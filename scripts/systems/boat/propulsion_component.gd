@@ -5,7 +5,7 @@ extends Node3D
 ## Engine / propeller. Applies a forward or reverse thrust force at the stern.
 ## throttle is set each frame by BoatController — range -1 (full reverse) to 1 (full ahead).
 
-@export var max_thrust:          float = 12000.0
+@export var max_thrust:          float = 24000.0
 @export var reverse_multiplier:  float = 0.45   # reverse is weaker than ahead
 ## Local position of the propeller (stern centre, at waterline).
 @export var stern_offset: Vector3 = Vector3(0.0, 0.0, 5.8)

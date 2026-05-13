@@ -40,8 +40,10 @@ func _physics_process(delta: float) -> void:
 	if Engine.is_editor_hint() or not _active:
 		return
 
-	var throttle_target: float = Input.get_axis("move_back",   "move_forward")
-	var rudder_target:   float = Input.get_axis("move_right",  "move_left")
+	# Positive throttle = thrust along -body Z (Godot forward). JSON hulls are
+	# authored with bow at +Z, so invert so W (move_forward) matches visual bow.
+	var throttle_target: float = -Input.get_axis("move_back", "move_forward")
+	var rudder_target:   float = Input.get_axis("move_left", "move_right")
 	var lateral_target:  float = Input.get_axis("boat_thrust_left", "boat_thrust_right")
 
 	# Throttle and rudder ramp smoothly; bow thruster is immediate

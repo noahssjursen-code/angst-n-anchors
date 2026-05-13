@@ -58,6 +58,11 @@ boat_thrust_right={
 
 3d/physics_engine="Jolt Physics"
 
+[layer_names]
+
+3d_physics/layer_1="world"
+3d_physics/layer_2="boat_hull"
+
 [rendering]
 
 rendering_device/driver.windows="d3d12"

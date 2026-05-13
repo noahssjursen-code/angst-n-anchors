@@ -8,44 +8,59 @@
 [ext_resource type="Script" path="res://scripts/systems/boat/boat_controller.gd" id="6"]
 [ext_resource type="Script" path="res://scripts/systems/boat/captains_chair.gd" id="7"]
 [ext_resource type="Script" path="res://scripts/systems/boat/boat_camera.gd" id="8"]
+[ext_resource type="Script" path="res://scripts/systems/boat/hydrodynamics_component.gd" id="9"]
 
-[node name="CargoRunner" type="RigidBody3D"]
+[node name="TestBoat" type="RigidBody3D"]
 script = ExtResource("1")
-hull_mass = 5000.0
-linear_damp_coeff = 0.8
-angular_damp_coeff = 1.0
-hull_size = Vector3(6.0, 2.2, 16.0)
-stabilization_torque = 8000.0
-stabilization_damp = 2000.0
+hull_mass = 22000.0
+linear_damp_coeff = 0.05
+angular_damp_coeff = 0.05
+hull_size = Vector3(6.0, 2.0, 14.0)
 
 [node name="BuoyancyComponent" type="Node3D" parent="."]
 script = ExtResource("2")
-force_per_point = 18000.0
-damping_per_point = 400.0
+water_density = 1000.0
+gravity = 9.8
+block_coefficient = 0.75
+vertical_damping = 2800.0
+
+[node name="HydrodynamicsComponent" type="Node3D" parent="."]
+script = ExtResource("9")
+forward_drag_coeff = 0.02
+lateral_drag_coeff = 0.92
+rotational_drag_coeff = 2.0
+orbital_flow_scale = 0.12
+slip_grip_coeff = 15500.0
+max_slip_grip_force = 340000.0
+bulk_horizontal_drag = 2400.0
 
 [node name="PropulsionComponent" type="Node3D" parent="."]
 script = ExtResource("3")
-max_thrust = 18000.0
-stern_offset = Vector3(0.0, 0.0, 7.0)
+max_thrust = 300000.0
+stern_offset = Vector3(0.0, -1.0, 6.0)
 
 [node name="RudderComponent" type="Node3D" parent="."]
 script = ExtResource("4")
-max_torque = 20000.0
+max_torque = 100000.0
+speed_factor = 0.32
+min_effectiveness_floor = 0.18
+rudder_flow_gate = 0.38
+sideslip_rudder_weight = 0.55
 
 [node name="BowThrusterComponent" type="Node3D" parent="."]
 script = ExtResource("5")
-max_thrust = 6000.0
-bow_offset = Vector3(0.0, 0.0, -7.0)
+max_thrust = 25000.0
+bow_offset = Vector3(0.0, 0.0, -6.0)
 
 [node name="BoatController" type="Node" parent="."]
 script = ExtResource("6")
 
 [node name="CaptainsChair" type="Node3D" parent="."]
-position = Vector3(0.0, 3.0, 4.2)
+position = Vector3(0.0, 2.5, 0.0)
 script = ExtResource("7")
 interact_range = 4.0
 
 [node name="BoatCamera" type="Camera3D" parent="."]
 script = ExtResource("8")
-follow_distance = 22.0
-follow_height = 8.0
+follow_distance = 18.0
+follow_height = 7.0
