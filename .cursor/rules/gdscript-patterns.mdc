@@ -1,0 +1,49 @@
+---
+description: GDScript architecture patterns for Angst 'n Anchors
+globs: **/*.gd
+alwaysApply: false
+---
+
+# GDScript Patterns
+
+## Services Before Custom Logic
+
+Check `scripts/autoloads/` before writing scene-local logic. If a behaviour recurs — interaction, dialogue, economy queries, contract checks — it belongs in a system, not a scene.
+
+Autoloads are the source of truth for game state:
+- `GameState` — time, money, reputation
+- `Economy` — port prices, supply/demand
+- `ContractBoard` — contracts, deadlines, consequences
+- `FleetManager` — ships, captains, routes
+- `World` — port and island registry
+
+## Jigsaw Components
+
+Scenes expose signals and `@export` slots. They do not reach outside themselves.
+
+```gdscript
+# BAD
+get_parent().get_parent().get_node("HUD").show_prompt(text)
+
+# GOOD
+InteractionSystem.show_prompt(text)
+# or
+signal interaction_triggered(context)
+```
+
+## Data in Resources
+
+Port data, cargo types, contract templates → `resources/data/` as `.tres` Resource subclasses. Never hardcode game data in scripts.
+
+```gdscript
+# BAD
+var exports = ["Fish", "Salt"]
+
+# GOOD
+@export var port_data: PortData
+var exports = port_data.exports
+```
+
+## Generic First
+
+Build the reusable system before the specific instance. `DialogueRunner` before the dock NPC. The scrollable list before the contract board. No one-offs that get refactored later.

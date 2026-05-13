@@ -1,0 +1,40 @@
+---
+description: No imported 3D assets — all in-world geometry is built from code
+alwaysApply: true
+---
+
+# Primitives Only
+
+No imported meshes, no external 3D model files, no texture atlases for in-world objects.
+
+Every ship, dock, building, crate, terrain piece, and prop is constructed in GDScript from Godot primitive meshes with `StandardMaterial3D`.
+
+## The Pattern
+
+```gdscript
+var mi := MeshInstance3D.new()
+var mesh := BoxMesh.new()
+mesh.size = Vector3(2.0, 0.5, 4.0)
+mi.mesh = mesh
+
+var mat := StandardMaterial3D.new()
+mat.albedo_color = Color(0.35, 0.28, 0.22)
+mat.roughness = 0.85
+mat.metallic = 0.05
+mi.material_override = mat
+add_child(mi)
+```
+
+## Allowed Primitives
+
+`BoxMesh`, `CylinderMesh`, `SphereMesh`, `CapsuleMesh`, `PlaneMesh`, `PrismMesh`, `TorusMesh`
+
+Use `MeshBuilder` in `scripts/world/mesh_builder.gd` for common compound shapes.
+
+## What Goes in resources/shaders/
+
+Custom `.gdshader` files for water, fog, outlines, etc. Applied to materials at runtime — never imported as textures.
+
+## UI Is Exempt
+
+2D UI (Control nodes, themes, icons) may use imported assets. This rule applies to the 3D world only.
