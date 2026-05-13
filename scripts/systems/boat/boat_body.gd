@@ -31,12 +31,15 @@ const LAYER_BOAT_HULL: int = 2
 		angular_damp = v
 
 @export_group("Hull")
-@export var hull_size: Vector3 = Vector3(6.0, 2.0, 14.0):
+## Absolute uniform scale applied to the mesh. The physical hull_size is calculated automatically.
+@export var mesh_scale: float = 1.0:
 	set(v):
-		hull_size = v
+		mesh_scale = v
 		if _transformer:
-			_transformer.set("target_size", v)
-		_resize_walk_deck_shape()
+			_transformer.set("absolute_scale", v)
+			_sync_hull_size_from_mesh()
+
+var hull_size: Vector3 = Vector3(6.0, 2.0, 14.0)
 
 const DEFAULT_HULL_JSON := "res://resources/data/meshes/ship_hull_flat_deck.json"
 
@@ -45,12 +48,14 @@ const DEFAULT_HULL_JSON := "res://resources/data/meshes/ship_hull_flat_deck.json
 		mesh_data_path = v
 		if _transformer:
 			_transformer.set("mesh_data_path", v)
+			_sync_hull_size_from_mesh()
 
 @export var mesh_rotation_degrees: Vector3 = Vector3(0.0, 0.0, 0.0):
 	set(v):
 		mesh_rotation_degrees = v
 		if _transformer:
 			_transformer.set("mesh_rotation_degrees", v)
+			_sync_hull_size_from_mesh()
 
 var _transformer: Node3D
 var _walk_deck:   AnimatableBody3D
@@ -112,9 +117,24 @@ func _ensure_transformer() -> void:
 			_transformer.owner = get_tree().edited_scene_root
 
 	_transformer.set("mesh_data_path", mesh_data_path)
-	_transformer.set("target_size", hull_size)
-	_transformer.set("mesh_color", Color(0.18, 0.20, 0.22))
+	_transformer.set("absolute_scale", mesh_scale)
+	_transformer.set("mesh_color", Color(0.55, 0.58, 0.62))
 	_transformer.set("mesh_rotation_degrees", mesh_rotation_degrees)
+	_sync_hull_size_from_mesh()
+
+
+func _sync_hull_size_from_mesh() -> void:
+	if _transformer and "actual_size" in _transformer:
+		var size: Vector3 = _transformer.get("actual_size")
+		if size.length_squared() > 0.01:
+			# If the mesh was rotated 90 degrees, swap the physics bounds X and Z
+			# so buoyancy and drag perfectly match the oriented hull.
+			var rot_y = absf(fmod(mesh_rotation_degrees.y, 180.0))
+			if rot_y > 45.0 and rot_y < 135.0:
+				hull_size = Vector3(size.z, size.y, size.x)
+			else:
+				hull_size = size
+			_resize_walk_deck_shape()
 
 
 func _ensure_walk_deck() -> void:

@@ -15,7 +15,9 @@ script = ExtResource("1")
 hull_mass = 22000.0
 linear_damp_coeff = 0.05
 angular_damp_coeff = 0.05
-hull_size = Vector3(6.0, 2.0, 14.0)
+mesh_scale = 0.7
+mesh_data_path = "res://resources/data/meshes/ship_hull_bulk_flat_deck.json"
+mesh_rotation_degrees = Vector3(0, -90, 0)
 
 [node name="BuoyancyComponent" type="Node3D" parent="."]
 script = ExtResource("2")

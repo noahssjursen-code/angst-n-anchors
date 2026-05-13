@@ -11,15 +11,16 @@ extends Node3D
 		if is_node_ready():
 			rebuild()
 
-@export var target_size: Vector3 = Vector3(1.0, 1.0, 1.0):
-	set(v):
-		target_size = v
-		if is_node_ready():
-			rebuild()
-
 @export var mesh_color: Color = Color(0.5, 0.5, 0.5):
 	set(v):
 		mesh_color = v
+		if is_node_ready():
+			rebuild()
+
+## Single uniform scale factor for the mesh. No independent X/Y/Z stretching.
+@export var absolute_scale: float = 1.0:
+	set(v):
+		absolute_scale = v
 		if is_node_ready():
 			rebuild()
 
@@ -34,6 +35,9 @@ extends Node3D
 		create_collision = v
 		if is_node_ready():
 			rebuild()
+
+
+var actual_size: Vector3 = Vector3.ZERO
 
 var _current_data: Dictionary = {}
 
@@ -94,7 +98,7 @@ func _load_json(path: String) -> Dictionary:
 func _get_normalization_params(vertices: Array) -> Dictionary:
 	var min_v := Vector3(INF, INF, INF)
 	var max_v := Vector3(-INF, -INF, -INF)
-	
+
 	for i in range(0, vertices.size(), 3):
 		var v := Vector3(vertices[i], vertices[i+1], vertices[i+2])
 		min_v.x = minf(min_v.x, v.x)
@@ -103,17 +107,16 @@ func _get_normalization_params(vertices: Array) -> Dictionary:
 		max_v.x = maxf(max_v.x, v.x)
 		max_v.y = maxf(max_v.y, v.y)
 		max_v.z = maxf(max_v.z, v.z)
-	
+
 	var native_size := max_v - min_v
 	var center := (max_v + min_v) * 0.5
-	
+
+	var scale_vec := Vector3(absolute_scale, absolute_scale, absolute_scale)
+	actual_size = native_size * absolute_scale
+
 	return {
-		"scale": Vector3(
-			target_size.x / maxf(native_size.x, 0.01),
-			target_size.y / maxf(native_size.y, 0.01),
-			target_size.z / maxf(native_size.z, 0.01)
-		),
-		"offset": -center
+		"scale": scale_vec,
+		"offset": -center,
 	}
 
 

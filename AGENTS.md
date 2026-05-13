@@ -92,21 +92,22 @@ var exports = port_data.exports
 
 ---
 
-## Visual Rules — Primitives Only
+## Visual Rules — Primitives + In-House JSON Meshes
 
-**No imported 3D models. No external meshes. No texture files for in-world objects.**
+**No imported DCC assets. No `.gltf` / `.glb` / `.fbx` / `.obj`. No texture files for in-world objects.**
 
-Every ship, dock, building, crate, buoy, and terrain piece is built in code from Godot primitives:
-- `BoxMesh`, `CylinderMesh`, `SphereMesh`, `PlaneMesh`, `PrismMesh`
-- Materials constructed from `StandardMaterial3D` with colour, roughness, and metallic values
-- `MeshBuilder` (in `scripts/world/`) is the shared utility for constructing these
+Every ship, dock, building, crate, buoy, and terrain piece comes from one of two sources:
 
-Shaders live in `resources/shaders/` and are applied to materials at runtime.
+1. **Godot primitives** composed in GDScript via `MeshBuilder` (`scripts/world/mesh_builder.gd`).
+2. **In-house JSON meshes** in `resources/data/meshes/`, produced by our own low-poly mesh AI tool, loaded at runtime by `MeshTransformer` (`scripts/systems/mesh_transformer.gd`).
 
-Textures and full shader passes come later. Build the geometry first, make it readable, make it correct. Visual polish is a later pass.
+Both are first-class. Pick whichever fits the shape — primitives for boxy/symmetric objects, JSON meshes for hulls and anything organic.
+
+Materials are always `StandardMaterial3D` constructed at runtime with colour, roughness, and metallic values. Shaders live in `resources/shaders/` and are applied to materials at runtime. Textures come later — geometry first, readable, correct.
+
+### Primitive pattern
 
 ```gdscript
-# Every in-world mesh follows this pattern:
 var mesh := BoxMesh.new()
 mesh.size = Vector3(2.0, 0.5, 4.0)
 var mat := StandardMaterial3D.new()
@@ -115,6 +116,26 @@ mat.roughness = 0.9
 mat.metallic = 0.0
 mesh_instance.mesh = mesh
 mesh_instance.material_override = mat
+```
+
+### JSON mesh pattern
+
+JSON shape:
+
+```json
+{ "vertices": [x, y, z, ...], "indices": [i, i, i, ...] }
+```
+
+Flat arrays of floats and ints. No normals, no UVs — `SurfaceTool` generates normals; colour is applied at load time. Authored exclusively by the in-house mesh AI; do not hand-edit.
+
+Always load through `MeshTransformer`. It normalises bounds, scales to `target_size`, applies the material, and builds a `ConvexPolygonShape3D` parented to the owning `RigidBody3D`. Concave shapes are silently disabled on dynamic bodies in Jolt — keep meshes convex-friendly or split them into convex pieces.
+
+```gdscript
+var transformer := preload("res://scripts/systems/mesh_transformer.gd").new()
+add_child(transformer)
+transformer.mesh_data_path = "res://resources/data/meshes/your_mesh.json"
+transformer.target_size = Vector3(6.0, 2.0, 14.0)
+transformer.mesh_color = Color(0.18, 0.20, 0.22)
 ```
 
 ---

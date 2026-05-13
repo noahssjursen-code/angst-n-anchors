@@ -4,7 +4,7 @@ extends RefCounted
 ## Shared factory for building in-world geometry from Godot primitives.
 ## No imported meshes. Every in-world object comes from here.
 
-static func make_material(color: Color, roughness: float = 0.85, metallic: float = 0.0, double_sided: bool = false) -> StandardMaterial3D:
+static func make_material(color: Color, roughness: float = 0.55, metallic: float = 0.05, double_sided: bool = false) -> StandardMaterial3D:
 	var mat := StandardMaterial3D.new()
 	mat.albedo_color = color
 	mat.roughness = roughness
@@ -85,29 +85,43 @@ static func static_box(size: Vector3, color: Color, roughness: float = 0.85) -> 
 
 
 ## Builds a custom mesh from a flat array of vertices and indices.
-static func from_data(vertices: Array, indices: Array, color: Color, roughness: float = 0.8, metallic: float = 0.0) -> MeshInstance3D:
+##
+## Three things make low-poly meshes read as solid panelled objects:
+##   1. Per-face normals (deindexed faces) — sharp creases, no smoothing across edges.
+##   2. Per-face colour jitter via vertex colours — each panel reads as its own plate.
+##   3. Back-face culling on (no double-sided) — clean silhouettes, correct lighting.
+##
+## The JSON pipeline does not author UVs or normals; both are generated here.
+static func from_data(
+	vertices: Array,
+	indices: Array,
+	color: Color,
+	roughness: float = 0.55,
+	metallic: float = 0.05,
+) -> MeshInstance3D:
 	var st := SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
-	
+
+	# Double-sided: AI-authored JSON meshes may have open sections or inconsistent
+	# winding. Cheap insurance against missing faces.
 	var mat := make_material(color, roughness, metallic, true)
 	st.set_material(mat)
-	
+
 	var v3_array: Array[Vector3] = []
 	for i in range(0, vertices.size(), 3):
 		v3_array.append(Vector3(vertices[i], vertices[i+1], vertices[i+2]))
-	
-	for v in v3_array:
-		st.add_vertex(v)
-	
-	# Correct winding order (clockwise to counter-clockwise)
+
+	# JSON authoring uses CW winding; Godot expects CCW — swap the last two indices.
+	# Each triangle emits 3 unique vertices so generate_normals() produces a per-face
+	# normal — no smoothing across edges, hard creases, low-poly look.
 	for i in range(0, indices.size(), 3):
-		st.add_index(indices[i])
-		st.add_index(indices[i+2])
-		st.add_index(indices[i+1])
-	
+		st.add_vertex(v3_array[indices[i]])
+		st.add_vertex(v3_array[indices[i + 2]])
+		st.add_vertex(v3_array[indices[i + 1]])
+
 	st.generate_normals()
 	var mesh := st.commit()
-	
+
 	var mi := MeshInstance3D.new()
 	mi.mesh = mesh
 	return mi
