@@ -231,7 +231,7 @@ func _process(delta: float) -> void:
 		smoothstep(0.05, 0.30, _wind), _wind, wind_db)
 	_blend_sequential(
 		[_rain_drizzle, _rain_moderate, _rain_heavy],
-		smoothstep(0.0, 0.15, _precip), _precip, rain_db)
+		smoothstep(0.25, 0.55, _precip), _precip, rain_db)
 	_blend_atmosphere(_precip, _wind)
 
 	_update_thunder(delta, storm)
@@ -271,17 +271,18 @@ func _blend_sequential(
 			max_db + linear_to_db(maxf(gain * amp, 0.00001)))
 
 
-## Constant-power bilinear blend across all four weather-plane corners.
-## sqrt of bilinear weights keeps total power constant anywhere on the plane.
+## Corner-focused bilinear blend across all four weather-plane corners.
+## Squaring the bilinear weights concentrates sound near corners — the center
+## of the compass fades to near-silence instead of playing all four at once.
 func _blend_atmosphere(p: float, w: float) -> void:
-	_atm_calm_clear.apply_volume(
-		atmosphere_db + linear_to_db(maxf(sqrt((1.0-p)*(1.0-w)), 0.00001)))
-	_atm_grey_drizzle.apply_volume(
-		atmosphere_db + linear_to_db(maxf(sqrt(p      *(1.0-w)), 0.00001)))
-	_atm_dry_squall.apply_volume(
-		atmosphere_db + linear_to_db(maxf(sqrt((1.0-p)*w      ), 0.00001)))
-	_atm_full_storm.apply_volume(
-		atmosphere_db + linear_to_db(maxf(sqrt(p      *w      ), 0.00001)))
+	var cc := pow((1.0-p)*(1.0-w), 2.0)
+	var gd := pow(p      *(1.0-w), 2.0)
+	var ds := pow((1.0-p)*w,       2.0)
+	var fs := pow(p      *w,       2.0)
+	_atm_calm_clear.apply_volume(  atmosphere_db + linear_to_db(maxf(cc, 0.00001)))
+	_atm_grey_drizzle.apply_volume(atmosphere_db + linear_to_db(maxf(gd, 0.00001)))
+	_atm_dry_squall.apply_volume(  atmosphere_db + linear_to_db(maxf(ds, 0.00001)))
+	_atm_full_storm.apply_volume(  atmosphere_db + linear_to_db(maxf(fs, 0.00001)))
 
 
 # ---------------------------------------------------------------------------

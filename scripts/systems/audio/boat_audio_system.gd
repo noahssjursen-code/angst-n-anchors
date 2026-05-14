@@ -35,14 +35,19 @@ var _stop_pool   : Array[AudioStreamPlayer] = []
 var _click_pool  : Array[AudioStreamPlayer] = []
 
 # --- Smoothed parameters ---
-var _throttle_s: float = 0.0   # abs(propulsion throttle), 0..1
-var _thruster_s: float = 0.0   # abs(lateral_input), 0..1
+var _throttle_s   : float = 0.0   # abs(propulsion throttle), 0..1
+var _thruster_s   : float = 0.0   # abs(lateral_input), 0..1
+var _engine_gain_s: float = 0.0   # 0=silent (docked), 1=boarded; fades slowly
 
-# --- State for one-shot triggers ---
-# Throttle click: fire whenever the target stage value jumps significantly.
+# --- Helm / start-sound state ---
+var _helm_active     : bool  = false
+var _start_cutoff_t  : float = 0.0   # count down; kills start pool when it hits 0
+
+# --- Throttle click ---
 var _last_stage_throttle: float = 0.0
 
-const _STAGE_CLICK_THRESH: float = 0.08
+const _STAGE_CLICK_THRESH : float = 0.08
+const _ENGINE_FADE_TIME   : float = 2.0   # seconds to fade engine out after leaving helm
 
 
 func _ready() -> void:
@@ -62,10 +67,6 @@ func _ready() -> void:
 		if p != null:
 			p.volume_db = -80.0
 			p.play()
-
-	# Engine idles from the moment the boat exists.
-	if _engine_idle != null:
-		_engine_idle.volume_db = engine_db
 
 	# Connect to helm signals so start/stop fire on boarding, not throttle changes.
 	var ctrl := get_parent().get_node_or_null("BoatController") as BoatController
@@ -90,23 +91,33 @@ func _process(delta: float) -> void:
 	var stage_target := absf(float(ctrl.get("_throttle"))) if ctrl != null else 0.0
 
 	# --- Exponential smoothing ---
-	var k := 1.0 - exp(-delta / maxf(smooth_time, 0.001))
-	_throttle_s = lerpf(_throttle_s, raw_throttle, k)
-	_thruster_s = lerpf(_thruster_s, raw_lateral,  k)
+	var k      := 1.0 - exp(-delta / maxf(smooth_time, 0.001))
+	var k_fade := 1.0 - exp(-delta / maxf(_ENGINE_FADE_TIME, 0.001))
+	_throttle_s    = lerpf(_throttle_s,    raw_throttle,                           k)
+	_thruster_s    = lerpf(_thruster_s,    raw_lateral,                            k)
+	_engine_gain_s = lerpf(_engine_gain_s, 1.0 if _helm_active else 0.0, k_fade)
+
+	# --- Engine start cutoff timer ---
+	if _start_cutoff_t > 0.0:
+		_start_cutoff_t -= delta
+		if _start_cutoff_t <= 0.0:
+			for p: AudioStreamPlayer in _start_pool:
+				p.stop()
 
 	# --- One-shot: throttle click on discrete stage change ---
 	if absf(stage_target - _last_stage_throttle) >= _STAGE_CLICK_THRESH:
 		_fire_oneshot(_click_pool)
 		_last_stage_throttle = stage_target
 
-	# --- Engine layer: constant-power blend idle ↔ load ---
-	var blend := _throttle_s
+	# --- Engine layer: constant-power blend idle ↔ load, gated by helm ---
+	var e_db   := engine_db + linear_to_db(maxf(_engine_gain_s, 0.00001))
+	var blend  := _throttle_s
 	var amp_idle := cos(blend * PI * 0.5)
 	var amp_load := sin(blend * PI * 0.5)
 	if _engine_idle != null:
-		_engine_idle.volume_db = engine_db + linear_to_db(maxf(amp_idle, 0.00001))
+		_engine_idle.volume_db = e_db + linear_to_db(maxf(amp_idle, 0.00001))
 	if _engine_load != null:
-		_engine_load.volume_db = engine_db + linear_to_db(maxf(amp_load, 0.00001))
+		_engine_load.volume_db = e_db + linear_to_db(maxf(amp_load, 0.00001))
 
 	# --- Bow thruster: fades in above 2% input ---
 	var thr_gain := smoothstep(0.02, 0.15, _thruster_s)
@@ -132,10 +143,13 @@ func _process(delta: float) -> void:
 # ---------------------------------------------------------------------------
 
 func _on_helm_activated() -> void:
+	_helm_active    = true
 	_fire_oneshot(_start_pool)
+	_start_cutoff_t = 2.0   # hard-cut start sound after 2 s
 
 
 func _on_helm_deactivated() -> void:
+	_helm_active = false
 	_fire_oneshot(_stop_pool)
 
 
