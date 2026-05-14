@@ -25,6 +25,9 @@ extends Node
 @export var stage_label_stop: String = "STOP"
 @export var stage_label_ahead: String = "AHEAD"
 
+signal helm_activated
+signal helm_deactivated
+
 var _active: bool = false
 
 ## 0 = off, 1 = bow-only (yaw), 2 = crab (lateral drift)
@@ -48,6 +51,7 @@ func activate() -> void:
 	_active = true
 	_ensure_hud()
 	_set_hud_visible(true)
+	helm_activated.emit()
 
 
 func deactivate() -> void:
@@ -59,6 +63,7 @@ func deactivate() -> void:
 	_throttle_stage_idx = _nearest_stage_idx(0.0)
 	_push_to_components()
 	_set_hud_visible(false)
+	helm_deactivated.emit()
 
 
 func _physics_process(delta: float) -> void:

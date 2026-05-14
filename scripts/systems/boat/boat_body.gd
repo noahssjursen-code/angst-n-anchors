@@ -175,6 +175,9 @@ func _ready() -> void:
 
 	if not Engine.is_editor_hint():
 		call_deferred("_ensure_walk_deck")
+		var audio: Node = load("res://scripts/systems/audio/boat_audio_system.gd").new()
+		audio.name = "BoatAudio"
+		add_child(audio)
 
 
 func _exit_tree() -> void:
