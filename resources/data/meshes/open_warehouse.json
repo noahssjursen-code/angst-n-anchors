@@ -335,7 +335,7 @@
         ],
         "roughness": 0.4,
         "metallic": 0.8,
-        "collision": "convex"
+        "collision": "concave"
       },
       {
         "name": "outer_walls",

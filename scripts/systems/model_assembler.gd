@@ -25,7 +25,9 @@ extends Node3D
 ##       "roughness": 0.9,
 ##       "metallic": 0.0,
 ##       "invert_collision_face_winding": false,
-##       "collision": "convex"
+##       "collision_double_sided": true, // concave only: default true (thin walls solid both sides)
+##       "collision": "convex"      // optional: "none" | "convex" | "concave"
+##                                    // concave = triangle mesh; static bodies only
 ##     }
 ##   ]
 ## }
@@ -154,6 +156,9 @@ func _build_part(part: Dictionary) -> void:
 	node.mesh_metallic = float(part.get("metallic", 0.0))
 	node.invert_collision_face_winding = bool(part.get("invert_collision_face_winding", false))
 	var is_collidable := _part_collision_enabled(part)
+	var col_key := str(part.get("collision", "none")).to_lower()
+	node.collision_mode = "concave" if col_key == "concave" else "convex"
+	node.collision_double_sided = bool(part.get("collision_double_sided", true))
 	node.create_collision = is_collidable and build_part_colliders
 	node.collision_parent_path = _collision_path_for_part(node)
 	node.rebuild_suspended = false

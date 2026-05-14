@@ -68,6 +68,15 @@ var mesh_data: Dictionary = {}:
 		if is_node_ready():
 			rebuild()
 
+## `convex` — hull of all vertices (wrong for hollow shells). `concave` — triangle
+## mesh; only use on **static** bodies (see Jolt / Godot notes on dynamic + concave).
+## Concave builds default to **double-sided** triangles unless `collision_double_sided` is off.
+var collision_mode: String = "convex"
+
+## For concave collisions: duplicate each triangle with opposite winding so thin shells
+## block movement from either side (Jolt trimesh is effectively one-sided per triangle).
+var collision_double_sided: bool = true
+
 ## Optional target for generated CollisionShape3D nodes. Use this when the
 ## transformer is nested under a generic assembler but colliders must be direct
 ## children of a PhysicsBody3D/Area3D.
@@ -89,9 +98,8 @@ var mesh_data: Dictionary = {}:
 		if is_node_ready():
 			rebuild()
 
-## When true, walk/collision mesh triangles use reversed winding (swaps v1 and v2).
-## Use if a DCC export has inverted normals for ConcavePolygonShape3D (walk through
-## walls from outside, stuck inside).
+## When true, collision triangles swap v1/v2 relative to authored indices (concave /
+## walk proxies). Mostly redundant when `collision_double_sided` is true.
 @export var invert_collision_face_winding: bool = false:
 	set(v):
 		if invert_collision_face_winding == v:
@@ -147,7 +155,10 @@ func rebuild() -> void:
 	
 	_build_mesh(params)
 	if create_collision:
-		_build_collision(params)
+		if collision_mode == "concave":
+			_build_collision_concave(params)
+		else:
+			_build_collision_convex(params)
 
 
 func get_collision_points_in(target: Node3D) -> Array[Vector3]:
@@ -322,36 +333,10 @@ func _build_mesh(params: Dictionary) -> void:
 		mi.owner = get_tree().edited_scene_root
 
 
-func _build_collision(params: Dictionary) -> void:
-	if not _current_data.has("vertices") or not _current_data.has("indices"):
-		return
-
-	var vertices: Array = _current_data["vertices"]
-	var s: Vector3 = params["scale"]
-	var offset: Vector3 = params["offset"]
-
+func _collision_col_child() -> CollisionShape3D:
 	var col := CollisionShape3D.new()
 	col.name = _generated_prefix() + "Collider"
-	
-	# Godot (and Jolt) silently disable ConcavePolygonShape3D on dynamic RigidBodies,
-	# which is why you fall straight through. Dynamic bodies MUST use Convex shapes.
-	# Since your new JSON is a "flat deck" hull, a Convex hull will wrap it perfectly
-	# without creating the "invisible ground" issue you had with the old recessed-hold ship.
-	var shape := ConvexPolygonShape3D.new()
-	var points: Array[Vector3] = []
-	
-	for i in range(0, vertices.size(), 3):
-		points.append(Vector3(
-			(vertices[i] + offset.x) * s.x, 
-			(vertices[i+1] + offset.y) * s.y, 
-			(vertices[i+2] + offset.z) * s.z
-		))
-	
-	shape.points = points
-	col.shape = shape
 	col.rotation_degrees = mesh_rotation_degrees
-	
-	# CRITICAL: CollisionShape3D must be a direct child of a CollisionObject3D.
 	var collision_parent := _get_collision_parent()
 	if collision_parent != null:
 		collision_parent.add_child(col)
@@ -362,6 +347,80 @@ func _build_collision(params: Dictionary) -> void:
 		add_child(col)
 		if Engine.is_editor_hint():
 			col.owner = get_tree().edited_scene_root
+	return col
+
+
+func _build_collision_convex(params: Dictionary) -> void:
+	if not _current_data.has("vertices") or not _current_data.has("indices"):
+		return
+
+	var vertices: Array = _current_data["vertices"]
+	var s: Vector3 = params["scale"]
+	var offset: Vector3 = params["offset"]
+
+	var col := _collision_col_child()
+
+	# Godot (and Jolt) silently disable ConcavePolygonShape3D on dynamic RigidBodies,
+	# which is why you fall straight through. Dynamic bodies MUST use Convex shapes.
+	var shape := ConvexPolygonShape3D.new()
+	var points: Array[Vector3] = []
+
+	for i in range(0, vertices.size(), 3):
+		points.append(Vector3(
+			(vertices[i] + offset.x) * s.x,
+			(vertices[i + 1] + offset.y) * s.y,
+			(vertices[i + 2] + offset.z) * s.z
+		))
+
+	shape.points = points
+	col.shape = shape
+
+
+func _build_collision_concave(params: Dictionary) -> void:
+	if not _current_data.has("vertices") or not _current_data.has("indices"):
+		return
+
+	var vertices: Array = _current_data["vertices"]
+	var indices: Array = _current_data["indices"]
+	var s: Vector3 = params["scale"]
+	var offset: Vector3 = params["offset"]
+
+	var faces: Array[Vector3] = []
+	for ii in range(0, indices.size(), 3):
+		var triangle := [0, 1, 2]
+		if invert_collision_face_winding:
+			triangle = [0, 2, 1]
+		var okay := true
+		var triple: Array[Vector3] = []
+		for ti in triangle:
+			var vertex_index := int(indices[ii + ti]) * 3
+			if vertex_index + 2 >= vertices.size():
+				okay = false
+				break
+			triple.append(Vector3(
+				(vertices[vertex_index] + offset.x) * s.x,
+				(vertices[vertex_index + 1] + offset.y) * s.y,
+				(vertices[vertex_index + 2] + offset.z) * s.z
+			))
+		if okay and triple.size() == 3:
+			faces.append_array(triple)
+			if collision_double_sided:
+				faces.push_back(triple[0])
+				faces.push_back(triple[2])
+				faces.push_back(triple[1])
+
+	if faces.size() < 9:
+		push_warning(
+			"MeshTransformer: concave collision fallback to convex (%s triangles)" %
+			str(name)
+		)
+		_build_collision_convex(params)
+		return
+
+	var col := _collision_col_child()
+	var shape := ConcavePolygonShape3D.new()
+	shape.set_faces(faces)
+	col.shape = shape
 
 
 func _get_collision_parent() -> CollisionObject3D:

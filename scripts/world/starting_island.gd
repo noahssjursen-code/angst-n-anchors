@@ -33,6 +33,13 @@ const PIER_CHAIN_GAP := 0.0
 ## Placement of pier 2 along deck local +X (after `PIER_ROTATION`); negate to flip which end hooks to pier 1.
 const PIER_CHAIN_SIGN := -1.0
 
+## Inland sand; slab top ≈ y=0. Small +Y clears ground vs floor flicker (z‑fighting).
+## Kept south/west of berth (mooring ≈ z 36–57).
+const OPEN_WAREHOUSE_MODEL := "res://resources/data/meshes/open_warehouse.json"
+const OPEN_WAREHOUSE_ABS_SCALE := 1.0
+const OPEN_WAREHOUSE_POSITION := Vector3(-22.0, 0.03, -8.0)
+const OPEN_WAREHOUSE_ROTATION := Vector3(0.0, 55.0, 0.0)
+
 var _ocean_shader_material: ShaderMaterial
 var _sky_material: ProceduralSkyMaterial
 var _environment: Environment
@@ -63,6 +70,7 @@ func _ready() -> void:
 	_build_sky()
 	_build_ocean()
 	_build_island()
+	_build_open_warehouse()
 	_build_dock()
 	_connect_weather_lighting()
 	_apply_weather_lighting()
@@ -232,6 +240,27 @@ func _build_island() -> void:
 	var ground := MeshBuilder.static_box(Vector3(80, 2, 60), C_SAND)
 	ground.position = Vector3(0, -1.0, 0)
 	add_child(ground)
+
+
+func _build_open_warehouse() -> void:
+	var warehouse := StaticBody3D.new()
+	warehouse.name = "OpenWarehouse"
+	add_child(warehouse)
+	warehouse.position = OPEN_WAREHOUSE_POSITION
+	warehouse.rotation_degrees = OPEN_WAREHOUSE_ROTATION
+
+	var assembler := ModelAssembler.new()
+	assembler.model_data_path = OPEN_WAREHOUSE_MODEL
+	assembler.absolute_scale = OPEN_WAREHOUSE_ABS_SCALE
+	assembler.collision_parent_path = NodePath("..")
+	assembler.build_part_colliders = true
+	warehouse.add_child(assembler)
+
+	if Engine.is_editor_hint():
+		var esc := get_tree().edited_scene_root
+		if esc != null:
+			warehouse.owner = esc
+			assembler.owner = esc
 
 
 func _build_dock() -> void:
