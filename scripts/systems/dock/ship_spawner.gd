@@ -67,14 +67,13 @@ func _moor_ship(ship: Node3D) -> void:
 		return
 
 	mooring.call("moor_to_posts", front_post, rear_post)
-	_register_post(front_post, mooring, "bow")
-	_register_post(rear_post, mooring, "stern")
+	_register_post(front_post, mooring)
+	_register_post(rear_post, mooring)
 
 
-func _register_post(post: Node, mooring: Node, station: String) -> void:
+func _register_post(post: Node, mooring: Node) -> void:
 	if post.has_method("register_mooring_component"):
 		post.call("register_mooring_component", mooring)
-	post.set("line_station", station)
 
 
 func _find_mooring_component(ship: Node) -> Node:

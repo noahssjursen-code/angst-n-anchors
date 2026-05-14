@@ -2,6 +2,9 @@
 class_name MooringPoint
 extends Node3D
 
+## Must match MooringComponent.SHIP_MOORING_CLEAT_GROUP — discoverability only (no naming).
+const _CLEAT_GROUP := "ship_mooring_cleat"
+
 @export_enum("port", "starboard") var side: String = "port":
 	set(v):
 		side = v
@@ -24,6 +27,8 @@ extends Node3D
 
 
 func _ready() -> void:
+	if not Engine.is_editor_hint():
+		add_to_group(_CLEAT_GROUP)
 	_update_marker()
 
 

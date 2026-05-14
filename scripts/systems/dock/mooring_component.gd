@@ -1,23 +1,28 @@
 class_name MooringComponent
 extends Node3D
 
-@export_enum("port", "starboard") var dock_side: String = "port"
-@export var auto_select_closest_side: bool = true
-@export var bow_point_path: NodePath
-@export var stern_point_path: NodePath
+## Ship cleats: any `Node3D` in group `SHIP_MOORING_CLEAT_GROUP` under this vessel's
+## `RigidBody3D` root. Distance is from cleat anchor to **this dock post's** anchor.
+const SHIP_MOORING_CLEAT_GROUP := "ship_mooring_cleat"
+
 @export var rope_radius: float = 0.045
 @export var rope_color: Color = Color(0.55, 0.42, 0.25)
 @export var hold_position_rate: float = 7.5
 @export var hold_velocity_damp: float = 8.0
 
-var is_moored: bool = false
+## Rope from **front** dock post (slot 0). Name kept for save compatibility.
 var bow_line_tied: bool = false
+## Rope from **rear** dock post (slot 1).
 var stern_line_tied: bool = false
+
+var is_moored: bool = false
 
 var _body: RigidBody3D
 var _front_post: Node
 var _rear_post: Node
+## Cleat Node3D used for front-post rope — picked by geometry at tie time.
 var _bow_point: Node3D
+## Cleat for rear-post rope.
 var _stern_point: Node3D
 var _hold_transform: Transform3D
 var _rope_root: Node3D
@@ -26,7 +31,6 @@ var _rope_root: Node3D
 func _ready() -> void:
 	_body = _resolve_boat_rigid_body()
 	_ensure_rope_root()
-	_resolve_mooring_points()
 
 
 func _physics_process(delta: float) -> void:
@@ -52,10 +56,7 @@ func moor_to_posts(front_post: Node, rear_post: Node) -> void:
 
 	_front_post = front_post
 	_rear_post = rear_post
-	if auto_select_closest_side:
-		_select_closest_dock_side(front_post, rear_post)
-	else:
-		_resolve_mooring_points()
+	_assign_closest_cleats_to_registered_posts(true)
 	_hold_transform = _body.global_transform
 	bow_line_tied = true
 	stern_line_tied = true
@@ -69,24 +70,67 @@ func release_mooring() -> void:
 	stern_line_tied = false
 	_front_post = null
 	_rear_post = null
+	_bow_point = null
+	_stern_point = null
 	_clear_ropes()
 
 
-func toggle_line(station: String) -> bool:
-	var next_tied := not is_line_tied(station)
-	set_line_tied(station, next_tied)
+func is_mooring_line_tied_from_post(post: Node) -> bool:
+	if post != null and post == _front_post:
+		return bow_line_tied
+	if post != null and post == _rear_post:
+		return stern_line_tied
+	return false
+
+
+func toggle_line_from_post(post: Node) -> bool:
+	if _body == null:
+		_body = _resolve_boat_rigid_body()
+	if post != _front_post and post != _rear_post:
+		push_warning(
+			"MooringComponent: pole is not a registered dock post for this mooring.",
+		)
+		return false
+
+	var forward_slot := post == _front_post
+	var next_tied := not is_slot_tied(forward_slot)
+	if next_tied:
+		var exclude: Node3D = null
+		if forward_slot and stern_line_tied and _stern_point != null:
+			exclude = _stern_point
+		elif not forward_slot and bow_line_tied and _bow_point != null:
+			exclude = _bow_point
+
+		var cleats := _ship_cleat_nodes()
+		if cleats.is_empty():
+			push_warning(
+				"MooringComponent: no cleats — add MooringPoint (or nodes in group '"
+				+ SHIP_MOORING_CLEAT_GROUP
+				+ "') under the boat.",
+			)
+			return false
+
+		var tgt := _post_anchor(post)
+		var pick := _closest_cleat_to(tgt, cleats, exclude)
+		if pick == null:
+			pick = _closest_cleat_to(tgt, cleats, null)
+		if pick == null:
+			return false
+		if forward_slot:
+			_bow_point = pick
+		else:
+			_stern_point = pick
+
+	set_line_tied(forward_slot, next_tied)
 	return next_tied
 
 
-func set_line_tied(station: String, tied: bool) -> void:
+func set_line_tied(forward_slot: bool, tied: bool) -> void:
 	var had_any_line := bow_line_tied or stern_line_tied
-	match station:
-		"bow":
-			bow_line_tied = tied
-		"stern":
-			stern_line_tied = tied
-		_:
-			return
+	if forward_slot:
+		bow_line_tied = tied
+	else:
+		stern_line_tied = tied
 
 	var has_any_line := bow_line_tied or stern_line_tied
 	is_moored = has_any_line
@@ -98,14 +142,8 @@ func set_line_tied(station: String, tied: bool) -> void:
 	_rebuild_ropes()
 
 
-func is_line_tied(station: String) -> bool:
-	match station:
-		"bow":
-			return bow_line_tied
-		"stern":
-			return stern_line_tied
-		_:
-			return false
+func is_slot_tied(forward_slot: bool) -> bool:
+	return bow_line_tied if forward_slot else stern_line_tied
 
 
 func _ensure_rope_root() -> void:
@@ -122,15 +160,14 @@ func _rebuild_ropes() -> void:
 	if _body == null or _front_post == null or _rear_post == null:
 		return
 
-	var bow_anchor: Variant = _point_anchor(_bow_point)
-	var stern_anchor: Variant = _point_anchor(_stern_point)
-	if bow_anchor == null or stern_anchor == null:
-		return
-
 	if bow_line_tied:
-		_add_rope("ForwardRope", bow_anchor, _post_anchor(_front_post))
+		var a := _point_anchor_vector(_bow_point)
+		if _bow_point != null:
+			_add_rope("ForwardRope", a, _post_anchor(_front_post))
 	if stern_line_tied:
-		_add_rope("RearRope", stern_anchor, _post_anchor(_rear_post))
+		var b := _point_anchor_vector(_stern_point)
+		if _stern_point != null:
+			_add_rope("RearRope", b, _post_anchor(_rear_post))
 
 
 func _clear_ropes() -> void:
@@ -174,35 +211,6 @@ func _post_anchor(post: Node) -> Vector3:
 	return Vector3.ZERO
 
 
-func _resolve_mooring_points() -> void:
-	_bow_point = get_node_or_null(bow_point_path) as Node3D
-	_stern_point = get_node_or_null(stern_point_path) as Node3D
-	if _bow_point == null:
-		_bow_point = _find_point(dock_side, "bow")
-	if _stern_point == null:
-		_stern_point = _find_point(dock_side, "stern")
-
-
-func _select_closest_dock_side(front_post: Node, rear_post: Node) -> void:
-	var best_side := dock_side
-	var best_score := INF
-	for side in ["port", "starboard"]:
-		var bow_point := _find_point(side, "bow")
-		var stern_point := _find_point(side, "stern")
-		if bow_point == null or stern_point == null:
-			continue
-		var score := (
-			bow_point.global_position.distance_to(_post_anchor(front_post))
-			+ stern_point.global_position.distance_to(_post_anchor(rear_post))
-		)
-		if score < best_score:
-			best_score = score
-			best_side = side
-			_bow_point = bow_point
-			_stern_point = stern_point
-	dock_side = best_side
-
-
 func _resolve_boat_rigid_body() -> RigidBody3D:
 	var p := get_parent()
 	while p != null:
@@ -212,21 +220,66 @@ func _resolve_boat_rigid_body() -> RigidBody3D:
 	return null
 
 
-func _find_point(requested_side: String, requested_station: String) -> Node3D:
-	var boat := get_parent()
-	if boat == null:
-		return null
-	for child in boat.get_children():
-		var node := child as Node
-		if node != null and node.has_method("matches"):
-			if bool(node.call("matches", requested_side, requested_station)):
-				return node as Node3D
-	return null
+func _ship_cleat_nodes() -> Array[Node3D]:
+	var out: Array[Node3D] = []
+	if _body == null:
+		return out
+	for node in get_tree().get_nodes_in_group(SHIP_MOORING_CLEAT_GROUP):
+		var n := node as Node3D
+		if n == null:
+			continue
+		if _body.is_ancestor_of(n):
+			out.append(n)
+	return out
 
 
-func _point_anchor(point: Node3D):
-	if point == null:
-		return null
+func _assign_closest_cleats_to_registered_posts(require_distinct_when_possible: bool) -> void:
+	var cleats := _ship_cleat_nodes()
+	if cleats.is_empty():
+		push_warning(
+			"MooringComponent: no cleats — add nodes in group '"
+			+ SHIP_MOORING_CLEAT_GROUP
+			+ "' parented under the vessel RigidBody (e.g. MooringPoint).",
+		)
+		return
+
+	var pf := _post_anchor(_front_post)
+	var pr := _post_anchor(_rear_post)
+
+	_bow_point = _closest_cleat_to(pf, cleats, null)
+	var exclude_second: Node3D = (
+		_bow_point if require_distinct_when_possible and cleats.size() > 1 else null
+	)
+	_stern_point = _closest_cleat_to(pr, cleats, exclude_second)
+	if _stern_point == null:
+		_stern_point = _closest_cleat_to(pr, cleats, null)
+
+
+func _closest_cleat_to(
+	world_target: Vector3,
+	candidates: Array[Node3D],
+	exclude: Node3D,
+) -> Node3D:
+	var best: Node3D = null
+	var best_d := INF
+	for candidate in candidates:
+		if exclude != null and candidate == exclude:
+			continue
+		var d := world_target.distance_squared_to(_cleat_anchor(candidate))
+		if d < best_d:
+			best_d = d
+			best = candidate
+	return best
+
+
+func _cleat_anchor(point: Node3D) -> Vector3:
 	if point.has_method("get_anchor_global_position"):
 		return point.call("get_anchor_global_position")
 	return point.global_position
+
+
+func _point_anchor_vector(point: Node3D) -> Vector3:
+	if point == null:
+		return Vector3.ZERO
+	return _cleat_anchor(point)
+

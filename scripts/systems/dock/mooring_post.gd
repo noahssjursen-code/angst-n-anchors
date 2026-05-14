@@ -6,8 +6,6 @@ extends StaticBody3D
 @export var post_radius: float = 0.16
 @export var anchor_local_position: Vector3 = Vector3(0.0, 0.85, 0.0)
 @export var post_color: Color = Color(0.18, 0.11, 0.06)
-@export_enum("bow", "stern") var line_station: String = "bow"
-
 var _moor_interact_range: float = 3.2
 
 ## Max distance / ray depth for mooring prompts and E toggle.
@@ -133,8 +131,8 @@ func _rebuild() -> void:
 func _toggle_line() -> void:
 	if _mooring_component == null or not is_instance_valid(_mooring_component):
 		return
-	if _mooring_component.has_method("toggle_line"):
-		_mooring_component.call("toggle_line", line_station)
+	if _mooring_component.has_method("toggle_line_from_post"):
+		_mooring_component.call("toggle_line_from_post", self)
 	_update_prompt()
 
 
@@ -146,10 +144,13 @@ func _update_prompt() -> void:
 	if not can_interact:
 		return
 	var action := "tie"
-	if _mooring_component != null and _mooring_component.has_method("is_line_tied"):
-		if bool(_mooring_component.call("is_line_tied", line_station)):
-			action = "untie"
-	_prompt_label.text = "Press E to %s %s line" % [action, line_station]
+	if (
+		_mooring_component != null
+		and _mooring_component.has_method("is_mooring_line_tied_from_post")
+		and bool(_mooring_component.call("is_mooring_line_tied_from_post", self))
+	):
+		action = "untie"
+	_prompt_label.text = "Press E to %s mooring line" % action
 
 
 func _player_can_interact() -> bool:

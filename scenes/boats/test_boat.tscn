@@ -86,9 +86,6 @@ interact_range = 4.8
 
 [node name="MooringComponent" type="Node3D" parent="ShipGameplay"]
 script = ExtResource("11")
-dock_side = "port"
-bow_point_path = NodePath("MooringPoint_PortBow")
-stern_point_path = NodePath("MooringPoint_PortStern")
 
 [node name="MooringPoint_PortBow" type="Node3D" parent="ShipGameplay"]
 position = Vector3(-2.5, 2.0, -9.5)
