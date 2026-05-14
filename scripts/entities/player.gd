@@ -1,5 +1,7 @@
 extends CharacterBody3D
 
+const CARRY_COMPONENT_SCRIPT := preload("res://scripts/systems/cargo/carry_component.gd")
+
 # ── Movement ──────────────────────────────────────────────────────────────────
 @export_group("Movement")
 @export var walk_speed:          float = 4.5
@@ -46,6 +48,7 @@ func _ready() -> void:
 	_camera_base_y = camera.position.y
 	_current_speed = walk_speed
 	camera.fov = base_fov
+	_ensure_carry_component()
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -140,7 +143,11 @@ func _process(delta: float) -> void:
 	camera.position.y = _camera_base_y + bob_offset + _camera_y_offset
 
 	# Sprint FOV — only kicks in once actually moving at speed
-	var sprinting := is_on_floor() and Input.is_key_pressed(KEY_SHIFT) and flat_speed > walk_speed * 0.8
+	var sprinting := (
+		is_on_floor()
+		and Input.is_key_pressed(KEY_SHIFT)
+		and flat_speed > walk_speed * 0.8
+	)
 	var target_fov := base_fov * sprint_fov_multiplier if sprinting else base_fov
 	camera.fov = lerpf(camera.fov, target_fov, delta * 6.0)
 
@@ -149,3 +156,11 @@ func _process(delta: float) -> void:
 	if is_on_floor() and absf(_smoothed_input.x) > 0.05:
 		strafe_tilt = -signf(_smoothed_input.x) * deg_to_rad(strafe_tilt_angle)
 	camera.rotation.z = lerp_angle(camera.rotation.z, strafe_tilt, delta * 8.0)
+
+
+func _ensure_carry_component() -> void:
+	if get_node_or_null("CarryComponent") != null:
+		return
+	var carry_component := CARRY_COMPONENT_SCRIPT.new() as Node3D
+	carry_component.name = "CarryComponent"
+	add_child(carry_component)

@@ -25,7 +25,9 @@ const FREQUENCY_2  := 0.26
 const SPEED_2      := 1.1
 const DIR_2        := Vector2(-0.5, 1.0)
 
-## Runtime multiplier for both wave trains (visual + buoyancy). Arrow keys tweak this.
+## Runtime multiplier for both wave trains (visual + buoyancy).
+## WeatherLighting drives this by default, but it can still be set directly for
+## independent wave tuning/debugging.
 const WAVE_INTENSITY_MIN:  float = 0.0
 const WAVE_INTENSITY_MAX:  float = 5.0
 const WAVE_INTENSITY_STEP: float = 0.1
@@ -37,7 +39,11 @@ static var _coupled_vessel: RigidBody3D = null
 
 
 static func bump_wave_intensity(delta: float) -> void:
-	wave_intensity = clampf(wave_intensity + delta, WAVE_INTENSITY_MIN, WAVE_INTENSITY_MAX)
+	set_wave_intensity(wave_intensity + delta)
+
+
+static func set_wave_intensity(value: float) -> void:
+	wave_intensity = clampf(value, WAVE_INTENSITY_MIN, WAVE_INTENSITY_MAX)
 
 
 static func set_coupled_vessel(body: RigidBody3D) -> void:
@@ -67,7 +73,8 @@ static func get_base_wave_height_at(x: float, z: float) -> float:
 
 
 ## Effective free surface **including** hull displacement dip (visual / debug).
-## Buoyancy must NOT use this — it couples lift to the hull's own trough and feels like a rigid sheet.
+## Buoyancy must NOT use this — it couples lift to the hull's own trough and feels
+## like a rigid sheet.
 ## Use `get_buoyancy_surface_height_at()` for submerged depth instead.
 static func get_height_at(x: float, z: float) -> float:
 	return _wave_height_at_xy(x, z) - _vessel_dip_at(x, z)
@@ -80,7 +87,8 @@ static func _hull_size_from_body(b: RigidBody3D) -> Vector3:
 	return hs
 
 
-## Shared Gaussian displacement under the coupled hull (visual + effective surface for `get_height_at`).
+## Shared Gaussian displacement under the coupled hull.
+## Used by the visual surface and effective `get_height_at()` query.
 static func _vessel_displacement_params(b: RigidBody3D) -> Dictionary:
 	var hs: Vector3 = _hull_size_from_body(b)
 	var bx: float = b.global_position.x

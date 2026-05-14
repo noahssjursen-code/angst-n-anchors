@@ -1,4 +1,4 @@
-[gd_scene load_steps=10 format=3]
+[gd_scene load_steps=13 format=3]
 
 [ext_resource type="Script" path="res://scripts/systems/boat/boat_body.gd" id="1"]
 [ext_resource type="Script" path="res://scripts/systems/boat/buoyancy_component.gd" id="2"]
@@ -9,6 +9,9 @@
 [ext_resource type="Script" path="res://scripts/systems/boat/captains_chair.gd" id="7"]
 [ext_resource type="Script" path="res://scripts/systems/boat/boat_camera.gd" id="8"]
 [ext_resource type="Script" path="res://scripts/systems/boat/hydrodynamics_component.gd" id="9"]
+[ext_resource type="Script" path="res://scripts/systems/cargo/cargo_deck.gd" id="10"]
+[ext_resource type="Script" path="res://scripts/systems/dock/mooring_component.gd" id="11"]
+[ext_resource type="Script" path="res://scripts/systems/dock/mooring_point.gd" id="12"]
 
 [node name="TestBoat" type="RigidBody3D"]
 script = ExtResource("1")
@@ -69,4 +72,41 @@ interact_range = 5.2
 script = ExtResource("8")
 follow_distance = 18.0
 follow_height = 7.0
+
+[node name="CargoDeck" type="Node3D" parent="."]
+position = Vector3(0, 2.15, 1.5)
+script = ExtResource("10")
+grid_size = Vector3i(4, 2, 3)
+slot_size = Vector3(0.9, 0.85, 0.9)
+load_zone_extra = Vector3(1.0, 1.8, 1.0)
+
+[node name="MooringComponent" type="Node3D" parent="."]
+script = ExtResource("11")
+dock_side = "port"
+bow_point_path = NodePath("../MooringPoint_PortBow")
+stern_point_path = NodePath("../MooringPoint_PortStern")
+
+[node name="MooringPoint_PortBow" type="Node3D" parent="."]
+position = Vector3(-3.2, 1.2, -9.5)
+script = ExtResource("12")
+side = "port"
+station = "bow"
+
+[node name="MooringPoint_PortStern" type="Node3D" parent="."]
+position = Vector3(-3.2, 1.2, 9.5)
+script = ExtResource("12")
+side = "port"
+station = "stern"
+
+[node name="MooringPoint_StarboardBow" type="Node3D" parent="."]
+position = Vector3(3.2, 1.2, -9.5)
+script = ExtResource("12")
+side = "starboard"
+station = "bow"
+
+[node name="MooringPoint_StarboardStern" type="Node3D" parent="."]
+position = Vector3(3.2, 1.2, 9.5)
+script = ExtResource("12")
+side = "starboard"
+station = "stern"
 
