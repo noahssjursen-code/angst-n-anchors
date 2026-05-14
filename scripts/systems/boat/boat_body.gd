@@ -325,6 +325,28 @@ func get_hull_displacement_kg() -> float:
 	return _hull_displacement_kg()
 
 
+func get_cargo_decks() -> Array[Node]:
+	var out: Array[Node] = []
+	for node in find_children("*", "Node3D", true, false):
+		if node.has_method("get_capacity_units") and node.has_method("get_available_units"):
+			out.append(node)
+	return out
+
+
+func get_cargo_capacity_units() -> int:
+	var total := 0
+	for deck in get_cargo_decks():
+		total += int(deck.call("get_capacity_units"))
+	return total
+
+
+func get_cargo_available_units() -> int:
+	var total := 0
+	for deck in get_cargo_decks():
+		total += int(deck.call("get_available_units"))
+	return total
+
+
 func place_at_waterline(water_y: float, draft_fraction: float = 0.45) -> void:
 	_ensure_model()
 	_sync_hull_size_from_mesh()

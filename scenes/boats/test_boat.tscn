@@ -1,4 +1,4 @@
-[gd_scene load_steps=12 format=3]
+[gd_scene load_steps=13 format=3]
 
 [ext_resource type="Script" path="res://scripts/systems/boat/boat_body.gd" id="1"]
 [ext_resource type="Script" path="res://scripts/systems/boat/buoyancy_component.gd" id="2"]
@@ -11,6 +11,7 @@
 [ext_resource type="Script" path="res://scripts/systems/boat/hydrodynamics_component.gd" id="9"]
 [ext_resource type="Script" path="res://scripts/systems/dock/mooring_component.gd" id="11"]
 [ext_resource type="Script" path="res://scripts/systems/dock/mooring_point.gd" id="12"]
+[ext_resource type="Script" path="res://scripts/systems/boat/cargo_deck_component.gd" id="13"]
 
 [node name="TestBoat" type="RigidBody3D"]
 script = ExtResource("1")
@@ -111,4 +112,22 @@ position = Vector3(2.5, 2.0, 9.5)
 script = ExtResource("12")
 side = "starboard"
 station = "stern"
+
+[node name="CargoDeck_Main" type="Node3D" parent="ShipGameplay"]
+position = Vector3(0, 2.04, -0.25)
+script = ExtResource("13")
+deck_width_m = 4.8
+deck_length_m = 9.4
+unit_size_x_m = 1.2
+unit_size_z_m = 1.2
+max_units_override = 24
+
+[node name="CargoDeck_Aft" type="Node3D" parent="ShipGameplay"]
+position = Vector3(0, 2.04, 6.8)
+script = ExtResource("13")
+deck_width_m = 3.8
+deck_length_m = 3.8
+unit_size_x_m = 1.2
+unit_size_z_m = 1.2
+max_units_override = 9
 

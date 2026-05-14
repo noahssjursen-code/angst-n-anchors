@@ -26,6 +26,15 @@ extends CharacterBody3D
 @export var head_bob_frequency:   float = 10.0
 @export var head_bob_amplitude:   float = 0.055
 
+@export_group("Water")
+## Temporary water interaction: player cannot walk on water.
+@export var water_surface_y: float = -1.5
+@export var water_horizontal_drag: float = 6.0
+@export var water_sink_terminal_speed: float = -4.2
+@export var water_rescue_depth: float = 1.1
+@export var water_rescue_delay_s: float = 0.85
+@export var abyss_reset_y: float = -25.0
+
 const MAX_PITCH  := deg_to_rad(88.0)
 const BASE_GRAVITY := 20.0   # stronger than real-world 9.8 — keeps feet planted
 const LAYER_PLAYER := 8
@@ -40,6 +49,8 @@ var _bob_time:         float   = 0.0
 var _camera_y_offset:  float   = 0.0
 var _was_on_floor:     bool    = true
 var _camera_base_y:    float   = 0.0
+var _last_safe_position: Vector3 = Vector3.ZERO
+var _water_submerge_time: float = 0.0
 
 
 func _ready() -> void:
@@ -50,6 +61,7 @@ func _ready() -> void:
 	_camera_base_y = camera.position.y
 	_current_speed = walk_speed
 	camera.fov = base_fov
+	_last_safe_position = global_position
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -123,8 +135,35 @@ func _physics_process(delta: float) -> void:
 
 	move_and_slide()
 
+	var waterline := water_surface_y
+	if global_position.y < waterline:
+		# In water: heavy drag and limited sink speed (not walkable, no surface clamp).
+		var drag := clampf(1.0 - water_horizontal_drag * delta, 0.0, 1.0)
+		velocity.x *= drag
+		velocity.z *= drag
+		velocity.y = maxf(velocity.y, water_sink_terminal_speed)
+
+		if global_position.y < waterline - water_rescue_depth:
+			_water_submerge_time += delta
+		else:
+			_water_submerge_time = 0.0
+		if _water_submerge_time >= water_rescue_delay_s:
+			global_position = _last_safe_position
+			velocity = Vector3.ZERO
+			_water_submerge_time = 0.0
+			return
+	else:
+		_water_submerge_time = 0.0
+
+	if global_position.y < abyss_reset_y:
+		global_position = _last_safe_position
+		velocity = Vector3.ZERO
+		return
+
 	if is_on_floor() and velocity.y < 0.0:
 		velocity.y = 0.0
+	if is_on_floor() and global_position.y > waterline + 0.1:
+		_last_safe_position = global_position
 
 
 func _process(delta: float) -> void:

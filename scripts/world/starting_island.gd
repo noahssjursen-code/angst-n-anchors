@@ -6,6 +6,8 @@ const BOAT_SCENE   := preload("res://scenes/boats/test_boat.tscn")
 const OCEAN_SHADER := preload("res://resources/shaders/ocean_waves.gdshader")
 const RAIN_FIELD_SCRIPT := preload("res://scripts/systems/weather/rain_field.gd")
 const DockFacilitiesScript := preload("res://scripts/systems/dock/dock_facilities.gd")
+const WarehouseCargoTestScript := preload("res://scripts/systems/cargo/warehouse_cargo_test.gd")
+const WarehouseContractZoneScript := preload("res://scripts/systems/cargo/warehouse_contract_zone.gd")
 
 const C_SAND  := Color(0.82, 0.74, 0.58)
 const C_OCEAN := Color(0.10, 0.28, 0.48)
@@ -44,6 +46,8 @@ var _ocean_shader_material: ShaderMaterial
 var _sky_material: ProceduralSkyMaterial
 var _environment: Environment
 var _sun: DirectionalLight3D
+var _open_warehouse: StaticBody3D
+var _warehouse_contract_zone: Node3D
 
 
 func _process(_delta: float) -> void:
@@ -72,6 +76,7 @@ func _ready() -> void:
 	_build_island()
 	_build_open_warehouse()
 	_build_dock()
+	_build_warehouse_cargo_test()
 	_connect_weather_lighting()
 	_apply_weather_lighting()
 	
@@ -248,6 +253,7 @@ func _build_open_warehouse() -> void:
 	add_child(warehouse)
 	warehouse.position = OPEN_WAREHOUSE_POSITION
 	warehouse.rotation_degrees = OPEN_WAREHOUSE_ROTATION
+	_open_warehouse = warehouse
 
 	var assembler := ModelAssembler.new()
 	assembler.model_data_path = OPEN_WAREHOUSE_MODEL
@@ -261,6 +267,54 @@ func _build_open_warehouse() -> void:
 		if esc != null:
 			warehouse.owner = esc
 			assembler.owner = esc
+	_build_warehouse_contract_zone()
+
+
+func _build_warehouse_contract_zone() -> void:
+	if _open_warehouse == null or not is_instance_valid(_open_warehouse):
+		return
+	var old := _open_warehouse.get_node_or_null("ContractZone")
+	if old != null:
+		old.queue_free()
+
+	var zone := WarehouseContractZoneScript.new()
+	zone.name = "ContractZone"
+	zone.position = Vector3(0.0, 0.03, -0.6)
+	zone.set("zone_width_m", 6.2)
+	zone.set("zone_length_m", 8.4)
+	zone.set("slot_size_x_m", 1.2)
+	zone.set("slot_size_z_m", 1.2)
+	zone.set("show_debug_area", true)
+	zone.set("debug_color", Color(0.18, 0.76, 0.30, 0.25))
+	_open_warehouse.add_child(zone)
+	_warehouse_contract_zone = zone
+
+	if Engine.is_editor_hint():
+		var esc := get_tree().edited_scene_root
+		if esc != null:
+			zone.owner = esc
+
+
+func _build_warehouse_cargo_test() -> void:
+	if Engine.is_editor_hint():
+		return
+	if _open_warehouse == null or not is_instance_valid(_open_warehouse):
+		return
+
+	var existing := get_node_or_null("WarehouseCargoTest")
+	if existing != null:
+		existing.queue_free()
+
+	var cargo_test := WarehouseCargoTestScript.new()
+	cargo_test.name = "WarehouseCargoTest"
+	add_child(cargo_test)
+	cargo_test.warehouse_root_path = cargo_test.get_path_to(_open_warehouse)
+	if _warehouse_contract_zone != null and is_instance_valid(_warehouse_contract_zone):
+		cargo_test.contract_zone_path = cargo_test.get_path_to(_warehouse_contract_zone)
+	var spawner := get_node_or_null("DockFacilities/ShipSpawner")
+	if spawner != null:
+		cargo_test.ship_spawner_path = cargo_test.get_path_to(spawner)
+	cargo_test.call_deferred("refresh_demo_contract")
 
 
 func _build_dock() -> void:
