@@ -2,6 +2,7 @@ class_name MooringComponent
 extends Node3D
 
 @export_enum("port", "starboard") var dock_side: String = "port"
+@export var auto_select_closest_side: bool = true
 @export var bow_point_path: NodePath
 @export var stern_point_path: NodePath
 @export var rope_radius: float = 0.045
@@ -10,6 +11,8 @@ extends Node3D
 @export var hold_velocity_damp: float = 8.0
 
 var is_moored: bool = false
+var bow_line_tied: bool = false
+var stern_line_tied: bool = false
 
 var _body: RigidBody3D
 var _front_post: Node
@@ -21,7 +24,7 @@ var _rope_root: Node3D
 
 
 func _ready() -> void:
-	_body = get_parent() as RigidBody3D
+	_body = _resolve_boat_rigid_body()
 	_ensure_rope_root()
 	_resolve_mooring_points()
 
@@ -43,23 +46,66 @@ func _physics_process(delta: float) -> void:
 
 func moor_to_posts(front_post: Node, rear_post: Node) -> void:
 	if _body == null:
-		_body = get_parent() as RigidBody3D
+		_body = _resolve_boat_rigid_body()
 	if _body == null:
 		return
 
-	_resolve_mooring_points()
 	_front_post = front_post
 	_rear_post = rear_post
+	if auto_select_closest_side:
+		_select_closest_dock_side(front_post, rear_post)
+	else:
+		_resolve_mooring_points()
 	_hold_transform = _body.global_transform
+	bow_line_tied = true
+	stern_line_tied = true
 	is_moored = true
 	_rebuild_ropes()
 
 
 func release_mooring() -> void:
 	is_moored = false
+	bow_line_tied = false
+	stern_line_tied = false
 	_front_post = null
 	_rear_post = null
 	_clear_ropes()
+
+
+func toggle_line(station: String) -> bool:
+	var next_tied := not is_line_tied(station)
+	set_line_tied(station, next_tied)
+	return next_tied
+
+
+func set_line_tied(station: String, tied: bool) -> void:
+	var had_any_line := bow_line_tied or stern_line_tied
+	match station:
+		"bow":
+			bow_line_tied = tied
+		"stern":
+			stern_line_tied = tied
+		_:
+			return
+
+	var has_any_line := bow_line_tied or stern_line_tied
+	is_moored = has_any_line
+	if has_any_line and not had_any_line and _body != null:
+		_hold_transform = _body.global_transform
+	if not has_any_line and _body != null:
+		_body.linear_velocity = Vector3.ZERO
+		_body.angular_velocity = Vector3.ZERO
+	_rebuild_ropes()
+
+
+func is_line_tied(station: String) -> bool:
+	match station:
+		"bow":
+			return bow_line_tied
+		"stern":
+			return stern_line_tied
+		_:
+			return false
 
 
 func _ensure_rope_root() -> void:
@@ -81,8 +127,10 @@ func _rebuild_ropes() -> void:
 	if bow_anchor == null or stern_anchor == null:
 		return
 
-	_add_rope("ForwardRope", bow_anchor, _post_anchor(_front_post))
-	_add_rope("RearRope", stern_anchor, _post_anchor(_rear_post))
+	if bow_line_tied:
+		_add_rope("ForwardRope", bow_anchor, _post_anchor(_front_post))
+	if stern_line_tied:
+		_add_rope("RearRope", stern_anchor, _post_anchor(_rear_post))
 
 
 func _clear_ropes() -> void:
@@ -133,6 +181,35 @@ func _resolve_mooring_points() -> void:
 		_bow_point = _find_point(dock_side, "bow")
 	if _stern_point == null:
 		_stern_point = _find_point(dock_side, "stern")
+
+
+func _select_closest_dock_side(front_post: Node, rear_post: Node) -> void:
+	var best_side := dock_side
+	var best_score := INF
+	for side in ["port", "starboard"]:
+		var bow_point := _find_point(side, "bow")
+		var stern_point := _find_point(side, "stern")
+		if bow_point == null or stern_point == null:
+			continue
+		var score := (
+			bow_point.global_position.distance_to(_post_anchor(front_post))
+			+ stern_point.global_position.distance_to(_post_anchor(rear_post))
+		)
+		if score < best_score:
+			best_score = score
+			best_side = side
+			_bow_point = bow_point
+			_stern_point = stern_point
+	dock_side = best_side
+
+
+func _resolve_boat_rigid_body() -> RigidBody3D:
+	var p := get_parent()
+	while p != null:
+		if p is RigidBody3D:
+			return p as RigidBody3D
+		p = p.get_parent()
+	return null
 
 
 func _find_point(requested_side: String, requested_station: String) -> Node3D:

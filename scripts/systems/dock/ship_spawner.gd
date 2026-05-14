@@ -38,14 +38,26 @@ func spawn_ship() -> Node3D:
 
 
 func clear_ship() -> void:
+	_clear_post_registrations()
 	if current_ship != null and is_instance_valid(current_ship):
 		current_ship.queue_free()
 	current_ship = null
 
 
+func release_current_ship() -> void:
+	if current_ship == null or not is_instance_valid(current_ship):
+		return
+	var mooring := _find_mooring_component(current_ship)
+	if mooring != null and mooring.has_method("release_mooring"):
+		mooring.call("release_mooring")
+
+
 func _moor_ship(ship: Node3D) -> void:
-	var mooring := ship.get_node_or_null("MooringComponent")
+	var mooring := _find_mooring_component(ship)
 	if mooring == null or not mooring.has_method("moor_to_posts"):
+		push_warning(
+			"ShipSpawner: ship has no MooringComponent (expected under ShipGameplay or boat root)."
+		)
 		return
 
 	var front_post := get_node_or_null(front_post_path)
@@ -55,3 +67,30 @@ func _moor_ship(ship: Node3D) -> void:
 		return
 
 	mooring.call("moor_to_posts", front_post, rear_post)
+	_register_post(front_post, mooring, "bow")
+	_register_post(rear_post, mooring, "stern")
+
+
+func _register_post(post: Node, mooring: Node, station: String) -> void:
+	if post.has_method("register_mooring_component"):
+		post.call("register_mooring_component", mooring)
+	post.set("line_station", station)
+
+
+func _find_mooring_component(ship: Node) -> Node:
+	if ship == null:
+		return null
+	var direct := ship.get_node_or_null("MooringComponent")
+	if direct != null:
+		return direct
+	return ship.find_child("MooringComponent", true, false)
+
+
+func _clear_post_registrations() -> void:
+	if current_ship == null or not is_instance_valid(current_ship):
+		return
+	var mooring := _find_mooring_component(current_ship)
+	for post_path in [front_post_path, rear_post_path]:
+		var post := get_node_or_null(post_path)
+		if post != null and post.has_method("clear_mooring_component"):
+			post.call("clear_mooring_component", mooring)

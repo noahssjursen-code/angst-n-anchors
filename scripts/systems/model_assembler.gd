@@ -24,6 +24,7 @@ extends Node3D
 ##       "color": [0.1, 0.1, 0.1],
 ##       "roughness": 0.9,
 ##       "metallic": 0.0,
+##       "invert_collision_face_winding": false,
 ##       "collision": "convex"
 ##     }
 ##   ]
@@ -59,9 +60,20 @@ const PART_PREFIX := "ModelPart_"
 		if is_node_ready():
 			rebuild()
 
+## When false, collision-enabled parts still contribute points through
+## `get_collision_points_in`, but do not spawn separate CollisionShape3D nodes.
+@export var build_part_colliders: bool = true:
+	set(v):
+		if build_part_colliders == v:
+			return
+		build_part_colliders = v
+		if is_node_ready():
+			rebuild()
+
 var _part_nodes_by_name: Dictionary = {}
 var _part_nodes_by_role: Dictionary = {}
 var _part_specs_by_name: Dictionary = {}
+var _collidable_parts_by_name: Dictionary = {}
 var collision_mode_override: String = ""
 
 
@@ -74,6 +86,7 @@ func rebuild() -> void:
 	_part_nodes_by_name.clear()
 	_part_nodes_by_role.clear()
 	_part_specs_by_name.clear()
+	_collidable_parts_by_name.clear()
 
 	if model_data_path.is_empty():
 		return
@@ -139,13 +152,16 @@ func _build_part(part: Dictionary) -> void:
 	node.mesh_color = _color_from_array(part.get("color", [0.5, 0.5, 0.5]), Color(0.5, 0.5, 0.5))
 	node.mesh_roughness = float(part.get("roughness", 0.96))
 	node.mesh_metallic = float(part.get("metallic", 0.0))
-	node.create_collision = _part_collision_enabled(part)
+	node.invert_collision_face_winding = bool(part.get("invert_collision_face_winding", false))
+	var is_collidable := _part_collision_enabled(part)
+	node.create_collision = is_collidable and build_part_colliders
 	node.collision_parent_path = _collision_path_for_part(node)
 	node.rebuild_suspended = false
 	node.rebuild()
 
 	_part_nodes_by_name[part_name] = node
 	_part_specs_by_name[part_name] = part.duplicate()
+	_collidable_parts_by_name[part_name] = is_collidable
 
 	var role := str(part.get("role", ""))
 	if not role.is_empty():
@@ -170,17 +186,53 @@ func _build_nested_model(part_name: String, part: Dictionary) -> void:
 
 	node.collision_parent_path = _collision_path_for_part(node)
 	node.collision_mode_override = _nested_collision_override(part)
+	node.build_part_colliders = build_part_colliders
 	node.absolute_scale = absolute_scale * float(part.get("scale", 1.0))
 	node.model_data_path = model_path
 
 	_part_nodes_by_name[part_name] = node
 	_part_specs_by_name[part_name] = part.duplicate()
+	_collidable_parts_by_name[part_name] = _nested_collision_override(part) != "none"
 
 	var role := str(part.get("role", ""))
 	if not role.is_empty():
 		if not _part_nodes_by_role.has(role):
 			_part_nodes_by_role[role] = []
 		_part_nodes_by_role[role].append(node)
+
+
+func get_collision_points_in(target: Node3D) -> Array[Vector3]:
+	var points: Array[Vector3] = []
+	if target == null:
+		return points
+
+	for part_name in _part_nodes_by_name.keys():
+		if not bool(_collidable_parts_by_name.get(part_name, false)):
+			continue
+		var node := _part_nodes_by_name[part_name] as Node
+		if node == null:
+			continue
+		if node.has_method("get_collision_points_in"):
+			points.append_array(node.call("get_collision_points_in", target))
+
+	return points
+
+
+func get_collision_faces_in(target: Node3D) -> Array[Vector3]:
+	var faces: Array[Vector3] = []
+	if target == null:
+		return faces
+
+	for part_name in _part_nodes_by_name.keys():
+		if not bool(_collidable_parts_by_name.get(part_name, false)):
+			continue
+		var node := _part_nodes_by_name[part_name] as Node
+		if node == null:
+			continue
+		if node.has_method("get_collision_faces_in"):
+			faces.append_array(node.call("get_collision_faces_in", target))
+
+	return faces
 
 
 func _clear_generated_parts() -> void:

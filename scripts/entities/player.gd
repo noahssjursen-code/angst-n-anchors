@@ -1,7 +1,5 @@
 extends CharacterBody3D
 
-const CARRY_COMPONENT_SCRIPT := preload("res://scripts/systems/cargo/carry_component.gd")
-
 # ── Movement ──────────────────────────────────────────────────────────────────
 @export_group("Movement")
 @export var walk_speed:          float = 4.5
@@ -30,6 +28,8 @@ const CARRY_COMPONENT_SCRIPT := preload("res://scripts/systems/cargo/carry_compo
 
 const MAX_PITCH  := deg_to_rad(88.0)
 const BASE_GRAVITY := 20.0   # stronger than real-world 9.8 — keeps feet planted
+const LAYER_PLAYER := 8
+const LAYER_BOAT_WALK := 4
 
 @onready var camera: Camera3D = $Camera3D
 
@@ -44,11 +44,12 @@ var _camera_base_y:    float   = 0.0
 
 func _ready() -> void:
 	add_to_group("player")
+	collision_layer = LAYER_PLAYER
+	collision_mask |= LAYER_BOAT_WALK
 	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 	_camera_base_y = camera.position.y
 	_current_speed = walk_speed
 	camera.fov = base_fov
-	_ensure_carry_component()
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -156,11 +157,3 @@ func _process(delta: float) -> void:
 	if is_on_floor() and absf(_smoothed_input.x) > 0.05:
 		strafe_tilt = -signf(_smoothed_input.x) * deg_to_rad(strafe_tilt_angle)
 	camera.rotation.z = lerp_angle(camera.rotation.z, strafe_tilt, delta * 8.0)
-
-
-func _ensure_carry_component() -> void:
-	if get_node_or_null("CarryComponent") != null:
-		return
-	var carry_component := CARRY_COMPONENT_SCRIPT.new() as Node3D
-	carry_component.name = "CarryComponent"
-	add_child(carry_component)

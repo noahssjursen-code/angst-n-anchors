@@ -5,7 +5,6 @@ const PLAYER_SCENE := preload("res://scenes/islands/starting_island/player.tscn"
 const BOAT_SCENE   := preload("res://scenes/boats/test_boat.tscn")
 const OCEAN_SHADER := preload("res://resources/shaders/ocean_waves.gdshader")
 const RAIN_FIELD_SCRIPT := preload("res://scripts/systems/weather/rain_field.gd")
-const CARGO_SOURCE_SCRIPT := preload("res://scripts/systems/cargo/cargo_source.gd")
 const MOORING_POST_SCRIPT := preload("res://scripts/systems/dock/mooring_post.gd")
 const SHIP_SPAWNER_SCRIPT := preload("res://scripts/systems/dock/ship_spawner.gd")
 const DOCK_TERMINAL_SCRIPT := preload("res://scripts/systems/dock/dock_terminal.gd")
@@ -16,10 +15,12 @@ const C_WOOD  := Color(0.32, 0.22, 0.13)
 const C_POST  := Color(0.24, 0.16, 0.09)
 
 const BERTH_SHIP_POSITION := Vector3(11.0, WaveSurface.WATER_LEVEL, 47.0)
-const MOORING_FRONT_POST_POSITION := Vector3(7.2, 0.0, 36.5)
-const MOORING_REAR_POST_POSITION := Vector3(7.2, 0.0, 57.5)
-const TERMINAL_POSITION := Vector3(-2.8, 0.0, 31.5)
-const CARGO_SOURCE_POSITION := Vector3(-8.0, 0.0, 27.0)
+const DOCK_SURFACE_Y := 0.08
+const DOCK_BODY_CENTER_Y := DOCK_SURFACE_Y - 1.0
+const DOCK_PILE_CENTER_Y := DOCK_SURFACE_Y - 1.75
+const MOORING_FRONT_POST_POSITION := Vector3(7.2, DOCK_SURFACE_Y, 36.5)
+const MOORING_REAR_POST_POSITION := Vector3(7.2, DOCK_SURFACE_Y, 57.5)
+const TERMINAL_POSITION := Vector3(-2.8, DOCK_SURFACE_Y, 31.5)
 
 var _ocean_shader_material: ShaderMaterial
 var _sky_material: ProceduralSkyMaterial
@@ -51,7 +52,6 @@ func _ready() -> void:
 	_build_ocean()
 	_build_island()
 	_build_dock()
-	_build_cargo_source()
 	_connect_weather_lighting()
 	_apply_weather_lighting()
 	
@@ -223,25 +223,26 @@ func _build_island() -> void:
 
 
 func _build_dock() -> void:
-	_add_dock_section("LoadingApron", Vector3(16.0, 2.0, 8.0), Vector3(-3.5, -1.0, 31.0))
-	_add_dock_section("SideBerth", Vector3(3.2, 2.0, 31.0), Vector3(5.6, -1.0, 45.5))
-	_add_dock_section("BerthConnector", Vector3(8.0, 2.0, 4.0), Vector3(2.8, -1.0, 35.0))
+	_add_dock_section(
+		"LoadingApron",
+		Vector3(16.0, 2.0, 8.0),
+		Vector3(-3.5, DOCK_BODY_CENTER_Y, 31.0)
+	)
+	_add_dock_section("SideBerth", Vector3(3.2, 2.0, 31.0), Vector3(5.6, DOCK_BODY_CENTER_Y, 45.5))
+	_add_dock_section(
+		"BerthConnector",
+		Vector3(8.0, 2.0, 4.0),
+		Vector3(2.8, DOCK_BODY_CENTER_Y, 35.0)
+	)
 
 	for z in [31.0, 36.0, 41.0, 46.0, 51.0, 56.0]:
 		for x in [4.2, 7.0]:
-			_add_support_pile(Vector3(x, -1.75, z))
+			_add_support_pile(Vector3(x, DOCK_PILE_CENTER_Y, z))
 
 	var front_post := _add_mooring_post("MooringPostForward", MOORING_FRONT_POST_POSITION)
 	var rear_post := _add_mooring_post("MooringPostRear", MOORING_REAR_POST_POSITION)
 	_build_ship_spawner(front_post, rear_post)
 	_build_dock_terminal()
-
-
-func _build_cargo_source() -> void:
-	var cargo_source := CARGO_SOURCE_SCRIPT.new() as Node3D
-	cargo_source.name = "WarehouseCargoSource"
-	cargo_source.position = CARGO_SOURCE_POSITION
-	add_child(cargo_source)
 
 
 func _spawn_player() -> void:

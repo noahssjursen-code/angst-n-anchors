@@ -173,7 +173,7 @@
         ],
         "roughness": 0.1,
         "metallic": 0.9,
-        "collision": "none"
+        "collision": "convex"
       },
       {
         "name": "overhanging_roof",

@@ -18,9 +18,13 @@ func _ready() -> void:
 
 
 func _process(_delta: float) -> void:
-	if Engine.is_editor_hint() or _prompt_label == null or _panel == null:
+	if Engine.is_editor_hint() or _panel == null or _prompt_label == null:
 		return
-	_prompt_label.visible = not _panel.visible and _player_can_interact()
+	var can_interact := _player_can_interact()
+	_prompt_label.visible = (
+		can_interact
+		and not _panel.visible
+	)
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -30,7 +34,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		_show_menu()
 		get_viewport().set_input_as_handled()
 	elif event.is_action_pressed("ui_cancel") and _panel != null and _panel.visible:
-		_panel.visible = false
+		_close_menu()
 		get_viewport().set_input_as_handled()
 
 
@@ -59,6 +63,9 @@ func _rebuild_terminal() -> void:
 
 
 func _ensure_ui() -> void:
+	if _ui_layer != null and is_instance_valid(_ui_layer):
+		return
+
 	_ui_layer = CanvasLayer.new()
 	_ui_layer.name = "DockTerminalLayer"
 	add_child(_ui_layer)
@@ -69,8 +76,8 @@ func _ensure_ui() -> void:
 	_panel.set_anchors_preset(Control.PRESET_CENTER)
 	_panel.offset_left = -150.0
 	_panel.offset_right = 150.0
-	_panel.offset_top = -90.0
-	_panel.offset_bottom = 90.0
+	_panel.offset_top = -120.0
+	_panel.offset_bottom = 120.0
 	_ui_layer.add_child(_panel)
 
 	var title := Label.new()
@@ -86,8 +93,8 @@ func _ensure_ui() -> void:
 	spawn_button.set_anchors_preset(Control.PRESET_CENTER)
 	spawn_button.offset_left = -105.0
 	spawn_button.offset_right = 105.0
-	spawn_button.offset_top = -18.0
-	spawn_button.offset_bottom = 22.0
+	spawn_button.offset_top = -24.0
+	spawn_button.offset_bottom = 16.0
 	spawn_button.pressed.connect(_spawn_selected_ship)
 	_panel.add_child(spawn_button)
 
@@ -98,10 +105,11 @@ func _ensure_ui() -> void:
 	close_button.offset_right = 70.0
 	close_button.offset_top = -54.0
 	close_button.offset_bottom = -18.0
-	close_button.pressed.connect(func() -> void: _panel.visible = false)
+	close_button.pressed.connect(_close_menu)
 	_panel.add_child(close_button)
 
 	_prompt_label = Label.new()
+	_prompt_label.name = "TerminalPrompt"
 	_prompt_label.text = prompt_text
 	_prompt_label.visible = false
 	_prompt_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -109,15 +117,22 @@ func _ensure_ui() -> void:
 	_prompt_label.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
 	_prompt_label.offset_left = -190.0
 	_prompt_label.offset_right = 190.0
-	_prompt_label.offset_top = -88.0
-	_prompt_label.offset_bottom = -48.0
+	_prompt_label.offset_top = -148.0
+	_prompt_label.offset_bottom = -108.0
 	_ui_layer.add_child(_prompt_label)
-
 
 func _show_menu() -> void:
 	_ensure_ui()
 	_panel.visible = true
-	_prompt_label.visible = false
+	if _prompt_label != null:
+		_prompt_label.visible = false
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+
+
+func _close_menu() -> void:
+	if _panel != null:
+		_panel.visible = false
+	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 
 
 func _spawn_selected_ship() -> void:
@@ -126,6 +141,9 @@ func _spawn_selected_ship() -> void:
 		spawner.call("spawn_ship")
 	if _panel != null:
 		_panel.visible = false
+	if _prompt_label != null:
+		_prompt_label.visible = false
+	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 
 
 func _player_can_interact() -> bool:

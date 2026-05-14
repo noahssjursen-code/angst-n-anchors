@@ -89,6 +89,15 @@ var mesh_data: Dictionary = {}:
 		if is_node_ready():
 			rebuild()
 
+## When true, walk/collision mesh triangles use reversed winding (swaps v1 and v2).
+## Use if a DCC export has inverted normals for ConcavePolygonShape3D (walk through
+## walls from outside, stuck inside).
+@export var invert_collision_face_winding: bool = false:
+	set(v):
+		if invert_collision_face_winding == v:
+			return
+		invert_collision_face_winding = v
+
 
 var actual_size: Vector3 = Vector3.ZERO
 var actual_center: Vector3 = Vector3.ZERO
@@ -139,6 +148,80 @@ func rebuild() -> void:
 	_build_mesh(params)
 	if create_collision:
 		_build_collision(params)
+
+
+func get_collision_points_in(target: Node3D) -> Array[Vector3]:
+	if target == null:
+		return []
+	if not _ensure_current_data():
+		return []
+
+	var params := _get_normalization_params(_current_data["vertices"])
+	var vertices: Array = _current_data["vertices"]
+	var points: Array[Vector3] = []
+	var rotation_basis := Basis.from_euler(Vector3(
+		deg_to_rad(mesh_rotation_degrees.x),
+		deg_to_rad(mesh_rotation_degrees.y),
+		deg_to_rad(mesh_rotation_degrees.z)
+	))
+	var scale_vec: Vector3 = params["scale"]
+	var offset: Vector3 = params["offset"]
+
+	for i in range(0, vertices.size(), 3):
+		var local := Vector3(vertices[i], vertices[i + 1], vertices[i + 2])
+		local = rotation_basis * ((local + offset) * scale_vec)
+		points.append(target.to_local(to_global(local)))
+
+	return points
+
+
+func get_collision_faces_in(target: Node3D) -> Array[Vector3]:
+	if target == null:
+		return []
+	if not _ensure_current_data():
+		return []
+
+	var params := _get_normalization_params(_current_data["vertices"])
+	var vertices: Array = _current_data["vertices"]
+	var indices: Array = _current_data["indices"]
+	var faces: Array[Vector3] = []
+	var rotation_basis := Basis.from_euler(Vector3(
+		deg_to_rad(mesh_rotation_degrees.x),
+		deg_to_rad(mesh_rotation_degrees.y),
+		deg_to_rad(mesh_rotation_degrees.z)
+	))
+	var scale_vec: Vector3 = params["scale"]
+	var offset: Vector3 = params["offset"]
+
+	for i in range(0, indices.size(), 3):
+		var triangle := [0, 1, 2]
+		if invert_collision_face_winding:
+			triangle = [0, 2, 1]
+		for j in triangle:
+			var vertex_index := int(indices[i + j]) * 3
+			if vertex_index + 2 >= vertices.size():
+				continue
+			var local := Vector3(
+				vertices[vertex_index],
+				vertices[vertex_index + 1],
+				vertices[vertex_index + 2]
+			)
+			local = rotation_basis * ((local + offset) * scale_vec)
+			faces.append(target.to_local(to_global(local)))
+
+	return faces
+
+
+func _ensure_current_data() -> bool:
+	if _current_data.has("vertices") and _current_data.has("indices"):
+		return true
+	if not mesh_data.is_empty():
+		_current_data = mesh_data.duplicate(true)
+	elif not mesh_data_path.is_empty():
+		_current_data = _load_json(mesh_data_path)
+	else:
+		return false
+	return _current_data.has("vertices") and _current_data.has("indices")
 
 
 func _load_json(path: String) -> Dictionary:
