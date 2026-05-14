@@ -15,8 +15,10 @@ const MESH_TRANSFORMER_SCRIPT := preload("res://scripts/systems/mesh_transformer
 @export var crate_scale: float = 0.78
 @export var crate_color: Color = Color(0.56, 0.43, 0.30)
 @export var crate_positions_local: Array[Vector3] = []
-@export var contract_demo_crate_count: int = 8
+@export var contract_demo_crate_count: int = 35
 @export var contract_active_demo: bool = true
+## Debug helper key: instantly load all remaining contract crates into ship cargo decks.
+@export var quickload_all_cargo_keycode: int = KEY_K
 @export var carry_visual_scale: float = 0.46
 @export var carry_visual_offset_local: Vector3 = Vector3(0.38, -0.44, -1.15)
 
@@ -37,6 +39,7 @@ func _ready() -> void:
 func _process(_delta: float) -> void:
 	if Engine.is_editor_hint() or _prompt_label == null:
 		return
+	_update_debug_zone_visibility()
 	_prompt_label.text = _status_text()
 	_prompt_label.visible = true
 
@@ -44,6 +47,16 @@ func _process(_delta: float) -> void:
 func _unhandled_input(event: InputEvent) -> void:
 	if Engine.is_editor_hint():
 		return
+	if event is InputEventKey:
+		var key_event := event as InputEventKey
+		if (
+			key_event.pressed
+			and not key_event.echo
+			and key_event.keycode == quickload_all_cargo_keycode
+		):
+			_debug_quickload_all_cargo_to_ship()
+			get_viewport().set_input_as_handled()
+			return
 	if not event.is_action_pressed("interact"):
 		return
 
@@ -276,6 +289,51 @@ func _remaining_crate_count() -> int:
 	return count
 
 
+func _is_ship_boarded() -> bool:
+	var spawner := get_node_or_null(ship_spawner_path) as ShipSpawner
+	if (
+		spawner == null
+		or spawner.current_ship == null
+		or not is_instance_valid(spawner.current_ship)
+	):
+		return false
+	var chair := spawner.current_ship.find_child("CaptainsChair", true, false)
+	if chair != null and chair.has_method("is_occupied"):
+		return bool(chair.call("is_occupied"))
+	return false
+
+
+func _set_contract_zone_visible(on: bool) -> void:
+	var zone := _contract_zone()
+	if zone != null and "show_debug_area" in zone:
+		zone.set("show_debug_area", on)
+
+
+func _set_ship_deck_zones_visible(on: bool) -> void:
+	var spawner := get_node_or_null(ship_spawner_path) as ShipSpawner
+	if (
+		spawner == null
+		or spawner.current_ship == null
+		or not is_instance_valid(spawner.current_ship)
+	):
+		return
+	if not spawner.current_ship.has_method("get_cargo_decks"):
+		return
+	var decks: Array = spawner.current_ship.call("get_cargo_decks")
+	for d in decks:
+		var deck := d as Node
+		if deck != null and "show_debug_deck_area" in deck:
+			deck.set("show_debug_deck_area", on)
+
+
+func _update_debug_zone_visibility() -> void:
+	var loading_finished := _remaining_crate_count() <= 0 and _carried_units <= 0
+	var boarded := _is_ship_boarded()
+	var zones_visible := not (loading_finished or boarded)
+	_set_contract_zone_visible(zones_visible)
+	_set_ship_deck_zones_visible(zones_visible)
+
+
 func _nearest_player() -> CharacterBody3D:
 	var best: CharacterBody3D = null
 	var best_d2 := INF
@@ -355,6 +413,89 @@ func _clear_carried_visual() -> void:
 	if _carried_visual != null and is_instance_valid(_carried_visual):
 		_carried_visual.queue_free()
 	_carried_visual = null
+
+
+func _debug_quickload_all_cargo_to_ship() -> void:
+	var spawner := get_node_or_null(ship_spawner_path) as ShipSpawner
+	if (
+		spawner == null
+		or spawner.current_ship == null
+		or not is_instance_valid(spawner.current_ship)
+	):
+		return
+	if not spawner.current_ship.has_method("get_cargo_decks"):
+		return
+
+	var decks: Array = spawner.current_ship.call("get_cargo_decks")
+	if decks.is_empty():
+		return
+
+	var warehouse := _warehouse_root()
+	if warehouse == null:
+		return
+
+	var crates: Array[StaticBody3D] = []
+	for node in warehouse.get_children():
+		if node is StaticBody3D and node.is_in_group(CRATE_GROUP):
+			crates.append(node as StaticBody3D)
+
+	for crate in crates:
+		if crate == null or not is_instance_valid(crate):
+			continue
+		if not _try_debug_add_one_crate_to_any_deck(
+			decks,
+			crate.global_position,
+			"warehouse_crate",
+		):
+			break
+		crate.queue_free()
+
+	if _carried_units > 0:
+		var carry_point := global_position
+		var player := _nearest_player()
+		if player != null:
+			carry_point = player.global_position
+		if _try_debug_add_one_crate_to_any_deck(decks, carry_point, _carried_cargo_id):
+			_carried_units = 0
+			_carried_cargo_id = ""
+			_clear_carried_visual()
+
+
+func _try_debug_add_one_crate_to_any_deck(
+	decks: Array,
+	world_hint: Vector3,
+	cargo_id: String,
+) -> bool:
+	var best_deck: Node = null
+	var best_drop := Vector3.INF
+	var best_dist := INF
+	for d in decks:
+		var deck := d as Node
+		if deck == null:
+			continue
+		if not deck.has_method("get_available_units"):
+			continue
+		if int(deck.call("get_available_units")) <= 0:
+			continue
+		if not deck.has_method("get_nearest_free_slot_world_position"):
+			continue
+		var drop: Vector3 = deck.call("get_nearest_free_slot_world_position", world_hint)
+		if drop == Vector3.INF:
+			continue
+		var d2 := drop.distance_squared_to(world_hint)
+		if d2 < best_dist:
+			best_dist = d2
+			best_deck = deck
+			best_drop = drop
+
+	if best_deck == null:
+		return false
+
+	var id := cargo_id
+	if id.is_empty():
+		id = "warehouse_crate"
+	var ticket: int = best_deck.call("add_cargo", id, 1, crate_mass_kg, best_drop)
+	return ticket > 0
 
 
 func _json_root_has_parts(path: String) -> bool:

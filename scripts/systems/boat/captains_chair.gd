@@ -335,3 +335,7 @@ func _place_player_on_deck(body: CharacterBody3D) -> void:
 	body.global_position = boat.to_global(local_exit)
 	body.velocity = Vector3.ZERO
 
+
+func is_occupied() -> bool:
+	return _occupied
+
