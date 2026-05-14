@@ -6,6 +6,9 @@ extends Node3D
 @export var spawn_rotation_degrees: Vector3 = Vector3.ZERO
 @export var waterline_draft_fraction: float = 0.45
 @export var spawned_ship_name: String = "SpawnedShip"
+## Spawn-time autoselect only considers bollards near the ship to avoid
+## capturing absurd initial rope lengths from distant extension posts.
+@export_range(2.0, 120.0, 0.5) var spawn_mooring_max_distance_m: float = 12.0
 
 var current_ship: Node3D
 
@@ -69,15 +72,69 @@ func _moor_ship(ship: Node3D) -> void:
 	if mc == null:
 		return
 
-	var pair := MooringComponent.pick_two_dock_posts_for_ship(mc, tree)
+	var pair := _pick_spawn_near_post_pair(
+		mc,
+		tree,
+		ship.global_position,
+		spawn_mooring_max_distance_m,
+	)
 	if pair.size() < 2 or pair[0] == null or pair[1] == null:
 		push_warning(
-			"ShipSpawner: need at least two dock bollards (group \"%s\", get_anchor_global_position)."
+			"ShipSpawner: need at least two nearby dock bollards within "
+			+ str(spawn_mooring_max_distance_m)
+			+ "m (group \"%s\", get_anchor_global_position)."
 			% MooringComponent.DOCK_MOORING_GROUP,
 		)
 		return
 
 	mc.moor_to_posts(pair[0], pair[1])
+
+
+func _pick_spawn_near_post_pair(
+	mooring: MooringComponent,
+	tree: SceneTree,
+	ship_pos: Vector3,
+	max_distance: float,
+) -> Array:
+	if mooring == null or tree == null:
+		return [null, null]
+
+	var refs := mooring.bow_and_stern_reference_world()
+	if refs.size() < 2:
+		return [null, null]
+	var bow_ref: Vector3 = refs[0]
+	var stern_ref: Vector3 = refs[1]
+	var max_d2 := max_distance * max_distance
+
+	var candidates: Array[Node] = []
+	for n in tree.get_nodes_in_group(MooringComponent.DOCK_MOORING_GROUP):
+		if not n.has_method("get_anchor_global_position"):
+			continue
+		var anchor := MooringComponent.dock_post_anchor_world(n)
+		if anchor.distance_squared_to(ship_pos) <= max_d2:
+			candidates.append(n)
+	if candidates.size() < 2:
+		return [null, null]
+
+	var best_bow: Node = null
+	var best_bow_d2 := INF
+	for n in candidates:
+		var d2 := bow_ref.distance_squared_to(MooringComponent.dock_post_anchor_world(n))
+		if d2 < best_bow_d2:
+			best_bow_d2 = d2
+			best_bow = n
+
+	var best_stern: Node = null
+	var best_stern_d2 := INF
+	for n in candidates:
+		if n == best_bow:
+			continue
+		var d2 := stern_ref.distance_squared_to(MooringComponent.dock_post_anchor_world(n))
+		if d2 < best_stern_d2:
+			best_stern_d2 = d2
+			best_stern = n
+
+	return [best_bow, best_stern]
 
 
 func _find_mooring_component(ship: Node) -> Node:

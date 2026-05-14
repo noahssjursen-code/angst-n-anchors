@@ -145,6 +145,17 @@ var _transformer: Node3D
 var _model_assembler: ModelAssembler
 var _walk_deck:   AnimatableBody3D
 
+## Mooring positional solve runs here (inside Jolt/Godot integration), not via impulses.
+var _mooring_integrate: Callable = Callable()
+
+
+func mount_mooring_integrate(callback: Callable) -> void:
+	_mooring_integrate = callback
+
+
+func clear_mooring_integrate() -> void:
+	_mooring_integrate = Callable()
+
 
 func _ready() -> void:
 	linear_damp  = linear_damp_coeff
@@ -172,7 +183,10 @@ func _exit_tree() -> void:
 		_walk_deck = null
 
 
-func _integrate_forces(_state: PhysicsDirectBodyState3D) -> void:
+func _integrate_forces(state: PhysicsDirectBodyState3D) -> void:
+	if not Engine.is_editor_hint() and _mooring_integrate.is_valid():
+		_mooring_integrate.call(state)
+
 	if Engine.is_editor_hint() or _walk_deck == null or not is_instance_valid(_walk_deck):
 		return
 	_sync_walk_deck_transform()

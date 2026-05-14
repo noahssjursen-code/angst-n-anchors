@@ -1002,7 +1002,7 @@
         ],
         "roughness": 0.2,
         "metallic": 0.9,
-        "collision": "convex"
+        "collision": "none"
       },
       {
         "name": "stern_transom_railing",
@@ -1092,7 +1092,7 @@
         ],
         "roughness": 0.2,
         "metallic": 0.9,
-        "collision": "convex"
+        "collision": "none"
       }
     ]
   }

@@ -10,7 +10,7 @@ const DockFacilitiesScript := preload("res://scripts/systems/dock/dock_facilitie
 const C_SAND  := Color(0.82, 0.74, 0.58)
 const C_OCEAN := Color(0.10, 0.28, 0.48)
 
-const BERTH_SHIP_POSITION := Vector3(11.0, WaveSurface.WATER_LEVEL, 47.0)
+const BERTH_SHIP_POSITION := Vector3(12.5, WaveSurface.WATER_LEVEL, 47.0)
 const DOCK_SURFACE_Y := 0.08
 const MOORING_BERTH_FRONT_Z := 36.5
 const MOORING_BERTH_REAR_Z := 57.5

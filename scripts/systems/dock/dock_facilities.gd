@@ -3,7 +3,7 @@ extends Node3D
 
 const _SCRIPT_SELF := preload("res://scripts/systems/dock/dock_facilities.gd")
 
-## Mooring posts, ship spawner, and dock terminal in one subtree. Instantiate under any
+## Mooring posts, cargo ramp (when ship is moored), ship spawner, and dock terminal in one subtree. Instantiate under any
 ## island root; positions are in the parent's local space.
 ## Pass every shore `MooringPost` world position here (minimum two). Spawn logic picks two
 ## closest to bow/stern; any grouped bollard accepts line toggles via `MooringComponent`.
@@ -40,6 +40,8 @@ static func attach(
 	spawner.ship_scene = ship_scene
 	spawner.spawn_position = spawn_position
 	kit.add_child(spawner)
+
+	# Ramp intentionally disabled for now.
 
 	var terminal := DockTerminal.new()
 	terminal.name = "DockTerminal"
