@@ -9,8 +9,9 @@ extends Node
 ##   Throttle stage — W / S (move_forward / move_back) increments / decrements stage
 ##   Direct stage set — number keys 1..5 (astern..full ahead)
 ##   Rudder   — A / D  (move_left / move_right)
-##   Docking thruster mode toggle — boat_docking_thrusters (default T)
-##   Bow + stern crab — Q / R only while docking mode is on (boat_thrust_left / boat_thrust_right)
+##   Thruster mode cycle — T (boat_docking_thrusters): Off → Bow-only → Crab → Off
+##     Bow-only: Q/R yaw the bow (useful for swinging the bow at low speed)
+##     Crab: Q/R pure lateral drift (bow + stern together)
 
 @export var throttle_response: float = 1.8   # how fast throttle ramps (units/s)
 @export var rudder_response:   float = 3.0
@@ -25,7 +26,9 @@ extends Node
 @export var stage_label_ahead: String = "AHEAD"
 
 var _active: bool = false
-var _docking_thrusters: bool = false
+
+## 0 = off, 1 = bow-only (yaw), 2 = crab (lateral drift)
+var _thruster_mode: int = 0
 
 var _throttle: float = 0.0
 var _rudder:   float = 0.0
@@ -48,11 +51,11 @@ func activate() -> void:
 
 
 func deactivate() -> void:
-	_active            = false
-	_docking_thrusters = false
-	_throttle          = 0.0
-	_rudder            = 0.0
-	_lateral           = 0.0
+	_active         = false
+	_thruster_mode  = 0
+	_throttle       = 0.0
+	_rudder         = 0.0
+	_lateral        = 0.0
 	_throttle_stage_idx = _nearest_stage_idx(0.0)
 	_push_to_components()
 	_set_hud_visible(false)
@@ -65,7 +68,7 @@ func _physics_process(delta: float) -> void:
 	# Positive throttle = thrust along -body Z (Godot forward). JSON hulls are
 	# authored with bow at +Z, so invert so W (move_forward) matches visual bow.
 	if Input.is_action_just_pressed("boat_docking_thrusters"):
-		_docking_thrusters = not _docking_thrusters
+		_thruster_mode = (_thruster_mode + 1) % 3
 
 	if Input.is_action_just_pressed("move_forward"):
 		_step_throttle_stage(1)
@@ -78,7 +81,7 @@ func _physics_process(delta: float) -> void:
 	var rudder_target:   float = Input.get_axis("move_left", "move_right")
 
 	var lateral_target: float = 0.0
-	if _docking_thrusters:
+	if _thruster_mode > 0:
 		lateral_target = Input.get_axis("boat_thrust_left", "boat_thrust_right")
 
 	# Throttle and rudder ramp smoothly; crab thrust is immediate
@@ -122,7 +125,7 @@ func _push_to_components() -> void:
 	if _rudder_comp  != null: _rudder_comp.rudder_input  = _rudder
 	if _bow_thruster != null:
 		_bow_thruster.lateral_input = _lateral
-		_bow_thruster.crab_mode = _docking_thrusters
+		_bow_thruster.crab_mode = (_thruster_mode == 2)
 
 
 func _step_throttle_stage(step: int) -> void:
@@ -198,13 +201,15 @@ func _update_hud() -> void:
 	var speed_knots := speed_mps * 1.943844
 	var stage_name := _throttle_stage_label(_target_throttle_from_stage())
 	var stage_count := _stage_count()
+	var thruster_str := (["", "  |  BOW", "  |  CRAB"] as Array)[_thruster_mode] as String
 	_hud_label.text = (
-		"Speed: %.1f kn\nThrottle: %s (%d/%d)\nSet: 1-5 | W/S step | X stop"
+		"Speed: %.1f kn\nThrottle: %s (%d/%d)%s\nSet: 1-5 | W/S step | X stop | T thruster"
 		% [
 			speed_knots,
 			stage_name,
 			_throttle_stage_idx + 1,
 			stage_count,
+			thruster_str,
 		]
 	)
 

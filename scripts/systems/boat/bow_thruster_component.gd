@@ -30,10 +30,17 @@ func _physics_process(_delta: float) -> void:
 	if Engine.is_editor_hint() or _body == null or is_zero_approx(lateral_input):
 		return
 
-	var force_world: Vector3 = _body.global_transform.basis.x * lateral_input * max_thrust
-	var bow_app: Vector3 = _body.to_global(bow_offset) - _body.global_position
-	_body.apply_force(force_world, bow_app)
-
 	if crab_mode:
-		var stern_app: Vector3 = _body.to_global(stern_offset) - _body.global_position
-		_body.apply_force(force_world, stern_app)
+		# Pure sideways translation: applying at two asymmetric offsets creates an
+		# unequal torque balance (stern arm >> bow arm) which inverts apparent direction.
+		# Central force = no torque, guaranteed lateral drift.  Scale by 2 to approximate
+		# the combined output of both tunnel thrusters.
+		# Negate: hull body is authored rotated 180° Y so basis.x points to port,
+		# making positive lateral_input push the wrong way without the flip.
+		var f := _body.global_transform.basis.x * (-lateral_input) * max_thrust * 2.0
+		_body.apply_central_force(f)
+	else:
+		# Bow-only: force at bow offset creates yaw torque — swings the bow.
+		var f := _body.global_transform.basis.x * lateral_input * max_thrust
+		var bow_app := _body.to_global(bow_offset) - _body.global_position
+		_body.apply_force(f, bow_app)
