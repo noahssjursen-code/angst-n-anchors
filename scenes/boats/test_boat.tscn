@@ -63,8 +63,9 @@ sideslip_rudder_weight = 0.25
 
 [node name="BowThrusterComponent" type="Node3D" parent="."]
 script = ExtResource("5")
-max_thrust = 15000.0
-bow_offset = Vector3(0.0, 0.0, -11.0)
+max_thrust = 17500.0
+bow_offset = Vector3(0.0, -1.3, -11.0)
+stern_offset = Vector3(0.0, -1.3, 11.0)
 
 [node name="BoatController" type="Node" parent="."]
 script = ExtResource("6")

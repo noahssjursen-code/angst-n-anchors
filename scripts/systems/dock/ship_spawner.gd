@@ -5,8 +5,6 @@ extends Node3D
 @export var spawn_position: Vector3 = Vector3(11.0, -1.5, 47.0)
 @export var spawn_rotation_degrees: Vector3 = Vector3.ZERO
 @export var waterline_draft_fraction: float = 0.45
-@export var front_post_path: NodePath
-@export var rear_post_path: NodePath
 @export var spawned_ship_name: String = "SpawnedShip"
 
 var current_ship: Node3D
@@ -56,24 +54,30 @@ func _moor_ship(ship: Node3D) -> void:
 	var mooring := _find_mooring_component(ship)
 	if mooring == null or not mooring.has_method("moor_to_posts"):
 		push_warning(
-			"ShipSpawner: ship has no MooringComponent (expected under ShipGameplay or boat root)."
+			"ShipSpawner: ship has no MooringComponent (expected under ShipGameplay or boat root).",
 		)
 		return
 
-	var front_post := get_node_or_null(front_post_path)
-	var rear_post := get_node_or_null(rear_post_path)
-	if front_post == null or rear_post == null:
-		push_warning("ShipSpawner: missing mooring posts")
+	var tree := ship.get_tree()
+	if tree == null:
+		push_warning("ShipSpawner: ship not in scene tree yet")
 		return
 
-	mooring.call("moor_to_posts", front_post, rear_post)
-	_register_post(front_post, mooring)
-	_register_post(rear_post, mooring)
+	MooringComponent.register_mooring_on_all_dock_bollards(tree, mooring)
 
+	var mc := mooring as MooringComponent
+	if mc == null:
+		return
 
-func _register_post(post: Node, mooring: Node) -> void:
-	if post.has_method("register_mooring_component"):
-		post.call("register_mooring_component", mooring)
+	var pair := MooringComponent.pick_two_dock_posts_for_ship(mc, tree)
+	if pair.size() < 2 or pair[0] == null or pair[1] == null:
+		push_warning(
+			"ShipSpawner: need at least two dock bollards (group \"%s\", get_anchor_global_position)."
+			% MooringComponent.DOCK_MOORING_GROUP,
+		)
+		return
+
+	mc.moor_to_posts(pair[0], pair[1])
 
 
 func _find_mooring_component(ship: Node) -> Node:
@@ -89,7 +93,6 @@ func _clear_post_registrations() -> void:
 	if current_ship == null or not is_instance_valid(current_ship):
 		return
 	var mooring := _find_mooring_component(current_ship)
-	for post_path in [front_post_path, rear_post_path]:
-		var post := get_node_or_null(post_path)
-		if post != null and post.has_method("clear_mooring_component"):
-			post.call("clear_mooring_component", mooring)
+	var tree := get_tree()
+	if tree != null:
+		MooringComponent.clear_mooring_on_all_dock_bollards(tree, mooring)

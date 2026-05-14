@@ -2,10 +2,53 @@
 class_name MooringPost
 extends StaticBody3D
 
+## Visual style: timber cylinder (legacy), or the docking bollard mesh used on ship cleats
+## (`MooringPoint`).
+enum MooringVisual {
+	TIMBER_POST,
+	DOCKING_BOLLARD,
+}
+
+const DEFAULT_DOCKING_BOLLARD_MODEL := "res://resources/data/meshes/docking_bollard.json"
+
+## Line attachment height differs per visual; docking bollard follows `MooringPoint` cleat height.
+@export var anchor_local_position: Vector3 = Vector3(0.0, 0.52, 0.0)
+
+
+@export var mooring_visual: MooringVisual = MooringVisual.DOCKING_BOLLARD:
+	set(v):
+		if mooring_visual == v:
+			return
+		mooring_visual = v
+		if is_node_ready():
+			_rebuild()
+
+
 @export var post_height: float = 1.1
 @export var post_radius: float = 0.16
-@export var anchor_local_position: Vector3 = Vector3(0.0, 0.85, 0.0)
 @export var post_color: Color = Color(0.18, 0.11, 0.06)
+
+@export_file("*.json") var bollard_model_path: String = DEFAULT_DOCKING_BOLLARD_MODEL:
+	set(v):
+		bollard_model_path = v
+		_rebuild_if_docking_bollard_visual()
+
+@export_range(0.05, 4.0, 0.01) var bollard_scale: float = 1.0:
+	set(v):
+		bollard_scale = maxf(v, 0.05)
+		_rebuild_if_docking_bollard_visual()
+
+@export var bollard_rotation_degrees: Vector3 = Vector3(0.0, 90.0, 0.0):
+	set(v):
+		bollard_rotation_degrees = v
+		_rebuild_if_docking_bollard_visual()
+
+## Loose fit around `docking_bollard.json` at scale 1; scales with `bollard_scale` for rays / bump.
+@export var bollard_collision_size: Vector3 = Vector3(0.62, 0.98, 0.62):
+	set(v):
+		bollard_collision_size = v
+		_rebuild_if_docking_bollard_visual()
+
 var _moor_interact_range: float = 3.2
 
 ## Max distance / ray depth for mooring prompts and E toggle.
@@ -35,6 +78,7 @@ var _prompt_label: Label
 func _ready() -> void:
 	_rebuild()
 	if not Engine.is_editor_hint():
+		add_to_group(MooringComponent.DOCK_MOORING_GROUP)
 		_ensure_prompt_ui()
 
 
@@ -63,6 +107,11 @@ func register_mooring_component(component: Node) -> void:
 func clear_mooring_component(component: Node) -> void:
 	if _mooring_component == component:
 		_mooring_component = null
+
+
+func _rebuild_if_docking_bollard_visual() -> void:
+	if is_node_ready() and mooring_visual == MooringVisual.DOCKING_BOLLARD:
+		_rebuild()
 
 
 func _refresh_editor_range_gizmo_deferred() -> void:
@@ -104,6 +153,42 @@ func _rebuild() -> void:
 	for child in get_children():
 		child.queue_free()
 
+	match mooring_visual:
+		MooringVisual.DOCKING_BOLLARD:
+			_rebuild_docking_bollard()
+		_:
+			_rebuild_timber_post()
+
+	if Engine.is_editor_hint():
+		call_deferred("_refresh_editor_range_gizmo")
+
+
+func _rebuild_docking_bollard() -> void:
+	var sc := maxf(bollard_scale, 0.05)
+	var box := CollisionShape3D.new()
+	box.name = "PostCollision"
+	var shape := BoxShape3D.new()
+	shape.size = bollard_collision_size * sc
+	box.shape = shape
+	box.position = Vector3.UP * (shape.size.y * 0.5)
+	add_child(box)
+
+	var asm := ModelAssembler.new()
+	asm.name = "DockingBollard"
+	asm.build_part_colliders = false
+	asm.collision_parent_path = NodePath("")
+	asm.absolute_scale = sc
+	asm.rotation_degrees = bollard_rotation_degrees
+	asm.model_data_path = bollard_model_path
+	add_child(asm)
+
+	if Engine.is_editor_hint():
+		var esc := get_tree().edited_scene_root
+		if esc != null:
+			asm.owner = esc
+
+
+func _rebuild_timber_post() -> void:
 	var shape := CylinderShape3D.new()
 	shape.radius = post_radius
 	shape.height = post_height
@@ -124,8 +209,6 @@ func _rebuild() -> void:
 	cap.position = Vector3.UP * post_height
 	add_child(cap)
 
-	if Engine.is_editor_hint():
-		call_deferred("_refresh_editor_range_gizmo")
 
 
 func _toggle_line() -> void:

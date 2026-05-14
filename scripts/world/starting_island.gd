@@ -5,28 +5,38 @@ const PLAYER_SCENE := preload("res://scenes/islands/starting_island/player.tscn"
 const BOAT_SCENE   := preload("res://scenes/boats/test_boat.tscn")
 const OCEAN_SHADER := preload("res://resources/shaders/ocean_waves.gdshader")
 const RAIN_FIELD_SCRIPT := preload("res://scripts/systems/weather/rain_field.gd")
-const MOORING_POST_SCRIPT := preload("res://scripts/systems/dock/mooring_post.gd")
-const SHIP_SPAWNER_SCRIPT := preload("res://scripts/systems/dock/ship_spawner.gd")
-const DOCK_TERMINAL_SCRIPT := preload("res://scripts/systems/dock/dock_terminal.gd")
+const DockFacilitiesScript := preload("res://scripts/systems/dock/dock_facilities.gd")
 
 const C_SAND  := Color(0.82, 0.74, 0.58)
 const C_OCEAN := Color(0.10, 0.28, 0.48)
-const C_WOOD  := Color(0.32, 0.22, 0.13)
-const C_POST  := Color(0.24, 0.16, 0.09)
 
 const BERTH_SHIP_POSITION := Vector3(11.0, WaveSurface.WATER_LEVEL, 47.0)
 const DOCK_SURFACE_Y := 0.08
-const DOCK_BODY_CENTER_Y := DOCK_SURFACE_Y - 1.0
-const DOCK_PILE_CENTER_Y := DOCK_SURFACE_Y - 1.75
-const MOORING_FRONT_POST_POSITION := Vector3(7.2, DOCK_SURFACE_Y, 36.5)
-const MOORING_REAR_POST_POSITION := Vector3(7.2, DOCK_SURFACE_Y, 57.5)
-const TERMINAL_POSITION := Vector3(-2.8, DOCK_SURFACE_Y, 31.5)
+const MOORING_BERTH_FRONT_Z := 36.5
+const MOORING_BERTH_REAR_Z := 57.5
+## Near the land end of `concrete_pier` (deck top at `DOCK_SURFACE_Y`).
+const TERMINAL_POSITION := Vector3(4.5, DOCK_SURFACE_Y, 37.8)
+## Island-side / approach from sand; XY added to TERMINAL, Y overwritten at spawn (feet on deck).
+const PLAYER_SPAWN_OFFSET_FROM_TERMINAL := Vector3(3, 0.0, -15)
+
+const CONCRETE_PIER_MODEL := "res://resources/data/meshes/concrete_pier.json"
+const PIER_DECK_TOP_LOCAL_Y := 2.0
+const PIER_ABS_SCALE := 1.3
+## `concrete_pier` deck narrow half-span is 1.8 m locally; − small inset so bollards sit near rails.
+const MOORING_SIDE_OFFSET_FROM_PIER_CENTER_X := 1.8 * PIER_ABS_SCALE - 0.08
+const PIER_POSITION := Vector3(5.6, DOCK_SURFACE_Y - PIER_DECK_TOP_LOCAL_Y * PIER_ABS_SCALE, 42.0)
+const PIER_ROTATION := Vector3(0.0, 90.0, 0.0)
+## Authored deck span along local +X in `concrete_pier.json` (vertices roughly -10..10).
+const PIER_DECK_LENGTH_UNSCALED := 20.0
+## Extra distance between pier centers along the long axis (m); 0 = flush end-to-end.
+const PIER_CHAIN_GAP := 0.0
+## Placement of pier 2 along deck local +X (after `PIER_ROTATION`); negate to flip which end hooks to pier 1.
+const PIER_CHAIN_SIGN := -1.0
 
 var _ocean_shader_material: ShaderMaterial
 var _sky_material: ProceduralSkyMaterial
 var _environment: Environment
 var _sun: DirectionalLight3D
-var _ship_spawner: Node3D
 
 
 func _process(_delta: float) -> void:
@@ -45,6 +55,8 @@ func _ready() -> void:
 			or child is WorldEnvironment
 			or child is DirectionalLight3D
 			or child.name == "ShipSpawner"
+			or child.name == "DockFacilities"
+			or child.name.begins_with("ConcretePier")
 		):
 			child.queue_free()
 
@@ -223,33 +235,70 @@ func _build_island() -> void:
 
 
 func _build_dock() -> void:
-	_add_dock_section(
-		"LoadingApron",
-		Vector3(16.0, 2.0, 8.0),
-		Vector3(-3.5, DOCK_BODY_CENTER_Y, 31.0)
-	)
-	_add_dock_section("SideBerth", Vector3(3.2, 2.0, 31.0), Vector3(5.6, DOCK_BODY_CENTER_Y, 45.5))
-	_add_dock_section(
-		"BerthConnector",
-		Vector3(8.0, 2.0, 4.0),
-		Vector3(2.8, DOCK_BODY_CENTER_Y, 35.0)
+	_build_concrete_piers()
+
+	var moorings := PackedVector3Array()
+	var sz := DOCK_SURFACE_Y
+	var sx := _mooring_starboard_row_world_x()
+	var px := _mooring_port_row_world_x()
+
+	moorings.push_back(Vector3(sx, sz, MOORING_BERTH_FRONT_Z))
+	moorings.push_back(Vector3(sx, sz, MOORING_BERTH_REAR_Z))
+	moorings.push_back(Vector3(px, sz, MOORING_BERTH_FRONT_Z))
+	moorings.push_back(Vector3(px, sz, MOORING_BERTH_REAR_Z))
+
+	var sea_ext_star := _extended_pier_pair_at_row_world_x(sx)
+	for i in sea_ext_star.size():
+		moorings.push_back(sea_ext_star[i])
+	var sea_ext_port := _extended_pier_pair_at_row_world_x(px)
+	for i in sea_ext_port.size():
+		moorings.push_back(sea_ext_port[i])
+
+	DockFacilitiesScript.attach(
+		self,
+		moorings,
+		TERMINAL_POSITION,
+		180.0,
+		BERTH_SHIP_POSITION,
+		BOAT_SCENE,
 	)
 
-	for z in [31.0, 36.0, 41.0, 46.0, 51.0, 56.0]:
-		for x in [4.2, 7.0]:
-			_add_support_pile(Vector3(x, DOCK_PILE_CENTER_Y, z))
 
-	var front_post := _add_mooring_post("MooringPostForward", MOORING_FRONT_POST_POSITION)
-	var rear_post := _add_mooring_post("MooringPostRear", MOORING_REAR_POST_POSITION)
-	_build_ship_spawner(front_post, rear_post)
-	_build_dock_terminal()
+func _mooring_starboard_row_world_x() -> float:
+	return PIER_POSITION.x + MOORING_SIDE_OFFSET_FROM_PIER_CENTER_X
+
+
+func _mooring_port_row_world_x() -> float:
+	return PIER_POSITION.x - MOORING_SIDE_OFFSET_FROM_PIER_CENTER_X
+
+
+## Two bollards on the chained slab for one outboard row (same Z layout as berth ends).
+func _extended_pier_pair_at_row_world_x(world_x_row: float) -> PackedVector3Array:
+	var axial := _pier_world_long_axis()
+	var along := axial * (_pier_center_to_center() * 0.32)
+	var pier2 := _second_pier_center()
+
+	var xa := world_x_row
+	var ys := DOCK_SURFACE_Y
+
+	var pa := pier2 + along
+	var pb := pier2 - along
+	pa.x = xa
+	pb.x = xa
+	pa.y = ys
+	pb.y = ys
+
+	var out := PackedVector3Array()
+	out.push_back(pa)
+	out.push_back(pb)
+	return out
 
 
 func _spawn_player() -> void:
 	var player := PLAYER_SCENE.instantiate()
-	# On the dock walkway (matches _build_dock: 4×14 m, top y=0, z≈30–44).
-	# Slightly toward the island (lower z) so you start on planks, not over the boat side.
-	player.position = Vector3(0.0, 0.5, 32.5)
+	var spawn_position := TERMINAL_POSITION + PLAYER_SPAWN_OFFSET_FROM_TERMINAL
+	spawn_position.y = DOCK_SURFACE_Y + 0.02
+	player.position = spawn_position
 	add_child(player)
 
 
@@ -259,48 +308,49 @@ func _spawn_rain_field() -> void:
 	add_child(rain_field)
 
 
-func _add_dock_section(
-	section_name: String,
-	size: Vector3,
-	section_position: Vector3,
-) -> StaticBody3D:
-	var section := MeshBuilder.static_box(size, C_WOOD, 0.92)
-	section.name = section_name
-	section.position = section_position
-	add_child(section)
-	return section
+func _build_concrete_piers() -> void:
+	_build_concrete_pier_instance(PIER_POSITION, "")
+	_build_concrete_pier_instance(_second_pier_center(), "2")
 
 
-func _add_support_pile(pile_position: Vector3) -> void:
-	var pile := MeshBuilder.cylinder(0.13, 3.5, C_POST, 0.95)
-	pile.name = "DockSupportPile"
-	pile.position = pile_position
-	add_child(pile)
+func _pier_world_long_axis() -> Vector3:
+	var r := Vector3(
+		deg_to_rad(PIER_ROTATION.x),
+		deg_to_rad(PIER_ROTATION.y),
+		deg_to_rad(PIER_ROTATION.z),
+	)
+	return Basis.from_euler(r).x.normalized()
 
 
-func _add_mooring_post(post_name: String, post_position: Vector3) -> Node3D:
-	var post := MOORING_POST_SCRIPT.new() as Node3D
-	post.name = post_name
-	post.position = post_position
-	add_child(post)
-	return post
+func _pier_center_to_center() -> float:
+	return PIER_DECK_LENGTH_UNSCALED * PIER_ABS_SCALE + PIER_CHAIN_GAP
 
 
-func _build_ship_spawner(front_post: Node3D, rear_post: Node3D) -> void:
-	_ship_spawner = SHIP_SPAWNER_SCRIPT.new() as Node3D
-	_ship_spawner.name = "ShipSpawner"
-	add_child(_ship_spawner)
-	_ship_spawner.set("ship_scene", BOAT_SCENE)
-	_ship_spawner.set("spawn_position", BERTH_SHIP_POSITION)
-	_ship_spawner.set("front_post_path", _ship_spawner.get_path_to(front_post))
-	_ship_spawner.set("rear_post_path", _ship_spawner.get_path_to(rear_post))
+func _second_pier_center() -> Vector3:
+	var p := (
+		PIER_POSITION
+		+ _pier_world_long_axis() * _pier_center_to_center() * PIER_CHAIN_SIGN
+	)
+	p.y = PIER_POSITION.y
+	return p
 
 
-func _build_dock_terminal() -> void:
-	var terminal := DOCK_TERMINAL_SCRIPT.new() as Node3D
-	terminal.name = "DockTerminal"
-	terminal.position = TERMINAL_POSITION
-	terminal.rotation_degrees = Vector3(0.0, 180.0, 0.0)
-	add_child(terminal)
-	if _ship_spawner != null:
-		terminal.set("spawner_path", terminal.get_path_to(_ship_spawner))
+func _build_concrete_pier_instance(center: Vector3, name_suffix: String) -> void:
+	var pier := StaticBody3D.new()
+	pier.name = "ConcretePier" + name_suffix
+	add_child(pier)
+	pier.position = center
+	pier.rotation_degrees = PIER_ROTATION
+
+	var assembler := ModelAssembler.new()
+	assembler.model_data_path = CONCRETE_PIER_MODEL
+	assembler.absolute_scale = PIER_ABS_SCALE
+	assembler.collision_parent_path = NodePath("..")
+	assembler.build_part_colliders = true
+	pier.add_child(assembler)
+
+	if Engine.is_editor_hint():
+		var esc := get_tree().edited_scene_root
+		if esc != null:
+			pier.owner = esc
+			assembler.owner = esc

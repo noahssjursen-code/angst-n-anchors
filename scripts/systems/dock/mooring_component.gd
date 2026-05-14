@@ -4,11 +4,15 @@ extends Node3D
 ## Ship cleats: any `Node3D` in group `SHIP_MOORING_CLEAT_GROUP` under this vessel's
 ## `RigidBody3D` root. Distance is from cleat anchor to **this dock post's** anchor.
 const SHIP_MOORING_CLEAT_GROUP := "ship_mooring_cleat"
+## Dock bollards (`MooringPost`); any eligible for tie / prompts when this ship mooring registers.
+const DOCK_MOORING_GROUP := "dock_mooring_bollard"
 
 @export var rope_radius: float = 0.045
 @export var rope_color: Color = Color(0.55, 0.42, 0.25)
 @export var hold_position_rate: float = 7.5
 @export var hold_velocity_damp: float = 8.0
+## Used only when estimating bow/stern with no typed cleats in `SHIP_MOORING_CLEAT_GROUP`.
+@export var fallback_hull_half_length_m: float = 11.5
 
 ## Rope from **front** dock post (slot 0). Name kept for save compatibility.
 var bow_line_tied: bool = false
@@ -31,6 +35,118 @@ var _rope_root: Node3D
 func _ready() -> void:
 	_body = _resolve_boat_rigid_body()
 	_ensure_rope_root()
+
+
+## World anchors used to rank dock posts (closest-to-bow vs closest-to-stern).
+func bow_and_stern_reference_world() -> Array[Vector3]:
+	var bow_acc := Vector3.ZERO
+	var stern_acc := Vector3.ZERO
+	var nb := 0
+	var ns := 0
+	for cleat in _ship_cleat_nodes():
+		var sv = cleat.get("station")
+		if sv == null:
+			continue
+		var station := str(sv)
+		match station:
+			"bow":
+				bow_acc += _cleat_anchor(cleat)
+				nb += 1
+			"stern":
+				stern_acc += _cleat_anchor(cleat)
+				ns += 1
+
+	if _body == null:
+		_body = _resolve_boat_rigid_body()
+	if _body == null:
+		return [Vector3.ZERO, Vector3.ZERO]
+
+	var mid := _body.global_position
+	var zb := _body.global_transform.basis.z
+	var bow_w: Vector3
+	var stern_w: Vector3
+	if nb > 0:
+		bow_w = bow_acc / float(nb)
+	else:
+		bow_w = mid - zb * fallback_hull_half_length_m
+	if ns > 0:
+		stern_w = stern_acc / float(ns)
+	else:
+		stern_w = mid + zb * fallback_hull_half_length_m
+	return [bow_w, stern_w]
+
+
+static func dock_post_anchor_world(post: Node) -> Vector3:
+	if post != null and post.has_method("get_anchor_global_position"):
+		return post.call("get_anchor_global_position")
+	if post is Node3D:
+		return (post as Node3D).global_position
+	return Vector3.ZERO
+
+
+static func pick_two_dock_posts_for_ship(
+	mooring: MooringComponent,
+	tree: SceneTree,
+) -> Array:
+	if tree == null or mooring == null:
+		return [null, null]
+	var refs: Array = mooring.bow_and_stern_reference_world()
+	if refs.size() < 2:
+		return [null, null]
+	var bow_ref: Vector3 = refs[0]
+	var stern_ref: Vector3 = refs[1]
+
+	var cand: Array[Node] = []
+	for n in tree.get_nodes_in_group(DOCK_MOORING_GROUP):
+		if n.has_method("get_anchor_global_position"):
+			cand.append(n)
+	if cand.size() < 2:
+		return [null, null]
+
+	var best_bow_p: Node = null
+	var best_bow_d := INF
+	for n in cand:
+		var d_sq := bow_ref.distance_squared_to(dock_post_anchor_world(n))
+		if d_sq < best_bow_d:
+			best_bow_d = d_sq
+			best_bow_p = n
+
+	var best_stern_p: Node = null
+	var best_stern_d := INF
+	for n in cand:
+		if n == best_bow_p:
+			continue
+		var d_sq := stern_ref.distance_squared_to(dock_post_anchor_world(n))
+		if d_sq < best_stern_d:
+			best_stern_d = d_sq
+			best_stern_p = n
+	return [best_bow_p, best_stern_p]
+
+
+static func register_mooring_on_all_dock_bollards(tree: SceneTree, mooring: Node) -> void:
+	if tree == null or mooring == null:
+		return
+	for n in tree.get_nodes_in_group(DOCK_MOORING_GROUP):
+		if n.has_method("register_mooring_component"):
+			n.call("register_mooring_component", mooring)
+
+
+static func clear_mooring_on_all_dock_bollards(tree: SceneTree, mooring: Node) -> void:
+	if tree == null:
+		return
+	for n in tree.get_nodes_in_group(DOCK_MOORING_GROUP):
+		if n.has_method("clear_mooring_component"):
+			n.call("clear_mooring_component", mooring)
+
+
+func _dock_slot_forward_for_post(post: Node) -> bool:
+	if post == _front_post:
+		return true
+	if post == _rear_post:
+		return false
+	var refs := bow_and_stern_reference_world()
+	var a := dock_post_anchor_world(post)
+	return a.distance_squared_to(refs[0]) <= a.distance_squared_to(refs[1])
 
 
 func _physics_process(delta: float) -> void:
@@ -86,15 +202,21 @@ func is_mooring_line_tied_from_post(post: Node) -> bool:
 func toggle_line_from_post(post: Node) -> bool:
 	if _body == null:
 		_body = _resolve_boat_rigid_body()
-	if post != _front_post and post != _rear_post:
+	if not post.is_in_group(DOCK_MOORING_GROUP):
 		push_warning(
-			"MooringComponent: pole is not a registered dock post for this mooring.",
+			"MooringComponent: expected a dock bollard (group \"" + DOCK_MOORING_GROUP + "\")."
 		)
 		return false
 
-	var forward_slot := post == _front_post
+	var forward_slot: bool = _dock_slot_forward_for_post(post)
 	var next_tied := not is_slot_tied(forward_slot)
+
 	if next_tied:
+		if forward_slot:
+			_front_post = post
+		else:
+			_rear_post = post
+
 		var exclude: Node3D = null
 		if forward_slot and stern_line_tied and _stern_point != null:
 			exclude = _stern_point
@@ -157,17 +279,21 @@ func _ensure_rope_root() -> void:
 func _rebuild_ropes() -> void:
 	_ensure_rope_root()
 	_clear_ropes()
-	if _body == null or _front_post == null or _rear_post == null:
+	if _body == null:
 		return
 
-	if bow_line_tied:
-		var a := _point_anchor_vector(_bow_point)
-		if _bow_point != null:
-			_add_rope("ForwardRope", a, _post_anchor(_front_post))
-	if stern_line_tied:
-		var b := _point_anchor_vector(_stern_point)
-		if _stern_point != null:
-			_add_rope("RearRope", b, _post_anchor(_rear_post))
+	if bow_line_tied and _front_post != null and _bow_point != null:
+		_add_rope(
+			"ForwardRope",
+			_point_anchor_vector(_bow_point),
+			_post_anchor(_front_post),
+		)
+	if stern_line_tied and _rear_post != null and _stern_point != null:
+		_add_rope(
+			"RearRope",
+			_point_anchor_vector(_stern_point),
+			_post_anchor(_rear_post),
+		)
 
 
 func _clear_ropes() -> void:
