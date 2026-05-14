@@ -52,8 +52,14 @@ var _fill_light: DirectionalLight3D
 var _open_warehouse: StaticBody3D
 var _warehouse_contract_zone: Node3D
 
+var _lightning_light: DirectionalLight3D
+var _lightning_flash_rect: ColorRect
+var _lightning_cooldown: float = 2.0
+var _lightning_phase: int = 0   # 0=idle, 1=flash1, 2=gap, 3=flash2
+var _lightning_phase_t: float = 0.0
 
-func _process(_delta: float) -> void:
+
+func _process(delta: float) -> void:
 	if _ocean_shader_material:
 		_ocean_shader_material.set_shader_parameter("wave_time", WaveSurface.get_sim_time())
 		_ocean_shader_material.set_shader_parameter("wave_intensity", WaveSurface.wave_intensity)
@@ -62,6 +68,8 @@ func _process(_delta: float) -> void:
 		_sky_shader_material.set_shader_parameter("sky_time", WaveSurface.get_sim_time())
 		_sky_shader_material.set_shader_parameter("sun_direction",  _celestial_dir(0.0))
 		_sky_shader_material.set_shader_parameter("moon_direction", _celestial_dir(0.5))
+	if not Engine.is_editor_hint():
+		_update_lightning(delta)
 
 
 # Returns the world-space unit vector pointing FROM the scene TOWARD a celestial body.
@@ -104,6 +112,7 @@ func _ready() -> void:
 		_spawn_player()
 		_spawn_rain_field()
 		_spawn_weather_hud()
+		_spawn_lightning_system()
 
 
 func _build_sky() -> void:
@@ -273,45 +282,51 @@ func _apply_weather_lighting() -> void:
 			tod * 360.0 - 120.0,
 			0.0
 		)
-		_sun.light_energy = lerpf(0.03, 1.5, daylight) * lerpf(1.0, 0.22, cloud)
-		var dawn  := Color(1.0,  0.68, 0.42)
-		var noon  := Color(1.0,  0.92, 0.78)
-		var stormc := Color(0.55, 0.60, 0.68)
+		# Storm crushes sun further — full overcast is almost no direct light.
+		_sun.light_energy = lerpf(0.03, 1.6, daylight) * lerpf(1.0, 0.10, cloud)
+		var dawn   := Color(1.0,  0.68, 0.42)
+		var noon   := Color(1.0,  0.95, 0.82)
+		var stormc := Color(0.48, 0.55, 0.68)
 		_sun.light_color = dawn.lerp(noon, daylight).lerp(stormc, storm)
 
 	# --- Fill light ---
 	if _fill_light != null:
-		_fill_light.light_energy = lerpf(0.18, 0.05, cloud) * lerpf(0.15, 1.0, daylight)
+		_fill_light.light_energy = lerpf(0.18, 0.04, cloud) * lerpf(0.12, 1.0, daylight)
 
 	# --- Ambient ---
 	if _environment != null:
+		# Full storm cuts ambient heavily — interior shadows become oppressive.
 		_environment.ambient_light_energy = (
-			lerpf(0.05, 0.20, daylight) * lerpf(1.0, 0.72, cloud)
+			lerpf(0.04, 0.22, daylight) * lerpf(1.0, 0.52, cloud)
 		)
 
 	# --- Sky shader uniforms ---
 	if _sky_shader_material != null:
-		var night_top     := Color(0.020, 0.030, 0.065)
-		var day_top       := Color(0.24,  0.44,  0.68)
-		var storm_top     := Color(0.16,  0.18,  0.22)
-		var night_horizon := Color(0.07,  0.065, 0.08)
-		var day_horizon   := Color(0.46,  0.66,  0.88)
-		var storm_horizon := Color(0.28,  0.30,  0.34)
+		var night_top     := Color(0.018, 0.025, 0.060)
+		# Calm-clear: deep saturated blue sky.
+		var day_top       := Color(0.18,  0.46,  0.78)
+		# Full storm: near-black greenish-grey.
+		var storm_top     := Color(0.09,  0.10,  0.13)
+		var night_horizon := Color(0.06,  0.055, 0.07)
+		# Calm-clear: bright pale horizon.
+		var day_horizon   := Color(0.54,  0.74,  0.92)
+		# Storm: heavy grey.
+		var storm_horizon := Color(0.22,  0.24,  0.28)
 
 		var top_col  := night_top.lerp(day_top, daylight).lerp(storm_top, cloud)
 		var horiz    := night_horizon.lerp(day_horizon, daylight).lerp(storm_horizon, cloud)
 		var ground_c := (
 			Color(0.04, 0.04, 0.05)
 			.lerp(Color(0.15, 0.13, 0.11), daylight)
-			.lerp(Color(0.08, 0.08, 0.08), cloud)
+			.lerp(Color(0.06, 0.06, 0.07), cloud)
 		)
 		_sky_shader_material.set_shader_parameter("sky_top_color",     Vector3(top_col.r, top_col.g, top_col.b))
 		_sky_shader_material.set_shader_parameter("sky_horizon_color", Vector3(horiz.r,   horiz.g,   horiz.b))
 		_sky_shader_material.set_shader_parameter("sky_ground_color",  Vector3(ground_c.r, ground_c.g, ground_c.b))
 		_sky_shader_material.set_shader_parameter("cloud_coverage",    cloud)
 		_sky_shader_material.set_shader_parameter("storm_intensity",   storm)
-		# Sun disk: warm at dawn, white at noon, pale at night.
-		var sun_col := Color(1.0, 0.68, 0.38).lerp(Color(1.0, 0.95, 0.85), daylight)
+		# Sun disk: warm at dawn, vivid white at noon, pale at night.
+		var sun_col := Color(1.0, 0.62, 0.30).lerp(Color(1.0, 0.96, 0.88), daylight)
 		_sky_shader_material.set_shader_parameter("sun_color", Vector3(sun_col.r, sun_col.g, sun_col.b))
 
 	# --- Fog (visibility axis) ---
@@ -347,13 +362,101 @@ func _apply_weather_lighting() -> void:
 		_ocean_shader_material.set_shader_parameter(
 			"wave_energy_multiplier", WaveSurface.get_wave_energy_multiplier())
 		_ocean_shader_material.set_shader_parameter("water_alpha",      lerpf(0.92, 0.97, rain))
-		_ocean_shader_material.set_shader_parameter("foam_strength",    lerpf(0.45, 0.88, rain + wind * 0.4))
-		_ocean_shader_material.set_shader_parameter("foam_steep_start", lerpf(0.60, 0.38, storm))
-		_ocean_shader_material.set_shader_parameter("foam_steep_end",   lerpf(0.92, 0.68, storm))
+		var foam_driver := clampf(rain + wind * 0.55, 0.0, 1.0)
+		_ocean_shader_material.set_shader_parameter("foam_strength",    lerpf(0.38, 0.92, foam_driver))
+		# Squall (wind only) lowers the steepness threshold so whitecaps appear even without rain.
+		var steep_driver := clampf(maxf(storm, wind * 0.65), 0.0, 1.0)
+		_ocean_shader_material.set_shader_parameter("foam_steep_start", lerpf(0.62, 0.34, steep_driver))
+		_ocean_shader_material.set_shader_parameter("foam_steep_end",   lerpf(0.94, 0.62, steep_driver))
 		_ocean_shader_material.set_shader_parameter(
 			"near_color_lift", lerpf(0.20, 0.08, cloud))
-		_ocean_shader_material.set_shader_parameter("roughness", lerpf(0.07, 0.28, rain))
-		_ocean_shader_material.set_shader_parameter("metallic",  lerpf(0.10, 0.04, rain))
+		var rough_driver := clampf(maxf(rain, wind * 0.55), 0.0, 1.0)
+		_ocean_shader_material.set_shader_parameter("roughness", lerpf(0.07, 0.32, rough_driver))
+		_ocean_shader_material.set_shader_parameter("metallic",  lerpf(0.10, 0.03, rough_driver))
+
+
+func _spawn_lightning_system() -> void:
+	# Scene light — rapid cool-white flash, no shadows (too brief to matter).
+	var ll := DirectionalLight3D.new()
+	_lightning_light = ll
+	ll.name = "LightningLight"
+	ll.light_color    = Color(0.80, 0.88, 1.0)
+	ll.light_energy   = 0.0
+	ll.shadow_enabled = false
+	ll.sky_mode       = DirectionalLight3D.SKY_MODE_LIGHT_ONLY
+	ll.rotation_degrees = Vector3(-55.0, 0.0, 0.0)
+	add_child(ll)
+
+	# Screen overlay — thin white-blue panel that spikes and fades.
+	var canvas := CanvasLayer.new()
+	canvas.layer = 20
+	add_child(canvas)
+	var rect := ColorRect.new()
+	_lightning_flash_rect = rect
+	rect.color = Color(0.82, 0.90, 1.0, 0.0)
+	rect.set_anchors_preset(Control.PRESET_FULL_RECT)
+	rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	canvas.add_child(rect)
+
+
+func _update_lightning(delta: float) -> void:
+	var storm := 0.0
+	var w := _weather_lighting()
+	if w:
+		storm = float(w.get("storm_intensity"))
+
+	# Kill everything when not stormy enough.
+	if storm < 0.20:
+		if _lightning_light:   _lightning_light.light_energy = 0.0
+		if _lightning_flash_rect: _lightning_flash_rect.color.a = 0.0
+		_lightning_phase    = 0
+		_lightning_cooldown = randf_range(2.0, 6.0)
+		return
+
+	if _lightning_phase == 0:
+		_lightning_cooldown -= delta
+		if _lightning_cooldown <= 0.0:
+			# Randomise the strike direction for variety.
+			if _lightning_light:
+				_lightning_light.rotation_degrees = Vector3(
+					randf_range(-70.0, -30.0),
+					randf_range(0.0, 360.0),
+					0.0
+				)
+			_lightning_phase   = 1
+			_lightning_phase_t = 0.0
+			# More frequent at higher storm; still irregular.
+			_lightning_cooldown = randf_range(1.5, 10.0) / storm
+		return
+
+	_lightning_phase_t += delta
+
+	match _lightning_phase:
+		1: # First flash — sharp spike then quick fade.
+			var t    := minf(_lightning_phase_t / 0.07, 1.0)
+			var fade := 1.0 - t
+			if _lightning_light:   _lightning_light.light_energy = fade * 9.0 * storm
+			if _lightning_flash_rect: _lightning_flash_rect.color.a = fade * 0.40 * storm
+			if _lightning_phase_t > 0.07:
+				_lightning_phase   = 2
+				_lightning_phase_t = 0.0
+
+		2: # Brief dark gap between the two flashes.
+			if _lightning_light:   _lightning_light.light_energy = 0.0
+			if _lightning_flash_rect: _lightning_flash_rect.color.a = 0.0
+			if _lightning_phase_t > 0.05:
+				_lightning_phase   = 3
+				_lightning_phase_t = 0.0
+
+		3: # Second flash — dimmer, slightly longer.
+			var t    := minf(_lightning_phase_t / 0.10, 1.0)
+			var fade := 1.0 - t
+			if _lightning_light:   _lightning_light.light_energy = fade * 5.5 * storm
+			if _lightning_flash_rect: _lightning_flash_rect.color.a = fade * 0.24 * storm
+			if _lightning_phase_t > 0.10:
+				if _lightning_light:   _lightning_light.light_energy = 0.0
+				if _lightning_flash_rect: _lightning_flash_rect.color.a = 0.0
+				_lightning_phase = 0
 
 
 func _weather_lighting() -> Node:

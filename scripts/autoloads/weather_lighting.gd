@@ -57,8 +57,9 @@ const WAVE_RATE          : float = 1.0
 
 # --- Derived convenience getters ---
 ## Cloud coverage 0–1: cloud_cover is the primary dial; rain and wind add on top.
+## precipitation=1 forces near-overcast (0.90); wind=1 alone gives dramatic partial cover (0.50).
 var cloud_coverage: float:
-	get: return clampf(maxf(cloud_cover, precipitation * 0.65 + wind_force * 0.25), 0.0, 1.0)
+	get: return clampf(maxf(cloud_cover, precipitation * 0.90 + wind_force * 0.50), 0.0, 1.0)
 
 ## Rain visual amount 0–1: only appears past the first 30% precipitation.
 var rain_amount: float:
