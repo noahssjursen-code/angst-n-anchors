@@ -2,8 +2,10 @@
 class_name PropulsionComponent
 extends Node3D
 
-## Engine / propeller. Applies a forward or reverse thrust force at the stern.
-## throttle is set each frame by BoatController — range -1 (full reverse) to 1 (full ahead).
+## Engine / propeller. Applies thrust at the stern.
+## In this project, mesh orientation means "ahead" uses negative throttle, and
+## "astern" uses positive throttle.
+## throttle is set each frame by BoatController — range -1..1.
 
 @export var max_thrust:          float = 24000.0
 @export var reverse_multiplier:  float = 0.45   # reverse is weaker than ahead
@@ -26,7 +28,9 @@ func _physics_process(_delta: float) -> void:
 		return
 
 	var magnitude: float = throttle * max_thrust
-	if throttle < 0.0:
+	# Ahead is negative throttle in this vessel convention, so apply reverse
+	# penalty only for astern (positive) command.
+	if throttle > 0.0:
 		magnitude *= reverse_multiplier
 
 	# Forward is -Z in Godot's convention

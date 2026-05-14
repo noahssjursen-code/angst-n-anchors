@@ -15,15 +15,29 @@ extends RefCounted
 ## Sea level — must match the ocean plane y-position in starting_island.gd.
 const WATER_LEVEL: float = -1.5
 
-const AMPLITUDE_1  := 0.30
-const FREQUENCY_1  := 0.18
-const SPEED_1      := 0.75
+const AMPLITUDE_1  := 0.35
+const FREQUENCY_1  := 0.08
+const SPEED_1      := 0.95
 const DIR_1        := Vector2(1.0, 0.6)
+const STEEPNESS_1  := 0.45
 
-const AMPLITUDE_2  := 0.12
-const FREQUENCY_2  := 0.26
-const SPEED_2      := 1.1
+const AMPLITUDE_2  := 0.15
+const FREQUENCY_2  := 0.18
+const SPEED_2      := 1.2
 const DIR_2        := Vector2(-0.5, 1.0)
+const STEEPNESS_2  := 0.35
+
+const AMPLITUDE_3  := 0.22
+const FREQUENCY_3  := 0.05
+const SPEED_3      := 0.6
+const DIR_3        := Vector2(0.23, -0.97)
+const STEEPNESS_3  := 0.40
+
+const AMPLITUDE_4  := 0.08
+const FREQUENCY_4  := 0.32
+const SPEED_4      := 1.5
+const DIR_4        := Vector2(-0.91, -0.20)
+const STEEPNESS_4  := 0.25
 
 ## Runtime multiplier for both wave trains (visual + buoyancy).
 ## WeatherLighting drives this by default, but it can still be set directly for
@@ -46,6 +60,14 @@ static func set_wave_intensity(value: float) -> void:
 	wave_intensity = clampf(value, WAVE_INTENSITY_MIN, WAVE_INTENSITY_MAX)
 
 
+## Calm baseline with occasional larger swell sets (rare peaks).
+static func get_wave_energy_multiplier() -> float:
+	var t := get_sim_time()
+	var gate := sin(t * 0.032) + sin(t * 0.011 + 1.7) * 0.22 - 0.72
+	var rare := pow(clampf(gate * 1.9, 0.0, 1.0), 3.5)
+	return 0.85 + rare * 0.6
+
+
 static func set_coupled_vessel(body: RigidBody3D) -> void:
 	_coupled_vessel = body
 
@@ -64,7 +86,7 @@ static func get_sim_time() -> float:
 ## Buoyancy samples this so upward force follows wave phase without fighting the
 ## displacement depression under the hull (fluid-like heave vs spring-mounted sheet).
 static func get_buoyancy_surface_height_at(x: float, z: float) -> float:
-	return _wave_height_at_xy(x, z)
+	return _gerstner_world_sample(x, z)["height"]
 
 
 ## Raw travelling sine stack only (no hull dip). Alias of `get_buoyancy_surface_height_at`.
@@ -115,28 +137,12 @@ static func _vessel_displacement_params(b: RigidBody3D) -> Dictionary:
 
 ## ∂h_wave/∂t — wave part only; hull dip motion is ignored (slow vs wave frequency).
 static func get_vertical_velocity_at(x: float, z: float) -> float:
-	var t: float = get_sim_time()
-	var d1: Vector2 = DIR_1.normalized()
-	var d2: Vector2 = DIR_2.normalized()
-	var a1: float = AMPLITUDE_1 * wave_intensity
-	var a2: float = AMPLITUDE_2 * wave_intensity
-	var ph1: float = (x * d1.x + z * d1.y) * FREQUENCY_1 + t * SPEED_1
-	var ph2: float = (x * d2.x + z * d2.y) * FREQUENCY_2 + t * SPEED_2
-	return cos(ph1) * SPEED_1 * a1 + cos(ph2) * SPEED_2 * a2
+	return _gerstner_world_sample(x, z)["dy_dt"]
 
 
 ## ∂η/∂x and ∂η/∂z for the wave part (no hull dip). Used for surface normal & flow hints.
 static func get_surface_gradient_xz(x: float, z: float) -> Vector2:
-	var t: float = get_sim_time()
-	var d1: Vector2 = DIR_1.normalized()
-	var d2: Vector2 = DIR_2.normalized()
-	var a1: float = AMPLITUDE_1 * wave_intensity
-	var a2: float = AMPLITUDE_2 * wave_intensity
-	var ph1: float = (x * d1.x + z * d1.y) * FREQUENCY_1 + t * SPEED_1
-	var ph2: float = (x * d2.x + z * d2.y) * FREQUENCY_2 + t * SPEED_2
-	var gx: float = cos(ph1) * a1 * FREQUENCY_1 * d1.x + cos(ph2) * a2 * FREQUENCY_2 * d2.x
-	var gz: float = cos(ph1) * a1 * FREQUENCY_1 * d1.y + cos(ph2) * a2 * FREQUENCY_2 * d2.y
-	return Vector2(gx, gz)
+	return _gerstner_world_sample(x, z)["gradient"]
 
 
 ## Unit "up" of the free surface (small-slope normal from wave heightfield).
@@ -163,14 +169,98 @@ static func sync_ocean_coupling_to_shader(mat: ShaderMaterial) -> void:
 
 
 static func _wave_height_at_xy(x: float, z: float) -> float:
+	return _gerstner_world_sample(x, z)["height"]
+
+
+static func _gerstner_world_sample(x: float, z: float) -> Dictionary:
 	var t: float = get_sim_time()
-	var d1: Vector2 = DIR_1.normalized()
-	var d2: Vector2 = DIR_2.normalized()
-	var a1: float = AMPLITUDE_1 * wave_intensity
-	var a2: float = AMPLITUDE_2 * wave_intensity
-	var wave1: float = sin((x * d1.x + z * d1.y) * FREQUENCY_1 + t * SPEED_1) * a1
-	var wave2: float = sin((x * d2.x + z * d2.y) * FREQUENCY_2 + t * SPEED_2) * a2
-	return WATER_LEVEL + wave1 + wave2
+	var world := Vector2(x, z)
+	var param := world
+	# Fixed-point solve: world = param + horizontal_gerstner_displacement(param).
+	for solve_idx in range(3):
+		var d := _gerstner_displacement_xz_from_param(param, t)
+		param = world - d
+	return _gerstner_sample_from_param(param, t)
+
+
+static func _gerstner_sample_from_param(param: Vector2, t: float) -> Dictionary:
+	var d1 := DIR_1.normalized()
+	var d2 := DIR_2.normalized()
+	var d3 := DIR_3.normalized()
+	var d4 := DIR_4.normalized()
+	var amp_scale := wave_intensity * get_wave_energy_multiplier()
+	var a1 := AMPLITUDE_1 * amp_scale
+	var a2 := AMPLITUDE_2 * amp_scale
+	var a3 := AMPLITUDE_3 * amp_scale
+	var a4 := AMPLITUDE_4 * amp_scale
+	var q1 := clampf(STEEPNESS_1, 0.0, 0.98)
+	var q2 := clampf(STEEPNESS_2, 0.0, 0.98)
+	var q3 := clampf(STEEPNESS_3, 0.0, 0.98)
+	var q4 := clampf(STEEPNESS_4, 0.0, 0.98)
+
+	var ph1 := param.dot(d1) * FREQUENCY_1 + t * SPEED_1
+	var ph2 := param.dot(d2) * FREQUENCY_2 + t * SPEED_2
+	var ph3 := param.dot(d3) * FREQUENCY_3 + t * SPEED_3
+	var ph4 := param.dot(d4) * FREQUENCY_4 + t * SPEED_4
+	var s1 := sin(ph1)
+	var s2 := sin(ph2)
+	var s3 := sin(ph3)
+	var s4 := sin(ph4)
+	var c1 := cos(ph1)
+	var c2 := cos(ph2)
+	var c3 := cos(ph3)
+	var c4 := cos(ph4)
+
+	var disp_xz := (
+		d1 * (q1 * a1 * c1)
+		+ d2 * (q2 * a2 * c2)
+		+ d3 * (q3 * a3 * c3)
+		+ d4 * (q4 * a4 * c4)
+	)
+	var y := WATER_LEVEL + a1 * s1 + a2 * s2 + a3 * s3 + a4 * s4
+	var grad := Vector2(
+		a1 * FREQUENCY_1 * d1.x * c1
+		+ a2 * FREQUENCY_2 * d2.x * c2
+		+ a3 * FREQUENCY_3 * d3.x * c3
+		+ a4 * FREQUENCY_4 * d4.x * c4,
+		a1 * FREQUENCY_1 * d1.y * c1
+		+ a2 * FREQUENCY_2 * d2.y * c2
+		+ a3 * FREQUENCY_3 * d3.y * c3
+		+ a4 * FREQUENCY_4 * d4.y * c4,
+	)
+	var dy_dt := a1 * SPEED_1 * c1 + a2 * SPEED_2 * c2 + a3 * SPEED_3 * c3 + a4 * SPEED_4 * c4
+	return {
+		"height": y,
+		"gradient": grad,
+		"dy_dt": dy_dt,
+		"disp_xz": disp_xz,
+	}
+
+
+static func _gerstner_displacement_xz_from_param(param: Vector2, t: float) -> Vector2:
+	var d1 := DIR_1.normalized()
+	var d2 := DIR_2.normalized()
+	var d3 := DIR_3.normalized()
+	var d4 := DIR_4.normalized()
+	var amp_scale := wave_intensity * get_wave_energy_multiplier()
+	var a1 := AMPLITUDE_1 * amp_scale
+	var a2 := AMPLITUDE_2 * amp_scale
+	var a3 := AMPLITUDE_3 * amp_scale
+	var a4 := AMPLITUDE_4 * amp_scale
+	var q1 := clampf(STEEPNESS_1, 0.0, 0.98)
+	var q2 := clampf(STEEPNESS_2, 0.0, 0.98)
+	var q3 := clampf(STEEPNESS_3, 0.0, 0.98)
+	var q4 := clampf(STEEPNESS_4, 0.0, 0.98)
+	var ph1 := param.dot(d1) * FREQUENCY_1 + t * SPEED_1
+	var ph2 := param.dot(d2) * FREQUENCY_2 + t * SPEED_2
+	var ph3 := param.dot(d3) * FREQUENCY_3 + t * SPEED_3
+	var ph4 := param.dot(d4) * FREQUENCY_4 + t * SPEED_4
+	return (
+		d1 * (q1 * a1 * cos(ph1))
+		+ d2 * (q2 * a2 * cos(ph2))
+		+ d3 * (q3 * a3 * cos(ph3))
+		+ d4 * (q4 * a4 * cos(ph4))
+	)
 
 
 static func _vessel_dip_at(x: float, z: float) -> float:

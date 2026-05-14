@@ -20,11 +20,11 @@ angular_damp_coeff = 0.02
 auto_mass_from_hull = true
 design_draft_fraction = 0.42
 engine_mass = 4500.0
-keel_ballast_mass = 0.0
+keel_ballast_mass = 8000.0
 fuel_stores_mass = 7000.0
 cargo_mass = 0.0
-center_of_mass_depth_fraction = 0.45
-artificial_keel_extra_depth = 0.35
+center_of_mass_depth_fraction = 0.58
+artificial_keel_extra_depth = 0.78
 mesh_scale = 1.4
 model_data_path = "res://resources/data/meshes/cargo_ship_hull.json"
 mesh_data_path = "res://resources/data/meshes/ship_hull_bulk_flat_deck.json"
@@ -51,7 +51,7 @@ draft_fraction = 0.38
 
 [node name="PropulsionComponent" type="Node3D" parent="."]
 script = ExtResource("3")
-max_thrust = 220000.0
+max_thrust = 440000.0
 stern_offset = Vector3(0.0, -1.3, 11.0)
 
 [node name="RudderComponent" type="Node3D" parent="."]
