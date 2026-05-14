@@ -13,14 +13,17 @@ extends Node3D
 ## the wave phase** with little resistance — keep modest.
 @export var orbital_flow_scale: float = 0.12
 ## Opposes velocity tangent to the local free surface (ball-on-trampoline grip).
-@export var slip_grip_coeff: float = 15500.0
-@export var max_slip_grip_force: float = 340000.0
+@export var slip_grip_coeff: float = 8500.0
+@export var max_slip_grip_force: float = 180000.0
 ## Drains horizontal speed vs **world** (still ocean / inertia). Stops zero-throttle
 ## surfing on wave orbital motion forever.
 @export var bulk_horizontal_drag: float = 2400.0
 ## Approximate operational draft used for water drag. Kept separate from buoyancy:
 ## buoyancy decides where the hull floats; this only estimates submerged side area.
 @export var draft_fraction: float = 0.38
+## Scales all wave-coupling forces (slip grip + orbital flow). Reduce toward 0.3–0.5
+## for heavy vessels that should punch through waves with more inertia.
+@export_range(0.0, 2.0, 0.01) var wave_influence_scale: float = 0.55
 
 var _body: RigidBody3D
 
@@ -47,7 +50,7 @@ func _physics_process(_delta: float) -> void:
 	var water_horiz: Vector3 = Vector3.ZERO
 	if pl > 1e-4:
 		perp2 /= pl
-		water_horiz = Vector3(perp2.x, 0.0, perp2.y) * (dh_dt * orbital_flow_scale)
+		water_horiz = Vector3(perp2.x, 0.0, perp2.y) * (dh_dt * orbital_flow_scale * wave_influence_scale)
 
 	var rel_world: Vector3 = v_world - water_horiz
 	var local_vel: Vector3 = basis_inv * rel_world
@@ -86,14 +89,15 @@ func _physics_process(_delta: float) -> void:
 	_body.apply_central_force(global_force)
 	_body.apply_torque(global_torque)
 
-	if slip_grip_coeff > 0.0 and max_slip_grip_force > 0.0:
+	if slip_grip_coeff > 0.0 and max_slip_grip_force > 0.0 and wave_influence_scale > 0.0:
 		var n_up: Vector3 = WaveSurface.get_surface_normal_at(cx, cz)
 		var v_n: float = n_up.dot(v_world)
 		var v_slip: Vector3 = v_world - n_up * v_n
-		var f_slip: Vector3 = -v_slip * slip_grip_coeff
+		var f_slip: Vector3 = -v_slip * slip_grip_coeff * wave_influence_scale
 		var slip_len: float = f_slip.length()
-		if slip_len > max_slip_grip_force:
-			f_slip *= max_slip_grip_force / slip_len
+		var scaled_max: float = max_slip_grip_force * wave_influence_scale
+		if slip_len > scaled_max:
+			f_slip *= scaled_max / slip_len
 		_body.apply_central_force(f_slip)
 
 	var v_hz: Vector3 = Vector3(v_world.x, 0.0, v_world.z)

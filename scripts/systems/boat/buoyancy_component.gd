@@ -34,6 +34,9 @@ extends Node3D
 @export var vertical_damping: float = 2800.0
 ## Per-column lift caps once ~fully submerged (linear depth model would diverge).
 @export var lift_depth_hull_scale: float = 1.15
+## Scales wave-relative vertical damping. Lower = hull moves more independently of the
+## surface; higher = hull snaps tightly to wave contour. Match with HydrodynamicsComponent.wave_influence_scale.
+@export_range(0.0, 2.0, 0.01) var wave_influence_scale: float = 0.55
 
 var _body: RigidBody3D
 
@@ -112,7 +115,7 @@ func _physics_process(_delta: float) -> void:
 		var water_vy: float       = WaveSurface.get_vertical_velocity_at(world_pt.x, world_pt.z)
 		var rel_vy: float         = point_vel.y - water_vy
 		var damp_scale: float     = minf(depth, 1.2) / 1.2
-		var vert_damp := Vector3(0.0, -rel_vy * vertical_damping * damp_scale, 0.0)
+		var vert_damp := Vector3(0.0, -rel_vy * vertical_damping * damp_scale * wave_influence_scale, 0.0)
 
 		_body.apply_force(lift + vert_damp, world_offset)
 

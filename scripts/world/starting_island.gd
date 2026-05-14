@@ -4,7 +4,9 @@ extends Node3D
 const PLAYER_SCENE := preload("res://scenes/islands/starting_island/player.tscn")
 const BOAT_SCENE   := preload("res://scenes/boats/test_boat.tscn")
 const OCEAN_SHADER := preload("res://resources/shaders/ocean_waves.gdshader")
-const RAIN_FIELD_SCRIPT := preload("res://scripts/systems/weather/rain_field.gd")
+const SKY_SHADER   := preload("res://resources/shaders/sky.gdshader")
+const RAIN_FIELD_SCRIPT  := preload("res://scripts/systems/weather/rain_field.gd")
+const WEATHER_HUD_SCRIPT := preload("res://scripts/systems/weather/weather_hud.gd")
 const DockFacilitiesScript := preload("res://scripts/systems/dock/dock_facilities.gd")
 const WarehouseCargoTestScript := preload("res://scripts/systems/cargo/warehouse_cargo_test.gd")
 const WarehouseContractZoneScript := preload("res://scripts/systems/cargo/warehouse_contract_zone.gd")
@@ -43,7 +45,7 @@ const OPEN_WAREHOUSE_POSITION := Vector3(-22.0, 0.03, -8.0)
 const OPEN_WAREHOUSE_ROTATION := Vector3(0.0, 55.0, 0.0)
 
 var _ocean_shader_material: ShaderMaterial
-var _sky_material: ProceduralSkyMaterial
+var _sky_shader_material: ShaderMaterial
 var _environment: Environment
 var _sun: DirectionalLight3D
 var _fill_light: DirectionalLight3D
@@ -56,6 +58,23 @@ func _process(_delta: float) -> void:
 		_ocean_shader_material.set_shader_parameter("wave_time", WaveSurface.get_sim_time())
 		_ocean_shader_material.set_shader_parameter("wave_intensity", WaveSurface.wave_intensity)
 		WaveSurface.sync_ocean_coupling_to_shader(_ocean_shader_material)
+	if _sky_shader_material:
+		_sky_shader_material.set_shader_parameter("sky_time", WaveSurface.get_sim_time())
+		_sky_shader_material.set_shader_parameter("sun_direction",  _celestial_dir(0.0))
+		_sky_shader_material.set_shader_parameter("moon_direction", _celestial_dir(0.5))
+
+
+# Returns the world-space unit vector pointing FROM the scene TOWARD a celestial body.
+# tod_offset 0.0 = sun, 0.5 = moon (placed half a day opposite).
+func _celestial_dir(tod_offset: float) -> Vector3:
+	var weather := _weather_lighting()
+	var tod     := (weather.time_of_day if weather else 0.42) as float
+	var t    := fmod(tod + tod_offset, 1.0)
+	var elev := -cos(t * TAU)                   # -1 at midnight, +1 at noon
+	var x_r  := deg_to_rad(-elev * 55.0)        # matches _sun rotation formula
+	var y_r  := deg_to_rad(t * 360.0 - 120.0)
+	var rot  := Basis.from_euler(Vector3(x_r, y_r, 0.0))
+	return -(rot * Vector3(0.0, 0.0, -1.0))     # direction TO body (negate light ray)
 
 
 func _ready() -> void:
@@ -84,20 +103,17 @@ func _ready() -> void:
 	if not Engine.is_editor_hint():
 		_spawn_player()
 		_spawn_rain_field()
+		_spawn_weather_hud()
 
 
 func _build_sky() -> void:
-	var sky_mat := ProceduralSkyMaterial.new()
-	_sky_material = sky_mat
-	sky_mat.sky_top_color        = Color(0.26, 0.46, 0.70)
-	sky_mat.sky_horizon_color    = Color(0.48, 0.68, 0.90)
-	sky_mat.ground_bottom_color  = Color(0.16, 0.14, 0.12)
-	sky_mat.ground_horizon_color = Color(0.48, 0.44, 0.36)
-	sky_mat.sun_angle_max        = 2.0
-	sky_mat.sun_curve            = 0.12
+	var sky_sm := ShaderMaterial.new()
+	sky_sm.shader = SKY_SHADER
+	_sky_shader_material = sky_sm
 
 	var sky := Sky.new()
-	sky.sky_material = sky_mat
+	sky.sky_material        = sky_sm
+	sky.radiance_size       = Sky.RADIANCE_SIZE_64
 
 	var environ := Environment.new()
 	_environment = environ
@@ -106,17 +122,17 @@ func _build_sky() -> void:
 	environ.ambient_light_source = Environment.AMBIENT_SOURCE_SKY
 	environ.ambient_light_energy = 0.18
 
-	# Tonemap — conservative exposure; materials now carry the brightness, not post.
+	# Tonemap — conservative exposure; materials carry brightness, not post.
 	environ.tonemap_mode     = Environment.TONE_MAPPER_FILMIC
 	environ.tonemap_exposure = 0.95
 	environ.tonemap_white    = 6.0
 
-	# SSAO — contact shadows under crates, dock edges, ship hull meeting water.
+	# SSAO — contact shadows under crates, dock edges, hull against water.
 	environ.ssao_enabled   = true
 	environ.ssao_radius    = 0.9
 	environ.ssao_intensity = 1.4
 
-	# Bloom — only extreme highlights (water sparkle, later ship lights); keep subtle.
+	# Bloom — only hot highlights (water sparkle, future ship lights).
 	environ.glow_enabled    = true
 	environ.glow_normalized = false
 	environ.glow_intensity  = 0.4
@@ -124,17 +140,24 @@ func _build_sky() -> void:
 	environ.set_glow_level(2, true)
 	environ.set_glow_level(3, true)
 
-	# SSR — water reflects nearby ship and dock geometry.
+	# SSR — water reflects nearby geometry.
 	environ.ssr_enabled   = true
 	environ.ssr_max_steps = 32
 	environ.ssr_fade_in   = 0.15
 	environ.ssr_fade_out  = 2.0
 
+	# Fog — driven by visibility axis at runtime; disabled until weather sets it.
+	environ.fog_enabled            = false
+	environ.fog_light_color        = Color(0.82, 0.84, 0.88)
+	environ.fog_density            = 0.0
+	environ.fog_aerial_perspective = 0.0
+	environ.fog_sky_affect         = 1.0
+
 	var world_env := WorldEnvironment.new()
 	world_env.environment = environ
 	add_child(world_env)
 
-	# Primary sun — warm directional, drives hard shadows.
+	# Primary sun — warm directional, hard shadows.
 	var sun := DirectionalLight3D.new()
 	_sun = sun
 	sun.rotation_degrees = Vector3(-50, 28, 0)
@@ -146,14 +169,18 @@ func _build_sky() -> void:
 	sun.shadow_bias                     = 0.04
 	add_child(sun)
 
-	# Sky fill — cool blue, no shadow, gives shadow-side faces sky colour not black.
+	# Sky fill — cool blue, scene lighting only; must NOT enter sky shader (LIGHT0/1 slots).
 	var fill := DirectionalLight3D.new()
 	_fill_light = fill
 	fill.rotation_degrees = Vector3(40, -160, 0)
 	fill.light_color    = Color(0.52, 0.64, 0.90)
 	fill.light_energy   = 0.18
 	fill.shadow_enabled = false
+	fill.sky_mode       = DirectionalLight3D.SKY_MODE_LIGHT_ONLY
 	add_child(fill)
+
+	# Apply initial sky uniforms so the shader has values before first state_changed.
+	_apply_weather_lighting()
 
 
 func _build_ocean() -> void:
@@ -217,94 +244,115 @@ func _connect_weather_lighting() -> void:
 
 
 func _apply_weather_lighting() -> void:
-	var time_of_day := 0.42
-	var weather_amount := 0.0
+	var tod  := 0.42
+	var wind := 0.0
+	var vis  := 1.0
 	var weather := _weather_lighting()
 	if weather != null:
-		time_of_day = float(weather.get("time_of_day"))
-		weather_amount = float(weather.get("weather_amount"))
+		tod  = float(weather.get("time_of_day"))
+		wind = float(weather.get("wind_force"))
+		vis  = float(weather.get("visibility"))
 
-	var sun_arc := sin(time_of_day * TAU - PI * 0.5)
-	var daylight := smoothstep(-0.18, 0.72, sun_arc)
-	var cloud := clampf(weather_amount, 0.0, 1.0)
-	var rain := smoothstep(0.58, 1.0, cloud)
+	# Derived scalars
+	# elev_norm: -1 at midnight (sun below), 0 at horizon (dawn/dusk), +1 at solar noon.
+	var elev_norm  := -cos(tod * TAU)
+	var daylight   := smoothstep(-0.18, 0.55, elev_norm)
+	var cloud      := float(weather.get("cloud_coverage")) if weather != null else 0.0
+	var rain       := float(weather.get("rain_amount"))    if weather != null else 0.0
+	var storm      := float(weather.get("storm_intensity")) if weather != null else 0.0
+	var fog_t      := 1.0 - vis
 
+	# --- Sun ---
+	# Elevation: negative x_rot = sun higher above horizon (matching Godot convention).
+	# At noon elev_norm=+1 → x=-55° (55° above horizon).
+	# At midnight elev_norm=-1 → x=+55° (below ground, disk invisible in sky shader).
+	# Azimuth sweeps 360° over the day: rises east, transits south, sets west.
 	if _sun != null:
 		_sun.rotation_degrees = Vector3(
-			lerpf(8.0, -72.0, daylight),
-			time_of_day * 360.0 - 120.0,
+			-elev_norm * 55.0,
+			tod * 360.0 - 120.0,
 			0.0
 		)
-		_sun.light_energy = lerpf(0.03, 1.5, daylight) * lerpf(1.0, 0.28, cloud)
+		_sun.light_energy = lerpf(0.03, 1.5, daylight) * lerpf(1.0, 0.22, cloud)
 		var dawn  := Color(1.0,  0.68, 0.42)
-		var noon  := Color(1.0,  0.94, 0.82)
-		var storm := Color(0.58, 0.62, 0.68)
-		_sun.light_color = dawn.lerp(noon, daylight).lerp(storm, cloud)
+		var noon  := Color(1.0,  0.92, 0.78)
+		var stormc := Color(0.55, 0.60, 0.68)
+		_sun.light_color = dawn.lerp(noon, daylight).lerp(stormc, storm)
 
-	# Fill light: stays cool sky blue, dims in overcast/storm so sun still wins.
+	# --- Fill light ---
 	if _fill_light != null:
-		_fill_light.light_energy = lerpf(0.18, 0.06, cloud) * lerpf(0.2, 1.0, daylight)
+		_fill_light.light_energy = lerpf(0.18, 0.05, cloud) * lerpf(0.15, 1.0, daylight)
 
+	# --- Ambient ---
 	if _environment != null:
-		# Low ambient ceiling so sun shadows stay readable on low-poly geometry.
-		_environment.ambient_light_energy = lerpf(0.05, 0.20, daylight) * lerpf(1.0, 0.72, cloud)
+		_environment.ambient_light_energy = (
+			lerpf(0.05, 0.20, daylight) * lerpf(1.0, 0.72, cloud)
+		)
 
-	if _sky_material != null:
-		var night_top     := Color(0.025, 0.035, 0.070)
-		var day_top       := Color(0.26,  0.46,  0.70)
-		var storm_top     := Color(0.18,  0.20,  0.23)
-		var night_horizon := Color(0.08,  0.075, 0.09)
-		var day_horizon   := Color(0.48,  0.68,  0.90)
-		var storm_horizon := Color(0.31,  0.33,  0.35)
-		_sky_material.sky_top_color = (
-			night_top.lerp(day_top, daylight).lerp(storm_top, cloud)
-		)
-		_sky_material.sky_horizon_color = (
-			night_horizon.lerp(day_horizon, daylight).lerp(storm_horizon, cloud)
-		)
-		_sky_material.ground_bottom_color = (
+	# --- Sky shader uniforms ---
+	if _sky_shader_material != null:
+		var night_top     := Color(0.020, 0.030, 0.065)
+		var day_top       := Color(0.24,  0.44,  0.68)
+		var storm_top     := Color(0.16,  0.18,  0.22)
+		var night_horizon := Color(0.07,  0.065, 0.08)
+		var day_horizon   := Color(0.46,  0.66,  0.88)
+		var storm_horizon := Color(0.28,  0.30,  0.34)
+
+		var top_col  := night_top.lerp(day_top, daylight).lerp(storm_top, cloud)
+		var horiz    := night_horizon.lerp(day_horizon, daylight).lerp(storm_horizon, cloud)
+		var ground_c := (
 			Color(0.04, 0.04, 0.05)
-			.lerp(Color(0.16, 0.14, 0.12), daylight)
-			.lerp(Color(0.09, 0.09, 0.09), cloud)
+			.lerp(Color(0.15, 0.13, 0.11), daylight)
+			.lerp(Color(0.08, 0.08, 0.08), cloud)
 		)
-		_sky_material.ground_horizon_color = (
-			Color(0.08, 0.07, 0.06)
-			.lerp(Color(0.48, 0.44, 0.36), daylight)
-			.lerp(Color(0.20, 0.20, 0.19), cloud)
-		)
+		_sky_shader_material.set_shader_parameter("sky_top_color",     Vector3(top_col.r, top_col.g, top_col.b))
+		_sky_shader_material.set_shader_parameter("sky_horizon_color", Vector3(horiz.r,   horiz.g,   horiz.b))
+		_sky_shader_material.set_shader_parameter("sky_ground_color",  Vector3(ground_c.r, ground_c.g, ground_c.b))
+		_sky_shader_material.set_shader_parameter("cloud_coverage",    cloud)
+		_sky_shader_material.set_shader_parameter("storm_intensity",   storm)
+		# Sun disk: warm at dawn, white at noon, pale at night.
+		var sun_col := Color(1.0, 0.68, 0.38).lerp(Color(1.0, 0.95, 0.85), daylight)
+		_sky_shader_material.set_shader_parameter("sun_color", Vector3(sun_col.r, sun_col.g, sun_col.b))
 
+	# --- Fog (visibility axis) ---
+	if _environment != null:
+		_environment.fog_enabled = fog_t > 0.02
+		if _environment.fog_enabled:
+			# Light morning mist at low fog_t → classic pea-soup at max.
+			var mist_col  := Color(0.88, 0.90, 0.94)
+			var dense_col := Color(0.58, 0.61, 0.66)
+			_environment.fog_light_color = mist_col.lerp(dense_col, fog_t)
+			# Quadratic curve: gentle at first, thickens toward max.
+			_environment.fog_density     = lerpf(0.0, 0.28, fog_t * fog_t)
+			# Sky desaturates into the fog colour but never fully whiteouts.
+			_environment.fog_sky_affect  = lerpf(0.0, 0.55, fog_t * fog_t)
+
+	# --- Ocean shader ---
 	if _ocean_shader_material != null:
-		# Base colour: bright mid-blue day → dark night → grey-green storm.
-		var day_ocean   := C_OCEAN                         # Color(0.10, 0.28, 0.48)
-		var night_ocean := Color(0.022, 0.045, 0.090)
-		var storm_ocean := Color(0.055, 0.080, 0.100)
-		var ocean_color := night_ocean.lerp(day_ocean, daylight).lerp(storm_ocean, cloud)
-		# deep: darkened fraction of the base colour — stay visible.
-		var deep        := ocean_color * lerpf(0.22, 0.38, rain)
-		# shallow: brighter surface catch-light.
-		var shallow_w   := ocean_color * lerpf(0.62, 0.80, rain)
-		# horizon: sky-mixed blue for fresnel grazing.
-		var horizon_w   := ocean_color.lerp(Color(0.18, 0.32, 0.56), lerpf(0.45, 0.30, cloud))
+		var day_ocean   := C_OCEAN
+		var night_ocean := Color(0.020, 0.042, 0.085)
+		var storm_ocean := Color(0.050, 0.075, 0.095)
+		var ocean_color := night_ocean.lerp(day_ocean, daylight).lerp(storm_ocean, storm)
+		var deep      := ocean_color * lerpf(0.22, 0.38, rain)
+		var shallow_w := ocean_color * lerpf(0.62, 0.80, rain)
+		var horizon_w := ocean_color.lerp(Color(0.18, 0.32, 0.56), lerpf(0.45, 0.28, cloud))
 		_ocean_shader_material.set_shader_parameter(
 			"shallow_albedo", Vector3(shallow_w.r, shallow_w.g, shallow_w.b))
 		_ocean_shader_material.set_shader_parameter(
 			"deep_albedo", Vector3(deep.r, deep.g, deep.b))
 		_ocean_shader_material.set_shader_parameter(
 			"horizon_tint", Vector3(horizon_w.r, horizon_w.g, horizon_w.b))
-		# Fresnel: near 0.70 on clear day; still 0.45 in storms so sky bleeds in.
 		_ocean_shader_material.set_shader_parameter(
-			"fresnel_sky_mix", lerpf(0.70, 0.45, cloud))
+			"fresnel_sky_mix", lerpf(0.70, 0.42, cloud))
 		_ocean_shader_material.set_shader_parameter(
 			"wave_energy_multiplier", WaveSurface.get_wave_energy_multiplier())
-		_ocean_shader_material.set_shader_parameter("water_alpha", lerpf(0.92, 0.97, rain))
-		# Foam: calm baseline 0.45, rises in storms. Thresholds stay high for crest-only foam.
-		_ocean_shader_material.set_shader_parameter("foam_strength",    lerpf(0.45, 0.85, rain))
-		_ocean_shader_material.set_shader_parameter("foam_steep_start", lerpf(0.60, 0.42, rain))
-		_ocean_shader_material.set_shader_parameter("foam_steep_end",   lerpf(0.92, 0.72, rain))
+		_ocean_shader_material.set_shader_parameter("water_alpha",      lerpf(0.92, 0.97, rain))
+		_ocean_shader_material.set_shader_parameter("foam_strength",    lerpf(0.45, 0.88, rain + wind * 0.4))
+		_ocean_shader_material.set_shader_parameter("foam_steep_start", lerpf(0.60, 0.38, storm))
+		_ocean_shader_material.set_shader_parameter("foam_steep_end",   lerpf(0.92, 0.68, storm))
 		_ocean_shader_material.set_shader_parameter(
-			"near_color_lift", lerpf(0.20, 0.10, cloud))
-		# Low roughness for glossy specular; roughens a little in rain.
-		_ocean_shader_material.set_shader_parameter("roughness", lerpf(0.07, 0.22, rain))
+			"near_color_lift", lerpf(0.20, 0.08, cloud))
+		_ocean_shader_material.set_shader_parameter("roughness", lerpf(0.07, 0.28, rain))
 		_ocean_shader_material.set_shader_parameter("metallic",  lerpf(0.10, 0.04, rain))
 
 
@@ -461,6 +509,12 @@ func _spawn_rain_field() -> void:
 	var rain_field := RAIN_FIELD_SCRIPT.new() as Node3D
 	rain_field.name = "RainField"
 	add_child(rain_field)
+
+
+func _spawn_weather_hud() -> void:
+	var hud := WEATHER_HUD_SCRIPT.new()
+	hud.name = "WeatherHUD"
+	add_child(hud)
 
 
 func _build_concrete_piers() -> void:

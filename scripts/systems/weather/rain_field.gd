@@ -77,14 +77,17 @@ func _apply_weather() -> void:
 	if _particles == null or _process_material == null:
 		return
 
-	var weather_amount := 0.0
+	var precip := 0.0
+	var wind   := 0.0
 	var weather := _weather_lighting()
 	if weather != null:
-		weather_amount = float(weather.get("weather_amount"))
+		precip = float(weather.get("precipitation"))
+		wind   = float(weather.get("wind_force"))
 
-	var rain_amount := smoothstep(rain_start, 1.0, weather_amount)
+	var rain_amount := smoothstep(rain_start, 1.0, precip)
 	_particles.emitting = rain_amount > 0.01
 	_particles.amount_ratio = rain_amount
+
 	_process_material.initial_velocity_min = lerpf(fall_speed_clear, fall_speed_storm, rain_amount)
 	_process_material.initial_velocity_max = lerpf(
 		fall_speed_clear * 1.25,
@@ -92,9 +95,10 @@ func _apply_weather() -> void:
 		rain_amount
 	)
 	_process_material.gravity = Vector3(0.0, lerpf(-16.0, -30.0, rain_amount), 0.0)
-	_process_material.direction = (
-		Vector3.DOWN + wind_clear.lerp(wind_storm, rain_amount).normalized()
-	)
+
+	# Wind tilt: use wind_force axis independently from precipitation.
+	var wind_vec := wind_clear.lerp(wind_storm, wind)
+	_process_material.direction = (Vector3.DOWN + wind_vec).normalized()
 
 
 func _weather_lighting() -> Node:
