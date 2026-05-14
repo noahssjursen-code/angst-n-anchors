@@ -86,12 +86,8 @@ static func static_box(size: Vector3, color: Color, roughness: float = 0.85) -> 
 
 ## Builds a custom mesh from a flat array of vertices and indices.
 ##
-## Three things make low-poly meshes read as solid panelled objects:
-##   1. Per-face normals (deindexed faces) — sharp creases, no smoothing across edges.
-##   2. Per-face colour jitter via vertex colours — each panel reads as its own plate.
-##   3. Back-face culling on (no double-sided) — clean silhouettes, correct lighting.
-##
-## The JSON pipeline does not author UVs or normals; both are generated here.
+## JSON meshes use flat normals and a plain StandardMaterial3D. No UVs, no shader,
+## no procedural colour variation — just simple lighting and shadows.
 static func from_data(
 	vertices: Array,
 	indices: Array,
@@ -102,8 +98,6 @@ static func from_data(
 	var st := SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
 
-	# Double-sided: AI-authored JSON meshes may have open sections or inconsistent
-	# winding. Cheap insurance against missing faces.
 	var mat := make_material(color, roughness, metallic, true)
 	st.set_material(mat)
 
@@ -112,8 +106,7 @@ static func from_data(
 		v3_array.append(Vector3(vertices[i], vertices[i+1], vertices[i+2]))
 
 	# JSON authoring uses CW winding; Godot expects CCW — swap the last two indices.
-	# Each triangle emits 3 unique vertices so generate_normals() produces a per-face
-	# normal — no smoothing across edges, hard creases, low-poly look.
+	# Each triangle emits 3 unique vertices so generate_normals() gives flat shading.
 	for i in range(0, indices.size(), 3):
 		st.add_vertex(v3_array[indices[i]])
 		st.add_vertex(v3_array[indices[i + 2]])

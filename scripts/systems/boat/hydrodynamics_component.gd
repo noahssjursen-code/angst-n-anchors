@@ -18,6 +18,9 @@ extends Node3D
 ## Drains horizontal speed vs **world** (still ocean / inertia). Stops zero-throttle
 ## surfing on wave orbital motion forever.
 @export var bulk_horizontal_drag: float = 2400.0
+## Approximate operational draft used for water drag. Kept separate from buoyancy:
+## buoyancy decides where the hull floats; this only estimates submerged side area.
+@export var draft_fraction: float = 0.38
 
 var _body: RigidBody3D
 
@@ -58,6 +61,7 @@ func _physics_process(_delta: float) -> void:
 		var hs: Vector3 = _body.get("hull_size")
 		w = hs.x
 		l = hs.z
+		draft = hs.y * draft_fraction
 
 	var forward_area: float = w * draft
 	var lateral_area: float = l * draft
@@ -82,14 +86,15 @@ func _physics_process(_delta: float) -> void:
 	_body.apply_central_force(global_force)
 	_body.apply_torque(global_torque)
 
-	var n_up: Vector3 = WaveSurface.get_surface_normal_at(cx, cz)
-	var v_n: float = n_up.dot(v_world)
-	var v_slip: Vector3 = v_world - n_up * v_n
-	var f_slip: Vector3 = -v_slip * slip_grip_coeff
-	var slip_len: float = f_slip.length()
-	if slip_len > max_slip_grip_force:
-		f_slip *= max_slip_grip_force / slip_len
-	_body.apply_central_force(f_slip)
+	if slip_grip_coeff > 0.0 and max_slip_grip_force > 0.0:
+		var n_up: Vector3 = WaveSurface.get_surface_normal_at(cx, cz)
+		var v_n: float = n_up.dot(v_world)
+		var v_slip: Vector3 = v_world - n_up * v_n
+		var f_slip: Vector3 = -v_slip * slip_grip_coeff
+		var slip_len: float = f_slip.length()
+		if slip_len > max_slip_grip_force:
+			f_slip *= max_slip_grip_force / slip_len
+		_body.apply_central_force(f_slip)
 
 	var v_hz: Vector3 = Vector3(v_world.x, 0.0, v_world.z)
 	var vh_len: float = v_hz.length()

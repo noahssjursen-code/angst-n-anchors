@@ -37,11 +37,21 @@ const LAYER_BOAT_HULL: int = 2
 		mesh_scale = v
 		if _transformer:
 			_transformer.set("absolute_scale", v)
+		if _model_assembler:
+			_model_assembler.set("absolute_scale", v)
 			_sync_hull_size_from_mesh()
 
 var hull_size: Vector3 = Vector3(6.0, 2.0, 14.0)
+var hull_center: Vector3 = Vector3.ZERO
 
 const DEFAULT_HULL_JSON := "res://resources/data/meshes/ship_hull_flat_deck.json"
+
+@export_file("*.json") var model_data_path: String:
+	set(v):
+		model_data_path = v
+		if _model_assembler:
+			_model_assembler.set("model_data_path", v)
+			_sync_hull_size_from_mesh()
 
 @export_file("*.json") var mesh_data_path: String = DEFAULT_HULL_JSON:
 	set(v):
@@ -58,6 +68,7 @@ const DEFAULT_HULL_JSON := "res://resources/data/meshes/ship_hull_flat_deck.json
 			_sync_hull_size_from_mesh()
 
 var _transformer: Node3D
+var _model_assembler: ModelAssembler
 var _walk_deck:   AnimatableBody3D
 
 
@@ -78,7 +89,7 @@ func _ready() -> void:
 	center_of_mass_mode = RigidBody3D.CENTER_OF_MASS_MODE_CUSTOM
 	center_of_mass = Vector3(0.0, -hull_size.y * 0.4, 0.0)
 
-	_ensure_transformer()
+	_ensure_model()
 
 	if not Engine.is_editor_hint():
 		call_deferred("_ensure_walk_deck")
@@ -98,14 +109,40 @@ func _integrate_forces(_state: PhysicsDirectBodyState3D) -> void:
 
 func _physics_process(_delta: float) -> void:
 	if Engine.is_editor_hint():
-		_ensure_transformer()
+		var missing_single := _transformer == null or not is_instance_valid(_transformer)
+		if _model_assembler == null and missing_single:
+			_ensure_model()
 		return
 
 	if _walk_deck == null or not is_instance_valid(_walk_deck):
 		_ensure_walk_deck()
 
 
+func _ensure_model() -> void:
+	if not model_data_path.is_empty():
+		_ensure_model_assembler()
+	else:
+		_ensure_transformer()
+
+
+func _ensure_model_assembler() -> void:
+	_clear_single_mesh_transformer()
+	_model_assembler = get_node_or_null("ModelAssembler") as ModelAssembler
+	if _model_assembler == null:
+		_model_assembler = ModelAssembler.new()
+		_model_assembler.name = "ModelAssembler"
+		add_child(_model_assembler)
+		if Engine.is_editor_hint():
+			_model_assembler.owner = get_tree().edited_scene_root
+
+	_model_assembler.collision_parent_path = NodePath("..")
+	_model_assembler.absolute_scale = mesh_scale
+	_model_assembler.model_data_path = model_data_path
+	_sync_hull_size_from_mesh()
+
+
 func _ensure_transformer() -> void:
+	_clear_model_assembler()
 	_transformer = get_node_or_null("MeshTransformer")
 	if _transformer == null:
 		var transformer_script := load("res://scripts/systems/mesh_transformer.gd")
@@ -118,23 +155,66 @@ func _ensure_transformer() -> void:
 
 	_transformer.set("mesh_data_path", mesh_data_path)
 	_transformer.set("absolute_scale", mesh_scale)
-	_transformer.set("mesh_color", Color(0.55, 0.58, 0.62))
+	_transformer.set("mesh_color", Color(0.005, 0.005, 0.005))
 	_transformer.set("mesh_rotation_degrees", mesh_rotation_degrees)
 	_sync_hull_size_from_mesh()
 
 
 func _sync_hull_size_from_mesh() -> void:
+	if _model_assembler != null and is_instance_valid(_model_assembler):
+		var physics_part := _model_assembler.get_first_part_by_role("physics_body")
+		if physics_part != null:
+			_sync_hull_size_from_part(physics_part)
+			return
+
 	if _transformer and "actual_size" in _transformer:
-		var size: Vector3 = _transformer.get("actual_size")
-		if size.length_squared() > 0.01:
-			# If the mesh was rotated 90 degrees, swap the physics bounds X and Z
-			# so buoyancy and drag perfectly match the oriented hull.
-			var rot_y = absf(fmod(mesh_rotation_degrees.y, 180.0))
-			if rot_y > 45.0 and rot_y < 135.0:
-				hull_size = Vector3(size.z, size.y, size.x)
-			else:
-				hull_size = size
-			_resize_walk_deck_shape()
+		_sync_hull_size_from_part(_transformer)
+
+
+func _sync_hull_size_from_part(part: Node) -> void:
+	if not ("actual_size" in part):
+		return
+	var size: Vector3 = part.get("actual_size")
+	if size.length_squared() <= 0.01:
+		return
+
+	hull_size = size
+	if "actual_center" in part:
+		hull_center = part.get("actual_center")
+	else:
+		hull_center = Vector3.ZERO
+	# _ready() runs before JSON bounds are known. Keep stability tied to the
+	# real mesh-derived hull height, not the fallback default.
+	center_of_mass = hull_center + Vector3(0.0, -hull_size.y * 0.4, 0.0)
+	_resize_walk_deck_shape()
+
+
+func place_at_waterline(water_y: float, draft_fraction: float = 0.45) -> void:
+	_ensure_model()
+	_sync_hull_size_from_mesh()
+	var draft := hull_size.y * clampf(draft_fraction, 0.0, 1.0)
+	var hull_bottom_y := hull_center.y - hull_size.y * 0.5
+	global_position.y = water_y - draft - hull_bottom_y
+	linear_velocity = Vector3.ZERO
+	angular_velocity = Vector3.ZERO
+
+
+func _clear_single_mesh_transformer() -> void:
+	if _transformer != null and is_instance_valid(_transformer):
+		_transformer.queue_free()
+		_transformer = null
+	for child in get_children():
+		if child.name.begins_with("Generated_MeshTransformer_"):
+			child.queue_free()
+
+
+func _clear_model_assembler() -> void:
+	if _model_assembler != null and is_instance_valid(_model_assembler):
+		_model_assembler.queue_free()
+		_model_assembler = null
+	for child in get_children():
+		if child.name.begins_with("Generated_ModelPart_"):
+			child.queue_free()
 
 
 func _ensure_walk_deck() -> void:
@@ -170,7 +250,7 @@ func _walk_deck_box_size() -> Vector3:
 
 func _walk_deck_local_origin() -> Vector3:
 	# Slightly above geometric deck so the slab clears the hull collider visually.
-	return Vector3(0.0, hull_size.y * 0.5 + 0.08, 0.0)
+	return hull_center + Vector3(0.0, hull_size.y * 0.5 + 0.08, 0.0)
 
 
 func _sync_walk_deck_transform() -> void:

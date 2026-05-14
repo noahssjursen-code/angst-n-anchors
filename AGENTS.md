@@ -128,15 +128,49 @@ JSON shape:
 
 Flat arrays of floats and ints. No normals, no UVs — `SurfaceTool` generates normals; colour is applied at load time. Authored exclusively by the in-house mesh AI; do not hand-edit.
 
-Always load through `MeshTransformer`. It normalises bounds, scales to `target_size`, applies the material, and builds a `ConvexPolygonShape3D` parented to the owning `RigidBody3D`. Concave shapes are silently disabled on dynamic bodies in Jolt — keep meshes convex-friendly or split them into convex pieces.
+Always load through `MeshTransformer`. It centres bounds, applies one uniform
+`absolute_scale`, applies the material, and builds a `ConvexPolygonShape3D`
+parented to the configured collision parent. Concave shapes are silently disabled
+on dynamic bodies in Jolt — keep meshes convex-friendly or split them into convex pieces.
 
 ```gdscript
 var transformer := preload("res://scripts/systems/mesh_transformer.gd").new()
 add_child(transformer)
 transformer.mesh_data_path = "res://resources/data/meshes/your_mesh.json"
-transformer.target_size = Vector3(6.0, 2.0, 14.0)
+transformer.absolute_scale = 1.0
 transformer.mesh_color = Color(0.18, 0.20, 0.22)
 ```
+
+### Multi-part model assemblies
+
+Use `ModelAssembler` (`scripts/systems/model_assembler.gd`) for anything made of multiple JSON mesh parts.
+This layer is generic and must not hardcode ship, dock, building, or character concepts.
+
+Assembly JSON files live in `resources/data/models/` and contain generic `parts`:
+
+```json
+{
+  "name": "model_name",
+  "parts": [
+    {
+      "name": "main_body",
+      "mesh": "part_mesh.json",
+      "role": "physics_body",
+      "position": [0, 0, 0],
+      "rotation_degrees": [0, 0, 0],
+      "scale": 1.0,
+      "color": [0.005, 0.005, 0.005],
+      "roughness": 0.96,
+      "metallic": 0.0,
+      "collision": "convex"
+    }
+  ]
+}
+```
+
+`role` is a free-form generic tag. Higher-level systems may interpret roles like
+`physics_body`, `visual`, or `interactable`; the mesh assembly layer itself should
+only load, transform, materialize, and optionally create collision for parts.
 
 ---
 

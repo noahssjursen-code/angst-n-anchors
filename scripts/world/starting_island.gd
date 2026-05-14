@@ -88,7 +88,8 @@ func _build_sky() -> void:
 
 
 func _build_ocean() -> void:
-	# Vertex waves + hull dip match WaveSurface.get_height_at — buoyancy stays in sync.
+	# Vertex waves use effective surface (traveling wave − hull dip) via WaveSurface uniforms.
+	# Buoyancy samples the undisturbed wave only — see `WaveSurface.get_buoyancy_surface_height_at`.
 	var ocean := MeshBuilder.plane(Vector2(600, 600), C_OCEAN, 0.12, 96, 96)
 	var sm := ShaderMaterial.new()
 	sm.shader = OCEAN_SHADER
@@ -160,6 +161,10 @@ func _spawn_player() -> void:
 
 func _spawn_boat() -> void:
 	var boat := BOAT_SCENE.instantiate()
-	# Moored alongside the dock
-	boat.position = Vector3(5.0, -1.8, 37.0)
+	# Island sand collider is an 80×60 box centered at origin → z ∈ [-30, 30] (top at z=30).
+	# Keep the hull clear of land, then let BoatBody place its origin from actual
+	# mesh-derived hull height so model swaps do not inherit stale absolute Y values.
+	boat.position = Vector3(11.0, WaveSurface.WATER_LEVEL, 47.0)
 	add_child(boat)
+	if boat.has_method("place_at_waterline"):
+		boat.place_at_waterline(WaveSurface.WATER_LEVEL, 0.45)

@@ -57,21 +57,55 @@ Authored exclusively by our in-house low-poly mesh AI. Do not hand-edit unless f
 
 ### Loading
 
-Always load through `MeshTransformer` (`scripts/systems/mesh_transformer.gd`). It handles bounds normalisation, scaling to `target_size`, material assignment, and collider construction.
+Always load through `MeshTransformer` (`scripts/systems/mesh_transformer.gd`). It centres bounds,
+applies one uniform `absolute_scale`, assigns material values, and builds optional collision.
 
 ```gdscript
 var transformer := preload("res://scripts/systems/mesh_transformer.gd").new()
 add_child(transformer)
 transformer.mesh_data_path = "res://resources/data/meshes/your_mesh.json"
-transformer.target_size = Vector3(6.0, 2.0, 14.0)
+transformer.absolute_scale = 1.0
 transformer.mesh_color = Color(0.18, 0.20, 0.22)
 ```
 
 `MeshBuilder.from_data(vertices, indices, color, ...)` is the lower-level entry if you need to bypass normalisation.
 
+### Multi-Part Models
+
+Use `ModelAssembler` (`scripts/systems/model_assembler.gd`) for models made from multiple JSON mesh parts.
+This system is generic. Do not hardcode ship terms into the mesh layer.
+
+Assembly JSON files should live in `resources/data/models/` and contain generic `parts`:
+
+```json
+{
+  "name": "model_name",
+  "parts": [
+    {
+      "name": "main_body",
+      "mesh": "part_mesh.json",
+      "role": "physics_body",
+      "position": [0, 0, 0],
+      "rotation_degrees": [0, 0, 0],
+      "scale": 1.0,
+      "color": [0.005, 0.005, 0.005],
+      "roughness": 0.96,
+      "metallic": 0.0,
+      "collision": "convex"
+    }
+  ]
+}
+```
+
+`role` is a free-form generic tag. Higher-level systems may interpret roles like
+`physics_body`, `visual`, or `interactable`, but `ModelAssembler` must not know
+about boats, houses, docks, NPCs, or any other game-specific type.
+
 ### Collision
 
-`MeshTransformer` builds a `ConvexPolygonShape3D` by default and parents it to the owning `RigidBody3D`. Concave shapes are silently disabled on dynamic bodies in Jolt — design meshes to be convex-friendly, or split them into multiple convex pieces.
+`MeshTransformer` builds a `ConvexPolygonShape3D` by default and parents it to the configured
+collision parent when one exists. Concave shapes are silently disabled on dynamic bodies in Jolt —
+design meshes to be convex-friendly, or split them into multiple convex pieces.
 
 ## What Goes in resources/shaders/
 
