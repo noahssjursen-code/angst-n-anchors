@@ -62,6 +62,7 @@ const PART_PREFIX := "ModelPart_"
 var _part_nodes_by_name: Dictionary = {}
 var _part_nodes_by_role: Dictionary = {}
 var _part_specs_by_name: Dictionary = {}
+var collision_mode_override: String = ""
 
 
 func _ready() -> void:
@@ -138,7 +139,7 @@ func _build_part(part: Dictionary) -> void:
 	node.mesh_color = _color_from_array(part.get("color", [0.5, 0.5, 0.5]), Color(0.5, 0.5, 0.5))
 	node.mesh_roughness = float(part.get("roughness", 0.96))
 	node.mesh_metallic = float(part.get("metallic", 0.0))
-	node.create_collision = str(part.get("collision", "none")) != "none"
+	node.create_collision = _part_collision_enabled(part)
 	node.collision_parent_path = _collision_path_for_part(node)
 	node.rebuild_suspended = false
 	node.rebuild()
@@ -168,6 +169,7 @@ func _build_nested_model(part_name: String, part: Dictionary) -> void:
 		node.owner = get_tree().edited_scene_root
 
 	node.collision_parent_path = _collision_path_for_part(node)
+	node.collision_mode_override = _nested_collision_override(part)
 	node.absolute_scale = absolute_scale * float(part.get("scale", 1.0))
 	node.model_data_path = model_path
 
@@ -186,6 +188,21 @@ func _clear_generated_parts() -> void:
 		if child.name.begins_with(PART_PREFIX):
 			remove_child(child)
 			child.free()
+
+
+func _part_collision_enabled(part: Dictionary) -> bool:
+	if collision_mode_override == "none":
+		return false
+	return str(part.get("collision", "none")) != "none"
+
+
+func _nested_collision_override(part: Dictionary) -> String:
+	if collision_mode_override == "none":
+		return "none"
+	var mode := str(part.get("collision", ""))
+	if mode == "none":
+		return "none"
+	return ""
 
 
 func _load_json(path: String) -> Dictionary:
