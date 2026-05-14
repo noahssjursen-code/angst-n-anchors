@@ -15,7 +15,7 @@ const MESH_TRANSFORMER_SCRIPT := preload("res://scripts/systems/mesh_transformer
 @export var crate_scale: float = 0.78
 @export var crate_color: Color = Color(0.56, 0.43, 0.30)
 @export var crate_positions_local: Array[Vector3] = []
-@export var contract_demo_crate_count: int = 35
+@export var contract_demo_crate_count: int = 32
 @export var contract_active_demo: bool = true
 ## Debug helper key: instantly load all remaining contract crates into ship cargo decks.
 @export var quickload_all_cargo_keycode: int = KEY_K

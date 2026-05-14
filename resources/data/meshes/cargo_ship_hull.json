@@ -59,12 +59,12 @@
         "scale": 1,
         "material": "deck_steel",
         "color": [
-          0.35,
-          0.35,
-          0.38
+          0.30,
+          0.30,
+          0.32
         ],
-        "roughness": 0.9,
-        "metallic": 0.2,
+        "roughness": 0.88,
+        "metallic": 0.04,
         "collision": "none"
       },
       {
@@ -173,12 +173,12 @@
         "scale": 1,
         "material": "hull_paint_black",
         "color": [
-          0.12,
-          0.12,
-          0.12
+          0.10,
+          0.10,
+          0.11
         ],
-        "roughness": 0.6,
-        "metallic": 0,
+        "roughness": 0.82,
+        "metallic": 0.0,
         "collision": "convex"
       },
       {
@@ -386,12 +386,12 @@
         "scale": 1,
         "material": "superstructure_paint",
         "color": [
-          0.88,
-          0.88,
-          0.9
+          0.74,
+          0.74,
+          0.76
         ],
-        "roughness": 0.5,
-        "metallic": 0.1,
+        "roughness": 0.72,
+        "metallic": 0.0,
         "collision": "convex",
         "invert_collision_face_winding": true
       },
@@ -435,12 +435,12 @@
         "scale": 1,
         "material": "bridge_glass",
         "color": [
-          0.1,
-          0.2,
-          0.3
+          0.08,
+          0.16,
+          0.24
         ],
-        "roughness": 0.1,
-        "metallic": 0.9,
+        "roughness": 0.08,
+        "metallic": 0.0,
         "collision": "none"
       },
       {
@@ -996,12 +996,12 @@
         "scale": 1,
         "material": "railing_steel",
         "color": [
-          0.75,
-          0.75,
-          0.8
+          0.18,
+          0.18,
+          0.20
         ],
-        "roughness": 0.2,
-        "metallic": 0.9,
+        "roughness": 0.62,
+        "metallic": 0.35,
         "collision": "none"
       },
       {
@@ -1086,12 +1086,12 @@
         "scale": 1,
         "material": "railing_steel",
         "color": [
-          0.75,
-          0.75,
-          0.8
+          0.18,
+          0.18,
+          0.20
         ],
-        "roughness": 0.2,
-        "metallic": 0.9,
+        "roughness": 0.62,
+        "metallic": 0.35,
         "collision": "none"
       }
     ]

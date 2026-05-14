@@ -4,7 +4,7 @@ extends RefCounted
 ## Shared factory for building in-world geometry from Godot primitives.
 ## No imported meshes. Every in-world object comes from here.
 
-static func make_material(color: Color, roughness: float = 0.55, metallic: float = 0.05, double_sided: bool = false) -> StandardMaterial3D:
+static func make_material(color: Color, roughness: float = 0.85, metallic: float = 0.0, double_sided: bool = false) -> StandardMaterial3D:
 	var mat := StandardMaterial3D.new()
 	mat.albedo_color = color
 	mat.roughness = roughness

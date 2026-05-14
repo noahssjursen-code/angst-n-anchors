@@ -46,6 +46,7 @@ var _ocean_shader_material: ShaderMaterial
 var _sky_material: ProceduralSkyMaterial
 var _environment: Environment
 var _sun: DirectionalLight3D
+var _fill_light: DirectionalLight3D
 var _open_warehouse: StaticBody3D
 var _warehouse_contract_zone: Node3D
 
@@ -88,10 +89,12 @@ func _ready() -> void:
 func _build_sky() -> void:
 	var sky_mat := ProceduralSkyMaterial.new()
 	_sky_material = sky_mat
-	sky_mat.sky_top_color     = Color(0.26, 0.46, 0.70)
-	sky_mat.sky_horizon_color = Color(0.65, 0.78, 0.90)
+	sky_mat.sky_top_color        = Color(0.26, 0.46, 0.70)
+	sky_mat.sky_horizon_color    = Color(0.48, 0.68, 0.90)
 	sky_mat.ground_bottom_color  = Color(0.16, 0.14, 0.12)
 	sky_mat.ground_horizon_color = Color(0.48, 0.44, 0.36)
+	sky_mat.sun_angle_max        = 2.0
+	sky_mat.sun_curve            = 0.12
 
 	var sky := Sky.new()
 	sky.sky_material = sky_mat
@@ -101,20 +104,56 @@ func _build_sky() -> void:
 	environ.sky = sky
 	environ.background_mode      = Environment.BG_SKY
 	environ.ambient_light_source = Environment.AMBIENT_SOURCE_SKY
-	environ.ambient_light_energy = 0.5
-	environ.tonemap_mode         = Environment.TONE_MAPPER_FILMIC
+	environ.ambient_light_energy = 0.18
+
+	# Tonemap — conservative exposure; materials now carry the brightness, not post.
+	environ.tonemap_mode     = Environment.TONE_MAPPER_FILMIC
+	environ.tonemap_exposure = 0.95
+	environ.tonemap_white    = 6.0
+
+	# SSAO — contact shadows under crates, dock edges, ship hull meeting water.
+	environ.ssao_enabled   = true
+	environ.ssao_radius    = 0.9
+	environ.ssao_intensity = 1.4
+
+	# Bloom — only extreme highlights (water sparkle, later ship lights); keep subtle.
+	environ.glow_enabled    = true
+	environ.glow_normalized = false
+	environ.glow_intensity  = 0.4
+	environ.glow_bloom      = 0.07
+	environ.set_glow_level(2, true)
+	environ.set_glow_level(3, true)
+
+	# SSR — water reflects nearby ship and dock geometry.
+	environ.ssr_enabled   = true
+	environ.ssr_max_steps = 32
+	environ.ssr_fade_in   = 0.15
+	environ.ssr_fade_out  = 2.0
 
 	var world_env := WorldEnvironment.new()
 	world_env.environment = environ
 	add_child(world_env)
 
+	# Primary sun — warm directional, drives hard shadows.
 	var sun := DirectionalLight3D.new()
 	_sun = sun
 	sun.rotation_degrees = Vector3(-50, 28, 0)
-	sun.light_color    = Color(1.0, 0.94, 0.82)
-	sun.light_energy   = 1.8
+	sun.light_color    = Color(1.0, 0.92, 0.78)
+	sun.light_energy   = 1.5
 	sun.shadow_enabled = true
+	sun.directional_shadow_mode         = DirectionalLight3D.SHADOW_PARALLEL_4_SPLITS
+	sun.directional_shadow_max_distance = 180.0
+	sun.shadow_bias                     = 0.04
 	add_child(sun)
+
+	# Sky fill — cool blue, no shadow, gives shadow-side faces sky colour not black.
+	var fill := DirectionalLight3D.new()
+	_fill_light = fill
+	fill.rotation_degrees = Vector3(40, -160, 0)
+	fill.light_color    = Color(0.52, 0.64, 0.90)
+	fill.light_energy   = 0.18
+	fill.shadow_enabled = false
+	add_child(fill)
 
 
 func _build_ocean() -> void:
@@ -196,22 +235,27 @@ func _apply_weather_lighting() -> void:
 			time_of_day * 360.0 - 120.0,
 			0.0
 		)
-		_sun.light_energy = lerpf(0.03, 1.9, daylight) * lerpf(1.0, 0.28, cloud)
-		var dawn := Color(1.0, 0.68, 0.42)
-		var noon := Color(1.0, 0.94, 0.82)
+		_sun.light_energy = lerpf(0.03, 1.5, daylight) * lerpf(1.0, 0.28, cloud)
+		var dawn  := Color(1.0,  0.68, 0.42)
+		var noon  := Color(1.0,  0.94, 0.82)
 		var storm := Color(0.58, 0.62, 0.68)
 		_sun.light_color = dawn.lerp(noon, daylight).lerp(storm, cloud)
 
+	# Fill light: stays cool sky blue, dims in overcast/storm so sun still wins.
+	if _fill_light != null:
+		_fill_light.light_energy = lerpf(0.18, 0.06, cloud) * lerpf(0.2, 1.0, daylight)
+
 	if _environment != null:
-		_environment.ambient_light_energy = lerpf(0.08, 0.58, daylight) * lerpf(1.0, 0.72, cloud)
+		# Low ambient ceiling so sun shadows stay readable on low-poly geometry.
+		_environment.ambient_light_energy = lerpf(0.05, 0.20, daylight) * lerpf(1.0, 0.72, cloud)
 
 	if _sky_material != null:
-		var night_top := Color(0.025, 0.035, 0.070)
-		var day_top := Color(0.26, 0.46, 0.70)
-		var storm_top := Color(0.18, 0.20, 0.23)
-		var night_horizon := Color(0.08, 0.075, 0.09)
-		var day_horizon := Color(0.65, 0.78, 0.90)
-		var storm_horizon := Color(0.31, 0.33, 0.35)
+		var night_top     := Color(0.025, 0.035, 0.070)
+		var day_top       := Color(0.26,  0.46,  0.70)
+		var storm_top     := Color(0.18,  0.20,  0.23)
+		var night_horizon := Color(0.08,  0.075, 0.09)
+		var day_horizon   := Color(0.48,  0.68,  0.90)
+		var storm_horizon := Color(0.31,  0.33,  0.35)
 		_sky_material.sky_top_color = (
 			night_top.lerp(day_top, daylight).lerp(storm_top, cloud)
 		)

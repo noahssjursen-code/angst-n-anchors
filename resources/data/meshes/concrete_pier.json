@@ -81,14 +81,14 @@
           0
         ],
         "scale": 1,
-        "material": "polished_concrete",
+        "material": "concrete",
         "color": [
-          0.75,
-          0.75,
-          0.75
+          0.62,
+          0.61,
+          0.58
         ],
-        "roughness": 0.6,
-        "metallic": 0,
+        "roughness": 0.90,
+        "metallic": 0.0,
         "collision": "convex"
       },
       {
@@ -471,14 +471,14 @@
           0
         ],
         "scale": 1,
-        "material": "rough_concrete",
+        "material": "concrete_dark",
         "color": [
-          0.6,
-          0.6,
-          0.6
+          0.42,
+          0.41,
+          0.39
         ],
-        "roughness": 0.9,
-        "metallic": 0,
+        "roughness": 0.92,
+        "metallic": 0.0,
         "collision": "convex"
       }
     ]
