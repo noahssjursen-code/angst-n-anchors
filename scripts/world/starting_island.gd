@@ -5,8 +5,9 @@ const PLAYER_SCENE := preload("res://scenes/islands/starting_island/player.tscn"
 const BOAT_SCENE   := preload("res://scenes/boats/test_boat.tscn")
 const OCEAN_SHADER := preload("res://resources/shaders/ocean_waves.gdshader")
 const SKY_SHADER   := preload("res://resources/shaders/sky.gdshader")
-const RAIN_FIELD_SCRIPT  := preload("res://scripts/systems/weather/rain_field.gd")
-const WEATHER_HUD_SCRIPT := preload("res://scripts/systems/weather/weather_hud.gd")
+const RAIN_FIELD_SCRIPT    := preload("res://scripts/systems/weather/rain_field.gd")
+const WEATHER_HUD_SCRIPT   := preload("res://scripts/systems/weather/weather_hud.gd")
+const WEATHER_AUDIO_SCRIPT := preload("res://scripts/systems/audio/weather_audio_system.gd")
 const DockFacilitiesScript := preload("res://scripts/systems/dock/dock_facilities.gd")
 const WarehouseCargoTestScript := preload("res://scripts/systems/cargo/warehouse_cargo_test.gd")
 const WarehouseContractZoneScript := preload("res://scripts/systems/cargo/warehouse_contract_zone.gd")
@@ -113,6 +114,7 @@ func _ready() -> void:
 		_spawn_rain_field()
 		_spawn_weather_hud()
 		_spawn_lightning_system()
+		_spawn_ocean_ambient()
 
 
 func _build_sky() -> void:
@@ -618,6 +620,12 @@ func _spawn_weather_hud() -> void:
 	var hud := WEATHER_HUD_SCRIPT.new()
 	hud.name = "WeatherHUD"
 	add_child(hud)
+
+
+func _spawn_ocean_ambient() -> void:
+	var ambient := WEATHER_AUDIO_SCRIPT.new()
+	ambient.name = "WeatherAudio"
+	add_child(ambient)
 
 
 func _build_concrete_piers() -> void:
