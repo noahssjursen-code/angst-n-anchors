@@ -4,7 +4,13 @@
       "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\noahs\\\\Documents\\\\angst-n-anchors\" -Recurse -Force)",
       "Bash(Select-Object FullName)",
       "Bash(ConvertTo-Csv -NoTypeInformation)",
-      "Bash(Out-String)"
+      "Bash(Out-String)",
+      "Bash(Get-Content \"C:\\\\Users\\\\noahs\\\\Documents\\\\angst-n-anchors\\\\scripts\\\\world\\\\starting_island.gd\")",
+      "Bash(Measure-Object -Line)",
+      "Bash(Select-Object -ExpandProperty Lines)",
+      "Bash(Get-Content \"C:\\\\Users\\\\noahs\\\\Documents\\\\angst-n-anchors\\\\scripts\\\\world\\\\world_renderer.gd\")",
+      "Bash(Get-Content \"C:\\\\Users\\\\noahs\\\\Documents\\\\angst-n-anchors\\\\scripts\\\\world\\\\atmospheric_effects.gd\")",
+      "Bash(Get-Content \"C:\\\\Users\\\\noahs\\\\Documents\\\\angst-n-anchors\\\\scripts\\\\world\\\\port.gd\")"
     ]
   }
 }

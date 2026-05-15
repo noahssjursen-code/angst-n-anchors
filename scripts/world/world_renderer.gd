@@ -1,0 +1,300 @@
+@tool
+class_name WorldRenderer
+extends Node3D
+
+## Owns the ocean, sky, sun/fill lights, and fog.
+## Connects to WeatherLighting and updates all world visuals when weather changes.
+## No knowledge of ports, players, or gameplay.
+
+const OCEAN_SHADER := preload("res://resources/shaders/ocean_waves.gdshader")
+const SKY_SHADER   := preload("res://resources/shaders/sky.gdshader")
+const C_OCEAN      := Color(0.10, 0.28, 0.48)
+
+var _ocean_shader_material: ShaderMaterial
+var _sky_shader_material:   ShaderMaterial
+var _environment:           Environment
+var _sun:                   DirectionalLight3D
+var _fill_light:            DirectionalLight3D
+var _ocean_mesh:            MeshInstance3D
+
+
+func _ready() -> void:
+	_build_sky()
+	_build_ocean()
+	_connect_weather_lighting()
+	_apply_weather_lighting()
+
+
+func _process(_delta: float) -> void:
+	_follow_camera_xz()
+	if _ocean_shader_material:
+		_ocean_shader_material.set_shader_parameter("wave_time",      WaveSurface.get_sim_time())
+		_ocean_shader_material.set_shader_parameter("wave_intensity",  WaveSurface.wave_intensity)
+		WaveSurface.sync_ocean_coupling_to_shader(_ocean_shader_material)
+	if _sky_shader_material:
+		_sky_shader_material.set_shader_parameter("sky_time",       WaveSurface.get_sim_time())
+		_sky_shader_material.set_shader_parameter("sun_direction",   _celestial_dir(0.0))
+		_sky_shader_material.set_shader_parameter("moon_direction",  _celestial_dir(0.5))
+
+
+func _follow_camera_xz() -> void:
+	if _ocean_mesh == null or not is_instance_valid(_ocean_mesh):
+		return
+	# The shader reads world-space XZ via MODEL_MATRIX, so moving the mesh with
+	# the camera keeps the full mesh over visible water without changing wave math.
+	var cam := get_viewport().get_camera_3d()
+	if cam == null:
+		return
+	_ocean_mesh.position.x = cam.global_position.x
+	_ocean_mesh.position.z = cam.global_position.z
+
+
+func _build_sky() -> void:
+	var sky_sm := ShaderMaterial.new()
+	sky_sm.shader        = SKY_SHADER
+	_sky_shader_material = sky_sm
+
+	var sky := Sky.new()
+	sky.sky_material  = sky_sm
+	sky.radiance_size = Sky.RADIANCE_SIZE_64
+
+	var environ := Environment.new()
+	_environment = environ
+	environ.sky                  = sky
+	environ.background_mode      = Environment.BG_SKY
+	environ.ambient_light_source = Environment.AMBIENT_SOURCE_SKY
+	environ.ambient_light_energy = 0.18
+
+	environ.tonemap_mode     = Environment.TONE_MAPPER_FILMIC
+	environ.tonemap_exposure = 0.95
+	environ.tonemap_white    = 6.0
+
+	environ.ssao_enabled   = true
+	environ.ssao_radius    = 0.9
+	environ.ssao_intensity = 1.4
+
+	environ.glow_enabled    = true
+	environ.glow_normalized = false
+	environ.glow_intensity  = 0.4
+	environ.glow_bloom      = 0.07
+	environ.set_glow_level(2, true)
+	environ.set_glow_level(3, true)
+
+	environ.ssr_enabled   = true
+	environ.ssr_max_steps = 32
+	environ.ssr_fade_in   = 0.15
+	environ.ssr_fade_out  = 2.0
+
+	environ.fog_enabled            = false
+	environ.fog_light_color        = Color(0.82, 0.84, 0.88)
+	environ.fog_density            = 0.0
+	environ.fog_aerial_perspective = 0.0
+	environ.fog_sky_affect         = 1.0
+
+	var world_env := WorldEnvironment.new()
+	world_env.environment = environ
+	add_child(world_env)
+
+	var sun := DirectionalLight3D.new()
+	_sun = sun
+	sun.rotation_degrees                  = Vector3(-50, 28, 0)
+	sun.light_color                       = Color(1.0, 0.92, 0.78)
+	sun.light_energy                      = 1.5
+	sun.shadow_enabled                    = true
+	sun.directional_shadow_mode           = DirectionalLight3D.SHADOW_PARALLEL_4_SPLITS
+	sun.directional_shadow_max_distance   = 180.0
+	sun.shadow_bias                       = 0.04
+	add_child(sun)
+
+	var fill := DirectionalLight3D.new()
+	_fill_light = fill
+	fill.rotation_degrees = Vector3(40, -160, 0)
+	fill.light_color      = Color(0.52, 0.64, 0.90)
+	fill.light_energy     = 0.18
+	fill.shadow_enabled   = false
+	fill.sky_mode         = DirectionalLight3D.SKY_MODE_LIGHT_ONLY
+	add_child(fill)
+
+	# Apply initial sky uniforms so the shader has values before the ocean is ready.
+	_apply_weather_lighting()
+
+
+func _build_ocean() -> void:
+	var ocean := MeshBuilder.plane(Vector2(600, 600), C_OCEAN, 0.12, 260, 260)
+	var sm    := ShaderMaterial.new()
+	sm.shader = OCEAN_SHADER
+	sm.set_shader_parameter("wave_time",             WaveSurface.get_sim_time())
+	sm.set_shader_parameter("water_level",           WaveSurface.WATER_LEVEL)
+	sm.set_shader_parameter("amplitude_1",           WaveSurface.AMPLITUDE_1)
+	sm.set_shader_parameter("frequency_1",           WaveSurface.FREQUENCY_1)
+	sm.set_shader_parameter("speed_1",               WaveSurface.SPEED_1)
+	sm.set_shader_parameter("dir_1",                 WaveSurface.DIR_1)
+	sm.set_shader_parameter("steepness_1",           WaveSurface.STEEPNESS_1)
+	sm.set_shader_parameter("amplitude_2",           WaveSurface.AMPLITUDE_2)
+	sm.set_shader_parameter("frequency_2",           WaveSurface.FREQUENCY_2)
+	sm.set_shader_parameter("speed_2",               WaveSurface.SPEED_2)
+	sm.set_shader_parameter("dir_2",                 WaveSurface.DIR_2)
+	sm.set_shader_parameter("steepness_2",           WaveSurface.STEEPNESS_2)
+	sm.set_shader_parameter("amplitude_3",           WaveSurface.AMPLITUDE_3)
+	sm.set_shader_parameter("frequency_3",           WaveSurface.FREQUENCY_3)
+	sm.set_shader_parameter("speed_3",               WaveSurface.SPEED_3)
+	sm.set_shader_parameter("dir_3",                 WaveSurface.DIR_3)
+	sm.set_shader_parameter("steepness_3",           WaveSurface.STEEPNESS_3)
+	sm.set_shader_parameter("amplitude_4",           WaveSurface.AMPLITUDE_4)
+	sm.set_shader_parameter("frequency_4",           WaveSurface.FREQUENCY_4)
+	sm.set_shader_parameter("speed_4",               WaveSurface.SPEED_4)
+	sm.set_shader_parameter("dir_4",                 WaveSurface.DIR_4)
+	sm.set_shader_parameter("steepness_4",           WaveSurface.STEEPNESS_4)
+	sm.set_shader_parameter("wave_energy_multiplier", WaveSurface.get_wave_energy_multiplier())
+	sm.set_shader_parameter("shallow_albedo",        Vector3(0.04,  0.14,  0.28))
+	sm.set_shader_parameter("deep_albedo",           Vector3(0.008, 0.025, 0.055))
+	sm.set_shader_parameter("horizon_tint",          Vector3(0.10,  0.20,  0.38))
+	sm.set_shader_parameter("water_alpha",           0.94)
+	sm.set_shader_parameter("fresnel_sky_mix",       0.72)
+	sm.set_shader_parameter("fresnel_power",         3.8)
+	sm.set_shader_parameter("foam_strength",         0.55)
+	sm.set_shader_parameter("foam_steep_start",      0.60)
+	sm.set_shader_parameter("foam_steep_end",        0.92)
+	sm.set_shader_parameter("near_color_lift",       0.20)
+	sm.set_shader_parameter("roughness",             0.07)
+	sm.set_shader_parameter("metallic",              0.10)
+	sm.set_shader_parameter("specular",              0.92)
+	sm.set_shader_parameter("chop_strength",         0.08)
+	sm.set_shader_parameter("wave_intensity",        WaveSurface.wave_intensity)
+	ocean.material_override = sm
+	_ocean_shader_material  = sm
+	ocean.position          = Vector3(0, WaveSurface.WATER_LEVEL, 0)
+	_ocean_mesh             = ocean
+	add_child(ocean)
+
+
+func _connect_weather_lighting() -> void:
+	var weather := _get_weather()
+	if weather == null:
+		return
+	var cb := Callable(self, "_apply_weather_lighting")
+	if not weather.is_connected("state_changed", cb):
+		weather.connect("state_changed", cb)
+
+
+func _apply_weather_lighting() -> void:
+	var weather := _get_weather()
+	var tod   := float(weather.get("time_of_day"))     if weather else 0.42
+	var wind  := float(weather.get("wind_force"))      if weather else 0.0
+	var vis   := float(weather.get("visibility"))      if weather else 1.0
+	var cloud := float(weather.get("cloud_coverage"))  if weather else 0.0
+	var rain  := float(weather.get("rain_amount"))     if weather else 0.0
+	var storm := float(weather.get("storm_intensity")) if weather else 0.0
+
+	var elev_norm := -cos(tod * TAU)
+	var daylight  := smoothstep(-0.18, 0.55, elev_norm)
+	var fog_t     := 1.0 - vis
+
+	_apply_sun(tod, daylight, cloud, storm)
+	_apply_fog(fog_t, daylight, storm)
+	_apply_sky_shader(daylight, cloud, storm)
+	_apply_ocean_shader(daylight, cloud, rain, wind, storm)
+
+
+func _apply_sun(tod: float, daylight: float, cloud: float, storm: float) -> void:
+	var elev_norm := -cos(tod * TAU)
+	if _sun != null:
+		_sun.rotation_degrees = Vector3(-elev_norm * 55.0, tod * 360.0 - 120.0, 0.0)
+		_sun.light_energy     = lerpf(0.03, 1.6, daylight) * lerpf(1.0, 0.10, cloud)
+		_sun.light_color      = (
+			Color(1.0, 0.68, 0.42)
+			.lerp(Color(1.0, 0.95, 0.82), daylight)
+			.lerp(Color(0.48, 0.55, 0.68), storm)
+		)
+	if _fill_light != null:
+		_fill_light.light_energy = lerpf(0.18, 0.03, cloud) * lerpf(0.03, 1.0, daylight)
+	if _environment != null:
+		_environment.ambient_light_energy = (
+			lerpf(0.006, 0.22, daylight * daylight) * lerpf(1.0, 0.52, cloud)
+		)
+
+
+func _apply_fog(fog_t: float, daylight: float, storm: float) -> void:
+	if _environment == null:
+		return
+	_environment.fog_enabled = fog_t > 0.04
+	if not _environment.fog_enabled:
+		return
+	_environment.fog_light_color = (
+		Color(0.06, 0.07, 0.09)
+		.lerp(Color(0.46, 0.49, 0.54), daylight)
+		.lerp(Color(0.28, 0.30, 0.33), storm * 0.5)
+	)
+	_environment.fog_density            = lerpf(0.0, 0.25, fog_t * fog_t * fog_t)
+	_environment.fog_aerial_perspective = lerpf(0.0, 0.35, fog_t)
+	_environment.fog_sky_affect         = lerpf(0.0, 0.18, fog_t * fog_t)
+
+
+func _apply_sky_shader(daylight: float, cloud: float, storm: float) -> void:
+	if _sky_shader_material == null:
+		return
+	var top_col := (
+		Color(0.006, 0.009, 0.028)
+		.lerp(Color(0.18,  0.46,  0.78),  daylight)
+		.lerp(Color(0.09,  0.10,  0.13),  cloud)
+	)
+	var horiz := (
+		Color(0.018, 0.016, 0.028)
+		.lerp(Color(0.54,  0.74,  0.92),  daylight)
+		.lerp(Color(0.22,  0.24,  0.28),  cloud)
+	)
+	var ground_c := (
+		Color(0.04, 0.04, 0.05)
+		.lerp(Color(0.15, 0.13, 0.11), daylight)
+		.lerp(Color(0.06, 0.06, 0.07), cloud)
+	)
+	var sun_col := Color(1.0, 0.62, 0.30).lerp(Color(1.0, 0.96, 0.88), daylight)
+
+	_sky_shader_material.set_shader_parameter("sky_top_color",     Vector3(top_col.r,  top_col.g,  top_col.b))
+	_sky_shader_material.set_shader_parameter("sky_horizon_color", Vector3(horiz.r,    horiz.g,    horiz.b))
+	_sky_shader_material.set_shader_parameter("sky_ground_color",  Vector3(ground_c.r, ground_c.g, ground_c.b))
+	_sky_shader_material.set_shader_parameter("cloud_coverage",    cloud)
+	_sky_shader_material.set_shader_parameter("storm_intensity",   storm)
+	_sky_shader_material.set_shader_parameter("sun_color",         Vector3(sun_col.r,  sun_col.g,  sun_col.b))
+
+
+func _apply_ocean_shader(daylight: float, cloud: float, rain: float, wind: float, storm: float) -> void:
+	if _ocean_shader_material == null:
+		return
+	var ocean_color := (
+		Color(0.020, 0.042, 0.085)
+		.lerp(C_OCEAN, daylight)
+		.lerp(Color(0.050, 0.075, 0.095), storm)
+	)
+	var deep      := ocean_color * lerpf(0.22, 0.38, rain)
+	var shallow_w := ocean_color * lerpf(0.62, 0.80, rain)
+	var horizon_w := ocean_color.lerp(Color(0.18, 0.32, 0.56), lerpf(0.45, 0.28, cloud))
+	var foam_driver  := clampf(rain + wind * 0.55, 0.0, 1.0)
+	var steep_driver := clampf(maxf(storm, wind * 0.65), 0.0, 1.0)
+	var rough_driver := clampf(maxf(rain,  wind * 0.55), 0.0, 1.0)
+
+	_ocean_shader_material.set_shader_parameter("shallow_albedo",         Vector3(shallow_w.r, shallow_w.g, shallow_w.b))
+	_ocean_shader_material.set_shader_parameter("deep_albedo",            Vector3(deep.r,      deep.g,      deep.b))
+	_ocean_shader_material.set_shader_parameter("horizon_tint",           Vector3(horizon_w.r, horizon_w.g, horizon_w.b))
+	_ocean_shader_material.set_shader_parameter("fresnel_sky_mix",        lerpf(0.70, 0.42, cloud))
+	_ocean_shader_material.set_shader_parameter("wave_energy_multiplier", WaveSurface.get_wave_energy_multiplier())
+	_ocean_shader_material.set_shader_parameter("water_alpha",            lerpf(0.92, 0.97, rain))
+	_ocean_shader_material.set_shader_parameter("foam_strength",          lerpf(0.38, 0.92, foam_driver))
+	_ocean_shader_material.set_shader_parameter("foam_steep_start",       lerpf(0.62, 0.34, steep_driver))
+	_ocean_shader_material.set_shader_parameter("foam_steep_end",         lerpf(0.94, 0.62, steep_driver))
+	_ocean_shader_material.set_shader_parameter("near_color_lift",        lerpf(0.20, 0.08, cloud))
+	_ocean_shader_material.set_shader_parameter("roughness",              lerpf(0.07, 0.32, rough_driver))
+	_ocean_shader_material.set_shader_parameter("metallic",               lerpf(0.10, 0.03, rough_driver))
+
+
+func _celestial_dir(tod_offset: float) -> Vector3:
+	var weather := _get_weather()
+	var tod     := float(weather.get("time_of_day")) if weather else 0.42
+	var t       := fmod(tod + tod_offset, 1.0)
+	var elev    := -cos(t * TAU)
+	var rot     := Basis.from_euler(Vector3(deg_to_rad(-elev * 55.0), deg_to_rad(t * 360.0 - 120.0), 0.0))
+	return -(rot * Vector3(0.0, 0.0, -1.0))
+
+
+func _get_weather() -> Node:
+	return get_node_or_null("/root/WeatherLighting")

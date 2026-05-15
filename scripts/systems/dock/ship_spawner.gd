@@ -6,9 +6,6 @@ extends Node3D
 @export var spawn_rotation_degrees: Vector3 = Vector3.ZERO
 @export var waterline_draft_fraction: float = 0.45
 @export var spawned_ship_name: String = "SpawnedShip"
-## Spawn-time autoselect only considers bollards near the ship to avoid
-## capturing absurd initial rope lengths from distant extension posts.
-@export_range(2.0, 120.0, 0.5) var spawn_mooring_max_distance_m: float = 12.0
 
 var current_ship: Node3D
 
@@ -39,7 +36,6 @@ func spawn_ship() -> Node3D:
 
 
 func clear_ship() -> void:
-	_clear_post_registrations()
 	if current_ship != null and is_instance_valid(current_ship):
 		current_ship.queue_free()
 	current_ship = null
@@ -54,87 +50,11 @@ func release_current_ship() -> void:
 
 
 func _moor_ship(ship: Node3D) -> void:
-	var mooring := _find_mooring_component(ship)
-	if mooring == null or not mooring.has_method("moor_to_posts"):
-		push_warning(
-			"ShipSpawner: ship has no MooringComponent (expected under ShipGameplay or boat root).",
-		)
+	var mooring := _find_mooring_component(ship) as MooringComponent
+	if mooring == null:
+		push_warning("ShipSpawner: ship has no MooringComponent")
 		return
-
-	var tree := ship.get_tree()
-	if tree == null:
-		push_warning("ShipSpawner: ship not in scene tree yet")
-		return
-
-	MooringComponent.register_mooring_on_all_dock_bollards(tree, mooring)
-
-	var mc := mooring as MooringComponent
-	if mc == null:
-		return
-
-	var pair := _pick_spawn_near_post_pair(
-		mc,
-		tree,
-		ship.global_position,
-		spawn_mooring_max_distance_m,
-	)
-	if pair.size() < 2 or pair[0] == null or pair[1] == null:
-		push_warning(
-			"ShipSpawner: need at least two nearby dock bollards within "
-			+ str(spawn_mooring_max_distance_m)
-			+ "m (group \"%s\", get_anchor_global_position)."
-			% MooringComponent.DOCK_MOORING_GROUP,
-		)
-		return
-
-	mc.moor_to_posts(pair[0], pair[1])
-
-
-func _pick_spawn_near_post_pair(
-	mooring: MooringComponent,
-	tree: SceneTree,
-	ship_pos: Vector3,
-	max_distance: float,
-) -> Array:
-	if mooring == null or tree == null:
-		return [null, null]
-
-	var refs := mooring.bow_and_stern_reference_world()
-	if refs.size() < 2:
-		return [null, null]
-	var bow_ref: Vector3 = refs[0]
-	var stern_ref: Vector3 = refs[1]
-	var max_d2 := max_distance * max_distance
-
-	var candidates: Array[Node] = []
-	for n in tree.get_nodes_in_group(MooringComponent.DOCK_MOORING_GROUP):
-		if not n.has_method("get_anchor_global_position"):
-			continue
-		var anchor := MooringComponent.dock_post_anchor_world(n)
-		if anchor.distance_squared_to(ship_pos) <= max_d2:
-			candidates.append(n)
-	if candidates.size() < 2:
-		return [null, null]
-
-	var best_bow: Node = null
-	var best_bow_d2 := INF
-	for n in candidates:
-		var d2 := bow_ref.distance_squared_to(MooringComponent.dock_post_anchor_world(n))
-		if d2 < best_bow_d2:
-			best_bow_d2 = d2
-			best_bow = n
-
-	var best_stern: Node = null
-	var best_stern_d2 := INF
-	for n in candidates:
-		if n == best_bow:
-			continue
-		var d2 := stern_ref.distance_squared_to(MooringComponent.dock_post_anchor_world(n))
-		if d2 < best_stern_d2:
-			best_stern_d2 = d2
-			best_stern = n
-
-	return [best_bow, best_stern]
+	mooring.auto_moor(ship.get_tree())
 
 
 func _find_mooring_component(ship: Node) -> Node:
@@ -144,12 +64,3 @@ func _find_mooring_component(ship: Node) -> Node:
 	if direct != null:
 		return direct
 	return ship.find_child("MooringComponent", true, false)
-
-
-func _clear_post_registrations() -> void:
-	if current_ship == null or not is_instance_valid(current_ship):
-		return
-	var mooring := _find_mooring_component(current_ship)
-	var tree := get_tree()
-	if tree != null:
-		MooringComponent.clear_mooring_on_all_dock_bollards(tree, mooring)

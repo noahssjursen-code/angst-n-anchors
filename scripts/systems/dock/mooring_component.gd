@@ -6,6 +6,8 @@ extends Node3D
 const SHIP_MOORING_CLEAT_GROUP := "ship_mooring_cleat"
 ## Dock bollards (`MooringPost`); any eligible for tie / prompts when this ship mooring registers.
 const DOCK_MOORING_GROUP := "dock_mooring_bollard"
+## Group that MooringComponent joins at runtime so new bollards can auto-register.
+const SHIP_MOORING_COMPONENT_GROUP := "ship_mooring_component"
 
 const _MAX_SEGMENT_POOL_PER_ROPE: int = 32
 
@@ -43,9 +45,6 @@ const _MAX_SEGMENT_POOL_PER_ROPE: int = 32
 @export_range(1e-5, 0.06, 0.000001) var radial_velocity_kill_epsilon: float = 0.00072
 ## 0 disables cap — prefer a cap so freak numerics cannot spike one frame impulse.
 @export_range(0.0, 2.8e8, 20000.0) var mooring_radial_impulse_abs_cap: float = 1.95e7
-## Used only when estimating bow/stern with no typed cleats in `SHIP_MOORING_CLEAT_GROUP`.
-@export var fallback_hull_half_length_m: float = 11.5
-
 ## Rope from **front** dock post (slot 0). Name kept for save compatibility.
 var bow_line_tied: bool = false
 ## Rope from **rear** dock post (slot 1).
@@ -84,6 +83,7 @@ func _ready() -> void:
 	_body = _resolve_boat_rigid_body()
 	_ensure_rope_root()
 	if not Engine.is_editor_hint():
+		add_to_group(SHIP_MOORING_COMPONENT_GROUP)
 		call_deferred("_register_integrate_hook")
 
 
@@ -107,45 +107,6 @@ func _unregister_integrate_hook() -> void:
 			boat.clear_mooring_integrate()
 
 
-## World anchors used to rank dock posts (closest-to-bow vs closest-to-stern).
-func bow_and_stern_reference_world() -> Array[Vector3]:
-	var bow_acc := Vector3.ZERO
-	var stern_acc := Vector3.ZERO
-	var nb := 0
-	var ns := 0
-	for cleat in _ship_cleat_nodes():
-		var sv = cleat.get("station")
-		if sv == null:
-			continue
-		var station := str(sv)
-		match station:
-			"bow":
-				bow_acc += _cleat_anchor(cleat)
-				nb += 1
-			"stern":
-				stern_acc += _cleat_anchor(cleat)
-				ns += 1
-
-	if _body == null:
-		_body = _resolve_boat_rigid_body()
-	if _body == null:
-		return [Vector3.ZERO, Vector3.ZERO]
-
-	var mid := _body.global_position
-	var zb := _body.global_transform.basis.z
-	var bow_w: Vector3
-	var stern_w: Vector3
-	if nb > 0:
-		bow_w = bow_acc / float(nb)
-	else:
-		bow_w = mid - zb * fallback_hull_half_length_m
-	if ns > 0:
-		stern_w = stern_acc / float(ns)
-	else:
-		stern_w = mid + zb * fallback_hull_half_length_m
-	return [bow_w, stern_w]
-
-
 static func dock_post_anchor_world(post: Node) -> Vector3:
 	if post != null and post.has_method("get_anchor_global_position"):
 		return post.call("get_anchor_global_position")
@@ -154,69 +115,64 @@ static func dock_post_anchor_world(post: Node) -> Vector3:
 	return Vector3.ZERO
 
 
-static func pick_two_dock_posts_for_ship(
-	mooring: MooringComponent,
-	tree: SceneTree,
-) -> Array:
-	if tree == null or mooring == null:
-		return [null, null]
-	var refs: Array = mooring.bow_and_stern_reference_world()
-	if refs.size() < 2:
-		return [null, null]
-	var bow_ref: Vector3 = refs[0]
-	var stern_ref: Vector3 = refs[1]
-
-	var cand: Array[Node] = []
-	for n in tree.get_nodes_in_group(DOCK_MOORING_GROUP):
-		if n.has_method("get_anchor_global_position"):
-			cand.append(n)
-	if cand.size() < 2:
-		return [null, null]
-
-	var best_bow_p: Node = null
-	var best_bow_d := INF
-	for n in cand:
-		var d_sq := bow_ref.distance_squared_to(dock_post_anchor_world(n))
-		if d_sq < best_bow_d:
-			best_bow_d = d_sq
-			best_bow_p = n
-
-	var best_stern_p: Node = null
-	var best_stern_d := INF
-	for n in cand:
-		if n == best_bow_p:
-			continue
-		var d_sq := stern_ref.distance_squared_to(dock_post_anchor_world(n))
-		if d_sq < best_stern_d:
-			best_stern_d = d_sq
-			best_stern_p = n
-	return [best_bow_p, best_stern_p]
-
-
-static func register_mooring_on_all_dock_bollards(tree: SceneTree, mooring: Node) -> void:
-	if tree == null or mooring == null:
-		return
-	for n in tree.get_nodes_in_group(DOCK_MOORING_GROUP):
-		if n.has_method("register_mooring_component"):
-			n.call("register_mooring_component", mooring)
-
-
-static func clear_mooring_on_all_dock_bollards(tree: SceneTree, mooring: Node) -> void:
+## Each cleat finds its nearest bollard: bow cleats → front post, stern cleats → rear post.
+func auto_moor(tree: SceneTree) -> void:
 	if tree == null:
 		return
+	var posts: Array[Node] = []
 	for n in tree.get_nodes_in_group(DOCK_MOORING_GROUP):
-		if n.has_method("clear_mooring_component"):
-			n.call("clear_mooring_component", mooring)
+		if n.has_method("get_anchor_global_position"):
+			posts.append(n)
+	if posts.size() < 2:
+		push_warning("MooringComponent: need ≥2 bollards to auto-moor")
+		return
+	var cleats := _ship_cleat_nodes()
+	if cleats.is_empty():
+		push_warning("MooringComponent: no cleats for auto-moor")
+		return
+	var bow_pos   := _mean_cleat_position(cleats, "bow")
+	var stern_pos := _mean_cleat_position(cleats, "stern")
+	var front := _closest_post_to(bow_pos,   posts, null)
+	var rear  := _closest_post_to(stern_pos, posts, front)
+	if front == null or rear == null:
+		push_warning("MooringComponent: could not pair bollards for auto-moor")
+		return
+	moor_to_posts(front, rear)
+
+
+func _mean_cleat_position(cleats: Array[Node3D], station_filter: String) -> Vector3:
+	var acc := Vector3.ZERO
+	var count := 0
+	for c in cleats:
+		if c.get("station") == station_filter:
+			acc += _cleat_anchor(c)
+			count += 1
+	if count == 0:
+		for c in cleats:
+			acc += _cleat_anchor(c)
+		count = cleats.size()
+	return acc / float(count) if count > 0 else Vector3.ZERO
+
+
+func _closest_post_to(target: Vector3, posts: Array, exclude: Node) -> Node:
+	var best: Node = null
+	var best_d2 := INF
+	for p in posts:
+		if p == exclude:
+			continue
+		var d2 := target.distance_squared_to(dock_post_anchor_world(p))
+		if d2 < best_d2:
+			best_d2 = d2
+			best = p
+	return best
 
 
 func _dock_slot_forward_for_post(post: Node) -> bool:
-	if post == _front_post:
+	if _front_post != null and post == _front_post:
 		return true
-	if post == _rear_post:
+	if _rear_post != null and post == _rear_post:
 		return false
-	var refs := bow_and_stern_reference_world()
-	var a := dock_post_anchor_world(post)
-	return a.distance_squared_to(refs[0]) <= a.distance_squared_to(refs[1])
+	return not bow_line_tied
 
 
 func _integrate_mooring_constraints(state: PhysicsDirectBodyState3D) -> void:

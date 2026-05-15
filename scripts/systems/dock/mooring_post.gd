@@ -70,7 +70,6 @@ var _show_interact_sphere: bool = true
 		_show_interact_sphere = v
 		_refresh_editor_range_gizmo_deferred()
 
-var _mooring_component: Node
 var _prompt_layer: CanvasLayer
 var _prompt_label: Label
 
@@ -100,13 +99,21 @@ func get_anchor_global_position() -> Vector3:
 	return to_global(anchor_local_position)
 
 
-func register_mooring_component(component: Node) -> void:
-	_mooring_component = component
-
-
-func clear_mooring_component(component: Node) -> void:
-	if _mooring_component == component:
-		_mooring_component = null
+func _find_active_mooring() -> MooringComponent:
+	var nearest: MooringComponent = null
+	var best_d2 := INF
+	for n in get_tree().get_nodes_in_group(MooringComponent.SHIP_MOORING_COMPONENT_GROUP):
+		var mc := n as MooringComponent
+		if mc == null:
+			continue
+		var body := mc.get_boat_rigid_body()
+		if body == null:
+			continue
+		var d2 := global_position.distance_squared_to(body.global_position)
+		if d2 < best_d2:
+			best_d2 = d2
+			nearest = mc
+	return nearest
 
 
 func _rebuild_if_docking_bollard_visual() -> void:
@@ -212,33 +219,28 @@ func _rebuild_timber_post() -> void:
 
 
 func _toggle_line() -> void:
-	if _mooring_component == null or not is_instance_valid(_mooring_component):
+	var mc := _find_active_mooring()
+	if mc == null:
 		return
-	if _mooring_component.has_method("toggle_line_from_post"):
-		_mooring_component.call("toggle_line_from_post", self)
+	mc.call("toggle_line_from_post", self)
 	_update_prompt()
 
 
 func _update_prompt() -> void:
 	if _prompt_label == null:
 		return
-	var can_interact := _player_can_interact()
-	_prompt_label.visible = can_interact
-	if not can_interact:
+	if not _player_can_interact():
+		_prompt_label.visible = false
 		return
-	var action := "tie"
-	if (
-		_mooring_component != null
-		and _mooring_component.has_method("is_mooring_line_tied_from_post")
-		and bool(_mooring_component.call("is_mooring_line_tied_from_post", self))
-	):
-		action = "untie"
+	var mc := _find_active_mooring()
+	_prompt_label.visible = mc != null
+	if mc == null:
+		return
+	var action := "untie" if bool(mc.call("is_mooring_line_tied_from_post", self)) else "tie"
 	_prompt_label.text = "Press E to %s mooring line" % action
 
 
 func _player_can_interact() -> bool:
-	if _mooring_component == null or not is_instance_valid(_mooring_component):
-		return false
 	var player := _nearest_player()
 	if player == null:
 		return false
