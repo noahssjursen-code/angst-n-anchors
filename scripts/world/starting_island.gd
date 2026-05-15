@@ -293,23 +293,25 @@ func _apply_weather_lighting() -> void:
 
 	# --- Fill light ---
 	if _fill_light != null:
-		_fill_light.light_energy = lerpf(0.18, 0.04, cloud) * lerpf(0.12, 1.0, daylight)
+		# Night fill is nearly zero — moonlight should not bounce off everything.
+		_fill_light.light_energy = lerpf(0.18, 0.03, cloud) * lerpf(0.03, 1.0, daylight)
 
 	# --- Ambient ---
 	if _environment != null:
-		# Full storm cuts ambient heavily — interior shadows become oppressive.
+		# Squared daylight curve keeps nights very dark and only brightens
+		# significantly as the sun rises well above the horizon.
 		_environment.ambient_light_energy = (
-			lerpf(0.04, 0.22, daylight) * lerpf(1.0, 0.52, cloud)
+			lerpf(0.006, 0.22, daylight * daylight) * lerpf(1.0, 0.52, cloud)
 		)
 
 	# --- Sky shader uniforms ---
 	if _sky_shader_material != null:
-		var night_top     := Color(0.018, 0.025, 0.060)
+		var night_top     := Color(0.006, 0.009, 0.028)   # deep navy-black
 		# Calm-clear: deep saturated blue sky.
 		var day_top       := Color(0.18,  0.46,  0.78)
 		# Full storm: near-black greenish-grey.
 		var storm_top     := Color(0.09,  0.10,  0.13)
-		var night_horizon := Color(0.06,  0.055, 0.07)
+		var night_horizon := Color(0.018, 0.016, 0.028)  # near-black horizon at night
 		# Calm-clear: bright pale horizon.
 		var day_horizon   := Color(0.54,  0.74,  0.92)
 		# Storm: heavy grey.
@@ -333,16 +335,26 @@ func _apply_weather_lighting() -> void:
 
 	# --- Fog (visibility axis) ---
 	if _environment != null:
-		_environment.fog_enabled = fog_t > 0.02
+		_environment.fog_enabled = fog_t > 0.04
 		if _environment.fog_enabled:
-			# Light morning mist at low fog_t → classic pea-soup at max.
-			var mist_col  := Color(0.88, 0.90, 0.94)
-			var dense_col := Color(0.58, 0.61, 0.66)
-			_environment.fog_light_color = mist_col.lerp(dense_col, fog_t)
-			# Quadratic curve: gentle at first, thickens toward max.
-			_environment.fog_density     = lerpf(0.0, 0.28, fog_t * fog_t)
-			# Sky desaturates into the fog colour but never fully whiteouts.
-			_environment.fog_sky_affect  = lerpf(0.0, 0.55, fog_t * fog_t)
+			# Fog colour tracks ambient light so it reads as obscured air, not a
+			# white overlay.  Daytime overcast grey, dark at night, mid-grey in storms.
+			var day_fog   := Color(0.46, 0.49, 0.54)   # cool medium grey
+			var night_fog := Color(0.06, 0.07, 0.09)   # near-black
+			var storm_fog := Color(0.28, 0.30, 0.33)   # darker stormy grey
+			var fog_col   := night_fog.lerp(day_fog, daylight).lerp(storm_fog, storm * 0.5)
+			_environment.fog_light_color = fog_col
+
+			# Cubic curve: almost invisible at low fog_t, builds sharply near max.
+			var fog_curve := fog_t * fog_t * fog_t
+			_environment.fog_density    = lerpf(0.0, 0.25, fog_curve)
+
+			# Aerial perspective helps geometry dissolve into fog at distance.
+			_environment.fog_aerial_perspective = lerpf(0.0, 0.35, fog_t)
+
+			# Keep sky effect very subtle — real fog is IN the air between you
+			# and the horizon, not painted on the sky itself.
+			_environment.fog_sky_affect = lerpf(0.0, 0.18, fog_t * fog_t)
 
 	# --- Ocean shader ---
 	if _ocean_shader_material != null:

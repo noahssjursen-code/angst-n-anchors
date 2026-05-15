@@ -21,10 +21,10 @@ uniform vec3  moon_color     : source_color          = vec3(0.82, 0.86, 0.96);
 
 // --- Cloud layer ---
 uniform float cloud_coverage  : hint_range(0.0, 1.0) = 0.0;
-uniform float cloud_sharpness : hint_range(0.5, 8.0) = 3.5;
+uniform float cloud_sharpness : hint_range(0.5, 8.0) = 1.8;
 uniform float cloud_speed     : hint_range(0.0, 0.5) = 0.04;
-uniform vec3  cloud_light     : source_color          = vec3(0.95, 0.93, 0.90);
-uniform vec3  cloud_dark      : source_color          = vec3(0.38, 0.38, 0.42);
+uniform vec3  cloud_light     : source_color          = vec3(1.00, 0.98, 0.96);
+uniform vec3  cloud_dark      : source_color          = vec3(0.44, 0.46, 0.52);
 uniform float cloud_altitude  : hint_range(0.0, 1.0) = 0.28;
 uniform float cloud_thickness : hint_range(0.0, 1.0) = 0.22;
 
@@ -92,28 +92,34 @@ vec3 sky_gradient(vec3 dir) {
 // ---------------------------------------------------------------------------
 
 float cloud_density(vec3 dir) {
-	// Only upper hemisphere.
+	// Only upper hemisphere — hard cutoff well below horizon.
 	if (dir.y < 0.02) return 0.0;
 
-	// Soft fade near horizon (prevents hard edge) and near zenith (thinner cover overhead).
-	float horizon_fade = smoothstep(0.02, 0.18, dir.y);
-	float zenith_fade  = 1.0 - smoothstep(0.72, 0.96, dir.y);
+	// Fade near horizon (prevents hard ring edge); clouds visible almost to zenith.
+	float horizon_fade = smoothstep(0.03, 0.14, dir.y);
+	float zenith_fade  = 1.0 - smoothstep(0.88, 0.98, dir.y);
 	float sky_fade     = horizon_fade * zenith_fade;
 
-	// Hemispherical projection: add a softening bias so UVs don't explode near the horizon.
-	// Without this, dividing by a tiny dir.y stretches the pattern into a ring.
-	float h  = dir.y + 0.25;
+	// Hemispherical projection with moderate bias. Lower bias (0.18) vs old 0.25 lets
+	// clouds spread more naturally across mid-elevations.
+	float h  = dir.y + 0.18;
 	vec2  uv = dir.xz / h;
 
-	// Scroll with time
 	uv += vec2(sky_time * cloud_speed, sky_time * cloud_speed * 0.45);
 
-	float shape = fbm(uv * 1.8) * 0.6 + fbm(uv * 3.6) * 0.3 + fbm(uv * 7.2) * 0.1;
+	// Large-scale formation (2.2) + medium detail (4.5) + fine wisp (9.0).
+	// Larger base scale creates more convincing cloud formations instead of
+	// a uniform speckled haze.
+	float shape = fbm(uv * 2.2) * 0.60
+	            + fbm(uv * 4.5) * 0.28
+	            + fbm(uv * 9.0) * 0.12;
 
-	// Coverage threshold
-	float threshold = 1.0 - cloud_coverage;
-	float raw = (shape - threshold) / (1.0 - threshold + 0.001);
-	return clamp(pow(raw, cloud_sharpness) * 1.8, 0.0, 1.0) * sky_fade;
+	// Give coverage more weight so clouds appear at moderate values.
+	float threshold = 1.0 - clamp(cloud_coverage * 1.2, 0.0, 1.0);
+	float raw = clamp((shape - threshold) / (1.0 - threshold + 0.001), 0.0, 1.0);
+
+	// Lower sharpness = softer rounded edges; higher multiplier = more opaque fill.
+	return clamp(pow(raw, cloud_sharpness) * 2.8, 0.0, 1.0) * sky_fade;
 }
 
 
@@ -141,10 +147,10 @@ vec3 sun_contribution(vec3 dir) {
 
 vec3 moon_contribution(vec3 dir) {
 	float cos_angle = dot(dir, moon_direction);
-	// Disk — dimmer than the sun
-	float disk   = step(1.0 - moon_size, cos_angle) * 1.4;
-	// Tight soft edge only
-	float corona = pow(max(cos_angle, 0.0), 256.0) * 0.5;
+	// Disk — visually present but not bright enough to bathe the scene in light.
+	float disk   = step(1.0 - moon_size, cos_angle) * 0.65;
+	// Very faint soft corona
+	float corona = pow(max(cos_angle, 0.0), 256.0) * 0.18;
 	// Fade out when moon is below the horizon
 	float elev_fade = smoothstep(-0.08, 0.04, moon_direction.y);
 	return moon_color * (disk + corona) * elev_fade;
@@ -165,13 +171,23 @@ void sky() {
 		col += moon_contribution(dir) * (1.0 - cloud_coverage * 0.75);
 	}
 
-	// Clouds — lit by sun elevation
+	// Clouds — shaded with sun elevation AND cloud density (denser core = darker).
 	float clouds = cloud_density(dir);
 	if (clouds > 0.001) {
-		float sun_up   = max(sun_direction.y, 0.0);
-		vec3 cloud_col = mix(cloud_dark, cloud_light, sun_up * (1.0 - storm_intensity * 0.7));
-		cloud_col      = mix(cloud_col, vec3(0.28, 0.30, 0.34), storm_intensity * 0.5);
-		col = mix(col, cloud_col, clouds);
+		float sun_up = max(sun_direction.y, 0.0);
+
+		// Edge-brightening: cloud edges are lit more than dense interiors.
+		// This gives the illusion of volume without ray-marching.
+		float interior = smoothstep(0.3, 1.0, clouds) * 0.55;
+		vec3 cloud_col = mix(cloud_light, cloud_dark, interior);
+
+		// Night/dusk: darken clouds proportionally to sun height.
+		cloud_col = mix(cloud_col * 0.25, cloud_col, smoothstep(0.0, 0.35, sun_up));
+
+		// Storm: desaturate to dark greenish-grey.
+		cloud_col = mix(cloud_col, vec3(0.24, 0.27, 0.30), storm_intensity * 0.65);
+
+		col = mix(col, cloud_col, clouds * 0.95);
 	}
 
 	COLOR = col;
