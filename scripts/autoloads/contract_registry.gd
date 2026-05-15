@@ -46,6 +46,10 @@ func get_port_display_name(port_id: String) -> String:
 	return str(info.get("display_name", "Unknown Port"))
 
 
+func get_port_ids() -> Array:
+	return _ports.keys()
+
+
 # ── Contract queries ──────────────────────────────────────────────────────────
 
 ## Returns contracts originating from port_id, sorted by reward descending.
@@ -63,6 +67,36 @@ func get_contracts_from_port(port_id: String) -> Array[Contract]:
 
 func get_destination_name(contract: Contract) -> String:
 	return get_port_display_name(contract.destination_port_id)
+
+
+func get_accepted_contracts() -> Array[Contract]:
+	var out: Array[Contract] = []
+	for c in _contracts.values():
+		var contract := c as Contract
+		if contract != null and contract.state == Contract.State.ACCEPTED:
+			out.append(contract)
+	return out
+
+
+func get_port_position(port_id: String) -> Vector3:
+	var info := _ports.get(port_id, {}) as Dictionary
+	if info.is_empty():
+		return Vector3(INF, INF, INF)
+	return info.get("position", Vector3(INF, INF, INF)) as Vector3
+
+
+func get_port_warehouse(port_id: String) -> Warehouse:
+	var info := _ports.get(port_id, {}) as Dictionary
+	if not info.has("warehouse"):
+		return null
+	var wh := info["warehouse"] as Warehouse
+	if wh == null or not is_instance_valid(wh):
+		return null
+	return wh
+
+
+func unregister_port(port_id: String) -> void:
+	_ports.erase(port_id)
 
 
 # ── Accept ────────────────────────────────────────────────────────────────────

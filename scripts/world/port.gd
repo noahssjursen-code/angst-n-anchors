@@ -233,3 +233,12 @@ func _register_with_registry() -> void:
 	if registry == null:
 		return
 	registry.register_port(port_id, port_display_name, global_position, _warehouse)
+
+
+func _exit_tree() -> void:
+	if Engine.is_editor_hint():
+		return
+	var registry := get_node_or_null("/root/ContractRegistry")
+	if registry == null:
+		return
+	registry.unregister_port(port_id)

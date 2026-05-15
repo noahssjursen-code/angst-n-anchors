@@ -13,6 +13,7 @@ extends Node
 ##     Bow-only: Q/R yaw the bow (useful for swinging the bow at low speed)
 ##     Crab: Q/R pure lateral drift (bow + stern together)
 
+@export var ship_name:         String = "Unnamed Vessel"
 @export var throttle_response: float = 1.8   # how fast throttle ramps (units/s)
 @export var rudder_response:   float = 3.0
 ## Ordered throttle table. Index is the helm stage.
@@ -44,11 +45,12 @@ var _throttle_stage_idx: int = 1
 @onready var _boat_body: RigidBody3D = get_parent() as RigidBody3D
 
 var _hud_layer: CanvasLayer
-var _hud_label: Label
+var _ship_hud: ShipHud
 
 
 func activate() -> void:
 	_active = true
+	get_parent().add_to_group("player_boat")
 	_ensure_hud()
 	_set_hud_visible(true)
 	helm_activated.emit()
@@ -63,6 +65,7 @@ func deactivate() -> void:
 	_throttle_stage_idx = _nearest_stage_idx(0.0)
 	_push_to_components()
 	_set_hud_visible(false)
+	get_parent().remove_from_group("player_boat")
 	helm_deactivated.emit()
 
 
@@ -95,7 +98,6 @@ func _physics_process(delta: float) -> void:
 	_lateral  = lateral_target
 
 	_push_to_components()
-	_update_hud()
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -179,17 +181,10 @@ func _ensure_hud() -> void:
 	_hud_layer.name = "BoatHelmHUD"
 	add_child(_hud_layer)
 
-	_hud_label = Label.new()
-	_hud_label.name = "Status"
-	_hud_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
-	_hud_label.vertical_alignment = VERTICAL_ALIGNMENT_TOP
-	_hud_label.add_theme_font_size_override("font_size", 22)
-	_hud_label.set_anchors_preset(Control.PRESET_TOP_LEFT)
-	_hud_label.offset_left = 20.0
-	_hud_label.offset_top = 20.0
-	_hud_label.offset_right = 620.0
-	_hud_label.offset_bottom = 200.0
-	_hud_layer.add_child(_hud_label)
+	_ship_hud = ShipHud.new()
+	_ship_hud.name = "ShipHud"
+	_hud_layer.add_child(_ship_hud)
+	_ship_hud.setup(_boat_body, self)
 
 
 func _set_hud_visible(on: bool) -> void:
@@ -197,31 +192,9 @@ func _set_hud_visible(on: bool) -> void:
 		_hud_layer.visible = on
 
 
-func _update_hud() -> void:
-	if _hud_label == null:
-		return
-	var speed_mps := 0.0
-	if _boat_body != null:
-		speed_mps = _boat_body.linear_velocity.length()
-	var speed_knots := speed_mps * 1.943844
-	var stage_name := _throttle_stage_label(_target_throttle_from_stage())
-	var stage_count := _stage_count()
-	var thruster_str := (["", "  |  BOW", "  |  CRAB"] as Array)[_thruster_mode] as String
-	_hud_label.text = (
-		"Speed: %.1f kn\nThrottle: %s (%d/%d)%s\nSet: 1-5 | W/S step | X stop | T thruster"
-		% [
-			speed_knots,
-			stage_name,
-			_throttle_stage_idx + 1,
-			stage_count,
-			thruster_str,
-		]
-	)
+func get_throttle_stage_idx() -> int:
+	return _throttle_stage_idx
 
 
-func _throttle_stage_label(value: float) -> String:
-	if value < -0.05:
-		return stage_label_astem
-	if value > 0.05:
-		return stage_label_ahead
-	return stage_label_stop
+func get_thruster_mode() -> int:
+	return _thruster_mode
