@@ -7,10 +7,13 @@ extends Node3D
 ## The world sets the node's global position — Port knows nothing about the world around it.
 
 const DockFacilitiesScript        := preload("res://scripts/systems/dock/dock_facilities.gd")
-const WarehouseCargoTestScript    := preload("res://scripts/systems/cargo/warehouse_cargo_test.gd")
 const WarehouseContractZoneScript := preload("res://scripts/systems/cargo/warehouse_contract_zone.gd")
+const ContractNpcScript           := preload("res://scripts/systems/dock/contract_npc.gd")
+const DeliveryNpcScript           := preload("res://scripts/systems/dock/delivery_npc.gd")
 
 @export var ship_scene: PackedScene = preload("res://scenes/boats/test_boat.tscn")
+@export var port_id: String = ""
+@export var port_display_name: String = "Port"
 
 # --- Layout constants (local space) ---
 const DOCK_SURFACE_Y          := 0.08
@@ -36,19 +39,24 @@ const OPEN_WAREHOUSE_SCALE    := 1.0
 const OPEN_WAREHOUSE_POSITION := Vector3(-22.0, 0.03, -8.0)
 const OPEN_WAREHOUSE_ROTATION := Vector3(0.0, 55.0, 0.0)
 
-var _open_warehouse:       StaticBody3D
-var _warehouse_zone:       Node3D
+var _open_warehouse: StaticBody3D
+var _warehouse:      Warehouse
 
 
 func _ready() -> void:
 	for child in get_children():
 		child.queue_free()
 
+	if not Engine.is_editor_hint() and port_id.is_empty():
+		port_id = UuidUtil.generate()
+
 	_build_piers()
 	_build_dock()
 	_build_warehouse()
+
 	if not Engine.is_editor_hint():
-		_build_warehouse_cargo_test()
+		_build_npcs()
+		call_deferred("_register_with_registry")
 
 
 func get_player_spawn_position() -> Vector3:
@@ -159,32 +167,36 @@ func _second_pier_center() -> Vector3:
 # --- Warehouse ---
 
 func _build_warehouse() -> void:
-	var warehouse              := StaticBody3D.new()
-	warehouse.name             = "OpenWarehouse"
-	warehouse.position         = OPEN_WAREHOUSE_POSITION
-	warehouse.rotation_degrees = OPEN_WAREHOUSE_ROTATION
-	add_child(warehouse)
-	_open_warehouse = warehouse
+	var esc := get_tree().edited_scene_root if Engine.is_editor_hint() else null
+
+	# Geometry — static collision + visual model.
+	var body              := StaticBody3D.new()
+	body.name             = "OpenWarehouse"
+	body.position         = OPEN_WAREHOUSE_POSITION
+	body.rotation_degrees = OPEN_WAREHOUSE_ROTATION
+	add_child(body)
+	_open_warehouse = body
+	if esc != null:
+		body.owner = esc
 
 	var assembler                   := ModelAssembler.new()
 	assembler.model_data_path       = OPEN_WAREHOUSE_MODEL
 	assembler.absolute_scale        = OPEN_WAREHOUSE_SCALE
 	assembler.collision_parent_path = NodePath("..")
 	assembler.build_part_colliders  = true
-	warehouse.add_child(assembler)
+	body.add_child(assembler)
+	if esc != null:
+		assembler.owner = esc
 
-	if Engine.is_editor_hint():
-		var esc := get_tree().edited_scene_root
-		if esc != null:
-			warehouse.owner  = esc
-			assembler.owner  = esc
-
-	_build_warehouse_zone()
-
-
-func _build_warehouse_zone() -> void:
-	if _open_warehouse == null or not is_instance_valid(_open_warehouse):
-		return
+	# Warehouse logic node — owns the slot zone and cargo inventory.
+	var wh              := Warehouse.new()
+	wh.name             = "PortWarehouse"
+	wh.position         = OPEN_WAREHOUSE_POSITION
+	wh.rotation_degrees = OPEN_WAREHOUSE_ROTATION
+	add_child(wh)
+	_warehouse = wh
+	if esc != null:
+		wh.owner = esc
 
 	var zone          := WarehouseContractZoneScript.new()
 	zone.name         = "ContractZone"
@@ -195,26 +207,29 @@ func _build_warehouse_zone() -> void:
 	zone.set("slot_size_z_m",   1.2)
 	zone.set("show_debug_area", true)
 	zone.set("debug_color",     Color(0.18, 0.76, 0.30, 0.25))
-	_open_warehouse.add_child(zone)
-	_warehouse_zone = zone
-
-	if Engine.is_editor_hint():
-		var esc := get_tree().edited_scene_root
-		if esc != null:
-			zone.owner = esc
+	wh.add_child(zone)
+	if esc != null:
+		zone.owner = esc
 
 
-func _build_warehouse_cargo_test() -> void:
-	if _open_warehouse == null or not is_instance_valid(_open_warehouse):
+# --- NPCs ---
+
+func _build_npcs() -> void:
+	var contract_npc              := ContractNpcScript.new()
+	contract_npc.name             = "ContractNpc"
+	contract_npc.port_id          = port_id
+	contract_npc.position         = TERMINAL_POSITION + Vector3(-2.5, 0.0, 0.0)
+	add_child(contract_npc)
+
+	var delivery_npc              := DeliveryNpcScript.new()
+	delivery_npc.name             = "DeliveryNpc"
+	delivery_npc.port_id          = port_id
+	delivery_npc.position         = TERMINAL_POSITION + Vector3(2.5, 0.0, 0.0)
+	add_child(delivery_npc)
+
+
+func _register_with_registry() -> void:
+	var registry := get_node_or_null("/root/ContractRegistry")
+	if registry == null:
 		return
-
-	var cargo_test                  := WarehouseCargoTestScript.new()
-	cargo_test.name                 = "WarehouseCargoTest"
-	add_child(cargo_test)
-	cargo_test.warehouse_root_path  = cargo_test.get_path_to(_open_warehouse)
-	if _warehouse_zone != null and is_instance_valid(_warehouse_zone):
-		cargo_test.contract_zone_path = cargo_test.get_path_to(_warehouse_zone)
-	var spawner := get_node_or_null("DockFacilities/ShipSpawner")
-	if spawner != null:
-		cargo_test.ship_spawner_path = cargo_test.get_path_to(spawner)
-	cargo_test.call_deferred("refresh_demo_contract")
+	registry.register_port(port_id, port_display_name, global_position, _warehouse)

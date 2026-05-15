@@ -116,12 +116,12 @@ station = "stern"
 [node name="CargoDeck_Main" type="Node3D" parent="ShipGameplay"]
 position = Vector3(0, 2.04, -0.25)
 script = ExtResource("13")
-deck_width_m = 4.8
+deck_width_m = 5.2
 deck_length_m = 9.4
 unit_size_x_m = 1.2
 unit_size_z_m = 1.2
 max_units_override = 24
-visual_crate_height_offset_m = 0.62
+visual_crate_height_offset_m = 0.42
 
 [node name="CargoDeck_Aft" type="Node3D" parent="ShipGameplay"]
 position = Vector3(0, 2.04, 6.8)
@@ -131,5 +131,5 @@ deck_length_m = 3.8
 unit_size_x_m = 1.2
 unit_size_z_m = 1.2
 max_units_override = 9
-visual_crate_height_offset_m = 0.62
+visual_crate_height_offset_m = 0.52
 

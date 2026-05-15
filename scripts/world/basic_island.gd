@@ -13,6 +13,13 @@ const C_SAND := Color(0.82, 0.74, 0.58)
 ## Which boat the dock spawns. Passed through to Port.
 @export var ship_scene: PackedScene
 
+## Stable port identifier. Set by the world so contracts can reference this port
+## before the island physically loads. Leave empty to auto-generate a UUID.
+@export var port_id: String = ""
+
+## Display name shown in contract boards.
+@export var port_display_name: String = "Port"
+
 
 func _ready() -> void:
 	for child in get_children():
@@ -28,9 +35,13 @@ func _add_ground() -> void:
 
 
 func _add_port() -> void:
-	var port                := Port.new()
-	port.name               = "Port"
-	port.rotation_degrees.y = dock_facing_degrees
+	var port                  := Port.new()
+	port.name                 = "Port"
+	port.rotation_degrees.y   = dock_facing_degrees
+	if not port_id.is_empty():
+		port.port_id          = port_id
+	if not port_display_name.is_empty():
+		port.port_display_name = port_display_name
 	if ship_scene != null:
-		port.ship_scene = ship_scene
+		port.ship_scene       = ship_scene
 	add_child(port)
