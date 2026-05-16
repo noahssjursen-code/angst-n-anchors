@@ -10,9 +10,7 @@ extends Node3D
 
 enum BerthStatus { FREE = 0, RESERVED = 1, OCCUPIED = 2 }
 
-const C_QUAY           := Color(0.28, 0.30, 0.34)
 const C_QUAY_EDGE      := Color(0.22, 0.23, 0.26)
-const C_BOLLARD        := Color(0.16, 0.16, 0.18)
 const C_EDGE_STRIPE    := Color(0.82, 0.78, 0.20)
 const C_BERTH          := Color(0.20, 0.85, 0.35, 0.35)
 const C_BERTH_RESERVED := Color(0.95, 0.75, 0.10, 0.40)
@@ -22,11 +20,26 @@ const C_LABEL          := Color(0.30, 1.00, 0.50, 0.90)
 const C_CARGO_YARD     := Color(0.34, 0.32, 0.30)
 const FUEL_STATION_SCENE  := preload("res://scenes/systems/fuel_station.tscn")
 const PLAYER_SHIP_SCENE   := preload("res://scenes/boats/test_boat.tscn")
+## Main quay deck — lit asphalt probe (adjust in `resources/materials/asphalt_dock.tres`).
+const QUAY_BODY_MATERIAL: StandardMaterial3D = preload(
+	"res://resources/materials/asphalt_dock.tres"
+)
+
+
+func _editor_berth_overlays_visible() -> bool:
+	return Engine.is_editor_hint()
+
 
 var _berth_data: Array = []
 
 const QUAY_HEIGHT    := 0.6
 const QUAY_DEPTH     := 8.0
+## Dark lip along the water-facing edge — must not share volume/facets with the main slab or Z‑fights.
+const QUAY_LIP_DEPTH := 0.35
+const QUAY_LIP_SLAB_GAP := 0.002
+## Yellow stripe centred on Z≈0.11, spans ~[0, 0.22]. Lip band ends at QUAY_LIP_DEPTH; slab starts just after.
+## Bollard mesh projects toward −Z; centre must sit far enough inland to stay wholly on slab / inside stripe.
+const MOORING_BOLLARD_CENTER_Z := QUAY_LIP_DEPTH + QUAY_LIP_SLAB_GAP + 0.42
 const BERTH_GAP_M    := 3.0
 const BERTH_MARGIN   := 1.5
 
@@ -80,19 +93,22 @@ func _rebuild() -> void:
 # ── Quay ──────────────────────────────────────────────────────────────────────
 
 func _build_quay() -> void:
-	var size             := Vector3(dock_length, QUAY_HEIGHT, QUAY_DEPTH)
-	var body             := StaticBody3D.new()
+	var lip_half := QUAY_LIP_DEPTH * 0.5
+	# Lip centres on the band [0, QUAY_LIP_DEPTH]; slab starts after tiny gap → no overlapping coplanar faces.
+	var slab_z_half := (QUAY_DEPTH - QUAY_LIP_DEPTH - QUAY_LIP_SLAB_GAP) * 0.5
+	var slab_centre_z := QUAY_LIP_DEPTH + QUAY_LIP_SLAB_GAP + slab_z_half
+	var slab_size_z := slab_z_half * 2.0
+
+	var size := Vector3(dock_length, QUAY_HEIGHT, slab_size_z)
+	var body := StaticBody3D.new()
 	body.name            = "Quay"
-	body.position        = Vector3(0.0, QUAY_HEIGHT * 0.5, QUAY_DEPTH * 0.5)
+	body.position        = Vector3(0.0, QUAY_HEIGHT * 0.5, slab_centre_z)
 	var mi               := MeshInstance3D.new()
 	mi.name              = "Mesh"
 	var mesh             := BoxMesh.new()
 	mesh.size            = size
 	mi.mesh              = mesh
-	var mat              := StandardMaterial3D.new()
-	mat.albedo_color     = C_QUAY
-	mat.shading_mode     = BaseMaterial3D.SHADING_MODE_UNSHADED
-	mi.material_override = mat
+	mi.material_override = QUAY_BODY_MATERIAL
 	body.add_child(mi)
 	var col              := CollisionShape3D.new()
 	var box              := BoxShape3D.new()
@@ -102,8 +118,8 @@ func _build_quay() -> void:
 	add_child(body)
 
 	# Dark leading edge where quay meets water
-	_box(Vector3(dock_length, QUAY_HEIGHT, 0.35),
-		 Vector3(0.0, QUAY_HEIGHT * 0.5, 0.175),
+	_box(Vector3(dock_length, QUAY_HEIGHT, QUAY_LIP_DEPTH),
+		 Vector3(0.0, QUAY_HEIGHT * 0.5, lip_half),
 		 C_QUAY_EDGE, "QuayLip")
 
 	# Safety stripe along dock face
@@ -111,16 +127,17 @@ func _build_quay() -> void:
 		 Vector3(0.0, QUAY_HEIGHT + 0.02, 0.11),
 		 C_EDGE_STRIPE, "DockStripe")
 
-	# Bollards — one every 8 m along dock face
-	var n_bollards := maxi(1, int(dock_length / 8.0))
-	var spacing    := dock_length / float(n_bollards)
-	for i in range(n_bollards):
-		var bx := -dock_length * 0.5 + spacing * (float(i) + 0.5)
-		_box(Vector3(0.32, 0.52, 0.32),
-			 Vector3(bx, QUAY_HEIGHT + 0.26, 0.40),
-			 C_BOLLARD, "Bollard%d" % i)
-
-
+	# Mooring bollards — docking_bollard mesh + `dock_mooring_bollard` group for MooringComponent
+	var n_posts := maxi(2, int(dock_length / 8.0))
+	var spacing   := dock_length / float(n_posts)
+	for i in range(n_posts):
+		var bx   := -dock_length * 0.5 + spacing * (float(i) + 0.5)
+		var post := MooringPost.new()
+		post.name = "DockMooringPost%d" % i
+		post.position = Vector3(bx, QUAY_HEIGHT, MOORING_BOLLARD_CENTER_Z)
+		# Default docking bollard mesh uses Y=90°; dock quay wants +90° on local Y.
+		post.bollard_rotation_degrees = Vector3(0.0, 180.0, 0.0)
+		add_child(post)
 # ── Berths ────────────────────────────────────────────────────────────────────
 
 func _build_berths() -> void:
@@ -139,7 +156,8 @@ func _build_berths() -> void:
 	var summary := "%s  ·  %d berth%s  ·  max %.0f m" % [
 		ShipClass.display_name(max_ship_class), count, "s" if count != 1 else "", ship_len
 	]
-	_label(summary, Vector3(0.0, 4.5, -ship_beam - 1.0), C_LABEL, 0.65, "LabelSummary")
+	var sum_lbl := _label(summary, Vector3(0.0, 4.5, -ship_beam - 1.0), C_LABEL, 0.65, "LabelSummary")
+	sum_lbl.visible = _editor_berth_overlays_visible()
 
 
 func _build_berth_slot(index: int, cx: float, slot_w: float, ship_beam: float, cargo_type: int) -> void:
@@ -161,6 +179,7 @@ func _build_berth_slot(index: int, cx: float, slot_w: float, ship_beam: float, c
 	mat.cull_mode          = BaseMaterial3D.CULL_DISABLED
 	fill.material_override = mat
 	add_child(fill)
+	fill.visible = _editor_berth_overlays_visible()
 
 	_berth_data.append({
 		"status":      BerthStatus.FREE,
@@ -185,11 +204,13 @@ func _build_berth_slot(index: int, cx: float, slot_w: float, ship_beam: float, c
 		emat.shading_mode      = BaseMaterial3D.SHADING_MODE_UNSHADED
 		edge.material_override = emat
 		add_child(edge)
+		edge.visible = _editor_berth_overlays_visible()
 
 	var type_str : String = CargoBerthType.display_name(cargo_type as CargoBerthType.Type)
-	_label("#%d  %s" % [index + 1, type_str],
-		   Vector3(cx, 1.2, -ship_beam - 0.5),
-		   C_LABEL, 0.48, "LabelBerth%d" % index)
+	var berth_lbl := _label("#%d  %s" % [index + 1, type_str],
+			Vector3(cx, 1.2, -ship_beam - 0.5),
+			C_LABEL, 0.48, "LabelBerth%d" % index)
+	berth_lbl.visible = _editor_berth_overlays_visible()
 
 	match cargo_type:
 		CargoBerthType.Type.BULK:      _crane_bulk(index, cx, crane_z)
@@ -407,7 +428,8 @@ func spawn_player_ship(index: int) -> Node3D:
 
 	var mooring := ship.find_child("MooringComponent", true, false) as MooringComponent
 	if mooring != null:
-		mooring.auto_moor(get_tree())
+		# Deferred so berth transform / waterline settle before cleat ↔ bollard pairing.
+		mooring.call_deferred("auto_moor", mooring.get_tree())
 
 	var b       := _berth_data[index] as Dictionary
 	b["status"] = BerthStatus.OCCUPIED
