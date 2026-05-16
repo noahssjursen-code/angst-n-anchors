@@ -63,11 +63,14 @@ func _refresh_list() -> void:
 		_list.add_child(_plain_label("No contracts available."))
 		return
 
+	var has_active:   bool = registry.get_accepted_contracts().size() > 0
+	var ship_berthed: bool = _ship_is_berthed()
+
 	for contract in contracts:
-		_list.add_child(_make_row(contract, registry))
+		_list.add_child(_make_row(contract, registry, has_active, ship_berthed))
 
 
-func _make_row(contract: Contract, registry: Node) -> Control:
+func _make_row(contract: Contract, registry: Node, has_active: bool, ship_berthed: bool) -> Control:
 	var dest: String = registry.get_destination_name(contract)
 
 	var info           := Label.new()
@@ -84,8 +87,15 @@ func _make_row(contract: Contract, registry: Node) -> Control:
 	var btn := Button.new()
 	match contract.state:
 		Contract.State.AVAILABLE:
-			btn.text = "Accept"
-			btn.pressed.connect(_on_accept.bind(contract.id))
+			if has_active:
+				btn.text     = "Busy"
+				btn.disabled = true
+			elif not ship_berthed:
+				btn.text     = "Berth ship first"
+				btn.disabled = true
+			else:
+				btn.text = "Accept"
+				btn.pressed.connect(_on_accept.bind(contract.id))
 		Contract.State.ACCEPTED:
 			btn.text     = "Active"
 			btn.disabled = true
@@ -164,6 +174,16 @@ func _plain_label(text: String) -> Label:
 	var lbl := Label.new()
 	lbl.text = text
 	return lbl
+
+
+func _ship_is_berthed() -> bool:
+	var plot := get_parent() as PortPlot
+	if plot == null:
+		return false
+	var dock := plot.get_node_or_null("PortDock") as PortDock
+	if dock == null:
+		return false
+	return dock.find_occupied_berth() != -1
 
 
 func _registry() -> Node:

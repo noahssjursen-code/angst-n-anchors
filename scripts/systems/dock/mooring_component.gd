@@ -747,4 +747,3 @@ func _hide_all_rope_segments() -> void:
 		_hide_rope_segments(_bow_rope_segments)
 	if _stern_rope_holder != null:
 		_hide_rope_segments(_stern_rope_segments)
-

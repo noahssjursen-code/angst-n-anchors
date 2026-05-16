@@ -80,7 +80,11 @@ func _setup_ports(defs: Array[PortDefinition]) -> void:
 		var data := PortExpander.expand(def, world_seed)
 
 		if registry != null:
-			registry.register_port(data.port_id, data.display_name, data.world_position)
+			registry.register_port(
+				data.port_id, data.display_name, data.world_position,
+				Vector3(INF, INF, INF),
+				data.commodity_export, data.commodity_imports,
+			)
 
 		if i == 0:
 			# Home port: always present, added directly so spawn position is available.

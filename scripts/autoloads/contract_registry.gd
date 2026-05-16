@@ -16,7 +16,9 @@ const COMMODITIES := [
 	{ "id": "provisions", "display": "Provisions", "mass_kg": 150.0, "value": 14 },
 ]
 
-## port_id -> { id, display_name, position, spawn_pos }
+const CONTRACT_RADIUS := 1200.0
+
+## port_id -> { id, display_name, position, spawn_pos, commodity_export, commodity_imports }
 var _ports: Dictionary = {}
 ## contract_id -> Contract
 var _contracts: Dictionary = {}
@@ -29,13 +31,17 @@ func register_port(
 	display_name: String,
 	world_pos: Vector3,
 	spawn_pos: Vector3 = Vector3(INF, INF, INF),
+	commodity_export: String = "",
+	commodity_imports: Array = [],
 ) -> void:
 	var already_known := _ports.has(port_id)
 	_ports[port_id] = {
-		"id":           port_id,
-		"display_name": display_name,
-		"position":     world_pos,
-		"spawn_pos":    spawn_pos if spawn_pos != Vector3(INF, INF, INF) else world_pos,
+		"id":                port_id,
+		"display_name":      display_name,
+		"position":          world_pos,
+		"spawn_pos":         spawn_pos if spawn_pos != Vector3(INF, INF, INF) else world_pos,
+		"commodity_export":  commodity_export,
+		"commodity_imports": commodity_imports,
 	}
 	if not already_known:
 		_generate_contracts_for(port_id)
@@ -102,6 +108,8 @@ func accept_contract(contract_id: String) -> bool:
 	var contract := _contracts.get(contract_id) as Contract
 	if contract == null or contract.state != Contract.State.AVAILABLE:
 		return false
+	if get_accepted_contracts().size() > 0:
+		return false
 
 	contract.state = Contract.State.ACCEPTED
 
@@ -138,6 +146,9 @@ func deliver_cargo(item: CargoItem) -> int:
 	if contract.is_complete():
 		contract.state = Contract.State.COMPLETED
 		contract_completed.emit(contract)
+		if contract.id.begins_with("debug::"):
+			contract.state           = Contract.State.AVAILABLE
+			contract.delivered_count = 0
 
 	return reward
 
@@ -145,40 +156,73 @@ func deliver_cargo(item: CargoItem) -> int:
 # ── Generation ────────────────────────────────────────────────────────────────
 
 func _generate_contracts_for(new_port_id: String) -> void:
+	var new_info := _ports.get(new_port_id, {}) as Dictionary
+	var new_pos  := new_info.get("position", Vector3.ZERO) as Vector3
+
 	for existing_id in _ports.keys():
 		if existing_id == new_port_id:
+			continue
+		var ex_info := _ports.get(existing_id, {}) as Dictionary
+		var ex_pos  := ex_info.get("position", Vector3.ZERO) as Vector3
+		if new_pos.distance_to(ex_pos) > CONTRACT_RADIUS:
 			continue
 		var inbound  := _make_contract(existing_id, new_port_id)
 		var outbound := _make_contract(new_port_id, existing_id)
 		_contracts[inbound.id]  = inbound
 		_contracts[outbound.id] = outbound
 
+	var dc := _make_debug_contract(new_port_id)
+	_contracts[dc.id] = dc
+
 
 func _make_contract(from_id: String, to_id: String) -> Contract:
-	var from_info := _ports.get(from_id, {}) as Dictionary
-	var to_info   := _ports.get(to_id,   {}) as Dictionary
-	var from_pos  := from_info.get("position", Vector3.ZERO) as Vector3
-	var to_pos    := to_info.get("position",   Vector3.ZERO) as Vector3
-	var distance  := maxf(from_pos.distance_to(to_pos), 1.0)
+	var from_info    := _ports.get(from_id, {}) as Dictionary
+	var to_info      := _ports.get(to_id,   {}) as Dictionary
+	var from_pos     := from_info.get("position", Vector3.ZERO) as Vector3
+	var to_pos       := to_info.get("position",   Vector3.ZERO) as Vector3
+	var distance     := maxf(from_pos.distance_to(to_pos), 1.0)
+
+	var commodity_id := str(from_info.get("commodity_export", "provisions"))
+	var commodity: Dictionary = {}
+	for entry in COMMODITIES:
+		if str((entry as Dictionary)["id"]) == commodity_id:
+			commodity = entry as Dictionary
+			break
+	if commodity.is_empty():
+		commodity = COMMODITIES[0] as Dictionary
 
 	var rng      := RandomNumberGenerator.new()
 	rng.seed     = _hash_route(from_id, to_id)
-	var commodity: Dictionary = COMMODITIES[rng.randi() % COMMODITIES.size()]
-	var quantity   := rng.randi() % 7 + 4
-	var value_per  := int(commodity["value"])
-	var reward     := int(distance * float(quantity) * float(value_per) * 0.12)
+	var quantity := rng.randi() % 7 + 4
+	var value_per := int(commodity["value"])
+	var reward   := int(distance * float(quantity) * float(value_per) * 0.12)
 
-	var c                    := Contract.new()
-	c.id                     = from_id + "::" + to_id
-	c.commodity              = str(commodity["id"])
-	c.display_name           = str(commodity["display"])
-	c.quantity               = quantity
-	c.mass_per_unit_kg       = float(commodity["mass_kg"])
-	c.reward_gold            = reward
-	c.origin_port_id         = from_id
-	c.destination_port_id    = to_id
-	c.state                  = Contract.State.AVAILABLE
-	c.delivered_count        = 0
+	var c                 := Contract.new()
+	c.id                  = from_id + "::" + to_id
+	c.commodity           = commodity_id
+	c.display_name        = str(commodity["display"])
+	c.quantity            = quantity
+	c.mass_per_unit_kg    = float(commodity["mass_kg"])
+	c.reward_gold         = reward
+	c.origin_port_id      = from_id
+	c.destination_port_id = to_id
+	c.state               = Contract.State.AVAILABLE
+	c.delivered_count     = 0
+	return c
+
+
+func _make_debug_contract(port_id: String) -> Contract:
+	var c                 := Contract.new()
+	c.id                  = "debug::" + port_id
+	c.commodity           = "provisions"
+	c.display_name        = "Provisions"
+	c.quantity            = 1
+	c.mass_per_unit_kg    = 150.0
+	c.reward_gold         = 25
+	c.origin_port_id      = port_id
+	c.destination_port_id = port_id
+	c.state               = Contract.State.AVAILABLE
+	c.delivered_count     = 0
 	return c
 
 
