@@ -47,11 +47,11 @@ func _build() -> void:
 	assembler.build_part_colliders = false
 	add_child(assembler)
 
-	_apply_colors()
-
 	if Engine.is_editor_hint():
 		_own_subtree(col)
 		_own_subtree(assembler)
+
+	call_deferred("_apply_colors")
 
 
 func _apply_colors() -> void:

@@ -6,8 +6,9 @@ extends Node3D
 ## Connects to WeatherLighting and updates all world visuals when weather changes.
 ## No knowledge of ports, players, or gameplay.
 
-const OCEAN_SHADER := preload("res://resources/shaders/ocean_waves.gdshader")
-const SKY_SHADER   := preload("res://resources/shaders/sky.gdshader")
+const OCEAN_SHADER   := preload("res://resources/shaders/ocean_waves.gdshader")
+const SKY_SHADER     := preload("res://resources/shaders/sky.gdshader")
+const SCREEN_SHADER  := preload("res://resources/shaders/screen_effects.gdshader")
 const C_OCEAN      := Color(0.10, 0.28, 0.48)
 
 var _ocean_shader_material: ShaderMaterial
@@ -21,6 +22,7 @@ var _ocean_mesh:            MeshInstance3D
 func _ready() -> void:
 	_build_sky()
 	_build_ocean()
+	_build_screen_effects()
 	_connect_weather_lighting()
 	_apply_weather_lighting()
 
@@ -69,27 +71,20 @@ func _build_sky() -> void:
 	environ.tonemap_exposure = 0.95
 	environ.tonemap_white    = 6.0
 
-	environ.ssao_enabled   = true
-	environ.ssao_radius    = 0.9
-	environ.ssao_intensity = 1.4
+	environ.ssao_enabled = false
+	environ.glow_enabled = false
+	environ.ssr_enabled  = false
 
-	environ.glow_enabled    = true
-	environ.glow_normalized = false
-	environ.glow_intensity  = 0.4
-	environ.glow_bloom      = 0.07
-	environ.set_glow_level(2, true)
-	environ.set_glow_level(3, true)
+	environ.adjustment_enabled    = true
+	environ.adjustment_brightness = 1.02
+	environ.adjustment_contrast   = 1.05
+	environ.adjustment_saturation = 0.88
 
-	environ.ssr_enabled   = true
-	environ.ssr_max_steps = 32
-	environ.ssr_fade_in   = 0.15
-	environ.ssr_fade_out  = 2.0
-
-	environ.fog_enabled            = false
-	environ.fog_light_color        = Color(0.82, 0.84, 0.88)
-	environ.fog_density            = 0.0
-	environ.fog_aerial_perspective = 0.0
-	environ.fog_sky_affect         = 1.0
+	environ.fog_enabled            = true
+	environ.fog_light_color        = Color(0.58, 0.66, 0.78)
+	environ.fog_density            = 0.005
+	environ.fog_aerial_perspective = 0.12
+	environ.fog_sky_affect         = 0.6
 
 	var world_env := WorldEnvironment.new()
 	world_env.environment = environ
@@ -117,6 +112,24 @@ func _build_sky() -> void:
 
 	# Apply initial sky uniforms so the shader has values before the ocean is ready.
 	_apply_weather_lighting()
+
+
+func _build_screen_effects() -> void:
+	if Engine.is_editor_hint():
+		return
+	var layer      := CanvasLayer.new()
+	layer.name     = "ScreenEffects"
+	layer.layer    = -10
+	add_child(layer)
+
+	var rect              := ColorRect.new()
+	rect.name             = "EffectsRect"
+	rect.set_anchors_preset(Control.PRESET_FULL_RECT)
+	rect.mouse_filter     = Control.MOUSE_FILTER_IGNORE
+	var mat               := ShaderMaterial.new()
+	mat.shader            = SCREEN_SHADER
+	rect.material         = mat
+	layer.add_child(rect)
 
 
 func _build_ocean() -> void:
@@ -217,17 +230,14 @@ func _apply_sun(tod: float, daylight: float, cloud: float, storm: float) -> void
 func _apply_fog(fog_t: float, daylight: float, storm: float) -> void:
 	if _environment == null:
 		return
-	_environment.fog_enabled = fog_t > 0.04
-	if not _environment.fog_enabled:
-		return
 	_environment.fog_light_color = (
 		Color(0.06, 0.07, 0.09)
-		.lerp(Color(0.46, 0.49, 0.54), daylight)
+		.lerp(Color(0.58, 0.66, 0.78), daylight)
 		.lerp(Color(0.28, 0.30, 0.33), storm * 0.5)
 	)
-	_environment.fog_density            = lerpf(0.0, 0.25, fog_t * fog_t * fog_t)
-	_environment.fog_aerial_perspective = lerpf(0.0, 0.35, fog_t)
-	_environment.fog_sky_affect         = lerpf(0.0, 0.18, fog_t * fog_t)
+	_environment.fog_density            = 0.005 + lerpf(0.0, 0.25, fog_t * fog_t * fog_t)
+	_environment.fog_aerial_perspective = 0.12  + lerpf(0.0, 0.35, fog_t)
+	_environment.fog_sky_affect         = 0.6   * lerpf(0.6, 0.18, fog_t * fog_t)
 
 
 func _apply_sky_shader(daylight: float, cloud: float, storm: float) -> void:

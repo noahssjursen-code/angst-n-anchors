@@ -18,7 +18,8 @@ const C_BERTH_BORDER   := Color(0.25, 1.00, 0.45, 0.70)
 const C_LABEL          := Color(0.30, 1.00, 0.50, 0.90)
 const C_CARGO_YARD     := Color(0.34, 0.32, 0.30)
 const C_CARGO          := Color(0.58, 0.45, 0.26)
-const FUEL_STATION_SCENE := preload("res://scenes/systems/fuel_station.tscn")
+const FUEL_STATION_SCENE  := preload("res://scenes/systems/fuel_station.tscn")
+const PLAYER_SHIP_SCENE   := preload("res://scenes/boats/test_boat.tscn")
 
 var _berth_data: Array = []
 
@@ -307,6 +308,56 @@ func release_berth(index: int) -> void:
 	b["status"]      = BerthStatus.FREE
 	b["reserved_by"] = ""
 	_update_berth_color(index)
+
+func get_berth_spawn_transform(index: int) -> Transform3D:
+	var count  := ShipClass.berth_count(dock_length, max_ship_class, BERTH_GAP_M)
+	var slot_w := dock_length / float(count)
+	var cx     := -dock_length * 0.5 + slot_w * (float(index) + 0.5)
+	var beam   := ShipClass.beam(max_ship_class)
+
+	# Dock runs along local +X. Ship berths alongside (length parallel to dock).
+	# Bow faces +X — ship forward is -Z local, so ship_z column = -dock_x.
+	# ship_x derived by right-hand rule (up × ship_z) to keep basis orthogonal.
+	var local_pos  := Vector3(cx, WaveSurface.WATER_LEVEL, -beam * 0.5)
+	var dock_x     := global_transform.basis.x.normalized()
+	var ship_z     := -dock_x
+	var ship_y     := Vector3.UP
+	var ship_x     := ship_y.cross(ship_z).normalized()
+	var ship_basis := Basis(ship_x, ship_y, ship_z)
+	return Transform3D(ship_basis, to_global(local_pos))
+
+
+func spawn_player_ship(index: int) -> Node3D:
+	if index < 0 or index >= _berth_data.size():
+		return null
+
+	var ship := PLAYER_SHIP_SCENE.instantiate() as Node3D
+	if ship == null:
+		return null
+
+	var t         := get_berth_spawn_transform(index)
+	ship.name     = "PlayerShip"
+	ship.transform = t
+
+	var plot := get_parent()
+	if plot == null:
+		ship.queue_free()
+		return null
+	plot.add_child(ship)
+
+	if ship.has_method("place_at_waterline"):
+		ship.call("place_at_waterline", WaveSurface.WATER_LEVEL, 0.45)
+
+	var mooring := ship.find_child("MooringComponent", true, false) as MooringComponent
+	if mooring != null:
+		mooring.auto_moor(get_tree())
+
+	var b       := _berth_data[index] as Dictionary
+	b["status"] = BerthStatus.OCCUPIED
+	_update_berth_color(index)
+
+	return ship
+
 
 func _update_berth_color(index: int) -> void:
 	var b    := _berth_data[index] as Dictionary
