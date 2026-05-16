@@ -126,9 +126,14 @@ func _to_screen_poly(pid: String, wpos: Vector3, info: Dictionary) -> PackedVect
 		var ls := int(info.get("layout_seed",    0))
 		_poly_cache[pid] = IslandMeshBuilder.build_polygon(iw, pd, ls)
 	var local_poly := _poly_cache[pid] as PackedVector2Array
+	var ry := float(info.get("rotation_y", 0.0))
+	var cy := cos(ry)
+	var sy := sin(ry)
 	var out := PackedVector2Array()
 	for p in local_poly:
-		out.append(_w2s_f(wpos.x + p.x, wpos.z + p.y))
+		var rx := p.x * cy + p.y * sy
+		var rz := -p.x * sy + p.y * cy
+		out.append(_w2s_f(wpos.x + rx, wpos.z + rz))
 	return out
 
 
@@ -358,50 +363,17 @@ func _draw_port_panel(font: Font, registry: Node) -> void:
 	if info.is_empty():
 		return
 
-	var panel_w := 240.0
-	var panel_h := 116.0
-	var panel_x := _cpx + _cpw - panel_w - 8.0
-	var panel_y := _cpy + _cph - panel_h - 8.0
-
-	draw_rect(Rect2(panel_x, panel_y, panel_w, panel_h), Color(0.04, 0.07, 0.16, 0.95))
-	draw_rect(Rect2(panel_x, panel_y, panel_w, panel_h), C_EDGE_SEL, false, 1.5)
-
-	var tx     := panel_x + 12.0
-	var ty     := panel_y + 18.0
-	var line_h := 19.0
-
-	draw_string(font, Vector2(tx, ty),
-				str(info.get("display_name", "")).to_upper(),
-				HORIZONTAL_ALIGNMENT_LEFT, -1, 14, C_PORT_LBL_SEL)
-	ty += line_h + 2.0
-
-	var export_id := str(info.get("commodity_export", ""))
-	draw_string(font, Vector2(tx, ty),
-				"Exports:  " + (export_id.capitalize() if not export_id.is_empty() else "—"),
-				HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color(0.62, 0.80, 0.55, 0.90))
-	ty += line_h
-
-	var imports    := info.get("commodity_imports", []) as Array
-	var imp_label  := "—"
-	if not imports.is_empty():
-		var names: Array[String] = []
-		for s in imports:
-			names.append(str(s).capitalize())
-		imp_label = ", ".join(names)
-	draw_string(font, Vector2(tx, ty),
-				"Imports:  " + imp_label,
-				HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color(0.55, 0.72, 0.50, 0.75))
-	ty += line_h
+	# Gather data first so panel height can be computed
+	var pop      := int(info.get("population", 0))
+	var features := info.get("features", []) as Array
+	var exports  := str(info.get("commodity_export", ""))
+	var imports  := info.get("commodity_imports", []) as Array
 
 	var contracts := registry.get_contracts_from_port(_selected_port) as Array
-	var avail := 0
+	var avail     := 0
 	for c in contracts:
 		if (c as Contract).state == Contract.State.AVAILABLE:
 			avail += 1
-	draw_string(font, Vector2(tx, ty),
-				"Contracts:  %d available" % avail,
-				HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color(0.65, 0.82, 0.58, 0.80))
-	ty += line_h
 
 	var wpos     := info.get("position", Vector3.ZERO) as Vector3
 	var ship_pos := Vector3(INF, INF, INF)
@@ -410,12 +382,119 @@ func _draw_port_panel(font: Font, registry: Node) -> void:
 		if rb != null:
 			ship_pos = rb.global_position
 			break
+
+	# Layout constants
+	var lh     := 18.0   # normal line height
+	var lh_sm  := 16.0   # small line height (features)
+	var pad    := 12.0
+	var feat_rows := int(ceil(float(features.size()) / 2.0))
+
+	var panel_w := 252.0
+	var panel_h := (pad                 # top padding
+		+ 18.0                          # port name
+		+ 4.0                           # gap
+		+ lh                            # population
+		+ 8.0                           # section gap
+		+ lh                            # exports
+		+ lh                            # imports
+		+ 8.0                           # section gap
+		+ lh_sm * float(feat_rows)      # features
+		+ 8.0                           # section gap
+		+ lh                            # contracts
+		+ lh                            # distance (conditional but always reserve)
+		+ pad)                          # bottom padding
+
+	var panel_x := _cpx + _cpw - panel_w - 8.0
+	var panel_y := _cpy + _cph - panel_h - 8.0
+
+	draw_rect(Rect2(panel_x, panel_y, panel_w, panel_h), Color(0.04, 0.07, 0.16, 0.95))
+	draw_rect(Rect2(panel_x, panel_y, panel_w, panel_h), C_EDGE_SEL, false, 1.5)
+
+	var tx := panel_x + pad
+	var ty := panel_y + pad + 14.0
+
+	# Port name
+	draw_string(font, Vector2(tx, ty),
+				str(info.get("display_name", "")).to_upper(),
+				HORIZONTAL_ALIGNMENT_LEFT, -1, 14, C_PORT_LBL_SEL)
+	ty += 4.0 + lh
+
+	# Population
+	var pop_str := _format_population(pop)
+	draw_string(font, Vector2(tx, ty),
+				"~%s inhabitants" % pop_str,
+				HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color(0.65, 0.75, 0.60, 0.75))
+	ty += lh + 8.0
+
+	# Divider
+	draw_line(Vector2(panel_x + 8, ty - 4), Vector2(panel_x + panel_w - 8, ty - 4),
+			  Color(0.38, 0.52, 0.32, 0.30), 1.0)
+
+	# Exports
+	var exp_label := exports.capitalize() if not exports.is_empty() else "—"
+	draw_string(font, Vector2(tx, ty),
+				"Exports   " + exp_label,
+				HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color(0.62, 0.80, 0.55, 0.90))
+	ty += lh
+
+	# Imports
+	var imp_parts: Array[String] = []
+	for s in imports:
+		imp_parts.append(str(s).capitalize())
+	var imp_label := ", ".join(imp_parts) if not imp_parts.is_empty() else "—"
+	draw_string(font, Vector2(tx, ty),
+				"Imports   " + imp_label,
+				HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color(0.55, 0.72, 0.50, 0.75))
+	ty += lh + 8.0
+
+	# Divider
+	draw_line(Vector2(panel_x + 8, ty - 4), Vector2(panel_x + panel_w - 8, ty - 4),
+			  Color(0.38, 0.52, 0.32, 0.30), 1.0)
+
+	# Features — two per row
+	if features.is_empty():
+		draw_string(font, Vector2(tx, ty), "No facilities",
+					HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color(0.45, 0.55, 0.42, 0.55))
+		ty += lh_sm
+	else:
+		var col_w := (panel_w - pad * 2.0) * 0.5
+		for fi in range(features.size()):
+			var row := fi / 2
+			var col := fi % 2
+			var fx  := tx + float(col) * col_w
+			var fy  := ty + float(row) * lh_sm
+			draw_string(font, Vector2(fx, fy),
+						str(features[fi]),
+						HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color(0.58, 0.72, 0.52, 0.80))
+		ty += float(feat_rows) * lh_sm
+
+	ty += 8.0
+
+	# Divider
+	draw_line(Vector2(panel_x + 8, ty - 4), Vector2(panel_x + panel_w - 8, ty - 4),
+			  Color(0.38, 0.52, 0.32, 0.30), 1.0)
+
+	# Contracts
+	draw_string(font, Vector2(tx, ty),
+				"%d contracts available" % avail,
+				HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color(0.65, 0.82, 0.58, 0.80))
+	ty += lh
+
+	# Distance
 	if ship_pos.x != INF:
 		var dist     := Vector2(wpos.x, wpos.z).distance_to(Vector2(ship_pos.x, ship_pos.z))
 		var dist_str := "%.0f m" % dist if dist < 1852.0 else "%.1f nm" % (dist / 1852.0)
 		draw_string(font, Vector2(tx, ty),
-					"Distance:  " + dist_str,
+					"Distance  " + dist_str,
 					HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color(0.50, 0.65, 0.48, 0.70))
+
+
+func _format_population(pop: int) -> String:
+	if pop >= 10000:
+		return "%dk" % (pop / 1000)
+	if pop >= 1000:
+		return "%.1fk" % (float(pop) / 1000.0)
+	return str(pop)
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────

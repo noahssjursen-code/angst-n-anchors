@@ -40,6 +40,32 @@ const COMMODITIES: Array[String] = [
 	"grain", "timber", "iron_ore", "coal", "provisions",
 ]
 
+## [name, min_size, probability]
+const FEATURE_POOL: Array = [
+	["Harbour Master",  0, 1.00],
+	["Fuel Dock",       0, 1.00],
+	["Tavern",          0, 0.70],
+	["General Store",   1, 0.90],
+	["Chandlery",       1, 0.75],
+	["Shipwright",      1, 0.60],
+	["Bank",            2, 0.70],
+	["Warehouse",       2, 0.80],
+	["Maintenance Bay", 2, 0.65],
+	["Dry Dock",        3, 0.70],
+	["Ship Supplier",   3, 0.75],
+	["Exchange",        3, 0.65],
+	["Naval Yard",      4, 0.80],
+	["Customs House",   4, 0.90],
+]
+
+const POPULATION_RANGE: Dictionary = {
+	0: [50,    300],
+	1: [300,   1500],
+	2: [1500,  6000],
+	3: [6000,  25000],
+	4: [25000, 100000],
+}
+
 
 static func expand(definition: PortDefinition, world_seed: int) -> PortData:
 	var data           := PortData.new()
@@ -58,10 +84,13 @@ static func expand(definition: PortDefinition, world_seed: int) -> PortData:
 	var rng      := RandomNumberGenerator.new()
 	rng.seed     = world_seed ^ _hash_id(definition.port_id)
 
-	data.berth_types      = _berth_types(rng, size, data.dock_length, data.max_ship_class)
-	data.commodity_export = COMMODITIES[rng.randi() % COMMODITIES.size()]
+	data.berth_types       = _berth_types(rng, size, data.dock_length, data.max_ship_class)
+	data.commodity_export  = COMMODITIES[rng.randi() % COMMODITIES.size()]
 	data.commodity_imports = _imports(rng, size, data.commodity_export)
-	data.layout_seed      = rng.randi()
+	data.layout_seed       = rng.randi()
+	data.rotation_y        = rng.randf() * TAU
+	data.population        = _population(rng, size)
+	data.features          = _features(rng, size)
 
 	return data
 
@@ -105,6 +134,24 @@ static func _imports(
 		if c != export and not imports.has(c):
 			imports.append(c)
 	return imports
+
+
+static func _population(rng: RandomNumberGenerator, size: int) -> int:
+	var range_arr := POPULATION_RANGE[clampi(size, 0, 4)] as Array
+	var lo := int(range_arr[0])
+	var hi := int(range_arr[1])
+	return lo + rng.randi() % (hi - lo)
+
+
+static func _features(rng: RandomNumberGenerator, size: int) -> Array[String]:
+	var out: Array[String] = []
+	for entry in FEATURE_POOL:
+		var arr       := entry as Array
+		var min_size  := int(arr[1])
+		var chance    := float(arr[2])
+		if size >= min_size and rng.randf() < chance:
+			out.append(str(arr[0]))
+	return out
 
 
 static func _hash_id(s: String) -> int:

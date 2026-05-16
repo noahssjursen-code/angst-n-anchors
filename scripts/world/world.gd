@@ -97,6 +97,7 @@ func _setup_ports(defs: Array[PortDefinition]) -> void:
 				Vector3(INF, INF, INF),
 				data.commodity_export, data.commodity_imports,
 				data.island_width, 140.0, data.layout_seed,
+				data.population, data.features, data.rotation_y,
 			)
 
 		if i == 0:

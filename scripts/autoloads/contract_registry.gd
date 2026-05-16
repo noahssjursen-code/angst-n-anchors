@@ -36,6 +36,9 @@ func register_port(
 	island_width: float = 0.0,
 	plot_depth: float = 140.0,
 	layout_seed: int = 0,
+	population: int = 0,
+	features: Array = [],
+	rotation_y: float = -INF,
 ) -> void:
 	var already_known := _ports.has(port_id)
 	var entry := {
@@ -48,11 +51,26 @@ func register_port(
 		"island_width":      island_width,
 		"plot_depth":        plot_depth,
 		"layout_seed":       layout_seed,
+		"population":        population,
+		"features":          features,
+		"rotation_y":        rotation_y if rotation_y != -INF else 0.0,
 	}
-	if already_known and island_width == 0.0:
-		entry["island_width"] = (_ports[port_id] as Dictionary).get("island_width", 0.0)
-		entry["plot_depth"]   = (_ports[port_id] as Dictionary).get("plot_depth",   140.0)
-		entry["layout_seed"]  = (_ports[port_id] as Dictionary).get("layout_seed",  0)
+	if already_known:
+		var prev := _ports[port_id] as Dictionary
+		if island_width == 0.0:
+			entry["island_width"] = prev.get("island_width", 0.0)
+			entry["plot_depth"]   = prev.get("plot_depth",   140.0)
+			entry["layout_seed"]  = prev.get("layout_seed",  0)
+		if commodity_export.is_empty():
+			entry["commodity_export"] = prev.get("commodity_export", "")
+		if commodity_imports.is_empty():
+			entry["commodity_imports"] = prev.get("commodity_imports", [])
+		if population == 0:
+			entry["population"] = prev.get("population", 0)
+		if features.is_empty():
+			entry["features"] = prev.get("features", [])
+		if rotation_y == -INF:
+			entry["rotation_y"] = prev.get("rotation_y", 0.0)
 	_ports[port_id] = entry
 	if not already_known:
 		_generate_contracts_for(port_id)

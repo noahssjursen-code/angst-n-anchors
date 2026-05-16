@@ -23,3 +23,8 @@ var commodity_imports: Array[String]  = []
 # Layout
 var island_width: float = 80.0
 var layout_seed:  int   = 0
+var rotation_y:   float = 0.0
+
+# Settlement
+var population: int          = 0
+var features:   Array[String] = []

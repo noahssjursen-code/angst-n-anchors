@@ -133,15 +133,13 @@ func _build_npcs() -> void:
 		var cnpc        := ContractNpc.new()
 		cnpc.name       = "ContractNpc"
 		cnpc.port_id    = port_id
-		cnpc.position   = fpos + contract_local + Vector3(0.0, 0.0, -5.0)
+		cnpc.position   = fpos + contract_local + Vector3(-2.0, 0.0, -5.0)
 		add_child(cnpc)
 
-	var delivery_local := facilities.get_delivery_npc_local_pos()
-	if delivery_local != Vector3.ZERO:
 		var dnpc        := DeliveryNpc.new()
 		dnpc.name       = "DeliveryNpc"
 		dnpc.port_id    = port_id
-		dnpc.position   = fpos + delivery_local + Vector3(0.0, 0.0, -7.0)
+		dnpc.position   = fpos + contract_local + Vector3(2.0, 0.0, -5.0)
 		add_child(dnpc)
 
 	if not port_id.is_empty():
@@ -202,6 +200,7 @@ func configure(data: PortData) -> void:
 	_has_fuel_point_data     = data.has_fuel_point
 	_layout_seed_data        = data.layout_seed
 	_configuring             = false
+	rotation.y               = data.rotation_y
 	if is_inside_tree():
 		_rebuild()
 
