@@ -312,18 +312,19 @@ void sky() {
 	// Clouds — shaded with sun elevation AND cloud density (denser core = darker).
 	float clouds = cloud_density(dir);
 	if (clouds > 0.001) {
-		float sun_up = max(sun_direction.y, 0.0);
-
 		// Edge-brightening: cloud edges are lit more than dense interiors.
 		// This gives the illusion of volume without ray-marching.
 		float interior = smoothstep(0.3, 1.0, clouds) * 0.55;
 		vec3 cloud_col = mix(cloud_light, cloud_dark, interior);
 
-		// Night/dusk: darken clouds proportionally to sun height.
-		cloud_col = mix(cloud_col * 0.25, cloud_col, smoothstep(0.0, 0.35, sun_up));
-
-		// Storm: desaturate to dark greenish-grey.
+		// Storm tint first — old order applied day-grey *after* night dim and re-brightened the dome.
 		cloud_col = mix(cloud_col, vec3(0.24, 0.27, 0.30), storm_intensity * 0.65);
+
+		// Night: crush albedo; moon gives a subtle lift only when sun is down.
+		float day_cloud_lit = smoothstep(-0.05, 0.32, sun_direction.y);
+		cloud_col *= mix(0.045, 1.0, day_cloud_lit);
+		float moon_up = max(moon_direction.y, 0.0);
+		cloud_col *= mix(1.0, 1.0 + moon_up * 0.26, 1.0 - day_cloud_lit);
 
 		col = mix(col, cloud_col, clouds * 0.95);
 	}

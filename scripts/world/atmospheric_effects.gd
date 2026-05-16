@@ -67,12 +67,18 @@ func _spawn_weather_hud() -> void:
 
 
 func _update_lightning(delta: float) -> void:
-	var storm := 0.0
-	var w     := _get_weather()
+	var thunder := 0.0
+	var daylight := 0.5
+	var w := _get_weather()
 	if w:
-		storm = float(w.get("storm_intensity"))
+		thunder = float(w.get("thunder_intensity"))
+		var tod := float(w.get("time_of_day"))
+		var elev_norm := -cos(tod * TAU)
+		daylight = smoothstep(-0.18, 0.55, elev_norm)
 
-	if storm < 0.20:
+	var bolt := thunder * lerpf(0.12, 1.0, daylight)
+
+	if bolt < 0.08:
 		if _lightning_light:      _lightning_light.light_energy = 0.0
 		if _lightning_flash_rect: _lightning_flash_rect.color.a = 0.0
 		_lightning_phase    = 0
@@ -90,7 +96,7 @@ func _update_lightning(delta: float) -> void:
 				)
 			_lightning_phase    = 1
 			_lightning_phase_t  = 0.0
-			_lightning_cooldown = randf_range(1.5, 10.0) / storm
+			_lightning_cooldown = randf_range(1.5, 10.0) / maxf(bolt, 0.05)
 		return
 
 	_lightning_phase_t += delta
@@ -98,8 +104,8 @@ func _update_lightning(delta: float) -> void:
 	match _lightning_phase:
 		1: # First flash — sharp spike, quick fade.
 			var fade := 1.0 - minf(_lightning_phase_t / 0.07, 1.0)
-			if _lightning_light:      _lightning_light.light_energy = fade * 9.0 * storm
-			if _lightning_flash_rect: _lightning_flash_rect.color.a = fade * 0.40 * storm
+			if _lightning_light:      _lightning_light.light_energy = fade * 9.0 * bolt
+			if _lightning_flash_rect: _lightning_flash_rect.color.a = fade * 0.40 * bolt
 			if _lightning_phase_t > 0.07:
 				_lightning_phase   = 2
 				_lightning_phase_t = 0.0
@@ -111,8 +117,8 @@ func _update_lightning(delta: float) -> void:
 				_lightning_phase_t = 0.0
 		3: # Second flash — dimmer, slightly longer.
 			var fade := 1.0 - minf(_lightning_phase_t / 0.10, 1.0)
-			if _lightning_light:      _lightning_light.light_energy = fade * 5.5 * storm
-			if _lightning_flash_rect: _lightning_flash_rect.color.a = fade * 0.24 * storm
+			if _lightning_light:      _lightning_light.light_energy = fade * 5.5 * bolt
+			if _lightning_flash_rect: _lightning_flash_rect.color.a = fade * 0.24 * bolt
 			if _lightning_phase_t > 0.10:
 				if _lightning_light:      _lightning_light.light_energy = 0.0
 				if _lightning_flash_rect: _lightning_flash_rect.color.a = 0.0

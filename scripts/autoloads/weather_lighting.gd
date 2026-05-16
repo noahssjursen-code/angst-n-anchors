@@ -1,9 +1,12 @@
 class_name WeatherLightingState
 extends Node
 
-## Weather state: precipitation (X) × wind_force (Y), plus independent cloud_cover, fog, and time.
+## Weather state: compass plane (precipitation × wind), fog, and cloud dial.
+## **Canonical bundle:** `WeatherState` + `get_weather_state()` / `apply_weather_state()` / `blend_towards()`
+## for zones and dynamic weather (saved as `.tres`, no scattered float imports).
+## Quick script shortcut: **`weather_vector`** `Vector3(precip, wind, fog_density)` — ignores `cloud_cover`.
 ##
-## Political-compass axes:
+## Political-compass (keyboard rain × wind dot, or assign `weather_vector` / `WeatherState`):
 ##   X=0,Y=0 → clear calm  (perfect sailing day)
 ##   X=1,Y=0 → heavy rain, flat sea  (grey drizzle)
 ##   X=0,Y=1 → dry squall  (fast, tall seas, clear sky)
@@ -56,22 +59,38 @@ const WAVE_RATE          : float = 1.0
 		state_changed.emit()
 
 # --- Derived convenience getters ---
-## Cloud coverage 0–1: cloud_cover is the primary dial; rain and wind add on top.
-## precipitation=1 forces near-overcast (0.90); wind=1 alone gives dramatic partial cover (0.50).
+## Effective sky cloud opacity 0–1: explicit `cloud_cover` plus rain-grey when precip is high.
+## Wind does **not** add fake overcast (dry squalls stay visually clear).
 var cloud_coverage: float:
-	get: return clampf(maxf(cloud_cover, precipitation * 0.90 + wind_force * 0.50), 0.0, 1.0)
+	get: return clampf(maxf(cloud_cover, precipitation * 0.88), 0.0, 1.0)
 
 ## Rain visual amount 0–1: only appears past the first 30% precipitation.
 var rain_amount: float:
 	get: return smoothstep(0.30, 1.0, precipitation)
 
-## Gale darkness 0–1: extra sky darkening on high wind + precipitation.
+## Thunder / lightning 0–1: only when rain is actually heavy **and** wind is up — not every shower.
+var thunder_intensity: float:
+	get: return clampf(
+		smoothstep(0.40, 0.82, precipitation) * smoothstep(0.25, 0.68, wind_force),
+		0.0, 1.0)
+
+## Gale darkness 0–1: sky/ocean grimness when precip and wind both high.
 var storm_intensity: float:
 	get: return clampf(precipitation * wind_force, 0.0, 1.0)
 
 ## Fog density 0–1 (inverted visibility).
 var fog_density: float:
 	get: return 1.0 - visibility
+
+## Legacy compat: old callers expected a single “weather” scalar for VFX volume.
+var weather_amount: float:
+	get: return maxf(precipitation, cloud_cover * 0.35)
+
+## Compact axes for gameplay / AI: **x** = precipitation, **y** = wind, **z** = fog density (`1 − visibility`).
+## Ocean swell still follows `wind_force` (and manual wave override). **Cloud** stays on `cloud_cover`;
+## **time** stays on `time_of_day` — neither is in this vector.
+var weather_vector: Vector3:
+	get: return Vector3(precipitation, wind_force, fog_density)
 
 # --- Automatic time progression ---
 @export var automatic_time_enabled: bool = false
@@ -168,11 +187,47 @@ func _sync_wave_intensity() -> void:
 	)
 
 
+## Bulk-assign compass + fog.**z** is fog density (1 = pea soup). Leaves `cloud_cover` and `time_of_day`.
+## For presets / zones prefer `apply_weather_state(WeatherState)` so cloud + fog travel together.
+func set_weather_vector(v: Vector3) -> void:
+	precipitation = clampf(v.x, 0.0, 1.0)
+	wind_force = clampf(v.y, 0.0, 1.0)
+	var fd := clampf(v.z, 0.0, 1.0)
+	visibility = clampf(1.0 - fd, 0.0, 1.0)
+	_sync_wave_intensity()
+	state_changed.emit()
+
+
+func get_weather_state() -> WeatherState:
+	var s := WeatherState.new()
+	s.precipitation = precipitation
+	s.wind_force = wind_force
+	s.visibility = visibility
+	s.cloud_cover = cloud_cover
+	return s
+
+
+## Apply full snapshot (zones, authored `.tres`, runtime generators). Leaves `time_of_day` untouched.
+func apply_weather_state(next: WeatherState) -> void:
+	if next == null:
+		return
+	precipitation = clampf(next.precipitation, 0.0, 1.0)
+	wind_force = clampf(next.wind_force, 0.0, 1.0)
+	visibility = clampf(next.visibility, 0.0, 1.0)
+	cloud_cover = clampf(next.cloud_cover, 0.0, 1.0)
+	_sync_wave_intensity()
+	state_changed.emit()
+
+
+## Convenience for drift / biome edges: blend current weather toward target (weight 1 = adopt target).
+func blend_towards(target: WeatherState, weight: float) -> void:
+	if target == null:
+		return
+	apply_weather_state(WeatherState.lerp_states(get_weather_state(), target, weight))
+
+
 # --- Legacy compat shims so old callers don't break ---
 
-## Read-only: returns the heavier of precipitation/wind for backward compat.
-var weather_amount: float:
-	get: return cloud_coverage
 
 func bump_time(delta: float) -> void:
 	time_of_day += delta

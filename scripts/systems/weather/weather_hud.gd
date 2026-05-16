@@ -176,10 +176,14 @@ func _update_label() -> void:
 	var wind   := float(w.get("wind_force"))
 	var vis    := float(w.get("visibility"))
 	var tod    := float(w.get("time_of_day"))
-	var cloud  := float(w.get("cloud_cover"))
+	var cloud_dial := float(w.get("cloud_cover"))
+	var cloud_sky := float(w.get("cloud_coverage"))
 	_label.text = (
-		"Rain %d%%  Wind %d%%  Cloud %d%%\nFog  %d%%  Time %.2f\n"
-		% [int(precip * 100), int(wind * 100), int(cloud * 100), int((1.0 - vis) * 100), tod]
+		"Rain %d%%  Wind %d%%  SkyCloud %d%% (dial %d%%)\nFog  %d%%  Time %.2f\n"
+		% [
+			int(precip * 100), int(wind * 100), int(cloud_sky * 100),
+			int(cloud_dial * 100), int((1.0 - vis) * 100), tod,
+		]
 		+ "← → Rain    ↑ Calm / ↓ Gale\nShift+←→ Time  Shift+↑↓ Fog\nCtrl+←→ Clouds  Ctrl+↑↓ Waves"
 	)
 

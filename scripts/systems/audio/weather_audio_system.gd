@@ -10,9 +10,9 @@ extends Node
 ## Layer structure:
 ##   Ocean (4 slots):  calm_seas → choppy_seas → rough_seas → stormy_seas  (wave_intensity)
 ##   Wind  (2 slots):  wind_light  ↔  wind_gale                            (wind_force)
-##   Rain  (3 slots):  rain_drizzle → rain_moderate → rain_heavy           (precipitation)
+##   Rain  (3 slots):  rain_drizzle → rain_moderate → rain_heavy           (rain_amount)
 ##   Atmosphere (4 slots): bilinear blend across the full precip × wind plane
-##   Thunder: one-shot pool of variants, triggered by storm_intensity
+##   Thunder: one-shot pool driven by thunder_intensity (heavy rain + wind, not every shower)
 ##
 ## File naming:
 ##   {base}_1.wav, {base}_2.wav, … (numbered variants)
@@ -105,9 +105,15 @@ class VariantSlot:
 			var amp_next := sin(blend * PI * 0.5)
 			for i in range(players.size()):
 				if i == _cur:
-					players[i].volume_db = target_db + linear_to_db(maxf(amp_cur, 0.00001))
+					if amp_cur < 1e-4:
+						players[i].volume_db = -80.0
+					else:
+						players[i].volume_db = target_db + linear_to_db(amp_cur)
 				elif i == _next:
-					players[i].volume_db = target_db + linear_to_db(maxf(amp_next, 0.00001))
+					if amp_next < 1e-4:
+						players[i].volume_db = -80.0
+					else:
+						players[i].volume_db = target_db + linear_to_db(amp_next)
 				else:
 					players[i].volume_db = -80.0
 
@@ -173,6 +179,8 @@ const _WAVE_GALE: float = 3.40
 var _wave_t : float = 0.0
 var _wind   : float = 0.0
 var _precip : float = 0.0
+var _rain   : float = 0.0
+var _thunder: float = 0.0
 
 
 # ---------------------------------------------------------------------------
@@ -210,17 +218,20 @@ func _process(delta: float) -> void:
 
 	# --- Read weather state ---
 	var wl      := _weather()
-	var wind_raw   := float(wl.get("wind_force"))      if wl else 0.0
-	var precip_raw := float(wl.get("precipitation"))   if wl else 0.0
-	var storm      := float(wl.get("storm_intensity")) if wl else 0.0
+	var wind_raw    := float(wl.get("wind_force"))        if wl else 0.0
+	var precip_raw  := float(wl.get("precipitation"))     if wl else 0.0
+	var rain_raw    := float(wl.get("rain_amount"))       if wl else 0.0
+	var thunder_raw := float(wl.get("thunder_intensity")) if wl else 0.0
 	var wave_raw   := clampf(
 		(WaveSurface.wave_intensity - _WAVE_CALM) / (_WAVE_GALE - _WAVE_CALM), 0.0, 1.0)
 
 	# --- Exponential smoothing ---
 	var k := 1.0 - exp(-delta / maxf(smooth_time, 0.001))
-	_wave_t = lerpf(_wave_t, wave_raw,   k)
-	_wind   = lerpf(_wind,   wind_raw,   k)
-	_precip = lerpf(_precip, precip_raw, k)
+	_wave_t  = lerpf(_wave_t,  wave_raw,    k)
+	_wind    = lerpf(_wind,    wind_raw,    k)
+	_precip  = lerpf(_precip,  precip_raw,  k)
+	_rain    = lerpf(_rain,    rain_raw,    k)
+	_thunder = lerpf(_thunder, thunder_raw, k)
 
 	# --- Apply volumes ---
 	_blend_sequential(
@@ -228,13 +239,13 @@ func _process(delta: float) -> void:
 		1.0, _wave_t, ocean_db)
 	_blend_sequential(
 		[_wind_light, _wind_gale],
-		smoothstep(0.05, 0.30, _wind), _wind, wind_db)
+		smoothstep(0.10, 0.38, _wind), _wind, wind_db)
 	_blend_sequential(
 		[_rain_drizzle, _rain_moderate, _rain_heavy],
-		smoothstep(0.25, 0.55, _precip), _precip, rain_db)
+		smoothstep(0.08, 0.40, _rain), _rain, rain_db)
 	_blend_atmosphere(_precip, _wind)
 
-	_update_thunder(delta, storm)
+	_update_thunder(delta, _thunder)
 
 
 # ---------------------------------------------------------------------------
@@ -249,8 +260,16 @@ func _blend_sequential(
 	var n := slots.size()
 	if n == 0:
 		return
+	if gain < 0.0015:
+		for s: VariantSlot in slots:
+			s.apply_volume(-80.0)
+		return
 	if n == 1:
-		(slots[0] as VariantSlot).apply_volume(max_db + linear_to_db(maxf(gain, 0.00001)))
+		var lin1 := gain
+		if lin1 < 1e-5:
+			(slots[0] as VariantSlot).apply_volume(-80.0)
+		else:
+			(slots[0] as VariantSlot).apply_volume(max_db + linear_to_db(lin1))
 		return
 
 	# Map t into [0, n-1] and split into segment index + local blend.
@@ -267,32 +286,53 @@ func _blend_sequential(
 			amp = amp_lo
 		elif i == idx + 1:
 			amp = amp_hi
-		(slots[i] as VariantSlot).apply_volume(
-			max_db + linear_to_db(maxf(gain * amp, 0.00001)))
+		var lin := gain * amp
+		if lin < 1e-5:
+			(slots[i] as VariantSlot).apply_volume(-80.0)
+		else:
+			(slots[i] as VariantSlot).apply_volume(max_db + linear_to_db(lin))
 
 
 ## Corner-focused bilinear blend across all four weather-plane corners.
-## Squaring the bilinear weights concentrates sound near corners — the center
-## of the compass fades to near-silence instead of playing all four at once.
+## Near-clear weather forces only the calm slot so the compass centre is not a storm mix.
 func _blend_atmosphere(p: float, w: float) -> void:
-	var cc := pow((1.0-p)*(1.0-w), 2.0)
-	var gd := pow(p      *(1.0-w), 2.0)
-	var ds := pow((1.0-p)*w,       2.0)
-	var fs := pow(p      *w,       2.0)
-	_atm_calm_clear.apply_volume(  atmosphere_db + linear_to_db(maxf(cc, 0.00001)))
-	_atm_grey_drizzle.apply_volume(atmosphere_db + linear_to_db(maxf(gd, 0.00001)))
-	_atm_dry_squall.apply_volume(  atmosphere_db + linear_to_db(maxf(ds, 0.00001)))
-	_atm_full_storm.apply_volume(  atmosphere_db + linear_to_db(maxf(fs, 0.00001)))
+	if maxf(p, w) < 0.12:
+		_atm_calm_clear.apply_volume(atmosphere_db)
+		_atm_grey_drizzle.apply_volume(-80.0)
+		_atm_dry_squall.apply_volume(-80.0)
+		_atm_full_storm.apply_volume(-80.0)
+		return
+
+	var cc := pow((1.0 - p) * (1.0 - w), 2.0)
+	var gd := pow(p * (1.0 - w), 2.0)
+	var ds := pow((1.0 - p) * w, 2.0)
+	var fs := pow(p * w, 2.0)
+	var sum := cc + gd + ds + fs + 1e-6
+	cc /= sum
+	gd /= sum
+	ds /= sum
+	fs /= sum
+	_atm_apply_weight(_atm_calm_clear, cc)
+	_atm_apply_weight(_atm_grey_drizzle, gd)
+	_atm_apply_weight(_atm_dry_squall, ds)
+	_atm_apply_weight(_atm_full_storm, fs)
+
+
+func _atm_apply_weight(slot: VariantSlot, weight: float) -> void:
+	if weight < 0.01:
+		slot.apply_volume(-80.0)
+	else:
+		slot.apply_volume(atmosphere_db + linear_to_db(weight))
 
 
 # ---------------------------------------------------------------------------
 # Thunder
 # ---------------------------------------------------------------------------
 
-func _update_thunder(delta: float, storm: float) -> void:
+func _update_thunder(delta: float, thunder: float) -> void:
 	if _thunder_pool.is_empty():
 		return
-	if storm < 0.15:
+	if thunder < 0.12:
 		_thunder_cooldown = randf_range(3.0, 8.0)
 		return
 	_thunder_cooldown -= delta
@@ -311,7 +351,7 @@ func _update_thunder(delta: float, storm: float) -> void:
 	p.volume_db   = thunder_db + randf_range(-4.0, 2.0)
 	p.pitch_scale = randf_range(0.88, 1.08)
 	p.play()
-	_thunder_cooldown = randf_range(2.0, 12.0) / maxf(storm, 0.01)
+	_thunder_cooldown = randf_range(2.0, 12.0) / maxf(thunder, 0.01)
 
 
 func _load_thunder_variants(dir: String, base: String) -> Array[AudioStreamPlayer]:

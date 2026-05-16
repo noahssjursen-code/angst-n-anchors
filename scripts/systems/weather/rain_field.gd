@@ -1,7 +1,7 @@
 class_name RainField
 extends Node3D
 
-## Camera-following rain volume driven by WeatherLighting.weather_amount.
+## Camera-following rain volume driven by `precipitation` / `rain_amount` on WeatherLighting.
 ## Uses procedural streak meshes only: no imported textures or VFX assets.
 
 @export_range(0.0, 1.0, 0.001) var rain_start: float = 0.58
