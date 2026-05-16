@@ -1,66 +1,56 @@
+@tool
 class_name HarbourMasterNpc
-extends StaticBody3D
+extends NpcInteractable
 
 ## Harbour master NPC. Handles berth booking and harbour dues enquiries.
-## Dialogue is menu-driven. VHF radio will call the same API remotely once built.
 
-const LAYER_WORLD    := 1
-const NPC_COLOR      := Color(0.15, 0.22, 0.45)   # dark navy uniform
-const HAT_COLOR      := Color(0.78, 0.62, 0.14)   # gold-band peaked cap
+const PEAKED_CAP_PATH := "res://resources/data/meshes/hat_peaked_cap.json"
 
-@export var port_id:       String = ""
-@export var interact_range: float = 4.0
+@export var port_id: String = ""
 
-var _open:   bool  = false
 var _panel:  Panel
-var _body:   VBoxContainer   # swapped out per screen
-var _prompt: Label
+var _body:   VBoxContainer
 
 enum _Screen { MAIN, REQUEST_BERTH, PAY_DUES, VESSEL_INFO }
 var _screen: _Screen = _Screen.MAIN
 
 
 func _ready() -> void:
-	_build_body()
+	clothing_color = Color(0.15, 0.22, 0.45)
+	trousers_color = Color(0.12, 0.16, 0.32)
+	prompt_text    = "Press E — Harbour Master"
+	super._ready()
 	if not Engine.is_editor_hint():
-		_build_ui()
+		call_deferred("_build_ui")
+	else:
+		call_deferred("_add_hat")
 
 
-func _process(_delta: float) -> void:
-	if Engine.is_editor_hint():
-		return
-	if _prompt != null:
-		_prompt.visible = _player_in_range() and not _open
+func _add_hat() -> void:
+	add_overlay("hat", PEAKED_CAP_PATH)
 
 
-func _unhandled_input(event: InputEvent) -> void:
-	if Engine.is_editor_hint():
-		return
-	if event.is_action_pressed("ui_cancel") and _open:
-		if _screen == _Screen.MAIN:
-			_close()
-		else:
-			_show_main()
-		get_viewport().set_input_as_handled()
-		return
-	if event.is_action_pressed("interact") and _player_in_range() and not _open:
-		_open_panel()
-		get_viewport().set_input_as_handled()
+# ── NpcInteractable hooks ──────────────────────────────────────────────────────
+
+func _on_interact() -> void:
+	_show_main()
+	_panel.visible = true
+	open_ui()
+
+
+func _on_ui_cancel() -> void:
+	if _screen == _Screen.MAIN:
+		_panel.visible = false
+		close_ui()
+	else:
+		_show_main()
 
 
 # ── Screens ───────────────────────────────────────────────────────────────────
 
-func _open_panel() -> void:
-	_show_main()
-	_panel.visible   = true
-	_open            = true
-	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
-
-
 func _close() -> void:
-	_panel.visible   = false
-	_open            = false
-	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+	_panel.visible = false
+	close_ui()
 
 
 func _show_main() -> void:
@@ -83,7 +73,7 @@ func _show_request_berth() -> void:
 		_add_back_button()
 		return
 
-	var berths := dock.get_berths()
+	var berths     := dock.get_berths()
 	var free_count := 0
 	for b in berths:
 		if int((b as Dictionary)["status"]) == PortDock.BerthStatus.FREE:
@@ -138,7 +128,7 @@ func _on_berth_selected(index: int) -> void:
 func _show_pay_dues() -> void:
 	_screen = _Screen.PAY_DUES
 	_clear_body()
-	_add_quote("No outstanding dues on record, Captain.")   # stub — billing system TBD
+	_add_quote("No outstanding dues on record, Captain.")
 	_add_back_button()
 
 
@@ -174,9 +164,8 @@ func _add_quote(text: String) -> void:
 	lbl.autowrap_mode          = TextServer.AUTOWRAP_WORD
 	lbl.size_flags_horizontal  = Control.SIZE_EXPAND_FILL
 	lbl.add_theme_font_size_override("font_size", 15)
-	var sep                    := HSeparator.new()
 	_body.add_child(lbl)
-	_body.add_child(sep)
+	_body.add_child(HSeparator.new())
 
 
 func _add_option(text: String, callback: Callable) -> void:
@@ -198,19 +187,8 @@ func _add_disabled_option(text: String) -> void:
 
 
 func _add_back_button() -> void:
-	var sep := HSeparator.new()
-	_body.add_child(sep)
+	_body.add_child(HSeparator.new())
 	_add_option("← Back", _show_main)
-
-
-# ── Proximity ─────────────────────────────────────────────────────────────────
-
-func _player_in_range() -> bool:
-	for node in get_tree().get_nodes_in_group("player"):
-		var body := node as CharacterBody3D
-		if body != null and global_position.distance_to(body.global_position) <= interact_range:
-			return true
-	return false
 
 
 # ── Dock lookup ───────────────────────────────────────────────────────────────
@@ -219,37 +197,14 @@ func _get_dock() -> PortDock:
 	var parent := get_parent()
 	if parent == null:
 		return null
-	var dock := parent.get_node_or_null("PortDock") as PortDock
-	return dock
+	return parent.get_node_or_null("PortDock") as PortDock
 
 
-# ── Build ─────────────────────────────────────────────────────────────────────
-
-func _build_body() -> void:
-	collision_layer = LAYER_WORLD
-	collision_mask  = 0
-
-	var shape      := BoxShape3D.new()
-	shape.size     = Vector3(0.7, 1.8, 0.7)
-	var col        := CollisionShape3D.new()
-	col.name       = "Body"
-	col.shape      = shape
-	col.position   = Vector3.UP * 0.9
-	add_child(col)
-
-	var body       := MeshBuilder.box(shape.size, NPC_COLOR, 0.6, 0.0)
-	body.name      = "NpcVisual"
-	body.position  = Vector3.UP * 0.9
-	add_child(body)
-
-	# Peaked cap — wider brim than the other NPCs to mark authority
-	var hat        := MeshBuilder.box(Vector3(0.82, 0.10, 0.82), HAT_COLOR, 0.5, 0.0)
-	hat.name       = "NpcHat"
-	hat.position   = Vector3.UP * 1.87
-	add_child(hat)
-
+# ── Build UI ──────────────────────────────────────────────────────────────────
 
 func _build_ui() -> void:
+	add_overlay("hat", PEAKED_CAP_PATH)
+
 	var layer      := CanvasLayer.new()
 	layer.name     = "HarbourMasterLayer"
 	add_child(layer)
@@ -273,7 +228,7 @@ func _build_ui() -> void:
 	title.offset_bottom = 40.0
 	_panel.add_child(title)
 
-	var scroll              := ScrollContainer.new()
+	var scroll           := ScrollContainer.new()
 	scroll.set_anchors_preset(Control.PRESET_FULL_RECT)
 	scroll.offset_top    = 48.0
 	scroll.offset_bottom = -8.0
@@ -282,20 +237,3 @@ func _build_ui() -> void:
 	_body                       = VBoxContainer.new()
 	_body.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	scroll.add_child(_body)
-
-	# Prompt
-	var prompt_layer      := CanvasLayer.new()
-	prompt_layer.name     = "HarbourMasterPromptLayer"
-	add_child(prompt_layer)
-
-	_prompt                      = Label.new()
-	_prompt.text                 = "Press E — Harbour Master"
-	_prompt.visible              = false
-	_prompt.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_prompt.add_theme_font_size_override("font_size", 18)
-	_prompt.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
-	_prompt.offset_left   = -220.0
-	_prompt.offset_right  =  220.0
-	_prompt.offset_top    = -148.0
-	_prompt.offset_bottom = -108.0
-	prompt_layer.add_child(_prompt)

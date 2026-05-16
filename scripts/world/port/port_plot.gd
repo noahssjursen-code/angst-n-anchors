@@ -104,11 +104,31 @@ func _build_npcs() -> void:
 	if facilities == null:
 		return
 
-	var hm          := HarbourMasterNpc.new()
-	hm.name         = "HarbourMasterNpc"
-	hm.port_id      = port_id
-	hm.position     = facilities.get_harbour_master_position() + Vector3(0.0, 0.0, -4.5)
+	# facilities.position is in port_plot local space; NPC local positions are
+	# relative to facilities, so sum gives the correct port_plot-local position.
+	var fpos := facilities.position
+
+	var hm         := HarbourMasterNpc.new()
+	hm.name        = "HarbourMasterNpc"
+	hm.port_id     = port_id
+	hm.position    = fpos + facilities.get_harbour_master_local_pos() + Vector3(0.0, 0.0, -4.5)
 	add_child(hm)
+
+	var contract_local := facilities.get_contract_npc_local_pos()
+	if contract_local != Vector3.ZERO:
+		var cnpc        := ContractNpc.new()
+		cnpc.name       = "ContractNpc"
+		cnpc.port_id    = port_id
+		cnpc.position   = fpos + contract_local + Vector3(0.0, 0.0, -5.0)
+		add_child(cnpc)
+
+	var delivery_local := facilities.get_delivery_npc_local_pos()
+	if delivery_local != Vector3.ZERO:
+		var dnpc        := DeliveryNpc.new()
+		dnpc.name       = "DeliveryNpc"
+		dnpc.port_id    = port_id
+		dnpc.position   = fpos + delivery_local + Vector3(0.0, 0.0, -7.0)
+		add_child(dnpc)
 
 	if not port_id.is_empty():
 		call_deferred("_register_with_registry")

@@ -6,7 +6,8 @@ extends Node3D
 ## Facilities are placed in priority rows — lowest priority number = closest to dock.
 ## Port size determines which facilities exist. Position is always computed, never arbitrary.
 
-const C_AUTHORITY := Color(0.78, 0.62, 0.14)
+const C_AUTHORITY             := Color(0.78, 0.62, 0.14)
+const HARBOURMASTER_MESH_PATH := "res://resources/data/meshes/harbour_master_building.json"
 const C_COMMERCE  := Color(0.24, 0.64, 0.36)
 const C_SERVICES  := Color(0.72, 0.34, 0.14)
 const C_STORAGE   := Color(0.52, 0.56, 0.64)
@@ -18,6 +19,8 @@ const EDGE_MARGIN : float = 4.0   ## margin on each side in X
 
 var _spawn_local_pos:          Vector3 = Vector3.ZERO
 var _harbour_master_local_pos: Vector3 = Vector3.ZERO
+var _contract_npc_local_pos:   Vector3 = Vector3.ZERO
+var _delivery_npc_local_pos:   Vector3 = Vector3.ZERO
 
 @export var port_size: int = 1:
 	set(v): port_size = v; if is_inside_tree(): _rebuild()
@@ -52,6 +55,8 @@ func _rebuild() -> void:
 func _build_facilities() -> void:
 	_spawn_local_pos          = Vector3.ZERO
 	_harbour_master_local_pos = Vector3.ZERO
+	_contract_npc_local_pos   = Vector3.ZERO
+	_delivery_npc_local_pos   = Vector3.ZERO
 
 	# Collect facilities present at this port size
 	var present: Array = []
@@ -94,11 +99,18 @@ func _place_row(defs: Array, center_z: float) -> void:
 		var bw := minf(float(d["w"]), slot_w - 2.0)
 		var cx := -available_w * 0.5 + slot_w * (float(i) + 0.5)
 
-		_box(Vector3(bw, h, float(d["d"])), Vector3(cx, h * 0.5, center_z), d["color"] as Color, id)
+		if id == "HarbourMaster":
+			_harbourmaster_building(Vector3(cx, 0.0, center_z))
+		else:
+			_box(Vector3(bw, h, float(d["d"])), Vector3(cx, h * 0.5, center_z), d["color"] as Color, id)
 
 		if id == "HarbourMaster":
 			_harbour_master_local_pos = Vector3(cx, 0.0, center_z)
 			_spawn_local_pos          = Vector3(cx, 0.02, center_z - float(d["d"]) * 0.5 - 2.0)
+		if id == "ShippingAgent":
+			_contract_npc_local_pos   = Vector3(cx, 0.0, center_z)
+		if id == "Warehouse":
+			_delivery_npc_local_pos   = Vector3(cx, 0.0, center_z)
 
 
 func _facility_defs() -> Array:
@@ -117,8 +129,32 @@ func _facility_defs() -> Array:
 func get_spawn_position() -> Vector3:
 	return to_global(_spawn_local_pos)
 
-func get_harbour_master_position() -> Vector3:
-	return to_global(_harbour_master_local_pos)
+func get_harbour_master_local_pos() -> Vector3:
+	return _harbour_master_local_pos
+
+func get_contract_npc_local_pos() -> Vector3:
+	return _contract_npc_local_pos
+
+func get_delivery_npc_local_pos() -> Vector3:
+	return _delivery_npc_local_pos
+
+
+func _harbourmaster_building(pos: Vector3) -> void:
+	var body      := StaticBody3D.new()
+	body.name     = "HarbourMaster"
+	body.position = pos
+	var col       := CollisionShape3D.new()
+	var box       := BoxShape3D.new()
+	box.size      = Vector3(8.0, 5.0, 7.0)
+	col.shape     = box
+	col.position  = Vector3(0.0, 2.5, 0.0)
+	body.add_child(col)
+	var ma                     := ModelAssembler.new()
+	ma.name                    = "Model"
+	ma.model_data_path         = HARBOURMASTER_MESH_PATH
+	ma.build_part_colliders    = false
+	body.add_child(ma)
+	add_child(body)
 
 
 func _box(size: Vector3, pos: Vector3, color: Color, node_name: String) -> MeshInstance3D:

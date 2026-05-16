@@ -1,28 +1,35 @@
+@tool
 class_name DeliveryNpc
-extends StaticBody3D
+extends NpcBase
 
 ## Destination-side NPC. Joins DELIVERY_GROUP so PlayerCarryComponent delivers
-## to it using the same mechanic as any other delivery zone — no special casing.
+## to it using the same mechanic as any other delivery zone.
 
-const DELIVERY_GROUP := "cargo_delivery_zone"
-const LAYER_WORLD    := 1
+const DELIVERY_GROUP  := "cargo_delivery_zone"
+const FLAT_CAP_PATH   := "res://resources/data/meshes/hat_flat_cap.json"
 
 signal gold_earned(amount: int)
 
 @export var port_id: String = ""
-@export var interact_range: float = 4.0
-@export var npc_color: Color = Color(0.22, 0.58, 0.32)
 
-var _prompt_layer: CanvasLayer
+var _reward_layer: CanvasLayer
 var _reward_label: Label
 var _reward_timer: float = 0.0
 
 
 func _ready() -> void:
-	_build_body()
+	clothing_color = Color(0.22, 0.58, 0.32)
+	trousers_color = Color(0.14, 0.32, 0.18)
+	super._ready()
 	if not Engine.is_editor_hint():
 		add_to_group(DELIVERY_GROUP)
-		_build_ui()
+		call_deferred("_build_ui")
+	else:
+		call_deferred("_add_hat")
+
+
+func _add_hat() -> void:
+	add_overlay("hat", FLAT_CAP_PATH)
 
 
 func _process(delta: float) -> void:
@@ -66,33 +73,12 @@ func _flash_reward(amount: int) -> void:
 	_reward_timer         = 2.5
 
 
-func _build_body() -> void:
-	collision_layer = LAYER_WORLD
-	collision_mask  = 0
-
-	var shape      := BoxShape3D.new()
-	shape.size     = Vector3(0.7, 1.8, 0.7)
-	var col        := CollisionShape3D.new()
-	col.name       = "Body"
-	col.shape      = shape
-	col.position   = Vector3.UP * 0.9
-	add_child(col)
-
-	var body       := MeshBuilder.box(shape.size, npc_color, 0.6, 0.0)
-	body.name      = "NpcVisual"
-	body.position  = Vector3.UP * 0.9
-	add_child(body)
-
-	var hat        := MeshBuilder.box(Vector3(0.75, 0.12, 0.75), npc_color.lightened(0.15), 0.5, 0.0)
-	hat.name       = "NpcHat"
-	hat.position   = Vector3.UP * 1.86
-	add_child(hat)
-
-
 func _build_ui() -> void:
-	_prompt_layer      = CanvasLayer.new()
-	_prompt_layer.name = "DeliveryNpcLayer"
-	add_child(_prompt_layer)
+	add_overlay("hat", FLAT_CAP_PATH)
+
+	_reward_layer      = CanvasLayer.new()
+	_reward_layer.name = "DeliveryNpcLayer"
+	add_child(_reward_layer)
 
 	_reward_label                      = Label.new()
 	_reward_label.visible              = false
@@ -104,15 +90,7 @@ func _build_ui() -> void:
 	_reward_label.offset_top    = -200.0
 	_reward_label.offset_bottom = -160.0
 	_reward_label.modulate      = Color(1.0, 0.88, 0.2)
-	_prompt_layer.add_child(_reward_label)
-
-
-func _nearest_player() -> CharacterBody3D:
-	for node in get_tree().get_nodes_in_group("player"):
-		var body := node as CharacterBody3D
-		if body != null and global_position.distance_to(body.global_position) <= interact_range:
-			return body
-	return null
+	_reward_layer.add_child(_reward_label)
 
 
 func _registry() -> Node:

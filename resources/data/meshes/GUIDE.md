@@ -217,6 +217,14 @@ Use this when `MeshTransformer` produces an inside-out convex hull (symptom: col
 | `weathered_granite` | island base | (0.32, 0.34, 0.38) | 0.85 | 0.10 |
 | `mossy_turf` | island surface | (0.18, 0.28, 0.15) | 0.95 | 0.0 |
 | `cold_sand` | shoreline | (0.55, 0.52, 0.48) | 1.0 | 0.0 |
+| `skin` | NPC head, hands | (0.72, 0.55, 0.40) | 0.60 | 0.0 |
+| `rough_cloth` | NPC jacket / coat | (0.18, 0.20, 0.30) | 0.90 | 0.0 |
+| `worn_trousers` | NPC legs | (0.18, 0.18, 0.20) | 0.88 | 0.0 |
+| `face_ink` | NPC eyes, brows, mouth | (0.05, 0.04, 0.04) | 0.80 | 0.0 |
+| `fuel_tank_steel` | fuel tank body | (0.42, 0.08, 0.06) | 0.72 | 0.35 |
+| `industrial_yellow` | pump / machinery | (0.78, 0.66, 0.08) | 0.68 | 0.08 |
+| `safety_stripe` | warning bands | (0.95, 0.75, 0.05) | 0.65 | 0.05 |
+| `iron_pipe` | pipes, conduit | (0.18, 0.18, 0.20) | 0.62 | 0.55 |
 
 Invent new tags freely — use a descriptive snake_case name. Keep colour values physically plausible.
 
@@ -249,6 +257,8 @@ Example from `starter_island` — beacon placed on the hilltop:
 | Cargo ship (whole) | ~20 m long, 4 m wide |
 | Open warehouse | 20 m × 30 m × 8.5 m peak |
 | Starter island | ~18 m across, 3 m tall |
+| NPC base | 0.40 m wide, 0.26 m deep, 1.80 m tall |
+| Fuel station | 7.4 m × 3.6 m footprint, 2.5 m tall |
 
 ---
 
