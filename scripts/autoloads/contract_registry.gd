@@ -29,6 +29,7 @@ func register_port(
 	display_name: String,
 	world_pos: Vector3,
 	warehouse: Warehouse,
+	spawn_pos: Vector3 = Vector3(INF, INF, INF),
 ) -> void:
 	var already_known := _ports.has(port_id)
 	_ports[port_id] = {
@@ -36,6 +37,7 @@ func register_port(
 		"display_name": display_name,
 		"position":     world_pos,
 		"warehouse":    warehouse,
+		"spawn_pos":    spawn_pos if spawn_pos != Vector3(INF, INF, INF) else world_pos,
 	}
 	if not already_known:
 		_generate_contracts_for(port_id)
@@ -83,6 +85,13 @@ func get_port_position(port_id: String) -> Vector3:
 	if info.is_empty():
 		return Vector3(INF, INF, INF)
 	return info.get("position", Vector3(INF, INF, INF)) as Vector3
+
+
+func get_port_spawn_position(port_id: String) -> Vector3:
+	var info := _ports.get(port_id, {}) as Dictionary
+	if info.is_empty():
+		return Vector3(INF, INF, INF)
+	return info.get("spawn_pos", Vector3(INF, INF, INF)) as Vector3
 
 
 func get_port_warehouse(port_id: String) -> Warehouse:

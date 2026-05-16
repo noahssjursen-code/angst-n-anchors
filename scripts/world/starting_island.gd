@@ -8,11 +8,6 @@ extends Node3D
 const PLAYER_SCENE := preload("res://scenes/islands/starting_island/player.tscn")
 const C_SAND       := Color(0.82, 0.74, 0.58)
 
-const REMOTE_PORT_ID       := "harbor-north"
-const REMOTE_PORT_NAME     := "Harbor"
-const REMOTE_PORT_POSITION := Vector3(0.0, 0.0, 400.0)
-
-
 func _ready() -> void:
 	# In the editor, queue_free() is deferred — old nodes stay alive when new
 	# ones are added with the same name, causing Godot to auto-rename them and
@@ -29,9 +24,7 @@ func _ready() -> void:
 
 	if not Engine.is_editor_hint():
 		_add_atmospheric_effects()
-		_add_proximity_loader()
 		_spawn_player()
-		call_deferred("_pre_register_remote_port")
 
 
 func _add_world_renderer() -> void:
@@ -62,29 +55,6 @@ func _add_atmospheric_effects() -> void:
 	var fx  := AtmosphericEffects.new()
 	fx.name = "AtmosphericEffects"
 	add_child(fx)
-
-
-func _add_proximity_loader() -> void:
-	var loader  := ProximityLoader.new()
-	loader.name = "ProximityLoader"
-	add_child(loader)
-	loader.register(
-		REMOTE_PORT_POSITION,
-		func() -> Node3D:
-			var island                   := BasicIsland.new()
-			island.dock_facing_degrees   = 180.0
-			island.port_id               = REMOTE_PORT_ID
-			island.port_display_name     = REMOTE_PORT_NAME
-			return island,
-		200.0,
-	)
-
-
-func _pre_register_remote_port() -> void:
-	var registry := get_node_or_null("/root/ContractRegistry")
-	if registry == null:
-		return
-	registry.register_port(REMOTE_PORT_ID, REMOTE_PORT_NAME, REMOTE_PORT_POSITION, null)
 
 
 func _spawn_player() -> void:

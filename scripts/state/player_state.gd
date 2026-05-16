@@ -13,3 +13,5 @@ var display_name: String = "Captain":
 	set(v):
 		display_name = v
 		display_name_changed.emit(v)
+
+var current_port_id: String = ""

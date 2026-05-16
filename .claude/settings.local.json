@@ -10,7 +10,11 @@
       "Bash(Select-Object -ExpandProperty Lines)",
       "Bash(Get-Content \"C:\\\\Users\\\\noahs\\\\Documents\\\\angst-n-anchors\\\\scripts\\\\world\\\\world_renderer.gd\")",
       "Bash(Get-Content \"C:\\\\Users\\\\noahs\\\\Documents\\\\angst-n-anchors\\\\scripts\\\\world\\\\atmospheric_effects.gd\")",
-      "Bash(Get-Content \"C:\\\\Users\\\\noahs\\\\Documents\\\\angst-n-anchors\\\\scripts\\\\world\\\\port.gd\")"
+      "Bash(Get-Content \"C:\\\\Users\\\\noahs\\\\Documents\\\\angst-n-anchors\\\\scripts\\\\world\\\\port.gd\")",
+      "Bash(Get-Content \"C:\\\\Users\\\\noahs\\\\Documents\\\\angst-n-anchors\\\\scripts\\\\world\\\\basic_island.gd\")",
+      "Bash(Get-ChildItem \"C:\\\\Users\\\\noahs\\\\Documents\\\\angst-n-anchors\\\\scenes\" -Recurse -Filter \"*.tscn\")",
+      "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\noahs\\\\Documents\\\\angst-n-anchors\" -Recurse -Directory)",
+      "Bash(Select-Object -ExpandProperty FullName)"
     ]
   }
 }
