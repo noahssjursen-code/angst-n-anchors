@@ -40,9 +40,10 @@ func _draw() -> void:
 
 func _draw_compass(c: Vector2) -> void:
 	var r        := COMPASS_R
-	# Ship mesh bow is +Z; Godot forward is -Z; so ship faces +Z when rotation.y = PI.
-	# Rotating the card by (PI - rotation.y) keeps N pointing to world +Z (north).
-	var card_rot := _boat.rotation.y - PI
+	# Bow (+local Z) projected to X/Z; north = −world Z matches sea chart north-up.
+	var bow_h := NavigationAxes.vessel_bow_horizontal(_boat)
+	var h_rad := NavigationAxes.heading_rad_horizontal(bow_h)
+	var card_rot := NavigationAxes.compass_card_rotation_rad(h_rad)
 	var speed_kn := _boat.linear_velocity.length() * 1.943844
 	var dest_rad := _dest_bearing_rad()
 
@@ -172,7 +173,8 @@ func _draw_dashboard(c: Vector2) -> void:
 	if _controller == null:
 		return
 
-	var heading_deg  := fposmod(rad_to_deg(PI - _boat.rotation.y), 360.0)
+	var bow_h := NavigationAxes.vessel_bow_horizontal(_boat)
+	var heading_deg := NavigationAxes.heading_deg_horizontal(bow_h)
 	var speed_kn     := _boat.linear_velocity.length() * 1.943844
 	var stage_idx    := _controller.get_throttle_stage_idx()
 	var vals         := _controller.throttle_stage_values
@@ -284,7 +286,7 @@ func _dest_bearing_rad() -> float:
 	if best_pos.x == INF:
 		return NAN
 	var to := best_pos - ship_pos
-	return atan2(to.x, -to.z)
+	return NavigationAxes.bearing_rad_world_delta(to)
 
 
 func _draw_centered(text: String, pos: Vector2, font_size: int, color: Color) -> void:

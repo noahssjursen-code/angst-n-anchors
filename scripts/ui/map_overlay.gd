@@ -2,6 +2,7 @@ class_name MapOverlay
 extends Control
 
 ## Procedural sea chart drawn via _draw().
+## Axis convention matches `NavigationAxes`: north-up ⇒ world −Z, east ⇒ +X.
 ## Supports scroll-wheel zoom, left-drag pan, and click-to-select ports.
 
 const MARGIN    := 60.0
@@ -249,13 +250,13 @@ func _draw() -> void:
 		for c in accepted:
 			dest_ids[c.destination_port_id] = true
 
-	var ship_pos:   Vector3 = Vector3(INF, INF, INF)
-	var ship_rot_y: float   = 0.0
+	var ship_pos:    Vector3 = Vector3(INF, INF, INF)
+	var ship_bow_hz := Vector2(0.0, -1.0)
 	for n in get_tree().get_nodes_in_group("player_boat"):
 		var rb := n as RigidBody3D
 		if rb != null:
-			ship_pos   = rb.global_position
-			ship_rot_y = rb.rotation.y
+			ship_pos    = rb.global_position
+			ship_bow_hz = NavigationAxes.vessel_bow_horizontal(rb)
 			break
 
 	# Grid interval
@@ -348,10 +349,14 @@ func _draw() -> void:
 				draw_string(font, sp + Vector2(-ntw * 0.5, -poly_h * 0.5 - 6.0),
 							pname, HORIZONTAL_ALIGNMENT_LEFT, -1, lbl_size, lbl_col)
 
-	# Ship
+	# Ship (bow projected to horizontal so chart agrees with helm after wave roll/pitch).
 	if ship_pos.x != INF:
-		var sp   := _w2s(ship_pos)
-		var fwd  := Vector2(sin(ship_rot_y), cos(ship_rot_y))
+		var sp := _w2s(ship_pos)
+		var fwd := ship_bow_hz
+		if fwd.length_squared() < 1e-10:
+			fwd = Vector2(0.0, -1.0)
+		else:
+			fwd = fwd.normalized()
 		var perp := Vector2(-fwd.y, fwd.x)
 		var sz   := 11.0
 		draw_circle(sp, sz + 4.0, Color(C_SHIP.r, C_SHIP.g, C_SHIP.b, 0.20))
