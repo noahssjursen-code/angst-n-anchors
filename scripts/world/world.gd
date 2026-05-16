@@ -7,7 +7,11 @@ extends Node3D
 
 const PLAYER_SCENE := preload("res://scenes/islands/starting_island/player.tscn")
 
-const LOAD_RADIUS : float = 350.0
+const LOAD_RADIUS           : float = 350.0
+const EDITOR_PREVIEW_RADIUS : float = 600.0
+const EDITOR_PREVIEW_MAX    : int   = 6
+const MIN_PORT_SEPARATION   : float = 600.0
+const SCATTER_RADIUS_PER_PORT : float = 200.0
 
 const PORT_NAMES : Array[String] = [
 	"Holmvik", "Sandvær", "Bergnes", "Kloven",
@@ -61,14 +65,19 @@ func _add_atmospheric_effects() -> void:
 
 
 func _add_editor_preview(defs: Array[PortDefinition]) -> void:
-	for i in range(defs.size()):
-		var def  := defs[i]
+	var count := 0
+	for def in defs:
+		if count >= EDITOR_PREVIEW_MAX:
+			break
+		if def.world_position.length() > EDITOR_PREVIEW_RADIUS:
+			continue
 		var data := PortExpander.expand(def, world_seed)
 		var plot  := PortPlot.new()
 		plot.name = "Port_%s" % def.port_id
 		plot.configure(data)
 		add_child(plot)
 		plot.position = def.world_position
+		count += 1
 
 
 func _setup_ports(defs: Array[PortDefinition]) -> void:
@@ -119,18 +128,35 @@ func _generate_definitions() -> Array[PortDefinition]:
 	home.size           = 1
 	defs.append(home)
 
-	var rng  := RandomNumberGenerator.new()
-	rng.seed = world_seed
+	var rng       := RandomNumberGenerator.new()
+	rng.seed      = world_seed
+	var scatter_r := float(port_count) * SCATTER_RADIUS_PER_PORT
+	var placed    : Array[Vector3] = [Vector3.ZERO]
+	var i         := 0
+	var tries     := 0
 
-	for i in range(port_count):
-		var p           := PortDefinition.new()
-		p.port_id       = "port-%d" % (i + 1)
-		p.display_name  = PORT_NAMES[i % PORT_NAMES.size()]
-		var angle       := (float(i) / float(port_count)) * TAU
-		var radius      := 400.0 + float(rng.randi() % 400)
-		p.world_position = Vector3(cos(angle) * radius, 0.0, sin(angle) * radius)
+	while i < port_count and tries < port_count * 500:
+		tries += 1
+		var angle     := rng.randf() * TAU
+		var dist      := sqrt(rng.randf()) * scatter_r
+		var candidate := Vector3(cos(angle) * dist, 0.0, sin(angle) * dist)
+
+		var too_close := false
+		for existing in placed:
+			if candidate.distance_to(existing) < MIN_PORT_SEPARATION:
+				too_close = true
+				break
+		if too_close:
+			continue
+
+		var p            := PortDefinition.new()
+		p.port_id        = "port-%d" % (i + 1)
+		p.display_name   = PORT_NAMES[i % PORT_NAMES.size()]
+		p.world_position = candidate
 		p.size           = rng.randi() % 5
 		defs.append(p)
+		placed.append(candidate)
+		i += 1
 
 	return defs
 
