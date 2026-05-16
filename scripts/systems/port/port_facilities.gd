@@ -6,8 +6,9 @@ extends Node3D
 ## Facilities are placed in priority rows — lowest priority number = closest to dock.
 ## Port size determines which facilities exist. Position is always computed, never arbitrary.
 
-const C_AUTHORITY             := Color(0.78, 0.62, 0.14)
-const HARBOURMASTER_MESH_PATH := "res://resources/data/meshes/harbour_master_building.json"
+const C_AUTHORITY              := Color(0.78, 0.62, 0.14)
+const HARBOURMASTER_MESH_PATH  := "res://resources/data/meshes/harbour_master_building.json"
+const SHIPPINGAGENT_MESH_PATH  := "res://resources/data/meshes/shipping_agent_building.json"
 const C_COMMERCE  := Color(0.24, 0.64, 0.36)
 const C_SERVICES  := Color(0.72, 0.34, 0.14)
 const C_STORAGE   := Color(0.52, 0.56, 0.64)
@@ -101,6 +102,8 @@ func _place_row(defs: Array, center_z: float) -> void:
 
 		if id == "HarbourMaster":
 			_harbourmaster_building(Vector3(cx, 0.0, center_z))
+		elif id == "ShippingAgent":
+			_shippingagent_building(Vector3(cx, 0.0, center_z))
 		else:
 			_box(Vector3(bw, h, float(d["d"])), Vector3(cx, h * 0.5, center_z), d["color"] as Color, id)
 
@@ -117,8 +120,7 @@ func _facility_defs() -> Array:
 	## Priority 0 = dock row (first contact), higher = further inland.
 	return [
 		{ "id": "HarbourMaster",  "w":  8.0, "h": 5.0, "d":  7.0, "priority": 0, "color": C_AUTHORITY, "min_size": 0 },
-		{ "id": "Chandlery",      "w":  9.0, "h": 4.0, "d":  8.0, "priority": 0, "color": C_COMMERCE,  "min_size": 1 },
-		{ "id": "ShippingAgent",  "w": 10.0, "h": 5.0, "d":  8.0, "priority": 1, "color": C_COMMERCE,  "min_size": 1 },
+		{ "id": "ShippingAgent",  "w": 10.0, "h": 5.0, "d":  8.0, "priority": 0, "color": C_COMMERCE,  "min_size": 1 },
 		{ "id": "MarineEngineer", "w": 11.0, "h": 4.0, "d":  9.0, "priority": 1, "color": C_SERVICES,  "min_size": 2 },
 		{ "id": "Customs",        "w":  8.0, "h": 5.0, "d":  7.0, "priority": 1, "color": C_AUTHORITY, "min_size": 2 },
 		{ "id": "Warehouse",      "w": 24.0, "h": 6.0, "d": 12.0, "priority": 2, "color": C_STORAGE,   "min_size": 0 },
@@ -152,6 +154,24 @@ func _harbourmaster_building(pos: Vector3) -> void:
 	var ma                     := ModelAssembler.new()
 	ma.name                    = "Model"
 	ma.model_data_path         = HARBOURMASTER_MESH_PATH
+	ma.build_part_colliders    = false
+	body.add_child(ma)
+	add_child(body)
+
+
+func _shippingagent_building(pos: Vector3) -> void:
+	var body      := StaticBody3D.new()
+	body.name     = "ShippingAgent"
+	body.position = pos
+	var col       := CollisionShape3D.new()
+	var box       := BoxShape3D.new()
+	box.size      = Vector3(10.0, 5.0, 8.0)
+	col.shape     = box
+	col.position  = Vector3(0.0, 2.5, 0.0)
+	body.add_child(col)
+	var ma                     := ModelAssembler.new()
+	ma.name                    = "Model"
+	ma.model_data_path         = SHIPPINGAGENT_MESH_PATH
 	ma.build_part_colliders    = false
 	body.add_child(ma)
 	add_child(body)

@@ -40,6 +40,7 @@ func _rebuild() -> void:
 			for child in get_children():
 				_own_subtree(child)
 	else:
+		_add_atmospheric_effects()
 		_setup_ports(defs)
 		call_deferred("_spawn_player")
 
@@ -48,6 +49,12 @@ func _add_world_renderer() -> void:
 	var renderer  := WorldRenderer.new()
 	renderer.name = "WorldRenderer"
 	add_child(renderer)
+
+
+func _add_atmospheric_effects() -> void:
+	var fx  := AtmosphericEffects.new()
+	fx.name = "AtmosphericEffects"
+	add_child(fx)
 
 
 func _add_editor_preview(defs: Array[PortDefinition]) -> void:
@@ -73,7 +80,7 @@ func _setup_ports(defs: Array[PortDefinition]) -> void:
 		var data := PortExpander.expand(def, world_seed)
 
 		if registry != null:
-			registry.register_port(data.port_id, data.display_name, data.world_position, null)
+			registry.register_port(data.port_id, data.display_name, data.world_position)
 
 		if i == 0:
 			# Home port: always present, added directly so spawn position is available.

@@ -32,6 +32,7 @@ const SHIP_CLASS_BY_SIZE: Dictionary = {
 var _configuring:         bool       = false
 var _berth_types_data:    Array[int] = []
 var _has_fuel_point_data: bool       = true
+var _berth_cargo_count:   Dictionary = {}  # berth_index -> pending pickup count
 
 
 func _ready() -> void:
@@ -140,7 +141,39 @@ func _register_with_registry() -> void:
 		return
 	var facilities := get_node_or_null("PortFacilities") as PortFacilities
 	var spawn_pos  := facilities.get_spawn_position() if facilities != null else global_position
-	registry.register_port(port_id, port_label, global_position, null, spawn_pos)
+	registry.register_port(port_id, port_label, global_position, spawn_pos)
+	if not registry.contract_accepted.is_connected(_on_contract_accepted):
+		registry.contract_accepted.connect(_on_contract_accepted)
+
+
+func _on_contract_accepted(contract: Contract, items: Array[CargoItem]) -> void:
+	if contract.origin_port_id != port_id:
+		return
+	var dock := get_node_or_null("PortDock") as PortDock
+	if dock == null:
+		return
+	var berth_idx := dock.find_occupied_berth()
+	if berth_idx == -1:
+		return  # no ship berthed, nowhere to stage cargo
+	dock.set_berth_has_cargo(berth_idx, true)
+	_berth_cargo_count[berth_idx] = items.size()
+	var positions := dock.get_berth_apron_positions(berth_idx, items.size())
+	for i in range(items.size()):
+		var pickup          := CargoPickup.new()
+		pickup.name         = "ApronCargo_" + items[i].id.left(8)
+		add_child(pickup)
+		pickup.global_position = positions[i]
+		pickup.setup(items[i])
+		pickup.picked_up.connect(func(_item: CargoItem) -> void: _on_apron_cargo_removed(berth_idx))
+
+
+func _on_apron_cargo_removed(berth_idx: int) -> void:
+	_berth_cargo_count[berth_idx] = (_berth_cargo_count.get(berth_idx, 1) as int) - 1
+	if (_berth_cargo_count[berth_idx] as int) <= 0:
+		_berth_cargo_count.erase(berth_idx)
+		var dock := get_node_or_null("PortDock") as PortDock
+		if dock != null:
+			dock.set_berth_has_cargo(berth_idx, false)
 
 
 ## Wire a PortData record into this plot. Triggers one rebuild.

@@ -232,7 +232,7 @@ func _register_with_registry() -> void:
 	var registry := get_node_or_null("/root/ContractRegistry")
 	if registry == null:
 		return
-	registry.register_port(port_id, port_display_name, global_position, _warehouse)
+	registry.register_port(port_id, port_display_name, global_position)
 
 
 func _exit_tree() -> void:

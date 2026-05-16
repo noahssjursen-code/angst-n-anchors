@@ -4,7 +4,7 @@ extends Node
 ## Single source of truth for ports and trade contracts.
 ## No knowledge of the physical world; operates purely on data.
 
-signal contract_accepted(contract: Contract)
+signal contract_accepted(contract: Contract, items: Array[CargoItem])
 signal unit_delivered(contract: Contract, reward_gold: int)
 signal contract_completed(contract: Contract)
 
@@ -16,7 +16,7 @@ const COMMODITIES := [
 	{ "id": "provisions", "display": "Provisions", "mass_kg": 150.0, "value": 14 },
 ]
 
-## port_id -> { id, display_name, position, warehouse }
+## port_id -> { id, display_name, position, spawn_pos }
 var _ports: Dictionary = {}
 ## contract_id -> Contract
 var _contracts: Dictionary = {}
@@ -28,7 +28,6 @@ func register_port(
 	port_id: String,
 	display_name: String,
 	world_pos: Vector3,
-	warehouse: Warehouse,
 	spawn_pos: Vector3 = Vector3(INF, INF, INF),
 ) -> void:
 	var already_known := _ports.has(port_id)
@@ -36,7 +35,6 @@ func register_port(
 		"id":           port_id,
 		"display_name": display_name,
 		"position":     world_pos,
-		"warehouse":    warehouse,
 		"spawn_pos":    spawn_pos if spawn_pos != Vector3(INF, INF, INF) else world_pos,
 	}
 	if not already_known:
@@ -94,16 +92,6 @@ func get_port_spawn_position(port_id: String) -> Vector3:
 	return info.get("spawn_pos", Vector3(INF, INF, INF)) as Vector3
 
 
-func get_port_warehouse(port_id: String) -> Warehouse:
-	var info := _ports.get(port_id, {}) as Dictionary
-	if not info.has("warehouse"):
-		return null
-	var wh := info["warehouse"] as Warehouse
-	if wh == null or not is_instance_valid(wh):
-		return null
-	return wh
-
-
 func unregister_port(port_id: String) -> void:
 	_ports.erase(port_id)
 
@@ -117,22 +105,18 @@ func accept_contract(contract_id: String) -> bool:
 
 	contract.state = Contract.State.ACCEPTED
 
-	var origin_info := _ports.get(contract.origin_port_id, {}) as Dictionary
-	var warehouse   := origin_info.get("warehouse") as Warehouse
-	if warehouse != null and is_instance_valid(warehouse):
-		var items: Array[CargoItem] = []
-		for i in range(contract.quantity):
-			items.append(CargoItem.create(
-				contract.commodity,
-				contract.destination_port_id,
-				contract.mass_per_unit_kg,
-				contract.reward_per_unit(),
-				contract.origin_port_id,
-				contract.id,
-			))
-		warehouse.set_inventory(items)
+	var items: Array[CargoItem] = []
+	for i in range(contract.quantity):
+		items.append(CargoItem.create(
+			contract.commodity,
+			contract.destination_port_id,
+			contract.mass_per_unit_kg,
+			contract.reward_per_unit(),
+			contract.origin_port_id,
+			contract.id,
+		))
 
-	contract_accepted.emit(contract)
+	contract_accepted.emit(contract, items)
 	return true
 
 

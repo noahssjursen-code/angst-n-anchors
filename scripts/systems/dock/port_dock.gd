@@ -17,7 +17,6 @@ const C_BERTH_OCCUPIED := Color(0.90, 0.20, 0.15, 0.40)
 const C_BERTH_BORDER   := Color(0.25, 1.00, 0.45, 0.70)
 const C_LABEL          := Color(0.30, 1.00, 0.50, 0.90)
 const C_CARGO_YARD     := Color(0.34, 0.32, 0.30)
-const C_CARGO          := Color(0.58, 0.45, 0.26)
 const FUEL_STATION_SCENE  := preload("res://scenes/systems/fuel_station.tscn")
 const PLAYER_SHIP_SCENE   := preload("res://scenes/boats/test_boat.tscn")
 
@@ -146,6 +145,10 @@ func _build_berth_slot(index: int, cx: float, slot_w: float, ship_beam: float, c
 		"reserved_by": "",
 		"cargo_type":  cargo_type,
 		"fill":        fill,
+		"has_cargo":   false,
+		"cx":          cx,
+		"slot_w":      slot_w,
+		"apron_z":     apron_z,   # dock-local Z centre of this berth's apron
 	})
 
 	for sx in [-1.0, 1.0]:
@@ -173,11 +176,6 @@ func _build_berth_slot(index: int, cx: float, slot_w: float, ship_beam: float, c
 
 	_box(Vector3(slot_w - 0.4, 0.12, APRON_DEPTH),
 		 Vector3(cx, 0.06, apron_z), C_CARGO_YARD, "Apron%d" % index)
-
-	var stack_ox : float = (float(index % 3) - 1.0) * slot_w * 0.18
-	_box(Vector3(3.5, 2.0 + float(index % 2), 3.5),
-		 Vector3(cx + stack_ox, 1.2, apron_z + 1.0 - float(index % 2) * 1.5),
-		 C_CARGO, "Stack%d" % index)
 
 
 # ── Crane types ───────────────────────────────────────────────────────────────
@@ -268,6 +266,43 @@ func _own_subtree(node: Node, esc: Node) -> void:
 
 
 # ── Runtime API ───────────────────────────────────────────────────────────────
+
+## Returns the index of the occupied berth (player's ship), or -1 if none.
+func find_occupied_berth() -> int:
+	for i in range(_berth_data.size()):
+		if int((_berth_data[i] as Dictionary)["status"]) == BerthStatus.OCCUPIED:
+			return i
+	return -1
+
+
+## Marks a berth as having cargo staged (true) or clear (false).
+func set_berth_has_cargo(berth_index: int, has_cargo: bool) -> void:
+	if berth_index < 0 or berth_index >= _berth_data.size():
+		return
+	(_berth_data[berth_index] as Dictionary)["has_cargo"] = has_cargo
+
+
+## Returns n world-space positions within berth_index's cargo apron, in a grid.
+## Uses the exact cx/slot_w/apron_z recorded when the berth geometry was built —
+## same slot, same crane, same apron.
+func get_berth_apron_positions(berth_index: int, n: int) -> Array[Vector3]:
+	var out: Array[Vector3] = []
+	if n <= 0 or berth_index < 0 or berth_index >= _berth_data.size():
+		return out
+	var b       := _berth_data[berth_index] as Dictionary
+	var cx      := float(b["cx"])
+	var slot_w  := float(b["slot_w"])
+	var apron_z := float(b["apron_z"])
+	var apron_w := slot_w - 0.4
+	var cols    := maxi(int(apron_w / 1.5), 1)
+	for i in range(n):
+		var col := i % cols
+		var row := i / cols
+		var x   := cx - apron_w * 0.5 + 1.5 * (float(col) + 0.5)
+		var z   := apron_z - APRON_DEPTH * 0.4 + 1.5 * float(row)
+		out.append(to_global(Vector3(x, QUAY_HEIGHT + 0.05, z)))
+	return out
+
 
 func get_spawn_position() -> Vector3:
 	return to_global(Vector3(0.0, QUAY_HEIGHT + 0.1, QUAY_DEPTH * 0.5))
