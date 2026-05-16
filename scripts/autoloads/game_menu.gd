@@ -10,6 +10,7 @@ enum Screen { NONE, PAUSE, MAP }
 
 var _screen:          Screen     = Screen.NONE
 var _prev_mouse_mode: int        = Input.MOUSE_MODE_VISIBLE
+var _helm_active:     bool       = false
 var _hud_layer:   CanvasLayer
 var _menu_layer:  CanvasLayer
 var _walking_hud: WalkingHud
@@ -61,8 +62,14 @@ func _ready() -> void:
 
 func _unhandled_input(event: InputEvent) -> void:
 	if event.is_action_pressed("ui_cancel"):
-		_set_screen(Screen.PAUSE if _screen == Screen.NONE else Screen.NONE)
-		get_viewport().set_input_as_handled()
+		if _screen != Screen.NONE:
+			_set_screen(Screen.NONE)
+			get_viewport().set_input_as_handled()
+		elif Input.mouse_mode == Input.MOUSE_MODE_CAPTURED and not _helm_active:
+			# Only open the pause menu when no other UI is holding the cursor.
+			# NPC dialogs set mouse visible; helm exit is handled by CaptainsChair.
+			_set_screen(Screen.PAUSE)
+			get_viewport().set_input_as_handled()
 	elif event.is_action_pressed("open_map") and _screen != Screen.PAUSE:
 		_set_screen(Screen.MAP if _screen != Screen.MAP else Screen.NONE)
 		get_viewport().set_input_as_handled()
@@ -229,7 +236,9 @@ func _connect_controller(bc: BoatController) -> void:
 
 func _on_helm_on() -> void:
 	_walking_hud.visible = false
+	_helm_active = true
 
 
 func _on_helm_off() -> void:
 	_walking_hud.visible = true
+	_helm_active = false

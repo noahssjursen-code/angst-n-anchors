@@ -91,6 +91,7 @@ static func expand(definition: PortDefinition, world_seed: int) -> PortData:
 	data.rotation_y        = rng.randf() * TAU
 	data.population        = _population(rng, size)
 	data.features          = _features(rng, size)
+	data.berth_count       = ShipClass.berth_count(data.dock_length, data.max_ship_class, 3.0)
 
 	return data
 

@@ -68,7 +68,7 @@ func deliver(item: CargoItem) -> bool:
 func _flash_reward(amount: int) -> void:
 	if _reward_label == null:
 		return
-	_reward_label.text    = "+%d gold" % amount
+	_reward_label.text    = "+%d ℳ" % amount
 	_reward_label.visible = true
 	_reward_timer         = 2.5
 

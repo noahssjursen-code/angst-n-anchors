@@ -19,9 +19,9 @@ var _target: Node3D = null
 
 func _ready() -> void:
 	_target = get_parent()
-	# Start the orbit angle directly behind the stern so the first thing
-	# the player sees after boarding is the bow ahead of them.
-	# Boat local +Z is the stern direction; atan2 maps that into world yaw.
+	# Start the orbit angle on the bow side so the bow is the first thing
+	# the player sees after boarding. Boat local +Z is the bow direction;
+	# atan2 maps that world direction into the initial yaw offset.
 	if _target != null:
 		var bz: Vector3 = _target.global_transform.basis.z
 		_yaw = atan2(bz.x, bz.z)

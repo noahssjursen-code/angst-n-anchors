@@ -31,7 +31,7 @@ extends Node3D
 
 ## Resists heave relative to the *water surface* (not world). Too strong or world-
 ## relative kills riding over waves.
-@export var vertical_damping: float = 2800.0
+@export var vertical_damping: float = 3600.0
 ## Per-column lift caps once ~fully submerged (linear depth model would diverge).
 @export var lift_depth_hull_scale: float = 1.15
 ## Scales wave-relative vertical damping. Lower = hull moves more independently of the

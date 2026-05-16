@@ -17,7 +17,7 @@ var data: PlayerData = PlayerData.new()
 
 
 func _ready() -> void:
-	_connect_registry()
+	call_deferred("_connect_registry")
 
 
 # ── Economy API ───────────────────────────────────────────────────────────────
@@ -56,9 +56,12 @@ func _load_data(raw: Dictionary = {}) -> void:
 func _connect_registry() -> void:
 	var registry := get_node_or_null("/root/ContractRegistry")
 	if registry == null:
+		push_error("PlayerSession: ContractRegistry autoload not found — check autoload order in Project Settings.")
 		return
-	registry.unit_delivered.connect(_on_unit_delivered)
-	registry.contract_completed.connect(_on_contract_completed)
+	if not registry.unit_delivered.is_connected(_on_unit_delivered):
+		registry.unit_delivered.connect(_on_unit_delivered)
+	if not registry.contract_completed.is_connected(_on_contract_completed):
+		registry.contract_completed.connect(_on_contract_completed)
 
 
 func _on_unit_delivered(_contract: Contract, reward: int) -> void:

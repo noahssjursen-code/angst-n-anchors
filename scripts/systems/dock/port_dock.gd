@@ -392,15 +392,15 @@ func spawn_player_ship(index: int) -> Node3D:
 	if ship == null:
 		return null
 
-	var t         := get_berth_spawn_transform(index)
-	ship.name     = "PlayerShip"
-	ship.transform = t
+	var t     := get_berth_spawn_transform(index)
+	ship.name = "PlayerShip"
 
 	var plot := get_parent()
 	if plot == null:
 		ship.queue_free()
 		return null
 	plot.add_child(ship)
+	ship.global_transform = t
 
 	if ship.has_method("place_at_waterline"):
 		ship.call("place_at_waterline", WaveSurface.WATER_LEVEL, 0.45)

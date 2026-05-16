@@ -120,12 +120,11 @@ func _build(gs: Node) -> Array:
 			_row(e, "  Delivered",
 				"%d / %d" % [contract.delivered_count, contract.quantity], C_VALUE)
 			_row(e, "  Reward", "ℳ %d" % contract.reward_gold, C_GOLD)
-			if registry != null:
-				var wh: Warehouse = registry.get_port_warehouse(contract.origin_port_id)
-				if wh != null and is_instance_valid(wh):
-					_row(e, "  Warehouse", "%d crates remaining" % wh.item_count(), C_VALUE)
-				else:
-					_stub(e, "  Warehouse", "not found")
+			var apron := _count_apron_cargo(contract.id)
+			if apron > 0:
+				_row(e, "  Apron cargo", "%d crates" % apron, C_VALUE)
+			else:
+				_stub(e, "  Apron cargo", "none staged")
 
 	# ── World ─────────────────────────────────────────────────────────────────
 	_sep(e)
@@ -192,3 +191,12 @@ func _stub(e: Array, label: String, reason: String) -> void:
 
 func _sep(e: Array) -> void:
 	e.append({ "kind": "sep",     "label": "",    "value": "",     "color": C_SEP     })
+
+
+func _count_apron_cargo(contract_id: String) -> int:
+	var count := 0
+	for node in get_tree().get_nodes_in_group("cargo_pickup"):
+		var cp := node as CargoPickup
+		if cp != null and cp.cargo_item != null and cp.cargo_item.contract_id == contract_id:
+			count += 1
+	return count

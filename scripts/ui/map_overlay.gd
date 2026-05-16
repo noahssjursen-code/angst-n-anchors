@@ -48,6 +48,11 @@ var _wx_max: float = 1.0
 var _wz_min: float = 0.0
 var _wz_max: float = 1.0
 
+## Port size → short class label for display
+const SIZE_CLASS_LABEL: Array[String] = [
+	"Coastal", "Coastal", "Short Sea", "Handysize", "Deep Sea"
+]
+
 
 func _ready() -> void:
 	set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -69,6 +74,13 @@ func _process(_delta: float) -> void:
 func _input(event: InputEvent) -> void:
 	if not visible:
 		return
+	if event is InputEventKey:
+		var ke := event as InputEventKey
+		if ke.pressed and not ke.echo and ke.keycode == KEY_H:
+			_user_moved = false
+			_reset_view()
+			get_viewport().set_input_as_handled()
+			return
 	if event is InputEventMouseButton:
 		var mb := event as InputEventMouseButton
 		if mb.pressed and mb.button_index == MOUSE_BUTTON_WHEEL_UP:
@@ -96,7 +108,7 @@ func _input(event: InputEvent) -> void:
 		var dm  := mm.position - _drag_origin_mouse
 		_drag_dist    += mm.relative.length()
 		_cam_center.x  = _drag_origin_center.x - dm.x / ppu
-		_cam_center.y  = _drag_origin_center.y + dm.y / ppu
+		_cam_center.y  = _drag_origin_center.y - dm.y / ppu
 		_user_moved    = true
 		get_viewport().set_input_as_handled()
 
@@ -207,7 +219,7 @@ func _draw() -> void:
 	draw_string(font, Vector2(vp.x * 0.5 - ttw * 0.5, py + 38.0),
 				title, HORIZONTAL_ALIGNMENT_LEFT, -1, title_fs, C_TITLE)
 
-	var hint    := "scroll  zoom    drag  pan    M  close    click island  info"
+	var hint    := "scroll  zoom    drag  pan    H  home    M  close    click island  info"
 	var hint_tw := font.get_string_size(hint, HORIZONTAL_ALIGNMENT_LEFT, -1, 10).x
 	draw_string(font, Vector2(px + pw - hint_tw - 14, py + 32.0),
 				hint, HORIZONTAL_ALIGNMENT_LEFT, -1, 10, C_HINT)
@@ -268,7 +280,7 @@ func _draw() -> void:
 
 	var gz: float = floor(_wz_min / grid_interval) * grid_interval
 	while gz <= _wz_max:
-		var sy: float = _cpy + (1.0 - (gz - _wz_min) / (_wz_max - _wz_min)) * _cph
+		var sy: float = _cpy + (gz - _wz_min) / (_wz_max - _wz_min) * _cph
 		if sy >= _cpy - 1.0 and sy <= _cpy + _cph + 1.0:
 			draw_line(Vector2(_cpx, sy), Vector2(_cpx + _cpw, sy), C_GRID, 1.0)
 		gz += grid_interval
@@ -280,7 +292,16 @@ func _draw() -> void:
 			var dp: Vector3 = registry.get_port_position(c.destination_port_id)
 			if op.x == INF or dp.x == INF:
 				continue
-			_draw_dashed_line(_w2s(op), _w2s(dp), Color(1.0, 0.58, 0.06, 0.28), 1.5, 10.0)
+			var op2 := _w2s(op)
+			var dp2 := _w2s(dp)
+			_draw_dashed_line(op2, dp2, Color(1.0, 0.58, 0.06, 0.28), 1.5, 10.0)
+			# Distance label at midpoint
+			var mid      := (op2 + dp2) * 0.5
+			var route_d  := op.distance_to(dp)
+			var route_lbl := "%.0f m" % route_d if route_d < 1852.0 else "%.1f nm" % (route_d / 1852.0)
+			var rtw      := font.get_string_size(route_lbl, HORIZONTAL_ALIGNMENT_LEFT, -1, 9).x
+			draw_string(font, mid + Vector2(-rtw * 0.5, -4.0),
+						route_lbl, HORIZONTAL_ALIGNMENT_LEFT, -1, 9, Color(1.0, 0.65, 0.15, 0.65))
 
 	# Islands
 	if registry != null:
@@ -316,17 +337,21 @@ func _draw() -> void:
 			outline.append(spoly[0])
 			draw_polyline(outline, edge_col, 1.5, true)
 
-			var sp       := _w2s(wpos)
-			var pname    := str(info.get("display_name", ""))
-			var ntw      := font.get_string_size(pname, HORIZONTAL_ALIGNMENT_LEFT, -1, 11).x
-			var lbl_col  := C_PORT_LBL_SEL if is_sel else C_PORT_LABEL
-			draw_string(font, sp + Vector2(-ntw * 0.5, -14.0),
-						pname, HORIZONTAL_ALIGNMENT_LEFT, -1, 11, lbl_col)
+			# Only draw label when island is large enough on screen to read
+			var poly_h := _poly_screen_height(spoly)
+			if poly_h >= 10.0 or is_sel or is_dest:
+				var sp       := _w2s(wpos)
+				var pname    := str(info.get("display_name", ""))
+				var lbl_size := 13 if is_sel else 11
+				var ntw      := font.get_string_size(pname, HORIZONTAL_ALIGNMENT_LEFT, -1, lbl_size).x
+				var lbl_col  := C_PORT_LBL_SEL if is_sel else C_PORT_LABEL
+				draw_string(font, sp + Vector2(-ntw * 0.5, -poly_h * 0.5 - 6.0),
+							pname, HORIZONTAL_ALIGNMENT_LEFT, -1, lbl_size, lbl_col)
 
 	# Ship
 	if ship_pos.x != INF:
 		var sp   := _w2s(ship_pos)
-		var fwd  := Vector2(sin(ship_rot_y), -cos(ship_rot_y))
+		var fwd  := Vector2(sin(ship_rot_y), cos(ship_rot_y))
 		var perp := Vector2(-fwd.y, fwd.x)
 		var sz   := 11.0
 		draw_circle(sp, sz + 4.0, Color(C_SHIP.r, C_SHIP.g, C_SHIP.b, 0.20))
@@ -339,6 +364,9 @@ func _draw() -> void:
 	# Port info panel
 	if not _selected_port.is_empty() and registry != null:
 		_draw_port_panel(font, registry)
+
+	# Compass rose — top-right inside chart
+	_draw_compass_rose(Vector2(_cpx + _cpw - 48.0, _cpy + 50.0), 28.0)
 
 	# Scale bar
 	var scale_w_world := (_wx_max - _wx_min) * 0.2
@@ -363,11 +391,13 @@ func _draw_port_panel(font: Font, registry: Node) -> void:
 	if info.is_empty():
 		return
 
-	# Gather data first so panel height can be computed
-	var pop      := int(info.get("population", 0))
-	var features := info.get("features", []) as Array
-	var exports  := str(info.get("commodity_export", ""))
-	var imports  := info.get("commodity_imports", []) as Array
+	var pop         := int(info.get("population", 0))
+	var features    := info.get("features", []) as Array
+	var exports     := str(info.get("commodity_export", ""))
+	var imports     := info.get("commodity_imports", []) as Array
+	var berths      := int(info.get("berth_count", 1))
+	var port_size   := int(info.get("size", 1))
+	var class_label := SIZE_CLASS_LABEL[clampi(port_size, 0, SIZE_CLASS_LABEL.size() - 1)]
 
 	var contracts := registry.get_contracts_from_port(_selected_port) as Array
 	var avail     := 0
@@ -383,26 +413,24 @@ func _draw_port_panel(font: Font, registry: Node) -> void:
 			ship_pos = rb.global_position
 			break
 
-	# Layout constants
-	var lh     := 18.0   # normal line height
-	var lh_sm  := 16.0   # small line height (features)
+	var lh     := 18.0
+	var lh_sm  := 16.0
 	var pad    := 12.0
-	var feat_rows := int(ceil(float(features.size()) / 2.0))
+	var feat_rows := maxi(1, int(ceil(float(features.size()) / 2.0))) if not features.is_empty() else 1
 
-	var panel_w := 252.0
-	var panel_h := (pad                 # top padding
+	var panel_w := 264.0
+	var panel_h := (pad
 		+ 18.0                          # port name
-		+ 4.0                           # gap
-		+ lh                            # population
-		+ 8.0                           # section gap
+		+ 4.0
+		+ lh                            # population + berths
+		+ 8.0
 		+ lh                            # exports
 		+ lh                            # imports
-		+ 8.0                           # section gap
+		+ 8.0
 		+ lh_sm * float(feat_rows)      # features
-		+ 8.0                           # section gap
-		+ lh                            # contracts
-		+ lh                            # distance (conditional but always reserve)
-		+ pad)                          # bottom padding
+		+ 8.0
+		+ lh                            # contracts + distance
+		+ pad)
 
 	var panel_x := _cpx + _cpw - panel_w - 8.0
 	var panel_y := _cpy + _cph - panel_h - 8.0
@@ -413,20 +441,24 @@ func _draw_port_panel(font: Font, registry: Node) -> void:
 	var tx := panel_x + pad
 	var ty := panel_y + pad + 14.0
 
-	# Port name
+	# Port name + size badge
 	draw_string(font, Vector2(tx, ty),
 				str(info.get("display_name", "")).to_upper(),
 				HORIZONTAL_ALIGNMENT_LEFT, -1, 14, C_PORT_LBL_SEL)
+	var badge := "  [%s]" % class_label
+	var nw    := font.get_string_size(str(info.get("display_name", "")).to_upper(),
+					HORIZONTAL_ALIGNMENT_LEFT, -1, 14).x
+	draw_string(font, Vector2(tx + nw, ty),
+				badge, HORIZONTAL_ALIGNMENT_LEFT, -1, 9, Color(0.50, 0.65, 0.48, 0.70))
 	ty += 4.0 + lh
 
-	# Population
+	# Population + berths on same line
 	var pop_str := _format_population(pop)
 	draw_string(font, Vector2(tx, ty),
-				"~%s inhabitants" % pop_str,
+				"~%s  ·  %d berth%s" % [pop_str, berths, "s" if berths != 1 else ""],
 				HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color(0.65, 0.75, 0.60, 0.75))
 	ty += lh + 8.0
 
-	# Divider
 	draw_line(Vector2(panel_x + 8, ty - 4), Vector2(panel_x + panel_w - 8, ty - 4),
 			  Color(0.38, 0.52, 0.32, 0.30), 1.0)
 
@@ -447,13 +479,12 @@ func _draw_port_panel(font: Font, registry: Node) -> void:
 				HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color(0.55, 0.72, 0.50, 0.75))
 	ty += lh + 8.0
 
-	# Divider
 	draw_line(Vector2(panel_x + 8, ty - 4), Vector2(panel_x + panel_w - 8, ty - 4),
 			  Color(0.38, 0.52, 0.32, 0.30), 1.0)
 
 	# Features — two per row
 	if features.is_empty():
-		draw_string(font, Vector2(tx, ty), "No facilities",
+		draw_string(font, Vector2(tx, ty), "No special facilities",
 					HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color(0.45, 0.55, 0.42, 0.55))
 		ty += lh_sm
 	else:
@@ -470,23 +501,22 @@ func _draw_port_panel(font: Font, registry: Node) -> void:
 
 	ty += 8.0
 
-	# Divider
 	draw_line(Vector2(panel_x + 8, ty - 4), Vector2(panel_x + panel_w - 8, ty - 4),
 			  Color(0.38, 0.52, 0.32, 0.30), 1.0)
 
-	# Contracts
+	# Contracts available + distance on same line
+	var contracts_txt := "%d contract%s" % [avail, "s" if avail != 1 else ""]
 	draw_string(font, Vector2(tx, ty),
-				"%d contracts available" % avail,
+				contracts_txt,
 				HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color(0.65, 0.82, 0.58, 0.80))
-	ty += lh
 
-	# Distance
 	if ship_pos.x != INF:
 		var dist     := Vector2(wpos.x, wpos.z).distance_to(Vector2(ship_pos.x, ship_pos.z))
 		var dist_str := "%.0f m" % dist if dist < 1852.0 else "%.1f nm" % (dist / 1852.0)
-		draw_string(font, Vector2(tx, ty),
-					"Distance  " + dist_str,
-					HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color(0.50, 0.65, 0.48, 0.70))
+		var dtw      := font.get_string_size(dist_str, HORIZONTAL_ALIGNMENT_LEFT, -1, 11).x
+		draw_string(font, Vector2(panel_x + panel_w - pad - dtw, ty),
+					dist_str,
+					HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color(0.50, 0.65, 0.78, 0.80))
 
 
 func _format_population(pop: int) -> String:
@@ -506,7 +536,66 @@ func _w2s(world: Vector3) -> Vector2:
 func _w2s_f(wx: float, wz: float) -> Vector2:
 	var tx := (wx - _wx_min) / (_wx_max - _wx_min)
 	var tz := (wz - _wz_min) / (_wz_max - _wz_min)
-	return Vector2(_cpx + tx * _cpw, _cpy + (1.0 - tz) * _cph)
+	return Vector2(_cpx + tx * _cpw, _cpy + tz * _cph)
+
+
+func _poly_screen_height(poly: PackedVector2Array) -> float:
+	if poly.is_empty():
+		return 0.0
+	var mn := poly[0].y
+	var mx := poly[0].y
+	for p in poly:
+		mn = minf(mn, p.y)
+		mx = maxf(mx, p.y)
+	return mx - mn
+
+
+func _draw_compass_rose(center: Vector2, r: float) -> void:
+	var font := ThemeDB.fallback_font
+	draw_circle(center, r + 5.0, Color(0.03, 0.05, 0.14, 0.88))
+	draw_arc(center, r + 3.0, 0.0, TAU, 48, Color(0.28, 0.42, 0.66, 0.55), 1.5, true)
+
+	# Intercardinal ticks
+	for d in [45, 135, 225, 315]:
+		var a := deg_to_rad(float(d)) - PI * 0.5
+		draw_line(center + Vector2(cos(a), sin(a)) * r * 0.78,
+				  center + Vector2(cos(a), sin(a)) * r,
+				  Color(0.35, 0.46, 0.62, 0.38), 1.0, true)
+
+	# Cardinals: N red, E/S/W pale blue
+	var cdata: Array = [
+		["N", 0,   Color(0.95, 0.28, 0.28, 1.00), true ],
+		["E", 90,  Color(0.68, 0.80, 0.92, 0.80), false],
+		["S", 180, Color(0.68, 0.80, 0.92, 0.80), false],
+		["W", 270, Color(0.68, 0.80, 0.92, 0.80), false],
+	]
+	for entry in cdata:
+		var e    := entry as Array
+		var a    := deg_to_rad(float(int(e[1]))) - PI * 0.5
+		var col  := e[2] as Color
+		var bold := bool(e[3])
+		var inner := r * (0.52 if bold else 0.68)
+		draw_line(center + Vector2(cos(a), sin(a)) * inner,
+				  center + Vector2(cos(a), sin(a)) * r,
+				  col, 2.5 if bold else 1.5, true)
+		var lp   := center + Vector2(cos(a), sin(a)) * (r - 17.0)
+		var lstr := str(e[0])
+		var tw   := font.get_string_size(lstr, HORIZONTAL_ALIGNMENT_LEFT, -1, 10).x
+		draw_string(font, lp + Vector2(-tw * 0.5, 5.0), lstr,
+					HORIZONTAL_ALIGNMENT_LEFT, -1, 10, col)
+
+	# North pointer (gold up-triangle) and south pointer (dim down-triangle)
+	draw_colored_polygon(PackedVector2Array([
+		center + Vector2(0.0,   -r * 0.53),
+		center + Vector2(-r * 0.12, -r * 0.08),
+		center + Vector2( r * 0.12, -r * 0.08),
+	]), Color(0.96, 0.86, 0.12, 0.92))
+	draw_colored_polygon(PackedVector2Array([
+		center + Vector2(0.0,    r * 0.53),
+		center + Vector2(-r * 0.12,  r * 0.08),
+		center + Vector2( r * 0.12,  r * 0.08),
+	]), Color(0.42, 0.52, 0.68, 0.42))
+	draw_circle(center, 3.5, Color(0.82, 0.88, 1.00, 0.72))
 
 
 func _draw_dashed_line(a: Vector2, b: Vector2, col: Color, width: float, dash: float) -> void:

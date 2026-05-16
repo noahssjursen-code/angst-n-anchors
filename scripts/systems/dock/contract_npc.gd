@@ -63,20 +63,29 @@ func _refresh_list() -> void:
 		_list.add_child(_plain_label("No contracts available."))
 		return
 
-	var has_active:   bool = registry.get_accepted_contracts().size() > 0
+	var active_count: int = registry.get_accepted_contracts().size()
+	var slots_free:   int = registry.MAX_ACTIVE_CONTRACTS - active_count
 	var ship_berthed: bool = _ship_is_berthed()
 
 	for contract in contracts:
-		_list.add_child(_make_row(contract, registry, has_active, ship_berthed))
+		_list.add_child(_make_row(contract, registry, slots_free, ship_berthed))
 
 
-func _make_row(contract: Contract, registry: Node, has_active: bool, ship_berthed: bool) -> Control:
+func _make_row(contract: Contract, registry: Node, slots_free: int, ship_berthed: bool) -> Control:
 	var dest: String = registry.get_destination_name(contract)
 
+	var dist_str := ""
+	var origin_pos: Vector3 = registry.get_port_position(contract.origin_port_id)
+	var dest_pos:   Vector3 = registry.get_port_position(contract.destination_port_id)
+	if origin_pos.x != INF and dest_pos.x != INF:
+		var d := origin_pos.distance_to(dest_pos)
+		dist_str = "  %.0f m" % d if d < 1852.0 else "  %.1f nm" % (d / 1852.0)
+
 	var info           := Label.new()
-	info.text          = "%s  →  %s\n%d × %s   %d gold" % [
+	info.text          = "%s  →  %s%s\n%d × %s   ℳ %d" % [
 		registry.get_port_display_name(contract.origin_port_id),
 		dest,
+		dist_str,
 		contract.quantity,
 		contract.display_name,
 		contract.reward_gold,
@@ -87,8 +96,8 @@ func _make_row(contract: Contract, registry: Node, has_active: bool, ship_berthe
 	var btn := Button.new()
 	match contract.state:
 		Contract.State.AVAILABLE:
-			if has_active:
-				btn.text     = "Busy"
+			if slots_free <= 0:
+				btn.text     = "Full (%d/%d)" % [registry.MAX_ACTIVE_CONTRACTS, registry.MAX_ACTIVE_CONTRACTS]
 				btn.disabled = true
 			elif not ship_berthed:
 				btn.text     = "Berth ship first"

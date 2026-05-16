@@ -33,7 +33,7 @@ const WALK_MODEL_COLLIDER_NAME := "WalkModelCollider"
 		linear_damp_coeff = v
 		linear_damp = v
 ## Baseline angular damping.
-@export var angular_damp_coeff:  float = 0.05:
+@export var angular_damp_coeff:  float = 0.7:
 	set(v):
 		angular_damp_coeff = v
 		angular_damp = v

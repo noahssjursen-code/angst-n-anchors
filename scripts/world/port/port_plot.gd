@@ -136,11 +136,17 @@ func _build_npcs() -> void:
 		cnpc.position   = fpos + contract_local + Vector3(-2.0, 0.0, -5.0)
 		add_child(cnpc)
 
-		var dnpc        := DeliveryNpc.new()
-		dnpc.name       = "DeliveryNpc"
-		dnpc.port_id    = port_id
-		dnpc.position   = fpos + contract_local + Vector3(2.0, 0.0, -5.0)
-		add_child(dnpc)
+	# DeliveryNpc is required at every port — even size-0 ports that have no
+	# ShippingAgent. Without it, contracts targeting this port can never be
+	# completed. Fall back to the harbour master position when contract_local is
+	# ZERO (no ShippingAgent building).
+	var delivery_ref := contract_local if contract_local != Vector3.ZERO \
+						else facilities.get_harbour_master_local_pos()
+	var dnpc        := DeliveryNpc.new()
+	dnpc.name       = "DeliveryNpc"
+	dnpc.port_id    = port_id
+	dnpc.position   = fpos + delivery_ref + Vector3(2.0, 0.0, -5.0)
+	add_child(dnpc)
 
 	if not port_id.is_empty():
 		call_deferred("_register_with_registry")
@@ -155,6 +161,74 @@ func _register_with_registry() -> void:
 	registry.register_port(port_id, port_label, global_position, spawn_pos)
 	if not registry.contract_accepted.is_connected(_on_contract_accepted):
 		registry.contract_accepted.connect(_on_contract_accepted)
+	_respawn_pending_cargo(registry)
+
+
+func _respawn_pending_cargo(registry: Node) -> void:
+	var dock := get_node_or_null("PortDock") as PortDock
+	if dock == null:
+		return
+	var berth_idx := dock.find_occupied_berth()
+	if berth_idx == -1:
+		return
+	for contract in registry.get_accepted_contracts():
+		var c := contract as Contract
+		if c == null or c.origin_port_id != port_id:
+			continue
+		var remaining := c.quantity - c.delivered_count
+		if remaining <= 0:
+			continue
+		var existing := 0
+		for child in get_children():
+			var cp := child as CargoPickup
+			if cp != null and cp.cargo_item != null and cp.cargo_item.contract_id == c.id:
+				existing += 1
+		# Avoid spawning items already picked up and in transit (on ship or being carried).
+		var in_transit := _count_in_transit(c.id)
+		var to_spawn   := remaining - existing - in_transit
+		if to_spawn <= 0:
+			continue
+		var cur_count := int(_berth_cargo_count.get(berth_idx, 0))
+		_berth_cargo_count[berth_idx] = cur_count + to_spawn
+		dock.set_berth_has_cargo(berth_idx, true)
+		var positions := dock.get_berth_apron_positions(berth_idx, to_spawn)
+		for i in range(to_spawn):
+			var item    := CargoItem.create(
+				c.commodity, c.destination_port_id,
+				c.mass_per_unit_kg, c.reward_per_unit(),
+				c.origin_port_id, c.id,
+			)
+			var pickup  := CargoPickup.new()
+			pickup.name = "ApronCargo_" + item.id.left(8)
+			add_child(pickup)
+			pickup.global_position = positions[i]
+			pickup.setup(item)
+			pickup.picked_up.connect(func(_it: CargoItem) -> void: _on_apron_cargo_removed(berth_idx))
+
+
+func _count_in_transit(contract_id: String) -> int:
+	var count := 0
+	for node in get_tree().get_nodes_in_group("cargo_deck"):
+		var dc := node as CargoDeckComponent
+		if dc == null:
+			continue
+		for item in dc.get_all_items():
+			if (item as CargoItem).contract_id == contract_id:
+				count += 1
+	for player in get_tree().get_nodes_in_group("player"):
+		var carry := player.get_node_or_null("PlayerCarryComponent") as PlayerCarryComponent
+		if carry != null and carry.is_carrying():
+			var ci := carry.get_carried()
+			if ci != null and ci.contract_id == contract_id:
+				count += 1
+	return count
+
+
+## Called after a ship berths so cargo for accepted contracts can be staged.
+func respawn_staged_cargo() -> void:
+	var registry := get_node_or_null("/root/ContractRegistry")
+	if registry != null:
+		_respawn_pending_cargo(registry)
 
 
 func _on_contract_accepted(contract: Contract, items: Array[CargoItem]) -> void:

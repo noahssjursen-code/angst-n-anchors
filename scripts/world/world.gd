@@ -7,15 +7,23 @@ extends Node3D
 
 const PLAYER_SCENE := preload("res://scenes/islands/starting_island/player.tscn")
 
-const LOAD_RADIUS           : float = 350.0
+const LOAD_RADIUS           : float = 500.0
 const EDITOR_PREVIEW_RADIUS : float = 600.0
 const EDITOR_PREVIEW_MAX    : int   = 6
 const MIN_PORT_SEPARATION   : float = 600.0
 const SCATTER_RADIUS_PER_PORT : float = 200.0
 
 const PORT_NAMES : Array[String] = [
-	"Holmvik", "Sandvær", "Bergnes", "Kloven",
-	"Strandnes", "Kvamsvik", "Bremsund", "Tysneset",
+	"Holmvik",  "Sandvær",  "Bergnes",  "Kloven",
+	"Strandnes","Kvamsvik", "Bremsund", "Tysneset",
+	"Fjelltun", "Grønnvik", "Harberg",  "Innvær",
+	"Jørvika",  "Kalvøy",   "Lyngnes",  "Molvær",
+	"Nordheim", "Ostervik", "Raudvik",  "Solberg",
+	"Torsberg", "Urvik",    "Vargnes",  "Øyangen",
+	"Bakkevær", "Dalsøy",   "Egersund", "Fossberg",
+	"Grindøy",  "Hammnes",  "Isfjord",  "Kopervær",
+	"Langøy",   "Midtvik",  "Nessund",  "Ålvær",
+	"Ravnheim", "Skarvøy",  "Tjuvnes",  "Ulvvær",
 ]
 
 @export var world_seed:   int = 42:
@@ -98,6 +106,7 @@ func _setup_ports(defs: Array[PortDefinition]) -> void:
 				data.commodity_export, data.commodity_imports,
 				data.island_width, 140.0, data.layout_seed,
 				data.population, data.features, data.rotation_y,
+				data.berth_count, data.size,
 			)
 
 		if i == 0:

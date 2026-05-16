@@ -26,5 +26,6 @@ var layout_seed:  int   = 0
 var rotation_y:   float = 0.0
 
 # Settlement
-var population: int          = 0
-var features:   Array[String] = []
+var population:  int          = 0
+var features:    Array[String] = []
+var berth_count: int          = 1

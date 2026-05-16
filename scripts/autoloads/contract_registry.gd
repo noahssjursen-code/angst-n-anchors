@@ -16,9 +16,10 @@ const COMMODITIES := [
 	{ "id": "provisions", "display": "Provisions", "mass_kg": 150.0, "value": 14 },
 ]
 
-const CONTRACT_RADIUS := 1200.0
+const CONTRACT_RADIUS      := 3500.0
+const MAX_ACTIVE_CONTRACTS := 3
 
-## port_id -> { id, display_name, position, spawn_pos, commodity_export, commodity_imports }
+## port_id -> { id, display_name, position, spawn_pos, commodity_export, commodity_imports, ... }
 var _ports: Dictionary = {}
 ## contract_id -> Contract
 var _contracts: Dictionary = {}
@@ -39,6 +40,8 @@ func register_port(
 	population: int = 0,
 	features: Array = [],
 	rotation_y: float = -INF,
+	berth_count: int = 0,
+	size: int = -1,
 ) -> void:
 	var already_known := _ports.has(port_id)
 	var entry := {
@@ -54,6 +57,8 @@ func register_port(
 		"population":        population,
 		"features":          features,
 		"rotation_y":        rotation_y if rotation_y != -INF else 0.0,
+		"berth_count":       berth_count if berth_count > 0 else 1,
+		"size":              size if size >= 0 else 1,
 	}
 	if already_known:
 		var prev := _ports[port_id] as Dictionary
@@ -71,6 +76,10 @@ func register_port(
 			entry["features"] = prev.get("features", [])
 		if rotation_y == -INF:
 			entry["rotation_y"] = prev.get("rotation_y", 0.0)
+		if berth_count == 0:
+			entry["berth_count"] = prev.get("berth_count", 1)
+		if size < 0:
+			entry["size"] = prev.get("size", 1)
 	_ports[port_id] = entry
 	if not already_known:
 		_generate_contracts_for(port_id)
@@ -141,7 +150,7 @@ func accept_contract(contract_id: String) -> bool:
 	var contract := _contracts.get(contract_id) as Contract
 	if contract == null or contract.state != Contract.State.AVAILABLE:
 		return false
-	if get_accepted_contracts().size() > 0:
+	if get_accepted_contracts().size() >= MAX_ACTIVE_CONTRACTS:
 		return false
 
 	contract.state = Contract.State.ACCEPTED
@@ -179,9 +188,8 @@ func deliver_cargo(item: CargoItem) -> int:
 	if contract.is_complete():
 		contract.state = Contract.State.COMPLETED
 		contract_completed.emit(contract)
-		if contract.id.begins_with("debug::"):
-			contract.state           = Contract.State.AVAILABLE
-			contract.delivered_count = 0
+		contract.delivered_count = 0
+		contract.state           = Contract.State.AVAILABLE
 
 	return reward
 
@@ -204,9 +212,6 @@ func _generate_contracts_for(new_port_id: String) -> void:
 		_contracts[inbound.id]  = inbound
 		_contracts[outbound.id] = outbound
 
-	var dc := _make_debug_contract(new_port_id)
-	_contracts[dc.id] = dc
-
 
 func _make_contract(from_id: String, to_id: String) -> Contract:
 	var from_info    := _ports.get(from_id, {}) as Dictionary
@@ -224,11 +229,11 @@ func _make_contract(from_id: String, to_id: String) -> Contract:
 	if commodity.is_empty():
 		commodity = COMMODITIES[0] as Dictionary
 
-	var rng      := RandomNumberGenerator.new()
-	rng.seed     = _hash_route(from_id, to_id)
-	var quantity := rng.randi() % 7 + 4
+	var rng       := RandomNumberGenerator.new()
+	rng.seed      = _hash_route(from_id, to_id)
+	var quantity  := rng.randi() % 3 + 3    # 3–5 items per run
 	var value_per := int(commodity["value"])
-	var reward   := int(distance * float(quantity) * float(value_per) * 0.12)
+	var reward    := int(distance * float(quantity) * float(value_per) * 0.14)
 
 	var c                 := Contract.new()
 	c.id                  = from_id + "::" + to_id
@@ -243,20 +248,6 @@ func _make_contract(from_id: String, to_id: String) -> Contract:
 	c.delivered_count     = 0
 	return c
 
-
-func _make_debug_contract(port_id: String) -> Contract:
-	var c                 := Contract.new()
-	c.id                  = "debug::" + port_id
-	c.commodity           = "provisions"
-	c.display_name        = "Provisions"
-	c.quantity            = 1
-	c.mass_per_unit_kg    = 150.0
-	c.reward_gold         = 25
-	c.origin_port_id      = port_id
-	c.destination_port_id = port_id
-	c.state               = Contract.State.AVAILABLE
-	c.delivered_count     = 0
-	return c
 
 
 static func _hash_route(from_id: String, to_id: String) -> int:

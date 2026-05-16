@@ -110,13 +110,11 @@ func _on_berth_selected(index: int) -> void:
 	var dock := _get_dock()
 	if dock == null:
 		return
-	var gs          := get_node_or_null("/root/GameState")
-	var player_name : String = "Captain"
-	if gs != null:
-		player_name = str(gs.get("player").get("display_name") if gs.get("player") != null else "Captain")
-
-	if dock.reserve_berth(index, player_name):
+	if dock.reserve_berth(index, "Captain"):
 		dock.spawn_player_ship(index)
+		var plot := get_parent() as PortPlot
+		if plot != null:
+			plot.respawn_staged_cargo()
 		_clear_body()
 		_add_quote("Berth #%d is yours, Captain. Mind the tides." % (index + 1))
 		_add_option("Thank you.", _close)

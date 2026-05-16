@@ -8,7 +8,7 @@ extends Node
 ##
 ## Uses camera position (not player position) so it works correctly when sailing.
 
-const CHECK_INTERVAL := 2.0
+const CHECK_INTERVAL := 1.0
 
 var _entries: Array = []
 var _timer:   float = 0.0
@@ -56,6 +56,12 @@ func _unload(entry: Dictionary) -> void:
 	if entry["instance"] == null or not is_instance_valid(entry["instance"]):
 		entry["instance"] = null
 		return
+	# Never unload a port that contains the player's active ship.
+	var instance := entry["instance"] as Node
+	if instance != null:
+		for boat in get_tree().get_nodes_in_group("player_boat"):
+			if boat is Node and instance.is_ancestor_of(boat as Node):
+				return
 	entry["instance"].queue_free()
 	entry["instance"] = null
 

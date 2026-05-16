@@ -42,7 +42,7 @@ func _draw_compass(c: Vector2) -> void:
 	var r        := COMPASS_R
 	# Ship mesh bow is +Z; Godot forward is -Z; so ship faces +Z when rotation.y = PI.
 	# Rotating the card by (PI - rotation.y) keeps N pointing to world +Z (north).
-	var card_rot := PI - _boat.rotation.y
+	var card_rot := _boat.rotation.y - PI
 	var speed_kn := _boat.linear_velocity.length() * 1.943844
 	var dest_rad := _dest_bearing_rad()
 
@@ -179,7 +179,7 @@ func _draw_dashboard(c: Vector2) -> void:
 	var stage_val: float = vals[clampi(stage_idx, 0, vals.size() - 1)] if not vals.is_empty() else 0.0
 	var thruster     := _controller.get_thruster_mode()
 	var thruster_labels := ["OFF", "BOW ONLY", "CRAB"]
-	var dest_str     := _dest_distance_str()
+	var dest_info    := _nearest_dest_info()
 
 	var marks_str := ""
 	var session := get_node_or_null("/root/PlayerSession")
@@ -194,8 +194,8 @@ func _draw_dashboard(c: Vector2) -> void:
 		["THRUSTER", thruster_labels[clampi(thruster,0,2)],
 		             Color(0.28, 0.72, 1.00, 0.90) if thruster > 0 else Color(0.65, 0.72, 0.82, 0.70)],
 	]
-	if dest_str != "":
-		cells.append(["DEST", dest_str, Color(1.0, 0.58, 0.06, 0.95)])
+	if dest_info[1] != "":
+		cells.append([dest_info[0].to_upper(), dest_info[1], Color(1.0, 0.58, 0.06, 0.95)])
 
 	var cell_w := 110.0
 	var cell_h :=  58.0
@@ -222,14 +222,17 @@ func _draw_dashboard(c: Vector2) -> void:
 		_draw_centered(val, Vector2(cx, py + v_pad + 50.0), 15, val_col)
 
 
-func _dest_distance_str() -> String:
+## Returns [port_name, distance_str] for the nearest accepted contract destination.
+## Both strings are empty when nothing is active or the boat is invalid.
+func _nearest_dest_info() -> Array:
 	var registry := get_node_or_null("/root/ContractRegistry")
 	if registry == null or _boat == null:
-		return ""
+		return ["", ""]
 	var contracts: Array[Contract] = registry.get_accepted_contracts()
 	if contracts.is_empty():
-		return ""
+		return ["", ""]
 	var best_dist := INF
+	var best_name := ""
 	for contract in contracts:
 		var dest_pos: Vector3 = registry.get_port_position(contract.destination_port_id)
 		if dest_pos.x == INF:
@@ -237,11 +240,11 @@ func _dest_distance_str() -> String:
 		var d := _boat.global_position.distance_to(dest_pos)
 		if d < best_dist:
 			best_dist = d
+			best_name = registry.get_port_display_name(contract.destination_port_id)
 	if best_dist == INF:
-		return ""
-	if best_dist >= 1852.0:
-		return "%.1f nm" % (best_dist / 1852.0)
-	return "%.0f m" % best_dist
+		return ["", ""]
+	var dist_str := "%.1f nm" % (best_dist / 1852.0) if best_dist >= 1852.0 else "%.0f m" % best_dist
+	return [best_name, dist_str]
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -281,7 +284,7 @@ func _dest_bearing_rad() -> float:
 	if best_pos.x == INF:
 		return NAN
 	var to := best_pos - ship_pos
-	return atan2(-to.x, -to.z)
+	return atan2(to.x, -to.z)
 
 
 func _draw_centered(text: String, pos: Vector2, font_size: int, color: Color) -> void:
