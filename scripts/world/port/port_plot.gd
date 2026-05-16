@@ -23,7 +23,7 @@ const SHIP_CLASS_BY_SIZE: Dictionary = {
 @export var plot_width: float = 80.0:
 	set(v): plot_width = v; if is_inside_tree() and not _configuring: _rebuild()
 
-@export var plot_depth: float = 110.0:
+@export var plot_depth: float = 140.0:
 	set(v): plot_depth = v; if is_inside_tree() and not _configuring: _rebuild()
 
 @export var port_size: int = 1:
@@ -32,6 +32,8 @@ const SHIP_CLASS_BY_SIZE: Dictionary = {
 var _configuring:         bool       = false
 var _berth_types_data:    Array[int] = []
 var _has_fuel_point_data: bool       = true
+var _layout_seed_data:    int        = 0
+var _island_width_data:   float      = 80.0
 var _berth_cargo_count:   Dictionary = {}  # berth_index -> pending pickup count
 
 
@@ -50,9 +52,9 @@ func _rebuild() -> void:
 	var ship_class := SHIP_CLASS_BY_SIZE.get(clampi(port_size, 0, 4),
 		ShipClass.Type.COASTAL_TRADER) as ShipClass.Type
 
-	# Ground slab — full land area from dock face to back of plot.
+	# Ground slab — island body uses island_width (wider than dock).
 	# Neither PortDock nor PortFacilities owns the ground; this node does.
-	var gsize                := Vector3(plot_width, 0.4, plot_depth)
+	var gsize                := Vector3(_island_width_data, 0.4, plot_depth)
 	var gbody                := StaticBody3D.new()
 	gbody.name               = "Ground"
 	gbody.position           = Vector3(0.0, -0.2, 0.0)
@@ -96,8 +98,9 @@ func _rebuild() -> void:
 	var facilities            := PortFacilities.new()
 	facilities.name           = "PortFacilities"
 	facilities.port_size      = port_size
-	facilities.plot_width     = plot_width
+	facilities.plot_width     = _island_width_data
 	facilities.plot_depth     = plot_depth - PortDock.INLAND_DEPTH
+	facilities.layout_seed    = _layout_seed_data
 	facilities.position       = Vector3(0.0, 0.0, -hd + PortDock.INLAND_DEPTH)
 	add_child(facilities)
 
@@ -195,8 +198,10 @@ func configure(data: PortData) -> void:
 	port_label               = data.display_name
 	port_size                = data.size
 	plot_width               = data.dock_length
+	_island_width_data       = data.island_width
 	_berth_types_data        = data.berth_types.duplicate()
 	_has_fuel_point_data     = data.has_fuel_point
+	_layout_seed_data        = data.layout_seed
 	_configuring             = false
 	if is_inside_tree():
 		_rebuild()

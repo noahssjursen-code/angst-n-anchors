@@ -16,6 +16,18 @@ const DOCK_LENGTH_BY_SIZE: Dictionary = {
 	4: 320.0,   # 5 berths — deep sea freighter
 }
 
+## Island land body width — always wider than the dock, giving the T-shape.
+## Buildings are placed within island_width regardless of dock_length.
+## Each entry is noticeably wider than the corresponding DOCK_LENGTH so the
+## dock visibly "sticks out" from a wider land mass.
+const ISLAND_WIDTH_BY_SIZE: Dictionary = {
+	0:  60.0,   # dock=22 m  — compact fishing hamlet
+	1:  80.0,   # dock=40 m  — small working port
+	2: 120.0,   # dock=90 m  — decent T visible
+	3: 200.0,   # dock=175 m — moderate T
+	4: 340.0,   # dock=320 m — dock just narrower than island
+}
+
 const SHIP_CLASS_BY_SIZE: Dictionary = {
 	0: ShipClass.Type.COASTAL_TRADER,
 	1: ShipClass.Type.COASTAL_TRADER,
@@ -39,6 +51,7 @@ static func expand(definition: PortDefinition, world_seed: int) -> PortData:
 	var size := clampi(definition.size, 0, 4)
 
 	data.dock_length    = float(DOCK_LENGTH_BY_SIZE[size])
+	data.island_width   = float(ISLAND_WIDTH_BY_SIZE[size])
 	data.max_ship_class = SHIP_CLASS_BY_SIZE[size] as ShipClass.Type
 	data.has_fuel_point = true
 
@@ -48,6 +61,7 @@ static func expand(definition: PortDefinition, world_seed: int) -> PortData:
 	data.berth_types      = _berth_types(rng, size, data.dock_length, data.max_ship_class)
 	data.commodity_export = COMMODITIES[rng.randi() % COMMODITIES.size()]
 	data.commodity_imports = _imports(rng, size, data.commodity_export)
+	data.layout_seed      = rng.randi()
 
 	return data
 

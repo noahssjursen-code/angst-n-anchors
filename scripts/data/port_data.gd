@@ -19,3 +19,7 @@ var has_fuel_point:  bool               = true
 # Economy
 var commodity_export:  String         = ""
 var commodity_imports: Array[String]  = []
+
+# Layout
+var island_width: float = 80.0
+var layout_seed:  int   = 0
