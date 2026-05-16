@@ -3,11 +3,12 @@ extends Node3D
 ## Minimal playable test scene: one port, renderer, player.
 ## Keeps the main scene runnable without spinning up the full world generator.
 
-const PLAYER_SCENE := preload("res://scenes/islands/starting_island/player.tscn")
+const PLAYER_SCENE := preload("res://scenes/shared/player.tscn")
+const WORLD_RENDERER_SCRIPT := preload("res://scripts/world/world_renderer.gd")
 
 
 func _ready() -> void:
-	var renderer  := WorldRenderer.new()
+	var renderer := WORLD_RENDERER_SCRIPT.new() as Node3D
 	renderer.name = "WorldRenderer"
 	add_child(renderer)
 

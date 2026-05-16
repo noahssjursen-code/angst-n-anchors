@@ -12,7 +12,7 @@ extends RefCounted
 ## Limits: no true volume conservation, no Kelvin wake, no breaking — upgrade path is
 ## SWE/FFT ocean or GPU simulation when you need production fidelity.
 
-## Sea level — must match the ocean plane y-position in starting_island.gd.
+## Sea level — must match the ocean plane `y` (`WorldRenderer` / `_build_ocean`).
 const WATER_LEVEL: float = -1.5
 
 const AMPLITUDE_1  := 0.35
@@ -48,7 +48,7 @@ const WAVE_INTENSITY_STEP: float = 0.1
 
 static var wave_intensity: float = 1.0
 
-## One rigid hull that perturbs the heightfield (starting island). Clear on exit_tree.
+## One rigid hull that perturbs the heightfield. Clear on exit_tree.
 static var _coupled_vessel: RigidBody3D = null
 
 

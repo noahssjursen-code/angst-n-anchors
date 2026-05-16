@@ -16,8 +16,8 @@ Full design: [`Angst 'n Anchors.md`](Angst%20'n%20Anchors.md)
 
 ```
 scenes/
-  islands/          # One subfolder per island (starting_island/, etc.)
-  shared/           # Reusable packed scenes (interactable, dialogue, prompt UI, etc.)
+  islands/          # Future: one subfolder per island composition (see `world.tscn` + `PortPlot` for gameplay)
+  shared/           # Reusable packed scenes (player root, NPC base, interactable wrappers, dialogue UI)
   ui/               # HUD, menus, overlay panels
 
 scripts/
@@ -179,7 +179,7 @@ only load, transform, materialize, and optionally create collision for parts.
 - **Small steps.** Build the smallest thing that proves the system works, then expand.
 - **No premature optimisation.** Readable code first. Profile before you optimise.
 - **Validate before breadth.** One NPC using the shared dialogue runner correctly is worth more than five NPCs with custom one-offs.
-- **The starting island is the test bed.** Every system gets proven there before it goes anywhere else.
+- **Ship first on the runnable world (`world.tscn`, home port).** Prove shared systems before spreading them wide.
 
 ---
 

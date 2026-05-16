@@ -58,7 +58,7 @@ func _build_sky() -> void:
 
 	var sky := Sky.new()
 	sky.sky_material  = sky_sm
-	sky.radiance_size = Sky.RADIANCE_SIZE_64
+	sky.radiance_size = Sky.RADIANCE_SIZE_128
 
 	var environ := Environment.new()
 	_environment = environ
@@ -78,7 +78,7 @@ func _build_sky() -> void:
 	environ.adjustment_enabled    = true
 	environ.adjustment_brightness = 1.02
 	environ.adjustment_contrast   = 1.05
-	environ.adjustment_saturation = 0.88
+	environ.adjustment_saturation = 0.93
 
 	environ.fog_enabled            = true
 	environ.fog_light_color        = Color(0.58, 0.66, 0.78)
@@ -237,7 +237,8 @@ func _apply_fog(fog_t: float, daylight: float, storm: float) -> void:
 	)
 	_environment.fog_density            = 0.005 + lerpf(0.0, 0.25, fog_t * fog_t * fog_t)
 	_environment.fog_aerial_perspective = 0.12  + lerpf(0.0, 0.35, fog_t)
-	_environment.fog_sky_affect         = 0.6   * lerpf(0.6, 0.18, fog_t * fog_t)
+	# Clear air: leave the procedural sky intact; fog only eats the dome when visibility drops.
+	_environment.fog_sky_affect = lerpf(0.11, 0.58, fog_t * fog_t)
 
 
 func _apply_sky_shader(daylight: float, cloud: float, storm: float) -> void:
@@ -245,13 +246,18 @@ func _apply_sky_shader(daylight: float, cloud: float, storm: float) -> void:
 		return
 	var top_col := (
 		Color(0.006, 0.009, 0.028)
-		.lerp(Color(0.18,  0.46,  0.78),  daylight)
-		.lerp(Color(0.09,  0.10,  0.13),  cloud)
+		.lerp(Color(0.07, 0.28, 0.62), daylight)
+		.lerp(Color(0.09, 0.10, 0.13), cloud)
 	)
 	var horiz := (
 		Color(0.018, 0.016, 0.028)
-		.lerp(Color(0.54,  0.74,  0.92),  daylight)
-		.lerp(Color(0.22,  0.24,  0.28),  cloud)
+		.lerp(Color(0.34, 0.54, 0.78), daylight)
+		.lerp(Color(0.22, 0.24, 0.28), cloud)
+	)
+	var zenith_deep := (
+		Color(0.001, 0.004, 0.022)
+		.lerp(Color(0.015, 0.08, 0.38), daylight)
+		.lerp(Color(0.05, 0.065, 0.09), storm)
 	)
 	var ground_c := (
 		Color(0.04, 0.04, 0.05)
@@ -260,12 +266,21 @@ func _apply_sky_shader(daylight: float, cloud: float, storm: float) -> void:
 	)
 	var sun_col := Color(1.0, 0.62, 0.30).lerp(Color(1.0, 0.96, 0.88), daylight)
 
+	# Inverse of scripted daylight curve — brightest stars at full night; clouds/storm occlude Milky-Way fantasies cheaply.
+	var star_vis := pow(clampf(1.0 - daylight, 0.0, 1.0), 0.78)
+	star_vis *= lerpf(1.0, 0.1, cloud)
+	star_vis *= lerpf(1.0, 0.52, storm)
+
 	_sky_shader_material.set_shader_parameter("sky_top_color",     Vector3(top_col.r,  top_col.g,  top_col.b))
 	_sky_shader_material.set_shader_parameter("sky_horizon_color", Vector3(horiz.r,    horiz.g,    horiz.b))
 	_sky_shader_material.set_shader_parameter("sky_ground_color",  Vector3(ground_c.r, ground_c.g, ground_c.b))
+	_sky_shader_material.set_shader_parameter("sky_zenith_deep",   Vector3(zenith_deep.r, zenith_deep.g, zenith_deep.b))
+	var zen_mix := lerpf(0.16, 0.48, daylight) * lerpf(1.0, 0.45, cloud) * lerpf(1.0, 0.55, storm)
+	_sky_shader_material.set_shader_parameter("sky_zenith_mix",    zen_mix)
 	_sky_shader_material.set_shader_parameter("cloud_coverage",    cloud)
 	_sky_shader_material.set_shader_parameter("storm_intensity",   storm)
 	_sky_shader_material.set_shader_parameter("sun_color",         Vector3(sun_col.r,  sun_col.g,  sun_col.b))
+	_sky_shader_material.set_shader_parameter("star_visibility",   clampf(star_vis, 0.0, 1.0))
 
 
 func _apply_ocean_shader(daylight: float, cloud: float, rain: float, wind: float, storm: float) -> void:

@@ -5,7 +5,9 @@ extends Node3D
 ## Main scene root. Generates port definitions from seed, expands them to PortData,
 ## eagerly loads the home port, and lazy-loads all others via ProximityLoader.
 
-const PLAYER_SCENE := preload("res://scenes/islands/starting_island/player.tscn")
+const PLAYER_SCENE := preload("res://scenes/shared/player.tscn")
+const WORLD_RENDERER_SCRIPT := preload("res://scripts/world/world_renderer.gd")
+const ATMOSPHERIC_SCRIPT := preload("res://scripts/world/atmospheric_effects.gd")
 
 const LOAD_RADIUS           : float = 500.0
 const EDITOR_PREVIEW_RADIUS : float = 600.0
@@ -61,13 +63,13 @@ func _rebuild() -> void:
 
 
 func _add_world_renderer() -> void:
-	var renderer  := WorldRenderer.new()
+	var renderer := WORLD_RENDERER_SCRIPT.new() as Node3D
 	renderer.name = "WorldRenderer"
 	add_child(renderer)
 
 
 func _add_atmospheric_effects() -> void:
-	var fx  := AtmosphericEffects.new()
+	var fx := ATMOSPHERIC_SCRIPT.new() as Node3D
 	fx.name = "AtmosphericEffects"
 	add_child(fx)
 

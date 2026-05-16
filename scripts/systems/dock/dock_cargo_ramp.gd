@@ -13,7 +13,7 @@ const LAYER_BOAT_WALK: int = 4
 @export_group("Ends")
 ## Hull-side endpoint in boat `RigidBody3D` local space (`ShipGameplay` is usually identity).
 @export var boat_attachment_local: Vector3 = Vector3(-2.72, 2.06, 0.0)
-## Pier deck elevation (matches `starting_island` dock slab top when berth spawns near kit).
+## Pier deck elevation (adjust to dock slab kit / berth-relative spawn).
 @export var pier_walk_y: float = 0.08
 ## Along the abeam ray, reach at least this far toward the dock (m) so the foot sits on deck.
 @export var min_along_abeam: float = 0.65
