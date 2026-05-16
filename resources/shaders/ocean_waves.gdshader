@@ -27,19 +27,19 @@ uniform float steepness_4 = 0.25;
 uniform float wave_intensity = 1.0;
 uniform float wave_energy_multiplier = 1.0;
 
-uniform vec3 shallow_albedo : source_color = vec3(0.04, 0.14, 0.28);
-uniform vec3 deep_albedo    : source_color = vec3(0.008, 0.025, 0.055);
-uniform vec3 horizon_tint   : source_color = vec3(0.10, 0.20, 0.38);
-uniform float roughness     : hint_range(0.0, 1.0) = 0.07;
-uniform float metallic      : hint_range(0.0, 1.0) = 0.1;
-uniform float specular      : hint_range(0.0, 1.0) = 0.92;
+uniform vec3 shallow_albedo : source_color = vec3(0.028, 0.074, 0.118);
+uniform vec3 deep_albedo    : source_color = vec3(0.006, 0.018, 0.036);
+uniform vec3 horizon_tint   : source_color = vec3(0.068, 0.118, 0.172);
+uniform float roughness     : hint_range(0.0, 1.0) = 0.14;
+uniform float metallic      : hint_range(0.0, 1.0) = 0.02;
+uniform float specular      : hint_range(0.0, 1.0) = 0.56;
 uniform float water_alpha   : hint_range(0.15, 1.0) = 0.94;
 uniform float fresnel_power : hint_range(0.5, 10.0) = 3.8;
-uniform float fresnel_sky_mix : hint_range(0.0, 1.0) = 0.72;
-uniform float near_color_lift : hint_range(0.0, 1.0) = 0.20;
+uniform float fresnel_sky_mix : hint_range(0.0, 1.0) = 0.62;
+uniform float near_color_lift : hint_range(0.0, 1.0) = 0.14;
 
 // Wind chop — per-pixel normal perturbation strength (independent of geometry waves).
-uniform float chop_strength : hint_range(0.0, 1.0) = 0.08;
+uniform float chop_strength : hint_range(0.0, 1.0) = 0.12;
 
 uniform float foam_strength    : hint_range(0.0, 2.0) = 0.55;
 uniform float foam_steep_start : hint_range(0.0, 1.0) = 0.60;
@@ -51,6 +51,118 @@ uniform vec2 boat_coupling_axes = vec2(1.0, 1.0);
 varying vec3 v_world_pos;
 varying vec3 v_world_normal;
 varying float v_wave_steep;
+
+/* Smooth procedural noise — pure sine grids read as tiling under one sun/light. */
+
+float wf_hash21(vec2 p) {
+	vec2 hp = fract(p * vec2(123.344, 445.891));
+	hp += dot(hp, hp + 341.743);
+	return fract(hp.x * hp.y * 9571.834);
+}
+
+
+float wf_vnoise(vec2 p) {
+	vec2 i = floor(p);
+	vec2 f = fract(p);
+	vec2 u = f * f * (3.0 - 2.0 * f);
+	float a = wf_hash21(i);
+	float b = wf_hash21(i + vec2(1.0, 0.0));
+	float c = wf_hash21(i + vec2(0.0, 1.0));
+	float d = wf_hash21(i + vec2(1.0, 1.0));
+	return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
+
+
+}
+
+float wf_ocean_ripple_eta(vec2 xz, float wt) {
+
+
+	mat2 ra = mat2(vec2(0.809174, -0.587582), vec2(0.587582, 0.809174));
+
+
+	mat2 rb = mat2(vec2(0.422618, -0.906308), vec2(0.906308, 0.422618));
+
+
+	vec2 a = ra * xz;
+
+
+	vec2 b = rb * xz;
+
+
+	float wt_e = wt * 1.38;
+
+
+	float eta = wf_vnoise(a * 1.034 + wt_e * vec2(-0.28, 0.31))
+
+
+			+ wf_vnoise(b * 1.974 + wt_e * vec2(0.41, -0.33)) * 0.47
+
+
+			+ wf_vnoise(
+
+
+				  a * 3.974
+				  + vec2(b.x * (-0.17) + b.y * 0.11, b.x * 0.13 + b.y * 0.19)
+				  + wt_e * vec2(-0.44, 0.42))
+				* 0.145;
+
+
+	eta += sin(dot(a, vec2(1.04, -0.81)) + wt_e * 0.93) * 0.082;
+
+
+	eta += sin(dot(b * vec2(2.11, -1.87), vec2(0.91, 0.74)) + wt_e * (-1.14)) * 0.058;
+
+
+	return eta;
+
+
+}
+
+vec2 wf_ocean_eta_gradient(vec2 xz, float wt, float e) {
+
+
+	float e2 = max(e, 1e-4);
+
+
+	float hx_m_z_m = wf_ocean_ripple_eta(xz + vec2(-e2, -e2), wt);
+
+
+	float hx_0_z_m = wf_ocean_ripple_eta(xz + vec2(0.0, -e2), wt);
+
+
+	float hx_p_z_m = wf_ocean_ripple_eta(xz + vec2(e2, -e2), wt);
+
+
+	float hx_m_0 = wf_ocean_ripple_eta(xz + vec2(-e2, 0.0), wt);
+
+
+	float hx_p_0 = wf_ocean_ripple_eta(xz + vec2(e2, 0.0), wt);
+
+
+	float hx_m_z_p = wf_ocean_ripple_eta(xz + vec2(-e2, e2), wt);
+
+
+	float hx_0_z_p = wf_ocean_ripple_eta(xz + vec2(0.0, e2), wt);
+
+
+	float hx_p_z_p = wf_ocean_ripple_eta(xz + vec2(e2, e2), wt);
+
+
+	float gx = hx_p_z_m + 2.0 * hx_p_0 + hx_p_z_p - hx_m_z_m - 2.0 * hx_m_0 - hx_m_z_p;
+
+
+	float gz = hx_m_z_p + 2.0 * hx_0_z_p + hx_p_z_p - hx_m_z_m - 2.0 * hx_0_z_m - hx_p_z_m;
+
+
+	float inv = 1.0 / max(8.0 * e2, 1e-4);
+
+
+	return vec2(gx * inv, gz * inv);
+
+
+}
+
+
 
 void vertex() {
 	vec4 w4 = MODEL_MATRIX * vec4(VERTEX, 1.0);
@@ -145,47 +257,113 @@ void vertex() {
 }
 
 void fragment() {
+	vec3 nm = normalize(v_world_normal);
 	vec2 xz = v_world_pos.xz;
+	float wt = wave_time;
 
-	// Per-pixel wind chop: 4 layers of scrolling directional normals.
-	// Vertex Gerstner gives macro swells; this gives the micro-ripple churn
-	// that makes water look alive at every distance.
-	vec2 p1 = xz * 0.11;
-	vec2 p2 = xz * 0.27;
-	vec2 p3 = xz * 0.61;
-	vec2 p4 = xz * 1.40;
-	float nx = sin(p1.x + p1.y * 0.7  - wave_time * 0.55) * 0.40
-	         + sin(p2.x * 0.8 - p2.y  + wave_time * 0.95) * 0.28
-	         + sin(p3.y * 1.1 + p3.x  - wave_time * 1.80) * 0.18
-	         + sin(p4.x - p4.y * 1.3  + wave_time * 3.10) * 0.14;
-	float nz = cos(p1.y + p1.x * 0.6  + wave_time * 0.48) * 0.40
-	         + cos(p2.y * 0.9 + p2.x  - wave_time * 0.82) * 0.28
-	         + cos(p3.x * 1.2 - p3.y  + wave_time * 1.60) * 0.18
-	         + cos(p4.y + p4.x * 1.4  - wave_time * 2.70) * 0.14;
+	/* Stable finite-difference width (avoid distance-based ε — that caused strobing topo lines). */
 
-	vec3 base_n  = normalize(v_world_normal);
-	vec3 world_n = normalize(base_n + vec3(nx, 0.0, nz) * chop_strength);
 
-	// Write perturbed normal in view space so Godot's PBR lighting uses it.
+	float epsilon = mix(0.74, 0.98, chop_strength);
+
+
+	vec2 xz_eff = xz + wt * vec2(0.16, -0.13);
+
+
+
+	vec2 g_eta = wf_ocean_eta_gradient(xz_eff, wt, epsilon);
+
+
+	float dh_dx = g_eta.x;
+
+
+	float dh_dz = g_eta.y;
+
+
+	float ripple_gain =
+		chop_strength * mix(10.17, 6.93, chop_strength) * mix(1.0, 0.78, clamp(v_wave_steep, 0.0, 1.0));
+	vec3 lateral = vec3(-dh_dx, 0.0, -dh_dz) * ripple_gain;
+
+
+	vec3 ripple = lateral - nm * dot(nm, lateral);
+
+
+	vec3 world_n = normalize(nm + ripple);
+
+
 	NORMAL = normalize((VIEW_MATRIX * vec4(world_n, 0.0)).xyz);
 
 	vec3 view_dir = normalize(CAMERA_POSITION_WORLD - v_world_pos);
-	float ndv        = clamp(dot(world_n, view_dir), 0.001, 1.0);
+	float ndv = clamp(dot(world_n, view_dir), 0.001, 1.0);
+
+
 	float look_graze = 1.0 - pow(ndv, 1.18);
 
-	vec3 body  = mix(deep_albedo, shallow_albedo, look_graze * (0.22 + near_color_lift * 0.25));
-	float fres = pow(look_graze, fresnel_power);
-	vec3 col   = mix(body, horizon_tint, fres * fresnel_sky_mix);
+	vec3 body = mix(deep_albedo, shallow_albedo, look_graze * (0.22 + near_color_lift * 0.25));
 
-	// Foam: noisy break-up so it looks like spray, not paint.
-	float foam_noise = fract(sin(dot(xz, vec2(12.9898, 78.233))) * 43758.5453);
+
+	float fres = pow(look_graze, fresnel_power);
+
+
+	vec3 col = mix(body, horizon_tint, fres * fresnel_sky_mix);
+
+	mat2 ROT_A = mat2(vec2(0.809174, -0.587582), vec2(0.587582, 0.809174));
+
+
+	mat2 ROT_B = mat2(vec2(0.422618, -0.906308), vec2(0.906308, 0.422618));
+
+
+	vec2 xz_a = ROT_A * xz;
+
+
+	vec2 xz_b = ROT_B * xz;
+
+
+	vec2 foam_uv = xz_a + xz_b * vec2(-0.27, 0.41);
+
+
+	float foam_noise = wf_vnoise(
+		foam_uv * 5.974 + xz_b.xx * vec2(-0.31, -0.22) + wt * vec2(1.47, -1.21));
+
 	float foam = smoothstep(foam_steep_start, foam_steep_end, v_wave_steep) * foam_strength;
+
+
 	foam *= mix(0.35, 1.0, foam_noise);
+
+
 	col = mix(col, vec3(0.86, 0.90, 0.93), foam);
 
-	ALBEDO    = col;
-	ROUGHNESS = mix(roughness, 0.88, foam);
-	METALLIC  = mix(metallic, 0.02, foam);
-	SPECULAR  = mix(specular, 0.22, foam);
-	ALPHA     = water_alpha;
+	vec2 jitter_c = xz_a * 21.974 + xz_b.yy * vec2(-9.834, 7.917) + wt * vec2(8.93, -6.71);
+
+
+	vec2 jitter_d = xz_b.yx * vec2(17.401, -14.917) + wt * vec2(-7.61, 8.734);
+
+
+
+	float sp = wf_vnoise(jitter_c) * 0.68 + wf_vnoise(jitter_d * 6.417 + vec2(83.917, -41.734)) * 0.32;
+
+
+	ALBEDO = col;
+
+
+
+	float r_body = clamp(
+		roughness + 0.046 * (sp - 0.5) + v_wave_steep * 0.045, 0.034, 0.93);
+
+
+	float spec_body = specular * mix(0.78, 0.96, sp);
+
+
+	ROUGHNESS = mix(r_body, 0.88, foam);
+
+
+	METALLIC = mix(metallic, 0.02, foam);
+
+
+	SPECULAR = mix(spec_body, 0.22, foam);
+
+
+	ALPHA = water_alpha;
+
+
 }
