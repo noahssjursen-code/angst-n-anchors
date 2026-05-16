@@ -14,8 +14,11 @@ const PORT_NAMES : Array[String] = [
 	"Strandnes", "Kvamsvik", "Bremsund", "Tysneset",
 ]
 
-@export var world_seed: int = 42:
+@export var world_seed:   int = 42:
 	set(v): world_seed = v; if is_inside_tree(): _rebuild()
+
+@export var port_count: int = 35:
+	set(v): port_count = v; if is_inside_tree(): _rebuild()
 
 
 func _ready() -> void:
@@ -84,6 +87,7 @@ func _setup_ports(defs: Array[PortDefinition]) -> void:
 				data.port_id, data.display_name, data.world_position,
 				Vector3(INF, INF, INF),
 				data.commodity_export, data.commodity_imports,
+				data.island_width, 140.0, data.layout_seed,
 			)
 
 		if i == 0:
@@ -117,8 +121,6 @@ func _generate_definitions() -> Array[PortDefinition]:
 
 	var rng  := RandomNumberGenerator.new()
 	rng.seed = world_seed
-
-	var port_count := 4 + rng.randi() % 4   # 4–7 additional ports
 
 	for i in range(port_count):
 		var p           := PortDefinition.new()
