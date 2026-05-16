@@ -9,6 +9,10 @@ extends Node3D
 const C_AUTHORITY              := Color(0.78, 0.62, 0.14)
 const HARBOURMASTER_MESH_PATH  := "res://resources/data/meshes/harbour_master_building.json"
 const SHIPPINGAGENT_MESH_PATH  := "res://resources/data/meshes/shipping_agent_building.json"
+const CUSTOMS_MESH_PATH        := "res://resources/data/meshes/customs_building.json"
+const MARINE_ENGINEER_MESH_PATH := "res://resources/data/meshes/marine_engineer_building.json"
+const WAREHOUSE_MESH_PATH      := "res://resources/data/meshes/warehouse_building.json"
+const TOWN_MESH_PATH           := "res://resources/data/meshes/town_building.json"
 const C_COMMERCE  := Color(0.24, 0.64, 0.36)
 const C_SERVICES  := Color(0.72, 0.34, 0.14)
 const C_STORAGE   := Color(0.52, 0.56, 0.64)
@@ -104,6 +108,14 @@ func _place_row(defs: Array, center_z: float) -> void:
 			_harbourmaster_building(Vector3(cx, 0.0, center_z))
 		elif id == "ShippingAgent":
 			_shippingagent_building(Vector3(cx, 0.0, center_z))
+		elif id == "Customs":
+			_customs_building(Vector3(cx, 0.0, center_z))
+		elif id == "MarineEngineer":
+			_marine_engineer_building(Vector3(cx, 0.0, center_z))
+		elif id == "Warehouse":
+			_warehouse_building(Vector3(cx, 0.0, center_z))
+		elif id == "Town":
+			_town_building(Vector3(cx, 0.0, center_z))
 		else:
 			_box(Vector3(bw, h, float(d["d"])), Vector3(cx, h * 0.5, center_z), d["color"] as Color, id)
 
@@ -172,6 +184,78 @@ func _shippingagent_building(pos: Vector3) -> void:
 	var ma                     := ModelAssembler.new()
 	ma.name                    = "Model"
 	ma.model_data_path         = SHIPPINGAGENT_MESH_PATH
+	ma.build_part_colliders    = false
+	body.add_child(ma)
+	add_child(body)
+
+
+func _customs_building(pos: Vector3) -> void:
+	var body      := StaticBody3D.new()
+	body.name     = "Customs"
+	body.position = pos
+	var col       := CollisionShape3D.new()
+	var box       := BoxShape3D.new()
+	box.size      = Vector3(8.0, 5.0, 7.0)
+	col.shape     = box
+	col.position  = Vector3(0.0, 2.5, 0.0)
+	body.add_child(col)
+	var ma                     := ModelAssembler.new()
+	ma.name                    = "Model"
+	ma.model_data_path         = CUSTOMS_MESH_PATH
+	ma.build_part_colliders    = false
+	body.add_child(ma)
+	add_child(body)
+
+
+func _marine_engineer_building(pos: Vector3) -> void:
+	var body      := StaticBody3D.new()
+	body.name     = "MarineEngineer"
+	body.position = pos
+	var col       := CollisionShape3D.new()
+	var box       := BoxShape3D.new()
+	box.size      = Vector3(11.0, 4.0, 9.0)
+	col.shape     = box
+	col.position  = Vector3(0.0, 2.0, 0.0)
+	body.add_child(col)
+	var ma                     := ModelAssembler.new()
+	ma.name                    = "Model"
+	ma.model_data_path         = MARINE_ENGINEER_MESH_PATH
+	ma.build_part_colliders    = false
+	body.add_child(ma)
+	add_child(body)
+
+
+func _warehouse_building(pos: Vector3) -> void:
+	var body      := StaticBody3D.new()
+	body.name     = "Warehouse"
+	body.position = pos
+	var col       := CollisionShape3D.new()
+	var box       := BoxShape3D.new()
+	box.size      = Vector3(24.0, 6.0, 12.0)
+	col.shape     = box
+	col.position  = Vector3(0.0, 3.0, 0.0)
+	body.add_child(col)
+	var ma                     := ModelAssembler.new()
+	ma.name                    = "Model"
+	ma.model_data_path         = WAREHOUSE_MESH_PATH
+	ma.build_part_colliders    = false
+	body.add_child(ma)
+	add_child(body)
+
+
+func _town_building(pos: Vector3) -> void:
+	var body      := StaticBody3D.new()
+	body.name     = "Town"
+	body.position = pos
+	var col       := CollisionShape3D.new()
+	var box       := BoxShape3D.new()
+	box.size      = Vector3(28.0, 6.0, 14.0)
+	col.shape     = box
+	col.position  = Vector3(0.0, 3.0, 0.0)
+	body.add_child(col)
+	var ma                     := ModelAssembler.new()
+	ma.name                    = "Model"
+	ma.model_data_path         = TOWN_MESH_PATH
 	ma.build_part_colliders    = false
 	body.add_child(ma)
 	add_child(body)

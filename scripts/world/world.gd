@@ -10,8 +10,8 @@ const PLAYER_SCENE := preload("res://scenes/islands/starting_island/player.tscn"
 const LOAD_RADIUS : float = 350.0
 
 const PORT_NAMES : Array[String] = [
-	"Stonehaven", "Greywater", "Saltholm", "Ironharbour",
-	"Westport",   "Millcove",  "Dunreach", "Coppergate",
+	"Holmvik", "Sandvær", "Bergnes", "Kloven",
+	"Strandnes", "Kvamsvik", "Bremsund", "Tysneset",
 ]
 
 @export var world_seed: int = 42:
@@ -106,7 +106,7 @@ func _generate_definitions() -> Array[PortDefinition]:
 
 	var home            := PortDefinition.new()
 	home.port_id        = "port-home"
-	home.display_name   = "Home Port"
+	home.display_name   = "Haugsvik"
 	home.world_position = Vector3.ZERO
 	home.size           = 1
 	defs.append(home)

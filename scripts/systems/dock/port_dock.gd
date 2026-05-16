@@ -11,6 +11,9 @@ extends Node3D
 enum BerthStatus { FREE = 0, RESERVED = 1, OCCUPIED = 2 }
 
 const C_QUAY           := Color(0.28, 0.30, 0.34)
+const C_QUAY_EDGE      := Color(0.22, 0.23, 0.26)
+const C_BOLLARD        := Color(0.16, 0.16, 0.18)
+const C_EDGE_STRIPE    := Color(0.82, 0.78, 0.20)
 const C_BERTH          := Color(0.20, 0.85, 0.35, 0.35)
 const C_BERTH_RESERVED := Color(0.95, 0.75, 0.10, 0.40)
 const C_BERTH_OCCUPIED := Color(0.90, 0.20, 0.15, 0.40)
@@ -97,6 +100,25 @@ func _build_quay() -> void:
 	col.shape            = box
 	body.add_child(col)
 	add_child(body)
+
+	# Dark leading edge where quay meets water
+	_box(Vector3(dock_length, QUAY_HEIGHT, 0.35),
+		 Vector3(0.0, QUAY_HEIGHT * 0.5, 0.175),
+		 C_QUAY_EDGE, "QuayLip")
+
+	# Safety stripe along dock face
+	_box(Vector3(dock_length, 0.04, 0.22),
+		 Vector3(0.0, QUAY_HEIGHT + 0.02, 0.11),
+		 C_EDGE_STRIPE, "DockStripe")
+
+	# Bollards — one every 8 m along dock face
+	var n_bollards := maxi(1, int(dock_length / 8.0))
+	var spacing    := dock_length / float(n_bollards)
+	for i in range(n_bollards):
+		var bx := -dock_length * 0.5 + spacing * (float(i) + 0.5)
+		_box(Vector3(0.32, 0.52, 0.32),
+			 Vector3(bx, QUAY_HEIGHT + 0.26, 0.40),
+			 C_BOLLARD, "Bollard%d" % i)
 
 
 # ── Berths ────────────────────────────────────────────────────────────────────

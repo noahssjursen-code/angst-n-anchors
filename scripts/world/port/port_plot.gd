@@ -82,6 +82,17 @@ func _rebuild() -> void:
 	dock.position         = Vector3(0.0, 0.0, -hd)
 	add_child(dock)
 
+	if not port_label.is_empty():
+		var name_lbl           := Label3D.new()
+		name_lbl.name          = "PortNameLabel"
+		name_lbl.text          = port_label.to_upper()
+		name_lbl.pixel_size    = 0.014
+		name_lbl.modulate      = Color(0.96, 0.92, 0.78, 0.88)
+		name_lbl.billboard     = BaseMaterial3D.BILLBOARD_ENABLED
+		name_lbl.no_depth_test = true
+		name_lbl.position      = Vector3(0.0, 22.0, -hd)
+		add_child(name_lbl)
+
 	var facilities            := PortFacilities.new()
 	facilities.name           = "PortFacilities"
 	facilities.port_size      = port_size

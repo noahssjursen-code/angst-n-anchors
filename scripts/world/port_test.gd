@@ -11,8 +11,10 @@ func _ready() -> void:
 	renderer.name = "WorldRenderer"
 	add_child(renderer)
 
-	var plot  := PortPlot.new()
-	plot.name = "Port"
+	var plot        := PortPlot.new()
+	plot.name       = "Port"
+	plot.port_id    = "port-test"
+	plot.port_label = "Testvik"
 	add_child(plot)
 
 	_spawn_player()

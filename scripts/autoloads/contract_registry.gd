@@ -161,13 +161,15 @@ func _make_contract(from_id: String, to_id: String) -> Contract:
 	var to_pos    := to_info.get("position",   Vector3.ZERO) as Vector3
 	var distance  := maxf(from_pos.distance_to(to_pos), 1.0)
 
-	var commodity: Dictionary = COMMODITIES[randi() % COMMODITIES.size()]
-	var quantity   := randi() % 7 + 4
+	var rng      := RandomNumberGenerator.new()
+	rng.seed     = _hash_route(from_id, to_id)
+	var commodity: Dictionary = COMMODITIES[rng.randi() % COMMODITIES.size()]
+	var quantity   := rng.randi() % 7 + 4
 	var value_per  := int(commodity["value"])
 	var reward     := int(distance * float(quantity) * float(value_per) * 0.12)
 
 	var c                    := Contract.new()
-	c.id                     = UuidUtil.generate()
+	c.id                     = from_id + "::" + to_id
 	c.commodity              = str(commodity["id"])
 	c.display_name           = str(commodity["display"])
 	c.quantity               = quantity
@@ -178,3 +180,10 @@ func _make_contract(from_id: String, to_id: String) -> Contract:
 	c.state                  = Contract.State.AVAILABLE
 	c.delivered_count        = 0
 	return c
+
+
+static func _hash_route(from_id: String, to_id: String) -> int:
+	var h := 5381
+	for ch in (from_id + "|" + to_id):
+		h = ((h << 5) + h) ^ ch.unicode_at(0)
+	return h
