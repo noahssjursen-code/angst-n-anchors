@@ -92,25 +92,17 @@ float wf_ocean_ripple_eta(vec2 xz, float wt) {
 	float wt_e = wt * 1.38;
 
 
-	float eta = wf_vnoise(a * 1.034 + wt_e * vec2(-0.28, 0.31))
-
-
-			+ wf_vnoise(b * 1.974 + wt_e * vec2(0.41, -0.33)) * 0.47
-
-
+	// Suppress broad stationary bowl-like features: favor finer octaves + faster drift.
+	float eta = wf_vnoise(a * 1.58 + wt_e * vec2(-0.63, 0.71)) * 0.36
+			+ wf_vnoise(b * 2.74 + wt_e * vec2(0.88, -0.73)) * 0.31
 			+ wf_vnoise(
+				  a * 4.95
+				  + vec2(b.x * (-0.24) + b.y * 0.17, b.x * 0.19 + b.y * 0.26)
+				  + wt_e * vec2(-0.96, 0.91))
+				* 0.11;
 
-
-				  a * 3.974
-				  + vec2(b.x * (-0.17) + b.y * 0.11, b.x * 0.13 + b.y * 0.19)
-				  + wt_e * vec2(-0.44, 0.42))
-				* 0.145;
-
-
-	eta += sin(dot(a, vec2(1.04, -0.81)) + wt_e * 0.93) * 0.082;
-
-
-	eta += sin(dot(b * vec2(2.11, -1.87), vec2(0.91, 0.74)) + wt_e * (-1.14)) * 0.058;
+	eta += sin(dot(a, vec2(1.21, -0.93)) + wt_e * 1.37) * 0.046;
+	eta += sin(dot(b * vec2(2.64, -2.21), vec2(0.92, 0.78)) + wt_e * (-1.61)) * 0.034;
 
 
 	return eta;
@@ -267,7 +259,7 @@ void fragment() {
 	float epsilon = mix(0.74, 0.98, chop_strength);
 
 
-	vec2 xz_eff = xz + wt * vec2(0.16, -0.13);
+	vec2 xz_eff = xz + wt * vec2(0.42, -0.35) + vec2(sin(wt * 0.21), cos(wt * 0.17)) * 0.75;
 
 
 
@@ -280,8 +272,10 @@ void fragment() {
 	float dh_dz = g_eta.y;
 
 
-	float ripple_gain =
-		chop_strength * mix(10.17, 6.93, chop_strength) * mix(1.0, 0.78, clamp(v_wave_steep, 0.0, 1.0));
+	float grad_mag = length(g_eta);
+	float grad_damp = 1.0 / (1.0 + grad_mag * 1.7);
+	float ripple_gain = chop_strength * mix(8.6, 6.2, chop_strength) * mix(1.0, 0.78, clamp(v_wave_steep, 0.0, 1.0));
+	ripple_gain *= mix(1.0, grad_damp, 0.38);
 	vec3 lateral = vec3(-dh_dx, 0.0, -dh_dz) * ripple_gain;
 
 
