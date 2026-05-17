@@ -462,6 +462,28 @@ func spawn_player_ship(index: int, ship_scene_path: String = "") -> Node3D:
 	return ship
 
 
+## Place an already-built BoatBody at a berth. Caller must have called reserve_berth() first.
+func place_ship_at_berth(index: int, ship: BoatBody) -> BoatBody:
+	if index < 0 or index >= _berth_data.size():
+		return null
+	var t    := get_berth_spawn_transform(index)
+	ship.name = "PlayerShip"
+	var plot := get_parent()
+	if plot == null:
+		return null
+	plot.add_child(ship)
+	ship.global_transform = t
+	ship.call_deferred("place_at_waterline", WaveSurface.WATER_LEVEL, ship.design_draft_fraction)
+	ship.fit_to_port_berth(self, index)
+	var mooring := ship.find_child("MooringComponent", true, false) as MooringComponent
+	if mooring != null:
+		mooring.call_deferred("auto_moor", mooring.get_tree())
+	var b       := _berth_data[index] as Dictionary
+	b["status"] = BerthStatus.OCCUPIED
+	_update_berth_color(index)
+	return ship
+
+
 func _update_berth_color(index: int) -> void:
 	var b    := _berth_data[index] as Dictionary
 	var fill := b["fill"] as MeshInstance3D

@@ -14,7 +14,7 @@
       },
       "role": "physics_body",
       "position": [0, 0, 0],
-      "rotation_degrees": [0, 90, 0],
+      "rotation_degrees": [0, -90, 0],
       "scale": 1.0,
       "color": [0.10, 0.10, 0.11],
       "roughness": 0.82,
@@ -34,7 +34,7 @@
       },
       "role": "visual",
       "position": [0, 0, 0],
-      "rotation_degrees": [0, 90, 0],
+      "rotation_degrees": [0, -90, 0],
       "scale": 1.0,
       "color": [0.55, 0.08, 0.08],
       "roughness": 0.80,
@@ -52,12 +52,24 @@
       },
       "role": "visual",
       "position": [0, 0, 0],
-      "rotation_degrees": [0, 90, 0],
+      "rotation_degrees": [0, -90, 0],
       "scale": 1.0,
       "color": [0.30, 0.30, 0.32],
       "roughness": 0.88,
       "metallic": 0.04,
       "collision": "none"
     }
-  ]
+  ],
+  "slots": {
+    "bridge":           [0.0,  3.3, -21.0],
+    "propulsion":       [0.0, -1.5, -28.8],
+    "bow_thruster":     [0.0, -1.5,  28.8],
+    "mooring_port_fwd": [-5.0,  3.0, 25.5],
+    "mooring_stbd_fwd": [ 5.0,  3.0, 25.5],
+    "mooring_port_aft": [-5.0,  3.0, -25.5],
+    "mooring_stbd_aft": [ 5.0,  3.0, -25.5],
+    "cargo_main":       [0.0,  3.2,  7.0],
+    "cargo_aft":        [0.0,  3.2, -9.0],
+    "nav_light_bow":    [0.0,  4.2, 29.0]
+  }
 }

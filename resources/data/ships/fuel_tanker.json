@@ -1,0 +1,56 @@
+{
+  "display_name": "Fuel Tanker",
+  "hull": "hulls/hull_coastal_trader_long.json",
+  "scale": 2.0,
+  "superstructure": "bridge_small",
+  "cargo_decks": [],
+
+  "physics": {
+    "auto_mass_from_hull": true,
+    "hull_mass": 22000,
+    "design_draft_fraction": 0.52,
+    "engine_mass": 5000,
+    "keel_ballast_mass": 12000,
+    "fuel_stores_mass": 20000,
+    "center_of_mass_depth_fraction": 0.62,
+    "artificial_keel_extra_depth": 1.0,
+    "linear_damp_coeff": 0.03,
+    "angular_damp_coeff": 0.88
+  },
+
+  "buoyancy": {
+    "block_coefficient": 0.73,
+    "vertical_damping": 4300
+  },
+
+  "hydrodynamics": {
+    "forward_drag_coeff": 0.05,
+    "lateral_drag_coeff": 4.2,
+    "rotational_drag_coeff": 7.0,
+    "orbital_flow_scale": 0.08,
+    "bulk_horizontal_drag": 560.0,
+    "draft_fraction": 0.47
+  },
+
+  "propulsion": {
+    "max_thrust": 780000,
+    "reverse_multiplier": 0.45
+  },
+
+  "rudder": {
+    "max_torque": 1500000,
+    "speed_factor": 0.68,
+    "min_effectiveness_floor": 0.40,
+    "rudder_flow_gate": 0.25,
+    "sideslip_rudder_weight": 0.58
+  },
+
+  "bow_thruster": {
+    "max_thrust": 140000
+  },
+
+  "camera": {
+    "follow_distance": 42.0,
+    "follow_height": 14.0
+  }
+}

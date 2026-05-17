@@ -8,10 +8,10 @@ extends Node3D
 ## lateral_input is set each frame by BoatController — range -1 (port) to 1 (starboard).
 
 @export var max_thrust: float = 4000.0
-## Local thruster bore (bow, near waterline).
-@export var bow_offset: Vector3 = Vector3(0.0, 0.0, -5.8)
-## Local bore for stern tunnel thruster; used only when `crab_mode` is true.
-@export var stern_offset: Vector3 = Vector3(0.0, -1.3, 11.0)
+## Local bore of the bow tunnel thruster (positive Z = bow).
+@export var bow_offset: Vector3 = Vector3(0.0, 0.0, 5.8)
+## Local bore of the stern tunnel thruster; used only when `crab_mode` is true.
+@export var stern_offset: Vector3 = Vector3(0.0, -1.3, -11.0)
 
 var lateral_input: float = 0.0
 ## When true, apply equal parallel force bow + stern (docking crab). BoatController owns this flag.
@@ -31,13 +31,9 @@ func _physics_process(_delta: float) -> void:
 		return
 
 	if crab_mode:
-		# Pure sideways translation: applying at two asymmetric offsets creates an
-		# unequal torque balance (stern arm >> bow arm) which inverts apparent direction.
-		# Central force = no torque, guaranteed lateral drift.  Scale by 2 to approximate
-		# the combined output of both tunnel thrusters.
-		# Negate: hull body is authored rotated 180° Y so basis.x points to port,
-		# making positive lateral_input push the wrong way without the flip.
-		var f := _body.global_transform.basis.x * (-lateral_input) * max_thrust * 2.0
+		# Pure sideways translation: central force means no torque, guaranteed lateral drift.
+		# Scale by 2 to approximate the combined output of both tunnel thrusters.
+		var f := _body.global_transform.basis.x * lateral_input * max_thrust * 2.0
 		_body.apply_central_force(f)
 	else:
 		# Bow-only: force at bow offset creates yaw torque — swings the bow.

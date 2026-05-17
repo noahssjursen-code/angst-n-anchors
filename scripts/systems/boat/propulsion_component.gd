@@ -3,14 +3,15 @@ class_name PropulsionComponent
 extends Node3D
 
 ## Engine / propeller. Applies thrust at the stern.
-## In this project, mesh orientation means "ahead" uses negative throttle, and
-## "astern" uses positive throttle.
 ## throttle is set each frame by BoatController — range -1..1.
+## Negative throttle = ahead; positive throttle = astern (reduced by reverse_multiplier).
+## BoatController sends negated stage values so the stage table stays sign-intuitive
+## (positive stage = ahead intent) while this component receives the inverted value.
 
 @export var max_thrust:          float = 24000.0
-@export var reverse_multiplier:  float = 0.45   # reverse is weaker than ahead
-## Local position of the propeller (stern centre, at waterline).
-@export var stern_offset: Vector3 = Vector3(0.0, 0.0, 5.8)
+@export var reverse_multiplier:  float = 0.45
+## Local position of the propeller (stern centre, at or below waterline).
+@export var stern_offset: Vector3 = Vector3(0.0, 0.0, -5.8)
 
 var throttle: float = 0.0
 
@@ -28,12 +29,9 @@ func _physics_process(_delta: float) -> void:
 		return
 
 	var magnitude: float = throttle * max_thrust
-	# Ahead is negative throttle in this vessel convention, so apply reverse
-	# penalty only for astern (positive) command.
 	if throttle > 0.0:
 		magnitude *= reverse_multiplier
 
-	# Forward is -Z in Godot's convention
-	var force: Vector3   = -_body.global_transform.basis.z * magnitude
-	var offset: Vector3  = _body.to_global(stern_offset) - _body.global_position
+	var force: Vector3  = -_body.global_transform.basis.z * magnitude
+	var offset: Vector3 = _body.to_global(stern_offset) - _body.global_position
 	_body.apply_force(force, offset)

@@ -15,6 +15,7 @@ const HARBOURMASTER_MESH_PATH   := "res://resources/data/meshes/port_buildings/h
 const SHIPPINGAGENT_MESH_PATH   := "res://resources/data/meshes/port_buildings/shipping_agent_building.json"
 const CUSTOMS_MESH_PATH         := "res://resources/data/meshes/port_buildings/customs_building.json"
 const MARINE_ENGINEER_MESH_PATH := "res://resources/data/meshes/port_buildings/marine_engineer_building.json"
+const SHIPWRIGHT_MESH_PATH      := "res://resources/data/meshes/port_buildings/shipwright_building.json"
 const WAREHOUSE_MESH_PATH       := "res://resources/data/meshes/port_buildings/warehouse_building.json"
 const TOWN_MESH_PATH            := "res://resources/data/meshes/port_buildings/town_building.json"
 const FOGHORN_SCENE            := preload("res://scenes/systems/fog_horn_building.tscn")
@@ -46,6 +47,7 @@ var _spawn_local_pos:          Vector3 = Vector3.ZERO
 var _harbour_master_local_pos: Vector3 = Vector3.ZERO
 var _contract_npc_local_pos:   Vector3 = Vector3.ZERO
 var _delivery_npc_local_pos:   Vector3 = Vector3.ZERO
+var _shipwright_local_pos:     Vector3 = Vector3.ZERO
 
 @export var port_size: int = 1:
 	set(v): port_size = v; if is_inside_tree(): _rebuild()
@@ -91,6 +93,7 @@ func _build_facilities() -> void:
 	_harbour_master_local_pos = Vector3.ZERO
 	_contract_npc_local_pos   = Vector3.ZERO
 	_delivery_npc_local_pos   = Vector3.ZERO
+	_shipwright_local_pos     = Vector3.ZERO
 
 	_rng = RandomNumberGenerator.new()
 	_rng.seed = layout_seed
@@ -315,6 +318,8 @@ func _place_facility(id: String, pos: Vector3) -> void:
 		_customs_building(pos)
 	elif id == "MarineEngineer":
 		_marine_engineer_building(pos)
+	elif id == "Shipwright":
+		_shipwright_building(pos)
 	elif id == "Warehouse":
 		_warehouse_building(pos)
 	elif id == "Town":
@@ -328,6 +333,8 @@ func _track_npc_pos(id: String, cx: float, center_z: float, depth: float) -> voi
 			_spawn_local_pos          = Vector3(0.0, 0.02, center_z - depth * 0.5 - 2.0)
 		"ShippingAgent":
 			_contract_npc_local_pos   = Vector3(cx, 0.0, center_z)
+		"Shipwright":
+			_shipwright_local_pos     = Vector3(cx, 0.0, center_z)
 		"Warehouse":
 			_delivery_npc_local_pos   = Vector3(cx, 0.0, center_z)
 
@@ -348,6 +355,7 @@ func _facility_defs() -> Array:
 	return [
 		{ "id": "HarbourMaster",  "w":  8.0, "h": 5.0, "d":  7.0, "priority": 0, "color": C_AUTHORITY, "min_size": 0 },
 		{ "id": "ShippingAgent",  "w": 10.0, "h": 5.0, "d":  8.0, "priority": 0, "color": C_COMMERCE,  "min_size": 1 },
+		{ "id": "Shipwright",     "w": 12.0, "h": 6.0, "d": 10.0, "priority": 1, "color": C_SERVICES,  "min_size": 1 },
 		{ "id": "MarineEngineer", "w": 11.0, "h": 4.0, "d":  9.0, "priority": 1, "color": C_SERVICES,  "min_size": 2 },
 		{ "id": "Customs",        "w":  8.0, "h": 5.0, "d":  7.0, "priority": 1, "color": C_AUTHORITY, "min_size": 2 },
 		{ "id": "Warehouse",      "w": 24.0, "h": 6.0, "d": 12.0, "priority": 2, "color": C_STORAGE,   "min_size": 0, "tile": true, "tile_gap": 2.5, "max_tiles": [1, 1, 2, 3,  5] },
@@ -368,6 +376,9 @@ func get_contract_npc_local_pos() -> Vector3:
 
 func get_delivery_npc_local_pos() -> Vector3:
 	return _delivery_npc_local_pos
+
+func get_shipwright_local_pos() -> Vector3:
+	return _shipwright_local_pos
 
 
 # ── Building constructors ─────────────────────────────────────────────────────
@@ -439,6 +450,24 @@ func _marine_engineer_building(pos: Vector3) -> void:
 	var ma                  := ModelAssembler.new()
 	ma.name                 = "Model"
 	ma.model_data_path      = MARINE_ENGINEER_MESH_PATH
+	ma.build_part_colliders = false
+	body.add_child(ma)
+	add_child(body)
+
+
+func _shipwright_building(pos: Vector3) -> void:
+	var body      := StaticBody3D.new()
+	body.name     = "Shipwright"
+	body.position = pos
+	var col       := CollisionShape3D.new()
+	var box       := BoxShape3D.new()
+	box.size      = Vector3(12.0, 6.0, 10.0)
+	col.shape     = box
+	col.position  = Vector3(0.0, 3.0, 0.0)
+	body.add_child(col)
+	var ma                  := ModelAssembler.new()
+	ma.name                 = "Model"
+	ma.model_data_path      = SHIPWRIGHT_MESH_PATH
 	ma.build_part_colliders = false
 	body.add_child(ma)
 	add_child(body)

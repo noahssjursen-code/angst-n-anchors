@@ -17,7 +17,10 @@
       "Bash(python3 *)",
       "Bash(python *)",
       "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\noahs\\\\Documents\\\\angst-n-anchors\" -Directory)",
-      "Bash(Select-Object Name)"
+      "Bash(Select-Object Name)",
+      "PowerShell(Get-ChildItem -Path \"C:\\\\Users\\\\noahs\\\\Documents\\\\angst-n-anchors\\\\scenes\" -Recurse -File | Where-Object { $_.Extension -eq '.tscn' } | ForEach-Object { $_.FullName.Replace\\('C:\\\\Users\\\\noahs\\\\Documents\\\\angst-n-anchors\\\\', ''\\) })",
+      "Bash(xargs grep -l \"SubViewport\")",
+      "Bash(xargs ls -la)"
     ]
   }
 }

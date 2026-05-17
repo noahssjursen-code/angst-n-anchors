@@ -152,6 +152,13 @@ func _build_npcs() -> void:
 	dnpc.position   = fpos + delivery_ref + Vector3(2.0, 0.0, -5.0)
 	add_child(dnpc)
 
+	var sw_local := facilities.get_shipwright_local_pos()
+	if sw_local != Vector3.ZERO:
+		var sw      := ShipwrightNpc.new()
+		sw.name     = "ShipwrightNpc"
+		sw.position = fpos + sw_local + Vector3(0.0, 0.0, -5.5)
+		add_child(sw)
+
 	if not port_id.is_empty():
 		call_deferred("_register_with_registry")
 

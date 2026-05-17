@@ -33,7 +33,7 @@ func _physics_process(_delta: float) -> void:
 	if Engine.is_editor_hint() or _body == null or is_zero_approx(rudder_input):
 		return
 
-	# Forward speed: positive = moving ahead
+	# basis.z is the body's backward axis; negate dot so positive = astern, negative = ahead.
 	var fwd_speed: float = -_body.linear_velocity.dot(_body.global_transform.basis.z)
 	var basis_inv: Basis = _body.global_transform.basis.inverse()
 	var local_vel: Vector3 = basis_inv * _body.linear_velocity

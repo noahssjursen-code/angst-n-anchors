@@ -73,8 +73,6 @@ func _physics_process(delta: float) -> void:
 	if Engine.is_editor_hint() or not _active:
 		return
 
-	# Positive throttle = thrust along -body Z (Godot forward). JSON hulls are
-	# authored with bow at +Z, so invert so W (move_forward) matches visual bow.
 	if Input.is_action_just_pressed("boat_docking_thrusters"):
 		_thruster_mode = (_thruster_mode + 1) % 3
 
@@ -83,8 +81,8 @@ func _physics_process(delta: float) -> void:
 	elif Input.is_action_just_pressed("move_back"):
 		_step_throttle_stage(-1)
 
-	# Boat mesh is authored with bow at +Z while propulsion uses Godot forward (-Z),
-	# so invert stage command before sending to engine.
+	# Stage table is signed (positive = ahead intent). PropulsionComponent treats
+	# negative throttle as ahead, so we negate before sending.
 	var throttle_target: float = -_target_throttle_from_stage()
 	var rudder_target:   float = Input.get_axis("move_left", "move_right")
 
