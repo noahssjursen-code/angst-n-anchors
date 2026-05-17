@@ -8,6 +8,8 @@ var port_id:        String  = ""
 var display_name:   String  = ""
 var world_position: Vector3 = Vector3.ZERO
 var size:           int     = 1   ## 0 (small landing) → 4 (large industrial port)
+var has_lighthouse: bool    = false
+var has_fog_horn:   bool    = false
 
 
 func to_dict() -> Dictionary:
@@ -16,6 +18,8 @@ func to_dict() -> Dictionary:
 		"display_name":   display_name,
 		"world_position": { "x": world_position.x, "y": world_position.y, "z": world_position.z },
 		"size":           size,
+		"has_lighthouse": has_lighthouse,
+		"has_fog_horn":   has_fog_horn,
 	}
 
 
@@ -30,4 +34,6 @@ static func from_dict(d: Dictionary) -> PortDefinition:
 		float(wp.get("z", 0.0)),
 	)
 	p.size = int(d.get("size", 1))
+	p.has_lighthouse = bool(d.get("has_lighthouse", false))
+	p.has_fog_horn   = bool(d.get("has_fog_horn",   false))
 	return p

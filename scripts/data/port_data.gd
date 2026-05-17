@@ -2,7 +2,8 @@ class_name PortData
 extends RefCounted
 
 ## Expanded runtime port record. Produced by PortExpander from a PortDefinition + world seed.
-## Lives in ContractRegistry for the session. Never serialized — always re-derived from the definition.
+## Lives in ContractRegistry for the session. Never serialized — always re-derived
+## from the definition.
 
 # Identity (copied from PortDefinition)
 var port_id:        String  = ""
@@ -15,6 +16,8 @@ var dock_length:     float              = 60.0
 var max_ship_class:  ShipClass.Type     = ShipClass.Type.COASTAL_TRADER
 var berth_types:     Array[int]         = []   ## CargoBerthType.Type per slot
 var has_fuel_point:  bool               = true
+var has_lighthouse:  bool               = false
+var has_fog_horn:    bool               = false
 
 # Economy
 var commodity_export:  String         = ""

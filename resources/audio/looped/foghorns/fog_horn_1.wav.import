@@ -2,7 +2,7 @@
 
 importer="wav"
 type="AudioStreamWAV"
-uid="uid://byna6ust3flbi"
+uid="uid://rc3a4tkdpp2t"
 path="res://.godot/imported/fog_horn_1.wav-2d368e7897c70dd16f96a4320c6f15b0.sample"
 
 [deps]
@@ -18,7 +18,7 @@ force/max_rate=false
 force/max_rate_hz=44100
 edit/trim=false
 edit/normalize=false
-edit/loop_mode=0
+edit/loop_mode=2
 edit/loop_begin=0
 edit/loop_end=-1
 compress/mode=2

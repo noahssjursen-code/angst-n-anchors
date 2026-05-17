@@ -56,6 +56,8 @@ const FEATURE_POOL: Array = [
 	["Exchange",        3, 0.65],
 	["Naval Yard",      4, 0.80],
 	["Customs House",   4, 0.90],
+	["Lighthouse",      1, 0.30],
+	["Fog Horn",        0, 0.40],
 ]
 
 const POPULATION_RANGE: Dictionary = {
@@ -83,6 +85,9 @@ static func expand(definition: PortDefinition, world_seed: int) -> PortData:
 
 	var rng      := RandomNumberGenerator.new()
 	rng.seed     = world_seed ^ _hash_id(definition.port_id)
+
+	data.has_lighthouse = definition.has_lighthouse or (size >= 1 and rng.randf() < 0.3)
+	data.has_fog_horn   = definition.has_fog_horn or (size >= 0 and rng.randf() < 0.4)
 
 	data.berth_types       = _berth_types(rng, size, data.dock_length, data.max_ship_class)
 	data.commodity_export  = COMMODITIES[rng.randi() % COMMODITIES.size()]

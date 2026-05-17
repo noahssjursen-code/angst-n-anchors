@@ -1,46 +1,38 @@
 class_name FogHorn
 extends AudioStreamPlayer3D
 
-## A directional foghorn that sounds out miles away at sea when fog is present.
-## Automatically selects a random tone and plays periodically during low visibility.
+@export var min_fog_density_to_play: float = 0.20
 
-const HORN_SOUNDS: Array[String] = [
-	"res://resources/audio/looped/foghorns/fog_horn_1.wav",
-	"res://resources/audio/looped/foghorns/fog_horn_2.wav",
-	"res://resources/audio/looped/foghorns/fog_horn_3.wav"
-]
-
-@export var blast_interval_seconds: float = 30.0
-@export var min_fog_density_to_play: float = 0.25
-
-var _timer: Timer
+var _is_active: bool = false
 
 func _ready() -> void:
 	if Engine.is_editor_hint():
 		return
 		
-	# Setup audio properties for extremely long distance sound
-	max_distance = 8000.0 # Heard miles away
-	unit_size = 50.0      # Attenuates slowly (large source)
-	bus = &"Master"       # Ensure it routes correctly (adjust if you have a specific bus)
+	# 3D Audio setup
+	max_distance = 8000.0
+	unit_size = 200.0     # Increased from 50 to carry much further before dropping off
+	volume_db = 6.0       # Boost base volume
+	bus = &"Master"
 	
-	# Pick a random horn sound and stick to it forever for this port
-	var sound_path = HORN_SOUNDS.pick_random()
-	if ResourceLoader.exists(sound_path):
-		stream = load(sound_path)
-		if stream is AudioStreamWAV:
-			stream.loop_mode = AudioStreamWAV.LOOP_DISABLED # Just in case it's set to loop
-	
-	_timer = Timer.new()
-	_timer.wait_time = blast_interval_seconds + randf_range(-5.0, 5.0) # Slight randomization to desync multiple ports
-	_timer.autostart = true
-	_timer.timeout.connect(_on_timer_timeout)
-	add_child(_timer)
+	# Load the audio.
+	stream = load("res://resources/audio/looped/foghorns/fog_horn_1.wav")
 
 
-func _on_timer_timeout() -> void:
+func _process(_delta: float) -> void:
+	if Engine.is_editor_hint() or stream == null:
+		return
+		
 	var weather = get_node_or_null("/root/WeatherLighting")
-	if weather:
-		var fog = float(weather.get("fog_density"))
-		if fog >= min_fog_density_to_play:
-			play()
+	if weather == null:
+		return
+		
+	var fog = float(weather.get("fog_density"))
+	var should_play = fog >= min_fog_density_to_play
+	
+	if should_play and not _is_active:
+		_is_active = true
+		play()
+	elif not should_play and _is_active:
+		_is_active = false
+		stop()

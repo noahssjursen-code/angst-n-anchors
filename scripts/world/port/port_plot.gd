@@ -32,6 +32,8 @@ const SHIP_CLASS_BY_SIZE: Dictionary = {
 var _configuring:         bool       = false
 var _berth_types_data:    Array[int] = []
 var _has_fuel_point_data: bool       = true
+var _has_lighthouse_data: bool       = false
+var _has_fog_horn_data:   bool       = false
 var _layout_seed_data:    int        = 0
 var _island_width_data:   float      = 80.0
 var _berth_cargo_count:   Dictionary = {}  # berth_index -> pending pickup count
@@ -100,6 +102,8 @@ func _rebuild() -> void:
 	facilities.plot_width     = _island_width_data
 	facilities.plot_depth     = plot_depth - PortDock.INLAND_DEPTH
 	facilities.layout_seed    = _layout_seed_data
+	facilities.has_lighthouse = _has_lighthouse_data
+	facilities.has_fog_horn   = _has_fog_horn_data
 	facilities.position       = Vector3(0.0, 0.0, -hd + PortDock.INLAND_DEPTH)
 	add_child(facilities)
 
@@ -272,6 +276,8 @@ func configure(data: PortData) -> void:
 	_island_width_data       = data.island_width
 	_berth_types_data        = data.berth_types.duplicate()
 	_has_fuel_point_data     = data.has_fuel_point
+	_has_lighthouse_data     = data.has_lighthouse
+	_has_fog_horn_data       = data.has_fog_horn
 	_layout_seed_data        = data.layout_seed
 	_configuring             = false
 	rotation.y               = data.rotation_y
