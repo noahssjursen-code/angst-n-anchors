@@ -142,6 +142,7 @@ func _build_ui() -> void:
 	_panel            = Panel.new()
 	_panel.name       = "ContractBoard"
 	_panel.visible    = false
+	_panel.theme      = HudStyle.make_theme()
 	_panel.set_anchors_preset(Control.PRESET_CENTER)
 	_panel.offset_left   = -320.0
 	_panel.offset_right  =  320.0
@@ -150,9 +151,10 @@ func _build_ui() -> void:
 	ui_layer.add_child(_panel)
 
 	var title                  := Label.new()
-	title.text                 = "Contract Board"
+	title.text                 = "CONTRACT BOARD"
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	title.add_theme_font_size_override("font_size", 18)
+	title.add_theme_font_size_override("font_size", 15)
+	title.add_theme_color_override("font_color", HudStyle.C_AMBER)
 	title.set_anchors_preset(Control.PRESET_TOP_WIDE)
 	title.offset_top    = 10.0
 	title.offset_bottom = 40.0

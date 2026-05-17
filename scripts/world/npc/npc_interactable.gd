@@ -35,6 +35,11 @@ func _build_prompt() -> void:
 	_prompt.offset_right  =  220.0
 	_prompt.offset_top    = -148.0
 	_prompt.offset_bottom = -108.0
+	_prompt.add_theme_color_override("font_color", HudStyle.C_AMBER)
+	_prompt.add_theme_color_override("font_shadow_color", Color(0.0, 0.0, 0.0, 0.85))
+	_prompt.add_theme_constant_override("shadow_offset_x", 1)
+	_prompt.add_theme_constant_override("shadow_offset_y", 1)
+	_prompt.add_theme_constant_override("shadow_as_outline", 1)
 	_prompt_layer.add_child(_prompt)
 
 

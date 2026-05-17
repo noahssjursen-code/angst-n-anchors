@@ -89,7 +89,7 @@ func _build_ui() -> void:
 	_reward_label.offset_right  =  180.0
 	_reward_label.offset_top    = -200.0
 	_reward_label.offset_bottom = -160.0
-	_reward_label.modulate      = Color(1.0, 0.88, 0.2)
+	_reward_label.modulate      = HudStyle.C_AMBER
 	_reward_layer.add_child(_reward_label)
 
 
