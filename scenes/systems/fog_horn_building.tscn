@@ -1,0 +1,11 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/world/port/fog_horn_building.gd" id="1"]
+[ext_resource type="Script" path="res://scripts/entities/fog_horn.gd" id="2"]
+
+[node name="FogHornBuilding" type="Node3D"]
+script = ExtResource("1")
+
+[node name="FogHorn" type="AudioStreamPlayer3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 6.2, 0)
+script = ExtResource("2")

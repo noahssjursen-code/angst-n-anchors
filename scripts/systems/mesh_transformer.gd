@@ -146,9 +146,10 @@ func rebuild() -> void:
 		return
 
 	if _current_data.is_empty():
+		push_error("MeshTransformer: current_data is empty for path: " + mesh_data_path)
 		return
 	if not _current_data.has("vertices") or not _current_data.has("indices"):
-		push_error("MeshTransformer: mesh data must contain `vertices` and `indices`")
+		push_error("MeshTransformer: mesh data must contain `vertices` and `indices` (path: " + mesh_data_path + ", keys: " + str(_current_data.keys()) + ")")
 		return
 
 	var params := _get_normalization_params(_current_data["vertices"])
