@@ -150,6 +150,10 @@ func _get_boat_position() -> Vector3:
 		var rb := n as RigidBody3D
 		if rb != null:
 			return rb.global_position
+	for n in get_tree().get_nodes_in_group("player"):
+		var cb := n as CharacterBody3D
+		if cb != null:
+			return cb.global_position
 	return Vector3(INF, INF, INF)
 
 

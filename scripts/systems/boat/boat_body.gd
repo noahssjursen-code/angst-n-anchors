@@ -179,6 +179,10 @@ func _ready() -> void:
 		audio.name = "BoatAudio"
 		add_child(audio)
 
+		var lighting := ShipLighting.new()
+		lighting.name = "ShipLighting"
+		add_child(lighting)
+
 
 func _exit_tree() -> void:
 	if _walk_deck != null and is_instance_valid(_walk_deck):

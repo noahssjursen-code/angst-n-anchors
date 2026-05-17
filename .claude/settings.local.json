@@ -13,7 +13,11 @@
       "Bash(Get-Content \"C:\\\\Users\\\\noahs\\\\Documents\\\\angst-n-anchors\\\\scripts\\\\world\\\\basic_island.gd\")",
       "Bash(Get-ChildItem \"C:\\\\Users\\\\noahs\\\\Documents\\\\angst-n-anchors\\\\scenes\" -Recurse -Filter \"*.tscn\")",
       "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\noahs\\\\Documents\\\\angst-n-anchors\" -Recurse -Directory)",
-      "Bash(Select-Object -ExpandProperty FullName)"
+      "Bash(Select-Object -ExpandProperty FullName)",
+      "Bash(python3 *)",
+      "Bash(python *)",
+      "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\noahs\\\\Documents\\\\angst-n-anchors\" -Directory)",
+      "Bash(Select-Object Name)"
     ]
   }
 }

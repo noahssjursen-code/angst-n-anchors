@@ -18,6 +18,7 @@ const MARINE_ENGINEER_MESH_PATH := "res://resources/data/meshes/marine_engineer_
 const WAREHOUSE_MESH_PATH       := "res://resources/data/meshes/warehouse_building.json"
 const TOWN_MESH_PATH            := "res://resources/data/meshes/town_building.json"
 const FOGHORN_SCENE            := preload("res://scenes/systems/fog_horn_building.tscn")
+const LIGHTHOUSE_SCENE         := preload("res://scenes/systems/lighthouse_building.tscn")
 
 const C_AUTHORITY := Color(0.78, 0.62, 0.14)
 const C_COMMERCE  := Color(0.24, 0.64, 0.36)
@@ -287,31 +288,22 @@ func _place_town_street_pairs(def: Dictionary, start_z: float) -> float:
 # ── Shared placement helpers ──────────────────────────────────────────────────
 
 func _place_landmarks() -> void:
-	print("[PortFacilities] Placing landmarks. FogHorn: ", has_fog_horn, " Lighthouse: ", has_lighthouse)
 	if not has_lighthouse and not has_fog_horn:
 		return
 
-	# Place them at the far left/right edges of the dock-side area.
-	# We want them to be visible from the sea, so near Z=0 but at the island flanks.
+	# Foghorn: dock edge, left or right flank — visible from sea.
 	var edge_x := plot_width * 0.5 - 6.0
-	var edge_z := 2.0 # Near the dock face
-
-	var lighthouse_side := -1
-
-	if has_lighthouse:
-		lighthouse_side = _rng.randi() % 2
-		var lx := -edge_x if lighthouse_side == 0 else edge_x
-		_lighthouse_building(Vector3(lx, 0.0, edge_z))
+	var dock_z := 2.0
 
 	if has_fog_horn:
-		var side := 1
-		if lighthouse_side != -1:
-			side = 1 - lighthouse_side # Opposite of lighthouse
-		else:
-			side = _rng.randi() % 2
-
+		var side := _rng.randi() % 2
 		var fx := -edge_x if side == 0 else edge_x
-		_fog_horn_building(Vector3(fx, 0.0, edge_z))
+		_fog_horn_building(Vector3(fx, 0.0, dock_z))
+
+	# Lighthouse: centered at the far inland end of the plot, large.
+	if has_lighthouse:
+		var back_z := plot_depth - 8.0
+		_lighthouse_building(Vector3(0.0, 0.0, back_z))
 
 
 func _place_facility(id: String, pos: Vector3) -> void:
@@ -490,38 +482,14 @@ func _town_building(pos: Vector3) -> void:
 
 
 func _lighthouse_building(pos: Vector3) -> void:
-	var body      := StaticBody3D.new()
-	body.name     = "Lighthouse"
-	body.position = pos
-
-	# Placeholder: a tall cylinder
-	var mi := MeshInstance3D.new()
-	var mesh := CylinderMesh.new()
-	mesh.top_radius = 2.0
-	mesh.bottom_radius = 3.5
-	mesh.height = 20.0
-	mi.mesh = mesh
-
-	var mat := StandardMaterial3D.new()
-	mat.albedo_color = Color(0.9, 0.9, 0.9) # White
-	mat.roughness = 0.8
-	mi.material_override = mat
-	mi.position.y = 10.0
-	body.add_child(mi)
-
-	var col := CollisionShape3D.new()
-	var shape := CylinderShape3D.new()
-	shape.radius = 3.5
-	shape.height = 20.0
-	col.shape = shape
-	col.position.y = 10.0
-	body.add_child(col)
-
-	add_child(body)
+	var building := LIGHTHOUSE_SCENE.instantiate()
+	building.name = "LighthouseBuilding"
+	building.position = pos
+	building.scale = Vector3(2.0, 2.0, 2.0)
+	add_child(building)
 
 
 func _fog_horn_building(pos: Vector3) -> void:
-	print("[PortFacilities] Instantiating FogHorn at ", pos)
 	var building := FOGHORN_SCENE.instantiate()
 	building.name = "FogHornBuilding"
 	building.position = pos

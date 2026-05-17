@@ -9,7 +9,7 @@ const PLAYER_SCENE := preload("res://scenes/shared/player.tscn")
 const WORLD_RENDERER_SCRIPT := preload("res://scripts/world/world_renderer.gd")
 const ATMOSPHERIC_SCRIPT := preload("res://scripts/world/atmospheric_effects.gd")
 
-const LOAD_RADIUS           : float = 500.0
+const LOAD_RADIUS           : float = 1500.0
 const EDITOR_PREVIEW_RADIUS : float = 600.0
 const EDITOR_PREVIEW_MAX    : int   = 6
 const MIN_PORT_SEPARATION   : float = 600.0

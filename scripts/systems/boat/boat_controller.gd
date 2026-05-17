@@ -122,6 +122,10 @@ func _unhandled_input(event: InputEvent) -> void:
 			_set_stage_from_percent(1.0)
 		KEY_X:
 			_set_stage_stop()
+		KEY_L:
+			var lighting := get_node_or_null("../ShipLighting") as ShipLighting
+			if lighting != null:
+				lighting.cycle_preset()
 		_:
 			return
 	get_viewport().set_input_as_handled()

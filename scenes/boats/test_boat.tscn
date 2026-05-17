@@ -51,7 +51,7 @@ draft_fraction = 0.38
 
 [node name="PropulsionComponent" type="Node3D" parent="."]
 script = ExtResource("3")
-max_thrust = 177000.0
+max_thrust = 574000.0
 stern_offset = Vector3(0.0, -1.3, 11.0)
 
 [node name="RudderComponent" type="Node3D" parent="."]

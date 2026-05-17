@@ -407,12 +407,21 @@ func _draw_port_panel(font: Font, registry: Node) -> void:
 		return
 
 	var pop         := int(info.get("population", 0))
-	var features    := info.get("features", []) as Array
 	var exports     := str(info.get("commodity_export", ""))
 	var imports     := info.get("commodity_imports", []) as Array
 	var berths      := int(info.get("berth_count", 1))
 	var port_size   := int(info.get("size", 1))
 	var class_label := SIZE_CLASS_LABEL[clampi(port_size, 0, SIZE_CLASS_LABEL.size() - 1)]
+
+	# Filter the feature pool to only things that are actually in-game.
+	const IMPLEMENTED_FEATURES: Array[String] = [
+		"Fuel Dock", "Lighthouse", "Fog Horn", "Harbour Master",
+	]
+	var raw_features := info.get("features", []) as Array
+	var facilities: Array[String] = []
+	for f in raw_features:
+		if IMPLEMENTED_FEATURES.has(str(f)):
+			facilities.append(str(f))
 
 	var contracts := registry.get_contracts_from_port(_selected_port) as Array
 	var avail     := 0
@@ -428,23 +437,22 @@ func _draw_port_panel(font: Font, registry: Node) -> void:
 			ship_pos = rb.global_position
 			break
 
-	var lh     := 18.0
-	var lh_sm  := 16.0
-	var pad    := 12.0
-	var feat_rows := maxi(1, int(ceil(float(features.size()) / 2.0))) if not features.is_empty() else 1
+	var lh    := 18.0
+	var lh_sm := 16.0
+	var pad   := 12.0
 
 	var panel_w := 264.0
 	var panel_h := (pad
-		+ 18.0                          # port name
+		+ 18.0    # port name
 		+ 4.0
-		+ lh                            # population + berths
+		+ lh      # pop + berths
 		+ 8.0
-		+ lh                            # exports
-		+ lh                            # imports
+		+ lh      # exports
+		+ lh      # imports
 		+ 8.0
-		+ lh_sm * float(feat_rows)      # features
+		+ lh_sm   # facilities line (always shown)
 		+ 8.0
-		+ lh                            # contracts + distance
+		+ lh      # contracts + distance
 		+ pad)
 
 	var panel_x := _cpx + _cpw - panel_w - 8.0
@@ -456,21 +464,20 @@ func _draw_port_panel(font: Font, registry: Node) -> void:
 	var tx := panel_x + pad
 	var ty := panel_y + pad + 14.0
 
-	# Port name + size badge
+	# Port name + class badge
 	draw_string(font, Vector2(tx, ty),
 				str(info.get("display_name", "")).to_upper(),
 				HORIZONTAL_ALIGNMENT_LEFT, -1, 14, C_PORT_LBL_SEL)
-	var badge := "  [%s]" % class_label
-	var nw    := font.get_string_size(str(info.get("display_name", "")).to_upper(),
-					HORIZONTAL_ALIGNMENT_LEFT, -1, 14).x
+	var nw := font.get_string_size(str(info.get("display_name", "")).to_upper(),
+				HORIZONTAL_ALIGNMENT_LEFT, -1, 14).x
 	draw_string(font, Vector2(tx + nw, ty),
-				badge, HORIZONTAL_ALIGNMENT_LEFT, -1, 9, Color(0.50, 0.65, 0.48, 0.70))
+				"  [%s]" % class_label,
+				HORIZONTAL_ALIGNMENT_LEFT, -1, 9, Color(0.50, 0.65, 0.48, 0.70))
 	ty += 4.0 + lh
 
-	# Population + berths on same line
-	var pop_str := _format_population(pop)
+	# Pop + berths
 	draw_string(font, Vector2(tx, ty),
-				"~%s  ·  %d berth%s" % [pop_str, berths, "s" if berths != 1 else ""],
+				"~%s  ·  %d berth%s" % [_format_population(pop), berths, "s" if berths != 1 else ""],
 				HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color(0.65, 0.75, 0.60, 0.75))
 	ty += lh + 8.0
 
@@ -478,9 +485,8 @@ func _draw_port_panel(font: Font, registry: Node) -> void:
 			  Color(0.38, 0.52, 0.32, 0.30), 1.0)
 
 	# Exports
-	var exp_label := exports.capitalize() if not exports.is_empty() else "—"
 	draw_string(font, Vector2(tx, ty),
-				"Exports   " + exp_label,
+				"Exports   " + (exports.capitalize() if not exports.is_empty() else "—"),
 				HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color(0.62, 0.80, 0.55, 0.90))
 	ty += lh
 
@@ -488,41 +494,27 @@ func _draw_port_panel(font: Font, registry: Node) -> void:
 	var imp_parts: Array[String] = []
 	for s in imports:
 		imp_parts.append(str(s).capitalize())
-	var imp_label := ", ".join(imp_parts) if not imp_parts.is_empty() else "—"
 	draw_string(font, Vector2(tx, ty),
-				"Imports   " + imp_label,
+				"Imports   " + (", ".join(imp_parts) if not imp_parts.is_empty() else "—"),
 				HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color(0.55, 0.72, 0.50, 0.75))
 	ty += lh + 8.0
 
 	draw_line(Vector2(panel_x + 8, ty - 4), Vector2(panel_x + panel_w - 8, ty - 4),
 			  Color(0.38, 0.52, 0.32, 0.30), 1.0)
 
-	# Features — two per row
-	if features.is_empty():
-		draw_string(font, Vector2(tx, ty), "No special facilities",
-					HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color(0.45, 0.55, 0.42, 0.55))
-		ty += lh_sm
-	else:
-		var col_w := (panel_w - pad * 2.0) * 0.5
-		for fi in range(features.size()):
-			var row := fi / 2
-			var col := fi % 2
-			var fx  := tx + float(col) * col_w
-			var fy  := ty + float(row) * lh_sm
-			draw_string(font, Vector2(fx, fy),
-						str(features[fi]),
-						HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color(0.58, 0.72, 0.52, 0.80))
-		ty += float(feat_rows) * lh_sm
-
-	ty += 8.0
+	# Facilities — only implemented ones, joined on one line
+	var fac_label := "  ·  ".join(facilities) if not facilities.is_empty() else "—"
+	draw_string(font, Vector2(tx, ty),
+				fac_label,
+				HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color(0.58, 0.72, 0.52, 0.80))
+	ty += lh_sm + 8.0
 
 	draw_line(Vector2(panel_x + 8, ty - 4), Vector2(panel_x + panel_w - 8, ty - 4),
 			  Color(0.38, 0.52, 0.32, 0.30), 1.0)
 
-	# Contracts available + distance on same line
-	var contracts_txt := "%d contract%s" % [avail, "s" if avail != 1 else ""]
+	# Contracts + distance
 	draw_string(font, Vector2(tx, ty),
-				contracts_txt,
+				"%d contract%s" % [avail, "s" if avail != 1 else ""],
 				HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color(0.65, 0.82, 0.58, 0.80))
 
 	if ship_pos.x != INF:

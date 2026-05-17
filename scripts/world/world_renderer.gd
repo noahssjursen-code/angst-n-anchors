@@ -246,14 +246,14 @@ func _apply_fog(fog_t: float, daylight: float, storm: float) -> void:
 	
 	# Traditional Screen-Space Fog (Handles skybox blending and distant occlusion)
 	_environment.fog_light_color = base_fog_col
-	_environment.fog_density            = lerpf(0.0, 0.05, fog_t * fog_t)
+	_environment.fog_density            = lerpf(0.0, 0.025, fog_t * fog_t)
 	_environment.fog_aerial_perspective = lerpf(0.0, 0.65, fog_t)
 	_environment.fog_sky_affect = lerpf(0.0, 0.85, fog_t * fog_t)
-	
+
 	# Volumetric Fog (Physical 3D depth, light shafts, and realistic thickness)
 	_environment.volumetric_fog_albedo = base_fog_col
 	# Scale volumetric density aggressively with fog_t
-	_environment.volumetric_fog_density = lerpf(0.0, 0.18, fog_t)
+	_environment.volumetric_fog_density = lerpf(0.0, 0.09, fog_t)
 	# Push the fog rendering distance out based on visibility
 	_environment.volumetric_fog_length = lerpf(480.0, 120.0, fog_t)
 
