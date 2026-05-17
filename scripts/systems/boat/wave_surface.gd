@@ -91,17 +91,19 @@ static func _vessel_displacement_params(b: RigidBody3D) -> Dictionary:
 	# The absolute depth the keel is submerged under the wave
 	var depth_below_surface: float = maxf(surf_raw - keel_y, 0.0)
 	
-	# Give the hole a very tight fit around the hull to carve out the wave
+	# The Mexican Hat Wavelet crosses 0 dip at exactly D = 0.85.
+	# By scaling sx and sz to 0.52, the edge of the physical boat (u = 0.5/0.52 = 0.96 => D = 0.85)
+	# lands EXACTLY on the zero-crossing, creating a perfect airtight seal against the hull.
 	var sx: float = maxf(hs.x * 0.52, 0.5)
 	var sz: float = maxf(hs.z * 0.52, 0.5)
 	var amp: float = 0.0
 	
 	if depth_below_surface > 0.0:
-		# We want the hole to carve out the wave, but not perfectly match it 1:1,
-		# so water can still slightly lap over the very bottom edge.
-		amp = depth_below_surface * 0.85
-		# Cap it at a much tighter multiple of the hull height so it doesn't dig massive craters
-		amp = minf(amp, hs.y * 1.4)
+		# We MUST carve out the entire depth of the wave, plus a little extra (1.05x),
+		# otherwise large waves will flood the deck because the hole isn't deep enough.
+		amp = depth_below_surface * 1.05
+		# The cap must be generous enough to handle storm waves cresting over the ship
+		amp = minf(amp, hs.y * 3.8)
 		
 	var vel_xz := Vector2(b.linear_velocity.x, b.linear_velocity.z)
 	return {
@@ -205,10 +207,7 @@ static func _vessel_dip_at(x: float, z: float) -> float:
 	var v2: float = v * v
 	var dist4: float = u2 * u2 + v2 * v2
 	
-	# "Bloom" effect: as the ship sinks deeper, the water gets pushed further outwards
-	var spread: float = 1.0 + clampf(amp * 0.15, 0.0, 1.2)
-	var spread4: float = spread * spread * spread * spread
-	var D: float = dist4 / spread4
+	var D: float = dist4
 	
 	if D > 8.0:
 		return 0.0

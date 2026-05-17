@@ -58,12 +58,14 @@ func _physics_process(_delta: float) -> void:
 
 	var w: float = 5.0
 	var l: float = 12.0
+	var h: float = 2.0
 	var draft: float = 1.0
 
 	if "hull_size" in _body:
 		var hs: Vector3 = _body.get("hull_size")
 		w = hs.x
 		l = hs.z
+		h = hs.y
 		draft = hs.y * draft_fraction
 
 	var forward_area: float = w * draft
@@ -75,6 +77,19 @@ func _physics_process(_delta: float) -> void:
 	var f_z: float = (
 		-0.5 * water_density * local_vel.z * absf(local_vel.z) * forward_area * forward_drag_coeff
 	)
+	
+	# --- DYNAMIC WAVE-CRASH DRAG ---
+	# If the boat plunges its nose into a wave, the effective frontal area massively increases.
+	# We sample the water height at the bow. If it's above the keel, we apply extra slamming drag.
+	var bow_world_pt := _body.to_global(Vector3(0.0, -h * 0.5, -l * 0.5))
+	var bow_water_y := WaveSurface.get_buoyancy_surface_height_at(bow_world_pt.x, bow_world_pt.z)
+	var bow_immersion := clampf(bow_water_y - bow_world_pt.y, 0.0, h)
+	if bow_immersion > draft:
+		var extra_immersion := bow_immersion - draft
+		var crash_area := w * extra_immersion
+		var crash_drag_coeff := 1.8 # Very high drag for crashing into a solid wall of water
+		var f_z_crash := -0.5 * water_density * local_vel.z * absf(local_vel.z) * crash_area * crash_drag_coeff
+		f_z += f_z_crash * wave_influence_scale
 
 	var local_force := Vector3(f_x, 0.0, f_z)
 	var global_force: Vector3 = _body.global_transform.basis * local_force

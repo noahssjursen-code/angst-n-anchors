@@ -131,6 +131,7 @@ void vertex() {
 	float boat_dip = 0.0;
 	float ddip_dx = 0.0;
 	float ddip_dz = 0.0;
+	vec2 outward_disp = vec2(0.0);
 	if (boat_coupling.z > 0.0001) {
 		float bx = boat_coupling.x;
 		float bz = boat_coupling.y;
@@ -155,10 +156,7 @@ void vertex() {
 		float v2 = v * v;
 		float dist4 = u2 * u2 + v2 * v2;
 		
-		// "Bloom" effect: as the ship sinks deeper, the water gets pushed further outwards, creating a wider cone
-		float spread = 1.0 + clamp(amp * 0.15, 0.0, 1.2);
-		float spread4 = spread * spread * spread * spread;
-		float D = dist4 / spread4;
+		float D = dist4;
 		
 		if (D < 8.0) {
 			float a = 1.8;
@@ -171,18 +169,27 @@ void vertex() {
 			boat_dip = amp * (exp_a - c * D * exp_b);
 			float d_dip_dD = amp * (-a * exp_a - c * exp_b * (1.0 - b * D));
 			
+			// Fold outward: push the rising water ring away from the hull to create a funnel/overhang
+			if (boat_dip < 0.0) {
+				float fold_amount = -boat_dip * 0.8; // How aggressively it curls outwards
+				float dist_xz = max(length(vec2(dx, dz)), 0.1);
+				outward_disp = (vec2(dx, dz) / dist_xz) * fold_amount;
+			}
+			
 			float u3 = u2 * u;
 			float v3 = v2 * v;
 			
-			// Chain rule: d(dip)/du = d(dip)/dD * dD/du (which is 4*u^3 / spread4)
-			float ddip_dlocal_x = d_dip_dD * 4.0 * u3 / (sx * spread4);
-			float ddip_dlocal_z = d_dip_dD * 4.0 * v3 / (sz * spread4);
+			// Chain rule: d(dip)/du = d(dip)/dD * dD/du (which is 4*u^3)
+			float ddip_dlocal_x = d_dip_dD * 4.0 * u3 / sx;
+			float ddip_dlocal_z = d_dip_dD * 4.0 * v3 / sz;
 			
 			ddip_dx = ddip_dlocal_x * right_x + ddip_dlocal_z * fwd_x;
 			ddip_dz = ddip_dlocal_x * right_z + ddip_dlocal_z * fwd_z;
 		}
 	}
 	displaced_world.y -= boat_dip;
+	displaced_world.x += outward_disp.x;
+	displaced_world.z += outward_disp.y;
 	slopes.x += ddip_dx;
 	slopes.y += ddip_dz;
 
