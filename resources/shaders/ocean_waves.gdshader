@@ -1,5 +1,5 @@
 shader_type spatial;
-render_mode blend_mix,depth_prepass_alpha,specular_schlick_ggx;
+render_mode blend_mix,depth_draw_always,specular_schlick_ggx;
 
 uniform sampler2DArray displacement_map : filter_linear, repeat_enable;
 uniform sampler2DArray slope_map : filter_linear, repeat_enable;
@@ -121,8 +121,8 @@ void vertex() {
 
 	fft_foam = clamp(fft_foam * 0.22, 0.0, 1.0);
 
-	// Tune down the FFT base amplitude so 'calm' is subtle and 'gale' isn't apocalyptic.
-	float amp_scale = wave_intensity * wave_energy_multiplier * 0.35;
+	// Increase the FFT base amplitude slightly so shapes have mass.
+	float amp_scale = wave_intensity * wave_energy_multiplier * 0.42;
 	displacement *= amp_scale;
 	slopes *= amp_scale;
 
@@ -184,7 +184,8 @@ void vertex() {
 	v_world_pos   = displaced_world;
 	v_world_normal = world_n_geom;
 	float foam_steep_raw = 1.0 - clamp(world_n_foam_metric.y, 0.0, 1.0);
-	v_wave_steep = pow(foam_steep_raw, 2.35);
+	// Tighter power curve here reduces the area of wave peaks classified as "steep"
+	v_wave_steep = pow(foam_steep_raw, 2.75);
 	v_boat_wake = wake;
 	v_foam = fft_foam;
 }
@@ -235,11 +236,14 @@ void fragment() {
 
 	// Combine steepness-driven foam + FFT Jacobian foam (squash cascade stacking).
 	float steep_foam = smoothstep(foam_steep_start, foam_steep_end, v_wave_steep) * foam_strength;
-	float fft_foam_w = clamp(v_foam, 0.0, 1.0) * foam_strength * 0.32;
+	float fft_foam_w = clamp(v_foam, 0.0, 1.0) * foam_strength * 0.16;
 	float foam = steep_foam + fft_foam_w; 
-
-	foam *= mix(0.35, 1.0, foam_noise);
-	col = mix(col, vec3(0.86, 0.90, 0.93), foam);
+	
+	foam *= mix(0.15, 1.0, foam_noise);
+	// Lower the floor for foam, make it slightly translucent, and mix based on final foam scalar.
+	// This helps foam look like a surface layer rather than a solid opaque mesh.
+	float foam_mask = clamp(foam, 0.0, 1.0);
+	col = mix(col, vec3(0.86, 0.90, 0.93), foam_mask * 0.85);
 
 	vec2 jitter_c = xz_a * 21.974 + xz_b.yy * vec2(-9.834, 7.917) + wt * vec2(8.93, -6.71);
 	vec2 jitter_d = xz_b.yx * vec2(17.401, -14.917) + wt * vec2(-7.61, 8.734);
@@ -254,9 +258,9 @@ void fragment() {
 	float r_micro = clamp(
 		r_base + 0.042 * (sp - 0.5) + v_wave_steep * 0.035, 0.12, 0.93);
 
-	ROUGHNESS = mix(r_micro, mix(0.78, 0.92, foam_noise * 0.35), clamp(foam, 0.0, 1.0));
+	ROUGHNESS = mix(r_micro, mix(0.78, 0.92, foam_noise * 0.35), foam_mask);
 
 	METALLIC = metallic * 0.65;
-	SPECULAR = mix(specular * 0.72, 0.17, clamp(foam, 0.0, 1.0));
+	SPECULAR = mix(specular * 0.72, 0.17, foam_mask);
 	ALPHA = water_alpha;
 }

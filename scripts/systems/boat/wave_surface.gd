@@ -61,8 +61,8 @@ static func get_buoyancy_surface_height_at(x: float, z: float) -> float:
 	py = clamp(py, 0, int(res) - 1)
 	
 	var idx = py * int(res) + px
-	# Scale down the FFT raw height by 0.35 to match the visual shader's amp_scale tuning
-	return WATER_LEVEL + fft_system.buoyancy_data[idx] * wave_intensity * get_wave_energy_multiplier() * 0.35
+	# Scale down the FFT raw height by 0.42 to match the visual shader's amp_scale tuning
+	return WATER_LEVEL + fft_system.buoyancy_data[idx] * wave_intensity * get_wave_energy_multiplier() * 0.42
 
 static func get_base_wave_height_at(x: float, z: float) -> float:
 	return get_buoyancy_surface_height_at(x, z)
