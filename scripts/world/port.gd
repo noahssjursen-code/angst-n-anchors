@@ -23,7 +23,7 @@ const BERTH_SHIP_POSITION     := Vector3(12.5, WaveSurface.WATER_LEVEL, 47.0)
 const TERMINAL_POSITION       := Vector3(4.5, DOCK_SURFACE_Y, 37.8)
 const PLAYER_SPAWN_OFFSET     := Vector3(3.0, 0.0, -15.0)
 
-const CONCRETE_PIER_MODEL     := "res://resources/data/meshes/concrete_pier.json"
+const CONCRETE_PIER_MODEL     := "res://resources/data/meshes/docks/concrete_pier.json"
 const PIER_DECK_TOP_LOCAL_Y   := 2.0
 const PIER_ABS_SCALE          := 1.3
 ## Pier deck narrow half-span (1.8 m local) minus small inset so bollards sit near the rail.
@@ -34,7 +34,7 @@ const PIER_DECK_LENGTH_LOCAL  := 20.0   # authored deck span along local +X in c
 const PIER_CHAIN_GAP          := 0.0   # extra separation between chained pier centers
 const PIER_CHAIN_SIGN         := -1.0  # negate to flip which end hooks to pier 1
 
-const OPEN_WAREHOUSE_MODEL    := "res://resources/data/meshes/open_warehouse.json"
+const OPEN_WAREHOUSE_MODEL    := "res://resources/data/meshes/port_buildings/open_warehouse.json"
 const OPEN_WAREHOUSE_SCALE    := 1.0
 const OPEN_WAREHOUSE_POSITION := Vector3(-22.0, 0.03, -8.0)
 const OPEN_WAREHOUSE_ROTATION := Vector3(0.0, 55.0, 0.0)

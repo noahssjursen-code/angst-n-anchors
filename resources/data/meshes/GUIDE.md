@@ -1,12 +1,12 @@
 # Mesh Authoring Guide — Angst 'n Anchors
 
-Reference for the in-house low-poly mesh AI. Study the existing files in this folder before generating a new one.
+Reference for the in-house low-poly mesh AI. Study existing files under `resources/data/meshes/` (see category subfolders in `resources/data/README.md`) before generating a new one.
 
 ---
 
 ## File format
 
-Every file in this folder is a **multi-part model assembly** — the same format `ModelAssembler` reads. There is no bare `{vertices, indices}` file format in production; everything is wrapped in the parts structure.
+Most production files use the **multi-part** `parts` structure below (same format `ModelAssembler` loads). **Single-mesh** files with only `vertices` / `indices` are also valid when loaded directly by `MeshTransformer` — place those under a category folder (e.g. `ships/hand_tanker_hull.json`).
 
 ```json
 {

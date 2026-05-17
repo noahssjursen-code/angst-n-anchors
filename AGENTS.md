@@ -99,7 +99,7 @@ var exports = port_data.exports
 Every ship, dock, building, crate, buoy, and terrain piece comes from one of two sources:
 
 1. **Godot primitives** composed in GDScript via `MeshBuilder` (`scripts/world/mesh_builder.gd`).
-2. **In-house JSON meshes** in `resources/data/meshes/`, produced by our own low-poly mesh AI tool, loaded at runtime by `MeshTransformer` (`scripts/systems/mesh_transformer.gd`).
+2. **In-house JSON meshes** under `resources/data/meshes/` (grouped by category — see `resources/data/README.md`), produced by our own low-poly mesh AI tool, loaded at runtime by `MeshTransformer` (`scripts/systems/mesh_transformer.gd`).
 
 Both are first-class. Pick whichever fits the shape — primitives for boxy/symmetric objects, JSON meshes for hulls and anything organic.
 
@@ -136,7 +136,7 @@ on dynamic bodies in Jolt — keep meshes convex-friendly or split them into con
 ```gdscript
 var transformer := preload("res://scripts/systems/mesh_transformer.gd").new()
 add_child(transformer)
-transformer.mesh_data_path = "res://resources/data/meshes/your_mesh.json"
+transformer.mesh_data_path = "res://resources/data/meshes/ships/your_mesh.json"
 transformer.absolute_scale = 1.0
 transformer.mesh_color = Color(0.18, 0.20, 0.22)
 ```
@@ -146,7 +146,7 @@ transformer.mesh_color = Color(0.18, 0.20, 0.22)
 Use `ModelAssembler` (`scripts/systems/model_assembler.gd`) for anything made of multiple JSON mesh parts.
 This layer is generic and must not hardcode ship, dock, building, or character concepts.
 
-Assembly JSON files live in `resources/data/models/` and contain generic `parts`:
+Assembly JSON files live in `resources/data/models/` (e.g. `ships/`, `buildings/`) and contain generic `parts`:
 
 ```json
 {

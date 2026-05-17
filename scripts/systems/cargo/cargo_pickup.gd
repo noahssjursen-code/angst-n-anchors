@@ -11,7 +11,7 @@ signal picked_up(item: CargoItem)
 
 var cargo_item: CargoItem
 
-@export_file("*.json") var mesh_path: String = "res://resources/data/meshes/crate_wooden.json"
+@export_file("*.json") var mesh_path: String = "res://resources/data/meshes/props/crate_wooden.json"
 @export var mesh_scale: float = 0.78
 @export var box_size: Vector3 = Vector3(0.95, 0.95, 0.95)
 

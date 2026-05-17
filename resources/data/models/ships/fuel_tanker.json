@@ -1,0 +1,12 @@
+{
+  "name": "fuel_tanker",
+  "parts": [
+    {
+      "name": "hull",
+      "model": "hulls/hull_deep_sea_freighter.json",
+      "position": [0, 0, 0],
+      "rotation_degrees": [0, 0, 0],
+      "scale": 1.0
+    }
+  ]
+}

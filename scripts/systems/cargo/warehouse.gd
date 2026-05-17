@@ -10,7 +10,7 @@ signal inventory_changed(warehouse: Warehouse)
 const WAREHOUSE_GROUP := "warehouse"
 
 @export var slot_y_offset: float = 0.02
-@export_file("*.json") var crate_mesh_path: String = "res://resources/data/meshes/crate_wooden.json"
+@export_file("*.json") var crate_mesh_path: String = "res://resources/data/meshes/props/crate_wooden.json"
 @export var crate_scale: float = 0.78
 
 var _inventory: Array[CargoItem] = []

@@ -4,7 +4,7 @@ extends Node3D
 
 ## Procedural lighthouse. Rotating beam uses volumetric spotlights.
 
-const MODEL_PATH := "res://resources/data/models/lighthouse_building.json"
+const MODEL_PATH := "res://resources/data/models/buildings/lighthouse_building.json"
 
 @export var sweep_speed_hz: float = 15.0 / 360.0
 

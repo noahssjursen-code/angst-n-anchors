@@ -7,7 +7,7 @@ extends Node3D
 ## is the `fuel_pump` mesh role; higher-level systems can query it via
 ##   assembler.get_first_part_by_role("interactable")
 
-const MODEL_PATH := "res://resources/data/meshes/fuel_station.json"
+const MODEL_PATH := "res://resources/data/meshes/props/fuel_station.json"
 
 var assembler: ModelAssembler
 

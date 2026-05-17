@@ -1,0 +1,39 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/systems/model_assembler.gd" id="1"]
+
+[node name="HullLineup" type="Node3D"]
+
+[node name="Sun" type="DirectionalLight3D" parent="."]
+rotation_degrees = Vector3(-45, 45, 0)
+light_energy = 1.5
+shadow_enabled = true
+
+[node name="Camera3D" type="Camera3D" parent="."]
+position = Vector3(29, 80, 0)
+rotation_degrees = Vector3(-90, 0, 0)
+fov = 90.0
+
+[node name="Hull_CoastalTrader" type="Node3D" parent="."]
+position = Vector3(0, 0, 0)
+script = ExtResource("1")
+model_data_path = "res://resources/data/models/hulls/hull_coastal_trader.json"
+absolute_scale = 1.0
+
+[node name="Hull_ShortSeaCoaster" type="Node3D" parent="."]
+position = Vector3(12, 0, 0)
+script = ExtResource("1")
+model_data_path = "res://resources/data/models/hulls/hull_short_sea_coaster.json"
+absolute_scale = 1.0
+
+[node name="Hull_HandysizeFeeder" type="Node3D" parent="."]
+position = Vector3(28, 0, 0)
+script = ExtResource("1")
+model_data_path = "res://resources/data/models/hulls/hull_handysize_feeder.json"
+absolute_scale = 1.0
+
+[node name="Hull_DeepSeaFreighter" type="Node3D" parent="."]
+position = Vector3(50, 0, 0)
+script = ExtResource("1")
+model_data_path = "res://resources/data/models/hulls/hull_deep_sea_freighter.json"
+absolute_scale = 1.0

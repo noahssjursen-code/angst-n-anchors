@@ -3,7 +3,7 @@
  "parts": [
   {
    "name": "tower",
-   "mesh": "res://resources/data/meshes/lighthouse_tower.json",
+   "mesh": "res://resources/data/meshes/lighthouse/lighthouse_tower.json",
    "role": "physics_body",
    "position": [0, 10.0, 0],
    "rotation_degrees": [0, 0, 0],
@@ -15,7 +15,7 @@
   },
   {
    "name": "deck",
-   "mesh": "res://resources/data/meshes/lighthouse_deck.json",
+   "mesh": "res://resources/data/meshes/lighthouse/lighthouse_deck.json",
    "role": "visual",
    "position": [0, 20.25, 0],
    "rotation_degrees": [0, 0, 0],
@@ -27,7 +27,7 @@
   },
   {
    "name": "lantern",
-   "mesh": "res://resources/data/meshes/lighthouse_lantern.json",
+   "mesh": "res://resources/data/meshes/lighthouse/lighthouse_lantern.json",
    "role": "visual",
    "position": [0, 22.0, 0],
    "rotation_degrees": [0, 0, 0],
@@ -39,7 +39,7 @@
   },
   {
    "name": "roof",
-   "mesh": "res://resources/data/meshes/lighthouse_roof.json",
+   "mesh": "res://resources/data/meshes/lighthouse/lighthouse_roof.json",
    "role": "visual",
    "position": [0, 24.75, 0],
    "rotation_degrees": [0, 0, 0],

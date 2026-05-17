@@ -14,9 +14,9 @@ extends Node3D
 ##   "parts": [
 ##     {
 ##       "name": "body",
-##       "mesh": "res://resources/data/meshes/body.json",
+##       "mesh": "res://resources/data/meshes/ships/hull.json",
 ##       // or: "mesh": { "vertices": [...], "indices": [...] },
-##       // or: "model": "res://resources/data/models/nested_model.json",
+##       // or: "model": "res://resources/data/models/ships/nested_model.json",
 ##       "role": "physics_body",
 ##       "position": [0, 0, 0],
 ##       "rotation_degrees": [0, 0, 0],

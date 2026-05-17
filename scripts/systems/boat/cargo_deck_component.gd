@@ -46,7 +46,7 @@ signal cargo_changed(component: CargoDeckComponent)
 
 @export_group("Visual cargo")
 @export var spawn_visual_crates: bool = true
-@export_file("*.json") var visual_crate_mesh_path: String = "res://resources/data/meshes/crate_wooden.json"
+@export_file("*.json") var visual_crate_mesh_path: String = "res://resources/data/meshes/props/crate_wooden.json"
 @export_range(0.1, 3.0, 0.01) var visual_crate_scale: float = 0.62
 @export var visual_crate_height_offset_m: float = 0.16
 

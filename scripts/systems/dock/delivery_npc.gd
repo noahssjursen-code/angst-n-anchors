@@ -6,7 +6,7 @@ extends NpcBase
 ## to it using the same mechanic as any other delivery zone.
 
 const DELIVERY_GROUP  := "cargo_delivery_zone"
-const FLAT_CAP_PATH   := "res://resources/data/meshes/hat_flat_cap.json"
+const FLAT_CAP_PATH   := "res://resources/data/meshes/characters/hat_flat_cap.json"
 
 signal gold_earned(amount: int)
 

@@ -5,7 +5,7 @@ extends Node3D
 ## Must match MooringComponent.SHIP_MOORING_CLEAT_GROUP — discoverability only (no naming).
 const _CLEAT_GROUP := "ship_mooring_cleat"
 
-const DEFAULT_BOLLARD_MODEL := "res://resources/data/meshes/docking_bollard.json"
+const DEFAULT_BOLLARD_MODEL := "res://resources/data/meshes/docks/docking_bollard.json"
 
 @export_file("*.json") var bollard_model_path: String = DEFAULT_BOLLARD_MODEL:
 	set(v):

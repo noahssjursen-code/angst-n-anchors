@@ -9,7 +9,7 @@ enum MooringVisual {
 	DOCKING_BOLLARD,
 }
 
-const DEFAULT_DOCKING_BOLLARD_MODEL := "res://resources/data/meshes/docking_bollard.json"
+const DEFAULT_DOCKING_BOLLARD_MODEL := "res://resources/data/meshes/docks/docking_bollard.json"
 
 ## Line attachment height differs per visual; docking bollard follows `MooringPoint` cleat height.
 @export var anchor_local_position: Vector3 = Vector3(0.0, 0.52, 0.0)

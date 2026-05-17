@@ -6,7 +6,7 @@ extends Node3D
 ## Drop this scene onto a dock or port plot. It will automatically build its
 ## visual mesh and the fog horn audio player child will handle blast logic.
 
-const MODEL_PATH := "res://resources/data/models/foghorn_building.json"
+const MODEL_PATH := "res://resources/data/models/buildings/foghorn_building.json"
 
 var assembler: ModelAssembler
 

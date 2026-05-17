@@ -4,7 +4,7 @@ extends NpcInteractable
 
 ## Harbour master NPC. Handles berth booking and harbour dues enquiries.
 
-const PEAKED_CAP_PATH := "res://resources/data/meshes/hat_peaked_cap.json"
+const PEAKED_CAP_PATH := "res://resources/data/meshes/characters/hat_peaked_cap.json"
 
 @export var port_id: String = ""
 

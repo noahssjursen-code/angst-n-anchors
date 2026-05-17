@@ -1,0 +1,42 @@
+[gd_scene load_steps=4 format=3]
+
+[ext_resource type="Script" path="res://scripts/systems/model_assembler.gd" id="1"]
+[ext_resource type="Script" path="res://scripts/systems/boat/captains_chair.gd" id="2"]
+[ext_resource type="Script" path="res://scripts/systems/boat/ship_light.gd" id="3"]
+
+[node name="BridgeMedium" type="Node3D"]
+
+[node name="ModelAssembler" type="Node3D" parent="."]
+script = ExtResource("1")
+model_data_path = "res://resources/data/models/superstructures/bridge_medium.json"
+absolute_scale = 1.0
+
+[node name="CaptainsChair" type="Node3D" parent="."]
+position = Vector3(0, 11.0, 1.5)
+script = ExtResource("2")
+aim_target_offset = Vector3(0, 0.8, 0)
+interaction_volume_size = Vector3(28.0, 3.0, 8.0)
+exit_deck_offset = Vector2(0.0, 60.0)
+interact_range = 8.0
+
+[node name="ShipLight_NavPort" type="Node3D" parent="."]
+position = Vector3(-14.5, 10.5, 3.5)
+rotation = Vector3(0, 1.5708, 0)
+script = ExtResource("3")
+light_type = 0
+
+[node name="ShipLight_NavStarboard" type="Node3D" parent="."]
+position = Vector3(14.5, 10.5, 3.5)
+rotation = Vector3(0, -1.5708, 0)
+script = ExtResource("3")
+light_type = 1
+
+[node name="ShipLight_NavMasthead" type="Node3D" parent="."]
+position = Vector3(0, 28.0, 9.0)
+script = ExtResource("3")
+light_type = 2
+
+[node name="ShipLight_Window" type="Node3D" parent="."]
+position = Vector3(0, 10.5, -0.1)
+script = ExtResource("3")
+light_type = 5

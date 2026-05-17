@@ -115,7 +115,7 @@ var _artificial_keel_extra_depth: float = 0.0
 var hull_size: Vector3 = Vector3(6.0, 2.0, 14.0)
 var hull_center: Vector3 = Vector3.ZERO
 
-const DEFAULT_HULL_JSON := "res://resources/data/meshes/ship_hull_flat_deck.json"
+const DEFAULT_HULL_JSON := "res://resources/data/meshes/ships/hand_tanker_hull.json"
 
 @export_file("*.json") var model_data_path: String:
 	set(v):

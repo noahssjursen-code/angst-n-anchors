@@ -14,7 +14,7 @@ const WAREHOUSE_GROUP  := "warehouse"
 @export var deposit_range: float = 5.0
 
 @export_group("Carry visual")
-@export_file("*.json") var carry_mesh_path: String = "res://resources/data/meshes/crate_wooden.json"
+@export_file("*.json") var carry_mesh_path: String = "res://resources/data/meshes/props/crate_wooden.json"
 @export var carry_scale: float   = 0.46
 @export var carry_offset: Vector3 = Vector3(0.38, -0.44, -1.15)
 

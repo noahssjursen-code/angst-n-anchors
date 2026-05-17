@@ -27,8 +27,8 @@ cargo_mass = 0.0
 center_of_mass_depth_fraction = 0.58
 artificial_keel_extra_depth = 0.78
 mesh_scale = 1.4
-model_data_path = "res://resources/data/meshes/cargo_ship_hull.json"
-mesh_data_path = "res://resources/data/meshes/ship_hull_bulk_flat_deck.json"
+model_data_path = "res://resources/data/meshes/ships/cargo_ship_hull.json"
+mesh_data_path = ""
 mesh_rotation_degrees = Vector3(0, -90, 0)
 
 [node name="BuoyancyComponent" type="Node3D" parent="."]

@@ -10,7 +10,7 @@ No imported DCC assets (`.gltf`, `.glb`, `.fbx`, `.obj`, `.blend`), no texture a
 Every ship, dock, building, crate, terrain piece, and prop comes from one of two sources:
 
 1. **Godot primitives** composed in GDScript with `StandardMaterial3D`.
-2. **In-house JSON meshes** in `resources/data/meshes/`, produced by our own low-poly mesh AI tool, loaded at runtime by `MeshTransformer`.
+2. **In-house JSON meshes** under `resources/data/meshes/` (use category subfolders — see `resources/data/README.md`), produced by our own low-poly mesh AI tool, loaded at runtime by `MeshTransformer`.
 
 Both pipelines are first-class. Pick whichever fits the shape.
 
@@ -40,7 +40,7 @@ Use `MeshBuilder` in `scripts/world/mesh_builder.gd` for common compound shapes 
 
 Use for anything a primitive composite can't express cleanly: hulls, organic forms, characters, signature props.
 
-JSON files live in `resources/data/meshes/` and follow this shape:
+JSON files live under `resources/data/meshes/<category>/` and follow this shape (single-mesh `.json`; multi-part authoring uses the `parts` format in GUIDE.md):
 
 ```json
 {
@@ -63,7 +63,7 @@ applies one uniform `absolute_scale`, assigns material values, and builds option
 ```gdscript
 var transformer := preload("res://scripts/systems/mesh_transformer.gd").new()
 add_child(transformer)
-transformer.mesh_data_path = "res://resources/data/meshes/your_mesh.json"
+transformer.mesh_data_path = "res://resources/data/meshes/ships/your_mesh.json"
 transformer.absolute_scale = 1.0
 transformer.mesh_color = Color(0.18, 0.20, 0.22)
 ```
@@ -75,7 +75,7 @@ transformer.mesh_color = Color(0.18, 0.20, 0.22)
 Use `ModelAssembler` (`scripts/systems/model_assembler.gd`) for models made from multiple JSON mesh parts.
 This system is generic. Do not hardcode ship terms into the mesh layer.
 
-Assembly JSON files should live in `resources/data/models/` and contain generic `parts`:
+Assembly JSON files should live in `resources/data/models/` (e.g. `ships/`, `buildings/`) and contain generic `parts`:
 
 ```json
 {

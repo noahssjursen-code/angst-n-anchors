@@ -3,7 +3,7 @@ class_name NpcBase
 extends StaticBody3D
 
 const LAYER_WORLD := 1
-const MODEL_PATH  := "res://resources/data/meshes/npc_base.json"
+const MODEL_PATH  := "res://resources/data/meshes/characters/npc_base.json"
 
 @export var skin_color: Color = Color(0.72, 0.55, 0.40):
 	set(v): skin_color = v; _apply_colors()

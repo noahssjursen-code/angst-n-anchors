@@ -11,12 +11,12 @@ extends Node3D
 ## far island flanks (high X offset), not blocking the street. Town tiles run as
 ## L/R pairs along the street further inland. Seeded RNG assigns sides per port.
 
-const HARBOURMASTER_MESH_PATH   := "res://resources/data/meshes/harbour_master_building.json"
-const SHIPPINGAGENT_MESH_PATH   := "res://resources/data/meshes/shipping_agent_building.json"
-const CUSTOMS_MESH_PATH         := "res://resources/data/meshes/customs_building.json"
-const MARINE_ENGINEER_MESH_PATH := "res://resources/data/meshes/marine_engineer_building.json"
-const WAREHOUSE_MESH_PATH       := "res://resources/data/meshes/warehouse_building.json"
-const TOWN_MESH_PATH            := "res://resources/data/meshes/town_building.json"
+const HARBOURMASTER_MESH_PATH   := "res://resources/data/meshes/port_buildings/harbour_master_building.json"
+const SHIPPINGAGENT_MESH_PATH   := "res://resources/data/meshes/port_buildings/shipping_agent_building.json"
+const CUSTOMS_MESH_PATH         := "res://resources/data/meshes/port_buildings/customs_building.json"
+const MARINE_ENGINEER_MESH_PATH := "res://resources/data/meshes/port_buildings/marine_engineer_building.json"
+const WAREHOUSE_MESH_PATH       := "res://resources/data/meshes/port_buildings/warehouse_building.json"
+const TOWN_MESH_PATH            := "res://resources/data/meshes/port_buildings/town_building.json"
 const FOGHORN_SCENE            := preload("res://scenes/systems/fog_horn_building.tscn")
 const LIGHTHOUSE_SCENE         := preload("res://scenes/systems/lighthouse_building.tscn")
 
