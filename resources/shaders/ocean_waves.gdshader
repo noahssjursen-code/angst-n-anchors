@@ -13,12 +13,12 @@ uniform float wave_energy_multiplier = 1.0;
 uniform vec3 shallow_albedo : source_color = vec3(0.028, 0.074, 0.118);
 uniform vec3 deep_albedo    : source_color = vec3(0.006, 0.018, 0.036);
 uniform vec3 horizon_tint   : source_color = vec3(0.068, 0.118, 0.172);
-uniform float roughness     : hint_range(0.0, 1.0) = 0.14;
-uniform float metallic      : hint_range(0.0, 1.0) = 0.02;
-uniform float specular      : hint_range(0.0, 1.0) = 0.56;
+uniform float roughness     : hint_range(0.0, 1.0) = 0.20;
+uniform float metallic      : hint_range(0.0, 1.0) = 0.0;
+uniform float specular      : hint_range(0.0, 1.0) = 0.40;
 uniform float water_alpha   : hint_range(0.15, 1.0) = 0.94;
-uniform float fresnel_power : hint_range(0.5, 10.0) = 3.8;
-uniform float fresnel_sky_mix : hint_range(0.0, 1.0) = 0.62;
+uniform float fresnel_power : hint_range(0.5, 10.0) = 3.1;
+uniform float fresnel_sky_mix : hint_range(0.0, 1.0) = 0.48;
 uniform float near_color_lift : hint_range(0.0, 1.0) = 0.14;
 
 // Wind chop — per-pixel normal perturbation strength (independent of geometry waves).
@@ -116,14 +116,17 @@ void vertex() {
 		
 		displacement += disp_sample.xyz;
 		slopes += slope_sample.xy;
-		fft_foam += disp_sample.w;
+		fft_foam += clamp(disp_sample.w, 0.0, 1.0);
 	}
+
+	fft_foam = clamp(fft_foam * 0.22, 0.0, 1.0);
 
 	// Tune down the FFT base amplitude so 'calm' is subtle and 'gale' isn't apocalyptic.
 	float amp_scale = wave_intensity * wave_energy_multiplier * 0.35;
 	displacement *= amp_scale;
 	slopes *= amp_scale;
 
+	// Full summed slopes define geometry / lighting.
 	vec3 displaced_world = vec3(wp.x + displacement.x, water_level + displacement.y, wp.z + displacement.z);
 
 	float boat_dip = 0.0;
@@ -172,14 +175,16 @@ void vertex() {
 	slopes.x += ddip_dx;
 	slopes.y += ddip_dz;
 
-	vec3 world_n = normalize(vec3(-slopes.x, 1.0, -slopes.y));
+	vec3 world_n_geom = normalize(vec3(-slopes.x, 1.0, -slopes.y));
+	vec3 world_n_foam_metric = normalize(vec3(-slopes.x * 0.25, 1.0, -slopes.y * 0.25));
 
 	VERTEX = (inverse(MODEL_MATRIX) * vec4(displaced_world, 1.0)).xyz;
-	NORMAL = normalize((inverse(MODEL_MATRIX) * vec4(world_n, 0.0)).xyz);
+	NORMAL = normalize((inverse(MODEL_MATRIX) * vec4(world_n_geom, 0.0)).xyz);
 
 	v_world_pos   = displaced_world;
-	v_world_normal = world_n;
-	v_wave_steep  = 1.0 - clamp(world_n.y, 0.0, 1.0);
+	v_world_normal = world_n_geom;
+	float foam_steep_raw = 1.0 - clamp(world_n_foam_metric.y, 0.0, 1.0);
+	v_wave_steep = pow(foam_steep_raw, 2.35);
 	v_boat_wake = wake;
 	v_foam = fft_foam;
 }
@@ -200,7 +205,7 @@ void fragment() {
 
 	float grad_mag = length(g_eta);
 	float grad_damp = 1.0 / (1.0 + grad_mag * 1.7);
-	float ripple_gain = chop_strength * mix(8.6, 6.2, chop_strength) * mix(1.0, 0.78, clamp(v_wave_steep, 0.0, 1.0));
+	float ripple_gain = chop_strength * mix(7.8, 5.9, chop_strength) * mix(1.0, 0.74, clamp(v_wave_steep, 0.0, 1.0));
 	ripple_gain *= mix(1.0, grad_damp, 0.38);
 	vec3 lateral = vec3(-dh_dx, 0.0, -dh_dz) * ripple_gain;
 
@@ -215,7 +220,7 @@ void fragment() {
 	float look_graze = 1.0 - pow(flat_ndv, 1.18);
 	vec3 body = mix(deep_albedo, shallow_albedo, look_graze * (0.22 + near_color_lift * 0.25));
 	
-	float fres = pow(look_graze, fresnel_power * 1.6);
+	float fres = pow(look_graze, fresnel_power * 1.2);
 	vec3 col = mix(body, horizon_tint, fres * fresnel_sky_mix);
 
 	mat2 ROT_A = mat2(vec2(0.809174, -0.587582), vec2(0.587582, 0.809174));
@@ -228,9 +233,10 @@ void fragment() {
 	float foam_noise = wf_vnoise(
 		foam_uv * 5.974 + xz_b.xx * vec2(-0.31, -0.22) + wt * vec2(1.47, -1.21));
 
-	// Combine dynamic steepness foam with physics-simulated FFT foam
-	float foam = smoothstep(foam_steep_start, foam_steep_end, v_wave_steep) * foam_strength;
-	foam += v_foam * foam_strength; 
+	// Combine steepness-driven foam + FFT Jacobian foam (squash cascade stacking).
+	float steep_foam = smoothstep(foam_steep_start, foam_steep_end, v_wave_steep) * foam_strength;
+	float fft_foam_w = clamp(v_foam, 0.0, 1.0) * foam_strength * 0.32;
+	float foam = steep_foam + fft_foam_w; 
 
 	foam *= mix(0.35, 1.0, foam_noise);
 	col = mix(col, vec3(0.86, 0.90, 0.93), foam);
@@ -242,11 +248,15 @@ void fragment() {
 
 	ALBEDO = col;
 
-	float r_body = clamp(
-		roughness + 0.046 * (sp - 0.5) + v_wave_steep * 0.045, 0.034, 0.93);
+	/* FFT macro-normals are already directional; killing roughness (*0.45) reads as lacquered glass. */
+	float chop_rough_boost = chop_strength * 0.12;
+	float r_base = max(roughness * 1.18 + chop_rough_boost, 0.16);
+	float r_micro = clamp(
+		r_base + 0.042 * (sp - 0.5) + v_wave_steep * 0.035, 0.12, 0.93);
 
-	ROUGHNESS = mix(roughness * 0.45, 0.88, foam);
-	METALLIC = metallic;
-	SPECULAR = mix(specular, 0.22, foam);
+	ROUGHNESS = mix(r_micro, mix(0.78, 0.92, foam_noise * 0.35), clamp(foam, 0.0, 1.0));
+
+	METALLIC = metallic * 0.65;
+	SPECULAR = mix(specular * 0.72, 0.17, clamp(foam, 0.0, 1.0));
 	ALPHA = water_alpha;
 }

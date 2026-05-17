@@ -13,6 +13,7 @@ var pipeline_update: RID
 var pipeline_fft_x: RID
 var pipeline_fft_y: RID
 var pipeline_assemble: RID
+var main_shader: RID
 
 var initial_spectrum_tex: RID
 var spectrum_tex: RID
@@ -65,10 +66,6 @@ func _process(delta: float) -> void:
 	var bytes = rd.texture_get_data(buoyancy_tex, 0)
 	if bytes.size() == RESOLUTION * RESOLUTION * 4:
 		buoyancy_data = bytes.to_float32_array()
-		if Time.get_ticks_msec() % 1000 < 16:
-			print("buoyancy_data[0]: ", buoyancy_data[0], " [500]: ", buoyancy_data[500])
-
-var main_shader: RID
 
 func _compile_shaders() -> void:
 	var file = FileAccess.open("res://resources/shaders/fft_ocean_compute.glsl", FileAccess.READ)

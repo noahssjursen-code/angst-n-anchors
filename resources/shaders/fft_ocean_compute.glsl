@@ -328,10 +328,10 @@ void main() {
 		float biasedJacobian = max(0.0, -(jacobian - params.foam_bias));
 
 		if (biasedJacobian > params.foam_threshold) {
-			foam += params.foam_add * biasedJacobian;
+			foam += min(params.foam_add * biasedJacobian * 0.12, 0.25);
 		}
 
-		imageStore(displacement_textures, ivec3(id.xy, i), vec4(displacement, foam));
+		imageStore(displacement_textures, ivec3(id.xy, i), vec4(displacement, clamp(foam, 0.0, 1.0)));
 		imageStore(slope_textures, ivec3(id.xy, i), vec4(slopes, 0.0, 0.0));
 
 		if (i == 0u) {
