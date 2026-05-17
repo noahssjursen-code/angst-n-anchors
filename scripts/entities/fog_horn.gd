@@ -10,9 +10,10 @@ func _ready() -> void:
 		return
 		
 	# 3D Audio setup
-	max_distance = 8000.0
-	unit_size = 200.0     # Increased from 50 to carry much further before dropping off
-	volume_db = 6.0       # Boost base volume
+	max_distance = 10000.0
+	unit_size = 80.0       # Increased from 50.0 to carry much further without falling off
+	volume_db = 12.0       # Boosted base volume
+	attenuation_model = AudioStreamPlayer3D.ATTENUATION_LOGARITHMIC
 	bus = &"Master"
 	
 	# Load the audio.

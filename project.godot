@@ -17,6 +17,7 @@ config/icon="res://icon.svg"
 
 [autoload]
 
+WorldWeather="*res://scripts/autoloads/world_weather.gd"
 WeatherLighting="*res://scripts/autoloads/weather_lighting.gd"
 ContractRegistry="*res://scripts/autoloads/contract_registry.gd"
 PlayerSession="*res://scripts/autoloads/player_session.gd"
