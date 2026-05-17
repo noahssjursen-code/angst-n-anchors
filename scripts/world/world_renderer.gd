@@ -7,6 +7,7 @@ extends Node3D
 ## No knowledge of ports, players, or gameplay.
 
 const OCEAN_SHADER   := preload("res://resources/shaders/ocean_waves.gdshader")
+const OCEAN_HORIZON_SHADER := preload("res://resources/shaders/ocean_horizon.gdshader")
 const SKY_SHADER     := preload("res://resources/shaders/sky.gdshader")
 const SCREEN_SHADER  := preload("res://resources/shaders/screen_effects.gdshader")
 ## Base midday water dye — kept darker so the ocean reads as depth, not a bright lagoon.
@@ -15,11 +16,13 @@ const C_OCEAN      := Color(0.038, 0.085, 0.128)
 const FFT_WATER_SYSTEM_SCRIPT := preload("res://scripts/systems/fft_water_system.gd")
 
 var _ocean_shader_material: ShaderMaterial
+var _ocean_horizon_material: ShaderMaterial
 var _sky_shader_material:   ShaderMaterial
 var _environment:           Environment
 var _sun:                   DirectionalLight3D
 var _fill_light:            DirectionalLight3D
 var _ocean_mesh:            MeshInstance3D
+var _ocean_mesh_outer:      MeshInstance3D
 var _fft_system:            Node # Use Node instead of FFTWaterSystem to avoid unresolved class error without reload
 
 
@@ -64,6 +67,10 @@ func _follow_camera_xz() -> void:
 	var grid_size := 600.0 / 261.0
 	_ocean_mesh.position.x = snappedf(cam.global_position.x, grid_size)
 	_ocean_mesh.position.z = snappedf(cam.global_position.z, grid_size)
+	
+	if _ocean_mesh_outer != null and is_instance_valid(_ocean_mesh_outer):
+		_ocean_mesh_outer.position.x = _ocean_mesh.position.x
+		_ocean_mesh_outer.position.z = _ocean_mesh.position.z
 
 
 func _build_sky() -> void:
@@ -182,6 +189,26 @@ func _build_ocean() -> void:
 	ocean.position          = Vector3(0, WaveSurface.WATER_LEVEL, 0)
 	_ocean_mesh             = ocean
 	add_child(ocean)
+
+	var ocean_outer := MeshBuilder.plane(Vector2(20000, 20000), C_OCEAN, 0.12, 64, 64)
+	var sm_outer    := ShaderMaterial.new()
+	sm_outer.shader = OCEAN_HORIZON_SHADER
+	sm_outer.set_shader_parameter("water_level",     WaveSurface.WATER_LEVEL)
+	sm_outer.set_shader_parameter("shallow_albedo",  Vector3(0.028, 0.074, 0.118))
+	sm_outer.set_shader_parameter("deep_albedo",     Vector3(0.006, 0.018, 0.036))
+	sm_outer.set_shader_parameter("horizon_tint",    Vector3(0.068, 0.118, 0.172))
+	sm_outer.set_shader_parameter("fresnel_sky_mix", 0.48)
+	sm_outer.set_shader_parameter("fresnel_power",   3.1)
+	sm_outer.set_shader_parameter("near_color_lift", 0.14)
+	sm_outer.set_shader_parameter("roughness",       0.20)
+	sm_outer.set_shader_parameter("metallic",        0.0)
+	sm_outer.set_shader_parameter("specular",        0.40)
+	
+	ocean_outer.material_override = sm_outer
+	_ocean_horizon_material = sm_outer
+	ocean_outer.position = Vector3(0, WaveSurface.WATER_LEVEL, 0)
+	_ocean_mesh_outer = ocean_outer
+	add_child(ocean_outer)
 
 
 func _connect_weather_lighting() -> void:
@@ -341,6 +368,16 @@ func _apply_ocean_shader(daylight: float, cloud: float, rain: float, wind: float
 	_ocean_shader_material.set_shader_parameter("specular", spec_drive)
 	_ocean_shader_material.set_shader_parameter("roughness",              lerpf(0.20, 0.48, rough_driver))
 	_ocean_shader_material.set_shader_parameter("metallic",               lerpf(0.01, 0.03, rough_driver))
+
+	if _ocean_horizon_material != null:
+		_ocean_horizon_material.set_shader_parameter("shallow_albedo",         Vector3(shallow_w.r, shallow_w.g, shallow_w.b))
+		_ocean_horizon_material.set_shader_parameter("deep_albedo",            Vector3(deep.r,      deep.g,      deep.b))
+		_ocean_horizon_material.set_shader_parameter("horizon_tint",           Vector3(horizon_w.r, horizon_w.g, horizon_w.b))
+		_ocean_horizon_material.set_shader_parameter("fresnel_sky_mix",        fres_blend * 0.86)
+		_ocean_horizon_material.set_shader_parameter("near_color_lift",        near_lift)
+		_ocean_horizon_material.set_shader_parameter("specular", spec_drive)
+		_ocean_horizon_material.set_shader_parameter("roughness",              lerpf(0.20, 0.48, rough_driver))
+		_ocean_horizon_material.set_shader_parameter("metallic",               lerpf(0.01, 0.03, rough_driver))
 
 
 func _celestial_dir(tod_offset: float) -> Vector3:
