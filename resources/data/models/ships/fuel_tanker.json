@@ -3,10 +3,10 @@
   "parts": [
     {
       "name": "hull",
-      "model": "hulls/hull_deep_sea_freighter.json",
+      "model": "hulls/hull_coastal_trader_long.json",
       "position": [0, 0, 0],
       "rotation_degrees": [0, 0, 0],
-      "scale": 1.0
+      "scale": 2.0
     }
   ]
 }

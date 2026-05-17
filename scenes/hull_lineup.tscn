@@ -1,43 +1,62 @@
-[gd_scene load_steps=2 format=3]
+[gd_scene load_steps=10 format=3]
 
 [ext_resource type="Script" path="res://scripts/systems/model_assembler.gd" id="1"]
 
 [node name="HullLineup" type="Node3D"]
 
-[node name="Sun" type="DirectionalLight3D" parent="."]
-rotation_degrees = Vector3(-45, 45, 0)
-light_energy = 1.5
+[node name="DirectionalLight3D" type="DirectionalLight3D" parent="."]
+transform = Transform3D(0.707, -0.5, 0.5, 0, 0.707, 0.707, -0.707, -0.5, 0.5, 0, 40, 0)
+light_energy = 1.2
 shadow_enabled = true
 
 [node name="Camera3D" type="Camera3D" parent="."]
-position = Vector3(29, 80, 0)
-rotation_degrees = Vector3(-90, 0, 0)
-fov = 90.0
+transform = Transform3D(1, 0, 0, 0, 0.6, 0.8, 0, -0.8, 0.6, 0, 90, 60)
+fov = 60.0
 
-[node name="Hull_CoastalTrader" type="Node3D" parent="."]
-position = Vector3(0, 0, 0)
+[node name="CT" type="Node3D" parent="."]
+position = Vector3(-52.5, 0, 0)
 script = ExtResource("1")
 model_data_path = "res://resources/data/models/hulls/hull_coastal_trader.json"
-absolute_scale = 1.0
 build_part_colliders = false
 
-[node name="Hull_ShortSeaCoaster" type="Node3D" parent="."]
-position = Vector3(12, 0, 0)
+[node name="CT_Long" type="Node3D" parent="."]
+position = Vector3(-37.5, 0, 0)
+script = ExtResource("1")
+model_data_path = "res://resources/data/models/hulls/hull_coastal_trader_long.json"
+build_part_colliders = false
+
+[node name="SSC" type="Node3D" parent="."]
+position = Vector3(-22.5, 0, 0)
 script = ExtResource("1")
 model_data_path = "res://resources/data/models/hulls/hull_short_sea_coaster.json"
-absolute_scale = 1.0
 build_part_colliders = false
 
-[node name="Hull_HandysizeFeeder" type="Node3D" parent="."]
-position = Vector3(28, 0, 0)
+[node name="SSC_Long" type="Node3D" parent="."]
+position = Vector3(-7.5, 0, 0)
+script = ExtResource("1")
+model_data_path = "res://resources/data/models/hulls/hull_short_sea_coaster_long.json"
+build_part_colliders = false
+
+[node name="HF" type="Node3D" parent="."]
+position = Vector3(7.5, 0, 0)
 script = ExtResource("1")
 model_data_path = "res://resources/data/models/hulls/hull_handysize_feeder.json"
-absolute_scale = 1.0
 build_part_colliders = false
 
-[node name="Hull_DeepSeaFreighter" type="Node3D" parent="."]
-position = Vector3(50, 0, 0)
+[node name="HF_Long" type="Node3D" parent="."]
+position = Vector3(22.5, 0, 0)
+script = ExtResource("1")
+model_data_path = "res://resources/data/models/hulls/hull_handysize_feeder_long.json"
+build_part_colliders = false
+
+[node name="DSF" type="Node3D" parent="."]
+position = Vector3(37.5, 0, 0)
 script = ExtResource("1")
 model_data_path = "res://resources/data/models/hulls/hull_deep_sea_freighter.json"
-absolute_scale = 1.0
+build_part_colliders = false
+
+[node name="DSF_Long" type="Node3D" parent="."]
+position = Vector3(52.5, 0, 0)
+script = ExtResource("1")
+model_data_path = "res://resources/data/models/hulls/hull_deep_sea_freighter_long.json"
 build_part_colliders = false

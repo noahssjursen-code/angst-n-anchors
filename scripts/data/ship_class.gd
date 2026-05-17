@@ -25,10 +25,10 @@ const MAX_LENGTH_M: Dictionary = {
 ## Typical beam (m) — sets how far berth indicators extend into the water.
 const BEAM_M: Dictionary = {
 	Type.LAUNCH:              2.0,
-	Type.COASTAL_TRADER:      5.0,
-	Type.SHORT_SEA_COASTER:   8.0,
-	Type.HANDYSIZE_FEEDER:   12.0,
-	Type.DEEP_SEA_FREIGHTER: 18.0,
+	Type.COASTAL_TRADER:      3.5,
+	Type.SHORT_SEA_COASTER:   5.5,
+	Type.HANDYSIZE_FEEDER:    8.0,
+	Type.DEEP_SEA_FREIGHTER: 11.0,
 }
 
 const DISPLAY_NAME: Dictionary = {
