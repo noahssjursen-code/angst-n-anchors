@@ -24,7 +24,7 @@ var spectrums_buffer: RID
 
 var displacement_map_rd: Texture2DArrayRD
 var slope_map_rd: Texture2DArrayRD
-var buoyancy_map_rd: Texture2DRD
+var buoyancy_map_rd: Texture2DArrayRD
 
 var time: float = 0.0
 var _last_wind := -1.0
@@ -43,9 +43,13 @@ var _last_short_wave := -1.0
 @export var lambda := Vector2(1.0, 1.0)
 
 var push_constant_params := PackedByteArray()
-var buoyancy_data := PackedFloat32Array()
+var buoyancy_data: Array[PackedFloat32Array] = []
+var prev_buoyancy_data: Array[PackedFloat32Array] = []
+var prev_delta: float = 0.016
 
 func _ready() -> void:
+	buoyancy_data.resize(4)
+	prev_buoyancy_data.resize(4)
 	push_constant_params.resize(80)
 	rd = RenderingServer.get_rendering_device()
 	if not rd:
@@ -63,9 +67,13 @@ func _process(delta: float) -> void:
 	time += delta
 	_run_update_fft_assemble(delta)
 	
-	var bytes = rd.texture_get_data(buoyancy_tex, 0)
-	if bytes.size() == RESOLUTION * RESOLUTION * 4:
-		buoyancy_data = bytes.to_float32_array()
+	for i in range(4):
+		var bytes = rd.texture_get_data(buoyancy_tex, i)
+		if bytes.size() == RESOLUTION * RESOLUTION * 4:
+			if buoyancy_data[i] and not buoyancy_data[i].is_empty():
+				prev_buoyancy_data[i] = buoyancy_data[i]
+				prev_delta = delta
+			buoyancy_data[i] = bytes.to_float32_array()
 
 func _compile_shaders() -> void:
 	var file = FileAccess.open("res://resources/shaders/fft_ocean_compute.glsl", FileAccess.READ)
@@ -142,7 +150,8 @@ func _create_buffers_and_textures() -> void:
 	fmt_r32.mipmaps = 1
 	fmt_r32.format = RenderingDevice.DATA_FORMAT_R32_SFLOAT
 	fmt_r32.usage_bits = common_usage
-	fmt_r32.texture_type = RenderingDevice.TEXTURE_TYPE_2D
+	fmt_r32.texture_type = RenderingDevice.TEXTURE_TYPE_2D_ARRAY
+	fmt_r32.array_layers = 4
 	buoyancy_tex = rd.texture_create(fmt_r32, RDTextureView.new())
 	
 	# Create Godot wrappers for spatial shader
@@ -152,7 +161,7 @@ func _create_buffers_and_textures() -> void:
 	slope_map_rd = Texture2DArrayRD.new()
 	slope_map_rd.texture_rd_rid = slope_tex
 	
-	buoyancy_map_rd = Texture2DRD.new()
+	buoyancy_map_rd = Texture2DArrayRD.new()
 	buoyancy_map_rd.texture_rd_rid = buoyancy_tex
 
 func _create_uniform_set() -> void:

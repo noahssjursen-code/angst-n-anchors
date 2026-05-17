@@ -46,7 +46,7 @@ layout(rgba32f, set = 0, binding = 1) uniform image2DArray initial_spectrum_text
 layout(rgba32f, set = 0, binding = 2) uniform image2DArray spectrum_textures;
 layout(rgba32f, set = 0, binding = 3) uniform image2DArray displacement_textures;
 layout(rg32f,   set = 0, binding = 4) uniform image2DArray slope_textures;
-layout(r32f,    set = 0, binding = 5) uniform image2D buoyancy_data;
+layout(r32f,    set = 0, binding = 5) uniform image2DArray buoyancy_data;
 layout(rgba32f, set = 0, binding = 6) uniform image2DArray fourier_target;
 
 // Math helpers
@@ -333,10 +333,7 @@ void main() {
 
 		imageStore(displacement_textures, ivec3(id.xy, i), vec4(displacement, clamp(foam, 0.0, 1.0)));
 		imageStore(slope_textures, ivec3(id.xy, i), vec4(slopes, 0.0, 0.0));
-
-		if (i == 0u) {
-			imageStore(buoyancy_data, ivec2(id.xy), vec4(displacement.y, 0.0, 0.0, 0.0));
-		}
+		imageStore(buoyancy_data, ivec3(id.xy, i), vec4(displacement.y, 0.0, 0.0, 0.0));
 	}
 }
 #endif

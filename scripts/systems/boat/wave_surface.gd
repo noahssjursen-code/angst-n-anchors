@@ -44,25 +44,27 @@ static func get_sim_time() -> float:
 	return Time.get_ticks_msec() * 0.001
 
 static func get_buoyancy_surface_height_at(x: float, z: float) -> float:
-	if fft_system == null or fft_system.buoyancy_data.is_empty():
+	if fft_system == null or fft_system.buoyancy_data.size() < 4 or fft_system.buoyancy_data[0].is_empty():
 		return WATER_LEVEL
 	
-	var length_scale = fft_system.length_scales.x
-	var res = 1024.0
+	var h_total := 0.0
+	for i in range(4):
+		var length_scale = fft_system.length_scales[i]
+		var res = 1024.0
+		
+		var u = fmod(x / length_scale, 1.0)
+		var v = fmod(z / length_scale, 1.0)
+		if u < 0.0: u += 1.0
+		if v < 0.0: v += 1.0
+		
+		var px = clamp(int(u * res), 0, 1023)
+		var py = clamp(int(v * res), 0, 1023)
+		
+		var idx = py * 1024 + px
+		h_total += fft_system.buoyancy_data[i][idx]
 	
-	var u = fmod(x / length_scale, 1.0)
-	var v = fmod(z / length_scale, 1.0)
-	if u < 0.0: u += 1.0
-	if v < 0.0: v += 1.0
-	
-	var px = int(u * res)
-	var py = int(v * res)
-	px = clamp(px, 0, int(res) - 1)
-	py = clamp(py, 0, int(res) - 1)
-	
-	var idx = py * int(res) + px
 	# Scale down the FFT raw height by 0.42 to match the visual shader's amp_scale tuning
-	return WATER_LEVEL + fft_system.buoyancy_data[idx] * wave_intensity * get_wave_energy_multiplier() * 0.42
+	return WATER_LEVEL + h_total * wave_intensity * get_wave_energy_multiplier() * 0.42
 
 static func get_base_wave_height_at(x: float, z: float) -> float:
 	return get_buoyancy_surface_height_at(x, z)
@@ -103,9 +105,30 @@ static func _vessel_displacement_params(b: RigidBody3D) -> Dictionary:
 	}
 
 static func get_vertical_velocity_at(x: float, z: float) -> float:
-	# Velocity approximation is complex without retaining previous frame's grid.
-	# For rigid body damping, 0 is acceptable as a baseline if we don't have true dy/dt.
-	return 0.0
+	if fft_system == null or fft_system.buoyancy_data.size() < 4 or fft_system.prev_buoyancy_data.size() < 4 or fft_system.buoyancy_data[0].is_empty() or fft_system.prev_buoyancy_data[0].is_empty():
+		return 0.0
+
+	var dt = fft_system.prev_delta
+	if dt <= 0.0001: return 0.0
+
+	var h_now = 0.0
+	var h_prev = 0.0
+	for i in range(4):
+		var length_scale = fft_system.length_scales[i]
+		var res = 1024.0
+		var u = fmod(x / length_scale, 1.0)
+		var v = fmod(z / length_scale, 1.0)
+		if u < 0.0: u += 1.0
+		if v < 0.0: v += 1.0
+		
+		var px = clamp(int(u * res), 0, 1023)
+		var py = clamp(int(v * res), 0, 1023)
+		var idx = py * 1024 + px
+		h_now += fft_system.buoyancy_data[i][idx]
+		h_prev += fft_system.prev_buoyancy_data[i][idx]
+	
+	var dh = (h_now - h_prev) * wave_intensity * get_wave_energy_multiplier() * 0.42
+	return dh / dt
 
 static func get_surface_gradient_xz(x: float, z: float) -> Vector2:
 	var e = 1.0
