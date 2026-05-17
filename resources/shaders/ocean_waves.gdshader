@@ -29,6 +29,7 @@ uniform float foam_steep_end   : hint_range(0.0, 1.0) = 0.92;
 
 uniform vec4 boat_coupling = vec4(0.0, 0.0, 0.0, 0.0);
 uniform vec2 boat_coupling_axes = vec2(1.0, 1.0);
+uniform vec4 boat_basis = vec4(1.0, 0.0, 0.0, 1.0);
 uniform vec2 boat_velocity = vec2(0.0, 0.0);
 
 varying vec3 v_world_pos;
@@ -140,13 +141,33 @@ void vertex() {
 		float sz = max(boat_coupling_axes.y, 0.01);
 		float dx = displaced_world.x - bx;
 		float dz = displaced_world.z - bz;
-		float u = dx / sx;
-		float v = dz / sz;
-		float g = -0.5 * (u * u + v * v);
+		
+		float right_x = boat_basis.x;
+		float right_z = boat_basis.y;
+		float fwd_x = boat_basis.z;
+		float fwd_z = boat_basis.w;
+		
+		float local_x = dx * right_x + dz * right_z;
+		float local_z = dx * fwd_x + dz * fwd_z;
+		
+		float u = local_x / sx;
+		float v = local_z / sz;
+		
+		float u2 = u * u;
+		float v2 = v * v;
+		// Use a squircle (power of 4) distance metric to make a flatter, boxier hole that fits the deck
+		float dist4 = u2 * u2 + v2 * v2;
+		float g = -0.7 * dist4;
+		
 		if (g > -8.0) {
 			boat_dip = amp * exp(g);
-			ddip_dx = -boat_dip * u / sx;
-			ddip_dz = -boat_dip * v / sz;
+			float u3 = u2 * u;
+			float v3 = v2 * v;
+			float ddip_dlocal_x = -boat_dip * 2.8 * u3 / sx;
+			float ddip_dlocal_z = -boat_dip * 2.8 * v3 / sz;
+			
+			ddip_dx = ddip_dlocal_x * right_x + ddip_dlocal_z * fwd_x;
+			ddip_dz = ddip_dlocal_x * right_z + ddip_dlocal_z * fwd_z;
 		}
 
 		// Trailing wake

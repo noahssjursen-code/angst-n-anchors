@@ -84,14 +84,25 @@ static func _vessel_displacement_params(b: RigidBody3D) -> Dictionary:
 	var bz: float = b.global_position.z
 	var keel_y: float = b.global_position.y - hs.y * 0.5
 	var surf_raw: float = get_base_wave_height_at(bx, bz)
-	var immersion: float = clampf((surf_raw - keel_y) / maxf(hs.y, 0.01), 0.0, 2.8)
-	var sx: float = maxf(hs.x * 0.62, 0.5)
-	var sz: float = maxf(hs.z * 0.58, 0.5)
+	
+	var right := b.global_transform.basis.x
+	var fwd := b.global_transform.basis.z
+	
+	# The absolute depth the keel is submerged under the wave
+	var depth_below_surface: float = maxf(surf_raw - keel_y, 0.0)
+	
+	# Give the hole a slightly tighter fit around the hull to carve out the wave
+	var sx: float = maxf(hs.x * 0.55, 0.5)
+	var sz: float = maxf(hs.z * 0.55, 0.5)
 	var amp: float = 0.0
-	if immersion > 0.0:
-		var waterplane: float = hs.x * hs.z
-		amp = immersion * (0.52 + 0.14 * sqrt(waterplane / 90.0))
-		amp = minf(amp, 2.85)
+	
+	if depth_below_surface > 0.0:
+		# We want the hole to be almost as deep as the boat is submerged,
+		# so the water surface stays pinned near or below the deck line.
+		amp = depth_below_surface * 1.05
+		# Cap it at a generous multiple of the hull height so it can carve out big waves
+		amp = minf(amp, hs.y * 3.5)
+		
 	var vel_xz := Vector2(b.linear_velocity.x, b.linear_velocity.z)
 	return {
 		"amp": amp,
@@ -99,9 +110,13 @@ static func _vessel_displacement_params(b: RigidBody3D) -> Dictionary:
 		"sz": sz,
 		"bx": bx,
 		"bz": bz,
-		"immersion": immersion,
+		"immersion": depth_below_surface,
 		"vel_x": vel_xz.x,
-		"vel_z": vel_xz.y
+		"vel_z": vel_xz.y,
+		"right_x": right.x,
+		"right_z": right.z,
+		"fwd_x": fwd.x,
+		"fwd_z": fwd.z
 	}
 
 static func get_vertical_velocity_at(x: float, z: float) -> float:
@@ -155,10 +170,12 @@ static func sync_ocean_coupling_to_shader(mat: ShaderMaterial) -> void:
 		mat.set_shader_parameter("boat_coupling", Vector4(p["bx"], p["bz"], 0.0, 0.0))
 		mat.set_shader_parameter("boat_coupling_axes", Vector2(p["sx"], p["sz"]))
 		mat.set_shader_parameter("boat_velocity", Vector2(p["vel_x"], p["vel_z"]))
+		mat.set_shader_parameter("boat_basis", Vector4(p["right_x"], p["right_z"], p["fwd_x"], p["fwd_z"]))
 		return
 	mat.set_shader_parameter("boat_coupling", Vector4(p["bx"], p["bz"], p["amp"], 0.0))
 	mat.set_shader_parameter("boat_coupling_axes", Vector2(p["sx"], p["sz"]))
 	mat.set_shader_parameter("boat_velocity", Vector2(p["vel_x"], p["vel_z"]))
+	mat.set_shader_parameter("boat_basis", Vector4(p["right_x"], p["right_z"], p["fwd_x"], p["fwd_z"]))
 
 static func _vessel_dip_at(x: float, z: float) -> float:
 	if _coupled_vessel == null or not is_instance_valid(_coupled_vessel):
@@ -169,9 +186,26 @@ static func _vessel_dip_at(x: float, z: float) -> float:
 		return 0.0
 	var sx: float = p["sx"]
 	var sz: float = p["sz"]
-	var u: float = (x - p["bx"]) / sx
-	var v: float = (z - p["bz"]) / sz
-	var dist2: float = u * u + v * v
-	if dist2 > 22.0:
+	
+	var dx: float = x - p["bx"]
+	var dz: float = z - p["bz"]
+	
+	var right_x: float = p["right_x"]
+	var right_z: float = p["right_z"]
+	var fwd_x: float = p["fwd_x"]
+	var fwd_z: float = p["fwd_z"]
+	
+	var local_x: float = dx * right_x + dz * right_z
+	var local_z: float = dx * fwd_x + dz * fwd_z
+	
+	var u: float = local_x / sx
+	var v: float = local_z / sz
+	
+	var u2: float = u * u
+	var v2: float = v * v
+	var dist4: float = u2 * u2 + v2 * v2
+	var g: float = -0.7 * dist4
+	
+	if g < -8.0:
 		return 0.0
-	return amp * exp(-0.5 * dist2)
+	return amp * exp(g)
