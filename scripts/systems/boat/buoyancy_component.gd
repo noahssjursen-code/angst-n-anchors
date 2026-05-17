@@ -31,7 +31,7 @@ extends Node3D
 
 ## Resists heave relative to the *water surface* (not world). Too strong or world-
 ## relative kills riding over waves.
-@export var vertical_damping: float = 3600.0
+@export var vertical_damping: float = 65000.0
 ## Per-column lift caps once ~fully submerged (linear depth model would diverge).
 @export var lift_depth_hull_scale: float = 1.15
 ## Scales wave-relative vertical damping. Lower = hull moves more independently of the
@@ -102,22 +102,41 @@ func _physics_process(_delta: float) -> void:
 			continue
 
 		active += 1
+
+		# Limit max buoyancy so we don't get infinite lift if completely swallowed by a huge wave
 		var lift_depth: float = minf(depth, max_lift_depth)
+		var raw_lift: float = lift_depth * base_force
 
-		# Archimedes' principle: upward force = weight of displaced fluid.
-		# Per sample: water_density * gravity * column_area * submerged_depth.
-		var lift := Vector3.UP * (lift_depth * base_force)
-
-		# Damp heave relative to the wave (world-only damping fights following the surface).
+		# Damp heave relative to the wave
 		var world_offset: Vector3 = world_pt - _body.global_position
 		var angular_point_vel: Vector3 = _body.angular_velocity.cross(world_offset)
 		var point_vel: Vector3 = _body.linear_velocity + angular_point_vel
-		var water_vy: float       = WaveSurface.get_vertical_velocity_at(world_pt.x, world_pt.z)
-		var rel_vy: float         = point_vel.y - water_vy
-		var damp_scale: float     = minf(depth, 1.2) / 1.2
-		var vert_damp := Vector3(0.0, -rel_vy * vertical_damping * damp_scale * wave_influence_scale, 0.0)
-
-		_body.apply_force(lift + vert_damp, world_offset)
+		
+		# Limit water vertical velocity readings so spikes in the wave math don't cause explosive damping
+		var water_vy: float = clampf(WaveSurface.get_vertical_velocity_at(world_pt.x, world_pt.z), -8.0, 8.0)
+		var rel_vy: float = point_vel.y - water_vy
+		
+		# Damping scales with immersion. Even if barely touching, apply some resistance.
+		var damp_scale: float = clampf(depth / maxf(hull_h, 1.0), 0.2, 1.0)
+		
+		# Mix of linear and quadratic damping for realistic fluid resistance.
+		# Quadratic drag gives massive resistance to plunging/jumping, but low resistance to gentle bobbing.
+		var linear_damp: float = rel_vy * vertical_damping
+		var quad_damp: float = sign(rel_vy) * (rel_vy * rel_vy) * (vertical_damping * 1.5)
+		var damp_force_y: float = -(linear_damp + quad_damp) * damp_scale * wave_influence_scale
+		
+		# CRITICAL PHYSICS STABILITY FIX:
+		# If the damping force is too high, it applies an impulse larger than the boat's momentum,
+		# causing the physics engine to elastically bounce the boat OUT of the water.
+		# We clamp the damping force so it can never remove more than 98% of the relative velocity in a single frame.
+		var mass_per_point: float = _body.mass / maxf(footprint_samples.size(), 1.0)
+		var max_damp_force: float = (mass_per_point * absf(rel_vy) / _delta) * 0.98
+		
+		damp_force_y = clampf(damp_force_y, -max_damp_force, max_damp_force)
+		
+		var total_y_force: float = raw_lift + damp_force_y
+		
+		_body.apply_force(Vector3(0.0, total_y_force, 0.0), world_offset)
 
 	# Discrete keel samples can all sit in a sharp wave trough (mathematical air gap);
 	# add weak central support when still near the free surface.
@@ -129,9 +148,12 @@ func _physics_process(_delta: float) -> void:
 		)
 		var gap: float = surf_c - keel_c
 		if gap > -hull_h * 1.35:
-			var pseudo_depth: float = clampf(gap + hull_h * 0.4, 0.0, max_lift_depth)
+			var pseudo_depth: float = clampf(gap + hull_h * 0.4, 0.0, 5.0)
 			if pseudo_depth > 0.0:
 				var assist: float = (
 					pseudo_depth * base_force * float(mini(footprint_samples.size(), 6)) * 0.2
 				)
+				# Cap assist so it can't launch the boat
+				var weight_per_point: float = (_body.mass * gravity) / maxf(footprint_samples.size(), 1.0)
+				assist = minf(assist, weight_per_point * float(footprint_samples.size()) * 0.8)
 				_body.apply_central_force(Vector3.UP * assist)

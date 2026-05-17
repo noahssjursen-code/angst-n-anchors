@@ -6,18 +6,18 @@ extends Node3D
 ## orbital flow, and **tangent slip** is damped (ice-like sliding on a curved sheet).
 
 @export var water_density: float = 1000.0
-@export var forward_drag_coeff: float = 0.02
-@export var lateral_drag_coeff: float = 0.85
-@export var rotational_drag_coeff: float = 2.0
+@export var forward_drag_coeff: float = 0.08
+@export var lateral_drag_coeff: float = 1.6
+@export var rotational_drag_coeff: float = 4.0
 ## Horizontal water motion from ∂η/∂t (drag only). High values make the hull **ride
 ## the wave phase** with little resistance — keep modest.
 @export var orbital_flow_scale: float = 0.12
 ## Opposes velocity tangent to the local free surface (ball-on-trampoline grip).
-@export var slip_grip_coeff: float = 8500.0
-@export var max_slip_grip_force: float = 180000.0
+@export var slip_grip_coeff: float = 18000.0
+@export var max_slip_grip_force: float = 450000.0
 ## Drains horizontal speed vs **world** (still ocean / inertia). Stops zero-throttle
 ## surfing on wave orbital motion forever.
-@export var bulk_horizontal_drag: float = 2400.0
+@export var bulk_horizontal_drag: float = 4200.0
 ## Approximate operational draft used for water drag. Kept separate from buoyancy:
 ## buoyancy decides where the hull floats; this only estimates submerged side area.
 @export var draft_fraction: float = 0.38

@@ -97,11 +97,11 @@ static func _vessel_displacement_params(b: RigidBody3D) -> Dictionary:
 	var amp: float = 0.0
 	
 	if depth_below_surface > 0.0:
-		# We want the hole to be almost as deep as the boat is submerged,
-		# so the water surface stays pinned near or below the deck line.
-		amp = depth_below_surface * 1.05
-		# Cap it at a generous multiple of the hull height so it can carve out big waves
-		amp = minf(amp, hs.y * 3.5)
+		# We want the hole to carve out the wave, but not perfectly match it 1:1,
+		# so water can still slightly lap over the very bottom edge.
+		amp = depth_below_surface * 0.85
+		# Cap it at a much tighter multiple of the hull height so it doesn't dig massive craters
+		amp = minf(amp, hs.y * 1.4)
 		
 	var vel_xz := Vector2(b.linear_velocity.x, b.linear_velocity.z)
 	return {
@@ -204,8 +204,20 @@ static func _vessel_dip_at(x: float, z: float) -> float:
 	var u2: float = u * u
 	var v2: float = v * v
 	var dist4: float = u2 * u2 + v2 * v2
-	var g: float = -1.8 * dist4
 	
-	if g < -8.0:
+	# "Bloom" effect: as the ship sinks deeper, the water gets pushed further outwards
+	var spread: float = 1.0 + clampf(amp * 0.15, 0.0, 1.2)
+	var spread4: float = spread * spread * spread * spread
+	var D: float = dist4 / spread4
+	
+	if D > 8.0:
 		return 0.0
-	return amp * exp(g)
+		
+	var a: float = 1.8
+	var b: float = 0.8
+	var c: float = 0.5
+	
+	var exp_a: float = exp(-a * D)
+	var exp_b: float = exp(-b * D)
+	
+	return amp * (exp_a - c * D * exp_b)

@@ -35,7 +35,6 @@ uniform vec2 boat_velocity = vec2(0.0, 0.0);
 varying vec3 v_world_pos;
 varying vec3 v_world_normal;
 varying float v_wave_steep;
-varying float v_boat_wake;
 varying float v_foam;
 
 /* Smooth procedural noise — pure sine grids read as tiling under one sun/light. */
@@ -132,7 +131,6 @@ void vertex() {
 	float boat_dip = 0.0;
 	float ddip_dx = 0.0;
 	float ddip_dz = 0.0;
-	float wake = 0.0;
 	if (boat_coupling.z > 0.0001) {
 		float bx = boat_coupling.x;
 		float bz = boat_coupling.y;
@@ -155,40 +153,33 @@ void vertex() {
 		
 		float u2 = u * u;
 		float v2 = v * v;
-		// Use a squircle (power of 4) distance metric to make a flatter, boxier hole that fits the deck
 		float dist4 = u2 * u2 + v2 * v2;
-		float g = -1.8 * dist4;
 		
-		if (g > -8.0) {
-			boat_dip = amp * exp(g);
+		// "Bloom" effect: as the ship sinks deeper, the water gets pushed further outwards, creating a wider cone
+		float spread = 1.0 + clamp(amp * 0.15, 0.0, 1.2);
+		float spread4 = spread * spread * spread * spread;
+		float D = dist4 / spread4;
+		
+		if (D < 8.0) {
+			float a = 1.8;
+			float b = 0.8;
+			float c = 0.5;
+			
+			float exp_a = exp(-a * D);
+			float exp_b = exp(-b * D);
+			
+			boat_dip = amp * (exp_a - c * D * exp_b);
+			float d_dip_dD = amp * (-a * exp_a - c * exp_b * (1.0 - b * D));
+			
 			float u3 = u2 * u;
 			float v3 = v2 * v;
-			float ddip_dlocal_x = -boat_dip * 7.2 * u3 / sx;
-			float ddip_dlocal_z = -boat_dip * 7.2 * v3 / sz;
+			
+			// Chain rule: d(dip)/du = d(dip)/dD * dD/du (which is 4*u^3 / spread4)
+			float ddip_dlocal_x = d_dip_dD * 4.0 * u3 / (sx * spread4);
+			float ddip_dlocal_z = d_dip_dD * 4.0 * v3 / (sz * spread4);
 			
 			ddip_dx = ddip_dlocal_x * right_x + ddip_dlocal_z * fwd_x;
 			ddip_dz = ddip_dlocal_x * right_z + ddip_dlocal_z * fwd_z;
-		}
-
-		// Trailing wake
-		float v_len = length(boat_velocity);
-		if (v_len > 0.5) {
-			vec2 v_dir = boat_velocity / v_len;
-			float along = dx * v_dir.x + dz * v_dir.y;
-			float across = dx * -v_dir.y + dz * v_dir.x;
-			
-			// Behind the boat
-			if (along < 0.0 && along > -v_len * 3.0) {
-				float trail_width = mix(sz * 1.2, sz * 3.0, -along / (v_len * 3.0));
-				float t_u = across / trail_width;
-				float t_v = along / (v_len * 3.0); 
-				
-				float t_g = -0.5 * (t_u * t_u);
-				if (t_g > -5.0) {
-					// Mask for foam wake
-					wake = exp(t_g) * (1.0 + t_v) * clamp(v_len * 0.1, 0.0, 1.0);
-				}
-			}
 		}
 	}
 	displaced_world.y -= boat_dip;
@@ -206,7 +197,6 @@ void vertex() {
 	float foam_steep_raw = 1.0 - clamp(world_n_foam_metric.y, 0.0, 1.0);
 	// Tighter power curve here reduces the area of wave peaks classified as "steep"
 	v_wave_steep = pow(foam_steep_raw, 2.75);
-	v_boat_wake = wake;
 	v_foam = fft_foam;
 }
 
