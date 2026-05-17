@@ -121,38 +121,44 @@ vec3 sky_gradient(vec3 dir) {
 
 
 // ---------------------------------------------------------------------------
-// Cloud density at a given sky direction
+// Cloud density and volume
 // ---------------------------------------------------------------------------
 
-float cloud_density(vec3 dir) {
-	// Only upper hemisphere — hard cutoff well below horizon.
-	if (dir.y < 0.02) return 0.0;
-
-	// Fade near horizon (prevents hard ring edge); clouds visible almost to zenith.
-	float horizon_fade = smoothstep(0.03, 0.14, dir.y);
-	float zenith_fade  = 1.0 - smoothstep(0.88, 0.98, dir.y);
-	float sky_fade     = horizon_fade * zenith_fade;
-
-	// Hemispherical projection with moderate bias. Lower bias (0.18) vs old 0.25 lets
-	// clouds spread more naturally across mid-elevations.
-	float h  = dir.y + 0.18;
-	vec2  uv = dir.xz / h;
-
+float get_cloud_shape(vec3 dir) {
+	if (dir.y < 0.0) return 0.0;
+	// Project onto a flat sky plane. A lower addition stretches clouds towards the horizon.
+	float h = dir.y + 0.15; 
+	vec2 uv = dir.xz / h;
+	
+	// Drift
 	uv += vec2(sky_time * cloud_speed, sky_time * cloud_speed * 0.45);
+	
+	// Layered noise for puffy shapes
+	float shape = fbm(uv * 1.8) * 0.55
+	            + fbm(uv * 3.8) * 0.30
+	            + fbm(uv * 7.5) * 0.15;
+	            
+	// Carve out deep structural valleys so high-coverage never turns into a flat monotone blanket
+	float valleys = fbm(uv * 2.5 + vec2(12.3, 4.5));
+	shape -= pow(valleys, 2.5) * 0.5;
+	            
+	return shape;
+}
 
-	// Large-scale formation (2.2) + medium detail (4.5) + fine wisp (9.0).
-	// Larger base scale creates more convincing cloud formations instead of
-	// a uniform speckled haze.
-	float shape = fbm(uv * 2.2) * 0.60
-	            + fbm(uv * 4.5) * 0.28
-	            + fbm(uv * 9.0) * 0.12;
-
-	// Give coverage more weight so clouds appear at moderate values.
-	float threshold = 1.0 - clamp(cloud_coverage * 1.2, 0.0, 1.0);
-	float raw = clamp((shape - threshold) / (1.0 - threshold + 0.001), 0.0, 1.0);
-
-	// Lower sharpness = softer rounded edges; higher multiplier = more opaque fill.
-	return clamp(pow(raw, cloud_sharpness) * 2.8, 0.0, 1.0) * sky_fade;
+float cloud_density(vec3 dir, float shape) {
+	if (dir.y < 0.0) return 0.0;
+	
+	float horizon_fade = smoothstep(0.02, 0.12, dir.y);
+	
+	// Storms increase overall cloud coverage and thickness
+	float coverage = clamp(cloud_coverage * 1.3 + storm_intensity * 0.2, 0.0, 1.0);
+	float threshold = 1.0 - coverage;
+	
+	// Sharpness controls how fluffy vs hard-edged the clouds are.
+	// As coverage increases, we keep a wider gradient so the contours remain visible!
+	float edge_softness = max(0.15, (1.0 - coverage) * 0.5) / cloud_sharpness;
+	float density = smoothstep(threshold, threshold + edge_softness, shape);
+	return clamp(density * horizon_fade, 0.0, 1.0);
 }
 
 
@@ -309,20 +315,48 @@ void sky() {
 		col += moon_contribution(dir) * (1.0 - cloud_coverage * 0.75);
 	}
 
-	// Clouds — shaded with sun elevation AND cloud density (denser core = darker).
-	float clouds = cloud_density(dir);
+	// Clouds — Pseudo-volumetric shading
+	float base_shape = get_cloud_shape(dir);
+	float clouds = cloud_density(dir, base_shape);
+	
 	if (clouds > 0.001) {
-		// Edge-brightening: cloud edges are lit more than dense interiors.
-		// This gives the illusion of volume without ray-marching.
-		float interior = smoothstep(0.3, 1.0, clouds) * 0.55;
-		vec3 cloud_col = mix(cloud_light, cloud_dark, interior);
-
-		// Storm tint first — old order applied day-grey *after* night dim and re-brightened the dome.
-		cloud_col = mix(cloud_col, vec3(0.24, 0.27, 0.30), storm_intensity * 0.65);
-
-		// Night: crush albedo; moon gives a subtle lift only when sun is down.
+		// 1. Self-Shadowing (Sample density slightly towards the sun)
+		vec3 offset_dir = normalize(dir + sun_direction * 0.15);
+		float sun_shape = get_cloud_shape(offset_dir);
+		float sun_density_val = cloud_density(offset_dir, sun_shape);
+		
+		// If the cloud is thicker towards the sun, this pixel is in shadow.
+		// Also, we mix in the raw inverted `base_shape` so that even at 100% coverage,
+		// the deep valleys of the noise remain permanently darker than the peaks!
+		float structural_shadow = 1.0 - clamp(base_shape * 1.2, 0.0, 1.0);
+		float cast_shadow = clamp((sun_density_val - clouds) * 2.5, 0.0, 1.0);
+		float shadow = clamp(cast_shadow + structural_shadow * 0.8, 0.0, 1.0);
+		
+		// 2. Base Color (Thicker/shadowed = darker bellies)
+		// Dynamic color scaling:
+		// Clear = bright (but dimmer) tops, Overcast = very moody heavy grey, Storm = nearly black thunder-grey
+		vec3 base_lit = mix(vec3(0.65, 0.68, 0.72), vec3(0.12, 0.14, 0.16), cloud_coverage);
+		vec3 base_dark = mix(vec3(0.35, 0.38, 0.42), vec3(0.05, 0.06, 0.07), cloud_coverage);
+		
+		// In storms, turn thunder gray and heavily bruise the darks
+		base_lit = mix(base_lit, vec3(0.04, 0.05, 0.06), storm_intensity);
+		base_dark = mix(base_dark, vec3(0.01, 0.01, 0.015), storm_intensity);
+		
+		vec3 ambient = mix(base_lit, base_dark, shadow);
+		
+		// 3. Sunlight Illumination (Light hits the unshadowed parts)
+		float direct_light = 1.0 - shadow;
+		vec3 cloud_col = ambient + sun_color * direct_light * 0.25 * (1.0 - storm_intensity * 0.85);
+		
+		// 4. Silver Linings (Forward scattering through thin cloud edges)
+		float sun_dot = max(dot(dir, sun_direction), 0.0);
+		float silver_lining = pow(sun_dot, 16.0) * smoothstep(0.0, 0.4, clouds) * smoothstep(1.0, 0.5, clouds);
+		cloud_col += sun_color * silver_lining * 1.5 * (1.0 - storm_intensity * 0.8);
+		
+		// 5. Day/Night Cycle Dimming
 		float day_cloud_lit = smoothstep(-0.05, 0.32, sun_direction.y);
 		cloud_col *= mix(0.045, 1.0, day_cloud_lit);
+		
 		float moon_up = max(moon_direction.y, 0.0);
 		cloud_col *= mix(1.0, 1.0 + moon_up * 0.26, 1.0 - day_cloud_lit);
 

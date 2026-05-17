@@ -68,15 +68,13 @@ var cloud_coverage: float:
 var rain_amount: float:
 	get: return smoothstep(0.30, 1.0, precipitation)
 
-## Thunder / lightning 0–1: only when rain is actually heavy **and** wind is up — not every shower.
+## Thunder / lightning 0–1: driven by heavy rain, so we can have thunderous weather even in calm seas.
 var thunder_intensity: float:
-	get: return clampf(
-		smoothstep(0.40, 0.82, precipitation) * smoothstep(0.25, 0.68, wind_force),
-		0.0, 1.0)
+	get: return smoothstep(0.50, 0.95, precipitation)
 
-## Gale darkness 0–1: sky/ocean grimness when precip and wind both high.
+## Storm darkness 0–1: sky/ocean grimness driven primarily by heavy rain, allowing storms without huge waves.
 var storm_intensity: float:
-	get: return clampf(precipitation * wind_force, 0.0, 1.0)
+	get: return clampf(smoothstep(0.45, 1.0, precipitation) + (precipitation * wind_force * 0.2), 0.0, 1.0)
 
 ## Fog density 0–1 (inverted visibility).
 var fog_density: float:

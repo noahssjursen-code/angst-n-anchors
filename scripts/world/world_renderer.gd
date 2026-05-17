@@ -100,6 +100,15 @@ func _build_sky() -> void:
 	environ.fog_density            = 0.005
 	environ.fog_aerial_perspective = 0.12
 	environ.fog_sky_affect         = 0.6
+	
+	# Enable Volumetric Fog for true physical depth and light scattering
+	environ.volumetric_fog_enabled = true
+	environ.volumetric_fog_density = 0.005
+	environ.volumetric_fog_albedo  = Color(0.58, 0.66, 0.78)
+	environ.volumetric_fog_emission = Color(0.02, 0.02, 0.02)
+	environ.volumetric_fog_emission_energy = 0.1
+	environ.volumetric_fog_length = 320.0
+	environ.volumetric_fog_detail_spread = 2.0
 
 	var world_env := WorldEnvironment.new()
 	world_env.environment = environ
@@ -228,15 +237,25 @@ func _apply_sun(tod: float, daylight: float, cloud: float, storm: float) -> void
 func _apply_fog(fog_t: float, daylight: float, storm: float) -> void:
 	if _environment == null:
 		return
-	_environment.fog_light_color = (
+		
+	var base_fog_col = (
 		Color(0.06, 0.07, 0.09)
 		.lerp(Color(0.58, 0.66, 0.78), daylight)
 		.lerp(Color(0.28, 0.30, 0.33), storm * 0.5)
 	)
-	_environment.fog_density            = 0.005 + lerpf(0.0, 0.25, fog_t * fog_t * fog_t)
-	_environment.fog_aerial_perspective = 0.12  + lerpf(0.0, 0.35, fog_t)
-	# Clear air: leave the procedural sky intact; fog only eats the dome when visibility drops.
-	_environment.fog_sky_affect = lerpf(0.11, 0.58, fog_t * fog_t)
+	
+	# Traditional Screen-Space Fog (Handles skybox blending and distant occlusion)
+	_environment.fog_light_color = base_fog_col
+	_environment.fog_density            = lerpf(0.0, 0.05, fog_t * fog_t)
+	_environment.fog_aerial_perspective = lerpf(0.0, 0.65, fog_t)
+	_environment.fog_sky_affect = lerpf(0.0, 0.85, fog_t * fog_t)
+	
+	# Volumetric Fog (Physical 3D depth, light shafts, and realistic thickness)
+	_environment.volumetric_fog_albedo = base_fog_col
+	# Scale volumetric density aggressively with fog_t
+	_environment.volumetric_fog_density = lerpf(0.0, 0.18, fog_t)
+	# Push the fog rendering distance out based on visibility
+	_environment.volumetric_fog_length = lerpf(480.0, 120.0, fog_t)
 
 
 func _apply_sky_shader(daylight: float, cloud: float, storm: float) -> void:
