@@ -272,11 +272,16 @@ void fragment() {
 	/* FFT macro-normals are already directional; killing roughness (*0.45) reads as lacquered glass. */
 	float chop_rough_boost = chop_strength * 0.12;
 	float r_base = max(roughness * 1.18 + chop_rough_boost, 0.16);
+	
+	// Added more aggressive grain/micro-roughness to break up smooth reflections
 	float r_micro = clamp(
-		r_base + 0.042 * (sp - 0.5) + v_wave_steep * 0.035, 0.12, 0.93);
+		r_base + 0.18 * (sp - 0.5) + v_wave_steep * 0.035, 0.12, 0.93);
+
+	// Also slightly multiply albedo by the high-freq noise to add visual grain directly to the color
+	ALBEDO *= mix(0.92, 1.08, sp);
 
 	ROUGHNESS = mix(r_micro, mix(0.78, 0.92, foam_noise * 0.35), foam_mask);
 
 	METALLIC = metallic * 0.65;
-	SPECULAR = mix(specular * 0.72, 0.17, foam_mask);
+	SPECULAR = mix(specular * 0.72, 0.10, foam_mask);
 }
