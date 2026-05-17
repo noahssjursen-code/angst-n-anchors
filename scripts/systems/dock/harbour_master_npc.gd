@@ -6,13 +6,20 @@ extends NpcInteractable
 
 const PEAKED_CAP_PATH := "res://resources/data/meshes/characters/hat_peaked_cap.json"
 
+## Ships offered when assigning a berth. Extend as you add playable hull scenes.
+const PLAYER_VESSEL_CHOICES: Array[Dictionary] = [
+	{"label": "Coastal cargo (standard)", "path": "res://scenes/boats/test_boat.tscn"},
+	{"label": "Coastal tanker", "path": "res://scenes/boats/fuel_tanker.tscn"},
+]
+
 @export var port_id: String = ""
 
 var _panel:  Panel
 var _body:   VBoxContainer
 
-enum _Screen { MAIN, REQUEST_BERTH, PAY_DUES, VESSEL_INFO }
+enum _Screen { MAIN, REQUEST_BERTH, PAY_DUES, VESSEL_INFO, SHIP_SELECT }
 var _screen: _Screen = _Screen.MAIN
+var _pending_berth_index: int = -1
 
 
 func _ready() -> void:
@@ -39,7 +46,10 @@ func _on_interact() -> void:
 
 
 func _on_ui_cancel() -> void:
-	if _screen == _Screen.MAIN:
+	if _screen == _Screen.SHIP_SELECT:
+		_release_pending_berth()
+		_show_request_berth()
+	elif _screen == _Screen.MAIN:
 		_panel.visible = false
 		close_ui()
 	else:
@@ -49,6 +59,7 @@ func _on_ui_cancel() -> void:
 # ── Screens ───────────────────────────────────────────────────────────────────
 
 func _close() -> void:
+	_release_pending_berth()
 	_panel.visible = false
 	close_ui()
 
@@ -111,17 +122,76 @@ func _on_berth_selected(index: int) -> void:
 	if dock == null:
 		return
 	if dock.reserve_berth(index, "Captain"):
-		dock.spawn_player_ship(index)
-		var plot := get_parent() as PortPlot
-		if plot != null:
-			plot.respawn_staged_cargo()
-		_clear_body()
-		_add_quote("Berth #%d is yours, Captain. Mind the tides." % (index + 1))
-		_add_option("Thank you.", _close)
+		_pending_berth_index = index
+		_show_ship_select()
 	else:
 		_clear_body()
 		_add_quote("I'm sorry — that berth was just taken.")
 		_add_back_button()
+
+
+func _show_ship_select() -> void:
+	_screen = _Screen.SHIP_SELECT
+	_clear_body()
+
+	_add_quote("Which vessel shall we bring alongside?")
+
+	var listed := false
+	for entry in PLAYER_VESSEL_CHOICES:
+		var label      : String = str(entry.get("label", "Vessel"))
+		var scene_path : String = str(entry.get("path", ""))
+		if scene_path.is_empty() or not ResourceLoader.exists(scene_path):
+			continue
+		_add_option(label, _spawn_chosen_ship.bind(scene_path))
+		listed = true
+
+	if not listed:
+		_release_pending_berth()
+		_add_quote("No playable vessels configured for this harbour.")
+		_add_back_button()
+		return
+
+	_add_option("Never mind — release the berth.", _cancel_ship_select)
+	_add_back_button()
+
+
+func _cancel_ship_select() -> void:
+	_release_pending_berth()
+	_show_request_berth()
+
+
+func _release_pending_berth() -> void:
+	if _pending_berth_index < 0:
+		return
+	var dock := _get_dock()
+	if dock != null:
+		dock.release_berth(_pending_berth_index)
+	_pending_berth_index = -1
+
+
+func _spawn_chosen_ship(scene_path: String) -> void:
+	var dock := _get_dock()
+	var idx  := _pending_berth_index
+	if dock == null or idx < 0:
+		return
+
+	_pending_berth_index = -1
+
+	var ship := dock.spawn_player_ship(idx, scene_path)
+	if ship == null:
+		dock.release_berth(idx)
+		_clear_body()
+		_add_quote("Couldn't ready that vessel. Your berth has been released.")
+		_add_back_button()
+		return
+
+	var plot := get_parent() as PortPlot
+	if plot != null:
+		plot.respawn_staged_cargo()
+
+	_clear_body()
+	_add_quote("Berth #%d is yours, Captain. Mind the tides." % (idx + 1))
+	_add_option("Thank you.", _close)
 
 
 func _show_pay_dues() -> void:
@@ -187,7 +257,13 @@ func _add_disabled_option(text: String) -> void:
 
 func _add_back_button() -> void:
 	_body.add_child(HSeparator.new())
-	_add_option("← Back", _show_main)
+	if _screen == _Screen.SHIP_SELECT:
+		_add_option("← Back", func() -> void:
+			_release_pending_berth()
+			_show_request_berth()
+		)
+	else:
+		_add_option("← Back", _show_main)
 
 
 # ── Dock lookup ───────────────────────────────────────────────────────────────

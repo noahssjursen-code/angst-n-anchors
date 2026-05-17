@@ -5,11 +5,12 @@
 [ext_resource type="Script" path="res://scripts/systems/boat/bridge_interactable.gd" id="3"]
 
 [node name="BridgeSmall" type="Node3D"]
+rotation = Vector3(0, 3.141592653589793, 0)
 
 [node name="ModelAssembler" type="Node3D" parent="."]
 script = ExtResource("1")
 model_data_path = "res://resources/data/models/superstructures/bridge_small.json"
-absolute_scale = 1.0
+absolute_scale = 1.2
 
 [node name="ShipLight_NavPort" type="Node3D" parent="."]
 position = Vector3(-1.5, 1, 1.5)

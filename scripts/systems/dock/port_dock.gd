@@ -387,33 +387,50 @@ func release_berth(index: int) -> void:
 	b["reserved_by"] = ""
 	_update_berth_color(index)
 
-func get_berth_spawn_transform(index: int) -> Transform3D:
+func berth_reference_local_midship(index: int) -> Vector3:
 	var count  := ShipClass.berth_count(dock_length, max_ship_class, BERTH_GAP_M)
 	var slot_w := dock_length / float(count)
 	var cx     := -dock_length * 0.5 + slot_w * (float(index) + 0.5)
-	var beam   := ShipClass.beam(max_ship_class)
+	var beam_m := ShipClass.beam(max_ship_class)
+	return Vector3(cx, WaveSurface.WATER_LEVEL, -beam_m * 0.5)
 
-	# Dock runs along local +X. Ship berths alongside (length parallel to dock).
-	# Bow faces +X — ship forward is -Z local, so ship_z column = -dock_x.
-	# ship_x derived by right-hand rule (up × ship_z) to keep basis orthogonal.
-	var local_pos  := Vector3(cx, WaveSurface.WATER_LEVEL, -beam * 0.5)
-	var dock_x     := global_transform.basis.x.normalized()
-	var ship_z     := -dock_x
-	var ship_y     := Vector3.UP
-	var ship_x     := ship_y.cross(ship_z).normalized()
+
+func berth_nominal_half_beam_m() -> float:
+	return ShipClass.beam(max_ship_class) * 0.5
+
+
+func get_berth_spawn_transform(index: int) -> Transform3D:
+	var local_pos := berth_reference_local_midship(index)
+	var dock_x    := global_transform.basis.x.normalized()
+	var ship_z    := -dock_x
+	var ship_y    := Vector3.UP
+	var ship_x    := ship_y.cross(ship_z).normalized()
 	var ship_basis := Basis(ship_x, ship_y, ship_z)
 	return Transform3D(ship_basis, to_global(local_pos))
 
 
-func spawn_player_ship(index: int) -> Node3D:
+func spawn_player_ship(index: int, ship_scene_path: String = "") -> Node3D:
 	if index < 0 or index >= _berth_data.size():
 		return null
 
-	var ship := PLAYER_SHIP_SCENE.instantiate() as Node3D
-	if ship == null:
+	var path := ship_scene_path.strip_edges()
+	if path.is_empty():
+		path = String(PLAYER_SHIP_SCENE.resource_path)
+	elif not ResourceLoader.exists(path):
+		push_error("PortDock: ship scene missing: %s" % path)
 		return null
 
-	var t     := get_berth_spawn_transform(index)
+	var packed := load(path) as PackedScene
+	if packed == null:
+		push_error("PortDock: not a PackedScene: %s" % path)
+		return null
+
+	var ship := packed.instantiate() as Node3D
+	if ship == null:
+		push_error("PortDock: ship scene root must be Node3D: %s" % path)
+		return null
+
+	var t := get_berth_spawn_transform(index)
 	ship.name = "PlayerShip"
 
 	var plot := get_parent()
@@ -423,8 +440,15 @@ func spawn_player_ship(index: int) -> Node3D:
 	plot.add_child(ship)
 	ship.global_transform = t
 
+	var berth_draft_frac: float = 0.45
+	var body := ship as BoatBody
+	if body != null:
+		berth_draft_frac = body.design_draft_fraction
 	if ship.has_method("place_at_waterline"):
-		ship.call("place_at_waterline", WaveSurface.WATER_LEVEL, 0.45)
+		ship.call("place_at_waterline", WaveSurface.WATER_LEVEL, berth_draft_frac)
+
+	if body != null:
+		body.fit_to_port_berth(self, index)
 
 	var mooring := ship.find_child("MooringComponent", true, false) as MooringComponent
 	if mooring != null:

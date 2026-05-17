@@ -65,6 +65,14 @@ func apply_sync_token(token: Dictionary) -> void:
 		initialize(float(token["epoch"]))
 
 
+func snap_time_of_day(day_fraction: float) -> void:
+	## 0–1 through the cycle (0./1.=midnight, 0.5=noon). Locks real-time offset so it stays stable.
+	var day_length := DAY_LENGTH_REAL_SECONDS
+	_epoch_unix = Time.get_unix_time_from_system() - clampf(day_fraction, 0.0, 1.0) * day_length
+	_last_day = get_day_number()
+	_push_to_weather()
+
+
 func _push_to_weather() -> void:
 	var weather := get_node_or_null("/root/WeatherLighting")
 	if weather != null:

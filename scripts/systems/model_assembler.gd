@@ -117,6 +117,23 @@ func get_first_part_by_role(role: String) -> MeshTransformer:
 	return parts[0] as MeshTransformer
 
 
+## Roles are declared on MeshTransformer leaf parts; `model` nests another assembler in between.
+## Boat hull bounds and tooling that need mesh metrics must recurse (see `boat_body`).
+func get_first_mesh_part_by_role(role: String) -> MeshTransformer:
+	var direct_at_level: Variant = _part_nodes_by_role.get(role, [])
+	if typeof(direct_at_level) == TYPE_ARRAY:
+		for entry in direct_at_level:
+			if entry is MeshTransformer:
+				return entry as MeshTransformer
+	for pk in _part_nodes_by_name.keys():
+		var child: Node = _part_nodes_by_name[pk]
+		if child is ModelAssembler:
+			var inner := (child as ModelAssembler).get_first_mesh_part_by_role(role)
+			if inner != null:
+				return inner
+	return null
+
+
 func get_parts_by_role(role: String) -> Array:
 	return _part_nodes_by_role.get(role, []).duplicate()
 

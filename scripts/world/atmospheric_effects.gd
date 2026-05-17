@@ -134,6 +134,8 @@ func _update_lightning(delta: float) -> void:
 
 
 func _tick_zone_weather() -> void:
+	if WorldWeather.is_blend_to_lighting_paused():
+		return
 	if not WorldWeather.is_initialized():
 		return
 	var boat_pos := _get_boat_position()

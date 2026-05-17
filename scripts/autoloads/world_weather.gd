@@ -7,6 +7,15 @@ extends Node
 var _zones: Array[WeatherZone] = []
 var _ambient: WeatherState
 var _initialized: bool = false
+var _blend_to_lighting_paused: bool = false
+
+
+func set_blend_to_lighting_paused(paused: bool) -> void:
+	_blend_to_lighting_paused = paused
+
+
+func is_blend_to_lighting_paused() -> bool:
+	return _blend_to_lighting_paused
 
 
 func _ready() -> void:

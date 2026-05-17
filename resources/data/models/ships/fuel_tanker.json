@@ -5,7 +5,7 @@
       "name": "hull",
       "model": "hulls/hull_coastal_trader_long.json",
       "position": [0, 0, 0],
-      "rotation_degrees": [0, 0, 0],
+      "rotation_degrees": [0, 180, 0],
       "scale": 2.0
     }
   ]

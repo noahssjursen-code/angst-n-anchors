@@ -141,6 +141,11 @@ const DEFAULT_HULL_JSON := "res://resources/data/meshes/ships/hand_tanker_hull.j
 			_sync_hull_size_from_mesh()
 			_build_merged_collision()
 
+@export_group("Berthing")
+## After spawn beside a berth, slide seaward if hull protrudes inland past nominal dock-class beam.
+@export var berth_auto_fit_enabled: bool = true
+@export_range(0.0, 3.0, 0.05) var berth_lateral_margin_m: float = 0.35
+
 var _transformer: Node3D
 var _model_assembler: ModelAssembler
 var _walk_deck:   AnimatableBody3D
@@ -256,9 +261,13 @@ func _ensure_transformer() -> void:
 	_build_merged_collision()
 
 
+func refresh_hull_bounds_from_visuals() -> void:
+	_sync_hull_size_from_mesh()
+
+
 func _sync_hull_size_from_mesh() -> void:
 	if _model_assembler != null and is_instance_valid(_model_assembler):
-		var physics_part := _model_assembler.get_first_part_by_role("physics_body")
+		var physics_part := _model_assembler.get_first_mesh_part_by_role("physics_body")
 		if physics_part != null:
 			_sync_hull_size_from_part(physics_part)
 			return
@@ -362,6 +371,45 @@ func place_at_waterline(water_y: float, draft_fraction: float = 0.45) -> void:
 	global_position.y = water_y - draft - hull_bottom_y
 	linear_velocity = Vector3.ZERO
 	angular_velocity = Vector3.ZERO
+
+
+## Called by PortDock after spawn: ship owns lateral adjustment vs nominal berth half-beam.
+func fit_to_port_berth(dock: PortDock, berth_index: int) -> void:
+	if Engine.is_editor_hint() or not berth_auto_fit_enabled:
+		return
+	if dock == null or berth_index < 0:
+		return
+
+	var berth_count := ShipClass.berth_count(
+		dock.dock_length,
+		dock.max_ship_class,
+		PortDock.BERTH_GAP_M
+	)
+	if berth_index >= berth_count:
+		return
+
+	refresh_hull_bounds_from_visuals()
+
+	var inland_world: Vector3 = dock.global_transform.basis.z.normalized()
+	var seaward_world: Vector3 = -inland_world
+	var nominal_half := dock.berth_nominal_half_beam_m()
+	var extent_inland := _obb_half_extent_on_world_axis(global_transform.basis, hull_size, inland_world)
+	var overcrowd := extent_inland - nominal_half + berth_lateral_margin_m
+	if overcrowd > 0.0:
+		global_position += seaward_world * overcrowd
+		if not Engine.is_editor_hint():
+			linear_velocity = Vector3.ZERO
+			angular_velocity = Vector3.ZERO
+
+
+func _obb_half_extent_on_world_axis(b: Basis, size_xyz: Vector3, axis_world: Vector3) -> float:
+	var ax := axis_world.normalized()
+	var half := size_xyz * 0.5
+	return (
+		absf(ax.dot(b.x)) * half.x +
+		absf(ax.dot(b.y)) * half.y +
+		absf(ax.dot(b.z)) * half.z
+	)
 
 
 func _clear_single_mesh_transformer() -> void:
