@@ -91,9 +91,9 @@ static func _vessel_displacement_params(b: RigidBody3D) -> Dictionary:
 	# The absolute depth the keel is submerged under the wave
 	var depth_below_surface: float = maxf(surf_raw - keel_y, 0.0)
 	
-	# Give the hole a slightly tighter fit around the hull to carve out the wave
-	var sx: float = maxf(hs.x * 0.55, 0.5)
-	var sz: float = maxf(hs.z * 0.55, 0.5)
+	# Give the hole a very tight fit around the hull to carve out the wave
+	var sx: float = maxf(hs.x * 0.52, 0.5)
+	var sz: float = maxf(hs.z * 0.52, 0.5)
 	var amp: float = 0.0
 	
 	if depth_below_surface > 0.0:
@@ -204,7 +204,7 @@ static func _vessel_dip_at(x: float, z: float) -> float:
 	var u2: float = u * u
 	var v2: float = v * v
 	var dist4: float = u2 * u2 + v2 * v2
-	var g: float = -0.7 * dist4
+	var g: float = -1.8 * dist4
 	
 	if g < -8.0:
 		return 0.0

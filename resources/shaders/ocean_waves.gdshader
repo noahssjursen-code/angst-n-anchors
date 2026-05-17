@@ -157,14 +157,14 @@ void vertex() {
 		float v2 = v * v;
 		// Use a squircle (power of 4) distance metric to make a flatter, boxier hole that fits the deck
 		float dist4 = u2 * u2 + v2 * v2;
-		float g = -0.7 * dist4;
+		float g = -1.8 * dist4;
 		
 		if (g > -8.0) {
 			boat_dip = amp * exp(g);
 			float u3 = u2 * u;
 			float v3 = v2 * v;
-			float ddip_dlocal_x = -boat_dip * 2.8 * u3 / sx;
-			float ddip_dlocal_z = -boat_dip * 2.8 * v3 / sz;
+			float ddip_dlocal_x = -boat_dip * 7.2 * u3 / sx;
+			float ddip_dlocal_z = -boat_dip * 7.2 * v3 / sz;
 			
 			ddip_dx = ddip_dlocal_x * right_x + ddip_dlocal_z * fwd_x;
 			ddip_dz = ddip_dlocal_x * right_z + ddip_dlocal_z * fwd_z;
