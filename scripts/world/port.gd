@@ -86,7 +86,7 @@ func _build_pier_instance(center: Vector3, name_suffix: String) -> void:
 	assembler.build_part_colliders  = true
 	pier.add_child(assembler)
 
-	if Engine.is_editor_hint():
+	if Engine.is_editor_hint() and get_tree() != null:
 		var esc := get_tree().edited_scene_root
 		if esc != null:
 			pier.owner     = esc
@@ -167,7 +167,7 @@ func _second_pier_center() -> Vector3:
 # --- Warehouse ---
 
 func _build_warehouse() -> void:
-	var esc := get_tree().edited_scene_root if Engine.is_editor_hint() else null
+	var esc := get_tree().edited_scene_root if Engine.is_editor_hint() and get_tree() != null else null
 
 	# Geometry — static collision + visual model.
 	var body              := StaticBody3D.new()

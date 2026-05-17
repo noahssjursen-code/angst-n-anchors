@@ -81,7 +81,7 @@ func _rebuild() -> void:
 	if _light != null:
 		_light.visible = false
 
-	if Engine.is_editor_hint():
+	if Engine.is_editor_hint() and get_tree() != null:
 		var esc: Node = get_tree().edited_scene_root
 		if esc != null:
 			for child in get_children():

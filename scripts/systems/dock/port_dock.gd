@@ -83,7 +83,7 @@ func _rebuild() -> void:
 	if has_fuel_point:
 		_build_fuel_point()
 
-	if Engine.is_editor_hint():
+	if Engine.is_editor_hint() and get_tree() != null:
 		var esc := get_tree().edited_scene_root
 		if esc != null:
 			for child in get_children():

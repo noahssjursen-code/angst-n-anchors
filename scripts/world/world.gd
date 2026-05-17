@@ -56,7 +56,7 @@ func _rebuild() -> void:
 			positions.append(d.world_position)
 		WorldWeather.initialize(world_seed, positions)
 
-	if Engine.is_editor_hint():
+	if Engine.is_editor_hint() and get_tree() != null:
 		_add_editor_preview(defs)
 		var esc := get_tree().edited_scene_root
 		if esc != null:
@@ -196,6 +196,8 @@ func _spawn_player() -> void:
 
 
 func _own_subtree(node: Node) -> void:
+	if get_tree() == null:
+		return
 	var esc := get_tree().edited_scene_root
 	if esc == null:
 		return

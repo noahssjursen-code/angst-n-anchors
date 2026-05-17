@@ -189,7 +189,7 @@ func _rebuild_docking_bollard() -> void:
 	asm.model_data_path = bollard_model_path
 	add_child(asm)
 
-	if Engine.is_editor_hint():
+	if Engine.is_editor_hint() and get_tree() != null:
 		var esc := get_tree().edited_scene_root
 		if esc != null:
 			asm.owner = esc

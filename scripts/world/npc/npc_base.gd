@@ -99,6 +99,8 @@ func _nearest_player_in(range_m: float) -> CharacterBody3D:
 
 
 func _own_subtree(node: Node) -> void:
+	if get_tree() == null:
+		return
 	var esc := get_tree().edited_scene_root
 	if esc == null:
 		return

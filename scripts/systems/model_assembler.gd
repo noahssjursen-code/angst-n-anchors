@@ -140,7 +140,7 @@ func _build_part(part: Dictionary) -> void:
 	node.name = PART_PREFIX + _safe_node_name(part_name)
 	node.position = _vector3_from_array(part.get("position", []), Vector3.ZERO) * absolute_scale
 	add_child(node)
-	if Engine.is_editor_hint():
+	if Engine.is_editor_hint() and get_tree() != null:
 		node.owner = get_tree().edited_scene_root
 
 	node.rebuild_suspended = true
@@ -186,7 +186,7 @@ func _build_nested_model(part_name: String, part: Dictionary) -> void:
 	node.position = _vector3_from_array(part.get("position", []), Vector3.ZERO) * absolute_scale
 	node.rotation_degrees = _vector3_from_array(part.get("rotation_degrees", []), Vector3.ZERO)
 	add_child(node)
-	if Engine.is_editor_hint():
+	if Engine.is_editor_hint() and get_tree() != null:
 		node.owner = get_tree().edited_scene_root
 
 	node.collision_parent_path = _collision_path_for_part(node)

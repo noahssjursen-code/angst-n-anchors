@@ -330,7 +330,7 @@ func _build_mesh(params: Dictionary) -> void:
 	mi.rotation_degrees = mesh_rotation_degrees
 	mi.name = _generated_prefix() + "Mesh"
 	add_child(mi)
-	if Engine.is_editor_hint():
+	if Engine.is_editor_hint() and get_tree() != null:
 		mi.owner = get_tree().edited_scene_root
 
 
@@ -342,11 +342,11 @@ func _collision_col_child() -> CollisionShape3D:
 	if collision_parent != null:
 		collision_parent.add_child(col)
 		col.global_position = global_position
-		if Engine.is_editor_hint():
+		if Engine.is_editor_hint() and get_tree() != null:
 			col.owner = get_tree().edited_scene_root
 	else:
 		add_child(col)
-		if Engine.is_editor_hint():
+		if Engine.is_editor_hint() and get_tree() != null:
 			col.owner = get_tree().edited_scene_root
 	return col
 

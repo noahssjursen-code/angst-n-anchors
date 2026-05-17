@@ -224,7 +224,7 @@ func _ensure_model_assembler() -> void:
 		_model_assembler = ModelAssembler.new()
 		_model_assembler.name = "ModelAssembler"
 		add_child(_model_assembler)
-		if Engine.is_editor_hint():
+		if Engine.is_editor_hint() and get_tree() != null:
 			_model_assembler.owner = get_tree().edited_scene_root
 
 	_model_assembler.collision_parent_path = NodePath("..")
@@ -244,7 +244,7 @@ func _ensure_transformer() -> void:
 		_transformer.set_script(transformer_script)
 		_transformer.name = "MeshTransformer"
 		add_child(_transformer)
-		if Engine.is_editor_hint():
+		if Engine.is_editor_hint() and get_tree() != null:
 			_transformer.owner = get_tree().edited_scene_root
 
 	_transformer.set("mesh_data_path", mesh_data_path)
@@ -478,7 +478,7 @@ func _build_merged_collision() -> void:
 	collision.name = MERGED_COLLIDER_NAME
 	collision.shape = shape
 	add_child(collision)
-	if Engine.is_editor_hint():
+	if Engine.is_editor_hint() and get_tree() != null:
 		collision.owner = get_tree().edited_scene_root
 	_add_walk_model_collision()
 

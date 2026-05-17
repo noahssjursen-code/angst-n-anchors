@@ -176,7 +176,7 @@ func _build() -> void:
 	_omni.position.y                  = 22.0
 	add_child(_omni)
 
-	if Engine.is_editor_hint():
+	if Engine.is_editor_hint() and get_tree() != null:
 		var esc := get_tree().edited_scene_root
 		if esc != null:
 			for child in get_children():

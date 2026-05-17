@@ -110,7 +110,7 @@ func _rebuild() -> void:
 	if not Engine.is_editor_hint():
 		call_deferred("_build_npcs")
 
-	if Engine.is_editor_hint():
+	if Engine.is_editor_hint() and get_tree() != null:
 		var esc := get_tree().edited_scene_root
 		if esc != null:
 			for child in get_children():

@@ -31,7 +31,7 @@ func _build() -> void:
 
 	_add_labels()
 
-	if Engine.is_editor_hint():
+	if Engine.is_editor_hint() and get_tree() != null:
 		assembler.owner = get_tree().edited_scene_root
 		_own_subtree(assembler)
 
@@ -51,7 +51,7 @@ func _add_labels() -> void:
 		label.billboard = BaseMaterial3D.BILLBOARD_DISABLED
 		label.double_sided = false
 		add_child(label)
-		if Engine.is_editor_hint():
+		if Engine.is_editor_hint() and get_tree() != null:
 			label.owner = get_tree().edited_scene_root
 
 
@@ -65,6 +65,8 @@ func get_pump_position() -> Vector3:
 
 
 func _own_subtree(node: Node) -> void:
+	if get_tree() == null:
+		return
 	var esc := get_tree().edited_scene_root
 	if esc == null:
 		return

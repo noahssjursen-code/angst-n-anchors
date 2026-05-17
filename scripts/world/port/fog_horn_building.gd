@@ -27,11 +27,13 @@ func _build() -> void:
 	assembler.build_part_colliders = not Engine.is_editor_hint()
 	add_child(assembler)
 
-	if Engine.is_editor_hint():
+	if Engine.is_editor_hint() and get_tree() != null:
 		assembler.owner = get_tree().edited_scene_root
 		_own_subtree(assembler)
 
 func _own_subtree(node: Node) -> void:
+	if get_tree() == null:
+		return
 	var esc := get_tree().edited_scene_root
 	if esc == null:
 		return
