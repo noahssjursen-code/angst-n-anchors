@@ -81,9 +81,9 @@ vec3 sky_gradient(vec3 dir) {
 	float up = dn.y;
 
 	// Ground hemisphere
-	if (up < -0.05) {
-		float ground_t = clamp((-up - 0.05) / 0.3, 0.0, 1.0);
-		return mix(sky_horizon_color, sky_ground_color, ground_t);
+	if (up < -0.0) {
+		float ground_t = clamp(-up / 0.05, 0.0, 1.0);
+		return mix(sky_horizon_color, vec3(0.0), ground_t);
 	}
 
 	float day = smoothstep(-0.08, 0.22, sun_direction.y);

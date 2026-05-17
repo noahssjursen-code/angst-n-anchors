@@ -1,5 +1,5 @@
 shader_type spatial;
-render_mode blend_mix,depth_draw_always,specular_schlick_ggx;
+render_mode specular_schlick_ggx;
 
 uniform sampler2DArray displacement_map : filter_linear, repeat_enable;
 uniform sampler2DArray slope_map : filter_linear, repeat_enable;
@@ -16,7 +16,6 @@ uniform vec3 horizon_tint   : source_color = vec3(0.068, 0.118, 0.172);
 uniform float roughness     : hint_range(0.0, 1.0) = 0.20;
 uniform float metallic      : hint_range(0.0, 1.0) = 0.0;
 uniform float specular      : hint_range(0.0, 1.0) = 0.40;
-uniform float water_alpha   : hint_range(0.15, 1.0) = 0.94;
 uniform float fresnel_power : hint_range(0.5, 10.0) = 3.1;
 uniform float fresnel_sky_mix : hint_range(0.0, 1.0) = 0.48;
 uniform float near_color_lift : hint_range(0.0, 1.0) = 0.14;
@@ -262,5 +261,4 @@ void fragment() {
 
 	METALLIC = metallic * 0.65;
 	SPECULAR = mix(specular * 0.72, 0.17, foam_mask);
-	ALPHA = water_alpha;
 }
