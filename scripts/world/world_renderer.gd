@@ -12,15 +12,24 @@ const SCREEN_SHADER  := preload("res://resources/shaders/screen_effects.gdshader
 ## Base midday water dye — kept darker so the ocean reads as depth, not a bright lagoon.
 const C_OCEAN      := Color(0.038, 0.085, 0.128)
 
+const FFT_WATER_SYSTEM_SCRIPT := preload("res://scripts/systems/fft_water_system.gd")
+
 var _ocean_shader_material: ShaderMaterial
 var _sky_shader_material:   ShaderMaterial
 var _environment:           Environment
 var _sun:                   DirectionalLight3D
 var _fill_light:            DirectionalLight3D
 var _ocean_mesh:            MeshInstance3D
+var _fft_system:            Node # Use Node instead of FFTWaterSystem to avoid unresolved class error without reload
 
 
 func _ready() -> void:
+	if not Engine.is_editor_hint():
+		_fft_system = FFT_WATER_SYSTEM_SCRIPT.new()
+		_fft_system.name = "FFTWaterSystem"
+		add_child(_fft_system)
+		WaveSurface.fft_system = _fft_system
+
 	_build_sky()
 	_build_ocean()
 	_build_screen_effects()
@@ -32,7 +41,12 @@ func _process(_delta: float) -> void:
 	_follow_camera_xz()
 	if _ocean_shader_material:
 		_ocean_shader_material.set_shader_parameter("wave_time",      WaveSurface.get_sim_time())
-		_ocean_shader_material.set_shader_parameter("wave_intensity",  WaveSurface.wave_intensity)
+		_ocean_shader_material.set_shader_parameter("wave_intensity", WaveSurface.wave_intensity)
+		_ocean_shader_material.set_shader_parameter("wave_energy_multiplier", WaveSurface.get_wave_energy_multiplier())
+		if _fft_system:
+			_ocean_shader_material.set_shader_parameter("displacement_map", _fft_system.displacement_map_rd)
+			_ocean_shader_material.set_shader_parameter("slope_map",        _fft_system.slope_map_rd)
+			_ocean_shader_material.set_shader_parameter("length_scales",    _fft_system.length_scales)
 		WaveSurface.sync_ocean_coupling_to_shader(_ocean_shader_material)
 	if _sky_shader_material:
 		_sky_shader_material.set_shader_parameter("sky_time",       WaveSurface.get_sim_time())
@@ -43,13 +57,13 @@ func _process(_delta: float) -> void:
 func _follow_camera_xz() -> void:
 	if _ocean_mesh == null or not is_instance_valid(_ocean_mesh):
 		return
-	# The shader reads world-space XZ via MODEL_MATRIX, so moving the mesh with
-	# the camera keeps the full mesh over visible water without changing wave math.
+	# Snap mesh to grid size to prevent vertices from sliding continuously over wave math
 	var cam := get_viewport().get_camera_3d()
 	if cam == null:
 		return
-	_ocean_mesh.position.x = cam.global_position.x
-	_ocean_mesh.position.z = cam.global_position.z
+	var grid_size := 600.0 / 261.0
+	_ocean_mesh.position.x = snappedf(cam.global_position.x, grid_size)
+	_ocean_mesh.position.z = snappedf(cam.global_position.z, grid_size)
 
 
 func _build_sky() -> void:
@@ -134,32 +148,12 @@ func _build_screen_effects() -> void:
 
 
 func _build_ocean() -> void:
-	var ocean := MeshBuilder.plane(Vector2(600, 600), C_OCEAN, 0.12, 260, 260)
+	var ocean := MeshBuilder.plane(Vector2(600, 600), C_OCEAN, 0.12, 512, 512)
 	var sm    := ShaderMaterial.new()
 	sm.shader = OCEAN_SHADER
 	sm.set_shader_parameter("wave_time",             WaveSurface.get_sim_time())
 	sm.set_shader_parameter("water_level",           WaveSurface.WATER_LEVEL)
-	sm.set_shader_parameter("amplitude_1",           WaveSurface.AMPLITUDE_1)
-	sm.set_shader_parameter("frequency_1",           WaveSurface.FREQUENCY_1)
-	sm.set_shader_parameter("speed_1",               WaveSurface.SPEED_1)
-	sm.set_shader_parameter("dir_1",                 WaveSurface.DIR_1)
-	sm.set_shader_parameter("steepness_1",           WaveSurface.STEEPNESS_1)
-	sm.set_shader_parameter("amplitude_2",           WaveSurface.AMPLITUDE_2)
-	sm.set_shader_parameter("frequency_2",           WaveSurface.FREQUENCY_2)
-	sm.set_shader_parameter("speed_2",               WaveSurface.SPEED_2)
-	sm.set_shader_parameter("dir_2",                 WaveSurface.DIR_2)
-	sm.set_shader_parameter("steepness_2",           WaveSurface.STEEPNESS_2)
-	sm.set_shader_parameter("amplitude_3",           WaveSurface.AMPLITUDE_3)
-	sm.set_shader_parameter("frequency_3",           WaveSurface.FREQUENCY_3)
-	sm.set_shader_parameter("speed_3",               WaveSurface.SPEED_3)
-	sm.set_shader_parameter("dir_3",                 WaveSurface.DIR_3)
-	sm.set_shader_parameter("steepness_3",           WaveSurface.STEEPNESS_3)
-	sm.set_shader_parameter("amplitude_4",           WaveSurface.AMPLITUDE_4)
-	sm.set_shader_parameter("frequency_4",           WaveSurface.FREQUENCY_4)
-	sm.set_shader_parameter("speed_4",               WaveSurface.SPEED_4)
-	sm.set_shader_parameter("dir_4",                 WaveSurface.DIR_4)
-	sm.set_shader_parameter("steepness_4",           WaveSurface.STEEPNESS_4)
-	sm.set_shader_parameter("wave_energy_multiplier", WaveSurface.get_wave_energy_multiplier())
+	
 	sm.set_shader_parameter("shallow_albedo",        Vector3(0.028, 0.074, 0.118))
 	sm.set_shader_parameter("deep_albedo",           Vector3(0.006, 0.018, 0.036))
 	sm.set_shader_parameter("horizon_tint",          Vector3(0.068, 0.118, 0.172))
@@ -174,7 +168,7 @@ func _build_ocean() -> void:
 	sm.set_shader_parameter("metallic",             0.02)
 	sm.set_shader_parameter("specular",             0.56)
 	sm.set_shader_parameter("chop_strength",         0.12)
-	sm.set_shader_parameter("wave_intensity",        WaveSurface.wave_intensity)
+	
 	ocean.material_override = sm
 	_ocean_shader_material  = sm
 	ocean.position          = Vector3(0, WaveSurface.WATER_LEVEL, 0)
@@ -208,6 +202,10 @@ func _apply_weather_lighting() -> void:
 	_apply_fog(fog_t, daylight, storm)
 	_apply_sky_shader(daylight, cloud, storm)
 	_apply_ocean_shader(daylight, cloud, rain, wind, storm, fog_t)
+
+	# Optional: Sync FFT parameters based on weather
+	if _fft_system:
+		_fft_system.sync_weather(wind, storm, WaveSurface.short_wave_factor)
 
 
 func _apply_sun(tod: float, daylight: float, cloud: float, storm: float) -> void:
@@ -313,7 +311,6 @@ func _apply_ocean_shader(daylight: float, cloud: float, rain: float, wind: float
 	_ocean_shader_material.set_shader_parameter("horizon_tint",           Vector3(horizon_w.r, horizon_w.g, horizon_w.b))
 	var fres_cloud := lerpf(0.58, 0.34, cloud)
 	_ocean_shader_material.set_shader_parameter("fresnel_sky_mix",        lerpf(fres_cloud, fres_cloud * 0.72, fog_w))
-	_ocean_shader_material.set_shader_parameter("wave_energy_multiplier", WaveSurface.get_wave_energy_multiplier())
 	_ocean_shader_material.set_shader_parameter("water_alpha",            lerpf(0.92, 0.97, rain))
 	_ocean_shader_material.set_shader_parameter("foam_strength",          lerpf(0.38, 0.92, foam_driver))
 	_ocean_shader_material.set_shader_parameter("foam_steep_start",       lerpf(0.62, 0.34, steep_driver))

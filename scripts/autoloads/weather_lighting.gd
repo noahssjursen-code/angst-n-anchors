@@ -99,7 +99,7 @@ var weather_vector: Vector3:
 # --- Wave coupling ---
 @export var weather_drives_waves: bool = true
 @export var calm_wave_intensity: float  = 0.55
-@export var gale_wave_intensity: float  = 3.40
+@export var gale_wave_intensity: float  = 1.83
 
 # --- Control mode (L to toggle) ---
 const MODE_WEATHER : String = "weather"
@@ -184,6 +184,11 @@ func _sync_wave_intensity() -> void:
 		intensity,
 		WaveSurface.WAVE_INTENSITY_MIN,
 		WaveSurface.WAVE_INTENSITY_MAX
+	)
+	WaveSurface.set_weather_short_wave_factor(
+		wind_force,
+		precipitation,
+		storm_intensity
 	)
 
 
