@@ -50,6 +50,12 @@ func _rebuild() -> void:
 
 	var defs := _generate_definitions()
 
+	if not Engine.is_editor_hint():
+		var positions: Array[Vector3] = []
+		for d in defs:
+			positions.append(d.world_position)
+		WorldWeather.initialize(world_seed, positions)
+
 	if Engine.is_editor_hint():
 		_add_editor_preview(defs)
 		var esc := get_tree().edited_scene_root

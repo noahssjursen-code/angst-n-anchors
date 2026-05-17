@@ -56,7 +56,6 @@ const WAVE_RATE          : float = 1.0
 @export_range(0.0, 1.0, 0.001) var visibility: float = 1.0:
 	set(v):
 		visibility = clampf(v, 0.0, 1.0)
-		print("[WeatherLighting] Visibility: ", visibility, " Fog Density: ", fog_density)
 		state_changed.emit()
 
 # --- Derived convenience getters ---

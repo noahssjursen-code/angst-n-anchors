@@ -14,6 +14,10 @@ var _lightning_cooldown:   float = 2.0
 var _lightning_phase:      int   = 0   # 0=idle  1=flash1  2=gap  3=flash2
 var _lightning_phase_t:    float = 0.0
 
+const ZONE_TICK   : float = 0.5    # seconds between zone polls
+const ZONE_WEIGHT : float = 0.017  # lerp weight per tick — ~20s half-life
+var _zone_timer   : float = 0.0
+
 
 func _ready() -> void:
 	_spawn_rain_field()
@@ -24,6 +28,10 @@ func _ready() -> void:
 
 func _process(delta: float) -> void:
 	_update_lightning(delta)
+	_zone_timer += delta
+	if _zone_timer >= ZONE_TICK:
+		_zone_timer = 0.0
+		_tick_zone_weather()
 
 
 func _spawn_rain_field() -> void:
@@ -123,6 +131,26 @@ func _update_lightning(delta: float) -> void:
 				if _lightning_light:      _lightning_light.light_energy = 0.0
 				if _lightning_flash_rect: _lightning_flash_rect.color.a = 0.0
 				_lightning_phase = 0
+
+
+func _tick_zone_weather() -> void:
+	if not WorldWeather.is_initialized():
+		return
+	var boat_pos := _get_boat_position()
+	if boat_pos.x == INF:
+		return
+	var target := WorldWeather.get_state_at(boat_pos) as WeatherState
+	var port_factor := WorldWeather.get_port_calm_factor(boat_pos)
+	var weight := lerpf(ZONE_WEIGHT, 0.08, port_factor)
+	WeatherLighting.blend_towards(target, weight)
+
+
+func _get_boat_position() -> Vector3:
+	for n in get_tree().get_nodes_in_group("player_boat"):
+		var rb := n as RigidBody3D
+		if rb != null:
+			return rb.global_position
+	return Vector3(INF, INF, INF)
 
 
 func _get_weather() -> Node:

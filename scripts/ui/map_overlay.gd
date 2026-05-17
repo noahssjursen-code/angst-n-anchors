@@ -38,6 +38,7 @@ var _drag_dist:          float   = 0.0
 var _was_visible:        bool    = false
 var _selected_port:      String  = ""
 var _poly_cache:         Dictionary = {}  ## port_id -> PackedVector2Array local XZ
+var _show_weather:       bool       = true
 
 ## Set each frame in _draw; used by _try_select without re-computing.
 var _cpx: float = 0.0
@@ -77,11 +78,16 @@ func _input(event: InputEvent) -> void:
 		return
 	if event is InputEventKey:
 		var ke := event as InputEventKey
-		if ke.pressed and not ke.echo and ke.keycode == KEY_H:
-			_user_moved = false
-			_reset_view()
-			get_viewport().set_input_as_handled()
-			return
+		if ke.pressed and not ke.echo:
+			if ke.keycode == KEY_H:
+				_user_moved = false
+				_reset_view()
+				get_viewport().set_input_as_handled()
+				return
+			if ke.keycode == KEY_F:
+				_show_weather = not _show_weather
+				get_viewport().set_input_as_handled()
+				return
 	if event is InputEventMouseButton:
 		var mb := event as InputEventMouseButton
 		if mb.pressed and mb.button_index == MOUSE_BUTTON_WHEEL_UP:
@@ -220,7 +226,7 @@ func _draw() -> void:
 	draw_string(font, Vector2(vp.x * 0.5 - ttw * 0.5, py + 38.0),
 				title, HORIZONTAL_ALIGNMENT_LEFT, -1, title_fs, C_TITLE)
 
-	var hint    := "scroll  zoom    drag  pan    H  home    M  close    click island  info"
+	var hint    := "scroll  zoom    drag  pan    H  home    F  weather    M  close    click island  info"
 	var hint_tw := font.get_string_size(hint, HORIZONTAL_ALIGNMENT_LEFT, -1, 10).x
 	draw_string(font, Vector2(px + pw - hint_tw - 14, py + 32.0),
 				hint, HORIZONTAL_ALIGNMENT_LEFT, -1, 10, C_HINT)
@@ -285,6 +291,10 @@ func _draw() -> void:
 		if sy >= _cpy - 1.0 and sy <= _cpy + _cph + 1.0:
 			draw_line(Vector2(_cpx, sy), Vector2(_cpx + _cpw, sy), C_GRID, 1.0)
 		gz += grid_interval
+
+	# Weather zones
+	if _show_weather:
+		_draw_weather_zones()
 
 	# Contract routes
 	if registry != null:
@@ -601,6 +611,53 @@ func _draw_compass_rose(center: Vector2, r: float) -> void:
 		center + Vector2( r * 0.12,  r * 0.08),
 	]), Color(0.42, 0.52, 0.68, 0.42))
 	draw_circle(center, 3.5, Color(0.82, 0.88, 1.00, 0.72))
+
+
+func _draw_weather_zones() -> void:
+	if not WorldWeather.is_initialized():
+		return
+	var font := ThemeDB.fallback_font
+	var ppu  := _ppu()
+	for zone in WorldWeather.get_zones():
+		var sc         := _w2s_f(zone.center.x, zone.center.y)
+		var outer_r_px := zone.outer_radius * ppu
+		var inner_r_px := zone.inner_radius * ppu
+		# Skip if fully off screen
+		if sc.x + outer_r_px < _cpx or sc.x - outer_r_px > _cpx + _cpw:
+			continue
+		if sc.y + outer_r_px < _cpy or sc.y - outer_r_px > _cpy + _cph:
+			continue
+		var fill:   Color
+		var border: Color
+		var label:  String
+		if zone.zone_type == WeatherZone.ZoneType.PORT_CALM:
+			continue
+		match zone.zone_type:
+			WeatherZone.ZoneType.STORM:
+				fill   = Color(0.55, 0.14, 0.08, 0.09)
+				border = Color(0.80, 0.28, 0.14, 0.55)
+				label  = "STORM"
+			WeatherZone.ZoneType.FOG:
+				fill   = Color(0.34, 0.46, 0.66, 0.09)
+				border = Color(0.52, 0.66, 0.86, 0.55)
+				label  = "FOG"
+			WeatherZone.ZoneType.SQUALL:
+				fill   = Color(0.14, 0.40, 0.54, 0.09)
+				border = Color(0.22, 0.58, 0.74, 0.55)
+				label  = "SQUALL"
+			_:
+				fill   = Color(0.5, 0.5, 0.5, 0.09)
+				border = Color(0.6, 0.6, 0.6, 0.55)
+				label  = ""
+		draw_circle(sc, outer_r_px, fill)
+		draw_arc(sc, outer_r_px, 0.0, TAU, 48, border, 1.0, true)
+		draw_circle(sc, inner_r_px, Color(fill.r, fill.g, fill.b, fill.a * 2.2))
+		draw_arc(sc, inner_r_px, 0.0, TAU, 36, Color(border.r, border.g, border.b, border.a * 1.3), 1.2, true)
+		if label != "" and outer_r_px > 14.0:
+			var tw := font.get_string_size(label, HORIZONTAL_ALIGNMENT_LEFT, -1, 9).x
+			draw_string(font, sc + Vector2(-tw * 0.5, 4.0),
+						label, HORIZONTAL_ALIGNMENT_LEFT, -1, 9,
+						Color(border.r, border.g, border.b, 0.75))
 
 
 func _draw_dashed_line(a: Vector2, b: Vector2, col: Color, width: float, dash: float) -> void:

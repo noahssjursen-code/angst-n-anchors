@@ -50,7 +50,7 @@ func _build_ui() -> void:
 	vbox.add_child(title)
 
 	var scroll := ScrollContainer.new()
-	scroll.custom_minimum_size = Vector2(0, 220)
+	scroll.custom_minimum_size = Vector2(0, 420)
 	vbox.add_child(scroll)
 
 	var col := VBoxContainer.new()
@@ -59,6 +59,14 @@ func _build_ui() -> void:
 	scroll.add_child(col)
 
 	for entry in _preset_entries():
+		if entry.has("sep"):
+			var sep := Label.new()
+			sep.text = entry.sep
+			sep.add_theme_color_override("font_color", Color(0.55, 0.68, 0.88, 0.70))
+			sep.add_theme_font_size_override("font_size", 10)
+			sep.add_theme_constant_override("margin_top", 4)
+			col.add_child(sep)
+			continue
 		var b := Button.new()
 		b.text = entry.label
 		b.custom_minimum_size = Vector2(0, 26)
@@ -73,7 +81,6 @@ func _build_ui() -> void:
 		b.add_theme_stylebox_override("hover", _hover_style(bs))
 		b.add_theme_stylebox_override("pressed", _pressed_style(bs))
 		b.add_theme_color_override("font_color", Color(0.9, 0.92, 0.96, 1.0))
-
 		var p: float = entry.precip
 		var w: float = entry.wind
 		var v: float = entry.vis
@@ -104,15 +111,44 @@ func _pressed_style(from: StyleBoxFlat) -> StyleBoxFlat:
 
 func _preset_entries() -> Array[Dictionary]:
 	return [
-		{"label": "Clear calm", "precip": 0.0, "wind": 0.0, "vis": 1.0, "cloud": 0.0},
-		{"label": "Light breeze", "precip": 0.0, "wind": 0.22, "vis": 1.0, "cloud": 0.05},
-		{"label": "Overcast (dry)", "precip": 0.0, "wind": 0.12, "vis": 0.92, "cloud": 0.92},
-		{"label": "Dry squall", "precip": 0.0, "wind": 0.88, "vis": 0.94, "cloud": 0.08},
-		{"label": "Grey drizzle", "precip": 0.55, "wind": 0.08, "vis": 0.68, "cloud": 0.38},
-		{"label": "Heavy rain · calm seas", "precip": 0.92, "wind": 0.06, "vis": 0.48, "cloud": 0.52},
-		{"label": "Full storm · gale", "precip": 0.88, "wind": 0.92, "vis": 0.52, "cloud": 0.58},
-		{"label": "Sea fog · light swell", "precip": 0.06, "wind": 0.18, "vis": 0.28, "cloud": 0.65},
-		{"label": "Pea soup fog + drizzle", "precip": 0.42, "wind": 0.05, "vis": 0.12, "cloud": 0.78},
+		# ── Fair weather ─────────────────────────────────────────
+		{"sep": "── Fair weather"},
+		{"label": "Calm",                   "precip": 0.00, "wind": 0.00, "vis": 1.00, "cloud": 0.00},
+		{"label": "Light breeze",           "precip": 0.00, "wind": 0.22, "vis": 1.00, "cloud": 0.05},
+		{"label": "Fresh breeze",           "precip": 0.00, "wind": 0.45, "vis": 0.98, "cloud": 0.10},
+		{"label": "Strong breeze",          "precip": 0.00, "wind": 0.65, "vis": 0.95, "cloud": 0.18},
+		{"label": "Near gale",              "precip": 0.00, "wind": 0.85, "vis": 0.90, "cloud": 0.22},
+		{"label": "Dry squall",             "precip": 0.00, "wind": 0.92, "vis": 0.88, "cloud": 0.10},
+		# ── Overcast ─────────────────────────────────────────────
+		{"sep": "── Overcast"},
+		{"label": "High cloud",             "precip": 0.00, "wind": 0.12, "vis": 0.88, "cloud": 0.60},
+		{"label": "Overcast",               "precip": 0.00, "wind": 0.20, "vis": 0.82, "cloud": 0.95},
+		{"label": "Overcast, fresh wind",   "precip": 0.00, "wind": 0.60, "vis": 0.80, "cloud": 0.92},
+		{"label": "Haze",                   "precip": 0.00, "wind": 0.10, "vis": 0.65, "cloud": 0.35},
+		{"label": "Frontal approach",       "precip": 0.18, "wind": 0.50, "vis": 0.65, "cloud": 0.80},
+		# ── Fog ──────────────────────────────────────────────────
+		{"sep": "── Fog"},
+		{"label": "Shallow mist",           "precip": 0.00, "wind": 0.05, "vis": 0.55, "cloud": 0.40},
+		{"label": "Patchy fog",             "precip": 0.00, "wind": 0.08, "vis": 0.40, "cloud": 0.55},
+		{"label": "Dense fog",              "precip": 0.00, "wind": 0.05, "vis": 0.15, "cloud": 0.72},
+		{"label": "Thick fog",              "precip": 0.08, "wind": 0.03, "vis": 0.05, "cloud": 0.85},
+		{"label": "Fog, light wind",        "precip": 0.05, "wind": 0.28, "vis": 0.25, "cloud": 0.68},
+		{"label": "Fog and drizzle",        "precip": 0.35, "wind": 0.08, "vis": 0.18, "cloud": 0.80},
+		# ── Precipitation ────────────────────────────────────────
+		{"sep": "── Precipitation"},
+		{"label": "Light drizzle",          "precip": 0.30, "wind": 0.12, "vis": 0.72, "cloud": 0.55},
+		{"label": "Steady drizzle",         "precip": 0.55, "wind": 0.10, "vis": 0.62, "cloud": 0.42},
+		{"label": "Moderate rain",          "precip": 0.65, "wind": 0.30, "vis": 0.52, "cloud": 0.72},
+		{"label": "Heavy persistent rain",  "precip": 0.85, "wind": 0.25, "vis": 0.38, "cloud": 0.82},
+		{"label": "Heavy rain, calm sea",   "precip": 0.92, "wind": 0.08, "vis": 0.42, "cloud": 0.78},
+		{"label": "Passing shower",         "precip": 0.45, "wind": 0.42, "vis": 0.65, "cloud": 0.58},
+		# ── Storm ────────────────────────────────────────────────
+		{"sep": "── Storm"},
+		{"label": "Rain squall",            "precip": 0.55, "wind": 0.72, "vis": 0.55, "cloud": 0.75},
+		{"label": "Gale, driving rain",     "precip": 0.88, "wind": 0.90, "vis": 0.48, "cloud": 0.88},
+		{"label": "Severe storm",           "precip": 0.95, "wind": 0.98, "vis": 0.38, "cloud": 0.95},
+		{"label": "Thunderstorm",           "precip": 0.95, "wind": 0.82, "vis": 0.40, "cloud": 0.92},
+		{"label": "Post-storm clearing",    "precip": 0.12, "wind": 0.62, "vis": 0.78, "cloud": 0.48},
 	]
 
 
