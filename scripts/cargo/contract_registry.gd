@@ -39,7 +39,10 @@ static func commodity_color(commodity_id: String) -> Color:
 	return Color(float(arr[0]), float(arr[1]), float(arr[2]))
 
 const CONTRACT_RADIUS      := 3500.0
-const MAX_ACTIVE_CONTRACTS := 8
+## One contract at a time. Stacking deliveries to multiple ports doesn't make
+## sense at the scales involved — pick a single route, fill the ship for it,
+## sail there, deliver, then take another contract from the destination.
+const MAX_ACTIVE_CONTRACTS := 1
 
 ## port_id -> { id, display_name, position, spawn_pos, commodity_export, commodity_imports, ... }
 var _ports: Dictionary = {}

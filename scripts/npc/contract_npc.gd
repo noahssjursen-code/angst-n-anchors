@@ -64,10 +64,12 @@ func _refresh_list() -> void:
 	var ship_berthed: bool = _ship_is_berthed()
 	var ship_cells_free: int = _ship_cells_free()
 
-	# Header line above the rows.
-	var header := _plain_label("Active %d / %d   ·   Ship capacity %d free cells" % [
-		active_count, registry.MAX_ACTIVE_CONTRACTS, ship_cells_free,
-	])
+	# Header line above the rows. One contract at a time: the header is
+	# "Active route" or "No active route", plus current ship capacity.
+	var header_text := "No active route   ·   Ship capacity %d cells" % ship_cells_free
+	if active_count > 0:
+		header_text = "Route active   ·   Ship capacity %d cells" % ship_cells_free
+	var header := _plain_label(header_text)
 	header.add_theme_color_override("font_color", HudStyle.C_AMBER)
 	_list.add_child(header)
 	_list.add_child(HSeparator.new())
@@ -128,14 +130,14 @@ func _make_row(contract: Contract, registry: Node, slots_free: int, ship_berthed
 
 	var btn := Button.new()
 	btn.custom_minimum_size = Vector2(130, 0)
-	# A new contract entering the slate costs one of MAX_ACTIVE_CONTRACTS slots,
-	# but an already-active one (any taken_count > 0) doesn't.
+	# Only one contract at a time. A NEW contract is locked out if any other
+	# one is active; the active contract itself can still be topped up.
 	var needs_slot := contract.taken_count == 0
 	if still_offered <= 0:
 		btn.text     = "Done"
 		btn.disabled = true
 	elif needs_slot and slots_free <= 0:
-		btn.text     = "Slots full"
+		btn.text     = "Finish active route first"
 		btn.disabled = true
 	elif not ship_berthed:
 		btn.text     = "Berth ship"
