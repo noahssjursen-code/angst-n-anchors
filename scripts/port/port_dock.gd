@@ -248,19 +248,16 @@ func _build_berth_slot(index: int, cx: float, slot_w: float, ship_beam: float, c
 		CargoBerthType.Type.CONTAINER: _crane_container(index, cx, slot_w, crane_z)
 		_:                             _crane_general(index, cx, slot_w, crane_z)
 
-	# Asphalt strip under the crane area, between the elevated quay edge and
-	# the apron pad. Keeps the gantry on concrete instead of grass. Wide
-	# enough to cover the rails + gantry sweep.
-	var crane_strip_w := maxf(slot_w - 0.4, 1.5)
-	var crane_strip_z := QUAY_DEPTH + (CRANE_QUAY_GAP + CRANE_D + APRON_GAP) * 0.5
-	var crane_strip_d := CRANE_QUAY_GAP + CRANE_D + APRON_GAP
-	_box(Vector3(crane_strip_w, 0.12, crane_strip_d),
-		 Vector3(cx, 0.06, crane_strip_z), C_CARGO_YARD.darkened(0.05),
-		 "CraneAsphalt%d" % index)
-
-	# Concrete apron pad — staging area, sits flush with the asphalt strip.
-	_box(Vector3(apron_w_reach, 0.12, APRON_DEPTH),
-		 Vector3(cx, 0.06, apron_z), C_CARGO_YARD, "ApronPad%d" % index)
+	# One continuous asphalt slab from the quay edge to the back of the apron,
+	# at the full berth-slot width. Cranes, rails and apron all sit on it —
+	# no grass slivers between zones, no stacked sub-pads.
+	var yard_w  := maxf(slot_w - 0.4, 1.5)
+	var yard_z0 := QUAY_DEPTH                           # front edge (water side)
+	var yard_z1 := apron_z + APRON_DEPTH * 0.5          # back edge (inland)
+	var yard_d  := yard_z1 - yard_z0
+	_box(Vector3(yard_w, 0.12, yard_d),
+		 Vector3(cx, 0.06, yard_z0 + yard_d * 0.5),
+		 C_CARGO_YARD, "YardAsphalt%d" % index)
 
 
 # ── Crane types ───────────────────────────────────────────────────────────────
