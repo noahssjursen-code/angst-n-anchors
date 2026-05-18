@@ -57,7 +57,7 @@ func _sample_fog_density() -> float:
 	# When the debug HUD pauses the WeatherField → WeatherLighting blend, the
 	# user is scrubbing fog manually. Honour their value instead of reading
 	# the noise field (which would happily ignore the override).
-	var paused := ww != null and ww.is_blend_to_lighting_paused()
+	var paused: bool = ww != null and bool(ww.is_blend_to_lighting_paused())
 	if ww != null and ww.is_initialized() and not paused:
 		# Sample own position + 4 cardinal points 220 m out.
 		# Use the worst fog found so the horn reacts to fog approaching
