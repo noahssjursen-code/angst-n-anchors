@@ -44,7 +44,9 @@ func _unhandled_input(event: InputEvent) -> void:
 
 	if event is InputEventMouseButton:
 		var mb := event as InputEventMouseButton
-		if mb.button_index == MOUSE_BUTTON_RIGHT:
+		# LMB / RMB are reserved for the crane (hoist up / down) — orbit moved
+		# to middle mouse button drag so it doesn't fight with hoist input.
+		if mb.button_index == MOUSE_BUTTON_MIDDLE:
 			_orbiting = mb.pressed
 			get_viewport().set_input_as_handled()
 		elif mb.button_index == MOUSE_BUTTON_WHEEL_UP and mb.pressed:

@@ -10,13 +10,15 @@ extends Node3D
 ## Controls (active only while operator is seated):
 ##   W / A / S / D — pan hook relative to the camera view (forward / left /
 ##                  back / right). Mapped onto gantry roll + trolley travel.
-##   R / C       — hoist up / down (R raises hook, C lowers)
+##   LMB / RMB   — hoist up / down (held; LMB raises, RMB lowers)
 ##   RMB drag    — orbit camera around hook
 ##   Scroll      — camera zoom
 ##   F           — engage chains (when hook is near a pallet) /
 ##                  release pallet (when carrying) /
 ##                  board / exit (when not carrying)
-##   Q           — rotate carried pallet 90° (swaps footprint X/Z)
+##   Q           — rotate carried pallet 90° (matches deck orientation)
+##   MMB drag    — orbit camera around hook
+##   Scroll      — zoom
 ##   Escape      — force exit (drops pallet in place if carrying)
 
 const MODEL_PATH := "res://resources/data/models/dockyard/gantry_crane.json"
@@ -518,10 +520,12 @@ func _read_kinematic_input(delta: float) -> void:
 			trolley_min_z, trolley_max_z,
 		)
 
+	# Hoist on mouse buttons: LMB raises, RMB lowers.
+	# (Orbit moved to MMB drag in CraneCamera so LMB/RMB are free for this.)
 	var hoist_dir := 0.0
-	if Input.is_action_pressed("crane_hoist_up"):
+	if Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
 		hoist_dir -= 1.0
-	if Input.is_action_pressed("crane_hoist_down"):
+	if Input.is_mouse_button_pressed(MOUSE_BUTTON_RIGHT):
 		hoist_dir += 1.0
 	_hoist_drop = clampf(
 		_hoist_drop + hoist_dir * hoist_speed_m * delta,
@@ -608,7 +612,42 @@ func _update_carried_pallet() -> void:
 	# Fully attached: pallet rides under the hook.
 	if _rigging.attached_count() >= CraneRigging.MAX_CHAINS:
 		var hp := _hook.global_position
-		_carried_pallet.global_position = Vector3(hp.x, hp.y - 1.4, hp.z)
+		# Match the basis of whichever deck the pallet will land on so the Q
+		# rotation reads correctly relative to the destination cell, instead
+		# of being locked to world axes regardless of dock rotation.
+		var deck_basis := _find_carry_alignment_basis()
+		if deck_basis != Basis.IDENTITY:
+			var oriented := deck_basis.orthonormalized()
+			if _carry_rotated:
+				oriented = oriented.rotated(Vector3.UP, PI * 0.5)
+			_carried_pallet.global_transform = Transform3D(
+				oriented,
+				Vector3(hp.x, hp.y - 1.4, hp.z),
+			)
+		else:
+			_carried_pallet.global_position = Vector3(hp.x, hp.y - 1.4, hp.z)
+
+
+## Returns the basis the carried pallet should align to right now. Prefers
+## the deck currently under the hook; falls back to the destination apron;
+## then identity (world axes) if neither exists.
+func _find_carry_alignment_basis() -> Basis:
+	if _carried_pallet == null or _hook == null:
+		return Basis.IDENTITY
+	var pallet_res := _carried_pallet.get("pallet") as Pallet
+	var hp := _hook.global_position
+	# 1) Any deck the hook is over.
+	for node in get_tree().get_nodes_in_group(CargoDeckComponent.DECK_GROUP):
+		var deck := node as CargoDeckComponent
+		if deck != null and deck.contains_world_point(hp):
+			return deck.global_basis
+	# 2) Destination apron if the pallet has one.
+	if pallet_res != null and not pallet_res.destination_port_id.is_empty():
+		for node in get_tree().get_nodes_in_group(CargoDeckComponent.DECK_GROUP):
+			var deck2 := node as CargoDeckComponent
+			if deck2 != null and deck2.accepts_delivery(pallet_res):
+				return deck2.global_basis
+	return Basis.IDENTITY
 
 
 # ── Beacon ────────────────────────────────────────────────────────────────────
@@ -850,8 +889,9 @@ func _toggle_rotation() -> void:
 	# target both read it for sizing — one mutation propagates everywhere.
 	pallet_res.footprint = Vector2i(pallet_res.footprint.y, pallet_res.footprint.x)
 	_carry_rotated = not _carry_rotated
-	# Rotate the visual 90° around its own Y so the on-hook pallet matches.
-	_carried_pallet.rotation.y = PI * 0.5 if _carry_rotated else 0.0
+	# Visual rotation is applied by _update_carried_pallet each frame based on
+	# the deck the pallet will land on — that way rotation reads correctly
+	# against the destination cell, not against world axes.
 
 
 func _engage_chains(pallet_node: Node3D) -> void:
@@ -1044,7 +1084,7 @@ func _update_hud() -> void:
 		hint = "[E] engage chains"
 	else:
 		hint = "Move hook close to a pallet (yellow corners light up)"
-	_hud.text = "Gantry %+5.1f m   Trolley %+5.1f m   Hook drop %4.1f m\n%s\n[WASD] pan  [R/C] hoist  [Q] rotate  [F] engage/release  [RMB] orbit  [scroll] zoom  [Esc] exit" % [
+	_hud.text = "Gantry %+5.1f m   Trolley %+5.1f m   Hook drop %4.1f m\n%s\n[WASD] pan  [LMB/RMB] hoist up/down  [Q] rotate  [F] engage/release  [MMB] orbit  [scroll] zoom  [Esc] exit" % [
 		_gantry_x_offset, _trolley_z, _hoist_drop, hint,
 	]
 
@@ -1065,10 +1105,7 @@ func _register_input_actions() -> void:
 		"crane_pan_right":    KEY_D,
 		"crane_pan_back":     KEY_S,
 		"crane_pan_forward":  KEY_W,
-		"crane_hoist_up":     KEY_R,
-		# F is now `interact` (boarding / exit / engage chains) globally —
-		# can't double-bind hoist there. C is unbound and easy to reach.
-		"crane_hoist_down":   KEY_C,
+		# Hoist no longer keyboard-bound — it's on LMB/RMB now.
 		"crane_rotate_pallet": KEY_Q,
 	}
 	for action: String in bindings:
