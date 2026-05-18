@@ -11,6 +11,14 @@ extends CharacterBody3D
 @export var input_smoothness:     float = 8.0
 @export var speed_blend_sharpness: float = 6.0
 
+## Maximum height the player will step up over without jumping. Anything under
+## this (e.g. quay lips, low platforms, kerb stones) is auto-mounted via a
+## "ghost cast" probe after each slide.
+@export var max_step_height:      float = 0.45
+## How far below the feet the body will snap to ground when descending. Stops
+## you launching off the top of small drops.
+@export var floor_snap_distance:  float = 0.35
+
 # ── Jump ──────────────────────────────────────────────────────────────────────
 @export_group("Jump")
 @export var jump_peak_height:           float = 0.9
@@ -62,6 +70,11 @@ func _ready() -> void:
 	_current_speed = walk_speed
 	camera.fov = base_fov
 	_last_safe_position = global_position
+
+	# Snap to floor when descending small steps so we don't go briefly airborne.
+	floor_snap_length = floor_snap_distance
+	floor_stop_on_slope = true
+	floor_max_angle = deg_to_rad(48.0)
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -133,7 +146,23 @@ func _physics_process(delta: float) -> void:
 	velocity.x = new_flat.x
 	velocity.z = new_flat.z
 
+	var pre_move_pos := global_position
+	var pre_velocity := velocity
+
 	move_and_slide()
+
+	# Step-climb recovery: if we were grounded, intended to move horizontally,
+	# but made noticeably less progress than asked, try to ghost-step over a
+	# low ledge. Restores velocity so we don't lose momentum to the wall.
+	if (on_floor or _was_on_floor) and pre_velocity.y <= 0.5 and max_step_height > 0.0:
+		var intended := Vector3(pre_velocity.x, 0.0, pre_velocity.z) * delta
+		if intended.length_squared() > 0.0001:
+			var actual := global_position - pre_move_pos
+			actual.y = 0.0
+			if actual.length() < intended.length() * 0.6:
+				if _try_step_up(intended):
+					velocity.x = pre_velocity.x
+					velocity.z = pre_velocity.z
 
 	var waterline := water_surface_y
 	if global_position.y < waterline:
@@ -196,3 +225,58 @@ func _process(delta: float) -> void:
 	if is_on_floor() and absf(_smoothed_input.x) > 0.05:
 		strafe_tilt = -signf(_smoothed_input.x) * deg_to_rad(strafe_tilt_angle)
 	camera.rotation.z = lerp_angle(camera.rotation.z, strafe_tilt, delta * 8.0)
+
+
+# ── Step climb (ghost-cast probe) ─────────────────────────────────────────────
+
+## Probe whether the player can mount a low obstacle by moving up by
+## max_step_height, then forward by `horizontal_motion`, then back down to find
+## a walkable surface. Commits the new position if all three probes succeed.
+## Returns true on a successful step.
+func _try_step_up(horizontal_motion: Vector3) -> bool:
+	var motion := Vector3(horizontal_motion.x, 0.0, horizontal_motion.z)
+	if motion.length_squared() < 0.0001:
+		return false
+
+	var up_vec := Vector3.UP * max_step_height
+	var rid    := get_rid()
+
+	# 1. Move UP by step height (clipped if there's a low ceiling).
+	var up_params  := PhysicsTestMotionParameters3D.new()
+	up_params.from   = global_transform
+	up_params.motion = up_vec
+	var up_result   := PhysicsTestMotionResult3D.new()
+	var up_blocked  := PhysicsServer3D.body_test_motion(rid, up_params, up_result)
+	var actual_up   := up_result.get_travel() if up_blocked else up_vec
+	if actual_up.y < 0.05:
+		return false
+
+	# 2. Move FORWARD from raised position.
+	var raised := global_transform.translated(actual_up)
+	var fwd_params  := PhysicsTestMotionParameters3D.new()
+	fwd_params.from   = raised
+	fwd_params.motion = motion
+	var fwd_result := PhysicsTestMotionResult3D.new()
+	var fwd_blocked := PhysicsServer3D.body_test_motion(rid, fwd_params, fwd_result)
+	var actual_fwd := fwd_result.get_travel() if fwd_blocked else motion
+	if actual_fwd.length() < motion.length() * 0.25:
+		return false
+
+	# 3. Drop DOWN to find the step surface.
+	var raised_fwd := raised.translated(actual_fwd)
+	var down_params  := PhysicsTestMotionParameters3D.new()
+	down_params.from   = raised_fwd
+	down_params.motion = Vector3.DOWN * (max_step_height + 0.1)
+	var down_result := PhysicsTestMotionResult3D.new()
+	var down_hit := PhysicsServer3D.body_test_motion(rid, down_params, down_result)
+	if not down_hit:
+		# Nothing to land on — would fall off, abort.
+		return false
+
+	# Reject steep surfaces — would be unwalkable.
+	var normal := down_result.get_collision_normal()
+	if normal.dot(Vector3.UP) < cos(floor_max_angle):
+		return false
+
+	global_position = raised_fwd.origin + down_result.get_travel()
+	return true
