@@ -532,6 +532,12 @@ func _apply_kinematics(delta: float = 0.0) -> void:
 func _update_carried_pallet() -> void:
 	if _carried_pallet == null or _rigging == null:
 		return
+	if not is_instance_valid(_carried_pallet):
+		# Pallet was freed externally — drop our reference.
+		_carried_pallet = null
+		if _rigging != null:
+			_rigging.detach_all()
+		return
 	# Fully attached: pallet rides under the hook.
 	if _rigging.attached_count() >= CraneRigging.MAX_CHAINS:
 		var hp := _hook.global_position
@@ -659,8 +665,22 @@ func _sockets_of(pallet_node: Node3D) -> Array:
 
 
 func _engage_chains(pallet_node: Node3D) -> void:
-	if _rigging == null or pallet_node == null:
+	if _rigging == null or pallet_node == null or not is_instance_valid(pallet_node):
 		return
+
+	# If this pallet is currently a child of a CargoDeckComponent's
+	# PalletVisuals, reparent it to the scene root first. Otherwise the
+	# deck's remove_pallet_by_resource() will queue_free the very node we're
+	# about to carry, leaving _carried_pallet pointing at a freed instance.
+	var scene_root := get_tree().current_scene
+	if scene_root != null and pallet_node.get_parent() != scene_root:
+		pallet_node.reparent(scene_root, true)
+
+	# Now the deck can't reach the visual by name. Releasing the resource is
+	# still required to clear the deck's _cells dict and mass accounting.
+	if pallet_node.has_method("get") and pallet_node.get("pallet") != null:
+		_detach_from_deck(pallet_node.get("pallet"))
+
 	# Snap all four chains in one go.
 	_rigging.detach_all()
 	for socket in _sockets_of(pallet_node):
@@ -671,9 +691,6 @@ func _engage_chains(pallet_node: Node3D) -> void:
 	if _highlighted_pallet != null:
 		_set_pallet_highlight(_highlighted_pallet, false)
 		_highlighted_pallet = null
-	# Detach from any cargo deck the pallet was sitting on.
-	if pallet_node.has_method("get") and pallet_node.get("pallet") != null:
-		_detach_from_deck(pallet_node.get("pallet"))
 
 
 # ── Release ───────────────────────────────────────────────────────────────────
