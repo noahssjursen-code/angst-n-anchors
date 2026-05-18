@@ -45,7 +45,13 @@ static var _seated_count: int = 0
 @export var hoist_max_drop: float = 17.0
 
 ## How close (3D distance) the hook must be to a pallet to engage chains.
-@export var pickup_range_m: float = 3.5
+## Tight — forces the player to actually lower the hook (F) before pickup.
+@export var pickup_range_m: float = 1.8
+
+## How close (XZ) the hook must be to a delivery zone / deck cell to release.
+@export var release_xz_range_m: float = 1.6
+## How far above the target surface the hook may be when releasing.
+@export var release_max_height_m: float = 2.5
 
 ## Player must be within this range to board.
 @export var board_range_m: float = 7.0
@@ -570,6 +576,8 @@ func _update_snap_ghost() -> void:
 
 	var hook_pos := _hook.global_position
 
+	var xz_r2 := release_xz_range_m * release_xz_range_m
+
 	# 1. Delivery zone wins — show a gold ghost over the zone if it accepts.
 	var pallet_res = _carried_pallet.get("pallet")
 	for node in get_tree().get_nodes_in_group("cargo_delivery_zone"):
@@ -582,7 +590,9 @@ func _update_snap_ghost() -> void:
 			continue
 		var dx := hook_pos.x - n3.global_position.x
 		var dz := hook_pos.z - n3.global_position.z
-		if dx * dx + dz * dz > 9.0:
+		if dx * dx + dz * dz > xz_r2:
+			continue
+		if hook_pos.y - n3.global_position.y > release_max_height_m:
 			continue
 		_show_ghost(n3.global_position + Vector3(0.0, 0.05, 0.0), Color(1.0, 0.85, 0.20))
 		return
@@ -593,6 +603,8 @@ func _update_snap_ghost() -> void:
 		if deck == null or deck.is_full():
 			continue
 		if not deck.contains_world_point(hook_pos):
+			continue
+		if hook_pos.y - deck.global_position.y > release_max_height_m:
 			continue
 		var cell_pos := deck.get_nearest_free_cell_world(hook_pos)
 		if cell_pos == Vector3.INF:
@@ -705,6 +717,8 @@ func _try_release() -> void:
 	var hook_pos := _hook.global_position
 	var pallet_res = _carried_pallet.get("pallet")
 
+	var xz_r2 := release_xz_range_m * release_xz_range_m
+
 	# 1) Delivery zone match
 	if pallet_res != null:
 		for node in get_tree().get_nodes_in_group("cargo_delivery_zone"):
@@ -717,7 +731,9 @@ func _try_release() -> void:
 				continue
 			var dx := hook_pos.x - n3.global_position.x
 			var dz := hook_pos.z - n3.global_position.z
-			if dx * dx + dz * dz > 9.0:
+			if dx * dx + dz * dz > xz_r2:
+				continue
+			if hook_pos.y - n3.global_position.y > release_max_height_m:
 				continue
 			node.call("deliver_pallet", pallet_res)
 			_consume_pallet()
@@ -729,6 +745,8 @@ func _try_release() -> void:
 		if deck == null or deck.is_full():
 			continue
 		if not deck.contains_world_point(hook_pos):
+			continue
+		if hook_pos.y - deck.global_position.y > release_max_height_m:
 			continue
 		if pallet_res != null:
 			var cell := deck.add_pallet(pallet_res, hook_pos)
