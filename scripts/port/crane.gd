@@ -389,15 +389,16 @@ func _build_slew_arm() -> void:
 
 
 func _build_camera() -> void:
-	# Fixed at tower top, rotated to look outboard (toward water) and slightly down.
-	# -Z in dock space = toward water. When slew = -90, boom faces -Z.
-	# Camera is a child of Crane (not SlewArm) so it doesn't spin with slew.
+	# Camera is a child of SlewArm so it rotates with slew and always looks
+	# along the boom direction. Positioned just above the pivot, looking
+	# outboard (+X in SlewArm space) and steeply down — gives a clear
+	# top-down-ish view of the hook and the landing zone below it.
 	_crane_cam                  = Camera3D.new()
 	_crane_cam.name             = "CraneCam"
-	_crane_cam.position         = Vector3(0.0, tower_height - 0.5, -tower_w)
-	_crane_cam.rotation_degrees = Vector3(-30.0, 0.0, 0.0)
+	_crane_cam.position         = Vector3(boom_reach * 0.25, 4.0, 0.0)
+	_crane_cam.rotation_degrees = Vector3(-55.0, 90.0, 0.0)
 	_crane_cam.current          = false
-	add_child(_crane_cam)
+	_slew_arm.add_child(_crane_cam)
 
 
 func _build_ui() -> void:
