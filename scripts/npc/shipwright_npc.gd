@@ -105,7 +105,7 @@ var _pending_entry: Dictionary = {}
 
 
 func _ready() -> void:
-	prompt_text = "Press E — Shipwright"
+	prompt_text = "Press F — Shipwright"
 	super._ready()
 	if not Engine.is_editor_hint():
 		call_deferred("_build_ui")

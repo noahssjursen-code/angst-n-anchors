@@ -10,10 +10,10 @@ extends Node3D
 ## Controls (active only while operator is seated):
 ##   W / A / S / D — pan hook relative to the camera view (forward / left /
 ##                  back / right). Mapped onto gantry roll + trolley travel.
-##   R / F       — hoist up / down (R raises hook, F lowers)
+##   R / C       — hoist up / down (R raises hook, C lowers)
 ##   RMB drag    — orbit camera around hook
 ##   Scroll      — camera zoom
-##   E           — engage chains (when hook is near a pallet) /
+##   F           — engage chains (when hook is near a pallet) /
 ##                  release pallet (when carrying) /
 ##                  board / exit (when not carrying)
 ##   Q           — rotate carried pallet 90° (swaps footprint X/Z)
@@ -429,7 +429,7 @@ func _build_ui() -> void:
 
 	_prompt = Label.new()
 	_prompt.name = "Prompt"
-	_prompt.text = "Press E to operate crane"
+	_prompt.text = "Press F to operate crane"
 	_prompt.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_prompt.visible = false
 	_prompt.add_theme_font_size_override("font_size", 22)
@@ -1044,7 +1044,7 @@ func _update_hud() -> void:
 		hint = "[E] engage chains"
 	else:
 		hint = "Move hook close to a pallet (yellow corners light up)"
-	_hud.text = "Gantry %+5.1f m   Trolley %+5.1f m   Hook drop %4.1f m\n%s\n[WASD] pan  [R/F] hoist  [Q] rotate  [RMB] orbit  [scroll] zoom  [Esc] exit" % [
+	_hud.text = "Gantry %+5.1f m   Trolley %+5.1f m   Hook drop %4.1f m\n%s\n[WASD] pan  [R/C] hoist  [Q] rotate  [F] engage/release  [RMB] orbit  [scroll] zoom  [Esc] exit" % [
 		_gantry_x_offset, _trolley_z, _hoist_drop, hint,
 	]
 
@@ -1066,7 +1066,9 @@ func _register_input_actions() -> void:
 		"crane_pan_back":     KEY_S,
 		"crane_pan_forward":  KEY_W,
 		"crane_hoist_up":     KEY_R,
-		"crane_hoist_down":   KEY_F,
+		# F is now `interact` (boarding / exit / engage chains) globally —
+		# can't double-bind hoist there. C is unbound and easy to reach.
+		"crane_hoist_down":   KEY_C,
 		"crane_rotate_pallet": KEY_Q,
 	}
 	for action: String in bindings:

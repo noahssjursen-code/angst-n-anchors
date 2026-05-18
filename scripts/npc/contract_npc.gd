@@ -16,7 +16,7 @@ var _list:  VBoxContainer
 func _ready() -> void:
 	clothing_color = Color(0.22, 0.38, 0.60)
 	trousers_color = Color(0.16, 0.24, 0.42)
-	prompt_text    = "Press E to view contracts"
+	prompt_text    = "Press F to view contracts"
 	super._ready()
 	if not Engine.is_editor_hint():
 		call_deferred("_build_ui")

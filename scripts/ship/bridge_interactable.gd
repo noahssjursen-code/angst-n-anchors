@@ -15,7 +15,7 @@ const BOARDING_RAY_COLLISION_MASK: int = (1 << 0) | (1 << 1) | (1 << 2)
 @export var look_distance: float = 35.0
 @export var look_dot_threshold: float = 0.72
 @export var interact_range: float = 10.0
-@export var prompt_text: String = "Press E to board"
+@export var prompt_text: String = "Press F to board"
 @export var exit_deck_offset: Vector2 = Vector2(0.0, 2.0)
 
 var _occupied: bool = false
