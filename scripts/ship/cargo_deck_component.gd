@@ -154,6 +154,13 @@ func get_all_pallets() -> Array[Pallet]:
 func get_pallet_at_cell(cell_idx: int) -> Pallet:
 	return _cells.get(cell_idx, null) as Pallet
 
+## Remove whichever cell holds this exact Pallet resource. Returns the Pallet or null.
+func remove_pallet_by_resource(pallet: Pallet) -> Pallet:
+	for idx in _cells.keys():
+		if _cells[idx] == pallet:
+			return remove_pallet(int(idx))
+	return null
+
 
 # ── Spatial helpers ───────────────────────────────────────────────────────────
 

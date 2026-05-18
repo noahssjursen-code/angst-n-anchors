@@ -37,12 +37,18 @@ func accepts_pallet(pallet: Pallet) -> bool:
 	return pallet.destination_port_id == port_id
 
 
-## Delivers a pallet if it matches. Returns true and emits signal on success.
-func deliver_pallet(pallet: Pallet) -> bool:
+## Delivers a pallet if it matches. Calls ContractRegistry, emits signal, returns gold earned.
+func deliver_pallet(pallet: Pallet) -> int:
 	if not accepts_pallet(pallet):
-		return false
-	pallet_delivered.emit(pallet, pallet.value_gold)
-	return true
+		return 0
+	var registry := get_node_or_null("/root/ContractRegistry")
+	var reward   := 0
+	if registry != null:
+		reward = int(registry.deliver_pallet(pallet))
+	else:
+		reward = pallet.value_gold
+	pallet_delivered.emit(pallet, reward)
+	return reward
 
 
 func _rebuild_debug_visual() -> void:

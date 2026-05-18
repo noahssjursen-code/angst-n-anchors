@@ -13,6 +13,8 @@ extends Resource
 @export var units: int = 0
 ## Maximum units this pallet was sized for (= units_per_pallet at creation time).
 @export var max_units: int = 1
+## Grid cells this pallet occupies (cols × rows). Default 1×1. Timber might be 1×4, etc.
+@export var footprint: Vector2i = Vector2i(1, 1)
 @export var mass_kg: float = 0.0
 ## Total gold value on delivery.
 @export var value_gold: int = 0

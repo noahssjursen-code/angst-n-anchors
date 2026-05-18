@@ -224,11 +224,13 @@ func _build_berth_slot(index: int, cx: float, slot_w: float, ship_beam: float, c
 # ── Crane types ───────────────────────────────────────────────────────────────
 
 func _crane_general(index: int, cx: float, crane_z: float) -> void:
-	var col := CargoBerthType.crane_color(CargoBerthType.Type.GENERAL)
-	_box(Vector3(CRANE_W, CRANE_H, CRANE_D), Vector3(cx, CRANE_H * 0.5, crane_z), col, "Crane%d" % index)
-	_box(Vector3(2.0, 1.5, 8.0), Vector3(cx, CRANE_H - 1.0, crane_z - 5.0), col.lightened(0.15), "CraneBoom%d" % index)
-	_label("General  #%d" % (index + 1), Vector3(cx, CRANE_H + 1.2, crane_z),
-		   Color(1.0, 1.0, 1.0, 0.90), 0.44, "LabelCrane%d" % index)
+	var crane          := Crane.new()
+	crane.name         = "Crane%d" % index
+	crane.position     = Vector3(cx, QUAY_HEIGHT, crane_z)
+	crane.tower_height = CRANE_H
+	crane.boom_reach   = 20.0
+	crane.boom_tail    = 10.0
+	add_child(crane)
 
 
 func _crane_bulk(index: int, cx: float, crane_z: float) -> void:
