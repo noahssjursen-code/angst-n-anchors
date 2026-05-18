@@ -58,9 +58,6 @@ signal cargo_changed(component: CargoDeckComponent)
 		debug_grid_y_offset = v
 		_rebuild_debug_visual()
 
-## How many cargo units stack on one pallet / cell on this ship.
-@export_range(1, 12, 1) var units_per_pallet: int = PalletFactory.DEFAULT_UNITS_PER_PALLET
-
 # cell_idx (int) -> Pallet
 var _cells: Dictionary = {}
 var _deck_mass_kg: float = 0.0
