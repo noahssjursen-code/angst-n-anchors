@@ -69,6 +69,7 @@ var _highlighted_pallet: Node3D = null  # PalletNode whose sockets glow
 var _ui: CanvasLayer
 var _prompt: Label
 var _hud: Label
+var _prev_mouse_mode: int = Input.MOUSE_MODE_VISIBLE
 
 
 # ── Lifecycle ─────────────────────────────────────────────────────────────────
@@ -516,6 +517,8 @@ func _enter_crane() -> void:
 	if _camera != null:
 		_camera.set_enabled(true)
 	get_viewport().physics_object_picking = true
+	_prev_mouse_mode = Input.mouse_mode
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 	if _prompt != null:
 		_prompt.visible = false
 	if _hud != null:
@@ -530,6 +533,7 @@ func _exit_crane() -> void:
 	_clear_highlight()
 	if _camera != null:
 		_camera.set_enabled(false)
+	Input.mouse_mode = _prev_mouse_mode
 	if _player != null:
 		var pcam := _player.get_node_or_null("Camera3D") as Camera3D
 		if pcam != null:
