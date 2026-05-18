@@ -21,24 +21,30 @@ static var world_seed: int = 0
 
 # ── Tuning ────────────────────────────────────────────────────────────────────
 # Pressure: large slow synoptic-scale lows / highs.
-const PRESSURE_FEATURE_SCALE_M := 4500.0   ## metres per pressure "cell"
-const PRESSURE_TIME_SCALE_H    := 8.0      ## game-hours for a cell to evolve
+# Feature scale is BIG so a sailing boat doesn't cross a whole pressure system
+# in a minute. Time scale is generous so weather evolves over real-world
+# minutes, not seconds, even when the boat sits still.
+const PRESSURE_FEATURE_SCALE_M := 8000.0   ## metres per pressure "cell"
+const PRESSURE_TIME_SCALE_H    := 18.0     ## game-hours for a cell to evolve
 const PRESSURE_BASE_HPA        := 1013.0
 const PRESSURE_AMPLITUDE_HPA   := 28.0     ## ±28 hPa gives 985–1041, realistic
 
 # Cloud: mid-scale cover field.
-const CLOUD_FEATURE_SCALE_M := 1800.0
-const CLOUD_TIME_SCALE_H    := 3.0
+const CLOUD_FEATURE_SCALE_M := 2800.0
+const CLOUD_TIME_SCALE_H    := 6.0
 
-# Local: small fast band — jitter on visibility / precipitation.
-const LOCAL_FEATURE_SCALE_M := 600.0
-const LOCAL_TIME_SCALE_H    := 0.4
+# Local: small fast band — used ONLY for visibility / precip jitter, never wind.
+const LOCAL_FEATURE_SCALE_M := 900.0
+const LOCAL_TIME_SCALE_H    := 1.5
 
 # Wind: derived from pressure gradient via central differences.
-const WIND_GRADIENT_EPS_M    := 60.0
+# Stencil is wide (≈ 1/16 of a pressure cell) so the gradient is essentially a
+# low-pass of the pressure field — boat motion can't snap-flip the wind by
+# walking across a tiny noise wiggle.
+const WIND_GRADIENT_EPS_M    := 350.0
 ## Maps pressure gradient (hPa/m) to wind force [0..1].
-## Tuned so a typical 0.005–0.012 hPa/m gradient produces 0.3–0.8 wind force.
-const WIND_GRADIENT_GAIN     := 90.0
+## Rebalanced for the wider stencil + larger features (smaller gradients).
+const WIND_GRADIENT_GAIN     := 220.0
 ## Baseline easterly trade so wind is never exactly zero in dead-flat pressure.
 const BASELINE_WIND          := Vector3(0.12, 0.0, 0.04)
 
@@ -60,7 +66,10 @@ static func _ensure_noise() -> void:
 	_pressure_noise.seed       = world_seed ^ 0x50525353  # 'PRSS'
 	_pressure_noise.noise_type = FastNoiseLite.TYPE_SIMPLEX_SMOOTH
 	_pressure_noise.frequency  = 1.0  # we normalise coords ourselves
-	_pressure_noise.fractal_octaves     = 3
+	# Single dominant octave — the wind gradient is derived from this field
+	# and any high-frequency wiggle becomes a sharp wind shear under
+	# finite differences. Keep the pressure field clean and smooth.
+	_pressure_noise.fractal_octaves     = 1
 	_pressure_noise.fractal_gain        = 0.55
 	_pressure_noise.fractal_lacunarity  = 2.1
 

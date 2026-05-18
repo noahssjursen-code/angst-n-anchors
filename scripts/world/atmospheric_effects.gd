@@ -15,10 +15,17 @@ var _lightning_phase:      int   = 0   # 0=idle  1=flash1  2=gap  3=flash2
 var _lightning_phase_t:    float = 0.0
 
 const ZONE_TICK     : float = 0.5    # seconds between zone polls
-const ZONE_WEIGHT   : float = 0.017  # lerp weight per tick — ~20s half-life
-## Wind direction lerps faster than force — direction shifts feel laggy if
-## smoothed too hard, while still preventing per-tick swings from looking jittery.
-const WIND_DIR_LERP : float = 0.08
+## Lerp weight per tick. ~0.006 = ≈60s half-life on wind_force, so a calm-to-
+## storm transition takes minutes of real time even if the underlying noise
+## sample changes abruptly (e.g. when the boat sails into a new pressure
+## system). Higher values feel jittery; lower than this feels laggy.
+const ZONE_WEIGHT   : float = 0.006
+## Wind-direction lerp. Slightly faster than wind_force so big rotations
+## feel responsive; still smooth enough to never look like a snap.
+const WIND_DIR_LERP : float = 0.035
+## When the boat is hugging the shore the field can step hard (you cross
+## the harbour edge and shelter goes 1→0). Cap how much faster lerping gets.
+const SHORE_LERP_BOOST : float = 0.025
 var _zone_timer     : float = 0.0
 
 
@@ -156,8 +163,9 @@ func _tick_zone_weather() -> void:
 	# real-world lee-side calm.
 	target.precipitation = target.precipitation * lerpf(0.55, 1.0, shelter)
 
-	# Lerp faster when approaching land so the transition feels responsive.
-	var weight := lerpf(ZONE_WEIGHT, 0.08, 1.0 - shelter)
+	# Slight boost to lerp weight near land so the shore transition isn't laggy,
+	# but capped at SHORE_LERP_BOOST so even at the shoreline it stays smooth.
+	var weight := lerpf(ZONE_WEIGHT, SHORE_LERP_BOOST, 1.0 - shelter)
 	WeatherLighting.blend_towards(target, weight)
 
 	# Wind direction: same geostrophic vector that drove `target.wind_force`,
