@@ -1,3 +1,4 @@
+@tool
 class_name Crane
 extends Node3D
 
@@ -72,19 +73,20 @@ var _hud:    Label   # in-operator HUD showing slew/troll/hoist
 
 
 func _ready() -> void:
-	if Engine.is_editor_hint():
-		return
-	hoist_max_m  = tower_height - 2.0
-	trolley_max_m = boom_reach  - 0.8
+	hoist_max_m   = tower_height - 2.0
+	trolley_max_m = boom_reach   - 0.8
 	_troll = clampf(_troll, trolley_min_m, trolley_max_m)
-	_hoist = clampf(_hoist, hoist_min_m,  hoist_max_m)
-	_register_input_actions()
+	_hoist = clampf(_hoist, hoist_min_m,   hoist_max_m)
+	if not Engine.is_editor_hint():
+		_register_input_actions()
 	_build()
 
 
 # ── Main loop ─────────────────────────────────────────────────────────────────
 
 func _process(delta: float) -> void:
+	if Engine.is_editor_hint():
+		return
 	if not _occupied:
 		_update_prompt()
 		return
@@ -97,6 +99,8 @@ func _process(delta: float) -> void:
 
 
 func _unhandled_input(event: InputEvent) -> void:
+	if Engine.is_editor_hint():
+		return
 	if _occupied:
 		if event.is_action_pressed("ui_cancel"):
 			_exit_crane()
@@ -305,8 +309,9 @@ func _update_hud() -> void:
 func _build() -> void:
 	_build_tower()
 	_build_slew_arm()
-	_build_camera()
-	_build_ui()
+	if not Engine.is_editor_hint():
+		_build_camera()
+		_build_ui()
 
 
 func _build_tower() -> void:

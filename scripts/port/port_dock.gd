@@ -231,6 +231,10 @@ func _crane_general(index: int, cx: float, crane_z: float) -> void:
 	crane.boom_reach   = 20.0
 	crane.boom_tail    = 10.0
 	add_child(crane)
+	if Engine.is_editor_hint() and get_tree() != null:
+		var esc := get_tree().edited_scene_root
+		if esc != null:
+			_own_subtree(crane, esc)
 
 
 func _crane_bulk(index: int, cx: float, crane_z: float) -> void:

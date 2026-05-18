@@ -204,11 +204,11 @@ static func get_all_for_ship(ship_root: Node) -> Array[CargoDeckComponent]:
 # ── Internal: grid math ───────────────────────────────────────────────────────
 
 func _cell_local_center(cell_idx: int) -> Vector3:
-	var cols   := get_cols()
-	var rows   := get_rows()
-	var idx    := clamp(cell_idx, 0, cols * rows - 1)
-	var col    := idx % cols
-	var row    := idx / cols
+	var cols:  int = get_cols()
+	var rows:  int = get_rows()
+	var idx:   int = clampi(cell_idx, 0, cols * rows - 1)
+	var col:   int = idx % cols
+	var row:   int = idx / cols
 	var step_x := deck_width_m  / float(cols)
 	var step_z := deck_length_m / float(rows)
 	var x      := -deck_width_m  * 0.5 + step_x * (float(col) + 0.5)
