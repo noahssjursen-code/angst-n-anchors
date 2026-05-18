@@ -8,8 +8,8 @@ extends Node3D
 ## and animated by this script.
 ##
 ## Controls (active only while operator is seated):
-##   A / D       — gantry rolls along quay (-X / +X within roll range)
-##   W / S       — trolley travels along beam (toward water / toward land)
+##   W / A / S / D — pan hook relative to the camera view (forward / left /
+##                  back / right). Mapped onto gantry roll + trolley travel.
 ##   R / F       — hoist up / down (R raises hook, F lowers)
 ##   RMB drag    — orbit camera around hook
 ##   Scroll      — camera zoom
@@ -286,18 +286,20 @@ func _unhandled_input(event: InputEvent) -> void:
 # ── Kinematics ────────────────────────────────────────────────────────────────
 
 func _read_kinematic_input(delta: float) -> void:
-	var gantry_dir := Input.get_axis("crane_gantry_left", "crane_gantry_right")
-	_gantry_x_offset = clampf(
-		_gantry_x_offset + gantry_dir * gantry_speed_m * delta,
-		-gantry_roll_range_x, gantry_roll_range_x,
-	)
-
-	var trolley_dir := Input.get_axis("crane_trolley_land", "crane_trolley_water")
-	# trolley_water = -Z, so we subtract.
-	_trolley_z = clampf(
-		_trolley_z - trolley_dir * trolley_speed_m * delta,
-		trolley_min_z, trolley_max_z,
-	)
+	# Camera-relative pan: WASD is in screen space, projected onto the crane's
+	# local X (gantry rails) and Z (trolley boom).
+	var pan_y := Input.get_axis("crane_pan_back",  "crane_pan_forward")
+	var pan_x := Input.get_axis("crane_pan_left",  "crane_pan_right")
+	if absf(pan_x) > 0.001 or absf(pan_y) > 0.001:
+		var local_wish := _camera_relative_wish(pan_x, pan_y)
+		_gantry_x_offset = clampf(
+			_gantry_x_offset + local_wish.x * gantry_speed_m * delta,
+			-gantry_roll_range_x, gantry_roll_range_x,
+		)
+		_trolley_z = clampf(
+			_trolley_z + local_wish.z * trolley_speed_m * delta,
+			trolley_min_z, trolley_max_z,
+		)
 
 	var hoist_dir := 0.0
 	if Input.is_action_pressed("crane_hoist_up"):
@@ -308,6 +310,36 @@ func _read_kinematic_input(delta: float) -> void:
 		_hoist_drop + hoist_dir * hoist_speed_m * delta,
 		hoist_min_drop, hoist_max_drop,
 	)
+
+
+## Translates a screen-space WASD input (pan_x = right, pan_y = forward) into
+## a unit-clamped direction expressed in the crane's local XZ frame, using the
+## active orbit camera's facing. World-Y components are stripped so panning
+## stays horizontal regardless of camera pitch.
+func _camera_relative_wish(pan_x: float, pan_y: float) -> Vector3:
+	if _camera == null:
+		# Camera not built yet — fall back to crane-local axes.
+		return Vector3(pan_x, 0.0, -pan_y)
+	var cam_basis  := _camera.global_transform.basis
+	var forward_xz := -cam_basis.z
+	forward_xz.y = 0.0
+	if forward_xz.length_squared() < 1e-6:
+		forward_xz = -cam_basis.y  # camera looking straight down — use its Y
+		forward_xz.y = 0.0
+	forward_xz = forward_xz.normalized()
+	var right_xz := cam_basis.x
+	right_xz.y = 0.0
+	right_xz = right_xz.normalized()
+
+	var wish_world := forward_xz * pan_y + right_xz * pan_x
+	if wish_world.length() > 1.0:
+		wish_world = wish_world.normalized()
+
+	# Crane root may be rotated by its parent dock — use the inverse basis
+	# rather than assuming world XZ == crane XZ.
+	var local_wish := global_transform.basis.inverse() * wish_world
+	local_wish.y = 0.0
+	return local_wish
 
 
 func _apply_kinematics() -> void:
@@ -552,7 +584,7 @@ func _update_hud() -> void:
 		hint = "[E] engage chains"
 	else:
 		hint = "Move hook close to a pallet (yellow corners light up)"
-	_hud.text = "Gantry %+5.1f m   Trolley %+5.1f m   Hook drop %4.1f m\n%s\n[A/D] roll  [W/S] trolley  [R/F] hoist  [RMB] orbit  [scroll] zoom  [Esc] exit" % [
+	_hud.text = "Gantry %+5.1f m   Trolley %+5.1f m   Hook drop %4.1f m\n%s\n[WASD] pan (camera-relative)  [R/F] hoist  [RMB] orbit  [scroll] zoom  [Esc] exit" % [
 		_gantry_x_offset, _trolley_z, _hoist_drop, hint,
 	]
 
@@ -561,10 +593,10 @@ func _update_hud() -> void:
 
 func _register_input_actions() -> void:
 	var bindings := {
-		"crane_gantry_left":  KEY_A,
-		"crane_gantry_right": KEY_D,
-		"crane_trolley_land": KEY_S,   # +Z = toward land
-		"crane_trolley_water": KEY_W,  # -Z = toward water
+		"crane_pan_left":     KEY_A,
+		"crane_pan_right":    KEY_D,
+		"crane_pan_back":     KEY_S,
+		"crane_pan_forward":  KEY_W,
 		"crane_hoist_up":     KEY_R,
 		"crane_hoist_down":   KEY_F,
 	}
