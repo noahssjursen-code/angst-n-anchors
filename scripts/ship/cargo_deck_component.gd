@@ -40,7 +40,7 @@ signal cargo_changed(component: CargoDeckComponent)
 @export var port_id: String = ""
 
 @export_group("Debug")
-@export var show_debug_grid: bool = true:
+@export var show_debug_grid: bool = false:
 	set(v):
 		show_debug_grid = v
 		_rebuild_debug_visual()
