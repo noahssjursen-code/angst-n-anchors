@@ -31,11 +31,7 @@ func _add_hat() -> void:
 # ── NpcInteractable hooks ──────────────────────────────────────────────────────
 
 func _on_interact() -> void:
-	var player := _nearest_player()
-	if player == null:
-		return
-	var carry := player.get_node_or_null("PlayerCarryComponent") as PlayerCarryComponent
-	if carry != null and carry.is_carrying():
+	if _nearest_player() == null:
 		return
 	_refresh_list()
 	_panel.visible = true

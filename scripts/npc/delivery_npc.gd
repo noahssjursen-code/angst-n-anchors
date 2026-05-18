@@ -2,8 +2,7 @@
 class_name DeliveryNpc
 extends NpcBase
 
-## Destination-side NPC. Joins DELIVERY_GROUP so PlayerCarryComponent delivers
-## to it using the same mechanic as any other delivery zone.
+## Destination-side NPC. Joins DELIVERY_GROUP so cranes can deliver pallets to it.
 
 const DELIVERY_GROUP  := "cargo_delivery_zone"
 const FLAT_CAP_PATH   := "res://resources/data/meshes/characters/hat_flat_cap.json"
@@ -41,23 +40,23 @@ func _process(delta: float) -> void:
 			_reward_label.visible = false
 
 
-# ── DeliveryZone interface (used by PlayerCarryComponent) ─────────────────────
+# ── DeliveryZone interface ────────────────────────────────────────────────────
 
-func accepts(item: CargoItem) -> bool:
-	if item == null or port_id.is_empty():
+func accepts_pallet(pallet: Pallet) -> bool:
+	if pallet == null or port_id.is_empty():
 		return false
-	return item.destination_port_id == port_id
+	return pallet.destination_port_id == port_id
 
 
-func deliver(item: CargoItem) -> bool:
-	if not accepts(item):
+func deliver_pallet(pallet: Pallet) -> bool:
+	if not accepts_pallet(pallet):
 		return false
 	var registry := _registry()
 	var reward   := 0
 	if registry != null:
-		reward = int(registry.deliver_cargo(item))
+		reward = int(registry.deliver_pallet(pallet))
 	else:
-		reward = item.value_gold
+		reward = pallet.value_gold
 	gold_earned.emit(reward)
 	_flash_reward(reward)
 	return true

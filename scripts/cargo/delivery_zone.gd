@@ -6,7 +6,7 @@ extends Node3D
 
 const GROUP := "cargo_delivery_zone"
 
-signal cargo_delivered(item: CargoItem, value_gold: int)
+signal pallet_delivered(pallet: Pallet, value_gold: int)
 
 ## UUID of the port this zone belongs to. Set when the port is created.
 @export var port_id: String = ""
@@ -31,17 +31,17 @@ func _ready() -> void:
 	_rebuild_debug_visual()
 
 
-func accepts(item: CargoItem) -> bool:
-	if item == null or port_id.is_empty():
+func accepts_pallet(pallet: Pallet) -> bool:
+	if pallet == null or port_id.is_empty():
 		return false
-	return item.destination_port_id == port_id
+	return pallet.destination_port_id == port_id
 
 
-## Delivers cargo if it matches. Returns true and emits signal on success.
-func deliver(item: CargoItem) -> bool:
-	if not accepts(item):
+## Delivers a pallet if it matches. Returns true and emits signal on success.
+func deliver_pallet(pallet: Pallet) -> bool:
+	if not accepts_pallet(pallet):
 		return false
-	cargo_delivered.emit(item, item.value_gold)
+	pallet_delivered.emit(pallet, pallet.value_gold)
 	return true
 
 

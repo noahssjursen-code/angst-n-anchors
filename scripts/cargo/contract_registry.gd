@@ -4,7 +4,7 @@ extends Node
 ## Single source of truth for ports and trade contracts.
 ## No knowledge of the physical world; operates purely on data.
 
-signal contract_accepted(contract: Contract, items: Array[CargoItem])
+signal contract_accepted(contract: Contract, pallets: Array[Pallet])
 signal unit_delivered(contract: Contract, reward_gold: int)
 signal contract_completed(contract: Contract)
 
@@ -155,34 +155,24 @@ func accept_contract(contract_id: String) -> bool:
 
 	contract.state = Contract.State.ACCEPTED
 
-	var items: Array[CargoItem] = []
-	for i in range(contract.quantity):
-		items.append(CargoItem.create(
-			contract.commodity,
-			contract.destination_port_id,
-			contract.mass_per_unit_kg,
-			contract.reward_per_unit(),
-			contract.origin_port_id,
-			contract.id,
-		))
-
-	contract_accepted.emit(contract, items)
+	var pallets := PalletFactory.split(contract, PalletFactory.DEFAULT_UNITS_PER_PALLET)
+	contract_accepted.emit(contract, pallets)
 	return true
 
 
 # ── Delivery ──────────────────────────────────────────────────────────────────
 
-## Called when a player delivers one cargo unit. Returns gold earned (0 on failure).
-func deliver_cargo(item: CargoItem) -> int:
-	if item == null:
+## Called when a pallet is delivered. Returns gold earned (0 on failure).
+func deliver_pallet(pallet: Pallet) -> int:
+	if pallet == null:
 		return 0
 
-	var contract := _contracts.get(item.contract_id, null) as Contract
+	var contract := _contracts.get(pallet.contract_id, null) as Contract
 	if contract == null or contract.state == Contract.State.COMPLETED:
-		return item.value_gold
+		return pallet.value_gold
 
-	contract.delivered_count += 1
-	var reward := contract.reward_per_unit()
+	contract.delivered_count += pallet.units
+	var reward := pallet.value_gold
 	unit_delivered.emit(contract, reward)
 
 	if contract.is_complete():

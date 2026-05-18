@@ -189,49 +189,39 @@ func _respawn_pending_cargo(registry: Node) -> void:
 		var remaining := c.quantity - c.delivered_count
 		if remaining <= 0:
 			continue
-		var existing := 0
+		# Count pallets already staged on this apron.
+		var already_staged := 0
 		for child in get_children():
-			var cp := child as CargoPickup
-			if cp != null and cp.cargo_item != null and cp.cargo_item.contract_id == c.id:
-				existing += 1
-		# Avoid spawning items already picked up and in transit (on ship or being carried).
+			var pn := child as PalletNode
+			if pn != null and pn.pallet != null and pn.pallet.contract_id == c.id:
+				already_staged += pn.pallet.units
 		var in_transit := _count_in_transit(c.id)
-		var to_spawn   := remaining - existing - in_transit
-		if to_spawn <= 0:
+		var units_to_spawn := remaining - already_staged - in_transit
+		if units_to_spawn <= 0:
 			continue
-		var cur_count := int(_berth_cargo_count.get(berth_idx, 0))
-		_berth_cargo_count[berth_idx] = cur_count + to_spawn
-		dock.set_berth_has_cargo(berth_idx, true)
-		var positions := dock.get_berth_apron_positions(berth_idx, to_spawn)
-		for i in range(to_spawn):
-			var item    := CargoItem.create(
-				c.commodity, c.destination_port_id,
-				c.mass_per_unit_kg, c.reward_per_unit(),
-				c.origin_port_id, c.id,
-			)
-			var pickup  := CargoPickup.new()
-			pickup.name = "ApronCargo_" + item.id.left(8)
-			add_child(pickup)
-			pickup.global_position = positions[i]
-			pickup.setup(item)
-			pickup.picked_up.connect(func(_it: CargoItem) -> void: _on_apron_cargo_removed(berth_idx))
+		var pallets := PalletFactory.split(c, PalletFactory.DEFAULT_UNITS_PER_PALLET)
+		# Filter to only the missing units by trimming already-covered pallets.
+		var covered := already_staged + in_transit
+		var spawn_pallets: Array[Pallet] = []
+		for p in pallets:
+			if covered >= (p as Pallet).units:
+				covered -= (p as Pallet).units
+				continue
+			spawn_pallets.append(p as Pallet)
+		if spawn_pallets.is_empty():
+			continue
+		_stage_pallets_on_apron(dock, berth_idx, spawn_pallets)
 
 
 func _count_in_transit(contract_id: String) -> int:
 	var count := 0
-	for node in get_tree().get_nodes_in_group("cargo_deck"):
+	for node in get_tree().get_nodes_in_group(CargoDeckComponent.DECK_GROUP):
 		var dc := node as CargoDeckComponent
 		if dc == null:
 			continue
-		for item in dc.get_all_items():
-			if (item as CargoItem).contract_id == contract_id:
-				count += 1
-	for player in get_tree().get_nodes_in_group("player"):
-		var carry := player.get_node_or_null("PlayerCarryComponent") as PlayerCarryComponent
-		if carry != null and carry.is_carrying():
-			var ci := carry.get_carried()
-			if ci != null and ci.contract_id == contract_id:
-				count += 1
+		for p in dc.get_all_pallets():
+			if (p as Pallet).contract_id == contract_id:
+				count += (p as Pallet).units
 	return count
 
 
@@ -242,7 +232,7 @@ func respawn_staged_cargo() -> void:
 		_respawn_pending_cargo(registry)
 
 
-func _on_contract_accepted(contract: Contract, items: Array[CargoItem]) -> void:
+func _on_contract_accepted(contract: Contract, pallets: Array[Pallet]) -> void:
 	if contract.origin_port_id != port_id:
 		return
 	var dock := get_node_or_null("PortDock") as PortDock
@@ -251,25 +241,31 @@ func _on_contract_accepted(contract: Contract, items: Array[CargoItem]) -> void:
 	var berth_idx := dock.find_occupied_berth()
 	if berth_idx == -1:
 		return  # no ship berthed, nowhere to stage cargo
+	_stage_pallets_on_apron(dock, berth_idx, pallets)
+
+
+func _stage_pallets_on_apron(dock: PortDock, berth_idx: int, pallets: Array[Pallet]) -> void:
 	dock.set_berth_has_cargo(berth_idx, true)
-	_berth_cargo_count[berth_idx] = items.size()
-	var positions := dock.get_berth_apron_positions(berth_idx, items.size())
-	for i in range(items.size()):
-		var pickup          := CargoPickup.new()
-		pickup.name         = "ApronCargo_" + items[i].id.left(8)
-		add_child(pickup)
-		pickup.global_position = positions[i]
-		pickup.setup(items[i])
-		pickup.picked_up.connect(func(_item: CargoItem) -> void: _on_apron_cargo_removed(berth_idx))
+	var cur := int(_berth_cargo_count.get(berth_idx, 0))
+	_berth_cargo_count[berth_idx] = cur + pallets.size()
+	var positions := dock.get_berth_apron_positions(berth_idx, pallets.size())
+	for i in range(pallets.size()):
+		var node      := PalletNode.new()
+		node.name     = "ApronPallet_" + pallets[i].id.left(8)
+		add_child(node)
+		node.global_position = positions[i] if i < positions.size() else dock.get_spawn_position()
+		node.setup(pallets[i])
+		node.grabbed.connect(_on_apron_pallet_grabbed.bind(berth_idx))
 
 
-func _on_apron_cargo_removed(berth_idx: int) -> void:
-	_berth_cargo_count[berth_idx] = (_berth_cargo_count.get(berth_idx, 1) as int) - 1
-	if (_berth_cargo_count[berth_idx] as int) <= 0:
+func _on_apron_pallet_grabbed(node: PalletNode, berth_idx: int) -> void:
+	_berth_cargo_count[berth_idx] = (int(_berth_cargo_count.get(berth_idx, 1))) - 1
+	if int(_berth_cargo_count.get(berth_idx, 0)) <= 0:
 		_berth_cargo_count.erase(berth_idx)
 		var dock := get_node_or_null("PortDock") as PortDock
 		if dock != null:
 			dock.set_berth_has_cargo(berth_idx, false)
+	node.grabbed.disconnect(_on_apron_pallet_grabbed)
 
 
 ## Wire a PortData record into this plot. Triggers one rebuild.
