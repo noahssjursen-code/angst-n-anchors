@@ -102,6 +102,14 @@ var _snap_ghost_mat: StandardMaterial3D
 var _snap_label: Label3D
 var _snap_phase: float = 0.0
 
+# Persistent indicator that hovers over the destination apron cell whenever
+# the operator is carrying a pallet whose destination matches that apron.
+# Visible across the whole dock so the player knows where to go right after
+# engaging chains.
+var _dest_target: MeshInstance3D
+var _dest_target_mat: StandardMaterial3D
+var _dest_label: Label3D
+
 
 # ── Lifecycle ─────────────────────────────────────────────────────────────────
 
@@ -119,6 +127,8 @@ func _exit_tree() -> void:
 		_rigging.detach_all()
 	if _snap_ghost != null and is_instance_valid(_snap_ghost):
 		_snap_ghost.queue_free()
+	if _dest_target != null and is_instance_valid(_dest_target):
+		_dest_target.queue_free()
 
 
 # ── Build ─────────────────────────────────────────────────────────────────────
@@ -296,10 +306,11 @@ func _build_lights() -> void:
 
 
 func _build_snap_ghost() -> void:
+	# Hover-confirmation ghost — placed under the hook over a valid target.
 	_snap_ghost = MeshInstance3D.new()
 	_snap_ghost.name = "SnapGhost"
 	var mesh := BoxMesh.new()
-	mesh.size = Vector3(1.3, 0.05, 1.3)
+	mesh.size = Vector3(1.3, 0.04, 1.3)
 	_snap_ghost.mesh = mesh
 	_snap_ghost.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	_snap_ghost.visible = false
@@ -308,20 +319,44 @@ func _build_snap_ghost() -> void:
 	_snap_ghost_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	_snap_ghost_mat.no_depth_test = true
 	_snap_ghost.material_override = _snap_ghost_mat
-	# Parented to the scene root so it isn't pulled around by the gantry frame.
 	get_tree().current_scene.add_child(_snap_ghost)
 
-	# Floating action label that sits above the ghost: "DELIVER +200ℳ" / "PLACE".
-	_snap_label                = Label3D.new()
-	_snap_label.name           = "SnapLabel"
-	_snap_label.font_size      = 96
-	_snap_label.pixel_size     = 0.006
-	_snap_label.billboard      = BaseMaterial3D.BILLBOARD_ENABLED
-	_snap_label.no_depth_test  = true
-	_snap_label.outline_size   = 12
-	_snap_label.modulate       = Color.WHITE
-	_snap_label.outline_modulate = Color(0.05, 0.05, 0.05)
+	_snap_label                  = Label3D.new()
+	_snap_label.name             = "SnapLabel"
+	_snap_label.font_size        = 44
+	_snap_label.pixel_size       = 0.0035
+	_snap_label.billboard        = BaseMaterial3D.BILLBOARD_ENABLED
+	_snap_label.no_depth_test    = true
+	_snap_label.outline_size     = 3
+	_snap_label.modulate         = Color.WHITE
+	_snap_label.outline_modulate = Color(0.05, 0.05, 0.05, 0.85)
 	_snap_ghost.add_child(_snap_label)
+
+	# Persistent destination target — sits on the cell of the destination apron.
+	_dest_target = MeshInstance3D.new()
+	_dest_target.name = "DestinationTarget"
+	var dmesh := BoxMesh.new()
+	dmesh.size = Vector3(1.3, 0.04, 1.3)
+	_dest_target.mesh = dmesh
+	_dest_target.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	_dest_target.visible = false
+	_dest_target_mat = StandardMaterial3D.new()
+	_dest_target_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	_dest_target_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	_dest_target_mat.no_depth_test = true
+	_dest_target.material_override = _dest_target_mat
+	get_tree().current_scene.add_child(_dest_target)
+
+	_dest_label                  = Label3D.new()
+	_dest_label.name             = "DestLabel"
+	_dest_label.font_size        = 48
+	_dest_label.pixel_size       = 0.004
+	_dest_label.billboard        = BaseMaterial3D.BILLBOARD_ENABLED
+	_dest_label.no_depth_test    = true
+	_dest_label.outline_size     = 3
+	_dest_label.modulate         = Color(1.0, 0.84, 0.20)
+	_dest_label.outline_modulate = Color(0.04, 0.04, 0.04, 0.85)
+	_dest_target.add_child(_dest_label)
 
 
 func _wire_kinematic_parts() -> void:
@@ -587,7 +622,8 @@ func _update_snap_ghost() -> void:
 	if _snap_ghost == null or _hook == null:
 		return
 	if _carried_pallet == null:
-		_hide_ghost()
+		_hide_snap_ghost()
+		_hide_dest_target()
 		return
 
 	var hook_pos := _hook.global_position
@@ -595,6 +631,7 @@ func _update_snap_ghost() -> void:
 	var xz_r2 := release_xz_range_m * release_xz_range_m
 
 	var pallet_res: Pallet = _carried_pallet.get("pallet") as Pallet
+	_update_destination_target(pallet_res)
 
 	# 1. Delivery — apron deck whose port_id matches pallet.destination_port_id.
 	for node in get_tree().get_nodes_in_group(CargoDeckComponent.DECK_GROUP):
@@ -609,9 +646,9 @@ func _update_snap_ghost() -> void:
 		if cell_pos_d == Vector3.INF:
 			cell_pos_d = deck.global_position
 		var reward := pallet_res.value_gold if pallet_res != null else 0
-		_show_ghost(cell_pos_d + Vector3(0.0, 0.05, 0.0),
-				Color(1.0, 0.85, 0.20),
-				"DELIVER  +%d ℳ" % reward,
+		_show_ghost(cell_pos_d, deck.global_basis,
+				Color(1.0, 0.84, 0.20),
+				"+%d ℳ" % reward,
 				true)
 		return
 
@@ -627,46 +664,95 @@ func _update_snap_ghost() -> void:
 		var cell_pos := deck.get_nearest_free_cell_world(hook_pos)
 		if cell_pos == Vector3.INF:
 			continue
-		_show_ghost(cell_pos + Vector3(0.0, 0.05, 0.0),
+		_show_ghost(cell_pos, deck.global_basis,
 				Color(0.30, 0.95, 0.45),
-				"PLACE",
+				"",
 				false)
 		return
 
 	# 3. No valid target.
-	_hide_ghost()
+	_hide_snap_ghost()
 
 
-func _show_ghost(pos: Vector3, color: Color, label_text: String, is_delivery: bool) -> void:
+func _show_ghost(pos: Vector3, deck_basis: Basis, color: Color, label_text: String, is_delivery: bool) -> void:
 	_snap_ghost.visible = true
-	_snap_ghost.global_position = pos
+	# Match the deck's orientation so the ghost aligns with the cell, not world axes.
+	_snap_ghost.global_transform = Transform3D(deck_basis.orthonormalized(), pos + Vector3(0.0, 0.05, 0.0))
 
-	# Pulse the ghost — sharper when it's a delivery target.
-	_snap_phase = fmod(_snap_phase + get_process_delta_time() * 4.0, TAU)
-	var pulse := 0.65 + 0.35 * sin(_snap_phase)
+	_snap_phase = fmod(_snap_phase + get_process_delta_time() * 3.0, TAU)
+	var pulse := 0.5 + 0.5 * sin(_snap_phase)
 
-	_snap_ghost_mat.albedo_color = Color(color.r, color.g, color.b, 0.45)
+	_snap_ghost_mat.albedo_color = Color(color.r, color.g, color.b, 0.40)
 	_snap_ghost_mat.emission_enabled = true
 	_snap_ghost_mat.emission = color
-	_snap_ghost_mat.emission_energy_multiplier = (1.2 + pulse * 1.8) if is_delivery else 1.2
-
-	# Delivery ghost grows ~1.7×; place ghost stays a tight 1.3 m square.
-	var scale_xy := 1.6 + pulse * 0.25 if is_delivery else 1.0
-	_snap_ghost.scale = Vector3(scale_xy, 1.0, scale_xy)
+	_snap_ghost_mat.emission_energy_multiplier = (0.8 + pulse * 0.9) if is_delivery else 0.6
 
 	if _snap_label != null:
-		_snap_label.visible  = true
-		_snap_label.text     = label_text
-		_snap_label.position = Vector3(0.0, 1.6 + pulse * 0.15, 0.0)
-		_snap_label.modulate = color if is_delivery else Color(0.85, 1.0, 0.92)
+		if label_text.is_empty():
+			_snap_label.visible = false
+		else:
+			_snap_label.visible  = true
+			_snap_label.text     = label_text
+			_snap_label.position = Vector3(0.0, 1.05, 0.0)
+			_snap_label.modulate = color
 
 
-func _hide_ghost() -> void:
+func _hide_snap_ghost() -> void:
 	if _snap_ghost != null:
 		_snap_ghost.visible = false
-		_snap_ghost.scale   = Vector3.ONE
 	if _snap_label != null:
 		_snap_label.visible = false
+
+
+# ── Destination target (persistent while carrying matching pallet) ────────────
+
+func _update_destination_target(pallet_res: Pallet) -> void:
+	if pallet_res == null or pallet_res.destination_port_id.is_empty():
+		_hide_dest_target()
+		return
+
+	# Find the apron deck whose port_id matches the pallet's destination.
+	var best: CargoDeckComponent = null
+	for node in get_tree().get_nodes_in_group(CargoDeckComponent.DECK_GROUP):
+		var deck := node as CargoDeckComponent
+		if deck != null and deck.accepts_delivery(pallet_res):
+			best = deck
+			break
+
+	if best == null:
+		_hide_dest_target()
+		return
+
+	var cell_pos := best.get_nearest_free_cell_world(_hook.global_position)
+	if cell_pos == Vector3.INF:
+		cell_pos = best.global_position
+
+	_dest_target.visible = true
+	_dest_target.global_transform = Transform3D(
+		best.global_basis.orthonormalized(),
+		cell_pos + Vector3(0.0, 0.06, 0.0),
+	)
+
+	# Bigger, slower pulse than the under-hook snap-ghost so they read as
+	# separate things from a distance.
+	var dphase := fmod(_snap_phase * 0.5, TAU)
+	var dp := 0.5 + 0.5 * sin(dphase)
+	_dest_target_mat.albedo_color = Color(1.0, 0.84, 0.20, 0.35 + dp * 0.25)
+	_dest_target_mat.emission_enabled = true
+	_dest_target_mat.emission = Color(1.0, 0.84, 0.20)
+	_dest_target_mat.emission_energy_multiplier = 1.0 + dp * 1.5
+
+	if _dest_label != null:
+		_dest_label.visible  = true
+		_dest_label.text     = "DELIVER"
+		_dest_label.position = Vector3(0.0, 1.4 + dp * 0.15, 0.0)
+
+
+func _hide_dest_target() -> void:
+	if _dest_target != null:
+		_dest_target.visible = false
+	if _dest_label != null:
+		_dest_label.visible = false
 
 
 # ── Pickup highlight ──────────────────────────────────────────────────────────
@@ -874,7 +960,8 @@ func _exit_crane() -> void:
 	# leaves. They (or another operator) must re-board and position over a
 	# valid drop target. This prevents cargo being lost over the water.
 	_clear_highlight()
-	_hide_ghost()
+	_hide_snap_ghost()
+	_hide_dest_target()
 	if _camera != null:
 		_camera.set_enabled(false)
 	Input.mouse_mode = _prev_mouse_mode
