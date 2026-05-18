@@ -3,12 +3,12 @@
 importer="wav"
 type="AudioStreamWAV"
 uid="uid://b2aceirmd32tu"
-path="res://.godot/imported/hook_top.wav-40b862822b700398cf50ab0d357fd7de.sample"
+path="res://.godot/imported/hook_top.wav-bedfbb90af6a1442ecf0db7884046685.sample"
 
 [deps]
 
 source_file="res://resources/audio/normal/crane/hook_top.wav"
-dest_files=["res://.godot/imported/hook_top.wav-40b862822b700398cf50ab0d357fd7de.sample"]
+dest_files=["res://.godot/imported/hook_top.wav-bedfbb90af6a1442ecf0db7884046685.sample"]
 
 [params]
 

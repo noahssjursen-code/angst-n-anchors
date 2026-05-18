@@ -3,12 +3,12 @@
 importer="wav"
 type="AudioStreamWAV"
 uid="uid://bf6yv0bncrv8b"
-path="res://.godot/imported/hook_bottom.wav-30e6315ef9896867a4073f69716a965a.sample"
+path="res://.godot/imported/hook_bottom.wav-e9a78394645ef80074dfb10a4cde2745.sample"
 
 [deps]
 
 source_file="res://resources/audio/normal/crane/hook_bottom.wav"
-dest_files=["res://.godot/imported/hook_bottom.wav-30e6315ef9896867a4073f69716a965a.sample"]
+dest_files=["res://.godot/imported/hook_bottom.wav-e9a78394645ef80074dfb10a4cde2745.sample"]
 
 [params]
 

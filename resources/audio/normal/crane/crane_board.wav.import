@@ -3,12 +3,12 @@
 importer="wav"
 type="AudioStreamWAV"
 uid="uid://crwfs6ethdkh1"
-path="res://.godot/imported/crane_board.wav-0759e5f2813f76c397b7368fedafb1fc.sample"
+path="res://.godot/imported/crane_board.wav-a2cb00cf45208ec7e9c5ff00742af296.sample"
 
 [deps]
 
 source_file="res://resources/audio/normal/crane/crane_board.wav"
-dest_files=["res://.godot/imported/crane_board.wav-0759e5f2813f76c397b7368fedafb1fc.sample"]
+dest_files=["res://.godot/imported/crane_board.wav-a2cb00cf45208ec7e9c5ff00742af296.sample"]
 
 [params]
 

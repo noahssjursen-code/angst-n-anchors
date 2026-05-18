@@ -3,12 +3,12 @@
 importer="wav"
 type="AudioStreamWAV"
 uid="uid://xm1p57akmxmx"
-path="res://.godot/imported/chain_release.wav-e9f7f4fd32d818ea5e6f74ac96448df4.sample"
+path="res://.godot/imported/chain_release.wav-641b5cd555e234f54aacb00934cced36.sample"
 
 [deps]
 
 source_file="res://resources/audio/normal/crane/chain_release.wav"
-dest_files=["res://.godot/imported/chain_release.wav-e9f7f4fd32d818ea5e6f74ac96448df4.sample"]
+dest_files=["res://.godot/imported/chain_release.wav-641b5cd555e234f54aacb00934cced36.sample"]
 
 [params]
 
