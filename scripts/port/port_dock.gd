@@ -259,7 +259,10 @@ func _build_berth_slot(index: int, cx: float, slot_w: float, ship_beam: float, c
 func _crane_general(index: int, cx: float, slot_w: float, crane_z: float) -> void:
 	var crane                 := GantryCrane.new()
 	crane.name                = "Crane%d" % index
-	crane.position            = Vector3(cx, QUAY_HEIGHT, crane_z)
+	# Crane sits inland of the quay slab — on island ground (Y=0), not on the
+	# quay's elevated surface. Rails then end up flush with the apron pad
+	# (also on island ground).
+	crane.position            = Vector3(cx, 0.0, crane_z)
 	# Rails extend past the leg base on each side; rail must fit inside the
 	# berth slot. APRON_REACH_INSET captures this margin and is reused by the
 	# apron-pad sizing and pallet spawn grid so they all stay aligned.
