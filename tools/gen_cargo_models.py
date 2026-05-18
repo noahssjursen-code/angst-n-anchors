@@ -265,26 +265,30 @@ def make_barrel() -> None:
     dump("provisions_barrel.json", {"name": "provisions_barrel", "parts": parts})
 
 
-def make_sack() -> None:
-    """Burlap sack with a clearly cinched neck + knot. 8-sided prisms for a
-    softer, more fabric-like silhouette than 6-sided would give."""
-    burlap = [0.78, 0.65, 0.42]
-    rope   = [0.42, 0.28, 0.16]
+def make_chest() -> None:
+    """Wooden trading chest with iron straps + lock — low, wide, distinctive
+    silhouette unlike barrel / crate / amphora."""
+    wood = [0.55, 0.38, 0.22]
+    iron = [0.20, 0.17, 0.14]
+    w, h, d = 0.85, 0.32, 0.55
     parts = [
-        # Wide sagging base
-        part("base",     prism_mesh(0.30, 0.44, 0.10, 0.00, sides=8), burlap, (0, 0, 0)),
-        # Widest belly
-        part("belly",    prism_mesh(0.44, 0.44, 0.18, 0.10, sides=8), burlap, (0, 0, 0)),
-        # Shoulder narrows toward the cinch
-        part("shoulder", prism_mesh(0.44, 0.16, 0.18, 0.28, sides=8),
-             [c * 0.93 for c in burlap], (0, 0, 0)),
-        # Very narrow neck — the cinch
-        part("neck",     prism_mesh(0.10, 0.08, 0.04, 0.46, sides=8),
-             [c * 0.85 for c in burlap], (0, 0, 0)),
-        # Knot on top (gathered fabric tied off — wider than the neck)
-        part("knot",     prism_mesh(0.18, 0.12, 0.07, 0.50, sides=8), rope, (0, 0, 0)),
+        # Lower body
+        part("body", box_mesh(w, h, d), wood, (0, 0, 0)),
+        # Slightly raised lid (flat slab on top, overhangs the body a touch)
+        part("lid",  box_mesh(w + 0.03, 0.08, d + 0.03),
+             [c * 0.9 for c in wood], (0, h, 0)),
+        # Three iron straps wrapping front-to-back across the body + lid
+        part("strap_l", box_mesh(0.05, h + 0.12, d + 0.04), iron,
+             (-w * 0.35, h * 0.5, 0), roughness=0.45, metallic=0.6),
+        part("strap_r", box_mesh(0.05, h + 0.12, d + 0.04), iron,
+             ( w * 0.35, h * 0.5, 0), roughness=0.45, metallic=0.6),
+        part("strap_c", box_mesh(0.05, h + 0.12, d + 0.04), iron,
+             ( 0.0,      h * 0.5, 0), roughness=0.45, metallic=0.6),
+        # Lock plate centred on the front face
+        part("lock", box_mesh(0.12, 0.11, 0.03), iron,
+             (0, h * 0.65, d * 0.5), roughness=0.45, metallic=0.6),
     ]
-    dump("provisions_sack.json", {"name": "provisions_sack", "parts": parts})
+    dump("provisions_chest.json", {"name": "provisions_chest", "parts": parts})
 
 
 def make_amphora() -> None:
@@ -320,6 +324,6 @@ if __name__ == "__main__":
         make_pallet(*fp)
     make_produce_pile()
     make_barrel()
-    make_sack()
+    make_chest()
     make_amphora()
     print("Done.")
