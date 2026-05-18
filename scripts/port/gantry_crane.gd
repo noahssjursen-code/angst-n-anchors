@@ -610,12 +610,16 @@ func _update_carried_pallet() -> void:
 		if _rigging != null:
 			_rigging.detach_all()
 		return
-	# Fully attached: pallet rides under the hook. Rotation is anchored to
-	# the basis the pallet had at pickup (apron orientation, ship deck
-	# orientation, etc.) and Q applies a fixed 90° twist relative to that
-	# baseline. Carrying it across other decks doesn't snap it around.
+	# Fully attached: pallet rides under the hook. Basis tracks whichever
+	# deck the hook is directly over (so the carried pallet always matches
+	# how it will land). Over empty space (no deck contains hook), keep the
+	# last seen basis — never falls back to world axes mid-air, which is
+	# what caused the previous flip-flop.
 	if _rigging.attached_count() >= CraneRigging.MAX_CHAINS:
 		var hp := _hook.global_position
+		var deck_basis := _deck_under_hook_basis(hp)
+		if deck_basis != Basis.IDENTITY:
+			_carry_baseline_basis = deck_basis
 		var oriented := _carry_baseline_basis
 		if _carry_rotated:
 			oriented = oriented.rotated(Vector3.UP, PI * 0.5)
@@ -623,6 +627,17 @@ func _update_carried_pallet() -> void:
 			oriented,
 			Vector3(hp.x, hp.y - 1.4, hp.z),
 		)
+
+
+## Returns the basis of whichever deck the hook is currently above. Returns
+## IDENTITY when no deck claims the hook (open water, etc.) — caller treats
+## that as "keep last basis".
+func _deck_under_hook_basis(hook_pos: Vector3) -> Basis:
+	for node in get_tree().get_nodes_in_group(CargoDeckComponent.DECK_GROUP):
+		var deck := node as CargoDeckComponent
+		if deck != null and deck.contains_world_point(hook_pos):
+			return deck.global_basis.orthonormalized()
+	return Basis.IDENTITY
 
 
 # ── Beacon ────────────────────────────────────────────────────────────────────
