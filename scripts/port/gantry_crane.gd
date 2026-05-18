@@ -43,10 +43,11 @@ static var _seated_count: int = 0
 
 ## Hoist limits — how far the hook hangs below the trolley.
 ## Trolley sits at world Y ≈ 17.22 (quay 0.6 + rails 0.12 + model 16.5);
-## max drop 16.5 m bottoms the hook at world Y ≈ 0.72, just above the
-## asphalt (Y=0.6) and within easy pickup range of pallet sockets at Y≈0.78.
+## hook mesh extends 0.35 m below its origin, so max drop 16.1 m bottoms
+## the visual hook at world Y ≈ 0.77 — sits cleanly above the asphalt
+## (Y=0.6) while still within pickup range of pallet sockets at Y≈0.78.
 @export var hoist_min_drop: float = 1.0
-@export var hoist_max_drop: float = 16.5
+@export var hoist_max_drop: float = 16.1
 
 ## How close (XZ) the hook must be to a pallet's center to engage chains.
 ## Tight so the player must position the trolley right over the pallet.
