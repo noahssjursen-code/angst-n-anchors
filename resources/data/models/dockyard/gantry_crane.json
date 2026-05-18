@@ -93,8 +93,8 @@
     },
     {
       "name": "trolley_rail",
-      "_doc": "Long beam along Z that trolley rides on. Cantilevers heavily in -Z (toward water).",
-      "mesh": { "vertices": [-0.6,-0.55,-40.0, 0.6,-0.55,-40.0, 0.6,0.55,-40.0, -0.6,0.55,-40.0, -0.6,-0.55,8.0, 0.6,-0.55,8.0, 0.6,0.55,8.0, -0.6,0.55,8.0],
+      "_doc": "Long beam along Z. Cantilevers over water (-Z, ship berth) and over apron (+Z, pallet staging).",
+      "mesh": { "vertices": [-0.6,-0.55,-30.0, 0.6,-0.55,-30.0, 0.6,0.55,-30.0, -0.6,0.55,-30.0, -0.6,-0.55,22.0, 0.6,-0.55,22.0, 0.6,0.55,22.0, -0.6,0.55,22.0],
                 "indices": [0,1,5,0,5,4, 3,7,6,3,6,2, 0,3,2,0,2,1, 4,5,6,4,6,7, 0,4,7,0,7,3, 1,2,6,1,6,5] },
       "role": "trolley_rail",
       "position": [0.0, 17.2, 0.0],
