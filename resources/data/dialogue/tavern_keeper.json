@@ -1,0 +1,35 @@
+{
+  "title": "TAVERN KEEPER",
+  "entry": "main",
+  "screens": {
+    "main": {
+      "quote": "Welcome to the Sailor's Rest, Captain. Take a load off — what'll it be?",
+      "options": [
+        {"label": "What's the news?",              "goto":   "news"},
+        {"label": "Heard any rumours of late?",    "goto":   "rumours"},
+        {"label": "I'll buy a round for the house.", "action": "buy_round", "enabled_if": "has_coin"},
+        {"label": "Goodbye.",                      "action": "close"}
+      ]
+    },
+    "news": {
+      "quote": "The weather's been foul off the western capes. Two coasters limped back into Harberg last week with snapped masts. Captains are paying handsome for safe crews.",
+      "options": [
+        {"label": "Anything else?", "goto": "news_more"},
+        {"label": "← Back",         "goto": "main"}
+      ]
+    },
+    "news_more": {
+      "quote": "Customs at Ostervik have been turning over every grain sack. Word is someone tried to slip contraband through. Wouldn't go that way if you're carrying anything... interesting.",
+      "options": [
+        {"label": "← Back to news", "goto": "news"},
+        {"label": "← Main",         "goto": "main"}
+      ]
+    },
+    "rumours": {
+      "quote": "Old Sigrid swears she saw a square-rigger near Vargnes flying no colours. Probably nothing. Probably.",
+      "options": [
+        {"label": "← Back", "goto": "main"}
+      ]
+    }
+  }
+}
