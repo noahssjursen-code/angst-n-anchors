@@ -181,40 +181,70 @@ def maxi_py(a: int, b: int) -> int:
 
 
 def make_produce_pile() -> None:
-    """Pile of round produce (cabbages / melons). Two rows of squat
-    hex-spheres in cabbage green — no stack-of-cylinders silhouette so it
-    can't read as a barrel."""
-    skin   = [0.50, 0.66, 0.30]   # cabbage green
+    """Open wooden crate filled with round produce (cabbages / melons).
+    Slatted wood frame around six green hex-sphere heads."""
+    wood   = [0.55, 0.38, 0.22]
+    dark   = [c * 0.70 for c in wood]
+    skin   = [0.50, 0.66, 0.30]
     leaves = [0.36, 0.50, 0.20]
+
+    crate_w = 1.05
+    crate_d = 1.05
+    crate_h = 0.45
+    post_t  = 0.07
+    rail_t  = 0.06
+    hw, hd = crate_w / 2.0, crate_d / 2.0
+
+    parts: list[dict] = []
+
+    # 4 corner posts (vertical)
+    for i, (ox, oz) in enumerate([(-hw, -hd), (hw, -hd), (-hw, hd), (hw, hd)]):
+        parts.append(part(
+            f"post_{i}",
+            box_mesh(post_t, crate_h, post_t),
+            wood, (ox, 0.0, oz),
+        ))
+
+    # Top + bottom + mid horizontal rails around the perimeter (X and Z axes)
+    side_t = post_t * 0.9
+    rail_lengths = [(crate_w, rail_t, side_t), (side_t, rail_t, crate_d)]
+    for y_label, ry in [("bot", 0.0), ("mid", crate_h * 0.5 - rail_t * 0.5), ("top", crate_h - rail_t)]:
+        parts.append(part(f"rail_{y_label}_front",
+                          box_mesh(*rail_lengths[0]), dark, (0, ry, -hd)))
+        parts.append(part(f"rail_{y_label}_back",
+                          box_mesh(*rail_lengths[0]), dark, (0, ry,  hd)))
+        parts.append(part(f"rail_{y_label}_left",
+                          box_mesh(*rail_lengths[1]), dark, (-hw, ry, 0)))
+        parts.append(part(f"rail_{y_label}_right",
+                          box_mesh(*rail_lengths[1]), dark, ( hw, ry, 0)))
+
+    # Bottom deck so produce isn't floating between rails.
+    parts.append(part("floor",
+                      box_mesh(crate_w - 0.04, rail_t, crate_d - 0.04),
+                      wood, (0, 0.03, 0)))
+
+    # Cabbages — sit on the floor; bottom row of 4, top row of 2.
     r = 0.20
     h = 0.22
-    bottoms = [(-0.28, -0.28), ( 0.28, -0.28), (-0.28,  0.28), ( 0.28,  0.28)]
-    tops    = [(-0.15,  0.0),  ( 0.15,  0.0)]
-    parts: list[dict] = []
+    base_y = rail_t + 0.04
+    bottoms = [(-0.25, -0.25), ( 0.25, -0.25), (-0.25,  0.25), ( 0.25,  0.25)]
+    tops    = [(-0.12, 0.0),   ( 0.12, 0.0)]
     for i, (ox, oz) in enumerate(bottoms):
-        parts.append(part(
-            f"head_{i}",
-            prism_mesh(r, r * 0.55, h, 0.0, sides=6),
-            skin, (ox, 0.0, oz),
-        ))
-        # Tiny darker cap (stem)
-        parts.append(part(
-            f"stem_{i}",
-            prism_mesh(r * 0.45, r * 0.20, 0.05, h - 0.02, sides=6),
-            leaves, (ox, 0.0, oz),
-        ))
+        parts.append(part(f"head_b{i}",
+                          prism_mesh(r, r * 0.55, h, base_y, sides=6),
+                          skin, (ox, 0, oz)))
+        parts.append(part(f"stem_b{i}",
+                          prism_mesh(r * 0.45, r * 0.20, 0.05, base_y + h - 0.02, sides=6),
+                          leaves, (ox, 0, oz)))
     for i, (ox, oz) in enumerate(tops):
-        y = h + 0.02
-        parts.append(part(
-            f"head_top_{i}",
-            prism_mesh(r, r * 0.55, h, y, sides=6),
-            skin, (ox, 0.0, oz),
-        ))
-        parts.append(part(
-            f"stem_top_{i}",
-            prism_mesh(r * 0.45, r * 0.20, 0.05, y + h - 0.02, sides=6),
-            leaves, (ox, 0.0, oz),
-        ))
+        y = base_y + h + 0.02
+        parts.append(part(f"head_t{i}",
+                          prism_mesh(r, r * 0.55, h, y, sides=6),
+                          skin, (ox, 0, oz)))
+        parts.append(part(f"stem_t{i}",
+                          prism_mesh(r * 0.45, r * 0.20, 0.05, y + h - 0.02, sides=6),
+                          leaves, (ox, 0, oz)))
+
     dump("provisions_produce_pile.json",
          {"name": "provisions_produce_pile", "parts": parts})
 
