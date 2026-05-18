@@ -18,11 +18,6 @@ extends NpcBase
 ## `PortFacilities.position` within the port plot.
 @export var anchor_offset: Vector3 = Vector3.ZERO
 
-## Tiny vertical body-bob amplitude. The leg cycle does most of the visual
-## work now — this just adds a touch of bounce so the spine doesn't look
-## glued to a rail.
-const BOB_AMPLITUDE : float = 0.025
-
 var _anim: WalkAnimator
 
 
@@ -66,8 +61,8 @@ func _process(_delta: float) -> void:
 	var dist  := speed * t
 	if _anim != null and _anim.is_ready():
 		_anim.update(dist)
-	# Small body bob — riding on top of the leg cycle.
-	var bob := sin(dist * WalkAnimator.CYCLES_PER_M * TAU * 2.0) * BOB_AMPLITUDE
-	xform.origin   += anchor_offset
-	xform.origin.y += bob
+	# No body bob — a symmetric sine sinks the walker (and its feet) below
+	# ground on the negative half. Re-add later as a non-positive offset
+	# (only ever DOWN from neutral) if the spine feels too rigid.
+	xform.origin += anchor_offset
 	transform = xform
