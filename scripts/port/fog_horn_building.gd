@@ -21,6 +21,19 @@ func _ready() -> void:
 	_ensure_fog_horn()
 
 func _build() -> void:
+	# In editor: if a FogHornModel already exists (baked into a parent
+	# scene's saved tree, e.g. world.tscn), leave it alone. Rebuilding it on
+	# every open would destroy the baked node and create a fresh one with a
+	# different identity, marking the parent scene "unsaved" the instant it
+	# loads — and the next save would bake the new one, triggering the same
+	# churn on the next open. Editor preview still works because the baked
+	# model is the real model.
+	if Engine.is_editor_hint():
+		var existing := get_node_or_null("FogHornModel") as ModelAssembler
+		if existing != null:
+			assembler = existing
+			return
+
 	if assembler != null:
 		assembler.queue_free()
 
