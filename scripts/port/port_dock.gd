@@ -215,7 +215,7 @@ func _build_berth_slot(index: int, cx: float, slot_w: float, ship_beam: float, c
 	match cargo_type:
 		CargoBerthType.Type.BULK:      _crane_bulk(index, cx, crane_z)
 		CargoBerthType.Type.CONTAINER: _crane_container(index, cx, slot_w, crane_z)
-		_:                             _crane_general(index, cx, crane_z)
+		_:                             _crane_general(index, cx, slot_w, crane_z)
 
 	_box(Vector3(slot_w - 0.4, 0.12, APRON_DEPTH),
 		 Vector3(cx, 0.06, apron_z), C_CARGO_YARD, "Apron%d" % index)
@@ -223,10 +223,12 @@ func _build_berth_slot(index: int, cx: float, slot_w: float, ship_beam: float, c
 
 # ── Crane types ───────────────────────────────────────────────────────────────
 
-func _crane_general(index: int, cx: float, crane_z: float) -> void:
-	var crane     := GantryCrane.new()
-	crane.name    = "Crane%d" % index
-	crane.position = Vector3(cx, QUAY_HEIGHT, crane_z)
+func _crane_general(index: int, cx: float, slot_w: float, crane_z: float) -> void:
+	var crane                 := GantryCrane.new()
+	crane.name                = "Crane%d" % index
+	crane.position            = Vector3(cx, QUAY_HEIGHT, crane_z)
+	# Gantry rolls within its berth slot, with a small margin from the neighbors.
+	crane.gantry_roll_range_x = maxf(slot_w * 0.5 - 1.5, 1.0)
 	add_child(crane)
 	if Engine.is_editor_hint() and get_tree() != null:
 		var esc := get_tree().edited_scene_root

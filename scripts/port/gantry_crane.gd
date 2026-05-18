@@ -90,6 +90,8 @@ func _exit_tree() -> void:
 # ── Build ─────────────────────────────────────────────────────────────────────
 
 func _build() -> void:
+	_build_rails()
+
 	_gantry_frame = Node3D.new()
 	_gantry_frame.name = "GantryFrame"
 	add_child(_gantry_frame)
@@ -109,6 +111,54 @@ func _build() -> void:
 		_build_rigging.call_deferred()
 		_build_camera.call_deferred()
 		_build_ui()
+
+
+func _build_rails() -> void:
+	# Two parallel rails on the ground showing where the gantry travels.
+	# The legs sit at X=±2.5 in the gantry frame; the frame slides ±roll_range,
+	# so the gantry's X sweep is (-roll_range - 2.5) … (+roll_range + 2.5).
+	# We pad each end by 0.6 m for visual end stops.
+	var sweep_half := gantry_roll_range_x + 2.5
+	var rail_len   := (sweep_half + 0.6) * 2.0
+	var rail_z     := 2.5
+	var rail_color := Color(0.12, 0.12, 0.13)
+	var stop_color := Color(0.95, 0.78, 0.10)
+
+	for sign_z in [-1.0, 1.0]:
+		var rail := MeshInstance3D.new()
+		rail.name = "Rail_" + ("F" if sign_z > 0 else "B")
+		var mesh := BoxMesh.new()
+		mesh.size = Vector3(rail_len, 0.12, 0.32)
+		rail.mesh = mesh
+		rail.position = Vector3(0.0, 0.06, rail_z * sign_z)
+		rail.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		var mat := StandardMaterial3D.new()
+		mat.albedo_color = rail_color
+		mat.roughness = 0.8
+		rail.material_override = mat
+		add_child(rail)
+		if Engine.is_editor_hint() and get_tree() != null and get_tree().edited_scene_root != null:
+			rail.owner = get_tree().edited_scene_root
+
+		# Yellow end stops at each end of the rail.
+		for sign_x in [-1.0, 1.0]:
+			var stop := MeshInstance3D.new()
+			stop.name = "RailStop_%s_%s" % [
+				"L" if sign_x < 0 else "R",
+				"B" if sign_z < 0 else "F",
+			]
+			var smesh := BoxMesh.new()
+			smesh.size = Vector3(0.5, 0.55, 0.55)
+			stop.mesh = smesh
+			stop.position = Vector3(sign_x * (sweep_half + 0.35), 0.28, rail_z * sign_z)
+			stop.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+			var smat := StandardMaterial3D.new()
+			smat.albedo_color = stop_color
+			smat.roughness = 0.6
+			stop.material_override = smat
+			add_child(stop)
+			if Engine.is_editor_hint() and get_tree() != null and get_tree().edited_scene_root != null:
+				stop.owner = get_tree().edited_scene_root
 
 
 func _wire_kinematic_parts() -> void:
