@@ -754,8 +754,10 @@ func _try_release() -> void:
 				_consume_pallet()
 				return
 
-	# 3) Drop in place
-	_drop_in_place()
+	# 3) No valid target — silently refuse. Pallet keeps hanging so the
+	#    player must position over the apron, ship deck, or delivery zone.
+	#    The HUD's hint line already reflects the lack of a snap target.
+	return
 
 
 func _consume_pallet() -> void:
@@ -824,8 +826,9 @@ func _enter_crane() -> void:
 
 func _exit_crane() -> void:
 	_occupied = false
-	if _carried_pallet != null:
-		_drop_in_place()
+	# Note: a carried pallet stays attached to the hook when the operator
+	# leaves. They (or another operator) must re-board and position over a
+	# valid drop target. This prevents cargo being lost over the water.
 	_clear_highlight()
 	if _snap_ghost != null:
 		_snap_ghost.visible = false
@@ -862,7 +865,10 @@ func _update_hud() -> void:
 		return
 	var hint := ""
 	if _carried_pallet != null:
-		hint = "[E] release pallet over destination"
+		if _snap_ghost != null and _snap_ghost.visible:
+			hint = "[E] release here"
+		else:
+			hint = "No drop target below — move over apron, ship deck, or delivery zone"
 	elif _highlighted_pallet != null:
 		hint = "[E] engage chains"
 	else:
