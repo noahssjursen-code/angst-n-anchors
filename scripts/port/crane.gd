@@ -395,8 +395,8 @@ func _build_camera() -> void:
 	# top-down-ish view of the hook and the landing zone below it.
 	_crane_cam                  = Camera3D.new()
 	_crane_cam.name             = "CraneCam"
-	_crane_cam.position         = Vector3(boom_reach * 0.55, 1.5, 0.0)
-	_crane_cam.rotation_degrees = Vector3(-65.0, -90.0, 0.0)
+	_crane_cam.position         = Vector3(boom_reach * 0.55, -1.0, 0.0)
+	_crane_cam.rotation_degrees = Vector3(-60.0, -90.0, 0.0)
 	_crane_cam.current          = false
 	_slew_arm.add_child(_crane_cam)
 
