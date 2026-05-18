@@ -658,10 +658,10 @@ func _weather_grid() -> Dictionary:
 						maxf(span_x / float(WX_MAX_CELLS_X),
 							 span_z / float(WX_MAX_CELLS_Y)))
 	# Snap origin to the world-space lattice. Cells stay anchored when panning.
-	var wx0 := floor(_wx_min / cell_m) * cell_m
-	var wz0 := floor(_wz_min / cell_m) * cell_m
-	var cols := int(ceil((_wx_max - wx0) / cell_m))
-	var rows := int(ceil((_wz_max - wz0) / cell_m))
+	var wx0  : float = floorf(_wx_min / cell_m) * cell_m
+	var wz0  : float = floorf(_wz_min / cell_m) * cell_m
+	var cols : int   = int(ceilf((_wx_max - wx0) / cell_m))
+	var rows : int   = int(ceilf((_wz_max - wz0) / cell_m))
 	cols = clampi(cols, 1, WX_MAX_CELLS_X + 2)
 	rows = clampi(rows, 1, WX_MAX_CELLS_Y + 2)
 	return {
