@@ -13,10 +13,19 @@ extends Node3D
 
 const GROUP := "pallet_node"
 
-const MODEL_PALLET_SECTION  := "res://resources/data/models/cargo/pallet_section.json"
+## One pallet JSON per canonical footprint shape. Other orientations
+## (e.g. 2×1, 3×2) load the smaller-dim-first variant and rotate 90° at
+## instantiation.
+const PALLET_MODELS := {
+	Vector2i(1, 1): "res://resources/data/models/cargo/pallet_1x1.json",
+	Vector2i(1, 2): "res://resources/data/models/cargo/pallet_1x2.json",
+	Vector2i(2, 2): "res://resources/data/models/cargo/pallet_2x2.json",
+	Vector2i(2, 3): "res://resources/data/models/cargo/pallet_2x3.json",
+}
+
 const MODEL_PROVISIONS := [
-	"res://resources/data/models/cargo/provisions_crate.json",
 	"res://resources/data/models/cargo/provisions_barrel.json",
+	"res://resources/data/models/cargo/provisions_barrel_stack.json",
 	"res://resources/data/models/cargo/provisions_sack.json",
 	"res://resources/data/models/cargo/provisions_amphora.json",
 ]
@@ -200,20 +209,20 @@ func _spawn_model(model_path: String, local_pos: Vector3) -> ModelAssembler:
 	return node
 
 
-# ── Pallet base — tile pallet_section.json across the footprint ───────────────
+# ── Pallet base — one model per footprint, optionally rotated 90° ────────────
 
 func _build_pallet_base() -> void:
 	if pallet == null:
 		return
-	var fp_w := maxi(pallet.footprint.x, 1)
-	var fp_h := maxi(pallet.footprint.y, 1)
-	var cell_real_w := cell_w / float(fp_w)
-	var cell_real_d := cell_d / float(fp_h)
-	for row in fp_h:
-		for col in fp_w:
-			var lx := -cell_w * 0.5 + cell_real_w * (float(col) + 0.5)
-			var lz := -cell_d * 0.5 + cell_real_d * (float(row) + 0.5)
-			_spawn_model(MODEL_PALLET_SECTION, Vector3(lx, 0.0, lz))
+	var fp_x := maxi(pallet.footprint.x, 1)
+	var fp_z := maxi(pallet.footprint.y, 1)
+	# Pick the canonical (small-dim, large-dim) key. If the actual footprint is
+	# wider than deep, rotate the model 90° around Y at instantiation.
+	var key := Vector2i(mini(fp_x, fp_z), maxi(fp_x, fp_z))
+	var path: String = PALLET_MODELS.get(key, PALLET_MODELS[Vector2i(1, 1)])
+	var asm := _spawn_model(path, Vector3.ZERO)
+	if asm != null and fp_x > fp_z:
+		asm.rotation.y = PI * 0.5
 
 
 # ── Per-cell cargo placement ──────────────────────────────────────────────────

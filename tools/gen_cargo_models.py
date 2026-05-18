@@ -118,38 +118,50 @@ def dump(filename: str, model: dict) -> None:
 
 # ── Models ────────────────────────────────────────────────────────────────────
 
-def make_pallet_section() -> None:
-    """Single 1×1 cell pallet section — used N×M times to tile a multi-cell pallet base."""
+def make_pallet(fp_x: int, fp_z: int) -> None:
+    """One coherent pallet at fp_x × fp_z cells (cell = 1.5 m). Deck slab on
+    top, fp_z+1 darker stringer slats below."""
     cell = 1.5
     pad = 0.1
-    w = cell - pad
+    w = cell * fp_x - pad
+    d = cell * fp_z - pad
     plank_h = 0.14
     wood = [0.55, 0.38, 0.22]
-    parts = [
-        # Top deck slab
-        part("deck", box_mesh(w, plank_h, w), wood, (0, 0, 0)),
-        # Two darker stringers underneath for visible pallet construction
-        part("stringer_l", box_mesh(w * 0.95, 0.04, 0.12),
-             [c * 0.65 for c in wood], (0, -0.04, -w * 0.35)),
-        part("stringer_r", box_mesh(w * 0.95, 0.04, 0.12),
-             [c * 0.65 for c in wood], (0, -0.04, w * 0.35)),
-    ]
-    dump("pallet_section.json", {"name": "pallet_section", "parts": parts})
+    dark = [c * 0.65 for c in wood]
+    parts = [part("deck", box_mesh(w, plank_h, d), wood, (0, 0, 0))]
+    stringer_count = fp_z + 1
+    for i in range(stringer_count):
+        z = -d / 2.0 + (i + 0.5) * (d / stringer_count)
+        parts.append(part(
+            f"stringer_{i}",
+            box_mesh(w * 0.95, 0.04, 0.12),
+            dark, (0, -0.04, z),
+        ))
+    name = f"pallet_{fp_x}x{fp_z}"
+    dump(f"{name}.json", {"name": name, "parts": parts})
 
 
-def make_crate() -> None:
-    """Wooden crate — just body + dark rim caps. Reference: gantry crane parts."""
-    w = 1.05
-    h = 0.55
-    pale = [0.66, 0.50, 0.30]
-    dark = [0.38, 0.26, 0.15]
-    parts = [
-        part("body", box_mesh(w, h, w, 0), pale, (0, 0, 0)),
-        # Thin dark rim band wrapping top + bottom (two slim boxes).
-        part("rim_bottom", box_mesh(w + 0.04, 0.05, w + 0.04, 0.0), dark, (0, 0, 0)),
-        part("rim_top",    box_mesh(w + 0.04, 0.05, w + 0.04, h - 0.05), dark, (0, 0, 0)),
-    ]
-    dump("provisions_crate.json", {"name": "provisions_crate", "parts": parts})
+def make_barrel_stack() -> None:
+    """Three small hex barrels stacked vertically — replaces the boxy crate."""
+    wood = [0.45, 0.27, 0.15]
+    hoop = [0.22, 0.18, 0.14]
+    r = 0.28
+    h = 0.22
+    parts: list[dict] = []
+    for i in range(3):
+        y = i * h
+        parts.append(part(
+            f"body_{i}",
+            prism_mesh(r, r, h, y, sides=6),
+            wood, (0, 0, 0),
+        ))
+        parts.append(part(
+            f"hoop_{i}",
+            prism_mesh(r * 1.04, r * 1.04, 0.04, y + h * 0.5 - 0.02, sides=6),
+            hoop, (0, 0, 0), roughness=0.45, metallic=0.6,
+        ))
+    dump("provisions_barrel_stack.json",
+         {"name": "provisions_barrel_stack", "parts": parts})
 
 
 def make_barrel() -> None:
@@ -210,8 +222,11 @@ def make_amphora() -> None:
 
 if __name__ == "__main__":
     print(f"Writing cargo model JSONs into {OUT_DIR}/")
-    make_pallet_section()
-    make_crate()
+    # Pallets: one per canonical footprint. Other orientations (2×1, 3×2)
+    # are these rotated 90° at instantiation time.
+    for fp in [(1, 1), (1, 2), (2, 2), (2, 3)]:
+        make_pallet(*fp)
+    make_barrel_stack()
     make_barrel()
     make_sack()
     make_amphora()
