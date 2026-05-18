@@ -19,12 +19,12 @@ extends RefCounted
 ## compute shader) we'll bake a 2D distance texture from these disks.
 
 ## Distance from shore at which waves recover to 100 %.
-const SHELTER_FALLOFF_M : float = 600.0
+const SHELTER_FALLOFF_M : float = 300.0
 
 ## Extra padding around the visual island polygon — the polygon edge is noisy
 ## (see IslandMeshBuilder.build_polygon) so we treat the disk as slightly
 ## larger than the nominal half-width.
-const ISLAND_RADIUS_PADDING_M : float = 35.0
+const ISLAND_RADIUS_PADDING_M : float = 25.0
 
 # ── Cached island disks ───────────────────────────────────────────────────────
 static var _centers_xz : PackedVector2Array = PackedVector2Array()
