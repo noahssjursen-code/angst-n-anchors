@@ -151,8 +151,34 @@ func _build_npcs() -> void:
 		sw.position = fpos + sw_local + Vector3(0.0, 0.0, -5.5)
 		add_child(sw)
 
+	_build_walkers(fpos)
+
 	if not port_id.is_empty():
 		call_deferred("_register_with_registry")
+
+
+## Spawn the port's ambient walkers. Each one is deterministic from
+## (layout_seed, npc_index), so two clients with the same world see the same
+## people walking the same loops — zero replication. Walker count scales
+## with port_size; positions are local to the port plot so the walkers move
+## with the port if it ever gets re-placed.
+func _build_walkers(facilities_pos: Vector3) -> void:
+	var count := AmbientPopulation.walker_count_for_size(port_size)
+	if count <= 0:
+		return
+	# Walker loops are anchored at the port-plot origin (where the island is
+	# centred) and sized to the island's half-width.
+	var radius := _island_width_data * 0.5
+	for i in range(count):
+		var walker := WalkingNpc.new()
+		walker.name          = "Walker_%d" % i
+		walker.port_seed     = _layout_seed_data
+		walker.npc_index     = i
+		walker.port_radius   = radius
+		# Loops are computed at the patrol origin (0,0); the walker adds this
+		# anchor each frame to land in port-plot local space.
+		walker.anchor_offset = facilities_pos
+		add_child(walker)
 
 
 func _register_with_registry() -> void:
