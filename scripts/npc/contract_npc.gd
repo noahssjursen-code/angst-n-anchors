@@ -149,16 +149,20 @@ func _make_row(contract: Contract, registry: Node, slots_free: int, ship_berthed
 	row1.add_child(btn)
 
 	# ── Row 2: pallet/footprint · stock · capacity hint
-	# Each unit = 1 cell. Layout is N pallets sized up to max_units cells each.
+	# Each unit = 1 cell. Layout: greedy fill by max_units, last pallet smaller.
 	var last_pallet_size: int = contract.quantity - (pallets_needed - 1) * max_units
+	var full_fp: Vector2i = PalletFactory.best_footprint(max_units, max_units)
+	var last_fp: Vector2i = PalletFactory.best_footprint(last_pallet_size, max_units)
 	var shape_hint := ""
 	if pallets_needed == 1:
-		shape_hint = "1 pallet · 1×%d cells" % contract.quantity
+		shape_hint = "1 pallet · %d×%d" % [last_fp.x, last_fp.y]
 	elif last_pallet_size == max_units:
-		shape_hint = "%d pallets · 1×%d each" % [pallets_needed, max_units]
+		shape_hint = "%d pallets · %d×%d each" % [pallets_needed, full_fp.x, full_fp.y]
 	else:
-		shape_hint = "%d pallets · %d × 1×%d + 1 × 1×%d" % [
-			pallets_needed, pallets_needed - 1, max_units, last_pallet_size,
+		shape_hint = "%d pallets · %d × %d×%d + 1 × %d×%d" % [
+			pallets_needed,
+			pallets_needed - 1, full_fp.x, full_fp.y,
+			last_fp.x, last_fp.y,
 		]
 	var caps_text := "%s  ·  stock %d  ·  needs %d of %d cells" % [
 		shape_hint, stock, cells_needed, ship_cells_free,

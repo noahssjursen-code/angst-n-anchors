@@ -6,8 +6,8 @@ const DEFAULT_MAX_PALLET_UNITS := 4
 
 
 ## Split a contract into Pallet resources. Each unit = 1 grid cell. A pallet
-## stretches up to max_pallet_units cells (laid out as a 1×N strip along Z),
-## then the next pallet starts.
+## stretches up to max_pallet_units cells. Footprint is the most-square
+## rectangle that fits the batch (4 → 2×2, 6 → 2×3, 5 → 2×3 with one empty).
 ##   max_units_override > 0 overrides the commodity's max_pallet_units.
 static func split(contract: Contract, max_units_override: int = 0) -> Array[Pallet]:
 	var pallets: Array[Pallet] = []
@@ -30,12 +30,41 @@ static func split(contract: Contract, max_units_override: int = 0) -> Array[Pall
 			contract.mass_per_unit_kg,
 			value_per_unit,
 		)
-		# 1×N strip: width 1 cell, length = unit count.
-		p.footprint = Vector2i(1, batch)
+		p.footprint = best_footprint(batch, max_units)
 		pallets.append(p)
 		remaining -= batch
 
 	return pallets
+
+
+## Returns the most-square (w, h) rectangle that holds at least `units` cells
+## without exceeding `max_units` cells. Ties broken by lower overfill.
+## Examples (max_units 6):
+##   1 → 1×1   2 → 1×2   3 → 2×2 (one empty)   4 → 2×2
+##   5 → 2×3 (one empty)   6 → 2×3
+## Examples (max_units 4):
+##   3 → 2×2 (one empty)   4 → 2×2
+static func best_footprint(units: int, max_units: int) -> Vector2i:
+	units = maxi(units, 1)
+	max_units = maxi(max_units, units)
+
+	var best := Vector2i(1, units)
+	var best_score := INF
+	# Width sweep is bounded by ceil(sqrt(max_units)) since beyond that any
+	# valid (w, h) is just the mirror of (h, w).
+	var w_cap := int(ceil(sqrt(float(max_units))))
+	for w in range(1, w_cap + 1):
+		var h := int(ceil(float(units) / float(w)))
+		var cells := w * h
+		if cells > max_units:
+			continue
+		var overfill := cells - units
+		# Heavy weight on squareness, plus a small penalty for empty cells.
+		var score := absi(w - h) + overfill
+		if score < best_score:
+			best_score = score
+			best = Vector2i(w, h)
+	return best
 
 
 ## How many pallets a contract will produce.
