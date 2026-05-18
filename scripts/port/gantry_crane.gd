@@ -347,37 +347,28 @@ func _build_lights() -> void:
 	if Engine.is_editor_hint() and get_tree() != null and get_tree().edited_scene_root != null:
 		bulb.owner = get_tree().edited_scene_root
 
-	# Berth number painted on the crane structure, facing the water — a fixed
-	# (non-billboarded) sign visible from the open sea. Two copies: one
-	# facing -Z (water side) and one facing +Z (land side) so the number
-	# reads from either approach. Default off-white; turns bright green when
-	# the player's ship is moored at this crane's berth.
-	_berth_number = _make_berth_sign(berth_index, Vector3(0.0, 14.0, -3.2), 180.0)
+	# Huge berth number painted on the dock in front of the crane, facing the
+	# water — readable from the open sea like an airport runway number.
+	# Sits flat on the asphalt; bright green when the player's ship is moored
+	# here, off-white otherwise.
+	_berth_number = Label3D.new()
+	_berth_number.name = "BerthNumber"
+	_berth_number.text = str(berth_index + 1) if berth_index >= 0 else "?"
+	_berth_number.font_size = 256
+	_berth_number.pixel_size = 0.030
+	_berth_number.modulate = Color(0.96, 0.92, 0.70, 1.0)
+	_berth_number.outline_modulate = Color(0.05, 0.05, 0.05, 1.0)
+	_berth_number.outline_size = 24
+	_berth_number.billboard = BaseMaterial3D.BILLBOARD_DISABLED
+	_berth_number.no_depth_test = false
+	# Flat on the dock surface, "up" of the digit pointing toward land so a
+	# ship approaching from the water reads it right-side-up.
+	_berth_number.rotation_degrees = Vector3(-90.0, 0.0, 0.0)
+	_berth_number.position = Vector3(0.0, 0.01, -7.0)
+	_berth_number.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	add_child(_berth_number)
 	if Engine.is_editor_hint() and get_tree() != null and get_tree().edited_scene_root != null:
 		_berth_number.owner = get_tree().edited_scene_root
-
-	var land_sign := _make_berth_sign(berth_index, Vector3(0.0, 14.0, 3.2), 0.0)
-	add_child(land_sign)
-	if Engine.is_editor_hint() and get_tree() != null and get_tree().edited_scene_root != null:
-		land_sign.owner = get_tree().edited_scene_root
-
-
-func _make_berth_sign(idx: int, pos: Vector3, yaw_deg: float) -> Label3D:
-	var lbl := Label3D.new()
-	lbl.name = "BerthSign"
-	lbl.text = str(idx + 1) if idx >= 0 else "?"
-	lbl.font_size = 256
-	lbl.pixel_size = 0.022
-	lbl.modulate = Color(0.95, 0.92, 0.78, 0.95)
-	lbl.outline_modulate = Color(0.05, 0.05, 0.05, 1.0)
-	lbl.outline_size = 30
-	lbl.billboard = BaseMaterial3D.BILLBOARD_DISABLED
-	lbl.no_depth_test = false
-	lbl.position = pos
-	lbl.rotation_degrees = Vector3(0.0, yaw_deg, 0.0)
-	lbl.double_sided = true
-	return lbl
 
 
 func _build_snap_ghost() -> void:
@@ -706,18 +697,15 @@ func _update_beacon(delta: float) -> void:
 	var pulse := pow(maxf(sin(_beacon_phase), 0.0), 12.0)
 	_beacon.light_energy = 0.2 + pulse * 5.0
 
-	# Update berth signs (both sides) — off-white normally, bright green
-	# when the player's ship is moored at this berth.
+	# Update the painted berth number — off-white normally, bright green
+	# when this crane's berth has the player's ship moored.
 	var was_assigned := _is_assigned
 	_is_assigned = _berth_has_ship()
-	if _is_assigned != was_assigned:
-		var col := (
+	if _is_assigned != was_assigned and _berth_number != null:
+		_berth_number.modulate = (
 			Color(0.30, 0.95, 0.45, 1.0) if _is_assigned
-			else Color(0.95, 0.92, 0.78, 0.95)
+			else Color(0.96, 0.92, 0.70, 1.0)
 		)
-		for sign in [_berth_number] + find_children("BerthSign", "", false, false):
-			if sign != null and is_instance_valid(sign) and sign is Label3D:
-				(sign as Label3D).modulate = col
 
 
 ## True when a ship is moored at this crane's berth. Reads PortDock berth
