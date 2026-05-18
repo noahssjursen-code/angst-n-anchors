@@ -31,8 +31,8 @@ signal player_exited
 @export var hoist_speed_m: float     = 3.5
 
 ## Trolley travel limits along Z (negative = toward water).
-@export var trolley_min_z: float = -10.0
-@export var trolley_max_z: float = 4.0
+@export var trolley_min_z: float = -38.0
+@export var trolley_max_z: float = 6.0
 
 ## Hoist limits (hook position Y in trolley-local space — always negative).
 @export var hoist_min_drop: float = 1.0    # hook just below trolley
