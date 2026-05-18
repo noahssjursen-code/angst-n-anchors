@@ -1,4 +1,4 @@
-[gd_scene load_steps=3 format=3 uid="uid://b8d2cargoshowcase01"]
+[gd_scene format=3 uid="uid://qdo0hef4gl5e"]
 
 [ext_resource type="Script" path="res://scripts/cargo/cargo_showcase.gd" id="1_csc"]
 
@@ -19,8 +19,8 @@ transform = Transform3D(0.866, -0.25, 0.433, 0, 0.866, 0.5, -0.5, -0.433, 0.75, 
 shadow_enabled = false
 
 [node name="Camera3D" type="Camera3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 0.766, 0.643, 0, -0.643, 0.766, 14, 18, 32)
-fov = 50.0
+transform = Transform3D(1, 0, 0, 0, 0.643, 0.766, 0, -0.766, 0.643, 14, 38, 30)
+fov = 65.0
 current = true
 
 [node name="Showcase" type="Node3D" parent="."]

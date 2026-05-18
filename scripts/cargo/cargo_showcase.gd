@@ -7,6 +7,10 @@ extends Node3D
 ## the game. Tick the `rebuild` checkbox in the inspector to refresh after any
 ## change to PalletNode visuals or ContractRegistry.COMMODITIES.
 
+## Preloaded directly so the constants resolve in @tool mode (autoload
+## singleton isn't running in the editor).
+const REGISTRY := preload("res://scripts/cargo/contract_registry.gd")
+
 const CELL_SIZE := 1.5
 const PALLET_GAP := 0.8
 const ROW_GAP    := 4.5
@@ -44,9 +48,9 @@ func _rebuild() -> void:
 	for child in get_children():
 		child.queue_free()
 
-	var commodities: Array = ContractRegistry.COMMODITIES
+	var commodities: Array = REGISTRY.COMMODITIES
 	if commodities.is_empty():
-		push_warning("CargoShowcase: ContractRegistry.COMMODITIES is empty.")
+		push_warning("CargoShowcase: COMMODITIES table is empty.")
 		return
 
 	# Pre-pass: compute the grid size so we can lay down a backing pad.
@@ -138,7 +142,7 @@ func _rebuild() -> void:
 			row_lbl.billboard   = BaseMaterial3D.BILLBOARD_ENABLED
 			row_lbl.no_depth_test = true
 			row_lbl.position    = Vector3(-1.5, LABEL_H + 0.6, z + deepest * 0.5)
-			row_lbl.modulate    = ContractRegistry.commodity_color(commodity_id)
+			row_lbl.modulate    = REGISTRY.commodity_color(commodity_id)
 			add_child(row_lbl)
 			row_lbl.owner = _scene_owner()
 
