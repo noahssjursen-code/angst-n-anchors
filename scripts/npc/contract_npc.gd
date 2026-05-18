@@ -78,11 +78,11 @@ func _refresh_list() -> void:
 
 func _make_row(contract: Contract, registry: Node, slots_free: int, ship_berthed: bool, ship_cells_free: int) -> Control:
 	# ── Data ────────────────────────────────────────────────────────────────
-	var info := registry.commodity_info(contract.commodity)
-	var color := registry.commodity_color(contract.commodity)
-	var fp_w  := int(info.get("footprint_w", 1))
-	var fp_h  := int(info.get("footprint_h", 1))
-	var upp   := int(info.get("units_per_pallet", 4))
+	var info: Dictionary = registry.commodity_info(contract.commodity)
+	var color: Color     = registry.commodity_color(contract.commodity)
+	var fp_w: int        = int(info.get("footprint_w", 1))
+	var fp_h: int        = int(info.get("footprint_h", 1))
+	var upp: int         = int(info.get("units_per_pallet", 4))
 	var pallets_needed := int(ceil(float(contract.quantity) / float(maxi(upp, 1))))
 	var cells_needed   := pallets_needed * fp_w * fp_h
 	var stock          := int(registry.get_export_stock(contract.origin_port_id, contract.commodity))
