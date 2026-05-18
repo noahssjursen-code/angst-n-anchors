@@ -140,17 +140,9 @@ func _build_npcs() -> void:
 		cnpc.position   = fpos + contract_local + Vector3(-2.0, 0.0, -5.0)
 		add_child(cnpc)
 
-	# DeliveryNpc is required at every port — even size-0 ports that have no
-	# ShippingAgent. Without it, contracts targeting this port can never be
-	# completed. Fall back to the harbour master position when contract_local is
-	# ZERO (no ShippingAgent building).
-	var delivery_ref := contract_local if contract_local != Vector3.ZERO \
-						else facilities.get_harbour_master_local_pos()
-	var dnpc        := DeliveryNpc.new()
-	dnpc.name       = "DeliveryNpc"
-	dnpc.port_id    = port_id
-	dnpc.position   = fpos + delivery_ref + Vector3(2.0, 0.0, -5.0)
-	add_child(dnpc)
+	# (DeliveryNpc retired — the apron CargoDeckComponent now handles delivery
+	# directly when the crane releases a pallet whose destination matches the
+	# port. See CargoDeckComponent.accepts_delivery / deliver_pallet.)
 
 	var sw_local := facilities.get_shipwright_local_pos()
 	if sw_local != Vector3.ZERO:

@@ -580,32 +580,24 @@ func _update_snap_ghost() -> void:
 
 	var xz_r2 := release_xz_range_m * release_xz_range_m
 
-	# 1. Delivery zone wins — show a gold ghost over the zone if it accepts.
 	var pallet_res = _carried_pallet.get("pallet")
-	for node in get_tree().get_nodes_in_group("cargo_delivery_zone"):
-		if not node.has_method("accepts_pallet"):
-			continue
-		if not bool(node.call("accepts_pallet", pallet_res)):
-			continue
-		var n3 := node as Node3D
-		if n3 == null:
-			continue
-		var dx := hook_pos.x - n3.global_position.x
-		var dz := hook_pos.z - n3.global_position.z
-		if dx * dx + dz * dz > xz_r2:
-			continue
-		if hook_pos.y - n3.global_position.y > release_max_height_m:
-			continue
-		_show_ghost(n3.global_position + Vector3(0.0, 0.05, 0.0), Color(1.0, 0.85, 0.20))
-		return
 
-	# 2. Cargo deck cell (ship deck OR apron — both are CargoDeckComponents).
+	# 1. Delivery — apron deck whose port_id matches pallet.destination_port_id.
 	for node in get_tree().get_nodes_in_group(CargoDeckComponent.DECK_GROUP):
 		var deck := node as CargoDeckComponent
-		if deck == null:
+		if deck == null or not deck.accepts_delivery(pallet_res):
 			continue
-		# Origin-port gate (apron decks) and capacity check both live in accepts_pallet.
-		if not deck.accepts_pallet(pallet_res):
+		if not deck.contains_world_point(hook_pos):
+			continue
+		if hook_pos.y - deck.global_position.y > release_max_height_m:
+			continue
+		_show_ghost(deck.global_position + Vector3(0.0, 0.05, 0.0), Color(1.0, 0.85, 0.20))
+		return
+
+	# 2. Staging — any deck that accepts the pallet (ship deck OR origin apron).
+	for node in get_tree().get_nodes_in_group(CargoDeckComponent.DECK_GROUP):
+		var deck := node as CargoDeckComponent
+		if deck == null or not deck.accepts_pallet(pallet_res):
 			continue
 		if not deck.contains_world_point(hook_pos):
 			continue
@@ -730,44 +722,38 @@ func _try_release() -> void:
 
 	var xz_r2 := release_xz_range_m * release_xz_range_m
 
-	# 1) Delivery zone match
+	# 1) Apron delivery — destination port matches. Sells the pallet via the
+	#    ContractRegistry; deck is responsible for the bookkeeping.
 	if pallet_res != null:
-		for node in get_tree().get_nodes_in_group("cargo_delivery_zone"):
-			if not node.has_method("accepts_pallet"):
+		for node in get_tree().get_nodes_in_group(CargoDeckComponent.DECK_GROUP):
+			var deck := node as CargoDeckComponent
+			if deck == null or not deck.accepts_delivery(pallet_res):
 				continue
-			if not bool(node.call("accepts_pallet", pallet_res)):
+			if not deck.contains_world_point(hook_pos):
 				continue
-			var n3 := node as Node3D
-			if n3 == null:
+			if hook_pos.y - deck.global_position.y > release_max_height_m:
 				continue
-			var dx := hook_pos.x - n3.global_position.x
-			var dz := hook_pos.z - n3.global_position.z
-			if dx * dx + dz * dz > xz_r2:
-				continue
-			if hook_pos.y - n3.global_position.y > release_max_height_m:
-				continue
-			node.call("deliver_pallet", pallet_res)
+			deck.deliver_pallet(pallet_res)
 			_consume_pallet()
 			return
 
-	# 2) Ship deck cell
+	# 2) Staging — any deck (ship cargo or origin-port apron) that takes us.
 	for node in get_tree().get_nodes_in_group(CargoDeckComponent.DECK_GROUP):
 		var deck := node as CargoDeckComponent
-		if deck == null or deck.is_full():
+		if deck == null or not deck.accepts_pallet(pallet_res):
 			continue
 		if not deck.contains_world_point(hook_pos):
 			continue
 		if hook_pos.y - deck.global_position.y > release_max_height_m:
 			continue
-		if pallet_res != null:
-			var cell := deck.add_pallet(pallet_res, hook_pos)
-			if cell >= 0:
-				_consume_pallet()
-				return
+		var cell := deck.add_pallet(pallet_res, hook_pos)
+		if cell >= 0:
+			_consume_pallet()
+			return
 
 	# 3) No valid target — silently refuse. Pallet keeps hanging so the
-	#    player must position over the apron, ship deck, or delivery zone.
-	#    The HUD's hint line already reflects the lack of a snap target.
+	#    player must position over the apron or a ship's cargo deck. The
+	#    HUD's hint line already reflects the lack of a snap target.
 	return
 
 

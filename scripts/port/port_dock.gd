@@ -202,7 +202,7 @@ func _build_berth_slot(index: int, cx: float, slot_w: float, ship_beam: float, c
 	apron_deck.cell_size_x_m              = 1.5
 	apron_deck.cell_size_z_m              = 1.5
 	apron_deck.affects_boat_cargo_mass    = false
-	apron_deck.required_origin_port_id    = port_id
+	apron_deck.port_id                    = port_id
 	apron_deck.debug_color                = Color(0.85, 0.55, 0.18, 0.20)
 	apron_deck.debug_grid_y_offset        = 0.0   # grid lies flat on the quay
 	add_child(apron_deck)

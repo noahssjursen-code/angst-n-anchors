@@ -33,10 +33,11 @@ signal cargo_changed(component: CargoDeckComponent)
 @export var max_cells_override: int = 0
 @export var affects_boat_cargo_mass: bool = true
 
-## When non-empty, the deck only accepts pallets whose origin_port_id matches.
-## Used by port apron grids so foreign cargo can't be dumped here. Empty (the
-## default) means any pallet is accepted, suitable for ship cargo decks.
-@export var required_origin_port_id: String = ""
+## Port UUID this deck represents. Apron decks set this so:
+##   * accepts_pallet (staging) requires pallet.origin_port_id == port_id
+##   * accepts_delivery (selling) succeeds when pallet.destination_port_id == port_id
+## Ship decks leave it empty: they accept anything, and never deliver.
+@export var port_id: String = ""
 
 @export_group("Debug")
 @export var show_debug_grid: bool = true:
@@ -106,15 +107,35 @@ func can_accept(count: int = 1) -> bool:
 	return count > 0 and count <= get_available()
 
 
-## Whether this deck will physically take this specific pallet (capacity +
-## origin gate). Called by the crane's release flow before attempting add.
+## Whether this deck will physically take this specific pallet for STAGING
+## (capacity + origin gate). Called by the crane's release flow before
+## attempting add. Origin gating only applies when port_id is set.
 func accepts_pallet(pallet: Pallet) -> bool:
 	if pallet == null or is_full():
 		return false
-	if not required_origin_port_id.is_empty():
-		if pallet.origin_port_id != required_origin_port_id:
-			return false
+	if not port_id.is_empty() and pallet.origin_port_id != port_id:
+		return false
 	return true
+
+
+## Whether this deck represents the destination for a pallet — i.e. dropping
+## the pallet here counts as a delivery (and a sale). Only port apron decks
+## return true; ship decks never do.
+func accepts_delivery(pallet: Pallet) -> bool:
+	if pallet == null or port_id.is_empty():
+		return false
+	return pallet.destination_port_id == port_id
+
+
+## Sell the pallet via ContractRegistry. Caller is responsible for removing
+## the pallet visual. Returns the gold reward (0 on failure).
+func deliver_pallet(pallet: Pallet) -> int:
+	if not accepts_delivery(pallet):
+		return 0
+	var registry := get_node_or_null("/root/ContractRegistry")
+	if registry == null:
+		return pallet.value_gold
+	return int(registry.deliver_pallet(pallet))
 
 
 # ── Pallet API ────────────────────────────────────────────────────────────────
