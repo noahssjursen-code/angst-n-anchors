@@ -49,6 +49,9 @@ const CRANE_D        := 6.0
 const CRANE_QUAY_GAP := 3.0
 const APRON_GAP      := 2.0
 const APRON_DEPTH    := 14.0
+## Per-side inset (m) from the slot edge where the crane cannot reach.
+## Mirrors the gantry roll range formula in _crane_general — keep in sync.
+const APRON_REACH_INSET := 3.2
 
 ## Total inland footprint from dock face to back of cargo aprons + buffer.
 ## PortPlot reads this to position PortFacilities without guessing.
@@ -217,7 +220,10 @@ func _build_berth_slot(index: int, cx: float, slot_w: float, ship_beam: float, c
 		CargoBerthType.Type.CONTAINER: _crane_container(index, cx, slot_w, crane_z)
 		_:                             _crane_general(index, cx, slot_w, crane_z)
 
-	_box(Vector3(slot_w - 0.4, 0.12, APRON_DEPTH),
+	# Apron pad shrinks to the area the gantry can actually reach so the
+	# player sees exactly where pallets can spawn and be picked up.
+	var apron_w_reach := maxf(slot_w - 2.0 * APRON_REACH_INSET, 1.5)
+	_box(Vector3(apron_w_reach, 0.12, APRON_DEPTH),
 		 Vector3(cx, 0.06, apron_z), C_CARGO_YARD, "Apron%d" % index)
 
 
@@ -227,11 +233,10 @@ func _crane_general(index: int, cx: float, slot_w: float, crane_z: float) -> voi
 	var crane                 := GantryCrane.new()
 	crane.name                = "Crane%d" % index
 	crane.position            = Vector3(cx, QUAY_HEIGHT, crane_z)
-	# Rails extend past the leg base on each side (~3.1 m); the rail itself
-	# must fit inside the berth slot. So:
-	#   rail_half ≤ slot_w/2  →  roll_range ≤ slot_w/2 − 3.2
-	# Clamped to 0 so very narrow berths still produce a valid (stationary) crane.
-	crane.gantry_roll_range_x = maxf(slot_w * 0.5 - 3.2, 0.0)
+	# Rails extend past the leg base on each side; rail must fit inside the
+	# berth slot. APRON_REACH_INSET captures this margin and is reused by the
+	# apron-pad sizing and pallet spawn grid so they all stay aligned.
+	crane.gantry_roll_range_x = maxf(slot_w * 0.5 - APRON_REACH_INSET, 0.0)
 	add_child(crane)
 	if Engine.is_editor_hint() and get_tree() != null:
 		var esc := get_tree().edited_scene_root
@@ -344,7 +349,7 @@ func get_berth_apron_positions(berth_index: int, n: int) -> Array[Vector3]:
 	var cx      := float(b["cx"])
 	var slot_w  := float(b["slot_w"])
 	var apron_z := float(b["apron_z"])
-	var apron_w := slot_w - 0.4
+	var apron_w := maxf(slot_w - 2.0 * APRON_REACH_INSET, 1.5)
 	var cols    := maxi(int(apron_w / 1.5), 1)
 	for i in range(n):
 		var col := i % cols
