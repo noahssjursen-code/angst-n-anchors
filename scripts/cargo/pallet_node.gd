@@ -5,11 +5,11 @@ extends Node3D
 ## The crane will grab this node to move it between apron and deck.
 ##
 ## Geometry comes from ModelAssembler-loaded JSON models under
-## `resources/data/models/cargo/` (one composed model per cell), matching the
-## rest of the project's primitive-only model convention. Multi-cell pallets
-## tile pallet_section.json across their footprint; cargo per cell is picked
-## from a small library per-commodity (provisions has crate/barrel/sack/amphora
-## variants, others use a placeholder block until proper JSON models land).
+## `resources/data/models/cargo/`. Each footprint has its own pallet model
+## (pallet_1x1, pallet_1x2, pallet_2x2, pallet_2x3 — others rotated). Cargo
+## per cell is picked from a per-commodity library (provisions has barrel /
+## produce-crate / hay-bales / amphora variants; other commodities still
+## use a placeholder block until their own JSON models land).
 
 const GROUP := "pallet_node"
 
