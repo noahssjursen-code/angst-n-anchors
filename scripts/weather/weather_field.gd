@@ -89,24 +89,31 @@ static func sample(world_pos: Vector3, game_time: float = -1.0) -> WeatherSample
 	if game_time < 0.0:
 		game_time = current_game_time()
 
+	# Seasonal envelope — winters are stormier (bigger pressure swings, stronger
+	# trades, more cloud), summers are calmer and clearer. Same on every client.
+	var season := Season.modifiers(game_time)
+
 	var s := WeatherSample.new()
 
-	# Pressure: smooth synoptic field, hPa.
-	var pressure_hpa := pressure_at(world_pos, game_time)
+	# Pressure: smooth synoptic field, hPa. Amplitude scales with season.
+	var pressure_hpa := pressure_at(world_pos, game_time, float(season["pressure_amplitude_mul"]))
 	s.pressure = pressure_hpa
 
 	# Wind: geostrophic-ish — perpendicular to pressure gradient, magnitude
-	# proportional to |gradient|. Plus a baseline trade wind.
-	var wind := _wind_from_gradient(world_pos, game_time)
+	# proportional to |gradient|. Plus a baseline trade wind (winter stronger).
+	var wind := _wind_from_gradient(world_pos, game_time,
+									 float(season["pressure_amplitude_mul"]),
+									 float(season["baseline_wind_mul"]))
 	s.wind        = wind
 	s.wind_force  = clampf(wind.length(), 0.0, 1.0)
 
 	# Cloud: low pressure → more cloud, plus an independent cloud noise band
-	# so coverage doesn't track pressure perfectly.
+	# so coverage doesn't track pressure perfectly. Winter adds an overcast bias.
 	var cloud_n      := _sample3(_cloud_noise, world_pos, game_time,
 								   CLOUD_FEATURE_SCALE_M, CLOUD_TIME_SCALE_H)
 	var pressure_bias := clampf((PRESSURE_BASE_HPA - pressure_hpa) / PRESSURE_AMPLITUDE_HPA, -1.0, 1.0)
-	var cloud := clampf(0.45 + 0.35 * cloud_n + 0.30 * pressure_bias, 0.0, 1.0)
+	var cloud := clampf(0.45 + 0.35 * cloud_n + 0.30 * pressure_bias + float(season["cloud_bias"]),
+						 0.0, 1.0)
 	s.cloud_cover = cloud
 
 	# Precipitation: needs cloud cover AND low pressure. Locally jittered.
@@ -122,21 +129,27 @@ static func sample(world_pos: Vector3, game_time: float = -1.0) -> WeatherSample
 	var vis := 1.0 - clampf(0.45 * precip + 0.20 * cloud + fog_band, 0.0, 0.85)
 	s.visibility = clampf(vis, 0.15, 1.0)
 
-	# Temperature — Phase 4 will modulate by season.
-	s.temperature = TEMPERATURE_BASE_C
+	# Temperature: base + seasonal offset. Phase 5+ may add latitude / land bias.
+	s.temperature = TEMPERATURE_BASE_C + float(season["temperature_offset_c"])
 
 	return s
 
 
 ## Pressure (hPa) at a given point + time. Public so the map / debug can
-## sample the raw field without paying for the full WeatherSample.
-static func pressure_at(world_pos: Vector3, game_time: float = -1.0) -> float:
+## sample the raw field without paying for the full WeatherSample. Pass an
+## explicit `amplitude_mul` to skip the season lookup (used internally by
+## `sample()` and `_wind_from_gradient()` so the four neighbour samples share
+## the same season state).
+static func pressure_at(world_pos: Vector3, game_time: float = -1.0,
+						 amplitude_mul: float = -1.0) -> float:
 	_ensure_noise()
 	if game_time < 0.0:
 		game_time = current_game_time()
+	if amplitude_mul < 0.0:
+		amplitude_mul = float(Season.modifiers(game_time)["pressure_amplitude_mul"])
 	var n := _sample3(_pressure_noise, world_pos, game_time,
 					   PRESSURE_FEATURE_SCALE_M, PRESSURE_TIME_SCALE_H)
-	return PRESSURE_BASE_HPA + PRESSURE_AMPLITUDE_HPA * n
+	return PRESSURE_BASE_HPA + PRESSURE_AMPLITUDE_HPA * amplitude_mul * n
 
 
 ## Current game-time in game-hours since the world epoch. Reads `/root/WorldClock`;
@@ -165,19 +178,21 @@ static func _sample3(noise: FastNoiseLite, pos: Vector3, time_h: float,
 	return noise.get_noise_3d(x, t, z)
 
 
-static func _wind_from_gradient(pos: Vector3, time_h: float) -> Vector3:
+static func _wind_from_gradient(pos: Vector3, time_h: float,
+								 pressure_amp_mul: float,
+								 baseline_wind_mul: float) -> Vector3:
 	var eps := WIND_GRADIENT_EPS_M
-	var p_xp := pressure_at(pos + Vector3(eps, 0.0, 0.0), time_h)
-	var p_xm := pressure_at(pos - Vector3(eps, 0.0, 0.0), time_h)
-	var p_zp := pressure_at(pos + Vector3(0.0, 0.0, eps), time_h)
-	var p_zm := pressure_at(pos - Vector3(0.0, 0.0, eps), time_h)
+	var p_xp := pressure_at(pos + Vector3(eps, 0.0, 0.0), time_h, pressure_amp_mul)
+	var p_xm := pressure_at(pos - Vector3(eps, 0.0, 0.0), time_h, pressure_amp_mul)
+	var p_zp := pressure_at(pos + Vector3(0.0, 0.0, eps), time_h, pressure_amp_mul)
+	var p_zm := pressure_at(pos - Vector3(0.0, 0.0, eps), time_h, pressure_amp_mul)
 	var gx := (p_xp - p_xm) / (2.0 * eps)
 	var gz := (p_zp - p_zm) / (2.0 * eps)
 	# Geostrophic: wind blows along the isobars (perpendicular to ∇P),
 	# with low pressure on the left in the northern hemisphere.
 	# Rotate gradient 90° CCW around +Y → (-gz, 0, gx).
 	var dir := Vector3(-gz, 0.0, gx) * WIND_GRADIENT_GAIN
-	var wind := BASELINE_WIND + dir
+	var wind := BASELINE_WIND * baseline_wind_mul + dir
 	# Clamp magnitude to [0..1] so scalar consumers stay happy.
 	var mag := wind.length()
 	if mag > 1.0:
