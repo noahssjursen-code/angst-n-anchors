@@ -80,11 +80,10 @@ func _make_row(contract: Contract, registry: Node, slots_free: int, ship_berthed
 	# ── Data ────────────────────────────────────────────────────────────────
 	var info: Dictionary = registry.commodity_info(contract.commodity)
 	var color: Color     = registry.commodity_color(contract.commodity)
-	var fp_w: int        = int(info.get("footprint_w", 1))
-	var fp_h: int        = int(info.get("footprint_h", 1))
-	var upp: int         = int(info.get("units_per_pallet", 4))
-	var pallets_needed := int(ceil(float(contract.quantity) / float(maxi(upp, 1))))
-	var cells_needed   := pallets_needed * fp_w * fp_h
+	var max_units: int   = int(info.get("max_pallet_units", 4))
+	# One unit = one cell. Pallets are 1×N strips up to max_units long.
+	var cells_needed   := contract.quantity
+	var pallets_needed := int(ceil(float(contract.quantity) / float(maxi(max_units, 1))))
 	var stock          := int(registry.get_export_stock(contract.origin_port_id, contract.commodity))
 
 	var dest_name: String = registry.get_destination_name(contract)
@@ -150,11 +149,19 @@ func _make_row(contract: Contract, registry: Node, slots_free: int, ship_berthed
 	row1.add_child(btn)
 
 	# ── Row 2: pallet/footprint · stock · capacity hint
-	var pallet_str := "%d pallet%s · %d×%d cells" % [
-		pallets_needed, "s" if pallets_needed != 1 else "", fp_w, fp_h,
-	]
+	# Each unit = 1 cell. Layout is N pallets sized up to max_units cells each.
+	var last_pallet_size: int = contract.quantity - (pallets_needed - 1) * max_units
+	var shape_hint := ""
+	if pallets_needed == 1:
+		shape_hint = "1 pallet · 1×%d cells" % contract.quantity
+	elif last_pallet_size == max_units:
+		shape_hint = "%d pallets · 1×%d each" % [pallets_needed, max_units]
+	else:
+		shape_hint = "%d pallets · %d × 1×%d + 1 × 1×%d" % [
+			pallets_needed, pallets_needed - 1, max_units, last_pallet_size,
+		]
 	var caps_text := "%s  ·  stock %d  ·  needs %d of %d cells" % [
-		pallet_str, stock, cells_needed, ship_cells_free,
+		shape_hint, stock, cells_needed, ship_cells_free,
 	]
 	var caps := Label.new()
 	caps.text = caps_text
