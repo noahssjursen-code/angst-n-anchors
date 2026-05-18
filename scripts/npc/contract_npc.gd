@@ -62,41 +62,75 @@ func _refresh_list() -> void:
 	var active_count: int = registry.get_accepted_contracts().size()
 	var slots_free:   int = registry.MAX_ACTIVE_CONTRACTS - active_count
 	var ship_berthed: bool = _ship_is_berthed()
+	var ship_cells_free: int = _ship_cells_free()
+
+	# Header line above the rows.
+	var header := _plain_label("Active %d / %d   ·   Ship capacity %d free cells" % [
+		active_count, registry.MAX_ACTIVE_CONTRACTS, ship_cells_free,
+	])
+	header.add_theme_color_override("font_color", HudStyle.C_AMBER)
+	_list.add_child(header)
+	_list.add_child(HSeparator.new())
 
 	for contract in contracts:
-		_list.add_child(_make_row(contract, registry, slots_free, ship_berthed))
+		_list.add_child(_make_row(contract, registry, slots_free, ship_berthed, ship_cells_free))
 
 
-func _make_row(contract: Contract, registry: Node, slots_free: int, ship_berthed: bool) -> Control:
-	var dest: String = registry.get_destination_name(contract)
+func _make_row(contract: Contract, registry: Node, slots_free: int, ship_berthed: bool, ship_cells_free: int) -> Control:
+	# ── Data ────────────────────────────────────────────────────────────────
+	var info := registry.commodity_info(contract.commodity)
+	var color := registry.commodity_color(contract.commodity)
+	var fp_w  := int(info.get("footprint_w", 1))
+	var fp_h  := int(info.get("footprint_h", 1))
+	var upp   := int(info.get("units_per_pallet", 4))
+	var pallets_needed := int(ceil(float(contract.quantity) / float(maxi(upp, 1))))
+	var cells_needed   := pallets_needed * fp_w * fp_h
+	var stock          := int(registry.get_export_stock(contract.origin_port_id, contract.commodity))
 
-	var dist_str := ""
+	var dest_name: String = registry.get_destination_name(contract)
 	var origin_pos: Vector3 = registry.get_port_position(contract.origin_port_id)
 	var dest_pos:   Vector3 = registry.get_port_position(contract.destination_port_id)
+	var dist_str := ""
 	if origin_pos.x != INF and dest_pos.x != INF:
 		var d := origin_pos.distance_to(dest_pos)
-		dist_str = "  %.0f m" % d if d < 1852.0 else "  %.1f nm" % (d / 1852.0)
+		dist_str = "%.0f m" % d if d < 1852.0 else "%.1f nm" % (d / 1852.0)
+	if dist_str.is_empty():
+		dist_str = "in port"
 
-	var info           := Label.new()
-	info.text          = "%s  →  %s%s\n%d × %s   ℳ %d" % [
-		registry.get_port_display_name(contract.origin_port_id),
-		dest,
-		dist_str,
-		contract.quantity,
-		contract.display_name,
-		contract.reward_gold,
+	# ── Row 1: color swatch · commodity (qty) → dest · distance · reward · button
+	var swatch        := ColorRect.new()
+	swatch.color      = color
+	swatch.custom_minimum_size = Vector2(18, 32)
+
+	var headline      := Label.new()
+	headline.text     = "%s ×%d  →  %s   %s" % [
+		contract.display_name, contract.quantity, dest_name, dist_str,
 	]
-	info.autowrap_mode         = TextServer.AUTOWRAP_WORD
-	info.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	headline.add_theme_font_size_override("font_size", 14)
+	headline.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+
+	var reward_lbl    := Label.new()
+	reward_lbl.text   = "ℳ %d" % contract.reward_gold
+	reward_lbl.add_theme_font_size_override("font_size", 14)
+	reward_lbl.add_theme_color_override("font_color", HudStyle.C_AMBER)
+	reward_lbl.custom_minimum_size = Vector2(70, 0)
+	reward_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 
 	var btn := Button.new()
+	btn.custom_minimum_size = Vector2(110, 0)
 	match contract.state:
 		Contract.State.AVAILABLE:
 			if slots_free <= 0:
-				btn.text     = "Full (%d/%d)" % [registry.MAX_ACTIVE_CONTRACTS, registry.MAX_ACTIVE_CONTRACTS]
+				btn.text     = "Full"
 				btn.disabled = true
 			elif not ship_berthed:
-				btn.text     = "Berth ship first"
+				btn.text     = "Berth ship"
+				btn.disabled = true
+			elif stock < contract.quantity:
+				btn.text     = "Out of stock"
+				btn.disabled = true
+			elif ship_cells_free < cells_needed:
+				btn.text     = "No space"
 				btn.disabled = true
 			else:
 				btn.text = "Accept"
@@ -108,13 +142,31 @@ func _make_row(contract: Contract, registry: Node, slots_free: int, ship_berthed
 			btn.text     = "Done"
 			btn.disabled = true
 
-	var row                   := HBoxContainer.new()
-	row.size_flags_horizontal = Control.SIZE_FILL
-	row.add_child(info)
-	row.add_child(btn)
+	var row1 := HBoxContainer.new()
+	row1.size_flags_horizontal = Control.SIZE_FILL
+	row1.add_child(swatch)
+	row1.add_child(headline)
+	row1.add_child(reward_lbl)
+	row1.add_child(btn)
+
+	# ── Row 2: pallet/footprint · stock · capacity hint
+	var pallet_str := "%d pallet%s · %d×%d cells" % [
+		pallets_needed, "s" if pallets_needed != 1 else "", fp_w, fp_h,
+	]
+	var caps_text := "%s  ·  stock %d  ·  needs %d of %d cells" % [
+		pallet_str, stock, cells_needed, ship_cells_free,
+	]
+	var caps := Label.new()
+	caps.text = caps_text
+	caps.add_theme_font_size_override("font_size", 11)
+	var dim := Color(0.78, 0.78, 0.82)
+	if stock < contract.quantity or (ship_berthed and ship_cells_free < cells_needed):
+		dim = Color(0.95, 0.55, 0.45)  # warning
+	caps.add_theme_color_override("font_color", dim)
 
 	var wrapper := VBoxContainer.new()
-	wrapper.add_child(row)
+	wrapper.add_child(row1)
+	wrapper.add_child(caps)
 	wrapper.add_child(HSeparator.new())
 	return wrapper
 
@@ -191,6 +243,21 @@ func _ship_is_berthed() -> bool:
 	if dock == null:
 		return false
 	return dock.find_occupied_berth() != -1
+
+
+## Sum of free cells across every CARGO deck (port_id empty → ship deck) in
+## the scene. With one player and one boat this is just that boat's capacity;
+## fleets sum naturally.
+func _ship_cells_free() -> int:
+	var total := 0
+	for node in get_tree().get_nodes_in_group(CargoDeckComponent.DECK_GROUP):
+		var deck := node as CargoDeckComponent
+		if deck == null:
+			continue
+		if not deck.port_id.is_empty():
+			continue  # apron deck, not a ship
+		total += deck.get_available()
+	return total
 
 
 func _registry() -> Node:

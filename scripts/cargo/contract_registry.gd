@@ -14,12 +14,27 @@ signal contract_completed(contract: Contract)
 ## Provisions are dense small barrels (6/pallet, 1×1). Timber is long planks
 ## (2/pallet, 1×4 cells). Iron ore is heavy (2/pallet, 1×1). Coal/grain mid.
 const COMMODITIES := [
-	{ "id": "grain",      "display": "Grain",      "mass_kg": 180.0, "value":  8, "units_per_pallet": 4, "footprint_w": 1, "footprint_h": 1 },
-	{ "id": "timber",     "display": "Timber",     "mass_kg": 320.0, "value": 12, "units_per_pallet": 2, "footprint_w": 1, "footprint_h": 4 },
-	{ "id": "iron_ore",   "display": "Iron Ore",   "mass_kg": 480.0, "value": 18, "units_per_pallet": 2, "footprint_w": 1, "footprint_h": 1 },
-	{ "id": "coal",       "display": "Coal",       "mass_kg": 280.0, "value": 10, "units_per_pallet": 4, "footprint_w": 1, "footprint_h": 1 },
-	{ "id": "provisions", "display": "Provisions", "mass_kg": 150.0, "value": 14, "units_per_pallet": 6, "footprint_w": 1, "footprint_h": 1 },
+	{ "id": "grain",      "display": "Grain",      "mass_kg": 180.0, "value":  8, "units_per_pallet":  4, "footprint_w": 1, "footprint_h": 1, "color": [0.90, 0.78, 0.30] },
+	{ "id": "timber",     "display": "Timber",     "mass_kg": 320.0, "value": 12, "units_per_pallet":  2, "footprint_w": 1, "footprint_h": 4, "color": [0.52, 0.33, 0.18] },
+	{ "id": "iron_ore",   "display": "Iron Ore",   "mass_kg": 480.0, "value": 18, "units_per_pallet":  2, "footprint_w": 1, "footprint_h": 1, "color": [0.50, 0.42, 0.38] },
+	{ "id": "coal",       "display": "Coal",       "mass_kg": 280.0, "value": 10, "units_per_pallet":  4, "footprint_w": 1, "footprint_h": 1, "color": [0.20, 0.20, 0.22] },
+	{ "id": "provisions", "display": "Provisions", "mass_kg": 150.0, "value": 14, "units_per_pallet": 12, "footprint_w": 1, "footprint_h": 1, "color": [0.72, 0.30, 0.22] },
 ]
+
+
+static func commodity_info(commodity_id: String) -> Dictionary:
+	for entry in COMMODITIES:
+		if str((entry as Dictionary)["id"]) == commodity_id:
+			return entry as Dictionary
+	return {}
+
+
+static func commodity_color(commodity_id: String) -> Color:
+	var info := commodity_info(commodity_id)
+	var arr: Array = info.get("color", [0.6, 0.6, 0.6])
+	if arr.size() < 3:
+		return Color(0.6, 0.6, 0.6)
+	return Color(float(arr[0]), float(arr[1]), float(arr[2]))
 
 const CONTRACT_RADIUS      := 3500.0
 const MAX_ACTIVE_CONTRACTS := 8
@@ -28,6 +43,10 @@ const MAX_ACTIVE_CONTRACTS := 8
 var _ports: Dictionary = {}
 ## contract_id -> Contract
 var _contracts: Dictionary = {}
+## port_id -> { commodity_id -> units_available_to_export }
+## Drawn down when a contract is accepted, replenished by future restock logic
+## (TBD). Multiplayer: every player draws from the same per-port pool.
+var _export_stock: Dictionary = {}
 
 
 # ── Port registration ─────────────────────────────────────────────────────────
@@ -157,11 +176,41 @@ func accept_contract(contract_id: String) -> bool:
 		return false
 	if get_accepted_contracts().size() >= MAX_ACTIVE_CONTRACTS:
 		return false
+	# Reserve units from the origin port's export pool. Refuse if not enough.
+	if not _consume_stock(contract.origin_port_id, contract.commodity, contract.quantity):
+		return false
 
 	contract.state = Contract.State.ACCEPTED
 
 	var pallets := PalletFactory.split(contract)
 	contract_accepted.emit(contract, pallets)
+	return true
+
+
+# ── Port export pool ─────────────────────────────────────────────────────────
+
+func get_export_stock(port_id: String, commodity_id: String) -> int:
+	var pool: Dictionary = _export_stock.get(port_id, {})
+	return int(pool.get(commodity_id, 0))
+
+
+func add_export_stock(port_id: String, commodity_id: String, units: int) -> void:
+	if units <= 0 or port_id.is_empty() or commodity_id.is_empty():
+		return
+	if not _export_stock.has(port_id):
+		_export_stock[port_id] = {}
+	var pool: Dictionary = _export_stock[port_id]
+	pool[commodity_id] = int(pool.get(commodity_id, 0)) + units
+
+
+func _consume_stock(port_id: String, commodity_id: String, units: int) -> bool:
+	if units <= 0:
+		return true
+	# Same-port contracts (debug self-loops) draw from their own pool too.
+	var have := get_export_stock(port_id, commodity_id)
+	if have < units:
+		return false
+	_export_stock[port_id][commodity_id] = have - units
 	return true
 
 
@@ -251,6 +300,10 @@ func _make_contract(from_id: String, to_id: String) -> Contract:
 	c.destination_port_id = to_id
 	c.state               = Contract.State.AVAILABLE
 	c.delivered_count     = 0
+
+	# Seed the origin port's export pool with this contract's units so
+	# accept_contract() can draw against it.
+	add_export_stock(from_id, commodity_id, quantity)
 	return c
 
 
