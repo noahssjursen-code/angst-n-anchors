@@ -25,7 +25,7 @@ const PALLET_MODELS := {
 
 const MODEL_PROVISIONS := [
 	"res://resources/data/models/cargo/provisions_barrel.json",
-	"res://resources/data/models/cargo/provisions_barrel_stack.json",
+	"res://resources/data/models/cargo/provisions_cheese_stack.json",
 	"res://resources/data/models/cargo/provisions_sack.json",
 	"res://resources/data/models/cargo/provisions_amphora.json",
 ]

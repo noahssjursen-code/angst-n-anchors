@@ -180,27 +180,28 @@ def maxi_py(a: int, b: int) -> int:
     return a if a > b else b
 
 
-def make_barrel_stack() -> None:
-    """Three small hex barrels stacked vertically — replaces the boxy crate."""
-    wood = [0.45, 0.27, 0.15]
-    hoop = [0.22, 0.18, 0.14]
-    r = 0.28
-    h = 0.22
+def make_cheese_stack() -> None:
+    """Three stacked wheels of cheese — flat hex disks, distinct from barrels.
+    Pale wax/cheese yellow body with a darker rind ring on top of each wheel."""
+    cheese = [0.92, 0.82, 0.50]
+    rind   = [0.62, 0.48, 0.26]
+    r = 0.42
+    h = 0.14
     parts: list[dict] = []
     for i in range(3):
         y = i * h
         parts.append(part(
-            f"body_{i}",
+            f"wheel_{i}",
             prism_mesh(r, r, h, y, sides=6),
-            wood, (0, 0, 0),
+            cheese, (0, 0, 0),
         ))
         parts.append(part(
-            f"hoop_{i}",
-            prism_mesh(r * 1.04, r * 1.04, 0.04, y + h * 0.5 - 0.02, sides=6),
-            hoop, (0, 0, 0), roughness=0.45, metallic=0.6,
+            f"rind_{i}",
+            prism_mesh(r * 1.02, r * 1.02, 0.02, y + h - 0.01, sides=6),
+            rind, (0, 0, 0),
         ))
-    dump("provisions_barrel_stack.json",
-         {"name": "provisions_barrel_stack", "parts": parts})
+    dump("provisions_cheese_stack.json",
+         {"name": "provisions_cheese_stack", "parts": parts})
 
 
 def make_barrel() -> None:
@@ -265,7 +266,7 @@ if __name__ == "__main__":
     # are these rotated 90° at instantiation time.
     for fp in [(1, 1), (1, 2), (2, 2), (2, 3)]:
         make_pallet(*fp)
-    make_barrel_stack()
+    make_cheese_stack()
     make_barrel()
     make_sack()
     make_amphora()
