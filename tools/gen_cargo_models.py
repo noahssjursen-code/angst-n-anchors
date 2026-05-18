@@ -265,30 +265,26 @@ def make_barrel() -> None:
     dump("provisions_barrel.json", {"name": "provisions_barrel", "parts": parts})
 
 
-def make_chest() -> None:
-    """Wooden trading chest with iron straps + lock — low, wide, distinctive
-    silhouette unlike barrel / crate / amphora."""
-    wood = [0.55, 0.38, 0.22]
-    iron = [0.20, 0.17, 0.14]
-    w, h, d = 0.85, 0.32, 0.55
-    parts = [
-        # Lower body
-        part("body", box_mesh(w, h, d), wood, (0, 0, 0)),
-        # Slightly raised lid (flat slab on top, overhangs the body a touch)
-        part("lid",  box_mesh(w + 0.03, 0.08, d + 0.03),
-             [c * 0.9 for c in wood], (0, h, 0)),
-        # Three iron straps wrapping front-to-back across the body + lid
-        part("strap_l", box_mesh(0.05, h + 0.12, d + 0.04), iron,
-             (-w * 0.35, h * 0.5, 0), roughness=0.45, metallic=0.6),
-        part("strap_r", box_mesh(0.05, h + 0.12, d + 0.04), iron,
-             ( w * 0.35, h * 0.5, 0), roughness=0.45, metallic=0.6),
-        part("strap_c", box_mesh(0.05, h + 0.12, d + 0.04), iron,
-             ( 0.0,      h * 0.5, 0), roughness=0.45, metallic=0.6),
-        # Lock plate centred on the front face
-        part("lock", box_mesh(0.12, 0.11, 0.03), iron,
-             (0, h * 0.65, d * 0.5), roughness=0.45, metallic=0.6),
-    ]
-    dump("provisions_chest.json", {"name": "provisions_chest", "parts": parts})
+def make_hay_bales() -> None:
+    """Two stacked rectangular hay bales bound with rope. Yellow straw body
+    + dark rope cinches keep it distinct from barrel / chest / amphora."""
+    hay  = [0.86, 0.72, 0.36]
+    rope = [0.32, 0.20, 0.12]
+    bw, bh, bd = 0.85, 0.30, 0.45
+    parts = []
+    for i in range(2):
+        y = i * (bh + 0.03)
+        ox = (0.06 if i % 2 else -0.06)   # slight offset between layers
+        parts.append(part(f"bale_{i}", box_mesh(bw, bh, bd), hay, (ox, y, 0)))
+        # Two rope cinches wrapping around the bale (front-to-back)
+        for j, rx in enumerate([-bw * 0.28, bw * 0.28]):
+            parts.append(part(
+                f"rope_{i}_{j}",
+                box_mesh(0.045, bh + 0.02, bd + 0.04),
+                rope, (ox + rx, y, 0),
+            ))
+    dump("provisions_hay_bales.json",
+         {"name": "provisions_hay_bales", "parts": parts})
 
 
 def make_amphora() -> None:
@@ -324,6 +320,6 @@ if __name__ == "__main__":
         make_pallet(*fp)
     make_produce_pile()
     make_barrel()
-    make_chest()
+    make_hay_bales()
     make_amphora()
     print("Done.")
