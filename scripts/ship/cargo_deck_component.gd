@@ -440,8 +440,6 @@ func _rebuild_debug_visual() -> void:
 	if _debug_root != null and is_instance_valid(_debug_root):
 		_debug_root.queue_free()
 		_debug_root = null
-	if not show_debug_grid:
-		return
 
 	_debug_root          = Node3D.new()
 	_debug_root.name     = "DeckGrid"
@@ -450,27 +448,11 @@ func _rebuild_debug_visual() -> void:
 	if Engine.is_editor_hint() and get_tree() != null and get_tree().edited_scene_root != null:
 		_debug_root.owner = get_tree().edited_scene_root
 
-	var cols   := get_cols()
-	var rows   := get_rows()
-	var hx     := deck_width_m  * 0.5
-	var hz     := deck_length_m * 0.5
-	var step_x := deck_width_m  / float(cols)
-	var step_z := deck_length_m / float(rows)
-	var thick  := 0.04
-	var h      := 0.01
-	var mat    := _grid_material()
+	var hx := deck_width_m  * 0.5
+	var hz := deck_length_m * 0.5
+	var h  := 0.01
 
-	# Cell-dividing lines along X (rows of Z-running lines)
-	for col in range(cols + 1):
-		var x := -hx + step_x * float(col)
-		_line(_debug_root, Vector3(x, 0.0, -hz), Vector3(x, 0.0, hz), thick, h, mat)
-
-	# Cell-dividing lines along Z (cols of X-running lines)
-	for row in range(rows + 1):
-		var z := -hz + step_z * float(row)
-		_line(_debug_root, Vector3(-hx, 0.0, z), Vector3(hx, 0.0, z), thick, h, mat)
-
-	# Corner L-brackets for visual anchoring
+	# Hazard L-brackets at the corners — always shown, they mark the cargo zone.
 	var arm   := clampf(minf(hx, hz) * 0.25, 0.3, 1.2)
 	var thick2 := 0.12
 	var mat2   := _hazard_material()
@@ -478,6 +460,24 @@ func _rebuild_debug_visual() -> void:
 	_add_corner(_debug_root,  hx, -hz, -1.0,  1.0, arm, thick2, h * 2.0, mat2)
 	_add_corner(_debug_root, -hx,  hz,  1.0, -1.0, arm, thick2, h * 2.0, mat2)
 	_add_corner(_debug_root,  hx,  hz, -1.0, -1.0, arm, thick2, h * 2.0, mat2)
+
+	# Cell-dividing lines + "CARGO NxM" label — only when explicitly enabled.
+	if not show_debug_grid:
+		return
+
+	var cols   := get_cols()
+	var rows   := get_rows()
+	var step_x := deck_width_m  / float(cols)
+	var step_z := deck_length_m / float(rows)
+	var thick  := 0.04
+	var mat    := _grid_material()
+
+	for col in range(cols + 1):
+		var x := -hx + step_x * float(col)
+		_line(_debug_root, Vector3(x, 0.0, -hz), Vector3(x, 0.0, hz), thick, h, mat)
+	for row in range(rows + 1):
+		var z := -hz + step_z * float(row)
+		_line(_debug_root, Vector3(-hx, 0.0, z), Vector3(hx, 0.0, z), thick, h, mat)
 
 	var label              := Label3D.new()
 	label.text             = "CARGO %dx%d" % [cols, rows]
