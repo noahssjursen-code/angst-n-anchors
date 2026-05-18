@@ -240,6 +240,47 @@ func _make_contract(from_id: String, to_id: String) -> Contract:
 
 
 
+# ── Debug ─────────────────────────────────────────────────────────────────────
+
+## Spawns a contract whose origin AND destination are the given port, then
+## immediately accepts it so pallets stage on the apron right away. Lets the
+## crane system be tested without sailing anywhere. Reward is flat (not
+## distance-scaled, since distance is zero).
+func debug_spawn_local_contract(
+	port_id: String,
+	commodity_id: String = "provisions",
+	quantity: int = 4,
+	reward: int = 200,
+) -> Contract:
+	if not _ports.has(port_id):
+		push_warning("ContractRegistry: debug_spawn_local_contract — unknown port_id: " + port_id)
+		return null
+
+	var commodity: Dictionary = {}
+	for entry in COMMODITIES:
+		if str((entry as Dictionary)["id"]) == commodity_id:
+			commodity = entry as Dictionary
+			break
+	if commodity.is_empty():
+		commodity = COMMODITIES[0] as Dictionary
+
+	var c                 := Contract.new()
+	c.id                  = "debug::%s::%d" % [port_id, Time.get_ticks_msec()]
+	c.commodity           = str(commodity["id"])
+	c.display_name        = str(commodity["display"])
+	c.quantity            = quantity
+	c.mass_per_unit_kg    = float(commodity["mass_kg"])
+	c.reward_gold         = reward
+	c.origin_port_id      = port_id
+	c.destination_port_id = port_id
+	c.state               = Contract.State.AVAILABLE
+	c.delivered_count     = 0
+	_contracts[c.id]      = c
+
+	accept_contract(c.id)
+	return c
+
+
 static func _hash_route(from_id: String, to_id: String) -> int:
 	var h := 5381
 	for ch in (from_id + "|" + to_id):

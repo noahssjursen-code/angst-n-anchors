@@ -46,6 +46,35 @@ func _unhandled_input(event: InputEvent) -> void:
 		elif ke.pressed and not ke.echo and ke.physical_keycode == KEY_E and _shown:
 			_apply_debug_day_calm_preset()
 			get_viewport().set_input_as_handled()
+		elif ke.pressed and not ke.echo and ke.physical_keycode == KEY_F5 and _shown:
+			_spawn_debug_local_contract()
+			get_viewport().set_input_as_handled()
+
+
+## Spawn an auto-accepted same-port contract at the port nearest the player.
+## Pickup and dropoff are at the same dock so the crane can be exercised
+## without sailing anywhere.
+func _spawn_debug_local_contract() -> void:
+	var registry := get_node_or_null("/root/ContractRegistry")
+	if registry == null:
+		return
+	var player := get_tree().get_first_node_in_group("player") as Node3D
+	if player == null:
+		return
+	var player_pos := player.global_position
+	var nearest_id := ""
+	var nearest_d := INF
+	for pid in registry.call("get_port_ids"):
+		var pos: Vector3 = registry.call("get_port_position", pid)
+		if pos.x == INF:
+			continue
+		var d := player_pos.distance_to(pos)
+		if d < nearest_d:
+			nearest_d = d
+			nearest_id = pid
+	if nearest_id.is_empty():
+		return
+	registry.call("debug_spawn_local_contract", nearest_id)
 
 
 func _apply_debug_day_calm_preset() -> void:
