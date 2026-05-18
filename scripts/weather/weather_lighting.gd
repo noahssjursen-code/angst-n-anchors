@@ -58,6 +58,19 @@ const WAVE_RATE          : float = 1.0
 		visibility = clampf(v, 0.0, 1.0)
 		state_changed.emit()
 
+## Horizontal wind vector (XZ plane). Magnitude is normalised to ≤ 1 so it
+## composes cleanly with `wind_force` — direction lives here, intensity in
+## `wind_force`. Pumped each tick by AtmosphericEffects from
+## `WeatherField.sample_wind(boat_pos)` (geostrophic pressure gradient).
+## Consumers wanting wind-aware tilt (rain, smoke, flags, sails) should read
+## this instead of inventing their own direction.
+@export var wind_dir: Vector3 = Vector3(-1.0, 0.0, 0.0):
+	set(v):
+		v.y = 0.0
+		var mag := v.length()
+		wind_dir = v if mag <= 1.0 else (v / mag)
+		state_changed.emit()
+
 # --- Derived convenience getters ---
 ## Effective sky cloud opacity 0–1: explicit `cloud_cover` plus rain-grey when precip is high.
 ## Wind does **not** add fake overcast (dry squalls stay visually clear).

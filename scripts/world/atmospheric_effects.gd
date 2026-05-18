@@ -14,9 +14,12 @@ var _lightning_cooldown:   float = 2.0
 var _lightning_phase:      int   = 0   # 0=idle  1=flash1  2=gap  3=flash2
 var _lightning_phase_t:    float = 0.0
 
-const ZONE_TICK   : float = 0.5    # seconds between zone polls
-const ZONE_WEIGHT : float = 0.017  # lerp weight per tick — ~20s half-life
-var _zone_timer   : float = 0.0
+const ZONE_TICK     : float = 0.5    # seconds between zone polls
+const ZONE_WEIGHT   : float = 0.017  # lerp weight per tick — ~20s half-life
+## Wind direction lerps faster than force — direction shifts feel laggy if
+## smoothed too hard, while still preventing per-tick swings from looking jittery.
+const WIND_DIR_LERP : float = 0.08
+var _zone_timer     : float = 0.0
 
 
 func _ready() -> void:
@@ -156,6 +159,11 @@ func _tick_zone_weather() -> void:
 	# Lerp faster when approaching land so the transition feels responsive.
 	var weight := lerpf(ZONE_WEIGHT, 0.08, 1.0 - shelter)
 	WeatherLighting.blend_towards(target, weight)
+
+	# Wind direction: same geostrophic vector that drove `target.wind_force`,
+	# blended toward smoothly so direction shifts feel natural.
+	var wind_vec   := WeatherField.sample_wind(boat_pos) * lerpf(0.15, 1.0, shelter)
+	WeatherLighting.wind_dir = WeatherLighting.wind_dir.lerp(wind_vec, WIND_DIR_LERP)
 
 
 func _get_boat_position() -> Vector3:
