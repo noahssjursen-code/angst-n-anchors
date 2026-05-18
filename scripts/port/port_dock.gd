@@ -101,17 +101,24 @@ func _rebuild() -> void:
 
 # ── Quay ──────────────────────────────────────────────────────────────────────
 
+## Visual-only padding added around the functional slab footprint. Does NOT
+## affect dock_length, crane Z, apron Z or any other gameplay measurements —
+## just gives the concrete a bit of border so cranes don't sit on the very edge.
+const QUAY_SLAB_PAD_Z := 2.0
+const QUAY_SLAB_PAD_X := 1.5
+
+
 func _build_quay() -> void:
 	var lip_half := QUAY_LIP_DEPTH * 0.5
-	# Slab now spans from just behind the lip all the way to the back of the
-	# apron — one continuous elevated dock the cranes and apron sit on.
-	var slab_back := QUAY_DEPTH + CRANE_QUAY_GAP + CRANE_D + APRON_GAP + APRON_DEPTH
+	# Slab spans from just behind the lip past the back of the apron (+ pad
+	# so the apron isn't flush with the concrete edge).
+	var slab_back := QUAY_DEPTH + CRANE_QUAY_GAP + CRANE_D + APRON_GAP + APRON_DEPTH + QUAY_SLAB_PAD_Z
 	var slab_front := QUAY_LIP_DEPTH + QUAY_LIP_SLAB_GAP
 	var slab_size_z := slab_back - slab_front
 	var slab_z_half := slab_size_z * 0.5
 	var slab_centre_z := slab_front + slab_z_half
 
-	var size := Vector3(dock_length, QUAY_HEIGHT, slab_size_z)
+	var size := Vector3(dock_length + QUAY_SLAB_PAD_X * 2.0, QUAY_HEIGHT, slab_size_z)
 	var body := StaticBody3D.new()
 	body.name            = "Quay"
 	body.position        = Vector3(0.0, QUAY_HEIGHT * 0.5, slab_centre_z)
