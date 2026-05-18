@@ -96,8 +96,7 @@ const HULL_CATALOG: Array[Dictionary] = [
 	},
 ]
 
-var _panel: Panel
-var _body:  VBoxContainer
+var _dialogue: DialoguePanel
 
 enum _Screen { MAIN, HULL_SELECT, CONFIRM }
 var _screen:       _Screen     = _Screen.MAIN
@@ -115,7 +114,7 @@ func _ready() -> void:
 
 func _on_interact() -> void:
 	_show_main()
-	_panel.visible = true
+	_dialogue.show_panel()
 	open_ui()
 
 
@@ -123,7 +122,7 @@ func _on_ui_cancel() -> void:
 	if _screen == _Screen.CONFIRM:
 		_show_hull_select()
 	elif _screen == _Screen.MAIN:
-		_panel.visible = false
+		_dialogue.hide_panel()
 		close_ui()
 	else:
 		_show_main()
@@ -132,38 +131,38 @@ func _on_ui_cancel() -> void:
 # ── Screens ───────────────────────────────────────────────────────────────────
 
 func _close() -> void:
-	_panel.visible = false
+	_dialogue.hide_panel()
 	close_ui()
 
 
 func _show_main() -> void:
 	_screen = _Screen.MAIN
-	_clear_body()
-	_add_quote("Good day, Captain. Looking to commission a new vessel?\nI can lay down any hull in my catalog.")
-	_add_option("Show me what you can build.", _show_hull_select)
-	_add_option("Not today, thank you.",        _close)
+	_dialogue.clear()
+	_dialogue.add_quote("Good day, Captain. Looking to commission a new vessel?\nI can lay down any hull in my catalog.")
+	_dialogue.add_option("Show me what you can build.", _show_hull_select)
+	_dialogue.add_option("Not today, thank you.",        _close)
 
 
 func _show_hull_select() -> void:
 	_screen = _Screen.HULL_SELECT
-	_clear_body()
-	_add_quote("Choose your hull. I'll build her true.")
+	_dialogue.clear()
+	_dialogue.add_quote("Choose your hull. I'll build her true.")
 	for entry in HULL_CATALOG:
 		var e   := entry as Dictionary
 		var lbl := "%s  [%s]" % [str(e["display"]), str(e["ship_class_label"])]
-		_add_option(lbl, _show_confirm.bind(e))
-	_add_back_button()
+		_dialogue.add_option(lbl, _show_confirm.bind(e))
+	_dialogue.add_back_button(_show_main)
 
 
 func _show_confirm(entry: Dictionary) -> void:
 	_screen        = _Screen.CONFIRM
 	_pending_entry = entry
-	_clear_body()
-	_add_quote(
+	_dialogue.clear()
+	_dialogue.add_quote(
 		"%s\n\nThis will be your new vessel, Captain. Ready to lay her keel?" % str(entry["display"])
 	)
-	_add_option("Commission her.", func() -> void: _commission(entry))
-	_add_back_button()
+	_dialogue.add_option("Commission her.", func() -> void: _commission(entry))
+	_dialogue.add_back_button(_show_hull_select)
 
 
 func _commission(entry: Dictionary) -> void:
@@ -173,18 +172,18 @@ func _commission(entry: Dictionary) -> void:
 	var path := "user://shipwright_orders/" + str(entry["id"]) + ".json"
 	var f    := FileAccess.open(path, FileAccess.WRITE)
 	if f == null:
-		_clear_body()
-		_add_quote("Something went wrong in the yard. Try again.")
-		_add_back_button()
+		_dialogue.clear()
+		_dialogue.add_quote("Something went wrong in the yard. Try again.")
+		_dialogue.add_back_button(_show_hull_select)
 		return
 	f.store_string(JSON.stringify(template))
 	f.close()
 
 	var ship := ShipBuilder.build(path)
 	if ship == null:
-		_clear_body()
-		_add_quote("The yard couldn't build that vessel. Please report this bug.")
-		_add_back_button()
+		_dialogue.clear()
+		_dialogue.add_quote("The yard couldn't build that vessel. Please report this bug.")
+		_dialogue.add_back_button(_show_hull_select)
 		return
 
 	var placed := _try_place_at_berth(ship)
@@ -203,12 +202,12 @@ func _commission(entry: Dictionary) -> void:
 		plot.respawn_staged_cargo()
 
 	_pending_entry = {}
-	_clear_body()
+	_dialogue.clear()
 	if placed:
-		_add_quote("She's alongside, Captain. %s — ready for sea." % str(entry["display"]))
+		_dialogue.add_quote("She's alongside, Captain. %s — ready for sea." % str(entry["display"]))
 	else:
-		_add_quote("She's afloat, Captain, but all berths are occupied.\nYou'll find her in the water nearby.")
-	_add_option("Much obliged.", _close)
+		_dialogue.add_quote("She's afloat, Captain, but all berths are occupied.\nYou'll find her in the water nearby.")
+	_dialogue.add_option("Much obliged.", _close)
 
 
 func _try_place_at_berth(ship: BoatBody) -> bool:
@@ -273,40 +272,6 @@ func _build_template(entry: Dictionary) -> Dictionary:
 	}
 
 
-# ── UI helpers ────────────────────────────────────────────────────────────────
-
-func _clear_body() -> void:
-	for child in _body.get_children():
-		child.queue_free()
-
-
-func _add_quote(text: String) -> void:
-	var lbl                   := Label.new()
-	lbl.text                  = text
-	lbl.autowrap_mode         = TextServer.AUTOWRAP_WORD
-	lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	lbl.add_theme_font_size_override("font_size", 15)
-	_body.add_child(lbl)
-	_body.add_child(HSeparator.new())
-
-
-func _add_option(text: String, callback: Callable) -> void:
-	var btn                   := Button.new()
-	btn.text                  = text
-	btn.alignment             = HORIZONTAL_ALIGNMENT_LEFT
-	btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	btn.pressed.connect(callback)
-	_body.add_child(btn)
-
-
-func _add_back_button() -> void:
-	_body.add_child(HSeparator.new())
-	if _screen == _Screen.CONFIRM:
-		_add_option("← Back", _show_hull_select)
-	else:
-		_add_option("← Back", _show_main)
-
-
 # ── Dock lookup ───────────────────────────────────────────────────────────────
 
 func _get_dock() -> PortDock:
@@ -319,37 +284,5 @@ func _get_dock() -> PortDock:
 # ── Build UI ──────────────────────────────────────────────────────────────────
 
 func _build_ui() -> void:
-	var layer  := CanvasLayer.new()
-	layer.name = "ShipwrightLayer"
-	add_child(layer)
-
-	_panel               = Panel.new()
-	_panel.name          = "ShipwrightPanel"
-	_panel.visible       = false
-	_panel.theme         = HudStyle.make_theme()
-	_panel.set_anchors_preset(Control.PRESET_CENTER)
-	_panel.offset_left   = -300.0
-	_panel.offset_right  =  300.0
-	_panel.offset_top    = -250.0
-	_panel.offset_bottom =  250.0
-	layer.add_child(_panel)
-
-	var title                  := Label.new()
-	title.text                 = "SHIPWRIGHT"
-	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	title.add_theme_font_size_override("font_size", 15)
-	title.add_theme_color_override("font_color", HudStyle.C_AMBER)
-	title.set_anchors_preset(Control.PRESET_TOP_WIDE)
-	title.offset_top    = 10.0
-	title.offset_bottom = 40.0
-	_panel.add_child(title)
-
-	var scroll           := ScrollContainer.new()
-	scroll.set_anchors_preset(Control.PRESET_FULL_RECT)
-	scroll.offset_top    = 48.0
-	scroll.offset_bottom = -8.0
-	_panel.add_child(scroll)
-
-	_body                       = VBoxContainer.new()
-	_body.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	scroll.add_child(_body)
+	_dialogue = DialoguePanel.new("SHIPWRIGHT", Vector2(600.0, 500.0))
+	add_child(_dialogue)

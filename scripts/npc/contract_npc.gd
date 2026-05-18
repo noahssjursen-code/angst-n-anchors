@@ -9,8 +9,7 @@ const FLAT_CAP_PATH := "res://resources/data/meshes/characters/hat_flat_cap.json
 
 @export var port_id: String = ""
 
-var _panel: Panel
-var _list:  VBoxContainer
+var _dialogue: DialoguePanel
 
 
 func _ready() -> void:
@@ -34,29 +33,28 @@ func _on_interact() -> void:
 	if _nearest_player() == null:
 		return
 	_refresh_list()
-	_panel.visible = true
+	_dialogue.show_panel()
 	open_ui()
 
 
 func _on_ui_cancel() -> void:
-	_panel.visible = false
+	_dialogue.hide_panel()
 	close_ui()
 
 
 # ── Panel ─────────────────────────────────────────────────────────────────────
 
 func _refresh_list() -> void:
-	for child in _list.get_children():
-		child.queue_free()
+	_dialogue.clear()
 
 	var registry := _registry()
 	if registry == null:
-		_list.add_child(_plain_label("ContractRegistry autoload not found."))
+		_dialogue.add_label("ContractRegistry autoload not found.")
 		return
 
 	var contracts: Array[Contract] = registry.get_contracts_from_port(port_id)
 	if contracts.is_empty():
-		_list.add_child(_plain_label("No contracts available."))
+		_dialogue.add_label("No contracts available.")
 		return
 
 	var active_count: int = registry.get_accepted_contracts().size()
@@ -69,13 +67,12 @@ func _refresh_list() -> void:
 	var header_text := "No active route   ·   Ship capacity %d cells" % ship_cells_free
 	if active_count > 0:
 		header_text = "Route active   ·   Ship capacity %d cells" % ship_cells_free
-	var header := _plain_label(header_text)
+	var header := _dialogue.add_label(header_text)
 	header.add_theme_color_override("font_color", HudStyle.C_AMBER)
-	_list.add_child(header)
-	_list.add_child(HSeparator.new())
+	_dialogue.add_separator()
 
 	for contract in contracts:
-		_list.add_child(_make_row(contract, registry, slots_free, ship_berthed, ship_cells_free))
+		_dialogue.add_custom(_make_row(contract, registry, slots_free, ship_berthed, ship_cells_free))
 
 
 func _make_row(contract: Contract, registry: Node, slots_free: int, ship_berthed: bool, ship_cells_free: int) -> Control:
@@ -217,57 +214,8 @@ func _on_accept(contract_id: String, take_units: int = 0) -> void:
 
 func _build_ui() -> void:
 	add_overlay("hat", FLAT_CAP_PATH)
-
-	var ui_layer      := CanvasLayer.new()
-	ui_layer.name     = "ContractNpcLayer"
-	add_child(ui_layer)
-
-	_panel            = Panel.new()
-	_panel.name       = "ContractBoard"
-	_panel.visible    = false
-	_panel.theme      = HudStyle.make_theme()
-	_panel.set_anchors_preset(Control.PRESET_CENTER)
-	_panel.offset_left   = -320.0
-	_panel.offset_right  =  320.0
-	_panel.offset_top    = -280.0
-	_panel.offset_bottom =  280.0
-	ui_layer.add_child(_panel)
-
-	var title                  := Label.new()
-	title.text                 = "CONTRACT BOARD"
-	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	title.add_theme_font_size_override("font_size", 15)
-	title.add_theme_color_override("font_color", HudStyle.C_AMBER)
-	title.set_anchors_preset(Control.PRESET_TOP_WIDE)
-	title.offset_top    = 10.0
-	title.offset_bottom = 40.0
-	_panel.add_child(title)
-
-	var scroll           := ScrollContainer.new()
-	scroll.set_anchors_preset(Control.PRESET_FULL_RECT)
-	scroll.offset_top    = 48.0
-	scroll.offset_bottom = -44.0
-	_panel.add_child(scroll)
-
-	_list                       = VBoxContainer.new()
-	_list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	scroll.add_child(_list)
-
-	var close_btn           := Button.new()
-	close_btn.text          = "Close"
-	close_btn.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
-	close_btn.offset_top    = -38.0
-	close_btn.offset_bottom = -6.0
-	close_btn.offset_left   = 8.0
-	close_btn.offset_right  = -8.0
-	close_btn.pressed.connect(_on_ui_cancel)
-	_panel.add_child(close_btn)
-
-
-func _plain_label(text: String) -> Label:
-	var lbl := Label.new()
-	lbl.text = text
-	return lbl
+	_dialogue = DialoguePanel.new("CONTRACT BOARD", Vector2(640.0, 560.0))
+	add_child(_dialogue)
 
 
 func _ship_is_berthed() -> bool:
