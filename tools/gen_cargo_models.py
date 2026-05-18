@@ -44,7 +44,7 @@ def box_mesh(w: float, h: float, d: float, y_base: float = 0.0) -> dict:
     return {"vertices": v, "indices": i}
 
 
-def prism_mesh(r_bottom: float, r_top: float, h: float, y_base: float = 0.0, sides: int = 12) -> dict:
+def prism_mesh(r_bottom: float, r_top: float, h: float, y_base: float = 0.0, sides: int = 6) -> dict:
     """Truncated regular prism (cone-like) with `sides` sides."""
     v: list[float] = []
     for k in range(sides):
@@ -86,10 +86,33 @@ def part(name: str, mesh: dict, color: list[float], pos=(0, 0, 0), roughness: fl
     }
 
 
+def _render(obj, indent: int = 0) -> str:
+    """JSON-ish formatter: dicts indented, numeric arrays kept inline so
+    vertex/index lists don't blow up to thousands of lines."""
+    pad = "  " * indent
+    inner_pad = "  " * (indent + 1)
+    if isinstance(obj, dict):
+        if not obj:
+            return "{}"
+        items = []
+        for k, v in obj.items():
+            items.append(f'{inner_pad}"{k}": {_render(v, indent + 1)}')
+        return "{\n" + ",\n".join(items) + "\n" + pad + "}"
+    if isinstance(obj, list):
+        if obj and all(isinstance(x, (int, float, bool)) for x in obj):
+            return "[" + ", ".join(json.dumps(x) for x in obj) + "]"
+        if not obj:
+            return "[]"
+        items = [f"{inner_pad}{_render(x, indent + 1)}" for x in obj]
+        return "[\n" + ",\n".join(items) + "\n" + pad + "]"
+    return json.dumps(obj)
+
+
 def dump(filename: str, model: dict) -> None:
     path = OUT_DIR / filename
     with path.open("w") as f:
-        json.dump(model, f, indent=1)
+        f.write(_render(model))
+        f.write("\n")
     print(f"  wrote {path}")
 
 
@@ -115,114 +138,66 @@ def make_pallet_section() -> None:
 
 
 def make_crate() -> None:
-    """Wooden crate — main body + 4 corner posts + thin top/bottom rims."""
+    """Wooden crate — just body + dark rim caps. Reference: gantry crane parts."""
     w = 1.05
     h = 0.55
     pale = [0.66, 0.50, 0.30]
     dark = [0.38, 0.26, 0.15]
-    half = w / 2.0
-    post = 0.10
     parts = [
-        # Main body
         part("body", box_mesh(w, h, w, 0), pale, (0, 0, 0)),
-        # 4 vertical corner posts (slightly outside the body)
-        part("post_fl", box_mesh(post, h + 0.02, post, -0.01), dark, (-half, 0, -half)),
-        part("post_fr", box_mesh(post, h + 0.02, post, -0.01), dark, ( half, 0, -half)),
-        part("post_bl", box_mesh(post, h + 0.02, post, -0.01), dark, (-half, 0,  half)),
-        part("post_br", box_mesh(post, h + 0.02, post, -0.01), dark, ( half, 0,  half)),
-        # Top + bottom rim band (thin horizontal slats)
-        part("rim_bottom", box_mesh(w + 0.02, 0.04, w + 0.02, 0.02), dark, (0, 0, 0)),
-        part("rim_top",    box_mesh(w + 0.02, 0.04, w + 0.02, h - 0.04), dark, (0, 0, 0)),
-        # Lid hint — small raised square in the middle of the top
-        part("lid", box_mesh(w * 0.6, 0.04, w * 0.6, h), [c * 0.85 for c in pale], (0, 0, 0)),
+        # Thin dark rim band wrapping top + bottom (two slim boxes).
+        part("rim_bottom", box_mesh(w + 0.04, 0.05, w + 0.04, 0.0), dark, (0, 0, 0)),
+        part("rim_top",    box_mesh(w + 0.04, 0.05, w + 0.04, h - 0.05), dark, (0, 0, 0)),
     ]
     dump("provisions_crate.json", {"name": "provisions_crate", "parts": parts})
 
 
 def make_barrel() -> None:
-    """Wooden barrel — bulging body (3 stacked frustums) + 2 metal hoops."""
+    """Wooden barrel — single hex body with two thin hoops. 6-sided prisms."""
     wood = [0.45, 0.27, 0.15]
     hoop = [0.20, 0.18, 0.16]
-    # Bulging silhouette: narrow→wide→narrow.
-    r_end = 0.35
-    r_mid = 0.45
-    h_low, h_mid, h_high = 0.22, 0.22, 0.22
+    r = 0.42
+    h = 0.66
     parts = [
-        # Body: bottom frustum (narrows down → up to widest)
-        part("body_low",  prism_mesh(r_end, r_mid, h_low,  0.00, sides=14), wood, (0, 0, 0)),
-        # Middle: straight at widest
-        part("body_mid",  prism_mesh(r_mid, r_mid, h_mid,  h_low, sides=14), wood, (0, 0, 0)),
-        # Upper frustum (widest → narrows up)
-        part("body_high", prism_mesh(r_mid, r_end, h_high, h_low + h_mid, sides=14), wood, (0, 0, 0)),
-        # Two darker hoops at top + bottom of the middle bulge
-        part("hoop_lo",   prism_mesh(r_mid * 1.02, r_mid * 1.02, 0.04, h_low - 0.02, sides=14),
+        part("body",    prism_mesh(r, r, h, 0.0, sides=6), wood, (0, 0, 0)),
+        part("hoop_lo", prism_mesh(r * 1.04, r * 1.04, 0.05, h * 0.2, sides=6),
              hoop, (0, 0, 0), roughness=0.45, metallic=0.6),
-        part("hoop_hi",   prism_mesh(r_mid * 1.02, r_mid * 1.02, 0.04, h_low + h_mid - 0.02, sides=14),
+        part("hoop_hi", prism_mesh(r * 1.04, r * 1.04, 0.05, h * 0.7, sides=6),
              hoop, (0, 0, 0), roughness=0.45, metallic=0.6),
-        # Top lid disc
-        part("lid",       prism_mesh(r_end * 0.95, r_end * 0.95, 0.03,
-                                     h_low + h_mid + h_high - 0.015, sides=14),
-             [c * 0.85 for c in wood], (0, 0, 0)),
     ]
     dump("provisions_barrel.json", {"name": "provisions_barrel", "parts": parts})
 
 
 def make_sack() -> None:
-    """Canvas sack — bulbous body that narrows to a tied neck."""
+    """Canvas sack — two stacked hex frustums + tiny tie. 6 sides."""
     canvas = [0.82, 0.74, 0.58]
     rope   = [0.35, 0.25, 0.18]
-    # Stacked frustums to build a teardrop: narrow base → wide belly → narrow neck → tiny tie.
     parts = [
-        # Bottom (small footprint widening upward)
-        part("base",   prism_mesh(0.30, 0.48, 0.18, 0.00, sides=12), canvas, (0, 0, 0)),
-        # Belly (widest, slight outward bow)
-        part("belly",  prism_mesh(0.48, 0.46, 0.18, 0.18, sides=12), canvas, (0, 0, 0)),
-        # Shoulder (narrowing)
-        part("shoulder", prism_mesh(0.46, 0.30, 0.15, 0.36, sides=12),
-             [c * 0.94 for c in canvas], (0, 0, 0)),
-        # Neck (small cinch)
-        part("neck",   prism_mesh(0.18, 0.20, 0.08, 0.51, sides=12),
-             [c * 0.88 for c in canvas], (0, 0, 0)),
-        # Tie at the very top
-        part("tie",    prism_mesh(0.22, 0.10, 0.05, 0.59, sides=12), rope, (0, 0, 0)),
+        # Body: base → belly (one frustum) → shoulder narrows up.
+        part("belly",    prism_mesh(0.34, 0.48, 0.35, 0.0,  sides=6), canvas, (0, 0, 0)),
+        part("shoulder", prism_mesh(0.48, 0.20, 0.20, 0.35, sides=6),
+             [c * 0.92 for c in canvas], (0, 0, 0)),
+        # Tiny tie/knob on top.
+        part("tie",      prism_mesh(0.16, 0.10, 0.06, 0.55, sides=6), rope, (0, 0, 0)),
     ]
     dump("provisions_sack.json", {"name": "provisions_sack", "parts": parts})
 
 
 def make_amphora() -> None:
-    """Cluster of 4 small clay amphorae (jars) in a 2×2 layout."""
+    """Cluster of 4 small clay jars — each jar is 2 hex frustums + a neck."""
     clay = [0.42, 0.26, 0.18]
-    foot = 0.10
-    belly = 0.18
-    shoulder = 0.12
-    neck = 0.06
-    mouth = 0.09
 
     def one_jar(prefix: str, ox: float, oz: float) -> list[dict]:
         return [
-            # Foot (narrow base)
-            part(f"{prefix}_foot",
-                 prism_mesh(foot, foot + 0.02, 0.06, 0.00, sides=10),
+            part(f"{prefix}_belly",
+                 prism_mesh(0.10, 0.20, 0.22, 0.00, sides=6),
                  clay, (ox, 0, oz)),
-            # Belly (round bulge)
-            part(f"{prefix}_belly_lo",
-                 prism_mesh(foot + 0.02, belly, 0.12, 0.06, sides=10),
-                 clay, (ox, 0, oz)),
-            part(f"{prefix}_belly_hi",
-                 prism_mesh(belly, shoulder, 0.10, 0.18, sides=10),
-                 clay, (ox, 0, oz)),
-            # Neck (long narrow)
-            part(f"{prefix}_neck",
-                 prism_mesh(shoulder, neck, 0.16, 0.28, sides=10),
-                 [c * 0.95 for c in clay], (ox, 0, oz)),
-            # Mouth (slight flare)
-            part(f"{prefix}_mouth",
-                 prism_mesh(neck, mouth, 0.03, 0.44, sides=10),
-                 [c * 0.85 for c in clay], (ox, 0, oz)),
+            part(f"{prefix}_shoulder",
+                 prism_mesh(0.20, 0.08, 0.18, 0.22, sides=6),
+                 [c * 0.92 for c in clay], (ox, 0, oz)),
         ]
 
-    # 2×2 grid offsets — fit comfortably in one cell.
-    o = 0.30
+    o = 0.28
     parts: list[dict] = []
     parts.extend(one_jar("fl", -o, -o))
     parts.extend(one_jar("fr",  o, -o))
