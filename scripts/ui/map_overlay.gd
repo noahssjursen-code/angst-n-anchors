@@ -623,9 +623,24 @@ func _draw_compass_rose(center: Vector2, r: float) -> void:
 const WX_MIN_CELL_M     : float = 2500.0  ## smallest cell side in world metres
 const WX_MAX_CELLS_X    : int   = 32
 const WX_MAX_CELLS_Y    : int   = 22
-const WX_SUBSAMPLES     : int   = 2       ## NxN sub-samples averaged per cell
+const WX_SUBSAMPLES     : int   = 1       ## NxN sub-samples averaged per cell — field is already smooth at this scale
 const WX_PRESSURE_LO    : float = 990.0   ## hPa mapped to deep red
 const WX_PRESSURE_HI    : float = 1030.0  ## hPa mapped to deep blue
+
+## Throttle weather grid recomputation — pressure shifts over minutes of game
+## time, no point re-rasterising 60×/s. We re-sample whenever the cached grid
+## is stale by more than this many game-hours OR the view has scrolled/zoomed.
+const WX_CACHE_MAX_AGE_GAME_H : float = 0.05    # ≈ 3s real-time at 1min/h
+
+var _wx_cache_time_h : float = -1.0
+var _wx_cache_wx0    : float = 0.0
+var _wx_cache_wz0    : float = 0.0
+var _wx_cache_cell_m : float = 0.0
+var _wx_cache_cols   : int   = 0
+var _wx_cache_rows   : int   = 0
+var _wx_cache_pressure : PackedFloat32Array = PackedFloat32Array()
+var _wx_cache_wind_x   : PackedFloat32Array = PackedFloat32Array()
+var _wx_cache_wind_z   : PackedFloat32Array = PackedFloat32Array()
 
 
 func _draw_weather_zones() -> void:
@@ -633,10 +648,52 @@ func _draw_weather_zones() -> void:
 		return
 	var time_h := WeatherField.current_game_time()
 	var g := _weather_grid()
-	_draw_weather_pressure_field(time_h, g)
-	_draw_weather_wind_field(time_h, g)
-	_draw_weather_extrema(time_h, g)
+	_ensure_weather_cache(time_h, g)
+	_draw_weather_pressure_field(g)
+	_draw_weather_wind_field(g)
+	_draw_weather_extrema(g)
 	_draw_weather_season_banner(time_h)
+
+
+## Single pass over the grid that fills the pressure / wind caches. Reused
+## across all three draw passes — collapses ~3× redundant noise work into 1.
+func _ensure_weather_cache(time_h: float, g: Dictionary) -> void:
+	var cell_m : float = g["cell_m"]
+	var cols   : int   = g["cols"]
+	var rows   : int   = g["rows"]
+	var wx0    : float = g["wx0"]
+	var wz0    : float = g["wz0"]
+	# Reuse last frame's samples if view + time both barely moved.
+	var view_unchanged := (
+		_wx_cache_cell_m == cell_m
+		and _wx_cache_cols == cols
+		and _wx_cache_rows == rows
+		and is_equal_approx(_wx_cache_wx0, wx0)
+		and is_equal_approx(_wx_cache_wz0, wz0)
+	)
+	var time_fresh := view_unchanged and absf(time_h - _wx_cache_time_h) < WX_CACHE_MAX_AGE_GAME_H
+	if time_fresh:
+		return
+	_wx_cache_time_h = time_h
+	_wx_cache_wx0    = wx0
+	_wx_cache_wz0    = wz0
+	_wx_cache_cell_m = cell_m
+	_wx_cache_cols   = cols
+	_wx_cache_rows   = rows
+	var n := cols * rows
+	_wx_cache_pressure.resize(n)
+	_wx_cache_wind_x.resize(n)
+	_wx_cache_wind_z.resize(n)
+	for j in range(rows):
+		var wz : float = wz0 + (float(j) + 0.5) * cell_m
+		for i in range(cols):
+			var wx : float = wx0 + (float(i) + 0.5) * cell_m
+			var s := _cell_avg_sample(time_h, wx0 + float(i) * cell_m, wz0 + float(j) * cell_m, cell_m)
+			var idx := j * cols + i
+			_wx_cache_pressure[idx] = float(s["pressure"])
+			var w : Vector3 = s["wind"]
+			_wx_cache_wind_x[idx] = w.x
+			_wx_cache_wind_z[idx] = w.z
 
 
 ## Build the shared world-anchored grid description used by all three weather
@@ -699,37 +756,42 @@ func _cell_avg_sample(time_h: float, wx0: float, wz0: float, cell_m: float) -> D
 	return {"pressure": p_sum / n, "wind": w_sum / n}
 
 
-func _draw_weather_pressure_field(time_h: float, g: Dictionary) -> void:
+func _draw_weather_pressure_field(g: Dictionary) -> void:
 	var cell_m : float = g["cell_m"]
 	var cell_w : float = cell_m * float(g["ppu_x"])
 	var cell_h : float = cell_m * float(g["ppu_z"])
-	for j in range(g["rows"]):
+	var cols   : int   = g["cols"]
+	var rows   : int   = g["rows"]
+	for j in range(rows):
 		var wz0 : float = g["wz0"] + float(j) * cell_m
 		var sy  : float = _wz_to_sy(wz0, g)
-		for i in range(g["cols"]):
+		for i in range(cols):
 			var wx0 : float = g["wx0"] + float(i) * cell_m
 			var sx  : float = _wx_to_sx(wx0, g)
-			var s := _cell_avg_sample(time_h, wx0, wz0, cell_m)
 			draw_rect(Rect2(sx, sy, cell_w + 1.0, cell_h + 1.0),
-					   _pressure_color(float(s["pressure"])), true)
+					   _pressure_color(_wx_cache_pressure[j * cols + i]), true)
 
 
-func _draw_weather_wind_field(time_h: float, g: Dictionary) -> void:
+func _draw_weather_wind_field(g: Dictionary) -> void:
 	var cell_m : float = g["cell_m"]
 	var cell_w : float = cell_m * float(g["ppu_x"])
 	var cell_h : float = cell_m * float(g["ppu_z"])
+	var cols   : int   = g["cols"]
+	var rows   : int   = g["rows"]
 	var arrow_len := minf(cell_w, cell_h) * 0.78
-	for j in range(g["rows"]):
+	for j in range(rows):
 		var wz0 : float = g["wz0"] + float(j) * cell_m
-		for i in range(g["cols"]):
+		for i in range(cols):
 			var wx0 : float = g["wx0"] + float(i) * cell_m
-			var s := _cell_avg_sample(time_h, wx0, wz0, cell_m)
-			var w : Vector3 = s["wind"]
-			var mag := minf(w.length(), 1.0)
+			var idx := j * cols + i
+			var wx_v : float = _wx_cache_wind_x[idx]
+			var wz_v : float = _wx_cache_wind_z[idx]
+			var mag := sqrt(wx_v * wx_v + wz_v * wz_v)
 			if mag < 0.05:
 				continue
+			mag = minf(mag, 1.0)
 			# Screen Y is flipped vs world Z (north-up): negate Z to match.
-			var screen_dir := Vector2(w.x, -w.z).normalized()
+			var screen_dir := Vector2(wx_v, -wz_v) / maxf(sqrt(wx_v*wx_v + wz_v*wz_v), 1e-4)
 			var cx := _wx_to_sx(wx0 + cell_m * 0.5, g)
 			var cy := _wz_to_sy(wz0 + cell_m * 0.5, g)
 			var tail := Vector2(cx, cy) - screen_dir * arrow_len * 0.5
@@ -741,26 +803,19 @@ func _draw_weather_wind_field(time_h: float, g: Dictionary) -> void:
 			draw_line(head, head - screen_dir * 4.0 - perp * 2.6, col, 1.4, true)
 
 
-## Walk the pressure grid and mark local minima as L (storm centres) and
-## local maxima as H. Uses the SAME averaged samples the heatmap drew, so
+## Walk the cached pressure grid and mark local minima as L (storm centres)
+## and local maxima as H. Uses the SAME cached samples the heatmap drew, so
 ## labels always sit on cells that look the colour the label claims.
-func _draw_weather_extrema(time_h: float, g: Dictionary) -> void:
+func _draw_weather_extrema(g: Dictionary) -> void:
 	var cell_m : float = g["cell_m"]
 	var cols   : int   = g["cols"]
 	var rows   : int   = g["rows"]
 	if cols < 3 or rows < 3:
 		return
-	var grid := PackedFloat32Array()
-	grid.resize(cols * rows)
-	for j in range(rows):
-		var wz0 : float = g["wz0"] + float(j) * cell_m
-		for i in range(cols):
-			var wx0 : float = g["wx0"] + float(i) * cell_m
-			grid[j * cols + i] = float(_cell_avg_sample(time_h, wx0, wz0, cell_m)["pressure"])
 	var font := ThemeDB.fallback_font
 	for j in range(1, rows - 1):
 		for i in range(1, cols - 1):
-			var p := grid[j * cols + i]
+			var p := _wx_cache_pressure[j * cols + i]
 			var is_low  := p < WX_PRESSURE_LO + 5.0
 			var is_high := p > WX_PRESSURE_HI - 5.0
 			if not (is_low or is_high):
@@ -771,7 +826,7 @@ func _draw_weather_extrema(time_h: float, g: Dictionary) -> void:
 				for di in [-1, 0, 1]:
 					if di == 0 and dj == 0:
 						continue
-					var nb := grid[(j + dj) * cols + (i + di)]
+					var nb := _wx_cache_pressure[(j + dj) * cols + (i + di)]
 					if nb <= p: min_ok = false
 					if nb >= p: max_ok = false
 			if is_low and min_ok:
