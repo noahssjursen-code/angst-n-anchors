@@ -228,7 +228,15 @@ func _build_lights() -> void:
 		var flood := SpotLight3D.new()
 		flood.name = "Flood%d" % i
 		flood.position = positions[i]
-		flood.look_at(positions[i] + Vector3(sx * 0.6, -1.0, sz * 0.6), Vector3.UP, true)
+		# SpotLight3D shines along its local -Z, so build a basis whose -Z
+		# matches the desired down-and-outward aim. Done manually because
+		# look_at requires the node to be in the tree.
+		var aim_dir := Vector3(sx * 0.6, -1.0, sz * 0.6).normalized()
+		var z_axis  := -aim_dir
+		var ref_up  := Vector3.UP if absf(z_axis.dot(Vector3.UP)) < 0.99 else Vector3.FORWARD
+		var x_axis  := ref_up.cross(z_axis).normalized()
+		var y_axis  := z_axis.cross(x_axis).normalized()
+		flood.basis = Basis(x_axis, y_axis, z_axis)
 		flood.light_color = Color(1.0, 0.94, 0.82)
 		flood.light_energy = 4.0
 		flood.spot_range = 32.0
