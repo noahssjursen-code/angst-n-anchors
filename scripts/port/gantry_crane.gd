@@ -347,22 +347,21 @@ func _build_lights() -> void:
 	if Engine.is_editor_hint() and get_tree() != null and get_tree().edited_scene_root != null:
 		bulb.owner = get_tree().edited_scene_root
 
-	# Big berth number painted flat on the asphalt in front of the crane.
-	# Always visible (so players learn berth identity), turns bright green
-	# when the player's ship is moored here so "your crane" reads at a glance.
+	# Big billboarded berth number high on the crane — readable from the open
+	# sea, no matter which direction the player is approaching from. Always
+	# visible at 70 % alpha; turns bright green at full alpha when the
+	# player's ship is moored at this crane's berth.
 	_berth_number = Label3D.new()
 	_berth_number.name = "BerthNumber"
 	_berth_number.text = str(berth_index + 1) if berth_index >= 0 else "?"
 	_berth_number.font_size = 256
-	_berth_number.pixel_size = 0.012
+	_berth_number.pixel_size = 0.020
 	_berth_number.modulate = Color(0.92, 0.88, 0.72, 0.70)
-	_berth_number.outline_modulate = Color(0.05, 0.05, 0.05, 0.85)
-	_berth_number.outline_size = 14
-	_berth_number.billboard = BaseMaterial3D.BILLBOARD_DISABLED
-	_berth_number.no_depth_test = false
-	_berth_number.rotation_degrees = Vector3(-90.0, 0.0, 0.0)  # flat on the ground
-	# Sit it on the apron in front of the crane (a few metres back from the rails)
-	_berth_number.position = Vector3(0.0, 0.13, 5.0)
+	_berth_number.outline_modulate = Color(0.05, 0.05, 0.05, 0.95)
+	_berth_number.outline_size = 24
+	_berth_number.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	_berth_number.no_depth_test = true
+	_berth_number.position = Vector3(0.0, 14.0, 0.0)
 	add_child(_berth_number)
 	if Engine.is_editor_hint() and get_tree() != null and get_tree().edited_scene_root != null:
 		_berth_number.owner = get_tree().edited_scene_root
