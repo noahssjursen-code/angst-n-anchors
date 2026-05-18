@@ -115,6 +115,34 @@ var _dest_target: MeshInstance3D
 var _dest_target_mat: StandardMaterial3D
 var _dest_label: Label3D
 
+# ── Audio ─────────────────────────────────────────────────────────────────────
+# Crane sounds live in res://resources/audio/{looped,normal}/crane/. Files
+# named "<base>_N.wav" are treated as variants — a random one is picked PER
+# CRANE INSTANCE at build time, so each crane sounds slightly different but
+# stays consistent within itself.
+const SOUND_DIR := "res://resources/audio/looped/crane"
+const MOTOR_SPEED_THRESHOLD_M_PER_S := 0.08
+const HOIST_LIMIT_EPSILON := 0.01
+
+var _sfx_motor_gantry: AudioStreamPlayer3D
+var _sfx_motor_trolley: AudioStreamPlayer3D
+var _sfx_motor_hoist: AudioStreamPlayer3D
+# Cached streams for one-shots; one-shot players are created on demand and
+# freed when finished so concurrent plays don't cut each other off.
+var _sfx_chain_engage: AudioStream
+var _sfx_chain_release: AudioStream
+var _sfx_crane_board: AudioStream
+var _sfx_crane_exit: AudioStream
+var _sfx_hook_bottom: AudioStream
+var _sfx_hook_top: AudioStream
+var _sfx_beacon_blink: AudioStream
+var _was_beacon_lit: bool = false
+var _was_hoist_at_bottom: bool = false
+var _was_hoist_at_top: bool = false
+var _last_gantry_x_for_audio: float = 0.0
+var _last_trolley_z_for_audio: float = 0.0
+var _last_hoist_drop_for_audio: float = 0.0
+
 
 # ── Lifecycle ─────────────────────────────────────────────────────────────────
 
@@ -166,6 +194,7 @@ func _build() -> void:
 		_build_camera.call_deferred()
 		_build_snap_ghost.call_deferred()
 		_build_ui()
+		_build_audio.call_deferred()
 
 
 func _build_rails() -> void:
@@ -471,6 +500,7 @@ func _process(delta: float) -> void:
 	# Always keep the cable + hook position in sync with state — otherwise the
 	# cable renders at its default 1 m size when no one is operating the crane.
 	_apply_kinematics(delta)
+	_update_audio(delta)
 	if _occupied:
 		_update_carried_pallet()
 		_update_pickup_highlight()
@@ -637,6 +667,11 @@ func _update_beacon(delta: float) -> void:
 	# Sharp pulse — bright for ~0.2 s, then dim, every ~3.9 s.
 	var pulse := pow(maxf(sin(_beacon_phase), 0.0), 12.0)
 	_beacon.light_energy = 0.2 + pulse * 5.0
+	# Click on the rising edge of each pulse.
+	var lit_now := pulse > 0.4
+	if lit_now and not _was_beacon_lit:
+		_play_one_shot(_sfx_beacon_blink, _beacon, -18.0)
+	_was_beacon_lit = lit_now
 
 
 # ── Snap-preview ──────────────────────────────────────────────────────────────
@@ -887,6 +922,7 @@ func _engage_chains(pallet_node: Node3D) -> void:
 	# Clear pickup halo — we're now carrying it.
 	if pallet_node.has_method("set_highlighted"):
 		pallet_node.set_highlighted(false)
+	_play_one_shot(_sfx_chain_engage, _hook)
 
 	# If this pallet is currently a child of a CargoDeckComponent's
 	# PalletVisuals, reparent it to the scene root first. Otherwise the
@@ -961,6 +997,7 @@ func _try_release() -> void:
 func _consume_pallet() -> void:
 	if _rigging != null:
 		_rigging.detach_all()
+	_play_one_shot(_sfx_chain_release, _hook)
 	if _carried_pallet != null and is_instance_valid(_carried_pallet):
 		_carried_pallet.queue_free()
 	_carried_pallet = null
@@ -1015,6 +1052,7 @@ func _enter_crane() -> void:
 	_prev_mouse_mode = Input.mouse_mode
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 	_seated_count += 1
+	_play_one_shot(_sfx_crane_board, self)
 	if _prompt != null:
 		_prompt.visible = false
 	if _hud != null:
@@ -1034,6 +1072,7 @@ func _exit_crane() -> void:
 		_camera.set_enabled(false)
 	Input.mouse_mode = _prev_mouse_mode
 	_seated_count = maxi(_seated_count - 1, 0)
+	_play_one_shot(_sfx_crane_exit, self)
 	if _player != null:
 		var pcam := _player.get_node_or_null("Camera3D") as Camera3D
 		if pcam != null:
@@ -1092,3 +1131,130 @@ func _register_input_actions() -> void:
 		var ev := InputEventKey.new()
 		ev.physical_keycode = int(bindings[action])
 		InputMap.action_add_event(action, ev)
+
+
+# ── Audio ─────────────────────────────────────────────────────────────────────
+
+func _build_audio() -> void:
+	# Cache one-shot streams once. Variant pick is per-spawn; if the user adds
+	# additional <base>_N.wav files later, each crane independently picks one.
+	_sfx_chain_engage   = _pick_random_sound("chain_engage")
+	_sfx_chain_release  = _pick_random_sound("chain_release")
+	_sfx_crane_board    = _pick_random_sound("crane_board")
+	_sfx_crane_exit     = _pick_random_sound("crane_exit")
+	_sfx_hook_bottom    = _pick_random_sound("hook_bottom")
+	_sfx_hook_top       = _pick_random_sound("hook_top")
+	_sfx_beacon_blink   = _pick_random_sound("beacon_blink")
+
+	# Motor loops — parented to their relevant moving part so the sound pans
+	# correctly as the gantry rolls, the trolley travels, or the hook descends.
+	_sfx_motor_gantry  = _make_motor_player("motor_gantry",  _gantry_frame, -10.0)
+	_sfx_motor_trolley = _make_motor_player("motor_trolley", _trolley,      -10.0)
+	_sfx_motor_hoist   = _make_motor_player("motor_hoist",   _trolley,      -12.0)
+
+	_last_gantry_x_for_audio  = _gantry_x_offset
+	_last_trolley_z_for_audio = _trolley_z
+	_last_hoist_drop_for_audio = _hoist_drop
+
+
+## Returns one of the .wav files in SOUND_DIR whose name is `<base>.wav` or
+## `<base>_N.wav`. Choice is random — called once per sound per crane.
+func _pick_random_sound(base: String) -> AudioStream:
+	var dir := DirAccess.open(SOUND_DIR)
+	if dir == null:
+		return null
+	var exact := base + ".wav"
+	var matches: Array[String] = []
+	for f in dir.get_files():
+		if not f.ends_with(".wav"):
+			continue
+		if f == exact or f.begins_with(base + "_"):
+			matches.append(SOUND_DIR.path_join(f))
+	if matches.is_empty():
+		return null
+	return load(matches[randi() % matches.size()]) as AudioStream
+
+
+func _make_motor_player(base: String, parent: Node3D, db: float) -> AudioStreamPlayer3D:
+	if parent == null:
+		return null
+	var stream := _pick_random_sound(base)
+	if stream == null:
+		return null
+	var looped := _looping_copy(stream)
+	var p := AudioStreamPlayer3D.new()
+	p.name = "Sfx_" + base
+	p.stream = looped
+	p.volume_db = db
+	p.unit_size = 10.0
+	p.max_distance = 80.0
+	p.autoplay = false
+	parent.add_child(p)
+	return p
+
+
+## Returns a duplicated stream with loop_mode forced on. Decks of audio assets
+## might have been imported with looping off; this guarantees the motor loops.
+func _looping_copy(stream: AudioStream) -> AudioStream:
+	var wav := stream as AudioStreamWAV
+	if wav == null:
+		return stream
+	var copy: AudioStreamWAV = wav.duplicate()
+	copy.loop_mode = AudioStreamWAV.LOOP_FORWARD
+	copy.loop_begin = 0
+	# loop_end <= 0 means "use end of sample" — keeps full-length playback.
+	return copy
+
+
+## Spawns a one-shot AudioStreamPlayer3D at `parent`, plays the stream, frees
+## itself when finished. Concurrent calls don't truncate each other.
+func _play_one_shot(stream: AudioStream, parent: Node3D, db: float = -6.0) -> void:
+	if stream == null or parent == null or not is_instance_valid(parent):
+		return
+	var p := AudioStreamPlayer3D.new()
+	p.stream = stream
+	p.volume_db = db
+	p.unit_size = 8.0
+	p.max_distance = 60.0
+	parent.add_child(p)
+	p.finished.connect(p.queue_free)
+	p.play()
+
+
+## Per-frame audio update — called from _process. Gates motor loops by axis
+## speed and fires hoist-limit clacks on transition.
+func _update_audio(delta: float) -> void:
+	if delta <= 0.0:
+		return
+	# Speeds (m/s) since last frame for each axis.
+	var v_gantry  := absf(_gantry_x_offset  - _last_gantry_x_for_audio)  / delta
+	var v_trolley := absf(_trolley_z        - _last_trolley_z_for_audio) / delta
+	var v_hoist   := absf(_hoist_drop       - _last_hoist_drop_for_audio) / delta
+	_last_gantry_x_for_audio   = _gantry_x_offset
+	_last_trolley_z_for_audio  = _trolley_z
+	_last_hoist_drop_for_audio = _hoist_drop
+
+	_gate_motor(_sfx_motor_gantry,  v_gantry)
+	_gate_motor(_sfx_motor_trolley, v_trolley)
+	_gate_motor(_sfx_motor_hoist,   v_hoist)
+
+	# Hoist limit clacks — fire on edge into the limit, reset on departure.
+	var at_bottom := _hoist_drop >= hoist_max_drop - HOIST_LIMIT_EPSILON
+	var at_top    := _hoist_drop <= hoist_min_drop + HOIST_LIMIT_EPSILON
+	if at_bottom and not _was_hoist_at_bottom and _hook != null:
+		_play_one_shot(_sfx_hook_bottom, _hook)
+	if at_top and not _was_hoist_at_top and _hook != null:
+		_play_one_shot(_sfx_hook_top, _hook)
+	_was_hoist_at_bottom = at_bottom
+	_was_hoist_at_top = at_top
+
+
+func _gate_motor(player: AudioStreamPlayer3D, speed: float) -> void:
+	if player == null:
+		return
+	if speed > MOTOR_SPEED_THRESHOLD_M_PER_S:
+		if not player.playing:
+			player.play()
+	else:
+		if player.playing:
+			player.stop()
