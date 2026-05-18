@@ -27,11 +27,11 @@ func _ready() -> void:
 	# mode back to PINGPONG (the default for many WAV exports). A foghorn has
 	# a decaying tail — ping-pong only plays the first BWWAAAAA, then bounces
 	# back-and-forth across the silent tail forever.
+	# NB: we only touch loop_mode here — loop_begin/loop_end come from the
+	# import and zeroing them would produce an empty loop (= silence).
 	var wav := stream as AudioStreamWAV
 	if wav != null and wav.loop_mode != AudioStreamWAV.LOOP_FORWARD:
-		wav.loop_mode  = AudioStreamWAV.LOOP_FORWARD
-		wav.loop_begin = 0
-		wav.loop_end   = 0   # 0 = end of stream
+		wav.loop_mode = AudioStreamWAV.LOOP_FORWARD
 
 
 func _process(_delta: float) -> void:
