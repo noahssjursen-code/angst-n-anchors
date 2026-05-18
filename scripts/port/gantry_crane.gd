@@ -355,10 +355,10 @@ func _build_lights() -> void:
 	_berth_number.name = "BerthNumber"
 	_berth_number.text = str(berth_index + 1) if berth_index >= 0 else "?"
 	_berth_number.font_size = 192
-	_berth_number.pixel_size = 0.018
+	_berth_number.pixel_size = 0.026   # ~5 m tall painted digit
 	_berth_number.modulate = Color(0.96, 0.92, 0.70, 1.0)
 	_berth_number.outline_modulate = Color(0.05, 0.05, 0.05, 1.0)
-	_berth_number.outline_size = 18
+	_berth_number.outline_size = 22
 	_berth_number.billboard = BaseMaterial3D.BILLBOARD_DISABLED
 	_berth_number.no_depth_test = false
 	# Flat on the dock surface, rotated 180° around Y so the digit reads
