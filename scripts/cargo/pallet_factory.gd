@@ -76,6 +76,44 @@ static func pallet_count(contract: Contract) -> int:
 	return int(ceil(float(contract.quantity) / float(maxi(max_units, 1))))
 
 
+## Total grid cells the pallets for `units` of `commodity_id` will occupy.
+## Footprint overfills (3 units → 2×2 = 4 cells) are counted truthfully so
+## ship-capacity gating doesn't lie about how much space the cargo eats.
+static func cells_needed(units: int, commodity_id: String) -> int:
+	if units <= 0:
+		return 0
+	var rules := _commodity_rules(commodity_id)
+	var max_units := int(rules.get("max_pallet_units", DEFAULT_MAX_PALLET_UNITS))
+	return cells_needed_for(units, max_units)
+
+
+## Variant that takes max_units directly.
+static func cells_needed_for(units: int, max_units: int) -> int:
+	if units <= 0 or max_units <= 0:
+		return 0
+	var total := 0
+	var remaining := units
+	while remaining > 0:
+		var batch := mini(remaining, max_units)
+		var fp := best_footprint(batch, max_units)
+		total += fp.x * fp.y
+		remaining -= batch
+	return total
+
+
+## Largest unit count ≤ `units` whose resulting pallets fit in `free_cells`.
+## Returns 0 if even one pallet doesn't fit.
+static func max_units_in_cells(units: int, max_units: int, free_cells: int) -> int:
+	if units <= 0 or max_units <= 0 or free_cells <= 0:
+		return 0
+	var best := 0
+	# Iterate down — first fitting count is the answer.
+	for n in range(units, 0, -1):
+		if cells_needed_for(n, max_units) <= free_cells:
+			return n
+	return best
+
+
 static func _commodity_rules(commodity_id: String) -> Dictionary:
 	for entry in ContractRegistry.COMMODITIES:
 		if str((entry as Dictionary)["id"]) == commodity_id:

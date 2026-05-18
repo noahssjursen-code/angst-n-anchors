@@ -82,11 +82,12 @@ func _make_row(contract: Contract, registry: Node, slots_free: int, ship_berthed
 	var color: Color     = registry.commodity_color(contract.commodity)
 	var max_units: int   = int(info.get("max_pallet_units", 4))
 	var stock: int       = int(registry.get_export_stock(contract.origin_port_id, contract.commodity))
-	# Units the contract still has on offer + how many the player can actually
-	# take right now (ship capacity is also a constraint).
+	# Units the contract still has on offer + the largest count whose pallets
+	# (including footprint overfills) actually fit in ship_cells_free.
 	var still_offered    := contract.available_to_take()
-	var takeable         := mini(mini(still_offered, stock), ship_cells_free)
-	var cells_needed     := still_offered  # 1 unit = 1 cell
+	var stock_limit      := mini(still_offered, stock)
+	var takeable         := PalletFactory.max_units_in_cells(stock_limit, max_units, ship_cells_free)
+	var cells_needed     := PalletFactory.cells_needed_for(still_offered, max_units)
 	var pallets_needed   := int(ceil(float(still_offered) / float(maxi(max_units, 1))))
 
 	var dest_name: String = registry.get_destination_name(contract)
@@ -277,32 +278,31 @@ func _ship_is_berthed() -> bool:
 	return dock.find_occupied_berth() != -1
 
 
-## Free cells the player can still commit to. Equals the total capacity of all
-## ship cargo decks MINUS units already committed via accepted contracts that
-## haven't been delivered yet (whether physically on apron, on ship, or
-## hanging from a crane). Without this, the UI would let the player keep
-## accepting because the ship looks empty when in fact the apron is piling up.
+## Free CELLS the player can still commit to. Counts cells, not units, so
+## footprint overfills (3 timber → 2×2 = 4 cells) are accounted for. Equals
+## total ship deck capacity minus the cells occupied by every committed-but-
+## undelivered pallet in the pipeline.
 func _ship_cells_free() -> int:
 	var total_capacity := 0
 	for node in get_tree().get_nodes_in_group(CargoDeckComponent.DECK_GROUP):
 		var deck := node as CargoDeckComponent
 		if deck == null or not deck.port_id.is_empty():
-			continue  # skip apron decks
+			continue
 		total_capacity += deck.get_capacity()
 
-	var committed := 0
+	var committed_cells := 0
 	var registry := _registry()
 	if registry != null:
 		for c in registry.get_accepted_contracts():
 			var contract := c as Contract
 			if contract == null:
 				continue
-			# taken_count is what the player has accepted; delivered_count
-			# is what's been sold. The difference is everything sitting in
-			# the pipeline (apron + ship + hook).
-			committed += maxi(contract.taken_count - contract.delivered_count, 0)
+			var in_play := maxi(contract.taken_count - contract.delivered_count, 0)
+			if in_play <= 0:
+				continue
+			committed_cells += PalletFactory.cells_needed(in_play, contract.commodity)
 
-	return maxi(total_capacity - committed, 0)
+	return maxi(total_capacity - committed_cells, 0)
 
 
 func _registry() -> Node:
