@@ -116,11 +116,11 @@ var _dest_target_mat: StandardMaterial3D
 var _dest_label: Label3D
 
 # ── Audio ─────────────────────────────────────────────────────────────────────
-# Crane sounds live in res://resources/audio/{looped,normal}/crane/. Files
-# named "<base>_N.wav" are treated as variants — a random one is picked PER
-# CRANE INSTANCE at build time, so each crane sounds slightly different but
-# stays consistent within itself.
-const SOUND_DIR := "res://resources/audio/looped/crane"
+# Crane sounds: motor loops in looped/crane/, one-shots in normal/crane/. Files
+# named "<base>_N.wav" are treated as variants — one is picked at random PER
+# CRANE INSTANCE at build time so each crane has its own consistent voice.
+const SOUND_DIR_LOOPED := "res://resources/audio/looped/crane"
+const SOUND_DIR_NORMAL := "res://resources/audio/normal/crane"
 const MOTOR_SPEED_THRESHOLD_M_PER_S := 0.08
 const HOIST_LIMIT_EPSILON := 0.01
 
@@ -1132,12 +1132,12 @@ func _register_input_actions() -> void:
 func _build_audio() -> void:
 	# Cache one-shot streams once. Variant pick is per-spawn; if the user adds
 	# additional <base>_N.wav files later, each crane independently picks one.
-	_sfx_chain_engage   = _pick_random_sound("chain_engage")
-	_sfx_chain_release  = _pick_random_sound("chain_release")
-	_sfx_crane_board    = _pick_random_sound("crane_board")
-	_sfx_crane_exit     = _pick_random_sound("crane_exit")
-	_sfx_hook_bottom    = _pick_random_sound("hook_bottom")
-	_sfx_hook_top       = _pick_random_sound("hook_top")
+	_sfx_chain_engage   = _pick_random_sound(SOUND_DIR_NORMAL, "chain_engage")
+	_sfx_chain_release  = _pick_random_sound(SOUND_DIR_NORMAL, "chain_release")
+	_sfx_crane_board    = _pick_random_sound(SOUND_DIR_NORMAL, "crane_board")
+	_sfx_crane_exit     = _pick_random_sound(SOUND_DIR_NORMAL, "crane_exit")
+	_sfx_hook_bottom    = _pick_random_sound(SOUND_DIR_NORMAL, "hook_bottom")
+	_sfx_hook_top       = _pick_random_sound(SOUND_DIR_NORMAL, "hook_top")
 
 	# Motor loops — parented to their relevant moving part so the sound pans
 	# correctly as the gantry rolls, the trolley travels, or the hook descends.
@@ -1150,10 +1150,10 @@ func _build_audio() -> void:
 	_last_hoist_drop_for_audio = _hoist_drop
 
 
-## Returns one of the .wav files in SOUND_DIR whose name is `<base>.wav` or
+## Returns one of the .wav files in `folder` whose name is `<base>.wav` or
 ## `<base>_N.wav`. Choice is random — called once per sound per crane.
-func _pick_random_sound(base: String) -> AudioStream:
-	var dir := DirAccess.open(SOUND_DIR)
+func _pick_random_sound(folder: String, base: String) -> AudioStream:
+	var dir := DirAccess.open(folder)
 	if dir == null:
 		return null
 	var exact := base + ".wav"
@@ -1162,7 +1162,7 @@ func _pick_random_sound(base: String) -> AudioStream:
 		if not f.ends_with(".wav"):
 			continue
 		if f == exact or f.begins_with(base + "_"):
-			matches.append(SOUND_DIR.path_join(f))
+			matches.append(folder.path_join(f))
 	if matches.is_empty():
 		return null
 	return load(matches[randi() % matches.size()]) as AudioStream
@@ -1171,32 +1171,19 @@ func _pick_random_sound(base: String) -> AudioStream:
 func _make_motor_player(base: String, parent: Node3D, db: float) -> AudioStreamPlayer3D:
 	if parent == null:
 		return null
-	var stream := _pick_random_sound(base)
+	var stream := _pick_random_sound(SOUND_DIR_LOOPED, base)
 	if stream == null:
 		return null
-	var looped := _looping_copy(stream)
+	# .import sets loop_mode=1, so the stream loops natively. Use it as-is.
 	var p := AudioStreamPlayer3D.new()
 	p.name = "Sfx_" + base
-	p.stream = looped
+	p.stream = stream
 	p.volume_db = db
 	p.unit_size = 10.0
 	p.max_distance = 80.0
 	p.autoplay = false
 	parent.add_child(p)
 	return p
-
-
-## Returns a duplicated stream with loop_mode forced on. Decks of audio assets
-## might have been imported with looping off; this guarantees the motor loops.
-func _looping_copy(stream: AudioStream) -> AudioStream:
-	var wav := stream as AudioStreamWAV
-	if wav == null:
-		return stream
-	var copy: AudioStreamWAV = wav.duplicate()
-	copy.loop_mode = AudioStreamWAV.LOOP_FORWARD
-	copy.loop_begin = 0
-	# loop_end <= 0 means "use end of sample" — keeps full-length playback.
-	return copy
 
 
 ## Spawns a one-shot AudioStreamPlayer3D at `parent`, plays the stream, frees
