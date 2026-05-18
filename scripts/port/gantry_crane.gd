@@ -81,6 +81,7 @@ var _player: CharacterBody3D = null
 var _carried_pallet: Node3D = null      # PalletNode currently lifted
 var _highlighted_pallet: Node3D = null  # PalletNode whose sockets glow
 var _carry_rotated: bool = false        # carried pallet rotated 90° from spawn
+var _carry_baseline_basis: Basis = Basis.IDENTITY  # orientation captured at engage
 
 var _ui: CanvasLayer
 var _prompt: Label
@@ -609,13 +610,13 @@ func _update_carried_pallet() -> void:
 		if _rigging != null:
 			_rigging.detach_all()
 		return
-	# Fully attached: pallet rides under the hook. Rotation is kept stable
-	# in world space — Q applies a fixed 90° world-Y twist. The snap-ghost
-	# already previews the deck-aligned orientation, and when released the
-	# fresh PalletNode aligns to the deck's basis automatically.
+	# Fully attached: pallet rides under the hook. Rotation is anchored to
+	# the basis the pallet had at pickup (apron orientation, ship deck
+	# orientation, etc.) and Q applies a fixed 90° twist relative to that
+	# baseline. Carrying it across other decks doesn't snap it around.
 	if _rigging.attached_count() >= CraneRigging.MAX_CHAINS:
 		var hp := _hook.global_position
-		var oriented := Basis.IDENTITY
+		var oriented := _carry_baseline_basis
 		if _carry_rotated:
 			oriented = oriented.rotated(Vector3.UP, PI * 0.5)
 		_carried_pallet.global_transform = Transform3D(
@@ -871,8 +872,10 @@ func _toggle_rotation() -> void:
 func _engage_chains(pallet_node: Node3D) -> void:
 	if _rigging == null or pallet_node == null or not is_instance_valid(pallet_node):
 		return
-	# Each new pickup starts in its natural orientation.
+	# Each new pickup starts in its natural orientation, anchored to whatever
+	# basis the pallet had while sitting on its source deck.
 	_carry_rotated = false
+	_carry_baseline_basis = pallet_node.global_basis.orthonormalized()
 
 	# If this pallet is currently a child of a CargoDeckComponent's
 	# PalletVisuals, reparent it to the scene root first. Otherwise the
