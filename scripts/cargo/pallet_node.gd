@@ -199,9 +199,12 @@ func _commodity_color() -> Color:
 # ── JSON model loading ────────────────────────────────────────────────────────
 
 ## Loads a JSON-defined model via ModelAssembler at `local_pos` (within
-## _mesh_root). Caller is responsible for sizing/spacing — the JSON's own
-## extents must already match the cell.
+## _mesh_root). Returns null when the path is missing on disk — protects
+## against stale references after rename / delete.
 func _spawn_model(model_path: String, local_pos: Vector3) -> ModelAssembler:
+	if not FileAccess.file_exists(model_path):
+		push_warning("PalletNode: model not found: " + model_path)
+		return null
 	var node := ModelAssembler.new()
 	node.model_data_path = model_path
 	node.position = local_pos
