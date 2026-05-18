@@ -349,13 +349,13 @@ func _build_slew_arm() -> void:
 	# Boom: extends +X (outboard) and -X (counterweight)
 	var boom_len := boom_reach + boom_tail
 	var boom_cx  := (boom_reach - boom_tail) * 0.5
-	_vis_box(Vector3(boom_len, 1.6, 1.6), Vector3(boom_cx, 0.0, 0.0), C_CRANE, "Boom")
+	_vis_box_in(_slew_arm, Vector3(boom_len, 1.6, 1.6), Vector3(boom_cx, 0.0, 0.0), C_CRANE, "Boom")
 	# Counterweight block
-	_vis_box(Vector3(2.8, 2.8, 2.8), Vector3(-boom_tail + 1.4, -0.9, 0.0),
+	_vis_box_in(_slew_arm, Vector3(2.8, 2.8, 2.8), Vector3(-boom_tail + 1.4, -0.9, 0.0),
 		Color(0.50, 0.50, 0.52), "Counterweight")
 
 	# King post (connects tower top to boom)
-	_vis_box(Vector3(0.5, 2.0, 0.5), Vector3(0.0, 1.0, 0.0), C_CRANE.lightened(0.1), "KingPost")
+	_vis_box_in(_slew_arm, Vector3(0.5, 2.0, 0.5), Vector3(0.0, 1.0, 0.0), C_CRANE.lightened(0.1), "KingPost")
 
 	# Trolley
 	_trolley          = Node3D.new()
