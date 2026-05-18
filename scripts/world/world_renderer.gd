@@ -242,7 +242,11 @@ func _apply_weather_lighting() -> void:
 
 	# Optional: Sync FFT parameters based on weather
 	if _fft_system:
-		_fft_system.sync_weather(wind, storm, WaveSurface.short_wave_factor)
+		var wind_dir : Vector3 = weather.get("wind_dir") if weather else Vector3.RIGHT
+		# Spectrum wants a single rotation angle in the XZ plane; positive Z is
+		# the FFT's "zero direction", so atan2(x, z) gives wind-blowing-toward.
+		var wind_angle := atan2(wind_dir.x, wind_dir.z)
+		_fft_system.sync_weather(wind, storm, WaveSurface.short_wave_factor, wind_angle)
 
 
 func _apply_sun(tod: float, daylight: float, cloud: float, storm: float) -> void:
