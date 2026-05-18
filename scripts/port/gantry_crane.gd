@@ -503,17 +503,18 @@ func _apply_kinematics(delta: float = 0.0) -> void:
 	if _hook != null:
 		_hook.position = Vector3(_sway.x, -_hoist_drop, _sway.y)
 	if _cable != null and _hook != null:
-		# Cable runs from trolley (Y=0) to hook position; orient +Y of the box
-		# mesh toward the hook so it tilts with the sway.
+		# Cable runs from trolley (Y=0) to hook position; orient local +Y toward
+		# the hook so it tilts with the sway. Basis MUST be set before scale —
+		# assigning a unit-length basis wipes any prior scale.
 		var hook_local := _hook.position
 		var length := hook_local.length()
-		_cable.position = hook_local * 0.5
-		_cable.scale = Vector3(1.0, length, 1.0)
 		var dir := hook_local.normalized() if length > 0.0001 else Vector3.DOWN
 		var ref_up := Vector3.FORWARD if absf(dir.dot(Vector3.UP)) > 0.99 else Vector3.UP
 		var x_axis := dir.cross(ref_up).normalized()
 		var z_axis := x_axis.cross(dir).normalized()
 		_cable.basis = Basis(x_axis, dir, z_axis)
+		_cable.scale = Vector3(1.0, length, 1.0)
+		_cable.position = hook_local * 0.5
 
 
 # ── Carried pallet ────────────────────────────────────────────────────────────
