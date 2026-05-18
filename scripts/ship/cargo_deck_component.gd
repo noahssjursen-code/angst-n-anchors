@@ -280,15 +280,27 @@ func _clamp_to_grid(local: Vector3) -> Vector3:
 	var hz := deck_length_m * 0.5
 	return Vector3(clampf(local.x, -hx, hx), 0.0, clampf(local.z, -hz, hz))
 
-## Footprint of a Pallet, defaulting to 1×1 when the pallet or its footprint
-## is missing. Always returns positive dimensions.
+## Footprint of a Pallet in this deck's LOCAL axes. Pallet.footprint is stored
+## as a world-aligned shape (so the same 1×5 strip looks the same on every
+## deck regardless of how the deck is rotated). Decks whose X axis is closer
+## to world Z than world X swap the components, so the on-deck cell block
+## occupies the same physical area as what the player carried.
 func _footprint_of(pallet: Pallet) -> Vector2i:
 	if pallet == null:
 		return Vector2i.ONE
 	var fp := pallet.footprint
 	if fp.x <= 0 or fp.y <= 0:
 		return Vector2i.ONE
-	return fp
+	return _world_to_deck_local_fp(fp)
+
+
+func _world_to_deck_local_fp(world_fp: Vector2i) -> Vector2i:
+	var dx := global_basis.x.normalized()
+	# If deck-X is more aligned with world Z than world X, the deck is rotated
+	# ~90° from world. Swap the footprint components to preserve world shape.
+	if absf(dx.x) < absf(dx.z):
+		return Vector2i(world_fp.y, world_fp.x)
+	return world_fp
 
 
 ## Cell indices covered by a block whose top-left is `origin_idx` and size `fp`.

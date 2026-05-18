@@ -81,7 +81,6 @@ var _player: CharacterBody3D = null
 var _carried_pallet: Node3D = null      # PalletNode currently lifted
 var _highlighted_pallet: Node3D = null  # PalletNode whose sockets glow
 var _carry_rotated: bool = false        # carried pallet rotated 90° from spawn
-var _carry_baseline_basis: Basis = Basis.IDENTITY  # orientation captured at engage
 
 var _ui: CanvasLayer
 var _prompt: Label
@@ -610,34 +609,19 @@ func _update_carried_pallet() -> void:
 		if _rigging != null:
 			_rigging.detach_all()
 		return
-	# Fully attached: pallet rides under the hook. Basis tracks whichever
-	# deck the hook is directly over (so the carried pallet always matches
-	# how it will land). Over empty space (no deck contains hook), keep the
-	# last seen basis — never falls back to world axes mid-air, which is
-	# what caused the previous flip-flop.
+	# Fully attached: pallet rides under the hook. Always rendered in WORLD
+	# axes (with a 90° twist for Q). CargoDeckComponent converts pallet.footprint
+	# to deck-local at placement so the on-deck visual occupies the same world
+	# shape — no need for basis-tracking gymnastics here.
 	if _rigging.attached_count() >= CraneRigging.MAX_CHAINS:
 		var hp := _hook.global_position
-		var deck_basis := _deck_under_hook_basis(hp)
-		if deck_basis != Basis.IDENTITY:
-			_carry_baseline_basis = deck_basis
-		var oriented := _carry_baseline_basis
+		var oriented := Basis.IDENTITY
 		if _carry_rotated:
 			oriented = oriented.rotated(Vector3.UP, PI * 0.5)
 		_carried_pallet.global_transform = Transform3D(
 			oriented,
 			Vector3(hp.x, hp.y - 1.4, hp.z),
 		)
-
-
-## Returns the basis of whichever deck the hook is currently above. Returns
-## IDENTITY when no deck claims the hook (open water, etc.) — caller treats
-## that as "keep last basis".
-func _deck_under_hook_basis(hook_pos: Vector3) -> Basis:
-	for node in get_tree().get_nodes_in_group(CargoDeckComponent.DECK_GROUP):
-		var deck := node as CargoDeckComponent
-		if deck != null and deck.contains_world_point(hook_pos):
-			return deck.global_basis.orthonormalized()
-	return Basis.IDENTITY
 
 
 # ── Beacon ────────────────────────────────────────────────────────────────────
@@ -791,13 +775,18 @@ func _update_destination_target(pallet_res: Pallet) -> void:
 		_dest_label.position = Vector3(0.0, 1.4 + dp * 0.15, 0.0)
 
 
-## Footprint as a unitless cell multiplier — (1, 1) for ordinary cargo,
-## (1, 4) for timber. Used to stretch the snap-ghost mesh, which is sized
-## to one cell at baseline.
-func _footprint_size(_deck: CargoDeckComponent, pallet: Pallet) -> Vector2:
+## Footprint as a unitless cell multiplier in the deck's LOCAL axes — used to
+## stretch the snap-ghost mesh (which is parented in deck-local space via the
+## deck's basis). Calls CargoDeckComponent's world→deck-local converter so a
+## (1, 5) world pallet on a 90°-rotated deck previews as (5, 1) deck-local —
+## same world shape as the carried pallet.
+func _footprint_size(deck: CargoDeckComponent, pallet: Pallet) -> Vector2:
 	if pallet == null:
 		return Vector2.ONE
-	return Vector2(maxi(pallet.footprint.x, 1), maxi(pallet.footprint.y, 1))
+	var fp_local := pallet.footprint
+	if deck != null:
+		fp_local = deck._world_to_deck_local_fp(pallet.footprint)
+	return Vector2(maxi(fp_local.x, 1), maxi(fp_local.y, 1))
 
 
 func _hide_dest_target() -> void:
@@ -887,10 +876,8 @@ func _toggle_rotation() -> void:
 func _engage_chains(pallet_node: Node3D) -> void:
 	if _rigging == null or pallet_node == null or not is_instance_valid(pallet_node):
 		return
-	# Each new pickup starts in its natural orientation, anchored to whatever
-	# basis the pallet had while sitting on its source deck.
+	# Each new pickup starts in its natural orientation.
 	_carry_rotated = false
-	_carry_baseline_basis = pallet_node.global_basis.orthonormalized()
 
 	# If this pallet is currently a child of a CargoDeckComponent's
 	# PalletVisuals, reparent it to the scene root first. Otherwise the
