@@ -81,6 +81,7 @@ var _player: CharacterBody3D = null
 var _carried_pallet: Node3D = null      # PalletNode currently lifted
 var _highlighted_pallet: Node3D = null  # PalletNode whose sockets glow
 var _carry_rotated: bool = false        # carried pallet rotated 90° from spawn
+var _carry_baseline_basis: Basis = Basis.IDENTITY  # actual basis at pickup
 
 var _ui: CanvasLayer
 var _prompt: Label
@@ -609,13 +610,13 @@ func _update_carried_pallet() -> void:
 		if _rigging != null:
 			_rigging.detach_all()
 		return
-	# Fully attached: pallet rides under the hook. Always rendered in WORLD
-	# axes (with a 90° twist for Q). CargoDeckComponent converts pallet.footprint
-	# to deck-local at placement so the on-deck visual occupies the same world
-	# shape — no need for basis-tracking gymnastics here.
+	# Fully attached: pallet rides under the hook. Basis stays at whatever
+	# it was when picked up — apron-rotation if it came off the apron, ship-
+	# rotation if re-picked off a ship, etc. Q applies a 90° twist relative
+	# to that captured basis. No snapping to world or to decks underneath.
 	if _rigging.attached_count() >= CraneRigging.MAX_CHAINS:
 		var hp := _hook.global_position
-		var oriented := Basis.IDENTITY
+		var oriented := _carry_baseline_basis
 		if _carry_rotated:
 			oriented = oriented.rotated(Vector3.UP, PI * 0.5)
 		_carried_pallet.global_transform = Transform3D(
@@ -876,8 +877,11 @@ func _toggle_rotation() -> void:
 func _engage_chains(pallet_node: Node3D) -> void:
 	if _rigging == null or pallet_node == null or not is_instance_valid(pallet_node):
 		return
-	# Each new pickup starts in its natural orientation.
+	# Each new pickup starts in its natural orientation — anchor to the
+	# pallet's CURRENT global basis (apron/ship rotation, etc.) so it doesn't
+	# visually snap to world or anywhere else.
 	_carry_rotated = false
+	_carry_baseline_basis = pallet_node.global_basis.orthonormalized()
 
 	# If this pallet is currently a child of a CargoDeckComponent's
 	# PalletVisuals, reparent it to the scene root first. Otherwise the
