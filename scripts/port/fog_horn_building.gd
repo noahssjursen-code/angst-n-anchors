@@ -4,14 +4,21 @@ extends Node3D
 
 ## Foghorn warning tower.
 ## Drop this scene onto a dock or port plot. It will automatically build its
-## visual mesh and the fog horn audio player child will handle blast logic.
+## visual mesh and an internal FogHorn audio child to drive blast logic.
+##
+## Both the model and the FogHorn are spawned at runtime — keeping the scene
+## empty avoids name-clash warnings ("from a more nested instance") when the
+## same FogHornBuilding ends up baked into a parent scene's saved tree.
 
-const MODEL_PATH := "res://resources/data/models/buildings/foghorn_building.json"
+const MODEL_PATH      := "res://resources/data/models/buildings/foghorn_building.json"
+const FOG_HORN_SCRIPT := preload("res://scripts/port/fog_horn.gd")
+const FOG_HORN_OFFSET := Vector3(0.0, 6.2, 0.0)   ## matches the old .tscn placement
 
 var assembler: ModelAssembler
 
 func _ready() -> void:
 	_build()
+	_ensure_fog_horn()
 
 func _build() -> void:
 	if assembler != null:
@@ -30,6 +37,20 @@ func _build() -> void:
 	if Engine.is_editor_hint() and get_tree() != null:
 		assembler.owner = get_tree().edited_scene_root
 		_own_subtree(assembler)
+
+
+## Idempotent: if a FogHorn child already exists (baked .tscn, hot-reload),
+## we leave it alone. Otherwise create one with the script attached.
+func _ensure_fog_horn() -> void:
+	if Engine.is_editor_hint():
+		return
+	if get_node_or_null("FogHorn") != null:
+		return
+	var horn := AudioStreamPlayer3D.new()
+	horn.name = "FogHorn"
+	horn.set_script(FOG_HORN_SCRIPT)
+	horn.position = FOG_HORN_OFFSET
+	add_child(horn)
 
 func _own_subtree(node: Node) -> void:
 	if get_tree() == null:
