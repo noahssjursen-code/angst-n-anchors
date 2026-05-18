@@ -69,6 +69,23 @@ var _prompt: Label
 var _hud: Label
 var _prev_mouse_mode: int = Input.MOUSE_MODE_VISIBLE
 
+# ── Polish: lights, hook sway, snap-preview ───────────────────────────────────
+var _beacon: OmniLight3D
+var _beacon_phase: float = 0.0
+var _floods: Array[SpotLight3D] = []
+
+# Hook sway: trolley/gantry motion drags the hook with damped spring response.
+var _last_gantry_x: float = 0.0
+var _last_trolley_z: float = 0.0
+var _sway: Vector2 = Vector2.ZERO       # x = along gantry axis, y = along trolley axis
+var _sway_vel: Vector2 = Vector2.ZERO
+@export var sway_drag: float = 0.16     # how strongly motion drags the hook (m·s/m/s)
+@export var sway_spring: float = 18.0   # restoring stiffness
+@export var sway_damp: float = 6.0      # damping
+
+var _snap_ghost: MeshInstance3D
+var _snap_ghost_mat: StandardMaterial3D
+
 
 # ── Lifecycle ─────────────────────────────────────────────────────────────────
 
@@ -84,6 +101,8 @@ func _ready() -> void:
 func _exit_tree() -> void:
 	if _rigging != null and is_instance_valid(_rigging):
 		_rigging.detach_all()
+	if _snap_ghost != null and is_instance_valid(_snap_ghost):
+		_snap_ghost.queue_free()
 
 
 # ── Build ─────────────────────────────────────────────────────────────────────
@@ -105,10 +124,13 @@ func _build() -> void:
 		_assembler.owner = get_tree().edited_scene_root
 
 	_wire_kinematic_parts.call_deferred()
+	_build_hazard_bands()
+	_build_lights()
 
 	if not Engine.is_editor_hint():
 		_build_rigging.call_deferred()
 		_build_camera.call_deferred()
+		_build_snap_ghost.call_deferred()
 		_build_ui()
 
 
@@ -158,6 +180,112 @@ func _build_rails() -> void:
 			add_child(stop)
 			if Engine.is_editor_hint() and get_tree() != null and get_tree().edited_scene_root != null:
 				stop.owner = get_tree().edited_scene_root
+
+
+func _build_hazard_bands() -> void:
+	# Yellow/black diagonal stripes around the bottom 1.4 m of each leg, plus
+	# a thin band wrapping the trolley for visibility.
+	var leg_xs := [-2.5, 2.5]
+	var leg_zs := [-2.5, 2.5]
+	for lx in leg_xs:
+		for lz in leg_zs:
+			var band := MeshInstance3D.new()
+			band.name = "HazardBand_%s%s" % [
+				"L" if lx < 0 else "R",
+				"B" if lz < 0 else "F",
+			]
+			var mesh := BoxMesh.new()
+			mesh.size = Vector3(1.12, 1.4, 1.12)
+			band.mesh = mesh
+			band.position = Vector3(lx, 0.7, lz)
+			band.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+			band.material_override = _hazard_material()
+			_gantry_frame.add_child(band)
+			if Engine.is_editor_hint() and get_tree() != null and get_tree().edited_scene_root != null:
+				band.owner = get_tree().edited_scene_root
+
+
+func _hazard_material() -> ShaderMaterial:
+	var mat := ShaderMaterial.new()
+	var shader := Shader.new()
+	shader.code = "shader_type spatial;\nrender_mode cull_disabled, shadows_disabled;\nvoid fragment() {\n\tfloat s = fract((UV.x + UV.y) * 4.0);\n\tALBEDO = s > 0.5 ? vec3(0.95, 0.78, 0.0) : vec3(0.06, 0.06, 0.06);\n\tROUGHNESS = 0.7;\n\tMETALLIC = 0.05;\n}"
+	mat.shader = shader
+	return mat
+
+
+func _build_lights() -> void:
+	# Floodlights aimed down-and-outward from the four top corners.
+	var top_y := 16.5
+	var positions := [
+		Vector3(-2.5, top_y, -2.5),
+		Vector3( 2.5, top_y, -2.5),
+		Vector3(-2.5, top_y,  2.5),
+		Vector3( 2.5, top_y,  2.5),
+	]
+	for i in positions.size():
+		var sx: float = -1.0 if positions[i].x < 0 else 1.0
+		var sz: float = -1.0 if positions[i].z < 0 else 1.0
+		var flood := SpotLight3D.new()
+		flood.name = "Flood%d" % i
+		flood.position = positions[i]
+		flood.look_at(positions[i] + Vector3(sx * 0.6, -1.0, sz * 0.6), Vector3.UP, true)
+		flood.light_color = Color(1.0, 0.94, 0.82)
+		flood.light_energy = 4.0
+		flood.spot_range = 32.0
+		flood.spot_angle = 55.0
+		flood.spot_attenuation = 0.6
+		flood.shadow_enabled = false
+		_gantry_frame.add_child(flood)
+		_floods.append(flood)
+		if Engine.is_editor_hint() and get_tree() != null and get_tree().edited_scene_root != null:
+			flood.owner = get_tree().edited_scene_root
+
+	# Red obstruction beacon on top of the trolley rail, slow-blinking.
+	_beacon = OmniLight3D.new()
+	_beacon.name = "Beacon"
+	_beacon.position = Vector3(0.0, 18.2, 0.0)
+	_beacon.light_color = Color(1.0, 0.1, 0.1)
+	_beacon.light_energy = 1.0
+	_beacon.omni_range = 6.0
+	_beacon.shadow_enabled = false
+	_gantry_frame.add_child(_beacon)
+	if Engine.is_editor_hint() and get_tree() != null and get_tree().edited_scene_root != null:
+		_beacon.owner = get_tree().edited_scene_root
+
+	# Small red bulb mesh so the beacon source is visible against the sky.
+	var bulb := MeshInstance3D.new()
+	bulb.name = "BeaconBulb"
+	var bmesh := SphereMesh.new()
+	bmesh.radius = 0.22
+	bmesh.height = 0.44
+	bulb.mesh = bmesh
+	bulb.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	var bmat := StandardMaterial3D.new()
+	bmat.albedo_color = Color(1.0, 0.15, 0.15)
+	bmat.emission_enabled = true
+	bmat.emission = Color(1.0, 0.15, 0.15)
+	bmat.emission_energy_multiplier = 2.0
+	bulb.material_override = bmat
+	_beacon.add_child(bulb)
+	if Engine.is_editor_hint() and get_tree() != null and get_tree().edited_scene_root != null:
+		bulb.owner = get_tree().edited_scene_root
+
+
+func _build_snap_ghost() -> void:
+	_snap_ghost = MeshInstance3D.new()
+	_snap_ghost.name = "SnapGhost"
+	var mesh := BoxMesh.new()
+	mesh.size = Vector3(1.3, 0.05, 1.3)
+	_snap_ghost.mesh = mesh
+	_snap_ghost.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	_snap_ghost.visible = false
+	_snap_ghost_mat = StandardMaterial3D.new()
+	_snap_ghost_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	_snap_ghost_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	_snap_ghost_mat.no_depth_test = true
+	_snap_ghost.material_override = _snap_ghost_mat
+	# Parented to the scene root so it isn't pulled around by the gantry frame.
+	get_tree().current_scene.add_child(_snap_ghost)
 
 
 func _wire_kinematic_parts() -> void:
@@ -251,13 +379,15 @@ func _build_ui() -> void:
 func _process(delta: float) -> void:
 	if Engine.is_editor_hint():
 		return
+	_update_beacon(delta)
 	if not _occupied:
 		_update_prompt()
 		return
 	_read_kinematic_input(delta)
-	_apply_kinematics()
+	_apply_kinematics(delta)
 	_update_carried_pallet()
 	_update_pickup_highlight()
+	_update_snap_ghost()
 	_update_hud()
 
 
@@ -342,17 +472,38 @@ func _camera_relative_wish(pan_x: float, pan_y: float) -> Vector3:
 	return local_wish
 
 
-func _apply_kinematics() -> void:
+func _apply_kinematics(delta: float = 0.0) -> void:
 	if _gantry_frame != null:
 		_gantry_frame.position.x = _gantry_x_offset
 	if _trolley != null:
 		_trolley.position.z = _trolley_z
+
+	# Hook sway: trolley/gantry motion drags the hook with a damped spring.
+	if delta > 0.0001:
+		var gantry_vel  := (_gantry_x_offset - _last_gantry_x) / delta
+		var trolley_vel := (_trolley_z      - _last_trolley_z) / delta
+		var target := Vector2(-gantry_vel * sway_drag, -trolley_vel * sway_drag)
+		# Spring–damper toward the velocity-driven target.
+		var accel := (target - _sway) * sway_spring - _sway_vel * sway_damp
+		_sway_vel += accel * delta
+		_sway += _sway_vel * delta
+	_last_gantry_x  = _gantry_x_offset
+	_last_trolley_z = _trolley_z
+
 	if _hook != null:
-		_hook.position = Vector3(0.0, -_hoist_drop, 0.0)
+		_hook.position = Vector3(_sway.x, -_hoist_drop, _sway.y)
 	if _cable != null and _hook != null:
-		# Cable goes from trolley (Y=0) down to hook (Y=-hoist_drop).
-		_cable.scale.y = _hoist_drop
-		_cable.position = Vector3(0.0, -_hoist_drop * 0.5, 0.0)
+		# Cable runs from trolley (Y=0) to hook position; orient +Y of the box
+		# mesh toward the hook so it tilts with the sway.
+		var hook_local := _hook.position
+		var length := hook_local.length()
+		_cable.position = hook_local * 0.5
+		_cable.scale = Vector3(1.0, length, 1.0)
+		var dir := hook_local.normalized() if length > 0.0001 else Vector3.DOWN
+		var ref_up := Vector3.FORWARD if absf(dir.dot(Vector3.UP)) > 0.99 else Vector3.UP
+		var x_axis := dir.cross(ref_up).normalized()
+		var z_axis := x_axis.cross(dir).normalized()
+		_cable.basis = Basis(x_axis, dir, z_axis)
 
 
 # ── Carried pallet ────────────────────────────────────────────────────────────
@@ -364,6 +515,71 @@ func _update_carried_pallet() -> void:
 	if _rigging.attached_count() >= CraneRigging.MAX_CHAINS:
 		var hp := _hook.global_position
 		_carried_pallet.global_position = Vector3(hp.x, hp.y - 1.4, hp.z)
+
+
+# ── Beacon ────────────────────────────────────────────────────────────────────
+
+func _update_beacon(delta: float) -> void:
+	if _beacon == null:
+		return
+	_beacon_phase = fmod(_beacon_phase + delta * 1.6, TAU)
+	# Sharp pulse — bright for ~0.2 s, then dim, every ~3.9 s.
+	var pulse := pow(maxf(sin(_beacon_phase), 0.0), 12.0)
+	_beacon.light_energy = 0.2 + pulse * 5.0
+
+
+# ── Snap-preview ──────────────────────────────────────────────────────────────
+
+func _update_snap_ghost() -> void:
+	if _snap_ghost == null or _hook == null:
+		return
+	if _carried_pallet == null:
+		_snap_ghost.visible = false
+		return
+
+	var hook_pos := _hook.global_position
+
+	# 1. Delivery zone wins — show a gold ghost over the zone if it accepts.
+	var pallet_res = _carried_pallet.get("pallet")
+	for node in get_tree().get_nodes_in_group("cargo_delivery_zone"):
+		if not node.has_method("accepts_pallet"):
+			continue
+		if not bool(node.call("accepts_pallet", pallet_res)):
+			continue
+		var n3 := node as Node3D
+		if n3 == null:
+			continue
+		var dx := hook_pos.x - n3.global_position.x
+		var dz := hook_pos.z - n3.global_position.z
+		if dx * dx + dz * dz > 9.0:
+			continue
+		_show_ghost(n3.global_position + Vector3(0.0, 0.05, 0.0), Color(1.0, 0.85, 0.20))
+		return
+
+	# 2. Ship deck cell.
+	for node in get_tree().get_nodes_in_group(CargoDeckComponent.DECK_GROUP):
+		var deck := node as CargoDeckComponent
+		if deck == null or deck.is_full():
+			continue
+		if not deck.contains_world_point(hook_pos):
+			continue
+		var cell_pos := deck.get_nearest_free_cell_world(hook_pos)
+		if cell_pos == Vector3.INF:
+			continue
+		_show_ghost(cell_pos + Vector3(0.0, 0.05, 0.0), Color(0.30, 0.95, 0.45))
+		return
+
+	# 3. No valid target.
+	_snap_ghost.visible = false
+
+
+func _show_ghost(pos: Vector3, color: Color) -> void:
+	_snap_ghost.visible = true
+	_snap_ghost.global_position = pos
+	_snap_ghost_mat.albedo_color = Color(color.r, color.g, color.b, 0.45)
+	_snap_ghost_mat.emission_enabled = true
+	_snap_ghost_mat.emission = color
+	_snap_ghost_mat.emission_energy_multiplier = 1.2
 
 
 # ── Pickup highlight ──────────────────────────────────────────────────────────
@@ -549,6 +765,8 @@ func _exit_crane() -> void:
 	if _carried_pallet != null:
 		_drop_in_place()
 	_clear_highlight()
+	if _snap_ghost != null:
+		_snap_ghost.visible = false
 	if _camera != null:
 		_camera.set_enabled(false)
 	Input.mouse_mode = _prev_mouse_mode
