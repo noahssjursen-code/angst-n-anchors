@@ -319,7 +319,10 @@ func _make_contract(from_id: String, to_id: String) -> Contract:
 
 	var rng       := RandomNumberGenerator.new()
 	rng.seed      = _hash_route(from_id, to_id)
-	var quantity  := rng.randi() % 3 + 3    # 3–5 items per run
+	# Each contract is sized as a ship-load-or-more — a single bulk route the
+	# player fills their hold from, sails, delivers, and returns to top up.
+	# Picked from a wide range so different routes feel distinct in scale.
+	var quantity  := rng.randi() % 41 + 30  # 30–70 units per contract
 	var value_per := int(commodity["value"])
 	var reward    := int(distance * float(quantity) * float(value_per) * 0.14)
 	# Same-port contracts have zero distance — pay a flat in-port handling
