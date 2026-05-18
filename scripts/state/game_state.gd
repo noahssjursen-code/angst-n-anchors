@@ -43,7 +43,7 @@ func _wire_contract_registry() -> void:
 	var registry := get_node_or_null("/root/ContractRegistry")
 	if registry == null:
 		return
-	registry.contract_accepted.connect(func(_c: Contract, _items: Array[CargoItem]) -> void: _refresh_contracts())
+	registry.contract_accepted.connect(func(_c: Contract, _pallets: Array[Pallet]) -> void: _refresh_contracts())
 	registry.contract_completed.connect(func(_c: Contract) -> void: _refresh_contracts())
 
 

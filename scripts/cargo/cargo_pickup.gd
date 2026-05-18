@@ -27,7 +27,7 @@ func setup(item: CargoItem) -> void:
 	cargo_item = item
 
 
-## Called by PlayerCarryComponent. Returns the CargoItem and queues self for removal.
+## Returns the CargoItem and queues self for removal.
 func pick_up() -> CargoItem:
 	var item := cargo_item
 	picked_up.emit(item)

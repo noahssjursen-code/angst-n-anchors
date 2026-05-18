@@ -46,7 +46,6 @@ var _rng: RandomNumberGenerator = null
 var _spawn_local_pos:          Vector3 = Vector3.ZERO
 var _harbour_master_local_pos: Vector3 = Vector3.ZERO
 var _contract_npc_local_pos:   Vector3 = Vector3.ZERO
-var _delivery_npc_local_pos:   Vector3 = Vector3.ZERO
 var _shipwright_local_pos:     Vector3 = Vector3.ZERO
 
 @export var port_size: int = 1:
@@ -92,7 +91,6 @@ func _build_facilities() -> void:
 	_spawn_local_pos          = Vector3.ZERO
 	_harbour_master_local_pos = Vector3.ZERO
 	_contract_npc_local_pos   = Vector3.ZERO
-	_delivery_npc_local_pos   = Vector3.ZERO
 	_shipwright_local_pos     = Vector3.ZERO
 
 	_rng = RandomNumberGenerator.new()
@@ -336,7 +334,7 @@ func _track_npc_pos(id: String, cx: float, center_z: float, depth: float) -> voi
 		"Shipwright":
 			_shipwright_local_pos     = Vector3(cx, 0.0, center_z)
 		"Warehouse":
-			_delivery_npc_local_pos   = Vector3(cx, 0.0, center_z)
+			pass  # warehouse position no longer captured — DeliveryNpc retired
 
 
 func _shuffle_array(arr: Array) -> void:
@@ -373,9 +371,6 @@ func get_harbour_master_local_pos() -> Vector3:
 
 func get_contract_npc_local_pos() -> Vector3:
 	return _contract_npc_local_pos
-
-func get_delivery_npc_local_pos() -> Vector3:
-	return _delivery_npc_local_pos
 
 func get_shipwright_local_pos() -> Vector3:
 	return _shipwright_local_pos

@@ -1,0 +1,129 @@
+{
+  "name": "gantry_crane",
+  "_doc": "Wharf gantry crane. Origin at gantry base center on quay surface. Legs straddle 5m (X, along quay) × 5m (Z). Top frame at H=16m. Trolley rail cantilevers in -Z (toward water). Trolley + hook are runtime-positioned by gantry_crane.gd via 'trolley' / 'hook' roles.",
+  "parts": [
+    {
+      "name": "leg_fl",
+      "_doc": "Front-left leg (-X, +Z, land side)",
+      "mesh": { "vertices": [-0.5,-8.0,-0.5, 0.5,-8.0,-0.5, 0.5,8.0,-0.5, -0.5,8.0,-0.5, -0.5,-8.0,0.5, 0.5,-8.0,0.5, 0.5,8.0,0.5, -0.5,8.0,0.5],
+                "indices": [0,1,5,0,5,4, 3,7,6,3,6,2, 0,3,2,0,2,1, 4,5,6,4,6,7, 0,4,7,0,7,3, 1,2,6,1,6,5] },
+      "role": "leg",
+      "position": [-2.5, 8.0, 2.5],
+      "color": [0.92, 0.78, 0.14],
+      "roughness": 0.7,
+      "metallic": 0.2,
+      "collision": "convex"
+    },
+    {
+      "name": "leg_fr",
+      "mesh": { "vertices": [-0.5,-8.0,-0.5, 0.5,-8.0,-0.5, 0.5,8.0,-0.5, -0.5,8.0,-0.5, -0.5,-8.0,0.5, 0.5,-8.0,0.5, 0.5,8.0,0.5, -0.5,8.0,0.5],
+                "indices": [0,1,5,0,5,4, 3,7,6,3,6,2, 0,3,2,0,2,1, 4,5,6,4,6,7, 0,4,7,0,7,3, 1,2,6,1,6,5] },
+      "role": "leg",
+      "position": [2.5, 8.0, 2.5],
+      "color": [0.92, 0.78, 0.14],
+      "roughness": 0.7,
+      "metallic": 0.2,
+      "collision": "convex"
+    },
+    {
+      "name": "leg_bl",
+      "mesh": { "vertices": [-0.5,-8.0,-0.5, 0.5,-8.0,-0.5, 0.5,8.0,-0.5, -0.5,8.0,-0.5, -0.5,-8.0,0.5, 0.5,-8.0,0.5, 0.5,8.0,0.5, -0.5,8.0,0.5],
+                "indices": [0,1,5,0,5,4, 3,7,6,3,6,2, 0,3,2,0,2,1, 4,5,6,4,6,7, 0,4,7,0,7,3, 1,2,6,1,6,5] },
+      "role": "leg",
+      "position": [-2.5, 8.0, -2.5],
+      "color": [0.92, 0.78, 0.14],
+      "roughness": 0.7,
+      "metallic": 0.2,
+      "collision": "convex"
+    },
+    {
+      "name": "leg_br",
+      "mesh": { "vertices": [-0.5,-8.0,-0.5, 0.5,-8.0,-0.5, 0.5,8.0,-0.5, -0.5,8.0,-0.5, -0.5,-8.0,0.5, 0.5,-8.0,0.5, 0.5,8.0,0.5, -0.5,8.0,0.5],
+                "indices": [0,1,5,0,5,4, 3,7,6,3,6,2, 0,3,2,0,2,1, 4,5,6,4,6,7, 0,4,7,0,7,3, 1,2,6,1,6,5] },
+      "role": "leg",
+      "position": [2.5, 8.0, -2.5],
+      "color": [0.92, 0.78, 0.14],
+      "roughness": 0.7,
+      "metallic": 0.2,
+      "collision": "convex"
+    },
+    {
+      "name": "diag_brace_left",
+      "_doc": "Diagonal X-brace on -X leg pair for visual interest",
+      "mesh": { "vertices": [-0.18,-3.8,-0.18, 0.18,-3.8,-0.18, 0.18,3.8,-0.18, -0.18,3.8,-0.18, -0.18,-3.8,0.18, 0.18,-3.8,0.18, 0.18,3.8,0.18, -0.18,3.8,0.18],
+                "indices": [0,1,5,0,5,4, 3,7,6,3,6,2, 0,3,2,0,2,1, 4,5,6,4,6,7, 0,4,7,0,7,3, 1,2,6,1,6,5] },
+      "role": "brace",
+      "position": [-2.5, 8.0, 0.0],
+      "rotation_degrees": [62, 0, 0],
+      "color": [0.82, 0.68, 0.10],
+      "roughness": 0.7
+    },
+    {
+      "name": "diag_brace_right",
+      "mesh": { "vertices": [-0.18,-3.8,-0.18, 0.18,-3.8,-0.18, 0.18,3.8,-0.18, -0.18,3.8,-0.18, -0.18,-3.8,0.18, 0.18,-3.8,0.18, 0.18,3.8,0.18, -0.18,3.8,0.18],
+                "indices": [0,1,5,0,5,4, 3,7,6,3,6,2, 0,3,2,0,2,1, 4,5,6,4,6,7, 0,4,7,0,7,3, 1,2,6,1,6,5] },
+      "role": "brace",
+      "position": [2.5, 8.0, 0.0],
+      "rotation_degrees": [62, 0, 0],
+      "color": [0.82, 0.68, 0.10],
+      "roughness": 0.7
+    },
+    {
+      "name": "top_beam_x",
+      "_doc": "Horizontal beam joining the two leg pairs across X (along quay)",
+      "mesh": { "vertices": [-3.5,-0.5,-0.5, 3.5,-0.5,-0.5, 3.5,0.5,-0.5, -3.5,0.5,-0.5, -3.5,-0.5,0.5, 3.5,-0.5,0.5, 3.5,0.5,0.5, -3.5,0.5,0.5],
+                "indices": [0,1,5,0,5,4, 3,7,6,3,6,2, 0,3,2,0,2,1, 4,5,6,4,6,7, 0,4,7,0,7,3, 1,2,6,1,6,5] },
+      "role": "top_beam",
+      "position": [0.0, 16.5, 2.5],
+      "color": [0.92, 0.78, 0.14],
+      "roughness": 0.7,
+      "metallic": 0.2,
+      "collision": "convex"
+    },
+    {
+      "name": "top_beam_x_back",
+      "mesh": { "vertices": [-3.5,-0.5,-0.5, 3.5,-0.5,-0.5, 3.5,0.5,-0.5, -3.5,0.5,-0.5, -3.5,-0.5,0.5, 3.5,-0.5,0.5, 3.5,0.5,0.5, -3.5,0.5,0.5],
+                "indices": [0,1,5,0,5,4, 3,7,6,3,6,2, 0,3,2,0,2,1, 4,5,6,4,6,7, 0,4,7,0,7,3, 1,2,6,1,6,5] },
+      "role": "top_beam",
+      "position": [0.0, 16.5, -2.5],
+      "color": [0.92, 0.78, 0.14],
+      "roughness": 0.7,
+      "metallic": 0.2,
+      "collision": "convex"
+    },
+    {
+      "name": "trolley_rail",
+      "_doc": "Long beam along Z. Cantilevers over water (-Z, ship berth) and over apron (+Z, pallet staging).",
+      "mesh": { "vertices": [-0.6,-0.55,-30.0, 0.6,-0.55,-30.0, 0.6,0.55,-30.0, -0.6,0.55,-30.0, -0.6,-0.55,22.0, 0.6,-0.55,22.0, 0.6,0.55,22.0, -0.6,0.55,22.0],
+                "indices": [0,1,5,0,5,4, 3,7,6,3,6,2, 0,3,2,0,2,1, 4,5,6,4,6,7, 0,4,7,0,7,3, 1,2,6,1,6,5] },
+      "role": "trolley_rail",
+      "position": [0.0, 17.2, 0.0],
+      "color": [0.85, 0.70, 0.10],
+      "roughness": 0.7,
+      "metallic": 0.2,
+      "collision": "convex"
+    },
+    {
+      "name": "trolley",
+      "_doc": "Slides along trolley_rail in Z. Runtime-moved by gantry_crane.gd.",
+      "mesh": { "vertices": [-0.9,-0.4,-0.9, 0.9,-0.4,-0.9, 0.9,0.4,-0.9, -0.9,0.4,-0.9, -0.9,-0.4,0.9, 0.9,-0.4,0.9, 0.9,0.4,0.9, -0.9,0.4,0.9],
+                "indices": [0,1,5,0,5,4, 3,7,6,3,6,2, 0,3,2,0,2,1, 4,5,6,4,6,7, 0,4,7,0,7,3, 1,2,6,1,6,5] },
+      "role": "trolley",
+      "position": [0.0, 16.5, 0.0],
+      "color": [0.55, 0.50, 0.12],
+      "roughness": 0.5,
+      "metallic": 0.3
+    },
+    {
+      "name": "hook_block",
+      "_doc": "Hangs below trolley. Runtime-parented under trolley node so it follows.",
+      "mesh": { "vertices": [-0.45,-0.35,-0.45, 0.45,-0.35,-0.45, 0.45,0.35,-0.45, -0.45,0.35,-0.45, -0.45,-0.35,0.45, 0.45,-0.35,0.45, 0.45,0.35,0.45, -0.45,0.35,0.45],
+                "indices": [0,1,5,0,5,4, 3,7,6,3,6,2, 0,3,2,0,2,1, 4,5,6,4,6,7, 0,4,7,0,7,3, 1,2,6,1,6,5] },
+      "role": "hook",
+      "position": [0.0, 13.0, 0.0],
+      "color": [0.20, 0.20, 0.22],
+      "roughness": 0.3,
+      "metallic": 0.7
+    }
+  ]
+}

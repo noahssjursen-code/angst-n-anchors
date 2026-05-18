@@ -4,7 +4,7 @@ extends StaticBody3D
 @export var spawner_path: NodePath
 @export var interact_range: float = 4.0
 @export var terminal_size: Vector3 = Vector3(1.0, 1.2, 0.55)
-@export var prompt_text: String = "Press E for ship terminal"
+@export var prompt_text: String = "Press F for ship terminal"
 
 var _ui_layer: CanvasLayer
 var _panel: Panel

@@ -237,7 +237,7 @@ func _update_prompt() -> void:
 	if mc == null:
 		return
 	var action := "untie" if bool(mc.call("is_mooring_line_tied_from_post", self)) else "tie"
-	_prompt_label.text = "Press E to %s mooring line" % action
+	_prompt_label.text = "Press F to %s mooring line" % action
 
 
 func _player_can_interact() -> bool:

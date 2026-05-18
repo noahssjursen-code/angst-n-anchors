@@ -5,7 +5,7 @@ extends Node3D
 ## The helm/cabin interaction point. When the player presses E within range,
 ## they take control of the boat: player movement is suspended, the boat
 ## camera activates, and BoatController starts reading input.
-## Press E or Escape to exit.
+## Press F or Escape to exit.
 
 signal player_boarded
 signal player_exited
@@ -16,7 +16,7 @@ const BOARDING_RAY_COLLISION_MASK: int = (1 << 0) | (1 << 1) | (1 << 2)
 @export var interact_range: float = 2.8
 @export var look_distance: float = 35.0
 @export var look_dot_threshold: float = 0.72
-@export var prompt_text: String = "Press E to board"
+@export var prompt_text: String = "Press F to board"
 
 @export_group("Helm boarding volume")
 

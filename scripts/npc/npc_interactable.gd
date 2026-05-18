@@ -3,7 +3,7 @@ extends NpcBase
 
 @export var interact_range: float = 4.0
 
-@export var prompt_text: String = "Press E":
+@export var prompt_text: String = "Press F":
 	set(v):
 		prompt_text = v
 		if _prompt != null:

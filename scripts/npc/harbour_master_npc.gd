@@ -25,7 +25,7 @@ var _pending_berth_index: int = -1
 func _ready() -> void:
 	clothing_color = Color(0.15, 0.22, 0.45)
 	trousers_color = Color(0.12, 0.16, 0.32)
-	prompt_text    = "Press E — Harbour Master"
+	prompt_text    = "Press F — Harbour Master"
 	super._ready()
 	if not Engine.is_editor_hint():
 		call_deferred("_build_ui")

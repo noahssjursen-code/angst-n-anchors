@@ -39,6 +39,21 @@ const DISPLAY_NAME: Dictionary = {
 	Type.DEEP_SEA_FREIGHTER: "Deep Sea Freighter",
 }
 
+## Indicative cargo grid cells a ship of this class is built to hold. Used by
+## the ContractNpc UI to show "X cells free / Y needed" before accepting.
+## Actual capacity comes from the ship's CargoDeckComponent(s); this is just
+## an upper-bound hint when no boat is currently berthed.
+const CARGO_CELLS: Dictionary = {
+	Type.LAUNCH:              2,
+	Type.COASTAL_TRADER:      8,
+	Type.SHORT_SEA_COASTER:  20,
+	Type.HANDYSIZE_FEEDER:   48,
+	Type.DEEP_SEA_FREIGHTER: 96,
+}
+
+static func cargo_cells(type: Type) -> int:
+	return int(CARGO_CELLS.get(type, 4))
+
 static func max_length(type: Type) -> float:
 	return float(MAX_LENGTH_M.get(type, 10.0))
 
