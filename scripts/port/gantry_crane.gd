@@ -44,9 +44,11 @@ static var _seated_count: int = 0
 @export var hoist_min_drop: float = 1.0
 @export var hoist_max_drop: float = 17.0
 
-## How close (3D distance) the hook must be to a pallet to engage chains.
-## Tight — forces the player to actually lower the hook (F) before pickup.
-@export var pickup_range_m: float = 1.8
+## How close (XZ) the hook must be to a pallet's center to engage chains.
+## Tight so the player must position the trolley right over the pallet.
+@export var pickup_xz_range_m: float = 0.9
+## Hook can be at most this far above the pallet top to engage.
+@export var pickup_max_height_m: float = 1.8
 
 ## How close (XZ) the hook must be to a delivery zone / deck cell to release.
 @export var release_xz_range_m: float = 1.6
@@ -641,17 +643,23 @@ func _update_pickup_highlight() -> void:
 		_set_pallet_highlight(_highlighted_pallet, true)
 
 
-## Returns the nearest pallet whose corner-attach points are within pickup_range_m
-## (3D Euclidean distance from the hook). Returns null if none in range.
+## Returns the nearest pallet within pickup_xz_range_m horizontally AND
+## pickup_max_height_m vertically (hook above pallet). Forces the operator
+## to position the trolley directly over the pallet and lower the hook.
 func _find_nearest_pallet() -> Node3D:
 	var hp := _hook.global_position
 	var best: Node3D = null
-	var best_d2 := pickup_range_m * pickup_range_m
+	var best_d2 := pickup_xz_range_m * pickup_xz_range_m
 	for n in get_tree().get_nodes_in_group(PalletNode.GROUP):
 		var pn := n as Node3D
 		if pn == null:
 			continue
-		var d2 := hp.distance_squared_to(pn.global_position + Vector3(0, 0.8, 0))
+		var dx := hp.x - pn.global_position.x
+		var dz := hp.z - pn.global_position.z
+		var dy := hp.y - pn.global_position.y     # >0 means hook above pallet
+		if dy < -0.4 or dy > pickup_max_height_m:
+			continue
+		var d2 := dx * dx + dz * dz
 		if d2 < best_d2:
 			best_d2 = d2
 			best = pn
