@@ -108,12 +108,14 @@ func can_accept(count: int = 1) -> bool:
 
 
 ## Whether this deck will physically take this specific pallet for STAGING
-## (capacity + origin gate). Called by the crane's release flow before
-## attempting add. Origin gating only applies when port_id is set.
+## (footprint fits AND origin gate). Called by the crane's release flow.
 func accepts_pallet(pallet: Pallet) -> bool:
-	if pallet == null or is_full():
+	if pallet == null:
 		return false
 	if not port_id.is_empty() and pallet.origin_port_id != port_id:
+		return false
+	# Footprint must fit somewhere on the grid.
+	if _find_free_block(_footprint_of(pallet), Vector3.ZERO, false) < 0:
 		return false
 	return true
 
@@ -140,9 +142,12 @@ func deliver_pallet(pallet: Pallet) -> int:
 
 # ── Pallet API ────────────────────────────────────────────────────────────────
 
-## Place a pallet at the nearest free cell to world_hint. Returns cell index (>=0) or -1.
+## Place a pallet at the nearest free cell block to world_hint. Returns the
+## origin (top-left) cell index of the placed block, or -1 if it didn't fit.
 func add_pallet(pallet: Pallet, world_hint: Vector3 = Vector3.INF) -> int:
-	if not accepts_pallet(pallet):
+	if pallet == null:
+		return -1
+	if not port_id.is_empty() and pallet.origin_port_id != port_id:
 		return -1
 
 	var preferred_local := Vector3.ZERO
@@ -150,29 +155,36 @@ func add_pallet(pallet: Pallet, world_hint: Vector3 = Vector3.INF) -> int:
 	if use_hint:
 		preferred_local = _clamp_to_grid(to_local(world_hint))
 
-	var cell_idx := _pick_free_cell(preferred_local, use_hint)
-	if cell_idx < 0:
+	var fp := _footprint_of(pallet)
+	var origin_idx := _find_free_block(fp, preferred_local, use_hint)
+	if origin_idx < 0:
 		return -1
 
-	_cells[cell_idx] = pallet
+	# Reserve every cell in the footprint — all keys point to the same pallet.
+	for cell_idx in _block_cells(origin_idx, fp):
+		_cells[cell_idx] = pallet
 
 	if affects_boat_cargo_mass and pallet.mass_kg > 0.0:
 		_apply_boat_cargo_mass_delta(pallet.mass_kg)
 		_deck_mass_kg += pallet.mass_kg
 
-	_spawn_pallet_node(cell_idx, pallet)
+	_spawn_pallet_node(origin_idx, pallet)
 	cargo_changed.emit(self)
-	return cell_idx
+	return origin_idx
 
 
-## Remove the pallet at cell_idx. Returns the Pallet or null.
+## Remove the pallet occupying cell_idx (any cell in its footprint). Returns
+## the Pallet or null.
 func remove_pallet(cell_idx: int) -> Pallet:
 	if not _cells.has(cell_idx):
 		return null
 
 	var pallet := _cells[cell_idx] as Pallet
-	_cells.erase(cell_idx)
-	_remove_pallet_node(cell_idx)
+	# Clear every cell that references this pallet (full footprint).
+	for k in _cells.keys().duplicate():
+		if _cells[k] == pallet:
+			_cells.erase(k)
+	_remove_pallet_node(pallet)
 
 	if pallet != null and affects_boat_cargo_mass and pallet.mass_kg > 0.0:
 		_apply_boat_cargo_mass_delta(-pallet.mass_kg)
@@ -188,10 +200,13 @@ func clear_all() -> void:
 
 
 func get_all_pallets() -> Array[Pallet]:
+	# Deduplicate — multi-cell pallets appear under multiple keys.
+	var seen := {}
 	var out: Array[Pallet] = []
 	for v in _cells.values():
 		var p := v as Pallet
-		if p != null:
+		if p != null and not seen.has(p):
+			seen[p] = true
 			out.append(p)
 	return out
 
@@ -212,12 +227,15 @@ func remove_pallet_by_resource(pallet: Pallet) -> Pallet:
 func get_cell_world_center(cell_idx: int) -> Vector3:
 	return to_global(_cell_local_center(cell_idx))
 
-func get_nearest_free_cell_world(world_point: Vector3) -> Vector3:
+## Returns the world-space center of the nearest free cell BLOCK that fits the
+## given pallet's footprint. Vector3.INF if nothing fits.
+func get_nearest_free_cell_world(world_point: Vector3, pallet: Pallet = null) -> Vector3:
 	var preferred := _clamp_to_grid(to_local(world_point))
-	var idx       := _pick_free_cell(preferred, true)
-	if idx < 0:
+	var fp := _footprint_of(pallet)
+	var origin_idx := _find_free_block(fp, preferred, true)
+	if origin_idx < 0:
 		return Vector3.INF
-	return to_global(_cell_local_center(idx))
+	return to_global(_block_local_center(origin_idx, fp))
 
 func contains_world_point(world_point: Vector3) -> bool:
 	var l  := to_local(world_point)
@@ -265,6 +283,71 @@ func _clamp_to_grid(local: Vector3) -> Vector3:
 	var hz := deck_length_m * 0.5
 	return Vector3(clampf(local.x, -hx, hx), 0.0, clampf(local.z, -hz, hz))
 
+## Footprint of a Pallet, defaulting to 1×1 when the pallet or its footprint
+## is missing. Always returns positive dimensions.
+func _footprint_of(pallet: Pallet) -> Vector2i:
+	if pallet == null:
+		return Vector2i.ONE
+	var fp := pallet.footprint
+	if fp.x <= 0 or fp.y <= 0:
+		return Vector2i.ONE
+	return fp
+
+
+## Cell indices covered by a block whose top-left is `origin_idx` and size `fp`.
+func _block_cells(origin_idx: int, fp: Vector2i) -> Array[int]:
+	var cols := get_cols()
+	var col  := origin_idx % cols
+	var row  := origin_idx / cols
+	var out: Array[int] = []
+	for dr in range(fp.y):
+		for dc in range(fp.x):
+			out.append((row + dr) * cols + (col + dc))
+	return out
+
+
+func _block_local_center(origin_idx: int, fp: Vector2i) -> Vector3:
+	var cols := get_cols()
+	var rows := get_rows()
+	var col  := origin_idx % cols
+	var row  := origin_idx / cols
+	var step_x := deck_width_m  / float(cols)
+	var step_z := deck_length_m / float(rows)
+	var cx := -deck_width_m  * 0.5 + step_x * (float(col) + float(fp.x) * 0.5)
+	var cz := -deck_length_m * 0.5 + step_z * (float(row) + float(fp.y) * 0.5)
+	return Vector3(cx, 0.0, cz)
+
+
+## Searches the grid for a free block of size `fp`. If use_preferred, returns
+## the closest block to preferred_local; otherwise returns any/first match.
+## Returns the block's origin cell index, or -1.
+func _find_free_block(fp: Vector2i, preferred_local: Vector3, use_preferred: bool) -> int:
+	var cols := get_cols()
+	var rows := get_rows()
+	if fp.x > cols or fp.y > rows:
+		return -1
+
+	var best_idx  := -1
+	var best_dist := INF
+	for row in range(rows - fp.y + 1):
+		for col in range(cols - fp.x + 1):
+			var origin_idx := row * cols + col
+			var fits := true
+			for cell_idx in _block_cells(origin_idx, fp):
+				if _cells.has(cell_idx):
+					fits = false
+					break
+			if not fits:
+				continue
+			if not use_preferred:
+				return origin_idx
+			var d2 := preferred_local.distance_squared_to(_block_local_center(origin_idx, fp))
+			if d2 < best_dist:
+				best_dist = d2
+				best_idx = origin_idx
+	return best_idx
+
+
 func _pick_free_cell(preferred_local: Vector3, use_preferred: bool) -> int:
 	var capacity := get_capacity()
 	if capacity <= 0:
@@ -296,24 +379,32 @@ func _ensure_pallet_root() -> Node3D:
 	return _pallet_root
 
 
-func _spawn_pallet_node(cell_idx: int, pallet: Pallet) -> void:
+func _spawn_pallet_node(origin_idx: int, pallet: Pallet) -> void:
 	var root := _ensure_pallet_root()
 	if root == null:
 		return
-	var node                := PalletNode.new()
-	node.name               = "Pallet_%d" % cell_idx
+	var fp := _footprint_of(pallet)
+	var node     := PalletNode.new()
+	node.name    = _pallet_node_name(pallet)
 	root.add_child(node)
-	node.position           = _cell_local_center(cell_idx)
-	node.setup(pallet, cell_size_x_m, cell_size_z_m)
+	node.position = _block_local_center(origin_idx, fp)
+	# Visual fills its footprint so a 1×4 timber pallet renders as a long pad.
+	node.setup(pallet, cell_size_x_m * float(fp.x), cell_size_z_m * float(fp.y))
 
 
-func _remove_pallet_node(cell_idx: int) -> void:
+func _remove_pallet_node(pallet: Pallet) -> void:
 	var root := _ensure_pallet_root()
-	if root == null:
+	if root == null or pallet == null:
 		return
-	var node := root.get_node_or_null("Pallet_%d" % cell_idx) as Node
+	var node := root.get_node_or_null(_pallet_node_name(pallet))
 	if node != null and is_instance_valid(node):
 		node.queue_free()
+
+
+func _pallet_node_name(pallet: Pallet) -> String:
+	if pallet == null or pallet.id.is_empty():
+		return "Pallet"
+	return "Pallet_" + pallet.id.left(8)
 
 
 # ── Internal: boat mass ───────────────────────────────────────────────────────

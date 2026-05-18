@@ -98,6 +98,9 @@ func _build_attach_sockets() -> void:
 			s.queue_free()
 	_sockets.clear()
 
+	# Sockets sit at the outer corners of the (possibly multi-cell) footprint.
+	# cell_w/cell_d already encode the full extent (set by CargoDeckComponent
+	# as cell_size × footprint dim), so this scales for 1×1, 1×4, 2×2, …
 	var inset := 0.18
 	var hx    := cell_w * 0.5 - inset
 	var hz    := cell_d * 0.5 - inset

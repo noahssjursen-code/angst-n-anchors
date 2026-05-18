@@ -642,11 +642,11 @@ func _update_snap_ghost() -> void:
 			continue
 		if hook_pos.y - deck.global_position.y > release_max_height_m:
 			continue
-		var cell_pos_d := deck.get_nearest_free_cell_world(hook_pos)
+		var cell_pos_d := deck.get_nearest_free_cell_world(hook_pos, pallet_res)
 		if cell_pos_d == Vector3.INF:
 			cell_pos_d = deck.global_position
 		var reward := pallet_res.value_gold if pallet_res != null else 0
-		_show_ghost(cell_pos_d, deck.global_basis,
+		_show_ghost(cell_pos_d, deck.global_basis, _footprint_size(deck, pallet_res),
 				Color(1.0, 0.84, 0.20),
 				"+%d ℳ" % reward,
 				true)
@@ -661,10 +661,10 @@ func _update_snap_ghost() -> void:
 			continue
 		if hook_pos.y - deck.global_position.y > release_max_height_m:
 			continue
-		var cell_pos := deck.get_nearest_free_cell_world(hook_pos)
+		var cell_pos := deck.get_nearest_free_cell_world(hook_pos, pallet_res)
 		if cell_pos == Vector3.INF:
 			continue
-		_show_ghost(cell_pos, deck.global_basis,
+		_show_ghost(cell_pos, deck.global_basis, _footprint_size(deck, pallet_res),
 				Color(0.30, 0.95, 0.45),
 				"",
 				false)
@@ -674,10 +674,14 @@ func _update_snap_ghost() -> void:
 	_hide_snap_ghost()
 
 
-func _show_ghost(pos: Vector3, deck_basis: Basis, color: Color, label_text: String, is_delivery: bool) -> void:
+func _show_ghost(pos: Vector3, deck_basis: Basis, footprint_xz: Vector2, color: Color, label_text: String, is_delivery: bool) -> void:
 	_snap_ghost.visible = true
-	# Match the deck's orientation so the ghost aligns with the cell, not world axes.
-	_snap_ghost.global_transform = Transform3D(deck_basis.orthonormalized(), pos + Vector3(0.0, 0.05, 0.0))
+	# Match deck orientation and stretch to the footprint so a 1×4 timber pad
+	# is shown as a long rectangle instead of a tiny square.
+	var oriented := deck_basis.orthonormalized()
+	oriented.x *= maxf(footprint_xz.x, 0.5)
+	oriented.z *= maxf(footprint_xz.y, 0.5)
+	_snap_ghost.global_transform = Transform3D(oriented, pos + Vector3(0.0, 0.05, 0.0))
 
 	_snap_phase = fmod(_snap_phase + get_process_delta_time() * 3.0, TAU)
 	var pulse := 0.5 + 0.5 * sin(_snap_phase)
@@ -723,13 +727,17 @@ func _update_destination_target(pallet_res: Pallet) -> void:
 		_hide_dest_target()
 		return
 
-	var cell_pos := best.get_nearest_free_cell_world(_hook.global_position)
+	var cell_pos := best.get_nearest_free_cell_world(_hook.global_position, pallet_res)
 	if cell_pos == Vector3.INF:
 		cell_pos = best.global_position
 
 	_dest_target.visible = true
+	var dbasis := best.global_basis.orthonormalized()
+	var fpz := _footprint_size(best, pallet_res)
+	dbasis.x *= maxf(fpz.x, 0.5)
+	dbasis.z *= maxf(fpz.y, 0.5)
 	_dest_target.global_transform = Transform3D(
-		best.global_basis.orthonormalized(),
+		dbasis,
 		cell_pos + Vector3(0.0, 0.06, 0.0),
 	)
 
@@ -746,6 +754,15 @@ func _update_destination_target(pallet_res: Pallet) -> void:
 		_dest_label.visible  = true
 		_dest_label.text     = "DELIVER"
 		_dest_label.position = Vector3(0.0, 1.4 + dp * 0.15, 0.0)
+
+
+## Footprint as a unitless cell multiplier — (1, 1) for ordinary cargo,
+## (1, 4) for timber. Used to stretch the snap-ghost mesh, which is sized
+## to one cell at baseline.
+func _footprint_size(_deck: CargoDeckComponent, pallet: Pallet) -> Vector2:
+	if pallet == null:
+		return Vector2.ONE
+	return Vector2(maxi(pallet.footprint.x, 1), maxi(pallet.footprint.y, 1))
 
 
 func _hide_dest_target() -> void:

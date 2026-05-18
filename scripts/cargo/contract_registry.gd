@@ -8,16 +8,21 @@ signal contract_accepted(contract: Contract, pallets: Array[Pallet])
 signal unit_delivered(contract: Contract, reward_gold: int)
 signal contract_completed(contract: Contract)
 
+## Per-commodity packing rules:
+##   units_per_pallet — how many physical units one pallet stacks
+##   footprint_w / _h — grid cells the pallet occupies (cols × rows)
+## Provisions are dense small barrels (6/pallet, 1×1). Timber is long planks
+## (2/pallet, 1×4 cells). Iron ore is heavy (2/pallet, 1×1). Coal/grain mid.
 const COMMODITIES := [
-	{ "id": "grain",      "display": "Grain",      "mass_kg": 180.0, "value": 8  },
-	{ "id": "timber",     "display": "Timber",     "mass_kg": 320.0, "value": 12 },
-	{ "id": "iron_ore",   "display": "Iron Ore",   "mass_kg": 480.0, "value": 18 },
-	{ "id": "coal",       "display": "Coal",       "mass_kg": 280.0, "value": 10 },
-	{ "id": "provisions", "display": "Provisions", "mass_kg": 150.0, "value": 14 },
+	{ "id": "grain",      "display": "Grain",      "mass_kg": 180.0, "value":  8, "units_per_pallet": 4, "footprint_w": 1, "footprint_h": 1 },
+	{ "id": "timber",     "display": "Timber",     "mass_kg": 320.0, "value": 12, "units_per_pallet": 2, "footprint_w": 1, "footprint_h": 4 },
+	{ "id": "iron_ore",   "display": "Iron Ore",   "mass_kg": 480.0, "value": 18, "units_per_pallet": 2, "footprint_w": 1, "footprint_h": 1 },
+	{ "id": "coal",       "display": "Coal",       "mass_kg": 280.0, "value": 10, "units_per_pallet": 4, "footprint_w": 1, "footprint_h": 1 },
+	{ "id": "provisions", "display": "Provisions", "mass_kg": 150.0, "value": 14, "units_per_pallet": 6, "footprint_w": 1, "footprint_h": 1 },
 ]
 
 const CONTRACT_RADIUS      := 3500.0
-const MAX_ACTIVE_CONTRACTS := 3
+const MAX_ACTIVE_CONTRACTS := 8
 
 ## port_id -> { id, display_name, position, spawn_pos, commodity_export, commodity_imports, ... }
 var _ports: Dictionary = {}
@@ -155,7 +160,7 @@ func accept_contract(contract_id: String) -> bool:
 
 	contract.state = Contract.State.ACCEPTED
 
-	var pallets := PalletFactory.split(contract, PalletFactory.DEFAULT_UNITS_PER_PALLET)
+	var pallets := PalletFactory.split(contract)
 	contract_accepted.emit(contract, pallets)
 	return true
 

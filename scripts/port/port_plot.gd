@@ -193,7 +193,7 @@ func _respawn_pending_cargo(registry: Node) -> void:
 		var units_to_spawn := remaining - already_staged - in_transit
 		if units_to_spawn <= 0:
 			continue
-		var pallets := PalletFactory.split(c, PalletFactory.DEFAULT_UNITS_PER_PALLET)
+		var pallets := PalletFactory.split(c)
 		var covered := already_staged + in_transit
 		var spawn_pallets: Array[Pallet] = []
 		for p in pallets:
