@@ -190,6 +190,12 @@ func _generate_contracts_for(new_port_id: String) -> void:
 	var new_info := _ports.get(new_port_id, {}) as Dictionary
 	var new_pos  := new_info.get("position", Vector3.ZERO) as Vector3
 
+	# Self-loop contract: pickup and dropoff at the same port. Useful for
+	# in-port crane practice without sailing, and reads as a real contract
+	# in the ContractNpc list.
+	var local := _make_contract(new_port_id, new_port_id)
+	_contracts[local.id] = local
+
 	for existing_id in _ports.keys():
 		if existing_id == new_port_id:
 			continue
@@ -224,6 +230,10 @@ func _make_contract(from_id: String, to_id: String) -> Contract:
 	var quantity  := rng.randi() % 3 + 3    # 3–5 items per run
 	var value_per := int(commodity["value"])
 	var reward    := int(distance * float(quantity) * float(value_per) * 0.14)
+	# Same-port contracts have zero distance — pay a flat in-port handling
+	# fee instead so the contract is still worth taking.
+	if from_id == to_id:
+		reward = quantity * value_per * 5
 
 	var c                 := Contract.new()
 	c.id                  = from_id + "::" + to_id
