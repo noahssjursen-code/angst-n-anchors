@@ -32,6 +32,15 @@ uniform vec2 boat_coupling_axes = vec2(1.0, 1.0);
 uniform vec4 boat_basis = vec4(1.0, 0.0, 0.0, 1.0);
 uniform vec2 boat_velocity = vec2(0.0, 0.0);
 
+// ── Land shelter (Phase 2.5++) ─────────────────────────────────────────────
+// Each island is packed as vec4(center_x, center_z, radius_m, _pad). Waves
+// fade out smoothly from full amplitude at `shelter_falloff_m` offshore down
+// to zero inside the island disk. Filled at world-init from LandField.
+const int MAX_LAND_DISKS = 64;
+uniform vec4  land_disks[MAX_LAND_DISKS];
+uniform int   land_disk_count    = 0;
+uniform float shelter_falloff_m  = 600.0;
+
 varying vec3 v_world_pos;
 varying vec3 v_world_normal;
 varying float v_wave_steep;
@@ -120,8 +129,24 @@ void vertex() {
 
 	fft_foam = clamp(fft_foam * 0.22, 0.0, 1.0);
 
+	// Shore shelter — vertices inside / very near an island disk get their
+	// wave displacement scaled to zero, so waves can never climb over the
+	// land mesh, the dock, the cranes, or the buildings on top. Smoothly
+	// returns to 1.0 (open ocean) over `shelter_falloff_m` from the shore.
+	float shelter = 1.0;
+	if (land_disk_count > 0) {
+		float min_d = 1e9;
+		for (int li = 0; li < land_disk_count; li++) {
+			vec4 disk = land_disks[li];
+			float d = distance(wp.xz, disk.xy) - disk.z;
+			min_d = min(min_d, d);
+		}
+		shelter = clamp(min_d / shelter_falloff_m, 0.0, 1.0);
+		shelter = shelter * shelter * (3.0 - 2.0 * shelter); // smoothstep
+	}
+
 	// Increase the FFT base amplitude slightly so shapes have mass.
-	float amp_scale = wave_intensity * wave_energy_multiplier * 0.42;
+	float amp_scale = wave_intensity * wave_energy_multiplier * 0.42 * shelter;
 	displacement *= amp_scale;
 	slopes *= amp_scale;
 

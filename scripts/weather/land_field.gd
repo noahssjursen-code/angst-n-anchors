@@ -99,3 +99,19 @@ static func get_island_disks() -> Array:
 	for i in range(_centers_xz.size()):
 		out.append({"center": _centers_xz[i], "radius": _radii[i]})
 	return out
+
+
+## Returns a `PackedVector4Array` packed as (center_x, center_z, radius, 0)
+## per island — the exact layout the ocean shader's `land_disks[]` uniform
+## expects. Truncated to `max_count` so we never exceed the shader's
+## MAX_LAND_DISKS bound. A world with more islands than the shader can hold
+## will simply fall back to the nearest `max_count` for shelter (Phase: bake
+## a 2D SDF texture instead, once port count justifies it).
+static func get_disks_packed(max_count: int) -> PackedVector4Array:
+	var out := PackedVector4Array()
+	var n := mini(_centers_xz.size(), max_count)
+	out.resize(n)
+	for i in range(n):
+		var c := _centers_xz[i]
+		out[i] = Vector4(c.x, c.y, _radii[i], 0.0)
+	return out
