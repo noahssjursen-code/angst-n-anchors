@@ -1009,6 +1009,7 @@ func _drop_in_place() -> void:
 		_carried_pallet.emit_signal("released", _carried_pallet)
 	if _rigging != null:
 		_rigging.detach_all()
+	_play_one_shot(_sfx_chain_release, _hook)
 	_carried_pallet = null
 
 
