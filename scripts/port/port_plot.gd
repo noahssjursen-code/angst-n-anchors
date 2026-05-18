@@ -107,15 +107,6 @@ func _rebuild() -> void:
 	facilities.position       = Vector3(0.0, 0.0, -hd + PortDock.INLAND_DEPTH)
 	add_child(facilities)
 
-	# Destination beacon — shows a gold light column when an accepted contract
-	# targets this port. Visible from anywhere on the map.
-	if not port_id.is_empty():
-		var beacon := DestinationBeacon.new()
-		beacon.name = "DestinationBeacon"
-		beacon.port_id = port_id
-		beacon.position = Vector3(0.0, 0.0, -hd)
-		add_child(beacon)
-
 	if not Engine.is_editor_hint():
 		call_deferred("_build_npcs")
 
