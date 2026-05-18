@@ -54,10 +54,14 @@ func _process(_delta: float) -> void:
 
 func _sample_fog_density() -> float:
 	var ww := get_node_or_null("/root/WorldWeather")
-	if ww != null and ww.is_initialized():
+	# When the debug HUD pauses the WeatherField → WeatherLighting blend, the
+	# user is scrubbing fog manually. Honour their value instead of reading
+	# the noise field (which would happily ignore the override).
+	var paused := ww != null and ww.is_blend_to_lighting_paused()
+	if ww != null and ww.is_initialized() and not paused:
 		# Sample own position + 4 cardinal points 220 m out.
 		# Use the worst fog found so the horn reacts to fog approaching
-		# from sea even though the port calm zone shelters the horn itself.
+		# from sea even though the port shelter masks the horn itself.
 		var worst := 0.0
 		for offset in [Vector3.ZERO,
 				Vector3(220, 0, 0), Vector3(-220, 0, 0),
@@ -66,7 +70,7 @@ func _sample_fog_density() -> float:
 			if fd > worst:
 				worst = fd
 		return worst
-	# Fallback to player's current weather if WorldWeather isn't up yet.
+	# Fallback (or debug override): read player's current weather state.
 	var weather := get_node_or_null("/root/WeatherLighting")
 	if weather != null:
 		return float(weather.get("fog_density"))
