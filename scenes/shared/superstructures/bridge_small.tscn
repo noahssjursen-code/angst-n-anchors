@@ -1,8 +1,8 @@
 [gd_scene load_steps=4 format=3]
 
-[ext_resource type="Script" path="res://scripts/systems/model_assembler.gd" id="1"]
-[ext_resource type="Script" path="res://scripts/systems/boat/ship_light.gd" id="2"]
-[ext_resource type="Script" path="res://scripts/systems/boat/bridge_interactable.gd" id="3"]
+[ext_resource type="Script" path="res://scripts/core/model_assembler.gd" id="1"]
+[ext_resource type="Script" path="res://scripts/ship/ship_light.gd" id="2"]
+[ext_resource type="Script" path="res://scripts/ship/bridge_interactable.gd" id="3"]
 
 [node name="BridgeSmall" type="Node3D"]
 rotation = Vector3(0, 3.141592653589793, 0)

@@ -1,8 +1,8 @@
 [gd_scene load_steps=4 format=3]
 
-[ext_resource type="Script" path="res://scripts/systems/model_assembler.gd" id="1"]
-[ext_resource type="Script" path="res://scripts/systems/boat/captains_chair.gd" id="2"]
-[ext_resource type="Script" path="res://scripts/systems/boat/ship_light.gd" id="3"]
+[ext_resource type="Script" path="res://scripts/core/model_assembler.gd" id="1"]
+[ext_resource type="Script" path="res://scripts/ship/captains_chair.gd" id="2"]
+[ext_resource type="Script" path="res://scripts/ship/ship_light.gd" id="3"]
 
 [node name="BridgeMedium" type="Node3D"]
 

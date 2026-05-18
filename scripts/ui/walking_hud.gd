@@ -51,8 +51,8 @@ func _draw() -> void:
 
 	for contract in contracts:
 		var dest: String = registry.get_port_display_name(contract.destination_port_id)
-		var remain := contract.quantity - contract.delivered_count
-		var c_str  := "%s  →  %s   (%d/%d)" % [contract.display_name, dest, remain, contract.quantity]
+		var in_transit := contract.taken_count - contract.delivered_count
+		var c_str  := "%s  →  %s   ×%d" % [contract.display_name, dest, in_transit]
 		var c_tw   := _font.get_string_size(c_str, HORIZONTAL_ALIGNMENT_LEFT, -1, cfs).x
 		var c_pw   := c_tw + c_pad * 2.0
 		draw_rect(Rect2(ox, cy, c_pw, cph), HudStyle.C_BG)
