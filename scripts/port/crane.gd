@@ -52,7 +52,7 @@ const C_HOOK    := Color(0.25, 0.25, 0.28)
 
 # ── Runtime state ─────────────────────────────────────────────────────────────
 
-var _slew:  float  = -90.0   # degrees; -90 = boom toward water (dock -Z)
+var _slew:  float  = 90.0    # degrees; +90 = boom toward water (dock -Z)
 var _troll: float  = 8.0     # m from tower centre along boom
 var _hoist: float  = 10.0    # m below boom (hook height = tower_height - hoist)
 
@@ -121,9 +121,9 @@ func _unhandled_input(event: InputEvent) -> void:
 # ── Crane input ───────────────────────────────────────────────────────────────
 
 func _read_crane_input(delta: float) -> void:
-	# Slew: A left, D right
+	# Slew: A left, D right (negated so A swings boom toward operator's left)
 	var slew_dir := Input.get_axis("crane_slew_left", "crane_slew_right")
-	_slew += slew_dir * slew_speed_deg * delta
+	_slew -= slew_dir * slew_speed_deg * delta
 
 	# Trolley: W extend outboard, S retract inboard
 	var troll_dir := Input.get_axis("crane_trolley_in", "crane_trolley_out")
@@ -396,7 +396,7 @@ func _build_camera() -> void:
 	_crane_cam                  = Camera3D.new()
 	_crane_cam.name             = "CraneCam"
 	_crane_cam.position         = Vector3(boom_reach * 0.25, 4.0, 0.0)
-	_crane_cam.rotation_degrees = Vector3(-55.0, 90.0, 0.0)
+	_crane_cam.rotation_degrees = Vector3(-55.0, -90.0, 0.0)
 	_crane_cam.current          = false
 	_slew_arm.add_child(_crane_cam)
 
