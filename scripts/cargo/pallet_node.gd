@@ -15,6 +15,7 @@ var cell_d: float  = 1.5
 
 var _mesh_root: Node3D
 var _label: Label3D
+var _sockets: Array[PalletAttachPoint] = []
 
 
 func _ready() -> void:
@@ -69,6 +70,34 @@ func _build() -> void:
 	if pallet != null:
 		_label.text     = "%s\n×%d" % [pallet.display_name, pallet.units]
 		_label.position = Vector3(0.0, 1.2, 0.0)
+
+	_build_attach_sockets()
+
+
+func _build_attach_sockets() -> void:
+	for s in _sockets:
+		if is_instance_valid(s):
+			s.queue_free()
+	_sockets.clear()
+
+	var inset := 0.18
+	var hx    := cell_w * 0.5 - inset
+	var hz    := cell_d * 0.5 - inset
+	var y     := 0.18  # just above the pallet base
+	var corners := [
+		Vector3(-hx, y, -hz),
+		Vector3( hx, y, -hz),
+		Vector3( hx, y,  hz),
+		Vector3(-hx, y,  hz),
+	]
+	for i in corners.size():
+		var sock := PalletAttachPoint.new()
+		sock.name = "Socket%d" % i
+		sock.corner_index = i
+		sock.pallet_node = self
+		sock.position = corners[i]
+		add_child(sock)
+		_sockets.append(sock)
 
 
 func _commodity_color() -> Color:

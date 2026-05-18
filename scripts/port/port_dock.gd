@@ -224,12 +224,9 @@ func _build_berth_slot(index: int, cx: float, slot_w: float, ship_beam: float, c
 # ── Crane types ───────────────────────────────────────────────────────────────
 
 func _crane_general(index: int, cx: float, crane_z: float) -> void:
-	var crane          := Crane.new()
-	crane.name         = "Crane%d" % index
-	crane.position     = Vector3(cx, QUAY_HEIGHT, crane_z)
-	crane.tower_height = CRANE_H
-	crane.boom_reach   = 20.0
-	crane.boom_tail    = 10.0
+	var crane     := GantryCrane.new()
+	crane.name    = "Crane%d" % index
+	crane.position = Vector3(cx, QUAY_HEIGHT, crane_z)
 	add_child(crane)
 	if Engine.is_editor_hint() and get_tree() != null:
 		var esc := get_tree().edited_scene_root
