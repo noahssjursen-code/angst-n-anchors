@@ -57,12 +57,15 @@ func _build() -> void:
 func _apply_colors() -> void:
 	if assembler == null:
 		return
-	_tint("head",      skin_color)
-	_tint("hands",     skin_color)
-	_tint("face_nose", skin_color)
-	_tint("torso",     clothing_color)
-	_tint("arms",      clothing_color)
-	_tint("legs",      trousers_color)
+	_tint("head",        skin_color)
+	_tint("hand_left",   skin_color)
+	_tint("hand_right",  skin_color)
+	_tint("face_nose",   skin_color)
+	_tint("torso",       clothing_color)
+	_tint("arm_left",    clothing_color)
+	_tint("arm_right",   clothing_color)
+	_tint("leg_left",    trousers_color)
+	_tint("leg_right",   trousers_color)
 
 
 func _tint(part_name: String, color: Color) -> void:

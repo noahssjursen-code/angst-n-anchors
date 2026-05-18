@@ -18,6 +18,10 @@ extends Node3D
 ##       // or: "mesh": { "vertices": [...], "indices": [...] },
 ##       // or: "model": "res://resources/data/models/ships/nested_model.json",
 ##       "role": "physics_body",
+##       "parent": "other_part_name",  // optional: attach under a previously-built
+##                                       // sibling part so position / rotation
+##                                       // inherit from that node (articulated rigs).
+##                                       // Default: attach to assembler root.
 ##       "position": [0, 0, 0],
 ##       "rotation_degrees": [0, 0, 0],
 ##       "scale": 1.0,
@@ -156,7 +160,13 @@ func _build_part(part: Dictionary) -> void:
 	var node := MeshTransformer.new()
 	node.name = PART_PREFIX + _safe_node_name(part_name)
 	node.position = _vector3_from_array(part.get("position", []), Vector3.ZERO) * absolute_scale
-	add_child(node)
+	# Optional `parent: "<part_name>"` lets a part attach to a previously-built
+	# sibling instead of the assembler root. Lets us build articulated rigs
+	# (hand follows arm, tool follows hand) without a Skeleton3D — just nested
+	# Node3Ds. Parent must appear before child in the JSON; if unknown, falls
+	# back to the assembler root with a warning.
+	var parent_node := _resolve_part_parent(part, part_name)
+	parent_node.add_child(node)
 	if Engine.is_editor_hint() and get_tree() != null:
 		node.owner = get_tree().edited_scene_root
 
@@ -202,7 +212,8 @@ func _build_nested_model(part_name: String, part: Dictionary) -> void:
 	node.name = PART_PREFIX + _safe_node_name(part_name)
 	node.position = _vector3_from_array(part.get("position", []), Vector3.ZERO) * absolute_scale
 	node.rotation_degrees = _vector3_from_array(part.get("rotation_degrees", []), Vector3.ZERO)
-	add_child(node)
+	var parent_node := _resolve_part_parent(part, part_name)
+	parent_node.add_child(node)
 	if Engine.is_editor_hint() and get_tree() != null:
 		node.owner = get_tree().edited_scene_root
 
@@ -255,6 +266,23 @@ func get_collision_faces_in(target: Node3D) -> Array[Vector3]:
 			faces.append_array(node.call("get_collision_faces_in", target))
 
 	return faces
+
+
+## Resolves the Node a freshly-built part should attach to. Default is the
+## assembler root. If the part declares `parent: "<other_part_name>"`, look
+## that previously-built part up and use it instead — produces a Node3D
+## hierarchy without needing a Skeleton3D.
+func _resolve_part_parent(part: Dictionary, part_name: String) -> Node:
+	if not part.has("parent"):
+		return self
+	var parent_key := str(part.get("parent", "")).strip_edges()
+	if parent_key.is_empty():
+		return self
+	var parent_node := _part_nodes_by_name.get(parent_key, null) as Node
+	if parent_node == null:
+		push_warning("ModelAssembler: part `%s` references unknown parent `%s` — attaching to root" % [part_name, parent_key])
+		return self
+	return parent_node
 
 
 func _clear_generated_parts() -> void:

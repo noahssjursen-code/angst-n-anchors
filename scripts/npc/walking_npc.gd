@@ -8,8 +8,8 @@ extends NpcBase
 ##
 ## Configured by `PortPlot._build_walkers()`: assign `port_seed`, `npc_index`,
 ## and `port_radius` before adding to the tree. _process polls the field every
-## frame and applies the transform locally — no physics, no nav-mesh, no
-## animation rig. A tiny vertical bob fakes a step cadence.
+## frame, applies the patrol transform, and drives the WalkAnimator from the
+## walker's cumulative distance walked.
 
 @export var port_seed:    int   = 0
 @export var npc_index:    int   = 0
@@ -18,9 +18,12 @@ extends NpcBase
 ## `PortFacilities.position` within the port plot.
 @export var anchor_offset: Vector3 = Vector3.ZERO
 
-## How fast the visual bob cycles relative to walk speed (cycles per metre).
-const BOB_CYCLES_PER_M : float = 0.55
-const BOB_AMPLITUDE    : float = 0.045
+## Tiny vertical body-bob amplitude. The leg cycle does most of the visual
+## work now — this just adds a touch of bounce so the spine doesn't look
+## glued to a rail.
+const BOB_AMPLITUDE : float = 0.025
+
+var _anim: WalkAnimator
 
 
 func _ready() -> void:
@@ -36,6 +39,15 @@ func _ready() -> void:
 	# Ambient walkers are intangible — player walks through them, no physics
 	# collisions disrupt the boat or the dock. The visual is everything.
 	call_deferred("_clear_collisions")
+	# Animator can only cache limb refs after the assembler has built
+	# (NpcBase calls _build via call_deferred). One more deferral chains
+	# us to the frame after that.
+	_anim = WalkAnimator.new()
+	call_deferred("_attach_animator")
+
+
+func _attach_animator() -> void:
+	_anim.attach(self)
 
 
 func _clear_collisions() -> void:
@@ -48,10 +60,14 @@ func _process(_delta: float) -> void:
 		return
 	var t := Time.get_ticks_msec() * 0.001
 	var xform := AmbientPopulation.local_transform_at(port_seed, npc_index, t, port_radius)
-	# Tiny vertical bob to suggest stepping. Cycles with distance walked, not
-	# wall-clock time, so faster walkers visibly bob faster.
-	var bob := sin(t * AmbientPopulation.walk_speed_for(port_seed, npc_index)
-				   * BOB_CYCLES_PER_M * TAU) * BOB_AMPLITUDE
+	# Walk cycle: cumulative distance = speed × time. Locks gait visually to
+	# patrol speed without any per-walker state.
+	var speed := AmbientPopulation.walk_speed_for(port_seed, npc_index)
+	var dist  := speed * t
+	if _anim != null and _anim.is_ready():
+		_anim.update(dist)
+	# Small body bob — riding on top of the leg cycle.
+	var bob := sin(dist * WalkAnimator.CYCLES_PER_M * TAU * 2.0) * BOB_AMPLITUDE
 	xform.origin   += anchor_offset
 	xform.origin.y += bob
 	transform = xform
