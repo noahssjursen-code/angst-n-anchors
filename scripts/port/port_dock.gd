@@ -195,7 +195,8 @@ func _build_berth_slot(index: int, cx: float, slot_w: float, ship_beam: float, c
 	var apron_w_reach := maxf(slot_w - 2.0 * APRON_REACH_INSET, 1.5)
 	var apron_deck := CargoDeckComponent.new()
 	apron_deck.name                       = "ApronDeck%d" % index
-	apron_deck.position                   = Vector3(cx, QUAY_HEIGHT + 0.001, apron_z)
+	# Sits just above the concrete pad (which is 0.12 m tall starting at Y=0).
+	apron_deck.position                   = Vector3(cx, 0.13, apron_z)
 	apron_deck.deck_width_m               = apron_w_reach
 	apron_deck.deck_length_m              = APRON_DEPTH
 	apron_deck.cell_size_x_m              = 1.5
@@ -247,7 +248,10 @@ func _build_berth_slot(index: int, cx: float, slot_w: float, ship_beam: float, c
 		CargoBerthType.Type.CONTAINER: _crane_container(index, cx, slot_w, crane_z)
 		_:                             _crane_general(index, cx, slot_w, crane_z)
 
-	# Apron visual is the CargoDeckComponent's grid above — no static box.
+	# Concrete apron pad sits on the island ground (the quay slab ends well
+	# before the apron). The grid deck lives just above it.
+	_box(Vector3(apron_w_reach, 0.12, APRON_DEPTH),
+		 Vector3(cx, 0.06, apron_z), C_CARGO_YARD, "ApronPad%d" % index)
 
 
 # ── Crane types ───────────────────────────────────────────────────────────────
