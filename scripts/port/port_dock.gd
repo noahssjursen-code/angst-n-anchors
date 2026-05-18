@@ -195,7 +195,7 @@ func _build_berth_slot(index: int, cx: float, slot_w: float, ship_beam: float, c
 	var apron_w_reach := maxf(slot_w - 2.0 * APRON_REACH_INSET, 1.5)
 	var apron_deck := CargoDeckComponent.new()
 	apron_deck.name                       = "ApronDeck%d" % index
-	apron_deck.position                   = Vector3(cx, QUAY_HEIGHT + 0.005, apron_z)
+	apron_deck.position                   = Vector3(cx, QUAY_HEIGHT + 0.001, apron_z)
 	apron_deck.deck_width_m               = apron_w_reach
 	apron_deck.deck_length_m              = APRON_DEPTH
 	apron_deck.cell_size_x_m              = 1.5
@@ -203,6 +203,7 @@ func _build_berth_slot(index: int, cx: float, slot_w: float, ship_beam: float, c
 	apron_deck.affects_boat_cargo_mass    = false
 	apron_deck.required_origin_port_id    = port_id
 	apron_deck.debug_color                = Color(0.85, 0.55, 0.18, 0.20)
+	apron_deck.debug_grid_y_offset        = 0.0   # grid lies flat on the quay
 	add_child(apron_deck)
 	if Engine.is_editor_hint() and get_tree() != null:
 		var esc := get_tree().edited_scene_root

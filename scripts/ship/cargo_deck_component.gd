@@ -49,6 +49,14 @@ signal cargo_changed(component: CargoDeckComponent)
 		debug_color = v
 		_rebuild_debug_visual()
 
+## Local Y at which the grid lines render. Ship decks use a small positive
+## offset so the grid sits on top of the deck plate; apron decks use 0 so the
+## grid lies flat on the quay surface.
+@export var debug_grid_y_offset: float = 0.06:
+	set(v):
+		debug_grid_y_offset = v
+		_rebuild_debug_visual()
+
 ## How many cargo units stack on one pallet / cell on this ship.
 @export_range(1, 12, 1) var units_per_pallet: int = PalletFactory.DEFAULT_UNITS_PER_PALLET
 
@@ -316,7 +324,7 @@ func _rebuild_debug_visual() -> void:
 
 	_debug_root          = Node3D.new()
 	_debug_root.name     = "DeckGrid"
-	_debug_root.position = Vector3(0.0, 0.06, 0.0)
+	_debug_root.position = Vector3(0.0, debug_grid_y_offset, 0.0)
 	add_child(_debug_root)
 	if Engine.is_editor_hint() and get_tree() != null and get_tree().edited_scene_root != null:
 		_debug_root.owner = get_tree().edited_scene_root
