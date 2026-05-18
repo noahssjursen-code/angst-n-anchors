@@ -181,29 +181,30 @@ func _respawn_pending_cargo(registry: Node) -> void:
 		var c := contract as Contract
 		if c == null or c.origin_port_id != port_id:
 			continue
-		var remaining := c.quantity - c.delivered_count
-		if remaining <= 0:
+		# Pallets that SHOULD currently exist somewhere = accepted but not yet
+		# delivered. Anything missing gets re-spawned on the apron.
+		var in_play := c.taken_count - c.delivered_count
+		if in_play <= 0:
 			continue
-		# Count pallets already on this apron deck.
 		var already_staged := 0
 		for p in apron.get_all_pallets():
 			if (p as Pallet).contract_id == c.id:
 				already_staged += (p as Pallet).units
-		var in_transit := _count_in_transit(c.id) - already_staged
-		var units_to_spawn := remaining - already_staged - in_transit
+		var elsewhere := _count_in_transit(c.id) - already_staged
+		var units_to_spawn := in_play - already_staged - elsewhere
 		if units_to_spawn <= 0:
 			continue
-		var pallets := PalletFactory.split(c)
-		var covered := already_staged + in_transit
-		var spawn_pallets: Array[Pallet] = []
-		for p in pallets:
-			if covered >= (p as Pallet).units:
-				covered -= (p as Pallet).units
-				continue
-			spawn_pallets.append(p as Pallet)
-		if spawn_pallets.is_empty():
-			continue
-		_stage_pallets_on_apron(dock, berth_idx, spawn_pallets)
+		# Build a batch contract for splitting just the missing units.
+		var batch := Contract.new()
+		batch.id                  = c.id
+		batch.commodity           = c.commodity
+		batch.display_name        = c.display_name
+		batch.quantity            = units_to_spawn
+		batch.mass_per_unit_kg    = c.mass_per_unit_kg
+		batch.reward_gold         = c.reward_per_unit() * units_to_spawn
+		batch.origin_port_id      = c.origin_port_id
+		batch.destination_port_id = c.destination_port_id
+		_stage_pallets_on_apron(dock, berth_idx, PalletFactory.split(batch))
 
 
 func _count_in_transit(contract_id: String) -> int:

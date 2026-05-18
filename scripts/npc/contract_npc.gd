@@ -81,10 +81,13 @@ func _make_row(contract: Contract, registry: Node, slots_free: int, ship_berthed
 	var info: Dictionary = registry.commodity_info(contract.commodity)
 	var color: Color     = registry.commodity_color(contract.commodity)
 	var max_units: int   = int(info.get("max_pallet_units", 4))
-	# One unit = one cell. Pallets are 1×N strips up to max_units long.
-	var cells_needed   := contract.quantity
-	var pallets_needed := int(ceil(float(contract.quantity) / float(maxi(max_units, 1))))
-	var stock          := int(registry.get_export_stock(contract.origin_port_id, contract.commodity))
+	var stock: int       = int(registry.get_export_stock(contract.origin_port_id, contract.commodity))
+	# Units the contract still has on offer + how many the player can actually
+	# take right now (ship capacity is also a constraint).
+	var still_offered    := contract.available_to_take()
+	var takeable         := mini(mini(still_offered, stock), ship_cells_free)
+	var cells_needed     := still_offered  # 1 unit = 1 cell
+	var pallets_needed   := int(ceil(float(still_offered) / float(maxi(max_units, 1))))
 
 	var dest_name: String = registry.get_destination_name(contract)
 	var origin_pos: Vector3 = registry.get_port_position(contract.origin_port_id)
@@ -101,45 +104,56 @@ func _make_row(contract: Contract, registry: Node, slots_free: int, ship_berthed
 	swatch.color      = color
 	swatch.custom_minimum_size = Vector2(18, 32)
 
+	# Shows remaining-on-offer instead of original total once partials happen.
+	var qty_str := "×%d" % still_offered
+	if contract.taken_count > 0:
+		qty_str = "×%d (of %d)" % [still_offered, contract.quantity]
+
 	var headline      := Label.new()
-	headline.text     = "%s ×%d  →  %s   %s" % [
-		contract.display_name, contract.quantity, dest_name, dist_str,
+	headline.text     = "%s %s  →  %s   %s" % [
+		contract.display_name, qty_str, dest_name, dist_str,
 	]
 	headline.add_theme_font_size_override("font_size", 14)
 	headline.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 
 	var reward_lbl    := Label.new()
-	reward_lbl.text   = "ℳ %d" % contract.reward_gold
+	# Reward shown for what's offered now (proportional to remaining quantity).
+	var offered_reward := contract.reward_per_unit() * still_offered
+	reward_lbl.text   = "ℳ %d" % offered_reward
 	reward_lbl.add_theme_font_size_override("font_size", 14)
 	reward_lbl.add_theme_color_override("font_color", HudStyle.C_AMBER)
 	reward_lbl.custom_minimum_size = Vector2(70, 0)
 	reward_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 
 	var btn := Button.new()
-	btn.custom_minimum_size = Vector2(110, 0)
-	match contract.state:
-		Contract.State.AVAILABLE:
-			if slots_free <= 0:
-				btn.text     = "Full"
-				btn.disabled = true
-			elif not ship_berthed:
-				btn.text     = "Berth ship"
-				btn.disabled = true
-			elif stock < contract.quantity:
-				btn.text     = "Out of stock"
-				btn.disabled = true
-			elif ship_cells_free < cells_needed:
-				btn.text     = "No space"
-				btn.disabled = true
-			else:
-				btn.text = "Accept"
-				btn.pressed.connect(_on_accept.bind(contract.id))
-		Contract.State.ACCEPTED:
-			btn.text     = "Active"
-			btn.disabled = true
-		Contract.State.COMPLETED:
-			btn.text     = "Done"
-			btn.disabled = true
+	btn.custom_minimum_size = Vector2(130, 0)
+	# A new contract entering the slate costs one of MAX_ACTIVE_CONTRACTS slots,
+	# but an already-active one (any taken_count > 0) doesn't.
+	var needs_slot := contract.taken_count == 0
+	if still_offered <= 0:
+		btn.text     = "Done"
+		btn.disabled = true
+	elif needs_slot and slots_free <= 0:
+		btn.text     = "Slots full"
+		btn.disabled = true
+	elif not ship_berthed:
+		btn.text     = "Berth ship"
+		btn.disabled = true
+	elif stock <= 0:
+		btn.text     = "Out of stock"
+		btn.disabled = true
+	elif ship_cells_free <= 0:
+		btn.text     = "No space"
+		btn.disabled = true
+	elif takeable <= 0:
+		btn.text     = "No space"
+		btn.disabled = true
+	elif takeable < still_offered:
+		btn.text     = "Take %d of %d" % [takeable, still_offered]
+		btn.pressed.connect(_on_accept.bind(contract.id, takeable))
+	else:
+		btn.text = "Accept"
+		btn.pressed.connect(_on_accept.bind(contract.id, 0))
 
 	var row1 := HBoxContainer.new()
 	row1.size_flags_horizontal = Control.SIZE_FILL
@@ -149,30 +163,37 @@ func _make_row(contract: Contract, registry: Node, slots_free: int, ship_berthed
 	row1.add_child(btn)
 
 	# ── Row 2: pallet/footprint · stock · capacity hint
-	# Each unit = 1 cell. Layout: greedy fill by max_units, last pallet smaller.
-	var last_pallet_size: int = contract.quantity - (pallets_needed - 1) * max_units
-	var full_fp: Vector2i = PalletFactory.best_footprint(max_units, max_units)
-	var last_fp: Vector2i = PalletFactory.best_footprint(last_pallet_size, max_units)
+	# Pallet layout is computed for what the player would actually take now.
+	var take_units := maxi(takeable, 0)
+	var take_pallets := int(ceil(float(take_units) / float(maxi(max_units, 1)))) if take_units > 0 else pallets_needed
 	var shape_hint := ""
-	if pallets_needed == 1:
-		shape_hint = "1 pallet · %d×%d" % [last_fp.x, last_fp.y]
-	elif last_pallet_size == max_units:
-		shape_hint = "%d pallets · %d×%d each" % [pallets_needed, full_fp.x, full_fp.y]
+	if take_units > 0:
+		var last_pallet_size: int = take_units - (take_pallets - 1) * max_units
+		var full_fp: Vector2i = PalletFactory.best_footprint(max_units, max_units)
+		var last_fp: Vector2i = PalletFactory.best_footprint(last_pallet_size, max_units)
+		if take_pallets == 1:
+			shape_hint = "1 pallet · %d×%d" % [last_fp.x, last_fp.y]
+		elif last_pallet_size == max_units:
+			shape_hint = "%d pallets · %d×%d each" % [take_pallets, full_fp.x, full_fp.y]
+		else:
+			shape_hint = "%d pallets · %d × %d×%d + 1 × %d×%d" % [
+				take_pallets,
+				take_pallets - 1, full_fp.x, full_fp.y,
+				last_fp.x, last_fp.y,
+			]
 	else:
-		shape_hint = "%d pallets · %d × %d×%d + 1 × %d×%d" % [
-			pallets_needed,
-			pallets_needed - 1, full_fp.x, full_fp.y,
-			last_fp.x, last_fp.y,
-		]
-	var caps_text := "%s  ·  stock %d  ·  needs %d of %d cells" % [
-		shape_hint, stock, cells_needed, ship_cells_free,
+		shape_hint = "%d pallets · 1×1" % pallets_needed
+	var caps_text := "%s  ·  stock %d  ·  ship has %d cells free" % [
+		shape_hint, stock, ship_cells_free,
 	]
 	var caps := Label.new()
 	caps.text = caps_text
 	caps.add_theme_font_size_override("font_size", 11)
 	var dim := Color(0.78, 0.78, 0.82)
-	if stock < contract.quantity or (ship_berthed and ship_cells_free < cells_needed):
-		dim = Color(0.95, 0.55, 0.45)  # warning
+	if takeable < still_offered:
+		dim = Color(0.95, 0.78, 0.40)  # partial — gentle warning
+	if takeable <= 0 and still_offered > 0:
+		dim = Color(0.95, 0.55, 0.45)  # blocked — red
 	caps.add_theme_color_override("font_color", dim)
 
 	var wrapper := VBoxContainer.new()
@@ -182,10 +203,10 @@ func _make_row(contract: Contract, registry: Node, slots_free: int, ship_berthed
 	return wrapper
 
 
-func _on_accept(contract_id: String) -> void:
+func _on_accept(contract_id: String, take_units: int = 0) -> void:
 	var registry := _registry()
 	if registry != null:
-		registry.accept_contract(contract_id)
+		registry.accept_contract(contract_id, take_units)
 	_refresh_list()
 
 

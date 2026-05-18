@@ -143,7 +143,11 @@ func get_accepted_contracts() -> Array[Contract]:
 	var out: Array[Contract] = []
 	for c in _contracts.values():
 		var contract := c as Contract
-		if contract != null and contract.state == Contract.State.ACCEPTED:
+		if contract == null:
+			continue
+		# A contract is "active" while any of its units are out on the apron
+		# or in transit — i.e. taken but not yet delivered.
+		if contract.is_in_transit():
 			out.append(contract)
 	return out
 
@@ -172,21 +176,47 @@ func unregister_port(port_id: String) -> void:
 
 # ── Accept ────────────────────────────────────────────────────────────────────
 
-func accept_contract(contract_id: String) -> bool:
+## Accept (a portion of) a contract. take_units = 0 means "as much as I can":
+## limited by the contract's remaining quantity AND port stock. Returns the
+## actual number of units accepted (0 if nothing fit). Pallets for the taken
+## amount are emitted via contract_accepted.
+func accept_contract(contract_id: String, take_units: int = 0) -> int:
 	var contract := _contracts.get(contract_id) as Contract
-	if contract == null or contract.state != Contract.State.AVAILABLE:
-		return false
-	if get_accepted_contracts().size() >= MAX_ACTIVE_CONTRACTS:
-		return false
-	# Reserve units from the origin port's export pool. Refuse if not enough.
-	if not _consume_stock(contract.origin_port_id, contract.commodity, contract.quantity):
-		return false
+	if contract == null:
+		return 0
+	if contract.available_to_take() <= 0:
+		return 0
+	# New contract entering the player's slate counts toward the cap. An
+	# already-active contract (taken_count > 0) doesn't take a new slot.
+	if contract.taken_count == 0 and get_accepted_contracts().size() >= MAX_ACTIVE_CONTRACTS:
+		return 0
 
-	contract.state = Contract.State.ACCEPTED
+	var stock := get_export_stock(contract.origin_port_id, contract.commodity)
+	var cap := mini(contract.available_to_take(), stock)
+	var actual: int = cap if take_units <= 0 else mini(take_units, cap)
+	if actual <= 0:
+		return 0
 
-	var pallets := PalletFactory.split(contract)
+	_consume_stock(contract.origin_port_id, contract.commodity, actual)
+	contract.taken_count += actual
+	if contract.taken_count >= contract.quantity:
+		contract.state = Contract.State.ACCEPTED
+
+	# Pallets are generated from a temporary batch contract — same id (so
+	# delivery still maps), reduced quantity + reward, identical packing rules.
+	var batch := Contract.new()
+	batch.id                  = contract.id
+	batch.commodity           = contract.commodity
+	batch.display_name        = contract.display_name
+	batch.quantity            = actual
+	batch.mass_per_unit_kg    = contract.mass_per_unit_kg
+	batch.reward_gold         = contract.reward_per_unit() * actual
+	batch.origin_port_id      = contract.origin_port_id
+	batch.destination_port_id = contract.destination_port_id
+	var pallets := PalletFactory.split(batch)
+
 	contract_accepted.emit(contract, pallets)
-	return true
+	return actual
 
 
 # ── Port export pool ─────────────────────────────────────────────────────────
@@ -234,7 +264,10 @@ func deliver_pallet(pallet: Pallet) -> int:
 	if contract.is_complete():
 		contract.state = Contract.State.COMPLETED
 		contract_completed.emit(contract)
+		# Reset for potential reuse. Stock pool isn't replenished here — it
+		# stays drained until a future restock pass refills it.
 		contract.delivered_count = 0
+		contract.taken_count     = 0
 		contract.state           = Contract.State.AVAILABLE
 
 	return reward
