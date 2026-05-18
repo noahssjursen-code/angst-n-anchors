@@ -119,26 +119,65 @@ def dump(filename: str, model: dict) -> None:
 # ── Models ────────────────────────────────────────────────────────────────────
 
 def make_pallet(fp_x: int, fp_z: int) -> None:
-    """One coherent pallet at fp_x × fp_z cells (cell = 1.5 m). Deck slab on
-    top, fp_z+1 darker stringer slats below."""
+    """Wooden pallet at fp_x × fp_z cells (cell = 1.5 m). Structure:
+      * 3 stringers running along Z (the long axis when fp_z >= fp_x)
+      * N top deck planks running along X, spaced across Z with visible gaps
+      * 2 bottom planks (front + back) for when the crane lifts it
+    Total vertical height: stringer (0.10) + plank (0.04) = 0.14 m."""
     cell = 1.5
-    pad = 0.1
+    pad = 0.10
     w = cell * fp_x - pad
     d = cell * fp_z - pad
-    plank_h = 0.14
+
     wood = [0.55, 0.38, 0.22]
-    dark = [c * 0.65 for c in wood]
-    parts = [part("deck", box_mesh(w, plank_h, d), wood, (0, 0, 0))]
-    stringer_count = fp_z + 1
-    for i in range(stringer_count):
-        z = -d / 2.0 + (i + 0.5) * (d / stringer_count)
+    dark = [c * 0.70 for c in wood]
+
+    stringer_h = 0.10
+    stringer_w = 0.12
+    plank_h    = 0.04
+    plank_w    = 0.18
+    plank_gap  = 0.07
+    pitch      = plank_w + plank_gap
+
+    top_y      = stringer_h          # planks sit on top of stringers
+    bottom_y   = -plank_h            # bottom planks below stringers
+
+    parts: list[dict] = []
+
+    # Three stringers spaced across X (positions: -0.4w, 0, +0.4w)
+    for i in range(3):
+        sx = (i - 1) * (w * 0.40)
         parts.append(part(
             f"stringer_{i}",
-            box_mesh(w * 0.95, 0.04, 0.12),
-            dark, (0, -0.04, z),
+            box_mesh(stringer_w, stringer_h, d),
+            dark, (sx, 0, 0),
         ))
+
+    # Top deck planks — count scales with depth so pitch stays ~0.25 m.
+    num_top = maxi_py(5, int(round(d / pitch)))
+    actual_pitch = d / num_top
+    for i in range(num_top):
+        pz = -d / 2.0 + actual_pitch * (i + 0.5)
+        parts.append(part(
+            f"top_{i}",
+            box_mesh(w, plank_h, plank_w),
+            wood, (0, top_y, pz),
+        ))
+
+    # Two bottom planks at front + back (visible when lifted).
+    for i, ratio in enumerate([-0.42, 0.42]):
+        parts.append(part(
+            f"bottom_{i}",
+            box_mesh(w, plank_h, plank_w),
+            wood, (0, bottom_y, ratio * d),
+        ))
+
     name = f"pallet_{fp_x}x{fp_z}"
     dump(f"{name}.json", {"name": name, "parts": parts})
+
+
+def maxi_py(a: int, b: int) -> int:
+    return a if a > b else b
 
 
 def make_barrel_stack() -> None:
