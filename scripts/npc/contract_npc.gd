@@ -277,19 +277,32 @@ func _ship_is_berthed() -> bool:
 	return dock.find_occupied_berth() != -1
 
 
-## Sum of free cells across every CARGO deck (port_id empty → ship deck) in
-## the scene. With one player and one boat this is just that boat's capacity;
-## fleets sum naturally.
+## Free cells the player can still commit to. Equals the total capacity of all
+## ship cargo decks MINUS units already committed via accepted contracts that
+## haven't been delivered yet (whether physically on apron, on ship, or
+## hanging from a crane). Without this, the UI would let the player keep
+## accepting because the ship looks empty when in fact the apron is piling up.
 func _ship_cells_free() -> int:
-	var total := 0
+	var total_capacity := 0
 	for node in get_tree().get_nodes_in_group(CargoDeckComponent.DECK_GROUP):
 		var deck := node as CargoDeckComponent
-		if deck == null:
-			continue
-		if not deck.port_id.is_empty():
-			continue  # apron deck, not a ship
-		total += deck.get_available()
-	return total
+		if deck == null or not deck.port_id.is_empty():
+			continue  # skip apron decks
+		total_capacity += deck.get_capacity()
+
+	var committed := 0
+	var registry := _registry()
+	if registry != null:
+		for c in registry.get_accepted_contracts():
+			var contract := c as Contract
+			if contract == null:
+				continue
+			# taken_count is what the player has accepted; delivered_count
+			# is what's been sold. The difference is everything sitting in
+			# the pipeline (apron + ship + hook).
+			committed += maxi(contract.taken_count - contract.delivered_count, 0)
+
+	return maxi(total_capacity - committed, 0)
 
 
 func _registry() -> Node:
