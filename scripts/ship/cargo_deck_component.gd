@@ -33,6 +33,11 @@ signal cargo_changed(component: CargoDeckComponent)
 @export var max_cells_override: int = 0
 @export var affects_boat_cargo_mass: bool = true
 
+## When non-empty, the deck only accepts pallets whose origin_port_id matches.
+## Used by port apron grids so foreign cargo can't be dumped here. Empty (the
+## default) means any pallet is accepted, suitable for ship cargo decks.
+@export var required_origin_port_id: String = ""
+
 @export_group("Debug")
 @export var show_debug_grid: bool = true:
 	set(v):
@@ -93,11 +98,22 @@ func can_accept(count: int = 1) -> bool:
 	return count > 0 and count <= get_available()
 
 
+## Whether this deck will physically take this specific pallet (capacity +
+## origin gate). Called by the crane's release flow before attempting add.
+func accepts_pallet(pallet: Pallet) -> bool:
+	if pallet == null or is_full():
+		return false
+	if not required_origin_port_id.is_empty():
+		if pallet.origin_port_id != required_origin_port_id:
+			return false
+	return true
+
+
 # ── Pallet API ────────────────────────────────────────────────────────────────
 
 ## Place a pallet at the nearest free cell to world_hint. Returns cell index (>=0) or -1.
 func add_pallet(pallet: Pallet, world_hint: Vector3 = Vector3.INF) -> int:
-	if pallet == null or is_full():
+	if not accepts_pallet(pallet):
 		return -1
 
 	var preferred_local := Vector3.ZERO

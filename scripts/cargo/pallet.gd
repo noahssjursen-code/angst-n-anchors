@@ -6,6 +6,7 @@ extends Resource
 
 @export var id: String = ""
 @export var contract_id: String = ""
+@export var origin_port_id: String = ""
 @export var destination_port_id: String = ""
 @export var commodity: String = ""
 @export var display_name: String = ""
@@ -30,6 +31,7 @@ static func create(
 	var p                 := Pallet.new()
 	p.id                  = UuidUtil.generate()
 	p.contract_id         = contract.id
+	p.origin_port_id      = contract.origin_port_id
 	p.destination_port_id = contract.destination_port_id
 	p.commodity           = contract.commodity
 	p.display_name        = contract.display_name

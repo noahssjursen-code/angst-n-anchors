@@ -599,10 +599,13 @@ func _update_snap_ghost() -> void:
 		_show_ghost(n3.global_position + Vector3(0.0, 0.05, 0.0), Color(1.0, 0.85, 0.20))
 		return
 
-	# 2. Ship deck cell.
+	# 2. Cargo deck cell (ship deck OR apron — both are CargoDeckComponents).
 	for node in get_tree().get_nodes_in_group(CargoDeckComponent.DECK_GROUP):
 		var deck := node as CargoDeckComponent
-		if deck == null or deck.is_full():
+		if deck == null:
+			continue
+		# Origin-port gate (apron decks) and capacity check both live in accepts_pallet.
+		if not deck.accepts_pallet(pallet_res):
 			continue
 		if not deck.contains_world_point(hook_pos):
 			continue

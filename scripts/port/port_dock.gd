@@ -60,6 +60,12 @@ const INLAND_DEPTH := QUAY_DEPTH + CRANE_QUAY_GAP + CRANE_D + APRON_GAP + APRON_
 @export var dock_length: float = 80.0:
 	set(v): dock_length = v; if is_inside_tree(): _rebuild()
 
+## Port UUID this dock belongs to. Propagated to apron CargoDeckComponents so
+## they reject pallets that did not originate here. Set by PortPlot before
+## rebuild.
+@export var port_id: String = "":
+	set(v): port_id = v; if is_inside_tree(): _rebuild()
+
 @export var max_ship_class: ShipClass.Type = ShipClass.Type.COASTAL_TRADER:
 	set(v): max_ship_class = v; if is_inside_tree(): _rebuild()
 
@@ -184,6 +190,25 @@ func _build_berth_slot(index: int, cx: float, slot_w: float, ship_beam: float, c
 	add_child(fill)
 	fill.visible = _editor_berth_overlays_visible()
 
+	# Apron cargo grid — replaces the old static apron pad. Pallets snap to
+	# cells; only pallets whose origin_port_id matches `port_id` are accepted.
+	var apron_w_reach := maxf(slot_w - 2.0 * APRON_REACH_INSET, 1.5)
+	var apron_deck := CargoDeckComponent.new()
+	apron_deck.name                       = "ApronDeck%d" % index
+	apron_deck.position                   = Vector3(cx, QUAY_HEIGHT + 0.005, apron_z)
+	apron_deck.deck_width_m               = apron_w_reach
+	apron_deck.deck_length_m              = APRON_DEPTH
+	apron_deck.cell_size_x_m              = 1.5
+	apron_deck.cell_size_z_m              = 1.5
+	apron_deck.affects_boat_cargo_mass    = false
+	apron_deck.required_origin_port_id    = port_id
+	apron_deck.debug_color                = Color(0.85, 0.55, 0.18, 0.20)
+	add_child(apron_deck)
+	if Engine.is_editor_hint() and get_tree() != null:
+		var esc := get_tree().edited_scene_root
+		if esc != null:
+			_own_subtree(apron_deck, esc)
+
 	_berth_data.append({
 		"status":      BerthStatus.FREE,
 		"reserved_by": "",
@@ -193,6 +218,7 @@ func _build_berth_slot(index: int, cx: float, slot_w: float, ship_beam: float, c
 		"cx":          cx,
 		"slot_w":      slot_w,
 		"apron_z":     apron_z,   # dock-local Z centre of this berth's apron
+		"apron_deck":  apron_deck,
 	})
 
 	for sx in [-1.0, 1.0]:
@@ -220,11 +246,7 @@ func _build_berth_slot(index: int, cx: float, slot_w: float, ship_beam: float, c
 		CargoBerthType.Type.CONTAINER: _crane_container(index, cx, slot_w, crane_z)
 		_:                             _crane_general(index, cx, slot_w, crane_z)
 
-	# Apron pad shrinks to the area the gantry can actually reach so the
-	# player sees exactly where pallets can spawn and be picked up.
-	var apron_w_reach := maxf(slot_w - 2.0 * APRON_REACH_INSET, 1.5)
-	_box(Vector3(apron_w_reach, 0.12, APRON_DEPTH),
-		 Vector3(cx, 0.06, apron_z), C_CARGO_YARD, "Apron%d" % index)
+	# Apron visual is the CargoDeckComponent's grid above — no static box.
 
 
 # ── Crane types ───────────────────────────────────────────────────────────────
@@ -341,6 +363,14 @@ func set_berth_has_cargo(berth_index: int, has_cargo: bool) -> void:
 ## Returns n world-space positions within berth_index's cargo apron, in a grid.
 ## Uses the exact cx/slot_w/apron_z recorded when the berth geometry was built —
 ## same slot, same crane, same apron.
+## Returns the CargoDeckComponent acting as this berth's apron grid, or null.
+func get_berth_apron_deck(berth_index: int) -> CargoDeckComponent:
+	if berth_index < 0 or berth_index >= _berth_data.size():
+		return null
+	var b := _berth_data[berth_index] as Dictionary
+	return b.get("apron_deck", null) as CargoDeckComponent
+
+
 func get_berth_apron_positions(berth_index: int, n: int, offset: int = 0) -> Array[Vector3]:
 	var out: Array[Vector3] = []
 	if n <= 0 or berth_index < 0 or berth_index >= _berth_data.size():

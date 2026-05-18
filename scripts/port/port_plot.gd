@@ -36,7 +36,6 @@ var _has_lighthouse_data: bool       = false
 var _has_fog_horn_data:   bool       = false
 var _layout_seed_data:    int        = 0
 var _island_width_data:   float      = 80.0
-var _berth_cargo_count:   Dictionary = {}  # berth_index -> pending pickup count
 
 
 func _ready() -> void:
@@ -78,6 +77,7 @@ func _rebuild() -> void:
 
 	var dock              := PortDock.new()
 	dock.name             = "PortDock"
+	dock.port_id          = port_id
 	dock.dock_length      = plot_width
 	dock.max_ship_class   = ship_class
 	dock.berth_types      = _berth_types_data.duplicate()
@@ -182,6 +182,9 @@ func _respawn_pending_cargo(registry: Node) -> void:
 	var berth_idx := dock.find_occupied_berth()
 	if berth_idx == -1:
 		return
+	var apron := dock.get_berth_apron_deck(berth_idx)
+	if apron == null:
+		return
 	for contract in registry.get_accepted_contracts():
 		var c := contract as Contract
 		if c == null or c.origin_port_id != port_id:
@@ -189,18 +192,16 @@ func _respawn_pending_cargo(registry: Node) -> void:
 		var remaining := c.quantity - c.delivered_count
 		if remaining <= 0:
 			continue
-		# Count pallets already staged on this apron.
+		# Count pallets already on this apron deck.
 		var already_staged := 0
-		for child in get_children():
-			var pn := child as PalletNode
-			if pn != null and pn.pallet != null and pn.pallet.contract_id == c.id:
-				already_staged += pn.pallet.units
-		var in_transit := _count_in_transit(c.id)
+		for p in apron.get_all_pallets():
+			if (p as Pallet).contract_id == c.id:
+				already_staged += (p as Pallet).units
+		var in_transit := _count_in_transit(c.id) - already_staged
 		var units_to_spawn := remaining - already_staged - in_transit
 		if units_to_spawn <= 0:
 			continue
 		var pallets := PalletFactory.split(c, PalletFactory.DEFAULT_UNITS_PER_PALLET)
-		# Filter to only the missing units by trimming already-covered pallets.
 		var covered := already_staged + in_transit
 		var spawn_pallets: Array[Pallet] = []
 		for p in pallets:
@@ -245,28 +246,23 @@ func _on_contract_accepted(contract: Contract, pallets: Array[Pallet]) -> void:
 
 
 func _stage_pallets_on_apron(dock: PortDock, berth_idx: int, pallets: Array[Pallet]) -> void:
-	dock.set_berth_has_cargo(berth_idx, true)
-	var cur := int(_berth_cargo_count.get(berth_idx, 0))
-	_berth_cargo_count[berth_idx] = cur + pallets.size()
-	# Spawn new pallets after the existing ones so we don't overlap.
-	var positions := dock.get_berth_apron_positions(berth_idx, pallets.size(), cur)
-	for i in range(pallets.size()):
-		var node      := PalletNode.new()
-		node.name     = "ApronPallet_" + pallets[i].id.left(8)
-		add_child(node)
-		node.global_position = positions[i] if i < positions.size() else dock.get_spawn_position()
-		node.setup(pallets[i])
-		node.grabbed.connect(_on_apron_pallet_grabbed.bind(berth_idx))
+	var apron := dock.get_berth_apron_deck(berth_idx)
+	if apron == null:
+		return
+	# Listen once per apron — the deck is the source of truth for "has cargo".
+	if not apron.cargo_changed.is_connected(_on_apron_changed):
+		apron.cargo_changed.connect(_on_apron_changed.bind(dock, berth_idx))
+	for p in pallets:
+		# add_pallet picks the nearest free cell and spawns the visual itself.
+		# Passing INF lets the deck choose any free cell.
+		apron.add_pallet(p)
+	_on_apron_changed(apron, dock, berth_idx)
 
 
-func _on_apron_pallet_grabbed(node: PalletNode, berth_idx: int) -> void:
-	_berth_cargo_count[berth_idx] = (int(_berth_cargo_count.get(berth_idx, 1))) - 1
-	if int(_berth_cargo_count.get(berth_idx, 0)) <= 0:
-		_berth_cargo_count.erase(berth_idx)
-		var dock := get_node_or_null("PortDock") as PortDock
-		if dock != null:
-			dock.set_berth_has_cargo(berth_idx, false)
-	node.grabbed.disconnect(_on_apron_pallet_grabbed)
+func _on_apron_changed(apron: CargoDeckComponent, dock: PortDock, berth_idx: int) -> void:
+	if apron == null or dock == null:
+		return
+	dock.set_berth_has_cargo(berth_idx, apron.get_used() > 0)
 
 
 ## Wire a PortData record into this plot. Triggers one rebuild.
