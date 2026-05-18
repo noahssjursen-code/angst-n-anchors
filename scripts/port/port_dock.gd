@@ -270,6 +270,9 @@ func _crane_general(index: int, cx: float, slot_w: float, crane_z: float) -> voi
 	crane.name                = "Crane%d" % index
 	# Crane sits on top of the (now-extended) quay slab.
 	crane.position            = Vector3(cx, QUAY_HEIGHT, crane_z)
+	# Tell the crane which berth it serves so it can light up when a ship
+	# moors here.
+	crane.berth_index         = index
 	# Rails extend past the leg base on each side; rail must fit inside the
 	# berth slot. APRON_REACH_INSET captures this margin and is reused by the
 	# apron-pad sizing and pallet spawn grid so they all stay aligned.

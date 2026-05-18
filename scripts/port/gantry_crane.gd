@@ -37,6 +37,11 @@ static var _seated_count: int = 0
 @export var trolley_speed_m: float   = 4.0
 @export var hoist_speed_m: float     = 3.5
 
+## Berth this crane serves (set by PortDock at spawn). Used so the crane can
+## switch its beacon to green + show an "ASSIGNED" label when a ship is
+## moored at the matching berth — answering "which crane is mine?".
+@export var berth_index: int = -1
+
 ## Trolley travel limits along Z. -Z = over water/ship berth, +Z = over apron.
 @export var trolley_min_z: float = -28.0
 @export var trolley_max_z: float = 20.0
@@ -94,6 +99,8 @@ var _prev_mouse_mode: int = Input.MOUSE_MODE_VISIBLE
 var _beacon: OmniLight3D
 var _beacon_phase: float = 0.0
 var _floods: Array[SpotLight3D] = []
+var _berth_number: Label3D
+var _is_assigned: bool = false
 
 # Hook sway: trolley/gantry motion drags the hook with damped spring response.
 var _last_gantry_x: float = 0.0
@@ -323,7 +330,6 @@ func _build_lights() -> void:
 	if Engine.is_editor_hint() and get_tree() != null and get_tree().edited_scene_root != null:
 		_beacon.owner = get_tree().edited_scene_root
 
-	# Small red bulb mesh so the beacon source is visible against the sky.
 	var bulb := MeshInstance3D.new()
 	bulb.name = "BeaconBulb"
 	var bmesh := SphereMesh.new()
@@ -340,6 +346,26 @@ func _build_lights() -> void:
 	_beacon.add_child(bulb)
 	if Engine.is_editor_hint() and get_tree() != null and get_tree().edited_scene_root != null:
 		bulb.owner = get_tree().edited_scene_root
+
+	# Big berth number painted flat on the asphalt in front of the crane.
+	# Always visible (so players learn berth identity), turns bright green
+	# when the player's ship is moored here so "your crane" reads at a glance.
+	_berth_number = Label3D.new()
+	_berth_number.name = "BerthNumber"
+	_berth_number.text = str(berth_index + 1) if berth_index >= 0 else "?"
+	_berth_number.font_size = 256
+	_berth_number.pixel_size = 0.012
+	_berth_number.modulate = Color(0.92, 0.88, 0.72, 0.70)
+	_berth_number.outline_modulate = Color(0.05, 0.05, 0.05, 0.85)
+	_berth_number.outline_size = 14
+	_berth_number.billboard = BaseMaterial3D.BILLBOARD_DISABLED
+	_berth_number.no_depth_test = false
+	_berth_number.rotation_degrees = Vector3(-90.0, 0.0, 0.0)  # flat on the ground
+	# Sit it on the apron in front of the crane (a few metres back from the rails)
+	_berth_number.position = Vector3(0.0, 0.13, 5.0)
+	add_child(_berth_number)
+	if Engine.is_editor_hint() and get_tree() != null and get_tree().edited_scene_root != null:
+		_berth_number.owner = get_tree().edited_scene_root
 
 
 func _build_snap_ghost() -> void:
@@ -667,6 +693,27 @@ func _update_beacon(delta: float) -> void:
 	# Sharp pulse — bright for ~0.2 s, then dim, every ~3.9 s.
 	var pulse := pow(maxf(sin(_beacon_phase), 0.0), 12.0)
 	_beacon.light_energy = 0.2 + pulse * 5.0
+
+	# Update the painted-on-ground berth number: white-ish when unassigned,
+	# bright green when the player's ship is at this berth.
+	var was_assigned := _is_assigned
+	_is_assigned = _berth_has_ship()
+	if _is_assigned != was_assigned and _berth_number != null:
+		_berth_number.modulate = (
+			Color(0.30, 0.95, 0.45, 1.0) if _is_assigned
+			else Color(0.92, 0.88, 0.72, 0.70)
+		)
+
+
+## True when a ship is moored at this crane's berth. Reads PortDock berth
+## state via the parent — set by PortDock at spawn (berth_index).
+func _berth_has_ship() -> bool:
+	if berth_index < 0:
+		return false
+	var dock := get_parent() as PortDock
+	if dock == null:
+		return false
+	return dock.find_occupied_berth() == berth_index
 
 
 # ── Snap-preview ──────────────────────────────────────────────────────────────
