@@ -227,8 +227,11 @@ func _crane_general(index: int, cx: float, slot_w: float, crane_z: float) -> voi
 	var crane                 := GantryCrane.new()
 	crane.name                = "Crane%d" % index
 	crane.position            = Vector3(cx, QUAY_HEIGHT, crane_z)
-	# Gantry rolls within its berth slot, with a small margin from the neighbors.
-	crane.gantry_roll_range_x = maxf(slot_w * 0.5 - 1.5, 1.0)
+	# Rails extend past the leg base on each side (~3.1 m); the rail itself
+	# must fit inside the berth slot. So:
+	#   rail_half ≤ slot_w/2  →  roll_range ≤ slot_w/2 − 3.2
+	# Clamped to 0 so very narrow berths still produce a valid (stationary) crane.
+	crane.gantry_roll_range_x = maxf(slot_w * 0.5 - 3.2, 0.0)
 	add_child(crane)
 	if Engine.is_editor_hint() and get_tree() != null:
 		var esc := get_tree().edited_scene_root
