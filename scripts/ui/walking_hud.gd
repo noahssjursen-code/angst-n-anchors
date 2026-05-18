@@ -51,8 +51,13 @@ func _draw() -> void:
 
 	for contract in contracts:
 		var dest: String = registry.get_port_display_name(contract.destination_port_id)
-		var remain := contract.quantity - contract.delivered_count
-		var c_str  := "%s  →  %s   (%d/%d)" % [contract.display_name, dest, remain, contract.quantity]
+		# In-transit = what's actually on the apron / ship right now.
+		# Available = what the port still has on offer for top-ups.
+		var in_transit := contract.taken_count - contract.delivered_count
+		var available  := contract.available_to_take()
+		var c_str  := "%s  →  %s   carrying %d   (%d still available)" % [
+			contract.display_name, dest, in_transit, available,
+		]
 		var c_tw   := _font.get_string_size(c_str, HORIZONTAL_ALIGNMENT_LEFT, -1, cfs).x
 		var c_pw   := c_tw + c_pad * 2.0
 		draw_rect(Rect2(ox, cy, c_pw, cph), HudStyle.C_BG)
