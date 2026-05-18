@@ -1,176 +1,184 @@
 # Angst 'n Anchors
 
-A maritime trading game set on the Norwegian coast in the early 1980s. You start with a busted skiff and some pocket money. The sea is already busy with ships that aren't yours. You intend to change that.
-
-"Angst" is a real English word — borrowed from German, fully absorbed. It means low-grade dread, anxiety, the feeling that things could go wrong at any moment. That's the texture of being a small operator in a world where bigger players have already carved up the routes.
+A maritime trading game built in Godot. The player drives a boat, picks up cargo at one port, and delivers it to another. Ships are assembled at runtime from modular JSON parts so players (and the dev) can build custom vessels without touching the scene editor. The long-term goal is an MMO.
 
 ---
 
-## The Core Loop
+## Pillars
 
-Ports buy things and sell things. Your job is to be in the right place with the right cargo at the right price.
-
-Every port has exports (surplus, sells cheap) and imports (shortage, pays well). You buy low, sail, sell high. The catch is that everyone else is doing the same — and most of them started before you.
-
-No production simulation. No animated lumber mills in the forest. The port just has fish. The other port just wants fish. You connect them.
-
----
-
-## Setting
-
-**Early 1980s. Norwegian fjord coast.**
-
-Diesel engines. VHF radio. Paper charts. No GPS, no mobile phones. The harbour master knows every captain by name and has opinions about all of them.
-
-The maritime world of this era runs on personal relationships and reputation. A shipping agent who trusts you gets you the contract. A harbour master who respects you finds a berth when the dock looks full. A chandler who's seen you pay on time extends credit in a bad week.
-
-The ports are working ports — coal and iron ore on the bulk berths, timber and general cargo at the derricks, the occasional container on the newer gantry cranes. Fuel pontoons at the end of the quay. The harbour master office overlooking the whole operation.
+1. **Driving the boat is the game.** Physics-driven helm — propulsion, rudder, bow thruster, hydrodynamics, buoyancy on a wave surface. Distance and weather matter. Sailing the route yourself is the loop.
+2. **Cargo delivery between ports.** Buy or accept a contract at one port, load, sail, unload, get paid. Spot trading and contract board both exist as concepts; contracts are the working path in code today.
+3. **Modular ship design.** A ship = hull JSON + scale + superstructure key + component tuning. `ShipBuilder` assembles a complete `BoatBody` at runtime from a single template file. New hulls, new ships, new variants are all data.
+4. **MMO is the destination.** State model (berth reservation, harbour master mediation, contract registry) is being designed shared-session-aware from the start, even though the game currently runs single-player.
 
 ---
 
-## What It Feels Like
+## Tech Foundation
 
-**Euro Truck Simulator on water.** Early game is hands-on and physical. You are in the boat. You feel every delivery. You sail the route yourself, watch the fuel, check the weather over the VHF. The world has real distance. A run to the far coast takes time. That time matters.
-
-**A living world you're entering late.** When you start, established shipping companies already run the major routes. The contract board has deals you can't afford or don't have the rep to take. Big haulers pass you in open water. You are not the protagonist of this world — yet. You're an interloper, picking up scraps and looking for the angle nobody else has found.
-
-**Relaxing with a current of dread underneath.** Most of the time, sailing is calm. The sea is beautiful. A good run is satisfying in a quiet way. But you have a contract with a deadline. Your hull took a hit in last night's weather. A rival just took your berth. The angst is always there — not loud, just present.
-
----
-
-## Ports
-
-The port is the center of everything.
-
-Each port is a procedurally generated layout on a rectangle of ground — one side of the rectangle is always the dock face, flush against the water. No piers extending out; ships come alongside.
-
-**The dock** is the working core:
-- Berth slots sized to the port's maximum permitted ship class
-- One crane per berth, typed to the cargo that berth handles
-- A cargo apron behind each crane where goods stage before trucking
-- A fuel point at the quay end
-
-**The port buildings** sit behind the dock:
-- Harbour Master office — the first stop for any captain entering port
-- Shipping Agent — contracts, paperwork, connections
-- Chandlery — stores, provisions, small equipment
-- Marine Engineer — repairs and maintenance
-- Customs & Excise (larger ports) — bonded cargo, inspection
-- Warehouse — covered storage for cargo awaiting clearance or collection
-- Town — the civilian world behind the working port
-
-Ports range from small coastal landings (one general berth, a harbour master in a shed, a chandlery) to medium working ports (two or three typed berths, customs office, full facilities) to large industrial ports (container gantries, bulk grab cranes, the works).
-
-**Port size determines everything:** what ship classes can dock, what cargo types are handled, how many berths are available, what facilities exist.
+- **Engine:** Godot 4.6, GDScript only (no C#)
+- **Physics:** Jolt
+- **Renderer:** Forward Plus, D3D12 on Windows
+- **Geometry:** primitives composed in code via `MeshBuilder`, plus in-house JSON meshes loaded by `MeshTransformer` / `ModelAssembler`. No GLTF/FBX/OBJ. No imported textures for in-world objects.
+- **Materials:** `StandardMaterial3D` built at runtime — colour, roughness, metallic. Shaders in `resources/shaders/`.
+- **Data-driven:** ports, ships, hulls, commodities, contracts live as JSON/`.tres` under `resources/data/`. Scripts read from data; they don't hardcode game content.
+- **Event-driven state:** `GameState` autoload with `PlayerState`, `ShipState`, `ContractState`, `WorldState`. Systems write, UI subscribes — no polling.
 
 ---
 
-## Cargo
+## Ship Building System (active focus)
 
-Cargo comes in tiers. Handling it requires the right equipment at the right berth.
+Ships are built from three layers of JSON:
 
-| Tier | Examples | How it moves |
-|------|----------|--------------|
-| **Bulk** | Coal, iron ore, grain | Grab/bucket crane, conveyor — poured in, scooped out |
-| **Break-bulk** | Timber bundles, drums, bagged goods | Derrick crane, sling lifts — unit loads, irregular shapes |
-| **General cargo** | Palletised crates, packaged goods | Standard crane, forklift — the current player-carry mechanic |
-| **Container** | ISO containers | Gantry crane — standardised, fastest throughput |
+1. **Hull JSON** — `resources/data/models/hulls/*.json`. Mesh parts, materials, collision, plus a `"slots"` dict of named attachment points at scale=1.
+2. **Ship model JSON** — `resources/data/models/ships/*.json`. References a hull, applies scale. Used by existing `.tscn` scenes via `BoatBody.model_data_path`.
+3. **Ship template JSON** — `resources/data/ships/*.json`. Full ship: hull, scale, superstructure key, physics, buoyancy, hydrodynamics, propulsion, rudder, bow thruster, camera, cargo decks. Consumed by `ShipBuilder.build()`.
 
-A port's accepted cargo types come directly from its berth configuration. A port with one general berth and one bulk berth accepts general cargo and bulk — that's it. Bring the wrong cargo type to the wrong port and the harbour master turns you away.
+### Pipeline
 
-The current player-carry (crate) system is general cargo tier — a working placeholder until crane mechanics are built. The data model is the same; only the delivery mechanism changes.
+```gdscript
+var boat := ShipBuilder.build("res://resources/data/ships/fuel_tanker.json")
+get_tree().current_scene.add_child(boat)
+boat.place_at_waterline(water_y)
+```
 
----
+`ShipBuilder` reads the template, loads the hull, multiplies slot positions by the template scale, and instantiates all components in one go.
 
-## Ship Classes
+### Orientation convention
 
-Ships have a class that determines where they can dock.
+**Bow = +Z, Stern = −Z, Port = −X, Starboard = +X.** Hull mesh parts use `rotation_degrees: [0, -90, 0]` to bake authored vertex orientation into world space. Do not add extra rotation in ship model JSONs or scene files. See [SHIP_BUILDING.md](SHIP_BUILDING.md) for the full convention and the historical bugs that have already been fixed.
 
-| Class | Name | Length |
-|-------|------|--------|
-| 0 | Launch / Tender | < 10 m |
-| 1 | Coastal Trader | 10 – 30 m |
-| 2 | Short Sea Coaster | 30 – 60 m |
-| 3 | Handysize Feeder | 60 – 100 m |
-| 4 | Deep Sea Freighter | 100 m+ |
+### Hull slots
 
-Every dock has a maximum ship class. A small coastal landing doesn't want a deep sea freighter in the berth. The harbour master enforces this — and the berth indicators on the water tell you at a glance how big a slot is before you commit.
+| Slot | Purpose |
+|---|---|
+| `bridge` | Superstructure origin |
+| `propulsion` | Propeller, stern, below waterline |
+| `bow_thruster` | Bow tunnel thruster |
+| `mooring_port_fwd` / `mooring_stbd_fwd` / `mooring_port_aft` / `mooring_stbd_aft` | Four mooring points |
+| `cargo_main` / `cargo_aft` | Cargo deck origins |
+| `nav_light_bow` | Bow nav light |
 
-Berth count is derived from dock length and ship class. A dock built for Coastal Traders fits more ships than one sized for Handysize Feeders. A longer dock automatically has more berths.
+### Available hulls
 
----
+`hull_coastal_trader`, `..._long`, `hull_short_sea_coaster`, `..._long`, `hull_handysize_feeder`, `..._long`, `hull_deep_sea_freighter`, `..._long`, `hull_large`. Lengths range from 13 m up to 60 m at scale 1. Template `scale` multiplies hull dimensions and all slot positions.
 
-## The Harbour Master
+### Ship components
 
-The harbour master is not an obstacle — he's a relationship.
+Composed onto every built ship: `BoatBody` (RigidBody3D root), `BuoyancyComponent`, `HydrodynamicsComponent`, `PropulsionComponent`, `RudderComponent`, `BowThrusterComponent`, `BoatController`, `BoatCamera`, `MooringComponent`, mooring points, and `CargoDeckComponent` per declared cargo slot. Superstructure scenes live in `scenes/shared/superstructures/` (currently `bridge_small`, `bridge_medium`).
 
-Before entering a port you contact him on VHF (channel 12 or 16 depending on the port). You tell him your vessel name, your class, your intended cargo. He tells you if there's a berth and what it'll cost. You don't just sail in and tie up wherever you like. This is Norway in 1983.
+### Authoring entry points
 
-At the harbour master office you can:
-- Request a berth (see what's free, get one assigned, be told no if your class is too large)
-- Pay harbour dues
-- Ask what cargo types and ship classes the port accepts
-
-Berths have state: **free**, **reserved**, **occupied**. In multiplayer, two captains can't be assigned the same berth — the harbour master mediates. The reservation system is designed with this in mind from the start.
+- **By hand:** drop a template JSON in `resources/data/ships/`.
+- **In-game:** the `ShipwrightNpc` at a port offers a catalog of hulls and writes a template to `user://shipwright_orders/`, then calls `ShipBuilder.build()`. Catalog selection only at this stage — there is no in-game free-mix UI yet.
 
 ---
 
-## The Contract System
+## Ports & World
 
-Beyond spot trading there's a live board of posted deals — real opportunities and real obligations.
-
-- **Spot offers** — take it or leave it, short window
-- **Delivery contracts** — binding, deadline, penalty if missed
-- **Supply agreements** — steady volume over weeks, locks your capacity
-- **Tenders** — port authority posts a job, companies bid
-
-Miss a deadline: financial penalty and reputation damage. A port that doesn't trust you won't offer you anything good. A port that relies on you becomes a relationship.
-
----
-
-## A World Already in Motion
-
-When you start the game, other shipping companies are already running routes, holding contracts, occupying berths. You'll see their ships on the water. You'll see their names on contracts you can't touch yet.
-
-This isn't hostile — it's just true. The opportunity is to find the gaps: the island no one's bothering with, the cargo type the big operators consider too small-margin, the route slightly too risky for a company with something to lose.
+- **`world.tscn`** is the runnable scene. `World` generates port definitions from a seed (default `world_seed=42`, `port_count=35`) and uses `ProximityLoader` (radius 1500) to instantiate ports near the player. The home port loads eagerly.
+- **`PortPlot`** is the composition root for one port: ground polygon (organic visual, box collision), `PortDock` on the water side, `PortFacilities` on the land side. Driven by `port_size` (0–4) and plot dimensions.
+- **`PortDock`** owns berths, typed cranes (placeholder), cargo aprons, fuel point. Berth slots sized to the port's max ship class.
+- **Ship classes** (`ShipClass.Type`): `COASTAL_TRADER`, `SHORT_SEA_COASTER`, `HANDYSIZE_FEEDER`, `DEEP_SEA_FREIGHTER`. `port_size → max ship class` mapping lives in `PortPlot.SHIP_CLASS_BY_SIZE`.
+- **Port NPCs:** `HarbourMasterNpc` (berth assignment, vessel info, dues — VHF planned), `ShipwrightNpc` (commission ships), `ContractNpc` (post / accept contracts), `DeliveryNpc`, plus a `Warehouse` with `WarehouseContractZone`.
+- **Port facilities (props):** `FuelStation`, `LighthouseBuilding`, `FogHornBuilding`.
+- **Naming:** Norwegian-style names from a fixed pool (`Holmvik`, `Sandvær`, `Bergnes`, …).
 
 ---
 
-## Progression Arc
+## Cargo & Contracts
 
-**Early — One boat, one captain (you).** You walk the dock, talk to the harbour master, check the board. Take whatever pays. Load, sail, unload. Watch the credits climb.
-
-**Middle — Small fleet.** A second hull, a hired captain. Suddenly two problems instead of one — payroll, coordination, scheduling. You take contracts that need reliability, not just availability.
-
-**Late — Shipping company.** Your name is on the contract board. Port authorities have opinions about you. You personally sail when you want to, not because you have to.
-
-No win state. No end screen. The sea does not run out of cargo.
+- **`ContractRegistry`** (autoload) is the single source of truth for ports and contracts. No knowledge of the physical world.
+- **Commodities** (current set): `grain`, `timber`, `iron_ore`, `coal`, `provisions`. Each has `mass_kg` and `value`.
+- **Contracts:** `Contract`, `CargoItem`, `CargoManifest`. `MAX_ACTIVE_CONTRACTS = 3`, generation radius 3500.
+- **Pickup / delivery:** `CargoPickup`, `DeliveryZone`, `CargoDeckComponent` on the ship, `PlayerCarryComponent` for the placeholder player-carry mechanic (until crane systems are built).
+- **Player flow:** talk to a contract NPC → accept contract → pick up at warehouse → load onto ship → sail → unload at delivery port → reward.
 
 ---
 
-## Technical Foundation
+## Player
 
-- **Godot 4.6**, GDScript only, Jolt Physics, Forward Plus renderer, D3D12 on Windows
-- **Primitives only** — all in-world geometry is BoxMesh, PlaneMesh, CylinderMesh etc. built in code. No imported 3D meshes or texture files for in-world objects. Muted, functional, consistent style.
-- **Data-driven** — ports, cargo, contracts, ship classes defined in data, not hardcoded logic
-- **Event-driven state** — `GameState` autoload with typed sub-states (`PlayerState`, `ShipState`, `ContractState`, `WorldState`); systems post changes, others subscribe
-- **Multiplayer-aware from the start** — berth reservation, harbour master mediation, state model designed for shared sessions before multiplayer is implemented
+- `CharacterBody3D` first-person controller (`scripts/entities/player.gd`). WASD + space + shift, mouse look, head bob, water rescue behaviour (player can't walk on water; gets pulled up after a short delay).
+- Boards a ship via `BridgeInteractable` → `CaptainsChair`. Helm activation triggers `GameState.ship.data` population for HUD/UI.
+- Inputs: `interact` (E), `load_ship` (K), `boat_thrust_left`/`right` (Q/R), `boat_docking_thrusters` (T), `open_map` (M).
 
 ---
 
-## Current Implementation State
+## Autoloads (registered in `project.godot`)
 
-The port system is the most developed area:
+| Autoload | Role |
+|---|---|
+| `WorldWeather` | World-level weather state |
+| `WeatherLighting` | Lighting driven by weather |
+| `WorldClock` | Game time |
+| `ContractRegistry` | Ports and contracts (data only) |
+| `PlayerSession` | Persistent player data (`marks`, name) |
+| `GameMenu` | Pause / menu system |
+| `GameState` | Read model: `player`, `ship`, `contract`, `world` sub-states |
+| `DebugHud` | F3 debug overlay |
 
-- `PortPlot` — `@tool` Node3D procedural port layout (ground, buildings, spawn point, all from component defs array)
-- `PortDock` — self-contained dock system (quay, typed berths, typed cranes, cargo aprons, fuel point); driven by `dock_length` and `max_ship_class`
-- `ShipClass` — 5-tier ship classification with lengths, beams, berth count logic
-- `CargoBerthType` — GENERAL / BULK / CONTAINER with distinct crane visuals per type
-- `ContractRegistry` — autoload, single source of truth for ports, contracts, spawn positions
-- `Contract`, `CargoItem`, `CargoManifest` — contract data model, working end-to-end
-- `HarbourMasterNpc` — in-port dialogue (berth request, vessel info, dues stub); VHF planned
-- Player carry mechanic — general cargo placeholder until crane systems are built
-- `GameState` sub-states — event-driven, no polling
-- Debug overlay (F3), map overlay (M) with zoom/pan
+---
 
-**Next areas:** seeded world generation, VHF radio, crane interaction system, multiplayer berth reservation.
+## Multiplayer / MMO Notes
+
+- Berths have explicit state (free / reserved / occupied). Harbour master is the mediator, by design.
+- `ContractRegistry` is a single registry — fits a server-authoritative model.
+- `ShipBuilder` produces a deterministic ship from a template path — replicable across clients.
+- Nothing networked is wired up yet. The architecture is the prep work, not the implementation.
+
+---
+
+## Project Layout
+
+```
+scenes/
+  boats/                     # fuel_tanker.tscn, test_boat.tscn (legacy authored scenes)
+  islands/                   # future: island compositions
+  shared/                    # player.tscn, npc_base.tscn, superstructures/
+  systems/                   # port_dock, port_facilities, fuel_station, lighthouse, fog_horn
+  ui/
+  world.tscn                 # main scene
+  port_test.tscn             # standalone port test
+  hull_lineup.tscn           # hull comparison scene
+
+scripts/
+  autoloads/                 # weather, clock, contract_registry, player_session, game_menu, debug_hud
+  state/                     # game_state + player/ship/contract/world sub-states
+  entities/                  # player, fog_horn
+  player/                    # player_data
+  systems/
+    boat/                    # boat_body, controller, camera, propulsion, rudder, bow_thruster, buoyancy, hydrodynamics, cargo_deck, captains_chair, bridge_interactable, ship_light(ing), wave_surface
+    dock/                    # port_dock, harbour_master, shipwright, contract/delivery npcs, mooring, dock_facilities, ship_spawner, dock_cargo_ramp, dock_terminal
+    cargo/                   # cargo_item, cargo_pickup, contract, delivery_zone, warehouse, warehouse_contract_zone
+    port/                    # port_facilities
+    player/                  # player_carry_component
+    audio/                   # boat_audio_system, weather_audio_system
+    weather/                 # rain_field, weather_hud, weather_state, weather_zone
+    fft_water_system.gd, mesh_transformer.gd, model_assembler.gd, ship_builder.gd
+  world/
+    world.gd, world_renderer.gd, proximity_loader.gd, atmospheric_effects.gd
+    mesh_builder.gd, island_mesh_builder.gd, palette.gd
+    port/                    # port_plot, fuel_station, lighthouse_building, fog_horn_building
+    npc/                     # npc_base, npc_interactable
+  ui/  util/  utils/
+
+resources/
+  data/
+    ships/                   # ship templates (fuel_tanker.json)
+    models/
+      hulls/                 # 9 hull JSONs with slots
+      ships/                 # ship model JSONs (legacy wrappers)
+      superstructures/       # bridge_small, bridge_medium
+      buildings/             # foghorn_building, lighthouse_building
+    meshes/                  # primitive JSON mesh library by category
+    lights/
+  materials/  shaders/  themes/  audio/  textures/
+```
+
+---
+
+## Reference Docs
+
+- [AGENTS.md](AGENTS.md) — Guidance for AI agents working in this codebase. Visual rules, autoload conventions, build discipline.
+- [SHIP_BUILDING.md](SHIP_BUILDING.md) — Ship building system in depth: pipeline, slots, orientation, known historical bugs and their fixes.
+- [resources/data/README.md](resources/data/README.md) — Data folder conventions.
+- [resources/data/meshes/GUIDE.md](resources/data/meshes/GUIDE.md) — Mesh JSON authoring.
