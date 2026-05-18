@@ -4,6 +4,10 @@ extends Node
 
 ## Routes player input to the boat's components when seated at the helm.
 ## Activate/deactivate is called by CaptainsChair when the player boards or exits.
+
+## How many helms are currently being controlled. Lets unrelated systems
+## (e.g. PalletNode label visibility) tell whether the player is sailing.
+static var helmed_count: int = 0
 ##
 ## Input mapping:
 ##   Throttle stage — W / S (move_forward / move_back) increments / decrements stage
@@ -50,6 +54,7 @@ var _ship_hud: ShipHud
 
 func activate() -> void:
 	_active = true
+	helmed_count += 1
 	get_parent().add_to_group("player_boat")
 	_ensure_hud()
 	_set_hud_visible(true)
@@ -57,6 +62,8 @@ func activate() -> void:
 
 
 func deactivate() -> void:
+	if _active:
+		helmed_count = maxi(helmed_count - 1, 0)
 	_active         = false
 	_thruster_mode  = 0
 	_throttle       = 0.0

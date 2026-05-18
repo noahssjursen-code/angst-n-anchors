@@ -121,6 +121,12 @@ func _build_halo() -> void:
 
 
 func _process(delta: float) -> void:
+	# Hide the floating commodity / destination / value label while the player
+	# is helming a boat — it's clutter when sailing past port cargo. Reappears
+	# the moment they leave the helm.
+	if _label != null:
+		_label.visible = BoatController.helmed_count == 0
+
 	if not _highlighted or _halo == null or _halo_mat == null:
 		return
 	_halo_phase = fmod(_halo_phase + delta * 3.0, TAU)
