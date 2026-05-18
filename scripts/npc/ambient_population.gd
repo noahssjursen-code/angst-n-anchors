@@ -126,14 +126,13 @@ static func _rng_for(port_seed: int, npc_index: int, salt: int) -> RandomNumberG
 
 
 ## Build a transform that places the walker at `pos` looking along `facing`
-## (XZ plane). Up is always +Y.
+## (XZ plane). Up is always +Y. Uses Basis.looking_at so the model's local
+## -Z (Godot's "front" convention) aligns with the walking direction —
+## otherwise the walker moonwalks along its loop.
 static func _transform_facing(pos: Vector3, facing: Vector3) -> Transform3D:
 	var f := facing
 	f.y = 0.0
 	if f.length_squared() < 0.0001:
 		return Transform3D(Basis(), pos)
 	f = f.normalized()
-	var up := Vector3.UP
-	var right := up.cross(f).normalized()
-	var basis := Basis(right, up, f)
-	return Transform3D(basis, pos)
+	return Transform3D(Basis.looking_at(f, Vector3.UP), pos)
