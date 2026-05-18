@@ -68,10 +68,28 @@ func _build() -> void:
 		add_child(_label)
 
 	if pallet != null:
-		_label.text     = "%s\n×%d" % [pallet.display_name, pallet.units]
-		_label.position = Vector3(0.0, 1.2, 0.0)
+		var dest_name := _destination_display()
+		var dest_line := "→ %s" % dest_name if not dest_name.is_empty() else ""
+		var gold_line := "%d ℳ" % pallet.value_gold if pallet.value_gold > 0 else ""
+		var lines     := PackedStringArray()
+		lines.append("%s ×%d" % [pallet.display_name, pallet.units])
+		if not dest_line.is_empty():
+			lines.append(dest_line)
+		if not gold_line.is_empty():
+			lines.append(gold_line)
+		_label.text     = "\n".join(lines)
+		_label.position = Vector3(0.0, 1.35, 0.0)
 
 	_build_attach_sockets()
+
+
+func _destination_display() -> String:
+	if pallet == null or pallet.destination_port_id.is_empty():
+		return ""
+	var registry := get_node_or_null("/root/ContractRegistry")
+	if registry == null:
+		return ""
+	return str(registry.call("get_port_display_name", pallet.destination_port_id))
 
 
 func _build_attach_sockets() -> void:

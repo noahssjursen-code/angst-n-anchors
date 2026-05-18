@@ -99,6 +99,8 @@ var _sway_vel: Vector2 = Vector2.ZERO
 
 var _snap_ghost: MeshInstance3D
 var _snap_ghost_mat: StandardMaterial3D
+var _snap_label: Label3D
+var _snap_phase: float = 0.0
 
 
 # ── Lifecycle ─────────────────────────────────────────────────────────────────
@@ -308,6 +310,18 @@ func _build_snap_ghost() -> void:
 	_snap_ghost.material_override = _snap_ghost_mat
 	# Parented to the scene root so it isn't pulled around by the gantry frame.
 	get_tree().current_scene.add_child(_snap_ghost)
+
+	# Floating action label that sits above the ghost: "DELIVER +200ℳ" / "PLACE".
+	_snap_label                = Label3D.new()
+	_snap_label.name           = "SnapLabel"
+	_snap_label.font_size      = 96
+	_snap_label.pixel_size     = 0.006
+	_snap_label.billboard      = BaseMaterial3D.BILLBOARD_ENABLED
+	_snap_label.no_depth_test  = true
+	_snap_label.outline_size   = 12
+	_snap_label.modulate       = Color.WHITE
+	_snap_label.outline_modulate = Color(0.05, 0.05, 0.05)
+	_snap_ghost.add_child(_snap_label)
 
 
 func _wire_kinematic_parts() -> void:
@@ -573,14 +587,14 @@ func _update_snap_ghost() -> void:
 	if _snap_ghost == null or _hook == null:
 		return
 	if _carried_pallet == null:
-		_snap_ghost.visible = false
+		_hide_ghost()
 		return
 
 	var hook_pos := _hook.global_position
 
 	var xz_r2 := release_xz_range_m * release_xz_range_m
 
-	var pallet_res = _carried_pallet.get("pallet")
+	var pallet_res: Pallet = _carried_pallet.get("pallet") as Pallet
 
 	# 1. Delivery — apron deck whose port_id matches pallet.destination_port_id.
 	for node in get_tree().get_nodes_in_group(CargoDeckComponent.DECK_GROUP):
@@ -591,7 +605,14 @@ func _update_snap_ghost() -> void:
 			continue
 		if hook_pos.y - deck.global_position.y > release_max_height_m:
 			continue
-		_show_ghost(deck.global_position + Vector3(0.0, 0.05, 0.0), Color(1.0, 0.85, 0.20))
+		var cell_pos_d := deck.get_nearest_free_cell_world(hook_pos)
+		if cell_pos_d == Vector3.INF:
+			cell_pos_d = deck.global_position
+		var reward := pallet_res.value_gold if pallet_res != null else 0
+		_show_ghost(cell_pos_d + Vector3(0.0, 0.05, 0.0),
+				Color(1.0, 0.85, 0.20),
+				"DELIVER  +%d ℳ" % reward,
+				true)
 		return
 
 	# 2. Staging — any deck that accepts the pallet (ship deck OR origin apron).
@@ -606,20 +627,46 @@ func _update_snap_ghost() -> void:
 		var cell_pos := deck.get_nearest_free_cell_world(hook_pos)
 		if cell_pos == Vector3.INF:
 			continue
-		_show_ghost(cell_pos + Vector3(0.0, 0.05, 0.0), Color(0.30, 0.95, 0.45))
+		_show_ghost(cell_pos + Vector3(0.0, 0.05, 0.0),
+				Color(0.30, 0.95, 0.45),
+				"PLACE",
+				false)
 		return
 
 	# 3. No valid target.
-	_snap_ghost.visible = false
+	_hide_ghost()
 
 
-func _show_ghost(pos: Vector3, color: Color) -> void:
+func _show_ghost(pos: Vector3, color: Color, label_text: String, is_delivery: bool) -> void:
 	_snap_ghost.visible = true
 	_snap_ghost.global_position = pos
+
+	# Pulse the ghost — sharper when it's a delivery target.
+	_snap_phase = fmod(_snap_phase + get_process_delta_time() * 4.0, TAU)
+	var pulse := 0.65 + 0.35 * sin(_snap_phase)
+
 	_snap_ghost_mat.albedo_color = Color(color.r, color.g, color.b, 0.45)
 	_snap_ghost_mat.emission_enabled = true
 	_snap_ghost_mat.emission = color
-	_snap_ghost_mat.emission_energy_multiplier = 1.2
+	_snap_ghost_mat.emission_energy_multiplier = (1.2 + pulse * 1.8) if is_delivery else 1.2
+
+	# Delivery ghost grows ~1.7×; place ghost stays a tight 1.3 m square.
+	var scale_xy := 1.6 + pulse * 0.25 if is_delivery else 1.0
+	_snap_ghost.scale = Vector3(scale_xy, 1.0, scale_xy)
+
+	if _snap_label != null:
+		_snap_label.visible  = true
+		_snap_label.text     = label_text
+		_snap_label.position = Vector3(0.0, 1.6 + pulse * 0.15, 0.0)
+		_snap_label.modulate = color if is_delivery else Color(0.85, 1.0, 0.92)
+
+
+func _hide_ghost() -> void:
+	if _snap_ghost != null:
+		_snap_ghost.visible = false
+		_snap_ghost.scale   = Vector3.ONE
+	if _snap_label != null:
+		_snap_label.visible = false
 
 
 # ── Pickup highlight ──────────────────────────────────────────────────────────
@@ -827,8 +874,7 @@ func _exit_crane() -> void:
 	# leaves. They (or another operator) must re-board and position over a
 	# valid drop target. This prevents cargo being lost over the water.
 	_clear_highlight()
-	if _snap_ghost != null:
-		_snap_ghost.visible = false
+	_hide_ghost()
 	if _camera != null:
 		_camera.set_enabled(false)
 	Input.mouse_mode = _prev_mouse_mode
