@@ -38,12 +38,6 @@ func get_state_at(world_pos: Vector3) -> WeatherState:
 	return WeatherField.sample(world_pos).to_weather_state()
 
 
-## Deprecated — Phase 5 will give the map a proper weather visualisation
-## (pressure isobars, wind barbs, storm centres). For back-compat returns [].
-func get_zones() -> Array[WeatherZone]:
-	return []
-
-
 ## How "close to shore" we are, in 0..1 — kept for back-compat with the
 ## tracker / atmospheric blender. Forwards to the LandField SDF, which has
 ## already replaced PORT_CALM as the source of harbour shelter.
