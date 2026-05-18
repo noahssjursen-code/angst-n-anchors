@@ -398,7 +398,9 @@ func _spawn_pallet_node(origin_idx: int, pallet: Pallet) -> void:
 	root.add_child(node)
 	node.position = _block_local_center(origin_idx, fp)
 	# Visual fills its footprint so a 1×4 timber pallet renders as a long pad.
-	node.setup(pallet, cell_size_x_m * float(fp.x), cell_size_z_m * float(fp.y))
+	# Pass `fp` as the display footprint too — fp is DECK-LOCAL, so a pallet
+	# whose world footprint differs renders correctly oriented for this deck.
+	node.setup(pallet, cell_size_x_m * float(fp.x), cell_size_z_m * float(fp.y), fp)
 
 
 func _remove_pallet_node(pallet: Pallet) -> void:

@@ -114,7 +114,6 @@ func _rebuild() -> void:
 			add_child(node)
 			node.position = Vector3(x + w * 0.5, 0.12, z + d * 0.5)
 			node.setup(pallet, w, d)
-			node.rotation.y = PI * 0.5    # show pallets + cargo turned 90°
 			node.owner = _scene_owner()
 
 			if show_labels:

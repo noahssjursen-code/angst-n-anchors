@@ -36,6 +36,11 @@ signal released(node: PalletNode)
 var pallet: Pallet = null
 var cell_w: float  = 1.5
 var cell_d: float  = 1.5
+## Footprint to draw in this node's LOCAL frame. Usually the deck-local
+## footprint (= pallet.footprint maybe with X/Z swapped if the deck is
+## rotated 90° from world). Defaults to pallet.footprint when setup is
+## called without an override.
+var _display_fp: Vector2i = Vector2i(1, 1)
 
 var _mesh_root: Node3D
 var _label: Label3D
@@ -53,10 +58,17 @@ func _ready() -> void:
 	add_to_group(GROUP)
 
 
-func setup(p: Pallet, cell_width: float = 1.5, cell_depth: float = 1.5) -> void:
+func setup(p: Pallet, cell_width: float = 1.5, cell_depth: float = 1.5,
+		display_fp: Vector2i = Vector2i.ZERO) -> void:
 	pallet = p
 	cell_w = cell_width
 	cell_d = cell_depth
+	if display_fp.x > 0 and display_fp.y > 0:
+		_display_fp = display_fp
+	elif p != null and p.footprint.x > 0 and p.footprint.y > 0:
+		_display_fp = p.footprint
+	else:
+		_display_fp = Vector2i(1, 1)
 	_build()
 
 
@@ -217,8 +229,8 @@ func _spawn_model(model_path: String, local_pos: Vector3) -> ModelAssembler:
 func _build_pallet_base() -> void:
 	if pallet == null:
 		return
-	var fp_x := maxi(pallet.footprint.x, 1)
-	var fp_z := maxi(pallet.footprint.y, 1)
+	var fp_x := maxi(_display_fp.x, 1)
+	var fp_z := maxi(_display_fp.y, 1)
 	# Pick the canonical (small-dim, large-dim) key. If the actual footprint is
 	# wider than deep, rotate the model 90° around Y at instantiation.
 	var key := Vector2i(mini(fp_x, fp_z), maxi(fp_x, fp_z))
@@ -236,8 +248,8 @@ func _build_pallet_base() -> void:
 func _build_per_cell_cargo() -> void:
 	if pallet == null:
 		return
-	var fp_w := maxi(pallet.footprint.x, 1)
-	var fp_h := maxi(pallet.footprint.y, 1)
+	var fp_w := maxi(_display_fp.x, 1)
+	var fp_h := maxi(_display_fp.y, 1)
 	var cell_real_w := cell_w / float(fp_w)
 	var cell_real_d := cell_d / float(fp_h)
 	var base_y := 0.14   # top of the pallet section deck
