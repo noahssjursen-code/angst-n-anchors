@@ -34,9 +34,11 @@ signal player_exited
 @export var trolley_min_z: float = -28.0
 @export var trolley_max_z: float = 20.0
 
-## Hoist limits (hook position Y in trolley-local space — always negative).
-@export var hoist_min_drop: float = 1.0    # hook just below trolley
-@export var hoist_max_drop: float = 15.0   # hook close to ground
+## Hoist limits — how far the hook hangs below the trolley.
+## Trolley sits at world Y ≈ 17.1 (quay 0.6 + model 16.5); a drop of 17 m
+## brings the hook to world Y ≈ 0.1, just above the apron/deck surface.
+@export var hoist_min_drop: float = 1.0
+@export var hoist_max_drop: float = 17.0
 
 ## How close (3D distance) the hook must be to a pallet to engage chains.
 @export var pickup_range_m: float = 3.5
