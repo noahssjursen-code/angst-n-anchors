@@ -143,6 +143,9 @@ func _build() -> void:
 
 	_gantry_frame = Node3D.new()
 	_gantry_frame.name = "GantryFrame"
+	# Sit the gantry on top of the rails (0.12 m tall) instead of floating at
+	# crane origin level. Leg bottoms (model Y=0) now align with rail tops.
+	_gantry_frame.position.y = 0.12
 	add_child(_gantry_frame)
 	if Engine.is_editor_hint() and get_tree() != null and get_tree().edited_scene_root != null:
 		_gantry_frame.owner = get_tree().edited_scene_root
