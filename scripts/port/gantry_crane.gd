@@ -323,13 +323,20 @@ func _build_cable() -> void:
 		_cable.queue_free()
 	_cable = MeshInstance3D.new()
 	_cable.name = "Cable"
-	var box := BoxMesh.new()
-	box.size = Vector3(0.08, 1.0, 0.08)
-	_cable.mesh = box
+	# Thin cylinder reads as a rope/cable far better than a box. CylinderMesh's
+	# default axis is +Y with height 1 — gets scaled in _apply_kinematics.
+	var cyl := CylinderMesh.new()
+	cyl.top_radius = 0.05
+	cyl.bottom_radius = 0.05
+	cyl.height = 1.0
+	cyl.radial_segments = 10
+	cyl.rings = 1
+	_cable.mesh = cyl
 	_cable.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	var mat := StandardMaterial3D.new()
-	mat.albedo_color = Color(0.20, 0.20, 0.22)
-	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	mat.albedo_color = Color(0.12, 0.12, 0.14)
+	mat.roughness = 0.85
+	mat.metallic = 0.3
 	_cable.material_override = mat
 	_trolley.add_child(_cable)
 
@@ -390,15 +397,18 @@ func _process(delta: float) -> void:
 	if Engine.is_editor_hint():
 		return
 	_update_beacon(delta)
-	if not _occupied:
-		_update_prompt()
-		return
-	_read_kinematic_input(delta)
+	if _occupied:
+		_read_kinematic_input(delta)
+	# Always keep the cable + hook position in sync with state — otherwise the
+	# cable renders at its default 1 m size when no one is operating the crane.
 	_apply_kinematics(delta)
-	_update_carried_pallet()
-	_update_pickup_highlight()
-	_update_snap_ghost()
-	_update_hud()
+	if _occupied:
+		_update_carried_pallet()
+		_update_pickup_highlight()
+		_update_snap_ghost()
+		_update_hud()
+	else:
+		_update_prompt()
 
 
 func _unhandled_input(event: InputEvent) -> void:
