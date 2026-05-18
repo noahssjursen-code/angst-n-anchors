@@ -6,10 +6,10 @@ extends Node3D
 ## Place this node anywhere in the world; all internal positions are local to this node.
 ## The world sets the node's global position — Port knows nothing about the world around it.
 
-const DockFacilitiesScript        := preload("res://scripts/systems/dock/dock_facilities.gd")
-const WarehouseContractZoneScript := preload("res://scripts/systems/cargo/warehouse_contract_zone.gd")
-const ContractNpcScript           := preload("res://scripts/systems/dock/contract_npc.gd")
-const DeliveryNpcScript           := preload("res://scripts/systems/dock/delivery_npc.gd")
+const DockFacilitiesScript        := preload("res://scripts/port/dock_facilities.gd")
+const WarehouseContractZoneScript := preload("res://scripts/cargo/warehouse_contract_zone.gd")
+const ContractNpcScript           := preload("res://scripts/npc/contract_npc.gd")
+const DeliveryNpcScript           := preload("res://scripts/npc/delivery_npc.gd")
 
 @export var ship_scene: PackedScene = preload("res://scenes/boats/test_boat.tscn")
 @export var port_id: String = ""

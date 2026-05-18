@@ -20,7 +20,10 @@
       "Bash(Select-Object Name)",
       "PowerShell(Get-ChildItem -Path \"C:\\\\Users\\\\noahs\\\\Documents\\\\angst-n-anchors\\\\scenes\" -Recurse -File | Where-Object { $_.Extension -eq '.tscn' } | ForEach-Object { $_.FullName.Replace\\('C:\\\\Users\\\\noahs\\\\Documents\\\\angst-n-anchors\\\\', ''\\) })",
       "Bash(xargs grep -l \"SubViewport\")",
-      "Bash(xargs ls -la)"
+      "Bash(xargs ls -la)",
+      "Bash(godot --version)",
+      "Bash(where godot *)",
+      "Bash(powershell.exe -NoProfile -Command \"Get-ChildItem -Path 'C:\\\\Users\\\\noahs','C:\\\\Program Files','C:\\\\Program Files \\(x86\\)' -Filter 'Godot*.exe' -Recurse -ErrorAction SilentlyContinue -Depth 3 | Select-Object -First 5 -ExpandProperty FullName\")"
     ]
   }
 }

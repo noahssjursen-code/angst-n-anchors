@@ -1,49 +1,101 @@
 ---
-description: GDScript architecture patterns for Angst 'n Anchors
+description: GDScript architecture patterns for Angst 'n Anchors — folder structure, autoloads, ship building, interaction pattern
 globs: **/*.gd
 alwaysApply: false
 ---
 
 # GDScript Patterns
 
-## Services Before Custom Logic
+## Folder Structure — By System
 
-Check `scripts/autoloads/` before writing scene-local logic. If a behaviour recurs — interaction, dialogue, economy queries, contract checks — it belongs in a system, not a scene.
+Each system owns all its files in one folder. Never scatter a system across multiple folders.
 
-Autoloads are the source of truth for game state:
-- `GameState` — time, money, reputation
-- `Economy` — port prices, supply/demand
-- `ContractBoard` — contracts, deadlines, consequences
-- `FleetManager` — ships, captains, routes
-- `World` — port and island registry
+```
+scripts/core/        # Shared infrastructure — no game knowledge (MeshTransformer, ModelAssembler, MeshBuilder, interactable base)
+scripts/player/      # CharacterBody3D, PlayerSession autoload
+scripts/ship/        # BoatBody, controller, camera, propulsion, ShipBuilder
+scripts/ocean/       # FftWaterSystem, WaveSurface
+scripts/weather/     # WorldWeather + WeatherLighting autoloads, WeatherState, WeatherZone
+scripts/time/        # WorldClock autoload
+scripts/world/       # World, ProximityLoader, WorldRenderer, AtmosphericEffects
+scripts/port/        # PortPlot, PortDock, PortFacilities, buildings, PortData
+scripts/npc/         # NpcBase, HarbourMasterNpc, ShipwrightNpc, ContractNpc, DeliveryNpc
+scripts/cargo/       # ContractRegistry autoload, Contract, CargoItem, CargoPickup, Warehouse
+scripts/ui/          # GameMenu + DebugHud autoloads, HUDs, overlays
+scripts/state/       # GameState autoload, PlayerState, ShipState, ContractState, WorldState
+```
 
-## Jigsaw Components
+## Actual Autoloads
 
-Scenes expose signals and `@export` slots. They do not reach outside themselves.
+These are the registered singletons. Do not reference anything else as if it were an autoload.
+
+| Autoload | Role |
+|---|---|
+| `WorldWeather` | Wind, rain, fog state and weather zones |
+| `WeatherLighting` | Sky colour, fog, sun angle |
+| `WorldClock` | Game time |
+| `ContractRegistry` | Port registry, contracts, commodities |
+| `PlayerSession` | Player marks and persistence |
+| `GameMenu` | Pause / menu |
+| `GameState` | Read model — player, ship, contract, world sub-states |
+| `DebugHud` | F3 debug overlay |
+
+A scene that needs port data asks `ContractRegistry`, not its own parent. A HUD that needs ship speed reads `GameState.ship.speed_knots`, not a ship node.
+
+## State Model — UI Reads GameState
+
+```gdscript
+# BAD — polling a scene node
+var speed = $Ship.velocity.length()
+
+# GOOD — read model
+var speed = GameState.ship.speed_knots
+```
+
+Systems write their own state. GameState aggregates sub-states. UI subscribes to GameState.
+
+## Jigsaw Components — No Reaching Up
+
+Nodes communicate across system boundaries via signals or autoloads, not node paths.
 
 ```gdscript
 # BAD
 get_parent().get_parent().get_node("HUD").show_prompt(text)
 
-# GOOD
-InteractionSystem.show_prompt(text)
-# or
-signal interaction_triggered(context)
+# GOOD — signal out
+signal interaction_triggered(context: Dictionary)
+
+# GOOD — autoload
+ContractRegistry.get_contracts_for_port(port_id)
 ```
 
-## Data in Resources
+## Ship Building — Templates Not Scenes
 
-Port data, cargo types, contract templates → `resources/data/` as `.tres` Resource subclasses. Never hardcode game data in scripts.
+New ships are built from JSON templates, not hand-placed scenes. Never manually add ship components in the editor.
+
+```gdscript
+var boat := ShipBuilder.build("res://resources/data/ships/fuel_tanker.json")
+get_tree().current_scene.add_child(boat)
+boat.place_at_waterline(water_y)
+```
+
+Hull orientation: **Bow = +Z, Stern = −Z, Port = −X, Starboard = +X.**
+Hull parts always use `"rotation_degrees": [0, -90, 0]`. Never add extra rotation.
+
+## Interactable Pattern
+
+All "press E to do thing" logic inherits from `interactable.gd` in `scripts/core/`.
+Do not hand-roll prompt display or interaction detection per object.
+
+## Data-Driven
+
+Port definitions, ship templates, commodity configs → `resources/data/`. Scripts read from data.
 
 ```gdscript
 # BAD
-var exports = ["Fish", "Salt"]
+var exports = ["grain", "timber"]
 
 # GOOD
-@export var port_data: PortData
-var exports = port_data.exports
+var port_data := ContractRegistry.get_port_data(port_id)
+var exports   := port_data.commodity_export
 ```
-
-## Generic First
-
-Build the reusable system before the specific instance. `DialogueRunner` before the dock NPC. The scrollable list before the contract board. No one-offs that get refactored later.

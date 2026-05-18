@@ -1,7 +1,7 @@
 [gd_scene load_steps=3 format=3]
 
-[ext_resource type="Script" path="res://scripts/world/port/fog_horn_building.gd" id="1"]
-[ext_resource type="Script" path="res://scripts/entities/fog_horn.gd" id="2"]
+[ext_resource type="Script" path="res://scripts/port/fog_horn_building.gd" id="1"]
+[ext_resource type="Script" path="res://scripts/port/fog_horn.gd" id="2"]
 
 [node name="FogHornBuilding" type="Node3D"]
 script = ExtResource("1")

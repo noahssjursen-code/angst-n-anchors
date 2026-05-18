@@ -1,7 +1,7 @@
 class_name DockFacilities
 extends Node3D
 
-const _SCRIPT_SELF := preload("res://scripts/systems/dock/dock_facilities.gd")
+const _SCRIPT_SELF := preload("res://scripts/port/dock_facilities.gd")
 
 ## Mooring posts, ship spawner, and dock terminal in one subtree. Instantiate under any
 ## island root; positions are in the parent's local space.
