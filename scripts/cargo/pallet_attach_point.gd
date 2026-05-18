@@ -1,51 +1,36 @@
 class_name PalletAttachPoint
-extends Area3D
+extends Node3D
 
-## One of the four chain-attachment sockets on a Pallet. Sits at a corner of the
-## pallet, slightly above the deck. While the crane has highlighting enabled,
-## the socket renders a glowing ring; clicking it (LMB raycast hit) tells the
-## crane to attach one chain to this point.
+## A passive visual marker at one corner of a Pallet showing where a chain
+## attaches. Not interactive — the crane decides when to engage via a key
+## press, not by clicking. This node just lights up to give visual feedback.
 
 const GROUP := "pallet_attach_point"
-const RADIUS := 0.32
-
-signal clicked(socket: PalletAttachPoint)
 
 ## The PalletNode this socket belongs to.
 var pallet_node: Node3D = null
-## 0..3 — used by the crane to track which corner is which.
+## 0..3 — used by the crane to position chains consistently.
 var corner_index: int = 0
 
 var _ring: MeshInstance3D
-var _attached: bool = false
 var _highlighted: bool = false
+var _attached: bool = false
 
 
 func _ready() -> void:
 	add_to_group(GROUP)
-	input_ray_pickable = true
-	monitoring = false  # we don't need physics overlap, just raycast picks
-
-	var shape := CollisionShape3D.new()
-	var sphere := SphereShape3D.new()
-	sphere.radius = RADIUS
-	shape.shape = sphere
-	add_child(shape)
 
 	_ring = MeshInstance3D.new()
 	_ring.name = "Ring"
 	var mesh := SphereMesh.new()
-	mesh.radius = RADIUS
-	mesh.height = RADIUS * 2.0
+	mesh.radius = 0.28
+	mesh.height = 0.56
 	mesh.radial_segments = 16
 	mesh.rings = 8
 	_ring.mesh = mesh
 	_ring.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	_ring.visible = true
 	add_child(_ring)
-
 	_apply_material()
-	input_event.connect(_on_input_event)
 
 
 func set_highlighted(on: bool) -> void:
@@ -56,17 +41,10 @@ func set_highlighted(on: bool) -> void:
 
 
 func set_attached(on: bool) -> void:
+	if _attached == on:
+		return
 	_attached = on
 	_apply_material()
-
-
-func is_attached() -> bool:
-	return _attached
-
-
-func _on_input_event(_cam: Node, event: InputEvent, _pos: Vector3, _norm: Vector3, _shape_idx: int) -> void:
-	if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
-		clicked.emit(self)
 
 
 func _apply_material() -> void:
@@ -80,11 +58,10 @@ func _apply_material() -> void:
 		mat.emission = Color(0.30, 0.95, 0.45)
 		mat.emission_energy_multiplier = 1.5
 	elif _highlighted:
-		mat.albedo_color = Color(1.0, 0.85, 0.20, 0.65)
+		mat.albedo_color = Color(1.0, 0.85, 0.20, 0.75)
 		mat.emission_enabled = true
 		mat.emission = Color(1.0, 0.85, 0.20)
-		mat.emission_energy_multiplier = 1.2
+		mat.emission_energy_multiplier = 1.4
 	else:
-		# Dim default — visible enough to aim at, but doesn't shout.
-		mat.albedo_color = Color(0.85, 0.85, 0.90, 0.32)
+		mat.albedo_color = Color(0.80, 0.80, 0.85, 0.28)
 	_ring.material_override = mat

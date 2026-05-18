@@ -248,7 +248,8 @@ func _stage_pallets_on_apron(dock: PortDock, berth_idx: int, pallets: Array[Pall
 	dock.set_berth_has_cargo(berth_idx, true)
 	var cur := int(_berth_cargo_count.get(berth_idx, 0))
 	_berth_cargo_count[berth_idx] = cur + pallets.size()
-	var positions := dock.get_berth_apron_positions(berth_idx, pallets.size())
+	# Spawn new pallets after the existing ones so we don't overlap.
+	var positions := dock.get_berth_apron_positions(berth_idx, pallets.size(), cur)
 	for i in range(pallets.size()):
 		var node      := PalletNode.new()
 		node.name     = "ApronPallet_" + pallets[i].id.left(8)

@@ -341,7 +341,7 @@ func set_berth_has_cargo(berth_index: int, has_cargo: bool) -> void:
 ## Returns n world-space positions within berth_index's cargo apron, in a grid.
 ## Uses the exact cx/slot_w/apron_z recorded when the berth geometry was built —
 ## same slot, same crane, same apron.
-func get_berth_apron_positions(berth_index: int, n: int) -> Array[Vector3]:
+func get_berth_apron_positions(berth_index: int, n: int, offset: int = 0) -> Array[Vector3]:
 	var out: Array[Vector3] = []
 	if n <= 0 or berth_index < 0 or berth_index >= _berth_data.size():
 		return out
@@ -352,8 +352,9 @@ func get_berth_apron_positions(berth_index: int, n: int) -> Array[Vector3]:
 	var apron_w := maxf(slot_w - 2.0 * APRON_REACH_INSET, 1.5)
 	var cols    := maxi(int(apron_w / 1.5), 1)
 	for i in range(n):
-		var col := i % cols
-		var row := i / cols
+		var idx := i + offset
+		var col := idx % cols
+		var row := idx / cols
 		var x   := cx - apron_w * 0.5 + 1.5 * (float(col) + 0.5)
 		var z   := apron_z - APRON_DEPTH * 0.4 + 1.5 * float(row)
 		out.append(to_global(Vector3(x, QUAY_HEIGHT + 0.05, z)))

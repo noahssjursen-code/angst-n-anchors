@@ -13,10 +13,10 @@ extends Node3D
 ##   R / F       — hoist up / down (R raises hook, F lowers)
 ##   RMB drag    — orbit camera around hook
 ##   Scroll      — camera zoom
-##   LMB         — click a glowing pallet corner socket to attach a chain
-##   Space       — release pallet (drops on whatever is below: delivery zone, deck cell, or in place)
-##   E           — board crane (when standing nearby) / exit crane (when seated, hands free)
-##   Escape      — force exit
+##   E           — engage chains (when hook is near a pallet) /
+##                  release pallet (when carrying) /
+##                  board / exit (when not carrying)
+##   Escape      — force exit (drops pallet in place if carrying)
 
 const MODEL_PATH := "res://resources/data/models/dockyard/gantry_crane.json"
 
@@ -38,11 +38,8 @@ signal player_exited
 @export var hoist_min_drop: float = 1.0    # hook just below trolley
 @export var hoist_max_drop: float = 15.0   # hook close to ground
 
-## How close (XZ) the hook must be to a pallet to brighten its sockets.
-## Sockets are always clickable — this only affects the highlight ring.
-@export var pickup_range_m: float = 6.0
-## Hook must be below this world Y to brighten the nearest pallet's sockets.
-@export var pickup_max_hook_height: float = 14.0
+## How close (3D distance) the hook must be to a pallet to engage chains.
+@export var pickup_range_m: float = 3.5
 
 ## Player must be within this range to board.
 @export var board_range_m: float = 7.0
@@ -272,11 +269,13 @@ func _unhandled_input(event: InputEvent) -> void:
 			_exit_crane()
 			get_viewport().set_input_as_handled()
 		elif event.is_action_pressed("interact"):
-			if _carried_pallet == null:
+			# E is contextual: release > engage > exit
+			if _carried_pallet != null:
+				_try_release()
+			elif _highlighted_pallet != null:
+				_engage_chains(_highlighted_pallet)
+			else:
 				_exit_crane()
-				get_viewport().set_input_as_handled()
-		elif event.is_action_pressed("crane_release"):
-			_try_release()
 			get_viewport().set_input_as_handled()
 	else:
 		if event.is_action_pressed("interact") and _nearest_boardable_player() != null:
@@ -338,10 +337,7 @@ func _update_carried_pallet() -> void:
 # ── Pickup highlight ──────────────────────────────────────────────────────────
 
 func _update_pickup_highlight() -> void:
-	if _carried_pallet != null or _rigging == null or _hook == null:
-		_clear_highlight()
-		return
-	if _hook.global_position.y > pickup_max_hook_height:
+	if _carried_pallet != null or _hook == null:
 		_clear_highlight()
 		return
 
@@ -354,6 +350,8 @@ func _update_pickup_highlight() -> void:
 		_set_pallet_highlight(_highlighted_pallet, true)
 
 
+## Returns the nearest pallet whose corner-attach points are within pickup_range_m
+## (3D Euclidean distance from the hook). Returns null if none in range.
 func _find_nearest_pallet() -> Node3D:
 	var hp := _hook.global_position
 	var best: Node3D = null
@@ -362,9 +360,7 @@ func _find_nearest_pallet() -> Node3D:
 		var pn := n as Node3D
 		if pn == null:
 			continue
-		var dx := hp.x - pn.global_position.x
-		var dz := hp.z - pn.global_position.z
-		var d2 := dx * dx + dz * dz
+		var d2 := hp.distance_squared_to(pn.global_position + Vector3(0, 0.8, 0))
 		if d2 < best_d2:
 			best_d2 = d2
 			best = pn
@@ -378,12 +374,9 @@ func _clear_highlight() -> void:
 
 
 func _set_pallet_highlight(pallet_node: Node3D, on: bool) -> void:
-	# Sockets stay clickable regardless — only the brighter ring toggles.
 	for socket in _sockets_of(pallet_node):
 		if socket.has_method("set_highlighted"):
 			socket.set_highlighted(on)
-		if not socket.clicked.is_connected(_on_socket_clicked):
-			socket.clicked.connect(_on_socket_clicked)
 
 
 func _sockets_of(pallet_node: Node3D) -> Array:
@@ -396,38 +389,22 @@ func _sockets_of(pallet_node: Node3D) -> Array:
 	return out
 
 
-func _on_socket_clicked(socket: Node) -> void:
-	if _carried_pallet != null or _rigging == null or socket == null:
+func _engage_chains(pallet_node: Node3D) -> void:
+	if _rigging == null or pallet_node == null:
 		return
-	var s := socket as PalletAttachPoint
-	if s == null or s.pallet_node == null:
-		return
-	# Once a pallet has any chain attached, ignore clicks on other pallets.
-	var existing := _rigging.attached_sockets()
-	if not existing.is_empty():
-		var first := existing[0] as PalletAttachPoint
-		if first != null and first.pallet_node != s.pallet_node:
-			return
-	if not _rigging.attach(s):
-		return
-	# When all four attached → start carrying.
-	if _rigging.attached_count() >= CraneRigging.MAX_CHAINS:
-		_begin_carry(s.pallet_node)
-
-
-func _begin_carry(pallet_node: Node3D) -> void:
+	# Snap all four chains in one go.
+	_rigging.detach_all()
+	for socket in _sockets_of(pallet_node):
+		_rigging.attach(socket as Node3D)
+		if socket.has_method("set_attached"):
+			socket.set_attached(true)
 	_carried_pallet = pallet_node
-	# Stop highlighting (sockets stay green via set_attached).
 	if _highlighted_pallet != null:
 		_set_pallet_highlight(_highlighted_pallet, false)
 		_highlighted_pallet = null
-	# Detach pallet from any cargo deck it sat on.
+	# Detach from any cargo deck the pallet was sitting on.
 	if pallet_node.has_method("get") and pallet_node.get("pallet") != null:
 		_detach_from_deck(pallet_node.get("pallet"))
-	# Re-mark sockets attached so they stay green while carried.
-	for socket in _sockets_of(pallet_node):
-		if socket.has_method("set_attached"):
-			socket.set_attached(true)
 
 
 # ── Release ───────────────────────────────────────────────────────────────────
@@ -570,16 +547,12 @@ func _update_hud() -> void:
 		return
 	var hint := ""
 	if _carried_pallet != null:
-		hint = "[Space] release pallet"
+		hint = "[E] release pallet over destination"
+	elif _highlighted_pallet != null:
+		hint = "[E] engage chains"
 	else:
-		var attached := 0 if _rigging == null else _rigging.attached_count()
-		if attached > 0:
-			hint = "Chains attached: %d / 4 — click remaining corners" % attached
-		elif _highlighted_pallet != null:
-			hint = "Click glowing pallet corners to attach chains"
-		else:
-			hint = "Lower hook (F) near a pallet to begin"
-	_hud.text = "Gantry %+5.1f m   Trolley %+5.1f m   Hook drop %4.1f m\n%s\n[A/D] roll  [W/S] trolley  [R/F] hoist  [RMB] orbit  [scroll] zoom  [E/Esc] exit" % [
+		hint = "Move hook close to a pallet (yellow corners light up)"
+	_hud.text = "Gantry %+5.1f m   Trolley %+5.1f m   Hook drop %4.1f m\n%s\n[A/D] roll  [W/S] trolley  [R/F] hoist  [RMB] orbit  [scroll] zoom  [Esc] exit" % [
 		_gantry_x_offset, _trolley_z, _hoist_drop, hint,
 	]
 
@@ -594,7 +567,6 @@ func _register_input_actions() -> void:
 		"crane_trolley_water": KEY_W,  # -Z = toward water
 		"crane_hoist_up":     KEY_R,
 		"crane_hoist_down":   KEY_F,
-		"crane_release":      KEY_SPACE,
 	}
 	for action: String in bindings:
 		if InputMap.has_action(action):
