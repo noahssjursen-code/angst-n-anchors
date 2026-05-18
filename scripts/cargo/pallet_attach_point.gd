@@ -31,6 +31,19 @@ func _ready() -> void:
 	_ring.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(_ring)
 	_apply_material()
+	# Only visible while someone is operating a crane.
+	_ring.visible = _is_any_crane_seated()
+
+
+func set_visible_to_operator(on: bool) -> void:
+	if _ring != null:
+		_ring.visible = on
+
+
+## Polls GantryCrane._seated_count without importing it directly to avoid a
+## hard class dependency. Falls back to false if the script isn't loaded.
+func _is_any_crane_seated() -> bool:
+	return GantryCrane._seated_count > 0
 
 
 func set_highlighted(on: bool) -> void:

@@ -23,6 +23,10 @@ const MODEL_PATH := "res://resources/data/models/dockyard/gantry_crane.json"
 signal player_boarded
 signal player_exited
 
+## How many cranes are currently being operated. Used by PalletAttachPoint
+## to show/hide the corner rings (pickup hints) only while someone is seated.
+static var _seated_count: int = 0
+
 # ── Tunables ──────────────────────────────────────────────────────────────────
 
 @export var gantry_roll_range_x: float = 4.0     # ±range from spawn X
@@ -791,6 +795,8 @@ func _enter_crane() -> void:
 	get_viewport().physics_object_picking = true
 	_prev_mouse_mode = Input.mouse_mode
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	_seated_count += 1
+	_broadcast_pickup_visibility(true)
 	if _prompt != null:
 		_prompt.visible = false
 	if _hud != null:
@@ -808,6 +814,9 @@ func _exit_crane() -> void:
 	if _camera != null:
 		_camera.set_enabled(false)
 	Input.mouse_mode = _prev_mouse_mode
+	_seated_count = maxi(_seated_count - 1, 0)
+	if _seated_count == 0:
+		_broadcast_pickup_visibility(false)
 	if _player != null:
 		var pcam := _player.get_node_or_null("Camera3D") as Camera3D
 		if pcam != null:
@@ -843,6 +852,14 @@ func _update_hud() -> void:
 	_hud.text = "Gantry %+5.1f m   Trolley %+5.1f m   Hook drop %4.1f m\n%s\n[WASD] pan (camera-relative)  [R/F] hoist  [RMB] orbit  [scroll] zoom  [Esc] exit" % [
 		_gantry_x_offset, _trolley_z, _hoist_drop, hint,
 	]
+
+
+func _broadcast_pickup_visibility(on: bool) -> void:
+	if get_tree() == null:
+		return
+	for node in get_tree().get_nodes_in_group(PalletAttachPoint.GROUP):
+		if node.has_method("set_visible_to_operator"):
+			node.call("set_visible_to_operator", on)
 
 
 # ── Input registration ────────────────────────────────────────────────────────
