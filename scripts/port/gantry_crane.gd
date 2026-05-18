@@ -38,10 +38,11 @@ signal player_exited
 @export var hoist_min_drop: float = 1.0    # hook just below trolley
 @export var hoist_max_drop: float = 15.0   # hook close to ground
 
-## How close (XZ) the hook must be to a pallet to highlight its sockets.
-@export var pickup_range_m: float = 4.0
-## Hook must be below this absolute world Y to enable pickup highlights.
-@export var pickup_max_hook_height: float = 2.5
+## How close (XZ) the hook must be to a pallet to brighten its sockets.
+## Sockets are always clickable — this only affects the highlight ring.
+@export var pickup_range_m: float = 6.0
+## Hook must be below this world Y to brighten the nearest pallet's sockets.
+@export var pickup_max_hook_height: float = 14.0
 
 ## Player must be within this range to board.
 @export var board_range_m: float = 7.0
@@ -227,6 +228,7 @@ func _build_ui() -> void:
 	_prompt.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_prompt.visible = false
 	_prompt.add_theme_font_size_override("font_size", 22)
+	_prompt.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_prompt.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
 	_prompt.offset_left = -240.0
 	_prompt.offset_right = 240.0
@@ -237,6 +239,7 @@ func _build_ui() -> void:
 	_hud = Label.new()
 	_hud.name = "Hud"
 	_hud.visible = false
+	_hud.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_hud.add_theme_font_size_override("font_size", 16)
 	_hud.set_anchors_preset(Control.PRESET_TOP_LEFT)
 	_hud.offset_left = 16.0
@@ -375,15 +378,12 @@ func _clear_highlight() -> void:
 
 
 func _set_pallet_highlight(pallet_node: Node3D, on: bool) -> void:
+	# Sockets stay clickable regardless — only the brighter ring toggles.
 	for socket in _sockets_of(pallet_node):
 		if socket.has_method("set_highlighted"):
 			socket.set_highlighted(on)
-		if on:
-			if not socket.clicked.is_connected(_on_socket_clicked):
-				socket.clicked.connect(_on_socket_clicked)
-		else:
-			if socket.clicked.is_connected(_on_socket_clicked):
-				socket.clicked.disconnect(_on_socket_clicked)
+		if not socket.clicked.is_connected(_on_socket_clicked):
+			socket.clicked.connect(_on_socket_clicked)
 
 
 func _sockets_of(pallet_node: Node3D) -> Array:
@@ -397,13 +397,22 @@ func _sockets_of(pallet_node: Node3D) -> Array:
 
 
 func _on_socket_clicked(socket: Node) -> void:
-	if _carried_pallet != null or _rigging == null or _highlighted_pallet == null:
+	if _carried_pallet != null or _rigging == null or socket == null:
 		return
-	if not _rigging.attach(socket as Node3D):
+	var s := socket as PalletAttachPoint
+	if s == null or s.pallet_node == null:
+		return
+	# Once a pallet has any chain attached, ignore clicks on other pallets.
+	var existing := _rigging.attached_sockets()
+	if not existing.is_empty():
+		var first := existing[0] as PalletAttachPoint
+		if first != null and first.pallet_node != s.pallet_node:
+			return
+	if not _rigging.attach(s):
 		return
 	# When all four attached → start carrying.
 	if _rigging.attached_count() >= CraneRigging.MAX_CHAINS:
-		_begin_carry(_highlighted_pallet)
+		_begin_carry(s.pallet_node)
 
 
 func _begin_carry(pallet_node: Node3D) -> void:

@@ -41,7 +41,7 @@ func _ready() -> void:
 	mesh.rings = 8
 	_ring.mesh = mesh
 	_ring.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	_ring.visible = false
+	_ring.visible = true
 	add_child(_ring)
 
 	_apply_material()
@@ -52,13 +52,11 @@ func set_highlighted(on: bool) -> void:
 	if _highlighted == on:
 		return
 	_highlighted = on
-	_ring.visible = on or _attached
 	_apply_material()
 
 
 func set_attached(on: bool) -> void:
 	_attached = on
-	_ring.visible = _highlighted or _attached
 	_apply_material()
 
 
@@ -67,8 +65,6 @@ func is_attached() -> bool:
 
 
 func _on_input_event(_cam: Node, event: InputEvent, _pos: Vector3, _norm: Vector3, _shape_idx: int) -> void:
-	if not _highlighted:
-		return
 	if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
 		clicked.emit(self)
 
@@ -89,5 +85,6 @@ func _apply_material() -> void:
 		mat.emission = Color(1.0, 0.85, 0.20)
 		mat.emission_energy_multiplier = 1.2
 	else:
-		mat.albedo_color = Color(0.6, 0.6, 0.6, 0.4)
+		# Dim default — visible enough to aim at, but doesn't shout.
+		mat.albedo_color = Color(0.85, 0.85, 0.90, 0.32)
 	_ring.material_override = mat
