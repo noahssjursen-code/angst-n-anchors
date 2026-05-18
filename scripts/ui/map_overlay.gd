@@ -109,15 +109,21 @@ func _input(event: InputEvent) -> void:
 				if _drag_dist < 5.0:
 					_try_select(mb.position)
 			get_viewport().set_input_as_handled()
-	elif event is InputEventMouseMotion and _dragging:
-		var mm  := event as InputEventMouseMotion
-		var ppu := _ppu()
-		var dm  := mm.position - _drag_origin_mouse
-		_drag_dist    += mm.relative.length()
-		_cam_center.x  = _drag_origin_center.x - dm.x / ppu
-		_cam_center.y  = _drag_origin_center.y - dm.y / ppu
-		_user_moved    = true
-		get_viewport().set_input_as_handled()
+	elif event is InputEventMouseMotion:
+		var mm := event as InputEventMouseMotion
+		_hover_pos = mm.position
+		_hover_inside = (
+			mm.position.x >= _cpx and mm.position.x <= _cpx + _cpw
+			and mm.position.y >= _cpy and mm.position.y <= _cpy + _cph
+		)
+		if _dragging:
+			var ppu := _ppu()
+			var dm  := mm.position - _drag_origin_mouse
+			_drag_dist    += mm.relative.length()
+			_cam_center.x  = _drag_origin_center.x - dm.x / ppu
+			_cam_center.y  = _drag_origin_center.y - dm.y / ppu
+			_user_moved    = true
+			get_viewport().set_input_as_handled()
 
 
 func _try_select(screen_pos: Vector2) -> void:
@@ -642,6 +648,11 @@ var _wx_cache_pressure : PackedFloat32Array = PackedFloat32Array()
 var _wx_cache_wind_x   : PackedFloat32Array = PackedFloat32Array()
 var _wx_cache_wind_z   : PackedFloat32Array = PackedFloat32Array()
 
+## Last cursor position over the chart (for the hover-inspect tooltip).
+## Tracked in _input so we don't depend on get_local_mouse_position() during _draw.
+var _hover_pos        : Vector2 = Vector2(-1.0, -1.0)
+var _hover_inside     : bool    = false
+
 
 func _draw_weather_zones() -> void:
 	if not WorldWeather.is_initialized():
@@ -652,7 +663,10 @@ func _draw_weather_zones() -> void:
 	_draw_weather_pressure_field(g)
 	_draw_weather_wind_field(g)
 	_draw_weather_extrema(g)
+	_draw_weather_legend()
 	_draw_weather_season_banner(time_h)
+	if _hover_inside:
+		_draw_weather_hover(time_h, g)
 
 
 ## Single pass over the grid that fills the pressure / wind caches. Reused
@@ -866,6 +880,113 @@ func _pressure_color(hpa: float) -> Color:
 	var g := lerpf(0.18, 0.34, smoothstep(0.0, 1.0, t))
 	var b := lerpf(0.08, 0.78, t)
 	return Color(r, g, b, 0.13)
+
+
+## Small pressure-colour key in the bottom-left so the heatmap is readable.
+## Same gradient _pressure_color produces, with hPa labels at both ends.
+func _draw_weather_legend() -> void:
+	var w := 130.0
+	var h := 9.0
+	var x := _cpx + 10.0
+	var y := _cpy + _cph - 26.0
+	var font := ThemeDB.fallback_font
+	# Title
+	draw_string(font, Vector2(x, y - 4.0),
+				"Pressure (hPa)", HORIZONTAL_ALIGNMENT_LEFT, -1, 10,
+				Color(0.82, 0.86, 0.92, 0.80))
+	# Gradient bar — 18 stops, opaque so the legend reads against the chart.
+	var stops := 18
+	var stop_w := w / float(stops)
+	for i in range(stops):
+		var hpa := lerpf(WX_PRESSURE_LO, WX_PRESSURE_HI, float(i) / float(stops - 1))
+		var col := _pressure_color(hpa)
+		col.a = 0.85
+		draw_rect(Rect2(x + float(i) * stop_w, y + 4.0, stop_w + 0.5, h), col, true)
+	# End labels
+	draw_string(font, Vector2(x - 2.0, y + 4.0 + h + 9.0),
+				"%d  Low" % int(WX_PRESSURE_LO), HORIZONTAL_ALIGNMENT_LEFT, -1, 9,
+				Color(1.0, 0.65, 0.55, 0.88))
+	draw_string(font, Vector2(x + w - 36.0, y + 4.0 + h + 9.0),
+				"High  %d" % int(WX_PRESSURE_HI), HORIZONTAL_ALIGNMENT_LEFT, -1, 9,
+				Color(0.65, 0.82, 1.0, 0.88))
+
+
+## Hover-inspect tooltip — picks the cell under the cursor, samples
+## WeatherField for the full WeatherSample, formats the numbers, and draws
+## a small box near the cursor. Single sample per frame — cheap.
+func _draw_weather_hover(time_h: float, g: Dictionary) -> void:
+	var cell_m : float = g["cell_m"]
+	var cols   : int   = g["cols"]
+	var rows   : int   = g["rows"]
+	# Mouse → world XZ → cell index.
+	var wx : float = _wx_min + (_hover_pos.x - _cpx) / float(g["ppu_x"])
+	var wz : float = _wz_min + (_hover_pos.y - _cpy) / float(g["ppu_z"])
+	var i := int(floorf((wx - float(g["wx0"])) / cell_m))
+	var j := int(floorf((wz - float(g["wz0"])) / cell_m))
+	if i < 0 or j < 0 or i >= cols or j >= rows:
+		return
+	# Sample at the centre of the hovered cell so the readout matches the cell.
+	var cell_wx : float = float(g["wx0"]) + (float(i) + 0.5) * cell_m
+	var cell_wz : float = float(g["wz0"]) + (float(j) + 0.5) * cell_m
+	var s := WeatherField.sample(Vector3(cell_wx, 0.0, cell_wz), time_h)
+
+	# Format readout lines
+	var pressure_label := "Normal"
+	if s.pressure < 1000.0:
+		pressure_label = "Low (stormy)"
+	elif s.pressure > 1020.0:
+		pressure_label = "High (clear)"
+	var wind_kts := s.wind_force * 50.0  ## tuned: wind_force=1.0 ≈ gale (~50 kts)
+	var wind_dir_label := _compass_label_for(s.wind)
+	var precip_pct := int(s.precipitation * 100.0)
+	var cloud_pct  := int(s.cloud_cover * 100.0)
+	var vis_pct    := int(s.visibility * 100.0)
+
+	var lines : Array[String] = [
+		"Position:  %d, %d  m"      % [int(cell_wx), int(cell_wz)],
+		"Pressure:  %.1f hPa  (%s)" % [s.pressure, pressure_label],
+		"Wind:      %s  %.0f kts"   % [wind_dir_label, wind_kts],
+		"Cloud:     %d %%"          % cloud_pct,
+		"Precip:    %d %%"          % precip_pct,
+		"Visibility:%d %%"          % vis_pct,
+		"Temp:      %.1f °C"        % s.temperature,
+	]
+	# Box geometry
+	var font := ThemeDB.fallback_font
+	var line_h := 13
+	var pad := 6.0
+	var w := 0.0
+	for ln in lines:
+		w = maxf(w, font.get_string_size(ln, HORIZONTAL_ALIGNMENT_LEFT, -1, 11).x)
+	w += pad * 2.0
+	var h := float(lines.size()) * float(line_h) + pad * 2.0
+	# Offset from cursor; flip sides if it'd run off the chart.
+	var bx := _hover_pos.x + 14.0
+	var by := _hover_pos.y + 14.0
+	if bx + w > _cpx + _cpw: bx = _hover_pos.x - 14.0 - w
+	if by + h > _cpy + _cph: by = _hover_pos.y - 14.0 - h
+	# Background plate
+	draw_rect(Rect2(bx, by, w, h), Color(0.05, 0.07, 0.11, 0.92), true)
+	draw_rect(Rect2(bx, by, w, h), Color(0.38, 0.50, 0.72, 0.72), false)
+	# Lines
+	for k in range(lines.size()):
+		draw_string(font, Vector2(bx + pad, by + pad + float(k + 1) * float(line_h) - 3.0),
+					lines[k], HORIZONTAL_ALIGNMENT_LEFT, -1, 11,
+					Color(0.92, 0.94, 0.98, 0.96))
+
+
+## XZ wind vector → 8-point compass label ("blowing FROM" convention,
+## matching how navigators speak — "N wind" means blowing from the north).
+func _compass_label_for(wind: Vector3) -> String:
+	if wind.length() < 0.04:
+		return "calm"
+	# Wind FROM direction: opposite of where wind blows TO. Atan in world XZ:
+	# +X = east, +Z = south. "From" angle: atan2(-wx, -wz), normalised to 0–360.
+	var ang := rad_to_deg(atan2(-wind.x, -wind.z))
+	if ang < 0.0: ang += 360.0
+	var dirs := ["N","NE","E","SE","S","SW","W","NW"]
+	var idx := int(round(ang / 45.0)) % 8
+	return dirs[idx]
 
 
 func _draw_dashed_line(a: Vector2, b: Vector2, col: Color, width: float, dash: float) -> void:
