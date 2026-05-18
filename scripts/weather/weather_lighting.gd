@@ -81,9 +81,18 @@ var cloud_coverage: float:
 var rain_amount: float:
 	get: return smoothstep(0.30, 1.0, precipitation)
 
-## Thunder / lightning 0–1: driven by heavy rain, so we can have thunderous weather even in calm seas.
+## Thunder / lightning 0–1: driven by the *combined* storminess of the
+## weather. Heavy rain alone (calm-air thunderstorm) ramps it up, but a
+## strong dry squall (wind without much rain) can also flicker. Tuned for
+## the Phase-2 noise field's distribution of precip/wind — the old threshold
+## was 0.50 precip, which the deterministic field reaches only briefly in
+## the heart of a deep low; now the gate opens earlier and tracks the joint
+## storm signal.
 var thunder_intensity: float:
-	get: return smoothstep(0.50, 0.95, precipitation)
+	get:
+		var rain_drive := smoothstep(0.35, 0.85, precipitation)
+		var wind_drive := smoothstep(0.55, 0.90, wind_force) * 0.45
+		return clampf(rain_drive + wind_drive, 0.0, 1.0)
 
 ## Storm darkness 0–1: sky/ocean grimness driven primarily by heavy rain, allowing storms without huge waves.
 var storm_intensity: float:

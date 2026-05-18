@@ -96,11 +96,14 @@ func _update_lightning(delta: float) -> void:
 
 	var bolt := thunder * lerpf(0.12, 1.0, daylight)
 
-	if bolt < 0.08:
+	# Slightly lower than the old 0.08 floor — pairs with the new wider
+	# thunder formula so distant squalls still get the occasional flicker
+	# instead of being totally silent.
+	if bolt < 0.05:
 		if _lightning_light:      _lightning_light.light_energy = 0.0
 		if _lightning_flash_rect: _lightning_flash_rect.color.a = 0.0
 		_lightning_phase    = 0
-		_lightning_cooldown = randf_range(2.0, 6.0)
+		_lightning_cooldown = randf_range(3.0, 8.0)
 		return
 
 	if _lightning_phase == 0:
@@ -114,7 +117,11 @@ func _update_lightning(delta: float) -> void:
 				)
 			_lightning_phase    = 1
 			_lightning_phase_t  = 0.0
-			_lightning_cooldown = randf_range(1.5, 10.0) / maxf(bolt, 0.05)
+			# Cooldown is inversely proportional to bolt strength, with a
+			# 3 s floor so peak storms flicker like a real thunderstorm
+			# instead of strobing. Light storms get a long quiet between
+			# strikes; heavy storms still feel active.
+			_lightning_cooldown = maxf(3.0, randf_range(4.0, 14.0) / maxf(bolt, 0.05))
 		return
 
 	_lightning_phase_t += delta
