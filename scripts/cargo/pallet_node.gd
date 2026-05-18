@@ -17,6 +17,13 @@ var _mesh_root: Node3D
 var _label: Label3D
 var _sockets: Array[PalletAttachPoint] = []
 
+## Pickup-ready indicator: a thin pulsing gold disc that wraps the pallet.
+## Hidden by default; the crane toggles it when this is the highlighted pallet.
+var _halo: MeshInstance3D
+var _halo_mat: StandardMaterial3D
+var _highlighted: bool = false
+var _halo_phase: float = 0.0
+
 
 func _ready() -> void:
 	add_to_group(GROUP)
@@ -77,6 +84,50 @@ func _build() -> void:
 		_label.position = Vector3(0.0, 1.35, 0.0)
 
 	_build_attach_sockets()
+	_build_halo()
+
+
+func set_highlighted(on: bool) -> void:
+	_highlighted = on
+	if _halo != null:
+		_halo.visible = on
+
+
+func _build_halo() -> void:
+	if _halo != null and is_instance_valid(_halo):
+		_halo.queue_free()
+	_halo = MeshInstance3D.new()
+	_halo.name = "PickupHalo"
+	# Thin disc sized slightly bigger than the pallet footprint.
+	var torus := TorusMesh.new()
+	torus.inner_radius = maxf(maxf(cell_w, cell_d) * 0.50, 0.5)
+	torus.outer_radius = torus.inner_radius + 0.18
+	torus.rings = 32
+	torus.ring_segments = 8
+	_halo.mesh = torus
+	_halo.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	_halo.position = Vector3(0.0, 0.04, 0.0)
+	_halo_mat = StandardMaterial3D.new()
+	_halo_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	_halo_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	_halo_mat.no_depth_test = true
+	_halo_mat.albedo_color = Color(1.0, 0.84, 0.18, 0.6)
+	_halo_mat.emission_enabled = true
+	_halo_mat.emission = Color(1.0, 0.84, 0.18)
+	_halo_mat.emission_energy_multiplier = 1.6
+	_halo.material_override = _halo_mat
+	_halo.visible = _highlighted
+	add_child(_halo)
+
+
+func _process(delta: float) -> void:
+	if not _highlighted or _halo == null or _halo_mat == null:
+		return
+	_halo_phase = fmod(_halo_phase + delta * 3.0, TAU)
+	var pulse := 0.6 + 0.4 * sin(_halo_phase)
+	_halo_mat.emission_energy_multiplier = 1.0 + pulse * 1.5
+	_halo.scale.x = 1.0 + pulse * 0.05
+	_halo.scale.z = 1.0 + pulse * 0.05
 
 
 func _destination_display() -> String:

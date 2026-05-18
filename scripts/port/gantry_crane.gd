@@ -843,9 +843,8 @@ func _clear_highlight() -> void:
 
 
 func _set_pallet_highlight(pallet_node: Node3D, on: bool) -> void:
-	for socket in _sockets_of(pallet_node):
-		if socket.has_method("set_highlighted"):
-			socket.set_highlighted(on)
+	if pallet_node != null and pallet_node.has_method("set_highlighted"):
+		pallet_node.set_highlighted(on)
 
 
 func _sockets_of(pallet_node: Node3D) -> Array:
@@ -882,6 +881,9 @@ func _engage_chains(pallet_node: Node3D) -> void:
 	# visually snap to world or anywhere else.
 	_carry_rotated = false
 	_carry_baseline_basis = pallet_node.global_basis.orthonormalized()
+	# Clear pickup halo — we're now carrying it.
+	if pallet_node.has_method("set_highlighted"):
+		pallet_node.set_highlighted(false)
 
 	# If this pallet is currently a child of a CargoDeckComponent's
 	# PalletVisuals, reparent it to the scene root first. Otherwise the
@@ -1010,7 +1012,6 @@ func _enter_crane() -> void:
 	_prev_mouse_mode = Input.mouse_mode
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 	_seated_count += 1
-	_broadcast_pickup_visibility(true)
 	if _prompt != null:
 		_prompt.visible = false
 	if _hud != null:
@@ -1030,8 +1031,6 @@ func _exit_crane() -> void:
 		_camera.set_enabled(false)
 	Input.mouse_mode = _prev_mouse_mode
 	_seated_count = maxi(_seated_count - 1, 0)
-	if _seated_count == 0:
-		_broadcast_pickup_visibility(false)
 	if _player != null:
 		var pcam := _player.get_node_or_null("Camera3D") as Camera3D
 		if pcam != null:
@@ -1066,18 +1065,10 @@ func _update_hud() -> void:
 	elif _highlighted_pallet != null:
 		hint = "[E] engage chains"
 	else:
-		hint = "Move hook close to a pallet (yellow corners light up)"
+		hint = "Move hook close to a pallet (gold halo means ready)"
 	_hud.text = "Gantry %+5.1f m   Trolley %+5.1f m   Hook drop %4.1f m\n%s\n[WASD] pan  [LMB/RMB] hoist up/down  [Q] rotate  [F] engage/release  [MMB] orbit  [scroll] zoom  [Esc] exit" % [
 		_gantry_x_offset, _trolley_z, _hoist_drop, hint,
 	]
-
-
-func _broadcast_pickup_visibility(on: bool) -> void:
-	if get_tree() == null:
-		return
-	for node in get_tree().get_nodes_in_group(PalletAttachPoint.GROUP):
-		if node.has_method("set_visible_to_operator"):
-			node.call("set_visible_to_operator", on)
 
 
 # ── Input registration ────────────────────────────────────────────────────────
