@@ -1,6 +1,6 @@
 [gd_scene load_steps=10 format=3]
 
-[ext_resource type="Script" path="res://scripts/systems/model_assembler.gd" id="1"]
+[ext_resource type="Script" path="res://scripts/core/model_assembler.gd" id="1"]
 
 [node name="HullLineup" type="Node3D"]
 

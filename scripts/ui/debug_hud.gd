@@ -3,7 +3,7 @@ extends Node
 ## Autoload — owns the F3 debug overlay. F4 weather presets + E midday/calm while panel is open.
 ## Layer 100: always above every other UI element.
 
-const _WEATHER_PANEL := preload("res://scripts/ui/weather_debug_presets.gd")
+const _WEATHER_PANEL := preload("res://scripts/weather/weather_debug_presets.gd")
 
 var _layer:   CanvasLayer
 var _overlay: DebugDraw

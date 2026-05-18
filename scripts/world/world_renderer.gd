@@ -13,7 +13,7 @@ const SCREEN_SHADER  := preload("res://resources/shaders/screen_effects.gdshader
 ## Base midday water dye — kept darker so the ocean reads as depth, not a bright lagoon.
 const C_OCEAN      := Color(0.015, 0.045, 0.075)
 
-const FFT_WATER_SYSTEM_SCRIPT := preload("res://scripts/systems/fft_water_system.gd")
+const FFT_WATER_SYSTEM_SCRIPT := preload("res://scripts/ocean/fft_water_system.gd")
 
 var _ocean_shader_material: ShaderMaterial
 var _ocean_horizon_material: ShaderMaterial

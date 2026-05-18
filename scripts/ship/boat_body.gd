@@ -180,7 +180,7 @@ func _ready() -> void:
 
 	if not Engine.is_editor_hint():
 		call_deferred("_ensure_walk_deck")
-		var audio: Node = load("res://scripts/systems/audio/boat_audio_system.gd").new()
+		var audio: Node = load("res://scripts/ship/boat_audio_system.gd").new()
 		audio.name = "BoatAudio"
 		add_child(audio)
 
@@ -244,7 +244,7 @@ func _ensure_transformer() -> void:
 	_clear_model_assembler()
 	_transformer = get_node_or_null("MeshTransformer")
 	if _transformer == null:
-		var transformer_script := load("res://scripts/systems/mesh_transformer.gd")
+		var transformer_script := load("res://scripts/core/mesh_transformer.gd")
 		_transformer = Node3D.new()
 		_transformer.set_script(transformer_script)
 		_transformer.name = "MeshTransformer"

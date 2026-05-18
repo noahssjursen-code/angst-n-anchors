@@ -17,14 +17,14 @@ config/icon="res://icon.svg"
 
 [autoload]
 
-WorldWeather="*res://scripts/autoloads/world_weather.gd"
-WeatherLighting="*res://scripts/autoloads/weather_lighting.gd"
-WorldClock="*res://scripts/autoloads/world_clock.gd"
-ContractRegistry="*res://scripts/autoloads/contract_registry.gd"
-PlayerSession="*res://scripts/autoloads/player_session.gd"
-GameMenu="*res://scripts/autoloads/game_menu.gd"
+WorldWeather="*res://scripts/weather/world_weather.gd"
+WeatherLighting="*res://scripts/weather/weather_lighting.gd"
+WorldClock="*res://scripts/time/world_clock.gd"
+ContractRegistry="*res://scripts/cargo/contract_registry.gd"
+PlayerSession="*res://scripts/player/player_session.gd"
+GameMenu="*res://scripts/ui/game_menu.gd"
 GameState="*res://scripts/state/game_state.gd"
-DebugHud="*res://scripts/autoloads/debug_hud.gd"
+DebugHud="*res://scripts/ui/debug_hud.gd"
 
 [input]
 

@@ -4,9 +4,9 @@ extends Node3D
 ## Runtime-only atmospheric layer: rain particles, lightning, weather audio, and debug HUD.
 ## Reads weather state from the WeatherLighting autoload. No world or port knowledge.
 
-const RAIN_FIELD_SCRIPT    := preload("res://scripts/systems/weather/rain_field.gd")
-const WEATHER_HUD_SCRIPT   := preload("res://scripts/systems/weather/weather_hud.gd")
-const WEATHER_AUDIO_SCRIPT := preload("res://scripts/systems/audio/weather_audio_system.gd")
+const RAIN_FIELD_SCRIPT    := preload("res://scripts/weather/rain_field.gd")
+const WEATHER_HUD_SCRIPT   := preload("res://scripts/weather/weather_hud.gd")
+const WEATHER_AUDIO_SCRIPT := preload("res://scripts/weather/weather_audio_system.gd")
 
 var _lightning_light:      DirectionalLight3D
 var _lightning_flash_rect: ColorRect

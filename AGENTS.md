@@ -1,193 +1,203 @@
 # AGENTS.md — Angst 'n Anchors
 
 Guidance for AI agents working in this codebase. Read this before writing any code.
+Full design: [`Angst 'n Anchors.md`](Angst%20'n%20Anchors.md)
+Full architecture: [`ARCHITECTURE.md`](ARCHITECTURE.md)
 
 ---
 
 ## What This Game Is
 
-A maritime trading game built in Godot 4.6 (GDScript, Jolt, Forward Plus). The player starts small and competes in a world that's already running. Ports export and import goods. You move cargo. Contracts are binding. Rival companies exist before you do.
-
-Full design: [`Angst 'n Anchors.md`](Angst%20'n%20Anchors.md)
+A maritime trading game built in Godot 4.6 (GDScript, Jolt, Forward Plus). The player drives a boat,
+picks up cargo at one port, and delivers it to another. Ships are assembled at runtime from modular
+JSON templates so players can build custom vessels without touching the scene editor. Long-term goal: MMO.
 
 ---
 
-## Folder Structure
+## Folder Structure — One Axis: By System
+
+Every system owns everything it does — autoload, state class, components, data, UI bits. Nothing scattered across node-type folders.
 
 ```
-scenes/
-  islands/          # Future: one subfolder per island composition (see `world.tscn` + `PortPlot` for gameplay)
-  shared/           # Reusable packed scenes (player root, NPC base, interactable wrappers, dialogue UI)
-  ui/               # HUD, menus, overlay panels
-
 scripts/
-  autoloads/        # Singleton services — registered in project settings
-  systems/          # Shared game systems (interaction, dialogue, contracts, economy)
-  entities/         # Per-entity scripts (Port, Ship, Captain, Cargo, etc.)
-  world/            # World generation: MeshBuilder, terrain, ocean, docks
-  ui/               # UI logic scripts
-  utils/            # Pure utility functions (math, formatting, random helpers)
+  core/         # Shared infrastructure — no game knowledge (MeshTransformer, ModelAssembler, MeshBuilder, palette, interactable base)
+  player/       # CharacterBody3D controller, PlayerSession autoload, player data
+  ship/         # BoatBody, controller, camera, propulsion, rudder, thruster, buoyancy, hydrodynamics, lights, audio
+  ocean/        # FFT water simulation (FftWaterSystem), WaveSurface query
+  weather/      # WorldWeather + WeatherLighting autoloads, WeatherState, WeatherZone, rain, audio, HUD, debug presets
+  time/         # WorldClock autoload
+  world/        # World generation, seeding, ProximityLoader, WorldRenderer, AtmosphericEffects
+  port/         # PortPlot, PortDock, PortFacilities, FuelStation, LighthouseBuilding, FogHornBuilding
+  npc/          # NpcBase, NpcInteractable, HarbourMasterNpc, ShipwrightNpc, ContractNpc, DeliveryNpc
+  cargo/        # Contract, CargoItem, CargoPickup, DeliveryZone, Warehouse, ContractRegistry autoload — and later cranes
+  ui/           # HUDs, menus, overlays, GameMenu + DebugHud autoloads
+  state/        # GameState autoload (cross-system read model), sub-states: PlayerState, ShipState, ContractState, WorldState
 
-resources/
-  data/             # Port definitions, cargo types, contract templates (.tres or .json)
-  shaders/          # .gdshader files
-  themes/           # UI Theme resources
+resources/data/
+  ships/        # Ship templates (fuel_tanker.json) → consumed by ShipBuilder
+  models/
+    hulls/      # Hull model JSONs with "slots" dict (attachment points)
+    ships/      # Ship model JSONs (legacy wrappers, being phased out)
+    superstructures/  # Bridge scenes referenced by hull slots
+    buildings/  # Fog horn, lighthouse
+  meshes/       # Raw {vertices, indices} JSON by category (hulls/, docks/, buildings/, props/, …)
+  lights/       # Nav-light JSON configs
+```
+
+---
+
+## Autoloads (Singletons)
+
+Each autoload lives in its system folder and is registered in `project.godot`.
+
+| Autoload | System | Role |
+|---|---|---|
+| `WorldWeather` | `weather/` | Wind, rain, fog state; weather zones |
+| `WeatherLighting` | `weather/` | Sun angle, sky colour, fog colour |
+| `WorldClock` | `time/` | Game time |
+| `ContractRegistry` | `cargo/` | Port registry, contracts, commodities |
+| `PlayerSession` | `player/` | Persistent player data (marks, name) |
+| `GameMenu` | `ui/` | Pause / menu system |
+| `GameState` | `state/` | Read model: player/ship/contract/world sub-states |
+| `DebugHud` | `ui/` | F3 debug overlay |
+
+The autoloads listed above are the **actual** registered singletons. Do not reference `Economy`, `ContractBoard`, `FleetManager`, or `World` — those don't exist yet.
+
+---
+
+## Ship Building System
+
+Ships are built at runtime by `ShipBuilder` from a JSON template. There is no hand-placed boat scene for new ships.
+
+### Pipeline
+
+```gdscript
+var boat := ShipBuilder.build("res://resources/data/ships/fuel_tanker.json")
+get_tree().current_scene.add_child(boat)
+boat.place_at_waterline(water_y)
+```
+
+### Three layers of JSON
+
+1. **Hull JSON** — `resources/data/models/hulls/<name>.json`. Geometry parts + a `"slots"` dict of named attachment points.
+2. **Ship template JSON** — `resources/data/ships/<name>.json`. References a hull, sets scale, superstructure key, physics params, buoyancy, cargo decks. Consumed by `ShipBuilder.build()`.
+3. **Ship model JSON** — `resources/data/models/ships/<name>.json`. Legacy wrapper, being phased out. Use ship templates instead.
+
+### Orientation convention — do not get this wrong
+
+**Bow = +Z, Stern = −Z, Port = −X, Starboard = +X.**
+
+Hull parts always use `"rotation_degrees": [0, -90, 0]` to bake authored vertex orientation into world space. Do not add extra rotation in ship model JSONs, ship template JSONs, or scene files.
+
+### Slots
+
+| Slot | Purpose |
+|---|---|
+| `bridge` | Superstructure origin |
+| `propulsion` | Propeller attachment, below waterline |
+| `bow_thruster` | Bow tunnel thruster |
+| `mooring_port_fwd` / `mooring_stbd_fwd` / `mooring_port_aft` / `mooring_stbd_aft` | Four mooring points |
+| `cargo_main` / `cargo_aft` | Cargo deck origins |
+| `nav_light_bow` | Bow nav light |
+
+---
+
+## Visual Rules — No Imported Assets
+
+**No `.gltf` / `.glb` / `.fbx` / `.obj`. No imported texture files for in-world objects.**
+
+Everything comes from:
+1. **Godot primitives** (`BoxMesh`, `CylinderMesh`, etc.) composed in GDScript.
+2. **JSON meshes** under `resources/data/meshes/`, loaded by `MeshTransformer`.
+
+Materials are always `StandardMaterial3D` built at runtime. Shaders live in `resources/shaders/`.
+
+### MeshTransformer (single part)
+
+```gdscript
+var mt := preload("res://scripts/core/mesh_transformer.gd").new()
+add_child(mt)
+mt.mesh_data_path = "res://resources/data/meshes/hulls/your_mesh.json"
+mt.absolute_scale  = 1.0
+mt.mesh_color      = Color(0.18, 0.20, 0.22)
+```
+
+### ModelAssembler (multiple parts)
+
+```gdscript
+var ma := preload("res://scripts/core/model_assembler.gd").new()
+add_child(ma)
+ma.model_data_path = "res://resources/data/models/buildings/lighthouse.json"
+```
+
+`ModelAssembler` is generic — no ship, dock, or NPC terms in the mesh layer.
+
+### JSON mesh format
+
+```json
+{ "vertices": [x, y, z, ...], "indices": [i, i, i, ...] }
+```
+
+Flat arrays, no normals, no UVs. `SurfaceTool` generates normals at load time. Only authored by the in-house mesh tool — do not hand-edit vertex data.
+
+### Multi-part model format
+
+```json
+{
+  "parts": [
+    {
+      "name": "body", "mesh": "hull_body.json", "role": "physics_body",
+      "position": [0, 0, 0], "rotation_degrees": [0, -90, 0], "scale": 1.0,
+      "color": [0.15, 0.15, 0.18], "roughness": 0.9, "metallic": 0.0, "collision": "convex"
+    }
+  ]
+}
 ```
 
 ---
 
 ## Core Patterns
 
-### 1. Shared Services First
+### State model
 
-Before writing custom logic for a specific scene, check if a system already handles it. If the mechanic will appear more than once — interactions, dialogue, prompts, objectives — build it as a shared system first.
-
-**Autoloads** are the global services. They do not depend on scene structure.
-
-Current intended autoloads (register in project settings as singletons):
-- `GameState` — time, player money, reputation, flags
-- `Economy` — port prices, supply/demand tracking
-- `ContractBoard` — active contracts, posting, deadlines, consequences
-- `FleetManager` — ships, captains, crew, routes
-- `World` — map data, port registry, island registry
-
-A scene that needs port prices asks `Economy`, not its own parent node.
-
-### 2. Jigsaw Components — Plug and Play
-
-Scenes should be composable. A `Port` scene doesn't hardcode its dock NPC — it has an `Interactable` child that any NPC or board can slot into. An `Interactable` doesn't know what happens when triggered — it signals outward and lets its parent or a system handle it.
-
-Aim for: **add the component, wire one signal, it works.**
-
-Avoid: a node that reaches up to its grandparent, or hardcodes the name of a sibling.
+UI subscribes to `GameState`. Systems write state. No UI polls the scene tree.
 
 ```gdscript
-# BAD — brittle, scene-specific
-get_parent().get_parent().get_node("HUD").show_prompt(text)
+# BAD — polling a node
+var speed = $Ship/BoatBody.velocity.length()
 
-# GOOD — signal or autoload
-InteractionSystem.show_prompt(text)
+# GOOD — read model
+var speed = GameState.ship.speed_knots
 ```
 
-### 3. Signals Over Direct Calls (for decoupled nodes)
+### Interactable pattern
 
-Nodes that don't own each other communicate via signals or autoloads. Direct method calls are fine within the same logical unit (a ship calling its own engine). Across units, signal or use a service.
+All "press E to do thing" interactions go through a shared base. Do not hand-roll per-object interaction prompts.
 
-### 4. Generic Before Specific
+### Signals over direct calls
 
-Before building the dock NPC, build `DialogueRunner`. Before building the contract board UI, build the generic scrollable list. The first implementation of any repeating pattern must be the reusable one — not a one-off you refactor later.
-
-### 5. Data-Driven Where Possible
-
-Port definitions, cargo types, and contract templates live in `resources/data/` as `.tres` Resource files or `.json`. Scripts read from these; they do not hardcode game data.
+Nodes communicate across system boundaries via signals or autoloads, not node paths.
 
 ```gdscript
 # BAD
-var exports = ["Fish", "Timber"]  # hardcoded in script
+get_parent().get_parent().get_node("HUD").show_prompt(text)
 
 # GOOD
-var port_data: PortData = load("res://resources/data/ports/port_verde.tres")
-var exports = port_data.exports
+signal interaction_triggered(context: Dictionary)
 ```
 
----
+### Data-driven
 
-## Visual Rules — Primitives + In-House JSON Meshes
-
-**No imported DCC assets. No `.gltf` / `.glb` / `.fbx` / `.obj`. No texture files for in-world objects.**
-
-Every ship, dock, building, crate, buoy, and terrain piece comes from one of two sources:
-
-1. **Godot primitives** composed in GDScript via `MeshBuilder` (`scripts/world/mesh_builder.gd`).
-2. **In-house JSON meshes** under `resources/data/meshes/` (grouped by category — see `resources/data/README.md`), produced by our own low-poly mesh AI tool, loaded at runtime by `MeshTransformer` (`scripts/systems/mesh_transformer.gd`).
-
-Both are first-class. Pick whichever fits the shape — primitives for boxy/symmetric objects, JSON meshes for hulls and anything organic.
-
-Materials are always `StandardMaterial3D` constructed at runtime with colour, roughness, and metallic values. Shaders live in `resources/shaders/` and are applied to materials at runtime. Textures come later — geometry first, readable, correct.
-
-### Primitive pattern
-
-```gdscript
-var mesh := BoxMesh.new()
-mesh.size = Vector3(2.0, 0.5, 4.0)
-var mat := StandardMaterial3D.new()
-mat.albedo_color = Color(0.3, 0.25, 0.2)
-mat.roughness = 0.9
-mat.metallic = 0.0
-mesh_instance.mesh = mesh
-mesh_instance.material_override = mat
-```
-
-### JSON mesh pattern
-
-JSON shape:
-
-```json
-{ "vertices": [x, y, z, ...], "indices": [i, i, i, ...] }
-```
-
-Flat arrays of floats and ints. No normals, no UVs — `SurfaceTool` generates normals; colour is applied at load time. Authored exclusively by the in-house mesh AI; do not hand-edit.
-
-Always load through `MeshTransformer`. It centres bounds, applies one uniform
-`absolute_scale`, applies the material, and builds a `ConvexPolygonShape3D`
-parented to the configured collision parent. Concave shapes are silently disabled
-on dynamic bodies in Jolt — keep meshes convex-friendly or split them into convex pieces.
-
-```gdscript
-var transformer := preload("res://scripts/systems/mesh_transformer.gd").new()
-add_child(transformer)
-transformer.mesh_data_path = "res://resources/data/meshes/ships/your_mesh.json"
-transformer.absolute_scale = 1.0
-transformer.mesh_color = Color(0.18, 0.20, 0.22)
-```
-
-### Multi-part model assemblies
-
-Use `ModelAssembler` (`scripts/systems/model_assembler.gd`) for anything made of multiple JSON mesh parts.
-This layer is generic and must not hardcode ship, dock, building, or character concepts.
-
-Assembly JSON files live in `resources/data/models/` (e.g. `ships/`, `buildings/`) and contain generic `parts`:
-
-```json
-{
-  "name": "model_name",
-  "parts": [
-    {
-      "name": "main_body",
-      "mesh": "part_mesh.json",
-      "role": "physics_body",
-      "position": [0, 0, 0],
-      "rotation_degrees": [0, 0, 0],
-      "scale": 1.0,
-      "color": [0.005, 0.005, 0.005],
-      "roughness": 0.96,
-      "metallic": 0.0,
-      "collision": "convex"
-    }
-  ]
-}
-```
-
-`role` is a free-form generic tag. Higher-level systems may interpret roles like
-`physics_body`, `visual`, or `interactable`; the mesh assembly layer itself should
-only load, transform, materialize, and optionally create collision for parts.
-
----
-
-## Build Discipline
-
-- **Small steps.** Build the smallest thing that proves the system works, then expand.
-- **No premature optimisation.** Readable code first. Profile before you optimise.
-- **Validate before breadth.** One NPC using the shared dialogue runner correctly is worth more than five NPCs with custom one-offs.
-- **Ship first on the runnable world (`world.tscn`, home port).** Prove shared systems before spreading them wide.
+Port definitions, ship templates, commodities live in `resources/data/`. Scripts read from data.
 
 ---
 
 ## Godot Specifics
 
-- Godot **4.6**, GDScript only (no C#)
+- Godot **4.6**, GDScript only, no C#
 - Physics: **Jolt**
-- Renderer: **Forward Plus**
-- Scene tree is not the data model — game state lives in autoloads, not node hierarchies
+- Renderer: **Forward Plus**, D3D12 on Windows
+- Use `class_name` for any script used by multiple others — it makes the type available globally without preload
 - Use `@export` for designer-facing values; keep logic in scripts
-- Prefer `Resource` subclasses for structured data over plain `Dictionary`
+- Scene tree is not the data model — game state lives in autoloads, not node hierarchies
+- Concave shapes are silently disabled on dynamic bodies in Jolt — keep meshes convex-friendly
