@@ -266,16 +266,23 @@ def make_barrel() -> None:
 
 
 def make_sack() -> None:
-    """Canvas sack — two stacked hex frustums + tiny tie. 6 sides."""
-    canvas = [0.82, 0.74, 0.58]
-    rope   = [0.35, 0.25, 0.18]
+    """Burlap sack with a clearly cinched neck + knot. 8-sided prisms for a
+    softer, more fabric-like silhouette than 6-sided would give."""
+    burlap = [0.78, 0.65, 0.42]
+    rope   = [0.42, 0.28, 0.16]
     parts = [
-        # Body: base → belly (one frustum) → shoulder narrows up.
-        part("belly",    prism_mesh(0.34, 0.48, 0.35, 0.0,  sides=6), canvas, (0, 0, 0)),
-        part("shoulder", prism_mesh(0.48, 0.20, 0.20, 0.35, sides=6),
-             [c * 0.92 for c in canvas], (0, 0, 0)),
-        # Tiny tie/knob on top.
-        part("tie",      prism_mesh(0.16, 0.10, 0.06, 0.55, sides=6), rope, (0, 0, 0)),
+        # Wide sagging base
+        part("base",     prism_mesh(0.30, 0.44, 0.10, 0.00, sides=8), burlap, (0, 0, 0)),
+        # Widest belly
+        part("belly",    prism_mesh(0.44, 0.44, 0.18, 0.10, sides=8), burlap, (0, 0, 0)),
+        # Shoulder narrows toward the cinch
+        part("shoulder", prism_mesh(0.44, 0.16, 0.18, 0.28, sides=8),
+             [c * 0.93 for c in burlap], (0, 0, 0)),
+        # Very narrow neck — the cinch
+        part("neck",     prism_mesh(0.10, 0.08, 0.04, 0.46, sides=8),
+             [c * 0.85 for c in burlap], (0, 0, 0)),
+        # Knot on top (gathered fabric tied off — wider than the neck)
+        part("knot",     prism_mesh(0.18, 0.12, 0.07, 0.50, sides=8), rope, (0, 0, 0)),
     ]
     dump("provisions_sack.json", {"name": "provisions_sack", "parts": parts})
 
