@@ -25,6 +25,10 @@ var _ocean_mesh:            MeshInstance3D
 var _ocean_mesh_outer:      MeshInstance3D
 var _fft_system:            Node # Use Node instead of FFTWaterSystem to avoid unresolved class error without reload
 
+## Shader's land_disks[] array bound — must match MAX_LAND_DISKS in ocean_waves.gdshader.
+const MAX_LAND_DISKS_SHADER : int = 64
+var _last_land_disk_count   : int = -1
+
 
 func _ready() -> void:
 	if not Engine.is_editor_hint():
@@ -51,6 +55,7 @@ func _process(_delta: float) -> void:
 			_ocean_shader_material.set_shader_parameter("slope_map",        _fft_system.slope_map_rd)
 			_ocean_shader_material.set_shader_parameter("length_scales",    _fft_system.length_scales)
 		WaveSurface.sync_ocean_coupling_to_shader(_ocean_shader_material)
+		_sync_land_shelter()
 	if _ocean_horizon_material:
 		_ocean_horizon_material.set_shader_parameter("wave_time", WaveSurface.get_sim_time())
 	if _sky_shader_material:
@@ -242,7 +247,11 @@ func _apply_weather_lighting() -> void:
 
 	# Optional: Sync FFT parameters based on weather
 	if _fft_system:
-		_fft_system.sync_weather(wind, storm, WaveSurface.short_wave_factor)
+		var wind_dir : Vector3 = weather.get("wind_dir") if weather else Vector3.RIGHT
+		# Spectrum wants a single rotation angle in the XZ plane; positive Z is
+		# the FFT's "zero direction", so atan2(x, z) gives wind-blowing-toward.
+		var wind_angle := atan2(wind_dir.x, wind_dir.z)
+		_fft_system.sync_weather(wind, storm, WaveSurface.short_wave_factor, wind_angle)
 
 
 func _apply_sun(tod: float, daylight: float, cloud: float, storm: float) -> void:
@@ -327,6 +336,24 @@ func _apply_sky_shader(daylight: float, cloud: float, storm: float) -> void:
 	_sky_shader_material.set_shader_parameter("storm_intensity",   storm)
 	_sky_shader_material.set_shader_parameter("sun_color",         Vector3(sun_col.r,  sun_col.g,  sun_col.b))
 	_sky_shader_material.set_shader_parameter("star_visibility",   clampf(star_vis, 0.0, 1.0))
+
+
+## Pushes LandField's island disks into the ocean shader so per-vertex wave
+## amplitude fades to zero inside / very near land. Lazy: re-binds only when
+## the island count actually changes (world rebuild, hot-reload), so the
+## per-frame cost is one int compare in steady state. Falls back to "open
+## ocean everywhere" if LandField hasn't been initialised yet.
+func _sync_land_shelter() -> void:
+	if _ocean_shader_material == null:
+		return
+	var n := LandField.get_island_count()
+	if n == _last_land_disk_count:
+		return
+	_last_land_disk_count = n
+	var disks := LandField.get_disks_packed(MAX_LAND_DISKS_SHADER)
+	_ocean_shader_material.set_shader_parameter("land_disks",       disks)
+	_ocean_shader_material.set_shader_parameter("land_disk_count",  disks.size())
+	_ocean_shader_material.set_shader_parameter("shelter_falloff_m", LandField.SHELTER_FALLOFF_M)
 
 
 func _apply_ocean_shader(daylight: float, cloud: float, rain: float, wind: float, storm: float, fog_t: float) -> void:

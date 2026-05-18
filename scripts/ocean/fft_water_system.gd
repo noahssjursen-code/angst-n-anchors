@@ -230,35 +230,43 @@ func _init_spectrums() -> void:
 		
 	rd.buffer_update(spectrums_buffer, 0, bytes.size(), bytes)
 
-func sync_weather(wind: float, storm: float, short_wave: float) -> void:
+var _last_wind_angle := -10.0  # sentinel: outside the [-PI, PI] band
+
+func sync_weather(wind: float, storm: float, short_wave: float, wind_angle: float = 0.0) -> void:
 	if not rd or not spectrums_buffer.is_valid(): return
-	
-	if is_equal_approx(wind, _last_wind) and is_equal_approx(storm, _last_storm) and is_equal_approx(short_wave, _last_short_wave):
+
+	# Re-pack only on a meaningful change — wind direction shifts slowly, so
+	# we tolerate ~3° before paying the buffer-update + init-pack cost.
+	if (is_equal_approx(wind, _last_wind)
+			and is_equal_approx(storm, _last_storm)
+			and is_equal_approx(short_wave, _last_short_wave)
+			and absf(wind_angle - _last_wind_angle) < 0.05):
 		return
-		
+
 	_last_wind = wind
 	_last_storm = storm
 	_last_short_wave = short_wave
+	_last_wind_angle = wind_angle
 
 	var w_speed = lerpf(4.0, 25.0, wind)
 	var peak_omega = 9.81 / max(w_speed, 0.1)
 	var sw_fade = lerpf(0.04, 0.001, short_wave)
 	var scale = 1.0 # Base scale, wave_intensity controls dynamic amplitude directly in shader
 	var swell = lerpf(1.0, 0.2, storm)
-	
+
 	var bytes = PackedByteArray()
 	bytes.resize(8 * 8 * 4)
 	for i in range(8):
 		var offset = i * 32
 		bytes.encode_float(offset + 0, scale) # scale
-		bytes.encode_float(offset + 4, 0.0) # angle
+		bytes.encode_float(offset + 4, wind_angle) # angle (radians, world XZ)
 		bytes.encode_float(offset + 8, 1.0) # spread_blend
 		bytes.encode_float(offset + 12, swell) # swell
 		bytes.encode_float(offset + 16, 0.0081) # alpha
 		bytes.encode_float(offset + 20, peak_omega) # peak_omega
 		bytes.encode_float(offset + 24, 3.3) # gamma
 		bytes.encode_float(offset + 28, sw_fade) # short_waves_fade
-		
+
 	rd.buffer_update(spectrums_buffer, 0, bytes.size(), bytes)
 	_run_init_pack()
 
