@@ -42,11 +42,10 @@ static var _seated_count: int = 0
 @export var trolley_max_z: float = 20.0
 
 ## Hoist limits — how far the hook hangs below the trolley.
-## Trolley sits at world Y ≈ 16.6 (crane 0 + gantry-on-rails 0.12 + model
-## 16.5); a drop of 16.4 m brings the hook to world Y ≈ 0.2, just above the
-## apron pad / ship deck surface.
+## Trolley sits at world Y ≈ 17.22 (quay 0.6 + rails 0.12 + model 16.5);
+## a drop of 17 m bottoms the hook just above the deck surface.
 @export var hoist_min_drop: float = 1.0
-@export var hoist_max_drop: float = 16.4
+@export var hoist_max_drop: float = 17.0
 
 ## How close (XZ) the hook must be to a pallet's center to engage chains.
 ## Tight so the player must position the trolley right over the pallet.

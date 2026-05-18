@@ -103,10 +103,13 @@ func _rebuild() -> void:
 
 func _build_quay() -> void:
 	var lip_half := QUAY_LIP_DEPTH * 0.5
-	# Lip centres on the band [0, QUAY_LIP_DEPTH]; slab starts after tiny gap → no overlapping coplanar faces.
-	var slab_z_half := (QUAY_DEPTH - QUAY_LIP_DEPTH - QUAY_LIP_SLAB_GAP) * 0.5
-	var slab_centre_z := QUAY_LIP_DEPTH + QUAY_LIP_SLAB_GAP + slab_z_half
-	var slab_size_z := slab_z_half * 2.0
+	# Slab now spans from just behind the lip all the way to the back of the
+	# apron — one continuous elevated dock the cranes and apron sit on.
+	var slab_back := QUAY_DEPTH + CRANE_QUAY_GAP + CRANE_D + APRON_GAP + APRON_DEPTH
+	var slab_front := QUAY_LIP_DEPTH + QUAY_LIP_SLAB_GAP
+	var slab_size_z := slab_back - slab_front
+	var slab_z_half := slab_size_z * 0.5
+	var slab_centre_z := slab_front + slab_z_half
 
 	var size := Vector3(dock_length, QUAY_HEIGHT, slab_size_z)
 	var body := StaticBody3D.new()
@@ -196,7 +199,8 @@ func _build_berth_slot(index: int, cx: float, slot_w: float, ship_beam: float, c
 	var apron_deck := CargoDeckComponent.new()
 	apron_deck.name                       = "ApronDeck%d" % index
 	# Sits just above the concrete pad (which is 0.12 m tall starting at Y=0).
-	apron_deck.position                   = Vector3(cx, 0.13, apron_z)
+	# Apron deck sits just above the quay surface.
+	apron_deck.position                   = Vector3(cx, QUAY_HEIGHT + 0.001, apron_z)
 	apron_deck.deck_width_m               = apron_w_reach
 	apron_deck.deck_length_m              = APRON_DEPTH
 	apron_deck.cell_size_x_m              = 1.5
@@ -248,16 +252,8 @@ func _build_berth_slot(index: int, cx: float, slot_w: float, ship_beam: float, c
 		CargoBerthType.Type.CONTAINER: _crane_container(index, cx, slot_w, crane_z)
 		_:                             _crane_general(index, cx, slot_w, crane_z)
 
-	# One continuous asphalt slab from the quay edge to the back of the apron,
-	# at the full berth-slot width. Cranes, rails and apron all sit on it —
-	# no grass slivers between zones, no stacked sub-pads.
-	var yard_w  := maxf(slot_w - 0.4, 1.5)
-	var yard_z0 := QUAY_DEPTH                           # front edge (water side)
-	var yard_z1 := apron_z + APRON_DEPTH * 0.5          # back edge (inland)
-	var yard_d  := yard_z1 - yard_z0
-	_box(Vector3(yard_w, 0.12, yard_d),
-		 Vector3(cx, 0.06, yard_z0 + yard_d * 0.5),
-		 C_CARGO_YARD, "YardAsphalt%d" % index)
+	# Quay slab already covers this area (extended in _build_quay) — no
+	# per-berth asphalt strip needed.
 
 
 # ── Crane types ───────────────────────────────────────────────────────────────
@@ -265,10 +261,8 @@ func _build_berth_slot(index: int, cx: float, slot_w: float, ship_beam: float, c
 func _crane_general(index: int, cx: float, slot_w: float, crane_z: float) -> void:
 	var crane                 := GantryCrane.new()
 	crane.name                = "Crane%d" % index
-	# Crane sits inland of the quay slab — on island ground (Y=0), not on the
-	# quay's elevated surface. Rails then end up flush with the apron pad
-	# (also on island ground).
-	crane.position            = Vector3(cx, 0.0, crane_z)
+	# Crane sits on top of the (now-extended) quay slab.
+	crane.position            = Vector3(cx, QUAY_HEIGHT, crane_z)
 	# Rails extend past the leg base on each side; rail must fit inside the
 	# berth slot. APRON_REACH_INSET captures this margin and is reused by the
 	# apron-pad sizing and pallet spawn grid so they all stay aligned.
