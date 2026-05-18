@@ -606,93 +606,157 @@ func _draw_compass_rose(center: Vector2, r: float) -> void:
 
 
 ## Live weather chart: pressure heatmap + wind barbs + L/H markers + season.
-## Replaces the static STORM/FOG/SQUALL circle overlays from the pre-noise
-## era. Driven entirely by `WeatherField.sample()` — no extra state, sampled
-## fresh each frame so the chart actually moves with the weather.
-const WX_GRID_TARGET_PX : float = 22.0    ## one pressure cell every ~22 px
-const WX_ARROW_STRIDE   : int   = 2       ## draw one wind arrow per 2x2 cells
+## Driven by `WeatherField.sample()` — no extra state, sampled fresh each
+## frame but on a coarse, world-anchored grid so the chart is cheap, readable
+## at any zoom, and doesn't slide around as you pan.
+##
+## Grid model:
+##   • cells are sized in WORLD metres, not screen pixels — minimum
+##     `WX_MIN_CELL_M`, large enough that fine zoom doesn't sample the same
+##     noise feature dozens of times
+##   • cells snap to a world-space lattice so wind arrows stay anchored to
+##     the world while you pan, instead of sliding under the cursor
+##   • the visible grid is capped at `WX_MAX_CELLS` in either axis so
+##     extreme zoom-out can't explode the sample count
+##   • each cell averages 4 sub-samples so reported wind / pressure is the
+##     "area average", not a single noisy point
+const WX_MIN_CELL_M     : float = 2500.0  ## smallest cell side in world metres
+const WX_MAX_CELLS_X    : int   = 32
+const WX_MAX_CELLS_Y    : int   = 22
+const WX_SUBSAMPLES     : int   = 2       ## NxN sub-samples averaged per cell
 const WX_PRESSURE_LO    : float = 990.0   ## hPa mapped to deep red
 const WX_PRESSURE_HI    : float = 1030.0  ## hPa mapped to deep blue
+
 
 func _draw_weather_zones() -> void:
 	if not WorldWeather.is_initialized():
 		return
 	var time_h := WeatherField.current_game_time()
-	_draw_weather_pressure_field(time_h)
-	_draw_weather_wind_field(time_h)
-	_draw_weather_extrema(time_h)
+	var g := _weather_grid()
+	_draw_weather_pressure_field(time_h, g)
+	_draw_weather_wind_field(time_h, g)
+	_draw_weather_extrema(time_h, g)
 	_draw_weather_season_banner(time_h)
 
 
-func _draw_weather_pressure_field(time_h: float) -> void:
-	# Sample resolution adapts to zoom so cells stay roughly screen-stable.
-	var cols   := maxi(8, int(_cpw / WX_GRID_TARGET_PX))
-	var rows   := maxi(6, int(_cph / WX_GRID_TARGET_PX))
-	var cell_w := _cpw / float(cols)
-	var cell_h := _cph / float(rows)
-	var dx     := (_wx_max - _wx_min) / float(cols)
-	var dz     := (_wz_max - _wz_min) / float(rows)
-	for j in range(rows):
-		var wz := _wz_min + (float(j) + 0.5) * dz
-		var sy := _cpy + float(j) * cell_h
-		for i in range(cols):
-			var wx := _wx_min + (float(i) + 0.5) * dx
-			var sx := _cpx + float(i) * cell_w
-			var p  := WeatherField.pressure_at(Vector3(wx, 0.0, wz), time_h)
-			var col := _pressure_color(p)
-			draw_rect(Rect2(sx, sy, cell_w + 1.0, cell_h + 1.0), col, true)
+## Build the shared world-anchored grid description used by all three weather
+## passes — single source of truth so pressure cells, wind arrows, and L/H
+## markers all line up exactly.
+##
+## Returns a Dictionary:
+##   cell_m   : float          world metres per cell side
+##   cols/rows: int            number of cells in view (incl. partial)
+##   wx0/wz0  : float          world coord of cell (0,0)'s south-west corner
+##   ppu_x    : float          screen pixels per world metre, X
+##   ppu_z    : float          screen pixels per world metre, Z (north-up flip)
+func _weather_grid() -> Dictionary:
+	var span_x := _wx_max - _wx_min
+	var span_z := _wz_max - _wz_min
+	# Pick cell size: at least WX_MIN_CELL_M, but grow it if the view is so
+	# wide that we'd otherwise exceed WX_MAX_CELLS.
+	var cell_m := maxf(WX_MIN_CELL_M,
+						maxf(span_x / float(WX_MAX_CELLS_X),
+							 span_z / float(WX_MAX_CELLS_Y)))
+	# Snap origin to the world-space lattice. Cells stay anchored when panning.
+	var wx0 := floor(_wx_min / cell_m) * cell_m
+	var wz0 := floor(_wz_min / cell_m) * cell_m
+	var cols := int(ceil((_wx_max - wx0) / cell_m))
+	var rows := int(ceil((_wz_max - wz0) / cell_m))
+	cols = clampi(cols, 1, WX_MAX_CELLS_X + 2)
+	rows = clampi(rows, 1, WX_MAX_CELLS_Y + 2)
+	return {
+		"cell_m": cell_m,
+		"cols":   cols,
+		"rows":   rows,
+		"wx0":    wx0,
+		"wz0":    wz0,
+		"ppu_x":  _cpw / span_x,
+		"ppu_z":  _cph / span_z,
+	}
 
 
-func _draw_weather_wind_field(time_h: float) -> void:
-	var cols   := maxi(8, int(_cpw / WX_GRID_TARGET_PX))
-	var rows   := maxi(6, int(_cph / WX_GRID_TARGET_PX))
-	var cell_w := _cpw / float(cols)
-	var cell_h := _cph / float(rows)
-	var dx     := (_wx_max - _wx_min) / float(cols)
-	var dz     := (_wz_max - _wz_min) / float(rows)
-	var arrow_len := minf(cell_w, cell_h) * 0.9
-	for j in range(0, rows, WX_ARROW_STRIDE):
-		var wz := _wz_min + (float(j) + 0.5) * dz
-		var sy := _cpy + (float(j) + 0.5) * cell_h
-		for i in range(0, cols, WX_ARROW_STRIDE):
-			var wx := _wx_min + (float(i) + 0.5) * dx
-			var sx := _cpx + (float(i) + 0.5) * cell_w
-			var w  := WeatherField.sample_wind(Vector3(wx, 0.0, wz), time_h)
+## World → screen for the weather grid (matches _w2s_f but precomputed).
+func _wx_to_sx(wx: float, g: Dictionary) -> float:
+	return _cpx + (wx - _wx_min) * float(g["ppu_x"])
+
+func _wz_to_sy(wz: float, g: Dictionary) -> float:
+	return _cpy + (wz - _wz_min) * float(g["ppu_z"])
+
+
+## Area-averaged WeatherSample at a cell origin. Sub-sampling smooths out the
+## last bit of noise so two adjacent cells look continuous, not stippled.
+func _cell_avg_sample(time_h: float, wx0: float, wz0: float, cell_m: float) -> Dictionary:
+	var step := cell_m / float(WX_SUBSAMPLES)
+	var p_sum := 0.0
+	var w_sum := Vector3.ZERO
+	for j in range(WX_SUBSAMPLES):
+		var wz := wz0 + (float(j) + 0.5) * step
+		for i in range(WX_SUBSAMPLES):
+			var wx := wx0 + (float(i) + 0.5) * step
+			p_sum += WeatherField.pressure_at(Vector3(wx, 0.0, wz), time_h)
+			w_sum += WeatherField.sample_wind(Vector3(wx, 0.0, wz), time_h)
+	var n := float(WX_SUBSAMPLES * WX_SUBSAMPLES)
+	return {"pressure": p_sum / n, "wind": w_sum / n}
+
+
+func _draw_weather_pressure_field(time_h: float, g: Dictionary) -> void:
+	var cell_m : float = g["cell_m"]
+	var cell_w : float = cell_m * float(g["ppu_x"])
+	var cell_h : float = cell_m * float(g["ppu_z"])
+	for j in range(g["rows"]):
+		var wz0 : float = g["wz0"] + float(j) * cell_m
+		var sy  : float = _wz_to_sy(wz0, g)
+		for i in range(g["cols"]):
+			var wx0 : float = g["wx0"] + float(i) * cell_m
+			var sx  : float = _wx_to_sx(wx0, g)
+			var s := _cell_avg_sample(time_h, wx0, wz0, cell_m)
+			draw_rect(Rect2(sx, sy, cell_w + 1.0, cell_h + 1.0),
+					   _pressure_color(float(s["pressure"])), true)
+
+
+func _draw_weather_wind_field(time_h: float, g: Dictionary) -> void:
+	var cell_m : float = g["cell_m"]
+	var cell_w : float = cell_m * float(g["ppu_x"])
+	var cell_h : float = cell_m * float(g["ppu_z"])
+	var arrow_len := minf(cell_w, cell_h) * 0.78
+	for j in range(g["rows"]):
+		var wz0 : float = g["wz0"] + float(j) * cell_m
+		for i in range(g["cols"]):
+			var wx0 : float = g["wx0"] + float(i) * cell_m
+			var s := _cell_avg_sample(time_h, wx0, wz0, cell_m)
+			var w : Vector3 = s["wind"]
 			var mag := minf(w.length(), 1.0)
 			if mag < 0.05:
 				continue
 			# Screen Y is flipped vs world Z (north-up): negate Z to match.
 			var screen_dir := Vector2(w.x, -w.z).normalized()
-			var tail := Vector2(sx, sy) - screen_dir * arrow_len * 0.5
-			var head := Vector2(sx, sy) + screen_dir * arrow_len * 0.5
+			var cx := _wx_to_sx(wx0 + cell_m * 0.5, g)
+			var cy := _wz_to_sy(wz0 + cell_m * 0.5, g)
+			var tail := Vector2(cx, cy) - screen_dir * arrow_len * 0.5
+			var head := Vector2(cx, cy) + screen_dir * arrow_len * 0.5
 			var col  := Color(0.95, 0.95, 1.00, 0.35 + 0.55 * mag)
-			draw_line(tail, head, col, 1.2, true)
-			# Arrowhead
+			draw_line(tail, head, col, 1.4, true)
 			var perp := Vector2(-screen_dir.y, screen_dir.x)
-			var h1 := head - screen_dir * 3.5 + perp * 2.2
-			var h2 := head - screen_dir * 3.5 - perp * 2.2
-			draw_line(head, h1, col, 1.2, true)
-			draw_line(head, h2, col, 1.2, true)
+			draw_line(head, head - screen_dir * 4.0 + perp * 2.6, col, 1.4, true)
+			draw_line(head, head - screen_dir * 4.0 - perp * 2.6, col, 1.4, true)
 
 
-## Walk the same pressure grid we already sampled and mark local minima as
-## L (storm centres) and local maxima as H (clear-weather highs). Cheap
-## because we only label cells noticeably above / below mean sea level.
-func _draw_weather_extrema(time_h: float) -> void:
-	var cols   := maxi(8, int(_cpw / WX_GRID_TARGET_PX))
-	var rows   := maxi(6, int(_cph / WX_GRID_TARGET_PX))
-	var cell_w := _cpw / float(cols)
-	var cell_h := _cph / float(rows)
-	var dx     := (_wx_max - _wx_min) / float(cols)
-	var dz     := (_wz_max - _wz_min) / float(rows)
-	# Re-sample to a small array we can compare 3x3 neighbours on.
+## Walk the pressure grid and mark local minima as L (storm centres) and
+## local maxima as H. Uses the SAME averaged samples the heatmap drew, so
+## labels always sit on cells that look the colour the label claims.
+func _draw_weather_extrema(time_h: float, g: Dictionary) -> void:
+	var cell_m : float = g["cell_m"]
+	var cols   : int   = g["cols"]
+	var rows   : int   = g["rows"]
+	if cols < 3 or rows < 3:
+		return
 	var grid := PackedFloat32Array()
 	grid.resize(cols * rows)
 	for j in range(rows):
-		var wz := _wz_min + (float(j) + 0.5) * dz
+		var wz0 : float = g["wz0"] + float(j) * cell_m
 		for i in range(cols):
-			var wx := _wx_min + (float(i) + 0.5) * dx
-			grid[j * cols + i] = WeatherField.pressure_at(Vector3(wx, 0.0, wz), time_h)
+			var wx0 : float = g["wx0"] + float(i) * cell_m
+			grid[j * cols + i] = float(_cell_avg_sample(time_h, wx0, wz0, cell_m)["pressure"])
 	var font := ThemeDB.fallback_font
 	for j in range(1, rows - 1):
 		for i in range(1, cols - 1):
@@ -711,14 +775,14 @@ func _draw_weather_extrema(time_h: float) -> void:
 					if nb <= p: min_ok = false
 					if nb >= p: max_ok = false
 			if is_low and min_ok:
-				var sx := _cpx + (float(i) + 0.5) * cell_w
-				var sy := _cpy + (float(j) + 0.5) * cell_h
+				var sx := _wx_to_sx(g["wx0"] + (float(i) + 0.5) * cell_m, g)
+				var sy := _wz_to_sy(g["wz0"] + (float(j) + 0.5) * cell_m, g)
 				draw_string(font, Vector2(sx - 5.0, sy + 5.0),
 							"L", HORIZONTAL_ALIGNMENT_LEFT, -1, 14,
 							Color(1.00, 0.45, 0.35, 0.95))
 			elif is_high and max_ok:
-				var sx2 := _cpx + (float(i) + 0.5) * cell_w
-				var sy2 := _cpy + (float(j) + 0.5) * cell_h
+				var sx2 := _wx_to_sx(g["wx0"] + (float(i) + 0.5) * cell_m, g)
+				var sy2 := _wz_to_sy(g["wz0"] + (float(j) + 0.5) * cell_m, g)
 				draw_string(font, Vector2(sx2 - 5.0, sy2 + 5.0),
 							"H", HORIZONTAL_ALIGNMENT_LEFT, -1, 14,
 							Color(0.55, 0.78, 1.00, 0.95))
