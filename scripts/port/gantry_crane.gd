@@ -135,8 +135,6 @@ var _sfx_crane_board: AudioStream
 var _sfx_crane_exit: AudioStream
 var _sfx_hook_bottom: AudioStream
 var _sfx_hook_top: AudioStream
-var _sfx_beacon_blink: AudioStream
-var _was_beacon_lit: bool = false
 var _was_hoist_at_bottom: bool = false
 var _was_hoist_at_top: bool = false
 var _last_gantry_x_for_audio: float = 0.0
@@ -667,11 +665,6 @@ func _update_beacon(delta: float) -> void:
 	# Sharp pulse — bright for ~0.2 s, then dim, every ~3.9 s.
 	var pulse := pow(maxf(sin(_beacon_phase), 0.0), 12.0)
 	_beacon.light_energy = 0.2 + pulse * 5.0
-	# Click on the rising edge of each pulse.
-	var lit_now := pulse > 0.4
-	if lit_now and not _was_beacon_lit:
-		_play_one_shot(_sfx_beacon_blink, _beacon, -18.0)
-	_was_beacon_lit = lit_now
 
 
 # ── Snap-preview ──────────────────────────────────────────────────────────────
@@ -1144,7 +1137,6 @@ func _build_audio() -> void:
 	_sfx_crane_exit     = _pick_random_sound("crane_exit")
 	_sfx_hook_bottom    = _pick_random_sound("hook_bottom")
 	_sfx_hook_top       = _pick_random_sound("hook_top")
-	_sfx_beacon_blink   = _pick_random_sound("beacon_blink")
 
 	# Motor loops — parented to their relevant moving part so the sound pans
 	# correctly as the gantry rolls, the trolley travels, or the hook descends.
