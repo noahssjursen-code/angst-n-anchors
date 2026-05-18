@@ -16,6 +16,7 @@ extends Node3D
 ##   E           — engage chains (when hook is near a pallet) /
 ##                  release pallet (when carrying) /
 ##                  board / exit (when not carrying)
+##   Q           — rotate carried pallet 90° (swaps footprint X/Z)
 ##   Escape      — force exit (drops pallet in place if carrying)
 
 const MODEL_PATH := "res://resources/data/models/dockyard/gantry_crane.json"
@@ -77,6 +78,7 @@ var _occupied: bool = false
 var _player: CharacterBody3D = null
 var _carried_pallet: Node3D = null      # PalletNode currently lifted
 var _highlighted_pallet: Node3D = null  # PalletNode whose sockets glow
+var _carry_rotated: bool = false        # carried pallet rotated 90° from spawn
 
 var _ui: CanvasLayer
 var _prompt: Label
@@ -488,6 +490,10 @@ func _unhandled_input(event: InputEvent) -> void:
 			else:
 				_exit_crane()
 			get_viewport().set_input_as_handled()
+		elif event.is_action_pressed("crane_rotate_pallet"):
+			if _carried_pallet != null:
+				_toggle_rotation()
+			get_viewport().set_input_as_handled()
 	else:
 		if event.is_action_pressed("interact") and _nearest_boardable_player() != null:
 			_enter_crane()
@@ -833,9 +839,26 @@ func _sockets_of(pallet_node: Node3D) -> Array:
 	return out
 
 
+func _toggle_rotation() -> void:
+	if _carried_pallet == null or not is_instance_valid(_carried_pallet):
+		return
+	var pallet_res: Pallet = _carried_pallet.get("pallet") as Pallet
+	if pallet_res == null:
+		return
+	# Swap X/Z of the footprint — the deck reads pallet.footprint when adding,
+	# the visual rebuild reads it for cell layout, and the snap-ghost / dest
+	# target both read it for sizing — one mutation propagates everywhere.
+	pallet_res.footprint = Vector2i(pallet_res.footprint.y, pallet_res.footprint.x)
+	_carry_rotated = not _carry_rotated
+	# Rotate the visual 90° around its own Y so the on-hook pallet matches.
+	_carried_pallet.rotation.y = PI * 0.5 if _carry_rotated else 0.0
+
+
 func _engage_chains(pallet_node: Node3D) -> void:
 	if _rigging == null or pallet_node == null or not is_instance_valid(pallet_node):
 		return
+	# Each new pickup starts in its natural orientation.
+	_carry_rotated = false
 
 	# If this pallet is currently a child of a CargoDeckComponent's
 	# PalletVisuals, reparent it to the scene root first. Otherwise the
@@ -913,6 +936,7 @@ func _consume_pallet() -> void:
 	if _carried_pallet != null and is_instance_valid(_carried_pallet):
 		_carried_pallet.queue_free()
 	_carried_pallet = null
+	_carry_rotated = false
 
 
 func _drop_in_place() -> void:
@@ -1020,7 +1044,7 @@ func _update_hud() -> void:
 		hint = "[E] engage chains"
 	else:
 		hint = "Move hook close to a pallet (yellow corners light up)"
-	_hud.text = "Gantry %+5.1f m   Trolley %+5.1f m   Hook drop %4.1f m\n%s\n[WASD] pan (camera-relative)  [R/F] hoist  [RMB] orbit  [scroll] zoom  [Esc] exit" % [
+	_hud.text = "Gantry %+5.1f m   Trolley %+5.1f m   Hook drop %4.1f m\n%s\n[WASD] pan  [R/F] hoist  [Q] rotate  [RMB] orbit  [scroll] zoom  [Esc] exit" % [
 		_gantry_x_offset, _trolley_z, _hoist_drop, hint,
 	]
 
@@ -1043,6 +1067,7 @@ func _register_input_actions() -> void:
 		"crane_pan_forward":  KEY_W,
 		"crane_hoist_up":     KEY_R,
 		"crane_hoist_down":   KEY_F,
+		"crane_rotate_pallet": KEY_Q,
 	}
 	for action: String in bindings:
 		if InputMap.has_action(action):
