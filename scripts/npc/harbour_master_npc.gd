@@ -6,10 +6,10 @@ extends NpcInteractable
 
 const PEAKED_CAP_PATH := "res://resources/data/meshes/characters/hat_peaked_cap.json"
 
-## Ships offered when assigning a berth. Extend as you add playable hull scenes.
+## Ships offered when assigning a berth. Extend as you add ship JSON templates.
 const PLAYER_VESSEL_CHOICES: Array[Dictionary] = [
-	{"label": "Coastal cargo (standard)", "path": "res://scenes/boats/test_boat.tscn"},
-	{"label": "Coastal tanker", "path": "res://scenes/boats/fuel_tanker.tscn"},
+	{"label": "Cargo Ship", "path": "res://resources/data/ships/test_boat.json"},
+	{"label": "Fuel Tanker", "path": "res://resources/data/ships/fuel_tanker.json"},
 ]
 
 @export var port_id: String = ""
@@ -139,7 +139,7 @@ func _show_ship_select() -> void:
 	for entry in PLAYER_VESSEL_CHOICES:
 		var label      : String = str(entry.get("label", "Vessel"))
 		var scene_path : String = str(entry.get("path", ""))
-		if scene_path.is_empty() or not ResourceLoader.exists(scene_path):
+		if scene_path.is_empty() or (not ResourceLoader.exists(scene_path) and not FileAccess.file_exists(scene_path)):
 			continue
 		_dialogue.add_option(label, _spawn_chosen_ship.bind(scene_path))
 		listed = true

@@ -1,0 +1,79 @@
+[gd_scene load_steps=9 format=3]
+
+[ext_resource type="Script" path="res://scripts/ship/bridge_interactable.gd" id="1"]
+[ext_resource type="Script" path="res://scripts/ship/ship_light.gd" id="2"]
+
+[sub_resource type="StandardMaterial3D" id="Mat_Body"]
+albedo_color = Color(0.84, 0.82, 0.76, 1)
+roughness = 0.9
+metallic = 0.0
+
+[sub_resource type="StandardMaterial3D" id="Mat_Stack"]
+albedo_color = Color(0.07, 0.06, 0.05, 1)
+roughness = 0.85
+metallic = 0.0
+
+[sub_resource type="BoxMesh" id="Mesh_Body"]
+size = Vector3(3.4, 3.2, 3.8)
+
+[sub_resource type="BoxMesh" id="Mesh_Wing"]
+size = Vector3(0.6, 0.18, 2.8)
+
+[sub_resource type="BoxMesh" id="Mesh_Roof"]
+size = Vector3(3.6, 0.15, 4.0)
+
+[sub_resource type="BoxMesh" id="Mesh_Stack"]
+size = Vector3(0.55, 1.2, 0.45)
+
+[node name="BridgeCargoShip" type="Node3D"]
+
+[node name="MainBody" type="MeshInstance3D" parent="."]
+position = Vector3(0, 1.6, 1.9)
+mesh = SubResource("Mesh_Body")
+surface_material_override/0 = SubResource("Mat_Body")
+
+[node name="WingPort" type="MeshInstance3D" parent="."]
+position = Vector3(-2.1, 2.95, 1.4)
+mesh = SubResource("Mesh_Wing")
+surface_material_override/0 = SubResource("Mat_Body")
+
+[node name="WingStarboard" type="MeshInstance3D" parent="."]
+position = Vector3(2.1, 2.95, 1.4)
+mesh = SubResource("Mesh_Wing")
+surface_material_override/0 = SubResource("Mat_Body")
+
+[node name="Roof" type="MeshInstance3D" parent="."]
+position = Vector3(0, 3.25, 2.0)
+mesh = SubResource("Mesh_Roof")
+surface_material_override/0 = SubResource("Mat_Body")
+
+[node name="ExhaustStack" type="MeshInstance3D" parent="."]
+position = Vector3(0.5, 1.95, -0.4)
+mesh = SubResource("Mesh_Stack")
+surface_material_override/0 = SubResource("Mat_Stack")
+
+[node name="BridgeInteractable" type="Node3D" parent="."]
+script = ExtResource("1")
+exit_deck_offset = Vector2(-1.8, -8.0)
+
+[node name="ShipLight_NavPort" type="Node3D" parent="."]
+position = Vector3(-1.7, 0.95, 3.8)
+rotation = Vector3(0, 1.5708, 0)
+script = ExtResource("2")
+light_type = 0
+
+[node name="ShipLight_NavStarboard" type="Node3D" parent="."]
+position = Vector3(1.7, 0.95, 3.8)
+rotation = Vector3(0, -1.5708, 0)
+script = ExtResource("2")
+light_type = 1
+
+[node name="ShipLight_NavMasthead" type="Node3D" parent="."]
+position = Vector3(0, 3.42, 3.5)
+script = ExtResource("2")
+light_type = 2
+
+[node name="ShipLight_Window" type="Node3D" parent="."]
+position = Vector3(0, 1.0, 3.8)
+script = ExtResource("2")
+light_type = 5

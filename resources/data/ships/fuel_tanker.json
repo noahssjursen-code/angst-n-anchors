@@ -2,7 +2,7 @@
   "display_name": "Fuel Tanker",
   "hull": "hulls/hull_coastal_trader_long.json",
   "scale": 2.0,
-  "superstructure": "bridge_small",
+  "superstructure": "bridge_short_sea_coaster",
   "cargo_decks": [],
 
   "physics": {
