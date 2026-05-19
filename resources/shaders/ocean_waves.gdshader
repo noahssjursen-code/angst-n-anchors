@@ -221,8 +221,11 @@ void vertex() {
 	vec3 world_n_geom = normalize(vec3(-slopes.x, 1.0, -slopes.y));
 	vec3 world_n_foam_metric = normalize(vec3(-slopes.x * 0.25, 1.0, -slopes.y * 0.25));
 
-	VERTEX = (inverse(MODEL_MATRIX) * vec4(displaced_world, 1.0)).xyz;
-	NORMAL = normalize((inverse(MODEL_MATRIX) * vec4(world_n_geom, 0.0)).xyz);
+	// One inverse, two uses. Compiler may already CSE this but it's not
+	// guaranteed across drivers — be explicit. ~30-40 ALU saved per vertex.
+	mat4 inv_model = inverse(MODEL_MATRIX);
+	VERTEX = (inv_model * vec4(displaced_world, 1.0)).xyz;
+	NORMAL = normalize((inv_model * vec4(world_n_geom, 0.0)).xyz);
 
 	v_world_pos   = displaced_world;
 	v_world_normal = world_n_geom;
