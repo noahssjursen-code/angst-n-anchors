@@ -13,6 +13,12 @@ const SHIP_CLASS_BY_SIZE: Dictionary = {
 	4: ShipClass.Type.DEEP_SEA_FREIGHTER,
 }
 
+## Extra flat terrain extending beyond the facilities footprint on all sides,
+## so noise hills never bleed into building collision. Combined with
+## IslandMeshBuilder.PAD_BLEND_M, this gives buildings ~8 m of pad + ~10 m of
+## ramp before the noise terrain reaches full height.
+const PAD_SAFE_MARGIN: float = 8.0
+
 @export var port_id: String = ""
 
 @export var port_label: String = "Port":
@@ -52,8 +58,12 @@ func _rebuild() -> void:
 		ShipClass.Type.COASTAL_TRADER) as ShipClass.Type
 
 	# Island ground — heightmapped terrain with a flat port pad stamped along the
-	# water face. Pad = plot_width × plot_depth at Y=0 so docks, facilities, and
-	# NPCs drop in unchanged. See IslandMeshBuilder for the height function.
+	# water face. Pad sized to the *island* width (facilities span the full island,
+	# not just the dock-length), plus a safe margin so hills don't grow into the
+	# outermost buildings (warehouses at the flanks, lighthouse at the inland edge).
+	# See IslandMeshBuilder for the height function.
+	var pad_w              := _island_width_data + 2.0 * PAD_SAFE_MARGIN
+	var pad_d              := plot_depth + 2.0 * PAD_SAFE_MARGIN
 	var poly               := IslandMeshBuilder.build_polygon(_island_width_data, plot_depth, _layout_seed_data)
 	var gbody              := StaticBody3D.new()
 	gbody.name             = "Ground"
@@ -61,21 +71,15 @@ func _rebuild() -> void:
 
 	var ground               := MeshInstance3D.new()
 	ground.name              = "Mesh"
-	ground.mesh              = IslandMeshBuilder.to_mesh(poly, plot_width, plot_depth, _layout_seed_data)
-	var gmat                 := StandardMaterial3D.new()
-	gmat.albedo_color        = Color.WHITE
-	gmat.vertex_color_use_as_albedo = true
-	gmat.shading_mode        = BaseMaterial3D.SHADING_MODE_PER_PIXEL
-	gmat.roughness           = 0.92
-	# Cull back faces — the terrain is a closed surface viewed from above.
-	# CULL_DISABLED rendered both sides, which combined with the (now-fixed)
-	# downward winding made the island look like translucent crystal facets.
-	gmat.cull_mode           = BaseMaterial3D.CULL_BACK
-	ground.material_override = gmat
+	ground.mesh              = IslandMeshBuilder.to_mesh(poly, pad_w, pad_d, _layout_seed_data, _island_width_data, plot_depth)
+	var terrain_shader           := load("res://resources/shaders/terrain.gdshader") as Shader
+	var gmat                     := ShaderMaterial.new()
+	gmat.shader                  = terrain_shader
+	ground.material_override     = gmat
 	gbody.add_child(ground)
 
 	var gcol  := CollisionShape3D.new()
-	gcol.shape = IslandMeshBuilder.to_collision_shape(poly, plot_width, plot_depth, _layout_seed_data)
+	gcol.shape = IslandMeshBuilder.to_collision_shape(poly, pad_w, pad_d, _layout_seed_data)
 	gbody.add_child(gcol)
 
 	var dock              := PortDock.new()
@@ -109,6 +113,8 @@ func _rebuild() -> void:
 	facilities.has_fog_horn   = _has_fog_horn_data
 	facilities.position       = Vector3(0.0, 0.0, -hd + PortDock.INLAND_DEPTH)
 	add_child(facilities)
+
+	_build_trees(poly, pad_w, pad_d)
 
 	if not Engine.is_editor_hint():
 		call_deferred("_build_npcs")
@@ -158,6 +164,88 @@ func _build_npcs() -> void:
 
 	if not port_id.is_empty():
 		call_deferred("_register_with_registry")
+
+
+func _build_trees(poly: PackedVector2Array, pad_w: float, pad_d: float) -> void:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = _layout_seed_data ^ 0x74726565  # "tree" XOR'd so placement differs from layout
+
+	var aabb_min := Vector2( INF,  INF)
+	var aabb_max := Vector2(-INF, -INF)
+	for p in poly:
+		aabb_min.x = minf(aabb_min.x, p.x)
+		aabb_min.y = minf(aabb_min.y, p.y)
+		aabb_max.x = maxf(aabb_max.x, p.x)
+		aabb_max.y = maxf(aabb_max.y, p.y)
+
+	var n_trees     : int   = 10 + port_size * 8
+	var pad_hw      : float = pad_w * 0.5
+	var pad_hd      : float = pad_d * 0.5
+	var excl_margin : float = 4.0  # extra buffer inside pad edge before trees begin
+
+	var placed   := 0
+	var attempts := 0
+	while placed < n_trees and attempts < n_trees * 25:
+		attempts += 1
+		var x  := rng.randf_range(aabb_min.x, aabb_max.x)
+		var z  := rng.randf_range(aabb_min.y, aabb_max.y)
+		var p2 := Vector2(x, z)
+		if not Geometry2D.is_point_in_polygon(p2, poly):
+			continue
+		# Keep trees outside the flat pad + margin
+		if absf(x) < pad_hw + excl_margin and absf(z) < pad_hd + excl_margin:
+			continue
+		var h := IslandMeshBuilder.get_height_at(p2, poly, pad_w, pad_d, _layout_seed_data)
+		if h < 1.0:  # skip beach / near-shore
+			continue
+		_place_tree(Vector3(x, h, z), rng)
+		placed += 1
+
+
+func _place_tree(pos: Vector3, rng: RandomNumberGenerator) -> void:
+	var s   : float = rng.randf_range(0.75, 1.35)
+	var rot : float = rng.randf_range(0.0, TAU)
+
+	var root      := Node3D.new()
+	root.name      = "Tree"
+	root.position  = pos
+	root.rotation.y = rot
+	add_child(root)
+
+	# Trunk
+	var trunk_mesh              := CylinderMesh.new()
+	trunk_mesh.top_radius       = 0.20 * s
+	trunk_mesh.bottom_radius    = 0.28 * s
+	trunk_mesh.height           = 3.2  * s
+	var trunk_mat               := StandardMaterial3D.new()
+	trunk_mat.albedo_color      = Color(0.08, 0.07, 0.05)
+	trunk_mat.roughness         = 0.92
+	var trunk_mi                := MeshInstance3D.new()
+	trunk_mi.mesh               = trunk_mesh
+	trunk_mi.material_override  = trunk_mat
+	trunk_mi.position           = Vector3(0.0, 0.4 * s, 0.0)  # bottom at -1.2*s underground
+	root.add_child(trunk_mi)
+
+	# Foliage — three stacked cones, widest at base
+	var foliage_color := Color(0.06, 0.07, 0.05)
+	var layers : Array[Array] = [
+		[2.6 * s, 0.0, 4.2 * s, 2.2 * s],   # [bot_r, top_r, height, centre_y]
+		[1.9 * s, 0.0, 3.4 * s, 5.0 * s],
+		[1.1 * s, 0.0, 2.6 * s, 7.2 * s],
+	]
+	for layer in layers:
+		var cone_mesh              := CylinderMesh.new()
+		cone_mesh.bottom_radius    = layer[0]
+		cone_mesh.top_radius       = layer[1]
+		cone_mesh.height           = layer[2]
+		var cone_mat               := StandardMaterial3D.new()
+		cone_mat.albedo_color      = foliage_color
+		cone_mat.roughness         = 0.88
+		var cone_mi                := MeshInstance3D.new()
+		cone_mi.mesh               = cone_mesh
+		cone_mi.material_override  = cone_mat
+		cone_mi.position           = Vector3(0.0, layer[3], 0.0)
+		root.add_child(cone_mi)
 
 
 ## Spawn the port's ambient walkers. Each one is deterministic from

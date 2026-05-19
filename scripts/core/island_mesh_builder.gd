@@ -21,25 +21,25 @@ extends RefCounted
 ## player walks on the visible terrain.
 
 # ── Silhouette knobs ────────────────────────────────────────────────────────
-const MARGIN      : float = 14.0
-const AMPLITUDE   : float =  8.0
-const DEPTH       : float =  8.0      # extrusion thickness below Y=0
-const SIDE_SEGS   : int   =  6
-const INLAND_SEGS : int   =  5
+const MARGIN      : float = 80.0   # avg land extension beyond port rectangle on 3 sides
+const AMPLITUDE   : float = 20.0   # noise variation around MARGIN
+const DEPTH       : float = 14.0   # extrusion thickness below Y=0
+const SIDE_SEGS   : int   =  8
+const INLAND_SEGS : int   =  7
 
 # ── Terrain knobs ───────────────────────────────────────────────────────────
 const GRID_STEP_M        : float = 4.0    # interior grid spacing
-const TERRAIN_PEAK_M     : float = 12.0   # max elevation above the pad
+const TERRAIN_PEAK_M     : float = 18.0   # max elevation above the pad
 const TERRAIN_NOISE_FREQ : float = 0.025
 const TERRAIN_NOISE_OCT  : int   = 3
 const PAD_BLEND_M        : float = 10.0   # smooth ring around the port pad
-const SHORE_FALLOFF_M    : float = 8.0    # beach-like falloff at the polygon edge
+const SHORE_FALLOFF_M    : float = 16.0   # beach-like falloff at the polygon edge
 
 # ── Vertex colour ramp (sand → grass → rock) ────────────────────────────────
-const C_SAND  : Color = Color(0.82, 0.72, 0.50)
-const C_GRASS : Color = Color(0.28, 0.42, 0.22)
-const C_ROCK  : Color = Color(0.46, 0.42, 0.36)
-const C_PAD   : Color = Color(0.30, 0.36, 0.26)
+const C_SAND  : Color = Color(0.17, 0.16, 0.14)
+const C_GRASS : Color = Color(0.08, 0.09, 0.06)
+const C_ROCK  : Color = Color(0.11, 0.10, 0.09)
+const C_PAD   : Color = Color(0.08, 0.08, 0.07)
 
 
 static func build_polygon(island_width: float, plot_depth: float, seed: int) -> PackedVector2Array:
@@ -83,7 +83,13 @@ static func build_polygon(island_width: float, plot_depth: float, seed: int) -> 
 ## Build a heightmapped terrain mesh from the polygon. Inside the port pad
 ## rectangle heights are 0 (flat); outside, a deterministic noise field rises up
 ## to TERRAIN_PEAK_M with a smooth pad-edge blend and a shore falloff.
-static func to_mesh(polygon: PackedVector2Array, pad_width: float, pad_depth: float, seed: int) -> ArrayMesh:
+## colour_w / colour_d define which area gets the flat-pad gravel colour.
+## They should be the *actual* port footprint (island_width × plot_depth),
+## not the expanded flat pad, so the safe-area margin colours as terrain.
+static func to_mesh(polygon: PackedVector2Array, pad_width: float, pad_depth: float, seed: int,
+		colour_w: float = -1.0, colour_d: float = -1.0) -> ArrayMesh:
+	var col_w := colour_w if colour_w > 0.0 else pad_width
+	var col_d := colour_d if colour_d > 0.0 else pad_depth
 	var data := _build_terrain(polygon, pad_width, pad_depth, seed)
 	var verts : PackedVector3Array = data["vertices"]
 	var tris  : PackedInt32Array   = data["indices"]
@@ -114,11 +120,11 @@ static func to_mesh(polygon: PackedVector2Array, pad_width: float, pad_depth: fl
 			var tmp := v1
 			v1 = v2
 			v2 = tmp
-		st.set_color(_colour_for_height(v0.y, pad_width, pad_depth, v0))
+		st.set_color(_colour_for_height(v0.y, col_w, col_d, v0))
 		st.add_vertex(v0)
-		st.set_color(_colour_for_height(v1.y, pad_width, pad_depth, v1))
+		st.set_color(_colour_for_height(v1.y, col_w, col_d, v1))
 		st.add_vertex(v1)
-		st.set_color(_colour_for_height(v2.y, pad_width, pad_depth, v2))
+		st.set_color(_colour_for_height(v2.y, col_w, col_d, v2))
 		st.add_vertex(v2)
 
 	# Side walls — extrude polygon down from Y=0 (where the terrain meets the shore).
@@ -130,11 +136,11 @@ static func to_mesh(polygon: PackedVector2Array, pad_width: float, pad_depth: fl
 		# Wall is dark rock so it doesn't fight the grass top visually.
 		st.set_color(C_ROCK * 0.6)
 		st.add_vertex(Vector3(a.x, 0.0,    a.y))
-		st.add_vertex(Vector3(b.x, 0.0,    b.y))
 		st.add_vertex(Vector3(a.x, bottom, a.y))
 		st.add_vertex(Vector3(b.x, 0.0,    b.y))
+		st.add_vertex(Vector3(b.x, 0.0,    b.y))
+		st.add_vertex(Vector3(a.x, bottom, a.y))
 		st.add_vertex(Vector3(b.x, bottom, b.y))
-		st.add_vertex(Vector3(a.x, bottom, a.y))
 
 	st.generate_normals()
 	return st.commit()
@@ -262,6 +268,15 @@ static func _height_at(p: Vector2, polygon: PackedVector2Array, pad_w: float, pa
 	return n * TERRAIN_PEAK_M * pad_t * shore_t
 
 
+static func get_height_at(p: Vector2, polygon: PackedVector2Array, pad_w: float, pad_d: float, seed: int) -> float:
+	var noise := FastNoiseLite.new()
+	noise.seed            = seed
+	noise.noise_type      = FastNoiseLite.TYPE_SIMPLEX
+	noise.frequency       = TERRAIN_NOISE_FREQ
+	noise.fractal_octaves = TERRAIN_NOISE_OCT
+	return _height_at(p, polygon, pad_w, pad_d, noise)
+
+
 static func _dist_to_polygon_edge(p: Vector2, polygon: PackedVector2Array) -> float:
 	var best : float = INF
 	var n    : int   = polygon.size()
@@ -286,9 +301,15 @@ static func _dist_point_segment(p: Vector2, a: Vector2, b: Vector2) -> float:
 static func _colour_for_height(_h: float, pad_w: float, pad_d: float, v: Vector3) -> Color:
 	var pad_hw : float = pad_w * 0.5
 	var pad_hd : float = pad_d * 0.5
-	if absf(v.x) <= pad_hw and absf(v.z) <= pad_hd:
-		return C_PAD
+	# Terrain colour by height
 	var t : float = clampf(v.y / TERRAIN_PEAK_M, 0.0, 1.0)
+	var terrain_col : Color
 	if t < 0.18:
-		return C_SAND.lerp(C_GRASS, smoothstep(0.0, 0.18, t))
-	return C_GRASS.lerp(C_ROCK, smoothstep(0.18, 1.0, t))
+		terrain_col = C_SAND.lerp(C_GRASS, smoothstep(0.0, 0.18, t))
+	else:
+		terrain_col = C_GRASS.lerp(C_ROCK, smoothstep(0.18, 1.0, t))
+	# Smooth blend from pad gravel into terrain over 8 m so the rectangle edge isn't sharp
+	var dx    : float = maxf(0.0, absf(v.x) - pad_hw)
+	var dz    : float = maxf(0.0, absf(v.z) - pad_hd)
+	var blend : float = smoothstep(0.0, 8.0, sqrt(dx * dx + dz * dz))
+	return C_PAD.lerp(terrain_col, blend)
