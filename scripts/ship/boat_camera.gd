@@ -12,13 +12,18 @@ extends Camera3D
 @export var orbit_speed:     float = 0.0022
 ## Point the camera looks toward — slightly above the boat centre
 @export var look_height_offset: float = 1.5
+@export var zoom_step:       float = 3.0
+@export var min_distance:    float = 4.0
+@export var max_distance:    float = 200.0
 
-var _yaw:    float  = 0.0
+var _yaw:          float  = 0.0
+var _zoom_target:  float  = 12.0
 var _target: Node3D = null
 
 
 func _ready() -> void:
 	_target = get_parent()
+	_zoom_target = follow_distance
 	# Start the orbit angle on the bow side so the bow is the first thing
 	# the player sees after boarding. Boat local +Z is the bow direction;
 	# atan2 maps that world direction into the initial yaw offset.
@@ -32,11 +37,19 @@ func _unhandled_input(event: InputEvent) -> void:
 		return
 	if event is InputEventMouseMotion and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
 		_yaw -= event.relative.x * orbit_speed
+	if event is InputEventMouseButton:
+		var mb := event as InputEventMouseButton
+		if mb.pressed and mb.button_index == MOUSE_BUTTON_WHEEL_UP:
+			_zoom_target = clampf(_zoom_target - zoom_step, min_distance, max_distance)
+		elif mb.pressed and mb.button_index == MOUSE_BUTTON_WHEEL_DOWN:
+			_zoom_target = clampf(_zoom_target + zoom_step, min_distance, max_distance)
 
 
 func _process(delta: float) -> void:
 	if not current or _target == null:
 		return
+
+	follow_distance = lerpf(follow_distance, _zoom_target, 1.0 - exp(-follow_speed * delta))
 
 	var target_pos: Vector3 = _target.global_position
 
