@@ -29,17 +29,22 @@ static func build(template_path: String) -> BoatBody:
 	var scale      := float(tmpl.get("scale", 1.0))
 	var slots      := _read_slots(hull_data, scale)
 
+	# Strip-theory hull data, derived once from the hull JSON. Shared between BoatBody
+	# (for displacement-based mass), StripBuoyancyComponent, and HydrodynamicsComponent.
+	var stations := HullStations.from_hull_json(hull_data, 10)
+
 	var boat := BoatBody.new()
 	boat.name = str(tmpl.get("display_name", "Ship")).replace(" ", "")
+	boat.hull_stations = stations
+	boat.mesh_scale = scale
 
 	_apply_physics(boat, tmpl.get("physics", {}))
 
 	var model_json_path := _hull_to_model_path(hull_path, tmpl, template_path)
 	boat.model_data_path = model_json_path
-	boat.mesh_scale = scale
 
-	boat.add_child(_make_buoyancy(tmpl.get("buoyancy", {})))
-	boat.add_child(_make_hydrodynamics(tmpl.get("hydrodynamics", {})))
+	boat.add_child(_make_strip_buoyancy(tmpl.get("buoyancy", {}), stations, scale))
+	boat.add_child(_make_hydrodynamics(tmpl.get("hydrodynamics", {}), stations, scale))
 	boat.add_child(_make_propulsion(tmpl.get("propulsion", {}), slots))
 	boat.add_child(_make_rudder(tmpl.get("rudder", {})))
 	boat.add_child(_make_bow_thruster(tmpl.get("bow_thruster", {}), slots))
@@ -100,39 +105,51 @@ static func _apply_physics(boat: BoatBody, cfg: Dictionary) -> void:
 		boat.angular_damp_coeff = float(cfg["angular_damp_coeff"])
 
 
-static func _make_buoyancy(cfg: Dictionary) -> BuoyancyComponent:
-	var c := BuoyancyComponent.new()
-	c.name = "BuoyancyComponent"
-	if cfg.has("block_coefficient"):
-		c.block_coefficient = float(cfg["block_coefficient"])
-	if cfg.has("vertical_damping"):
-		c.vertical_damping = float(cfg["vertical_damping"])
-	if cfg.has("wave_influence_scale"):
-		c.wave_influence_scale = float(cfg["wave_influence_scale"])
-	if cfg.has("fall_gravity_multiplier"):
-		c.fall_gravity_multiplier = float(cfg["fall_gravity_multiplier"])
+static func _make_strip_buoyancy(
+	cfg: Dictionary, stations: HullStations, scale: float
+) -> StripBuoyancyComponent:
+	var c := StripBuoyancyComponent.new()
+	c.name = "StripBuoyancyComponent"
+	c.hull_stations = stations
+	c.mesh_scale = scale
+	if cfg.has("water_density"):
+		c.water_density = float(cfg["water_density"])
 	if cfg.has("buoyancy_multiplier"):
 		c.buoyancy_multiplier = float(cfg["buoyancy_multiplier"])
+	if cfg.has("heave_damping_per_m2"):
+		c.heave_damping_per_m2 = float(cfg["heave_damping_per_m2"])
 	return c
 
 
-static func _make_hydrodynamics(cfg: Dictionary) -> HydrodynamicsComponent:
+static func _make_hydrodynamics(
+	cfg: Dictionary, stations: HullStations, scale: float
+) -> HydrodynamicsComponent:
 	var c := HydrodynamicsComponent.new()
 	c.name = "HydrodynamicsComponent"
-	if cfg.has("forward_drag_coeff"):
-		c.forward_drag_coeff = float(cfg["forward_drag_coeff"])
+	c.hull_stations = stations
+	c.mesh_scale = scale
+	if cfg.has("water_density"):
+		c.water_density = float(cfg["water_density"])
+	if cfg.has("frictional_coeff"):
+		c.frictional_coeff = float(cfg["frictional_coeff"])
+	if cfg.has("form_factor"):
+		c.form_factor = float(cfg["form_factor"])
+	if cfg.has("wave_making_peak_coeff"):
+		c.wave_making_peak_coeff = float(cfg["wave_making_peak_coeff"])
+	if cfg.has("hull_speed_fn"):
+		c.hull_speed_fn = float(cfg["hull_speed_fn"])
 	if cfg.has("lateral_drag_coeff"):
 		c.lateral_drag_coeff = float(cfg["lateral_drag_coeff"])
-	if cfg.has("rotational_drag_coeff"):
-		c.rotational_drag_coeff = float(cfg["rotational_drag_coeff"])
-	if cfg.has("orbital_flow_scale"):
-		c.orbital_flow_scale = float(cfg["orbital_flow_scale"])
-	if cfg.has("bulk_horizontal_drag"):
-		c.bulk_horizontal_drag = float(cfg["bulk_horizontal_drag"])
-	if cfg.has("draft_fraction"):
-		c.draft_fraction = float(cfg["draft_fraction"])
-	if cfg.has("wave_influence_scale"):
-		c.wave_influence_scale = float(cfg["wave_influence_scale"])
+	if cfg.has("yaw_drag_coeff"):
+		c.yaw_drag_coeff = float(cfg["yaw_drag_coeff"])
+	if cfg.has("wind_frontal_area"):
+		c.wind_frontal_area = float(cfg["wind_frontal_area"])
+	if cfg.has("wind_lateral_area"):
+		c.wind_lateral_area = float(cfg["wind_lateral_area"])
+	if cfg.has("wind_drag_coeff"):
+		c.wind_drag_coeff = float(cfg["wind_drag_coeff"])
+	if cfg.has("air_density"):
+		c.air_density = float(cfg["air_density"])
 	return c
 
 

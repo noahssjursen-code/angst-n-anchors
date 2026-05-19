@@ -14,6 +14,7 @@ extends Resource
 
 @export_range(0.0, 1.0, 0.001) var precipitation: float = 0.0
 @export_range(0.0, 1.0, 0.001) var wind_force:    float = 0.0  ## kept for back-compat; same as wind.length()
+@export_range(0.0, 30.0, 0.1) var wind_speed_ms:  float = 0.0  ## actual m/s, drives ship aerodynamics
 @export_range(0.0, 1.0, 0.001) var visibility:    float = 1.0
 @export_range(0.0, 1.0, 0.001) var cloud_cover:   float = 0.0
 
@@ -35,6 +36,7 @@ func to_weather_state() -> WeatherState:
 	var s := WeatherState.new()
 	s.precipitation = precipitation
 	s.wind_force    = wind_force
+	s.wind_speed_ms = wind_speed_ms
 	s.visibility    = visibility
 	s.cloud_cover   = cloud_cover
 	return s
@@ -47,6 +49,7 @@ static func from_weather_state(state: WeatherState) -> WeatherSample:
 		return s
 	s.precipitation = state.precipitation
 	s.wind_force    = state.wind_force
+	s.wind_speed_ms = state.wind_speed_ms
 	s.visibility    = state.visibility
 	s.cloud_cover   = state.cloud_cover
 	return s

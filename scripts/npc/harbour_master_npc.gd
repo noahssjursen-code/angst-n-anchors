@@ -8,8 +8,6 @@ const PEAKED_CAP_PATH := "res://resources/data/meshes/characters/hat_peaked_cap.
 
 ## Ships offered when assigning a berth. Extend as you add ship JSON templates.
 const PLAYER_VESSEL_CHOICES: Array[Dictionary] = [
-	{"label": "Cargo Ship", "path": "res://resources/data/ships/test_boat.json"},
-	{"label": "Fuel Tanker", "path": "res://resources/data/ships/fuel_tanker.json"},
 ]
 
 @export var port_id: String = ""

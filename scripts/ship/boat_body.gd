@@ -39,10 +39,10 @@ const WALK_MODEL_COLLIDER_NAME := "WalkModelCollider"
 		angular_damp = v
 
 @export_group("Mass model")
-## When true, hull share = water_density × hull bbox area × design draft × block coefficient
-## (Archimedes for a loaded hull). Component masses below are added on top.
-## Block coefficient and water density are read from BuoyancyComponent so lift and weight
-## stay consistent — buoyancy_multiplier ≈ 1.0 should leave the hull at design_draft_fraction.
+## When true, the hull's contribution to mass is computed from displacement at design
+## draft — strip-theory volume integral × water density. Component masses below add on
+## top, so a loaded ship settles deeper than design draft (which is correct).
+## Set by ShipBuilder; you rarely toggle this manually.
 @export var auto_mass_from_hull: bool = false:
 	set(v):
 		auto_mass_from_hull = v
@@ -52,6 +52,13 @@ const WALK_MODEL_COLLIDER_NAME := "WalkModelCollider"
 @export_range(0.05, 0.95, 0.01) var design_draft_fraction: float = 0.42:
 	set(v):
 		design_draft_fraction = clampf(v, 0.05, 0.95)
+		_refresh_mass()
+
+## Strip-theory hull data, set by ShipBuilder. Used for proper displacement-based mass.
+## If null, falls back to the old bbox approximation.
+@export var hull_stations: HullStations:
+	set(v):
+		hull_stations = v
 		_refresh_mass()
 
 @export_group("Component masses (kg)")
@@ -315,19 +322,39 @@ func _refresh_mass() -> void:
 	_refresh_center_of_mass()
 
 
-## Archimedes mass: the volume of water the hull displaces at design draft.
-## Reads block coefficient and water density from BuoyancyComponent so lift and weight stay
-## in lockstep — buoyancy_multiplier ≈ 1.0 should rest the hull at design_draft_fraction.
+## Hull-share mass: the steel of the hull itself. Calibrated so that hull_share +
+## *empty* components (engine, ballast, fuel) equals displacement at design draft —
+## i.e. an empty ship sits exactly at design draft. Cargo is NOT subtracted, so
+## loading cargo sinks the ship deeper (which is what we want).
+##
+## Uses strip-theory volume integration when hull_stations is available, otherwise
+## falls back to the old bbox × block_coefficient approximation.
 func _hull_displacement_kg() -> float:
-	var rho: float = _buoyancy_field("water_density", 1000.0)
-	var coeff: float = _buoyancy_field("block_coefficient", 0.7)
+	var rho: float = _buoyancy_field("water_density", 1025.0)
+	if hull_stations != null and not hull_stations.stations.is_empty():
+		var s: float = mesh_scale
+		var waterline_y: float = hull_stations.keel_y + hull_stations.height_m * design_draft_fraction
+		var vol_m3: float = 0.0
+		for i in range(hull_stations.stations.size()):
+			var half_area_s1: float = hull_stations.half_section_area_below(i, waterline_y)
+			var full_area_world: float = half_area_s1 * 2.0 * s * s
+			var st_len_world: float = hull_stations.station_length(i) * s
+			vol_m3 += full_area_world * st_len_world
+		# Empty-ship components: engine + ballast + fuel. Cargo deliberately excluded
+		# so it adds extra mass that pushes the ship below design draft when loaded.
+		var empty_components: float = engine_mass + keel_ballast_mass + fuel_stores_mass
+		return maxf(vol_m3 * rho - empty_components, 1000.0)
+	# Legacy fallback (no stations available).
 	var draft: float = maxf(hull_size.y * design_draft_fraction, 0.0)
 	var area: float = maxf(hull_size.x * hull_size.z, 0.0)
+	var coeff: float = _buoyancy_field("block_coefficient", 0.7)
 	return area * draft * coeff * rho
 
 
 func _buoyancy_field(field: String, fallback: float) -> float:
-	var b: Node = get_node_or_null("BuoyancyComponent")
+	var b: Node = get_node_or_null("StripBuoyancyComponent")
+	if b == null:
+		b = get_node_or_null("BuoyancyComponent")  # backward-compat with old scenes
 	if b != null and field in b:
 		return float(b.get(field))
 	return fallback
@@ -363,12 +390,26 @@ func get_cargo_available_units() -> int:
 	return total
 
 
-func place_at_waterline(water_y: float, draft_fraction: float = 0.45) -> void:
+## Position the ship so that the keel is `total_height × draft_fraction` below water_y.
+## `draft_fraction = -1` (default) means "use this ship's own design_draft_fraction" so
+## the spawn sits at the buoyancy equilibrium and the ship doesn't drift down at start.
+func place_at_waterline(water_y: float, draft_fraction: float = -1.0) -> void:
 	_ensure_model()
 	_sync_hull_size_from_mesh()
-	var draft := hull_size.y * clampf(draft_fraction, 0.0, 1.0)
-	var hull_bottom_y := hull_center.y - hull_size.y * 0.5
-	global_position.y = water_y - draft - hull_bottom_y
+	if draft_fraction < 0.0:
+		draft_fraction = design_draft_fraction
+	# Prefer strip-theory height (includes keel) when available, else hull_size.y
+	# (which is just the physics_body part's height, missing the keel_lower run).
+	var total_height: float
+	var keel_local_y: float
+	if hull_stations != null and hull_stations.height_m > 0.0:
+		total_height = hull_stations.height_m * mesh_scale
+		keel_local_y = hull_stations.keel_y * mesh_scale
+	else:
+		total_height = hull_size.y
+		keel_local_y = hull_center.y - hull_size.y * 0.5
+	var draft := total_height * clampf(draft_fraction, 0.0, 1.0)
+	global_position.y = water_y - draft - keel_local_y
 	linear_velocity = Vector3.ZERO
 	angular_velocity = Vector3.ZERO
 

@@ -97,23 +97,27 @@ func _refresh() -> void:
 
 func _draw_compass() -> void:
 	var w := _weather_lighting()
-	var precip := 0.0
+	var wind_speed_norm := 0.0  # 0..1 across compass
 	var wind   := 0.0
 	if w != null:
-		precip = float(w.get("precipitation"))
-		wind   = float(w.get("wind_force"))
+		var ws := float(w.get("wind_speed_ms"))
+		var ws_max := 30.0
+		if "WIND_SPEED_MAX" in w:
+			ws_max = float(w.get("WIND_SPEED_MAX"))
+		wind_speed_norm = clampf(ws / maxf(ws_max, 0.001), 0.0, 1.0)
+		wind = float(w.get("wind_force"))
 
 	var sz := _compass_rect.size
 
 	# Background grid
 	_compass_rect.draw_rect(Rect2(Vector2.ZERO, sz), Color(0.12, 0.12, 0.16, 1.0))
 
-	# Quadrant shading — TOP = calm, BOTTOM = gale, LEFT = clear, RIGHT = rain
+	# Quadrant shading — TOP = calm sea, BOTTOM = built-up sea, LEFT = no wind, RIGHT = strong wind
 	var mid := sz * 0.5
-	_compass_rect.draw_rect(Rect2(Vector2.ZERO,              mid), Color(0.18, 0.38, 0.55, 0.18))  # top-left:  calm-clear
-	_compass_rect.draw_rect(Rect2(Vector2(mid.x, 0),         mid), Color(0.18, 0.22, 0.38, 0.18))  # top-right: grey drizzle
-	_compass_rect.draw_rect(Rect2(Vector2(0, mid.y),         mid), Color(0.30, 0.30, 0.18, 0.18))  # bot-left:  dry squall
-	_compass_rect.draw_rect(Rect2(mid,                       mid), Color(0.30, 0.18, 0.18, 0.18))  # bot-right: full storm
+	_compass_rect.draw_rect(Rect2(Vector2.ZERO,              mid), Color(0.18, 0.38, 0.55, 0.18))  # top-left:  dead calm
+	_compass_rect.draw_rect(Rect2(Vector2(mid.x, 0),         mid), Color(0.30, 0.36, 0.30, 0.18))  # top-right: fresh breeze
+	_compass_rect.draw_rect(Rect2(Vector2(0, mid.y),         mid), Color(0.28, 0.24, 0.38, 0.18))  # bot-left:  old swell
+	_compass_rect.draw_rect(Rect2(mid,                       mid), Color(0.30, 0.18, 0.18, 0.18))  # bot-right: full gale
 
 	# Grid lines
 	var line_col := Color(0.30, 0.30, 0.34, 0.6)
@@ -121,21 +125,21 @@ func _draw_compass() -> void:
 	_compass_rect.draw_line(Vector2(0, mid.y), Vector2(sz.x, mid.y), line_col, 1.0)
 	_compass_rect.draw_rect(Rect2(Vector2.ZERO, sz), Color(0.30, 0.30, 0.34, 0.6), false, 1.0)
 
-	# Corner labels (TOP = calm)
+	# Corner labels
 	var lc := Color(0.55, 0.58, 0.65, 0.9)
 	var fs := 9
-	_compass_rect.draw_string(ThemeDB.fallback_font, Vector2(3, 12),             "CALM-CLEAR",    HORIZONTAL_ALIGNMENT_LEFT, -1, fs, lc)
-	_compass_rect.draw_string(ThemeDB.fallback_font, Vector2(3, sz.y - 4),       "DRY SQUALL",    HORIZONTAL_ALIGNMENT_LEFT, -1, fs, lc)
-	_compass_rect.draw_string(ThemeDB.fallback_font, Vector2(mid.x + 3, 12),     "GREY DRIZZLE",  HORIZONTAL_ALIGNMENT_LEFT, -1, fs, lc)
-	_compass_rect.draw_string(ThemeDB.fallback_font, Vector2(mid.x + 3, sz.y - 4), "FULL STORM",  HORIZONTAL_ALIGNMENT_LEFT, -1, fs, lc)
+	_compass_rect.draw_string(ThemeDB.fallback_font, Vector2(3, 12),               "DEAD CALM",    HORIZONTAL_ALIGNMENT_LEFT, -1, fs, lc)
+	_compass_rect.draw_string(ThemeDB.fallback_font, Vector2(3, sz.y - 4),         "OLD SWELL",    HORIZONTAL_ALIGNMENT_LEFT, -1, fs, lc)
+	_compass_rect.draw_string(ThemeDB.fallback_font, Vector2(mid.x + 3, 12),       "FRESH BREEZE", HORIZONTAL_ALIGNMENT_LEFT, -1, fs, lc)
+	_compass_rect.draw_string(ThemeDB.fallback_font, Vector2(mid.x + 3, sz.y - 4), "FULL GALE",    HORIZONTAL_ALIGNMENT_LEFT, -1, fs, lc)
 
 	# Axis arrows
 	var ax_col := Color(0.70, 0.72, 0.78, 0.8)
-	_compass_rect.draw_string(ThemeDB.fallback_font, Vector2(sz.x / 2 - 24, sz.y - 2), "← RAIN →",  HORIZONTAL_ALIGNMENT_LEFT, -1, 9, ax_col)
-	_compass_rect.draw_string(ThemeDB.fallback_font, Vector2(2, mid.y - 2),             "↑ CALM",    HORIZONTAL_ALIGNMENT_LEFT, -1, 9, ax_col)
+	_compass_rect.draw_string(ThemeDB.fallback_font, Vector2(sz.x / 2 - 32, sz.y - 2), "← WIND m/s →", HORIZONTAL_ALIGNMENT_LEFT, -1, 9, ax_col)
+	_compass_rect.draw_string(ThemeDB.fallback_font, Vector2(2, mid.y - 2),             "↑ CALM",       HORIZONTAL_ALIGNMENT_LEFT, -1, 9, ax_col)
 
-	# Current position dot — wind=0 (calm) at top, wind=1 (gale) at bottom
-	var dot := Vector2(precip * sz.x, wind * sz.y)
+	# Current position dot — wind_force=0 (calm sea) at top, wind_speed=0 at left
+	var dot := Vector2(wind_speed_norm * sz.x, wind * sz.y)
 	_compass_rect.draw_circle(dot, 7.0, Color(1.0, 0.90, 0.30, 0.95))
 	_compass_rect.draw_arc(dot, 7.0, 0.0, TAU, 24, Color(0.0, 0.0, 0.0, 0.6), 1.5)
 
@@ -174,17 +178,20 @@ func _update_label() -> void:
 		return
 	var precip := float(w.get("precipitation"))
 	var wind   := float(w.get("wind_force"))
+	var wind_speed_ms := float(w.get("wind_speed_ms"))
 	var vis    := float(w.get("visibility"))
 	var tod    := float(w.get("time_of_day"))
 	var cloud_dial := float(w.get("cloud_cover"))
 	var cloud_sky := float(w.get("cloud_coverage"))
 	_label.text = (
-		"Rain %d%%  Wind %d%%  SkyCloud %d%% (dial %d%%)\nFog  %d%%  Time %.2f\n"
+		"Wind %.1f m/s (%.0f kn)  Sea %d%%  Rain %d%%\nClouds %d%% (dial %d%%)  Fog %d%%  Time %.2f\n"
 		% [
-			int(precip * 100), int(wind * 100), int(cloud_sky * 100),
-			int(cloud_dial * 100), int((1.0 - vis) * 100), tod,
+			wind_speed_ms, wind_speed_ms * 1.94384,
+			int(wind * 100), int(precip * 100),
+			int(cloud_sky * 100), int(cloud_dial * 100),
+			int((1.0 - vis) * 100), tod,
 		]
-		+ "← → Rain    ↑ Calm / ↓ Gale\nShift+←→ Time  Shift+↑↓ Fog\nCtrl+←→ Clouds  Ctrl+↑↓ Waves"
+		+ "← → Wind m/s    ↑ Calm / ↓ Gale\nShift+←→ Time  Shift+↑↓ Fog\nCtrl+←→ Rain   Ctrl+↑↓ Clouds"
 	)
 
 
