@@ -75,11 +75,10 @@ func _rebuild() -> void:
 	var gmat                 := StandardMaterial3D.new()
 	gmat.albedo_color        = Color.WHITE
 	gmat.vertex_color_use_as_albedo = true
-	gmat.shading_mode        = BaseMaterial3D.SHADING_MODE_PER_PIXEL
-	gmat.roughness           = 0.92
-	# Cull back faces — the terrain is a closed surface viewed from above.
-	# CULL_DISABLED rendered both sides, which combined with the (now-fixed)
-	# downward winding made the island look like translucent crystal facets.
+	# Unshaded: vertex colours render exactly as set without sky/sun wash-out.
+	# Forward+ ambient light made the terrain appear nearly white regardless
+	# of colour values. Stylised low-poly terrain looks correct unshaded.
+	gmat.shading_mode        = BaseMaterial3D.SHADING_MODE_UNSHADED
 	gmat.cull_mode           = BaseMaterial3D.CULL_BACK
 	ground.material_override = gmat
 	gbody.add_child(ground)
