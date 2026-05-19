@@ -36,10 +36,10 @@ const PAD_BLEND_M        : float = 10.0   # smooth ring around the port pad
 const SHORE_FALLOFF_M    : float = 16.0   # beach-like falloff at the polygon edge
 
 # ── Vertex colour ramp (sand → grass → rock) ────────────────────────────────
-const C_SAND  : Color = Color(0.62, 0.54, 0.36)
-const C_GRASS : Color = Color(0.10, 0.22, 0.08)
-const C_ROCK  : Color = Color(0.24, 0.22, 0.18)
-const C_PAD   : Color = Color(0.18, 0.22, 0.14)
+const C_SAND  : Color = Color(0.58, 0.54, 0.46)
+const C_GRASS : Color = Color(0.26, 0.30, 0.20)
+const C_ROCK  : Color = Color(0.36, 0.34, 0.30)
+const C_PAD   : Color = Color(0.28, 0.28, 0.24)
 
 
 static func build_polygon(island_width: float, plot_depth: float, seed: int) -> PackedVector2Array:
