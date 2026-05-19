@@ -13,7 +13,13 @@ var _rotor: Node3D
 var _spot1: SpotLight3D
 var _spot2: SpotLight3D
 var _omni: OmniLight3D
+var _beam_mi1: MeshInstance3D
+var _beam_mi2: MeshInstance3D
 var _beam_mat: ShaderMaterial
+## Tracks whether the lighthouse contribution is currently "on" so we can
+## set node.visible exactly when it transitions — keeps the per-frame
+## branch cheap (one bool compare) instead of poking visibility every tick.
+var _is_active: bool = false
 
 const BEAM_SHADER = """
 shader_type spatial;
@@ -60,33 +66,52 @@ func _process(delta: float) -> void:
 	if Engine.is_editor_hint() or _rotor == null:
 		return
 	_rotor.rotate_y(TAU * sweep_speed_hz * delta)
-	
+
 	var weather = get_node_or_null("/root/WeatherLighting")
-	if weather != null:
-		var fog = float(weather.get("fog_density"))
-		var time = float(weather.get("time_of_day"))
-		
-		# Night factor: time_of_day is 0.0 to 1.0. 0.5 is noon.
-		var dist_from_noon = abs(time - 0.5)
-		var night_factor = smoothstep(0.15, 0.35, dist_from_noon)
-		var fog_factor = smoothstep(0.1, 0.4, fog)
-		
-		var active_factor = clampf(night_factor + fog_factor, 0.05, 1.0)
-		
-		if _spot1:
-			_spot1.light_energy = 400.0 * active_factor
-			_spot1.light_volumetric_fog_energy = 1500.0 * active_factor
-		if _spot2:
-			_spot2.light_energy = 400.0 * active_factor
-			_spot2.light_volumetric_fog_energy = 1500.0 * active_factor
-		
-		if _omni:
-			_omni.light_energy = 20.0 * active_factor
-			_omni.light_volumetric_fog_energy = 5.0 * active_factor
-			
-		if _beam_mat:
-			_beam_mat.set_shader_parameter("energy", 1.0 * active_factor)
-			_beam_mat.set_shader_parameter("fog_density", fog)
+	if weather == null:
+		return
+
+	var fog = float(weather.get("fog_density"))
+	var time = float(weather.get("time_of_day"))
+
+	# Night factor: time_of_day is 0.0 to 1.0. 0.5 is noon.
+	var dist_from_noon = abs(time - 0.5)
+	var night_factor = smoothstep(0.15, 0.35, dist_from_noon)
+	var fog_factor = smoothstep(0.1, 0.4, fog)
+	var raw_factor: float = night_factor + fog_factor
+
+	# Toggle hard off when contribution would be invisible — kills the spotlight
+	# contribution to volumetric fog (each spot was injecting up to 1500 units
+	# of fog energy over a 4 km range, very expensive) and stops the alpha-blended
+	# beam meshes from drawing transparent overdraw across the screen. Threshold
+	# matches the old 0.05 clamp floor: at high noon with no fog the lighthouse
+	# was only contributing 5% energy anyway, which is below visual perception
+	# through the existing dim/grade pipeline.
+	var should_be_active: bool = raw_factor > 0.04
+	if should_be_active != _is_active:
+		_is_active = should_be_active
+		if _spot1: _spot1.visible = should_be_active
+		if _spot2: _spot2.visible = should_be_active
+		if _omni:  _omni.visible  = should_be_active
+		if _beam_mi1: _beam_mi1.visible = should_be_active
+		if _beam_mi2: _beam_mi2.visible = should_be_active
+
+	if not _is_active:
+		return
+
+	var active_factor = clampf(raw_factor, 0.05, 1.0)
+	if _spot1:
+		_spot1.light_energy = 400.0 * active_factor
+		_spot1.light_volumetric_fog_energy = 1500.0 * active_factor
+	if _spot2:
+		_spot2.light_energy = 400.0 * active_factor
+		_spot2.light_volumetric_fog_energy = 1500.0 * active_factor
+	if _omni:
+		_omni.light_energy = 20.0 * active_factor
+		_omni.light_volumetric_fog_energy = 5.0 * active_factor
+	if _beam_mat:
+		_beam_mat.set_shader_parameter("energy", 1.0 * active_factor)
+		_beam_mat.set_shader_parameter("fog_density", fog)
 
 func _build() -> void:
 	if assembler != null:
@@ -122,7 +147,7 @@ func _build() -> void:
 	beam_mesh.radial_segments = 16
 	beam_mesh.rings = 1
 	
-	var _beam_mi1 = MeshInstance3D.new()
+	_beam_mi1 = MeshInstance3D.new()
 	_beam_mi1.name = "BeamMesh1"
 	_beam_mi1.mesh = beam_mesh
 	_beam_mi1.material_override = _beam_mat
@@ -130,8 +155,8 @@ func _build() -> void:
 	_beam_mi1.position = Vector3(0, 0, -1500.0)
 	_beam_mi1.rotation_degrees = Vector3(-90, 0, 0)
 	_rotor.add_child(_beam_mi1)
-	
-	var _beam_mi2 = MeshInstance3D.new()
+
+	_beam_mi2 = MeshInstance3D.new()
 	_beam_mi2.name = "BeamMesh2"
 	_beam_mi2.mesh = beam_mesh
 	_beam_mi2.material_override = _beam_mat
