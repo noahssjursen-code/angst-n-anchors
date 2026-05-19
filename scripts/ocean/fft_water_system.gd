@@ -4,6 +4,16 @@ extends Node
 const RESOLUTION = 1024
 const MAX_WAVES = 4
 
+## How many compute frames between each CPU readback of the buoyancy LUT.
+## 1 = read every frame (the old behaviour). Each readback pulls 4 layers ×
+## RESOLUTION² × 4 bytes = 16 MB at 1024² and forces a GPU pipeline stall,
+## which on a 60-fps loop is a hard sync every frame. The boat-physics
+## sampler only needs current-ish heights — running buoyancy at 30 Hz (N=2)
+## or 20 Hz (N=3) is invisible in feel but halves/thirds the stall cost.
+## Visuals stay at full 60 Hz because the displacement/slope textures are
+## sampled on the GPU side and never need to leave the device.
+const BUOYANCY_READBACK_INTERVAL: int = 2
+
 var rd: RenderingDevice
 var uniform_set: RID
 
@@ -46,6 +56,12 @@ var push_constant_params := PackedByteArray()
 var buoyancy_data: Array[PackedFloat32Array] = []
 var prev_buoyancy_data: Array[PackedFloat32Array] = []
 var prev_delta: float = 0.016
+## Counts compute frames since the last buoyancy readback. Wraps at
+## BUOYANCY_READBACK_INTERVAL so we read exactly once every N frames.
+var _readback_counter: int = 0
+## Accumulates frame deltas between readbacks; becomes `prev_delta` for the
+## CPU-side vertical-velocity calculation in WaveSurface.
+var _accumulated_delta: float = 0.0
 
 func _ready() -> void:
 	buoyancy_data.resize(4)
@@ -66,14 +82,25 @@ func _process(delta: float) -> void:
 	if not rd: return
 	time += delta
 	_run_update_fft_assemble(delta)
-	
+
+	# GPU↔CPU sync stall — skip on non-readback frames. Visual waves still
+	# update at full rate because they sample the GPU-side displacement/slope
+	# textures directly; only the CPU-side buoyancy LUT runs at the lower
+	# tick. See BUOYANCY_READBACK_INTERVAL.
+	_accumulated_delta += delta
+	_readback_counter += 1
+	if _readback_counter < BUOYANCY_READBACK_INTERVAL:
+		return
+	_readback_counter = 0
+
 	for i in range(4):
 		var bytes = rd.texture_get_data(buoyancy_tex, i)
 		if bytes.size() == RESOLUTION * RESOLUTION * 4:
 			if buoyancy_data[i] and not buoyancy_data[i].is_empty():
 				prev_buoyancy_data[i] = buoyancy_data[i]
-				prev_delta = delta
+				prev_delta = _accumulated_delta
 			buoyancy_data[i] = bytes.to_float32_array()
+	_accumulated_delta = 0.0
 
 func _compile_shaders() -> void:
 	var file = FileAccess.open("res://resources/shaders/fft_ocean_compute.glsl", FileAccess.READ)
