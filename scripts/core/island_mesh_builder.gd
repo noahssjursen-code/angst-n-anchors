@@ -83,7 +83,13 @@ static func build_polygon(island_width: float, plot_depth: float, seed: int) -> 
 ## Build a heightmapped terrain mesh from the polygon. Inside the port pad
 ## rectangle heights are 0 (flat); outside, a deterministic noise field rises up
 ## to TERRAIN_PEAK_M with a smooth pad-edge blend and a shore falloff.
-static func to_mesh(polygon: PackedVector2Array, pad_width: float, pad_depth: float, seed: int) -> ArrayMesh:
+## colour_w / colour_d define which area gets the flat-pad gravel colour.
+## They should be the *actual* port footprint (island_width × plot_depth),
+## not the expanded flat pad, so the safe-area margin colours as terrain.
+static func to_mesh(polygon: PackedVector2Array, pad_width: float, pad_depth: float, seed: int,
+		colour_w: float = -1.0, colour_d: float = -1.0) -> ArrayMesh:
+	var col_w := colour_w if colour_w > 0.0 else pad_width
+	var col_d := colour_d if colour_d > 0.0 else pad_depth
 	var data := _build_terrain(polygon, pad_width, pad_depth, seed)
 	var verts : PackedVector3Array = data["vertices"]
 	var tris  : PackedInt32Array   = data["indices"]
@@ -114,11 +120,11 @@ static func to_mesh(polygon: PackedVector2Array, pad_width: float, pad_depth: fl
 			var tmp := v1
 			v1 = v2
 			v2 = tmp
-		st.set_color(_colour_for_height(v0.y, pad_width, pad_depth, v0))
+		st.set_color(_colour_for_height(v0.y, col_w, col_d, v0))
 		st.add_vertex(v0)
-		st.set_color(_colour_for_height(v1.y, pad_width, pad_depth, v1))
+		st.set_color(_colour_for_height(v1.y, col_w, col_d, v1))
 		st.add_vertex(v1)
-		st.set_color(_colour_for_height(v2.y, pad_width, pad_depth, v2))
+		st.set_color(_colour_for_height(v2.y, col_w, col_d, v2))
 		st.add_vertex(v2)
 
 	# Side walls — extrude polygon down from Y=0 (where the terrain meets the shore).

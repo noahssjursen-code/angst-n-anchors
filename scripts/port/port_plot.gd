@@ -71,7 +71,7 @@ func _rebuild() -> void:
 
 	var ground               := MeshInstance3D.new()
 	ground.name              = "Mesh"
-	ground.mesh              = IslandMeshBuilder.to_mesh(poly, pad_w, pad_d, _layout_seed_data)
+	ground.mesh              = IslandMeshBuilder.to_mesh(poly, pad_w, pad_d, _layout_seed_data, _island_width_data, plot_depth)
 	var gmat                 := StandardMaterial3D.new()
 	gmat.albedo_color        = Color.WHITE
 	gmat.vertex_color_use_as_albedo = true
