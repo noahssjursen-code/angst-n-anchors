@@ -68,7 +68,7 @@ static func build(template_path: String) -> BoatBody:
 	mooring.name = "MooringComponent"
 	gameplay.add_child(mooring)
 
-	_add_mooring_points(gameplay, slots)
+	_add_mooring_points(gameplay, slots, stations)
 	_add_hull_lights(gameplay, hull_data, scale)
 	_add_cargo_decks(gameplay, hull_data, tmpl, slots, scale)
 
@@ -320,7 +320,15 @@ static func _instantiate_superstructure(key: String) -> Node3D:
 	return packed.instantiate() as Node3D
 
 
-static func _add_mooring_points(parent: Node3D, slots: Dictionary) -> void:
+static func _add_mooring_points(parent: Node3D, slots: Dictionary, stations: HullStations) -> void:
+	# Scale the visible bollard to the hull. The natural docking_bollard model
+	# is ~0.8 m wide and reads correctly on a 20–30 m coaster at scale 1.0.
+	# Linearly interpolate so a 13 m launch gets a smaller cleat and a 60 m
+	# freighter gets a chunkier one — keeps the visual proportion sensible.
+	var hull_length : float = stations.length_m if stations != null else 18.0
+	var t           : float = clampf((hull_length - 13.0) / 47.0, 0.0, 1.0)
+	var bollard_scale : float = lerpf(0.7, 1.5, t)
+
 	var pairs := [
 		["mooring_port_fwd",  "port",      "fwd"],
 		["mooring_stbd_fwd",  "starboard",  "fwd"],
@@ -336,6 +344,7 @@ static func _add_mooring_points(parent: Node3D, slots: Dictionary) -> void:
 		mp.position = slots[slot_name]
 		mp.set("side",    pair[1])
 		mp.set("station", pair[2])
+		mp.set("bollard_scale", bollard_scale)
 		parent.add_child(mp)
 
 
