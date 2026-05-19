@@ -72,15 +72,10 @@ func _rebuild() -> void:
 	var ground               := MeshInstance3D.new()
 	ground.name              = "Mesh"
 	ground.mesh              = IslandMeshBuilder.to_mesh(poly, pad_w, pad_d, _layout_seed_data, _island_width_data, plot_depth)
-	var gmat                 := StandardMaterial3D.new()
-	gmat.albedo_color        = Color.WHITE
-	gmat.vertex_color_use_as_albedo = true
-	# Unshaded: vertex colours render exactly as set without sky/sun wash-out.
-	# Forward+ ambient light made the terrain appear nearly white regardless
-	# of colour values. Stylised low-poly terrain looks correct unshaded.
-	gmat.shading_mode        = BaseMaterial3D.SHADING_MODE_UNSHADED
-	gmat.cull_mode           = BaseMaterial3D.CULL_BACK
-	ground.material_override = gmat
+	var terrain_shader           := load("res://resources/shaders/terrain.gdshader") as Shader
+	var gmat                     := ShaderMaterial.new()
+	gmat.shader                  = terrain_shader
+	ground.material_override     = gmat
 	gbody.add_child(ground)
 
 	var gcol  := CollisionShape3D.new()
