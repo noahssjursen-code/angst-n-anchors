@@ -94,13 +94,32 @@ static func to_mesh(polygon: PackedVector2Array, pad_width: float, pad_depth: fl
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
 
 	# Top surface — terrain, with vertex colour by elevation.
+	# Geometry2D.triangulate_delaunay's docs promise CCW output but in
+	# practice the winding is mixed across the returned triangle list.
+	# Godot uses CW winding for front-facing triangles (`SurfaceTool`'s
+	# `generate_normals` produces +Y normals for CW-wound triangles, not
+	# CCW), so we force every emitted triangle to be CW-from-above.
+	#
+	# The 2D XZ cross product `(v1-v0) × (v2-v0)` Y-component is positive
+	# for *standard* CCW winding — which is Godot CW from below, i.e. the
+	# wrong direction. So we swap when the value is positive.
 	var tri_count : int = tris.size() / 3
 	for i in range(tri_count):
 		var base : int = i * 3
-		for j in range(3):
-			var v := verts[tris[base + j]]
-			st.set_color(_colour_for_height(v.y, pad_width, pad_depth, v))
-			st.add_vertex(v)
+		var v0 := verts[tris[base + 0]]
+		var v1 := verts[tris[base + 1]]
+		var v2 := verts[tris[base + 2]]
+		var cross_y : float = (v1.z - v0.z) * (v2.x - v0.x) - (v1.x - v0.x) * (v2.z - v0.z)
+		if cross_y > 0.0:
+			var tmp := v1
+			v1 = v2
+			v2 = tmp
+		st.set_color(_colour_for_height(v0.y, pad_width, pad_depth, v0))
+		st.add_vertex(v0)
+		st.set_color(_colour_for_height(v1.y, pad_width, pad_depth, v1))
+		st.add_vertex(v1)
+		st.set_color(_colour_for_height(v2.y, pad_width, pad_depth, v2))
+		st.add_vertex(v2)
 
 	# Side walls — extrude polygon down from Y=0 (where the terrain meets the shore).
 	var bottom : float = 0.0 - DEPTH
@@ -128,11 +147,23 @@ static func to_collision_shape(polygon: PackedVector2Array, pad_width: float, pa
 	var verts : PackedVector3Array = data["vertices"]
 	var tris  : PackedInt32Array   = data["indices"]
 	var faces := PackedVector3Array()
+	# Same per-triangle winding correction as to_mesh — Godot/Jolt use CW
+	# winding for face normals, so we swap whenever the standard cross
+	# product Y component is positive (= standard CCW = Godot's "wrong way").
 	var tri_count : int = tris.size() / 3
 	for i in range(tri_count):
 		var base : int = i * 3
-		for j in range(3):
-			faces.append(verts[tris[base + j]])
+		var v0 := verts[tris[base + 0]]
+		var v1 := verts[tris[base + 1]]
+		var v2 := verts[tris[base + 2]]
+		var cross_y : float = (v1.z - v0.z) * (v2.x - v0.x) - (v1.x - v0.x) * (v2.z - v0.z)
+		if cross_y > 0.0:
+			var tmp := v1
+			v1 = v2
+			v2 = tmp
+		faces.append(v0)
+		faces.append(v1)
+		faces.append(v2)
 	var shape := ConcavePolygonShape3D.new()
 	shape.set_faces(faces)
 	return shape
