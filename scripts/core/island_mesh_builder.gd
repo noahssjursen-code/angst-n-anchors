@@ -23,7 +23,7 @@ extends RefCounted
 # ── Silhouette knobs ────────────────────────────────────────────────────────
 const MARGIN      : float = 45.0   # avg land extension beyond port rectangle on 3 sides
 const AMPLITUDE   : float = 15.0   # noise variation around MARGIN
-const DEPTH       : float =  8.0   # extrusion thickness below Y=0
+const DEPTH       : float = 14.0   # extrusion thickness below Y=0
 const SIDE_SEGS   : int   =  8
 const INLAND_SEGS : int   =  7
 
@@ -260,6 +260,15 @@ static func _height_at(p: Vector2, polygon: PackedVector2Array, pad_w: float, pa
 	# Noise sample in 0..1 (FastNoiseLite outputs -1..1).
 	var n : float = noise.get_noise_2d(p.x, p.y) * 0.5 + 0.5
 	return n * TERRAIN_PEAK_M * pad_t * shore_t
+
+
+static func get_height_at(p: Vector2, polygon: PackedVector2Array, pad_w: float, pad_d: float, seed: int) -> float:
+	var noise := FastNoiseLite.new()
+	noise.seed            = seed
+	noise.noise_type      = FastNoiseLite.TYPE_SIMPLEX
+	noise.frequency       = TERRAIN_NOISE_FREQ
+	noise.fractal_octaves = TERRAIN_NOISE_OCT
+	return _height_at(p, polygon, pad_w, pad_d, noise)
 
 
 static func _dist_to_polygon_edge(p: Vector2, polygon: PackedVector2Array) -> float:

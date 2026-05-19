@@ -120,6 +120,8 @@ func _rebuild() -> void:
 	facilities.position       = Vector3(0.0, 0.0, -hd + PortDock.INLAND_DEPTH)
 	add_child(facilities)
 
+	_build_trees(poly, pad_w, pad_d)
+
 	if not Engine.is_editor_hint():
 		call_deferred("_build_npcs")
 
@@ -168,6 +170,88 @@ func _build_npcs() -> void:
 
 	if not port_id.is_empty():
 		call_deferred("_register_with_registry")
+
+
+func _build_trees(poly: PackedVector2Array, pad_w: float, pad_d: float) -> void:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = _layout_seed_data ^ 0x74726565  # "tree" XOR'd so placement differs from layout
+
+	var aabb_min := Vector2( INF,  INF)
+	var aabb_max := Vector2(-INF, -INF)
+	for p in poly:
+		aabb_min.x = minf(aabb_min.x, p.x)
+		aabb_min.y = minf(aabb_min.y, p.y)
+		aabb_max.x = maxf(aabb_max.x, p.x)
+		aabb_max.y = maxf(aabb_max.y, p.y)
+
+	var n_trees     : int   = 10 + port_size * 8
+	var pad_hw      : float = pad_w * 0.5
+	var pad_hd      : float = pad_d * 0.5
+	var excl_margin : float = 4.0  # extra buffer inside pad edge before trees begin
+
+	var placed   := 0
+	var attempts := 0
+	while placed < n_trees and attempts < n_trees * 25:
+		attempts += 1
+		var x  := rng.randf_range(aabb_min.x, aabb_max.x)
+		var z  := rng.randf_range(aabb_min.y, aabb_max.y)
+		var p2 := Vector2(x, z)
+		if not Geometry2D.is_point_in_polygon(p2, poly):
+			continue
+		# Keep trees outside the flat pad + margin
+		if absf(x) < pad_hw + excl_margin and absf(z) < pad_hd + excl_margin:
+			continue
+		var h := IslandMeshBuilder.get_height_at(p2, poly, pad_w, pad_d, _layout_seed_data)
+		if h < 1.0:  # skip beach / near-shore
+			continue
+		_place_tree(Vector3(x, h, z), rng)
+		placed += 1
+
+
+func _place_tree(pos: Vector3, rng: RandomNumberGenerator) -> void:
+	var s   : float = rng.randf_range(0.75, 1.35)
+	var rot : float = rng.randf_range(0.0, TAU)
+
+	var root      := Node3D.new()
+	root.name      = "Tree"
+	root.position  = pos
+	root.rotation.y = rot
+	add_child(root)
+
+	# Trunk
+	var trunk_mesh              := CylinderMesh.new()
+	trunk_mesh.top_radius       = 0.20 * s
+	trunk_mesh.bottom_radius    = 0.28 * s
+	trunk_mesh.height           = 3.2  * s
+	var trunk_mat               := StandardMaterial3D.new()
+	trunk_mat.albedo_color      = Color(0.22, 0.13, 0.07)
+	trunk_mat.roughness         = 0.92
+	var trunk_mi                := MeshInstance3D.new()
+	trunk_mi.mesh               = trunk_mesh
+	trunk_mi.material_override  = trunk_mat
+	trunk_mi.position           = Vector3(0.0, 1.6 * s, 0.0)
+	root.add_child(trunk_mi)
+
+	# Foliage — three stacked cones, widest at base
+	var foliage_color := Color(0.07, 0.17, 0.05)
+	var layers : Array[Array] = [
+		[2.6 * s, 0.0, 4.2 * s, 2.2 * s],   # [bot_r, top_r, height, centre_y]
+		[1.9 * s, 0.0, 3.4 * s, 5.0 * s],
+		[1.1 * s, 0.0, 2.6 * s, 7.2 * s],
+	]
+	for layer in layers:
+		var cone_mesh              := CylinderMesh.new()
+		cone_mesh.bottom_radius    = layer[0]
+		cone_mesh.top_radius       = layer[1]
+		cone_mesh.height           = layer[2]
+		var cone_mat               := StandardMaterial3D.new()
+		cone_mat.albedo_color      = foliage_color
+		cone_mat.roughness         = 0.88
+		var cone_mi                := MeshInstance3D.new()
+		cone_mi.mesh               = cone_mesh
+		cone_mi.material_override  = cone_mat
+		cone_mi.position           = Vector3(0.0, layer[3], 0.0)
+		root.add_child(cone_mi)
 
 
 ## Spawn the port's ambient walkers. Each one is deterministic from
