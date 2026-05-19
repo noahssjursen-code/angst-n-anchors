@@ -27,11 +27,24 @@ static func set_weather_short_wave_factor(wind: float, precip: float, storm: flo
 	var rainy_short := x * lerpf(1.0, 0.45, y)
 	short_wave_factor = clampf(rainy_short * 0.78 + storm_t * 0.72, 0.0, 1.0)
 
+## Cached per-millisecond — the function is sampled multiple times per
+## physics frame (once per buoyancy point, once per vertical-velocity
+## query), and the value only depends on Time.get_ticks_msec(). At 9
+## buoyancy samples × 2 calls per frame this was running 2 sin + pow +
+## clampf 18× per physics tick.
+static var _wem_cache_tick:  int   = -1
+static var _wem_cache_value: float = 0.85
+
 static func get_wave_energy_multiplier() -> float:
-	var t := get_sim_time()
+	var tick := Time.get_ticks_msec()
+	if tick == _wem_cache_tick:
+		return _wem_cache_value
+	var t := tick * 0.001
 	var gate := sin(t * 0.032) + sin(t * 0.011 + 1.7) * 0.22 - 0.72
 	var rare := pow(clampf(gate * 1.9, 0.0, 1.0), 3.5)
-	return 0.85 + rare * 0.6
+	_wem_cache_value = 0.85 + rare * 0.6
+	_wem_cache_tick  = tick
+	return _wem_cache_value
 
 static func set_coupled_vessel(body: RigidBody3D) -> void:
 	_coupled_vessel = body
