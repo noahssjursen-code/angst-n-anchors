@@ -20,7 +20,8 @@
 
   "buoyancy": {
     "block_coefficient": 0.73,
-    "vertical_damping": 4300
+    "vertical_damping": 4300,
+    "buoyancy_multiplier": 0.82
   },
 
   "hydrodynamics": {
