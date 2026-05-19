@@ -25,9 +25,10 @@ var _ocean_mesh:            MeshInstance3D
 var _ocean_mesh_outer:      MeshInstance3D
 var _fft_system:            Node # Use Node instead of FFTWaterSystem to avoid unresolved class error without reload
 
-## Shader's land_disks[] array bound — must match MAX_LAND_DISKS in ocean_waves.gdshader.
-const MAX_LAND_DISKS_SHADER : int = 64
-var _last_land_disk_count   : int = -1
+## Tracks whether the baked LandField shelter texture is currently bound to
+## the ocean shader, so we re-upload exactly once when LandField finishes
+## initialising (which happens after WorldRenderer is added).
+var _shelter_texture_bound : bool = false
 
 
 func _ready() -> void:
@@ -134,7 +135,11 @@ func _build_sky() -> void:
 	sun.light_color                       = Color(1.0, 0.92, 0.78)
 	sun.light_energy                      = 1.5
 	sun.shadow_enabled                    = true
-	sun.directional_shadow_mode           = DirectionalLight3D.SHADOW_PARALLEL_4_SPLITS
+	# 2 cascades over 180 m gives a 90 m near split and 90 m far — plenty for
+	# the dock + immediate-water visible foreground. 4 cascades was rendering
+	# the shadowmap twice as often as needed for this shadow distance and was
+	# a measurable GPU chunk (~0.3-0.6 ms/frame on mid-tier).
+	sun.directional_shadow_mode           = DirectionalLight3D.SHADOW_PARALLEL_2_SPLITS
 	sun.directional_shadow_max_distance   = 180.0
 	sun.shadow_bias                       = 0.04
 	add_child(sun)
@@ -347,22 +352,22 @@ func _apply_sky_shader(daylight: float, cloud: float, storm: float) -> void:
 	_sky_shader_material.set_shader_parameter("star_visibility",   clampf(star_vis, 0.0, 1.0))
 
 
-## Pushes LandField's island disks into the ocean shader so per-vertex wave
-## amplitude fades to zero inside / very near land. Lazy: re-binds only when
-## the island count actually changes (world rebuild, hot-reload), so the
-## per-frame cost is one int compare in steady state. Falls back to "open
-## ocean everywhere" if LandField hasn't been initialised yet.
+## Binds LandField's baked shelter texture to the ocean shader. The texture is
+## generated once at world init from the island disks, so this runs exactly
+## once when LandField finishes initialising (WorldRenderer is added to the
+## scene first). Steady-state per-frame cost is one bool compare.
 func _sync_land_shelter() -> void:
 	if _ocean_shader_material == null:
 		return
-	var n := LandField.get_island_count()
-	if n == _last_land_disk_count:
+	if _shelter_texture_bound:
 		return
-	_last_land_disk_count = n
-	var disks := LandField.get_disks_packed(MAX_LAND_DISKS_SHADER)
-	_ocean_shader_material.set_shader_parameter("land_disks",       disks)
-	_ocean_shader_material.set_shader_parameter("land_disk_count",  disks.size())
-	_ocean_shader_material.set_shader_parameter("shelter_falloff_m", LandField.SHELTER_FALLOFF_M)
+	var tex := LandField.get_baked_shelter_texture()
+	if tex == null:
+		return
+	_ocean_shader_material.set_shader_parameter("land_shelter_map",    tex)
+	_ocean_shader_material.set_shader_parameter("land_shelter_origin", LandField.get_baked_world_origin())
+	_ocean_shader_material.set_shader_parameter("land_shelter_size",   LandField.get_baked_world_size())
+	_shelter_texture_bound = true
 
 
 func _apply_ocean_shader(daylight: float, cloud: float, rain: float, wind: float, storm: float, fog_t: float) -> void:

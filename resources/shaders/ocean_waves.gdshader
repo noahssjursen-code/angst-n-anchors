@@ -32,14 +32,16 @@ uniform vec2 boat_coupling_axes = vec2(1.0, 1.0);
 uniform vec4 boat_basis = vec4(1.0, 0.0, 0.0, 1.0);
 uniform vec2 boat_velocity = vec2(0.0, 0.0);
 
-// ── Land shelter (Phase 2.5++) ─────────────────────────────────────────────
-// Each island is packed as vec4(center_x, center_z, radius_m, _pad). Waves
-// fade out smoothly from full amplitude at `shelter_falloff_m` offshore down
-// to zero inside the island disk. Filled at world-init from LandField.
-const int MAX_LAND_DISKS = 64;
-uniform vec4  land_disks[MAX_LAND_DISKS];
-uniform int   land_disk_count    = 0;
-uniform float shelter_falloff_m  = 600.0;
+// ── Land shelter (baked SDF) ───────────────────────────────────────────────
+// LandField bakes a 2D R32F shelter texture at world init covering all
+// islands + their falloff zones. Each texel stores the precomputed
+// `shore_shelter` value (0 inside land, 1 in open water, smoothstepped in
+// between). The vertex shader does a single texture sample here instead of
+// iterating up to 64 land_disks per vertex — the per-frame difference is
+// ~4.4M distance() ops at typical port counts.
+uniform sampler2D land_shelter_map  : filter_linear, repeat_disable;
+uniform vec2      land_shelter_origin = vec2(0.0);
+uniform float     land_shelter_size   = 0.0;  // 0 means "no bake → open water"
 
 varying vec3 v_world_pos;
 varying vec3 v_world_normal;
@@ -128,20 +130,15 @@ void vertex() {
 
 	fft_foam = clamp(fft_foam * 0.22, 0.0, 1.0);
 
-	// Shore shelter — vertices inside / very near an island disk get their
-	// wave displacement scaled to zero, so waves can never climb over the
-	// land mesh, the dock, the cranes, or the buildings on top. Smoothly
-	// returns to 1.0 (open ocean) over `shelter_falloff_m` from the shore.
+	// Shore shelter — sample the LandField bake. Constant cost per vertex.
+	// Outside the baked region (or before LandField init) we're "open ocean".
 	float shelter = 1.0;
-	if (land_disk_count > 0) {
-		float min_d = 1e9;
-		for (int li = 0; li < land_disk_count; li++) {
-			vec4 disk = land_disks[li];
-			float d = distance(wp.xz, disk.xy) - disk.z;
-			min_d = min(min_d, d);
+	if (land_shelter_size > 0.0) {
+		vec2 shelter_uv = (wp.xz - land_shelter_origin) / land_shelter_size;
+		if (shelter_uv.x >= 0.0 && shelter_uv.x <= 1.0
+				&& shelter_uv.y >= 0.0 && shelter_uv.y <= 1.0) {
+			shelter = textureLod(land_shelter_map, shelter_uv, 0.0).r;
 		}
-		shelter = clamp(min_d / shelter_falloff_m, 0.0, 1.0);
-		shelter = shelter * shelter * (3.0 - 2.0 * shelter); // smoothstep
 	}
 
 	// Increase the FFT base amplitude slightly so shapes have mass.
