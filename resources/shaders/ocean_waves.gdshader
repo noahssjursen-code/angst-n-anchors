@@ -89,22 +89,21 @@ float wf_ocean_ripple_eta(vec2 xz, float wt) {
 }
 
 vec2 wf_ocean_eta_gradient(vec2 xz, float wt, float e) {
+	// 4-tap central-difference cross instead of an 8-tap Sobel.
+	// Each call to wf_ocean_ripple_eta does 3 vnoise samples + 2 sin, so
+	// dropping from 8 → 4 samples halves the per-fragment gradient cost
+	// (~440 ALU ops/fragment saved). Sobel's extra smoothing is invisible
+	// here because wf_ocean_ripple_eta already sums three noise octaves +
+	// two sinusoids; the noise field is smooth at the stencil scale.
 	float e2 = max(e, 1e-4);
 
-	float hx_m_z_m = wf_ocean_ripple_eta(xz + vec2(-e2, -e2), wt);
-	float hx_0_z_m = wf_ocean_ripple_eta(xz + vec2(0.0, -e2), wt);
-	float hx_p_z_m = wf_ocean_ripple_eta(xz + vec2(e2, -e2), wt);
-	float hx_m_0 = wf_ocean_ripple_eta(xz + vec2(-e2, 0.0), wt);
-	float hx_p_0 = wf_ocean_ripple_eta(xz + vec2(e2, 0.0), wt);
-	float hx_m_z_p = wf_ocean_ripple_eta(xz + vec2(-e2, e2), wt);
-	float hx_0_z_p = wf_ocean_ripple_eta(xz + vec2(0.0, e2), wt);
-	float hx_p_z_p = wf_ocean_ripple_eta(xz + vec2(e2, e2), wt);
+	float h_xm = wf_ocean_ripple_eta(xz + vec2(-e2, 0.0), wt);
+	float h_xp = wf_ocean_ripple_eta(xz + vec2( e2, 0.0), wt);
+	float h_zm = wf_ocean_ripple_eta(xz + vec2(0.0, -e2), wt);
+	float h_zp = wf_ocean_ripple_eta(xz + vec2(0.0,  e2), wt);
 
-	float gx = hx_p_z_m + 2.0 * hx_p_0 + hx_p_z_p - hx_m_z_m - 2.0 * hx_m_0 - hx_m_z_p;
-	float gz = hx_m_z_p + 2.0 * hx_0_z_p + hx_p_z_p - hx_m_z_m - 2.0 * hx_0_z_m - hx_p_z_m;
-
-	float inv = 1.0 / max(8.0 * e2, 1e-4);
-	return vec2(gx * inv, gz * inv);
+	float inv = 1.0 / max(2.0 * e2, 1e-4);
+	return vec2((h_xp - h_xm) * inv, (h_zp - h_zm) * inv);
 }
 
 void vertex() {
