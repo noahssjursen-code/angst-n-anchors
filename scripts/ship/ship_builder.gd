@@ -70,14 +70,7 @@ static func build(template_path: String) -> BoatBody:
 
 	_add_mooring_points(gameplay, slots)
 	_add_hull_lights(gameplay, hull_data, scale)
-
-	for deck_slot in tmpl.get("cargo_decks", []):
-		var slot_name := str(deck_slot)
-		if slots.has(slot_name):
-			var deck := CargoDeckComponent.new()
-			deck.name = "CargoDeck_" + slot_name
-			deck.position = slots[slot_name]
-			gameplay.add_child(deck)
+	_add_cargo_decks(gameplay, hull_data, tmpl, slots, scale)
 
 	return boat
 
@@ -234,6 +227,65 @@ static func _add_hull_lights(parent: Node3D, hull_data: Dictionary, scale: float
 		light.position = pos
 		light.light_type = type_id
 		parent.add_child(light)
+
+
+## Spawn cargo decks. Source of truth for deck dimensions is the hull JSON's
+## `cargo_decks` array; entries look like:
+##   {"name": "main", "position": [0, 1.05, 0],
+##    "deck_width": 2.8, "deck_length": 6.5, "cell_size": 1.0}
+##
+## The template can still filter which decks to enable by listing names in
+## its own `cargo_decks` array (legacy contract). If the template omits the
+## key, every hull-declared deck is added — which is what new commissions do.
+## If the template provides an empty list, no decks are added (used by very
+## small launches that shouldn't carry cargo).
+static func _add_cargo_decks(parent: Node3D, hull_data: Dictionary, tmpl: Dictionary,
+		slots: Dictionary, scale: float) -> void:
+	var hull_decks = hull_data.get("cargo_decks", [])
+	if typeof(hull_decks) != TYPE_ARRAY:
+		hull_decks = []
+
+	# Build a name → hull-deck-def lookup so the template can filter by name.
+	var by_name: Dictionary = {}
+	for d in hull_decks:
+		if typeof(d) == TYPE_DICTIONARY:
+			by_name[str(d.get("name", ""))] = d
+
+	var tmpl_decks: Variant = tmpl.get("cargo_decks", null)
+	var names_to_build: Array = []
+	if tmpl_decks == null:
+		# Template did not specify — use everything the hull declares.
+		for d in hull_decks:
+			if typeof(d) == TYPE_DICTIONARY:
+				names_to_build.append(str(d.get("name", "")))
+	elif typeof(tmpl_decks) == TYPE_ARRAY:
+		for entry in tmpl_decks:
+			names_to_build.append(str(entry))
+
+	for deck_name in names_to_build:
+		if not by_name.has(deck_name):
+			# Legacy fallback: deck_name is a slot key with no dimensions —
+			# use defaults sized for that slot's position.
+			if slots.has(deck_name):
+				var legacy := CargoDeckComponent.new()
+				legacy.name = "CargoDeck_" + deck_name
+				legacy.position = slots[deck_name]
+				parent.add_child(legacy)
+			continue
+		var def: Dictionary = by_name[deck_name]
+		var pos_arr = def.get("position", [0, 0, 0])
+		var pos := Vector3.ZERO
+		if typeof(pos_arr) == TYPE_ARRAY and pos_arr.size() >= 3:
+			pos = Vector3(float(pos_arr[0]), float(pos_arr[1]), float(pos_arr[2])) * scale
+		var deck := CargoDeckComponent.new()
+		deck.name = "CargoDeck_" + deck_name
+		deck.position = pos
+		deck.deck_width_m = float(def.get("deck_width", 5.0)) * scale
+		deck.deck_length_m = float(def.get("deck_length", 8.0)) * scale
+		var cell_size := float(def.get("cell_size", 1.5)) * scale
+		deck.cell_size_x_m = cell_size
+		deck.cell_size_z_m = cell_size
+		parent.add_child(deck)
 
 
 static func _light_type_from_string(s: String) -> int:

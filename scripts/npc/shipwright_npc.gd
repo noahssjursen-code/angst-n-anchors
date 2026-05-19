@@ -229,12 +229,14 @@ func _try_place_at_berth(ship: BoatBody) -> bool:
 # ── Template builder ──────────────────────────────────────────────────────────
 
 func _build_template(entry: Dictionary) -> Dictionary:
+	# Note: no `cargo_decks` key — ShipBuilder will instantiate every deck the
+	# hull JSON declares (sized properly to the hull). Add an explicit array to
+	# restrict the set, or `[]` to commission with no cargo decks.
 	return {
 		"display_name":   str(entry["display"]),
 		"hull":           str(entry["hull_file"]),
 		"scale":          1.0,
 		"superstructure": str(entry["superstructure"]),
-		"cargo_decks":    [],
 		"physics": {
 			"auto_mass_from_hull": true,
 			"design_draft_fraction": 0.45,

@@ -383,5 +383,29 @@
         -3.6
       ]
     }
+  ],
+  "cargo_decks": [
+    {
+      "name": "main",
+      "position": [
+        0.0,
+        1.55,
+        -2.62
+      ],
+      "deck_width": 3.12,
+      "deck_length": 7.75,
+      "cell_size": 1.25
+    },
+    {
+      "name": "fwd",
+      "position": [
+        0.0,
+        1.55,
+        5.12
+      ],
+      "deck_width": 3.12,
+      "deck_length": 7.75,
+      "cell_size": 1.25
+    }
   ]
 }

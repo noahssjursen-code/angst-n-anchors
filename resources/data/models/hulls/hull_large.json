@@ -401,5 +401,29 @@
         -18.0
       ]
     }
+  ],
+  "cargo_decks": [
+    {
+      "name": "main",
+      "position": [
+        0.0,
+        3.05,
+        4.5
+      ],
+      "deck_width": 7.8,
+      "deck_length": 49.0,
+      "cell_size": 1.5
+    },
+    {
+      "name": "aft",
+      "position": [
+        0.0,
+        3.05,
+        -26.0
+      ],
+      "deck_width": 7.8,
+      "deck_length": 6.0,
+      "cell_size": 1.5
+    }
   ]
 }
