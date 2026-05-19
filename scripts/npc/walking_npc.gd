@@ -19,6 +19,10 @@ extends NpcBase
 @export var anchor_offset: Vector3 = Vector3.ZERO
 
 var _anim: WalkAnimator
+## Precomputed patrol loop: waypoints, segment lengths, perimeter, walk speed.
+## Pure function of (port_seed, npc_index, port_radius) — captured once at
+## ready so the per-frame path is just a segment-walk + lerp.
+var _loop_data: Dictionary
 
 
 func _ready() -> void:
@@ -31,6 +35,7 @@ func _ready() -> void:
 	clothing_color = Color.from_hsv(rng.randf(),                 0.45, rng.randf_range(0.30, 0.65))
 	trousers_color = Color.from_hsv(rng.randf(),                 0.30, rng.randf_range(0.18, 0.40))
 	super._ready()
+	_loop_data = AmbientPopulation.build_loop(port_seed, npc_index, port_radius)
 	# NpcBase builds synchronously now → animator can attach in the same frame.
 	_anim = WalkAnimator.new()
 	_anim.attach(self)
@@ -40,11 +45,10 @@ func _process(_delta: float) -> void:
 	if Engine.is_editor_hint():
 		return
 	var t := Time.get_ticks_msec() * 0.001
-	var xform := AmbientPopulation.local_transform_at(port_seed, npc_index, t, port_radius)
+	var xform := AmbientPopulation.transform_along_loop(_loop_data, t)
 	# Walk cycle: cumulative distance = speed × time. Locks gait visually to
 	# patrol speed without any per-walker state.
-	var speed := AmbientPopulation.walk_speed_for(port_seed, npc_index)
-	var dist  := speed * t
+	var dist  : float = float(_loop_data["speed"]) * t
 	if _anim != null and _anim.is_ready():
 		_anim.update(dist)
 	xform.origin += anchor_offset

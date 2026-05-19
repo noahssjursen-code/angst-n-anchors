@@ -23,18 +23,18 @@ void fragment() {
 
 	vec4 color = texture(screen_texture, uv);
 
-	// 3x3 luma Sobel edge detection — works on colour boundaries without depth
-	float s00 = luma(texture(screen_texture, uv + vec2(-px.x,  px.y)).rgb);
-	float s10 = luma(texture(screen_texture, uv + vec2( 0.0,   px.y)).rgb);
-	float s20 = luma(texture(screen_texture, uv + vec2( px.x,  px.y)).rgb);
-	float s01 = luma(texture(screen_texture, uv + vec2(-px.x,  0.0 )).rgb);
-	float s21 = luma(texture(screen_texture, uv + vec2( px.x,  0.0 )).rgb);
-	float s02 = luma(texture(screen_texture, uv + vec2(-px.x, -px.y)).rgb);
-	float s12 = luma(texture(screen_texture, uv + vec2( 0.0,  -px.y)).rgb);
-	float s22 = luma(texture(screen_texture, uv + vec2( px.x, -px.y)).rgb);
+	// 4-tap cross luma gradient instead of an 8-tap Sobel. At 1080p this is
+	// the difference between 18M and 10M screen-texture samples per frame
+	// (every pixel, every frame). Diagonal edges fade slightly faster but
+	// the outline_strength is 0.04 — the visible effect is a thin subtle
+	// outline, and the cross stencil delivers it for ~45% fewer samples.
+	float s_left  = luma(texture(screen_texture, uv + vec2(-px.x, 0.0 )).rgb);
+	float s_right = luma(texture(screen_texture, uv + vec2( px.x, 0.0 )).rgb);
+	float s_up    = luma(texture(screen_texture, uv + vec2( 0.0,  px.y)).rgb);
+	float s_down  = luma(texture(screen_texture, uv + vec2( 0.0, -px.y)).rgb);
 
-	float gx = -s00 + s20 - 2.0*s01 + 2.0*s21 - s02 + s22;
-	float gy = -s00 - 2.0*s10 - s20 + s02 + 2.0*s12 + s22;
+	float gx = s_right - s_left;
+	float gy = s_up    - s_down;
 	float edge    = length(vec2(gx, gy));
 	float outline = step(outline_threshold, edge) * outline_strength;
 	color.rgb     = mix(color.rgb, outline_color, outline);

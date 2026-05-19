@@ -32,14 +32,16 @@ uniform vec2 boat_coupling_axes = vec2(1.0, 1.0);
 uniform vec4 boat_basis = vec4(1.0, 0.0, 0.0, 1.0);
 uniform vec2 boat_velocity = vec2(0.0, 0.0);
 
-// ── Land shelter (Phase 2.5++) ─────────────────────────────────────────────
-// Each island is packed as vec4(center_x, center_z, radius_m, _pad). Waves
-// fade out smoothly from full amplitude at `shelter_falloff_m` offshore down
-// to zero inside the island disk. Filled at world-init from LandField.
-const int MAX_LAND_DISKS = 64;
-uniform vec4  land_disks[MAX_LAND_DISKS];
-uniform int   land_disk_count    = 0;
-uniform float shelter_falloff_m  = 600.0;
+// ── Land shelter (baked SDF) ───────────────────────────────────────────────
+// LandField bakes a 2D R32F shelter texture at world init covering all
+// islands + their falloff zones. Each texel stores the precomputed
+// `shore_shelter` value (0 inside land, 1 in open water, smoothstepped in
+// between). The vertex shader does a single texture sample here instead of
+// iterating up to 64 land_disks per vertex — the per-frame difference is
+// ~4.4M distance() ops at typical port counts.
+uniform sampler2D land_shelter_map  : filter_linear, repeat_disable;
+uniform vec2      land_shelter_origin = vec2(0.0);
+uniform float     land_shelter_size   = 0.0;  // 0 means "no bake → open water"
 
 varying vec3 v_world_pos;
 varying vec3 v_world_normal;
@@ -89,22 +91,21 @@ float wf_ocean_ripple_eta(vec2 xz, float wt) {
 }
 
 vec2 wf_ocean_eta_gradient(vec2 xz, float wt, float e) {
+	// 4-tap central-difference cross instead of an 8-tap Sobel.
+	// Each call to wf_ocean_ripple_eta does 3 vnoise samples + 2 sin, so
+	// dropping from 8 → 4 samples halves the per-fragment gradient cost
+	// (~440 ALU ops/fragment saved). Sobel's extra smoothing is invisible
+	// here because wf_ocean_ripple_eta already sums three noise octaves +
+	// two sinusoids; the noise field is smooth at the stencil scale.
 	float e2 = max(e, 1e-4);
 
-	float hx_m_z_m = wf_ocean_ripple_eta(xz + vec2(-e2, -e2), wt);
-	float hx_0_z_m = wf_ocean_ripple_eta(xz + vec2(0.0, -e2), wt);
-	float hx_p_z_m = wf_ocean_ripple_eta(xz + vec2(e2, -e2), wt);
-	float hx_m_0 = wf_ocean_ripple_eta(xz + vec2(-e2, 0.0), wt);
-	float hx_p_0 = wf_ocean_ripple_eta(xz + vec2(e2, 0.0), wt);
-	float hx_m_z_p = wf_ocean_ripple_eta(xz + vec2(-e2, e2), wt);
-	float hx_0_z_p = wf_ocean_ripple_eta(xz + vec2(0.0, e2), wt);
-	float hx_p_z_p = wf_ocean_ripple_eta(xz + vec2(e2, e2), wt);
+	float h_xm = wf_ocean_ripple_eta(xz + vec2(-e2, 0.0), wt);
+	float h_xp = wf_ocean_ripple_eta(xz + vec2( e2, 0.0), wt);
+	float h_zm = wf_ocean_ripple_eta(xz + vec2(0.0, -e2), wt);
+	float h_zp = wf_ocean_ripple_eta(xz + vec2(0.0,  e2), wt);
 
-	float gx = hx_p_z_m + 2.0 * hx_p_0 + hx_p_z_p - hx_m_z_m - 2.0 * hx_m_0 - hx_m_z_p;
-	float gz = hx_m_z_p + 2.0 * hx_0_z_p + hx_p_z_p - hx_m_z_m - 2.0 * hx_0_z_m - hx_p_z_m;
-
-	float inv = 1.0 / max(8.0 * e2, 1e-4);
-	return vec2(gx * inv, gz * inv);
+	float inv = 1.0 / max(2.0 * e2, 1e-4);
+	return vec2((h_xp - h_xm) * inv, (h_zp - h_zm) * inv);
 }
 
 void vertex() {
@@ -129,20 +130,15 @@ void vertex() {
 
 	fft_foam = clamp(fft_foam * 0.22, 0.0, 1.0);
 
-	// Shore shelter — vertices inside / very near an island disk get their
-	// wave displacement scaled to zero, so waves can never climb over the
-	// land mesh, the dock, the cranes, or the buildings on top. Smoothly
-	// returns to 1.0 (open ocean) over `shelter_falloff_m` from the shore.
+	// Shore shelter — sample the LandField bake. Constant cost per vertex.
+	// Outside the baked region (or before LandField init) we're "open ocean".
 	float shelter = 1.0;
-	if (land_disk_count > 0) {
-		float min_d = 1e9;
-		for (int li = 0; li < land_disk_count; li++) {
-			vec4 disk = land_disks[li];
-			float d = distance(wp.xz, disk.xy) - disk.z;
-			min_d = min(min_d, d);
+	if (land_shelter_size > 0.0) {
+		vec2 shelter_uv = (wp.xz - land_shelter_origin) / land_shelter_size;
+		if (shelter_uv.x >= 0.0 && shelter_uv.x <= 1.0
+				&& shelter_uv.y >= 0.0 && shelter_uv.y <= 1.0) {
+			shelter = textureLod(land_shelter_map, shelter_uv, 0.0).r;
 		}
-		shelter = clamp(min_d / shelter_falloff_m, 0.0, 1.0);
-		shelter = shelter * shelter * (3.0 - 2.0 * shelter); // smoothstep
 	}
 
 	// Increase the FFT base amplitude slightly so shapes have mass.
@@ -221,8 +217,11 @@ void vertex() {
 	vec3 world_n_geom = normalize(vec3(-slopes.x, 1.0, -slopes.y));
 	vec3 world_n_foam_metric = normalize(vec3(-slopes.x * 0.25, 1.0, -slopes.y * 0.25));
 
-	VERTEX = (inverse(MODEL_MATRIX) * vec4(displaced_world, 1.0)).xyz;
-	NORMAL = normalize((inverse(MODEL_MATRIX) * vec4(world_n_geom, 0.0)).xyz);
+	// One inverse, two uses. Compiler may already CSE this but it's not
+	// guaranteed across drivers — be explicit. ~30-40 ALU saved per vertex.
+	mat4 inv_model = inverse(MODEL_MATRIX);
+	VERTEX = (inv_model * vec4(displaced_world, 1.0)).xyz;
+	NORMAL = normalize((inv_model * vec4(world_n_geom, 0.0)).xyz);
 
 	v_world_pos   = displaced_world;
 	v_world_normal = world_n_geom;
