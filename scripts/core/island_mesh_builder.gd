@@ -21,8 +21,8 @@ extends RefCounted
 ## player walks on the visible terrain.
 
 # ── Silhouette knobs ────────────────────────────────────────────────────────
-const MARGIN      : float = 45.0   # avg land extension beyond port rectangle on 3 sides
-const AMPLITUDE   : float = 15.0   # noise variation around MARGIN
+const MARGIN      : float = 80.0   # avg land extension beyond port rectangle on 3 sides
+const AMPLITUDE   : float = 20.0   # noise variation around MARGIN
 const DEPTH       : float = 14.0   # extrusion thickness below Y=0
 const SIDE_SEGS   : int   =  8
 const INLAND_SEGS : int   =  7
