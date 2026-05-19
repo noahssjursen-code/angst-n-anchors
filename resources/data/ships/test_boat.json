@@ -1,0 +1,55 @@
+{
+  "display_name": "Cargo Ship",
+  "hull": "hull_cargo_ship.json",
+  "scale": 1.4,
+  "superstructure": "bridge_cargo_ship",
+  "cargo_decks": ["cargo_main", "cargo_fwd"],
+
+  "physics": {
+    "auto_mass_from_hull": true,
+    "design_draft_fraction": 0.42,
+    "engine_mass": 4500.0,
+    "keel_ballast_mass": 8000.0,
+    "fuel_stores_mass": 7000.0,
+    "center_of_mass_depth_fraction": 0.58,
+    "artificial_keel_extra_depth": 0.78,
+    "linear_damp_coeff": 0.01,
+    "angular_damp_coeff": 0.7
+  },
+
+  "buoyancy": {
+    "block_coefficient": 0.72,
+    "vertical_damping": 65000.0
+  },
+
+  "hydrodynamics": {
+    "forward_drag_coeff": 0.05,
+    "lateral_drag_coeff": 2.0,
+    "rotational_drag_coeff": 5.0,
+    "orbital_flow_scale": 0.08,
+    "bulk_horizontal_drag": 450.0,
+    "draft_fraction": 0.42
+  },
+
+  "propulsion": {
+    "max_thrust": 574000.0,
+    "reverse_multiplier": 0.45
+  },
+
+  "rudder": {
+    "max_torque": 1320000.0,
+    "speed_factor": 0.62,
+    "min_effectiveness_floor": 0.38,
+    "rudder_flow_gate": 0.22,
+    "sideslip_rudder_weight": 0.55
+  },
+
+  "bow_thruster": {
+    "max_thrust": 92000.0
+  },
+
+  "camera": {
+    "follow_distance": 22.0,
+    "follow_height": 8.5
+  }
+}
