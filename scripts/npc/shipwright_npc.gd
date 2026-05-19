@@ -255,7 +255,7 @@ func _build_template(entry: Dictionary) -> Dictionary:
 			"reverse_multiplier":  0.45,
 		},
 		"rudder": {
-			"max_torque":              float(entry["propulsion_thrust"]) * 1.8,
+			"max_torque":              504000.0 * pow(float(entry["propulsion_thrust"]) / 280000.0, 4.0 / 3.0),
 			"speed_factor":            0.65,
 			"min_effectiveness_floor": 0.38,
 			"rudder_flow_gate":        0.25,
