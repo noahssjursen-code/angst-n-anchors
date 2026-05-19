@@ -21,19 +21,19 @@ extends RefCounted
 ## player walks on the visible terrain.
 
 # ── Silhouette knobs ────────────────────────────────────────────────────────
-const MARGIN      : float = 14.0
-const AMPLITUDE   : float =  8.0
-const DEPTH       : float =  8.0      # extrusion thickness below Y=0
-const SIDE_SEGS   : int   =  6
-const INLAND_SEGS : int   =  5
+const MARGIN      : float = 45.0   # avg land extension beyond port rectangle on 3 sides
+const AMPLITUDE   : float = 15.0   # noise variation around MARGIN
+const DEPTH       : float =  8.0   # extrusion thickness below Y=0
+const SIDE_SEGS   : int   =  8
+const INLAND_SEGS : int   =  7
 
 # ── Terrain knobs ───────────────────────────────────────────────────────────
 const GRID_STEP_M        : float = 4.0    # interior grid spacing
-const TERRAIN_PEAK_M     : float = 12.0   # max elevation above the pad
+const TERRAIN_PEAK_M     : float = 18.0   # max elevation above the pad
 const TERRAIN_NOISE_FREQ : float = 0.025
 const TERRAIN_NOISE_OCT  : int   = 3
 const PAD_BLEND_M        : float = 10.0   # smooth ring around the port pad
-const SHORE_FALLOFF_M    : float = 8.0    # beach-like falloff at the polygon edge
+const SHORE_FALLOFF_M    : float = 16.0   # beach-like falloff at the polygon edge
 
 # ── Vertex colour ramp (sand → grass → rock) ────────────────────────────────
 const C_SAND  : Color = Color(0.82, 0.72, 0.50)
