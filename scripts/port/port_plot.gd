@@ -223,7 +223,7 @@ func _place_tree(pos: Vector3, rng: RandomNumberGenerator) -> void:
 	var trunk_mi                := MeshInstance3D.new()
 	trunk_mi.mesh               = trunk_mesh
 	trunk_mi.material_override  = trunk_mat
-	trunk_mi.position           = Vector3(0.0, 1.6 * s, 0.0)
+	trunk_mi.position           = Vector3(0.0, 0.4 * s, 0.0)  # bottom at -1.2*s underground
 	root.add_child(trunk_mi)
 
 	# Foliage — three stacked cones, widest at base

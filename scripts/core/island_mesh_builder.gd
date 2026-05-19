@@ -301,9 +301,15 @@ static func _dist_point_segment(p: Vector2, a: Vector2, b: Vector2) -> float:
 static func _colour_for_height(_h: float, pad_w: float, pad_d: float, v: Vector3) -> Color:
 	var pad_hw : float = pad_w * 0.5
 	var pad_hd : float = pad_d * 0.5
-	if absf(v.x) <= pad_hw and absf(v.z) <= pad_hd:
-		return C_PAD
+	# Terrain colour by height
 	var t : float = clampf(v.y / TERRAIN_PEAK_M, 0.0, 1.0)
+	var terrain_col : Color
 	if t < 0.18:
-		return C_SAND.lerp(C_GRASS, smoothstep(0.0, 0.18, t))
-	return C_GRASS.lerp(C_ROCK, smoothstep(0.18, 1.0, t))
+		terrain_col = C_SAND.lerp(C_GRASS, smoothstep(0.0, 0.18, t))
+	else:
+		terrain_col = C_GRASS.lerp(C_ROCK, smoothstep(0.18, 1.0, t))
+	# Smooth blend from pad gravel into terrain over 8 m so the rectangle edge isn't sharp
+	var dx    : float = maxf(0.0, absf(v.x) - pad_hw)
+	var dz    : float = maxf(0.0, absf(v.z) - pad_hd)
+	var blend : float = smoothstep(0.0, 8.0, sqrt(dx * dx + dz * dz))
+	return C_PAD.lerp(terrain_col, blend)

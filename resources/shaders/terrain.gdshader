@@ -36,8 +36,12 @@ void fragment() {
 	vec2 uv   = world_pos.xz * grass_scale;
 	float n   = _vnoise(uv) * 0.65 + _vnoise(uv * 2.7 + vec2(5.3, 1.7)) * 0.35;
 
-	// Multiplicative overlay so dark areas (rock, pad) stay dark;
-	// the effect is strongest where the base colour has some green.
-	float shift = (n - 0.5) * grass_strength;
+	// A slower, larger noise breaks up the flat pad surface independently
+	float pad_n = _vnoise(world_pos.xz * 0.35 + vec2(12.1, 7.4));
+
+	// Blend both: grass detail dominates on terrain, pad noise fills in flat areas
+	float combined = mix(pad_n, n, smoothstep(0.0, 0.04, length(base - vec3(0.08, 0.08, 0.07))));
+
+	float shift = (combined - 0.5) * grass_strength;
 	ALBEDO = clamp(base + base * shift, 0.0, 1.0);
 }
