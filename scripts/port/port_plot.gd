@@ -5,8 +5,6 @@ extends Node3D
 ## Composition root: positions PortDock (water side) and PortFacilities (land side)
 ## as a matched pair. Drives both from port_size and plot dimensions.
 
-const C_GROUND := Color(0.28, 0.34, 0.24)
-
 const SHIP_CLASS_BY_SIZE: Dictionary = {
 	0: ShipClass.Type.COASTAL_TRADER,
 	1: ShipClass.Type.COASTAL_TRADER,
@@ -53,9 +51,9 @@ func _rebuild() -> void:
 	var ship_class := SHIP_CLASS_BY_SIZE.get(clampi(port_size, 0, 4),
 		ShipClass.Type.COASTAL_TRADER) as ShipClass.Type
 
-	# Island ground — organic visual mesh, flat-box collision.
-	# Visual: polygon built from port dimensions, organic on three sides, straight on water face.
-	# Collision: simple box covering the port rectangle (players stay on the port area).
+	# Island ground — heightmapped terrain with a flat port pad stamped along the
+	# water face. Pad = plot_width × plot_depth at Y=0 so docks, facilities, and
+	# NPCs drop in unchanged. See IslandMeshBuilder for the height function.
 	var poly               := IslandMeshBuilder.build_polygon(_island_width_data, plot_depth, _layout_seed_data)
 	var gbody              := StaticBody3D.new()
 	gbody.name             = "Ground"
@@ -63,16 +61,18 @@ func _rebuild() -> void:
 
 	var ground               := MeshInstance3D.new()
 	ground.name              = "Mesh"
-	ground.mesh              = IslandMeshBuilder.to_mesh(poly)
+	ground.mesh              = IslandMeshBuilder.to_mesh(poly, plot_width, plot_depth, _layout_seed_data)
 	var gmat                 := StandardMaterial3D.new()
-	gmat.albedo_color        = C_GROUND
-	gmat.shading_mode        = BaseMaterial3D.SHADING_MODE_UNSHADED
+	gmat.albedo_color        = Color.WHITE
+	gmat.vertex_color_use_as_albedo = true
+	gmat.shading_mode        = BaseMaterial3D.SHADING_MODE_PER_PIXEL
+	gmat.roughness           = 0.92
 	gmat.cull_mode           = BaseMaterial3D.CULL_DISABLED
 	ground.material_override = gmat
 	gbody.add_child(ground)
 
 	var gcol  := CollisionShape3D.new()
-	gcol.shape = IslandMeshBuilder.to_collision_shape(poly)
+	gcol.shape = IslandMeshBuilder.to_collision_shape(poly, plot_width, plot_depth, _layout_seed_data)
 	gbody.add_child(gcol)
 
 	var dock              := PortDock.new()
