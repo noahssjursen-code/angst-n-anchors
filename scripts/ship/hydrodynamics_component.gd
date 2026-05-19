@@ -5,7 +5,7 @@ extends Node3D
 ## Drag in hull axes plus **wave coupling**: velocity is compared to a cheap surface
 ## orbital flow, and **tangent slip** is damped (ice-like sliding on a curved sheet).
 
-@export var water_density: float = 1000.0
+@export var water_density: float = 1025.0  # North Sea / Norwegian coast salt water
 @export var forward_drag_coeff: float = 0.08
 @export var lateral_drag_coeff: float = 1.6
 @export var rotational_drag_coeff: float = 4.0
@@ -21,9 +21,10 @@ extends Node3D
 ## Approximate operational draft used for water drag. Kept separate from buoyancy:
 ## buoyancy decides where the hull floats; this only estimates submerged side area.
 @export var draft_fraction: float = 0.38
-## Scales all wave-coupling forces (slip grip + orbital flow). Reduce toward 0.3–0.5
-## for heavy vessels that should punch through waves with more inertia.
-@export_range(0.0, 2.0, 0.01) var wave_influence_scale: float = 0.55
+## Scales horizontal wave-coupling forces (slip grip + orbital flow). Independent of
+## BuoyancyComponent.wave_influence_scale which controls vertical heave damping.
+## Lower = hull punches through wave surface with more inertia (heavy ship feel).
+@export_range(0.0, 2.0, 0.01) var wave_influence_scale: float = 0.38
 
 var _body: RigidBody3D
 

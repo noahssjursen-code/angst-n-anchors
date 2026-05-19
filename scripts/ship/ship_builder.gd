@@ -107,6 +107,12 @@ static func _make_buoyancy(cfg: Dictionary) -> BuoyancyComponent:
 		c.block_coefficient = float(cfg["block_coefficient"])
 	if cfg.has("vertical_damping"):
 		c.vertical_damping = float(cfg["vertical_damping"])
+	if cfg.has("wave_influence_scale"):
+		c.wave_influence_scale = float(cfg["wave_influence_scale"])
+	if cfg.has("fall_gravity_multiplier"):
+		c.fall_gravity_multiplier = float(cfg["fall_gravity_multiplier"])
+	if cfg.has("buoyancy_multiplier"):
+		c.buoyancy_multiplier = float(cfg["buoyancy_multiplier"])
 	return c
 
 
@@ -125,6 +131,8 @@ static func _make_hydrodynamics(cfg: Dictionary) -> HydrodynamicsComponent:
 		c.bulk_horizontal_drag = float(cfg["bulk_horizontal_drag"])
 	if cfg.has("draft_fraction"):
 		c.draft_fraction = float(cfg["draft_fraction"])
+	if cfg.has("wave_influence_scale"):
+		c.wave_influence_scale = float(cfg["wave_influence_scale"])
 	return c
 
 

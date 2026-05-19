@@ -21,8 +21,8 @@ extends Node3D
 	Vector2( 0.0,   0.0),  # centre
 ]
 
-@export var water_density: float = 1000.0
-@export var gravity: float = 9.8
+@export var water_density: float = 1025.0  # North Sea / Norwegian coast salt water
+@export var gravity: float = 9.81
 ## Multiplier on computed lift (Archimedes column model undershoots heavy hulls vs mass).
 ## Tune per vessel so hull_mass * gravity ≈ equilibrium buoyancy at operational draft.
 @export var buoyancy_multiplier: float = 1.0
@@ -34,9 +34,12 @@ extends Node3D
 @export var vertical_damping: float = 65000.0
 ## Per-column lift caps once ~fully submerged (linear depth model would diverge).
 @export var lift_depth_hull_scale: float = 1.15
-## Scales wave-relative vertical damping. Lower = hull moves more independently of the
-## surface; higher = hull snaps tightly to wave contour. Match with HydrodynamicsComponent.wave_influence_scale.
-@export_range(0.0, 2.0, 0.01) var wave_influence_scale: float = 0.55
+## Scales wave-relative vertical damping. Independent of HydrodynamicsComponent.wave_influence_scale.
+## Higher = hull couples tightly to wave surface vertically (resists sinking on re-entry).
+@export_range(0.0, 2.0, 0.01) var wave_influence_scale: float = 0.65
+## Extra gravity multiplier applied when the hull is fully airborne (off a wave crest).
+## 1.0 = no boost. 1.5 = 2.5× total gravity when airborne. Makes heavy ships fall hard.
+@export_range(1.0, 4.0, 0.05) var fall_gravity_multiplier: float = 1.8
 
 var _body: RigidBody3D
 
@@ -120,9 +123,10 @@ func _physics_process(_delta: float) -> void:
 		var damp_scale: float = clampf(depth / maxf(hull_h, 1.0), 0.2, 1.0)
 		
 		# Mix of linear and quadratic damping for realistic fluid resistance.
-		# Quadratic drag gives massive resistance to plunging/jumping, but low resistance to gentle bobbing.
+		# Quadratic term dominates at plunge speed — 3× gives strong splash-entry resistance
+		# without over-damping gentle bobbing (which is linear-regime).
 		var linear_damp: float = rel_vy * vertical_damping
-		var quad_damp: float = sign(rel_vy) * (rel_vy * rel_vy) * (vertical_damping * 1.5)
+		var quad_damp: float = sign(rel_vy) * (rel_vy * rel_vy) * (vertical_damping * 3.0)
 		var damp_force_y: float = -(linear_damp + quad_damp) * damp_scale * wave_influence_scale
 		
 		# CRITICAL PHYSICS STABILITY FIX:
@@ -138,22 +142,27 @@ func _physics_process(_delta: float) -> void:
 		
 		_body.apply_force(Vector3(0.0, total_y_force, 0.0), world_offset)
 
-	# Discrete keel samples can all sit in a sharp wave trough (mathematical air gap);
-	# add weak central support when still near the free surface.
 	if active == 0:
-		var keel_c: float = _body.to_global(Vector3(hull_center.x, hull_bottom_y, hull_center.z)).y
+		var keel_world: Vector3 = _body.to_global(Vector3(hull_center.x, hull_bottom_y, hull_center.z))
 		var surf_c: float = WaveSurface.get_buoyancy_surface_height_at(
 			_body.global_position.x,
 			_body.global_position.z
 		)
-		var gap: float = surf_c - keel_c
-		if gap > -hull_h * 1.35:
+		var gap: float = surf_c - keel_world.y  # positive = keel below surface
+
+		if gap < -hull_h * 0.25:
+			# Hull is genuinely airborne — keel more than 25% hull-height above water.
+			# Apply extra downward force so heavy ships fall hard off wave crests.
+			# (fall_gravity_multiplier - 1) so total effective gravity = g * (1 + multiplier - 1) = g * multiplier)
+			_body.apply_central_force(Vector3.DOWN * _body.mass * gravity * (fall_gravity_multiplier - 1.0))
+		elif gap > -hull_h * 1.35:
+			# Wave-trough false gap: samples fell through a sharp crest mathematically.
+			# Apply weak central assist to bridge the gap — not a fall, just discrete sampling noise.
 			var pseudo_depth: float = clampf(gap + hull_h * 0.4, 0.0, 5.0)
 			if pseudo_depth > 0.0:
 				var assist: float = (
 					pseudo_depth * base_force * float(mini(footprint_samples.size(), 6)) * 0.2
 				)
-				# Cap assist so it can't launch the boat
 				var weight_per_point: float = (_body.mass * gravity) / maxf(footprint_samples.size(), 1.0)
 				assist = minf(assist, weight_per_point * float(footprint_samples.size()) * 0.8)
 				_body.apply_central_force(Vector3.UP * assist)
