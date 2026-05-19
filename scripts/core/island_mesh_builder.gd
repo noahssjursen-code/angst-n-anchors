@@ -130,11 +130,11 @@ static func to_mesh(polygon: PackedVector2Array, pad_width: float, pad_depth: fl
 		# Wall is dark rock so it doesn't fight the grass top visually.
 		st.set_color(C_ROCK * 0.6)
 		st.add_vertex(Vector3(a.x, 0.0,    a.y))
-		st.add_vertex(Vector3(b.x, 0.0,    b.y))
 		st.add_vertex(Vector3(a.x, bottom, a.y))
 		st.add_vertex(Vector3(b.x, 0.0,    b.y))
+		st.add_vertex(Vector3(b.x, 0.0,    b.y))
+		st.add_vertex(Vector3(a.x, bottom, a.y))
 		st.add_vertex(Vector3(b.x, bottom, b.y))
-		st.add_vertex(Vector3(a.x, bottom, a.y))
 
 	st.generate_normals()
 	return st.commit()
