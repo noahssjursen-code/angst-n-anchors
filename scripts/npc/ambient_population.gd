@@ -37,23 +37,44 @@ static func walker_count_for_size(size: int) -> int:
 ## Returns the local-space Transform3D for walker `npc_index` at the given
 ## port (identified by `port_seed` + `port_radius`) at the given time.
 ##
-## The transform is purely procedural — no allocation, no caching. Repeated
-## calls with the same inputs return identical results across all clients.
+## Convenience wrapper that rebuilds the loop on every call. For per-frame use
+## prefer `build_loop(...)` once and `transform_along_loop(loop, time)` after
+## — that path avoids per-frame `RandomNumberGenerator` instantiation and
+## `PackedVector3Array` allocations, which add up fast at ~250 walkers × 60 fps.
 static func local_transform_at(port_seed: int, npc_index: int,
 								time_s: float, port_radius: float) -> Transform3D:
+	return transform_along_loop(build_loop(port_seed, npc_index, port_radius), time_s)
+
+
+## Precompute and bundle everything a walker needs to follow its loop:
+## waypoints, segment lengths, perimeter, walking speed. The result is
+## a pure function of `(port_seed, npc_index, port_radius)`, so callers can
+## cache it once and reuse for the walker's lifetime.
+static func build_loop(port_seed: int, npc_index: int, port_radius: float) -> Dictionary:
 	var loop      := _loop_waypoints(port_seed, npc_index, port_radius)
-	var speed     := _walk_speed(port_seed, npc_index)
 	var segments  := _segment_lengths(loop)
 	var perimeter : float = 0.0
 	for s in segments:
 		perimeter += s
+	return {
+		"loop":      loop,
+		"segments":  segments,
+		"perimeter": perimeter,
+		"speed":     _walk_speed(port_seed, npc_index),
+	}
+
+
+## Sample a precomputed loop (from `build_loop`) at `time_s`. Cheap: just the
+## segment-walk + a lerp + a facing.
+static func transform_along_loop(loop_data: Dictionary, time_s: float) -> Transform3D:
+	var loop      : PackedVector3Array = loop_data["loop"]
+	var segments  : PackedFloat32Array = loop_data["segments"]
+	var perimeter : float              = loop_data["perimeter"]
+	var speed     : float              = loop_data["speed"]
 	if perimeter <= 0.001:
 		return Transform3D(Basis(), loop[0])
 
-	# Distance along the loop, wrapped.
 	var dist := fposmod(time_s * speed, perimeter)
-
-	# Walk segments until we land in the right one.
 	var pos    := loop[0]
 	var facing := Vector3.FORWARD
 	var n      := loop.size()
