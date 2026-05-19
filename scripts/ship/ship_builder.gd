@@ -50,6 +50,7 @@ static func build(template_path: String) -> BoatBody:
 	boat.add_child(_make_bow_thruster(tmpl.get("bow_thruster", {}), slots))
 	boat.add_child(_make_controller())
 	boat.add_child(_make_camera(tmpl.get("camera", {})))
+	boat.add_child(_make_lighting_controller())
 
 	var gameplay := Node3D.new()
 	gameplay.name = "ShipGameplay"
@@ -68,6 +69,7 @@ static func build(template_path: String) -> BoatBody:
 	gameplay.add_child(mooring)
 
 	_add_mooring_points(gameplay, slots)
+	_add_hull_lights(gameplay, hull_data, scale)
 
 	for deck_slot in tmpl.get("cargo_decks", []):
 		var slot_name := str(deck_slot)
@@ -197,6 +199,52 @@ static func _make_controller() -> BoatController:
 	var c := BoatController.new()
 	c.name = "BoatController"
 	return c
+
+
+## Lighting controller — discovers ShipLight nodes anywhere under the boat
+## (in group "ship_light") and drives presets via the L key. Auto-engages
+## nav lights at night and in fog.
+static func _make_lighting_controller() -> ShipLighting:
+	var c := ShipLighting.new()
+	c.name = "ShipLighting"
+	return c
+
+
+## Spawn hull-mounted lights declared in the hull JSON's `lights` array.
+## Each entry: { "type": "<nav_port|nav_starboard|nav_masthead|nav_stern|work|window>",
+##               "position": [x, y, z] }.
+## Bridge-mounted lights (e.g. masthead, window) stay on the superstructure
+## scene so they move with the bridge.
+static func _add_hull_lights(parent: Node3D, hull_data: Dictionary, scale: float) -> void:
+	var lights = hull_data.get("lights", [])
+	if typeof(lights) != TYPE_ARRAY:
+		return
+	for entry in lights:
+		if typeof(entry) != TYPE_DICTIONARY:
+			continue
+		var type_id := _light_type_from_string(str(entry.get("type", "")))
+		if type_id < 0:
+			continue
+		var pos_arr = entry.get("position", [0, 0, 0])
+		if typeof(pos_arr) != TYPE_ARRAY or pos_arr.size() < 3:
+			continue
+		var pos := Vector3(float(pos_arr[0]), float(pos_arr[1]), float(pos_arr[2])) * scale
+		var light := ShipLight.new()
+		light.name = "HullLight_%s" % str(entry.get("type", "")).capitalize()
+		light.position = pos
+		light.light_type = type_id
+		parent.add_child(light)
+
+
+static func _light_type_from_string(s: String) -> int:
+	match s:
+		"nav_port":      return ShipLight.LightType.NAV_PORT
+		"nav_starboard": return ShipLight.LightType.NAV_STARBOARD
+		"nav_masthead":  return ShipLight.LightType.NAV_MASTHEAD
+		"nav_stern":     return ShipLight.LightType.NAV_STERN
+		"work":          return ShipLight.LightType.WORK
+		"window":        return ShipLight.LightType.WINDOW
+		_:               return -1
 
 
 static func _make_camera(cfg: Dictionary) -> BoatCamera:
