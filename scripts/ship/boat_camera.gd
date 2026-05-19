@@ -35,7 +35,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		return
 	if event is InputEventMouseMotion and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
 		_yaw   -= event.relative.x * orbit_speed
-		_pitch  = clampf(_pitch - event.relative.y * orbit_speed, -0.12, 1.45)
+		_pitch  = clampf(_pitch + event.relative.y * orbit_speed, -0.12, 1.45)
 	if event is InputEventMouseButton:
 		var mb := event as InputEventMouseButton
 		if mb.pressed and mb.button_index == MOUSE_BUTTON_WHEEL_UP:
