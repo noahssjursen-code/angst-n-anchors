@@ -15,8 +15,13 @@ extends RefCounted
 ##   get_tree().current_scene.add_child(boat)
 ##   boat.place_at_waterline(water_y)
 
-const HULL_BASE_DIR  := "res://resources/data/models/hulls/"
-const SUPER_BASE_DIR := "res://scenes/shared/superstructures/"
+const HULL_BASE_DIR       := "res://resources/data/models/hulls/"
+## Legacy PackedScene path — kept for fallback while the JSON bridges are
+## bedding in. The .tscn loader still works if a JSON for the requested
+## key doesn't exist; once all five bridges have shipped as JSON we can
+## drop this entirely.
+const SUPER_SCENE_DIR     := "res://scenes/shared/superstructures/"
+const SUPER_MODEL_DIR     := "res://resources/data/models/superstructures/"
 
 static func build(template_path: String) -> BoatBody:
 	var tmpl := _load_json(template_path)
@@ -58,7 +63,7 @@ static func build(template_path: String) -> BoatBody:
 
 	var super_key := str(tmpl.get("superstructure", ""))
 	if not super_key.is_empty() and slots.has("bridge"):
-		var super_node := _instantiate_superstructure(super_key)
+		var super_node := _build_superstructure(super_key)
 		if super_node != null:
 			super_node.name = "Superstructure"
 			super_node.position = slots["bridge"]
@@ -309,15 +314,87 @@ static func _make_camera(cfg: Dictionary) -> BoatCamera:
 	return c
 
 
-static func _instantiate_superstructure(key: String) -> Node3D:
-	var path := SUPER_BASE_DIR + key + ".tscn"
-	if not ResourceLoader.exists(path):
-		push_warning("ShipBuilder: superstructure scene not found: " + path)
+## Build the superstructure (bridge) node tree for `key`. Tries the JSON
+## model first; falls back to the legacy .tscn if the JSON doesn't exist.
+##
+## JSON path: spawns a ModelAssembler-driven visual + the BridgeInteractable
+## + ShipLight nodes positioned via the JSON `slots` dict. This is the
+## target architecture.
+##
+## .tscn path: instantiates a PackedScene with pre-built ShipLight nodes
+## inside it (the old format, still in the tree until JSON ships for every
+## hull class).
+static func _build_superstructure(key: String) -> Node3D:
+	var json_path := SUPER_MODEL_DIR + key + ".json"
+	if FileAccess.file_exists(json_path):
+		return _build_superstructure_from_json(json_path)
+
+	var scene_path := SUPER_SCENE_DIR + key + ".tscn"
+	if not ResourceLoader.exists(scene_path):
+		push_warning("ShipBuilder: superstructure missing — no JSON at " + json_path
+			+ " and no scene at " + scene_path)
 		return null
-	var packed := load(path) as PackedScene
+	var packed := load(scene_path) as PackedScene
 	if packed == null:
 		return null
 	return packed.instantiate() as Node3D
+
+
+## Construct the bridge node tree from a JSON model file. The JSON declares
+## visual `parts` (consumed by ModelAssembler), a `slots` dict of light /
+## interactable positions, and an optional `interactable` config block.
+static func _build_superstructure_from_json(path: String) -> Node3D:
+	var root := Node3D.new()
+
+	var visuals := ModelAssembler.new()
+	visuals.name = "BridgeVisuals"
+	visuals.build_part_colliders = false
+	visuals.model_data_path = path
+	root.add_child(visuals)
+
+	var data := _load_json(path)
+	if data.is_empty():
+		return root
+
+	var slot_data: Variant = data.get("slots", {})
+	var slot_dict: Dictionary = slot_data if typeof(slot_data) == TYPE_DICTIONARY else {}
+
+	# BridgeInteractable — boarding zone in front of the deck house.
+	var interact := BridgeInteractable.new()
+	interact.name = "BridgeInteractable"
+	if slot_dict.has("bridge_interactable"):
+		var bi_pos = slot_dict["bridge_interactable"]
+		if typeof(bi_pos) == TYPE_ARRAY and bi_pos.size() >= 3:
+			interact.position = Vector3(float(bi_pos[0]), float(bi_pos[1]), float(bi_pos[2]))
+	var iv = data.get("interactable", {})
+	if typeof(iv) == TYPE_DICTIONARY:
+		var exit_arr = iv.get("exit_deck_offset", null)
+		if typeof(exit_arr) == TYPE_ARRAY and exit_arr.size() >= 2:
+			interact.exit_deck_offset = Vector2(float(exit_arr[0]), float(exit_arr[1]))
+	root.add_child(interact)
+
+	# Spawn the bridge-mounted lights from the JSON slots.
+	# Naming convention in slots: light_<type>: [x, y, z]
+	# where <type> is one of nav_port, nav_starboard, nav_masthead, nav_stern,
+	# work, window.
+	for slot_name in slot_dict.keys():
+		var key := str(slot_name)
+		if not key.begins_with("light_"):
+			continue
+		var type_str := key.substr("light_".length())
+		var type_id := _light_type_from_string(type_str)
+		if type_id < 0:
+			continue
+		var pos_arr = slot_dict[slot_name]
+		if typeof(pos_arr) != TYPE_ARRAY or pos_arr.size() < 3:
+			continue
+		var light := ShipLight.new()
+		light.name = "ShipLight_" + type_str.capitalize().replace(" ", "")
+		light.position = Vector3(float(pos_arr[0]), float(pos_arr[1]), float(pos_arr[2]))
+		light.light_type = type_id
+		root.add_child(light)
+
+	return root
 
 
 static func _add_mooring_points(parent: Node3D, slots: Dictionary, stations: HullStations) -> void:
