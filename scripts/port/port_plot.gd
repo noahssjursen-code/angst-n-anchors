@@ -67,7 +67,10 @@ func _rebuild() -> void:
 	gmat.vertex_color_use_as_albedo = true
 	gmat.shading_mode        = BaseMaterial3D.SHADING_MODE_PER_PIXEL
 	gmat.roughness           = 0.92
-	gmat.cull_mode           = BaseMaterial3D.CULL_DISABLED
+	# Cull back faces — the terrain is a closed surface viewed from above.
+	# CULL_DISABLED rendered both sides, which combined with the (now-fixed)
+	# downward winding made the island look like translucent crystal facets.
+	gmat.cull_mode           = BaseMaterial3D.CULL_BACK
 	ground.material_override = gmat
 	gbody.add_child(ground)
 
