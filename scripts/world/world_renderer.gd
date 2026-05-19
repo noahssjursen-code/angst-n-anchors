@@ -288,12 +288,21 @@ func _apply_fog(fog_t: float, daylight: float, storm: float) -> void:
 	_environment.fog_aerial_perspective = lerpf(0.0, 0.65, fog_t)
 	_environment.fog_sky_affect = lerpf(0.0, 0.85, fog_t * fog_t)
 
-	# Volumetric Fog (Physical 3D depth, light shafts, and realistic thickness)
-	_environment.volumetric_fog_albedo = base_fog_col
-	# Scale volumetric density aggressively with fog_t
-	_environment.volumetric_fog_density = lerpf(0.0, 0.09, fog_t)
-	# Push the fog rendering distance out based on visibility
-	_environment.volumetric_fog_length = lerpf(480.0, 120.0, fog_t)
+	# Volumetric Fog (Physical 3D depth, light shafts, and realistic thickness).
+	# Godot runs the full 64³ froxel compute every frame as long as
+	# volumetric_fog_enabled = true — density only scales the visible
+	# contribution, not the compute cost. In clear weather we'd be paying ~2-4 ms
+	# for fog with zero visible effect, so we gate the whole pass on a small
+	# density threshold (~visibility 0.95). At that level the fog has zero
+	# perceptible contribution; toggling the pass off is free perf.
+	var vol_density := lerpf(0.0, 0.09, fog_t)
+	var want_volumetric := vol_density > 0.005
+	_environment.volumetric_fog_enabled = want_volumetric
+	if want_volumetric:
+		_environment.volumetric_fog_albedo  = base_fog_col
+		_environment.volumetric_fog_density = vol_density
+		# Push the fog rendering distance out based on visibility
+		_environment.volumetric_fog_length  = lerpf(480.0, 120.0, fog_t)
 
 
 func _apply_sky_shader(daylight: float, cloud: float, storm: float) -> void:
