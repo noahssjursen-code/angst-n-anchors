@@ -133,8 +133,8 @@ var weather_vector: Vector3:
 
 # --- Wave coupling ---
 @export var weather_drives_waves: bool = true
-@export var calm_wave_intensity: float  = 0.55
-@export var gale_wave_intensity: float  = 1.83
+@export var calm_wave_intensity: float  = 0.33  # was 0.55 — scaled down 40%
+@export var gale_wave_intensity: float  = 1.10  # was 1.83 — scaled down 40%
 
 # --- Control mode (L to toggle) ---
 const MODE_WEATHER : String = "weather"
