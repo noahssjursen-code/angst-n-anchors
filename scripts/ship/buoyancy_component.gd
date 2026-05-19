@@ -36,7 +36,7 @@ extends Node3D
 @export var lift_depth_hull_scale: float = 1.15
 ## Scales wave-relative vertical damping. Independent of HydrodynamicsComponent.wave_influence_scale.
 ## Higher = hull couples tightly to wave surface vertically (resists sinking on re-entry).
-@export_range(0.0, 2.0, 0.01) var wave_influence_scale: float = 0.65
+@export_range(0.0, 2.0, 0.01) var wave_influence_scale: float = 0.50
 ## Extra gravity multiplier applied when the hull is fully airborne (off a wave crest).
 ## 1.0 = no boost. 1.5 = 2.5× total gravity when airborne. Makes heavy ships fall hard.
 @export_range(1.0, 4.0, 0.05) var fall_gravity_multiplier: float = 1.8
@@ -126,7 +126,7 @@ func _physics_process(_delta: float) -> void:
 		# Quadratic term dominates at plunge speed — 3× gives strong splash-entry resistance
 		# without over-damping gentle bobbing (which is linear-regime).
 		var linear_damp: float = rel_vy * vertical_damping
-		var quad_damp: float = sign(rel_vy) * (rel_vy * rel_vy) * (vertical_damping * 3.0)
+		var quad_damp: float = sign(rel_vy) * (rel_vy * rel_vy) * (vertical_damping * 2.0)
 		var damp_force_y: float = -(linear_damp + quad_damp) * damp_scale * wave_influence_scale
 		
 		# CRITICAL PHYSICS STABILITY FIX:
