@@ -223,7 +223,7 @@ func _place_tree(pos: Vector3, rng: RandomNumberGenerator) -> void:
 	trunk_mesh.bottom_radius    = 0.28 * s
 	trunk_mesh.height           = 3.2  * s
 	var trunk_mat               := StandardMaterial3D.new()
-	trunk_mat.albedo_color      = Color(0.28, 0.22, 0.16)
+	trunk_mat.albedo_color      = Color(0.08, 0.07, 0.05)
 	trunk_mat.roughness         = 0.92
 	var trunk_mi                := MeshInstance3D.new()
 	trunk_mi.mesh               = trunk_mesh
@@ -232,7 +232,7 @@ func _place_tree(pos: Vector3, rng: RandomNumberGenerator) -> void:
 	root.add_child(trunk_mi)
 
 	# Foliage — three stacked cones, widest at base
-	var foliage_color := Color(0.20, 0.24, 0.16)
+	var foliage_color := Color(0.06, 0.07, 0.05)
 	var layers : Array[Array] = [
 		[2.6 * s, 0.0, 4.2 * s, 2.2 * s],   # [bot_r, top_r, height, centre_y]
 		[1.9 * s, 0.0, 3.4 * s, 5.0 * s],
