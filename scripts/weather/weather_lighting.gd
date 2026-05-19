@@ -18,6 +18,14 @@ extends Node
 
 signal state_changed
 
+## Suppress per-property state_changed emits and wave-intensity resyncs while a
+## bulk update is in flight (apply_weather_state, blend_towards). Each setter
+## still updates its field; the caller is responsible for emitting once and
+## resyncing once after all fields are set. Drops 4 emits → 1 per blend tick,
+## which used to fan out into 4 full shader-uniform re-applies in WorldRenderer.
+var _suppress_emit:      bool = false
+var _suppress_wave_sync: bool = false
+
 # --- Rates for keyboard scrubbing ---
 const TIME_RATE          : float = 0.22
 const PRECIP_RATE        : float = 0.40
@@ -30,33 +38,40 @@ const WAVE_RATE          : float = 1.0
 @export_range(0.0, 1.0, 0.001) var time_of_day: float = 0.42:
 	set(v):
 		time_of_day = wrapf(v, 0.0, 1.0)
-		state_changed.emit()
+		if not _suppress_emit:
+			state_changed.emit()
 
 # --- Independent: cloud cover (0 clear sky → 1 fully overcast, no rain required) ---
 @export_range(0.0, 1.0, 0.001) var cloud_cover: float = 0.0:
 	set(v):
 		cloud_cover = clampf(v, 0.0, 1.0)
-		state_changed.emit()
+		if not _suppress_emit:
+			state_changed.emit()
 
 # --- Axis X : precipitation (0 clear → 1 downpour) ---
 @export_range(0.0, 1.0, 0.001) var precipitation: float = 0.0:
 	set(v):
 		precipitation = clampf(v, 0.0, 1.0)
-		_sync_wave_intensity()
-		state_changed.emit()
+		if not _suppress_wave_sync:
+			_sync_wave_intensity()
+		if not _suppress_emit:
+			state_changed.emit()
 
 # --- Axis Y : wind force (0 becalmed → 1 gale) ---
 @export_range(0.0, 1.0, 0.001) var wind_force: float = 0.0:
 	set(v):
 		wind_force = clampf(v, 0.0, 1.0)
-		_sync_wave_intensity()
-		state_changed.emit()
+		if not _suppress_wave_sync:
+			_sync_wave_intensity()
+		if not _suppress_emit:
+			state_changed.emit()
 
 # --- Axis Z : visibility (1 crystal-clear → 0 pea-soup fog) ---
 @export_range(0.0, 1.0, 0.001) var visibility: float = 1.0:
 	set(v):
 		visibility = clampf(v, 0.0, 1.0)
-		state_changed.emit()
+		if not _suppress_emit:
+			state_changed.emit()
 
 ## Horizontal wind vector (XZ plane). Magnitude is normalised to ≤ 1 so it
 ## composes cleanly with `wind_force` — direction lives here, intensity in
@@ -215,10 +230,13 @@ func _sync_wave_intensity() -> void:
 ## Bulk-assign compass + fog.**z** is fog density (1 = pea soup). Leaves `cloud_cover` and `time_of_day`.
 ## For presets / zones prefer `apply_weather_state(WeatherState)` so cloud + fog travel together.
 func set_weather_vector(v: Vector3) -> void:
-	precipitation = clampf(v.x, 0.0, 1.0)
-	wind_force = clampf(v.y, 0.0, 1.0)
-	var fd := clampf(v.z, 0.0, 1.0)
-	visibility = clampf(1.0 - fd, 0.0, 1.0)
+	_suppress_emit      = true
+	_suppress_wave_sync = true
+	precipitation = v.x
+	wind_force    = v.y
+	visibility    = 1.0 - clampf(v.z, 0.0, 1.0)
+	_suppress_wave_sync = false
+	_suppress_emit      = false
 	_sync_wave_intensity()
 	state_changed.emit()
 
@@ -233,13 +251,20 @@ func get_weather_state() -> WeatherState:
 
 
 ## Apply full snapshot (zones, authored `.tres`, runtime generators). Leaves `time_of_day` untouched.
+## Bulk-updates all four axes then emits `state_changed` once + resyncs waves
+## once — without the suppression flags this fired 4 redundant emits, each
+## triggering a full sky/sun/ocean shader-uniform reapply in WorldRenderer.
 func apply_weather_state(next: WeatherState) -> void:
 	if next == null:
 		return
-	precipitation = clampf(next.precipitation, 0.0, 1.0)
-	wind_force = clampf(next.wind_force, 0.0, 1.0)
-	visibility = clampf(next.visibility, 0.0, 1.0)
-	cloud_cover = clampf(next.cloud_cover, 0.0, 1.0)
+	_suppress_emit      = true
+	_suppress_wave_sync = true
+	precipitation = next.precipitation
+	wind_force    = next.wind_force
+	visibility    = next.visibility
+	cloud_cover   = next.cloud_cover
+	_suppress_wave_sync = false
+	_suppress_emit      = false
 	_sync_wave_intensity()
 	state_changed.emit()
 
