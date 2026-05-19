@@ -60,7 +60,7 @@ static func distance_to_land(world_pos: Vector3) -> float:
 	var pos2 := Vector2(world_pos.x, world_pos.z)
 	var best := INF
 	for i in range(_centers_xz.size()):
-		var d := pos2.distance_to(_centers_xz[i]) - _radii[i]
+		var d := sqrt(pos2.distance_squared_to(_centers_xz[i])) - _radii[i]
 		if d < best:
 			best = d
 	return best
@@ -69,13 +69,29 @@ static func distance_to_land(world_pos: Vector3) -> float:
 ## 0..1 shelter factor. 0 = on land / right at the shore, 1 = fully open water.
 ## Smooth transition over `SHELTER_FALLOFF_M` from the shore outwards.
 ## Returns 1.0 before init so systems behave like "open ocean" until ready.
+##
+## Fast path: in the common case (boat far from all islands) we skip the
+## `sqrt` per island and short-circuit to 1.0. With ~35 islands sampled
+## ~20× per physics frame, that's a big saving when sailing the open sea.
 static func shore_shelter(world_pos: Vector3) -> float:
 	if not _initialized or _centers_xz.is_empty():
 		return 1.0
-	var d := distance_to_land(world_pos)
-	if d <= 0.0:
-		return 0.0
-	return smoothstep(0.0, SHELTER_FALLOFF_M, d)
+	var pos2 := Vector2(world_pos.x, world_pos.z)
+	var best : float = INF
+	for i in range(_centers_xz.size()):
+		var r := _radii[i]
+		var threshold := SHELTER_FALLOFF_M + r
+		var d2 := pos2.distance_squared_to(_centers_xz[i])
+		if d2 > threshold * threshold:
+			continue  # this island is fully open-water (shelter=1) from here
+		var d := sqrt(d2) - r
+		if d < best:
+			best = d
+			if best <= 0.0:
+				return 0.0  # on or inside land — no other island can win
+	if best == INF:
+		return 1.0
+	return smoothstep(0.0, SHELTER_FALLOFF_M, best)
 
 
 ## How "close to shore" we are, in 0..1 — inverse of `shore_shelter`. Handy
