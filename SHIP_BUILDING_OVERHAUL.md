@@ -470,11 +470,48 @@ stay untouched — they're working and not part of the brief.
 
 ## 7 — Status log
 
-Will be updated as phases land.
+- **Phase 0** — design doc (this file). Committed `594332b`.
+- **Phase 1** — `ShipLighting` controller attached to every boat;
+  hull-mounted nav stern + scaled work-light suite spawned from new
+  `lights` arrays in hull JSONs. Committed `dcd47ed`.
+- **Phase 2** — hull-declared cargo decks with explicit dimensions;
+  shipwright commissions every deck the hull declares (16 → 145 cells
+  depending on hull class). Committed `5dac4f3`.
+- **Phase 3** — `MooringPoint.bollard_scale` derived from hull length
+  (0.7 → 1.5 across 13 m → 60 m hulls). Committed `3334ce8`.
+- **Phase 4** — JSON detailed bridge models (16 parts each: deck house,
+  funnel + cap, mast + yard + antenna, railings, ladder, door, window
+  strip). ShipBuilder loads via ModelAssembler; lights + interactable
+  positions live in the bridge JSON's `slots` dict. Committed
+  `373ea1c`. `.tscn` bridge scenes retained as fallback for one cycle.
+- **Phase 5** — Shipwright catalog collapsed to 5 fields per entry;
+  propulsion / bow thrust / rudder torque / camera all derived from
+  `HullStations.length_m` and `displacement_volume_m3`. Two previously
+  orphaned hulls (`hull_cargo_ship`, `hull_large`) added. Committed
+  `2ca784d`.
+- **Phase 6** — dropped unused `SHIPS_BASE_DIR` constant, refreshed
+  header docstring to describe the actual hull-JSON-driven flow.
+  Committed `c1ae7fc`.
 
-- **Phase 0 — design doc (this file)** — drafting
+### Still to do (after playtest review)
+
+- **Visual sign-off on JSON bridges.** I can't see them; they need to
+  be eyeballed in-engine. If any look wrong, the parametric generator
+  at `/tmp/gen_bridges.py` (re-create on next session) regenerates all
+  five from a single config dict.
+- **Delete the `.tscn` bridge scenes** once visuals are confirmed.
+  Currently retained as fallback.
+- **Audit `MooringComponent` for new bollard layout.** The component
+  discovers cleats by group; should still work, but verify ropes
+  attach to the new scaled bollards.
+- **Refine the JSON bridges with more detail** — the generator's 16
+  parts is a workable baseline but could grow (lifebuoys, signal
+  flags, lifeboat davits, more antennas on bigger ships, etc.).
+- **Cargo deck sizes per hull JSON were derived from bounding box
+  approximations.** A few hulls (deep_sea_freighter aft, cargo_ship)
+  have small aft decks (~5 m) that may need hand-tuning.
 
 ---
 
-*Document lives on `feature/ship-building-overhaul`. Will be merged
-with the implementation as Phase 0.*
+*Document lives on `feature/ship-building-overhaul`. PR-ready once the
+visual review is done.*
