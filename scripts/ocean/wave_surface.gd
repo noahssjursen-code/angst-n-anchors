@@ -60,20 +60,22 @@ static func get_buoyancy_surface_height_at(x: float, z: float) -> float:
 	if fft_system == null or fft_system.buoyancy_data.size() < 4 or fft_system.buoyancy_data[0].is_empty():
 		return WATER_LEVEL
 
+	var res     : int   = FFTWaterSystem.RESOLUTION
+	var res_f   : float = float(res)
+	var res_max : int   = res - 1
 	var h_total := 0.0
 	for i in range(4):
 		var length_scale = fft_system.length_scales[i]
-		var res = 1024.0
 
 		var u = fmod(x / length_scale, 1.0)
 		var v = fmod(z / length_scale, 1.0)
 		if u < 0.0: u += 1.0
 		if v < 0.0: v += 1.0
 
-		var px = clamp(int(u * res), 0, 1023)
-		var py = clamp(int(v * res), 0, 1023)
+		var px = clamp(int(u * res_f), 0, res_max)
+		var py = clamp(int(v * res_f), 0, res_max)
 
-		var idx = py * 1024 + px
+		var idx = py * res + px
 		h_total += fft_system.buoyancy_data[i][idx]
 
 	# Scale down the FFT raw height by 0.42 to match the visual shader's amp_scale tuning,
@@ -145,19 +147,21 @@ static func get_vertical_velocity_at(x: float, z: float) -> float:
 	var dt = fft_system.prev_delta
 	if dt <= 0.0001: return 0.0
 
+	var res     : int   = FFTWaterSystem.RESOLUTION
+	var res_f   : float = float(res)
+	var res_max : int   = res - 1
 	var h_now = 0.0
 	var h_prev = 0.0
 	for i in range(4):
 		var length_scale = fft_system.length_scales[i]
-		var res = 1024.0
 		var u = fmod(x / length_scale, 1.0)
 		var v = fmod(z / length_scale, 1.0)
 		if u < 0.0: u += 1.0
 		if v < 0.0: v += 1.0
-		
-		var px = clamp(int(u * res), 0, 1023)
-		var py = clamp(int(v * res), 0, 1023)
-		var idx = py * 1024 + px
+
+		var px = clamp(int(u * res_f), 0, res_max)
+		var py = clamp(int(v * res_f), 0, res_max)
+		var idx = py * res + px
 		h_now += fft_system.buoyancy_data[i][idx]
 		h_prev += fft_system.prev_buoyancy_data[i][idx]
 	

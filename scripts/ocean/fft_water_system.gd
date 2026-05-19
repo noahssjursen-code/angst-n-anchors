@@ -1,7 +1,14 @@
 class_name FFTWaterSystem
 extends Node
 
-const RESOLUTION = 1024
+## FFT grid size — must be a power of two and match SIZE in
+## fft_ocean_compute.glsl (we inject it as a #define when compiling the
+## FFT_X / FFT_Y passes). At 512² the displacement texel is 0.5 m on the
+## 256 m length scale, which is finer than the geometry resolution of the
+## ocean mesh on screen; close-up still looks correct, FFT compute cost
+## drops ~4×, and per-readback bandwidth is 1 MB/layer instead of 4 MB.
+const RESOLUTION = 512
+const RESOLUTION_LOG2 = 9  # log2(RESOLUTION)
 const MAX_WAVES = 4
 
 ## How many compute frames between each CPU readback of the buoyancy LUT.
@@ -107,11 +114,16 @@ func _compile_shaders() -> void:
 	var base_code = file.get_as_text()
 	var code_without_version = base_code.replace("#version 450", "")
 	
+	# Inject the FFT size as a #define so the FFT_X/FFT_Y passes get the matching
+	# shared-memory buffer size and butterfly count. SIZE/LOG_SIZE in the GLSL
+	# are #ifndef-guarded so we can override them from here without touching
+	# the source for each resolution change.
+	var fft_defines := "#define SIZE %d\n#define LOG_SIZE %d\n" % [RESOLUTION, RESOLUTION_LOG2]
 	pipeline_init = _create_pipeline("#version 450\n#define PASS_INIT\n" + code_without_version)
 	pipeline_pack = _create_pipeline("#version 450\n#define PASS_PACK\n" + code_without_version)
 	pipeline_update = _create_pipeline("#version 450\n#define PASS_UPDATE\n" + code_without_version)
-	pipeline_fft_x = _create_pipeline("#version 450\n#define PASS_FFT_X\n" + code_without_version)
-	pipeline_fft_y = _create_pipeline("#version 450\n#define PASS_FFT_Y\n" + code_without_version)
+	pipeline_fft_x = _create_pipeline("#version 450\n#define PASS_FFT_X\n" + fft_defines + code_without_version)
+	pipeline_fft_y = _create_pipeline("#version 450\n#define PASS_FFT_Y\n" + fft_defines + code_without_version)
 	pipeline_assemble = _create_pipeline("#version 450\n#define PASS_ASSEMBLE\n" + code_without_version)
 
 func _create_pipeline(src: String) -> RID:
