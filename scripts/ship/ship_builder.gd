@@ -3,20 +3,20 @@ extends RefCounted
 
 ## Builds a complete playable ship from a template JSON at runtime.
 ##
-## Template files live in res://resources/data/ships/*.json.
-## Each hull JSON (res://resources/data/models/hulls/*.json) carries a "slots"
-## section that defines named attachment points at scale=1; ShipBuilder multiplies
-## those by the template's "scale" field when placing superstructures and mooring
-## points.
+## Templates today come from the shipwright NPC, which writes them to
+## user://shipwright_orders/<id>.json before calling ShipBuilder.build().
+## Each hull JSON (res://resources/data/models/hulls/*.json) declares its own
+## `slots`, `cargo_decks`, `lights`, and other attachments; ShipBuilder reads
+## all of them and instantiates the right component nodes at the right
+## positions + scale.
 ##
 ## Usage:
-##   var boat := ShipBuilder.build("res://resources/data/ships/fuel_tanker.json")
+##   var boat := ShipBuilder.build("user://shipwright_orders/coastal_trader.json")
 ##   get_tree().current_scene.add_child(boat)
 ##   boat.place_at_waterline(water_y)
 
 const HULL_BASE_DIR  := "res://resources/data/models/hulls/"
 const SUPER_BASE_DIR := "res://scenes/shared/superstructures/"
-const SHIPS_BASE_DIR := "res://resources/data/ships/"
 
 static func build(template_path: String) -> BoatBody:
 	var tmpl := _load_json(template_path)
