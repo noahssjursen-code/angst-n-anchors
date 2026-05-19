@@ -2,121 +2,165 @@
 class_name HydrodynamicsComponent
 extends Node3D
 
-## Drag in hull axes plus **wave coupling**: velocity is compared to a cheap surface
-## orbital flow, and **tangent slip** is damped (ice-like sliding on a curved sheet).
+## Principled ship hydrodynamics:
+##   * Frictional drag (ITTC-style) over wetted surface area, multiplied by a form factor.
+##   * Froude-based wave-making resistance — creates a soft "hull speed" ceiling.
+##   * Lateral & yaw drag (cross-flow + rotational damping).
+##   * Wind force on superstructure (aerodynamic drag with apparent wind).
+##
+## Sea-state coupling is no longer here — StripBuoyancyComponent's per-station water
+## sampling produces wave-driven drag naturally (the ship's pitch/heave through waves
+## costs energy via the heave damping). The slip-grip / orbital-flow hacks are gone.
 
-@export var water_density: float = 1000.0
-@export var forward_drag_coeff: float = 0.08
-@export var lateral_drag_coeff: float = 1.6
-@export var rotational_drag_coeff: float = 4.0
-## Horizontal water motion from ∂η/∂t (drag only). High values make the hull **ride
-## the wave phase** with little resistance — keep modest.
-@export var orbital_flow_scale: float = 0.12
-## Opposes velocity tangent to the local free surface (ball-on-trampoline grip).
-@export var slip_grip_coeff: float = 18000.0
-@export var max_slip_grip_force: float = 450000.0
-## Drains horizontal speed vs **world** (still ocean / inertia). Stops zero-throttle
-## surfing on wave orbital motion forever.
-@export var bulk_horizontal_drag: float = 4200.0
-## Approximate operational draft used for water drag. Kept separate from buoyancy:
-## buoyancy decides where the hull floats; this only estimates submerged side area.
-@export var draft_fraction: float = 0.38
-## Scales all wave-coupling forces (slip grip + orbital flow). Reduce toward 0.3–0.5
-## for heavy vessels that should punch through waves with more inertia.
-@export_range(0.0, 2.0, 0.01) var wave_influence_scale: float = 0.55
+## Hull station table (shared with StripBuoyancyComponent). Used to derive wetted surface
+## area and the length scale for Froude calculations. Set by ShipBuilder.
+@export var hull_stations: HullStations
+@export var mesh_scale: float = 1.0
+@export var water_density: float = 1025.0
+@export var gravity: float = 9.81
+
+@export_group("Hull drag")
+## ITTC-style frictional drag coefficient over the wetted hull surface. Real-world cargo
+## ships sit around 0.002–0.003. Includes biofouling / roughness in practice.
+@export_range(0.0, 0.02, 0.0001) var frictional_coeff: float = 0.0025
+## Form factor (1+k). Multiplies frictional drag. ≈ 1.15–1.30 for cargo hulls.
+@export_range(1.0, 2.0, 0.01) var form_factor: float = 1.20
+## Wave-making peak coefficient — controls how strong the hull-speed wall is.
+## 0.003 is typical for a displacement cargo ship; higher = stronger wall.
+@export_range(0.0, 0.05, 0.0001) var wave_making_peak_coeff: float = 0.003
+## Froude number above which wave-making drag rises sharply (the hull speed knee).
+## Displacement hulls hit a wall around Fn = 0.4; sleeker hulls push to 0.45+.
+@export_range(0.2, 0.6, 0.01) var hull_speed_fn: float = 0.40
+
+@export_group("Lateral / yaw")
+## Cross-flow drag coefficient. Ships are flat plates edge-on — values 1.5–3.0 typical.
+@export_range(0.0, 5.0, 0.05) var lateral_drag_coeff: float = 2.0
+## Yaw damping coefficient (rotational drag).
+@export_range(0.0, 20.0, 0.1) var yaw_drag_coeff: float = 5.0
+
+@export_group("Wind / aerodynamics")
+@export var air_density: float = 1.225
+@export var wind_frontal_area: float = 20.0
+@export var wind_lateral_area: float = 70.0
+@export_range(0.0, 2.0, 0.01) var wind_drag_coeff: float = 0.85
 
 var _body: RigidBody3D
+# Cached at runtime once mesh_scale + hull_stations are known.
+var _wetted_area_m2: float = 0.0
+var _length_world_m: float = 0.0
+var _draft_m: float = 0.0
 
 
 func _ready() -> void:
 	_body = get_parent() as RigidBody3D
 	if _body == null:
 		push_error("HydrodynamicsComponent must be a child of a RigidBody3D")
+		return
+	_recompute_geometry()
+
+
+## Recompute cached geometry from hull_stations + mesh_scale. Call after changing either.
+func _recompute_geometry() -> void:
+	if hull_stations == null:
+		return
+	var s := mesh_scale
+	_length_world_m = hull_stations.length_m * s
+	# Use design draft assumption: 50% of hull height. Good enough for cached drag —
+	# StripBuoyancy will settle the actual draft from mass balance.
+	_draft_m = (hull_stations.height_m * 0.5) * s
+	# Wetted surface area approximation: sum over stations of (perimeter at waterline × length).
+	# Perimeter on each side ≈ 2*draft (vertical) + half_beam (bottom horizontal).
+	# Full beam: 2 * (2*draft + half_beam).
+	var waterline_local: float = hull_stations.keel_y + (hull_stations.height_m * 0.5)
+	var total_S: float = 0.0
+	for i in range(hull_stations.stations.size()):
+		var hb_wl: float = hull_stations.half_beam_at(i, waterline_local) * s
+		var hb_keel: float = hull_stations.half_beam_at(i, hull_stations.keel_y) * s
+		if hb_wl <= 0.001:
+			continue
+		var st_len: float = hull_stations.station_length(i) * s
+		# Per-side wetted perimeter at this station ≈ draft (vertical) + (half_beam at keel for bottom run)
+		var side_perim: float = _draft_m + hb_keel
+		var ring_perim: float = 2.0 * side_perim  # both sides
+		total_S += ring_perim * st_len
+	_wetted_area_m2 = total_S
 
 
 func _physics_process(_delta: float) -> void:
-	if Engine.is_editor_hint() or _body == null:
+	if Engine.is_editor_hint() or _body == null or hull_stations == null:
 		return
+	if _wetted_area_m2 <= 0.0:
+		_recompute_geometry()
+		if _wetted_area_m2 <= 0.0:
+			return
 
-	var basis_inv: Basis = _body.global_transform.basis.inverse()
-	var cx: float = _body.global_position.x
-	var cz: float = _body.global_position.z
+	var basis: Basis = _body.global_transform.basis
+	var basis_inv: Basis = basis.inverse()
 	var v_world: Vector3 = _body.linear_velocity
+	var v_local: Vector3 = basis_inv * v_world
+	var omega_y_local: float = (basis_inv * _body.angular_velocity).y
 
-	var dh_dt: float = WaveSurface.get_vertical_velocity_at(cx, cz)
-	var slope: Vector2 = WaveSurface.get_surface_gradient_xz(cx, cz)
-	var perp2: Vector2 = Vector2(-slope.y, slope.x)
-	var pl: float = perp2.length()
-	var water_horiz: Vector3 = Vector3.ZERO
-	if pl > 1e-4:
-		perp2 /= pl
-		water_horiz = Vector3(perp2.x, 0.0, perp2.y) * (dh_dt * orbital_flow_scale * wave_influence_scale)
+	# --- FORWARD DRAG: frictional × form factor + wave-making ---
+	var v_fwd: float = v_local.z
+	var v_fwd_mag: float = absf(v_fwd)
+	if v_fwd_mag > 0.01:
+		var q: float = 0.5 * water_density * v_fwd_mag * v_fwd_mag
+		var Cf: float = frictional_coeff * form_factor
+		var Cw: float = _wave_making_coefficient(v_fwd_mag)
+		var F_fwd: float = q * _wetted_area_m2 * (Cf + Cw)
+		# Sign: opposes motion along the forward axis.
+		var f_local := Vector3(0.0, 0.0, -signf(v_fwd) * F_fwd)
+		_body.apply_central_force(basis * f_local)
 
-	var rel_world: Vector3 = v_world - water_horiz
-	var local_vel: Vector3 = basis_inv * rel_world
-	var local_avel: Vector3 = basis_inv * _body.angular_velocity
+	# --- LATERAL DRAG (cross-flow): high coefficient, hull side as flat plate ---
+	var v_lat: float = v_local.x
+	var v_lat_mag: float = absf(v_lat)
+	if v_lat_mag > 0.01:
+		var q_lat: float = 0.5 * water_density * v_lat_mag * v_lat_mag
+		var side_area: float = _length_world_m * _draft_m
+		var F_lat: float = q_lat * side_area * lateral_drag_coeff
+		var f_local := Vector3(-signf(v_lat) * F_lat, 0.0, 0.0)
+		_body.apply_central_force(basis * f_local)
 
-	var w: float = 5.0
-	var l: float = 12.0
-	var h: float = 2.0
-	var draft: float = 1.0
+	# --- YAW DAMPING ---
+	var om_mag: float = absf(omega_y_local)
+	if om_mag > 0.001:
+		# Yaw torque ∝ ω² · ρ · L³ · draft · Cyaw  (L³ from torque arm² × velocity_at_tip)
+		var L: float = _length_world_m
+		var T_yaw: float = 0.5 * water_density * om_mag * om_mag * L * L * L * _draft_m * yaw_drag_coeff * 0.01
+		# Sign opposes spin.
+		var t_local := Vector3(0.0, -signf(omega_y_local) * T_yaw, 0.0)
+		_body.apply_torque(basis * t_local)
 
-	if "hull_size" in _body:
-		var hs: Vector3 = _body.get("hull_size")
-		w = hs.x
-		l = hs.z
-		h = hs.y
-		draft = hs.y * draft_fraction
+	# --- WIND FORCE on superstructure ---
+	var wind_speed: float = float(WeatherLighting.wind_speed_ms)
+	if wind_speed > 0.1 and wind_drag_coeff > 0.0:
+		var wind_dir3: Vector3 = WeatherLighting.wind_dir
+		wind_dir3.y = 0.0
+		var wind_vel: Vector3 = wind_dir3 * wind_speed
+		var ship_horiz: Vector3 = Vector3(v_world.x, 0.0, v_world.z)
+		var apparent_wind: Vector3 = wind_vel - ship_horiz
+		var local_wind: Vector3 = basis_inv * apparent_wind
+		var fw_x: float = 0.5 * air_density * local_wind.x * absf(local_wind.x) * wind_lateral_area * wind_drag_coeff
+		var fw_z: float = 0.5 * air_density * local_wind.z * absf(local_wind.z) * wind_frontal_area * wind_drag_coeff
+		var wind_local := Vector3(fw_x, 0.0, fw_z)
+		_body.apply_central_force(basis * wind_local)
 
-	var forward_area: float = w * draft
-	var lateral_area: float = l * draft
 
-	var f_x: float = (
-		-0.5 * water_density * local_vel.x * absf(local_vel.x) * lateral_area * lateral_drag_coeff
-	)
-	var f_z: float = (
-		-0.5 * water_density * local_vel.z * absf(local_vel.z) * forward_area * forward_drag_coeff
-	)
-	
-	# --- DYNAMIC WAVE-CRASH DRAG ---
-	# If the boat plunges its nose into a wave, the effective frontal area massively increases.
-	# We sample the water height at the bow. If it's above the keel, we apply extra slamming drag.
-	var bow_world_pt := _body.to_global(Vector3(0.0, -h * 0.5, -l * 0.5))
-	var bow_water_y := WaveSurface.get_buoyancy_surface_height_at(bow_world_pt.x, bow_world_pt.z)
-	var bow_immersion := clampf(bow_water_y - bow_world_pt.y, 0.0, h)
-	if bow_immersion > draft:
-		var extra_immersion := bow_immersion - draft
-		var crash_area := w * extra_immersion
-		var crash_drag_coeff := 1.8 # Very high drag for crashing into a solid wall of water
-		var f_z_crash := -0.5 * water_density * local_vel.z * absf(local_vel.z) * crash_area * crash_drag_coeff
-		f_z += f_z_crash * wave_influence_scale
-
-	var local_force := Vector3(f_x, 0.0, f_z)
-	var global_force: Vector3 = _body.global_transform.basis * local_force
-
-	var t_y: float = (
-		-0.5 * water_density * local_avel.y * absf(local_avel.y) * (l * l * draft)
-		* rotational_drag_coeff
-	)
-	var local_torque := Vector3(0.0, t_y, 0.0)
-	var global_torque: Vector3 = _body.global_transform.basis * local_torque
-
-	_body.apply_central_force(global_force)
-	_body.apply_torque(global_torque)
-
-	if slip_grip_coeff > 0.0 and max_slip_grip_force > 0.0 and wave_influence_scale > 0.0:
-		var n_up: Vector3 = WaveSurface.get_surface_normal_at(cx, cz)
-		var v_n: float = n_up.dot(v_world)
-		var v_slip: Vector3 = v_world - n_up * v_n
-		var f_slip: Vector3 = -v_slip * slip_grip_coeff * wave_influence_scale
-		var slip_len: float = f_slip.length()
-		var scaled_max: float = max_slip_grip_force * wave_influence_scale
-		if slip_len > scaled_max:
-			f_slip *= scaled_max / slip_len
-		_body.apply_central_force(f_slip)
-
-	var v_hz: Vector3 = Vector3(v_world.x, 0.0, v_world.z)
-	var vh_len: float = v_hz.length()
-	if vh_len > 0.02:
-		var f_bulk: Vector3 = -v_hz * vh_len * bulk_horizontal_drag
-		_body.apply_central_force(f_bulk)
+## Empirical wave-making resistance coefficient as a function of forward speed.
+## Below Fn = 0.15, near zero. Rises with (Fn - 0.15)². Above hull_speed_fn, rises
+## sharply (quadratic kick) to create the hull-speed soft wall.
+func _wave_making_coefficient(v_fwd_mag: float) -> float:
+	if _length_world_m <= 0.1:
+		return 0.0
+	var Fn: float = v_fwd_mag / sqrt(gravity * _length_world_m)
+	if Fn < 0.15:
+		return 0.0
+	# Smooth ramp from 0 at Fn=0.15 to peak at Fn=hull_speed_fn.
+	var ramp_t: float = clampf((Fn - 0.15) / maxf(hull_speed_fn - 0.15, 0.01), 0.0, 1.0)
+	var Cw: float = wave_making_peak_coeff * ramp_t * ramp_t
+	if Fn > hull_speed_fn:
+		# Above the knee, wave-making rises sharply — soft wall behaviour.
+		var over: float = Fn - hull_speed_fn
+		Cw += wave_making_peak_coeff * 8.0 * over * over
+	return Cw

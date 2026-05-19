@@ -33,10 +33,10 @@ func _physics_process(_delta: float) -> void:
 	if crab_mode:
 		# Pure sideways translation: central force means no torque, guaranteed lateral drift.
 		# Scale by 2 to approximate the combined output of both tunnel thrusters.
-		var f := _body.global_transform.basis.x * lateral_input * max_thrust * 2.0
+		var f := _body.global_transform.basis.x * -lateral_input * max_thrust * 2.0
 		_body.apply_central_force(f)
 	else:
 		# Bow-only: force at bow offset creates yaw torque — swings the bow.
-		var f := _body.global_transform.basis.x * lateral_input * max_thrust
+		var f := _body.global_transform.basis.x * -lateral_input * max_thrust
 		var bow_app := _body.to_global(bow_offset) - _body.global_position
 		_body.apply_force(f, bow_app)

@@ -57,7 +57,7 @@ var _last_short_wave := -1.0
 @export var foam_decay_rate: float = 0.5
 @export var foam_add: float = 1.0
 @export var foam_threshold: float = 0.4
-@export var lambda := Vector2(1.0, 1.0)
+@export var lambda := Vector2(0.5, 0.5)
 
 var push_constant_params := PackedByteArray()
 var buoyancy_data: Array[PackedFloat32Array] = []
