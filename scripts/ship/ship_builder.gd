@@ -24,6 +24,17 @@ static func build(template_path: String) -> BoatBody:
 		push_error("ShipBuilder: failed to load template: " + template_path)
 		return null
 
+	# Telemetry timer — visible in the debug HUD's loading log.
+	# Looked up off the main loop because ShipBuilder is RefCounted, no node.
+	var loop := Engine.get_main_loop() as SceneTree
+	var telemetry: Node = null
+	var t_handle: int = 0
+	if loop != null and loop.root != null:
+		telemetry = loop.root.get_node_or_null("Telemetry")
+	var ship_id := template_path.get_file().get_basename()
+	if telemetry != null:
+		t_handle = telemetry.mark_load_event("ship.build:%s" % ship_id)
+
 	var hull_path  := _resolve_hull_path(str(tmpl.get("hull", "")), template_path)
 	var hull_data  := _load_json(hull_path)
 	var scale      := float(tmpl.get("scale", 1.0))
@@ -76,6 +87,9 @@ static func build(template_path: String) -> BoatBody:
 			deck.name = "CargoDeck_" + slot_name
 			deck.position = slots[slot_name]
 			gameplay.add_child(deck)
+
+	if telemetry != null:
+		telemetry.end_load_event(t_handle)
 
 	return boat
 

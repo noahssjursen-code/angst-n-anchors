@@ -25,6 +25,7 @@ PlayerSession="*res://scripts/player/player_session.gd"
 GameMenu="*res://scripts/ui/game_menu.gd"
 GameState="*res://scripts/state/game_state.gd"
 DebugHud="*res://scripts/ui/debug_hud.gd"
+Telemetry="*res://scripts/state/telemetry.gd"
 
 [input]
 

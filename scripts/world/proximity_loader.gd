@@ -14,12 +14,13 @@ var _entries: Array = []
 var _timer:   float = 0.0
 
 
-func register(world_position: Vector3, factory: Callable, load_radius: float) -> void:
+func register(world_position: Vector3, factory: Callable, load_radius: float, debug_name: String = "") -> void:
 	_entries.append({
-		"position": world_position,
-		"factory":  factory,
-		"radius":   load_radius,
-		"instance": null,
+		"position":   world_position,
+		"factory":    factory,
+		"radius":     load_radius,
+		"instance":   null,
+		"debug_name": debug_name,
 	})
 
 
@@ -43,13 +44,20 @@ func _tick() -> void:
 func _load(entry: Dictionary) -> void:
 	if entry["instance"] != null and is_instance_valid(entry["instance"]):
 		return
+	var t := get_node_or_null("/root/Telemetry")
+	var ev_name := "port.load:%s" % str(entry.get("debug_name", "port"))
+	var handle: int = t.mark_load_event(ev_name) if t != null else 0
 	var node := (entry["factory"] as Callable).call() as Node3D
 	if node == null:
 		push_warning("ProximityLoader: factory did not return a Node3D")
+		if t != null:
+			t.end_load_event(handle)
 		return
 	get_parent().add_child(node)
 	node.global_position = entry["position"]
 	entry["instance"] = node
+	if t != null:
+		t.end_load_event(handle)
 
 
 func _unload(entry: Dictionary) -> void:

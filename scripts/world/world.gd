@@ -40,6 +40,9 @@ func _ready() -> void:
 
 
 func _rebuild() -> void:
+	var t := _telemetry()
+	var world_handle: int = t.mark_load_event("world.init") if t != null else 0
+
 	for child in get_children():
 		if Engine.is_editor_hint():
 			child.free()
@@ -59,7 +62,10 @@ func _rebuild() -> void:
 				"center": d.world_position,
 				"radius": _island_radius_for_size(d.size),
 			})
+		var lf_handle: int = t.mark_load_event("land_field.bake") if t != null else 0
 		LandField.initialize(islands)
+		if t != null:
+			t.end_load_event(lf_handle)
 		WorldWeather.initialize(world_seed, positions)
 
 	if Engine.is_editor_hint() and get_tree() != null:
@@ -72,6 +78,16 @@ func _rebuild() -> void:
 		_add_atmospheric_effects()
 		_setup_ports(defs)
 		call_deferred("_spawn_player")
+
+	if t != null:
+		t.end_load_event(world_handle)
+
+
+## Cached lookup so we don't pay the `/root/Telemetry` resolve cost on
+## every load-event call. Returns null in editor / tool runs that don't
+## boot autoloads.
+func _telemetry() -> Node:
+	return get_node_or_null("/root/Telemetry")
 
 
 func _add_world_renderer() -> void:
@@ -139,6 +155,7 @@ func _setup_ports(defs: Array[PortDefinition]) -> void:
 					plot.configure(captured)
 					return plot,
 				LOAD_RADIUS,
+				data.port_id,
 			)
 
 
