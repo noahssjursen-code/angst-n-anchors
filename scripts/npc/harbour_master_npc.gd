@@ -126,67 +126,41 @@ func _show_ship_select() -> void:
 	_screen = _Screen.SHIP_SELECT
 	_dialogue.clear()
 
-	_dialogue.add_quote("Which vessel shall we bring alongside?")
-
-	var listed := false
-
-	for ship in _ships_at_port_available():
-		var label := _ship_label(ship)
-		_dialogue.add_option("Move %s to this berth" % label, _assign_existing_ship.bind(ship))
-		listed = true
+	var berth_n := _pending_berth_index + 1
+	_dialogue.add_quote(
+		"Berth #%d is held for you. One vessel per captain — what shall we bring alongside?"
+		% berth_n
+	)
 
 	var session := get_node_or_null("/root/PlayerSession")
+	var record: Dictionary = {}
 	if session != null:
-		for record in session.data.get_owned_vessel_records():
-			var rec := record as Dictionary
-			var template_path := str(rec.get("template_path", ""))
-			if template_path.is_empty() or not FileAccess.file_exists(template_path):
-				continue
-			var display := str(rec.get("display", "Your vessel"))
-			var short := display.split("  •  ")[0] if "  •  " in display else display
-			_dialogue.add_option("Deploy %s" % short, _spawn_owned_template.bind(template_path))
-			listed = true
+		record = session.data.get_active_vessel_record()
 
-	if not listed:
-		_release_pending_berth()
-		_dialogue.add_quote(
-			"I don't have any of your vessels on file, Captain.\n"
-			+ "Commission a hull at the shipwright, or sail one in and make fast to the bollards."
+	var template_path := str(record.get("template_path", ""))
+	var hull_id := str(record.get("hull_id", ""))
+	var starter_only := _is_starter_vessel_record(template_path, hull_id)
+	var has_ledger := not template_path.is_empty() and FileAccess.file_exists(template_path)
+	var replace_note := (
+		" (replaces your current vessel)"
+		if PlayerVessel.find_active_ship(get_tree()) != null
+		else ""
+	)
+
+	if has_ledger and not starter_only:
+		var display := str(record.get("display", "Your vessel"))
+		var short := display.split("  •  ")[0] if "  •  " in display else display
+		_dialogue.add_option(
+			"Deploy %s%s" % [short, replace_note],
+			_spawn_ledger_vessel.bind(template_path),
 		)
-		_dialogue.add_back_button(_show_main)
-		return
+	_dialogue.add_option(
+		"Bring complimentary Coastal Trader (13 m)%s" % replace_note,
+		_claim_starter_vessel,
+	)
 
 	_dialogue.add_option("Never mind — release the berth.", _cancel_ship_select)
 	_dialogue.add_back_button(_cancel_ship_select)
-
-
-func _ships_at_port_available() -> Array[BoatBody]:
-	var out: Array[BoatBody] = []
-	var plot := get_parent() as PortPlot
-	if plot == null:
-		return out
-	var dock := _get_dock()
-	var owner_id := PortDock.local_player_owner_id()
-	var player_berth := dock.find_player_berth(owner_id) if dock != null else -1
-	for node in get_tree().get_nodes_in_group("player_boat"):
-		var ship := node as BoatBody
-		if ship == null or not plot.is_ancestor_of(ship):
-			continue
-		if dock != null and player_berth >= 0:
-			var at_berth := dock.get_ship_at_berth(player_berth)
-			if at_berth == ship:
-				continue
-		out.append(ship)
-	return out
-
-
-func _ship_label(ship: BoatBody) -> String:
-	if ship == null:
-		return "your vessel"
-	var n := ship.name
-	if n == "PlayerShip" or n.begins_with("@"):
-		return "your vessel"
-	return n
 
 
 func _cancel_ship_select() -> void:
@@ -203,26 +177,21 @@ func _release_pending_berth() -> void:
 	_pending_berth_index = -1
 
 
-func _spawn_owned_template(template_path: String) -> void:
-	_spawn_chosen_ship(template_path)
-
-
-func _assign_existing_ship(ship: BoatBody) -> void:
-	var dock := _get_dock()
-	var idx  := _pending_berth_index
-	if dock == null or idx < 0 or ship == null:
-		return
-	_pending_berth_index = -1
-	if not dock.assign_existing_ship_to_berth(idx, ship):
-		dock.release_berth(idx)
+func _claim_starter_vessel() -> void:
+	var path := StarterVessel.write_template_file()
+	if path.is_empty():
 		_dialogue.clear()
-		_dialogue.add_quote("Couldn't move that vessel alongside. Your berth has been released.")
+		_dialogue.add_quote("Couldn't prepare your yard loaner. Try again in a moment.")
 		_dialogue.add_back_button(_show_main)
 		return
-	_finish_berth_assignment(idx)
+	_spawn_chosen_ship(path, true)
 
 
-func _spawn_chosen_ship(scene_path: String) -> void:
+func _spawn_ledger_vessel(template_path: String) -> void:
+	_spawn_chosen_ship(template_path, false)
+
+
+func _spawn_chosen_ship(scene_path: String, is_starter: bool) -> void:
 	var dock := _get_dock()
 	var idx  := _pending_berth_index
 	if dock == null or idx < 0:
@@ -237,6 +206,11 @@ func _spawn_chosen_ship(scene_path: String) -> void:
 		_dialogue.add_quote("Couldn't ready that vessel. Your berth has been released.")
 		_dialogue.add_back_button(_show_main)
 		return
+
+	if is_starter:
+		var session := get_node_or_null("/root/PlayerSession")
+		if session != null:
+			StarterVessel.set_active_vessel_record(session)
 
 	_finish_berth_assignment(idx)
 
@@ -278,6 +252,12 @@ func _show_vessel_info() -> void:
 
 
 # ── Dock lookup ───────────────────────────────────────────────────────────────
+
+func _is_starter_vessel_record(template_path: String, hull_id: String) -> bool:
+	if template_path == StarterVessel.TEMPLATE_PATH:
+		return true
+	return hull_id == str(StarterVessel.ENTRY.get("id", "coastal_trader"))
+
 
 func _get_dock() -> PortDock:
 	var parent := get_parent()

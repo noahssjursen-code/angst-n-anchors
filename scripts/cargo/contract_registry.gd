@@ -7,6 +7,7 @@ extends Node
 signal contract_accepted(contract: Contract, pallets: Array[Pallet])
 signal unit_delivered(contract: Contract, reward_gold: int)
 signal contract_completed(contract: Contract)
+signal contract_transit_forfeited(contract: Contract, units: int)
 
 ## Per-commodity packing rules.
 ##
@@ -274,6 +275,28 @@ func deliver_pallet(pallet: Pallet) -> int:
 		contract.state           = Contract.State.AVAILABLE
 
 	return reward
+
+
+# ── Lost in transit (ship despawn, etc.) ─────────────────────────────────────
+
+## Cargo on a destroyed/replaced hull is gone — roll back in-transit units and
+## return stock to the origin port so the contract is not stuck open.
+func forfeit_transit_units(contract_id: String, units: int) -> void:
+	if units <= 0 or contract_id.is_empty():
+		return
+	var contract := _contracts.get(contract_id) as Contract
+	if contract == null:
+		return
+	var in_transit := maxi(contract.taken_count - contract.delivered_count, 0)
+	var actual := mini(units, in_transit)
+	if actual <= 0:
+		return
+	contract.taken_count -= actual
+	add_export_stock(contract.origin_port_id, contract.commodity, actual)
+	if contract.taken_count <= 0:
+		contract.taken_count = 0
+		contract.state = Contract.State.AVAILABLE
+	contract_transit_forfeited.emit(contract, actual)
 
 
 # ── Generation ────────────────────────────────────────────────────────────────

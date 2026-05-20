@@ -204,6 +204,8 @@ func _ready() -> void:
 
 
 func _exit_tree() -> void:
+	PlayerVessel.unmark_player_ship(self)
+	PlayerVessel.unregister_ship_from_docks(self)
 	if _walk_deck != null and is_instance_valid(_walk_deck):
 		_walk_deck.queue_free()
 		_walk_deck = null
@@ -396,6 +398,16 @@ func get_cargo_available_units() -> int:
 ## Position the ship so that the keel is `total_height × draft_fraction` below water_y.
 ## `draft_fraction = -1` (default) means "use this ship's own design_draft_fraction" so
 ## the spawn sits at the buoyancy equilibrium and the ship doesn't drift down at start.
+## Teleport hull to a berth (or spawn) pose; clears velocity so mooring/physics do not fight the move.
+func snap_to_transform(xform: Transform3D) -> void:
+	freeze = true
+	global_transform = xform
+	linear_velocity = Vector3.ZERO
+	angular_velocity = Vector3.ZERO
+	freeze = false
+	sleeping = false
+
+
 func place_at_waterline(water_y: float, draft_fraction: float = -1.0) -> void:
 	_ensure_model()
 	_sync_hull_size_from_mesh()
@@ -424,12 +436,7 @@ func fit_to_port_berth(dock: PortDock, berth_index: int) -> void:
 	if dock == null or berth_index < 0:
 		return
 
-	var berth_count := ShipClass.berth_count(
-		dock.dock_length,
-		dock.max_ship_class,
-		PortDock.BERTH_GAP_M
-	)
-	if berth_index >= berth_count:
+	if berth_index < 0 or berth_index >= dock.berth_count():
 		return
 
 	refresh_hull_bounds_from_visuals()

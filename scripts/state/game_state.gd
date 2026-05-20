@@ -45,6 +45,7 @@ func _wire_contract_registry() -> void:
 		return
 	registry.contract_accepted.connect(func(_c: Contract, _pallets: Array[Pallet]) -> void: _refresh_contracts())
 	registry.contract_completed.connect(func(_c: Contract) -> void: _refresh_contracts())
+	registry.contract_transit_forfeited.connect(func(_c: Contract, _u: int) -> void: _refresh_contracts())
 
 
 func _refresh_contracts() -> void:

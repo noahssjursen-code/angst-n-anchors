@@ -55,7 +55,6 @@ var _ship_hud: ShipHud
 func activate() -> void:
 	_active = true
 	helmed_count += 1
-	get_parent().add_to_group("player_boat")
 	_ensure_hud()
 	_set_hud_visible(true)
 	helm_activated.emit()
@@ -72,7 +71,6 @@ func deactivate() -> void:
 	_throttle_stage_idx = _nearest_stage_idx(0.0)
 	_push_to_components()
 	_set_hud_visible(false)
-	get_parent().remove_from_group("player_boat")
 	helm_deactivated.emit()
 
 
