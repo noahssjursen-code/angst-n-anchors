@@ -54,9 +54,50 @@ func _draw() -> void:
 	_draw_wind(Vector2(vp.x * 0.5 + COMPASS_R + 130.0, 92.0))
 	_draw_lights_status(Vector2(vp.x - 90.0, 30.0))
 	_draw_throttle(Vector2(108.0, vp.y - 142.0))
+	_draw_fuel(Vector2(220.0, vp.y - 142.0))
 	_draw_dashboard(Vector2(vp.x * 0.5, vp.y - 49.0))
 	if _toast_remaining_s > 0.0:
 		_draw_toast(Vector2(vp.x * 0.5, vp.y * 0.5 - 80.0))
+
+
+# ── Fuel gauge ───────────────────────────────────────────────────────────────
+
+## Vertical fuel bar next to the throttle telegraph. Colour-banded:
+## green > 30%, amber 10-30%, red < 10%. Reads BoatBody.get_fuel_fraction()
+## directly — fuel state is small and queried once per frame, no signal
+## subscription needed.
+func _draw_fuel(c: Vector2) -> void:
+	if _boat == null or not _boat.has_method("get_fuel_fraction"):
+		return
+	var pct: float = _boat.get_fuel_fraction()
+	var w := 28.0
+	var h := 180.0
+	var px := c.x - w * 0.5
+	var py := c.y - h * 0.5
+
+	# Frame.
+	draw_rect(Rect2(px - 4.0, py - 12.0, w + 8.0, h + 28.0), HudStyle.C_BG)
+	draw_rect(Rect2(px - 4.0, py - 12.0, w + 8.0, h + 28.0), HudStyle.C_BRASS, false, 1.2)
+	_draw_centered("FUEL", Vector2(c.x, py - 1.0), 9, HudStyle.C_LABEL)
+
+	# Empty track.
+	draw_rect(Rect2(px, py, w, h), Color(HudStyle.C_BG_INNER.r, HudStyle.C_BG_INNER.g, HudStyle.C_BG_INNER.b, 0.8))
+
+	# Filled portion grows from the bottom.
+	var fill_h := h * pct
+	var fill_col: Color
+	if pct < 0.10:
+		fill_col = HudStyle.C_RED
+	elif pct < 0.30:
+		fill_col = HudStyle.C_AMBER
+	else:
+		fill_col = HudStyle.C_GREEN
+	if fill_h > 0.0:
+		draw_rect(Rect2(px, py + h - fill_h, w, fill_h), fill_col)
+
+	# Percent readout.
+	_draw_centered("%d%%" % int(pct * 100.0), Vector2(c.x, py + h + 14.0), 10,
+			HudStyle.C_TEXT if pct >= 0.10 else HudStyle.C_RED)
 
 
 # ── Toast (transient flash message) ──────────────────────────────────────────

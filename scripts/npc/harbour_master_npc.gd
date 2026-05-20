@@ -9,7 +9,11 @@ const PEAKED_CAP_PATH := AssetPaths.HAT_PEAKED_CAP
 
 var _dialogue: DialoguePanel
 
-enum _Screen { MAIN, REQUEST_BERTH, VESSEL_INFO, SHIP_SELECT }
+enum _Screen { MAIN, REQUEST_BERTH, VESSEL_INFO, SHIP_SELECT, REFUEL }
+
+## Price per litre of diesel. Tuned so a full 400 L tank costs ~200 marks —
+## a starter player earns enough from one delivery to cover the return trip.
+const FUEL_PRICE_PER_LITRE : float = 0.5
 var _screen: _Screen = _Screen.MAIN
 var _pending_berth_index: int = -1
 
@@ -61,8 +65,62 @@ func _show_main() -> void:
 	_dialogue.clear()
 	_dialogue.add_quote("Good day, Captain. What can I do for you?")
 	_dialogue.add_option("I would like to request a berth.",  _show_request_berth)
+	if _can_offer_refuel():
+		_dialogue.add_option("Refuel my ship.",                _show_refuel)
 	_dialogue.add_option("What vessels can dock here?",        _show_vessel_info)
 	_dialogue.add_option("Nothing, thank you.",                _close)
+
+
+# ── Refuel ────────────────────────────────────────────────────────────────────
+
+func _can_offer_refuel() -> bool:
+	var dock := _get_dock()
+	if dock == null or not dock.has_fuel_point:
+		return false
+	return LocalPlayerView.has_active_ship()
+
+
+func _show_refuel() -> void:
+	_screen = _Screen.REFUEL
+	_dialogue.clear()
+	var ship := LocalPlayerView.get_active_ship() as BoatBody
+	if ship == null:
+		_dialogue.add_quote("You have no vessel to refuel, Captain.")
+		_dialogue.add_back_button(_show_main)
+		return
+	var needed := maxf(ship.fuel_capacity_l - ship.fuel_l, 0.0)
+	if needed <= 0.5:
+		_dialogue.add_quote("Tank is already full, Captain. No fuel needed.")
+		_dialogue.add_back_button(_show_main)
+		return
+	var price := int(ceil(needed * FUEL_PRICE_PER_LITRE))
+	var pct := int(round(ship.get_fuel_fraction() * 100.0))
+	_dialogue.add_quote(
+		"Your tank reads %d%% — fill her up for %s?\n(%d L of diesel)" %
+		[pct, PlayerSession.format_money(price), int(round(needed))]
+	)
+	_dialogue.add_option("Yes — top her off.", _commit_refuel.bind(needed, price))
+	_dialogue.add_back_button(_show_main)
+
+
+func _commit_refuel(litres: float, price: int) -> void:
+	var session := get_node_or_null("/root/PlayerSession")
+	var ship := LocalPlayerView.get_active_ship() as BoatBody
+	if session == null or ship == null:
+		_show_main()
+		return
+	if not session.spend_marks(price):
+		_dialogue.clear()
+		_dialogue.add_quote(
+			"Your balance won't cover that, Captain.\nNeed %s more."
+			% PlayerSession.format_money(price - session.get_marks())
+		)
+		_dialogue.add_back_button(_show_main)
+		return
+	ship.add_fuel(litres)
+	_dialogue.clear()
+	_dialogue.add_quote("Tank's full, Captain. Safe sailing.")
+	_dialogue.add_option("Thank you.", _close)
 
 
 func _show_request_berth() -> void:

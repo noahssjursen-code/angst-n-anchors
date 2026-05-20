@@ -192,10 +192,15 @@ func _snapshot_into_player_data() -> void:
 		var ctrl := ship.get_node_or_null("BoatController") as BoatController
 		if ctrl != null and ctrl.has_method("get_throttle_stage_idx"):
 			stage_idx = ctrl.get_throttle_stage_idx()
+		var fuel_fraction := 1.0
+		var boat_body := ship as BoatBody
+		if boat_body != null and boat_body.has_method("get_fuel_fraction"):
+			fuel_fraction = boat_body.get_fuel_fraction()
 		data.ship_runtime_state = {
 			"world_pos":          ship.global_position,
 			"yaw":                ship.rotation.y,
 			"throttle_stage_idx": stage_idx,
+			"fuel_fraction":      fuel_fraction,
 		}
 	else:
 		data.ship_runtime_state = {}
@@ -241,6 +246,19 @@ func restore_player_state() -> void:
 		call_deferred("_restore_ship_pose", data.ship_runtime_state.duplicate())
 
 
+## Apply the most recently saved ship_runtime_state to the player's
+## currently-spawned ship. Called from PortDock.spawn_player_ship after
+## the harbour master finishes a spawn, so fuel level / throttle stage /
+## yaw / position get restored at the right moment in the load flow.
+func apply_runtime_state_to_active_ship() -> void:
+	if _session == null:
+		return
+	var data: PlayerData = _session.data
+	if data == null or data.ship_runtime_state.is_empty():
+		return
+	_restore_ship_pose(data.ship_runtime_state.duplicate())
+
+
 func _restore_ship_pose(state: Dictionary) -> void:
 	var ship := get_active_ship() as Node3D
 	if ship == null:
@@ -250,3 +268,9 @@ func _restore_ship_pose(state: Dictionary) -> void:
 		ship.global_position = pos_raw
 	var yaw := float(state.get("yaw", 0.0))
 	ship.rotation.y = yaw
+	# Restore fuel level if persisted (defaults to 1.0 = full tank for
+	# pre-v2 saves and freshly-commissioned ships).
+	if state.has("fuel_fraction"):
+		var boat := ship as BoatBody
+		if boat != null:
+			boat.fuel_l = boat.fuel_capacity_l * float(state["fuel_fraction"])

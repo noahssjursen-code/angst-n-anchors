@@ -712,6 +712,13 @@ func spawn_player_ship(index: int, ship_scene_path: String = "") -> Node3D:
 
 	if body != null:
 		PlayerVessel.mark_player_ship(body)
+		# After the player's ship is marked, ask LocalPlayerView to apply any
+		# saved runtime state (fuel level, throttle stage). World-load tries
+		# this earlier but no ship existed yet; this is the actual moment
+		# where the active vessel exists.
+		var view := get_tree().root.get_node_or_null("LocalPlayerView")
+		if view != null and view.has_method("apply_runtime_state_to_active_ship"):
+			view.call_deferred("apply_runtime_state_to_active_ship")
 
 	return ship
 

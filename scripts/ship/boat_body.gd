@@ -90,6 +90,31 @@ const WALK_MODEL_COLLIDER_NAME := "WalkModelCollider"
 		cargo_mass = maxf(0.0, v)
 		_refresh_mass()
 
+@export_group("Fuel")
+## Tank capacity in litres. Scales with hull size — defaults sized for a
+## coastal trader. ShipBuilder can override per-template; a value > 0 here
+## ensures any hull spawned cold-boot has a usable tank.
+@export var fuel_capacity_l: float = 400.0:
+	set(v):
+		fuel_capacity_l = maxf(v, 1.0)
+		fuel_l = minf(fuel_l, fuel_capacity_l)
+
+## Current fuel level in litres. Persisted via PlayerData.ship_runtime_state
+## as a fraction so different hulls round-trip cleanly.
+@export var fuel_l: float = 400.0:
+	set(v):
+		var clamped := clampf(v, 0.0, fuel_capacity_l)
+		var was_dry := fuel_l <= 0.0001
+		fuel_l = clamped
+		fuel_changed.emit(get_fuel_fraction())
+		if not was_dry and fuel_l <= 0.0001:
+			fuel_depleted.emit()
+
+## Emitted when fuel level changes. Argument is current fraction (0..1).
+signal fuel_changed(fraction: float)
+## Emitted once when the tank crosses from non-empty to empty.
+signal fuel_depleted
+
 @export_group("Stability (artificial keel)")
 ## Push the rigid-body center of mass below the mesh geometric center (ballast / keel).
 ## Vertical offset from `hull_center` = `hull_size.y * center_of_mass_depth_fraction`
@@ -166,6 +191,39 @@ var _walk_deck:   AnimatableBody3D
 
 ## Mooring positional solve runs here (inside Jolt/Godot integration), not via impulses.
 var _mooring_integrate: Callable = Callable()
+
+
+# ── Fuel API ─────────────────────────────────────────────────────────────────
+
+## 0..1 fraction of capacity.
+func get_fuel_fraction() -> float:
+	if fuel_capacity_l <= 0.0:
+		return 0.0
+	return clampf(fuel_l / fuel_capacity_l, 0.0, 1.0)
+
+
+## Deduct fuel; clamps to zero. Called by PropulsionComponent each tick.
+func consume_fuel(litres: float) -> void:
+	if litres <= 0.0:
+		return
+	fuel_l = maxf(fuel_l - litres, 0.0)
+
+
+## Add fuel up to capacity. Used by FuelStation when refuelling at a pump.
+## Returns the actual amount added (may be less than requested if the
+## tank was already nearly full).
+func add_fuel(litres: float) -> float:
+	if litres <= 0.0:
+		return 0.0
+	var before := fuel_l
+	fuel_l = minf(fuel_l + litres, fuel_capacity_l)
+	return fuel_l - before
+
+
+## Top up to full. Used by the shipwright on commission so a freshly-built
+## ship is ready to sail.
+func fill_tank() -> void:
+	fuel_l = fuel_capacity_l
 
 
 func mount_mooring_integrate(callback: Callable) -> void:

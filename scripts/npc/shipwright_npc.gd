@@ -195,6 +195,10 @@ func _commission(entry: Dictionary) -> void:
 		return
 
 	PlayerVessel.mark_player_ship(ship)
+	# Freshly-built vessel sails with a full tank — captain pays the
+	# commission, the yard hands over a ready ship.
+	if ship.has_method("fill_tank"):
+		ship.fill_tank()
 	_register_active_vessel(entry, path, uid)
 
 	var placed := _try_place_at_berth(ship)
