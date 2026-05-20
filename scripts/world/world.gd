@@ -209,13 +209,48 @@ func _spawn_player() -> void:
 	await get_tree().process_frame
 
 	var home      := get_node_or_null("HomePort") as PortPlot
-	var spawn_pos := Vector3(0.0, 0.5, 0.0)
-	if home != null:
-		spawn_pos = home.get_spawn_position()
+	var spawn_pos := _safe_spawn_position(home)
 
 	var player      := PLAYER_SCENE.instantiate()
 	player.position = spawn_pos
 	add_child(player)
+
+
+## Resolve a safe spawn position for the player. Prefers HomePort.get_spawn_position()
+## (which returns the dock's spawn anchor), but validates the result against the
+## physics world to make sure we're not dropping the player into water or inside
+## a collider. Falls back to a high-and-dry default so the player doesn't drown
+## on the very first frame if port generation produced something unexpected.
+func _safe_spawn_position(home: PortPlot) -> Vector3:
+	var candidate := Vector3.ZERO
+	if home != null:
+		candidate = home.get_spawn_position()
+	else:
+		push_warning("World: home port missing at spawn time; falling back")
+
+	# Clamp Y above the water level so we never spawn beneath the surface.
+	var water_y := WaveSurface.WATER_LEVEL
+	if candidate.y < water_y + 1.0:
+		candidate.y = water_y + 1.5
+
+	# Cast a short ray downward at the candidate to ensure there's ground
+	# (the dock plate or terrain) beneath us. If not, raise to a safe height
+	# above water so the player falls onto whatever's there.
+	var space := get_world_3d().direct_space_state
+	if space != null:
+		var from := candidate + Vector3.UP * 5.0
+		var to   := candidate + Vector3.DOWN * 20.0
+		var q    := PhysicsRayQueryParameters3D.create(from, to)
+		q.collide_with_areas = false
+		var hit := space.intersect_ray(q)
+		if hit.is_empty():
+			push_warning("World: no ground beneath spawn at %s; raising" % candidate)
+			candidate.y = water_y + 6.0
+		else:
+			# Hit the deck/terrain — snap to slightly above it.
+			candidate = (hit["position"] as Vector3) + Vector3.UP * 0.6
+
+	return candidate
 
 
 ## Mirrors PortExpander.ISLAND_WIDTH_BY_SIZE so LandField can be seeded without

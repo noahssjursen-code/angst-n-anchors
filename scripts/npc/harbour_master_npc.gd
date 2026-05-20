@@ -9,7 +9,7 @@ const PEAKED_CAP_PATH := "res://resources/data/meshes/characters/hat_peaked_cap.
 
 var _dialogue: DialoguePanel
 
-enum _Screen { MAIN, REQUEST_BERTH, PAY_DUES, VESSEL_INFO, SHIP_SELECT }
+enum _Screen { MAIN, REQUEST_BERTH, VESSEL_INFO, SHIP_SELECT }
 var _screen: _Screen = _Screen.MAIN
 var _pending_berth_index: int = -1
 
@@ -61,7 +61,6 @@ func _show_main() -> void:
 	_dialogue.clear()
 	_dialogue.add_quote("Good day, Captain. What can I do for you?")
 	_dialogue.add_option("I would like to request a berth.",  _show_request_berth)
-	_dialogue.add_option("I am here to pay my harbour dues.", _show_pay_dues)
 	_dialogue.add_option("What vessels can dock here?",        _show_vessel_info)
 	_dialogue.add_option("Nothing, thank you.",                _close)
 
@@ -223,13 +222,6 @@ func _finish_berth_assignment(idx: int) -> void:
 	_dialogue.clear()
 	_dialogue.add_quote("Berth #%d is yours, Captain. Mind the tides." % (idx + 1))
 	_dialogue.add_option("Thank you.", _close)
-
-
-func _show_pay_dues() -> void:
-	_screen = _Screen.PAY_DUES
-	_dialogue.clear()
-	_dialogue.add_quote("No outstanding dues on record, Captain.")
-	_dialogue.add_back_button(_show_main)
 
 
 func _show_vessel_info() -> void:

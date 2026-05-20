@@ -43,6 +43,12 @@ var _rudder:   float = 0.0
 var _lateral:  float = 0.0
 var _throttle_stage_idx: int = 1
 
+## Accumulator for distance-sailed telemetry. Flushed to PlayerSession in
+## ~5-second batches so we're not hammering the save layer per physics tick.
+var _distance_accum_m:   float = 0.0
+var _distance_flush_tick: float = 0.0
+const DISTANCE_FLUSH_INTERVAL_S : float = 5.0
+
 @onready var _propulsion:    PropulsionComponent  = get_node_or_null("../PropulsionComponent")
 @onready var _rudder_comp:   RudderComponent      = get_node_or_null("../RudderComponent")
 @onready var _bow_thruster:  BowThrusterComponent = get_node_or_null("../BowThrusterComponent")
@@ -101,6 +107,27 @@ func _physics_process(delta: float) -> void:
 	_lateral  = lateral_target
 
 	_push_to_components()
+	_accumulate_distance_sailed(delta)
+
+
+## Integrate the helmed ship's horizontal speed and flush to PlayerSession
+## in five-second batches. Only ticks while a player is at the helm (which
+## is implied by _active being true, gated at the top of the function).
+func _accumulate_distance_sailed(delta: float) -> void:
+	if _boat_body == null or not is_instance_valid(_boat_body):
+		return
+	var v := _boat_body.linear_velocity
+	_distance_accum_m += Vector2(v.x, v.z).length() * delta
+	_distance_flush_tick += delta
+	if _distance_flush_tick < DISTANCE_FLUSH_INTERVAL_S:
+		return
+	_distance_flush_tick = 0.0
+	if _distance_accum_m < 0.1:
+		return
+	var session := get_node_or_null("/root/PlayerSession")
+	if session != null and session.has_method("add_distance_sailed"):
+		session.add_distance_sailed(_distance_accum_m)
+	_distance_accum_m = 0.0
 
 
 func _unhandled_input(event: InputEvent) -> void:

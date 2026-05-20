@@ -10,6 +10,11 @@ var _controller: BoatController = null
 var _font:       Font
 
 const COMPASS_R := 68.0
+const TOAST_DURATION_S := 3.0
+
+## Transient flash message (mooring rejection, low fuel, etc).
+var _toast_text:        String = ""
+var _toast_remaining_s: float  = 0.0
 
 
 func _ready() -> void:
@@ -21,9 +26,23 @@ func _ready() -> void:
 func setup(boat: RigidBody3D, controller: BoatController) -> void:
 	_boat       = boat
 	_controller = controller
+	# Subscribe to the boat's MooringComponent so split-berth rejections
+	# surface to the player as a 3-second amber flash instead of vanishing
+	# silently into a property nobody reads.
+	var mooring := _boat.get_node_or_null("ShipGameplay/MooringComponent") as MooringComponent
+	if mooring != null and not mooring.mooring_rejected.is_connected(show_toast):
+		mooring.mooring_rejected.connect(show_toast)
 
 
-func _process(_delta: float) -> void:
+## Publicly callable so other systems can flash short messages on the helm HUD.
+func show_toast(text: String, duration_s: float = TOAST_DURATION_S) -> void:
+	_toast_text        = text
+	_toast_remaining_s = duration_s
+
+
+func _process(delta: float) -> void:
+	if _toast_remaining_s > 0.0:
+		_toast_remaining_s -= delta
 	queue_redraw()
 
 
@@ -36,6 +55,26 @@ func _draw() -> void:
 	_draw_lights_status(Vector2(vp.x - 90.0, 30.0))
 	_draw_throttle(Vector2(108.0, vp.y - 142.0))
 	_draw_dashboard(Vector2(vp.x * 0.5, vp.y - 49.0))
+	if _toast_remaining_s > 0.0:
+		_draw_toast(Vector2(vp.x * 0.5, vp.y * 0.5 - 80.0))
+
+
+# ── Toast (transient flash message) ──────────────────────────────────────────
+
+func _draw_toast(c: Vector2) -> void:
+	var fs := 16
+	var tw := _font.get_string_size(_toast_text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
+	var pad := 14.0
+	var pw  := tw + pad * 2.0
+	var ph  := float(fs) + pad * 1.2
+	# Soft fade-out in the last 0.6 s.
+	var alpha := clampf(_toast_remaining_s / 0.6, 0.0, 1.0)
+	var bg := Color(HudStyle.C_BG.r, HudStyle.C_BG.g, HudStyle.C_BG.b, HudStyle.C_BG.a * alpha)
+	var border := Color(HudStyle.C_AMBER.r, HudStyle.C_AMBER.g, HudStyle.C_AMBER.b, alpha)
+	var text   := Color(HudStyle.C_TEXT.r, HudStyle.C_TEXT.g, HudStyle.C_TEXT.b, alpha)
+	draw_rect(Rect2(c.x - pw * 0.5, c.y - ph * 0.5, pw, ph), bg)
+	draw_rect(Rect2(c.x - pw * 0.5, c.y - ph * 0.5, pw, ph), border, false, 1.4)
+	_draw_centered(_toast_text, c + Vector2(0.0, fs * 0.4), fs, text)
 
 
 # ── Wind indicator ───────────────────────────────────────────────────────────

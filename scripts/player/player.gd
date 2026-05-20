@@ -101,7 +101,8 @@ func _physics_process(delta: float) -> void:
 		_camera_y_offset = clampf(velocity.y * 0.045, -0.45, 0.0)
 	_was_on_floor = on_floor
 
-	# Gravity — variable scale depending on jump state
+	# Gravity — variable scale depending on jump state. Always applied so the
+	# player can't hover during a dialogue / pause / menu.
 	if not on_floor:
 		var g_scale := fall_gravity_multiplier
 		if velocity.y > 0.0:
@@ -110,12 +111,17 @@ func _physics_process(delta: float) -> void:
 	elif velocity.y < 0.0:
 		velocity.y = 0.0
 
+	# Input is only consumed while the mouse is captured. NPC dialogues +
+	# pause menu + map overlay all set `Input.mouse_mode = VISIBLE`, which
+	# now also gates movement + jump — fixes "walk away mid-conversation".
+	var inputs_active := Input.mouse_mode == Input.MOUSE_MODE_CAPTURED
+
 	# Jump impulse derived from desired peak height
-	if Input.is_action_just_pressed("jump") and on_floor:
+	if inputs_active and Input.is_action_just_pressed("jump") and on_floor:
 		velocity.y = sqrt(2.0 * BASE_GRAVITY * jump_peak_height)
 
 	# Smooth raw input on the forward axis — strafe stays immediate
-	var raw := Input.get_vector("move_left", "move_right", "move_forward", "move_back")
+	var raw := Input.get_vector("move_left", "move_right", "move_forward", "move_back") if inputs_active else Vector2.ZERO
 	var blend := 1.0 - exp(-input_smoothness * delta)
 	_smoothed_input.x = raw.x
 	_smoothed_input.y = lerpf(_smoothed_input.y, raw.y, blend)
@@ -128,7 +134,7 @@ func _physics_process(delta: float) -> void:
 
 	# Speed ramps up/down smoothly so shift feels like breaking into a run
 	# KEY_SHIFT checked directly — Shift as an input action is unreliable in Godot 4
-	var target_speed := sprint_speed if Input.is_key_pressed(KEY_SHIFT) else walk_speed
+	var target_speed := sprint_speed if (inputs_active and Input.is_key_pressed(KEY_SHIFT)) else walk_speed
 	_current_speed = lerpf(_current_speed, target_speed, 1.0 - exp(-speed_blend_sharpness * delta))
 	var speed := _current_speed
 

@@ -135,8 +135,18 @@ func _on_commission_requested(entry: Dictionary) -> void:
 
 
 func _try_pay_for_commission(entry: Dictionary) -> bool:
+	# Validate the hull JSON exists and has usable geometry BEFORE charging
+	# the player. Without this guard a missing / corrupt hull file would
+	# silently deduct marks and then crash on HullStations.from_hull_json.
 	var hull_path := ShipBuilder.HULL_BASE_DIR + str(entry.get("hull_file", ""))
+	if not FileAccess.file_exists(hull_path):
+		_show_commission_error("That hull is unavailable in the yard right now.")
+		return false
 	var hull_data := ShipBuilder._load_json(hull_path)
+	if hull_data.is_empty() or not hull_data.has("parts"):
+		_show_commission_error("The hull blueprint is corrupted — please report this bug.")
+		return false
+
 	var stations := HullStations.from_hull_json(hull_data, 10)
 	var session := get_node_or_null("/root/PlayerSession")
 	if session == null:
@@ -154,6 +164,14 @@ func _try_pay_for_commission(entry: Dictionary) -> bool:
 		_dialogue.show_panel()
 		return false
 	return true
+
+
+## Show a polite "we can't build that" message without charging the player.
+func _show_commission_error(line: String) -> void:
+	_dialogue.clear()
+	_dialogue.add_quote(line)
+	_dialogue.add_option("Back to catalog.", _open_catalog)
+	_dialogue.show_panel()
 
 
 func _commission(entry: Dictionary) -> void:
