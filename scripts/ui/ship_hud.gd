@@ -32,8 +32,107 @@ func _draw() -> void:
 		return
 	var vp := get_viewport_rect().size
 	_draw_compass(Vector2(vp.x * 0.5, 92.0))
+	_draw_wind(Vector2(vp.x * 0.5 + COMPASS_R + 130.0, 92.0))
+	_draw_lights_status(Vector2(vp.x - 90.0, 30.0))
 	_draw_throttle(Vector2(108.0, vp.y - 142.0))
 	_draw_dashboard(Vector2(vp.x * 0.5, vp.y - 49.0))
+
+
+# ── Wind indicator ───────────────────────────────────────────────────────────
+
+## Compact wind dial — sits to the right of the compass. Shows wind
+## direction *relative to the bow* (so the arrow points the way the wind
+## blows across the ship, not absolute compass) plus force in m/s.
+func _draw_wind(c: Vector2) -> void:
+	var weather := get_node_or_null("/root/WeatherLighting")
+	if weather == null:
+		return
+	var wind_dir: Vector3 = weather.get("wind_dir")
+	var wind_force: float = float(weather.get("wind_force"))
+	var wind_ms_var: Variant = weather.get("wind_speed_ms")
+	var wind_ms : float = float(wind_ms_var) if wind_ms_var != null else wind_force * 30.0
+
+	var r := 36.0
+
+	# Background dial.
+	draw_circle(c, r + 6.0, HudStyle.C_BG)
+	draw_arc(c, r + 4.0, 0.0, TAU, 60, HudStyle.C_BRASS, 1.2, true)
+
+	# Bow marker — small amber tick at the top of the dial (12 o'clock).
+	draw_line(c + Vector2(0.0, -r - 2.0), c + Vector2(0.0, -r + 6.0),
+			HudStyle.C_AMBER, 1.5, true)
+	_draw_centered("BOW", c + Vector2(0.0, -r - 8.0), 8, HudStyle.C_LABEL)
+
+	# Arrow direction: world-space wind rotated into ship-local frame so
+	# "wind from astern" points down on the dial.
+	var bow_h := NavigationAxes.vessel_bow_horizontal(_boat)
+	if bow_h.length_squared() < 1e-6:
+		bow_h = Vector2(0.0, -1.0)
+	else:
+		bow_h = bow_h.normalized()
+	# Local-wind vector: wind component along/across bow.
+	var wind_xz := Vector2(wind_dir.x, wind_dir.z)
+	# Wind "FROM" convention — flip so the arrow points the way the wind is
+	# coming from, matching how mariners describe wind.
+	wind_xz = -wind_xz
+	# Bow points local +Y on the dial; right of the ship is local +X.
+	var bow_perp := Vector2(-bow_h.y, bow_h.x)
+	var local_x  := wind_xz.dot(bow_perp)
+	var local_y  := wind_xz.dot(bow_h)
+	var dial_dir := Vector2(local_x, -local_y)  # screen Y is inverted from ship Y
+	if dial_dir.length_squared() < 1e-6:
+		# Calm — no arrow, just print "CALM".
+		_draw_centered("CALM", c, 11, HudStyle.C_LABEL)
+		return
+	dial_dir = dial_dir.normalized()
+
+	# Force-coded arrow colour: green light, amber moderate, red gale.
+	var arrow_col: Color
+	if wind_force < 0.33:
+		arrow_col = HudStyle.C_GREEN
+	elif wind_force < 0.66:
+		arrow_col = HudStyle.C_AMBER
+	else:
+		arrow_col = HudStyle.C_RED
+
+	# Arrow shaft + arrowhead.
+	var tail := c - dial_dir * (r - 8.0)
+	var head := c + dial_dir * (r - 8.0)
+	draw_line(tail, head, arrow_col, 2.2, true)
+	var perp := Vector2(-dial_dir.y, dial_dir.x) * 5.0
+	var back := head - dial_dir * 9.0
+	draw_colored_polygon(PackedVector2Array([head, back + perp, back - perp]), arrow_col)
+
+	# Force readout in centre.
+	_draw_centered("%d kt" % int(wind_ms * 1.94384), c + Vector2(0.0, 18.0),
+			10, HudStyle.C_TEXT)
+
+
+# ── Lights status ────────────────────────────────────────────────────────────
+
+## Tiny preset badge in the top-right showing the current ShipLighting
+## preset (OFF/NAV/WORK/ALL). Sized to be unobtrusive — players who don't
+## care can ignore it. Players hunting for the L key cycle get instant
+## feedback.
+func _draw_lights_status(c: Vector2) -> void:
+	if _boat == null:
+		return
+	var lighting := _boat.get_node_or_null("ShipLighting")
+	if lighting == null or not lighting.has_method("get_preset_name"):
+		return
+	var preset: String = lighting.get_preset_name()
+	var label := "LIGHTS · %s" % preset
+	var tw := _font.get_string_size(label, HORIZONTAL_ALIGNMENT_LEFT, -1, 10).x
+	var pad := 8.0
+	var pw := tw + pad * 2.0
+	var ph := 22.0
+	var px := c.x - pw * 0.5
+	var py := c.y - ph * 0.5
+	draw_rect(Rect2(px, py, pw, ph), HudStyle.C_BG)
+	draw_rect(Rect2(px, py, pw, ph), HudStyle.C_BRASS, false, 1.0)
+	var preset_col := HudStyle.C_LABEL if preset == "OFF" else HudStyle.C_AMBER
+	draw_string(_font, Vector2(px + pad, py + ph * 0.5 + 4.0),
+			label, HORIZONTAL_ALIGNMENT_LEFT, -1, 10, preset_col)
 
 
 # ── Compass ───────────────────────────────────────────────────────────────────
