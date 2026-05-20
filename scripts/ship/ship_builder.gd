@@ -622,18 +622,8 @@ static func _resolve_hull_path(hull_ref: String, template_path: String) -> Strin
 	return local
 
 
+## Forwarded to JsonUtil so callers that still go through ShipBuilder._load_json
+## (shipwright_npc, starter_vessel, etc.) keep working. New code should call
+## JsonUtil.load() directly.
 static func _load_json(path: String) -> Dictionary:
-	if not FileAccess.file_exists(path):
-		push_error("ShipBuilder: file not found: " + path)
-		return {}
-	var f := FileAccess.open(path, FileAccess.READ)
-	var text := f.get_as_text()
-	f.close()
-	var json := JSON.new()
-	if json.parse(text) != OK:
-		push_error("ShipBuilder: JSON parse error in " + path)
-		return {}
-	var data = json.get_data()
-	if typeof(data) != TYPE_DICTIONARY:
-		return {}
-	return data
+	return JsonUtil.load(path)
