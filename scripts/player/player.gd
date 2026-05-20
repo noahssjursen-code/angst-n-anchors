@@ -50,6 +50,15 @@ const LAYER_BOAT_WALK := 4
 
 @onready var camera: Camera3D = $Camera3D
 
+enum CameraMode { FIRST_PERSON, THIRD_PERSON }
+
+## Third-person camera tuning — pivot at head height, look back over shoulder.
+const TP_PIVOT_Y    : float = 1.65
+const TP_DISTANCE   : float = 3.0
+
+var _camera_mode: CameraMode = CameraMode.FIRST_PERSON
+var _body_npc:    NpcBase    = null
+
 var _pitch:            float   = 0.0
 var _smoothed_input:   Vector2 = Vector2.ZERO
 var _current_speed:    float   = 0.0
@@ -76,12 +85,20 @@ func _ready() -> void:
 	floor_stop_on_slope = true
 	floor_max_angle = deg_to_rad(48.0)
 
+	_build_body_mesh()
+	_apply_camera_mode()
+
 
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventMouseMotion and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
 		rotate_y(-event.relative.x * mouse_sensitivity)
 		_pitch = clampf(_pitch - event.relative.y * mouse_sensitivity, -MAX_PITCH, MAX_PITCH)
-		camera.rotation.x = _pitch
+		_apply_pitch()
+
+	if event.is_action_pressed("toggle_camera"):
+		_toggle_camera_mode()
+		get_viewport().set_input_as_handled()
+		return
 
 	if event is InputEventMouseButton and event.pressed:
 		var mb := event as InputEventMouseButton
@@ -289,3 +306,65 @@ func _try_step_up(horizontal_motion: Vector3) -> bool:
 
 	global_position = raised_fwd.origin + down_result.get_travel()
 	return true
+
+
+# ── Camera mode (Phase 7.6) ───────────────────────────────────────────────────
+##
+## First-person camera lives at head height and the player body mesh is hidden
+## so we don't render our own helmet. Third-person orbits a head pivot behind
+## the player at TP_DISTANCE so the captain becomes visible — this is the view
+## MP players will see of each other. V toggles between the two.
+
+func _toggle_camera_mode() -> void:
+	if _camera_mode == CameraMode.FIRST_PERSON:
+		_camera_mode = CameraMode.THIRD_PERSON
+	else:
+		_camera_mode = CameraMode.FIRST_PERSON
+	_apply_camera_mode()
+
+
+func _apply_camera_mode() -> void:
+	if _body_npc != null:
+		_body_npc.visible = _camera_mode == CameraMode.THIRD_PERSON
+	_apply_pitch()
+
+
+func _apply_pitch() -> void:
+	# In both modes the player yaw is on the CharacterBody3D itself; only pitch
+	# moves the camera. Third-person additionally orbits the camera back along
+	# its local +Z so the body stays in frame.
+	camera.rotation.x = _pitch
+	if _camera_mode == CameraMode.FIRST_PERSON:
+		camera.position = Vector3(0.0, _camera_base_y, 0.0)
+		return
+	var pivot := Vector3(0.0, TP_PIVOT_Y, 0.0)
+	var offset := Basis(Vector3.RIGHT, -_pitch) * Vector3(0.0, 0.0, TP_DISTANCE)
+	camera.position = pivot + offset
+
+
+func _build_body_mesh() -> void:
+	# Visible character body for third-person view (and future MP). Mirrors the
+	# captain's CharacterAppearance from PlayerData so the figure on screen is
+	# the one the player tuned in the creator.
+	_body_npc = NpcBase.new()
+	_body_npc.name = "BodyMesh"
+	_body_npc.visible = false
+	add_child(_body_npc)
+	_apply_appearance_from_session()
+
+	var session := get_node_or_null("/root/PlayerSession")
+	if session != null and session.has_signal("data_loaded"):
+		session.data_loaded.connect(_on_player_data_changed)
+
+
+func _on_player_data_changed(_data: Variant) -> void:
+	_apply_appearance_from_session()
+
+
+func _apply_appearance_from_session() -> void:
+	if _body_npc == null:
+		return
+	var session := get_node_or_null("/root/PlayerSession")
+	if session == null or session.data == null or session.data.appearance == null:
+		return
+	session.data.appearance.apply_to_npc(_body_npc)
