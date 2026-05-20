@@ -10,8 +10,11 @@ extends Node3D
 @export var height_above_camera: float = 7.0
 @export var fall_speed_clear: float = 11.0
 @export var fall_speed_storm: float = 19.0
-@export var wind_clear: Vector3 = Vector3(-1.2, 0.0, 0.5)
-@export var wind_storm: Vector3 = Vector3(-6.0, 0.0, 2.5)
+## Per-axis wind multipliers applied to `WeatherLighting.wind_dir` when
+## tilting rain streaks. Magnitude is the rain-space horizontal speed at
+## `wind_force == 0` / `== 1` respectively, in roughly m/s.
+@export var wind_tilt_calm:  float = 1.8
+@export var wind_tilt_storm: float = 6.5
 
 var _particles: GPUParticles3D
 var _process_material: ParticleProcessMaterial
@@ -77,12 +80,14 @@ func _apply_weather() -> void:
 	if _particles == null or _process_material == null:
 		return
 
-	var precip := 0.0
-	var wind   := 0.0
-	var weather := _weather_lighting()
+	var precip   := 0.0
+	var wind     := 0.0
+	var wind_dir := Vector3(-1.0, 0.0, 0.0)
+	var weather  := _weather_lighting()
 	if weather != null:
-		precip = float(weather.get("precipitation"))
-		wind   = float(weather.get("wind_force"))
+		precip   = float(weather.get("precipitation"))
+		wind     = float(weather.get("wind_force"))
+		wind_dir = weather.get("wind_dir") as Vector3
 
 	var rain_amount := smoothstep(rain_start, 1.0, precip)
 	_particles.emitting = rain_amount > 0.01
@@ -96,9 +101,11 @@ func _apply_weather() -> void:
 	)
 	_process_material.gravity = Vector3(0.0, lerpf(-16.0, -30.0, rain_amount), 0.0)
 
-	# Wind tilt: use wind_force axis independently from precipitation.
-	var wind_vec := wind_clear.lerp(wind_storm, wind)
-	_process_material.direction = (Vector3.DOWN + wind_vec).normalized()
+	# Wind tilt: direction from WeatherLighting.wind_dir (geostrophic gradient,
+	# smoothed in AtmosphericEffects); magnitude scales with wind_force so
+	# calm days have a gentle drift and storms shear hard sideways.
+	var tilt_mag := lerpf(wind_tilt_calm, wind_tilt_storm, wind)
+	_process_material.direction = (Vector3.DOWN + wind_dir * tilt_mag).normalized()
 
 
 func _weather_lighting() -> Node:

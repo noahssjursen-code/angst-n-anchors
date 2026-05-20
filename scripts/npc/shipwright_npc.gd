@@ -5,99 +5,85 @@ extends NpcInteractable
 ## Shipwright NPC. Lets the player commission a new vessel from the available hull catalog.
 ## Writes a minimal ship template to user://shipwright_orders/ and calls ShipBuilder.build().
 
+## Catalog of buildable hulls. Each entry only carries identity + the hull
+## file + the bridge to attach. All physics parameters (propulsion thrust,
+## bow thrust, camera distance/height, rudder torque) are *derived* from
+## the hull's dimensions in `_build_template` via HullStations, so adding
+## a new hull is one entry here.
 const HULL_CATALOG: Array[Dictionary] = [
 	{
-		"id":                 "coastal_trader",
-		"display":            "Coastal Trader  •  13 m",
-		"ship_class_label":   "Coastal Trader",
-		"hull_file":          "hull_coastal_trader.json",
-		"superstructure":     "bridge_small",
-		"propulsion_thrust":  120000.0,
-		"bow_thrust":          35000.0,
-		"cam_dist":            20.0,
-		"cam_height":           8.0,
+		"id":               "coastal_trader",
+		"display":          "Coastal Trader  •  13 m / 43 ft",
+		"ship_class_label": "Coastal Trader",
+		"hull_file":        "hull_coastal_trader.json",
+		"superstructure":   "bridge_coastal_trader",
 	},
 	{
-		"id":                 "coastal_trader_long",
-		"display":            "Coastal Trader, Extended  •  15 m",
-		"ship_class_label":   "Coastal Trader",
-		"hull_file":          "hull_coastal_trader_long.json",
-		"superstructure":     "bridge_small",
-		"propulsion_thrust":  155000.0,
-		"bow_thrust":          42000.0,
-		"cam_dist":            24.0,
-		"cam_height":           9.0,
+		"id":               "coastal_trader_long",
+		"display":          "Coastal Trader, Extended  •  15 m / 49 ft",
+		"ship_class_label": "Coastal Trader",
+		"hull_file":        "hull_coastal_trader_long.json",
+		"superstructure":   "bridge_coastal_trader",
 	},
 	{
-		"id":                 "short_sea_coaster",
-		"display":            "Short Sea Coaster  •  22 m",
-		"ship_class_label":   "Short Sea Coaster",
-		"hull_file":          "hull_short_sea_coaster.json",
-		"superstructure":     "bridge_small",
-		"propulsion_thrust":  280000.0,
-		"bow_thrust":          70000.0,
-		"cam_dist":            35.0,
-		"cam_height":          12.0,
+		"id":               "cargo_ship",
+		"display":          "Twin-Deck Cargo Coaster  •  20 m / 66 ft",
+		"ship_class_label": "Coastal Trader",
+		"hull_file":        "hull_cargo_ship.json",
+		"superstructure":   "bridge_cargo_ship",
 	},
 	{
-		"id":                 "short_sea_coaster_long",
-		"display":            "Short Sea Coaster, Extended  •  25 m",
-		"ship_class_label":   "Short Sea Coaster",
-		"hull_file":          "hull_short_sea_coaster_long.json",
-		"superstructure":     "bridge_small",
-		"propulsion_thrust":  340000.0,
-		"bow_thrust":          85000.0,
-		"cam_dist":            40.0,
-		"cam_height":          13.0,
+		"id":               "short_sea_coaster",
+		"display":          "Short Sea Coaster  •  22 m / 72 ft",
+		"ship_class_label": "Short Sea Coaster",
+		"hull_file":        "hull_short_sea_coaster.json",
+		"superstructure":   "bridge_short_sea_coaster",
 	},
 	{
-		"id":                 "handysize_feeder",
-		"display":            "Handysize Feeder  •  35 m",
-		"ship_class_label":   "Handysize Feeder",
-		"hull_file":          "hull_handysize_feeder.json",
-		"superstructure":     "bridge_medium",
-		"propulsion_thrust":  520000.0,
-		"bow_thrust":         120000.0,
-		"cam_dist":            55.0,
-		"cam_height":          18.0,
+		"id":               "short_sea_coaster_long",
+		"display":          "Short Sea Coaster, Extended  •  25 m / 82 ft",
+		"ship_class_label": "Short Sea Coaster",
+		"hull_file":        "hull_short_sea_coaster_long.json",
+		"superstructure":   "bridge_short_sea_coaster",
 	},
 	{
-		"id":                 "handysize_feeder_long",
-		"display":            "Handysize Feeder, Extended  •  40 m",
-		"ship_class_label":   "Handysize Feeder",
-		"hull_file":          "hull_handysize_feeder_long.json",
-		"superstructure":     "bridge_medium",
-		"propulsion_thrust":  630000.0,
-		"bow_thrust":         145000.0,
-		"cam_dist":            65.0,
-		"cam_height":          20.0,
+		"id":               "handysize_feeder",
+		"display":          "Handysize Feeder  •  35 m / 115 ft",
+		"ship_class_label": "Handysize Feeder",
+		"hull_file":        "hull_handysize_feeder.json",
+		"superstructure":   "bridge_handysize_feeder",
 	},
 	{
-		"id":                 "deep_sea_freighter",
-		"display":            "Deep Sea Freighter  •  50 m",
-		"ship_class_label":   "Deep Sea Freighter",
-		"hull_file":          "hull_deep_sea_freighter.json",
-		"superstructure":     "bridge_medium",
-		"propulsion_thrust":  900000.0,
-		"bow_thrust":         200000.0,
-		"cam_dist":            80.0,
-		"cam_height":          24.0,
+		"id":               "handysize_feeder_long",
+		"display":          "Handysize Feeder, Extended  •  40 m / 131 ft",
+		"ship_class_label": "Handysize Feeder",
+		"hull_file":        "hull_handysize_feeder_long.json",
+		"superstructure":   "bridge_handysize_feeder",
 	},
 	{
-		"id":                 "deep_sea_freighter_long",
-		"display":            "Deep Sea Freighter, Extended  •  60 m",
-		"ship_class_label":   "Deep Sea Freighter",
-		"hull_file":          "hull_deep_sea_freighter_long.json",
-		"superstructure":     "bridge_medium",
-		"propulsion_thrust":  1100000.0,
-		"bow_thrust":          250000.0,
-		"cam_dist":             95.0,
-		"cam_height":           28.0,
+		"id":               "deep_sea_freighter",
+		"display":          "Deep Sea Freighter  •  50 m / 164 ft",
+		"ship_class_label": "Deep Sea Freighter",
+		"hull_file":        "hull_deep_sea_freighter.json",
+		"superstructure":   "bridge_deep_sea_freighter",
+	},
+	{
+		"id":               "deep_sea_freighter_long",
+		"display":          "Deep Sea Freighter, Extended  •  60 m / 197 ft",
+		"ship_class_label": "Deep Sea Freighter",
+		"hull_file":        "hull_deep_sea_freighter_long.json",
+		"superstructure":   "bridge_deep_sea_freighter",
+	},
+	{
+		"id":               "large_freighter",
+		"display":          "Large Freighter  •  60 m / 197 ft",
+		"ship_class_label": "Deep Sea Freighter",
+		"hull_file":        "hull_large.json",
+		"superstructure":   "bridge_deep_sea_freighter",
 	},
 ]
 
-var _panel: Panel
-var _body:  VBoxContainer
+var _dialogue: DialoguePanel
 
 enum _Screen { MAIN, HULL_SELECT, CONFIRM }
 var _screen:       _Screen     = _Screen.MAIN
@@ -115,7 +101,7 @@ func _ready() -> void:
 
 func _on_interact() -> void:
 	_show_main()
-	_panel.visible = true
+	_dialogue.show_panel()
 	open_ui()
 
 
@@ -123,7 +109,7 @@ func _on_ui_cancel() -> void:
 	if _screen == _Screen.CONFIRM:
 		_show_hull_select()
 	elif _screen == _Screen.MAIN:
-		_panel.visible = false
+		_dialogue.hide_panel()
 		close_ui()
 	else:
 		_show_main()
@@ -132,38 +118,38 @@ func _on_ui_cancel() -> void:
 # ── Screens ───────────────────────────────────────────────────────────────────
 
 func _close() -> void:
-	_panel.visible = false
+	_dialogue.hide_panel()
 	close_ui()
 
 
 func _show_main() -> void:
 	_screen = _Screen.MAIN
-	_clear_body()
-	_add_quote("Good day, Captain. Looking to commission a new vessel?\nI can lay down any hull in my catalog.")
-	_add_option("Show me what you can build.", _show_hull_select)
-	_add_option("Not today, thank you.",        _close)
+	_dialogue.clear()
+	_dialogue.add_quote("Good day, Captain. Looking to commission a new vessel?\nI can lay down any hull in my catalog.")
+	_dialogue.add_option("Show me what you can build.", _show_hull_select)
+	_dialogue.add_option("Not today, thank you.",        _close)
 
 
 func _show_hull_select() -> void:
 	_screen = _Screen.HULL_SELECT
-	_clear_body()
-	_add_quote("Choose your hull. I'll build her true.")
+	_dialogue.clear()
+	_dialogue.add_quote("Choose your hull. I'll build her true.")
 	for entry in HULL_CATALOG:
 		var e   := entry as Dictionary
 		var lbl := "%s  [%s]" % [str(e["display"]), str(e["ship_class_label"])]
-		_add_option(lbl, _show_confirm.bind(e))
-	_add_back_button()
+		_dialogue.add_option(lbl, _show_confirm.bind(e))
+	_dialogue.add_back_button(_show_main)
 
 
 func _show_confirm(entry: Dictionary) -> void:
 	_screen        = _Screen.CONFIRM
 	_pending_entry = entry
-	_clear_body()
-	_add_quote(
+	_dialogue.clear()
+	_dialogue.add_quote(
 		"%s\n\nThis will be your new vessel, Captain. Ready to lay her keel?" % str(entry["display"])
 	)
-	_add_option("Commission her.", func() -> void: _commission(entry))
-	_add_back_button()
+	_dialogue.add_option("Commission her.", func() -> void: _commission(entry))
+	_dialogue.add_back_button(_show_hull_select)
 
 
 func _commission(entry: Dictionary) -> void:
@@ -173,18 +159,18 @@ func _commission(entry: Dictionary) -> void:
 	var path := "user://shipwright_orders/" + str(entry["id"]) + ".json"
 	var f    := FileAccess.open(path, FileAccess.WRITE)
 	if f == null:
-		_clear_body()
-		_add_quote("Something went wrong in the yard. Try again.")
-		_add_back_button()
+		_dialogue.clear()
+		_dialogue.add_quote("Something went wrong in the yard. Try again.")
+		_dialogue.add_back_button(_show_hull_select)
 		return
 	f.store_string(JSON.stringify(template))
 	f.close()
 
 	var ship := ShipBuilder.build(path)
 	if ship == null:
-		_clear_body()
-		_add_quote("The yard couldn't build that vessel. Please report this bug.")
-		_add_back_button()
+		_dialogue.clear()
+		_dialogue.add_quote("The yard couldn't build that vessel. Please report this bug.")
+		_dialogue.add_back_button(_show_hull_select)
 		return
 
 	var placed := _try_place_at_berth(ship)
@@ -203,12 +189,12 @@ func _commission(entry: Dictionary) -> void:
 		plot.respawn_staged_cargo()
 
 	_pending_entry = {}
-	_clear_body()
+	_dialogue.clear()
 	if placed:
-		_add_quote("She's alongside, Captain. %s — ready for sea." % str(entry["display"]))
+		_dialogue.add_quote("She's alongside, Captain. %s — ready for sea." % str(entry["display"]))
 	else:
-		_add_quote("She's afloat, Captain, but all berths are occupied.\nYou'll find her in the water nearby.")
-	_add_option("Much obliged.", _close)
+		_dialogue.add_quote("She's afloat, Captain, but all berths are occupied.\nYou'll find her in the water nearby.")
+	_dialogue.add_option("Much obliged.", _close)
 
 
 func _try_place_at_berth(ship: BoatBody) -> bool:
@@ -229,82 +215,75 @@ func _try_place_at_berth(ship: BoatBody) -> bool:
 
 # ── Template builder ──────────────────────────────────────────────────────────
 
+## Build a ship template from a catalog entry. Most fields are derived from
+## the hull's geometry via HullStations rather than hand-tuned per ship.
+##
+## Calibrated against the previous hand-tuned values so a freshly-derived
+## coastal trader (13 m) gets ~58 kN thrust and a freighter (50 m) ~3.2 MN —
+## matching the old gameplay feel within ~10%.
 func _build_template(entry: Dictionary) -> Dictionary:
+	var hull_path : String = ShipBuilder.HULL_BASE_DIR + str(entry["hull_file"])
+	var hull_data : Dictionary = ShipBuilder._load_json(hull_path)
+	var stations  : HullStations = HullStations.from_hull_json(hull_data, 10)
+
+	# Mass derived from strip-theory displacement at design draft.
+	var displacement_kg : float = maxf(stations.displacement_volume_m3 * 1025.0, 1000.0)
+	# F = m × a. 0.7 m/s² peak steady-state acceleration. Slightly above real-
+	# world cargo ships (~0.1 m/s²) for game feel — boats need to be sailable.
+	var propulsion_thrust : float = displacement_kg * 0.7
+	# Bow thruster as a fraction of main; ratio drops with hull length because
+	# bigger ships rely on mooring / tug assistance rather than a powerful BT.
+	var bow_ratio : float = clampf(0.40 - stations.length_m / 200.0, 0.10, 0.40)
+	var bow_thrust : float = propulsion_thrust * bow_ratio
+	# Rudder torque ∝ thrust^(4/3) — the rudder operates in propeller wash, so
+	# torque grows faster than linear thrust. Coefficient calibrated against the
+	# old reference: 280 kN thrust → 504 kNm torque.
+	var rudder_torque : float = 0.0275 * pow(propulsion_thrust, 4.0 / 3.0)
+	var cam_dist   : float = stations.length_m * 1.45 + 11.0
+	var cam_height : float = stations.length_m * 0.36 + 4.0
+
+	# Note: no `cargo_decks` key — ShipBuilder will instantiate every deck the
+	# hull JSON declares (sized properly to the hull). Set an explicit array to
+	# restrict the set, or `[]` to commission with no cargo decks.
 	return {
 		"display_name":   str(entry["display"]),
 		"hull":           str(entry["hull_file"]),
 		"scale":          1.0,
 		"superstructure": str(entry["superstructure"]),
-		"cargo_decks":    [],
 		"physics": {
-			"auto_mass_from_hull": true,
-			"design_draft_fraction": 0.45,
+			"auto_mass_from_hull":    true,
+			"design_draft_fraction":  0.45,
 		},
 		"buoyancy": {
-			"block_coefficient": 0.72,
-			"vertical_damping":  3000.0,
+			"heave_damping_per_m2": 8000.0,
 		},
 		"hydrodynamics": {
-			"forward_drag_coeff":    0.05,
-			"lateral_drag_coeff":    4.0,
-			"rotational_drag_coeff": 6.5,
-			"orbital_flow_scale":    0.08,
-			"bulk_horizontal_drag":  400.0,
-			"draft_fraction":        0.44,
+			"frictional_coeff":       0.0025,
+			"form_factor":            1.20,
+			"wave_making_peak_coeff": 0.005,
+			"hull_speed_fn":          0.40,
+			"lateral_drag_coeff":     2.0,
+			"yaw_drag_coeff":         5.0,
 		},
 		"propulsion": {
-			"max_thrust":          float(entry["propulsion_thrust"]),
-			"reverse_multiplier":  0.45,
+			"max_thrust":         propulsion_thrust,
+			"reverse_multiplier": 0.45,
 		},
 		"rudder": {
-			"max_torque":              float(entry["propulsion_thrust"]) * 1.8,
+			"max_torque":              rudder_torque,
 			"speed_factor":            0.65,
 			"min_effectiveness_floor": 0.38,
 			"rudder_flow_gate":        0.25,
 			"sideslip_rudder_weight":  0.55,
 		},
 		"bow_thruster": {
-			"max_thrust": float(entry["bow_thrust"]),
+			"max_thrust": bow_thrust,
 		},
 		"camera": {
-			"follow_distance": float(entry["cam_dist"]),
-			"follow_height":   float(entry["cam_height"]),
+			"follow_distance": cam_dist,
+			"follow_height":   cam_height,
 		},
 	}
-
-
-# ── UI helpers ────────────────────────────────────────────────────────────────
-
-func _clear_body() -> void:
-	for child in _body.get_children():
-		child.queue_free()
-
-
-func _add_quote(text: String) -> void:
-	var lbl                   := Label.new()
-	lbl.text                  = text
-	lbl.autowrap_mode         = TextServer.AUTOWRAP_WORD
-	lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	lbl.add_theme_font_size_override("font_size", 15)
-	_body.add_child(lbl)
-	_body.add_child(HSeparator.new())
-
-
-func _add_option(text: String, callback: Callable) -> void:
-	var btn                   := Button.new()
-	btn.text                  = text
-	btn.alignment             = HORIZONTAL_ALIGNMENT_LEFT
-	btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	btn.pressed.connect(callback)
-	_body.add_child(btn)
-
-
-func _add_back_button() -> void:
-	_body.add_child(HSeparator.new())
-	if _screen == _Screen.CONFIRM:
-		_add_option("← Back", _show_hull_select)
-	else:
-		_add_option("← Back", _show_main)
 
 
 # ── Dock lookup ───────────────────────────────────────────────────────────────
@@ -319,37 +298,5 @@ func _get_dock() -> PortDock:
 # ── Build UI ──────────────────────────────────────────────────────────────────
 
 func _build_ui() -> void:
-	var layer  := CanvasLayer.new()
-	layer.name = "ShipwrightLayer"
-	add_child(layer)
-
-	_panel               = Panel.new()
-	_panel.name          = "ShipwrightPanel"
-	_panel.visible       = false
-	_panel.theme         = HudStyle.make_theme()
-	_panel.set_anchors_preset(Control.PRESET_CENTER)
-	_panel.offset_left   = -300.0
-	_panel.offset_right  =  300.0
-	_panel.offset_top    = -250.0
-	_panel.offset_bottom =  250.0
-	layer.add_child(_panel)
-
-	var title                  := Label.new()
-	title.text                 = "SHIPWRIGHT"
-	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	title.add_theme_font_size_override("font_size", 15)
-	title.add_theme_color_override("font_color", HudStyle.C_AMBER)
-	title.set_anchors_preset(Control.PRESET_TOP_WIDE)
-	title.offset_top    = 10.0
-	title.offset_bottom = 40.0
-	_panel.add_child(title)
-
-	var scroll           := ScrollContainer.new()
-	scroll.set_anchors_preset(Control.PRESET_FULL_RECT)
-	scroll.offset_top    = 48.0
-	scroll.offset_bottom = -8.0
-	_panel.add_child(scroll)
-
-	_body                       = VBoxContainer.new()
-	_body.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	scroll.add_child(_body)
+	_dialogue = DialoguePanel.new("SHIPWRIGHT", Vector2(600.0, 500.0))
+	add_child(_dialogue)

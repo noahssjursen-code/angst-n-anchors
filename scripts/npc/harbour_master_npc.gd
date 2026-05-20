@@ -6,16 +6,13 @@ extends NpcInteractable
 
 const PEAKED_CAP_PATH := "res://resources/data/meshes/characters/hat_peaked_cap.json"
 
-## Ships offered when assigning a berth. Extend as you add playable hull scenes.
+## Ships offered when assigning a berth. Extend as you add ship JSON templates.
 const PLAYER_VESSEL_CHOICES: Array[Dictionary] = [
-	{"label": "Coastal cargo (standard)", "path": "res://scenes/boats/test_boat.tscn"},
-	{"label": "Coastal tanker", "path": "res://scenes/boats/fuel_tanker.tscn"},
 ]
 
 @export var port_id: String = ""
 
-var _panel:  Panel
-var _body:   VBoxContainer
+var _dialogue: DialoguePanel
 
 enum _Screen { MAIN, REQUEST_BERTH, PAY_DUES, VESSEL_INFO, SHIP_SELECT }
 var _screen: _Screen = _Screen.MAIN
@@ -41,7 +38,7 @@ func _add_hat() -> void:
 
 func _on_interact() -> void:
 	_show_main()
-	_panel.visible = true
+	_dialogue.show_panel()
 	open_ui()
 
 
@@ -50,7 +47,7 @@ func _on_ui_cancel() -> void:
 		_release_pending_berth()
 		_show_request_berth()
 	elif _screen == _Screen.MAIN:
-		_panel.visible = false
+		_dialogue.hide_panel()
 		close_ui()
 	else:
 		_show_main()
@@ -60,28 +57,28 @@ func _on_ui_cancel() -> void:
 
 func _close() -> void:
 	_release_pending_berth()
-	_panel.visible = false
+	_dialogue.hide_panel()
 	close_ui()
 
 
 func _show_main() -> void:
 	_screen = _Screen.MAIN
-	_clear_body()
-	_add_quote("Good day, Captain. What can I do for you?")
-	_add_option("I would like to request a berth.",  _show_request_berth)
-	_add_option("I am here to pay my harbour dues.", _show_pay_dues)
-	_add_option("What vessels can dock here?",        _show_vessel_info)
-	_add_option("Nothing, thank you.",                _close)
+	_dialogue.clear()
+	_dialogue.add_quote("Good day, Captain. What can I do for you?")
+	_dialogue.add_option("I would like to request a berth.",  _show_request_berth)
+	_dialogue.add_option("I am here to pay my harbour dues.", _show_pay_dues)
+	_dialogue.add_option("What vessels can dock here?",        _show_vessel_info)
+	_dialogue.add_option("Nothing, thank you.",                _close)
 
 
 func _show_request_berth() -> void:
 	_screen = _Screen.REQUEST_BERTH
-	_clear_body()
+	_dialogue.clear()
 
 	var dock := _get_dock()
 	if dock == null:
-		_add_quote("I'm afraid the dock is not operational at the moment.")
-		_add_back_button()
+		_dialogue.add_quote("I'm afraid the dock is not operational at the moment.")
+		_dialogue.add_back_button(_show_main)
 		return
 
 	var berths     := dock.get_berths()
@@ -91,11 +88,11 @@ func _show_request_berth() -> void:
 			free_count += 1
 
 	if free_count == 0:
-		_add_quote("I'm sorry, Captain — we have no berths free at present.")
-		_add_back_button()
+		_dialogue.add_quote("I'm sorry, Captain — we have no berths free at present.")
+		_dialogue.add_back_button(_show_main)
 		return
 
-	_add_quote("We have %d berth%s available. Which would you like?" % [
+	_dialogue.add_quote("We have %d berth%s available. Which would you like?" % [
 		free_count, "s" if free_count != 1 else ""
 	])
 
@@ -104,7 +101,7 @@ func _show_request_berth() -> void:
 		var status := int(b["status"])
 		if status == PortDock.BerthStatus.FREE:
 			var idx := i
-			_add_option("Berth #%d — assign me here." % (i + 1),
+			_dialogue.add_option("Berth #%d — assign me here." % (i + 1),
 				func() -> void: _on_berth_selected(idx))
 		else:
 			var by  : String = str(b["reserved_by"])
@@ -112,9 +109,9 @@ func _show_request_berth() -> void:
 				i + 1,
 				("reserved by %s" % by) if status == PortDock.BerthStatus.RESERVED else "occupied",
 			]
-			_add_disabled_option(lbl)
+			_dialogue.add_disabled_option(lbl)
 
-	_add_back_button()
+	_dialogue.add_back_button(_show_main)
 
 
 func _on_berth_selected(index: int) -> void:
@@ -125,34 +122,34 @@ func _on_berth_selected(index: int) -> void:
 		_pending_berth_index = index
 		_show_ship_select()
 	else:
-		_clear_body()
-		_add_quote("I'm sorry — that berth was just taken.")
-		_add_back_button()
+		_dialogue.clear()
+		_dialogue.add_quote("I'm sorry — that berth was just taken.")
+		_dialogue.add_back_button(_show_main)
 
 
 func _show_ship_select() -> void:
 	_screen = _Screen.SHIP_SELECT
-	_clear_body()
+	_dialogue.clear()
 
-	_add_quote("Which vessel shall we bring alongside?")
+	_dialogue.add_quote("Which vessel shall we bring alongside?")
 
 	var listed := false
 	for entry in PLAYER_VESSEL_CHOICES:
 		var label      : String = str(entry.get("label", "Vessel"))
 		var scene_path : String = str(entry.get("path", ""))
-		if scene_path.is_empty() or not ResourceLoader.exists(scene_path):
+		if scene_path.is_empty() or (not ResourceLoader.exists(scene_path) and not FileAccess.file_exists(scene_path)):
 			continue
-		_add_option(label, _spawn_chosen_ship.bind(scene_path))
+		_dialogue.add_option(label, _spawn_chosen_ship.bind(scene_path))
 		listed = true
 
 	if not listed:
 		_release_pending_berth()
-		_add_quote("No playable vessels configured for this harbour.")
-		_add_back_button()
+		_dialogue.add_quote("No playable vessels configured for this harbour.")
+		_dialogue.add_back_button(_show_main)
 		return
 
-	_add_option("Never mind — release the berth.", _cancel_ship_select)
-	_add_back_button()
+	_dialogue.add_option("Never mind — release the berth.", _cancel_ship_select)
+	_dialogue.add_back_button(_cancel_ship_select)
 
 
 func _cancel_ship_select() -> void:
@@ -180,90 +177,44 @@ func _spawn_chosen_ship(scene_path: String) -> void:
 	var ship := dock.spawn_player_ship(idx, scene_path)
 	if ship == null:
 		dock.release_berth(idx)
-		_clear_body()
-		_add_quote("Couldn't ready that vessel. Your berth has been released.")
-		_add_back_button()
+		_dialogue.clear()
+		_dialogue.add_quote("Couldn't ready that vessel. Your berth has been released.")
+		_dialogue.add_back_button(_show_main)
 		return
 
 	var plot := get_parent() as PortPlot
 	if plot != null:
 		plot.respawn_staged_cargo()
 
-	_clear_body()
-	_add_quote("Berth #%d is yours, Captain. Mind the tides." % (idx + 1))
-	_add_option("Thank you.", _close)
+	_dialogue.clear()
+	_dialogue.add_quote("Berth #%d is yours, Captain. Mind the tides." % (idx + 1))
+	_dialogue.add_option("Thank you.", _close)
 
 
 func _show_pay_dues() -> void:
 	_screen = _Screen.PAY_DUES
-	_clear_body()
-	_add_quote("No outstanding dues on record, Captain.")
-	_add_back_button()
+	_dialogue.clear()
+	_dialogue.add_quote("No outstanding dues on record, Captain.")
+	_dialogue.add_back_button(_show_main)
 
 
 func _show_vessel_info() -> void:
 	_screen = _Screen.VESSEL_INFO
-	_clear_body()
+	_dialogue.clear()
 	var dock := _get_dock()
 	if dock == null:
-		_add_quote("Dock information unavailable.")
-		_add_back_button()
+		_dialogue.add_quote("Dock information unavailable.")
+		_dialogue.add_back_button(_show_main)
 		return
 	var class_name_str : String = ShipClass.display_name(dock.max_ship_class)
 	var max_len        : float  = ShipClass.max_length(dock.max_ship_class)
 	var slots          : int    = dock.berth_count()
-	_add_quote(
+	_dialogue.add_quote(
 		"This port accepts vessels up to %s class (max %.0f m).\n%d berth%s available." % [
 			class_name_str, max_len, slots, "s" if slots != 1 else ""
 		]
 	)
-	_add_back_button()
-
-
-# ── UI helpers ────────────────────────────────────────────────────────────────
-
-func _clear_body() -> void:
-	for child in _body.get_children():
-		child.queue_free()
-
-
-func _add_quote(text: String) -> void:
-	var lbl                    := Label.new()
-	lbl.text                   = text
-	lbl.autowrap_mode          = TextServer.AUTOWRAP_WORD
-	lbl.size_flags_horizontal  = Control.SIZE_EXPAND_FILL
-	lbl.add_theme_font_size_override("font_size", 15)
-	_body.add_child(lbl)
-	_body.add_child(HSeparator.new())
-
-
-func _add_option(text: String, callback: Callable) -> void:
-	var btn                   := Button.new()
-	btn.text                  = text
-	btn.alignment             = HORIZONTAL_ALIGNMENT_LEFT
-	btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	btn.pressed.connect(callback)
-	_body.add_child(btn)
-
-
-func _add_disabled_option(text: String) -> void:
-	var btn                   := Button.new()
-	btn.text                  = text
-	btn.alignment             = HORIZONTAL_ALIGNMENT_LEFT
-	btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	btn.disabled              = true
-	_body.add_child(btn)
-
-
-func _add_back_button() -> void:
-	_body.add_child(HSeparator.new())
-	if _screen == _Screen.SHIP_SELECT:
-		_add_option("← Back", func() -> void:
-			_release_pending_berth()
-			_show_request_berth()
-		)
-	else:
-		_add_option("← Back", _show_main)
+	_dialogue.add_back_button(_show_main)
 
 
 # ── Dock lookup ───────────────────────────────────────────────────────────────
@@ -279,38 +230,5 @@ func _get_dock() -> PortDock:
 
 func _build_ui() -> void:
 	add_overlay("hat", PEAKED_CAP_PATH)
-
-	var layer      := CanvasLayer.new()
-	layer.name     = "HarbourMasterLayer"
-	add_child(layer)
-
-	_panel               = Panel.new()
-	_panel.name          = "HarbourMasterPanel"
-	_panel.visible       = false
-	_panel.theme         = HudStyle.make_theme()
-	_panel.set_anchors_preset(Control.PRESET_CENTER)
-	_panel.offset_left   = -300.0
-	_panel.offset_right  =  300.0
-	_panel.offset_top    = -220.0
-	_panel.offset_bottom =  220.0
-	layer.add_child(_panel)
-
-	var title                  := Label.new()
-	title.text                 = "HARBOUR MASTER"
-	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	title.add_theme_font_size_override("font_size", 15)
-	title.add_theme_color_override("font_color", HudStyle.C_AMBER)
-	title.set_anchors_preset(Control.PRESET_TOP_WIDE)
-	title.offset_top    = 10.0
-	title.offset_bottom = 40.0
-	_panel.add_child(title)
-
-	var scroll           := ScrollContainer.new()
-	scroll.set_anchors_preset(Control.PRESET_FULL_RECT)
-	scroll.offset_top    = 48.0
-	scroll.offset_bottom = -8.0
-	_panel.add_child(scroll)
-
-	_body                       = VBoxContainer.new()
-	_body.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	scroll.add_child(_body)
+	_dialogue = DialoguePanel.new("HARBOUR MASTER")
+	add_child(_dialogue)

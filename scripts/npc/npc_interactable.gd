@@ -1,6 +1,16 @@
 class_name NpcInteractable
 extends NpcBase
 
+## NPC the player can talk to. Adds a child StaticBody3D + capsule collider
+## so the camera-forward raycast hit-tests against the figure. The body is
+## a child of the Node3D root, not the root itself, so the player can never
+## physically bump into the NPC (mass-less, immovable, no awkward shoving).
+##
+## Subclasses implement `_on_interact()` (called when player presses interact
+## while looking at the NPC within `interact_range`) and `_on_ui_cancel()`.
+
+const LAYER_WORLD := 1
+
 @export var interact_range: float = 4.0
 
 @export var prompt_text: String = "Press F":
@@ -12,12 +22,34 @@ extends NpcBase
 var _open:         bool         = false
 var _prompt:       Label
 var _prompt_layer: CanvasLayer
+var _body:         StaticBody3D
 
 
 func _ready() -> void:
 	super._ready()
+	_build_collider()
 	if not Engine.is_editor_hint():
-		call_deferred("_build_prompt")
+		_build_prompt()
+
+
+func _build_collider() -> void:
+	_body                  = StaticBody3D.new()
+	_body.name             = "InteractBody"
+	_body.collision_layer  = LAYER_WORLD
+	_body.collision_mask   = 0
+	add_child(_body)
+
+	var capsule    := CapsuleShape3D.new()
+	capsule.radius = 0.15
+	capsule.height = 1.70
+	var col        := CollisionShape3D.new()
+	col.name       = "BodyShape"
+	col.shape      = capsule
+	col.position   = Vector3(0.0, 0.85, 0.0)
+	_body.add_child(col)
+
+	if Engine.is_editor_hint():
+		_own_subtree(_body)
 
 
 func _build_prompt() -> void:
@@ -78,7 +110,8 @@ func _can_interact() -> bool:
 	if hit.is_empty():
 		return false
 	var collider := hit.get("collider") as Node
-	return collider == self or (collider != null and is_ancestor_of(collider))
+	# Collider is our inner StaticBody3D — check it's the right one (ours).
+	return collider == _body or (collider != null and is_ancestor_of(collider))
 
 
 func _nearest_player() -> CharacterBody3D:

@@ -1,8 +1,25 @@
 class_name FFTWaterSystem
 extends Node
 
-const RESOLUTION = 1024
+## FFT grid size — must be a power of two and match SIZE in
+## fft_ocean_compute.glsl (we inject it as a #define when compiling the
+## FFT_X / FFT_Y passes). At 512² the displacement texel is 0.5 m on the
+## 256 m length scale, which is finer than the geometry resolution of the
+## ocean mesh on screen; close-up still looks correct, FFT compute cost
+## drops ~4×, and per-readback bandwidth is 1 MB/layer instead of 4 MB.
+const RESOLUTION = 512
+const RESOLUTION_LOG2 = 9  # log2(RESOLUTION)
 const MAX_WAVES = 4
+
+## How many compute frames between each CPU readback of the buoyancy LUT.
+## 1 = read every frame (the old behaviour). Each readback pulls 4 layers ×
+## RESOLUTION² × 4 bytes = 16 MB at 1024² and forces a GPU pipeline stall,
+## which on a 60-fps loop is a hard sync every frame. The boat-physics
+## sampler only needs current-ish heights — running buoyancy at 30 Hz (N=2)
+## or 20 Hz (N=3) is invisible in feel but halves/thirds the stall cost.
+## Visuals stay at full 60 Hz because the displacement/slope textures are
+## sampled on the GPU side and never need to leave the device.
+const BUOYANCY_READBACK_INTERVAL: int = 2
 
 var rd: RenderingDevice
 var uniform_set: RID
@@ -40,12 +57,18 @@ var _last_short_wave := -1.0
 @export var foam_decay_rate: float = 0.5
 @export var foam_add: float = 1.0
 @export var foam_threshold: float = 0.4
-@export var lambda := Vector2(1.0, 1.0)
+@export var lambda := Vector2(0.5, 0.5)
 
 var push_constant_params := PackedByteArray()
 var buoyancy_data: Array[PackedFloat32Array] = []
 var prev_buoyancy_data: Array[PackedFloat32Array] = []
 var prev_delta: float = 0.016
+## Counts compute frames since the last buoyancy readback. Wraps at
+## BUOYANCY_READBACK_INTERVAL so we read exactly once every N frames.
+var _readback_counter: int = 0
+## Accumulates frame deltas between readbacks; becomes `prev_delta` for the
+## CPU-side vertical-velocity calculation in WaveSurface.
+var _accumulated_delta: float = 0.0
 
 func _ready() -> void:
 	buoyancy_data.resize(4)
@@ -66,25 +89,41 @@ func _process(delta: float) -> void:
 	if not rd: return
 	time += delta
 	_run_update_fft_assemble(delta)
-	
+
+	# GPU↔CPU sync stall — skip on non-readback frames. Visual waves still
+	# update at full rate because they sample the GPU-side displacement/slope
+	# textures directly; only the CPU-side buoyancy LUT runs at the lower
+	# tick. See BUOYANCY_READBACK_INTERVAL.
+	_accumulated_delta += delta
+	_readback_counter += 1
+	if _readback_counter < BUOYANCY_READBACK_INTERVAL:
+		return
+	_readback_counter = 0
+
 	for i in range(4):
 		var bytes = rd.texture_get_data(buoyancy_tex, i)
 		if bytes.size() == RESOLUTION * RESOLUTION * 4:
 			if buoyancy_data[i] and not buoyancy_data[i].is_empty():
 				prev_buoyancy_data[i] = buoyancy_data[i]
-				prev_delta = delta
+				prev_delta = _accumulated_delta
 			buoyancy_data[i] = bytes.to_float32_array()
+	_accumulated_delta = 0.0
 
 func _compile_shaders() -> void:
 	var file = FileAccess.open("res://resources/shaders/fft_ocean_compute.glsl", FileAccess.READ)
 	var base_code = file.get_as_text()
 	var code_without_version = base_code.replace("#version 450", "")
 	
+	# Inject the FFT size as a #define so the FFT_X/FFT_Y passes get the matching
+	# shared-memory buffer size and butterfly count. SIZE/LOG_SIZE in the GLSL
+	# are #ifndef-guarded so we can override them from here without touching
+	# the source for each resolution change.
+	var fft_defines := "#define SIZE %d\n#define LOG_SIZE %d\n" % [RESOLUTION, RESOLUTION_LOG2]
 	pipeline_init = _create_pipeline("#version 450\n#define PASS_INIT\n" + code_without_version)
 	pipeline_pack = _create_pipeline("#version 450\n#define PASS_PACK\n" + code_without_version)
 	pipeline_update = _create_pipeline("#version 450\n#define PASS_UPDATE\n" + code_without_version)
-	pipeline_fft_x = _create_pipeline("#version 450\n#define PASS_FFT_X\n" + code_without_version)
-	pipeline_fft_y = _create_pipeline("#version 450\n#define PASS_FFT_Y\n" + code_without_version)
+	pipeline_fft_x = _create_pipeline("#version 450\n#define PASS_FFT_X\n" + fft_defines + code_without_version)
+	pipeline_fft_y = _create_pipeline("#version 450\n#define PASS_FFT_Y\n" + fft_defines + code_without_version)
 	pipeline_assemble = _create_pipeline("#version 450\n#define PASS_ASSEMBLE\n" + code_without_version)
 
 func _create_pipeline(src: String) -> RID:
@@ -230,35 +269,43 @@ func _init_spectrums() -> void:
 		
 	rd.buffer_update(spectrums_buffer, 0, bytes.size(), bytes)
 
-func sync_weather(wind: float, storm: float, short_wave: float) -> void:
+var _last_wind_angle := -10.0  # sentinel: outside the [-PI, PI] band
+
+func sync_weather(wind: float, storm: float, short_wave: float, wind_angle: float = 0.0) -> void:
 	if not rd or not spectrums_buffer.is_valid(): return
-	
-	if is_equal_approx(wind, _last_wind) and is_equal_approx(storm, _last_storm) and is_equal_approx(short_wave, _last_short_wave):
+
+	# Re-pack only on a meaningful change — wind direction shifts slowly, so
+	# we tolerate ~3° before paying the buffer-update + init-pack cost.
+	if (is_equal_approx(wind, _last_wind)
+			and is_equal_approx(storm, _last_storm)
+			and is_equal_approx(short_wave, _last_short_wave)
+			and absf(wind_angle - _last_wind_angle) < 0.05):
 		return
-		
+
 	_last_wind = wind
 	_last_storm = storm
 	_last_short_wave = short_wave
+	_last_wind_angle = wind_angle
 
 	var w_speed = lerpf(4.0, 25.0, wind)
 	var peak_omega = 9.81 / max(w_speed, 0.1)
 	var sw_fade = lerpf(0.04, 0.001, short_wave)
 	var scale = 1.0 # Base scale, wave_intensity controls dynamic amplitude directly in shader
 	var swell = lerpf(1.0, 0.2, storm)
-	
+
 	var bytes = PackedByteArray()
 	bytes.resize(8 * 8 * 4)
 	for i in range(8):
 		var offset = i * 32
 		bytes.encode_float(offset + 0, scale) # scale
-		bytes.encode_float(offset + 4, 0.0) # angle
+		bytes.encode_float(offset + 4, wind_angle) # angle (radians, world XZ)
 		bytes.encode_float(offset + 8, 1.0) # spread_blend
 		bytes.encode_float(offset + 12, swell) # swell
 		bytes.encode_float(offset + 16, 0.0081) # alpha
 		bytes.encode_float(offset + 20, peak_omega) # peak_omega
 		bytes.encode_float(offset + 24, 3.3) # gamma
 		bytes.encode_float(offset + 28, sw_fade) # short_waves_fade
-		
+
 	rd.buffer_update(spectrums_buffer, 0, bytes.size(), bytes)
 	_run_init_pack()
 

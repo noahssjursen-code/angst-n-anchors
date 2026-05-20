@@ -52,8 +52,14 @@ func _rebuild() -> void:
 
 	if not Engine.is_editor_hint():
 		var positions: Array[Vector3] = []
+		var islands  : Array          = []
 		for d in defs:
 			positions.append(d.world_position)
+			islands.append({
+				"center": d.world_position,
+				"radius": _island_radius_for_size(d.size),
+			})
+		LandField.initialize(islands)
 		WorldWeather.initialize(world_seed, positions)
 
 	if Engine.is_editor_hint() and get_tree() != null:
@@ -193,6 +199,15 @@ func _spawn_player() -> void:
 	var player      := PLAYER_SCENE.instantiate()
 	player.position = spawn_pos
 	add_child(player)
+
+
+## Mirrors PortExpander.ISLAND_WIDTH_BY_SIZE so LandField can be seeded without
+## paying for a full PortExpander.expand() round-trip per island at init time.
+## Returns the island's nominal half-width (radius before LandField padding).
+func _island_radius_for_size(size: int) -> float:
+	var size_clamped := clampi(size, 0, 4)
+	const HALF_WIDTHS := [30.0, 40.0, 60.0, 100.0, 170.0]  # ISLAND_WIDTH_BY_SIZE * 0.5
+	return HALF_WIDTHS[size_clamped]
 
 
 func _own_subtree(node: Node) -> void:

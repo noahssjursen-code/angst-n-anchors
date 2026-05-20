@@ -3,20 +3,25 @@ extends RefCounted
 
 ## Builds a complete playable ship from a template JSON at runtime.
 ##
-## Template files live in res://resources/data/ships/*.json.
-## Each hull JSON (res://resources/data/models/hulls/*.json) carries a "slots"
-## section that defines named attachment points at scale=1; ShipBuilder multiplies
-## those by the template's "scale" field when placing superstructures and mooring
-## points.
+## Templates today come from the shipwright NPC, which writes them to
+## user://shipwright_orders/<id>.json before calling ShipBuilder.build().
+## Each hull JSON (res://resources/data/models/hulls/*.json) declares its own
+## `slots`, `cargo_decks`, `lights`, and other attachments; ShipBuilder reads
+## all of them and instantiates the right component nodes at the right
+## positions + scale.
 ##
 ## Usage:
-##   var boat := ShipBuilder.build("res://resources/data/ships/fuel_tanker.json")
+##   var boat := ShipBuilder.build("user://shipwright_orders/coastal_trader.json")
 ##   get_tree().current_scene.add_child(boat)
 ##   boat.place_at_waterline(water_y)
 
-const HULL_BASE_DIR  := "res://resources/data/models/hulls/"
-const SUPER_BASE_DIR := "res://scenes/shared/superstructures/"
-const SHIPS_BASE_DIR := "res://resources/data/ships/"
+const HULL_BASE_DIR       := "res://resources/data/models/hulls/"
+## Legacy PackedScene path — kept for fallback while the JSON bridges are
+## bedding in. The .tscn loader still works if a JSON for the requested
+## key doesn't exist; once all five bridges have shipped as JSON we can
+## drop this entirely.
+const SUPER_SCENE_DIR     := "res://scenes/shared/superstructures/"
+const SUPER_MODEL_DIR     := "res://resources/data/models/superstructures/"
 
 static func build(template_path: String) -> BoatBody:
 	var tmpl := _load_json(template_path)
@@ -29,22 +34,28 @@ static func build(template_path: String) -> BoatBody:
 	var scale      := float(tmpl.get("scale", 1.0))
 	var slots      := _read_slots(hull_data, scale)
 
+	# Strip-theory hull data, derived once from the hull JSON. Shared between BoatBody
+	# (for displacement-based mass), StripBuoyancyComponent, and HydrodynamicsComponent.
+	var stations := HullStations.from_hull_json(hull_data, 10)
+
 	var boat := BoatBody.new()
 	boat.name = str(tmpl.get("display_name", "Ship")).replace(" ", "")
+	boat.hull_stations = stations
+	boat.mesh_scale = scale
 
 	_apply_physics(boat, tmpl.get("physics", {}))
 
 	var model_json_path := _hull_to_model_path(hull_path, tmpl, template_path)
 	boat.model_data_path = model_json_path
-	boat.mesh_scale = scale
 
-	boat.add_child(_make_buoyancy(tmpl.get("buoyancy", {})))
-	boat.add_child(_make_hydrodynamics(tmpl.get("hydrodynamics", {})))
+	boat.add_child(_make_strip_buoyancy(tmpl.get("buoyancy", {}), stations, scale))
+	boat.add_child(_make_hydrodynamics(tmpl.get("hydrodynamics", {}), stations, scale))
 	boat.add_child(_make_propulsion(tmpl.get("propulsion", {}), slots))
 	boat.add_child(_make_rudder(tmpl.get("rudder", {})))
 	boat.add_child(_make_bow_thruster(tmpl.get("bow_thruster", {}), slots))
 	boat.add_child(_make_controller())
 	boat.add_child(_make_camera(tmpl.get("camera", {})))
+	boat.add_child(_make_lighting_controller())
 
 	var gameplay := Node3D.new()
 	gameplay.name = "ShipGameplay"
@@ -52,7 +63,7 @@ static func build(template_path: String) -> BoatBody:
 
 	var super_key := str(tmpl.get("superstructure", ""))
 	if not super_key.is_empty() and slots.has("bridge"):
-		var super_node := _instantiate_superstructure(super_key)
+		var super_node := _build_superstructure(super_key)
 		if super_node != null:
 			super_node.name = "Superstructure"
 			super_node.position = slots["bridge"]
@@ -62,15 +73,9 @@ static func build(template_path: String) -> BoatBody:
 	mooring.name = "MooringComponent"
 	gameplay.add_child(mooring)
 
-	_add_mooring_points(gameplay, slots)
-
-	for deck_slot in tmpl.get("cargo_decks", []):
-		var slot_name := str(deck_slot)
-		if slots.has(slot_name):
-			var deck := CargoDeckComponent.new()
-			deck.name = "CargoDeck_" + slot_name
-			deck.position = slots[slot_name]
-			gameplay.add_child(deck)
+	_add_mooring_points(gameplay, slots, stations)
+	_add_hull_lights(gameplay, hull_data, scale)
+	_add_cargo_decks(gameplay, hull_data, tmpl, slots, scale)
 
 	return boat
 
@@ -100,31 +105,51 @@ static func _apply_physics(boat: BoatBody, cfg: Dictionary) -> void:
 		boat.angular_damp_coeff = float(cfg["angular_damp_coeff"])
 
 
-static func _make_buoyancy(cfg: Dictionary) -> BuoyancyComponent:
-	var c := BuoyancyComponent.new()
-	c.name = "BuoyancyComponent"
-	if cfg.has("block_coefficient"):
-		c.block_coefficient = float(cfg["block_coefficient"])
-	if cfg.has("vertical_damping"):
-		c.vertical_damping = float(cfg["vertical_damping"])
+static func _make_strip_buoyancy(
+	cfg: Dictionary, stations: HullStations, scale: float
+) -> StripBuoyancyComponent:
+	var c := StripBuoyancyComponent.new()
+	c.name = "StripBuoyancyComponent"
+	c.hull_stations = stations
+	c.mesh_scale = scale
+	if cfg.has("water_density"):
+		c.water_density = float(cfg["water_density"])
+	if cfg.has("buoyancy_multiplier"):
+		c.buoyancy_multiplier = float(cfg["buoyancy_multiplier"])
+	if cfg.has("heave_damping_per_m2"):
+		c.heave_damping_per_m2 = float(cfg["heave_damping_per_m2"])
 	return c
 
 
-static func _make_hydrodynamics(cfg: Dictionary) -> HydrodynamicsComponent:
+static func _make_hydrodynamics(
+	cfg: Dictionary, stations: HullStations, scale: float
+) -> HydrodynamicsComponent:
 	var c := HydrodynamicsComponent.new()
 	c.name = "HydrodynamicsComponent"
-	if cfg.has("forward_drag_coeff"):
-		c.forward_drag_coeff = float(cfg["forward_drag_coeff"])
+	c.hull_stations = stations
+	c.mesh_scale = scale
+	if cfg.has("water_density"):
+		c.water_density = float(cfg["water_density"])
+	if cfg.has("frictional_coeff"):
+		c.frictional_coeff = float(cfg["frictional_coeff"])
+	if cfg.has("form_factor"):
+		c.form_factor = float(cfg["form_factor"])
+	if cfg.has("wave_making_peak_coeff"):
+		c.wave_making_peak_coeff = float(cfg["wave_making_peak_coeff"])
+	if cfg.has("hull_speed_fn"):
+		c.hull_speed_fn = float(cfg["hull_speed_fn"])
 	if cfg.has("lateral_drag_coeff"):
 		c.lateral_drag_coeff = float(cfg["lateral_drag_coeff"])
-	if cfg.has("rotational_drag_coeff"):
-		c.rotational_drag_coeff = float(cfg["rotational_drag_coeff"])
-	if cfg.has("orbital_flow_scale"):
-		c.orbital_flow_scale = float(cfg["orbital_flow_scale"])
-	if cfg.has("bulk_horizontal_drag"):
-		c.bulk_horizontal_drag = float(cfg["bulk_horizontal_drag"])
-	if cfg.has("draft_fraction"):
-		c.draft_fraction = float(cfg["draft_fraction"])
+	if cfg.has("yaw_drag_coeff"):
+		c.yaw_drag_coeff = float(cfg["yaw_drag_coeff"])
+	if cfg.has("wind_frontal_area"):
+		c.wind_frontal_area = float(cfg["wind_frontal_area"])
+	if cfg.has("wind_lateral_area"):
+		c.wind_lateral_area = float(cfg["wind_lateral_area"])
+	if cfg.has("wind_drag_coeff"):
+		c.wind_drag_coeff = float(cfg["wind_drag_coeff"])
+	if cfg.has("air_density"):
+		c.air_density = float(cfg["air_density"])
 	return c
 
 
@@ -174,6 +199,111 @@ static func _make_controller() -> BoatController:
 	return c
 
 
+## Lighting controller — discovers ShipLight nodes anywhere under the boat
+## (in group "ship_light") and drives presets via the L key. Auto-engages
+## nav lights at night and in fog.
+static func _make_lighting_controller() -> ShipLighting:
+	var c := ShipLighting.new()
+	c.name = "ShipLighting"
+	return c
+
+
+## Spawn hull-mounted lights declared in the hull JSON's `lights` array.
+## Each entry: { "type": "<nav_port|nav_starboard|nav_masthead|nav_stern|work|window>",
+##               "position": [x, y, z] }.
+## Bridge-mounted lights (e.g. masthead, window) stay on the superstructure
+## scene so they move with the bridge.
+static func _add_hull_lights(parent: Node3D, hull_data: Dictionary, scale: float) -> void:
+	var lights = hull_data.get("lights", [])
+	if typeof(lights) != TYPE_ARRAY:
+		return
+	for entry in lights:
+		if typeof(entry) != TYPE_DICTIONARY:
+			continue
+		var type_id := _light_type_from_string(str(entry.get("type", "")))
+		if type_id < 0:
+			continue
+		var pos_arr = entry.get("position", [0, 0, 0])
+		if typeof(pos_arr) != TYPE_ARRAY or pos_arr.size() < 3:
+			continue
+		var pos := Vector3(float(pos_arr[0]), float(pos_arr[1]), float(pos_arr[2])) * scale
+		var light := ShipLight.new()
+		light.name = "HullLight_%s" % str(entry.get("type", "")).capitalize()
+		light.position = pos
+		light.light_type = type_id
+		parent.add_child(light)
+
+
+## Spawn cargo decks. Source of truth for deck dimensions is the hull JSON's
+## `cargo_decks` array; entries look like:
+##   {"name": "main", "position": [0, 1.05, 0],
+##    "deck_width": 2.8, "deck_length": 6.5, "cell_size": 1.0}
+##
+## The template can still filter which decks to enable by listing names in
+## its own `cargo_decks` array (legacy contract). If the template omits the
+## key, every hull-declared deck is added — which is what new commissions do.
+## If the template provides an empty list, no decks are added (used by very
+## small launches that shouldn't carry cargo).
+static func _add_cargo_decks(parent: Node3D, hull_data: Dictionary, tmpl: Dictionary,
+		slots: Dictionary, scale: float) -> void:
+	var hull_decks = hull_data.get("cargo_decks", [])
+	if typeof(hull_decks) != TYPE_ARRAY:
+		hull_decks = []
+
+	# Build a name → hull-deck-def lookup so the template can filter by name.
+	var by_name: Dictionary = {}
+	for d in hull_decks:
+		if typeof(d) == TYPE_DICTIONARY:
+			by_name[str(d.get("name", ""))] = d
+
+	var tmpl_decks: Variant = tmpl.get("cargo_decks", null)
+	var names_to_build: Array = []
+	if tmpl_decks == null:
+		# Template did not specify — use everything the hull declares.
+		for d in hull_decks:
+			if typeof(d) == TYPE_DICTIONARY:
+				names_to_build.append(str(d.get("name", "")))
+	elif typeof(tmpl_decks) == TYPE_ARRAY:
+		for entry in tmpl_decks:
+			names_to_build.append(str(entry))
+
+	for deck_name in names_to_build:
+		if not by_name.has(deck_name):
+			# Legacy fallback: deck_name is a slot key with no dimensions —
+			# use defaults sized for that slot's position.
+			if slots.has(deck_name):
+				var legacy := CargoDeckComponent.new()
+				legacy.name = "CargoDeck_" + deck_name
+				legacy.position = slots[deck_name]
+				parent.add_child(legacy)
+			continue
+		var def: Dictionary = by_name[deck_name]
+		var pos_arr = def.get("position", [0, 0, 0])
+		var pos := Vector3.ZERO
+		if typeof(pos_arr) == TYPE_ARRAY and pos_arr.size() >= 3:
+			pos = Vector3(float(pos_arr[0]), float(pos_arr[1]), float(pos_arr[2])) * scale
+		var deck := CargoDeckComponent.new()
+		deck.name = "CargoDeck_" + deck_name
+		deck.position = pos
+		deck.deck_width_m = float(def.get("deck_width", 5.0)) * scale
+		deck.deck_length_m = float(def.get("deck_length", 8.0)) * scale
+		var cell_size := float(def.get("cell_size", 1.5)) * scale
+		deck.cell_size_x_m = cell_size
+		deck.cell_size_z_m = cell_size
+		parent.add_child(deck)
+
+
+static func _light_type_from_string(s: String) -> int:
+	match s:
+		"nav_port":      return ShipLight.LightType.NAV_PORT
+		"nav_starboard": return ShipLight.LightType.NAV_STARBOARD
+		"nav_masthead":  return ShipLight.LightType.NAV_MASTHEAD
+		"nav_stern":     return ShipLight.LightType.NAV_STERN
+		"work":          return ShipLight.LightType.WORK
+		"window":        return ShipLight.LightType.WINDOW
+		_:               return -1
+
+
 static func _make_camera(cfg: Dictionary) -> BoatCamera:
 	var c := BoatCamera.new()
 	c.name = "BoatCamera"
@@ -184,18 +314,98 @@ static func _make_camera(cfg: Dictionary) -> BoatCamera:
 	return c
 
 
-static func _instantiate_superstructure(key: String) -> Node3D:
-	var path := SUPER_BASE_DIR + key + ".tscn"
-	if not ResourceLoader.exists(path):
-		push_warning("ShipBuilder: superstructure scene not found: " + path)
+## Build the superstructure (bridge) node tree for `key`. Tries the JSON
+## model first; falls back to the legacy .tscn if the JSON doesn't exist.
+##
+## JSON path: spawns a ModelAssembler-driven visual + the BridgeInteractable
+## + ShipLight nodes positioned via the JSON `slots` dict. This is the
+## target architecture.
+##
+## .tscn path: instantiates a PackedScene with pre-built ShipLight nodes
+## inside it (the old format, still in the tree until JSON ships for every
+## hull class).
+static func _build_superstructure(key: String) -> Node3D:
+	var json_path := SUPER_MODEL_DIR + key + ".json"
+	if FileAccess.file_exists(json_path):
+		return _build_superstructure_from_json(json_path)
+
+	var scene_path := SUPER_SCENE_DIR + key + ".tscn"
+	if not ResourceLoader.exists(scene_path):
+		push_warning("ShipBuilder: superstructure missing — no JSON at " + json_path
+			+ " and no scene at " + scene_path)
 		return null
-	var packed := load(path) as PackedScene
+	var packed := load(scene_path) as PackedScene
 	if packed == null:
 		return null
 	return packed.instantiate() as Node3D
 
 
-static func _add_mooring_points(parent: Node3D, slots: Dictionary) -> void:
+## Construct the bridge node tree from a JSON model file. The JSON declares
+## visual `parts` (consumed by ModelAssembler), a `slots` dict of light /
+## interactable positions, and an optional `interactable` config block.
+static func _build_superstructure_from_json(path: String) -> Node3D:
+	var root := Node3D.new()
+
+	var visuals := ModelAssembler.new()
+	visuals.name = "BridgeVisuals"
+	visuals.build_part_colliders = false
+	visuals.model_data_path = path
+	root.add_child(visuals)
+
+	var data := _load_json(path)
+	if data.is_empty():
+		return root
+
+	var slot_data: Variant = data.get("slots", {})
+	var slot_dict: Dictionary = slot_data if typeof(slot_data) == TYPE_DICTIONARY else {}
+
+	# BridgeInteractable — boarding zone in front of the deck house.
+	var interact := BridgeInteractable.new()
+	interact.name = "BridgeInteractable"
+	if slot_dict.has("bridge_interactable"):
+		var bi_pos = slot_dict["bridge_interactable"]
+		if typeof(bi_pos) == TYPE_ARRAY and bi_pos.size() >= 3:
+			interact.position = Vector3(float(bi_pos[0]), float(bi_pos[1]), float(bi_pos[2]))
+	var iv = data.get("interactable", {})
+	if typeof(iv) == TYPE_DICTIONARY:
+		var exit_arr = iv.get("exit_deck_offset", null)
+		if typeof(exit_arr) == TYPE_ARRAY and exit_arr.size() >= 2:
+			interact.exit_deck_offset = Vector2(float(exit_arr[0]), float(exit_arr[1]))
+	root.add_child(interact)
+
+	# Spawn the bridge-mounted lights from the JSON slots.
+	# Naming convention in slots: light_<type>: [x, y, z]
+	# where <type> is one of nav_port, nav_starboard, nav_masthead, nav_stern,
+	# work, window.
+	for slot_name in slot_dict.keys():
+		var key := str(slot_name)
+		if not key.begins_with("light_"):
+			continue
+		var type_str := key.substr("light_".length())
+		var type_id := _light_type_from_string(type_str)
+		if type_id < 0:
+			continue
+		var pos_arr = slot_dict[slot_name]
+		if typeof(pos_arr) != TYPE_ARRAY or pos_arr.size() < 3:
+			continue
+		var light := ShipLight.new()
+		light.name = "ShipLight_" + type_str.capitalize().replace(" ", "")
+		light.position = Vector3(float(pos_arr[0]), float(pos_arr[1]), float(pos_arr[2]))
+		light.light_type = type_id
+		root.add_child(light)
+
+	return root
+
+
+static func _add_mooring_points(parent: Node3D, slots: Dictionary, stations: HullStations) -> void:
+	# Scale the visible bollard to the hull. The natural docking_bollard model
+	# is ~0.8 m wide and reads correctly on a 20–30 m coaster at scale 1.0.
+	# Linearly interpolate so a 13 m launch gets a smaller cleat and a 60 m
+	# freighter gets a chunkier one — keeps the visual proportion sensible.
+	var hull_length : float = stations.length_m if stations != null else 18.0
+	var t           : float = clampf((hull_length - 13.0) / 47.0, 0.0, 1.0)
+	var bollard_scale : float = lerpf(0.7, 1.5, t)
+
 	var pairs := [
 		["mooring_port_fwd",  "port",      "fwd"],
 		["mooring_stbd_fwd",  "starboard",  "fwd"],
@@ -211,6 +421,7 @@ static func _add_mooring_points(parent: Node3D, slots: Dictionary) -> void:
 		mp.position = slots[slot_name]
 		mp.set("side",    pair[1])
 		mp.set("station", pair[2])
+		mp.set("bollard_scale", bollard_scale)
 		parent.add_child(mp)
 
 

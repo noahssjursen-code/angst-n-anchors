@@ -23,7 +23,8 @@
       "Bash(xargs ls -la)",
       "Bash(godot --version)",
       "Bash(where godot *)",
-      "Bash(powershell.exe -NoProfile -Command \"Get-ChildItem -Path 'C:\\\\Users\\\\noahs','C:\\\\Program Files','C:\\\\Program Files \\(x86\\)' -Filter 'Godot*.exe' -Recurse -ErrorAction SilentlyContinue -Depth 3 | Select-Object -First 5 -ExpandProperty FullName\")"
+      "Bash(powershell.exe -NoProfile -Command \"Get-ChildItem -Path 'C:\\\\Users\\\\noahs','C:\\\\Program Files','C:\\\\Program Files \\(x86\\)' -Filter 'Godot*.exe' -Recurse -ErrorAction SilentlyContinue -Depth 3 | Select-Object -First 5 -ExpandProperty FullName\")",
+      "Bash(mkdir -p .claude/hooks)"
     ]
   }
 }

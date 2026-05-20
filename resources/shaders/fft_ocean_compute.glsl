@@ -237,8 +237,15 @@ void main() {
 
 // FFT Logic
 #if defined(PASS_FFT_X) || defined(PASS_FFT_Y)
+// SIZE / LOG_SIZE are injected as #defines by fft_water_system.gd so the
+// resolution can be tuned from script (RESOLUTION / RESOLUTION_LOG2).
+// Fallback values match the historical 1024² grid if no define is supplied.
+#ifndef SIZE
 #define SIZE 1024
+#endif
+#ifndef LOG_SIZE
 #define LOG_SIZE 10
+#endif
 
 layout(local_size_x = SIZE, local_size_y = 1, local_size_z = 1) in;
 

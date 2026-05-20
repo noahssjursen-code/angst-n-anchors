@@ -27,11 +27,24 @@ static func set_weather_short_wave_factor(wind: float, precip: float, storm: flo
 	var rainy_short := x * lerpf(1.0, 0.45, y)
 	short_wave_factor = clampf(rainy_short * 0.78 + storm_t * 0.72, 0.0, 1.0)
 
+## Cached per-millisecond — the function is sampled multiple times per
+## physics frame (once per buoyancy point, once per vertical-velocity
+## query), and the value only depends on Time.get_ticks_msec(). At 9
+## buoyancy samples × 2 calls per frame this was running 2 sin + pow +
+## clampf 18× per physics tick.
+static var _wem_cache_tick:  int   = -1
+static var _wem_cache_value: float = 0.85
+
 static func get_wave_energy_multiplier() -> float:
-	var t := get_sim_time()
+	var tick := Time.get_ticks_msec()
+	if tick == _wem_cache_tick:
+		return _wem_cache_value
+	var t := tick * 0.001
 	var gate := sin(t * 0.032) + sin(t * 0.011 + 1.7) * 0.22 - 0.72
 	var rare := pow(clampf(gate * 1.9, 0.0, 1.0), 3.5)
-	return 0.85 + rare * 0.6
+	_wem_cache_value = 0.85 + rare * 0.6
+	_wem_cache_tick  = tick
+	return _wem_cache_value
 
 static func set_coupled_vessel(body: RigidBody3D) -> void:
 	_coupled_vessel = body
@@ -46,25 +59,31 @@ static func get_sim_time() -> float:
 static func get_buoyancy_surface_height_at(x: float, z: float) -> float:
 	if fft_system == null or fft_system.buoyancy_data.size() < 4 or fft_system.buoyancy_data[0].is_empty():
 		return WATER_LEVEL
-	
+
+	var res     : int   = FFTWaterSystem.RESOLUTION
+	var res_f   : float = float(res)
+	var res_max : int   = res - 1
 	var h_total := 0.0
 	for i in range(4):
 		var length_scale = fft_system.length_scales[i]
-		var res = 1024.0
-		
+
 		var u = fmod(x / length_scale, 1.0)
 		var v = fmod(z / length_scale, 1.0)
 		if u < 0.0: u += 1.0
 		if v < 0.0: v += 1.0
-		
-		var px = clamp(int(u * res), 0, 1023)
-		var py = clamp(int(v * res), 0, 1023)
-		
-		var idx = py * 1024 + px
+
+		var px = clamp(int(u * res_f), 0, res_max)
+		var py = clamp(int(v * res_f), 0, res_max)
+
+		var idx = py * res + px
 		h_total += fft_system.buoyancy_data[i][idx]
-	
-	# Scale down the FFT raw height by 0.42 to match the visual shader's amp_scale tuning
-	return WATER_LEVEL + h_total * wave_intensity * get_wave_energy_multiplier() * 0.42
+
+	# Scale down the FFT raw height by 0.42 to match the visual shader's amp_scale tuning,
+	# and multiply by the same LandField shelter the ocean shader uses per-vertex — so
+	# the boat's buoyancy reads exactly the surface the player sees. Without this the
+	# physics bobs the hull in invisible waves near distant islands.
+	var shelter := LandField.shore_shelter(Vector3(x, 0.0, z))
+	return WATER_LEVEL + h_total * wave_intensity * get_wave_energy_multiplier() * 0.42 * shelter
 
 static func get_base_wave_height_at(x: float, z: float) -> float:
 	return get_buoyancy_surface_height_at(x, z)
@@ -128,23 +147,29 @@ static func get_vertical_velocity_at(x: float, z: float) -> float:
 	var dt = fft_system.prev_delta
 	if dt <= 0.0001: return 0.0
 
+	var res     : int   = FFTWaterSystem.RESOLUTION
+	var res_f   : float = float(res)
+	var res_max : int   = res - 1
 	var h_now = 0.0
 	var h_prev = 0.0
 	for i in range(4):
 		var length_scale = fft_system.length_scales[i]
-		var res = 1024.0
 		var u = fmod(x / length_scale, 1.0)
 		var v = fmod(z / length_scale, 1.0)
 		if u < 0.0: u += 1.0
 		if v < 0.0: v += 1.0
-		
-		var px = clamp(int(u * res), 0, 1023)
-		var py = clamp(int(v * res), 0, 1023)
-		var idx = py * 1024 + px
+
+		var px = clamp(int(u * res_f), 0, res_max)
+		var py = clamp(int(v * res_f), 0, res_max)
+		var idx = py * res + px
 		h_now += fft_system.buoyancy_data[i][idx]
 		h_prev += fft_system.prev_buoyancy_data[i][idx]
 	
-	var dh = (h_now - h_prev) * wave_intensity * get_wave_energy_multiplier() * 0.42
+	# Same shelter as get_buoyancy_surface_height_at so vertical velocity also
+	# tracks the dampened surface near land — otherwise the hull would still
+	# see vertical motion (impulse) even when the static height is flat.
+	var shelter := LandField.shore_shelter(Vector3(x, 0.0, z))
+	var dh = (h_now - h_prev) * wave_intensity * get_wave_energy_multiplier() * 0.42 * shelter
 	return dh / dt
 
 static func get_surface_gradient_xz(x: float, z: float) -> Vector2:

@@ -19,7 +19,6 @@ const C_BERTH_BORDER   := Color(0.25, 1.00, 0.45, 0.70)
 const C_LABEL          := Color(0.30, 1.00, 0.50, 0.90)
 const C_CARGO_YARD     := Color(0.34, 0.32, 0.30)
 const FUEL_STATION_SCENE  := preload("res://scenes/systems/fuel_station.tscn")
-const PLAYER_SHIP_SCENE   := preload("res://scenes/boats/test_boat.tscn")
 ## Main quay deck — lit asphalt probe (adjust in `resources/materials/asphalt_dock.tres`).
 const QUAY_BODY_MATERIAL: StandardMaterial3D = preload(
 	"res://resources/materials/asphalt_dock.tres"
@@ -477,20 +476,27 @@ func spawn_player_ship(index: int, ship_scene_path: String = "") -> Node3D:
 
 	var path := ship_scene_path.strip_edges()
 	if path.is_empty():
-		path = String(PLAYER_SHIP_SCENE.resource_path)
-	elif not ResourceLoader.exists(path):
-		push_error("PortDock: ship scene missing: %s" % path)
+		push_error("PortDock: no ship path provided to spawn_player_ship")
 		return null
 
-	var packed := load(path) as PackedScene
-	if packed == null:
-		push_error("PortDock: not a PackedScene: %s" % path)
-		return null
-
-	var ship := packed.instantiate() as Node3D
-	if ship == null:
-		push_error("PortDock: ship scene root must be Node3D: %s" % path)
-		return null
+	var ship: Node3D = null
+	if path.ends_with(".json"):
+		ship = ShipBuilder.build(path)
+		if ship == null:
+			push_error("PortDock: ShipBuilder failed to build: %s" % path)
+			return null
+	else:
+		if not ResourceLoader.exists(path):
+			push_error("PortDock: ship scene missing: %s" % path)
+			return null
+		var packed := load(path) as PackedScene
+		if packed == null:
+			push_error("PortDock: not a PackedScene: %s" % path)
+			return null
+		ship = packed.instantiate() as Node3D
+		if ship == null:
+			push_error("PortDock: ship scene root must be Node3D: %s" % path)
+			return null
 
 	var t := get_berth_spawn_transform(index)
 	ship.name = "PlayerShip"

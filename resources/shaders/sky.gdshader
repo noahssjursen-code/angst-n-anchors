@@ -320,16 +320,22 @@ void sky() {
 	float clouds = cloud_density(dir, base_shape);
 	
 	if (clouds > 0.001) {
-		// 1. Self-Shadowing (Sample density slightly towards the sun)
-		vec3 offset_dir = normalize(dir + sun_direction * 0.15);
-		float sun_shape = get_cloud_shape(offset_dir);
-		float sun_density_val = cloud_density(offset_dir, sun_shape);
-		
-		// If the cloud is thicker towards the sun, this pixel is in shadow.
-		// Also, we mix in the raw inverted `base_shape` so that even at 100% coverage,
-		// the deep valleys of the noise remain permanently darker than the peaks!
+		// Cast shadow needs a second cloud shape sample toward the sun — a full
+		// 4-octave FBM. Skip it when the sun is below the horizon: the whole
+		// cloud column is dimmed to ~4.5% at night via day_cloud_lit anyway,
+		// and the moon doesn't cast cloud shadows. Saves the second FBM call
+		// (4 noise samples × 4 octaves) for ~half the day cycle.
+		float cast_shadow = 0.0;
+		if (sun_direction.y > -0.05) {
+			vec3 offset_dir = normalize(dir + sun_direction * 0.15);
+			float sun_shape = get_cloud_shape(offset_dir);
+			float sun_density_val = cloud_density(offset_dir, sun_shape);
+			cast_shadow = clamp((sun_density_val - clouds) * 2.5, 0.0, 1.0);
+		}
+
+		// Structural shadow from the deep valleys of the base shape — runs
+		// regardless of sun position so cloud volume reads correctly day & night.
 		float structural_shadow = 1.0 - clamp(base_shape * 1.2, 0.0, 1.0);
-		float cast_shadow = clamp((sun_density_val - clouds) * 2.5, 0.0, 1.0);
 		float shadow = clamp(cast_shadow + structural_shadow * 0.8, 0.0, 1.0);
 		
 		// 2. Base Color (Thicker/shadowed = darker bellies)

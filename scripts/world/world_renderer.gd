@@ -25,6 +25,11 @@ var _ocean_mesh:            MeshInstance3D
 var _ocean_mesh_outer:      MeshInstance3D
 var _fft_system:            Node # Use Node instead of FFTWaterSystem to avoid unresolved class error without reload
 
+## Tracks whether the baked LandField shelter texture is currently bound to
+## the ocean shader, so we re-upload exactly once when LandField finishes
+## initialising (which happens after WorldRenderer is added).
+var _shelter_texture_bound : bool = false
+
 
 func _ready() -> void:
 	if not Engine.is_editor_hint():
@@ -51,6 +56,7 @@ func _process(_delta: float) -> void:
 			_ocean_shader_material.set_shader_parameter("slope_map",        _fft_system.slope_map_rd)
 			_ocean_shader_material.set_shader_parameter("length_scales",    _fft_system.length_scales)
 		WaveSurface.sync_ocean_coupling_to_shader(_ocean_shader_material)
+		_sync_land_shelter()
 	if _ocean_horizon_material:
 		_ocean_horizon_material.set_shader_parameter("wave_time", WaveSurface.get_sim_time())
 	if _sky_shader_material:
@@ -129,7 +135,11 @@ func _build_sky() -> void:
 	sun.light_color                       = Color(1.0, 0.92, 0.78)
 	sun.light_energy                      = 1.5
 	sun.shadow_enabled                    = true
-	sun.directional_shadow_mode           = DirectionalLight3D.SHADOW_PARALLEL_4_SPLITS
+	# 2 cascades over 180 m gives a 90 m near split and 90 m far — plenty for
+	# the dock + immediate-water visible foreground. 4 cascades was rendering
+	# the shadowmap twice as often as needed for this shadow distance and was
+	# a measurable GPU chunk (~0.3-0.6 ms/frame on mid-tier).
+	sun.directional_shadow_mode           = DirectionalLight3D.SHADOW_PARALLEL_2_SPLITS
 	sun.directional_shadow_max_distance   = 180.0
 	sun.shadow_bias                       = 0.04
 	add_child(sun)
@@ -242,7 +252,11 @@ func _apply_weather_lighting() -> void:
 
 	# Optional: Sync FFT parameters based on weather
 	if _fft_system:
-		_fft_system.sync_weather(wind, storm, WaveSurface.short_wave_factor)
+		var wind_dir : Vector3 = weather.get("wind_dir") if weather else Vector3.RIGHT
+		# Spectrum wants a single rotation angle in the XZ plane; positive Z is
+		# the FFT's "zero direction", so atan2(x, z) gives wind-blowing-toward.
+		var wind_angle := atan2(wind_dir.x, wind_dir.z)
+		_fft_system.sync_weather(wind, storm, WaveSurface.short_wave_factor, wind_angle)
 
 
 func _apply_sun(tod: float, daylight: float, cloud: float, storm: float) -> void:
@@ -279,12 +293,21 @@ func _apply_fog(fog_t: float, daylight: float, storm: float) -> void:
 	_environment.fog_aerial_perspective = lerpf(0.0, 0.65, fog_t)
 	_environment.fog_sky_affect = lerpf(0.0, 0.85, fog_t * fog_t)
 
-	# Volumetric Fog (Physical 3D depth, light shafts, and realistic thickness)
-	_environment.volumetric_fog_albedo = base_fog_col
-	# Scale volumetric density aggressively with fog_t
-	_environment.volumetric_fog_density = lerpf(0.0, 0.09, fog_t)
-	# Push the fog rendering distance out based on visibility
-	_environment.volumetric_fog_length = lerpf(480.0, 120.0, fog_t)
+	# Volumetric Fog (Physical 3D depth, light shafts, and realistic thickness).
+	# Godot runs the full 64³ froxel compute every frame as long as
+	# volumetric_fog_enabled = true — density only scales the visible
+	# contribution, not the compute cost. In clear weather we'd be paying ~2-4 ms
+	# for fog with zero visible effect, so we gate the whole pass on a small
+	# density threshold (~visibility 0.95). At that level the fog has zero
+	# perceptible contribution; toggling the pass off is free perf.
+	var vol_density := lerpf(0.0, 0.09, fog_t)
+	var want_volumetric := vol_density > 0.005
+	_environment.volumetric_fog_enabled = want_volumetric
+	if want_volumetric:
+		_environment.volumetric_fog_albedo  = base_fog_col
+		_environment.volumetric_fog_density = vol_density
+		# Push the fog rendering distance out based on visibility
+		_environment.volumetric_fog_length  = lerpf(480.0, 120.0, fog_t)
 
 
 func _apply_sky_shader(daylight: float, cloud: float, storm: float) -> void:
@@ -327,6 +350,24 @@ func _apply_sky_shader(daylight: float, cloud: float, storm: float) -> void:
 	_sky_shader_material.set_shader_parameter("storm_intensity",   storm)
 	_sky_shader_material.set_shader_parameter("sun_color",         Vector3(sun_col.r,  sun_col.g,  sun_col.b))
 	_sky_shader_material.set_shader_parameter("star_visibility",   clampf(star_vis, 0.0, 1.0))
+
+
+## Binds LandField's baked shelter texture to the ocean shader. The texture is
+## generated once at world init from the island disks, so this runs exactly
+## once when LandField finishes initialising (WorldRenderer is added to the
+## scene first). Steady-state per-frame cost is one bool compare.
+func _sync_land_shelter() -> void:
+	if _ocean_shader_material == null:
+		return
+	if _shelter_texture_bound:
+		return
+	var tex := LandField.get_baked_shelter_texture()
+	if tex == null:
+		return
+	_ocean_shader_material.set_shader_parameter("land_shelter_map",    tex)
+	_ocean_shader_material.set_shader_parameter("land_shelter_origin", LandField.get_baked_world_origin())
+	_ocean_shader_material.set_shader_parameter("land_shelter_size",   LandField.get_baked_world_size())
+	_shelter_texture_bound = true
 
 
 func _apply_ocean_shader(daylight: float, cloud: float, rain: float, wind: float, storm: float, fog_t: float) -> void:

@@ -12,6 +12,10 @@ extends Resource
 @export_range(0.0, 1.0, 0.001) var precipitation: float = 0.0
 @export_range(0.0, 1.0, 0.001) var wind_force: float = 0.0
 
+## Actual wind speed (m/s) — drives ship aerodynamic drag. Separable from `wind_force`,
+## which is the sea-state / Beaufort lever for waves and storm visuals.
+@export_range(0.0, 30.0, 0.1) var wind_speed_ms: float = 0.0
+
 ## 1 = crystal clear, 0 = pea-soup (matches WeatherLighting.visibility).
 @export_range(0.0, 1.0, 0.001) var visibility: float = 1.0
 
@@ -39,6 +43,7 @@ static func create_clear_calm() -> WeatherState:
 	var s := WeatherState.new()
 	s.precipitation = 0.0
 	s.wind_force = 0.0
+	s.wind_speed_ms = 0.0
 	s.visibility = 1.0
 	s.cloud_cover = 0.0
 	return s
@@ -49,6 +54,7 @@ static func lerp_states(a: WeatherState, b: WeatherState, t: float) -> WeatherSt
 	var o := WeatherState.new()
 	o.precipitation = lerpf(a.precipitation, b.precipitation, t)
 	o.wind_force = lerpf(a.wind_force, b.wind_force, t)
+	o.wind_speed_ms = lerpf(a.wind_speed_ms, b.wind_speed_ms, t)
 	o.visibility = lerpf(a.visibility, b.visibility, t)
 	o.cloud_cover = lerpf(a.cloud_cover, b.cloud_cover, t)
 	return o

@@ -1,61 +1,106 @@
 class_name WeatherLightingState
 extends Node
 
-## Weather state: compass plane (precipitation × wind), fog, and cloud dial.
+## Weather state: compass plane (wind_speed × wind_force), fog, cloud dial, rain.
 ## **Canonical bundle:** `WeatherState` + `get_weather_state()` / `apply_weather_state()` / `blend_towards()`
 ## for zones and dynamic weather (saved as `.tres`, no scattered float imports).
 ## Quick script shortcut: **`weather_vector`** `Vector3(precip, wind, fog_density)` — ignores `cloud_cover`.
 ##
-## Political-compass (keyboard rain × wind dot, or assign `weather_vector` / `WeatherState`):
-##   X=0,Y=0 → clear calm  (perfect sailing day)
-##   X=1,Y=0 → heavy rain, flat sea  (grey drizzle)
-##   X=0,Y=1 → dry squall  (fast, tall seas, clear sky)
-##   X=1,Y=1 → full gale  (dark, violent)
+## Compass (keyboard wind_speed × wind_force dot, or assign `weather_vector` / `WeatherState`):
+##   X=0,Y=0 → dead calm     (no wind, flat sea)
+##   X=1,Y=0 → fresh breeze  (strong wind, sea not yet built up)
+##   X=0,Y=1 → old swell     (calm air, leftover waves from past storm)
+##   X=1,Y=1 → full gale     (everything at max)
 ##
+## `wind_force` (0→1) drives wave/storm visuals (Beaufort scale equivalent).
+## `wind_speed_ms` (0→30 m/s) is the actual wind hitting the hull — drives ship aerodynamics.
+## These are correlated but separable: a fresh squall hits the hull before waves build.
 ## cloud_cover (0→1) is independent: overcast sky without necessarily any rain.
 ## visibility (0→1) is independent: 0 = pea-soup fog, 1 = crystal clear.
 ## time_of_day (0→1) is also independent: 0/1 = midnight, 0.5 = noon.
 
 signal state_changed
 
+## Suppress per-property state_changed emits and wave-intensity resyncs while a
+## bulk update is in flight (apply_weather_state, blend_towards). Each setter
+## still updates its field; the caller is responsible for emitting once and
+## resyncing once after all fields are set. Drops 4 emits → 1 per blend tick,
+## which used to fan out into 4 full shader-uniform re-applies in WorldRenderer.
+var _suppress_emit:      bool = false
+var _suppress_wave_sync: bool = false
+
 # --- Rates for keyboard scrubbing ---
 const TIME_RATE          : float = 0.22
 const PRECIP_RATE        : float = 0.40
 const WIND_RATE          : float = 0.40
+const WIND_SPEED_RATE    : float = 12.0  # m/s per second of holding — traverses 0-30 in ~2.5s
 const VIS_RATE           : float = 0.35
 const CLOUD_RATE         : float = 0.40
 const WAVE_RATE          : float = 1.0
+const WIND_SPEED_MAX     : float = 30.0  # m/s. ~58 knots, Beaufort 10/11
 
 # --- Axis 0 : time of day ---
 @export_range(0.0, 1.0, 0.001) var time_of_day: float = 0.42:
 	set(v):
 		time_of_day = wrapf(v, 0.0, 1.0)
-		state_changed.emit()
+		if not _suppress_emit:
+			state_changed.emit()
 
 # --- Independent: cloud cover (0 clear sky → 1 fully overcast, no rain required) ---
 @export_range(0.0, 1.0, 0.001) var cloud_cover: float = 0.0:
 	set(v):
 		cloud_cover = clampf(v, 0.0, 1.0)
-		state_changed.emit()
+		if not _suppress_emit:
+			state_changed.emit()
 
-# --- Axis X : precipitation (0 clear → 1 downpour) ---
+# --- Independent: precipitation (0 clear → 1 downpour). Controlled via Ctrl+←/→ ---
 @export_range(0.0, 1.0, 0.001) var precipitation: float = 0.0:
 	set(v):
 		precipitation = clampf(v, 0.0, 1.0)
-		_sync_wave_intensity()
-		state_changed.emit()
+		if not _suppress_wave_sync:
+			_sync_wave_intensity()
+		if not _suppress_emit:
+			state_changed.emit()
 
 # --- Axis Y : wind force (0 becalmed → 1 gale) ---
+## Drives wave/storm visuals (Beaufort-scale equivalent). Independent of `wind_speed_ms`
+## so an old swell (high `wind_force`, low `wind_speed_ms`) and a fresh squall (low
+## `wind_force`, high `wind_speed_ms`) are both representable.
 @export_range(0.0, 1.0, 0.001) var wind_force: float = 0.0:
 	set(v):
 		wind_force = clampf(v, 0.0, 1.0)
-		_sync_wave_intensity()
-		state_changed.emit()
+		if not _suppress_wave_sync:
+			_sync_wave_intensity()
+		if not _suppress_emit:
+			state_changed.emit()
+
+# --- Axis X : wind speed in m/s (the actual aerodynamic wind on the hull) ---
+## Drives aerodynamic drag on superstructure (HydrodynamicsComponent). 0–30 m/s
+## covers calm to storm-force. `wind_dir` carries the direction; this is the magnitude.
+@export_range(0.0, 30.0, 0.1) var wind_speed_ms: float = 0.0:
+	set(v):
+		wind_speed_ms = clampf(v, 0.0, WIND_SPEED_MAX)
+		if not _suppress_emit:
+			state_changed.emit()
 
 # --- Axis Z : visibility (1 crystal-clear → 0 pea-soup fog) ---
 @export_range(0.0, 1.0, 0.001) var visibility: float = 1.0:
 	set(v):
 		visibility = clampf(v, 0.0, 1.0)
+		if not _suppress_emit:
+			state_changed.emit()
+
+## Horizontal wind vector (XZ plane). Magnitude is normalised to ≤ 1 so it
+## composes cleanly with `wind_force` — direction lives here, intensity in
+## `wind_force`. Pumped each tick by AtmosphericEffects from
+## `WeatherField.sample_wind(boat_pos)` (geostrophic pressure gradient).
+## Consumers wanting wind-aware tilt (rain, smoke, flags, sails) should read
+## this instead of inventing their own direction.
+@export var wind_dir: Vector3 = Vector3(-1.0, 0.0, 0.0):
+	set(v):
+		v.y = 0.0
+		var mag := v.length()
+		wind_dir = v if mag <= 1.0 else (v / mag)
 		state_changed.emit()
 
 # --- Derived convenience getters ---
@@ -68,9 +113,18 @@ var cloud_coverage: float:
 var rain_amount: float:
 	get: return smoothstep(0.30, 1.0, precipitation)
 
-## Thunder / lightning 0–1: driven by heavy rain, so we can have thunderous weather even in calm seas.
+## Thunder / lightning 0–1: driven by the *combined* storminess of the
+## weather. Heavy rain alone (calm-air thunderstorm) ramps it up, but a
+## strong dry squall (wind without much rain) can also flicker. Tuned for
+## the Phase-2 noise field's distribution of precip/wind — the old threshold
+## was 0.50 precip, which the deterministic field reaches only briefly in
+## the heart of a deep low; now the gate opens earlier and tracks the joint
+## storm signal.
 var thunder_intensity: float:
-	get: return smoothstep(0.50, 0.95, precipitation)
+	get:
+		var rain_drive := smoothstep(0.35, 0.85, precipitation)
+		var wind_drive := smoothstep(0.55, 0.90, wind_force) * 0.45
+		return clampf(rain_drive + wind_drive, 0.0, 1.0)
 
 ## Storm darkness 0–1: sky/ocean grimness driven primarily by heavy rain, allowing storms without huge waves.
 var storm_intensity: float:
@@ -96,8 +150,8 @@ var weather_vector: Vector3:
 
 # --- Wave coupling ---
 @export var weather_drives_waves: bool = true
-@export var calm_wave_intensity: float  = 0.55
-@export var gale_wave_intensity: float  = 1.83
+@export var calm_wave_intensity: float  = 0.33  # was 0.55 — scaled down 40%
+@export var gale_wave_intensity: float  = 1.10  # was 1.83 — scaled down 40%
 
 # --- Control mode (L to toggle) ---
 const MODE_WEATHER : String = "weather"
@@ -143,12 +197,12 @@ func _apply_held_controls(delta: float) -> void:
 	var shift := Input.is_key_pressed(KEY_SHIFT)
 	var ctrl  := Input.is_key_pressed(KEY_CTRL)
 
-	# Ctrl+Up/Down — wave height; Ctrl+Left/Right — cloud cover. Always available.
+	# Ctrl: Left/Right = precipitation, Up/Down = cloud cover. Always available.
 	if ctrl:
-		if v != 0:
-			WaveSurface.bump_wave_intensity(float(v) * WAVE_RATE * delta)
 		if h != 0:
-			cloud_cover = clampf(cloud_cover + float(h) * CLOUD_RATE * delta, 0.0, 1.0)
+			precipitation = clampf(precipitation + float(h) * PRECIP_RATE * delta, 0.0, 1.0)
+		if v != 0:
+			cloud_cover = clampf(cloud_cover + float(v) * CLOUD_RATE * delta, 0.0, 1.0)
 		return
 
 	if control_mode == MODE_WAVES:
@@ -165,11 +219,15 @@ func _apply_held_controls(delta: float) -> void:
 			visibility = clampf(visibility + float(v) * VIS_RATE * delta, 0.0, 1.0)
 			state_changed.emit()
 	else:
-		# Plain: RIGHT = more rain, LEFT = less rain.
-		# UP = calmer (less wind, dot moves toward calm corner at top),
-		# DOWN = more wind/gale (dot moves toward storm corner at bottom).
+		# Plain compass: RIGHT = stronger wind speed (m/s), LEFT = lighter wind.
+		# UP = calmer sea state (less wave-building wind force),
+		# DOWN = stormier sea state (more wave-building wind force).
 		if h != 0:
-			precipitation = clampf(precipitation + float(h) * PRECIP_RATE * delta, 0.0, 1.0)
+			wind_speed_ms = clampf(
+				wind_speed_ms + float(h) * WIND_SPEED_RATE * delta,
+				0.0,
+				WIND_SPEED_MAX
+			)
 		if v != 0:
 			wind_force = clampf(wind_force - float(v) * WIND_RATE * delta, 0.0, 1.0)
 
@@ -193,10 +251,13 @@ func _sync_wave_intensity() -> void:
 ## Bulk-assign compass + fog.**z** is fog density (1 = pea soup). Leaves `cloud_cover` and `time_of_day`.
 ## For presets / zones prefer `apply_weather_state(WeatherState)` so cloud + fog travel together.
 func set_weather_vector(v: Vector3) -> void:
-	precipitation = clampf(v.x, 0.0, 1.0)
-	wind_force = clampf(v.y, 0.0, 1.0)
-	var fd := clampf(v.z, 0.0, 1.0)
-	visibility = clampf(1.0 - fd, 0.0, 1.0)
+	_suppress_emit      = true
+	_suppress_wave_sync = true
+	precipitation = v.x
+	wind_force    = v.y
+	visibility    = 1.0 - clampf(v.z, 0.0, 1.0)
+	_suppress_wave_sync = false
+	_suppress_emit      = false
 	_sync_wave_intensity()
 	state_changed.emit()
 
@@ -205,19 +266,28 @@ func get_weather_state() -> WeatherState:
 	var s := WeatherState.new()
 	s.precipitation = precipitation
 	s.wind_force = wind_force
+	s.wind_speed_ms = wind_speed_ms
 	s.visibility = visibility
 	s.cloud_cover = cloud_cover
 	return s
 
 
 ## Apply full snapshot (zones, authored `.tres`, runtime generators). Leaves `time_of_day` untouched.
+## Bulk-updates all axes then emits `state_changed` once + resyncs waves
+## once — without the suppression flags this fired multiple redundant emits, each
+## triggering a full sky/sun/ocean shader-uniform reapply in WorldRenderer.
 func apply_weather_state(next: WeatherState) -> void:
 	if next == null:
 		return
-	precipitation = clampf(next.precipitation, 0.0, 1.0)
-	wind_force = clampf(next.wind_force, 0.0, 1.0)
-	visibility = clampf(next.visibility, 0.0, 1.0)
-	cloud_cover = clampf(next.cloud_cover, 0.0, 1.0)
+	_suppress_emit      = true
+	_suppress_wave_sync = true
+	precipitation  = next.precipitation
+	wind_force     = next.wind_force
+	wind_speed_ms  = next.wind_speed_ms
+	visibility     = next.visibility
+	cloud_cover    = next.cloud_cover
+	_suppress_wave_sync = false
+	_suppress_emit      = false
 	_sync_wave_intensity()
 	state_changed.emit()
 

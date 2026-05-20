@@ -14,9 +14,19 @@ var _lightning_cooldown:   float = 2.0
 var _lightning_phase:      int   = 0   # 0=idle  1=flash1  2=gap  3=flash2
 var _lightning_phase_t:    float = 0.0
 
-const ZONE_TICK   : float = 0.5    # seconds between zone polls
-const ZONE_WEIGHT : float = 0.017  # lerp weight per tick — ~20s half-life
-var _zone_timer   : float = 0.0
+const ZONE_TICK     : float = 0.5    # seconds between zone polls
+## Lerp weight per tick. ~0.006 = ≈60s half-life on wind_force, so a calm-to-
+## storm transition takes minutes of real time even if the underlying noise
+## sample changes abruptly (e.g. when the boat sails into a new pressure
+## system). Higher values feel jittery; lower than this feels laggy.
+const ZONE_WEIGHT   : float = 0.006
+## Wind-direction lerp. Slightly faster than wind_force so big rotations
+## feel responsive; still smooth enough to never look like a snap.
+const WIND_DIR_LERP : float = 0.035
+## When the boat is hugging the shore the field can step hard (you cross
+## the harbour edge and shelter goes 1→0). Cap how much faster lerping gets.
+const SHORE_LERP_BOOST : float = 0.025
+var _zone_timer     : float = 0.0
 
 
 func _ready() -> void:
@@ -86,11 +96,14 @@ func _update_lightning(delta: float) -> void:
 
 	var bolt := thunder * lerpf(0.12, 1.0, daylight)
 
-	if bolt < 0.08:
+	# Slightly lower than the old 0.08 floor — pairs with the new wider
+	# thunder formula so distant squalls still get the occasional flicker
+	# instead of being totally silent.
+	if bolt < 0.05:
 		if _lightning_light:      _lightning_light.light_energy = 0.0
 		if _lightning_flash_rect: _lightning_flash_rect.color.a = 0.0
 		_lightning_phase    = 0
-		_lightning_cooldown = randf_range(2.0, 6.0)
+		_lightning_cooldown = randf_range(3.0, 8.0)
 		return
 
 	if _lightning_phase == 0:
@@ -104,7 +117,11 @@ func _update_lightning(delta: float) -> void:
 				)
 			_lightning_phase    = 1
 			_lightning_phase_t  = 0.0
-			_lightning_cooldown = randf_range(1.5, 10.0) / maxf(bolt, 0.05)
+			# Cooldown is inversely proportional to bolt strength, with a
+			# 3 s floor so peak storms flicker like a real thunderstorm
+			# instead of strobing. Light storms get a long quiet between
+			# strikes; heavy storms still feel active.
+			_lightning_cooldown = maxf(3.0, randf_range(4.0, 14.0) / maxf(bolt, 0.05))
 		return
 
 	_lightning_phase_t += delta
@@ -142,9 +159,26 @@ func _tick_zone_weather() -> void:
 	if boat_pos.x == INF:
 		return
 	var target := WorldWeather.get_state_at(boat_pos) as WeatherState
-	var port_factor := WorldWeather.get_port_calm_factor(boat_pos)
-	var weight := lerpf(ZONE_WEIGHT, 0.08, port_factor)
+
+	# Harbour shelter: scale the wave-driving wind_force by distance-to-land
+	# (LandField SDF). Open ocean is unchanged; near shore even a storm gets
+	# its wave amplitude knocked down, which kills the old "waves clipping
+	# through islands" bug PORT_CALM was a hack-fix for.
+	var shelter := LandField.shore_shelter(boat_pos)
+	target.wind_force = target.wind_force * lerpf(0.15, 1.0, shelter)
+	# Slight precip dampening near shore too — looks better, and matches
+	# real-world lee-side calm.
+	target.precipitation = target.precipitation * lerpf(0.55, 1.0, shelter)
+
+	# Slight boost to lerp weight near land so the shore transition isn't laggy,
+	# but capped at SHORE_LERP_BOOST so even at the shoreline it stays smooth.
+	var weight := lerpf(ZONE_WEIGHT, SHORE_LERP_BOOST, 1.0 - shelter)
 	WeatherLighting.blend_towards(target, weight)
+
+	# Wind direction: same geostrophic vector that drove `target.wind_force`,
+	# blended toward smoothly so direction shifts feel natural.
+	var wind_vec   := WeatherField.sample_wind(boat_pos) * lerpf(0.15, 1.0, shelter)
+	WeatherLighting.wind_dir = WeatherLighting.wind_dir.lerp(wind_vec, WIND_DIR_LERP)
 
 
 func _get_boat_position() -> Vector3:
