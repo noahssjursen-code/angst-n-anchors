@@ -116,6 +116,8 @@ static func _apply_physics(boat: BoatBody, cfg: Dictionary) -> void:
 		boat.hull_mass = float(cfg["hull_mass"])
 	if cfg.has("design_draft_fraction"):
 		boat.design_draft_fraction = float(cfg["design_draft_fraction"])
+	if cfg.has("mass_scale"):
+		boat.mass_scale = float(cfg["mass_scale"])
 	if cfg.has("engine_mass"):
 		boat.engine_mass = float(cfg["engine_mass"])
 	if cfg.has("keel_ballast_mass"):

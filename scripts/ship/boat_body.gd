@@ -21,8 +21,8 @@ const WALK_MODEL_COLLIDER_NAME := "WalkModelCollider"
 @export_group("Physics")
 ## Manual mass override (kg). Used when `auto_mass_from_hull = false`. Ignored otherwise.
 ## Realistic ship mass = displaced water volume × water density. A 14 m steel workboat is
-## ~15–60 t; a 28 m coastal cargo is ~120–250 t. Don't ad-hoc weight to fight wave wobble —
-## tune `Stability` group + buoyancy multiplier instead.
+## ~15–60 t; a 28 m coastal cargo is ~120–250 t. For wave heave, prefer `mass_scale` over
+## arbitrary `hull_mass` when using auto mass.
 @export var hull_mass:           float = 22000.0:
 	set(v):
 		hull_mass = v
@@ -52,6 +52,13 @@ const WALK_MODEL_COLLIDER_NAME := "WalkModelCollider"
 @export_range(0.05, 0.95, 0.01) var design_draft_fraction: float = 0.42:
 	set(v):
 		design_draft_fraction = clampf(v, 0.05, 0.95)
+		_refresh_mass()
+## Extra rigid-body mass vs displacement balance (auto mass or manual hull_mass).
+## Values > 1.0 make the hull heavier than Archimedes at design draft so it settles
+## slightly deeper but resists wave heave — rides crests instead of sinking into them.
+@export_range(1.0, 2.0, 0.01) var mass_scale: float = 1.28:
+	set(v):
+		mass_scale = maxf(1.0, v)
 		_refresh_mass()
 
 ## Strip-theory hull data, set by ShipBuilder. Used for proper displacement-based mass.
@@ -318,7 +325,7 @@ func _refresh_mass() -> void:
 		hull_share = _hull_displacement_kg()
 	else:
 		hull_share = hull_mass
-	mass = maxf(hull_share + components, 1.0)
+	mass = maxf((hull_share + components) * mass_scale, 1.0)
 	_refresh_center_of_mass()
 
 

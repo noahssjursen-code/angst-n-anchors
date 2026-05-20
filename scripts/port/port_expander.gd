@@ -5,27 +5,32 @@ extends RefCounted
 ## Same inputs always produce identical output on every machine.
 ## No randomness survives outside this class — all state is derived.
 
-## Dock lengths chosen so berth_count(dock, ship_class, gap=3) gives the target
-## number of berths per port size (1 / 2 / 3 / 4 / 5).
-## slot sizes: CT=18 m, SSC=28 m, HF=43 m, DSF=63 m (max_length + 3 m gap)
-const DOCK_LENGTH_BY_SIZE: Dictionary = {
-	0:  22.0,   # 1 berth  — coastal trader
-	1:  40.0,   # 2 berths — coastal trader
-	2:  90.0,   # 3 berths — short sea coaster
-	3: 175.0,   # 4 berths — handysize feeder
-	4: 320.0,   # 5 berths — deep sea freighter
+## Berth count per port tier (fixed). dock_length = count × slot width so
+## growth is along the waterfront (+X), not inland into the town (+Z).
+const BERTH_COUNT_BY_SIZE: Dictionary = {
+	0: 1,
+	1: 2,
+	2: 3,
+	3: 4,
+	4: 5,
 }
 
-## Island land body width — always wider than the dock, giving the T-shape.
-## Buildings are placed within island_width regardless of dock_length.
-## Each entry is noticeably wider than the corresponding DOCK_LENGTH so the
-## dock visibly "sticks out" from a wider land mass.
+## Width (m) of each berth slot along the dock face — cranes/aprons scale with this.
+const SLOT_WIDTH_BY_SIZE: Dictionary = {
+	0:  40.0,
+	1:  50.0,
+	2:  62.0,
+	3:  76.0,
+	4:  92.0,
+}
+
+## Island land body width — wider than dock_length (T-shape along the shore).
 const ISLAND_WIDTH_BY_SIZE: Dictionary = {
-	0:  60.0,   # dock=22 m  — compact fishing hamlet
-	1:  80.0,   # dock=40 m  — small working port
-	2: 120.0,   # dock=90 m  — decent T visible
-	3: 200.0,   # dock=175 m — moderate T
-	4: 340.0,   # dock=320 m — dock just narrower than island
+	0:  88.0,
+	1:  120.0,
+	2:  200.0,
+	3:  320.0,
+	4:  500.0,
 }
 
 const SHIP_CLASS_BY_SIZE: Dictionary = {
@@ -78,8 +83,11 @@ static func expand(definition: PortDefinition, world_seed: int) -> PortData:
 
 	var size := clampi(definition.size, 0, 4)
 
-	data.dock_length    = float(DOCK_LENGTH_BY_SIZE[size])
-	data.island_width   = float(ISLAND_WIDTH_BY_SIZE[size])
+	var berth_n           := int(BERTH_COUNT_BY_SIZE[size])
+	var slot_w            := float(SLOT_WIDTH_BY_SIZE[size])
+	data.dock_length      = float(berth_n) * slot_w
+	data.island_width     = float(ISLAND_WIDTH_BY_SIZE[size])
+	data.berth_count      = berth_n
 	data.max_ship_class = SHIP_CLASS_BY_SIZE[size] as ShipClass.Type
 	data.has_fuel_point = true
 
@@ -89,14 +97,13 @@ static func expand(definition: PortDefinition, world_seed: int) -> PortData:
 	data.has_lighthouse = definition.has_lighthouse or (size >= 1 and rng.randf() < 0.3)
 	data.has_fog_horn   = definition.has_fog_horn or (size >= 0 and rng.randf() < 0.4)
 
-	data.berth_types       = _berth_types(rng, size, data.dock_length, data.max_ship_class)
+	data.berth_types       = _berth_types(rng, size, berth_n)
 	data.commodity_export  = COMMODITIES[rng.randi() % COMMODITIES.size()]
 	data.commodity_imports = _imports(rng, size, data.commodity_export)
 	data.layout_seed       = rng.randi()
 	data.rotation_y        = rng.randf() * TAU
 	data.population        = _population(rng, size)
 	data.features          = _features(rng, size)
-	data.berth_count       = ShipClass.berth_count(data.dock_length, data.max_ship_class, 3.0)
 
 	# Sync physical flags with features list — if the feature is listed, the building must exist.
 	if "Lighthouse" in data.features:
@@ -108,12 +115,10 @@ static func expand(definition: PortDefinition, world_seed: int) -> PortData:
 
 
 static func _berth_types(
-	rng:       RandomNumberGenerator,
-	size:      int,
-	dock_len:  float,
-	max_class: ShipClass.Type,
+	rng:   RandomNumberGenerator,
+	size:  int,
+	count: int,
 ) -> Array[int]:
-	var count  := ShipClass.berth_count(dock_len, max_class, 3.0)
 	var types: Array[int] = []
 
 	# Specialization rolled once per port

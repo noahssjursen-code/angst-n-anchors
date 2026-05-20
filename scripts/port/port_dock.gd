@@ -39,7 +39,7 @@ const QUAY_LIP_SLAB_GAP := 0.002
 ## Yellow stripe centred on Z≈0.11, spans ~[0, 0.22]. Lip band ends at QUAY_LIP_DEPTH; slab starts just after.
 ## Bollard mesh projects toward −Z; centre must sit far enough inland to stay wholly on slab / inside stripe.
 const MOORING_BOLLARD_CENTER_Z := QUAY_LIP_DEPTH + QUAY_LIP_SLAB_GAP + 0.42
-const BERTH_GAP_M    := 3.0
+const BERTH_GAP_M    := 4.0
 const BERTH_MARGIN   := 1.5
 
 const CRANE_W        := 6.0
@@ -47,10 +47,16 @@ const CRANE_H        := 18.0
 const CRANE_D        := 6.0
 const CRANE_QUAY_GAP := 3.0
 const APRON_GAP      := 2.0
+## Apron runs inland (+Z). Keep shallow so the quay does not swallow the town.
 const APRON_DEPTH    := 14.0
-## Per-side inset (m) from the slot edge where the crane cannot reach.
-## Mirrors the gantry roll range formula in _crane_general — keep in sync.
-const APRON_REACH_INSET := 3.2
+const APRON_DEPTH_MAX := 16.0
+const APRON_CELL_M   := 1.5
+## Extra apron cells beyond the ship-class hint for contract staging overflow.
+const APRON_STAGING_MARGIN_CELLS := 12
+## Per-side inset (m) from the slot edge — keep in sync with gantry roll formula.
+const APRON_REACH_INSET := 0.8
+## Gantry must cover ship length (bow–stern along the dock face) from midship.
+const CRANE_SHIP_LENGTH_FRAC := 0.58
 
 ## Total inland footprint from dock face to back of cargo aprons + buffer.
 ## PortPlot reads this to position PortFacilities without guessing.
@@ -163,7 +169,10 @@ func _build_berths() -> void:
 
 	var ship_len  : float = ShipClass.max_length(max_ship_class)
 	var ship_beam : float = ShipClass.beam(max_ship_class)
-	var count     : int   = ShipClass.berth_count(dock_length, max_ship_class, BERTH_GAP_M)
+	var count     : int   = berth_types.size() if berth_types.size() > 0 else ShipClass.berth_count(
+		dock_length, max_ship_class, BERTH_GAP_M
+	)
+	count = maxi(count, 1)
 	var slot_w    : float = dock_length / float(count)
 
 	for i in range(count):
@@ -179,9 +188,13 @@ func _build_berths() -> void:
 
 
 func _build_berth_slot(index: int, cx: float, slot_w: float, ship_beam: float, cargo_type: int) -> void:
+	var ship_len := ShipClass.max_length(max_ship_class)
+	var cargo    := _berth_cargo_layout(slot_w, ship_len, ship_beam, max_ship_class)
+	var apron_w_reach: float = cargo["apron_w"]
+	var apron_depth: float = cargo["apron_depth"]
 	var bz      : float = -ship_beam * 0.5
 	var crane_z : float = QUAY_DEPTH + CRANE_QUAY_GAP + CRANE_D * 0.5
-	var apron_z : float = QUAY_DEPTH + CRANE_QUAY_GAP + CRANE_D + APRON_GAP + APRON_DEPTH * 0.5
+	var apron_z : float = QUAY_DEPTH + CRANE_QUAY_GAP + CRANE_D + APRON_GAP + apron_depth * 0.5
 
 	# Berth water indicator
 	var fill               := MeshInstance3D.new()
@@ -199,18 +212,16 @@ func _build_berth_slot(index: int, cx: float, slot_w: float, ship_beam: float, c
 	add_child(fill)
 	fill.visible = _editor_berth_overlays_visible()
 
-	# Apron cargo grid — replaces the old static apron pad. Pallets snap to
-	# cells; only pallets whose origin_port_id matches `port_id` are accepted.
-	var apron_w_reach := maxf(slot_w - 2.0 * APRON_REACH_INSET, 1.5)
+	# Apron cargo grid — sized for this port's ship class + staging margin.
 	var apron_deck := CargoDeckComponent.new()
 	apron_deck.name                       = "ApronDeck%d" % index
 	# Sits just above the concrete pad (which is 0.12 m tall starting at Y=0).
 	# Apron deck sits just above the quay surface.
 	apron_deck.position                   = Vector3(cx, QUAY_HEIGHT + 0.001, apron_z)
 	apron_deck.deck_width_m               = apron_w_reach
-	apron_deck.deck_length_m              = APRON_DEPTH
-	apron_deck.cell_size_x_m              = 1.5
-	apron_deck.cell_size_z_m              = 1.5
+	apron_deck.deck_length_m              = apron_depth
+	apron_deck.cell_size_x_m              = APRON_CELL_M
+	apron_deck.cell_size_z_m              = APRON_CELL_M
 	apron_deck.affects_boat_cargo_mass    = false
 	apron_deck.port_id                    = port_id
 	apron_deck.debug_color                = Color(0.85, 0.55, 0.18, 0.20)
@@ -229,7 +240,9 @@ func _build_berth_slot(index: int, cx: float, slot_w: float, ship_beam: float, c
 		"has_cargo":   false,
 		"cx":          cx,
 		"slot_w":      slot_w,
-		"apron_z":     apron_z,   # dock-local Z centre of this berth's apron
+		"apron_z":     apron_z,
+		"apron_w":     apron_w_reach,
+		"apron_depth": apron_depth,
 		"apron_deck":  apron_deck,
 	})
 
@@ -256,26 +269,81 @@ func _build_berth_slot(index: int, cx: float, slot_w: float, ship_beam: float, c
 	match cargo_type:
 		CargoBerthType.Type.BULK:      _crane_bulk(index, cx, crane_z)
 		CargoBerthType.Type.CONTAINER: _crane_container(index, cx, slot_w, crane_z)
-		_:                             _crane_general(index, cx, slot_w, crane_z)
+		_:                             _crane_general(index, cx, cargo, crane_z, apron_z, apron_depth, ship_beam)
 
 	# Quay slab already covers this area (extended in _build_quay) — no
 	# per-berth asphalt strip needed.
 
 
+## Apron width/depth and gantry reach for a berth slot. Ship length runs along
+## the dock face (gantry X); apron depth runs inland (trolley +Z) — keep depth small.
+static func _berth_cargo_layout(
+		slot_w: float,
+		ship_len: float,
+		ship_beam: float,
+		max_class: ShipClass.Type,
+) -> Dictionary:
+	var target_cells := ShipClass.cargo_cells(max_class) + APRON_STAGING_MARGIN_CELLS
+	# Prefer a wide, shallow apron (along-shore × inland) so capacity grows +X not +Z.
+	var min_cols := maxi(int(ceil(sqrt(float(target_cells) * 1.35))), 4)
+	var min_apron_w := float(min_cols) * APRON_CELL_M
+	var apron_w := clampf(
+		maxf(maxf(slot_w - 2.0 * APRON_REACH_INSET, min_apron_w), ship_beam + 8.0),
+		APRON_CELL_M * 2.0,
+		slot_w - 0.5,
+	)
+	var cols := maxi(int(floor(apron_w / APRON_CELL_M)), 2)
+	var rows_needed := maxi(int(ceil(float(target_cells) / float(cols))), 3)
+	var apron_depth := clampf(
+		float(rows_needed) * APRON_CELL_M,
+		APRON_DEPTH * 0.85,
+		APRON_DEPTH_MAX,
+	)
+	var roll_slot := maxf(slot_w * 0.5 - APRON_REACH_INSET, 2.0)
+	var roll_ship := ship_len * CRANE_SHIP_LENGTH_FRAC + 4.0
+	var gantry_roll := maxf(roll_slot, roll_ship)
+	return {
+		"apron_w": apron_w,
+		"apron_depth": apron_depth,
+		"gantry_roll": gantry_roll,
+	}
+
+
+## Trolley Z limits in crane-local space: −Z toward ship, +Z toward apron back.
+static func _crane_trolley_limits(
+		crane_z: float,
+		apron_z: float,
+		apron_depth: float,
+		ship_beam: float,
+) -> Vector2:
+	var ship_edge_z := -ship_beam - 3.0
+	var trolley_min := ship_edge_z - crane_z - 3.0
+	var apron_back_z := apron_z + apron_depth * 0.5 + 2.0
+	var trolley_max := apron_back_z - crane_z + 2.0
+	if trolley_max <= trolley_min + 6.0:
+		trolley_max = trolley_min + 28.0
+	return Vector2(trolley_min, trolley_max)
+
+
 # ── Crane types ───────────────────────────────────────────────────────────────
 
-func _crane_general(index: int, cx: float, slot_w: float, crane_z: float) -> void:
+func _crane_general(
+		index: int,
+		cx: float,
+		cargo: Dictionary,
+		crane_z: float,
+		apron_z: float,
+		apron_depth: float,
+		ship_beam: float,
+) -> void:
 	var crane                 := GantryCrane.new()
 	crane.name                = "Crane%d" % index
-	# Crane sits on top of the (now-extended) quay slab.
 	crane.position            = Vector3(cx, QUAY_HEIGHT, crane_z)
-	# Tell the crane which berth it serves so it can light up when a ship
-	# moors here.
 	crane.berth_index         = index
-	# Rails extend past the leg base on each side; rail must fit inside the
-	# berth slot. APRON_REACH_INSET captures this margin and is reused by the
-	# apron-pad sizing and pallet spawn grid so they all stay aligned.
-	crane.gantry_roll_range_x = maxf(slot_w * 0.5 - APRON_REACH_INSET, 0.0)
+	crane.gantry_roll_range_x = float(cargo["gantry_roll"])
+	var trolley_limits        := _crane_trolley_limits(crane_z, apron_z, apron_depth, ship_beam)
+	crane.trolley_min_z       = trolley_limits.x
+	crane.trolley_max_z       = trolley_limits.y
 	add_child(crane)
 	if Engine.is_editor_hint() and get_tree() != null:
 		var esc := get_tree().edited_scene_root
@@ -396,14 +464,15 @@ func get_berth_apron_positions(berth_index: int, n: int, offset: int = 0) -> Arr
 	var cx      := float(b["cx"])
 	var slot_w  := float(b["slot_w"])
 	var apron_z := float(b["apron_z"])
-	var apron_w := maxf(slot_w - 2.0 * APRON_REACH_INSET, 1.5)
-	var cols    := maxi(int(apron_w / 1.5), 1)
+	var apron_w := float(b.get("apron_w", maxf(slot_w - 2.0 * APRON_REACH_INSET, 1.5)))
+	var apron_depth := float(b.get("apron_depth", APRON_DEPTH))
+	var cols    := maxi(int(apron_w / APRON_CELL_M), 1)
 	for i in range(n):
 		var idx := i + offset
 		var col := idx % cols
 		var row := idx / cols
-		var x   := cx - apron_w * 0.5 + 1.5 * (float(col) + 0.5)
-		var z   := apron_z - APRON_DEPTH * 0.4 + 1.5 * float(row)
+		var x   := cx - apron_w * 0.5 + APRON_CELL_M * (float(col) + 0.5)
+		var z   := apron_z - apron_depth * 0.4 + APRON_CELL_M * float(row)
 		out.append(to_global(Vector3(x, QUAY_HEIGHT + 0.05, z)))
 	return out
 
@@ -415,6 +484,8 @@ func can_dock(ship_type: ShipClass.Type) -> bool:
 	return ShipClass.fits(ship_type, max_ship_class)
 
 func berth_count() -> int:
+	if berth_types.size() > 0:
+		return berth_types.size()
 	return ShipClass.berth_count(dock_length, max_ship_class, BERTH_GAP_M)
 
 func get_berths() -> Array:

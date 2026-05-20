@@ -56,12 +56,12 @@ static var _seated_count: int = 0
 
 ## How close (XZ) the hook must be to a pallet's center to engage chains.
 ## Tight so the player must position the trolley right over the pallet.
-@export var pickup_xz_range_m: float = 0.9
+@export var pickup_xz_range_m: float = 1.15
 ## Hook can be at most this far above the pallet top to engage.
 @export var pickup_max_height_m: float = 1.8
 
 ## How close (XZ) the hook must be to a delivery zone / deck cell to release.
-@export var release_xz_range_m: float = 1.6
+@export var release_xz_range_m: float = 2.0
 ## How far above the target surface the hook may be when releasing.
 @export var release_max_height_m: float = 2.5
 
