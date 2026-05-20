@@ -74,6 +74,23 @@ func set_display_name(name: String) -> void:
 	_request_save()
 
 
+func set_appearance(appearance: CharacterAppearance) -> void:
+	if appearance == null:
+		return
+	data.appearance = appearance
+	data_loaded.emit(data)
+	_request_save()
+
+
+func begin_new_captain(display_name: String, appearance: CharacterAppearance) -> void:
+	data = PlayerData.new()
+	var trimmed := display_name.strip_edges()
+	data.display_name = trimmed if not trimmed.is_empty() else "Captain"
+	data.appearance = appearance if appearance != null else CharacterAppearance.default_appearance()
+	data_loaded.emit(data)
+	save_now()
+
+
 func add_distance_sailed(delta_m: float) -> void:
 	if delta_m <= 0.0:
 		return

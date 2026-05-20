@@ -57,6 +57,15 @@ func _ready() -> void:
 	for n in get_tree().root.find_children("*", "BoatController", true, false):
 		_connect_controller(n as BoatController)
 
+	var scene := get_tree().current_scene
+	if scene != null and String(scene.scene_file_path).ends_with("main_menu.tscn"):
+		set_gameplay_hud_visible(false)
+
+
+func set_gameplay_hud_visible(visible: bool) -> void:
+	if _hud_layer != null:
+		_hud_layer.visible = visible
+
 
 # ── Input ─────────────────────────────────────────────────────────────────────
 
