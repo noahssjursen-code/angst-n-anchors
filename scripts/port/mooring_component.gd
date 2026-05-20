@@ -563,7 +563,26 @@ func _resolve_boat_rigid_body() -> RigidBody3D:
 	return null
 
 
+func _dock_from_node(node: Node) -> PortDock:
+	var n: Node = node
+	while n != null:
+		if n is PortDock:
+			return n as PortDock
+		n = n.get_parent()
+	return null
+
+
+## Resolve the quay you are tied to. Sailed-in vessels live under World, not
+## PortPlot — walk up from the bollard posts, not only from the ship hierarchy.
 func _find_port_dock() -> PortDock:
+	if bow_line_tied and _front_post != null:
+		var bow_dock := _dock_from_node(_front_post)
+		if bow_dock != null:
+			return bow_dock
+	if stern_line_tied and _rear_post != null:
+		var stern_dock := _dock_from_node(_rear_post)
+		if stern_dock != null:
+			return stern_dock
 	var n: Node = get_parent()
 	while n != null:
 		if n is PortDock:
@@ -603,10 +622,10 @@ func _berth_index_for_post(dock: PortDock, post: Node) -> int:
 
 
 func _would_split_berths(new_post: Node) -> bool:
-	var dock := _find_port_dock()
-	if dock == null:
+	var new_dock := _dock_from_node(new_post)
+	if new_dock == null:
 		return false
-	var new_berth := _berth_index_for_post(dock, new_post)
+	var new_berth := _berth_index_for_post(new_dock, new_post)
 	if new_berth < 0:
 		return false
 	var other_post: Node = null
@@ -616,7 +635,12 @@ func _would_split_berths(new_post: Node) -> bool:
 		other_post = _rear_post
 	if other_post == null:
 		return false
-	var other_berth := _berth_index_for_post(dock, other_post)
+	var other_dock := _dock_from_node(other_post)
+	if other_dock == null:
+		return false
+	if other_dock != new_dock:
+		return true
+	var other_berth := _berth_index_for_post(other_dock, other_post)
 	return other_berth >= 0 and other_berth != new_berth
 
 
