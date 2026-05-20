@@ -319,6 +319,53 @@ Right now home port spawns the player at `PortDock.get_spawn_position()`. For co
 
 ---
 
+## Phase 7.5 — Character creation polish
+
+**Risk:** low.
+
+Character creator exists (`scripts/ui/character_creator_panel.gd` + `character_preview.gd`, NpcBase-based preview on the main menu) but the audit flagged the `_on_name_changed(_text: String)` callback as `pass` — name input doesn't propagate. The full round-trip from creator → PlayerData → in-game player model needs verifying end-to-end.
+
+**Files:** `scripts/ui/character_creator_panel.gd`, `scripts/ui/character_preview.gd`, `scripts/ui/main_menu.gd`, `scripts/player/character_appearance.gd`, `scripts/player/player_data.gd`.
+
+**Changes:**
+- Wire `_on_name_changed` to update an internal `_pending_name` and pass it through to PlayerSession on "Confirm".
+- Ensure `PlayerData.appearance` (skin/clothing/trousers colours, hat choice) is fully serialised through `to_dict()`/`from_dict()`.
+- After main menu confirm, the in-game `Player` mesh hierarchy uses the same NpcBase-style rig with the chosen appearance — same code path the creator preview used.
+- Add a "Randomize" button.
+- Persistence: appearance round-trips through PlayerData v2 (already covered by Phase 4's schema bump — verify dict layout).
+
+**Verify:** new captain → custom name + colours + hat → confirm → enter world. Walk to a reflective surface (or inspect via debug) — model matches the creator preview. Quit and reload; appearance persists.
+
+---
+
+## Phase 7.6 — Third-person camera (MP-critical)
+
+**Risk:** medium. Camera changes are user-felt; needs careful default tuning.
+
+Current `scripts/player/player.gd` is first-person mouse-look only. Multiplayer needs you to *see your own character* (and remote players see you in third-person), so introduce a switchable follow cam now.
+
+**Files:** `scripts/player/player.gd`, new `scripts/player/player_camera.gd`.
+
+**Changes:**
+
+1. Extract camera management into a new `PlayerCamera` component that owns:
+   - **First-person**: attached to the head, mouse-look applies yaw to body + pitch to head.
+   - **Third-person**: orbit camera ~3–5 m back, ~1.6 m up, mouse-look orbits. Collision recovery: raycast from player to ideal cam pos; pull in if obstructed, lerp back out on clear.
+
+2. Hotkey **V** toggles modes. Default: third-person on foot, first-person at helm (helm camera is `BoatCamera`, untouched).
+
+3. In third-person, `_visual_root` (player mesh) becomes visible. In first-person, hide torso + head meshes (legs still visible looking down for foot-grounding feel).
+
+4. Route the camera target through `LocalPlayerView.get_local_player_node()` so future remote players are renderable without confusion.
+
+5. Smoothing: position lerp ~0.15 s, rotation lerp ~0.05 s. Avoid foot-jitter on uneven terrain (sample mean foot height over short lookback).
+
+**Verify:** spawn at home port, press V → swap views. Walk near a building → camera doesn't clip through geometry. Helm a ship → switches to BoatCamera. Exit helm → returns to last-used on-foot mode.
+
+**MP payoff:** when MP lands, other players' bodies and boats are visible because the camera no longer assumes "I'm inside my own head". Spectator / follow-other-player modes are a one-line trigger from here.
+
+---
+
 ## Phase 8 — Architecture documentation refresh
 
 **Risk:** trivial.
@@ -352,6 +399,116 @@ Final integration smoke: boot the world, board a starter vessel, accept a contra
 
 ---
 
+## Phase 9 — Settings menu
+
+**Risk:** low-medium. Pure UI + project settings application.
+
+No settings UI exists today. Required for any kind of public release. Reuses `UiBuilder` for visual consistency.
+
+**Files:** new `scripts/ui/settings_menu.gd`, new `scenes/ui/settings_menu.tscn`, modify `scripts/ui/main_menu.gd` (add Settings button) and `scripts/ui/game_menu.gd` (add Settings button to pause).
+
+**Changes:**
+
+- **Graphics tab**: resolution dropdown, window mode (windowed/borderless/fullscreen), MSAA, VSync, FFT water resolution preset (low/med/high — maps to 256/512/1024 in `fft_water_system.gd`), volumetric fog toggle.
+- **Audio tab**: master / SFX / ambient / UI sliders mapped to `AudioServer.set_bus_volume_db`.
+- **Controls tab**: rebindable keys for movement, interact, helm controls, view toggle. Stored in `InputMap` overrides.
+- **Persistence**: settings save to `user://settings.cfg` via `ConfigFile`; load at boot, applied before world spawn.
+
+**Verify:** open from main menu, tweak each setting, restart game — settings persist and apply.
+
+---
+
+## Phase 10 — Pause-on-focus-loss + autosave heartbeat
+
+**Risk:** trivial. Two small additions to existing autoloads.
+
+### 10.1 Pause on focus loss
+
+`GameMenu` already handles ESC pause. Add a `NOTIFICATION_APPLICATION_FOCUS_OUT` handler that triggers the same pause path. Resume requires the user to press ESC or click — never auto-resumes on focus-back, to avoid surprise input.
+
+**Files:** `scripts/ui/game_menu.gd`.
+
+### 10.2 Autosave heartbeat
+
+Phase 4 saves on quit + event triggers. Add a 60-second wall-clock timer that calls `PlayerSession.save_now()` regardless. Insurance against crashes / power loss.
+
+**Files:** `scripts/player/player_session.gd`.
+
+**Verify:** play for 90 s, kill the process from task manager, relaunch — last 60 s of progress is preserved.
+
+---
+
+## Phase 11 — First-time tutorial chain
+
+**Risk:** low. Pure UX flow.
+
+A new captain spawns with no idea what to do. The audit found the gameplay loop *is* discoverable, but only if you know to look at the harbour master first. Add a subtle hint chain.
+
+**Files:** new `scripts/ui/tutorial_hint.gd`, modify `scripts/state/local_player_view.gd` (tracks "first-time" state).
+
+**Mechanism:** a single line of text floats at the bottom-centre of the screen with a soft fade. Sequence:
+
+1. **On first spawn**, after the player has had control for 3 s: `"→ Speak to the Harbour Master to take a vessel."`
+2. **After harbour master interaction**, on next on-foot moment: `"→ Visit the Shipwright to commission a custom hull, or skip and use your starter Coastal Trader."`
+3. **First time aboard a ship**, after helm activation: `"W/S throttle · A/D rudder · Q/E bow thruster · ESC to leave helm"`
+4. **First time accepting a contract**: `"→ Cargo is staged on the dock. Use the crane to load it onto your ship."`
+5. **First time delivering**: `"→ Dock at the destination port, then unload the cargo to complete delivery."`
+6. **After first delivery**: hints disable for that captain.
+
+Stored as boolean flags on `PlayerData` (`tutorial_step_1_done`, etc., or one bitmask field). New captain = all false; existing save = all true (skip tutorial for returning players).
+
+**Verify:** new captain → hints appear in order. Existing captain → no hints.
+
+---
+
+## Phase 12 — Hull damage + loading screen + fuel range + audio polish
+
+**Risk:** mixed. Four small independent additions bundled into one phase since each is self-contained.
+
+### 12.1 Hull damage from collision impact
+
+`ShipData.hull_health` (0.0–1.0) exists but is never modified. Wire it:
+
+- `BoatBody._integrate_forces()` or a collision contact monitor: when `_body.get_contact_count() > 0`, compute impact magnitude as `linear_velocity.length() * collision_mass`. If above a threshold (e.g. impact > 5 m/s · ship_mass), subtract from hull_health.
+- At hull_health < 0.5, mild HUD warning; < 0.2, red "HULL CRITICAL" flash.
+- Repair interaction at the harbour master: "Patch hull (ℳN)" where N scales with damage.
+
+**Files:** `scripts/ship/boat_body.gd`, `scripts/ship/ship_data.gd` (signals), `scripts/ui/ship_hud.gd` (gauge), `scripts/npc/harbour_master_npc.gd` (repair option).
+
+### 12.2 Loading screen with Telemetry log
+
+Currently world spawn is silent for 1–2 s during port generation + SDF bake. Show a "Building world..." panel that consumes `Telemetry.load_events` and lists them as they complete:
+
+```
+✓ Building islands           (842 ms)
+✓ Baking shelter             (203 ms)
+✓ Generating ports           (157 ms)
+✓ Spawning home port         (89 ms)
+…
+```
+
+**Files:** new `scripts/ui/loading_screen.gd`, modify `scripts/world/world.gd` to show/hide it.
+
+### 12.3 Fuel range circle on the map
+
+Once Phase 5 lands, draw a green ring on `MapOverlay` representing the player's current fuel range (`fuel_l / burn_rate * cruise_speed`). Updates live as fuel drops.
+
+**Files:** `scripts/ui/map_overlay.gd`.
+
+### 12.4 Audio cues
+
+Three short audio additions (re-use existing AudioStreamPlayer infrastructure in `boat_audio_system.gd`):
+
+- **Splash on wave slam**: trigger when bow vertical velocity > 4 m/s relative to wave surface. Uses any existing wave/splash sample under `resources/audio/` or a placeholder white-noise burst.
+- **Dock-bump thud**: triggered on collision contact between BoatBody and a dock collider (use a collision layer mask).
+- **Low-fuel cough loop**: starts at fuel < 10 %, stops at refuel.
+
+**Files:** `scripts/ship/boat_audio_system.gd`, `scripts/ship/boat_body.gd` (collision hooks).
+
+**Verify:** ram a dock with throttle 100% → hull damage drops, thud audio plays. Sail through a heavy storm → splashes on bow slams. Run low on fuel → cough loop. Open map → ring shows where you can reach before drying out.
+
+---
+
 ## What's deliberately out of scope
 
 - **Multiplayer transport.** The user wants MP later but this plan is single-player polish.
@@ -362,28 +519,60 @@ Final integration smoke: boot the world, board a starter vessel, accept a contra
 
 ---
 
+## Full phase list (execution order)
+
+| # | Phase | Risk | Primary value |
+|---|---|---|---|
+| 0 | Worktrees + gitignore + plan visible in repo | trivial | ✅ shipped |
+| 1 | Quick correctness fixes (7 small bugs) | low | Real bugs gone |
+| 2 | DRY pass (json util, asset paths, boarding base) | low | Cleaner codebase |
+| 3 | LocalPlayerView as single source of truth | medium | MP seam alive |
+| 4 | Persistence completeness (contracts, ship pose, cargo, on-foot) | medium | Quit/resume works |
+| 5 | Fuel system MVP | medium | Actual mechanic |
+| 6 | Cargo journal + contract restock | low-med | Loop visible |
+| 7 | Abandon-ship + UX polish | low | Stuck-player exit |
+| 7.5 | Character creation polish | low | Name input wired, appearance round-trips |
+| 7.6 | Third-person camera (V toggle) | medium | MP-critical |
+| 8 | Architecture docs refresh | trivial | Lock in decisions |
+| 9 | Settings menu (graphics / audio / controls) | low-med | Ship-ready UI |
+| 10 | Pause-on-focus-loss + autosave heartbeat | trivial | Crash insurance |
+| 11 | First-time tutorial hint chain | low | New player onboarding |
+| 12 | Hull damage + loading screen + fuel-range ring + audio cues | mixed | Polish bundle |
+
+---
+
 ## Order rationale
 
-- **Phase 0** is the explicit user ask + a one-line clean-up.
-- **Phase 1** fixes confirmed bugs in isolation so later refactors don't conflate fixes with restructure.
-- **Phase 2** removes duplication so Phase 3's migration has fewer places to touch.
-- **Phase 3** establishes `LocalPlayerView` as the seam *before* Phase 4 adds persistence — saves go through the right interface from day one.
-- **Phase 4** is the biggest single-player feel improvement — quitting and resuming actually works.
-- **Phase 5** is the biggest missing mechanic — fuel makes the world feel less arbitrary.
-- **Phase 6** makes the gameplay loop visible to the player (cargo journal) and self-sustaining (restock).
-- **Phase 7** closes the rough-edges polish gap.
-- **Phase 8** is the docs refresh that locks in the architectural decisions.
+- **0–2** are independent housekeeping; build stays playable throughout.
+- **3** lands the seam *before* persistence (4) so saves go through the right interface from day one.
+- **4** is the biggest single-player feel improvement — quitting and resuming actually works.
+- **5** is the biggest missing mechanic — fuel gives the world stakes.
+- **6** makes the gameplay loop legible and self-sustaining.
+- **7 / 7.5 / 7.6** are polish + the camera lift; 7.6 specifically prepares for MP without doing the MP transport work.
+- **8** locks in the architectural choices in docs.
+- **9** is shipping-grade UI scaffolding.
+- **10** is one commit's worth of crash-resilience polish.
+- **11** is the missing onboarding — once everything else works, players need to be told how.
+- **12** is the polish bundle that uses everything below (hull damage uses helm cam, loading screen uses Telemetry, fuel-range ring uses Phase 5, audio uses Phase 5).
 
-Each phase ships as its own commit with a clear scope. If anything regresses, the bad phase is identifiable and revertable in isolation.
+Each phase ships as its own commit. If anything regresses, the bad phase is identifiable and revertable in isolation.
 
 ---
 
 ## Total estimated work
 
-Phases 0-2: ~3-4 hours
-Phase 3: ~3 hours
-Phase 4: ~4-5 hours
-Phase 5: ~3-4 hours
-Phases 6-8: ~3 hours
+| Phases | Hours |
+|---|---|
+| 0–2 | 3–4 |
+| 3 | 3 |
+| 4 | 4–5 |
+| 5 | 3–4 |
+| 6–7 | 2–3 |
+| 7.5 + 7.6 | 3 |
+| 8 | 1 |
+| 9 | 3 |
+| 10 | 0.5 |
+| 11 | 1.5 |
+| 12 | 3 |
 
-Roughly **16-20 hours of focused work**. Realistic for "overnight" only if the user's bar is "wake up to a few of these landed" rather than all eight. I'll execute top-down: Phase 0 first, Phase 1 next, etc., and commit each one independently. If the user wants me to stop earlier, anything past whatever shipped is opt-in for the next session.
+Roughly **27–30 hours** of focused work. Realistic for "overnight" only if the user's bar is "wake up to several of these landed". I'll execute top-down — phase 0 → phase 12 — and commit each one independently. Anything past whatever shipped is opt-in for the next session.
