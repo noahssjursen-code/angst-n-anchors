@@ -91,8 +91,11 @@ func _ready() -> void:
 
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventMouseMotion and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
-		rotate_y(-event.relative.x * mouse_sensitivity)
-		_pitch = clampf(_pitch - event.relative.y * mouse_sensitivity, -MAX_PITCH, MAX_PITCH)
+		var sens := mouse_sensitivity * _settings_sens_multiplier()
+		var invert := _settings_invert_y()
+		rotate_y(-event.relative.x * sens)
+		var dy := event.relative.y * sens * (-1.0 if invert else 1.0)
+		_pitch = clampf(_pitch - dy, -MAX_PITCH, MAX_PITCH)
 		_apply_pitch()
 
 	if event.is_action_pressed("toggle_camera"):
@@ -359,6 +362,16 @@ func _build_body_mesh() -> void:
 
 func _on_player_data_changed(_data: Variant) -> void:
 	_apply_appearance_from_session()
+
+
+func _settings_sens_multiplier() -> float:
+	var s := get_node_or_null("/root/GameSettings")
+	return float(s.mouse_sensitivity) if s != null else 1.0
+
+
+func _settings_invert_y() -> bool:
+	var s := get_node_or_null("/root/GameSettings")
+	return bool(s.invert_mouse_y) if s != null else false
 
 
 func _apply_appearance_from_session() -> void:

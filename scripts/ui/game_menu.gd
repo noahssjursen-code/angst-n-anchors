@@ -6,7 +6,7 @@ extends Node
 ## Layer 5  — WalkingHud (always on during gameplay)
 ## Layer 20 — Pause / Map modal screens
 
-enum Screen { NONE, PAUSE, MAP }
+enum Screen { NONE, PAUSE, MAP, SETTINGS }
 
 var _screen:          Screen     = Screen.NONE
 var _prev_mouse_mode: int        = Input.MOUSE_MODE_VISIBLE
@@ -18,6 +18,7 @@ var _journal:     ContractJournalOverlay
 var _bg:          ColorRect
 var _pause_root:  Control
 var _map:         MapOverlay
+var _settings:    SettingsPanel
 
 
 func _ready() -> void:
@@ -58,6 +59,11 @@ func _ready() -> void:
 	_map              = MapOverlay.new()
 	_map.process_mode = Node.PROCESS_MODE_ALWAYS
 	_menu_layer.add_child(_map)
+
+	_settings              = SettingsPanel.new()
+	_settings.process_mode = Node.PROCESS_MODE_ALWAYS
+	_settings.close_requested.connect(func() -> void: _set_screen(Screen.PAUSE))
+	_menu_layer.add_child(_settings)
 
 	_set_screen(Screen.NONE)
 
@@ -124,9 +130,12 @@ func _set_screen(s: Screen) -> void:
 	_bg.visible          = modal
 	_pause_root.visible  = s == Screen.PAUSE
 	_map.visible         = s == Screen.MAP
+	_settings.visible    = s == Screen.SETTINGS
 	if _journal != null:
 		_journal.visible = not modal
-	get_tree().paused    = s == Screen.PAUSE
+	# Pause while on Pause OR Settings — both are reached from the pause menu
+	# and a moving world behind the settings panel is jarring.
+	get_tree().paused    = s == Screen.PAUSE or s == Screen.SETTINGS
 
 
 # ── Pause panel ───────────────────────────────────────────────────────────────
@@ -175,6 +184,10 @@ func _build_pause() -> Control:
 	var map_btn := UiBuilder.button("SEA CHART  [ M ]")
 	map_btn.pressed.connect(func() -> void: _set_screen(Screen.MAP))
 	vbox.add_child(map_btn)
+
+	var settings_btn := UiBuilder.button("SETTINGS")
+	settings_btn.pressed.connect(func() -> void: _set_screen(Screen.SETTINGS))
+	vbox.add_child(settings_btn)
 
 	var quit := UiBuilder.button("QUIT TO DESKTOP")
 	quit.pressed.connect(_quit_to_desktop)
