@@ -8,6 +8,7 @@ class_name PlayerData
 var account_id:   String = ""       # set by auth layer when accounts arrive
 var display_name: String = "Captain"
 var marks:        int    = 0
+var appearance:   CharacterAppearance = CharacterAppearance.default_appearance()
 
 ## Lifetime stats — useful for profiles and leaderboards later.
 var total_marks_earned:  int   = 0
@@ -57,6 +58,7 @@ func to_dict() -> Dictionary:
 		"distance_sailed_m":        distance_sailed_m,
 		"shipwright_starter_used":  shipwright_starter_used,
 		"owned_vessels":            owned_vessels.duplicate(),
+		"appearance":               appearance.to_dict(),
 	}
 
 
@@ -72,5 +74,6 @@ static func from_dict(d: Dictionary) -> PlayerData:
 	var owned_raw: Variant = d.get("owned_vessels", [])
 	if typeof(owned_raw) == TYPE_ARRAY:
 		pd.owned_vessels = (owned_raw as Array).duplicate()
+	pd.appearance = CharacterAppearance.from_dict(d.get("appearance", {}) as Dictionary)
 	pd.repair_save_consistency()
 	return pd

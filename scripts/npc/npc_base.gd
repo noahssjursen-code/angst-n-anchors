@@ -98,6 +98,18 @@ func add_overlay(overlay_id: String, json_path: String) -> ModelAssembler:
 	return ma
 
 
+func remove_overlay(overlay_id: String) -> void:
+	if not _overlays.has(overlay_id):
+		return
+	var old := _overlays[overlay_id] as ModelAssembler
+	if old != null and is_instance_valid(old):
+		if Engine.is_editor_hint():
+			old.free()
+		else:
+			old.queue_free()
+	_overlays.erase(overlay_id)
+
+
 # ── Hand anchors (for tools) ──────────────────────────────────────────────────
 
 ## Returns the `hand_left` or `hand_right` MeshTransformer — these are
