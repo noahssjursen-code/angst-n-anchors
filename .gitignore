@@ -1,3 +1,14 @@
 # Godot 4+ specific ignores
 .godot/
 /android/
+
+# Claude Code session worktree metadata (never commit)
+.claude/worktrees/
+
+# These four .uid files were intentionally removed from tracking in
+# `general fixes` (9ee4043); Godot re-creates them on every --import
+# run. Ignoring them stops the regen from dirtying the working tree.
+scripts/player/character_appearance.gd.uid
+scripts/ui/character_creator_panel.gd.uid
+scripts/ui/character_preview.gd.uid
+scripts/ui/main_menu.gd.uid
