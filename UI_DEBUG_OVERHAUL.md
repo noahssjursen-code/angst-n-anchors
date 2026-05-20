@@ -350,8 +350,44 @@ Committed as the first commit on the branch.
 
 ## 5 — Status log
 
-- **Phase 0 — design doc** — drafting.
+- **Phase 0** — design doc (this file). Committed `469b48e`.
+- **Phase 1** — `Telemetry` autoload with system info + `Performance`
+  monitor sampling + `mark_load_event` / `end_load_event` API. Hooked
+  into world init, LandField SDF bake, ProximityLoader port spawn, and
+  ShipBuilder.build. Committed `1c76a43`.
+- **Phase 2** — `DebugDraw` rewritten with HudStyle palette + signal
+  subscriptions (Telemetry.sampled for 1 Hz system stats / loading log;
+  named state signals for instant gameplay refresh). New SYSTEM and
+  LOADING LOG sections. Committed `3db42c6` + `d1d008f`.
+- **Phase 3** — `WalkingHud` redraws only on state-change signals.
+  Committed `662e16e`.
+- **Phase 4** — `MapWeatherView` extracted from `map_overlay.gd`
+  (1004 → 652 lines). All weather rendering + grid cache moved.
+  Committed `919cba7`.
+- **Phase 5** — `UiBuilder` static factory + `GameMenu` migration.
+  Committed `c4c9f46`.
+- **Phase 6** — `ShipHud` gains wind dial (bow-relative arrow, force-
+  coded colour, knots readout) and lights-preset badge (OFF / NAV /
+  WORK / ALL). Committed `eacf7ca`.
+- **Phase 7** — `LocalPlayerView` autoload introduced as the
+  multiplayer seam; `WalkingHud` migrated as proof-of-concept.
+  Committed `ca14123`.
+
+### Still to do (after playtest review)
+
+- **Migrate ShipHud and DebugDraw to LocalPlayerView.** The seam
+  exists; running the substitution incrementally avoids landing one
+  giant refactor commit.
+- **Further map_overlay split** — port panel, compass rose, scale bar
+  could each become their own MapXxxView along the same lines as
+  MapWeatherView. Optional; depends on whether the 652-line monolith
+  feels small enough.
+- **Wire the rest of HUDStyle** through `DialoguePanel` (currently
+  builds its own panel inline) so NPC dialogs match the new look.
+- **Fuel + bathymetry placeholders** in ShipHud → real readouts when
+  those systems land.
 
 ---
 
-*Lives on `feature/ui-debug-overhaul`. Updated as phases land.*
+*Lives on `feature/ui-debug-overhaul`. PR-ready once playtest confirms
+the visual look matches expectations.*
