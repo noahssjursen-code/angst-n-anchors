@@ -142,7 +142,7 @@ func _show_ship_select() -> void:
 	var has_ledger := not template_path.is_empty() and FileAccess.file_exists(template_path)
 	var replace_note := (
 		" (replaces your current vessel)"
-		if PlayerVessel.find_active_ship(get_tree()) != null
+		if LocalPlayerView.has_active_ship()
 		else ""
 	)
 

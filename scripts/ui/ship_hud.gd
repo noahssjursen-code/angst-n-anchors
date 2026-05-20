@@ -375,22 +375,24 @@ func _time_string() -> String:
 
 
 func _nearest_dest_info() -> Array:
-	var registry := get_node_or_null("/root/ContractRegistry")
-	if registry == null or _boat == null:
+	if _boat == null:
 		return ["", ""]
-	var contracts: Array[Contract] = registry.get_accepted_contracts()
+	var contracts: Array = LocalPlayerView.get_active_contracts()
 	if contracts.is_empty():
 		return ["", ""]
 	var best_dist := INF
 	var best_name := ""
-	for contract in contracts:
-		var dest_pos: Vector3 = registry.get_port_position(contract.destination_port_id)
+	for raw in contracts:
+		var contract := raw as Contract
+		if contract == null:
+			continue
+		var dest_pos: Vector3 = LocalPlayerView.get_port_position(contract.destination_port_id)
 		if dest_pos.x == INF:
 			continue
 		var d := _boat.global_position.distance_to(dest_pos)
 		if d < best_dist:
 			best_dist = d
-			best_name = registry.get_port_display_name(contract.destination_port_id)
+			best_name = LocalPlayerView.get_port_display_name(contract.destination_port_id)
 	if best_dist == INF:
 		return ["", ""]
 	var dist_str := "%.1f nm" % (best_dist / 1852.0) if best_dist >= 1852.0 else "%.0f m" % best_dist
@@ -412,17 +414,19 @@ func _throttle_color(val: float) -> Color:
 
 
 func _dest_bearing_rad() -> float:
-	var registry := get_node_or_null("/root/ContractRegistry")
-	if registry == null or _boat == null:
+	if _boat == null:
 		return NAN
-	var contracts: Array[Contract] = registry.get_accepted_contracts()
+	var contracts: Array = LocalPlayerView.get_active_contracts()
 	if contracts.is_empty():
 		return NAN
 	var ship_pos  := _boat.global_position
 	var best_pos  := Vector3(INF, INF, INF)
 	var best_dist := INF
-	for contract in contracts:
-		var dest_pos: Vector3 = registry.get_port_position(contract.destination_port_id)
+	for raw in contracts:
+		var contract := raw as Contract
+		if contract == null:
+			continue
+		var dest_pos: Vector3 = LocalPlayerView.get_port_position(contract.destination_port_id)
 		if dest_pos.x == INF:
 			continue
 		var d := ship_pos.distance_to(dest_pos)

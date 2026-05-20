@@ -51,6 +51,16 @@ func _ready() -> void:
 
 
 # ── Public read API ──────────────────────────────────────────────────────────
+##
+## **Convention**: UI code (HUDs, menus, debug overlays) should *only* read
+## per-player state through this view. NPCs and gameplay-mutating systems
+## (ShipBuilder, PortDock, etc.) may continue to consult the autoloads
+## directly — they're the world-authority side, not a per-client view.
+##
+## In multiplayer this autoload becomes a per-client object the network
+## layer populates with the local player's projection of the world. Every
+## UI that already reads from here will keep working with no further
+## changes; gameplay-mutating code stays on the (per-server) authority.
 
 func get_marks() -> int:
 	if _session == null:
@@ -75,10 +85,38 @@ func get_helmed_boat() -> Node:
 	return _helmed
 
 
+## The player's commissioned ship if one is spawned (regardless of whether
+## they're currently helming it). Returns null if no ship is in the world.
+##
+## Routes through PlayerVessel today — single-player logic; in MP this
+## becomes "the local player's authoritative ship reference from the
+## server projection".
+func get_active_ship() -> Node:
+	return PlayerVessel.find_active_ship(get_tree())
+
+
+func has_active_ship() -> bool:
+	return get_active_ship() != null
+
+
 func get_active_contracts() -> Array:
 	if _registry == null:
 		return []
 	return _registry.get_accepted_contracts()
+
+
+## Display-port lookup. UI code wanting "what's the human-readable name
+## of port X" should ask the view rather than reaching into ContractRegistry.
+func get_port_display_name(port_id: String) -> String:
+	if _registry == null or port_id.is_empty():
+		return ""
+	return str(_registry.get_port_display_name(port_id))
+
+
+func get_port_position(port_id: String) -> Vector3:
+	if _registry == null or port_id.is_empty():
+		return Vector3(INF, INF, INF)
+	return _registry.get_port_position(port_id)
 
 
 # ── Wiring ───────────────────────────────────────────────────────────────────
