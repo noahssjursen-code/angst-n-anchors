@@ -717,7 +717,7 @@ func _berth_has_ship() -> bool:
 	var dock := get_parent() as PortDock
 	if dock == null:
 		return false
-	return dock.find_occupied_berth() == berth_index
+	return dock.find_player_berth(PortDock.local_player_owner_id()) == berth_index
 
 
 # ── Snap-preview ──────────────────────────────────────────────────────────────
@@ -752,7 +752,7 @@ func _update_snap_ghost() -> void:
 		var reward := pallet_res.value_gold if pallet_res != null else 0
 		_show_ghost(cell_pos_d, deck.global_basis, _footprint_size(deck, pallet_res),
 				Color(1.0, 0.84, 0.20),
-				"+%d ℳ" % reward,
+				"+%s" % PlayerSession.format_money(reward),
 				true)
 		return
 

@@ -100,7 +100,7 @@ func _build() -> void:
 	if pallet != null:
 		var dest_name := _destination_display()
 		var dest_line := "→ %s" % dest_name if not dest_name.is_empty() else ""
-		var gold_line := "%d ℳ" % pallet.value_gold if pallet.value_gold > 0 else ""
+		var gold_line := PlayerSession.format_money(pallet.value_gold) if pallet.value_gold > 0 else ""
 		var lines     := PackedStringArray()
 		lines.append("%s ×%d" % [pallet.display_name, pallet.units])
 		if not dest_line.is_empty():

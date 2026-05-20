@@ -219,10 +219,14 @@ func _rebuild_timber_post() -> void:
 
 
 func _toggle_line() -> void:
-	var mc := _find_active_mooring()
+	var mc := _find_active_mooring() as MooringComponent
 	if mc == null:
 		return
-	mc.call("toggle_line_from_post", self)
+	var tied: bool = mc.toggle_line_from_post(self)
+	if not tied and not mc.last_mooring_reject.is_empty():
+		_prompt_label.visible = true
+		_prompt_label.text = mc.last_mooring_reject
+		return
 	_update_prompt()
 
 

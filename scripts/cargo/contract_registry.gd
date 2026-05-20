@@ -306,7 +306,9 @@ func _make_contract(from_id: String, to_id: String) -> Contract:
 	var to_info      := _ports.get(to_id,   {}) as Dictionary
 	var from_pos     := from_info.get("position", Vector3.ZERO) as Vector3
 	var to_pos       := to_info.get("position",   Vector3.ZERO) as Vector3
-	var distance     := maxf(from_pos.distance_to(to_pos), 1.0)
+	var same_port    := from_id == to_id
+	var distance_nm  := ContractPricing.route_distance_nm(from_pos, to_pos)
+	var origin_size  := int(from_info.get("size", 1))
 
 	var commodity_id := str(from_info.get("commodity_export", "provisions"))
 	var commodity: Dictionary = {}
@@ -319,16 +321,9 @@ func _make_contract(from_id: String, to_id: String) -> Contract:
 
 	var rng       := RandomNumberGenerator.new()
 	rng.seed      = _hash_route(from_id, to_id)
-	# Each contract is sized as a ship-load-or-more — a single bulk route the
-	# player fills their hold from, sails, delivers, and returns to top up.
-	# Picked from a wide range so different routes feel distinct in scale.
-	var quantity  := rng.randi() % 41 + 30  # 30–70 units per contract
+	var quantity  := ContractPricing.quantity_for_port(origin_size, rng)
 	var value_per := int(commodity["value"])
-	var reward    := int(distance * float(quantity) * float(value_per) * 0.14)
-	# Same-port contracts have zero distance — pay a flat in-port handling
-	# fee instead so the contract is still worth taking.
-	if from_id == to_id:
-		reward = quantity * value_per * 5
+	var reward    := ContractPricing.total_reward(value_per, quantity, distance_nm, same_port)
 
 	var c                 := Contract.new()
 	c.id                  = from_id + "::" + to_id

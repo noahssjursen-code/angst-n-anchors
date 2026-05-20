@@ -2,14 +2,8 @@
 class_name ShipwrightNpc
 extends NpcInteractable
 
-## Shipwright NPC. Lets the player commission a new vessel from the available hull catalog.
-## Writes a minimal ship template to user://shipwright_orders/ and calls ShipBuilder.build().
+## Shipwright NPC — catalog showroom with 3D previews, prices, and commission.
 
-## Catalog of buildable hulls. Each entry only carries identity + the hull
-## file + the bridge to attach. All physics parameters (propulsion thrust,
-## bow thrust, camera distance/height, rudder torque) are *derived* from
-## the hull's dimensions in `_build_template` via HullStations, so adding
-## a new hull is one entry here.
 const HULL_CATALOG: Array[Dictionary] = [
 	{
 		"id":               "coastal_trader",
@@ -83,11 +77,8 @@ const HULL_CATALOG: Array[Dictionary] = [
 	},
 ]
 
+var _catalog: ShipwrightCatalogPanel
 var _dialogue: DialoguePanel
-
-enum _Screen { MAIN, HULL_SELECT, CONFIRM }
-var _screen:       _Screen     = _Screen.MAIN
-var _pending_entry: Dictionary = {}
 
 
 func _ready() -> void:
@@ -97,81 +88,99 @@ func _ready() -> void:
 		call_deferred("_build_ui")
 
 
-# ── NpcInteractable hooks ──────────────────────────────────────────────────────
-
 func _on_interact() -> void:
-	_show_main()
-	_dialogue.show_panel()
+	_open_catalog()
 	open_ui()
 
 
 func _on_ui_cancel() -> void:
-	if _screen == _Screen.CONFIRM:
-		_show_hull_select()
-	elif _screen == _Screen.MAIN:
+	if _catalog != null and _catalog.is_open():
+		_catalog.hide_catalog()
+		close_ui()
+	elif _dialogue != null and _dialogue.is_open():
 		_dialogue.hide_panel()
 		close_ui()
-	else:
-		_show_main()
 
 
-# ── Screens ───────────────────────────────────────────────────────────────────
+func _open_catalog() -> void:
+	if _dialogue != null and _dialogue.is_open():
+		_dialogue.hide_panel()
+	_catalog.open_catalog(HULL_CATALOG, 0)
+	_catalog.show_panel()
 
-func _close() -> void:
-	_dialogue.hide_panel()
+
+func _build_ui() -> void:
+	_catalog = ShipwrightCatalogPanel.new()
+	add_child(_catalog)
+	_catalog.closed.connect(_on_catalog_closed)
+	_catalog.commission_requested.connect(_on_commission_requested)
+
+	_dialogue = DialoguePanel.new("SHIPWRIGHT", Vector2(520.0, 280.0))
+	add_child(_dialogue)
+
+	var session := get_node_or_null("/root/PlayerSession")
+	if session != null and session.has_signal("marks_changed"):
+		if not session.marks_changed.is_connected(_on_marks_changed):
+			session.marks_changed.connect(_on_marks_changed)
+
+
+func _on_catalog_closed() -> void:
 	close_ui()
 
 
-func _show_main() -> void:
-	_screen = _Screen.MAIN
-	_dialogue.clear()
-	_dialogue.add_quote("Good day, Captain. Looking to commission a new vessel?\nI can lay down any hull in my catalog.")
-	_dialogue.add_option("Show me what you can build.", _show_hull_select)
-	_dialogue.add_option("Not today, thank you.",        _close)
+func _on_marks_changed(_balance: int) -> void:
+	if _catalog != null and _catalog.is_open():
+		_catalog.refresh()
 
 
-func _show_hull_select() -> void:
-	_screen = _Screen.HULL_SELECT
-	_dialogue.clear()
-	_dialogue.add_quote("Choose your hull. I'll build her true.")
-	for entry in HULL_CATALOG:
-		var e   := entry as Dictionary
-		var lbl := "%s  [%s]" % [str(e["display"]), str(e["ship_class_label"])]
-		_dialogue.add_option(lbl, _show_confirm.bind(e))
-	_dialogue.add_back_button(_show_main)
+func _on_commission_requested(entry: Dictionary) -> void:
+	if not _try_pay_for_commission(entry):
+		return
+	_catalog.hide_catalog()
+	_commission(entry)
 
 
-func _show_confirm(entry: Dictionary) -> void:
-	_screen        = _Screen.CONFIRM
-	_pending_entry = entry
-	_dialogue.clear()
-	_dialogue.add_quote(
-		"%s\n\nThis will be your new vessel, Captain. Ready to lay her keel?" % str(entry["display"])
-	)
-	_dialogue.add_option("Commission her.", func() -> void: _commission(entry))
-	_dialogue.add_back_button(_show_hull_select)
+func _try_pay_for_commission(entry: Dictionary) -> bool:
+	var hull_path := ShipBuilder.HULL_BASE_DIR + str(entry.get("hull_file", ""))
+	var hull_data := ShipBuilder._load_json(hull_path)
+	var stations := HullStations.from_hull_json(hull_data, 10)
+	var session := get_node_or_null("/root/PlayerSession")
+	if session == null:
+		return true
+	var price := ShipwrightPricing.commission_price(entry, stations, session.data)
+	if price <= 0:
+		return true
+	if not session.spend_marks(price):
+		_dialogue.clear()
+		_dialogue.add_quote(
+			"Your balance won't cover that hull, Captain.\nNeed %s more in the ledger."
+			% PlayerSession.format_money(price - session.get_marks())
+		)
+		_dialogue.add_option("Back to catalog.", _open_catalog)
+		_dialogue.show_panel()
+		return false
+	return true
 
 
 func _commission(entry: Dictionary) -> void:
 	var template := _build_template(entry)
 
 	DirAccess.make_dir_recursive_absolute("user://shipwright_orders")
-	var path := "user://shipwright_orders/" + str(entry["id"]) + ".json"
+	var uid := "%s_%d" % [str(entry["id"]), Time.get_unix_time_from_system()]
+	var path := "user://shipwright_orders/" + uid + ".json"
 	var f    := FileAccess.open(path, FileAccess.WRITE)
 	if f == null:
-		_dialogue.clear()
-		_dialogue.add_quote("Something went wrong in the yard. Try again.")
-		_dialogue.add_back_button(_show_hull_select)
+		_show_result("Something went wrong in the yard. Try again.", _open_catalog)
 		return
 	f.store_string(JSON.stringify(template))
 	f.close()
 
 	var ship := ShipBuilder.build(path)
 	if ship == null:
-		_dialogue.clear()
-		_dialogue.add_quote("The yard couldn't build that vessel. Please report this bug.")
-		_dialogue.add_back_button(_show_hull_select)
+		_show_result("The yard couldn't build that vessel. Please report this bug.", _open_catalog)
 		return
+
+	_register_owned_vessel(entry, path, uid)
 
 	var placed := _try_place_at_berth(ship)
 
@@ -188,24 +197,53 @@ func _commission(entry: Dictionary) -> void:
 	if plot != null:
 		plot.respawn_staged_cargo()
 
-	_pending_entry = {}
-	_dialogue.clear()
 	if placed:
-		_dialogue.add_quote("She's alongside, Captain. %s — ready for sea." % str(entry["display"]))
+		_show_result("She's alongside, Captain.\n%s — ready for sea." % str(entry["display"]), _close_after_result)
 	else:
-		_dialogue.add_quote("She's afloat, Captain, but all berths are occupied.\nYou'll find her in the water nearby.")
-	_dialogue.add_option("Much obliged.", _close)
+		_show_result(
+			"She's afloat, Captain, but all berths are occupied.\nYou'll find her in the water nearby.",
+			_close_after_result
+		)
+
+
+func _show_result(message: String, on_done: Callable) -> void:
+	_dialogue.clear()
+	_dialogue.add_quote(message)
+	_dialogue.add_option("Much obliged.", on_done)
+	_dialogue.show_panel()
+
+
+func _close_after_result() -> void:
+	_dialogue.hide_panel()
+	close_ui()
+
+
+func _register_owned_vessel(entry: Dictionary, template_path: String, uid: String) -> void:
+	var session := get_node_or_null("/root/PlayerSession")
+	if session == null:
+		return
+	var hull_id := str(entry.get("id", ""))
+	session.data.add_owned_vessel({
+		"uid":           uid,
+		"hull_id":       hull_id,
+		"display":       str(entry.get("display", "Vessel")),
+		"template_path": template_path,
+	})
+	if hull_id == ShipwrightPricing.STARTER_HULL_ID:
+		session.data.shipwright_starter_used = true
+	session.save_now()
 
 
 func _try_place_at_berth(ship: BoatBody) -> bool:
 	var dock := _get_dock()
 	if dock == null:
 		return false
+	var owner_id := PortDock.local_player_owner_id()
 	var berths := dock.get_berths()
 	for i in range(berths.size()):
 		var b := berths[i] as Dictionary
 		if int(b["status"]) == PortDock.BerthStatus.FREE:
-			if dock.reserve_berth(i, "Captain"):
+			if dock.reserve_berth(i, owner_id):
 				var placed := dock.place_ship_at_berth(i, ship)
 				if placed != null:
 					return true
@@ -213,38 +251,19 @@ func _try_place_at_berth(ship: BoatBody) -> bool:
 	return false
 
 
-# ── Template builder ──────────────────────────────────────────────────────────
-
-## Build a ship template from a catalog entry. Most fields are derived from
-## the hull's geometry via HullStations rather than hand-tuned per ship.
-##
-## Calibrated against the previous hand-tuned values so a freshly-derived
-## coastal trader (13 m) gets ~58 kN thrust and a freighter (50 m) ~3.2 MN —
-## matching the old gameplay feel within ~10%.
 func _build_template(entry: Dictionary) -> Dictionary:
 	var hull_path : String = ShipBuilder.HULL_BASE_DIR + str(entry["hull_file"])
 	var hull_data : Dictionary = ShipBuilder._load_json(hull_path)
 	var stations  : HullStations = HullStations.from_hull_json(hull_data, 10)
 
-	# Mass derived from strip-theory displacement at design draft.
 	var displacement_kg : float = maxf(stations.displacement_volume_m3 * 1025.0, 1000.0)
-	# F = m × a. 0.7 m/s² peak steady-state acceleration. Slightly above real-
-	# world cargo ships (~0.1 m/s²) for game feel — boats need to be sailable.
 	var propulsion_thrust : float = displacement_kg * 0.7
-	# Bow thruster as a fraction of main; ratio drops with hull length because
-	# bigger ships rely on mooring / tug assistance rather than a powerful BT.
 	var bow_ratio : float = clampf(0.40 - stations.length_m / 200.0, 0.10, 0.40)
 	var bow_thrust : float = propulsion_thrust * bow_ratio
-	# Rudder torque ∝ thrust^(4/3) — the rudder operates in propeller wash, so
-	# torque grows faster than linear thrust. Coefficient calibrated against the
-	# old reference: 280 kN thrust → 504 kNm torque.
 	var rudder_torque : float = 0.0275 * pow(propulsion_thrust, 4.0 / 3.0)
 	var cam_dist   : float = stations.length_m * 1.45 + 11.0
 	var cam_height : float = stations.length_m * 0.36 + 4.0
 
-	# Note: no `cargo_decks` key — ShipBuilder adds one deck (prefers `"main"`,
-	# clamped between bridge and bow, snapped to the cell grid). Use `[]` for
-	# launches with no cargo deck.
 	return {
 		"display_name":   str(entry["display"]),
 		"hull":           str(entry["hull_file"]),
@@ -287,17 +306,8 @@ func _build_template(entry: Dictionary) -> Dictionary:
 	}
 
 
-# ── Dock lookup ───────────────────────────────────────────────────────────────
-
 func _get_dock() -> PortDock:
 	var parent := get_parent()
 	if parent == null:
 		return null
 	return parent.get_node_or_null("PortDock") as PortDock
-
-
-# ── Build UI ──────────────────────────────────────────────────────────────────
-
-func _build_ui() -> void:
-	_dialogue = DialoguePanel.new("SHIPWRIGHT", Vector2(600.0, 500.0))
-	add_child(_dialogue)

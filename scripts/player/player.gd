@@ -84,7 +84,10 @@ func _unhandled_input(event: InputEvent) -> void:
 		camera.rotation.x = _pitch
 
 	if event is InputEventMouseButton and event.pressed:
-		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+		var mb := event as InputEventMouseButton
+		# Wheel buttons are not real clicks — do not recapture the cursor (breaks NPC UIs).
+		if mb.button_index in [MOUSE_BUTTON_LEFT, MOUSE_BUTTON_RIGHT, MOUSE_BUTTON_MIDDLE]:
+			Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 
 	if event.is_action_pressed("ui_cancel"):
 		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
