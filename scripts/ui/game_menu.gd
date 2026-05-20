@@ -100,56 +100,27 @@ func _build_pause() -> Control:
 	root.set_anchors_preset(Control.PRESET_FULL_RECT)
 	root.mouse_filter = Control.MOUSE_FILTER_IGNORE
 
-	var panel := PanelContainer.new()
+	var panel := UiBuilder.panel()
 	panel.set_anchors_preset(Control.PRESET_CENTER)
 	panel.offset_left   = -170.0
 	panel.offset_right  =  170.0
 	panel.offset_top    = -160.0
 	panel.offset_bottom =  160.0
-
-	var bg_style := StyleBoxFlat.new()
-	bg_style.bg_color = Color(0.04, 0.06, 0.14, 0.98)
-	bg_style.border_color = Color(0.30, 0.44, 0.68, 0.82)
-	bg_style.set_border_width_all(2)
-	bg_style.content_margin_left   = 28.0
-	bg_style.content_margin_right  = 28.0
-	bg_style.content_margin_top    = 30.0
-	bg_style.content_margin_bottom = 30.0
-	panel.add_theme_stylebox_override("panel", bg_style)
 	root.add_child(panel)
 
 	var vbox := VBoxContainer.new()
 	vbox.add_theme_constant_override("separation", 14)
 	panel.add_child(vbox)
 
-	# Title
-	var title := Label.new()
-	title.text = "ANGST 'N ANCHORS"
-	title.add_theme_font_size_override("font_size", 22)
-	title.add_theme_color_override("font_color", Color(0.96, 0.86, 0.12, 1.00))
-	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	vbox.add_child(title)
+	vbox.add_child(UiBuilder.title_label("ANGST 'N ANCHORS"))
+	vbox.add_child(UiBuilder.subtitle_label("— PAUSED —"))
+	vbox.add_child(UiBuilder.separator())
 
-	var sub := Label.new()
-	sub.text = "— PAUSED —"
-	sub.add_theme_font_size_override("font_size", 11)
-	sub.add_theme_color_override("font_color", Color(0.40, 0.52, 0.72, 0.70))
-	sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	vbox.add_child(sub)
-
-	var div := HSeparator.new()
-	var div_style := StyleBoxFlat.new()
-	div_style.bg_color = Color(0.28, 0.40, 0.64, 0.35)
-	div_style.content_margin_top    = 4.0
-	div_style.content_margin_bottom = 4.0
-	div.add_theme_stylebox_override("separator", div_style)
-	vbox.add_child(div)
-
-	# Marks display inside pause menu
+	# Marks display.
 	var marks_label := Label.new()
 	marks_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	marks_label.add_theme_font_size_override("font_size", 15)
-	marks_label.add_theme_color_override("font_color", Color(0.96, 0.82, 0.28, 0.90))
+	marks_label.add_theme_color_override("font_color", HudStyle.C_AMBER)
 	marks_label.name = "MarksLabel"
 	vbox.add_child(marks_label)
 	_update_marks_label(marks_label)
@@ -159,19 +130,17 @@ func _build_pause() -> Control:
 			marks_label.text = "ℳ  %d  Marks" % bal
 		)
 
-	var div2 := HSeparator.new()
-	div2.add_theme_stylebox_override("separator", div_style)
-	vbox.add_child(div2)
+	vbox.add_child(UiBuilder.separator())
 
-	var resume := _make_button("RESUME  [ ESC ]")
+	var resume := UiBuilder.button("RESUME  [ ESC ]")
 	resume.pressed.connect(func() -> void: _set_screen(Screen.NONE))
 	vbox.add_child(resume)
 
-	var map_btn := _make_button("SEA CHART  [ M ]")
+	var map_btn := UiBuilder.button("SEA CHART  [ M ]")
 	map_btn.pressed.connect(func() -> void: _set_screen(Screen.MAP))
 	vbox.add_child(map_btn)
 
-	var quit := _make_button("QUIT TO DESKTOP")
+	var quit := UiBuilder.button("QUIT TO DESKTOP")
 	quit.pressed.connect(func() -> void: get_tree().quit())
 	vbox.add_child(quit)
 
@@ -181,43 +150,6 @@ func _build_pause() -> Control:
 func _update_marks_label(lbl: Label) -> void:
 	var session := get_node_or_null("/root/PlayerSession")
 	lbl.text = "ℳ  %d  Marks" % (session.get_marks() if session != null else 0)
-
-
-func _make_button(txt: String) -> Button:
-	var btn := Button.new()
-	btn.text = txt
-	btn.custom_minimum_size = Vector2(264, 46)
-	btn.add_theme_font_size_override("font_size", 14)
-
-	var sn := StyleBoxFlat.new()
-	sn.bg_color      = Color(0.08, 0.11, 0.22, 0.92)
-	sn.border_color  = Color(0.28, 0.40, 0.64, 0.50)
-	sn.set_border_width_all(1)
-	sn.content_margin_left  = 14.0
-	sn.content_margin_right = 14.0
-
-	var sh := StyleBoxFlat.new()
-	sh.bg_color     = Color(0.14, 0.20, 0.38, 0.96)
-	sh.border_color = Color(0.50, 0.68, 1.00, 0.90)
-	sh.set_border_width_all(2)
-	sh.content_margin_left  = 14.0
-	sh.content_margin_right = 14.0
-
-	var sp := StyleBoxFlat.new()
-	sp.bg_color     = Color(0.20, 0.30, 0.52, 0.96)
-	sp.border_color = Color(0.96, 0.86, 0.12, 0.90)
-	sp.set_border_width_all(2)
-	sp.content_margin_left  = 14.0
-	sp.content_margin_right = 14.0
-
-	btn.add_theme_stylebox_override("normal",  sn)
-	btn.add_theme_stylebox_override("hover",   sh)
-	btn.add_theme_stylebox_override("pressed", sp)
-	btn.add_theme_stylebox_override("focus",   sh)
-	btn.add_theme_color_override("font_color",         Color(0.78, 0.88, 1.00, 0.90))
-	btn.add_theme_color_override("font_hover_color",   Color(1.00, 1.00, 1.00, 1.00))
-	btn.add_theme_color_override("font_pressed_color", Color(0.96, 0.86, 0.12, 1.00))
-	return btn
 
 
 # ── Boat controller wiring ────────────────────────────────────────────────────

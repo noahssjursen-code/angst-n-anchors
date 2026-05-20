@@ -91,11 +91,18 @@ func get_capacity() -> int:
 		return mini(cap, max_cells_override)
 	return cap
 
+## Alias for BoatBody and other callers that expect unit-based naming.
+func get_capacity_units() -> int:
+	return get_capacity()
+
 func get_used() -> int:
 	return _cells.size()
 
 func get_available() -> int:
 	return maxi(get_capacity() - get_used(), 0)
+
+func get_available_units() -> int:
+	return get_available()
 
 func is_full() -> bool:
 	return get_available() <= 0

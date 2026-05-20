@@ -5,94 +5,81 @@ extends NpcInteractable
 ## Shipwright NPC. Lets the player commission a new vessel from the available hull catalog.
 ## Writes a minimal ship template to user://shipwright_orders/ and calls ShipBuilder.build().
 
+## Catalog of buildable hulls. Each entry only carries identity + the hull
+## file + the bridge to attach. All physics parameters (propulsion thrust,
+## bow thrust, camera distance/height, rudder torque) are *derived* from
+## the hull's dimensions in `_build_template` via HullStations, so adding
+## a new hull is one entry here.
 const HULL_CATALOG: Array[Dictionary] = [
 	{
-		"id":                 "coastal_trader",
-		"display":            "Coastal Trader  •  13 m / 43 ft",
-		"ship_class_label":   "Coastal Trader",
-		"hull_file":          "hull_coastal_trader.json",
-		"superstructure":     "bridge_coastal_trader",
-		"propulsion_thrust":   58000.0,
-		"bow_thrust":          24000.0,
-		"cam_dist":            20.0,
-		"cam_height":           8.0,
+		"id":               "coastal_trader",
+		"display":          "Coastal Trader  •  13 m / 43 ft",
+		"ship_class_label": "Coastal Trader",
+		"hull_file":        "hull_coastal_trader.json",
+		"superstructure":   "bridge_coastal_trader",
 	},
 	{
-		"id":                 "coastal_trader_long",
-		"display":            "Coastal Trader, Extended  •  15 m / 49 ft",
-		"ship_class_label":   "Coastal Trader",
-		"hull_file":          "hull_coastal_trader_long.json",
-		"superstructure":     "bridge_coastal_trader",
-		"propulsion_thrust":   89000.0,
-		"bow_thrust":          33000.0,
-		"cam_dist":            24.0,
-		"cam_height":           9.0,
+		"id":               "coastal_trader_long",
+		"display":          "Coastal Trader, Extended  •  15 m / 49 ft",
+		"ship_class_label": "Coastal Trader",
+		"hull_file":        "hull_coastal_trader_long.json",
+		"superstructure":   "bridge_coastal_trader",
 	},
 	{
-		"id":                 "short_sea_coaster",
-		"display":            "Short Sea Coaster  •  22 m / 72 ft",
-		"ship_class_label":   "Short Sea Coaster",
-		"hull_file":          "hull_short_sea_coaster.json",
-		"superstructure":     "bridge_short_sea_coaster",
-		"propulsion_thrust":  280000.0,
-		"bow_thrust":          70000.0,
-		"cam_dist":            35.0,
-		"cam_height":          12.0,
+		"id":               "cargo_ship",
+		"display":          "Twin-Deck Cargo Coaster  •  20 m / 66 ft",
+		"ship_class_label": "Coastal Trader",
+		"hull_file":        "hull_cargo_ship.json",
+		"superstructure":   "bridge_cargo_ship",
 	},
 	{
-		"id":                 "short_sea_coaster_long",
-		"display":            "Short Sea Coaster, Extended  •  25 m / 82 ft",
-		"ship_class_label":   "Short Sea Coaster",
-		"hull_file":          "hull_short_sea_coaster_long.json",
-		"superstructure":     "bridge_short_sea_coaster",
-		"propulsion_thrust":  410000.0,
-		"bow_thrust":          90000.0,
-		"cam_dist":            40.0,
-		"cam_height":          13.0,
+		"id":               "short_sea_coaster",
+		"display":          "Short Sea Coaster  •  22 m / 72 ft",
+		"ship_class_label": "Short Sea Coaster",
+		"hull_file":        "hull_short_sea_coaster.json",
+		"superstructure":   "bridge_short_sea_coaster",
 	},
 	{
-		"id":                 "handysize_feeder",
-		"display":            "Handysize Feeder  •  35 m / 115 ft",
-		"ship_class_label":   "Handysize Feeder",
-		"hull_file":          "hull_handysize_feeder.json",
-		"superstructure":     "bridge_handysize_feeder",
-		"propulsion_thrust":  1130000.0,
-		"bow_thrust":          177000.0,
-		"cam_dist":            55.0,
-		"cam_height":          18.0,
+		"id":               "short_sea_coaster_long",
+		"display":          "Short Sea Coaster, Extended  •  25 m / 82 ft",
+		"ship_class_label": "Short Sea Coaster",
+		"hull_file":        "hull_short_sea_coaster_long.json",
+		"superstructure":   "bridge_short_sea_coaster",
 	},
 	{
-		"id":                 "handysize_feeder_long",
-		"display":            "Handysize Feeder, Extended  •  40 m / 131 ft",
-		"ship_class_label":   "Handysize Feeder",
-		"hull_file":          "hull_handysize_feeder_long.json",
-		"superstructure":     "bridge_handysize_feeder",
-		"propulsion_thrust":  1680000.0,
-		"bow_thrust":          231000.0,
-		"cam_dist":            65.0,
-		"cam_height":          20.0,
+		"id":               "handysize_feeder",
+		"display":          "Handysize Feeder  •  35 m / 115 ft",
+		"ship_class_label": "Handysize Feeder",
+		"hull_file":        "hull_handysize_feeder.json",
+		"superstructure":   "bridge_handysize_feeder",
 	},
 	{
-		"id":                 "deep_sea_freighter",
-		"display":            "Deep Sea Freighter  •  50 m / 164 ft",
-		"ship_class_label":   "Deep Sea Freighter",
-		"hull_file":          "hull_deep_sea_freighter.json",
-		"superstructure":     "bridge_deep_sea_freighter",
-		"propulsion_thrust":  3290000.0,
-		"bow_thrust":          362000.0,
-		"cam_dist":            80.0,
-		"cam_height":          24.0,
+		"id":               "handysize_feeder_long",
+		"display":          "Handysize Feeder, Extended  •  40 m / 131 ft",
+		"ship_class_label": "Handysize Feeder",
+		"hull_file":        "hull_handysize_feeder_long.json",
+		"superstructure":   "bridge_handysize_feeder",
 	},
 	{
-		"id":                 "deep_sea_freighter_long",
-		"display":            "Deep Sea Freighter, Extended  •  60 m / 197 ft",
-		"ship_class_label":   "Deep Sea Freighter",
-		"hull_file":          "hull_deep_sea_freighter_long.json",
-		"superstructure":     "bridge_deep_sea_freighter",
-		"propulsion_thrust":  5680000.0,
-		"bow_thrust":          521000.0,
-		"cam_dist":             95.0,
-		"cam_height":           28.0,
+		"id":               "deep_sea_freighter",
+		"display":          "Deep Sea Freighter  •  50 m / 164 ft",
+		"ship_class_label": "Deep Sea Freighter",
+		"hull_file":        "hull_deep_sea_freighter.json",
+		"superstructure":   "bridge_deep_sea_freighter",
+	},
+	{
+		"id":               "deep_sea_freighter_long",
+		"display":          "Deep Sea Freighter, Extended  •  60 m / 197 ft",
+		"ship_class_label": "Deep Sea Freighter",
+		"hull_file":        "hull_deep_sea_freighter_long.json",
+		"superstructure":   "bridge_deep_sea_freighter",
+	},
+	{
+		"id":               "large_freighter",
+		"display":          "Large Freighter  •  60 m / 197 ft",
+		"ship_class_label": "Deep Sea Freighter",
+		"hull_file":        "hull_large.json",
+		"superstructure":   "bridge_deep_sea_freighter",
 	},
 ]
 
@@ -228,16 +215,44 @@ func _try_place_at_berth(ship: BoatBody) -> bool:
 
 # ── Template builder ──────────────────────────────────────────────────────────
 
+## Build a ship template from a catalog entry. Most fields are derived from
+## the hull's geometry via HullStations rather than hand-tuned per ship.
+##
+## Calibrated against the previous hand-tuned values so a freshly-derived
+## coastal trader (13 m) gets ~58 kN thrust and a freighter (50 m) ~3.2 MN —
+## matching the old gameplay feel within ~10%.
 func _build_template(entry: Dictionary) -> Dictionary:
+	var hull_path : String = ShipBuilder.HULL_BASE_DIR + str(entry["hull_file"])
+	var hull_data : Dictionary = ShipBuilder._load_json(hull_path)
+	var stations  : HullStations = HullStations.from_hull_json(hull_data, 10)
+
+	# Mass derived from strip-theory displacement at design draft.
+	var displacement_kg : float = maxf(stations.displacement_volume_m3 * 1025.0, 1000.0)
+	# F = m × a. 0.7 m/s² peak steady-state acceleration. Slightly above real-
+	# world cargo ships (~0.1 m/s²) for game feel — boats need to be sailable.
+	var propulsion_thrust : float = displacement_kg * 0.7
+	# Bow thruster as a fraction of main; ratio drops with hull length because
+	# bigger ships rely on mooring / tug assistance rather than a powerful BT.
+	var bow_ratio : float = clampf(0.40 - stations.length_m / 200.0, 0.10, 0.40)
+	var bow_thrust : float = propulsion_thrust * bow_ratio
+	# Rudder torque ∝ thrust^(4/3) — the rudder operates in propeller wash, so
+	# torque grows faster than linear thrust. Coefficient calibrated against the
+	# old reference: 280 kN thrust → 504 kNm torque.
+	var rudder_torque : float = 0.0275 * pow(propulsion_thrust, 4.0 / 3.0)
+	var cam_dist   : float = stations.length_m * 1.45 + 11.0
+	var cam_height : float = stations.length_m * 0.36 + 4.0
+
+	# Note: no `cargo_decks` key — ShipBuilder adds one deck (prefers `"main"`,
+	# clamped between bridge and bow, snapped to the cell grid). Use `[]` for
+	# launches with no cargo deck.
 	return {
 		"display_name":   str(entry["display"]),
 		"hull":           str(entry["hull_file"]),
 		"scale":          1.0,
 		"superstructure": str(entry["superstructure"]),
-		"cargo_decks":    [],
 		"physics": {
-			"auto_mass_from_hull": true,
-			"design_draft_fraction": 0.45,
+			"auto_mass_from_hull":    true,
+			"design_draft_fraction":  0.45,
 		},
 		"buoyancy": {
 			"heave_damping_per_m2": 8000.0,
@@ -251,22 +266,22 @@ func _build_template(entry: Dictionary) -> Dictionary:
 			"yaw_drag_coeff":         5.0,
 		},
 		"propulsion": {
-			"max_thrust":          float(entry["propulsion_thrust"]),
-			"reverse_multiplier":  0.45,
+			"max_thrust":         propulsion_thrust,
+			"reverse_multiplier": 0.45,
 		},
 		"rudder": {
-			"max_torque":              504000.0 * pow(float(entry["propulsion_thrust"]) / 280000.0, 4.0 / 3.0),
+			"max_torque":              rudder_torque,
 			"speed_factor":            0.65,
 			"min_effectiveness_floor": 0.38,
 			"rudder_flow_gate":        0.25,
 			"sideslip_rudder_weight":  0.55,
 		},
 		"bow_thruster": {
-			"max_thrust": float(entry["bow_thrust"]),
+			"max_thrust": bow_thrust,
 		},
 		"camera": {
-			"follow_distance": float(entry["cam_dist"]),
-			"follow_height":   float(entry["cam_height"]),
+			"follow_distance": cam_dist,
+			"follow_height":   cam_height,
 		},
 	}
 
