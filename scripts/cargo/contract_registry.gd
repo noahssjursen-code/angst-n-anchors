@@ -53,6 +53,29 @@ var _contracts: Dictionary = {}
 ## Drawn down when a contract is accepted, replenished by future restock logic
 ## (TBD). Multiplayer: every player draws from the same per-port pool.
 var _export_stock: Dictionary = {}
+## port_id -> { commodity_id -> peak_seen_stock }. Restock target — each
+## game-hour tick we top each pool up toward this cap so depleted ports
+## recover over time instead of staying drained forever.
+var _export_stock_cap: Dictionary = {}
+
+## Units restocked per game-hour per (port, commodity). 1 unit/hour means a
+## 5-unit contract refills in ~5 minutes of real time. Low enough that the
+## player still feels stock pressure when they over-fish a route.
+const RESTOCK_PER_HOUR : int = 1
+
+
+func _ready() -> void:
+	# Restock loop — subscribe deferred so WorldClock has finished its own
+	# _ready (autoload order is fragile across project edits).
+	call_deferred("_connect_world_clock")
+
+
+func _connect_world_clock() -> void:
+	var clock := get_node_or_null("/root/WorldClock")
+	if clock == null:
+		return
+	if clock.has_signal("hour_changed") and not clock.hour_changed.is_connected(_on_world_hour_tick):
+		clock.hour_changed.connect(_on_world_hour_tick)
 
 
 # ── Port registration ─────────────────────────────────────────────────────────
@@ -236,7 +259,31 @@ func add_export_stock(port_id: String, commodity_id: String, units: int) -> void
 	if not _export_stock.has(port_id):
 		_export_stock[port_id] = {}
 	var pool: Dictionary = _export_stock[port_id]
-	pool[commodity_id] = int(pool.get(commodity_id, 0)) + units
+	var new_total := int(pool.get(commodity_id, 0)) + units
+	pool[commodity_id] = new_total
+
+	# Track the high-water mark so the restock loop knows where to refill to.
+	if not _export_stock_cap.has(port_id):
+		_export_stock_cap[port_id] = {}
+	var cap_pool: Dictionary = _export_stock_cap[port_id]
+	cap_pool[commodity_id] = maxi(int(cap_pool.get(commodity_id, 0)), new_total)
+
+
+## Periodic restock pass — every game-hour tick we add RESTOCK_PER_HOUR
+## units to each (port, commodity) pool, capped at the seeded high-water
+## mark so we never overshoot what the world originally generated.
+func _on_world_hour_tick(_hour_number: int) -> void:
+	for port_id in _export_stock_cap.keys():
+		var cap_pool: Dictionary = _export_stock_cap[port_id]
+		if not _export_stock.has(port_id):
+			_export_stock[port_id] = {}
+		var pool: Dictionary = _export_stock[port_id]
+		for commodity_id in cap_pool.keys():
+			var cap := int(cap_pool[commodity_id])
+			var have := int(pool.get(commodity_id, 0))
+			if have >= cap:
+				continue
+			pool[commodity_id] = mini(have + RESTOCK_PER_HOUR, cap)
 
 
 func _consume_stock(port_id: String, commodity_id: String, units: int) -> bool:

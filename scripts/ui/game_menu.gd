@@ -14,6 +14,7 @@ var _helm_active:     bool       = false
 var _hud_layer:   CanvasLayer
 var _menu_layer:  CanvasLayer
 var _walking_hud: WalkingHud
+var _journal:     ContractJournalOverlay
 var _bg:          ColorRect
 var _pause_root:  Control
 var _map:         MapOverlay
@@ -34,6 +35,9 @@ func _ready() -> void:
 
 	_walking_hud = WalkingHud.new()
 	_hud_layer.add_child(_walking_hud)
+
+	_journal = ContractJournalOverlay.new()
+	_hud_layer.add_child(_journal)
 
 	# ── Modal menu layer ───────────────────────────────────────────────────────
 	_menu_layer              = CanvasLayer.new()
@@ -99,6 +103,10 @@ func _unhandled_input(event: InputEvent) -> void:
 	elif event.is_action_pressed("open_map") and _screen != Screen.PAUSE:
 		_set_screen(Screen.MAP if _screen != Screen.MAP else Screen.NONE)
 		get_viewport().set_input_as_handled()
+	elif event.is_action_pressed("open_journal") and _screen == Screen.NONE:
+		if _journal != null:
+			_journal.toggle()
+		get_viewport().set_input_as_handled()
 
 
 # ── Screen switching ──────────────────────────────────────────────────────────
@@ -116,6 +124,8 @@ func _set_screen(s: Screen) -> void:
 	_bg.visible          = modal
 	_pause_root.visible  = s == Screen.PAUSE
 	_map.visible         = s == Screen.MAP
+	if _journal != null:
+		_journal.visible = not modal
 	get_tree().paused    = s == Screen.PAUSE
 
 

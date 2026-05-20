@@ -7,6 +7,7 @@ extends Node
 ## with the received dict. From that point both sides compute identical time_of_day.
 
 signal day_changed(day_number: int)
+signal hour_changed(hour_number: int)
 
 ## 24 real minutes per game day.
 const DAY_LENGTH_REAL_SECONDS := 1440.0
@@ -15,11 +16,13 @@ const SECONDS_PER_GAME_HOUR   := 60.0
 
 var _epoch_unix: float = 0.0
 var _last_day:   int   = 0
+var _last_hour:  int   = 0
 
 
 func _ready() -> void:
 	_epoch_unix = 0.0  # Unix origin — time_of_day flows from real Unix time by default
 	_last_day   = get_day_number()
+	_last_hour  = int(get_game_hours_elapsed())
 	_push_to_weather()
 
 
@@ -29,12 +32,17 @@ func _process(_delta: float) -> void:
 	if day != _last_day:
 		_last_day = day
 		day_changed.emit(day)
+	var hour := int(get_game_hours_elapsed())
+	if hour != _last_hour:
+		_last_hour = hour
+		hour_changed.emit(hour)
 
 
 ## Anchor the clock to a specific Unix epoch (call this when loading a saved world).
 func initialize(epoch_unix: float) -> void:
 	_epoch_unix = epoch_unix
 	_last_day   = get_day_number()
+	_last_hour  = int(get_game_hours_elapsed())
 
 
 ## 0.0–1.0 position through the current game day.
@@ -73,6 +81,7 @@ func set_game_hours_elapsed(hours: float) -> void:
 		return
 	_epoch_unix = Time.get_unix_time_from_system() - (hours * SECONDS_PER_GAME_HOUR)
 	_last_day   = get_day_number()
+	_last_hour  = int(get_game_hours_elapsed())
 	_push_to_weather()
 
 
