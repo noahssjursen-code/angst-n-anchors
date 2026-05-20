@@ -368,25 +368,21 @@ func get_hull_displacement_kg() -> float:
 	return _hull_displacement_kg()
 
 
-func get_cargo_decks() -> Array[Node]:
-	var out: Array[Node] = []
-	for node in find_children("*", "Node3D", true, false):
-		if node.has_method("get_capacity_units") and node.has_method("get_available_units"):
-			out.append(node)
-	return out
+func get_cargo_decks() -> Array[CargoDeckComponent]:
+	return CargoDeckComponent.get_all_for_ship(self)
 
 
 func get_cargo_capacity_units() -> int:
 	var total := 0
 	for deck in get_cargo_decks():
-		total += int(deck.call("get_capacity_units"))
+		total += deck.get_capacity()
 	return total
 
 
 func get_cargo_available_units() -> int:
 	var total := 0
 	for deck in get_cargo_decks():
-		total += int(deck.call("get_available_units"))
+		total += deck.get_available()
 	return total
 
 

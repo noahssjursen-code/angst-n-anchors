@@ -368,38 +368,6 @@
         3.2,
         -24.5
       ]
-    },
-    {
-      "type": "work",
-      "position": [
-        0.0,
-        4.0,
-        15.0
-      ]
-    },
-    {
-      "type": "work",
-      "position": [
-        0.0,
-        4.0,
-        5.0
-      ]
-    },
-    {
-      "type": "work",
-      "position": [
-        0.0,
-        4.0,
-        -5.0
-      ]
-    },
-    {
-      "type": "work",
-      "position": [
-        0.0,
-        4.0,
-        -15.0
-      ]
     }
   ],
   "cargo_decks": [

@@ -22,6 +22,18 @@ const HULL_BASE_DIR       := "res://resources/data/models/hulls/"
 ## drop this entirely.
 const SUPER_SCENE_DIR     := "res://scenes/shared/superstructures/"
 const SUPER_MODEL_DIR     := "res://resources/data/models/superstructures/"
+## Applied to the hull `bridge` slot when placing the superstructure (ship-local:
+## −Y down, −Z aft). Scaled by the ship template `scale`.
+const SUPERSTRUCTURE_OFFSET := Vector3(0.0, -0.3, -1.0)
+## Cargo deck must end this far forward of bow reference slots (m at scale 1).
+const CARGO_BOW_CLEARANCE_M := 1.5
+## Cargo deck stern edge must be at least this far forward of the bridge slot (+Z).
+const CARGO_AFT_OF_BRIDGE_M := 3.0
+## Mooring cleats: pull toward centerline and away from bow/stern tips (fractions at scale 1).
+const MOORING_BEAM_INSET_FRAC := 0.22
+const MOORING_END_INSET_FRAC := 0.09
+## Funnel / exhaust stack: nudge forward (+Z) in superstructure-local space (m at scale 1).
+const FUNNEL_FORWARD_OFFSET_M := 1.2
 
 static func build(template_path: String) -> BoatBody:
 	var tmpl := _load_json(template_path)
@@ -77,8 +89,9 @@ static func build(template_path: String) -> BoatBody:
 		var super_node := _build_superstructure(super_key)
 		if super_node != null:
 			super_node.name = "Superstructure"
-			super_node.position = slots["bridge"]
+			super_node.position = slots["bridge"] + SUPERSTRUCTURE_OFFSET * scale
 			gameplay.add_child(super_node)
+			_schedule_funnel_nudge(super_node, scale)
 
 	var mooring := MooringComponent.new()
 	mooring.name = "MooringComponent"
@@ -86,7 +99,7 @@ static func build(template_path: String) -> BoatBody:
 
 	_add_mooring_points(gameplay, slots, stations)
 	_add_hull_lights(gameplay, hull_data, scale)
-	_add_cargo_decks(gameplay, hull_data, tmpl, slots, scale)
+	_add_cargo_decks(gameplay, hull_data, tmpl, slots, scale, stations)
 
 	if telemetry != null:
 		telemetry.end_load_event(t_handle)
@@ -223,10 +236,10 @@ static func _make_lighting_controller() -> ShipLighting:
 
 
 ## Spawn hull-mounted lights declared in the hull JSON's `lights` array.
-## Each entry: { "type": "<nav_port|nav_starboard|nav_masthead|nav_stern|work|window>",
+## Each entry: { "type": "<nav_port|nav_starboard|nav_masthead|nav_stern|window>",
 ##               "position": [x, y, z] }.
-## Bridge-mounted lights (e.g. masthead, window) stay on the superstructure
-## scene so they move with the bridge.
+## Deck/work floods are not spawned. Bridge-mounted lights stay on the
+## superstructure scene so they move with the bridge.
 static func _add_hull_lights(parent: Node3D, hull_data: Dictionary, scale: float) -> void:
 	var lights = hull_data.get("lights", [])
 	if typeof(lights) != TYPE_ARRAY:
@@ -234,7 +247,10 @@ static func _add_hull_lights(parent: Node3D, hull_data: Dictionary, scale: float
 	for entry in lights:
 		if typeof(entry) != TYPE_DICTIONARY:
 			continue
-		var type_id := _light_type_from_string(str(entry.get("type", "")))
+		var type_str := str(entry.get("type", ""))
+		if type_str == "work":
+			continue
+		var type_id := _light_type_from_string(type_str)
 		if type_id < 0:
 			continue
 		var pos_arr = entry.get("position", [0, 0, 0])
@@ -248,63 +264,130 @@ static func _add_hull_lights(parent: Node3D, hull_data: Dictionary, scale: float
 		parent.add_child(light)
 
 
-## Spawn cargo decks. Source of truth for deck dimensions is the hull JSON's
-## `cargo_decks` array; entries look like:
-##   {"name": "main", "position": [0, 1.05, 0],
-##    "deck_width": 2.8, "deck_length": 6.5, "cell_size": 1.0}
-##
-## The template can still filter which decks to enable by listing names in
-## its own `cargo_decks` array (legacy contract). If the template omits the
-## key, every hull-declared deck is added — which is what new commissions do.
-## If the template provides an empty list, no decks are added (used by very
-## small launches that shouldn't carry cargo).
+## Spawn one cargo deck per ship. Dimensions come from the hull JSON's
+## `cargo_decks` entry (prefer `"main"`). The template may pick a name via
+## `cargo_decks: ["main"]`, omit the key (same as `["main"]` when present),
+## or pass `[]` for no deck.
 static func _add_cargo_decks(parent: Node3D, hull_data: Dictionary, tmpl: Dictionary,
-		slots: Dictionary, scale: float) -> void:
+		slots: Dictionary, scale: float, stations: HullStations) -> void:
+	var def := _pick_cargo_deck_def(hull_data, tmpl)
+	if def.is_empty():
+		return
+	var fitted := _fit_cargo_deck_to_hull(def, slots, scale, stations)
+	if fitted.is_empty():
+		push_warning("ShipBuilder: no room for cargo deck on hull")
+		return
+	var deck_name := str(fitted.get("name", "main"))
+	var pos_arr = fitted.get("position", [0, 0, 0])
+	var pos := Vector3.ZERO
+	if typeof(pos_arr) == TYPE_ARRAY and pos_arr.size() >= 3:
+		pos = Vector3(float(pos_arr[0]), float(pos_arr[1]), float(pos_arr[2])) * scale
+	var deck := CargoDeckComponent.new()
+	deck.name = "CargoDeck_" + deck_name
+	deck.position = pos
+	deck.deck_width_m = float(fitted.get("deck_width", 5.0)) * scale
+	deck.deck_length_m = float(fitted.get("deck_length", 8.0)) * scale
+	var cell_size := float(fitted.get("cell_size", 1.5)) * scale
+	deck.cell_size_x_m = cell_size
+	deck.cell_size_z_m = cell_size
+	parent.add_child(deck)
+
+
+## Returns the single hull cargo-deck definition to build, or {} if none.
+static func _pick_cargo_deck_def(hull_data: Dictionary, tmpl: Dictionary) -> Dictionary:
 	var hull_decks = hull_data.get("cargo_decks", [])
 	if typeof(hull_decks) != TYPE_ARRAY:
 		hull_decks = []
 
-	# Build a name → hull-deck-def lookup so the template can filter by name.
 	var by_name: Dictionary = {}
 	for d in hull_decks:
 		if typeof(d) == TYPE_DICTIONARY:
 			by_name[str(d.get("name", ""))] = d
 
 	var tmpl_decks: Variant = tmpl.get("cargo_decks", null)
-	var names_to_build: Array = []
-	if tmpl_decks == null:
-		# Template did not specify — use everything the hull declares.
-		for d in hull_decks:
-			if typeof(d) == TYPE_DICTIONARY:
-				names_to_build.append(str(d.get("name", "")))
-	elif typeof(tmpl_decks) == TYPE_ARRAY:
-		for entry in tmpl_decks:
-			names_to_build.append(str(entry))
+	if typeof(tmpl_decks) == TYPE_ARRAY:
+		if tmpl_decks.is_empty():
+			return {}
+		var chosen := str(tmpl_decks[0])
+		if by_name.has(chosen):
+			return by_name[chosen] as Dictionary
+		return {}
 
-	for deck_name in names_to_build:
-		if not by_name.has(deck_name):
-			# Legacy fallback: deck_name is a slot key with no dimensions —
-			# use defaults sized for that slot's position.
-			if slots.has(deck_name):
-				var legacy := CargoDeckComponent.new()
-				legacy.name = "CargoDeck_" + deck_name
-				legacy.position = slots[deck_name]
-				parent.add_child(legacy)
-			continue
-		var def: Dictionary = by_name[deck_name]
-		var pos_arr = def.get("position", [0, 0, 0])
-		var pos := Vector3.ZERO
-		if typeof(pos_arr) == TYPE_ARRAY and pos_arr.size() >= 3:
-			pos = Vector3(float(pos_arr[0]), float(pos_arr[1]), float(pos_arr[2])) * scale
-		var deck := CargoDeckComponent.new()
-		deck.name = "CargoDeck_" + deck_name
-		deck.position = pos
-		deck.deck_width_m = float(def.get("deck_width", 5.0)) * scale
-		deck.deck_length_m = float(def.get("deck_length", 8.0)) * scale
-		var cell_size := float(def.get("cell_size", 1.5)) * scale
-		deck.cell_size_x_m = cell_size
-		deck.cell_size_z_m = cell_size
-		parent.add_child(deck)
+	if by_name.has("main"):
+		return by_name["main"] as Dictionary
+	if hull_decks.size() > 0 and typeof(hull_decks[0]) == TYPE_DICTIONARY:
+		return hull_decks[0] as Dictionary
+	return {}
+
+
+## Clamp deck between bridge and bow, then snap width/length to whole cell counts
+## so registered capacity matches the physical grid.
+static func _fit_cargo_deck_to_hull(def: Dictionary, slots: Dictionary, scale: float,
+		stations: HullStations) -> Dictionary:
+	var cell := maxf(float(def.get("cell_size", 1.5)) * scale, 0.2)
+	var pos_arr = def.get("position", [0, 0, 0])
+	var pos := Vector3.ZERO
+	if typeof(pos_arr) == TYPE_ARRAY and pos_arr.size() >= 3:
+		pos = Vector3(float(pos_arr[0]), float(pos_arr[1]), float(pos_arr[2])) * scale
+
+	var width := float(def.get("deck_width", 5.0)) * scale
+	var length := float(def.get("deck_length", 8.0)) * scale
+	if stations != null and stations.beam_m > 0.0:
+		width = minf(width, stations.beam_m * 0.88 * scale)
+
+	var bow_limit := -INF
+	for key in ["bow_thruster", "nav_light_bow", "mooring_port_fwd", "mooring_stbd_fwd"]:
+		if slots.has(key):
+			bow_limit = maxf(bow_limit, (slots[key] as Vector3).z)
+	if bow_limit == -INF and stations != null and not stations.stations.is_empty():
+		var last: Dictionary = stations.stations[stations.stations.size() - 1]
+		bow_limit = float(last.get("z", 0.0)) * scale
+	bow_limit -= CARGO_BOW_CLEARANCE_M * scale
+
+	var aft_limit := INF
+	if slots.has("bridge"):
+		aft_limit = (slots["bridge"] as Vector3).z + CARGO_AFT_OF_BRIDGE_M * scale
+	elif stations != null and stations.stations.size() > 0:
+		var first: Dictionary = stations.stations[0]
+		aft_limit = float(first.get("z", 0.0)) * scale + CARGO_AFT_OF_BRIDGE_M * scale
+
+	var span := bow_limit - aft_limit
+	if span < cell * 0.5 or bow_limit == -INF or aft_limit == INF:
+		return {}
+
+	length = minf(length, span)
+	var half := length * 0.5
+	var aft_edge := pos.z - half
+	var fwd_edge := pos.z + half
+	if aft_edge < aft_limit:
+		var shift := aft_limit - aft_edge
+		aft_edge += shift
+		fwd_edge += shift
+	if fwd_edge > bow_limit:
+		var shift := fwd_edge - bow_limit
+		aft_edge -= shift
+		fwd_edge -= shift
+	length = maxf(fwd_edge - aft_edge, 0.0)
+	if length < cell * 0.5:
+		return {}
+
+	var cols := maxi(int(floor(width / cell)), 1)
+	var rows := maxi(int(floor(length / cell)), 1)
+	while rows > 1 and float(rows) * cell > span + 0.001:
+		rows -= 1
+	width = float(cols) * cell
+	length = float(rows) * cell
+	half = length * 0.5
+	aft_edge = clampf(pos.z - half, aft_limit, bow_limit - length)
+	pos.z = aft_edge + half
+
+	return {
+		"name": def.get("name", "main"),
+		"position": [pos.x / scale, pos.y / scale, pos.z / scale],
+		"deck_width": width / scale,
+		"deck_length": length / scale,
+		"cell_size": def.get("cell_size", 1.5),
+	}
 
 
 static func _light_type_from_string(s: String) -> int:
@@ -389,13 +472,14 @@ static func _build_superstructure_from_json(path: String) -> Node3D:
 
 	# Spawn the bridge-mounted lights from the JSON slots.
 	# Naming convention in slots: light_<type>: [x, y, z]
-	# where <type> is one of nav_port, nav_starboard, nav_masthead, nav_stern,
-	# work, window.
+	# where <type> is nav_port, nav_starboard, nav_masthead, nav_stern, or window.
 	for slot_name in slot_dict.keys():
 		var key := str(slot_name)
 		if not key.begins_with("light_"):
 			continue
 		var type_str := key.substr("light_".length())
+		if type_str == "work":
+			continue
 		var type_id := _light_type_from_string(type_str)
 		if type_id < 0:
 			continue
@@ -411,6 +495,25 @@ static func _build_superstructure_from_json(path: String) -> Node3D:
 	return root
 
 
+static func _schedule_funnel_nudge(super_root: Node3D, scale: float) -> void:
+	var delta_z := FUNNEL_FORWARD_OFFSET_M * scale
+	Callable(ShipBuilder, "_nudge_funnel_parts").call_deferred(super_root, delta_z)
+
+
+static func _nudge_funnel_parts(super_root: Node3D, delta_z: float) -> void:
+	if super_root == null or not is_instance_valid(super_root) or absf(delta_z) < 1e-6:
+		return
+	for part_name in [
+		"ModelPart_funnel",
+		"ModelPart_funnel_cap",
+		"ModelPart_exhaust_stack",
+		"ExhaustStack",
+	]:
+		var part := super_root.find_child(part_name, true, false) as Node3D
+		if part != null:
+			part.position.z += delta_z
+
+
 static func _add_mooring_points(parent: Node3D, slots: Dictionary, stations: HullStations) -> void:
 	# Scale the visible bollard to the hull. The natural docking_bollard model
 	# is ~0.8 m wide and reads correctly on a 20–30 m coaster at scale 1.0.
@@ -421,10 +524,10 @@ static func _add_mooring_points(parent: Node3D, slots: Dictionary, stations: Hul
 	var bollard_scale : float = lerpf(0.7, 1.5, t)
 
 	var pairs := [
-		["mooring_port_fwd",  "port",      "fwd"],
-		["mooring_stbd_fwd",  "starboard",  "fwd"],
-		["mooring_port_aft",  "port",      "aft"],
-		["mooring_stbd_aft",  "starboard",  "aft"],
+		["mooring_port_fwd",  "port",      "bow"],
+		["mooring_stbd_fwd",  "starboard", "bow"],
+		["mooring_port_aft",  "port",      "stern"],
+		["mooring_stbd_aft",  "starboard", "stern"],
 	]
 	for pair in pairs:
 		var slot_name: String = pair[0]
@@ -432,11 +535,32 @@ static func _add_mooring_points(parent: Node3D, slots: Dictionary, stations: Hul
 			continue
 		var mp := MooringPoint.new()
 		mp.name = "MooringPoint_" + slot_name.capitalize().replace(" ", "")
-		mp.position = slots[slot_name]
+		mp.position = _adjust_mooring_position(slots[slot_name], slot_name, stations)
 		mp.set("side",    pair[1])
 		mp.set("station", pair[2])
 		mp.set("bollard_scale", bollard_scale)
 		parent.add_child(mp)
+
+
+## Pull cleats inboard and away from the bow/stern tips. Authored hull slots sit
+## on the sheer line past the hull mesh; this keeps bollards on the deck edge.
+static func _adjust_mooring_position(pos: Vector3, slot_name: String,
+		stations: HullStations) -> Vector3:
+	var out := pos
+	var beam_pull := absf(out.x) * MOORING_BEAM_INSET_FRAC
+	if out.x < -0.01:
+		out.x = minf(out.x + beam_pull, -0.15)
+	elif out.x > 0.01:
+		out.x = maxf(out.x - beam_pull, 0.15)
+
+	var length_pull := 0.8
+	if stations != null and stations.length_m > 0.0:
+		length_pull = stations.length_m * MOORING_END_INSET_FRAC
+	if slot_name.contains("fwd"):
+		out.z -= length_pull
+	elif slot_name.contains("aft"):
+		out.z += length_pull
+	return out
 
 
 static func _read_slots(hull_data: Dictionary, scale: float) -> Dictionary:

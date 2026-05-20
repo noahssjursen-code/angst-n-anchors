@@ -242,9 +242,9 @@ func _build_template(entry: Dictionary) -> Dictionary:
 	var cam_dist   : float = stations.length_m * 1.45 + 11.0
 	var cam_height : float = stations.length_m * 0.36 + 4.0
 
-	# Note: no `cargo_decks` key — ShipBuilder will instantiate every deck the
-	# hull JSON declares (sized properly to the hull). Set an explicit array to
-	# restrict the set, or `[]` to commission with no cargo decks.
+	# Note: no `cargo_decks` key — ShipBuilder adds one deck (prefers `"main"`,
+	# clamped between bridge and bow, snapped to the cell grid). Use `[]` for
+	# launches with no cargo deck.
 	return {
 		"display_name":   str(entry["display"]),
 		"hull":           str(entry["hull_file"]),
