@@ -103,7 +103,27 @@ func has_local_save() -> bool:
 
 
 func save_now() -> bool:
+	# Let LocalPlayerView capture in-world state (contracts, ship pose,
+	# world clock) into PlayerData before we serialise. If LocalPlayerView
+	# is the caller, it skips this leg to avoid infinite recursion.
+	_snapshot_world_state()
 	return _flush_save()
+
+
+## Pull world-state snapshots into PlayerData before each save flush.
+## Called from save_now() and the autosave heartbeat (Phase 10).
+func _snapshot_world_state() -> void:
+	var view := get_node_or_null("/root/LocalPlayerView")
+	if view == null or _snapshot_in_progress:
+		return
+	_snapshot_in_progress = true
+	if view.has_method("_snapshot_into_player_data"):
+		view._snapshot_into_player_data()
+	_snapshot_in_progress = false
+
+
+# Re-entrancy guard so LocalPlayerView -> save_now() -> _snapshot doesn't loop.
+var _snapshot_in_progress: bool = false
 
 
 # ── Persistence ───────────────────────────────────────────────────────────────

@@ -18,6 +18,26 @@ var distance_sailed_m:   float = 0.0
 ## { "uid", "hull_id", "display", "template_path" } — empty when none.
 var active_vessel: Dictionary = {}
 
+# ── Save format v2 additions (introduced Phase 4 of the overnight refactor) ──
+##
+## Snapshot of accepted contracts. Each entry: { "id", "taken_count",
+## "delivered_count" }. On load, ContractRegistry replays the accept then sets
+## counts. Any in-transit units (`taken > delivered`) are treated as forfeit
+## (rolled back to taken=delivered) so the world stays consistent — the
+## player loses cargo that was in their hold on quit, which matches the
+## existing "ship despawn forfeits cargo" rule.
+var accepted_contracts: Array = []
+
+## Runtime state of the captain's ship for resume-where-you-left-off saves.
+## { "world_pos": Vector3, "yaw": float, "throttle_stage_idx": int }.
+## Empty when no ship is in the world at save time.
+var ship_runtime_state: Dictionary = {}
+
+## Game time at save (game-hours since the world epoch). Restored to
+## WorldClock on load so day/night picks up where it left off instead of
+## resetting to noon.
+var world_clock_hours: float = -1.0
+
 
 func owns_hull_id(hull_id: String) -> bool:
 	return not active_vessel.is_empty() and str(active_vessel.get("hull_id", "")) == hull_id
@@ -53,6 +73,10 @@ func to_dict() -> Dictionary:
 		"distance_sailed_m":        distance_sailed_m,
 		"active_vessel":            active_vessel.duplicate(),
 		"appearance":               appearance.to_dict(),
+		# v2 additions
+		"accepted_contracts":       accepted_contracts.duplicate(true),
+		"ship_runtime_state":       _ship_runtime_to_dict(),
+		"world_clock_hours":        world_clock_hours,
 	}
 
 
@@ -76,4 +100,44 @@ static func from_dict(d: Dictionary) -> PlayerData:
 				if typeof(last_entry) == TYPE_DICTIONARY:
 					pd.active_vessel = (last_entry as Dictionary).duplicate()
 	pd.appearance = CharacterAppearance.from_dict(d.get("appearance", {}) as Dictionary)
+	# v2 additions — default to empty / sentinel for v1 saves (forward compat).
+	var contracts_raw: Variant = d.get("accepted_contracts", [])
+	if typeof(contracts_raw) == TYPE_ARRAY:
+		pd.accepted_contracts = (contracts_raw as Array).duplicate(true)
+	var ship_raw: Variant = d.get("ship_runtime_state", {})
+	if typeof(ship_raw) == TYPE_DICTIONARY:
+		pd.ship_runtime_state = _ship_runtime_from_dict(ship_raw as Dictionary)
+	pd.world_clock_hours = float(d.get("world_clock_hours", -1.0))
 	return pd
+
+
+# ── v2 helpers ───────────────────────────────────────────────────────────────
+
+func _ship_runtime_to_dict() -> Dictionary:
+	if ship_runtime_state.is_empty():
+		return {}
+	var pos: Variant = ship_runtime_state.get("world_pos", Vector3.ZERO)
+	if typeof(pos) == TYPE_VECTOR3:
+		var v: Vector3 = pos
+		return {
+			"world_pos":          [v.x, v.y, v.z],
+			"yaw":                float(ship_runtime_state.get("yaw", 0.0)),
+			"throttle_stage_idx": int(ship_runtime_state.get("throttle_stage_idx", 1)),
+		}
+	# Already serialised form.
+	return ship_runtime_state.duplicate()
+
+
+static func _ship_runtime_from_dict(d: Dictionary) -> Dictionary:
+	if d.is_empty():
+		return {}
+	var pos_raw: Variant = d.get("world_pos", null)
+	var pos := Vector3.ZERO
+	if typeof(pos_raw) == TYPE_ARRAY and (pos_raw as Array).size() >= 3:
+		var arr := pos_raw as Array
+		pos = Vector3(float(arr[0]), float(arr[1]), float(arr[2]))
+	return {
+		"world_pos":          pos,
+		"yaw":                float(d.get("yaw", 0.0)),
+		"throttle_stage_idx": int(d.get("throttle_stage_idx", 1)),
+	}

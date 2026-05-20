@@ -215,6 +215,14 @@ func _spawn_player() -> void:
 	player.position = spawn_pos
 	add_child(player)
 
+	# Phase 4 — restore per-player state once the world has spawned.
+	# LocalPlayerView reapplies world-clock + contract counts immediately
+	# and defers ship-pose restore until the next frame so the spawn-side
+	# flow has time to instantiate any active vessel.
+	var view := get_node_or_null("/root/LocalPlayerView")
+	if view != null and view.has_method("restore_player_state"):
+		view.call("restore_player_state")
+
 
 ## Resolve a safe spawn position for the player. Prefers HomePort.get_spawn_position()
 ## (which returns the dock's spawn anchor), but validates the result against the

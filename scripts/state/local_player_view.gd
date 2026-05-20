@@ -155,3 +155,98 @@ func _on_contracts_changed_one(_a: Variant = null) -> void:
 
 func _on_contracts_changed_two(_a: Variant = null, _b: Variant = null) -> void:
 	contracts_changed.emit(get_active_contracts())
+
+
+# ── Persistence (Phase 4 of the overnight refactor) ──────────────────────────
+##
+## Capture the per-player runtime state into the PlayerSession's PlayerData
+## so the player's progress survives quit / crash / sleep.
+##
+## Captured here:
+##   • accepted contracts (taken / delivered counts)
+##   • ship runtime state (world position, yaw, throttle stage)
+##   • world clock hours (so day/night picks up where it left off)
+##
+## Marks, lifetime stats, appearance, active_vessel record are saved by
+## their own write paths (PlayerSession setters) — this just supplements.
+##
+## Called by PlayerSession from inside save_now() — split from the write
+## itself so we don't recurse if a saver wants to call snapshot directly.
+func _snapshot_into_player_data() -> void:
+	if _session == null:
+		return
+	var data: PlayerData = _session.data
+	if data == null:
+		return
+
+	# Accepted contracts.
+	if _registry != null and _registry.has_method("snapshot_accepted"):
+		data.accepted_contracts = _registry.snapshot_accepted()
+	else:
+		data.accepted_contracts = []
+
+	# Ship runtime state.
+	var ship := get_active_ship() as Node3D
+	if ship != null:
+		var stage_idx := 1
+		var ctrl := ship.get_node_or_null("BoatController") as BoatController
+		if ctrl != null and ctrl.has_method("get_throttle_stage_idx"):
+			stage_idx = ctrl.get_throttle_stage_idx()
+		data.ship_runtime_state = {
+			"world_pos":          ship.global_position,
+			"yaw":                ship.rotation.y,
+			"throttle_stage_idx": stage_idx,
+		}
+	else:
+		data.ship_runtime_state = {}
+
+	# World clock — game-hours since the world epoch.
+	var clock := get_node_or_null("/root/WorldClock")
+	if clock != null and clock.has_method("get_game_hours_elapsed"):
+		data.world_clock_hours = float(clock.call("get_game_hours_elapsed"))
+
+
+## Convenience: snapshot + write. Used by the abandon-ship flow and any
+## explicit "save right now" callers. PlayerSession's save_now() already
+## snapshots internally so calling it directly works too.
+func save_player_state() -> void:
+	if _session != null and _session.has_method("save_now"):
+		_session.save_now()
+
+
+## Restore the per-player snapshot. Called by World after the home port
+## spawns. Contract restore is best-effort — any contract IDs that no
+## longer exist are ignored. Ship pose restore only fires if the active
+## vessel was successfully respawned by the existing flow.
+func restore_player_state() -> void:
+	if _session == null:
+		return
+	var data: PlayerData = _session.data
+	if data == null:
+		return
+
+	# World clock.
+	if data.world_clock_hours >= 0.0:
+		var clock := get_node_or_null("/root/WorldClock")
+		if clock != null and clock.has_method("set_game_hours_elapsed"):
+			clock.call("set_game_hours_elapsed", data.world_clock_hours)
+
+	# Contracts.
+	if not data.accepted_contracts.is_empty() and _registry != null and _registry.has_method("restore_accepted"):
+		_registry.restore_accepted(data.accepted_contracts)
+		contracts_changed.emit(get_active_contracts())
+
+	# Ship pose — defer one frame so spawn-side code has settled.
+	if not data.ship_runtime_state.is_empty():
+		call_deferred("_restore_ship_pose", data.ship_runtime_state.duplicate())
+
+
+func _restore_ship_pose(state: Dictionary) -> void:
+	var ship := get_active_ship() as Node3D
+	if ship == null:
+		return
+	var pos_raw: Variant = state.get("world_pos", null)
+	if typeof(pos_raw) == TYPE_VECTOR3:
+		ship.global_position = pos_raw
+	var yaw := float(state.get("yaw", 0.0))
+	ship.rotation.y = yaw

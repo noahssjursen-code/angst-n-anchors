@@ -299,6 +299,54 @@ func forfeit_transit_units(contract_id: String, units: int) -> void:
 	contract_transit_forfeited.emit(contract, actual)
 
 
+# ── Save / restore (Phase 4 of the overnight refactor) ──────────────────────
+
+## Snapshot accepted contracts to a serialisable Array. Each entry:
+##   { "id": String, "taken_count": int, "delivered_count": int }
+## Persisted in PlayerData.accepted_contracts so a quit/load round-trip
+## preserves contract progress.
+func snapshot_accepted() -> Array:
+	var out: Array = []
+	for raw in get_accepted_contracts():
+		var c := raw as Contract
+		if c == null:
+			continue
+		out.append({
+			"id":              c.id,
+			"taken_count":     c.taken_count,
+			"delivered_count": c.delivered_count,
+		})
+	return out
+
+
+## Restore accepted-contract state from a snapshot (typically loaded from
+## PlayerData on game launch). Contracts whose id we don't recognise (e.g.
+## the world was regenerated with a different seed) are skipped silently.
+##
+## Mid-flight cargo (taken > delivered) is forfeit on restore: we set
+## taken := delivered so the contract state is consistent with the ship's
+## actual cargo holds (which are empty after respawn). This matches the
+## existing "ship despawn forfeits cargo" rule.
+func restore_accepted(records: Array) -> void:
+	for entry in records:
+		if typeof(entry) != TYPE_DICTIONARY:
+			continue
+		var rec := entry as Dictionary
+		var cid := str(rec.get("id", ""))
+		if cid.is_empty():
+			continue
+		var c := _contracts.get(cid) as Contract
+		if c == null:
+			continue
+		var delivered := int(rec.get("delivered_count", 0))
+		var taken     := int(rec.get("taken_count", delivered))
+		# Forfeit any in-flight cargo by clamping taken to delivered.
+		c.delivered_count = clampi(delivered, 0, c.quantity)
+		c.taken_count     = clampi(maxi(taken, c.delivered_count), 0, c.quantity)
+		if c.taken_count > c.delivered_count:
+			c.taken_count = c.delivered_count
+
+
 # ── Generation ────────────────────────────────────────────────────────────────
 
 func _generate_contracts_for(new_port_id: String) -> void:

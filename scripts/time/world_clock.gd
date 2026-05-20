@@ -65,6 +65,17 @@ func apply_sync_token(token: Dictionary) -> void:
 		initialize(float(token["epoch"]))
 
 
+## Set the total elapsed game-hours since epoch. Anchors the epoch so the
+## clock keeps moving forward from this point as wall-clock time advances.
+## Used by persistence (Phase 4) to restore in-progress days across reload.
+func set_game_hours_elapsed(hours: float) -> void:
+	if hours < 0.0:
+		return
+	_epoch_unix = Time.get_unix_time_from_system() - (hours * SECONDS_PER_GAME_HOUR)
+	_last_day   = get_day_number()
+	_push_to_weather()
+
+
 func snap_time_of_day(day_fraction: float) -> void:
 	## 0–1 through the cycle (0./1.=midnight, 0.5=noon). Locks real-time offset so it stays stable.
 	var day_length := DAY_LENGTH_REAL_SECONDS
