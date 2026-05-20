@@ -10,6 +10,9 @@ extends Node3D
 
 enum BerthStatus { FREE = 0, RESERVED = 1, OCCUPIED = 2 }
 
+## Default owner id when no PlayerSession display name is set.
+const LOCAL_PLAYER_OWNER := "Captain"
+
 const C_QUAY_EDGE      := Color(0.22, 0.23, 0.26)
 const C_EDGE_STRIPE    := Color(0.82, 0.78, 0.20)
 const C_BERTH          := Color(0.20, 0.85, 0.35, 0.35)
@@ -235,6 +238,8 @@ func _build_berth_slot(index: int, cx: float, slot_w: float, ship_beam: float, c
 	_berth_data.append({
 		"status":      BerthStatus.FREE,
 		"reserved_by": "",
+		"owner_id":    "",
+		"ship":        null,
 		"cargo_type":  cargo_type,
 		"fill":        fill,
 		"has_cargo":   false,
@@ -430,6 +435,17 @@ func _own_subtree(node: Node, esc: Node) -> void:
 
 # ── Runtime API ───────────────────────────────────────────────────────────────
 
+static func local_player_owner_id() -> String:
+	var tree := Engine.get_main_loop()
+	if tree is SceneTree:
+		var ps := (tree as SceneTree).root.get_node_or_null("PlayerSession")
+		if ps != null and ps.get("data") != null:
+			var player_name: String = ps.data.display_name
+			if not player_name.is_empty():
+				return player_name
+	return LOCAL_PLAYER_OWNER
+
+
 ## Returns the index of the occupied berth (player's ship), or -1 if none.
 func find_occupied_berth() -> int:
 	for i in range(_berth_data.size()):
@@ -517,7 +533,91 @@ func release_berth(index: int) -> void:
 	var b            := _berth_data[index] as Dictionary
 	b["status"]      = BerthStatus.FREE
 	b["reserved_by"] = ""
+	b["owner_id"]    = ""
+	b["ship"]        = null
 	_update_berth_color(index)
+
+
+func register_ship_at_berth(index: int, ship: BoatBody, owner_id: String = "") -> bool:
+	if index < 0 or index >= _berth_data.size() or ship == null:
+		return false
+	unregister_ship(ship)
+	var b := _berth_data[index] as Dictionary
+	var st := int(b["status"])
+	if st == BerthStatus.FREE:
+		pass
+	elif st == BerthStatus.RESERVED:
+		var who := str(b["reserved_by"])
+		if not who.is_empty() and owner_id != "" and who != owner_id:
+			return false
+	else:
+		var existing: BoatBody = b.get("ship", null) as BoatBody
+		if existing != null and existing != ship:
+			return false
+	b["ship"]     = ship
+	b["owner_id"] = owner_id if not owner_id.is_empty() else LOCAL_PLAYER_OWNER
+	b["status"]   = BerthStatus.OCCUPIED
+	b["reserved_by"] = ""
+	_update_berth_color(index)
+	return true
+
+
+func unregister_ship(ship: BoatBody) -> void:
+	if ship == null:
+		return
+	for i in range(_berth_data.size()):
+		var b := _berth_data[i] as Dictionary
+		if b.get("ship", null) as BoatBody == ship:
+			b["ship"]     = null
+			b["owner_id"] = ""
+			b["status"]   = BerthStatus.FREE
+			b["reserved_by"] = ""
+			_update_berth_color(i)
+
+
+func find_berth_index_at_position(world_pos: Vector3) -> int:
+	if _berth_data.is_empty():
+		return -1
+	var local := to_local(world_pos)
+	var best_i := -1
+	var best_d := INF
+	for i in range(_berth_data.size()):
+		var b := _berth_data[i] as Dictionary
+		var cx: float = float(b["cx"])
+		var half: float = float(b["slot_w"]) * 0.5
+		if absf(local.x - cx) <= half:
+			return i
+		var d := absf(local.x - cx)
+		if d < best_d:
+			best_d = d
+			best_i = i
+	return best_i
+
+
+func find_player_berth(owner_id: String) -> int:
+	if owner_id.is_empty():
+		return -1
+	for i in range(_berth_data.size()):
+		var b := _berth_data[i] as Dictionary
+		if int(b["status"]) != BerthStatus.OCCUPIED:
+			continue
+		if str(b.get("owner_id", "")) == owner_id:
+			return i
+	return -1
+
+
+func get_ship_at_berth(index: int) -> BoatBody:
+	if index < 0 or index >= _berth_data.size():
+		return null
+	return (_berth_data[index] as Dictionary).get("ship", null) as BoatBody
+
+
+func berth_has_ship(index: int) -> bool:
+	if index < 0 or index >= _berth_data.size():
+		return false
+	var b := _berth_data[index] as Dictionary
+	return int(b["status"]) == BerthStatus.OCCUPIED and b.get("ship", null) != null
+
 
 func berth_reference_local_midship(index: int) -> Vector3:
 	var count  := ShipClass.berth_count(dock_length, max_ship_class, BERTH_GAP_M)
@@ -594,11 +694,30 @@ func spawn_player_ship(index: int, ship_scene_path: String = "") -> Node3D:
 		# Deferred so berth transform / waterline settle before cleat ↔ bollard pairing.
 		mooring.call_deferred("auto_moor", mooring.get_tree())
 
-	var b       := _berth_data[index] as Dictionary
-	b["status"] = BerthStatus.OCCUPIED
-	_update_berth_color(index)
+	register_ship_at_berth(
+		index, body if body != null else ship as BoatBody, local_player_owner_id()
+	)
 
 	return ship
+
+
+## Move an existing player ship onto a reserved berth (no new build).
+func assign_existing_ship_to_berth(index: int, ship: BoatBody) -> bool:
+	if index < 0 or index >= _berth_data.size() or ship == null:
+		return false
+	var plot := get_parent()
+	if plot == null:
+		return false
+	if ship.get_parent() != plot:
+		ship.reparent(plot)
+	ship.global_transform = get_berth_spawn_transform(index)
+	ship.call_deferred("place_at_waterline", WaveSurface.WATER_LEVEL, ship.design_draft_fraction)
+	ship.fit_to_port_berth(self, index)
+	var mooring := ship.find_child("MooringComponent", true, false) as MooringComponent
+	if mooring != null:
+		mooring.call_deferred("auto_moor", mooring.get_tree())
+	register_ship_at_berth(index, ship, local_player_owner_id())
+	return true
 
 
 ## Place an already-built BoatBody at a berth. Caller must have called reserve_berth() first.
@@ -617,9 +736,7 @@ func place_ship_at_berth(index: int, ship: BoatBody) -> BoatBody:
 	var mooring := ship.find_child("MooringComponent", true, false) as MooringComponent
 	if mooring != null:
 		mooring.call_deferred("auto_moor", mooring.get_tree())
-	var b       := _berth_data[index] as Dictionary
-	b["status"] = BerthStatus.OCCUPIED
-	_update_berth_color(index)
+	register_ship_at_berth(index, ship, local_player_owner_id())
 	return ship
 
 

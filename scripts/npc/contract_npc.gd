@@ -32,6 +32,9 @@ func _add_hat() -> void:
 func _on_interact() -> void:
 	if _nearest_player() == null:
 		return
+	if _player_berth_index() < 0:
+		_show_berth_required()
+		return
 	_refresh_list()
 	_dialogue.show_panel()
 	open_ui()
@@ -59,14 +62,16 @@ func _refresh_list() -> void:
 
 	var active_count: int = registry.get_accepted_contracts().size()
 	var slots_free:   int = registry.MAX_ACTIVE_CONTRACTS - active_count
-	var ship_berthed: bool = _ship_is_berthed()
+	var berth_idx: int = _player_berth_index()
+	var ship_berthed: bool = berth_idx >= 0
 	var ship_cells_free: int = _ship_cells_free()
 
 	# Header line above the rows. One contract at a time: the header is
 	# "Active route" or "No active route", plus current ship capacity.
-	var header_text := "No active route   ·   Ship capacity %d cells" % ship_cells_free
+	var berth_label := "Berth %d   ·   " % (berth_idx + 1) if ship_berthed else ""
+	var header_text := "%sNo active route   ·   Ship capacity %d cells" % [berth_label, ship_cells_free]
 	if active_count > 0:
-		header_text = "Route active   ·   Ship capacity %d cells" % ship_cells_free
+		header_text = "%sRoute active   ·   Ship capacity %d cells" % [berth_label, ship_cells_free]
 	var header := _dialogue.add_label(header_text)
 	header.add_theme_color_override("font_color", HudStyle.C_AMBER)
 	_dialogue.add_separator()
@@ -119,7 +124,7 @@ func _make_row(contract: Contract, registry: Node, slots_free: int, ship_berthed
 	var reward_lbl    := Label.new()
 	# Reward shown for what's offered now (proportional to remaining quantity).
 	var offered_reward := contract.reward_per_unit() * still_offered
-	reward_lbl.text   = "ℳ %d" % offered_reward
+	reward_lbl.text   = PlayerSession.format_money(offered_reward)
 	reward_lbl.add_theme_font_size_override("font_size", 14)
 	reward_lbl.add_theme_color_override("font_color", HudStyle.C_AMBER)
 	reward_lbl.custom_minimum_size = Vector2(70, 0)
@@ -218,14 +223,39 @@ func _build_ui() -> void:
 	add_child(_dialogue)
 
 
-func _ship_is_berthed() -> bool:
+func _show_berth_required() -> void:
+	_dialogue.clear()
+	var intro := _dialogue.add_label(
+		"No vessel registered at this quay.\n\n"
+		+ "Make fast bow and stern to the bollards alongside a berth, then return."
+	)
+	intro.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_dialogue.show_panel()
+	open_ui()
+
+
+func _port_dock() -> PortDock:
 	var plot := get_parent() as PortPlot
 	if plot == null:
-		return false
-	var dock := plot.get_node_or_null("PortDock") as PortDock
+		return null
+	return plot.get_node_or_null("PortDock") as PortDock
+
+
+func _player_berth_index() -> int:
+	var dock := _port_dock()
 	if dock == null:
-		return false
-	return dock.find_occupied_berth() != -1
+		return -1
+	return dock.find_player_berth(PortDock.local_player_owner_id())
+
+
+func _player_ship() -> BoatBody:
+	var dock := _port_dock()
+	if dock == null:
+		return null
+	var idx := _player_berth_index()
+	if idx < 0:
+		return null
+	return dock.get_ship_at_berth(idx)
 
 
 ## Free CELLS the player can still commit to. Counts cells, not units, so
@@ -233,8 +263,11 @@ func _ship_is_berthed() -> bool:
 ## total ship deck capacity minus the cells occupied by every committed-but-
 ## undelivered pallet in the pipeline.
 func _ship_cells_free() -> int:
+	var ship := _player_ship()
+	if ship == null:
+		return 0
 	var total_capacity := 0
-	for node in get_tree().get_nodes_in_group(CargoDeckComponent.DECK_GROUP):
+	for node in ship.find_children("*", "CargoDeckComponent", true, false):
 		var deck := node as CargoDeckComponent
 		if deck == null or not deck.port_id.is_empty():
 			continue

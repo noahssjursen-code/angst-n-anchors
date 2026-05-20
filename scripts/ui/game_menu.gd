@@ -127,7 +127,7 @@ func _build_pause() -> Control:
 	var session := get_node_or_null("/root/PlayerSession")
 	if session != null:
 		session.marks_changed.connect(func(bal: int) -> void:
-			marks_label.text = "ℳ  %d  Marks" % bal
+			marks_label.text = PlayerSession.format_money(bal)
 		)
 
 	vbox.add_child(UiBuilder.separator())
@@ -141,7 +141,7 @@ func _build_pause() -> Control:
 	vbox.add_child(map_btn)
 
 	var quit := UiBuilder.button("QUIT TO DESKTOP")
-	quit.pressed.connect(func() -> void: get_tree().quit())
+	quit.pressed.connect(_quit_to_desktop)
 	vbox.add_child(quit)
 
 	return root
@@ -149,7 +149,7 @@ func _build_pause() -> Control:
 
 func _update_marks_label(lbl: Label) -> void:
 	var session := get_node_or_null("/root/PlayerSession")
-	lbl.text = "ℳ  %d  Marks" % (session.get_marks() if session != null else 0)
+	lbl.text = PlayerSession.format_money(session.get_marks() if session != null else 0)
 
 
 # ── Boat controller wiring ────────────────────────────────────────────────────
@@ -174,3 +174,10 @@ func _on_helm_on() -> void:
 func _on_helm_off() -> void:
 	_walking_hud.visible = true
 	_helm_active = false
+
+
+func _quit_to_desktop() -> void:
+	var session := get_node_or_null("/root/PlayerSession")
+	if session != null and session.has_method("save_now"):
+		session.call("save_now")
+	get_tree().quit()

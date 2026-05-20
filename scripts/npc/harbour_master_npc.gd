@@ -1,14 +1,9 @@
-@tool
 class_name HarbourMasterNpc
 extends NpcInteractable
 
 ## Harbour master NPC. Handles berth booking and harbour dues enquiries.
 
 const PEAKED_CAP_PATH := "res://resources/data/meshes/characters/hat_peaked_cap.json"
-
-## Ships offered when assigning a berth. Extend as you add ship JSON templates.
-const PLAYER_VESSEL_CHOICES: Array[Dictionary] = [
-]
 
 @export var port_id: String = ""
 
@@ -118,7 +113,7 @@ func _on_berth_selected(index: int) -> void:
 	var dock := _get_dock()
 	if dock == null:
 		return
-	if dock.reserve_berth(index, "Captain"):
+	if dock.reserve_berth(index, PortDock.local_player_owner_id()):
 		_pending_berth_index = index
 		_show_ship_select()
 	else:
@@ -134,22 +129,64 @@ func _show_ship_select() -> void:
 	_dialogue.add_quote("Which vessel shall we bring alongside?")
 
 	var listed := false
-	for entry in PLAYER_VESSEL_CHOICES:
-		var label      : String = str(entry.get("label", "Vessel"))
-		var scene_path : String = str(entry.get("path", ""))
-		if scene_path.is_empty() or (not ResourceLoader.exists(scene_path) and not FileAccess.file_exists(scene_path)):
-			continue
-		_dialogue.add_option(label, _spawn_chosen_ship.bind(scene_path))
+
+	for ship in _ships_at_port_available():
+		var label := _ship_label(ship)
+		_dialogue.add_option("Move %s to this berth" % label, _assign_existing_ship.bind(ship))
 		listed = true
+
+	var session := get_node_or_null("/root/PlayerSession")
+	if session != null:
+		for record in session.data.get_owned_vessel_records():
+			var rec := record as Dictionary
+			var template_path := str(rec.get("template_path", ""))
+			if template_path.is_empty() or not FileAccess.file_exists(template_path):
+				continue
+			var display := str(rec.get("display", "Your vessel"))
+			var short := display.split("  •  ")[0] if "  •  " in display else display
+			_dialogue.add_option("Deploy %s" % short, _spawn_owned_template.bind(template_path))
+			listed = true
 
 	if not listed:
 		_release_pending_berth()
-		_dialogue.add_quote("No playable vessels configured for this harbour.")
+		_dialogue.add_quote(
+			"I don't have any of your vessels on file, Captain.\n"
+			+ "Commission a hull at the shipwright, or sail one in and make fast to the bollards."
+		)
 		_dialogue.add_back_button(_show_main)
 		return
 
 	_dialogue.add_option("Never mind — release the berth.", _cancel_ship_select)
 	_dialogue.add_back_button(_cancel_ship_select)
+
+
+func _ships_at_port_available() -> Array[BoatBody]:
+	var out: Array[BoatBody] = []
+	var plot := get_parent() as PortPlot
+	if plot == null:
+		return out
+	var dock := _get_dock()
+	var owner_id := PortDock.local_player_owner_id()
+	var player_berth := dock.find_player_berth(owner_id) if dock != null else -1
+	for node in get_tree().get_nodes_in_group("player_boat"):
+		var ship := node as BoatBody
+		if ship == null or not plot.is_ancestor_of(ship):
+			continue
+		if dock != null and player_berth >= 0:
+			var at_berth := dock.get_ship_at_berth(player_berth)
+			if at_berth == ship:
+				continue
+		out.append(ship)
+	return out
+
+
+func _ship_label(ship: BoatBody) -> String:
+	if ship == null:
+		return "your vessel"
+	var n := ship.name
+	if n == "PlayerShip" or n.begins_with("@"):
+		return "your vessel"
+	return n
 
 
 func _cancel_ship_select() -> void:
@@ -164,6 +201,25 @@ func _release_pending_berth() -> void:
 	if dock != null:
 		dock.release_berth(_pending_berth_index)
 	_pending_berth_index = -1
+
+
+func _spawn_owned_template(template_path: String) -> void:
+	_spawn_chosen_ship(template_path)
+
+
+func _assign_existing_ship(ship: BoatBody) -> void:
+	var dock := _get_dock()
+	var idx  := _pending_berth_index
+	if dock == null or idx < 0 or ship == null:
+		return
+	_pending_berth_index = -1
+	if not dock.assign_existing_ship_to_berth(idx, ship):
+		dock.release_berth(idx)
+		_dialogue.clear()
+		_dialogue.add_quote("Couldn't move that vessel alongside. Your berth has been released.")
+		_dialogue.add_back_button(_show_main)
+		return
+	_finish_berth_assignment(idx)
 
 
 func _spawn_chosen_ship(scene_path: String) -> void:
@@ -182,6 +238,10 @@ func _spawn_chosen_ship(scene_path: String) -> void:
 		_dialogue.add_back_button(_show_main)
 		return
 
+	_finish_berth_assignment(idx)
+
+
+func _finish_berth_assignment(idx: int) -> void:
 	var plot := get_parent() as PortPlot
 	if plot != null:
 		plot.respawn_staged_cargo()

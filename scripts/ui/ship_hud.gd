@@ -285,7 +285,7 @@ func _draw_dashboard(c: Vector2) -> void:
 	var marks_str := ""
 	var session := get_node_or_null("/root/PlayerSession")
 	if session != null:
-		marks_str = "ℳ %d" % session.get_marks()
+		marks_str = PlayerSession.format_money(session.get_marks())
 
 	var cells: Array = [
 		["TIME",     _time_string(),                         HudStyle.C_AMBER                                             ],
