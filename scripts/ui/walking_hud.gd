@@ -3,6 +3,10 @@ extends Control
 
 ## Persistent on-foot HUD — marks balance and active contracts, top-left corner.
 ## Shown when the player is on foot; hidden by GameMenu when helming a ship.
+##
+## Redraws only on state changes (PlayerSession.marks_changed,
+## ContractRegistry.contract_accepted / _completed). Pre-overhaul this
+## hit queue_redraw() every frame — wasted CPU when nothing changed.
 
 var _font: Font
 
@@ -12,9 +16,38 @@ func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_font        = ThemeDB.fallback_font
 
+	var session := get_node_or_null("/root/PlayerSession")
+	if session != null:
+		if session.has_signal("marks_changed") and not session.marks_changed.is_connected(_refresh_arg):
+			session.marks_changed.connect(_refresh_arg)
+		if session.has_signal("data_loaded") and not session.data_loaded.is_connected(_refresh_arg):
+			session.data_loaded.connect(_refresh_arg)
 
-func _process(_delta: float) -> void:
+	var registry := get_node_or_null("/root/ContractRegistry")
+	if registry != null:
+		if registry.has_signal("contract_accepted") and not registry.contract_accepted.is_connected(_refresh_two):
+			registry.contract_accepted.connect(_refresh_two)
+		if registry.has_signal("contract_completed") and not registry.contract_completed.is_connected(_refresh_arg):
+			registry.contract_completed.connect(_refresh_arg)
+		if registry.has_signal("unit_delivered") and not registry.unit_delivered.is_connected(_refresh_two):
+			registry.unit_delivered.connect(_refresh_two)
+
+	# One redraw at start so the panel doesn't appear blank on first frame.
 	queue_redraw()
+
+
+# Helpers — accept the signal args (we ignore them and just redraw).
+func _refresh_arg(_arg: Variant = null) -> void:
+	queue_redraw()
+
+
+func _refresh_two(_a: Variant = null, _b: Variant = null) -> void:
+	queue_redraw()
+
+
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_VISIBILITY_CHANGED and visible:
+		queue_redraw()
 
 
 func _draw() -> void:
