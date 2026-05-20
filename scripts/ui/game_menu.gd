@@ -15,6 +15,7 @@ var _hud_layer:   CanvasLayer
 var _menu_layer:  CanvasLayer
 var _walking_hud: WalkingHud
 var _journal:     ContractJournalOverlay
+var _hints:       HintOverlay
 var _bg:          ColorRect
 var _pause_root:  Control
 var _map:         MapOverlay
@@ -39,6 +40,9 @@ func _ready() -> void:
 
 	_journal = ContractJournalOverlay.new()
 	_hud_layer.add_child(_journal)
+
+	_hints = HintOverlay.new()
+	_hud_layer.add_child(_hints)
 
 	# ── Modal menu layer ───────────────────────────────────────────────────────
 	_menu_layer              = CanvasLayer.new()

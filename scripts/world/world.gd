@@ -223,6 +223,11 @@ func _spawn_player() -> void:
 	if view != null and view.has_method("restore_player_state"):
 		view.call("restore_player_state")
 
+	# Phase 11 — fire the welcome hint once per captain after spawn settles.
+	var tut := get_node_or_null("/root/Tutorial")
+	if tut != null:
+		tut.call_deferred("show", "welcome")
+
 
 ## Resolve a safe spawn position for the player. Prefers HomePort.get_spawn_position()
 ## (which returns the dock's spawn anchor), but validates the result against the

@@ -243,6 +243,9 @@ func accept_contract(contract_id: String, take_units: int = 0) -> int:
 	var pallets := PalletFactory.split(batch)
 
 	contract_accepted.emit(contract, pallets)
+	var tut := get_node_or_null("/root/Tutorial")
+	if tut != null:
+		tut.call_deferred("show", "first_journal")
 	return actual
 
 

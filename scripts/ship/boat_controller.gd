@@ -64,6 +64,9 @@ func activate() -> void:
 	_ensure_hud()
 	_set_hud_visible(true)
 	helm_activated.emit()
+	var tut := get_node_or_null("/root/Tutorial")
+	if tut != null:
+		tut.call_deferred("show", "first_helm")
 
 
 func deactivate() -> void:

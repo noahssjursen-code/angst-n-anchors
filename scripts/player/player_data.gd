@@ -38,6 +38,10 @@ var ship_runtime_state: Dictionary = {}
 ## resetting to noon.
 var world_clock_hours: float = -1.0
 
+## Tutorial hint chain — { hint_id: true } once a hint has fired. Persisted
+## so a returning captain doesn't have to skip the same banners again.
+var tutorial_seen: Dictionary = {}
+
 
 func owns_hull_id(hull_id: String) -> bool:
 	return not active_vessel.is_empty() and str(active_vessel.get("hull_id", "")) == hull_id
@@ -77,6 +81,7 @@ func to_dict() -> Dictionary:
 		"accepted_contracts":       accepted_contracts.duplicate(true),
 		"ship_runtime_state":       _ship_runtime_to_dict(),
 		"world_clock_hours":        world_clock_hours,
+		"tutorial_seen":            tutorial_seen.duplicate(),
 	}
 
 
@@ -108,6 +113,9 @@ static func from_dict(d: Dictionary) -> PlayerData:
 	if typeof(ship_raw) == TYPE_DICTIONARY:
 		pd.ship_runtime_state = _ship_runtime_from_dict(ship_raw as Dictionary)
 	pd.world_clock_hours = float(d.get("world_clock_hours", -1.0))
+	var tut_raw: Variant = d.get("tutorial_seen", {})
+	if typeof(tut_raw) == TYPE_DICTIONARY:
+		pd.tutorial_seen = (tut_raw as Dictionary).duplicate()
 	return pd
 
 

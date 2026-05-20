@@ -283,6 +283,10 @@ func _finish_berth_assignment(idx: int) -> void:
 	_dialogue.add_quote("Berth #%d is yours, Captain. Mind the tides." % (idx + 1))
 	_dialogue.add_option("Thank you.", _close)
 
+	var tut := get_node_or_null("/root/Tutorial")
+	if tut != null:
+		tut.call_deferred("show", "first_berth")
+
 
 # ── Abandon ship ──────────────────────────────────────────────────────────────
 
