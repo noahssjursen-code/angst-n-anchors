@@ -41,15 +41,27 @@ func _ready() -> void:
 		t.sampled.connect(_on_telemetry)
 
 	# Refresh on gameplay state changes (player, ship, contracts, weather).
+	# Each sub-state has its own named signals — no generic "changed".
 	var gs := get_node_or_null("/root/GameState")
 	if gs != null:
-		for sub in [gs.player, gs.ship, gs.contract, gs.world]:
-			if sub != null and sub.has_signal("changed"):
-				sub.changed.connect(_on_state_changed)
+		_connect_if(gs.player,   "marks_changed",         _on_state_changed)
+		_connect_if(gs.player,   "display_name_changed",  _on_state_changed)
+		_connect_if(gs.ship,     "boarded",               _on_state_changed)
+		_connect_if(gs.ship,     "exited",                _on_state_changed)
+		_connect_if(gs.ship,     "hull_changed",          _on_state_changed)
+		_connect_if(gs.ship,     "fuel_changed",          _on_state_changed)
+		_connect_if(gs.contract, "active_changed",        _on_state_changed)
+		_connect_if(gs.world,    "weather_changed",       _on_state_changed)
+		_connect_if(gs.world,    "nearest_port_changed",  _on_state_changed)
 
 	var wl := get_node_or_null("/root/WeatherLighting")
 	if wl != null and wl.has_signal("state_changed"):
 		wl.state_changed.connect(_on_state_changed)
+
+
+static func _connect_if(obj: Object, signal_name: String, target: Callable) -> void:
+	if obj != null and obj.has_signal(signal_name) and not obj.is_connected(signal_name, target):
+		obj.connect(signal_name, target)
 
 
 func _on_telemetry() -> void:
@@ -57,7 +69,10 @@ func _on_telemetry() -> void:
 		queue_redraw()
 
 
-func _on_state_changed() -> void:
+## Accepts an optional argument so a single handler can connect to both
+## 0-arg signals (ShipState.exited, WeatherLighting.state_changed) and
+## 1-arg signals (marks_changed(balance), weather_changed(label), …).
+func _on_state_changed(_arg: Variant = null) -> void:
 	if visible:
 		queue_redraw()
 
