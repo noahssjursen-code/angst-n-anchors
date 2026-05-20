@@ -21,6 +21,11 @@ var _map:         MapOverlay
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
+	# Pause-on-focus-loss: when the user alt-tabs / clicks away, treat it
+	# as ESC so the game freezes and the cursor unlocks. Resume requires
+	# them to come back and press ESC — no auto-resume on focus regain so
+	# stray clicks can't unpause unexpectedly.
+	get_window().focus_exited.connect(_on_window_focus_exited)
 
 	# ── Walking HUD layer (persistent) ────────────────────────────────────────
 	_hud_layer       = CanvasLayer.new()
@@ -65,6 +70,18 @@ func _ready() -> void:
 func set_gameplay_hud_visible(visible: bool) -> void:
 	if _hud_layer != null:
 		_hud_layer.visible = visible
+
+
+## Pause the game when the window loses focus. Skip if we're already in
+## a modal screen (paused already) or sitting on the main menu (no game).
+func _on_window_focus_exited() -> void:
+	if _screen != Screen.NONE:
+		return
+	# `current_scene` is the main menu before the world boots — don't pause it.
+	var scene := get_tree().current_scene
+	if scene == null or String(scene.scene_file_path).ends_with("main_menu.tscn"):
+		return
+	_set_screen(Screen.PAUSE)
 
 
 # ── Input ─────────────────────────────────────────────────────────────────────

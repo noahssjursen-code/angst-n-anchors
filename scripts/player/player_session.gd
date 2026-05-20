@@ -23,10 +23,25 @@ var data: PlayerData = PlayerData.new()
 
 var _save_pending: bool = false
 
+# ── Autosave heartbeat (Phase 10 of the overnight refactor) ──────────────────
+## Every AUTOSAVE_INTERVAL_S of real wall-clock time we force a flush, even
+## if no event-driven save was requested. Insurance against crashes / power
+## loss / OS-killing-the-process.
+const AUTOSAVE_INTERVAL_S : float = 60.0
+var _autosave_clock: float = 0.0
+
 
 func _ready() -> void:
 	_load_from_disk()
 	call_deferred("_connect_registry")
+
+
+func _process(delta: float) -> void:
+	_autosave_clock += delta
+	if _autosave_clock < AUTOSAVE_INTERVAL_S:
+		return
+	_autosave_clock = 0.0
+	save_now()
 
 
 func _exit_tree() -> void:
