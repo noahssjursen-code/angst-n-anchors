@@ -41,6 +41,10 @@ var _camera: Camera3D
 var _name_field: LineEdit
 var _hat_row: HBoxContainer
 var _hat_buttons: Array[Button] = []
+var _skin_buttons:     Array[Button] = []
+var _clothing_buttons: Array[Button] = []
+var _trousers_buttons: Array[Button] = []
+var _sail_btn: Button
 
 
 func _ready() -> void:
@@ -57,6 +61,8 @@ func open_with_existing(data: PlayerData) -> void:
 		_name_field.text = data.display_name
 	_refresh_preview()
 	_rebuild_hat_selection()
+	_refresh_swatch_selection()
+	_update_sail_btn_enabled()
 	visible = true
 
 
@@ -168,13 +174,13 @@ func _build_ui() -> void:
 	opts.add_child(_name_field)
 
 	opts.add_child(_section_label("Complexion"))
-	opts.add_child(_make_swatch_row(SKIN_PRESETS, _on_skin_picked))
+	opts.add_child(_make_swatch_row(SKIN_PRESETS, _on_skin_picked, _skin_buttons))
 
 	opts.add_child(_section_label("Jacket"))
-	opts.add_child(_make_swatch_row(CLOTHING_PRESETS, _on_clothing_picked))
+	opts.add_child(_make_swatch_row(CLOTHING_PRESETS, _on_clothing_picked, _clothing_buttons))
 
 	opts.add_child(_section_label("Trousers"))
-	opts.add_child(_make_swatch_row(TROUSERS_PRESETS, _on_trousers_picked))
+	opts.add_child(_make_swatch_row(TROUSERS_PRESETS, _on_trousers_picked, _trousers_buttons))
 
 	opts.add_child(_section_label("Headwear"))
 	_hat_row = HBoxContainer.new()
@@ -196,10 +202,12 @@ func _build_ui() -> void:
 	back_btn.pressed.connect(func() -> void: cancelled.emit())
 	actions.add_child(back_btn)
 
-	var sail_btn := Button.new()
-	sail_btn.text = "Set sail"
-	sail_btn.pressed.connect(_on_confirm)
-	actions.add_child(sail_btn)
+	_sail_btn = Button.new()
+	_sail_btn.text = "Set sail"
+	_sail_btn.pressed.connect(_on_confirm)
+	actions.add_child(_sail_btn)
+	_refresh_swatch_selection()
+	_update_sail_btn_enabled()
 
 
 func _section_label(text: String) -> Label:
@@ -210,24 +218,52 @@ func _section_label(text: String) -> Label:
 	return lbl
 
 
-func _make_swatch_row(colors: Array[Color], on_pick: Callable) -> HBoxContainer:
+func _make_swatch_row(colors: Array[Color], on_pick: Callable, store: Array[Button]) -> HBoxContainer:
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 6)
 	for c in colors:
 		var btn := Button.new()
 		btn.custom_minimum_size = Vector2(36, 28)
 		btn.tooltip_text = "#%s" % c.to_html(false)
-		var sb := StyleBoxFlat.new()
-		sb.bg_color = c
-		sb.border_color = HudStyle.C_BRASS
-		sb.set_border_width_all(1)
-		sb.set_corner_radius_all(2)
-		btn.add_theme_stylebox_override("normal", sb)
-		btn.add_theme_stylebox_override("hover", sb)
-		btn.add_theme_stylebox_override("pressed", sb)
+		btn.set_meta("swatch_color", c)
 		btn.pressed.connect(on_pick.bind(c))
+		_apply_swatch_style(btn, c, false)
 		row.add_child(btn)
+		store.append(btn)
 	return row
+
+
+func _apply_swatch_style(btn: Button, c: Color, selected: bool) -> void:
+	var sb := StyleBoxFlat.new()
+	sb.bg_color = c
+	sb.border_color = HudStyle.C_AMBER if selected else HudStyle.C_BRASS
+	sb.set_border_width_all(2 if selected else 1)
+	sb.set_corner_radius_all(2)
+	btn.add_theme_stylebox_override("normal",  sb)
+	btn.add_theme_stylebox_override("hover",   sb)
+	btn.add_theme_stylebox_override("pressed", sb)
+	btn.add_theme_stylebox_override("focus",   sb)
+
+
+func _refresh_swatch_selection() -> void:
+	_highlight_swatch_for(_skin_buttons,     _appearance.skin_color)
+	_highlight_swatch_for(_clothing_buttons, _appearance.clothing_color)
+	_highlight_swatch_for(_trousers_buttons, _appearance.trousers_color)
+
+
+func _highlight_swatch_for(buttons: Array[Button], current: Color) -> void:
+	for btn in buttons:
+		if btn == null:
+			continue
+		var c: Color = btn.get_meta("swatch_color", Color.WHITE)
+		var selected := c.is_equal_approx(current)
+		_apply_swatch_style(btn, c, selected)
+
+
+func _update_sail_btn_enabled() -> void:
+	if _sail_btn == null or _name_field == null:
+		return
+	_sail_btn.disabled = _name_field.text.strip_edges().is_empty()
 
 
 func _build_hat_buttons() -> void:
@@ -253,22 +289,25 @@ func _rebuild_hat_selection() -> void:
 
 
 func _on_name_changed(_text: String) -> void:
-	pass
+	_update_sail_btn_enabled()
 
 
 func _on_skin_picked(c: Color) -> void:
 	_appearance.skin_color = c
 	_refresh_preview()
+	_refresh_swatch_selection()
 
 
 func _on_clothing_picked(c: Color) -> void:
 	_appearance.clothing_color = c
 	_refresh_preview()
+	_refresh_swatch_selection()
 
 
 func _on_trousers_picked(c: Color) -> void:
 	_appearance.trousers_color = c
 	_refresh_preview()
+	_refresh_swatch_selection()
 
 
 func _on_hat_pressed(hat_id: String) -> void:
