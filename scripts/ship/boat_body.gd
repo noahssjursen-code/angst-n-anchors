@@ -115,6 +115,25 @@ signal fuel_changed(fraction: float)
 ## Emitted once when the tank crosses from non-empty to empty.
 signal fuel_depleted
 
+
+## Empirical cruise speed in m/s used to estimate range on the map's
+## fuel-range ring. Doesn't drive physics — it's a UI hint that lines up
+## with what a starter trader actually does at full throttle.
+const CRUISE_SPEED_MS : float = 5.0
+
+
+## How far the vessel can travel before running dry, at cruise speed and
+## current fuel level. Returns metres. Returns 0 when there's no propulsion
+## component so the ring stays hidden in that case.
+func get_estimated_range_m() -> float:
+	var prop := find_child("PropulsionComponent", true, false)
+	if prop == null:
+		return 0.0
+	var burn := float(prop.get("fuel_burn_l_per_sec_full"))
+	if burn <= 0.0:
+		return 0.0
+	return fuel_l / burn * CRUISE_SPEED_MS
+
 @export_group("Stability (artificial keel)")
 ## Push the rigid-body center of mass below the mesh geometric center (ballast / keel).
 ## Vertical offset from `hull_center` = `hull_size.y * center_of_mass_depth_fraction`
