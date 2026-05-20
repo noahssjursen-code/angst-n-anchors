@@ -253,9 +253,10 @@ func _build_template(entry: Dictionary) -> Dictionary:
 		"physics": {
 			"auto_mass_from_hull":    true,
 			"design_draft_fraction":  0.45,
+			"mass_scale":             1.28,
 		},
 		"buoyancy": {
-			"heave_damping_per_m2": 8000.0,
+			"heave_damping_per_m2": 11000.0,
 		},
 		"hydrodynamics": {
 			"frictional_coeff":       0.0025,
