@@ -9,7 +9,7 @@ const PEAKED_CAP_PATH := AssetPaths.HAT_PEAKED_CAP
 
 var _dialogue: DialoguePanel
 
-enum _Screen { MAIN, REQUEST_BERTH, VESSEL_INFO, SHIP_SELECT, REFUEL }
+enum _Screen { MAIN, REQUEST_BERTH, VESSEL_INFO, SHIP_SELECT, REFUEL, ABANDON_CONFIRM }
 
 ## Price per litre of diesel. Tuned so a full 400 L tank costs ~200 marks —
 ## a starter player earns enough from one delivery to cover the return trip.
@@ -68,6 +68,8 @@ func _show_main() -> void:
 	if _can_offer_refuel():
 		_dialogue.add_option("Refuel my ship.",                _show_refuel)
 	_dialogue.add_option("What vessels can dock here?",        _show_vessel_info)
+	if LocalPlayerView.has_active_ship():
+		_dialogue.add_option("Abandon my vessel.",             _show_abandon_confirm)
 	_dialogue.add_option("Nothing, thank you.",                _close)
 
 
@@ -280,6 +282,61 @@ func _finish_berth_assignment(idx: int) -> void:
 	_dialogue.clear()
 	_dialogue.add_quote("Berth #%d is yours, Captain. Mind the tides." % (idx + 1))
 	_dialogue.add_option("Thank you.", _close)
+
+
+# ── Abandon ship ──────────────────────────────────────────────────────────────
+
+func _show_abandon_confirm() -> void:
+	_screen = _Screen.ABANDON_CONFIRM
+	_dialogue.clear()
+	if not LocalPlayerView.has_active_ship():
+		_dialogue.add_quote("You have no vessel to abandon, Captain.")
+		_dialogue.add_back_button(_show_main)
+		return
+	_dialogue.add_quote(
+		"Abandon your vessel? She'll be towed away and any cargo aboard "
+		+ "will be forfeit. You can claim a fresh loaner afterwards."
+	)
+	_dialogue.add_option("Yes — scrap her.",   _commit_abandon)
+	_dialogue.add_back_button(_show_main)
+
+
+func _commit_abandon() -> void:
+	# Despawn the ship — PlayerVessel handles cargo forfeit, dock unregister,
+	# and mooring release as part of _prepare_despawn.
+	PlayerVessel.despawn_all_ships(get_tree())
+
+	# Clear active-vessel record so the harbour master offers the starter
+	# loaner again on the next berth request. Drop saved ship pose too so
+	# we don't try to restore a vessel that no longer exists.
+	var session := get_node_or_null("/root/PlayerSession")
+	if session != null and session.data != null:
+		session.data.set_active_vessel({})
+		session.data.ship_runtime_state = {}
+		if session.has_method("save_now"):
+			session.call("save_now")
+
+	# Move the player back to the home port spawn anchor so they're not
+	# left floating where their ship used to be.
+	_teleport_player_to_home()
+
+	_dialogue.clear()
+	_dialogue.add_quote("She's gone, Captain. Come back when you'd like another berth.")
+	_dialogue.add_option("Thank you.", _close)
+
+
+func _teleport_player_to_home() -> void:
+	var tree := get_tree()
+	if tree == null or tree.root == null:
+		return
+	var home := tree.root.find_child("HomePort", true, false) as PortPlot
+	if home == null:
+		return
+	var spawn_pos := home.get_spawn_position()
+	for node in tree.get_nodes_in_group("player"):
+		var player := node as Node3D
+		if player != null and is_instance_valid(player):
+			player.global_position = spawn_pos
 
 
 func _show_vessel_info() -> void:
