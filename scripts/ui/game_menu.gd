@@ -6,7 +6,7 @@ extends Node
 ## Layer 5  — WalkingHud (always on during gameplay)
 ## Layer 20 — Pause / Map modal screens
 
-enum Screen { NONE, PAUSE, MAP }
+enum Screen { NONE, PAUSE, MAP, SETTINGS }
 
 var _screen:          Screen     = Screen.NONE
 var _prev_mouse_mode: int        = Input.MOUSE_MODE_VISIBLE
@@ -14,13 +14,21 @@ var _helm_active:     bool       = false
 var _hud_layer:   CanvasLayer
 var _menu_layer:  CanvasLayer
 var _walking_hud: WalkingHud
+var _journal:     ContractJournalOverlay
+var _hints:       HintOverlay
 var _bg:          ColorRect
 var _pause_root:  Control
 var _map:         MapOverlay
+var _settings:    SettingsPanel
 
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
+	# Pause-on-focus-loss: when the user alt-tabs / clicks away, treat it
+	# as ESC so the game freezes and the cursor unlocks. Resume requires
+	# them to come back and press ESC — no auto-resume on focus regain so
+	# stray clicks can't unpause unexpectedly.
+	get_window().focus_exited.connect(_on_window_focus_exited)
 
 	# ── Walking HUD layer (persistent) ────────────────────────────────────────
 	_hud_layer       = CanvasLayer.new()
@@ -29,6 +37,12 @@ func _ready() -> void:
 
 	_walking_hud = WalkingHud.new()
 	_hud_layer.add_child(_walking_hud)
+
+	_journal = ContractJournalOverlay.new()
+	_hud_layer.add_child(_journal)
+
+	_hints = HintOverlay.new()
+	_hud_layer.add_child(_hints)
 
 	# ── Modal menu layer ───────────────────────────────────────────────────────
 	_menu_layer              = CanvasLayer.new()
@@ -50,6 +64,11 @@ func _ready() -> void:
 	_map.process_mode = Node.PROCESS_MODE_ALWAYS
 	_menu_layer.add_child(_map)
 
+	_settings              = SettingsPanel.new()
+	_settings.process_mode = Node.PROCESS_MODE_ALWAYS
+	_settings.close_requested.connect(func() -> void: _set_screen(Screen.PAUSE))
+	_menu_layer.add_child(_settings)
+
 	_set_screen(Screen.NONE)
 
 	# Watch for boat controllers spawned at any point
@@ -67,20 +86,38 @@ func set_gameplay_hud_visible(visible: bool) -> void:
 		_hud_layer.visible = visible
 
 
+## Pause the game when the window loses focus. Skip if we're already in
+## a modal screen (paused already) or sitting on the main menu (no game).
+func _on_window_focus_exited() -> void:
+	if _screen != Screen.NONE:
+		return
+	# `current_scene` is the main menu before the world boots — don't pause it.
+	var scene := get_tree().current_scene
+	if scene == null or String(scene.scene_file_path).ends_with("main_menu.tscn"):
+		return
+	_set_screen(Screen.PAUSE)
+
+
 # ── Input ─────────────────────────────────────────────────────────────────────
 
 func _unhandled_input(event: InputEvent) -> void:
 	if event.is_action_pressed("ui_cancel"):
-		if _screen != Screen.NONE:
+		if _screen == Screen.SETTINGS:
+			_set_screen(Screen.PAUSE)
+			get_viewport().set_input_as_handled()
+		elif _screen != Screen.NONE:
 			_set_screen(Screen.NONE)
 			get_viewport().set_input_as_handled()
-		elif Input.mouse_mode == Input.MOUSE_MODE_CAPTURED and not _helm_active:
-			# Only open the pause menu when no other UI is holding the cursor.
-			# NPC dialogs set mouse visible; helm exit is handled by CaptainsChair.
+		elif not _helm_active:
+			# Helm exit is handled by CaptainsChair. NPC dialogs consume ESC while open.
 			_set_screen(Screen.PAUSE)
 			get_viewport().set_input_as_handled()
 	elif event.is_action_pressed("open_map") and _screen != Screen.PAUSE:
 		_set_screen(Screen.MAP if _screen != Screen.MAP else Screen.NONE)
+		get_viewport().set_input_as_handled()
+	elif event.is_action_pressed("open_journal") and _screen == Screen.NONE:
+		if _journal != null:
+			_journal.toggle()
 		get_viewport().set_input_as_handled()
 
 
@@ -99,7 +136,12 @@ func _set_screen(s: Screen) -> void:
 	_bg.visible          = modal
 	_pause_root.visible  = s == Screen.PAUSE
 	_map.visible         = s == Screen.MAP
-	get_tree().paused    = s == Screen.PAUSE
+	_settings.visible    = s == Screen.SETTINGS
+	if _journal != null:
+		_journal.visible = not modal
+	# Pause while on Pause OR Settings — both are reached from the pause menu
+	# and a moving world behind the settings panel is jarring.
+	get_tree().paused    = s == Screen.PAUSE or s == Screen.SETTINGS
 
 
 # ── Pause panel ───────────────────────────────────────────────────────────────
@@ -148,6 +190,10 @@ func _build_pause() -> Control:
 	var map_btn := UiBuilder.button("SEA CHART  [ M ]")
 	map_btn.pressed.connect(func() -> void: _set_screen(Screen.MAP))
 	vbox.add_child(map_btn)
+
+	var settings_btn := UiBuilder.button("SETTINGS")
+	settings_btn.pressed.connect(func() -> void: _set_screen(Screen.SETTINGS))
+	vbox.add_child(settings_btn)
 
 	var quit := UiBuilder.button("QUIT TO DESKTOP")
 	quit.pressed.connect(_quit_to_desktop)

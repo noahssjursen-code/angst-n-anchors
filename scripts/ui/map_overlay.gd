@@ -319,6 +319,19 @@ func _draw() -> void:
 			"hover_inside": _hover_inside,
 		})
 
+	# Fuel range ring — drawn under contract routes / islands so the ring
+	# never obscures port detail. Only shown when there's an active ship
+	# with a propulsion component reporting a finite range.
+	if ship_pos.x != INF:
+		var boat: BoatBody = null
+		for n in get_tree().get_nodes_in_group("player_boat"):
+			boat = n as BoatBody
+			break
+		if boat != null and boat.has_method("get_estimated_range_m"):
+			var range_m: float = boat.get_estimated_range_m()
+			if range_m > 1.0:
+				_draw_fuel_range_ring(_w2s(ship_pos), range_m, ppu, boat)
+
 	# Contract routes
 	if registry != null:
 		for c in accepted:
@@ -635,6 +648,40 @@ var _hover_pos        : Vector2 = Vector2(-1.0, -1.0)
 var _hover_inside     : bool    = false
 
 
+
+
+## Render the fuel-range ring centred on the player ship. Amber fade —
+## brighter at the edge, near-transparent in the centre — so it reads as a
+## reachable horizon rather than a circle of doom. Colour shifts to red
+## when fuel is below ~15% so the captain notices at a glance.
+func _draw_fuel_range_ring(center: Vector2, range_m: float, ppu: float, boat: BoatBody) -> void:
+	var r_px := range_m * ppu
+	if r_px <= 4.0 or r_px > 4000.0:
+		return
+	var frac := boat.get_fuel_fraction()
+	var col := Color(1.0, 0.65, 0.15, 0.32)
+	if frac < 0.15:
+		col = Color(0.95, 0.30, 0.20, 0.42)
+	# Filled disc, very faint, for the reachable area.
+	var fill := Color(col.r, col.g, col.b, 0.06)
+	draw_circle(center, r_px, fill)
+	# Outline ring — dashed via short arcs around the circle.
+	var segments := 96
+	for i in range(segments):
+		var a0 := float(i)     / float(segments) * TAU
+		var a1 := float(i + 1) / float(segments) * TAU
+		if i % 2 == 0:
+			var p0 := center + Vector2(cos(a0), sin(a0)) * r_px
+			var p1 := center + Vector2(cos(a1), sin(a1)) * r_px
+			draw_line(p0, p1, col, 1.5, true)
+	# Label at the top of the ring.
+	var font := ThemeDB.fallback_font
+	var range_nm := range_m / 1852.0
+	var lbl := "%.1f nm" % range_nm if range_nm >= 0.5 else "%.0f m" % range_m
+	var fs := 10
+	var tw := font.get_string_size(lbl, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
+	var lp := center + Vector2(-tw * 0.5, -r_px - 6.0)
+	draw_string(font, lp, lbl, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, col)
 
 
 func _draw_dashed_line(a: Vector2, b: Vector2, col: Color, width: float, dash: float) -> void:

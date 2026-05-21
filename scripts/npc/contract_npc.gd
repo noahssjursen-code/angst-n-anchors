@@ -5,7 +5,7 @@ extends NpcInteractable
 ## Contract board NPC. Opens a contract list when the player interacts.
 ## Blocks interaction if player is carrying cargo.
 
-const FLAT_CAP_PATH := "res://resources/data/meshes/characters/hat_flat_cap.json"
+const FLAT_CAP_PATH := AssetPaths.HAT_FLAT_CAP
 
 @export var port_id: String = ""
 

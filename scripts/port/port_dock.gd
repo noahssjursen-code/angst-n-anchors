@@ -620,9 +620,15 @@ func berth_has_ship(index: int) -> bool:
 
 
 func berth_reference_local_midship(index: int) -> Vector3:
-	var count  := ShipClass.berth_count(dock_length, max_ship_class, BERTH_GAP_M)
+	# Must match _build_berths() / PortExpander slot centres — not ShipClass.berth_count().
+	if index >= 0 and index < _berth_data.size():
+		var b := _berth_data[index] as Dictionary
+		var cx: float = float(b["cx"])
+		var beam_m := ShipClass.beam(max_ship_class)
+		return Vector3(cx, WaveSurface.WATER_LEVEL, -beam_m * 0.5)
+	var count := maxi(berth_count(), 1)
 	var slot_w := dock_length / float(count)
-	var cx     := -dock_length * 0.5 + slot_w * (float(index) + 0.5)
+	var cx := -dock_length * 0.5 + slot_w * (float(index) + 0.5)
 	var beam_m := ShipClass.beam(max_ship_class)
 	return Vector3(cx, WaveSurface.WATER_LEVEL, -beam_m * 0.5)
 
@@ -644,6 +650,10 @@ func get_berth_spawn_transform(index: int) -> Transform3D:
 func spawn_player_ship(index: int, ship_scene_path: String = "") -> Node3D:
 	if index < 0 or index >= _berth_data.size():
 		return null
+
+	var tree := get_tree()
+	if tree != null:
+		PlayerVessel.replace_before_spawn(tree)
 
 	var path := ship_scene_path.strip_edges()
 	if path.is_empty():
@@ -677,17 +687,19 @@ func spawn_player_ship(index: int, ship_scene_path: String = "") -> Node3D:
 		ship.queue_free()
 		return null
 	plot.add_child(ship)
-	ship.global_transform = t
 
 	var berth_draft_frac: float = 0.45
 	var body := ship as BoatBody
 	if body != null:
 		berth_draft_frac = body.design_draft_fraction
-	if ship.has_method("place_at_waterline"):
-		ship.call("place_at_waterline", WaveSurface.WATER_LEVEL, berth_draft_frac)
-
-	if body != null:
+		body.snap_to_transform(t)
+		body.place_at_waterline(WaveSurface.WATER_LEVEL, berth_draft_frac)
 		body.fit_to_port_berth(self, index)
+	elif ship.has_method("place_at_waterline"):
+		ship.global_transform = t
+		ship.call("place_at_waterline", WaveSurface.WATER_LEVEL, berth_draft_frac)
+	else:
+		ship.global_transform = t
 
 	var mooring := ship.find_child("MooringComponent", true, false) as MooringComponent
 	if mooring != null:
@@ -697,6 +709,16 @@ func spawn_player_ship(index: int, ship_scene_path: String = "") -> Node3D:
 	register_ship_at_berth(
 		index, body if body != null else ship as BoatBody, local_player_owner_id()
 	)
+
+	if body != null:
+		PlayerVessel.mark_player_ship(body)
+		# After the player's ship is marked, ask LocalPlayerView to apply any
+		# saved runtime state (fuel level, throttle stage). World-load tries
+		# this earlier but no ship existed yet; this is the actual moment
+		# where the active vessel exists.
+		var view := get_tree().root.get_node_or_null("LocalPlayerView")
+		if view != null and view.has_method("apply_runtime_state_to_active_ship"):
+			view.call_deferred("apply_runtime_state_to_active_ship")
 
 	return ship
 
@@ -708,20 +730,30 @@ func assign_existing_ship_to_berth(index: int, ship: BoatBody) -> bool:
 	var plot := get_parent()
 	if plot == null:
 		return false
-	if ship.get_parent() != plot:
-		ship.reparent(plot)
-	ship.global_transform = get_berth_spawn_transform(index)
-	ship.call_deferred("place_at_waterline", WaveSurface.WATER_LEVEL, ship.design_draft_fraction)
-	ship.fit_to_port_berth(self, index)
+
 	var mooring := ship.find_child("MooringComponent", true, false) as MooringComponent
 	if mooring != null:
+		mooring.release_mooring()
+
+	if ship.get_parent() != plot:
+		ship.reparent(plot)
+
+	var berth_xform := get_berth_spawn_transform(index)
+	ship.snap_to_transform(berth_xform)
+	ship.place_at_waterline(WaveSurface.WATER_LEVEL, ship.design_draft_fraction)
+	ship.fit_to_port_berth(self, index)
+
+	if mooring != null:
 		mooring.call_deferred("auto_moor", mooring.get_tree())
-	register_ship_at_berth(index, ship, local_player_owner_id())
-	return true
+
+	return register_ship_at_berth(index, ship, local_player_owner_id())
 
 
 ## Place an already-built BoatBody at a berth. Caller must have called reserve_berth() first.
 func place_ship_at_berth(index: int, ship: BoatBody) -> BoatBody:
+	var tree := get_tree()
+	if tree != null:
+		PlayerVessel.despawn_all_ships(tree, ship)
 	if index < 0 or index >= _berth_data.size():
 		return null
 	var t    := get_berth_spawn_transform(index)
@@ -730,13 +762,14 @@ func place_ship_at_berth(index: int, ship: BoatBody) -> BoatBody:
 	if plot == null:
 		return null
 	plot.add_child(ship)
-	ship.global_transform = t
-	ship.call_deferred("place_at_waterline", WaveSurface.WATER_LEVEL, ship.design_draft_fraction)
+	ship.snap_to_transform(t)
+	ship.place_at_waterline(WaveSurface.WATER_LEVEL, ship.design_draft_fraction)
 	ship.fit_to_port_berth(self, index)
 	var mooring := ship.find_child("MooringComponent", true, false) as MooringComponent
 	if mooring != null:
 		mooring.call_deferred("auto_moor", mooring.get_tree())
 	register_ship_at_berth(index, ship, local_player_owner_id())
+	PlayerVessel.mark_player_ship(ship)
 	return ship
 
 

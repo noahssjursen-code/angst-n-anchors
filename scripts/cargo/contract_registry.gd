@@ -7,6 +7,7 @@ extends Node
 signal contract_accepted(contract: Contract, pallets: Array[Pallet])
 signal unit_delivered(contract: Contract, reward_gold: int)
 signal contract_completed(contract: Contract)
+signal contract_transit_forfeited(contract: Contract, units: int)
 
 ## Per-commodity packing rules.
 ##
@@ -52,6 +53,29 @@ var _contracts: Dictionary = {}
 ## Drawn down when a contract is accepted, replenished by future restock logic
 ## (TBD). Multiplayer: every player draws from the same per-port pool.
 var _export_stock: Dictionary = {}
+## port_id -> { commodity_id -> peak_seen_stock }. Restock target — each
+## game-hour tick we top each pool up toward this cap so depleted ports
+## recover over time instead of staying drained forever.
+var _export_stock_cap: Dictionary = {}
+
+## Units restocked per game-hour per (port, commodity). 1 unit/hour means a
+## 5-unit contract refills in ~5 minutes of real time. Low enough that the
+## player still feels stock pressure when they over-fish a route.
+const RESTOCK_PER_HOUR : int = 1
+
+
+func _ready() -> void:
+	# Restock loop — subscribe deferred so WorldClock has finished its own
+	# _ready (autoload order is fragile across project edits).
+	call_deferred("_connect_world_clock")
+
+
+func _connect_world_clock() -> void:
+	var clock := get_node_or_null("/root/WorldClock")
+	if clock == null:
+		return
+	if clock.has_signal("hour_changed") and not clock.hour_changed.is_connected(_on_world_hour_tick):
+		clock.hour_changed.connect(_on_world_hour_tick)
 
 
 # ── Port registration ─────────────────────────────────────────────────────────
@@ -219,6 +243,9 @@ func accept_contract(contract_id: String, take_units: int = 0) -> int:
 	var pallets := PalletFactory.split(batch)
 
 	contract_accepted.emit(contract, pallets)
+	var tut := get_node_or_null("/root/Tutorial")
+	if tut != null:
+		tut.call_deferred("show", "first_journal")
 	return actual
 
 
@@ -235,7 +262,31 @@ func add_export_stock(port_id: String, commodity_id: String, units: int) -> void
 	if not _export_stock.has(port_id):
 		_export_stock[port_id] = {}
 	var pool: Dictionary = _export_stock[port_id]
-	pool[commodity_id] = int(pool.get(commodity_id, 0)) + units
+	var new_total := int(pool.get(commodity_id, 0)) + units
+	pool[commodity_id] = new_total
+
+	# Track the high-water mark so the restock loop knows where to refill to.
+	if not _export_stock_cap.has(port_id):
+		_export_stock_cap[port_id] = {}
+	var cap_pool: Dictionary = _export_stock_cap[port_id]
+	cap_pool[commodity_id] = maxi(int(cap_pool.get(commodity_id, 0)), new_total)
+
+
+## Periodic restock pass — every game-hour tick we add RESTOCK_PER_HOUR
+## units to each (port, commodity) pool, capped at the seeded high-water
+## mark so we never overshoot what the world originally generated.
+func _on_world_hour_tick(_hour_number: int) -> void:
+	for port_id in _export_stock_cap.keys():
+		var cap_pool: Dictionary = _export_stock_cap[port_id]
+		if not _export_stock.has(port_id):
+			_export_stock[port_id] = {}
+		var pool: Dictionary = _export_stock[port_id]
+		for commodity_id in cap_pool.keys():
+			var cap := int(cap_pool[commodity_id])
+			var have := int(pool.get(commodity_id, 0))
+			if have >= cap:
+				continue
+			pool[commodity_id] = mini(have + RESTOCK_PER_HOUR, cap)
 
 
 func _consume_stock(port_id: String, commodity_id: String, units: int) -> bool:
@@ -274,6 +325,76 @@ func deliver_pallet(pallet: Pallet) -> int:
 		contract.state           = Contract.State.AVAILABLE
 
 	return reward
+
+
+# ── Lost in transit (ship despawn, etc.) ─────────────────────────────────────
+
+## Cargo on a destroyed/replaced hull is gone — roll back in-transit units and
+## return stock to the origin port so the contract is not stuck open.
+func forfeit_transit_units(contract_id: String, units: int) -> void:
+	if units <= 0 or contract_id.is_empty():
+		return
+	var contract := _contracts.get(contract_id) as Contract
+	if contract == null:
+		return
+	var in_transit := maxi(contract.taken_count - contract.delivered_count, 0)
+	var actual := mini(units, in_transit)
+	if actual <= 0:
+		return
+	contract.taken_count -= actual
+	add_export_stock(contract.origin_port_id, contract.commodity, actual)
+	if contract.taken_count <= 0:
+		contract.taken_count = 0
+		contract.state = Contract.State.AVAILABLE
+	contract_transit_forfeited.emit(contract, actual)
+
+
+# ── Save / restore (Phase 4 of the overnight refactor) ──────────────────────
+
+## Snapshot accepted contracts to a serialisable Array. Each entry:
+##   { "id": String, "taken_count": int, "delivered_count": int }
+## Persisted in PlayerData.accepted_contracts so a quit/load round-trip
+## preserves contract progress.
+func snapshot_accepted() -> Array:
+	var out: Array = []
+	for raw in get_accepted_contracts():
+		var c := raw as Contract
+		if c == null:
+			continue
+		out.append({
+			"id":              c.id,
+			"taken_count":     c.taken_count,
+			"delivered_count": c.delivered_count,
+		})
+	return out
+
+
+## Restore accepted-contract state from a snapshot (typically loaded from
+## PlayerData on game launch). Contracts whose id we don't recognise (e.g.
+## the world was regenerated with a different seed) are skipped silently.
+##
+## Mid-flight cargo (taken > delivered) is forfeit on restore: we set
+## taken := delivered so the contract state is consistent with the ship's
+## actual cargo holds (which are empty after respawn). This matches the
+## existing "ship despawn forfeits cargo" rule.
+func restore_accepted(records: Array) -> void:
+	for entry in records:
+		if typeof(entry) != TYPE_DICTIONARY:
+			continue
+		var rec := entry as Dictionary
+		var cid := str(rec.get("id", ""))
+		if cid.is_empty():
+			continue
+		var c := _contracts.get(cid) as Contract
+		if c == null:
+			continue
+		var delivered := int(rec.get("delivered_count", 0))
+		var taken     := int(rec.get("taken_count", delivered))
+		# Forfeit any in-flight cargo by clamping taken to delivered.
+		c.delivered_count = clampi(delivered, 0, c.quantity)
+		c.taken_count     = clampi(maxi(taken, c.delivered_count), 0, c.quantity)
+		if c.taken_count > c.delivered_count:
+			c.taken_count = c.delivered_count
 
 
 # ── Generation ────────────────────────────────────────────────────────────────

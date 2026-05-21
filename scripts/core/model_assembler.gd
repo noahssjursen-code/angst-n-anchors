@@ -307,26 +307,10 @@ func _nested_collision_override(part: Dictionary) -> String:
 	return ""
 
 
+## Thin wrapper around JsonUtil.load() — kept as an instance method so existing
+## callers work unchanged.
 func _load_json(path: String) -> Dictionary:
-	if not FileAccess.file_exists(path):
-		push_error("ModelAssembler: file not found: " + path)
-		return {}
-
-	var file := FileAccess.open(path, FileAccess.READ)
-	var json_string := file.get_as_text()
-	file.close()
-
-	var json := JSON.new()
-	var error := json.parse(json_string)
-	if error != OK:
-		push_error("ModelAssembler: JSON parse error in " + path)
-		return {}
-
-	var data = json.get_data()
-	if typeof(data) != TYPE_DICTIONARY:
-		push_error("ModelAssembler: root must be an object in " + path)
-		return {}
-	return data
+	return JsonUtil.load(path)
 
 
 func _resolve_mesh_path(mesh_path: String) -> String:

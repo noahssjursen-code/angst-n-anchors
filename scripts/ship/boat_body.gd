@@ -90,6 +90,50 @@ const WALK_MODEL_COLLIDER_NAME := "WalkModelCollider"
 		cargo_mass = maxf(0.0, v)
 		_refresh_mass()
 
+@export_group("Fuel")
+## Tank capacity in litres. Scales with hull size — defaults sized for a
+## coastal trader. ShipBuilder can override per-template; a value > 0 here
+## ensures any hull spawned cold-boot has a usable tank.
+@export var fuel_capacity_l: float = 400.0:
+	set(v):
+		fuel_capacity_l = maxf(v, 1.0)
+		fuel_l = minf(fuel_l, fuel_capacity_l)
+
+## Current fuel level in litres. Persisted via PlayerData.ship_runtime_state
+## as a fraction so different hulls round-trip cleanly.
+@export var fuel_l: float = 400.0:
+	set(v):
+		var clamped := clampf(v, 0.0, fuel_capacity_l)
+		var was_dry := fuel_l <= 0.0001
+		fuel_l = clamped
+		fuel_changed.emit(get_fuel_fraction())
+		if not was_dry and fuel_l <= 0.0001:
+			fuel_depleted.emit()
+
+## Emitted when fuel level changes. Argument is current fraction (0..1).
+signal fuel_changed(fraction: float)
+## Emitted once when the tank crosses from non-empty to empty.
+signal fuel_depleted
+
+
+## Empirical cruise speed in m/s used to estimate range on the map's
+## fuel-range ring. Doesn't drive physics — it's a UI hint that lines up
+## with what a starter trader actually does at full throttle.
+const CRUISE_SPEED_MS : float = 5.0
+
+
+## How far the vessel can travel before running dry, at cruise speed and
+## current fuel level. Returns metres. Returns 0 when there's no propulsion
+## component so the ring stays hidden in that case.
+func get_estimated_range_m() -> float:
+	var prop := find_child("PropulsionComponent", true, false)
+	if prop == null:
+		return 0.0
+	var burn := float(prop.get("fuel_burn_l_per_sec_full"))
+	if burn <= 0.0:
+		return 0.0
+	return fuel_l / burn * CRUISE_SPEED_MS
+
 @export_group("Stability (artificial keel)")
 ## Push the rigid-body center of mass below the mesh geometric center (ballast / keel).
 ## Vertical offset from `hull_center` = `hull_size.y * center_of_mass_depth_fraction`
@@ -168,6 +212,39 @@ var _walk_deck:   AnimatableBody3D
 var _mooring_integrate: Callable = Callable()
 
 
+# ── Fuel API ─────────────────────────────────────────────────────────────────
+
+## 0..1 fraction of capacity.
+func get_fuel_fraction() -> float:
+	if fuel_capacity_l <= 0.0:
+		return 0.0
+	return clampf(fuel_l / fuel_capacity_l, 0.0, 1.0)
+
+
+## Deduct fuel; clamps to zero. Called by PropulsionComponent each tick.
+func consume_fuel(litres: float) -> void:
+	if litres <= 0.0:
+		return
+	fuel_l = maxf(fuel_l - litres, 0.0)
+
+
+## Add fuel up to capacity. Used by FuelStation when refuelling at a pump.
+## Returns the actual amount added (may be less than requested if the
+## tank was already nearly full).
+func add_fuel(litres: float) -> float:
+	if litres <= 0.0:
+		return 0.0
+	var before := fuel_l
+	fuel_l = minf(fuel_l + litres, fuel_capacity_l)
+	return fuel_l - before
+
+
+## Top up to full. Used by the shipwright on commission so a freshly-built
+## ship is ready to sail.
+func fill_tank() -> void:
+	fuel_l = fuel_capacity_l
+
+
 func mount_mooring_integrate(callback: Callable) -> void:
 	_mooring_integrate = callback
 
@@ -204,6 +281,8 @@ func _ready() -> void:
 
 
 func _exit_tree() -> void:
+	PlayerVessel.unmark_player_ship(self)
+	PlayerVessel.unregister_ship_from_docks(self)
 	if _walk_deck != null and is_instance_valid(_walk_deck):
 		_walk_deck.queue_free()
 		_walk_deck = null
@@ -396,6 +475,16 @@ func get_cargo_available_units() -> int:
 ## Position the ship so that the keel is `total_height × draft_fraction` below water_y.
 ## `draft_fraction = -1` (default) means "use this ship's own design_draft_fraction" so
 ## the spawn sits at the buoyancy equilibrium and the ship doesn't drift down at start.
+## Teleport hull to a berth (or spawn) pose; clears velocity so mooring/physics do not fight the move.
+func snap_to_transform(xform: Transform3D) -> void:
+	freeze = true
+	global_transform = xform
+	linear_velocity = Vector3.ZERO
+	angular_velocity = Vector3.ZERO
+	freeze = false
+	sleeping = false
+
+
 func place_at_waterline(water_y: float, draft_fraction: float = -1.0) -> void:
 	_ensure_model()
 	_sync_hull_size_from_mesh()
@@ -424,12 +513,7 @@ func fit_to_port_berth(dock: PortDock, berth_index: int) -> void:
 	if dock == null or berth_index < 0:
 		return
 
-	var berth_count := ShipClass.berth_count(
-		dock.dock_length,
-		dock.max_ship_class,
-		PortDock.BERTH_GAP_M
-	)
-	if berth_index >= berth_count:
+	if berth_index < 0 or berth_index >= dock.berth_count():
 		return
 
 	refresh_hull_bounds_from_visuals()

@@ -1,6 +1,11 @@
 class_name MooringComponent
 extends Node3D
 
+## Emitted when a `toggle_line_from_post` call is rejected (e.g. lines on
+## different berths). HUDs subscribe via the `LocalPlayerView.helmed_boat`
+## reference to surface a brief toast to the player.
+signal mooring_rejected(reason: String)
+
 ## Ship cleats: any `Node3D` in group `SHIP_MOORING_CLEAT_GROUP` under this vessel's
 ## `RigidBody3D` root. Distance is from cleat anchor to **this dock post's** anchor.
 const SHIP_MOORING_CLEAT_GROUP := "ship_mooring_cleat"
@@ -420,6 +425,7 @@ func toggle_line_from_post(post: Node) -> bool:
 
 	if next_tied and _would_split_berths(post):
 		last_mooring_reject = "Both lines must be made fast within the same berth."
+		mooring_rejected.emit(last_mooring_reject)
 		return false
 
 	if next_tied:

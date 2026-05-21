@@ -1,10 +1,7 @@
 class_name ShipwrightPricing
 extends RefCounted
 
-## Catalog quotes in Marks (ℳ). Coastal trader is free once per account.
-
-const STARTER_HULL_ID := "coastal_trader"
-
+## Catalog quotes in Marks (ℳ). The 13 m coastal trader is harbour-master only (StarterVessel).
 
 static func quote_price_marks(stations: HullStations) -> int:
 	if stations == null:
@@ -14,10 +11,7 @@ static func quote_price_marks(stations: HullStations) -> int:
 	return int(1200.0 + len_m * len_m * 52.0)
 
 
-static func commission_price(entry: Dictionary, stations: HullStations, player: PlayerData) -> int:
-	if player != null and str(entry.get("id", "")) == STARTER_HULL_ID:
-		if not player.owns_hull_id(STARTER_HULL_ID):
-			return 0
+static func commission_price(entry: Dictionary, stations: HullStations, _player: PlayerData) -> int:
 	return quote_price_marks(stations)
 
 

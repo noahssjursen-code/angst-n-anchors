@@ -5,7 +5,11 @@ extends RefCounted
 ## Game code goes through PlayerSession; this class only handles JSON I/O.
 ## A future online backend can replace load/save here without touching callers.
 
-const SAVE_VERSION: int = 1
+## v1 → v2 adds: accepted_contracts, ship_runtime_state, world_clock_hours.
+## PlayerData.from_dict tolerates missing keys, so v1 saves auto-upgrade
+## on first load + save (in-flight contract counts will be left as-is for
+## the migration tick, but any subsequent save snapshots properly).
+const SAVE_VERSION: int = 2
 const SAVE_DIR: String = "user://save"
 const SAVE_PATH: String = SAVE_DIR + "/player.json"
 

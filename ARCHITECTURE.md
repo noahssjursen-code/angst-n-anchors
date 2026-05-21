@@ -127,6 +127,7 @@ Each autoload lives in its system folder and is registered in `project.godot` fr
 
 | Autoload | System Folder | Registered Path |
 |---|---|---|
+| `GameSettings` | `state/` | `res://scripts/state/game_settings.gd` |
 | `WorldWeather` | `weather/` | `res://scripts/weather/world_weather.gd` |
 | `WeatherLighting` | `weather/` | `res://scripts/weather/weather_lighting.gd` |
 | `WorldClock` | `time/` | `res://scripts/time/world_clock.gd` |
@@ -135,6 +136,13 @@ Each autoload lives in its system folder and is registered in `project.godot` fr
 | `GameMenu` | `ui/` | `res://scripts/ui/game_menu.gd` |
 | `GameState` | `state/` | `res://scripts/state/game_state.gd` |
 | `DebugHud` | `ui/` | `res://scripts/ui/debug_hud.gd` |
+| `Telemetry` | `state/` | `res://scripts/state/telemetry.gd` |
+| `LocalPlayerView` | `state/` | `res://scripts/state/local_player_view.gd` |
+| `Tutorial` | `state/` | `res://scripts/state/tutorial.gd` |
+
+### `LocalPlayerView` — the MP seam
+
+`LocalPlayerView` is a per-client view of the local player's projection of the world. UI consults it instead of touching `PlayerSession` / `ContractRegistry` directly; gameplay-mutating code (NPC commerce, ship spawning, contract acceptance) continues to use the autoloads. When multiplayer lands, every UI that reads through `LocalPlayerView` keeps working with no further changes — only the autoload's internals switch from "delegate to local autoloads" to "consume the server projection."
 
 ---
 

@@ -13,20 +13,36 @@ extends Node3D
 ## Local position of the propeller (stern centre, at or below waterline).
 @export var stern_offset: Vector3 = Vector3(0.0, 0.0, -5.8)
 
+## Litres of fuel burned per second at FULL throttle (|throttle| == 1.0).
+## Linear with throttle magnitude. Tuned so a 400 L tank lasts ~13 real
+## minutes at full ahead, longer at cruise stages.
+@export var fuel_burn_l_per_sec_full: float = 0.5
+
 var throttle: float = 0.0
 
-var _body: RigidBody3D
+var _body: BoatBody = null
 
 
 func _ready() -> void:
-	_body = get_parent() as RigidBody3D
+	_body = get_parent() as BoatBody
 	if _body == null:
-		push_error("PropulsionComponent must be a child of a RigidBody3D")
+		push_error("PropulsionComponent must be a child of a BoatBody (RigidBody3D)")
 
 
-func _physics_process(_delta: float) -> void:
+func _physics_process(delta: float) -> void:
 	if Engine.is_editor_hint() or _body == null or is_zero_approx(throttle):
 		return
+
+	# Burn fuel proportional to throttle magnitude. If the tank is dry,
+	# clamp magnitude to zero — engine stalls. Rudder still works because
+	# this component only owns propulsion.
+	var fuel_pct := _body.get_fuel_fraction()
+	if fuel_pct <= 0.0:
+		return
+
+	var burn := absf(throttle) * fuel_burn_l_per_sec_full * delta
+	if burn > 0.0:
+		_body.consume_fuel(burn)
 
 	var magnitude: float = throttle * max_thrust
 	if throttle > 0.0:

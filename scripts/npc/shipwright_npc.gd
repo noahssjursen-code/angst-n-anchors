@@ -4,14 +4,8 @@ extends NpcInteractable
 
 ## Shipwright NPC — catalog showroom with 3D previews, prices, and commission.
 
+## Retail catalog — starter 13 m Coastal Trader is harbour-master only (StarterVessel).
 const HULL_CATALOG: Array[Dictionary] = [
-	{
-		"id":               "coastal_trader",
-		"display":          "Coastal Trader  •  13 m / 43 ft",
-		"ship_class_label": "Coastal Trader",
-		"hull_file":        "hull_coastal_trader.json",
-		"superstructure":   "bridge_coastal_trader",
-	},
 	{
 		"id":               "coastal_trader_long",
 		"display":          "Coastal Trader, Extended  •  15 m / 49 ft",
@@ -141,8 +135,18 @@ func _on_commission_requested(entry: Dictionary) -> void:
 
 
 func _try_pay_for_commission(entry: Dictionary) -> bool:
+	# Validate the hull JSON exists and has usable geometry BEFORE charging
+	# the player. Without this guard a missing / corrupt hull file would
+	# silently deduct marks and then crash on HullStations.from_hull_json.
 	var hull_path := ShipBuilder.HULL_BASE_DIR + str(entry.get("hull_file", ""))
+	if not FileAccess.file_exists(hull_path):
+		_show_commission_error("That hull is unavailable in the yard right now.")
+		return false
 	var hull_data := ShipBuilder._load_json(hull_path)
+	if hull_data.is_empty() or not hull_data.has("parts"):
+		_show_commission_error("The hull blueprint is corrupted — please report this bug.")
+		return false
+
 	var stations := HullStations.from_hull_json(hull_data, 10)
 	var session := get_node_or_null("/root/PlayerSession")
 	if session == null:
@@ -162,6 +166,14 @@ func _try_pay_for_commission(entry: Dictionary) -> bool:
 	return true
 
 
+## Show a polite "we can't build that" message without charging the player.
+func _show_commission_error(line: String) -> void:
+	_dialogue.clear()
+	_dialogue.add_quote(line)
+	_dialogue.add_option("Back to catalog.", _open_catalog)
+	_dialogue.show_panel()
+
+
 func _commission(entry: Dictionary) -> void:
 	var template := _build_template(entry)
 
@@ -175,12 +187,19 @@ func _commission(entry: Dictionary) -> void:
 	f.store_string(JSON.stringify(template))
 	f.close()
 
+	PlayerVessel.replace_before_spawn(get_tree())
+
 	var ship := ShipBuilder.build(path)
 	if ship == null:
 		_show_result("The yard couldn't build that vessel. Please report this bug.", _open_catalog)
 		return
 
-	_register_owned_vessel(entry, path, uid)
+	PlayerVessel.mark_player_ship(ship)
+	# Freshly-built vessel sails with a full tank — captain pays the
+	# commission, the yard hands over a ready ship.
+	if ship.has_method("fill_tank"):
+		ship.fill_tank()
+	_register_active_vessel(entry, path, uid)
 
 	var placed := _try_place_at_berth(ship)
 
@@ -218,19 +237,16 @@ func _close_after_result() -> void:
 	close_ui()
 
 
-func _register_owned_vessel(entry: Dictionary, template_path: String, uid: String) -> void:
+func _register_active_vessel(entry: Dictionary, template_path: String, uid: String) -> void:
 	var session := get_node_or_null("/root/PlayerSession")
 	if session == null:
 		return
-	var hull_id := str(entry.get("id", ""))
-	session.data.add_owned_vessel({
+	session.data.set_active_vessel({
 		"uid":           uid,
-		"hull_id":       hull_id,
+		"hull_id":       str(entry.get("id", "")),
 		"display":       str(entry.get("display", "Vessel")),
 		"template_path": template_path,
 	})
-	if hull_id == ShipwrightPricing.STARTER_HULL_ID:
-		session.data.shipwright_starter_used = true
 	session.save_now()
 
 
@@ -252,58 +268,7 @@ func _try_place_at_berth(ship: BoatBody) -> bool:
 
 
 func _build_template(entry: Dictionary) -> Dictionary:
-	var hull_path : String = ShipBuilder.HULL_BASE_DIR + str(entry["hull_file"])
-	var hull_data : Dictionary = ShipBuilder._load_json(hull_path)
-	var stations  : HullStations = HullStations.from_hull_json(hull_data, 10)
-
-	var displacement_kg : float = maxf(stations.displacement_volume_m3 * 1025.0, 1000.0)
-	var propulsion_thrust : float = displacement_kg * 0.7
-	var bow_ratio : float = clampf(0.40 - stations.length_m / 200.0, 0.10, 0.40)
-	var bow_thrust : float = propulsion_thrust * bow_ratio
-	var rudder_torque : float = 0.0275 * pow(propulsion_thrust, 4.0 / 3.0)
-	var cam_dist   : float = stations.length_m * 1.45 + 11.0
-	var cam_height : float = stations.length_m * 0.36 + 4.0
-
-	return {
-		"display_name":   str(entry["display"]),
-		"hull":           str(entry["hull_file"]),
-		"scale":          1.0,
-		"superstructure": str(entry["superstructure"]),
-		"physics": {
-			"auto_mass_from_hull":    true,
-			"design_draft_fraction":  0.45,
-			"mass_scale":             1.28,
-		},
-		"buoyancy": {
-			"heave_damping_per_m2": 11000.0,
-		},
-		"hydrodynamics": {
-			"frictional_coeff":       0.0025,
-			"form_factor":            1.20,
-			"wave_making_peak_coeff": 0.005,
-			"hull_speed_fn":          0.40,
-			"lateral_drag_coeff":     2.0,
-			"yaw_drag_coeff":         5.0,
-		},
-		"propulsion": {
-			"max_thrust":         propulsion_thrust,
-			"reverse_multiplier": 0.45,
-		},
-		"rudder": {
-			"max_torque":              rudder_torque,
-			"speed_factor":            0.65,
-			"min_effectiveness_floor": 0.38,
-			"rudder_flow_gate":        0.25,
-			"sideslip_rudder_weight":  0.55,
-		},
-		"bow_thruster": {
-			"max_thrust": bow_thrust,
-		},
-		"camera": {
-			"follow_distance": cam_dist,
-			"follow_height":   cam_height,
-		},
-	}
+	return StarterVessel.build_template(entry)
 
 
 func _get_dock() -> PortDock:

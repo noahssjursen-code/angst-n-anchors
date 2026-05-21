@@ -9,8 +9,8 @@ const HAT_FLAT_CAP := "flat_cap"
 const HAT_PEAKED_CAP := "peaked_cap"
 
 const HAT_PATHS: Dictionary = {
-	HAT_FLAT_CAP:   "res://resources/data/meshes/characters/hat_flat_cap.json",
-	HAT_PEAKED_CAP: "res://resources/data/meshes/characters/hat_peaked_cap.json",
+	HAT_FLAT_CAP:   AssetPaths.HAT_FLAT_CAP,
+	HAT_PEAKED_CAP: AssetPaths.HAT_PEAKED_CAP,
 }
 
 var skin_color: Color = Color(0.72, 0.55, 0.40)

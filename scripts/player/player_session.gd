@@ -8,12 +8,12 @@ extends Node
 ## fetch when accounts arrive. Nothing else in the game needs to change.
 
 ## Fictional ledger currency — abstract enough to fit any era or tone.
-const CURRENCY_SYMBOL := "ℳ"
-const CURRENCY_NAME   := "Marks"
+const CURRENCY_SYMBOL := PlayerData.CURRENCY_SYMBOL
+const CURRENCY_NAME   := PlayerData.CURRENCY_NAME
 
 
 static func format_money(amount: int) -> String:
-	return "%s %d" % [CURRENCY_SYMBOL, amount]
+	return PlayerData.format_money(amount)
 
 signal marks_changed(new_balance: int)
 signal data_loaded(data: PlayerData)
@@ -23,10 +23,25 @@ var data: PlayerData = PlayerData.new()
 
 var _save_pending: bool = false
 
+# ── Autosave heartbeat (Phase 10 of the overnight refactor) ──────────────────
+## Every AUTOSAVE_INTERVAL_S of real wall-clock time we force a flush, even
+## if no event-driven save was requested. Insurance against crashes / power
+## loss / OS-killing-the-process.
+const AUTOSAVE_INTERVAL_S : float = 60.0
+var _autosave_clock: float = 0.0
+
 
 func _ready() -> void:
 	_load_from_disk()
 	call_deferred("_connect_registry")
+
+
+func _process(delta: float) -> void:
+	_autosave_clock += delta
+	if _autosave_clock < AUTOSAVE_INTERVAL_S:
+		return
+	_autosave_clock = 0.0
+	save_now()
 
 
 func _exit_tree() -> void:
@@ -103,7 +118,27 @@ func has_local_save() -> bool:
 
 
 func save_now() -> bool:
+	# Let LocalPlayerView capture in-world state (contracts, ship pose,
+	# world clock) into PlayerData before we serialise. If LocalPlayerView
+	# is the caller, it skips this leg to avoid infinite recursion.
+	_snapshot_world_state()
 	return _flush_save()
+
+
+## Pull world-state snapshots into PlayerData before each save flush.
+## Called from save_now() and the autosave heartbeat (Phase 10).
+func _snapshot_world_state() -> void:
+	var view := get_node_or_null("/root/LocalPlayerView")
+	if view == null or _snapshot_in_progress:
+		return
+	_snapshot_in_progress = true
+	if view.has_method("_snapshot_into_player_data"):
+		view._snapshot_into_player_data()
+	_snapshot_in_progress = false
+
+
+# Re-entrancy guard so LocalPlayerView -> save_now() -> _snapshot doesn't loop.
+var _snapshot_in_progress: bool = false
 
 
 # ── Persistence ───────────────────────────────────────────────────────────────
