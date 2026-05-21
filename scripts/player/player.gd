@@ -94,7 +94,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		var sens := mouse_sensitivity * _settings_sens_multiplier()
 		var invert := _settings_invert_y()
 		rotate_y(-event.relative.x * sens)
-		var dy := event.relative.y * sens * (-1.0 if invert else 1.0)
+		var dy: float = event.relative.y * sens * (-1.0 if invert else 1.0)
 		_pitch = clampf(_pitch - dy, -MAX_PITCH, MAX_PITCH)
 		_apply_pitch()
 

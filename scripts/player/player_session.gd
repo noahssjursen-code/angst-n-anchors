@@ -8,12 +8,12 @@ extends Node
 ## fetch when accounts arrive. Nothing else in the game needs to change.
 
 ## Fictional ledger currency — abstract enough to fit any era or tone.
-const CURRENCY_SYMBOL := "ℳ"
-const CURRENCY_NAME   := "Marks"
+const CURRENCY_SYMBOL := PlayerData.CURRENCY_SYMBOL
+const CURRENCY_NAME   := PlayerData.CURRENCY_NAME
 
 
 static func format_money(amount: int) -> String:
-	return "%s %d" % [CURRENCY_SYMBOL, amount]
+	return PlayerData.format_money(amount)
 
 signal marks_changed(new_balance: int)
 signal data_loaded(data: PlayerData)

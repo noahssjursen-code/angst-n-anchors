@@ -1,5 +1,14 @@
 class_name PlayerData
 
+## Fictional ledger currency — shared by UI formatters and PlayerSession.
+const CURRENCY_SYMBOL := "ℳ"
+const CURRENCY_NAME   := "Marks"
+
+
+static func format_money(amount: int) -> String:
+	return "%s %d" % [CURRENCY_SYMBOL, amount]
+
+
 ## Pure data object — no Node, no signals.
 ## Holds everything that belongs to one player account.
 ## Serialises cleanly to/from a Dictionary so a future DB layer

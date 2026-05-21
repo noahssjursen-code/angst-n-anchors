@@ -752,7 +752,7 @@ func _update_snap_ghost() -> void:
 		var reward := pallet_res.value_gold if pallet_res != null else 0
 		_show_ghost(cell_pos_d, deck.global_basis, _footprint_size(deck, pallet_res),
 				Color(1.0, 0.84, 0.20),
-				"+%s" % PlayerSession.format_money(reward),
+				"+%s" % PlayerData.format_money(reward),
 				true)
 		return
 
