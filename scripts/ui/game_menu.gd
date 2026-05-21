@@ -24,10 +24,7 @@ var _settings:    SettingsPanel
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
-	# Pause-on-focus-loss: when the user alt-tabs / clicks away, treat it
-	# as ESC so the game freezes and the cursor unlocks. Resume requires
-	# them to come back and press ESC — no auto-resume on focus regain so
-	# stray clicks can't unpause unexpectedly.
+	# We keep gameplay unpaused in MP mode; focus loss should not freeze time.
 	get_window().focus_exited.connect(_on_window_focus_exited)
 
 	# ── Walking HUD layer (persistent) ────────────────────────────────────────
@@ -66,7 +63,7 @@ func _ready() -> void:
 
 	_settings              = SettingsPanel.new()
 	_settings.process_mode = Node.PROCESS_MODE_ALWAYS
-	_settings.close_requested.connect(func() -> void: _set_screen(Screen.PAUSE))
+	_settings.close_requested.connect(func() -> void: _set_screen(Screen.NONE))
 	_menu_layer.add_child(_settings)
 
 	_set_screen(Screen.NONE)
@@ -86,16 +83,8 @@ func set_gameplay_hud_visible(visible: bool) -> void:
 		_hud_layer.visible = visible
 
 
-## Pause the game when the window loses focus. Skip if we're already in
-## a modal screen (paused already) or sitting on the main menu (no game).
 func _on_window_focus_exited() -> void:
-	if _screen != Screen.NONE:
-		return
-	# `current_scene` is the main menu before the world boots — don't pause it.
-	var scene := get_tree().current_scene
-	if scene == null or String(scene.scene_file_path).ends_with("main_menu.tscn"):
-		return
-	_set_screen(Screen.PAUSE)
+	return
 
 
 # ── Input ─────────────────────────────────────────────────────────────────────
@@ -103,16 +92,12 @@ func _on_window_focus_exited() -> void:
 func _unhandled_input(event: InputEvent) -> void:
 	if event.is_action_pressed("ui_cancel"):
 		if _screen == Screen.SETTINGS:
-			_set_screen(Screen.PAUSE)
+			_set_screen(Screen.NONE)
 			get_viewport().set_input_as_handled()
 		elif _screen != Screen.NONE:
 			_set_screen(Screen.NONE)
 			get_viewport().set_input_as_handled()
-		elif not _helm_active:
-			# Helm exit is handled by CaptainsChair. NPC dialogs consume ESC while open.
-			_set_screen(Screen.PAUSE)
-			get_viewport().set_input_as_handled()
-	elif event.is_action_pressed("open_map") and _screen != Screen.PAUSE:
+	elif event.is_action_pressed("open_map"):
 		_set_screen(Screen.MAP if _screen != Screen.MAP else Screen.NONE)
 		get_viewport().set_input_as_handled()
 	elif event.is_action_pressed("open_journal") and _screen == Screen.NONE:
@@ -139,9 +124,7 @@ func _set_screen(s: Screen) -> void:
 	_settings.visible    = s == Screen.SETTINGS
 	if _journal != null:
 		_journal.visible = not modal
-	# Pause while on Pause OR Settings — both are reached from the pause menu
-	# and a moving world behind the settings panel is jarring.
-	get_tree().paused    = s == Screen.PAUSE or s == Screen.SETTINGS
+	get_tree().paused = false
 
 
 # ── Pause panel ───────────────────────────────────────────────────────────────

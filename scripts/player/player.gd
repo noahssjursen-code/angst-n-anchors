@@ -42,6 +42,11 @@ extends CharacterBody3D
 @export var water_rescue_depth: float = 1.1
 @export var water_rescue_delay_s: float = 0.85
 @export var abyss_reset_y: float = -25.0
+@export_group("Networking")
+@export var default_player_id: String = "local-player"
+@export var position_api_url: String = "http://127.0.0.1:8080/v1/player-position"
+@export var enable_http_position_send: bool = false
+@export var position_send_interval_s: float = 0.08
 
 const MAX_PITCH  := deg_to_rad(88.0)
 const BASE_GRAVITY := 20.0   # stronger than real-world 9.8 — keeps feet planted
@@ -68,6 +73,11 @@ var _was_on_floor:     bool    = true
 var _camera_base_y:    float   = 0.0
 var _last_safe_position: Vector3 = Vector3.ZERO
 var _water_submerge_time: float = 0.0
+var _position_send_clock: float = 0.0
+var _position_request: HTTPRequest = null
+var _position_request_in_flight: bool = false
+var _position_send_pending: bool = false
+var _network_player_id: String = ""
 
 
 func _ready() -> void:
@@ -86,7 +96,11 @@ func _ready() -> void:
 	floor_max_angle = deg_to_rad(48.0)
 
 	_build_body_mesh()
+	_network_player_id = _resolve_network_player_id()
+	DisplayServer.window_set_title("Angst N Anchors - %s" % _network_player_id)
 	_apply_camera_mode()
+	if enable_http_position_send:
+		_ensure_position_request()
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -103,11 +117,17 @@ func _unhandled_input(event: InputEvent) -> void:
 		get_viewport().set_input_as_handled()
 		return
 
-	if event is InputEventMouseButton and event.pressed:
-		var mb := event as InputEventMouseButton
-		# Wheel buttons are not real clicks — do not recapture the cursor (breaks NPC UIs).
-		if mb.button_index in [MOUSE_BUTTON_LEFT, MOUSE_BUTTON_RIGHT, MOUSE_BUTTON_MIDDLE]:
-			Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+	# Explicit cursor lock toggle for MP multi-window testing:
+	# F1 toggles between free cursor and mouselook capture.
+	if event is InputEventKey:
+		var key := event as InputEventKey
+		if key.pressed and not key.echo and key.keycode == KEY_F1:
+			Input.mouse_mode = (
+				Input.MOUSE_MODE_VISIBLE
+				if Input.mouse_mode == Input.MOUSE_MODE_CAPTURED
+				else Input.MOUSE_MODE_CAPTURED
+			)
+			get_viewport().set_input_as_handled()
 
 
 func _physics_process(delta: float) -> void:
@@ -138,7 +158,11 @@ func _physics_process(delta: float) -> void:
 		velocity.y = sqrt(2.0 * BASE_GRAVITY * jump_peak_height)
 
 	# Smooth raw input on the forward axis — strafe stays immediate
-	var raw := Input.get_vector("move_left", "move_right", "move_forward", "move_back") if inputs_active else Vector2.ZERO
+	var raw := (
+		Input.get_vector("move_left", "move_right", "move_forward", "move_back")
+		if inputs_active
+		else Vector2.ZERO
+	)
 	var blend := 1.0 - exp(-input_smoothness * delta)
 	_smoothed_input.x = raw.x
 	_smoothed_input.y = lerpf(_smoothed_input.y, raw.y, blend)
@@ -151,7 +175,11 @@ func _physics_process(delta: float) -> void:
 
 	# Speed ramps up/down smoothly so shift feels like breaking into a run
 	# KEY_SHIFT checked directly — Shift as an input action is unreliable in Godot 4
-	var target_speed := sprint_speed if (inputs_active and Input.is_key_pressed(KEY_SHIFT)) else walk_speed
+	var target_speed := (
+		sprint_speed
+		if (inputs_active and Input.is_key_pressed(KEY_SHIFT))
+		else walk_speed
+	)
 	_current_speed = lerpf(_current_speed, target_speed, 1.0 - exp(-speed_blend_sharpness * delta))
 	var speed := _current_speed
 
@@ -219,6 +247,8 @@ func _physics_process(delta: float) -> void:
 		velocity.y = 0.0
 	if is_on_floor() and global_position.y > waterline + 0.1:
 		_last_safe_position = global_position
+
+	_tick_position_send(delta)
 
 
 func _process(delta: float) -> void:
@@ -378,3 +408,108 @@ func _apply_appearance_from_session() -> void:
 	if session == null or session.data == null or session.data.appearance == null:
 		return
 	session.data.appearance.apply_to_npc(_body_npc)
+
+
+func _ensure_position_request() -> void:
+	if _position_request != null and is_instance_valid(_position_request):
+		return
+	_position_request = HTTPRequest.new()
+	_position_request.name = "PositionHttpRequest"
+	add_child(_position_request)
+	_position_request.request_completed.connect(_on_position_request_completed)
+
+
+func _tick_position_send(delta: float) -> void:
+	if not enable_http_position_send:
+		return
+	if position_send_interval_s <= 0.0:
+		return
+	_position_send_clock += delta
+	if _position_send_clock < position_send_interval_s:
+		return
+	_position_send_clock = 0.0
+	_send_position_update()
+
+
+func _send_position_update() -> void:
+	if _position_request == null or not is_instance_valid(_position_request):
+		return
+	if _position_request_in_flight:
+		_position_send_pending = true
+		return
+	var payload := {
+		"player_id": _network_player_id,
+		"x": global_position.x,
+		"y": global_position.y,
+		"z": global_position.z,
+		"yaw": rotation.y,
+		"sent_at_utc": Time.get_datetime_string_from_system(true, true),
+	}
+	var headers := PackedStringArray([
+		"Content-Type: application/json",
+	])
+	_position_request_in_flight = true
+	var err := _position_request.request(
+		position_api_url,
+		headers,
+		HTTPClient.METHOD_POST,
+		JSON.stringify(payload)
+	)
+	if err != OK:
+		_position_request_in_flight = false
+		push_warning(
+			"Player position send failed to start. URL=%s err=%d"
+			% [position_api_url, err]
+		)
+
+
+func _on_position_request_completed(
+	result: int,
+	_response_code: int,
+	_headers: PackedStringArray,
+	_body: PackedByteArray
+) -> void:
+	_position_request_in_flight = false
+	if result != HTTPRequest.RESULT_SUCCESS:
+		push_warning(
+			"Player position send transport failure. result=%d URL=%s"
+			% [result, position_api_url]
+		)
+	elif _response_code < 200 or _response_code >= 300:
+		push_warning(
+			"Player position send failed. HTTP %d URL=%s"
+			% [_response_code, position_api_url]
+		)
+
+	if _position_send_pending:
+		_position_send_pending = false
+		_send_position_update()
+
+
+func get_network_player_id() -> String:
+	return _network_player_id
+
+
+func _resolve_network_player_id() -> String:
+	var cmd_id := _extract_player_id_from_args(OS.get_cmdline_user_args())
+	if not cmd_id.is_empty():
+		return cmd_id
+	cmd_id = _extract_player_id_from_args(OS.get_cmdline_args())
+	if not cmd_id.is_empty():
+		return cmd_id
+	var env_id := OS.get_environment("AAN_PLAYER_ID").strip_edges()
+	if not env_id.is_empty():
+		return env_id
+	if not default_player_id.strip_edges().is_empty():
+		return default_player_id.strip_edges()
+	return "local-player"
+
+
+func _extract_player_id_from_args(args: PackedStringArray) -> String:
+	for raw_arg in args:
+		var arg := String(raw_arg)
+		if arg.begins_with("--player-id="):
+			var cmd_id := arg.trim_prefix("--player-id=").strip_edges()
+			if not cmd_id.is_empty():
+				return cmd_id
+	return ""

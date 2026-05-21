@@ -29,6 +29,7 @@ DebugHud="*res://scripts/ui/debug_hud.gd"
 Telemetry="*res://scripts/state/telemetry.gd"
 LocalPlayerView="*res://scripts/state/local_player_view.gd"
 Tutorial="*res://scripts/state/tutorial.gd"
+PlayerVisibilityService="*res://scripts/network/player_visibility_service.gd"
 
 [input]
 

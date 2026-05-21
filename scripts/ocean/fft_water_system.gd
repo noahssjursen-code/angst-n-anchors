@@ -31,6 +31,7 @@ var pipeline_fft_x: RID
 var pipeline_fft_y: RID
 var pipeline_assemble: RID
 var main_shader: RID
+var _shader_rids: Array[RID] = []
 
 var initial_spectrum_tex: RID
 var spectrum_tex: RID
@@ -109,6 +110,10 @@ func _process(delta: float) -> void:
 			buoyancy_data[i] = bytes.to_float32_array()
 	_accumulated_delta = 0.0
 
+
+func _exit_tree() -> void:
+	_release_gpu_resources()
+
 func _compile_shaders() -> void:
 	var file = FileAccess.open("res://resources/shaders/fft_ocean_compute.glsl", FileAccess.READ)
 	var base_code = file.get_as_text()
@@ -122,9 +127,15 @@ func _compile_shaders() -> void:
 	pipeline_init = _create_pipeline("#version 450\n#define PASS_INIT\n" + code_without_version)
 	pipeline_pack = _create_pipeline("#version 450\n#define PASS_PACK\n" + code_without_version)
 	pipeline_update = _create_pipeline("#version 450\n#define PASS_UPDATE\n" + code_without_version)
-	pipeline_fft_x = _create_pipeline("#version 450\n#define PASS_FFT_X\n" + fft_defines + code_without_version)
-	pipeline_fft_y = _create_pipeline("#version 450\n#define PASS_FFT_Y\n" + fft_defines + code_without_version)
-	pipeline_assemble = _create_pipeline("#version 450\n#define PASS_ASSEMBLE\n" + code_without_version)
+	pipeline_fft_x = _create_pipeline(
+		"#version 450\n#define PASS_FFT_X\n" + fft_defines + code_without_version
+	)
+	pipeline_fft_y = _create_pipeline(
+		"#version 450\n#define PASS_FFT_Y\n" + fft_defines + code_without_version
+	)
+	pipeline_assemble = _create_pipeline(
+		"#version 450\n#define PASS_ASSEMBLE\n" + code_without_version
+	)
 
 func _create_pipeline(src: String) -> RID:
 	var shader_src = RDShaderSource.new()
@@ -133,6 +144,7 @@ func _create_pipeline(src: String) -> RID:
 	if spirv.compile_error_compute != "":
 		push_error("Compute Shader Compile Error: ", spirv.compile_error_compute)
 	var shader = rd.shader_create_from_spirv(spirv)
+	_shader_rids.append(shader)
 	if not main_shader.is_valid():
 		main_shader = shader
 	return rd.compute_pipeline_create(shader)
@@ -144,7 +156,12 @@ func _create_buffers_and_textures() -> void:
 	buffer_bytes.fill(0)
 	spectrums_buffer = rd.storage_buffer_create(buffer_bytes.size(), buffer_bytes)
 	
-	var common_usage = RenderingDevice.TEXTURE_USAGE_STORAGE_BIT | RenderingDevice.TEXTURE_USAGE_SAMPLING_BIT | RenderingDevice.TEXTURE_USAGE_CAN_UPDATE_BIT | RenderingDevice.TEXTURE_USAGE_CAN_COPY_FROM_BIT
+	var common_usage := (
+		RenderingDevice.TEXTURE_USAGE_STORAGE_BIT
+		| RenderingDevice.TEXTURE_USAGE_SAMPLING_BIT
+		| RenderingDevice.TEXTURE_USAGE_CAN_UPDATE_BIT
+		| RenderingDevice.TEXTURE_USAGE_CAN_COPY_FROM_BIT
+	)
 
 	# Textures
 	var fmt_rgba32 = RDTextureFormat.new()
@@ -338,7 +355,9 @@ func _run_init_pack() -> void:
 	# INIT
 	rd.compute_list_bind_compute_pipeline(compute_list, pipeline_init)
 	rd.compute_list_bind_uniform_set(compute_list, uniform_set, 0)
-	rd.compute_list_set_push_constant(compute_list, push_constant_params, push_constant_params.size())
+	rd.compute_list_set_push_constant(
+		compute_list, push_constant_params, push_constant_params.size()
+	)
 	rd.compute_list_dispatch(compute_list, RESOLUTION / 8, RESOLUTION / 8, 1)
 	
 	rd.compute_list_add_barrier(compute_list)
@@ -346,7 +365,9 @@ func _run_init_pack() -> void:
 	# PACK
 	rd.compute_list_bind_compute_pipeline(compute_list, pipeline_pack)
 	rd.compute_list_bind_uniform_set(compute_list, uniform_set, 0)
-	rd.compute_list_set_push_constant(compute_list, push_constant_params, push_constant_params.size())
+	rd.compute_list_set_push_constant(
+		compute_list, push_constant_params, push_constant_params.size()
+	)
 	rd.compute_list_dispatch(compute_list, RESOLUTION / 8, RESOLUTION / 8, 1)
 	
 	rd.compute_list_end()
@@ -360,7 +381,9 @@ func _run_update_fft_assemble(delta: float) -> void:
 	# UPDATE
 	rd.compute_list_bind_compute_pipeline(compute_list, pipeline_update)
 	rd.compute_list_bind_uniform_set(compute_list, uniform_set, 0)
-	rd.compute_list_set_push_constant(compute_list, push_constant_params, push_constant_params.size())
+	rd.compute_list_set_push_constant(
+		compute_list, push_constant_params, push_constant_params.size()
+	)
 	rd.compute_list_dispatch(compute_list, RESOLUTION / 8, RESOLUTION / 8, 1)
 	
 	rd.compute_list_add_barrier(compute_list)
@@ -368,7 +391,9 @@ func _run_update_fft_assemble(delta: float) -> void:
 	# FFT X
 	rd.compute_list_bind_compute_pipeline(compute_list, pipeline_fft_x)
 	rd.compute_list_bind_uniform_set(compute_list, uniform_set, 0)
-	rd.compute_list_set_push_constant(compute_list, push_constant_params, push_constant_params.size())
+	rd.compute_list_set_push_constant(
+		compute_list, push_constant_params, push_constant_params.size()
+	)
 	rd.compute_list_dispatch(compute_list, 1, RESOLUTION, 1)
 	
 	rd.compute_list_add_barrier(compute_list)
@@ -376,7 +401,9 @@ func _run_update_fft_assemble(delta: float) -> void:
 	# FFT Y
 	rd.compute_list_bind_compute_pipeline(compute_list, pipeline_fft_y)
 	rd.compute_list_bind_uniform_set(compute_list, uniform_set, 0)
-	rd.compute_list_set_push_constant(compute_list, push_constant_params, push_constant_params.size())
+	rd.compute_list_set_push_constant(
+		compute_list, push_constant_params, push_constant_params.size()
+	)
 	rd.compute_list_dispatch(compute_list, 1, RESOLUTION, 1)
 	
 	rd.compute_list_add_barrier(compute_list)
@@ -384,8 +411,46 @@ func _run_update_fft_assemble(delta: float) -> void:
 	# ASSEMBLE
 	rd.compute_list_bind_compute_pipeline(compute_list, pipeline_assemble)
 	rd.compute_list_bind_uniform_set(compute_list, uniform_set, 0)
-	rd.compute_list_set_push_constant(compute_list, push_constant_params, push_constant_params.size())
+	rd.compute_list_set_push_constant(
+		compute_list, push_constant_params, push_constant_params.size()
+	)
 	rd.compute_list_dispatch(compute_list, RESOLUTION / 8, RESOLUTION / 8, 1)
 	
 	rd.compute_list_end()
 	# rd.submit() and rd.sync() removed because we are on the global RenderingDevice
+
+
+func _release_gpu_resources() -> void:
+	if not rd:
+		return
+
+	if displacement_map_rd != null:
+		displacement_map_rd.texture_rd_rid = RID()
+	if slope_map_rd != null:
+		slope_map_rd.texture_rd_rid = RID()
+	if buoyancy_map_rd != null:
+		buoyancy_map_rd.texture_rd_rid = RID()
+
+	_free_rid(uniform_set)
+	_free_rid(pipeline_init)
+	_free_rid(pipeline_pack)
+	_free_rid(pipeline_update)
+	_free_rid(pipeline_fft_x)
+	_free_rid(pipeline_fft_y)
+	_free_rid(pipeline_assemble)
+	_free_rid(initial_spectrum_tex)
+	_free_rid(spectrum_tex)
+	_free_rid(displacement_tex)
+	_free_rid(slope_tex)
+	_free_rid(buoyancy_tex)
+	_free_rid(spectrums_buffer)
+
+	for shader_rid in _shader_rids:
+		_free_rid(shader_rid)
+	_shader_rids.clear()
+	main_shader = RID()
+
+
+func _free_rid(rid_value: RID) -> void:
+	if rid_value.is_valid():
+		rd.free_rid(rid_value)

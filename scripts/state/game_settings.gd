@@ -30,6 +30,7 @@ var invert_mouse_y:    bool  = false
 
 func _ready() -> void:
 	load_settings()
+	_apply_command_line_overrides()
 	apply_all()
 
 
@@ -46,6 +47,27 @@ func load_settings() -> void:
 	max_fps           = int(cfg.get_value("graphics",  "max_fps",       max_fps))
 	mouse_sensitivity = float(cfg.get_value("input",   "mouse_sens",    mouse_sensitivity))
 	invert_mouse_y    = bool(cfg.get_value("input",    "invert_mouse_y", invert_mouse_y))
+
+
+func _apply_command_line_overrides() -> void:
+	if _has_cli_flag("--force-windowed"):
+		window_mode = WindowMode.WINDOWED
+		return
+	if _has_cli_flag("--force-fullscreen"):
+		window_mode = WindowMode.FULLSCREEN
+		return
+
+
+func _has_cli_flag(flag: String) -> bool:
+	var user_args: PackedStringArray = OS.get_cmdline_user_args()
+	for raw_arg in user_args:
+		if String(raw_arg) == flag:
+			return true
+	var args: PackedStringArray = OS.get_cmdline_args()
+	for raw_arg in args:
+		if String(raw_arg) == flag:
+			return true
+	return false
 
 
 func save_settings() -> void:

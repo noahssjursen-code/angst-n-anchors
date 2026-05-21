@@ -9,6 +9,7 @@ extends Control
 ## per-frame redraw was wasted CPU when nothing actually changed.
 
 var _font: Font
+const PlayerSessionScript := preload("res://scripts/player/player_session.gd")
 
 
 func _ready() -> void:
@@ -44,8 +45,9 @@ func _draw() -> void:
 	var view := get_node_or_null("/root/LocalPlayerView")
 	if view == null:
 		return
+	var player_id := _resolve_local_player_id()
 
-	var marks_str := PlayerSession.format_money(view.get_marks())
+	var marks_str := PlayerSessionScript.format_money(view.get_marks())
 	var fs        := 17
 	var tw        := _font.get_string_size(marks_str, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
 	var pad_h     := 14.0
@@ -59,6 +61,26 @@ func _draw() -> void:
 	draw_rect(Rect2(ox, oy, pw, ph), HudStyle.C_BRASS, false, 1.2)
 	draw_string(_font, Vector2(ox + pad_h, oy + pad_v + fs - 2),
 				marks_str, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, HudStyle.C_AMBER)
+	if not player_id.is_empty():
+		var id_fs := 11
+		var id_pad_h := 10.0
+		var id_pad_v := 6.0
+		var id_str := "Player: %s" % player_id
+		var id_tw := _font.get_string_size(id_str, HORIZONTAL_ALIGNMENT_LEFT, -1, id_fs).x
+		var id_pw := id_tw + id_pad_h * 2.0
+		var id_ph := float(id_fs) + id_pad_v * 2.0
+		var id_y := oy + ph + 4.0
+		draw_rect(Rect2(ox, id_y, id_pw, id_ph), HudStyle.C_BG)
+		draw_rect(Rect2(ox, id_y, id_pw, id_ph), HudStyle.C_BRASS, false, 1.0)
+		draw_string(
+			_font,
+			Vector2(ox + id_pad_h, id_y + id_pad_v + id_fs - 2.0),
+			id_str,
+			HORIZONTAL_ALIGNMENT_LEFT,
+			-1,
+			id_fs,
+			HudStyle.C_TEXT
+		)
 
 	# Player-local data (active contracts) goes through the view.
 	# World-state lookups (port display names) still use the registry —
@@ -73,6 +95,8 @@ func _draw() -> void:
 	var cfs   := 12
 	var cph   := float(cfs) + 8.0
 	var cy    := oy + ph + 6.0
+	if not player_id.is_empty():
+		cy += float(11) + 6.0 * 2.0 + 4.0
 	var c_pad := 10.0
 
 	for raw in contracts:
@@ -89,3 +113,11 @@ func _draw() -> void:
 		draw_string(_font, Vector2(ox + c_pad, cy + cph - 5.0),
 					c_str, HORIZONTAL_ALIGNMENT_LEFT, -1, cfs, HudStyle.C_TEXT)
 		cy += cph + 3.0
+
+
+func _resolve_local_player_id() -> String:
+	var players := get_tree().get_nodes_in_group("player")
+	for node in players:
+		if node != null and node.has_method("get_network_player_id"):
+			return String(node.call("get_network_player_id"))
+	return ""
