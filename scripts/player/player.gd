@@ -109,9 +109,6 @@ func _unhandled_input(event: InputEvent) -> void:
 		if mb.button_index in [MOUSE_BUTTON_LEFT, MOUSE_BUTTON_RIGHT, MOUSE_BUTTON_MIDDLE]:
 			Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 
-	if event.is_action_pressed("ui_cancel"):
-		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
-
 
 func _physics_process(delta: float) -> void:
 	var on_floor := is_on_floor()
