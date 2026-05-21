@@ -26,7 +26,7 @@ extends Node3D
 ## Damps the ship's vertical velocity relative to the local water surface velocity.
 ## Real wave-radiation damping scales with frequency — this is a constant approximation
 ## that's been tuned for "feels right" without killing wave following.
-@export var heave_damping_per_m2: float = 8000.0
+@export var heave_damping_per_m2: float = 11000.0
 
 var _body: RigidBody3D
 

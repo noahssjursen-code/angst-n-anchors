@@ -52,16 +52,26 @@ Each autoload lives in its system folder and is registered in `project.godot`.
 
 | Autoload | System | Role |
 |---|---|---|
+| `GameSettings` | `state/` | Audio / graphics / input prefs (user://settings.cfg) |
 | `WorldWeather` | `weather/` | Wind, rain, fog state; weather zones |
 | `WeatherLighting` | `weather/` | Sun angle, sky colour, fog colour |
-| `WorldClock` | `time/` | Game time |
-| `ContractRegistry` | `cargo/` | Port registry, contracts, commodities |
-| `PlayerSession` | `player/` | Persistent player data (marks, name) |
-| `GameMenu` | `ui/` | Pause / menu system |
+| `WorldClock` | `time/` | Game time. Emits `day_changed` + `hour_changed` (1 game hr = 60 real s) |
+| `ContractRegistry` | `cargo/` | Port registry, contracts, commodities, restock loop |
+| `PlayerSession` | `player/` | Persistent player data (marks, name, contracts, ship pose, world clock). Autosaves every 60 s + on focus loss |
+| `GameMenu` | `ui/` | Pause / map / settings / journal / hint overlay |
 | `GameState` | `state/` | Read model: player/ship/contract/world sub-states |
 | `DebugHud` | `ui/` | F3 debug overlay |
+| `Telemetry` | `state/` | Spawn-timing / load-events telemetry |
+| `LocalPlayerView` | `state/` | **The MP seam.** Per-client view of the local player's world. UI reads through here, not direct autoloads |
+| `Tutorial` | `state/` | First-time hint chain (fires once per captain, persisted) |
 
 The autoloads listed above are the **actual** registered singletons. Do not reference `Economy`, `ContractBoard`, `FleetManager`, or `World` — those don't exist yet.
+
+### Convention — `LocalPlayerView` is the MP seam
+
+UI code (HUDs, menus, debug overlays, hint banners) should **only** read per-player state through `LocalPlayerView`. NPCs and gameplay-mutating systems (`ShipBuilder`, `PortDock`, contract acceptance) may continue to consult the autoloads directly — they're the world-authority side, not a per-client view.
+
+In multiplayer this autoload becomes a per-client object the network layer populates with the local player's projection of the world. Every UI that already reads from here will keep working unchanged; the gameplay-mutating code stays on the (per-server) authority.
 
 ---
 
@@ -201,3 +211,30 @@ Port definitions, ship templates, commodities live in `resources/data/`. Scripts
 - Use `@export` for designer-facing values; keep logic in scripts
 - Scene tree is not the data model — game state lives in autoloads, not node hierarchies
 - Concave shapes are silently disabled on dynamic bodies in Jolt — keep meshes convex-friendly
+
+---
+
+## Save Format
+
+Persistence flows through `PlayerSession.save_now()` → `_snapshot_into_player_data()` (via `LocalPlayerView`) → `PlayerSaveStore.save_player()`. The save envelope is `{version, player, saved_at_unix}`; format version is currently **2**. See [`SAVE_FORMAT.md`](SAVE_FORMAT.md) for the field schema and the v1 → v2 upgrade behaviour.
+
+Saved per-captain state covers: marks, lifetime stats, appearance, active vessel ledger record, accepted contracts (with delivered counts; in-flight cargo is forfeited on load), ship runtime state (position, yaw, throttle, fuel fraction), world-clock hours, and tutorial-hint-seen flags. Autosave heartbeats every 60 s of wall-clock; `_notification(NOTIFICATION_WM_CLOSE_REQUEST)` and window focus loss both force a flush.
+
+---
+
+## Input Map
+
+Actions registered in `project.godot` that gameplay code reads via `Input.is_action_pressed` / `event.is_action_pressed`:
+
+| Action | Default key | Used by |
+|---|---|---|
+| `ui_cancel` | Esc | Pause menu, close dialogues, leave UI |
+| `open_map` | M | Sea chart overlay |
+| `open_journal` | J | Cargo journal overlay (toggle) |
+| `toggle_camera` | V | First / third-person camera switch |
+| `jump` | Space | Player jump |
+| `boat_lights_toggle` | L | Boat nav lights |
+| `boat_horn_press` | E | Foghorn |
+| `boat_docking_thrusters` | T | Bow thruster mode |
+
+Add new actions to `project.godot` directly; there is no separate input-map JSON.

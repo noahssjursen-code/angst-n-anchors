@@ -12,7 +12,7 @@ extends Node3D
 ## set colours / call add_overlay() / attach a WalkAnimator immediately after
 ## super._ready() without waiting an extra frame.
 
-const MODEL_PATH := "res://resources/data/meshes/characters/npc_base.json"
+const MODEL_PATH := AssetPaths.NPC_BASE_MESH
 
 @export var skin_color: Color = Color(0.72, 0.55, 0.40):
 	set(v): skin_color = v; _apply_colors()
@@ -96,6 +96,18 @@ func add_overlay(overlay_id: String, json_path: String) -> ModelAssembler:
 		_own_subtree(ma)
 	_overlays[overlay_id] = ma
 	return ma
+
+
+func remove_overlay(overlay_id: String) -> void:
+	if not _overlays.has(overlay_id):
+		return
+	var old := _overlays[overlay_id] as ModelAssembler
+	if old != null and is_instance_valid(old):
+		if Engine.is_editor_hint():
+			old.free()
+		else:
+			old.queue_free()
+	_overlays.erase(overlay_id)
 
 
 # ── Hand anchors (for tools) ──────────────────────────────────────────────────

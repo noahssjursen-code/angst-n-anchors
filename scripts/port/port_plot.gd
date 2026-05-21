@@ -288,7 +288,7 @@ func _respawn_pending_cargo(registry: Node) -> void:
 	var dock := get_node_or_null("PortDock") as PortDock
 	if dock == null:
 		return
-	var berth_idx := dock.find_occupied_berth()
+	var berth_idx := dock.find_player_berth(PortDock.local_player_owner_id())
 	if berth_idx == -1:
 		return
 	var apron := dock.get_berth_apron_deck(berth_idx)
@@ -349,7 +349,7 @@ func _on_contract_accepted(contract: Contract, pallets: Array[Pallet]) -> void:
 	var dock := get_node_or_null("PortDock") as PortDock
 	if dock == null:
 		return
-	var berth_idx := dock.find_occupied_berth()
+	var berth_idx := dock.find_player_berth(PortDock.local_player_owner_id())
 	if berth_idx == -1:
 		return  # no ship berthed, nowhere to stage cargo
 	_stage_pallets_on_apron(dock, berth_idx, pallets)

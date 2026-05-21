@@ -189,7 +189,7 @@ func _build_gameplay(e: Array) -> void:
 
 	# ── Player ────────────────────────────────────────────────────────────────
 	_sec(e, "PLAYER")
-	_row(e, "Marks", "ℳ %d" % gs.player.marks, C_GOLD)
+	_row(e, "Marks", PlayerSession.format_money(gs.player.marks), C_GOLD)
 	_row(e, "Name",  gs.player.display_name,     C_VALUE)
 
 	var players := get_tree().get_nodes_in_group("player")
@@ -237,7 +237,7 @@ func _build_gameplay(e: Array) -> void:
 				"× %d  →  %s" % [contract.quantity, dest], C_VALUE)
 			_row(e, "  Delivered",
 				"%d / %d" % [contract.delivered_count, contract.quantity], C_VALUE)
-			_row(e, "  Reward", "ℳ %d" % contract.reward_gold, C_GOLD)
+			_row(e, "  Reward", PlayerSession.format_money(contract.reward_gold), C_GOLD)
 			var apron := _count_apron_cargo(contract.id)
 			if apron > 0:
 				_row(e, "  Apron cargo", "%d crates" % apron, C_VALUE)

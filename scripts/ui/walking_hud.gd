@@ -45,7 +45,7 @@ func _draw() -> void:
 	if view == null:
 		return
 
-	var marks_str := "ℳ  %d" % view.get_marks()
+	var marks_str := PlayerSession.format_money(view.get_marks())
 	var fs        := 17
 	var tw        := _font.get_string_size(marks_str, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
 	var pad_h     := 14.0

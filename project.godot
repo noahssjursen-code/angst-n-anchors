@@ -11,12 +11,13 @@ config_version=5
 [application]
 
 config/name="Angst N Anchors"
-run/main_scene="res://scenes/world.tscn"
+run/main_scene="res://scenes/ui/main_menu.tscn"
 config/features=PackedStringArray("4.6", "Forward Plus")
 config/icon="res://icon.svg"
 
 [autoload]
 
+GameSettings="*res://scripts/state/game_settings.gd"
 WorldWeather="*res://scripts/weather/world_weather.gd"
 WeatherLighting="*res://scripts/weather/weather_lighting.gd"
 WorldClock="*res://scripts/time/world_clock.gd"
@@ -27,6 +28,7 @@ GameState="*res://scripts/state/game_state.gd"
 DebugHud="*res://scripts/ui/debug_hud.gd"
 Telemetry="*res://scripts/state/telemetry.gd"
 LocalPlayerView="*res://scripts/state/local_player_view.gd"
+Tutorial="*res://scripts/state/tutorial.gd"
 
 [input]
 
@@ -88,6 +90,16 @@ boat_docking_thrusters={
 open_map={
 "deadzone": 0.5,
 "events": [Object(InputEventKey,"resource_local_to_scene":false,"resource_name":"","device":-1,"window_id":0,"alt_pressed":false,"shift_pressed":false,"ctrl_pressed":false,"meta_pressed":false,"pressed":false,"keycode":0,"physical_keycode":77,"key_label":0,"unicode":109,"location":0,"echo":false,"script":null)
+]
+}
+open_journal={
+"deadzone": 0.5,
+"events": [Object(InputEventKey,"resource_local_to_scene":false,"resource_name":"","device":-1,"window_id":0,"alt_pressed":false,"shift_pressed":false,"ctrl_pressed":false,"meta_pressed":false,"pressed":false,"keycode":0,"physical_keycode":74,"key_label":0,"unicode":106,"location":0,"echo":false,"script":null)
+]
+}
+toggle_camera={
+"deadzone": 0.5,
+"events": [Object(InputEventKey,"resource_local_to_scene":false,"resource_name":"","device":-1,"window_id":0,"alt_pressed":false,"shift_pressed":false,"ctrl_pressed":false,"meta_pressed":false,"pressed":false,"keycode":0,"physical_keycode":86,"key_label":0,"unicode":118,"location":0,"echo":false,"script":null)
 ]
 }
 

@@ -116,6 +116,8 @@ static func _apply_physics(boat: BoatBody, cfg: Dictionary) -> void:
 		boat.hull_mass = float(cfg["hull_mass"])
 	if cfg.has("design_draft_fraction"):
 		boat.design_draft_fraction = float(cfg["design_draft_fraction"])
+	if cfg.has("mass_scale"):
+		boat.mass_scale = float(cfg["mass_scale"])
 	if cfg.has("engine_mass"):
 		boat.engine_mass = float(cfg["engine_mass"])
 	if cfg.has("keel_ballast_mass"):
@@ -620,18 +622,8 @@ static func _resolve_hull_path(hull_ref: String, template_path: String) -> Strin
 	return local
 
 
+## Forwarded to JsonUtil so callers that still go through ShipBuilder._load_json
+## (shipwright_npc, starter_vessel, etc.) keep working. New code should call
+## JsonUtil.load() directly.
 static func _load_json(path: String) -> Dictionary:
-	if not FileAccess.file_exists(path):
-		push_error("ShipBuilder: file not found: " + path)
-		return {}
-	var f := FileAccess.open(path, FileAccess.READ)
-	var text := f.get_as_text()
-	f.close()
-	var json := JSON.new()
-	if json.parse(text) != OK:
-		push_error("ShipBuilder: JSON parse error in " + path)
-		return {}
-	var data = json.get_data()
-	if typeof(data) != TYPE_DICTIONARY:
-		return {}
-	return data
+	return JsonUtil.load(path)

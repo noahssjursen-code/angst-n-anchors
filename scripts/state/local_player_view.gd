@@ -51,6 +51,16 @@ func _ready() -> void:
 
 
 # ── Public read API ──────────────────────────────────────────────────────────
+##
+## **Convention**: UI code (HUDs, menus, debug overlays) should *only* read
+## per-player state through this view. NPCs and gameplay-mutating systems
+## (ShipBuilder, PortDock, etc.) may continue to consult the autoloads
+## directly — they're the world-authority side, not a per-client view.
+##
+## In multiplayer this autoload becomes a per-client object the network
+## layer populates with the local player's projection of the world. Every
+## UI that already reads from here will keep working with no further
+## changes; gameplay-mutating code stays on the (per-server) authority.
 
 func get_marks() -> int:
 	if _session == null:
@@ -75,10 +85,38 @@ func get_helmed_boat() -> Node:
 	return _helmed
 
 
+## The player's commissioned ship if one is spawned (regardless of whether
+## they're currently helming it). Returns null if no ship is in the world.
+##
+## Routes through PlayerVessel today — single-player logic; in MP this
+## becomes "the local player's authoritative ship reference from the
+## server projection".
+func get_active_ship() -> Node:
+	return PlayerVessel.find_active_ship(get_tree())
+
+
+func has_active_ship() -> bool:
+	return get_active_ship() != null
+
+
 func get_active_contracts() -> Array:
 	if _registry == null:
 		return []
 	return _registry.get_accepted_contracts()
+
+
+## Display-port lookup. UI code wanting "what's the human-readable name
+## of port X" should ask the view rather than reaching into ContractRegistry.
+func get_port_display_name(port_id: String) -> String:
+	if _registry == null or port_id.is_empty():
+		return ""
+	return str(_registry.get_port_display_name(port_id))
+
+
+func get_port_position(port_id: String) -> Vector3:
+	if _registry == null or port_id.is_empty():
+		return Vector3(INF, INF, INF)
+	return _registry.get_port_position(port_id)
 
 
 # ── Wiring ───────────────────────────────────────────────────────────────────
@@ -117,3 +155,122 @@ func _on_contracts_changed_one(_a: Variant = null) -> void:
 
 func _on_contracts_changed_two(_a: Variant = null, _b: Variant = null) -> void:
 	contracts_changed.emit(get_active_contracts())
+
+
+# ── Persistence (Phase 4 of the overnight refactor) ──────────────────────────
+##
+## Capture the per-player runtime state into the PlayerSession's PlayerData
+## so the player's progress survives quit / crash / sleep.
+##
+## Captured here:
+##   • accepted contracts (taken / delivered counts)
+##   • ship runtime state (world position, yaw, throttle stage)
+##   • world clock hours (so day/night picks up where it left off)
+##
+## Marks, lifetime stats, appearance, active_vessel record are saved by
+## their own write paths (PlayerSession setters) — this just supplements.
+##
+## Called by PlayerSession from inside save_now() — split from the write
+## itself so we don't recurse if a saver wants to call snapshot directly.
+func _snapshot_into_player_data() -> void:
+	if _session == null:
+		return
+	var data: PlayerData = _session.data
+	if data == null:
+		return
+
+	# Accepted contracts.
+	if _registry != null and _registry.has_method("snapshot_accepted"):
+		data.accepted_contracts = _registry.snapshot_accepted()
+	else:
+		data.accepted_contracts = []
+
+	# Ship runtime state.
+	var ship := get_active_ship() as Node3D
+	if ship != null:
+		var stage_idx := 1
+		var ctrl := ship.get_node_or_null("BoatController") as BoatController
+		if ctrl != null and ctrl.has_method("get_throttle_stage_idx"):
+			stage_idx = ctrl.get_throttle_stage_idx()
+		var fuel_fraction := 1.0
+		var boat_body := ship as BoatBody
+		if boat_body != null and boat_body.has_method("get_fuel_fraction"):
+			fuel_fraction = boat_body.get_fuel_fraction()
+		data.ship_runtime_state = {
+			"world_pos":          ship.global_position,
+			"yaw":                ship.rotation.y,
+			"throttle_stage_idx": stage_idx,
+			"fuel_fraction":      fuel_fraction,
+		}
+	else:
+		data.ship_runtime_state = {}
+
+	# World clock — game-hours since the world epoch.
+	var clock := get_node_or_null("/root/WorldClock")
+	if clock != null and clock.has_method("get_game_hours_elapsed"):
+		data.world_clock_hours = float(clock.call("get_game_hours_elapsed"))
+
+
+## Convenience: snapshot + write. Used by the abandon-ship flow and any
+## explicit "save right now" callers. PlayerSession's save_now() already
+## snapshots internally so calling it directly works too.
+func save_player_state() -> void:
+	if _session != null and _session.has_method("save_now"):
+		_session.save_now()
+
+
+## Restore the per-player snapshot. Called by World after the home port
+## spawns. Contract restore is best-effort — any contract IDs that no
+## longer exist are ignored. Ship pose restore only fires if the active
+## vessel was successfully respawned by the existing flow.
+func restore_player_state() -> void:
+	if _session == null:
+		return
+	var data: PlayerData = _session.data
+	if data == null:
+		return
+
+	# World clock.
+	if data.world_clock_hours >= 0.0:
+		var clock := get_node_or_null("/root/WorldClock")
+		if clock != null and clock.has_method("set_game_hours_elapsed"):
+			clock.call("set_game_hours_elapsed", data.world_clock_hours)
+
+	# Contracts.
+	if not data.accepted_contracts.is_empty() and _registry != null and _registry.has_method("restore_accepted"):
+		_registry.restore_accepted(data.accepted_contracts)
+		contracts_changed.emit(get_active_contracts())
+
+	# Ship pose — defer one frame so spawn-side code has settled.
+	if not data.ship_runtime_state.is_empty():
+		call_deferred("_restore_ship_pose", data.ship_runtime_state.duplicate())
+
+
+## Apply the most recently saved ship_runtime_state to the player's
+## currently-spawned ship. Called from PortDock.spawn_player_ship after
+## the harbour master finishes a spawn, so fuel level / throttle stage /
+## yaw / position get restored at the right moment in the load flow.
+func apply_runtime_state_to_active_ship() -> void:
+	if _session == null:
+		return
+	var data: PlayerData = _session.data
+	if data == null or data.ship_runtime_state.is_empty():
+		return
+	_restore_ship_pose(data.ship_runtime_state.duplicate())
+
+
+func _restore_ship_pose(state: Dictionary) -> void:
+	var ship := get_active_ship() as Node3D
+	if ship == null:
+		return
+	var pos_raw: Variant = state.get("world_pos", null)
+	if typeof(pos_raw) == TYPE_VECTOR3:
+		ship.global_position = pos_raw
+	var yaw := float(state.get("yaw", 0.0))
+	ship.rotation.y = yaw
+	# Restore fuel level if persisted (defaults to 1.0 = full tank for
+	# pre-v2 saves and freshly-commissioned ships).
+	if state.has("fuel_fraction"):
+		var boat := ship as BoatBody
+		if boat != null:
+			boat.fuel_l = boat.fuel_capacity_l * float(state["fuel_fraction"])

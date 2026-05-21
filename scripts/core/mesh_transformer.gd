@@ -236,25 +236,10 @@ func _ensure_current_data() -> bool:
 	return _current_data.has("vertices") and _current_data.has("indices")
 
 
+## Thin wrapper around JsonUtil.load() — kept as an instance method so existing
+## callers (line 144, 233) work unchanged.
 func _load_json(path: String) -> Dictionary:
-	if not FileAccess.file_exists(path):
-		return {}
-	
-	var file := FileAccess.open(path, FileAccess.READ)
-	var json_string := file.get_as_text()
-	file.close()
-	
-	var json := JSON.new()
-	var error := json.parse(json_string)
-	if error != OK:
-		push_error("MeshTransformer: JSON Parse Error in " + path)
-		return {}
-	
-	var data = json.get_data()
-	if typeof(data) != TYPE_DICTIONARY:
-		return {}
-		
-	return data
+	return JsonUtil.load(path)
 
 
 func _get_normalization_params(vertices: Array) -> Dictionary:

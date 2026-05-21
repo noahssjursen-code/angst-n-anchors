@@ -10,6 +10,11 @@ var _controller: BoatController = null
 var _font:       Font
 
 const COMPASS_R := 68.0
+const TOAST_DURATION_S := 3.0
+
+## Transient flash message (mooring rejection, low fuel, etc).
+var _toast_text:        String = ""
+var _toast_remaining_s: float  = 0.0
 
 
 func _ready() -> void:
@@ -21,9 +26,23 @@ func _ready() -> void:
 func setup(boat: RigidBody3D, controller: BoatController) -> void:
 	_boat       = boat
 	_controller = controller
+	# Subscribe to the boat's MooringComponent so split-berth rejections
+	# surface to the player as a 3-second amber flash instead of vanishing
+	# silently into a property nobody reads.
+	var mooring := _boat.get_node_or_null("ShipGameplay/MooringComponent") as MooringComponent
+	if mooring != null and not mooring.mooring_rejected.is_connected(show_toast):
+		mooring.mooring_rejected.connect(show_toast)
 
 
-func _process(_delta: float) -> void:
+## Publicly callable so other systems can flash short messages on the helm HUD.
+func show_toast(text: String, duration_s: float = TOAST_DURATION_S) -> void:
+	_toast_text        = text
+	_toast_remaining_s = duration_s
+
+
+func _process(delta: float) -> void:
+	if _toast_remaining_s > 0.0:
+		_toast_remaining_s -= delta
 	queue_redraw()
 
 
@@ -35,7 +54,68 @@ func _draw() -> void:
 	_draw_wind(Vector2(vp.x * 0.5 + COMPASS_R + 130.0, 92.0))
 	_draw_lights_status(Vector2(vp.x - 90.0, 30.0))
 	_draw_throttle(Vector2(108.0, vp.y - 142.0))
+	_draw_fuel(Vector2(220.0, vp.y - 142.0))
 	_draw_dashboard(Vector2(vp.x * 0.5, vp.y - 49.0))
+	if _toast_remaining_s > 0.0:
+		_draw_toast(Vector2(vp.x * 0.5, vp.y * 0.5 - 80.0))
+
+
+# ── Fuel gauge ───────────────────────────────────────────────────────────────
+
+## Vertical fuel bar next to the throttle telegraph. Colour-banded:
+## green > 30%, amber 10-30%, red < 10%. Reads BoatBody.get_fuel_fraction()
+## directly — fuel state is small and queried once per frame, no signal
+## subscription needed.
+func _draw_fuel(c: Vector2) -> void:
+	if _boat == null or not _boat.has_method("get_fuel_fraction"):
+		return
+	var pct: float = _boat.get_fuel_fraction()
+	var w := 28.0
+	var h := 180.0
+	var px := c.x - w * 0.5
+	var py := c.y - h * 0.5
+
+	# Frame.
+	draw_rect(Rect2(px - 4.0, py - 12.0, w + 8.0, h + 28.0), HudStyle.C_BG)
+	draw_rect(Rect2(px - 4.0, py - 12.0, w + 8.0, h + 28.0), HudStyle.C_BRASS, false, 1.2)
+	_draw_centered("FUEL", Vector2(c.x, py - 1.0), 9, HudStyle.C_LABEL)
+
+	# Empty track.
+	draw_rect(Rect2(px, py, w, h), Color(HudStyle.C_BG_INNER.r, HudStyle.C_BG_INNER.g, HudStyle.C_BG_INNER.b, 0.8))
+
+	# Filled portion grows from the bottom.
+	var fill_h := h * pct
+	var fill_col: Color
+	if pct < 0.10:
+		fill_col = HudStyle.C_RED
+	elif pct < 0.30:
+		fill_col = HudStyle.C_AMBER
+	else:
+		fill_col = HudStyle.C_GREEN
+	if fill_h > 0.0:
+		draw_rect(Rect2(px, py + h - fill_h, w, fill_h), fill_col)
+
+	# Percent readout.
+	_draw_centered("%d%%" % int(pct * 100.0), Vector2(c.x, py + h + 14.0), 10,
+			HudStyle.C_TEXT if pct >= 0.10 else HudStyle.C_RED)
+
+
+# ── Toast (transient flash message) ──────────────────────────────────────────
+
+func _draw_toast(c: Vector2) -> void:
+	var fs := 16
+	var tw := _font.get_string_size(_toast_text, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
+	var pad := 14.0
+	var pw  := tw + pad * 2.0
+	var ph  := float(fs) + pad * 1.2
+	# Soft fade-out in the last 0.6 s.
+	var alpha := clampf(_toast_remaining_s / 0.6, 0.0, 1.0)
+	var bg := Color(HudStyle.C_BG.r, HudStyle.C_BG.g, HudStyle.C_BG.b, HudStyle.C_BG.a * alpha)
+	var border := Color(HudStyle.C_AMBER.r, HudStyle.C_AMBER.g, HudStyle.C_AMBER.b, alpha)
+	var text   := Color(HudStyle.C_TEXT.r, HudStyle.C_TEXT.g, HudStyle.C_TEXT.b, alpha)
+	draw_rect(Rect2(c.x - pw * 0.5, c.y - ph * 0.5, pw, ph), bg)
+	draw_rect(Rect2(c.x - pw * 0.5, c.y - ph * 0.5, pw, ph), border, false, 1.4)
+	_draw_centered(_toast_text, c + Vector2(0.0, fs * 0.4), fs, text)
 
 
 # ── Wind indicator ───────────────────────────────────────────────────────────
@@ -285,7 +365,7 @@ func _draw_dashboard(c: Vector2) -> void:
 	var marks_str := ""
 	var session := get_node_or_null("/root/PlayerSession")
 	if session != null:
-		marks_str = "ℳ %d" % session.get_marks()
+		marks_str = PlayerSession.format_money(session.get_marks())
 
 	var cells: Array = [
 		["TIME",     _time_string(),                         HudStyle.C_AMBER                                             ],
@@ -336,22 +416,24 @@ func _time_string() -> String:
 
 
 func _nearest_dest_info() -> Array:
-	var registry := get_node_or_null("/root/ContractRegistry")
-	if registry == null or _boat == null:
+	if _boat == null:
 		return ["", ""]
-	var contracts: Array[Contract] = registry.get_accepted_contracts()
+	var contracts: Array = LocalPlayerView.get_active_contracts()
 	if contracts.is_empty():
 		return ["", ""]
 	var best_dist := INF
 	var best_name := ""
-	for contract in contracts:
-		var dest_pos: Vector3 = registry.get_port_position(contract.destination_port_id)
+	for raw in contracts:
+		var contract := raw as Contract
+		if contract == null:
+			continue
+		var dest_pos: Vector3 = LocalPlayerView.get_port_position(contract.destination_port_id)
 		if dest_pos.x == INF:
 			continue
 		var d := _boat.global_position.distance_to(dest_pos)
 		if d < best_dist:
 			best_dist = d
-			best_name = registry.get_port_display_name(contract.destination_port_id)
+			best_name = LocalPlayerView.get_port_display_name(contract.destination_port_id)
 	if best_dist == INF:
 		return ["", ""]
 	var dist_str := "%.1f nm" % (best_dist / 1852.0) if best_dist >= 1852.0 else "%.0f m" % best_dist
@@ -373,17 +455,19 @@ func _throttle_color(val: float) -> Color:
 
 
 func _dest_bearing_rad() -> float:
-	var registry := get_node_or_null("/root/ContractRegistry")
-	if registry == null or _boat == null:
+	if _boat == null:
 		return NAN
-	var contracts: Array[Contract] = registry.get_accepted_contracts()
+	var contracts: Array = LocalPlayerView.get_active_contracts()
 	if contracts.is_empty():
 		return NAN
 	var ship_pos  := _boat.global_position
 	var best_pos  := Vector3(INF, INF, INF)
 	var best_dist := INF
-	for contract in contracts:
-		var dest_pos: Vector3 = registry.get_port_position(contract.destination_port_id)
+	for raw in contracts:
+		var contract := raw as Contract
+		if contract == null:
+			continue
+		var dest_pos: Vector3 = LocalPlayerView.get_port_position(contract.destination_port_id)
 		if dest_pos.x == INF:
 			continue
 		var d := ship_pos.distance_to(dest_pos)

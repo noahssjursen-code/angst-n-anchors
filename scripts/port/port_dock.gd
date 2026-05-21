@@ -10,6 +10,9 @@ extends Node3D
 
 enum BerthStatus { FREE = 0, RESERVED = 1, OCCUPIED = 2 }
 
+## Default owner id when no PlayerSession display name is set.
+const LOCAL_PLAYER_OWNER := "Captain"
+
 const C_QUAY_EDGE      := Color(0.22, 0.23, 0.26)
 const C_EDGE_STRIPE    := Color(0.82, 0.78, 0.20)
 const C_BERTH          := Color(0.20, 0.85, 0.35, 0.35)
@@ -39,7 +42,7 @@ const QUAY_LIP_SLAB_GAP := 0.002
 ## Yellow stripe centred on Z≈0.11, spans ~[0, 0.22]. Lip band ends at QUAY_LIP_DEPTH; slab starts just after.
 ## Bollard mesh projects toward −Z; centre must sit far enough inland to stay wholly on slab / inside stripe.
 const MOORING_BOLLARD_CENTER_Z := QUAY_LIP_DEPTH + QUAY_LIP_SLAB_GAP + 0.42
-const BERTH_GAP_M    := 3.0
+const BERTH_GAP_M    := 4.0
 const BERTH_MARGIN   := 1.5
 
 const CRANE_W        := 6.0
@@ -47,10 +50,16 @@ const CRANE_H        := 18.0
 const CRANE_D        := 6.0
 const CRANE_QUAY_GAP := 3.0
 const APRON_GAP      := 2.0
+## Apron runs inland (+Z). Keep shallow so the quay does not swallow the town.
 const APRON_DEPTH    := 14.0
-## Per-side inset (m) from the slot edge where the crane cannot reach.
-## Mirrors the gantry roll range formula in _crane_general — keep in sync.
-const APRON_REACH_INSET := 3.2
+const APRON_DEPTH_MAX := 16.0
+const APRON_CELL_M   := 1.5
+## Extra apron cells beyond the ship-class hint for contract staging overflow.
+const APRON_STAGING_MARGIN_CELLS := 12
+## Per-side inset (m) from the slot edge — keep in sync with gantry roll formula.
+const APRON_REACH_INSET := 0.8
+## Gantry must cover ship length (bow–stern along the dock face) from midship.
+const CRANE_SHIP_LENGTH_FRAC := 0.58
 
 ## Total inland footprint from dock face to back of cargo aprons + buffer.
 ## PortPlot reads this to position PortFacilities without guessing.
@@ -163,7 +172,10 @@ func _build_berths() -> void:
 
 	var ship_len  : float = ShipClass.max_length(max_ship_class)
 	var ship_beam : float = ShipClass.beam(max_ship_class)
-	var count     : int   = ShipClass.berth_count(dock_length, max_ship_class, BERTH_GAP_M)
+	var count     : int   = berth_types.size() if berth_types.size() > 0 else ShipClass.berth_count(
+		dock_length, max_ship_class, BERTH_GAP_M
+	)
+	count = maxi(count, 1)
 	var slot_w    : float = dock_length / float(count)
 
 	for i in range(count):
@@ -179,9 +191,13 @@ func _build_berths() -> void:
 
 
 func _build_berth_slot(index: int, cx: float, slot_w: float, ship_beam: float, cargo_type: int) -> void:
+	var ship_len := ShipClass.max_length(max_ship_class)
+	var cargo    := _berth_cargo_layout(slot_w, ship_len, ship_beam, max_ship_class)
+	var apron_w_reach: float = cargo["apron_w"]
+	var apron_depth: float = cargo["apron_depth"]
 	var bz      : float = -ship_beam * 0.5
 	var crane_z : float = QUAY_DEPTH + CRANE_QUAY_GAP + CRANE_D * 0.5
-	var apron_z : float = QUAY_DEPTH + CRANE_QUAY_GAP + CRANE_D + APRON_GAP + APRON_DEPTH * 0.5
+	var apron_z : float = QUAY_DEPTH + CRANE_QUAY_GAP + CRANE_D + APRON_GAP + apron_depth * 0.5
 
 	# Berth water indicator
 	var fill               := MeshInstance3D.new()
@@ -199,18 +215,16 @@ func _build_berth_slot(index: int, cx: float, slot_w: float, ship_beam: float, c
 	add_child(fill)
 	fill.visible = _editor_berth_overlays_visible()
 
-	# Apron cargo grid — replaces the old static apron pad. Pallets snap to
-	# cells; only pallets whose origin_port_id matches `port_id` are accepted.
-	var apron_w_reach := maxf(slot_w - 2.0 * APRON_REACH_INSET, 1.5)
+	# Apron cargo grid — sized for this port's ship class + staging margin.
 	var apron_deck := CargoDeckComponent.new()
 	apron_deck.name                       = "ApronDeck%d" % index
 	# Sits just above the concrete pad (which is 0.12 m tall starting at Y=0).
 	# Apron deck sits just above the quay surface.
 	apron_deck.position                   = Vector3(cx, QUAY_HEIGHT + 0.001, apron_z)
 	apron_deck.deck_width_m               = apron_w_reach
-	apron_deck.deck_length_m              = APRON_DEPTH
-	apron_deck.cell_size_x_m              = 1.5
-	apron_deck.cell_size_z_m              = 1.5
+	apron_deck.deck_length_m              = apron_depth
+	apron_deck.cell_size_x_m              = APRON_CELL_M
+	apron_deck.cell_size_z_m              = APRON_CELL_M
 	apron_deck.affects_boat_cargo_mass    = false
 	apron_deck.port_id                    = port_id
 	apron_deck.debug_color                = Color(0.85, 0.55, 0.18, 0.20)
@@ -224,12 +238,16 @@ func _build_berth_slot(index: int, cx: float, slot_w: float, ship_beam: float, c
 	_berth_data.append({
 		"status":      BerthStatus.FREE,
 		"reserved_by": "",
+		"owner_id":    "",
+		"ship":        null,
 		"cargo_type":  cargo_type,
 		"fill":        fill,
 		"has_cargo":   false,
 		"cx":          cx,
 		"slot_w":      slot_w,
-		"apron_z":     apron_z,   # dock-local Z centre of this berth's apron
+		"apron_z":     apron_z,
+		"apron_w":     apron_w_reach,
+		"apron_depth": apron_depth,
 		"apron_deck":  apron_deck,
 	})
 
@@ -256,26 +274,81 @@ func _build_berth_slot(index: int, cx: float, slot_w: float, ship_beam: float, c
 	match cargo_type:
 		CargoBerthType.Type.BULK:      _crane_bulk(index, cx, crane_z)
 		CargoBerthType.Type.CONTAINER: _crane_container(index, cx, slot_w, crane_z)
-		_:                             _crane_general(index, cx, slot_w, crane_z)
+		_:                             _crane_general(index, cx, cargo, crane_z, apron_z, apron_depth, ship_beam)
 
 	# Quay slab already covers this area (extended in _build_quay) — no
 	# per-berth asphalt strip needed.
 
 
+## Apron width/depth and gantry reach for a berth slot. Ship length runs along
+## the dock face (gantry X); apron depth runs inland (trolley +Z) — keep depth small.
+static func _berth_cargo_layout(
+		slot_w: float,
+		ship_len: float,
+		ship_beam: float,
+		max_class: ShipClass.Type,
+) -> Dictionary:
+	var target_cells := ShipClass.cargo_cells(max_class) + APRON_STAGING_MARGIN_CELLS
+	# Prefer a wide, shallow apron (along-shore × inland) so capacity grows +X not +Z.
+	var min_cols := maxi(int(ceil(sqrt(float(target_cells) * 1.35))), 4)
+	var min_apron_w := float(min_cols) * APRON_CELL_M
+	var apron_w := clampf(
+		maxf(maxf(slot_w - 2.0 * APRON_REACH_INSET, min_apron_w), ship_beam + 8.0),
+		APRON_CELL_M * 2.0,
+		slot_w - 0.5,
+	)
+	var cols := maxi(int(floor(apron_w / APRON_CELL_M)), 2)
+	var rows_needed := maxi(int(ceil(float(target_cells) / float(cols))), 3)
+	var apron_depth := clampf(
+		float(rows_needed) * APRON_CELL_M,
+		APRON_DEPTH * 0.85,
+		APRON_DEPTH_MAX,
+	)
+	var roll_slot := maxf(slot_w * 0.5 - APRON_REACH_INSET, 2.0)
+	var roll_ship := ship_len * CRANE_SHIP_LENGTH_FRAC + 4.0
+	var gantry_roll := maxf(roll_slot, roll_ship)
+	return {
+		"apron_w": apron_w,
+		"apron_depth": apron_depth,
+		"gantry_roll": gantry_roll,
+	}
+
+
+## Trolley Z limits in crane-local space: −Z toward ship, +Z toward apron back.
+static func _crane_trolley_limits(
+		crane_z: float,
+		apron_z: float,
+		apron_depth: float,
+		ship_beam: float,
+) -> Vector2:
+	var ship_edge_z := -ship_beam - 3.0
+	var trolley_min := ship_edge_z - crane_z - 3.0
+	var apron_back_z := apron_z + apron_depth * 0.5 + 2.0
+	var trolley_max := apron_back_z - crane_z + 2.0
+	if trolley_max <= trolley_min + 6.0:
+		trolley_max = trolley_min + 28.0
+	return Vector2(trolley_min, trolley_max)
+
+
 # ── Crane types ───────────────────────────────────────────────────────────────
 
-func _crane_general(index: int, cx: float, slot_w: float, crane_z: float) -> void:
+func _crane_general(
+		index: int,
+		cx: float,
+		cargo: Dictionary,
+		crane_z: float,
+		apron_z: float,
+		apron_depth: float,
+		ship_beam: float,
+) -> void:
 	var crane                 := GantryCrane.new()
 	crane.name                = "Crane%d" % index
-	# Crane sits on top of the (now-extended) quay slab.
 	crane.position            = Vector3(cx, QUAY_HEIGHT, crane_z)
-	# Tell the crane which berth it serves so it can light up when a ship
-	# moors here.
 	crane.berth_index         = index
-	# Rails extend past the leg base on each side; rail must fit inside the
-	# berth slot. APRON_REACH_INSET captures this margin and is reused by the
-	# apron-pad sizing and pallet spawn grid so they all stay aligned.
-	crane.gantry_roll_range_x = maxf(slot_w * 0.5 - APRON_REACH_INSET, 0.0)
+	crane.gantry_roll_range_x = float(cargo["gantry_roll"])
+	var trolley_limits        := _crane_trolley_limits(crane_z, apron_z, apron_depth, ship_beam)
+	crane.trolley_min_z       = trolley_limits.x
+	crane.trolley_max_z       = trolley_limits.y
 	add_child(crane)
 	if Engine.is_editor_hint() and get_tree() != null:
 		var esc := get_tree().edited_scene_root
@@ -362,6 +435,17 @@ func _own_subtree(node: Node, esc: Node) -> void:
 
 # ── Runtime API ───────────────────────────────────────────────────────────────
 
+static func local_player_owner_id() -> String:
+	var tree := Engine.get_main_loop()
+	if tree is SceneTree:
+		var ps := (tree as SceneTree).root.get_node_or_null("PlayerSession")
+		if ps != null and ps.get("data") != null:
+			var player_name: String = ps.data.display_name
+			if not player_name.is_empty():
+				return player_name
+	return LOCAL_PLAYER_OWNER
+
+
 ## Returns the index of the occupied berth (player's ship), or -1 if none.
 func find_occupied_berth() -> int:
 	for i in range(_berth_data.size()):
@@ -396,14 +480,15 @@ func get_berth_apron_positions(berth_index: int, n: int, offset: int = 0) -> Arr
 	var cx      := float(b["cx"])
 	var slot_w  := float(b["slot_w"])
 	var apron_z := float(b["apron_z"])
-	var apron_w := maxf(slot_w - 2.0 * APRON_REACH_INSET, 1.5)
-	var cols    := maxi(int(apron_w / 1.5), 1)
+	var apron_w := float(b.get("apron_w", maxf(slot_w - 2.0 * APRON_REACH_INSET, 1.5)))
+	var apron_depth := float(b.get("apron_depth", APRON_DEPTH))
+	var cols    := maxi(int(apron_w / APRON_CELL_M), 1)
 	for i in range(n):
 		var idx := i + offset
 		var col := idx % cols
 		var row := idx / cols
-		var x   := cx - apron_w * 0.5 + 1.5 * (float(col) + 0.5)
-		var z   := apron_z - APRON_DEPTH * 0.4 + 1.5 * float(row)
+		var x   := cx - apron_w * 0.5 + APRON_CELL_M * (float(col) + 0.5)
+		var z   := apron_z - apron_depth * 0.4 + APRON_CELL_M * float(row)
 		out.append(to_global(Vector3(x, QUAY_HEIGHT + 0.05, z)))
 	return out
 
@@ -415,6 +500,8 @@ func can_dock(ship_type: ShipClass.Type) -> bool:
 	return ShipClass.fits(ship_type, max_ship_class)
 
 func berth_count() -> int:
+	if berth_types.size() > 0:
+		return berth_types.size()
 	return ShipClass.berth_count(dock_length, max_ship_class, BERTH_GAP_M)
 
 func get_berths() -> Array:
@@ -446,12 +533,102 @@ func release_berth(index: int) -> void:
 	var b            := _berth_data[index] as Dictionary
 	b["status"]      = BerthStatus.FREE
 	b["reserved_by"] = ""
+	b["owner_id"]    = ""
+	b["ship"]        = null
 	_update_berth_color(index)
 
+
+func register_ship_at_berth(index: int, ship: BoatBody, owner_id: String = "") -> bool:
+	if index < 0 or index >= _berth_data.size() or ship == null:
+		return false
+	unregister_ship(ship)
+	var b := _berth_data[index] as Dictionary
+	var st := int(b["status"])
+	if st == BerthStatus.FREE:
+		pass
+	elif st == BerthStatus.RESERVED:
+		var who := str(b["reserved_by"])
+		if not who.is_empty() and owner_id != "" and who != owner_id:
+			return false
+	else:
+		var existing: BoatBody = b.get("ship", null) as BoatBody
+		if existing != null and existing != ship:
+			return false
+	b["ship"]     = ship
+	b["owner_id"] = owner_id if not owner_id.is_empty() else LOCAL_PLAYER_OWNER
+	b["status"]   = BerthStatus.OCCUPIED
+	b["reserved_by"] = ""
+	_update_berth_color(index)
+	return true
+
+
+func unregister_ship(ship: BoatBody) -> void:
+	if ship == null:
+		return
+	for i in range(_berth_data.size()):
+		var b := _berth_data[i] as Dictionary
+		if b.get("ship", null) as BoatBody == ship:
+			b["ship"]     = null
+			b["owner_id"] = ""
+			b["status"]   = BerthStatus.FREE
+			b["reserved_by"] = ""
+			_update_berth_color(i)
+
+
+func find_berth_index_at_position(world_pos: Vector3) -> int:
+	if _berth_data.is_empty():
+		return -1
+	var local := to_local(world_pos)
+	var best_i := -1
+	var best_d := INF
+	for i in range(_berth_data.size()):
+		var b := _berth_data[i] as Dictionary
+		var cx: float = float(b["cx"])
+		var half: float = float(b["slot_w"]) * 0.5
+		if absf(local.x - cx) <= half:
+			return i
+		var d := absf(local.x - cx)
+		if d < best_d:
+			best_d = d
+			best_i = i
+	return best_i
+
+
+func find_player_berth(owner_id: String) -> int:
+	if owner_id.is_empty():
+		return -1
+	for i in range(_berth_data.size()):
+		var b := _berth_data[i] as Dictionary
+		if int(b["status"]) != BerthStatus.OCCUPIED:
+			continue
+		if str(b.get("owner_id", "")) == owner_id:
+			return i
+	return -1
+
+
+func get_ship_at_berth(index: int) -> BoatBody:
+	if index < 0 or index >= _berth_data.size():
+		return null
+	return (_berth_data[index] as Dictionary).get("ship", null) as BoatBody
+
+
+func berth_has_ship(index: int) -> bool:
+	if index < 0 or index >= _berth_data.size():
+		return false
+	var b := _berth_data[index] as Dictionary
+	return int(b["status"]) == BerthStatus.OCCUPIED and b.get("ship", null) != null
+
+
 func berth_reference_local_midship(index: int) -> Vector3:
-	var count  := ShipClass.berth_count(dock_length, max_ship_class, BERTH_GAP_M)
+	# Must match _build_berths() / PortExpander slot centres — not ShipClass.berth_count().
+	if index >= 0 and index < _berth_data.size():
+		var b := _berth_data[index] as Dictionary
+		var cx: float = float(b["cx"])
+		var beam_m := ShipClass.beam(max_ship_class)
+		return Vector3(cx, WaveSurface.WATER_LEVEL, -beam_m * 0.5)
+	var count := maxi(berth_count(), 1)
 	var slot_w := dock_length / float(count)
-	var cx     := -dock_length * 0.5 + slot_w * (float(index) + 0.5)
+	var cx := -dock_length * 0.5 + slot_w * (float(index) + 0.5)
 	var beam_m := ShipClass.beam(max_ship_class)
 	return Vector3(cx, WaveSurface.WATER_LEVEL, -beam_m * 0.5)
 
@@ -473,6 +650,10 @@ func get_berth_spawn_transform(index: int) -> Transform3D:
 func spawn_player_ship(index: int, ship_scene_path: String = "") -> Node3D:
 	if index < 0 or index >= _berth_data.size():
 		return null
+
+	var tree := get_tree()
+	if tree != null:
+		PlayerVessel.replace_before_spawn(tree)
 
 	var path := ship_scene_path.strip_edges()
 	if path.is_empty():
@@ -506,32 +687,73 @@ func spawn_player_ship(index: int, ship_scene_path: String = "") -> Node3D:
 		ship.queue_free()
 		return null
 	plot.add_child(ship)
-	ship.global_transform = t
 
 	var berth_draft_frac: float = 0.45
 	var body := ship as BoatBody
 	if body != null:
 		berth_draft_frac = body.design_draft_fraction
-	if ship.has_method("place_at_waterline"):
-		ship.call("place_at_waterline", WaveSurface.WATER_LEVEL, berth_draft_frac)
-
-	if body != null:
+		body.snap_to_transform(t)
+		body.place_at_waterline(WaveSurface.WATER_LEVEL, berth_draft_frac)
 		body.fit_to_port_berth(self, index)
+	elif ship.has_method("place_at_waterline"):
+		ship.global_transform = t
+		ship.call("place_at_waterline", WaveSurface.WATER_LEVEL, berth_draft_frac)
+	else:
+		ship.global_transform = t
 
 	var mooring := ship.find_child("MooringComponent", true, false) as MooringComponent
 	if mooring != null:
 		# Deferred so berth transform / waterline settle before cleat ↔ bollard pairing.
 		mooring.call_deferred("auto_moor", mooring.get_tree())
 
-	var b       := _berth_data[index] as Dictionary
-	b["status"] = BerthStatus.OCCUPIED
-	_update_berth_color(index)
+	register_ship_at_berth(
+		index, body if body != null else ship as BoatBody, local_player_owner_id()
+	)
+
+	if body != null:
+		PlayerVessel.mark_player_ship(body)
+		# After the player's ship is marked, ask LocalPlayerView to apply any
+		# saved runtime state (fuel level, throttle stage). World-load tries
+		# this earlier but no ship existed yet; this is the actual moment
+		# where the active vessel exists.
+		var view := get_tree().root.get_node_or_null("LocalPlayerView")
+		if view != null and view.has_method("apply_runtime_state_to_active_ship"):
+			view.call_deferred("apply_runtime_state_to_active_ship")
 
 	return ship
 
 
+## Move an existing player ship onto a reserved berth (no new build).
+func assign_existing_ship_to_berth(index: int, ship: BoatBody) -> bool:
+	if index < 0 or index >= _berth_data.size() or ship == null:
+		return false
+	var plot := get_parent()
+	if plot == null:
+		return false
+
+	var mooring := ship.find_child("MooringComponent", true, false) as MooringComponent
+	if mooring != null:
+		mooring.release_mooring()
+
+	if ship.get_parent() != plot:
+		ship.reparent(plot)
+
+	var berth_xform := get_berth_spawn_transform(index)
+	ship.snap_to_transform(berth_xform)
+	ship.place_at_waterline(WaveSurface.WATER_LEVEL, ship.design_draft_fraction)
+	ship.fit_to_port_berth(self, index)
+
+	if mooring != null:
+		mooring.call_deferred("auto_moor", mooring.get_tree())
+
+	return register_ship_at_berth(index, ship, local_player_owner_id())
+
+
 ## Place an already-built BoatBody at a berth. Caller must have called reserve_berth() first.
 func place_ship_at_berth(index: int, ship: BoatBody) -> BoatBody:
+	var tree := get_tree()
+	if tree != null:
+		PlayerVessel.despawn_all_ships(tree, ship)
 	if index < 0 or index >= _berth_data.size():
 		return null
 	var t    := get_berth_spawn_transform(index)
@@ -540,15 +762,14 @@ func place_ship_at_berth(index: int, ship: BoatBody) -> BoatBody:
 	if plot == null:
 		return null
 	plot.add_child(ship)
-	ship.global_transform = t
-	ship.call_deferred("place_at_waterline", WaveSurface.WATER_LEVEL, ship.design_draft_fraction)
+	ship.snap_to_transform(t)
+	ship.place_at_waterline(WaveSurface.WATER_LEVEL, ship.design_draft_fraction)
 	ship.fit_to_port_berth(self, index)
 	var mooring := ship.find_child("MooringComponent", true, false) as MooringComponent
 	if mooring != null:
 		mooring.call_deferred("auto_moor", mooring.get_tree())
-	var b       := _berth_data[index] as Dictionary
-	b["status"] = BerthStatus.OCCUPIED
-	_update_berth_color(index)
+	register_ship_at_berth(index, ship, local_player_owner_id())
+	PlayerVessel.mark_player_ship(ship)
 	return ship
 
 
