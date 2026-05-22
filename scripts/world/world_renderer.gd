@@ -232,6 +232,14 @@ func _connect_weather_lighting() -> void:
 		weather.connect("state_changed", cb)
 
 
+func _exit_tree() -> void:
+	var weather := _get_weather()
+	if weather != null:
+		var cb := Callable(self, "_apply_weather_lighting")
+		if weather.is_connected("state_changed", cb):
+			weather.disconnect("state_changed", cb)
+
+
 func _apply_weather_lighting() -> void:
 	var weather := _get_weather()
 	var tod   := float(weather.get("time_of_day"))     if weather else 0.42

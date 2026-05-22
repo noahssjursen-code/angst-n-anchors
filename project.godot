@@ -17,6 +17,8 @@ config/icon="res://icon.svg"
 
 [autoload]
 
+ServerConfig="*res://scripts/network/server_config.gd"
+NetworkManager="*res://scripts/network/network_manager.gd"
 GameSettings="*res://scripts/state/game_settings.gd"
 WorldWeather="*res://scripts/weather/world_weather.gd"
 WeatherLighting="*res://scripts/weather/weather_lighting.gd"

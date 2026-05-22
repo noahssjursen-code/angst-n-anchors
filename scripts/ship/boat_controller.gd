@@ -2,6 +2,12 @@
 class_name BoatController
 extends Node
 
+const VehicleGroups = preload("res://scripts/ship/vehicle_groups.gd")
+
+func _init() -> void:
+	add_to_group(VehicleGroups.SHIP_OWNER_ONLY)
+
+
 ## Routes player input to the boat's components when seated at the helm.
 ## Activate/deactivate is called by CaptainsChair when the player boards or exits.
 

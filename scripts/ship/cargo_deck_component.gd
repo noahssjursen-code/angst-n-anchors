@@ -408,6 +408,10 @@ func _spawn_pallet_node(origin_idx: int, pallet: Pallet) -> void:
 	# Pass `fp` as the display footprint too — fp is DECK-LOCAL, so a pallet
 	# whose world footprint differs renders correctly oriented for this deck.
 	node.setup(pallet, cell_size_x_m * float(fp.x), cell_size_z_m * float(fp.y), fp)
+	
+	var manager := get_node_or_null("/root/NetworkManager")
+	if manager != null and manager.has_method("register_cargo_spawn"):
+		manager.call("register_cargo_spawn", pallet.id, pallet, node)
 
 
 func _remove_pallet_node(pallet: Pallet) -> void:
@@ -417,6 +421,10 @@ func _remove_pallet_node(pallet: Pallet) -> void:
 	var node := root.get_node_or_null(_pallet_node_name(pallet))
 	if node != null and is_instance_valid(node):
 		node.queue_free()
+		
+	var manager := get_node_or_null("/root/NetworkManager")
+	if manager != null and manager.has_method("unregister_cargo"):
+		manager.call("unregister_cargo", pallet.id)
 
 
 func _pallet_node_name(pallet: Pallet) -> String:

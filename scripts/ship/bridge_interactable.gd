@@ -7,6 +7,13 @@
 class_name BridgeInteractable
 extends Node3D
 
+const VehicleGroups = preload("res://scripts/ship/vehicle_groups.gd")
+
+func _init() -> void:
+	add_to_group(VehicleGroups.SHIP_OWNER_ONLY)
+	add_to_group(VehicleGroups.BOARDING_HIDES_OCCUPANT)
+
+
 signal player_boarded
 signal player_exited
 

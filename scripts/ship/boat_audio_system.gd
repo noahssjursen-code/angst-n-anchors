@@ -1,6 +1,12 @@
 class_name BoatAudioSystem
 extends Node
 
+const VehicleGroups = preload("res://scripts/ship/vehicle_groups.gd")
+
+func _init() -> void:
+	add_to_group(VehicleGroups.SHIP_OWNER_ONLY)
+
+
 ## Per-boat audio: engine, bow thruster, hull wash, and throttle one-shots.
 ##
 ## Spawned as a child of BoatBody. Finds sibling components by name automatically.

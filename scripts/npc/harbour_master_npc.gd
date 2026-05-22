@@ -266,6 +266,8 @@ func _spawn_chosen_ship(scene_path: String, is_starter: bool) -> void:
 		_dialogue.add_back_button(_show_main)
 		return
 
+	_network_register_ship(ship, scene_path)
+
 	if is_starter:
 		var session := get_node_or_null("/root/PlayerSession")
 		if session != null:
@@ -383,3 +385,30 @@ func _build_ui() -> void:
 	add_overlay("hat", PEAKED_CAP_PATH)
 	_dialogue = DialoguePanel.new("HARBOUR MASTER")
 	add_child(_dialogue)
+
+
+func _network_register_ship(ship_node: Node3D, template_path: String) -> void:
+	var manager := get_node_or_null("/root/NetworkManager")
+	if manager == null:
+		return
+		
+	var hull_id := ""
+	var f := FileAccess.open(template_path, FileAccess.READ)
+	if f != null:
+		var json = JSON.parse_string(f.get_as_text())
+		f.close()
+		if json is Dictionary and json.has("hull"):
+			var hull_file: String = json["hull"]
+			hull_id = hull_file.replace("hull_", "").replace(".json", "")
+			
+	if hull_id.is_empty():
+		hull_id = "coastal_trader"
+		
+	var ship_id := "player_ship"
+	var session := get_node_or_null("/root/PlayerSession")
+	if session != null and session.get("data") != null:
+		var record: Dictionary = session.data.get_active_vessel_record()
+		if not record.is_empty():
+			ship_id = String(record.get("uid", "player_ship"))
+			
+	manager.call("register_ship_spawn", ship_id, hull_id, ship_node)
