@@ -20,9 +20,9 @@ const PRESETS := {
 	},
 	"digital_ocean": {
 		"label": "Digital Ocean",
-		"udp_host": "159.203.0.0", # REPLACE_ME.example
+		"udp_host": "142.93.43.16",
 		"udp_port": 7777,
-		"http_host": "159.203.0.0", # REPLACE_ME.example
+		"http_host": "142.93.43.16",
 		"http_port": 8080,
 	}
 }

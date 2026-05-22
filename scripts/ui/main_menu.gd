@@ -10,6 +10,10 @@ enum Page { MODE_SELECT, SINGLEPLAYER, MULTIPLAYER, CREATOR }
 var _page: Page = Page.MODE_SELECT
 var _new_game_warns: bool = false
 
+# Live Server Ping Variables
+var _active_pings: Dictionary = {}
+var _server_list_container: VBoxContainer = null
+
 # UI Roots
 var _mode_select_root: CenterContainer = null
 var _singleplayer_root: CenterContainer = null
@@ -232,7 +236,7 @@ func _build_multiplayer_page() -> void:
 
 	var panel := Panel.new()
 	panel.theme = HudStyle.make_theme()
-	panel.custom_minimum_size = Vector2(400, 0)
+	panel.custom_minimum_size = Vector2(460, 0)
 	_multiplayer_root.add_child(panel)
 
 	var margin := MarginContainer.new()
@@ -257,7 +261,7 @@ func _build_multiplayer_page() -> void:
 
 	# Fast start for local developers
 	var dev_btn := Button.new()
-	dev_btn.text = "⚡ DEV LOCAL QUICKSTART"
+	dev_btn.text = "⚡ QUICKSTART MULTIPLAYER"
 	dev_btn.add_theme_color_override("font_color", HudStyle.C_AMBER)
 	dev_btn.pressed.connect(_on_dev_local_quickstart)
 	vbox.add_child(dev_btn)
@@ -279,29 +283,47 @@ func _build_multiplayer_page() -> void:
 
 	vbox.add_child(HSeparator.new())
 
-	var server_lbl := Label.new()
-	server_lbl.text = "MULTIPLAYER SERVER"
-	server_lbl.add_theme_font_size_override("font_size", 11)
-	server_lbl.add_theme_color_override("font_color", HudStyle.C_LABEL)
-	vbox.add_child(server_lbl)
+	# 1. Live Server Selector Header & Control Buttons
+	var list_title_lbl := Label.new()
+	list_title_lbl.text = "SELECT MULTIPLAYER SERVER (LIVE)"
+	list_title_lbl.add_theme_font_size_override("font_size", 11)
+	list_title_lbl.add_theme_color_override("font_color", HudStyle.C_AMBER)
+	vbox.add_child(list_title_lbl)
+
+	# 2. Scrollable Server List Panel
+	var list_scroll := ScrollContainer.new()
+	list_scroll.custom_minimum_size = Vector2(0, 110)
+	list_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	vbox.add_child(list_scroll)
+
+	_server_list_container = VBoxContainer.new()
+	_server_list_container.add_theme_constant_override("separation", 6)
+	list_scroll.add_child(_server_list_container)
+
+	# 3. Refresh Server List Button
+	var refresh_servers_btn := Button.new()
+	refresh_servers_btn.text = "🔄 REFRESH SERVER STATUS"
+	refresh_servers_btn.add_theme_font_size_override("font_size", 11)
+	vbox.add_child(refresh_servers_btn)
 
 	var config := get_node_or_null("/root/ServerConfig")
-	
-	var server_opt := OptionButton.new()
-	server_opt.add_item("Local Server", 0)
-	server_opt.add_item("Digital Ocean", 1)
-	server_opt.add_item("Custom...", 2)
-	vbox.add_child(server_opt)
+
+	# Advanced config label
+	var advanced_lbl := Label.new()
+	advanced_lbl.text = "ADVANCED / CUSTOM CONFIG"
+	advanced_lbl.add_theme_font_size_override("font_size", 11)
+	advanced_lbl.add_theme_color_override("font_color", HudStyle.C_LABEL)
+	vbox.add_child(advanced_lbl)
 
 	var custom_grid := GridContainer.new()
+	custom_grid.name = "CustomGrid"
 	custom_grid.columns = 2
-	custom_grid.visible = false
 	custom_grid.add_theme_constant_override("h_separation", 8)
 	custom_grid.add_theme_constant_override("v_separation", 6)
 	vbox.add_child(custom_grid)
 
 	var host_lbl := Label.new()
-	host_lbl.text = "IP Address:"
+	host_lbl.text = "Custom IP:"
 	host_lbl.add_theme_font_size_override("font_size", 12)
 	custom_grid.add_child(host_lbl)
 
@@ -319,7 +341,8 @@ func _build_multiplayer_page() -> void:
 	custom_grid.add_child(port_edit)
 
 	var test_btn := Button.new()
-	test_btn.text = "Test connection"
+	test_btn.name = "TestBtn"
+	test_btn.text = "Set & Test Custom IP"
 	vbox.add_child(test_btn)
 
 	var test_status_lbl := Label.new()
@@ -331,34 +354,19 @@ func _build_multiplayer_page() -> void:
 		if config == null:
 			return
 		var p_name: String = config.get("preset")
-		if p_name == "local":
-			server_opt.selected = 0
-			custom_grid.visible = false
-		elif p_name == "digital_ocean":
-			server_opt.selected = 1
-			custom_grid.visible = false
-		else:
-			server_opt.selected = 2
+		if p_name == "custom":
 			custom_grid.visible = true
+			test_btn.visible = true
 			host_edit.text = String(config.get("udp_host"))
 			port_edit.text = String(config.get("udp_port"))
+		else:
+			custom_grid.visible = false
+			test_btn.visible = false
 
 	update_ui_from_config.call()
 
-	server_opt.item_selected.connect(func(index: int) -> void:
-		test_status_lbl.text = ""
-		if index == 0:
-			config.call("use_preset", "local")
-			custom_grid.visible = false
-		elif index == 1:
-			config.call("use_preset", "digital_ocean")
-			custom_grid.visible = false
-		else:
-			custom_grid.visible = true
-	)
-
 	var save_custom := func() -> void:
-		if server_opt.selected == 2 and config != null:
+		if config != null:
 			var host := host_edit.text.strip_edges()
 			var port := int(port_edit.text.strip_edges())
 			if port <= 0:
@@ -367,9 +375,11 @@ func _build_multiplayer_page() -> void:
 
 	host_edit.text_changed.connect(func(_new_text: String) -> void:
 		save_custom.call()
+		_refresh_server_list()
 	)
 	port_edit.text_changed.connect(func(_new_text: String) -> void:
 		save_custom.call()
+		_refresh_server_list()
 	)
 
 	test_btn.pressed.connect(func() -> void:
@@ -391,8 +401,11 @@ func _build_multiplayer_page() -> void:
 			else:
 				test_status_lbl.text = "Failed to connect! (Code: %d)" % response_code
 				test_status_lbl.add_theme_color_override("font_color", Color.RED)
+			_refresh_server_list()
 		)
 	)
+
+	refresh_servers_btn.pressed.connect(_refresh_server_list)
 
 	vbox.add_child(HSeparator.new())
 
@@ -417,6 +430,9 @@ func _show_page(page: Page) -> void:
 		config.set("is_multiplayer_mode", page == Page.MULTIPLAYER)
 		
 	_refresh_continue_states()
+	
+	if page == Page.MULTIPLAYER:
+		_refresh_server_list()
 
 
 func _refresh_continue_states() -> void:
@@ -492,11 +508,11 @@ func _on_creator_confirmed(display_name: String, appearance: CharacterAppearance
 
 
 func _on_dev_local_quickstart() -> void:
-	# Instantly select the local server preset
+	# Keep currently selected preset in ServerConfig, just make sure multiplayer is active
 	var config := get_node_or_null("/root/ServerConfig")
 	if config != null:
-		config.call("use_preset", "local")
 		config.set("is_multiplayer_mode", true)
+		config.call("save_to_disk")
 		
 	# Instantly begin/continue a local captain profile if possible
 	var session := get_node_or_null("/root/PlayerSession")
@@ -520,3 +536,183 @@ func _on_quit() -> void:
 	if session != null:
 		session.save_now()
 	get_tree().quit()
+
+
+func _refresh_server_list() -> void:
+	if _server_list_container == null:
+		return
+		
+	# Clear previous rows
+	for c in _server_list_container.get_children():
+		c.queue_free()
+		
+	# Cancel any running HTTP pings
+	for url in _active_pings.keys():
+		var req = _active_pings[url]
+		if is_instance_valid(req):
+			req.queue_free()
+	_active_pings.clear()
+	
+	var config := get_node_or_null("/root/ServerConfig")
+	if config == null:
+		return
+		
+	# Get all available servers to ping
+	var servers = []
+	
+	# Add presets
+	var presets: Dictionary = config.PRESETS
+	for p_id in presets.keys():
+		var p_data = presets[p_id]
+		servers.append({
+			"id": p_id,
+			"label": p_data["label"],
+			"host": p_data["udp_host"],
+			"http_host": p_data["http_host"],
+			"http_port": p_data["http_port"],
+			"is_preset": true
+		})
+		
+	# Add custom if preset is custom
+	if config.get("preset") == "custom":
+		servers.append({
+			"id": "custom",
+			"label": "Custom Server",
+			"host": config.get("udp_host"),
+			"http_host": config.get("http_host"),
+			"http_port": config.get("http_port"),
+			"is_preset": false
+		})
+	else:
+		# Always add a slot for custom option so they can click to edit it!
+		servers.append({
+			"id": "custom",
+			"label": "Custom IP Setup",
+			"host": config.get("udp_host"),
+			"http_host": config.get("http_host"),
+			"http_port": config.get("http_port"),
+			"is_preset": false
+		})
+		
+	# Build rows
+	for s in servers:
+		var row := HBoxContainer.new()
+		row.add_theme_constant_override("separation", 10)
+		_server_list_container.add_child(row)
+		
+		# 1. Status Indicator Dot
+		var status_dot := Label.new()
+		status_dot.text = "●"
+		status_dot.add_theme_color_override("font_color", Color.GRAY) # Gray initially while pinging
+		row.add_child(status_dot)
+		
+		# 2. Server Name
+		var name_lbl := Label.new()
+		name_lbl.text = s["label"]
+		name_lbl.add_theme_font_size_override("font_size", 12)
+		name_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		row.add_child(name_lbl)
+		
+		# 3. Latency Ping Label
+		var ping_lbl := Label.new()
+		ping_lbl.text = "..."
+		ping_lbl.add_theme_font_size_override("font_size", 11)
+		ping_lbl.add_theme_color_override("font_color", HudStyle.C_LABEL)
+		row.add_child(ping_lbl)
+		
+		# 4. Players Count Label
+		var players_lbl := Label.new()
+		players_lbl.text = "—"
+		players_lbl.add_theme_font_size_override("font_size", 11)
+		players_lbl.add_theme_color_override("font_color", HudStyle.C_LABEL)
+		row.add_child(players_lbl)
+		
+		# 5. Active/Select Button
+		var select_btn := Button.new()
+		select_btn.text = "Select"
+		select_btn.add_theme_font_size_override("font_size", 10)
+		row.add_child(select_btn)
+		
+		# Determine if currently active
+		var is_active := false
+		if s["id"] == config.get("preset"):
+			is_active = true
+		elif s["id"] == "custom" and config.get("preset") == "custom":
+			is_active = true
+			
+		if is_active:
+			select_btn.text = "Active"
+			select_btn.disabled = true
+			name_lbl.add_theme_color_override("font_color", HudStyle.C_AMBER)
+		else:
+			var s_id: String = s["id"]
+			var is_preset: bool = s["is_preset"]
+			var s_host: String = s["host"]
+			var s_http_host: String = s["http_host"]
+			var s_http_port: int = int(s["http_port"])
+			select_btn.pressed.connect(func() -> void:
+				if is_preset:
+					config.call("use_preset", s_id)
+				else:
+					config.call("use_custom", s_host, config.get("udp_port"), s_http_host, s_http_port)
+				
+				# Update advanced UI components
+				var grid = _multiplayer_root.find_child("CustomGrid", true, false)
+				if grid != null:
+					grid.visible = (s_id == "custom")
+				var t_btn = _multiplayer_root.find_child("TestBtn", true, false)
+				if t_btn != null:
+					t_btn.visible = (s_id == "custom")
+					
+				_refresh_server_list()
+			)
+			
+		# Fire off the asynchronous HTTP ping to `/v1/players`
+		var http_url := "http://%s:%d/v1/players" % [s["http_host"], s["http_port"]]
+		var start_time := Time.get_ticks_msec()
+		
+		var http_req := HTTPRequest.new()
+		add_child(http_req)
+		http_req.timeout = 2.0
+		_active_pings[http_url] = http_req
+		
+		# Use typed parameters to avoid Variant warning treatment as error
+		http_req.request_completed.connect(func(result: int, response_code: int, _headers: PackedStringArray, body: PackedByteArray) -> void:
+			if not is_instance_valid(row) or not is_instance_valid(status_dot):
+				if is_instance_valid(http_req):
+					http_req.queue_free()
+				return
+				
+			var duration_ms := Time.get_ticks_msec() - start_time
+			
+			if result == HTTPRequest.RESULT_SUCCESS and response_code == 200:
+				var json := JSON.new()
+				var parse_err := json.parse(body.get_string_from_utf8())
+				var count := 0
+				if parse_err == OK and json.data is Dictionary:
+					count = int(json.data.get("count", 0))
+					
+				status_dot.add_theme_color_override("font_color", Color.GREEN)
+				ping_lbl.text = "%d ms" % duration_ms
+				ping_lbl.add_theme_color_override("font_color", Color.GREEN)
+				players_lbl.text = "%d active" % count
+				players_lbl.add_theme_color_override("font_color", HudStyle.C_AMBER if count > 0 else HudStyle.C_LABEL)
+			else:
+				status_dot.add_theme_color_override("font_color", Color.RED)
+				ping_lbl.text = "Offline"
+				ping_lbl.add_theme_color_override("font_color", Color.RED)
+				players_lbl.text = "Offline"
+				players_lbl.add_theme_color_override("font_color", Color.RED)
+				
+			http_req.queue_free()
+			_active_pings.erase(http_url)
+		)
+		
+		var err := http_req.request(http_url)
+		if err != OK:
+			status_dot.add_theme_color_override("font_color", Color.RED)
+			ping_lbl.text = "Error"
+			players_lbl.text = "Offline"
+			http_req.queue_free()
+			_active_pings.erase(http_url)
+
