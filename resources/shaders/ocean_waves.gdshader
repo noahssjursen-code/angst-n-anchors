@@ -169,41 +169,39 @@ void vertex() {
 		
 		float local_x = dx * right_x + dz * right_z;
 		float local_z = dx * fwd_x + dz * fwd_z;
-		
+
 		float u = local_x / sx;
 		float v = local_z / sz;
-		
-		float u2 = u * u;
-		float v2 = v * v;
-		float dist4 = u2 * u2 + v2 * v2;
-		
-		float D = dist4;
-		
-		if (D < 8.0) {
+
+		// Circular Mexican Hat: D = u² + v². See wave_surface.gd:_vessel_displacement_params
+		// for the geometry rationale. MUST match the CPU sample (get_height_at) exactly,
+		// otherwise the visible water surface and the boat's physics surface diverge.
+		float D = u * u + v * v;
+
+		if (D < 4.0) {
 			float a = 1.8;
 			float b = 0.8;
 			float c = 0.5;
-			
+
 			float exp_a = exp(-a * D);
 			float exp_b = exp(-b * D);
-			
+
 			boat_dip = amp * (exp_a - c * D * exp_b);
 			float d_dip_dD = amp * (-a * exp_a - c * exp_b * (1.0 - b * D));
-			
-			// Fold outward: push the rising water ring away from the hull to create a funnel/overhang
+
+			// Fold outward: push the rising water ring away from the hull. 0.25 (was 0.8)
+			// keeps the curl visible without inflating the footprint past the hull edge —
+			// the visible ridge used to bulge ~70cm outward for a tanker, now ~20cm.
 			if (boat_dip < 0.0) {
-				float fold_amount = -boat_dip * 0.8; // How aggressively it curls outwards
+				float fold_amount = -boat_dip * 0.25;
 				float dist_xz = max(length(vec2(dx, dz)), 0.1);
 				outward_disp = (vec2(dx, dz) / dist_xz) * fold_amount;
 			}
-			
-			float u3 = u2 * u;
-			float v3 = v2 * v;
-			
-			// Chain rule: d(dip)/du = d(dip)/dD * dD/du (which is 4*u^3)
-			float ddip_dlocal_x = d_dip_dD * 4.0 * u3 / sx;
-			float ddip_dlocal_z = d_dip_dD * 4.0 * v3 / sz;
-			
+
+			// Chain rule: d(dip)/du = d(dip)/dD · dD/du. dD/du = 2u for circular D.
+			float ddip_dlocal_x = d_dip_dD * 2.0 * u / sx;
+			float ddip_dlocal_z = d_dip_dD * 2.0 * v / sz;
+
 			ddip_dx = ddip_dlocal_x * right_x + ddip_dlocal_z * fwd_x;
 			ddip_dz = ddip_dlocal_x * right_z + ddip_dlocal_z * fwd_z;
 		}

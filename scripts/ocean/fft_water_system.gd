@@ -20,13 +20,16 @@ const FFT_OCEAN_ASSEMBLE = preload("res://resources/shaders/fft_ocean_assemble.g
 
 ## How many compute frames between each CPU readback of the buoyancy LUT.
 ## 1 = read every frame (the old behaviour). Each readback pulls 4 layers ×
-## RESOLUTION² × 4 bytes = 16 MB at 1024² and forces a GPU pipeline stall,
+## RESOLUTION² × 4 bytes = 4 MB at 512² and forces a GPU pipeline stall,
 ## which on a 60-fps loop is a hard sync every frame. The boat-physics
-## sampler only needs current-ish heights — running buoyancy at 30 Hz (N=2)
-## or 20 Hz (N=3) is invisible in feel but halves/thirds the stall cost.
-## Visuals stay at full 60 Hz because the displacement/slope textures are
-## sampled on the GPU side and never need to leave the device.
-const BUOYANCY_READBACK_INTERVAL: int = 2
+## sampler only needs current-ish heights — running buoyancy at 20 Hz (N=3)
+## is invisible in feel because StripBuoyancy's per-station integration
+## already smooths over single-frame height jitter, and the vertical
+## velocity term uses `prev_delta` from the readback interval so impulse
+## scale stays correct. Visuals stay at full 60 Hz because the
+## displacement/slope textures are sampled on the GPU side and never need
+## to leave the device.
+const BUOYANCY_READBACK_INTERVAL: int = 3
 
 var rd: RenderingDevice
 var uniform_set: RID

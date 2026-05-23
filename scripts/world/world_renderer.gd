@@ -15,6 +15,23 @@ const C_OCEAN      := Color(0.015, 0.045, 0.075)
 
 const FFT_WATER_SYSTEM_SCRIPT := preload("res://scripts/ocean/fft_water_system.gd")
 
+## Inner ocean mesh — full-detail FFT wave field. Sized so the camera at max
+## zoom (~200 m back from the boat) still sees waves out to the horizon mesh.
+## At max-zoom, 70° FOV looking forward, the visible water extends ~700 m
+## ahead, so a 1500 m square (radius 750 m around camera) just covers it.
+const INNER_OCEAN_SIZE        : float = 1500.0
+const INNER_OCEAN_SUBDIVISIONS : int   = 768
+## Horizon mesh — far field that samples the largest FFT cascade only (~256 m
+## wavelength) for storm swell. 20 km square is "to the horizon" for all
+## practical camera positions. Subdivisions chosen so vertex spacing in the
+## active-wave ring (camera→wave_fade_far ≈ 5.5 km) stays under cascade-0
+## Nyquist (128 m). 20 km / 257 ≈ 78 m/vert — comfortably above Nyquist.
+const HORIZON_OCEAN_SIZE        : float = 20000.0
+const HORIZON_OCEAN_SUBDIVISIONS : int   = 256
+## Half-extent at which the horizon shader stops discarding (must equal half
+## the inner mesh size; 2 m extra overlap prevents seam gaps at the boundary).
+const HORIZON_DISCARD_HALF : float = INNER_OCEAN_SIZE * 0.5 - 2.0
+
 var _ocean_shader_material: ShaderMaterial
 var _ocean_horizon_material: ShaderMaterial
 var _sky_shader_material:   ShaderMaterial
@@ -59,6 +76,16 @@ func _process(_delta: float) -> void:
 		_sync_land_shelter()
 	if _ocean_horizon_material:
 		_ocean_horizon_material.set_shader_parameter("wave_time", WaveSurface.get_sim_time())
+		_ocean_horizon_material.set_shader_parameter("wave_intensity", WaveSurface.wave_intensity)
+		_ocean_horizon_material.set_shader_parameter("wave_energy_multiplier", WaveSurface.get_wave_energy_multiplier())
+		if _fft_system:
+			# Horizon mesh only samples the largest cascade (256 m). The smaller
+			# cascades have wavelengths well below the horizon vertex spacing
+			# (~78 m at 256 subdivisions), so sampling them would just alias —
+			# only cascade 0 is over Nyquist for this mesh.
+			_ocean_horizon_material.set_shader_parameter("displacement_map", _fft_system.displacement_map_rd)
+			_ocean_horizon_material.set_shader_parameter("slope_map",        _fft_system.slope_map_rd)
+			_ocean_horizon_material.set_shader_parameter("length_scale_0", _fft_system.length_scales.x)
 	if _sky_shader_material:
 		_sky_shader_material.set_shader_parameter("sky_time",       WaveSurface.get_sim_time())
 		_sky_shader_material.set_shader_parameter("sun_direction",   _celestial_dir(0.0))
@@ -68,14 +95,17 @@ func _process(_delta: float) -> void:
 func _follow_camera_xz() -> void:
 	if _ocean_mesh == null or not is_instance_valid(_ocean_mesh):
 		return
-	# Snap mesh to grid size to prevent vertices from sliding continuously over wave math
 	var cam := get_viewport().get_camera_3d()
 	if cam == null:
 		return
-	var grid_size := 600.0 / 261.0
+	# Snap to vertex spacing so each vertex always lands on the same offset
+	# from the camera. Without this, every vertex re-samples the wave field
+	# at a slightly shifted position each frame, causing sub-vertex morphing
+	# ("swimming") in screen space. Snapping freezes that relative position.
+	var grid_size := INNER_OCEAN_SIZE / float(INNER_OCEAN_SUBDIVISIONS)
 	_ocean_mesh.position.x = snappedf(cam.global_position.x, grid_size)
 	_ocean_mesh.position.z = snappedf(cam.global_position.z, grid_size)
-	
+
 	if _ocean_mesh_outer != null and is_instance_valid(_ocean_mesh_outer):
 		_ocean_mesh_outer.position.x = _ocean_mesh.position.x
 		_ocean_mesh_outer.position.z = _ocean_mesh.position.z
@@ -176,12 +206,16 @@ func _build_screen_effects() -> void:
 
 
 func _build_ocean() -> void:
-	var ocean := MeshBuilder.plane(Vector2(600, 600), C_OCEAN, 0.12, 512, 512)
+	var ocean := MeshBuilder.plane(
+		Vector2(INNER_OCEAN_SIZE, INNER_OCEAN_SIZE),
+		C_OCEAN, 0.12,
+		INNER_OCEAN_SUBDIVISIONS, INNER_OCEAN_SUBDIVISIONS
+	)
 	var sm    := ShaderMaterial.new()
 	sm.shader = OCEAN_SHADER
 	sm.set_shader_parameter("wave_time",             WaveSurface.get_sim_time())
 	sm.set_shader_parameter("water_level",           WaveSurface.WATER_LEVEL)
-	
+
 	sm.set_shader_parameter("shallow_albedo",        Vector3(0.015, 0.045, 0.075))
 	sm.set_shader_parameter("deep_albedo",           Vector3(0.003, 0.010, 0.020))
 	sm.set_shader_parameter("horizon_tint",          Vector3(0.035, 0.065, 0.095))
@@ -195,14 +229,18 @@ func _build_ocean() -> void:
 	sm.set_shader_parameter("metallic",             0.0)
 	sm.set_shader_parameter("specular",             0.15)
 	sm.set_shader_parameter("chop_strength",         0.12)
-	
+
 	ocean.material_override = sm
 	_ocean_shader_material  = sm
 	ocean.position          = Vector3(0, WaveSurface.WATER_LEVEL, 0)
 	_ocean_mesh             = ocean
 	add_child(ocean)
 
-	var ocean_outer := MeshBuilder.plane(Vector2(20000, 20000), C_OCEAN, 0.12, 64, 64)
+	var ocean_outer := MeshBuilder.plane(
+		Vector2(HORIZON_OCEAN_SIZE, HORIZON_OCEAN_SIZE),
+		C_OCEAN, 0.12,
+		HORIZON_OCEAN_SUBDIVISIONS, HORIZON_OCEAN_SUBDIVISIONS
+	)
 	var sm_outer    := ShaderMaterial.new()
 	sm_outer.shader = OCEAN_HORIZON_SHADER
 	sm_outer.set_shader_parameter("water_level",     WaveSurface.WATER_LEVEL)
@@ -215,7 +253,8 @@ func _build_ocean() -> void:
 	sm_outer.set_shader_parameter("roughness",       0.35)
 	sm_outer.set_shader_parameter("metallic",        0.0)
 	sm_outer.set_shader_parameter("specular",        0.15)
-	
+	sm_outer.set_shader_parameter("discard_half",    HORIZON_DISCARD_HALF)
+
 	ocean_outer.material_override = sm_outer
 	_ocean_horizon_material = sm_outer
 	ocean_outer.position = Vector3(0, WaveSurface.WATER_LEVEL, 0)
