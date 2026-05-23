@@ -30,7 +30,8 @@ uniform float water_level = -1.5;
 
 uniform vec3 shallow_albedo : source_color = vec3(0.028, 0.074, 0.118);
 uniform vec3 deep_albedo    : source_color = vec3(0.006, 0.018, 0.036);
-uniform vec3 horizon_tint   : source_color = vec3(0.068, 0.118, 0.172);
+uniform vec3 sky_top_color     : source_color = vec3(0.07, 0.28, 0.62);
+uniform vec3 sky_horizon_color : source_color = vec3(0.34, 0.54, 0.78);
 uniform float roughness     : hint_range(0.0, 1.0) = 0.20;
 uniform float metallic      : hint_range(0.0, 1.0) = 0.0;
 uniform float specular      : hint_range(0.0, 1.0) = 0.40;
@@ -93,7 +94,7 @@ void vertex() {
 void fragment() {
 	// Cut a square hole exactly where the inner ocean mesh sits so it's the
 	// only thing visible in the foreground. discard_half is set by
-	// world_renderer to (INNER_OCEAN_SIZE * 0.5 - 2.0) — 2 m overlap prevents
+	// world_renderer to (INNER_OCEAN_SIZE * 0.5 - 15.0) — 15 m overlap prevents
 	// microscopic gap seams at the boundary.
 	if (abs(v_local_pos.x) < discard_half && abs(v_local_pos.z) < discard_half) {
 		discard;
@@ -107,27 +108,17 @@ void fragment() {
 
 	vec3 body = mix(deep_albedo, shallow_albedo, look_graze * (0.22 + near_color_lift * 0.25));
 
-	float fres = pow(look_graze, fresnel_power * 1.2);
-	vec3 col = mix(body, horizon_tint, fres * fresnel_sky_mix);
+	// Dynamic sky reflection based on PBR reflection vector and sky color gradients
+	vec3 ref_dir = reflect(-view_dir, nm);
+	float sky_mix = clamp(ref_dir.y, 0.0, 1.0);
+	vec3 sky_ref_color = mix(sky_horizon_color, sky_top_color, pow(sky_mix, 0.85));
 
-	// Apply the same high-frequency noise/grain as the local ocean shader so
-	// the seam between the two materials reads as one ocean, not two.
-	vec2 xz = v_world_pos.xz;
-	float wt = wave_time;
-	mat2 ROT_A = mat2(vec2(0.809174, -0.587582), vec2(0.587582, 0.809174));
-	mat2 ROT_B = mat2(vec2(0.422618, -0.906308), vec2(0.906308, 0.422618));
-	vec2 xz_a = ROT_A * xz;
-	vec2 xz_b = ROT_B * xz;
-
-	vec2 jitter_c = xz_a * 21.974 + xz_b.yy * vec2(-9.834, 7.917) + wt * vec2(8.93, -6.71);
-	vec2 jitter_d = xz_b.yx * vec2(17.401, -14.917) + wt * vec2(-7.61, 8.734);
-	float sp = wf_vnoise(jitter_c) * 0.68 + wf_vnoise(jitter_d * 6.417 + vec2(83.917, -41.734)) * 0.32;
-
-	col *= mix(0.92, 1.08, sp);
-	float r_micro = clamp(roughness + 0.18 * (sp - 0.5), 0.12, 0.93);
+	// Enhanced Fresnel equation for lifelike, mirror-like horizon reflection
+	float fres = pow(look_graze, fresnel_power);
+	vec3 col = mix(body, sky_ref_color, fres * fresnel_sky_mix);
 
 	ALBEDO = col;
-	ROUGHNESS = r_micro;
+	ROUGHNESS = roughness;
 	METALLIC = metallic;
 	SPECULAR = specular;
 }

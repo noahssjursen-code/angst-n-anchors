@@ -80,6 +80,11 @@ var _readback_counter: int = 0
 ## CPU-side vertical-velocity calculation in WaveSurface.
 var _accumulated_delta: float = 0.0
 
+# Decoupled wave simulation tick timer (capping GPU computes to 60Hz instead of full game FPS)
+var _sim_timer: float = 0.0
+const SIM_TICK_RATE: float = 60.0
+const SIM_STEP: float = 1.0 / SIM_TICK_RATE
+
 func _ready() -> void:
 	buoyancy_data.resize(4)
 	prev_buoyancy_data.resize(4)
@@ -97,14 +102,24 @@ func _ready() -> void:
 
 func _process(delta: float) -> void:
 	if not rd: return
-	time += delta
-	_run_update_fft_assemble(delta)
+	
+	# Cap the expensive GPU compute simulation to exactly 60Hz to slash GPU utilization,
+	# while letting the rest of the game render at the monitor's full 100Hz refresh rate.
+	_sim_timer += delta
+	if _sim_timer < SIM_STEP:
+		return
+	
+	var sim_delta = minf(_sim_timer, 0.1)
+	_sim_timer = 0.0
+	
+	time += sim_delta
+	_run_update_fft_assemble(sim_delta)
 
 	# GPU↔CPU sync stall — skip on non-readback frames. Visual waves still
 	# update at full rate because they sample the GPU-side displacement/slope
 	# textures directly; only the CPU-side buoyancy LUT runs at the lower
 	# tick. See BUOYANCY_READBACK_INTERVAL.
-	_accumulated_delta += delta
+	_accumulated_delta += sim_delta
 	_readback_counter += 1
 	if _readback_counter < BUOYANCY_READBACK_INTERVAL:
 		return
