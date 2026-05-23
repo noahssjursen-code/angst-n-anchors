@@ -85,6 +85,7 @@ const INLAND_DEPTH := QUAY_DEPTH + CRANE_QUAY_GAP + CRANE_D + APRON_GAP + APRON_
 
 
 func _ready() -> void:
+	add_to_group("port_docks")
 	call_deferred("_rebuild")
 
 
