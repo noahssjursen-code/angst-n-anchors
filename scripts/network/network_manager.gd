@@ -392,6 +392,24 @@ func is_connected_to_host() -> bool:
 	return bool(client.call("is_connected_to_host"))
 
 
+func logout() -> void:
+	var local_id := get_local_player_id()
+	if not local_id.is_empty():
+		print("[NetworkManager] Gracefully declaring logout to server for: ", local_id)
+		var pkt := WireProtocolClass.encode_logout(local_id)
+		client.call("send_packet", pkt)
+	close_connection()
+
+
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_WM_CLOSE_REQUEST:
+		logout()
+
+
+func _exit_tree() -> void:
+	logout()
+
+
 func close_connection() -> void:
 	client.call("close_connection")
 	_local_senders.clear()

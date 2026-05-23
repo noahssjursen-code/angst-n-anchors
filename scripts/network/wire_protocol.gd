@@ -7,6 +7,7 @@ const UDP_PROTOCOL_VERSION := 4
 
 const UDP_MSG_TYPE_CLIENT_UPDATE := 1
 const UDP_MSG_TYPE_SNAPSHOT := 2
+const UDP_MSG_TYPE_LOGOUT := 3
 
 const MAX_STRING_LEN := 64
 
@@ -89,6 +90,23 @@ static func encode_client_update(seq: int, player_id: String, observer_pos: Vect
 		if meta_len > 0:
 			packet.append_array(meta_bytes.slice(0, meta_len))
 			
+	return packet
+
+
+## Encodes an explicit logout/disconnect packet containing the local player_id.
+static func encode_logout(player_id: String) -> PackedByteArray:
+	var packet := PackedByteArray()
+	packet.resize(3)
+	packet.encode_u8(0, UDP_PROTOCOL_VERSION)
+	packet.encode_u8(1, UDP_MSG_TYPE_LOGOUT)
+	
+	var id_bytes := player_id.to_utf8_buffer()
+	var id_len := id_bytes.size()
+	if id_len > MAX_STRING_LEN:
+		id_len = MAX_STRING_LEN
+		id_bytes = id_bytes.slice(0, MAX_STRING_LEN)
+	packet.encode_u8(2, id_len)
+	packet.append_array(id_bytes)
 	return packet
 
 
