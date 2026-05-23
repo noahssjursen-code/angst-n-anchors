@@ -130,7 +130,6 @@ func _commission(entry: Dictionary) -> void:
 		return
 
 	PlayerVessel.mark_player_ship(ship)
-	_network_register_ship(ship, path)
 	# Freshly-built vessel sails with a full tank — captain pays the
 	# commission, the yard hands over a ready ship.
 	if ship.has_method("fill_tank"):
@@ -147,6 +146,9 @@ func _commission(entry: Dictionary) -> void:
 			var anchor := dock.global_position if dock != null else global_position
 			ship.global_position = anchor + Vector3(0.0, 0.0, -20.0)
 			ship.call_deferred("place_at_waterline", WaveSurface.WATER_LEVEL)
+
+	# Register for replication only after the hull has a real world transform.
+	_network_register_ship(ship, path, str(entry.get("id", "")))
 
 	var plot := get_parent() as PortPlot
 	if plot != null:
@@ -214,28 +216,29 @@ func _get_dock() -> PortDock:
 	return parent.get_node_or_null("PortDock") as PortDock
 
 
-func _network_register_ship(ship_node: Node3D, template_path: String) -> void:
+func _network_register_ship(ship_node: Node3D, template_path: String, preferred_hull_id: String = "") -> void:
 	var manager := get_node_or_null("/root/NetworkManager")
 	if manager == null:
 		return
-		
-	var hull_id := ""
-	var f := FileAccess.open(template_path, FileAccess.READ)
-	if f != null:
-		var json = JSON.parse_string(f.get_as_text())
-		f.close()
-		if json is Dictionary and json.has("hull"):
-			var hull_file: String = json["hull"]
-			hull_id = hull_file.replace("hull_", "").replace(".json", "")
-			
-	if hull_id.is_empty():
-		hull_id = "coastal_trader"
-		
-	var ship_id := "player_ship"
+
 	var session := get_node_or_null("/root/PlayerSession")
+	var record_hull_id := ""
+	if session != null and session.get("data") != null:
+		var record: Dictionary = session.data.get_active_vessel_record()
+		if not record.is_empty():
+			record_hull_id = str(record.get("hull_id", ""))
+
+	var hull_id := HullRegistry.resolve_id_from_template(
+		template_path,
+		preferred_hull_id if not preferred_hull_id.is_empty() else record_hull_id
+	)
+	if hull_id.is_empty():
+		hull_id = "cargo_ship_medium"
+
+	var ship_id := "player_ship"
 	if session != null and session.get("data") != null:
 		var record: Dictionary = session.data.get_active_vessel_record()
 		if not record.is_empty():
 			ship_id = String(record.get("uid", "player_ship"))
-			
+
 	manager.call("register_ship_spawn", ship_id, hull_id, ship_node)

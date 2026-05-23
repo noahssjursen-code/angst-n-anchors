@@ -55,6 +55,9 @@ func apply_entities(entities_list: Array, local_id: String, scene_nodes: Diction
 				if node != null:
 					add_child(node)
 					node.global_position = ent["pos"]
+					var payload: Array = ent.get("payload", [])
+					if str(ent["type"]).begins_with("ship_") and payload.size() >= 6:
+						node.global_rotation = Vector3(payload[3], payload[4], payload[5])
 					print("[ReplicationDrawingService] Spawned dynamic: ", id, " (", ent["type"], ")")
 			
 			if node != null:
@@ -299,7 +302,9 @@ func _spawn_dynamic_entity_node(id: String, type: String) -> Node3D:
 		
 	# C. Remote Ships
 	if type.begins_with("ship_"):
-		var hull_id := type.replace("ship_", "")
+		var hull_id := HullRegistry.resolve_network_hull_id(
+			HullRegistry.hull_id_from_network_type(type)
+		)
 		var template_dir := "user://remote_ship_templates"
 		DirAccess.make_dir_recursive_absolute(template_dir)
 		var path := "%s/%s.json" % [template_dir, hull_id]
@@ -331,6 +336,15 @@ func _spawn_dynamic_entity_node(id: String, type: String) -> Node3D:
 				label.position = Vector3(0.0, 5.0, 0.0)
 				ship.add_child(label)
 				return ship
+			push_warning(
+				"ReplicationDrawingService: failed to build remote ship hull_id=%s path=%s"
+				% [hull_id, path]
+			)
+		else:
+			push_warning(
+				"ReplicationDrawingService: unknown hull_id=%s for remote type=%s"
+				% [hull_id, type]
+			)
 				
 	return null
 
@@ -366,12 +380,16 @@ func _apply_state_to_node(node: Node3D, type: String, payload: Array, meta: Stri
 		
 	# Format-specific rotation extraction
 	if format == 4:
-		# Vector4 (XYZ Yaw): f[3] = global yaw
-		node.rotation.y = lerp_angle(node.rotation.y, payload[3], 1.0)
+		if type.begins_with("ship_"):
+			node.global_rotation = Vector3(node.global_rotation.x, payload[3], node.global_rotation.z)
+		else:
+			# Vector4 (XYZ Yaw): f[3] = yaw
+			node.rotation.y = lerp_angle(node.rotation.y, payload[3], 1.0)
 	elif format == 6:
-		# Vector6 (XYZ Rotation XYZ): f[3,4,5] = Euler Rx, Ry, Rz
-		# Skip base node Euler rotation override for cranes (last 3 elements are crane joints, not rotation!)
-		if not (type == "crane" or type.begins_with("crane")):
+		if type.begins_with("ship_"):
+			node.global_rotation = Vector3(payload[3], payload[4], payload[5])
+		# Cranes use Format 6 payload for joint values, not body rotation — handled below.
+		elif not (type == "crane" or type.begins_with("crane")):
 			node.rotation.x = payload[3]
 			node.rotation.y = payload[4]
 			node.rotation.z = payload[5]

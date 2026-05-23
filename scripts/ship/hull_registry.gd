@@ -329,3 +329,52 @@ static func get_by_file(filename: String) -> Dictionary:
 		if def.get("hull_file", "").get_file() == file_clean:
 			return def.duplicate()
 	return {}
+
+
+## Strip the wire entity prefix once: ship_container_ship_ultra -> container_ship_ultra.
+static func hull_id_from_network_type(network_type: String) -> String:
+	if network_type.begins_with("ship_"):
+		return network_type.substr(5)
+	return network_type
+
+
+## Maps a network hull id (registry id, filename stem, or legacy alias) to a registry id.
+static func resolve_network_hull_id(hull_id: String) -> String:
+	if hull_id.is_empty():
+		return ""
+	if HULL_DEFINITIONS.has(hull_id):
+		return hull_id
+	var from_file := get_by_file("hull_%s.json" % hull_id)
+	if not from_file.is_empty():
+		return str(from_file.get("id", ""))
+	var recovered := _recover_double_stripped_hull_id(hull_id)
+	if HULL_DEFINITIONS.has(recovered):
+		return recovered
+	return hull_id
+
+
+static func _recover_double_stripped_hull_id(hull_id: String) -> String:
+	# e.g. container_ultra (from ship_container_ship_ultra with replace-all) -> container_ship_ultra
+	var parts: PackedStringArray = hull_id.split("_")
+	if parts.size() == 2 and parts[0] in ["container", "cargo"]:
+		return "%s_ship_%s" % [parts[0], parts[1]]
+	return hull_id
+
+
+## Resolve the registry hull id used on the wire from a template path and/or saved id.
+static func resolve_id_from_template(template_path: String, preferred_id: String = "") -> String:
+	var resolved := resolve_network_hull_id(preferred_id)
+	if HULL_DEFINITIONS.has(resolved):
+		return resolved
+	if template_path.is_empty():
+		return resolved
+	var f := FileAccess.open(template_path, FileAccess.READ)
+	if f == null:
+		return resolved
+	var json = JSON.parse_string(f.get_as_text())
+	f.close()
+	if json is Dictionary and json.has("hull"):
+		var entry := get_by_file(str(json["hull"]))
+		if not entry.is_empty():
+			return str(entry.get("id", ""))
+	return resolved

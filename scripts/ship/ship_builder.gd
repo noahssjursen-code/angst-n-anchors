@@ -319,6 +319,8 @@ static func _add_cargo_decks(parent: Node3D, hull_data: Dictionary, tmpl: Dictio
 	var deck := CargoDeckComponent.new()
 	deck.name = "CargoDeck_" + deck_name
 	deck.position = _slot_to_frame(pos)
+	# Grid defaults: width on +X, length on +Z. ShipFrame uses +X fore-aft, ±Z beam.
+	deck.rotation.y = -HULL_AUTHORED_Y_ROT
 	deck.deck_width_m = float(fitted.get("deck_width", 5.0)) * scale
 	deck.deck_length_m = float(fitted.get("deck_length", 8.0)) * scale
 	var cell_size := float(fitted.get("cell_size", 1.5)) * scale
