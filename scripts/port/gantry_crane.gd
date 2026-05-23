@@ -1112,9 +1112,12 @@ func _detach_from_deck(pallet_res) -> void:
 func _nearest_boardable_player() -> CharacterBody3D:
 	if not _remotely_operated_by.is_empty():
 		return null
+	var center_pos := global_position
+	if _gantry_frame != null:
+		center_pos = _gantry_frame.global_position
 	for node in get_tree().get_nodes_in_group("player"):
 		var body := node as CharacterBody3D
-		if body != null and global_position.distance_to(body.global_position) <= board_range_m:
+		if body != null and center_pos.distance_to(body.global_position) <= board_range_m:
 			return body
 	return null
 

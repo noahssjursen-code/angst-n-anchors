@@ -41,7 +41,6 @@ func spawn_ship() -> Node3D:
 		ship.call("place_at_waterline", WaveSurface.WATER_LEVEL, draft_frac)
 
 	_moor_ship(ship)
-	var boat := ship as BoatBody
 	if boat != null:
 		PlayerVessel.mark_player_ship(boat)
 	return ship

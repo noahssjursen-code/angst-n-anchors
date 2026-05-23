@@ -11,6 +11,13 @@ const RESOLUTION = 512
 const RESOLUTION_LOG2 = 9  # log2(RESOLUTION)
 const MAX_WAVES = 4
 
+const FFT_OCEAN_INIT = preload("res://resources/shaders/fft_ocean_init.glsl")
+const FFT_OCEAN_PACK = preload("res://resources/shaders/fft_ocean_pack.glsl")
+const FFT_OCEAN_UPDATE = preload("res://resources/shaders/fft_ocean_update.glsl")
+const FFT_OCEAN_FFT_X = preload("res://resources/shaders/fft_ocean_fft_x.glsl")
+const FFT_OCEAN_FFT_Y = preload("res://resources/shaders/fft_ocean_fft_y.glsl")
+const FFT_OCEAN_ASSEMBLE = preload("res://resources/shaders/fft_ocean_assemble.glsl")
+
 ## How many compute frames between each CPU readback of the buoyancy LUT.
 ## 1 = read every frame (the old behaviour). Each readback pulls 4 layers ×
 ## RESOLUTION² × 4 bytes = 16 MB at 1024² and forces a GPU pipeline stall,
@@ -110,29 +117,28 @@ func _process(delta: float) -> void:
 	_accumulated_delta = 0.0
 
 func _compile_shaders() -> void:
-	var file = FileAccess.open("res://resources/shaders/fft_ocean_compute.glsl", FileAccess.READ)
-	var base_code = file.get_as_text()
-	var code_without_version = base_code.replace("#version 450", "")
-	
-	# Inject the FFT size as a #define so the FFT_X/FFT_Y passes get the matching
-	# shared-memory buffer size and butterfly count. SIZE/LOG_SIZE in the GLSL
-	# are #ifndef-guarded so we can override them from here without touching
-	# the source for each resolution change.
-	var fft_defines := "#define SIZE %d\n#define LOG_SIZE %d\n" % [RESOLUTION, RESOLUTION_LOG2]
-	pipeline_init = _create_pipeline("#version 450\n#define PASS_INIT\n" + code_without_version)
-	pipeline_pack = _create_pipeline("#version 450\n#define PASS_PACK\n" + code_without_version)
-	pipeline_update = _create_pipeline("#version 450\n#define PASS_UPDATE\n" + code_without_version)
-	pipeline_fft_x = _create_pipeline("#version 450\n#define PASS_FFT_X\n" + fft_defines + code_without_version)
-	pipeline_fft_y = _create_pipeline("#version 450\n#define PASS_FFT_Y\n" + fft_defines + code_without_version)
-	pipeline_assemble = _create_pipeline("#version 450\n#define PASS_ASSEMBLE\n" + code_without_version)
+	pipeline_init = _load_shader_pipeline(FFT_OCEAN_INIT)
+	pipeline_pack = _load_shader_pipeline(FFT_OCEAN_PACK)
+	pipeline_update = _load_shader_pipeline(FFT_OCEAN_UPDATE)
+	pipeline_fft_x = _load_shader_pipeline(FFT_OCEAN_FFT_X)
+	pipeline_fft_y = _load_shader_pipeline(FFT_OCEAN_FFT_Y)
+	pipeline_assemble = _load_shader_pipeline(FFT_OCEAN_ASSEMBLE)
 
-func _create_pipeline(src: String) -> RID:
-	var shader_src = RDShaderSource.new()
-	shader_src.set_stage_source(RenderingDevice.SHADER_STAGE_COMPUTE, src)
-	var spirv = rd.shader_compile_spirv_from_source(shader_src)
-	if spirv.compile_error_compute != "":
-		push_error("Compute Shader Compile Error: ", spirv.compile_error_compute)
-	var shader = rd.shader_create_from_spirv(spirv)
+func _load_shader_pipeline(shader_file: RDShaderFile) -> RID:
+	if shader_file == null:
+		push_error("FftWaterSystem: Shader file is null")
+		return RID()
+	
+	var versions = shader_file.get_version_list()
+	var version_name = &""
+	if not versions.is_empty():
+		version_name = versions[0]
+	
+	var shader_spirv: RDShaderSPIRV = shader_file.get_spirv(version_name)
+	if shader_spirv == null:
+		push_error("FftWaterSystem: Failed to get spirv for shader with version " + str(version_name))
+		return RID()
+	var shader = rd.shader_create_from_spirv(shader_spirv)
 	if not main_shader.is_valid():
 		main_shader = shader
 	return rd.compute_pipeline_create(shader)
