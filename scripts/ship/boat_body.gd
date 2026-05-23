@@ -7,8 +7,9 @@ extends RigidBody3D
 ##
 ## Hull collision lives on layer "boat_hull" so the CharacterBody player does not
 ## directly push the RigidBody (infinite-mass kinematic vs dynamic = huge impulses).
-## A thin AnimatableBody3D "WalkDeck" on the "world" layer follows the hull each
-## physics step so the player still has a stable deck to stand on.
+## A thin AnimatableBody3D "WalkDeck" on the boat_walk layer — flat box only, synced
+## each physics step. No hull mesh concave collider (that shell scales with ultra hulls
+## and was launching players on the quay when ships spawned).
 
 const LAYER_WORLD:     int = 1
 const LAYER_BOAT_HULL: int = 2
@@ -16,7 +17,6 @@ const LAYER_BOAT_WALK: int = 4
 const LAYER_PLAYER:    int = 8
 const MERGED_COLLIDER_NAME := "MergedBoatCollider"
 const WALK_DECK_COLLIDER_NAME := "WalkDeckCollider"
-const WALK_MODEL_COLLIDER_NAME := "WalkModelCollider"
 
 @export_group("Physics")
 ## Manual mass override (kg). Used when `auto_mass_from_hull = false`. Ignored otherwise.
@@ -606,7 +606,7 @@ func _ensure_walk_deck() -> void:
 
 	_walk_deck = AnimatableBody3D.new()
 	_walk_deck.name = "WalkDeck"
-	_walk_deck.sync_to_physics = true
+	_walk_deck.sync_to_physics = false
 	_walk_deck.collision_layer = LAYER_BOAT_WALK
 	_walk_deck.collision_mask  = LAYER_PLAYER
 
@@ -615,18 +615,17 @@ func _ensure_walk_deck() -> void:
 	var box := BoxShape3D.new()
 	box.size = _walk_deck_box_size()
 	cs.shape = box
+	cs.disabled = true
 	_walk_deck.add_child(cs)
-	_add_walk_model_collision()
 
 	var parent_node := get_parent()
 	if parent_node != null:
 		parent_node.add_child(_walk_deck)
 	else:
 		add_child(_walk_deck)
-
 	_walk_deck.set_meta("_boat_owner", self)
-
 	_sync_walk_deck_transform()
+	call_deferred("_enable_walk_deck_collision")
 
 
 func _walk_deck_box_size() -> Vector3:
@@ -644,40 +643,22 @@ func _sync_walk_deck_transform() -> void:
 	_walk_deck.global_transform = global_transform * Transform3D(Basis(), _walk_deck_local_origin())
 
 
+func _enable_walk_deck_collision() -> void:
+	if _walk_deck == null or not is_instance_valid(_walk_deck):
+		return
+	_sync_walk_deck_transform()
+	var cs := _walk_deck.get_node_or_null(WALK_DECK_COLLIDER_NAME) as CollisionShape3D
+	if cs != null:
+		cs.disabled = false
+
+
 func _resize_walk_deck_shape() -> void:
 	if _walk_deck == null or not is_instance_valid(_walk_deck):
 		return
 	var cs := _walk_deck.get_node_or_null(WALK_DECK_COLLIDER_NAME) as CollisionShape3D
 	if cs != null and cs.shape is BoxShape3D:
 		(cs.shape as BoxShape3D).size = _walk_deck_box_size()
-	_add_walk_model_collision()
-
-
-func _add_walk_model_collision() -> void:
-	if _walk_deck == null or not is_instance_valid(_walk_deck):
-		return
-
-	var existing := _walk_deck.get_node_or_null(WALK_MODEL_COLLIDER_NAME)
-	if existing != null:
-		_walk_deck.remove_child(existing)
-		existing.free()
-
-	var boat_faces := _walk_collision_faces()
-	if boat_faces.size() < 3:
-		return
-
-	var origin := _walk_deck_local_origin()
-	var walk_faces: Array[Vector3] = []
-	for point in boat_faces:
-		walk_faces.append(point - origin)
-
-	var shape := ConcavePolygonShape3D.new()
-	shape.set_faces(walk_faces)
-
-	var collision := CollisionShape3D.new()
-	collision.name = WALK_MODEL_COLLIDER_NAME
-	collision.shape = shape
-	_walk_deck.add_child(collision)
+	_sync_walk_deck_transform()
 
 
 func _build_merged_collision() -> void:
@@ -696,7 +677,6 @@ func _build_merged_collision() -> void:
 	add_child(collision)
 	if Engine.is_editor_hint() and get_tree() != null:
 		collision.owner = get_tree().edited_scene_root
-	_add_walk_model_collision()
 
 
 func _merged_collision_points() -> Array[Vector3]:
@@ -705,15 +685,6 @@ func _merged_collision_points() -> Array[Vector3]:
 	if _transformer != null and is_instance_valid(_transformer):
 		if _transformer.has_method("get_collision_points_in"):
 			return _transformer.call("get_collision_points_in", self)
-	return []
-
-
-func _walk_collision_faces() -> Array[Vector3]:
-	if _model_assembler != null and is_instance_valid(_model_assembler):
-		return _model_assembler.get_collision_faces_in(self)
-	if _transformer != null and is_instance_valid(_transformer):
-		if _transformer.has_method("get_collision_faces_in"):
-			return _transformer.call("get_collision_faces_in", self)
 	return []
 
 
