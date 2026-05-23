@@ -106,15 +106,18 @@ static func _vessel_displacement_params(b: RigidBody3D) -> Dictionary:
 	
 	var right := b.global_transform.basis.x
 	var fwd := b.global_transform.basis.z
-	
+
 	# The absolute depth the keel is submerged under the wave
 	var depth_below_surface: float = maxf(surf_raw - keel_y, 0.0)
-	
-	# The Mexican Hat Wavelet crosses 0 dip at exactly D = 0.85.
-	# By scaling sx and sz to 0.52, the edge of the physical boat (u = 0.5/0.52 = 0.96 => D = 0.85)
-	# lands EXACTLY on the zero-crossing, creating a perfect airtight seal against the hull.
-	var sx: float = maxf(hs.x * 0.52, 0.5)
-	var sz: float = maxf(hs.z * 0.52, 0.5)
+
+	# Circular Mexican Hat Wavelet: D = u² + v². Zero crossing at D ≈ 0.85
+	# (where exp(-1.8D) = 0.5·D·exp(-0.8D)), which gives r = √0.85 ≈ 0.922.
+	# Setting sx = hs.x * 0.542 puts that zero crossing right at the hull edge
+	# (u·sx = 0.922 · 0.542 · hs.x = 0.5 · hs.x) along the cardinal axes AND on
+	# diagonals — true elliptical hug, no square-corner overshoot like the old
+	# u⁴+v⁴ super-ellipse had.
+	var sx: float = maxf(hs.x * 0.542, 0.5)
+	var sz: float = maxf(hs.z * 0.542, 0.5)
 	var amp: float = 0.0
 	
 	if depth_below_surface > 0.0:
@@ -227,21 +230,21 @@ static func _vessel_dip_at(x: float, z: float) -> float:
 	
 	var u: float = local_x / sx
 	var v: float = local_z / sz
-	
-	var u2: float = u * u
-	var v2: float = v * v
-	var dist4: float = u2 * u2 + v2 * v2
-	
-	var D: float = dist4
-	
-	if D > 8.0:
+
+	# Circular norm — see _vessel_displacement_params for the rationale.
+	# Cutoff D > 4.0 (was 8.0): at D=4 dip ≈ -0.08·amp, by D=5 it's already
+	# 1e-3·amp — past 4 we're integrating noise and visibly trailing the
+	# ridge way past the hull.
+	var D: float = u * u + v * v
+
+	if D > 4.0:
 		return 0.0
-		
+
 	var a: float = 1.8
 	var b: float = 0.8
 	var c: float = 0.5
-	
+
 	var exp_a: float = exp(-a * D)
 	var exp_b: float = exp(-b * D)
-	
+
 	return amp * (exp_a - c * D * exp_b)

@@ -1,12 +1,37 @@
 shader_type spatial;
 render_mode specular_schlick_ggx;
 
-uniform float water_level = -1.5;
+// ── Wave field (FFT cascade 0 only) ───────────────────────────────────────
+// The horizon mesh is too coarse (~210 m verts at 20 km / 96 subdivs) to
+// sample the smaller cascades without aliasing. Cascade 0 has the longest
+// wavelength (~256 m) and carries the storm swell that the user actually
+// reads at distance, so we sample it alone.
+uniform sampler2DArray displacement_map : filter_linear, repeat_enable;
+uniform sampler2DArray slope_map        : filter_linear, repeat_enable;
+uniform float length_scale_0 = 256.0;
+
 uniform float wave_time = 0.0;
+uniform float wave_intensity = 1.0;
+uniform float wave_energy_multiplier = 1.0;
+
+// Distance from camera at which horizon waves start fading to flat. The
+// inner ocean mesh extends to `discard_half` so amplitude should still be
+// near-full at that boundary — the seam is invisible because the inner mesh
+// is already discarding the horizon mesh's pixels there.
+uniform float wave_fade_near : hint_range(200.0, 5000.0) = 900.0;
+uniform float wave_fade_far  : hint_range(1000.0, 12000.0) = 5500.0;
+
+// Half-extent of the inner ocean mesh — we discard fragments inside that
+// square so the inner mesh is the only thing visible in the foreground.
+// Set by world_renderer.gd to match INNER_OCEAN_SIZE.
+uniform float discard_half = 298.0;
+
+uniform float water_level = -1.5;
 
 uniform vec3 shallow_albedo : source_color = vec3(0.028, 0.074, 0.118);
 uniform vec3 deep_albedo    : source_color = vec3(0.006, 0.018, 0.036);
-uniform vec3 horizon_tint   : source_color = vec3(0.068, 0.118, 0.172);
+uniform vec3 sky_top_color     : source_color = vec3(0.07, 0.28, 0.62);
+uniform vec3 sky_horizon_color : source_color = vec3(0.34, 0.54, 0.78);
 uniform float roughness     : hint_range(0.0, 1.0) = 0.20;
 uniform float metallic      : hint_range(0.0, 1.0) = 0.0;
 uniform float specular      : hint_range(0.0, 1.0) = 0.40;
@@ -16,6 +41,8 @@ uniform float near_color_lift : hint_range(0.0, 1.0) = 0.14;
 
 varying vec3 v_world_pos;
 varying vec3 v_local_pos;
+varying vec3 v_world_normal;
+varying float v_wave_fade;
 
 float wf_hash21(vec2 p) {
 	vec2 hp = fract(p * vec2(123.344, 445.891));
@@ -37,47 +64,61 @@ float wf_vnoise(vec2 p) {
 void vertex() {
 	v_local_pos = VERTEX;
 	vec4 w4 = MODEL_MATRIX * vec4(VERTEX, 1.0);
-	// Snap strictly to the water level (flat plane)
-	w4.y = water_level;
-	v_world_pos = w4.xyz;
-	VERTEX = (inverse(MODEL_MATRIX) * w4).xyz;
+	vec3 wp = w4.xyz;
+
+	// Distance-based amplitude fade. At the inner-mesh boundary the
+	// amplitude matches what the inner shader uses (* 0.42), then quietly
+	// flattens past `wave_fade_far` so the literal horizon line is calm.
+	float dist_from_cam = length(wp.xz - CAMERA_POSITION_WORLD.xz);
+	float wave_fade = 1.0 - smoothstep(wave_fade_near, wave_fade_far, dist_from_cam);
+	v_wave_fade = wave_fade;
+
+	float amp_scale = wave_intensity * wave_energy_multiplier * 0.42 * wave_fade;
+
+	vec2 uv = wp.xz / length_scale_0;
+	vec3 disp  = textureLod(displacement_map, vec3(uv, 0.0), 0.0).xyz;
+	vec2 slope = textureLod(slope_map,        vec3(uv, 0.0), 0.0).xy;
+
+	wp.y = water_level + disp.y * amp_scale;
+	wp.x += disp.x * amp_scale;
+	wp.z += disp.z * amp_scale;
+
+	v_world_pos = wp;
+	v_world_normal = normalize(vec3(-slope.x * amp_scale, 1.0, -slope.y * amp_scale));
+
+	mat4 inv_model = inverse(MODEL_MATRIX);
+	VERTEX = (inv_model * vec4(wp, 1.0)).xyz;
+	NORMAL = normalize((inv_model * vec4(v_world_normal, 0.0)).xyz);
 }
 
 void fragment() {
-	// Cut a square hole exactly where the high-res 600x600 ocean mesh sits.
-	// We use 298.0 to give a tiny 2m overlap to prevent any microscopic gap seams.
-	if (abs(v_local_pos.x) < 298.0 && abs(v_local_pos.z) < 298.0) {
+	// Cut a square hole exactly where the inner ocean mesh sits so it's the
+	// only thing visible in the foreground. discard_half is set by
+	// world_renderer to (INNER_OCEAN_SIZE * 0.5 - 15.0) — 15 m overlap prevents
+	// microscopic gap seams at the boundary.
+	if (abs(v_local_pos.x) < discard_half && abs(v_local_pos.z) < discard_half) {
 		discard;
 	}
 
-	vec3 nm = vec3(0.0, 1.0, 0.0);
+	vec3 nm = normalize(v_world_normal);
 	vec3 view_dir = normalize(CAMERA_POSITION_WORLD - v_world_pos);
-	
+
 	float flat_ndv = clamp(dot(nm, view_dir), 0.001, 1.0);
 	float look_graze = 1.0 - pow(flat_ndv, 1.18);
-	
+
 	vec3 body = mix(deep_albedo, shallow_albedo, look_graze * (0.22 + near_color_lift * 0.25));
-	
-	float fres = pow(look_graze, fresnel_power * 1.2);
-	vec3 col = mix(body, horizon_tint, fres * fresnel_sky_mix);
-	
-	// Apply the same high-frequency noise/grain as the local ocean shader
-	vec2 xz = v_world_pos.xz;
-	float wt = wave_time;
-	mat2 ROT_A = mat2(vec2(0.809174, -0.587582), vec2(0.587582, 0.809174));
-	mat2 ROT_B = mat2(vec2(0.422618, -0.906308), vec2(0.906308, 0.422618));
-	vec2 xz_a = ROT_A * xz;
-	vec2 xz_b = ROT_B * xz;
-	
-	vec2 jitter_c = xz_a * 21.974 + xz_b.yy * vec2(-9.834, 7.917) + wt * vec2(8.93, -6.71);
-	vec2 jitter_d = xz_b.yx * vec2(17.401, -14.917) + wt * vec2(-7.61, 8.734);
-	float sp = wf_vnoise(jitter_c) * 0.68 + wf_vnoise(jitter_d * 6.417 + vec2(83.917, -41.734)) * 0.32;
-	
-	col *= mix(0.92, 1.08, sp);
-	float r_micro = clamp(roughness + 0.18 * (sp - 0.5), 0.12, 0.93);
-	
+
+	// Dynamic sky reflection based on PBR reflection vector and sky color gradients
+	vec3 ref_dir = reflect(-view_dir, nm);
+	float sky_mix = clamp(ref_dir.y, 0.0, 1.0);
+	vec3 sky_ref_color = mix(sky_horizon_color, sky_top_color, pow(sky_mix, 0.85));
+
+	// Enhanced Fresnel equation for lifelike, mirror-like horizon reflection
+	float fres = pow(look_graze, fresnel_power);
+	vec3 col = mix(body, sky_ref_color, fres * fresnel_sky_mix);
+
 	ALBEDO = col;
-	ROUGHNESS = r_micro;
+	ROUGHNESS = roughness;
 	METALLIC = metallic;
 	SPECULAR = specular;
 }

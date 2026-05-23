@@ -12,7 +12,10 @@ uniform float wave_energy_multiplier = 1.0;
 
 uniform vec3 shallow_albedo : source_color = vec3(0.028, 0.074, 0.118);
 uniform vec3 deep_albedo    : source_color = vec3(0.006, 0.018, 0.036);
-uniform vec3 horizon_tint   : source_color = vec3(0.068, 0.118, 0.172);
+uniform vec3 sky_top_color     : source_color = vec3(0.07, 0.28, 0.62);
+uniform vec3 sky_horizon_color : source_color = vec3(0.34, 0.54, 0.78);
+uniform vec3 sun_direction     = vec3(0.0, 1.0, 0.0);
+uniform vec3 sun_color         : source_color = vec3(1.0, 0.9, 0.8);
 uniform float roughness     : hint_range(0.0, 1.0) = 0.20;
 uniform float metallic      : hint_range(0.0, 1.0) = 0.0;
 uniform float specular      : hint_range(0.0, 1.0) = 0.40;
@@ -169,41 +172,39 @@ void vertex() {
 		
 		float local_x = dx * right_x + dz * right_z;
 		float local_z = dx * fwd_x + dz * fwd_z;
-		
+
 		float u = local_x / sx;
 		float v = local_z / sz;
-		
-		float u2 = u * u;
-		float v2 = v * v;
-		float dist4 = u2 * u2 + v2 * v2;
-		
-		float D = dist4;
-		
-		if (D < 8.0) {
+
+		// Circular Mexican Hat: D = u² + v². See wave_surface.gd:_vessel_displacement_params
+		// for the geometry rationale. MUST match the CPU sample (get_height_at) exactly,
+		// otherwise the visible water surface and the boat's physics surface diverge.
+		float D = u * u + v * v;
+
+		if (D < 4.0) {
 			float a = 1.8;
 			float b = 0.8;
 			float c = 0.5;
-			
+
 			float exp_a = exp(-a * D);
 			float exp_b = exp(-b * D);
-			
+
 			boat_dip = amp * (exp_a - c * D * exp_b);
 			float d_dip_dD = amp * (-a * exp_a - c * exp_b * (1.0 - b * D));
-			
-			// Fold outward: push the rising water ring away from the hull to create a funnel/overhang
+
+			// Fold outward: push the rising water ring away from the hull. 0.25 (was 0.8)
+			// keeps the curl visible without inflating the footprint past the hull edge —
+			// the visible ridge used to bulge ~70cm outward for a tanker, now ~20cm.
 			if (boat_dip < 0.0) {
-				float fold_amount = -boat_dip * 0.8; // How aggressively it curls outwards
+				float fold_amount = -boat_dip * 0.25;
 				float dist_xz = max(length(vec2(dx, dz)), 0.1);
 				outward_disp = (vec2(dx, dz) / dist_xz) * fold_amount;
 			}
-			
-			float u3 = u2 * u;
-			float v3 = v2 * v;
-			
-			// Chain rule: d(dip)/du = d(dip)/dD * dD/du (which is 4*u^3)
-			float ddip_dlocal_x = d_dip_dD * 4.0 * u3 / sx;
-			float ddip_dlocal_z = d_dip_dD * 4.0 * v3 / sz;
-			
+
+			// Chain rule: d(dip)/du = d(dip)/dD · dD/du. dD/du = 2u for circular D.
+			float ddip_dlocal_x = d_dip_dD * 2.0 * u / sx;
+			float ddip_dlocal_z = d_dip_dD * 2.0 * v / sz;
+
 			ddip_dx = ddip_dlocal_x * right_x + ddip_dlocal_z * fwd_x;
 			ddip_dz = ddip_dlocal_x * right_z + ddip_dlocal_z * fwd_z;
 		}
@@ -235,6 +236,7 @@ void fragment() {
 	vec3 nm = normalize(v_world_normal);
 	vec2 xz = v_world_pos.xz;
 	float wt = wave_time;
+	float dist_to_cam = length(CAMERA_POSITION_WORLD - v_world_pos);
 
 	/* Stable finite-difference width */
 	float epsilon = mix(0.74, 0.98, chop_strength);
@@ -249,6 +251,11 @@ void fragment() {
 	float grad_damp = 1.0 / (1.0 + grad_mag * 1.7);
 	float ripple_gain = chop_strength * mix(7.8, 5.9, chop_strength) * mix(1.0, 0.74, clamp(v_wave_steep, 0.0, 1.0));
 	ripple_gain *= mix(1.0, grad_damp, 0.38);
+	
+	// Smoothly fade out procedural normal ripples in the far distance (between 80m and 600m)
+	float ripple_dist_fade = 1.0 - smoothstep(80.0, 600.0, dist_to_cam);
+	ripple_gain *= ripple_dist_fade;
+	
 	vec3 lateral = vec3(-dh_dx, 0.0, -dh_dz) * ripple_gain;
 
 	vec3 ripple = lateral - nm * dot(nm, lateral);
@@ -262,8 +269,20 @@ void fragment() {
 	float look_graze = 1.0 - pow(flat_ndv, 1.18);
 	vec3 body = mix(deep_albedo, shallow_albedo, look_graze * (0.22 + near_color_lift * 0.25));
 	
-	float fres = pow(look_graze, fresnel_power * 1.2);
-	vec3 col = mix(body, horizon_tint, fres * fresnel_sky_mix);
+	// Dynamic sky reflection based on PBR reflection vector and sky color gradients
+	vec3 ref_dir = reflect(-view_dir, world_n);
+	float sky_mix = clamp(ref_dir.y, 0.0, 1.0);
+	vec3 sky_ref_color = mix(sky_horizon_color, sky_top_color, pow(sky_mix, 0.85));
+
+	// Enhanced Fresnel equation for lifelike, mirror-like horizon reflection
+	float fres = pow(look_graze, fresnel_power);
+	vec3 col = mix(body, sky_ref_color, fres * fresnel_sky_mix);
+
+	// Subsurface Scattering (SSS) backlit wave crest glow
+	float sss_dot = clamp(dot(-view_dir, sun_direction), 0.0, 1.0);
+	float sss_factor = pow(sss_dot, 8.0) * clamp(v_wave_steep * 1.5, 0.0, 1.0);
+	vec3 sss_glow = vec3(0.04, 0.46, 0.38) * sun_color * wave_intensity;
+	col += sss_glow * sss_factor;
 
 	mat2 ROT_A = mat2(vec2(0.809174, -0.587582), vec2(0.587582, 0.809174));
 	mat2 ROT_B = mat2(vec2(0.422618, -0.906308), vec2(0.906308, 0.422618));
@@ -289,7 +308,10 @@ void fragment() {
 	vec2 jitter_c = xz_a * 21.974 + xz_b.yy * vec2(-9.834, 7.917) + wt * vec2(8.93, -6.71);
 	vec2 jitter_d = xz_b.yx * vec2(17.401, -14.917) + wt * vec2(-7.61, 8.734);
 
-	float sp = wf_vnoise(jitter_c) * 0.68 + wf_vnoise(jitter_d * 6.417 + vec2(83.917, -41.734)) * 0.32;
+	// Distance-based grain/noise fading to completely prevent sparkling/glittering digital static in the distance
+	float noise_fade = 1.0 - smoothstep(15.0, 120.0, dist_to_cam);
+	float raw_sp = wf_vnoise(jitter_c) * 0.68 + wf_vnoise(jitter_d * 6.417 + vec2(83.917, -41.734)) * 0.32;
+	float sp = mix(0.5, raw_sp, noise_fade);
 
 	ALBEDO = col;
 
