@@ -100,11 +100,16 @@ func _build_ui() -> void:
 	viewport_frame.custom_minimum_size = Vector2(360, 420)
 	preview_col.add_child(viewport_frame)
 
+	var vp_container := SubViewportContainer.new()
+	vp_container.set_anchors_preset(Control.PRESET_FULL_RECT)
+	vp_container.stretch = true
+	viewport_frame.add_child(vp_container)
+
 	_viewport = SubViewport.new()
 	_viewport.size = Vector2i(480, 560)
 	_viewport.render_target_update_mode = SubViewport.UPDATE_ALWAYS
 	_viewport.own_world_3d = true
-	viewport_frame.add_child(_viewport)
+	vp_container.add_child(_viewport)
 
 	var env := WorldEnvironment.new()
 	var we := Environment.new()
@@ -218,7 +223,9 @@ func _section_label(text: String) -> Label:
 	return lbl
 
 
-func _make_swatch_row(colors: Array[Color], on_pick: Callable, store: Array[Button]) -> HBoxContainer:
+func _make_swatch_row(
+	colors: Array[Color], on_pick: Callable, store: Array[Button]
+) -> HBoxContainer:
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 6)
 	for c in colors:

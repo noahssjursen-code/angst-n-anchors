@@ -35,6 +35,13 @@ var _orbit_speed: float = 0.02 # Slower, more cinematic camera sweep
 var _orbit_radius: float = 110.0 # Broader circle to appreciate the port
 var _orbit_height: float = 24.0 # Slightly higher up to fully eliminate any water clipping!
 
+# Smooth cinematic transitions and preview NPC
+var _menu_preview_npc: NpcBase = null
+var _cam_look_at_smoothed: Vector3 = Vector3(0.0, 1.5, 0.0)
+var _target_orbit_radius: float = 110.0
+var _target_orbit_height: float = 24.0
+var _target_look_at: Vector3 = Vector3(0.0, 1.5, 0.0)
+
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
@@ -60,16 +67,20 @@ func _ready() -> void:
 
 
 func _process(delta: float) -> void:
+	# Interpolate camera parameters smoothly for cinematic transitions
+	_orbit_radius = lerp(_orbit_radius, _target_orbit_radius, 4.0 * delta)
+	_orbit_height = lerp(_orbit_height, _target_orbit_height, 4.0 * delta)
+	_cam_look_at_smoothed = _cam_look_at_smoothed.lerp(_target_look_at, 4.0 * delta)
+
 	if _cam != null and is_instance_valid(_cam):
 		_orbit_angle += _orbit_speed * delta
-		var target := Vector3(0.0, 1.5, 0.0) # Look at Testvik harbor area
 		var offset := Vector3(
 			cos(_orbit_angle) * _orbit_radius,
-			_orbit_height + sin(_orbit_angle * 0.5) * 4.0, # Gentle elevation wave
+			_orbit_height + sin(_orbit_angle * 0.5) * (1.5 if _page == Page.MULTIPLAYER else 4.0), # Calmer waves when zoomed
 			sin(_orbit_angle) * _orbit_radius
 		)
-		_cam.global_position = target + offset
-		_cam.look_at(target, Vector3.UP)
+		_cam.global_position = _cam_look_at_smoothed + offset
+		_cam.look_at(_cam_look_at_smoothed, Vector3.UP)
 
 
 func _setup_3d_background() -> void:
@@ -102,6 +113,16 @@ func _setup_3d_background() -> void:
 	_cam.current = true
 	_cam.far = 1500.0 # Make sure the horizon stays beautifully rendered
 	add_child(_cam)
+
+	# Spawn the 3D majestic preview NPC standing on the edge of the Testvik wharf
+	_menu_preview_npc = NpcBase.new()
+	_menu_preview_npc.name = "MenuPreviewNpc"
+	_menu_preview_npc.position = Vector3(0.0, 0.12, -1.8)
+	_menu_preview_npc.rotation_degrees = Vector3(0.0, 45.0, 0.0) # Stand facing slightly cinematic
+	add_child(_menu_preview_npc)
+	_menu_preview_npc.skin_color = Color(0.72, 0.55, 0.40)
+	_menu_preview_npc.clothing_color = Color(0.18, 0.20, 0.30)
+	_menu_preview_npc.trousers_color = Color(0.18, 0.18, 0.20)
 
 
 func _build_background_vignette() -> void:
@@ -400,6 +421,18 @@ func _show_page(page: Page) -> void:
 	var config := get_node_or_null("/root/ServerConfig")
 	if config != null:
 		config.set("is_multiplayer_mode", page == Page.MULTIPLAYER)
+		
+	# Smoothly trigger cinematic camera shifts depending on page
+	if page == Page.MULTIPLAYER:
+		# Zoom right onto the preview captain model standing on the pier!
+		_target_orbit_radius = 8.5
+		_target_orbit_height = 2.2
+		_target_look_at = Vector3(0.0, 1.0, -1.8)
+	else:
+		# Return to global panoramic port view
+		_target_orbit_radius = 110.0
+		_target_orbit_height = 24.0
+		_target_look_at = Vector3(0.0, 1.5, 0.0)
 		
 	_refresh_continue_states()
 	
@@ -737,10 +770,20 @@ func _load_postgres_captains(http_host: String, http_port: int) -> void:
 			var cap_name: String = cap["display_name"]
 			var cap_marks: int = int(cap["marks"])
 			
+			# Parse appearance safely
+			var cap_app: CharacterAppearance = null
+			var app_str: String = cap.get("appearance_json", "")
+			if not app_str.is_empty():
+				var app_json := JSON.new()
+				if app_json.parse(app_str) == OK and app_json.data is Dictionary:
+					cap_app = CharacterAppearance.from_dict(app_json.data)
+			
 			# Selected Captain highlight
 			if _selected_mp_captain_id == cap_id:
 				name_btn.add_theme_color_override("font_color", HudStyle.C_AMBER)
 				_mp_play_btn.disabled = false
+				# Instantly draw their appearance on the background preview model!
+				_update_menu_preview_npc(cap_app)
 				
 			name_btn.pressed.connect(func() -> void:
 				_selected_mp_captain_id = cap_id
@@ -749,8 +792,7 @@ func _load_postgres_captains(http_host: String, http_port: int) -> void:
 				# Cache selection in local player session fields temporarily
 				var session := get_node_or_null("/root/PlayerSession")
 				if session != null:
-					session.data.display_name = cap_name
-					session.data.marks = cap_marks
+					session.set_captain_profile(cap_id, cap_name, cap_marks, cap_app)
 					
 				_load_postgres_captains(http_host, http_port) # Redraw highlighting
 			)
@@ -795,8 +837,12 @@ func _create_postgres_captain(display_name: String, appearance: CharacterAppeara
 				
 				var session := get_node_or_null("/root/PlayerSession")
 				if session != null:
-					session.data.display_name = _selected_mp_captain_name
-					session.data.marks = int(json.data.get("marks", 1000))
+					session.set_captain_profile(
+						_selected_mp_captain_id,
+						_selected_mp_captain_name,
+						int(json.data.get("marks", 1000)),
+						appearance
+					)
 					
 			_show_page(Page.MULTIPLAYER)
 		else:
@@ -906,6 +952,23 @@ func _go_to_world() -> void:
 	if menu != null and menu.has_method("set_gameplay_hud_visible"):
 		menu.set_gameplay_hud_visible(true)
 	get_tree().change_scene_to_file(WORLD_SCENE)
+
+
+func _update_menu_preview_npc(appearance: CharacterAppearance) -> void:
+	if _menu_preview_npc == null or not is_instance_valid(_menu_preview_npc):
+		return
+	if appearance == null:
+		appearance = CharacterAppearance.default_appearance()
+		
+	_menu_preview_npc.skin_color = appearance.skin_color
+	_menu_preview_npc.clothing_color = appearance.clothing_color
+	_menu_preview_npc.trousers_color = appearance.trousers_color
+	
+	_menu_preview_npc.remove_overlay("hat")
+	if not appearance.hat_id.is_empty():
+		var hat_path: String = CharacterAppearance.HAT_PATHS.get(appearance.hat_id, "")
+		if not hat_path.is_empty():
+			_menu_preview_npc.add_overlay("hat", hat_path)
 
 
 func _on_dev_local_quickstart() -> void:

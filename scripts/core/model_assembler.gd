@@ -111,7 +111,10 @@ func rebuild() -> void:
 
 
 func get_part(part_name: String) -> MeshTransformer:
-	return _part_nodes_by_name.get(part_name, null) as MeshTransformer
+	var node: Variant = _part_nodes_by_name.get(part_name, null)
+	if node == null or not is_instance_valid(node):
+		return null
+	return node as MeshTransformer
 
 
 func get_first_part_by_role(role: String) -> MeshTransformer:

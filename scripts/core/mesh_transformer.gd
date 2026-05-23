@@ -135,6 +135,10 @@ func rebuild() -> void:
 				child.free()
 
 	for child in get_children():
+		# Articulated rigs parent sibling limb parts under joints (e.g. hand_left
+		# under arm_left). Only clear generated mesh/collision nodes — never rig parts.
+		if child is MeshTransformer or child is ModelAssembler:
+			continue
 		remove_child(child)
 		child.free()
 	

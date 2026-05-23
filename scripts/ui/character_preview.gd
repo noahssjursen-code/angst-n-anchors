@@ -8,6 +8,7 @@ const TURN_SPEED := 0.55
 var _pivot: Node3D
 var _npc: NpcBase
 var _spin_enabled: bool = true
+var _pending_appearance: CharacterAppearance = null
 
 
 func _ready() -> void:
@@ -17,6 +18,9 @@ func _ready() -> void:
 	_npc = NpcBase.new()
 	_npc.name = "PreviewNpc"
 	_pivot.add_child(_npc)
+	if _pending_appearance != null:
+		apply_appearance(_pending_appearance)
+		_pending_appearance = null
 
 
 func _process(delta: float) -> void:
@@ -27,6 +31,7 @@ func _process(delta: float) -> void:
 
 func apply_appearance(appearance: CharacterAppearance) -> void:
 	if _npc == null:
+		_pending_appearance = appearance
 		return
 	if appearance == null:
 		appearance = CharacterAppearance.default_appearance()

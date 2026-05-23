@@ -15,6 +15,7 @@ static func format_money(amount: int) -> String:
 ## can hydrate or persist it without touching any other game code.
 
 var account_id:   String = ""       # set by auth layer when accounts arrive
+var captain_id:   String = ""       # Postgres captain UUID when playing on MP server
 var display_name: String = "Captain"
 var marks:        int    = 0
 var appearance:   CharacterAppearance = CharacterAppearance.default_appearance()
@@ -79,6 +80,7 @@ func repair_save_consistency() -> void:
 func to_dict() -> Dictionary:
 	return {
 		"account_id":               account_id,
+		"captain_id":               captain_id,
 		"display_name":             display_name,
 		"marks":                    marks,
 		"total_marks_earned":       total_marks_earned,
@@ -97,6 +99,7 @@ func to_dict() -> Dictionary:
 static func from_dict(d: Dictionary) -> PlayerData:
 	var pd                  := PlayerData.new()
 	pd.account_id           = str(d.get("account_id",          ""))
+	pd.captain_id           = str(d.get("captain_id",          ""))
 	pd.display_name         = str(d.get("display_name",        "Captain"))
 	pd.marks                = int(d.get("marks",               0))
 	pd.total_marks_earned   = int(d.get("total_marks_earned",  0))

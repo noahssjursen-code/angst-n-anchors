@@ -61,6 +61,8 @@ func apply_entities(entities_list: Array, local_id: String, scene_nodes: Diction
 				state["node"] = node
 				state["type"] = ent["type"]
 				state["interpolated_payload"] = ent["payload"].duplicate()
+				state["walk_distance_m"] = 0.0
+				state["walk_sample_pos"] = ent["pos"]
 		
 		if node != null:
 			state["target_pos"] = ent["pos"]
@@ -135,6 +137,9 @@ func interpolate_entities(delta: float, position_smoothness: float, payload_smoo
 		
 		# 3. Apply state back to actual Godot properties
 		_apply_state_to_node(node, state["type"], current_payload, state["meta"])
+
+		if state["type"] == "player":
+			_drive_player_walk_cycle(state, node, delta)
 
 
 ## Parses metadata to identify pilot IDs that should be hidden.
@@ -261,6 +266,7 @@ func _spawn_dynamic_entity_node(id: String, type: String) -> Node3D:
 		
 		var body := NpcBase.new()
 		body.name = "BodyMesh"
+		body.rotation.y = PI  # mesh authored facing +Z; body forward is -Z
 		body.skin_color = Color(0.65, 0.48, 0.38)
 		body.clothing_color = Color(0.24, 0.28, 0.44)
 		body.trousers_color = Color(0.18, 0.18, 0.22)
@@ -383,7 +389,59 @@ func _apply_state_to_node(node: Node3D, type: String, payload: Array, meta: Stri
 			node.rotation.z = payload[5]
 
 	# Specialized non-spatial joint replication
-	if type == "player" or type.begins_with("ship_"):
+	if type == "player":
+		if node.has_method("_sync_walk_deck_transform"):
+			node.call("_sync_walk_deck_transform")
+			
+		var body := node.get_node_or_null("BodyMesh") as NpcBase
+		if body != null and is_instance_valid(body):
+			var parsed_meta := _parse_meta_map(meta)
+			var skin_hex: String = parsed_meta.get("skin", "")
+			var coat_hex: String = parsed_meta.get("coat", "")
+			var pants_hex: String = parsed_meta.get("pants", "")
+			var hat: String = parsed_meta.get("hat", "")
+			var display_name: String = parsed_meta.get("name", "")
+
+			var next_skin := body.skin_color
+			var next_coat := body.clothing_color
+			var next_pants := body.trousers_color
+			var colors_changed := false
+
+			if not skin_hex.is_empty():
+				var new_color := Color.from_string(skin_hex, next_skin)
+				if not next_skin.is_equal_approx(new_color):
+					next_skin = new_color
+					colors_changed = true
+			if not coat_hex.is_empty():
+				var new_color := Color.from_string(coat_hex, next_coat)
+				if not next_coat.is_equal_approx(new_color):
+					next_coat = new_color
+					colors_changed = true
+			if not pants_hex.is_empty():
+				var new_color := Color.from_string(pants_hex, next_pants)
+				if not next_pants.is_equal_approx(new_color):
+					next_pants = new_color
+					colors_changed = true
+
+			if colors_changed:
+				body.set_colors(next_skin, next_coat, next_pants)
+
+			if not display_name.is_empty():
+				var label := node.get_node_or_null("PlayerNameLabel") as Label3D
+				if label != null:
+					label.text = display_name
+					
+			var current_hat_node = body.get_node_or_null("Overlay_hat") as ModelAssembler
+			if hat.is_empty():
+				if current_hat_node != null:
+					body.remove_overlay("hat")
+			else:
+				var target_hat_path: String = CharacterAppearance.HAT_PATHS.get(hat, "")
+				if not target_hat_path.is_empty():
+					if current_hat_node == null or current_hat_node.model_data_path != target_hat_path:
+						body.add_overlay("hat", target_hat_path)
+
+	elif type.begins_with("ship_"):
 		if node.has_method("_sync_walk_deck_transform"):
 			node.call("_sync_walk_deck_transform")
 
@@ -415,6 +473,39 @@ func _parse_meta_map(meta: String) -> Dictionary:
 		if kv.size() == 2:
 			out[kv[0]] = kv[1]
 	return out
+
+
+func _drive_player_walk_cycle(state: Dictionary, node: Node3D, _delta: float) -> void:
+	var body := node.get_node_or_null("BodyMesh") as NpcBase
+	if body == null:
+		return
+
+	var anim: Variant = state.get("walk_anim", null)
+	if anim == null or not (anim is WalkAnimator):
+		anim = WalkAnimator.new()
+		(anim as WalkAnimator).attach(body)
+		state["walk_anim"] = anim
+
+	var walker := anim as WalkAnimator
+	if not walker.is_ready():
+		walker.attach(body)
+		if not walker.is_ready():
+			return
+
+	var last_pos: Vector3 = state.get("walk_sample_pos", node.global_position)
+	var delta_h := node.global_position - last_pos
+	delta_h.y = 0.0
+	var step_m := delta_h.length()
+	state["walk_sample_pos"] = node.global_position
+
+	if step_m > 0.002:
+		var dist: float = float(state.get("walk_distance_m", 0.0))
+		dist += step_m
+		state["walk_distance_m"] = dist
+		walker.update(dist)
+	else:
+		state["walk_distance_m"] = 0.0
+		walker.reset()
 
 
 func clear_all(scene_nodes: Dictionary) -> void:

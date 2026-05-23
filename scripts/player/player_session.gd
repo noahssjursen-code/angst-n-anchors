@@ -97,8 +97,21 @@ func set_appearance(appearance: CharacterAppearance) -> void:
 	_request_save()
 
 
+func set_captain_profile(captain_id: String, display_name: String, marks: int, appearance: CharacterAppearance) -> void:
+	data.captain_id = captain_id.strip_edges()
+	var trimmed := display_name.strip_edges()
+	if not trimmed.is_empty():
+		data.display_name = trimmed
+	data.marks = marks
+	if appearance != null:
+		data.appearance = appearance
+	data_loaded.emit(data)
+	_request_save()
+
+
 func begin_new_captain(display_name: String, appearance: CharacterAppearance) -> void:
 	data = PlayerData.new()
+	data.captain_id = ""
 	var trimmed := display_name.strip_edges()
 	data.display_name = trimmed if not trimmed.is_empty() else "Captain"
 	data.appearance = appearance if appearance != null else CharacterAppearance.default_appearance()
