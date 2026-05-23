@@ -1,10 +1,11 @@
+@tool
 class_name ShipwrightPreview
 extends Node3D
 
 ## Visual-only hull + bridge for the shipwright catalog SubViewport.
 
-const SUPER_MODEL_DIR := "res://resources/data/models/superstructures/"
-const SUPER_OFFSET := Vector3(0.0, -0.3, -1.0)
+const SUPER_OFFSET := ShipBuilder.SUPERSTRUCTURE_OFFSET
+const _DeckGridOverlay := preload("res://scripts/ship/deck_grid_visualizer.gd")
 
 var _pivot: Node3D
 var _spin_enabled: bool = true
@@ -23,9 +24,10 @@ func _process(delta: float) -> void:
 func show_entry(entry: Dictionary) -> HullStations:
 	_clear_models()
 	var hull_path := ShipBuilder.HULL_BASE_DIR + str(entry.get("hull_file", ""))
-	var hull_data := ShipBuilder._load_json(hull_path)
+	var hull_data := JsonUtil.load(hull_path)
 	var stations := HullStations.from_hull_json(hull_data, 10)
-	var slots := _read_slots(hull_data, 1.0)
+	var scale := ShipBuilder.HULL_WORLD_SCALE
+	var slots := _read_slots(hull_data, scale)
 
 	if _pivot == null:
 		_pivot = Node3D.new()
@@ -33,18 +35,33 @@ func show_entry(entry: Dictionary) -> HullStations:
 		add_child(_pivot)
 	_pivot.rotation.y = _display_yaw
 
+	var frame := Node3D.new()
+	frame.name = "ShipFrame"
+	frame.rotation.y = ShipBuilder.SHIP_FRAME_Y_ROT
+	_pivot.add_child(frame)
+
 	var hull_asm := ModelAssembler.new()
 	hull_asm.name = "HullVisuals"
 	hull_asm.build_part_colliders = false
+	hull_asm.absolute_scale = scale
 	hull_asm.model_data_path = hull_path
-	_pivot.add_child(hull_asm)
+	frame.add_child(hull_asm)
 
 	var super_key := str(entry.get("superstructure", ""))
 	if not super_key.is_empty() and slots.has("bridge"):
-		var super_node := _build_superstructure(super_key)
-		if super_node != null:
-			super_node.position = slots["bridge"] + SUPER_OFFSET
-			_pivot.add_child(super_node)
+		var scene_path := ShipBuilder.SUPER_SCENE_DIR + super_key + ".tscn"
+		if ResourceLoader.exists(scene_path):
+			var super_node := ShipBuilder.instantiate_superstructure(super_key)
+			if super_node != null:
+				super_node.name = "Superstructure"
+				var local_pos: Vector3 = slots["bridge"] + SUPER_OFFSET * scale
+				super_node.position = local_pos.rotated(
+					Vector3.UP, ShipBuilder.HULL_AUTHORED_Y_ROT
+				)
+				super_node.rotation.y = ShipBuilder.HULL_AUTHORED_Y_ROT
+				frame.add_child(super_node)
+
+	_DeckGridOverlay.attach(frame, stations, scale, slots, entry, hull_data)
 
 	return stations
 
@@ -88,16 +105,3 @@ static func _read_slots(hull_data: Dictionary, scale: float) -> Dictionary:
 		if typeof(v) == TYPE_ARRAY and v.size() >= 3:
 			out[key] = Vector3(float(v[0]), float(v[1]), float(v[2])) * scale
 	return out
-
-
-static func _build_superstructure(key: String) -> Node3D:
-	var json_path := SUPER_MODEL_DIR + key + ".json"
-	if not FileAccess.file_exists(json_path):
-		return null
-	var root := Node3D.new()
-	var visuals := ModelAssembler.new()
-	visuals.name = "BridgeVisuals"
-	visuals.build_part_colliders = false
-	visuals.model_data_path = json_path
-	root.add_child(visuals)
-	return root

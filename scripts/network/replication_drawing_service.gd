@@ -304,22 +304,10 @@ func _spawn_dynamic_entity_node(id: String, type: String) -> Node3D:
 		DirAccess.make_dir_recursive_absolute(template_dir)
 		var path := "%s/%s.json" % [template_dir, hull_id]
 		
-		var ship_catalog = {
-			"coastal_trader": { "id": "coastal_trader", "superstructure": "bridge_coastal_trader", "hull_file": "hull_coastal_trader.json" },
-			"coastal_trader_long": { "id": "coastal_trader_long", "superstructure": "bridge_coastal_trader", "hull_file": "hull_coastal_trader_long.json" },
-			"cargo_ship": { "id": "cargo_ship", "superstructure": "bridge_cargo_ship", "hull_file": "hull_cargo_ship.json" },
-			"short_sea_coaster": { "id": "short_sea_coaster", "superstructure": "bridge_short_sea_coaster", "hull_file": "hull_short_sea_coaster.json" },
-			"short_sea_coaster_long": { "id": "short_sea_coaster_long", "superstructure": "bridge_short_sea_coaster", "hull_file": "hull_short_sea_coaster_long.json" },
-			"handysize_feeder": { "id": "handysize_feeder", "superstructure": "bridge_handysize_feeder", "hull_file": "hull_handysize_feeder.json" },
-			"handysize_feeder_long": { "id": "handysize_feeder_long", "superstructure": "bridge_handysize_feeder", "hull_file": "hull_handysize_feeder_long.json" },
-			"deep_sea_freighter": { "id": "deep_sea_freighter", "superstructure": "bridge_deep_sea_freighter", "hull_file": "hull_deep_sea_freighter.json" },
-			"deep_sea_freighter_long": { "id": "deep_sea_freighter_long", "superstructure": "bridge_deep_sea_freighter", "hull_file": "hull_deep_sea_freighter_long.json" },
-			"large_freighter": { "id": "large_freighter", "superstructure": "bridge_deep_sea_freighter", "hull_file": "hull_large.json" }
-		}
-		
-		if ship_catalog.has(hull_id):
+		var registry_entry := HullRegistry.get_by_id(hull_id)
+		if not registry_entry.is_empty():
 			if not FileAccess.file_exists(path):
-				var tmpl := StarterVessel.build_template(ship_catalog[hull_id])
+				var tmpl := StarterVessel.build_template(registry_entry)
 				var f := FileAccess.open(path, FileAccess.WRITE)
 				if f != null:
 					f.store_string(JSON.stringify(tmpl))

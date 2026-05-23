@@ -170,7 +170,7 @@ func _build_part(part: Dictionary) -> void:
 	# back to the assembler root with a warning.
 	var parent_node := _resolve_part_parent(part, part_name)
 	parent_node.add_child(node)
-	if Engine.is_editor_hint() and get_tree() != null:
+	if Engine.is_editor_hint() and is_inside_tree():
 		node.owner = get_tree().edited_scene_root
 
 	node.rebuild_suspended = true
@@ -217,7 +217,7 @@ func _build_nested_model(part_name: String, part: Dictionary) -> void:
 	node.rotation_degrees = _vector3_from_array(part.get("rotation_degrees", []), Vector3.ZERO)
 	var parent_node := _resolve_part_parent(part, part_name)
 	parent_node.add_child(node)
-	if Engine.is_editor_hint() and get_tree() != null:
+	if Engine.is_editor_hint() and is_inside_tree():
 		node.owner = get_tree().edited_scene_root
 
 	node.collision_parent_path = _collision_path_for_part(node)

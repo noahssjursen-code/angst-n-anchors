@@ -369,7 +369,7 @@ func _show_vessel_info() -> void:
 func _is_starter_vessel_record(template_path: String, hull_id: String) -> bool:
 	if template_path == StarterVessel.TEMPLATE_PATH:
 		return true
-	return hull_id == str(StarterVessel.ENTRY.get("id", "coastal_trader"))
+	return hull_id == str(StarterVessel.ENTRY.get("id", "cargo_ship"))
 
 
 func _get_dock() -> PortDock:

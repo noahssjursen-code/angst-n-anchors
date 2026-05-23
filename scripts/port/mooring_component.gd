@@ -124,12 +124,24 @@ static func dock_post_anchor_world(post: Node) -> Vector3:
 
 ## Each cleat finds its nearest bollard: bow cleats → front post, stern cleats → rear post.
 func auto_moor(tree: SceneTree) -> void:
+	auto_moor_at_berth(tree, -1)
+
+
+## Prefer bollards on the same berth slot so lines do not yank the ship along the quay.
+func auto_moor_at_berth(tree: SceneTree, berth_index: int) -> void:
 	if tree == null:
 		return
-	var posts: Array[Node] = []
-	for n in tree.get_nodes_in_group(DOCK_MOORING_GROUP):
-		if n.has_method("get_anchor_global_position"):
-			posts.append(n)
+	var posts: Array[Node] = _berth_bollard_candidates(tree, berth_index)
+	if posts.size() < 2:
+		if berth_index >= 0:
+			push_warning(
+				"MooringComponent: fewer than 2 bollards for berth %d — using nearest pair"
+				% (berth_index + 1)
+			)
+		posts = []
+		for n in tree.get_nodes_in_group(DOCK_MOORING_GROUP):
+			if n.has_method("get_anchor_global_position"):
+				posts.append(n)
 	if posts.size() < 2:
 		push_warning("MooringComponent: need ≥2 bollards to auto-moor")
 		return
@@ -145,6 +157,29 @@ func auto_moor(tree: SceneTree) -> void:
 		push_warning("MooringComponent: could not pair bollards for auto-moor")
 		return
 	moor_to_posts(front, rear)
+
+
+func _berth_bollard_candidates(tree: SceneTree, berth_index: int) -> Array[Node]:
+	var out: Array[Node] = []
+	if berth_index < 0:
+		return out
+	if _body == null:
+		_body = _resolve_boat_rigid_body()
+	if _body == null:
+		return out
+	var dock := _find_port_dock()
+	if dock == null:
+		return out
+	var berth_cx := dock.get_berth_cx(berth_index)
+	var slot_half := dock.get_berth_slot_half_width(berth_index)
+	var reach := slot_half + 4.0
+	for n in tree.get_nodes_in_group(DOCK_MOORING_GROUP):
+		if not n.has_method("get_anchor_global_position"):
+			continue
+		var local := dock.to_local(dock_post_anchor_world(n))
+		if absf(local.x - berth_cx) <= reach:
+			out.append(n)
+	return out
 
 
 func _mean_cleat_position(cleats: Array[Node3D], station_filter: String) -> Vector3:

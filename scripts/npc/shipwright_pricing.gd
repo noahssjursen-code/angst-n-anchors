@@ -18,4 +18,4 @@ static func commission_price(entry: Dictionary, stations: HullStations, _player:
 static func price_label(price: int) -> String:
 	if price <= 0:
 		return "Complimentary (yard loaner)"
-	return PlayerSession.format_money(price)
+	return PlayerData.format_money(price)

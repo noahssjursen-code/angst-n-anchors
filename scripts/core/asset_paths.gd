@@ -15,7 +15,7 @@ const HAT_PEAKED_CAP := CHARACTER_BASE_DIR + "hat_peaked_cap.json"
 
 # ── Hull base + bridge superstructures ───────────────────────────────────────
 const HULL_BASE_DIR  := "res://resources/data/models/hulls/"
-const BRIDGE_BASE_DIR := "res://resources/data/models/superstructures/"
+const BRIDGE_SCENE_DIR := "res://scenes/shared/superstructures/"
 
 # ── Port building meshes (port_facilities.gd is the sole consumer for these,
 #     pulled here as documentation — not currently imported elsewhere) ────────

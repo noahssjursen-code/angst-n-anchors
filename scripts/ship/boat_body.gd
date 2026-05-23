@@ -200,7 +200,7 @@ const DEFAULT_HULL_JSON := "res://resources/data/meshes/ships/hand_tanker_hull.j
 			_build_merged_collision()
 
 @export_group("Berthing")
-## After spawn beside a berth, slide seaward if hull protrudes inland past nominal dock-class beam.
+## Legacy toggle — berthing no longer shoves the hull seaward; see `dock_at_berth()`.
 @export var berth_auto_fit_enabled: bool = true
 @export_range(0.0, 3.0, 0.05) var berth_lateral_margin_m: float = 0.35
 
@@ -317,15 +317,22 @@ func _ensure_model() -> void:
 
 func _ensure_model_assembler() -> void:
 	_clear_single_mesh_transformer()
-	_model_assembler = get_node_or_null("ModelAssembler") as ModelAssembler
+	_model_assembler = get_node_or_null("ShipFrame/ModelAssembler") as ModelAssembler
+	if _model_assembler == null:
+		_model_assembler = get_node_or_null("ModelAssembler") as ModelAssembler
 	if _model_assembler == null:
 		_model_assembler = ModelAssembler.new()
 		_model_assembler.name = "ModelAssembler"
-		add_child(_model_assembler)
+		var visual_parent: Node = get_node_or_null("ShipFrame")
+		if visual_parent == null:
+			visual_parent = self
+		visual_parent.add_child(_model_assembler)
 		if Engine.is_editor_hint() and get_tree() != null:
 			_model_assembler.owner = get_tree().edited_scene_root
 
-	_model_assembler.collision_parent_path = NodePath("..")
+	var parent := _model_assembler.get_parent()
+	var collision_path := NodePath("../..") if parent != null and parent.name == "ShipFrame" else NodePath("..")
+	_model_assembler.collision_parent_path = collision_path
 	_model_assembler.build_part_colliders = false
 	_model_assembler.absolute_scale = mesh_scale
 	_model_assembler.model_data_path = model_data_path
@@ -376,15 +383,25 @@ func _sync_hull_size_from_part(part: Node) -> void:
 	if size.length_squared() <= 0.01:
 		return
 
+	var center: Vector3 = part.get("actual_center") if "actual_center" in part else Vector3.ZERO
+	if _model_in_ship_frame():
+		# Mesh bounds are in ShipFrame space (length on X); body space has length on Z.
+		size = Vector3(size.z, size.y, size.x)
+		center = center.rotated(Vector3.UP, deg_to_rad(-90.0))
+
 	hull_size = size
-	if "actual_center" in part:
-		hull_center = part.get("actual_center")
-	else:
-		hull_center = Vector3.ZERO
+	hull_center = center
 	# _ready() runs before JSON bounds are known. Keep stability and mass tied to the
 	# real mesh-derived hull dimensions, not the fallback default.
 	_refresh_mass()
 	_resize_walk_deck_shape()
+
+
+func _model_in_ship_frame() -> bool:
+	if _model_assembler == null or not is_instance_valid(_model_assembler):
+		return false
+	var parent := _model_assembler.get_parent()
+	return parent != null and parent.name == "ShipFrame"
 
 
 func _refresh_center_of_mass() -> void:
@@ -418,14 +435,7 @@ func _refresh_mass() -> void:
 func _hull_displacement_kg() -> float:
 	var rho: float = _buoyancy_field("water_density", 1025.0)
 	if hull_stations != null and not hull_stations.stations.is_empty():
-		var s: float = mesh_scale
-		var waterline_y: float = hull_stations.keel_y + hull_stations.height_m * design_draft_fraction
-		var vol_m3: float = 0.0
-		for i in range(hull_stations.stations.size()):
-			var half_area_s1: float = hull_stations.half_section_area_below(i, waterline_y)
-			var full_area_world: float = half_area_s1 * 2.0 * s * s
-			var st_len_world: float = hull_stations.station_length(i) * s
-			vol_m3 += full_area_world * st_len_world
+		var vol_m3: float = _submerged_volume_m3(design_draft_fraction)
 		# Empty-ship components: engine + ballast + fuel. Cargo deliberately excluded
 		# so it adds extra mass that pushes the ship below design draft when loaded.
 		var empty_components: float = engine_mass + keel_ballast_mass + fuel_stores_mass
@@ -489,7 +499,7 @@ func place_at_waterline(water_y: float, draft_fraction: float = -1.0) -> void:
 	_ensure_model()
 	_sync_hull_size_from_mesh()
 	if draft_fraction < 0.0:
-		draft_fraction = design_draft_fraction
+		draft_fraction = floating_draft_fraction()
 	# Prefer strip-theory height (includes keel) when available, else hull_size.y
 	# (which is just the physics_body part's height, missing the keel_lower run).
 	var total_height: float
@@ -506,38 +516,68 @@ func place_at_waterline(water_y: float, draft_fraction: float = -1.0) -> void:
 	angular_velocity = Vector3.ZERO
 
 
-## Called by PortDock after spawn: ship owns lateral adjustment vs nominal berth half-beam.
-func fit_to_port_berth(dock: PortDock, berth_index: int) -> void:
-	if Engine.is_editor_hint() or not berth_auto_fit_enabled:
-		return
+## Draft fraction for spawn / berth placement. Auto-mass ships with `mass_scale` > 1 are
+## heavier than Archimedes at `design_draft_fraction`, so spawning at design draft leaves
+## them under-buoyant until they settle — looks like they sink deep on load.
+func floating_draft_fraction() -> float:
+	if auto_mass_from_hull and hull_stations != null and not hull_stations.stations.is_empty():
+		return _equilibrium_draft_fraction()
+	return design_draft_fraction
+
+
+func _submerged_volume_m3(draft_fraction: float) -> float:
+	if hull_stations == null or hull_stations.stations.is_empty():
+		return 0.0
+	var s: float = mesh_scale
+	var wl: float = hull_stations.keel_y + hull_stations.height_m * clampf(draft_fraction, 0.0, 1.0)
+	var vol_m3: float = 0.0
+	for i in range(hull_stations.stations.size()):
+		var half_area_s1: float = hull_stations.half_section_area_below(i, wl)
+		vol_m3 += half_area_s1 * 2.0 * s * s * hull_stations.station_length(i) * s
+	return vol_m3
+
+
+func _equilibrium_draft_fraction() -> float:
+	var rho: float = _buoyancy_field("water_density", 1025.0)
+	var target_mass: float = maxf(mass, 1.0)
+	var lo: float = 0.05
+	var hi: float = 0.98
+	for _attempt in range(20):
+		var mid: float = (lo + hi) * 0.5
+		var buoy_mass: float = _submerged_volume_m3(mid) * rho
+		if buoy_mass < target_mass:
+			lo = mid
+		else:
+			hi = mid
+	return clampf((lo + hi) * 0.5, 0.05, 0.98)
+
+
+## Place alongside a berth: correct heading, actual half-beam offset from quay, waterline.
+func dock_at_berth(dock: PortDock, berth_index: int) -> void:
 	if dock == null or berth_index < 0:
 		return
-
-	if berth_index < 0 or berth_index >= dock.berth_count():
-		return
-
 	refresh_hull_bounds_from_visuals()
-
-	var inland_world: Vector3 = dock.global_transform.basis.z.normalized()
-	var seaward_world: Vector3 = -inland_world
-	var nominal_half := dock.berth_nominal_half_beam_m()
-	var extent_inland := _obb_half_extent_on_world_axis(global_transform.basis, hull_size, inland_world)
-	var overcrowd := extent_inland - nominal_half + berth_lateral_margin_m
-	if overcrowd > 0.0:
-		global_position += seaward_world * overcrowd
-		if not Engine.is_editor_hint():
-			linear_velocity = Vector3.ZERO
-			angular_velocity = Vector3.ZERO
+	var xform := dock.get_berth_spawn_transform(berth_index, get_half_beam_m())
+	snap_to_transform(xform)
+	place_at_waterline(WaveSurface.WATER_LEVEL)
 
 
-func _obb_half_extent_on_world_axis(b: Basis, size_xyz: Vector3, axis_world: Vector3) -> float:
-	var ax := axis_world.normalized()
-	var half := size_xyz * 0.5
-	return (
-		absf(ax.dot(b.x)) * half.x +
-		absf(ax.dot(b.y)) * half.y +
-		absf(ax.dot(b.z)) * half.z
-	)
+func get_half_beam_m() -> float:
+	return _effective_half_beam_m()
+
+
+## Deprecated — kept so old call sites do nothing harmful.
+func fit_to_port_berth(dock: PortDock, berth_index: int) -> void:
+	if not berth_auto_fit_enabled:
+		return
+	dock_at_berth(dock, berth_index)
+
+
+func _effective_half_beam_m() -> float:
+	if hull_stations != null and hull_stations.beam_m > 0.01:
+		return hull_stations.beam_m * mesh_scale * 0.5
+	# Body space: beam on X after ShipFrame bounds sync.
+	return hull_size.x * 0.5
 
 
 func _clear_single_mesh_transformer() -> void:

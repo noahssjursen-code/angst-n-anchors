@@ -1,3 +1,4 @@
+@tool
 class_name ShipBuilder
 extends RefCounted
 
@@ -21,7 +22,6 @@ const HULL_BASE_DIR       := "res://resources/data/models/hulls/"
 ## key doesn't exist; once all five bridges have shipped as JSON we can
 ## drop this entirely.
 const SUPER_SCENE_DIR     := "res://scenes/shared/superstructures/"
-const SUPER_MODEL_DIR     := "res://resources/data/models/superstructures/"
 ## Applied to the hull `bridge` slot when placing the superstructure (ship-local:
 ## −Y down, −Z aft). Scaled by the ship template `scale`.
 const SUPERSTRUCTURE_OFFSET := Vector3(0.0, -0.3, -1.0)
@@ -34,6 +34,18 @@ const MOORING_BEAM_INSET_FRAC := 0.22
 const MOORING_END_INSET_FRAC := 0.09
 ## Funnel / exhaust stack: nudge forward (+Z) in superstructure-local space (m at scale 1).
 const FUNNEL_FORWARD_OFFSET_M := 1.2
+## Hull JSON parts bake `rotation_degrees` Y = −90° (authored +Z → mesh −X bow).
+## ShipFrame rotates mesh/gameplay into body space where Godot forward is −Z.
+const HULL_AUTHORED_Y_ROT := deg_to_rad(-90.0)
+const SHIP_FRAME_Y_ROT := deg_to_rad(-90.0)
+## Global hull scale so catalog lengths (e.g. 10 m) match in-world visuals.
+## Hull JSON geometry is authored ~1 unit = 1 m; this closes the gap to stated specs.
+const HULL_WORLD_SCALE := 1.3
+
+
+static func resolved_mesh_scale(tmpl: Dictionary) -> float:
+	return float(tmpl.get("scale", 1.0)) * HULL_WORLD_SCALE
+
 
 static func build(template_path: String) -> BoatBody:
 	var tmpl := _load_json(template_path)
@@ -54,7 +66,7 @@ static func build(template_path: String) -> BoatBody:
 
 	var hull_path  := _resolve_hull_path(str(tmpl.get("hull", "")), template_path)
 	var hull_data  := _load_json(hull_path)
-	var scale      := float(tmpl.get("scale", 1.0))
+	var scale      := resolved_mesh_scale(tmpl)
 	var slots      := _read_slots(hull_data, scale)
 
 	# Strip-theory hull data, derived once from the hull JSON. Shared between BoatBody
@@ -80,16 +92,23 @@ static func build(template_path: String) -> BoatBody:
 	boat.add_child(_make_camera(tmpl.get("camera", {})))
 	boat.add_child(_make_lighting_controller())
 
+	var frame := Node3D.new()
+	frame.name = "ShipFrame"
+	frame.rotation.y = SHIP_FRAME_Y_ROT
+	boat.add_child(frame)
+
 	var gameplay := Node3D.new()
 	gameplay.name = "ShipGameplay"
-	boat.add_child(gameplay)
+	frame.add_child(gameplay)
 
 	var super_key := str(tmpl.get("superstructure", ""))
 	if not super_key.is_empty() and slots.has("bridge"):
 		var super_node := _build_superstructure(super_key)
 		if super_node != null:
 			super_node.name = "Superstructure"
-			super_node.position = slots["bridge"] + SUPERSTRUCTURE_OFFSET * scale
+			var local_pos: Vector3 = slots["bridge"] + SUPERSTRUCTURE_OFFSET * scale
+			super_node.position = _slot_to_frame(local_pos)
+			super_node.rotation.y = HULL_AUTHORED_Y_ROT
 			gameplay.add_child(super_node)
 			_schedule_funnel_nudge(super_node, scale)
 
@@ -97,9 +116,22 @@ static func build(template_path: String) -> BoatBody:
 	mooring.name = "MooringComponent"
 	gameplay.add_child(mooring)
 
-	_add_mooring_points(gameplay, slots, stations)
+	# Dynamic holographic deck grid visualizer
+	var hull_ref: String = str(tmpl.get("hull", ""))
+	var registry_entry := HullRegistry.get_by_file(hull_ref)
+
+	DeckGridOverlay.attach(gameplay, stations, scale, slots, registry_entry, hull_data)
+
+	_add_mooring_points(gameplay, slots, stations, scale)
 	_add_hull_lights(gameplay, hull_data, scale)
-	_add_cargo_decks(gameplay, hull_data, tmpl, slots, scale, stations)
+
+	var has_cargo := true
+	if not registry_entry.is_empty():
+		var caps = registry_entry.get("capabilities", [])
+		has_cargo = caps.has("cargo")
+
+	if has_cargo:
+		_add_cargo_decks(gameplay, hull_data, tmpl, slots, scale, stations)
 
 	if telemetry != null:
 		telemetry.end_load_event(t_handle)
@@ -190,7 +222,7 @@ static func _make_propulsion(cfg: Dictionary, slots: Dictionary) -> PropulsionCo
 	if cfg.has("reverse_multiplier"):
 		c.reverse_multiplier = float(cfg["reverse_multiplier"])
 	if slots.has("propulsion"):
-		c.stern_offset = slots["propulsion"]
+		c.stern_offset = _slot_to_body(slots["propulsion"])
 	return c
 
 
@@ -216,9 +248,9 @@ static func _make_bow_thruster(cfg: Dictionary, slots: Dictionary) -> BowThruste
 	if cfg.has("max_thrust"):
 		c.max_thrust = float(cfg["max_thrust"])
 	if slots.has("bow_thruster"):
-		c.bow_offset = slots["bow_thruster"]
+		c.bow_offset = _slot_to_body(slots["bow_thruster"])
 	if slots.has("propulsion"):
-		c.stern_offset = slots["propulsion"]
+		c.stern_offset = _slot_to_body(slots["propulsion"])
 	return c
 
 
@@ -261,7 +293,7 @@ static func _add_hull_lights(parent: Node3D, hull_data: Dictionary, scale: float
 		var pos := Vector3(float(pos_arr[0]), float(pos_arr[1]), float(pos_arr[2])) * scale
 		var light := ShipLight.new()
 		light.name = "HullLight_%s" % str(entry.get("type", "")).capitalize()
-		light.position = pos
+		light.position = _slot_to_frame(pos)
 		light.light_type = type_id
 		parent.add_child(light)
 
@@ -286,7 +318,7 @@ static func _add_cargo_decks(parent: Node3D, hull_data: Dictionary, tmpl: Dictio
 		pos = Vector3(float(pos_arr[0]), float(pos_arr[1]), float(pos_arr[2])) * scale
 	var deck := CargoDeckComponent.new()
 	deck.name = "CargoDeck_" + deck_name
-	deck.position = pos
+	deck.position = _slot_to_frame(pos)
 	deck.deck_width_m = float(fitted.get("deck_width", 5.0)) * scale
 	deck.deck_length_m = float(fitted.get("deck_length", 8.0)) * scale
 	var cell_size := float(fitted.get("cell_size", 1.5)) * scale
@@ -413,88 +445,21 @@ static func _make_camera(cfg: Dictionary) -> BoatCamera:
 	return c
 
 
-## Build the superstructure (bridge) node tree for `key`. Tries the JSON
-## model first; falls back to the legacy .tscn if the JSON doesn't exist.
-##
-## JSON path: spawns a ModelAssembler-driven visual + the BridgeInteractable
-## + ShipLight nodes positioned via the JSON `slots` dict. This is the
-## target architecture.
-##
-## .tscn path: instantiates a PackedScene with pre-built ShipLight nodes
-## inside it (the old format, still in the tree until JSON ships for every
-## hull class).
-static func _build_superstructure(key: String) -> Node3D:
-	var json_path := SUPER_MODEL_DIR + key + ".json"
-	if FileAccess.file_exists(json_path):
-		return _build_superstructure_from_json(json_path)
+## Instantiate a superstructure scene by registry key (e.g. wheelhouse_fishing_small).
+static func instantiate_superstructure(key: String) -> Node3D:
+	return _build_superstructure(key)
 
+
+## Build the superstructure (bridge) node tree for `key` from a PackedScene.
+static func _build_superstructure(key: String) -> Node3D:
 	var scene_path := SUPER_SCENE_DIR + key + ".tscn"
 	if not ResourceLoader.exists(scene_path):
-		push_warning("ShipBuilder: superstructure missing — no JSON at " + json_path
-			+ " and no scene at " + scene_path)
+		push_warning("ShipBuilder: superstructure scene missing at " + scene_path)
 		return null
 	var packed := load(scene_path) as PackedScene
 	if packed == null:
 		return null
 	return packed.instantiate() as Node3D
-
-
-## Construct the bridge node tree from a JSON model file. The JSON declares
-## visual `parts` (consumed by ModelAssembler), a `slots` dict of light /
-## interactable positions, and an optional `interactable` config block.
-static func _build_superstructure_from_json(path: String) -> Node3D:
-	var root := Node3D.new()
-
-	var visuals := ModelAssembler.new()
-	visuals.name = "BridgeVisuals"
-	visuals.build_part_colliders = false
-	visuals.model_data_path = path
-	root.add_child(visuals)
-
-	var data := _load_json(path)
-	if data.is_empty():
-		return root
-
-	var slot_data: Variant = data.get("slots", {})
-	var slot_dict: Dictionary = slot_data if typeof(slot_data) == TYPE_DICTIONARY else {}
-
-	# BridgeInteractable — boarding zone in front of the deck house.
-	var interact := BridgeInteractable.new()
-	interact.name = "BridgeInteractable"
-	if slot_dict.has("bridge_interactable"):
-		var bi_pos = slot_dict["bridge_interactable"]
-		if typeof(bi_pos) == TYPE_ARRAY and bi_pos.size() >= 3:
-			interact.position = Vector3(float(bi_pos[0]), float(bi_pos[1]), float(bi_pos[2]))
-	var iv = data.get("interactable", {})
-	if typeof(iv) == TYPE_DICTIONARY:
-		var exit_arr = iv.get("exit_deck_offset", null)
-		if typeof(exit_arr) == TYPE_ARRAY and exit_arr.size() >= 2:
-			interact.exit_deck_offset = Vector2(float(exit_arr[0]), float(exit_arr[1]))
-	root.add_child(interact)
-
-	# Spawn the bridge-mounted lights from the JSON slots.
-	# Naming convention in slots: light_<type>: [x, y, z]
-	# where <type> is nav_port, nav_starboard, nav_masthead, nav_stern, or window.
-	for slot_name in slot_dict.keys():
-		var key := str(slot_name)
-		if not key.begins_with("light_"):
-			continue
-		var type_str := key.substr("light_".length())
-		if type_str == "work":
-			continue
-		var type_id := _light_type_from_string(type_str)
-		if type_id < 0:
-			continue
-		var pos_arr = slot_dict[slot_name]
-		if typeof(pos_arr) != TYPE_ARRAY or pos_arr.size() < 3:
-			continue
-		var light := ShipLight.new()
-		light.name = "ShipLight_" + type_str.capitalize().replace(" ", "")
-		light.position = Vector3(float(pos_arr[0]), float(pos_arr[1]), float(pos_arr[2]))
-		light.light_type = type_id
-		root.add_child(light)
-
-	return root
 
 
 static func _schedule_funnel_nudge(super_root: Node3D, scale: float) -> void:
@@ -516,12 +481,14 @@ static func _nudge_funnel_parts(super_root: Node3D, delta_z: float) -> void:
 			part.position.z += delta_z
 
 
-static func _add_mooring_points(parent: Node3D, slots: Dictionary, stations: HullStations) -> void:
+static func _add_mooring_points(
+	parent: Node3D, slots: Dictionary, stations: HullStations, mesh_scale: float
+) -> void:
 	# Scale the visible bollard to the hull. The natural docking_bollard model
 	# is ~0.8 m wide and reads correctly on a 20–30 m coaster at scale 1.0.
 	# Linearly interpolate so a 13 m launch gets a smaller cleat and a 60 m
 	# freighter gets a chunkier one — keeps the visual proportion sensible.
-	var hull_length : float = stations.length_m if stations != null else 18.0
+	var hull_length: float = (stations.length_m if stations != null else 18.0) * mesh_scale
 	var t           : float = clampf((hull_length - 13.0) / 47.0, 0.0, 1.0)
 	var bollard_scale : float = lerpf(0.7, 1.5, t)
 
@@ -537,7 +504,8 @@ static func _add_mooring_points(parent: Node3D, slots: Dictionary, stations: Hul
 			continue
 		var mp := MooringPoint.new()
 		mp.name = "MooringPoint_" + slot_name.capitalize().replace(" ", "")
-		mp.position = _adjust_mooring_position(slots[slot_name], slot_name, stations)
+		var adjusted := _adjust_mooring_position(slots[slot_name], slot_name, stations)
+		mp.position = _slot_to_frame(adjusted)
 		mp.set("side",    pair[1])
 		mp.set("station", pair[2])
 		mp.set("bollard_scale", bollard_scale)
@@ -565,6 +533,14 @@ static func _adjust_mooring_position(pos: Vector3, slot_name: String,
 	return out
 
 
+static func _slot_to_frame(pos: Vector3) -> Vector3:
+	return pos.rotated(Vector3.UP, HULL_AUTHORED_Y_ROT)
+
+
+static func _slot_to_body(pos: Vector3) -> Vector3:
+	return _slot_to_frame(pos).rotated(Vector3.UP, SHIP_FRAME_Y_ROT)
+
+
 static func _read_slots(hull_data: Dictionary, scale: float) -> Dictionary:
 	var out: Dictionary = {}
 	if not hull_data.has("slots"):
@@ -581,10 +557,10 @@ static func _read_slots(hull_data: Dictionary, scale: float) -> Dictionary:
 
 static func _hull_to_model_path(hull_path: String, tmpl: Dictionary, template_path: String) -> String:
 	var hull_key := str(tmpl.get("hull", ""))
-	var scale    := float(tmpl.get("scale", 1.0))
 
 	# Write a minimal ship model JSON that wraps the hull at the given scale.
-	# Use user:// scratch space so we never pollute res://.
+	# Scale is applied once via ModelAssembler.absolute_scale — do not bake it
+	# into the scratch part or nested hulls double-scale (1.3²).
 	var model_name := template_path.get_file().get_basename()
 	var scratch    := "user://ship_builder_cache/" + model_name + ".json"
 
@@ -596,7 +572,7 @@ static func _hull_to_model_path(hull_path: String, tmpl: Dictionary, template_pa
 			"name": "hull",
 			"model": hull_path,
 			"position": [0, 0, 0],
-			"scale": scale
+			"scale": 1.0
 		}]
 	})
 	var f := FileAccess.open(scratch, FileAccess.WRITE)

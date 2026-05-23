@@ -5,14 +5,14 @@ extends RefCounted
 ## Not sold at the shipwright; captains can request another anytime.
 
 const ENTRY: Dictionary = {
-	"id":               "coastal_trader",
-	"display":          "Coastal Trader  •  13 m / 43 ft",
+	"id":               "cargo_ship",
+	"display":          "Twin-Deck Cargo Coaster  •  20 m",
 	"ship_class_label": "Coastal Trader",
-	"hull_file":        "hull_coastal_trader.json",
-	"superstructure":   "bridge_coastal_trader",
+	"hull_file":        "hull_cargo_ship.json",
+	"superstructure":   "",
 }
 
-const TEMPLATE_PATH := "user://shipwright_orders/starter_coastal_trader.json"
+const TEMPLATE_PATH := "user://shipwright_orders/starter_cargo_ship.json"
 
 
 static func ensure_template_file() -> String:
@@ -21,18 +21,20 @@ static func ensure_template_file() -> String:
 	return write_template_file()
 
 
-static func build_template(entry: Dictionary = ENTRY) -> Dictionary:
+static func build_template(entry: Dictionary = {}) -> Dictionary:
+	if entry.is_empty():
+		entry = HullRegistry.get_by_id("cargo_ship")
 	var hull_path: String = ShipBuilder.HULL_BASE_DIR + str(entry.get("hull_file", ""))
-	var hull_data: Dictionary = ShipBuilder._load_json(hull_path)
+	var hull_data: Dictionary = JsonUtil.load(hull_path)
 	var stations: HullStations = HullStations.from_hull_json(hull_data, 10)
-
-	var displacement_kg: float = maxf(stations.displacement_volume_m3 * 1025.0, 1000.0)
+	var s: float = ShipBuilder.HULL_WORLD_SCALE
+	var displacement_kg: float = maxf(stations.displacement_volume_m3 * s * s * s * 1025.0, 1000.0)
 	var propulsion_thrust: float = displacement_kg * 0.7
-	var bow_ratio: float = clampf(0.40 - stations.length_m / 200.0, 0.10, 0.40)
+	var bow_ratio: float = clampf(0.40 - (stations.length_m * s) / 200.0, 0.10, 0.40)
 	var bow_thrust: float = propulsion_thrust * bow_ratio
 	var rudder_torque: float = 0.0275 * pow(propulsion_thrust, 4.0 / 3.0)
-	var cam_dist: float = stations.length_m * 1.45 + 11.0
-	var cam_height: float = stations.length_m * 0.36 + 4.0
+	var cam_dist: float = stations.length_m * s * 1.45 + 11.0
+	var cam_height: float = stations.length_m * s * 0.36 + 4.0
 
 	return {
 		"display_name":   str(entry.get("display", "Coastal Trader")),
@@ -91,9 +93,9 @@ static func set_active_vessel_record(session: Node) -> void:
 		return
 	ensure_template_file()
 	session.data.set_active_vessel({
-		"uid":           "coastal_trader_active",
-		"hull_id":       str(ENTRY.get("id", "")),
-		"display":       str(ENTRY.get("display", "")),
+		"uid":           "cargo_ship_active",
+		"hull_id":       "cargo_ship",
+		"display":       "Twin-Deck Cargo Coaster  •  20 m",
 		"template_path": TEMPLATE_PATH,
 	})
 	if session.has_method("save_now"):

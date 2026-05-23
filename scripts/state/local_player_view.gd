@@ -246,31 +246,61 @@ func restore_player_state() -> void:
 		call_deferred("_restore_ship_pose", data.ship_runtime_state.duplicate())
 
 
-## Apply the most recently saved ship_runtime_state to the player's
-## currently-spawned ship. Called from PortDock.spawn_player_ship after
-## the harbour master finishes a spawn, so fuel level / throttle stage /
-## yaw / position get restored at the right moment in the load flow.
+## Apply saved fuel / throttle to the active ship after a berth spawn.
+## Does **not** restore world position or yaw — `PortDock.dock_at_berth()` owns that.
 func apply_runtime_state_to_active_ship() -> void:
 	if _session == null:
 		return
 	var data: PlayerData = _session.data
 	if data == null or data.ship_runtime_state.is_empty():
+		_snapshot_active_ship_runtime()
 		return
-	_restore_ship_pose(data.ship_runtime_state.duplicate())
+	_apply_ship_runtime_state(data.ship_runtime_state.duplicate(), false)
+	_snapshot_active_ship_runtime()
 
 
 func _restore_ship_pose(state: Dictionary) -> void:
+	_apply_ship_runtime_state(state, true)
+
+
+func _apply_ship_runtime_state(state: Dictionary, restore_transform: bool) -> void:
 	var ship := get_active_ship() as Node3D
 	if ship == null:
 		return
-	var pos_raw: Variant = state.get("world_pos", null)
-	if typeof(pos_raw) == TYPE_VECTOR3:
-		ship.global_position = pos_raw
-	var yaw := float(state.get("yaw", 0.0))
-	ship.rotation.y = yaw
+	if restore_transform:
+		var pos_raw: Variant = state.get("world_pos", null)
+		if typeof(pos_raw) == TYPE_VECTOR3:
+			ship.global_position = pos_raw
+		ship.rotation.y = float(state.get("yaw", 0.0))
 	# Restore fuel level if persisted (defaults to 1.0 = full tank for
 	# pre-v2 saves and freshly-commissioned ships).
 	if state.has("fuel_fraction"):
 		var boat := ship as BoatBody
 		if boat != null:
 			boat.fuel_l = boat.fuel_capacity_l * float(state["fuel_fraction"])
+
+
+func _snapshot_active_ship_runtime() -> void:
+	if _session == null:
+		return
+	var data: PlayerData = _session.data
+	if data == null:
+		return
+	var ship := get_active_ship() as Node3D
+	if ship == null:
+		data.ship_runtime_state = {}
+		return
+	var stage_idx := 1
+	var ctrl := ship.get_node_or_null("BoatController") as BoatController
+	if ctrl != null and ctrl.has_method("get_throttle_stage_idx"):
+		stage_idx = ctrl.get_throttle_stage_idx()
+	var fuel_fraction := 1.0
+	var boat_body := ship as BoatBody
+	if boat_body != null and boat_body.has_method("get_fuel_fraction"):
+		fuel_fraction = boat_body.get_fuel_fraction()
+	data.ship_runtime_state = {
+		"world_pos":          ship.global_position,
+		"yaw":                ship.rotation.y,
+		"throttle_stage_idx": stage_idx,
+		"fuel_fraction":      fuel_fraction,
+	}
