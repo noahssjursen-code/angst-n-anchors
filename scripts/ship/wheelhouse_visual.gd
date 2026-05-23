@@ -10,6 +10,23 @@ enum FootprintPreset {
 	FISHING_SMALL,
 	FISHING_MEDIUM,
 	FISHING_LARGE,
+	TANKER_SMALL,
+	TANKER_MEDIUM,
+	TANKER_LARGE,
+	TANKER_HUGE,
+	TANKER_ULTRA,
+	CARGO_SMALL,
+	CARGO_MEDIUM,
+	CARGO_LARGE,
+	CARGO_HUGE,
+	CARGO_ULTRA,
+	CONTAINER_SMALL,
+	CONTAINER_MEDIUM,
+	CONTAINER_LARGE,
+	CONTAINER_ULTRA,
+	FERRY_SMALL,
+	FERRY_MEDIUM,
+	FERRY_LARGE,
 }
 
 static func _fishing_small_footprint() -> PackedVector2Array:
@@ -51,6 +68,101 @@ static func _fishing_large_footprint() -> PackedVector2Array:
 	])
 
 
+## Aft-house hexagonal footprint: forward edge narrowed by `chamfer` at the
+## forward port/starboard corners. Used by tanker, cargo, and container bridges.
+static func _hex_aft_house(half_w: float, half_d: float, chamfer: float) -> PackedVector2Array:
+	return PackedVector2Array([
+		Vector2(-half_w + chamfer, half_d),
+		Vector2(-half_w, half_d - chamfer),
+		Vector2(-half_w, -half_d),
+		Vector2(half_w, -half_d),
+		Vector2(half_w, half_d - chamfer),
+		Vector2(half_w - chamfer, half_d),
+	])
+
+
+## Rectangular cabin footprint with an optional Z shift. Used for ferry
+## passenger cabins where the bridge slot sits midship; the shift compensates
+## for `ShipBuilder.SUPERSTRUCTURE_OFFSET` so the cabin ends up centered.
+static func _rect_cabin(
+	half_w: float, half_d: float, z_offset: float = 0.0
+) -> PackedVector2Array:
+	return PackedVector2Array([
+		Vector2(-half_w, half_d + z_offset),
+		Vector2(-half_w, -half_d + z_offset),
+		Vector2(half_w, -half_d + z_offset),
+		Vector2(half_w, half_d + z_offset),
+	])
+
+
+static func _tanker_small_footprint() -> PackedVector2Array:
+	return _hex_aft_house(1.45, 1.40, 0.35)
+
+
+static func _tanker_medium_footprint() -> PackedVector2Array:
+	return _hex_aft_house(1.75, 1.70, 0.40)
+
+
+static func _tanker_large_footprint() -> PackedVector2Array:
+	return _hex_aft_house(2.20, 2.10, 0.50)
+
+
+static func _tanker_huge_footprint() -> PackedVector2Array:
+	return _hex_aft_house(3.20, 3.20, 0.70)
+
+
+static func _tanker_ultra_footprint() -> PackedVector2Array:
+	return _hex_aft_house(5.00, 5.00, 1.20)
+
+
+static func _cargo_small_footprint() -> PackedVector2Array:
+	return _hex_aft_house(1.70, 1.75, 0.50)
+
+
+static func _cargo_medium_footprint() -> PackedVector2Array:
+	return _hex_aft_house(2.00, 2.10, 0.60)
+
+
+static func _cargo_large_footprint() -> PackedVector2Array:
+	return _hex_aft_house(2.60, 2.65, 0.70)
+
+
+static func _cargo_huge_footprint() -> PackedVector2Array:
+	return _hex_aft_house(3.80, 3.80, 1.00)
+
+
+static func _cargo_ultra_footprint() -> PackedVector2Array:
+	return _hex_aft_house(6.50, 6.50, 1.60)
+
+
+static func _container_small_footprint() -> PackedVector2Array:
+	return _hex_aft_house(1.45, 1.30, 0.30)
+
+
+static func _container_medium_footprint() -> PackedVector2Array:
+	return _hex_aft_house(2.10, 2.00, 0.45)
+
+
+static func _container_large_footprint() -> PackedVector2Array:
+	return _hex_aft_house(3.00, 2.80, 0.60)
+
+
+static func _container_ultra_footprint() -> PackedVector2Array:
+	return _hex_aft_house(4.50, 4.20, 1.00)
+
+
+static func _ferry_small_footprint() -> PackedVector2Array:
+	return _rect_cabin(2.10, 4.50, 1.3)
+
+
+static func _ferry_medium_footprint() -> PackedVector2Array:
+	return _rect_cabin(2.60, 6.50, 1.3)
+
+
+static func _ferry_large_footprint() -> PackedVector2Array:
+	return _rect_cabin(3.40, 8.50, 1.3)
+
+
 @export var footprint_preset: FootprintPreset = FootprintPreset.FISHING_SMALL:
 	set(v):
 		footprint_preset = v
@@ -89,18 +201,143 @@ func _apply_preset_defaults() -> void:
 		FootprintPreset.FISHING_SMALL:
 			deck_contact_y = 0.3
 			wall_height = 2.24
+			window_sill = 0.84
+			window_head = 2.04
 			mast_height = 1.12
 			mast_diameter = 0.1
 		FootprintPreset.FISHING_MEDIUM:
 			deck_contact_y = 0.4
 			wall_height = 2.5
+			window_sill = 0.96
+			window_head = 2.24
 			mast_height = 1.24
 			mast_diameter = 0.11
 		FootprintPreset.FISHING_LARGE:
 			deck_contact_y = 0.5
 			wall_height = 2.9
+			window_sill = 1.08
+			window_head = 2.48
 			mast_height = 1.44
 			mast_diameter = 0.12
+		FootprintPreset.TANKER_SMALL:
+			deck_contact_y = 0.35
+			wall_height = 2.1
+			window_sill = 0.80
+			window_head = 1.90
+			mast_height = 1.2
+			mast_diameter = 0.11
+		FootprintPreset.TANKER_MEDIUM:
+			deck_contact_y = 0.45
+			wall_height = 2.4
+			window_sill = 0.90
+			window_head = 2.20
+			mast_height = 1.4
+			mast_diameter = 0.12
+		FootprintPreset.TANKER_LARGE:
+			deck_contact_y = 0.6
+			wall_height = 2.8
+			window_sill = 1.00
+			window_head = 2.50
+			mast_height = 1.6
+			mast_diameter = 0.14
+		FootprintPreset.TANKER_HUGE:
+			deck_contact_y = 0.9
+			wall_height = 3.6
+			window_sill = 2.10
+			window_head = 3.30
+			mast_height = 2.4
+			mast_diameter = 0.20
+		FootprintPreset.TANKER_ULTRA:
+			deck_contact_y = 1.2
+			wall_height = 4.8
+			window_sill = 3.00
+			window_head = 4.30
+			mast_height = 3.2
+			mast_diameter = 0.30
+		FootprintPreset.CARGO_SMALL:
+			deck_contact_y = 0.40
+			wall_height = 2.3
+			window_sill = 0.85
+			window_head = 2.05
+			mast_height = 1.3
+			mast_diameter = 0.11
+		FootprintPreset.CARGO_MEDIUM:
+			deck_contact_y = 0.55
+			wall_height = 2.6
+			window_sill = 0.95
+			window_head = 2.35
+			mast_height = 1.5
+			mast_diameter = 0.13
+		FootprintPreset.CARGO_LARGE:
+			deck_contact_y = 0.70
+			wall_height = 3.0
+			window_sill = 1.10
+			window_head = 2.70
+			mast_height = 1.8
+			mast_diameter = 0.15
+		FootprintPreset.CARGO_HUGE:
+			deck_contact_y = 1.00
+			wall_height = 3.8
+			window_sill = 2.30
+			window_head = 3.50
+			mast_height = 2.4
+			mast_diameter = 0.22
+		FootprintPreset.CARGO_ULTRA:
+			deck_contact_y = 1.40
+			wall_height = 5.5
+			window_sill = 3.60
+			window_head = 5.00
+			mast_height = 3.6
+			mast_diameter = 0.34
+		FootprintPreset.CONTAINER_SMALL:
+			deck_contact_y = 0.50
+			wall_height = 3.2
+			window_sill = 1.30
+			window_head = 2.80
+			mast_height = 1.8
+			mast_diameter = 0.12
+		FootprintPreset.CONTAINER_MEDIUM:
+			deck_contact_y = 0.75
+			wall_height = 4.5
+			window_sill = 2.40
+			window_head = 4.05
+			mast_height = 2.4
+			mast_diameter = 0.16
+		FootprintPreset.CONTAINER_LARGE:
+			deck_contact_y = 1.00
+			wall_height = 5.5
+			window_sill = 3.20
+			window_head = 4.95
+			mast_height = 3.0
+			mast_diameter = 0.20
+		FootprintPreset.CONTAINER_ULTRA:
+			deck_contact_y = 1.40
+			wall_height = 7.0
+			window_sill = 4.50
+			window_head = 6.45
+			mast_height = 4.0
+			mast_diameter = 0.28
+		FootprintPreset.FERRY_SMALL:
+			deck_contact_y = 0.40
+			wall_height = 2.2
+			window_sill = 0.85
+			window_head = 2.00
+			mast_height = 1.4
+			mast_diameter = 0.10
+		FootprintPreset.FERRY_MEDIUM:
+			deck_contact_y = 0.50
+			wall_height = 2.4
+			window_sill = 0.95
+			window_head = 2.20
+			mast_height = 1.6
+			mast_diameter = 0.12
+		FootprintPreset.FERRY_LARGE:
+			deck_contact_y = 0.60
+			wall_height = 2.6
+			window_sill = 1.05
+			window_head = 2.40
+			mast_height = 1.8
+			mast_diameter = 0.14
 		FootprintPreset.CUSTOM:
 			pass
 
@@ -115,6 +352,40 @@ func _get_footprint() -> PackedVector2Array:
 			return _fishing_medium_footprint()
 		FootprintPreset.FISHING_LARGE:
 			return _fishing_large_footprint()
+		FootprintPreset.TANKER_SMALL:
+			return _tanker_small_footprint()
+		FootprintPreset.TANKER_MEDIUM:
+			return _tanker_medium_footprint()
+		FootprintPreset.TANKER_LARGE:
+			return _tanker_large_footprint()
+		FootprintPreset.TANKER_HUGE:
+			return _tanker_huge_footprint()
+		FootprintPreset.TANKER_ULTRA:
+			return _tanker_ultra_footprint()
+		FootprintPreset.CARGO_SMALL:
+			return _cargo_small_footprint()
+		FootprintPreset.CARGO_MEDIUM:
+			return _cargo_medium_footprint()
+		FootprintPreset.CARGO_LARGE:
+			return _cargo_large_footprint()
+		FootprintPreset.CARGO_HUGE:
+			return _cargo_huge_footprint()
+		FootprintPreset.CARGO_ULTRA:
+			return _cargo_ultra_footprint()
+		FootprintPreset.CONTAINER_SMALL:
+			return _container_small_footprint()
+		FootprintPreset.CONTAINER_MEDIUM:
+			return _container_medium_footprint()
+		FootprintPreset.CONTAINER_LARGE:
+			return _container_large_footprint()
+		FootprintPreset.CONTAINER_ULTRA:
+			return _container_ultra_footprint()
+		FootprintPreset.FERRY_SMALL:
+			return _ferry_small_footprint()
+		FootprintPreset.FERRY_MEDIUM:
+			return _ferry_medium_footprint()
+		FootprintPreset.FERRY_LARGE:
+			return _ferry_large_footprint()
 		_:
 			return PackedVector2Array()
 
