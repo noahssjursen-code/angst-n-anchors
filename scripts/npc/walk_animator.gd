@@ -71,3 +71,12 @@ func update(distance_walked_m: float) -> void:
 	var arm_swing := sin(phase) * SWING_AMPLITUDE_RAD * ARM_AMPLITUDE_FACTOR
 	_arm_left.rotation  = Vector3( arm_swing,  0.0, 0.0)
 	_arm_right.rotation = Vector3(-arm_swing,  0.0, 0.0)
+
+
+func reset() -> void:
+	if not _ready:
+		return
+	_arm_left.rotation  = Vector3.ZERO
+	_arm_right.rotation = Vector3.ZERO
+	_leg_left.rotation  = Vector3.ZERO
+	_leg_right.rotation = Vector3.ZERO

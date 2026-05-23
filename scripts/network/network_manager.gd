@@ -123,6 +123,12 @@ func _tick_outbound(delta: float) -> void:
 			func():
 				return [lp.global_position.x, lp.global_position.y, lp.global_position.z, lp.rotation.y],
 			func():
+				var session := get_node_or_null("/root/PlayerSession")
+				if session != null and session.data != null and session.data.appearance != null:
+					return session.data.appearance.to_meta_string(
+						str(session.data.display_name),
+						str(session.data.captain_id)
+					)
 				return ""
 		)
 

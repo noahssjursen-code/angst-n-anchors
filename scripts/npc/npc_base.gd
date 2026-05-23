@@ -15,17 +15,18 @@ extends Node3D
 const MODEL_PATH := AssetPaths.NPC_BASE_MESH
 
 @export var skin_color: Color = Color(0.72, 0.55, 0.40):
-	set(v): skin_color = v; _apply_colors()
+	set(v): skin_color = v; if not _color_apply_blocked: _apply_colors()
 
 @export var clothing_color: Color = Color(0.18, 0.20, 0.30):
-	set(v): clothing_color = v; _apply_colors()
+	set(v): clothing_color = v; if not _color_apply_blocked: _apply_colors()
 
 @export var trousers_color: Color = Color(0.18, 0.18, 0.20):
-	set(v): trousers_color = v; _apply_colors()
+	set(v): trousers_color = v; if not _color_apply_blocked: _apply_colors()
 
 var assembler: ModelAssembler
 var _overlays: Dictionary = {}
 var _tools:    Dictionary = {}   ## hand_side ("left"/"right") → Node3D
+var _color_apply_blocked: bool = false
 
 
 func _ready() -> void:
@@ -58,7 +59,7 @@ func _build() -> void:
 # ── Colours ───────────────────────────────────────────────────────────────────
 
 func _apply_colors() -> void:
-	if assembler == null:
+	if assembler == null or not is_instance_valid(assembler):
 		return
 	_tint("head",        skin_color)
 	_tint("hand_left",   skin_color)
@@ -69,6 +70,15 @@ func _apply_colors() -> void:
 	_tint("arm_right",   clothing_color)
 	_tint("leg_left",    trousers_color)
 	_tint("leg_right",   trousers_color)
+
+
+func set_colors(skin: Color, clothing: Color, trousers: Color) -> void:
+	_color_apply_blocked = true
+	skin_color = skin
+	clothing_color = clothing
+	trousers_color = trousers
+	_color_apply_blocked = false
+	_apply_colors()
 
 
 func _tint(part_name: String, color: Color) -> void:
