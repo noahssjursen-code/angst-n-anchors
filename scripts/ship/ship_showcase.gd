@@ -33,6 +33,12 @@ const LABEL_H := 7.5
 			if is_instance_valid(preview):
 				preview.set_spin_enabled(v)
 
+@export var show_cargo_decks: bool = true:
+	set(v):
+		show_cargo_decks = v
+		if is_inside_tree():
+			_rebuild()
+
 @export var frame_camera: bool = true:
 	set(v):
 		frame_camera = v
@@ -122,6 +128,7 @@ func _rebuild() -> void:
 			preview.position = Vector3(x_pos, 0.0, z_pos)
 			preview.owner = _scene_owner()
 			preview.set_spin_enabled(spin_ships)
+			preview.set_show_cargo_decks(show_cargo_decks)
 			preview.show_entry(data["entry"])
 			_previews.append(preview)
 

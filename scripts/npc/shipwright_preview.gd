@@ -9,6 +9,7 @@ const _DeckGridOverlay := preload("res://scripts/ship/deck_grid_visualizer.gd")
 
 var _pivot: Node3D
 var _spin_enabled: bool = true
+var _show_cargo_decks: bool = true
 ## Turntable angle — kept when swapping catalog entries so Next/Prev does not reset spin.
 var _display_yaw: float = 0.0
 
@@ -63,6 +64,9 @@ func show_entry(entry: Dictionary) -> HullStations:
 
 	_DeckGridOverlay.attach(frame, stations, scale, slots, entry, hull_data)
 
+	if _show_cargo_decks:
+		ShipBuilder.attach_cargo_decks(frame, hull_data, entry, slots, scale, stations, true)
+
 	return stations
 
 
@@ -79,6 +83,10 @@ func _clear_models() -> void:
 
 func set_spin_enabled(enabled: bool) -> void:
 	_spin_enabled = enabled
+
+
+func set_show_cargo_decks(enabled: bool) -> void:
+	_show_cargo_decks = enabled
 
 
 static func camera_transform_for_length(length_m: float) -> Transform3D:

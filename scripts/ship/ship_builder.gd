@@ -29,6 +29,8 @@ const SUPERSTRUCTURE_OFFSET := Vector3(0.0, -0.3, -1.0)
 const CARGO_BOW_CLEARANCE_M := 1.5
 ## Cargo deck stern edge must be at least this far forward of the bridge slot (+Z).
 const CARGO_AFT_OF_BRIDGE_M := 3.0
+## Nudge fitted cargo grid aft (−Z in hull slot space) after hull clamping.
+const CARGO_DECK_STERN_SHIFT_CELLS := 3
 ## Mooring cleats: pull toward centerline and away from bow/stern tips (fractions at scale 1).
 const MOORING_BEAM_INSET_FRAC := 0.22
 const MOORING_END_INSET_FRAC := 0.09
@@ -298,6 +300,93 @@ static func _add_hull_lights(parent: Node3D, hull_data: Dictionary, scale: float
 		parent.add_child(light)
 
 
+## Hull part vertices in hull slot space (+Z bow, X beam) — matches MeshTransformer.
+static func _hull_part_vertices_hull(hull_data: Dictionary, part_name: String, scale: float) -> Array[Vector3]:
+	var out: Array[Vector3] = []
+	if not hull_data.has("parts"):
+		return out
+	for part: Variant in hull_data["parts"]:
+		if typeof(part) != TYPE_DICTIONARY:
+			continue
+		var spec: Dictionary = part
+		if str(spec.get("name", "")) != part_name:
+			continue
+		var mesh = spec.get("mesh", null)
+		if typeof(mesh) != TYPE_DICTIONARY:
+			continue
+		var raw_verts = mesh.get("vertices", [])
+		if typeof(raw_verts) != TYPE_ARRAY:
+			continue
+		var rot_deg := _vec3_from_array(spec.get("rotation_degrees", [0, 0, 0]))
+		var part_scale: float = float(spec.get("scale", 1.0))
+		var part_pos := _vec3_from_array(spec.get("position", [0, 0, 0])) * scale
+		var basis := Basis.from_euler(rot_deg * (PI / 180.0))
+		for i in range(0, raw_verts.size(), 3):
+			if i + 2 >= raw_verts.size():
+				break
+			var v := Vector3(float(raw_verts[i]), float(raw_verts[i + 1]), float(raw_verts[i + 2]))
+			v *= part_scale * scale
+			v = basis * v + part_pos
+			out.append(v)
+		break
+	return out
+
+
+## Sample deck plate height for a cargo grid in hull slot space.
+## Hulls often rake upward toward the bow; use the median Y inside the cargo
+## footprint so a bow gunwale peak does not float the whole grid.
+static func _deck_surface_y_at(
+		hull_data: Dictionary,
+		scale: float,
+		hull_x: float,
+		hull_z: float,
+		half_fore_aft_z: float,
+		half_beam_x: float
+) -> float:
+	var verts := _hull_part_vertices_hull(hull_data, "deck", scale)
+	if verts.is_empty():
+		verts = _hull_part_vertices_hull(hull_data, "hull_upper", scale)
+	if verts.is_empty():
+		return 0.0
+
+	var ys := _deck_vertex_ys_in_footprint(verts, hull_x, hull_z, half_fore_aft_z, half_beam_x)
+	if ys.is_empty():
+		ys = _deck_vertex_ys_in_footprint(
+			verts, hull_x, hull_z, half_fore_aft_z * 1.5, half_beam_x * 1.5
+		)
+	return _median_float(ys)
+
+
+static func _deck_vertex_ys_in_footprint(
+		verts: Array[Vector3],
+		hull_x: float,
+		hull_z: float,
+		half_fore_aft_z: float,
+		half_beam_x: float
+) -> Array[float]:
+	var ys: Array[float] = []
+	for v: Vector3 in verts:
+		if absf(v.x - hull_x) <= half_beam_x and absf(v.z - hull_z) <= half_fore_aft_z:
+			ys.append(v.y)
+	return ys
+
+
+static func _median_float(values: Array[float]) -> float:
+	if values.is_empty():
+		return 0.0
+	values.sort()
+	var mid := values.size() / 2
+	if values.size() % 2 == 1:
+		return values[mid]
+	return (values[mid - 1] + values[mid]) * 0.5
+
+
+static func _vec3_from_array(raw: Variant) -> Vector3:
+	if typeof(raw) != TYPE_ARRAY or raw.size() < 3:
+		return Vector3.ZERO
+	return Vector3(float(raw[0]), float(raw[1]), float(raw[2]))
+
+
 ## Spawn one cargo deck per ship. Dimensions come from the hull JSON's
 ## `cargo_decks` entry (prefer `"main"`). The template may pick a name via
 ## `cargo_decks: ["main"]`, omit the key (same as `["main"]` when present),
@@ -318,15 +407,51 @@ static func _add_cargo_decks(parent: Node3D, hull_data: Dictionary, tmpl: Dictio
 		pos = Vector3(float(pos_arr[0]), float(pos_arr[1]), float(pos_arr[2])) * scale
 	var deck := CargoDeckComponent.new()
 	deck.name = "CargoDeck_" + deck_name
-	deck.position = _slot_to_frame(pos)
+	var deck_width := float(fitted.get("deck_width", 5.0)) * scale
+	var deck_length := float(fitted.get("deck_length", 8.0)) * scale
+	var cell_size := float(fitted.get("cell_size", 1.5)) * scale
+	var surface_y := _deck_surface_y_at(
+		hull_data,
+		scale,
+		pos.x,
+		pos.z,
+		deck_length * 0.5,
+		deck_width * 0.5
+	)
+	var frame_pos := _slot_to_frame(pos)
+	frame_pos.y = surface_y
+	deck.position = frame_pos
 	# Grid defaults: width on +X, length on +Z. ShipFrame uses +X fore-aft, ±Z beam.
 	deck.rotation.y = -HULL_AUTHORED_Y_ROT
-	deck.deck_width_m = float(fitted.get("deck_width", 5.0)) * scale
-	deck.deck_length_m = float(fitted.get("deck_length", 8.0)) * scale
-	var cell_size := float(fitted.get("cell_size", 1.5)) * scale
+	deck.deck_width_m = deck_width
+	deck.deck_length_m = deck_length
 	deck.cell_size_x_m = cell_size
 	deck.cell_size_z_m = cell_size
 	parent.add_child(deck)
+
+
+## Attach fitted cargo deck grids under `parent` (ShipFrame space), matching runtime ships.
+static func attach_cargo_decks(
+		parent: Node3D,
+		hull_data: Dictionary,
+		registry_entry: Dictionary,
+		slots: Dictionary,
+		scale: float,
+		stations: HullStations,
+		show_debug_grid: bool = false
+) -> void:
+	if not registry_entry.is_empty():
+		var caps = registry_entry.get("capabilities", [])
+		if not caps.has("cargo"):
+			return
+	var tmpl := StarterVessel.build_template(registry_entry)
+	_add_cargo_decks(parent, hull_data, tmpl, slots, scale, stations)
+	if not show_debug_grid:
+		return
+	for n in parent.find_children("*", "CargoDeckComponent", true, false):
+		var deck := n as CargoDeckComponent
+		if deck != null:
+			deck.show_debug_grid = true
 
 
 ## Returns the single hull cargo-deck definition to build, or {} if none.
@@ -413,6 +538,11 @@ static func _fit_cargo_deck_to_hull(def: Dictionary, slots: Dictionary, scale: f
 		rows -= 1
 	width = float(cols) * cell
 	length = float(rows) * cell
+	half = length * 0.5
+	aft_edge = clampf(pos.z - half, aft_limit, bow_limit - length)
+	pos.z = aft_edge + half
+
+	pos.z -= float(CARGO_DECK_STERN_SHIFT_CELLS) * cell
 	half = length * 0.5
 	aft_edge = clampf(pos.z - half, aft_limit, bow_limit - length)
 	pos.z = aft_edge + half
