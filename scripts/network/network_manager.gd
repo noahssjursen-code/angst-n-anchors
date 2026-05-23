@@ -103,6 +103,8 @@ func _tick_outbound(delta: float) -> void:
 	var local_id := get_local_player_id()
 	if local_id.is_empty():
 		return
+
+	_ensure_local_ship_registered()
 		
 	# Resolve our main observer camera position
 	var observer_pos := Vector3.ZERO
@@ -271,10 +273,54 @@ func register_ship_spawn(ship_id: String, hull_id: String, ship_node: Node3D) ->
 	var local_player_id := get_local_player_id()
 	if not ship_id.begins_with(local_player_id + "_"):
 		unique_ship_id = local_player_id + "_" + ship_id
+
+	var resolved_hull_id := HullRegistry.resolve_network_hull_id(hull_id)
 		
 	_local_ships_board_states[unique_ship_id] = false
-	_register_ship_sender(unique_ship_id, hull_id, ship_node, false)
+	_register_ship_sender(unique_ship_id, resolved_hull_id, ship_node, false)
+	_force_sender_sync(unique_ship_id)
 	_wire_board_signals_recursive(unique_ship_id, ship_node)
+
+
+func _force_sender_sync(sender_id: String) -> void:
+	var sender: Variant = _local_senders.get(sender_id, null)
+	if sender == null:
+		return
+	sender["last_sent_pos"] = Vector3(INF, INF, INF)
+	sender["last_sent_payload"] = []
+	sender["last_sent_meta"] = ""
+	sender["last_sent_time_ms"] = 0
+
+
+func _ensure_local_ship_registered() -> void:
+	var tree := get_tree()
+	if tree == null:
+		return
+	var ship := PlayerVessel.find_active_ship(tree)
+	if ship == null or not is_instance_valid(ship):
+		return
+	for sender_id in _local_senders.keys():
+		var sender: Dictionary = _local_senders[sender_id]
+		if not str(sender.get("type", "")).begins_with("ship_"):
+			continue
+		var node: Node3D = sender.get("node") as Node3D
+		if node == ship:
+			return
+
+	var hull_id := ""
+	var ship_id := "player_ship"
+	var session := get_node_or_null("/root/PlayerSession")
+	if session != null and session.get("data") != null:
+		var record: Dictionary = session.data.get_active_vessel_record()
+		if not record.is_empty():
+			hull_id = str(record.get("hull_id", ""))
+			ship_id = String(record.get("uid", "player_ship"))
+			var template_path := str(record.get("template_path", ""))
+			if hull_id.is_empty() and not template_path.is_empty():
+				hull_id = HullRegistry.resolve_id_from_template(template_path, hull_id)
+	if hull_id.is_empty():
+		hull_id = "cargo_ship_medium"
+	register_ship_spawn(ship_id, hull_id, ship)
 
 
 func unregister_ship(ship_id: String) -> void:
@@ -287,9 +333,11 @@ func _register_ship_sender(ship_id: String, hull_id: String, ship_node: Node3D, 
 		ship_node,
 		ship_id,
 		"ship_" + hull_id,
-		4, # Vector4: [x, y, z, yaw]
+		6, # Vector6: [x, y, z, global_rx, global_ry, global_rz]
 		func():
-			return [ship_node.global_position.x, ship_node.global_position.y, ship_node.global_position.z, ship_node.rotation.y],
+			var pos := ship_node.global_position
+			var rot := ship_node.global_rotation
+			return [pos.x, pos.y, pos.z, rot.x, rot.y, rot.z],
 		func():
 			var pilot := get_local_player_id() if boarded else ""
 			var berth_tag := ""
@@ -330,7 +378,9 @@ func _on_local_ship_boarded(ship_id: String) -> void:
 	_local_ships_board_states[ship_id] = true
 	var sender = _local_senders.get(ship_id, null)
 	if sender != null:
-		var hull_id := String(sender["type"]).replace("ship_", "")
+		var hull_id := HullRegistry.resolve_network_hull_id(
+			HullRegistry.hull_id_from_network_type(String(sender["type"]))
+		)
 		_register_ship_sender(ship_id, hull_id, sender["node"], true)
 
 
@@ -338,7 +388,9 @@ func _on_local_ship_exited(ship_id: String) -> void:
 	_local_ships_board_states[ship_id] = false
 	var sender = _local_senders.get(ship_id, null)
 	if sender != null:
-		var hull_id := String(sender["type"]).replace("ship_", "")
+		var hull_id := HullRegistry.resolve_network_hull_id(
+			HullRegistry.hull_id_from_network_type(String(sender["type"]))
+		)
 		_register_ship_sender(ship_id, hull_id, sender["node"], false)
 
 

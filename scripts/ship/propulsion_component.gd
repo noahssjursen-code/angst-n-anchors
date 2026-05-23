@@ -48,6 +48,7 @@ func _physics_process(delta: float) -> void:
 	if throttle > 0.0:
 		magnitude *= reverse_multiplier
 
-	var force: Vector3  = -_body.global_transform.basis.z * magnitude
+	# Body space: bow at −Z (Godot forward). Negative throttle = ahead; force must push toward −Z.
+	var force: Vector3  = _body.global_transform.basis.z * magnitude
 	var offset: Vector3 = _body.to_global(stern_offset) - _body.global_position
 	_body.apply_force(force, offset)

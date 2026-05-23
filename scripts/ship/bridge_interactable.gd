@@ -1,8 +1,5 @@
-## BridgeInteractable — attach to any bridge superstructure scene.
-## Generates its boarding interaction volume at runtime from the bridge's
-## own rendered mesh geometry. No manual collision box, no editor gizmo.
-## Drop this node into a bridge scene; the hull that instances the bridge
-## connects to player_boarded / player_exited as needed.
+## BridgeInteractable — helm access for the parent vessel.
+## Press F while looking at any part of the boat (hull, deck, wheelhouse) in range.
 
 class_name BridgeInteractable
 extends Node3D
@@ -19,15 +16,13 @@ signal player_exited
 
 const BOARDING_RAY_COLLISION_MASK: int = (1 << 0) | (1 << 1) | (1 << 2)
 
-@export var look_distance: float = 35.0
-@export var look_dot_threshold: float = 0.72
+@export var look_distance: float = 45.0
 @export var interact_range: float = 10.0
-@export var prompt_text: String = "Press F to board"
+@export var prompt_text: String = "Press F to helm"
 @export var exit_deck_offset: Vector2 = Vector2(0.0, 2.0)
 
 var _occupied: bool = false
 var _player: CharacterBody3D = null
-var _interaction_area: Area3D
 var _prompt_layer: CanvasLayer
 var _prompt_label: Label
 var _boat_cam: Camera3D = null
@@ -36,56 +31,9 @@ var _boat_rigid_cached: RigidBody3D = null
 
 
 func _ready() -> void:
-	# Wait two frames so ModelAssembler finishes building mesh before we sample it.
-	await get_tree().process_frame
-	await get_tree().process_frame
-	_build_from_mesh()
 	_cache_boat_nodes()
 	_ensure_prompt_ui()
 
-
-# --- Mesh-derived collision --------------------------------------------------
-
-func _build_from_mesh() -> void:
-	var verts: PackedVector3Array = []
-	_collect_verts(get_parent(), verts)
-	if verts.is_empty():
-		push_warning("BridgeInteractable: no mesh vertices found — bridge mesh may not be built yet.")
-		return
-
-	_interaction_area = Area3D.new()
-	_interaction_area.name = "BridgeMeshArea"
-	_interaction_area.collision_layer = 1
-	_interaction_area.collision_mask = 0
-	_interaction_area.monitoring = false
-	_interaction_area.monitorable = true
-
-	var shape := ConvexPolygonShape3D.new()
-	shape.points = verts
-
-	var cs := CollisionShape3D.new()
-	cs.shape = shape
-	_interaction_area.add_child(cs)
-	add_child(_interaction_area)
-
-
-func _collect_verts(node: Node, out: PackedVector3Array) -> void:
-	if node is MeshInstance3D:
-		var mi: MeshInstance3D = node
-		if mi.mesh != null:
-			for s in mi.mesh.get_surface_count():
-				var arrays := mi.mesh.surface_get_arrays(s)
-				if arrays.is_empty():
-					continue
-				var pts: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
-				var rel: Transform3D = global_transform.affine_inverse() * mi.global_transform
-				for v in pts:
-					out.append(rel * v)
-	for child in node.get_children():
-		_collect_verts(child, out)
-
-
-# --- Input / prompt ----------------------------------------------------------
 
 func _process(_delta: float) -> void:
 	_update_prompt()
@@ -102,56 +50,60 @@ func _unhandled_input(event: InputEvent) -> void:
 			get_viewport().set_input_as_handled()
 
 
-# --- Boarding detection ------------------------------------------------------
-
-func _nearest_player_in_range() -> CharacterBody3D:
+func _boarding_player() -> CharacterBody3D:
+	var boat := _boat_rigid_body()
+	if boat == null:
+		return null
 	for node: Node in get_tree().get_nodes_in_group("player"):
 		var body := node as CharacterBody3D
-		if body and global_position.distance_to(body.global_position) <= interact_range:
+		if body == null:
+			continue
+		if not _player_near_boat(body, boat):
+			continue
+		if _player_looking_at_boat(body, boat):
 			return body
 	return null
 
 
-func _boarding_player() -> CharacterBody3D:
-	var body := _nearest_player_in_range()
-	if body == null:
-		return null
-	if not _player_is_looking_at_bridge(body):
-		return null
-	return body
+func _player_near_boat(body: CharacterBody3D, boat: RigidBody3D) -> bool:
+	var local := boat.to_local(body.global_position)
+	var body_boat := boat as BoatBody
+	if body_boat != null and body_boat.hull_stations != null:
+		var half_len := body_boat.hull_stations.length_m * body_boat.mesh_scale * 0.5
+		var half_beam := body_boat.get_half_beam_m()
+		var margin := maxf(interact_range, 6.0)
+		return absf(local.x) <= half_beam + margin and absf(local.z) <= half_len + margin
+	return body.global_position.distance_to(boat.global_position) <= interact_range
 
 
-func _player_is_looking_at_bridge(body: CharacterBody3D) -> bool:
+func _player_looking_at_boat(body: CharacterBody3D, boat: RigidBody3D) -> bool:
 	var camera := body.get_node_or_null("Camera3D") as Camera3D
 	if camera == null:
 		return false
 
 	var from := camera.global_position
-	var to   := from - camera.global_transform.basis.z * look_distance
+	var to := from - camera.global_transform.basis.z * look_distance
 	var query := PhysicsRayQueryParameters3D.create(from, to, BOARDING_RAY_COLLISION_MASK)
 	query.exclude = [body.get_rid()]
-	query.collide_with_areas  = true
+	query.collide_with_areas = true
 	query.collide_with_bodies = true
 
 	var hit := get_world_3d().direct_space_state.intersect_ray(query)
-	if not hit.is_empty():
-		var collider := hit.get("collider") as Node
-		# Hit the bridge mesh area directly
-		if collider == _interaction_area or (collider != null and is_ancestor_of(collider)):
-			return true
-		# Hit any part of the same boat (hull, deck, etc.)
-		var mine     := _boat_rigid_body()
-		var hit_boat := _collision_owning_boat(collider)
-		return hit_boat != null and mine != null and hit_boat == mine
+	if hit.is_empty():
+		return false
 
-	# Dot-product fallback: player is close and broadly facing the bridge
-	var to_bridge := global_position - camera.global_position
-	if to_bridge.length_squared() <= 0.01:
+	var collider := hit.get("collider") as Node
+	return _collider_belongs_to_boat(collider, boat)
+
+
+func _collider_belongs_to_boat(collider: Node, boat: RigidBody3D) -> bool:
+	if collider == null:
+		return false
+	if collider == boat or boat.is_ancestor_of(collider):
 		return true
-	return (-camera.global_transform.basis.z.normalized()).dot(to_bridge.normalized()) >= look_dot_threshold
+	var owner_boat := _collision_owning_boat(collider)
+	return owner_boat != null and owner_boat == boat
 
-
-# --- Board / exit ------------------------------------------------------------
 
 func _board() -> void:
 	_player = _boarding_player()
@@ -202,8 +154,6 @@ func _place_player_on_deck(body: CharacterBody3D) -> void:
 	body.velocity = Vector3.ZERO
 
 
-# --- Helpers -----------------------------------------------------------------
-
 func _boat_rigid_body() -> RigidBody3D:
 	if _boat_rigid_cached != null and is_instance_valid(_boat_rigid_cached):
 		return _boat_rigid_cached
@@ -220,7 +170,7 @@ func _cache_boat_nodes() -> void:
 	var rb := _boat_rigid_body()
 	if rb == null:
 		return
-	_boat_cam        = rb.get_node_or_null("BoatCamera") as Camera3D
+	_boat_cam = rb.get_node_or_null("BoatCamera") as Camera3D
 	_boat_controller = rb.get_node_or_null("BoatController") as BoatController
 
 
@@ -250,14 +200,14 @@ func _ensure_prompt_ui() -> void:
 	_prompt_label.name = "BoardPrompt"
 	_prompt_label.text = prompt_text
 	_prompt_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_prompt_label.vertical_alignment   = VERTICAL_ALIGNMENT_CENTER
+	_prompt_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	_prompt_label.visible = false
 	_prompt_label.add_theme_font_size_override("font_size", 22)
 	_prompt_label.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
-	_prompt_label.offset_left   = -180.0
-	_prompt_label.offset_right  =  180.0
-	_prompt_label.offset_top    =  -92.0
-	_prompt_label.offset_bottom =  -48.0
+	_prompt_label.offset_left = -180.0
+	_prompt_label.offset_right = 180.0
+	_prompt_label.offset_top = -92.0
+	_prompt_label.offset_bottom = -48.0
 	_prompt_layer.add_child(_prompt_label)
 
 

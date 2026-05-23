@@ -42,6 +42,8 @@ const QUAY_LIP_SLAB_GAP := 0.002
 ## Yellow stripe centred on Z≈0.11, spans ~[0, 0.22]. Lip band ends at QUAY_LIP_DEPTH; slab starts just after.
 ## Bollard mesh projects toward −Z; centre must sit far enough inland to stay wholly on slab / inside stripe.
 const MOORING_BOLLARD_CENTER_Z := QUAY_LIP_DEPTH + QUAY_LIP_SLAB_GAP + 0.42
+## Gap between quay face (local Z≈0) and the hull's inland rail when berthed.
+const BERTH_QUAY_GAP_M := 0.15
 const BERTH_GAP_M    := 4.0
 const BERTH_MARGIN   := 1.5
 
@@ -620,26 +622,40 @@ func berth_has_ship(index: int) -> bool:
 	return int(b["status"]) == BerthStatus.OCCUPIED and b.get("ship", null) != null
 
 
-func berth_reference_local_midship(index: int) -> Vector3:
+func berth_reference_local_midship(index: int, half_beam_m: float = -1.0) -> Vector3:
 	# Must match _build_berths() / PortExpander slot centres — not ShipClass.berth_count().
+	var cx: float
 	if index >= 0 and index < _berth_data.size():
 		var b := _berth_data[index] as Dictionary
-		var cx: float = float(b["cx"])
-		var beam_m := ShipClass.beam(max_ship_class)
-		return Vector3(cx, WaveSurface.WATER_LEVEL, -beam_m * 0.5)
+		cx = float(b["cx"])
+	else:
+		var count := maxi(berth_count(), 1)
+		var slot_w := dock_length / float(count)
+		cx = -dock_length * 0.5 + slot_w * (float(index) + 0.5)
+	var hb := half_beam_m if half_beam_m > 0.0 else ShipClass.beam(max_ship_class) * 0.5
+	return Vector3(cx, WaveSurface.WATER_LEVEL, -(hb + BERTH_QUAY_GAP_M))
+
+
+func get_berth_cx(index: int) -> float:
+	if index >= 0 and index < _berth_data.size():
+		return float((_berth_data[index] as Dictionary)["cx"])
 	var count := maxi(berth_count(), 1)
 	var slot_w := dock_length / float(count)
-	var cx := -dock_length * 0.5 + slot_w * (float(index) + 0.5)
-	var beam_m := ShipClass.beam(max_ship_class)
-	return Vector3(cx, WaveSurface.WATER_LEVEL, -beam_m * 0.5)
+	return -dock_length * 0.5 + slot_w * (float(index) + 0.5)
+
+
+func get_berth_slot_half_width(index: int) -> float:
+	if index >= 0 and index < _berth_data.size():
+		return float((_berth_data[index] as Dictionary)["slot_w"]) * 0.5
+	return dock_length / float(maxi(berth_count(), 1)) * 0.5
 
 
 func berth_nominal_half_beam_m() -> float:
 	return ShipClass.beam(max_ship_class) * 0.5
 
 
-func get_berth_spawn_transform(index: int) -> Transform3D:
-	var local_pos := berth_reference_local_midship(index)
+func get_berth_spawn_transform(index: int, half_beam_m: float = -1.0) -> Transform3D:
+	var local_pos := berth_reference_local_midship(index, half_beam_m)
 	var dock_x    := global_transform.basis.x.normalized()
 	var ship_z    := -dock_x
 	var ship_y    := Vector3.UP
@@ -680,32 +696,25 @@ func spawn_player_ship(index: int, ship_scene_path: String = "") -> Node3D:
 			push_error("PortDock: ship scene root must be Node3D: %s" % path)
 			return null
 
-	var t := get_berth_spawn_transform(index)
-	ship.name = "PlayerShip"
-
 	var plot := get_parent()
 	if plot == null:
 		ship.queue_free()
 		return null
+	ship.name = "PlayerShip"
 	plot.add_child(ship)
 
-	var berth_draft_frac: float = 0.45
 	var body := ship as BoatBody
 	if body != null:
-		berth_draft_frac = body.design_draft_fraction
-		body.snap_to_transform(t)
-		body.place_at_waterline(WaveSurface.WATER_LEVEL, berth_draft_frac)
-		body.fit_to_port_berth(self, index)
+		body.dock_at_berth(self, index)
 	elif ship.has_method("place_at_waterline"):
-		ship.global_transform = t
-		ship.call("place_at_waterline", WaveSurface.WATER_LEVEL, berth_draft_frac)
+		ship.global_transform = get_berth_spawn_transform(index)
+		ship.call("place_at_waterline", WaveSurface.WATER_LEVEL)
 	else:
-		ship.global_transform = t
+		ship.global_transform = get_berth_spawn_transform(index)
 
 	var mooring := ship.find_child("MooringComponent", true, false) as MooringComponent
 	if mooring != null:
-		# Deferred so berth transform / waterline settle before cleat ↔ bollard pairing.
-		mooring.call_deferred("auto_moor", mooring.get_tree())
+		mooring.call_deferred("auto_moor_at_berth", mooring.get_tree(), index)
 
 	register_ship_at_berth(
 		index, body if body != null else ship as BoatBody, local_player_owner_id()
@@ -713,10 +722,8 @@ func spawn_player_ship(index: int, ship_scene_path: String = "") -> Node3D:
 
 	if body != null:
 		PlayerVessel.mark_player_ship(body)
-		# After the player's ship is marked, ask LocalPlayerView to apply any
-		# saved runtime state (fuel level, throttle stage). World-load tries
-		# this earlier but no ship existed yet; this is the actual moment
-		# where the active vessel exists.
+		# Saved runtime state restores fuel/throttle only — berth placement
+		# from dock_at_berth() must not be overwritten by an old ocean pose.
 		var view := get_tree().root.get_node_or_null("LocalPlayerView")
 		if view != null and view.has_method("apply_runtime_state_to_active_ship"):
 			view.call_deferred("apply_runtime_state_to_active_ship")
@@ -739,13 +746,10 @@ func assign_existing_ship_to_berth(index: int, ship: BoatBody) -> bool:
 	if ship.get_parent() != plot:
 		ship.reparent(plot)
 
-	var berth_xform := get_berth_spawn_transform(index)
-	ship.snap_to_transform(berth_xform)
-	ship.place_at_waterline(WaveSurface.WATER_LEVEL, ship.design_draft_fraction)
-	ship.fit_to_port_berth(self, index)
+	ship.dock_at_berth(self, index)
 
 	if mooring != null:
-		mooring.call_deferred("auto_moor", mooring.get_tree())
+		mooring.call_deferred("auto_moor_at_berth", mooring.get_tree(), index)
 
 	return register_ship_at_berth(index, ship, local_player_owner_id())
 
@@ -757,20 +761,20 @@ func place_ship_at_berth(index: int, ship: BoatBody) -> BoatBody:
 		PlayerVessel.despawn_all_ships(tree, ship)
 	if index < 0 or index >= _berth_data.size():
 		return null
-	var t    := get_berth_spawn_transform(index)
 	ship.name = "PlayerShip"
 	var plot := get_parent()
 	if plot == null:
 		return null
 	plot.add_child(ship)
-	ship.snap_to_transform(t)
-	ship.place_at_waterline(WaveSurface.WATER_LEVEL, ship.design_draft_fraction)
-	ship.fit_to_port_berth(self, index)
+	ship.dock_at_berth(self, index)
 	var mooring := ship.find_child("MooringComponent", true, false) as MooringComponent
 	if mooring != null:
-		mooring.call_deferred("auto_moor", mooring.get_tree())
+		mooring.call_deferred("auto_moor_at_berth", mooring.get_tree(), index)
 	register_ship_at_berth(index, ship, local_player_owner_id())
 	PlayerVessel.mark_player_ship(ship)
+	var view := get_tree().root.get_node_or_null("LocalPlayerView")
+	if view != null and view.has_method("apply_runtime_state_to_active_ship"):
+		view.call_deferred("apply_runtime_state_to_active_ship")
 	return ship
 
 

@@ -4,73 +4,7 @@ extends NpcInteractable
 
 ## Shipwright NPC — catalog showroom with 3D previews, prices, and commission.
 
-## Retail catalog — starter 13 m Coastal Trader is harbour-master only (StarterVessel).
-const HULL_CATALOG: Array[Dictionary] = [
-	{
-		"id":               "coastal_trader_long",
-		"display":          "Coastal Trader, Extended  •  15 m / 49 ft",
-		"ship_class_label": "Coastal Trader",
-		"hull_file":        "hull_coastal_trader_long.json",
-		"superstructure":   "bridge_coastal_trader",
-	},
-	{
-		"id":               "cargo_ship",
-		"display":          "Twin-Deck Cargo Coaster  •  20 m / 66 ft",
-		"ship_class_label": "Coastal Trader",
-		"hull_file":        "hull_cargo_ship.json",
-		"superstructure":   "bridge_cargo_ship",
-	},
-	{
-		"id":               "short_sea_coaster",
-		"display":          "Short Sea Coaster  •  22 m / 72 ft",
-		"ship_class_label": "Short Sea Coaster",
-		"hull_file":        "hull_short_sea_coaster.json",
-		"superstructure":   "bridge_short_sea_coaster",
-	},
-	{
-		"id":               "short_sea_coaster_long",
-		"display":          "Short Sea Coaster, Extended  •  25 m / 82 ft",
-		"ship_class_label": "Short Sea Coaster",
-		"hull_file":        "hull_short_sea_coaster_long.json",
-		"superstructure":   "bridge_short_sea_coaster",
-	},
-	{
-		"id":               "handysize_feeder",
-		"display":          "Handysize Feeder  •  35 m / 115 ft",
-		"ship_class_label": "Handysize Feeder",
-		"hull_file":        "hull_handysize_feeder.json",
-		"superstructure":   "bridge_handysize_feeder",
-	},
-	{
-		"id":               "handysize_feeder_long",
-		"display":          "Handysize Feeder, Extended  •  40 m / 131 ft",
-		"ship_class_label": "Handysize Feeder",
-		"hull_file":        "hull_handysize_feeder_long.json",
-		"superstructure":   "bridge_handysize_feeder",
-	},
-	{
-		"id":               "deep_sea_freighter",
-		"display":          "Deep Sea Freighter  •  50 m / 164 ft",
-		"ship_class_label": "Deep Sea Freighter",
-		"hull_file":        "hull_deep_sea_freighter.json",
-		"superstructure":   "bridge_deep_sea_freighter",
-	},
-	{
-		"id":               "deep_sea_freighter_long",
-		"display":          "Deep Sea Freighter, Extended  •  60 m / 197 ft",
-		"ship_class_label": "Deep Sea Freighter",
-		"hull_file":        "hull_deep_sea_freighter_long.json",
-		"superstructure":   "bridge_deep_sea_freighter",
-	},
-	{
-		"id":               "large_freighter",
-		"display":          "Large Freighter  •  60 m / 197 ft",
-		"ship_class_label": "Deep Sea Freighter",
-		"hull_file":        "hull_large.json",
-		"superstructure":   "bridge_deep_sea_freighter",
-	},
-]
-
+## Full hull catalog — starter 13 m Coastal Trader is harbour-master only (StarterVessel).
 var _catalog: ShipwrightCatalogPanel
 var _dialogue: DialoguePanel
 
@@ -99,7 +33,8 @@ func _on_ui_cancel() -> void:
 func _open_catalog() -> void:
 	if _dialogue != null and _dialogue.is_open():
 		_dialogue.hide_panel()
-	_catalog.open_catalog(HULL_CATALOG, 0)
+	var catalog: Array[Dictionary] = HullRegistry.catalog()
+	_catalog.open_catalog(catalog, 0)
 	_catalog.show_panel()
 
 
@@ -142,7 +77,7 @@ func _try_pay_for_commission(entry: Dictionary) -> bool:
 	if not FileAccess.file_exists(hull_path):
 		_show_commission_error("That hull is unavailable in the yard right now.")
 		return false
-	var hull_data := ShipBuilder._load_json(hull_path)
+	var hull_data := JsonUtil.load(hull_path)
 	if hull_data.is_empty() or not hull_data.has("parts"):
 		_show_commission_error("The hull blueprint is corrupted — please report this bug.")
 		return false
@@ -195,7 +130,6 @@ func _commission(entry: Dictionary) -> void:
 		return
 
 	PlayerVessel.mark_player_ship(ship)
-	_network_register_ship(ship, path)
 	# Freshly-built vessel sails with a full tank — captain pays the
 	# commission, the yard hands over a ready ship.
 	if ship.has_method("fill_tank"):
@@ -211,7 +145,10 @@ func _commission(entry: Dictionary) -> void:
 			var dock := _get_dock()
 			var anchor := dock.global_position if dock != null else global_position
 			ship.global_position = anchor + Vector3(0.0, 0.0, -20.0)
-			ship.call_deferred("place_at_waterline", WaveSurface.WATER_LEVEL, ship.design_draft_fraction)
+			ship.call_deferred("place_at_waterline", WaveSurface.WATER_LEVEL)
+
+	# Register for replication only after the hull has a real world transform.
+	_network_register_ship(ship, path, str(entry.get("id", "")))
 
 	var plot := get_parent() as PortPlot
 	if plot != null:
@@ -279,28 +216,29 @@ func _get_dock() -> PortDock:
 	return parent.get_node_or_null("PortDock") as PortDock
 
 
-func _network_register_ship(ship_node: Node3D, template_path: String) -> void:
+func _network_register_ship(ship_node: Node3D, template_path: String, preferred_hull_id: String = "") -> void:
 	var manager := get_node_or_null("/root/NetworkManager")
 	if manager == null:
 		return
-		
-	var hull_id := ""
-	var f := FileAccess.open(template_path, FileAccess.READ)
-	if f != null:
-		var json = JSON.parse_string(f.get_as_text())
-		f.close()
-		if json is Dictionary and json.has("hull"):
-			var hull_file: String = json["hull"]
-			hull_id = hull_file.replace("hull_", "").replace(".json", "")
-			
-	if hull_id.is_empty():
-		hull_id = "coastal_trader"
-		
-	var ship_id := "player_ship"
+
 	var session := get_node_or_null("/root/PlayerSession")
+	var record_hull_id := ""
+	if session != null and session.get("data") != null:
+		var record: Dictionary = session.data.get_active_vessel_record()
+		if not record.is_empty():
+			record_hull_id = str(record.get("hull_id", ""))
+
+	var hull_id := HullRegistry.resolve_id_from_template(
+		template_path,
+		preferred_hull_id if not preferred_hull_id.is_empty() else record_hull_id
+	)
+	if hull_id.is_empty():
+		hull_id = "cargo_ship_medium"
+
+	var ship_id := "player_ship"
 	if session != null and session.get("data") != null:
 		var record: Dictionary = session.data.get_active_vessel_record()
 		if not record.is_empty():
 			ship_id = String(record.get("uid", "player_ship"))
-			
+
 	manager.call("register_ship_spawn", ship_id, hull_id, ship_node)
