@@ -292,12 +292,64 @@ func register_cargo_spawn(cargo_id: String, pallet: Resource, node: Node3D) -> v
 		"cargo",
 		4, # Vector4: [x, y, z, yaw]
 		func():
-			return [node.global_position.x, node.global_position.y, node.global_position.z, node.rotation.y],
+			return _cargo_replication_state(node),
 		func():
-			var com := String(pallet.get("commodity")) if pallet.get("commodity") != null else "cargo"
-			var units := int(pallet.get("units")) if pallet.get("units") != null else 1
-			return "com=%s;units=%d" % [com, units]
+			return _cargo_replication_meta(pallet, node)
 	)
+
+
+func entity_id_for_node(target: Node) -> String:
+	if target == null:
+		return ""
+	for sender_id in _local_senders.keys():
+		var sender: Dictionary = _local_senders[sender_id]
+		var n: Node = sender.get("node") as Node
+		if n == null or not is_instance_valid(n):
+			continue
+		if n == target or n.is_ancestor_of(target):
+			return str(sender_id)
+	return ""
+
+
+func _cargo_replication_state(node: Node3D) -> Array:
+	var ship := _boat_body_ancestor(node)
+	var ship_id := entity_id_for_node(ship)
+	if ship != null and not ship_id.is_empty():
+		var local_xform := ship.global_transform.affine_inverse() * node.global_transform
+		var origin := local_xform.origin
+		return [origin.x, origin.y, origin.z, local_xform.basis.get_euler().y]
+	return [node.global_position.x, node.global_position.y, node.global_position.z, node.rotation.y]
+
+
+func _boat_body_ancestor(node: Node) -> BoatBody:
+	var current := node
+	while current != null:
+		if current is BoatBody:
+			return current as BoatBody
+		current = current.get_parent()
+	return null
+
+
+func _cargo_replication_meta(pallet: Resource, node: Node3D) -> String:
+	var com := String(pallet.get("commodity")) if pallet.get("commodity") != null else "cargo"
+	var units := int(pallet.get("units")) if pallet.get("units") != null else 1
+	var fp := Vector2i(1, 1)
+	var fp_raw: Variant = pallet.get("footprint")
+	if fp_raw is Vector2i:
+		fp = fp_raw
+	var parts: PackedStringArray = [
+		"com=%s" % com,
+		"units=%d" % units,
+		"fp=%d,%d" % [fp.x, fp.y],
+	]
+	var display := str(pallet.get("display_name")) if pallet.get("display_name") != null else ""
+	if not display.is_empty():
+		parts.append("dn=%s" % display)
+	var ship := _boat_body_ancestor(node)
+	var parent_id := entity_id_for_node(ship) if ship != null else ""
+	if not parent_id.is_empty():
+		parts.append("parent=%s" % parent_id)
+	return ";".join(parts)
 
 
 func unregister_cargo(cargo_id: String, delivered: bool = false) -> void:

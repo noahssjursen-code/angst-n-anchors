@@ -63,6 +63,10 @@ func apply_entities(entities_list: Array, local_id: String, scene_nodes: Diction
 		
 		# Track piloted/operated players to handle visual avatar hiding
 		var meta: String = ent["meta"]
+		if _is_delivered_cargo_meta(meta):
+			_despawn_remote_entity(id, scene_nodes)
+			continue
+
 		_parse_pilot_meta(meta, active_pilot_ids)
 		
 		# 2. Check if we already have this entity drawn
@@ -76,7 +80,7 @@ func apply_entities(entities_list: Array, local_id: String, scene_nodes: Diction
 				print("[ReplicationDrawingService] Binding pre-placed node: ", id)
 			else:
 				# Spawn dynamic visual node
-				node = _spawn_dynamic_entity_node(id, ent["type"])
+				node = _spawn_dynamic_entity_node(id, ent["type"], meta)
 				if node != null:
 					add_child(node)
 					node.global_position = ent["pos"]
@@ -104,6 +108,9 @@ func apply_entities(entities_list: Array, local_id: String, scene_nodes: Diction
 			
 			# Process Dynamic Parent/Relational Attachment Meta: "parent=parent_entity_id"
 			_process_attachment_meta(node, id, meta)
+
+			if ent["type"] == "cargo":
+				_sync_remote_cargo_visual(node as PalletNode, id, meta, state)
 		
 	# Update remote players avatar visibility (hide those driving ships/cranes)
 	_update_avatar_visibilities(active_pilot_ids)
@@ -278,7 +285,7 @@ func _set_berth_lock_state(berth_tag: String, ship_id: String, active: bool) -> 
 
 
 ## Spawns custom visual remote scenes based on generic types.
-func _spawn_dynamic_entity_node(id: String, type: String) -> Node3D:
+func _spawn_dynamic_entity_node(id: String, type: String, meta: String = "") -> Node3D:
 	# Custom mapping
 	if TYPE_SCENE_MAP.has(type):
 		var scene_res = load(TYPE_SCENE_MAP[type])
@@ -314,15 +321,13 @@ func _spawn_dynamic_entity_node(id: String, type: String) -> Node3D:
 		
 	# B. Remote Cargo Pallets
 	if type == "cargo":
-		var pallet_res := Pallet.new()
-		pallet_res.id = id
-		pallet_res.commodity = "cargo"
-		pallet_res.units = 1
-		pallet_res.footprint = Vector2i(1, 1)
-		
+		var pallet_res := _cargo_pallet_from_meta(id, meta)
+		var fp := pallet_res.footprint
+		var cell_w := 1.5 * float(fp.x)
+		var cell_d := 1.5 * float(fp.y)
 		var pallet_node := PalletNode.new()
 		pallet_node.name = "RemoteCargo_" + id
-		pallet_node.setup(pallet_res, 1.5, 1.5, Vector2i(1, 1))
+		pallet_node.setup(pallet_res, cell_w, cell_d, fp)
 		return pallet_node
 		
 	# C. Remote Ships
@@ -372,6 +377,67 @@ func _spawn_dynamic_entity_node(id: String, type: String) -> Node3D:
 			)
 				
 	return null
+
+
+func _is_delivered_cargo_meta(meta: String) -> bool:
+	return _parse_meta_map(meta).get("state", "") == "delivered"
+
+
+func _despawn_remote_entity(id: String, scene_nodes: Dictionary) -> void:
+	if not _visible_entities.has(id):
+		return
+	var state: Dictionary = _visible_entities[id]
+	var node: Node3D = state.get("node", null)
+	if is_instance_valid(node) and not scene_nodes.has(id) and node.get_parent() == self:
+		node.queue_free()
+	_visible_entities.erase(id)
+
+
+func _cargo_pallet_from_meta(id: String, meta: String) -> Pallet:
+	var parsed := _parse_meta_map(meta)
+	var commodity := str(parsed.get("com", "cargo"))
+	var units := maxi(int(parsed.get("units", "1")), 1)
+	var footprint := _cargo_footprint_from_meta(parsed, commodity, units)
+	var info := ContractRegistry.commodity_info(commodity)
+
+	var pallet_res := Pallet.new()
+	pallet_res.id = id
+	pallet_res.commodity = commodity
+	pallet_res.units = units
+	pallet_res.max_units = units
+	pallet_res.footprint = footprint
+	var display := str(parsed.get("dn", ""))
+	if display.is_empty() and not info.is_empty():
+		display = str(info.get("display", commodity.capitalize()))
+	pallet_res.display_name = display
+	return pallet_res
+
+
+func _cargo_footprint_from_meta(parsed: Dictionary, commodity: String, units: int) -> Vector2i:
+	var fp_raw := str(parsed.get("fp", ""))
+	if fp_raw.contains(","):
+		var bits := fp_raw.split(",")
+		if bits.size() >= 2:
+			return Vector2i(maxi(int(bits[0]), 1), maxi(int(bits[1]), 1))
+	var max_units := int(ContractRegistry.commodity_info(commodity).get("max_pallet_units", 4))
+	max_units = maxi(max_units, 1)
+	return PalletFactory.best_footprint(units, max_units)
+
+
+func _cargo_visual_key(meta: String) -> String:
+	return meta.strip_edges()
+
+
+func _sync_remote_cargo_visual(node: PalletNode, id: String, meta: String, state: Dictionary) -> void:
+	if node == null or not is_instance_valid(node):
+		return
+	var key := _cargo_visual_key(meta)
+	if str(state.get("cargo_visual_key", "")) == key:
+		return
+	state["cargo_visual_key"] = key
+	var pallet_res := _cargo_pallet_from_meta(id, meta)
+	var fp := pallet_res.footprint
+	node.setup(pallet_res, 1.5 * float(fp.x), 1.5 * float(fp.y), fp)
 
 
 func _disable_physics_in_subtree(n: Node) -> void:

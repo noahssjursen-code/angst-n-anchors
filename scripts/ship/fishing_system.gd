@@ -14,6 +14,10 @@ extends Node3D
 @export var trommel_rotation_speed: float = 3.0
 @export var drag_coefficient: float = 8000.0
 @export var catch_interval_seconds: float = 20.0
+## Seconds between each crate winched aboard during a haul.
+@export var crate_stagger_seconds: float = 5.0
+## Crates per successful haul (placed one at a time).
+@export var crates_per_haul: int = 4
 
 var _body: BoatBody = null
 var _propulsion: PropulsionComponent = null
@@ -24,6 +28,10 @@ var _drum_rotation_node: Node3D
 var _net_mesh: MeshInstance3D
 var _catch_timer: float = 0.0
 var _zone_catch_mul: float = 1.0
+var _haul_crates_remaining: int = 0
+var _haul_stagger_timer: float = 0.0
+var _haul_zone: Dictionary = {}
+var _haul_toast_sent: bool = false
 
 func _ready() -> void:
 	_body = get_parent() as BoatBody
@@ -47,6 +55,8 @@ func _ready() -> void:
 
 func toggle_trawling() -> void:
 	trawling = not trawling
+	if not trawling:
+		_cancel_haul(false)
 	if _body != null:
 		var controller = _body.find_child("BoatController", true, false) as BoatController
 		if controller != null:
@@ -226,13 +236,16 @@ func _physics_process(delta: float) -> void:
 			# Periodically catch fish if moving > 0.5 m/s (approx 1 knot)
 			if speed > 0.5:
 				_update_zone_catch_rate(_body.global_position)
-				_catch_timer += delta
-				var interval := catch_interval_seconds / maxf(_zone_catch_mul, 0.1)
-				if _catch_timer >= interval:
-					_catch_timer = 0.0
-					_try_catch_fish()
+				_process_haul(delta)
+				if _haul_crates_remaining <= 0:
+					_catch_timer += delta
+					var interval := catch_interval_seconds / maxf(_zone_catch_mul, 0.1)
+					if _catch_timer >= interval:
+						_catch_timer = 0.0
+						_try_start_haul()
 	else:
 		_catch_timer = 0.0
+		_cancel_haul(false)
 
 
 func _update_zone_catch_rate(sample_pos: Vector3) -> void:
@@ -243,8 +256,35 @@ func _update_zone_catch_rate(sample_pos: Vector3) -> void:
 	_zone_catch_mul = maxf(float(zone.get("catch_mul", 1.0)), 0.1)
 
 
-func _try_catch_fish() -> void:
-	if _body == null:
+func _process_haul(delta: float) -> void:
+	if _haul_crates_remaining <= 0:
+		return
+	_haul_stagger_timer -= delta
+	if _haul_stagger_timer > 0.0:
+		return
+	if _place_one_fish_crate():
+		_haul_crates_remaining -= 1
+		if _haul_crates_remaining > 0:
+			_haul_stagger_timer = crate_stagger_seconds
+		else:
+			_haul_zone = {}
+			_haul_toast_sent = false
+	else:
+		_notify_trawl("Deck is FULL! No room for fish!")
+		_cancel_haul(false)
+
+
+func _cancel_haul(reset_catch_timer: bool) -> void:
+	_haul_crates_remaining = 0
+	_haul_stagger_timer = 0.0
+	_haul_zone = {}
+	_haul_toast_sent = false
+	if reset_catch_timer:
+		_catch_timer = 0.0
+
+
+func _try_start_haul() -> void:
+	if _body == null or _haul_crates_remaining > 0:
 		return
 
 	var sample_pos := _body.global_position
@@ -259,9 +299,35 @@ func _try_catch_fish() -> void:
 	if decks.is_empty():
 		return
 
-	var units := 4
+	var crate_count := _crates_for_zone(zone)
+	if crate_count <= 0:
+		return
+
+	_haul_zone = zone
+	_haul_crates_remaining = crate_count
+	_haul_stagger_timer = 0.0
+	_haul_toast_sent = false
+
+
+func _crates_for_zone(zone: Dictionary) -> int:
+	var catch_mul := float(zone.get("catch_mul", 1.0))
+	if catch_mul >= 1.4:
+		return maxi(crates_per_haul, 1)
+	if catch_mul >= 1.1:
+		return maxi(crates_per_haul - 1, 1)
+	if catch_mul >= 0.85:
+		return maxi(mini(crates_per_haul, 3), 1)
+	return maxi(mini(crates_per_haul, 2), 1)
+
+
+func _place_one_fish_crate() -> bool:
+	if _body == null:
+		return false
+
+	var zone := _haul_zone
 	var price_mul := float(zone.get("price_mul", 1.0)) if not zone.is_empty() else 1.0
 	var tier_label := str(zone.get("tier_label", ""))
+	var crate_value := ContractRegistry.fish_crate_value(price_mul)
 
 	var fish_pallet := Pallet.new()
 	fish_pallet.id = UuidUtil.generate()
@@ -270,28 +336,25 @@ func _try_catch_fish() -> void:
 	fish_pallet.destination_port_id = ""
 	fish_pallet.commodity = "fish"
 	fish_pallet.display_name = "Fresh Fish" if tier_label.is_empty() else "Fresh Fish (%s)" % tier_label
-	fish_pallet.units = units
-	fish_pallet.max_units = units
-	fish_pallet.footprint = Vector2i(2, 2)
-	fish_pallet.mass_kg = 800.0
-	fish_pallet.value_gold = ContractRegistry.fish_crate_value(price_mul)
+	fish_pallet.units = 1
+	fish_pallet.max_units = 1
+	fish_pallet.footprint = Vector2i(1, 1)
+	fish_pallet.mass_kg = 200.0
+	fish_pallet.value_gold = crate_value
 
-	var placed := false
+	var decks := _body.find_children("*", "CargoDeckComponent", true, false)
 	for deck_node in decks:
 		var deck := deck_node as CargoDeckComponent
-		var idx := deck.add_pallet(fish_pallet)
-		if idx >= 0:
-			placed = true
-			break
-
-	if placed:
-		var pay_line := PlayerData.format_money(fish_pallet.value_gold)
-		if tier_label.is_empty() or tier_label == "Normal":
-			_notify_trawl("Caught Fresh Fish — %s at port" % pay_line)
-		else:
-			_notify_trawl("%s grounds — crate worth %s" % [tier_label, pay_line])
-	else:
-		_notify_trawl("Deck is FULL! No room for fish!")
+		if deck.add_pallet(fish_pallet) >= 0:
+			if not _haul_toast_sent:
+				_haul_toast_sent = true
+				var pay_line := PlayerData.format_money(crate_value)
+				if tier_label.is_empty() or tier_label == "Normal":
+					_notify_trawl("Fish on deck — %s per crate at port" % pay_line)
+				else:
+					_notify_trawl("%s grounds — %s per crate" % [tier_label, pay_line])
+			return true
+	return false
 
 
 func _notify_trawl(message: String) -> void:
