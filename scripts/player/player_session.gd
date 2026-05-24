@@ -18,6 +18,7 @@ static func format_money(amount: int) -> String:
 signal marks_changed(new_balance: int)
 signal data_loaded(data: PlayerData)
 signal save_completed(success: bool)
+signal vessels_synced()
 
 var data: PlayerData = PlayerData.new()
 
@@ -112,6 +113,11 @@ func set_captain_profile(captain_id: String, display_name: String, marks: int, a
 		data.appearance = appearance
 	data_loaded.emit(data)
 	_request_save()
+	VesselSync.pull_captain_vessel(self)
+
+
+func notify_vessels_synced() -> void:
+	vessels_synced.emit()
 
 
 func begin_new_captain(display_name: String, appearance: CharacterAppearance) -> void:

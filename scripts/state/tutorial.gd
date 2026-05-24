@@ -15,7 +15,7 @@ const DEFAULT_DURATION : float = 6.0
 
 const HINTS := {
 	"welcome": {
-		"text": "Welcome aboard, Captain. Walk over to the Harbour Master to request a berth.",
+		"text": "Welcome aboard, Captain. Visit the Shipwright to commission your first fishing trawler.",
 		"duration": 8.0,
 	},
 	"first_berth": {

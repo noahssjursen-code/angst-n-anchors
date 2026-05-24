@@ -23,6 +23,7 @@ var _trommel_winch: Node3D
 var _drum_rotation_node: Node3D
 var _net_mesh: MeshInstance3D
 var _catch_timer: float = 0.0
+var _zone_catch_mul: float = 1.0
 
 func _ready() -> void:
 	_body = get_parent() as BoatBody
@@ -224,38 +225,57 @@ func _physics_process(delta: float) -> void:
 
 			# Periodically catch fish if moving > 0.5 m/s (approx 1 knot)
 			if speed > 0.5:
+				_update_zone_catch_rate(_body.global_position)
 				_catch_timer += delta
-				if _catch_timer >= catch_interval_seconds:
+				var interval := catch_interval_seconds / maxf(_zone_catch_mul, 0.1)
+				if _catch_timer >= interval:
 					_catch_timer = 0.0
 					_try_catch_fish()
 	else:
 		_catch_timer = 0.0
 
 
+func _update_zone_catch_rate(sample_pos: Vector3) -> void:
+	if not FishingField.is_initialized():
+		_zone_catch_mul = 1.0
+		return
+	var zone := FishingField.sample(sample_pos)
+	_zone_catch_mul = maxf(float(zone.get("catch_mul", 1.0)), 0.1)
+
+
 func _try_catch_fish() -> void:
 	if _body == null:
 		return
-		
-	# Find all cargo decks on the boat
+
+	var sample_pos := _body.global_position
+	var zone := FishingField.sample(sample_pos) if FishingField.is_initialized() else {}
+	if FishingField.is_initialized() and not bool(zone.get("open_water", false)):
+		_notify_trawl("Too close to shore — move to open water")
+		return
+	if float(zone.get("catch_mul", 1.0)) < 0.2:
+		return
+
 	var decks := _body.find_children("*", "CargoDeckComponent", true, false)
 	if decks.is_empty():
 		return
-		
-	# Build the fish pallet
+
+	var units := 4
+	var price_mul := float(zone.get("price_mul", 1.0)) if not zone.is_empty() else 1.0
+	var tier_label := str(zone.get("tier_label", ""))
+
 	var fish_pallet := Pallet.new()
 	fish_pallet.id = UuidUtil.generate()
 	fish_pallet.contract_id = ""
 	fish_pallet.origin_port_id = ""
 	fish_pallet.destination_port_id = ""
 	fish_pallet.commodity = "fish"
-	fish_pallet.display_name = "Fresh Fish"
-	fish_pallet.units = 4
-	fish_pallet.max_units = 4
+	fish_pallet.display_name = "Fresh Fish" if tier_label.is_empty() else "Fresh Fish (%s)" % tier_label
+	fish_pallet.units = units
+	fish_pallet.max_units = units
 	fish_pallet.footprint = Vector2i(2, 2)
 	fish_pallet.mass_kg = 800.0
-	fish_pallet.value_gold = 64
-	
-	# Try to add to any of the cargo decks
+	fish_pallet.value_gold = ContractRegistry.fish_crate_value(price_mul)
+
 	var placed := false
 	for deck_node in decks:
 		var deck := deck_node as CargoDeckComponent
@@ -263,16 +283,26 @@ func _try_catch_fish() -> void:
 		if idx >= 0:
 			placed = true
 			break
-			
-	# Show toast notification
-	var controller = _body.find_child("BoatController", true, false) as BoatController
-	if controller != null:
-		var hud = controller.get("_ship_hud")
-		if hud != null and hud.has_method("show_toast"):
-			if placed:
-				hud.show_toast("Caught a crate of Fresh Fish!")
-			else:
-				hud.show_toast("Deck is FULL! No room for fish!")
+
+	if placed:
+		var pay_line := PlayerData.format_money(fish_pallet.value_gold)
+		if tier_label.is_empty() or tier_label == "Normal":
+			_notify_trawl("Caught Fresh Fish — %s at port" % pay_line)
+		else:
+			_notify_trawl("%s grounds — crate worth %s" % [tier_label, pay_line])
+	else:
+		_notify_trawl("Deck is FULL! No room for fish!")
+
+
+func _notify_trawl(message: String) -> void:
+	if _body == null:
+		return
+	var controller := _body.find_child("BoatController", true, false) as BoatController
+	if controller == null:
+		return
+	var hud = controller.get("_ship_hud")
+	if hud != null and hud.has_method("show_toast"):
+		hud.show_toast(message)
 
 
 func _update_trawl_visuals() -> void:
