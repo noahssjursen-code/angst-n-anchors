@@ -100,6 +100,7 @@ func apply_entities(entities_list: Array, local_id: String, scene_nodes: Diction
 	var local_senders: Dictionary = {}
 	for sid in local_sender_ids:
 		local_senders[str(sid)] = true
+	_purge_local_authority_echoes(local_id, local_senders, scene_nodes)
 	var active_snapshot_ids: Dictionary = {}
 	var active_pilot_ids: Dictionary = {}
 	var current_frame_berths: Dictionary = {}
@@ -110,6 +111,12 @@ func apply_entities(entities_list: Array, local_id: String, scene_nodes: Diction
 		if _should_skip_remote_entity(ent, local_id, local_senders, scene_nodes):
 			_despawn_remote_entity(id, scene_nodes)
 			continue
+		if str(ent.get("type", "")) == "cargo":
+			var nm := get_node_or_null("/root/NetworkManager")
+			if nm != null and nm.has_method("is_snapshot_entity_locally_authoritative"):
+				if bool(nm.call("is_snapshot_entity_locally_authoritative", ent)):
+					_despawn_remote_entity(id, scene_nodes)
+					continue
 			
 		active_snapshot_ids[id] = true
 		
@@ -130,7 +137,7 @@ func apply_entities(entities_list: Array, local_id: String, scene_nodes: Diction
 			if scene_nodes.has(id):
 				node = scene_nodes[id] as Node3D
 			else:
-				node = _spawn_dynamic_entity_node(id, ent["type"], meta)
+				node = _spawn_dynamic_entity_node(id, ent["type"], meta, ent)
 				if node != null:
 					add_child(node)
 					node.global_position = ent["pos"]
@@ -156,6 +163,7 @@ func apply_entities(entities_list: Array, local_id: String, scene_nodes: Diction
 			state["target_pos"] = ent["pos"]
 			state["target_payload"] = ent["payload"]
 			state["meta"] = ent["meta"]
+			state["owner_id"] = str(ent.get("owner_id", ""))
 			state["last_seen_ms"] = now_ms
 			_visible_entities[id] = state
 			
@@ -163,7 +171,7 @@ func apply_entities(entities_list: Array, local_id: String, scene_nodes: Diction
 			_parse_berth_meta(id, ent["type"], meta, current_frame_berths)
 			
 			# Process Dynamic Parent/Relational Attachment Meta: "parent=parent_entity_id"
-			_process_attachment_meta(node, id, meta)
+			_process_attachment_meta(node, id, meta, local_id, local_senders, scene_nodes)
 
 			if ent["type"] == "cargo":
 				_sync_remote_cargo_visual(node as PalletNode, id, meta, state)
@@ -266,11 +274,31 @@ func _parse_berth_meta(ship_id: String, type: String, meta: String, current_fram
 
 
 ## Handles generic parent-child reparenting loops
-func _process_attachment_meta(node: Node3D, entity_id: String, meta: String) -> void:
+func _process_attachment_meta(
+	node: Node3D,
+	entity_id: String,
+	meta: String,
+	local_id: String,
+	local_senders: Dictionary,
+	scene_nodes: Dictionary,
+) -> void:
 	var parsed := _parse_meta_map(meta)
 	var parent_tag: String = parsed.get("parent", "")
 	
 	if not parent_tag.is_empty():
+		# Owned cargo parented to our ship must never become a remote ghost.
+		if local_senders.has(parent_tag):
+			_despawn_remote_entity(entity_id, scene_nodes)
+			return
+		if not local_id.is_empty() and parent_tag.begins_with(local_id + "_"):
+			_despawn_remote_entity(entity_id, scene_nodes)
+			return
+		var nm := get_node_or_null("/root/NetworkManager")
+		if nm != null and nm.has_method("get_local_registered_node"):
+			var local_parent: Node = nm.call("get_local_registered_node", parent_tag)
+			if local_parent != null:
+				_despawn_remote_entity(entity_id, scene_nodes)
+				return
 		# Locate parent node
 		if _visible_entities.has(parent_tag):
 			var parent_state: Dictionary = _visible_entities[parent_tag]
@@ -342,7 +370,13 @@ func _set_berth_lock_state(berth_tag: String, ship_id: String, active: bool) -> 
 
 
 ## Spawns custom visual remote scenes based on generic types.
-func _spawn_dynamic_entity_node(id: String, type: String, meta: String = "") -> Node3D:
+func _spawn_dynamic_entity_node(id: String, type: String, meta: String = "", ent: Dictionary = {}) -> Node3D:
+	var nm := get_node_or_null("/root/NetworkManager")
+	if not ent.is_empty() and nm != null and nm.has_method("is_snapshot_entity_locally_authoritative"):
+		if bool(nm.call("is_snapshot_entity_locally_authoritative", ent)):
+			return null
+	if nm != null and nm.has_method("has_local_entity_id") and bool(nm.call("has_local_entity_id", id)):
+		return null
 	# Custom mapping
 	if TYPE_SCENE_MAP.has(type):
 		var scene_res = load(TYPE_SCENE_MAP[type])
@@ -377,17 +411,24 @@ func _spawn_dynamic_entity_node(id: String, type: String, meta: String = "") -> 
 		
 	# B. Remote Cargo Pallets
 	if type == "cargo":
+		if _local_deck_pallet_exists(id):
+			return null
 		var pallet_res := _cargo_pallet_from_meta(id, meta)
 		var fp := pallet_res.footprint
 		var cell_w := 1.5 * float(fp.x)
 		var cell_d := 1.5 * float(fp.y)
 		var pallet_node := PalletNode.new()
 		pallet_node.name = "RemoteCargo_" + id
+		pallet_node.is_network_remote_proxy = true
+		pallet_node.is_network_local_authority = false
 		pallet_node.setup(pallet_res, cell_w, cell_d, fp)
 		return pallet_node
 		
 	# C. Remote Ships
 	if type.begins_with("ship_"):
+		if nm != null and nm.has_method("get_local_registered_node"):
+			if nm.call("get_local_registered_node", id) != null:
+				return null
 		var hull_id := HullRegistry.resolve_network_hull_id(
 			HullRegistry.hull_id_from_network_type(type)
 		)
@@ -445,40 +486,123 @@ func _is_removed_entity_meta(meta: String) -> bool:
 	return state == "delivered" or state == "despawned"
 
 
+func _purge_local_authority_echoes(
+	local_id: String,
+	local_senders: Dictionary,
+	scene_nodes: Dictionary,
+) -> void:
+	for id_variant in _visible_entities.keys().duplicate():
+		var id := String(id_variant)
+		if local_senders.has(id):
+			_despawn_remote_entity(id, scene_nodes)
+			continue
+		var nm := get_node_or_null("/root/NetworkManager")
+		if nm != null and nm.has_method("has_local_entity_id") and bool(nm.call("has_local_entity_id", id)):
+			_despawn_remote_entity(id, scene_nodes)
+			continue
+		var state: Dictionary = _visible_entities[id]
+		var ent_type := str(state.get("type", ""))
+		var meta := str(state.get("meta", ""))
+		var parent_id := str(_parse_meta_map(meta).get("parent", ""))
+		if not parent_id.is_empty():
+			if local_senders.has(parent_id):
+				_despawn_remote_entity(id, scene_nodes)
+				continue
+		if not local_id.is_empty() and parent_id.begins_with(local_id + "_"):
+			_despawn_remote_entity(id, scene_nodes)
+			continue
+		if nm != null and nm.has_method("get_local_registered_node"):
+			if nm.call("get_local_registered_node", parent_id) != null:
+				_despawn_remote_entity(id, scene_nodes)
+				continue
+		if _owner_is_local_player(str(state.get("owner_id", "")), local_id):
+			_despawn_remote_entity(id, scene_nodes)
+			continue
+		# Cargo parented to our ship must never exist as a remote proxy.
+		if ent_type == "cargo" and not parent_id.is_empty():
+			if local_senders.has(parent_id) or parent_id.begins_with(local_id + "_"):
+				_despawn_remote_entity(id, scene_nodes)
+
+
+## Public entry for NetworkManager to purge owned echoes every frame.
+func purge_local_authority_echoes(
+	local_id: String,
+	local_sender_ids: Array,
+	scene_nodes: Dictionary,
+) -> void:
+	var local_senders: Dictionary = {}
+	for sid in local_sender_ids:
+		local_senders[str(sid)] = true
+	_purge_local_authority_echoes(local_id, local_senders, scene_nodes)
+
+
 func _should_skip_remote_entity(
 	ent: Dictionary,
 	local_id: String,
 	local_senders: Dictionary,
 	scene_nodes: Dictionary,
 ) -> bool:
+	var nm := get_node_or_null("/root/NetworkManager")
+	if nm != null and nm.has_method("is_snapshot_entity_locally_authoritative"):
+		if bool(nm.call("is_snapshot_entity_locally_authoritative", ent)):
+			return true
+
 	var id := str(ent.get("id", ""))
 	if id.is_empty():
 		return true
-	if not local_id.is_empty() and id == local_id:
-		return true
+	if not local_id.is_empty():
+		if id == local_id or id.begins_with(local_id + "_"):
+			return true
 	if local_senders.has(id):
 		return true
 
-	var owner_id := str(ent.get("owner_id", ""))
-	if not owner_id.is_empty() and not local_id.is_empty() and owner_id == local_id:
+	if _owner_is_local_player(str(ent.get("owner_id", "")), local_id):
 		return true
-	if not owner_id.is_empty():
-		var local_name := _local_display_name(local_id)
-		if not local_name.is_empty() and owner_id == local_name:
-			return true
-		var captain_id := _local_captain_id()
-		if not captain_id.is_empty() and owner_id == captain_id:
-			return true
 
 	var meta := str(ent.get("meta", ""))
 	var parent_id := str(_parse_meta_map(meta).get("parent", ""))
-	if not parent_id.is_empty() and local_senders.has(parent_id):
-		return true
+	if not parent_id.is_empty():
+		if local_senders.has(parent_id):
+			return true
+		if not local_id.is_empty() and parent_id.begins_with(local_id + "_"):
+			return true
+
+	# Never draw our own deck cargo from snapshots — CargoDeckComponent owns it.
+	if str(ent.get("type", "")) == "cargo" and not parent_id.is_empty():
+		if local_senders.has(parent_id) or parent_id.begins_with(local_id + "_"):
+			return true
 
 	# Scene cranes we operate locally — snapshot is our own echo.
 	if scene_nodes.has(id) and local_senders.has(id):
 		return true
 
+	return false
+
+
+func _local_deck_pallet_exists(cargo_id: String) -> bool:
+	var nm := get_node_or_null("/root/NetworkManager")
+	if nm != null and nm.has_method("has_local_entity_id") and bool(nm.call("has_local_entity_id", cargo_id)):
+		return true
+	for n in get_tree().get_nodes_in_group(PalletNode.GROUP):
+		var pn := n as PalletNode
+		if pn == null or pn.is_network_remote_proxy:
+			continue
+		if pn.pallet != null and pn.pallet.id == cargo_id:
+			return true
+	return false
+
+
+func _owner_is_local_player(owner_id: String, local_id: String) -> bool:
+	if owner_id.is_empty():
+		return false
+	if not local_id.is_empty() and owner_id == local_id:
+		return true
+	var local_name := _local_display_name(local_id)
+	if not local_name.is_empty() and owner_id == local_name:
+		return true
+	var captain_id := _local_captain_id()
+	if not captain_id.is_empty() and owner_id == captain_id:
+		return true
 	return false
 
 

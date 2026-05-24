@@ -7,12 +7,14 @@ Findings from multiplayer playtests. Add new entries under **Open issues** as we
 ## Fixed / needs retest
 
 - **#5 — Stale remote ships after respawn:** Client sends `state=despawned` on hull free; server deletes entity; removed owned-entity LastSeen blanket refresh. **Redeploy MP server required.**
-- **Replication pass (2026-05-24, unverified solo):** skip/despawn local echoes for owned cargo/cranes; `adopt_scene_node` for cranes; remote ships can't be mooring targets; company panel uses full `owned_vessels`.
+- **Replication pass (2026-05-24, unverified solo):** skip/despawn local echoes for owned cargo/cranes; `adopt_scene_node` for cranes; remote ships can't be mooring targets; company panel uses full `owned_vessels`. **2026-05-25:** server no longer echoes `OwnerID == observer` entities; client purges owned cargo ghosts each snapshot.
 - **Main menu:** no UDP connect or ghost ships/fleet on menu load.
 
 ## Open issues (fix landed — confirm on next 2-player session)
 
 ### 1. Cargo replication — duplicate local + remote instances everywhere
+
+**Handoff doc:** See [`CARGO_REPLICATION_HANDOFF.md`](CARGO_REPLICATION_HANDOFF.md) for full agent context, root causes, fixes attempted, and retest steps.
 
 **Status:** Open  
 **Severity:** High  

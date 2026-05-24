@@ -218,6 +218,17 @@ func _dock_slot_forward_for_post(post: Node) -> bool:
 
 
 func _integrate_mooring_constraints(state: PhysicsDirectBodyState3D) -> void:
+	if bow_line_tied and (_front_post == null or not is_instance_valid(_front_post)):
+		bow_line_tied = false
+	if stern_line_tied and (_rear_post == null or not is_instance_valid(_rear_post)):
+		stern_line_tied = false
+	
+	var has_any_line := bow_line_tied or stern_line_tied
+	if not has_any_line:
+		is_moored = false
+		_hide_all_rope_segments()
+		return
+
 	if not is_moored or _body == null:
 		return
 
@@ -854,6 +865,17 @@ func _orient_cylinder(mi: MeshInstance3D, a: Vector3, b: Vector3) -> void:
 
 
 func _update_rope_visuals() -> void:
+	if bow_line_tied and (_front_post == null or not is_instance_valid(_front_post)):
+		bow_line_tied = false
+	if stern_line_tied and (_rear_post == null or not is_instance_valid(_rear_post)):
+		stern_line_tied = false
+	
+	var has_any_line := bow_line_tied or stern_line_tied
+	if not has_any_line:
+		is_moored = false
+		_hide_all_rope_segments()
+		return
+
 	_ensure_rope_root()
 	if bow_line_tied and _bow_point != null and _front_post != null:
 		var a := _cleat_anchor(_bow_point)

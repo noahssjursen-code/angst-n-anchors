@@ -110,9 +110,10 @@ func _find_active_mooring() -> MooringComponent:
 		if body == null:
 			continue
 		var d2 := global_position.distance_squared_to(body.global_position)
-		if d2 < best_d2:
-			best_d2 = d2
-			nearest = mc
+		if d2 < 1600.0: # 40 meters squared maximum distance
+			if d2 < best_d2:
+				best_d2 = d2
+				nearest = mc
 	return nearest
 
 

@@ -36,6 +36,10 @@ signal released(node: PalletNode)
 var pallet: Pallet = null
 var cell_w: float  = 1.5
 var cell_d: float  = 1.5
+## True for deck/apron pallets this client simulates. Remote MP proxies must stay false.
+var is_network_local_authority: bool = false
+## True for ReplicationDrawingService spawns — no pickup, sell, or deck mutation.
+var is_network_remote_proxy: bool = false
 ## Footprint to draw in this node's LOCAL frame. Usually the deck-local
 ## footprint (= pallet.footprint maybe with X/Z swapped if the deck is
 ## rotated 90° from world). Defaults to pallet.footprint when setup is

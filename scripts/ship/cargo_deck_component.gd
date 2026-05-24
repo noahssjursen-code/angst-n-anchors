@@ -217,6 +217,22 @@ func get_all_pallets() -> Array[Pallet]:
 	return out
 
 
+## Re-register every on-deck pallet with NetworkManager (e.g. after MP session starts).
+func reregister_network_pallets() -> void:
+	if _is_autonomous_npc_deck():
+		return
+	var manager := get_node_or_null("/root/NetworkManager")
+	if manager == null or not manager.has_method("register_cargo_spawn"):
+		return
+	var root := _ensure_pallet_root()
+	if root == null:
+		return
+	for pallet in get_all_pallets():
+		var node := root.get_node_or_null(_pallet_node_name(pallet)) as Node3D
+		if node != null and is_instance_valid(node):
+			manager.call("register_cargo_spawn", pallet.id, pallet, node)
+
+
 func get_pallet_at_cell(cell_idx: int) -> Pallet:
 	return _cells.get(cell_idx, null) as Pallet
 

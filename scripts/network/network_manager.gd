@@ -16,6 +16,9 @@ var drawing_service: Node3D = null
 # Outbound generic senders: id -> { "node": Node, "type": String, "format": int, "state_callable": Callable, "meta_callable": Callable }
 var _local_senders: Dictionary = {}
 
+# Wire ids are truncated to 64 bytes; map truncated -> canonical sender id.
+var _wire_id_aliases: Dictionary = {}
+
 # Static pre-placed level nodes registered by ID: id -> Node
 var _scene_nodes: Dictionary = {}
 
@@ -58,6 +61,14 @@ func _ready() -> void:
 func _process(delta: float) -> void:
 	if not _session_active:
 		return
+	# Drop any owned/local cargo/ship echoes before interpolation can move them.
+	if drawing_service != null and drawing_service.has_method("purge_local_authority_echoes"):
+		drawing_service.call(
+			"purge_local_authority_echoes",
+			get_local_player_id(),
+			_local_sender_ids_for_filter(),
+			_scene_nodes
+		)
 	# 1. Delegate dynamic remote entities interpolation to the drawing service
 	drawing_service.interpolate_entities(delta, position_smoothness, payload_smoothness)
 	
@@ -74,7 +85,11 @@ func register_sender(node: Node, id: String, type: String, format: int, state_ca
 	if id.is_empty() or node == null or not is_instance_valid(node):
 		return
 	
-	_local_senders[id] = {
+	var wire_id := _truncate_wire_id(id)
+	if id != wire_id:
+		_wire_id_aliases[id] = wire_id
+	
+	_local_senders[wire_id] = {
 		"node": node,
 		"type": type,
 		"format": format,
@@ -86,12 +101,84 @@ func register_sender(node: Node, id: String, type: String, format: int, state_ca
 		"last_sent_time_ms": 0
 	}
 	if drawing_service != null:
-		drawing_service.clear_entity_remote_state(id)
+		drawing_service.clear_entity_remote_state(wire_id)
+		if wire_id != id:
+			drawing_service.clear_entity_remote_state(id)
 
 
 ## Unregisters a node from replication.
 func unregister_sender(id: String) -> void:
-	_local_senders.erase(id)
+	var canonical := _resolve_local_sender_id(id)
+	if canonical.is_empty():
+		_local_senders.erase(id)
+		_wire_id_aliases.erase(id)
+		return
+	_local_senders.erase(canonical)
+	for alias_id in _wire_id_aliases.keys():
+		if str(_wire_id_aliases[alias_id]) == canonical:
+			_wire_id_aliases.erase(alias_id)
+
+
+func is_snapshot_entity_locally_authoritative(ent: Dictionary) -> bool:
+	var local_senders: Dictionary = {}
+	for sid in _local_sender_ids_for_filter():
+		local_senders[str(sid)] = true
+	return _entity_is_locally_authoritative(ent, get_local_player_id(), local_senders)
+
+
+func get_local_registered_node(entity_id: String) -> Node:
+	var canonical := _resolve_local_sender_id(entity_id)
+	if canonical.is_empty():
+		return null
+	var sender: Variant = _local_senders.get(canonical, null)
+	if sender == null:
+		return null
+	var node: Node = sender["node"] as Node
+	if node == null or not is_instance_valid(node):
+		return null
+	return node
+
+
+func _local_sender_ids_for_filter() -> Array:
+	var ids: Array = []
+	var seen: Dictionary = {}
+	for sid in _local_senders.keys():
+		var wire_id := str(sid)
+		if seen.has(wire_id):
+			continue
+		seen[wire_id] = true
+		ids.append(wire_id)
+	for full_id in _wire_id_aliases.keys():
+		var alias := str(full_id)
+		if not seen.has(alias):
+			seen[alias] = true
+			ids.append(alias)
+	return ids
+
+
+func _truncate_wire_id(id: String) -> String:
+	var bytes := id.to_utf8_buffer()
+	if bytes.size() <= WireProtocolClass.MAX_STRING_LEN:
+		return id
+	return bytes.slice(0, WireProtocolClass.MAX_STRING_LEN).get_string_from_utf8()
+
+
+func _resolve_local_sender_id(id: String) -> String:
+	if id.is_empty():
+		return ""
+	if _local_senders.has(id):
+		return id
+	if _wire_id_aliases.has(id):
+		return str(_wire_id_aliases[id])
+	return ""
+
+
+func _has_local_sender(id: String) -> bool:
+	return not _resolve_local_sender_id(id).is_empty()
+
+
+func has_local_entity_id(id: String) -> bool:
+	return _has_local_sender(id)
 
 
 ## Registers a static/pre-placed scene node by its ID (e.g. static cranes).
@@ -153,7 +240,7 @@ func _tick_outbound(delta: float) -> void:
 		var sender: Dictionary = _local_senders[id]
 		var node = sender["node"]
 		if not is_instance_valid(node):
-			_local_senders.erase(id)
+			unregister_sender(str(id))
 			continue
 			
 		var pos: Vector3 = node.global_position if node is Node3D else Vector3.ZERO
@@ -212,15 +299,98 @@ func _on_packet_received(msg_type: int, payload: PackedByteArray) -> void:
 		if snapshot.is_empty():
 			return
 			
-		# Forward snapshots directly to drawing service
+		var filtered := _filter_snapshot_entities(snapshot.get("entities", []))
 		drawing_service.apply_entities(
-			snapshot.get("entities", []),
+			filtered,
 			get_local_player_id(),
 			_scene_nodes,
-			_local_senders.keys(),
+			_local_sender_ids_for_filter(),
 			Time.get_ticks_msec(),
 			entity_timeout_ms
 		)
+
+
+func _filter_snapshot_entities(entities: Array) -> Array:
+	var local_id := get_local_player_id()
+	var local_senders: Dictionary = {}
+	for sid in _local_sender_ids_for_filter():
+		local_senders[str(sid)] = true
+	var filtered: Array = []
+	for ent in entities:
+		if not ent is Dictionary:
+			continue
+		if _entity_is_locally_authoritative(ent, local_id, local_senders):
+			var id := str(ent.get("id", ""))
+			if not id.is_empty() and drawing_service != null and drawing_service.has_method("clear_entity_remote_state"):
+				drawing_service.call("clear_entity_remote_state", id)
+			continue
+		filtered.append(ent)
+	return filtered
+
+
+func _entity_is_locally_authoritative(ent: Dictionary, local_id: String, local_senders: Dictionary) -> bool:
+	var id := str(ent.get("id", ""))
+	if id.is_empty():
+		return true
+	if local_senders.has(id) or _has_local_sender(id):
+		return true
+	if not local_id.is_empty():
+		if id == local_id or id.begins_with(local_id + "_"):
+			return true
+		var wire_local := _truncate_wire_id(local_id)
+		if id == wire_local or id.begins_with(wire_local + "_"):
+			return true
+		var owner_id := str(ent.get("owner_id", ""))
+		if owner_id == local_id or owner_id == wire_local:
+			return true
+		if _owner_matches_local_player(owner_id, local_id):
+			return true
+	var meta := str(ent.get("meta", ""))
+	var parent_id := _meta_value(meta, "parent")
+	if not parent_id.is_empty():
+		if local_senders.has(parent_id) or _has_local_sender(parent_id):
+			return true
+		if not local_id.is_empty() and parent_id.begins_with(local_id + "_"):
+			return true
+		if not local_id.is_empty() and parent_id.begins_with(_truncate_wire_id(local_id) + "_"):
+			return true
+	if str(ent.get("type", "")) == "cargo":
+		if not parent_id.is_empty() and (
+			local_senders.has(parent_id)
+			or _has_local_sender(parent_id)
+			or parent_id.begins_with(local_id + "_")
+		):
+			return true
+	return false
+
+
+func _owner_matches_local_player(owner_id: String, local_id: String) -> bool:
+	if owner_id.is_empty() or local_id.is_empty():
+		return false
+	var local_name := local_id
+	var idx := local_id.rfind("_")
+	if idx > 0:
+		var suffix := local_id.substr(idx + 1)
+		if suffix.is_valid_int():
+			local_name = local_id.substr(0, idx)
+	if owner_id == local_name:
+		return true
+	var session := get_node_or_null("/root/PlayerSession")
+	if session != null and session.get("data") != null:
+		var captain_id := str(session.data.captain_id)
+		if not captain_id.is_empty() and owner_id == captain_id:
+			return true
+	return false
+
+
+func _meta_value(meta: String, key: String) -> String:
+	if meta.is_empty():
+		return ""
+	var prefix := key + "="
+	for part in meta.split(";"):
+		if part.begins_with(prefix):
+			return part.substr(prefix.length())
+	return ""
 
 
 # ── Backwards Compatible Gameplay Hooks ─────────────────────────────────────
@@ -301,6 +471,15 @@ func _flush_crane_vacated(crane_id: String) -> void:
 func register_cargo_spawn(cargo_id: String, pallet: Resource, node: Node3D) -> void:
 	if cargo_id.is_empty() or node == null or not is_instance_valid(node):
 		return
+	var wire_id := _truncate_wire_id(cargo_id)
+	if drawing_service != null and drawing_service.has_method("clear_entity_remote_state"):
+		drawing_service.call("clear_entity_remote_state", wire_id)
+		if wire_id != cargo_id:
+			drawing_service.call("clear_entity_remote_state", cargo_id)
+	if node is PalletNode:
+		var pallet_node := node as PalletNode
+		pallet_node.is_network_local_authority = true
+		pallet_node.is_network_remote_proxy = false
 	register_sender(
 		node,
 		cargo_id,
@@ -370,13 +549,19 @@ func _cargo_replication_meta(pallet: Resource, node: Node3D) -> String:
 func unregister_cargo(cargo_id: String, delivered: bool = false) -> void:
 	if delivered:
 		_flush_cargo_delivered(cargo_id)
+	var wire_id := _truncate_wire_id(cargo_id)
 	if drawing_service != null and drawing_service.has_method("clear_entity_remote_state"):
-		drawing_service.call("clear_entity_remote_state", cargo_id)
+		drawing_service.call("clear_entity_remote_state", wire_id)
+		if wire_id != cargo_id:
+			drawing_service.call("clear_entity_remote_state", cargo_id)
 	unregister_sender(cargo_id)
 
 
 func _flush_cargo_delivered(cargo_id: String) -> void:
-	var sender: Variant = _local_senders.get(cargo_id, null)
+	var wire_id := _resolve_local_sender_id(cargo_id)
+	if wire_id.is_empty():
+		wire_id = _truncate_wire_id(cargo_id)
+	var sender: Variant = _local_senders.get(wire_id, null)
 	if sender == null or client == null:
 		return
 	var node: Node3D = sender["node"] as Node3D
@@ -398,7 +583,7 @@ func _flush_cargo_delivered(cargo_id: String) -> void:
 		local_id,
 		observer_pos,
 		[{
-			"id": cargo_id,
+			"id": wire_id,
 			"type": "cargo",
 			"format": 4,
 			"payload": payload,
@@ -677,7 +862,28 @@ func begin_multiplayer_session() -> void:
 	_session_active = true
 	if drawing_service != null:
 		drawing_service.visible = true
+	_reregister_local_authority()
 	client.call("request_connect")
+
+
+func _reregister_local_authority() -> void:
+	_ensure_local_ship_registered()
+	var tree := get_tree()
+	if tree == null:
+		return
+	var ship := PlayerVessel.find_active_ship(tree)
+	if ship == null or not is_instance_valid(ship):
+		return
+	for deck in CargoDeckComponent.get_all_for_ship(ship):
+		if deck.has_method("reregister_network_pallets"):
+			deck.call("reregister_network_pallets")
+	if drawing_service != null and drawing_service.has_method("purge_local_authority_echoes"):
+		drawing_service.call(
+			"purge_local_authority_echoes",
+			get_local_player_id(),
+			_local_sender_ids_for_filter(),
+			_scene_nodes
+		)
 
 
 func end_multiplayer_session(silent: bool = false) -> void:
@@ -714,6 +920,7 @@ func _exit_tree() -> void:
 func close_connection() -> void:
 	client.call("close_connection")
 	_local_senders.clear()
+	_wire_id_aliases.clear()
 	_local_ships_board_states.clear()
 	if drawing_service != null:
 		drawing_service.clear_all(_scene_nodes)

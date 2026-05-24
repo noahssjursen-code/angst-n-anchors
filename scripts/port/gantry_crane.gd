@@ -939,6 +939,8 @@ func _find_nearest_pallet() -> Node3D:
 		var pn := n as Node3D
 		if pn == null:
 			continue
+		if pn is PalletNode and (pn as PalletNode).is_network_remote_proxy:
+			continue
 		var dx := hp.x - pn.global_position.x
 		var dz := hp.z - pn.global_position.z
 		var dy := hp.y - pn.global_position.y     # >0 means hook above pallet
