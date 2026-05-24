@@ -132,7 +132,7 @@ static func _obb_signed_distance(
 	var dz := absf(lz) - half_z
 	var ox := maxf(dx, 0.0)
 	var oz := maxf(dz, 0.0)
-	return sqrt(ox * ox + oz * oz) + minf(maxi(dx, dz), 0.0)
+	return sqrt(ox * ox + oz * oz) + minf(maxf(dx, dz), 0.0)
 
 
 ## 0..1 shelter factor. 0 = on land / right at the shore, 1 = fully open water.
@@ -213,6 +213,63 @@ static func get_baked_world_origin() -> Vector2:
 ## Side length (square) of the world region covered by the baked texture.
 static func get_baked_world_size() -> float:
 	return _baked_world_size
+
+
+static func get_active_island_indices_for_segment(a: Vector2, b: Vector2, clearance: float) -> Array[int]:
+	var out: Array[int] = []
+	if not _initialized or _centers_xz.is_empty():
+		return out
+	var ab := b - a
+	var ab_len_sq := ab.length_squared()
+	for i in range(_centers_xz.size()):
+		var center := _centers_xz[i]
+		var radius := _radii[i]
+		var dist := 0.0
+		if ab_len_sq == 0.0:
+			dist = a.distance_to(center)
+		else:
+			var ap := center - a
+			var t := clampf(ap.dot(ab) / ab_len_sq, 0.0, 1.0)
+			var proj := a + t * ab
+			dist = center.distance_to(proj)
+		if dist < radius + clearance:
+			out.append(i)
+	return out
+
+
+static func distance_to_land_filter(world_pos: Vector3, active_islands: Array[int]) -> float:
+	if not _initialized or _centers_xz.is_empty() or active_islands.is_empty():
+		return INF
+	var pos2 := Vector2(world_pos.x, world_pos.z)
+	var best := INF
+	for idx in active_islands:
+		var d := _obb_signed_distance(
+			pos2,
+			_centers_xz[idx],
+			_obb_half_x[idx],
+			_obb_half_z[idx],
+			_obb_rot_y[idx],
+		)
+		if d < best:
+			best = d
+	return best
+
+
+static func is_island_ignored(idx: int, ignore_centers: Array[Vector2]) -> bool:
+	if not _initialized or idx < 0 or idx >= _centers_xz.size():
+		return false
+	var center := _centers_xz[idx]
+	for ic in ignore_centers:
+		if center.distance_to(ic) < 10.0:
+			return true
+	return false
+
+
+static func get_island_disk(idx: int) -> Dictionary:
+	if not _initialized or idx < 0 or idx >= _centers_xz.size():
+		return {}
+	return {"center": _centers_xz[idx], "radius": _radii[idx]}
+
 
 
 ## Bake `shore_shelter` over a square world region into an R32F texture the

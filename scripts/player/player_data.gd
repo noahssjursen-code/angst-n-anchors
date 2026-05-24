@@ -3,6 +3,7 @@ class_name PlayerData
 ## Fictional ledger currency — shared by UI formatters and PlayerSession.
 const CURRENCY_SYMBOL := "ℳ"
 const CURRENCY_NAME   := "Marks"
+const NEW_CAPTAIN_STARTING_MARKS := 6400
 
 
 static func format_money(amount: int) -> String:
@@ -135,7 +136,7 @@ func find_owned_by_server_id(server_id: String) -> Dictionary:
 	return {}
 
 
-func get_deployable_vessels() -> Array:
+func get_harbour_vessel_records() -> Array:
 	var out: Array = []
 	for entry_raw in owned_vessels:
 		if typeof(entry_raw) != TYPE_DICTIONARY:
@@ -147,6 +148,20 @@ func get_deployable_vessels() -> Array:
 		if resolved.is_empty():
 			continue
 		out.append(resolved)
+	return out
+
+
+static func is_vessel_on_npc_run(record: Dictionary) -> bool:
+	return bool(record.get("autonomous_active", false))
+
+
+func get_deployable_vessels() -> Array:
+	var out: Array = []
+	for entry_raw in get_harbour_vessel_records():
+		var entry := entry_raw as Dictionary
+		if is_vessel_on_npc_run(entry):
+			continue
+		out.append(entry)
 	return out
 
 

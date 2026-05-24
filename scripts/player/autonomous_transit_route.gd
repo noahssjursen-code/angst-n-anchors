@@ -1,32 +1,34 @@
 class_name AutonomousTransitRoute
 extends RefCounted
 
-## Sea-lane waypoints for autonomous vessel transit — avoids cutting through islands.
+## Sea-lane waypoints: berth tentacle → open-water chord → destination tentacle.
 
-enum SegmentMode { DOCK_LEG, OPEN_WATER, APPROACH }
+enum SegmentMode { LANE, OPEN_WATER }
 
-const SEA_CLEARANCE_M := 180.0
-const ROUTING_RADIUS_PADDING_M := 55.0
+const OPEN_CONNECT_CLEARANCE_M := 28.0
+const LAND_SAMPLE_COUNT := 32
+const MAX_ARC_RAD := deg_to_rad(118.0)
+const ARC_STEP_RAD := deg_to_rad(22.0)
+const ROUTING_RADIUS_PADDING_M := 40.0
 const TRAWL_OFFSHORE_M := 900.0
-const DOCK_LEAD_M := 140.0
-const LAND_SAMPLE_COUNT := 48
-const MAX_DETOUR_PASSES := 8
-const MAX_ARC_RAD := TAU * 0.99
-const ARC_STEP_RAD := deg_to_rad(28.0)
+
+static var _graph_initialized: bool = false
+static var _nodes: Array = []
+static var _adj: Dictionary = {}
 
 
 static func build_waypoints(
-	from_pos: Vector3,
-	to_pos: Vector3,
-	departure_offshore: Vector3,
-	arrival_offshore: Vector3,
+	from_port_id: String,
+	to_port_id: String,
 	loop_home: bool,
 ) -> Array:
 	if loop_home:
-		return _loop_home_waypoints(from_pos, departure_offshore)
-	if not _vec3_is_valid(from_pos) or not _vec3_is_valid(to_pos):
-		return [from_pos, to_pos] if _vec3_is_valid(from_pos) else []
-	return _port_to_port_waypoints(from_pos, to_pos, departure_offshore, arrival_offshore)
+		return _loop_home_waypoints(from_port_id)
+	if from_port_id.is_empty() or to_port_id.is_empty():
+		return []
+	if from_port_id == to_port_id:
+		return _loop_home_waypoints(from_port_id)
+	return _port_to_port_waypoints(from_port_id, to_port_id)
 
 
 static func polyline_length(points: Array) -> float:
@@ -86,218 +88,301 @@ static func velocity_along_polyline(points: Array, local_t: float, leg_duration:
 	return vel
 
 
-static func _loop_home_waypoints(from_pos: Vector3, offshore: Vector3) -> Array:
-	if not _vec3_is_valid(from_pos):
+static func _loop_home_waypoints(port_id: String) -> Array:
+	var berth_pos := _berth_pos(port_id, 0)
+	if not _vec3_is_valid(berth_pos):
 		return []
-	if not _vec3_is_valid(offshore):
-		return [from_pos]
+	var offshore := _fishing_offshore(port_id, berth_pos)
 	var pts: Array = []
-	_append_unique(pts, from_pos)
-	var lead := _seaward_step(from_pos, offshore, DOCK_LEAD_M)
-	_append_segment(pts, lead, SegmentMode.DOCK_LEG)
-	_append_segment(pts, offshore, SegmentMode.OPEN_WATER)
-	_append_segment(pts, from_pos, SegmentMode.APPROACH)
-	_force_terminal(pts, from_pos)
+	var depart_kind := BerthApproachLanes.best_departure_lane_kind(berth_pos, offshore, port_id)
+	var approach_kind := BerthApproachLanes.best_approach_lane_kind(berth_pos, offshore, port_id)
+	_append_lane_chain(pts, BerthApproachLanes.get_lane(port_id, 0, depart_kind))
+	if _vec3_is_valid(offshore):
+		_append_unique(pts, offshore)
+	_append_lane_chain(pts, _reverse_lane(BerthApproachLanes.get_lane(port_id, 0, approach_kind)))
+	_force_terminal(pts, berth_pos)
 	return pts
 
 
-static func _port_to_port_waypoints(
-	from_pos: Vector3,
-	to_pos: Vector3,
-	departure_offshore: Vector3,
-	arrival_offshore: Vector3,
+static func _port_to_port_waypoints(from_port_id: String, to_port_id: String) -> Array:
+	var from_berth := _berth_pos(from_port_id, 0)
+	var to_berth := _berth_pos(to_port_id, 0)
+	if not _vec3_is_valid(from_berth) or not _vec3_is_valid(to_berth):
+		return []
+
+	var path := _find_shortest_path(from_port_id, to_port_id)
+	if path.is_empty():
+		var pts: Array = []
+		var depart_kind := BerthApproachLanes.best_departure_lane_kind(from_berth, to_berth, from_port_id)
+		var approach_kind := BerthApproachLanes.best_approach_lane_kind(to_berth, from_berth, to_port_id)
+		var depart_lane := BerthApproachLanes.get_lane(from_port_id, 0, depart_kind)
+		var approach_lane := BerthApproachLanes.get_lane(to_port_id, 0, approach_kind)
+		_append_lane_chain(pts, depart_lane)
+		var open_start := BerthApproachLanes.lane_outer_point(from_port_id, 0, depart_kind)
+		if pts.size() > 0:
+			open_start = pts[pts.size() - 1] as Vector3
+		var open_end := BerthApproachLanes.lane_outer_point(to_port_id, 0, approach_kind)
+		if approach_lane.size() >= 2:
+			open_end = approach_lane[approach_lane.size() - 1] as Vector3
+		var ignore_centers: Array[Vector2] = []
+		if not from_port_id.is_empty():
+			ignore_centers.append(_port_island_center(from_port_id))
+		if not to_port_id.is_empty():
+			ignore_centers.append(_port_island_center(to_port_id))
+		_append_open_water(pts, open_start, open_end, ignore_centers)
+		_append_lane_chain(pts, _reverse_lane(approach_lane))
+		_force_terminal(pts, to_berth)
+		return pts
+
+	var pts: Array = []
+	
+	# 1. Append departure lane
+	var start_node: Dictionary = _nodes[path[0]]
+	var start_idx: int = int(start_node.node_index)
+	var depart_kind := int(BerthApproachLanes.LaneKind.SPINE)
+	if start_idx == 3:
+		depart_kind = int(BerthApproachLanes.LaneKind.FLANK_PORT)
+	elif start_idx == 5:
+		depart_kind = int(BerthApproachLanes.LaneKind.FLANK_STARBOARD)
+		
+	var depart_lane := BerthApproachLanes.get_lane(from_port_id, 0, depart_kind)
+	_append_lane_chain(pts, depart_lane)
+	
+	# 2. Append intermediate open water nodes
+	var open_start := BerthApproachLanes.lane_outer_point(from_port_id, 0, depart_kind)
+	if pts.size() > 0:
+		open_start = pts[pts.size() - 1] as Vector3
+		
+	var prev_pos := open_start
+	for i in range(1, path.size() - 1):
+		var node: Dictionary = _nodes[path[i]]
+		var next_pos: Vector3 = node.position
+		_append_unique(pts, next_pos)
+		prev_pos = next_pos
+		
+	# 3. Append arrival lane (reversed)
+	var end_node: Dictionary = _nodes[path[path.size() - 1]]
+	var end_idx: int = int(end_node.node_index)
+	var approach_kind := int(BerthApproachLanes.LaneKind.SPINE)
+	if end_idx == 3:
+		approach_kind = int(BerthApproachLanes.LaneKind.FLANK_PORT)
+	elif end_idx == 5:
+		approach_kind = int(BerthApproachLanes.LaneKind.FLANK_STARBOARD)
+		
+	var approach_lane := BerthApproachLanes.get_lane(to_port_id, 0, approach_kind)
+	_append_lane_chain(pts, _reverse_lane(approach_lane))
+	
+	_force_terminal(pts, to_berth)
+	return pts
+
+
+static func _departure_lane(
+	port_id: String,
+	berth_index: int,
+	berth_pos: Vector3,
+	target_pos: Vector3,
 ) -> Array:
-	var pts: Array = []
-	_append_unique(pts, from_pos)
-
-	var dep_lead := _seaward_step(from_pos, departure_offshore, DOCK_LEAD_M)
-	_append_segment(pts, dep_lead, SegmentMode.DOCK_LEG)
-
-	_append_segment(pts, departure_offshore, SegmentMode.OPEN_WATER)
-
-	var ocean_start: Vector3 = pts[pts.size() - 1]
-	var entry_gate := _port_entry_gate(to_pos, ocean_start, arrival_offshore)
-	_append_segment(pts, entry_gate, SegmentMode.OPEN_WATER)
-
-	_append_segment(pts, to_pos, SegmentMode.APPROACH)
-	_force_terminal(pts, to_pos)
-	return pts
+	if not BerthApproachLanes.is_initialized():
+		return [berth_pos]
+	var kind := BerthApproachLanes.best_departure_lane_kind(berth_pos, target_pos, port_id)
+	return BerthApproachLanes.get_lane(port_id, berth_index, kind)
 
 
-static func _append_segment(pts: Array, end: Vector3, mode: SegmentMode) -> void:
-	if not _vec3_is_valid(end) or pts.is_empty():
+static func _approach_lane(
+	port_id: String,
+	berth_index: int,
+	berth_pos: Vector3,
+	from_pos: Vector3,
+) -> Array:
+	if not BerthApproachLanes.is_initialized():
+		return [berth_pos]
+	var kind := BerthApproachLanes.best_approach_lane_kind(berth_pos, from_pos, port_id)
+	return BerthApproachLanes.get_lane(port_id, berth_index, kind)
+
+
+static func _fishing_offshore(port_id: String, berth_pos: Vector3) -> Vector3:
+	if BerthApproachLanes.is_initialized():
+		return BerthApproachLanes.lane_outer_point(port_id, 0, int(BerthApproachLanes.LaneKind.SPINE))
+	var seaward := _registry_seaward(port_id)
+	return berth_pos + seaward * TRAWL_OFFSHORE_M
+
+
+static func _registry_seaward(port_id: String) -> Vector3:
+	var reg: Node = Engine.get_main_loop().root.get_node_or_null("/root/ContractRegistry")
+	if reg == null or not reg.has_method("get_port_info"):
+		return Vector3(0.0, 0.0, -1.0)
+	var info: Dictionary = reg.call("get_port_info", port_id) as Dictionary
+	var ry := float(info.get("rotation_y", 0.0))
+	var dir := Vector3(-sin(ry), 0.0, -cos(ry))
+	if dir.length_squared() < 0.0001:
+		return Vector3(0.0, 0.0, -1.0)
+	return dir.normalized()
+
+
+static func _berth_pos(port_id: String, berth_index: int) -> Vector3:
+	if BerthApproachLanes.is_initialized():
+		var pos := BerthApproachLanes.berth_world_position(port_id, berth_index)
+		if _vec3_is_valid(pos) and pos != Vector3.ZERO:
+			return pos
+	return _registry_pos(port_id)
+
+
+static func _registry_pos(port_id: String) -> Vector3:
+	var reg: Node = Engine.get_main_loop().root.get_node_or_null("/root/ContractRegistry")
+	if reg == null:
+		return Vector3.ZERO
+	if reg.has_method("get_port_spawn_position"):
+		var pos := reg.call("get_port_spawn_position", port_id) as Vector3
+		if _vec3_is_valid(pos) and pos != Vector3(INF, INF, INF):
+			return pos
+	if reg.has_method("get_port_position"):
+		return reg.call("get_port_position", port_id) as Vector3
+	return Vector3.ZERO
+
+
+static func _append_lane_chain(pts: Array, lane: Array) -> void:
+	for p_raw in lane:
+		if p_raw is Vector3:
+			_append_unique(pts, p_raw as Vector3)
+
+
+static func _reverse_lane(lane: Array) -> Array:
+	var out: Array = []
+	for i in range(lane.size() - 1, -1, -1):
+		out.append(lane[i])
+	return out
+
+
+static func _append_open_water(pts: Array, start: Vector3, end: Vector3, ignore_centers: Array[Vector2] = []) -> void:
+	if not _vec3_is_valid(start) or not _vec3_is_valid(end):
 		return
-	var start: Vector3 = pts[pts.size() - 1]
-	for p in _route_segment(start, end, mode):
+	for p in _open_water_connector(start, end, ignore_centers):
 		_append_unique(pts, p)
 
 
-static func _route_segment(start: Vector3, end: Vector3, mode: SegmentMode) -> Array:
-	var chain: Array = []
-	var head := start
-	for detour_i in range(MAX_DETOUR_PASSES):
-		if not _segment_blocked(head, end, mode):
-			if _horiz_dist(head, end) > 1.0:
-				chain.append(end)
-			return chain
-		var blocker := _primary_blocker(head, end, mode)
-		if blocker.is_empty():
-			chain.append(end)
-			return chain
-		var arc := _arc_detour_points(blocker, head, end)
-		if arc.is_empty():
-			chain.append(end)
-			return chain
-		for p in arc:
-			chain.append(p)
-		head = arc[arc.size() - 1]
-	chain.append(end)
-	return chain
+static func _open_water_connector(start: Vector3, end: Vector3, ignore_centers: Array[Vector2] = []) -> Array:
+	if _horiz_dist(start, end) <= 1.0:
+		return []
+	if not _connector_blocked(start, end, ignore_centers):
+		return [end]
 
+	var blocker := _primary_blocker(start, end, ignore_centers)
+	if blocker.is_empty():
+		return [end]
 
-static func _seaward_step(port_pos: Vector3, seaward_hint: Vector3, lead_m: float) -> Vector3:
-	var dir := seaward_hint - port_pos
-	dir.y = 0.0
-	if dir.length_squared() < 1.0:
-		dir = Vector3(0.0, 0.0, -1.0)
-	else:
-		dir = dir.normalized()
-	var out := port_pos + dir * lead_m
-	out.y = WaveSurface.WATER_LEVEL
+	var arc := _single_arc_detour(blocker, start, end)
+	if arc.is_empty():
+		return [end]
+	var out: Array = []
+	for p in arc:
+		out.append(p)
+	if _horiz_dist(out[out.size() - 1], end) > 1.0:
+		out.append(end)
 	return out
 
 
-static func _port_entry_gate(
-	port_pos: Vector3,
-	approach_from: Vector3,
-	seaward_hint: Vector3,
-) -> Vector3:
-	var disk := _nearest_island_disk(port_pos)
-	if disk.is_empty():
-		return _fallback_point(approach_from, port_pos, DOCK_LEAD_M * 2.5)
-	var center: Vector2 = disk.get("center", Vector2.ZERO)
-	var radius: float = float(disk.get("radius", 0.0))
-	var ang_in: float = _bearing_from_center(center, approach_from)
-	var ang_sea: float = _bearing_from_center(center, seaward_hint)
-	var ang: float = ang_in
-	if absf(_angle_diff(ang_in, ang_sea)) > PI * 0.45:
-		ang = _lerp_angle(ang_in, ang_sea, 0.42)
-	return _clearance_point(center, radius, ang)
-
-
-static func _fallback_point(from_pos: Vector3, to_pos: Vector3, lead_m: float) -> Vector3:
-	var dir := to_pos - from_pos
-	dir.y = 0.0
-	if dir.length_squared() < 1.0:
-		dir = Vector3(0.0, 0.0, -1.0)
-	else:
-		dir = dir.normalized()
-	var out := from_pos + dir * lead_m
-	out.y = WaveSurface.WATER_LEVEL
-	return out
-
-
-static func _nearest_island_disk(pos: Vector3) -> Dictionary:
-	if not LandField.is_initialized():
-		return {}
-	var pos2 := Vector2(pos.x, pos.z)
-	var best := INF
-	var best_disk: Dictionary = {}
-	for disk in LandField.get_island_disks():
-		var center: Vector2 = disk.get("center", Vector2.ZERO)
-		var radius: float = float(disk.get("radius", 0.0))
-		var d := pos2.distance_to(center) - radius
-		if d < best:
-			best = d
-			best_disk = disk
-	return best_disk
-
-
-static func _routing_radius(island_radius: float) -> float:
-	return island_radius + SEA_CLEARANCE_M + ROUTING_RADIUS_PADDING_M
-
-
-static func _clearance_point(center: Vector2, island_radius: float, ang: float) -> Vector3:
-	var r := _routing_radius(island_radius)
-	return Vector3(
-		center.x + cos(ang) * r,
-		WaveSurface.WATER_LEVEL,
-		center.y + sin(ang) * r,
-	)
-
-
-static func _bearing_from_center(center: Vector2, pos: Vector3) -> float:
-	return atan2(pos.z - center.y, pos.x - center.x)
-
-
-static func _angle_diff(a: float, b: float) -> float:
-	return atan2(sin(a - b), cos(a - b))
-
-
-static func _lerp_angle(a: float, b: float, t: float) -> float:
-	var diff := _angle_diff(b, a)
-	return a + diff * clampf(t, 0.0, 1.0)
-
-
-static func _segment_blocked(a: Vector3, b: Vector3, mode: SegmentMode) -> bool:
+static func _connector_blocked(a: Vector3, b: Vector3, ignore_centers: Array[Vector2] = []) -> bool:
 	if not LandField.is_initialized():
 		return false
-	if _segment_pierces_land(a, b):
+
+	var a2 := Vector2(a.x, a.z)
+	var b2 := Vector2(b.x, b.z)
+	var max_clearance := maxf(OPEN_CONNECT_CLEARANCE_M, 0.0)
+	var active_indices := LandField.get_active_island_indices_for_segment(a2, b2, max_clearance)
+
+	if active_indices.is_empty():
+		return false  # Safe: no islands are near this segment at all
+
+	if _segment_pierces_land_filtered(a, b, active_indices):
 		return true
-	match mode:
-		SegmentMode.DOCK_LEG:
-			return false
-		SegmentMode.OPEN_WATER:
-			return _segment_violates_clearance(a, b, 0.0, 1.0)
-		SegmentMode.APPROACH:
-			return _segment_violates_clearance(a, b, 0.0, 0.88)
-	return false
+
+	# Build active list for clearance (excluding ignored ones)
+	var clearance_indices: Array[int] = []
+	for idx in active_indices:
+		if not LandField.is_island_ignored(idx, ignore_centers):
+			clearance_indices.append(idx)
+
+	if clearance_indices.is_empty():
+		return false
+
+	return _segment_violates_clearance_filtered(a, b, OPEN_CONNECT_CLEARANCE_M, clearance_indices)
 
 
-static func _segment_pierces_land(a: Vector3, b: Vector3) -> bool:
-	for i in range(LAND_SAMPLE_COUNT + 1):
-		var t := float(i) / float(LAND_SAMPLE_COUNT)
+static func _get_sample_count(a: Vector3, b: Vector3) -> int:
+	var d := Vector2(a.x, a.z).distance_to(Vector2(b.x, b.z))
+	return clampi(int(ceil(d / 12.0)), 32, 256)
+
+
+static func _segment_pierces_land_filtered(a: Vector3, b: Vector3, active_indices: Array[int]) -> bool:
+	var steps := _get_sample_count(a, b)
+	for i in range(steps + 1):
+		var t := float(i) / float(steps)
 		var p := a.lerp(b, t)
-		if LandField.distance_to_land(p) < 0.0:
+		if LandField.distance_to_land_filter(p, active_indices) < 0.0:
 			return true
 	return false
 
 
-static func _segment_violates_clearance(a: Vector3, b: Vector3, t_start: float, t_end: float) -> bool:
-	for i in range(LAND_SAMPLE_COUNT + 1):
-		var t := lerpf(t_start, t_end, float(i) / float(LAND_SAMPLE_COUNT))
+static func _segment_violates_clearance_filtered(a: Vector3, b: Vector3, clearance: float, clearance_indices: Array[int]) -> bool:
+	var steps := _get_sample_count(a, b)
+	for i in range(steps + 1):
+		var t := float(i) / float(steps)
 		var p := a.lerp(b, t)
-		if LandField.distance_to_land(p) < SEA_CLEARANCE_M:
+		if LandField.distance_to_land_filter(p, clearance_indices) < clearance:
 			return true
 	return false
 
 
-static func _primary_blocker(a: Vector3, b: Vector3, mode: SegmentMode) -> Dictionary:
+static func _primary_blocker(a: Vector3, b: Vector3, ignore_centers: Array[Vector2] = []) -> Dictionary:
 	if not LandField.is_initialized():
 		return {}
+
+	var a2 := Vector2(a.x, a.z)
+	var b2 := Vector2(b.x, b.z)
+	var max_clearance := maxf(OPEN_CONNECT_CLEARANCE_M, 0.0)
+	var active_indices := LandField.get_active_island_indices_for_segment(a2, b2, max_clearance)
+
+	if active_indices.is_empty():
+		return {}
+
 	var worst := INF
 	var worst_p := Vector2.ZERO
-	for i in range(LAND_SAMPLE_COUNT + 1):
-		var t := float(i) / float(LAND_SAMPLE_COUNT)
-		if mode == SegmentMode.APPROACH and t > 0.88:
-			continue
+	var steps := _get_sample_count(a, b)
+	for i in range(steps + 1):
+		var t := float(i) / float(steps)
 		var p := a.lerp(b, t)
-		var d := LandField.distance_to_land(p)
+		var d := LandField.distance_to_land_filter(p, active_indices)
 		if d < worst:
 			worst = d
 			worst_p = Vector2(p.x, p.z)
-	var limit := 0.0 if mode == SegmentMode.DOCK_LEG else SEA_CLEARANCE_M
-	if worst >= limit:
+	if worst >= OPEN_CONNECT_CLEARANCE_M:
 		return {}
-	for disk in LandField.get_island_disks():
+
+	for idx in active_indices:
+		var disk := LandField.get_island_disk(idx)
+		if disk.is_empty():
+			continue
 		var center: Vector2 = disk.get("center", Vector2.ZERO)
 		var radius: float = float(disk.get("radius", 0.0))
-		if worst_p.distance_to(center) <= radius + SEA_CLEARANCE_M:
+		var is_ignored := false
+		for ic in ignore_centers:
+			if center.distance_to(ic) < 10.0:
+				is_ignored = true
+				break
+		if is_ignored:
+			if worst_p.distance_to(center) <= radius:
+				return disk
+			continue
+		if worst_p.distance_to(center) <= radius + OPEN_CONNECT_CLEARANCE_M:
 			return disk
 	return {}
 
 
-static func _arc_detour_points(blocker: Dictionary, a: Vector3, b: Vector3) -> Array:
+static func _routing_radius(island_radius: float) -> float:
+	return island_radius + OPEN_CONNECT_CLEARANCE_M + ROUTING_RADIUS_PADDING_M
+
+
+static func _single_arc_detour(blocker: Dictionary, a: Vector3, b: Vector3) -> Array:
 	var center: Vector2 = blocker.get("center", Vector2.ZERO)
 	var radius: float = _routing_radius(float(blocker.get("radius", 0.0)))
 	var a2 := Vector2(a.x, a.z)
@@ -311,7 +396,7 @@ static func _arc_detour_points(blocker: Dictionary, a: Vector3, b: Vector3) -> A
 		return []
 	if absf(delta) > MAX_ARC_RAD:
 		delta = MAX_ARC_RAD if delta >= 0.0 else -MAX_ARC_RAD
-	var steps := clampi(int(ceil(absf(delta) / ARC_STEP_RAD)), 2, 7)
+	var steps := clampi(int(ceil(absf(delta) / ARC_STEP_RAD)), 2, 6)
 	var pts: Array = []
 	for i in range(1, steps + 1):
 		var t := float(i) / float(steps)
@@ -351,3 +436,212 @@ static func _horiz_dist(a: Vector3, b: Vector3) -> float:
 
 static func _vec3_is_valid(v: Vector3) -> bool:
 	return v.is_finite() and absf(v.x) < 1.0e8 and absf(v.z) < 1.0e8
+
+
+static func _port_island_center(port_id: String) -> Vector2:
+	if BerthApproachLanes.is_initialized():
+		var meta := BerthApproachLanes.get_island_meta(port_id)
+		if not meta.is_empty():
+			var center_v: Vector3 = meta.get("center", Vector3.ZERO)
+			return Vector2(center_v.x, center_v.z)
+	var pos := _berth_pos(port_id, 0)
+	return Vector2(pos.x, pos.z)
+
+
+static func invalidate_graph() -> void:
+	_graph_initialized = false
+
+
+static func _get_roundabout_local_node(idx: int, half_x: float, half_z: float) -> Vector3:
+	var margin_x := 90.0
+	match idx:
+		0: return Vector3(0.0, WaveSurface.WATER_LEVEL, -half_z - 120.0)
+		1: return Vector3(half_x + margin_x, WaveSurface.WATER_LEVEL, -half_z - 50.0)
+		2: return Vector3(half_x + margin_x, WaveSurface.WATER_LEVEL, 70.0)
+		3: return Vector3(half_x + margin_x, WaveSurface.WATER_LEVEL, half_z + 105.0)
+		4: return Vector3(0.0, WaveSurface.WATER_LEVEL, half_z + 190.0)
+		5: return Vector3(-half_x - margin_x, WaveSurface.WATER_LEVEL, half_z + 105.0)
+		6: return Vector3(-half_x - margin_x, WaveSurface.WATER_LEVEL, 70.0)
+		7: return Vector3(-half_x - margin_x, WaveSurface.WATER_LEVEL, -half_z - 50.0)
+	return Vector3.ZERO
+
+
+static func _roundabout_node_world(port_id: String, idx: int) -> Vector3:
+	if not BerthApproachLanes.is_initialized():
+		return Vector3.ZERO
+	var meta := BerthApproachLanes.get_island_meta(port_id)
+	if meta.is_empty():
+		return Vector3.ZERO
+	var half_x: float = meta.get("half_x", 0.0)
+	var half_z: float = meta.get("half_z", 0.0)
+	var local := _get_roundabout_local_node(idx, half_x, half_z)
+	var center: Vector3 = meta.get("center", Vector3.ZERO)
+	var ry: float = meta.get("rotation_y", 0.0)
+	var basis := Basis.from_euler(Vector3(0.0, ry, 0.0))
+	var world := center + basis * local
+	world.y = WaveSurface.WATER_LEVEL
+	return world
+
+
+static func _get_node_index(port_id: String, node_index: int) -> int:
+	for i in range(_nodes.size()):
+		var n: Dictionary = _nodes[i]
+		if n.port_id == port_id and int(n.node_index) == node_index:
+			return i
+	return -1
+
+
+static func rebuild_navigation_graph() -> void:
+	_nodes.clear()
+	_adj.clear()
+	
+	if not BerthApproachLanes.is_initialized():
+		return
+		
+	# 1. Collect all 8 nodes for every island
+	var port_ids = BerthApproachLanes._lanes.keys()
+	for port_id in port_ids:
+		for idx in range(8):
+			var pos := _roundabout_node_world(port_id, idx)
+			if pos != Vector3.ZERO:
+				_nodes.append({
+					"port_id": port_id,
+					"node_index": idx,
+					"position": pos
+				})
+				
+	var n := _nodes.size()
+	for i in range(n):
+		_adj[i] = []
+		
+	# 2. Add roundabout loop edges for each port
+	for port_id in port_ids:
+		for idx in range(8):
+			var u := _get_node_index(port_id, idx)
+			var v := _get_node_index(port_id, (idx + 1) % 8)
+			if u != -1 and v != -1:
+				_adj[u].append(v)
+				_adj[v].append(u)
+				
+	# 3. Add open-water edges between different islands
+	for i in range(n):
+		var node_a: Dictionary = _nodes[i]
+		var port_id_a: String = node_a.port_id
+		for j in range(i + 1, n):
+			var node_b: Dictionary = _nodes[j]
+			var port_id_b: String = node_b.port_id
+			if port_id_a == port_id_b:
+				continue
+				
+			var d := _horiz_dist(node_a.position, node_b.position)
+			if d >= 4000.0:
+				continue
+				
+			if not _connector_blocked(node_a.position, node_b.position, []):
+				_adj[i].append(j)
+				_adj[j].append(i)
+				
+	_graph_initialized = true
+	print("[AutonomousTransitRoute] Rebuilt global roundabout graph: %d nodes, %d edges" % [_nodes.size(), _total_edges()])
+
+
+static func _total_edges() -> int:
+	var total: int = 0
+	for u in _adj.keys():
+		var neighbors: Array = _adj[u]
+		total += neighbors.size()
+	return total / 2
+
+
+static func _find_shortest_path(from_port_id: String, to_port_id: String) -> Array:
+	if not _graph_initialized:
+		rebuild_navigation_graph()
+	if _nodes.is_empty():
+		return []
+		
+	var start_indices: Array[int] = []
+	var end_indices: Array[int] = []
+	
+	# Start nodes are Node 0, Node 3, Node 5 of start port
+	for node_idx in [0, 3, 5]:
+		var idx := _get_node_index(from_port_id, node_idx)
+		if idx != -1:
+			start_indices.append(idx)
+			
+	# End nodes are Node 0, Node 3, Node 5 of end port
+	for node_idx in [0, 3, 5]:
+		var idx := _get_node_index(to_port_id, node_idx)
+		if idx != -1:
+			end_indices.append(idx)
+			
+	if start_indices.is_empty() or end_indices.is_empty():
+		return []
+		
+	var dist: Dictionary = {}
+	var parent: Dictionary = {}
+	var visited: Dictionary = {}
+	var pq: Array = []
+	
+	for idx in start_indices:
+		var n: Dictionary = _nodes[idx]
+		var kind := int(BerthApproachLanes.LaneKind.SPINE)
+		if int(n.node_index) == 3:
+			kind = int(BerthApproachLanes.LaneKind.FLANK_PORT)
+		elif int(n.node_index) == 5:
+			kind = int(BerthApproachLanes.LaneKind.FLANK_STARBOARD)
+			
+		var lane_len := polyline_length(BerthApproachLanes.get_lane(from_port_id, 0, kind))
+		dist[idx] = lane_len
+		parent[idx] = -1
+		pq.append([lane_len, idx])
+		
+	while not pq.is_empty():
+		pq.sort_custom(func(a, b): return a[0] < b[0])
+		var current = pq.pop_front()
+		var d: float = current[0]
+		var u: int = current[1]
+		
+		if visited.has(u):
+			continue
+		visited[u] = true
+		
+		var neighbors: Array = _adj.get(u, [])
+		for v in neighbors:
+			var node_u: Dictionary = _nodes[u]
+			var node_v: Dictionary = _nodes[v]
+			var weight := _horiz_dist(node_u.position, node_v.position)
+			var new_dist := d + weight
+			if not dist.has(v) or new_dist < dist[v]:
+				dist[v] = new_dist
+				parent[v] = u
+				pq.append([new_dist, v])
+				
+	var best_end_idx := -1
+	var min_total_dist := INF
+	
+	for idx in end_indices:
+		if dist.has(idx):
+			var n: Dictionary = _nodes[idx]
+			var kind := int(BerthApproachLanes.LaneKind.SPINE)
+			if int(n.node_index) == 3:
+				kind = int(BerthApproachLanes.LaneKind.FLANK_PORT)
+			elif int(n.node_index) == 5:
+				kind = int(BerthApproachLanes.LaneKind.FLANK_STARBOARD)
+				
+			var arr_len := polyline_length(BerthApproachLanes.get_lane(to_port_id, 0, kind))
+			var total: float = float(dist[idx]) + arr_len
+			if total < min_total_dist:
+				min_total_dist = total
+				best_end_idx = idx
+				
+	if best_end_idx == -1:
+		return []
+		
+	var path: Array[int] = []
+	var curr := best_end_idx
+	while curr != -1:
+		path.append(curr)
+		curr = parent.get(curr, -1)
+	path.reverse()
+	
+	return path

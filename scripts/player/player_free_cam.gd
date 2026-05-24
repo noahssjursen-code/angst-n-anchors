@@ -1,7 +1,7 @@
 class_name PlayerFreeCam
 extends Node
 
-## Detached fly camera — toggle with F3 held + P.
+## Detached fly camera — toggle with F3 held + P. Scroll wheel adjusts move speed.
 
 signal toggled(active: bool)
 
@@ -9,6 +9,9 @@ const GROUP := "player_free_cam"
 
 @export var move_speed: float = 18.0
 @export var fast_multiplier: float = 3.0
+@export var min_move_speed: float = 2.0
+@export var max_move_speed: float = 400.0
+@export var scroll_speed_factor: float = 1.12
 @export var mouse_sensitivity: float = 0.002
 @export var min_pitch: float = deg_to_rad(-89.0)
 @export var max_pitch: float = deg_to_rad(89.0)
@@ -61,6 +64,20 @@ func handle_input(event: InputEvent) -> bool:
 		if _player != null and _player.get_viewport() != null:
 			_player.get_viewport().set_input_as_handled()
 		return true
+
+	if event is InputEventMouseButton:
+		var mb := event as InputEventMouseButton
+		if mb.pressed:
+			if mb.button_index == MOUSE_BUTTON_WHEEL_UP:
+				move_speed = clampf(move_speed * scroll_speed_factor, min_move_speed, max_move_speed)
+				if _player != null and _player.get_viewport() != null:
+					_player.get_viewport().set_input_as_handled()
+				return true
+			if mb.button_index == MOUSE_BUTTON_WHEEL_DOWN:
+				move_speed = clampf(move_speed / scroll_speed_factor, min_move_speed, max_move_speed)
+				if _player != null and _player.get_viewport() != null:
+					_player.get_viewport().set_input_as_handled()
+				return true
 
 	if event.is_action_pressed("ui_cancel"):
 		deactivate()

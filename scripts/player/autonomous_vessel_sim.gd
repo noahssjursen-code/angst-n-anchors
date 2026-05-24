@@ -73,6 +73,9 @@ static var _legs_cache: Dictionary = {}
 
 static func invalidate_legs_cache() -> void:
 	_legs_cache.clear()
+	# Dynamically invalidate the global roundabout graph.
+	# Graph rebuilding is now extremely cheap (<10ms) thanks to bounding sphere distance pruning.
+	AutonomousTransitRoute.invalidate_graph()
 
 
 static func build_legs(av: AutonomousVesselRecord) -> Array:
@@ -111,7 +114,8 @@ static func _legs_cache_key(av: AutonomousVesselRecord) -> String:
 	parts.append("1" if av.role_is_fishing() else "0")
 	parts.append(av.hull_id)
 	# Port ids only — never bake live dock transforms into the cache key.
-	parts.append("route_v4")
+	parts.append("route_v9")
+	parts.append(str(BerthApproachLanes.is_initialized()))
 	parts.append(str(LandField.get_island_count()) if LandField.is_initialized() else "0")
 	return "|".join(parts)
 
@@ -182,13 +186,9 @@ static func _append_transit(
 	trawl_mid: bool,
 	loop_home: bool,
 ) -> void:
-	var from_pos := _port_sea_pos(from_id)
-	var to_pos := _port_sea_pos(to_id)
 	var waypoints := AutonomousTransitRoute.build_waypoints(
-		from_pos,
-		to_pos,
-		_offshore_point(from_id),
-		_offshore_point(to_id),
+		from_id,
+		to_id,
 		loop_home,
 	)
 	var distance_m := AutonomousTransitRoute.polyline_length(waypoints)
@@ -355,8 +355,12 @@ static func dock_berth_transform(
 	return dock.get_berth_spawn_transform(berth_index, half_beam_m)
 
 
-## Authoritative sim anchor — registry only so every client agrees before docks stream in.
+## Authoritative sim anchor — berth lane origin when baked, else registry spawn.
 static func _port_sea_pos(port_id: String) -> Vector3:
+	if BerthApproachLanes.is_initialized():
+		var berth := BerthApproachLanes.berth_world_position(port_id, 0)
+		if _vec3_is_valid(berth) and berth != Vector3.ZERO:
+			return berth
 	return _registry_pos(port_id)
 
 

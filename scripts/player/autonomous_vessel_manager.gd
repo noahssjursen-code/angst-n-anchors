@@ -5,12 +5,14 @@ extends Node
 ## Multiplayer: sim + render from server `/v1/autonomous_vessels` for every client.
 
 const WorldReference := preload("res://scripts/world/world_reference.gd")
+const BerthApproachLanesDebugDraw := preload("res://scripts/navigation/berth_approach_lanes_debug_draw.gd")
 const REFRESH_INTERVAL_S := 2.0
 
 var _controllers: Dictionary = {}  ## uid -> AutonomousNpcShip
 var _server_records: Dictionary = {}  ## mp_* uid -> record (multiplayer only)
 var _refresh_clock: float = 0.0
 var _transit_debug_draw: AutonomousTransitDebugDraw
+var _lane_debug_draw: BerthApproachLanesDebugDraw
 var _fetch_in_flight: bool = false
 var _context_port_id: String = ""
 var _pending_fleet_push: Dictionary = {}  ## uid -> { record, at_ms }
@@ -34,6 +36,7 @@ func _ready() -> void:
 
 	call_deferred("refresh_all")
 	call_deferred("_ensure_transit_debug_draw")
+	call_deferred("_ensure_lane_debug_draw")
 
 
 func _process(delta: float) -> void:
@@ -95,6 +98,7 @@ func _flush_pending_fleet_push() -> void:
 
 func refresh_all() -> void:
 	_ensure_transit_debug_draw()
+	_ensure_lane_debug_draw()
 	var session := get_node_or_null("/root/PlayerSession")
 	if session == null:
 		return
@@ -332,6 +336,9 @@ func _world_root() -> Node:
 	var tree := get_tree()
 	if tree == null:
 		return null
+	for node in tree.get_nodes_in_group("world"):
+		if node is Node3D:
+			return node as Node3D
 	if tree.current_scene != null:
 		return tree.current_scene
 	return tree.root
@@ -348,6 +355,29 @@ func _ensure_transit_debug_draw() -> void:
 	_transit_debug_draw = AutonomousTransitDebugDraw.new()
 	_transit_debug_draw.name = "AutonomousTransitDebugDraw"
 	world.add_child(_transit_debug_draw)
+
+
+func _ensure_lane_debug_draw() -> void:
+	var world := _world_root()
+	if world == null:
+		return
+	if _lane_debug_draw != null and is_instance_valid(_lane_debug_draw):
+		if _lane_debug_draw.get_parent() != world:
+			_lane_debug_draw.reparent(world)
+		return
+	_lane_debug_draw = BerthApproachLanesDebugDraw.new()
+	_lane_debug_draw.name = "BerthApproachLanesDebugDraw"
+	_lane_debug_draw.top_level = true
+	world.add_child(_lane_debug_draw)
+
+
+func refresh_lane_debug() -> void:
+	_ensure_lane_debug_draw()
+	var hud := get_node_or_null("/root/DebugHud")
+	var open := bool(hud.call("is_open")) if hud != null else false
+	if _lane_debug_draw != null and is_instance_valid(_lane_debug_draw):
+		_lane_debug_draw.sync_visibility(open)
+		_lane_debug_draw.refresh_now()
 
 
 func _player_data() -> PlayerData:

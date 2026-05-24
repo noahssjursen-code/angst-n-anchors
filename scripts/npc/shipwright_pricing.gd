@@ -1,7 +1,7 @@
 class_name ShipwrightPricing
 extends RefCounted
 
-## Catalog quotes in Marks (ℳ). Starter fishing trawler is free once per captain.
+## Catalog quotes in Marks (ℳ).
 
 const STARTER_TRAWLER_ID := "fishing_trawler_small"
 
@@ -14,21 +14,9 @@ static func quote_price_marks(stations: HullStations) -> int:
 	return int(1200.0 + len_m * len_m * 52.0)
 
 
-static func is_free_starter_trawler(entry: Dictionary, player: PlayerData) -> bool:
-	if player == null:
-		return false
-	if player.starter_trawler_claimed:
-		return false
-	return str(entry.get("id", "")) == STARTER_TRAWLER_ID
-
-
-static func commission_price(entry: Dictionary, stations: HullStations, player: PlayerData) -> int:
-	if is_free_starter_trawler(entry, player):
-		return 0
+static func commission_price(_entry: Dictionary, stations: HullStations, _player: PlayerData) -> int:
 	return quote_price_marks(stations)
 
 
 static func price_label(price: int) -> String:
-	if price <= 0:
-		return "First trawler — complimentary"
 	return PlayerData.format_money(price)

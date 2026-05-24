@@ -214,6 +214,10 @@ func get_port_info(port_id: String) -> Dictionary:
 	return _ports.get(port_id, {}) as Dictionary
 
 
+func get_all_port_ids() -> Array:
+	return _ports.keys()
+
+
 func get_port_spawn_position(port_id: String) -> Vector3:
 	var info := _ports.get(port_id, {}) as Dictionary
 	if info.is_empty():

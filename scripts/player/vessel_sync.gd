@@ -5,6 +5,12 @@ extends RefCounted
 ## Commissioning appends rows; harbour master picks which hull to deploy.
 
 
+static var _in_flight_registrations: Dictionary = {}
+static var _failed_registrations: Dictionary = {}
+static var _in_flight_pull: bool = false
+static var _pending_pull_callbacks: Array = []
+
+
 static func publish_commission(session: Node, entry: Dictionary, template_path: String, uid: String) -> void:
 	if session == null or not _is_mp_session(session):
 		return
@@ -30,7 +36,24 @@ static func pull_captain_vessel(session: Node, on_complete: Callable = Callable(
 		if on_complete.is_valid():
 			on_complete.call()
 		return
-	_fetch_vessels(session, captain_id, on_complete)
+
+	if _in_flight_pull:
+		if on_complete.is_valid():
+			_pending_pull_callbacks.append(on_complete)
+		return
+
+	_in_flight_pull = true
+	if on_complete.is_valid():
+		_pending_pull_callbacks.append(on_complete)
+
+	_fetch_vessels(session, captain_id, func() -> void:
+		_in_flight_pull = false
+		var callbacks := _pending_pull_callbacks.duplicate()
+		_pending_pull_callbacks.clear()
+		for cb in callbacks:
+			if cb.is_valid():
+				cb.call()
+	)
 
 
 ## Multiplayer NPCs should await this before reading owned_vessels.
@@ -100,18 +123,40 @@ static func ensure_vessel_registered(
 			on_complete.call(record)
 		return
 
-	var captain_id := _captain_id(session)
-	var hull_id := str(record.get("hull_id", ""))
-	var display := str(record.get("display", record.get("display_name", "Vessel")))
-	var template_path := str(record.get("template_path", ""))
 	var uid := str(record.get("uid", ""))
-	if captain_id.is_empty() or hull_id.is_empty() or uid.is_empty():
-		push_warning("VesselSync: cannot register vessel — missing captain_id, hull_id, or uid")
+	if uid.is_empty():
 		if on_complete.is_valid():
 			on_complete.call(record)
 		return
 
+	if _in_flight_registrations.has(uid):
+		if on_complete.is_valid():
+			on_complete.call(record)
+		return
+
+	if _failed_registrations.has(uid):
+		if on_complete.is_valid():
+			on_complete.call(record)
+		return
+
+	var captain_id := _captain_id(session)
+	var hull_id := str(record.get("hull_id", ""))
+	var display := str(record.get("display", record.get("display_name", "Vessel")))
+	var template_path := str(record.get("template_path", ""))
+	if captain_id.is_empty() or hull_id.is_empty():
+		push_warning("VesselSync: cannot register vessel — missing captain_id or hull_id")
+		if on_complete.is_valid():
+			on_complete.call(record)
+		return
+
+	_in_flight_registrations[uid] = true
 	_post_vessel(session, captain_id, hull_id, display, template_path, uid, func(updated: Dictionary) -> void:
+		_in_flight_registrations.erase(uid)
+		if updated.is_empty() or str(updated.get("server_vessel_id", "")).is_empty():
+			_failed_registrations[uid] = true
+			push_warning("VesselSync: registration failed for local vessel uid=%s" % uid)
+		else:
+			_failed_registrations.erase(uid)
 		if on_complete.is_valid():
 			on_complete.call(updated)
 	)
@@ -130,6 +175,9 @@ static func backfill_unregistered_vessels(session: Node) -> void:
 		if PlayerData.is_legacy_starter_vessel(record):
 			continue
 		if not str(record.get("server_vessel_id", "")).is_empty():
+			continue
+		var uid := str(record.get("uid", ""))
+		if uid.is_empty() or _in_flight_registrations.has(uid) or _failed_registrations.has(uid):
 			continue
 		var hull_id := str(record.get("hull_id", ""))
 		if hull_id.is_empty():
@@ -319,6 +367,9 @@ static func _collect_unregistered_local(owned: Array) -> Array:
 		if PlayerData.is_legacy_starter_vessel(record):
 			continue
 		if not str(record.get("server_vessel_id", "")).is_empty():
+			continue
+		var uid := str(record.get("uid", ""))
+		if uid.is_empty() or _in_flight_registrations.has(uid) or _failed_registrations.has(uid):
 			continue
 		var hull_id := str(record.get("hull_id", ""))
 		if hull_id.is_empty():

@@ -123,6 +123,11 @@ func notify_vessels_synced() -> void:
 func begin_new_captain(display_name: String, appearance: CharacterAppearance) -> void:
 	data = PlayerData.new()
 	data.captain_id = ""
+	data.marks = PlayerData.NEW_CAPTAIN_STARTING_MARKS
+	data.total_marks_earned = 0
+	data.owned_vessels = []
+	data.active_vessel = {}
+	data.ship_runtime_state = {}
 	var trimmed := display_name.strip_edges()
 	data.display_name = trimmed if not trimmed.is_empty() else "Captain"
 	data.appearance = appearance if appearance != null else CharacterAppearance.default_appearance()
