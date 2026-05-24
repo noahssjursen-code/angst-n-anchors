@@ -2,8 +2,9 @@
 
 Detailed architecture reference. See also:
 - [`AGENTS.md`](AGENTS.md) — quick-start for AI agents
-- [`SYSTEMS_AND_STRUCTURE.md`](SYSTEMS_AND_STRUCTURE.md) — migration rationale, future systems, migration plan
 - [`Angst 'n Anchors.md`](Angst%20'n%20Anchors.md) — game design overview
+- [`SHIP_BUILDING.md`](SHIP_BUILDING.md) — hull slots and ship JSON pipeline
+- [`SAVE_FORMAT.md`](SAVE_FORMAT.md) — player save schema
 
 ---
 
