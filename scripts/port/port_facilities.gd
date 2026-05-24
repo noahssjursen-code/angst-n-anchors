@@ -47,6 +47,7 @@ var _spawn_local_pos:          Vector3 = Vector3.ZERO
 var _harbour_master_local_pos: Vector3 = Vector3.ZERO
 var _contract_npc_local_pos:   Vector3 = Vector3.ZERO
 var _shipwright_local_pos:     Vector3 = Vector3.ZERO
+var _company_office_local_pos: Vector3 = Vector3.ZERO
 
 @export var port_size: int = 1:
 	set(v): port_size = v; if is_inside_tree(): _rebuild()
@@ -92,6 +93,7 @@ func _build_facilities() -> void:
 	_harbour_master_local_pos = Vector3.ZERO
 	_contract_npc_local_pos   = Vector3.ZERO
 	_shipwright_local_pos     = Vector3.ZERO
+	_company_office_local_pos = Vector3.ZERO
 
 	_rng = RandomNumberGenerator.new()
 	_rng.seed = layout_seed
@@ -322,6 +324,8 @@ func _place_facility(id: String, pos: Vector3) -> void:
 		_warehouse_building(pos)
 	elif id == "Town":
 		_town_building(pos)
+	elif id == "CompanyOffice":
+		_company_office_building(pos)
 
 
 func _track_npc_pos(id: String, cx: float, center_z: float, depth: float) -> void:
@@ -333,6 +337,8 @@ func _track_npc_pos(id: String, cx: float, center_z: float, depth: float) -> voi
 			_contract_npc_local_pos   = Vector3(cx, 0.0, center_z)
 		"Shipwright":
 			_shipwright_local_pos     = Vector3(cx, 0.0, center_z)
+		"CompanyOffice":
+			_company_office_local_pos = Vector3(cx, 0.0, center_z)
 		"Warehouse":
 			pass  # warehouse position no longer captured — DeliveryNpc retired
 
@@ -353,6 +359,7 @@ func _facility_defs() -> Array:
 	return [
 		{ "id": "HarbourMaster",  "w":  8.0, "h": 5.0, "d":  7.0, "priority": 0, "color": C_AUTHORITY, "min_size": 0 },
 		{ "id": "ShippingAgent",  "w": 10.0, "h": 5.0, "d":  8.0, "priority": 0, "color": C_COMMERCE,  "min_size": 1 },
+		{ "id": "CompanyOffice",  "w":  9.0, "h": 5.0, "d":  8.0, "priority": 0, "color": C_COMMERCE,  "min_size": 0 },
 		{ "id": "Shipwright",     "w": 12.0, "h": 6.0, "d": 10.0, "priority": 1, "color": C_SERVICES,  "min_size": 1 },
 		{ "id": "MarineEngineer", "w": 11.0, "h": 4.0, "d":  9.0, "priority": 1, "color": C_SERVICES,  "min_size": 2 },
 		{ "id": "Customs",        "w":  8.0, "h": 5.0, "d":  7.0, "priority": 1, "color": C_AUTHORITY, "min_size": 2 },
@@ -374,6 +381,9 @@ func get_contract_npc_local_pos() -> Vector3:
 
 func get_shipwright_local_pos() -> Vector3:
 	return _shipwright_local_pos
+
+func get_company_office_local_pos() -> Vector3:
+	return _company_office_local_pos
 
 
 # ── Building constructors ─────────────────────────────────────────────────────
@@ -519,6 +529,13 @@ func _fog_horn_building(pos: Vector3) -> void:
 	building.position = pos
 	# Rotate to face the sea (-Z)
 	building.rotation.y = PI
+	add_child(building)
+
+
+func _company_office_building(pos: Vector3) -> void:
+	var building := CompanyOffice.new()
+	building.name = "CompanyOffice"
+	building.position = pos
 	add_child(building)
 
 

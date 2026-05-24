@@ -160,6 +160,14 @@ func _build_npcs() -> void:
 		sw.position = fpos + sw_local + Vector3(0.0, 0.0, -5.5)
 		add_child(sw)
 
+	var co_local := facilities.get_company_office_local_pos()
+	if co_local != Vector3.ZERO:
+		var agent := CompanyAgentNpc.new()
+		agent.name = "CompanyAgentNpc"
+		agent.port_id = port_id
+		agent.position = fpos + co_local + Vector3(0.0, 0.0, -4.5)
+		add_child(agent)
+
 	_build_walkers(fpos)
 
 	if not port_id.is_empty():
