@@ -2,7 +2,7 @@ class_name CargoBerthType
 extends RefCounted
 
 ## Cargo handling type for a berth slot.
-## Determines crane shape, accepted cargo, and eventually what ships can load/unload there.
+## Determines accepted cargo metadata; all berths use the gantry crane visually.
 
 enum Type {
 	GENERAL   = 0,  ## Derrick crane — crates, pallets, break-bulk timber

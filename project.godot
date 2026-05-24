@@ -31,6 +31,7 @@ DebugHud="*res://scripts/ui/debug_hud.gd"
 Telemetry="*res://scripts/state/telemetry.gd"
 LocalPlayerView="*res://scripts/state/local_player_view.gd"
 Tutorial="*res://scripts/state/tutorial.gd"
+AutonomousVesselManager="*res://scripts/player/autonomous_vessel_manager.gd"
 
 [input]
 

@@ -114,26 +114,10 @@ static func expand(definition: PortDefinition, world_seed: int) -> PortData:
 	return data
 
 
-static func _berth_types(
-	rng:   RandomNumberGenerator,
-	size:  int,
-	count: int,
-) -> Array[int]:
+static func _berth_types(_rng: RandomNumberGenerator, _size: int, count: int) -> Array[int]:
 	var types: Array[int] = []
-
-	# Specialization rolled once per port
-	var spec := 0   # 0 = all general
-	if size >= 1 and rng.randf() < 0.4:
-		spec = 1    # bulk terminal — grab cranes
-	if size >= 3 and rng.randf() < 0.3:
-		spec = 2    # container terminal — gantry cranes
-
 	for i in range(count):
-		match spec:
-			1: types.append(CargoBerthType.Type.BULK      if i == 0 else CargoBerthType.Type.GENERAL)
-			2: types.append(CargoBerthType.Type.CONTAINER if i == 0 else CargoBerthType.Type.GENERAL)
-			_: types.append(CargoBerthType.Type.GENERAL)
-
+		types.append(CargoBerthType.Type.GENERAL)
 	return types
 
 

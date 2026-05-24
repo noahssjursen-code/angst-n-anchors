@@ -26,6 +26,8 @@ var _panel:        Panel
 var _body:         VBoxContainer
 var _scroll:       ScrollContainer
 var _title_label:  Label
+var _viewport_fit_fraction: float = -1.0
+var _viewport_fit_aspect: float = 16.0 / 9.0
 
 
 func _init(title_text: String = "", panel_size: Vector2 = DEFAULT_SIZE) -> void:
@@ -67,6 +69,7 @@ func _init(title_text: String = "", panel_size: Vector2 = DEFAULT_SIZE) -> void:
 # ── Visibility ────────────────────────────────────────────────────────────────
 
 func show_panel() -> void:
+	fit_viewport_if_configured()
 	_panel.visible = true
 
 
@@ -81,6 +84,65 @@ func is_open() -> bool:
 func set_title(text: String) -> void:
 	if _title_label != null:
 		_title_label.text = text
+
+
+func set_panel_size(panel_size: Vector2) -> void:
+	_viewport_fit_fraction = -1.0
+	_apply_panel_size(panel_size)
+
+
+## Size a 16:9 (or custom aspect) panel to fit within `fraction` of the viewport.
+func fit_viewport(fraction: float = 0.75, aspect: float = 16.0 / 9.0) -> void:
+	_viewport_fit_fraction = fraction
+	_viewport_fit_aspect = aspect
+	var vp := get_viewport()
+	if vp == null:
+		return
+	_apply_panel_size(_viewport_panel_size(vp.get_visible_rect().size, fraction, aspect))
+
+
+func fit_viewport_if_configured() -> void:
+	if _viewport_fit_fraction > 0.0:
+		fit_viewport(_viewport_fit_fraction, _viewport_fit_aspect)
+
+
+func _apply_panel_size(panel_size: Vector2) -> void:
+	if _panel == null:
+		return
+	_panel.offset_left = -panel_size.x * 0.5
+	_panel.offset_right = panel_size.x * 0.5
+	_panel.offset_top = -panel_size.y * 0.5
+	_panel.offset_bottom = panel_size.y * 0.5
+
+
+static func viewport_panel_size(
+	viewport_size: Vector2, fraction: float, aspect: float = 16.0 / 9.0
+) -> Vector2:
+	return _viewport_panel_size(viewport_size, fraction, aspect)
+
+
+static func _viewport_panel_size(
+	viewport_size: Vector2, fraction: float, aspect: float
+) -> Vector2:
+	var max_w := viewport_size.x * fraction
+	var max_h := viewport_size.y * fraction
+	var w := max_w
+	var h := w / aspect
+	if h > max_h:
+		h = max_h
+		w = h * aspect
+	return Vector2(w, h)
+
+
+func _ready() -> void:
+	var vp := get_viewport()
+	if vp != null and not vp.size_changed.is_connected(_on_viewport_size_changed):
+		vp.size_changed.connect(_on_viewport_size_changed)
+
+
+func _on_viewport_size_changed() -> void:
+	if _viewport_fit_fraction > 0.0 and is_open():
+		fit_viewport(_viewport_fit_fraction, _viewport_fit_aspect)
 
 
 # ── Content ───────────────────────────────────────────────────────────────────

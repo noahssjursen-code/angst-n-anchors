@@ -3,12 +3,18 @@ extends Node
 ## Autoload — owns the F3 debug overlay. F4 weather presets + E midday/calm while panel is open.
 ## Layer 100: always above every other UI element.
 
+signal visibility_changed(visible: bool)
+
 const _WEATHER_PANEL := preload("res://scripts/weather/weather_debug_presets.gd")
 
 var _layer:   CanvasLayer
 var _overlay: DebugDraw
 var _weather_preset_panel: Control
 var _shown:   bool = false
+
+
+func is_open() -> bool:
+	return _shown
 
 
 func _ready() -> void:
@@ -39,6 +45,7 @@ func _unhandled_input(event: InputEvent) -> void:
 			_overlay.visible = _shown
 			if not _shown:
 				_weather_preset_panel.visible = false
+			visibility_changed.emit(_shown)
 			get_viewport().set_input_as_handled()
 		elif ke.pressed and not ke.echo and ke.physical_keycode == KEY_F4 and _shown:
 			_weather_preset_panel.visible = not _weather_preset_panel.visible
@@ -46,6 +53,15 @@ func _unhandled_input(event: InputEvent) -> void:
 		elif ke.pressed and not ke.echo and ke.physical_keycode == KEY_E and _shown:
 			_apply_debug_day_calm_preset()
 			get_viewport().set_input_as_handled()
+		elif ke.pressed and not ke.echo and _shown:
+			if ke.physical_keycode == KEY_O:
+				AutonomousSimDebug.adjust_speed(-1)
+				_overlay.queue_redraw()
+				get_viewport().set_input_as_handled()
+			elif ke.physical_keycode == KEY_I:
+				AutonomousSimDebug.adjust_speed(1)
+				_overlay.queue_redraw()
+				get_viewport().set_input_as_handled()
 
 
 func _apply_debug_day_calm_preset() -> void:

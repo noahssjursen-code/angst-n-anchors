@@ -274,10 +274,7 @@ func _build_berth_slot(index: int, cx: float, slot_w: float, ship_beam: float, c
 			C_LABEL, 0.48, "LabelBerth%d" % index)
 	berth_lbl.visible = _editor_berth_overlays_visible()
 
-	match cargo_type:
-		CargoBerthType.Type.BULK:      _crane_bulk(index, cx, crane_z)
-		CargoBerthType.Type.CONTAINER: _crane_container(index, cx, slot_w, crane_z)
-		_:                             _crane_general(index, cx, cargo, crane_z, apron_z, apron_depth, ship_beam)
+	_berth_general(index, cx, cargo, crane_z, apron_z, apron_depth, ship_beam)
 
 	# Quay slab already covers this area (extended in _build_quay) — no
 	# per-berth asphalt strip needed.
@@ -333,9 +330,9 @@ static func _crane_trolley_limits(
 	return Vector2(trolley_min, trolley_max)
 
 
-# ── Crane types ───────────────────────────────────────────────────────────────
+# ── Gantry crane ──────────────────────────────────────────────────────────────
 
-func _crane_general(
+func _berth_general(
 		index: int,
 		cx: float,
 		cargo: Dictionary,
@@ -357,27 +354,6 @@ func _crane_general(
 		var esc := get_tree().edited_scene_root
 		if esc != null:
 			_own_subtree(crane, esc)
-
-
-func _crane_bulk(index: int, cx: float, crane_z: float) -> void:
-	var col := CargoBerthType.crane_color(CargoBerthType.Type.BULK)
-	_box(Vector3(7.0, 12.0, 7.0), Vector3(cx, 6.0, crane_z), col, "Crane%d" % index)
-	_box(Vector3(4.5, 1.5, 12.0), Vector3(cx, 13.5, crane_z - 4.0), col.lightened(0.10), "CraneBoom%d" % index)
-	_box(Vector3(3.5, 3.0, 3.5), Vector3(cx, 10.0, crane_z - 7.0), col.darkened(0.15), "CraneGrab%d" % index)
-	_label("Bulk  #%d" % (index + 1), Vector3(cx, 15.5, crane_z),
-		   Color(1.0, 1.0, 1.0, 0.90), 0.44, "LabelCrane%d" % index)
-
-
-func _crane_container(index: int, cx: float, slot_w: float, crane_z: float) -> void:
-	var col      := CargoBerthType.crane_color(CargoBerthType.Type.CONTAINER)
-	var leg_span : float = minf(slot_w * 0.42, 18.0)
-	var h        : float = 24.0
-	_box(Vector3(2.5, h, 2.5), Vector3(cx - leg_span, h * 0.5, crane_z), col, "CraneLegL%d" % index)
-	_box(Vector3(2.5, h, 2.5), Vector3(cx + leg_span, h * 0.5, crane_z), col, "CraneLegR%d" % index)
-	_box(Vector3(leg_span * 2.0 + 2.5, 2.5, 2.5), Vector3(cx, h, crane_z), col, "CraneBeam%d" % index)
-	_box(Vector3(2.5, 2.0, 10.0), Vector3(cx, h - 1.0, crane_z - 6.0), col.lightened(0.15), "CraneBoom%d" % index)
-	_label("Container  #%d" % (index + 1), Vector3(cx, h + 1.5, crane_z),
-		   Color(1.0, 1.0, 1.0, 0.90), 0.44, "LabelCrane%d" % index)
 
 
 # ── Fuel point ────────────────────────────────────────────────────────────────

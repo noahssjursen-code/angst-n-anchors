@@ -44,6 +44,7 @@ const LAYER_BOAT_WALK := 4
 @onready var camera: Camera3D = $Camera3D
 
 var _player_camera: PlayerCamera = null
+var _free_cam: PlayerFreeCam = null
 var _body_npc: NpcBase = null
 var _walk_anim: WalkAnimator = null
 var _walk_distance_m: float = 0.0
@@ -75,10 +76,19 @@ func _ready() -> void:
 	add_child(_player_camera)
 
 	_build_body_mesh()
+
+	_free_cam = PlayerFreeCam.new()
+	_free_cam.name = "PlayerFreeCam"
+	add_child(_free_cam)
+
 	_player_camera.bind(self, camera, _body_npc)
+	_free_cam.bind(self, camera, _player_camera, _body_npc)
 
 
 func _unhandled_input(event: InputEvent) -> void:
+	if _free_cam != null and _free_cam.handle_input(event):
+		return
+
 	if _player_camera != null and _player_camera.handle_input(event):
 		get_viewport().set_input_as_handled()
 		return
@@ -91,6 +101,10 @@ func _unhandled_input(event: InputEvent) -> void:
 
 
 func _physics_process(delta: float) -> void:
+	if _free_cam != null and _free_cam.is_active():
+		velocity = Vector3.ZERO
+		return
+
 	var on_floor := is_on_floor()
 
 	# Landing — dip the camera slightly on impact, recover smoothly
@@ -211,6 +225,10 @@ func _physics_process(delta: float) -> void:
 
 
 func _process(delta: float) -> void:
+	if _free_cam != null and _free_cam.is_active():
+		_free_cam.update(delta)
+		return
+
 	if _player_camera == null:
 		return
 	var inputs_active := Input.mouse_mode == Input.MOUSE_MODE_CAPTURED

@@ -25,7 +25,11 @@ var total_marks_earned:  int   = 0
 var contracts_completed: int   = 0
 var distance_sailed_m:   float = 0.0
 ## Ledger records for every hull the captain owns.
-## Each entry: { "uid", "hull_id", "display", "template_path", "server_vessel_id?" }.
+## Each entry: { uid, hull_id, display, template_path, server_vessel_id?,
+##   crew[], autonomous_active, autonomous_active_at, home_port_id,
+##   visit_port_id?, expense_per_day, pending_earnings, last_collected_at,
+##   last_accrual_at, sim_version }.
+## See AutonomousVesselRecord for the canonical autonomous / NPC-sim shape.
 var owned_vessels: Array = []
 ## Hull currently deployed in the world (must match one entry in owned_vessels).
 var active_vessel: Dictionary = {}

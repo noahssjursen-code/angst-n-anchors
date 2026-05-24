@@ -100,7 +100,7 @@ func _draw() -> void:
 	var ty := oy + PAD_Y + 12.0
 	draw_string(font, Vector2(ox + PAD_X, ty),
 		"DEBUG", HORIZONTAL_ALIGNMENT_LEFT, -1, 11, C_TITLE)
-	var hint   := "F3 toggle · F4 weather · E day/calm"
+	var hint   := "F3 · F3+P cam · F4 wx · E calm · O I fleet speed"
 	var hint_w := font.get_string_size(hint, HORIZONTAL_ALIGNMENT_LEFT, -1, 9).x
 	draw_string(font, Vector2(ox + PANEL_W - hint_w - PAD_X, ty),
 		hint, HORIZONTAL_ALIGNMENT_LEFT, -1, 9, C_LABEL)
@@ -119,8 +119,18 @@ func _build() -> Array:
 	var e:        Array = []
 	_build_system(e)
 	_build_loading(e)
+	_build_debug_tools(e)
 	_build_gameplay(e)
 	return e
+
+
+func _build_debug_tools(e: Array) -> void:
+	_sec(e, "DEBUG TOOLS")
+	var scale_c := C_VALUE if AutonomousSimDebug.time_scale <= 1.001 else C_WARN
+	_row(e, "Fleet sim speed", AutonomousSimDebug.label(), scale_c)
+	_stub(e, "Adjust", "O slower   I faster")
+	_stub(e, "Fleet paths", "orange transit lines")
+	_sep(e)
 
 
 func _build_system(e: Array) -> void:
