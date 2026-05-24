@@ -36,6 +36,8 @@ var send_clock: float = 0.0
 @export var position_smoothness: float = 14.0
 @export var payload_smoothness: float = 12.0
 
+var _session_active: bool = false
+
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
@@ -49,10 +51,13 @@ func _ready() -> void:
 	# Instantiate clean, modular drawing service
 	drawing_service = ReplicationDrawingServiceClass.new()
 	drawing_service.name = "ReplicationDrawingService"
+	drawing_service.visible = false
 	add_child(drawing_service)
 
 
 func _process(delta: float) -> void:
+	if not _session_active:
+		return
 	# 1. Delegate dynamic remote entities interpolation to the drawing service
 	drawing_service.interpolate_entities(delta, position_smoothness, payload_smoothness)
 	
@@ -198,6 +203,8 @@ func _tick_outbound(delta: float) -> void:
 # ── Snapshot Packet Router ───────────────────────────────────────────────────
 
 func _on_packet_received(msg_type: int, payload: PackedByteArray) -> void:
+	if not _session_active:
+		return
 	if msg_type == WireProtocolClass.UDP_MSG_TYPE_SNAPSHOT:
 		var snapshot := WireProtocolClass.decode_snapshot(payload)
 		if snapshot.is_empty():
@@ -589,22 +596,48 @@ func is_connected_to_host() -> bool:
 	return bool(client.call("is_connected_to_host"))
 
 
-func logout() -> void:
-	var local_id := get_local_player_id()
-	if not local_id.is_empty():
-		print("[NetworkManager] Gracefully declaring logout to server for: ", local_id)
-		var pkt := WireProtocolClass.encode_logout(local_id)
-		client.call("send_packet", pkt)
+func is_session_active() -> bool:
+	return _session_active
+
+
+func begin_multiplayer_session() -> void:
+	if _session_active:
+		return
+	_session_active = true
+	if drawing_service != null:
+		drawing_service.visible = true
+	client.call("request_connect")
+
+
+func end_multiplayer_session(silent: bool = false) -> void:
+	if _session_active and not silent:
+		_send_logout_packet()
+	_session_active = false
+	if drawing_service != null:
+		drawing_service.visible = false
 	close_connection()
+
+
+func logout() -> void:
+	end_multiplayer_session(false)
+
+
+func _send_logout_packet() -> void:
+	var local_id := get_local_player_id()
+	if local_id.is_empty():
+		return
+	print("[NetworkManager] Gracefully declaring logout to server for: ", local_id)
+	var pkt := WireProtocolClass.encode_logout(local_id)
+	client.call("send_packet", pkt)
 
 
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_WM_CLOSE_REQUEST:
-		logout()
+		end_multiplayer_session(false)
 
 
 func _exit_tree() -> void:
-	logout()
+	end_multiplayer_session(false)
 
 
 func close_connection() -> void:

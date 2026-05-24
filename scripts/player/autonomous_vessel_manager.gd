@@ -34,12 +34,31 @@ func _ready() -> void:
 			world_state.nearest_port_changed.connect(_on_nearest_port_changed)
 		_context_port_id = world_state.nearest_port_id
 
+	if _is_main_menu():
+		return
+
 	call_deferred("refresh_all")
 	call_deferred("_ensure_transit_debug_draw")
 	call_deferred("_ensure_lane_debug_draw")
 
 
+func clear_all_for_menu() -> void:
+	_fetch_in_flight = false
+	for uid in _controllers.keys().duplicate():
+		_despawn_uid(str(uid))
+	_server_records.clear()
+
+
+func _is_main_menu() -> bool:
+	var tree := get_tree()
+	if tree == null or tree.current_scene == null:
+		return false
+	return String(tree.current_scene.scene_file_path).ends_with("main_menu.tscn")
+
+
 func _process(delta: float) -> void:
+	if _is_main_menu():
+		return
 	_flush_pending_fleet_push()
 	_refresh_clock += delta
 	if _refresh_clock < REFRESH_INTERVAL_S:
@@ -51,6 +70,8 @@ func _process(delta: float) -> void:
 
 
 func apply_record_update(uid: String, record: Dictionary) -> void:
+	if _is_main_menu():
+		return
 	if uid.is_empty() or record.is_empty():
 		return
 
@@ -97,6 +118,8 @@ func _flush_pending_fleet_push() -> void:
 
 
 func refresh_all() -> void:
+	if _is_main_menu():
+		return
 	_ensure_transit_debug_draw()
 	_ensure_lane_debug_draw()
 	var session := get_node_or_null("/root/PlayerSession")
@@ -120,6 +143,8 @@ func refresh_all() -> void:
 
 
 func refresh_vessel(_uid: String = "") -> void:
+	if _is_main_menu():
+		return
 	if _is_mp_session():
 		call_deferred("refresh_all")
 		return
@@ -134,10 +159,15 @@ func refresh_vessel(_uid: String = "") -> void:
 
 
 func _on_session_data(_data: Variant = null) -> void:
+	if _is_main_menu():
+		clear_all_for_menu()
+		return
 	call_deferred("refresh_all")
 
 
 func _on_nearest_port_changed(port_id: String) -> void:
+	if _is_main_menu():
+		return
 	if port_id == _context_port_id:
 		return
 	_context_port_id = port_id
@@ -242,6 +272,8 @@ func _purge_stale_controllers() -> void:
 
 
 func _ensure_spawn(record: Dictionary) -> void:
+	if _is_main_menu():
+		return
 	var uid := str(record.get("uid", ""))
 	if uid.is_empty():
 		return
@@ -333,15 +365,17 @@ func _disable_player_control(ship: BoatBody) -> void:
 
 
 func _world_root() -> Node:
+	if _is_main_menu():
+		return null
 	var tree := get_tree()
 	if tree == null:
 		return null
 	for node in tree.get_nodes_in_group("world"):
 		if node is Node3D:
 			return node as Node3D
-	if tree.current_scene != null:
-		return tree.current_scene
-	return tree.root
+	if tree.current_scene != null and tree.current_scene is Node3D:
+		return tree.current_scene as Node3D
+	return null
 
 
 func _ensure_transit_debug_draw() -> void:

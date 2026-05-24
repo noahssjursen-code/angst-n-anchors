@@ -1,0 +1,10 @@
+WARNING: 6 RIDs of type "Compute" were leaked.
+   at: _free_rids (servers/rendering/rendering_device.cpp:7295)
+WARNING: 1 RID of type "UniformSet" was leaked.
+   at: _free_rids (servers/rendering/rendering_device.cpp:7293)
+WARNING: 1 RID of type "StorageBuffer" was leaked.
+   at: _free_rids (servers/rendering/rendering_device.cpp:7293)
+WARNING: 6 RIDs of type "Shader" were leaked.
+   at: _free_rids (servers/rendering/rendering_device.cpp:7295)
+WARNING: 5 RIDs of type "Texture" were leaked.
+   at: finalize (servers/rendering/rendering_device.cpp:7505)

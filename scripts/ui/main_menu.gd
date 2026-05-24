@@ -46,6 +46,8 @@ var _target_look_at: Vector3 = Vector3(0.0, 1.5, 0.0)
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+
+	_ensure_menu_offline()
 	
 	# Set up 3D Background first
 	_setup_3d_background()
@@ -947,7 +949,28 @@ func _on_mp_play_pressed() -> void:
 	req.request(http_url)
 
 
+func _ensure_menu_offline() -> void:
+	var config := get_node_or_null("/root/ServerConfig")
+	if config != null:
+		config.set("is_multiplayer_mode", false)
+	var network := get_node_or_null("/root/NetworkManager")
+	if network != null and network.has_method("end_multiplayer_session"):
+		network.call("end_multiplayer_session", true)
+	var fleet := get_node_or_null("/root/AutonomousVesselManager")
+	if fleet != null and fleet.has_method("clear_all_for_menu"):
+		fleet.call("clear_all_for_menu")
+
+
 func _go_to_world() -> void:
+	var config := get_node_or_null("/root/ServerConfig")
+	var is_mp := config != null and bool(config.get("is_multiplayer_mode"))
+	var network := get_node_or_null("/root/NetworkManager")
+	if network != null:
+		if is_mp and network.has_method("begin_multiplayer_session"):
+			network.call("begin_multiplayer_session")
+		elif network.has_method("end_multiplayer_session"):
+			network.call("end_multiplayer_session", true)
+
 	var menu := get_node_or_null("/root/GameMenu")
 	if menu != null and menu.has_method("set_gameplay_hud_visible"):
 		menu.set_gameplay_hud_visible(true)

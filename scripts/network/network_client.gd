@@ -10,30 +10,42 @@ var _udp_peer: PacketPeerUDP = null
 var _udp_connected: bool = false
 var _udp_server_host: String = ""
 var _udp_server_port: int = 7777
+var _connect_requested: bool = false
 
 var _health_http_req: HTTPRequest = null
 
 
 func _ready() -> void:
-	# Listen for config changes to automatically rebind
 	var config := get_node_or_null("/root/ServerConfig")
 	if config != null:
 		config.connect("changed", _on_server_config_changed)
-	_rebind_connection()
+	_refresh_server_endpoints()
 
 
 func _on_server_config_changed() -> void:
-	_rebind_connection()
+	_refresh_server_endpoints()
+	if _connect_requested:
+		_rebind_connection()
 
 
-func _rebind_connection() -> void:
-	close_connection()
+func _refresh_server_endpoints() -> void:
 	var config := get_node_or_null("/root/ServerConfig")
 	if config == null:
 		return
 	_udp_server_host = config.get("udp_host")
 	_udp_server_port = int(config.get("udp_port"))
-	ensure_udp_peer()
+
+
+func request_connect() -> void:
+	_connect_requested = true
+	_rebind_connection()
+
+
+func _rebind_connection() -> void:
+	_close_udp_socket()
+	_refresh_server_endpoints()
+	if _connect_requested:
+		ensure_udp_peer()
 
 
 func _process(_delta: float) -> void:
@@ -41,6 +53,8 @@ func _process(_delta: float) -> void:
 
 
 func ensure_udp_peer() -> void:
+	if not _connect_requested:
+		return
 	if _udp_peer != null:
 		return
 	_udp_peer = PacketPeerUDP.new()
@@ -54,6 +68,11 @@ func ensure_udp_peer() -> void:
 
 
 func close_connection() -> void:
+	_connect_requested = false
+	_close_udp_socket()
+
+
+func _close_udp_socket() -> void:
 	if _udp_peer != null:
 		_udp_peer.close()
 		_udp_peer = null
@@ -71,6 +90,8 @@ func is_connected_to_host() -> bool:
 
 
 func send_packet(packet: PackedByteArray) -> void:
+	if not _connect_requested:
+		return
 	ensure_udp_peer()
 	if _udp_peer == null:
 		return
