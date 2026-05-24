@@ -37,9 +37,12 @@ const BAKE_RESOLUTION : int = 512
 ## camera positions just outside still get a meaningful shelter value.
 const BAKE_PADDING_M : float = 800.0
 
-# ── Cached island disks ───────────────────────────────────────────────────────
+# ── Cached island collision (OBB in world XZ; disk radius for fast shelter) ───
 static var _centers_xz : PackedVector2Array = PackedVector2Array()
 static var _radii      : PackedFloat32Array = PackedFloat32Array()
+static var _obb_half_x : PackedFloat32Array = PackedFloat32Array()
+static var _obb_half_z : PackedFloat32Array = PackedFloat32Array()
+static var _obb_rot_y  : PackedFloat32Array = PackedFloat32Array()
 static var _initialized: bool = false
 
 # ── Baked shelter texture (CPU-baked, GPU-sampled) ────────────────────────────
@@ -50,19 +53,41 @@ static var _baked_world_origin   : Vector2 = Vector2.ZERO
 static var _baked_world_size     : float   = 0.0
 
 
-## Seed the field. Each entry must be a Dictionary with:
-##   "center": Vector3   — world-space island centre
-##   "radius": float     — nominal island half-width (we add a padding margin)
+## Seed the field. Each entry is a Dictionary with:
+##   "center": Vector3 — port / island origin in world space
+## Preferred (matches port island footprint):
+##   "half_x", "half_z": float — local half-extents incl. organic margin (m)
+##   "rotation_y": float — port plot yaw (radians)
+## Legacy fallback:
+##   "radius": float — circular island (deprecated; too small for routing)
 static func initialize(islands: Array) -> void:
 	_centers_xz.clear()
 	_radii.clear()
+	_obb_half_x.clear()
+	_obb_half_z.clear()
+	_obb_rot_y.clear()
 	for island in islands:
-		var center : Vector3 = island.get("center", Vector3.ZERO)
-		var radius : float   = float(island.get("radius", 0.0)) + ISLAND_RADIUS_PADDING_M
+		var center_v: Vector3 = island.get("center", Vector3.ZERO)
+		var center := Vector2(center_v.x, center_v.z)
+		if island.has("half_x") and island.has("half_z"):
+			var half_x := maxf(float(island.get("half_x", 0.0)), 1.0) + ISLAND_RADIUS_PADDING_M
+			var half_z := maxf(float(island.get("half_z", 0.0)), 1.0) + ISLAND_RADIUS_PADDING_M
+			var rot_y := float(island.get("rotation_y", 0.0))
+			var route_r := sqrt(half_x * half_x + half_z * half_z)
+			_centers_xz.append(center)
+			_radii.append(route_r)
+			_obb_half_x.append(half_x)
+			_obb_half_z.append(half_z)
+			_obb_rot_y.append(rot_y)
+			continue
+		var radius: float = float(island.get("radius", 0.0)) + ISLAND_RADIUS_PADDING_M
 		if radius <= 0.0:
 			continue
-		_centers_xz.append(Vector2(center.x, center.z))
+		_centers_xz.append(center)
 		_radii.append(radius)
+		_obb_half_x.append(radius)
+		_obb_half_z.append(radius)
+		_obb_rot_y.append(0.0)
 	_initialized = true
 	_bake_shelter_texture()
 
@@ -79,10 +104,35 @@ static func distance_to_land(world_pos: Vector3) -> float:
 	var pos2 := Vector2(world_pos.x, world_pos.z)
 	var best := INF
 	for i in range(_centers_xz.size()):
-		var d := sqrt(pos2.distance_squared_to(_centers_xz[i])) - _radii[i]
+		var d := _obb_signed_distance(
+			pos2,
+			_centers_xz[i],
+			_obb_half_x[i],
+			_obb_half_z[i],
+			_obb_rot_y[i],
+		)
 		if d < best:
 			best = d
 	return best
+
+
+static func _obb_signed_distance(
+	pos2: Vector2,
+	center: Vector2,
+	half_x: float,
+	half_z: float,
+	rot_y: float,
+) -> float:
+	var offset := pos2 - center
+	var c := cos(-rot_y)
+	var s := sin(-rot_y)
+	var lx := offset.x * c - offset.y * s
+	var lz := offset.x * s + offset.y * c
+	var dx := absf(lx) - half_x
+	var dz := absf(lz) - half_z
+	var ox := maxf(dx, 0.0)
+	var oz := maxf(dz, 0.0)
+	return sqrt(ox * ox + oz * oz) + minf(maxf(dx, dz), 0.0)
 
 
 ## 0..1 shelter factor. 0 = on land / right at the shore, 1 = fully open water.
@@ -163,6 +213,63 @@ static func get_baked_world_origin() -> Vector2:
 ## Side length (square) of the world region covered by the baked texture.
 static func get_baked_world_size() -> float:
 	return _baked_world_size
+
+
+static func get_active_island_indices_for_segment(a: Vector2, b: Vector2, clearance: float) -> Array[int]:
+	var out: Array[int] = []
+	if not _initialized or _centers_xz.is_empty():
+		return out
+	var ab := b - a
+	var ab_len_sq := ab.length_squared()
+	for i in range(_centers_xz.size()):
+		var center := _centers_xz[i]
+		var radius := _radii[i]
+		var dist := 0.0
+		if ab_len_sq == 0.0:
+			dist = a.distance_to(center)
+		else:
+			var ap := center - a
+			var t := clampf(ap.dot(ab) / ab_len_sq, 0.0, 1.0)
+			var proj := a + t * ab
+			dist = center.distance_to(proj)
+		if dist < radius + clearance:
+			out.append(i)
+	return out
+
+
+static func distance_to_land_filter(world_pos: Vector3, active_islands: Array[int]) -> float:
+	if not _initialized or _centers_xz.is_empty() or active_islands.is_empty():
+		return INF
+	var pos2 := Vector2(world_pos.x, world_pos.z)
+	var best := INF
+	for idx in active_islands:
+		var d := _obb_signed_distance(
+			pos2,
+			_centers_xz[idx],
+			_obb_half_x[idx],
+			_obb_half_z[idx],
+			_obb_rot_y[idx],
+		)
+		if d < best:
+			best = d
+	return best
+
+
+static func is_island_ignored(idx: int, ignore_centers: Array[Vector2]) -> bool:
+	if not _initialized or idx < 0 or idx >= _centers_xz.size():
+		return false
+	var center := _centers_xz[idx]
+	for ic in ignore_centers:
+		if center.distance_to(ic) < 10.0:
+			return true
+	return false
+
+
+static func get_island_disk(idx: int) -> Dictionary:
+	if not _initialized or idx < 0 or idx >= _centers_xz.size():
+		return {}
+	return {"center": _centers_xz[idx], "radius": _radii[idx]}
+
 
 
 ## Bake `shore_shelter` over a square world region into an R32F texture the

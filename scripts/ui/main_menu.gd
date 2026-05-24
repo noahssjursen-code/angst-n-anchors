@@ -378,8 +378,8 @@ func _build_multiplayer_page() -> void:
 		var p_name: String = config.get("preset")
 		if p_name == "custom":
 			custom_grid.visible = true
-			host_edit.text = String(config.get("udp_host"))
-			port_edit.text = String(config.get("udp_port"))
+			host_edit.text = str(config.get("udp_host"))
+			port_edit.text = str(config.get("udp_port"))
 		else:
 			custom_grid.visible = false
 
@@ -840,7 +840,7 @@ func _create_postgres_captain(display_name: String, appearance: CharacterAppeara
 					session.set_captain_profile(
 						_selected_mp_captain_id,
 						_selected_mp_captain_name,
-						int(json.data.get("marks", 1000)),
+						int(json.data.get("marks", PlayerData.NEW_CAPTAIN_STARTING_MARKS)),
 						appearance
 					)
 					

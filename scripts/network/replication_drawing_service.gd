@@ -9,6 +9,42 @@ const VehicleGroups = preload("res://scripts/ship/vehicle_groups.gd")
 # Tracks active visual remote representations: id -> { "node": Node3D, "type": String, "target_pos": Vector3, "target_payload": Array, "interpolated_payload": Array, "meta": String, "last_seen_ms": int }
 var _visible_entities: Dictionary = {}
 
+
+func _live_node(state: Dictionary) -> Node3D:
+	var raw: Variant = state.get("node", null)
+	if raw == null:
+		return null
+	if not is_instance_valid(raw):
+		return null
+	return raw as Node3D
+
+
+func _prune_stale_entries() -> void:
+	var stale: Array[String] = []
+	for id_variant in _visible_entities.keys():
+		var id := String(id_variant)
+		var state: Dictionary = _visible_entities[id]
+		if _live_node(state) == null:
+			stale.append(id)
+	for id in stale:
+		_visible_entities.erase(id)
+
+
+func _purge_entities_under(root: Node) -> void:
+	if root == null or not is_instance_valid(root):
+		return
+	var stale: Array[String] = []
+	for id_variant in _visible_entities.keys():
+		var id := String(id_variant)
+		var node := _live_node(_visible_entities[id_variant] as Dictionary)
+		if node == null:
+			stale.append(id)
+			continue
+		if node != root and root.is_ancestor_of(node):
+			stale.append(id)
+	for id in stale:
+		_visible_entities.erase(id)
+
 # Keep track of active berth locks established by remote ships: "portID_berthIndex" -> ship_entity_id
 var _occupied_berths: Dictionary = {}
 
@@ -22,8 +58,9 @@ func clear_entity_remote_state(id: String) -> void:
 	if not _visible_entities.has(id):
 		return
 	var state: Dictionary = _visible_entities[id]
-	var node: Node3D = state.get("node", null)
-	if is_instance_valid(node):
+	var node := _live_node(state)
+	if node != null:
+		_purge_entities_under(node)
 		if node.has_method("set"):
 			node.set("_remotely_operated_by", "")
 		# Dynamic remotes are children of this service; pre-placed scene nodes are not.
@@ -43,6 +80,7 @@ const TYPE_SCENE_MAP := {
 
 ## Processes snapshot frames to add, update, or remove remote entity nodes.
 func apply_entities(entities_list: Array, local_id: String, scene_nodes: Dictionary, local_sender_ids: Array, now_ms: int, timeout_ms: int) -> void:
+	_prune_stale_entries()
 	var active_snapshot_ids: Dictionary = {}
 	var active_pilot_ids: Dictionary = {}
 	var current_frame_berths: Dictionary = {}
@@ -71,9 +109,9 @@ func apply_entities(entities_list: Array, local_id: String, scene_nodes: Diction
 		
 		# 2. Check if we already have this entity drawn
 		var state: Dictionary = _visible_entities.get(id, {})
-		var node: Node3D = state.get("node", null)
+		var node := _live_node(state)
 		
-		if node == null or not is_instance_valid(node):
+		if node == null:
 			# New entity! First check if it is a pre-placed level node (like cranes)
 			if scene_nodes.has(id):
 				node = scene_nodes[id] as Node3D
@@ -128,8 +166,9 @@ func apply_entities(entities_list: Array, local_id: String, scene_nodes: Diction
 		var age := now_ms - int(state["last_seen_ms"])
 		
 		if age > timeout_ms:
-			var node: Node3D = state.get("node", null)
-			if is_instance_valid(node):
+			var node := _live_node(state)
+			if node != null:
+				_purge_entities_under(node)
 				if not scene_nodes.has(id):
 					print("[ReplicationDrawingService] Despawning expired: ", id)
 					node.queue_free()
@@ -142,13 +181,14 @@ func apply_entities(entities_list: Array, local_id: String, scene_nodes: Diction
 
 ## Interpolates active visual entities towards their goals.
 func interpolate_entities(delta: float, position_smoothness: float, payload_smoothness: float) -> void:
+	_prune_stale_entries()
 	var pos_alpha := 1.0 - exp(-position_smoothness * delta)
 	var pay_alpha := 1.0 - exp(-payload_smoothness * delta)
 	
 	for id in _visible_entities.keys():
 		var state: Dictionary = _visible_entities[id]
-		var node: Node3D = state.get("node", null)
-		if node == null or not is_instance_valid(node):
+		var node := _live_node(state)
+		if node == null:
 			continue
 			
 		var target_pos: Vector3 = state["target_pos"]
@@ -193,8 +233,8 @@ func _update_avatar_visibilities(piloting_player_ids: Dictionary) -> void:
 	for id in _visible_entities.keys():
 		var state: Dictionary = _visible_entities[id]
 		if state["type"] == "player":
-			var node: Node3D = state.get("node", null)
-			if is_instance_valid(node):
+			var node := _live_node(state)
+			if node != null:
 				node.visible = not piloting_player_ids.has(id)
 
 
@@ -216,9 +256,9 @@ func _process_attachment_meta(node: Node3D, entity_id: String, meta: String) -> 
 		# Locate parent node
 		if _visible_entities.has(parent_tag):
 			var parent_state: Dictionary = _visible_entities[parent_tag]
-			var parent_node: Node3D = parent_state.get("node", null)
+			var parent_node := _live_node(parent_state)
 			
-			if is_instance_valid(parent_node):
+			if parent_node != null:
 				# Optional: Resolve sub-node anchor target (e.g. parent=crane_1:hook_anchor)
 				var actual_parent: Node3D = parent_node
 				var path_parts := parent_tag.split(":")
@@ -271,7 +311,7 @@ func _set_berth_lock_state(berth_tag: String, ship_id: String, active: bool) -> 
 			if active:
 				var ship_node: BoatBody = null
 				if _visible_entities.has(ship_id):
-					ship_node = _visible_entities[ship_id].get("node") as BoatBody
+					ship_node = _live_node(_visible_entities[ship_id]) as BoatBody
 				
 				# Occupy the dock slot
 				print("[Replication] Remote lock established on port: ", port_id, " berth: ", berth_index)
@@ -385,9 +425,11 @@ func _despawn_remote_entity(id: String, scene_nodes: Dictionary) -> void:
 	if not _visible_entities.has(id):
 		return
 	var state: Dictionary = _visible_entities[id]
-	var node: Node3D = state.get("node", null)
-	if is_instance_valid(node) and not scene_nodes.has(id) and node.get_parent() == self:
-		node.queue_free()
+	var node := _live_node(state)
+	if node != null:
+		_purge_entities_under(node)
+		if not scene_nodes.has(id) and node.get_parent() == self:
+			node.queue_free()
 	_visible_entities.erase(id)
 
 
@@ -613,7 +655,7 @@ func _drive_player_walk_cycle(state: Dictionary, node: Node3D, _delta: float) ->
 func clear_all(scene_nodes: Dictionary) -> void:
 	for id in _visible_entities.keys():
 		var state: Dictionary = _visible_entities[id]
-		var node: Node3D = state.get("node", null)
-		if is_instance_valid(node) and not scene_nodes.has(id):
+		var node := _live_node(state)
+		if node != null and not scene_nodes.has(id):
 			node.queue_free()
 	_visible_entities.clear()

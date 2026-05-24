@@ -160,10 +160,19 @@ func _build_npcs() -> void:
 		sw.position = fpos + sw_local + Vector3(0.0, 0.0, -5.5)
 		add_child(sw)
 
+	var co_local := facilities.get_company_office_local_pos()
+	if co_local != Vector3.ZERO:
+		var agent := CompanyAgentNpc.new()
+		agent.name = "CompanyAgentNpc"
+		agent.port_id = port_id
+		agent.position = fpos + co_local + Vector3(0.0, 0.0, -4.5)
+		add_child(agent)
+
 	_build_walkers(fpos)
 
 	if not port_id.is_empty():
 		call_deferred("_register_with_registry")
+		call_deferred("_bake_approach_lanes")
 
 
 func _build_trees(poly: PackedVector2Array, pad_w: float, pad_d: float) -> void:
@@ -282,6 +291,21 @@ func _register_with_registry() -> void:
 	if not registry.contract_accepted.is_connected(_on_contract_accepted):
 		registry.contract_accepted.connect(_on_contract_accepted)
 	_respawn_pending_cargo(registry)
+
+
+func _bake_approach_lanes() -> void:
+	if Engine.is_editor_hint() or port_id.is_empty():
+		return
+	var dock := get_node_or_null("PortDock") as PortDock
+	if dock == null:
+		return
+	var baked := BerthApproachLanes.bake_from_dock(port_id, dock)
+	if baked <= 0:
+		return
+	AutonomousVesselSim.invalidate_legs_cache()
+	var mgr := get_node_or_null("/root/AutonomousVesselManager")
+	if mgr != null and mgr.has_method("refresh_lane_debug"):
+		mgr.call("refresh_lane_debug")
 
 
 func _respawn_pending_cargo(registry: Node) -> void:

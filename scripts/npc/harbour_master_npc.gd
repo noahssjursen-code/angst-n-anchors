@@ -51,11 +51,16 @@ func _add_hat() -> void:
 
 func _on_interact() -> void:
 	var session := get_node_or_null("/root/PlayerSession")
-	if session != null:
-		VesselSync.pull_captain_vessel(session)
-	_show_main()
-	_dialogue.show_panel()
-	open_ui()
+	if session == null:
+		_show_main()
+		_dialogue.show_panel()
+		open_ui()
+		return
+	VesselSync.refresh_for_ui(session, func() -> void:
+		_show_main()
+		_dialogue.show_panel()
+		open_ui()
+	)
 
 
 func _on_ui_cancel() -> void:
@@ -213,14 +218,25 @@ func _show_ship_select() -> void:
 	var berth_n := _pending_berth_index + 1
 	var session := get_node_or_null("/root/PlayerSession")
 	var fleet: Array = []
+	var deployable: Array = []
 	if session != null and session.data != null:
-		fleet = session.data.get_deployable_vessels()
+		fleet = session.data.get_harbour_vessel_records()
+		deployable = session.data.get_deployable_vessels()
 
 	if fleet.is_empty():
 		_release_pending_berth()
 		_dialogue.add_quote(
 			"No commissioned vessel on file, Captain.\n"
 			+ "The Shipwright builds fishing trawlers — your berth has been released."
+		)
+		_dialogue.add_back_button(_show_request_berth)
+		return
+
+	if deployable.is_empty():
+		_release_pending_berth()
+		_dialogue.add_quote(
+			"No hull available for berth, Captain.\n"
+			+ "Your registered vessels are on autonomous runs — recall them from the fleet office first."
 		)
 		_dialogue.add_back_button(_show_request_berth)
 		return
@@ -240,10 +256,13 @@ func _show_ship_select() -> void:
 		var record := entry_raw as Dictionary
 		var display := str(record.get("display", "Your vessel"))
 		var short := display.split("  •  ")[0] if "  •  " in display else display
-		_dialogue.add_option(
-			"Deploy %s%s" % [short, replace_note],
-			_deploy_fleet_vessel.bind(record),
-		)
+		if PlayerData.is_vessel_on_npc_run(record):
+			_dialogue.add_disabled_option("%s — on autonomous run" % short)
+		else:
+			_dialogue.add_option(
+				"Deploy %s%s" % [short, replace_note],
+				_deploy_fleet_vessel.bind(record),
+			)
 
 	_dialogue.add_option("Never mind — release the berth.", _cancel_ship_select)
 	_dialogue.add_back_button(_cancel_ship_select)
@@ -264,6 +283,14 @@ func _release_pending_berth() -> void:
 
 
 func _deploy_fleet_vessel(record: Dictionary) -> void:
+	if PlayerData.is_vessel_on_npc_run(record):
+		_dialogue.clear()
+		_dialogue.add_quote(
+			"That hull is on an autonomous run, Captain.\n"
+			+ "Recall her from the fleet office before requesting a berth."
+		)
+		_dialogue.add_back_button(_show_ship_select)
+		return
 	var session := get_node_or_null("/root/PlayerSession")
 	if session != null and session.data != null:
 		session.data.set_active_vessel(record)

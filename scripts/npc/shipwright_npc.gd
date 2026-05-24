@@ -2,7 +2,8 @@
 class_name ShipwrightNpc
 extends NpcInteractable
 
-## Shipwright NPC — catalog showroom with 3D previews, prices, and commission.
+## Shipwright NPC — catalog showroom with 3D previews, prices, and registry commission.
+## Hull spawning is handled by the Harbour Master after a berth is assigned.
 var _catalog: ShipwrightCatalogPanel
 var _dialogue: DialoguePanel
 
@@ -15,8 +16,15 @@ func _ready() -> void:
 
 
 func _on_interact() -> void:
-	_open_catalog()
-	open_ui()
+	var session := get_node_or_null("/root/PlayerSession")
+	if session == null:
+		_open_catalog()
+		open_ui()
+		return
+	VesselSync.refresh_for_ui(session, func() -> void:
+		_open_catalog()
+		open_ui()
+	)
 
 
 func _on_ui_cancel() -> void:
@@ -63,26 +71,8 @@ func _on_marks_changed(_balance: int) -> void:
 func _on_commission_requested(entry: Dictionary) -> void:
 	if not _try_pay_for_commission(entry):
 		return
-	_mark_starter_trawler_claimed(entry)
 	_catalog.hide_catalog()
 	_commission(entry)
-
-
-func _mark_starter_trawler_claimed(entry: Dictionary) -> void:
-	if not ShipwrightPricing.is_free_starter_trawler(entry, _player_data()):
-		return
-	var session := get_node_or_null("/root/PlayerSession")
-	if session == null:
-		return
-	session.data.starter_trawler_claimed = true
-	session.save_now()
-
-
-func _player_data() -> PlayerData:
-	var session := get_node_or_null("/root/PlayerSession")
-	if session == null:
-		return null
-	return session.data
 
 
 func _try_pay_for_commission(entry: Dictionary) -> bool:
@@ -138,45 +128,16 @@ func _commission(entry: Dictionary) -> void:
 	f.store_string(JSON.stringify(template))
 	f.close()
 
-	PlayerVessel.replace_before_spawn(get_tree())
+	_register_commissioned_vessel(entry, path, uid)
 
-	var ship := ShipBuilder.build(path)
-	if ship == null:
-		_show_result("The yard couldn't build that vessel. Please report this bug.", _open_catalog)
-		return
-
-	PlayerVessel.mark_player_ship(ship)
-	# Freshly-built vessel sails with a full tank — captain pays the
-	# commission, the yard hands over a ready ship.
-	if ship.has_method("fill_tank"):
-		ship.fill_tank()
-	_register_active_vessel(entry, path, uid)
-
-	var placed := _try_place_at_berth(ship)
-
-	if not placed:
-		var plot := get_parent() as Node3D
-		if plot != null:
-			plot.add_child(ship)
-			var dock := _get_dock()
-			var anchor := dock.global_position if dock != null else global_position
-			ship.global_position = anchor + Vector3(0.0, 0.0, -20.0)
-			ship.call_deferred("place_at_waterline", WaveSurface.WATER_LEVEL)
-
-	# Register for replication only after the hull has a real world transform.
-	_network_register_ship(ship, path, str(entry.get("id", "")))
-
-	var plot := get_parent() as PortPlot
-	if plot != null:
-		plot.respawn_staged_cargo()
-
-	if placed:
-		_show_result("She's alongside, Captain.\n%s — ready for sea." % str(entry["display"]), _close_after_result)
-	else:
-		_show_result(
-			"She's afloat, Captain, but all berths are occupied.\nYou'll find her in the water nearby.",
-			_close_after_result
+	_show_result(
+		(
+			"%s is on your registry, Captain.\n"
+			+ "Visit the Harbour Master to request a berth and bring her alongside."
 		)
+		% str(entry.get("display", "Your vessel")),
+		_close_after_result,
+	)
 
 
 func _show_result(message: String, on_done: Callable) -> void:
@@ -191,7 +152,7 @@ func _close_after_result() -> void:
 	close_ui()
 
 
-func _register_active_vessel(entry: Dictionary, template_path: String, uid: String) -> void:
+func _register_commissioned_vessel(entry: Dictionary, template_path: String, uid: String) -> void:
 	var session := get_node_or_null("/root/PlayerSession")
 	if session == null:
 		return
@@ -202,62 +163,9 @@ func _register_active_vessel(entry: Dictionary, template_path: String, uid: Stri
 		"template_path": template_path,
 	}
 	session.data.upsert_owned_vessel(record)
-	session.data.set_active_vessel(record)
 	session.save_now()
 	VesselSync.publish_commission(session, entry, template_path, uid)
 
 
-func _try_place_at_berth(ship: BoatBody) -> bool:
-	var dock := _get_dock()
-	if dock == null:
-		return false
-	var owner_id := PortDock.local_player_owner_id()
-	var berths := dock.get_berths()
-	for i in range(berths.size()):
-		var b := berths[i] as Dictionary
-		if int(b["status"]) == PortDock.BerthStatus.FREE:
-			if dock.reserve_berth(i, owner_id):
-				var placed := dock.place_ship_at_berth(i, ship)
-				if placed != null:
-					return true
-				dock.release_berth(i)
-	return false
-
-
 func _build_template(entry: Dictionary) -> Dictionary:
 	return StarterVessel.build_template(entry)
-
-
-func _get_dock() -> PortDock:
-	var parent := get_parent()
-	if parent == null:
-		return null
-	return parent.get_node_or_null("PortDock") as PortDock
-
-
-func _network_register_ship(ship_node: Node3D, template_path: String, preferred_hull_id: String = "") -> void:
-	var manager := get_node_or_null("/root/NetworkManager")
-	if manager == null:
-		return
-
-	var session := get_node_or_null("/root/PlayerSession")
-	var record_hull_id := ""
-	if session != null and session.get("data") != null:
-		var record: Dictionary = session.data.get_active_vessel_record()
-		if not record.is_empty():
-			record_hull_id = str(record.get("hull_id", ""))
-
-	var hull_id := HullRegistry.resolve_id_from_template(
-		template_path,
-		preferred_hull_id if not preferred_hull_id.is_empty() else record_hull_id
-	)
-	if hull_id.is_empty():
-		hull_id = "cargo_ship_medium"
-
-	var ship_id := "player_ship"
-	if session != null and session.get("data") != null:
-		var record: Dictionary = session.data.get_active_vessel_record()
-		if not record.is_empty():
-			ship_id = String(record.get("uid", "player_ship"))
-
-	manager.call("register_ship_spawn", ship_id, hull_id, ship_node)

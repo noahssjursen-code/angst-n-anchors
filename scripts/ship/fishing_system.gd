@@ -66,6 +66,9 @@ func _ready() -> void:
 
 
 func toggle_trawling() -> void:
+	if not trawling and not _fish_deck_has_space():
+		_notify_trawl("Deck is FULL! Stow cargo before trawling.")
+		return
 	trawling = not trawling
 	if not trawling:
 		_cancel_haul(false)
@@ -257,30 +260,46 @@ func _process(delta: float) -> void:
 func _physics_process(delta: float) -> void:
 	if Engine.is_editor_hint():
 		return
-		
-	if trawling:
-		# Apply backward central drag force to slow the boat
-		if _body != null and _body is RigidBody3D:
-			var vel := _body.linear_velocity
-			var horiz_vel := Vector3(vel.x, 0.0, vel.z)
-			var speed := horiz_vel.length()
-			if speed > 0.1:
-				var drag_force := -horiz_vel.normalized() * (speed * drag_coefficient)
-				_body.apply_central_force(drag_force)
 
-			# Periodically catch fish if moving > 0.5 m/s (approx 1 knot)
-			if speed > 0.5:
-				_update_zone_catch_rate(_body.global_position)
-				_process_haul(delta)
-				if _haul_crates_remaining <= 0:
-					_catch_timer += delta
-					var interval := catch_interval_seconds / maxf(_zone_catch_mul, 0.1)
-					if _catch_timer >= interval:
-						_catch_timer = 0.0
-						_try_start_haul()
-	else:
+	if not trawling:
 		_catch_timer = 0.0
 		_cancel_haul(false)
+		return
+
+	if not _fish_deck_has_space():
+		_retract_trawl("Deck is FULL! Net retracted.")
+		return
+
+	if _body != null and _body.freeze:
+		var sim_dt := delta * AutonomousSimDebug.time_scale
+		_update_zone_catch_rate(_body.global_position)
+		_process_haul(sim_dt)
+		if _haul_crates_remaining <= 0:
+			_catch_timer += sim_dt
+			var interval := catch_interval_seconds / maxf(_zone_catch_mul, 0.1)
+			if _catch_timer >= interval:
+				_catch_timer = 0.0
+				_try_start_haul()
+		return
+
+	if _body != null and _body is RigidBody3D:
+		var vel := _body.linear_velocity
+		var horiz_vel := Vector3(vel.x, 0.0, vel.z)
+		var speed := horiz_vel.length()
+		if speed > 0.1:
+			var drag_force := -horiz_vel.normalized() * (speed * drag_coefficient)
+			_body.apply_central_force(drag_force)
+
+		# Periodically catch fish if moving > 0.5 m/s (approx 1 knot)
+		if speed > 0.5:
+			_update_zone_catch_rate(_body.global_position)
+			_process_haul(delta)
+			if _haul_crates_remaining <= 0:
+				_catch_timer += delta
+				var interval := catch_interval_seconds / maxf(_zone_catch_mul, 0.1)
+				if _catch_timer >= interval:
+					_catch_timer = 0.0
+					_try_start_haul()
 
 
 func _update_zone_catch_rate(sample_pos: Vector3) -> void:
@@ -305,8 +324,7 @@ func _process_haul(delta: float) -> void:
 			_haul_zone = {}
 			_haul_toast_sent = false
 	else:
-		_notify_trawl("Deck is FULL! No room for fish!")
-		_cancel_haul(false)
+		_retract_trawl("Deck is FULL! Net retracted.")
 
 
 func _cancel_haul(reset_catch_timer: bool) -> void:
@@ -320,6 +338,10 @@ func _cancel_haul(reset_catch_timer: bool) -> void:
 
 func _try_start_haul() -> void:
 	if _body == null or _haul_crates_remaining > 0:
+		return
+
+	if not _fish_deck_has_space():
+		_retract_trawl()
 		return
 
 	var sample_pos := _body.global_position
@@ -388,6 +410,39 @@ func _place_one_fish_crate() -> bool:
 					_notify_trawl("Fish on deck — %s per crate at port" % pay_line)
 				else:
 					_notify_trawl("%s grounds — %s per crate" % [tier_label, pay_line])
+			return true
+	return false
+
+
+## External trawl control (e.g. autonomous NPC sim). Skips cast when deck is full.
+func apply_trawl_desired(enabled: bool) -> void:
+	if enabled and not _fish_deck_has_space():
+		if trawling:
+			_retract_trawl("Deck is FULL! Net retracted.")
+		return
+	if trawling == enabled:
+		return
+	trawling = enabled
+	if not enabled:
+		_cancel_haul(false)
+
+
+func _retract_trawl(notify_message: String = "") -> void:
+	var was_trawling := trawling
+	trawling = false
+	_cancel_haul(false)
+	if was_trawling and not notify_message.is_empty():
+		_notify_trawl(notify_message)
+
+
+func _fish_deck_has_space() -> bool:
+	if _body == null:
+		return false
+	for deck_node in _body.find_children("*", "CargoDeckComponent", true, false):
+		var deck := deck_node as CargoDeckComponent
+		if deck == null or not deck.port_id.is_empty():
+			continue
+		if deck.get_available() >= 1:
 			return true
 	return false
 
