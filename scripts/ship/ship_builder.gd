@@ -70,6 +70,8 @@ static func build(template_path: String) -> BoatBody:
 	var hull_data  := _load_json(hull_path)
 	var scale      := resolved_mesh_scale(tmpl)
 	var slots      := _read_slots(hull_data, scale)
+	var hull_ref: String = str(tmpl.get("hull", ""))
+	var registry_entry := HullRegistry.get_by_file(hull_ref)
 
 	# Strip-theory hull data, derived once from the hull JSON. Shared between BoatBody
 	# (for displacement-based mass), StripBuoyancyComponent, and HydrodynamicsComponent.
@@ -119,21 +121,26 @@ static func build(template_path: String) -> BoatBody:
 	gameplay.add_child(mooring)
 
 	# Dynamic holographic deck grid visualizer
-	var hull_ref: String = str(tmpl.get("hull", ""))
-	var registry_entry := HullRegistry.get_by_file(hull_ref)
-
 	DeckGridOverlay.attach(gameplay, stations, scale, slots, registry_entry, hull_data)
 
 	_add_mooring_points(gameplay, slots, stations, scale)
 	_add_hull_lights(gameplay, hull_data, scale)
 
 	var has_cargo := true
+	var has_fishing := false
 	if not registry_entry.is_empty():
 		var caps = registry_entry.get("capabilities", [])
 		has_cargo = caps.has("cargo")
+		has_fishing = caps.has("fishing")
 
 	if has_cargo:
 		_add_cargo_decks(gameplay, hull_data, tmpl, slots, scale, stations)
+
+	if has_fishing:
+		var fishing_node := _make_fishing_system()
+		if fishing_node != null:
+			fishing_node.name = "FishingSystem"
+			gameplay.add_child(fishing_node)
 
 	if telemetry != null:
 		telemetry.end_load_event(t_handle)
@@ -393,41 +400,54 @@ static func _vec3_from_array(raw: Variant) -> Vector3:
 ## or pass `[]` for no deck.
 static func _add_cargo_decks(parent: Node3D, hull_data: Dictionary, tmpl: Dictionary,
 		slots: Dictionary, scale: float, stations: HullStations) -> void:
-	var def := _pick_cargo_deck_def(hull_data, tmpl)
-	if def.is_empty():
+	var hull_decks = hull_data.get("cargo_decks", [])
+	if typeof(hull_decks) != TYPE_ARRAY or hull_decks.is_empty():
 		return
-	var fitted := _fit_cargo_deck_to_hull(def, slots, scale, stations)
-	if fitted.is_empty():
-		push_warning("ShipBuilder: no room for cargo deck on hull")
-		return
-	var deck_name := str(fitted.get("name", "main"))
-	var pos_arr = fitted.get("position", [0, 0, 0])
-	var pos := Vector3.ZERO
-	if typeof(pos_arr) == TYPE_ARRAY and pos_arr.size() >= 3:
-		pos = Vector3(float(pos_arr[0]), float(pos_arr[1]), float(pos_arr[2])) * scale
-	var deck := CargoDeckComponent.new()
-	deck.name = "CargoDeck_" + deck_name
-	var deck_width := float(fitted.get("deck_width", 5.0)) * scale
-	var deck_length := float(fitted.get("deck_length", 8.0)) * scale
-	var cell_size := float(fitted.get("cell_size", 1.5)) * scale
-	var surface_y := _deck_surface_y_at(
-		hull_data,
-		scale,
-		pos.x,
-		pos.z,
-		deck_length * 0.5,
-		deck_width * 0.5
-	)
-	var frame_pos := _slot_to_frame(pos)
-	frame_pos.y = surface_y
-	deck.position = frame_pos
-	# Grid defaults: width on +X, length on +Z. ShipFrame uses +X fore-aft, ±Z beam.
-	deck.rotation.y = -HULL_AUTHORED_Y_ROT
-	deck.deck_width_m = deck_width
-	deck.deck_length_m = deck_length
-	deck.cell_size_x_m = cell_size
-	deck.cell_size_z_m = cell_size
-	parent.add_child(deck)
+
+	var allowed_names: Array = []
+	var tmpl_decks: Variant = tmpl.get("cargo_decks", null)
+	if typeof(tmpl_decks) == TYPE_ARRAY:
+		for name in tmpl_decks:
+			allowed_names.append(str(name))
+
+	for def_raw in hull_decks:
+		if typeof(def_raw) != TYPE_DICTIONARY:
+			continue
+		var def := def_raw as Dictionary
+		var deck_name := str(def.get("name", ""))
+		if not allowed_names.is_empty() and not allowed_names.has(deck_name):
+			continue
+
+		var fitted := _fit_cargo_deck_to_hull(def, slots, scale, stations)
+		if fitted.is_empty():
+			continue
+
+		var pos_arr = fitted.get("position", [0, 0, 0])
+		var pos := Vector3.ZERO
+		if typeof(pos_arr) == TYPE_ARRAY and pos_arr.size() >= 3:
+			pos = Vector3(float(pos_arr[0]), float(pos_arr[1]), float(pos_arr[2])) * scale
+		var deck := CargoDeckComponent.new()
+		deck.name = "CargoDeck_" + deck_name
+		var deck_width := float(fitted.get("deck_width", 5.0)) * scale
+		var deck_length := float(fitted.get("deck_length", 8.0)) * scale
+		var cell_size := float(fitted.get("cell_size", 1.5)) * scale
+		var surface_y := _deck_surface_y_at(
+			hull_data,
+			scale,
+			pos.x,
+			pos.z,
+			deck_length * 0.5,
+			deck_width * 0.5
+		)
+		var frame_pos := _slot_to_frame(pos)
+		frame_pos.y = surface_y
+		deck.position = frame_pos
+		deck.rotation.y = -HULL_AUTHORED_Y_ROT
+		deck.deck_width_m = deck_width
+		deck.deck_length_m = deck_length
+		deck.cell_size_x_m = cell_size
+		deck.cell_size_z_m = cell_size
+		parent.add_child(deck)
 
 
 ## Attach fitted cargo deck grids under `parent` (ShipFrame space), matching runtime ships.
@@ -496,21 +516,43 @@ static func _fit_cargo_deck_to_hull(def: Dictionary, slots: Dictionary, scale: f
 	if stations != null and stations.beam_m > 0.0:
 		width = minf(width, stations.beam_m * 0.88 * scale)
 
-	var bow_limit := -INF
-	for key in ["bow_thruster", "nav_light_bow", "mooring_port_fwd", "mooring_stbd_fwd"]:
-		if slots.has(key):
-			bow_limit = maxf(bow_limit, (slots[key] as Vector3).z)
-	if bow_limit == -INF and stations != null and not stations.stations.is_empty():
-		var last: Dictionary = stations.stations[stations.stations.size() - 1]
-		bow_limit = float(last.get("z", 0.0)) * scale
-	bow_limit -= CARGO_BOW_CLEARANCE_M * scale
+	var bridge_is_forward := false
+	if slots.has("bridge") and (slots["bridge"] as Vector3).z > 0.0:
+		bridge_is_forward = true
 
+	var bow_limit := -INF
 	var aft_limit := INF
-	if slots.has("bridge"):
-		aft_limit = (slots["bridge"] as Vector3).z + CARGO_AFT_OF_BRIDGE_M * scale
-	elif stations != null and stations.stations.size() > 0:
-		var first: Dictionary = stations.stations[0]
-		aft_limit = float(first.get("z", 0.0)) * scale + CARGO_AFT_OF_BRIDGE_M * scale
+
+	if not bridge_is_forward:
+		# Standard layout: Bridge is aft, cargo is forward of bridge
+		for key in ["bow_thruster", "nav_light_bow", "mooring_port_fwd", "mooring_stbd_fwd"]:
+			if slots.has(key):
+				bow_limit = maxf(bow_limit, (slots[key] as Vector3).z)
+		if bow_limit == -INF and stations != null and not stations.stations.is_empty():
+			var last: Dictionary = stations.stations[stations.stations.size() - 1]
+			bow_limit = float(last.get("z", 0.0)) * scale
+		bow_limit -= CARGO_BOW_CLEARANCE_M * scale
+
+		if slots.has("bridge"):
+			aft_limit = (slots["bridge"] as Vector3).z + CARGO_AFT_OF_BRIDGE_M * scale
+		elif stations != null and stations.stations.size() > 0:
+			var first: Dictionary = stations.stations[0]
+			aft_limit = float(first.get("z", 0.0)) * scale + CARGO_AFT_OF_BRIDGE_M * scale
+	else:
+		# Forward bridge layout (e.g. fishing boats): Bridge is forward, cargo is aft of bridge
+		if slots.has("bridge"):
+			bow_limit = (slots["bridge"] as Vector3).z - CARGO_AFT_OF_BRIDGE_M * scale
+		else:
+			bow_limit = 0.0
+		
+		var stern_limit := INF
+		for key in ["mooring_port_aft", "mooring_stbd_aft", "propulsion"]:
+			if slots.has(key):
+				stern_limit = minf(stern_limit, (slots[key] as Vector3).z)
+		if stern_limit == INF and stations != null and not stations.stations.is_empty():
+			var first: Dictionary = stations.stations[0]
+			stern_limit = float(first.get("z", 0.0)) * scale
+		aft_limit = stern_limit + CARGO_BOW_CLEARANCE_M * scale
 
 	var span := bow_limit - aft_limit
 	if span < cell * 0.5 or bow_limit == -INF or aft_limit == INF:
@@ -728,6 +770,10 @@ static func _resolve_hull_path(hull_ref: String, template_path: String) -> Strin
 	if FileAccess.file_exists(models):
 		return models
 	return local
+
+
+static func _make_fishing_system() -> Node:
+	return load("res://scripts/ship/fishing_system.gd").new()
 
 
 ## Forwarded to JsonUtil so callers that still go through ShipBuilder._load_json

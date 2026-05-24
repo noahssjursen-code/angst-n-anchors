@@ -29,6 +29,8 @@ var _save_pending: bool = false
 ## loss / OS-killing-the-process.
 const AUTOSAVE_INTERVAL_S : float = 60.0
 var _autosave_clock: float = 0.0
+var _marks_sync_pending: bool = false
+var _marks_sync_in_flight: bool = false
 
 
 func _ready() -> void:
@@ -38,10 +40,11 @@ func _ready() -> void:
 
 func _process(delta: float) -> void:
 	_autosave_clock += delta
-	if _autosave_clock < AUTOSAVE_INTERVAL_S:
-		return
-	_autosave_clock = 0.0
-	save_now()
+	if _autosave_clock >= AUTOSAVE_INTERVAL_S:
+		_autosave_clock = 0.0
+		save_now()
+	if _marks_sync_pending and not _marks_sync_in_flight:
+		_sync_marks_to_server()
 
 
 func _exit_tree() -> void:
@@ -63,6 +66,7 @@ func earn_marks(amount: int) -> void:
 	data.total_marks_earned += amount
 	marks_changed.emit(data.marks)
 	_request_save()
+	_request_marks_server_sync()
 
 
 func spend_marks(amount: int) -> bool:
@@ -73,6 +77,7 @@ func spend_marks(amount: int) -> bool:
 	data.marks -= amount
 	marks_changed.emit(data.marks)
 	_request_save()
+	_request_marks_server_sync()
 	return true
 
 
@@ -205,3 +210,42 @@ func _on_unit_delivered(_contract: Contract, reward: int) -> void:
 func _on_contract_completed(_contract: Contract) -> void:
 	data.contracts_completed += 1
 	_request_save()
+
+
+func _request_marks_server_sync() -> void:
+	if data.captain_id.is_empty():
+		return
+	var config := get_node_or_null("/root/ServerConfig") as Node
+	if config == null or not bool(config.get("is_multiplayer_mode")):
+		return
+	_marks_sync_pending = true
+
+
+func _sync_marks_to_server() -> void:
+	if _marks_sync_in_flight or not _marks_sync_pending:
+		return
+	if data.captain_id.is_empty():
+		_marks_sync_pending = false
+		return
+	var config := get_node_or_null("/root/ServerConfig") as Node
+	if config == null or not bool(config.get("is_multiplayer_mode")):
+		_marks_sync_pending = false
+		return
+	var http_url := "%s/v1/captains" % str(config.call("get_http_base_url"))
+	var body := JSON.stringify({
+		"id": data.captain_id,
+		"marks": data.marks,
+	})
+	var req := HTTPRequest.new()
+	add_child(req)
+	_marks_sync_in_flight = true
+	_marks_sync_pending = false
+	req.request_completed.connect(func(result: int, response_code: int, _headers: PackedStringArray, _body: PackedByteArray) -> void:
+		_marks_sync_in_flight = false
+		req.queue_free()
+		if result != HTTPRequest.RESULT_SUCCESS or response_code != 200:
+			push_warning("PlayerSession: failed to sync marks to server (HTTP %d)" % response_code)
+			_marks_sync_pending = true
+	)
+	var headers := PackedStringArray(["Content-Type: application/json"])
+	req.request(http_url, headers, HTTPClient.METHOD_PUT, body)

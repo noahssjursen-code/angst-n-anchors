@@ -62,6 +62,23 @@ func show_entry(entry: Dictionary) -> HullStations:
 				super_node.rotation.y = ShipBuilder.HULL_AUTHORED_Y_ROT
 				frame.add_child(super_node)
 
+	var has_fishing := false
+	var caps = entry.get("capabilities", [])
+	if typeof(caps) == TYPE_ARRAY:
+		has_fishing = caps.has("fishing")
+	if not has_fishing:
+		var hull_ref: String = str(entry.get("hull_file", "")).to_lower()
+		if hull_ref.contains("fishing") or hull_ref.contains("trawler"):
+			has_fishing = true
+
+	if has_fishing:
+		var fishing_node := ShipBuilder._make_fishing_system()
+		if fishing_node != null:
+			fishing_node.name = "FishingSystem"
+			frame.add_child(fishing_node)
+			if Engine.is_editor_hint() and get_tree() != null:
+				fishing_node.owner = get_tree().edited_scene_root
+
 	_DeckGridOverlay.attach(frame, stations, scale, slots, entry, hull_data)
 
 	if _show_cargo_decks:

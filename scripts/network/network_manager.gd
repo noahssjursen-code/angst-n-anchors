@@ -240,7 +240,47 @@ func notify_crane_operated(crane_id: String, boarded: bool) -> void:
 					return "op=%s;hy=%.3f" % [get_local_player_id(), hook_yaw]
 			)
 	else:
+		_flush_crane_vacated(crane_id)
 		unregister_sender(crane_id)
+		if drawing_service != null and drawing_service.has_method("clear_scene_node_remote_state"):
+			drawing_service.call("clear_scene_node_remote_state", crane_id)
+
+
+func _flush_crane_vacated(crane_id: String) -> void:
+	var sender: Variant = _local_senders.get(crane_id, null)
+	if sender == null or client == null:
+		return
+	var crane_node: Node = sender["node"]
+	if crane_node == null or not is_instance_valid(crane_node):
+		return
+	var payload: Array = sender["state_callable"].call()
+	var hook_node := crane_node.get("_hook") as Node3D
+	var hook_yaw := 0.0
+	if hook_node != null and is_instance_valid(hook_node):
+		hook_yaw = hook_node.rotation.y
+	var local_id := get_local_player_id()
+	if local_id.is_empty():
+		return
+	var observer_pos := Vector3.ZERO
+	var vp := get_viewport()
+	if vp != null:
+		var cam := vp.get_camera_3d()
+		if cam != null:
+			observer_pos = cam.global_position
+	_outbound_seq += 1
+	var pkt := WireProtocolClass.encode_client_update(
+		_outbound_seq,
+		local_id,
+		observer_pos,
+		[{
+			"id": crane_id,
+			"type": "crane",
+			"format": 6,
+			"payload": payload,
+			"meta": "op=;hy=%.3f" % hook_yaw,
+		}]
+	)
+	client.call("send_packet", pkt)
 
 
 func register_cargo_spawn(cargo_id: String, pallet: Resource, node: Node3D) -> void:
@@ -260,8 +300,45 @@ func register_cargo_spawn(cargo_id: String, pallet: Resource, node: Node3D) -> v
 	)
 
 
-func unregister_cargo(cargo_id: String) -> void:
+func unregister_cargo(cargo_id: String, delivered: bool = false) -> void:
+	if delivered:
+		_flush_cargo_delivered(cargo_id)
+	if drawing_service != null and drawing_service.has_method("clear_entity_remote_state"):
+		drawing_service.call("clear_entity_remote_state", cargo_id)
 	unregister_sender(cargo_id)
+
+
+func _flush_cargo_delivered(cargo_id: String) -> void:
+	var sender: Variant = _local_senders.get(cargo_id, null)
+	if sender == null or client == null:
+		return
+	var node: Node3D = sender["node"] as Node3D
+	if node == null or not is_instance_valid(node):
+		return
+	var payload: Array = sender["state_callable"].call()
+	var local_id := get_local_player_id()
+	if local_id.is_empty():
+		return
+	var observer_pos := Vector3.ZERO
+	var vp := get_viewport()
+	if vp != null:
+		var cam := vp.get_camera_3d()
+		if cam != null:
+			observer_pos = cam.global_position
+	_outbound_seq += 1
+	var pkt := WireProtocolClass.encode_client_update(
+		_outbound_seq,
+		local_id,
+		observer_pos,
+		[{
+			"id": cargo_id,
+			"type": "cargo",
+			"format": 4,
+			"payload": payload,
+			"meta": "state=delivered",
+		}]
+	)
+	client.call("send_packet", pkt)
 
 
 func register_ship_spawn(ship_id: String, hull_id: String, ship_node: Node3D) -> void:

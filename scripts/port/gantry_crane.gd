@@ -545,6 +545,7 @@ func _build_ui() -> void:
 func _process(delta: float) -> void:
 	if Engine.is_editor_hint():
 		return
+	_sync_rigging_carried_state()
 	_update_beacon(delta)
 	if _occupied:
 		_read_kinematic_input(delta)
@@ -684,6 +685,15 @@ func _apply_kinematics(delta: float = 0.0) -> void:
 
 
 # ── Carried pallet ────────────────────────────────────────────────────────────
+
+func _sync_rigging_carried_state() -> void:
+	if _rigging == null:
+		return
+	if _carried_pallet != null and not is_instance_valid(_carried_pallet):
+		_carried_pallet = null
+	if _carried_pallet == null and _rigging.attached_count() > 0:
+		_rigging.detach_all()
+
 
 func _update_carried_pallet() -> void:
 	if _carried_pallet == null or _rigging == null:
@@ -991,16 +1001,15 @@ func _engage_chains(pallet_node: Node3D) -> void:
 		pallet_node.set_highlighted(false)
 	_play_one_shot(_sfx_chain_engage, _hook)
 
-	# If this pallet is currently a child of a CargoDeckComponent's
-	# PalletVisuals, reparent it to the scene root first. Otherwise the
-	# deck's remove_pallet_by_resource() will queue_free the very node we're
-	# about to carry, leaving _carried_pallet pointing at a freed instance.
-	var scene_root := get_tree().current_scene
-	if scene_root != null and pallet_node.get_parent() != scene_root:
-		pallet_node.reparent(scene_root, true)
+	# Reparent away from the deck before clearing deck bookkeeping so the
+	# visual cannot be queue_free'd while chains attach to its sockets.
+	var carry_root := get_tree().current_scene
+	if carry_root == null:
+		carry_root = get_tree().root
+	if pallet_node.get_parent() != carry_root:
+		pallet_node.reparent(carry_root, true)
 
-	# Now the deck can't reach the visual by name. Releasing the resource is
-	# still required to clear the deck's _cells dict and mass accounting.
+	# Clear deck cells/mass only — never destroy the carried visual here.
 	if pallet_node.has_method("get") and pallet_node.get("pallet") != null:
 		_detach_from_deck(pallet_node.get("pallet"))
 
@@ -1103,14 +1112,14 @@ func _detach_from_deck(pallet_res) -> void:
 		var deck := node as CargoDeckComponent
 		if deck == null:
 			continue
-		if deck.remove_pallet_by_resource(pallet_res) != null:
+		if deck.detach_pallet_resource(pallet_res) != null:
 			return
 
 
 # ── Board / exit ──────────────────────────────────────────────────────────────
 
 func _nearest_boardable_player() -> CharacterBody3D:
-	if not _remotely_operated_by.is_empty():
+	if _remote_operator_blocks_boarding():
 		return null
 	var center_pos := global_position
 	if _gantry_frame != null:
@@ -1120,6 +1129,19 @@ func _nearest_boardable_player() -> CharacterBody3D:
 		if body != null and center_pos.distance_to(body.global_position) <= board_range_m:
 			return body
 	return null
+
+
+func _remote_operator_blocks_boarding() -> bool:
+	if _remotely_operated_by.is_empty():
+		return false
+	var local_id := ""
+	var manager := get_node_or_null("/root/NetworkManager")
+	if manager != null and manager.has_method("get_local_player_id"):
+		local_id = str(manager.call("get_local_player_id"))
+	# Stale server echo of our own session after exiting — not a real remote lock.
+	if not local_id.is_empty() and _remotely_operated_by == local_id and not _occupied:
+		return false
+	return true
 
 
 func _enter_crane() -> void:

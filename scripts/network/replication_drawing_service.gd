@@ -16,6 +16,26 @@ var _occupied_berths: Dictionary = {}
 func get_visible_entities() -> Dictionary:
 	return _visible_entities
 
+
+## Drop cached remote state for an entity we own locally again (sold/released).
+func clear_entity_remote_state(id: String) -> void:
+	if not _visible_entities.has(id):
+		return
+	var state: Dictionary = _visible_entities[id]
+	var node: Node3D = state.get("node", null)
+	if is_instance_valid(node):
+		if node.has_method("set"):
+			node.set("_remotely_operated_by", "")
+		# Dynamic remotes are children of this service; pre-placed scene nodes are not.
+		if node.get_parent() == self:
+			node.queue_free()
+	_visible_entities.erase(id)
+
+
+## Back-compat alias for crane vacate cleanup.
+func clear_scene_node_remote_state(id: String) -> void:
+	clear_entity_remote_state(id)
+
 # Custom scene templates mapping
 const TYPE_SCENE_MAP := {
 }
@@ -32,6 +52,11 @@ func apply_entities(entities_list: Array, local_id: String, scene_nodes: Diction
 		
 		# 1. Skip ourselves and anything we currently have authority over (local senders)
 		if id == local_id or local_sender_ids.has(id):
+			continue
+
+		# Ignore snapshot echo of our own released entities — stale cargo/crane
+		# state otherwise respawns visuals and blocks gameplay.
+		if str(ent.get("owner_id", "")) == local_id:
 			continue
 			
 		active_snapshot_ids[id] = true
