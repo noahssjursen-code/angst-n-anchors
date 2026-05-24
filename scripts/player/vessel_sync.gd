@@ -98,7 +98,7 @@ static func push_fleet_state(session: Node, record: Dictionary) -> void:
 		if result != HTTPRequest.RESULT_SUCCESS or code != 200:
 			push_warning("VesselSync: fleet push failed for %s (HTTP %d)" % [server_id, code])
 	)
-	req.request(url, PackedStringArray(["Content-Type: application/json"]), HTTPClient.METHOD_PUT, body)
+	req.request(url, _auth_headers(session), HTTPClient.METHOD_PUT, body)
 
 
 ## Ensures the vessel exists in Postgres, then pushes fleet route/state.
@@ -233,6 +233,15 @@ static func _captain_id(session: Node) -> String:
 	return str(session.data.captain_id)
 
 
+static func _auth_headers(session: Node, content_type: String = "application/json") -> PackedStringArray:
+	var auth := session.get_node_or_null("/root/AuthSession")
+	if auth != null:
+		return auth.call("auth_headers", content_type)
+	if content_type.is_empty():
+		return PackedStringArray()
+	return PackedStringArray(["Content-Type: " + content_type])
+
+
 static func _post_vessel(
 	session: Node,
 	captain_id: String,
@@ -283,7 +292,7 @@ static func _post_vessel(
 		if on_complete.is_valid():
 			on_complete.call(record)
 	)
-	req.request(url, PackedStringArray(["Content-Type: application/json"]), HTTPClient.METHOD_POST, body)
+	req.request(url, _auth_headers(session), HTTPClient.METHOD_POST, body)
 
 
 static func _fetch_vessels(session: Node, captain_id: String, on_complete: Callable = Callable()) -> void:
@@ -303,7 +312,7 @@ static func _fetch_vessels(session: Node, captain_id: String, on_complete: Calla
 			return
 		_apply_server_vessels(session, parsed as Array, on_complete)
 	)
-	req.request(url)
+	req.request(url, _auth_headers(session, ""))
 
 
 static func _apply_server_vessels(session: Node, rows: Array, on_complete: Callable = Callable()) -> void:

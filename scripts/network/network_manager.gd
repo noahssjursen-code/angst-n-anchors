@@ -838,14 +838,20 @@ func find_any_ship_near(global_pos: Vector3, max_dist: float = 25.0) -> Node3D:
 # ── Connection & Bootstrap Helpers ───────────────────────────────────────────
 
 func get_local_player_id() -> String:
+	# Stable wire identity: the captain UUID issued by the server. Falls back to
+	# a local-only id for singleplayer so save logic that touches this still works.
 	var session := get_node_or_null("/root/PlayerSession")
 	if session == null or session.get("data") == null:
 		return ""
 	var pdata = session.get("data")
-	if pdata != null:
-		var pid := OS.get_process_id()
-		return "%s_%d" % [pdata.display_name, pid]
-	return ""
+	if pdata == null:
+		return ""
+	var captain_id := str(pdata.captain_id).strip_edges()
+	if not captain_id.is_empty():
+		return captain_id
+	# Singleplayer / pre-login fallback. Never goes on the wire because UDP only
+	# starts after a captain is selected on the multiplayer path.
+	return "local_%s_%d" % [str(pdata.display_name), OS.get_process_id()]
 
 
 func is_connected_to_host() -> bool:

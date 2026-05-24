@@ -9,7 +9,7 @@ const UDP_MSG_TYPE_CLIENT_UPDATE := 1
 const UDP_MSG_TYPE_SNAPSHOT := 2
 const UDP_MSG_TYPE_LOGOUT := 3
 
-const MAX_STRING_LEN := 64
+const MAX_STRING_LEN := 128
 
 
 # ── Outbound Encoder (Client -> Server) ──────────────────────────────────────

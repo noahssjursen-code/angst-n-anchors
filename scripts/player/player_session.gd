@@ -269,5 +269,6 @@ func _sync_marks_to_server() -> void:
 			push_warning("PlayerSession: failed to sync marks to server (HTTP %d)" % response_code)
 			_marks_sync_pending = true
 	)
-	var headers := PackedStringArray(["Content-Type: application/json"])
+	var auth := get_node_or_null("/root/AuthSession")
+	var headers := auth.auth_headers() if auth != null else PackedStringArray(["Content-Type: application/json"])
 	req.request(http_url, headers, HTTPClient.METHOD_PUT, body)

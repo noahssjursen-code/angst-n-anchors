@@ -76,7 +76,9 @@ static func request_nearby(
 		if on_complete.is_valid():
 			on_complete.call(filtered)
 	)
-	req.request(url)
+	var auth := session.get_node_or_null("/root/AuthSession")
+	var headers := auth.call("auth_headers", "") if auth != null else PackedStringArray()
+	req.request(url, headers)
 
 
 static func resolve_query_port_id(

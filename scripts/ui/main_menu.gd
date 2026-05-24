@@ -5,7 +5,7 @@ extends Control
 
 const WORLD_SCENE := "res://scenes/world.tscn"
 
-enum Page { MODE_SELECT, SINGLEPLAYER, MULTIPLAYER, CREATOR }
+enum Page { MODE_SELECT, SINGLEPLAYER, MULTIPLAYER, CREATOR, LOGIN }
 
 var _page: Page = Page.MODE_SELECT
 var _new_game_warns: bool = false
@@ -21,7 +21,14 @@ var _selected_mp_captain_name: String = ""
 var _mode_select_root: CenterContainer = null
 var _singleplayer_root: CenterContainer = null
 var _multiplayer_root: CenterContainer = null
+var _login_root: CenterContainer = null
 var _creator: CharacterCreatorPanel = null
+
+# Login page fields (held so we can clear / focus them)
+var _login_email_edit: LineEdit = null
+var _login_password_edit: LineEdit = null
+var _login_status_lbl: Label = null
+var _login_signed_in_lbl: Label = null
 
 # Buttons to update names dynamically
 var _sp_continue_btn: Button = null
@@ -57,6 +64,7 @@ func _ready() -> void:
 	_build_mode_select_page()
 	_build_singleplayer_page()
 	_build_multiplayer_page()
+	_build_login_page()
 	
 	_creator = CharacterCreatorPanel.new()
 	_creator.name = "CharacterCreator"
@@ -183,7 +191,7 @@ func _build_mode_select_page() -> void:
 
 	var mp_btn := Button.new()
 	mp_btn.text = "Multiplayer"
-	mp_btn.pressed.connect(func() -> void: _show_page(Page.MULTIPLAYER))
+	mp_btn.pressed.connect(func() -> void: _open_multiplayer_or_login())
 	vbox.add_child(mp_btn)
 
 	vbox.add_child(HSeparator.new())
@@ -410,16 +418,186 @@ func _build_multiplayer_page() -> void:
 	vbox.add_child(back_btn)
 
 
+# ── 4. Page Login (email + password gate to the multiplayer server) ──────────
+
+func _build_login_page() -> void:
+	_login_root = CenterContainer.new()
+	_login_root.name = "LoginPage"
+	_login_root.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_login_root.visible = false
+	add_child(_login_root)
+
+	var panel := Panel.new()
+	panel.theme = HudStyle.make_theme()
+	panel.custom_minimum_size = Vector2(420, 0)
+	_login_root.add_child(panel)
+
+	var margin := MarginContainer.new()
+	margin.add_theme_constant_override("margin_left", 28)
+	margin.add_theme_constant_override("margin_right", 28)
+	margin.add_theme_constant_override("margin_top", 28)
+	margin.add_theme_constant_override("margin_bottom", 28)
+	panel.add_child(margin)
+
+	var vbox := VBoxContainer.new()
+	vbox.add_theme_constant_override("separation", 12)
+	margin.add_child(vbox)
+
+	var title := Label.new()
+	title.text = "SIGN IN"
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.add_theme_font_size_override("font_size", 18)
+	title.add_theme_color_override("font_color", HudStyle.C_AMBER)
+	vbox.add_child(title)
+
+	var hint := Label.new()
+	hint.text = "Your account owns your captains, vessels, and crew on the server."
+	hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	hint.add_theme_font_size_override("font_size", 11)
+	hint.add_theme_color_override("font_color", HudStyle.C_LABEL)
+	hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	vbox.add_child(hint)
+
+	vbox.add_child(HSeparator.new())
+
+	_login_signed_in_lbl = Label.new()
+	_login_signed_in_lbl.text = ""
+	_login_signed_in_lbl.add_theme_font_size_override("font_size", 11)
+	_login_signed_in_lbl.add_theme_color_override("font_color", HudStyle.C_LABEL)
+	vbox.add_child(_login_signed_in_lbl)
+
+	var email_lbl := Label.new()
+	email_lbl.text = "Email"
+	email_lbl.add_theme_font_size_override("font_size", 12)
+	vbox.add_child(email_lbl)
+
+	_login_email_edit = LineEdit.new()
+	_login_email_edit.placeholder_text = "captain@example.com"
+	vbox.add_child(_login_email_edit)
+
+	var pw_lbl := Label.new()
+	pw_lbl.text = "Password"
+	pw_lbl.add_theme_font_size_override("font_size", 12)
+	vbox.add_child(pw_lbl)
+
+	_login_password_edit = LineEdit.new()
+	_login_password_edit.placeholder_text = "at least 8 characters"
+	_login_password_edit.secret = true
+	vbox.add_child(_login_password_edit)
+
+	_login_status_lbl = Label.new()
+	_login_status_lbl.text = ""
+	_login_status_lbl.add_theme_font_size_override("font_size", 11)
+	_login_status_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	vbox.add_child(_login_status_lbl)
+
+	var btn_row := HBoxContainer.new()
+	btn_row.add_theme_constant_override("separation", 10)
+	vbox.add_child(btn_row)
+
+	var sign_in_btn := Button.new()
+	sign_in_btn.text = "Sign in"
+	sign_in_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	sign_in_btn.pressed.connect(func() -> void: _on_login_pressed(false))
+	btn_row.add_child(sign_in_btn)
+
+	var register_btn := Button.new()
+	register_btn.text = "Register"
+	register_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	register_btn.pressed.connect(func() -> void: _on_login_pressed(true))
+	btn_row.add_child(register_btn)
+
+	vbox.add_child(HSeparator.new())
+
+	var logout_btn := Button.new()
+	logout_btn.text = "Sign out"
+	logout_btn.pressed.connect(func() -> void: _on_logout_pressed())
+	vbox.add_child(logout_btn)
+
+	var back_btn := Button.new()
+	back_btn.text = "Back to Game Mode"
+	back_btn.pressed.connect(func() -> void: _show_page(Page.MODE_SELECT))
+	vbox.add_child(back_btn)
+
+
+func _refresh_login_state() -> void:
+	var auth := get_node_or_null("/root/AuthSession")
+	if auth == null or _login_signed_in_lbl == null:
+		return
+	if bool(auth.call("is_authenticated")):
+		_login_signed_in_lbl.text = "Signed in as %s" % str(auth.get("email"))
+		_login_signed_in_lbl.add_theme_color_override("font_color", Color.GREEN)
+	else:
+		_login_signed_in_lbl.text = "Not signed in"
+		_login_signed_in_lbl.add_theme_color_override("font_color", HudStyle.C_LABEL)
+
+
+func _on_login_pressed(register: bool) -> void:
+	var auth := get_node_or_null("/root/AuthSession")
+	if auth == null or _login_email_edit == null or _login_password_edit == null:
+		return
+	var email_in := _login_email_edit.text.strip_edges()
+	var password := _login_password_edit.text
+	if email_in.is_empty() or password.is_empty():
+		_login_status_lbl.text = "Email and password are required."
+		_login_status_lbl.add_theme_color_override("font_color", Color.RED)
+		return
+	_login_status_lbl.text = "Working..."
+	_login_status_lbl.add_theme_color_override("font_color", HudStyle.C_LABEL)
+	var cb := func(ok: bool, err: String) -> void:
+		if not ok:
+			_login_status_lbl.text = "Sign-in failed: %s" % err
+			_login_status_lbl.add_theme_color_override("font_color", Color.RED)
+			_refresh_login_state()
+			return
+		_login_password_edit.text = ""
+		_login_status_lbl.text = ""
+		_refresh_login_state()
+		_show_page(Page.MULTIPLAYER)
+	if register:
+		auth.call("register", email_in, password, cb)
+	else:
+		auth.call("login", email_in, password, cb)
+
+
+func _on_logout_pressed() -> void:
+	var auth := get_node_or_null("/root/AuthSession")
+	if auth == null:
+		return
+	auth.call("logout")
+	var session := get_node_or_null("/root/PlayerSession")
+	if session != null and session.get("data") != null:
+		session.data.captain_id = ""
+	_selected_mp_captain_id = ""
+	_selected_mp_captain_name = ""
+	if _mp_play_btn != null:
+		_mp_play_btn.disabled = true
+	_refresh_login_state()
+	if _login_status_lbl != null:
+		_login_status_lbl.text = "Signed out."
+		_login_status_lbl.add_theme_color_override("font_color", HudStyle.C_LABEL)
+
+
+func _open_multiplayer_or_login() -> void:
+	var auth := get_node_or_null("/root/AuthSession")
+	if auth != null and bool(auth.call("is_authenticated")):
+		_show_page(Page.MULTIPLAYER)
+	else:
+		_show_page(Page.LOGIN)
+
+
 # ── Page Flow & Transition Controllers ────────────────────────────────────────
 
 func _show_page(page: Page) -> void:
 	_page = page
-	
+
 	_mode_select_root.visible = page == Page.MODE_SELECT
 	_singleplayer_root.visible = page == Page.SINGLEPLAYER
 	_multiplayer_root.visible = page == Page.MULTIPLAYER
 	_creator.visible = page == Page.CREATOR
-	
+	if _login_root != null:
+		_login_root.visible = page == Page.LOGIN
+
 	var config := get_node_or_null("/root/ServerConfig")
 	if config != null:
 		config.set("is_multiplayer_mode", page == Page.MULTIPLAYER)
@@ -437,9 +615,11 @@ func _show_page(page: Page) -> void:
 		_target_look_at = Vector3(0.0, 1.5, 0.0)
 		
 	_refresh_continue_states()
-	
+
 	if page == Page.MULTIPLAYER:
 		_refresh_server_list()
+	if page == Page.LOGIN:
+		_refresh_login_state()
 
 
 func _refresh_continue_states() -> void:
@@ -710,39 +890,54 @@ func _refresh_server_list() -> void:
 func _load_postgres_captains(http_host: String, http_port: int) -> void:
 	if _mp_captains_container == null:
 		return
-		
+
 	# Clear list first
 	for c in _mp_captains_container.get_children():
 		c.queue_free()
-		
+
+	var auth := get_node_or_null("/root/AuthSession")
+	if auth == null or not bool(auth.call("is_authenticated")):
+		_clear_mp_captains_ui("Sign in to load your captains.")
+		return
+
 	var loading_lbl := Label.new()
-	loading_lbl.text = "Loading Captains..."
+	loading_lbl.text = "Loading your captains..."
 	loading_lbl.add_theme_font_size_override("font_size", 11)
 	_mp_captains_container.add_child(loading_lbl)
-	
-	var http_url := "http://%s:%d/v1/captains" % [http_host, http_port]
+
+	# Scoped to the logged-in user via /v1/auth/me. The Bearer token is required.
+	var http_url := "http://%s:%d/v1/auth/me" % [http_host, http_port]
 	var req := HTTPRequest.new()
 	add_child(req)
-	
+
 	req.request_completed.connect(func(result: int, response_code: int, _headers: PackedStringArray, body: PackedByteArray) -> void:
 		req.queue_free()
 		if not is_instance_valid(_mp_captains_container):
 			return
-			
+
 		for c in _mp_captains_container.get_children():
 			c.queue_free()
-			
+
+		if response_code == 401:
+			auth.call("logout")
+			_clear_mp_captains_ui("Session expired. Sign in again.")
+			return
 		if result != HTTPRequest.RESULT_SUCCESS or response_code != 200:
 			_clear_mp_captains_ui("Failed to load captains.")
 			return
-			
+
 		var json := JSON.new()
 		var parse_err := json.parse(body.get_string_from_utf8())
-		if parse_err != OK or not (json.data is Array):
-			_clear_mp_captains_ui("No captains registered on this server.")
+		if parse_err != OK or not (json.data is Dictionary):
+			_clear_mp_captains_ui("Malformed response from server.")
 			return
-			
-		var captains_list: Array = json.data
+
+		var me := json.data as Dictionary
+		var caps_raw: Variant = me.get("captains", [])
+		if typeof(caps_raw) != TYPE_ARRAY:
+			_clear_mp_captains_ui("No captains registered. Create one below!")
+			return
+		var captains_list: Array = caps_raw as Array
 		if captains_list.is_empty():
 			_clear_mp_captains_ui("No captains registered. Create one below!")
 			return
@@ -807,8 +1002,8 @@ func _load_postgres_captains(http_host: String, http_port: int) -> void:
 				_delete_postgres_captain(http_host, http_port, cap_id)
 			)
 	)
-	
-	req.request(http_url)
+
+	req.request(http_url, auth.call("auth_headers", ""))
 
 
 func _create_postgres_captain(display_name: String, appearance: CharacterAppearance) -> void:
@@ -851,7 +1046,7 @@ func _create_postgres_captain(display_name: String, appearance: CharacterAppeara
 			_show_page(Page.MULTIPLAYER)
 	)
 	
-	var headers := PackedStringArray(["Content-Type: application/json"])
+	var headers := _auth_headers_with_content()
 	req.request(http_url, headers, HTTPClient.METHOD_POST, JSON.stringify(body_dict))
 
 
@@ -859,7 +1054,7 @@ func _delete_postgres_captain(http_host: String, http_port: int, captain_id: Str
 	var http_url := "http://%s:%d/v1/captains?id=%s" % [http_host, http_port, captain_id]
 	var req := HTTPRequest.new()
 	add_child(req)
-	
+
 	req.request_completed.connect(func(result: int, response_code: int, _headers: PackedStringArray, _body: PackedByteArray) -> void:
 		req.queue_free()
 		if result == HTTPRequest.RESULT_SUCCESS and response_code == 200:
@@ -869,16 +1064,30 @@ func _delete_postgres_captain(http_host: String, http_port: int, captain_id: Str
 				_mp_play_btn.disabled = true
 			_load_postgres_captains(http_host, http_port)
 	)
-	
-	req.request(http_url, PackedStringArray(), HTTPClient.METHOD_DELETE)
+
+	req.request(http_url, _auth_headers_no_content(), HTTPClient.METHOD_DELETE)
+
+
+func _auth_headers_with_content() -> PackedStringArray:
+	var auth := get_node_or_null("/root/AuthSession")
+	if auth != null:
+		return auth.call("auth_headers", "application/json")
+	return PackedStringArray(["Content-Type: application/json"])
+
+
+func _auth_headers_no_content() -> PackedStringArray:
+	var auth := get_node_or_null("/root/AuthSession")
+	if auth != null:
+		return auth.call("auth_headers", "")
+	return PackedStringArray()
 
 
 func _add_postgres_captain_marks(http_host: String, http_port: int, captain_id: String, current_marks: int) -> void:
 	var http_url := "http://%s:%d/v1/captains" % [http_host, http_port]
 	var req := HTTPRequest.new()
 	add_child(req)
-	
-	var headers := PackedStringArray(["Content-Type: application/json"])
+
+	var headers := _auth_headers_with_content()
 	var body_dict := {
 		"id": captain_id,
 		"marks": current_marks + 1000000
