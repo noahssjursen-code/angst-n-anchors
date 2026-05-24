@@ -485,11 +485,15 @@ func _register_ship_sender(ship_id: String, hull_id: String, ship_node: Node3D, 
 						berth_tag = "berth=%s_%d" % [port_dock.port_id, idx]
 						break
 			
+			var parts: PackedStringArray = []
 			if not pilot.is_empty():
-				if not berth_tag.is_empty():
-					return "pilot=%s;%s" % [pilot, berth_tag]
-				return "pilot=" + pilot
-			return berth_tag
+				parts.append("pilot=" + pilot)
+			if not berth_tag.is_empty():
+				parts.append(berth_tag)
+			var fishing := ship_node.find_child("FishingSystem", true, false) as FishingSystem
+			if fishing != null and fishing.trawling:
+				parts.append("trawl=1")
+			return ";".join(parts)
 	)
 
 

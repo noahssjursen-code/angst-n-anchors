@@ -179,14 +179,13 @@ func interpolate_entities(delta: float, position_smoothness: float, payload_smoo
 
 ## Parses metadata to identify pilot IDs that should be hidden.
 func _parse_pilot_meta(meta: String, active_pilot_ids: Dictionary) -> void:
-	if meta.begins_with("pilot="):
-		var pid := meta.replace("pilot=", "")
-		if not pid.is_empty():
-			active_pilot_ids[pid] = true
-	elif meta.begins_with("op="):
-		var op_id := meta.replace("op=", "")
-		if not op_id.is_empty():
-			active_pilot_ids[op_id] = true
+	var parsed := _parse_meta_map(meta)
+	var pid: String = parsed.get("pilot", "")
+	if not pid.is_empty():
+		active_pilot_ids[pid] = true
+	var op_id: String = parsed.get("op", "")
+	if not op_id.is_empty():
+		active_pilot_ids[op_id] = true
 
 
 ## Updates avatar visibilities based on current piloting set.
@@ -543,6 +542,10 @@ func _apply_state_to_node(node: Node3D, type: String, payload: Array, meta: Stri
 	elif type.begins_with("ship_"):
 		if node.has_method("_sync_walk_deck_transform"):
 			node.call("_sync_walk_deck_transform")
+		var fishing := node.find_child("FishingSystem", true, false) as FishingSystem
+		if fishing != null:
+			var ship_meta := _parse_meta_map(meta)
+			fishing.trawling = ship_meta.get("trawl", "0") == "1"
 
 	elif type == "crane" or type.begins_with("crane"):
 		# Cranes use Format 6 payload: [base_x, base_y, base_z, gantry_x, trolley_z, hoist_drop]
