@@ -63,6 +63,16 @@ func is_third_person() -> bool:
 	return _mode == CameraMode.THIRD_PERSON
 
 
+## Yaw replicated to other clients — third-person sends visible mesh heading,
+## first-person sends the player root (look direction).
+func get_replication_yaw() -> float:
+	if _player == null:
+		return 0.0
+	if _mode == CameraMode.THIRD_PERSON and _body_mesh != null:
+		return _body_mesh.global_rotation.y
+	return _player.rotation.y
+
+
 ## Camera-relative movement basis (XZ). Third-person walks away from the orbit camera.
 func get_flat_basis() -> Basis:
 	if _player == null:

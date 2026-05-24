@@ -301,7 +301,6 @@ func _spawn_dynamic_entity_node(id: String, type: String, meta: String = "") -> 
 		
 		var body := NpcBase.new()
 		body.name = "BodyMesh"
-		body.rotation.y = PI  # mesh authored facing +Z; body forward is -Z
 		body.skin_color = Color(0.65, 0.48, 0.38)
 		body.clothing_color = Color(0.24, 0.28, 0.44)
 		body.trousers_color = Color(0.18, 0.18, 0.22)
@@ -473,6 +472,9 @@ func _apply_state_to_node(node: Node3D, type: String, payload: Array, meta: Stri
 	if format == 4:
 		if type.begins_with("ship_"):
 			node.global_rotation = Vector3(node.global_rotation.x, payload[3], node.global_rotation.z)
+		elif type == "player":
+			# Payload yaw is the visible BodyMesh heading (see NetworkManager sender).
+			node.rotation.y = lerp_angle(node.rotation.y, float(payload[3]), 1.0)
 		else:
 			# Vector4 (XYZ Yaw): f[3] = yaw
 			node.rotation.y = lerp_angle(node.rotation.y, payload[3], 1.0)

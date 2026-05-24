@@ -123,7 +123,11 @@ func _tick_outbound(delta: float) -> void:
 			"player",
 			4,
 			func():
-				return [lp.global_position.x, lp.global_position.y, lp.global_position.z, lp.rotation.y],
+				var yaw := lp.rotation.y
+				var cam_ctrl := lp.get_node_or_null("PlayerCamera")
+				if cam_ctrl != null and cam_ctrl.has_method("get_replication_yaw"):
+					yaw = float(cam_ctrl.call("get_replication_yaw"))
+				return [lp.global_position.x, lp.global_position.y, lp.global_position.z, yaw],
 			func():
 				var session := get_node_or_null("/root/PlayerSession")
 				if session != null and session.data != null and session.data.appearance != null:
