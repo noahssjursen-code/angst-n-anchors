@@ -15,8 +15,15 @@ func _ready() -> void:
 
 
 func _on_interact() -> void:
-	_open_catalog()
-	open_ui()
+	var session := get_node_or_null("/root/PlayerSession")
+	if session == null:
+		_open_catalog()
+		open_ui()
+		return
+	VesselSync.refresh_for_ui(session, func() -> void:
+		_open_catalog()
+		open_ui()
+	)
 
 
 func _on_ui_cancel() -> void:

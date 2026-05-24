@@ -1,7 +1,7 @@
 class_name AutonomousCraneOps
 extends RefCounted
 
-## Sim-backed crane unload for autonomous NPC vessels (local only).
+## Sim-backed crane unload for autonomous NPC vessels.
 ## Sells ship-deck pallets during CRANE stage and credits vessel pending_earnings.
 
 static var _crane_state: Dictionary = {}  ## uid -> { leg_key, initial_count, sold_count }
@@ -10,6 +10,20 @@ static var _crane_state: Dictionary = {}  ## uid -> { leg_key, initial_count, so
 static func clear_state(vessel_uid: String) -> void:
 	if not vessel_uid.is_empty():
 		_crane_state.erase(vessel_uid)
+
+
+static func resolve_apron(dock: PortDock, berth_index: int) -> CargoDeckComponent:
+	if dock == null:
+		return null
+	if berth_index >= 0:
+		var preferred := dock.get_berth_apron_deck(berth_index)
+		if preferred != null:
+			return preferred
+	for i in range(dock.berth_count()):
+		var apron := dock.get_berth_apron_deck(i)
+		if apron != null:
+			return apron
+	return null
 
 
 static func process_crane_tick(
@@ -22,10 +36,10 @@ static func process_crane_tick(
 	leg_t: float,
 ) -> Dictionary:
 	var uid := str(record.get("uid", ""))
-	if uid.is_empty() or body == null or dock == null or berth_index < 0:
+	if uid.is_empty() or body == null or dock == null:
 		return record
 
-	var apron := dock.get_berth_apron_deck(berth_index)
+	var apron := resolve_apron(dock, berth_index)
 	if apron == null:
 		return record
 
@@ -38,8 +52,18 @@ static func process_crane_tick(
 			"sold_count": 0,
 		}
 
-	var initial := int(state.get("initial_count", 0))
 	var sold := int(state.get("sold_count", 0))
+	var sellable_now := _count_sellable(body, apron)
+	var initial := int(state.get("initial_count", 0))
+
+	# Ship may spawn mid-leg (proximity load) after initial_count was captured as 0.
+	if sellable_now > initial:
+		state["initial_count"] = sold + sellable_now
+		initial = int(state["initial_count"])
+	elif initial <= 0 and sellable_now > 0:
+		state["initial_count"] = sellable_now
+		initial = sellable_now
+
 	_crane_state[uid] = state
 	if initial <= 0 or sold >= initial:
 		return record
@@ -50,7 +74,10 @@ static func process_crane_tick(
 		return record
 
 	var out := record.duplicate(true)
-	var earnings := int(out.get("pending_earnings", 0))
+	var earnings_before := int(out.get("pending_earnings", 0))
+	var earnings := earnings_before
+	var sold_before := sold
+
 	while sold < target:
 		var pallet := _take_next_sellable(body, apron)
 		if pallet == null:
@@ -61,7 +88,7 @@ static func process_crane_tick(
 	state["sold_count"] = sold
 	_crane_state[uid] = state
 
-	if earnings == int(out.get("pending_earnings", 0)):
+	if sold <= sold_before:
 		return record
 
 	out["pending_earnings"] = earnings
@@ -111,17 +138,14 @@ static func _sale_value(pallet: Pallet, apron: CargoDeckComponent) -> int:
 
 
 static func _persist_record(record: Dictionary) -> void:
-	var session := _session()
-	if session == null or session.get("data") == null:
-		return
-	var data: PlayerData = session.data as PlayerData
-	data.upsert_owned_vessel(record)
-	if session.has_method("_request_save"):
-		session.call("_request_save")
+	var uid := str(record.get("uid", ""))
+	var mgr := _manager()
+	if mgr != null and mgr.has_method("apply_record_update"):
+		mgr.call("apply_record_update", uid, record)
 
 
-static func _session() -> Node:
+static func _manager() -> Node:
 	var tree := Engine.get_main_loop()
 	if tree == null:
 		return null
-	return tree.root.get_node_or_null("/root/PlayerSession")
+	return tree.root.get_node_or_null("/root/AutonomousVesselManager")

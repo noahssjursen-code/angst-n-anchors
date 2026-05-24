@@ -2,7 +2,7 @@ class_name CompanyFleetPanel
 extends CanvasLayer
 
 ## Company office fleet roster — owned hulls with live 3D preview.
-## Data: PlayerSession.data.owned_vessels (refreshed from MP `/v1/vessels` on open).
+## Data: PlayerSession.data.owned_vessels — in MP refreshed from `/v1/vessels` before open.
 
 signal closed
 
@@ -92,15 +92,34 @@ func is_open() -> bool:
 
 func open_panel(office_port_id: String = "") -> void:
 	_office_port_id = office_port_id
-	_reload_vessels()
-	_accrue_fleet_pending()
 	_resize_panel()
 	_panel.visible = true
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	_show_loading_state()
+	var session := get_node_or_null("/root/PlayerSession")
+	if session == null:
+		_reload_vessels()
+		_finish_open_panel()
+		return
+	VesselSync.refresh_for_ui(session, func() -> void:
+		_reload_vessels()
+		_finish_open_panel()
+	)
+
+
+func _finish_open_panel() -> void:
+	_accrue_fleet_pending()
 	_refresh_company_header()
 	_refresh_list()
 	_select_index(maxi(_selected_index, 0) if not _vessels.is_empty() else -1)
-	VesselSync.pull_captain_vessel(get_node_or_null("/root/PlayerSession"))
+
+
+func _show_loading_state() -> void:
+	_vessels.clear()
+	_refresh_list()
+	if _empty_lbl != null:
+		_empty_lbl.text = "Syncing fleet from server…"
+		_empty_lbl.visible = true
 
 
 func hide_panel() -> void:
@@ -1013,10 +1032,14 @@ func _persist_vessel_record(record: Dictionary) -> void:
 	if session == null or session.get("data") == null:
 		return
 	session.data.upsert_owned_vessel(record)
+	VesselSync.persist_fleet_state(session, record)
 	if session.has_method("save_now"):
 		session.save_now()
 	if _selected_index >= 0 and _selected_index < _vessels.size():
 		_vessels[_selected_index] = record.duplicate()
+	var mgr := get_node_or_null("/root/AutonomousVesselManager")
+	if mgr != null and mgr.has_method("refresh_vessel"):
+		mgr.call("refresh_vessel", str(record.get("uid", "")))
 
 
 func _apply_crew_assignment(record: Dictionary, crew: Array, slot_count: int) -> Dictionary:

@@ -58,9 +58,14 @@ func _rebuild() -> void:
 		var islands  : Array          = []
 		for d in defs:
 			positions.append(d.world_position)
+			var data := PortExpander.expand(d, world_seed)
+			var land_pad := IslandMeshBuilder.MARGIN + IslandMeshBuilder.AMPLITUDE
+			const PLOT_DEPTH_M := 140.0
 			islands.append({
 				"center": d.world_position,
-				"radius": _island_radius_for_size(d.size),
+				"half_x": data.island_width * 0.5 + land_pad,
+				"half_z": PLOT_DEPTH_M * 0.5 + land_pad,
+				"rotation_y": data.rotation_y,
 			})
 		var lf_handle: int = t.mark_load_event("land_field.bake") if t != null else 0
 		LandField.initialize(islands)
@@ -123,6 +128,10 @@ func _setup_ports(defs: Array[PortDefinition]) -> void:
 	var loader  := ProximityLoader.new()
 	loader.name = "ProximityLoader"
 	add_child(loader)
+
+	var port_proximity := preload("res://scripts/world/port_proximity.gd").new()
+	port_proximity.name = "PortProximity"
+	add_child(port_proximity)
 
 	var registry := get_node_or_null("/root/ContractRegistry")
 

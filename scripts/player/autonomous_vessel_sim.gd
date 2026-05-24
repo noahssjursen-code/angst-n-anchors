@@ -110,19 +110,10 @@ static func _legs_cache_key(av: AutonomousVesselRecord) -> String:
 	parts.append(visit)
 	parts.append("1" if av.role_is_fishing() else "0")
 	parts.append(av.hull_id)
-	parts.append("route_v2")
+	# Port ids only — never bake live dock transforms into the cache key.
+	parts.append("route_v4")
 	parts.append(str(LandField.get_island_count()) if LandField.is_initialized() else "0")
-	parts.append(_pos_cache_key(_port_sea_pos(av.home_port_id)))
-	if visit.is_empty():
-		parts.append(_pos_cache_key(_offshore_point(av.home_port_id)))
-	else:
-		parts.append(_pos_cache_key(_port_sea_pos(visit)))
-		parts.append(_pos_cache_key(_offshore_point(visit)))
 	return "|".join(parts)
-
-
-static func _pos_cache_key(p: Vector3) -> String:
-	return "%d,%d" % [int(round(p.x)), int(round(p.z))]
 
 
 static func _build_legs_uncached(av: AutonomousVesselRecord) -> Array:
@@ -252,10 +243,10 @@ static func _sample_leg(av: AutonomousVesselRecord, leg_info: Dictionary, legs: 
 
 	match stage:
 		Stage.DOCK, Stage.CRANE:
-			var berth_xform := dock_berth_transform(port_id, 0)
-			pos = berth_xform.origin
+			var dock_pose := _sim_dock_pose(port_id)
+			pos = dock_pose.get("position", Vector3.ZERO)
 			target = pos
-			yaw = _yaw_from_basis(berth_xform.basis)
+			yaw = float(dock_pose.get("yaw", 0.0))
 		Stage.TRANSIT:
 			pos = _transit_position(leg, local_t)
 			velocity = _transit_velocity(leg, local_t, leg_duration)
@@ -364,13 +355,19 @@ static func dock_berth_transform(
 	return dock.get_berth_spawn_transform(berth_index, half_beam_m)
 
 
+## Authoritative sim anchor — registry only so every client agrees before docks stream in.
 static func _port_sea_pos(port_id: String) -> Vector3:
-	if port_id.is_empty():
-		return Vector3.ZERO
-	var xform := dock_berth_transform(port_id, 0)
-	if _vec3_is_valid(xform.origin) and xform.origin != Vector3.ZERO:
-		return xform.origin
 	return _registry_pos(port_id)
+
+
+static func _sim_dock_pose(port_id: String) -> Dictionary:
+	var pos := _port_sea_pos(port_id)
+	if not _vec3_is_valid(pos) or pos == Vector3.ZERO:
+		pos = Vector3.ZERO
+	return {
+		"position": pos,
+		"yaw": _port_yaw(port_id),
+	}
 
 
 static func _berth_position(port_id: String) -> Vector3:
@@ -381,12 +378,6 @@ static func _offshore_point(port_id: String) -> Vector3:
 	var base := _port_sea_pos(port_id)
 	if not _vec3_is_valid(base) or base == Vector3.ZERO:
 		return base
-	var dock := _find_dock(port_id)
-	if dock != null and is_instance_valid(dock):
-		var seaward := -dock.global_transform.basis.z
-		seaward.y = 0.0
-		if seaward.length_squared() > 0.0001:
-			return base + seaward.normalized() * TRAWL_OFFSHORE_M
 	var info := _port_info(port_id)
 	var ry := float(info.get("rotation_y", 0.0))
 	var seaward_reg := Vector3(-sin(ry), 0.0, -cos(ry))
@@ -398,9 +389,6 @@ static func _offshore_point(port_id: String) -> Vector3:
 
 
 static func _port_yaw(port_id: String) -> float:
-	var xform := dock_berth_transform(port_id, 0)
-	if xform != Transform3D.IDENTITY:
-		return _yaw_from_basis(xform.basis)
 	var info := _port_info(port_id)
 	return float(info.get("rotation_y", 0.0))
 

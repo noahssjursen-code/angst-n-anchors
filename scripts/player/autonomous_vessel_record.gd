@@ -201,13 +201,13 @@ func set_route(home_id: String, visit_id: String = NO_VISIT) -> void:
 
 
 ## True when the record should be simulated / rendered near `world_xz`.
-## Phase 1 (no sim yet): home or visit port within radius, or route midpoint.
+## Checks port anchors, route midpoint, and deterministic sim position.
 func is_relevant_near(world_xz: Vector2, radius_m: float) -> bool:
 	if not active:
 		return false
-	if not _ports_hydrated:
-		return true
 	var r2 := radius_m * radius_m
+	if not _ports_hydrated:
+		return _is_sim_near(world_xz, r2)
 	if home_port_id.is_empty():
 		return false
 	if _xz(home_pos).distance_squared_to(world_xz) <= r2:
@@ -218,7 +218,23 @@ func is_relevant_near(world_xz: Vector2, radius_m: float) -> bool:
 		var mid := (_xz(home_pos) + _xz(visit_pos)) * 0.5
 		if mid.distance_squared_to(world_xz) <= r2:
 			return true
-	return false
+	return _is_sim_near(world_xz, r2)
+
+
+func _is_sim_near(world_xz: Vector2, r2: float) -> bool:
+	if active_at <= 0:
+		return false
+	var sample := AutonomousVesselSim.sample(to_sim_record())
+	var pos: Vector3 = sample.get("position", Vector3.ZERO)
+	return _xz(pos).distance_squared_to(world_xz) <= r2
+
+
+func to_sim_record() -> Dictionary:
+	return merge_into_owned_vessel({
+		"uid": id if not id.is_empty() else owner_id,
+		"hull_id": hull_id,
+		"template_path": template_path,
+	})
 
 
 static func filter_nearby(

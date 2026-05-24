@@ -35,9 +35,17 @@ func _on_interact() -> void:
 	if _player_berth_index() < 0:
 		_show_berth_required()
 		return
-	_refresh_list()
-	_dialogue.show_panel()
-	open_ui()
+	var session := get_node_or_null("/root/PlayerSession")
+	if session == null:
+		_refresh_list()
+		_dialogue.show_panel()
+		open_ui()
+		return
+	VesselSync.refresh_for_ui(session, func() -> void:
+		_refresh_list()
+		_dialogue.show_panel()
+		open_ui()
+	)
 
 
 func _on_ui_cancel() -> void:

@@ -74,6 +74,19 @@ func owns_hull_id(hull_id: String) -> bool:
 	return false
 
 
+## Merge `patch` onto `existing` — keys in patch win; omitted fleet fields are kept.
+## Prevents partial writes (deploy snapshot, crane earnings tick) from wiping routes.
+static func merge_vessel_record(existing: Dictionary, patch: Dictionary) -> Dictionary:
+	if existing.is_empty():
+		return patch.duplicate(true)
+	if patch.is_empty():
+		return existing.duplicate(true)
+	var merged := existing.duplicate(true)
+	for key in patch:
+		merged[key] = patch[key]
+	return merged
+
+
 func upsert_owned_vessel(record: Dictionary) -> void:
 	if record.is_empty():
 		return
@@ -85,9 +98,19 @@ func upsert_owned_vessel(record: Dictionary) -> void:
 		if typeof(existing_raw) != TYPE_DICTIONARY:
 			continue
 		if str((existing_raw as Dictionary).get("uid", "")) == uid:
-			owned_vessels[i] = record.duplicate()
+			owned_vessels[i] = merge_vessel_record(existing_raw as Dictionary, record)
+			_mirror_active_vessel_from_owned(uid)
 			return
-	owned_vessels.append(record.duplicate())
+	owned_vessels.append(record.duplicate(true))
+	_mirror_active_vessel_from_owned(uid)
+
+
+func _mirror_active_vessel_from_owned(uid: String) -> void:
+	if str(active_vessel.get("uid", "")) != uid:
+		return
+	var fresh := find_owned_vessel(uid)
+	if not fresh.is_empty():
+		active_vessel = fresh
 
 
 func find_owned_vessel(uid: String) -> Dictionary:
@@ -120,18 +143,22 @@ func get_deployable_vessels() -> Array:
 		var entry := entry_raw as Dictionary
 		if is_legacy_starter_vessel(entry):
 			continue
-		var path := str(entry.get("template_path", ""))
-		if path.is_empty() or not FileAccess.file_exists(path):
+		var resolved := AutonomousVesselLoader.resolve_deployable_record(entry)
+		if resolved.is_empty():
 			continue
-		out.append(entry.duplicate())
+		out.append(resolved)
 	return out
 
 
 func set_active_vessel(record: Dictionary) -> void:
-	if typeof(record) != TYPE_DICTIONARY:
+	if typeof(record) != TYPE_DICTIONARY or record.is_empty():
 		active_vessel = {}
 		return
-	active_vessel = record.duplicate()
+	var uid := str(record.get("uid", ""))
+	var owned := find_owned_vessel(uid)
+	var merged := merge_vessel_record(owned, record) if not owned.is_empty() else record.duplicate(true)
+	active_vessel = merged.duplicate(true)
+	upsert_owned_vessel(merged)
 
 
 func get_active_vessel_record() -> Dictionary:
@@ -170,7 +197,12 @@ func repair_save_consistency() -> void:
 		cleaned.append(entry.duplicate())
 	owned_vessels = cleaned
 	if not active_vessel.is_empty() and not is_legacy_starter_vessel(active_vessel):
-		upsert_owned_vessel(active_vessel)
+		var active_uid := str(active_vessel.get("uid", ""))
+		var owned := find_owned_vessel(active_uid)
+		if owned.is_empty():
+			upsert_owned_vessel(active_vessel)
+		else:
+			upsert_owned_vessel(merge_vessel_record(owned, active_vessel))
 	elif not owned_vessels.is_empty() and active_vessel.is_empty():
 		var last_raw: Variant = owned_vessels[owned_vessels.size() - 1]
 		if typeof(last_raw) == TYPE_DICTIONARY:

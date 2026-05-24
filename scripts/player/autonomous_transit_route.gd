@@ -10,8 +10,8 @@ const ROUTING_RADIUS_PADDING_M := 55.0
 const TRAWL_OFFSHORE_M := 900.0
 const DOCK_LEAD_M := 140.0
 const LAND_SAMPLE_COUNT := 48
-const MAX_DETOUR_PASSES := 4
-const MAX_ARC_RAD := deg_to_rad(175.0)
+const MAX_DETOUR_PASSES := 8
+const MAX_ARC_RAD := TAU * 0.99
 const ARC_STEP_RAD := deg_to_rad(28.0)
 
 
@@ -112,6 +112,8 @@ static func _port_to_port_waypoints(
 
 	var dep_lead := _seaward_step(from_pos, departure_offshore, DOCK_LEAD_M)
 	_append_segment(pts, dep_lead, SegmentMode.DOCK_LEG)
+
+	_append_segment(pts, departure_offshore, SegmentMode.OPEN_WATER)
 
 	var ocean_start: Vector3 = pts[pts.size() - 1]
 	var entry_gate := _port_entry_gate(to_pos, ocean_start, arrival_offshore)

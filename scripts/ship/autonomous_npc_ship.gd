@@ -33,6 +33,10 @@ func sync_record(record: Dictionary) -> void:
 	_record = record.duplicate(true)
 
 
+func get_live_record() -> Dictionary:
+	return _record.duplicate(true)
+
+
 func get_body() -> BoatBody:
 	return _body
 
@@ -69,20 +73,30 @@ func _physics_process(delta: float) -> void:
 		_on_stage_changed(stage, str(sample.get("port_id", "")))
 	_last_stage = stage
 
-	if stage == AutonomousVesselSim.Stage.CRANE and _has_berth():
-		var cycle_sec := AutonomousVesselSim.cycle_duration_for_record(_record)
-		var cycle_index := int(floor(_sim_elapsed() / maxf(cycle_sec, 1.0)))
-		_record = AutonomousCraneOps.process_crane_tick(
-			_record,
-			_body,
-			_berth_dock,
-			_berth_index,
-			cycle_index,
-			int(sample.get("leg_index", 0)),
-			float(sample.get("leg_t", 0.0)),
-		)
-	elif stage != AutonomousVesselSim.Stage.CRANE:
+	var cycle_sec := AutonomousVesselSim.cycle_duration_for_record(_record)
+	var cycle_index := int(floor(_sim_elapsed() / maxf(cycle_sec, 1.0)))
+	var leg_index := int(sample.get("leg_index", 0))
+	var port_id := str(sample.get("port_id", ""))
+
+	if stage == AutonomousVesselSim.Stage.CRANE:
+		var dock := _resolve_port_dock(port_id)
+		if dock != null:
+			var berth_idx := _berth_index if _has_berth() else 0
+			_record = AutonomousCraneOps.process_crane_tick(
+				_record,
+				_body,
+				dock,
+				berth_idx,
+				cycle_index,
+				leg_index,
+				float(sample.get("leg_t", 0.0)),
+			)
+	elif stage == AutonomousVesselSim.Stage.DOCK:
+		AutonomousCargoOps.process_dock_load(_record, _body, port_id, cycle_index, leg_index)
 		AutonomousCraneOps.clear_state(vessel_uid)
+	else:
+		AutonomousCraneOps.clear_state(vessel_uid)
+		AutonomousCargoOps.clear_state(vessel_uid)
 
 	if stage == AutonomousVesselSim.Stage.TRANSIT:
 		_apply_transit_motion(sample, delta)
@@ -152,6 +166,14 @@ func _apply_transform(xform: Transform3D) -> void:
 
 func _has_berth() -> bool:
 	return _berth_dock != null and is_instance_valid(_berth_dock) and _berth_index >= 0
+
+
+func _resolve_port_dock(port_id: String) -> PortDock:
+	if _has_berth():
+		return _berth_dock
+	if port_id.is_empty():
+		return null
+	return AutonomousVesselSim.find_dock(port_id)
 
 
 func _berth_spawn_transform() -> Transform3D:

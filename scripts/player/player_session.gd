@@ -180,6 +180,17 @@ func _load_from_disk() -> void:
 func _load_data(raw: Dictionary = {}) -> void:
 	data = PlayerData.from_dict(raw) if not raw.is_empty() else PlayerData.new()
 	data_loaded.emit(data)
+	if not data.captain_id.is_empty():
+		call_deferred("_maybe_backfill_vessels")
+
+
+func _maybe_backfill_vessels() -> void:
+	var config := get_node_or_null("/root/ServerConfig") as Node
+	if config == null or not bool(config.get("is_multiplayer_mode")):
+		return
+	if data.captain_id.is_empty():
+		return
+	VesselSync.pull_captain_vessel(self)
 
 
 func _request_save() -> void:

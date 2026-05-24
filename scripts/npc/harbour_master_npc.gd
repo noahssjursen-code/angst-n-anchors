@@ -51,11 +51,16 @@ func _add_hat() -> void:
 
 func _on_interact() -> void:
 	var session := get_node_or_null("/root/PlayerSession")
-	if session != null:
-		VesselSync.pull_captain_vessel(session)
-	_show_main()
-	_dialogue.show_panel()
-	open_ui()
+	if session == null:
+		_show_main()
+		_dialogue.show_panel()
+		open_ui()
+		return
+	VesselSync.refresh_for_ui(session, func() -> void:
+		_show_main()
+		_dialogue.show_panel()
+		open_ui()
+	)
 
 
 func _on_ui_cancel() -> void:

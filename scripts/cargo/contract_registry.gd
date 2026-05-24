@@ -194,6 +194,22 @@ func get_port_position(port_id: String) -> Vector3:
 	return info.get("position", Vector3(INF, INF, INF)) as Vector3
 
 
+## Closest registered port within max_radius_m (INF = always pick closest).
+func nearest_port_id(world_xz: Vector2, max_radius_m: float = INF) -> String:
+	var best_id := ""
+	var limit_sq := max_radius_m * max_radius_m if max_radius_m < INF else INF
+	var best_sq := limit_sq
+	for pid in _ports.keys():
+		var pos := get_port_position(str(pid))
+		if pos == Vector3(INF, INF, INF):
+			continue
+		var d_sq := Vector2(pos.x, pos.z).distance_squared_to(world_xz)
+		if d_sq <= best_sq:
+			best_sq = d_sq
+			best_id = str(pid)
+	return best_id
+
+
 func get_port_info(port_id: String) -> Dictionary:
 	return _ports.get(port_id, {}) as Dictionary
 

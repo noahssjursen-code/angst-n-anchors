@@ -560,12 +560,14 @@ func find_any_ship_near(global_pos: Vector3, max_dist: float = 25.0) -> Node3D:
 		for s_id in visible_ents.keys():
 			var state: Dictionary = visible_ents[s_id]
 			if state["type"].begins_with("ship_"):
-				var node := state["node"] as Node3D
-				if is_instance_valid(node):
-					var d := node.global_position.distance_to(global_pos)
-					if d < min_dist:
-						min_dist = d
-						closest = node
+				var node_raw: Variant = state.get("node", null)
+				if node_raw == null or not is_instance_valid(node_raw):
+					continue
+				var node := node_raw as Node3D
+				var d := node.global_position.distance_to(global_pos)
+				if d < min_dist:
+					min_dist = d
+					closest = node
 					
 	return closest
 
