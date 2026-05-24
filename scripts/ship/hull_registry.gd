@@ -16,7 +16,7 @@ const HULL_DEFINITIONS: Dictionary = {
 		"hull_file": "hull_fishing_boat_small.json",
 		"superstructure": "wheelhouse_fishing_small",
 		"vendor": "boatyard",
-		"capabilities": ["fishing"]
+		"capabilities": ["fishing", "cargo"]
 	},
 	"fishing_trawler_medium": {
 		"id": "fishing_trawler_medium",
@@ -27,7 +27,7 @@ const HULL_DEFINITIONS: Dictionary = {
 		"hull_file": "hull_fishing_boat.json",
 		"superstructure": "wheelhouse_fishing_medium",
 		"vendor": "boatyard",
-		"capabilities": ["fishing"]
+		"capabilities": ["fishing", "cargo"]
 	},
 	"fishing_trawler_large": {
 		"id": "fishing_trawler_large",
@@ -38,7 +38,7 @@ const HULL_DEFINITIONS: Dictionary = {
 		"hull_file": "hull_fishing_boat_large.json",
 		"superstructure": "wheelhouse_fishing_large",
 		"vendor": "boatyard",
-		"capabilities": ["fishing"]
+		"capabilities": ["fishing", "cargo"]
 	},
 	
 	# --- TANKER ---

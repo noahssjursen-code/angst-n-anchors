@@ -679,5 +679,18 @@
       0.9,
       4.4
     ]
-  }
+  },
+  "cargo_decks": [
+    {
+      "name": "main",
+      "position": [
+        0.0,
+        0.55,
+        -0.6
+      ],
+      "deck_width": 2.4,
+      "deck_length": 2.4,
+      "cell_size": 1.2
+    }
+  ]
 }

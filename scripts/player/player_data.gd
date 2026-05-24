@@ -24,9 +24,14 @@ var appearance:   CharacterAppearance = CharacterAppearance.default_appearance()
 var total_marks_earned:  int   = 0
 var contracts_completed: int   = 0
 var distance_sailed_m:   float = 0.0
-## Ledger record for the captain's single vessel (template on disk).
-## { "uid", "hull_id", "display", "template_path" } — empty when none.
+## Ledger records for every hull the captain owns.
+## Each entry: { "uid", "hull_id", "display", "template_path", "server_vessel_id?" }.
+var owned_vessels: Array = []
+## Hull currently deployed in the world (must match one entry in owned_vessels).
 var active_vessel: Dictionary = {}
+
+const LEGACY_STARTER_TEMPLATE_PATH := "user://shipwright_orders/starter_cargo_ship.json"
+const LEGACY_STARTER_HULL_ID := "cargo_ship"
 
 # ── Save format v2 additions (introduced Phase 4 of the overnight refactor) ──
 ##
@@ -52,9 +57,70 @@ var world_clock_hours: float = -1.0
 ## so a returning captain doesn't have to skip the same banners again.
 var tutorial_seen: Dictionary = {}
 
+## True after the captain commissions their one free small fishing trawler.
+var starter_trawler_claimed: bool = false
+
 
 func owns_hull_id(hull_id: String) -> bool:
-	return not active_vessel.is_empty() and str(active_vessel.get("hull_id", "")) == hull_id
+	for entry_raw in owned_vessels:
+		if typeof(entry_raw) != TYPE_DICTIONARY:
+			continue
+		if str((entry_raw as Dictionary).get("hull_id", "")) == hull_id:
+			return true
+	return false
+
+
+func upsert_owned_vessel(record: Dictionary) -> void:
+	if record.is_empty():
+		return
+	var uid := str(record.get("uid", ""))
+	if uid.is_empty():
+		return
+	for i in range(owned_vessels.size()):
+		var existing_raw: Variant = owned_vessels[i]
+		if typeof(existing_raw) != TYPE_DICTIONARY:
+			continue
+		if str((existing_raw as Dictionary).get("uid", "")) == uid:
+			owned_vessels[i] = record.duplicate()
+			return
+	owned_vessels.append(record.duplicate())
+
+
+func find_owned_vessel(uid: String) -> Dictionary:
+	for entry_raw in owned_vessels:
+		if typeof(entry_raw) != TYPE_DICTIONARY:
+			continue
+		var entry := entry_raw as Dictionary
+		if str(entry.get("uid", "")) == uid:
+			return entry.duplicate()
+	return {}
+
+
+func find_owned_by_server_id(server_id: String) -> Dictionary:
+	if server_id.is_empty():
+		return {}
+	for entry_raw in owned_vessels:
+		if typeof(entry_raw) != TYPE_DICTIONARY:
+			continue
+		var entry := entry_raw as Dictionary
+		if str(entry.get("server_vessel_id", "")) == server_id:
+			return entry.duplicate()
+	return {}
+
+
+func get_deployable_vessels() -> Array:
+	var out: Array = []
+	for entry_raw in owned_vessels:
+		if typeof(entry_raw) != TYPE_DICTIONARY:
+			continue
+		var entry := entry_raw as Dictionary
+		if is_legacy_starter_vessel(entry):
+			continue
+		var path := str(entry.get("template_path", ""))
+		if path.is_empty() or not FileAccess.file_exists(path):
+			continue
+		out.append(entry.duplicate())
+	return out
 
 
 func set_active_vessel(record: Dictionary) -> void:
@@ -72,9 +138,39 @@ func has_active_vessel_record() -> bool:
 	return not active_vessel.is_empty()
 
 
+static func is_legacy_starter_vessel(record: Dictionary) -> bool:
+	if record.is_empty():
+		return false
+	var path := str(record.get("template_path", ""))
+	var hull_id := str(record.get("hull_id", ""))
+	if path == LEGACY_STARTER_TEMPLATE_PATH:
+		return true
+	return hull_id == LEGACY_STARTER_HULL_ID and path.ends_with("starter_cargo_ship.json")
+
+
+## True when the harbour master can deploy at least one owned hull.
+func can_deploy_at_harbour() -> bool:
+	return not get_deployable_vessels().is_empty()
+
+
 func repair_save_consistency() -> void:
-	# Legacy saves used owned_vessels[] — keep the last entry as the active hull.
-	pass
+	if is_legacy_starter_vessel(active_vessel):
+		active_vessel = {}
+	var cleaned: Array = []
+	for entry_raw in owned_vessels:
+		if typeof(entry_raw) != TYPE_DICTIONARY:
+			continue
+		var entry := entry_raw as Dictionary
+		if is_legacy_starter_vessel(entry):
+			continue
+		cleaned.append(entry.duplicate())
+	owned_vessels = cleaned
+	if not active_vessel.is_empty() and not is_legacy_starter_vessel(active_vessel):
+		upsert_owned_vessel(active_vessel)
+	elif not owned_vessels.is_empty() and active_vessel.is_empty():
+		var last_raw: Variant = owned_vessels[owned_vessels.size() - 1]
+		if typeof(last_raw) == TYPE_DICTIONARY:
+			active_vessel = (last_raw as Dictionary).duplicate()
 
 
 func to_dict() -> Dictionary:
@@ -86,6 +182,7 @@ func to_dict() -> Dictionary:
 		"total_marks_earned":       total_marks_earned,
 		"contracts_completed":      contracts_completed,
 		"distance_sailed_m":        distance_sailed_m,
+		"owned_vessels":            owned_vessels.duplicate(true),
 		"active_vessel":            active_vessel.duplicate(),
 		"appearance":               appearance.to_dict(),
 		# v2 additions
@@ -93,6 +190,7 @@ func to_dict() -> Dictionary:
 		"ship_runtime_state":       _ship_runtime_to_dict(),
 		"world_clock_hours":        world_clock_hours,
 		"tutorial_seen":            tutorial_seen.duplicate(),
+		"starter_trawler_claimed":  starter_trawler_claimed,
 	}
 
 
@@ -105,17 +203,14 @@ static func from_dict(d: Dictionary) -> PlayerData:
 	pd.total_marks_earned   = int(d.get("total_marks_earned",  0))
 	pd.contracts_completed  = int(d.get("contracts_completed", 0))
 	pd.distance_sailed_m         = float(d.get("distance_sailed_m", 0.0))
+	var owned_raw: Variant = d.get("owned_vessels", [])
+	if typeof(owned_raw) == TYPE_ARRAY:
+		for entry_raw in owned_raw as Array:
+			if typeof(entry_raw) == TYPE_DICTIONARY:
+				pd.owned_vessels.append((entry_raw as Dictionary).duplicate())
 	var active_raw: Variant = d.get("active_vessel", {})
 	if typeof(active_raw) == TYPE_DICTIONARY and not (active_raw as Dictionary).is_empty():
 		pd.active_vessel = (active_raw as Dictionary).duplicate()
-	else:
-		var owned_raw: Variant = d.get("owned_vessels", [])
-		if typeof(owned_raw) == TYPE_ARRAY:
-			var owned_arr: Array = owned_raw as Array
-			if not owned_arr.is_empty():
-				var last_entry: Variant = owned_arr[owned_arr.size() - 1]
-				if typeof(last_entry) == TYPE_DICTIONARY:
-					pd.active_vessel = (last_entry as Dictionary).duplicate()
 	pd.appearance = CharacterAppearance.from_dict(d.get("appearance", {}) as Dictionary)
 	# v2 additions — default to empty / sentinel for v1 saves (forward compat).
 	var contracts_raw: Variant = d.get("accepted_contracts", [])
@@ -128,6 +223,8 @@ static func from_dict(d: Dictionary) -> PlayerData:
 	var tut_raw: Variant = d.get("tutorial_seen", {})
 	if typeof(tut_raw) == TYPE_DICTIONARY:
 		pd.tutorial_seen = (tut_raw as Dictionary).duplicate()
+	pd.starter_trawler_claimed = bool(d.get("starter_trawler_claimed", false))
+	pd.repair_save_consistency()
 	return pd
 
 

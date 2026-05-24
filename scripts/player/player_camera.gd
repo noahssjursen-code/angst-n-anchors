@@ -1,7 +1,7 @@
 class_name PlayerCamera
 extends Node
 
-## Standard third-person orbit camera + first-person toggle (V).
+## Standard orbit camera with first-person default; toggle with V.
 
 enum CameraMode { FIRST_PERSON, THIRD_PERSON }
 
@@ -16,7 +16,7 @@ const TP_MAX_PITCH := deg_to_rad(72.0)
 @export var tp_distance: float = 4.2
 @export var tp_min_distance: float = 1.0
 @export var tp_collision_margin: float = 0.3
-@export var default_mode: CameraMode = CameraMode.THIRD_PERSON
+@export var default_mode: CameraMode = CameraMode.FIRST_PERSON
 
 @export_group("First Person")
 @export var fp_height: float = 1.6
@@ -34,7 +34,7 @@ var _player: CharacterBody3D = null
 var _camera: Camera3D = null
 var _body_mesh: NpcBase = null
 
-var _mode: CameraMode = CameraMode.THIRD_PERSON
+var _mode: CameraMode = CameraMode.FIRST_PERSON
 var _orbit_yaw: float = 0.0
 var _orbit_pitch: float = deg_to_rad(18.0)
 var _fp_pitch: float = 0.0
@@ -61,6 +61,16 @@ func get_mode() -> CameraMode:
 
 func is_third_person() -> bool:
 	return _mode == CameraMode.THIRD_PERSON
+
+
+## Yaw replicated to other clients — third-person sends visible mesh heading,
+## first-person sends the player root (look direction).
+func get_replication_yaw() -> float:
+	if _player == null:
+		return 0.0
+	if _mode == CameraMode.THIRD_PERSON and _body_mesh != null:
+		return _body_mesh.global_rotation.y
+	return _player.rotation.y
 
 
 ## Camera-relative movement basis (XZ). Third-person walks away from the orbit camera.

@@ -130,6 +130,8 @@ func accepts_pallet(pallet: Pallet) -> bool:
 func accepts_delivery(pallet: Pallet) -> bool:
 	if pallet == null or port_id.is_empty():
 		return false
+	if pallet.commodity == "fish":
+		return true
 	return pallet.destination_port_id == port_id
 
 
@@ -224,6 +226,25 @@ func remove_pallet_by_resource(pallet: Pallet) -> Pallet:
 		if _cells[idx] == pallet:
 			return remove_pallet(int(idx))
 	return null
+
+
+## Crane pickup: clear deck bookkeeping without destroying the visual node
+## (the pallet is reparented away before this runs).
+func detach_pallet_resource(pallet: Pallet) -> Pallet:
+	if pallet == null:
+		return null
+	var found := false
+	for k in _cells.keys().duplicate():
+		if _cells[k] == pallet:
+			_cells.erase(k)
+			found = true
+	if not found:
+		return null
+	if affects_boat_cargo_mass and pallet.mass_kg > 0.0:
+		_apply_boat_cargo_mass_delta(-pallet.mass_kg)
+		_deck_mass_kg = maxf(_deck_mass_kg - pallet.mass_kg, 0.0)
+	cargo_changed.emit(self)
+	return pallet
 
 
 # ── Spatial helpers ───────────────────────────────────────────────────────────

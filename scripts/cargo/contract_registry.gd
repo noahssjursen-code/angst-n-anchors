@@ -22,7 +22,15 @@ const COMMODITIES := [
 	{ "id": "iron_ore",   "display": "Iron Ore",   "mass_kg": 480.0, "value": 18, "max_pallet_units": 2, "color": [0.50, 0.42, 0.38] },
 	{ "id": "coal",       "display": "Coal",       "mass_kg": 280.0, "value": 10, "max_pallet_units": 4, "color": [0.20, 0.20, 0.22] },
 	{ "id": "provisions", "display": "Provisions", "mass_kg": 150.0, "value": 14, "max_pallet_units": 6, "color": [0.72, 0.30, 0.22] },
+	{ "id": "fish",       "display": "Fresh Fish",  "mass_kg": 200.0, "value": 125, "max_pallet_units": 4, "color": [0.35, 0.65, 0.85] },
 ]
+
+## Trawler catch crates sell for this at normal fishing grounds; zone multipliers apply.
+const FISH_CRATE_BASE_GOLD := 500
+
+
+static func fish_crate_value(zone_price_mul: float = 1.0) -> int:
+	return maxi(int(round(float(FISH_CRATE_BASE_GOLD) * zone_price_mul)), 1)
 
 
 static func commodity_info(commodity_id: String) -> Dictionary:
@@ -307,12 +315,14 @@ func deliver_pallet(pallet: Pallet) -> int:
 	if pallet == null:
 		return 0
 
+	var reward := maxi(pallet.value_gold, 0)
 	var contract := _contracts.get(pallet.contract_id, null) as Contract
 	if contract == null or contract.state == Contract.State.COMPLETED:
-		return pallet.value_gold
+		if reward > 0:
+			unit_delivered.emit(null, reward)
+		return reward
 
 	contract.delivered_count += pallet.units
-	var reward := pallet.value_gold
 	unit_delivered.emit(contract, reward)
 
 	if contract.is_complete():

@@ -322,7 +322,9 @@ func _refresh_entry() -> void:
 
 	var can_afford := price <= 0 or balance >= price
 	_commission_btn.disabled = not can_afford
-	if price <= 0:
+	if price <= 0 and ShipwrightPricing.is_free_starter_trawler(entry, player_data):
+		_commission_btn.text = "Commission (first trawler free)"
+	elif price <= 0:
 		_commission_btn.text = "Commission (complimentary)"
 	elif can_afford:
 		_commission_btn.text = "Commission — %s" % PlayerSession.format_money(price)

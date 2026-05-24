@@ -1,24 +1,8 @@
 class_name StarterVessel
 extends RefCounted
 
-## The 13 m Coastal Trader is the smallest hull — always free at the harbour master.
-## Not sold at the shipwright; captains can request another anytime.
-
-const ENTRY: Dictionary = {
-	"id":               "cargo_ship",
-	"display":          "Twin-Deck Cargo Coaster  •  20 m",
-	"ship_class_label": "Coastal Trader",
-	"hull_file":        "hull_cargo_ship.json",
-	"superstructure":   "",
-}
-
-const TEMPLATE_PATH := "user://shipwright_orders/starter_cargo_ship.json"
-
-
-static func ensure_template_file() -> String:
-	if FileAccess.file_exists(TEMPLATE_PATH):
-		return TEMPLATE_PATH
-	return write_template_file()
+## Builds shipwright-style hull template JSON from a HullRegistry entry.
+## Used by ShipBuilder and the shipwright commission flow — not a playable loaner.
 
 
 static func build_template(entry: Dictionary = {}) -> Dictionary:
@@ -37,7 +21,7 @@ static func build_template(entry: Dictionary = {}) -> Dictionary:
 	var cam_height: float = stations.length_m * s * 0.36 + 4.0
 
 	return {
-		"display_name":   str(entry.get("display", "Coastal Trader")),
+		"display_name":   str(entry.get("display", "Vessel")),
 		"hull":           str(entry.get("hull_file", "")),
 		"scale":          1.0,
 		"superstructure": str(entry.get("superstructure", "")),
@@ -76,27 +60,3 @@ static func build_template(entry: Dictionary = {}) -> Dictionary:
 			"follow_height":   cam_height,
 		},
 	}
-
-
-static func write_template_file() -> String:
-	DirAccess.make_dir_recursive_absolute("user://shipwright_orders")
-	var f := FileAccess.open(TEMPLATE_PATH, FileAccess.WRITE)
-	if f == null:
-		return ""
-	f.store_string(JSON.stringify(build_template()))
-	f.close()
-	return TEMPLATE_PATH
-
-
-static func set_active_vessel_record(session: Node) -> void:
-	if session == null or session.get("data") == null:
-		return
-	ensure_template_file()
-	session.data.set_active_vessel({
-		"uid":           "cargo_ship_active",
-		"hull_id":       "cargo_ship",
-		"display":       "Twin-Deck Cargo Coaster  •  20 m",
-		"template_path": TEMPLATE_PATH,
-	})
-	if session.has_method("save_now"):
-		session.call("save_now")

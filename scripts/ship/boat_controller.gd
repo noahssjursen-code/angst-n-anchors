@@ -64,6 +64,15 @@ var _hud_layer: CanvasLayer
 var _ship_hud: ShipHud
 
 
+func _ready() -> void:
+	if not Engine.is_editor_hint():
+		if not InputMap.has_action("boat_trawl_toggle"):
+			InputMap.add_action("boat_trawl_toggle")
+			var ev := InputEventKey.new()
+			ev.physical_keycode = KEY_G
+			InputMap.action_add_event("boat_trawl_toggle", ev)
+
+
 func activate() -> void:
 	_active = true
 	helmed_count += 1
@@ -95,6 +104,11 @@ func _physics_process(delta: float) -> void:
 
 	if Input.is_action_just_pressed("boat_docking_thrusters"):
 		_thruster_mode = (_thruster_mode + 1) % 3
+
+	if Input.is_action_just_pressed("boat_trawl_toggle"):
+		var fishing := _boat_body.find_child("FishingSystem", true, false) as FishingSystem
+		if fishing != null:
+			fishing.toggle_trawling()
 
 	if Input.is_action_just_pressed("move_forward"):
 		_step_throttle_stage(1)

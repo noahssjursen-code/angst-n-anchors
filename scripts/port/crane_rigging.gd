@@ -14,14 +14,24 @@ var _links: Array = []
 
 
 func _process(_dt: float) -> void:
-	if hook == null:
+	if hook == null or not is_instance_valid(hook) or not hook.is_inside_tree():
+		detach_all()
 		return
+	var alive_links: Array = []
 	for link in _links:
-		_update_chain(link)
+		var socket = link.socket
+		var mesh = link.mesh
+		if _update_chain(link):
+			alive_links.append(link)
+		elif is_instance_valid(mesh):
+			mesh.queue_free()
+	_links = alive_links
 
 
 func attach(socket: Node3D) -> bool:
-	if hook == null or socket == null:
+	if hook == null or not is_instance_valid(hook):
+		return false
+	if socket == null or not is_instance_valid(socket) or not socket.is_inside_tree():
 		return false
 	if _links.size() >= MAX_CHAINS:
 		return false
@@ -63,26 +73,40 @@ func attached_count() -> int:
 func attached_sockets() -> Array:
 	var out := []
 	for link in _links:
-		out.append(link.socket)
+		if is_instance_valid(link.socket):
+			out.append(link.socket)
 	return out
 
 
-func _update_chain(link: Dictionary) -> void:
-	var socket: Node3D = link.socket
-	var mesh: MeshInstance3D = link.mesh
-	if socket == null or not is_instance_valid(socket) or mesh == null or not is_instance_valid(mesh):
-		return
-	var a := hook.global_position
-	var b := socket.global_position
+func _node_global_position(node: Node3D) -> Variant:
+	if node == null or not is_instance_valid(node) or not node.is_inside_tree():
+		return null
+	return node.global_position
+
+
+func _update_chain(link: Dictionary) -> bool:
+	var socket = link.socket
+	var mesh = link.mesh
+	if not is_instance_valid(socket) or not is_instance_valid(mesh):
+		return false
+	if not socket.is_inside_tree():
+		return false
+	var a_var = _node_global_position(hook)
+	var b_var = _node_global_position(socket)
+	if a_var == null or b_var == null:
+		return false
+	var a: Vector3 = a_var
+	var b: Vector3 = b_var
 	var mid := (a + b) * 0.5
 	var dir := b - a
 	var length := dir.length()
 	if length < 0.01:
 		mesh.visible = false
-		return
+		return true
 	mesh.visible = true
 	mesh.global_position = mid
 	# Orient local +Y along the segment direction.
 	mesh.look_at(b, Vector3(0, 0, 1) if absf(dir.normalized().dot(Vector3.UP)) > 0.95 else Vector3.UP, true)
 	mesh.rotate_object_local(Vector3.RIGHT, PI * 0.5)
 	mesh.scale = Vector3(1.0, length, 1.0)
+	return true

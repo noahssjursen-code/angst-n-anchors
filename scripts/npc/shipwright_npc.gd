@@ -3,8 +3,6 @@ class_name ShipwrightNpc
 extends NpcInteractable
 
 ## Shipwright NPC — catalog showroom with 3D previews, prices, and commission.
-
-## Full hull catalog — starter 13 m Coastal Trader is harbour-master only (StarterVessel).
 var _catalog: ShipwrightCatalogPanel
 var _dialogue: DialoguePanel
 
@@ -65,8 +63,26 @@ func _on_marks_changed(_balance: int) -> void:
 func _on_commission_requested(entry: Dictionary) -> void:
 	if not _try_pay_for_commission(entry):
 		return
+	_mark_starter_trawler_claimed(entry)
 	_catalog.hide_catalog()
 	_commission(entry)
+
+
+func _mark_starter_trawler_claimed(entry: Dictionary) -> void:
+	if not ShipwrightPricing.is_free_starter_trawler(entry, _player_data()):
+		return
+	var session := get_node_or_null("/root/PlayerSession")
+	if session == null:
+		return
+	session.data.starter_trawler_claimed = true
+	session.save_now()
+
+
+func _player_data() -> PlayerData:
+	var session := get_node_or_null("/root/PlayerSession")
+	if session == null:
+		return null
+	return session.data
 
 
 func _try_pay_for_commission(entry: Dictionary) -> bool:
@@ -179,13 +195,16 @@ func _register_active_vessel(entry: Dictionary, template_path: String, uid: Stri
 	var session := get_node_or_null("/root/PlayerSession")
 	if session == null:
 		return
-	session.data.set_active_vessel({
+	var record := {
 		"uid":           uid,
 		"hull_id":       str(entry.get("id", "")),
 		"display":       str(entry.get("display", "Vessel")),
 		"template_path": template_path,
-	})
+	}
+	session.data.upsert_owned_vessel(record)
+	session.data.set_active_vessel(record)
 	session.save_now()
+	VesselSync.publish_commission(session, entry, template_path, uid)
 
 
 func _try_place_at_berth(ship: BoatBody) -> bool:

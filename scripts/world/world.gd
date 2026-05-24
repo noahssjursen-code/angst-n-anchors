@@ -67,6 +67,7 @@ func _rebuild() -> void:
 		if t != null:
 			t.end_load_event(lf_handle)
 		WorldWeather.initialize(world_seed, positions)
+		FishingField.initialize(world_seed)
 
 	if Engine.is_editor_hint() and get_tree() != null:
 		_add_editor_preview(defs)

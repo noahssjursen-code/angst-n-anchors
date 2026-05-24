@@ -123,7 +123,11 @@ func _tick_outbound(delta: float) -> void:
 			"player",
 			4,
 			func():
-				return [lp.global_position.x, lp.global_position.y, lp.global_position.z, lp.rotation.y],
+				var yaw := lp.rotation.y
+				var cam_ctrl := lp.get_node_or_null("PlayerCamera")
+				if cam_ctrl != null and cam_ctrl.has_method("get_replication_yaw"):
+					yaw = float(cam_ctrl.call("get_replication_yaw"))
+				return [lp.global_position.x, lp.global_position.y, lp.global_position.z, yaw],
 			func():
 				var session := get_node_or_null("/root/PlayerSession")
 				if session != null and session.data != null and session.data.appearance != null:
@@ -240,7 +244,47 @@ func notify_crane_operated(crane_id: String, boarded: bool) -> void:
 					return "op=%s;hy=%.3f" % [get_local_player_id(), hook_yaw]
 			)
 	else:
+		_flush_crane_vacated(crane_id)
 		unregister_sender(crane_id)
+		if drawing_service != null and drawing_service.has_method("clear_scene_node_remote_state"):
+			drawing_service.call("clear_scene_node_remote_state", crane_id)
+
+
+func _flush_crane_vacated(crane_id: String) -> void:
+	var sender: Variant = _local_senders.get(crane_id, null)
+	if sender == null or client == null:
+		return
+	var crane_node: Node = sender["node"]
+	if crane_node == null or not is_instance_valid(crane_node):
+		return
+	var payload: Array = sender["state_callable"].call()
+	var hook_node := crane_node.get("_hook") as Node3D
+	var hook_yaw := 0.0
+	if hook_node != null and is_instance_valid(hook_node):
+		hook_yaw = hook_node.rotation.y
+	var local_id := get_local_player_id()
+	if local_id.is_empty():
+		return
+	var observer_pos := Vector3.ZERO
+	var vp := get_viewport()
+	if vp != null:
+		var cam := vp.get_camera_3d()
+		if cam != null:
+			observer_pos = cam.global_position
+	_outbound_seq += 1
+	var pkt := WireProtocolClass.encode_client_update(
+		_outbound_seq,
+		local_id,
+		observer_pos,
+		[{
+			"id": crane_id,
+			"type": "crane",
+			"format": 6,
+			"payload": payload,
+			"meta": "op=;hy=%.3f" % hook_yaw,
+		}]
+	)
+	client.call("send_packet", pkt)
 
 
 func register_cargo_spawn(cargo_id: String, pallet: Resource, node: Node3D) -> void:
@@ -252,16 +296,105 @@ func register_cargo_spawn(cargo_id: String, pallet: Resource, node: Node3D) -> v
 		"cargo",
 		4, # Vector4: [x, y, z, yaw]
 		func():
-			return [node.global_position.x, node.global_position.y, node.global_position.z, node.rotation.y],
+			return _cargo_replication_state(node),
 		func():
-			var com := String(pallet.get("commodity")) if pallet.get("commodity") != null else "cargo"
-			var units := int(pallet.get("units")) if pallet.get("units") != null else 1
-			return "com=%s;units=%d" % [com, units]
+			return _cargo_replication_meta(pallet, node)
 	)
 
 
-func unregister_cargo(cargo_id: String) -> void:
+func entity_id_for_node(target: Node) -> String:
+	if target == null:
+		return ""
+	for sender_id in _local_senders.keys():
+		var sender: Dictionary = _local_senders[sender_id]
+		var n: Node = sender.get("node") as Node
+		if n == null or not is_instance_valid(n):
+			continue
+		if n == target or n.is_ancestor_of(target):
+			return str(sender_id)
+	return ""
+
+
+func _cargo_replication_state(node: Node3D) -> Array:
+	var ship := _boat_body_ancestor(node)
+	var ship_id := entity_id_for_node(ship)
+	if ship != null and not ship_id.is_empty():
+		var local_xform := ship.global_transform.affine_inverse() * node.global_transform
+		var origin := local_xform.origin
+		return [origin.x, origin.y, origin.z, local_xform.basis.get_euler().y]
+	return [node.global_position.x, node.global_position.y, node.global_position.z, node.rotation.y]
+
+
+func _boat_body_ancestor(node: Node) -> BoatBody:
+	var current := node
+	while current != null:
+		if current is BoatBody:
+			return current as BoatBody
+		current = current.get_parent()
+	return null
+
+
+func _cargo_replication_meta(pallet: Resource, node: Node3D) -> String:
+	var com := String(pallet.get("commodity")) if pallet.get("commodity") != null else "cargo"
+	var units := int(pallet.get("units")) if pallet.get("units") != null else 1
+	var fp := Vector2i(1, 1)
+	var fp_raw: Variant = pallet.get("footprint")
+	if fp_raw is Vector2i:
+		fp = fp_raw
+	var parts: PackedStringArray = [
+		"com=%s" % com,
+		"units=%d" % units,
+		"fp=%d,%d" % [fp.x, fp.y],
+	]
+	var display := str(pallet.get("display_name")) if pallet.get("display_name") != null else ""
+	if not display.is_empty():
+		parts.append("dn=%s" % display)
+	var ship := _boat_body_ancestor(node)
+	var parent_id := entity_id_for_node(ship) if ship != null else ""
+	if not parent_id.is_empty():
+		parts.append("parent=%s" % parent_id)
+	return ";".join(parts)
+
+
+func unregister_cargo(cargo_id: String, delivered: bool = false) -> void:
+	if delivered:
+		_flush_cargo_delivered(cargo_id)
+	if drawing_service != null and drawing_service.has_method("clear_entity_remote_state"):
+		drawing_service.call("clear_entity_remote_state", cargo_id)
 	unregister_sender(cargo_id)
+
+
+func _flush_cargo_delivered(cargo_id: String) -> void:
+	var sender: Variant = _local_senders.get(cargo_id, null)
+	if sender == null or client == null:
+		return
+	var node: Node3D = sender["node"] as Node3D
+	if node == null or not is_instance_valid(node):
+		return
+	var payload: Array = sender["state_callable"].call()
+	var local_id := get_local_player_id()
+	if local_id.is_empty():
+		return
+	var observer_pos := Vector3.ZERO
+	var vp := get_viewport()
+	if vp != null:
+		var cam := vp.get_camera_3d()
+		if cam != null:
+			observer_pos = cam.global_position
+	_outbound_seq += 1
+	var pkt := WireProtocolClass.encode_client_update(
+		_outbound_seq,
+		local_id,
+		observer_pos,
+		[{
+			"id": cargo_id,
+			"type": "cargo",
+			"format": 4,
+			"payload": payload,
+			"meta": "state=delivered",
+		}]
+	)
+	client.call("send_packet", pkt)
 
 
 func register_ship_spawn(ship_id: String, hull_id: String, ship_node: Node3D) -> void:
@@ -352,11 +485,15 @@ func _register_ship_sender(ship_id: String, hull_id: String, ship_node: Node3D, 
 						berth_tag = "berth=%s_%d" % [port_dock.port_id, idx]
 						break
 			
+			var parts: PackedStringArray = []
 			if not pilot.is_empty():
-				if not berth_tag.is_empty():
-					return "pilot=%s;%s" % [pilot, berth_tag]
-				return "pilot=" + pilot
-			return berth_tag
+				parts.append("pilot=" + pilot)
+			if not berth_tag.is_empty():
+				parts.append(berth_tag)
+			var fishing := ship_node.find_child("FishingSystem", true, false) as FishingSystem
+			if fishing != null and fishing.trawling:
+				parts.append("trawl=1")
+			return ";".join(parts)
 	)
 
 

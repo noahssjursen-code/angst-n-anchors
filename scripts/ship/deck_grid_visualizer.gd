@@ -17,6 +17,7 @@ const COLOR_DECK := Color(0.82, 0.86, 0.90, 0.14)
 const COLOR_MARGIN := Color(0.92, 0.32, 0.28, 0.48)
 const COLOR_STRUCTURE := Color(0.96, 0.76, 0.28, 0.52)
 const COLOR_SIDE := Color(0.55, 0.62, 0.72, 0.38)
+const COLOR_TROMMEL := Color(0.35, 0.65, 0.85, 0.48)
 
 const OPEN_PALETTE: Array[Color] = [
 	Color(0.18, 0.82, 0.52, 0.42),
@@ -104,6 +105,15 @@ static func _compute_zones(
 	if build_hi <= build_lo:
 		return []
 
+	var build_hi_orig := build_hi
+	var has_trommel := (role == VesselRole.Type.FISHING)
+	var trommel_lo := stern_x
+	if has_trommel:
+		var trommel_len := 1.2 * mesh_scale
+		trommel_lo = stern_x - trommel_len
+		if build_hi > trommel_lo:
+			build_hi = trommel_lo
+
 	var zones: Array = []
 
 	zones.append({
@@ -122,13 +132,30 @@ static func _compute_zones(
 		"color": COLOR_MARGIN,
 	})
 
-	zones.append({
-		"id": "stern_margin",
-		"label": "STERN\nMARGIN",
-		"x_lo": build_hi,
-		"x_hi": stern_x,
-		"color": COLOR_MARGIN,
-	})
+	if has_trommel:
+		if build_hi_orig < trommel_lo:
+			zones.append({
+				"id": "stern_margin",
+				"label": "STERN\nMARGIN",
+				"x_lo": build_hi_orig,
+				"x_hi": trommel_lo,
+				"color": COLOR_MARGIN,
+			})
+		zones.append({
+			"id": "trommel_zone",
+			"label": "TROMMEL",
+			"x_lo": trommel_lo,
+			"x_hi": stern_x,
+			"color": COLOR_TROMMEL,
+		})
+	else:
+		zones.append({
+			"id": "stern_margin",
+			"label": "STERN\nMARGIN",
+			"x_lo": build_hi,
+			"x_hi": stern_x,
+			"color": COLOR_MARGIN,
+		})
 
 	var reservations: Array = _deck_structure_reservations(
 		slots, mesh_scale, build_lo, build_hi, registry_entry
