@@ -133,12 +133,24 @@ func _build_facilities() -> void:
 		var row := priority_groups[priority] as Array
 		_shuffle_array(row)
 
-		var row_depth := 0.0
+		# Chunk priority group into rows of at most 2 buildings
+		var chunks: Array = []
+		var current_chunk: Array = []
 		for def in row:
-			row_depth = maxf(row_depth, float((def as Dictionary)["d"]))
+			current_chunk.append(def)
+			if current_chunk.size() == 2:
+				chunks.append(current_chunk)
+				current_chunk = []
+		if not current_chunk.is_empty():
+			chunks.append(current_chunk)
 
-		_place_street_row(row, cursor_z + row_depth * 0.5)
-		cursor_z += row_depth + ROW_Z_GAP
+		for chunk in chunks:
+			var row_depth := 0.0
+			for def in chunk:
+				row_depth = maxf(row_depth, float((def as Dictionary)["d"]))
+
+			_place_street_row(chunk, cursor_z + row_depth * 0.5)
+			cursor_z += row_depth + ROW_Z_GAP
 
 	# Entry posts mark the street entrance at dock edge
 	_box(Vector3(0.18, 1.2, 0.18), Vector3(-(STREET_HALF + 0.3), 0.6, 0.4),
@@ -355,15 +367,14 @@ func _shuffle_array(arr: Array) -> void:
 
 func _facility_defs() -> Array:
 	## priority 0 = dock row (placed first, closest to water)
-	## Warehouse and Town use tile=true with max_tiles[size 0..4].
+	## Town uses tile=true with max_tiles[size 0..4].
 	return [
 		{ "id": "HarbourMaster",  "w":  8.0, "h": 5.0, "d":  7.0, "priority": 0, "color": C_AUTHORITY, "min_size": 0 },
-		{ "id": "ShippingAgent",  "w": 10.0, "h": 5.0, "d":  8.0, "priority": 0, "color": C_COMMERCE,  "min_size": 1 },
+		{ "id": "ShippingAgent",  "w": 10.0, "h": 5.0, "d":  8.0, "priority": 0, "color": C_COMMERCE,  "min_size": 0 },
 		{ "id": "CompanyOffice",  "w":  9.0, "h": 5.0, "d":  8.0, "priority": 0, "color": C_COMMERCE,  "min_size": 0 },
-		{ "id": "Shipwright",     "w": 12.0, "h": 6.0, "d": 10.0, "priority": 1, "color": C_SERVICES,  "min_size": 1 },
+		{ "id": "Shipwright",     "w": 12.0, "h": 6.0, "d": 10.0, "priority": 1, "color": C_SERVICES,  "min_size": 0 },
 		{ "id": "MarineEngineer", "w": 11.0, "h": 4.0, "d":  9.0, "priority": 1, "color": C_SERVICES,  "min_size": 2 },
 		{ "id": "Customs",        "w":  8.0, "h": 5.0, "d":  7.0, "priority": 1, "color": C_AUTHORITY, "min_size": 2 },
-		{ "id": "Warehouse",      "w": 24.0, "h": 6.0, "d": 12.0, "priority": 2, "color": C_STORAGE,   "min_size": 0, "tile": true, "tile_gap": 2.5, "max_tiles": [1, 1, 2, 3,  5] },
 		{ "id": "Town",           "w": 28.0, "h": 5.0, "d": 14.0, "priority": 3, "color": C_TOWN,      "min_size": 0, "tile": true, "tile_gap": 2.0, "max_tiles": [2, 3, 4, 6, 10] },
 	]
 
