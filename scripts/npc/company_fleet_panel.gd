@@ -161,10 +161,13 @@ func _reload_vessels() -> void:
 	if session == null or session.get("data") == null:
 		return
 	var data: PlayerData = session.data
-	for entry_raw in data.get_deployable_vessels():
+	for entry_raw in data.owned_vessels:
 		if typeof(entry_raw) != TYPE_DICTIONARY:
 			continue
-		_vessels.append((entry_raw as Dictionary).duplicate())
+		var entry := entry_raw as Dictionary
+		if PlayerData.is_legacy_starter_vessel(entry):
+			continue
+		_vessels.append(entry.duplicate())
 
 
 func _build_chrome() -> void:

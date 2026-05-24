@@ -85,6 +85,8 @@ func register_sender(node: Node, id: String, type: String, format: int, state_ca
 		"last_sent_meta": "",
 		"last_sent_time_ms": 0
 	}
+	if drawing_service != null:
+		drawing_service.clear_entity_remote_state(id)
 
 
 ## Unregisters a node from replication.
@@ -225,6 +227,8 @@ func _on_packet_received(msg_type: int, payload: PackedByteArray) -> void:
 
 func register_crane(crane_id: String, crane_node: Node) -> void:
 	register_scene_node(crane_id, crane_node)
+	if drawing_service != null and drawing_service.has_method("adopt_scene_node"):
+		drawing_service.call("adopt_scene_node", crane_id, crane_node, _scene_nodes)
 
 
 func notify_crane_operated(crane_id: String, boarded: bool) -> void:
@@ -416,10 +420,78 @@ func register_ship_spawn(ship_id: String, hull_id: String, ship_node: Node3D) ->
 
 	var resolved_hull_id := HullRegistry.resolve_network_hull_id(hull_id)
 		
+	_unregister_other_local_ships(unique_ship_id)
 	_local_ships_board_states[unique_ship_id] = false
 	_register_ship_sender(unique_ship_id, resolved_hull_id, ship_node, false)
 	_force_sender_sync(unique_ship_id)
 	_wire_board_signals_recursive(unique_ship_id, ship_node)
+
+
+func unregister_ship_for_node(ship: Node) -> void:
+	if ship == null or not is_instance_valid(ship):
+		return
+	var ship_id := entity_id_for_node(ship)
+	if ship_id.is_empty():
+		return
+	unregister_ship_entity(ship_id)
+
+
+func unregister_ship_entity(ship_id: String) -> void:
+	if ship_id.is_empty():
+		return
+	_flush_ship_despawned(ship_id)
+	if drawing_service != null:
+		drawing_service.clear_entity_remote_state(ship_id)
+	_local_ships_board_states.erase(ship_id)
+	unregister_sender(ship_id)
+
+
+func _unregister_other_local_ships(keep_id: String) -> void:
+	var to_remove: Array[String] = []
+	for sid in _local_senders.keys():
+		var sender: Dictionary = _local_senders[sid]
+		if str(sender.get("type", "")).begins_with("ship_") and str(sid) != keep_id:
+			to_remove.append(str(sid))
+	for sid in to_remove:
+		unregister_ship_entity(sid)
+
+
+func _flush_ship_despawned(ship_id: String) -> void:
+	if client == null:
+		return
+	var local_id := get_local_player_id()
+	if local_id.is_empty():
+		return
+
+	var payload: Array = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+	var ent_type := "ship_cargo_ship_medium"
+	var sender: Variant = _local_senders.get(ship_id, null)
+	if sender != null:
+		var node: Node3D = sender["node"] as Node3D
+		if node != null and is_instance_valid(node):
+			payload = sender["state_callable"].call()
+		ent_type = str(sender.get("type", ent_type))
+
+	var observer_pos := Vector3.ZERO
+	var vp := get_viewport()
+	if vp != null:
+		var cam := vp.get_camera_3d()
+		if cam != null:
+			observer_pos = cam.global_position
+	_outbound_seq += 1
+	var pkt := WireProtocolClass.encode_client_update(
+		_outbound_seq,
+		local_id,
+		observer_pos,
+		[{
+			"id": ship_id,
+			"type": ent_type,
+			"format": maxi(payload.size(), 3),
+			"payload": payload,
+			"meta": "state=despawned",
+		}]
+	)
+	client.call("send_packet", pkt)
 
 
 func _force_sender_sync(sender_id: String) -> void:
@@ -464,8 +536,7 @@ func _ensure_local_ship_registered() -> void:
 
 
 func unregister_ship(ship_id: String) -> void:
-	_local_ships_board_states.erase(ship_id)
-	unregister_sender(ship_id)
+	unregister_ship_entity(ship_id)
 
 
 func _register_ship_sender(ship_id: String, hull_id: String, ship_node: Node3D, boarded: bool) -> void:

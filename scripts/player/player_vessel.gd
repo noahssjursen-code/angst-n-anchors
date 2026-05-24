@@ -72,6 +72,10 @@ static func _find_legacy_player_ship(tree: SceneTree) -> BoatBody:
 
 
 static func _prepare_despawn(ship: BoatBody, tree: SceneTree) -> void:
+	if tree != null and tree.root != null:
+		var manager := tree.root.get_node_or_null("NetworkManager")
+		if manager != null and manager.has_method("unregister_ship_for_node"):
+			manager.call("unregister_ship_for_node", ship)
 	_forfeit_cargo_on_ship(ship, tree)
 	unmark_player_ship(ship)
 	unregister_ship_from_docks(ship)

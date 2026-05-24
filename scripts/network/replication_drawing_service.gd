@@ -69,6 +69,22 @@ func clear_entity_remote_state(id: String) -> void:
 	_visible_entities.erase(id)
 
 
+## Prefer a pre-placed scene node over any dynamic duplicate for the same id.
+func adopt_scene_node(id: String, scene_node: Node3D, scene_nodes: Dictionary) -> void:
+	if id.is_empty() or scene_node == null or not is_instance_valid(scene_node):
+		return
+	if not _visible_entities.has(id):
+		return
+	var state: Dictionary = _visible_entities[id]
+	var node := _live_node(state)
+	if node == null or node == scene_node:
+		return
+	if node.get_parent() == self:
+		_purge_entities_under(node)
+		node.queue_free()
+	_visible_entities.erase(id)
+
+
 ## Back-compat alias for crane vacate cleanup.
 func clear_scene_node_remote_state(id: String) -> void:
 	clear_entity_remote_state(id)
@@ -81,6 +97,9 @@ const TYPE_SCENE_MAP := {
 ## Processes snapshot frames to add, update, or remove remote entity nodes.
 func apply_entities(entities_list: Array, local_id: String, scene_nodes: Dictionary, local_sender_ids: Array, now_ms: int, timeout_ms: int) -> void:
 	_prune_stale_entries()
+	var local_senders: Dictionary = {}
+	for sid in local_sender_ids:
+		local_senders[str(sid)] = true
 	var active_snapshot_ids: Dictionary = {}
 	var active_pilot_ids: Dictionary = {}
 	var current_frame_berths: Dictionary = {}
@@ -88,20 +107,15 @@ func apply_entities(entities_list: Array, local_id: String, scene_nodes: Diction
 	for ent: Dictionary in entities_list:
 		var id: String = ent["id"]
 		
-		# 1. Skip ourselves and anything we currently have authority over (local senders)
-		if id == local_id or local_sender_ids.has(id):
-			continue
-
-		# Ignore snapshot echo of our own released entities — stale cargo/crane
-		# state otherwise respawns visuals and blocks gameplay.
-		if str(ent.get("owner_id", "")) == local_id:
+		if _should_skip_remote_entity(ent, local_id, local_senders, scene_nodes):
+			_despawn_remote_entity(id, scene_nodes)
 			continue
 			
 		active_snapshot_ids[id] = true
 		
 		# Track piloted/operated players to handle visual avatar hiding
 		var meta: String = ent["meta"]
-		if _is_delivered_cargo_meta(meta):
+		if _is_removed_entity_meta(meta):
 			_despawn_remote_entity(id, scene_nodes)
 			continue
 
@@ -112,12 +126,10 @@ func apply_entities(entities_list: Array, local_id: String, scene_nodes: Diction
 		var node := _live_node(state)
 		
 		if node == null:
-			# New entity! First check if it is a pre-placed level node (like cranes)
+			# Pre-placed port nodes (cranes) must never spawn a dynamic duplicate.
 			if scene_nodes.has(id):
 				node = scene_nodes[id] as Node3D
-				print("[ReplicationDrawingService] Binding pre-placed node: ", id)
 			else:
-				# Spawn dynamic visual node
 				node = _spawn_dynamic_entity_node(id, ent["type"], meta)
 				if node != null:
 					add_child(node)
@@ -125,7 +137,6 @@ func apply_entities(entities_list: Array, local_id: String, scene_nodes: Diction
 					var payload: Array = ent.get("payload", [])
 					if str(ent["type"]).begins_with("ship_") and payload.size() >= 6:
 						node.global_rotation = Vector3(payload[3], payload[4], payload[5])
-					print("[ReplicationDrawingService] Spawned dynamic: ", id, " (", ent["type"], ")")
 			
 			if node != null:
 				state["node"] = node
@@ -133,6 +144,13 @@ func apply_entities(entities_list: Array, local_id: String, scene_nodes: Diction
 				state["interpolated_payload"] = ent["payload"].duplicate()
 				state["walk_distance_m"] = 0.0
 				state["walk_sample_pos"] = ent["pos"]
+		elif scene_nodes.has(id):
+			var scene_node := scene_nodes[id] as Node3D
+			if node != scene_node and node.get_parent() == self:
+				_purge_entities_under(node)
+				node.queue_free()
+				node = scene_node
+				state["node"] = scene_node
 		
 		if node != null:
 			state["target_pos"] = ent["pos"]
@@ -392,6 +410,7 @@ func _spawn_dynamic_entity_node(id: String, type: String, meta: String = "") -> 
 				ship.freeze = true
 				ship.freeze_mode = RigidBody3D.FREEZE_MODE_KINEMATIC
 				_disable_physics_in_subtree(ship)
+				_disable_remote_ship_gameplay(ship)
 				
 				var label := Label3D.new()
 				label.name = "ShipNameLabel"
@@ -418,7 +437,68 @@ func _spawn_dynamic_entity_node(id: String, type: String, meta: String = "") -> 
 
 
 func _is_delivered_cargo_meta(meta: String) -> bool:
-	return _parse_meta_map(meta).get("state", "") == "delivered"
+	return _is_removed_entity_meta(meta)
+
+
+func _is_removed_entity_meta(meta: String) -> bool:
+	var state := str(_parse_meta_map(meta).get("state", ""))
+	return state == "delivered" or state == "despawned"
+
+
+func _should_skip_remote_entity(
+	ent: Dictionary,
+	local_id: String,
+	local_senders: Dictionary,
+	scene_nodes: Dictionary,
+) -> bool:
+	var id := str(ent.get("id", ""))
+	if id.is_empty():
+		return true
+	if not local_id.is_empty() and id == local_id:
+		return true
+	if local_senders.has(id):
+		return true
+
+	var owner_id := str(ent.get("owner_id", ""))
+	if not owner_id.is_empty() and not local_id.is_empty() and owner_id == local_id:
+		return true
+	if not owner_id.is_empty():
+		var local_name := _local_display_name(local_id)
+		if not local_name.is_empty() and owner_id == local_name:
+			return true
+		var captain_id := _local_captain_id()
+		if not captain_id.is_empty() and owner_id == captain_id:
+			return true
+
+	var meta := str(ent.get("meta", ""))
+	var parent_id := str(_parse_meta_map(meta).get("parent", ""))
+	if not parent_id.is_empty() and local_senders.has(parent_id):
+		return true
+
+	# Scene cranes we operate locally — snapshot is our own echo.
+	if scene_nodes.has(id) and local_senders.has(id):
+		return true
+
+	return false
+
+
+func _local_display_name(local_id: String) -> String:
+	if local_id.is_empty():
+		return ""
+	var idx := local_id.rfind("_")
+	if idx <= 0:
+		return local_id
+	var suffix := local_id.substr(idx + 1)
+	if suffix.is_valid_int():
+		return local_id.substr(0, idx)
+	return local_id
+
+
+func _local_captain_id() -> String:
+	var session := get_node_or_null("/root/PlayerSession")
+	if session == null or session.get("data") == null:
+		return ""
+	return str(session.data.captain_id)
 
 
 func _despawn_remote_entity(id: String, scene_nodes: Dictionary) -> void:
@@ -487,6 +567,16 @@ func _disable_physics_in_subtree(n: Node) -> void:
 		return
 	for c in n.get_children():
 		_disable_physics_in_subtree(c)
+
+
+func _disable_remote_ship_gameplay(ship: BoatBody) -> void:
+	for mc in ship.find_children("*", "MooringComponent", true, false):
+		if mc is MooringComponent:
+			mc.remove_from_group(MooringComponent.SHIP_MOORING_COMPONENT_GROUP)
+			if mc.is_moored:
+				mc.release_mooring()
+			mc.set_process(false)
+			mc.set_physics_process(false)
 
 
 ## Maps payload floats back onto actual node properties based on format/type.
