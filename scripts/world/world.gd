@@ -109,6 +109,9 @@ func _bake_berth_lanes(t: Node, defs: Array[PortDefinition]) -> void:
 	var lane_handle: int = t.mark_load_event("berth_lanes.bake") if t != null else 0
 	BerthApproachLanes.bake_all_ports(defs, world_seed)
 	AutonomousVesselSim.invalidate_legs_cache()
+	# Pre-build the global roundabout nav graph now so the first NPC spawn
+	# doesn't pay an O(P^2 * S) land-clearance walk while ships are loading.
+	AutonomousTransitRoute.rebuild_navigation_graph()
 	call_deferred("_refresh_berth_lane_debug")
 	if t != null:
 		t.end_load_event(lane_handle)

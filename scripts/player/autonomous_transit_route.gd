@@ -293,19 +293,23 @@ static func _connector_blocked(a: Vector3, b: Vector3, ignore_centers: Array[Vec
 	if active_indices.is_empty():
 		return false  # Safe: no islands are near this segment at all
 
-	if _segment_pierces_land_filtered(a, b, active_indices):
-		return true
-
-	# Build active list for clearance (excluding ignored ones)
+	# Build clearance-island list once so the sampling loop below can decide
+	# pierce-vs-clearance in a single segment walk.
 	var clearance_indices: Array[int] = []
 	for idx in active_indices:
 		if not LandField.is_island_ignored(idx, ignore_centers):
 			clearance_indices.append(idx)
 
-	if clearance_indices.is_empty():
-		return false
-
-	return _segment_violates_clearance_filtered(a, b, OPEN_CONNECT_CLEARANCE_M, clearance_indices)
+	var steps := _get_sample_count(a, b)
+	for i in range(steps + 1):
+		var t := float(i) / float(steps)
+		var p := a.lerp(b, t)
+		if LandField.distance_to_land_filter(p, active_indices) < 0.0:
+			return true
+		if not clearance_indices.is_empty():
+			if LandField.distance_to_land_filter(p, clearance_indices) < OPEN_CONNECT_CLEARANCE_M:
+				return true
+	return false
 
 
 static func _get_sample_count(a: Vector3, b: Vector3) -> int:
@@ -596,11 +600,20 @@ static func _find_shortest_path(from_port_id: String, to_port_id: String) -> Arr
 		pq.append([lane_len, idx])
 		
 	while not pq.is_empty():
-		pq.sort_custom(func(a, b): return a[0] < b[0])
-		var current = pq.pop_front()
+		# Linear-scan min instead of full sort-per-iteration. With ~64 nodes the
+		# pq stays tiny; a sort_custom + lambda alloc per iteration was the bulk
+		# of Dijkstra cost per ship.
+		var best_i := 0
+		var best_d: float = pq[0][0]
+		for k in range(1, pq.size()):
+			if pq[k][0] < best_d:
+				best_d = pq[k][0]
+				best_i = k
+		var current = pq[best_i]
+		pq.remove_at(best_i)
 		var d: float = current[0]
 		var u: int = current[1]
-		
+
 		if visited.has(u):
 			continue
 		visited[u] = true
