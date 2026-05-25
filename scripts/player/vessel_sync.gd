@@ -420,10 +420,18 @@ static func _merge_server_row(data: PlayerData, row: Dictionary) -> Dictionary:
 		var path := str(existing.get("template_path", ""))
 		if path.is_empty() or not FileAccess.file_exists(path):
 			var rebuilt := _ensure_local_template(hull_id, display)
-			if rebuilt.is_empty():
-				return {}
-			existing["uid"] = rebuilt["uid"]
-			existing["template_path"] = rebuilt["template_path"]
+			if not rebuilt.is_empty():
+				existing["uid"] = rebuilt["uid"]
+				existing["template_path"] = rebuilt["template_path"]
+			else:
+				# Template rebuild failed (unknown hull or disk error). Keep the
+				# existing record so the panel still shows this vessel — silently
+				# dropping it caused the rest of the fleet to vanish when one row
+				# in the snapshot couldn't rebuild its template.
+				push_warning(
+					"VesselSync: kept existing vessel %s without template rebuild (hull_id=%s)"
+					% [server_id, hull_id]
+				)
 		return existing
 
 	var local := _ensure_local_template(hull_id, display)
