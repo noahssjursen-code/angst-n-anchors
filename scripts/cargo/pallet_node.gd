@@ -36,6 +36,10 @@ signal released(node: PalletNode)
 var pallet: Pallet = null
 var cell_w: float  = 1.5
 var cell_d: float  = 1.5
+## True for deck/apron pallets this client simulates. Remote MP proxies must stay false.
+var is_network_local_authority: bool = false
+## True for ReplicationDrawingService spawns — no pickup, sell, or deck mutation.
+var is_network_remote_proxy: bool = false
 ## Footprint to draw in this node's LOCAL frame. Usually the deck-local
 ## footprint (= pallet.footprint maybe with X/Z swapped if the deck is
 ## rotated 90° from world). Defaults to pallet.footprint when setup is
@@ -100,7 +104,7 @@ func _build() -> void:
 	if pallet != null:
 		var dest_name := _destination_display()
 		var dest_line := "→ %s" % dest_name if not dest_name.is_empty() else ""
-		var gold_line := PlayerSession.format_money(pallet.value_gold) if pallet.value_gold > 0 else ""
+		var gold_line := PlayerData.format_money(pallet.value_gold) if pallet.value_gold > 0 else ""
 		var lines     := PackedStringArray()
 		lines.append("%s ×%d" % [pallet.display_name, pallet.units])
 		if not dest_line.is_empty():
@@ -205,6 +209,7 @@ func _commodity_color() -> Color:
 		"iron_ore":   return Color(0.50, 0.42, 0.38)
 		"coal":       return Color(0.20, 0.20, 0.22)
 		"provisions": return Color(0.72, 0.30, 0.22)
+		"fish":       return Color(0.35, 0.65, 0.85)
 		_:            return Color(0.60, 0.60, 0.60)
 
 
@@ -274,6 +279,8 @@ func _build_cargo_item(pos: Vector3, c_w: float, c_d: float, rng: RandomNumberGe
 			# Pick one of the four provisions JSON models per cell.
 			var path: String = MODEL_PROVISIONS[rng.randi() % MODEL_PROVISIONS.size()]
 			_spawn_model(path, pos)
+		"fish":
+			_spawn_model("res://resources/data/models/cargo/fish_crate.json", pos)
 		_:
 			# Other commodities have no JSON models yet — drop a tidy
 			# placeholder cube per cell. Replace when their models land.

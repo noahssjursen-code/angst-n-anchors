@@ -376,6 +376,12 @@ func _draw_dashboard(c: Vector2) -> void:
 		["THRUSTER", thruster_labels[clampi(thruster, 0, 2)],
 				HudStyle.C_AMBER if thruster > 0 else HudStyle.C_LABEL],
 	]
+	var fishing := _boat.find_child("FishingSystem", true, false) as FishingSystem
+	if fishing != null:
+		var status_str := "ACTIVE" if fishing.trawling else "READY"
+		var status_col := HudStyle.C_GREEN if fishing.trawling else HudStyle.C_LABEL
+		cells.append(["TRAWL", status_str, status_col])
+
 	if dest_info[1] != "":
 		cells.append([dest_info[0].to_upper(), dest_info[1], HudStyle.C_AMBER])
 

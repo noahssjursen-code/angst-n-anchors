@@ -41,8 +41,6 @@ static func attach(
 	spawner.spawn_position = spawn_position
 	kit.add_child(spawner)
 
-	# Ramp intentionally disabled for now.
-
 	var terminal := DockTerminal.new()
 	terminal.name = "DockTerminal"
 	terminal.position = terminal_position

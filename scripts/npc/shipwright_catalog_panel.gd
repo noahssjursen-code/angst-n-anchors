@@ -320,11 +320,9 @@ func _refresh_entry() -> void:
 	var price := ShipwrightPricing.commission_price(entry, _stations, player_data)
 	_price_lbl.text = ShipwrightPricing.price_label(price)
 
-	var can_afford := price <= 0 or balance >= price
+	var can_afford := balance >= price
 	_commission_btn.disabled = not can_afford
-	if price <= 0:
-		_commission_btn.text = "Commission (complimentary)"
-	elif can_afford:
+	if can_afford:
 		_commission_btn.text = "Commission — %s" % PlayerSession.format_money(price)
 	else:
 		_commission_btn.text = "Need %s" % PlayerSession.format_money(price - balance)

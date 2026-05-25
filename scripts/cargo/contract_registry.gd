@@ -22,7 +22,15 @@ const COMMODITIES := [
 	{ "id": "iron_ore",   "display": "Iron Ore",   "mass_kg": 480.0, "value": 18, "max_pallet_units": 2, "color": [0.50, 0.42, 0.38] },
 	{ "id": "coal",       "display": "Coal",       "mass_kg": 280.0, "value": 10, "max_pallet_units": 4, "color": [0.20, 0.20, 0.22] },
 	{ "id": "provisions", "display": "Provisions", "mass_kg": 150.0, "value": 14, "max_pallet_units": 6, "color": [0.72, 0.30, 0.22] },
+	{ "id": "fish",       "display": "Fresh Fish",  "mass_kg": 200.0, "value": 125, "max_pallet_units": 4, "color": [0.35, 0.65, 0.85] },
 ]
+
+## Trawler catch crates sell for this at normal fishing grounds; zone multipliers apply.
+const FISH_CRATE_BASE_GOLD := 500
+
+
+static func fish_crate_value(zone_price_mul: float = 1.0) -> int:
+	return maxi(int(round(float(FISH_CRATE_BASE_GOLD) * zone_price_mul)), 1)
 
 
 static func commodity_info(commodity_id: String) -> Dictionary:
@@ -186,8 +194,28 @@ func get_port_position(port_id: String) -> Vector3:
 	return info.get("position", Vector3(INF, INF, INF)) as Vector3
 
 
+## Closest registered port within max_radius_m (INF = always pick closest).
+func nearest_port_id(world_xz: Vector2, max_radius_m: float = INF) -> String:
+	var best_id := ""
+	var limit_sq := max_radius_m * max_radius_m if max_radius_m < INF else INF
+	var best_sq := limit_sq
+	for pid in _ports.keys():
+		var pos := get_port_position(str(pid))
+		if pos == Vector3(INF, INF, INF):
+			continue
+		var d_sq := Vector2(pos.x, pos.z).distance_squared_to(world_xz)
+		if d_sq <= best_sq:
+			best_sq = d_sq
+			best_id = str(pid)
+	return best_id
+
+
 func get_port_info(port_id: String) -> Dictionary:
 	return _ports.get(port_id, {}) as Dictionary
+
+
+func get_all_port_ids() -> Array:
+	return _ports.keys()
 
 
 func get_port_spawn_position(port_id: String) -> Vector3:
@@ -307,12 +335,14 @@ func deliver_pallet(pallet: Pallet) -> int:
 	if pallet == null:
 		return 0
 
+	var reward := maxi(pallet.value_gold, 0)
 	var contract := _contracts.get(pallet.contract_id, null) as Contract
 	if contract == null or contract.state == Contract.State.COMPLETED:
-		return pallet.value_gold
+		if reward > 0:
+			unit_delivered.emit(null, reward)
+		return reward
 
 	contract.delivered_count += pallet.units
-	var reward := pallet.value_gold
 	unit_delivered.emit(contract, reward)
 
 	if contract.is_complete():

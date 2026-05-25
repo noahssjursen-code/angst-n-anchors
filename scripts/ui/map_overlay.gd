@@ -39,11 +39,13 @@ var _was_visible:        bool    = false
 var _selected_port:      String  = ""
 var _poly_cache:         Dictionary = {}  ## port_id -> PackedVector2Array local XZ
 var _show_weather:       bool       = true
+var _show_fishing:       bool       = false
 
 ## Weather overlay rendering — pressure heatmap, wind arrows, L/H markers,
 ## legend, season banner, hover tooltip. Pulled into its own file so the
 ## chart code can be read without scrolling past 350 lines of noise sampling.
 var _weather_view: MapWeatherView = MapWeatherView.new()
+var _fishing_view: MapFishingView = MapFishingView.new()
 
 ## Set each frame in _draw; used by _try_select without re-computing.
 var _cpx: float = 0.0
@@ -91,6 +93,10 @@ func _input(event: InputEvent) -> void:
 				return
 			if ke.keycode == KEY_F:
 				_show_weather = not _show_weather
+				get_viewport().set_input_as_handled()
+				return
+			if ke.keycode == KEY_G:
+				_show_fishing = not _show_fishing
 				get_viewport().set_input_as_handled()
 				return
 	if event is InputEventMouseButton:
@@ -237,7 +243,7 @@ func _draw() -> void:
 	draw_string(font, Vector2(vp.x * 0.5 - ttw * 0.5, py + 38.0),
 				title, HORIZONTAL_ALIGNMENT_LEFT, -1, title_fs, C_TITLE)
 
-	var hint    := "scroll  zoom    drag  pan    H  home    F  weather    M  close    click island  info"
+	var hint    := "scroll  zoom    drag  pan    H  home    F  weather    G  fishing    M  close    click island  info"
 	var hint_tw := font.get_string_size(hint, HORIZONTAL_ALIGNMENT_LEFT, -1, 10).x
 	draw_string(font, Vector2(px + pw - hint_tw - 14, py + 32.0),
 				hint, HORIZONTAL_ALIGNMENT_LEFT, -1, 10, C_HINT)
@@ -305,19 +311,22 @@ func _draw() -> void:
 
 	# Weather zones — pressure heatmap, wind, L/H markers, legend, hover.
 	# All rendering lives in MapWeatherView; we hand it the chart context.
+	var chart_ctx := {
+		"cpx": _cpx,
+		"cpy": _cpy,
+		"cpw": _cpw,
+		"cph": _cph,
+		"wx_min": _wx_min,
+		"wx_max": _wx_max,
+		"wz_min": _wz_min,
+		"wz_max": _wz_max,
+		"hover_pos": _hover_pos,
+		"hover_inside": _hover_inside,
+	}
+	if _show_fishing:
+		_fishing_view.render(self, chart_ctx)
 	if _show_weather:
-		_weather_view.render(self, {
-			"cpx":          _cpx,
-			"cpy":          _cpy,
-			"cpw":          _cpw,
-			"cph":          _cph,
-			"wx_min":       _wx_min,
-			"wx_max":       _wx_max,
-			"wz_min":       _wz_min,
-			"wz_max":       _wz_max,
-			"hover_pos":    _hover_pos,
-			"hover_inside": _hover_inside,
-		})
+		_weather_view.render(self, chart_ctx)
 
 	# Fuel range ring — drawn under contract routes / islands so the ring
 	# never obscures port detail. Only shown when there's an active ship

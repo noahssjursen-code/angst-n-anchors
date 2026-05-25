@@ -47,6 +47,15 @@ func load_settings() -> void:
 	mouse_sensitivity = float(cfg.get_value("input",   "mouse_sens",    mouse_sensitivity))
 	invert_mouse_y    = bool(cfg.get_value("input",    "invert_mouse_y", invert_mouse_y))
 
+	# Override saved setting if Godot was launched with windowed CLI flags
+	var force_windowed := false
+	for arg in OS.get_cmdline_args():
+		if arg == "--windowed" or arg == "-w" or "mode=0" in arg:
+			force_windowed = true
+			break
+	if force_windowed:
+		window_mode = WindowMode.WINDOWED
+
 
 func save_settings() -> void:
 	var cfg := ConfigFile.new()

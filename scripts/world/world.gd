@@ -36,6 +36,8 @@ const PORT_NAMES : Array[String] = [
 
 
 func _ready() -> void:
+	if not Engine.is_editor_hint():
+		add_to_group("world")
 	call_deferred("_rebuild")
 
 
@@ -58,15 +60,27 @@ func _rebuild() -> void:
 		var islands  : Array          = []
 		for d in defs:
 			positions.append(d.world_position)
+			var data := PortExpander.expand(d, world_seed)
+			var ry := data.rotation_y
+			
+			# Shift the OBB center inland by 70.0m because the organic island mesh
+			# extends landward (local +Z) but is flat at the water face (local -Z)
+			var landward := Vector3(sin(ry), 0.0, cos(ry)).normalized()
+			var shifted_center := d.world_position + landward * 70.0
+			
+			var land_pad := IslandMeshBuilder.MARGIN + IslandMeshBuilder.AMPLITUDE # 100.0
 			islands.append({
-				"center": d.world_position,
-				"radius": _island_radius_for_size(d.size),
+				"center": shifted_center,
+				"half_x": data.island_width * 0.5 + land_pad,
+				"half_z": 170.0, # Centred around the shifted inland axis
+				"rotation_y": ry,
 			})
 		var lf_handle: int = t.mark_load_event("land_field.bake") if t != null else 0
 		LandField.initialize(islands)
 		if t != null:
 			t.end_load_event(lf_handle)
 		WorldWeather.initialize(world_seed, positions)
+		FishingField.initialize(world_seed)
 
 	if Engine.is_editor_hint() and get_tree() != null:
 		_add_editor_preview(defs)
@@ -77,6 +91,7 @@ func _rebuild() -> void:
 	else:
 		_add_atmospheric_effects()
 		_setup_ports(defs)
+		_bake_berth_lanes(t, defs)
 		call_deferred("_spawn_player")
 
 	if t != null:
@@ -88,6 +103,24 @@ func _rebuild() -> void:
 ## boot autoloads.
 func _telemetry() -> Node:
 	return get_node_or_null("/root/Telemetry")
+
+
+func _bake_berth_lanes(t: Node, defs: Array[PortDefinition]) -> void:
+	var lane_handle: int = t.mark_load_event("berth_lanes.bake") if t != null else 0
+	BerthApproachLanes.bake_all_ports(defs, world_seed)
+	AutonomousVesselSim.invalidate_legs_cache()
+	# Pre-build the global roundabout nav graph now so the first NPC spawn
+	# doesn't pay an O(P^2 * S) land-clearance walk while ships are loading.
+	AutonomousTransitRoute.rebuild_navigation_graph()
+	call_deferred("_refresh_berth_lane_debug")
+	if t != null:
+		t.end_load_event(lane_handle)
+
+
+func _refresh_berth_lane_debug() -> void:
+	var mgr := get_node_or_null("/root/AutonomousVesselManager")
+	if mgr != null and mgr.has_method("refresh_lane_debug"):
+		mgr.call("refresh_lane_debug")
 
 
 func _add_world_renderer() -> void:
@@ -122,6 +155,10 @@ func _setup_ports(defs: Array[PortDefinition]) -> void:
 	var loader  := ProximityLoader.new()
 	loader.name = "ProximityLoader"
 	add_child(loader)
+
+	var port_proximity := preload("res://scripts/world/port_proximity.gd").new()
+	port_proximity.name = "PortProximity"
+	add_child(port_proximity)
 
 	var registry := get_node_or_null("/root/ContractRegistry")
 

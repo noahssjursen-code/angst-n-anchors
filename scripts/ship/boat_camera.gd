@@ -2,6 +2,12 @@
 class_name BoatCamera
 extends Camera3D
 
+const VehicleGroups = preload("res://scripts/ship/vehicle_groups.gd")
+
+func _init() -> void:
+	add_to_group(VehicleGroups.SHIP_OWNER_ONLY)
+
+
 ## Third-person camera that orbits the boat with mouse look (yaw + pitch) and scroll zoom.
 ## Does not roll with the boat — always stays upright so the horizon is readable.
 

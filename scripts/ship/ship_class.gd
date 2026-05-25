@@ -51,6 +51,19 @@ const CARGO_CELLS: Dictionary = {
 	Type.DEEP_SEA_FREIGHTER: 96,
 }
 
+## Minimum crew slots required before a vessel can run autonomously.
+const CREW_SLOTS: Dictionary = {
+	Type.LAUNCH:              2,
+	Type.COASTAL_TRADER:      3,
+	Type.SHORT_SEA_COASTER:   5,
+	Type.HANDYSIZE_FEEDER:    8,
+	Type.DEEP_SEA_FREIGHTER: 12,
+}
+
+static func crew_slots(type: Type) -> int:
+	return int(CREW_SLOTS.get(type, 3))
+
+
 static func cargo_cells(type: Type) -> int:
 	return int(CARGO_CELLS.get(type, 4))
 

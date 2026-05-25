@@ -1,0 +1,31 @@
+[gd_scene load_steps=4 format=3 uid="uid://c8wheelhousefishlg"]
+
+[ext_resource type="Script" path="res://scripts/ship/wheelhouse_visual.gd" id="1_visual"]
+[ext_resource type="Script" path="res://scripts/ship/bridge_interactable.gd" id="2_interact"]
+[ext_resource type="Script" path="res://scripts/ship/ship_light.gd" id="3_light"]
+
+[node name="wheelhouse_fishing_large" type="Node3D"]
+
+[node name="Visuals" type="Node3D" parent="."]
+script = ExtResource("1_visual")
+deck_contact_y = 0.64
+footprint_preset = 3
+wall_height = 2.9
+window_sill = 1.08
+window_head = 2.48
+roof_overhang = 0.035
+
+[node name="BridgeInteractable" type="Node3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.94, -0.55)
+script = ExtResource("2_interact")
+exit_deck_offset = Vector2(0, -0.4)
+
+[node name="ShipLight_Masthead" type="Node3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 5.98, 0.98)
+script = ExtResource("3_light")
+light_type = 2
+
+[node name="ShipLight_Window" type="Node3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 3.2, 1.77)
+script = ExtResource("3_light")
+light_type = 5

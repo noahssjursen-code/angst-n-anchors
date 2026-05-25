@@ -26,13 +26,7 @@ extends CharacterBody3D
 @export var jump_cut_gravity_multiplier: float = 3.0
 
 # ── Camera & Feel ─────────────────────────────────────────────────────────────
-@export_group("Camera")
-@export var mouse_sensitivity:    float = 0.0015
-@export var base_fov:             float = 90.0
-@export var sprint_fov_multiplier: float = 1.08
-@export var strafe_tilt_angle:    float = 1.8
-@export var head_bob_frequency:   float = 10.0
-@export var head_bob_amplitude:   float = 0.055
+# Camera behaviour lives in PlayerCamera (third-person orbit, collision, bob).
 
 @export_group("Water")
 ## Temporary water interaction: player cannot walk on water.
@@ -43,29 +37,23 @@ extends CharacterBody3D
 @export var water_rescue_delay_s: float = 0.85
 @export var abyss_reset_y: float = -25.0
 
-const MAX_PITCH  := deg_to_rad(88.0)
 const BASE_GRAVITY := 20.0   # stronger than real-world 9.8 — keeps feet planted
 const LAYER_PLAYER := 8
 const LAYER_BOAT_WALK := 4
 
 @onready var camera: Camera3D = $Camera3D
 
-enum CameraMode { FIRST_PERSON, THIRD_PERSON }
+var _player_camera: PlayerCamera = null
+var _free_cam: PlayerFreeCam = null
+var _body_npc: NpcBase = null
+var _walk_anim: WalkAnimator = null
+var _walk_distance_m: float = 0.0
 
-## Third-person camera tuning — pivot at head height, look back over shoulder.
-const TP_PIVOT_Y    : float = 1.65
-const TP_DISTANCE   : float = 3.0
+const WALK_ANIM_MIN_SPEED := 0.15
 
-var _camera_mode: CameraMode = CameraMode.FIRST_PERSON
-var _body_npc:    NpcBase    = null
-
-var _pitch:            float   = 0.0
 var _smoothed_input:   Vector2 = Vector2.ZERO
 var _current_speed:    float   = 0.0
-var _bob_time:         float   = 0.0
-var _camera_y_offset:  float   = 0.0
 var _was_on_floor:     bool    = true
-var _camera_base_y:    float   = 0.0
 var _last_safe_position: Vector3 = Vector3.ZERO
 var _water_submerge_time: float = 0.0
 
@@ -75,9 +63,7 @@ func _ready() -> void:
 	collision_layer = LAYER_PLAYER
 	collision_mask |= LAYER_BOAT_WALK
 	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
-	_camera_base_y = camera.position.y
 	_current_speed = walk_speed
-	camera.fov = base_fov
 	_last_safe_position = global_position
 
 	# Snap to floor when descending small steps so we don't go briefly airborne.
@@ -85,21 +71,25 @@ func _ready() -> void:
 	floor_stop_on_slope = true
 	floor_max_angle = deg_to_rad(48.0)
 
+	_player_camera = PlayerCamera.new()
+	_player_camera.name = "PlayerCamera"
+	add_child(_player_camera)
+
 	_build_body_mesh()
-	_apply_camera_mode()
+
+	_free_cam = PlayerFreeCam.new()
+	_free_cam.name = "PlayerFreeCam"
+	add_child(_free_cam)
+
+	_player_camera.bind(self, camera, _body_npc)
+	_free_cam.bind(self, camera, _player_camera, _body_npc)
 
 
 func _unhandled_input(event: InputEvent) -> void:
-	if event is InputEventMouseMotion and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
-		var sens := mouse_sensitivity * _settings_sens_multiplier()
-		var invert := _settings_invert_y()
-		rotate_y(-event.relative.x * sens)
-		var dy: float = event.relative.y * sens * (-1.0 if invert else 1.0)
-		_pitch = clampf(_pitch - dy, -MAX_PITCH, MAX_PITCH)
-		_apply_pitch()
+	if _free_cam != null and _free_cam.handle_input(event):
+		return
 
-	if event.is_action_pressed("toggle_camera"):
-		_toggle_camera_mode()
+	if _player_camera != null and _player_camera.handle_input(event):
 		get_viewport().set_input_as_handled()
 		return
 
@@ -111,11 +101,16 @@ func _unhandled_input(event: InputEvent) -> void:
 
 
 func _physics_process(delta: float) -> void:
+	if _free_cam != null and _free_cam.is_active():
+		velocity = Vector3.ZERO
+		return
+
 	var on_floor := is_on_floor()
 
 	# Landing — dip the camera slightly on impact, recover smoothly
 	if on_floor and not _was_on_floor:
-		_camera_y_offset = clampf(velocity.y * 0.045, -0.45, 0.0)
+		if _player_camera != null:
+			_player_camera.notify_landing(velocity.y)
 	_was_on_floor = on_floor
 
 	# Gravity — variable scale depending on jump state. Always applied so the
@@ -143,8 +138,13 @@ func _physics_process(delta: float) -> void:
 	_smoothed_input.x = raw.x
 	_smoothed_input.y = lerpf(_smoothed_input.y, raw.y, blend)
 
-	var wish := transform.basis * Vector3(_smoothed_input.x, 0.0, _smoothed_input.y)
+	var wish := _movement_basis() * Vector3(_smoothed_input.x, 0.0, _smoothed_input.y)
 	var has_input := wish.length_squared() > 0.0004
+
+	if has_input and _player_camera != null and _player_camera.is_third_person():
+		var face_yaw := atan2(wish.x, wish.z)
+		var turn_rate := 1.0 - exp(-14.0 * delta)
+		rotation.y = lerp_angle(rotation.y, face_yaw, turn_rate)
 
 	var accel   := ground_acceleration if on_floor else air_acceleration
 	var friction := ground_friction    if on_floor else air_friction
@@ -156,8 +156,9 @@ func _physics_process(delta: float) -> void:
 	var speed := _current_speed
 
 	# Work in local horizontal space to avoid fighting with basis changes mid-slide
-	var right_h   := transform.basis.x
-	var forward_h := transform.basis.z
+	var move_basis := _movement_basis()
+	var right_h   := move_basis.x
+	var forward_h := move_basis.z
 	var vel_flat  := Vector3(velocity.x, 0.0, velocity.z)
 	var local_vel := Vector2(vel_flat.dot(right_h), vel_flat.dot(forward_h))
 
@@ -220,37 +221,18 @@ func _physics_process(delta: float) -> void:
 	if is_on_floor() and global_position.y > waterline + 0.1:
 		_last_safe_position = global_position
 
+	_update_walk_animation(delta)
+
 
 func _process(delta: float) -> void:
-	var flat_speed := Vector3(velocity.x, 0.0, velocity.z).length()
+	if _free_cam != null and _free_cam.is_active():
+		_free_cam.update(delta)
+		return
 
-	# Head bob — scales with how fast you're moving relative to walk speed
-	var bob_offset := 0.0
-	if is_on_floor() and flat_speed > 1.0:
-		_bob_time += delta * head_bob_frequency * (flat_speed / walk_speed)
-		bob_offset = sin(_bob_time) * head_bob_amplitude
-	else:
-		_bob_time = lerpf(_bob_time, 0.0, delta * 5.0)
-
-	# Camera Y — bob layered on top of landing recovery
-	var recover_rate := 1.0 - exp(-12.0 * delta)
-	_camera_y_offset = lerpf(_camera_y_offset, 0.0, recover_rate)
-	camera.position.y = _camera_base_y + bob_offset + _camera_y_offset
-
-	# Sprint FOV — only kicks in once actually moving at speed
-	var sprinting := (
-		is_on_floor()
-		and Input.is_key_pressed(KEY_SHIFT)
-		and flat_speed > walk_speed * 0.8
-	)
-	var target_fov := base_fov * sprint_fov_multiplier if sprinting else base_fov
-	camera.fov = lerpf(camera.fov, target_fov, delta * 6.0)
-
-	# Strafe tilt — subtle roll when moving sideways
-	var strafe_tilt := 0.0
-	if is_on_floor() and absf(_smoothed_input.x) > 0.05:
-		strafe_tilt = -signf(_smoothed_input.x) * deg_to_rad(strafe_tilt_angle)
-	camera.rotation.z = lerp_angle(camera.rotation.z, strafe_tilt, delta * 8.0)
+	if _player_camera == null:
+		return
+	var inputs_active := Input.mouse_mode == Input.MOUSE_MODE_CAPTURED
+	_player_camera.update(delta, velocity, _smoothed_input, is_on_floor(), inputs_active)
 
 
 # ── Step climb (ghost-cast probe) ─────────────────────────────────────────────
@@ -308,40 +290,6 @@ func _try_step_up(horizontal_motion: Vector3) -> bool:
 	return true
 
 
-# ── Camera mode (Phase 7.6) ───────────────────────────────────────────────────
-##
-## First-person camera lives at head height and the player body mesh is hidden
-## so we don't render our own helmet. Third-person orbits a head pivot behind
-## the player at TP_DISTANCE so the captain becomes visible — this is the view
-## MP players will see of each other. V toggles between the two.
-
-func _toggle_camera_mode() -> void:
-	if _camera_mode == CameraMode.FIRST_PERSON:
-		_camera_mode = CameraMode.THIRD_PERSON
-	else:
-		_camera_mode = CameraMode.FIRST_PERSON
-	_apply_camera_mode()
-
-
-func _apply_camera_mode() -> void:
-	if _body_npc != null:
-		_body_npc.visible = _camera_mode == CameraMode.THIRD_PERSON
-	_apply_pitch()
-
-
-func _apply_pitch() -> void:
-	# In both modes the player yaw is on the CharacterBody3D itself; only pitch
-	# moves the camera. Third-person additionally orbits the camera back along
-	# its local +Z so the body stays in frame.
-	camera.rotation.x = _pitch
-	if _camera_mode == CameraMode.FIRST_PERSON:
-		camera.position = Vector3(0.0, _camera_base_y, 0.0)
-		return
-	var pivot := Vector3(0.0, TP_PIVOT_Y, 0.0)
-	var offset := Basis(Vector3.RIGHT, -_pitch) * Vector3(0.0, 0.0, TP_DISTANCE)
-	camera.position = pivot + offset
-
-
 func _build_body_mesh() -> void:
 	# Visible character body for third-person view (and future MP). Mirrors the
 	# captain's CharacterAppearance from PlayerData so the figure on screen is
@@ -349,7 +297,10 @@ func _build_body_mesh() -> void:
 	_body_npc = NpcBase.new()
 	_body_npc.name = "BodyMesh"
 	_body_npc.visible = false
+	_body_npc.rotation.y = PI  # mesh authored facing +Z; body forward is -Z
 	add_child(_body_npc)
+	_walk_anim = WalkAnimator.new()
+	_walk_anim.attach(_body_npc)
 	_apply_appearance_from_session()
 
 	var session := get_node_or_null("/root/PlayerSession")
@@ -361,16 +312,6 @@ func _on_player_data_changed(_data: Variant) -> void:
 	_apply_appearance_from_session()
 
 
-func _settings_sens_multiplier() -> float:
-	var s := get_node_or_null("/root/GameSettings")
-	return float(s.mouse_sensitivity) if s != null else 1.0
-
-
-func _settings_invert_y() -> bool:
-	var s := get_node_or_null("/root/GameSettings")
-	return bool(s.invert_mouse_y) if s != null else false
-
-
 func _apply_appearance_from_session() -> void:
 	if _body_npc == null:
 		return
@@ -378,3 +319,27 @@ func _apply_appearance_from_session() -> void:
 	if session == null or session.data == null or session.data.appearance == null:
 		return
 	session.data.appearance.apply_to_npc(_body_npc)
+	if _walk_anim != null and not _walk_anim.is_ready():
+		_walk_anim.attach(_body_npc)
+
+
+func _update_walk_animation(delta: float) -> void:
+	if _body_npc == null or _walk_anim == null:
+		return
+	if not _walk_anim.is_ready():
+		_walk_anim.attach(_body_npc)
+		if not _walk_anim.is_ready():
+			return
+
+	var flat_speed := Vector3(velocity.x, 0.0, velocity.z).length()
+	if is_on_floor() and flat_speed > WALK_ANIM_MIN_SPEED:
+		_walk_distance_m += flat_speed * delta
+		_walk_anim.update(_walk_distance_m)
+	else:
+		_walk_anim.reset()
+
+
+func _movement_basis() -> Basis:
+	if _player_camera != null:
+		return _player_camera.get_flat_basis()
+	return global_transform.basis

@@ -6,8 +6,12 @@ extends Resource
 ## raw vertices, then consumed by StripBuoyancyComponent each physics tick to compute
 ## per-station submerged area → lift force.
 ##
-## Coordinates are ship-local at scale 1.0. Multiply geometry by mesh_scale at runtime.
-## Z axis is the length axis (+Z = bow), Y is up, X is beam.
+## Coordinates are ship-local at scale 1.0 (BoatBody / physics frame). Multiply by mesh_scale at runtime.
+## −Z is bow (forward), +Z is stern. Y is up, X is beam.
+##
+## Hull JSON parts apply Y = −90°; BODY_FRAME_Y_ROT matches ShipBuilder.SHIP_FRAME_Y_ROT.
+
+const BODY_FRAME_Y_ROT := deg_to_rad(-90.0)
 ##
 ## Each `stations[i]` is a Dictionary:
 ##   z       — ship-local Z position of the station (length axis)
@@ -123,6 +127,7 @@ static func from_hull_json(hull_data: Dictionary, target_count: int = 10) -> Hul
 			v *= part_scale
 			v = part_basis * v
 			v += part_pos
+			v = v.rotated(Vector3.UP, BODY_FRAME_Y_ROT)
 			verts.append(v)
 
 	if verts.is_empty():
@@ -141,43 +146,40 @@ static func from_hull_json(hull_data: Dictionary, target_count: int = 10) -> Hul
 	result.keel_y = min_v.y
 	result.deck_y = max_v.y
 
-	# 3. Cluster Y values into discrete levels (typically 3: keel-bottom, mid, deck).
-	var y_vals: Array = []
-	for v in verts:
-		y_vals.append(v.y)
+	# 3. Resample to `target_count` evenly-spaced stations along the hull length.
+	# At each station, slice nearby hull vertices into a local (y, half_beam) profile.
+	# Sampling global Y curves per station left gaps (hb = 0) between valid rings and
+	# severely under-estimated submerged area — ships sank far below design draft.
 	var y_tol: float = 0.05 * maxf(result.height_m, 0.1)
-	var y_levels := _cluster_values(y_vals, y_tol)
-
-	# 4. For each Y level, build a piecewise-linear (z, max_half_beam) curve.
 	var z_tol: float = 0.005 * maxf(result.length_m, 0.1)
-	var y_curves: Dictionary = {}  # y_level → Array[Vector2] sorted by z
-	for y_lvl in y_levels:
-		var z_to_hb: Dictionary = {}
-		for v in verts:
-			if absf(v.y - y_lvl) > y_tol:
-				continue
-			# Quantize Z so near-duplicate samples collapse into one entry.
-			var z_key: float = roundf(v.z / z_tol) * z_tol
-			var existing: float = float(z_to_hb.get(z_key, 0.0))
-			z_to_hb[z_key] = maxf(existing, absf(v.x))
-		var curve: Array[Vector2] = []
-		for z_key in z_to_hb.keys():
-			curve.append(Vector2(float(z_key), float(z_to_hb[z_key])))
-		curve.sort_custom(func(a, b): return a.x < b.x)
-		y_curves[y_lvl] = curve
-
-	# 5. Resample to `target_count` evenly-spaced stations along the full hull length.
-	# At each station Z, sample each Y level's curve. Y values are sorted in `y_levels`
-	# (ascending after cluster sort), so the resulting section profile is keel-to-deck.
 	var z_min: float = min_v.z
 	var z_max: float = max_v.z
 	for i in range(target_count):
 		var t: float = float(i) / float(target_count - 1) if target_count > 1 else 0.5
 		var z_target: float = lerpf(z_min, z_max, t)
+		var z_prev: float = (
+			lerpf(z_min, z_max, float(i - 1) / float(target_count - 1))
+			if target_count > 1 and i > 0 else z_target
+		)
+		var z_next: float = (
+			lerpf(z_min, z_max, float(i + 1) / float(target_count - 1))
+			if target_count > 1 and i < target_count - 1 else z_target
+		)
+		var z_band: float = maxf(0.5 * (z_next - z_prev), z_tol * 4.0)
+
+		var y_to_hb: Dictionary = {}
+		for v in verts:
+			if absf(v.z - z_target) > z_band:
+				continue
+			var y_key: float = roundf(v.y / y_tol) * y_tol
+			var existing: float = float(y_to_hb.get(y_key, 0.0))
+			y_to_hb[y_key] = maxf(existing, absf(v.x))
+
 		var section: Array[Vector2] = []
-		for y_lvl in y_levels:
-			var hb := _sample_curve(y_curves[y_lvl], z_target)
-			section.append(Vector2(y_lvl, hb))
+		var y_keys: Array = y_to_hb.keys()
+		y_keys.sort()
+		for y_key in y_keys:
+			section.append(Vector2(float(y_key), float(y_to_hb[y_key])))
 		result.stations.append({"z": z_target, "section": section})
 
 	# 6. Compute total displacement volume (sum of station full-beam area × station_length).
@@ -189,48 +191,6 @@ static func from_hull_json(hull_data: Dictionary, target_count: int = 10) -> Hul
 	result.displacement_volume_m3 = total_vol
 
 	return result
-
-
-## Linear-interpolate a (z, half_beam) curve at a target z. Returns 0 outside the curve's
-## Z range (this is correct for hull geometry — the keel curve, for instance, doesn't reach
-## the bow tip, so half_beam is genuinely 0 forward of the keel's bow shoulder vertex).
-static func _sample_curve(curve: Array, z_target: float) -> float:
-	if curve.is_empty():
-		return 0.0
-	if z_target < curve[0].x or z_target > curve[curve.size() - 1].x:
-		return 0.0
-	for i in range(curve.size() - 1):
-		var p0: Vector2 = curve[i]
-		var p1: Vector2 = curve[i + 1]
-		if z_target >= p0.x and z_target <= p1.x:
-			var t: float = (z_target - p0.x) / maxf(p1.x - p0.x, 1e-6)
-			return lerpf(p0.y, p1.y, t)
-	return 0.0
-
-
-## Cluster a list of floats into discrete levels. Values within `tol` of the running cluster
-## extent merge into the same level. Returns sorted Array of cluster mean values.
-static func _cluster_values(values: Array, tol: float) -> Array:
-	if values.is_empty():
-		return []
-	var sorted := values.duplicate()
-	sorted.sort()
-	var clusters: Array = []
-	var current_sum: float = float(sorted[0])
-	var current_count: int = 1
-	var current_min: float = float(sorted[0])
-	for i in range(1, sorted.size()):
-		var v := float(sorted[i])
-		if v - current_min <= tol:
-			current_sum += v
-			current_count += 1
-		else:
-			clusters.append(current_sum / float(current_count))
-			current_sum = v
-			current_count = 1
-			current_min = v
-	clusters.append(current_sum / float(current_count))
-	return clusters
 
 
 static func _read_vec3(arr) -> Vector3:

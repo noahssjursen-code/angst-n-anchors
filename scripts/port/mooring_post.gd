@@ -100,6 +100,11 @@ func get_anchor_global_position() -> Vector3:
 
 
 func _find_active_mooring() -> MooringComponent:
+	# Mooring is owner-authoritative: only the local player's ship can be moored
+	# from here. Without this filter, interacting with the bollard near a
+	# replicated remote ship would toggle that ghost's mooring locally and
+	# broadcast a phantom berth lock that the remote owner could never see or
+	# clear (#4 in PLAYTEST_NOTES).
 	var nearest: MooringComponent = null
 	var best_d2 := INF
 	for n in get_tree().get_nodes_in_group(MooringComponent.SHIP_MOORING_COMPONENT_GROUP):
@@ -109,10 +114,13 @@ func _find_active_mooring() -> MooringComponent:
 		var body := mc.get_boat_rigid_body()
 		if body == null:
 			continue
+		if not body.is_in_group(PlayerVessel.GROUP):
+			continue
 		var d2 := global_position.distance_squared_to(body.global_position)
-		if d2 < best_d2:
-			best_d2 = d2
-			nearest = mc
+		if d2 < 1600.0: # 40 meters squared maximum distance
+			if d2 < best_d2:
+				best_d2 = d2
+				nearest = mc
 	return nearest
 
 

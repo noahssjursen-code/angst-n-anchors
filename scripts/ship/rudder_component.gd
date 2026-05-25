@@ -44,7 +44,8 @@ func _physics_process(_delta: float) -> void:
 	if effectiveness < min_effectiveness_floor and speed_for_rudder > rudder_flow_gate:
 		effectiveness = min_effectiveness_floor
 
-	# Flip torque sign when reversing so the helm still feels natural
+	# Flip torque sign when reversing so the helm still feels natural.
+	# Negate rudder_input: body bow is −Z; positive Y torque turns the bow to port.
 	var direction: float = signf(fwd_speed) if not is_zero_approx(fwd_speed) else 1.0
-	var torque: Vector3  = Vector3.UP * rudder_input * max_torque * effectiveness * direction
+	var torque: Vector3  = Vector3.UP * -rudder_input * max_torque * effectiveness * direction
 	_body.apply_torque(torque)

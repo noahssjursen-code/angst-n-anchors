@@ -2,6 +2,13 @@
 class_name CaptainsChair
 extends Node3D
 
+const VehicleGroups = preload("res://scripts/ship/vehicle_groups.gd")
+
+func _init() -> void:
+	add_to_group(VehicleGroups.SHIP_OWNER_ONLY)
+	add_to_group(VehicleGroups.BOARDING_HIDES_OCCUPANT)
+
+
 ## The helm/cabin interaction point. When the player presses E within range,
 ## they take control of the boat: player movement is suspended, the boat
 ## camera activates, and BoatController starts reading input.

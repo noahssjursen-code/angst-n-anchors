@@ -6,9 +6,10 @@ extends Node
 ## The factory is called once when the player enters the radius; the returned node
 ## is placed at the entry position and freed when they leave.
 ##
-## Uses camera position (not player position) so it works correctly when sailing.
+## Uses camera position (including freecam) so distant ports stream in while flying.
 
 const CHECK_INTERVAL := 1.0
+const WorldReference := preload("res://scripts/world/world_reference.gd")
 
 var _entries: Array = []
 var _timer:   float = 0.0
@@ -75,11 +76,4 @@ func _unload(entry: Dictionary) -> void:
 
 
 func _reference_position() -> Vector3:
-	# Camera tracks the boat when sailing — more reliable than player body position.
-	var cam := get_viewport().get_camera_3d()
-	if cam != null:
-		return cam.global_position
-	var players := get_tree().get_nodes_in_group("player")
-	if not players.is_empty():
-		return (players[0] as Node3D).global_position
-	return Vector3.ZERO
+	return WorldReference.stream_position(get_viewport())

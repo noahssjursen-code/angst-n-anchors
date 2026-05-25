@@ -4,7 +4,7 @@ extends Node3D
 @export var ship_scene: PackedScene
 @export var spawn_position: Vector3 = Vector3(11.0, -1.5, 47.0)
 @export var spawn_rotation_degrees: Vector3 = Vector3.ZERO
-## Used only when the spawned scene root is not a `BoatBody`. Otherwise spawn uses `design_draft_fraction`.
+## Used only when the spawned scene root is not a `BoatBody`. BoatBody spawns at equilibrium draft.
 @export var waterline_draft_fraction: float = 0.45
 @export var spawned_ship_name: String = "SpawnedShip"
 
@@ -32,13 +32,8 @@ func spawn_ship() -> Node3D:
 	add_child(ship)
 	current_ship = ship
 
-	var draft_frac := waterline_draft_fraction
-	var boat := ship as BoatBody
-	if boat != null:
-		draft_frac = boat.design_draft_fraction
-
 	if ship.has_method("place_at_waterline"):
-		ship.call("place_at_waterline", WaveSurface.WATER_LEVEL, draft_frac)
+		ship.call("place_at_waterline", WaveSurface.WATER_LEVEL)
 
 	_moor_ship(ship)
 	var boat := ship as BoatBody

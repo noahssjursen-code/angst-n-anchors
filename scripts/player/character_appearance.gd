@@ -54,6 +54,20 @@ func to_dict() -> Dictionary:
 	}
 
 
+func to_meta_string(display_name: String = "", captain_id: String = "") -> String:
+	var parts: PackedStringArray = [
+		"skin=%s" % skin_color.to_html(false),
+		"coat=%s" % clothing_color.to_html(false),
+		"pants=%s" % trousers_color.to_html(false),
+		"hat=%s" % hat_id,
+	]
+	if not display_name.is_empty():
+		parts.append("name=%s" % display_name)
+	if not captain_id.is_empty():
+		parts.append("cid=%s" % captain_id)
+	return ";".join(parts)
+
+
 func duplicate() -> CharacterAppearance:
 	var c := CharacterAppearance.new()
 	c.skin_color     = skin_color
@@ -66,9 +80,11 @@ func duplicate() -> CharacterAppearance:
 func apply_to_npc(npc: NpcBase) -> void:
 	if npc == null:
 		return
-	npc.skin_color      = skin_color
-	npc.clothing_color  = clothing_color
-	npc.trousers_color  = trousers_color
-	npc.remove_overlay("hat")
-	if hat_id != HAT_NONE and HAT_PATHS.has(hat_id):
-		npc.add_overlay("hat", str(HAT_PATHS[hat_id]))
+	npc.set_colors(skin_color, clothing_color, trousers_color)
+	if hat_id == HAT_NONE:
+		npc.remove_overlay("hat")
+	elif HAT_PATHS.has(hat_id):
+		var hat_path: String = str(HAT_PATHS[hat_id])
+		var existing := npc.get_node_or_null("Overlay_hat") as ModelAssembler
+		if existing == null or existing.model_data_path != hat_path:
+			npc.add_overlay("hat", hat_path)

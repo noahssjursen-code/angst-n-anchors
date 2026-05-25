@@ -12,3 +12,8 @@ scripts/player/character_appearance.gd.uid
 scripts/ui/character_creator_panel.gd.uid
 scripts/ui/character_preview.gd.uid
 scripts/ui/main_menu.gd.uid
+# Godot build exports
+*.exe
+*.pck
+*.zip
+*.cfg

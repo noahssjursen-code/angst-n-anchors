@@ -23,8 +23,17 @@ extends Node3D
 
 const MODEL_PATH := "res://resources/data/models/dockyard/gantry_crane.json"
 
+const VehicleGroups = preload("res://scripts/ship/vehicle_groups.gd")
+
 signal player_boarded
 signal player_exited
+
+var _remotely_operated_by: String = ""
+
+
+func _init() -> void:
+	add_to_group(VehicleGroups.BOARDING_HIDES_OCCUPANT)
+
 
 ## How many cranes are currently being operated. Used by PalletAttachPoint
 ## to show/hide the corner rings (pickup hints) only while someone is seated.
@@ -160,6 +169,18 @@ func _ready() -> void:
 	if not Engine.is_editor_hint():
 		_register_input_actions()
 	_build()
+	if not Engine.is_editor_hint():
+		var manager := get_node_or_null("/root/NetworkManager")
+		if manager != null and manager.has_method("register_crane"):
+			manager.call("register_crane", get_crane_id(), self)
+
+
+func get_crane_id() -> String:
+	var base_id: String = "crane_%d" % berth_index if berth_index >= 0 else name
+	var dock := get_parent() as PortDock
+	if dock != null and not dock.port_id.is_empty():
+		return "%s_%s" % [dock.port_id, base_id]
+	return base_id
 
 
 func _exit_tree() -> void:
@@ -524,6 +545,7 @@ func _build_ui() -> void:
 func _process(delta: float) -> void:
 	if Engine.is_editor_hint():
 		return
+	_sync_rigging_carried_state()
 	_update_beacon(delta)
 	if _occupied:
 		_read_kinematic_input(delta)
@@ -663,6 +685,15 @@ func _apply_kinematics(delta: float = 0.0) -> void:
 
 
 # ── Carried pallet ────────────────────────────────────────────────────────────
+
+func _sync_rigging_carried_state() -> void:
+	if _rigging == null:
+		return
+	if _carried_pallet != null and not is_instance_valid(_carried_pallet):
+		_carried_pallet = null
+	if _carried_pallet == null and _rigging.attached_count() > 0:
+		_rigging.detach_all()
+
 
 func _update_carried_pallet() -> void:
 	if _carried_pallet == null or _rigging == null:
@@ -908,6 +939,8 @@ func _find_nearest_pallet() -> Node3D:
 		var pn := n as Node3D
 		if pn == null:
 			continue
+		if pn is PalletNode and (pn as PalletNode).is_network_remote_proxy:
+			continue
 		var dx := hp.x - pn.global_position.x
 		var dz := hp.z - pn.global_position.z
 		var dy := hp.y - pn.global_position.y     # >0 means hook above pallet
@@ -970,16 +1003,15 @@ func _engage_chains(pallet_node: Node3D) -> void:
 		pallet_node.set_highlighted(false)
 	_play_one_shot(_sfx_chain_engage, _hook)
 
-	# If this pallet is currently a child of a CargoDeckComponent's
-	# PalletVisuals, reparent it to the scene root first. Otherwise the
-	# deck's remove_pallet_by_resource() will queue_free the very node we're
-	# about to carry, leaving _carried_pallet pointing at a freed instance.
-	var scene_root := get_tree().current_scene
-	if scene_root != null and pallet_node.get_parent() != scene_root:
-		pallet_node.reparent(scene_root, true)
+	# Reparent away from the deck before clearing deck bookkeeping so the
+	# visual cannot be queue_free'd while chains attach to its sockets.
+	var carry_root := get_tree().current_scene
+	if carry_root == null:
+		carry_root = get_tree().root
+	if pallet_node.get_parent() != carry_root:
+		pallet_node.reparent(carry_root, true)
 
-	# Now the deck can't reach the visual by name. Releasing the resource is
-	# still required to clear the deck's _cells dict and mass accounting.
+	# Clear deck cells/mass only — never destroy the carried visual here.
 	if pallet_node.has_method("get") and pallet_node.get("pallet") != null:
 		_detach_from_deck(pallet_node.get("pallet"))
 
@@ -990,6 +1022,9 @@ func _engage_chains(pallet_node: Node3D) -> void:
 		if socket.has_method("set_attached"):
 			socket.set_attached(true)
 	_carried_pallet = pallet_node
+	var manager := get_node_or_null("/root/NetworkManager")
+	if manager != null and manager.has_method("get_local_player_id"):
+		_carried_pallet.set_meta("carried_by", manager.call("get_local_player_id"))
 	if _highlighted_pallet != null:
 		_set_pallet_highlight(_highlighted_pallet, false)
 		_highlighted_pallet = null
@@ -1017,7 +1052,7 @@ func _try_release() -> void:
 			if hook_pos.y - deck.global_position.y > release_max_height_m:
 				continue
 			deck.deliver_pallet(pallet_res)
-			_consume_pallet()
+			_consume_pallet(true)
 			return
 
 	# 2) Staging — any deck (ship cargo or origin-port apron) that takes us.
@@ -1031,7 +1066,7 @@ func _try_release() -> void:
 			continue
 		var cell := deck.add_pallet(pallet_res, hook_pos)
 		if cell >= 0:
-			_consume_pallet()
+			_consume_pallet(false)
 			return
 
 	# 3) No valid target — silently refuse. Pallet keeps hanging so the
@@ -1040,11 +1075,17 @@ func _try_release() -> void:
 	return
 
 
-func _consume_pallet() -> void:
+func _consume_pallet(force_unregister: bool = false) -> void:
 	if _rigging != null:
 		_rigging.detach_all()
 	_play_one_shot(_sfx_chain_release, _hook)
 	if _carried_pallet != null and is_instance_valid(_carried_pallet):
+		if force_unregister:
+			var pallet_res = _carried_pallet.get("pallet")
+			if pallet_res != null:
+				var manager := get_node_or_null("/root/NetworkManager")
+				if manager != null and manager.has_method("unregister_cargo"):
+					manager.call("unregister_cargo", pallet_res.id, true)
 		_carried_pallet.queue_free()
 	_carried_pallet = null
 	_carry_rotated = false
@@ -1058,6 +1099,8 @@ func _drop_in_place() -> void:
 		_carried_pallet.reparent(scene_root)
 	var hp := _hook.global_position
 	_carried_pallet.global_position = Vector3(hp.x, 0.0, hp.z)
+	if _carried_pallet.has_meta("carried_by"):
+		_carried_pallet.remove_meta("carried_by")
 	if _carried_pallet.has_signal("released"):
 		_carried_pallet.emit_signal("released", _carried_pallet)
 	if _rigging != null:
@@ -1071,18 +1114,36 @@ func _detach_from_deck(pallet_res) -> void:
 		var deck := node as CargoDeckComponent
 		if deck == null:
 			continue
-		if deck.remove_pallet_by_resource(pallet_res) != null:
+		if deck.detach_pallet_resource(pallet_res) != null:
 			return
 
 
 # ── Board / exit ──────────────────────────────────────────────────────────────
 
 func _nearest_boardable_player() -> CharacterBody3D:
+	if _remote_operator_blocks_boarding():
+		return null
+	var center_pos := global_position
+	if _gantry_frame != null:
+		center_pos = _gantry_frame.global_position
 	for node in get_tree().get_nodes_in_group("player"):
 		var body := node as CharacterBody3D
-		if body != null and global_position.distance_to(body.global_position) <= board_range_m:
+		if body != null and center_pos.distance_to(body.global_position) <= board_range_m:
 			return body
 	return null
+
+
+func _remote_operator_blocks_boarding() -> bool:
+	if _remotely_operated_by.is_empty():
+		return false
+	var local_id := ""
+	var manager := get_node_or_null("/root/NetworkManager")
+	if manager != null and manager.has_method("get_local_player_id"):
+		local_id = str(manager.call("get_local_player_id"))
+	# Stale server echo of our own session after exiting — not a real remote lock.
+	if not local_id.is_empty() and _remotely_operated_by == local_id and not _occupied:
+		return false
+	return true
 
 
 func _enter_crane() -> void:
@@ -1105,10 +1166,15 @@ func _enter_crane() -> void:
 	if _hud != null:
 		_hud.visible = true
 	player_boarded.emit()
+	if not Engine.is_editor_hint():
+		var manager := get_node_or_null("/root/NetworkManager")
+		if manager != null and manager.has_method("notify_crane_operated"):
+			manager.call("notify_crane_operated", get_crane_id(), true)
 
 
 func _exit_crane() -> void:
 	_occupied = false
+	_remotely_operated_by = ""
 	# Note: a carried pallet stays attached to the hook when the operator
 	# leaves. They (or another operator) must re-board and position over a
 	# valid drop target. This prevents cargo being lost over the water.
@@ -1132,6 +1198,10 @@ func _exit_crane() -> void:
 	if _hud != null:
 		_hud.visible = false
 	player_exited.emit()
+	if not Engine.is_editor_hint():
+		var manager := get_node_or_null("/root/NetworkManager")
+		if manager != null and manager.has_method("notify_crane_operated"):
+			manager.call("notify_crane_operated", get_crane_id(), false)
 
 
 # ── UI ────────────────────────────────────────────────────────────────────────
@@ -1291,3 +1361,7 @@ func _gate_motor(player: AudioStreamPlayer3D, speed: float) -> void:
 	else:
 		if player.playing:
 			player.stop()
+
+
+func get_hook_node() -> Node3D:
+	return _hook

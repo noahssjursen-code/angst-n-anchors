@@ -24,12 +24,6 @@ var _settings:    SettingsPanel
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
-	# Pause-on-focus-loss: when the user alt-tabs / clicks away, treat it
-	# as ESC so the game freezes and the cursor unlocks. Resume requires
-	# them to come back and press ESC — no auto-resume on focus regain so
-	# stray clicks can't unpause unexpectedly.
-	get_window().focus_exited.connect(_on_window_focus_exited)
-
 	# ── Walking HUD layer (persistent) ────────────────────────────────────────
 	_hud_layer       = CanvasLayer.new()
 	_hud_layer.layer = 5
@@ -141,7 +135,13 @@ func _set_screen(s: Screen) -> void:
 		_journal.visible = not modal
 	# Pause while on Pause OR Settings — both are reached from the pause menu
 	# and a moving world behind the settings panel is jarring.
-	get_tree().paused    = s == Screen.PAUSE or s == Screen.SETTINGS
+	# However, in multiplayer mode, we must never pause the tree!
+	var config := get_node_or_null("/root/ServerConfig")
+	var is_mp := false
+	if config != null:
+		is_mp = bool(config.get("is_multiplayer_mode"))
+		
+	get_tree().paused    = (s == Screen.PAUSE or s == Screen.SETTINGS) and not is_mp
 
 
 # ── Pause panel ───────────────────────────────────────────────────────────────

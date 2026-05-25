@@ -17,6 +17,9 @@ config/icon="res://icon.svg"
 
 [autoload]
 
+ServerConfig="*res://scripts/network/server_config.gd"
+AuthSession="*res://scripts/network/auth_session.gd"
+NetworkManager="*res://scripts/network/network_manager.gd"
 GameSettings="*res://scripts/state/game_settings.gd"
 WorldWeather="*res://scripts/weather/world_weather.gd"
 WeatherLighting="*res://scripts/weather/weather_lighting.gd"
@@ -29,6 +32,7 @@ DebugHud="*res://scripts/ui/debug_hud.gd"
 Telemetry="*res://scripts/state/telemetry.gd"
 LocalPlayerView="*res://scripts/state/local_player_view.gd"
 Tutorial="*res://scripts/state/tutorial.gd"
+AutonomousVesselManager="*res://scripts/player/autonomous_vessel_manager.gd"
 
 [input]
 

@@ -1,7 +1,10 @@
 class_name ShipwrightPricing
 extends RefCounted
 
-## Catalog quotes in Marks (ℳ). The 13 m coastal trader is harbour-master only (StarterVessel).
+## Catalog quotes in Marks (ℳ).
+
+const STARTER_TRAWLER_ID := "fishing_trawler_small"
+
 
 static func quote_price_marks(stations: HullStations) -> int:
 	if stations == null:
@@ -11,11 +14,9 @@ static func quote_price_marks(stations: HullStations) -> int:
 	return int(1200.0 + len_m * len_m * 52.0)
 
 
-static func commission_price(entry: Dictionary, stations: HullStations, _player: PlayerData) -> int:
+static func commission_price(_entry: Dictionary, stations: HullStations, _player: PlayerData) -> int:
 	return quote_price_marks(stations)
 
 
 static func price_label(price: int) -> String:
-	if price <= 0:
-		return "Complimentary (yard loaner)"
-	return PlayerSession.format_money(price)
+	return PlayerData.format_money(price)

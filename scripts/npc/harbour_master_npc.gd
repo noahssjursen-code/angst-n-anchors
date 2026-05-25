@@ -25,8 +25,22 @@ func _ready() -> void:
 	super._ready()
 	if not Engine.is_editor_hint():
 		call_deferred("_build_ui")
+		call_deferred("_wire_session")
 	else:
 		call_deferred("_add_hat")
+
+
+func _wire_session() -> void:
+	var session := get_node_or_null("/root/PlayerSession")
+	if session == null or not session.has_signal("vessels_synced"):
+		return
+	if not session.vessels_synced.is_connected(_on_vessels_synced):
+		session.vessels_synced.connect(_on_vessels_synced)
+
+
+func _on_vessels_synced() -> void:
+	if _screen == _Screen.SHIP_SELECT and _pending_berth_index >= 0:
+		_show_ship_select()
 
 
 func _add_hat() -> void:
@@ -36,9 +50,17 @@ func _add_hat() -> void:
 # ── NpcInteractable hooks ──────────────────────────────────────────────────────
 
 func _on_interact() -> void:
-	_show_main()
-	_dialogue.show_panel()
-	open_ui()
+	var session := get_node_or_null("/root/PlayerSession")
+	if session == null:
+		_show_main()
+		_dialogue.show_panel()
+		open_ui()
+		return
+	VesselSync.refresh_for_ui(session, func() -> void:
+		_show_main()
+		_dialogue.show_panel()
+		open_ui()
+	)
 
 
 func _on_ui_cancel() -> void:
@@ -129,6 +151,14 @@ func _show_request_berth() -> void:
 	_screen = _Screen.REQUEST_BERTH
 	_dialogue.clear()
 
+	if not _captain_can_deploy_vessel():
+		_dialogue.add_quote(
+			"You've no vessel on the registry yet, Captain.\n"
+			+ "Visit the Shipwright and commission a fishing trawler first — then come back for a berth."
+		)
+		_dialogue.add_back_button(_show_main)
+		return
+
 	var dock := _get_dock()
 	if dock == null:
 		_dialogue.add_quote("I'm afraid the dock is not operational at the moment.")
@@ -186,37 +216,53 @@ func _show_ship_select() -> void:
 	_dialogue.clear()
 
 	var berth_n := _pending_berth_index + 1
-	_dialogue.add_quote(
-		"Berth #%d is held for you. One vessel per captain — what shall we bring alongside?"
-		% berth_n
-	)
-
 	var session := get_node_or_null("/root/PlayerSession")
-	var record: Dictionary = {}
-	if session != null:
-		record = session.data.get_active_vessel_record()
+	var fleet: Array = []
+	var deployable: Array = []
+	if session != null and session.data != null:
+		fleet = session.data.get_harbour_vessel_records()
+		deployable = session.data.get_deployable_vessels()
 
-	var template_path := str(record.get("template_path", ""))
-	var hull_id := str(record.get("hull_id", ""))
-	var starter_only := _is_starter_vessel_record(template_path, hull_id)
-	var has_ledger := not template_path.is_empty() and FileAccess.file_exists(template_path)
+	if fleet.is_empty():
+		_release_pending_berth()
+		_dialogue.add_quote(
+			"No commissioned vessel on file, Captain.\n"
+			+ "The Shipwright builds fishing trawlers — your berth has been released."
+		)
+		_dialogue.add_back_button(_show_request_berth)
+		return
+
+	if deployable.is_empty():
+		_release_pending_berth()
+		_dialogue.add_quote(
+			"No hull available for berth, Captain.\n"
+			+ "Your registered vessels are on autonomous runs — recall them from the fleet office first."
+		)
+		_dialogue.add_back_button(_show_request_berth)
+		return
+
 	var replace_note := (
-		" (replaces your current vessel)"
+		" (replaces current)"
 		if LocalPlayerView.has_active_ship()
 		else ""
 	)
 
-	if has_ledger and not starter_only:
+	_dialogue.add_quote(
+		"Berth #%d is held. One alongside at a time — which hull from your registry?"
+		% berth_n
+	)
+
+	for entry_raw in fleet:
+		var record := entry_raw as Dictionary
 		var display := str(record.get("display", "Your vessel"))
 		var short := display.split("  •  ")[0] if "  •  " in display else display
-		_dialogue.add_option(
-			"Deploy %s%s" % [short, replace_note],
-			_spawn_ledger_vessel.bind(template_path),
-		)
-	_dialogue.add_option(
-		"Bring complimentary Coastal Trader (13 m)%s" % replace_note,
-		_claim_starter_vessel,
-	)
+		if PlayerData.is_vessel_on_npc_run(record):
+			_dialogue.add_disabled_option("%s — on autonomous run" % short)
+		else:
+			_dialogue.add_option(
+				"Deploy %s%s" % [short, replace_note],
+				_deploy_fleet_vessel.bind(record),
+			)
 
 	_dialogue.add_option("Never mind — release the berth.", _cancel_ship_select)
 	_dialogue.add_back_button(_cancel_ship_select)
@@ -236,21 +282,25 @@ func _release_pending_berth() -> void:
 	_pending_berth_index = -1
 
 
-func _claim_starter_vessel() -> void:
-	var path := StarterVessel.write_template_file()
-	if path.is_empty():
+func _deploy_fleet_vessel(record: Dictionary) -> void:
+	if PlayerData.is_vessel_on_npc_run(record):
 		_dialogue.clear()
-		_dialogue.add_quote("Couldn't prepare your yard loaner. Try again in a moment.")
-		_dialogue.add_back_button(_show_main)
+		_dialogue.add_quote(
+			"That hull is on an autonomous run, Captain.\n"
+			+ "Recall her from the fleet office before requesting a berth."
+		)
+		_dialogue.add_back_button(_show_ship_select)
 		return
-	_spawn_chosen_ship(path, true)
+	var session := get_node_or_null("/root/PlayerSession")
+	if session != null and session.data != null:
+		session.data.set_active_vessel(record)
+		if session.has_method("save_now"):
+			session.call("save_now")
+	var template_path := str(record.get("template_path", ""))
+	_spawn_chosen_ship(template_path)
 
 
-func _spawn_ledger_vessel(template_path: String) -> void:
-	_spawn_chosen_ship(template_path, false)
-
-
-func _spawn_chosen_ship(scene_path: String, is_starter: bool) -> void:
+func _spawn_chosen_ship(scene_path: String) -> void:
 	var dock := _get_dock()
 	var idx  := _pending_berth_index
 	if dock == null or idx < 0:
@@ -266,11 +316,7 @@ func _spawn_chosen_ship(scene_path: String, is_starter: bool) -> void:
 		_dialogue.add_back_button(_show_main)
 		return
 
-	if is_starter:
-		var session := get_node_or_null("/root/PlayerSession")
-		if session != null:
-			StarterVessel.set_active_vessel_record(session)
-
+	_network_register_ship(ship, scene_path)
 	_finish_berth_assignment(idx)
 
 
@@ -299,7 +345,7 @@ func _show_abandon_confirm() -> void:
 		return
 	_dialogue.add_quote(
 		"Abandon your vessel? She'll be towed away and any cargo aboard "
-		+ "will be forfeit. You can claim a fresh loaner afterwards."
+		+ "will be forfeit. Your hull stays on the registry — request a berth to deploy her again."
 	)
 	_dialogue.add_option("Yes — scrap her.",   _commit_abandon)
 	_dialogue.add_back_button(_show_main)
@@ -310,12 +356,9 @@ func _commit_abandon() -> void:
 	# and mooring release as part of _prepare_despawn.
 	PlayerVessel.despawn_all_ships(get_tree())
 
-	# Clear active-vessel record so the harbour master offers the starter
-	# loaner again on the next berth request. Drop saved ship pose too so
-	# we don't try to restore a vessel that no longer exists.
+	# Drop saved ship pose — the hull record stays so the harbour master can redeploy.
 	var session := get_node_or_null("/root/PlayerSession")
 	if session != null and session.data != null:
-		session.data.set_active_vessel({})
 		session.data.ship_runtime_state = {}
 		if session.has_method("save_now"):
 			session.call("save_now")
@@ -325,7 +368,7 @@ func _commit_abandon() -> void:
 	_teleport_player_to_home()
 
 	_dialogue.clear()
-	_dialogue.add_quote("She's gone, Captain. Come back when you'd like another berth.")
+	_dialogue.add_quote("She's gone, Captain. Come back when you'd like her alongside again.")
 	_dialogue.add_option("Thank you.", _close)
 
 
@@ -364,10 +407,11 @@ func _show_vessel_info() -> void:
 
 # ── Dock lookup ───────────────────────────────────────────────────────────────
 
-func _is_starter_vessel_record(template_path: String, hull_id: String) -> bool:
-	if template_path == StarterVessel.TEMPLATE_PATH:
-		return true
-	return hull_id == str(StarterVessel.ENTRY.get("id", "coastal_trader"))
+func _captain_can_deploy_vessel() -> bool:
+	var session := get_node_or_null("/root/PlayerSession")
+	if session == null or session.data == null:
+		return false
+	return session.data.can_deploy_at_harbour()
 
 
 func _get_dock() -> PortDock:
@@ -383,3 +427,31 @@ func _build_ui() -> void:
 	add_overlay("hat", PEAKED_CAP_PATH)
 	_dialogue = DialoguePanel.new("HARBOUR MASTER")
 	add_child(_dialogue)
+
+
+func _network_register_ship(ship_node: Node3D, template_path: String, preferred_hull_id: String = "") -> void:
+	var manager := get_node_or_null("/root/NetworkManager")
+	if manager == null:
+		return
+
+	var session := get_node_or_null("/root/PlayerSession")
+	var record_hull_id := ""
+	if session != null and session.get("data") != null:
+		var record: Dictionary = session.data.get_active_vessel_record()
+		if not record.is_empty():
+			record_hull_id = str(record.get("hull_id", ""))
+
+	var hull_id := HullRegistry.resolve_id_from_template(
+		template_path,
+		preferred_hull_id if not preferred_hull_id.is_empty() else record_hull_id
+	)
+	if hull_id.is_empty():
+		hull_id = "cargo_ship_medium"
+
+	var ship_id := "player_ship"
+	if session != null and session.get("data") != null:
+		var record: Dictionary = session.data.get_active_vessel_record()
+		if not record.is_empty():
+			ship_id = String(record.get("uid", "player_ship"))
+
+	manager.call("register_ship_spawn", ship_id, hull_id, ship_node)

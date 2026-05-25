@@ -130,6 +130,8 @@ func accepts_pallet(pallet: Pallet) -> bool:
 func accepts_delivery(pallet: Pallet) -> bool:
 	if pallet == null or port_id.is_empty():
 		return false
+	if pallet.commodity == "fish":
+		return true
 	return pallet.destination_port_id == port_id
 
 
@@ -172,7 +174,7 @@ func add_pallet(pallet: Pallet, world_hint: Vector3 = Vector3.INF) -> int:
 		_apply_boat_cargo_mass_delta(pallet.mass_kg)
 		_deck_mass_kg += pallet.mass_kg
 
-	_spawn_pallet_node(origin_idx, pallet)
+	_spawn_pallet_node(origin_idx, pallet, _is_autonomous_npc_deck())
 	cargo_changed.emit(self)
 	return origin_idx
 
@@ -215,6 +217,22 @@ func get_all_pallets() -> Array[Pallet]:
 	return out
 
 
+## Re-register every on-deck pallet with NetworkManager (e.g. after MP session starts).
+func reregister_network_pallets() -> void:
+	if _is_autonomous_npc_deck():
+		return
+	var manager := get_node_or_null("/root/NetworkManager")
+	if manager == null or not manager.has_method("register_cargo_spawn"):
+		return
+	var root := _ensure_pallet_root()
+	if root == null:
+		return
+	for pallet in get_all_pallets():
+		var node := root.get_node_or_null(_pallet_node_name(pallet)) as Node3D
+		if node != null and is_instance_valid(node):
+			manager.call("register_cargo_spawn", pallet.id, pallet, node)
+
+
 func get_pallet_at_cell(cell_idx: int) -> Pallet:
 	return _cells.get(cell_idx, null) as Pallet
 
@@ -224,6 +242,25 @@ func remove_pallet_by_resource(pallet: Pallet) -> Pallet:
 		if _cells[idx] == pallet:
 			return remove_pallet(int(idx))
 	return null
+
+
+## Crane pickup: clear deck bookkeeping without destroying the visual node
+## (the pallet is reparented away before this runs).
+func detach_pallet_resource(pallet: Pallet) -> Pallet:
+	if pallet == null:
+		return null
+	var found := false
+	for k in _cells.keys().duplicate():
+		if _cells[k] == pallet:
+			_cells.erase(k)
+			found = true
+	if not found:
+		return null
+	if affects_boat_cargo_mass and pallet.mass_kg > 0.0:
+		_apply_boat_cargo_mass_delta(-pallet.mass_kg)
+		_deck_mass_kg = maxf(_deck_mass_kg - pallet.mass_kg, 0.0)
+	cargo_changed.emit(self)
+	return pallet
 
 
 # ── Spatial helpers ───────────────────────────────────────────────────────────
@@ -395,7 +432,7 @@ func _ensure_pallet_root() -> Node3D:
 	return _pallet_root
 
 
-func _spawn_pallet_node(origin_idx: int, pallet: Pallet) -> void:
+func _spawn_pallet_node(origin_idx: int, pallet: Pallet, skip_network: bool = false) -> void:
 	var root := _ensure_pallet_root()
 	if root == null:
 		return
@@ -409,6 +446,12 @@ func _spawn_pallet_node(origin_idx: int, pallet: Pallet) -> void:
 	# whose world footprint differs renders correctly oriented for this deck.
 	node.setup(pallet, cell_size_x_m * float(fp.x), cell_size_z_m * float(fp.y), fp)
 
+	if skip_network:
+		return
+	var manager := get_node_or_null("/root/NetworkManager")
+	if manager != null and manager.has_method("register_cargo_spawn"):
+		manager.call("register_cargo_spawn", pallet.id, pallet, node)
+
 
 func _remove_pallet_node(pallet: Pallet) -> void:
 	var root := _ensure_pallet_root()
@@ -417,6 +460,19 @@ func _remove_pallet_node(pallet: Pallet) -> void:
 	var node := root.get_node_or_null(_pallet_node_name(pallet))
 	if node != null and is_instance_valid(node):
 		node.queue_free()
+
+	if _is_autonomous_npc_deck():
+		return
+	var manager := get_node_or_null("/root/NetworkManager")
+	if manager != null and manager.has_method("unregister_cargo"):
+		manager.call("unregister_cargo", pallet.id)
+
+
+func _is_autonomous_npc_deck() -> bool:
+	var boat := _resolve_boat_body()
+	if boat == null:
+		return false
+	return boat.find_child("AutonomousNpcShip", true, false) != null
 
 
 func _pallet_node_name(pallet: Pallet) -> String:

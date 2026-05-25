@@ -1,0 +1,33 @@
+[gd_scene format=3 uid="uid://cpq4qhef4gl5f"]
+
+[ext_resource type="Script" path="res://scripts/player/player_showcase.gd" id="1_psc"]
+
+[sub_resource type="Environment" id="Env_psc"]
+background_mode = 1
+background_color = Color(0.08, 0.09, 0.11, 1)
+ambient_light_source = 2
+ambient_light_color = Color(0.85, 0.88, 0.95, 1)
+ambient_light_energy = 0.65
+
+[node name="PlayerShowcase" type="Node3D"]
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
+environment = SubResource("Env_psc")
+
+[node name="Sun" type="DirectionalLight3D" parent="."]
+transform = Transform3D(0.866, -0.25, 0.433, 0, 0.866, 0.5, -0.5, -0.433, 0.75, 0, 12, 0)
+shadow_enabled = true
+
+[node name="Camera3D" type="Camera3D" parent="."]
+transform = Transform3D(0.866, -0.25, 0.433, 0, 0.866, 0.5, -0.5, -0.433, 0.75, 4.4, 7.5, 13.5)
+fov = 48.0
+current = true
+
+[node name="Showcase" type="Node3D" parent="."]
+script = ExtResource("1_psc")
+rebuild = true
+show_ground_pad = true
+show_labels = true
+animate_walking = true
+spin_players = false
+spin_speed = 0.5
