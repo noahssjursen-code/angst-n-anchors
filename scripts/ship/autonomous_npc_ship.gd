@@ -8,6 +8,7 @@ const DOCK_LERP_RATE := 8.0
 const TRANSIT_YAW_LERP := 12.0
 
 var vessel_uid: String = ""
+var server_vessel_id: String = ""
 var owner_id: String = ""
 
 var _body: BoatBody
@@ -21,7 +22,9 @@ var _stage_label: Label3D
 
 func setup(body: BoatBody, record: Dictionary) -> void:
 	_body = body
+	record = AutonomousVesselLoader.normalize_spawn_record(record)
 	vessel_uid = str(record.get("uid", ""))
+	server_vessel_id = str(record.get("server_vessel_id", ""))
 	owner_id = "auto_%s" % vessel_uid
 	sync_record(record)
 	add_to_group(GROUP)
@@ -30,7 +33,21 @@ func setup(body: BoatBody, record: Dictionary) -> void:
 
 
 func sync_record(record: Dictionary) -> void:
-	_record = record.duplicate(true)
+	record = AutonomousVesselLoader.normalize_spawn_record(record)
+	var old_home := str(_record.get("home_port_id", ""))
+	var old_active_at := int(_record.get("autonomous_active_at", 0))
+	_record = record
+	vessel_uid = str(_record.get("uid", ""))
+	server_vessel_id = str(_record.get("server_vessel_id", ""))
+	if _body != null and is_instance_valid(_body):
+		_body.set_meta("autonomous_vessel_uid", vessel_uid)
+		if not server_vessel_id.is_empty():
+			_body.set_meta("server_vessel_id", server_vessel_id)
+	var new_home := str(_record.get("home_port_id", ""))
+	var new_active_at := int(_record.get("autonomous_active_at", 0))
+	if new_home != old_home or new_active_at != old_active_at:
+		release_berth()
+		call_deferred("snap_to_sample")
 
 
 func get_live_record() -> Dictionary:
@@ -309,7 +326,10 @@ func _update_stage_label(sample: Dictionary) -> void:
 		_stage_label.text = stage_name
 		return
 	var remaining := float(sample.get("stage_remaining_sec", 0.0))
-	_stage_label.text = "%s\n%s" % [stage_name, AutonomousVesselSim.format_stage_remaining(remaining)]
+	var id_line := vessel_uid.substr(0, min(12, vessel_uid.length()))
+	if not server_vessel_id.is_empty():
+		id_line = server_vessel_id.substr(0, min(8, server_vessel_id.length()))
+	_stage_label.text = "%s\n%s\n%s" % [id_line, stage_name, AutonomousVesselSim.format_stage_remaining(remaining)]
 
 
 func _label_height() -> float:

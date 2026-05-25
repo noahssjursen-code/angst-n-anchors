@@ -72,12 +72,15 @@ func _process(delta: float) -> void:
 func apply_record_update(uid: String, record: Dictionary) -> void:
 	if _is_main_menu():
 		return
+	record = AutonomousVesselLoader.normalize_spawn_record(record)
+	uid = AutonomousVesselLoader.canonical_uid(record)
 	if uid.is_empty() or record.is_empty():
 		return
 
-	var ctrl = _controllers.get(uid)
-	if ctrl != null and is_instance_valid(ctrl):
-		(ctrl as AutonomousNpcShip).sync_record(record)
+	var ctrl := _controller_for_record(record)
+	if ctrl != null:
+		ctrl.sync_record(record)
+		_controllers[uid] = ctrl
 
 	if _server_records.has(uid):
 		_server_records[uid] = record.duplicate(true)
@@ -87,7 +90,8 @@ func apply_record_update(uid: String, record: Dictionary) -> void:
 	var data := _player_data()
 	if data == null:
 		return
-	if data.find_owned_vessel(uid).is_empty():
+	var owned := _record_for_uid(uid)
+	if owned.is_empty():
 		return
 	data.upsert_owned_vessel(record)
 	var session := get_node_or_null("/root/PlayerSession")
@@ -151,9 +155,14 @@ func refresh_vessel(_uid: String = "") -> void:
 	var data := _player_data()
 	if data == null or _uid.is_empty():
 		return
-	var record: Dictionary = data.find_owned_vessel(_uid)
-	if record.is_empty() or not bool(record.get("autonomous_active", false)) or _should_skip_record(record):
-		_despawn_uid(_uid)
+	var record: Dictionary = _record_for_uid(_uid)
+	if record.is_empty():
+		record = data.find_owned_vessel(_uid)
+	record = AutonomousVesselLoader.normalize_spawn_record(record)
+	var canonical := AutonomousVesselLoader.canonical_uid(record)
+	if canonical.is_empty() or record.is_empty() or not bool(record.get("autonomous_active", false)) or _should_skip_record(record):
+		for alias in AutonomousVesselLoader.alias_uids(record):
+			_despawn_uid(alias)
 		return
 	_ensure_spawn(record)
 
@@ -181,6 +190,7 @@ func _on_server_records(records: Array) -> void:
 
 func _apply_record_list(records: Array, from_server: bool) -> void:
 	var keep: Dictionary = {}
+	var seen_canonical: Dictionary = {}
 	for rec_raw in records:
 		var record: Dictionary
 		if rec_raw is AutonomousVesselRecord:
@@ -191,12 +201,17 @@ func _apply_record_list(records: Array, from_server: bool) -> void:
 				else AutonomousVesselLoader.spawn_dict_from_local(rec)
 			)
 		elif typeof(rec_raw) == TYPE_DICTIONARY:
-			record = rec_raw as Dictionary
+			record = AutonomousVesselLoader.normalize_spawn_record(rec_raw as Dictionary)
 		else:
 			continue
-		var uid := str(record.get("uid", ""))
+		record = AutonomousVesselLoader.normalize_spawn_record(record)
+		var uid := AutonomousVesselLoader.canonical_uid(record)
 		if uid.is_empty():
 			continue
+		if seen_canonical.has(uid):
+			continue
+		seen_canonical[uid] = true
+		record["uid"] = uid
 		if not bool(record.get("autonomous_active", false)):
 			continue
 		if _should_skip_record(record):
@@ -204,6 +219,7 @@ func _apply_record_list(records: Array, from_server: bool) -> void:
 		if from_server:
 			_server_records[uid] = record.duplicate(true)
 		keep[uid] = true
+		_despawn_alias_controllers(record, uid)
 		_ensure_spawn(record)
 
 	if from_server:
@@ -257,11 +273,47 @@ func _sync_controller_records() -> void:
 
 func _record_for_uid(uid: String) -> Dictionary:
 	if _is_mp_session():
-		return _server_records.get(uid, {})
+		if _server_records.has(uid):
+			return _server_records[uid]
+		for key in _server_records.keys():
+			var rec: Dictionary = _server_records[key]
+			if uid in AutonomousVesselLoader.alias_uids(rec):
+				return rec
+		return {}
 	var data := _player_data()
 	if data == null:
 		return {}
-	return data.find_owned_vessel(uid)
+	var direct := data.find_owned_vessel(uid)
+	if not direct.is_empty():
+		return direct
+	for entry_raw in data.owned_vessels:
+		if typeof(entry_raw) != TYPE_DICTIONARY:
+			continue
+		var entry := entry_raw as Dictionary
+		if uid in AutonomousVesselLoader.alias_uids(entry):
+			return entry
+	return {}
+
+
+func _controller_for_record(record: Dictionary) -> AutonomousNpcShip:
+	var canonical := AutonomousVesselLoader.canonical_uid(record)
+	if not canonical.is_empty():
+		var direct = _controllers.get(canonical)
+		if direct != null and is_instance_valid(direct):
+			return direct as AutonomousNpcShip
+	for alias in AutonomousVesselLoader.alias_uids(record):
+		var ctrl = _controllers.get(alias)
+		if ctrl != null and is_instance_valid(ctrl):
+			return ctrl as AutonomousNpcShip
+	return null
+
+
+func _despawn_alias_controllers(record: Dictionary, keep_uid: String) -> void:
+	for alias in AutonomousVesselLoader.alias_uids(record):
+		if alias == keep_uid:
+			continue
+		if _controllers.has(alias):
+			_despawn_uid(alias)
 
 
 func _purge_stale_controllers() -> void:
@@ -274,15 +326,23 @@ func _purge_stale_controllers() -> void:
 func _ensure_spawn(record: Dictionary) -> void:
 	if _is_main_menu():
 		return
-	var uid := str(record.get("uid", ""))
+	record = AutonomousVesselLoader.normalize_spawn_record(record)
+	var uid := AutonomousVesselLoader.canonical_uid(record)
 	if uid.is_empty():
 		return
-	var existing = _controllers.get(uid)
+	record["uid"] = uid
+	_despawn_alias_controllers(record, uid)
+
+	var existing = _controller_for_record(record)
 	if existing != null:
 		if not is_instance_valid(existing):
 			_controllers.erase(uid)
 		else:
 			(existing as AutonomousNpcShip).sync_record(record)
+			for alias in AutonomousVesselLoader.alias_uids(record):
+				if alias != uid:
+					_controllers.erase(alias)
+			_controllers[uid] = existing
 			return
 
 	var path := AutonomousVesselLoader.resolve_template_path(record)
@@ -296,6 +356,9 @@ func _ensure_spawn(record: Dictionary) -> void:
 		return
 
 	ship.name = "AutonomousNPC_%s" % uid
+	if not str(record.get("server_vessel_id", "")).is_empty():
+		ship.set_meta("server_vessel_id", str(record.get("server_vessel_id", "")))
+	ship.set_meta("autonomous_vessel_uid", uid)
 	ship.freeze = true
 	_disable_player_control(ship)
 

@@ -117,14 +117,16 @@ func deactivate() -> void:
 	if not _active:
 		return
 	_active = false
+	if _player != null and _camera != null:
+		var feet := _resolve_feet_position()
+		_player.commit_freecam_position(feet)
 	if _camera != null:
 		_camera.top_level = false
-		_camera.transform = _saved_camera_local
 		_camera.current = true
 	if _body_mesh != null:
 		_body_mesh.visible = _saved_body_visible
 	if _player_camera != null:
-		_player_camera.call("_apply_mode")
+		_player_camera.sync_after_freecam(_yaw, _pitch)
 	if _player != null:
 		_player.velocity = Vector3.ZERO
 	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
@@ -159,6 +161,8 @@ func update(delta: float) -> void:
 	var basis := Basis.from_euler(Vector3(_pitch, _yaw, 0.0))
 	var motion := basis * input * speed * delta
 	_camera.global_position += motion
+	if _player != null:
+		_player.global_position += motion
 
 	var rot := Basis.from_euler(Vector3(_pitch, _yaw, 0.0))
 	_camera.global_transform = Transform3D(rot, _camera.global_position)
@@ -177,6 +181,28 @@ static func _is_toggle_shortcut(event: InputEvent) -> bool:
 	if ke.physical_keycode != KEY_P:
 		return false
 	return Input.is_key_pressed(KEY_F3)
+
+
+func _resolve_feet_position() -> Vector3:
+	var eye := _camera.global_position
+	var eye_h := 1.6
+	if _player_camera != null:
+		eye_h = _player_camera.eye_height()
+	var feet := Vector3(eye.x, eye.y - eye_h, eye.z)
+	if _player == null:
+		return feet
+	var space := _player.get_world_3d().direct_space_state
+	if space == null:
+		return feet
+	var from := feet + Vector3(0.0, 3.0, 0.0)
+	var to := feet + Vector3(0.0, -400.0, 0.0)
+	var query := PhysicsRayQueryParameters3D.create(from, to)
+	query.exclude = [_player.get_rid()]
+	query.collide_with_areas = false
+	var hit := space.intersect_ray(query)
+	if hit.is_empty():
+		return feet
+	return Vector3(feet.x, float(hit.position.y) + 0.05, feet.z)
 
 
 func _settings_sens_multiplier() -> float:

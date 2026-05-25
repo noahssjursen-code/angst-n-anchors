@@ -216,6 +216,22 @@ func _collision_distance(pivot: Vector3, desired_distance: float) -> float:
 	return clampf(hit_distance, tp_min_distance, desired_distance)
 
 
+func sync_after_freecam(yaw: float, pitch: float) -> void:
+	if _player == null:
+		return
+	_orbit_yaw = yaw
+	_player.rotation.y = yaw
+	if _mode == CameraMode.THIRD_PERSON:
+		_orbit_pitch = clampf(pitch, TP_MIN_PITCH, TP_MAX_PITCH)
+	else:
+		_fp_pitch = clampf(pitch, -FP_MAX_PITCH, FP_MAX_PITCH)
+	_apply_mode()
+
+
+func eye_height() -> float:
+	return fp_height
+
+
 func _toggle_mode() -> void:
 	if _mode == CameraMode.THIRD_PERSON:
 		_mode = CameraMode.FIRST_PERSON

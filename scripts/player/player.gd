@@ -235,6 +235,13 @@ func _process(delta: float) -> void:
 	_player_camera.update(delta, velocity, _smoothed_input, is_on_floor(), inputs_active)
 
 
+func commit_freecam_position(feet_world: Vector3) -> void:
+	global_position = feet_world
+	velocity = Vector3.ZERO
+	_last_safe_position = feet_world
+	_water_submerge_time = 0.0
+
+
 # ── Step climb (ghost-cast probe) ─────────────────────────────────────────────
 
 ## Probe whether the player can mount a low obstacle by moving up by

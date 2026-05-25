@@ -30,6 +30,8 @@ var _home_port_lbl: Label
 var _home_port_value_lbl: Label
 var _visit_port_lbl: Label
 var _visit_port_value_lbl: Label
+var _pick_home_btn: Button
+var _office_home_btn: Button
 var _pick_dest_btn: Button
 var _clear_dest_btn: Button
 var _route_summary_lbl: Label
@@ -47,6 +49,7 @@ var _blockers_lbl: Label
 var _hire_panel: CrewHirePanel
 var _map_picker_layer: CanvasLayer
 var _map_picker: FleetRouteMapPicker
+var _map_picker_title_lbl: Label
 var _map_picker_cancel_btn: Button
 var _map_picker_clear_btn: Button
 
@@ -390,11 +393,19 @@ func _build_chrome() -> void:
 	route_actions.add_theme_constant_override("separation", 8)
 	detail_v.add_child(route_actions)
 
-	_pick_dest_btn = UiBuilder.button("Select on map")
+	_pick_home_btn = UiBuilder.button("Change home")
+	_pick_home_btn.pressed.connect(_on_pick_home_pressed)
+	route_actions.add_child(_pick_home_btn)
+
+	_office_home_btn = UiBuilder.button("This office")
+	_office_home_btn.pressed.connect(_on_office_home_pressed)
+	route_actions.add_child(_office_home_btn)
+
+	_pick_dest_btn = UiBuilder.button("Destination")
 	_pick_dest_btn.pressed.connect(_on_pick_destination_pressed)
 	route_actions.add_child(_pick_dest_btn)
 
-	_clear_dest_btn = UiBuilder.button("Clear destination")
+	_clear_dest_btn = UiBuilder.button("Clear dest.")
 	_clear_dest_btn.pressed.connect(_on_clear_destination_pressed)
 	route_actions.add_child(_clear_dest_btn)
 
@@ -475,6 +486,7 @@ func _build_chrome() -> void:
 	_map_picker = FleetRouteMapPicker.new()
 	_map_picker.set_anchors_preset(Control.PRESET_FULL_RECT)
 	_map_picker.destination_picked.connect(_on_map_destination_picked)
+	_map_picker.home_picked.connect(_on_map_home_picked)
 	_map_picker.pick_cancelled.connect(_on_map_pick_cancelled)
 	_map_picker_layer.add_child(_map_picker)
 
@@ -503,12 +515,12 @@ func _build_chrome() -> void:
 	bar_h.add_theme_constant_override("separation", 10)
 	bar_margin.add_child(bar_h)
 
-	var picker_title := Label.new()
-	picker_title.text = "SELECT DESTINATION PORT"
-	picker_title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	picker_title.add_theme_font_size_override("font_size", 15)
-	picker_title.add_theme_color_override("font_color", HudStyle.C_AMBER)
-	bar_h.add_child(picker_title)
+	_map_picker_title_lbl = Label.new()
+	_map_picker_title_lbl.text = "SELECT PORT"
+	_map_picker_title_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_map_picker_title_lbl.add_theme_font_size_override("font_size", 15)
+	_map_picker_title_lbl.add_theme_color_override("font_color", HudStyle.C_AMBER)
+	bar_h.add_child(_map_picker_title_lbl)
 
 	_map_picker_clear_btn = UiBuilder.button("Clear destination")
 	_map_picker_clear_btn.pressed.connect(_on_clear_destination_pressed)
@@ -608,7 +620,7 @@ func _select_index(index: int) -> void:
 	_selected_index = index
 	_refresh_list()
 	if _selected_index >= 0:
-		_ensure_office_home_port()
+		_bootstrap_home_port_if_needed()
 	_show_vessel(_vessels[index])
 
 
@@ -685,18 +697,25 @@ func _accrue_fleet_pending() -> void:
 		session.save_now()
 
 
-func _ensure_office_home_port() -> void:
+func _bootstrap_home_port_if_needed() -> void:
 	if _office_port_id.is_empty() or _selected_index < 0 or _selected_index >= _vessels.size():
 		return
-	var record := _vessels[_selected_index].duplicate()
-	if str(record.get("home_port_id", "")) == _office_port_id:
+	var record := _vessels[_selected_index]
+	if not str(record.get("home_port_id", "")).is_empty():
 		return
 	var visit_id := str(record.get("visit_port_id", ""))
 	if visit_id == _office_port_id:
 		visit_id = ""
-	record = CompanyFleetOps.apply_route(record, _office_port_id, visit_id)
+	record = CompanyFleetOps.apply_route(record.duplicate(true), _office_port_id, visit_id)
 	_persist_vessel_record(record)
 	_vessels[_selected_index] = record
+
+
+func _route_home_port_id(record: Dictionary) -> String:
+	var stored := str(record.get("home_port_id", ""))
+	if not stored.is_empty():
+		return stored
+	return _office_port_id
 
 
 func _office_port_display_name() -> String:
@@ -714,15 +733,22 @@ func _refresh_route_section(record: Dictionary) -> void:
 	_home_port_value_lbl.visible = true
 	_visit_port_lbl.visible = true
 	_visit_port_value_lbl.visible = true
+	_pick_home_btn.visible = true
+	_office_home_btn.visible = true
 	_pick_dest_btn.visible = true
 	_clear_dest_btn.visible = true
 	_route_summary_lbl.visible = true
 
 	var av := AutonomousVesselRecord.from_owned_vessel(record)
-	var home_id := _office_port_id if not _office_port_id.is_empty() else av.home_port_id
-	_home_port_value_lbl.text = _port_display_name(home_id)
-	if _office_port_id.is_empty():
-		_home_port_value_lbl.text += " (visit a company office)"
+	var home_id := av.home_port_id
+	if home_id.is_empty():
+		_home_port_value_lbl.text = "Not set"
+		if _office_port_id.is_empty():
+			_home_port_value_lbl.text += " — visit a company office"
+		else:
+			_home_port_value_lbl.text += " — will register at %s" % _port_display_name(_office_port_id)
+	else:
+		_home_port_value_lbl.text = _port_display_name(home_id)
 
 	var optional_dest := CompanyFleetOps.visit_port_optional(record)
 	_visit_port_lbl.text = "Also sell at" if optional_dest else "Destination"
@@ -734,7 +760,10 @@ func _refresh_route_section(record: Dictionary) -> void:
 	else:
 		_visit_port_value_lbl.text = "Not selected — use map"
 
-	_pick_dest_btn.disabled = _office_port_id.is_empty()
+	_pick_dest_btn.disabled = _route_home_port_id(record).is_empty()
+	_pick_home_btn.disabled = false
+	_office_home_btn.visible = not _office_port_id.is_empty()
+	_office_home_btn.disabled = _office_port_id.is_empty()
 	_clear_dest_btn.visible = optional_dest or av.has_visit_port()
 	_clear_dest_btn.disabled = not av.has_visit_port()
 	_route_summary_lbl.text = CompanyFleetOps.route_summary(record, _registry())
@@ -749,13 +778,62 @@ func _port_display_name(port_id: String) -> String:
 	return port_id
 
 
-func _on_pick_destination_pressed() -> void:
-	if _office_port_id.is_empty() or _selected_index < 0:
+func _apply_home_port(record: Dictionary, home_id: String) -> Dictionary:
+	if home_id.is_empty():
+		return record
+	var visit_id := str(record.get("visit_port_id", ""))
+	if visit_id == home_id:
+		visit_id = ""
+	return CompanyFleetOps.apply_route(record, home_id, visit_id)
+
+
+func _on_pick_home_pressed() -> void:
+	if _selected_index < 0:
 		return
 	var record := _vessels[_selected_index]
+	_map_picker_layer.visible = true
+	_map_picker_title_lbl.text = "SELECT HOME PORT"
+	_map_picker_clear_btn.visible = false
+	_map_picker.open_home_picker(
+		str(record.get("home_port_id", "")),
+		str(record.get("visit_port_id", "")),
+	)
+
+
+func _on_office_home_pressed() -> void:
+	if _selected_index < 0 or _office_port_id.is_empty():
+		return
+	var record := _vessels[_selected_index].duplicate()
+	record = _apply_home_port(record, _office_port_id)
+	_persist_vessel_record(record)
+	_vessels[_selected_index] = record
+	_refresh_list()
+	_show_vessel(record)
+
+
+func _on_map_home_picked(port_id: String) -> void:
+	_map_picker_layer.visible = false
+	if _selected_index < 0 or port_id.is_empty():
+		return
+	var record := _vessels[_selected_index].duplicate()
+	record = _apply_home_port(record, port_id)
+	_persist_vessel_record(record)
+	_vessels[_selected_index] = record
+	_refresh_list()
+	_show_vessel(record)
+
+
+func _on_pick_destination_pressed() -> void:
+	if _selected_index < 0:
+		return
+	var record := _vessels[_selected_index]
+	var home_id := _route_home_port_id(record)
+	if home_id.is_empty():
+		return
 	var current := str(record.get("visit_port_id", ""))
 	_map_picker_layer.visible = true
-	_map_picker.open_picker(_office_port_id, current)
+	_map_picker_title_lbl.text = "SELECT DESTINATION PORT"
+	_map_picker.open_destination_picker(home_id, current)
 	var optional := CompanyFleetOps.visit_port_optional(record)
 	_map_picker_clear_btn.visible = optional
 
@@ -765,7 +843,10 @@ func _on_map_destination_picked(port_id: String) -> void:
 	if _selected_index < 0 or port_id.is_empty():
 		return
 	var record := _vessels[_selected_index].duplicate()
-	record = CompanyFleetOps.apply_route(record, _office_port_id, port_id)
+	var home_id := _route_home_port_id(record)
+	if home_id.is_empty():
+		return
+	record = CompanyFleetOps.apply_route(record, home_id, port_id)
 	_persist_vessel_record(record)
 	_refresh_list()
 	_show_vessel(record)
@@ -777,10 +858,13 @@ func _on_map_pick_cancelled() -> void:
 
 
 func _on_clear_destination_pressed() -> void:
-	if _selected_index < 0 or _office_port_id.is_empty():
+	if _selected_index < 0:
 		return
 	var record := _vessels[_selected_index].duplicate()
-	record = CompanyFleetOps.apply_route(record, _office_port_id, "")
+	var home_id := _route_home_port_id(record)
+	if home_id.is_empty():
+		return
+	record = CompanyFleetOps.apply_route(record, home_id, "")
 	_persist_vessel_record(record)
 	_map_picker_layer.visible = false
 	_map_picker.hide_picker()
@@ -845,7 +929,7 @@ func _on_toggle_active_pressed() -> void:
 	_persist_vessel_record(record)
 	var mgr := get_node_or_null("/root/AutonomousVesselManager")
 	if mgr != null and mgr.has_method("refresh_vessel"):
-		mgr.call("refresh_vessel", str(record.get("uid", "")))
+		mgr.call("refresh_vessel", AutonomousVesselLoader.canonical_uid(record))
 	_refresh_list()
 	_show_vessel(record)
 
@@ -916,6 +1000,8 @@ func _clear_detail_ui() -> void:
 	_home_port_value_lbl.visible = false
 	_visit_port_lbl.visible = false
 	_visit_port_value_lbl.visible = false
+	_pick_home_btn.visible = false
+	_office_home_btn.visible = false
 	_pick_dest_btn.visible = false
 	_clear_dest_btn.visible = false
 	_route_summary_lbl.visible = false
@@ -1042,7 +1128,7 @@ func _persist_vessel_record(record: Dictionary) -> void:
 		_vessels[_selected_index] = record.duplicate()
 	var mgr := get_node_or_null("/root/AutonomousVesselManager")
 	if mgr != null and mgr.has_method("refresh_vessel"):
-		mgr.call("refresh_vessel", str(record.get("uid", "")))
+		mgr.call("refresh_vessel", AutonomousVesselLoader.canonical_uid(record))
 
 
 func _apply_crew_assignment(record: Dictionary, crew: Array, slot_count: int) -> Dictionary:

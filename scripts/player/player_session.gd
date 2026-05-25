@@ -270,5 +270,7 @@ func _sync_marks_to_server() -> void:
 			_marks_sync_pending = true
 	)
 	var auth := get_node_or_null("/root/AuthSession")
-	var headers := auth.auth_headers() if auth != null else PackedStringArray(["Content-Type: application/json"])
+	var headers: PackedStringArray = PackedStringArray(["Content-Type: application/json"])
+	if auth != null:
+		headers = auth.auth_headers()
 	req.request(http_url, headers, HTTPClient.METHOD_PUT, body)

@@ -77,7 +77,9 @@ static func request_nearby(
 			on_complete.call(filtered)
 	)
 	var auth := session.get_node_or_null("/root/AuthSession")
-	var headers := auth.call("auth_headers", "") if auth != null else PackedStringArray()
+	var headers: PackedStringArray = PackedStringArray()
+	if auth != null:
+		headers = auth.call("auth_headers", "") as PackedStringArray
 	req.request(url, headers)
 
 
@@ -100,11 +102,10 @@ static func spawn_dict_from_server(rec: AutonomousVesselRecord) -> Dictionary:
 	base["hull_id"] = rec.hull_id
 	base["display"] = rec.display_name
 	base["template_path"] = rec.template_path
-	if rec.id.is_empty():
-		return base
-	base["server_vessel_id"] = rec.id
-	base["uid"] = "mp_%s" % rec.id
-	return base
+	if not rec.id.is_empty():
+		base["server_vessel_id"] = rec.id
+		base["id"] = rec.id
+	return normalize_spawn_record(base)
 
 
 ## SP spawn dict — local owned-vessel uid and save fields.
@@ -124,9 +125,8 @@ static func spawn_dict_from_local(rec: AutonomousVesselRecord) -> Dictionary:
 	base["template_path"] = rec.template_path
 	if not rec.id.is_empty():
 		base["server_vessel_id"] = rec.id
-	if str(base.get("uid", "")).is_empty() and not rec.id.is_empty():
-		base["uid"] = rec.id
-	return base
+		base["id"] = rec.id
+	return normalize_spawn_record(base)
 
 
 static func _find_local_owned(server_or_uid: String) -> Dictionary:
@@ -177,11 +177,58 @@ static func resolve_template_path(record: Dictionary) -> String:
 static func resolve_deployable_record(record: Dictionary) -> Dictionary:
 	if record.is_empty():
 		return {}
-	var path := resolve_template_path(record)
+	var normalized := normalize_spawn_record(record.duplicate(true))
+	var path := resolve_template_path(normalized)
 	if path.is_empty():
 		return {}
+	normalized["template_path"] = path
+	return normalized
+
+
+## One stable key per hull for spawn controllers — always mp_<server_vessel_id> in MP.
+static func canonical_uid(record: Dictionary) -> String:
+	var server_id := str(record.get("server_vessel_id", ""))
+	if server_id.is_empty():
+		server_id = str(record.get("id", ""))
+	if not server_id.is_empty():
+		return "mp_%s" % server_id
+	var uid := str(record.get("uid", ""))
+	if uid.begins_with("mp_"):
+		return uid
+	return uid
+
+
+## Every legacy/local alias that might have been used as a controller key.
+static func alias_uids(record: Dictionary) -> PackedStringArray:
+	var out: PackedStringArray = []
+	var canonical := canonical_uid(record)
+	if not canonical.is_empty():
+		out.append(canonical)
+	var server_id := str(record.get("server_vessel_id", ""))
+	if server_id.is_empty():
+		server_id = str(record.get("id", ""))
+	if not server_id.is_empty():
+		if not out.has(server_id):
+			out.append(server_id)
+		var mp_key := "mp_%s" % server_id
+		if not out.has(mp_key):
+			out.append(mp_key)
+	var local_uid := str(record.get("uid", ""))
+	if not local_uid.is_empty() and not out.has(local_uid):
+		out.append(local_uid)
+	return out
+
+
+static func normalize_spawn_record(record: Dictionary) -> Dictionary:
 	var out := record.duplicate(true)
-	out["template_path"] = path
+	var canonical := canonical_uid(out)
+	if not canonical.is_empty():
+		out["uid"] = canonical
+	var server_id := str(out.get("server_vessel_id", ""))
+	if server_id.is_empty():
+		server_id = str(out.get("id", ""))
+	if not server_id.is_empty():
+		out["server_vessel_id"] = server_id
 	return out
 
 

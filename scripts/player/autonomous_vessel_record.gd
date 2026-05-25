@@ -230,11 +230,12 @@ func _is_sim_near(world_xz: Vector2, r2: float) -> bool:
 
 
 func to_sim_record() -> Dictionary:
-	return merge_into_owned_vessel({
+	var merged := merge_into_owned_vessel({
 		"uid": id if not id.is_empty() else owner_id,
 		"hull_id": hull_id,
 		"template_path": template_path,
 	})
+	return AutonomousVesselLoader.normalize_spawn_record(merged)
 
 
 static func filter_nearby(

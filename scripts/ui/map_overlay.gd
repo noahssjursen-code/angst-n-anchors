@@ -27,6 +27,7 @@ const C_PORT_LBL_SEL := Color(0.90, 1.00, 0.82, 1.00)
 const C_SHIP         := Color(0.96, 0.86, 0.12, 1.00)
 const C_TITLE        := Color(0.96, 0.86, 0.12, 0.92)
 const C_HINT         := Color(0.40, 0.50, 0.66, 0.55)
+const SHIP_POLL_SEC  := MapShipMarkers.POLL_SEC
 
 var _cam_center:         Vector2 = Vector2.ZERO
 var _cam_span:           float   = 10000.0
@@ -40,6 +41,12 @@ var _selected_port:      String  = ""
 var _poly_cache:         Dictionary = {}  ## port_id -> PackedVector2Array local XZ
 var _show_weather:       bool       = true
 var _show_fishing:       bool       = false
+var _ship_poll_clock:    float      = 0.0
+var _ship_markers:       Array      = []
+var _ship_pending:       Array      = []
+var _ship_fetch_busy:    bool       = false
+var _ship_fetch_entities: bool      = false
+var _ship_http:          HTTPRequest
 
 ## Weather overlay rendering — pressure heatmap, wind arrows, L/H markers,
 ## legend, season banner, hover tooltip. Pulled into its own file so the
@@ -66,18 +73,29 @@ const SIZE_CLASS_LABEL: Array[String] = [
 func _ready() -> void:
 	set_anchors_preset(Control.PRESET_FULL_RECT)
 	mouse_filter = Control.MOUSE_FILTER_STOP
+	_ship_http = HTTPRequest.new()
+	_ship_http.timeout = 8.0
+	add_child(_ship_http)
+	if not _ship_http.request_completed.is_connected(_on_ship_http_completed):
+		_ship_http.request_completed.connect(_on_ship_http_completed)
 
 
-func _process(_delta: float) -> void:
+func _process(delta: float) -> void:
 	if visible:
 		if not _was_visible:
 			if not _user_moved:
 				_reset_view()
 			_was_visible = true
+			_ship_poll_clock = SHIP_POLL_SEC
+		_ship_poll_clock += delta
+		if _ship_poll_clock >= SHIP_POLL_SEC and not _ship_fetch_busy:
+			_ship_poll_clock = 0.0
+			_refresh_map_ships()
 		queue_redraw()
 	else:
 		_was_visible = false
 		_dragging    = false
+		_ship_poll_clock = 0.0
 
 
 func _input(event: InputEvent) -> void:
@@ -404,22 +422,19 @@ func _draw() -> void:
 				draw_string(font, sp + Vector2(-ntw * 0.5, -poly_h * 0.5 - 6.0),
 							pname, HORIZONTAL_ALIGNMENT_LEFT, -1, lbl_size, lbl_col)
 
+	for marker_raw in _ship_markers:
+		if typeof(marker_raw) != TYPE_DICTIONARY:
+			continue
+		var marker := marker_raw as Dictionary
+		var mpos: Vector3 = marker.get("pos", Vector3(INF, INF, INF))
+		if mpos.x == INF:
+			continue
+		var kind: int = int(marker.get("kind", MapShipMarkers.Kind.OTHER))
+		_draw_ship_marker(_w2s(mpos), marker.get("bow_hz", Vector2(0.0, -1.0)), MapShipMarkers.color_for(kind), 8.0)
+
 	# Ship (bow projected to horizontal so chart agrees with helm after wave roll/pitch).
 	if ship_pos.x != INF:
-		var sp := _w2s(ship_pos)
-		var fwd := ship_bow_hz
-		if fwd.length_squared() < 1e-10:
-			fwd = Vector2(0.0, -1.0)
-		else:
-			fwd = fwd.normalized()
-		var perp := Vector2(-fwd.y, fwd.x)
-		var sz   := 11.0
-		draw_circle(sp, sz + 4.0, Color(C_SHIP.r, C_SHIP.g, C_SHIP.b, 0.20))
-		draw_colored_polygon(PackedVector2Array([
-			sp + fwd  * sz,
-			sp - fwd  * sz * 0.5 + perp * sz * 0.5,
-			sp - fwd  * sz * 0.5 - perp * sz * 0.5,
-		]), C_SHIP)
+		_draw_ship_marker(_w2s(ship_pos), ship_bow_hz, C_SHIP, 11.0)
 
 	# Port info panel
 	if not _selected_port.is_empty() and registry != null:
@@ -580,6 +595,91 @@ func _format_population(pop: int) -> String:
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
+
+func _refresh_map_ships() -> void:
+	if _ship_fetch_busy:
+		return
+	_ship_fetch_busy = true
+
+	var session := get_node_or_null("/root/PlayerSession")
+	var markers := MapShipMarkers.collect_own_autonomous(session)
+	MapShipMarkers.append_scene_autonomous(get_tree(), session, markers)
+	markers = MapShipMarkers.dedupe_markers(markers)
+	_ship_pending = markers
+	_ship_markers = markers
+	queue_redraw()
+
+	var config := get_node_or_null("/root/ServerConfig")
+	if config != null and bool(config.get("is_multiplayer_mode")):
+		_ship_fetch_entities = true
+		var url := "%s/v1/entities" % str(config.call("get_http_base_url"))
+		var err := _ship_http.request(url)
+		if err != OK:
+			_ship_fetch_entities = false
+			_request_map_autonomous_fleet()
+	else:
+		_ship_fetch_busy = false
+
+
+func _on_ship_http_completed(
+	result: int,
+	response_code: int,
+	_headers: PackedStringArray,
+	body: PackedByteArray,
+) -> void:
+	if _ship_fetch_entities:
+		_ship_fetch_entities = false
+		if result == HTTPRequest.RESULT_SUCCESS and response_code == 200:
+			var session := get_node_or_null("/root/PlayerSession")
+			MapShipMarkers.append_entity_markers(body, session, get_tree(), _ship_pending)
+		_request_map_autonomous_fleet()
+		return
+
+	# Autonomous fleet response (`scope=map`).
+	if result == HTTPRequest.RESULT_SUCCESS and response_code == 200:
+		var session := get_node_or_null("/root/PlayerSession")
+		MapShipMarkers.append_server_autonomous_markers(body, session, _ship_pending)
+	_finish_map_ship_fetch()
+
+
+func _request_map_autonomous_fleet() -> void:
+	var config := get_node_or_null("/root/ServerConfig")
+	if config == null or not bool(config.get("is_multiplayer_mode")):
+		_finish_map_ship_fetch()
+		return
+
+	var auth := get_node_or_null("/root/AuthSession")
+	if auth == null or not bool(auth.call("is_authenticated")):
+		_finish_map_ship_fetch()
+		return
+
+	var url := "%s/v1/autonomous_vessels?scope=map" % str(config.call("get_http_base_url"))
+	var headers: PackedStringArray = auth.call("auth_headers", "") as PackedStringArray
+	var err := _ship_http.request(url, headers)
+	if err != OK:
+		_finish_map_ship_fetch()
+
+
+func _finish_map_ship_fetch() -> void:
+	_ship_markers = MapShipMarkers.dedupe_markers(_ship_pending)
+	_ship_fetch_busy = false
+	queue_redraw()
+
+
+func _draw_ship_marker(screen_pos: Vector2, bow_hz: Vector2, col: Color, sz: float) -> void:
+	var fwd := bow_hz
+	if fwd.length_squared() < 1e-10:
+		fwd = Vector2(0.0, -1.0)
+	else:
+		fwd = fwd.normalized()
+	var perp := Vector2(-fwd.y, fwd.x)
+	draw_circle(screen_pos, sz + 3.0, Color(col.r, col.g, col.b, 0.18))
+	draw_colored_polygon(PackedVector2Array([
+		screen_pos + fwd * sz,
+		screen_pos - fwd * sz * 0.5 + perp * sz * 0.5,
+		screen_pos - fwd * sz * 0.5 - perp * sz * 0.5,
+	]), col)
+
 
 func _w2s(world: Vector3) -> Vector2:
 	return _w2s_f(world.x, world.z)
