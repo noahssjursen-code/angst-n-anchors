@@ -23,7 +23,7 @@ const TP_MAX_PITCH := deg_to_rad(72.0)
 
 @export_group("Feel")
 @export var mouse_sensitivity: float = 0.0015
-@export var base_fov: float = 90.0
+@export var base_fov: float = 75.0
 @export var sprint_fov_multiplier: float = 1.08
 @export var strafe_tilt_angle: float = 1.8
 @export var head_bob_frequency: float = 10.0

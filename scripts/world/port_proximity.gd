@@ -2,7 +2,7 @@ class_name PortProximity
 extends Node
 
 ## Tracks the player's nearest port and updates GameState.world.nearest_port_id.
-## AutonomousVesselManager listens for port changes to reload DB-backed fleet NPCs.
+## Tracks nearest port for UI / world systems.
 
 const CHECK_INTERVAL_S := 1.0
 const PORT_CONTEXT_RADIUS_M := 3500.0

@@ -50,14 +50,11 @@ Two shared bases to be added during cleanup:
 
 ### `scripts/ship/`
 
-Everything the boat does. `BoatBody` (RigidBody3D root), plus components all composed by `ShipBuilder`:
-- `BuoyancyComponent`, `HydrodynamicsComponent`
-- `PropulsionComponent`, `RudderComponent`, `BowThrusterComponent`
-- `BoatController`, `BoatCamera`
-- `MooringComponent`, `CargoDeckComponent`
-- `ShipLight`, `ShipLighting`
-- `BoatAudioSystem`
-- `ShipBuilder` (factory — reads ship template JSON, produces a complete `BoatBody`)
+Everything the boat does. Hand-authored `BoatBody` vessels plus socket-mounted attachments:
+- Core: buoyancy, hydro, propulsion, rudder, thruster, controller, camera, mooring solver, walk deck
+- Attachments: cabin/helm, cargo decks, fishing, cleats, lights, ship crane stub
+- `VesselSpawn` + `AttachmentMount` + `VesselLoadout` / `VesselKits`
+- `HullRegistry` (catalog), shipwright catalog → shipyard outfit UI
 
 ### `scripts/ocean/`
 
@@ -96,7 +93,7 @@ All NPCs.
 - `NpcBase` — shared base class
 - `NpcInteractable` — the interactable wrapper for NPCs
 - `HarbourMasterNpc` — berth assignment, vessel info, dues
-- `ShipwrightNpc` — commission ships, hull catalog
+- `ShipwrightNpc` — hull catalog → shipyard outfit (job kits) → commission
 - `ContractNpc` — post/accept contracts
 - `DeliveryNpc` — receive deliveries
 
@@ -166,33 +163,21 @@ No UI node should reach into a system node to read values. No system should reac
 
 ---
 
-## Ship Building Pipeline
+## Vessel Pipeline
 
-Ships are pure data → runtime assembly. Never hand-place ship components in the scene editor for new ships.
+Hand-authored hull + 1×1×1 m brick deck fit-out.
 
 ```
-resources/data/models/hulls/hull_name.json    — geometry parts + slots
-resources/data/ships/ship_name.json           — hull ref + scale + physics params + cargo decks
+scenes/vessels/workboat.tscn  +  Workboat._assemble()
           ↓
-ShipBuilder.build("res://resources/data/ships/ship_name.json")
+BoatBody (SI sizes + faces + core systems)
           ↓
-BoatBody (RigidBody3D)
-  ├── MeshTransformer parts (hull geometry)
-  ├── BuoyancyComponent
-  ├── HydrodynamicsComponent
-  ├── PropulsionComponent
-  ├── RudderComponent
-  ├── BowThrusterComponent
-  ├── BoatController
-  ├── BoatCamera
-  ├── MooringComponent
-  │     ├── MooringPoint (×4, from slots)
-  ├── CargoDeckComponent (×N, from template)
-  └── Bridge superstructure (loaded from scenes/shared/superstructures/)
+DeckFitout.apply(boat, brick_layout)   # walls, cargo, crane, helm
+DeckFitout.ensure_auto_utilities()     # cleats + nav lights
 ```
 
-Hull orientation: **Bow = +Z, Stern = −Z, Port = −X, Starboard = +X.**
-All hull parts use `"rotation_degrees": [0, -90, 0]` to bake authored orientation into world space. No extra rotation anywhere else in the pipeline.
+Workboat orientation: **Bow = −Z, Stern = +Z, Port = −X, Starboard = +X.**
+Shipwright: fullscreen `ShipyardBrickEditor` paints the grid; ledger stores `brick_layout`.
 
 ---
 
@@ -200,19 +185,14 @@ All hull parts use `"rotation_degrees": [0, -90, 0]` to bake authored orientatio
 
 ```
 resources/data/
-  ships/              # Ship templates → ShipBuilder
   models/
-    hulls/            # Hull JSONs with slots (geometry + attachment points)
-    ships/            # Ship model JSONs (legacy, being phased out)
-    superstructures/  # Bridge scene references
     buildings/        # Building model JSONs
   meshes/             # Raw {vertices, indices} JSON by category
-    hulls/
-    bridges/
     docks/
     port_buildings/
     lighthouse/ foghorn/ props/ characters/ terrain/
   lights/             # Nav-light configs
+scenes/vessels/       # Hand-authored BoatBody scenes (workboat.tscn)
 ```
 
 Rule: `meshes/` contains only `{vertices, indices}` files. `models/` contains only `{parts}` files that reference meshes. No mixing.

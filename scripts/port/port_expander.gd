@@ -15,7 +15,7 @@ const BERTH_COUNT_BY_SIZE: Dictionary = {
 	4: 5,
 }
 
-## Width (m) of each berth slot along the dock face — cranes/aprons scale with this.
+## Width (m) of each berth slot along the dock face — must fit the 30 m workboat.
 const SLOT_WIDTH_BY_SIZE: Dictionary = {
 	0:  40.0,
 	1:  50.0,

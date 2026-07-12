@@ -2,22 +2,21 @@ class_name HullStations
 extends Resource
 
 ## Strip-theory hull data: the hull sliced into N stations along its length, each carrying
-## a cross-section profile. Built once per hull at ShipBuilder time from the hull JSON's
-## raw vertices, then consumed by StripBuoyancyComponent each physics tick to compute
-## per-station submerged area → lift force.
+## a cross-section profile. Built once per vessel (HullStations.from_box for box hulls, or
+## from_hull_json for legacy mesh-derived profiles), then consumed by StripBuoyancyComponent
+## each physics tick to compute per-station submerged area → lift force.
 ##
-## Coordinates are ship-local at scale 1.0 (BoatBody / physics frame). Multiply by mesh_scale at runtime.
-## −Z is bow (forward), +Z is stern. Y is up, X is beam.
-##
-## Hull JSON parts apply Y = −90°; BODY_FRAME_Y_ROT matches ShipBuilder.SHIP_FRAME_Y_ROT.
-
-const BODY_FRAME_Y_ROT := deg_to_rad(-90.0)
+## Coordinates are ship-local metres (1 unit = 1 m). No world scale multipliers.
+## −Z is bow (forward / Godot forward), +Z is stern. Y is up, X is beam (starboard +X).
 ##
 ## Each `stations[i]` is a Dictionary:
 ##   z       — ship-local Z position of the station (length axis)
 ##   section — Array[Vector2], sorted by y ascending. Each Vector2 = (y, half_beam).
 ##             half_beam = max |X| at this Y for the slice of hull around station Z.
 ##             A linear interpolation between adjacent y samples defines the section.
+
+## Legacy mesh bake only — unused by hand-authored metre vessels.
+const BODY_FRAME_Y_ROT := deg_to_rad(-90.0)
 
 @export var stations: Array = []
 @export var length_m: float = 0.0           ## bow-to-stern span (Z range)
@@ -89,6 +88,28 @@ func station_length(idx: int) -> float:
 	var z_prev: float = stations[idx - 1]["z"] if idx > 0 else z
 	var z_next: float = stations[idx + 1]["z"] if idx < stations.size() - 1 else z
 	return 0.5 * (z_next - z_prev)
+
+
+## Rectangular barge/workboat stations in metres (bow −Z, stern +Z, keel y=0).
+static func from_box(length_m: float, beam_m: float, depth_m: float, station_count: int = 10) -> HullStations:
+	var result := HullStations.new()
+	var L := maxf(length_m, 1.0)
+	var B := maxf(beam_m, 1.0)
+	var D := maxf(depth_m, 0.5)
+	var hb := B * 0.5
+	var n := maxi(station_count, 3)
+	result.length_m = L
+	result.beam_m = B
+	result.height_m = D
+	result.keel_y = 0.0
+	result.deck_y = D
+	var section: Array = [Vector2(0.0, hb), Vector2(D, hb)]
+	for i in range(n):
+		var t := float(i) / float(maxi(n - 1, 1))
+		var z := lerpf(-L * 0.5, L * 0.5, t)
+		result.stations.append({"z": z, "section": section.duplicate()})
+	result.displacement_volume_m3 = L * B * D
+	return result
 
 
 ## Build a HullStations resource from a hull JSON dictionary at scale 1.0.

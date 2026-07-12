@@ -19,6 +19,7 @@ var _refresh_clock: float = 0.0
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	top_level = true
+	add_to_group("berth_lane_debug")
 	_mesh_root = Node3D.new()
 	_mesh_root.name = "LaneMeshes"
 	add_child(_mesh_root)
@@ -56,6 +57,15 @@ func refresh_now() -> void:
 	_refresh_clock = REFRESH_SEC
 
 
+## Find any live drawer in the tree and refresh it (world / port bake hooks).
+static func refresh_if_enabled(tree: SceneTree) -> void:
+	if tree == null or not BerthApproachLanes.debug_visible:
+		return
+	for node in tree.get_nodes_in_group("berth_lane_debug"):
+		if node.has_method("refresh_now"):
+			node.call("refresh_now")
+
+
 func _process(delta: float) -> void:
 	if not visible:
 		return
@@ -71,28 +81,6 @@ func _rebuild() -> void:
 	if not BerthApproachLanes.is_initialized():
 		return
 	_draw_polylines(BerthApproachLanes.collect_debug_polylines())
-	
-	# Draw roundabout octagons for each island/port in magenta/pink
-	var port_ids = BerthApproachLanes._lanes.keys()
-	var pink := Color(1.0, 0.08, 0.58, 0.95) # Vibrant pink/magenta
-	for port_id in port_ids:
-		var verts := PackedVector3Array()
-		verts.resize(8 * 2)
-		var idx := 0
-		for i in range(8):
-			var p0 := AutonomousTransitRoute._roundabout_node_world(port_id, i)
-			var p1 := AutonomousTransitRoute._roundabout_node_world(port_id, (i + 1) % 8)
-			if p0 != Vector3.ZERO and p1 != Vector3.ZERO:
-				verts[idx] = _lift(p0)
-				verts[idx + 1] = _lift(p1)
-				idx += 2
-		if idx > 0:
-			verts.resize(idx)
-			_add_line_mesh(
-				"Roundabout_%s" % port_id,
-				verts,
-				pink
-			)
 
 
 func _draw_polylines(polylines: Array) -> void:

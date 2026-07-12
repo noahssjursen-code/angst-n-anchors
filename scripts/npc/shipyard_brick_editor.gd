@@ -1,0 +1,1151 @@
+class_name ShipyardBrickEditor
+extends CanvasLayer
+
+## Fullscreen build window: bare hull canvas + left item list.
+## Shipwright catalog only picks the hull; humans do the building here.
+
+signal closed
+signal layout_confirmed(hull_entry: Dictionary, layout: Dictionary, vessel_name: String, editing_uid: String)
+
+enum Tool { PLACE = 0, ERASE = 1 }
+
+var _hull_entry: Dictionary = {}
+var _editing_uid: String = ""
+var _layout: BrickLayout = BrickLayout.new()
+var _grid: DeckGrid
+var _layer_y: int = 0
+var _yaw: int = 0
+var _brick_id: String = "block"
+var _tool: int = Tool.PLACE
+var _painting := false
+var _last_paint_cell: Vector3i = Vector3i(-999, -999, -999)
+
+var _root: Control
+var _viewport: SubViewport
+var _world: Node3D
+var _boat: BoatBody
+var _brick_root: Node3D
+var _brick_visuals: Dictionary = {} ## cell_key → Node3D
+var _grid_overlay: Node3D
+var _ghost: Node3D
+var _ghost_brick_id: String = ""
+var _ghost_cell: Vector3i = Vector3i(-999, -999, -999)
+var _ghost_yaw: int = -1
+var _ghost_valid: bool = false
+const EDITOR_BRICK_ROOT := "EditorBricks"
+var _camera: Camera3D
+var _cam_yaw: float = 35.0
+var _cam_pitch: float = -35.0
+var _cam_dist: float = 48.0
+var _cam_target: Vector3 = Vector3(0.0, 2.5, 0.0)
+var _orbiting := false
+var _panning := false
+var _orbit_last: Vector2 = Vector2.ZERO
+
+var _hull_lbl: Label
+var _status_lbl: Label
+var _rules_lbl: Label
+var _caps_lbl: Label
+var _layer_lbl: Label
+var _name_edit: LineEdit
+var _brick_rows: Dictionary = {} ## brick_id → PanelContainer
+var _confirm_btn: Button
+var _back_btn: Button
+var _vp_host: SubViewportContainer
+const THUMB_PX := 80
+const MAX_VESSEL_NAME_LEN := 28
+
+
+func _init() -> void:
+	name = "ShipyardBrickEditor"
+	layer = 14
+	_build_chrome()
+
+
+func _ready() -> void:
+	var vp := get_viewport()
+	if vp != null and not vp.size_changed.is_connected(_resize):
+		vp.size_changed.connect(_resize)
+
+
+func is_open() -> bool:
+	return _root != null and _root.visible
+
+
+func open_for_hull(
+	hull_entry: Dictionary,
+	existing_layout: Dictionary = {},
+	editing_uid: String = "",
+	vessel_name: String = "",
+) -> void:
+	_hull_entry = hull_entry.duplicate(true)
+	_editing_uid = editing_uid.strip_edges()
+	_grid = Workboat.make_grid()
+	_layout = BrickLayout.new()
+	_layout.hull_id = str(hull_entry.get("id", "workboat"))
+	# Only restore a prior layout when explicitly passed — never auto-configure.
+	if not existing_layout.is_empty():
+		_layout = BrickLayout.from_dict(existing_layout)
+	_layer_y = 0
+	_yaw = 0
+	_brick_id = "block"
+	_tool = Tool.PLACE
+	var hull_label := str(hull_entry.get("display", "Vessel"))
+	if _editing_uid.is_empty():
+		_hull_lbl.text = "New build — %s" % hull_label
+		_confirm_btn.text = "Confirm build"
+		_back_btn.text = "Back to hulls"
+	else:
+		_hull_lbl.text = "Refit — %s" % hull_label
+		_confirm_btn.text = "Save refit"
+		_back_btn.text = "Back to yard"
+	var suggested := vessel_name.strip_edges()
+	if suggested.is_empty():
+		suggested = VesselSpawn.vessel_name_of({
+			"name": "",
+			"display": hull_label,
+		})
+	_name_edit.text = suggested
+	_resize()
+	_root.visible = true
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	_rebuild_preview()
+	_refresh_rules()
+	_refresh_palette_selection()
+
+
+func is_refitting() -> bool:
+	return not _editing_uid.is_empty()
+
+
+func hide_editor() -> void:
+	_root.visible = false
+	_clear_preview()
+
+
+func _close() -> void:
+	hide_editor()
+	closed.emit()
+
+
+func _build_chrome() -> void:
+	_root = Control.new()
+	_root.name = "EditorRoot"
+	_root.visible = false
+	_root.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_root.theme = HudStyle.make_theme()
+	add_child(_root)
+
+	var bg := ColorRect.new()
+	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
+	bg.color = Color(0.04, 0.05, 0.07, 1.0)
+	_root.add_child(bg)
+
+	var main := HBoxContainer.new()
+	main.set_anchors_preset(Control.PRESET_FULL_RECT)
+	main.add_theme_constant_override("separation", 0)
+	_root.add_child(main)
+
+	# ── LEFT: item list ──────────────────────────────────────────────────────
+	var side := PanelContainer.new()
+	side.custom_minimum_size = Vector2(360, 0)
+	side.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	var side_sb := StyleBoxFlat.new()
+	side_sb.bg_color = HudStyle.C_BG
+	side_sb.border_color = HudStyle.C_BRASS
+	side_sb.set_border_width_all(1)
+	side.add_theme_stylebox_override("panel", side_sb)
+	main.add_child(side)
+
+	var margin := MarginContainer.new()
+	margin.add_theme_constant_override("margin_left", 14)
+	margin.add_theme_constant_override("margin_right", 14)
+	margin.add_theme_constant_override("margin_top", 12)
+	margin.add_theme_constant_override("margin_bottom", 12)
+	side.add_child(margin)
+
+	var col := VBoxContainer.new()
+	col.add_theme_constant_override("separation", 8)
+	margin.add_child(col)
+
+	var title := Label.new()
+	title.text = "BUILD"
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.add_theme_font_size_override("font_size", 20)
+	title.add_theme_color_override("font_color", HudStyle.C_AMBER)
+	col.add_child(title)
+
+	_hull_lbl = Label.new()
+	_hull_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_hull_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_hull_lbl.add_theme_font_size_override("font_size", 13)
+	_hull_lbl.add_theme_color_override("font_color", HudStyle.C_TEXT)
+	col.add_child(_hull_lbl)
+
+	_status_lbl = Label.new()
+	_status_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_status_lbl.add_theme_font_size_override("font_size", 12)
+	_status_lbl.add_theme_color_override("font_color", HudStyle.C_LABEL)
+	_status_lbl.text = "Empty deck — place items yourself.\nLMB place · RMB orbit · MMB pan · Scroll zoom\n[ ] layer · R rotate · X erase\nCell = 1.0 m  ·  Hull = 30×24 m  ·  Grid = 30×24"
+	col.add_child(_status_lbl)
+
+	col.add_child(HSeparator.new())
+
+	var items_hdr := Label.new()
+	items_hdr.text = "ITEMS"
+	items_hdr.add_theme_color_override("font_color", HudStyle.C_AMBER)
+	col.add_child(items_hdr)
+
+	var brick_scroll := ScrollContainer.new()
+	brick_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	brick_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	col.add_child(brick_scroll)
+
+	var brick_col := VBoxContainer.new()
+	brick_col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	brick_col.add_theme_constant_override("separation", 6)
+	brick_scroll.add_child(brick_col)
+
+	_brick_rows.clear()
+	for id in BrickCatalog.ids():
+		var row := _make_item_row(id)
+		brick_col.add_child(row)
+		_brick_rows[id] = row
+
+	var tool_row := HBoxContainer.new()
+	tool_row.add_theme_constant_override("separation", 6)
+	col.add_child(tool_row)
+	var place_btn := UiBuilder.button("Place")
+	place_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	place_btn.pressed.connect(func() -> void: _tool = Tool.PLACE; _refresh_palette_selection(); _refresh_ghost_from_mouse())
+	tool_row.add_child(place_btn)
+	var erase_btn := UiBuilder.button("Erase")
+	erase_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	erase_btn.pressed.connect(func() -> void: _tool = Tool.ERASE; _refresh_palette_selection(); _clear_ghost())
+	tool_row.add_child(erase_btn)
+
+	var tool_row2 := HBoxContainer.new()
+	tool_row2.add_theme_constant_override("separation", 6)
+	col.add_child(tool_row2)
+	var rot_btn := UiBuilder.button("Rotate 90°")
+	rot_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	rot_btn.pressed.connect(func() -> void: _yaw = (_yaw + 90) % 360; _refresh_rules(); _refresh_ghost_from_mouse())
+	tool_row2.add_child(rot_btn)
+	var clear_btn := UiBuilder.button("Clear deck")
+	clear_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	clear_btn.pressed.connect(_clear_layout)
+	tool_row2.add_child(clear_btn)
+
+	_layer_lbl = Label.new()
+	_layer_lbl.add_theme_color_override("font_color", HudStyle.C_TEXT)
+	col.add_child(_layer_lbl)
+
+	var layer_row := HBoxContainer.new()
+	layer_row.add_theme_constant_override("separation", 6)
+	col.add_child(layer_row)
+	var down := UiBuilder.button("Layer −")
+	down.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	down.pressed.connect(func() -> void: _layer_y = maxi(_layer_y - 1, 0); _refresh_grid_overlay(); _refresh_rules(); _refresh_ghost_from_mouse())
+	layer_row.add_child(down)
+	var up := UiBuilder.button("Layer +")
+	up.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	up.pressed.connect(func() -> void: _layer_y = mini(_layer_y + 1, 24); _refresh_grid_overlay(); _refresh_rules(); _refresh_ghost_from_mouse())
+	layer_row.add_child(up)
+
+	col.add_child(HSeparator.new())
+
+	_rules_lbl = Label.new()
+	_rules_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_rules_lbl.add_theme_font_size_override("font_size", 12)
+	_rules_lbl.add_theme_color_override("font_color", HudStyle.C_TEXT)
+	col.add_child(_rules_lbl)
+
+	_caps_lbl = Label.new()
+	_caps_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_caps_lbl.add_theme_font_size_override("font_size", 12)
+	_caps_lbl.add_theme_color_override("font_color", HudStyle.C_LABEL)
+	col.add_child(_caps_lbl)
+
+	col.add_child(HSeparator.new())
+
+	var name_lbl := Label.new()
+	name_lbl.text = "Vessel name"
+	name_lbl.add_theme_font_size_override("font_size", 12)
+	name_lbl.add_theme_color_override("font_color", HudStyle.C_LABEL)
+	col.add_child(name_lbl)
+
+	_name_edit = LineEdit.new()
+	_name_edit.placeholder_text = "Name your vessel"
+	_name_edit.max_length = MAX_VESSEL_NAME_LEN
+	_name_edit.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	col.add_child(_name_edit)
+
+	_confirm_btn = UiBuilder.button("Confirm build")
+	_confirm_btn.pressed.connect(_on_confirm)
+	col.add_child(_confirm_btn)
+
+	_back_btn = UiBuilder.button("Back to hulls")
+	_back_btn.pressed.connect(_close)
+	col.add_child(_back_btn)
+
+	# ── RIGHT: 3D hull canvas ────────────────────────────────────────────────
+	_vp_host = SubViewportContainer.new()
+	_vp_host.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_vp_host.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_vp_host.stretch = true
+	_vp_host.mouse_filter = Control.MOUSE_FILTER_STOP
+	_vp_host.gui_input.connect(_on_viewport_gui_input)
+	main.add_child(_vp_host)
+
+	_viewport = SubViewport.new()
+	_viewport.own_world_3d = true
+	_viewport.size = Vector2i(1280, 720)
+	_viewport.render_target_update_mode = SubViewport.UPDATE_WHEN_VISIBLE
+	_viewport.handle_input_locally = true
+	_vp_host.add_child(_viewport)
+
+	_world = Node3D.new()
+	_world.name = "EditorWorld"
+	_viewport.add_child(_world)
+
+	_camera = Camera3D.new()
+	_camera.fov = 50.0
+	_camera.current = true
+	_world.add_child(_camera)
+
+	var sun := DirectionalLight3D.new()
+	sun.rotation_degrees = Vector3(-48.0, 40.0, 0.0)
+	sun.light_energy = 1.2
+	_world.add_child(sun)
+
+	var fill := DirectionalLight3D.new()
+	fill.rotation_degrees = Vector3(-15.0, -130.0, 0.0)
+	fill.light_energy = 0.35
+	_world.add_child(fill)
+
+	var env := WorldEnvironment.new()
+	var we := Environment.new()
+	we.background_mode = Environment.BG_COLOR
+	we.background_color = Color(0.06, 0.08, 0.11)
+	we.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
+	we.ambient_light_color = Color(0.2, 0.22, 0.26)
+	we.ambient_light_energy = 0.95
+	env.environment = we
+	_world.add_child(env)
+
+
+func _resize() -> void:
+	if _viewport == null or _vp_host == null:
+		return
+	var sz := _vp_host.size
+	if sz.x > 4.0 and sz.y > 4.0:
+		_viewport.size = Vector2i(int(sz.x), int(sz.y))
+
+
+func _unhandled_input(event: InputEvent) -> void:
+	if not is_open():
+		return
+	if event.is_action_pressed("ui_cancel"):
+		_close()
+		get_viewport().set_input_as_handled()
+		return
+	if event is InputEventKey and event.pressed and not event.echo:
+		var key := event as InputEventKey
+		match key.keycode:
+			KEY_R:
+				_yaw = (_yaw + 90) % 360
+				_refresh_rules()
+				_refresh_ghost_from_mouse()
+				get_viewport().set_input_as_handled()
+			KEY_X:
+				_tool = Tool.ERASE if _tool == Tool.PLACE else Tool.PLACE
+				_refresh_palette_selection()
+				_clear_ghost()
+				_refresh_ghost_from_mouse()
+				get_viewport().set_input_as_handled()
+			KEY_BRACKETLEFT:
+				_layer_y = maxi(_layer_y - 1, 0)
+				_refresh_grid_overlay()
+				_refresh_rules()
+				_refresh_ghost_from_mouse()
+				get_viewport().set_input_as_handled()
+			KEY_BRACKETRIGHT:
+				_layer_y = mini(_layer_y + 1, 24)
+				_refresh_grid_overlay()
+				_refresh_rules()
+				_refresh_ghost_from_mouse()
+				get_viewport().set_input_as_handled()
+
+
+func _on_viewport_gui_input(event: InputEvent) -> void:
+	if not is_open():
+		return
+	if event is InputEventMouseButton:
+		var mb := event as InputEventMouseButton
+		if mb.button_index == MOUSE_BUTTON_WHEEL_UP and mb.pressed:
+			_cam_dist = maxf(12.0, _cam_dist * 0.9)
+			_update_camera()
+		elif mb.button_index == MOUSE_BUTTON_WHEEL_DOWN and mb.pressed:
+			_cam_dist = minf(120.0, _cam_dist * 1.1)
+			_update_camera()
+		elif mb.button_index == MOUSE_BUTTON_RIGHT:
+			_orbiting = mb.pressed
+			_panning = false
+			_orbit_last = mb.position
+		elif mb.button_index == MOUSE_BUTTON_MIDDLE:
+			_panning = mb.pressed
+			_orbiting = false
+			_orbit_last = mb.position
+		elif mb.button_index == MOUSE_BUTTON_LEFT:
+			_painting = mb.pressed
+			if mb.pressed:
+				_last_paint_cell = Vector3i(-999, -999, -999)
+				_paint_at_screen(mb.position)
+			else:
+				_last_paint_cell = Vector3i(-999, -999, -999)
+	elif event is InputEventMouseMotion:
+		var mm := event as InputEventMouseMotion
+		if _orbiting:
+			var delta := mm.position - _orbit_last
+			_orbit_last = mm.position
+			_cam_yaw -= delta.x * 0.35
+			_cam_pitch = clampf(_cam_pitch - delta.y * 0.25, -80.0, -8.0)
+			_update_camera()
+		elif _panning:
+			var delta := mm.position - _orbit_last
+			_orbit_last = mm.position
+			var yaw_r := deg_to_rad(_cam_yaw)
+			var right := Vector3(cos(yaw_r), 0.0, -sin(yaw_r))
+			var forward := Vector3(-sin(yaw_r), 0.0, -cos(yaw_r))
+			var scale := _cam_dist * 0.0025
+			_cam_target += (-right * delta.x + forward * delta.y) * scale
+			_update_camera()
+		elif _painting and Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
+			_paint_at_screen(mm.position)
+		else:
+			_update_ghost_at_screen(mm.position)
+
+
+func _paint_at_screen(screen_pos: Vector2) -> void:
+	var cell := _pick_cell(screen_pos)
+	if cell.x < 0:
+		return
+	# Dragging across the same cell must not re-sync every motion event.
+	if cell == _last_paint_cell:
+		return
+	_last_paint_cell = cell
+	if _tool == Tool.ERASE:
+		if not _layout.has_cell(cell):
+			return
+		_layout.erase_footprint_at(cell)
+	else:
+		if not _try_place(cell):
+			return
+	_sync_brick_visuals()
+	_refresh_rules()
+
+
+func _try_place(cell: Vector3i) -> bool:
+	var entry := BrickCatalog.get_entry(_brick_id)
+	if entry.is_empty():
+		return false
+	if bool(entry.get("deck_only", false)) and cell.y != 0:
+		return false
+	var fp := BrickCatalog.footprint_of(_brick_id)
+	var yaw := _yaw
+	# Edge pieces (hull ladder) snap yaw outboard and must sit on the perimeter.
+	if bool(entry.get("edge_only", false)):
+		if cell.y != 0:
+			return false
+		yaw = _grid.outboard_yaw_degrees(cell, fp, 0)
+		var yaw_steps_edge := int(round(float(yaw) / 90.0)) % 4
+		if not _grid.footprint_touches_edge(cell, fp, yaw_steps_edge):
+			return false
+		_yaw = yaw
+	var yaw_steps := int(round(float(yaw) / 90.0)) % 4
+	var cells := _grid.footprint_cells(cell, fp, yaw_steps)
+	for c in cells:
+		if not _grid.in_bounds(c):
+			return false
+	for c in cells:
+		if _layout.has_cell(c):
+			_layout.erase_footprint_at(c)
+	return _layout.place_footprint(cell, _brick_id, yaw, _grid)
+
+
+func _placement_legal(cell: Vector3i, brick_id: String, yaw: int) -> bool:
+	if cell.x < 0 or _grid == null:
+		return false
+	var entry := BrickCatalog.get_entry(brick_id)
+	if entry.is_empty():
+		return false
+	if bool(entry.get("deck_only", false)) and cell.y != 0:
+		return false
+	var fp := BrickCatalog.footprint_of(brick_id)
+	var use_yaw := yaw
+	if bool(entry.get("edge_only", false)):
+		if cell.y != 0:
+			return false
+		use_yaw = _grid.outboard_yaw_degrees(cell, fp, 0)
+		var ys := int(round(float(use_yaw) / 90.0)) % 4
+		if not _grid.footprint_touches_edge(cell, fp, ys):
+			return false
+	var yaw_steps := int(round(float(use_yaw) / 90.0)) % 4
+	for c in _grid.footprint_cells(cell, fp, yaw_steps):
+		if not _grid.in_bounds(c):
+			return false
+	return true
+
+
+func _ghost_yaw_for(cell: Vector3i, brick_id: String) -> int:
+	var entry := BrickCatalog.get_entry(brick_id)
+	if bool(entry.get("edge_only", false)):
+		return _grid.outboard_yaw_degrees(cell, BrickCatalog.footprint_of(brick_id), 0)
+	return _yaw
+
+
+func _refresh_ghost_from_mouse() -> void:
+	if not is_open() or _vp_host == null:
+		return
+	_update_ghost_at_screen(_vp_host.get_local_mouse_position())
+
+
+func _update_ghost_at_screen(screen_pos: Vector2) -> void:
+	if not is_open() or _world == null or _grid == null:
+		return
+	if _tool == Tool.ERASE:
+		_clear_ghost()
+		return
+	var cell := _pick_cell(screen_pos)
+	if cell.x < 0:
+		_clear_ghost()
+		return
+	var yaw := _ghost_yaw_for(cell, _brick_id)
+	var valid := _placement_legal(cell, _brick_id, yaw)
+	if (
+		_ghost != null and is_instance_valid(_ghost)
+		and _ghost_brick_id == _brick_id
+		and _ghost_cell == cell
+		and _ghost_yaw == yaw
+		and _ghost_valid == valid
+	):
+		return
+	# Reuse the ghost mesh when only pose changed (same brick + validity).
+	if (
+		_ghost != null and is_instance_valid(_ghost)
+		and _ghost_brick_id == _brick_id
+		and _ghost_valid == valid
+	):
+		_ghost_cell = cell
+		_ghost_yaw = yaw
+		_ghost.position = DeckFitout.footprint_center_local(_grid, cell, _brick_id, yaw)
+		_ghost.rotation_degrees = Vector3(0.0, float(yaw), 0.0)
+		return
+	_clear_ghost()
+	_ghost_brick_id = _brick_id
+	_ghost_cell = cell
+	_ghost_yaw = yaw
+	_ghost_valid = valid
+	_ghost = BrickCatalog.create_visual(_brick_id, {"preview_mesh": true})
+	_ghost.name = "PlaceGhost"
+	_ghost.position = DeckFitout.footprint_center_local(_grid, cell, _brick_id, yaw)
+	_ghost.rotation_degrees = Vector3(0.0, float(yaw), 0.0)
+	_tint_ghost(_ghost, valid)
+	# Parent to boat so local footprint coords match placed bricks.
+	if _boat != null and is_instance_valid(_boat):
+		_boat.add_child(_ghost)
+	else:
+		_world.add_child(_ghost)
+
+
+func _tint_ghost(root: Node3D, valid: bool) -> void:
+	var tint := Color(0.35, 0.95, 0.55, 0.42) if valid else Color(0.95, 0.28, 0.25, 0.42)
+	var stack: Array[Node] = [root]
+	while not stack.is_empty():
+		var n: Node = stack.pop_back()
+		for c in n.get_children():
+			stack.append(c)
+		var mi := n as MeshInstance3D
+		if mi == null:
+			continue
+		var mat := StandardMaterial3D.new()
+		if mi.material_override is StandardMaterial3D:
+			mat = (mi.material_override as StandardMaterial3D).duplicate() as StandardMaterial3D
+		mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		mat.albedo_color = Color(
+			tint.r * 0.55 + mat.albedo_color.r * 0.45,
+			tint.g * 0.55 + mat.albedo_color.g * 0.45,
+			tint.b * 0.55 + mat.albedo_color.b * 0.45,
+			tint.a,
+		)
+		mat.roughness = 0.85
+		mat.metallic = 0.0
+		mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		mat.no_depth_test = true
+		mi.material_override = mat
+		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+
+
+func _clear_ghost() -> void:
+	if _ghost != null and is_instance_valid(_ghost):
+		_ghost.queue_free()
+	_ghost = null
+	_ghost_brick_id = ""
+	_ghost_cell = Vector3i(-999, -999, -999)
+	_ghost_yaw = -1
+	_ghost_valid = false
+
+
+func _pick_cell(screen_pos: Vector2) -> Vector3i:
+	if _camera == null or _grid == null:
+		return Vector3i(-1, -1, -1)
+	var from := _camera.project_ray_origin(screen_pos)
+	var dir := _camera.project_ray_normal(screen_pos)
+	var plane_y := _grid.deck_y + float(_layer_y) * DeckGrid.CELL_M + 0.05
+	if absf(dir.y) < 0.0001:
+		return Vector3i(-1, -1, -1)
+	var t := (plane_y - from.y) / dir.y
+	if t < 0.0:
+		return Vector3i(-1, -1, -1)
+	var hit := from + dir * t
+	var cell := _grid.local_to_cell(hit)
+	cell.y = _layer_y
+	if not _grid.in_bounds(cell):
+		return Vector3i(-1, -1, -1)
+	return cell
+
+
+func _make_item_row(brick_id: String) -> PanelContainer:
+	var row := PanelContainer.new()
+	row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row.mouse_filter = Control.MOUSE_FILTER_STOP
+	row.gui_input.connect(func(ev: InputEvent) -> void:
+		if ev is InputEventMouseButton:
+			var mb := ev as InputEventMouseButton
+			if mb.pressed and mb.button_index == MOUSE_BUTTON_LEFT:
+				_select_brick(brick_id)
+	)
+	var sb := StyleBoxFlat.new()
+	sb.bg_color = HudStyle.C_BG_INNER
+	sb.border_color = HudStyle.C_BRASS
+	sb.set_border_width_all(1)
+	sb.set_content_margin_all(6)
+	row.add_theme_stylebox_override("panel", sb)
+	row.set_meta("style", sb)
+
+	var h := HBoxContainer.new()
+	h.add_theme_constant_override("separation", 10)
+	row.add_child(h)
+
+	# Thumbnail plate — solid back so the SubViewport read clearly.
+	var thumb_plate := PanelContainer.new()
+	thumb_plate.custom_minimum_size = Vector2(THUMB_PX + 4, THUMB_PX + 4)
+	thumb_plate.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var plate_sb := StyleBoxFlat.new()
+	plate_sb.bg_color = Color(0.10, 0.11, 0.13, 1.0)
+	plate_sb.set_corner_radius_all(4)
+	plate_sb.set_content_margin_all(2)
+	thumb_plate.add_theme_stylebox_override("panel", plate_sb)
+	h.add_child(thumb_plate)
+
+	var thumb_host := SubViewportContainer.new()
+	thumb_host.custom_minimum_size = Vector2(THUMB_PX, THUMB_PX)
+	thumb_host.stretch = true
+	thumb_host.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	thumb_plate.add_child(thumb_host)
+
+	var svp := SubViewport.new()
+	svp.size = Vector2i(THUMB_PX, THUMB_PX)
+	svp.transparent_bg = false
+	svp.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+	svp.own_world_3d = true
+	svp.disable_3d = false
+	thumb_host.add_child(svp)
+
+	var world := Node3D.new()
+	svp.add_child(world)
+
+	var env_node := WorldEnvironment.new()
+	var env := Environment.new()
+	env.background_mode = Environment.BG_COLOR
+	env.background_color = Color(0.14, 0.15, 0.18)
+	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
+	env.ambient_light_color = Color(0.65, 0.66, 0.70)
+	env.ambient_light_energy = 0.95
+	env_node.environment = env
+	world.add_child(env_node)
+
+	var visual := BrickCatalog.create_visual(brick_id, {"preview_mesh": true})
+	world.add_child(visual)
+
+	var light := DirectionalLight3D.new()
+	light.rotation_degrees = Vector3(-42.0, 38.0, 0.0)
+	light.light_energy = 1.25
+	world.add_child(light)
+
+	var fill := DirectionalLight3D.new()
+	fill.rotation_degrees = Vector3(-12.0, -125.0, 0.0)
+	fill.light_energy = 0.55
+	world.add_child(fill)
+
+	var cam := Camera3D.new()
+	cam.fov = 32.0
+	cam.current = true
+	var sz := BrickCatalog.size_m(brick_id)
+	# Frame tall pieces (door / ladder) without clipping; keep small bricks readable.
+	var reach := maxf(sz.x, maxf(sz.y, sz.z))
+	if brick_id == "hull_ladder":
+		reach = maxf(reach, 3.2)
+	reach = reach * 1.55 + 0.55
+	cam.position = Vector3(reach * 0.78, reach * 0.58, reach * 0.92)
+	cam.look_at(Vector3(0.0, 0.0, 0.0), Vector3.UP)
+	world.add_child(cam)
+
+	var text_col := VBoxContainer.new()
+	text_col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	text_col.alignment = BoxContainer.ALIGNMENT_CENTER
+	h.add_child(text_col)
+
+	var name_lbl := Label.new()
+	name_lbl.text = BrickCatalog.display_name(brick_id)
+	name_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	name_lbl.add_theme_font_size_override("font_size", 14)
+	name_lbl.add_theme_color_override("font_color", HudStyle.C_TEXT)
+	text_col.add_child(name_lbl)
+
+	var fp := BrickCatalog.footprint_of(brick_id)
+	var size_lbl := Label.new()
+	size_lbl.text = "%d×%d×%d cells  (%.1f×%.1f×%.1f m)" % [
+		fp.x, fp.y, fp.z, sz.x, sz.y, sz.z
+	]
+	size_lbl.add_theme_font_size_override("font_size", 11)
+	size_lbl.add_theme_color_override("font_color", HudStyle.C_LABEL)
+	text_col.add_child(size_lbl)
+
+	return row
+
+
+func _select_brick(id: String) -> void:
+	_brick_id = id
+	_tool = Tool.PLACE
+	_refresh_palette_selection()
+	_clear_ghost()
+	_refresh_ghost_from_mouse()
+
+
+func _refresh_palette_selection() -> void:
+	for id in _brick_rows.keys():
+		var row: PanelContainer = _brick_rows[id]
+		var selected := _tool == Tool.PLACE and str(id) == _brick_id
+		var sb: StyleBoxFlat = row.get_meta("style") as StyleBoxFlat
+		if sb != null:
+			sb.border_color = HudStyle.C_AMBER if selected else HudStyle.C_BRASS
+			sb.set_border_width_all(2 if selected else 1)
+			sb.bg_color = Color(0.16, 0.14, 0.10) if selected else HudStyle.C_BG_INNER
+	_layer_lbl.text = "Layer %d  (%.1f m)  ·  Yaw %d°  ·  %s" % [
+		_layer_y, float(_layer_y) * DeckGrid.CELL_M, _yaw,
+		"ERASE" if _tool == Tool.ERASE else "PLACE",
+	]
+
+
+func _clear_layout() -> void:
+	_layout.clear()
+	_sync_brick_visuals()
+	_refresh_rules()
+
+
+func _rebuild_preview() -> void:
+	## Build the bare hull once; brick meshes are maintained incrementally afterward.
+	_clear_ghost()
+	_ensure_editor_boat()
+	_sync_brick_visuals()
+	_refresh_grid_overlay()
+	_update_camera()
+	_refresh_ghost_from_mouse()
+
+
+func _ensure_editor_boat() -> void:
+	if _boat != null and is_instance_valid(_boat):
+		return
+	_boat = Workboat.build()
+	_boat.name = "EditorBoat"
+	_boat.freeze = true
+	# Skip deferred gameplay fit-out / WalkDeck brick colliders in the editor.
+	_boat.set_meta("fitout_applied", true)
+	for child_name in ["BoatController", "BoatCamera", "BoatAudio"]:
+		var n := _boat.get_node_or_null(child_name)
+		if n != null:
+			n.queue_free()
+	_world.add_child(_boat)
+
+
+func _ensure_brick_root() -> void:
+	if _boat == null or not is_instance_valid(_boat):
+		_brick_root = null
+		return
+	_brick_root = _boat.get_node_or_null(EDITOR_BRICK_ROOT) as Node3D
+	if _brick_root == null:
+		_brick_root = Node3D.new()
+		_brick_root.name = EDITOR_BRICK_ROOT
+		_boat.add_child(_brick_root)
+
+
+func _sync_brick_visuals() -> void:
+	_ensure_editor_boat()
+	_ensure_brick_root()
+	if _brick_root == null or _grid == null:
+		return
+
+	var wanted: Dictionary = {} ## cell_key → { cell, brick_id, yaw }
+	var cargo_cells: Array[Vector3i] = []
+	for item in _layout.iter_primary_cells():
+		var cell: Vector3i = item["cell"]
+		var brick_id := str(item.get("brick_id", ""))
+		if BrickCatalog.has_tag(brick_id, "cargo"):
+			cargo_cells.append(cell)
+			continue
+		wanted[BrickLayout.cell_key(cell)] = item
+
+	var stale: Array[String] = []
+	for key in _brick_visuals.keys():
+		var k := str(key)
+		if not wanted.has(k):
+			stale.append(k)
+			continue
+		var node: Node3D = _brick_visuals[k]
+		if node == null or not is_instance_valid(node):
+			stale.append(k)
+			continue
+		var want: Dictionary = wanted[k]
+		var want_id := str(want.get("brick_id", ""))
+		var want_yaw := int(want.get("yaw", 0))
+		if str(node.get_meta("brick_id", "")) != want_id or int(node.get_meta("yaw", 0)) != want_yaw:
+			stale.append(k)
+
+	for k in stale:
+		var old: Variant = _brick_visuals.get(k, null)
+		_brick_visuals.erase(k)
+		if old is Node and is_instance_valid(old as Node):
+			(old as Node).queue_free()
+
+	for key in wanted.keys():
+		var k := str(key)
+		if _brick_visuals.has(k):
+			continue
+		var item: Dictionary = wanted[k]
+		var cell: Vector3i = item["cell"]
+		var brick_id := str(item.get("brick_id", ""))
+		var yaw := int(item.get("yaw", 0))
+		if not BrickCatalog.has(brick_id):
+			continue
+		var visual := BrickCatalog.create_visual(brick_id)
+		visual.name = "%s_%d_%d_%d" % [brick_id, cell.x, cell.y, cell.z]
+		visual.set_meta("brick_id", brick_id)
+		visual.set_meta("yaw", yaw)
+		visual.position = DeckFitout.footprint_center_local(_grid, cell, brick_id, yaw)
+		visual.rotation_degrees = Vector3(0.0, float(yaw), 0.0)
+		_brick_root.add_child(visual)
+		_brick_visuals[k] = visual
+
+	_refresh_cargo_zone_preview(cargo_cells)
+
+
+func _refresh_cargo_zone_preview(cargo_cells: Array[Vector3i]) -> void:
+	## One pad + yellow corner brackets — matches spawned CargoDeckComponent look.
+	if _brick_root == null:
+		return
+	var existing := _brick_root.get_node_or_null("CargoZonePreview")
+	if existing != null:
+		_brick_root.remove_child(existing)
+		existing.free()
+	if cargo_cells.is_empty() or _grid == null:
+		return
+
+	var min_x := 999
+	var max_x := -999
+	var min_z := 999
+	var max_z := -999
+	var sum := Vector3.ZERO
+	for c in cargo_cells:
+		min_x = mini(min_x, c.x)
+		max_x = maxi(max_x, c.x)
+		min_z = mini(min_z, c.z)
+		max_z = maxi(max_z, c.z)
+		sum += _grid.cell_center_local(Vector3i(c.x, 0, c.z))
+
+	var w := float(max_x - min_x + 1) * DeckGrid.CELL_M
+	var l := float(max_z - min_z + 1) * DeckGrid.CELL_M
+	var center := sum / float(cargo_cells.size())
+	center.y = _grid.deck_y + 0.06
+
+	var zone := Node3D.new()
+	zone.name = "CargoZonePreview"
+	zone.position = center
+	_brick_root.add_child(zone)
+
+	var plate := MeshBuilder.box(Vector3(w * 0.995, 0.03, l * 0.995), Color(0.32, 0.30, 0.26), 0.95, 0.0)
+	plate.position = Vector3(0.0, -0.01, 0.0)
+	zone.add_child(plate)
+
+	var hx := w * 0.5
+	var hz := l * 0.5
+	var arm := clampf(minf(hx, hz) * 0.25, 0.3, 1.2)
+	var thick := 0.12
+	var h := 0.02
+	var col := Color(0.95, 0.82, 0.12)
+	_cargo_zone_corner(zone, -hx, -hz, 1.0, 1.0, arm, thick, h, col)
+	_cargo_zone_corner(zone, hx, -hz, -1.0, 1.0, arm, thick, h, col)
+	_cargo_zone_corner(zone, -hx, hz, 1.0, -1.0, arm, thick, h, col)
+	_cargo_zone_corner(zone, hx, hz, -1.0, -1.0, arm, thick, h, col)
+
+
+func _cargo_zone_corner(
+	root: Node3D,
+	cx: float,
+	cz: float,
+	sx: float,
+	sz: float,
+	arm: float,
+	thick: float,
+	h: float,
+	color: Color,
+) -> void:
+	var a := MeshBuilder.box(Vector3(arm, h, thick), color, 0.85, 0.0)
+	a.position = Vector3(cx + sx * arm * 0.5, h * 0.5, cz)
+	root.add_child(a)
+	var b := MeshBuilder.box(Vector3(thick, h, arm), color, 0.85, 0.0)
+	b.position = Vector3(cx, h * 0.5, cz + sz * arm * 0.5)
+	root.add_child(b)
+
+
+func _clear_preview() -> void:
+	_clear_ghost()
+	_brick_visuals.clear()
+	_brick_root = null
+	if _boat != null and is_instance_valid(_boat):
+		_boat.queue_free()
+	_boat = null
+	if _grid_overlay != null and is_instance_valid(_grid_overlay):
+		_grid_overlay.queue_free()
+	_grid_overlay = null
+
+
+func _refresh_grid_overlay() -> void:
+	if _grid_overlay != null and is_instance_valid(_grid_overlay):
+		_grid_overlay.queue_free()
+	_grid_overlay = Node3D.new()
+	_grid_overlay.name = "GridOverlay"
+	_world.add_child(_grid_overlay)
+	if _grid == null:
+		return
+
+	var y := _grid.deck_y + float(_layer_y) * DeckGrid.CELL_M + 0.04
+	var half_x := _grid.half_beam
+	var half_z := _grid.half_loa
+	var cell := DeckGrid.CELL_M
+
+	# Soft deck wash so the grid reads clearly.
+	var wash := MeshBuilder.box(
+		Vector3(float(_grid.width) * cell, 0.01, float(_grid.length) * cell),
+		Color(0.15, 0.45, 0.75, 0.12),
+		1.0,
+		0.0,
+	)
+	wash.position = Vector3(0.0, y - 0.02, 0.0)
+	var wash_mat := wash.material_override as StandardMaterial3D
+	if wash_mat != null:
+		wash_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		wash_mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+	_grid_overlay.add_child(wash)
+
+	# 1 m cell lines.
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_LINES)
+	var line_col := Color(0.55, 0.85, 1.0, 0.85)
+	for ix in range(_grid.width + 1):
+		var x := -half_x + float(ix) * cell
+		st.set_color(line_col)
+		st.add_vertex(Vector3(x, y, -half_z))
+		st.set_color(line_col)
+		st.add_vertex(Vector3(x, y, half_z))
+	for iz in range(_grid.length + 1):
+		var z := -half_z + float(iz) * cell
+		st.set_color(line_col)
+		st.add_vertex(Vector3(-half_x, y, z))
+		st.set_color(line_col)
+		st.add_vertex(Vector3(half_x, y, z))
+	var mesh := st.commit()
+	var mi := MeshInstance3D.new()
+	mi.mesh = mesh
+	var line_mat := StandardMaterial3D.new()
+	line_mat.vertex_color_use_as_albedo = true
+	line_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	line_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	line_mat.albedo_color = Color(1, 1, 1, 1)
+	mi.material_override = line_mat
+	_grid_overlay.add_child(mi)
+
+	# Outer border thicker (second pass slightly elevated).
+	var border := SurfaceTool.new()
+	border.begin(Mesh.PRIMITIVE_LINES)
+	var edge := Color(1.0, 0.78, 0.25, 1.0)
+	var yb := y + 0.01
+	var corners := [
+		Vector3(-half_x, yb, -half_z), Vector3(half_x, yb, -half_z),
+		Vector3(half_x, yb, -half_z), Vector3(half_x, yb, half_z),
+		Vector3(half_x, yb, half_z), Vector3(-half_x, yb, half_z),
+		Vector3(-half_x, yb, half_z), Vector3(-half_x, yb, -half_z),
+	]
+	for i in range(0, corners.size(), 2):
+		border.set_color(edge)
+		border.add_vertex(corners[i])
+		border.set_color(edge)
+		border.add_vertex(corners[i + 1])
+	var border_mi := MeshInstance3D.new()
+	border_mi.mesh = border.commit()
+	var border_mat := StandardMaterial3D.new()
+	border_mat.vertex_color_use_as_albedo = true
+	border_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	border_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	border_mi.material_override = border_mat
+	_grid_overlay.add_child(border_mi)
+
+	_add_build_face_labels()
+	_add_scale_figure()
+
+
+func _add_scale_figure() -> void:
+	## 1.8 m human silhouette so claimed metres can be eyeballed against the hull.
+	if _grid == null or _grid_overlay == null:
+		return
+	var root := Node3D.new()
+	root.name = "ScaleFigure"
+	# Starboard midships, just outside the deck edge.
+	root.position = Vector3(_grid.half_beam + 0.6, _grid.deck_y, 0.0)
+	_grid_overlay.add_child(root)
+
+	var h := WorldUnits.PLAYER_HEIGHT_M
+	var body := MeshBuilder.box(
+		Vector3(0.45, h * 0.55, 0.28),
+		Color(0.85, 0.55, 0.35, 0.85),
+		0.9,
+		0.0,
+	)
+	body.position = Vector3(0.0, h * 0.45, 0.0)
+	root.add_child(body)
+	var head := MeshBuilder.box(
+		Vector3(0.28, 0.28, 0.28),
+		Color(0.85, 0.55, 0.35, 0.85),
+		0.9,
+		0.0,
+	)
+	head.position = Vector3(0.0, h - 0.14, 0.0)
+	root.add_child(head)
+
+	var tag := Label3D.new()
+	tag.text = "1.8 m"
+	tag.font_size = 24
+	tag.pixel_size = 0.006
+	tag.position = Vector3(0.0, h + 0.25, 0.0)
+	tag.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	tag.modulate = Color(0.85, 0.90, 0.95, 0.7)
+	tag.outline_size = 2
+	root.add_child(tag)
+
+	# One-metre stick on the deck (= one cell).
+	var stick := MeshBuilder.box(
+		Vector3(0.06, 0.06, 1.0),
+		Color(0.95, 0.2, 0.15, 0.9),
+		0.5,
+		0.0,
+	)
+	stick.position = Vector3(_grid.half_beam - 0.2, _grid.deck_y + 0.08, 0.0)
+	_grid_overlay.add_child(stick)
+	var stick_lbl := Label3D.new()
+	stick_lbl.text = "1 m"
+	stick_lbl.font_size = 20
+	stick_lbl.pixel_size = 0.005
+	stick_lbl.position = stick.position + Vector3(0.0, 0.25, 0.0)
+	stick_lbl.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	stick_lbl.modulate = Color(0.95, 0.35, 0.3, 0.75)
+	stick_lbl.outline_size = 2
+	_grid_overlay.add_child(stick_lbl)
+
+
+func _add_build_face_labels() -> void:
+	## Build-editor only orientation cues (not on the live vessel).
+	if _grid == null or _grid_overlay == null:
+		return
+	var y := _grid.deck_y + 0.08
+	var inset := 0.35
+	var labels := [
+		{"text": "BOW", "pos": Vector3(0.0, y, -_grid.half_loa - inset)},
+		{"text": "STERN", "pos": Vector3(0.0, y, _grid.half_loa + inset)},
+		{"text": "PORT", "pos": Vector3(-_grid.half_beam - inset, y, 0.0)},
+		{"text": "STARBOARD", "pos": Vector3(_grid.half_beam + inset, y, 0.0)},
+	]
+	for spec in labels:
+		var label := Label3D.new()
+		label.name = "BuildFace_%s" % str(spec["text"])
+		label.text = str(spec["text"])
+		label.position = spec["pos"] as Vector3
+		label.font_size = 28
+		label.pixel_size = 0.008
+		label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+		label.modulate = Color(0.75, 0.82, 0.90, 0.45)
+		label.outline_modulate = Color(0.02, 0.04, 0.06, 0.35)
+		label.outline_size = 4
+		label.no_depth_test = true
+		_grid_overlay.add_child(label)
+
+
+func _update_camera() -> void:
+	if _camera == null:
+		return
+	var yaw_r := deg_to_rad(_cam_yaw)
+	var pitch_r := deg_to_rad(_cam_pitch)
+	var target := _cam_target
+	var offset := Vector3(
+		_cam_dist * cos(pitch_r) * sin(yaw_r),
+		_cam_dist * -sin(pitch_r),
+		_cam_dist * cos(pitch_r) * cos(yaw_r),
+	)
+	_camera.global_position = target + offset
+	_camera.look_at(target, Vector3.UP)
+
+
+func _refresh_rules() -> void:
+	_refresh_palette_selection()
+	if _grid == null:
+		return
+	var report := BrickRules.validate(_layout, _grid)
+	if _layout.is_empty():
+		_rules_lbl.text = "Free build — 1.0 m cells. Place anything."
+	else:
+		_rules_lbl.text = "Free build — no constraints."
+	var caps: Dictionary = report.get("capabilities", {})
+	_caps_lbl.text = (
+		"Cargo cells: %d\nCabin: %s\nShip crane: %s\nParts: %d"
+		% [
+			int(caps.get("cargo_cells", 0)),
+			"yes" if bool(caps.get("has_cabin", false)) else "no",
+			"yes" if bool(caps.get("has_crane", false)) else "no",
+			int(caps.get("brick_count", 0)),
+		]
+	)
+	_confirm_btn.disabled = false
+
+
+func _on_confirm() -> void:
+	var vessel_name := _name_edit.text.strip_edges()
+	if vessel_name.is_empty():
+		vessel_name = VesselSpawn.vessel_name_of({
+			"name": "",
+			"display": str(_hull_entry.get("display", "Vessel")),
+		})
+	layout_confirmed.emit(
+		_hull_entry.duplicate(true),
+		_layout.to_dict(),
+		vessel_name,
+		_editing_uid,
+	)

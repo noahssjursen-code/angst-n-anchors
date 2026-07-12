@@ -12,18 +12,18 @@ var current_ship: Node3D
 
 
 func spawn_ship() -> Node3D:
-	if ship_scene == null:
-		push_warning("ShipSpawner: no ship scene configured")
-		return null
-
 	var tree := get_tree()
 	if tree != null:
 		PlayerVessel.replace_before_spawn(tree)
 	clear_ship()
 
-	var ship := ship_scene.instantiate() as Node3D
+	var ship: Node3D = null
+	if ship_scene != null:
+		ship = ship_scene.instantiate() as Node3D
+	else:
+		ship = VesselSpawn.instantiate() as Node3D
 	if ship == null:
-		push_warning("ShipSpawner: configured scene is not a Node3D")
+		push_warning("ShipSpawner: failed to instantiate vessel")
 		return null
 
 	ship.name = spawned_ship_name

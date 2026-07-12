@@ -58,6 +58,9 @@ func _boarding_player() -> CharacterBody3D:
 		var body := node as CharacterBody3D
 		if body == null:
 			continue
+		# Hull ladder climb takes priority when the player is at a ladder.
+		if HullLadderBoard.blocks_helm_for(body):
+			continue
 		if not _player_near_boat(body, boat):
 			continue
 		if _player_looking_at_boat(body, boat):

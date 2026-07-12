@@ -8,7 +8,7 @@ A maritime trading game built in Godot. The player drives a boat, picks up cargo
 
 1. **Driving the boat is the game.** Physics-driven helm — propulsion, rudder, bow thruster, hydrodynamics, buoyancy on a wave surface. Distance and weather matter. Sailing the route yourself is the loop.
 2. **Cargo delivery between ports.** Buy or accept a contract at one port, load, sail, unload, get paid. Spot trading and contract board both exist as concepts; contracts are the working path in code today.
-3. **Modular ship design.** A ship = hull JSON + scale + superstructure key + component tuning. `ShipBuilder` assembles a complete `BoatBody` at runtime from a single template file. New hulls, new ships, new variants are all data.
+3. **Modular ship design.** A hand-authored hull scene plus socket-mounted attachments (cabin, cargo, fishing, crane). Loadout is data on the owned-vessel ledger; job kits are presets. Shipyard UI outfits a hull before commission.
 4. **MMO is the destination.** State model (berth reservation, harbour master mediation, contract registry) is being designed shared-session-aware from the start, even though the game currently runs single-player.
 
 ---
@@ -25,51 +25,44 @@ A maritime trading game built in Godot. The player drives a boat, picks up cargo
 
 ---
 
-## Ship Building System (active focus)
+## Vessel System (active focus)
 
-Ships are built from three layers of JSON:
-
-1. **Hull JSON** — `resources/data/models/hulls/*.json`. Mesh parts, materials, collision, plus a `"slots"` dict of named attachment points at scale=1.
-2. **Ship model JSON** — `resources/data/models/ships/*.json`. References a hull, applies scale. Used by existing `.tscn` scenes via `BoatBody.model_data_path`.
-3. **Ship template JSON** — `resources/data/ships/*.json`. Full ship: hull, scale, superstructure key, physics, buoyancy, hydrodynamics, propulsion, rudder, bow thruster, camera, cargo decks. Consumed by `ShipBuilder.build()`.
-
-### Pipeline
+Hand-authored vessel scenes under `scenes/vessels/` own SI hull geometry, core systems, and a **1×1×1 m deck brick grid**. Players fit out vessels in the shipwright fullscreen editor (`ShipyardBrickEditor`). Layout is `brick_layout` on the owned-vessel ledger; `DeckFitout` rebuilds bricks + derived gameplay (cargo deck, helm, crane) at spawn.
 
 ```gdscript
-var boat := ShipBuilder.build("res://resources/data/ships/fuel_tanker.json")
+var boat := VesselSpawn.instantiate_from_record(owned_vessel_record)
 get_tree().current_scene.add_child(boat)
 boat.place_at_waterline(water_y)
 ```
 
-`ShipBuilder` reads the template, loads the hull, multiplies slot positions by the template scale, and instantiates all components in one go.
+Owned vessels persist `brick_layout: { hull_id, cells }`. `BrickRules` enforces height, part budget, doors, crane-on-base. Do not revive `WheelhouseVisual`, hull JSON bridge slots, or `ShipBuilder`.
 
-### Orientation convention
+### Orientation (workboat)
 
-**Bow = +Z, Stern = −Z, Port = −X, Starboard = +X.** Hull mesh parts use `rotation_degrees: [0, -90, 0]` to bake authored vertex orientation into world space. Do not add extra rotation in ship model JSONs or scene files. See [SHIP_BUILDING.md](SHIP_BUILDING.md) for the full convention and the historical bugs that have already been fixed.
+**Bow = −Z, Stern = +Z, Port = −X, Starboard = +X.** Sockets are in vessel metres.
 
-### Hull slots
+### Deck bricks (starter catalog)
 
-| Slot | Purpose |
+| Brick | Role |
 |---|---|
-| `bridge` | Superstructure origin |
-| `propulsion` | Propeller, stern, below waterline |
-| `bow_thruster` | Bow tunnel thruster |
-| `mooring_port_fwd` / `mooring_stbd_fwd` / `mooring_port_aft` / `mooring_stbd_aft` | Four mooring points |
-| `cargo_main` / `cargo_aft` | Cargo deck origins |
-| `nav_light_bow` | Bow nav light |
+| `block` / `block_window` / `block_door` | Cabin walls |
+| `ledge_45` | Roof / sheer break |
+| `railing` | Deck edge |
+| `cargo_tile` | Cargo capacity cells |
+| `crane_base` / `crane` | Ship-mounted crane |
 
 ### Available hulls
 
-`hull_coastal_trader`, `..._long`, `hull_short_sea_coaster`, `..._long`, `hull_handysize_feeder`, `..._long`, `hull_deep_sea_freighter`, `..._long`, `hull_large`. Lengths range from 13 m up to 60 m at scale 1. Template `scale` multiplies hull dimensions and all slot positions.
+Hand-authored vessel scenes under `scenes/vessels/` (currently the workboat). Catalog entries live in `HullRegistry`.
 
 ### Ship components
 
-Composed onto every built ship: `BoatBody` (RigidBody3D root), `BuoyancyComponent`, `HydrodynamicsComponent`, `PropulsionComponent`, `RudderComponent`, `BowThrusterComponent`, `BoatController`, `BoatCamera`, `MooringComponent`, mooring points, and `CargoDeckComponent` per declared cargo slot. Superstructure scenes live in `scenes/shared/superstructures/` (currently `bridge_small`, `bridge_medium`).
+Core on every vessel: `BoatBody`, buoyancy, hydrodynamics, propulsion, rudder, thruster, controller, camera, `MooringComponent`, walk deck, auto cleats/lights. Deck fit-out is a 1×1×1 m brick grid (`BrickCatalog` / `DeckFitout`) — walls, cargo tiles, crane, helm from layout. Shipwright fullscreen editor paints the grid; `BrickRules` keeps builds legal.
 
 ### Authoring entry points
 
-- **By hand:** drop a template JSON in `resources/data/ships/`.
-- **In-game:** the `ShipwrightNpc` at a port offers a catalog of hulls and writes a template to `user://shipwright_orders/`, then calls `ShipBuilder.build()`. Catalog selection only at this stage — there is no in-game free-mix UI yet.
+- **By hand:** author a vessel scene/script with a deck grid; register it in `HullRegistry`.
+- **In-game:** Shipwright catalog → fullscreen brick editor → commission writes `brick_layout` on the ledger. Harbour Master deploys via `VesselSpawn` + `DeckFitout`.
 
 ---
 
@@ -131,54 +124,28 @@ Composed onto every built ship: `BoatBody` (RigidBody3D root), `BuoyancyComponen
 
 ```
 scenes/
-  boats/                     # fuel_tanker.tscn, test_boat.tscn (legacy authored scenes)
-  islands/                   # future: island compositions
-  shared/                    # player.tscn, npc_base.tscn, superstructures/
+  vessels/                   # Hand-authored workboat.tscn
+  shared/                    # player.tscn, npc_base.tscn
   systems/                   # port_dock, port_facilities, fuel_station, lighthouse, fog_horn
   ui/
   world.tscn                 # main scene
-  port_test.tscn             # standalone port test
-  hull_lineup.tscn           # hull comparison scene
 
 scripts/
-  autoloads/                 # weather, clock, contract_registry, player_session, game_menu, debug_hud
-  state/                     # game_state + player/ship/contract/world sub-states
-  entities/                  # player, fog_horn
-  player/                    # player_data
-  systems/
-    boat/                    # boat_body, controller, camera, propulsion, rudder, bow_thruster, buoyancy, hydrodynamics, cargo_deck, captains_chair, bridge_interactable, ship_light(ing), wave_surface
-    dock/                    # port_dock, harbour_master, shipwright, contract/delivery npcs, mooring, dock_facilities, ship_spawner, dock_cargo_ramp, dock_terminal
-    cargo/                   # cargo_item, cargo_pickup, contract, delivery_zone, warehouse, warehouse_contract_zone
-    port/                    # port_facilities
-    player/                  # player_carry_component
-    audio/                   # boat_audio_system, weather_audio_system
-    weather/                 # rain_field, weather_hud, weather_state, weather_zone
-    fft_water_system.gd, mesh_transformer.gd, model_assembler.gd, ship_builder.gd
-  world/
-    world.gd, world_renderer.gd, proximity_loader.gd, atmospheric_effects.gd
-    mesh_builder.gd, island_mesh_builder.gd, palette.gd
-    port/                    # port_plot, fuel_station, lighthouse_building, fog_horn_building
-    npc/                     # npc_base, npc_interactable
-  ui/  util/  utils/
+  ship/                      # BoatBody, VesselSpawn, AttachmentMount, attachments/, vessels/
+  port/  npc/  cargo/  player/  state/  ui/  world/  ocean/  weather/  time/  core/
 
 resources/
   data/
-    ships/                   # ship templates (fuel_tanker.json)
-    models/
-      hulls/                 # 9 hull JSONs with slots
-      ships/                 # ship model JSONs (legacy wrappers)
-      superstructures/       # bridge_small, bridge_medium
-      buildings/             # foghorn_building, lighthouse_building
+    models/buildings/
     meshes/                  # primitive JSON mesh library by category
     lights/
-  materials/  shaders/  themes/  audio/  textures/
+  materials/  shaders/  themes/  audio/
 ```
 
 ---
 
 ## Reference Docs
 
-- [AGENTS.md](AGENTS.md) — Guidance for AI agents working in this codebase. Visual rules, autoload conventions, build discipline.
-- [SHIP_BUILDING.md](SHIP_BUILDING.md) — Ship building system in depth: pipeline, slots, orientation, known historical bugs and their fixes.
+- [AGENTS.md](AGENTS.md) — Guidance for AI agents working in this codebase. Visual rules, autoload conventions, vessel sockets/attachments.
 - [resources/data/README.md](resources/data/README.md) — Data folder conventions.
 - [resources/data/meshes/GUIDE.md](resources/data/meshes/GUIDE.md) — Mesh JSON authoring.

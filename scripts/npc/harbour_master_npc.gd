@@ -154,7 +154,7 @@ func _show_request_berth() -> void:
 	if not _captain_can_deploy_vessel():
 		_dialogue.add_quote(
 			"You've no vessel on the registry yet, Captain.\n"
-			+ "Visit the Shipwright and commission a fishing trawler first — then come back for a berth."
+			+ "Visit the Shipwright and commission a workboat first — then come back for a berth."
 		)
 		_dialogue.add_back_button(_show_main)
 		return
@@ -218,25 +218,14 @@ func _show_ship_select() -> void:
 	var berth_n := _pending_berth_index + 1
 	var session := get_node_or_null("/root/PlayerSession")
 	var fleet: Array = []
-	var deployable: Array = []
 	if session != null and session.data != null:
 		fleet = session.data.get_harbour_vessel_records()
-		deployable = session.data.get_deployable_vessels()
 
 	if fleet.is_empty():
 		_release_pending_berth()
 		_dialogue.add_quote(
 			"No commissioned vessel on file, Captain.\n"
-			+ "The Shipwright builds fishing trawlers — your berth has been released."
-		)
-		_dialogue.add_back_button(_show_request_berth)
-		return
-
-	if deployable.is_empty():
-		_release_pending_berth()
-		_dialogue.add_quote(
-			"No hull available for berth, Captain.\n"
-			+ "Your registered vessels are on autonomous runs — recall them from the fleet office first."
+			+ "The Shipwright builds workboats — your berth has been released."
 		)
 		_dialogue.add_back_button(_show_request_berth)
 		return
@@ -254,15 +243,11 @@ func _show_ship_select() -> void:
 
 	for entry_raw in fleet:
 		var record := entry_raw as Dictionary
-		var display := str(record.get("display", "Your vessel"))
-		var short := display.split("  •  ")[0] if "  •  " in display else display
-		if PlayerData.is_vessel_on_npc_run(record):
-			_dialogue.add_disabled_option("%s — on autonomous run" % short)
-		else:
-			_dialogue.add_option(
-				"Deploy %s%s" % [short, replace_note],
-				_deploy_fleet_vessel.bind(record),
-			)
+		var vessel_name := VesselSpawn.vessel_name_of(record)
+		_dialogue.add_option(
+			"Deploy %s%s" % [vessel_name, replace_note],
+			_deploy_fleet_vessel.bind(record),
+		)
 
 	_dialogue.add_option("Never mind — release the berth.", _cancel_ship_select)
 	_dialogue.add_back_button(_cancel_ship_select)
@@ -283,24 +268,16 @@ func _release_pending_berth() -> void:
 
 
 func _deploy_fleet_vessel(record: Dictionary) -> void:
-	if PlayerData.is_vessel_on_npc_run(record):
-		_dialogue.clear()
-		_dialogue.add_quote(
-			"That hull is on an autonomous run, Captain.\n"
-			+ "Recall her from the fleet office before requesting a berth."
-		)
-		_dialogue.add_back_button(_show_ship_select)
-		return
 	var session := get_node_or_null("/root/PlayerSession")
 	if session != null and session.data != null:
 		session.data.set_active_vessel(record)
 		if session.has_method("save_now"):
 			session.call("save_now")
-	var template_path := str(record.get("template_path", ""))
-	_spawn_chosen_ship(template_path)
+	var resolved := VesselSpawn.resolve_deployable_record(record)
+	_spawn_chosen_ship(resolved)
 
 
-func _spawn_chosen_ship(scene_path: String) -> void:
+func _spawn_chosen_ship(resolved: Dictionary) -> void:
 	var dock := _get_dock()
 	var idx  := _pending_berth_index
 	if dock == null or idx < 0:
@@ -308,13 +285,20 @@ func _spawn_chosen_ship(scene_path: String) -> void:
 
 	_pending_berth_index = -1
 
-	var ship := dock.spawn_player_ship(idx, scene_path)
+	var scene_path := str(resolved.get("scene_path", resolved.get("template_path", VesselSpawn.WORKBOAT_SCENE)))
+	if scene_path.is_empty():
+		scene_path = VesselSpawn.WORKBOAT_SCENE
+	var brick_layout: Dictionary = VesselSpawn.brick_layout_of(resolved)
+	var ship := dock.spawn_player_ship(idx, scene_path, brick_layout)
 	if ship == null:
 		dock.release_berth(idx)
 		_dialogue.clear()
 		_dialogue.add_quote("Couldn't ready that vessel. Your berth has been released.")
 		_dialogue.add_back_button(_show_main)
 		return
+
+	if ship is BoatBody:
+		VesselSpawn.apply_identity(ship as BoatBody, resolved)
 
 	_network_register_ship(ship, scene_path)
 	_finish_berth_assignment(idx)
@@ -446,7 +430,7 @@ func _network_register_ship(ship_node: Node3D, template_path: String, preferred_
 		preferred_hull_id if not preferred_hull_id.is_empty() else record_hull_id
 	)
 	if hull_id.is_empty():
-		hull_id = "cargo_ship_medium"
+		hull_id = "workboat"
 
 	var ship_id := "player_ship"
 	if session != null and session.get("data") != null:

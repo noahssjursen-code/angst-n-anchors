@@ -13,8 +13,9 @@ extends Node3D
 ## costs energy via the heave damping). The slip-grip / orbital-flow hacks are gone.
 
 ## Hull station table (shared with StripBuoyancyComponent). Used to derive wetted surface
-## area and the length scale for Froude calculations. Set by ShipBuilder.
+## area and the length scale for Froude calculations. Assigned by the vessel root.
 @export var hull_stations: HullStations
+## Deprecated — leave at 1.0 (stations are in metres).
 @export var mesh_scale: float = 1.0
 @export var water_density: float = 1025.0
 @export var gravity: float = 9.81

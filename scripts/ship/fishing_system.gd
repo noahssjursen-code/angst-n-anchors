@@ -113,14 +113,19 @@ func _setup_visuals() -> void:
 								scale = float(visuals.absolute_scale)
 							stern_z = float(prop_arr[2]) * scale
 	
-	# Adjust deck height based on parent scale
+	# Deck height from SI hull (metres). mesh_scale is deprecated and always 1.
 	var deck_y := 1.2
 	var scale: float = 1.0
 	if _body != null:
-		scale = _body.mesh_scale
-		deck_y = 1.2 * scale
+		scale = 1.0
+		if _body.hull_stations != null and _body.hull_stations.deck_y > 0.0:
+			deck_y = _body.hull_stations.deck_y
+		elif _body.depth_m > 0.0:
+			deck_y = _body.depth_m * 0.85
+		else:
+			deck_y = 1.2
 	else:
-		# Fallback for showcase
+		# Fallback for tool / preview
 		var visuals = get_parent().get_node_or_null("HullVisuals") if get_parent() != null else null
 		if visuals != null:
 			if "absolute_scale" in visuals:
@@ -271,7 +276,7 @@ func _physics_process(delta: float) -> void:
 		return
 
 	if _body != null and _body.freeze:
-		var sim_dt := delta * AutonomousSimDebug.time_scale
+		var sim_dt := delta
 		_update_zone_catch_rate(_body.global_position)
 		_process_haul(sim_dt)
 		if _haul_crates_remaining <= 0:

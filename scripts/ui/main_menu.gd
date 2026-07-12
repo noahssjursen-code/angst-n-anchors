@@ -956,9 +956,6 @@ func _ensure_menu_offline() -> void:
 	var network := get_node_or_null("/root/NetworkManager")
 	if network != null and network.has_method("end_multiplayer_session"):
 		network.call("end_multiplayer_session", true)
-	var fleet := get_node_or_null("/root/AutonomousVesselManager")
-	if fleet != null and fleet.has_method("clear_all_for_menu"):
-		fleet.call("clear_all_for_menu")
 
 
 func _go_to_world() -> void:

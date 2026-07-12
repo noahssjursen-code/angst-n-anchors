@@ -9,9 +9,9 @@ extends Node3D
 
 @export var max_thrust: float = 4000.0
 ## Local bore of the bow tunnel thruster (negative Z = bow in body space).
-@export var bow_offset: Vector3 = Vector3(0.0, 0.0, 5.8)
+@export var bow_offset: Vector3 = Vector3(0.0, 0.0, -5.8)
 ## Local bore of the stern tunnel thruster; used only when `crab_mode` is true.
-@export var stern_offset: Vector3 = Vector3(0.0, -1.3, -11.0)
+@export var stern_offset: Vector3 = Vector3(0.0, -1.3, 11.0)
 
 var lateral_input: float = 0.0
 ## When true, apply equal parallel force bow + stern (docking crab). BoatController owns this flag.
