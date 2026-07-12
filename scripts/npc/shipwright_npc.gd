@@ -237,6 +237,7 @@ func _refit(uid: String, entry: Dictionary, layout: Dictionary, vessel_name: Str
 	session.data.upsert_owned_vessel(updated)
 	session.save_now()
 	_apply_live_refit(updated)
+	VesselSync.push_brick_layout(session, updated)
 
 	_show_result(
 		"%s's fit-out is updated, Captain.\nShe's ready whenever you call for a berth."

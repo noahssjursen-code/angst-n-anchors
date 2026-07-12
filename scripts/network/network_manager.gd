@@ -500,8 +500,27 @@ func _register_ship_sender(ship_id: String, hull_id: String, ship_node: Node3D, 
 			var fishing := ship_node.find_child("FishingSystem", true, false) as FishingSystem
 			if fishing != null and fishing.trawling:
 				parts.append("trawl=1")
+			## Deck fit-out identity — remotes fetch layout via HTTP using vid + lh.
+			var session := get_node_or_null("/root/PlayerSession")
+			if session != null and session.get("data") != null:
+				var record: Dictionary = session.data.get_active_vessel_record()
+				var vid := str(record.get("server_vessel_id", ""))
+				var lh := str(record.get("layout_hash", ""))
+				if not vid.is_empty():
+					parts.append("vid=" + vid)
+				if not lh.is_empty():
+					parts.append("lh=" + lh)
 			return ";".join(parts)
 	)
+
+
+## After layout push/refit, force the next ship ClientUpdate to include new meta.
+func force_local_ship_meta_resync() -> void:
+	for sender_id in _local_senders.keys():
+		var sender: Dictionary = _local_senders[sender_id]
+		if not str(sender.get("type", "")).begins_with("ship_"):
+			continue
+		_force_sender_sync(str(sender_id))
 
 
 func _wire_board_signals_recursive(ship_id: String, n: Node) -> void:

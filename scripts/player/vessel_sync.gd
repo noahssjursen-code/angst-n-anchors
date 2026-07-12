@@ -31,7 +31,113 @@ static func publish_commission(
 	if hull_id.is_empty():
 		return
 
-	_post_vessel(session, captain_id, hull_id, display, template_path, uid)
+	var layout: Dictionary = {}
+	if session.get("data") != null:
+		var record: Dictionary = session.data.find_owned_vessel(uid)
+		layout = VesselSpawn.brick_layout_of(record)
+
+	_post_vessel(session, captain_id, hull_id, display, template_path, uid, layout)
+
+
+## Push deck fit-out after shipwright refit (or backfill).
+static func push_brick_layout(session: Node, record: Dictionary, on_complete: Callable = Callable()) -> void:
+	if session == null or not _is_mp_session(session):
+		if on_complete.is_valid():
+			on_complete.call(record)
+		return
+	var server_id := str(record.get("server_vessel_id", ""))
+	if server_id.is_empty():
+		ensure_vessel_registered(session, record, func(updated: Dictionary) -> void:
+			if updated.is_empty() or str(updated.get("server_vessel_id", "")).is_empty():
+				if on_complete.is_valid():
+					on_complete.call(updated)
+				return
+			push_brick_layout(session, updated, on_complete)
+		)
+		return
+
+	var layout := VesselSpawn.brick_layout_of(record)
+	var req := HTTPRequest.new()
+	session.add_child(req)
+	var body := JSON.stringify({
+		"id": server_id,
+		"brick_layout": layout,
+	})
+	var url := "%s/v1/vessels" % _http_base(session)
+	req.request_completed.connect(func(result: int, code: int, _h: PackedStringArray, resp_body: PackedByteArray) -> void:
+		req.queue_free()
+		if result != HTTPRequest.RESULT_SUCCESS or code != 200:
+			push_warning("VesselSync: failed to push brick_layout (HTTP %d)" % code)
+			if on_complete.is_valid():
+				on_complete.call(record)
+			return
+		var parsed: Variant = JSON.parse_string(resp_body.get_string_from_utf8())
+		if typeof(parsed) != TYPE_DICTIONARY or session.get("data") == null:
+			if on_complete.is_valid():
+				on_complete.call(record)
+			return
+		var row := parsed as Dictionary
+		var updated := record.duplicate(true)
+		updated["layout_hash"] = str(row.get("layout_hash", ""))
+		var layout_raw: Variant = row.get("brick_layout", layout)
+		if typeof(layout_raw) == TYPE_DICTIONARY:
+			updated["brick_layout"] = layout_raw
+		session.data.upsert_owned_vessel(updated)
+		if str(session.data.active_vessel.get("uid", "")) == str(updated.get("uid", "")):
+			session.data.set_active_vessel(updated)
+		if session.has_method("save_now"):
+			session.call("save_now")
+		_force_ship_meta_resync()
+		print("[VesselSync] Pushed brick_layout server_id=%s hash=%s" % [
+			server_id, str(updated.get("layout_hash", ""))
+		])
+		if on_complete.is_valid():
+			on_complete.call(updated)
+	)
+	req.request(url, PackedStringArray(["Content-Type: application/json"]), HTTPClient.METHOD_PUT, body)
+
+
+static func fetch_vessel_layout(session: Node, server_vessel_id: String, on_complete: Callable) -> void:
+	## Remote clients: GET /v1/vessels?id=<uuid> → { brick_layout, layout_hash, … }.
+	if session == null or server_vessel_id.is_empty() or not on_complete.is_valid():
+		return
+	var base := _http_base(session)
+	if base.is_empty():
+		on_complete.call({}, "")
+		return
+	var req := HTTPRequest.new()
+	session.add_child(req)
+	var url := "%s/v1/vessels?id=%s" % [base, server_vessel_id.uri_encode()]
+	req.request_completed.connect(func(result: int, code: int, _h: PackedStringArray, resp_body: PackedByteArray) -> void:
+		req.queue_free()
+		if result != HTTPRequest.RESULT_SUCCESS or code != 200:
+			on_complete.call({}, "")
+			return
+		var parsed: Variant = JSON.parse_string(resp_body.get_string_from_utf8())
+		if typeof(parsed) != TYPE_DICTIONARY:
+			on_complete.call({}, "")
+			return
+		var row := parsed as Dictionary
+		var layout_raw: Variant = row.get("brick_layout", {})
+		var layout: Dictionary = {}
+		if typeof(layout_raw) == TYPE_DICTIONARY:
+			layout = layout_raw as Dictionary
+		elif typeof(layout_raw) == TYPE_STRING:
+			var nested: Variant = JSON.parse_string(str(layout_raw))
+			if typeof(nested) == TYPE_DICTIONARY:
+				layout = nested as Dictionary
+		on_complete.call(layout, str(row.get("layout_hash", "")))
+	)
+	req.request(url)
+
+
+static func _force_ship_meta_resync() -> void:
+	var tree := Engine.get_main_loop() as SceneTree
+	if tree == null:
+		return
+	var nm := tree.root.get_node_or_null("/root/NetworkManager")
+	if nm != null and nm.has_method("force_local_ship_meta_resync"):
+		nm.call("force_local_ship_meta_resync")
 
 
 static func pull_captain_vessel(session: Node, on_complete: Callable = Callable()) -> void:
@@ -120,7 +226,8 @@ static func ensure_vessel_registered(
 		return
 
 	_in_flight_registrations[uid] = true
-	_post_vessel(session, captain_id, hull_id, display, template_path, uid, func(updated: Dictionary) -> void:
+	var layout := VesselSpawn.brick_layout_of(record)
+	_post_vessel(session, captain_id, hull_id, display, template_path, uid, layout, func(updated: Dictionary) -> void:
 		_in_flight_registrations.erase(uid)
 		if updated.is_empty() or str(updated.get("server_vessel_id", "")).is_empty():
 			_failed_registrations[uid] = true
@@ -198,6 +305,7 @@ static func _post_vessel(
 	display: String,
 	template_path: String,
 	uid: String,
+	brick_layout: Dictionary = {},
 	on_complete: Callable = Callable(),
 ) -> void:
 	var req := HTTPRequest.new()
@@ -207,6 +315,7 @@ static func _post_vessel(
 		"hull_id": hull_id,
 		"display_name": display,
 		"template_path": template_path,
+		"brick_layout": brick_layout if not brick_layout.is_empty() else {"hull_id": hull_id, "cells": {}},
 	})
 	var url := "%s/v1/vessels" % _http_base(session)
 	req.request_completed.connect(func(result: int, code: int, _h: PackedStringArray, resp_body: PackedByteArray) -> void:
@@ -221,7 +330,8 @@ static func _post_vessel(
 			if on_complete.is_valid():
 				on_complete.call({})
 			return
-		var server_id := str((parsed as Dictionary).get("id", ""))
+		var row := parsed as Dictionary
+		var server_id := str(row.get("id", ""))
 		if server_id.is_empty() or session.get("data") == null:
 			if on_complete.is_valid():
 				on_complete.call({})
@@ -232,12 +342,19 @@ static func _post_vessel(
 				on_complete.call({})
 			return
 		record["server_vessel_id"] = server_id
+		record["layout_hash"] = str(row.get("layout_hash", ""))
+		var layout_raw: Variant = row.get("brick_layout", null)
+		if typeof(layout_raw) == TYPE_DICTIONARY:
+			record["brick_layout"] = layout_raw
 		session.data.upsert_owned_vessel(record)
 		if str(session.data.active_vessel.get("uid", "")) == uid:
 			session.data.set_active_vessel(record)
 		if session.has_method("save_now"):
 			session.call("save_now")
-		print("[VesselSync] Registered vessel uid=%s server_id=%s" % [uid, server_id])
+		_force_ship_meta_resync()
+		print("[VesselSync] Registered vessel uid=%s server_id=%s hash=%s" % [
+			uid, server_id, str(record.get("layout_hash", ""))
+		])
 		if on_complete.is_valid():
 			on_complete.call(record)
 	)
@@ -358,6 +475,7 @@ static func _merge_server_row(data: PlayerData, row: Dictionary) -> Dictionary:
 		return {}
 
 	var fleet_patch := _fleet_patch_from_row(row)
+	var layout_patch := _layout_patch_from_row(row)
 	var hull_entry := HullRegistry.get_by_id(hull_id)
 	var hull_display := str(hull_entry.get("display", display))
 
@@ -369,6 +487,7 @@ static func _merge_server_row(data: PlayerData, row: Dictionary) -> Dictionary:
 			"hull_id": hull_id,
 		})
 		existing = PlayerData.merge_vessel_record(existing, fleet_patch)
+		existing = PlayerData.merge_vessel_record(existing, layout_patch)
 		var path := str(existing.get("template_path", ""))
 		if path.is_empty() or not ResourceLoader.exists(path):
 			var rebuilt := _ensure_local_template(hull_id, hull_display)
@@ -390,7 +509,29 @@ static func _merge_server_row(data: PlayerData, row: Dictionary) -> Dictionary:
 		"template_path":    local["template_path"],
 		"server_vessel_id": server_id,
 	}
-	return PlayerData.merge_vessel_record(record, fleet_patch)
+	record = PlayerData.merge_vessel_record(record, fleet_patch)
+	return PlayerData.merge_vessel_record(record, layout_patch)
+
+
+static func _layout_patch_from_row(row: Dictionary) -> Dictionary:
+	var patch: Dictionary = {}
+	var hash := str(row.get("layout_hash", ""))
+	if not hash.is_empty():
+		patch["layout_hash"] = hash
+	var layout_raw: Variant = row.get("brick_layout", null)
+	var layout: Dictionary = {}
+	if typeof(layout_raw) == TYPE_DICTIONARY:
+		layout = layout_raw as Dictionary
+	elif typeof(layout_raw) == TYPE_STRING:
+		var nested: Variant = JSON.parse_string(str(layout_raw))
+		if typeof(nested) == TYPE_DICTIONARY:
+			layout = nested as Dictionary
+	## Prefer server layout when it has cells; otherwise keep local via omit.
+	if not layout.is_empty() and (
+		layout.has("cells") or layout.has("cargo_zones") or layout.has("hull_id")
+	):
+		patch["brick_layout"] = layout
+	return patch
 
 
 static func _fleet_patch_from_row(_row: Dictionary) -> Dictionary:

@@ -48,6 +48,11 @@ func _purge_entities_under(root: Node) -> void:
 # Keep track of active berth locks established by remote ships: "portID_berthIndex" -> ship_entity_id
 var _occupied_berths: Dictionary = {}
 
+## Cache of fetched deck layouts: server_vessel_id -> { "hash": String, "layout": Dictionary }
+var _layout_cache: Dictionary = {}
+## In-flight HTTP fetches keyed by server_vessel_id.
+var _layout_inflight: Dictionary = {}
+
 ## Returns a duplicate of currently visible remote entities dictionary (for read-only queries)
 func get_visible_entities() -> Dictionary:
 	return _visible_entities
@@ -146,6 +151,9 @@ func apply_entities(entities_list: Array, local_id: String, scene_nodes: Diction
 			
 			# Process Dynamic Parent/Relational Attachment Meta: "parent=parent_entity_id"
 			_process_attachment_meta(node, id, meta)
+
+			if str(ent["type"]).begins_with("ship_"):
+				_sync_remote_ship_layout(id, node as BoatBody, meta, state)
 
 			if ent["type"] == "cargo":
 				_sync_remote_cargo_visual(node as PalletNode, id, meta, state)
@@ -373,6 +381,7 @@ func _spawn_dynamic_entity_node(id: String, type: String, meta: String = "") -> 
 		var hull_id := HullRegistry.resolve_network_hull_id(
 			HullRegistry.hull_id_from_network_type(type)
 		)
+		## Spawn bare hull first; layout applied async when vid/lh meta arrives.
 		var ship := VesselSpawn.instantiate(hull_id) as BoatBody
 		if ship != null:
 			ship.name = "RemoteShip_" + id
@@ -397,6 +406,88 @@ func _spawn_dynamic_entity_node(id: String, type: String, meta: String = "") -> 
 		)
 
 	return null
+
+
+func _sync_remote_ship_layout(entity_id: String, ship: BoatBody, meta: String, state: Dictionary) -> void:
+	if ship == null or not is_instance_valid(ship):
+		return
+	var parsed := _parse_meta_map(meta)
+	var vid := str(parsed.get("vid", ""))
+	var lh := str(parsed.get("lh", ""))
+	if vid.is_empty():
+		return
+
+	var applied_vid := str(state.get("layout_vid", ""))
+	var applied_hash := str(state.get("layout_hash", ""))
+	## Already applied this vessel; only refetch when layout hash changes.
+	if applied_vid == vid and (lh.is_empty() or applied_hash == lh):
+		return
+
+	var cached: Dictionary = _layout_cache.get(vid, {})
+	if not cached.is_empty() and (lh.is_empty() or str(cached.get("hash", "")) == lh):
+		_apply_remote_ship_layout(ship, cached.get("layout", {}) as Dictionary)
+		state["layout_vid"] = vid
+		state["layout_hash"] = str(cached.get("hash", lh))
+		_visible_entities[entity_id] = state
+		return
+
+	if _layout_inflight.has(vid):
+		return
+
+	var session := get_node_or_null("/root/PlayerSession")
+	if session == null:
+		session = get_tree().root.get_node_or_null("/root/PlayerSession")
+	if session == null:
+		return
+
+	_layout_inflight[vid] = true
+	VesselSync.fetch_vessel_layout(session, vid, func(layout: Dictionary, hash: String) -> void:
+		_layout_inflight.erase(vid)
+		if layout.is_empty() and hash.is_empty():
+			return
+		var use_hash := hash if not hash.is_empty() else lh
+		_layout_cache[vid] = {"hash": use_hash, "layout": layout}
+		## Entity may have despawned while the request was in flight.
+		if not _visible_entities.has(entity_id):
+			return
+		var live_state: Dictionary = _visible_entities[entity_id]
+		var live_ship := _live_node(live_state) as BoatBody
+		if live_ship == null:
+			return
+		_apply_remote_ship_layout(live_ship, layout)
+		live_state["layout_vid"] = vid
+		live_state["layout_hash"] = use_hash
+		_visible_entities[entity_id] = live_state
+	)
+
+
+func _apply_remote_ship_layout(ship: BoatBody, layout: Dictionary) -> void:
+	if ship == null or not is_instance_valid(ship) or layout.is_empty():
+		return
+	if ship.has_method("apply_brick_layout"):
+		ship.call("apply_brick_layout", layout)
+	## Keep remote ships kinematic / owner-stripped after fit-out rebuild.
+	ship.freeze = true
+	ship.freeze_mode = RigidBody3D.FREEZE_MODE_KINEMATIC
+	_disable_physics_in_subtree(ship)
+	_strip_owner_only_after_fitout(ship)
+
+
+func _strip_owner_only_after_fitout(ship: Node) -> void:
+	## DeckFitout may re-add helm interactables; strip owner-only groups again.
+	var doomed: Array[Node] = []
+	_collect_owner_only(ship, doomed)
+	for n in doomed:
+		if is_instance_valid(n):
+			n.queue_free()
+
+
+func _collect_owner_only(node: Node, out: Array[Node]) -> void:
+	if node.is_in_group(VehicleGroups.SHIP_OWNER_ONLY):
+		out.append(node)
+		return
+	for child in node.get_children():
+		_collect_owner_only(child, out)
 
 
 func _is_delivered_cargo_meta(meta: String) -> bool:
