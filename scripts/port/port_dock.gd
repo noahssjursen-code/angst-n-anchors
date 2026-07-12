@@ -22,6 +22,8 @@ const C_BERTH_BORDER   := Color(0.25, 1.00, 0.45, 0.70)
 const C_LABEL          := Color(0.30, 1.00, 0.50, 0.90)
 const C_CARGO_YARD     := Color(0.34, 0.32, 0.30)
 const FUEL_STATION_SCENE  := preload("res://scenes/systems/fuel_station.tscn")
+const WORKBOAT_SCENE_PATH := "res://scenes/vessels/workboat.tscn"
+const VESSEL_SPAWN_SCRIPT := preload("res://scripts/ship/vessel_spawn.gd")
 ## Main quay deck — lit asphalt probe (adjust in `resources/materials/asphalt_dock.tres`).
 const QUAY_BODY_MATERIAL: StandardMaterial3D = preload(
 	"res://resources/materials/asphalt_dock.tres"
@@ -694,7 +696,7 @@ func get_berth_spawn_transform(index: int, half_beam_m: float = -1.0) -> Transfo
 	return Transform3D(ship_basis, to_global(local_pos))
 
 
-func spawn_player_ship(index: int, ship_scene_path: String = "") -> Node3D:
+func spawn_player_ship(index: int, ship_scene_path: String = "", brick_layout: Dictionary = {}) -> Node3D:
 	if index < 0 or index >= _berth_data.size():
 		return null
 
@@ -704,27 +706,12 @@ func spawn_player_ship(index: int, ship_scene_path: String = "") -> Node3D:
 
 	var path := ship_scene_path.strip_edges()
 	if path.is_empty():
-		push_error("PortDock: no ship path provided to spawn_player_ship")
-		return null
+		path = WORKBOAT_SCENE_PATH
 
-	var ship: Node3D = null
-	if path.ends_with(".json"):
-		ship = ShipBuilder.build(path)
-		if ship == null:
-			push_error("PortDock: ShipBuilder failed to build: %s" % path)
-			return null
-	else:
-		if not ResourceLoader.exists(path):
-			push_error("PortDock: ship scene missing: %s" % path)
-			return null
-		var packed := load(path) as PackedScene
-		if packed == null:
-			push_error("PortDock: not a PackedScene: %s" % path)
-			return null
-		ship = packed.instantiate() as Node3D
-		if ship == null:
-			push_error("PortDock: ship scene root must be Node3D: %s" % path)
-			return null
+	var ship: Node3D = VESSEL_SPAWN_SCRIPT.instantiate_from_path(path, brick_layout) as Node3D
+	if ship == null:
+		push_error("PortDock: failed to spawn vessel from: %s" % path)
+		return null
 
 	var plot := get_parent()
 	if plot == null:

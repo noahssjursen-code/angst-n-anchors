@@ -126,15 +126,12 @@ func _build() -> Array:
 
 func _build_debug_tools(e: Array) -> void:
 	_sec(e, "DEBUG TOOLS")
-	var scale_c := C_VALUE if AutonomousSimDebug.time_scale <= 1.001 else C_WARN
-	_row(e, "Fleet sim speed", AutonomousSimDebug.label(), scale_c)
 	_row(e, "Berth lanes", "%s (%d ports, %d curves)" % [
 		BerthApproachLanes.debug_label(),
 		BerthApproachLanes.baked_port_count(),
 		BerthApproachLanes.debug_polyline_count(),
 	], C_VALUE)
-	_stub(e, "Adjust", "O slower   I faster   B lane overlay")
-	_stub(e, "Fleet paths", "orange transit · green spine · blue/port · orange/star flank")
+	_stub(e, "Toggle", "B lane overlay")
 	_sep(e)
 
 

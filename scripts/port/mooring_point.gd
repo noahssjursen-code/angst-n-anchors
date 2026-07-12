@@ -37,6 +37,12 @@ const DEFAULT_BOLLARD_MODEL := "res://resources/data/meshes/docks/docking_bollar
 	set(v):
 		station = v
 
+## When false, only the cleat anchor/group is created (brick mesh supplies the look).
+@export var build_visual: bool = true:
+	set(v):
+		build_visual = v
+		_rebuild_bollard_visual()
+
 
 func _ready() -> void:
 	if not Engine.is_editor_hint():
@@ -69,6 +75,9 @@ func _rebuild_bollard_visual() -> void:
 	if existing != null:
 		remove_child(existing)
 		existing.free()
+
+	if not build_visual:
+		return
 
 	var visual := ModelCache.instance(bollard_model_path, bollard_scale)
 	visual.name = "DockingBollard"

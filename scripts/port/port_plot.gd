@@ -144,7 +144,14 @@ func _build_ground(poly: PackedVector2Array, pad_w: float, pad_d: float) -> void
 
 
 func _add_dock(hd: float, ship_class: ShipClass.Type) -> PortDock:
-	var dock              := PortDock.new()
+	var dock_script := load("res://scripts/port/port_dock.gd") as GDScript
+	if dock_script == null:
+		push_error("PortPlot: failed to load port_dock.gd")
+		return null
+	var dock := dock_script.new() as PortDock
+	if dock == null:
+		push_error("PortPlot: PortDock script could not be instantiated (parse error?)")
+		return null
 	dock.name             = "PortDock"
 	dock.port_id          = port_id
 	dock.dock_length      = plot_width
@@ -220,11 +227,18 @@ func _build_npcs() -> void:
 	# relative to facilities, so sum gives the correct port_plot-local position.
 	var fpos := facilities.position
 
-	var hm         := HarbourMasterNpc.new()
-	hm.name        = "HarbourMasterNpc"
-	hm.port_id     = port_id
-	hm.position    = fpos + facilities.get_harbour_master_local_pos() + Vector3(0.0, 0.0, -4.5)
-	add_child(hm)
+	var hm_script := load("res://scripts/npc/harbour_master_npc.gd") as GDScript
+	if hm_script != null:
+		var hm := hm_script.new() as HarbourMasterNpc
+		if hm != null:
+			hm.name = "HarbourMasterNpc"
+			hm.port_id = port_id
+			hm.position = fpos + facilities.get_harbour_master_local_pos() + Vector3(0.0, 0.0, -4.5)
+			add_child(hm)
+		else:
+			push_error("PortPlot: HarbourMasterNpc failed to instantiate")
+	else:
+		push_error("PortPlot: harbour_master_npc.gd failed to load")
 
 	var contract_local := facilities.get_contract_npc_local_pos()
 	if contract_local != Vector3.ZERO:
@@ -240,18 +254,15 @@ func _build_npcs() -> void:
 
 	var sw_local := facilities.get_shipwright_local_pos()
 	if sw_local != Vector3.ZERO:
-		var sw      := ShipwrightNpc.new()
-		sw.name     = "ShipwrightNpc"
-		sw.position = fpos + sw_local + Vector3(0.0, 0.0, -5.5)
-		add_child(sw)
-
-	var co_local := facilities.get_company_office_local_pos()
-	if co_local != Vector3.ZERO:
-		var agent := CompanyAgentNpc.new()
-		agent.name = "CompanyAgentNpc"
-		agent.port_id = port_id
-		agent.position = fpos + co_local + Vector3(0.0, 0.0, -4.5)
-		add_child(agent)
+		var sw_script := load("res://scripts/npc/shipwright_npc.gd") as GDScript
+		if sw_script != null:
+			var sw := sw_script.new() as ShipwrightNpc
+			if sw != null:
+				sw.name = "ShipwrightNpc"
+				sw.position = fpos + sw_local + Vector3(0.0, 0.0, -5.5)
+				add_child(sw)
+			else:
+				push_error("PortPlot: ShipwrightNpc failed to instantiate")
 
 	_build_walkers(fpos)
 
@@ -407,12 +418,15 @@ func _bake_approach_lanes() -> void:
 	var baked := BerthApproachLanes.bake_from_dock(port_id, dock)
 	if baked <= 0:
 		return
-	# Lane geometry changed for this port only — do NOT wipe the global
-	# island-avoidance graph (that was the post-stream hitch).
-	AutonomousVesselSim.invalidate_legs_touching_port(port_id)
-	var mgr := get_node_or_null("/root/AutonomousVesselManager")
-	if mgr != null and mgr.has_method("refresh_lane_debug"):
-		mgr.call("refresh_lane_debug")
+	var tree := get_tree()
+	if tree != null and tree.get_first_node_in_group("berth_lane_debug") == null:
+		var draw := BerthApproachLanesDebugDraw.new()
+		draw.name = "BerthApproachLanesDebugDraw"
+		if tree.current_scene != null:
+			tree.current_scene.add_child(draw)
+		else:
+			add_child(draw)
+	BerthApproachLanesDebugDraw.refresh_if_enabled(tree)
 
 
 func _respawn_pending_cargo(registry: Node) -> void:

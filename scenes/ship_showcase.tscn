@@ -1,6 +1,7 @@
-[gd_scene format=3 uid="uid://d1rn78givrqbs"]
+[gd_scene format=3 uid="uid://c3xmd7s4ixu5e"]
 
 [ext_resource type="Script" path="res://scripts/ship/ship_showcase.gd" id="1_ssc"]
+[ext_resource type="Script" uid="uid://bdk63metm004v" path="res://scripts/npc/shipwright_preview.gd" id="2_hwsxe"]
 
 [sub_resource type="Environment" id="Env_ssc"]
 background_mode = 1
@@ -9,30 +10,326 @@ ambient_light_source = 2
 ambient_light_color = Color(0.78, 0.84, 0.92, 1)
 ambient_light_energy = 0.6
 
-[node name="ShipShowcase" type="Node3D"]
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_cico1"]
+albedo_color = Color(0.1, 0.12, 0.14, 1)
+roughness = 0.88
 
-[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
+[sub_resource type="BoxMesh" id="BoxMesh_xp0wh"]
+size = Vector3(285.58008, 0.12, 423.21515)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_oxu4w"]
+albedo_color = Color(0.08, 0.18, 0.28, 0.85)
+metallic = 0.05
+roughness = 0.35
+
+[sub_resource type="BoxMesh" id="BoxMesh_44oww"]
+size = Vector3(293.58008, 0.04, 431.21515)
+
+[node name="ShipShowcase" type="Node3D" unique_id=348362712]
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="." unique_id=1625210717]
 environment = SubResource("Env_ssc")
 
-[node name="Sun" type="DirectionalLight3D" parent="."]
+[node name="Sun" type="DirectionalLight3D" parent="." unique_id=1781182845]
 transform = Transform3D(0.866, -0.25, 0.433, 0, 0.866, 0.5, -0.5, -0.433, 0.75, 0, 18, 0)
 light_energy = 1.15
 shadow_enabled = true
 
-[node name="Fill" type="DirectionalLight3D" parent="."]
+[node name="Fill" type="DirectionalLight3D" parent="." unique_id=907095464]
 transform = Transform3D(0.94, 0.18, -0.29, 0, 0.85, 0.52, 0.34, -0.49, 0.8, 0, 10, 0)
-light_energy = 0.35
 light_color = Color(0.75, 0.82, 0.95, 1)
+light_energy = 0.35
 
-[node name="Camera3D" type="Camera3D" parent="."]
-transform = Transform3D(0.984, -0.087, 0.155, 0, 0.873, 0.488, -0.178, -0.48, 0.859, 42, 28, 58)
-fov = 52.0
+[node name="Camera3D" type="Camera3D" parent="." unique_id=709680079]
+transform = Transform3D(0.8320503, -0.25066006, 0.4948352, 0, 0.89207685, 0.4518838, -0.55470026, -0.37599006, 0.74225277, 342.3282, 195.35036, 515.9148)
 current = true
+fov = 52.0
 
-[node name="Showcase" type="Node3D" parent="."]
+[node name="Showcase" type="Node3D" parent="." unique_id=589336517]
 script = ExtResource("1_ssc")
-rebuild = true
-show_ground_pad = true
-show_labels = true
-spin_ships = false
-frame_camera = true
+
+[node name="@Label3D@19256" type="Label3D" parent="Showcase" unique_id=426753988]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -8, 2, 9.288944)
+modulate = Color(0.96, 0.76, 0.28, 0.95)
+text = "=== FISHING VESSEL ==="
+font_size = 36
+horizontal_alignment = 2
+
+[node name="ShipPreview_0_0" type="Node3D" parent="Showcase" unique_id=1699850436]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 5.1921134, 0, 9.288944)
+script = ExtResource("2_hwsxe")
+
+[node name="@Label3D@19283" type="Label3D" parent="Showcase" unique_id=2142402795]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 5.1921134, 7.5, 9.288944)
+billboard = 1
+text = "Small Fishing Trawler  •  10 m
+ℳ 6400"
+font_size = 22
+outline_size = 8
+
+[node name="ShipPreview_0_1" type="Node3D" parent="Showcase" unique_id=2091660253]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 29.115448, 0, 9.288944)
+script = ExtResource("2_hwsxe")
+
+[node name="@Label3D@19312" type="Label3D" parent="Showcase" unique_id=276196620]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 29.115448, 7.5, 9.288944)
+billboard = 1
+text = "Coastal Fishing Trawler  •  13 m
+ℳ 9988"
+font_size = 22
+outline_size = 8
+
+[node name="ShipPreview_0_2" type="Node3D" parent="Showcase" unique_id=519536994]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 57.135616, 0, 9.288944)
+script = ExtResource("2_hwsxe")
+
+[node name="@Label3D@19342" type="Label3D" parent="Showcase" unique_id=7606652]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 57.135616, 7.5, 9.288944)
+billboard = 1
+text = "Deep Sea Trawler  •  18 m
+ℳ 18048"
+font_size = 22
+outline_size = 8
+
+[node name="@Label3D@19343" type="Label3D" parent="Showcase" unique_id=283478226]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -8, 2, 81.568085)
+modulate = Color(0.96, 0.76, 0.28, 0.95)
+text = "=== LIQUID TANKER ==="
+font_size = 36
+horizontal_alignment = 2
+
+[node name="ShipPreview_1_0" type="Node3D" parent="Showcase" unique_id=634720292]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 6.20967, 0, 81.568085)
+script = ExtResource("2_hwsxe")
+
+[node name="@Label3D@19346" type="Label3D" parent="Showcase" unique_id=800574218]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 6.20967, 7.5, 81.568085)
+billboard = 1
+text = "Small Fuel Tanker  •  12 m
+ℳ 8688"
+font_size = 22
+outline_size = 8
+
+[node name="ShipPreview_1_1" type="Node3D" parent="Showcase" unique_id=410645744]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 32.181427, 0, 81.568085)
+script = ExtResource("2_hwsxe")
+
+[node name="@Label3D@19349" type="Label3D" parent="Showcase" unique_id=447813104]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 32.181427, 7.5, 81.568085)
+billboard = 1
+text = "Coastal Fuel Tanker  •  15 m
+ℳ 12900"
+font_size = 22
+outline_size = 8
+
+[node name="ShipPreview_1_2" type="Node3D" parent="Showcase" unique_id=2069694833]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 63.246613, 0, 81.568085)
+script = ExtResource("2_hwsxe")
+
+[node name="@Label3D@19352" type="Label3D" parent="Showcase" unique_id=209537171]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 63.246613, 7.5, 81.568085)
+billboard = 1
+text = "Harbour Fuel Tanker  •  22 m
+ℳ 26368"
+font_size = 22
+outline_size = 8
+
+[node name="ShipPreview_1_3" type="Node3D" parent="Showcase" unique_id=44295213]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 109.4953, 0, 81.568085)
+script = ExtResource("2_hwsxe")
+
+[node name="@Label3D@19355" type="Label3D" parent="Showcase" unique_id=777680631]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 109.4953, 8.030956, 81.568085)
+billboard = 1
+text = "Deep Sea Crude Tanker  •  45 m
+ℳ 106500"
+font_size = 22
+outline_size = 8
+
+[node name="ShipPreview_1_4" type="Node3D" parent="Showcase" unique_id=403077955]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 195.43108, 0, 81.568085)
+script = ExtResource("2_hwsxe")
+
+[node name="@Label3D@19358" type="Label3D" parent="Showcase" unique_id=934126507]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 195.43108, 17.84657, 81.568085)
+billboard = 1
+text = "VLCC Crude Tanker  •  100 m
+ℳ 521200"
+font_size = 22
+outline_size = 8
+
+[node name="@Label3D@19359" type="Label3D" parent="Showcase" unique_id=62422353]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -8, 2, 195.54848)
+modulate = Color(0.96, 0.76, 0.28, 0.95)
+text = "=== CARGO FREIGHTER ==="
+font_size = 36
+horizontal_alignment = 2
+
+[node name="ShipPreview_2_0" type="Node3D" parent="Showcase" unique_id=1372774161]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 7.7369246, 0, 195.54848)
+script = ExtResource("2_hwsxe")
+
+[node name="@Label3D@19389" type="Label3D" parent="Showcase" unique_id=2093520912]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 7.7369246, 7.5, 195.54848)
+billboard = 1
+text = "Small Cargo Coaster  •  15 m
+ℳ 12900"
+font_size = 22
+outline_size = 8
+
+[node name="ShipPreview_2_1" type="Node3D" parent="Showcase" unique_id=656138211]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 37.72385, 0, 195.54848)
+script = ExtResource("2_hwsxe")
+
+[node name="@Label3D@19422" type="Label3D" parent="Showcase" unique_id=824149301]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 37.72385, 7.5, 195.54848)
+billboard = 1
+text = "Twin-Deck Cargo Coaster  •  20 m
+ℳ 22000"
+font_size = 22
+outline_size = 8
+
+[node name="ShipPreview_2_2" type="Node3D" parent="Showcase" unique_id=768756520]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 74.29167, 0, 195.54848)
+script = ExtResource("2_hwsxe")
+
+[node name="@Label3D@19458" type="Label3D" parent="Showcase" unique_id=833833956]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 74.29167, 7.5, 195.54848)
+billboard = 1
+text = "Deep Sea Cargo Coaster  •  28 m
+ℳ 41968"
+font_size = 22
+outline_size = 8
+
+[node name="ShipPreview_2_3" type="Node3D" parent="Showcase" unique_id=679806126]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 126.10459, 0, 195.54848)
+script = ExtResource("2_hwsxe")
+
+[node name="@Label3D@19506" type="Label3D" parent="Showcase" unique_id=1228311400]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 126.10459, 8.923285, 195.54848)
+billboard = 1
+text = "Deep Sea Bulk Carrier  •  50 m
+ℳ 131200"
+font_size = 22
+outline_size = 8
+
+[node name="ShipPreview_2_4" type="Node3D" parent="Showcase" unique_id=166464067]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 214.58989, 0, 195.54848)
+script = ExtResource("2_hwsxe")
+
+[node name="@Label3D@19583" type="Label3D" parent="Showcase" unique_id=127078996]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 214.58989, 17.84657, 195.54848)
+billboard = 1
+text = "Supermax Bulk Carrier  •  100 m
+ℳ 521200"
+font_size = 22
+outline_size = 8
+
+[node name="@Label3D@19584" type="Label3D" parent="Showcase" unique_id=574404175]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -8, 2, 273.88672)
+modulate = Color(0.96, 0.76, 0.28, 0.95)
+text = "=== PASSENGER FERRY ==="
+font_size = 36
+horizontal_alignment = 2
+
+[node name="ShipPreview_3_0" type="Node3D" parent="Showcase" unique_id=1400437960]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 7.788453, 0, 273.88672)
+script = ExtResource("2_hwsxe")
+
+[node name="@Label3D@19587" type="Label3D" parent="Showcase" unique_id=1366292648]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 7.788453, 7.5, 273.88672)
+billboard = 1
+text = "Small Passenger Ferry  •  15 m
+ℳ 12900"
+font_size = 22
+outline_size = 8
+
+[node name="ShipPreview_3_1" type="Node3D" parent="Showcase" unique_id=426469353]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 38.85742, 0, 273.88672)
+script = ExtResource("2_hwsxe")
+
+[node name="@Label3D@19590" type="Label3D" parent="Showcase" unique_id=1645947931]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 38.85742, 7.5, 273.88672)
+billboard = 1
+text = "Passenger Route Ferry  •  22 m
+ℳ 26368"
+font_size = 22
+outline_size = 8
+
+[node name="ShipPreview_3_2" type="Node3D" parent="Showcase" unique_id=1239259048]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 77.48598, 0, 273.88672)
+script = ExtResource("2_hwsxe")
+
+[node name="@Label3D@19593" type="Label3D" parent="Showcase" unique_id=1416292978]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 77.48598, 7.5, 273.88672)
+billboard = 1
+text = "Double-Ended Car Ferry  •  30 m
+ℳ 48000"
+font_size = 22
+outline_size = 8
+
+[node name="@Label3D@19594" type="Label3D" parent="Showcase" unique_id=327529010]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -8, 2, 352.22495)
+modulate = Color(0.96, 0.76, 0.28, 0.95)
+text = "=== CONTAINER CARRIER ==="
+font_size = 36
+horizontal_alignment = 2
+
+[node name="ShipPreview_4_0" type="Node3D" parent="Showcase" unique_id=380746403]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 10.25, 0, 352.22495)
+script = ExtResource("2_hwsxe")
+
+[node name="@Label3D@19627" type="Label3D" parent="Showcase" unique_id=1968381565]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 10.25, 7.5, 352.22495)
+billboard = 1
+text = "Feeder Container Ship  •  20 m
+ℳ 22000"
+font_size = 22
+outline_size = 8
+
+[node name="ShipPreview_4_1" type="Node3D" parent="Showcase" unique_id=1972289276]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 50.397278, 0, 352.22495)
+script = ExtResource("2_hwsxe")
+
+[node name="@Label3D@19669" type="Label3D" parent="Showcase" unique_id=1755146110]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 50.397278, 7.5, 352.22495)
+billboard = 1
+text = "Handysize Container Ship  •  35 m
+ℳ 64900"
+font_size = 22
+outline_size = 8
+
+[node name="ShipPreview_4_2" type="Node3D" parent="Showcase" unique_id=1087383971]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 108.33916, 0, 352.22495)
+script = ExtResource("2_hwsxe")
+
+[node name="@Label3D@19720" type="Label3D" parent="Showcase" unique_id=447737692]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 108.33916, 9.815613, 352.22495)
+billboard = 1
+text = "Panamax Container Ship  •  55 m
+ℳ 158500"
+font_size = 22
+outline_size = 8
+
+[node name="ShipPreview_4_3" type="Node3D" parent="Showcase" unique_id=71734492]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 199.37396, 0, 352.22495)
+script = ExtResource("2_hwsxe")
+
+[node name="@Label3D@19802" type="Label3D" parent="Showcase" unique_id=960521368]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 199.37396, 17.84657, 352.22495)
+billboard = 1
+text = "ULCV Container Ship  •  100 m
+ℳ 521200"
+font_size = 22
+outline_size = 8
+
+[node name="GroundPad" type="MeshInstance3D" parent="Showcase" unique_id=241702580]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 132.79004, 0.06, 201.60757)
+material_override = SubResource("StandardMaterial3D_cico1")
+cast_shadow = 0
+mesh = SubResource("BoxMesh_xp0wh")
+
+[node name="WaterStrip" type="MeshInstance3D" parent="Showcase" unique_id=1104064068]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 132.79004, 0.04, 201.60757)
+material_override = SubResource("StandardMaterial3D_oxu4w")
+mesh = SubResource("BoxMesh_44oww")

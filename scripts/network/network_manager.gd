@@ -459,7 +459,7 @@ func _ensure_local_ship_registered() -> void:
 			if hull_id.is_empty() and not template_path.is_empty():
 				hull_id = HullRegistry.resolve_id_from_template(template_path, hull_id)
 	if hull_id.is_empty():
-		hull_id = "cargo_ship_medium"
+		hull_id = "workboat"
 	register_ship_spawn(ship_id, hull_id, ship)
 
 

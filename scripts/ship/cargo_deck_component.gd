@@ -174,7 +174,7 @@ func add_pallet(pallet: Pallet, world_hint: Vector3 = Vector3.INF) -> int:
 		_apply_boat_cargo_mass_delta(pallet.mass_kg)
 		_deck_mass_kg += pallet.mass_kg
 
-	_spawn_pallet_node(origin_idx, pallet, _is_autonomous_npc_deck())
+	_spawn_pallet_node(origin_idx, pallet, false)
 	cargo_changed.emit(self)
 	return origin_idx
 
@@ -445,18 +445,9 @@ func _remove_pallet_node(pallet: Pallet) -> void:
 	if node != null and is_instance_valid(node):
 		node.queue_free()
 
-	if _is_autonomous_npc_deck():
-		return
 	var manager := get_node_or_null("/root/NetworkManager")
 	if manager != null and manager.has_method("unregister_cargo"):
 		manager.call("unregister_cargo", pallet.id)
-
-
-func _is_autonomous_npc_deck() -> bool:
-	var boat := _resolve_boat_body()
-	if boat == null:
-		return false
-	return boat.find_child("AutonomousNpcShip", true, false) != null
 
 
 func _pallet_node_name(pallet: Pallet) -> String:
@@ -500,6 +491,21 @@ func _rebuild_debug_visual() -> void:
 	var hx := deck_width_m  * 0.5
 	var hz := deck_length_m * 0.5
 	var h  := 0.01
+
+	# Single pad under the zone so it reads as one cargo area (no per-cell seams).
+	var plate_mi := MeshInstance3D.new()
+	var plate := BoxMesh.new()
+	plate.size = Vector3(deck_width_m * 0.995, 0.03, deck_length_m * 0.995)
+	plate_mi.mesh = plate
+	var plate_mat := StandardMaterial3D.new()
+	plate_mat.albedo_color = Color(0.32, 0.30, 0.26)
+	plate_mat.roughness = 0.95
+	plate_mat.metallic = 0.0
+	plate_mat.metallic_specular = 0.0
+	plate_mi.material_override = plate_mat
+	plate_mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	plate_mi.position = Vector3(0.0, -0.01, 0.0)
+	_debug_root.add_child(plate_mi)
 
 	# Hazard L-brackets at the corners — always shown, they mark the cargo zone.
 	var arm   := clampf(minf(hx, hz) * 0.25, 0.3, 1.2)

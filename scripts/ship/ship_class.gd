@@ -12,23 +12,23 @@ enum Type {
 	DEEP_SEA_FREIGHTER = 4,  ## 100 m+  — ocean-going bulk and general cargo
 }
 
-## Game-scale maximum length (m) per class. Sized so the player's coastal trader
-## (~13 m hull) fits naturally and multiple berths appear at each port size.
+## Game-scale maximum length (m) per class. Real metres — no feel multipliers.
+## The player's workboat is 30 m LOA × 24 m beam (COASTAL_TRADER must fit it).
 const MAX_LENGTH_M: Dictionary = {
-	Type.LAUNCH:              5.0,
-	Type.COASTAL_TRADER:     15.0,
-	Type.SHORT_SEA_COASTER:  25.0,
-	Type.HANDYSIZE_FEEDER:   40.0,
-	Type.DEEP_SEA_FREIGHTER: 60.0,
+	Type.LAUNCH:              10.0,
+	Type.COASTAL_TRADER:     35.0,
+	Type.SHORT_SEA_COASTER:  50.0,
+	Type.HANDYSIZE_FEEDER:   70.0,
+	Type.DEEP_SEA_FREIGHTER: 100.0,
 }
 
 ## Typical beam (m) — sets how far berth indicators extend into the water.
 const BEAM_M: Dictionary = {
-	Type.LAUNCH:              2.0,
-	Type.COASTAL_TRADER:      3.5,
-	Type.SHORT_SEA_COASTER:   5.5,
-	Type.HANDYSIZE_FEEDER:    8.0,
-	Type.DEEP_SEA_FREIGHTER: 11.0,
+	Type.LAUNCH:              4.0,
+	Type.COASTAL_TRADER:     24.0,
+	Type.SHORT_SEA_COASTER:  14.0,
+	Type.HANDYSIZE_FEEDER:   18.0,
+	Type.DEEP_SEA_FREIGHTER: 24.0,
 }
 
 const DISPLAY_NAME: Dictionary = {

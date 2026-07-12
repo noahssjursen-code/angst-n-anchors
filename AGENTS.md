@@ -34,14 +34,11 @@ scripts/
   state/        # GameState autoload (cross-system read model), sub-states: PlayerState, ShipState, ContractState, WorldState
 
 resources/data/
-  ships/        # Ship templates (fuel_tanker.json) → consumed by ShipBuilder
   models/
-    hulls/      # Hull model JSONs with "slots" dict (attachment points)
-    ships/      # Ship model JSONs (legacy wrappers, being phased out)
-    superstructures/  # Bridge scenes referenced by hull slots
     buildings/  # Fog horn, lighthouse
   meshes/       # Raw {vertices, indices} JSON by category (hulls/, docks/, buildings/, props/, …)
   lights/       # Nav-light JSON configs
+scenes/vessels/ # Hand-authored vessel scenes (workboat.tscn)
 ```
 
 ---
@@ -69,46 +66,36 @@ The autoloads listed above are the **actual** registered singletons. Do not refe
 
 ### Convention — `LocalPlayerView` is the MP seam
 
-UI code (HUDs, menus, debug overlays, hint banners) should **only** read per-player state through `LocalPlayerView`. NPCs and gameplay-mutating systems (`ShipBuilder`, `PortDock`, contract acceptance) may continue to consult the autoloads directly — they're the world-authority side, not a per-client view.
+UI code (HUDs, menus, debug overlays, hint banners) should **only** read per-player state through `LocalPlayerView`. NPCs and gameplay-mutating systems (`VesselSpawn`, `PortDock`, contract acceptance) may continue to consult the autoloads directly — they're the world-authority side, not a per-client view.
 
 In multiplayer this autoload becomes a per-client object the network layer populates with the local player's projection of the world. Every UI that already reads from here will keep working unchanged; the gameplay-mutating code stays on the (per-server) authority.
 
 ---
 
-## Ship Building System
+## Vessel System — Deck-grid bricks
 
-Ships are built at runtime by `ShipBuilder` from a JSON template. There is no hand-placed boat scene for new ships.
-
-### Pipeline
+Hand-authored vessel scenes (`scenes/vessels/`) own hull geometry and core systems. Deck fit-out is a **1×1×1 m brick grid** painted in the shipwright fullscreen editor (`ShipyardBrickEditor`). Layout persists as `brick_layout` on the owned-vessel ledger; spawn rebuilds via `DeckFitout`.
 
 ```gdscript
-var boat := ShipBuilder.build("res://resources/data/ships/fuel_tanker.json")
+var boat := VesselSpawn.instantiate_from_record(owned_vessel_record)
 get_tree().current_scene.add_child(boat)
 boat.place_at_waterline(water_y)
 ```
 
-### Three layers of JSON
-
-1. **Hull JSON** — `resources/data/models/hulls/<name>.json`. Geometry parts + a `"slots"` dict of named attachment points.
-2. **Ship template JSON** — `resources/data/ships/<name>.json`. References a hull, sets scale, superstructure key, physics params, buoyancy, cargo decks. Consumed by `ShipBuilder.build()`.
-3. **Ship model JSON** — `resources/data/models/ships/<name>.json`. Legacy wrapper, being phased out. Use ship templates instead.
-
-### Orientation convention — do not get this wrong
-
-**Bow = +Z, Stern = −Z, Port = −X, Starboard = +X.**
-
-Hull parts always use `"rotation_degrees": [0, -90, 0]` to bake authored vertex orientation into world space. Do not add extra rotation in ship model JSONs, ship template JSONs, or scene files.
-
-### Slots
-
-| Slot | Purpose |
+| Always on BoatBody (core) | Brick fit-out (player) |
 |---|---|
-| `bridge` | Superstructure origin |
-| `propulsion` | Propeller attachment, below waterline |
-| `bow_thruster` | Bow tunnel thruster |
-| `mooring_port_fwd` / `mooring_stbd_fwd` / `mooring_port_aft` / `mooring_stbd_aft` | Four mooring points |
-| `cargo_main` / `cargo_aft` | Cargo deck origins |
-| `nav_light_bow` | Bow nav light |
+| Hull visual + collision | Wall / window / door / ledge / railing bricks |
+| Strip buoyancy + hydro | Cargo tiles → cargo deck |
+| Propulsion, rudder, thruster | Crane base + crane → ship crane |
+| BoatController / Camera / Audio | Enclosed cabin + door → helm boarding |
+| MooringComponent + auto cleats/lights | |
+| WalkDeck | |
+
+Role (ferry / cargo / trawler-with-crane) comes from bricks + rules (`BrickRules`), not kit ids. Do **not** revive `WheelhouseVisual`, hull JSON `bridge` slots, or `ShipBuilder`.
+
+### Orientation (workboat)
+
+**Bow = −Z, Stern = +Z, Port = −X, Starboard = +X.** Grid cells are vessel metres.
 
 ---
 

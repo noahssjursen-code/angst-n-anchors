@@ -11,7 +11,13 @@ static var _in_flight_pull: bool = false
 static var _pending_pull_callbacks: Array = []
 
 
-static func publish_commission(session: Node, entry: Dictionary, template_path: String, uid: String) -> void:
+static func publish_commission(
+	session: Node,
+	entry: Dictionary,
+	template_path: String,
+	uid: String,
+	vessel_name: String = "",
+) -> void:
 	if session == null or not _is_mp_session(session):
 		return
 	var captain_id := _captain_id(session)
@@ -19,7 +25,9 @@ static func publish_commission(session: Node, entry: Dictionary, template_path: 
 		return
 
 	var hull_id := str(entry.get("id", ""))
-	var display := str(entry.get("display", "Vessel"))
+	var display := vessel_name.strip_edges()
+	if display.is_empty():
+		display = str(entry.get("display", "Vessel"))
 	if hull_id.is_empty():
 		return
 
@@ -61,51 +69,13 @@ static func refresh_for_ui(session: Node, on_complete: Callable = Callable()) ->
 	pull_captain_vessel(session, on_complete)
 
 
-static func push_fleet_state(session: Node, record: Dictionary) -> void:
-	if session == null or not _is_mp_session(session):
-		return
-	var server_id := str(record.get("server_vessel_id", ""))
-	if server_id.is_empty():
-		push_warning(
-			"VesselSync: fleet not pushed — vessel has no server_vessel_id (uid=%s). "
-			% str(record.get("uid", ""))
-		)
-		return
-
-	var av := AutonomousVesselRecord.from_owned_vessel(record)
-	var fleet_body := JSON.stringify({
-		"autonomous_active": av.active,
-		"autonomous_active_at": av.active_at,
-		"home_port_id": av.home_port_id,
-		"visit_port_id": av.visit_port_id,
-		"crew": av.crew,
-		"expense_per_day": av.expense_per_day,
-		"pending_earnings": av.pending_earnings,
-		"last_collected_at": av.last_collected_at,
-		"last_accrual_at": av.last_accrual_at,
-		"sim_version": av.sim_version,
-	})
-
-	var req := HTTPRequest.new()
-	session.add_child(req)
-	var url := "%s/v1/vessels" % _http_base(session)
-	var body := JSON.stringify({
-		"id": server_id,
-		"fleet_state_json": fleet_body,
-	})
-	req.request_completed.connect(func(result: int, code: int, _h: PackedStringArray, _resp: PackedByteArray) -> void:
-		req.queue_free()
-		if result != HTTPRequest.RESULT_SUCCESS or code != 200:
-			push_warning("VesselSync: fleet push failed for %s (HTTP %d)" % [server_id, code])
-	)
-	req.request(url, PackedStringArray(["Content-Type: application/json"]), HTTPClient.METHOD_PUT, body)
+## Autonomous fleet sync removed — kept as no-ops so old MP call sites compile.
+static func push_fleet_state(_session: Node, _record: Dictionary) -> void:
+	pass
 
 
-## Ensures the vessel exists in Postgres, then pushes fleet route/state.
-static func persist_fleet_state(session: Node, record: Dictionary) -> void:
-	ensure_vessel_registered(session, record, func(updated: Dictionary) -> void:
-		push_fleet_state(session, updated)
-	)
+static func persist_fleet_state(_session: Node, _record: Dictionary) -> void:
+	pass
 
 
 ## POST /v1/vessels for owned hulls that only exist in the local save.
@@ -141,7 +111,7 @@ static func ensure_vessel_registered(
 
 	var captain_id := _captain_id(session)
 	var hull_id := str(record.get("hull_id", ""))
-	var display := str(record.get("display", record.get("display_name", "Vessel")))
+	var display := VesselSpawn.vessel_name_of(record)
 	var template_path := str(record.get("template_path", ""))
 	if captain_id.is_empty() or hull_id.is_empty():
 		push_warning("VesselSync: cannot register vessel — missing captain_id or hull_id")
@@ -188,7 +158,6 @@ static func backfill_unregistered_vessels(session: Node) -> void:
 		pending.append(record.duplicate(true))
 
 	if pending.is_empty():
-		sync_all_active_fleet_to_server(session)
 		return
 
 	var remaining := pending.size()
@@ -196,23 +165,12 @@ static func backfill_unregistered_vessels(session: Node) -> void:
 		ensure_vessel_registered(session, record, func(_updated: Dictionary) -> void:
 			remaining -= 1
 			if remaining <= 0:
-				sync_all_active_fleet_to_server(session)
 				pull_captain_vessel(session)
 		)
 
 
-static func sync_all_active_fleet_to_server(session: Node) -> void:
-	if session == null or not _is_mp_session(session) or session.get("data") == null:
-		return
-	for entry_raw in (session.data as PlayerData).owned_vessels:
-		if typeof(entry_raw) != TYPE_DICTIONARY:
-			continue
-		var record := entry_raw as Dictionary
-		if not bool(record.get("autonomous_active", false)):
-			continue
-		if str(record.get("server_vessel_id", "")).is_empty():
-			continue
-		push_fleet_state(session, record)
+static func sync_all_active_fleet_to_server(_session: Node) -> void:
+	pass
 
 
 static func _is_mp_session(session: Node) -> bool:
@@ -400,70 +358,56 @@ static func _merge_server_row(data: PlayerData, row: Dictionary) -> Dictionary:
 		return {}
 
 	var fleet_patch := _fleet_patch_from_row(row)
+	var hull_entry := HullRegistry.get_by_id(hull_id)
+	var hull_display := str(hull_entry.get("display", display))
 
-	var existing := data.find_owned_by_server_id(server_id)
+	var existing: Dictionary = data.find_owned_by_server_id(server_id)
 	if not existing.is_empty():
 		existing = PlayerData.merge_vessel_record(existing, {
-			"display": display,
+			"name": display,
+			"display": hull_display,
 			"hull_id": hull_id,
 		})
 		existing = PlayerData.merge_vessel_record(existing, fleet_patch)
 		var path := str(existing.get("template_path", ""))
-		if path.is_empty() or not FileAccess.file_exists(path):
-			var rebuilt := _ensure_local_template(hull_id, display)
+		if path.is_empty() or not ResourceLoader.exists(path):
+			var rebuilt := _ensure_local_template(hull_id, hull_display)
 			if rebuilt.is_empty():
 				return {}
 			existing["uid"] = rebuilt["uid"]
 			existing["template_path"] = rebuilt["template_path"]
+			existing["scene_path"] = rebuilt.get("scene_path", rebuilt["template_path"])
 		return existing
 
-	var local := _ensure_local_template(hull_id, display)
+	var local := _ensure_local_template(hull_id, hull_display)
 	if local.is_empty():
 		return {}
 	var record := {
 		"uid":              local["uid"],
 		"hull_id":          hull_id,
-		"display":          display,
+		"name":             display,
+		"display":          hull_display,
 		"template_path":    local["template_path"],
 		"server_vessel_id": server_id,
 	}
 	return PlayerData.merge_vessel_record(record, fleet_patch)
 
 
-static func _fleet_patch_from_row(row: Dictionary) -> Dictionary:
-	var raw := str(row.get("fleet_state_json", ""))
-	if raw.is_empty() or raw == "{}":
-		return {}
-	var parsed: Variant = JSON.parse_string(raw)
-	if typeof(parsed) != TYPE_DICTIONARY:
-		return {}
-	var fleet := parsed as Dictionary
-	return {
-		"autonomous_active": bool(fleet.get("autonomous_active", false)),
-		"autonomous_active_at": int(fleet.get("autonomous_active_at", 0)),
-		"home_port_id": str(fleet.get("home_port_id", "")),
-		"visit_port_id": str(fleet.get("visit_port_id", "")),
-		"crew": fleet.get("crew", []),
-		"expense_per_day": int(fleet.get("expense_per_day", 0)),
-		"pending_earnings": int(fleet.get("pending_earnings", 0)),
-		"last_collected_at": int(fleet.get("last_collected_at", 0)),
-		"last_accrual_at": int(fleet.get("last_accrual_at", 0)),
-		"sim_version": int(fleet.get("sim_version", AutonomousVesselRecord.SIM_VERSION)),
-	}
+static func _fleet_patch_from_row(_row: Dictionary) -> Dictionary:
+	# Autonomous fleet fields ignored after NPC-ship wipe.
+	return {}
 
 
 static func _ensure_local_template(hull_id: String, display: String) -> Dictionary:
 	var entry := HullRegistry.get_by_id(hull_id)
 	if entry.is_empty():
 		return {}
-	DirAccess.make_dir_recursive_absolute("user://shipwright_orders")
 	var uid := "%s_%d" % [hull_id, Time.get_unix_time_from_system()]
-	var path := "user://shipwright_orders/" + uid + ".json"
-	var template := StarterVessel.build_template(entry)
-	template["display_name"] = display
-	var f := FileAccess.open(path, FileAccess.WRITE)
-	if f == null:
-		return {}
-	f.store_string(JSON.stringify(template))
-	f.close()
-	return {"uid": uid, "template_path": path}
+	var scene_path := str(entry.get("scene_path", VesselSpawn.WORKBOAT_SCENE))
+	return {
+		"uid": uid,
+		"template_path": scene_path,
+		"scene_path": scene_path,
+		"display": display,
+		"hull_id": str(entry.get("id", "workboat")),
+	}

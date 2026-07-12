@@ -13,9 +13,9 @@ const NPC_BASE_MESH      := CHARACTER_BASE_DIR + "npc_base.json"
 const HAT_FLAT_CAP   := CHARACTER_BASE_DIR + "hat_flat_cap.json"
 const HAT_PEAKED_CAP := CHARACTER_BASE_DIR + "hat_peaked_cap.json"
 
-# ── Hull base + bridge superstructures ───────────────────────────────────────
-const HULL_BASE_DIR  := "res://resources/data/models/hulls/"
-const BRIDGE_SCENE_DIR := "res://scenes/shared/superstructures/"
+# ── Vessels (hand-authored scenes; no hull JSON catalog) ─────────────────────
+const VESSEL_SCENE_DIR := "res://scenes/vessels/"
+const WORKBOAT_SCENE   := VESSEL_SCENE_DIR + "workboat.tscn"
 
 # ── Port building meshes (port_facilities.gd is the sole consumer for these,
 #     pulled here as documentation — not currently imported elsewhere) ────────
@@ -45,4 +45,3 @@ const USER_SAVE_DIR        := "user://save/"
 const USER_PLAYER_SAVE     := USER_SAVE_DIR + "player.json"
 const USER_SETTINGS_PATH   := "user://settings.cfg"
 const USER_ORDERS_DIR      := "user://shipwright_orders/"
-const USER_SHIP_CACHE_DIR  := "user://ship_builder_cache/"

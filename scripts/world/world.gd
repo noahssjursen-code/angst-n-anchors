@@ -108,19 +108,25 @@ func _telemetry() -> Node:
 func _bake_berth_lanes(t: Node, defs: Array[PortDefinition]) -> void:
 	var lane_handle: int = t.mark_load_event("berth_lanes.bake") if t != null else 0
 	BerthApproachLanes.bake_all_ports(defs, world_seed)
-	AutonomousVesselSim.invalidate_legs_cache()
-	# Warm the roundabout graph once during world setup so the first island
-	# approach does not pay O(nodes²) land sampling mid-voyage.
-	AutonomousTransitRoute.rebuild_navigation_graph()
 	call_deferred("_refresh_berth_lane_debug")
 	if t != null:
 		t.end_load_event(lane_handle)
 
 
 func _refresh_berth_lane_debug() -> void:
-	var mgr := get_node_or_null("/root/AutonomousVesselManager")
-	if mgr != null and mgr.has_method("refresh_lane_debug"):
-		mgr.call("refresh_lane_debug")
+	_ensure_lane_debug_draw()
+	BerthApproachLanesDebugDraw.refresh_if_enabled(get_tree())
+
+
+func _ensure_lane_debug_draw() -> void:
+	var tree := get_tree()
+	if tree == null:
+		return
+	if tree.get_first_node_in_group("berth_lane_debug") != null:
+		return
+	var draw := BerthApproachLanesDebugDraw.new()
+	draw.name = "BerthApproachLanesDebugDraw"
+	add_child(draw)
 
 
 func _add_world_renderer() -> void:

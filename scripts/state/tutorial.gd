@@ -19,11 +19,11 @@ const HINTS := {
 		"duration": 8.0,
 	},
 	"first_berth": {
-		"text": "Your vessel is at the dock. Step aboard and press F on the captain's chair to take the helm.",
+		"text": "Your vessel is at the dock. Step aboard and press F on the helm wheel to take the helm.",
 		"duration": 8.0,
 	},
 	"first_helm": {
-		"text": "W/S adjusts throttle, A/D steers. Press F again to leave the helm. Sea chart on [M].",
+		"text": "W/S adjusts throttle, A/D steers. Press F again to leave the helm. V toggles first / third person. Sea chart on [M].",
 		"duration": 9.0,
 	},
 	"first_journal": {

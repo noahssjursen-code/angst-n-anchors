@@ -17,12 +17,12 @@ const LAYER_BOAT_WALK: int = 4
 const LAYER_PLAYER:    int = 8
 const MERGED_COLLIDER_NAME := "MergedBoatCollider"
 const WALK_DECK_COLLIDER_NAME := "WalkDeckCollider"
+const WALK_HULL_COLLIDER_NAME := "WalkHullCollider"
+const BRICK_COL_PREFIX := "BrickCol_"
 
 @export_group("Physics")
 ## Manual mass override (kg). Used when `auto_mass_from_hull = false`. Ignored otherwise.
-## Realistic ship mass = displaced water volume × water density. A 14 m steel workboat is
-## ~15–60 t; a 28 m coastal cargo is ~120–250 t. For wave heave, prefer `mass_scale` over
-## arbitrary `hull_mass` when using auto mass.
+## Prefer `displacement_t` (tonnes) for the new vessel contract.
 @export var hull_mass:           float = 22000.0:
 	set(v):
 		hull_mass = v
@@ -38,31 +38,60 @@ const WALK_DECK_COLLIDER_NAME := "WalkDeckCollider"
 		angular_damp_coeff = v
 		angular_damp = v
 
+@export_group("Vessel size (metres)")
+## Length overall — bow face to stern face.
+@export var length_m: float = 15.0:
+	set(v):
+		length_m = maxf(v, 1.0)
+		_on_si_size_changed()
+## Max beam — port face to starboard face.
+@export var beam_m: float = 12.0:
+	set(v):
+		beam_m = maxf(v, 1.0)
+		_on_si_size_changed()
+## Design draft (metres submerged at displacement_t).
+@export var draft_m: float = 1.5:
+	set(v):
+		draft_m = maxf(v, 0.1)
+		_on_si_size_changed()
+## Keel to deck height.
+@export var depth_m: float = 3.0:
+	set(v):
+		depth_m = maxf(v, 0.5)
+		_on_si_size_changed()
+## Mass at design draft, in tonnes (1 t = 1000 kg). Drives RigidBody mass when set > 0.
+@export var displacement_t: float = 120.0:
+	set(v):
+		displacement_t = maxf(v, 0.0)
+		_refresh_mass()
+
+@export_group("Hull faces")
+## Which local axis points to each face of the footprint rectangle.
+## Default matches propulsion: bow −Z (Godot forward), stern +Z, port −X, starboard +X.
+enum FaceAxis { PLUS_X = 0, MINUS_X = 1, PLUS_Z = 2, MINUS_Z = 3 }
+@export var bow_face: FaceAxis = FaceAxis.MINUS_Z
+@export var stern_face: FaceAxis = FaceAxis.PLUS_Z
+@export var port_face: FaceAxis = FaceAxis.MINUS_X
+@export var starboard_face: FaceAxis = FaceAxis.PLUS_X
+
 @export_group("Mass model")
-## When true, the hull's contribution to mass is computed from displacement at design
-## draft — strip-theory volume integral × water density. Component masses below add on
-## top, so a loaded ship settles deeper than design draft (which is correct).
-## Set by ShipBuilder; you rarely toggle this manually.
-@export var auto_mass_from_hull: bool = false:
+## When true, mass comes from strip displacement or `displacement_t`. Prefer displacement_t.
+@export var auto_mass_from_hull: bool = true:
 	set(v):
 		auto_mass_from_hull = v
 		_refresh_mass()
-## Targeted equilibrium draft (fraction of hull height submerged) used by auto mass.
-## A laden coastal cargo sits ~0.4–0.5; a planing skiff ~0.15–0.25.
-@export_range(0.05, 0.95, 0.01) var design_draft_fraction: float = 0.42:
+## Targeted equilibrium draft (fraction of hull height) when deriving mass from stations only.
+@export_range(0.05, 0.95, 0.01) var design_draft_fraction: float = 0.5:
 	set(v):
 		design_draft_fraction = clampf(v, 0.05, 0.95)
 		_refresh_mass()
-## Extra rigid-body mass vs displacement balance (auto mass or manual hull_mass).
-## Values > 1.0 make the hull heavier than Archimedes at design draft so it settles
-## slightly deeper but resists wave heave — rides crests instead of sinking into them.
-@export_range(1.0, 2.0, 0.01) var mass_scale: float = 1.28:
+## Deprecated — always 1.0. Kept so old callers compile; do not use.
+@export_range(1.0, 2.0, 0.01) var mass_scale: float = 1.0:
 	set(v):
-		mass_scale = maxf(1.0, v)
+		mass_scale = 1.0
 		_refresh_mass()
 
-## Strip-theory hull data, set by ShipBuilder. Used for proper displacement-based mass.
-## If null, falls back to the old bbox approximation.
+## Strip-theory hull data. Built from length/beam/depth for box vessels, or from JSON historically.
 @export var hull_stations: HullStations:
 	set(v):
 		hull_stations = v
@@ -92,7 +121,7 @@ const WALK_DECK_COLLIDER_NAME := "WalkDeckCollider"
 
 @export_group("Fuel")
 ## Tank capacity in litres. Scales with hull size — defaults sized for a
-## coastal trader. ShipBuilder can override per-template; a value > 0 here
+## coastal trader. Templates can override per-vessel; a value > 0 here
 ## ensures any hull spawned cold-boot has a usable tank.
 @export var fuel_capacity_l: float = 400.0:
 	set(v):
@@ -158,22 +187,22 @@ var _artificial_keel_extra_depth: float = 0.0
 		_refresh_center_of_mass()
 
 @export_group("Hull")
-## Absolute uniform scale applied to the mesh. The physical hull_size is calculated automatically.
+## Deprecated uniform mesh scale — always 1.0 (1 unit = 1 metre).
 @export var mesh_scale: float = 1.0:
 	set(v):
-		mesh_scale = v
+		mesh_scale = 1.0
 		if _transformer:
-			_transformer.set("absolute_scale", v)
+			_transformer.set("absolute_scale", 1.0)
 			_build_merged_collision()
 		if _model_assembler:
-			_model_assembler.set("absolute_scale", v)
+			_model_assembler.set("absolute_scale", 1.0)
 			_sync_hull_size_from_mesh()
 			_build_merged_collision()
 
-var hull_size: Vector3 = Vector3(6.0, 2.0, 14.0)
+var hull_size: Vector3 = Vector3(12.0, 3.0, 15.0)
 var hull_center: Vector3 = Vector3.ZERO
 
-const DEFAULT_HULL_JSON := "res://resources/data/meshes/ships/hand_tanker_hull.json"
+const DEFAULT_HULL_JSON := ""
 
 @export_file("*.json") var model_data_path: String:
 	set(v):
@@ -288,11 +317,30 @@ func _exit_tree() -> void:
 		_walk_deck = null
 
 
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_ENTER_TREE and not Engine.is_editor_hint():
+		# Fit-out may have built WalkDeck before we were in the tree — sync now.
+		call_deferred("_sync_walk_deck_after_enter")
+
+
+func _sync_walk_deck_after_enter() -> void:
+	if not is_inside_tree():
+		return
+	if _walk_deck != null and is_instance_valid(_walk_deck):
+		_ensure_walk_deck()
+		_sync_walk_deck_transform()
+		_enable_walk_deck_collision()
+
+
 func _integrate_forces(state: PhysicsDirectBodyState3D) -> void:
 	if not Engine.is_editor_hint() and _mooring_integrate.is_valid():
 		_mooring_integrate.call(state)
 
-	if Engine.is_editor_hint() or _walk_deck == null or not is_instance_valid(_walk_deck):
+	if Engine.is_editor_hint():
+		return
+	if not is_inside_tree():
+		return
+	if _walk_deck == null or not is_instance_valid(_walk_deck) or not _walk_deck.is_inside_tree():
 		return
 	_sync_walk_deck_transform()
 
@@ -311,7 +359,7 @@ func _physics_process(_delta: float) -> void:
 func _ensure_model() -> void:
 	if not model_data_path.is_empty():
 		_ensure_model_assembler()
-	else:
+	elif not mesh_data_path.is_empty():
 		_ensure_transformer()
 
 
@@ -415,14 +463,61 @@ func _refresh_center_of_mass() -> void:
 func _refresh_mass() -> void:
 	if not is_node_ready():
 		return
-	var components: float = engine_mass + keel_ballast_mass + fuel_stores_mass + cargo_mass
-	var hull_share: float
-	if auto_mass_from_hull:
-		hull_share = _hull_displacement_kg()
+	# displacement_t is design mass in tonnes (1 t = 1000 kg). Cargo adds on top.
+	# Component mass exports are for CoM / tuning docs — not stacked on displacement_t.
+	if displacement_t > 0.0:
+		mass = maxf(displacement_t * 1000.0 + cargo_mass, 1.0)
+	elif auto_mass_from_hull:
+		var components: float = engine_mass + keel_ballast_mass + fuel_stores_mass + cargo_mass
+		mass = maxf(_hull_displacement_kg() + components, 1.0)
 	else:
-		hull_share = hull_mass
-	mass = maxf((hull_share + components) * mass_scale, 1.0)
+		mass = maxf(hull_mass + engine_mass + keel_ballast_mass + fuel_stores_mass + cargo_mass, 1.0)
 	_refresh_center_of_mass()
+
+
+func _on_si_size_changed() -> void:
+	hull_size = Vector3(beam_m, depth_m, length_m)
+	hull_center = Vector3(0.0, depth_m * 0.5, 0.0)
+	if design_draft_fraction > 0.0 and depth_m > 0.0:
+		# Keep draft_m and design_draft_fraction loosely aligned for legacy callers.
+		pass
+	_refresh_mass()
+
+
+## Local unit vector toward the bow face.
+func get_bow_axis_local() -> Vector3:
+	return _face_axis_vector(bow_face)
+
+
+func get_stern_axis_local() -> Vector3:
+	return _face_axis_vector(stern_face)
+
+
+func get_port_axis_local() -> Vector3:
+	return _face_axis_vector(port_face)
+
+
+func get_starboard_axis_local() -> Vector3:
+	return _face_axis_vector(starboard_face)
+
+
+func _face_axis_vector(face: FaceAxis) -> Vector3:
+	match face:
+		FaceAxis.PLUS_X:
+			return Vector3(1.0, 0.0, 0.0)
+		FaceAxis.MINUS_X:
+			return Vector3(-1.0, 0.0, 0.0)
+		FaceAxis.PLUS_Z:
+			return Vector3(0.0, 0.0, 1.0)
+		FaceAxis.MINUS_Z:
+			return Vector3(0.0, 0.0, -1.0)
+	return Vector3(0.0, 0.0, -1.0)
+
+
+func get_displacement_tonnes() -> float:
+	if displacement_t > 0.0:
+		return displacement_t
+	return mass / 1000.0
 
 
 ## Hull-share mass: the steel of the hull itself. Calibrated so that hull_share +
@@ -505,8 +600,11 @@ func place_at_waterline(water_y: float, draft_fraction: float = -1.0) -> void:
 	var total_height: float
 	var keel_local_y: float
 	if hull_stations != null and hull_stations.height_m > 0.0:
-		total_height = hull_stations.height_m * mesh_scale
-		keel_local_y = hull_stations.keel_y * mesh_scale
+		total_height = hull_stations.height_m
+		keel_local_y = hull_stations.keel_y
+	elif depth_m > 0.0:
+		total_height = depth_m
+		keel_local_y = 0.0
 	else:
 		total_height = hull_size.y
 		keel_local_y = hull_center.y - hull_size.y * 0.5
@@ -528,12 +626,11 @@ func floating_draft_fraction() -> float:
 func _submerged_volume_m3(draft_fraction: float) -> float:
 	if hull_stations == null or hull_stations.stations.is_empty():
 		return 0.0
-	var s: float = mesh_scale
 	var wl: float = hull_stations.keel_y + hull_stations.height_m * clampf(draft_fraction, 0.0, 1.0)
 	var vol_m3: float = 0.0
 	for i in range(hull_stations.stations.size()):
-		var half_area_s1: float = hull_stations.half_section_area_below(i, wl)
-		vol_m3 += half_area_s1 * 2.0 * s * s * hull_stations.station_length(i) * s
+		var half_area: float = hull_stations.half_section_area_below(i, wl)
+		vol_m3 += half_area * 2.0 * hull_stations.station_length(i)
 	return vol_m3
 
 
@@ -574,9 +671,10 @@ func fit_to_port_berth(dock: PortDock, berth_index: int) -> void:
 
 
 func _effective_half_beam_m() -> float:
+	if beam_m > 0.01:
+		return beam_m * 0.5
 	if hull_stations != null and hull_stations.beam_m > 0.01:
-		return hull_stations.beam_m * mesh_scale * 0.5
-	# Body space: beam on X after ShipFrame bounds sync.
+		return hull_stations.beam_m * 0.5
 	return hull_size.x * 0.5
 
 
@@ -601,44 +699,123 @@ func _clear_model_assembler() -> void:
 func _ensure_walk_deck() -> void:
 	if Engine.is_editor_hint():
 		return
-	if _walk_deck != null and is_instance_valid(_walk_deck):
-		return
+	if _walk_deck == null or not is_instance_valid(_walk_deck):
+		_walk_deck = AnimatableBody3D.new()
+		_walk_deck.name = "WalkDeck"
+		_walk_deck.sync_to_physics = false
+		_walk_deck.collision_layer = LAYER_BOAT_WALK
+		_walk_deck.collision_mask  = LAYER_PLAYER
 
-	_walk_deck = AnimatableBody3D.new()
-	_walk_deck.name = "WalkDeck"
-	_walk_deck.sync_to_physics = false
-	_walk_deck.collision_layer = LAYER_BOAT_WALK
-	_walk_deck.collision_mask  = LAYER_PLAYER
+		var cs := CollisionShape3D.new()
+		cs.name = WALK_DECK_COLLIDER_NAME
+		var box := BoxShape3D.new()
+		box.size = _walk_deck_box_size()
+		cs.shape = box
+		cs.disabled = true
+		_walk_deck.add_child(cs)
 
-	var cs := CollisionShape3D.new()
-	cs.name = WALK_DECK_COLLIDER_NAME
-	var box := BoxShape3D.new()
-	box.size = _walk_deck_box_size()
-	cs.shape = box
-	cs.disabled = true
-	_walk_deck.add_child(cs)
-
+	# Prefer a sibling under the same parent so walk/brick colliders stay off the RigidBody.
 	var parent_node := get_parent()
-	if parent_node != null:
+	var walk_parent := _walk_deck.get_parent()
+	if walk_parent == null:
+		if parent_node != null:
+			parent_node.add_child(_walk_deck)
+		else:
+			add_child(_walk_deck)
+	elif parent_node != null and walk_parent == self:
+		var xf := _walk_deck.global_transform
+		remove_child(_walk_deck)
 		parent_node.add_child(_walk_deck)
-	else:
-		add_child(_walk_deck)
+		_walk_deck.global_transform = xf
+
 	_walk_deck.set_meta("_boat_owner", self)
+	_ensure_walk_hull_collider()
 	_sync_walk_deck_transform()
 	call_deferred("_enable_walk_deck_collision")
 
 
 func _walk_deck_box_size() -> Vector3:
-	return Vector3(hull_size.x * 0.96, 0.14, hull_size.z * 0.96)
+	## Full hull footprint — no inset rim (avoids gray hull ledge you can fall through).
+	return Vector3(hull_size.x, 0.14, hull_size.z)
 
 
 func _walk_deck_local_origin() -> Vector3:
+	# Prefer the brick-grid deck plane when this hull exposes one (Workboat).
+	if has_method("_deck_y"):
+		return Vector3(0.0, float(call("_deck_y")) + 0.04, 0.0)
 	# Slightly above geometric deck so the slab clears the hull collider visually.
 	return hull_center + Vector3(0.0, hull_size.y * 0.5 + 0.08, 0.0)
 
 
+func _walk_hull_box_size() -> Vector3:
+	## Matches the gray hull shell (full beam/loa, 85% depth).
+	return Vector3(hull_size.x, maxf(hull_size.y * 0.85, 0.5), hull_size.z)
+
+
+func _walk_hull_boat_local_center() -> Vector3:
+	var sz := _walk_hull_box_size()
+	return Vector3(0.0, sz.y * 0.5, 0.0)
+
+
+func _ensure_walk_hull_collider() -> void:
+	## Player-facing hull volume on boat_walk — RigidBody hull stays on boat_hull.
+	if _walk_deck == null or not is_instance_valid(_walk_deck):
+		return
+	var cs := _walk_deck.get_node_or_null(WALK_HULL_COLLIDER_NAME) as CollisionShape3D
+	if cs == null:
+		cs = CollisionShape3D.new()
+		cs.name = WALK_HULL_COLLIDER_NAME
+		_walk_deck.add_child(cs)
+	var box := cs.shape as BoxShape3D
+	if box == null:
+		box = BoxShape3D.new()
+		cs.shape = box
+	box.size = _walk_hull_box_size()
+	cs.position = boat_to_walk_deck_local(_walk_hull_boat_local_center())
+	cs.rotation = Vector3.ZERO
+	cs.disabled = false
+
+
+## Attach a brick CollisionShape3D as a *direct* child of WalkDeck (Godot ignores nested shapes).
+func add_walk_brick_collider(
+	name_suffix: String,
+	boat_local_center: Vector3,
+	size: Vector3,
+	yaw_deg: float,
+) -> CollisionShape3D:
+	var walk := ensure_walk_deck()
+	if walk == null:
+		return null
+	var cs := CollisionShape3D.new()
+	cs.name = "%s%s" % [BRICK_COL_PREFIX, name_suffix]
+	var box := BoxShape3D.new()
+	box.size = size
+	cs.shape = box
+	cs.position = boat_to_walk_deck_local(boat_local_center)
+	cs.rotation_degrees = Vector3(0.0, yaw_deg, 0.0)
+	walk.add_child(cs)
+	return cs
+
+
+func clear_walk_brick_colliders() -> void:
+	var walk := get_walk_deck()
+	if walk == null:
+		return
+	var to_free: Array[Node] = []
+	for child in walk.get_children():
+		if child is CollisionShape3D and str(child.name).begins_with(BRICK_COL_PREFIX):
+			to_free.append(child)
+	for child in to_free:
+		walk.remove_child(child)
+		child.free()
+
+
 func _sync_walk_deck_transform() -> void:
 	if _walk_deck == null or not is_instance_valid(_walk_deck):
+		return
+	# global_transform errors loudly when either node is outside the tree
+	# (fit-out / spawn often builds the WalkDeck before the boat is added).
+	if not is_inside_tree() or not _walk_deck.is_inside_tree():
 		return
 	_walk_deck.global_transform = global_transform * Transform3D(Basis(), _walk_deck_local_origin())
 
@@ -646,7 +823,10 @@ func _sync_walk_deck_transform() -> void:
 func _enable_walk_deck_collision() -> void:
 	if _walk_deck == null or not is_instance_valid(_walk_deck):
 		return
+	if not is_inside_tree() or not _walk_deck.is_inside_tree():
+		return
 	_sync_walk_deck_transform()
+	_ensure_walk_hull_collider()
 	var cs := _walk_deck.get_node_or_null(WALK_DECK_COLLIDER_NAME) as CollisionShape3D
 	if cs != null:
 		cs.disabled = false
@@ -658,7 +838,23 @@ func _resize_walk_deck_shape() -> void:
 	var cs := _walk_deck.get_node_or_null(WALK_DECK_COLLIDER_NAME) as CollisionShape3D
 	if cs != null and cs.shape is BoxShape3D:
 		(cs.shape as BoxShape3D).size = _walk_deck_box_size()
+	_ensure_walk_hull_collider()
 	_sync_walk_deck_transform()
+
+
+## Ensure WalkDeck exists (player stands / brick colliders live here).
+func ensure_walk_deck() -> AnimatableBody3D:
+	_ensure_walk_deck()
+	return _walk_deck
+
+
+func get_walk_deck() -> AnimatableBody3D:
+	return _walk_deck
+
+
+## Convert a point in boat-local space into WalkDeck-local space.
+func boat_to_walk_deck_local(boat_local: Vector3) -> Vector3:
+	return boat_local - _walk_deck_local_origin()
 
 
 func _build_merged_collision() -> void:

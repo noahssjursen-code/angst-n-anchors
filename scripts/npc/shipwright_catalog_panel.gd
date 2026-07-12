@@ -19,6 +19,9 @@ var _specs_lbl: Label
 var _price_lbl: Label
 var _index_lbl: Label
 var _commission_btn: Button
+var _prev_btn: Button
+var _next_btn: Button
+var _nav_row: HBoxContainer
 
 var _catalog: Array[Dictionary] = []
 var _index: int = 0
@@ -70,7 +73,12 @@ func is_open() -> bool:
 func open_catalog(catalog: Array, start_index: int = 0) -> void:
 	_catalog.clear()
 	for item in catalog:
-		_catalog.append(item as Dictionary)
+		var entry := item as Dictionary
+		# Drop any stale entries that no longer have a real scene.
+		var scene_path := str(entry.get("scene_path", ""))
+		if scene_path.is_empty() or not ResourceLoader.exists(scene_path):
+			continue
+		_catalog.append(entry)
 	_index = clampi(start_index, 0, maxi(_catalog.size() - 1, 0))
 	_resize_panel()
 	_panel.visible = true
@@ -109,14 +117,14 @@ func _build_chrome() -> void:
 	margin.add_child(root_v)
 
 	var title := Label.new()
-	title.text = "SHIPWRIGHT'S CATALOG"
+	title.text = "HULLS FOR SALE"
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	title.add_theme_font_size_override("font_size", 20)
 	title.add_theme_color_override("font_color", HudStyle.C_AMBER)
 	root_v.add_child(title)
 
 	var tagline := Label.new()
-	tagline.text = "Browse the fleet — commission any hull we have on the slips."
+	tagline.text = "Hulls for sale. Pick one — you build the deck yourself."
 	tagline.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	tagline.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	tagline.add_theme_font_size_override("font_size", 13)
@@ -192,25 +200,25 @@ func _build_chrome() -> void:
 	env.environment = we
 	world.add_child(env)
 
-	var nav := HBoxContainer.new()
-	nav.alignment = BoxContainer.ALIGNMENT_CENTER
-	nav.add_theme_constant_override("separation", 12)
-	preview_v.add_child(nav)
+	_nav_row = HBoxContainer.new()
+	_nav_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	_nav_row.add_theme_constant_override("separation", 12)
+	preview_v.add_child(_nav_row)
 
-	var prev_btn := UiBuilder.button("◀  Previous")
-	prev_btn.pressed.connect(func() -> void: _step(-1))
-	nav.add_child(prev_btn)
+	_prev_btn = UiBuilder.button("◀  Previous")
+	_prev_btn.pressed.connect(func() -> void: _step(-1))
+	_nav_row.add_child(_prev_btn)
 
 	_index_lbl = Label.new()
 	_index_lbl.custom_minimum_size = Vector2(100, 0)
 	_index_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_index_lbl.add_theme_font_size_override("font_size", 14)
 	_index_lbl.add_theme_color_override("font_color", HudStyle.C_TEXT)
-	nav.add_child(_index_lbl)
+	_nav_row.add_child(_index_lbl)
 
-	var next_btn := UiBuilder.button("Next  ▶")
-	next_btn.pressed.connect(func() -> void: _step(1))
-	nav.add_child(next_btn)
+	_next_btn = UiBuilder.button("Next  ▶")
+	_next_btn.pressed.connect(func() -> void: _step(1))
+	_nav_row.add_child(_next_btn)
 
 	# ── Spec sheet (right) ────────────────────────────────────────────────────
 	var sheet := VBoxContainer.new()
@@ -240,7 +248,7 @@ func _build_chrome() -> void:
 	spacer.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	sheet.add_child(spacer)
 
-	_commission_btn = UiBuilder.button("Commission vessel")
+	_commission_btn = UiBuilder.button("Select hull — build")
 	_commission_btn.pressed.connect(_on_commission_pressed)
 	sheet.add_child(_commission_btn)
 
@@ -277,7 +285,7 @@ func show_panel() -> void:
 
 
 func _step(delta_index: int) -> void:
-	if _catalog.is_empty():
+	if _catalog.size() <= 1:
 		return
 	_index = (_index + delta_index) % _catalog.size()
 	if _index < 0:
@@ -300,15 +308,22 @@ func _refresh_entry() -> void:
 	_name_lbl.text = short_name
 	_class_lbl.text = str(entry.get("ship_class_label", ""))
 
-	var len_m := _stations.length_m if _stations != null else 0.0
-	var beam_m := _stations.beam_m if _stations != null else 0.0
-	var disp_t := (_stations.displacement_volume_m3 * 1.025) if _stations != null else 0.0
+	var len_m := _stations.length_m if _stations != null else Workboat.LOA_M
+	var beam_m := _stations.beam_m if _stations != null else Workboat.BEAM_M
+	var disp_t := float(entry.get("displacement_t", Workboat.DISPLACEMENT_T))
 	_specs_lbl.text = (
-		"%s\nLength %.0f m  •  Beam %.1f m\nDisplacement ~%.0f t\nBrowse with ◀ ▶ or arrow keys."
+		"%s\nLength %.0f m  •  Beam %.1f m\nDisplacement ~%.0f t"
 		% [display, len_m, beam_m, disp_t]
 	)
 
-	_index_lbl.text = "%d / %d" % [_index + 1, _catalog.size()]
+	var multi := _catalog.size() > 1
+	if _nav_row != null:
+		_nav_row.visible = multi
+	if _prev_btn != null:
+		_prev_btn.visible = multi
+	if _next_btn != null:
+		_next_btn.visible = multi
+	_index_lbl.text = "%d / %d" % [_index + 1, _catalog.size()] if multi else "Available now"
 
 	var session := get_node_or_null("/root/PlayerSession")
 	var balance := 0
@@ -323,7 +338,7 @@ func _refresh_entry() -> void:
 	var can_afford := balance >= price
 	_commission_btn.disabled = not can_afford
 	if can_afford:
-		_commission_btn.text = "Commission — %s" % PlayerSession.format_money(price)
+		_commission_btn.text = "Select hull — %s" % PlayerSession.format_money(price)
 	else:
 		_commission_btn.text = "Need %s" % PlayerSession.format_money(price - balance)
 

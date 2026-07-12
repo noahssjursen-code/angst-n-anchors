@@ -373,47 +373,29 @@ func _spawn_dynamic_entity_node(id: String, type: String, meta: String = "") -> 
 		var hull_id := HullRegistry.resolve_network_hull_id(
 			HullRegistry.hull_id_from_network_type(type)
 		)
-		var template_dir := "user://remote_ship_templates"
-		DirAccess.make_dir_recursive_absolute(template_dir)
-		var path := "%s/%s.json" % [template_dir, hull_id]
-		
-		var registry_entry := HullRegistry.get_by_id(hull_id)
-		if not registry_entry.is_empty():
-			if not FileAccess.file_exists(path):
-				var tmpl := StarterVessel.build_template(registry_entry)
-				var f := FileAccess.open(path, FileAccess.WRITE)
-				if f != null:
-					f.store_string(JSON.stringify(tmpl))
-					f.close()
-			
-			var ship := ShipBuilder.build(path) as BoatBody
-			if ship != null:
-				ship.name = "RemoteShip_" + id
-				ship.freeze = true
-				ship.freeze_mode = RigidBody3D.FREEZE_MODE_KINEMATIC
-				_disable_physics_in_subtree(ship)
-				
-				var label := Label3D.new()
-				label.name = "ShipNameLabel"
-				label.text = "%s (%s)" % [id.split("_")[0], hull_id.capitalize()]
-				label.font_size = 64
-				label.pixel_size = 0.015
-				label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
-				label.no_depth_test = true
-				label.modulate = Color(0.96, 0.92, 0.78, 0.95)
-				label.position = Vector3(0.0, 5.0, 0.0)
-				ship.add_child(label)
-				return ship
-			push_warning(
-				"ReplicationDrawingService: failed to build remote ship hull_id=%s path=%s"
-				% [hull_id, path]
-			)
-		else:
-			push_warning(
-				"ReplicationDrawingService: unknown hull_id=%s for remote type=%s"
-				% [hull_id, type]
-			)
-				
+		var ship := VesselSpawn.instantiate(hull_id) as BoatBody
+		if ship != null:
+			ship.name = "RemoteShip_" + id
+			ship.freeze = true
+			ship.freeze_mode = RigidBody3D.FREEZE_MODE_KINEMATIC
+			_disable_physics_in_subtree(ship)
+
+			var label := Label3D.new()
+			label.name = "ShipNameLabel"
+			label.text = "%s (%s)" % [id.split("_")[0], hull_id.capitalize()]
+			label.font_size = 64
+			label.pixel_size = 0.015
+			label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+			label.no_depth_test = true
+			label.modulate = Color(0.96, 0.92, 0.78, 0.95)
+			label.position = Vector3(0.0, 5.0, 0.0)
+			ship.add_child(label)
+			return ship
+		push_warning(
+			"ReplicationDrawingService: failed to spawn remote ship hull_id=%s"
+			% hull_id
+		)
+
 	return null
 
 

@@ -8,13 +8,12 @@ extends Node3D
 ## up at the sample world position. Heave, pitch and roll all emerge from this —
 ## no fudge factors, no fall_gravity_multiplier, no pseudo-depth assist.
 ##
-## ShipBuilder constructs `hull_stations` from the hull JSON (HullStations.from_hull_json)
-## and assigns it before this component enters the tree. `mesh_scale` is the parent
-## BoatBody.mesh_scale and scales all geometry from scale-1.0 station data.
+## Parent vessel assigns `hull_stations` (metres). `mesh_scale` is deprecated and
+## should stay at 1.0 — station data is already in metres.
 
-## Per-hull station table (scale 1.0). Required — built by ShipBuilder.
+## Per-vessel station table in metres.
 @export var hull_stations: HullStations
-## Uniform scale applied to station geometry to match the rendered hull. Set by ShipBuilder.
+## Deprecated — always leave at 1.0 for metre-authored vessels.
 @export var mesh_scale: float = 1.0
 ## Salt water density.
 @export var water_density: float = 1025.0

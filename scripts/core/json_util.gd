@@ -2,10 +2,9 @@
 class_name JsonUtil
 extends RefCounted
 
-## Shared JSON file loader. Three classes had near-identical _load_json
-## implementations (ShipBuilder, MeshTransformer, ModelAssembler) plus a
-## handful of inline JSON.parse blocks scattered across NPCs. Centralised
-## so the parse-error handling and "is file present" check live in one place.
+## Shared JSON file loader. MeshTransformer, ModelAssembler, and various NPCs
+## use this instead of duplicating FileAccess + JSON.parse. Centralised so the
+## parse-error handling and "is file present" check live in one place.
 ##
 ## Parsed Dictionaries are cached by path and returned by reference — treat them
 ## as read-only. Callers that need to mutate must `duplicate(true)` first.

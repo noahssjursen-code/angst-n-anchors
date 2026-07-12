@@ -54,7 +54,7 @@ func _ready() -> void:
 ##
 ## **Convention**: UI code (HUDs, menus, debug overlays) should *only* read
 ## per-player state through this view. NPCs and gameplay-mutating systems
-## (ShipBuilder, PortDock, etc.) may continue to consult the autoloads
+## (VesselSpawn, PortDock, etc.) may continue to consult the autoloads
 ## directly — they're the world-authority side, not a per-client view.
 ##
 ## In multiplayer this autoload becomes a per-client object the network

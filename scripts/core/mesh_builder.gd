@@ -9,7 +9,15 @@ static func make_material(color: Color, roughness: float = 0.85, metallic: float
 	mat.albedo_color = color
 	mat.roughness = roughness
 	mat.metallic = metallic
-	if double_sided:
+	# Keep painted surfaces matte — default specular still reads as metal on flat slopes.
+	if metallic <= 0.001:
+		mat.metallic_specular = 0.15
+	if color.a < 0.999:
+		mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		## Glass reads from both sides of a thin pane.
+		mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+		mat.depth_draw_mode = BaseMaterial3D.DEPTH_DRAW_ALWAYS
+	elif double_sided:
 		mat.cull_mode = BaseMaterial3D.CULL_DISABLED
 	return mat
 
@@ -34,6 +42,26 @@ static func cylinder(radius: float, height: float, color: Color, roughness: floa
 	return mi
 
 
+static func torus(
+	inner_radius: float,
+	outer_radius: float,
+	color: Color,
+	roughness: float = 0.85,
+	metallic: float = 0.0,
+	rings: int = 24,
+	sides: int = 12,
+) -> MeshInstance3D:
+	var mi := MeshInstance3D.new()
+	var mesh := TorusMesh.new()
+	mesh.inner_radius = inner_radius
+	mesh.outer_radius = outer_radius
+	mesh.rings = rings
+	mesh.ring_segments = sides
+	mi.mesh = mesh
+	mi.material_override = make_material(color, roughness, metallic)
+	return mi
+
+
 static func sphere(radius: float, color: Color, roughness: float = 0.8, metallic: float = 0.0) -> MeshInstance3D:
 	var mi := MeshInstance3D.new()
 	var mesh := SphereMesh.new()
@@ -50,6 +78,50 @@ static func prism(size: Vector3, color: Color, roughness: float = 0.85, metallic
 	mesh.size = size
 	mi.mesh = mesh
 	mi.material_override = make_material(color, roughness, metallic)
+	return mi
+
+
+## Right-triangle wedge filling `size` AABB.
+## High edge at local −Z, slopes down to +Z (rotate yaw to aim the slope).
+static func wedge_45(size: Vector3, color: Color, roughness: float = 0.92, metallic: float = 0.0) -> MeshInstance3D:
+	var hx := size.x * 0.5
+	var hy := size.y * 0.5
+	var hz := size.z * 0.5
+	var v0 := Vector3(-hx, -hy, -hz)
+	var v1 := Vector3( hx, -hy, -hz)
+	var v2 := Vector3( hx, -hy,  hz)
+	var v3 := Vector3(-hx, -hy,  hz)
+	var v4 := Vector3(-hx,  hy, -hz)
+	var v5 := Vector3( hx,  hy, -hz)
+
+	var mat := make_material(color, roughness, metallic)
+	mat.metallic = 0.0
+	mat.metallic_specular = 0.0
+	mat.roughness = 1.0
+
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	# Flat shading — averaged normals on the slope read as chrome streaks.
+	st.set_smooth_group(-1)
+	st.set_material(mat)
+
+	var faces: Array = [
+		[v0, v2, v1], [v0, v3, v2], # bottom
+		[v0, v1, v5], [v0, v5, v4], # high back (−Z)
+		[v4, v5, v2], [v4, v2, v3], # slope
+		[v0, v4, v3],               # port
+		[v1, v2, v5],               # starboard
+	]
+	for face in faces:
+		# Unique verts per triangle so generate_normals cannot smooth across edges.
+		st.add_vertex(face[0])
+		st.add_vertex(face[1])
+		st.add_vertex(face[2])
+	st.generate_normals()
+
+	var mi := MeshInstance3D.new()
+	mi.mesh = st.commit()
+	mi.material_override = mat
 	return mi
 
 

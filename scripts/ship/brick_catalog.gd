@@ -1,0 +1,856 @@
+class_name BrickCatalog
+extends RefCounted
+
+## Lego-like ship fit-out bricks.
+## Footprint is in cells (x,y,z) = (width, height, length). Cell size = DeckGrid.CELL_M (1.0 m).
+
+## Shared window frame / glass metrics so corners seam with straight panes.
+const WIN_POST := 0.08
+const WIN_PANE_T := 0.04
+const WIN_FRAME := Color(0.72, 0.74, 0.78)
+
+const BRICKS: Dictionary = {
+	"block": {
+		"display": "Block",
+		"footprint": [1, 1, 1],
+		"tags": ["wall", "solid"],
+		"mass_kg": 80.0,
+		"color": Color(0.78, 0.80, 0.84),
+	},
+	"block_window": {
+		"display": "Window",
+		## 1×1×1 — glass flush on local −Z face.
+		"footprint": [1, 1, 1],
+		"tags": ["window"],
+		"mass_kg": 35.0,
+		"color": Color(0.55, 0.72, 0.88, 0.22),
+	},
+	"block_window_corner": {
+		"display": "Window corner",
+		## 1×1×1 outer L — glass on −Z and −X; seams with straight windows.
+		"footprint": [1, 1, 1],
+		"tags": ["window", "corner"],
+		"mass_kg": 40.0,
+		"color": Color(0.55, 0.72, 0.88, 0.22),
+	},
+	"block_door": {
+		"display": "Door",
+		## 2 m wide × 3 m tall × 1 m deep — spans three layers.
+		"footprint": [2, 3, 1],
+		"tags": ["door"],
+		"mass_kg": 90.0,
+		"color": Color(0.48, 0.32, 0.20),
+	},
+	"ledge_45": {
+		"display": "45° wedge",
+		## Full cell cut on the diagonal — triangle brick / ramp.
+		"footprint": [1, 1, 1],
+		"tags": ["slope", "solid"],
+		"mass_kg": 40.0,
+		"color": Color(0.78, 0.80, 0.84),
+	},
+	"stairs": {
+		"display": "Companionway",
+		## Tight 1×1×1 hatch stair — steep; prefer staircase for deck-to-deck.
+		"footprint": [1, 1, 1],
+		"tags": ["stairs", "slope"],
+		"mass_kg": 55.0,
+		"color": Color(0.58, 0.48, 0.36),
+		"stair_steps": 4,
+	},
+	"staircase": {
+		"display": "Staircase",
+		## 2 m wide × 4 m tall × 2 m run — spans four layers.
+		"footprint": [2, 4, 2],
+		"tags": ["stairs", "slope"],
+		"mass_kg": 320.0,
+		"color": Color(0.55, 0.46, 0.34),
+		## 4 m rise / 10 ≈ 0.4 m risers (under player max_step_height).
+		"stair_steps": 10,
+	},
+	"helm": {
+		"display": "Helm console",
+		## Bridge console — place in the bridge; F only when looking at this brick.
+		"footprint": [1, 1, 1],
+		"tags": ["helm"],
+		"mass_kg": 55.0,
+		"color": Color(0.32, 0.34, 0.38),
+	},
+	"light_deck": {
+		"display": "Deck flood",
+		## High mount; yaw aims across deck; housing/beam 45° down toward the deck.
+		"footprint": [1, 1, 1],
+		"tags": ["light", "work", "attach"],
+		"light_type": 4, ## ShipLight.LightType.WORK
+		"housing_pitch_deg": -45.0,
+		"spot_pitch_deg": 0.0, ## Beam parented under FloodHead.
+		"spot_range_m": 22.0,
+		"spot_energy": 95.0,
+		"spot_angle_deg": 48.0,
+		"yaw_step": 45,
+		"mass_kg": 18.0,
+		"color": Color(0.72, 0.70, 0.62),
+	},
+	"light_external": {
+		"display": "External flood",
+		## Outboard flood for quay / sea — yaw aims out; housing ~25° down.
+		"footprint": [1, 1, 1],
+		"tags": ["light", "work", "external", "attach"],
+		"light_type": 4,
+		"housing_pitch_deg": -25.0,
+		"spot_pitch_deg": 0.0,
+		"spot_range_m": 42.0,
+		"spot_energy": 120.0,
+		"spot_angle_deg": 40.0,
+		"yaw_step": 45,
+		"mass_kg": 22.0,
+		"color": Color(0.78, 0.76, 0.68),
+	},
+	"light_cabin": {
+		"display": "Cabin light",
+		## Mounts on a block; warm omni.
+		"footprint": [1, 1, 1],
+		"tags": ["light", "cabin_light", "attach"],
+		"light_type": 5, ## ShipLight.LightType.WINDOW (warm omni)
+		"yaw_step": 45,
+		"mass_kg": 8.0,
+		"color": Color(0.85, 0.78, 0.55),
+	},
+	"light_nav_port": {
+		"display": "Nav light (port)",
+		## Mounts on a block; yaw aims the lens (−Z) in 45° steps.
+		"footprint": [1, 1, 1],
+		"tags": ["light", "nav", "attach"],
+		"light_type": 0,
+		"yaw_step": 45,
+		"mass_kg": 10.0,
+		"color": Color(0.75, 0.12, 0.10),
+	},
+	"light_nav_stbd": {
+		"display": "Nav light (stbd)",
+		"footprint": [1, 1, 1],
+		"tags": ["light", "nav", "attach"],
+		"light_type": 1,
+		"yaw_step": 45,
+		"mass_kg": 10.0,
+		"color": Color(0.10, 0.65, 0.18),
+	},
+	"light_nav_white": {
+		"display": "Nav light (white)",
+		"footprint": [1, 1, 1],
+		"tags": ["light", "nav", "attach"],
+		"light_type": 2,
+		"yaw_step": 45,
+		"mass_kg": 12.0,
+		"color": Color(0.92, 0.92, 0.88),
+	},
+	"railing": {
+		"display": "Railing",
+		"footprint": [1, 1, 1],
+		"tags": ["railing", "edge"],
+		"mass_kg": 15.0,
+		"color": Color(0.35, 0.38, 0.42),
+	},
+	"bollard": {
+		"display": "Bollard",
+		## Mooring post — often on a bulwark / half-wall, not only bare deck.
+		"footprint": [1, 1, 1],
+		"tags": ["mooring", "cleat"],
+		"mass_kg": 55.0,
+		"color": Color(0.42, 0.40, 0.36),
+	},
+	"cargo_zone": {
+		"display": "Cargo zone",
+		"footprint": [1, 1, 1],
+		"tags": ["cargo", "floor", "zone"],
+		"mass_kg": 20.0,
+		"color": Color(0.40, 0.36, 0.30),
+		## Click corner A, then corner B — not a per-cell brick.
+		"place_mode": "rect",
+	},
+	"crane_base": {
+		"display": "Crane base",
+		## 2×2 m pad.
+		"footprint": [2, 1, 2],
+		"tags": ["crane_base"],
+		"mass_kg": 400.0,
+		"color": Color(0.55, 0.45, 0.22),
+	},
+	"crane": {
+		"display": "Crane arm",
+		"footprint": [1, 2, 1],
+		"tags": ["crane"],
+		"mass_kg": 600.0,
+		"color": Color(0.62, 0.52, 0.24),
+	},
+	"hull_ladder": {
+		"display": "Hull ladder",
+		## 2×2 m pad on the deck edge; rungs hang outboard so you climb aboard from the quay.
+		"footprint": [2, 1, 2],
+		"tags": ["ladder", "edge"],
+		"mass_kg": 45.0,
+		"color": Color(0.42, 0.44, 0.48),
+		"deck_only": true,
+		"edge_only": true,
+	},
+	"deck_text": {
+		"display": "Floor text",
+		## Flat Label3D on the deck — vessel name, draft marks, etc.
+		"footprint": [6, 1, 1],
+		"tags": ["text", "sign", "floor"],
+		"mass_kg": 5.0,
+		"color": Color(0.92, 0.86, 0.55),
+		"deck_only": true,
+		"default_text": "NAME",
+		"text_mount": "floor",
+	},
+	"wall_text": {
+		"display": "Wall text",
+		## Upright plaque — text reads horizontally on a bulkhead / cabin wall.
+		"footprint": [3, 1, 1],
+		"tags": ["text", "sign", "wall"],
+		"mass_kg": 8.0,
+		"color": Color(0.92, 0.86, 0.55),
+		"default_text": "NAME",
+		"text_mount": "wall",
+	},
+}
+
+
+static func ids() -> Array[String]:
+	var out: Array[String] = []
+	for k in BRICKS.keys():
+		out.append(str(k))
+	out.sort()
+	return out
+
+
+static func has(brick_id: String) -> bool:
+	return BRICKS.has(brick_id.strip_edges())
+
+
+static func get_entry(brick_id: String) -> Dictionary:
+	var id := brick_id.strip_edges()
+	if not BRICKS.has(id):
+		return {}
+	return (BRICKS[id] as Dictionary).duplicate(true)
+
+
+static func footprint_of(brick_id: String) -> Vector3i:
+	var e := get_entry(brick_id)
+	if e.is_empty():
+		return Vector3i(1, 1, 1)
+	var raw: Variant = e.get("footprint", [1, 1, 1])
+	if raw is Vector3i:
+		return raw as Vector3i
+	if raw is Array:
+		var a: Array = raw
+		return Vector3i(int(a[0]), int(a[1]) if a.size() > 1 else 1, int(a[2]) if a.size() > 2 else 1)
+	return Vector3i(1, 1, 1)
+
+
+static func size_m(brick_id: String) -> Vector3:
+	var fp := footprint_of(brick_id)
+	var s := DeckGrid.CELL_M
+	return Vector3(float(fp.x) * s, float(fp.y) * s, float(fp.z) * s)
+
+
+static func yaw_step_of(brick_id: String) -> int:
+	return maxi(int(get_entry(brick_id).get("yaw_step", 90)), 1)
+
+
+static func display_name(brick_id: String) -> String:
+	return str(get_entry(brick_id).get("display", brick_id))
+
+
+static func has_tag(brick_id: String, tag: String) -> bool:
+	var tags = get_entry(brick_id).get("tags", [])
+	return tags is Array and (tags as Array).has(tag)
+
+
+static func create_visual(brick_id: String, opts: Dictionary = {}) -> Node3D:
+	## Mesh is centred on the origin; caller places the node at the footprint AABB centre.
+	## opts.preview_mesh — when true, cargo tiles get a temporary plate (ghost / palette thumb).
+	var root := Node3D.new()
+	root.name = brick_id
+	var entry := get_entry(brick_id)
+	var color: Color = entry.get("color", Color(0.7, 0.7, 0.7)) as Color
+	var sz := size_m(brick_id)
+	var s := DeckGrid.CELL_M
+	match brick_id:
+		"block":
+			root.add_child(MeshBuilder.box(sz, color, 0.85, 0.0))
+		"block_window":
+			_add_window_visual(root, sz, color)
+		"block_window_corner":
+			_add_window_corner_visual(root, sz, color)
+		"block_door":
+			_add_door_visual(root, sz, color)
+		"ledge_45":
+			root.add_child(MeshBuilder.wedge_45(sz, color, 0.92, 0.0))
+		"stairs", "staircase":
+			_add_stairs_visual(root, sz, color, int(entry.get("stair_steps", 4)))
+		"helm":
+			_add_helm_visual(root, sz, color)
+		"light_deck":
+			_add_light_deck_visual(root, sz, color, float(entry.get("housing_pitch_deg", -45.0)))
+			if bool(opts.get("show_aim_gizmo", false)):
+				_add_light_aim_gizmo(root, brick_id)
+		"light_external":
+			_add_light_deck_visual(root, sz, color, float(entry.get("housing_pitch_deg", -25.0)))
+			if bool(opts.get("show_aim_gizmo", false)):
+				_add_light_aim_gizmo(root, brick_id)
+		"light_cabin":
+			_add_light_cabin_visual(root, sz, color)
+			if bool(opts.get("show_aim_gizmo", false)):
+				_add_light_aim_gizmo(root, brick_id)
+		"light_nav_port", "light_nav_stbd", "light_nav_white":
+			_add_light_nav_visual(root, sz, color, brick_id)
+			if bool(opts.get("show_aim_gizmo", false)):
+				_add_light_aim_gizmo(root, brick_id)
+		"railing":
+			var post_a := MeshBuilder.cylinder(0.04, sz.y * 0.95, color, 0.7, 0.2)
+			post_a.position = Vector3(-sz.x * 0.35, 0.0, 0.0)
+			root.add_child(post_a)
+			var post_b := MeshBuilder.cylinder(0.04, sz.y * 0.95, color, 0.7, 0.2)
+			post_b.position = Vector3(sz.x * 0.35, 0.0, 0.0)
+			root.add_child(post_b)
+			var rail := MeshBuilder.box(Vector3(sz.x, 0.06, 0.06), color, 0.7, 0.25)
+			rail.position = Vector3(0.0, sz.y * 0.4, 0.0)
+			root.add_child(rail)
+			var kick := MeshBuilder.box(Vector3(sz.x, 0.08, 0.08), color, 0.85, 0.1)
+			kick.position = Vector3(0.0, -sz.y * 0.44, 0.0)
+			root.add_child(kick)
+		"bollard":
+			_add_bollard_visual(root, sz, color)
+		"cargo_zone", "cargo_tile":
+			## Thumbnail / ghost: small plate with L-corners — runtime uses BrickLayout rects.
+			if bool(opts.get("preview_mesh", false)):
+				var tile := MeshBuilder.box(Vector3(sz.x * 0.92, 0.06, sz.z * 0.92), color, 0.95, 0.0)
+				tile.position = Vector3(0.0, -sz.y * 0.5 + 0.03, 0.0)
+				root.add_child(tile)
+				var arm := 0.28
+				var thick := 0.06
+				var h := 0.04
+				var yc := -sz.y * 0.5 + 0.06
+				var hx := sz.x * 0.42
+				var hz := sz.z * 0.42
+				var col := Color(0.95, 0.82, 0.12)
+				for corner in [
+					Vector3(-hx, yc, -hz), Vector3(hx, yc, -hz),
+					Vector3(-hx, yc, hz), Vector3(hx, yc, hz),
+				]:
+					var sx := 1.0 if corner.x < 0.0 else -1.0
+					var szn := 1.0 if corner.z < 0.0 else -1.0
+					var a := MeshBuilder.box(Vector3(arm, h, thick), col, 0.85, 0.0)
+					a.position = corner + Vector3(sx * arm * 0.5, 0.0, 0.0)
+					root.add_child(a)
+					var b := MeshBuilder.box(Vector3(thick, h, arm), col, 0.85, 0.0)
+					b.position = corner + Vector3(0.0, 0.0, szn * arm * 0.5)
+					root.add_child(b)
+		"crane_base":
+			var base := MeshBuilder.box(Vector3(sz.x, sz.y * 0.5, sz.z), color, 0.85, 0.15)
+			base.position = Vector3(0.0, -sz.y * 0.25, 0.0)
+			root.add_child(base)
+		"crane":
+			var pedestal := MeshBuilder.box(Vector3(sz.x * 0.7, sz.y * 0.85, sz.z * 0.7), color, 0.85, 0.2)
+			pedestal.position = Vector3(0.0, -sz.y * 0.05, 0.0)
+			root.add_child(pedestal)
+			var boom := MeshBuilder.box(Vector3(0.16, 0.16, maxf(sz.z, s) * 2.2), color, 0.8, 0.25)
+			boom.position = Vector3(0.0, sz.y * 0.35, -sz.z * 0.55)
+			boom.rotation_degrees = Vector3(-20.0, 0.0, 0.0)
+			root.add_child(boom)
+		"hull_ladder":
+			_add_hull_ladder_visual(root, sz, color)
+		"deck_text":
+			_add_deck_text_visual(
+				root, sz, color,
+				str(opts.get("text", entry.get("default_text", "NAME"))),
+				"floor",
+			)
+		"wall_text":
+			_add_deck_text_visual(
+				root, sz, color,
+				str(opts.get("text", entry.get("default_text", "NAME"))),
+				"wall",
+			)
+		_:
+			root.add_child(MeshBuilder.box(sz, color, 0.85, 0.0))
+	return root
+
+
+static func _add_deck_text_visual(
+	root: Node3D,
+	sz: Vector3,
+	color: Color,
+	text: String,
+	mount: String = "floor",
+) -> void:
+	var label_text := text if not text.strip_edges().is_empty() else "NAME"
+	if mount == "wall":
+		## Thin plaque proud of the front face (local −Z). Yaw aims the face at a bulkhead;
+		## stick-out keeps it clear of the wall mesh instead of flush / buried.
+		var plate_thick := 0.08
+		var stick_out := 0.14
+		var face_z := -sz.z * 0.5
+		## Back of plate just outside the cell face; plate + letters extend further out.
+		var plate_z := face_z - stick_out - plate_thick * 0.5
+		var plate := MeshBuilder.box(
+			Vector3(sz.x * 0.92, sz.y * 0.55, plate_thick),
+			Color(0.14, 0.14, 0.16),
+			0.9,
+			0.05,
+		)
+		plate.position = Vector3(0.0, 0.0, plate_z)
+		root.add_child(plate)
+
+		var label := Label3D.new()
+		label.name = "WallText"
+		label.text = label_text
+		label.font_size = 72
+		label.pixel_size = 0.007
+		## Upright, facing out (−Z) so letters read horizontally on the wall.
+		label.rotation_degrees = Vector3(0.0, 180.0, 0.0)
+		label.position = Vector3(0.0, 0.0, plate_z - plate_thick * 0.5 - 0.02)
+		label.modulate = color
+		label.outline_modulate = Color(0.05, 0.05, 0.06, 0.95)
+		label.outline_size = 10
+		label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		label.billboard = BaseMaterial3D.BILLBOARD_DISABLED
+		label.shaded = false
+		label.double_sided = true
+		label.render_priority = 1
+		root.add_child(label)
+		return
+
+	## Floor mount — text lying flat on the deck.
+	var floor_plate := MeshBuilder.box(
+		Vector3(sz.x * 0.98, 0.03, sz.z * 0.55),
+		Color(0.12, 0.12, 0.14),
+		0.95,
+		0.0,
+	)
+	floor_plate.position = Vector3(0.0, -sz.y * 0.5 + 0.02, 0.0)
+	root.add_child(floor_plate)
+
+	var floor_label := Label3D.new()
+	floor_label.name = "FloorText"
+	floor_label.text = label_text
+	floor_label.font_size = 96
+	floor_label.pixel_size = 0.008
+	floor_label.rotation_degrees = Vector3(-90.0, 0.0, 0.0)
+	floor_label.position = Vector3(0.0, -sz.y * 0.5 + 0.05, 0.0)
+	floor_label.modulate = color
+	floor_label.outline_modulate = Color(0.05, 0.05, 0.06, 0.95)
+	floor_label.outline_size = 12
+	floor_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	floor_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	floor_label.billboard = BaseMaterial3D.BILLBOARD_DISABLED
+	floor_label.shaded = false
+	floor_label.double_sided = true
+	floor_label.render_priority = 1
+	root.add_child(floor_label)
+
+
+static func _add_stairs_visual(root: Node3D, sz: Vector3, color: Color, steps: int = 4) -> void:
+	## Solid stepped fills. Low at +Z, high at −Z (yaw aims the climb).
+	## Treads abut with a hair of overlap so seams don't show gaps.
+	var n := maxi(steps, 2)
+	var riser := sz.y / float(n)
+	var tread := sz.z / float(n)
+	var hy := sz.y * 0.5
+	var hz := sz.z * 0.5
+	var overlap := 0.004
+	for k in range(n):
+		var h := riser * float(k + 1)
+		var depth := tread + overlap
+		var mi := MeshBuilder.box(Vector3(sz.x, h, depth), color, 0.9, 0.0)
+		## k=0 = lowest tread near +Z; k=n-1 = full rise near −Z.
+		mi.position = Vector3(0.0, -hy + h * 0.5, hz - (float(k) + 0.5) * tread)
+		root.add_child(mi)
+
+
+static func _add_helm_visual(root: Node3D, sz: Vector3, color: Color) -> void:
+	## Bridge console — no wheel. Local −Z = look-out (yaw the brick).
+	var panel := Color(0.14, 0.15, 0.17)
+	var body_col := Color(color.r * 0.85, color.g * 0.85, color.b * 0.88)
+	var screen := Color(0.25, 0.55, 0.48)
+	var metal := Color(0.42, 0.44, 0.48)
+	var accent := Color(0.75, 0.55, 0.18)
+
+	## Floor plinth.
+	var plinth := MeshBuilder.box(Vector3(0.92, 0.08, 0.78), Color(0.12, 0.12, 0.13), 0.9, 0.05)
+	plinth.position = Vector3(0.0, -sz.y * 0.5 + 0.04, 0.05)
+	root.add_child(plinth)
+
+	## Console cabinet.
+	var cabinet := MeshBuilder.box(Vector3(0.9, 0.72, 0.55), body_col, 0.82, 0.08)
+	cabinet.position = Vector3(0.0, -sz.y * 0.5 + 0.44, 0.08)
+	root.add_child(cabinet)
+
+	## Angled instrument face toward the helmsman (+Z).
+	var face := MeshBuilder.box(Vector3(0.86, 0.06, 0.48), panel, 0.45, 0.2)
+	face.position = Vector3(0.0, 0.12, -0.02)
+	face.rotation_degrees = Vector3(-32.0, 0.0, 0.0)
+	root.add_child(face)
+
+	## Twin chart / radar screens.
+	for x in [-0.22, 0.22]:
+		var bezel := MeshBuilder.box(Vector3(0.28, 0.02, 0.22), metal, 0.5, 0.35)
+		bezel.position = Vector3(x, 0.18, -0.1)
+		bezel.rotation_degrees = Vector3(-32.0, 0.0, 0.0)
+		root.add_child(bezel)
+		var glass := MeshBuilder.box(Vector3(0.24, 0.015, 0.18), screen, 0.15, 0.05)
+		glass.position = Vector3(x, 0.195, -0.11)
+		glass.rotation_degrees = Vector3(-32.0, 0.0, 0.0)
+		glass.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		root.add_child(glass)
+
+	## Centre status strip.
+	var strip := MeshBuilder.box(Vector3(0.14, 0.015, 0.2), Color(0.08, 0.09, 0.1), 0.4, 0.2)
+	strip.position = Vector3(0.0, 0.18, -0.1)
+	strip.rotation_degrees = Vector3(-32.0, 0.0, 0.0)
+	root.add_child(strip)
+	for i in range(3):
+		var led := MeshBuilder.box(
+			Vector3(0.03, 0.012, 0.03),
+			Color(0.2, 0.85, 0.35) if i == 1 else accent,
+			0.3,
+			0.1,
+		)
+		led.position = Vector3(0.0, 0.2, -0.04 - float(i) * 0.06)
+		led.rotation_degrees = Vector3(-32.0, 0.0, 0.0)
+		root.add_child(led)
+
+	## Desktop ledge for controls.
+	var desk := MeshBuilder.box(Vector3(0.88, 0.05, 0.28), panel, 0.55, 0.15)
+	desk.position = Vector3(0.0, -sz.y * 0.5 + 0.82, 0.28)
+	root.add_child(desk)
+
+	## Twin throttle / clutch levers.
+	for x in [-0.28, 0.28]:
+		var slot := MeshBuilder.box(Vector3(0.1, 0.03, 0.16), metal, 0.5, 0.4)
+		slot.position = Vector3(x, -sz.y * 0.5 + 0.86, 0.28)
+		root.add_child(slot)
+		var lever := MeshBuilder.box(Vector3(0.028, 0.16, 0.028), accent, 0.4, 0.35)
+		lever.position = Vector3(x, -sz.y * 0.5 + 0.94, 0.26)
+		lever.rotation_degrees = Vector3(-20.0, 0.0, 0.0)
+		root.add_child(lever)
+		var knob := MeshBuilder.sphere(0.03, Color(0.1, 0.1, 0.11), 0.35, 0.15)
+		knob.position = Vector3(x, -sz.y * 0.5 + 1.02, 0.22)
+		root.add_child(knob)
+
+	## Centre joystick / heading control.
+	var stick_base := MeshBuilder.cylinder(0.06, 0.04, metal, 0.45, 0.4)
+	stick_base.position = Vector3(0.0, -sz.y * 0.5 + 0.86, 0.3)
+	root.add_child(stick_base)
+	var stick := MeshBuilder.cylinder(0.02, 0.14, Color(0.2, 0.2, 0.22), 0.4, 0.2)
+	stick.position = Vector3(0.0, -sz.y * 0.5 + 0.94, 0.3)
+	root.add_child(stick)
+	var stick_top := MeshBuilder.sphere(0.035, accent, 0.4, 0.3)
+	stick_top.position = Vector3(0.0, -sz.y * 0.5 + 1.02, 0.3)
+	root.add_child(stick_top)
+
+	## Side handrails on the console.
+	for x in [-0.48, 0.48]:
+		var rail := MeshBuilder.cylinder(0.02, 0.55, metal, 0.5, 0.45)
+		rail.position = Vector3(x, -sz.y * 0.5 + 0.55, 0.2)
+		root.add_child(rail)
+
+	## Eye — standing at the desk looking out (−Z) over the screens.
+	var eye := Marker3D.new()
+	eye.name = "HelmEye"
+	eye.position = Vector3(0.0, 0.72, 0.55)
+	root.add_child(eye)
+
+
+static func _add_light_deck_visual(root: Node3D, sz: Vector3, color: Color, pitch_deg: float = -45.0) -> void:
+	## Flood can on a high mount — pitched toward local −Z (yaw aims the throw).
+	var metal := Color(0.35, 0.36, 0.38)
+	var mount := MeshBuilder.box(Vector3(0.16, 0.12, 0.16), metal, 0.7, 0.35)
+	mount.position = Vector3(0.0, sz.y * 0.15, 0.12)
+	root.add_child(mount)
+	var arm := MeshBuilder.box(Vector3(0.06, 0.06, 0.28), metal, 0.65, 0.4)
+	arm.position = Vector3(0.0, sz.y * 0.2, 0.0)
+	arm.rotation_degrees = Vector3(pitch_deg, 0.0, 0.0)
+	root.add_child(arm)
+	var head := Node3D.new()
+	head.name = "FloodHead"
+	head.position = Vector3(0.0, sz.y * 0.2, 0.0)
+	head.rotation_degrees = Vector3(pitch_deg, 0.0, 0.0)
+	root.add_child(head)
+	## Housing can + open reflector so the lamp face is obvious from deck.
+	var can := MeshBuilder.cylinder(0.15, 0.18, color, 0.72, 0.25)
+	can.rotation_degrees = Vector3(-90.0, 0.0, 0.0)
+	can.position = Vector3(0.0, 0.0, -0.18)
+	can.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	head.add_child(can)
+	var dish := MeshInstance3D.new()
+	var dish_mesh := CylinderMesh.new()
+	dish_mesh.top_radius = 0.18
+	dish_mesh.bottom_radius = 0.09
+	dish_mesh.height = 0.08
+	dish_mesh.radial_segments = 16
+	dish.mesh = dish_mesh
+	dish.material_override = MeshBuilder.make_material(Color(0.42, 0.42, 0.4), 0.55, 0.35)
+	dish.rotation_degrees = Vector3(-90.0, 0.0, 0.0)
+	dish.position = Vector3(0.0, 0.0, -0.28)
+	dish.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	head.add_child(dish)
+	var lens := MeshBuilder.cylinder(0.1, 0.03, Color(0.4, 0.38, 0.32), 0.15, 0.0)
+	lens.name = "Lens"
+	lens.rotation_degrees = Vector3(-90.0, 0.0, 0.0)
+	lens.position = Vector3(0.0, 0.0, -0.33)
+	lens.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	head.add_child(lens)
+
+
+static func _add_light_cabin_visual(root: Node3D, sz: Vector3, color: Color) -> void:
+	## Bulkhead / ceiling lamp — warm dome with a clear glass face.
+	var metal := Color(0.4, 0.4, 0.42)
+	var mount := MeshBuilder.cylinder(0.08, 0.05, metal, 0.7, 0.3)
+	mount.position = Vector3(0.0, sz.y * 0.5 - 0.06, 0.0)
+	root.add_child(mount)
+	var shade := MeshBuilder.cylinder(0.14, 0.06, color, 0.55, 0.15)
+	shade.position = Vector3(0.0, sz.y * 0.5 - 0.12, 0.0)
+	root.add_child(shade)
+	var bowl := MeshBuilder.sphere(0.12, Color(0.45, 0.38, 0.28), 0.25, 0.0)
+	bowl.name = "Lens"
+	bowl.position = Vector3(0.0, sz.y * 0.5 - 0.2, 0.0)
+	root.add_child(bowl)
+
+
+static func _add_light_nav_visual(root: Node3D, sz: Vector3, color: Color, brick_id: String) -> void:
+	## Compact running-light housing; lens faces local −Z.
+	var metal := Color(0.3, 0.32, 0.34)
+	var body := MeshBuilder.box(Vector3(0.22, 0.18, 0.28), metal, 0.7, 0.35)
+	body.position = Vector3(0.0, -sz.y * 0.15, 0.05)
+	root.add_child(body)
+	var lens_col := color
+	if brick_id == "light_nav_white":
+		lens_col = Color(0.92, 0.92, 0.88)
+	var lens := MeshBuilder.box(Vector3(0.16, 0.12, 0.06), lens_col, 0.2, 0.05)
+	lens.name = "Lens"
+	lens.position = Vector3(0.0, -sz.y * 0.15, -0.12)
+	root.add_child(lens)
+	var post := MeshBuilder.cylinder(0.04, 0.35, metal, 0.7, 0.3)
+	post.position = Vector3(0.0, -sz.y * 0.35, 0.05)
+	root.add_child(post)
+
+
+static func _add_light_aim_gizmo(root: Node3D, brick_id: String) -> void:
+	## Editor-only translucent cone / sphere so aim is obvious while placing.
+	var entry := get_entry(brick_id)
+	var lt := int(entry.get("light_type", 4))
+	var gizmo := Node3D.new()
+	gizmo.name = "AimGizmo"
+	root.add_child(gizmo)
+	match lt:
+		4: ## WORK / flood — cone matches FloodHead pitch (toward deck / quay).
+			var pitch := float(entry.get("housing_pitch_deg", entry.get("spot_pitch_deg", -45.0)))
+			var length := float(entry.get("spot_range_m", 10.0)) * 0.55
+			length = clampf(length, 6.0, 18.0)
+			var end_r := 2.4 if has_tag(brick_id, "external") else 3.0
+			var aim := Node3D.new()
+			aim.rotation_degrees = Vector3(pitch, 0.0, 0.0)
+			gizmo.add_child(aim)
+			var cone := _make_aim_cone(Color(1.0, 0.92, 0.55, 0.18), length, end_r)
+			cone.rotation_degrees = Vector3(-90.0, 0.0, 0.0)
+			cone.position = Vector3(0.0, 0.0, -length * 0.5)
+			aim.add_child(cone)
+		5: ## Cabin omni — soft sphere.
+			var ball := MeshBuilder.sphere(2.5, Color(1.0, 0.75, 0.4, 0.12), 0.9, 0.0)
+			ball.position = Vector3.ZERO
+			ball.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+			gizmo.add_child(ball)
+		_: ## Nav / directional — cone along −Z.
+			var nav_cone := _make_aim_cone(Color(0.7, 0.85, 1.0, 0.2), 6.0, 2.2)
+			nav_cone.rotation_degrees = Vector3(-90.0, 0.0, 0.0)
+			nav_cone.position = Vector3(0.0, 0.0, -3.0)
+			gizmo.add_child(nav_cone)
+
+
+static func _make_aim_cone(color: Color, length_m: float, end_radius: float) -> MeshInstance3D:
+	## Tip (narrow) at −Y, wide at +Y. Callers rotate so −Y points toward the fixture
+	## and +Y toward the throw (after a −90° X rot: −Y → +Z local of parent aim…).
+	## With the usual aim setup (cone −90° X, centred along −Z): tip at the light, wide at deck.
+	var mi := MeshInstance3D.new()
+	var mesh := CylinderMesh.new()
+	## Godot cylinder: top = +Y, bottom = −Y. After parent −90° X, +Y → −Z (far), −Y → +Z (toward light).
+	mesh.top_radius = end_radius
+	mesh.bottom_radius = 0.02
+	mesh.height = length_m
+	mesh.radial_segments = 16
+	mi.mesh = mesh
+	var mat := MeshBuilder.make_material(color, 0.95, 0.0, true)
+	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+	mat.depth_draw_mode = BaseMaterial3D.DEPTH_DRAW_DISABLED
+	mi.material_override = mat
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	return mi
+
+
+static func _window_glass_color(glass_color: Color) -> Color:
+	var glass := Color(glass_color.r, glass_color.g, glass_color.b, minf(glass_color.a, 0.28))
+	if glass.a >= 0.999:
+		glass.a = 0.22
+	return glass
+
+
+static func _add_window_visual(root: Node3D, sz: Vector3, glass_color: Color) -> void:
+	## Frame + glass flush on the local −Z face (yaw aims that outward).
+	var post_w := WIN_POST
+	var pane_t := WIN_PANE_T
+	var frame_col := WIN_FRAME
+	var face_z := -sz.z * 0.5 + pane_t * 0.5
+	var frame_d := maxf(sz.z * 0.22, 0.16)
+
+	var left := MeshBuilder.box(Vector3(post_w, sz.y, frame_d), frame_col, 0.85, 0.05)
+	left.position = Vector3(-sz.x * 0.5 + post_w * 0.5, 0.0, face_z + frame_d * 0.25)
+	root.add_child(left)
+	var right := MeshBuilder.box(Vector3(post_w, sz.y, frame_d), frame_col, 0.85, 0.05)
+	right.position = Vector3(sz.x * 0.5 - post_w * 0.5, 0.0, face_z + frame_d * 0.25)
+	root.add_child(right)
+	var top := MeshBuilder.box(Vector3(sz.x, post_w, frame_d), frame_col, 0.85, 0.05)
+	top.position = Vector3(0.0, sz.y * 0.5 - post_w * 0.5, face_z + frame_d * 0.25)
+	root.add_child(top)
+	var bottom := MeshBuilder.box(Vector3(sz.x, post_w, frame_d), frame_col, 0.85, 0.05)
+	bottom.position = Vector3(0.0, -sz.y * 0.5 + post_w * 0.5, face_z + frame_d * 0.25)
+	root.add_child(bottom)
+
+	var glass := _window_glass_color(glass_color)
+	var pane := MeshBuilder.box(
+		Vector3(sz.x - post_w * 2.0, sz.y - post_w * 2.0, pane_t),
+		glass,
+		0.05,
+		0.15,
+	)
+	pane.position = Vector3(0.0, 0.0, face_z)
+	pane.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	root.add_child(pane)
+
+
+static func _add_window_corner_visual(root: Node3D, sz: Vector3, glass_color: Color) -> void:
+	## Outer corner: glass on −Z and −X faces, shared stile at the outer edge.
+	var post_w := WIN_POST
+	var pane_t := WIN_PANE_T
+	var frame_col := WIN_FRAME
+	var glass := _window_glass_color(glass_color)
+	var frame_d := maxf(minf(sz.x, sz.z) * 0.22, 0.16)
+	var face_z := -sz.z * 0.5 + pane_t * 0.5
+	var face_x := -sz.x * 0.5 + pane_t * 0.5
+	var open_x := sz.x - post_w
+	var open_z := sz.z - post_w
+
+	var corner_post := MeshBuilder.box(Vector3(post_w, sz.y, post_w), frame_col, 0.85, 0.05)
+	corner_post.position = Vector3(face_x + post_w * 0.25, 0.0, face_z + post_w * 0.25)
+	root.add_child(corner_post)
+
+	var top_z := MeshBuilder.box(Vector3(open_x, post_w, frame_d), frame_col, 0.85, 0.05)
+	top_z.position = Vector3(-post_w * 0.5, sz.y * 0.5 - post_w * 0.5, face_z + frame_d * 0.25)
+	root.add_child(top_z)
+	var bot_z := MeshBuilder.box(Vector3(open_x, post_w, frame_d), frame_col, 0.85, 0.05)
+	bot_z.position = Vector3(-post_w * 0.5, -sz.y * 0.5 + post_w * 0.5, face_z + frame_d * 0.25)
+	root.add_child(bot_z)
+	var pane_z := MeshBuilder.box(
+		Vector3(open_x - post_w, sz.y - post_w * 2.0, pane_t),
+		glass,
+		0.05,
+		0.15,
+	)
+	pane_z.position = Vector3(-post_w * 0.5, 0.0, face_z)
+	pane_z.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	root.add_child(pane_z)
+
+	var top_x := MeshBuilder.box(Vector3(frame_d, post_w, open_z), frame_col, 0.85, 0.05)
+	top_x.position = Vector3(face_x + frame_d * 0.25, sz.y * 0.5 - post_w * 0.5, -post_w * 0.5)
+	root.add_child(top_x)
+	var bot_x := MeshBuilder.box(Vector3(frame_d, post_w, open_z), frame_col, 0.85, 0.05)
+	bot_x.position = Vector3(face_x + frame_d * 0.25, -sz.y * 0.5 + post_w * 0.5, -post_w * 0.5)
+	root.add_child(bot_x)
+	var pane_x := MeshBuilder.box(
+		Vector3(pane_t, sz.y - post_w * 2.0, open_z - post_w),
+		glass,
+		0.05,
+		0.15,
+	)
+	pane_x.position = Vector3(face_x, 0.0, -post_w * 0.5)
+	pane_x.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	root.add_child(pane_x)
+
+
+static func _add_door_visual(root: Node3D, sz: Vector3, color: Color) -> void:
+	## Frame + hinged leaf. Leaf swings on local −X (yaw aims the doorway).
+	var frame_col := Color(color.r * 0.75, color.g * 0.75, color.b * 0.75)
+	var leaf_col := Color(color.r * 1.05, color.g * 0.95, color.b * 0.85)
+	## Outer frame (open centre).
+	var post_w := 0.12
+	var lintel_h := 0.14
+	var left := MeshBuilder.box(Vector3(post_w, sz.y, sz.z * 0.35), frame_col, 0.85, 0.05)
+	left.position = Vector3(-sz.x * 0.5 + post_w * 0.5, 0.0, 0.0)
+	root.add_child(left)
+	var right := MeshBuilder.box(Vector3(post_w, sz.y, sz.z * 0.35), frame_col, 0.85, 0.05)
+	right.position = Vector3(sz.x * 0.5 - post_w * 0.5, 0.0, 0.0)
+	root.add_child(right)
+	var lintel := MeshBuilder.box(Vector3(sz.x, lintel_h, sz.z * 0.35), frame_col, 0.85, 0.05)
+	lintel.position = Vector3(0.0, sz.y * 0.5 - lintel_h * 0.5, 0.0)
+	root.add_child(lintel)
+
+	var leaf_w := sz.x - post_w * 2.0 - 0.04
+	var leaf_h := sz.y - lintel_h - 0.06
+	var leaf_t := 0.08
+	var hinge := Node3D.new()
+	hinge.name = "DoorHinge"
+	## Hinge on the port (−X) jamb, leaf extends toward +X.
+	hinge.position = Vector3(-sz.x * 0.5 + post_w, 0.0, 0.0)
+	root.add_child(hinge)
+	var leaf := MeshBuilder.box(Vector3(leaf_w, leaf_h, leaf_t), leaf_col, 0.8, 0.05)
+	leaf.name = "DoorLeaf"
+	leaf.position = Vector3(leaf_w * 0.5, -lintel_h * 0.5, 0.0)
+	hinge.add_child(leaf)
+	## Handle nub on the free edge.
+	var handle := MeshBuilder.box(Vector3(0.04, 0.18, 0.06), Color(0.75, 0.62, 0.28), 0.55, 0.4)
+	handle.position = Vector3(leaf_w - 0.18, 0.0, leaf_t * 0.5 + 0.03)
+	leaf.add_child(handle)
+
+
+static func _add_bollard_visual(root: Node3D, sz: Vector3, color: Color) -> void:
+	## Compact bollard — sits on deck or on a bulwark cell (half-wall).
+	var post_h := sz.y * 0.55
+	var post := MeshBuilder.cylinder(0.11, post_h, color, 0.7, 0.35)
+	post.position = Vector3(0.0, -sz.y * 0.5 + post_h * 0.5 + 0.02, 0.0)
+	root.add_child(post)
+	var base := MeshBuilder.cylinder(0.20, 0.06, Color(color.r * 0.85, color.g * 0.85, color.b * 0.85), 0.85, 0.2)
+	base.position = Vector3(0.0, -sz.y * 0.5 + 0.05, 0.0)
+	root.add_child(base)
+	var horn := MeshBuilder.cylinder(0.045, sz.x * 0.5, Color(0.55, 0.52, 0.45), 0.65, 0.4)
+	horn.rotation_degrees = Vector3(0.0, 0.0, 90.0)
+	horn.position = Vector3(0.0, -sz.y * 0.5 + post_h * 0.7, 0.0)
+	root.add_child(horn)
+
+
+static func _add_hull_ladder_visual(root: Node3D, sz: Vector3, color: Color) -> void:
+	## Deck pad + outboard ladder hanging in local −X (yaw aims that toward the quay).
+	var drop := 4.2
+	var pad := MeshBuilder.box(Vector3(sz.x * 0.95, 0.08, sz.z * 0.95), color, 0.85, 0.15)
+	pad.position = Vector3(0.0, -sz.y * 0.5 + 0.04, 0.0)
+	root.add_child(pad)
+	var rail_a := MeshBuilder.box(Vector3(0.08, drop, 0.08), color, 0.7, 0.25)
+	rail_a.position = Vector3(-sz.x * 0.55, -drop * 0.5, -sz.z * 0.35)
+	root.add_child(rail_a)
+	var rail_b := MeshBuilder.box(Vector3(0.08, drop, 0.08), color, 0.7, 0.25)
+	rail_b.position = Vector3(-sz.x * 0.55, -drop * 0.5, sz.z * 0.35)
+	root.add_child(rail_b)
+	var rung_n := 8
+	for i in range(rung_n):
+		var t := (float(i) + 0.5) / float(rung_n)
+		var rung := MeshBuilder.box(Vector3(0.06, 0.06, sz.z * 0.72), Color(0.55, 0.5, 0.35), 0.75, 0.1)
+		rung.position = Vector3(-sz.x * 0.55, -t * drop, 0.0)
+		root.add_child(rung)
+	# Quay-side foot plate so the climb target is obvious.
+	var foot := MeshBuilder.box(Vector3(0.5, 0.08, sz.z * 0.8), color, 0.85, 0.1)
+	foot.position = Vector3(-sz.x * 0.55 - 0.35, -drop, 0.0)
+	root.add_child(foot)

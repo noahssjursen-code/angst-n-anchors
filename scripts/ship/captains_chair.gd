@@ -186,6 +186,8 @@ func _boarding_player() -> CharacterBody3D:
 	var body := _nearest_player_in_range()
 	if body == null:
 		return null
+	if HullLadderBoard.blocks_helm_for(body):
+		return null
 	if not _player_is_looking_at_station(body):
 		return null
 	return body

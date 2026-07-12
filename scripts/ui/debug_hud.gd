@@ -11,6 +11,7 @@ var _layer:   CanvasLayer
 var _overlay: DebugDraw
 var _weather_preset_panel: Control
 var _shown:   bool = false
+var _scale_probe: Node3D = null
 
 
 func is_open() -> bool:
@@ -65,18 +66,13 @@ func _input(event: InputEvent) -> void:
 	if not ke.pressed or ke.echo:
 		return
 	match ke.physical_keycode:
-		KEY_O:
-			AutonomousSimDebug.adjust_speed(-1)
-			_overlay.queue_redraw()
-			get_viewport().set_input_as_handled()
-		KEY_I:
-			AutonomousSimDebug.adjust_speed(1)
-			_overlay.queue_redraw()
-			get_viewport().set_input_as_handled()
 		KEY_B:
 			BerthApproachLanes.toggle_debug()
 			_refresh_lane_debug_draw()
 			_overlay.queue_redraw()
+			get_viewport().set_input_as_handled()
+		KEY_P:
+			_toggle_scale_probe()
 			get_viewport().set_input_as_handled()
 
 
@@ -93,7 +89,122 @@ func _apply_debug_day_calm_preset() -> void:
 		wc.snap_time_of_day(0.5)
 
 
+## F3 + P — drops a measured scale rig 3 m in front of the player: a 1.8 m
+## mannequin, a 1 m red stick, and live-measured AABB labels for the nearest
+## boat. Ground truth for "how big is X really" arguments.
+func _toggle_scale_probe() -> void:
+	if _scale_probe != null and is_instance_valid(_scale_probe):
+		_scale_probe.queue_free()
+		_scale_probe = null
+		return
+
+	var tree := get_tree()
+	if tree == null or tree.current_scene == null:
+		return
+	var player := tree.get_first_node_in_group("player") as Node3D
+	if player == null:
+		return
+
+	_scale_probe = Node3D.new()
+	_scale_probe.name = "ScaleProbe"
+	tree.current_scene.add_child(_scale_probe)
+
+	var fwd := -player.global_transform.basis.z
+	fwd.y = 0.0
+	fwd = fwd.normalized() if fwd.length_squared() > 0.001 else Vector3.FORWARD
+	_scale_probe.global_position = player.global_position + fwd * 3.0
+
+	# 1.8 m mannequin (same rig as the player body).
+	var dummy := NpcBase.new()
+	dummy.name = "Mannequin18"
+	_scale_probe.add_child(dummy)
+	_probe_label("1.8 m — same mesh as you", Vector3(0.0, 2.15, 0.0), Color(0.95, 0.8, 0.3))
+
+	# 1 m stick.
+	var stick := MeshBuilder.box(Vector3(0.06, 1.0, 0.06), Color(0.95, 0.2, 0.15), 0.5, 0.0)
+	stick.position = Vector3(0.8, 0.5, 0.0)
+	_scale_probe.add_child(stick)
+	_probe_label("1 m", Vector3(0.8, 1.25, 0.0), Color(0.95, 0.35, 0.3))
+
+	# Live-measured nearest boat AABB — what the renderer actually draws,
+	# not what any constant claims.
+	var boat := _nearest_boat(player.global_position)
+	if boat != null:
+		var aabb := _measure_visual_aabb(boat)
+		_probe_label(
+			"boat measured: %.1f long × %.1f wide × %.1f tall" % [aabb.size.z, aabb.size.x, aabb.size.y],
+			Vector3(0.0, 2.6, 0.0),
+			Color(0.4, 0.85, 1.0),
+		)
+	else:
+		_probe_label("no boat within 200 m", Vector3(0.0, 2.6, 0.0), Color(0.6, 0.6, 0.6))
+
+
+func _probe_label(text: String, pos: Vector3, color: Color) -> void:
+	var lbl := Label3D.new()
+	lbl.text = text
+	lbl.font_size = 40
+	lbl.pixel_size = 0.006
+	lbl.position = pos
+	lbl.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	lbl.no_depth_test = true
+	lbl.modulate = color
+	lbl.outline_size = 8
+	_scale_probe.add_child(lbl)
+
+
+func _nearest_boat(from: Vector3) -> Node3D:
+	var best: Node3D = null
+	var best_d := 200.0
+	for n in get_tree().get_nodes_in_group("player_boat"):
+		if n is Node3D:
+			var d := (n as Node3D).global_position.distance_to(from)
+			if d < best_d:
+				best_d = d
+				best = n
+	if best == null:
+		# Fall back to any BoatBody in the scene.
+		for n in get_tree().current_scene.get_children():
+			if n is BoatBody:
+				var d2 := (n as Node3D).global_position.distance_to(from)
+				if d2 < best_d:
+					best_d = d2
+					best = n
+	return best
+
+
+static func _measure_visual_aabb(root: Node3D) -> AABB:
+	## World-space union of every visible MeshInstance3D under root.
+	var result := AABB()
+	var first := true
+	var stack: Array[Node] = [root]
+	while not stack.is_empty():
+		var n: Node = stack.pop_back()
+		for c in n.get_children():
+			stack.append(c)
+		var mi := n as MeshInstance3D
+		if mi == null or mi.mesh == null or not mi.visible:
+			continue
+		var local := mi.get_aabb()
+		var xf := mi.global_transform
+		for i in range(8):
+			var corner := xf * local.get_endpoint(i)
+			if first:
+				result = AABB(corner, Vector3.ZERO)
+				first = false
+			else:
+				result = result.expand(corner)
+	return result
+
+
 func _refresh_lane_debug_draw() -> void:
-	var mgr := get_node_or_null("/root/AutonomousVesselManager")
-	if mgr != null and mgr.has_method("refresh_lane_debug"):
-		mgr.call("refresh_lane_debug")
+	var tree := get_tree()
+	if tree == null:
+		return
+	if tree.get_first_node_in_group("berth_lane_debug") == null:
+		var scene := tree.current_scene
+		if scene != null:
+			var draw := BerthApproachLanesDebugDraw.new()
+			draw.name = "BerthApproachLanesDebugDraw"
+			scene.add_child(draw)
+	BerthApproachLanesDebugDraw.refresh_if_enabled(tree)

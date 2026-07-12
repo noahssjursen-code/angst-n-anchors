@@ -131,6 +131,10 @@ func begin_new_captain(display_name: String, appearance: CharacterAppearance) ->
 	var trimmed := display_name.strip_edges()
 	data.display_name = trimmed if not trimmed.is_empty() else "Captain"
 	data.appearance = appearance if appearance != null else CharacterAppearance.default_appearance()
+	# One hand-authored workboat on the registry so harbour deploy works immediately.
+	var starter := VesselSpawn.default_owned_record()
+	data.upsert_owned_vessel(starter)
+	data.set_active_vessel(starter)
 	data_loaded.emit(data)
 	save_now()
 

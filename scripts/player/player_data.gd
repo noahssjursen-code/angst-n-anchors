@@ -26,11 +26,8 @@ var total_marks_earned:  int   = 0
 var contracts_completed: int   = 0
 var distance_sailed_m:   float = 0.0
 ## Ledger records for every hull the captain owns.
-## Each entry: { uid, hull_id, display, template_path, server_vessel_id?,
-##   crew[], autonomous_active, autonomous_active_at, home_port_id,
-##   visit_port_id?, expense_per_day, pending_earnings, last_collected_at,
-##   last_accrual_at, sim_version }.
-## See AutonomousVesselRecord for the canonical autonomous / NPC-sim shape.
+## Each entry: { uid, hull_id, name, display, template_path / scene_path, brick_layout{}, server_vessel_id? }.
+## `name` is captain-chosen; `display` remains the hull catalog label.
 var owned_vessels: Array = []
 ## Hull currently deployed in the world (must match one entry in owned_vessels).
 var active_vessel: Dictionary = {}
@@ -94,15 +91,18 @@ func upsert_owned_vessel(record: Dictionary) -> void:
 	var uid := str(record.get("uid", ""))
 	if uid.is_empty():
 		return
+	var normalized := VesselSpawn.normalize_record(record)
 	for i in range(owned_vessels.size()):
 		var existing_raw: Variant = owned_vessels[i]
 		if typeof(existing_raw) != TYPE_DICTIONARY:
 			continue
 		if str((existing_raw as Dictionary).get("uid", "")) == uid:
-			owned_vessels[i] = merge_vessel_record(existing_raw as Dictionary, record)
+			owned_vessels[i] = VesselSpawn.normalize_record(
+				merge_vessel_record(existing_raw as Dictionary, normalized)
+			)
 			_mirror_active_vessel_from_owned(uid)
 			return
-	owned_vessels.append(record.duplicate(true))
+	owned_vessels.append(normalized)
 	_mirror_active_vessel_from_owned(uid)
 
 
@@ -144,25 +144,20 @@ func get_harbour_vessel_records() -> Array:
 		var entry := entry_raw as Dictionary
 		if is_legacy_starter_vessel(entry):
 			continue
-		var resolved := AutonomousVesselLoader.resolve_deployable_record(entry)
+		var resolved := VesselSpawn.resolve_deployable_record(entry)
 		if resolved.is_empty():
 			continue
 		out.append(resolved)
 	return out
 
 
-static func is_vessel_on_npc_run(record: Dictionary) -> bool:
-	return bool(record.get("autonomous_active", false))
+static func is_vessel_on_npc_run(_record: Dictionary) -> bool:
+	# Autonomous NPC fleet removed — vessels are never "on a run".
+	return false
 
 
 func get_deployable_vessels() -> Array:
-	var out: Array = []
-	for entry_raw in get_harbour_vessel_records():
-		var entry := entry_raw as Dictionary
-		if is_vessel_on_npc_run(entry):
-			continue
-		out.append(entry)
-	return out
+	return get_harbour_vessel_records()
 
 
 func set_active_vessel(record: Dictionary) -> void:
@@ -172,8 +167,8 @@ func set_active_vessel(record: Dictionary) -> void:
 	var uid := str(record.get("uid", ""))
 	var owned := find_owned_vessel(uid)
 	var merged := merge_vessel_record(owned, record) if not owned.is_empty() else record.duplicate(true)
-	active_vessel = merged.duplicate(true)
-	upsert_owned_vessel(merged)
+	active_vessel = VesselSpawn.normalize_record(merged)
+	upsert_owned_vessel(active_vessel)
 
 
 func get_active_vessel_record() -> Dictionary:
@@ -209,7 +204,7 @@ func repair_save_consistency() -> void:
 		var entry := entry_raw as Dictionary
 		if is_legacy_starter_vessel(entry):
 			continue
-		cleaned.append(entry.duplicate())
+		cleaned.append(VesselSpawn.normalize_record(entry))
 	owned_vessels = cleaned
 	if not active_vessel.is_empty() and not is_legacy_starter_vessel(active_vessel):
 		var active_uid := str(active_vessel.get("uid", ""))
@@ -221,7 +216,7 @@ func repair_save_consistency() -> void:
 	elif not owned_vessels.is_empty() and active_vessel.is_empty():
 		var last_raw: Variant = owned_vessels[owned_vessels.size() - 1]
 		if typeof(last_raw) == TYPE_DICTIONARY:
-			active_vessel = (last_raw as Dictionary).duplicate()
+			active_vessel = VesselSpawn.normalize_record(last_raw as Dictionary)
 
 
 func to_dict() -> Dictionary:
@@ -258,10 +253,10 @@ static func from_dict(d: Dictionary) -> PlayerData:
 	if typeof(owned_raw) == TYPE_ARRAY:
 		for entry_raw in owned_raw as Array:
 			if typeof(entry_raw) == TYPE_DICTIONARY:
-				pd.owned_vessels.append((entry_raw as Dictionary).duplicate())
+				pd.owned_vessels.append(VesselSpawn.normalize_record(entry_raw as Dictionary))
 	var active_raw: Variant = d.get("active_vessel", {})
 	if typeof(active_raw) == TYPE_DICTIONARY and not (active_raw as Dictionary).is_empty():
-		pd.active_vessel = (active_raw as Dictionary).duplicate()
+		pd.active_vessel = VesselSpawn.normalize_record(active_raw as Dictionary)
 	pd.appearance = CharacterAppearance.from_dict(d.get("appearance", {}) as Dictionary)
 	# v2 additions — default to empty / sentinel for v1 saves (forward compat).
 	var contracts_raw: Variant = d.get("accepted_contracts", [])
