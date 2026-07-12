@@ -33,6 +33,8 @@ func _editor_berth_overlays_visible() -> bool:
 
 
 var _berth_data: Array = []
+var _build_queue: Array = []  ## Array[Callable]
+const DOCK_JOBS_PER_FRAME: int = 1
 
 const QUAY_HEIGHT    := 0.6
 const QUAY_DEPTH     := 8.0
@@ -88,26 +90,67 @@ const INLAND_DEPTH := QUAY_DEPTH + CRANE_QUAY_GAP + CRANE_D + APRON_GAP + APRON_
 
 func _ready() -> void:
 	add_to_group("port_docks")
-	call_deferred("_rebuild")
+	if Engine.is_editor_hint():
+		call_deferred("_rebuild")
+	else:
+		# Sync so PortPlot can wait on a populated build queue immediately.
+		_rebuild()
+
+
+func is_build_complete() -> bool:
+	return _build_queue.is_empty()
 
 
 func _rebuild() -> void:
+	_build_queue.clear()
+	set_process(false)
+
 	for child in get_children():
 		if Engine.is_editor_hint():
 			child.free()
 		else:
-			child.queue_free()
+			child.free()
 
-	_build_quay()
-	_build_berths()
+	_build_quay_slab()
+	_enqueue_mooring_bollards()
+	_enqueue_berths()
 	if has_fuel_point:
-		_build_fuel_point()
+		_enqueue(_build_fuel_point)
 
-	if Engine.is_editor_hint() and get_tree() != null:
-		var esc := get_tree().edited_scene_root
-		if esc != null:
-			for child in get_children():
-				_own_subtree(child, esc)
+	if Engine.is_editor_hint():
+		_flush_build_queue()
+		if get_tree() != null:
+			var esc := get_tree().edited_scene_root
+			if esc != null:
+				for child in get_children():
+					_own_subtree(child, esc)
+		return
+
+	if not _build_queue.is_empty():
+		set_process(true)
+
+
+func _process(_delta: float) -> void:
+	if _build_queue.is_empty():
+		set_process(false)
+		return
+	for _i in range(DOCK_JOBS_PER_FRAME):
+		if _build_queue.is_empty():
+			break
+		var job: Callable = _build_queue.pop_front()
+		job.call()
+	if _build_queue.is_empty():
+		set_process(false)
+
+
+func _flush_build_queue() -> void:
+	while not _build_queue.is_empty():
+		var job: Callable = _build_queue.pop_front()
+		job.call()
+
+
+func _enqueue(job: Callable) -> void:
+	_build_queue.append(job)
 
 
 # ── Quay ──────────────────────────────────────────────────────────────────────
@@ -119,7 +162,7 @@ const QUAY_SLAB_PAD_Z := 2.0
 const QUAY_SLAB_PAD_X := 1.5
 
 
-func _build_quay() -> void:
+func _build_quay_slab() -> void:
 	var lip_half := QUAY_LIP_DEPTH * 0.5
 	# Slab spans from just behind the lip past the back of the apron (+ pad
 	# so the apron isn't flush with the concrete edge).
@@ -157,20 +200,27 @@ func _build_quay() -> void:
 		 Vector3(0.0, QUAY_HEIGHT + 0.02, 0.11),
 		 C_EDGE_STRIPE, "DockStripe")
 
-	# Mooring bollards — docking_bollard mesh + `dock_mooring_bollard` group for MooringComponent
+
+func _enqueue_mooring_bollards() -> void:
 	var n_posts := maxi(2, int(dock_length / 8.0))
 	var spacing   := dock_length / float(n_posts)
 	for i in range(n_posts):
 		var bx   := -dock_length * 0.5 + spacing * (float(i) + 0.5)
-		var post := MooringPost.new()
-		post.name = "DockMooringPost%d" % i
-		post.position = Vector3(bx, QUAY_HEIGHT, MOORING_BOLLARD_CENTER_Z)
-		# Default docking bollard mesh uses Y=90°; dock quay wants +90° on local Y.
-		post.bollard_rotation_degrees = Vector3(0.0, 180.0, 0.0)
-		add_child(post)
+		_enqueue(_spawn_mooring_bollard.bind(i, bx))
+
+
+func _spawn_mooring_bollard(index: int, bx: float) -> void:
+	var post := MooringPost.new()
+	post.name = "DockMooringPost%d" % index
+	post.position = Vector3(bx, QUAY_HEIGHT, MOORING_BOLLARD_CENTER_Z)
+	# Default docking bollard mesh uses Y=90°; dock quay wants +90° on local Y.
+	post.bollard_rotation_degrees = Vector3(0.0, 180.0, 0.0)
+	add_child(post)
+
+
 # ── Berths ────────────────────────────────────────────────────────────────────
 
-func _build_berths() -> void:
+func _enqueue_berths() -> void:
 	_berth_data.clear()
 
 	var ship_len  : float = ShipClass.max_length(max_ship_class)
@@ -184,8 +234,12 @@ func _build_berths() -> void:
 	for i in range(count):
 		var cx         : float = -dock_length * 0.5 + slot_w * (float(i) + 0.5)
 		var cargo_type : int   = berth_types[i] if i < berth_types.size() else CargoBerthType.Type.GENERAL
-		_build_berth_slot(i, cx, slot_w, ship_beam, cargo_type)
+		_enqueue(_build_berth_slot.bind(i, cx, slot_w, ship_beam, cargo_type))
 
+	_enqueue(_spawn_berth_summary_label.bind(count, ship_len, ship_beam))
+
+
+func _spawn_berth_summary_label(count: int, ship_len: float, ship_beam: float) -> void:
 	var summary := "%s  ·  %d berth%s  ·  max %.0f m" % [
 		ShipClass.display_name(max_ship_class), count, "s" if count != 1 else "", ship_len
 	]

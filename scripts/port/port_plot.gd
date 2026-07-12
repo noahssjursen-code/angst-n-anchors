@@ -41,17 +41,25 @@ var _has_fog_horn_data:   bool       = false
 var _layout_seed_data:    int        = 0
 var _island_width_data:   float      = 80.0
 
+## Runtime streamed build: ground first, then dock → facilities → trees → NPCs.
+var _stream_jobs: Array = []  ## Array[Callable]
+var _stream_gen: int = 0
+var _wait_target: Node = null
+const TREE_JOBS_PER_BATCH: int = 3
+
 
 func _ready() -> void:
 	call_deferred("_rebuild")
 
 
 func _rebuild() -> void:
+	_stream_gen += 1
+	_stream_jobs.clear()
+	_wait_target = null
+	set_process(false)
+
 	for child in get_children():
-		if Engine.is_editor_hint():
-			child.free()
-		else:
-			child.queue_free()
+		child.free()
 
 	var hd         := plot_depth * 0.5
 	var ship_class := SHIP_CLASS_BY_SIZE.get(clampi(port_size, 0, 4),
@@ -65,6 +73,58 @@ func _rebuild() -> void:
 	var pad_w              := _island_width_data + 2.0 * PAD_SAFE_MARGIN
 	var pad_d              := plot_depth + 2.0 * PAD_SAFE_MARGIN
 	var poly               := IslandMeshBuilder.build_polygon(_island_width_data, plot_depth, _layout_seed_data)
+	_build_ground(poly, pad_w, pad_d)
+
+	if not port_label.is_empty():
+		var name_lbl           := Label3D.new()
+		name_lbl.name          = "PortNameLabel"
+		name_lbl.text          = port_label.to_upper()
+		name_lbl.pixel_size    = 0.014
+		name_lbl.modulate      = Color(0.96, 0.92, 0.78, 0.88)
+		name_lbl.billboard     = BaseMaterial3D.BILLBOARD_ENABLED
+		name_lbl.no_depth_test = true
+		name_lbl.position      = Vector3(0.0, 22.0, -hd)
+		add_child(name_lbl)
+
+	if Engine.is_editor_hint():
+		_add_dock(hd, ship_class)
+		_add_facilities(hd)
+		_build_trees(poly, pad_w, pad_d)
+		if get_tree() != null:
+			var esc := get_tree().edited_scene_root
+			if esc != null:
+				for child in get_children():
+					_own_subtree(child, esc)
+		return
+
+	var gen := _stream_gen
+	_stream_jobs.append(_stream_add_dock.bind(gen, hd, ship_class))
+	_stream_jobs.append(_stream_add_facilities.bind(gen, hd))
+	_stream_jobs.append(_stream_enqueue_trees.bind(gen, poly, pad_w, pad_d))
+	_stream_jobs.append(_stream_build_npcs.bind(gen))
+	set_process(true)
+
+
+func _process(_delta: float) -> void:
+	if _wait_target != null:
+		if is_instance_valid(_wait_target) \
+				and _wait_target.has_method("is_build_complete") \
+				and not bool(_wait_target.call("is_build_complete")):
+			return
+		_wait_target = null
+
+	if _stream_jobs.is_empty():
+		set_process(false)
+		return
+
+	var job: Callable = _stream_jobs.pop_front()
+	job.call()
+
+	if _stream_jobs.is_empty() and _wait_target == null:
+		set_process(false)
+
+
+func _build_ground(poly: PackedVector2Array, pad_w: float, pad_d: float) -> void:
 	var gbody              := StaticBody3D.new()
 	gbody.name             = "Ground"
 	add_child(gbody)
@@ -82,6 +142,8 @@ func _rebuild() -> void:
 	gcol.shape = IslandMeshBuilder.to_collision_shape(poly, pad_w, pad_d, _layout_seed_data)
 	gbody.add_child(gcol)
 
+
+func _add_dock(hd: float, ship_class: ShipClass.Type) -> PortDock:
 	var dock              := PortDock.new()
 	dock.name             = "PortDock"
 	dock.port_id          = port_id
@@ -91,18 +153,10 @@ func _rebuild() -> void:
 	dock.has_fuel_point   = _has_fuel_point_data
 	dock.position         = Vector3(0.0, 0.0, -hd)
 	add_child(dock)
+	return dock
 
-	if not port_label.is_empty():
-		var name_lbl           := Label3D.new()
-		name_lbl.name          = "PortNameLabel"
-		name_lbl.text          = port_label.to_upper()
-		name_lbl.pixel_size    = 0.014
-		name_lbl.modulate      = Color(0.96, 0.92, 0.78, 0.88)
-		name_lbl.billboard     = BaseMaterial3D.BILLBOARD_ENABLED
-		name_lbl.no_depth_test = true
-		name_lbl.position      = Vector3(0.0, 22.0, -hd)
-		add_child(name_lbl)
 
+func _add_facilities(hd: float) -> PortFacilities:
 	var facilities            := PortFacilities.new()
 	facilities.name           = "PortFacilities"
 	facilities.port_size      = port_size
@@ -113,17 +167,48 @@ func _rebuild() -> void:
 	facilities.has_fog_horn   = _has_fog_horn_data
 	facilities.position       = Vector3(0.0, 0.0, -hd + PortDock.INLAND_DEPTH)
 	add_child(facilities)
+	return facilities
 
-	_build_trees(poly, pad_w, pad_d)
 
-	if not Engine.is_editor_hint():
-		call_deferred("_build_npcs")
+func _stream_add_dock(gen: int, hd: float, ship_class: ShipClass.Type) -> void:
+	if gen != _stream_gen:
+		return
+	_wait_target = _add_dock(hd, ship_class)
 
-	if Engine.is_editor_hint() and get_tree() != null:
-		var esc := get_tree().edited_scene_root
-		if esc != null:
-			for child in get_children():
-				_own_subtree(child, esc)
+
+func _stream_add_facilities(gen: int, hd: float) -> void:
+	if gen != _stream_gen:
+		return
+	_wait_target = _add_facilities(hd)
+
+
+func _stream_enqueue_trees(gen: int, poly: PackedVector2Array, pad_w: float, pad_d: float) -> void:
+	if gen != _stream_gen:
+		return
+	var specs := _plan_tree_specs(poly, pad_w, pad_d)
+	# Insert batches *after* the current job (front of remaining queue) in order.
+	var inserts: Array = []
+	var i := 0
+	while i < specs.size():
+		var batch: Array = specs.slice(i, mini(i + TREE_JOBS_PER_BATCH, specs.size()))
+		inserts.append(_stream_place_tree_batch.bind(gen, batch))
+		i += TREE_JOBS_PER_BATCH
+	# Prepend in reverse so first batch is next to run.
+	for j in range(inserts.size() - 1, -1, -1):
+		_stream_jobs.push_front(inserts[j])
+
+
+func _stream_place_tree_batch(gen: int, batch: Array) -> void:
+	if gen != _stream_gen:
+		return
+	for spec in batch:
+		_place_tree_from_spec(spec as Dictionary)
+
+
+func _stream_build_npcs(gen: int) -> void:
+	if gen != _stream_gen:
+		return
+	_build_npcs()
 
 
 func _build_npcs() -> void:
@@ -176,6 +261,12 @@ func _build_npcs() -> void:
 
 
 func _build_trees(poly: PackedVector2Array, pad_w: float, pad_d: float) -> void:
+	for spec in _plan_tree_specs(poly, pad_w, pad_d):
+		_place_tree_from_spec(spec as Dictionary)
+
+
+func _plan_tree_specs(poly: PackedVector2Array, pad_w: float, pad_d: float) -> Array:
+	var specs: Array = []
 	var rng := RandomNumberGenerator.new()
 	rng.seed = _layout_seed_data ^ 0x74726565  # "tree" XOR'd so placement differs from layout
 
@@ -207,13 +298,19 @@ func _build_trees(poly: PackedVector2Array, pad_w: float, pad_d: float) -> void:
 		var h := IslandMeshBuilder.get_height_at(p2, poly, pad_w, pad_d, _layout_seed_data)
 		if h < 1.0:  # skip beach / near-shore
 			continue
-		_place_tree(Vector3(x, h, z), rng)
+		specs.append({
+			"pos": Vector3(x, h, z),
+			"s": rng.randf_range(0.75, 1.35),
+			"rot": rng.randf_range(0.0, TAU),
+		})
 		placed += 1
+	return specs
 
 
-func _place_tree(pos: Vector3, rng: RandomNumberGenerator) -> void:
-	var s   : float = rng.randf_range(0.75, 1.35)
-	var rot : float = rng.randf_range(0.0, TAU)
+func _place_tree_from_spec(spec: Dictionary) -> void:
+	var pos: Vector3 = spec["pos"]
+	var s: float = spec["s"]
+	var rot: float = spec["rot"]
 
 	var root      := Node3D.new()
 	root.name      = "Tree"
@@ -255,6 +352,14 @@ func _place_tree(pos: Vector3, rng: RandomNumberGenerator) -> void:
 		cone_mi.material_override  = cone_mat
 		cone_mi.position           = Vector3(0.0, layer[3], 0.0)
 		root.add_child(cone_mi)
+
+
+func _place_tree(pos: Vector3, rng: RandomNumberGenerator) -> void:
+	_place_tree_from_spec({
+		"pos": pos,
+		"s": rng.randf_range(0.75, 1.35),
+		"rot": rng.randf_range(0.0, TAU),
+	})
 
 
 ## Spawn the port's ambient walkers. Each one is deterministic from
@@ -302,7 +407,9 @@ func _bake_approach_lanes() -> void:
 	var baked := BerthApproachLanes.bake_from_dock(port_id, dock)
 	if baked <= 0:
 		return
-	AutonomousVesselSim.invalidate_legs_cache()
+	# Lane geometry changed for this port only — do NOT wipe the global
+	# island-avoidance graph (that was the post-stream hitch).
+	AutonomousVesselSim.invalidate_legs_touching_port(port_id)
 	var mgr := get_node_or_null("/root/AutonomousVesselManager")
 	if mgr != null and mgr.has_method("refresh_lane_debug"):
 		mgr.call("refresh_lane_debug")

@@ -180,19 +180,17 @@ func _rebuild_docking_bollard() -> void:
 	box.position = Vector3.UP * (shape.size.y * 0.5)
 	add_child(box)
 
-	var asm := ModelAssembler.new()
-	asm.name = "DockingBollard"
-	asm.build_part_colliders = false
-	asm.collision_parent_path = NodePath("")
-	asm.absolute_scale = sc
-	asm.rotation_degrees = bollard_rotation_degrees
-	asm.model_data_path = bollard_model_path
-	add_child(asm)
+	var visual := ModelCache.instance(bollard_model_path, sc)
+	visual.name = "DockingBollard"
+	visual.rotation_degrees = bollard_rotation_degrees
+	add_child(visual)
 
 	if Engine.is_editor_hint() and get_tree() != null:
 		var esc := get_tree().edited_scene_root
 		if esc != null:
-			asm.owner = esc
+			visual.owner = esc
+			for child in visual.get_children():
+				child.owner = esc
 
 
 func _rebuild_timber_post() -> void:

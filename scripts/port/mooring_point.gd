@@ -65,17 +65,18 @@ func _rebuild_bollard_visual() -> void:
 
 	_remove_legacy_marker()
 
-	var asm := get_node_or_null("DockingBollard") as ModelAssembler
-	if asm == null:
-		asm = ModelAssembler.new()
-		asm.name = "DockingBollard"
-		add_child(asm)
-		var tree := get_tree()
-		if Engine.is_editor_hint() and tree != null and tree.edited_scene_root != null:
-			asm.owner = tree.edited_scene_root
+	var existing := get_node_or_null("DockingBollard")
+	if existing != null:
+		remove_child(existing)
+		existing.free()
 
-	asm.build_part_colliders = false
-	asm.rotation_degrees = bollard_rotation_degrees
-	asm.absolute_scale = bollard_scale
-	asm.model_data_path = bollard_model_path
+	var visual := ModelCache.instance(bollard_model_path, bollard_scale)
+	visual.name = "DockingBollard"
+	visual.rotation_degrees = bollard_rotation_degrees
+	add_child(visual)
+	var tree := get_tree()
+	if Engine.is_editor_hint() and tree != null and tree.edited_scene_root != null:
+		visual.owner = tree.edited_scene_root
+		for child in visual.get_children():
+			child.owner = tree.edited_scene_root
 

@@ -20,7 +20,7 @@ Every system owns everything it does — autoload, state class, components, data
 
 ```
 scripts/
-  core/         # Shared infrastructure — no game knowledge (MeshTransformer, ModelAssembler, MeshBuilder, palette, interactable base)
+  core/         # Shared infrastructure — no game knowledge (MeshTransformer, ModelAssembler, ModelCache, MeshBuilder, palette, interactable base)
   player/       # CharacterBody3D controller, PlayerSession autoload, player data
   ship/         # BoatBody, controller, camera, propulsion, rudder, thruster, buoyancy, hydrodynamics, lights, audio
   ocean/        # FFT water simulation (FftWaterSystem), WaveSurface query
@@ -141,6 +141,19 @@ ma.model_data_path = "res://resources/data/models/buildings/lighthouse.json"
 ```
 
 `ModelAssembler` is generic — no ship, dock, or NPC terms in the mesh layer.
+Use it when you need live part/role lookups, articulation, or per-instance collision from mesh parts (ships, NPCs, cranes, lighthouse).
+
+### ModelCache (static visuals — stamp copies)
+
+For repeated static props (port street buildings, bollards), build once and stamp:
+
+```gdscript
+var visual := ModelCache.instance("res://resources/data/meshes/port_buildings/town_building.json")
+visual.name = "Model"
+body.add_child(visual)
+```
+
+`ModelCache` runs `ModelAssembler` on first miss, bakes a dumb `Node3D` of `MeshInstance3D`s (shared `ArrayMesh`es), and returns cheap stamps afterward. Do not use it when you need `get_part` / `get_first_part_by_role`. Editor builds bypass the prototype store so JSON edits stay visible.
 
 ### JSON mesh format
 

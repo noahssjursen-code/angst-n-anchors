@@ -73,9 +73,25 @@ static var _legs_cache: Dictionary = {}
 
 static func invalidate_legs_cache() -> void:
 	_legs_cache.clear()
-	# Dynamically invalidate the global roundabout graph.
-	# Graph rebuilding is now extremely cheap (<10ms) thanks to bounding sphere distance pruning.
+	# Full wipe — used at world bake. Live dock bakes should use
+	# `invalidate_legs_touching_port` instead so we do not rebuild the
+	# global roundabout graph (O(nodes²) land sampling) on every island load.
 	AutonomousTransitRoute.invalidate_graph()
+
+
+## Drop cached legs that visit `port_id` without touching the navigation graph.
+## Live berth/lane rebakes change tentacles, not island roundabout nodes.
+static func invalidate_legs_touching_port(port_id: String) -> void:
+	if port_id.is_empty():
+		return
+	var to_erase: Array = []
+	for key in _legs_cache.keys():
+		var parts := str(key).split("|")
+		# key: home|visit|fishing|hull|route_v*|lanes_ready|island_count
+		if parts.size() >= 2 and (parts[0] == port_id or parts[1] == port_id):
+			to_erase.append(key)
+	for key in to_erase:
+		_legs_cache.erase(key)
 
 
 static func build_legs(av: AutonomousVesselRecord) -> Array:
