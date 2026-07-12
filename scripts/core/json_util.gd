@@ -6,12 +6,23 @@ extends RefCounted
 ## implementations (ShipBuilder, MeshTransformer, ModelAssembler) plus a
 ## handful of inline JSON.parse blocks scattered across NPCs. Centralised
 ## so the parse-error handling and "is file present" check live in one place.
+##
+## Parsed Dictionaries are cached by path and returned by reference — treat them
+## as read-only. Callers that need to mutate must `duplicate(true)` first.
+
+static var _cache: Dictionary = {}
+
 
 ## Load a JSON file and return its root Dictionary. Returns an empty Dictionary
 ## on any failure (missing file, parse error, root not a Dictionary), with
 ## a descriptive push_error so the caller can fail fast and the user can
 ## debug from the console.
 static func load(path: String) -> Dictionary:
+	if path.is_empty():
+		return {}
+	if _cache.has(path):
+		return _cache[path] as Dictionary
+
 	if not FileAccess.file_exists(path):
 		push_error("JsonUtil: file not found: " + path)
 		return {}
@@ -30,4 +41,15 @@ static func load(path: String) -> Dictionary:
 	if typeof(data) != TYPE_DICTIONARY:
 		push_error("JsonUtil: root is not a Dictionary in " + path)
 		return {}
-	return data as Dictionary
+
+	var dict := data as Dictionary
+	_cache[path] = dict
+	return dict
+
+
+## Drop one path (or the whole cache) so the next load re-reads from disk.
+static func clear_cache(path: String = "") -> void:
+	if path.is_empty():
+		_cache.clear()
+	else:
+		_cache.erase(path)

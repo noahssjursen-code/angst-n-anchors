@@ -109,6 +109,9 @@ func _bake_berth_lanes(t: Node, defs: Array[PortDefinition]) -> void:
 	var lane_handle: int = t.mark_load_event("berth_lanes.bake") if t != null else 0
 	BerthApproachLanes.bake_all_ports(defs, world_seed)
 	AutonomousVesselSim.invalidate_legs_cache()
+	# Warm the roundabout graph once during world setup so the first island
+	# approach does not pay O(nodes²) land sampling mid-voyage.
+	AutonomousTransitRoute.rebuild_navigation_graph()
 	call_deferred("_refresh_berth_lane_debug")
 	if t != null:
 		t.end_load_event(lane_handle)

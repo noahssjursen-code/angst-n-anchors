@@ -49,6 +49,10 @@ var _contract_npc_local_pos:   Vector3 = Vector3.ZERO
 var _shipwright_local_pos:     Vector3 = Vector3.ZERO
 var _company_office_local_pos: Vector3 = Vector3.ZERO
 
+## Runtime stream: one placement (or cheap prop) per frame after layout is planned.
+var _place_queue: Array = []  ## Array[Callable]
+const PLACES_PER_FRAME: int = 1
+
 @export var port_size: int = 1:
 	set(v): port_size = v; if is_inside_tree(): _rebuild()
 
@@ -69,26 +73,66 @@ var _company_office_local_pos: Vector3 = Vector3.ZERO
 
 
 func _ready() -> void:
-	call_deferred("_rebuild")
+	if Engine.is_editor_hint():
+		call_deferred("_rebuild")
+	else:
+		# Sync so PortPlot can wait on a populated place queue immediately.
+		_rebuild()
+
+
+func is_build_complete() -> bool:
+	return _place_queue.is_empty()
 
 
 func _rebuild() -> void:
+	_place_queue.clear()
+	set_process(false)
+
 	for child in get_children():
 		if Engine.is_editor_hint():
 			child.free()
 		else:
-			child.queue_free()
+			child.free()
 
-	_build_facilities()
+	_plan_facilities()
 
-	if Engine.is_editor_hint() and get_tree() != null:
-		var esc := get_tree().edited_scene_root
-		if esc != null:
-			for child in get_children():
-				_own_subtree(child, esc)
+	if Engine.is_editor_hint():
+		_flush_place_queue()
+		if get_tree() != null:
+			var esc := get_tree().edited_scene_root
+			if esc != null:
+				for child in get_children():
+					_own_subtree(child, esc)
+		return
+
+	if not _place_queue.is_empty():
+		set_process(true)
 
 
-func _build_facilities() -> void:
+func _process(_delta: float) -> void:
+	if _place_queue.is_empty():
+		set_process(false)
+		return
+	for _i in range(PLACES_PER_FRAME):
+		if _place_queue.is_empty():
+			break
+		var job: Callable = _place_queue.pop_front()
+		job.call()
+	if _place_queue.is_empty():
+		set_process(false)
+
+
+func _flush_place_queue() -> void:
+	while not _place_queue.is_empty():
+		var job: Callable = _place_queue.pop_front()
+		job.call()
+
+
+func _enqueue(job: Callable) -> void:
+	_place_queue.append(job)
+
+
+func _plan_facilities() -> void:
 	_spawn_local_pos          = Vector3.ZERO
 	_harbour_master_local_pos = Vector3.ZERO
 	_contract_npc_local_pos   = Vector3.ZERO
@@ -153,10 +197,10 @@ func _build_facilities() -> void:
 			cursor_z += row_depth + ROW_Z_GAP
 
 	# Entry posts mark the street entrance at dock edge
-	_box(Vector3(0.18, 1.2, 0.18), Vector3(-(STREET_HALF + 0.3), 0.6, 0.4),
-		 Color(0.20, 0.20, 0.22), "StreetPostL")
-	_box(Vector3(0.18, 1.2, 0.18), Vector3(+(STREET_HALF + 0.3), 0.6, 0.4),
-		 Color(0.20, 0.20, 0.22), "StreetPostR")
+	_enqueue(_box.bind(Vector3(0.18, 1.2, 0.18), Vector3(-(STREET_HALF + 0.3), 0.6, 0.4),
+		 Color(0.20, 0.20, 0.22), "StreetPostL"))
+	_enqueue(_box.bind(Vector3(0.18, 1.2, 0.18), Vector3(+(STREET_HALF + 0.3), 0.6, 0.4),
+		 Color(0.20, 0.20, 0.22), "StreetPostR"))
 
 	var service_end_z := cursor_z
 	cursor_z += SECTION_GAP
@@ -172,7 +216,7 @@ func _build_facilities() -> void:
 		road_end_z = _place_town_street_pairs(town_def, cursor_z)
 
 	# Road strip extends through full town section
-	_road_strip(road_end_z + 4.0)
+	_enqueue(_road_strip.bind(road_end_z + 4.0))
 
 	# Landmarks (Lighthouse, Fog Horn)
 	_place_landmarks()
@@ -192,7 +236,7 @@ func _place_street_row(defs: Array, center_z: float) -> void:
 		var bd := float(d["d"])
 		var side := _rng.randi() % 2
 		var bx := _street_x(bw, side)
-		_place_facility(id, Vector3(bx, 0.0, center_z))
+		_enqueue_facility(id, Vector3(bx, 0.0, center_z))
 		_track_npc_pos(id, bx, center_z, bd)
 		return
 
@@ -203,7 +247,7 @@ func _place_street_row(defs: Array, center_z: float) -> void:
 		var bw := float(d["w"])
 		var bd := float(d["d"])
 		var bx := _street_x(bw, i)
-		_place_facility(id, Vector3(bx, 0.0, center_z))
+		_enqueue_facility(id, Vector3(bx, 0.0, center_z))
 		_track_npc_pos(id, bx, center_z, bd)
 
 
@@ -249,7 +293,7 @@ func _place_tiled_row(def: Dictionary, center_z: float) -> void:
 
 	for i in range(n_tiles):
 		var bx := cursor_x + tile_w * 0.5
-		_place_facility(id, Vector3(bx, 0.0, center_z))
+		_enqueue_facility(id, Vector3(bx, 0.0, center_z))
 		_track_npc_pos(id, bx, center_z, float(def["d"]))
 		cursor_x += tile_step
 
@@ -269,12 +313,12 @@ func _place_warehouses_aside(def: Dictionary, center_z: float) -> void:
 	if n_wh == 1:
 		var side := _rng.randi() % 2
 		var cx   := -cx_abs if side == 0 else cx_abs
-		_warehouse_building(Vector3(cx, 0.0, center_z), PI * 0.5)
+		_enqueue(_warehouse_building.bind(Vector3(cx, 0.0, center_z), PI * 0.5))
 		_track_npc_pos("Warehouse", cx, center_z, wh_w)
 	else:
-		_warehouse_building(Vector3(-cx_abs, 0.0, center_z), PI * 0.5)
+		_enqueue(_warehouse_building.bind(Vector3(-cx_abs, 0.0, center_z), PI * 0.5))
 		_track_npc_pos("Warehouse", -cx_abs, center_z, wh_w)
-		_warehouse_building(Vector3(cx_abs, 0.0, center_z), PI * 0.5)
+		_enqueue(_warehouse_building.bind(Vector3(cx_abs, 0.0, center_z), PI * 0.5))
 
 
 func _place_town_street_pairs(def: Dictionary, start_z: float) -> float:
@@ -293,8 +337,8 @@ func _place_town_street_pairs(def: Dictionary, start_z: float) -> float:
 	var cursor_z := start_z
 	for _i in range(n_pairs):
 		var pair_z := cursor_z + tile_d * 0.5
-		_place_facility("Town", Vector3(-cx, 0.0, pair_z))
-		_place_facility("Town", Vector3( cx, 0.0, pair_z))
+		_enqueue_facility("Town", Vector3(-cx, 0.0, pair_z))
+		_enqueue_facility("Town", Vector3( cx, 0.0, pair_z))
 		cursor_z += tile_d + ROW_Z_GAP
 
 	return cursor_z - ROW_Z_GAP  # Z of last pair's far edge
@@ -313,12 +357,16 @@ func _place_landmarks() -> void:
 	if has_fog_horn:
 		var side := _rng.randi() % 2
 		var fx := -edge_x if side == 0 else edge_x
-		_fog_horn_building(Vector3(fx, 0.0, dock_z))
+		_enqueue(_fog_horn_building.bind(Vector3(fx, 0.0, dock_z)))
 
 	# Lighthouse: centered at the far inland end of the plot, large.
 	if has_lighthouse:
 		var back_z := plot_depth - 8.0
-		_lighthouse_building(Vector3(0.0, 0.0, back_z))
+		_enqueue(_lighthouse_building.bind(Vector3(0.0, 0.0, back_z)))
+
+
+func _enqueue_facility(id: String, pos: Vector3) -> void:
+	_enqueue(_place_facility.bind(id, pos))
 
 
 func _place_facility(id: String, pos: Vector3) -> void:
@@ -409,11 +457,9 @@ func _harbourmaster_building(pos: Vector3) -> void:
 	col.shape     = box
 	col.position  = Vector3(0.0, 2.5, 0.0)
 	body.add_child(col)
-	var ma                  := ModelAssembler.new()
-	ma.name                 = "Model"
-	ma.model_data_path      = HARBOURMASTER_MESH_PATH
-	ma.build_part_colliders = false
-	body.add_child(ma)
+	var visual := ModelCache.instance(HARBOURMASTER_MESH_PATH)
+	visual.name = "Model"
+	body.add_child(visual)
 	add_child(body)
 
 
@@ -427,11 +473,9 @@ func _shippingagent_building(pos: Vector3) -> void:
 	col.shape     = box
 	col.position  = Vector3(0.0, 2.5, 0.0)
 	body.add_child(col)
-	var ma                  := ModelAssembler.new()
-	ma.name                 = "Model"
-	ma.model_data_path      = SHIPPINGAGENT_MESH_PATH
-	ma.build_part_colliders = false
-	body.add_child(ma)
+	var visual := ModelCache.instance(SHIPPINGAGENT_MESH_PATH)
+	visual.name = "Model"
+	body.add_child(visual)
 	add_child(body)
 
 
@@ -445,11 +489,9 @@ func _customs_building(pos: Vector3) -> void:
 	col.shape     = box
 	col.position  = Vector3(0.0, 2.5, 0.0)
 	body.add_child(col)
-	var ma                  := ModelAssembler.new()
-	ma.name                 = "Model"
-	ma.model_data_path      = CUSTOMS_MESH_PATH
-	ma.build_part_colliders = false
-	body.add_child(ma)
+	var visual := ModelCache.instance(CUSTOMS_MESH_PATH)
+	visual.name = "Model"
+	body.add_child(visual)
 	add_child(body)
 
 
@@ -463,11 +505,9 @@ func _marine_engineer_building(pos: Vector3) -> void:
 	col.shape     = box
 	col.position  = Vector3(0.0, 2.0, 0.0)
 	body.add_child(col)
-	var ma                  := ModelAssembler.new()
-	ma.name                 = "Model"
-	ma.model_data_path      = MARINE_ENGINEER_MESH_PATH
-	ma.build_part_colliders = false
-	body.add_child(ma)
+	var visual := ModelCache.instance(MARINE_ENGINEER_MESH_PATH)
+	visual.name = "Model"
+	body.add_child(visual)
 	add_child(body)
 
 
@@ -481,11 +521,9 @@ func _shipwright_building(pos: Vector3) -> void:
 	col.shape     = box
 	col.position  = Vector3(0.0, 3.0, 0.0)
 	body.add_child(col)
-	var ma                  := ModelAssembler.new()
-	ma.name                 = "Model"
-	ma.model_data_path      = SHIPWRIGHT_MESH_PATH
-	ma.build_part_colliders = false
-	body.add_child(ma)
+	var visual := ModelCache.instance(SHIPWRIGHT_MESH_PATH)
+	visual.name = "Model"
+	body.add_child(visual)
 	add_child(body)
 
 
@@ -500,11 +538,9 @@ func _warehouse_building(pos: Vector3, rot_y: float = 0.0) -> void:
 	col.shape     = box
 	col.position  = Vector3(0.0, 3.0, 0.0)
 	body.add_child(col)
-	var ma                  := ModelAssembler.new()
-	ma.name                 = "Model"
-	ma.model_data_path      = WAREHOUSE_MESH_PATH
-	ma.build_part_colliders = false
-	body.add_child(ma)
+	var visual := ModelCache.instance(WAREHOUSE_MESH_PATH)
+	visual.name = "Model"
+	body.add_child(visual)
 	add_child(body)
 
 
@@ -518,11 +554,9 @@ func _town_building(pos: Vector3) -> void:
 	col.shape     = box
 	col.position  = Vector3(0.0, 3.0, 0.0)
 	body.add_child(col)
-	var ma                  := ModelAssembler.new()
-	ma.name                 = "Model"
-	ma.model_data_path      = TOWN_MESH_PATH
-	ma.build_part_colliders = false
-	body.add_child(ma)
+	var visual := ModelCache.instance(TOWN_MESH_PATH)
+	visual.name = "Model"
+	body.add_child(visual)
 	add_child(body)
 
 

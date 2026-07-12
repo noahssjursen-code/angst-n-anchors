@@ -32,6 +32,8 @@ No game knowledge. Used by multiple systems. Nothing in here knows about ships, 
 |---|---|
 | `mesh_transformer.gd` | Loads raw `{vertices, indices}` JSON → `MeshInstance3D` + optional collision |
 | `model_assembler.gd` | Loads `{parts}` JSON → tree of `MeshTransformer` nodes |
+| `model_cache.gd` | Build-once / stamp-copies for static JSON visuals (shared `ArrayMesh`) |
+| `json_util.gd` | Path-keyed JSON parse cache (read-only Dictionaries) |
 | `mesh_builder.gd` | Primitive shape helpers (box, cylinder, etc.) |
 | `island_mesh_builder.gd` | Terrain-specific polygon helpers |
 | `palette.gd` | Colour constants |
