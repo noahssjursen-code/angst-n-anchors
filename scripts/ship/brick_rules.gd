@@ -18,8 +18,7 @@ static func validate(layout: BrickLayout, grid: DeckGrid, _max_height: int = 0, 
 	var door_n := 0
 	var wall_n := 0
 	var window_n := 0
-	var cargo_n := 0
-
+	var helm_n := 0
 	for item in layout.iter_primary_cells():
 		var cell: Vector3i = item["cell"]
 		var brick_id := str(item.get("brick_id", ""))
@@ -36,18 +35,20 @@ static func validate(layout: BrickLayout, grid: DeckGrid, _max_height: int = 0, 
 			wall_n += 1
 		if BrickCatalog.has_tag(brick_id, "window"):
 			window_n += 1
-		if BrickCatalog.has_tag(brick_id, "cargo"):
-			cargo_n += 1
+		if BrickCatalog.has_tag(brick_id, "helm"):
+			helm_n += 1
 		if grid != null and not grid.in_bounds(cell):
 			# Still free-build — just skip counting wild cells.
 			pass
 
 	var caps := {
-		"cargo_cells": cargo_n,
+		"cargo_cells": layout.cargo_cell_count(),
 		"has_cabin": door_n >= 1 or wall_n >= 8,
+		"has_helm": helm_n >= 1,
 		"has_crane": crane_n >= 1,
 		"doors": door_n,
 		"windows": window_n,
+		"helms": helm_n,
 		"brick_count": brick_n,
 		"max_stack_y": max_y,
 	}

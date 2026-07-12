@@ -110,6 +110,8 @@ static func record_has_capability(record: Dictionary, capability: String) -> boo
 			return bool(caps.get("has_crane", false))
 		"cabin":
 			return bool(caps.get("has_cabin", false))
+		"helm":
+			return bool(caps.get("has_helm", false))
 		"fishing":
 			return layout.count_tag("fishing") > 0
 		_:

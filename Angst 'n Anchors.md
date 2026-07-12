@@ -48,7 +48,7 @@ Owned vessels persist `brick_layout: { hull_id, cells }`. `BrickRules` enforces 
 | `block` / `block_window` / `block_door` | Cabin walls |
 | `ledge_45` | Roof / sheer break |
 | `railing` | Deck edge |
-| `cargo_tile` | Cargo capacity cells |
+| `cargo_zone` | Deck cargo rectangle (corner A → B) |
 | `crane_base` / `crane` | Ship-mounted crane |
 
 ### Available hulls

@@ -19,6 +19,10 @@ var _brick_id: String = "block"
 var _tool: int = Tool.PLACE
 var _painting := false
 var _last_paint_cell: Vector3i = Vector3i(-999, -999, -999)
+## Cargo zone: click corner A, then corner B.
+var _cargo_anchor: Vector3i = Vector3i(-999, -999, -999)
+var _cargo_anchor_set := false
+var _thumb_cache: Dictionary = {} ## brick_id → ImageTexture
 
 var _root: Control
 var _viewport: SubViewport
@@ -48,6 +52,7 @@ var _rules_lbl: Label
 var _caps_lbl: Label
 var _layer_lbl: Label
 var _name_edit: LineEdit
+var _sign_text_edit: LineEdit
 var _brick_rows: Dictionary = {} ## brick_id → PanelContainer
 var _confirm_btn: Button
 var _back_btn: Button
@@ -66,6 +71,28 @@ func _ready() -> void:
 	var vp := get_viewport()
 	if vp != null and not vp.size_changed.is_connected(_resize):
 		vp.size_changed.connect(_resize)
+	# Bake palette icons after we're in the tree (SubViewport needs a SceneTree).
+	for id in _brick_rows.keys():
+		var row: PanelContainer = _brick_rows[id]
+		var thumb := _row_thumb_rect(row)
+		if thumb == null:
+			continue
+		if _thumb_cache.has(id):
+			thumb.texture = _thumb_cache[id] as Texture2D
+		else:
+			_bake_brick_thumbnail(str(id), thumb)
+
+
+func _row_thumb_rect(row: PanelContainer) -> TextureRect:
+	if row == null:
+		return null
+	var h := row.get_child(0) as HBoxContainer
+	if h == null or h.get_child_count() < 1:
+		return null
+	var plate := h.get_child(0) as PanelContainer
+	if plate == null or plate.get_child_count() < 1:
+		return null
+	return plate.get_child(0) as TextureRect
 
 
 func is_open() -> bool:
@@ -90,6 +117,7 @@ func open_for_hull(
 	_yaw = 0
 	_brick_id = "block"
 	_tool = Tool.PLACE
+	_clear_cargo_anchor()
 	var hull_label := str(hull_entry.get("display", "Vessel"))
 	if _editing_uid.is_empty():
 		_hull_lbl.text = "New build — %s" % hull_label
@@ -106,6 +134,8 @@ func open_for_hull(
 			"display": hull_label,
 		})
 	_name_edit.text = suggested
+	if _sign_text_edit != null:
+		_sign_text_edit.text = suggested
 	_resize()
 	_root.visible = true
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
@@ -186,7 +216,7 @@ func _build_chrome() -> void:
 	_status_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_status_lbl.add_theme_font_size_override("font_size", 12)
 	_status_lbl.add_theme_color_override("font_color", HudStyle.C_LABEL)
-	_status_lbl.text = "Empty deck — place items yourself.\nLMB place · RMB orbit · MMB pan · Scroll zoom\n[ ] layer · R rotate · X erase\nCell = 1.0 m  ·  Hull = 30×24 m  ·  Grid = 30×24"
+	_status_lbl.text = "Empty deck — place items yourself.\nLMB place · RMB orbit · MMB pan · Scroll zoom\n[ ] layer (shows this floor + below) · R rotate · X erase\nCargo zone: click A, then B · Doors open with F after deploy\nCell = 1.0 m  ·  Hull = 30×24 m  ·  Grid = 30×24"
 	col.add_child(_status_lbl)
 
 	col.add_child(HSeparator.new())
@@ -217,19 +247,19 @@ func _build_chrome() -> void:
 	col.add_child(tool_row)
 	var place_btn := UiBuilder.button("Place")
 	place_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	place_btn.pressed.connect(func() -> void: _tool = Tool.PLACE; _refresh_palette_selection(); _refresh_ghost_from_mouse())
+	place_btn.pressed.connect(func() -> void: _tool = Tool.PLACE; _clear_cargo_anchor(); _refresh_palette_selection(); _refresh_ghost_from_mouse())
 	tool_row.add_child(place_btn)
 	var erase_btn := UiBuilder.button("Erase")
 	erase_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	erase_btn.pressed.connect(func() -> void: _tool = Tool.ERASE; _refresh_palette_selection(); _clear_ghost())
+	erase_btn.pressed.connect(func() -> void: _tool = Tool.ERASE; _clear_cargo_anchor(); _refresh_palette_selection(); _clear_ghost())
 	tool_row.add_child(erase_btn)
 
 	var tool_row2 := HBoxContainer.new()
 	tool_row2.add_theme_constant_override("separation", 6)
 	col.add_child(tool_row2)
-	var rot_btn := UiBuilder.button("Rotate 90°")
+	var rot_btn := UiBuilder.button("Rotate")
 	rot_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	rot_btn.pressed.connect(func() -> void: _yaw = (_yaw + 90) % 360; _refresh_rules(); _refresh_ghost_from_mouse())
+	rot_btn.pressed.connect(func() -> void: _rotate_yaw(); _refresh_rules(); _refresh_ghost_from_mouse())
 	tool_row2.add_child(rot_btn)
 	var clear_btn := UiBuilder.button("Clear deck")
 	clear_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -245,12 +275,24 @@ func _build_chrome() -> void:
 	col.add_child(layer_row)
 	var down := UiBuilder.button("Layer −")
 	down.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	down.pressed.connect(func() -> void: _layer_y = maxi(_layer_y - 1, 0); _refresh_grid_overlay(); _refresh_rules(); _refresh_ghost_from_mouse())
+	down.pressed.connect(func() -> void: _set_layer_y(_layer_y - 1))
 	layer_row.add_child(down)
 	var up := UiBuilder.button("Layer +")
 	up.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	up.pressed.connect(func() -> void: _layer_y = mini(_layer_y + 1, 24); _refresh_grid_overlay(); _refresh_rules(); _refresh_ghost_from_mouse())
+	up.pressed.connect(func() -> void: _set_layer_y(_layer_y + 1))
 	layer_row.add_child(up)
+
+	var sign_lbl := Label.new()
+	sign_lbl.text = "Sign text (floor / wall)"
+	sign_lbl.add_theme_color_override("font_color", HudStyle.C_AMBER)
+	sign_lbl.add_theme_font_size_override("font_size", 12)
+	col.add_child(sign_lbl)
+	_sign_text_edit = LineEdit.new()
+	_sign_text_edit.placeholder_text = "Vessel name / custom text…"
+	_sign_text_edit.max_length = 32
+	_sign_text_edit.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_sign_text_edit.text_changed.connect(func(_t: String) -> void: _refresh_ghost_from_mouse())
+	col.add_child(_sign_text_edit)
 
 	col.add_child(HSeparator.new())
 
@@ -346,6 +388,12 @@ func _unhandled_input(event: InputEvent) -> void:
 	if not is_open():
 		return
 	if event.is_action_pressed("ui_cancel"):
+		if _cargo_anchor_set:
+			_clear_cargo_anchor()
+			_refresh_palette_selection()
+			_refresh_ghost_from_mouse()
+			get_viewport().set_input_as_handled()
+			return
 		_close()
 		get_viewport().set_input_as_handled()
 		return
@@ -353,27 +401,22 @@ func _unhandled_input(event: InputEvent) -> void:
 		var key := event as InputEventKey
 		match key.keycode:
 			KEY_R:
-				_yaw = (_yaw + 90) % 360
+				_rotate_yaw()
 				_refresh_rules()
 				_refresh_ghost_from_mouse()
 				get_viewport().set_input_as_handled()
 			KEY_X:
 				_tool = Tool.ERASE if _tool == Tool.PLACE else Tool.PLACE
+				_clear_cargo_anchor()
 				_refresh_palette_selection()
 				_clear_ghost()
 				_refresh_ghost_from_mouse()
 				get_viewport().set_input_as_handled()
 			KEY_BRACKETLEFT:
-				_layer_y = maxi(_layer_y - 1, 0)
-				_refresh_grid_overlay()
-				_refresh_rules()
-				_refresh_ghost_from_mouse()
+				_set_layer_y(_layer_y - 1)
 				get_viewport().set_input_as_handled()
 			KEY_BRACKETRIGHT:
-				_layer_y = mini(_layer_y + 1, 24)
-				_refresh_grid_overlay()
-				_refresh_rules()
-				_refresh_ghost_from_mouse()
+				_set_layer_y(_layer_y + 1)
 				get_viewport().set_input_as_handled()
 
 
@@ -421,20 +464,76 @@ func _on_viewport_gui_input(event: InputEvent) -> void:
 			_cam_target += (-right * delta.x + forward * delta.y) * scale
 			_update_camera()
 		elif _painting and Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
-			_paint_at_screen(mm.position)
+			# Cargo zones are click-A / click-B — never drag-paint.
+			if not _is_cargo_tool():
+				_paint_at_screen(mm.position)
+			else:
+				_update_ghost_at_screen(mm.position)
 		else:
 			_update_ghost_at_screen(mm.position)
+
+
+func _set_layer_y(y: int) -> void:
+	_layer_y = clampi(y, 0, 24)
+	_refresh_grid_overlay()
+	_apply_layer_visibility()
+	_refresh_palette_selection()
+	_refresh_rules()
+	_refresh_ghost_from_mouse()
+
+
+func _apply_layer_visibility() -> void:
+	## Current edit layer and everything below stay visible; hide floors above.
+	for key in _brick_visuals.keys():
+		var node: Node3D = _brick_visuals[key]
+		if node == null or not is_instance_valid(node):
+			continue
+		var cell_y := int(node.get_meta("cell_y", 0))
+		node.visible = cell_y <= _layer_y
+	## Cargo zones live on deck (y=0).
+	if _brick_root != null:
+		var cargo := _brick_root.get_node_or_null("CargoZonePreview")
+		if cargo != null:
+			cargo.visible = _layer_y >= 0
+
+
+func _is_cargo_tool() -> bool:
+	return BrickCatalog.has_tag(_brick_id, "cargo") or str(BrickCatalog.get_entry(_brick_id).get("place_mode", "")) == "rect"
+
+
+func _clear_cargo_anchor() -> void:
+	_cargo_anchor_set = false
+	_cargo_anchor = Vector3i(-999, -999, -999)
 
 
 func _paint_at_screen(screen_pos: Vector2) -> void:
 	var cell := _pick_cell(screen_pos)
 	if cell.x < 0:
 		return
-	# Dragging across the same cell must not re-sync every motion event.
 	if cell == _last_paint_cell:
 		return
 	_last_paint_cell = cell
+
+	if _is_cargo_tool():
+		_paint_cargo_at(cell)
+		return
+
 	if _tool == Tool.ERASE:
+		if _layout.erase_cargo_zone_at(cell):
+			_clear_cargo_anchor()
+			_sync_brick_visuals()
+			_refresh_rules()
+			return
+		## Fixtures peel first so erase doesn't delete the host wall.
+		if _layout.clear_light(cell):
+			_sync_brick_visuals()
+			_refresh_rules()
+			return
+		## Signs come off first so erase doesn't have to delete the wall to clear text.
+		if _layout.clear_sign(cell):
+			_sync_brick_visuals()
+			_refresh_rules()
+			return
 		if not _layout.has_cell(cell):
 			return
 		_layout.erase_footprint_at(cell)
@@ -445,12 +544,53 @@ func _paint_at_screen(screen_pos: Vector2) -> void:
 	_refresh_rules()
 
 
+func _paint_cargo_at(cell: Vector3i) -> void:
+	## Place: corner A then B. Erase: remove the whole zone under the cursor.
+	if cell.y != 0:
+		return
+	if _tool == Tool.ERASE:
+		if not _layout.erase_cargo_zone_at(cell):
+			return
+		_clear_cargo_anchor()
+		_sync_brick_visuals()
+		_refresh_rules()
+		_refresh_palette_selection()
+		_refresh_ghost_from_mouse()
+		return
+
+	if not _cargo_anchor_set:
+		_cargo_anchor = Vector3i(cell.x, 0, cell.z)
+		_cargo_anchor_set = true
+		_refresh_palette_selection()
+		_refresh_ghost_from_mouse()
+		return
+
+	var ok := _layout.add_cargo_zone(_cargo_anchor, Vector3i(cell.x, 0, cell.z))
+	_clear_cargo_anchor()
+	_refresh_palette_selection()
+	if not ok:
+		_refresh_ghost_from_mouse()
+		return
+	_sync_brick_visuals()
+	_refresh_rules()
+	_refresh_ghost_from_mouse()
+
+
+func _rotate_yaw() -> void:
+	var step := BrickCatalog.yaw_step_of(_brick_id) if BrickCatalog.has(_brick_id) else 90
+	_yaw = (_yaw + step) % 360
+
+
 func _try_place(cell: Vector3i) -> bool:
 	var entry := BrickCatalog.get_entry(_brick_id)
 	if entry.is_empty():
 		return false
 	if bool(entry.get("deck_only", false)) and cell.y != 0:
 		return false
+	if BrickCatalog.has_tag(_brick_id, "text"):
+		return _try_place_text(cell)
+	if BrickCatalog.has_tag(_brick_id, "light"):
+		return _try_place_light(cell)
 	var fp := BrickCatalog.footprint_of(_brick_id)
 	var yaw := _yaw
 	# Edge pieces (hull ladder) snap yaw outboard and must sit on the perimeter.
@@ -467,10 +607,78 @@ func _try_place(cell: Vector3i) -> bool:
 	for c in cells:
 		if not _grid.in_bounds(c):
 			return false
+		if _layout.cargo_contains(c):
+			return false
 	for c in cells:
 		if _layout.has_cell(c):
 			_layout.erase_footprint_at(c)
 	return _layout.place_footprint(cell, _brick_id, yaw, _grid)
+
+
+func _try_place_text(cell: Vector3i) -> bool:
+	## Signs mount onto existing walls/blocks — never delete the host brick.
+	if cell.x < 0 or _grid == null:
+		return false
+	var entry := BrickCatalog.get_entry(_brick_id)
+	if bool(entry.get("deck_only", false)) and cell.y != 0:
+		return false
+	var yaw := _yaw
+	var text := _sign_text()
+	if _layout.has_cell(cell):
+		var host := _layout.get_brick(_layout.primary_cell_of(cell))
+		var host_id := str(host.get("brick_id", ""))
+		if BrickCatalog.has_tag(host_id, "text"):
+			## Replace a free-standing sign brick.
+			_layout.erase_footprint_at(cell)
+			return _layout.place_footprint(cell, _brick_id, yaw, _grid, {"text": text})
+		## Attach plaque to the wall / block under the cursor.
+		return _layout.attach_sign(cell, _brick_id, yaw, text)
+	## Empty cell — free-standing floor/wall sign.
+	var fp := BrickCatalog.footprint_of(_brick_id)
+	var yaw_steps := int(round(float(yaw) / 90.0)) % 4
+	for c in _grid.footprint_cells(cell, fp, yaw_steps):
+		if not _grid.in_bounds(c):
+			return false
+		if _layout.has_cell(c):
+			## Footprint would eat a neighbour — mount on the clicked empty? fail soft.
+			return false
+	return _layout.place_footprint(cell, _brick_id, yaw, _grid, {"text": text})
+
+
+func _try_place_light(cell: Vector3i) -> bool:
+	## Lights mount onto existing walls/blocks — cone gizmo shows aim (45° yaw).
+	if cell.x < 0 or _grid == null:
+		return false
+	var yaw := BrickLayout.norm_yaw_step(_yaw, BrickCatalog.yaw_step_of(_brick_id))
+	_yaw = yaw
+	if _layout.has_cell(cell):
+		var host := _layout.get_brick(_layout.primary_cell_of(cell))
+		var host_id := str(host.get("brick_id", ""))
+		if BrickCatalog.has_tag(host_id, "light"):
+			_layout.erase_footprint_at(cell)
+			return _layout.place_footprint(cell, _brick_id, yaw, _grid)
+		return _layout.attach_light(cell, _brick_id, yaw)
+	## Empty cell — free-standing fixture.
+	var fp := BrickCatalog.footprint_of(_brick_id)
+	var yaw_steps := int(round(float(yaw) / 90.0)) % 4
+	for c in _grid.footprint_cells(cell, fp, yaw_steps):
+		if not _grid.in_bounds(c):
+			return false
+		if _layout.has_cell(c):
+			return false
+	return _layout.place_footprint(cell, _brick_id, yaw, _grid)
+
+
+func _sign_text() -> String:
+	if _sign_text_edit != null:
+		var t := _sign_text_edit.text.strip_edges()
+		if not t.is_empty():
+			return t
+	if _name_edit != null:
+		var n := _name_edit.text.strip_edges()
+		if not n.is_empty():
+			return n
+	return str(BrickCatalog.get_entry("deck_text").get("default_text", "NAME"))
 
 
 func _placement_legal(cell: Vector3i, brick_id: String, yaw: int) -> bool:
@@ -479,6 +687,13 @@ func _placement_legal(cell: Vector3i, brick_id: String, yaw: int) -> bool:
 	var entry := BrickCatalog.get_entry(brick_id)
 	if entry.is_empty():
 		return false
+	if BrickCatalog.has_tag(brick_id, "cargo") or str(entry.get("place_mode", "")) == "rect":
+		return cell.y == 0 and _grid.in_bounds(Vector3i(cell.x, 0, cell.z))
+	## Signs / lights can mount on existing walls / sit on empty deck.
+	if BrickCatalog.has_tag(brick_id, "text") or BrickCatalog.has_tag(brick_id, "light"):
+		if bool(entry.get("deck_only", false)) and cell.y != 0:
+			return false
+		return _grid.in_bounds(cell)
 	if bool(entry.get("deck_only", false)) and cell.y != 0:
 		return false
 	var fp := BrickCatalog.footprint_of(brick_id)
@@ -491,10 +706,22 @@ func _placement_legal(cell: Vector3i, brick_id: String, yaw: int) -> bool:
 		if not _grid.footprint_touches_edge(cell, fp, ys):
 			return false
 	var yaw_steps := int(round(float(use_yaw) / 90.0)) % 4
+	var allow_on_cargo := BrickCatalog.has_tag(brick_id, "text")
 	for c in _grid.footprint_cells(cell, fp, yaw_steps):
 		if not _grid.in_bounds(c):
 			return false
+		if not allow_on_cargo and _layout.cargo_contains(c):
+			return false
 	return true
+
+
+func _ghost_position_for(cell: Vector3i, brick_id: String, yaw: int) -> Vector3:
+	## Mounted lights sit on the host face; everything else uses footprint centre.
+	if BrickCatalog.has_tag(brick_id, "light") and _layout.has_cell(cell):
+		var host := _layout.get_brick(_layout.primary_cell_of(cell))
+		if not BrickCatalog.has_tag(str(host.get("brick_id", "")), "light"):
+			return _grid.cell_center_local(cell) + DeckFitout.light_mount_offset(yaw, brick_id)
+	return DeckFitout.footprint_center_local(_grid, cell, brick_id, yaw)
 
 
 func _ghost_yaw_for(cell: Vector3i, brick_id: String) -> int:
@@ -520,25 +747,32 @@ func _update_ghost_at_screen(screen_pos: Vector2) -> void:
 	if cell.x < 0:
 		_clear_ghost()
 		return
+	if _is_cargo_tool():
+		_update_cargo_ghost(cell)
+		return
 	var yaw := _ghost_yaw_for(cell, _brick_id)
 	var valid := _placement_legal(cell, _brick_id, yaw)
+	var sign := _sign_text() if BrickCatalog.has_tag(_brick_id, "text") else ""
 	if (
 		_ghost != null and is_instance_valid(_ghost)
 		and _ghost_brick_id == _brick_id
 		and _ghost_cell == cell
 		and _ghost_yaw == yaw
 		and _ghost_valid == valid
+		and str(_ghost.get_meta("sign_text", "")) == sign
 	):
 		return
-	# Reuse the ghost mesh when only pose changed (same brick + validity).
 	if (
 		_ghost != null and is_instance_valid(_ghost)
 		and _ghost_brick_id == _brick_id
 		and _ghost_valid == valid
+		and not _is_cargo_tool()
+		and str(_ghost.get_meta("sign_text", "")) == sign
+		and not BrickCatalog.has_tag(_brick_id, "text")
 	):
 		_ghost_cell = cell
 		_ghost_yaw = yaw
-		_ghost.position = DeckFitout.footprint_center_local(_grid, cell, _brick_id, yaw)
+		_ghost.position = _ghost_position_for(cell, _brick_id, yaw)
 		_ghost.rotation_degrees = Vector3(0.0, float(yaw), 0.0)
 		return
 	_clear_ghost()
@@ -546,16 +780,97 @@ func _update_ghost_at_screen(screen_pos: Vector2) -> void:
 	_ghost_cell = cell
 	_ghost_yaw = yaw
 	_ghost_valid = valid
-	_ghost = BrickCatalog.create_visual(_brick_id, {"preview_mesh": true})
+	var ghost_opts: Dictionary = {"preview_mesh": true}
+	if BrickCatalog.has_tag(_brick_id, "text"):
+		ghost_opts["text"] = sign
+	if BrickCatalog.has_tag(_brick_id, "light"):
+		ghost_opts["show_aim_gizmo"] = true
+	_ghost = BrickCatalog.create_visual(_brick_id, ghost_opts)
 	_ghost.name = "PlaceGhost"
-	_ghost.position = DeckFitout.footprint_center_local(_grid, cell, _brick_id, yaw)
+	_ghost.set_meta("sign_text", sign)
+	_ghost.position = _ghost_position_for(cell, _brick_id, yaw)
 	_ghost.rotation_degrees = Vector3(0.0, float(yaw), 0.0)
 	_tint_ghost(_ghost, valid)
-	# Parent to boat so local footprint coords match placed bricks.
 	if _boat != null and is_instance_valid(_boat):
 		_boat.add_child(_ghost)
 	else:
 		_world.add_child(_ghost)
+
+
+func _update_cargo_ghost(cell: Vector3i) -> void:
+	var a := _cargo_anchor if _cargo_anchor_set else Vector3i(cell.x, 0, cell.z)
+	var b := Vector3i(cell.x, 0, cell.z)
+	var zone := BrickLayout.normalize_cargo_rect(a, b)
+	var key := "cargo:%d,%d:%d,%d:%s" % [
+		BrickLayout.zone_min(zone).x, BrickLayout.zone_min(zone).z,
+		BrickLayout.zone_max(zone).x, BrickLayout.zone_max(zone).z,
+		str(_cargo_anchor_set),
+	]
+	var valid := cell.y == 0 and _cargo_rect_placeable(zone)
+	if (
+		_ghost != null and is_instance_valid(_ghost)
+		and str(_ghost.get_meta("cargo_key", "")) == key
+		and _ghost_valid == valid
+	):
+		return
+	_clear_ghost()
+	_ghost_brick_id = _brick_id
+	_ghost_cell = cell
+	_ghost_yaw = 0
+	_ghost_valid = valid
+	_ghost = _make_cargo_zone_visual(zone)
+	_ghost.name = "PlaceGhost"
+	_ghost.set_meta("cargo_key", key)
+	_tint_ghost(_ghost, valid)
+	if _boat != null and is_instance_valid(_boat):
+		_boat.add_child(_ghost)
+	else:
+		_world.add_child(_ghost)
+
+
+func _cargo_rect_placeable(zone: Dictionary) -> bool:
+	var mn := BrickLayout.zone_min(zone)
+	var mx := BrickLayout.zone_max(zone)
+	if _grid == null:
+		return false
+	for ix in range(mn.x, mx.x + 1):
+		for iz in range(mn.z, mx.z + 1):
+			var c := Vector3i(ix, 0, iz)
+			if not _grid.in_bounds(c):
+				return false
+			if _layout.has_cell(c):
+				return false
+	return true
+
+
+func _make_cargo_zone_visual(zone: Dictionary) -> Node3D:
+	var mn := BrickLayout.zone_min(zone)
+	var mx := BrickLayout.zone_max(zone)
+	var w := float(mx.x - mn.x + 1) * DeckGrid.CELL_M
+	var l := float(mx.z - mn.z + 1) * DeckGrid.CELL_M
+	var sum := Vector3.ZERO
+	var n := 0
+	for ix in range(mn.x, mx.x + 1):
+		for iz in range(mn.z, mx.z + 1):
+			sum += _grid.cell_center_local(Vector3i(ix, 0, iz))
+			n += 1
+	var root := Node3D.new()
+	if n <= 0:
+		return root
+	var center := sum / float(n)
+	center.y = _grid.deck_y + 0.08
+	root.position = center
+	var plate := MeshBuilder.box(Vector3(w * 0.98, 0.04, l * 0.98), Color(0.40, 0.36, 0.30), 0.95, 0.0)
+	root.add_child(plate)
+	var hx := w * 0.5
+	var hz := l * 0.5
+	var arm := clampf(minf(hx, hz) * 0.25, 0.3, 1.2)
+	var col := Color(0.95, 0.82, 0.12)
+	_cargo_zone_corner(root, -hx, -hz, 1.0, 1.0, arm, 0.12, 0.03, col)
+	_cargo_zone_corner(root, hx, -hz, -1.0, 1.0, arm, 0.12, 0.03, col)
+	_cargo_zone_corner(root, -hx, hz, 1.0, -1.0, arm, 0.12, 0.03, col)
+	_cargo_zone_corner(root, hx, hz, -1.0, -1.0, arm, 0.12, 0.03, col)
+	return root
 
 
 func _tint_ghost(root: Node3D, valid: bool) -> void:
@@ -637,7 +952,7 @@ func _make_item_row(brick_id: String) -> PanelContainer:
 	h.add_theme_constant_override("separation", 10)
 	row.add_child(h)
 
-	# Thumbnail plate — solid back so the SubViewport read clearly.
+	# Thumbnail plate — baked ImageTexture (live SubViewports in ScrollContainer stay blank).
 	var thumb_plate := PanelContainer.new()
 	thumb_plate.custom_minimum_size = Vector2(THUMB_PX + 4, THUMB_PX + 4)
 	thumb_plate.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -648,58 +963,15 @@ func _make_item_row(brick_id: String) -> PanelContainer:
 	thumb_plate.add_theme_stylebox_override("panel", plate_sb)
 	h.add_child(thumb_plate)
 
-	var thumb_host := SubViewportContainer.new()
-	thumb_host.custom_minimum_size = Vector2(THUMB_PX, THUMB_PX)
-	thumb_host.stretch = true
-	thumb_host.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	thumb_plate.add_child(thumb_host)
-
-	var svp := SubViewport.new()
-	svp.size = Vector2i(THUMB_PX, THUMB_PX)
-	svp.transparent_bg = false
-	svp.render_target_update_mode = SubViewport.UPDATE_ALWAYS
-	svp.own_world_3d = true
-	svp.disable_3d = false
-	thumb_host.add_child(svp)
-
-	var world := Node3D.new()
-	svp.add_child(world)
-
-	var env_node := WorldEnvironment.new()
-	var env := Environment.new()
-	env.background_mode = Environment.BG_COLOR
-	env.background_color = Color(0.14, 0.15, 0.18)
-	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
-	env.ambient_light_color = Color(0.65, 0.66, 0.70)
-	env.ambient_light_energy = 0.95
-	env_node.environment = env
-	world.add_child(env_node)
-
-	var visual := BrickCatalog.create_visual(brick_id, {"preview_mesh": true})
-	world.add_child(visual)
-
-	var light := DirectionalLight3D.new()
-	light.rotation_degrees = Vector3(-42.0, 38.0, 0.0)
-	light.light_energy = 1.25
-	world.add_child(light)
-
-	var fill := DirectionalLight3D.new()
-	fill.rotation_degrees = Vector3(-12.0, -125.0, 0.0)
-	fill.light_energy = 0.55
-	world.add_child(fill)
-
-	var cam := Camera3D.new()
-	cam.fov = 32.0
-	cam.current = true
-	var sz := BrickCatalog.size_m(brick_id)
-	# Frame tall pieces (door / ladder) without clipping; keep small bricks readable.
-	var reach := maxf(sz.x, maxf(sz.y, sz.z))
-	if brick_id == "hull_ladder":
-		reach = maxf(reach, 3.2)
-	reach = reach * 1.55 + 0.55
-	cam.position = Vector3(reach * 0.78, reach * 0.58, reach * 0.92)
-	cam.look_at(Vector3(0.0, 0.0, 0.0), Vector3.UP)
-	world.add_child(cam)
+	var thumb := TextureRect.new()
+	thumb.custom_minimum_size = Vector2(THUMB_PX, THUMB_PX)
+	thumb.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	thumb.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	thumb.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	thumb_plate.add_child(thumb)
+	if _thumb_cache.has(brick_id):
+		thumb.texture = _thumb_cache[brick_id] as Texture2D
+	# else: baked from _ready once the editor is in the scene tree
 
 	var text_col := VBoxContainer.new()
 	text_col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -714,10 +986,26 @@ func _make_item_row(brick_id: String) -> PanelContainer:
 	text_col.add_child(name_lbl)
 
 	var fp := BrickCatalog.footprint_of(brick_id)
+	var sz := BrickCatalog.size_m(brick_id)
 	var size_lbl := Label.new()
-	size_lbl.text = "%d×%d×%d cells  (%.1f×%.1f×%.1f m)" % [
-		fp.x, fp.y, fp.z, sz.x, sz.y, sz.z
-	]
+	if BrickCatalog.has_tag(brick_id, "cargo"):
+		size_lbl.text = "Click A → B rectangle on deck"
+	elif brick_id == "deck_text":
+		size_lbl.text = "Flat on deck  ·  %d×%d m" % [fp.x, fp.z]
+	elif brick_id == "wall_text":
+		size_lbl.text = "Mounts on wall  ·  rotate to face  ·  erase peels sign first"
+	elif BrickCatalog.has_tag(brick_id, "external"):
+		size_lbl.text = "Outboard flood  ·  25° down  ·  yaw aims quay / sea"
+	elif BrickCatalog.has_tag(brick_id, "work") and BrickCatalog.has_tag(brick_id, "light"):
+		size_lbl.text = "Deck flood  ·  45° down  ·  mount high, yaw aims throw"
+	elif BrickCatalog.has_tag(brick_id, "light"):
+		size_lbl.text = "Mounts on block  ·  rotate 45°  ·  cone shows aim"
+	elif BrickCatalog.has_tag(brick_id, "text"):
+		size_lbl.text = "Sign  ·  edit text below"
+	else:
+		size_lbl.text = "%d×%d×%d cells  (%.1f×%.1f×%.1f m)" % [
+			fp.x, fp.y, fp.z, sz.x, sz.y, sz.z
+		]
 	size_lbl.add_theme_font_size_override("font_size", 11)
 	size_lbl.add_theme_color_override("font_color", HudStyle.C_LABEL)
 	text_col.add_child(size_lbl)
@@ -725,12 +1013,80 @@ func _make_item_row(brick_id: String) -> PanelContainer:
 	return row
 
 
+func _bake_brick_thumbnail(brick_id: String, target: TextureRect) -> void:
+	## Off-tree SubViewport → ImageTexture. Avoids blank nested viewports in the item list.
+	var svp := SubViewport.new()
+	svp.size = Vector2i(THUMB_PX * 2, THUMB_PX * 2)
+	svp.transparent_bg = false
+	svp.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+	svp.own_world_3d = true
+	svp.disable_3d = false
+	add_child(svp)
+
+	var env_node := WorldEnvironment.new()
+	var env := Environment.new()
+	env.background_mode = Environment.BG_COLOR
+	env.background_color = Color(0.14, 0.15, 0.18)
+	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
+	env.ambient_light_color = Color(0.70, 0.71, 0.74)
+	env.ambient_light_energy = 1.0
+	env_node.environment = env
+	svp.add_child(env_node)
+
+	var visual := BrickCatalog.create_visual(brick_id, {
+		"preview_mesh": true,
+		"text": "NAME" if BrickCatalog.has_tag(brick_id, "text") else "",
+	})
+	svp.add_child(visual)
+
+	var light := DirectionalLight3D.new()
+	light.rotation_degrees = Vector3(-42.0, 38.0, 0.0)
+	light.light_energy = 1.35
+	svp.add_child(light)
+
+	var fill := DirectionalLight3D.new()
+	fill.rotation_degrees = Vector3(-12.0, -125.0, 0.0)
+	fill.light_energy = 0.6
+	svp.add_child(fill)
+
+	var cam := Camera3D.new()
+	cam.fov = 32.0
+	cam.current = true
+	var sz := BrickCatalog.size_m(brick_id)
+	var reach := maxf(sz.x, maxf(sz.y, sz.z))
+	if brick_id == "hull_ladder":
+		reach = maxf(reach, 3.2)
+	reach = reach * 1.55 + 0.55
+	svp.add_child(cam)
+	cam.position = Vector3(reach * 0.78, reach * 0.58, reach * 0.92)
+	cam.look_at(Vector3.ZERO, Vector3.UP)
+
+	await get_tree().process_frame
+	await RenderingServer.frame_post_draw
+	if not is_instance_valid(svp):
+		return
+	var img := svp.get_texture().get_image()
+	svp.queue_free()
+	if img == null:
+		return
+	img.resize(THUMB_PX, THUMB_PX, Image.INTERPOLATE_LANCZOS)
+	var tex := ImageTexture.create_from_image(img)
+	_thumb_cache[brick_id] = tex
+	if is_instance_valid(target):
+		target.texture = tex
+
+
 func _select_brick(id: String) -> void:
 	_brick_id = id
 	_tool = Tool.PLACE
+	_yaw = BrickLayout.norm_yaw_step(_yaw, BrickCatalog.yaw_step_of(id))
+	_clear_cargo_anchor()
 	_refresh_palette_selection()
 	_clear_ghost()
 	_refresh_ghost_from_mouse()
+	if BrickCatalog.has_tag(id, "text") and _sign_text_edit != null:
+		_sign_text_edit.grab_focus()
+		_sign_text_edit.select_all()
 
 
 func _refresh_palette_selection() -> void:
@@ -742,14 +1098,17 @@ func _refresh_palette_selection() -> void:
 			sb.border_color = HudStyle.C_AMBER if selected else HudStyle.C_BRASS
 			sb.set_border_width_all(2 if selected else 1)
 			sb.bg_color = Color(0.16, 0.14, 0.10) if selected else HudStyle.C_BG_INNER
-	_layer_lbl.text = "Layer %d  (%.1f m)  ·  Yaw %d°  ·  %s" % [
-		_layer_y, float(_layer_y) * DeckGrid.CELL_M, _yaw,
-		"ERASE" if _tool == Tool.ERASE else "PLACE",
+	var mode := "ERASE" if _tool == Tool.ERASE else "PLACE"
+	if _tool == Tool.PLACE and _is_cargo_tool():
+		mode = "CARGO A" if not _cargo_anchor_set else "CARGO B"
+	_layer_lbl.text = "Layer %d  (%.1f m)  ·  showing 0–%d  ·  Yaw %d°  ·  %s" % [
+		_layer_y, float(_layer_y) * DeckGrid.CELL_M, _layer_y, _yaw, mode,
 	]
 
 
 func _clear_layout() -> void:
 	_layout.clear()
+	_clear_cargo_anchor()
 	_sync_brick_visuals()
 	_refresh_rules()
 
@@ -796,15 +1155,29 @@ func _sync_brick_visuals() -> void:
 	if _brick_root == null or _grid == null:
 		return
 
-	var wanted: Dictionary = {} ## cell_key → { cell, brick_id, yaw }
-	var cargo_cells: Array[Vector3i] = []
+	var wanted: Dictionary = {} ## key → { cell, brick_id, yaw, text, is_sign? }
 	for item in _layout.iter_primary_cells():
 		var cell: Vector3i = item["cell"]
 		var brick_id := str(item.get("brick_id", ""))
-		if BrickCatalog.has_tag(brick_id, "cargo"):
-			cargo_cells.append(cell)
-			continue
 		wanted[BrickLayout.cell_key(cell)] = item
+		var sign_id := str(item.get("sign_id", ""))
+		if BrickCatalog.has(sign_id) and BrickCatalog.has_tag(sign_id, "text"):
+			wanted["sign:%s" % BrickLayout.cell_key(cell)] = {
+				"cell": cell,
+				"brick_id": sign_id,
+				"yaw": int(item.get("sign_yaw", 0)),
+				"text": str(item.get("text", "")),
+				"is_sign": true,
+			}
+		var light_id := str(item.get("light_id", ""))
+		if BrickCatalog.has(light_id) and BrickCatalog.has_tag(light_id, "light"):
+			wanted["light:%s" % BrickLayout.cell_key(cell)] = {
+				"cell": cell,
+				"brick_id": light_id,
+				"yaw": int(item.get("light_yaw", 0)),
+				"text": "",
+				"is_light": true,
+			}
 
 	var stale: Array[String] = []
 	for key in _brick_visuals.keys():
@@ -819,7 +1192,12 @@ func _sync_brick_visuals() -> void:
 		var want: Dictionary = wanted[k]
 		var want_id := str(want.get("brick_id", ""))
 		var want_yaw := int(want.get("yaw", 0))
-		if str(node.get_meta("brick_id", "")) != want_id or int(node.get_meta("yaw", 0)) != want_yaw:
+		var want_text := str(want.get("text", ""))
+		if (
+			str(node.get_meta("brick_id", "")) != want_id
+			or int(node.get_meta("yaw", 0)) != want_yaw
+			or str(node.get_meta("sign_text", "")) != want_text
+		):
 			stale.append(k)
 
 	for k in stale:
@@ -838,65 +1216,78 @@ func _sync_brick_visuals() -> void:
 		var yaw := int(item.get("yaw", 0))
 		if not BrickCatalog.has(brick_id):
 			continue
-		var visual := BrickCatalog.create_visual(brick_id)
+		var opts: Dictionary = {}
+		if BrickCatalog.has_tag(brick_id, "text"):
+			opts["text"] = str(item.get("text", ""))
+		if BrickCatalog.has_tag(brick_id, "light"):
+			opts["show_aim_gizmo"] = true
+		var visual := BrickCatalog.create_visual(brick_id, opts)
 		visual.name = "%s_%d_%d_%d" % [brick_id, cell.x, cell.y, cell.z]
 		visual.set_meta("brick_id", brick_id)
 		visual.set_meta("yaw", yaw)
-		visual.position = DeckFitout.footprint_center_local(_grid, cell, brick_id, yaw)
+		visual.set_meta("sign_text", str(item.get("text", "")))
+		visual.set_meta("cell_y", cell.y)
+		if bool(item.get("is_sign", false)):
+			visual.position = _grid.cell_center_local(cell)
+		elif bool(item.get("is_light", false)):
+			visual.position = _grid.cell_center_local(cell) + DeckFitout.light_mount_offset(yaw, brick_id)
+		else:
+			visual.position = DeckFitout.footprint_center_local(_grid, cell, brick_id, yaw)
 		visual.rotation_degrees = Vector3(0.0, float(yaw), 0.0)
 		_brick_root.add_child(visual)
 		_brick_visuals[k] = visual
 
-	_refresh_cargo_zone_preview(cargo_cells)
+	_refresh_cargo_zone_preview(_layout.iter_cargo_zones())
+	_apply_layer_visibility()
 
 
-func _refresh_cargo_zone_preview(cargo_cells: Array[Vector3i]) -> void:
-	## One pad + yellow corner brackets — matches spawned CargoDeckComponent look.
+func _refresh_cargo_zone_preview(zones: Array) -> void:
+	## One pad + yellow corner brackets per cargo rect.
 	if _brick_root == null:
 		return
 	var existing := _brick_root.get_node_or_null("CargoZonePreview")
 	if existing != null:
 		_brick_root.remove_child(existing)
 		existing.free()
-	if cargo_cells.is_empty() or _grid == null:
+	if zones.is_empty() or _grid == null:
 		return
 
-	var min_x := 999
-	var max_x := -999
-	var min_z := 999
-	var max_z := -999
-	var sum := Vector3.ZERO
-	for c in cargo_cells:
-		min_x = mini(min_x, c.x)
-		max_x = maxi(max_x, c.x)
-		min_z = mini(min_z, c.z)
-		max_z = maxi(max_z, c.z)
-		sum += _grid.cell_center_local(Vector3i(c.x, 0, c.z))
+	var root := Node3D.new()
+	root.name = "CargoZonePreview"
+	_brick_root.add_child(root)
 
-	var w := float(max_x - min_x + 1) * DeckGrid.CELL_M
-	var l := float(max_z - min_z + 1) * DeckGrid.CELL_M
-	var center := sum / float(cargo_cells.size())
-	center.y = _grid.deck_y + 0.06
-
-	var zone := Node3D.new()
-	zone.name = "CargoZonePreview"
-	zone.position = center
-	_brick_root.add_child(zone)
-
-	var plate := MeshBuilder.box(Vector3(w * 0.995, 0.03, l * 0.995), Color(0.32, 0.30, 0.26), 0.95, 0.0)
-	plate.position = Vector3(0.0, -0.01, 0.0)
-	zone.add_child(plate)
-
-	var hx := w * 0.5
-	var hz := l * 0.5
-	var arm := clampf(minf(hx, hz) * 0.25, 0.3, 1.2)
-	var thick := 0.12
-	var h := 0.02
-	var col := Color(0.95, 0.82, 0.12)
-	_cargo_zone_corner(zone, -hx, -hz, 1.0, 1.0, arm, thick, h, col)
-	_cargo_zone_corner(zone, hx, -hz, -1.0, 1.0, arm, thick, h, col)
-	_cargo_zone_corner(zone, -hx, hz, 1.0, -1.0, arm, thick, h, col)
-	_cargo_zone_corner(zone, hx, hz, -1.0, -1.0, arm, thick, h, col)
+	for zone_v in zones:
+		var zone := zone_v as Dictionary
+		var mn := BrickLayout.zone_min(zone)
+		var mx := BrickLayout.zone_max(zone)
+		var w := float(mx.x - mn.x + 1) * DeckGrid.CELL_M
+		var l := float(mx.z - mn.z + 1) * DeckGrid.CELL_M
+		var sum := Vector3.ZERO
+		var n := 0
+		for ix in range(mn.x, mx.x + 1):
+			for iz in range(mn.z, mx.z + 1):
+				sum += _grid.cell_center_local(Vector3i(ix, 0, iz))
+				n += 1
+		if n <= 0:
+			continue
+		var center := sum / float(n)
+		center.y = _grid.deck_y + 0.06
+		var pad := Node3D.new()
+		pad.position = center
+		root.add_child(pad)
+		var plate := MeshBuilder.box(Vector3(w * 0.995, 0.03, l * 0.995), Color(0.32, 0.30, 0.26), 0.95, 0.0)
+		plate.position = Vector3(0.0, -0.01, 0.0)
+		pad.add_child(plate)
+		var hx := w * 0.5
+		var hz := l * 0.5
+		var arm := clampf(minf(hx, hz) * 0.25, 0.3, 1.2)
+		var thick := 0.12
+		var h := 0.02
+		var col := Color(0.95, 0.82, 0.12)
+		_cargo_zone_corner(pad, -hx, -hz, 1.0, 1.0, arm, thick, h, col)
+		_cargo_zone_corner(pad, hx, -hz, -1.0, 1.0, arm, thick, h, col)
+		_cargo_zone_corner(pad, -hx, hz, 1.0, -1.0, arm, thick, h, col)
+		_cargo_zone_corner(pad, hx, hz, -1.0, -1.0, arm, thick, h, col)
 
 
 func _cargo_zone_corner(
@@ -1015,60 +1406,60 @@ func _refresh_grid_overlay() -> void:
 
 
 func _add_scale_figure() -> void:
-	## 1.8 m human silhouette so claimed metres can be eyeballed against the hull.
+	## Real player mesh at WorldUnits.PLAYER_HEIGHT_M so deck cells can be eyeballed.
 	if _grid == null or _grid_overlay == null:
 		return
+	var h := WorldUnits.PLAYER_HEIGHT_M
 	var root := Node3D.new()
 	root.name = "ScaleFigure"
 	# Starboard midships, just outside the deck edge.
-	root.position = Vector3(_grid.half_beam + 0.6, _grid.deck_y, 0.0)
+	root.position = Vector3(_grid.half_beam + 0.85, _grid.deck_y, 0.0)
 	_grid_overlay.add_child(root)
 
-	var h := WorldUnits.PLAYER_HEIGHT_M
-	var body := MeshBuilder.box(
-		Vector3(0.45, h * 0.55, 0.28),
-		Color(0.85, 0.55, 0.35, 0.85),
-		0.9,
-		0.0,
-	)
-	body.position = Vector3(0.0, h * 0.45, 0.0)
-	root.add_child(body)
-	var head := MeshBuilder.box(
-		Vector3(0.28, 0.28, 0.28),
-		Color(0.85, 0.55, 0.35, 0.85),
-		0.9,
-		0.0,
-	)
-	head.position = Vector3(0.0, h - 0.14, 0.0)
-	root.add_child(head)
+	var npc := NpcBase.new()
+	npc.name = "PlayerDummy"
+	# Mesh authored facing +Z; stand outside starboard facing the hull (−X).
+	npc.rotation.y = PI * 0.5
+	root.add_child(npc)
+
+	# Vertical height pole — exact metres, ticks every 0.5 m.
+	var pole := MeshBuilder.box(Vector3(0.05, h, 0.05), Color(0.95, 0.82, 0.15), 0.5, 0.0)
+	pole.position = Vector3(0.55, h * 0.5, 0.0)
+	root.add_child(pole)
+	var tick_y := 0.5
+	while tick_y <= h + 0.001:
+		var tick := MeshBuilder.box(Vector3(0.22, 0.03, 0.03), Color(0.95, 0.82, 0.15), 0.5, 0.0)
+		tick.position = Vector3(0.55, tick_y, 0.0)
+		root.add_child(tick)
+		tick_y += 0.5
 
 	var tag := Label3D.new()
-	tag.text = "1.8 m"
-	tag.font_size = 24
-	tag.pixel_size = 0.006
-	tag.position = Vector3(0.0, h + 0.25, 0.0)
+	tag.text = "%.1f m  (player)" % h
+	tag.font_size = 48
+	tag.pixel_size = 0.004
+	tag.position = Vector3(0.55, h + 0.35, 0.0)
 	tag.billboard = BaseMaterial3D.BILLBOARD_ENABLED
-	tag.modulate = Color(0.85, 0.90, 0.95, 0.7)
-	tag.outline_size = 2
+	tag.modulate = Color(0.95, 0.88, 0.35, 0.95)
+	tag.outline_size = 6
 	root.add_child(tag)
 
-	# One-metre stick on the deck (= one cell).
+	# One-metre stick on the deck (= one cell) — vertical for easy compare to the dummy.
 	var stick := MeshBuilder.box(
-		Vector3(0.06, 0.06, 1.0),
-		Color(0.95, 0.2, 0.15, 0.9),
+		Vector3(0.08, 1.0, 0.08),
+		Color(0.95, 0.2, 0.15, 0.95),
 		0.5,
 		0.0,
 	)
-	stick.position = Vector3(_grid.half_beam - 0.2, _grid.deck_y + 0.08, 0.0)
+	stick.position = Vector3(_grid.half_beam - 0.35, _grid.deck_y + 0.5, 0.55)
 	_grid_overlay.add_child(stick)
 	var stick_lbl := Label3D.new()
 	stick_lbl.text = "1 m"
-	stick_lbl.font_size = 20
-	stick_lbl.pixel_size = 0.005
-	stick_lbl.position = stick.position + Vector3(0.0, 0.25, 0.0)
+	stick_lbl.font_size = 40
+	stick_lbl.pixel_size = 0.004
+	stick_lbl.position = stick.position + Vector3(0.0, 0.7, 0.0)
 	stick_lbl.billboard = BaseMaterial3D.BILLBOARD_ENABLED
-	stick_lbl.modulate = Color(0.95, 0.35, 0.3, 0.75)
-	stick_lbl.outline_size = 2
+	stick_lbl.modulate = Color(0.95, 0.35, 0.3, 0.9)
+	stick_lbl.outline_size = 5
 	_grid_overlay.add_child(stick_lbl)
 
 
@@ -1125,9 +1516,10 @@ func _refresh_rules() -> void:
 		_rules_lbl.text = "Free build — no constraints."
 	var caps: Dictionary = report.get("capabilities", {})
 	_caps_lbl.text = (
-		"Cargo cells: %d\nCabin: %s\nShip crane: %s\nParts: %d"
+		"Cargo cells: %d\nHelm: %s\nCabin: %s\nShip crane: %s\nParts: %d"
 		% [
 			int(caps.get("cargo_cells", 0)),
+			"yes" if bool(caps.get("has_helm", false)) else "no",
 			"yes" if bool(caps.get("has_cabin", false)) else "no",
 			"yes" if bool(caps.get("has_crane", false)) else "no",
 			int(caps.get("brick_count", 0)),

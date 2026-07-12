@@ -19,7 +19,6 @@ func kind() -> String:
 
 func _on_mounted() -> void:
 	_build_visual()
-	_add_helm()
 
 
 func _build_visual() -> void:
@@ -32,17 +31,3 @@ func _build_visual() -> void:
 	house.name = "CabinShell"
 	house.position = Vector3(0.0, HOUSE_H * 0.5, 0.0)
 	add_child(house)
-
-	var window := ShipLight.new()
-	window.name = "CabinWindow"
-	window.light_type = ShipLight.LightType.WINDOW
-	window.position = Vector3(0.0, HOUSE_H * 0.55, -HOUSE_L * 0.45)
-	add_child(window)
-
-
-func _add_helm() -> void:
-	var helm := BridgeInteractable.new()
-	helm.name = "BridgeInteractable"
-	helm.position = Vector3(0.0, 0.1, 0.0)
-	helm.exit_deck_offset = Vector2(0.0, 3.0)
-	add_child(helm)

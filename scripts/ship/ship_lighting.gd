@@ -11,7 +11,7 @@ enum Preset { OFF = 0, NAV = 1, WORK = 2, ALL = 3 }
 
 const PRESET_NAMES: Array[String] = ["OFF", "NAV", "WORK", "ALL"]
 
-var _preset: int = Preset.NAV
+var _preset: int = Preset.ALL
 var _auto_nav_active: bool = false
 var _tick: float = 0.0
 

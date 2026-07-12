@@ -12,7 +12,12 @@ static func make_material(color: Color, roughness: float = 0.85, metallic: float
 	# Keep painted surfaces matte — default specular still reads as metal on flat slopes.
 	if metallic <= 0.001:
 		mat.metallic_specular = 0.15
-	if double_sided:
+	if color.a < 0.999:
+		mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		## Glass reads from both sides of a thin pane.
+		mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+		mat.depth_draw_mode = BaseMaterial3D.DEPTH_DRAW_ALWAYS
+	elif double_sided:
 		mat.cull_mode = BaseMaterial3D.CULL_DISABLED
 	return mat
 
@@ -32,6 +37,26 @@ static func cylinder(radius: float, height: float, color: Color, roughness: floa
 	mesh.top_radius = radius
 	mesh.bottom_radius = radius
 	mesh.height = height
+	mi.mesh = mesh
+	mi.material_override = make_material(color, roughness, metallic)
+	return mi
+
+
+static func torus(
+	inner_radius: float,
+	outer_radius: float,
+	color: Color,
+	roughness: float = 0.85,
+	metallic: float = 0.0,
+	rings: int = 24,
+	sides: int = 12,
+) -> MeshInstance3D:
+	var mi := MeshInstance3D.new()
+	var mesh := TorusMesh.new()
+	mesh.inner_radius = inner_radius
+	mesh.outer_radius = outer_radius
+	mesh.rings = rings
+	mesh.ring_segments = sides
 	mi.mesh = mesh
 	mi.material_override = make_material(color, roughness, metallic)
 	return mi
