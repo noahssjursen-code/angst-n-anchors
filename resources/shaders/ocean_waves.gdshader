@@ -37,8 +37,8 @@ uniform vec2 boat_velocity = vec2(0.0, 0.0);
 uniform sampler2D land_shelter_map  : filter_linear, repeat_disable;
 uniform vec2      land_shelter_origin = vec2(0.0);
 uniform float     land_shelter_size   = 0.0;
-## Mid-ring clipmap: discard the near patch so only the outer ring draws.
-## 0 = disabled (near patch).
+// Mid-ring clipmap: discard the near patch so only the outer ring draws.
+// 0 = disabled (near patch).
 uniform float     discard_half = 0.0;
 
 varying vec3 v_world_pos;
