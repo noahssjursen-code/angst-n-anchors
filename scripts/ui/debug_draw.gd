@@ -106,7 +106,7 @@ func _draw() -> void:
 	var ty := oy + PAD_Y + 12.0
 	draw_string(font, Vector2(ox + PAD_X, ty),
 		"DEBUG", HORIZONTAL_ALIGNMENT_LEFT, -1, 11, C_TITLE)
-	var hint   := "F3 · F3+P cam · scroll cam · B lanes · F4 wx · E · O I fleet"
+	var hint   := "F3 · F3+P cam · F8 ocean LOD · B lanes · F4 wx · O I fleet"
 	var hint_w := font.get_string_size(hint, HORIZONTAL_ALIGNMENT_LEFT, -1, 9).x
 	draw_string(font, Vector2(ox + PANEL_W - hint_w - PAD_X, ty),
 		hint, HORIZONTAL_ALIGNMENT_LEFT, -1, 9, C_LABEL)
@@ -193,14 +193,38 @@ func _build_water_gpu(e: Array) -> void:
 			int(r.get("vertices", 0)),
 			int(r.get("triangles", 0)),
 		], C_VALUE)
-		_row(e, "Clipmap", "%dm:%d  %dm:%d  %dkm:%d" % [
-			int(r.get("near_size", 0)),
-			int(r.get("near_subdivisions", 0)),
-			int(r.get("mid_size", 0)),
-			int(r.get("mid_subdivisions", 0)),
-			int(float(r.get("horizon_size", 0.0)) / 1000.0),
-			int(r.get("horizon_subdivisions", 0)),
-		], C_LABEL)
+		if r.has("active_rings"):
+			var tier_vertices: PackedInt32Array = r.get("tier_vertices", PackedInt32Array())
+			var tier_triangles: PackedInt32Array = r.get("tier_triangles", PackedInt32Array())
+			var samples: PackedInt32Array = r.get("cascade_samples", PackedInt32Array())
+			_row(e, "Clipmap rings", "%d active · %.2fm base · %.1fkm" % [
+				int(r.get("active_rings", 0)),
+				float(r.get("base_cell", 0.0)),
+				float(r.get("outer_extent", 0.0)) / 1000.0,
+			], C_LABEL)
+			if tier_vertices.size() >= 4 and tier_triangles.size() >= 4:
+				_row(e, "  Near / mid", "%dk/%dk v · %dk/%dk t" % [
+					tier_vertices[0] / 1000, tier_vertices[1] / 1000,
+					tier_triangles[0] / 1000, tier_triangles[1] / 1000,
+				], C_LABEL)
+				_row(e, "  Far / horizon", "%dk/%dk v · %dk/%dk t" % [
+					tier_vertices[2] / 1000, tier_vertices[3] / 1000,
+					tier_triangles[2] / 1000, tier_triangles[3] / 1000,
+				], C_LABEL)
+			if samples.size() >= 4:
+				_row(e, "Cascade samples", "%d / %d / %d / %d per vertex" % [
+					samples[0], samples[1], samples[2], samples[3],
+				], C_LABEL)
+			_row(e, "Ring false color", "ON (F8)" if bool(r.get("false_color", false)) else "off (F8)", C_WARN if bool(r.get("false_color", false)) else C_LABEL)
+		else:
+			_row(e, "Clipmap fallback", "%dm:%d  %dm:%d  %dkm:%d" % [
+				int(r.get("near_size", 0)),
+				int(r.get("near_subdivisions", 0)),
+				int(r.get("mid_size", 0)),
+				int(r.get("mid_subdivisions", 0)),
+				int(float(r.get("horizon_size", 0.0)) / 1000.0),
+				int(r.get("horizon_subdivisions", 0)),
+			], C_LABEL)
 
 	_stub(e, "Ocean raster", "included in GPU frame; Godot cannot isolate it")
 	_sep(e)

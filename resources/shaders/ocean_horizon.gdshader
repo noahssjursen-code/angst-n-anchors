@@ -13,9 +13,13 @@ uniform float wave_time = 0.0;
 uniform float wave_intensity = 1.0;
 uniform float wave_energy_multiplier = 1.0;
 
-uniform float wave_fade_near : hint_range(200.0, 5000.0) = 900.0;
+uniform float wave_fade_near : hint_range(200.0, 5000.0) = 4125.0;
 uniform float wave_fade_far  : hint_range(1000.0, 12000.0) = 5500.0;
 uniform float discard_half = 298.0;
+uniform float geomorph_strength : hint_range(0.0, 1.0) = 1.0;
+uniform sampler2D land_shelter_map : filter_linear, repeat_disable;
+uniform vec2 land_shelter_origin = vec2(0.0);
+uniform float land_shelter_size = 0.0;
 
 uniform float water_level = -1.5;
 
@@ -29,6 +33,7 @@ uniform vec3 sun_color         : source_color = vec3(1.0, 0.9, 0.8);
 uniform float fresnel_sky_mix : hint_range(0.0, 1.0) = 0.52;
 uniform float near_color_lift : hint_range(0.0, 1.0) = 0.14;
 uniform float glint_strength : hint_range(0.0, 4.0) = 0.18;
+uniform vec4 debug_tint : source_color = vec4(0.0);
 
 varying vec3 v_world_pos;
 varying vec3 v_local_pos;
@@ -36,14 +41,23 @@ varying vec3 v_world_normal;
 varying float v_fresnel;
 
 void vertex() {
+	VERTEX.xz = mix(VERTEX.xz, UV2, geomorph_strength);
 	v_local_pos = VERTEX;
 	vec4 w4 = MODEL_MATRIX * vec4(VERTEX, 1.0);
 	vec3 wp = w4.xyz;
 
 	float dist_from_cam = length(wp.xz - CAMERA_POSITION_WORLD.xz);
 	float wave_fade = 1.0 - smoothstep(wave_fade_near, wave_fade_far, dist_from_cam);
+	float shelter = 1.0;
+	if (land_shelter_size > 0.0) {
+		vec2 shelter_uv = (wp.xz - land_shelter_origin) / land_shelter_size;
+		if (shelter_uv.x >= 0.0 && shelter_uv.x <= 1.0
+				&& shelter_uv.y >= 0.0 && shelter_uv.y <= 1.0) {
+			shelter = textureLod(land_shelter_map, shelter_uv, 0.0).r;
+		}
+	}
 
-	float amp_scale = wave_intensity * wave_energy_multiplier * 0.42 * wave_fade;
+	float amp_scale = wave_intensity * wave_energy_multiplier * 0.42 * wave_fade * shelter;
 
 	vec2 uv = wp.xz / length_scale_0;
 	vec3 disp  = textureLod(displacement_map, vec3(uv, 0.0), 0.0).xyz;
@@ -62,10 +76,9 @@ void vertex() {
 }
 
 void fragment() {
-	if (abs(v_local_pos.x) < discard_half && abs(v_local_pos.z) < discard_half) {
+	if (discard_half > 0.0 && abs(v_local_pos.x) < discard_half && abs(v_local_pos.z) < discard_half) {
 		discard;
 	}
-
 	vec3 nm = normalize(v_world_normal);
 	vec3 view_dir = normalize(CAMERA_POSITION_WORLD - v_world_pos);
 	vec3 sun_n = normalize(sun_direction);
@@ -97,6 +110,7 @@ void fragment() {
 	float ndh = clamp(dot(nm, normalize(view_dir + sun_n)), 0.0, 1.0);
 	float glint = min(pow(ndh, 140.0) * 0.4, 0.35);
 	col += sun_color * glint * glint_strength * sun_up * (0.15 + fres * 0.4);
+	col = mix(col, debug_tint.rgb, debug_tint.a);
 
 	ALBEDO = col;
 	ROUGHNESS = 0.78;

@@ -1,4 +1,3 @@
-@tool
 class_name WorldRenderer
 extends Node3D
 
@@ -7,7 +6,10 @@ extends Node3D
 ## No knowledge of ports, players, or gameplay.
 
 const OCEAN_SHADER   := preload("res://resources/shaders/ocean_waves.gdshader")
+const OCEAN_MID_SHADER := preload("res://resources/shaders/ocean_waves_mid.gdshader")
+const OCEAN_FAR_SHADER := preload("res://resources/shaders/ocean_waves_far.gdshader")
 const OCEAN_HORIZON_SHADER := preload("res://resources/shaders/ocean_horizon.gdshader")
+const OCEAN_CLIPMAP_SCRIPT := preload("res://scripts/ocean/ocean_clipmap.gd")
 const SKY_SHADER     := preload("res://resources/shaders/sky.gdshader")
 const SCREEN_SHADER  := preload("res://resources/shaders/screen_effects.gdshader")
 ## Base midday water dye — kept darker so the ocean reads as depth, not a bright lagoon.
@@ -36,8 +38,12 @@ const HORIZON_OCEAN_SUBDIVISIONS : int   = 192
 ## the mid mesh size; 15 m extra overlap prevents seam gaps at the boundary under wild storm swells).
 const HORIZON_DISCARD_HALF : float = MID_OCEAN_SIZE * 0.5 - 15.0
 
+## Temporary A/B fallback while validating the generated clipmap in builds.
+@export var use_legacy_ocean := false
+
 var _ocean_shader_material: ShaderMaterial
 var _ocean_mid_material:    ShaderMaterial
+var _ocean_far_material:    ShaderMaterial
 var _ocean_horizon_material: ShaderMaterial
 var _sky_shader_material:   ShaderMaterial
 var _environment:           Environment
@@ -46,8 +52,10 @@ var _fill_light:            DirectionalLight3D
 var _ocean_mesh:            MeshInstance3D
 var _ocean_mesh_mid:        MeshInstance3D
 var _ocean_mesh_outer:      MeshInstance3D
+var _ocean_clipmap:         OceanClipmap
 var _fft_system:            Node # Use Node instead of FFTWaterSystem to avoid unresolved class error without reload
 var _fft_maps_bound:        bool = false
+var _ocean_debug_false_color := false
 
 ## Tracks whether the baked LandField shelter texture is currently bound to
 ## the ocean shader, so we re-upload exactly once when LandField finishes
@@ -77,6 +85,8 @@ func _ready() -> void:
 
 
 func get_ocean_debug_stats() -> Dictionary:
+	if _ocean_clipmap != null and is_instance_valid(_ocean_clipmap):
+		return _ocean_clipmap.get_debug_stats()
 	var near_vertices := (NEAR_OCEAN_SUBDIVISIONS + 2) * (NEAR_OCEAN_SUBDIVISIONS + 2)
 	var mid_vertices := (MID_OCEAN_SUBDIVISIONS + 2) * (MID_OCEAN_SUBDIVISIONS + 2)
 	var horizon_vertices := (HORIZON_OCEAN_SUBDIVISIONS + 2) * (HORIZON_OCEAN_SUBDIVISIONS + 2)
@@ -95,6 +105,18 @@ func get_ocean_debug_stats() -> Dictionary:
 	}
 
 
+func set_ocean_ring_debug(enabled: bool) -> void:
+	_ocean_debug_false_color = enabled
+	if _ocean_clipmap != null and is_instance_valid(_ocean_clipmap):
+		_ocean_clipmap.set_false_color(enabled)
+
+
+func _unhandled_key_input(event: InputEvent) -> void:
+	if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_F8:
+		set_ocean_ring_debug(not _ocean_debug_false_color)
+		get_viewport().set_input_as_handled()
+
+
 func _process(_delta: float) -> void:
 	_follow_camera_xz()
 	if _ocean_shader_material:
@@ -107,7 +129,10 @@ func _process(_delta: float) -> void:
 		_ocean_mid_material.set_shader_parameter("wave_time", WaveSurface.get_sim_time())
 		_ocean_mid_material.set_shader_parameter("wave_intensity", WaveSurface.wave_intensity)
 		_ocean_mid_material.set_shader_parameter("wave_energy_multiplier", WaveSurface.get_wave_energy_multiplier())
-		WaveSurface.sync_ocean_coupling_to_shader(_ocean_mid_material)
+	if _ocean_far_material:
+		_ocean_far_material.set_shader_parameter("wave_time", WaveSurface.get_sim_time())
+		_ocean_far_material.set_shader_parameter("wave_intensity", WaveSurface.wave_intensity)
+		_ocean_far_material.set_shader_parameter("wave_energy_multiplier", WaveSurface.get_wave_energy_multiplier())
 	if _ocean_horizon_material:
 		_ocean_horizon_material.set_shader_parameter("wave_time", WaveSurface.get_sim_time())
 		_ocean_horizon_material.set_shader_parameter("wave_intensity", WaveSurface.wave_intensity)
@@ -135,6 +160,10 @@ func _bind_fft_maps_once() -> void:
 		_ocean_mid_material.set_shader_parameter("displacement_map", disp)
 		_ocean_mid_material.set_shader_parameter("slope_map", slope)
 		_ocean_mid_material.set_shader_parameter("length_scales", scales)
+	if _ocean_far_material:
+		_ocean_far_material.set_shader_parameter("displacement_map", disp)
+		_ocean_far_material.set_shader_parameter("slope_map", slope)
+		_ocean_far_material.set_shader_parameter("length_scales", scales)
 	if _ocean_horizon_material:
 		_ocean_horizon_material.set_shader_parameter("displacement_map", disp)
 		_ocean_horizon_material.set_shader_parameter("slope_map", slope)
@@ -143,10 +172,13 @@ func _bind_fft_maps_once() -> void:
 
 
 func _follow_camera_xz() -> void:
-	if _ocean_mesh == null or not is_instance_valid(_ocean_mesh):
-		return
 	var cam := get_viewport().get_camera_3d()
 	if cam == null:
+		return
+	if _ocean_clipmap != null and is_instance_valid(_ocean_clipmap):
+		_ocean_clipmap.follow_camera(cam.global_position)
+		return
+	if _ocean_mesh == null or not is_instance_valid(_ocean_mesh):
 		return
 	# Snap to near-ring vertex spacing so screen-space swimming stays locked.
 	var grid_size := NEAR_OCEAN_SIZE / float(NEAR_OCEAN_SUBDIVISIONS)
@@ -257,7 +289,30 @@ func _build_screen_effects() -> void:
 
 
 func _build_ocean() -> void:
-	var sm := _make_ocean_material(0.0)
+	if use_legacy_ocean:
+		_build_legacy_ocean()
+		return
+
+	var sm := _make_ocean_material(OCEAN_SHADER, 1.0)
+	_ocean_shader_material = sm
+	var sm_mid := _make_ocean_material(OCEAN_MID_SHADER, 0.72)
+	_ocean_mid_material = sm_mid
+	var sm_far := _make_ocean_material(OCEAN_FAR_SHADER, 0.0)
+	_ocean_far_material = sm_far
+	var sm_horizon := _make_horizon_material()
+	_ocean_horizon_material = sm_horizon
+
+	var clipmap := OCEAN_CLIPMAP_SCRIPT.new() as OceanClipmap
+	clipmap.name = "OceanClipmap"
+	clipmap.position.y = WaveSurface.WATER_LEVEL
+	add_child(clipmap)
+	clipmap.build([sm, sm_mid, sm_far, sm_horizon])
+	_ocean_clipmap = clipmap
+
+
+func _build_legacy_ocean() -> void:
+	var sm := _make_ocean_material(OCEAN_SHADER, 1.0)
+	sm.set_shader_parameter("geomorph_strength", 0.0)
 	_ocean_shader_material = sm
 
 	var ocean := MeshBuilder.plane(
@@ -270,7 +325,9 @@ func _build_ocean() -> void:
 	_ocean_mesh = ocean
 	add_child(ocean)
 
-	var sm_mid := _make_ocean_material(NEAR_DISCARD_HALF)
+	var sm_mid := _make_ocean_material(OCEAN_SHADER, 1.0)
+	sm_mid.set_shader_parameter("discard_half", NEAR_DISCARD_HALF)
+	sm_mid.set_shader_parameter("geomorph_strength", 0.0)
 	_ocean_mid_material = sm_mid
 	var ocean_mid := MeshBuilder.plane(
 		Vector2(MID_OCEAN_SIZE, MID_OCEAN_SIZE),
@@ -287,17 +344,9 @@ func _build_ocean() -> void:
 		C_OCEAN, 0.12,
 		HORIZON_OCEAN_SUBDIVISIONS, HORIZON_OCEAN_SUBDIVISIONS
 	)
-	var sm_outer    := ShaderMaterial.new()
-	sm_outer.shader = OCEAN_HORIZON_SHADER
-	sm_outer.set_shader_parameter("water_level",     WaveSurface.WATER_LEVEL)
-	sm_outer.set_shader_parameter("shallow_albedo",  Vector3(0.022, 0.085, 0.130))
-	sm_outer.set_shader_parameter("deep_albedo",     Vector3(0.005, 0.022, 0.045))
-	sm_outer.set_shader_parameter("sky_top_color",     Vector3(0.07, 0.28, 0.62))
-	sm_outer.set_shader_parameter("sky_horizon_color", Vector3(0.34, 0.54, 0.78))
-	sm_outer.set_shader_parameter("fresnel_sky_mix", 0.52)
-	sm_outer.set_shader_parameter("near_color_lift", 0.14)
-	sm_outer.set_shader_parameter("glint_strength",  0.18)
+	var sm_outer := _make_horizon_material()
 	sm_outer.set_shader_parameter("discard_half",    HORIZON_DISCARD_HALF)
+	sm_outer.set_shader_parameter("geomorph_strength", 0.0)
 
 	ocean_outer.material_override = sm_outer
 	_ocean_horizon_material = sm_outer
@@ -306,9 +355,9 @@ func _build_ocean() -> void:
 	add_child(ocean_outer)
 
 
-func _make_ocean_material(discard_half: float) -> ShaderMaterial:
+func _make_ocean_material(shader: Shader, foam_scale: float) -> ShaderMaterial:
 	var sm := ShaderMaterial.new()
-	sm.shader = OCEAN_SHADER
+	sm.shader = shader
 	sm.set_shader_parameter("wave_time",             WaveSurface.get_sim_time())
 	sm.set_shader_parameter("water_level",           WaveSurface.WATER_LEVEL)
 	sm.set_shader_parameter("shallow_albedo",        Vector3(0.022, 0.085, 0.130))
@@ -318,13 +367,28 @@ func _make_ocean_material(discard_half: float) -> ShaderMaterial:
 	sm.set_shader_parameter("sun_direction",         Vector3(0.0, 1.0, 0.0))
 	sm.set_shader_parameter("sun_color",             Vector3(1.0, 0.9, 0.8))
 	sm.set_shader_parameter("fresnel_sky_mix",       0.52)
-	sm.set_shader_parameter("foam_strength",         0.7)
+	sm.set_shader_parameter("foam_strength",         0.7 * foam_scale)
 	sm.set_shader_parameter("foam_steep_start",      0.22)
 	sm.set_shader_parameter("foam_steep_end",        0.65)
 	sm.set_shader_parameter("near_color_lift",       0.14)
 	sm.set_shader_parameter("chop_strength",         0.14)
 	sm.set_shader_parameter("glint_strength",        0.55)
-	sm.set_shader_parameter("discard_half",          discard_half)
+	sm.set_shader_parameter("discard_half",          0.0)
+	return sm
+
+
+func _make_horizon_material() -> ShaderMaterial:
+	var sm := ShaderMaterial.new()
+	sm.shader = OCEAN_HORIZON_SHADER
+	sm.set_shader_parameter("water_level",       WaveSurface.WATER_LEVEL)
+	sm.set_shader_parameter("shallow_albedo",    Vector3(0.022, 0.085, 0.130))
+	sm.set_shader_parameter("deep_albedo",       Vector3(0.005, 0.022, 0.045))
+	sm.set_shader_parameter("sky_top_color",     Vector3(0.07, 0.28, 0.62))
+	sm.set_shader_parameter("sky_horizon_color", Vector3(0.34, 0.54, 0.78))
+	sm.set_shader_parameter("fresnel_sky_mix",   0.52)
+	sm.set_shader_parameter("near_color_lift",   0.14)
+	sm.set_shader_parameter("glint_strength",    0.18)
+	sm.set_shader_parameter("discard_half",      0.0)
 	return sm
 
 
@@ -484,6 +548,14 @@ func _sync_land_shelter() -> void:
 		_ocean_mid_material.set_shader_parameter("land_shelter_map",    tex)
 		_ocean_mid_material.set_shader_parameter("land_shelter_origin", LandField.get_baked_world_origin())
 		_ocean_mid_material.set_shader_parameter("land_shelter_size",   LandField.get_baked_world_size())
+	if _ocean_far_material != null:
+		_ocean_far_material.set_shader_parameter("land_shelter_map",    tex)
+		_ocean_far_material.set_shader_parameter("land_shelter_origin", LandField.get_baked_world_origin())
+		_ocean_far_material.set_shader_parameter("land_shelter_size",   LandField.get_baked_world_size())
+	if _ocean_horizon_material != null:
+		_ocean_horizon_material.set_shader_parameter("land_shelter_map",    tex)
+		_ocean_horizon_material.set_shader_parameter("land_shelter_origin", LandField.get_baked_world_origin())
+		_ocean_horizon_material.set_shader_parameter("land_shelter_size",   LandField.get_baked_world_size())
 	_shelter_texture_bound = true
 
 
@@ -555,12 +627,23 @@ func _apply_ocean_shader(daylight: float, cloud: float, rain: float, wind: float
 		_ocean_mid_material.set_shader_parameter("sun_direction",      sun_dir)
 		_ocean_mid_material.set_shader_parameter("sun_color",          Vector3(sun_col.r, sun_col.g, sun_col.b))
 		_ocean_mid_material.set_shader_parameter("fresnel_sky_mix", fres_blend)
-		_ocean_mid_material.set_shader_parameter("foam_strength",    lerpf(0.55, 1.05, foam_driver))
+		_ocean_mid_material.set_shader_parameter("foam_strength",    lerpf(0.55, 1.05, foam_driver) * 0.72)
 		_ocean_mid_material.set_shader_parameter("foam_steep_start", lerpf(0.26, 0.14, steep_driver))
 		_ocean_mid_material.set_shader_parameter("foam_steep_end",   lerpf(0.70, 0.45, steep_driver))
 		_ocean_mid_material.set_shader_parameter("near_color_lift", near_lift)
 		_ocean_mid_material.set_shader_parameter("chop_strength",   chop_val)
 		_ocean_mid_material.set_shader_parameter("glint_strength", glint)
+
+	if _ocean_far_material != null:
+		_ocean_far_material.set_shader_parameter("shallow_albedo",     Vector3(shallow_w.r, shallow_w.g, shallow_w.b))
+		_ocean_far_material.set_shader_parameter("deep_albedo",        Vector3(deep.r, deep.g, deep.b))
+		_ocean_far_material.set_shader_parameter("sky_top_color",      Vector3(top_col.r, top_col.g, top_col.b))
+		_ocean_far_material.set_shader_parameter("sky_horizon_color",  Vector3(horiz.r, horiz.g, horiz.b))
+		_ocean_far_material.set_shader_parameter("sun_direction",      sun_dir)
+		_ocean_far_material.set_shader_parameter("sun_color",          Vector3(sun_col.r, sun_col.g, sun_col.b))
+		_ocean_far_material.set_shader_parameter("fresnel_sky_mix",    fres_blend)
+		_ocean_far_material.set_shader_parameter("near_color_lift",    near_lift)
+		_ocean_far_material.set_shader_parameter("glint_strength",     glint * 0.55)
 
 	if _ocean_horizon_material != null:
 		_ocean_horizon_material.set_shader_parameter("shallow_albedo",    Vector3(shallow_w.r, shallow_w.g, shallow_w.b))
