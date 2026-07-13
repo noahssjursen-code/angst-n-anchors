@@ -1,6 +1,35 @@
 # Player Save Format
 
-Local saves use `user://save/player.json`.
+Local saves use a multi-captain roster under `user://save/`.
+
+```
+user://save/
+  index.json
+  captains/{account_id}/
+    player.json
+    player.json.bak
+    vessels/{uid}.json
+```
+
+## Index (`index.json`)
+
+```json
+{
+  "version": 1,
+  "captains": [
+    {
+      "id": "uuid",
+      "display_name": "Captain",
+      "home_port_id": "port-home",
+      "world_seed": 123456,
+      "last_played_unix": 0,
+      "marks": 0
+    }
+  ]
+}
+```
+
+## Captain envelope (`captains/{id}/player.json`)
 
 ```json
 {
@@ -14,39 +43,35 @@ Local saves use `user://save/player.json`.
 vessels, home port id, accepted contracts, ship runtime state, world-clock hours,
 tutorial flags, and starter-vessel state. Vector values inside JSON are arrays.
 
+## Migration
+
+A legacy single-slot `user://save/player.json` is moved into
+`captains/{account_id}/` on first boot by `LocalCaptainStore`. Matching vessel
+archives under `user://save/vessels/` move with that captain.
+
 ## Home port
 
 `home_port_id` selects which coastal quay is named `HomePort` on world load.
 New captains pick it from a chart after character creation. Defaults to
 `port-home` for legacy saves.
 
-## Ship runtime resume
+## Ship deployment state
 
-When `ship_runtime_state` is non-empty and the world context matches,
-`LocalPlayerView` respawns the active vessel at the saved pose and places the
-captain on deck (optionally resuming helm). Empty runtime means the captain
-starts on the home quay with no hull in the water — deploy via the harbour
-master.
-
-```json
-{
-  "world_pos": [x, y, z],
-  "yaw": 0.0,
-  "throttle_stage_idx": 1,
-  "fuel_fraction": 1.0,
-  "aboard": true,
-  "helming": false
-}
-```
+Loading a captain always starts them on foot at their home quay with no hull in
+the water. Their active vessel remains in the ownership ledger and is deployed
+normally through the harbour master. New saves omit `ship_runtime_state`; old
+runtime coordinates, vessel state, boarding state, and helm state are ignored.
 
 ## World context (v3)
 
-Coordinate-bearing state is associated with:
+Each singleplayer captain owns a world seed. New captains roll a fresh seed via
+`WorldBootstrap.roll_seed()` before home-port selection. Continue hydrates
+`GameSettings` from that captain's context before world load.
 
 ```json
 {
   "world_context": {
-    "seed": 42,
+    "seed": 123456,
     "generation_version": 1,
     "layout_checksum": "sha256..."
   }
@@ -58,11 +83,15 @@ the current generated world matches this identity. Marks, appearance, and the
 owned-vessel ledger are not world-local and remain available. Legacy saves with
 no context are accepted once and adopt the current context on their next save.
 
+Multiplayer worlds still take `world_seed` from the server (`GET /v1/world-options`).
+
 ## Compatibility
 
 - v1 lacked runtime contract/ship/time snapshots.
 - v2 added accepted contracts, ship runtime state, and world-clock hours.
+  Ship runtime state is now ignored.
 - v3 added generated-world identity.
+- Multi-captain folders + `index.json` are additive; legacy single-file saves migrate automatically.
 
 `PlayerData.from_dict()` supplies defaults for missing fields, so old envelopes
 upgrade on the next successful save. Flat legacy player dictionaries are still

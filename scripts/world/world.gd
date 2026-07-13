@@ -5,6 +5,10 @@ extends Node3D
 ## Main scene root. Generates port definitions from seed, expands them to PortData,
 ## eagerly loads the home port, and lazy-loads all others via ProximityLoader.
 
+## Fired once the first voyage boot finishes (layout, home port, player spawn,
+## and the nearby terrain collision/visual ring). Far LOD streaming may continue.
+signal boot_finished
+
 const PLAYER_SCENE := preload("res://scenes/shared/player.tscn")
 const WORLD_RENDERER_SCRIPT := preload("res://scripts/world/world_renderer.gd")
 const ATMOSPHERIC_SCRIPT := preload("res://scripts/world/atmospheric_effects.gd")
@@ -318,6 +322,29 @@ func _spawn_player() -> void:
 	var tut := get_node_or_null("/root/Tutorial")
 	if tut != null:
 		tut.call_deferred("show", "welcome")
+
+	# Hold LoadingGate until the spawn/collision terrain ring is built so land
+	# does not keep popping in after the overlay dismisses.
+	if _terrain_streamer != null:
+		await _await_spawn_terrain(spawn_pos)
+
+	boot_finished.emit()
+	var gate := get_node_or_null("/root/LoadingGate")
+	if gate != null and gate.has_method("notify_world_ready"):
+		gate.call("notify_world_ready")
+
+
+func _await_spawn_terrain(spawn_pos: Vector3) -> void:
+	if _terrain_streamer == null:
+		return
+	_terrain_streamer.begin_boot_priority(spawn_pos)
+	var deadline_ms := Time.get_ticks_msec() + 80000
+	while not _terrain_streamer.is_ready_around(spawn_pos):
+		if Time.get_ticks_msec() >= deadline_ms:
+			push_warning("World: spawn terrain ring timed out; continuing boot")
+			break
+		await get_tree().process_frame
+	_terrain_streamer.end_boot_priority()
 
 
 ## Resolve a safe spawn position for the player. Prefers HomePort.get_spawn_position()

@@ -167,6 +167,15 @@ func end_load_event(handle: int) -> void:
 		load_events.remove_at(0)
 
 
+## Names of load events still in flight (mark without end). Oldest first.
+func active_load_event_names() -> PackedStringArray:
+	var names := PackedStringArray()
+	for handle in _active_timers.keys():
+		var rec: Dictionary = _active_timers[handle]
+		names.append(str(rec.get("name", "")))
+	return names
+
+
 ## Convenience for sites that have a one-shot block to time. Caller
 ## passes a Callable; we time it, log the duration, return the result.
 func time_load_event(name: String, body: Callable) -> Variant:

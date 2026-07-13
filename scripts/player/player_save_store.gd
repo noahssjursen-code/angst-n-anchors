@@ -79,7 +79,10 @@ static func delete_save() -> bool:
 
 
 static func wipe_all_local_data() -> bool:
-	var root := _save_dir()
+	LocalCaptainStore.clear_active()
+	var root: String = SAVE_DIR
+	if not LocalCaptainStore.root_override.is_empty():
+		root = LocalCaptainStore.root_dir()
 	if not DirAccess.dir_exists_absolute(root):
 		return true
 	return _remove_tree(root)

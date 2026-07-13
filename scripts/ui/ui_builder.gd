@@ -127,18 +127,21 @@ static func button(text: String, min_size: Vector2 = Vector2(264, 42)) -> Button
 
 	btn.add_theme_stylebox_override("normal",   _btn_sb(HudStyle.C_BG_INNER,
 													     HudStyle.C_BRASS, 1))
-	btn.add_theme_stylebox_override("hover",    _btn_sb(Color(0.15, 0.12, 0.09, 0.92),
+	btn.add_theme_stylebox_override("hover",    _btn_sb(Color(0.10, 0.14, 0.15, 0.92),
 													     HudStyle.C_AMBER, 1))
-	btn.add_theme_stylebox_override("pressed",  _btn_sb(Color(0.18, 0.15, 0.11, 0.96),
+	btn.add_theme_stylebox_override("pressed",  _btn_sb(Color(0.12, 0.16, 0.17, 0.96),
 													     HudStyle.C_AMBER, 2))
-	btn.add_theme_stylebox_override("focus",    _btn_sb(Color(0.15, 0.12, 0.09, 0.92),
-													     HudStyle.C_AMBER, 1))
-	btn.add_theme_stylebox_override("disabled", _btn_sb(Color(0.07, 0.06, 0.05, 0.70),
+	btn.add_theme_stylebox_override("focus",    _btn_sb(Color(0.10, 0.14, 0.15, 0.92),
+													     HudStyle.C_COPPER, 1))
+	btn.add_theme_stylebox_override("disabled", _btn_sb(Color(0.05, 0.06, 0.07, 0.55),
 													     HudStyle.C_SEP, 1))
 	btn.add_theme_color_override("font_color",         HudStyle.C_TEXT)
 	btn.add_theme_color_override("font_hover_color",   HudStyle.C_AMBER)
 	btn.add_theme_color_override("font_pressed_color", HudStyle.C_AMBER)
 	btn.add_theme_color_override("font_disabled_color", HudStyle.C_LABEL)
+	var medium := HudStyle.font_medium()
+	if medium != null:
+		btn.add_theme_font_override("font", medium)
 	return btn
 
 

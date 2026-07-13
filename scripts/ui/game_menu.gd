@@ -1,6 +1,7 @@
 extends Node
 
 const HelmMinimapScript := preload("res://scripts/ui/chart/helm_minimap.gd")
+const WorldBootstrapScript := preload("res://scripts/world/world_bootstrap.gd")
 
 ## Autoload — manages all non-ship UI: pause menu (ESC), sea chart (M),
 ## and the persistent walking HUD.
@@ -184,8 +185,8 @@ func _build_pause() -> Control:
 	panel.set_anchors_preset(Control.PRESET_CENTER)
 	panel.offset_left   = -170.0
 	panel.offset_right  =  170.0
-	panel.offset_top    = -160.0
-	panel.offset_bottom =  160.0
+	panel.offset_top    = -190.0
+	panel.offset_bottom =  190.0
 	root.add_child(panel)
 
 	var vbox := VBoxContainer.new()
@@ -227,6 +228,10 @@ func _build_pause() -> Control:
 	var quit := UiBuilder.button("QUIT TO DESKTOP")
 	quit.pressed.connect(_quit_to_desktop)
 	vbox.add_child(quit)
+
+	var title_btn := UiBuilder.button("RETURN TO TITLE")
+	title_btn.pressed.connect(_return_to_title)
+	vbox.add_child(title_btn)
 
 	return root
 
@@ -282,3 +287,9 @@ func _quit_to_desktop() -> void:
 	if session != null and session.has_method("save_now"):
 		session.call("save_now")
 	get_tree().quit()
+
+
+func _return_to_title() -> void:
+	_set_screen(Screen.NONE)
+	get_tree().paused = false
+	WorldBootstrapScript.return_to_title(get_tree())

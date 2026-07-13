@@ -748,11 +748,6 @@ func spawn_player_ship(index: int, ship_scene_path: String = "", brick_layout: D
 
 	if body != null:
 		PlayerVessel.mark_player_ship(body)
-		# Saved runtime state restores fuel/throttle only — berth placement
-		# from dock_at_berth() must not be overwritten by an old ocean pose.
-		var view := get_tree().root.get_node_or_null("LocalPlayerView")
-		if view != null and view.has_method("apply_runtime_state_to_active_ship"):
-			view.call_deferred("apply_runtime_state_to_active_ship")
 
 	return ship
 
@@ -798,9 +793,6 @@ func place_ship_at_berth(index: int, ship: BoatBody) -> BoatBody:
 		mooring.call_deferred("auto_moor_at_berth", mooring.get_tree(), index)
 	register_ship_at_berth(index, ship, local_player_owner_id())
 	PlayerVessel.mark_player_ship(ship)
-	var view := get_tree().root.get_node_or_null("LocalPlayerView")
-	if view != null and view.has_method("apply_runtime_state_to_active_ship"):
-		view.call_deferred("apply_runtime_state_to_active_ship")
 	return ship
 
 

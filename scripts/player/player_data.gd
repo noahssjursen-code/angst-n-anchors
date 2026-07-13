@@ -66,9 +66,8 @@ const LEGACY_STARTER_HULL_ID := "cargo_ship"
 ## existing "ship despawn forfeits cargo" rule.
 var accepted_contracts: Array = []
 
-## Runtime state of the captain's ship for resume-where-you-left-off saves.
-## world_pos, yaw, throttle_stage_idx, fuel_fraction, aboard, helming.
-## Empty when no ship is in the world at save time.
+## Deprecated compatibility field. Resume-in-vessel persistence was removed;
+## old save values are ignored and new saves omit this field.
 var ship_runtime_state: Dictionary = {}
 
 ## Game time at save (game-hours since the world epoch). Restored to
@@ -360,7 +359,6 @@ func to_dict() -> Dictionary:
 		"appearance":               appearance.to_dict(),
 		# v2 additions
 		"accepted_contracts":       accepted_contracts.duplicate(true),
-		"ship_runtime_state":       _ship_runtime_to_dict(),
 		"world_clock_hours":        world_clock_hours,
 		"world_context":            world_context.duplicate(),
 		"tutorial_seen":            tutorial_seen.duplicate(),
@@ -391,9 +389,7 @@ static func from_dict(d: Dictionary) -> PlayerData:
 	var contracts_raw: Variant = d.get("accepted_contracts", [])
 	if typeof(contracts_raw) == TYPE_ARRAY:
 		pd.accepted_contracts = (contracts_raw as Array).duplicate(true)
-	var ship_raw: Variant = d.get("ship_runtime_state", {})
-	if typeof(ship_raw) == TYPE_DICTIONARY:
-		pd.ship_runtime_state = _ship_runtime_from_dict(ship_raw as Dictionary)
+	pd.ship_runtime_state = {}
 	pd.world_clock_hours = float(d.get("world_clock_hours", -1.0))
 	var world_context_raw: Variant = d.get("world_context", {})
 	if typeof(world_context_raw) == TYPE_DICTIONARY:
@@ -406,41 +402,3 @@ static func from_dict(d: Dictionary) -> PlayerData:
 	pd.home_port_id = home_port if not home_port.is_empty() else "port-home"
 	pd.repair_save_consistency()
 	return pd
-
-
-# ── v2 helpers ───────────────────────────────────────────────────────────────
-
-func _ship_runtime_to_dict() -> Dictionary:
-	if ship_runtime_state.is_empty():
-		return {}
-	var out := {}
-	var pos: Variant = ship_runtime_state.get("world_pos", Vector3.ZERO)
-	if typeof(pos) == TYPE_VECTOR3:
-		var v: Vector3 = pos
-		out["world_pos"] = [v.x, v.y, v.z]
-	elif typeof(pos) == TYPE_ARRAY and (pos as Array).size() >= 3:
-		out["world_pos"] = (pos as Array).duplicate()
-	out["yaw"] = float(ship_runtime_state.get("yaw", 0.0))
-	out["throttle_stage_idx"] = int(ship_runtime_state.get("throttle_stage_idx", 1))
-	out["fuel_fraction"] = float(ship_runtime_state.get("fuel_fraction", 1.0))
-	out["aboard"] = bool(ship_runtime_state.get("aboard", true))
-	out["helming"] = bool(ship_runtime_state.get("helming", false))
-	return out
-
-
-static func _ship_runtime_from_dict(d: Dictionary) -> Dictionary:
-	if d.is_empty():
-		return {}
-	var out := {}
-	var pos_raw: Variant = d.get("world_pos", null)
-	if typeof(pos_raw) == TYPE_ARRAY and (pos_raw as Array).size() >= 3:
-		var arr := pos_raw as Array
-		out["world_pos"] = Vector3(float(arr[0]), float(arr[1]), float(arr[2]))
-	elif typeof(pos_raw) == TYPE_VECTOR3:
-		out["world_pos"] = pos_raw
-	out["yaw"] = float(d.get("yaw", 0.0))
-	out["throttle_stage_idx"] = int(d.get("throttle_stage_idx", 1))
-	out["fuel_fraction"] = float(d.get("fuel_fraction", 1.0))
-	out["aboard"] = bool(d.get("aboard", true))
-	out["helming"] = bool(d.get("helming", false))
-	return out

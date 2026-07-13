@@ -17,6 +17,7 @@ func _initialize() -> void:
 	_test_collision_selection()
 	_test_request_and_queue_limits(layout)
 	_test_runtime_queue(layout)
+	_test_boot_ready_ring(layout)
 	_finish()
 
 
@@ -216,6 +217,52 @@ func _test_runtime_queue(layout: WorldLayout) -> void:
 	_check((after["lod_counts"] as PackedInt32Array)[0] == 1, "runtime debug stats count loaded LOD")
 	print("WorldTerrainStreamer runtime profile: %.3f ms first chunk" % float(after["last_build_ms"]))
 	streamer.free()
+
+
+func _test_boot_ready_ring(layout: WorldLayout) -> void:
+	var streamer := STREAMER.new()
+	streamer.visual_radius_m = 8000.0
+	streamer.collision_radius_m = 1800.0
+	streamer.max_jobs_per_frame = 1
+	streamer.build_budget_ms = 4.5
+	root.add_child(streamer)
+	streamer.configure(layout)
+	var focus := Vector3(15000.0, 20.0, 14500.0)
+	streamer.begin_boot_priority(focus)
+	_check(streamer.is_boot_priority(), "boot priority flag engages")
+	_check(not streamer.is_ready_around(focus), "boot ring starts incomplete")
+	var guard := 0
+	while not streamer.is_ready_around(focus) and guard < 256:
+		streamer._refresh_requests(focus)
+		streamer._process_jobs(focus)
+		streamer._sync_collisions(focus)
+		guard += 1
+	_check(streamer.is_ready_around(focus), "boot priority drains spawn/collision ring")
+	_check(guard > 1, "boot ring needs more than one frame of work")
+	# Far visual jobs may still be pending after the near ring is ready.
+	_check(int(streamer.get_debug_stats()["loaded"]) > 0, "boot leaves loaded near chunks")
+	streamer.end_boot_priority()
+	_check(not streamer.is_boot_priority(), "boot priority flag clears")
+	streamer.free()
+
+	# Open-water chunks have verts but no walkable collision faces; boot must
+	# still complete instead of waiting forever on null collision.
+	var ocean := STREAMER.new()
+	ocean.visual_radius_m = 4000.0
+	ocean.collision_radius_m = 1800.0
+	root.add_child(ocean)
+	ocean.configure(layout)
+	var ocean_focus := Vector3.ZERO
+	ocean.begin_boot_priority(ocean_focus)
+	guard = 0
+	while not ocean.is_ready_around(ocean_focus) and guard < 256:
+		ocean._refresh_requests(ocean_focus)
+		ocean._process_jobs(ocean_focus)
+		ocean._sync_collisions(ocean_focus)
+		guard += 1
+	_check(ocean.is_ready_around(ocean_focus), "open-water boot ring resolves without collision faces")
+	ocean.end_boot_priority()
+	ocean.free()
 
 
 func _check(condition: bool, label: String) -> void:

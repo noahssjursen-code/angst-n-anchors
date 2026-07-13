@@ -54,6 +54,8 @@ var _throttle_stage_idx: int = 1
 var _distance_accum_m:   float = 0.0
 var _distance_flush_tick: float = 0.0
 const DISTANCE_FLUSH_INTERVAL_S : float = 5.0
+const MOORED_TOAST_COOLDOWN_S := 2.5
+var _moored_toast_cooldown := 0.0
 
 @onready var _propulsion:    PropulsionComponent  = get_node_or_null("../PropulsionComponent")
 @onready var _rudder_comp:   RudderComponent      = get_node_or_null("../RudderComponent")
@@ -80,6 +82,8 @@ func activate() -> void:
 		WaveSurface.set_local_visual_vessel(_boat_body)
 	_ensure_hud()
 	_set_hud_visible(true)
+	if _is_moored() and _ship_hud != null:
+		_ship_hud.show_toast("MOORED — leave helm and untie both quay lines [F]", 5.0)
 	helm_activated.emit()
 	var tut := get_node_or_null("/root/Tutorial")
 	if tut != null:
@@ -105,6 +109,7 @@ func deactivate() -> void:
 func _physics_process(delta: float) -> void:
 	if Engine.is_editor_hint() or not _active:
 		return
+	_moored_toast_cooldown = maxf(_moored_toast_cooldown - delta, 0.0)
 
 	if Input.is_action_just_pressed("boat_docking_thrusters"):
 		_thruster_mode = (_thruster_mode + 1) % 3
@@ -127,6 +132,17 @@ func _physics_process(delta: float) -> void:
 	var lateral_target: float = 0.0
 	if _thruster_mode > 0:
 		lateral_target = Input.get_axis("boat_thrust_left", "boat_thrust_right")
+
+	if _is_moored() and (
+			not is_zero_approx(throttle_target)
+			or not is_zero_approx(lateral_target)
+	):
+		throttle_target = 0.0
+		lateral_target = 0.0
+		_throttle_stage_idx = _nearest_stage_idx(0.0)
+		if _moored_toast_cooldown <= 0.0 and _ship_hud != null:
+			_ship_hud.show_toast("MOORED — untie both quay lines before departure", 3.0)
+			_moored_toast_cooldown = MOORED_TOAST_COOLDOWN_S
 
 	# Throttle and rudder ramp smoothly; crab thrust is immediate
 	_throttle = move_toward(_throttle, throttle_target, throttle_response * delta)
@@ -194,6 +210,13 @@ func _push_to_components() -> void:
 	if _bow_thruster != null:
 		_bow_thruster.lateral_input = _lateral
 		_bow_thruster.crab_mode = (_thruster_mode == 2)
+
+
+func _is_moored() -> bool:
+	if _boat_body == null:
+		return false
+	var mooring := _boat_body.get_node_or_null("ShipGameplay/MooringComponent") as MooringComponent
+	return mooring != null and mooring.is_moored
 
 
 func _step_throttle_stage(step: int) -> void:
