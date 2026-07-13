@@ -1,14 +1,11 @@
 class_name FFTWaterSystem
 extends Node
 
-## FFT grid size — must be a power of two and match SIZE in
-## fft_ocean_compute.glsl (we inject it as a #define when compiling the
-## FFT_X / FFT_Y passes). At 512² the displacement texel is 0.5 m on the
-## 256 m length scale, which is finer than the geometry resolution of the
-## ocean mesh on screen; close-up still looks correct, FFT compute cost
-## drops ~4×, and per-readback bandwidth is 1 MB/layer instead of 4 MB.
-const RESOLUTION = 512
-const RESOLUTION_LOG2 = 9  # log2(RESOLUTION)
+## FFT grid size — must match SIZE / LOG_SIZE in the fft_ocean_*.glsl compute
+## shaders. 256² is ~4× cheaper than 512² and still finer than ocean mesh
+## spacing on the 256 m cascade (~1 m/texel vs ~2–3 m/vert).
+const RESOLUTION = 256
+const RESOLUTION_LOG2 = 8  # log2(RESOLUTION)
 const MAX_WAVES = 4
 
 const FFT_OCEAN_INIT = preload("res://resources/shaders/fft_ocean_init.glsl")
@@ -19,17 +16,8 @@ const FFT_OCEAN_FFT_Y = preload("res://resources/shaders/fft_ocean_fft_y.glsl")
 const FFT_OCEAN_ASSEMBLE = preload("res://resources/shaders/fft_ocean_assemble.glsl")
 
 ## How many compute frames between each CPU readback of the buoyancy LUT.
-## 1 = read every frame (the old behaviour). Each readback pulls 4 layers ×
-## RESOLUTION² × 4 bytes = 4 MB at 512² and forces a GPU pipeline stall,
-## which on a 60-fps loop is a hard sync every frame. The boat-physics
-## sampler only needs current-ish heights — running buoyancy at 20 Hz (N=3)
-## is invisible in feel because StripBuoyancy's per-station integration
-## already smooths over single-frame height jitter, and the vertical
-## velocity term uses `prev_delta` from the readback interval so impulse
-## scale stays correct. Visuals stay at full 60 Hz because the
-## displacement/slope textures are sampled on the GPU side and never need
-## to leave the device.
-const BUOYANCY_READBACK_INTERVAL: int = 3
+## At 30 Hz sim, N=2 ≈ 15 Hz buoyancy — still smooth for StripBuoyancy.
+const BUOYANCY_READBACK_INTERVAL: int = 2
 
 var rd: RenderingDevice
 var uniform_set: RID
@@ -83,9 +71,10 @@ var _readback_counter: int = 0
 ## CPU-side vertical-velocity calculation in WaveSurface.
 var _accumulated_delta: float = 0.0
 
-# Decoupled wave simulation tick timer (capping GPU computes to 60Hz instead of full game FPS)
+# Cap FFT compute below display refresh — visuals sample the latest maps;
+# 30 Hz sim is plenty for wave motion and halves GPU compute vs 60.
 var _sim_timer: float = 0.0
-const SIM_TICK_RATE: float = 60.0
+const SIM_TICK_RATE: float = 30.0
 const SIM_STEP: float = 1.0 / SIM_TICK_RATE
 
 func _ready() -> void:
