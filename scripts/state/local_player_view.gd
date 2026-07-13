@@ -201,6 +201,8 @@ func _snapshot_into_player_data() -> void:
 			"yaw":                ship.rotation.y,
 			"throttle_stage_idx": stage_idx,
 			"fuel_fraction":      fuel_fraction,
+			"aboard":             true,
+			"helming":            is_helming(),
 		}
 	else:
 		data.ship_runtime_state = {}
@@ -272,7 +274,67 @@ func apply_runtime_state_to_active_ship() -> void:
 
 
 func _restore_ship_pose(state: Dictionary) -> void:
+	## Mid-ocean / mid-voyage resume: spawn the active vessel if missing, then
+	## put the captain back on deck at the saved pose.
+	var ship := get_active_ship() as BoatBody
+	if ship == null:
+		ship = _spawn_saved_active_vessel(state)
+	if ship == null:
+		return
 	_apply_ship_runtime_state(state, true)
+	if bool(state.get("aboard", true)):
+		_place_player_on_ship_deck(ship)
+		if bool(state.get("helming", false)):
+			call_deferred("_resume_helm", ship)
+
+
+func _spawn_saved_active_vessel(state: Dictionary) -> BoatBody:
+	if _session == null or _session.data == null:
+		return null
+	var record: Dictionary = _session.data.active_vessel
+	if record.is_empty():
+		return null
+	var world := get_tree().get_first_node_in_group("world") as Node
+	if world == null:
+		return null
+	PlayerVessel.replace_before_spawn(get_tree())
+	var boat := VesselSpawn.instantiate_from_record(record)
+	if boat == null:
+		return null
+	boat.name = "PlayerShip"
+	world.add_child(boat)
+	PlayerVessel.mark_player_ship(boat)
+	var pos_raw: Variant = state.get("world_pos", null)
+	if typeof(pos_raw) == TYPE_VECTOR3:
+		boat.global_position = pos_raw
+	boat.rotation.y = float(state.get("yaw", 0.0))
+	if boat.has_method("place_at_waterline"):
+		boat.place_at_waterline(WaveSurface.WATER_LEVEL)
+	VesselSpawn.apply_identity(boat, record)
+	return boat
+
+
+func _place_player_on_ship_deck(ship: BoatBody) -> void:
+	var player := get_tree().get_first_node_in_group("player") as Node3D
+	if player == null or ship == null:
+		return
+	var deck_y := 1.4
+	if ship.hull_stations != null and ship.hull_stations.deck_y > 0.0:
+		deck_y = ship.hull_stations.deck_y + 0.25
+	elif ship.depth_m > 0.0:
+		deck_y = ship.depth_m * 0.85
+	# Slightly aft of amidships so the player is clearly on deck.
+	var local := Vector3(0.0, deck_y, maxf(ship.length_m * 0.08, 1.2))
+	player.global_position = ship.to_global(local)
+	player.rotation.y = ship.rotation.y
+
+
+func _resume_helm(ship: BoatBody) -> void:
+	if ship == null or not is_instance_valid(ship):
+		return
+	var ctrl := ship.get_node_or_null("BoatController") as BoatController
+	if ctrl != null and ctrl.has_method("activate"):
+		ctrl.activate()
 
 
 func _apply_ship_runtime_state(state: Dictionary, restore_transform: bool) -> void:
@@ -284,12 +346,19 @@ func _apply_ship_runtime_state(state: Dictionary, restore_transform: bool) -> vo
 		if typeof(pos_raw) == TYPE_VECTOR3:
 			ship.global_position = pos_raw
 		ship.rotation.y = float(state.get("yaw", 0.0))
+		var boat_body := ship as BoatBody
+		if boat_body != null and boat_body.has_method("place_at_waterline"):
+			boat_body.place_at_waterline(WaveSurface.WATER_LEVEL)
 	# Restore fuel level if persisted (defaults to 1.0 = full tank for
 	# pre-v2 saves and freshly-commissioned ships).
 	if state.has("fuel_fraction"):
 		var boat := ship as BoatBody
 		if boat != null:
 			boat.fuel_l = boat.fuel_capacity_l * float(state["fuel_fraction"])
+	if state.has("throttle_stage_idx"):
+		var ctrl := ship.get_node_or_null("BoatController") as BoatController
+		if ctrl != null and ctrl.has_method("set_throttle_stage_idx"):
+			ctrl.set_throttle_stage_idx(int(state["throttle_stage_idx"]))
 
 
 func _snapshot_active_ship_runtime() -> void:
@@ -315,4 +384,6 @@ func _snapshot_active_ship_runtime() -> void:
 		"yaw":                ship.rotation.y,
 		"throttle_stage_idx": stage_idx,
 		"fuel_fraction":      fuel_fraction,
+		"aboard":             true,
+		"helming":            is_helming(),
 	}

@@ -41,6 +41,12 @@ func _on_interact() -> void:
 		_dialogue.show_panel()
 		open_ui()
 		return
+	var config := get_node_or_null("/root/ServerConfig")
+	if config == null or not bool(config.get("is_multiplayer_mode")):
+		_refresh_list()
+		_dialogue.show_panel()
+		open_ui()
+		return
 	VesselSync.refresh_for_ui(session, func() -> void:
 		_refresh_list()
 		_dialogue.show_panel()

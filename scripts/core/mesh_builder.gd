@@ -91,8 +91,9 @@ static func pointed_hull_shell(
 	color: Color = Color(0.12, 0.14, 0.16),
 	roughness: float = 0.9,
 	metallic: float = 0.05,
+	double_sided: bool = false,
 ) -> MeshInstance3D:
-	var mat := make_material(color, roughness, metallic)
+	var mat := make_material(color, roughness, metallic, double_sided)
 	var st := SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
 	st.set_smooth_group(-1)

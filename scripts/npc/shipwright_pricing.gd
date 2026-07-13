@@ -12,9 +12,9 @@ static func quote_price_marks(stations: HullStations) -> int:
 
 
 static func commission_price(entry: Dictionary, stations: HullStations, _player: PlayerData) -> int:
-	var listed := int(entry.get("price_marks", 0))
-	if listed > 0:
-		return listed
+	## Explicit 0 = free hull (starter / gift). Don't invent a commission fee.
+	if entry.has("price_marks"):
+		return maxi(int(entry.get("price_marks", 0)), 0)
 	return quote_price_marks(stations)
 
 

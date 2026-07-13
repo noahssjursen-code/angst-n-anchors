@@ -10,6 +10,27 @@ static func format_money(amount: int) -> String:
 	return "%s %d" % [CURRENCY_SYMBOL, amount]
 
 
+static func new_uuid() -> String:
+	var bytes := Crypto.new().generate_random_bytes(16)
+	if bytes.size() != 16:
+		return "%08x-%04x-4000-8000-%012x" % [
+			int(Time.get_unix_time_from_system()),
+			Time.get_ticks_msec() & 0xffff,
+			Time.get_ticks_usec() & 0xffffffffffff,
+		]
+	# RFC 4122 version 4 + variant bits.
+	bytes[6] = (bytes[6] & 0x0f) | 0x40
+	bytes[8] = (bytes[8] & 0x3f) | 0x80
+	var hex := bytes.hex_encode()
+	return "%s-%s-%s-%s-%s" % [
+		hex.substr(0, 8),
+		hex.substr(8, 4),
+		hex.substr(12, 4),
+		hex.substr(16, 4),
+		hex.substr(20, 12),
+	]
+
+
 ## Pure data object — no Node, no signals.
 ## Holds everything that belongs to one player account.
 ## Serialises cleanly to/from a Dictionary so a future DB layer
@@ -46,7 +67,7 @@ const LEGACY_STARTER_HULL_ID := "cargo_ship"
 var accepted_contracts: Array = []
 
 ## Runtime state of the captain's ship for resume-where-you-left-off saves.
-## { "world_pos": Vector3, "yaw": float, "throttle_stage_idx": int }.
+## world_pos, yaw, throttle_stage_idx, fuel_fraction, aboard, helming.
 ## Empty when no ship is in the world at save time.
 var ship_runtime_state: Dictionary = {}
 
@@ -65,6 +86,9 @@ var tutorial_seen: Dictionary = {}
 
 ## True after the captain commissions their one free small fishing trawler.
 var starter_trawler_claimed: bool = false
+
+## Captain-chosen home quay. Defaults to the world seed's first coastal port.
+var home_port_id: String = "port-home"
 
 
 func owns_hull_id(hull_id: String) -> bool:
@@ -89,20 +113,88 @@ static func merge_vessel_record(existing: Dictionary, patch: Dictionary) -> Dict
 	return merged
 
 
+## JSON parses every number as a float. Compare persisted structures
+## semantically so 90 and 90.0 are the same layout.
+static func json_equivalent(a: Variant, b: Variant) -> bool:
+	if (typeof(a) == TYPE_INT or typeof(a) == TYPE_FLOAT) \
+			and (typeof(b) == TYPE_INT or typeof(b) == TYPE_FLOAT):
+		return is_equal_approx(float(a), float(b))
+	if typeof(a) != typeof(b):
+		return false
+	if typeof(a) == TYPE_DICTIONARY:
+		var ad := a as Dictionary
+		var bd := b as Dictionary
+		if ad.size() != bd.size():
+			return false
+		for key in ad:
+			if not bd.has(key) or not json_equivalent(ad[key], bd[key]):
+				return false
+		return true
+	if typeof(a) == TYPE_ARRAY:
+		var aa := a as Array
+		var ba := b as Array
+		if aa.size() != ba.size():
+			return false
+		for i in range(aa.size()):
+			if not json_equivalent(aa[i], ba[i]):
+				return false
+		return true
+	return a == b
+
+
+## Strip a vessel ledger row down to JSON-safe fields only.
+## Catalog entries carry Color / enum Variants that must never hit player.json.
+static func ledger_vessel_record(record: Dictionary) -> Dictionary:
+	if record.is_empty():
+		return {}
+	var hull_id := str(record.get("hull_id", "workboat")).strip_edges()
+	if hull_id.is_empty():
+		hull_id = "workboat"
+	var scene_path := str(record.get("scene_path", record.get("template_path", ""))).strip_edges()
+	if scene_path.is_empty():
+		scene_path = HullRegistry.scene_path_for(hull_id)
+	var layout_raw: Variant = record.get("brick_layout", {})
+	var layout: Dictionary = {}
+	if typeof(layout_raw) == TYPE_DICTIONARY:
+		layout = (layout_raw as Dictionary).duplicate(true)
+	if layout.is_empty():
+		layout = {"hull_id": hull_id, "cells": {}}
+	var out := {
+		"uid": str(record.get("uid", "")).strip_edges(),
+		"hull_id": hull_id,
+		"name": str(record.get("name", "")).strip_edges(),
+		"display": str(record.get("display", "")).strip_edges(),
+		"template_path": scene_path,
+		"scene_path": scene_path,
+		"brick_layout": layout,
+	}
+	var server_id := str(record.get("server_vessel_id", "")).strip_edges()
+	if not server_id.is_empty():
+		out["server_vessel_id"] = server_id
+	var layout_hash := str(record.get("layout_hash", "")).strip_edges()
+	if not layout_hash.is_empty():
+		out["layout_hash"] = layout_hash
+	return out
+
+
 func upsert_owned_vessel(record: Dictionary) -> void:
 	if record.is_empty():
 		return
 	var uid := str(record.get("uid", ""))
 	if uid.is_empty():
 		return
-	var normalized := VesselSpawn.normalize_record(record)
+	var normalized := ledger_vessel_record(VesselSpawn.normalize_record(record))
+	if normalized.is_empty() or str(normalized.get("uid", "")).is_empty():
+		return
 	for i in range(owned_vessels.size()):
 		var existing_raw: Variant = owned_vessels[i]
 		if typeof(existing_raw) != TYPE_DICTIONARY:
 			continue
 		if str((existing_raw as Dictionary).get("uid", "")) == uid:
-			owned_vessels[i] = VesselSpawn.normalize_record(
-				merge_vessel_record(existing_raw as Dictionary, normalized)
+			owned_vessels[i] = ledger_vessel_record(
+				VesselSpawn.normalize_record(
+					merge_vessel_record(existing_raw as Dictionary, normalized)
+				)
 			)
 			_mirror_active_vessel_from_owned(uid)
 			return
@@ -171,7 +263,7 @@ func set_active_vessel(record: Dictionary) -> void:
 	var uid := str(record.get("uid", ""))
 	var owned := find_owned_vessel(uid)
 	var merged := merge_vessel_record(owned, record) if not owned.is_empty() else record.duplicate(true)
-	active_vessel = VesselSpawn.normalize_record(merged)
+	active_vessel = ledger_vessel_record(VesselSpawn.normalize_record(merged))
 	upsert_owned_vessel(active_vessel)
 
 
@@ -201,29 +293,60 @@ func can_deploy_at_harbour() -> bool:
 func repair_save_consistency() -> void:
 	if is_legacy_starter_vessel(active_vessel):
 		active_vessel = {}
+	var active_server_id := str(active_vessel.get("server_vessel_id", ""))
+	var active_uid := str(active_vessel.get("uid", ""))
 	var cleaned: Array = []
+	var seen_uids: Dictionary = {}
 	for entry_raw in owned_vessels:
 		if typeof(entry_raw) != TYPE_DICTIONARY:
 			continue
 		var entry := entry_raw as Dictionary
 		if is_legacy_starter_vessel(entry):
 			continue
-		cleaned.append(VesselSpawn.normalize_record(entry))
+		var normalized := ledger_vessel_record(VesselSpawn.normalize_record(entry))
+		var uid := str(normalized.get("uid", ""))
+		var uid_collides := uid.is_empty() or seen_uids.has(uid)
+		if uid_collides:
+			var server_id := str(normalized.get("server_vessel_id", ""))
+			uid = (
+				"server_%s" % server_id
+				if not server_id.is_empty()
+				else VesselSpawn.new_vessel_uid(str(normalized.get("hull_id", "workboat")))
+			)
+			normalized["uid"] = uid
+		seen_uids[uid] = true
+		cleaned.append(normalized)
 	owned_vessels = cleaned
 	if not active_vessel.is_empty() and not is_legacy_starter_vessel(active_vessel):
-		var active_uid := str(active_vessel.get("uid", ""))
-		var owned := find_owned_vessel(active_uid)
+		# Server ID is immutable and disambiguates old second-resolution UID
+		# collisions. Only fall back to UID for offline/local vessels.
+		var owned := (
+			find_owned_by_server_id(active_server_id)
+			if not active_server_id.is_empty()
+			else find_owned_vessel(active_uid)
+		)
 		if owned.is_empty():
 			upsert_owned_vessel(active_vessel)
 		else:
-			upsert_owned_vessel(merge_vessel_record(owned, active_vessel))
+			var repaired_active := active_vessel.duplicate(true)
+			repaired_active["uid"] = str(owned.get("uid", active_uid))
+			upsert_owned_vessel(merge_vessel_record(owned, repaired_active))
+			active_vessel = find_owned_vessel(str(owned.get("uid", active_uid)))
 	elif not owned_vessels.is_empty() and active_vessel.is_empty():
 		var last_raw: Variant = owned_vessels[owned_vessels.size() - 1]
 		if typeof(last_raw) == TYPE_DICTIONARY:
-			active_vessel = VesselSpawn.normalize_record(last_raw as Dictionary)
+			active_vessel = ledger_vessel_record(VesselSpawn.normalize_record(last_raw as Dictionary))
 
 
 func to_dict() -> Dictionary:
+	var owned_out: Array = []
+	for entry_raw in owned_vessels:
+		if typeof(entry_raw) != TYPE_DICTIONARY:
+			continue
+		var safe := ledger_vessel_record(entry_raw as Dictionary)
+		if not safe.is_empty() and not str(safe.get("uid", "")).is_empty():
+			owned_out.append(safe)
+	var active_out := ledger_vessel_record(active_vessel) if not active_vessel.is_empty() else {}
 	return {
 		"account_id":               account_id,
 		"captain_id":               captain_id,
@@ -232,8 +355,8 @@ func to_dict() -> Dictionary:
 		"total_marks_earned":       total_marks_earned,
 		"contracts_completed":      contracts_completed,
 		"distance_sailed_m":        distance_sailed_m,
-		"owned_vessels":            owned_vessels.duplicate(true),
-		"active_vessel":            active_vessel.duplicate(),
+		"owned_vessels":            owned_out,
+		"active_vessel":            active_out,
 		"appearance":               appearance.to_dict(),
 		# v2 additions
 		"accepted_contracts":       accepted_contracts.duplicate(true),
@@ -242,6 +365,7 @@ func to_dict() -> Dictionary:
 		"world_context":            world_context.duplicate(),
 		"tutorial_seen":            tutorial_seen.duplicate(),
 		"starter_trawler_claimed":  starter_trawler_claimed,
+		"home_port_id":             home_port_id,
 	}
 
 
@@ -278,6 +402,8 @@ static func from_dict(d: Dictionary) -> PlayerData:
 	if typeof(tut_raw) == TYPE_DICTIONARY:
 		pd.tutorial_seen = (tut_raw as Dictionary).duplicate()
 	pd.starter_trawler_claimed = bool(d.get("starter_trawler_claimed", false))
+	var home_port := str(d.get("home_port_id", "port-home")).strip_edges()
+	pd.home_port_id = home_port if not home_port.is_empty() else "port-home"
 	pd.repair_save_consistency()
 	return pd
 
@@ -287,28 +413,34 @@ static func from_dict(d: Dictionary) -> PlayerData:
 func _ship_runtime_to_dict() -> Dictionary:
 	if ship_runtime_state.is_empty():
 		return {}
+	var out := {}
 	var pos: Variant = ship_runtime_state.get("world_pos", Vector3.ZERO)
 	if typeof(pos) == TYPE_VECTOR3:
 		var v: Vector3 = pos
-		return {
-			"world_pos":          [v.x, v.y, v.z],
-			"yaw":                float(ship_runtime_state.get("yaw", 0.0)),
-			"throttle_stage_idx": int(ship_runtime_state.get("throttle_stage_idx", 1)),
-		}
-	# Already serialised form.
-	return ship_runtime_state.duplicate()
+		out["world_pos"] = [v.x, v.y, v.z]
+	elif typeof(pos) == TYPE_ARRAY and (pos as Array).size() >= 3:
+		out["world_pos"] = (pos as Array).duplicate()
+	out["yaw"] = float(ship_runtime_state.get("yaw", 0.0))
+	out["throttle_stage_idx"] = int(ship_runtime_state.get("throttle_stage_idx", 1))
+	out["fuel_fraction"] = float(ship_runtime_state.get("fuel_fraction", 1.0))
+	out["aboard"] = bool(ship_runtime_state.get("aboard", true))
+	out["helming"] = bool(ship_runtime_state.get("helming", false))
+	return out
 
 
 static func _ship_runtime_from_dict(d: Dictionary) -> Dictionary:
 	if d.is_empty():
 		return {}
+	var out := {}
 	var pos_raw: Variant = d.get("world_pos", null)
-	var pos := Vector3.ZERO
 	if typeof(pos_raw) == TYPE_ARRAY and (pos_raw as Array).size() >= 3:
 		var arr := pos_raw as Array
-		pos = Vector3(float(arr[0]), float(arr[1]), float(arr[2]))
-	return {
-		"world_pos":          pos,
-		"yaw":                float(d.get("yaw", 0.0)),
-		"throttle_stage_idx": int(d.get("throttle_stage_idx", 1)),
-	}
+		out["world_pos"] = Vector3(float(arr[0]), float(arr[1]), float(arr[2]))
+	elif typeof(pos_raw) == TYPE_VECTOR3:
+		out["world_pos"] = pos_raw
+	out["yaw"] = float(d.get("yaw", 0.0))
+	out["throttle_stage_idx"] = int(d.get("throttle_stage_idx", 1))
+	out["fuel_fraction"] = float(d.get("fuel_fraction", 1.0))
+	out["aboard"] = bool(d.get("aboard", true))
+	out["helming"] = bool(d.get("helming", false))
+	return out

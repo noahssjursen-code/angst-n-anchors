@@ -1,7 +1,7 @@
 class_name ChartCamera
 extends RefCounted
 
-const ZOOM_IN := 0.82
+const ZOOM_IN := 0.70
 const ZOOM_OUT := 1.0 / ZOOM_IN
 const SPAN_MIN := 300.0
 const SPAN_MAX := 500000.0
@@ -22,8 +22,8 @@ func zoom(steps: int) -> void:
 func pan_pixels(delta_pixels: Vector2, pixels_per_world_unit: float, origin: Vector2) -> void:
 	if pixels_per_world_unit <= 0.0:
 		return
-	# Chart is north-up: screen +Y is world −Z, so grab-pan must flip the Y axis.
-	center = origin - Vector2(delta_pixels.x, -delta_pixels.y) / pixels_per_world_unit
+	# Chart is north-up: screen +Y is world +Z (south).
+	center = origin - delta_pixels / pixels_per_world_unit
 	user_moved = true
 
 

@@ -231,6 +231,12 @@ func _setup_ports(defs: Array[PortDefinition]) -> void:
 	add_child(port_proximity)
 
 	var registry := get_node_or_null("/root/ContractRegistry")
+	var home_port_id := "port-home"
+	var session := get_node_or_null("/root/PlayerSession")
+	if session != null and session.get("data") != null:
+		var preferred := str(session.data.home_port_id).strip_edges()
+		if not preferred.is_empty():
+			home_port_id = preferred
 
 	for i in range(defs.size()):
 		var def  := defs[i]
@@ -246,8 +252,9 @@ func _setup_ports(defs: Array[PortDefinition]) -> void:
 				data.berth_count, data.size,
 			)
 
-		if i == 0:
-			# Home port: always present, added directly so spawn position is available.
+		var is_home := data.port_id == home_port_id or (i == 0 and home_port_id == "port-home")
+		if is_home and get_node_or_null("HomePort") == null:
+			# Captain home quay: always present so spawn/teleport have a berth.
 			var plot := PortPlot.new()
 			plot.name = "HomePort"
 			plot.configure(data)
@@ -264,6 +271,18 @@ func _setup_ports(defs: Array[PortDefinition]) -> void:
 				LOAD_RADIUS,
 				data.port_id,
 			)
+
+	# Fallback if the saved home port id no longer exists in this seed.
+	if get_node_or_null("HomePort") == null and not defs.is_empty():
+		var fallback := PortExpander.expand(defs[0], world_seed)
+		var plot := PortPlot.new()
+		plot.name = "HomePort"
+		plot.configure(fallback)
+		add_child(plot)
+		plot.global_position = defs[0].world_position
+		if session != null and session.get("data") != null:
+			session.data.home_port_id = fallback.port_id
+
 
 
 func _generate_definitions() -> Array[PortDefinition]:

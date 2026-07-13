@@ -21,6 +21,12 @@ func _on_interact() -> void:
 		_show_yard_menu()
 		open_ui()
 		return
+	## Singleplayer: local ledger is authoritative — never wait on / wipe from server.
+	var config := get_node_or_null("/root/ServerConfig")
+	if config == null or not bool(config.get("is_multiplayer_mode")):
+		_show_yard_menu()
+		open_ui()
+		return
 	VesselSync.refresh_for_ui(session, func() -> void:
 		_show_yard_menu()
 		open_ui()
@@ -80,6 +86,7 @@ func _open_catalog() -> void:
 	if _editor != null and _editor.is_open():
 		_editor.hide_editor()
 	var catalog: Array[Dictionary] = HullRegistry.catalog()
+	catalog.append_array(PrebuiltVesselCatalog.catalog_entries())
 	_catalog.open_catalog(catalog, 0)
 	_catalog.show_panel()
 
@@ -140,8 +147,22 @@ func _on_marks_changed(_balance: int) -> void:
 
 
 func _on_commission_requested(entry: Dictionary) -> void:
-	## Catalog only selects a hull; building happens in the build window.
 	_catalog.hide_catalog()
+	if bool(entry.get("is_prebuilt", false)):
+		var layout_raw: Variant = entry.get("prebuilt_layout", {})
+		var layout: Dictionary = (
+			(layout_raw as Dictionary).duplicate(true)
+			if typeof(layout_raw) == TYPE_DICTIONARY
+			else {}
+		)
+		if layout.is_empty():
+			_show_commission_error("That ready-built vessel has no valid fit-out.")
+			return
+		if not _try_pay_for_commission(entry):
+			return
+		_commission(entry, layout, str(entry.get("prebuilt_name", "Vessel")))
+		return
+	## Bare hull: building happens in the deck editor.
 	_editor.open_for_hull(entry)
 
 
@@ -173,12 +194,7 @@ func _try_pay_for_commission(entry: Dictionary) -> bool:
 	var session := get_node_or_null("/root/PlayerSession")
 	if session == null:
 		return true
-	var price := int(entry.get("price_marks", 0))
-	if price <= 0:
-		## Explicit 0 = free hull (starter trawler); don't invent a commission fee.
-		if entry.has("price_marks") and int(entry.get("price_marks", -1)) == 0:
-			return true
-		price = ShipwrightPricing.commission_price(entry, stations, session.data)
+	var price := ShipwrightPricing.commission_price(entry, stations, session.data)
 	if price <= 0:
 		return true
 	if not session.spend_marks(price):
@@ -201,12 +217,21 @@ func _show_commission_error(line: String) -> void:
 
 
 func _commission(entry: Dictionary, layout: Dictionary, vessel_name: String) -> void:
-	var uid := "%s_%d" % [str(entry.get("id", "workboat")), Time.get_unix_time_from_system()]
-	var scene_path := str(entry.get("scene_path", VesselSpawn.WORKBOAT_SCENE))
+	var hull_id := str(entry.get("id", "workboat")).strip_edges()
+	if hull_id.is_empty():
+		hull_id = "workboat"
+	var uid := VesselSpawn.new_vessel_uid(hull_id)
+	var scene_path := str(entry.get("scene_path", VesselSpawn.WORKBOAT_SCENE)).strip_edges()
+	if scene_path.is_empty():
+		scene_path = HullRegistry.scene_path_for(hull_id)
 	var name := vessel_name.strip_edges()
 	if name.is_empty():
 		name = VesselSpawn.vessel_name_of({"display": str(entry.get("display", "Workboat"))})
-	_register_commissioned_vessel(entry, scene_path, uid, layout, name)
+	if not _register_commissioned_vessel(entry, scene_path, uid, layout, name):
+		_show_commission_error(
+			"The yard could not verify this vessel on disk. Your design is still open in memory; do not quit."
+		)
+		return
 
 	_show_result(
 		(
@@ -240,8 +265,11 @@ func _refit(uid: String, entry: Dictionary, layout: Dictionary, vessel_name: Str
 	var updated := VesselSpawn.normalize_record(
 		PlayerData.merge_vessel_record(existing, patch)
 	)
-	session.data.upsert_owned_vessel(updated)
-	session.save_now()
+	if not bool(session.call("persist_vessel_configuration", updated, false)):
+		_show_commission_error(
+			"The yard could not verify this refit on disk. It has not been reported as saved."
+		)
+		return
 	_apply_live_refit(updated)
 	VesselSync.push_brick_layout(session, updated)
 
@@ -285,19 +313,33 @@ func _register_commissioned_vessel(
 	uid: String,
 	layout: Dictionary,
 	vessel_name: String,
-) -> void:
+) -> bool:
 	var session := get_node_or_null("/root/PlayerSession")
-	if session == null:
-		return
+	if session == null or session.data == null:
+		return false
+	var hull_id := str(entry.get("id", "workboat")).strip_edges()
+	if hull_id.is_empty():
+		hull_id = "workboat"
+	var safe_layout: Dictionary = layout.duplicate(true) if typeof(layout) == TYPE_DICTIONARY else {}
+	if safe_layout.is_empty():
+		safe_layout = VesselSpawn.default_brick_layout(hull_id)
 	var record := VesselSpawn.normalize_record({
 		"uid":           uid,
-		"hull_id":       str(entry.get("id", "workboat")),
+		"hull_id":       hull_id,
 		"name":          vessel_name,
 		"display":       str(entry.get("display", "Workboat")),
 		"template_path": scene_path,
 		"scene_path":    scene_path,
-		"brick_layout":  layout,
+		"brick_layout":  safe_layout,
 	})
-	session.data.upsert_owned_vessel(record)
-	session.save_now()
+	## JSON-safe ledger row only — never persist catalog Colors / enums.
+	record = PlayerData.ledger_vessel_record(record)
+	var saved := (
+		session.has_method("persist_vessel_configuration")
+		and bool(session.call("persist_vessel_configuration", record, true))
+	)
+	if not saved:
+		push_error("Shipwright: failed to persist commissioned vessel uid=%s hull=%s" % [uid, hull_id])
+		return false
 	VesselSync.publish_commission(session, entry, scene_path, uid, vessel_name)
+	return true

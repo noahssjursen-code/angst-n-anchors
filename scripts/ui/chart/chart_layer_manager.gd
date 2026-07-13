@@ -1,34 +1,50 @@
 class_name ChartLayerManager
 extends RefCounted
 
-enum Preset { HARBOUR, COASTAL, PASSAGE, WEATHER }
+## Shared chart state. Navigation/Harbour are display profiles; Weather and
+## Fishing are independent overlays and may be enabled together.
 
-const PRESET_NAMES: Array[String] = ["Harbour", "Coastal", "Passage", "Weather"]
+enum Preset { NAVIGATION, WEATHER, FISHING, HARBOUR }
+
+const PRESET_NAMES: Array[String] = ["Navigation", "Weather", "Fishing", "Harbour"]
 const LAYER_ORDER: Array[String] = [
-	"base", "fishing", "weather", "routes", "approaches",
+	"base", "weather", "fishing", "routes", "approaches",
 	"traffic", "nav_vectors", "annotations",
 ]
 
-var preset := Preset.COASTAL
+var preset := Preset.NAVIGATION
 var revision := 0
-var _layers: Dictionary = {}
+var _layers: Dictionary = {
+	"base": true,
+	"weather": false,
+	"fishing": false,
+	"routes": true,
+	"approaches": false,
+	"traffic": false,
+	"nav_vectors": true,
+	"annotations": true,
+}
 
 
 func _init() -> void:
-	apply_preset(Preset.COASTAL)
+	apply_preset(Preset.NAVIGATION)
 
 
 func apply_preset(next_preset: int) -> void:
-	preset = next_preset
+	preset = clampi(next_preset, Preset.NAVIGATION, Preset.HARBOUR)
 	match preset:
-		Preset.HARBOUR:
-			_layers = _make_layers(true, false, false, true, true, true, true, true)
-		Preset.COASTAL:
-			_layers = _make_layers(true, false, false, true, false, true, true, true)
-		Preset.PASSAGE:
-			_layers = _make_layers(true, false, false, true, false, true, true, false)
 		Preset.WEATHER:
-			_layers = _make_layers(true, false, true, true, false, false, true, false)
+			_layers["weather"] = true
+		Preset.FISHING:
+			_layers["fishing"] = true
+		Preset.HARBOUR:
+			_layers["routes"] = true
+			_layers["approaches"] = true
+			_layers["annotations"] = true
+		_:
+			_layers["routes"] = true
+			_layers["approaches"] = false
+			_layers["annotations"] = true
 	revision += 1
 
 
@@ -59,23 +75,6 @@ func snapshot() -> Dictionary:
 	return _layers.duplicate()
 
 
-static func _make_layers(
-	base: bool,
-	fishing: bool,
-	weather: bool,
-	routes: bool,
-	approaches: bool,
-	traffic: bool,
-	nav_vectors: bool,
-	annotations: bool,
-) -> Dictionary:
-	return {
-		"base": base,
-		"fishing": fishing,
-		"weather": weather,
-		"routes": routes,
-		"approaches": approaches,
-		"traffic": traffic,
-		"nav_vectors": nav_vectors,
-		"annotations": annotations,
-	}
+func set_overlay_preferences(weather_on: bool, fishing_on: bool) -> void:
+	set_visible("weather", weather_on)
+	set_visible("fishing", fishing_on)

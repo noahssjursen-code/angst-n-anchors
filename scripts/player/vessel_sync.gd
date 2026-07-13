@@ -28,15 +28,27 @@ static func publish_commission(
 	var display := vessel_name.strip_edges()
 	if display.is_empty():
 		display = str(entry.get("display", "Vessel"))
-	if hull_id.is_empty():
+	if hull_id.is_empty() or uid.is_empty():
 		return
 
-	var layout: Dictionary = {}
+	var record: Dictionary = {}
 	if session.get("data") != null:
-		var record: Dictionary = session.data.find_owned_vessel(uid)
-		layout = VesselSpawn.brick_layout_of(record)
-
-	_post_vessel(session, captain_id, hull_id, display, template_path, uid, layout)
+		record = session.data.find_owned_vessel(uid)
+	if record.is_empty():
+		record = {
+			"uid": uid,
+			"hull_id": hull_id,
+			"name": display,
+			"display": display,
+			"template_path": template_path,
+			"scene_path": template_path,
+		}
+	else:
+		record["hull_id"] = hull_id
+		record["name"] = display
+		record["template_path"] = template_path
+		record["scene_path"] = template_path
+	ensure_vessel_registered(session, record)
 
 
 ## Push deck fit-out after shipwright refit (or backfill).
@@ -80,7 +92,10 @@ static func push_brick_layout(session: Node, record: Dictionary, on_complete: Ca
 		var updated := record.duplicate(true)
 		updated["layout_hash"] = str(row.get("layout_hash", ""))
 		var layout_raw: Variant = row.get("brick_layout", layout)
-		if typeof(layout_raw) == TYPE_DICTIONARY:
+		if typeof(layout_raw) == TYPE_DICTIONARY and (
+			_layout_has_configuration(layout_raw as Dictionary)
+			or not _layout_has_configuration(VesselSpawn.brick_layout_of(updated))
+		):
 			updated["brick_layout"] = layout_raw
 		session.data.upsert_owned_vessel(updated)
 		if str(session.data.active_vessel.get("uid", "")) == str(updated.get("uid", "")):
@@ -172,6 +187,10 @@ static func pull_captain_vessel(session: Node, on_complete: Callable = Callable(
 
 ## Multiplayer NPCs should await this before reading owned_vessels.
 static func refresh_for_ui(session: Node, on_complete: Callable = Callable()) -> void:
+	if session == null or not _is_mp_session(session):
+		if on_complete.is_valid():
+			on_complete.call()
+		return
 	pull_captain_vessel(session, on_complete)
 
 
@@ -344,7 +363,10 @@ static func _post_vessel(
 		record["server_vessel_id"] = server_id
 		record["layout_hash"] = str(row.get("layout_hash", ""))
 		var layout_raw: Variant = row.get("brick_layout", null)
-		if typeof(layout_raw) == TYPE_DICTIONARY:
+		if typeof(layout_raw) == TYPE_DICTIONARY and (
+			_layout_has_configuration(layout_raw as Dictionary)
+			or not _layout_has_configuration(VesselSpawn.brick_layout_of(record))
+		):
 			record["brick_layout"] = layout_raw
 		session.data.upsert_owned_vessel(record)
 		if str(session.data.active_vessel.get("uid", "")) == uid:
@@ -382,15 +404,24 @@ static func _fetch_vessels(session: Node, captain_id: String, on_complete: Calla
 
 
 static func _apply_server_vessels(session: Node, rows: Array, on_complete: Callable = Callable()) -> void:
+	if session == null or not _is_mp_session(session):
+		if on_complete.is_valid():
+			on_complete.call()
+		return
 	if session.get("data") == null:
 		if on_complete.is_valid():
 			on_complete.call()
 		return
 
 	var data: PlayerData = session.data
-	var pending_local := _collect_unregistered_local(data.owned_vessels)
+	## A pull is an update, never a delete operation. Preserve every local ledger
+	## row not represented by the response, including server-linked vessels.
+	## Server deletion/tombstones require an explicit user-facing flow.
+	var local_records := _collect_preserved_local_vessels(data.owned_vessels)
+	var backfill := _collect_unregistered_local(data.owned_vessels)
 	var merged: Array = []
 	var seen_server_ids: Dictionary = {}
+	var seen_uids: Dictionary = {}
 
 	for row_raw in rows:
 		if typeof(row_raw) != TYPE_DICTIONARY:
@@ -402,7 +433,22 @@ static func _apply_server_vessels(session: Node, rows: Array, on_complete: Calla
 		if server_id.is_empty() or seen_server_ids.has(server_id):
 			continue
 		seen_server_ids[server_id] = true
+		var uid := str(record.get("uid", ""))
+		if not uid.is_empty():
+			seen_uids[uid] = true
 		merged.append(record)
+
+	for local_raw in local_records:
+		if typeof(local_raw) != TYPE_DICTIONARY:
+			continue
+		var local := local_raw as Dictionary
+		var uid := str(local.get("uid", ""))
+		var server_id := str(local.get("server_vessel_id", ""))
+		if uid.is_empty() or seen_uids.has(uid) \
+				or (not server_id.is_empty() and seen_server_ids.has(server_id)):
+			continue
+		seen_uids[uid] = true
+		merged.append(local)
 
 	var active_uid := str(data.active_vessel.get("uid", ""))
 	var active_server_id := str(data.active_vessel.get("server_vessel_id", ""))
@@ -429,8 +475,25 @@ static func _apply_server_vessels(session: Node, rows: Array, on_complete: Calla
 		session.call("notify_vessels_synced")
 	if on_complete.is_valid():
 		on_complete.call()
-	if not pending_local.is_empty():
-		_backfill_vessel_records(session, pending_local)
+	if not backfill.is_empty():
+		_backfill_vessel_records(session, backfill)
+
+
+## Local save is the durability layer. Pull responses can update matching rows,
+## but omission from a response is not proof that the player meant to delete one.
+static func _collect_preserved_local_vessels(owned: Array) -> Array:
+	var out: Array = []
+	for entry_raw in owned:
+		if typeof(entry_raw) != TYPE_DICTIONARY:
+			continue
+		var record := entry_raw as Dictionary
+		if PlayerData.is_legacy_starter_vessel(record):
+			continue
+		var uid := str(record.get("uid", ""))
+		if uid.is_empty():
+			continue
+		out.append(record.duplicate(true))
+	return out
 
 
 static func _collect_unregistered_local(owned: Array) -> Array:
@@ -444,6 +507,8 @@ static func _collect_unregistered_local(owned: Array) -> Array:
 		if not str(record.get("server_vessel_id", "")).is_empty():
 			continue
 		var uid := str(record.get("uid", ""))
+		## Skip in-flight / hard-failed for POST retry only — preservation uses
+		## _collect_local_only_vessels and does not consult these flags.
 		if uid.is_empty() or _in_flight_registrations.has(uid) or _failed_registrations.has(uid):
 			continue
 		var hull_id := str(record.get("hull_id", ""))
@@ -474,12 +539,12 @@ static func _merge_server_row(data: PlayerData, row: Dictionary) -> Dictionary:
 	if hull_id.is_empty():
 		return {}
 
+	var existing: Dictionary = data.find_owned_by_server_id(server_id)
 	var fleet_patch := _fleet_patch_from_row(row)
-	var layout_patch := _layout_patch_from_row(row)
+	var layout_patch := _layout_patch_from_row(row, existing)
 	var hull_entry := HullRegistry.get_by_id(hull_id)
 	var hull_display := str(hull_entry.get("display", display))
 
-	var existing: Dictionary = data.find_owned_by_server_id(server_id)
 	if not existing.is_empty():
 		existing = PlayerData.merge_vessel_record(existing, {
 			"name": display,
@@ -498,7 +563,7 @@ static func _merge_server_row(data: PlayerData, row: Dictionary) -> Dictionary:
 			existing["scene_path"] = rebuilt.get("scene_path", rebuilt["template_path"])
 		return existing
 
-	var local := _ensure_local_template(hull_id, hull_display)
+	var local := _ensure_local_template(hull_id, hull_display, server_id)
 	if local.is_empty():
 		return {}
 	var record := {
@@ -513,11 +578,9 @@ static func _merge_server_row(data: PlayerData, row: Dictionary) -> Dictionary:
 	return PlayerData.merge_vessel_record(record, layout_patch)
 
 
-static func _layout_patch_from_row(row: Dictionary) -> Dictionary:
+static func _layout_patch_from_row(row: Dictionary, existing: Dictionary = {}) -> Dictionary:
 	var patch: Dictionary = {}
 	var hash := str(row.get("layout_hash", ""))
-	if not hash.is_empty():
-		patch["layout_hash"] = hash
 	var layout_raw: Variant = row.get("brick_layout", null)
 	var layout: Dictionary = {}
 	if typeof(layout_raw) == TYPE_DICTIONARY:
@@ -526,12 +589,27 @@ static func _layout_patch_from_row(row: Dictionary) -> Dictionary:
 		var nested: Variant = JSON.parse_string(str(layout_raw))
 		if typeof(nested) == TYPE_DICTIONARY:
 			layout = nested as Dictionary
-	## Prefer server layout when it has cells; otherwise keep local via omit.
+	## Never replace a configured local deck during a pull. A local refit may
+	## have reached disk before its HTTP push completed; stale server JSON must
+	## not erase ten minutes of work. Server layout hydrates only a bare record.
+	var local_is_configured := _layout_has_configuration(
+		VesselSpawn.brick_layout_of(existing)
+	)
 	if not layout.is_empty() and (
 		layout.has("cells") or layout.has("cargo_zones") or layout.has("hull_id")
-	):
+	) and not local_is_configured:
 		patch["brick_layout"] = layout
+		if not hash.is_empty():
+			patch["layout_hash"] = hash
 	return patch
+
+
+static func _layout_has_configuration(layout: Dictionary) -> bool:
+	var cells_raw: Variant = layout.get("cells", {})
+	if typeof(cells_raw) == TYPE_DICTIONARY and not (cells_raw as Dictionary).is_empty():
+		return true
+	var zones_raw: Variant = layout.get("cargo_zones", [])
+	return typeof(zones_raw) == TYPE_ARRAY and not (zones_raw as Array).is_empty()
 
 
 static func _fleet_patch_from_row(_row: Dictionary) -> Dictionary:
@@ -539,11 +617,19 @@ static func _fleet_patch_from_row(_row: Dictionary) -> Dictionary:
 	return {}
 
 
-static func _ensure_local_template(hull_id: String, display: String) -> Dictionary:
+static func _ensure_local_template(
+	hull_id: String,
+	display: String,
+	server_vessel_id: String = "",
+) -> Dictionary:
 	var entry := HullRegistry.get_by_id(hull_id)
 	if entry.is_empty():
 		return {}
-	var uid := "%s_%d" % [hull_id, Time.get_unix_time_from_system()]
+	var uid := (
+		"server_%s" % server_vessel_id
+		if not server_vessel_id.is_empty()
+		else VesselSpawn.new_vessel_uid(hull_id)
+	)
 	var scene_path := str(entry.get("scene_path", VesselSpawn.WORKBOAT_SCENE))
 	return {
 		"uid": uid,

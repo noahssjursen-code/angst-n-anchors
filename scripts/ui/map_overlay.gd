@@ -1,341 +1,560 @@
 class_name MapOverlay
 extends Control
 
-## Marine chart shell retained for GameMenu compatibility. Camera, navigation
-## snapshot, declutter policy, and ordered layer drawing live under ui/chart.
+## Full-screen, north-up marine chart. This is one UI in two contexts:
+## navigation and one-click home-port onboarding.
 
-const MARGIN := 48.0
-const HEADER_H := 76.0
-const STATUS_H := 34.0
-const REDRAW_INTERVAL_S := 0.20
-const C_SEA := Color(0.03, 0.04, 0.10, 0.97)
-const C_BORDER := Color(0.30, 0.44, 0.68, 0.80)
-const ChartCameraClass = preload("res://scripts/ui/chart/chart_camera.gd")
-const ChartLayerManagerClass = preload("res://scripts/ui/chart/chart_layer_manager.gd")
-const ChartLayerRendererClass = preload("res://scripts/ui/chart/chart_layer_renderer.gd")
-const ChartNavSnapshotClass = preload("res://scripts/ui/chart/chart_nav_snapshot.gd")
+signal close_requested
+signal home_port_confirmed(port_id: String)
+signal home_port_cancelled
+signal port_selected(port_id: String)
 
-var _camera := ChartCameraClass.new()
-var _layers := ChartLayerManagerClass.new()
-var _renderer := ChartLayerRendererClass.new()
-var _nav := ChartNavSnapshotClass.new()
-var _selected_port := ""
-var _dragging := false
-var _drag_origin_mouse := Vector2.ZERO
-var _drag_origin_center := Vector2.ZERO
-var _drag_distance := 0.0
-var _hover_pos := Vector2(-1.0, -1.0)
-var _redraw_elapsed := REDRAW_INTERVAL_S
-var _was_visible := false
-var _last_ctx: Dictionary = {}
-var _preset_select: OptionButton
-var _layer_buttons: Dictionary = {}
-var _route_waypoints := PackedVector3Array()
-var _last_draw_usec := 0
-var _draw_count := 0
+enum Mode { NAVIGATION, HOME_PORT_PICK }
+
+const CameraModel := preload("res://scripts/ui/chart/chart_camera.gd")
+const LayerManager := preload("res://scripts/ui/chart/chart_layer_manager.gd")
+const Renderer := preload("res://scripts/ui/chart/chart_layer_renderer.gd")
+const Snapshot := preload("res://scripts/ui/chart/chart_data_snapshot.gd")
+
+const FRAME := 26.0
+const TOP_H := 58.0
+const BOTTOM_H := 48.0
+const NAV_REFRESH_S := 0.20
+const OVERLAY_DEBOUNCE_S := 0.14
+
+var mode := Mode.NAVIGATION
+var data
+var camera := CameraModel.new()
+var layers := LayerManager.new()
+var renderer := Renderer.new()
+var nav := ChartNavSnapshot.new()
+
+var selected_port := ""
+var hover_screen := Vector2(-1.0, -1.0)
+var dragging := false
+var drag_origin_mouse := Vector2.ZERO
+var drag_origin_center := Vector2.ZERO
+var drag_distance := 0.0
+var nav_elapsed := NAV_REFRESH_S
+var overlay_debounce := 0.0
+var overlays_dirty := true
+var first_visible_frame := true
+var last_ctx: Dictionary = {}
+var hover_rows: Array[String] = []
+var hover_sample_screen := Vector2(-1000.0, -1000.0)
+var hover_layer_revision := -1
+
+var title_label: Label
+var hint_label: Label
+var mode_buttons: Array[Button] = []
+var weather_button: Button
+var fishing_button: Button
+var center_button: Button
+var close_button: Button
 
 
 func _ready() -> void:
 	add_to_group("marine_chart")
 	set_anchors_preset(Control.PRESET_FULL_RECT)
 	mouse_filter = Control.MOUSE_FILTER_STOP
-	_build_controls()
+	process_mode = Node.PROCESS_MODE_ALWAYS
+	texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	theme = HudStyle.make_theme()
+	_build_toolbar()
+	_load_layer_preferences()
+	_apply_mode_ui()
+
+
+func set_data_snapshot(snapshot) -> void:
+	data = snapshot
+	renderer.set_snapshot(data)
+	camera.user_moved = false
+	overlays_dirty = true
+	first_visible_frame = true
+
+
+func enter_home_port_pick_mode(_preselect_port_id: String = "") -> void:
+	mode = Mode.HOME_PORT_PICK
+	selected_port = ""
+	layers.apply_preset(ChartLayerManager.Preset.NAVIGATION)
+	layers.set_visible("routes", false)
+	layers.set_visible("approaches", false)
+	_apply_mode_ui()
+	camera.user_moved = false
+	overlays_dirty = true
+	first_visible_frame = true
+	visible = true
+
+
+func exit_home_port_pick_mode() -> void:
+	mode = Mode.NAVIGATION
+	_apply_mode_ui()
+	visible = false
+
+
+func is_home_port_pick_mode() -> bool:
+	return mode == Mode.HOME_PORT_PICK
+
+
+func get_selected_port_id() -> String:
+	return selected_port
+
+
+func open_navigation() -> void:
+	mode = Mode.NAVIGATION
+	if data == null or not data.is_valid():
+		set_data_snapshot(Snapshot.from_live_tree(get_tree()))
+	layers.apply_preset(ChartLayerManager.Preset.NAVIGATION)
+	_apply_mode_ui()
+	first_visible_frame = true
+	visible = true
+
+
+func get_debug_stats() -> Dictionary:
+	var stats := renderer.debug_stats()
+	stats["preset"] = ChartLayerManager.PRESET_NAMES[layers.preset]
+	return stats
+
+
+func ensure_live_data() -> bool:
+	if data == null or not data.is_valid():
+		set_data_snapshot(Snapshot.from_live_tree(get_tree()))
+	return data != null and data.is_valid()
+
+
+func refresh_shared_chart(bounds: Rect2) -> bool:
+	if not refresh_shared_nav():
+		return false
+	prepare_shared_overlays(bounds)
+	return true
+
+
+func refresh_shared_nav() -> bool:
+	if not ensure_live_data():
+		return false
+	_capture_nav()
+	return true
+
+
+func prepare_shared_overlays(bounds: Rect2) -> void:
+	renderer.prepare_overlays(bounds, layers, WeatherField.current_game_time())
 
 
 func _process(delta: float) -> void:
 	if not visible:
-		_was_visible = false
-		_dragging = false
 		return
-	if not _was_visible:
+	if not ensure_live_data():
+		return
+	if first_visible_frame:
 		_capture_nav()
-		if not _camera.user_moved:
-			_home()
-		_was_visible = true
-		_mark_dirty()
-	_redraw_elapsed += delta
-	if _redraw_elapsed >= REDRAW_INTERVAL_S:
-		_redraw_elapsed = 0.0
+		_home()
+		first_visible_frame = false
+		overlays_dirty = true
+	nav_elapsed += delta
+	if nav_elapsed >= NAV_REFRESH_S:
+		nav_elapsed = 0.0
 		_capture_nav()
 		queue_redraw()
+	if overlays_dirty:
+		overlay_debounce -= delta
+		if overlay_debounce <= 0.0 and not dragging:
+			renderer.prepare_overlays(
+				_camera_bounds(),
+				layers,
+				WeatherField.current_game_time(),
+			)
+			overlays_dirty = false
+			queue_redraw()
 
 
 func _input(event: InputEvent) -> void:
 	if not visible:
 		return
-	if event is InputEventKey:
-		var key := event as InputEventKey
-		if key.pressed and not key.echo:
-			if key.keycode == KEY_H:
-				_home()
-				get_viewport().set_input_as_handled()
-			elif key.keycode == KEY_F:
-				_set_layer("weather", _layers.toggle("weather"))
-				get_viewport().set_input_as_handled()
-			elif key.keycode == KEY_G:
-				_set_layer("fishing", _layers.toggle("fishing"))
-				get_viewport().set_input_as_handled()
-	elif event is InputEventMouseButton:
-		var mouse := event as InputEventMouseButton
-		if not _chart_rect().has_point(mouse.position):
-			return
-		if mouse.pressed and mouse.button_index == MOUSE_BUTTON_WHEEL_UP:
-			_camera.zoom(1)
-			_mark_dirty()
-			get_viewport().set_input_as_handled()
-		elif mouse.pressed and mouse.button_index == MOUSE_BUTTON_WHEEL_DOWN:
-			_camera.zoom(-1)
-			_mark_dirty()
-			get_viewport().set_input_as_handled()
-		elif mouse.button_index == MOUSE_BUTTON_LEFT:
-			if mouse.pressed:
-				_dragging = true
-				_drag_distance = 0.0
-				_drag_origin_mouse = mouse.position
-				_drag_origin_center = _camera.center
-			else:
-				_dragging = false
-				if _drag_distance < 5.0:
-					_select_port(mouse.position)
-			get_viewport().set_input_as_handled()
-		elif mouse.pressed and mouse.button_index == MOUSE_BUTTON_RIGHT:
-			_route_waypoints.append(_screen_to_world(mouse.position))
-			_capture_nav()
-			_mark_dirty()
-			get_viewport().set_input_as_handled()
-	elif event is InputEventMouseMotion:
+	if event is InputEventMouseMotion:
 		var motion := event as InputEventMouseMotion
-		_hover_pos = motion.position
-		if _dragging:
-			_drag_distance += motion.relative.length()
-			_camera.pan_pixels(
-				motion.position - _drag_origin_mouse,
-				_camera.pixels_per_world_unit(_chart_rect().size),
-				_drag_origin_center
+		hover_screen = motion.position
+		if dragging:
+			drag_distance += motion.relative.length()
+			camera.pan_pixels(
+				motion.position - drag_origin_mouse,
+				camera.pixels_per_world_unit(_chart_rect().size),
+				drag_origin_center,
 			)
-			_mark_dirty()
+		_refresh_hover_readout()
+		queue_redraw()
+		return
+	if event is InputEventMouseButton:
+		var mouse := event as InputEventMouseButton
+		var chart := _chart_rect()
+		if mouse.button_index == MOUSE_BUTTON_LEFT:
+			if mouse.pressed and chart.has_point(mouse.position):
+				dragging = true
+				drag_distance = 0.0
+				drag_origin_mouse = mouse.position
+				drag_origin_center = camera.center
+				get_viewport().set_input_as_handled()
+			elif not mouse.pressed and dragging:
+				dragging = false
+				_schedule_overlays()
+				# Consume the release before port selection emits. In onboarding,
+				# that signal immediately changes scene and detaches this Control.
+				var viewport := get_viewport()
+				if viewport != null:
+					viewport.set_input_as_handled()
+				if drag_distance < 5.0 and chart.has_point(mouse.position):
+					_click_chart(mouse.position)
+		elif (
+			mouse.pressed
+			and chart.has_point(mouse.position)
+			and mouse.button_index == MOUSE_BUTTON_WHEEL_UP
+		):
+			_zoom_at(mouse.position, 1)
+			_refresh_hover_readout(true)
 			get_viewport().set_input_as_handled()
+		elif (
+			mouse.pressed
+			and chart.has_point(mouse.position)
+			and mouse.button_index == MOUSE_BUTTON_WHEEL_DOWN
+		):
+			_zoom_at(mouse.position, -1)
+			_refresh_hover_readout(true)
+			get_viewport().set_input_as_handled()
+		return
+	if not event is InputEventKey:
+		return
+	var key := event as InputEventKey
+	if not key.pressed or key.echo:
+		return
+	if key.keycode == KEY_ESCAPE or key.is_action_pressed("ui_cancel"):
+		if mode == Mode.HOME_PORT_PICK:
+			home_port_cancelled.emit()
+		else:
+			close_requested.emit()
+		get_viewport().set_input_as_handled()
+	elif key.keycode == KEY_H:
+		_home()
+		get_viewport().set_input_as_handled()
+	elif key.keycode == KEY_W:
+		_toggle_overlay("weather")
+		get_viewport().set_input_as_handled()
+	elif key.keycode == KEY_F:
+		_toggle_overlay("fishing")
+		get_viewport().set_input_as_handled()
+	elif key.keycode == KEY_N:
+		_set_preset(ChartLayerManager.Preset.NAVIGATION)
+		get_viewport().set_input_as_handled()
 
 
 func _draw() -> void:
-	var draw_started := Time.get_ticks_usec()
-	var panel := Rect2(
-		Vector2(MARGIN, MARGIN),
-		get_viewport_rect().size - Vector2(MARGIN * 2.0, MARGIN * 2.0)
-	)
+	var viewport := get_viewport_rect().size
+	draw_rect(Rect2(Vector2.ZERO, viewport), Color(0.015, 0.025, 0.03, 0.98))
 	var chart := _chart_rect()
-	draw_rect(panel, C_SEA)
-	draw_rect(panel, C_BORDER, false, 2.0)
-	draw_rect(chart, Color(0.025, 0.045, 0.095, 1.0))
-	draw_rect(chart, Color(0.28, 0.40, 0.64, 0.45), false, 1.0)
-	var bounds := _camera.world_bounds(chart.size)
-	_last_ctx = {
+	draw_rect(chart.grow(1.0), Color(0.55, 0.56, 0.49, 1.0), false, 1.0)
+	var bounds := camera.world_bounds(chart.size)
+	last_ctx = {
 		"chart_rect": chart,
 		"world_bounds": bounds,
-		"world_span": _camera.span,
-		"cpx": chart.position.x,
-		"cpy": chart.position.y,
-		"cpw": chart.size.x,
-		"cph": chart.size.y,
-		"wx_min": bounds.position.x,
-		"wx_max": bounds.end.x,
-		"wz_min": bounds.position.y,
-		"wz_max": bounds.end.y,
-		"hover_pos": _hover_pos,
-		"hover_inside": chart.has_point(_hover_pos),
+		"world_span": camera.span,
 	}
-	_renderer.render(self, _last_ctx, _layers, _nav, _selected_port, _route_waypoints)
-	_draw_compass(Vector2(chart.end.x - 38.0, chart.position.y + 38.0))
-	_draw_status(panel)
-	_last_draw_usec = Time.get_ticks_usec() - draw_started
-	_draw_count += 1
+	renderer.render(self, last_ctx, layers, nav, selected_port)
+	_draw_compass(chart)
+	_draw_scale(chart, bounds)
+	_draw_status(chart)
 
 
-func _build_controls() -> void:
+func _build_toolbar() -> void:
 	var bar := HBoxContainer.new()
-	bar.name = "ChartControls"
-	bar.position = Vector2(MARGIN + 14.0, MARGIN + 10.0)
-	bar.size = Vector2(get_viewport_rect().size.x - MARGIN * 2.0 - 28.0, 32.0)
+	bar.name = "ChartToolbar"
+	bar.set_anchors_preset(Control.PRESET_TOP_WIDE)
+	bar.offset_left = FRAME
+	bar.offset_right = -FRAME
+	bar.offset_top = 13.0
+	bar.offset_bottom = 48.0
 	bar.add_theme_constant_override("separation", 8)
 	add_child(bar)
 
-	var title := Label.new()
-	title.text = "MARINE CHART"
-	title.add_theme_font_size_override("font_size", 16)
-	title.add_theme_color_override("font_color", Color(0.96, 0.86, 0.12, 0.95))
-	bar.add_child(title)
+	title_label = Label.new()
+	title_label.text = "NAVIGATION CHART"
+	title_label.custom_minimum_size.x = 190.0
+	title_label.add_theme_font_size_override("font_size", 18)
+	title_label.add_theme_color_override("font_color", Color(0.92, 0.86, 0.62))
+	bar.add_child(title_label)
 
-	_preset_select = OptionButton.new()
-	for preset_name in ChartLayerManagerClass.PRESET_NAMES:
-		_preset_select.add_item(preset_name)
-	_preset_select.select(_layers.preset)
-	_preset_select.item_selected.connect(_on_preset_selected)
-	bar.add_child(_preset_select)
+	hint_label = Label.new()
+	hint_label.visible = false
+	hint_label.text = "Click a port to begin"
+	hint_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	hint_label.add_theme_font_size_override("font_size", 15)
+	hint_label.add_theme_color_override("font_color", Color(0.90, 0.92, 0.82))
+	bar.add_child(hint_label)
 
-	var home := Button.new()
-	home.text = "Home"
-	home.pressed.connect(_home)
-	bar.add_child(home)
-	var clear_route := Button.new()
-	clear_route.text = "Clear route"
-	clear_route.tooltip_text = "Right-click chart to add waypoints"
-	clear_route.pressed.connect(_clear_route)
-	bar.add_child(clear_route)
 	for spec in [
-		["Weather", "weather"],
-		["Fishing", "fishing"],
-		["Traffic", "traffic"],
-		["Routes", "routes"],
-		["Approach", "approaches"],
-		["Labels", "annotations"],
+		["Navigate", ChartLayerManager.Preset.NAVIGATION],
+		["Harbour", ChartLayerManager.Preset.HARBOUR],
 	]:
-		var button := CheckButton.new()
-		var layer_name := str(spec[1])
+		var button := Button.new()
 		button.text = str(spec[0])
-		button.button_pressed = _layers.is_visible(layer_name)
-		button.toggled.connect(_on_layer_toggled.bind(layer_name))
-		_layer_buttons[layer_name] = button
+		button.toggle_mode = true
+		button.pressed.connect(_set_preset.bind(int(spec[1])))
+		mode_buttons.append(button)
 		bar.add_child(button)
 
+	weather_button = Button.new()
+	weather_button.text = "Weather"
+	weather_button.toggle_mode = true
+	weather_button.pressed.connect(_toggle_overlay.bind("weather"))
+	bar.add_child(weather_button)
 
-func _on_preset_selected(index: int) -> void:
-	_layers.apply_preset(index)
-	for layer_name in _layer_buttons:
-		(_layer_buttons[layer_name] as CheckButton).set_pressed_no_signal(
-			_layers.is_visible(layer_name)
-		)
-	_mark_dirty()
+	fishing_button = Button.new()
+	fishing_button.text = "Fishing"
+	fishing_button.toggle_mode = true
+	fishing_button.pressed.connect(_toggle_overlay.bind("fishing"))
+	bar.add_child(fishing_button)
 
+	center_button = Button.new()
+	center_button.text = "Center"
+	center_button.pressed.connect(_home)
+	bar.add_child(center_button)
 
-func _on_layer_toggled(shown: bool, layer_name: String) -> void:
-	_layers.set_visible(layer_name, shown)
-	_mark_dirty()
-
-
-func _set_layer(layer_name: String, shown: bool) -> void:
-	if _layer_buttons.has(layer_name):
-		(_layer_buttons[layer_name] as CheckButton).set_pressed_no_signal(shown)
-	_mark_dirty()
-
-
-func get_debug_stats() -> Dictionary:
-	var weather_stats := _renderer.weather_adapter.get_debug_stats() as Dictionary
-	return {
-		"draw_usec": _last_draw_usec,
-		"draw_count": _draw_count,
-		"weather_cache_cells": weather_stats.get("cache_cells", 0),
-		"weather_cache_rebuilds": weather_stats.get("cache_rebuilds", 0),
-		"preset": ChartLayerManagerClass.PRESET_NAMES[_layers.preset],
-	}
+	close_button = Button.new()
+	close_button.text = "Close"
+	close_button.pressed.connect(func() -> void: close_requested.emit())
+	bar.add_child(close_button)
+	_refresh_mode_buttons()
 
 
-func _capture_nav() -> void:
-	_nav = ChartNavSnapshotClass.capture(get_tree())
-	if not _route_waypoints.is_empty():
-		_nav.set_waypoint(_route_waypoints[0])
+func _apply_mode_ui() -> void:
+	var picking := mode == Mode.HOME_PORT_PICK
+	if title_label != null:
+		title_label.text = "CHOOSE YOUR HOME PORT" if picking else "NAVIGATION CHART"
+	if hint_label != null:
+		hint_label.visible = picking
+	for index in range(mode_buttons.size()):
+		mode_buttons[index].visible = not picking or index == 0
+	if center_button != null:
+		center_button.visible = not picking
+	if close_button != null:
+		close_button.visible = not picking
 
 
-func _clear_route() -> void:
-	_route_waypoints.clear()
-	_capture_nav()
-	_mark_dirty()
+func _set_preset(next: int) -> void:
+	layers.apply_preset(next)
+	if mode == Mode.HOME_PORT_PICK:
+		layers.set_visible("routes", false)
+		layers.set_visible("approaches", false)
+	_refresh_mode_buttons()
+	_persist_chart_settings()
+	_refresh_hover_readout(true)
+	_schedule_overlays()
+	queue_redraw()
 
 
-func _screen_to_world(screen: Vector2) -> Vector3:
-	var chart := _chart_rect()
-	var bounds := _camera.world_bounds(chart.size)
-	var uv := (screen - chart.position) / chart.size
-	return Vector3(
-		lerpf(bounds.position.x, bounds.end.x, uv.x),
-		0.0,
-		lerpf(bounds.end.y, bounds.position.y, uv.y),
+func _refresh_mode_buttons() -> void:
+	if mode_buttons.size() >= 2:
+		mode_buttons[0].set_pressed_no_signal(layers.preset == ChartLayerManager.Preset.NAVIGATION)
+		mode_buttons[1].set_pressed_no_signal(layers.preset == ChartLayerManager.Preset.HARBOUR)
+	if weather_button != null:
+		weather_button.set_pressed_no_signal(layers.is_visible("weather"))
+	if fishing_button != null:
+		fishing_button.set_pressed_no_signal(layers.is_visible("fishing"))
+
+
+func _toggle_overlay(layer_name: String) -> void:
+	layers.toggle(layer_name)
+	_refresh_mode_buttons()
+	_persist_chart_settings()
+	_refresh_hover_readout(true)
+	_schedule_overlays()
+	queue_redraw()
+
+
+func _load_layer_preferences() -> void:
+	var settings := get_node_or_null("/root/GameSettings")
+	if settings == null:
+		return
+	layers.set_overlay_preferences(
+		bool(settings.get("chart_weather_enabled")),
+		bool(settings.get("chart_fishing_enabled")),
 	)
+	var saved_profile := int(settings.get("chart_profile"))
+	layers.apply_preset(
+		ChartLayerManager.Preset.HARBOUR
+		if saved_profile == ChartLayerManager.Preset.HARBOUR
+		else ChartLayerManager.Preset.NAVIGATION
+	)
+	_refresh_mode_buttons()
+
+
+func _persist_chart_settings() -> void:
+	var settings := get_node_or_null("/root/GameSettings")
+	if settings == null:
+		return
+	settings.set("chart_weather_enabled", layers.is_visible("weather"))
+	settings.set("chart_fishing_enabled", layers.is_visible("fishing"))
+	settings.set("chart_profile", layers.preset)
+	if settings.has_method("save_settings"):
+		settings.call("save_settings")
+
+
+func _click_chart(screen: Vector2) -> void:
+	var hit := renderer.hit_test_port(screen, last_ctx, 26.0 if mode == Mode.HOME_PORT_PICK else 18.0)
+	if hit.is_empty():
+		if mode == Mode.NAVIGATION:
+			selected_port = ""
+			queue_redraw()
+		return
+	selected_port = hit
+	if mode == Mode.HOME_PORT_PICK:
+		home_port_confirmed.emit(hit)
+	else:
+		port_selected.emit(hit)
+		queue_redraw()
 
 
 func _home() -> void:
-	var points: Array[Vector3] = []
-	var registry := get_node_or_null("/root/ContractRegistry")
-	if registry != null:
-		for pid in registry.call("get_port_ids"):
-			var pos := registry.call("get_port_position", str(pid)) as Vector3
-			if pos.is_finite():
-				points.append(pos)
-	_camera.home(_nav.ship_position, points)
-	_mark_dirty()
-
-
-func _select_port(screen_position: Vector2) -> void:
-	var registry := get_node_or_null("/root/ContractRegistry")
-	if registry == null or _last_ctx.is_empty():
+	if data == null:
 		return
-	for pid_raw in registry.call("get_port_ids"):
-		var pid := str(pid_raw)
-		var info := registry.call("get_port_info", pid) as Dictionary
-		var pos := info.get("position", Vector3(INF, INF, INF)) as Vector3
-		if not pos.is_finite():
-			continue
-		var polygon := _renderer.screen_polygon(pid, pos, info, _last_ctx)
-		if polygon.size() >= 3 and Geometry2D.is_point_in_polygon(screen_position, polygon):
-			_selected_port = "" if _selected_port == pid else pid
-			_mark_dirty()
-			return
-	_selected_port = ""
-	_mark_dirty()
+	camera.home(nav.ship_position, data.port_positions())
+	_schedule_overlays()
+	queue_redraw()
 
 
-func _draw_status(panel: Rect2) -> void:
-	var status_y := panel.end.y - 13.0
-	var values: Array[String] = [
-		"HDG %s" % _degrees(_nav.heading_deg if _nav.has_ship() else NAN),
-		"COG %s" % _degrees(_nav.course_deg),
-		"SOG %.1f kt" % _nav.speed_knots,
-		"BRG %s" % _degrees(_nav.bearing_deg),
-		"LEE %s" % _signed_degrees(_nav.leeway_deg),
-		"WIND %s %.1f kt" % [_degrees(_nav.wind_direction_deg), _nav.wind_speed_knots],
-		"FUEL %s" % ("%.0f%%" % (_nav.fuel_fraction * 100.0) if is_finite(_nav.fuel_fraction) else "—"),
-		"TIME %s" % _nav.time_label,
-		"SCALE %s" % _distance(_camera.span),
-	]
-	draw_string(
-		ThemeDB.fallback_font, Vector2(panel.position.x + 14.0, status_y),
-		"    ".join(values), HORIZONTAL_ALIGNMENT_LEFT, -1, 11,
-		Color(0.76, 0.86, 0.94, 0.92)
-	)
+func _zoom_at(screen: Vector2, steps: int) -> void:
+	var chart := _chart_rect()
+	var before := _screen_to_world(screen)
+	camera.zoom(steps)
+	var bounds := camera.world_bounds(chart.size)
+	var uv := (screen - chart.position) / chart.size
+	var after := bounds.position + uv * bounds.size
+	camera.center += before - after
+	_schedule_overlays()
+	queue_redraw()
 
 
-func _draw_compass(center: Vector2) -> void:
-	draw_circle(center, 25.0, Color(0.03, 0.05, 0.14, 0.88))
-	draw_arc(center, 24.0, 0.0, TAU, 32, Color(0.48, 0.62, 0.82, 0.62), 1.0)
-	draw_line(center, center + Vector2(0.0, -19.0), Color(0.96, 0.30, 0.25), 2.0)
-	draw_string(
-		ThemeDB.fallback_font, center + Vector2(-4.0, -7.0), "N",
-		HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color(0.96, 0.86, 0.12)
-	)
+func _schedule_overlays() -> void:
+	overlays_dirty = true
+	overlay_debounce = OVERLAY_DEBOUNCE_S
+
+
+func _capture_nav() -> void:
+	nav = ChartNavSnapshot.capture(get_tree())
+
+
+func _camera_bounds() -> Rect2:
+	return camera.world_bounds(_chart_rect().size)
 
 
 func _chart_rect() -> Rect2:
 	var size := get_viewport_rect().size
 	return Rect2(
-		Vector2(MARGIN + 14.0, MARGIN + HEADER_H),
+		Vector2(FRAME, TOP_H),
 		Vector2(
-			maxf(size.x - (MARGIN + 14.0) * 2.0, 1.0),
-			maxf(size.y - MARGIN * 2.0 - HEADER_H - STATUS_H, 1.0)
-		)
+			maxf(size.x - FRAME * 2.0, 1.0),
+			maxf(size.y - TOP_H - BOTTOM_H, 1.0),
+		),
 	)
 
 
-func _mark_dirty() -> void:
-	_redraw_elapsed = REDRAW_INTERVAL_S
-	queue_redraw()
+func _screen_to_world(screen: Vector2) -> Vector2:
+	var chart := _chart_rect()
+	var bounds := camera.world_bounds(chart.size)
+	return bounds.position + (screen - chart.position) / chart.size * bounds.size
 
 
-static func _degrees(value: float) -> String:
-	return "%03d°" % int(round(value)) if is_finite(value) else "—"
+func _refresh_hover_readout(force: bool = false) -> void:
+	if not _chart_rect().has_point(hover_screen):
+		hover_rows.clear()
+		return
+	if (
+		not force
+		and hover_screen.distance_to(hover_sample_screen) < 4.0
+		and hover_layer_revision == layers.revision
+	):
+		return
+	hover_sample_screen = hover_screen
+	hover_layer_revision = layers.revision
+	# Snapshot once per cursor move/layer change. Nav refreshes and chart redraws
+	# reuse these strings instead of continuously re-sampling weather.
+	hover_rows = renderer.overlay_readout(
+		_screen_to_world(hover_screen),
+		layers,
+		WeatherField.current_game_time(),
+	)
 
 
-static func _signed_degrees(value: float) -> String:
-	return "%+.1f°" % value if is_finite(value) else "—"
+func _draw_compass(chart: Rect2) -> void:
+	var center := chart.position + Vector2(34.0, 35.0)
+	draw_circle(center, 22.0, Color(0.94, 0.93, 0.84, 0.90))
+	draw_arc(center, 22.0, 0.0, TAU, 32, Color(0.10, 0.18, 0.20), 1.0)
+	draw_line(center, center + Vector2(0.0, -17.0), Color(0.78, 0.12, 0.10), 2.0)
+	draw_string(
+		ThemeDB.fallback_font,
+		center + Vector2(-4.0, -4.0),
+		"N",
+		HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color(0.08, 0.14, 0.15),
+	)
 
 
-static func _distance(metres: float) -> String:
+func _draw_scale(chart: Rect2, bounds: Rect2) -> void:
+	var metres_per_px := bounds.size.x / chart.size.x
+	var target_m := metres_per_px * 100.0
+	var nice := _nice_distance(target_m)
+	var width := nice / metres_per_px
+	var origin := chart.position + Vector2(18.0, chart.size.y - 22.0)
+	draw_line(origin, origin + Vector2(width, 0.0), Color(0.08, 0.14, 0.15), 2.0)
+	draw_line(origin, origin + Vector2(0.0, -5.0), Color(0.08, 0.14, 0.15), 2.0)
+	draw_line(origin + Vector2(width, 0.0), origin + Vector2(width, -5.0), Color(0.08, 0.14, 0.15), 2.0)
+	draw_string(
+		ThemeDB.fallback_font,
+		origin + Vector2(0.0, -7.0),
+		_format_distance(nice),
+		HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color(0.08, 0.14, 0.15),
+	)
+
+
+func _draw_status(chart: Rect2) -> void:
+	var text := ""
+	if mode == Mode.HOME_PORT_PICK:
+		text = "CLICK A PORT TO BEGIN   ·   ESC BACK"
+	else:
+		text = "HDG %s   COG %s   SOG %.1f kt   WIND %s %.1f kt   FUEL %s   TIME %s" % [
+			_format_degrees(nav.heading_deg if nav.has_ship() else NAN),
+			_format_degrees(nav.course_deg),
+			nav.speed_knots,
+			_format_degrees(nav.wind_direction_deg),
+			nav.wind_speed_knots,
+			("%.0f%%" % (nav.fuel_fraction * 100.0)) if is_finite(nav.fuel_fraction) else "—",
+			nav.time_label,
+		]
+	draw_string(
+		ThemeDB.fallback_font,
+		Vector2(chart.position.x, chart.end.y + 17.0),
+		text,
+		HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color(0.76, 0.82, 0.78),
+	)
+	if not hover_rows.is_empty():
+		draw_string(
+			ThemeDB.fallback_font,
+			Vector2(chart.position.x, chart.end.y + 35.0),
+			"   ·   ".join(hover_rows),
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color(0.66, 0.74, 0.70),
+		)
+
+
+static func _nice_distance(value: float) -> float:
+	var power := pow(10.0, floorf(log(value) / log(10.0)))
+	var normalized := value / power
+	var step := 1.0
+	if normalized >= 5.0:
+		step = 5.0
+	elif normalized >= 2.0:
+		step = 2.0
+	return step * power
+
+
+static func _format_distance(metres: float) -> String:
 	return "%.0f m" % metres if metres < 1852.0 else "%.1f nm" % (metres / 1852.0)
+
+
+static func _format_degrees(value: float) -> String:
+	return "%03d°" % roundi(value) if is_finite(value) else "—"

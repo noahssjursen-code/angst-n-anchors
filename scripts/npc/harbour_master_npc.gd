@@ -56,6 +56,13 @@ func _on_interact() -> void:
 		_dialogue.show_panel()
 		open_ui()
 		return
+	## Singleplayer: local ledger is authoritative — never wait on / wipe from server.
+	var config := get_node_or_null("/root/ServerConfig")
+	if config == null or not bool(config.get("is_multiplayer_mode")):
+		_show_main()
+		_dialogue.show_panel()
+		open_ui()
+		return
 	VesselSync.refresh_for_ui(session, func() -> void:
 		_show_main()
 		_dialogue.show_panel()

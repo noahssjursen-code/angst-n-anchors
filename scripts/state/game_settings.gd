@@ -29,6 +29,12 @@ var max_fps:        int        = 120
 var mouse_sensitivity: float = 1.0           # multiplier applied to player.gd's base sensitivity
 var invert_mouse_y:    bool  = false
 
+# ── Chart / helm minimap ──────────────────────────────────────────────────────
+var chart_weather_enabled: bool = false
+var chart_fishing_enabled: bool = false
+var chart_profile: int = 0
+var minimap_collapsed: bool = false
+
 # ── Session world context ────────────────────────────────────────────────────
 ## Offline default or authoritative server-selected generation seed/version.
 ## These are intentionally not written to settings.cfg.
@@ -48,9 +54,9 @@ func _ready() -> void:
 	apply_all()
 
 
-func load_settings() -> void:
+func load_settings(path: String = CFG_PATH) -> void:
 	var cfg := ConfigFile.new()
-	var err := cfg.load(CFG_PATH)
+	var err := cfg.load(path)
 	if err != OK:
 		return
 	master_volume     = float(cfg.get_value("audio",    "master",        master_volume))
@@ -67,6 +73,10 @@ func load_settings() -> void:
 		max_fps = saved_max_fps
 	mouse_sensitivity = float(cfg.get_value("input",   "mouse_sens",    mouse_sensitivity))
 	invert_mouse_y    = bool(cfg.get_value("input",    "invert_mouse_y", invert_mouse_y))
+	chart_weather_enabled = bool(cfg.get_value("chart", "weather", chart_weather_enabled))
+	chart_fishing_enabled = bool(cfg.get_value("chart", "fishing", chart_fishing_enabled))
+	chart_profile = int(cfg.get_value("chart", "profile", chart_profile))
+	minimap_collapsed = bool(cfg.get_value("chart", "minimap_collapsed", minimap_collapsed))
 
 	# Override saved setting if Godot was launched with windowed CLI flags
 	var force_windowed := false
@@ -78,7 +88,7 @@ func load_settings() -> void:
 		window_mode = WindowMode.WINDOWED
 
 
-func save_settings() -> void:
+func save_settings(path: String = CFG_PATH) -> void:
 	var cfg := ConfigFile.new()
 	cfg.set_value("audio",    "master",         master_volume)
 	cfg.set_value("audio",    "sfx",            sfx_volume)
@@ -89,7 +99,11 @@ func save_settings() -> void:
 	cfg.set_value("graphics", "fps_cap_user_selected", true)
 	cfg.set_value("input",    "mouse_sens",     mouse_sensitivity)
 	cfg.set_value("input",    "invert_mouse_y", invert_mouse_y)
-	cfg.save(CFG_PATH)
+	cfg.set_value("chart",    "weather",        chart_weather_enabled)
+	cfg.set_value("chart",    "fishing",        chart_fishing_enabled)
+	cfg.set_value("chart",    "profile",        chart_profile)
+	cfg.set_value("chart",    "minimap_collapsed", minimap_collapsed)
+	cfg.save(path)
 
 
 # ── Apply ─────────────────────────────────────────────────────────────────────

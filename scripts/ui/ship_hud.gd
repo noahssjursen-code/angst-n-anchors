@@ -147,7 +147,7 @@ func _draw_wind(c: Vector2) -> void:
 	# "wind from astern" points down on the dial.
 	var bow_h := NavigationAxes.vessel_bow_horizontal(_boat)
 	if bow_h.length_squared() < 1e-6:
-		bow_h = Vector2(0.0, 1.0)
+		bow_h = Vector2(0.0, -1.0)
 	else:
 		bow_h = bow_h.normalized()
 	# Local-wind vector: wind component along/across bow.
@@ -155,8 +155,8 @@ func _draw_wind(c: Vector2) -> void:
 	# Wind "FROM" convention — flip so the arrow points the way the wind is
 	# coming from, matching how mariners describe wind.
 	wind_xz = -wind_xz
-	# Bow points local +Y on the dial; right of the ship is local +X.
-	var bow_perp := Vector2(-bow_h.y, bow_h.x)
+	# Bow points local +Y on the dial; starboard (right) is clockwise from bow.
+	var bow_perp := Vector2(bow_h.y, -bow_h.x)
 	var local_x  := wind_xz.dot(bow_perp)
 	var local_y  := wind_xz.dot(bow_h)
 	var dial_dir := Vector2(local_x, -local_y)  # screen Y is inverted from ship Y

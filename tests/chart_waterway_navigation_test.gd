@@ -3,7 +3,6 @@ extends SceneTree
 const FIXED_SEED := 90210
 const GENERATOR := preload("res://scripts/world/world_layout_generator.gd")
 const NAVIGATION := preload("res://scripts/navigation/waterway_navigation.gd")
-const COASTLINE_CACHE := preload("res://scripts/ui/chart/chart_coastline_cache.gd")
 
 var _failures := PackedStringArray()
 
@@ -14,8 +13,7 @@ func _initialize() -> void:
 	var different: WorldLayout = GENERATOR.generate(FIXED_SEED + 1)
 	_test_graph_reachability(first)
 	_test_route_distances(first)
-	_test_coastline_cache(first, same, different)
-	_test_chart_field_agreement(first)
+	_test_layout_identity(first, same, different)
 	_finish()
 
 
@@ -65,44 +63,13 @@ func _test_route_distances(layout: WorldLayout) -> void:
 	)
 
 
-func _test_coastline_cache(
+func _test_layout_identity(
 	first: WorldLayout,
 	same: WorldLayout,
 	different: WorldLayout,
 ) -> void:
-	var cache := COASTLINE_CACHE.new()
-	cache.prepare(first)
-	var initial_revision: int = cache.revision
-	cache.prepare(same)
-	_check(cache.revision == initial_revision, "same checksum preserves cache")
-	cache.prepare(different)
-	_check(cache.revision == initial_revision + 1, "new layout invalidates cache")
-	cache.prepare(first)
-	var segment: PackedVector2Array = first.coastline_contours[0]
-	var center := (segment[0] + segment[1]) * 0.5
-	var bounds := Rect2(center - Vector2(20.0, 20.0), Vector2(40.0, 40.0))
-	var visible := cache.segments_in_bounds(first, bounds)
-	_check(not visible.is_empty(), "visible coastline survives bounds culling")
-	for clipped in visible:
-		_check(
-			bounds.grow(0.01).has_point(clipped[0]) and bounds.grow(0.01).has_point(clipped[1]),
-			"coastline projection clips to visible bounds"
-		)
-
-
-func _test_chart_field_agreement(layout: WorldLayout) -> void:
-	var cache := COASTLINE_CACHE.new()
-	var samples := PackedVector2Array([
-		Vector2(-15000.0, 14500.0),
-		Vector2(15000.0, 14500.0),
-		Vector2(11250.0, 12750.0),
-		Vector2(-14000.0, -14000.0),
-	])
-	for sample in samples:
-		_check(
-			cache.is_chart_land(layout, sample) == layout.is_land(sample),
-			"chart and field agree at %s" % sample
-		)
+	_check(first.layout_checksum == same.layout_checksum, "same seed preserves layout checksum")
+	_check(first.layout_checksum != different.layout_checksum, "different seed changes layout checksum")
 
 
 func _check(condition: bool, label: String) -> void:

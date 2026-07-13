@@ -472,7 +472,9 @@ func _apply_weather_lighting() -> void:
 func _apply_sun(tod: float, daylight: float, cloud: float, storm: float) -> void:
 	var elev_norm := -cos(tod * TAU)
 	if _sun != null:
-		_sun.rotation_degrees = Vector3(-elev_norm * 55.0, tod * 360.0 - 120.0, 0.0)
+		# Sunrise +X (east), noon +Z (south), sunset −X (west).
+		# Matches NavigationAxes / chart (+X east, −Z north).
+		_sun.rotation_degrees = Vector3(-elev_norm * 55.0, 180.0 - tod * 360.0, 0.0)
 		_sun.light_energy     = lerpf(0.03, 1.6, daylight) * lerpf(1.0, 0.10, cloud)
 		_sun.light_color      = (
 			Color(1.0, 0.68, 0.42)
@@ -695,7 +697,11 @@ func _celestial_dir(tod_offset: float) -> Vector3:
 	var tod     := float(weather.get("time_of_day")) if weather else 0.42
 	var t       := fmod(tod + tod_offset, 1.0)
 	var elev    := -cos(t * TAU)
-	var rot     := Basis.from_euler(Vector3(deg_to_rad(-elev * 55.0), deg_to_rad(t * 360.0 - 120.0), 0.0))
+	var rot     := Basis.from_euler(Vector3(
+		deg_to_rad(-elev * 55.0),
+		deg_to_rad(180.0 - t * 360.0),
+		0.0,
+	))
 	return -(rot * Vector3(0.0, 0.0, -1.0))
 
 

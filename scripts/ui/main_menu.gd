@@ -4,11 +4,14 @@ extends Control
 ## Includes an orbiting 3D cinematic background showcasing Testvik in random weather!
 
 const WORLD_SCENE := "res://scenes/world.tscn"
+const ChartPreviewBootstrapScript := preload("res://scripts/ui/chart/chart_preview_bootstrap.gd")
 
-enum Page { MODE_SELECT, SINGLEPLAYER, MULTIPLAYER, CREATOR }
+enum Page { MODE_SELECT, SINGLEPLAYER, MULTIPLAYER, CREATOR, HOME_PORT }
 
 var _page: Page = Page.MODE_SELECT
 var _new_game_warns: bool = false
+var _pending_display_name: String = ""
+var _pending_appearance: CharacterAppearance = null
 
 # Live Server Ping & DB Captain Variables
 var _active_pings: Dictionary = {}
@@ -22,6 +25,9 @@ var _mode_select_root: CenterContainer = null
 var _singleplayer_root: CenterContainer = null
 var _multiplayer_root: CenterContainer = null
 var _creator: CharacterCreatorPanel = null
+var _home_port_chart: MapOverlay = null
+var _home_port_layer: CanvasLayer = null
+var _chart_bootstrap = ChartPreviewBootstrapScript.new()
 
 # Buttons to update names dynamically
 var _sp_continue_btn: Button = null
@@ -64,7 +70,21 @@ func _ready() -> void:
 	_creator.confirmed.connect(_on_creator_confirmed)
 	_creator.cancelled.connect(_on_creator_cancelled)
 	add_child(_creator)
-	
+
+	_home_port_layer = CanvasLayer.new()
+	_home_port_layer.name = "HomePortChartLayer"
+	_home_port_layer.layer = 25
+	_home_port_layer.visible = false
+	add_child(_home_port_layer)
+
+	_home_port_chart = MapOverlay.new()
+	_home_port_chart.name = "HomePortChart"
+	_home_port_chart.visible = false
+	_home_port_chart.process_mode = Node.PROCESS_MODE_ALWAYS
+	_home_port_chart.home_port_confirmed.connect(_on_home_port_confirmed)
+	_home_port_chart.home_port_cancelled.connect(_on_home_port_cancelled)
+	_home_port_layer.add_child(_home_port_chart)
+
 	_show_page(Page.MODE_SELECT)
 
 
@@ -421,6 +441,10 @@ func _show_page(page: Page) -> void:
 	_singleplayer_root.visible = page == Page.SINGLEPLAYER
 	_multiplayer_root.visible = page == Page.MULTIPLAYER
 	_creator.visible = page == Page.CREATOR
+	if _home_port_layer != null:
+		_home_port_layer.visible = page == Page.HOME_PORT
+	if page != Page.HOME_PORT and _home_port_chart != null and _home_port_chart.is_home_port_pick_mode():
+		_teardown_home_port_chart()
 	
 	var config := get_node_or_null("/root/ServerConfig")
 	if config != null:
@@ -464,12 +488,13 @@ func _refresh_continue_states() -> void:
 func _show_creator(new_voyage: bool) -> void:
 	_page = Page.CREATOR
 	_new_game_warns = new_voyage
-	
+
 	_mode_select_root.visible = false
 	_singleplayer_root.visible = false
 	_multiplayer_root.visible = false
 	_creator.visible = true
-	
+	_teardown_home_port_chart()
+
 	var session := get_node_or_null("/root/PlayerSession")
 	if new_voyage:
 		_creator.open_with_existing(null)
@@ -478,6 +503,10 @@ func _show_creator(new_voyage: bool) -> void:
 
 
 func _on_continue() -> void:
+	_ensure_menu_offline()
+	var session := get_node_or_null("/root/PlayerSession")
+	if session != null and session.has_method("begin_offline_voyage"):
+		session.call("begin_offline_voyage")
 	_go_to_world()
 
 
@@ -507,16 +536,66 @@ func _on_creator_confirmed(display_name: String, appearance: CharacterAppearance
 	if is_mp:
 		# Write New Captain profile directly to Postgres REST Server
 		_create_postgres_captain(display_name, appearance)
-	else:
-		# Traditional Local Singleplayer Save
-		var session := get_node_or_null("/root/PlayerSession")
-		if session != null:
-			if _new_game_warns:
-				session.begin_new_captain(display_name, appearance)
-			else:
-				session.set_display_name(display_name)
-				session.set_appearance(appearance)
-		_go_to_world()
+		return
+
+	# Traditional Local Singleplayer Save
+	var session := get_node_or_null("/root/PlayerSession")
+	if session == null:
+		return
+	if session.has_method("begin_offline_voyage"):
+		session.call("begin_offline_voyage")
+	if _new_game_warns:
+		_pending_display_name = display_name
+		_pending_appearance = appearance
+		_show_home_port_picker()
+		return
+	session.set_display_name(display_name)
+	session.set_appearance(appearance)
+	_go_to_world()
+
+
+func _show_home_port_picker() -> void:
+	_page = Page.HOME_PORT
+	_mode_select_root.visible = false
+	_singleplayer_root.visible = false
+	_multiplayer_root.visible = false
+	_creator.visible = false
+
+	var seed_val := 42
+	var settings := get_node_or_null("/root/GameSettings")
+	if settings != null:
+		seed_val = int(settings.get("map_generation_seed"))
+
+	var preview_snapshot = _chart_bootstrap.activate(self, seed_val)
+	if _home_port_layer != null:
+		_home_port_layer.visible = true
+	_home_port_chart.set_data_snapshot(preview_snapshot)
+	_home_port_chart.enter_home_port_pick_mode()
+
+
+func _teardown_home_port_chart() -> void:
+	if _home_port_chart != null and _home_port_chart.is_home_port_pick_mode():
+		_home_port_chart.exit_home_port_pick_mode()
+	if _home_port_layer != null:
+		_home_port_layer.visible = false
+	_chart_bootstrap.deactivate()
+
+
+func _on_home_port_cancelled() -> void:
+	_pending_display_name = ""
+	_pending_appearance = null
+	_teardown_home_port_chart()
+	_show_creator(true)
+
+
+func _on_home_port_confirmed(port_id: String) -> void:
+	var session := get_node_or_null("/root/PlayerSession")
+	if session != null:
+		session.begin_new_captain(_pending_display_name, _pending_appearance, port_id)
+	_pending_display_name = ""
+	_pending_appearance = null
+	_teardown_home_port_chart()
+	_go_to_world()
 
 
 func _on_quit() -> void:
@@ -754,7 +833,12 @@ func _load_postgres_captains(http_host: String, http_port: int) -> void:
 			_mp_captains_container.add_child(row)
 			
 			var name_btn := Button.new()
-			name_btn.text = "%s (%s Marks)" % [cap["display_name"], PlayerSession.format_money(int(cap["marks"]))]
+			var visible_id := str(cap.get("id", "")).substr(0, 8)
+			name_btn.text = "%s · %s (%s)" % [
+				cap["display_name"],
+				visible_id,
+				PlayerSession.format_money(int(cap["marks"])),
+			]
 			name_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 			name_btn.alignment = HORIZONTAL_ALIGNMENT_LEFT
 			row.add_child(name_btn)
@@ -961,6 +1045,7 @@ func _ensure_menu_offline() -> void:
 
 
 func _go_to_world() -> void:
+	_teardown_home_port_chart()
 	var config := get_node_or_null("/root/ServerConfig")
 	var is_mp := config != null and bool(config.get("is_multiplayer_mode"))
 	var network := get_node_or_null("/root/NetworkManager")

@@ -9,6 +9,9 @@ const WORKBOAT_SCRIPT := "res://scripts/ship/vessels/workboat.gd"
 const TRAWLER_SMALL_ID := "fishing_trawler_small"
 const TRAWLER_SMALL_SCENE := "res://scenes/vessels/fishing_trawler_small.tscn"
 const TRAWLER_SMALL_SCRIPT := "res://scripts/ship/vessels/fishing_trawler_small.gd"
+const PASSENGER_CATAMARAN_ID := "passenger_catamaran"
+const PASSENGER_CATAMARAN_SCENE := "res://scenes/vessels/passenger_catamaran.tscn"
+const PASSENGER_CATAMARAN_SCRIPT := "res://scripts/ship/vessels/passenger_catamaran.gd"
 
 
 static func instantiate(vessel_id: String = TRAWLER_SMALL_ID, brick_layout: Dictionary = {}) -> BoatBody:
@@ -69,7 +72,7 @@ static func default_brick_layout(vessel_id: String = TRAWLER_SMALL_ID) -> Dictio
 
 static func default_owned_record() -> Dictionary:
 	## Free starter — small coastal trawler.
-	var uid := "trawler_%d" % Time.get_unix_time_from_system()
+	var uid := new_vessel_uid(TRAWLER_SMALL_ID)
 	return normalize_record({
 		"uid": uid,
 		"hull_id": TRAWLER_SMALL_ID,
@@ -79,6 +82,20 @@ static func default_owned_record() -> Dictionary:
 		"scene_path": TRAWLER_SMALL_SCENE,
 		"brick_layout": default_brick_layout(TRAWLER_SMALL_ID),
 	})
+
+
+## Persistent identity is random, not second-resolution time. Two commissions
+## (or server rows hydrated in one frame) must never alias the same ledger row.
+static func new_vessel_uid(hull_id: String) -> String:
+	var id := HullRegistry.resolve_network_hull_id(hull_id)
+	var random_bytes := Crypto.new().generate_random_bytes(16)
+	if not random_bytes.is_empty():
+		return "%s_%s" % [id, random_bytes.hex_encode()]
+	return "%s_%d_%d" % [
+		id,
+		int(Time.get_unix_time_from_system() * 1000.0),
+		Time.get_ticks_usec(),
+	]
 
 
 static func brick_layout_of(record: Dictionary) -> Dictionary:
@@ -174,6 +191,8 @@ static func _instantiate_hull(hull_id: String) -> BoatBody:
 	var script_path := TRAWLER_SMALL_SCRIPT
 	if id == WORKBOAT_ID:
 		script_path = WORKBOAT_SCRIPT
+	elif id == PASSENGER_CATAMARAN_ID:
+		script_path = PASSENGER_CATAMARAN_SCRIPT
 	var script := load(script_path) as GDScript
 	if script != null and script.has_method("build"):
 		return script.call("build") as BoatBody

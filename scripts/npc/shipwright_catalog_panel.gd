@@ -117,14 +117,14 @@ func _build_chrome() -> void:
 	margin.add_child(root_v)
 
 	var title := Label.new()
-	title.text = "HULLS FOR SALE"
+	title.text = "VESSELS FOR SALE"
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	title.add_theme_font_size_override("font_size", 20)
 	title.add_theme_color_override("font_color", HudStyle.C_AMBER)
 	root_v.add_child(title)
 
 	var tagline := Label.new()
-	tagline.text = "Hulls for sale. Pick one — you build the deck yourself."
+	tagline.text = "Choose a bare hull to build, or purchase a ready-built vessel."
 	tagline.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	tagline.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	tagline.add_theme_font_size_override("font_size", 13)
@@ -297,7 +297,13 @@ func _refresh_entry() -> void:
 	if _catalog.is_empty():
 		return
 	var entry := _catalog[_index] as Dictionary
-	_stations = _preview.show_entry(entry)
+	var layout_raw: Variant = entry.get("prebuilt_layout", {})
+	var preview_layout: Dictionary = (
+		layout_raw as Dictionary
+		if typeof(layout_raw) == TYPE_DICTIONARY
+		else {}
+	)
+	_stations = _preview.show_entry(entry, preview_layout)
 
 	_camera.transform = ShipwrightPreview.camera_transform_for_length(
 		_stations.length_m if _stations != null else 18.0
@@ -338,7 +344,11 @@ func _refresh_entry() -> void:
 	var can_afford := balance >= price
 	_commission_btn.disabled = not can_afford
 	if can_afford:
-		_commission_btn.text = "Select hull — %s" % PlayerSession.format_money(price)
+		_commission_btn.text = (
+			"Purchase ready-built — %s" % PlayerSession.format_money(price)
+			if bool(entry.get("is_prebuilt", false))
+			else "Select hull — %s" % PlayerSession.format_money(price)
+		)
 	else:
 		_commission_btn.text = "Need %s" % PlayerSession.format_money(price - balance)
 
