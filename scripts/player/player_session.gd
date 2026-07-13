@@ -50,7 +50,11 @@ func _ready() -> void:
 	if OS.get_cmdline_args().has("--wipe-player-data"):
 		if not PlayerSaveStore.wipe_all_local_data():
 			push_error("PlayerSession: --wipe-player-data failed")
-	_load_from_disk()
+	LocalCaptainStore.ensure_migrated()
+	# Title screen owns which captain is active; boot with a clean empty ledger.
+	LocalCaptainStore.clear_active()
+	data = PlayerData.new()
+	data_loaded.emit(data)
 	call_deferred("_connect_registry")
 
 
@@ -151,9 +155,12 @@ func begin_new_captain(
 	display_name: String,
 	appearance: CharacterAppearance,
 	home_port_id: String = "port-home",
+	account_id: String = "",
+	world_seed: int = 0,
 ) -> void:
 	data = PlayerData.new()
-	data.account_id = PlayerData.new_uuid()
+	var id := account_id.strip_edges()
+	data.account_id = id if not id.is_empty() else PlayerData.new_uuid()
 	data.captain_id = ""
 	data.marks = PlayerData.NEW_CAPTAIN_STARTING_MARKS
 	data.total_marks_earned = 0
@@ -165,6 +172,8 @@ func begin_new_captain(
 	data.appearance = appearance if appearance != null else CharacterAppearance.default_appearance()
 	var home := home_port_id.strip_edges()
 	data.home_port_id = home if not home.is_empty() else "port-home"
+	if world_seed > 0:
+		data.world_context = {"seed": world_seed, "generation_version": 0, "layout_checksum": ""}
 	# One hand-authored workboat on the registry so harbour deploy works immediately.
 	var starter := VesselSpawn.default_owned_record()
 	data.upsert_owned_vessel(starter)
@@ -194,7 +203,7 @@ func add_distance_sailed(delta_m: float) -> void:
 
 
 func has_local_save() -> bool:
-	return PlayerSaveStore.has_save()
+	return LocalCaptainStore.has_any() or PlayerSaveStore.has_save()
 
 
 func save_now() -> bool:
@@ -318,6 +327,8 @@ func _flush_save() -> bool:
 				save_completed.emit(false)
 				return false
 	var ok := PlayerSaveStore.save_player(data)
+	if ok:
+		LocalCaptainStore.touch_index_from_player(data)
 	save_completed.emit(ok)
 	return ok
 

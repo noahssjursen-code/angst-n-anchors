@@ -39,6 +39,10 @@ const PORT_PAD_SEAWARD_SHIFT_M := 14.0
 @export var lod_distances_m := PackedFloat32Array(DEFAULT_LOD_DISTANCES)
 @export var sea_level_pad_height_m := 0.0
 
+## Elevated budget while the loading gate waits on the spawn ring.
+const BOOT_BUDGET_MS := 18.0
+const BOOT_MAX_JOBS := 4
+
 var _layout: Object
 var _flatten_zones: Array[Dictionary] = []
 var _chunks: Dictionary = {}
@@ -50,6 +54,8 @@ var _frame_index := 0
 var _last_build_ms := 0.0
 var _total_build_ms := 0.0
 var _completed_builds := 0
+var _boot_priority := false
+var _boot_focus := Vector3.ZERO
 
 
 func configure(layout: Object, port_definitions: Array = []) -> void:
@@ -86,12 +92,88 @@ func _exit_tree() -> void:
 func _process(_delta: float) -> void:
 	if _layout == null:
 		return
-	var stream_position := WorldReferenceScript.stream_position(get_viewport())
-	if _frame_index % maxi(queue_refresh_frames, 1) == 0:
+	var stream_position := _boot_focus if _boot_priority else WorldReferenceScript.stream_position(get_viewport())
+	if _boot_priority or _frame_index % maxi(queue_refresh_frames, 1) == 0:
 		_refresh_requests(stream_position)
 	_process_jobs(stream_position)
 	_sync_collisions(stream_position)
 	_frame_index += 1
+
+
+## Prefer nearby chunk builds and pin stream focus while LoadingGate is up.
+func begin_boot_priority(focus: Vector3) -> void:
+	_boot_priority = true
+	_boot_focus = focus
+	if _layout != null:
+		_refresh_requests(focus)
+
+
+func end_boot_priority() -> void:
+	_boot_priority = false
+
+
+func is_boot_priority() -> bool:
+	return _boot_priority
+
+
+func boot_focus() -> Vector3:
+	return _boot_focus
+
+
+## True when every chunk within the spawn/collision ring is loaded (and collidable).
+## Far visual rings may still be queued — that streaming continues after boot.
+func is_ready_around(world_pos: Vector3, radius_m: float = -1.0) -> bool:
+	if _layout == null:
+		return true
+	var r := _boot_ready_radius_m() if radius_m < 0.0 else radius_m
+	if r <= 0.0:
+		return true
+	var stream_xz := Vector2(world_pos.x, world_pos.z)
+	var desired := select_chunk_requests(
+		stream_xz,
+		float(_layout.half_extent_m),
+		r,
+		lod_distances_m,
+	)
+	for request in desired:
+		var coord: Vector2i = request["coord"]
+		var key := chunk_key(coord)
+		if not _chunks.has(key):
+			return false
+		if _queued.has(key):
+			return false
+		if chunk_needs_collision(coord, stream_xz, collision_radius_m):
+			var record := _chunks[key] as Dictionary
+			if not _chunk_collision_ready(record):
+				return false
+	return true
+
+
+func pending_near(world_pos: Vector3, radius_m: float = -1.0) -> int:
+	if _layout == null:
+		return 0
+	var r := _boot_ready_radius_m() if radius_m < 0.0 else radius_m
+	var stream_xz := Vector2(world_pos.x, world_pos.z)
+	var count := 0
+	for job in _jobs:
+		if distance_to_chunk(job["coord"], stream_xz) <= r:
+			count += 1
+	var desired := select_chunk_requests(
+		stream_xz,
+		float(_layout.half_extent_m),
+		r,
+		lod_distances_m,
+	)
+	for request in desired:
+		var key := chunk_key(request["coord"])
+		if not _chunks.has(key) and not _queued.has(key):
+			count += 1
+	return count
+
+
+func _boot_ready_radius_m() -> float:
+	var lod0 := float(lod_distances_m[0]) if lod_distances_m.size() > 0 else collision_radius_m
+	return maxf(collision_radius_m, lod0)
 
 
 func get_debug_stats() -> Dictionary:
@@ -183,8 +265,14 @@ func _enqueue(request: Dictionary) -> void:
 func _process_jobs(stream_position: Vector3) -> void:
 	var frame_started := Time.get_ticks_usec()
 	var completed := 0
-	while not _jobs.is_empty() and completed < maxi(max_jobs_per_frame, 1):
-		if completed > 0 and float(Time.get_ticks_usec() - frame_started) / 1000.0 >= build_budget_ms:
+	var budget := BOOT_BUDGET_MS if _boot_priority else build_budget_ms
+	var max_jobs := BOOT_MAX_JOBS if _boot_priority else max_jobs_per_frame
+	if _boot_priority and _jobs.size() > 1:
+		_jobs.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+			return float(a.get("distance", 0.0)) < float(b.get("distance", 0.0))
+		)
+	while not _jobs.is_empty() and completed < maxi(max_jobs, 1):
+		if completed > 0 and float(Time.get_ticks_usec() - frame_started) / 1000.0 >= budget:
 			break
 		var job := _jobs.pop_front() as Dictionary
 		var coord: Vector2i = job["coord"]
@@ -290,11 +378,12 @@ func _sync_collisions(stream_position: Vector3) -> void:
 		var coord := parse_chunk_key(StringName(key))
 		var record := _chunks[key] as Dictionary
 		var wanted := chunk_needs_collision(coord, stream_xz, collision_radius_m)
-		if wanted and record.get("collision", null) == null:
+		if wanted and not _has_collision_state(record):
 			_add_collision(StringName(key))
-		elif not wanted and record.get("collision", null) != null:
-			var body := record["collision"] as StaticBody3D
-			body.queue_free()
+		elif not wanted and _has_collision_state(record):
+			var body: Variant = record["collision"]
+			if body is StaticBody3D and is_instance_valid(body):
+				(body as StaticBody3D).queue_free()
 			record["collision"] = null
 
 
@@ -302,11 +391,14 @@ func _add_collision(key: StringName) -> void:
 	if not _chunks.has(key):
 		return
 	var record := _chunks[key] as Dictionary
-	if record.get("collision", null) != null:
+	if _has_collision_state(record):
 		return
 	var data := record["surface_data"] as Dictionary
 	var faces := collision_faces(data)
 	if faces.is_empty():
+		# Open-water / fully submerged chunks have no walkable faces. Mark them
+		# resolved so boot readiness does not wait forever on null collision.
+		record["collision"] = true
 		return
 	var body := StaticBody3D.new()
 	body.name = "Collision"
@@ -317,6 +409,16 @@ func _add_collision(key: StringName) -> void:
 	body.add_child(shape_node)
 	(record["node"] as Node3D).add_child(body)
 	record["collision"] = body
+
+
+func _has_collision_state(record: Dictionary) -> bool:
+	return record.get("collision", null) != null
+
+
+## Boot/visual readiness: chunk is loaded and, if inside the collision ring,
+## collision has been built or explicitly skipped (open water).
+func _chunk_collision_ready(record: Dictionary) -> bool:
+	return _has_collision_state(record)
 
 
 func _unload_chunk(key: StringName) -> void:

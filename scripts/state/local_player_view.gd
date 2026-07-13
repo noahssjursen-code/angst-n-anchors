@@ -211,7 +211,12 @@ func _snapshot_into_player_data() -> void:
 	var clock := get_node_or_null("/root/WorldClock")
 	if clock != null and clock.has_method("get_game_hours_elapsed"):
 		data.world_clock_hours = float(clock.call("get_game_hours_elapsed"))
-	data.world_context = _current_world_context()
+	# Only overwrite when a live world (or hydrated session context) exists.
+	# Title-screen captain creation has no World node yet; wiping here used to
+	# clear the rolled seed and cause a different map on first sail.
+	var live_context := _current_world_context()
+	if not live_context.is_empty() and int(live_context.get("seed", 0)) > 0:
+		data.world_context = live_context
 
 
 ## Convenience: snapshot + write. Used by the abandon-ship flow and any

@@ -163,14 +163,21 @@ func _build_ui() -> void:
 	hdr.add_theme_color_override("font_color", HudStyle.C_AMBER)
 	opts.add_child(hdr)
 
+	var steps := Label.new()
+	steps.text = "1  Identity    ·    2  Look    ·    3  Confirm"
+	steps.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	steps.add_theme_font_size_override("font_size", 12)
+	steps.add_theme_color_override("font_color", HudStyle.C_AMBER)
+	opts.add_child(steps)
+
 	var sub := Label.new()
-	sub.text = "Name, colours, and hat — more kit when we model it."
+	sub.text = "Choose a name and kit. Singleplayer then picks a home port on a fresh chart."
 	sub.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	sub.add_theme_font_size_override("font_size", 12)
 	sub.add_theme_color_override("font_color", HudStyle.C_LABEL)
 	opts.add_child(sub)
 
-	opts.add_child(_section_label("Name"))
+	opts.add_child(_section_label("1 · Identity"))
 	_name_field = LineEdit.new()
 	_name_field.placeholder_text = "Captain"
 	_name_field.text = "Captain"
@@ -178,6 +185,7 @@ func _build_ui() -> void:
 	_name_field.text_changed.connect(_on_name_changed)
 	opts.add_child(_name_field)
 
+	opts.add_child(_section_label("2 · Look"))
 	opts.add_child(_section_label("Complexion"))
 	opts.add_child(_make_swatch_row(SKIN_PRESETS, _on_skin_picked, _skin_buttons))
 
@@ -197,6 +205,7 @@ func _build_ui() -> void:
 	spacer.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	opts.add_child(spacer)
 
+	opts.add_child(_section_label("3 · Confirm"))
 	var actions := HBoxContainer.new()
 	actions.add_theme_constant_override("separation", 12)
 	actions.alignment = BoxContainer.ALIGNMENT_END
@@ -208,7 +217,7 @@ func _build_ui() -> void:
 	actions.add_child(back_btn)
 
 	_sail_btn = Button.new()
-	_sail_btn.text = "Set sail"
+	_sail_btn.text = "Continue"
 	_sail_btn.pressed.connect(_on_confirm)
 	actions.add_child(_sail_btn)
 	_refresh_swatch_selection()
