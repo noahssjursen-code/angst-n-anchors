@@ -25,6 +25,9 @@ const BODY_FRAME_Y_ROT := deg_to_rad(-90.0)
 @export var keel_y: float = 0.0             ## lowest Y in the hull (ship-local)
 @export var deck_y: float = 0.0             ## highest Y in the hull (ship-local)
 @export var displacement_volume_m3: float = 0.0  ## fully-submerged hull volume at scale 1
+@export var design_draft_m: float = 0.0
+@export var design_displacement_m3: float = 0.0
+@export var section_fullness_exponent: float = 1.0
 
 
 ## Submerged half-section area at one station, given a waterline Y in ship-local space.
@@ -77,6 +80,99 @@ func half_beam_at(station_idx: int, y_local: float) -> float:
 			var t: float = (y_local - p0.x) / maxf(p1.x - p0.x, 1e-6)
 			return lerpf(p0.y, p1.y, t)
 	return 0.0
+
+
+## Horizontal centroid of one submerged half-section, measured outward from
+## the centerline. Integrates the piecewise-linear section exactly.
+func half_section_centroid_x_below(station_idx: int, waterline_y: float) -> float:
+	if station_idx < 0 or station_idx >= stations.size():
+		return 0.0
+	var section: Array = stations[station_idx]["section"]
+	if section.size() < 2 or waterline_y <= section[0].x:
+		return 0.0
+	var area := 0.0
+	var first_moment := 0.0
+	for i in range(section.size() - 1):
+		var p0: Vector2 = section[i]
+		var p1: Vector2 = section[i + 1]
+		if waterline_y <= p0.x:
+			break
+		var upper_y := minf(waterline_y, p1.x)
+		var dy := upper_y - p0.x
+		if dy <= 0.0:
+			continue
+		var segment_h := maxf(p1.x - p0.x, 1e-6)
+		var t := clampf(dy / segment_h, 0.0, 1.0)
+		var hb1 := lerpf(p0.y, p1.y, t)
+		area += (p0.y + hb1) * 0.5 * dy
+		# Integral of x over 0..half_beam is half_beam² / 2.
+		first_moment += (p0.y * p0.y + p0.y * hb1 + hb1 * hb1) * dy / 6.0
+		if waterline_y < p1.x:
+			break
+	return first_moment / area if area > 1e-6 else 0.0
+
+
+func half_section_centroid_y_below(station_idx: int, waterline_y: float) -> float:
+	if station_idx < 0 or station_idx >= stations.size():
+		return keel_y
+	var section: Array = stations[station_idx]["section"]
+	if section.size() < 2 or waterline_y <= section[0].x:
+		return keel_y
+	var area := 0.0
+	var first_moment := 0.0
+	for i in range(section.size() - 1):
+		var p0: Vector2 = section[i]
+		var p1: Vector2 = section[i + 1]
+		if waterline_y <= p0.x:
+			break
+		var upper_y := minf(waterline_y, p1.x)
+		var dy := upper_y - p0.x
+		if dy <= 0.0:
+			continue
+		var segment_h := maxf(p1.x - p0.x, 1e-6)
+		var t := clampf(dy / segment_h, 0.0, 1.0)
+		var hb1 := lerpf(p0.y, p1.y, t)
+		var slope := (hb1 - p0.y) / dy
+		area += (p0.y + hb1) * 0.5 * dy
+		var y0 := p0.x
+		var y1 := upper_y
+		var square_delta := y1 * y1 - y0 * y0
+		first_moment += (
+			p0.y * square_delta * 0.5
+			+ slope * (
+				(y1 * y1 * y1 - y0 * y0 * y0) / 3.0
+				- y0 * square_delta * 0.5
+			)
+		)
+		if waterline_y < p1.x:
+			break
+	return first_moment / area if area > 1e-6 else keel_y
+
+
+func volume_below(waterline_y: float) -> float:
+	var volume := 0.0
+	for i in range(stations.size()):
+		volume += half_section_area_below(i, waterline_y) * 2.0 * station_length(i)
+	return volume
+
+
+func center_of_buoyancy_z_below(waterline_y: float) -> float:
+	var volume := 0.0
+	var moment := 0.0
+	for i in range(stations.size()):
+		var strip_volume := (
+			half_section_area_below(i, waterline_y) * 2.0 * station_length(i)
+		)
+		volume += strip_volume
+		moment += float(stations[i]["z"]) * strip_volume
+	return moment / volume if volume > 1e-6 else 0.0
+
+
+func waterplane_area_at(waterline_y: float) -> float:
+	var area := 0.0
+	for i in range(stations.size()):
+		area += half_beam_at(i, waterline_y) * 2.0 * station_length(i)
+	return area
 
 
 ## Length of hull represented by station `idx` for strip integration (m at scale 1).
@@ -133,6 +229,95 @@ static func from_pointed(
 	var dz := L / float(maxi(n - 1, 1))
 	result.displacement_volume_m3 = vol * dz
 	return result
+
+
+## Build a flared displacement hull whose integrated submerged volume at the
+## declared draft exactly matches the declared displacement. The vertical
+## section follows half_beam ~ (height / draft)^p below the design waterline;
+## p is solved numerically against the same strip integration used at runtime.
+static func from_design(
+	length_m: float,
+	beam_m: float,
+	depth_m: float,
+	draft_m: float,
+	displacement_t: float,
+	water_density: float = 1025.0,
+	bow_frac: float = 0.2,
+	station_count: int = 10,
+) -> HullStations:
+	var result := HullStations.new()
+	var length := maxf(length_m, 1.0)
+	var beam := maxf(beam_m, 1.0)
+	var depth := maxf(depth_m, 0.5)
+	var draft := clampf(draft_m, 0.05, depth * 0.98)
+	var count := maxi(station_count, 5)
+	var target_volume := maxf(displacement_t * 1000.0 / maxf(water_density, 1.0), 0.01)
+
+	result.length_m = length
+	result.beam_m = beam
+	result.height_m = depth
+	result.keel_y = 0.0
+	result.deck_y = depth
+	result.design_draft_m = draft
+	result.design_displacement_m3 = target_volume
+
+	var station_geometry: Array[Dictionary] = []
+	for i in range(count):
+		var t := float(i) / float(count - 1)
+		var z := lerpf(-length * 0.5, length * 0.5, t)
+		var taper := 1.0
+		var bow_length := clampf(bow_frac, 0.0, 0.45) * length
+		if bow_length > 0.001:
+			var shoulder_z := -length * 0.5 + bow_length
+			if z < shoulder_z:
+				taper = clampf(inverse_lerp(-length * 0.5, shoulder_z, z), 0.0, 1.0)
+		station_geometry.append({"z": z, "taper": taper})
+
+	var low := 0.05
+	var high := 12.0
+	for _iteration in range(48):
+		var exponent := (low + high) * 0.5
+		_assign_design_sections(result, station_geometry, beam, depth, draft, exponent)
+		var volume := result.volume_below(draft)
+		if volume > target_volume:
+			low = exponent
+		else:
+			high = exponent
+
+	result.section_fullness_exponent = (low + high) * 0.5
+	_assign_design_sections(
+		result,
+		station_geometry,
+		beam,
+		depth,
+		draft,
+		result.section_fullness_exponent
+	)
+	result.displacement_volume_m3 = result.volume_below(depth)
+	return result
+
+
+static func _assign_design_sections(
+	result: HullStations,
+	station_geometry: Array[Dictionary],
+	beam: float,
+	depth: float,
+	draft: float,
+	exponent: float,
+) -> void:
+	result.stations.clear()
+	var vertical_samples := 10
+	for station in station_geometry:
+		var taper := float(station["taper"])
+		var max_half_beam := beam * 0.5 * taper
+		var section: Array[Vector2] = []
+		for j in range(vertical_samples + 1):
+			var t := float(j) / float(vertical_samples)
+			var y := draft * t
+			section.append(Vector2(y, max_half_beam * pow(t, exponent)))
+		if depth > draft + 0.001:
+			section.append(Vector2(depth, max_half_beam))
+		result.stations.append({"z": float(station["z"]), "section": section})
 
 
 ## Build a HullStations resource from a hull JSON dictionary at scale 1.0.

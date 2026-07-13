@@ -125,6 +125,7 @@ func _build() -> Array:
 	var e:        Array = []
 	_build_system(e)
 	_build_water_gpu(e)
+	_build_vessel_physics(e)
 	_build_loading(e)
 	_build_debug_tools(e)
 	_build_gameplay(e)
@@ -183,8 +184,33 @@ func _build_water_gpu(e: Array) -> void:
 			float(s.get("readback_hz", 0.0)),
 			" · copy" if bool(s.get("readback_in_flight", false)) else "",
 		], C_VALUE)
+		_row(e, "Physics query", "%d² · %.1f ms old" % [
+			int(s.get("physics_query_resolution", 0)),
+			float(s.get("snapshot_age_ms", 0.0)),
+		], C_VALUE)
 	else:
 		_stub(e, "FFT", "system not found")
+
+	var wake := get_tree().get_first_node_in_group("ocean_wake_field")
+	if wake != null and wake.has_method("get_debug_stats"):
+		var w: Dictionary = wake.call("get_debug_stats")
+		_row(e, "Wake field", "%d² / %.1f km · %.1f MB @ %.0fHz" % [
+			int(w.get("resolution", 0)),
+			float(w.get("extent_m", 0.0)) / 1000.0,
+			float(w.get("memory_mb", 0.0)),
+			float(w.get("update_hz", 0.0)),
+		], C_VALUE)
+		_row(e, "Wake emitters", "%d active · %d segments · %.2f strength" % [
+			int(w.get("active_emitters", 0)),
+			int(w.get("stamped_segments", 0)),
+			float(w.get("local_strength", 0.0)),
+		], C_VALUE)
+		_row(e, "Wake update", "%.3f ms GPU · %.3f ms CPU" % [
+			float(w.get("gpu_update_ms", -1.0)),
+			float(w.get("cpu_update_ms", 0.0)),
+		], C_VALUE)
+	else:
+		_stub(e, "Wake", "field not found")
 
 	var renderer := get_tree().get_first_node_in_group("world_renderer")
 	if renderer != null and renderer.has_method("get_ocean_debug_stats"):
@@ -227,6 +253,53 @@ func _build_water_gpu(e: Array) -> void:
 			], C_LABEL)
 
 	_stub(e, "Ocean raster", "included in GPU frame; Godot cannot isolate it")
+	_sep(e)
+
+
+func _build_vessel_physics(e: Array) -> void:
+	_sec(e, "VESSEL PHYSICS")
+	var boat := PlayerVessel.find_active_ship(get_tree())
+	if boat == null:
+		_stub(e, "Vessel", "no active player hull")
+		_sep(e)
+		return
+	var profile := boat.physics_profile
+	var buoyancy := boat.get_node_or_null(
+		"StripBuoyancyComponent"
+	) as StripBuoyancyComponent
+	var breakdown := boat.get_mass_breakdown()
+	_row(e, "Quality / CPU", "%s · %.3f ms buoyancy" % [
+		boat.get_physics_quality_name(),
+		buoyancy.cpu_time_ms if buoyancy != null else 0.0,
+	], C_VALUE)
+	if buoyancy != null:
+		var target_draft := profile.design_draft_m if profile != null else boat.draft_m
+		_row(e, "Draft", "%.2f m / %.2f m target" % [
+			buoyancy.current_draft_m, target_draft,
+		], C_VALUE)
+		_row(e, "Displacement", "%.1f m³ · %.1f t" % [
+			buoyancy.submerged_volume_m3,
+			float(breakdown.get("total_kg", boat.mass)) / 1000.0,
+		], C_VALUE)
+		_row(e, "Waterplane / ζ", "%.1f m² · %.2f" % [
+			buoyancy.waterplane_area_m2,
+			buoyancy.effective_damping_ratio,
+		], C_VALUE)
+		_row(e, "Lift / damping", "%.0f / %.0f kN" % [
+			buoyancy.total_lift_n / 1000.0,
+			buoyancy.total_damping_n / 1000.0,
+		], C_VALUE)
+		_row(e, "Water age / stale", "%.1f ms · %d samples" % [
+			buoyancy.water_snapshot_age_s * 1000.0,
+			buoyancy.stale_sample_count,
+		], C_WARN if buoyancy.stale_sample_count > 0 else C_VALUE)
+	var com: Vector3 = breakdown.get("center_of_mass", boat.center_of_mass)
+	var cob := (
+		boat.to_local(buoyancy.center_of_buoyancy_world)
+		if buoyancy != null else Vector3.ZERO
+	)
+	_row(e, "COM", "(%.2f, %.2f, %.2f)" % [com.x, com.y, com.z], C_LABEL)
+	_row(e, "COB", "(%.2f, %.2f, %.2f)" % [cob.x, cob.y, cob.z], C_LABEL)
 	_sep(e)
 
 

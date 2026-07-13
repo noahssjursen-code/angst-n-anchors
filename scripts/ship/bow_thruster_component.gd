@@ -29,14 +29,25 @@ func _ready() -> void:
 func _physics_process(_delta: float) -> void:
 	if Engine.is_editor_hint() or _body == null or is_zero_approx(lateral_input):
 		return
+	var force_scale := 1.0
+	if _body.has_method("get_physics_force_scale_for_tick"):
+		force_scale = float(_body.call("get_physics_force_scale_for_tick"))
+	if force_scale <= 0.0:
+		return
 
 	if crab_mode:
-		# Pure sideways translation: central force means no torque, guaranteed lateral drift.
-		# Scale by 2 to approximate the combined output of both tunnel thrusters.
-		var f := _body.global_transform.basis.x * lateral_input * max_thrust * 2.0
-		_body.apply_central_force(f)
+		# Two real offset forces. Symmetric bores cancel yaw naturally; asymmetric
+		# fit-outs retain the small physical moment instead of hiding it centrally.
+		var f := _body.global_transform.basis.x * lateral_input * max_thrust * 2.0 * force_scale
+		var half_force := f * 0.5
+		_body.apply_force(
+			half_force, _body.to_global(bow_offset) - _body.global_position
+		)
+		_body.apply_force(
+			half_force, _body.to_global(stern_offset) - _body.global_position
+		)
 	else:
 		# Bow-only: force at bow offset creates yaw torque — swings the bow.
-		var f := _body.global_transform.basis.x * lateral_input * max_thrust
+		var f := _body.global_transform.basis.x * lateral_input * max_thrust * force_scale
 		var bow_app := _body.to_global(bow_offset) - _body.global_position
 		_body.apply_force(f, bow_app)

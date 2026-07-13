@@ -47,6 +47,7 @@ static var _initialized: bool = false
 
 # ── Baked shelter texture (CPU-baked, GPU-sampled) ────────────────────────────
 static var _baked_shelter_texture: ImageTexture = null
+static var _baked_shelter_data := PackedFloat32Array()
 ## World-space (x, z) of the texel-(0, 0) lower-left corner.
 static var _baked_world_origin   : Vector2 = Vector2.ZERO
 ## World-space extent (square) covered by the texture, in metres.
@@ -215,6 +216,34 @@ static func get_baked_world_size() -> float:
 	return _baked_world_size
 
 
+## Bilinear CPU lookup of the exact same bake bound to ocean shaders.
+static func sample_baked_shelter(world_pos: Vector3) -> float:
+	if _baked_shelter_data.is_empty() or _baked_world_size <= 0.0:
+		return shore_shelter(world_pos)
+	var uv := (Vector2(world_pos.x, world_pos.z) - _baked_world_origin) / _baked_world_size
+	if uv.x < 0.0 or uv.y < 0.0 or uv.x > 1.0 or uv.y > 1.0:
+		return 1.0
+	var px := uv.x * float(BAKE_RESOLUTION) - 0.5
+	var py := uv.y * float(BAKE_RESOLUTION) - 0.5
+	var x0 := clampi(int(floor(px)), 0, BAKE_RESOLUTION - 1)
+	var y0 := clampi(int(floor(py)), 0, BAKE_RESOLUTION - 1)
+	var x1 := mini(x0 + 1, BAKE_RESOLUTION - 1)
+	var y1 := mini(y0 + 1, BAKE_RESOLUTION - 1)
+	var fx := clampf(px - floor(px), 0.0, 1.0)
+	var fy := clampf(py - floor(py), 0.0, 1.0)
+	var a := lerpf(
+		_baked_shelter_data[y0 * BAKE_RESOLUTION + x0],
+		_baked_shelter_data[y0 * BAKE_RESOLUTION + x1],
+		fx
+	)
+	var b := lerpf(
+		_baked_shelter_data[y1 * BAKE_RESOLUTION + x0],
+		_baked_shelter_data[y1 * BAKE_RESOLUTION + x1],
+		fx
+	)
+	return lerpf(a, b, fy)
+
+
 static func get_active_island_indices_for_segment(a: Vector2, b: Vector2, clearance: float) -> Array[int]:
 	var out: Array[int] = []
 	if not _initialized or _centers_xz.is_empty():
@@ -283,6 +312,7 @@ static func get_island_disk(idx: int) -> Dictionary:
 static func _bake_shelter_texture() -> void:
 	if _centers_xz.is_empty():
 		_baked_shelter_texture = null
+		_baked_shelter_data.clear()
 		_baked_world_size = 0.0
 		return
 
@@ -323,4 +353,5 @@ static func _bake_shelter_texture() -> void:
 
 	var img := Image.create_from_data(BAKE_RESOLUTION, BAKE_RESOLUTION,
 									   false, Image.FORMAT_RF, bytes)
+	_baked_shelter_data = bytes.to_float32_array()
 	_baked_shelter_texture = ImageTexture.create_from_image(img)

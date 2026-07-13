@@ -6,6 +6,7 @@ extends Node
 const RESOLUTION = 512
 const RESOLUTION_LOG2 = 9  # log2(RESOLUTION)
 const MAX_WAVES = 4
+const PHYSICS_QUERY_RESOLUTION = 128
 
 const FFT_OCEAN_INIT = preload("res://resources/shaders/fft_ocean_init.glsl")
 const FFT_OCEAN_PACK = preload("res://resources/shaders/fft_ocean_pack.glsl")
@@ -13,6 +14,7 @@ const FFT_OCEAN_UPDATE = preload("res://resources/shaders/fft_ocean_update.glsl"
 const FFT_OCEAN_FFT_X = preload("res://resources/shaders/fft_ocean_fft_x.glsl")
 const FFT_OCEAN_FFT_Y = preload("res://resources/shaders/fft_ocean_fft_y.glsl")
 const FFT_OCEAN_ASSEMBLE = preload("res://resources/shaders/fft_ocean_assemble.glsl")
+const FFT_OCEAN_PHYSICS_QUERY = preload("res://resources/shaders/fft_ocean_physics_query.glsl")
 
 ## How many compute frames between buoyancy readback requests.
 ## Readback is async (non-blocking) — this only caps request rate.
@@ -27,13 +29,18 @@ var pipeline_update: RID
 var pipeline_fft_x: RID
 var pipeline_fft_y: RID
 var pipeline_assemble: RID
+var pipeline_physics_query: RID
 var main_shader: RID
+var physics_query_shader: RID
+var _shader_rids: Array[RID] = []
 
 var initial_spectrum_tex: RID
 var spectrum_tex: RID
 var displacement_tex: RID
 var slope_tex: RID
 var buoyancy_tex: RID
+var physics_query_tex: RID
+var physics_previous_tex: RID
 var spectrums_buffer: RID
 
 var displacement_map_rd: Texture2DArrayRD
@@ -60,20 +67,23 @@ var _last_short_wave := -1.0
 @export var lambda := Vector2(0.5, 0.5)
 
 var push_constant_params := PackedByteArray()
-var buoyancy_data: Array[PackedFloat32Array] = []
-var prev_buoyancy_data: Array[PackedFloat32Array] = []
-var prev_delta: float = 0.016
+## Four 128² RGBA32F layers: height and XYZ water velocity.
+var physics_query_data: Array[PackedFloat32Array] = []
+var physics_query_snapshot_time: float = -1.0
+var physics_query_completed_usec: int = 0
+var physics_query_source_usec: int = 0
 ## Counts compute frames since the last buoyancy readback request.
 var _readback_counter: int = 0
-## Accumulates frame deltas between readbacks; becomes `prev_delta` for the
-## CPU-side vertical-velocity calculation in WaveSurface.
-var _accumulated_delta: float = 0.0
 ## Async GPU→CPU buoyancy download — never call blocking texture_get_data
 ## on the render device (that stalls the whole GPU and pegs utilization).
 var _readback_in_flight: bool = false
 var _async_received: int = 0
 var _async_scratch: Array[PackedFloat32Array] = []
-var _async_delta_snapshot: float = 0.0
+var _async_time_snapshot: float = 0.0
+var _async_source_usec: int = 0
+var _physics_query_uniform_set: RID
+var _physics_query_push := PackedByteArray()
+var _physics_query_has_previous: bool = false
 var _gpu_fft_ms: float = -1.0
 var _cpu_submit_ms: float = 0.0
 
@@ -85,9 +95,9 @@ const SIM_STEP: float = 1.0 / SIM_TICK_RATE
 
 func _ready() -> void:
 	add_to_group("fft_water_system")
-	buoyancy_data.resize(4)
-	prev_buoyancy_data.resize(4)
+	physics_query_data.resize(4)
 	_async_scratch.resize(4)
+	_physics_query_push.resize(16)
 	push_constant_params.resize(80)
 	rd = RenderingServer.get_rendering_device()
 	if not rd:
@@ -99,6 +109,48 @@ func _ready() -> void:
 	_create_uniform_set()
 	_init_spectrums()
 	_run_init_pack()
+
+
+func _exit_tree() -> void:
+	if rd == null:
+		return
+	if displacement_map_rd != null:
+		displacement_map_rd.texture_rd_rid = RID()
+	if slope_map_rd != null:
+		slope_map_rd.texture_rd_rid = RID()
+	if buoyancy_map_rd != null:
+		buoyancy_map_rd.texture_rd_rid = RID()
+	for rid in [uniform_set, _physics_query_uniform_set]:
+		_free_rd_rid(rid)
+	for rid in [
+		pipeline_init,
+		pipeline_pack,
+		pipeline_update,
+		pipeline_fft_x,
+		pipeline_fft_y,
+		pipeline_assemble,
+		pipeline_physics_query,
+	]:
+		_free_rd_rid(rid)
+	for rid in [
+		initial_spectrum_tex,
+		spectrum_tex,
+		displacement_tex,
+		slope_tex,
+		buoyancy_tex,
+		physics_query_tex,
+		physics_previous_tex,
+		spectrums_buffer,
+	]:
+		_free_rd_rid(rid)
+	for rid in _shader_rids:
+		_free_rd_rid(rid)
+	_shader_rids.clear()
+
+
+func _free_rd_rid(rid: RID) -> void:
+	if rid.is_valid():
+		rd.free_rid(rid)
 
 func _process(delta: float) -> void:
 	if not rd: return
@@ -114,7 +166,6 @@ func _process(delta: float) -> void:
 	time += sim_delta
 	_run_update_fft_assemble(sim_delta)
 
-	_accumulated_delta += sim_delta
 	_readback_counter += 1
 	if _readback_counter >= BUOYANCY_READBACK_INTERVAL and not _readback_in_flight:
 		_readback_counter = 0
@@ -124,10 +175,11 @@ func _process(delta: float) -> void:
 func _kick_async_buoyancy_readback() -> void:
 	_readback_in_flight = true
 	_async_received = 0
-	_async_delta_snapshot = _accumulated_delta
+	_async_time_snapshot = time
+	_async_source_usec = Time.get_ticks_usec()
 	for i in range(4):
 		var err := rd.texture_get_data_async(
-			buoyancy_tex, i, Callable(self, "_on_buoyancy_async").bind(i)
+			physics_query_tex, i, Callable(self, "_on_buoyancy_async").bind(i)
 		)
 		if err != OK:
 			push_warning("FFTWaterSystem: async buoyancy readback failed (%s)" % error_string(err))
@@ -136,18 +188,17 @@ func _kick_async_buoyancy_readback() -> void:
 
 
 func _on_buoyancy_async(bytes: PackedByteArray, layer: int) -> void:
-	if bytes.size() == RESOLUTION * RESOLUTION * 4:
+	if bytes.size() == PHYSICS_QUERY_RESOLUTION * PHYSICS_QUERY_RESOLUTION * 16:
 		_async_scratch[layer] = bytes.to_float32_array()
 	_async_received += 1
 	if _async_received < 4:
 		return
 	for i in range(4):
 		if not _async_scratch[i].is_empty():
-			if not buoyancy_data[i].is_empty():
-				prev_buoyancy_data[i] = buoyancy_data[i]
-			buoyancy_data[i] = _async_scratch[i]
-	prev_delta = maxf(_async_delta_snapshot, 0.001)
-	_accumulated_delta = 0.0
+			physics_query_data[i] = _async_scratch[i]
+	physics_query_snapshot_time = _async_time_snapshot
+	physics_query_completed_usec = Time.get_ticks_usec()
+	physics_query_source_usec = _async_source_usec
 	_readback_in_flight = false
 
 
@@ -159,8 +210,9 @@ func get_debug_stats() -> Dictionary:
 	var texture_bytes := resolution_f * resolution_f * (
 		4.0 * 16.0 + 8.0 * 16.0 + 4.0 * 16.0 + 4.0 * 8.0 + 4.0 * 4.0
 	)
+	var query_resolution_f := float(PHYSICS_QUERY_RESOLUTION)
 	var readback_mb_s := (
-		resolution_f * resolution_f * 4.0 * 4.0
+		query_resolution_f * query_resolution_f * 16.0 * 4.0
 		* (SIM_TICK_RATE / float(BUOYANCY_READBACK_INTERVAL))
 		/ (1024.0 * 1024.0)
 	)
@@ -177,7 +229,15 @@ func get_debug_stats() -> Dictionary:
 		"readback_mb_s": readback_mb_s,
 		"readback_hz": SIM_TICK_RATE / float(BUOYANCY_READBACK_INTERVAL),
 		"readback_in_flight": _readback_in_flight,
+		"physics_query_resolution": PHYSICS_QUERY_RESOLUTION,
+		"snapshot_age_ms": get_physics_query_age_seconds() * 1000.0,
 	}
+
+
+func get_physics_query_age_seconds() -> float:
+	if physics_query_source_usec <= 0:
+		return INF
+	return float(Time.get_ticks_usec() - physics_query_source_usec) / 1_000_000.0
 
 
 func _profile_enabled() -> bool:
@@ -214,6 +274,14 @@ func _compile_shaders() -> void:
 	pipeline_fft_x = _load_shader_pipeline(FFT_OCEAN_FFT_X)
 	pipeline_fft_y = _load_shader_pipeline(FFT_OCEAN_FFT_Y)
 	pipeline_assemble = _load_shader_pipeline(FFT_OCEAN_ASSEMBLE)
+	var query_version := &""
+	var query_versions := FFT_OCEAN_PHYSICS_QUERY.get_version_list()
+	if not query_versions.is_empty():
+		query_version = query_versions[0]
+	var query_spirv := FFT_OCEAN_PHYSICS_QUERY.get_spirv(query_version)
+	physics_query_shader = rd.shader_create_from_spirv(query_spirv)
+	_shader_rids.append(physics_query_shader)
+	pipeline_physics_query = rd.compute_pipeline_create(physics_query_shader)
 
 func _load_shader_pipeline(shader_file: RDShaderFile) -> RID:
 	if shader_file == null:
@@ -230,6 +298,7 @@ func _load_shader_pipeline(shader_file: RDShaderFile) -> RID:
 		push_error("FftWaterSystem: Failed to get spirv for shader with version " + str(version_name))
 		return RID()
 	var shader = rd.shader_create_from_spirv(shader_spirv)
+	_shader_rids.append(shader)
 	if not main_shader.is_valid():
 		main_shader = shader
 	return rd.compute_pipeline_create(shader)
@@ -289,6 +358,18 @@ func _create_buffers_and_textures() -> void:
 	fmt_r32.texture_type = RenderingDevice.TEXTURE_TYPE_2D_ARRAY
 	fmt_r32.array_layers = 4
 	buoyancy_tex = rd.texture_create(fmt_r32, RDTextureView.new())
+
+	var fmt_query = RDTextureFormat.new()
+	fmt_query.width = PHYSICS_QUERY_RESOLUTION
+	fmt_query.height = PHYSICS_QUERY_RESOLUTION
+	fmt_query.depth = 1
+	fmt_query.mipmaps = 1
+	fmt_query.format = RenderingDevice.DATA_FORMAT_R32G32B32A32_SFLOAT
+	fmt_query.usage_bits = common_usage
+	fmt_query.texture_type = RenderingDevice.TEXTURE_TYPE_2D_ARRAY
+	fmt_query.array_layers = 4
+	physics_query_tex = rd.texture_create(fmt_query, RDTextureView.new())
+	physics_previous_tex = rd.texture_create(fmt_query, RDTextureView.new())
 	
 	# Create Godot wrappers for spatial shader
 	displacement_map_rd = Texture2DArrayRD.new()
@@ -347,6 +428,26 @@ func _create_uniform_set() -> void:
 	
 	# Any pipeline is fine to query the set layout, as they all share set 0
 	uniform_set = rd.uniform_set_create(uniforms, main_shader, 0)
+
+	var query_uniforms: Array[RDUniform] = []
+	var query_source := RDUniform.new()
+	query_source.uniform_type = RenderingDevice.UNIFORM_TYPE_IMAGE
+	query_source.binding = 0
+	query_source.add_id(displacement_tex)
+	query_uniforms.append(query_source)
+	var query_target := RDUniform.new()
+	query_target.uniform_type = RenderingDevice.UNIFORM_TYPE_IMAGE
+	query_target.binding = 1
+	query_target.add_id(physics_query_tex)
+	query_uniforms.append(query_target)
+	var query_previous := RDUniform.new()
+	query_previous.uniform_type = RenderingDevice.UNIFORM_TYPE_IMAGE
+	query_previous.binding = 2
+	query_previous.add_id(physics_previous_tex)
+	query_uniforms.append(query_previous)
+	_physics_query_uniform_set = rd.uniform_set_create(
+		query_uniforms, physics_query_shader, 0
+	)
 
 func _init_spectrums() -> void:
 	var bytes = PackedByteArray()
@@ -487,6 +588,24 @@ func _run_update_fft_assemble(delta: float) -> void:
 	rd.compute_list_bind_uniform_set(compute_list, uniform_set, 0)
 	rd.compute_list_set_push_constant(compute_list, push_constant_params, push_constant_params.size())
 	rd.compute_list_dispatch(compute_list, RESOLUTION / 8, RESOLUTION / 8, 1)
+
+	rd.compute_list_add_barrier(compute_list)
+	_physics_query_push.encode_float(0, maxf(delta, 0.001))
+	_physics_query_push.encode_u32(4, 1 if _physics_query_has_previous else 0)
+	_physics_query_push.encode_u32(8, RESOLUTION)
+	_physics_query_push.encode_u32(12, PHYSICS_QUERY_RESOLUTION)
+	rd.compute_list_bind_compute_pipeline(compute_list, pipeline_physics_query)
+	rd.compute_list_bind_uniform_set(compute_list, _physics_query_uniform_set, 0)
+	rd.compute_list_set_push_constant(
+		compute_list, _physics_query_push, _physics_query_push.size()
+	)
+	rd.compute_list_dispatch(
+		compute_list,
+		PHYSICS_QUERY_RESOLUTION / 8,
+		PHYSICS_QUERY_RESOLUTION / 8,
+		4
+	)
+	_physics_query_has_previous = true
 	
 	rd.compute_list_end()
 	if profile:

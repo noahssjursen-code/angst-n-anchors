@@ -41,6 +41,15 @@ vec2 ocean_chop_gradient(vec2 xz, float wt) {
 	return d;
 }
 
+vec2 ocean_wake_uv(vec2 world_xz, vec2 wake_origin, float wake_extent) {
+	return (world_xz - wake_origin) / max(wake_extent, 0.001);
+}
+
+float ocean_wake_coverage(vec2 uv) {
+	vec2 inside = step(vec2(0.0), uv) * step(uv, vec2(1.0));
+	return inside.x * inside.y;
+}
+
 float ocean_fresnel(vec3 normal_world, vec3 view_dir) {
 	float ndv = clamp(dot(normal_world, view_dir), 0.001, 1.0);
 	return 0.02 + 0.98 * pow(1.0 - ndv, 5.0);

@@ -160,12 +160,10 @@ func _tick_zone_weather() -> void:
 		return
 	var target := WorldWeather.get_state_at(boat_pos) as WeatherState
 
-	# Harbour shelter: scale the wave-driving wind_force by distance-to-land
-	# (LandField SDF). Open ocean is unchanged; near shore even a storm gets
-	# its wave amplitude knocked down, which kills the old "waves clipping
-	# through islands" bug PORT_CALM was a hack-fix for.
+	# Geographic wave shelter is sampled per water query and per shader vertex.
+	# Never feed the local player's shelter back into global storm amplitude:
+	# that changed the whole world's sea state when one boat entered harbour.
 	var shelter := LandField.shore_shelter(boat_pos)
-	target.wind_force = target.wind_force * lerpf(0.15, 1.0, shelter)
 	# Slight precip dampening near shore too — looks better, and matches
 	# real-world lee-side calm.
 	target.precipitation = target.precipitation * lerpf(0.55, 1.0, shelter)

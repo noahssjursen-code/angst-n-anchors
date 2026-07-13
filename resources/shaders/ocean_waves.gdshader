@@ -43,6 +43,11 @@ uniform float     land_shelter_size   = 0.0;
 // 0 = disabled (near patch).
 uniform float     discard_half = 0.0; // Legacy fallback only.
 uniform vec4      debug_tint : source_color = vec4(0.0);
+uniform sampler2D wake_field_map : filter_linear, repeat_disable;
+uniform vec2 wake_field_origin = vec2(0.0);
+uniform float wake_field_extent = 0.0;
+uniform float wake_field_texel_m = 2.0;
+uniform float wake_visual_strength : hint_range(0.0, 2.0) = 1.0;
 
 varying vec3 v_world_pos;
 varying vec3 v_world_normal;
@@ -94,6 +99,21 @@ void vertex() {
 	slopes *= amp_scale;
 
 	vec3 displaced_world = vec3(wp.x + displacement.x, water_level + displacement.y, wp.z + displacement.z);
+	// Wake is visual-only. Do not depress geometry here — that reads as a
+	// painted floating ribbon and fights FFT displacement. Mild slope only.
+	if (wake_field_extent > 0.0) {
+		vec2 wake_uv = ocean_wake_uv(displaced_world.xz, wake_field_origin, wake_field_extent);
+		if (ocean_wake_coverage(wake_uv) > 0.5) {
+			vec2 wake_step = vec2(wake_field_texel_m / wake_field_extent, 0.0);
+			float churn_l = textureLod(wake_field_map, wake_uv - wake_step, 0.0).g;
+			float churn_r = textureLod(wake_field_map, wake_uv + wake_step, 0.0).g;
+			float churn_b = textureLod(wake_field_map, wake_uv - wake_step.yx, 0.0).g;
+			float churn_f = textureLod(wake_field_map, wake_uv + wake_step.yx, 0.0).g;
+			slopes += vec2(churn_r - churn_l, churn_f - churn_b)
+				* (0.055 / max(wake_field_texel_m * 2.0, 0.1))
+				* wake_visual_strength;
+		}
+	}
 
 	float boat_dip = 0.0;
 	float ddip_dx = 0.0;
@@ -159,15 +179,35 @@ void fragment() {
 	vec2 xz = v_world_pos.xz;
 	float wt = wave_time;
 	float dist_to_cam = length(CAMERA_POSITION_WORLD - v_world_pos);
+	vec2 wake_sample = vec2(0.0);
+	vec2 wake_gradient = vec2(0.0);
+	if (wake_field_extent > 0.0) {
+		vec2 wake_uv = ocean_wake_uv(xz, wake_field_origin, wake_field_extent);
+		if (ocean_wake_coverage(wake_uv) > 0.5) {
+			wake_sample = texture(wake_field_map, wake_uv).rg;
+			vec2 wake_step = vec2(wake_field_texel_m / wake_field_extent, 0.0);
+			wake_gradient = vec2(
+				texture(wake_field_map, wake_uv + wake_step).g
+					- texture(wake_field_map, wake_uv - wake_step).g,
+				texture(wake_field_map, wake_uv + wake_step.yx).g
+					- texture(wake_field_map, wake_uv - wake_step.yx).g
+			);
+		}
+	}
 
 	// Capillary chop — analytic sines near camera (FFT slopes carry the rest).
 	float near_w = 1.0 - smoothstep(35.0, 280.0, dist_to_cam);
 	vec3 world_n = nm;
+	if (wake_sample.y > 0.001) {
+		vec3 wake_lateral = vec3(-wake_gradient.x, 0.0, -wake_gradient.y)
+			* 0.18 * wake_visual_strength;
+		world_n = normalize(world_n + wake_lateral - world_n * dot(world_n, wake_lateral));
+	}
 	if (near_w > 0.01 && chop_strength > 0.001) {
 		vec2 g_eta = ocean_chop_gradient(xz + wt * vec2(0.22, -0.18), wt);
 		float ripple_gain = chop_strength * 1.85 * near_w;
 		vec3 lateral = vec3(-g_eta.x, 0.0, -g_eta.y) * ripple_gain;
-		world_n = normalize(nm + lateral - nm * dot(nm, lateral));
+		world_n = normalize(world_n + lateral - world_n * dot(world_n, lateral));
 	}
 	NORMAL = normalize((VIEW_MATRIX * vec4(world_n, 0.0)).xyz);
 
@@ -222,16 +262,25 @@ void fragment() {
 	float foam_shape = smoothstep(0.15 + erode * 0.45, 0.85, jac_foam + steep * 0.3);
 
 	float foam = foam_shape * foam_strength;
+	// Wake foam laces into Jacobian foam — readable near the stern, not a
+	// solid white ribbon, but still visible at bollard thrust.
+	float wake_erode = ocean_fbm(xz_a * 1.55 + xz_b * 0.42 + wt * vec2(0.55, -0.28));
+	float wake_lace = smoothstep(0.05 + wake_erode * 0.28, 0.62, wake_sample.x);
+	float wake_foam = wake_lace * wake_visual_strength * 0.85;
+	float wake_churn = smoothstep(0.03, 0.45, wake_sample.y) * wake_visual_strength;
+	foam = max(foam, wake_foam);
 	foam = clamp(foam, 0.0, 1.0);
 	foam *= 1.0 - smoothstep(300.0, 1600.0, dist_to_cam) * 0.55;
 
+	col = mix(col, col * vec3(0.72, 0.82, 0.88), wake_churn * 0.18);
+
 	float foam_mask = foam;
 	vec3 foam_col = mix(vec3(0.75, 0.84, 0.88), vec3(0.97, 0.98, 1.0), foam_mask);
-	col = mix(col, foam_col, foam_mask * 0.9);
+	col = mix(col, foam_col, foam_mask * 0.78);
 	col = mix(col, debug_tint.rgb, debug_tint.a);
 
 	ALBEDO = col;
-	ROUGHNESS = mix(0.58, 0.95, foam_mask);
+	ROUGHNESS = mix(mix(0.58, 0.78, wake_churn), 0.95, foam_mask);
 	METALLIC = 0.0;
 	SPECULAR = 0.0;
 }
