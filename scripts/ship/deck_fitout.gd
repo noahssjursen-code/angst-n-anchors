@@ -47,6 +47,13 @@ static func apply(boat: BoatBody, layout: BrickLayout, grid: DeckGrid = null) ->
 		visual.position = boat_local
 		visual.rotation_degrees = Vector3(0.0, float(yaw), 0.0)
 		root.add_child(visual)
+		var brick_mass := float(BrickCatalog.get_entry(brick_id).get("mass_kg", 0.0))
+		boat.set_mass_entry(
+			"brick:%d:%d:%d" % [cell.x, cell.y, cell.z],
+			brick_mass,
+			boat_local,
+			"brick"
+		)
 		## Doors / stairs / helm / lights manage their own colliders (or none).
 		if (
 			not BrickCatalog.has_tag(brick_id, "text")
@@ -119,6 +126,7 @@ static func apply(boat: BoatBody, layout: BrickLayout, grid: DeckGrid = null) ->
 static func clear(boat: BoatBody) -> void:
 	if boat == null:
 		return
+	boat.clear_mass_entries("brick:")
 	var existing := boat.get_node_or_null(FITOUT_ROOT)
 	if existing != null:
 		boat.remove_child(existing)

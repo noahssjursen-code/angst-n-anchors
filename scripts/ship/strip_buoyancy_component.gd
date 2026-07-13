@@ -2,32 +2,28 @@
 class_name StripBuoyancyComponent
 extends Node3D
 
-## Strip-theory buoyancy: the hull is sliced into N stations along its length.
-## Each physics tick, every station samples water at port + starboard half-centroids,
-## computes submerged half-section area at the local waterline, and applies lift
-## up at the sample world position. Heave, pitch and roll all emerge from this —
-## no fudge factors, no fall_gravity_multiplier, no pseudo-depth assist.
-##
-## Parent vessel assigns `hull_stations` (metres). `mesh_scale` is deprecated and
-## should stay at 1.0 — station data is already in metres.
+## Distributed strip-theory lift. Every half-section uses one timestamped water
+## sample and applies Archimedes lift at its submerged centroid.
 
-## Per-vessel station table in metres.
 @export var hull_stations: HullStations
-## Deprecated — always leave at 1.0 for metre-authored vessels.
-@export var mesh_scale: float = 1.0
-## Salt water density.
+@export var mesh_scale: float = 1.0 ## Deprecated; stations are metres.
 @export var water_density: float = 1025.0
 @export var gravity: float = 9.81
-## Multiplier on lift forces. Should normally stay at 1.0 — strip theory produces correct
-## Archimedes lift directly. Only deviate if a hull is consistently sitting wrong.
 @export_range(0.5, 2.0, 0.01) var buoyancy_multiplier: float = 1.0
-## Vertical damping coefficient per unit waterplane area (N·s/m per m²).
-## Damps the ship's vertical velocity relative to the local water surface velocity.
-## Real wave-radiation damping scales with frequency — this is a constant approximation
-## that's been tuned for "feels right" without killing wave following.
-@export var heave_damping_per_m2: float = 11000.0
+@export var heave_damping_per_m2: float = 11000.0 ## Legacy fallback only.
 
 var _body: RigidBody3D
+
+var submerged_volume_m3: float = 0.0
+var current_draft_m: float = 0.0
+var waterplane_area_m2: float = 0.0
+var center_of_buoyancy_world: Vector3 = Vector3.ZERO
+var total_lift_n: float = 0.0
+var total_damping_n: float = 0.0
+var effective_damping_ratio: float = 0.0
+var water_snapshot_age_s: float = INF
+var stale_sample_count: int = 0
+var cpu_time_ms: float = 0.0
 
 
 func _ready() -> void:
@@ -45,90 +41,144 @@ func _exit_tree() -> void:
 
 
 func _physics_process(_delta: float) -> void:
-	if Engine.is_editor_hint() or _body == null or hull_stations == null:
+	if (
+		Engine.is_editor_hint()
+		or _body == null
+		or hull_stations == null
+		or hull_stations.stations.is_empty()
+	):
 		return
-	if hull_stations.stations.is_empty():
-		return
+	var cpu_begin := Time.get_ticks_usec()
+	var samples := _gather_samples()
+	_measure_hydrostatics(samples)
+	_apply_forces(samples)
+	cpu_time_ms = float(Time.get_ticks_usec() - cpu_begin) / 1000.0
 
-	var s: float = mesh_scale
-	var rho_g: float = water_density * gravity * buoyancy_multiplier
 
-	# Iterate stations. For each, apply lift on port and starboard halves independently.
-	# This gives roll dynamics for free — when the ship heels, the deeper side gets more
-	# area, more lift, and the resulting moment opposes the heel (righting moment).
-	for i in range(hull_stations.stations.size()):
+func _gather_samples() -> Array[Dictionary]:
+	var samples: Array[Dictionary] = []
+	var stride := 1
+	if _body.has_method("get_physics_station_stride"):
+		stride = maxi(int(_body.call("get_physics_station_stride")), 1)
+	for i in range(0, hull_stations.stations.size(), stride):
 		var station: Dictionary = hull_stations.stations[i]
-		var z_local: float = float(station["z"]) * s
-		var st_len: float = hull_stations.station_length(i) * s
-		if st_len <= 0.0:
+		var z_local := float(station["z"])
+		var station_length := hull_stations.station_length(i) * float(stride)
+		var half_beam := hull_stations.half_beam_at(i, hull_stations.deck_y)
+		if station_length <= 0.0 or half_beam <= 0.001:
 			continue
-
-		# Half-beam at design draft for sample point placement. Use the deck-level half-beam
-		# as a proxy (this is just where the sample is taken; the submerged area is computed
-		# from the full section profile at the local waterline).
-		var hb_max: float = hull_stations.half_beam_at(i, hull_stations.deck_y) * s
-		if hb_max <= 0.001:
-			# Station is at a hull endpoint (bow tip / stern tip) with zero beam — skip.
-			continue
-
-		_apply_station_side(i, z_local, hb_max * 0.5, st_len, rho_g)
-		_apply_station_side(i, z_local, -hb_max * 0.5, st_len, rho_g)
+		for side_sign in [-1.0, 1.0]:
+			var sample := _build_side_sample(
+				i, z_local, half_beam * 0.5 * side_sign, station_length, side_sign
+			)
+			if not sample.is_empty():
+				samples.append(sample)
+	return samples
 
 
-## Apply lift + damping at one side (port or starboard) of one station.
-## `x_local_side` is the X offset for the sample point (positive = starboard, negative = port).
-func _apply_station_side(
+func _build_side_sample(
 	station_idx: int,
 	z_local: float,
-	x_local_side: float,
-	station_length_world: float,
-	rho_g: float
-) -> void:
-	var s: float = mesh_scale
-	# Sample point at the ship-local design-waterline (y=0). Y is unimportant for water
-	# sampling — only X/Z determine where to query the wave surface.
-	var sample_local := Vector3(x_local_side, 0.0, z_local)
-	var sample_world: Vector3 = _body.to_global(sample_local)
-
-	var water_y_world: float = WaveSurface.get_buoyancy_surface_height_at(
-		sample_world.x, sample_world.z
+	x_proxy: float,
+	station_length: float,
+	side_sign: float,
+) -> Dictionary:
+	var proxy_world := _body.to_global(Vector3(
+		x_proxy, hull_stations.design_draft_m, z_local
+	))
+	var water := WaveSurface.sample_at(proxy_world.x, proxy_world.z)
+	var water_local := _body.to_local(Vector3(
+		proxy_world.x, water.height, proxy_world.z
+	))
+	var waterline_y := water_local.y
+	var half_area := hull_stations.half_section_area_below(station_idx, waterline_y)
+	if half_area <= 0.0:
+		return {}
+	var centroid_x := hull_stations.half_section_centroid_x_below(
+		station_idx, waterline_y
+	) * side_sign
+	var centroid_y := hull_stations.half_section_centroid_y_below(
+		station_idx, waterline_y
 	)
-	# Convert the water surface intersection point into ship-local frame to get the
-	# waterline as seen by the section profile. Approximation: treat the local water
-	# patch as flat at this XZ — accurate for ship-scale << wave-length.
-	var water_world_pt := Vector3(sample_world.x, water_y_world, sample_world.z)
-	var water_local: Vector3 = _body.to_local(water_world_pt)
-	var waterline_y_local: float = water_local.y / s  # back to scale-1.0 frame for HS query
+	return {
+		"force_point": _body.to_global(Vector3(centroid_x, centroid_y, z_local)),
+		"volume": half_area * station_length,
+		"waterplane_area": hull_stations.half_beam_at(
+			station_idx, waterline_y
+		) * station_length,
+		"draft": maxf(waterline_y - hull_stations.keel_y, 0.0),
+		"water": water,
+	}
 
-	# Submerged half-section area at this station + waterline, in scale-1.0 m².
-	# Multiply by s² to get area in world units. Multiply by station_length_world to get volume.
-	var half_area_s1: float = hull_stations.half_section_area_below(station_idx, waterline_y_local)
-	if half_area_s1 <= 0.0:
-		return  # this side of this station is dry
-	var half_area_world: float = half_area_s1 * s * s
-	var half_volume_world: float = half_area_world * station_length_world
 
-	# Archimedes lift, world UP direction.
-	var lift_N: float = rho_g * half_volume_world
+func _measure_hydrostatics(samples: Array[Dictionary]) -> void:
+	submerged_volume_m3 = 0.0
+	waterplane_area_m2 = 0.0
+	current_draft_m = 0.0
+	center_of_buoyancy_world = Vector3.ZERO
+	stale_sample_count = 0
+	water_snapshot_age_s = 0.0
+	for data in samples:
+		var volume := float(data["volume"])
+		var wp_area := float(data["waterplane_area"])
+		submerged_volume_m3 += volume
+		waterplane_area_m2 += wp_area
+		center_of_buoyancy_world += (data["force_point"] as Vector3) * volume
+		current_draft_m += float(data["draft"]) * wp_area
+		var water := data["water"] as WaterSample
+		water_snapshot_age_s = maxf(water_snapshot_age_s, water.age_seconds)
+		if water.stale:
+			stale_sample_count += 1
+	if submerged_volume_m3 > 1e-6:
+		center_of_buoyancy_world /= submerged_volume_m3
+	if waterplane_area_m2 > 1e-6:
+		current_draft_m /= waterplane_area_m2
 
-	# Damping: relative vertical velocity at the sample point vs local water vertical velocity.
-	var offset_from_com: Vector3 = sample_world - _body.global_position
-	var angular_vel_at_pt: Vector3 = _body.angular_velocity.cross(offset_from_com)
-	var point_vy: float = _body.linear_velocity.y + angular_vel_at_pt.y
-	# Clamp water Vy reads — FFT shader can briefly spike during cascade restarts.
-	var water_vy: float = clampf(
-		WaveSurface.get_vertical_velocity_at(sample_world.x, sample_world.z),
-		-8.0, 8.0
+
+func _apply_forces(samples: Array[Dictionary]) -> void:
+	total_lift_n = 0.0
+	total_damping_n = 0.0
+	var target_ratio := 0.85
+	var max_damping_accel := 6.0
+	if _body is BoatBody and (_body as BoatBody).physics_profile != null:
+		var profile := (_body as BoatBody).physics_profile
+		target_ratio = profile.heave_damping_ratio
+		max_damping_accel = profile.max_heave_damping_accel
+	var stiffness := water_density * gravity * waterplane_area_m2
+	var critical_damping := 2.0 * sqrt(maxf(_body.mass * stiffness, 0.0))
+	var damping_coefficient := target_ratio * critical_damping
+	effective_damping_ratio = (
+		damping_coefficient / critical_damping if critical_damping > 1e-6 else 0.0
 	)
-	var rel_vy: float = point_vy - water_vy
-
-	# Damping force scaled by waterplane area on this side (half_beam_at_waterline × station_length).
-	# This is the area presenting "drag" to vertical motion through the water surface.
-	var hb_at_wl: float = hull_stations.half_beam_at(station_idx, waterline_y_local) * s
-	var damp_area: float = hb_at_wl * station_length_world
-	var damp_N: float = -rel_vy * heave_damping_per_m2 * damp_area
-
-	# Combined vertical force, applied at the sample world position.
-	# Offset from COM creates a torque automatically — pitch and roll moments emerge.
-	var total_y_force: float = lift_N + damp_N
-	_body.apply_force(Vector3(0.0, total_y_force, 0.0), offset_from_com)
+	var world_com := _body.to_global(_body.center_of_mass)
+	for data in samples:
+		var force_point := data["force_point"] as Vector3
+		var offset_from_com := force_point - world_com
+		var area_fraction := (
+			float(data["waterplane_area"]) / waterplane_area_m2
+			if waterplane_area_m2 > 1e-6 else 0.0
+		)
+		var water := data["water"] as WaterSample
+		var point_velocity := (
+			_body.linear_velocity + _body.angular_velocity.cross(offset_from_com)
+		)
+		var lift_n := (
+			water_density * gravity * buoyancy_multiplier * float(data["volume"])
+		)
+		var damping_n := (
+			-(point_velocity.y - water.velocity.y)
+			* damping_coefficient
+			* area_fraction
+		)
+		var force_limit := (
+			_body.mass * max_damping_accel * maxf(area_fraction, 0.02)
+		)
+		if water.stale:
+			damping_n *= 0.5
+		damping_n = clampf(damping_n, -force_limit, force_limit)
+		_body.apply_force(
+			Vector3(0.0, lift_n + damping_n, 0.0),
+			force_point - _body.global_position
+		)
+		total_lift_n += lift_n
+		total_damping_n += damping_n

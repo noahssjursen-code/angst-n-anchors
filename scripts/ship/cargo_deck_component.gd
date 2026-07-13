@@ -72,8 +72,10 @@ func _ready() -> void:
 
 
 func _exit_tree() -> void:
-	if affects_boat_cargo_mass and absf(_deck_mass_kg) > 1e-6:
-		_apply_boat_cargo_mass_delta(-_deck_mass_kg)
+	if affects_boat_cargo_mass:
+		var boat := _resolve_boat_body()
+		if boat != null:
+			boat.clear_mass_entries(_mass_entry_prefix())
 		_deck_mass_kg = 0.0
 
 
@@ -171,7 +173,7 @@ func add_pallet(pallet: Pallet, world_hint: Vector3 = Vector3.INF) -> int:
 		_cells[cell_idx] = pallet
 
 	if affects_boat_cargo_mass and pallet.mass_kg > 0.0:
-		_apply_boat_cargo_mass_delta(pallet.mass_kg)
+		_set_pallet_mass_entry(pallet, origin_idx, fp)
 		_deck_mass_kg += pallet.mass_kg
 
 	_spawn_pallet_node(origin_idx, pallet, false)
@@ -193,7 +195,7 @@ func remove_pallet(cell_idx: int) -> Pallet:
 	_remove_pallet_node(pallet)
 
 	if pallet != null and affects_boat_cargo_mass and pallet.mass_kg > 0.0:
-		_apply_boat_cargo_mass_delta(-pallet.mass_kg)
+		_remove_pallet_mass_entry(pallet)
 		_deck_mass_kg = maxf(_deck_mass_kg - pallet.mass_kg, 0.0)
 
 	cargo_changed.emit(self)
@@ -241,7 +243,7 @@ func detach_pallet_resource(pallet: Pallet) -> Pallet:
 	if not found:
 		return null
 	if affects_boat_cargo_mass and pallet.mass_kg > 0.0:
-		_apply_boat_cargo_mass_delta(-pallet.mass_kg)
+		_remove_pallet_mass_entry(pallet)
 		_deck_mass_kg = maxf(_deck_mass_kg - pallet.mass_kg, 0.0)
 	cargo_changed.emit(self)
 	return pallet
@@ -466,10 +468,27 @@ func _resolve_boat_body() -> BoatBody:
 		p = p.get_parent()
 	return null
 
-func _apply_boat_cargo_mass_delta(delta_kg: float) -> void:
+func _mass_entry_prefix() -> String:
+	return "cargo:%d:" % get_instance_id()
+
+
+func _mass_entry_id(pallet: Pallet) -> String:
+	var pallet_key := pallet.id if not pallet.id.is_empty() else str(pallet.get_instance_id())
+	return _mass_entry_prefix() + pallet_key
+
+
+func _set_pallet_mass_entry(pallet: Pallet, origin_idx: int, fp: Vector2i) -> void:
 	var boat := _resolve_boat_body()
 	if boat != null:
-		boat.cargo_mass = maxf(boat.cargo_mass + delta_kg, 0.0)
+		var center_local := _block_local_center(origin_idx, fp)
+		var boat_local := boat.to_local(to_global(center_local))
+		boat.set_mass_entry(_mass_entry_id(pallet), pallet.mass_kg, boat_local, "cargo")
+
+
+func _remove_pallet_mass_entry(pallet: Pallet) -> void:
+	var boat := _resolve_boat_body()
+	if boat != null:
+		boat.remove_mass_entry(_mass_entry_id(pallet))
 
 
 # ── Internal: debug grid visual ───────────────────────────────────────────────

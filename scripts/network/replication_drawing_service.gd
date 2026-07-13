@@ -8,6 +8,7 @@ const VehicleGroups = preload("res://scripts/ship/vehicle_groups.gd")
 
 # Tracks active visual remote representations: id -> { "node": Node3D, "type": String, "target_pos": Vector3, "target_payload": Array, "interpolated_payload": Array, "meta": String, "last_seen_ms": int }
 var _visible_entities: Dictionary = {}
+var _wake_field: OceanWakeField
 
 
 func _live_node(state: Dictionary) -> Node3D:
@@ -220,9 +221,53 @@ func interpolate_entities(delta: float, position_smoothness: float, payload_smoo
 		
 		# 3. Apply state back to actual Godot properties
 		_apply_state_to_node(node, state["type"], current_payload, state["meta"])
+		if str(state["type"]).begins_with("ship_") and node is BoatBody:
+			_submit_remote_ship_wake(str(id), node as BoatBody, state, delta)
 
 		if state["type"] == "player":
 			_drive_player_walk_cycle(state, node, delta)
+
+
+func _submit_remote_ship_wake(
+	entity_id: String,
+	ship: BoatBody,
+	state: Dictionary,
+	delta: float,
+) -> void:
+	if delta <= 0.0001:
+		return
+	if _wake_field == null or not is_instance_valid(_wake_field):
+		_wake_field = get_tree().get_first_node_in_group(
+			"ocean_wake_field"
+		) as OceanWakeField
+	if _wake_field == null:
+		return
+	var current := ship.global_position
+	var previous: Vector3 = state.get("wake_sample_pos", current)
+	state["wake_sample_pos"] = current
+	var velocity := (current - previous) / delta
+	var planar_velocity := Vector2(velocity.x, velocity.z)
+	var speed := minf(planar_velocity.length(), 25.0)
+	if speed < 0.35:
+		return
+	var trailing_axis := -planar_velocity.normalized()
+	var propeller_local := Vector3(
+		0.0, ship.depth_m * 0.25, ship.length_m * 0.45
+	)
+	if ship.physics_profile != null:
+		propeller_local = ship.physics_profile.propeller_position
+	var propeller_world := ship.to_global(propeller_local)
+	var speed_strength := smoothstep(0.35, 7.0, speed)
+	_wake_field.submit_emitter(
+		"remote:" + entity_id,
+		Vector2(propeller_world.x, propeller_world.z),
+		trailing_axis,
+		ship.get_half_beam_m(),
+		speed,
+		speed_strength * 0.45,
+		speed_strength * 0.75,
+		30.0
+	)
 
 
 ## Parses metadata to identify pilot IDs that should be hidden.

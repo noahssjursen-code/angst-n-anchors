@@ -1,0 +1,14 @@
+[remap]
+
+importer="glsl"
+type="RDShaderFile"
+uid="uid://dcnd77nhmsnce"
+path="res://.godot/imported/ocean_wake_update.glsl-c7c97d7a5d6eea9465f979d9b6f094b7.res"
+
+[deps]
+
+source_file="res://resources/shaders/ocean_wake_update.glsl"
+dest_files=["res://.godot/imported/ocean_wake_update.glsl-c7c97d7a5d6eea9465f979d9b6f094b7.res"]
+
+[params]
+

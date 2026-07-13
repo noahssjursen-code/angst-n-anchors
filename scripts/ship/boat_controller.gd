@@ -25,7 +25,7 @@ static var helmed_count: int = 0
 
 @export var ship_name:         String = "Unnamed Vessel"
 @export var throttle_response: float = 1.8   # how fast throttle ramps (units/s)
-@export var rudder_response:   float = 3.0
+@export var rudder_response:   float = 1.35
 ## Ordered throttle table. Index is the helm stage.
 ## Default stages:
 ## 0 full astern, 1 stop, 2 dead slow, 3 half, 4 full ahead.
@@ -76,6 +76,8 @@ func _ready() -> void:
 func activate() -> void:
 	_active = true
 	helmed_count += 1
+	if _boat_body != null:
+		WaveSurface.set_local_visual_vessel(_boat_body)
 	_ensure_hud()
 	_set_hud_visible(true)
 	helm_activated.emit()
@@ -93,6 +95,8 @@ func deactivate() -> void:
 	_rudder         = 0.0
 	_lateral        = 0.0
 	_throttle_stage_idx = _nearest_stage_idx(0.0)
+	if _boat_body != null:
+		WaveSurface.clear_coupled_vessel_if(_boat_body)
 	_push_to_components()
 	_set_hud_visible(false)
 	helm_deactivated.emit()

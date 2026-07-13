@@ -26,6 +26,13 @@ uniform sampler2D land_shelter_map : filter_linear, repeat_disable;
 uniform vec2 land_shelter_origin = vec2(0.0);
 uniform float land_shelter_size = 0.0;
 uniform vec4 debug_tint : source_color = vec4(0.0);
+#if OCEAN_WAKE
+uniform sampler2D wake_field_map : filter_linear, repeat_disable;
+uniform vec2 wake_field_origin = vec2(0.0);
+uniform float wake_field_extent = 0.0;
+uniform float wake_field_texel_m = 2.0;
+uniform float wake_visual_strength : hint_range(0.0, 2.0) = 1.0;
+#endif
 
 varying vec3 v_world_pos;
 varying vec3 v_world_normal;
@@ -69,6 +76,23 @@ void vertex() {
 		water_level + displacement.y,
 		wp.z + displacement.z
 	);
+#if OCEAN_WAKE
+	if (wake_field_extent > 0.0) {
+		vec2 wake_uv = ocean_wake_uv(displaced_world.xz, wake_field_origin, wake_field_extent);
+		if (ocean_wake_coverage(wake_uv) > 0.5) {
+			vec2 wake_step = vec2(wake_field_texel_m / wake_field_extent, 0.0);
+			vec2 wake_gradient = vec2(
+				textureLod(wake_field_map, wake_uv + wake_step, 0.0).g
+					- textureLod(wake_field_map, wake_uv - wake_step, 0.0).g,
+				textureLod(wake_field_map, wake_uv + wake_step.yx, 0.0).g
+					- textureLod(wake_field_map, wake_uv - wake_step.yx, 0.0).g
+			);
+			slopes += wake_gradient
+				* (0.04 / max(wake_field_texel_m * 2.0, 0.1))
+				* wake_visual_strength;
+		}
+	}
+#endif
 	vec3 world_normal = normalize(vec3(-slopes.x, 1.0, -slopes.y));
 
 	mat4 inverse_model = inverse(MODEL_MATRIX);
@@ -81,6 +105,25 @@ void vertex() {
 
 void fragment() {
 	vec3 normal_world = normalize(v_world_normal);
+#if OCEAN_WAKE
+	vec2 wake_sample = vec2(0.0);
+	if (wake_field_extent > 0.0) {
+		vec2 wake_uv = ocean_wake_uv(v_world_pos.xz, wake_field_origin, wake_field_extent);
+		if (ocean_wake_coverage(wake_uv) > 0.5) {
+			wake_sample = texture(wake_field_map, wake_uv).rg;
+			vec2 wake_step = vec2(wake_field_texel_m / wake_field_extent, 0.0);
+			vec2 wake_gradient = vec2(
+				texture(wake_field_map, wake_uv + wake_step).g
+					- texture(wake_field_map, wake_uv - wake_step).g,
+				texture(wake_field_map, wake_uv + wake_step.yx).g
+					- texture(wake_field_map, wake_uv - wake_step.yx).g
+			);
+			normal_world = normalize(normal_world + vec3(
+				-wake_gradient.x, 0.0, -wake_gradient.y
+			) * 0.14 * wake_visual_strength);
+		}
+	}
+#endif
 	vec3 view_dir = normalize(CAMERA_POSITION_WORLD - v_world_pos);
 	vec3 sun_dir = normalize(sun_direction);
 	float distance_to_camera = length(CAMERA_POSITION_WORLD - v_world_pos);
@@ -120,10 +163,29 @@ void fragment() {
 		0.85,
 		clamp(jacobian, 0.0, 1.0) + v_wave_steep * 0.3
 	) * foam_strength;
+#if OCEAN_WAKE
+	float wake_erode = ocean_fbm(
+		v_world_pos.xz * vec2(1.35, 0.78)
+		+ wave_time * vec2(0.55, -0.28)
+	);
+	float wake_lace = smoothstep(
+		0.05 + wake_erode * 0.28,
+		0.62,
+		wake_sample.x
+	);
+	float wake_foam = wake_lace * wake_visual_strength * 0.75;
+	float wake_churn = smoothstep(0.03, 0.45, wake_sample.y) * wake_visual_strength;
+	foam = max(foam, wake_foam);
+	color = mix(color, color * vec3(0.72, 0.82, 0.88), wake_churn * 0.18);
+#endif
 	foam = clamp(foam, 0.0, 1.0);
 	vec3 foam_color = mix(vec3(0.75, 0.84, 0.88), vec3(0.97, 0.98, 1.0), foam);
-	color = mix(color, foam_color, foam * 0.9);
+	color = mix(color, foam_color, foam * 0.7);
+#if OCEAN_WAKE
+	ROUGHNESS = mix(mix(0.68, 0.8, wake_churn), 0.95, foam);
+#else
 	ROUGHNESS = mix(0.68, 0.95, foam);
+#endif
 #else
 	ROUGHNESS = 0.76;
 #endif

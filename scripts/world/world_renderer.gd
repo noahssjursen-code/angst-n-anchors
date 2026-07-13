@@ -16,6 +16,7 @@ const SCREEN_SHADER  := preload("res://resources/shaders/screen_effects.gdshader
 const C_OCEAN      := Color(0.015, 0.045, 0.075)
 
 const FFT_WATER_SYSTEM_SCRIPT := preload("res://scripts/ocean/fft_water_system.gd")
+const OCEAN_WAKE_FIELD_SCRIPT := preload("res://scripts/ocean/ocean_wake_field.gd")
 
 ## Clipmap ocean — dense near boat (where quality matters), coarse mid ring,
 ## cascade-0 horizon beyond. Near density is HIGHER than the old uniform grid.
@@ -54,6 +55,7 @@ var _ocean_mesh_mid:        MeshInstance3D
 var _ocean_mesh_outer:      MeshInstance3D
 var _ocean_clipmap:         OceanClipmap
 var _fft_system:            Node # Use Node instead of FFTWaterSystem to avoid unresolved class error without reload
+var _wake_field:            OceanWakeField
 var _fft_maps_bound:        bool = false
 var _ocean_debug_false_color := false
 
@@ -76,6 +78,9 @@ func _ready() -> void:
 	_fft_system.name = "FFTWaterSystem"
 	add_child(_fft_system)
 	WaveSurface.fft_system = _fft_system
+	_wake_field = OCEAN_WAKE_FIELD_SCRIPT.new() as OceanWakeField
+	_wake_field.name = "OceanWakeField"
+	add_child(_wake_field)
 
 	_build_sky()
 	_build_ocean()
@@ -138,6 +143,7 @@ func _process(_delta: float) -> void:
 		_ocean_horizon_material.set_shader_parameter("wave_intensity", WaveSurface.wave_intensity)
 		_ocean_horizon_material.set_shader_parameter("wave_energy_multiplier", WaveSurface.get_wave_energy_multiplier())
 	_bind_fft_maps_once()
+	_sync_wake_field()
 	if _sky_shader_material:
 		_sky_shader_material.set_shader_parameter("sky_time",       WaveSurface.get_sim_time())
 		_sky_shader_material.set_shader_parameter("sun_direction",   _celestial_dir(0.0))
@@ -177,7 +183,16 @@ func _follow_camera_xz() -> void:
 		return
 	if _ocean_clipmap != null and is_instance_valid(_ocean_clipmap):
 		_ocean_clipmap.follow_camera(cam.global_position)
+		# Focus the wake atlas on the same snapped origin as the clipmap so
+		# remaps and ocean meshes share one world grid.
+		if _wake_field != null:
+			_wake_field.set_focus(Vector2(
+				_ocean_clipmap.position.x,
+				_ocean_clipmap.position.z
+			))
 		return
+	if _wake_field != null:
+		_wake_field.set_focus(Vector2(cam.global_position.x, cam.global_position.z))
 	if _ocean_mesh == null or not is_instance_valid(_ocean_mesh):
 		return
 	# Snap to near-ring vertex spacing so screen-space swimming stays locked.
@@ -192,6 +207,24 @@ func _follow_camera_xz() -> void:
 	if _ocean_mesh_outer != null and is_instance_valid(_ocean_mesh_outer):
 		_ocean_mesh_outer.position.x = px
 		_ocean_mesh_outer.position.z = pz
+
+
+func _sync_wake_field() -> void:
+	if _wake_field == null or _wake_field.get_wake_texture() == null:
+		return
+	var texture := _wake_field.get_wake_texture()
+	var origin := _wake_field.get_world_origin()
+	var extent := _wake_field.get_world_extent()
+	var texel_m := extent / float(OceanWakeField.RESOLUTION)
+	for material in [_ocean_shader_material, _ocean_mid_material]:
+		if material == null:
+			continue
+		material.set_shader_parameter("wake_field_map", texture)
+		material.set_shader_parameter("wake_field_origin", origin)
+		material.set_shader_parameter("wake_field_extent", extent)
+		material.set_shader_parameter("wake_field_texel_m", texel_m)
+		# Keep wake visual contribution modest so FFT water remains the base.
+		material.set_shader_parameter("wake_visual_strength", 1.0)
 
 
 func _build_sky() -> void:

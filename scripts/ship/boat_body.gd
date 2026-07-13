@@ -2,6 +2,8 @@
 class_name BoatBody
 extends RigidBody3D
 
+enum PhysicsQuality { FULL, MEDIUM, SLEEP }
+
 ## Root node of every boat. Owns physics properties.
 ## Visuals and collision are handled by the MeshTransformer child component.
 ##
@@ -97,6 +99,15 @@ enum FaceAxis { PLUS_X = 0, MINUS_X = 1, PLUS_Z = 2, MINUS_Z = 3 }
 		hull_stations = v
 		_refresh_mass()
 
+## Authoritative SI physics contract for hand-authored vessels.
+@export var physics_profile: HullPhysicsProfile
+
+@export_group("Simulation LOD")
+@export var automatic_physics_lod: bool = true
+@export var medium_physics_distance_m: float = 350.0
+@export var sleep_physics_distance_m: float = 1200.0
+@export var physics_quality: PhysicsQuality = PhysicsQuality.FULL
+
 @export_group("Component masses (kg)")
 ## Engine + drivetrain (steel block, low and aft).
 @export var engine_mass: float = 0.0:
@@ -135,6 +146,7 @@ enum FaceAxis { PLUS_X = 0, MINUS_X = 1, PLUS_Z = 2, MINUS_Z = 3 }
 		var clamped := clampf(v, 0.0, fuel_capacity_l)
 		var was_dry := fuel_l <= 0.0001
 		fuel_l = clamped
+		_refresh_mass()
 		fuel_changed.emit(get_fuel_fraction())
 		if not was_dry and fuel_l <= 0.0001:
 			fuel_depleted.emit()
@@ -251,6 +263,13 @@ var _walk_deck:   AnimatableBody3D
 
 ## Mooring positional solve runs here (inside Jolt/Godot integration), not via impulses.
 var _mooring_integrate: Callable = Callable()
+## id -> {mass_kg, position, category}. Bricks and pallets register here.
+var _mass_entries: Dictionary = {}
+var _mass_breakdown: Dictionary = {}
+var _physics_lod_timer: float = 0.0
+var _applied_physics_quality: int = -1
+
+signal mass_properties_changed(total_mass_kg: float, local_center_of_mass: Vector3)
 
 
 # ── Fuel API ─────────────────────────────────────────────────────────────────
@@ -309,6 +328,7 @@ func _ready() -> void:
 	_ensure_model()
 	_build_merged_collision()
 	_refresh_mass()
+	set_physics_quality(physics_quality)
 
 	if not Engine.is_editor_hint():
 		call_deferred("_ensure_walk_deck")
@@ -366,6 +386,72 @@ func _physics_process(_delta: float) -> void:
 
 	if _walk_deck == null or not is_instance_valid(_walk_deck):
 		_ensure_walk_deck()
+	if automatic_physics_lod:
+		_physics_lod_timer += _delta
+		if _physics_lod_timer >= 1.0:
+			_physics_lod_timer = 0.0
+			_update_automatic_physics_quality()
+
+
+func set_physics_quality(value: PhysicsQuality) -> void:
+	if physics_quality == value and _applied_physics_quality == int(value):
+		return
+	physics_quality = value
+	_applied_physics_quality = int(value)
+	freeze = physics_quality == PhysicsQuality.SLEEP
+	sleeping = physics_quality == PhysicsQuality.SLEEP
+	for child_name in [
+		"StripBuoyancyComponent",
+		"HydrodynamicsComponent",
+		"PropulsionComponent",
+		"RudderComponent",
+		"BowThrusterComponent",
+	]:
+		var component := get_node_or_null(child_name)
+		if component != null:
+			component.set_physics_process(physics_quality != PhysicsQuality.SLEEP)
+
+
+func get_physics_station_stride() -> int:
+	return 2 if physics_quality == PhysicsQuality.MEDIUM else 1
+
+
+func get_physics_force_scale_for_tick() -> float:
+	if physics_quality == PhysicsQuality.SLEEP:
+		return 0.0
+	if physics_quality == PhysicsQuality.MEDIUM:
+		return 2.0 if Engine.get_physics_frames() % 2 == 0 else 0.0
+	return 1.0
+
+
+func get_physics_quality_name() -> String:
+	return PhysicsQuality.keys()[physics_quality]
+
+
+func _update_automatic_physics_quality() -> void:
+	var peer_active := (
+		multiplayer != null and multiplayer.multiplayer_peer != null
+	)
+	if peer_active and not is_multiplayer_authority():
+		set_physics_quality(PhysicsQuality.SLEEP)
+		return
+	if is_in_group(PlayerVessel.GROUP):
+		set_physics_quality(PhysicsQuality.FULL)
+		return
+	var nearest_distance := INF
+	if get_tree() != null:
+		for node in get_tree().get_nodes_in_group(PlayerVessel.GROUP):
+			var relevant := node as Node3D
+			if relevant != null and relevant != self:
+				nearest_distance = minf(
+					nearest_distance, global_position.distance_to(relevant.global_position)
+				)
+	if nearest_distance == INF or nearest_distance < medium_physics_distance_m:
+		set_physics_quality(PhysicsQuality.FULL)
+	elif nearest_distance < sleep_physics_distance_m:
+		set_physics_quality(PhysicsQuality.MEDIUM)
+	else:
+		set_physics_quality(PhysicsQuality.SLEEP)
 
 
 func _ensure_model() -> void:
@@ -467,6 +553,9 @@ func _model_in_ship_frame() -> bool:
 func _refresh_center_of_mass() -> void:
 	if not is_node_ready():
 		return
+	if physics_profile != null:
+		_refresh_profile_mass()
+		return
 	center_of_mass_mode = RigidBody3D.CENTER_OF_MASS_MODE_CUSTOM
 	var down: float = hull_size.y * _center_of_mass_depth_fraction + _artificial_keel_extra_depth
 	## Bow −Z / stern +Z — longitudinal_m > 0 shifts CoM aft (stern ballast).
@@ -475,6 +564,9 @@ func _refresh_center_of_mass() -> void:
 
 func _refresh_mass() -> void:
 	if not is_node_ready():
+		return
+	if physics_profile != null:
+		_refresh_profile_mass()
 		return
 	# displacement_t is design mass in tonnes (1 t = 1000 kg). Cargo adds on top.
 	# Component mass exports are for CoM / tuning docs — not stacked on displacement_t.
@@ -486,6 +578,126 @@ func _refresh_mass() -> void:
 	else:
 		mass = maxf(hull_mass + engine_mass + keel_ballast_mass + fuel_stores_mass + cargo_mass, 1.0)
 	_refresh_center_of_mass()
+
+
+func set_mass_entry(
+	entry_id: String,
+	entry_mass_kg: float,
+	local_position: Vector3,
+	category: String = "equipment",
+) -> void:
+	if entry_id.is_empty():
+		return
+	var clamped_mass := maxf(entry_mass_kg, 0.0)
+	if clamped_mass <= 0.0:
+		_mass_entries.erase(entry_id)
+	else:
+		_mass_entries[entry_id] = {
+			"mass_kg": clamped_mass,
+			"position": local_position,
+			"category": category,
+		}
+	if category == "cargo":
+		cargo_mass = _entry_category_mass("cargo")
+	else:
+		_refresh_mass()
+
+
+func remove_mass_entry(entry_id: String) -> void:
+	if not _mass_entries.has(entry_id):
+		return
+	var category := str((_mass_entries[entry_id] as Dictionary).get("category", "equipment"))
+	_mass_entries.erase(entry_id)
+	if category == "cargo":
+		cargo_mass = _entry_category_mass("cargo")
+	else:
+		_refresh_mass()
+
+
+func clear_mass_entries(prefix: String = "") -> void:
+	for key in _mass_entries.keys().duplicate():
+		if prefix.is_empty() or str(key).begins_with(prefix):
+			_mass_entries.erase(key)
+	cargo_mass = _entry_category_mass("cargo")
+	_refresh_mass()
+
+
+func get_mass_breakdown() -> Dictionary:
+	return _mass_breakdown.duplicate(true)
+
+
+func get_world_center_of_mass() -> Vector3:
+	return to_global(center_of_mass)
+
+
+func _entry_category_mass(category: String) -> float:
+	var total := 0.0
+	for entry in _mass_entries.values():
+		var data := entry as Dictionary
+		if str(data.get("category", "")) == category:
+			total += float(data.get("mass_kg", 0.0))
+	return total
+
+
+func _refresh_profile_mass() -> void:
+	if physics_profile == null or not is_node_ready():
+		return
+	var profile := physics_profile
+	var design_mass := profile.design_mass_kg()
+	var engine := maxf(profile.engine_mass_kg, 0.0)
+	var ballast := maxf(profile.ballast_mass_kg, 0.0)
+	var full_stores := maxf(profile.full_stores_mass_kg, 0.0)
+	var stores := full_stores * get_fuel_fraction()
+	var hull := maxf(design_mass - engine - ballast - full_stores, 1000.0)
+
+	var weighted := profile.hull_center_of_mass * hull
+	weighted += profile.engine_position * engine
+	weighted += profile.ballast_position * ballast
+	weighted += profile.stores_position * stores
+	var entries_total := 0.0
+	var category_totals: Dictionary = {}
+	for entry in _mass_entries.values():
+		var data := entry as Dictionary
+		var entry_mass := maxf(float(data.get("mass_kg", 0.0)), 0.0)
+		var entry_position: Vector3 = data.get("position", Vector3.ZERO)
+		var category := str(data.get("category", "equipment"))
+		entries_total += entry_mass
+		weighted += entry_position * entry_mass
+		category_totals[category] = float(category_totals.get(category, 0.0)) + entry_mass
+
+	# Compatibility for callers that still assign cargo_mass directly.
+	var registered_cargo := float(category_totals.get("cargo", 0.0))
+	var unregistered_cargo := maxf(cargo_mass - registered_cargo, 0.0)
+	entries_total += unregistered_cargo
+	weighted += Vector3(0.0, hull_size.y, 0.0) * unregistered_cargo
+
+	var total := maxf(hull + engine + ballast + stores + entries_total, 1.0)
+	mass = total
+	center_of_mass_mode = RigidBody3D.CENTER_OF_MASS_MODE_CUSTOM
+	center_of_mass = weighted / total
+
+	# Approximate principal moments from configurable radii of gyration. Boat
+	# body axes: X=pitch, Y=yaw, Z=roll.
+	var pitch_radius := maxf(profile.length_m * profile.pitch_gyradius_fraction, 0.1)
+	var yaw_radius := maxf(profile.length_m * profile.yaw_gyradius_fraction, 0.1)
+	var roll_radius := maxf(profile.beam_m * profile.roll_gyradius_fraction, 0.1)
+	inertia = Vector3(
+		total * pitch_radius * pitch_radius,
+		total * yaw_radius * yaw_radius,
+		total * roll_radius * roll_radius
+	)
+	_mass_breakdown = {
+		"total_kg": total,
+		"hull_kg": hull,
+		"engine_kg": engine,
+		"ballast_kg": ballast,
+		"stores_kg": stores,
+		"entries_kg": entries_total,
+		"categories": category_totals,
+		"center_of_mass": center_of_mass,
+		"inertia": inertia,
+	}
+	mass_properties_changed.emit(total, center_of_mass)
 
 
 func _on_si_size_changed() -> void:
@@ -606,6 +818,12 @@ func snap_to_transform(xform: Transform3D) -> void:
 func place_at_waterline(water_y: float, draft_fraction: float = -1.0) -> void:
 	_ensure_model()
 	_sync_hull_size_from_mesh()
+	# Spawn against the current macro surface when the caller requests nominal
+	# sea level. Before the first async snapshot, flat water is deterministic.
+	if is_equal_approx(water_y, WaveSurface.WATER_LEVEL):
+		var water := WaveSurface.sample_at(global_position.x, global_position.z)
+		if water.valid and not water.stale:
+			water_y = water.height
 	if draft_fraction < 0.0:
 		draft_fraction = floating_draft_fraction()
 	# Prefer strip-theory height (includes keel) when available, else hull_size.y

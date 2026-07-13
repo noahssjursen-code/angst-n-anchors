@@ -26,17 +26,21 @@ const _MAX_SEGMENT_POOL_PER_ROPE: int = 32
 
 @export_group("Moor solve (physics integration)")
 ## Positional Gauss–Seidel passes per rope per tick (cheap, bounded; no impulses).
-@export_range(6, 40, 1) var gauss_iterations: int = 18
+@export_range(6, 40, 1) var gauss_iterations: int = 12
 ## Fraction of each remaining length error removed per rope per pass (inelastic hitch).
-@export_range(0.03, 0.55, 0.005) var length_correction_blend: float = 0.084
+@export_range(0.03, 0.55, 0.005) var length_correction_blend: float = 0.06
 ## Cap hull translation contributed by one rope in one solver pass — keeps heavy mass stable.
 @export_range(0.0015, 0.08, 0.001) var max_length_step_m: float = 0.0078
 ## When **both** lines are fast, softly blend yaw/pitch/roll toward the berth attitude.
 @export_range(0.0, 42.0, 0.2) var berth_heading_blend_hz: float = 3.8
 ## Exponential reduction on hull linear drift while tied (heavy body; no sling-shot).
-@export_range(1.8, 28.0, 0.2) var mooring_lin_damping: float = 8.8
+@export_range(1.8, 28.0, 0.2) var mooring_lin_damping: float = 6.0
 ## Exponential reduction on yaw/pitch/heave spin while tied.
-@export_range(3.8, 60.0, 0.2) var mooring_ang_damping: float = 18.5
+@export_range(3.8, 60.0, 0.2) var mooring_ang_damping: float = 12.0
+## Lower vertical/roll/pitch damping lets the hull follow swell while lines
+## constrain horizontal drift and yaw.
+@export_range(0.0, 10.0, 0.1) var mooring_heave_damping: float = 0.8
+@export_range(0.0, 10.0, 0.1) var mooring_tilt_damping: float = 2.5
 ## Slack allowance above target line length (meters). Keep small for boarding proximity.
 @export_range(0.0, 6.0, 0.01) var rope_tension_slack_m: float = 0.24
 ## Margin below max length where tension is already considered active (stabilizes on boundary).
@@ -254,9 +258,15 @@ func _integrate_mooring_constraints(state: PhysicsDirectBodyState3D) -> void:
 		)
 
 	if bow_taut and stern_taut:
-		var qh := xf.basis.get_rotation_quaternion().normalized()
 		var br := berth_heading_blend_hz * dt
-		xf.basis = Basis(qh.slerp(_moor_snap_q, clampf(br, 0.0, 0.985)))
+		var current_forward := -xf.basis.z
+		var target_forward := -Basis(_moor_snap_q).z
+		var current_yaw := atan2(current_forward.x, current_forward.z)
+		var target_yaw := atan2(target_forward.x, target_forward.z)
+		var yaw_step := angle_difference(current_yaw, target_yaw) * clampf(
+			br, 0.0, 0.985
+		)
+		xf.basis = Basis(Vector3.UP, yaw_step) * xf.basis
 
 	var passes := gauss_iterations
 	for solve_idx in range(passes):
@@ -278,8 +288,20 @@ func _integrate_mooring_constraints(state: PhysicsDirectBodyState3D) -> void:
 	state.transform = xf
 	if kill_radial_velocity_at_cleats:
 		_kill_tied_rope_radial_motion_at_cleats(state)
-	state.linear_velocity *= exp(-mooring_lin_damping * dt)
-	state.angular_velocity *= exp(-mooring_ang_damping * dt)
+	var linear_damp := exp(-mooring_lin_damping * dt)
+	var heave_damp := exp(-mooring_heave_damping * dt)
+	state.linear_velocity = Vector3(
+		state.linear_velocity.x * linear_damp,
+		state.linear_velocity.y * heave_damp,
+		state.linear_velocity.z * linear_damp
+	)
+	var angular_local := state.transform.basis.inverse() * state.angular_velocity
+	angular_local = Vector3(
+		angular_local.x * exp(-mooring_tilt_damping * dt),
+		angular_local.y * exp(-mooring_ang_damping * dt),
+		angular_local.z * exp(-mooring_tilt_damping * dt)
+	)
+	state.angular_velocity = state.transform.basis * angular_local
 
 
 func _gauss_correction_step(

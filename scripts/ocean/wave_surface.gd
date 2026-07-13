@@ -7,12 +7,16 @@ const WATER_LEVEL: float = -1.5
 const WAVE_INTENSITY_MIN:  float = 0.0
 const WAVE_INTENSITY_MAX:  float = 5.0
 const WAVE_INTENSITY_STEP: float = 0.1
+const MAX_EXTRAPOLATION_SECONDS: float = 0.12
+const STALE_AFTER_SECONDS: float = 0.20
 
 static var wave_intensity: float = 1.0
 static var short_wave_factor: float = 0.0
 
 static var _coupled_vessel: RigidBody3D = null
 static var fft_system: Node = null
+static var _sample_cache_frame: int = -1
+static var _sample_cache: Dictionary = {}
 
 static func bump_wave_intensity(delta: float) -> void:
 	set_wave_intensity(wave_intensity + delta)
@@ -47,7 +51,22 @@ static func get_wave_energy_multiplier() -> float:
 	return _wem_cache_value
 
 static func set_coupled_vessel(body: RigidBody3D) -> void:
+	# Compatibility registration: first valid vessel wins until the local
+	# controller explicitly selects one. This removes last-writer-wins.
+	if _coupled_vessel == null or not is_instance_valid(_coupled_vessel):
+		_coupled_vessel = body
+
+
+static func set_local_visual_vessel(body: RigidBody3D) -> void:
 	_coupled_vessel = body
+
+
+static func is_local_visual_vessel(body: RigidBody3D) -> bool:
+	return (
+		body != null
+		and _coupled_vessel == body
+		and is_instance_valid(_coupled_vessel)
+	)
 
 static func clear_coupled_vessel_if(body: RigidBody3D) -> void:
 	if _coupled_vessel == body:
@@ -56,34 +75,13 @@ static func clear_coupled_vessel_if(body: RigidBody3D) -> void:
 static func get_sim_time() -> float:
 	return Time.get_ticks_msec() * 0.001
 
+
+static func clear_sample_cache() -> void:
+	_sample_cache.clear()
+	_sample_cache_frame = -1
+
 static func get_buoyancy_surface_height_at(x: float, z: float) -> float:
-	if fft_system == null or fft_system.buoyancy_data.size() < 4 or fft_system.buoyancy_data[0].is_empty():
-		return WATER_LEVEL
-
-	var res     : int   = FFTWaterSystem.RESOLUTION
-	var res_f   : float = float(res)
-	var res_max : int   = res - 1
-	var h_total := 0.0
-	for i in range(4):
-		var length_scale = fft_system.length_scales[i]
-
-		var u = fmod(x / length_scale, 1.0)
-		var v = fmod(z / length_scale, 1.0)
-		if u < 0.0: u += 1.0
-		if v < 0.0: v += 1.0
-
-		var px = clamp(int(u * res_f), 0, res_max)
-		var py = clamp(int(v * res_f), 0, res_max)
-
-		var idx = py * res + px
-		h_total += fft_system.buoyancy_data[i][idx]
-
-	# Scale down the FFT raw height by 0.42 to match the visual shader's amp_scale tuning,
-	# and multiply by the same LandField shelter the ocean shader uses per-vertex — so
-	# the boat's buoyancy reads exactly the surface the player sees. Without this the
-	# physics bobs the hull in invisible waves near distant islands.
-	var shelter := LandField.shore_shelter(Vector3(x, 0.0, z))
-	return WATER_LEVEL + h_total * wave_intensity * get_wave_energy_multiplier() * 0.42 * shelter
+	return sample_at(x, z).height
 
 static func get_base_wave_height_at(x: float, z: float) -> float:
 	return get_buoyancy_surface_height_at(x, z)
@@ -101,7 +99,12 @@ static func _vessel_displacement_params(b: RigidBody3D) -> Dictionary:
 	var hs: Vector3 = _hull_size_from_body(b)
 	var bx: float = b.global_position.x
 	var bz: float = b.global_position.z
-	var keel_y: float = b.global_position.y - hs.y * 0.5
+	var keel_local_y := -hs.y * 0.5
+	if "hull_stations" in b:
+		var stations := b.get("hull_stations") as HullStations
+		if stations != null:
+			keel_local_y = stations.keel_y
+	var keel_y: float = b.to_global(Vector3(0.0, keel_local_y, 0.0)).y
 	var surf_raw: float = get_base_wave_height_at(bx, bz)
 	
 	var right := b.global_transform.basis.x
@@ -144,48 +147,106 @@ static func _vessel_displacement_params(b: RigidBody3D) -> Dictionary:
 	}
 
 static func get_vertical_velocity_at(x: float, z: float) -> float:
-	if fft_system == null or fft_system.buoyancy_data.size() < 4 or fft_system.prev_buoyancy_data.size() < 4 or fft_system.buoyancy_data[0].is_empty() or fft_system.prev_buoyancy_data[0].is_empty():
-		return 0.0
-
-	var dt = fft_system.prev_delta
-	if dt <= 0.0001: return 0.0
-
-	var res     : int   = FFTWaterSystem.RESOLUTION
-	var res_f   : float = float(res)
-	var res_max : int   = res - 1
-	var h_now = 0.0
-	var h_prev = 0.0
-	for i in range(4):
-		var length_scale = fft_system.length_scales[i]
-		var u = fmod(x / length_scale, 1.0)
-		var v = fmod(z / length_scale, 1.0)
-		if u < 0.0: u += 1.0
-		if v < 0.0: v += 1.0
-
-		var px = clamp(int(u * res_f), 0, res_max)
-		var py = clamp(int(v * res_f), 0, res_max)
-		var idx = py * res + px
-		h_now += fft_system.buoyancy_data[i][idx]
-		h_prev += fft_system.prev_buoyancy_data[i][idx]
-	
-	# Same shelter as get_buoyancy_surface_height_at so vertical velocity also
-	# tracks the dampened surface near land — otherwise the hull would still
-	# see vertical motion (impulse) even when the static height is flat.
-	var shelter := LandField.shore_shelter(Vector3(x, 0.0, z))
-	var dh = (h_now - h_prev) * wave_intensity * get_wave_energy_multiplier() * 0.42 * shelter
-	return dh / dt
+	return sample_at(x, z).velocity.y
 
 static func get_surface_gradient_xz(x: float, z: float) -> Vector2:
-	var e = 1.0
-	var h0 = get_buoyancy_surface_height_at(x - e, z)
-	var h1 = get_buoyancy_surface_height_at(x + e, z)
-	var h2 = get_buoyancy_surface_height_at(x, z - e)
-	var h3 = get_buoyancy_surface_height_at(x, z + e)
-	return Vector2((h1 - h0) / (2.0 * e), (h3 - h2) / (2.0 * e))
+	return sample_at(x, z).gradient_xz
 
 static func get_surface_normal_at(x: float, z: float) -> Vector3:
-	var g: Vector2 = get_surface_gradient_xz(x, z)
-	return Vector3(-g.x, 1.0, -g.y).normalized()
+	return sample_at(x, z).normal
+
+
+static func sample_at(x: float, z: float) -> WaterSample:
+	var frame := Engine.get_physics_frames()
+	if frame != _sample_cache_frame:
+		_sample_cache_frame = frame
+		_sample_cache.clear()
+	var cache_key := Vector2i(roundi(x * 10.0), roundi(z * 10.0))
+	if _sample_cache.has(cache_key):
+		return _sample_cache[cache_key] as WaterSample
+	var sample := WaterSample.flat()
+	sample.shelter = LandField.sample_baked_shelter(Vector3(x, 0.0, z))
+	if (
+		fft_system == null
+		or not "physics_query_data" in fft_system
+		or fft_system.physics_query_data.size() < 4
+		or fft_system.physics_query_data[0].is_empty()
+	):
+		_sample_cache[cache_key] = sample
+		return sample
+
+	var raw := _sample_query_raw(x, z)
+	var scale := wave_intensity * get_wave_energy_multiplier() * 0.42 * sample.shelter
+	sample.height = WATER_LEVEL + raw.x * scale
+	sample.velocity = Vector3(raw.y, raw.z, raw.w) * scale
+	sample.snapshot_time = float(fft_system.physics_query_snapshot_time)
+	sample.age_seconds = float(fft_system.get_physics_query_age_seconds())
+	sample.stale = sample.age_seconds > STALE_AFTER_SECONDS
+	sample.valid = true
+	if not sample.stale:
+		sample.height += sample.velocity.y * minf(
+			sample.age_seconds, MAX_EXTRAPOLATION_SECONDS
+		)
+	else:
+		sample.velocity = Vector3.ZERO
+
+	var e := 1.0
+	var left := _sample_query_raw(x - e, z).x
+	var right := _sample_query_raw(x + e, z).x
+	var back := _sample_query_raw(x, z - e).x
+	var forward := _sample_query_raw(x, z + e).x
+	sample.gradient_xz = Vector2(
+		(right - left) * 0.5 * scale,
+		(forward - back) * 0.5 * scale
+	)
+	sample.normal = Vector3(
+		-sample.gradient_xz.x, 1.0, -sample.gradient_xz.y
+	).normalized()
+	_sample_cache[cache_key] = sample
+	return sample
+
+
+static func _sample_query_raw(x: float, z: float) -> Vector4:
+	var total := Vector4.ZERO
+	var resolution := FFTWaterSystem.PHYSICS_QUERY_RESOLUTION
+	for cascade in range(4):
+		var length_scale := float(fft_system.length_scales[cascade])
+		var u := fposmod(x / length_scale, 1.0)
+		var v := fposmod(z / length_scale, 1.0)
+		total += _bilinear_query_layer(
+			fft_system.physics_query_data[cascade], resolution, u, v
+		)
+	return total
+
+
+static func _bilinear_query_layer(
+	data: PackedFloat32Array,
+	resolution: int,
+	u: float,
+	v: float,
+) -> Vector4:
+	var px: float = u * float(resolution)
+	var py: float = v * float(resolution)
+	var x0 := int(floor(px)) % resolution
+	var y0 := int(floor(py)) % resolution
+	var x1 := (x0 + 1) % resolution
+	var y1 := (y0 + 1) % resolution
+	var fx: float = px - floor(px)
+	var fy: float = py - floor(py)
+	var a := _query_texel(data, resolution, x0, y0).lerp(
+		_query_texel(data, resolution, x1, y0), fx
+	)
+	var b := _query_texel(data, resolution, x0, y1).lerp(
+		_query_texel(data, resolution, x1, y1), fx
+	)
+	return a.lerp(b, fy)
+
+
+static func _query_texel(
+	data: PackedFloat32Array, resolution: int, x: int, y: int
+) -> Vector4:
+	var idx := (y * resolution + x) * 4
+	return Vector4(data[idx], data[idx + 1], data[idx + 2], data[idx + 3])
 
 static func sync_ocean_coupling_to_shader(mat: ShaderMaterial) -> void:
 	if mat == null:
