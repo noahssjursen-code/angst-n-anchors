@@ -166,12 +166,18 @@ func _try_pay_for_commission(entry: Dictionary) -> bool:
 		_show_commission_error("That hull is unavailable in the yard right now.")
 		return false
 
-	var stations: HullStations = HullStations.from_box(Workboat.LOA_M, Workboat.BEAM_M, Workboat.DEPTH_M, 10)
+	var loa := float(entry.get("loa_m", Workboat.LOA_M))
+	var beam := float(entry.get("beam_m", Workboat.BEAM_M))
+	var depth := float(entry.get("depth_m", Workboat.DEPTH_M))
+	var stations: HullStations = HullStations.from_box(loa, beam, depth, 10)
 	var session := get_node_or_null("/root/PlayerSession")
 	if session == null:
 		return true
 	var price := int(entry.get("price_marks", 0))
 	if price <= 0:
+		## Explicit 0 = free hull (starter trawler); don't invent a commission fee.
+		if entry.has("price_marks") and int(entry.get("price_marks", -1)) == 0:
+			return true
 		price = ShipwrightPricing.commission_price(entry, stations, session.data)
 	if price <= 0:
 		return true

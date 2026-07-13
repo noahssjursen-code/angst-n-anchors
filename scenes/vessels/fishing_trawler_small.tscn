@@ -1,0 +1,11 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/ship/vessels/fishing_trawler_small.gd" id="1_trawler"]
+
+[node name="FishingTrawlerSmall" type="RigidBody3D"]
+script = ExtResource("1_trawler")
+length_m = 28.0
+beam_m = 10.0
+depth_m = 5.6
+draft_m = 2.8
+displacement_t = 256.0

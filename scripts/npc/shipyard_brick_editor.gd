@@ -107,9 +107,10 @@ func open_for_hull(
 ) -> void:
 	_hull_entry = hull_entry.duplicate(true)
 	_editing_uid = editing_uid.strip_edges()
-	_grid = Workboat.make_grid()
+	var hull_id := str(hull_entry.get("id", "workboat"))
+	_grid = HullRegistry.make_grid(hull_id)
 	_layout = BrickLayout.new()
-	_layout.hull_id = str(hull_entry.get("id", "workboat"))
+	_layout.hull_id = hull_id
 	# Only restore a prior layout when explicitly passed — never auto-configure.
 	if not existing_layout.is_empty():
 		_layout = BrickLayout.from_dict(existing_layout)
@@ -118,6 +119,11 @@ func open_for_hull(
 	_brick_id = "block"
 	_tool = Tool.PLACE
 	_clear_cargo_anchor()
+	## Hull change must rebuild the editor boat (workboat vs trawler sizes).
+	if _boat != null and is_instance_valid(_boat):
+		_boat.queue_free()
+		_boat = null
+		_brick_root = null
 	var hull_label := str(hull_entry.get("display", "Vessel"))
 	if _editing_uid.is_empty():
 		_hull_lbl.text = "New build — %s" % hull_label
@@ -1124,10 +1130,16 @@ func _rebuild_preview() -> void:
 
 
 func _ensure_editor_boat() -> void:
+	var want_id := str(_hull_entry.get("id", "workboat"))
 	if _boat != null and is_instance_valid(_boat):
-		return
-	_boat = Workboat.build()
+		if str(_boat.get_meta("editor_hull_id", "")) == want_id:
+			return
+		_boat.queue_free()
+		_boat = null
+		_brick_root = null
+	_boat = HullRegistry.build_hull(want_id)
 	_boat.name = "EditorBoat"
+	_boat.set_meta("editor_hull_id", want_id)
 	_boat.freeze = true
 	# Skip deferred gameplay fit-out / WalkDeck brick colliders in the editor.
 	_boat.set_meta("fitout_applied", true)

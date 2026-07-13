@@ -20,9 +20,11 @@ func _process(delta: float) -> void:
 func show_entry(entry: Dictionary, _brick_layout: Dictionary = {}) -> HullStations:
 	## Catalog shows the bare hull only — no fit-out configuration here.
 	_clear_models()
-	var stations: HullStations = HullStations.from_box(
-		Workboat.LOA_M, Workboat.BEAM_M, Workboat.DEPTH_M, 10
-	)
+	var hull_id := str(entry.get("id", "workboat"))
+	var loa := float(entry.get("loa_m", Workboat.LOA_M))
+	var beam := float(entry.get("beam_m", Workboat.BEAM_M))
+	var depth := float(entry.get("depth_m", Workboat.DEPTH_M))
+	var stations: HullStations = HullStations.from_box(loa, beam, depth, 10)
 
 	if _pivot == null:
 		_pivot = Node3D.new()
@@ -30,7 +32,7 @@ func show_entry(entry: Dictionary, _brick_layout: Dictionary = {}) -> HullStatio
 		add_child(_pivot)
 	_pivot.rotation.y = _display_yaw
 
-	var boat := Workboat.build()
+	var boat := HullRegistry.build_hull(hull_id)
 	boat.name = "PreviewBoat"
 	boat.freeze = true
 	# Skip default starter fit-out — shipwright sells hulls, not pre-built boats.

@@ -15,7 +15,7 @@ const GROUP := "hull_ladder_board"
 @export var prompt_down: String = "Press F — climb down"
 
 ## Ladder hangs in local −X; drop matches BrickCatalog visual.
-const DROP_M := 4.2
+const DROP_M := 2.0
 
 var _prompt_layer: CanvasLayer
 var _prompt_label: Label

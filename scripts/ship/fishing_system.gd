@@ -22,6 +22,8 @@ extends Node3D
 @export var net_mouth_submerge: float = 0.45
 ## Pay-out rope length from the trommel drum to the net head (metres, before hull scale).
 @export var net_rope_length: float = 11.0
+## When true, stay at parent brick origin instead of auto-placing at the stern.
+@export var anchored_to_brick: bool = false
 
 const NET_MESH_HEIGHT := 7.0
 ## How far the net mouth trails horizontally beyond the rope head ring.
@@ -92,53 +94,58 @@ func _setup_visuals() -> void:
 			else:
 				child.queue_free()
 
-	# Position at the center stern deck. We derive the Z position from propulsion offset.
-	var stern_z := -5.5
-	if _propulsion != null:
-		stern_z = _propulsion.stern_offset.z
+	_visual_scale = 1.0
+	if anchored_to_brick:
+		## Brick cell centre → raise drum above the deck plate.
+		position = Vector3(0.0, 0.95, 0.0)
 	else:
-		# Fallback for showcase preview / tool mode
-		var visuals = get_parent().get_node_or_null("HullVisuals") if get_parent() != null else null
-		if visuals != null and "model_data_path" in visuals:
-			var path: String = visuals.model_data_path
-			if not path.is_empty():
-				var data = JsonUtil.load(path)
-				if data is Dictionary and data.has("slots"):
-					var raw_slots = data["slots"]
-					if raw_slots is Dictionary and raw_slots.has("propulsion"):
-						var prop_arr = raw_slots["propulsion"]
-						if prop_arr is Array and prop_arr.size() >= 3:
-							var scale: float = 1.0
-							if "absolute_scale" in visuals:
-								scale = float(visuals.absolute_scale)
-							stern_z = float(prop_arr[2]) * scale
-	
-	# Deck height from SI hull (metres). mesh_scale is deprecated and always 1.
-	var deck_y := 1.2
-	var scale: float = 1.0
-	if _body != null:
-		scale = 1.0
-		if _body.hull_stations != null and _body.hull_stations.deck_y > 0.0:
-			deck_y = _body.hull_stations.deck_y
-		elif _body.depth_m > 0.0:
-			deck_y = _body.depth_m * 0.85
+		# Position at the center stern deck. We derive the Z position from propulsion offset.
+		var stern_z := -5.5
+		if _propulsion != null:
+			stern_z = _propulsion.stern_offset.z
 		else:
-			deck_y = 1.2
-	else:
-		# Fallback for tool / preview
-		var visuals = get_parent().get_node_or_null("HullVisuals") if get_parent() != null else null
-		if visuals != null:
-			if "absolute_scale" in visuals:
-				scale = float(visuals.absolute_scale)
-			deck_y = 1.2 * scale
-	_visual_scale = scale
-	var stern_local := Vector3(absf(stern_z) - 0.6 * scale, 0.0, 0.0)
-	if _propulsion != null and _body != null and get_parent() is Node3D:
-		# stern_offset is the actual stern point; the PropulsionComponent node stays at hull origin.
-		var stern_world := _body.to_global(_propulsion.stern_offset)
-		stern_local = (get_parent() as Node3D).to_local(stern_world)
-		stern_local.x -= 0.6 * scale
-	position = Vector3(stern_local.x, deck_y + 0.2 * scale, stern_local.z)
+			# Fallback for showcase preview / tool mode
+			var visuals = get_parent().get_node_or_null("HullVisuals") if get_parent() != null else null
+			if visuals != null and "model_data_path" in visuals:
+				var path: String = visuals.model_data_path
+				if not path.is_empty():
+					var data = JsonUtil.load(path)
+					if data is Dictionary and data.has("slots"):
+						var raw_slots = data["slots"]
+						if raw_slots is Dictionary and raw_slots.has("propulsion"):
+							var prop_arr = raw_slots["propulsion"]
+							if prop_arr is Array and prop_arr.size() >= 3:
+								var scale: float = 1.0
+								if "absolute_scale" in visuals:
+									scale = float(visuals.absolute_scale)
+								stern_z = float(prop_arr[2]) * scale
+		
+		# Deck height from SI hull (metres). mesh_scale is deprecated and always 1.
+		var deck_y := 1.2
+		var scale: float = 1.0
+		if _body != null:
+			scale = 1.0
+			if _body.hull_stations != null and _body.hull_stations.deck_y > 0.0:
+				deck_y = _body.hull_stations.deck_y
+			elif _body.depth_m > 0.0:
+				deck_y = _body.depth_m * 0.85
+			else:
+				deck_y = 1.2
+		else:
+			# Fallback for tool / preview
+			var visuals = get_parent().get_node_or_null("HullVisuals") if get_parent() != null else null
+			if visuals != null:
+				if "absolute_scale" in visuals:
+					scale = float(visuals.absolute_scale)
+				deck_y = 1.2 * scale
+		_visual_scale = scale
+		var stern_local := Vector3(absf(stern_z) - 0.6 * scale, 0.0, 0.0)
+		if _propulsion != null and _body != null and get_parent() is Node3D:
+			# stern_offset is the actual stern point; the PropulsionComponent node stays at hull origin.
+			var stern_world := _body.to_global(_propulsion.stern_offset)
+			stern_local = (get_parent() as Node3D).to_local(stern_world)
+			stern_local.x -= 0.6 * scale
+		position = Vector3(stern_local.x, deck_y + 0.2 * scale, stern_local.z)
 	
 	# 1. Trommel Winch Mount Node
 	_trommel_winch = Node3D.new()
@@ -188,9 +195,9 @@ func _setup_visuals() -> void:
  
 	# 5. Trommel Winch Supports (V-shaped legs down to the deck at 70 degrees stilt angle)
 	var leg_angle_rad := deg_to_rad(20.0) # 70 degrees relative to horizontal deck
-	var leg_length := 1.49 * scale
-	var leg_thickness := 0.08 * scale
-	var leg_width := 0.12 * scale
+	var leg_length := 1.49 * _visual_scale
+	var leg_thickness := 0.08 * _visual_scale
+	var leg_width := 0.12 * _visual_scale
 	for side in [-0.8, 0.8]:
 		for tilt in [-1.0, 1.0]:
 			var leg_pivot := Node3D.new()
@@ -494,7 +501,12 @@ func _rope_payout_local() -> Vector3:
 
 
 func _ship_astern_horizontal() -> Vector3:
-	var aft := global_transform.basis.x
+	## Brick-mounted trommels cast toward the hull stern (+Z), not brick local X.
+	var aft: Vector3
+	if anchored_to_brick and _body != null:
+		aft = _body.global_transform.basis.z
+	else:
+		aft = global_transform.basis.x
 	aft.y = 0.0
 	if aft.length_squared() < 0.0001:
 		return Vector3.FORWARD

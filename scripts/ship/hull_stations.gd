@@ -92,23 +92,46 @@ func station_length(idx: int) -> float:
 
 ## Rectangular barge/workboat stations in metres (bow −Z, stern +Z, keel y=0).
 static func from_box(length_m: float, beam_m: float, depth_m: float, station_count: int = 10) -> HullStations:
+	return from_pointed(length_m, beam_m, depth_m, 0.0, station_count)
+
+
+## Parallel midbody with optional bow taper (bow_frac of LOA → tip at −Z).
+static func from_pointed(
+	length_m: float,
+	beam_m: float,
+	depth_m: float,
+	bow_frac: float = 0.28,
+	station_count: int = 10,
+) -> HullStations:
 	var result := HullStations.new()
 	var L := maxf(length_m, 1.0)
 	var B := maxf(beam_m, 1.0)
 	var D := maxf(depth_m, 0.5)
 	var hb := B * 0.5
 	var n := maxi(station_count, 3)
+	var bow_len := clampf(bow_frac, 0.0, 0.45) * L
+	var tip_z := -L * 0.5
+	var shoulder_z := tip_z + bow_len
 	result.length_m = L
 	result.beam_m = B
 	result.height_m = D
 	result.keel_y = 0.0
 	result.deck_y = D
-	var section: Array = [Vector2(0.0, hb), Vector2(D, hb)]
+	var vol := 0.0
 	for i in range(n):
 		var t := float(i) / float(maxi(n - 1, 1))
 		var z := lerpf(-L * 0.5, L * 0.5, t)
+		var half := hb
+		if bow_len > 0.01 and z < shoulder_z:
+			## Linear taper from shoulder → tip.
+			var u := inverse_lerp(tip_z, shoulder_z, z)
+			half = hb * clampf(u, 0.0, 1.0)
+		var section: Array = [Vector2(0.0, half), Vector2(D, half)]
 		result.stations.append({"z": z, "section": section.duplicate()})
-	result.displacement_volume_m3 = L * B * D
+		## Trapezoid station volume approx (station spacing added below).
+		vol += 2.0 * half * D
+	var dz := L / float(maxi(n - 1, 1))
+	result.displacement_volume_m3 = vol * dz
 	return result
 
 

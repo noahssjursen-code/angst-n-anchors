@@ -6,13 +6,14 @@ extends RefCounted
 const WORKBOAT_ID := "workboat"
 const WORKBOAT_SCENE := "res://scenes/vessels/workboat.tscn"
 const WORKBOAT_SCRIPT := "res://scripts/ship/vessels/workboat.gd"
+const TRAWLER_SMALL_ID := "fishing_trawler_small"
+const TRAWLER_SMALL_SCENE := "res://scenes/vessels/fishing_trawler_small.tscn"
+const TRAWLER_SMALL_SCRIPT := "res://scripts/ship/vessels/fishing_trawler_small.gd"
 
 
-static func instantiate(vessel_id: String = WORKBOAT_ID, brick_layout: Dictionary = {}) -> BoatBody:
-	var id := vessel_id.strip_edges()
-	if id.is_empty():
-		id = WORKBOAT_ID
-	var boat := _instantiate_workboat()
+static func instantiate(vessel_id: String = TRAWLER_SMALL_ID, brick_layout: Dictionary = {}) -> BoatBody:
+	var id := HullRegistry.resolve_network_hull_id(vessel_id)
+	var boat := _instantiate_hull(id)
 	if boat != null:
 		_apply_fitout(boat, brick_layout if not brick_layout.is_empty() else default_brick_layout(id))
 	return boat
@@ -21,26 +22,27 @@ static func instantiate(vessel_id: String = WORKBOAT_ID, brick_layout: Dictionar
 static func instantiate_from_path(path: String, brick_layout: Dictionary = {}) -> BoatBody:
 	var p := path.strip_edges()
 	if p.is_empty():
-		return instantiate(WORKBOAT_ID, brick_layout)
+		return instantiate(TRAWLER_SMALL_ID, brick_layout)
 	if p.ends_with(".tscn") or p.ends_with(".scn"):
 		if not ResourceLoader.exists(p):
 			push_error("VesselSpawn: scene missing: " + p)
-			return instantiate(WORKBOAT_ID, brick_layout)
+			return instantiate(TRAWLER_SMALL_ID, brick_layout)
 		var packed := load(p) as PackedScene
 		if packed == null:
 			push_error("VesselSpawn: not a PackedScene: " + p)
-			return instantiate(WORKBOAT_ID, brick_layout)
+			return instantiate(TRAWLER_SMALL_ID, brick_layout)
 		var node := packed.instantiate()
 		if node is BoatBody:
 			var boat := node as BoatBody
 			_ensure_assembled(boat)
-			_apply_fitout(boat, brick_layout if not brick_layout.is_empty() else default_brick_layout(WORKBOAT_ID))
+			var hull_id := HullRegistry.resolve_id_from_template(p, TRAWLER_SMALL_ID)
+			_apply_fitout(boat, brick_layout if not brick_layout.is_empty() else default_brick_layout(hull_id))
 			return boat
 		push_error("VesselSpawn: scene root must be BoatBody: " + p)
 		if node != null:
 			node.queue_free()
-		return instantiate(WORKBOAT_ID, brick_layout)
-	return instantiate(WORKBOAT_ID, brick_layout)
+		return instantiate(TRAWLER_SMALL_ID, brick_layout)
+	return instantiate(TRAWLER_SMALL_ID, brick_layout)
 
 
 static func instantiate_from_record(record: Dictionary) -> BoatBody:
@@ -51,30 +53,31 @@ static func instantiate_from_record(record: Dictionary) -> BoatBody:
 	if not path.is_empty():
 		boat = instantiate_from_path(path, layout)
 	else:
-		boat = instantiate(str(normalized.get("hull_id", WORKBOAT_ID)), layout)
+		boat = instantiate(str(normalized.get("hull_id", TRAWLER_SMALL_ID)), layout)
 	apply_identity(boat, normalized)
 	return boat
 
 
-static func scene_path_for(_vessel_id: String) -> String:
-	return WORKBOAT_SCENE
+static func scene_path_for(vessel_id: String) -> String:
+	return HullRegistry.scene_path_for(vessel_id)
 
 
-static func default_brick_layout(vessel_id: String = WORKBOAT_ID) -> Dictionary:
+static func default_brick_layout(vessel_id: String = TRAWLER_SMALL_ID) -> Dictionary:
 	## Bare deck — humans place every brick.
-	return {"hull_id": vessel_id, "cells": {}}
+	return {"hull_id": HullRegistry.resolve_network_hull_id(vessel_id), "cells": {}}
 
 
 static func default_owned_record() -> Dictionary:
-	var uid := "workboat_%d" % Time.get_unix_time_from_system()
+	## Free starter — small coastal trawler.
+	var uid := "trawler_%d" % Time.get_unix_time_from_system()
 	return normalize_record({
 		"uid": uid,
-		"hull_id": WORKBOAT_ID,
-		"name": "Workboat",
-		"display": "Workboat  •  30 × 24 m",
-		"template_path": WORKBOAT_SCENE,
-		"scene_path": WORKBOAT_SCENE,
-		"brick_layout": default_brick_layout(WORKBOAT_ID),
+		"hull_id": TRAWLER_SMALL_ID,
+		"name": "Day Trawler",
+		"display": "Fishing trawler  •  14 × 5 m",
+		"template_path": TRAWLER_SMALL_SCENE,
+		"scene_path": TRAWLER_SMALL_SCENE,
+		"brick_layout": default_brick_layout(TRAWLER_SMALL_ID),
 	})
 
 
@@ -82,8 +85,7 @@ static func brick_layout_of(record: Dictionary) -> Dictionary:
 	var raw: Variant = record.get("brick_layout", {})
 	if typeof(raw) == TYPE_DICTIONARY and not (raw as Dictionary).is_empty():
 		return (raw as Dictionary).duplicate(true)
-	# Migrate legacy attachments[] → starter layout
-	return default_brick_layout(str(record.get("hull_id", WORKBOAT_ID)))
+	return default_brick_layout(str(record.get("hull_id", TRAWLER_SMALL_ID)))
 
 
 ## Captain-chosen name, falling back to hull catalog label.
@@ -110,15 +112,16 @@ static func apply_identity(boat: BoatBody, record: Dictionary) -> void:
 
 static func normalize_record(record: Dictionary) -> Dictionary:
 	var out := record.duplicate(true)
+	var hull_id := HullRegistry.resolve_network_hull_id(str(out.get("hull_id", TRAWLER_SMALL_ID)))
+	out["hull_id"] = hull_id
 	if not out.has("brick_layout") or typeof(out.get("brick_layout", null)) != TYPE_DICTIONARY \
 			or (out.get("brick_layout", {}) as Dictionary).is_empty():
-		out["brick_layout"] = default_brick_layout(str(out.get("hull_id", WORKBOAT_ID)))
+		out["brick_layout"] = default_brick_layout(hull_id)
 	var custom_name := str(out.get("name", "")).strip_edges()
 	if custom_name.is_empty():
 		out["name"] = vessel_name_of(out)
 	else:
 		out["name"] = custom_name
-	# Drop retired kit fields gently (leave attachments if present for old saves, unused).
 	return out
 
 
@@ -127,11 +130,9 @@ static func resolve_template_path(record: Dictionary) -> String:
 	if path.ends_with(".tscn") or path.ends_with(".scn"):
 		if ResourceLoader.exists(path):
 			return path
-	elif not path.is_empty():
-		return WORKBOAT_SCENE
 	var hull_id := str(record.get("hull_id", ""))
 	if hull_id.is_empty():
-		return WORKBOAT_SCENE
+		return TRAWLER_SMALL_SCENE
 	return HullRegistry.scene_path_for(hull_id)
 
 
@@ -157,9 +158,11 @@ static func _apply_fitout(boat: BoatBody, layout: Dictionary) -> void:
 		DeckFitout.apply(boat, bl)
 
 
-static func _instantiate_workboat() -> BoatBody:
-	if ResourceLoader.exists(WORKBOAT_SCENE):
-		var packed := load(WORKBOAT_SCENE) as PackedScene
+static func _instantiate_hull(hull_id: String) -> BoatBody:
+	var id := HullRegistry.resolve_network_hull_id(hull_id)
+	var scene_path := HullRegistry.scene_path_for(id)
+	if ResourceLoader.exists(scene_path):
+		var packed := load(scene_path) as PackedScene
 		if packed != null:
 			var node := packed.instantiate()
 			if node is BoatBody:
@@ -168,10 +171,13 @@ static func _instantiate_workboat() -> BoatBody:
 				return boat
 			if node != null:
 				node.queue_free()
-	var script := load(WORKBOAT_SCRIPT) as GDScript
+	var script_path := TRAWLER_SMALL_SCRIPT
+	if id == WORKBOAT_ID:
+		script_path = WORKBOAT_SCRIPT
+	var script := load(script_path) as GDScript
 	if script != null and script.has_method("build"):
 		return script.call("build") as BoatBody
-	push_error("VesselSpawn: workboat scene/script missing")
+	push_error("VesselSpawn: hull missing id=%s" % id)
 	return null
 
 

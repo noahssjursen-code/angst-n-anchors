@@ -2,7 +2,8 @@ class_name DeckGrid
 extends RefCounted
 
 ## Deck brick grid in vessel-local metres.
-## Cell edge = WorldUnits.DECK_CELL_M (1.0 m). Workboat 30×24 m → 30 × 24 cells.
+## Cell edge = WorldUnits.DECK_CELL_M (1.0 m). Example: workboat 30×24 → 30×24 cells;
+## starter trawler 14×5 → 14×5 cells.
 ## Cell indices: ix ∈ [0, width), iz ∈ [0, length), iy ≥ 0 above deck.
 
 const CELL_M := WorldUnits.DECK_CELL_M

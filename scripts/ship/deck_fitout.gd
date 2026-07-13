@@ -29,6 +29,7 @@ static func apply(boat: BoatBody, layout: BrickLayout, grid: DeckGrid = null) ->
 	var cargo_zones: Array = layout.iter_cargo_zones()
 	var crane_origins: Array[Vector3i] = []
 	var ladder_n := 0
+	var fishing_n := 0
 	var brick_i := 0
 
 	for item in layout.iter_primary_cells():
@@ -87,6 +88,11 @@ static func apply(boat: BoatBody, layout: BrickLayout, grid: DeckGrid = null) ->
 		if BrickCatalog.has_tag(brick_id, "ladder"):
 			_add_hull_ladder(visual)
 			ladder_n += 1
+		if BrickCatalog.has_tag(brick_id, "trommel") or BrickCatalog.has_tag(brick_id, "fishing"):
+			## One live FishingSystem per hull — first trommel wins.
+			if fishing_n == 0:
+				_add_trommel_fishing(visual)
+			fishing_n += 1
 		if BrickCatalog.has_tag(brick_id, "mooring"):
 			_add_deck_bollard(visual)
 
@@ -99,6 +105,8 @@ static func apply(boat: BoatBody, layout: BrickLayout, grid: DeckGrid = null) ->
 	var caps: Dictionary = report.get("capabilities", {})
 	caps["has_ladder"] = ladder_n > 0
 	caps["ladders"] = ladder_n
+	caps["has_fishing"] = fishing_n > 0
+	caps["trommels"] = fishing_n
 	boat.set_meta("brick_capabilities", caps)
 	boat.set_meta("brick_layout", layout.to_dict())
 
@@ -158,6 +166,17 @@ static func _add_hull_ladder(visual: Node3D) -> void:
 	var board := HullLadderBoard.new()
 	board.name = "HullLadderBoard"
 	visual.add_child(board)
+
+
+static func _add_trommel_fishing(visual: Node3D) -> void:
+	## Drop catalog preview meshes — FishingSystem owns the live trommel + net.
+	for child in visual.get_children():
+		visual.remove_child(child)
+		child.free()
+	var fishing := FishingSystem.new()
+	fishing.name = "FishingSystem"
+	fishing.anchored_to_brick = true
+	visual.add_child(fishing)
 
 
 static func _add_brick_door(
@@ -291,6 +310,11 @@ static func _collider_spec(brick_id: String) -> Dictionary:
 			return {
 				"size": Vector3(sz.x * 0.9, 0.12, sz.z * 0.9),
 				"offset": Vector3(0.0, -sz.y * 0.5 + 0.06, 0.0),
+			}
+		"trommel_small":
+			return {
+				"size": Vector3(sz.x * 0.9, 0.14, sz.z * 0.9),
+				"offset": Vector3(0.0, -sz.y * 0.5 + 0.07, 0.0),
 			}
 		"deck_text", "wall_text":
 			return {"size": Vector3.ZERO, "offset": Vector3.ZERO}

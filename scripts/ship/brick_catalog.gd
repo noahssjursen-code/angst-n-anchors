@@ -193,6 +193,15 @@ const BRICKS: Dictionary = {
 		"deck_only": true,
 		"edge_only": true,
 	},
+	"trommel_small": {
+		"display": "Trommel (small)",
+		## 2×4 m deck winch — mounts FishingSystem for trawl cast/haul.
+		"footprint": [2, 1, 4],
+		"tags": ["fishing", "trommel"],
+		"mass_kg": 1800.0,
+		"color": Color(0.22, 0.24, 0.26),
+		"deck_only": true,
+	},
 	"deck_text": {
 		"display": "Floor text",
 		## Flat Label3D on the deck — vessel name, draft marks, etc.
@@ -362,6 +371,8 @@ static func create_visual(brick_id: String, opts: Dictionary = {}) -> Node3D:
 			root.add_child(boom)
 		"hull_ladder":
 			_add_hull_ladder_visual(root, sz, color)
+		"trommel_small":
+			_add_trommel_visual(root, sz, color)
 		"deck_text":
 			_add_deck_text_visual(
 				root, sz, color,
@@ -377,6 +388,32 @@ static func create_visual(brick_id: String, opts: Dictionary = {}) -> Node3D:
 		_:
 			root.add_child(MeshBuilder.box(sz, color, 0.85, 0.0))
 	return root
+
+
+static func _add_trommel_visual(root: Node3D, sz: Vector3, color: Color) -> void:
+	## Static preview — runtime DeckFitout swaps in FishingSystem for spin + net.
+	var steel := Color(color.r, color.g, color.b)
+	var accent := Color(0.35, 0.32, 0.28)
+	var pad := MeshBuilder.box(Vector3(sz.x * 0.92, 0.1, sz.z * 0.92), accent, 0.9, 0.1)
+	pad.position = Vector3(0.0, -sz.y * 0.5 + 0.05, 0.0)
+	root.add_child(pad)
+	var drum_len := minf(sz.z * 0.55, 2.4)
+	var drum_r := minf(sz.x * 0.22, 0.35)
+	var drum_y := -sz.y * 0.5 + drum_r + 0.85
+	var drum := MeshBuilder.cylinder(drum_r, drum_len, steel, 0.3, 0.85)
+	drum.rotation_degrees = Vector3(90.0, 0.0, 0.0)
+	drum.position = Vector3(0.0, drum_y, 0.0)
+	root.add_child(drum)
+	for side in [-1.0, 1.0]:
+		var flange := MeshBuilder.cylinder(drum_r * 1.55, 0.08, steel, 0.25, 0.9)
+		flange.rotation_degrees = Vector3(90.0, 0.0, 0.0)
+		flange.position = Vector3(0.0, drum_y, side * drum_len * 0.48)
+		root.add_child(flange)
+		for tilt in [-1.0, 1.0]:
+			var leg_h := drum_y - (-sz.y * 0.5 + 0.1)
+			var leg := MeshBuilder.box(Vector3(0.1, leg_h, 0.08), steel, 0.45, 0.7)
+			leg.position = Vector3(tilt * sz.x * 0.28, -sz.y * 0.5 + 0.1 + leg_h * 0.5, side * drum_len * 0.42)
+			root.add_child(leg)
 
 
 static func _add_deck_text_visual(
@@ -834,7 +871,7 @@ static func _add_bollard_visual(root: Node3D, sz: Vector3, color: Color) -> void
 
 static func _add_hull_ladder_visual(root: Node3D, sz: Vector3, color: Color) -> void:
 	## Deck pad + outboard ladder hanging in local −X (yaw aims that toward the quay).
-	var drop := 4.2
+	var drop := 2.0
 	var pad := MeshBuilder.box(Vector3(sz.x * 0.95, 0.08, sz.z * 0.95), color, 0.85, 0.15)
 	pad.position = Vector3(0.0, -sz.y * 0.5 + 0.04, 0.0)
 	root.add_child(pad)
@@ -844,7 +881,7 @@ static func _add_hull_ladder_visual(root: Node3D, sz: Vector3, color: Color) -> 
 	var rail_b := MeshBuilder.box(Vector3(0.08, drop, 0.08), color, 0.7, 0.25)
 	rail_b.position = Vector3(-sz.x * 0.55, -drop * 0.5, sz.z * 0.35)
 	root.add_child(rail_b)
-	var rung_n := 8
+	var rung_n := 4
 	for i in range(rung_n):
 		var t := (float(i) + 0.5) / float(rung_n)
 		var rung := MeshBuilder.box(Vector3(0.06, 0.06, sz.z * 0.72), Color(0.55, 0.5, 0.35), 0.75, 0.1)

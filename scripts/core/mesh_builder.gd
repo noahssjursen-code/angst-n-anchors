@@ -81,6 +81,126 @@ static func prism(size: Vector3, color: Color, roughness: float = 0.85, metallic
 	return mi
 
 
+## Ship planform: parallel midbody + pointed bow at −Z (bow), blunt stern at +Z.
+## Origin at midships; keel at y=0; deck at y=height.
+static func pointed_hull_shell(
+	loa: float,
+	beam: float,
+	height: float,
+	bow_frac: float = 0.28,
+	color: Color = Color(0.12, 0.14, 0.16),
+	roughness: float = 0.9,
+	metallic: float = 0.05,
+) -> MeshInstance3D:
+	var mat := make_material(color, roughness, metallic)
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	st.set_smooth_group(-1)
+	st.set_material(mat)
+	var ring := _pointed_plan_ring(loa, beam, bow_frac)
+	_extrude_plan_ring(st, ring, 0.0, height)
+	st.generate_normals()
+	var mi := MeshInstance3D.new()
+	mi.mesh = st.commit()
+	mi.material_override = mat
+	return mi
+
+
+## Thin deck plate matching pointed_hull_shell planform (top face at y = deck_y).
+static func pointed_deck_plate(
+	loa: float,
+	beam: float,
+	deck_y: float,
+	thickness: float = 0.12,
+	bow_frac: float = 0.28,
+	color: Color = Color(0.35, 0.32, 0.28),
+	roughness: float = 0.95,
+) -> MeshInstance3D:
+	var mat := make_material(color, roughness, 0.0)
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	st.set_smooth_group(-1)
+	st.set_material(mat)
+	var ring := _pointed_plan_ring(loa, beam, bow_frac)
+	var y0 := deck_y - thickness
+	_extrude_plan_ring(st, ring, y0, deck_y)
+	st.generate_normals()
+	var mi := MeshInstance3D.new()
+	mi.mesh = st.commit()
+	mi.material_override = mat
+	return mi
+
+
+## Convex points for a bow wedge collision (keel→deck), tip at −Z.
+static func pointed_bow_collision_points(
+	loa: float,
+	beam: float,
+	height: float,
+	bow_frac: float = 0.28,
+) -> PackedVector3Array:
+	var hz := loa * 0.5
+	var hb := beam * 0.5
+	var bow_len := clampf(bow_frac, 0.12, 0.45) * loa
+	var shoulder_z := -hz + bow_len
+	var pts := PackedVector3Array()
+	for y in [0.0, height]:
+		pts.append(Vector3(-hb, y, shoulder_z))
+		pts.append(Vector3(hb, y, shoulder_z))
+		pts.append(Vector3(0.0, y, -hz))
+	return pts
+
+
+static func _pointed_plan_ring(loa: float, beam: float, bow_frac: float) -> PackedVector2Array:
+	## XZ ring, CCW when viewed from above: stern → stbd shoulder → tip → port shoulder.
+	var hz := loa * 0.5
+	var hb := beam * 0.5
+	var bow_len := clampf(bow_frac, 0.12, 0.45) * loa
+	var shoulder_z := -hz + bow_len
+	return PackedVector2Array([
+		Vector2(-hb, hz),           ## stern port
+		Vector2(hb, hz),            ## stern starboard
+		Vector2(hb, shoulder_z),    ## bow shoulder stbd
+		Vector2(0.0, -hz),          ## bow tip (−Z)
+		Vector2(-hb, shoulder_z),   ## bow shoulder port
+	])
+
+
+static func _extrude_plan_ring(st: SurfaceTool, ring: PackedVector2Array, y0: float, y1: float) -> void:
+	var n := ring.size()
+	if n < 3:
+		return
+	## Bottom + top fans (unique verts per triangle for flat shading).
+	var c0 := Vector3.ZERO
+	var c1 := Vector3.ZERO
+	for p in ring:
+		c0 += Vector3(p.x, y0, p.y)
+		c1 += Vector3(p.x, y1, p.y)
+	c0 /= float(n)
+	c1 /= float(n)
+	for i in range(n):
+		var a := ring[i]
+		var b := ring[(i + 1) % n]
+		var a0 := Vector3(a.x, y0, a.y)
+		var b0 := Vector3(b.x, y0, b.y)
+		var a1 := Vector3(a.x, y1, a.y)
+		var b1 := Vector3(b.x, y1, b.y)
+		## Bottom (downward) — reverse winding.
+		st.add_vertex(c0)
+		st.add_vertex(b0)
+		st.add_vertex(a0)
+		## Top (upward).
+		st.add_vertex(c1)
+		st.add_vertex(a1)
+		st.add_vertex(b1)
+		## Side quad → two tris (outward normals for CCW plan ring).
+		st.add_vertex(a0)
+		st.add_vertex(b1)
+		st.add_vertex(b0)
+		st.add_vertex(a0)
+		st.add_vertex(a1)
+		st.add_vertex(b1)
+
+
 ## Right-triangle wedge filling `size` AABB.
 ## High edge at local −Z, slopes down to +Z (rotate yaw to aim the slope).
 static func wedge_45(size: Vector3, color: Color, roughness: float = 0.92, metallic: float = 0.0) -> MeshInstance3D:

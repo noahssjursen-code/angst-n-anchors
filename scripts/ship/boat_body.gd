@@ -186,6 +186,18 @@ var _artificial_keel_extra_depth: float = 0.0
 		_artificial_keel_extra_depth = maxf(0.0, v)
 		_refresh_center_of_mass()
 
+## Longitudinal trim ballast: metres from hull_center along LOA.
+## Positive = toward stern (+Z), negative = toward bow (−Z).
+## Use stern bias on pointed-bow hulls so CoM tracks the aft-shifted center of buoyancy.
+var _center_of_mass_longitudinal_m: float = 0.0
+
+@export_range(-40.0, 40.0, 0.05) var center_of_mass_longitudinal_m: float:
+	get:
+		return _center_of_mass_longitudinal_m
+	set(v):
+		_center_of_mass_longitudinal_m = clampf(v, -80.0, 80.0)
+		_refresh_center_of_mass()
+
 @export_group("Hull")
 ## Deprecated uniform mesh scale — always 1.0 (1 unit = 1 metre).
 @export var mesh_scale: float = 1.0:
@@ -457,7 +469,8 @@ func _refresh_center_of_mass() -> void:
 		return
 	center_of_mass_mode = RigidBody3D.CENTER_OF_MASS_MODE_CUSTOM
 	var down: float = hull_size.y * _center_of_mass_depth_fraction + _artificial_keel_extra_depth
-	center_of_mass = hull_center + Vector3(0.0, -down, 0.0)
+	## Bow −Z / stern +Z — longitudinal_m > 0 shifts CoM aft (stern ballast).
+	center_of_mass = hull_center + Vector3(0.0, -down, _center_of_mass_longitudinal_m)
 
 
 func _refresh_mass() -> void:
