@@ -1,0 +1,585 @@
+class_name CoastalPortPlacer
+extends RefCounted
+
+## Pure deterministic conversion from a WorldLayout to coastal PortDefinitions.
+## Local -Z is always the seaward direction. PortPlot places PortDock at local
+## Z = -plot_depth/2, so the plot origin is offset inland from the coastline by
+## that half-depth minus a small overhang that keeps the quay face in the water.
+
+const DEFAULT_PORT_COUNT := 35
+const PORT_DEFINITION := preload("res://scripts/port/port_definition.gd")
+
+const STRICT_SPACING_M := 800.0
+const MIN_SPACING_M := 450.0
+const STRICT_WATERWAY_REACH_M := 1800.0
+const MAX_WATERWAY_REACH_M := 5000.0
+## Matches PortPlot's default plot_depth * 0.5 (dock face at local -Z = -hd).
+const PLOT_HALF_DEPTH_M := 70.0
+## Quay face sits this far past the SDF coastline into open water.
+const DOCK_OVERHANG_M := 14.0
+const INLAND_ORIGIN_OFFSET_M := PLOT_HALF_DEPTH_M - DOCK_OVERHANG_M
+const FOOTPRINT_HALF_WIDTH_M := 46.0
+const FOOTPRINT_SEAWARD_M := 18.0
+const FOOTPRINT_INLAND_M := 76.0
+const APPROACH_START_M := 92.0
+const APPROACH_END_M := 650.0
+const APPROACH_HALF_WIDTH_M := 38.0
+## Half-lengths that fit each PortExpander dock_length = berths × slot width.
+const QUAY_HALF_LENGTH_BY_SIZE := [20.0, 50.0, 93.0, 152.0, 230.0]
+const QUAY_CLEAR_STEP_M := 8.0
+## Samples from the quay face into the berth pocket; land here blocks docking.
+const QUAY_BERTH_OFFSETS_M := [0.0, 8.0, 20.0, 38.0, 56.0]
+## Require open water (positive SDF) with a small margin so coastline graze fails.
+const QUAY_WATER_MARGIN_M := 0.75
+
+const FALLBACK_NAMES := [
+	"Haugsvik", "Alesund", "Bremanger", "Dyrvik", "Eidsund", "Floro",
+	"Giske", "Hellesund", "Isfjorden", "Jondal", "Kalvag", "Leirvik",
+	"Maloy", "Nordfjordeid", "Oksfjord", "Rorvik", "Selje", "Tingvoll",
+	"Ulsteinvik", "Vardo", "Austevoll", "Balestrand", "Dalsfjord",
+	"Ervik", "Fedje", "Gulen", "Hitra", "Ibestad", "Kinsarvik", "Luroy",
+	"Masfjorden", "Naeroy", "Orsta", "Rognan", "Skjervoy", "Tysnes",
+	"Valderoy", "Andalsnes", "Bjugn", "Froya", "Haram", "Kvam",
+]
+
+
+## names supplies names after the mandatory home port. Empty entries use the
+## stable fallback list. The returned array is always ordered with Haugsvik first.
+static func place_ports(
+		layout: WorldLayout,
+		requested_count: int = DEFAULT_PORT_COUNT,
+		names: PackedStringArray = PackedStringArray(),
+) -> Array[PortDefinition]:
+	var result: Array[PortDefinition] = []
+	if layout == null or requested_count <= 0:
+		return result
+	var candidates := _build_candidates(layout)
+	if candidates.is_empty():
+		return result
+	candidates.sort_custom(_candidate_less)
+
+	var selected: Array[Dictionary] = []
+	var tiers := [
+		{"spacing": STRICT_SPACING_M, "reach": STRICT_WATERWAY_REACH_M, "land_margin": 6.0, "quay_half": 93.0},
+		{"spacing": 680.0, "reach": 2600.0, "land_margin": 2.0, "quay_half": 50.0},
+		{"spacing": 560.0, "reach": 3800.0, "land_margin": 0.25, "quay_half": 50.0},
+		{"spacing": MIN_SPACING_M, "reach": MAX_WATERWAY_REACH_M, "land_margin": 0.0, "quay_half": 20.0},
+	]
+	for tier in tiers:
+		# Keep the playable network representative of the generated archetype,
+		# rather than allowing hash order to select only fjord-facing sites.
+		for required_region in [
+			WorldLayout.Region.MAINLAND,
+			WorldLayout.Region.FJORD,
+			WorldLayout.Region.ARCHIPELAGO,
+		]:
+			if selected.size() >= requested_count:
+				break
+			if _selected_has_region(selected, required_region):
+				continue
+			for candidate in candidates:
+				if int(candidate["region"]) != required_region:
+					continue
+				if _candidate_fits_tier(layout, selected, candidate, tier):
+					selected.append(candidate)
+					break
+		for candidate in candidates:
+			if selected.size() >= requested_count:
+				break
+			if _candidate_fits_tier(layout, selected, candidate, tier):
+				selected.append(candidate)
+		if selected.size() >= requested_count:
+			break
+
+	for index in range(selected.size()):
+		result.append(_make_definition(layout, selected[index], index, names))
+	return result
+
+
+## Public validation report for tests, tooling, and eventual generation telemetry.
+static func validate_site(
+		layout: WorldLayout,
+		world_xz: Vector2,
+		seaward: Vector2,
+		land_margin_m: float = 0.0,
+) -> Dictionary:
+	var connection := nearest_waterway_connection(layout, world_xz)
+	var quay_half := quay_clear_half_length_m(layout, world_xz, seaward)
+	return {
+		"origin_on_land": layout != null and layout.is_land(world_xz),
+		"land_footprint": is_land_footprint_valid(layout, world_xz, seaward, land_margin_m),
+		"seaward_clearance": has_seaward_clearance(layout, world_xz, seaward),
+		"quay_clearance": has_quay_clearance(layout, world_xz, seaward, QUAY_HALF_LENGTH_BY_SIZE[1]),
+		"quay_half_length_m": quay_half,
+		"waterway_connection": connection,
+		"waterway_distance_m": float(connection.get("distance_m", INF)),
+	}
+
+
+## Samples the facilities rectangle, including all corners and edge midpoints.
+static func is_land_footprint_valid(
+		layout: WorldLayout,
+		world_xz: Vector2,
+		seaward: Vector2,
+		min_inland_distance_m: float = 0.0,
+) -> bool:
+	if layout == null or seaward.length_squared() < 0.5:
+		return false
+	var forward := seaward.normalized()
+	var right := Vector2(-forward.y, forward.x)
+	var depths := PackedFloat32Array([
+		-FOOTPRINT_SEAWARD_M,
+		(FOOTPRINT_INLAND_M - FOOTPRINT_SEAWARD_M) * 0.5,
+		FOOTPRINT_INLAND_M,
+	])
+	var widths := PackedFloat32Array([-FOOTPRINT_HALF_WIDTH_M, 0.0, FOOTPRINT_HALF_WIDTH_M])
+	for depth in depths:
+		for width in widths:
+			var sample := world_xz - forward * depth + right * width
+			if layout.sample_signed_distance(sample) >= -min_inland_distance_m:
+				return false
+	return true
+
+
+## Verifies the dock face and a three-lane offshore approach. This invariant is
+## retained through every relaxation tier: a port is never allowed to face land.
+static func has_seaward_clearance(
+		layout: WorldLayout,
+		world_xz: Vector2,
+		seaward: Vector2,
+) -> bool:
+	if layout == null or seaward.length_squared() < 0.5:
+		return false
+	var forward := seaward.normalized()
+	var right := Vector2(-forward.y, forward.x)
+	for distance in PackedFloat32Array([
+		APPROACH_START_M, 150.0, 240.0, 360.0, 500.0, APPROACH_END_M,
+	]):
+		var center := world_xz + forward * distance
+		for lateral in PackedFloat32Array([-APPROACH_HALF_WIDTH_M, 0.0, APPROACH_HALF_WIDTH_M]):
+			if layout.sample_signed_distance(center + right * lateral) <= 0.0:
+				return false
+	return true
+
+
+## True when a straight quay of the given half-length has open water along the
+## full berth pocket. Rejects convex coastline corners that wedge land through
+## the dock face (the "can't berth at a bend" case).
+static func has_quay_clearance(
+		layout: WorldLayout,
+		world_xz: Vector2,
+		seaward: Vector2,
+		half_length_m: float,
+) -> bool:
+	if half_length_m <= 0.0:
+		return false
+	# Measure with the full search range, then compare. Passing half_length_m as
+	# the search cap used to miss non-multiple-of-step thresholds (e.g. 93 m).
+	return quay_clear_half_length_m(layout, world_xz, seaward) + 0.01 >= half_length_m
+
+
+## Largest quay half-length (metres from midships toward either end) that stays
+## clear of land. Steps outward so size can be clamped to what the coast allows.
+static func quay_clear_half_length_m(
+		layout: WorldLayout,
+		world_xz: Vector2,
+		seaward: Vector2,
+		max_half_m: float = QUAY_HALF_LENGTH_BY_SIZE[4],
+) -> float:
+	if layout == null or seaward.length_squared() < 0.5:
+		return 0.0
+	var forward := seaward.normalized()
+	var right := Vector2(-forward.y, forward.x)
+	var dock_face := world_xz + forward * PLOT_HALF_DEPTH_M
+	if not _quay_column_clear(layout, dock_face, forward, right, 0.0):
+		return 0.0
+	var clear := 0.0
+	var lateral := QUAY_CLEAR_STEP_M
+	while lateral <= max_half_m + 0.01:
+		if not _quay_column_clear(layout, dock_face, forward, right, lateral):
+			return clear
+		if not _quay_column_clear(layout, dock_face, forward, right, -lateral):
+			return clear
+		clear = lateral
+		lateral += QUAY_CLEAR_STEP_M
+	# Exact threshold (size table values are not all step-aligned).
+	if clear + 0.01 < max_half_m:
+		if _quay_column_clear(layout, dock_face, forward, right, max_half_m) \
+				and _quay_column_clear(layout, dock_face, forward, right, -max_half_m):
+			clear = max_half_m
+	return clear
+
+
+static func max_size_for_quay_half(half_length_m: float) -> int:
+	for size in range(QUAY_HALF_LENGTH_BY_SIZE.size() - 1, -1, -1):
+		if half_length_m + 0.01 >= float(QUAY_HALF_LENGTH_BY_SIZE[size]):
+			return size
+	return -1
+
+
+static func _quay_column_clear(
+		layout: WorldLayout,
+		dock_face: Vector2,
+		forward: Vector2,
+		right: Vector2,
+		lateral_m: float,
+) -> bool:
+	var along := dock_face + right * lateral_m
+	for offset in QUAY_BERTH_OFFSETS_M:
+		if layout.sample_signed_distance(along + forward * float(offset)) <= QUAY_WATER_MARGIN_M:
+			return false
+	return true
+
+
+## Checks generated records without relying on scene nodes.
+static func validate_ports(
+		layout: WorldLayout,
+		ports: Array[PortDefinition],
+		min_spacing_m: float = MIN_SPACING_M,
+) -> PackedStringArray:
+	var errors := PackedStringArray()
+	for i in range(ports.size()):
+		var port := ports[i]
+		var point := Vector2(port.world_position.x, port.world_position.z)
+		var seaward := seaward_from_yaw(port.rotation_y)
+		var report := validate_site(layout, point, seaward)
+		if not bool(report["land_footprint"]):
+			errors.append("%s has invalid land footprint" % port.port_id)
+		if not bool(report["seaward_clearance"]):
+			errors.append("%s has blocked seaward approach" % port.port_id)
+		var needed_half := float(QUAY_HALF_LENGTH_BY_SIZE[clampi(port.size, 0, 4)])
+		if not has_quay_clearance(layout, point, seaward, needed_half):
+			errors.append("%s quay is cut by a coastline corner" % port.port_id)
+		if float(report["waterway_distance_m"]) > MAX_WATERWAY_REACH_M:
+			errors.append("%s is disconnected from waterways" % port.port_id)
+		for j in range(i):
+			var other := ports[j]
+			var other_point := Vector2(other.world_position.x, other.world_position.z)
+			if point.distance_to(other_point) < min_spacing_m:
+				errors.append("%s is too close to %s" % [port.port_id, other.port_id])
+	return errors
+
+
+## Returns the closest point on the navigable centerline graph and enough
+## metadata for chart routing or snapping a port approach to that graph.
+static func nearest_waterway_connection(layout: WorldLayout, world_xz: Vector2) -> Dictionary:
+	var best := {
+		"waterway_id": "",
+		"segment_index": -1,
+		"point": Vector2.ZERO,
+		"distance_m": INF,
+		"distance_along_m": 0.0,
+	}
+	if layout == null:
+		return best
+	for waterway in layout.waterway_centerlines:
+		var points: PackedVector2Array = waterway["points"]
+		var along := 0.0
+		for segment_index in range(points.size() - 1):
+			var projection := _project_to_segment(world_xz, points[segment_index], points[segment_index + 1])
+			var point: Vector2 = projection["point"]
+			var distance := world_xz.distance_to(point)
+			if distance < float(best["distance_m"]):
+				best = {
+					"waterway_id": String(waterway["id"]),
+					"segment_index": segment_index,
+					"point": point,
+					"distance_m": distance,
+					"distance_along_m": along + float(projection["along_m"]),
+				}
+			along += points[segment_index].distance_to(points[segment_index + 1])
+	return best
+
+
+## Shortest route over the waterway graph, including straight snap distances
+## from each supplied point. Returns INF only when no waterway graph exists.
+static func navigable_route_distance(layout: WorldLayout, from_xz: Vector2, to_xz: Vector2) -> float:
+	if layout == null or layout.waterway_centerlines.is_empty():
+		return INF
+	var from_connection := nearest_waterway_connection(layout, from_xz)
+	var to_connection := nearest_waterway_connection(layout, to_xz)
+	var graph := _build_route_graph(layout, from_connection, to_connection)
+	var distances: PackedFloat32Array = graph["distances"]
+	var adjacency: Array = graph["adjacency"]
+	var start := int(graph["start"])
+	var target := int(graph["target"])
+	var visited := PackedByteArray()
+	visited.resize(distances.size())
+	distances.fill(INF)
+	distances[start] = 0.0
+	for _iteration in range(distances.size()):
+		var current := -1
+		var current_distance := INF
+		for node_index in range(distances.size()):
+			if visited[node_index] == 0 and distances[node_index] < current_distance:
+				current = node_index
+				current_distance = distances[node_index]
+		if current < 0 or current == target:
+			break
+		visited[current] = 1
+		for edge in adjacency[current]:
+			var next := int(edge["to"])
+			var proposed := current_distance + float(edge["distance"])
+			if proposed < distances[next]:
+				distances[next] = proposed
+	return (
+		float(from_connection["distance_m"])
+		+ distances[target]
+		+ float(to_connection["distance_m"])
+	)
+
+
+static func seaward_from_yaw(rotation_y: float) -> Vector2:
+	return Vector2(-sin(rotation_y), -cos(rotation_y)).normalized()
+
+
+static func yaw_for_seaward(seaward: Vector2) -> float:
+	var direction := seaward.normalized()
+	return atan2(-direction.x, -direction.y)
+
+
+static func _build_candidates(layout: WorldLayout) -> Array[Dictionary]:
+	var candidates: Array[Dictionary] = []
+	for contour_index in range(layout.coastline_contours.size()):
+		var contour := layout.coastline_contours[contour_index]
+		if contour.size() < 2:
+			continue
+		var a := contour[0]
+		var b := contour[1]
+		var tangent := b - a
+		if tangent.length_squared() < 1.0:
+			continue
+		tangent = tangent.normalized()
+		var normal := Vector2(-tangent.y, tangent.x)
+		var midpoint := (a + b) * 0.5
+		var probe := maxf(140.0, layout.cell_size_m * 1.1)
+		var distance_plus := layout.sample_signed_distance(midpoint + normal * probe)
+		var distance_minus := layout.sample_signed_distance(midpoint - normal * probe)
+		var inland := normal if distance_plus < distance_minus else -normal
+		var seaward := -inland
+		var position := midpoint + inland * INLAND_ORIGIN_OFFSET_M
+		if not layout.is_land(position):
+			continue
+		var connection := nearest_waterway_connection(layout, position + seaward * APPROACH_END_M)
+		var quay_half := quay_clear_half_length_m(layout, position, seaward)
+		if quay_half < float(QUAY_HALF_LENGTH_BY_SIZE[0]):
+			continue
+		candidates.append({
+			"position": position,
+			"seaward": seaward,
+			"waterway_distance_m": float(connection["distance_m"]),
+			"quay_half_length_m": quay_half,
+			"region": int(layout.classify_region(position)),
+			"score": _stable_score(layout.seed, midpoint, contour_index),
+			"contour_index": contour_index,
+		})
+	return candidates
+
+
+static func _candidate_less(a: Dictionary, b: Dictionary) -> bool:
+	var score_a := int(a["score"])
+	var score_b := int(b["score"])
+	if score_a != score_b:
+		return score_a < score_b
+	return int(a["contour_index"]) < int(b["contour_index"])
+
+
+static func _stable_score(seed: int, point: Vector2, index: int) -> int:
+	var value := seed ^ (int(round(point.x)) * 73856093)
+	value ^= int(round(point.y)) * 19349663
+	value ^= index * 83492791
+	value = ((value ^ (value >> 16)) * 0x45d9f3b) & 0x7fffffff
+	value = ((value ^ (value >> 16)) * 0x45d9f3b) & 0x7fffffff
+	return (value ^ (value >> 16)) & 0x7fffffff
+
+
+static func _already_selected(selected: Array[Dictionary], candidate: Dictionary) -> bool:
+	var index := int(candidate["contour_index"])
+	for existing in selected:
+		if int(existing["contour_index"]) == index:
+			return true
+	return false
+
+
+static func _selected_has_region(selected: Array[Dictionary], region: int) -> bool:
+	for candidate in selected:
+		if int(candidate.get("region", -1)) == region:
+			return true
+	return false
+
+
+static func _candidate_fits_tier(
+		layout: WorldLayout,
+		selected: Array[Dictionary],
+		candidate: Dictionary,
+		tier: Dictionary,
+) -> bool:
+	if _already_selected(selected, candidate):
+		return false
+	if float(candidate["waterway_distance_m"]) > float(tier["reach"]):
+		return false
+	if not is_land_footprint_valid(
+			layout,
+			candidate["position"],
+			candidate["seaward"],
+			float(tier["land_margin"]),
+	):
+		return false
+	if not has_seaward_clearance(layout, candidate["position"], candidate["seaward"]):
+		return false
+	if float(candidate.get("quay_half_length_m", 0.0)) + 0.01 < float(tier["quay_half"]):
+		return false
+	return _has_spacing(selected, candidate["position"], float(tier["spacing"]))
+
+
+static func _has_spacing(selected: Array[Dictionary], point: Vector2, spacing_m: float) -> bool:
+	for existing in selected:
+		if point.distance_to(existing["position"]) < spacing_m:
+			return false
+	return true
+
+
+static func _make_definition(
+		layout: WorldLayout,
+		candidate: Dictionary,
+		index: int,
+		names: PackedStringArray,
+) -> PortDefinition:
+	var point: Vector2 = candidate["position"]
+	var port := PORT_DEFINITION.new() as PortDefinition
+	# Preserve the established IDs so economy/contracts do not need a port rewrite.
+	port.port_id = "port-home" if index == 0 else "port-%d" % index
+	port.display_name = _name_for_index(index, names)
+	# PortPlot is authored around sea level: its local ground/pad is Y=0 and
+	# PortDock places the water-facing structures relative to that datum.
+	port.world_position = Vector3(point.x, 0.0, point.y)
+	var value := _stable_score(layout.seed ^ 0x706f7274, point, index)
+	var quay_half := float(candidate.get("quay_half_length_m", quay_clear_half_length_m(
+		layout, point, candidate["seaward"]
+	)))
+	var max_size := max_size_for_quay_half(quay_half)
+	if max_size < 0:
+		max_size = 0
+	port.size = clampi(mini(int(value % 5), max_size), 0, 4)
+	if index == 0:
+		# Home port prefers a useful berth count, but never a corner-cut quay.
+		port.size = maxi(port.size, mini(2, max_size))
+	port.has_lighthouse = index == 0 or value % 5 == 0
+	port.has_fog_horn = index == 0 or value % 7 == 0
+	port.rotation_y = yaw_for_seaward(candidate["seaward"])
+	port.has_explicit_rotation = true
+	port.region_kind = _port_region(layout.classify_region(point))
+	port.ground_mode = PortDefinition.GroundMode.WORLD_TERRAIN
+	return port
+
+
+static func _name_for_index(index: int, supplied: PackedStringArray) -> String:
+	if index == 0:
+		return "Haugsvik"
+	var supplied_index := index - 1
+	if supplied_index < supplied.size() and not supplied[supplied_index].strip_edges().is_empty():
+		return supplied[supplied_index].strip_edges()
+	return FALLBACK_NAMES[index % FALLBACK_NAMES.size()]
+
+
+static func _port_region(region: WorldLayout.Region) -> PortDefinition.RegionKind:
+	match region:
+		WorldLayout.Region.FJORD:
+			return PortDefinition.RegionKind.FJORD
+		WorldLayout.Region.ARCHIPELAGO:
+			return PortDefinition.RegionKind.ARCHIPELAGO
+		_:
+			return PortDefinition.RegionKind.MAINLAND
+
+
+static func _project_to_segment(point: Vector2, a: Vector2, b: Vector2) -> Dictionary:
+	var segment := b - a
+	var length := segment.length()
+	if length <= 0.0001:
+		return {"point": a, "along_m": 0.0, "t": 0.0}
+	var t := clampf((point - a).dot(segment) / (length * length), 0.0, 1.0)
+	return {"point": a + segment * t, "along_m": length * t, "t": t}
+
+
+static func _build_route_graph(
+		layout: WorldLayout,
+		from_connection: Dictionary,
+		to_connection: Dictionary,
+) -> Dictionary:
+	var nodes: Array[Vector2] = []
+	var adjacency: Array = []
+	var waterway_nodes := {}
+	var ocean_mouth_nodes := PackedInt32Array()
+	for waterway in layout.waterway_centerlines:
+		var indices := PackedInt32Array()
+		for point in waterway["points"]:
+			indices.append(_graph_node(nodes, adjacency, point))
+		waterway_nodes[String(waterway["id"])] = indices
+		if (waterway["connects_to"] as PackedStringArray).has("open_ocean"):
+			ocean_mouth_nodes.append(indices[0])
+		for i in range(indices.size() - 1):
+			_add_graph_edge(adjacency, indices[i], indices[i + 1], nodes[indices[i]].distance_to(nodes[indices[i + 1]]))
+	# Trunk mouths all open into the same navigable ocean. Direct mouth-to-mouth
+	# edges model that open-water leg without inventing a geographic hub point.
+	for i in range(ocean_mouth_nodes.size()):
+		for j in range(i):
+			var a := ocean_mouth_nodes[i]
+			var b := ocean_mouth_nodes[j]
+			_add_graph_edge(adjacency, a, b, nodes[a].distance_to(nodes[b]))
+	for waterway in layout.waterway_centerlines:
+		var connections: PackedStringArray = waterway["connects_to"]
+		for parent_id in connections:
+			if parent_id == "open_ocean" or not waterway_nodes.has(parent_id):
+				continue
+			var child_indices: PackedInt32Array = waterway_nodes[String(waterway["id"])]
+			var parent_indices: PackedInt32Array = waterway_nodes[parent_id]
+			var child_node := child_indices[0]
+			var parent_node := _nearest_graph_node(nodes[child_node], parent_indices, nodes)
+			_add_graph_edge(adjacency, child_node, parent_node, nodes[child_node].distance_to(nodes[parent_node]))
+	var start := _attach_connection(nodes, adjacency, waterway_nodes, from_connection)
+	var target := _attach_connection(nodes, adjacency, waterway_nodes, to_connection)
+	var distances := PackedFloat32Array()
+	distances.resize(nodes.size())
+	return {"adjacency": adjacency, "distances": distances, "start": start, "target": target}
+
+
+static func _graph_node(nodes: Array[Vector2], adjacency: Array, point: Vector2) -> int:
+	for i in range(nodes.size()):
+		if nodes[i].distance_squared_to(point) < 0.01:
+			return i
+	nodes.append(point)
+	adjacency.append([])
+	return nodes.size() - 1
+
+
+static func _add_graph_edge(adjacency: Array, a: int, b: int, distance: float) -> void:
+	adjacency[a].append({"to": b, "distance": distance})
+	adjacency[b].append({"to": a, "distance": distance})
+
+
+static func _nearest_graph_node(point: Vector2, indices: PackedInt32Array, nodes: Array[Vector2]) -> int:
+	var best := indices[0]
+	var best_distance := INF
+	for index in indices:
+		var distance := point.distance_squared_to(nodes[index])
+		if distance < best_distance:
+			best = index
+			best_distance = distance
+	return best
+
+
+static func _attach_connection(
+		nodes: Array[Vector2],
+		adjacency: Array,
+		waterway_nodes: Dictionary,
+		connection: Dictionary,
+) -> int:
+	var point: Vector2 = connection["point"]
+	var node := _graph_node(nodes, adjacency, point)
+	var indices: PackedInt32Array = waterway_nodes[String(connection["waterway_id"])]
+	var segment_index := clampi(int(connection["segment_index"]), 0, indices.size() - 2)
+	var a := indices[segment_index]
+	var b := indices[segment_index + 1]
+	_add_graph_edge(adjacency, node, a, point.distance_to(nodes[a]))
+	_add_graph_edge(adjacency, node, b, point.distance_to(nodes[b]))
+	return node

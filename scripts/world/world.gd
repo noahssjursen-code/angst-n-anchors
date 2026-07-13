@@ -8,12 +8,14 @@ extends Node3D
 const PLAYER_SCENE := preload("res://scenes/shared/player.tscn")
 const WORLD_RENDERER_SCRIPT := preload("res://scripts/world/world_renderer.gd")
 const ATMOSPHERIC_SCRIPT := preload("res://scripts/world/atmospheric_effects.gd")
+const WORLD_LAYOUT_GENERATOR := preload("res://scripts/world/world_layout_generator.gd")
+const COASTAL_PORT_PLACER := preload("res://scripts/world/coastal_port_placer.gd")
+const WORLD_TERRAIN_STREAMER := preload("res://scripts/world/world_terrain_streamer.gd")
 
 const LOAD_RADIUS           : float = 1500.0
 const EDITOR_PREVIEW_RADIUS : float = 600.0
 const EDITOR_PREVIEW_MAX    : int   = 6
-const MIN_PORT_SEPARATION   : float = 600.0
-const SCATTER_RADIUS_PER_PORT : float = 200.0
+const WORLD_GENERATION_VERSION := WORLD_LAYOUT_GENERATOR.GENERATION_VERSION
 
 const PORT_NAMES : Array[String] = [
 	"Holmvik",  "Sandvær",  "Bergnes",  "Kloven",
@@ -28,20 +30,38 @@ const PORT_NAMES : Array[String] = [
 	"Ravnheim", "Skarvøy",  "Tjuvnes",  "Ulvvær",
 ]
 
+var _ready_complete := false
+var _layout_checksum := ""
+var _world_layout: WorldLayout
+var _layout_generation_usec := 0
+var _requested_generation_version := WORLD_GENERATION_VERSION
+var _terrain_streamer: WorldTerrainStreamer
+
 @export var world_seed:   int = 42:
-	set(v): world_seed = v; if is_inside_tree(): _rebuild()
+	set(v): world_seed = v; if _ready_complete and is_inside_tree(): _rebuild()
 
 @export var port_count: int = 35:
-	set(v): port_count = v; if is_inside_tree(): _rebuild()
+	set(v): port_count = v; if _ready_complete and is_inside_tree(): _rebuild()
 
 
 func _ready() -> void:
 	if not Engine.is_editor_hint():
 		add_to_group("world")
+		var settings := get_node_or_null("/root/GameSettings")
+		if settings != null:
+			world_seed = int(settings.get("map_generation_seed"))
+			_requested_generation_version = int(settings.get("map_generation_version"))
+	_ready_complete = true
 	call_deferred("_rebuild")
 
 
 func _rebuild() -> void:
+	if _requested_generation_version != WORLD_GENERATION_VERSION:
+		push_error(
+			"World: generation version mismatch (requested %d, runtime %d)"
+			% [_requested_generation_version, WORLD_GENERATION_VERSION]
+		)
+		return
 	var t := _telemetry()
 	var world_handle: int = t.mark_load_event("world.init") if t != null else 0
 
@@ -51,32 +71,31 @@ func _rebuild() -> void:
 		else:
 			child.queue_free()
 
-	_add_world_renderer()
+	var layout_handle: int = t.mark_load_event("world.layout") if t != null else 0
+	var layout_started := Time.get_ticks_usec()
+	_world_layout = WORLD_LAYOUT_GENERATOR.generate(world_seed)
+	_layout_generation_usec = Time.get_ticks_usec() - layout_started
+	_layout_checksum = _world_layout.layout_checksum
+	if t != null:
+		t.end_load_event(layout_handle)
+	var settings := get_node_or_null("/root/GameSettings")
+	if settings != null and settings.has_method("set_world_generation_context"):
+		settings.call(
+			"set_world_generation_context",
+			world_seed,
+			WORLD_GENERATION_VERSION,
+			_layout_checksum,
+		)
 
+	_add_world_renderer()
 	var defs := _generate_definitions()
 
 	if not Engine.is_editor_hint():
 		var positions: Array[Vector3] = []
-		var islands  : Array          = []
 		for d in defs:
 			positions.append(d.world_position)
-			var data := PortExpander.expand(d, world_seed)
-			var ry := data.rotation_y
-			
-			# Shift the OBB center inland by 70.0m because the organic island mesh
-			# extends landward (local +Z) but is flat at the water face (local -Z)
-			var landward := Vector3(sin(ry), 0.0, cos(ry)).normalized()
-			var shifted_center := d.world_position + landward * 70.0
-			
-			var land_pad := IslandMeshBuilder.MARGIN + IslandMeshBuilder.AMPLITUDE # 100.0
-			islands.append({
-				"center": shifted_center,
-				"half_x": data.island_width * 0.5 + land_pad,
-				"half_z": 170.0, # Centred around the shifted inland axis
-				"rotation_y": ry,
-			})
 		var lf_handle: int = t.mark_load_event("land_field.bake") if t != null else 0
-		LandField.initialize(islands)
+		LandField.initialize(_world_layout)
 		if t != null:
 			t.end_load_event(lf_handle)
 		WorldWeather.initialize(world_seed, positions)
@@ -89,6 +108,7 @@ func _rebuild() -> void:
 			for child in get_children():
 				_own_subtree(child)
 	else:
+		_add_terrain_streamer(defs)
 		_add_atmospheric_effects()
 		_setup_ports(defs)
 		_bake_berth_lanes(t, defs)
@@ -103,6 +123,29 @@ func _rebuild() -> void:
 ## boot autoloads.
 func _telemetry() -> Node:
 	return get_node_or_null("/root/Telemetry")
+
+
+func get_world_context() -> Dictionary:
+	return {
+		"seed": world_seed,
+		"generation_version": WORLD_GENERATION_VERSION,
+		"layout_checksum": _layout_checksum,
+	}
+
+
+func get_world_layout() -> WorldLayout:
+	return _world_layout
+
+
+func get_world_generation_debug_stats() -> Dictionary:
+	return {
+		"seed": world_seed,
+		"version": WORLD_GENERATION_VERSION,
+		"checksum": _layout_checksum,
+		"generation_usec": _layout_generation_usec,
+		"raster_resolution": _world_layout.raster_resolution if _world_layout != null else 0,
+		"contour_segments": _world_layout.coastline_contours.size() if _world_layout != null else 0,
+	}
 
 
 func _bake_berth_lanes(t: Node, defs: Array[PortDefinition]) -> void:
@@ -139,6 +182,14 @@ func _add_atmospheric_effects() -> void:
 	var fx := ATMOSPHERIC_SCRIPT.new() as Node3D
 	fx.name = "AtmosphericEffects"
 	add_child(fx)
+
+
+func _add_terrain_streamer(defs: Array[PortDefinition]) -> void:
+	_terrain_streamer = WORLD_TERRAIN_STREAMER.new() as WorldTerrainStreamer
+	_terrain_streamer.name = "WorldTerrainStreamer"
+	_terrain_streamer.add_to_group("world_terrain_streamer")
+	add_child(_terrain_streamer)
+	_terrain_streamer.configure(_world_layout, defs)
 
 
 func _add_editor_preview(defs: Array[PortDefinition]) -> void:
@@ -203,46 +254,11 @@ func _setup_ports(defs: Array[PortDefinition]) -> void:
 
 
 func _generate_definitions() -> Array[PortDefinition]:
-	var defs: Array[PortDefinition] = []
-
-	var home            := PortDefinition.new()
-	home.port_id        = "port-home"
-	home.display_name   = "Haugsvik"
-	home.world_position = Vector3.ZERO
-	home.size           = 1
-	defs.append(home)
-
-	var rng       := RandomNumberGenerator.new()
-	rng.seed      = world_seed
-	var scatter_r := float(port_count) * SCATTER_RADIUS_PER_PORT
-	var placed    : Array[Vector3] = [Vector3.ZERO]
-	var i         := 0
-	var tries     := 0
-
-	while i < port_count and tries < port_count * 500:
-		tries += 1
-		var angle     := rng.randf() * TAU
-		var dist      := sqrt(rng.randf()) * scatter_r
-		var candidate := Vector3(cos(angle) * dist, 0.0, sin(angle) * dist)
-
-		var too_close := false
-		for existing in placed:
-			if candidate.distance_to(existing) < MIN_PORT_SEPARATION:
-				too_close = true
-				break
-		if too_close:
-			continue
-
-		var p            := PortDefinition.new()
-		p.port_id        = "port-%d" % (i + 1)
-		p.display_name   = PORT_NAMES[i % PORT_NAMES.size()]
-		p.world_position = candidate
-		p.size           = rng.randi() % 5
-		defs.append(p)
-		placed.append(candidate)
-		i += 1
-
-	return defs
+	return COASTAL_PORT_PLACER.place_ports(
+		_world_layout,
+		maxi(port_count, 1),
+		PackedStringArray(PORT_NAMES),
+	)
 
 
 func _spawn_player() -> void:

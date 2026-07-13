@@ -26,7 +26,7 @@ scripts/
   ocean/        # FFT water simulation (FftWaterSystem), WaveSurface query
   weather/      # Deterministic field/front/composer, WorldWeather API, local presentation, rain/audio/HUD
   time/         # WorldClock autoload
-  world/        # World generation, seeding, ProximityLoader, WorldRenderer, AtmosphericEffects
+  world/        # Norway macro layout/SDF, coastal ports, streamed terrain, renderer/loading
   port/         # PortPlot, PortDock, PortFacilities, FuelStation, LighthouseBuilding, FogHornBuilding
   npc/          # NpcBase, NpcInteractable, HarbourMasterNpc, ShipwrightNpc, ContractNpc, DeliveryNpc
   cargo/        # Contract, CargoItem, CargoPickup, DeliveryZone, Warehouse, ContractRegistry autoload — and later cranes
@@ -38,6 +38,7 @@ resources/data/
     buildings/  # Fog horn, lighthouse
   meshes/       # Raw {vertices, indices} JSON by category (hulls/, docks/, buildings/, props/, …)
   lights/       # Nav-light JSON configs
+  world/        # Procedural archetype parameters only; never generated mesh vertices
 scenes/vessels/ # Hand-authored vessel scenes (workboat.tscn)
 ```
 
@@ -49,7 +50,7 @@ Each autoload lives in its system folder and is registered in `project.godot`.
 
 | Autoload | System | Role |
 |---|---|---|
-| `GameSettings` | `state/` | Audio / graphics / input prefs (user://settings.cfg) |
+| `GameSettings` | `state/` | Client prefs plus session-only world seed/version/checksum handoff |
 | `WorldWeather` | `weather/` | Deterministic weather query API: composed samples, routes, fronts, local projection |
 | `WeatherLighting` | `weather/` | Smoothed local presentation only: sky, fog, ocean, audio, wind |
 | `WorldClock` | `time/` | Game time. Emits `day_changed` + `hour_changed` (1 game hr = 60 real s) |
@@ -72,6 +73,21 @@ Weather has a parallel read seam: gameplay/map queries call `WorldWeather.sample
 `sample_route()` / `active_fronts()`. Local VFX reads `WorldWeather.local_presentation`
 (currently exposed by the `WeatherLighting` compatibility autoload). Never sample
 `WeatherField` directly outside the weather implementation.
+
+### World generation contract
+
+`WorldLayoutGenerator.generate(seed)` creates the immutable 40×40 km
+`WorldLayout`: macro SDF, terrain heights, coastline contours, regional tags,
+and waterway graph. It is the shared geographic truth for terrain, `LandField`,
+ports, charting, weather, and navigation.
+
+- `CoastalPortPlacer` owns `PortDefinition` position/yaw; local `-Z` faces water.
+- `WorldTerrainStreamer` owns 1 km terrain chunks, LOD, nearby collision, and port pads.
+- `LandField.wave_shelter()` is short-range wave attenuation. Weather/fishing
+  use `coastal_exposure()` / `directional_fetch()`.
+- Do not reintroduce island-disk geography or per-port weather calm.
+- Seed + generation version + layout checksum identify a world. Coordinate
+  saves must not restore into a mismatched context.
 
 In multiplayer this autoload becomes a per-client object the network layer populates with the local player's projection of the world. Every UI that already reads from here will keep working unchanged; the gameplay-mutating code stays on the (per-server) authority.
 
@@ -221,9 +237,9 @@ Port definitions, ship templates, commodities live in `resources/data/`. Scripts
 
 ## Save Format
 
-Persistence flows through `PlayerSession.save_now()` → `_snapshot_into_player_data()` (via `LocalPlayerView`) → `PlayerSaveStore.save_player()`. The save envelope is `{version, player, saved_at_unix}`; format version is currently **2**. See [`SAVE_FORMAT.md`](SAVE_FORMAT.md) for the field schema and the v1 → v2 upgrade behaviour.
+Persistence flows through `PlayerSession.save_now()` → `_snapshot_into_player_data()` (via `LocalPlayerView`) → `PlayerSaveStore.save_player()`. The save envelope is `{version, player, saved_at_unix}`; format version is currently **3**. See [`SAVE_FORMAT.md`](SAVE_FORMAT.md) for the field schema and upgrade behaviour.
 
-Saved per-captain state covers: marks, lifetime stats, appearance, active vessel ledger record, accepted contracts (with delivered counts; in-flight cargo is forfeited on load), ship runtime state (position, yaw, throttle, fuel fraction), world-clock hours, and tutorial-hint-seen flags. Autosave heartbeats every 60 s of wall-clock; `_notification(NOTIFICATION_WM_CLOSE_REQUEST)` and window focus loss both force a flush.
+Saved per-captain state covers: marks, lifetime stats, appearance, active vessel ledger record, accepted contracts (with delivered counts; in-flight cargo is forfeited on load), ship runtime state (position, yaw, throttle, fuel fraction), world identity, world-clock hours, and tutorial-hint-seen flags. Autosave heartbeats every 60 s of wall-clock; `_notification(NOTIFICATION_WM_CLOSE_REQUEST)` and window focus loss both force a flush.
 
 ---
 

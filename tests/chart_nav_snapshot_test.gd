@@ -7,10 +7,10 @@ var _failures := PackedStringArray()
 
 func _initialize() -> void:
 	var eastbound: RefCounted = ChartNavSnapshotClass.from_kinematics(
-		Vector2(0.0, -1.0),
+		Vector2(0.0, 1.0),
 		Vector2(5.0, 0.0),
 		Vector3.ZERO,
-		Vector3(0.0, 0.0, 100.0)
+		Vector3(0.0, 0.0, -100.0)
 	)
 	_check_close(eastbound.heading_deg, 0.0, "north heading")
 	_check_close(eastbound.course_deg, 90.0, "east course")

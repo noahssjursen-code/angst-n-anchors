@@ -1,0 +1,34 @@
+{
+  "world_size_m": 40000.0,
+  "raster_resolution": 257,
+  "mainland": {
+    "coast_x_m": 6500.0,
+    "coast_amplitude_m": 1850.0,
+    "coast_harmonics": 4
+  },
+  "fjords": {
+    "root_count_min": 3,
+    "root_count_max": 7,
+    "trunk_width_min_m": 520.0,
+    "trunk_width_max_m": 1250.0,
+    "branch_width_min_m": 320.0,
+    "branch_width_max_m": 720.0,
+    "inland_reach_min_m": 6000.0,
+    "inland_reach_max_m": 16000.0,
+    "root_spacing_m": 3100.0
+  },
+  "archipelago": {
+    "cluster_count_min": 22,
+    "cluster_count_max": 34,
+    "belt_x_min_m": -12000.0,
+    "belt_x_max_m": 1800.0,
+    "radius_min_m": 220.0,
+    "radius_max_m": 780.0,
+    "lobes_min": 2,
+    "lobes_max": 4
+  },
+  "classification": {
+    "fjord_influence_m": 1500.0,
+    "open_water_x_m": -13500.0
+  }
+}

@@ -46,7 +46,7 @@ static func sample(world_pos: Vector3) -> Dictionary:
 	var tier := _tier_for_noise(noise_val)
 	var shelter := 1.0
 	if LandField.is_initialized():
-		shelter = LandField.shore_shelter(world_pos)
+		shelter = LandField.coastal_exposure(world_pos)
 	if shelter < MIN_OPEN_WATER_SHELTER:
 		tier = TIERS[0]
 		shelter = 0.0

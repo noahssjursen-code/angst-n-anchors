@@ -147,7 +147,7 @@ func _draw_wind(c: Vector2) -> void:
 	# "wind from astern" points down on the dial.
 	var bow_h := NavigationAxes.vessel_bow_horizontal(_boat)
 	if bow_h.length_squared() < 1e-6:
-		bow_h = Vector2(0.0, -1.0)
+		bow_h = Vector2(0.0, 1.0)
 	else:
 		bow_h = bow_h.normalized()
 	# Local-wind vector: wind component along/across bow.

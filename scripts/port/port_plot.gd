@@ -40,6 +40,7 @@ var _has_lighthouse_data: bool       = false
 var _has_fog_horn_data:   bool       = false
 var _layout_seed_data:    int        = 0
 var _island_width_data:   float      = 80.0
+var _ground_mode_data: PortDefinition.GroundMode = PortDefinition.GroundMode.LOCAL_ISLAND
 
 ## Runtime streamed build: ground first, then dock → facilities → trees → NPCs.
 var _stream_jobs: Array = []  ## Array[Callable]
@@ -73,7 +74,8 @@ func _rebuild() -> void:
 	var pad_w              := _island_width_data + 2.0 * PAD_SAFE_MARGIN
 	var pad_d              := plot_depth + 2.0 * PAD_SAFE_MARGIN
 	var poly               := IslandMeshBuilder.build_polygon(_island_width_data, plot_depth, _layout_seed_data)
-	_build_ground(poly, pad_w, pad_d)
+	if _ground_mode_data == PortDefinition.GroundMode.LOCAL_ISLAND or Engine.is_editor_hint():
+		_build_ground(poly, pad_w, pad_d)
 
 	if not port_label.is_empty():
 		var name_lbl           := Label3D.new()
@@ -100,7 +102,8 @@ func _rebuild() -> void:
 	var gen := _stream_gen
 	_stream_jobs.append(_stream_add_dock.bind(gen, hd, ship_class))
 	_stream_jobs.append(_stream_add_facilities.bind(gen, hd))
-	_stream_jobs.append(_stream_enqueue_trees.bind(gen, poly, pad_w, pad_d))
+	if _ground_mode_data == PortDefinition.GroundMode.LOCAL_ISLAND:
+		_stream_jobs.append(_stream_enqueue_trees.bind(gen, poly, pad_w, pad_d))
 	_stream_jobs.append(_stream_build_npcs.bind(gen))
 	set_process(true)
 
@@ -534,6 +537,7 @@ func configure(data: PortData) -> void:
 	_has_lighthouse_data     = data.has_lighthouse
 	_has_fog_horn_data       = data.has_fog_horn
 	_layout_seed_data        = data.layout_seed
+	_ground_mode_data        = data.ground_mode
 	_configuring             = false
 	rotation.y               = data.rotation_y
 	if is_inside_tree():

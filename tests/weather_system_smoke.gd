@@ -89,8 +89,8 @@ func _test_offshore_gale_access() -> void:
 func _profile_sampling() -> void:
 	var started := Time.get_ticks_usec()
 	for i in range(2000):
-		var x := float((i * 7919) % 32000) - 16000.0
-		var z := float((i * 3571) % 32000) - 16000.0
+		var x := float((i * 7919) % 40000) - 20000.0
+		var z := float((i * 3571) % 40000) - 20000.0
 		COMPOSER.sample(Vector3(x, 0.0, z), 300.0 + float(i % 48) * 0.25)
 	var elapsed := Time.get_ticks_usec() - started
 	print("Weather sampling profile: %.2f µs/sample uncached" % (float(elapsed) / 2000.0))

@@ -13,7 +13,7 @@ func _run() -> void:
 	var ports: Array[Vector3] = []
 	world_weather.call("initialize", 4451, ports)
 	var view := MAP_WEATHER_VIEW.new()
-	assert(MAP_WEATHER_VIEW.wind_to_screen_direction(Vector3(0.0, 0.0, -1.0)) == Vector2(0.0, -1.0))
+	assert(MAP_WEATHER_VIEW.wind_to_screen_direction(Vector3(0.0, 0.0, 1.0)) == Vector2(0.0, -1.0))
 	assert(MAP_WEATHER_VIEW.wind_to_screen_direction(Vector3(1.0, 0.0, 0.0)) == Vector2(1.0, 0.0))
 	var ctx := {
 		"wx_min": -8000.0, "wx_max": 8000.0,

@@ -5,7 +5,7 @@ const MPS_TO_KNOTS := 1.943844492
 
 var ship: Node3D = null
 var ship_position := Vector3(INF, INF, INF)
-var bow_horizontal := Vector2(0.0, -1.0)
+var bow_horizontal := Vector2(0.0, 1.0)
 var velocity_horizontal := Vector2.ZERO
 var heading_deg := 0.0
 var course_deg := NAN
@@ -92,7 +92,7 @@ func _apply_kinematics(
 	position: Vector3,
 	next_waypoint: Vector3,
 ) -> void:
-	bow_horizontal = bow.normalized() if bow.length_squared() > 1.0e-10 else Vector2(0.0, -1.0)
+	bow_horizontal = bow.normalized() if bow.length_squared() > 1.0e-10 else Vector2(0.0, 1.0)
 	velocity_horizontal = velocity
 	heading_deg = NavigationAxes.heading_deg_horizontal(bow_horizontal)
 	speed_knots = velocity.length() * MPS_TO_KNOTS

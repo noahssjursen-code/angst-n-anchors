@@ -115,7 +115,7 @@ func _setup_3d_background() -> void:
 	_cam = Camera3D.new()
 	_cam.name = "BackgroundCamera"
 	_cam.current = true
-	_cam.far = 1500.0 # Make sure the horizon stays beautifully rendered
+	_cam.far = 40000.0
 	add_child(_cam)
 
 	# Spawn the 3D majestic preview NPC standing on the edge of the Testvik wharf

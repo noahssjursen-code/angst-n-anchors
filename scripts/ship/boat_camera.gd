@@ -38,6 +38,10 @@ var _helming: bool = false
 
 
 func _ready() -> void:
+	# Outdoor MMO sightlines: Godot's default far (4000 m) cuts the mainland
+	# into a black void long before terrain streaming runs out.
+	far = 40000.0
+	near = 0.2
 	_target = get_parent()
 	_zoom_target = follow_distance
 	_pitch = atan2(follow_height, follow_distance)

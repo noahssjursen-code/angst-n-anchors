@@ -1,6 +1,6 @@
 ## Single convention for headings, bearings, and chart north-up.
-## World axes: Godot horizontal plane X/Z, Y up. Chart maps +X east (right),
-## smaller screen Y toward smaller world Z — so **north = world −Z**.
+## World axes: Godot horizontal plane X/Z, Y up. Chart maps +X east (right)
+## and +Z north (up).
 
 extends RefCounted
 class_name NavigationAxes
@@ -12,7 +12,7 @@ static func heading_rad_horizontal(bow_horizontal: Vector2) -> float:
 	if bh.length_squared() < 1e-10:
 		return 0.0
 	bh = bh.normalized()
-	return atan2(bh.x, -bh.y)
+	return atan2(bh.x, bh.y)
 
 
 static func heading_deg_horizontal(bow_horizontal: Vector2) -> float:
@@ -31,4 +31,4 @@ static func vessel_bow_horizontal(node: Node3D) -> Vector2:
 
 ## Bearing from world-space delta.xyz on the XZ plane, clockwise from north.
 static func bearing_rad_world_delta(delta: Vector3) -> float:
-	return atan2(delta.x, -delta.z)
+	return atan2(delta.x, delta.z)

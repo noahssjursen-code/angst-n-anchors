@@ -4,9 +4,8 @@ extends Node
 ## User-tunable graphics, audio, and input settings. Persisted to
 ## user://settings.cfg so they survive restart.
 ##
-## MP-readiness: settings are purely client-local. Nothing here affects the
-## simulation, so no per-player sync work is required when the network layer
-## arrives.
+## User preferences are client-local. The world-generation context below is a
+## session hand-off populated by server selection, not a persisted preference.
 
 signal settings_changed
 
@@ -29,6 +28,19 @@ var max_fps:        int        = 120
 # ── Input ─────────────────────────────────────────────────────────────────────
 var mouse_sensitivity: float = 1.0           # multiplier applied to player.gd's base sensitivity
 var invert_mouse_y:    bool  = false
+
+# ── Session world context ────────────────────────────────────────────────────
+## Offline default or authoritative server-selected generation seed/version.
+## These are intentionally not written to settings.cfg.
+var map_generation_seed: int = 42
+var map_generation_version: int = 3
+var map_layout_checksum: String = ""
+
+
+func set_world_generation_context(seed: int, version: int, checksum: String = "") -> void:
+	map_generation_seed = seed
+	map_generation_version = maxi(version, 1)
+	map_layout_checksum = checksum
 
 
 func _ready() -> void:

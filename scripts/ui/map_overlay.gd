@@ -248,7 +248,7 @@ func _screen_to_world(screen: Vector2) -> Vector3:
 	return Vector3(
 		lerpf(bounds.position.x, bounds.end.x, uv.x),
 		0.0,
-		lerpf(bounds.position.y, bounds.end.y, uv.y),
+		lerpf(bounds.end.y, bounds.position.y, uv.y),
 	)
 
 

@@ -16,7 +16,10 @@ static func sample(world_pos: Vector3, game_hours: float = -1.0) -> WeatherSampl
 	var base := WeatherField.sample(world_pos, game_hours)
 	var front_data := WeatherFrontField.sample_at(world_pos, game_hours)
 	var front_intensity := float(front_data.get("intensity", 0.0))
-	var exposure := _exposure_at(world_pos)
+	var base_direction := base.wind.normalized()
+	if base_direction.length_squared() < 0.25:
+		base_direction = Vector3(0.95, 0.0, 0.30).normalized()
+	var exposure := _exposure_at(world_pos, base_direction)
 	var offshore := smoothstep(0.08, 0.95, exposure)
 	var storm_access := pow(exposure, 0.72)
 
@@ -26,9 +29,6 @@ static func sample(world_pos: Vector3, game_hours: float = -1.0) -> WeatherSampl
 	sample.exposure = exposure
 	sample.front_intensity = front_intensity
 
-	var base_direction := base.wind.normalized()
-	if base_direction.length_squared() < 0.25:
-		base_direction = Vector3(0.95, 0.0, 0.30).normalized()
 	var front: WeatherFront = front_data.get("front") as WeatherFront
 	var front_direction := base_direction
 	if front != null and front.velocity_m_per_game_hour.length_squared() > 0.01:
@@ -86,10 +86,13 @@ static func sample(world_pos: Vector3, game_hours: float = -1.0) -> WeatherSampl
 	return sample
 
 
-static func _exposure_at(world_pos: Vector3) -> float:
+static func _exposure_at(world_pos: Vector3, wind_direction: Vector3) -> float:
 	if not LandField.is_initialized():
 		return 1.0
-	return clampf(LandField.sample_baked_shelter(world_pos), 0.0, 1.0)
+	var regional := LandField.coastal_exposure(world_pos)
+	var upwind := -Vector2(wind_direction.x, wind_direction.z)
+	var wind_fetch := LandField.directional_fetch(world_pos, upwind)
+	return clampf(regional * lerpf(0.55, 1.0, wind_fetch), 0.0, 1.0)
 
 
 static func _zone_label(exposure: float, front: float, sea_state: float) -> String:
