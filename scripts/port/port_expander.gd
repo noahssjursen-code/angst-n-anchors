@@ -101,7 +101,10 @@ static func expand(definition: PortDefinition, world_seed: int) -> PortData:
 	data.commodity_export  = COMMODITIES[rng.randi() % COMMODITIES.size()]
 	data.commodity_imports = _imports(rng, size, data.commodity_export)
 	data.layout_seed       = rng.randi()
-	data.rotation_y        = rng.randf() * TAU
+	var legacy_rotation := rng.randf() * TAU
+	data.rotation_y = definition.rotation_y if definition.has_explicit_rotation else legacy_rotation
+	data.region_kind = definition.region_kind
+	data.ground_mode = definition.ground_mode
 	data.population        = _population(rng, size)
 	data.features          = _features(rng, size)
 

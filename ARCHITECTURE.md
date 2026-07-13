@@ -68,8 +68,9 @@ position, and `WorldClock`. `WorldWeather` is the public API for point, route,
 and front queries. `WeatherLighting` remains the autoload facade for the
 smoothed local presentation consumed by sky/fog/ocean/audio. `RainField`,
 `WeatherAudioSystem`, the weather HUD, and scoped debug presets are presentation
-consumers. Geographic calm comes from baked `LandField` exposure rather than
-area-based overrides.
+consumers. `LandField` reads the generated macro SDF in O(1): local
+`wave_shelter` feeds physical ocean attenuation once, while kilometre-scale
+`coastal_exposure` and directional fetch feed weather, sea state, and fishing.
 
 ### `scripts/time/`
 
@@ -77,22 +78,28 @@ area-based overrides.
 
 ### `scripts/world/`
 
-World-level generation. No port content — just where ports are placed and how the world looks.
-- `World` (`@tool` Node3D, scene root) — generates port definitions from seed, sets up `ProximityLoader`
+World-level generation. A deterministic 40×40 km Norway archetype is the shared
+truth for rendering, weather, ports, charting, and navigation.
+- `World` (`@tool` Node3D, scene root) — resolves seed/version, owns layout bootstrap and consumers
+- `WorldLayoutGenerator` / `WorldLayout` — eastern mainland, branching navigable fjords, western skerries, SDF, heights, contours, waterway graph, checksum
+- `CoastalPortPlacer` — validates coast sites and aligns existing ports with local `-Z` seaward
+- `WorldTerrainStreamer` — incremental 1 km `ArrayMesh` chunks, distance LOD, nearby concave collision, flattened port pads
 - `ProximityLoader` — lazy-instantiates nodes near the player
 - `WorldRenderer` — ocean shader plane, sky
 - `AtmosphericEffects` — fog, atmospheric post-processing
+- `WaterwayNavigation` (`navigation/`) — deterministic reachability and navigable route distance over generated centerlines
 
 ### `scripts/port/`
 
-One port as a place.
-- `PortPlot` — composition root: island ground, `PortDock`, `PortFacilities`
+One port as a place. Macro worlds retain the existing port content and replace
+only its placement and ground.
+- `PortPlot` — composition root: optional legacy island ground, `PortDock`, `PortFacilities`
 - `PortDock` — berths, mooring, cargo aprons, fuel point, ship spawner
 - `PortFacilities` — land-side layout: buildings, NPC spawn positions
 - `FuelStation`, `LighthouseBuilding`, `FogHornBuilding` — physical buildings
 - `DockTerminal`, `DockCargoRamp` — dock interaction points
-- `PortData`, `PortDefinition` — typed data records for ports
-- `PortExpander` — expands `PortDefinition` → `PortData`
+- `PortData`, `PortDefinition` — typed records including coast yaw, region, and ground mode
+- `PortExpander` — expands `PortDefinition` → `PortData`; random yaw is legacy fallback only
 
 ### `scripts/npc/`
 
@@ -117,8 +124,9 @@ Contracts, cargo, and eventually cranes.
 
 - `GameMenu` autoload (pause/menu)
 - `DebugHud` autoload (F3 overlay)
-- `MapOverlay` marine-chart shell, layered chart components under `ui/chart/`,
-  `ShipHud`, `WalkingHud`
+- `MapOverlay` marine-chart shell with cached macro coastline, port markers,
+  waterway route distance, and layered components under `ui/chart/`
+- `ShipHud`, `WalkingHud`
 
 ### `scripts/state/`
 
@@ -200,6 +208,7 @@ resources/data/
     port_buildings/
     lighthouse/ foghorn/ props/ characters/ terrain/
   lights/             # Nav-light configs
+  world/              # Procedural archetype parameters (no generated geometry)
 scenes/vessels/       # Hand-authored BoatBody scenes (workboat.tscn)
 ```
 

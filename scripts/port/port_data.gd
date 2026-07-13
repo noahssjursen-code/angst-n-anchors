@@ -27,6 +27,8 @@ var commodity_imports: Array[String]  = []
 var island_width: float = 80.0
 var layout_seed:  int   = 0
 var rotation_y:   float = 0.0
+var region_kind: PortDefinition.RegionKind = PortDefinition.RegionKind.LEGACY_ISLAND
+var ground_mode: PortDefinition.GroundMode = PortDefinition.GroundMode.LOCAL_ISLAND
 
 # Settlement
 var population:  int          = 0

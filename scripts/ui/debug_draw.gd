@@ -126,11 +126,51 @@ func _build() -> Array:
 	_build_system(e)
 	_build_water_gpu(e)
 	_build_weather(e)
+	_build_world_generation(e)
 	_build_vessel_physics(e)
 	_build_loading(e)
 	_build_debug_tools(e)
 	_build_gameplay(e)
 	return e
+
+
+func _build_world_generation(e: Array) -> void:
+	_sec(e, "WORLD GENERATION")
+	var world := get_tree().get_first_node_in_group("world")
+	if world == null or not world.has_method("get_world_generation_debug_stats"):
+		_stub(e, "Layout", "world not initialized")
+		_sep(e)
+		return
+	var stats := world.call("get_world_generation_debug_stats") as Dictionary
+	_row(e, "Seed / version", "%d · v%d" % [
+		int(stats.get("seed", 0)),
+		int(stats.get("version", 0)),
+	], C_VALUE)
+	_row(e, "Layout bake", "%.1f ms · %d² · %d coast segments" % [
+		float(stats.get("generation_usec", 0)) / 1000.0,
+		int(stats.get("raster_resolution", 0)),
+		int(stats.get("contour_segments", 0)),
+	], C_VALUE)
+	var checksum := str(stats.get("checksum", ""))
+	_row(e, "Checksum", checksum.left(12) if not checksum.is_empty() else "—", C_LABEL)
+	var terrain := get_tree().get_first_node_in_group("world_terrain_streamer")
+	if terrain != null and terrain.has_method("get_debug_stats"):
+		var terrain_stats := terrain.call("get_debug_stats") as Dictionary
+		_row(e, "Terrain chunks", "%d loaded · %d queued · %d collision" % [
+			int(terrain_stats.get("loaded", 0)),
+			int(terrain_stats.get("pending", 0)),
+			int(terrain_stats.get("collision_count", 0)),
+		], C_VALUE)
+		_row(e, "Terrain geometry", "%d verts · %d tris · %.1f MB" % [
+			int(terrain_stats.get("vertices", 0)),
+			int(terrain_stats.get("triangles", 0)),
+			float(terrain_stats.get("memory_estimate_bytes", 0)) / (1024.0 * 1024.0),
+		], C_LABEL)
+		_row(e, "Terrain build", "%.2f ms last · %.2f ms avg" % [
+			float(terrain_stats.get("last_build_ms", 0.0)),
+			float(terrain_stats.get("average_build_ms", 0.0)),
+		], C_LABEL)
+	_sep(e)
 
 
 func _build_weather(e: Array) -> void:

@@ -4,14 +4,25 @@ extends RefCounted
 const C_GRID := Color(0.18, 0.26, 0.44, 0.22)
 const C_ISLAND := Color(0.22, 0.30, 0.20, 0.94)
 const C_EDGE := Color(0.38, 0.52, 0.32, 0.78)
+const C_MACRO_LAND := Color(0.16, 0.23, 0.16, 0.96)
+const C_MACRO_COAST := Color(0.48, 0.66, 0.38, 0.92)
+const C_PORT_MARKER := Color(0.82, 0.91, 0.56, 0.96)
 const C_SHIP := Color(0.96, 0.86, 0.12, 1.0)
 const C_TRAFFIC := Color(0.25, 0.88, 0.92, 0.92)
 const MapWeatherViewClass = preload("res://scripts/ui/map/map_weather_view.gd")
 const MapFishingViewClass = preload("res://scripts/ui/map/map_fishing_view.gd")
+const WaterwayNavigationClass = preload("res://scripts/navigation/waterway_navigation.gd")
+const ChartCoastlineCacheClass = preload("res://scripts/ui/chart/chart_coastline_cache.gd")
 
 var weather_adapter := MapWeatherViewClass.new()
 var fishing_adapter := MapFishingViewClass.new()
 var polygon_cache: Dictionary = {}
+var _active_layout: Variant
+var _waterway_navigation := WaterwayNavigationClass.new()
+var _coastline_cache := ChartCoastlineCacheClass.new()
+
+var coastline_cache_revision: int:
+	get: return _coastline_cache.revision
 
 
 func render(
@@ -23,8 +34,13 @@ func render(
 	route_waypoints: PackedVector3Array = PackedVector3Array(),
 ) -> void:
 	var registry := canvas.get_node_or_null("/root/ContractRegistry")
+	_active_layout = _resolve_world_layout(canvas)
+	if _active_layout != null:
+		prepare_layout(_active_layout)
+	elif not _waterway_navigation.is_empty():
+		_waterway_navigation.clear()
 	if layers.is_visible("base"):
-		_draw_base(canvas, ctx, registry, selected_port)
+		_draw_base(canvas, ctx, registry, selected_port, _active_layout)
 	if layers.is_visible("fishing"):
 		fishing_adapter.render(canvas, ctx)
 	if layers.is_visible("weather"):
@@ -61,7 +77,60 @@ func screen_polygon(pid: String, world_pos: Vector3, info: Dictionary, ctx: Dict
 	return out
 
 
-func _draw_base(canvas: Control, ctx: Dictionary, registry: Node, selected_port: String) -> void:
+## Builds stable world-space geometry once per deterministic layout. Camera
+## movement only clips and projects visible cached geometry.
+func prepare_layout(layout: Variant) -> void:
+	if layout == null:
+		return
+	var previous_key: String = _coastline_cache.cache_key
+	_coastline_cache.prepare(layout)
+	if previous_key != _coastline_cache.cache_key \
+			or _waterway_navigation.layout_checksum != _coastline_cache.cache_key:
+		_waterway_navigation.rebuild(layout)
+
+
+func coastline_segments_in_bounds(layout: Variant, bounds: Rect2) -> Array[PackedVector2Array]:
+	return _coastline_cache.segments_in_bounds(layout, bounds)
+
+
+func chart_land_at(layout: Variant, world_xz: Vector2) -> bool:
+	return _coastline_cache.is_chart_land(layout, world_xz)
+
+
+func _draw_macro_land(canvas: Control, ctx: Dictionary) -> void:
+	var bounds: Rect2 = ctx["world_bounds"]
+	for run in _coastline_cache.land_runs():
+		if not run.intersects(bounds, true):
+			continue
+		var clipped := run.intersection(bounds)
+		var a := _world_to_screen(Vector3(clipped.position.x, 0.0, clipped.position.y), ctx)
+		var b := _world_to_screen(Vector3(clipped.end.x, 0.0, clipped.end.y), ctx)
+		canvas.draw_rect(Rect2(a.min(b), (b - a).abs()), C_MACRO_LAND)
+	for segment in coastline_segments_in_bounds(_active_layout, bounds):
+		var a := _world_to_screen(Vector3(segment[0].x, 0.0, segment[0].y), ctx)
+		var b := _world_to_screen(Vector3(segment[1].x, 0.0, segment[1].y), ctx)
+		canvas.draw_line(a, b, C_MACRO_COAST, 1.6, true)
+
+
+static func _resolve_world_layout(canvas: Control) -> Variant:
+	var tree := canvas.get_tree()
+	if tree == null:
+		return null
+	var world := tree.get_first_node_in_group("world")
+	if world == null or not world.has_method("get_world_layout"):
+		return null
+	return world.call("get_world_layout")
+
+
+func _draw_base(
+	canvas: Control,
+	ctx: Dictionary,
+	registry: Node,
+	selected_port: String,
+	layout: Variant,
+) -> void:
+	if layout != null:
+		_draw_macro_land(canvas, ctx)
 	var interval := grid_interval(float(ctx["world_span"]))
 	var bounds: Rect2 = ctx["world_bounds"]
 	var chart: Rect2 = ctx["chart_rect"]
@@ -82,6 +151,12 @@ func _draw_base(canvas: Control, ctx: Dictionary, registry: Node, selected_port:
 		var info := registry.call("get_port_info", pid) as Dictionary
 		var world_pos := info.get("position", Vector3(INF, INF, INF)) as Vector3
 		if not world_pos.is_finite():
+			continue
+		if layout != null:
+			var marker := _world_to_screen(world_pos, ctx)
+			var selected := pid == selected_port
+			canvas.draw_circle(marker, 5.0 if selected else 3.5, Color(1.0, 0.88, 0.30) if selected else C_PORT_MARKER)
+			canvas.draw_circle(marker, 7.0 if selected else 5.0, C_EDGE, false, 1.0, true)
 			continue
 		var poly := screen_polygon(pid, world_pos, info, ctx)
 		if poly.size() < 3:
@@ -113,6 +188,13 @@ func _draw_routes(
 			var b := _world_to_screen(destination, ctx)
 			_dashed(canvas, a, b, Color(1.0, 0.58, 0.06, 0.52), 1.6, 9.0)
 			var distance := Vector2(origin.x, origin.z).distance_to(Vector2(destination.x, destination.z))
+			if not _waterway_navigation.is_empty():
+				var navigable_distance := _waterway_navigation.route_distance(
+					Vector2(origin.x, origin.z),
+					Vector2(destination.x, destination.z)
+				)
+				if is_finite(navigable_distance):
+					distance = navigable_distance
 			canvas.draw_string(
 				font, (a + b) * 0.5 + Vector2(4.0, -4.0), _distance(distance),
 				HORIZONTAL_ALIGNMENT_LEFT, -1, 9, Color(1.0, 0.70, 0.25, 0.78)
@@ -165,7 +247,9 @@ func _draw_traffic(canvas: Control, ctx: Dictionary) -> void:
 		if node == null or not is_instance_valid(node):
 			continue
 		var pos := _world_to_screen(node.global_position, ctx)
-		var bow := NavigationAxes.vessel_bow_horizontal(node).normalized()
+		var bow := _world_horizontal_to_screen(
+			NavigationAxes.vessel_bow_horizontal(node)
+		).normalized()
 		_draw_ship_symbol(canvas, pos, bow, C_TRAFFIC, 7.0)
 		canvas.draw_string(
 			ThemeDB.fallback_font, pos + Vector2(9.0, -7.0), str(id_raw),
@@ -200,7 +284,7 @@ func _draw_fronts(canvas: Control, ctx: Dictionary) -> void:
 			previous = next
 		var velocity := front.get("velocity", Vector2.ZERO) as Vector2
 		if velocity.length_squared() > 0.01 and chart.grow(-24.0).has_point(screen):
-			var direction := Vector2(velocity.x, velocity.y).normalized()
+			var direction := _world_horizontal_to_screen(velocity).normalized()
 			canvas.draw_line(screen, screen + direction * 22.0, color, 1.5, true)
 		if chart.grow(-80.0).has_point(screen):
 			canvas.draw_string(
@@ -215,11 +299,11 @@ func _draw_own_ship_and_vectors(canvas: Control, ctx: Dictionary, nav: RefCounte
 	if not nav.has_ship():
 		return
 	var pos := _world_to_screen(nav.ship_position, ctx)
-	var heading_dir: Vector2 = nav.bow_horizontal.normalized()
+	var heading_dir := _world_horizontal_to_screen(nav.bow_horizontal).normalized()
 	_draw_ship_symbol(canvas, pos, heading_dir, C_SHIP, 10.0)
 	canvas.draw_line(pos, pos + heading_dir * 48.0, Color(1.0, 0.86, 0.18, 0.95), 2.0, true)
 	if nav.has_course():
-		var course_dir: Vector2 = nav.velocity_horizontal.normalized()
+		var course_dir := _world_horizontal_to_screen(nav.velocity_horizontal).normalized()
 		_dashed(canvas, pos, pos + course_dir * 64.0, Color(0.25, 0.92, 0.96, 0.95), 2.0, 7.0)
 
 
@@ -302,8 +386,12 @@ static func _world_to_screen(world: Vector3, ctx: Dictionary) -> Vector2:
 	var chart: Rect2 = ctx["chart_rect"]
 	return chart.position + Vector2(
 		(world.x - bounds.position.x) / bounds.size.x * chart.size.x,
-		(world.z - bounds.position.y) / bounds.size.y * chart.size.y
+		(bounds.end.y - world.z) / bounds.size.y * chart.size.y
 	)
+
+
+static func _world_horizontal_to_screen(direction: Vector2) -> Vector2:
+	return Vector2(direction.x, -direction.y)
 
 
 static func _draw_ship_symbol(

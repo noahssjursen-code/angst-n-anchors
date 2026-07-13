@@ -162,6 +162,9 @@ func _enqueue(job: Callable) -> void:
 ## just gives the concrete a bit of border so cranes don't sit on the very edge.
 const QUAY_SLAB_PAD_Z := 2.0
 const QUAY_SLAB_PAD_X := 1.5
+## Concrete foundation reaches below the submerged terrain shelf. The authored
+## quay surface remains at QUAY_HEIGHT; only the underside moves downward.
+const QUAY_BELOW_WATER_DEPTH := 3.5
 
 
 func _build_quay_slab() -> void:
@@ -174,10 +177,16 @@ func _build_quay_slab() -> void:
 	var slab_z_half := slab_size_z * 0.5
 	var slab_centre_z := slab_front + slab_z_half
 
-	var size := Vector3(dock_length + QUAY_SLAB_PAD_X * 2.0, QUAY_HEIGHT, slab_size_z)
+	var structural_height := QUAY_HEIGHT + QUAY_BELOW_WATER_DEPTH
+	var structural_centre_y := (QUAY_HEIGHT - QUAY_BELOW_WATER_DEPTH) * 0.5
+	var size := Vector3(
+		dock_length + QUAY_SLAB_PAD_X * 2.0,
+		structural_height,
+		slab_size_z,
+	)
 	var body := StaticBody3D.new()
 	body.name            = "Quay"
-	body.position        = Vector3(0.0, QUAY_HEIGHT * 0.5, slab_centre_z)
+	body.position        = Vector3(0.0, structural_centre_y, slab_centre_z)
 	var mi               := MeshInstance3D.new()
 	mi.name              = "Mesh"
 	var mesh             := BoxMesh.new()
@@ -193,8 +202,8 @@ func _build_quay_slab() -> void:
 	add_child(body)
 
 	# Dark leading edge where quay meets water
-	_box(Vector3(dock_length, QUAY_HEIGHT, QUAY_LIP_DEPTH),
-		 Vector3(0.0, QUAY_HEIGHT * 0.5, lip_half),
+	_box(Vector3(dock_length, structural_height, QUAY_LIP_DEPTH),
+		 Vector3(0.0, structural_centre_y, lip_half),
 		 C_QUAY_EDGE, "QuayLip")
 
 	# Safety stripe along dock face

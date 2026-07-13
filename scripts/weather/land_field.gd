@@ -1,37 +1,28 @@
 class_name LandField
 extends RefCounted
 
-## Static distance-to-land and coastal-exposure query.
+## Static macro-geography, wave-shelter, and coastal-exposure query.
 ##
-## At world generation, `initialize(islands)` is called with one entry per
-## island: `{ center: Vector3, radius: float }`. After that, any system can
-## ask:
-##   LandField.distance_to_land(world_pos)   →   metres to nearest shore
-##                                               (negative inside land)
-##   LandField.shore_shelter(world_pos)      →   0.0 on shore, 1.0 fully open water
-##
-## The wave system multiplies its amplitude by `shore_shelter`, so storms can
-## rage in open water while harbours stay placid, with no area overrides.
-##
-## Performance: CPU calls are O(N_islands) per query. The ocean vertex shader
-## was doing the same loop per vertex (68k verts × up to 64 islands = ~4.4M
-## distance() ops/frame). `initialize()` now also bakes a 2D shelter texture
-## the shader samples once per vertex — constant cost regardless of island
-## count, frees the GPU vertex stage.
+## New worlds initialize this from a WorldLayout, whose macro signed-distance
+## raster makes distance and shelter queries O(1). `initialize(islands)` remains
+## accepted for old tools/tests; that compatibility backend retains its O(N)
+## island scan and historical shelter falloff.
 
-## Coastal exposure builds over kilometres. The OBB shoreline, rather than a
-## circular port radius, anchors the transition so long islands shelter their
-## full approaches without hard seams.
-const SHELTER_FALLOFF_M : float = 3000.0
+## Physical wave attenuation is deliberately local. Weather and sea-state use
+## coastal_exposure/directional_fetch instead and therefore do not apply this
+## attenuation a second time.
+const WAVE_SHELTER_FALLOFF_M := 450.0
+const LEGACY_SHELTER_FALLOFF_M := 3000.0
+const COASTAL_DISTANCE_M := 1800.0
+const FETCH_DISTANCE_M := 12000.0
+const FETCH_RAY_COUNT := 16
 
 ## Extra padding around the visual island polygon — the polygon edge is noisy
 ## (see IslandMeshBuilder.build_polygon) so we treat the disk as slightly
 ## larger than the nominal half-width.
 const ISLAND_RADIUS_PADDING_M : float = 25.0
 
-## Baked shelter texture size. 512² → ~30 m per texel for a 15 km-wide world.
-## Bilinear sampling on the GPU smooths the texel grid; the underlying
-## `shore_shelter` field has a 300 m falloff so 30 m resolution is plenty.
+## Baked wave-shelter texture size.
 const BAKE_RESOLUTION : int = 512
 
 ## Padding around the island bounding box when sizing the baked texture so
@@ -45,6 +36,7 @@ static var _obb_half_x : PackedFloat32Array = PackedFloat32Array()
 static var _obb_half_z : PackedFloat32Array = PackedFloat32Array()
 static var _obb_rot_y  : PackedFloat32Array = PackedFloat32Array()
 static var _initialized: bool = false
+static var _layout: WorldLayout = null
 
 # ── Baked shelter texture (CPU-baked, GPU-sampled) ────────────────────────────
 static var _baked_shelter_texture: ImageTexture = null
@@ -55,19 +47,35 @@ static var _baked_world_origin   : Vector2 = Vector2.ZERO
 static var _baked_world_size     : float   = 0.0
 
 
-## Seed the field. Each entry is a Dictionary with:
+## Seed the field from the preferred WorldLayout, or from the legacy island
+## array. Accepting Variant preserves the historical initialize(islands) API
+## while allowing the world bootstrap to call initialize(layout).
+static func initialize(source: Variant) -> void:
+	if source is WorldLayout:
+		initialize_from_layout(source as WorldLayout)
+		return
+	assert(source is Array, "LandField.initialize expects WorldLayout or Array")
+	_initialize_legacy(source as Array)
+
+
+static func initialize_from_layout(layout: WorldLayout) -> void:
+	assert(layout != null, "LandField requires a WorldLayout")
+	_clear_legacy_islands()
+	_layout = layout
+	_initialized = true
+	_bake_shelter_texture()
+
+
+## Legacy island entries:
 ##   "center": Vector3 — port / island origin in world space
 ## Preferred (matches port island footprint):
 ##   "half_x", "half_z": float — local half-extents incl. organic margin (m)
 ##   "rotation_y": float — port plot yaw (radians)
 ## Legacy fallback:
 ##   "radius": float — circular island (deprecated; too small for routing)
-static func initialize(islands: Array) -> void:
-	_centers_xz.clear()
-	_radii.clear()
-	_obb_half_x.clear()
-	_obb_half_z.clear()
-	_obb_rot_y.clear()
+static func _initialize_legacy(islands: Array) -> void:
+	_clear_legacy_islands()
+	_layout = null
 	for island in islands:
 		var center_v: Vector3 = island.get("center", Vector3.ZERO)
 		var center := Vector2(center_v.x, center_v.z)
@@ -94,14 +102,38 @@ static func initialize(islands: Array) -> void:
 	_bake_shelter_texture()
 
 
+static func _clear_legacy_islands() -> void:
+	_centers_xz.clear()
+	_radii.clear()
+	_obb_half_x.clear()
+	_obb_half_z.clear()
+	_obb_rot_y.clear()
+
+
 static func is_initialized() -> bool:
 	return _initialized
+
+
+## The immutable layout reference is safe to expose: its public raster and
+## contour accessors return copies.
+static func get_layout() -> WorldLayout:
+	return _layout
+
+
+static func get_coastline_contours() -> Array[PackedVector2Array]:
+	if _layout == null:
+		return []
+	return _layout.coastline_contours
 
 
 ## Signed distance (metres) from `world_pos` to the nearest island shore.
 ## Positive in open water, negative inside land. Returns +INF before init.
 static func distance_to_land(world_pos: Vector3) -> float:
-	if not _initialized or _centers_xz.is_empty():
+	if not _initialized:
+		return INF
+	if _layout != null:
+		return _layout.sample_signed_distance(Vector2(world_pos.x, world_pos.z))
+	if _centers_xz.is_empty():
 		return INF
 	var pos2 := Vector2(world_pos.x, world_pos.z)
 	var best := INF
@@ -137,21 +169,25 @@ static func _obb_signed_distance(
 	return sqrt(ox * ox + oz * oz) + minf(maxf(dx, dz), 0.0)
 
 
-## 0..1 shelter factor. 0 = on land / right at the shore, 1 = fully open water.
-## Smooth transition over `SHELTER_FALLOFF_M` from the shore outwards.
+## Local 0..1 wave attenuation. Zero on/inside land and effectively open water
+## within a few hundred metres. This is the only field baked into the ocean
+## shelter texture.
 ## Returns 1.0 before init so systems behave like "open ocean" until ready.
-##
-## Fast path: in the common case (boat far from all islands) we skip the
-## `sqrt` per island and short-circuit to 1.0. With ~35 islands sampled
-## ~20× per physics frame, that's a big saving when sailing the open sea.
-static func shore_shelter(world_pos: Vector3) -> float:
-	if not _initialized or _centers_xz.is_empty():
+static func wave_shelter(world_pos: Vector3) -> float:
+	if not _initialized:
+		return 1.0
+	if _layout != null:
+		var distance := distance_to_land(world_pos)
+		if distance <= 0.0:
+			return 0.0
+		return smoothstep(0.0, WAVE_SHELTER_FALLOFF_M, distance)
+	if _centers_xz.is_empty():
 		return 1.0
 	var pos2 := Vector2(world_pos.x, world_pos.z)
 	var best: float = INF
 	for i in range(_centers_xz.size()):
 		var r := _radii[i]
-		var threshold := SHELTER_FALLOFF_M + r
+		var threshold := LEGACY_SHELTER_FALLOFF_M + r
 		var d2 := pos2.distance_squared_to(_centers_xz[i])
 		if d2 > threshold * threshold:
 			continue  # this island is fully open-water (shelter=1) from here
@@ -168,19 +204,71 @@ static func shore_shelter(world_pos: Vector3) -> float:
 				return 0.0  # on or inside land — no other island can win
 	if best == INF:
 		return 1.0
-	return smoothstep(0.0, SHELTER_FALLOFF_M, best)
+	return smoothstep(0.0, LEGACY_SHELTER_FALLOFF_M, best)
 
 
-## How "close to shore" we are, in 0..1 — inverse of `shore_shelter`. Handy
+## Compatibility alias. "Shore shelter" now has the unambiguous local,
+## physical-wave semantics.
+static func shore_shelter(world_pos: Vector3) -> float:
+	return wave_shelter(world_pos)
+
+
+## Normalized unobstructed fetch in one direction. A value of 1 means the ray
+## remained over water for FETCH_DISTANCE_M. Layout sampling is bounded and
+## deterministic; SDF-guided steps keep the fixed upper cost modest.
+static func directional_fetch(world_pos: Vector3, direction: Vector2) -> float:
+	if not _initialized:
+		return 1.0
+	if distance_to_land(world_pos) <= 0.0:
+		return 0.0
+	if direction.length_squared() < 0.000001:
+		return 0.0
+	var ray := direction.normalized()
+	var origin := Vector2(world_pos.x, world_pos.z)
+	var travelled := 0.0
+	var minimum_step := 75.0
+	if _layout != null:
+		minimum_step = maxf(_layout.cell_size_m * 0.5, minimum_step)
+	while travelled < FETCH_DISTANCE_M:
+		var point := origin + ray * travelled
+		var distance := distance_to_land(Vector3(point.x, world_pos.y, point.y))
+		if distance <= 0.0:
+			return clampf(travelled / FETCH_DISTANCE_M, 0.0, 1.0)
+		# Cap the step so thin skerries represented by the macro raster cannot
+		# be jumped over by a large open-water SDF value.
+		travelled += clampf(distance * 0.7, minimum_step, 400.0)
+	return 1.0
+
+
+## Kilometre-scale openness/fetch proxy for weather, sea state, and open-water
+## gameplay. It intentionally does not reuse wave_shelter.
+static func coastal_exposure(world_pos: Vector3) -> float:
+	if not _initialized:
+		return 1.0
+	var coast_distance := distance_to_land(world_pos)
+	if coast_distance <= 0.0:
+		return 0.0
+	var fetch_sum := 0.0
+	for ray_index in range(FETCH_RAY_COUNT):
+		var angle := TAU * float(ray_index) / float(FETCH_RAY_COUNT)
+		fetch_sum += directional_fetch(world_pos, Vector2(cos(angle), sin(angle)))
+	var mean_fetch := fetch_sum / float(FETCH_RAY_COUNT)
+	var coastal_opening := smoothstep(80.0, COASTAL_DISTANCE_M, coast_distance)
+	return clampf(coastal_opening * pow(mean_fetch, 0.65), 0.0, 1.0)
+
+
+## Compatibility inverse of local wave shelter.
 ## for systems that want a "near land" signal (tracker lerp speed, ambient
 ## bird SFX volume, etc).
 static func shore_proximity(world_pos: Vector3) -> float:
-	return 1.0 - shore_shelter(world_pos)
+	return 1.0 - wave_shelter(world_pos)
 
 
 # ── Debug ─────────────────────────────────────────────────────────────────────
 
 static func get_island_count() -> int:
+	if _layout != null:
+		return _layout.coastline_contours.size()
 	return _centers_xz.size()
 
 
@@ -225,7 +313,7 @@ static func get_baked_world_size() -> float:
 ## Bilinear CPU lookup of the exact same bake bound to ocean shaders.
 static func sample_baked_shelter(world_pos: Vector3) -> float:
 	if _baked_shelter_data.is_empty() or _baked_world_size <= 0.0:
-		return shore_shelter(world_pos)
+		return wave_shelter(world_pos)
 	var uv := (Vector2(world_pos.x, world_pos.z) - _baked_world_origin) / _baked_world_size
 	if uv.x < 0.0 or uv.y < 0.0 or uv.x > 1.0 or uv.y > 1.0:
 		return 1.0
@@ -307,7 +395,7 @@ static func get_island_disk(idx: int) -> Dictionary:
 
 
 
-## Bake `shore_shelter` over a square world region into an R32F texture the
+## Bake `wave_shelter` over a square world region into an R32F texture the
 ## ocean vertex shader can sample once per vertex. Replaces the per-vertex
 ## land_disks loop: with 35 islands × 68k verts that was ~2.4M distance() ops
 ## per frame. Texture sample is O(1).
@@ -316,28 +404,38 @@ static func get_island_disk(idx: int) -> Dictionary:
 ## the early-out in shore_shelter the typical cost is ~50-150 ms on a
 ## modern CPU. The world is loading anyway; one extra hitch is invisible.
 static func _bake_shelter_texture() -> void:
-	if _centers_xz.is_empty():
+	if _layout == null and _centers_xz.is_empty():
 		_baked_shelter_texture = null
 		_baked_shelter_data.clear()
 		_baked_world_size = 0.0
 		return
 
-	# Bounding box of all island shore-influence zones (radius + falloff).
-	var min_x :=  INF
-	var min_z :=  INF
-	var max_x := -INF
-	var max_z := -INF
-	for i in range(_centers_xz.size()):
-		var c := _centers_xz[i]
-		var influence := _radii[i] + SHELTER_FALLOFF_M
-		min_x = minf(min_x, c.x - influence)
-		min_z = minf(min_z, c.y - influence)
-		max_x = maxf(max_x, c.x + influence)
-		max_z = maxf(max_z, c.y + influence)
-	min_x -= BAKE_PADDING_M
-	min_z -= BAKE_PADDING_M
-	max_x += BAKE_PADDING_M
-	max_z += BAKE_PADDING_M
+	var min_x: float
+	var min_z: float
+	var max_x: float
+	var max_z: float
+	if _layout != null:
+		# Macro map bounds are authoritative; each texel is one O(1) SDF query.
+		min_x = -_layout.half_extent_m
+		min_z = -_layout.half_extent_m
+		max_x = _layout.half_extent_m
+		max_z = _layout.half_extent_m
+	else:
+		min_x = INF
+		min_z = INF
+		max_x = -INF
+		max_z = -INF
+		for i in range(_centers_xz.size()):
+			var c := _centers_xz[i]
+			var influence := _radii[i] + LEGACY_SHELTER_FALLOFF_M
+			min_x = minf(min_x, c.x - influence)
+			min_z = minf(min_z, c.y - influence)
+			max_x = maxf(max_x, c.x + influence)
+			max_z = maxf(max_z, c.y + influence)
+		min_x -= BAKE_PADDING_M
+		min_z -= BAKE_PADDING_M
+		max_x += BAKE_PADDING_M
+		max_z += BAKE_PADDING_M
 
 	# Square the region so a single uniform `size` defines both axes.
 	var side : float = maxf(max_x - min_x, max_z - min_z)
@@ -354,7 +452,7 @@ static func _bake_shelter_texture() -> void:
 		var wz : float = _baked_world_origin.y + (float(j) + 0.5) * step
 		for i in range(BAKE_RESOLUTION):
 			var wx : float = _baked_world_origin.x + (float(i) + 0.5) * step
-			var shelter := shore_shelter(Vector3(wx, 0.0, wz))
+			var shelter := wave_shelter(Vector3(wx, 0.0, wz))
 			bytes.encode_float((j * BAKE_RESOLUTION + i) * 4, shelter)
 
 	var img := Image.create_from_data(BAKE_RESOLUTION, BAKE_RESOLUTION,

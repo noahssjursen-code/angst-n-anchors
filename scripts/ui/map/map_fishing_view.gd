@@ -48,6 +48,7 @@ func _grid(ctx: Dictionary) -> Dictionary:
 		"wz0": wz0,
 		"wx_min": wx_min,
 		"wz_min": wz_min,
+		"wz_max": wz_max,
 		"cpx": float(ctx["cpx"]),
 		"cpy": float(ctx["cpy"]),
 		"cpw": cpw,
@@ -94,7 +95,7 @@ func _draw_grounds(canvas: CanvasItem, g: Dictionary) -> void:
 	var rows: int = g["rows"]
 	for j in range(rows):
 		var wz0: float = float(g["wz0"]) + float(j) * cell_m
-		var sy: float = _wz_to_sy(wz0, g)
+		var sy: float = _wz_to_sy(wz0 + cell_m, g)
 		for i in range(cols):
 			var wx0: float = float(g["wx0"]) + float(i) * cell_m
 			var sx: float = _wx_to_sx(wx0, g)
@@ -135,9 +136,9 @@ func _draw_hover(canvas: CanvasItem, g: Dictionary, ctx: Dictionary) -> void:
 	var cpx: float = float(ctx["cpx"])
 	var cpy: float = float(ctx["cpy"])
 	var wx_min: float = float(ctx["wx_min"])
-	var wz_min: float = float(ctx["wz_min"])
+	var wz_max: float = float(ctx["wz_max"])
 	var wx: float = wx_min + (hover_pos.x - cpx) / float(g["ppu_x"])
-	var wz: float = wz_min + (hover_pos.y - cpy) / float(g["ppu_z"])
+	var wz: float = wz_max - (hover_pos.y - cpy) / float(g["ppu_z"])
 	var i := int(floorf((wx - float(g["wx0"])) / cell_m))
 	var j := int(floorf((wz - float(g["wz0"])) / cell_m))
 	if i < 0 or j < 0 or i >= cols or j >= rows:
@@ -177,4 +178,4 @@ func _wx_to_sx(wx: float, g: Dictionary) -> float:
 
 
 func _wz_to_sy(wz: float, g: Dictionary) -> float:
-	return float(g["cpy"]) + (wz - float(g["wz_min"])) * float(g["ppu_z"])
+	return float(g["cpy"]) + (float(g["wz_max"]) - wz) * float(g["ppu_z"])

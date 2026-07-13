@@ -54,6 +54,10 @@ var ship_runtime_state: Dictionary = {}
 ## WorldClock on load so day/night picks up where it left off instead of
 ## resetting to noon.
 var world_clock_hours: float = -1.0
+## World identity associated with coordinate-bearing state:
+## { "seed": int, "generation_version": int, "layout_checksum": String }.
+## Empty on legacy saves; those restore using the current world once, then adopt it.
+var world_context: Dictionary = {}
 
 ## Tutorial hint chain — { hint_id: true } once a hint has fired. Persisted
 ## so a returning captain doesn't have to skip the same banners again.
@@ -235,6 +239,7 @@ func to_dict() -> Dictionary:
 		"accepted_contracts":       accepted_contracts.duplicate(true),
 		"ship_runtime_state":       _ship_runtime_to_dict(),
 		"world_clock_hours":        world_clock_hours,
+		"world_context":            world_context.duplicate(),
 		"tutorial_seen":            tutorial_seen.duplicate(),
 		"starter_trawler_claimed":  starter_trawler_claimed,
 	}
@@ -266,6 +271,9 @@ static func from_dict(d: Dictionary) -> PlayerData:
 	if typeof(ship_raw) == TYPE_DICTIONARY:
 		pd.ship_runtime_state = _ship_runtime_from_dict(ship_raw as Dictionary)
 	pd.world_clock_hours = float(d.get("world_clock_hours", -1.0))
+	var world_context_raw: Variant = d.get("world_context", {})
+	if typeof(world_context_raw) == TYPE_DICTIONARY:
+		pd.world_context = (world_context_raw as Dictionary).duplicate()
 	var tut_raw: Variant = d.get("tutorial_seen", {})
 	if typeof(tut_raw) == TYPE_DICTIONARY:
 		pd.tutorial_seen = (tut_raw as Dictionary).duplicate()

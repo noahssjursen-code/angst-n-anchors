@@ -83,6 +83,9 @@ func _ready() -> void:
 
 	_player_camera.bind(self, camera, _body_npc)
 	_free_cam.bind(self, camera, _player_camera, _body_npc)
+	# Match boat camera: default Godot far (4000 m) black-clips the mainland.
+	camera.far = 40000.0
+	camera.near = 0.15
 
 
 func _unhandled_input(event: InputEvent) -> void:

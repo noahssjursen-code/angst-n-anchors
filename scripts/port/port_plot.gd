@@ -40,12 +40,12 @@ var _has_lighthouse_data: bool       = false
 var _has_fog_horn_data:   bool       = false
 var _layout_seed_data:    int        = 0
 var _island_width_data:   float      = 80.0
+var _ground_mode_data: PortDefinition.GroundMode = PortDefinition.GroundMode.LOCAL_ISLAND
 
-## Runtime streamed build: ground first, then dock → facilities → trees → NPCs.
+## Runtime streamed build: ground first, then dock → facilities → NPCs.
 var _stream_jobs: Array = []  ## Array[Callable]
 var _stream_gen: int = 0
 var _wait_target: Node = null
-const TREE_JOBS_PER_BATCH: int = 3
 
 
 func _ready() -> void:
@@ -73,7 +73,8 @@ func _rebuild() -> void:
 	var pad_w              := _island_width_data + 2.0 * PAD_SAFE_MARGIN
 	var pad_d              := plot_depth + 2.0 * PAD_SAFE_MARGIN
 	var poly               := IslandMeshBuilder.build_polygon(_island_width_data, plot_depth, _layout_seed_data)
-	_build_ground(poly, pad_w, pad_d)
+	if _ground_mode_data == PortDefinition.GroundMode.LOCAL_ISLAND or Engine.is_editor_hint():
+		_build_ground(poly, pad_w, pad_d)
 
 	if not port_label.is_empty():
 		var name_lbl           := Label3D.new()
@@ -89,7 +90,6 @@ func _rebuild() -> void:
 	if Engine.is_editor_hint():
 		_add_dock(hd, ship_class)
 		_add_facilities(hd)
-		_build_trees(poly, pad_w, pad_d)
 		if get_tree() != null:
 			var esc := get_tree().edited_scene_root
 			if esc != null:
@@ -100,7 +100,6 @@ func _rebuild() -> void:
 	var gen := _stream_gen
 	_stream_jobs.append(_stream_add_dock.bind(gen, hd, ship_class))
 	_stream_jobs.append(_stream_add_facilities.bind(gen, hd))
-	_stream_jobs.append(_stream_enqueue_trees.bind(gen, poly, pad_w, pad_d))
 	_stream_jobs.append(_stream_build_npcs.bind(gen))
 	set_process(true)
 
@@ -189,29 +188,6 @@ func _stream_add_facilities(gen: int, hd: float) -> void:
 	_wait_target = _add_facilities(hd)
 
 
-func _stream_enqueue_trees(gen: int, poly: PackedVector2Array, pad_w: float, pad_d: float) -> void:
-	if gen != _stream_gen:
-		return
-	var specs := _plan_tree_specs(poly, pad_w, pad_d)
-	# Insert batches *after* the current job (front of remaining queue) in order.
-	var inserts: Array = []
-	var i := 0
-	while i < specs.size():
-		var batch: Array = specs.slice(i, mini(i + TREE_JOBS_PER_BATCH, specs.size()))
-		inserts.append(_stream_place_tree_batch.bind(gen, batch))
-		i += TREE_JOBS_PER_BATCH
-	# Prepend in reverse so first batch is next to run.
-	for j in range(inserts.size() - 1, -1, -1):
-		_stream_jobs.push_front(inserts[j])
-
-
-func _stream_place_tree_batch(gen: int, batch: Array) -> void:
-	if gen != _stream_gen:
-		return
-	for spec in batch:
-		_place_tree_from_spec(spec as Dictionary)
-
-
 func _stream_build_npcs(gen: int) -> void:
 	if gen != _stream_gen:
 		return
@@ -271,113 +247,6 @@ func _build_npcs() -> void:
 		call_deferred("_bake_approach_lanes")
 
 
-func _build_trees(poly: PackedVector2Array, pad_w: float, pad_d: float) -> void:
-	for spec in _plan_tree_specs(poly, pad_w, pad_d):
-		_place_tree_from_spec(spec as Dictionary)
-
-
-func _plan_tree_specs(poly: PackedVector2Array, pad_w: float, pad_d: float) -> Array:
-	var specs: Array = []
-	var rng := RandomNumberGenerator.new()
-	rng.seed = _layout_seed_data ^ 0x74726565  # "tree" XOR'd so placement differs from layout
-
-	var aabb_min := Vector2( INF,  INF)
-	var aabb_max := Vector2(-INF, -INF)
-	for p in poly:
-		aabb_min.x = minf(aabb_min.x, p.x)
-		aabb_min.y = minf(aabb_min.y, p.y)
-		aabb_max.x = maxf(aabb_max.x, p.x)
-		aabb_max.y = maxf(aabb_max.y, p.y)
-
-	var n_trees     : int   = 10 + port_size * 8
-	var pad_hw      : float = pad_w * 0.5
-	var pad_hd      : float = pad_d * 0.5
-	var excl_margin : float = 4.0  # extra buffer inside pad edge before trees begin
-
-	var placed   := 0
-	var attempts := 0
-	while placed < n_trees and attempts < n_trees * 25:
-		attempts += 1
-		var x  := rng.randf_range(aabb_min.x, aabb_max.x)
-		var z  := rng.randf_range(aabb_min.y, aabb_max.y)
-		var p2 := Vector2(x, z)
-		if not Geometry2D.is_point_in_polygon(p2, poly):
-			continue
-		# Keep trees outside the flat pad + margin
-		if absf(x) < pad_hw + excl_margin and absf(z) < pad_hd + excl_margin:
-			continue
-		var h := IslandMeshBuilder.get_height_at(p2, poly, pad_w, pad_d, _layout_seed_data)
-		if h < 1.0:  # skip beach / near-shore
-			continue
-		specs.append({
-			"pos": Vector3(x, h, z),
-			"s": rng.randf_range(0.75, 1.35),
-			"rot": rng.randf_range(0.0, TAU),
-		})
-		placed += 1
-	return specs
-
-
-func _place_tree_from_spec(spec: Dictionary) -> void:
-	var pos: Vector3 = spec["pos"]
-	var s: float = spec["s"]
-	var rot: float = spec["rot"]
-
-	var root      := Node3D.new()
-	root.name      = "Tree"
-	root.position  = pos
-	root.rotation.y = rot
-	add_child(root)
-
-	# Trunk
-	var trunk_mesh              := CylinderMesh.new()
-	trunk_mesh.top_radius       = 0.20 * s
-	trunk_mesh.bottom_radius    = 0.28 * s
-	trunk_mesh.height           = 3.2  * s
-	var trunk_mat               := StandardMaterial3D.new()
-	trunk_mat.albedo_color      = Color(0.08, 0.07, 0.05)
-	trunk_mat.roughness         = 0.92
-	var trunk_mi                := MeshInstance3D.new()
-	trunk_mi.mesh               = trunk_mesh
-	trunk_mi.material_override  = trunk_mat
-	trunk_mi.position           = Vector3(0.0, 0.4 * s, 0.0)  # bottom at -1.2*s underground
-	root.add_child(trunk_mi)
-
-	# Foliage — three stacked cones, widest at base
-	var foliage_color := Color(0.06, 0.07, 0.05)
-	var layers : Array[Array] = [
-		[2.6 * s, 0.0, 4.2 * s, 2.2 * s],   # [bot_r, top_r, height, centre_y]
-		[1.9 * s, 0.0, 3.4 * s, 5.0 * s],
-		[1.1 * s, 0.0, 2.6 * s, 7.2 * s],
-	]
-	for layer in layers:
-		var cone_mesh              := CylinderMesh.new()
-		cone_mesh.bottom_radius    = layer[0]
-		cone_mesh.top_radius       = layer[1]
-		cone_mesh.height           = layer[2]
-		var cone_mat               := StandardMaterial3D.new()
-		cone_mat.albedo_color      = foliage_color
-		cone_mat.roughness         = 0.88
-		var cone_mi                := MeshInstance3D.new()
-		cone_mi.mesh               = cone_mesh
-		cone_mi.material_override  = cone_mat
-		cone_mi.position           = Vector3(0.0, layer[3], 0.0)
-		root.add_child(cone_mi)
-
-
-func _place_tree(pos: Vector3, rng: RandomNumberGenerator) -> void:
-	_place_tree_from_spec({
-		"pos": pos,
-		"s": rng.randf_range(0.75, 1.35),
-		"rot": rng.randf_range(0.0, TAU),
-	})
-
-
-## Spawn the port's ambient walkers. Each one is deterministic from
-## (layout_seed, npc_index), so two clients with the same world see the same
-## people walking the same loops — zero replication. Walker count scales
-## with port_size; positions are local to the port plot so the walkers move
-## with the port if it ever gets re-placed.
 func _build_walkers(facilities_pos: Vector3) -> void:
 	var count := AmbientPopulation.walker_count_for_size(port_size)
 	if count <= 0:
@@ -534,6 +403,7 @@ func configure(data: PortData) -> void:
 	_has_lighthouse_data     = data.has_lighthouse
 	_has_fog_horn_data       = data.has_fog_horn
 	_layout_seed_data        = data.layout_seed
+	_ground_mode_data        = data.ground_mode
 	_configuring             = false
 	rotation.y               = data.rotation_y
 	if is_inside_tree():

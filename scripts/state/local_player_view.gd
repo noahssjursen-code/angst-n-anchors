@@ -209,6 +209,7 @@ func _snapshot_into_player_data() -> void:
 	var clock := get_node_or_null("/root/WorldClock")
 	if clock != null and clock.has_method("get_game_hours_elapsed"):
 		data.world_clock_hours = float(clock.call("get_game_hours_elapsed"))
+	data.world_context = _current_world_context()
 
 
 ## Convenience: snapshot + write. Used by the abandon-ship flow and any
@@ -236,14 +237,25 @@ func restore_player_state() -> void:
 		if clock != null and clock.has_method("set_game_hours_elapsed"):
 			clock.call("set_game_hours_elapsed", data.world_clock_hours)
 
+	var world_matches := WorldGenerationContext.matches(data.world_context, _current_world_context())
+	if not world_matches:
+		push_warning("LocalPlayerView: saved ship/contracts belong to a different generated world; coordinate state was not restored")
+
 	# Contracts.
-	if not data.accepted_contracts.is_empty() and _registry != null and _registry.has_method("restore_accepted"):
+	if world_matches and not data.accepted_contracts.is_empty() and _registry != null and _registry.has_method("restore_accepted"):
 		_registry.restore_accepted(data.accepted_contracts)
 		contracts_changed.emit(get_active_contracts())
 
 	# Ship pose — defer one frame so spawn-side code has settled.
-	if not data.ship_runtime_state.is_empty():
+	if world_matches and not data.ship_runtime_state.is_empty():
 		call_deferred("_restore_ship_pose", data.ship_runtime_state.duplicate())
+
+
+func _current_world_context() -> Dictionary:
+	var world := get_tree().get_first_node_in_group("world")
+	if world != null and world.has_method("get_world_context"):
+		return world.call("get_world_context") as Dictionary
+	return {}
 
 
 ## Apply saved fuel / throttle to the active ship after a berth spawn.
