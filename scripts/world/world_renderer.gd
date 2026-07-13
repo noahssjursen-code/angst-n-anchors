@@ -445,7 +445,7 @@ func _exit_tree() -> void:
 func _apply_weather_lighting() -> void:
 	var weather := _get_weather()
 	var tod   := float(weather.get("time_of_day"))     if weather else 0.42
-	var wind  := float(weather.get("wind_force"))      if weather else 0.0
+	var sea   := float(weather.get("sea_state"))       if weather else 0.0
 	var vis   := float(weather.get("visibility"))      if weather else 1.0
 	var cloud := float(weather.get("cloud_coverage"))  if weather else 0.0
 	var rain  := float(weather.get("rain_amount"))     if weather else 0.0
@@ -458,7 +458,7 @@ func _apply_weather_lighting() -> void:
 	_apply_sun(tod, daylight, cloud, storm)
 	_apply_fog(fog_t, daylight, storm)
 	_apply_sky_shader(daylight, cloud, storm)
-	_apply_ocean_shader(daylight, cloud, rain, wind, storm, fog_t)
+	_apply_ocean_shader(daylight, cloud, rain, sea, storm, fog_t)
 
 	# Optional: Sync FFT parameters based on weather
 	if _fft_system:
@@ -466,7 +466,7 @@ func _apply_weather_lighting() -> void:
 		# Spectrum wants a single rotation angle in the XZ plane; positive Z is
 		# the FFT's "zero direction", so atan2(x, z) gives wind-blowing-toward.
 		var wind_angle := atan2(wind_dir.x, wind_dir.z)
-		_fft_system.sync_weather(wind, storm, WaveSurface.short_wave_factor, wind_angle)
+		_fft_system.sync_weather(sea, storm, WaveSurface.short_wave_factor, wind_angle)
 
 
 func _apply_sun(tod: float, daylight: float, cloud: float, storm: float) -> void:

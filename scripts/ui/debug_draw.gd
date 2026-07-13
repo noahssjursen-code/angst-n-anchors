@@ -125,11 +125,50 @@ func _build() -> Array:
 	var e:        Array = []
 	_build_system(e)
 	_build_water_gpu(e)
+	_build_weather(e)
 	_build_vessel_physics(e)
 	_build_loading(e)
 	_build_debug_tools(e)
 	_build_gameplay(e)
 	return e
+
+
+func _build_weather(e: Array) -> void:
+	_sec(e, "WEATHER")
+	var weather := get_node_or_null("/root/WeatherLighting")
+	if weather != null:
+		_row(e, "Local zone", "%s · %.0f%% exposed" % [
+			str(weather.get("zone_label")),
+			float(weather.get("exposure")) * 100.0,
+		], C_VALUE)
+		_row(e, "Wind / sea", "%.1f m/s · %.1f m Hs" % [
+			float(weather.get("wind_speed_ms")),
+			float(weather.get("significant_wave_height_m")),
+		], C_VALUE)
+		_row(e, "Front / visibility", "%.0f%% · %.0f%%" % [
+			float(weather.get("front_intensity")) * 100.0,
+			float(weather.get("visibility")) * 100.0,
+		], C_VALUE)
+	var world_weather := get_node_or_null("/root/WorldWeather")
+	if world_weather != null and world_weather.has_method("get_debug_metrics"):
+		var metrics := world_weather.call("get_debug_metrics") as Dictionary
+		_row(e, "Weather sampling", "%d µs · %d cached · %d fronts" % [
+			int(metrics.get("sample_usec", 0)),
+			int(metrics.get("cache_entries", 0)),
+			int(metrics.get("front_count", 0)),
+		], C_LABEL)
+	var fft := get_tree().get_first_node_in_group("fft_water_system")
+	if fft != null:
+		_row(e, "FFT weather repacks", "%d" % int(fft.get("weather_repack_count")), C_LABEL)
+	var chart := get_tree().get_first_node_in_group("marine_chart")
+	if chart != null and chart.has_method("get_debug_stats"):
+		var chart_stats := chart.call("get_debug_stats") as Dictionary
+		_row(e, "Chart draw/cache", "%d µs · %d cells / %d rebuilds" % [
+			int(chart_stats.get("draw_usec", 0)),
+			int(chart_stats.get("weather_cache_cells", 0)),
+			int(chart_stats.get("weather_cache_rebuilds", 0)),
+		], C_LABEL)
+	_sep(e)
 
 
 func _build_water_gpu(e: Array) -> void:

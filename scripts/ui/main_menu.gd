@@ -93,7 +93,9 @@ func _setup_3d_background() -> void:
 		weather_lighting.set("time_of_day", randf_range(0.2, 0.8)) # Golden hour or nice day hours
 		weather_lighting.set("cloud_cover", randf_range(0.2, 0.5))
 		weather_lighting.set("precipitation", 0.0) # Clear skies look cleaner on start
-		weather_lighting.set("wind_force", randf_range(0.1, 0.35)) # Low waves to prevent port clipping
+		var menu_breeze := randf_range(0.1, 0.35)
+		weather_lighting.set("wind_force", menu_breeze)
+		weather_lighting.set("sea_state", menu_breeze * 0.55) # Low waves to prevent port clipping
 		weather_lighting.set("visibility", 1.0)
 	
 	# Instantiate WorldRenderer (sets up wave surfaces, lighting, environment)

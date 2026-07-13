@@ -24,7 +24,7 @@ scripts/
   player/       # CharacterBody3D controller, PlayerSession autoload, player data
   ship/         # BoatBody, controller, camera, propulsion, rudder, thruster, buoyancy, hydrodynamics, lights, audio
   ocean/        # FFT water simulation (FftWaterSystem), WaveSurface query
-  weather/      # WorldWeather + WeatherLighting autoloads, WeatherState, WeatherZone, rain, audio, HUD, debug presets
+  weather/      # Deterministic field/front/composer, WorldWeather API, local presentation, rain/audio/HUD
   time/         # WorldClock autoload
   world/        # World generation, seeding, ProximityLoader, WorldRenderer, AtmosphericEffects
   port/         # PortPlot, PortDock, PortFacilities, FuelStation, LighthouseBuilding, FogHornBuilding
@@ -50,8 +50,8 @@ Each autoload lives in its system folder and is registered in `project.godot`.
 | Autoload | System | Role |
 |---|---|---|
 | `GameSettings` | `state/` | Audio / graphics / input prefs (user://settings.cfg) |
-| `WorldWeather` | `weather/` | Wind, rain, fog state; weather zones |
-| `WeatherLighting` | `weather/` | Sun angle, sky colour, fog colour |
+| `WorldWeather` | `weather/` | Deterministic weather query API: composed samples, routes, fronts, local projection |
+| `WeatherLighting` | `weather/` | Smoothed local presentation only: sky, fog, ocean, audio, wind |
 | `WorldClock` | `time/` | Game time. Emits `day_changed` + `hour_changed` (1 game hr = 60 real s) |
 | `ContractRegistry` | `cargo/` | Port registry, contracts, commodities, restock loop |
 | `PlayerSession` | `player/` | Persistent player data (marks, name, contracts, ship pose, world clock). Autosaves every 60 s + on focus loss |
@@ -67,6 +67,11 @@ The autoloads listed above are the **actual** registered singletons. Do not refe
 ### Convention — `LocalPlayerView` is the MP seam
 
 UI code (HUDs, menus, debug overlays, hint banners) should **only** read per-player state through `LocalPlayerView`. NPCs and gameplay-mutating systems (`VesselSpawn`, `PortDock`, contract acceptance) may continue to consult the autoloads directly — they're the world-authority side, not a per-client view.
+
+Weather has a parallel read seam: gameplay/map queries call `WorldWeather.sample_at()` /
+`sample_route()` / `active_fronts()`. Local VFX reads `WorldWeather.local_presentation`
+(currently exposed by the `WeatherLighting` compatibility autoload). Never sample
+`WeatherField` directly outside the weather implementation.
 
 In multiplayer this autoload becomes a per-client object the network layer populates with the local player's projection of the world. Every UI that already reads from here will keep working unchanged; the gameplay-mutating code stays on the (per-server) authority.
 

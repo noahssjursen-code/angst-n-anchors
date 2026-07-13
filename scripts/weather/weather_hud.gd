@@ -105,7 +105,7 @@ func _draw_compass() -> void:
 		if "WIND_SPEED_MAX" in w:
 			ws_max = float(w.get("WIND_SPEED_MAX"))
 		wind_speed_norm = clampf(ws / maxf(ws_max, 0.001), 0.0, 1.0)
-		wind = float(w.get("wind_force"))
+		wind = float(w.get("sea_state"))
 
 	var sz := _compass_rect.size
 
@@ -177,21 +177,23 @@ func _update_label() -> void:
 		_label.text = "(no WeatherLighting autoload)"
 		return
 	var precip := float(w.get("precipitation"))
-	var wind   := float(w.get("wind_force"))
+	var sea    := float(w.get("sea_state"))
 	var wind_speed_ms := float(w.get("wind_speed_ms"))
 	var vis    := float(w.get("visibility"))
 	var tod    := float(w.get("time_of_day"))
 	var cloud_dial := float(w.get("cloud_cover"))
 	var cloud_sky := float(w.get("cloud_coverage"))
+	var wave_height := float(w.get("significant_wave_height_m"))
+	var zone := str(w.get("zone_label"))
 	_label.text = (
-		"Wind %.1f m/s (%.0f kn)  Sea %d%%  Rain %d%%\nClouds %d%% (dial %d%%)  Fog %d%%  Time %.2f\n"
+		"%s  ·  Wind %.1f m/s (%.0f kn)  ·  Sea %.1f m Hs (%d%%)\nRain %d%%  Clouds %d%% (dial %d%%)  Fog %d%%  Time %.2f"
 		% [
+			zone,
 			wind_speed_ms, wind_speed_ms * 1.94384,
-			int(wind * 100), int(precip * 100),
+			wave_height, int(sea * 100), int(precip * 100),
 			int(cloud_sky * 100), int(cloud_dial * 100),
 			int((1.0 - vis) * 100), tod,
 		]
-		+ "← → Wind m/s    ↑ Calm / ↓ Gale\nShift+←→ Time  Shift+↑↓ Fog\nCtrl+←→ Rain   Ctrl+↑↓ Clouds"
 	)
 
 

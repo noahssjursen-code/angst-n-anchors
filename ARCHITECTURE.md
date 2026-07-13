@@ -62,7 +62,14 @@ Water physics. `FftWaterSystem` (the FFT simulation node) and `WaveSurface` (que
 
 ### `scripts/weather/`
 
-`WorldWeather` autoload (wind, rain, fog state), `WeatherLighting` autoload (sky/fog colour, sun angle), `WeatherState` (data class), `WeatherZone` (Area3D), `RainField`, `WeatherAudioSystem`, weather HUD panel, weather debug presets.
+Deterministic `WeatherField` + `Season`, analytic `WeatherFrontField`, coastal
+`LandField`, and `WeatherComposer` produce one authoritative sample from seed,
+position, and `WorldClock`. `WorldWeather` is the public API for point, route,
+and front queries. `WeatherLighting` remains the autoload facade for the
+smoothed local presentation consumed by sky/fog/ocean/audio. `RainField`,
+`WeatherAudioSystem`, the weather HUD, and scoped debug presets are presentation
+consumers. Geographic calm comes from baked `LandField` exposure rather than
+area-based overrides.
 
 ### `scripts/time/`
 
@@ -110,7 +117,8 @@ Contracts, cargo, and eventually cranes.
 
 - `GameMenu` autoload (pause/menu)
 - `DebugHud` autoload (F3 overlay)
-- `MapOverlay`, `ShipHud`, `WalkingHud`
+- `MapOverlay` marine-chart shell, layered chart components under `ui/chart/`,
+  `ShipHud`, `WalkingHud`
 
 ### `scripts/state/`
 
