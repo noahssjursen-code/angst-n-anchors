@@ -20,7 +20,8 @@ const FFT_WATER_SYSTEM_SCRIPT := preload("res://scripts/ocean/fft_water_system.g
 ## At max-zoom, 70° FOV looking forward, the visible water extends ~700 m
 ## ahead, so a 1500 m square (radius 750 m around camera) just covers it.
 const INNER_OCEAN_SIZE        : float = 1500.0
-const INNER_OCEAN_SUBDIVISIONS : int   = 768
+# 512 ≈ 2.9 m cells over 1500 m. 768 was ~590k verts × 8 texels and pegged GPUs.
+const INNER_OCEAN_SUBDIVISIONS : int   = 512
 ## Horizon mesh — far field that samples the largest FFT cascade only (~256 m
 ## wavelength) for storm swell. 20 km square is "to the horizon" for all
 ## practical camera positions. Subdivisions chosen so vertex spacing in the

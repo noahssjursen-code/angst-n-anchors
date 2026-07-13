@@ -61,40 +61,17 @@ float wf_vnoise(vec2 p) {
 	return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
 }
 
-float wf_fbm(vec2 p) {
-	float v = 0.0;
-	float a = 0.5;
-	mat2 m = mat2(vec2(0.80, -0.60), vec2(0.60, 0.80));
-	for (int i = 0; i < 3; i++) {
-		v += a * wf_vnoise(p);
-		p = m * p * 2.07;
-		a *= 0.5;
-	}
-	return v;
-}
-
-float wf_ocean_ripple_eta(vec2 xz, float wt) {
-	mat2 ra = mat2(vec2(0.809174, -0.587582), vec2(0.587582, 0.809174));
-	mat2 rb = mat2(vec2(0.422618, -0.906308), vec2(0.906308, 0.422618));
-	vec2 a = ra * xz;
-	vec2 b = rb * xz;
-	float wt_e = wt * 1.55;
-	float eta = wf_fbm(a * 1.85 + wt_e * vec2(-0.71, 0.63)) * 0.55
-			+ wf_fbm(b * 3.40 + wt_e * vec2(0.92, -0.68)) * 0.32
-			+ wf_vnoise(a * 7.1 + b * 0.3 + wt_e * vec2(-1.1, 0.95)) * 0.13;
-	eta += sin(dot(a, vec2(1.31, -0.87)) + wt_e * 1.55) * 0.04;
-	eta += sin(dot(b, vec2(0.77, 1.12)) + wt_e * (-1.72)) * 0.03;
-	return eta;
-}
-
-vec2 wf_ocean_eta_gradient(vec2 xz, float wt, float e) {
-	float e2 = max(e, 1e-4);
-	float h_xm = wf_ocean_ripple_eta(xz + vec2(-e2, 0.0), wt);
-	float h_xp = wf_ocean_ripple_eta(xz + vec2( e2, 0.0), wt);
-	float h_zm = wf_ocean_ripple_eta(xz + vec2(0.0, -e2), wt);
-	float h_zp = wf_ocean_ripple_eta(xz + vec2(0.0,  e2), wt);
-	float inv = 1.0 / max(2.0 * e2, 1e-4);
-	return vec2((h_xp - h_xm) * inv, (h_zp - h_zm) * inv);
+// Analytic capillary chop — closed-form derivatives, no FBM finite differences.
+// Old path: 4× ripple eta × (2 FBM + noise) ≈ 100+ hashes per pixel.
+vec2 wf_cheap_chop_grad(vec2 xz, float wt) {
+	vec2 d = vec2(0.0);
+	float p1 = dot(xz, vec2(1.73, -1.19)) + wt * 2.15;
+	float p2 = dot(xz, vec2(-2.41, 1.37)) + wt * 2.85;
+	float p3 = dot(xz, vec2(0.91, 2.63)) + wt * (-3.35);
+	d += vec2(1.73, -1.19) * cos(p1) * 0.55;
+	d += vec2(-2.41, 1.37) * cos(p2) * 0.35;
+	d += vec2(0.91, 2.63) * cos(p3) * 0.22;
+	return d;
 }
 
 void vertex() {
@@ -105,14 +82,18 @@ void vertex() {
 	vec2 slopes = vec2(0.0);
 	float fft_foam = 0.0;
 
-	for (int i = 0; i < 4; i++) {
+	// Cascades 0–2 for geometry; cascade 3 (4 m) is micro — skip on vertex
+	// to cut 2 texture fetches × ~0.5M verts. Foam from large cascades only.
+	for (int i = 0; i < 3; i++) {
 		float lScale = length_scales[i];
 		vec2 uv = wp.xz / lScale;
 		vec4 disp_sample = textureLod(displacement_map, vec3(uv, float(i)), 0.0);
 		vec4 slope_sample = textureLod(slope_map, vec3(uv, float(i)), 0.0);
 		displacement += disp_sample.xyz;
 		slopes += slope_sample.xy;
-		fft_foam += clamp(disp_sample.w, 0.0, 1.0);
+		if (i < 2) {
+			fft_foam += clamp(disp_sample.w, 0.0, 1.0);
+		}
 	}
 	fft_foam = clamp(fft_foam, 0.0, 1.0);
 
@@ -159,7 +140,6 @@ void vertex() {
 			float exp_b = exp(-b * D);
 			boat_dip = amp * (exp_a - c * D * exp_b);
 			float d_dip_dD = amp * (-a * exp_a - c * exp_b * (1.0 - b * D));
-			// Depression only — negative lobe would raise a berm around the hull.
 			if (boat_dip < 0.0) {
 				boat_dip = 0.0;
 				d_dip_dD = 0.0;
@@ -175,7 +155,6 @@ void vertex() {
 	slopes.y += ddip_dz;
 
 	vec3 world_n_geom = normalize(vec3(-slopes.x, 1.0, -slopes.y));
-	vec3 world_n_foam_metric = normalize(vec3(-slopes.x * 0.25, 1.0, -slopes.y * 0.25));
 
 	mat4 inv_model = inverse(MODEL_MATRIX);
 	VERTEX = (inv_model * vec4(displaced_world, 1.0)).xyz;
@@ -193,22 +172,21 @@ void fragment() {
 	float wt = wave_time;
 	float dist_to_cam = length(CAMERA_POSITION_WORLD - v_world_pos);
 
-	// Capillary chop — subtle. Overdriven gain made hammered metal (close-up).
-	float epsilon = mix(1.2, 2.0, chop_strength);
-	vec2 xz_eff = xz + wt * vec2(0.22, -0.18);
-	vec2 g_eta = wf_ocean_eta_gradient(xz_eff, wt, epsilon);
-	float ripple_gain = chop_strength * 1.85;
-	ripple_gain *= 1.0 - smoothstep(40.0, 350.0, dist_to_cam);
-	vec3 lateral = vec3(-g_eta.x, 0.0, -g_eta.y) * ripple_gain;
-	vec3 ripple = lateral - nm * dot(nm, lateral);
-	vec3 world_n = normalize(nm + ripple);
+	// Cheap analytic chop — only near camera (far sea already has FFT slopes).
+	float near_w = 1.0 - smoothstep(35.0, 220.0, dist_to_cam);
+	vec3 world_n = nm;
+	if (near_w > 0.01 && chop_strength > 0.001) {
+		vec2 g = wf_cheap_chop_grad(xz, wt);
+		float ripple_gain = chop_strength * 1.6 * near_w;
+		vec3 lateral = vec3(-g.x, 0.0, -g.y) * ripple_gain;
+		world_n = normalize(nm + lateral - nm * dot(nm, lateral));
+	}
 	NORMAL = normalize((VIEW_MATRIX * vec4(world_n, 0.0)).xyz);
 
 	vec3 view_dir = normalize(CAMERA_POSITION_WORLD - v_world_pos);
 	vec3 sun_n = normalize(sun_direction);
 	float sun_up = clamp(sun_n.y, 0.0, 1.0);
 
-	// Fresnel from macro normal so sky follows swell, not chop noise.
 	float ndv_macro = clamp(dot(nm, view_dir), 0.001, 1.0);
 	float fres = 0.02 + 0.98 * pow(1.0 - ndv_macro, 5.0);
 	v_fresnel = fres;
@@ -217,21 +195,14 @@ void fragment() {
 	float steep = clamp(v_wave_steep, 0.0, 1.0);
 	float height_rel = clamp((v_world_pos.y - water_level) * 0.55, -0.5, 1.0);
 
-	// Crest teal must NOT follow absolute height — FFT wind seas make long
-	// parallel ridges, and height→color paints straight green stripes (max waves).
-	// Prefer local steepness + noise breakup; keep height as a weak hint only.
-	float crest_noise = wf_fbm(xz * 0.28 + wt * 0.07) * 0.55
-			+ wf_vnoise(xz * 1.15 + wt * 0.19) * 0.45;
+	float crest_noise = wf_vnoise(xz * 0.55 + wt * 0.12);
 	float crest_geom = steep * 0.9 + max(height_rel, 0.0) * 0.2;
-	float crest = smoothstep(0.22, 0.78, crest_geom) * mix(0.4, 1.0, crest_noise);
-	// Tall seas exaggerate height banding — pull crest color back with intensity.
+	float crest = smoothstep(0.22, 0.78, crest_geom) * mix(0.45, 1.0, crest_noise);
 	crest *= mix(1.0, 0.5, clamp((wave_intensity - 0.8) * 0.4, 0.0, 1.0));
 	crest = clamp(crest, 0.0, 1.0);
 
 	vec3 body = mix(deep_albedo, shallow_albedo, (1.0 - facing) * (0.25 + near_color_lift * 0.4));
-	vec3 crest_teal = vec3(0.015, 0.11, 0.13);
-	body = mix(body, crest_teal, crest * 0.32);
-	// Soft trough darken — noisy so dips aren't solid blue planks.
+	body = mix(body, vec3(0.015, 0.11, 0.13), crest * 0.32);
 	float trough = clamp(-height_rel, 0.0, 0.4) * mix(0.55, 1.0, crest_noise);
 	body *= 1.0 - trough * 0.28;
 
@@ -241,7 +212,6 @@ void fragment() {
 	float sky_w = fres * fresnel_sky_mix * mix(1.15, 0.35, facing);
 	vec3 col = mix(body, sky_col, clamp(sky_w, 0.0, 0.92));
 
-	// Soft glitter (refs), not silver sheets. Clamp for tonemap.
 	float ndh = clamp(dot(world_n, normalize(view_dir + sun_n)), 0.0, 1.0);
 	float glint = pow(ndh, 96.0) * 0.35 + pow(ndh, 420.0) * 0.55;
 	glint *= 1.0 - smoothstep(50.0, 450.0, dist_to_cam) * 0.9;
@@ -252,24 +222,10 @@ void fragment() {
 	float sss = pow(toward_sun, 4.0) * crest * (0.4 + 0.6 * (1.0 - smoothstep(0.15, 0.8, sun_up)));
 	col += vec3(0.04, 0.22, 0.20) * sun_color * sss * 0.55 * clamp(wave_intensity, 0.25, 1.6);
 
-	// White slosh — FFT Jacobian foam sampled PER PIXEL from the two large
-	// cascades only. Per-vertex sampling showed triangle blotches, and the
-	// small cascades (16 m / 4 m) contribute per-texel speckle, not foam.
-	float jac_foam = textureLod(displacement_map, vec3(xz / length_scales.x, 0.0), 0.0).w * 0.75
-			+ textureLod(displacement_map, vec3(xz / length_scales.y, 1.0), 0.0).w * 0.45;
-	jac_foam = clamp(jac_foam, 0.0, 1.0);
-
-	mat2 ROT_A = mat2(vec2(0.809174, -0.587582), vec2(0.587582, 0.809174));
-	mat2 ROT_B = mat2(vec2(0.422618, -0.906308), vec2(0.906308, 0.422618));
-	vec2 xz_a = ROT_A * xz;
-	vec2 xz_b = ROT_B * xz;
-	// Soft edge erosion — foam dissolves into lace at its borders.
-	float n1 = wf_fbm(xz_a * 0.9 + wt * vec2(0.4, -0.32));
-	float n2 = wf_fbm(xz_b * 2.4 + xz_a * 0.3 + wt * vec2(-0.5, 0.62));
-	float erode = n1 * 0.6 + n2 * 0.4;
-	float foam_shape = smoothstep(0.15 + erode * 0.45, 0.85, jac_foam + steep * 0.3);
-
-	float foam = foam_shape * foam_strength;
+	// Foam from vertex-interpolated Jacobian (large cascades). One cheap noise
+	// erodes edges — no per-pixel displacement re-samples or FBM.
+	float erode = wf_vnoise(xz * 1.1 + wt * 0.35);
+	float foam = smoothstep(0.18 + erode * 0.4, 0.82, v_foam + steep * 0.25) * foam_strength;
 	foam = clamp(foam, 0.0, 1.0);
 	foam *= 1.0 - smoothstep(300.0, 1600.0, dist_to_cam) * 0.55;
 
@@ -283,8 +239,6 @@ void fragment() {
 	SPECULAR = 0.0;
 }
 
-// Local lights only. Directional sun is in fragment — lighting it here again
-// painted soft plastic white across every swell face.
 void light() {
 	if (!LIGHT_IS_DIRECTIONAL) {
 		float ndl = max(dot(NORMAL, LIGHT), 0.0);
