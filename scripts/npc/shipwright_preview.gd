@@ -17,8 +17,7 @@ func _process(delta: float) -> void:
 		_pivot.rotation.y = _display_yaw
 
 
-func show_entry(entry: Dictionary, _brick_layout: Dictionary = {}) -> HullStations:
-	## Catalog shows the bare hull only — no fit-out configuration here.
+func show_entry(entry: Dictionary, brick_layout: Dictionary = {}) -> HullStations:
 	_clear_models()
 	var hull_id := str(entry.get("id", "workboat"))
 	var loa := float(entry.get("loa_m", Workboat.LOA_M))
@@ -35,7 +34,7 @@ func show_entry(entry: Dictionary, _brick_layout: Dictionary = {}) -> HullStatio
 	var boat := HullRegistry.build_hull(hull_id)
 	boat.name = "PreviewBoat"
 	boat.freeze = true
-	# Skip default starter fit-out — shipwright sells hulls, not pre-built boats.
+	# Skip deferred fit-out; catalog explicitly chooses bare or ready-built.
 	boat.set_meta("fitout_applied", true)
 	DeckFitout.clear(boat)
 	for child_name in ["BoatController", "BoatCamera", "ShipLighting", "BoatAudio"]:
@@ -43,6 +42,8 @@ func show_entry(entry: Dictionary, _brick_layout: Dictionary = {}) -> HullStatio
 		if n != null:
 			n.queue_free()
 	_pivot.add_child(boat)
+	if not brick_layout.is_empty():
+		DeckFitout.apply(boat, BrickLayout.from_dict(brick_layout))
 	return stations
 
 

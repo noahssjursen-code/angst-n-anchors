@@ -18,6 +18,10 @@ extends Node3D
 @export var crate_stagger_seconds: float = 5.0
 ## Crates per successful haul (placed one at a time).
 @export var crates_per_haul: int = 4
+
+const FISH_CRATE_FOOTPRINT := Vector2i(2, 2)
+const FISH_CRATE_UNITS := 4
+const FISH_CRATE_MASS_PER_UNIT_KG := 200.0
 ## How far the net mouth sits below the wave surface when trawling.
 @export var net_mouth_submerge: float = 0.45
 ## Pay-out rope length from the trommel drum to the net head (metres, before hull scale).
@@ -359,7 +363,7 @@ func _try_start_haul() -> void:
 	var sample_pos := _body.global_position
 	var zone := FishingField.sample(sample_pos) if FishingField.is_initialized() else {}
 	if FishingField.is_initialized() and not bool(zone.get("open_water", false)):
-		_notify_trawl("Too close to shore — move to open water")
+		_notify_trawl("No trawling near mainland — steam for the outer islands")
 		return
 	if float(zone.get("catch_mul", 1.0)) < 0.2:
 		return
@@ -396,7 +400,7 @@ func _place_one_fish_crate() -> bool:
 	var zone := _haul_zone
 	var price_mul := float(zone.get("price_mul", 1.0)) if not zone.is_empty() else 1.0
 	var tier_label := str(zone.get("tier_label", ""))
-	var crate_value := ContractRegistry.fish_crate_value(price_mul)
+	var crate_value := ContractRegistry.fish_crate_value(price_mul) * FISH_CRATE_UNITS
 
 	var fish_pallet := Pallet.new()
 	fish_pallet.id = UuidUtil.generate()
@@ -405,10 +409,10 @@ func _place_one_fish_crate() -> bool:
 	fish_pallet.destination_port_id = ""
 	fish_pallet.commodity = "fish"
 	fish_pallet.display_name = "Fresh Fish" if tier_label.is_empty() else "Fresh Fish (%s)" % tier_label
-	fish_pallet.units = 1
-	fish_pallet.max_units = 1
-	fish_pallet.footprint = Vector2i(1, 1)
-	fish_pallet.mass_kg = 200.0
+	fish_pallet.units = FISH_CRATE_UNITS
+	fish_pallet.max_units = FISH_CRATE_UNITS
+	fish_pallet.footprint = FISH_CRATE_FOOTPRINT
+	fish_pallet.mass_kg = FISH_CRATE_MASS_PER_UNIT_KG * FISH_CRATE_UNITS
 	fish_pallet.value_gold = crate_value
 
 	var decks := _body.find_children("*", "CargoDeckComponent", true, false)
@@ -450,11 +454,13 @@ func _retract_trawl(notify_message: String = "") -> void:
 func _fish_deck_has_space() -> bool:
 	if _body == null:
 		return false
+	var fish_crate := Pallet.new()
+	fish_crate.footprint = FISH_CRATE_FOOTPRINT
 	for deck_node in _body.find_children("*", "CargoDeckComponent", true, false):
 		var deck := deck_node as CargoDeckComponent
 		if deck == null or not deck.port_id.is_empty():
 			continue
-		if deck.get_available() >= 1:
+		if deck.accepts_pallet(fish_crate):
 			return true
 	return false
 

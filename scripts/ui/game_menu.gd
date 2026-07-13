@@ -1,5 +1,7 @@
 extends Node
 
+const HelmMinimapScript := preload("res://scripts/ui/chart/helm_minimap.gd")
+
 ## Autoload — manages all non-ship UI: pause menu (ESC), sea chart (M),
 ## and the persistent walking HUD.
 ##
@@ -11,6 +13,7 @@ enum Screen { NONE, PAUSE, MAP, SETTINGS }
 var _screen:          Screen     = Screen.NONE
 var _prev_mouse_mode: int        = Input.MOUSE_MODE_VISIBLE
 var _helm_active:     bool       = false
+var _helm_cursor_released: bool  = false
 var _hud_layer:   CanvasLayer
 var _menu_layer:  CanvasLayer
 var _walking_hud: WalkingHud
@@ -19,6 +22,7 @@ var _hints:       HintOverlay
 var _bg:          ColorRect
 var _pause_root:  Control
 var _map:         MapOverlay
+var _minimap
 var _settings:    SettingsPanel
 
 
@@ -56,7 +60,13 @@ func _ready() -> void:
 
 	_map              = MapOverlay.new()
 	_map.process_mode = Node.PROCESS_MODE_ALWAYS
+	_map.close_requested.connect(func() -> void: _set_screen(Screen.NONE))
 	_menu_layer.add_child(_map)
+
+	_minimap = HelmMinimapScript.new()
+	_minimap.name = "HelmMinimap"
+	_minimap.setup(_map)
+	_hud_layer.add_child(_minimap)
 
 	_settings              = SettingsPanel.new()
 	_settings.process_mode = Node.PROCESS_MODE_ALWAYS
@@ -95,7 +105,17 @@ func _on_window_focus_exited() -> void:
 # ── Input ─────────────────────────────────────────────────────────────────────
 
 func _unhandled_input(event: InputEvent) -> void:
-	if event.is_action_pressed("ui_cancel"):
+	if (
+		event is InputEventKey
+		and event.pressed
+		and not event.echo
+		and event.keycode == KEY_C
+		and _helm_active
+		and _screen == Screen.NONE
+	):
+		_toggle_helm_cursor()
+		get_viewport().set_input_as_handled()
+	elif event.is_action_pressed("ui_cancel"):
 		if _screen == Screen.SETTINGS:
 			_set_screen(Screen.PAUSE)
 			get_viewport().set_input_as_handled()
@@ -107,6 +127,11 @@ func _unhandled_input(event: InputEvent) -> void:
 			_set_screen(Screen.PAUSE)
 			get_viewport().set_input_as_handled()
 	elif event.is_action_pressed("open_map") and _screen != Screen.PAUSE:
+		# Main menu hosts its own chart for home-port pick; don't open the
+		# empty gameplay overlay over the title screen.
+		var scene := get_tree().current_scene
+		if scene != null and String(scene.scene_file_path).ends_with("main_menu.tscn"):
+			return
 		_set_screen(Screen.MAP if _screen != Screen.MAP else Screen.NONE)
 		get_viewport().set_input_as_handled()
 	elif event.is_action_pressed("open_journal") and _screen == Screen.NONE:
@@ -130,7 +155,11 @@ func _set_screen(s: Screen) -> void:
 	_bg.visible          = modal
 	_pause_root.visible  = s == Screen.PAUSE
 	_map.visible         = s == Screen.MAP
+	if s == Screen.MAP:
+		_map.open_navigation()
 	_settings.visible    = s == Screen.SETTINGS
+	if _minimap != null:
+		_minimap.set_modal_hidden(modal)
 	if _journal != null:
 		_journal.visible = not modal
 	# Pause while on Pause OR Settings — both are reached from the pause menu
@@ -224,11 +253,28 @@ func _connect_controller(bc: BoatController) -> void:
 func _on_helm_on() -> void:
 	_walking_hud.visible = false
 	_helm_active = true
+	_helm_cursor_released = Input.mouse_mode == Input.MOUSE_MODE_VISIBLE
+	if _minimap != null:
+		_minimap.set_helm_active(true)
 
 
 func _on_helm_off() -> void:
 	_walking_hud.visible = true
 	_helm_active = false
+	if _helm_cursor_released and _screen == Screen.NONE:
+		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+	_helm_cursor_released = false
+	if _minimap != null:
+		_minimap.set_helm_active(false)
+
+
+func _toggle_helm_cursor() -> void:
+	_helm_cursor_released = Input.mouse_mode != Input.MOUSE_MODE_VISIBLE
+	Input.mouse_mode = (
+		Input.MOUSE_MODE_VISIBLE
+		if _helm_cursor_released
+		else Input.MOUSE_MODE_CAPTURED
+	)
 
 
 func _quit_to_desktop() -> void:

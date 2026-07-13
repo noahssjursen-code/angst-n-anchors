@@ -2,6 +2,7 @@ extends Node
 
 const WORKBOAT := preload("res://scripts/ship/vessels/workboat.gd")
 const TRAWLER := preload("res://scripts/ship/vessels/fishing_trawler_small.gd")
+const CATAMARAN := preload("res://scripts/ship/vessels/passenger_catamaran.gd")
 
 class FakeFFT:
 	extends Node
@@ -69,6 +70,7 @@ func _test_hydrostatic_profiles() -> void:
 	for profile in [
 		_profile(30.0, 24.0, 6.0, 3.0, 960.0, 0.0, 350.0),
 		_profile(28.0, 10.0, 5.6, 2.8, 256.0, 0.3, 180.0),
+		CATAMARAN.make_physics_profile(),
 	]:
 		var typed_profile := profile as HullPhysicsProfile
 		var stations: HullStations = typed_profile.make_stations()
@@ -84,6 +86,8 @@ func _test_hydrostatic_profiles() -> void:
 			stations.half_section_centroid_x_below(5, typed_profile.design_draft_m) > 0.0,
 			"submerged half-section centroid"
 		)
+	var cat_entry := HullRegistry.get_by_id(CATAMARAN.VESSEL_ID)
+	_check(int(cat_entry.get("price_marks", -1)) == 0, "catamaran hull costs zero")
 
 
 func _test_mass_and_moments() -> void:
@@ -218,6 +222,7 @@ func _test_handling_targets() -> void:
 	for vessel_profile in [
 		WORKBOAT.make_physics_profile(),
 		TRAWLER.make_physics_profile(),
+		CATAMARAN.make_physics_profile(),
 	]:
 		var profile := vessel_profile as HullPhysicsProfile
 		var thrust_at_cruise := minf(

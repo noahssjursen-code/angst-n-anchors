@@ -324,6 +324,17 @@ static func _collider_spec(brick_id: String) -> Dictionary:
 				"size": Vector3(sz.x * 0.9, 0.14, sz.z * 0.9),
 				"offset": Vector3(0.0, -sz.y * 0.5 + 0.07, 0.0),
 			}
+		"bench":
+			## Full footprint volume.
+			return {
+				"size": Vector3(sz.x * 0.94, sz.y * 0.92, sz.z * 0.72),
+				"offset": Vector3(0.0, -sz.y * 0.04, sz.z * 0.08),
+			}
+		"table":
+			return {
+				"size": Vector3(sz.x * 0.9, sz.y * 0.92, sz.z * 0.9),
+				"offset": Vector3(0.0, -sz.y * 0.04, 0.0),
+			}
 		"deck_text", "wall_text":
 			return {"size": Vector3.ZERO, "offset": Vector3.ZERO}
 		_:

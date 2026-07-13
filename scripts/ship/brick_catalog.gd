@@ -223,6 +223,22 @@ const BRICKS: Dictionary = {
 		"default_text": "NAME",
 		"text_mount": "wall",
 	},
+	"bench": {
+		"display": "Bench",
+		## 2×2×2 m — yaw aims the sit face (+Z). Backrest on −Z.
+		"footprint": [2, 2, 2],
+		"tags": ["prop", "furniture"],
+		"mass_kg": 55.0,
+		"color": Color(0.42, 0.30, 0.20),
+	},
+	"table": {
+		"display": "Table",
+		## 2×1×2 m mess table.
+		"footprint": [2, 1, 2],
+		"tags": ["prop", "furniture"],
+		"mass_kg": 55.0,
+		"color": Color(0.48, 0.34, 0.22),
+	},
 }
 
 
@@ -385,9 +401,92 @@ static func create_visual(brick_id: String, opts: Dictionary = {}) -> Node3D:
 				str(opts.get("text", entry.get("default_text", "NAME"))),
 				"wall",
 			)
+		"bench":
+			_add_bench_visual(root, sz, color)
+		"table":
+			_add_table_visual(root, sz, color)
 		_:
 			root.add_child(MeshBuilder.box(sz, color, 0.85, 0.0))
 	return root
+
+
+static func _add_bench_visual(root: Node3D, sz: Vector3, color: Color) -> void:
+	## Fills the footprint AABB. Sit face = local +Z; backrest on −Z.
+	var wood := Color(color.r, color.g, color.b)
+	var dark := Color(color.r * 0.72, color.g * 0.72, color.b * 0.75)
+	var metal := Color(0.32, 0.34, 0.36)
+	var floor_y := -sz.y * 0.5
+	var seat_h := sz.y * 0.22
+	var seat_t := maxf(sz.y * 0.04, 0.05)
+	var seat_d := sz.z * 0.72
+	var seat_w := sz.x * 0.94
+	var back_h := sz.y * 0.72
+	var back_t := maxf(sz.z * 0.04, 0.05)
+	var seat_z := sz.z * 0.08
+
+	var seat := MeshBuilder.box(Vector3(seat_w, seat_t, seat_d), wood, 0.88, 0.02)
+	seat.position = Vector3(0.0, floor_y + seat_h, seat_z)
+	root.add_child(seat)
+
+	var back := MeshBuilder.box(Vector3(seat_w, back_h, back_t), wood, 0.88, 0.02)
+	back.position = Vector3(
+		0.0,
+		floor_y + seat_h + back_h * 0.5,
+		seat_z - seat_d * 0.5 + back_t * 0.5
+	)
+	root.add_child(back)
+
+	for side in [-1.0, 1.0]:
+		var leg := MeshBuilder.box(Vector3(0.08, seat_h, seat_d * 0.9), dark, 0.9, 0.05)
+		leg.position = Vector3(side * (seat_w * 0.5 - 0.08), floor_y + seat_h * 0.5, seat_z)
+		root.add_child(leg)
+		var foot := MeshBuilder.box(Vector3(0.14, 0.05, seat_d * 0.95), metal, 0.7, 0.35)
+		foot.position = Vector3(side * (seat_w * 0.5 - 0.08), floor_y + 0.025, seat_z)
+		root.add_child(foot)
+
+	var brace := MeshBuilder.box(Vector3(seat_w * 0.8, 0.05, 0.06), metal, 0.7, 0.3)
+	brace.position = Vector3(0.0, floor_y + seat_h * 0.4, seat_z)
+	root.add_child(brace)
+
+
+static func _add_table_visual(root: Node3D, sz: Vector3, color: Color) -> void:
+	## Fills the footprint AABB — top near the top of the brick.
+	var wood := Color(color.r, color.g, color.b)
+	var dark := Color(color.r * 0.7, color.g * 0.7, color.b * 0.72)
+	var metal := Color(0.34, 0.36, 0.38)
+	var floor_y := -sz.y * 0.5
+	var top_h := sz.y * 0.92
+	var top_t := maxf(sz.y * 0.04, 0.05)
+	var top_w := sz.x * 0.9
+	var top_d := sz.z * 0.9
+	var leg_w := maxf(minf(sz.x, sz.z) * 0.05, 0.06)
+	var inset := minf(sz.x, sz.z) * 0.1
+
+	var top := MeshBuilder.box(Vector3(top_w, top_t, top_d), wood, 0.85, 0.02)
+	top.position = Vector3(0.0, floor_y + top_h, 0.0)
+	root.add_child(top)
+
+	var apron := MeshBuilder.box(Vector3(top_w * 0.84, maxf(sz.y * 0.05, 0.06), top_d * 0.84), dark, 0.9, 0.04)
+	apron.position = Vector3(0.0, floor_y + top_h - top_t * 0.5 - maxf(sz.y * 0.03, 0.04), 0.0)
+	root.add_child(apron)
+
+	for x in [-1.0, 1.0]:
+		for z in [-1.0, 1.0]:
+			var leg_h := top_h - top_t * 0.5 - 0.02
+			var leg := MeshBuilder.box(Vector3(leg_w, leg_h, leg_w), dark, 0.9, 0.05)
+			leg.position = Vector3(
+				x * (top_w * 0.5 - inset),
+				floor_y + leg_h * 0.5,
+				z * (top_d * 0.5 - inset)
+			)
+			root.add_child(leg)
+			var foot := MeshBuilder.cylinder(leg_w * 0.7, 0.04, metal, 0.7, 0.3)
+			foot.position = Vector3(
+				x * (top_w * 0.5 - inset),
+				floor_y + 0.02,
+				z * (top_d * 0.5 - inset)
+			)
+			root.add_child(foot)
 
 
 static func _add_trommel_visual(root: Node3D, sz: Vector3, color: Color) -> void:

@@ -1,0 +1,11 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/ship/vessels/passenger_catamaran.gd" id="1_catamaran"]
+
+[node name="PassengerCatamaran" type="RigidBody3D"]
+script = ExtResource("1_catamaran")
+length_m = 45.0
+beam_m = 16.0
+depth_m = 5.5
+draft_m = 2.2
+displacement_t = 520.0

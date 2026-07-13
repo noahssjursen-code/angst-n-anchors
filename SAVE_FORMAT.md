@@ -11,8 +11,33 @@ Local saves use `user://save/player.json`.
 ```
 
 `player` contains identity, marks/lifetime stats, appearance, owned and active
-vessels, accepted contracts, ship runtime state, world-clock hours, tutorial
-flags, and starter-vessel state. Vector values inside JSON are arrays.
+vessels, home port id, accepted contracts, ship runtime state, world-clock hours,
+tutorial flags, and starter-vessel state. Vector values inside JSON are arrays.
+
+## Home port
+
+`home_port_id` selects which coastal quay is named `HomePort` on world load.
+New captains pick it from a chart after character creation. Defaults to
+`port-home` for legacy saves.
+
+## Ship runtime resume
+
+When `ship_runtime_state` is non-empty and the world context matches,
+`LocalPlayerView` respawns the active vessel at the saved pose and places the
+captain on deck (optionally resuming helm). Empty runtime means the captain
+starts on the home quay with no hull in the water — deploy via the harbour
+master.
+
+```json
+{
+  "world_pos": [x, y, z],
+  "yaw": 0.0,
+  "throttle_stage_idx": 1,
+  "fuel_fraction": 1.0,
+  "aboard": true,
+  "helming": false
+}
+```
 
 ## World context (v3)
 

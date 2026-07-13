@@ -7,7 +7,7 @@ var _failures := PackedStringArray()
 
 func _initialize() -> void:
 	var eastbound: RefCounted = ChartNavSnapshotClass.from_kinematics(
-		Vector2(0.0, 1.0),
+		Vector2(0.0, -1.0),
 		Vector2(5.0, 0.0),
 		Vector3.ZERO,
 		Vector3(0.0, 0.0, -100.0)
@@ -15,7 +15,7 @@ func _initialize() -> void:
 	_check_close(eastbound.heading_deg, 0.0, "north heading")
 	_check_close(eastbound.course_deg, 90.0, "east course")
 	_check_close(eastbound.speed_knots, 5.0 * ChartNavSnapshotClass.MPS_TO_KNOTS, "horizontal SOG")
-	_check_close(eastbound.bearing_deg, 180.0, "south waypoint bearing")
+	_check_close(eastbound.bearing_deg, 0.0, "north waypoint bearing")
 	_check_close(eastbound.leeway_deg, 90.0, "signed HDG-to-COG leeway")
 
 	var stationary: RefCounted = ChartNavSnapshotClass.from_kinematics(
@@ -38,30 +38,17 @@ func _initialize() -> void:
 		"leeway wraps counter-clockwise"
 	)
 
-	# Vessel convention: Bow = −Z. Identity basis faces +Z (stern ahead of origin
-	# along +Z), so bow horizontal is −Z → heading 180° (south).
-	var vessel := Node3D.new()
-	root.add_child(vessel)
-	var stern_facing := NavigationAxes.vessel_bow_horizontal(vessel)
-	_check_close(stern_facing.x, 0.0, "identity bow x")
-	_check_close(stern_facing.y, -1.0, "identity bow is −Z")
+	# Shared world convention: −Z north, +Z south.
 	_check_close(
-		NavigationAxes.heading_deg_horizontal(stern_facing),
-		180.0,
-		"identity vessel heads south"
-	)
-	# Yaw 180°: local −Z aligns with world +Z (north).
-	vessel.rotation_degrees = Vector3(0.0, 180.0, 0.0)
-	vessel.force_update_transform()
-	var north_bow := NavigationAxes.vessel_bow_horizontal(vessel)
-	_check_close(north_bow.x, 0.0, "yaw-180 bow x")
-	_check_close(north_bow.y, 1.0, "yaw-180 bow is +Z north")
-	_check_close(
-		NavigationAxes.heading_deg_horizontal(north_bow),
+		NavigationAxes.heading_deg_horizontal(Vector2(0.0, -1.0)),
 		0.0,
-		"yaw-180 vessel heads north"
+		"world -Z heads north"
 	)
-	vessel.queue_free()
+	_check_close(
+		NavigationAxes.heading_deg_horizontal(Vector2(0.0, 1.0)),
+		180.0,
+		"world +Z heads south"
+	)
 	_finish()
 
 

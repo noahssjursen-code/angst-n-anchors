@@ -257,5 +257,9 @@ func get_throttle_stage_idx() -> int:
 	return _throttle_stage_idx
 
 
+func set_throttle_stage_idx(idx: int) -> void:
+	_throttle_stage_idx = clampi(idx, 0, _stage_count() - 1)
+
+
 func get_thruster_mode() -> int:
 	return _thruster_mode

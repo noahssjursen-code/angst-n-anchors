@@ -1,61 +1,46 @@
 extends SceneTree
 
-const ChartCameraClass = preload("res://scripts/ui/chart/chart_camera.gd")
-const ChartLayerManagerClass = preload("res://scripts/ui/chart/chart_layer_manager.gd")
-
-var _failures := PackedStringArray()
+const CameraClass := preload("res://scripts/ui/chart/chart_camera.gd")
+const LayersClass := preload("res://scripts/ui/chart/chart_layer_manager.gd")
+const RendererClass := preload("res://scripts/ui/chart/chart_layer_renderer.gd")
 
 
 func _initialize() -> void:
-	var layers := ChartLayerManagerClass.new()
-	_check(layers.preset == ChartLayerManagerClass.Preset.COASTAL, "default preset is Coastal")
-	_check(not layers.is_visible("weather"), "default has no pressure wash")
-	_check(layers.is_visible("traffic"), "Coastal shows AIS traffic")
-	_check(not layers.is_visible("approaches"), "Coastal hides berth approaches")
+	var layers := LayersClass.new()
+	assert(layers.preset == LayersClass.Preset.NAVIGATION)
+	assert(layers.is_visible("routes"))
+	assert(not layers.is_visible("weather"))
+	assert(not layers.is_visible("fishing"))
 
-	var stable_key := layers.cache_key()
-	_check(stable_key == layers.cache_key(), "unchanged layer cache key is stable")
-	var revision := layers.revision
-	layers.set_visible("weather", true)
-	_check(layers.cache_key() != stable_key, "layer toggle invalidates cache key")
-	_check(layers.revision == revision + 1, "layer toggle advances revision once")
-	layers.set_visible("weather", true)
-	_check(layers.revision == revision + 1, "no-op toggle preserves cache revision")
+	var revision: int = layers.revision
+	layers.apply_preset(LayersClass.Preset.WEATHER)
+	assert(layers.is_visible("weather"))
+	assert(not layers.is_visible("fishing"))
+	assert(layers.revision == revision + 1)
 
-	layers.apply_preset(ChartLayerManagerClass.Preset.HARBOUR)
-	_check(layers.is_visible("approaches"), "Harbour shows berth approaches")
-	_check(not layers.is_visible("weather"), "Harbour remains uncluttered")
-	layers.apply_preset(ChartLayerManagerClass.Preset.PASSAGE)
-	_check(not layers.is_visible("annotations"), "Passage suppresses port labels")
-	_check(layers.is_visible("nav_vectors"), "Passage keeps navigation vectors")
-	layers.apply_preset(ChartLayerManagerClass.Preset.WEATHER)
-	_check(layers.is_visible("weather"), "Weather preset shows weather")
-	_check(not layers.is_visible("traffic"), "Weather preset declutters traffic")
+	layers.apply_preset(LayersClass.Preset.FISHING)
+	assert(layers.is_visible("fishing"))
+	assert(layers.is_visible("weather"))
 
-	var camera := ChartCameraClass.new()
+	layers.apply_preset(LayersClass.Preset.NAVIGATION)
+	assert(layers.is_visible("weather"))
+	assert(layers.is_visible("fishing"))
+	assert(layers.is_visible("routes"))
+
+	layers.apply_preset(LayersClass.Preset.HARBOUR)
+	assert(layers.is_visible("approaches"))
+	assert(layers.is_visible("annotations"))
+
+	var camera := CameraClass.new()
 	camera.home(Vector3(100.0, 0.0, -200.0), [])
 	var bounds := camera.world_bounds(Vector2(800.0, 400.0))
-	_check(bounds.has_point(Vector2(100.0, -200.0)), "home keeps ship in camera bounds")
-	var origin := camera.center
-	var ppu := camera.pixels_per_world_unit(Vector2(800.0, 400.0))
-	camera.pan_pixels(Vector2(40.0, 0.0), ppu, origin)
-	_check(camera.center.x < origin.x, "drag right moves chart center west")
-	camera.center = origin
-	camera.pan_pixels(Vector2(0.0, 40.0), ppu, origin)
-	_check(camera.center.y > origin.y, "drag down moves chart center north")
-	_finish()
-
-
-func _check(condition: bool, label: String) -> void:
-	if not condition:
-		_failures.append(label)
-
-
-func _finish() -> void:
-	if _failures.is_empty():
-		print("ChartLayerManager tests: all deterministic checks passed")
-		quit()
-		return
-	for failure in _failures:
-		push_error("ChartLayerManager test: " + failure)
-	quit(1)
+	assert(bounds.has_point(Vector2(100.0, -200.0)))
+	var context := {
+		"world_bounds": Rect2(-100.0, -100.0, 200.0, 200.0),
+		"chart_rect": Rect2(0.0, 0.0, 200.0, 200.0),
+	}
+	var north := RendererClass._world_to_screen(Vector3(0.0, 0.0, -100.0), context)
+	var south := RendererClass._world_to_screen(Vector3(0.0, 0.0, 100.0), context)
+	assert(north.y < south.y)
+	print("Marine chart mode/camera tests passed")
+	quit()

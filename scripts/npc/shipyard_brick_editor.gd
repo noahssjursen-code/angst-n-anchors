@@ -37,6 +37,8 @@ var _ghost_cell: Vector3i = Vector3i(-999, -999, -999)
 var _ghost_yaw: int = -1
 var _ghost_valid: bool = false
 const EDITOR_BRICK_ROOT := "EditorBricks"
+const PREBUILT_DIR := "res://resources/data/vessels/prebuilt"
+const PREBUILT_FORMAT_VERSION := 1
 var _camera: Camera3D
 var _cam_yaw: float = 35.0
 var _cam_pitch: float = -35.0
@@ -56,6 +58,7 @@ var _sign_text_edit: LineEdit
 var _brick_rows: Dictionary = {} ## brick_id → PanelContainer
 var _confirm_btn: Button
 var _back_btn: Button
+var _dev_save_lbl: Label
 var _vp_host: SubViewportContainer
 const THUMB_PX := 80
 const MAX_VESSEL_NAME_LEN := 28
@@ -142,6 +145,8 @@ func open_for_hull(
 	_name_edit.text = suggested
 	if _sign_text_edit != null:
 		_sign_text_edit.text = suggested
+	if _dev_save_lbl != null:
+		_dev_save_lbl.text = ""
 	_resize()
 	_root.visible = true
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
@@ -331,6 +336,16 @@ func _build_chrome() -> void:
 	_confirm_btn = UiBuilder.button("Confirm build")
 	_confirm_btn.pressed.connect(_on_confirm)
 	col.add_child(_confirm_btn)
+
+	if OS.is_debug_build():
+		var dev_save_btn := UiBuilder.button("DEV · Save official prebuilt JSON")
+		dev_save_btn.pressed.connect(_on_dev_save_prebuilt)
+		col.add_child(dev_save_btn)
+		_dev_save_lbl = Label.new()
+		_dev_save_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		_dev_save_lbl.add_theme_font_size_override("font_size", 10)
+		_dev_save_lbl.add_theme_color_override("font_color", HudStyle.C_LABEL)
+		col.add_child(_dev_save_lbl)
 
 	_back_btn = UiBuilder.button("Back to hulls")
 	_back_btn.pressed.connect(_close)
@@ -1140,7 +1155,6 @@ func _ensure_editor_boat() -> void:
 	_boat = HullRegistry.build_hull(want_id)
 	_boat.name = "EditorBoat"
 	_boat.set_meta("editor_hull_id", want_id)
-	_boat.freeze = true
 	# Skip deferred gameplay fit-out / WalkDeck brick colliders in the editor.
 	_boat.set_meta("fitout_applied", true)
 	for child_name in ["BoatController", "BoatCamera", "BoatAudio"]:
@@ -1148,6 +1162,10 @@ func _ensure_editor_boat() -> void:
 		if n != null:
 			n.queue_free()
 	_world.add_child(_boat)
+	## After enter-tree, BoatBody LOD would flip freeze off and buoyancy lifts the hull.
+	_boat.automatic_physics_lod = false
+	_boat.set_physics_quality(BoatBody.PhysicsQuality.SLEEP)
+	_boat.global_position = Vector3.ZERO
 
 
 func _ensure_brick_root() -> void:
@@ -1552,4 +1570,97 @@ func _on_confirm() -> void:
 		_layout.to_dict(),
 		vessel_name,
 		_editing_uid,
+	)
+
+
+func _on_dev_save_prebuilt() -> void:
+	var vessel_name := _name_edit.text.strip_edges()
+	if vessel_name.is_empty():
+		vessel_name = str(_hull_entry.get("display", _layout.hull_id))
+	var preset_id := _prebuilt_slug(vessel_name)
+	if preset_id.is_empty():
+		preset_id = "%s_prebuilt" % _prebuilt_slug(_layout.hull_id)
+	var payload := make_prebuilt_payload(
+		preset_id,
+		vessel_name,
+		_hull_entry,
+		_layout.to_dict(),
+	)
+	var absolute_dir := ProjectSettings.globalize_path(PREBUILT_DIR)
+	var err := DirAccess.make_dir_recursive_absolute(absolute_dir)
+	if err != OK and err != ERR_ALREADY_EXISTS:
+		_show_dev_save_result("SAVE FAILED · could not create preset folder", true)
+		push_error("ShipyardBrickEditor: could not create %s (err %d)" % [PREBUILT_DIR, err])
+		return
+	var path := "%s/%s.json" % [PREBUILT_DIR, preset_id]
+	var temp_path := path + ".tmp"
+	var file := FileAccess.open(temp_path, FileAccess.WRITE)
+	if file == null:
+		_show_dev_save_result("SAVE FAILED · res:// is not writable", true)
+		push_error("ShipyardBrickEditor: could not write %s (err %d)" % [
+			temp_path, FileAccess.get_open_error(),
+		])
+		return
+	file.store_string(JSON.stringify(payload, "\t"))
+	file.flush()
+	file.close()
+	var parsed: Variant = JSON.parse_string(FileAccess.get_file_as_string(temp_path))
+	if typeof(parsed) != TYPE_DICTIONARY:
+		DirAccess.remove_absolute(temp_path)
+		_show_dev_save_result("SAVE FAILED · generated JSON did not validate", true)
+		return
+	if FileAccess.file_exists(path):
+		err = DirAccess.remove_absolute(path)
+		if err != OK:
+			DirAccess.remove_absolute(temp_path)
+			_show_dev_save_result("SAVE FAILED · existing preset is locked", true)
+			return
+	err = DirAccess.rename_absolute(temp_path, path)
+	if err != OK:
+		_show_dev_save_result("SAVE FAILED · could not install preset", true)
+		return
+	_show_dev_save_result("SAVED · %s" % path, false)
+	print("[Shipyard] Saved official prebuilt preset: %s" % ProjectSettings.globalize_path(path))
+
+
+static func make_prebuilt_payload(
+	preset_id: String,
+	vessel_name: String,
+	hull_entry: Dictionary,
+	layout: Dictionary,
+) -> Dictionary:
+	var hull_id := str(layout.get("hull_id", hull_entry.get("id", "workboat")))
+	var scene_path := str(hull_entry.get("scene_path", HullRegistry.scene_path_for(hull_id)))
+	return {
+		"format_version": PREBUILT_FORMAT_VERSION,
+		"id": preset_id,
+		"name": vessel_name,
+		"hull_id": hull_id,
+		"scene_path": scene_path,
+		"price_marks": maxi(int(hull_entry.get("price_marks", 0)), 0),
+		"brick_layout": layout.duplicate(true),
+	}
+
+
+static func _prebuilt_slug(value: String) -> String:
+	var out := ""
+	var lowered := value.strip_edges().to_lower()
+	for i in range(lowered.length()):
+		var code := lowered.unicode_at(i)
+		var is_letter := code >= 97 and code <= 122
+		var is_number := code >= 48 and code <= 57
+		if is_letter or is_number:
+			out += lowered[i]
+		elif not out.is_empty() and not out.ends_with("_"):
+			out += "_"
+	return out.trim_suffix("_")
+
+
+func _show_dev_save_result(message: String, failed: bool) -> void:
+	if _dev_save_lbl == null:
+		return
+	_dev_save_lbl.text = message
+	_dev_save_lbl.add_theme_color_override(
+		"font_color",
+		HudStyle.C_RED if failed else HudStyle.C_GREEN,
 	)

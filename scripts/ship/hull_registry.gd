@@ -6,8 +6,10 @@ extends RefCounted
 
 const WORKBOAT_SCENE := "res://scenes/vessels/workboat.tscn"
 const TRAWLER_SMALL_SCENE := "res://scenes/vessels/fishing_trawler_small.tscn"
+const PASSENGER_CATAMARAN_SCENE := "res://scenes/vessels/passenger_catamaran.tscn"
 const _WORKBOAT_SCRIPT := preload("res://scripts/ship/vessels/workboat.gd")
 const _TRAWLER_SMALL_SCRIPT := preload("res://scripts/ship/vessels/fishing_trawler_small.gd")
+const _PASSENGER_CATAMARAN_SCRIPT := preload("res://scripts/ship/vessels/passenger_catamaran.gd")
 
 const WORKBOAT := {
 	"id": "workboat",
@@ -39,6 +41,21 @@ const FISHING_TRAWLER_SMALL := {
 	"depth_m": 5.6,
 }
 
+const PASSENGER_CATAMARAN := {
+	"id": "passenger_catamaran",
+	"display": "Passenger catamaran  •  45 × 16 m",
+	"role": VesselRole.Type.PASSENGER,
+	"ship_class": ShipClass.Type.SHORT_SEA_COASTER,
+	"ship_class_label": "High-speed catamaran hull",
+	"scene_path": PASSENGER_CATAMARAN_SCENE,
+	"capabilities": [],
+	"price_marks": 0,
+	"displacement_t": 520.0,
+	"loa_m": 45.0,
+	"beam_m": 16.0,
+	"depth_m": 5.5,
+}
+
 ## Old hull ids from the deleted fleet — map to a live hull, never listed in catalog.
 const LEGACY_ID_ALIASES: Dictionary = {
 	"fishing_trawler_medium": "fishing_trawler_small",
@@ -58,9 +75,9 @@ const LEGACY_ID_ALIASES: Dictionary = {
 	"container_ship_medium": "workboat",
 	"container_ship_large": "workboat",
 	"container_ship_ultra": "workboat",
-	"ferry": "workboat",
-	"ferry_small": "workboat",
-	"ferry_large": "workboat",
+	"ferry": "passenger_catamaran",
+	"ferry_small": "passenger_catamaran",
+	"ferry_large": "passenger_catamaran",
 	"fishing_boat": "fishing_trawler_small",
 	"fishing_boat_small": "fishing_trawler_small",
 	"fishing_boat_large": "workboat",
@@ -71,6 +88,7 @@ static func catalog() -> Array[Dictionary]:
 	return [
 		FISHING_TRAWLER_SMALL.duplicate(true),
 		WORKBOAT.duplicate(true),
+		PASSENGER_CATAMARAN.duplicate(true),
 	]
 
 
@@ -79,6 +97,8 @@ static func get_by_id(hull_id: String) -> Dictionary:
 	match id:
 		"fishing_trawler_small":
 			return FISHING_TRAWLER_SMALL.duplicate(true)
+		"passenger_catamaran":
+			return PASSENGER_CATAMARAN.duplicate(true)
 		_:
 			return WORKBOAT.duplicate(true)
 
@@ -89,6 +109,8 @@ static func get_by_file(_filename: String) -> Dictionary:
 
 static func resolve_id_from_template(template_path: String, fallback: String = "workboat") -> String:
 	var path := template_path.strip_edges()
+	if path.contains("passenger_catamaran"):
+		return "passenger_catamaran"
 	if path.contains("fishing_trawler_small"):
 		return "fishing_trawler_small"
 	if path.contains("workboat"):
@@ -100,7 +122,7 @@ static func resolve_network_hull_id(hull_id: String) -> String:
 	var id := hull_id.strip_edges()
 	if id.is_empty():
 		return "workboat"
-	if id == "workboat" or id == "fishing_trawler_small":
+	if id == "workboat" or id == "fishing_trawler_small" or id == "passenger_catamaran":
 		return id
 	if LEGACY_ID_ALIASES.has(id):
 		return str(LEGACY_ID_ALIASES[id])
@@ -122,6 +144,8 @@ static func make_grid(hull_id: String) -> DeckGrid:
 	match resolve_network_hull_id(hull_id):
 		"fishing_trawler_small":
 			return _TRAWLER_SMALL_SCRIPT.make_grid()
+		"passenger_catamaran":
+			return _PASSENGER_CATAMARAN_SCRIPT.make_grid()
 		_:
 			return _WORKBOAT_SCRIPT.make_grid()
 
@@ -130,6 +154,8 @@ static func build_hull(hull_id: String) -> BoatBody:
 	match resolve_network_hull_id(hull_id):
 		"fishing_trawler_small":
 			return _TRAWLER_SMALL_SCRIPT.build() as BoatBody
+		"passenger_catamaran":
+			return _PASSENGER_CATAMARAN_SCRIPT.build() as BoatBody
 		_:
 			return _WORKBOAT_SCRIPT.build() as BoatBody
 
