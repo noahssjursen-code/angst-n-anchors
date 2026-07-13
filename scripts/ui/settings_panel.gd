@@ -170,16 +170,16 @@ func _fps_cap_row() -> HBoxContainer:
 
 	var opt := OptionButton.new()
 	var presets := [
-		{"label": "Uncapped", "value": 0},
 		{"label": "60 fps",   "value": 60},
 		{"label": "120 fps",  "value": 120},
 		{"label": "144 fps",  "value": 144},
 		{"label": "240 fps",  "value": 240},
+		{"label": "Uncapped (maximum GPU usage)", "value": 0},
 	]
 	for i in range(presets.size()):
 		opt.add_item(str(presets[i]["label"]), int(presets[i]["value"]))
-	# Select the entry whose id matches current setting; fall back to uncapped.
-	var match_idx := 0
+	# Select the entry whose id matches current setting; fall back to 120 fps.
+	var match_idx := 1
 	for i in range(presets.size()):
 		if int(presets[i]["value"]) == GameSettings.max_fps:
 			match_idx = i

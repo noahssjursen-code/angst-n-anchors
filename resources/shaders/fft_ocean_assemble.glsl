@@ -1,8 +1,8 @@
 #[compute]
 #version 450
 #define PASS_ASSEMBLE
-#define SIZE 256
-#define LOG_SIZE 8
+#define SIZE 512
+#define LOG_SIZE 9
 
 // This file is dynamically compiled by fft_water_system.gd with different #defines for each pass.
 

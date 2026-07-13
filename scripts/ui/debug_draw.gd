@@ -34,6 +34,7 @@ const C_BAD     := HudStyle.C_RED
 func _ready() -> void:
 	set_anchors_preset(Control.PRESET_FULL_RECT)
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
+	RenderingServer.viewport_set_measure_render_time(get_viewport().get_viewport_rid(), visible)
 
 	# Refresh on telemetry tick (system stats + loading log).
 	var t := get_node_or_null("/root/Telemetry")
@@ -79,8 +80,13 @@ func _on_state_changed(_arg: Variant = null) -> void:
 
 # Redraw once when becoming visible (so the panel doesn't show stale data).
 func _notification(what: int) -> void:
-	if what == NOTIFICATION_VISIBILITY_CHANGED and visible:
-		queue_redraw()
+	if what == NOTIFICATION_VISIBILITY_CHANGED:
+		var viewport := get_viewport()
+		if viewport == null:
+			return
+		RenderingServer.viewport_set_measure_render_time(viewport.get_viewport_rid(), visible)
+		if visible:
+			queue_redraw()
 
 
 func _draw() -> void:
@@ -118,10 +124,86 @@ func _draw() -> void:
 func _build() -> Array:
 	var e:        Array = []
 	_build_system(e)
+	_build_water_gpu(e)
 	_build_loading(e)
 	_build_debug_tools(e)
 	_build_gameplay(e)
 	return e
+
+
+func _build_water_gpu(e: Array) -> void:
+	_sec(e, "WATER / GPU")
+
+	var viewport_rid := get_viewport().get_viewport_rid()
+	var frame_gpu_ms := RenderingServer.viewport_get_measured_render_time_gpu(viewport_rid)
+	var frame_cpu_render_ms := (
+		RenderingServer.viewport_get_measured_render_time_cpu(viewport_rid)
+		+ RenderingServer.get_frame_setup_time_cpu()
+	)
+	var cap := Engine.max_fps
+	var target_fps := float(cap)
+	var refresh_hz := DisplayServer.screen_get_refresh_rate()
+	if GameSettings.vsync_enabled and refresh_hz > 1.0:
+		target_fps = minf(target_fps, refresh_hz) if target_fps > 0.0 else refresh_hz
+	var budget_ms := 1000.0 / target_fps if target_fps > 0.0 else 0.0
+	var frame_color := C_VALUE
+	if budget_ms > 0.0:
+		var headroom := budget_ms - frame_gpu_ms
+		frame_color = C_GOOD if headroom >= 2.0 else (C_WARN if headroom >= 0.5 else C_BAD)
+		_row(e, "GPU frame", "%.2f / %.2f ms  (%.2f free)" % [
+			frame_gpu_ms, budget_ms, headroom,
+		], frame_color)
+	else:
+		_row(e, "GPU frame", "%.2f ms (uncapped)" % frame_gpu_ms, C_WARN)
+	_row(e, "Render CPU", "%.2f ms" % frame_cpu_render_ms, C_VALUE)
+
+	var fft := get_tree().get_first_node_in_group("fft_water_system")
+	if fft != null and fft.has_method("get_debug_stats"):
+		var s: Dictionary = fft.call("get_debug_stats")
+		var fft_gpu := float(s.get("gpu_fft_ms", -1.0))
+		if fft_gpu >= 0.0:
+			var fps := maxf(float(Performance.get_monitor(Performance.TIME_FPS)), 1.0)
+			var amortized := fft_gpu * float(s.get("sim_hz", 0.0)) / fps
+			var share := amortized / frame_gpu_ms * 100.0 if frame_gpu_ms > 0.001 else 0.0
+			_row(e, "FFT GPU", "%.3f ms/tick · %.3f/frame · %.1f%%" % [
+				fft_gpu, amortized, share,
+			], C_VALUE)
+		else:
+			_stub(e, "FFT GPU", "collecting timestamps…")
+		_row(e, "FFT submit CPU", "%.3f ms" % float(s.get("cpu_submit_ms", 0.0)), C_VALUE)
+		_row(e, "FFT quality", "%d² × %d @ %dHz · %d groups" % [
+			int(s.get("resolution", 0)),
+			int(s.get("cascades", 0)),
+			int(s.get("sim_hz", 0)),
+			int(s.get("workgroups_per_tick", 0)),
+		], C_VALUE)
+		_row(e, "FFT memory/I-O", "%.1f MB · %.1f MB/s @ %.0fHz%s" % [
+			float(s.get("texture_mb", 0.0)),
+			float(s.get("readback_mb_s", 0.0)),
+			float(s.get("readback_hz", 0.0)),
+			" · copy" if bool(s.get("readback_in_flight", false)) else "",
+		], C_VALUE)
+	else:
+		_stub(e, "FFT", "system not found")
+
+	var renderer := get_tree().get_first_node_in_group("world_renderer")
+	if renderer != null and renderer.has_method("get_ocean_debug_stats"):
+		var r: Dictionary = renderer.call("get_ocean_debug_stats")
+		_row(e, "Ocean geometry", "%d verts · %d tris" % [
+			int(r.get("vertices", 0)),
+			int(r.get("triangles", 0)),
+		], C_VALUE)
+		_row(e, "Clipmap", "%dm:%d  %dm:%d  %dkm:%d" % [
+			int(r.get("near_size", 0)),
+			int(r.get("near_subdivisions", 0)),
+			int(r.get("mid_size", 0)),
+			int(r.get("mid_subdivisions", 0)),
+			int(float(r.get("horizon_size", 0.0)) / 1000.0),
+			int(r.get("horizon_subdivisions", 0)),
+		], C_LABEL)
+
+	_stub(e, "Ocean raster", "included in GPU frame; Godot cannot isolate it")
+	_sep(e)
 
 
 func _build_debug_tools(e: Array) -> void:

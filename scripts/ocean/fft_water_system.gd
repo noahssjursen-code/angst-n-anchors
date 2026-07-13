@@ -2,10 +2,9 @@ class_name FFTWaterSystem
 extends Node
 
 ## FFT grid size — must match SIZE / LOG_SIZE in the fft_ocean_*.glsl compute
-## shaders. 256² is ~4× cheaper than 512² and still finer than ocean mesh
-## spacing on the 256 m cascade (~1 m/texel vs ~2–3 m/vert).
-const RESOLUTION = 256
-const RESOLUTION_LOG2 = 8  # log2(RESOLUTION)
+## shaders. This is the full-quality setting used by the approved water look.
+const RESOLUTION = 512
+const RESOLUTION_LOG2 = 9  # log2(RESOLUTION)
 const MAX_WAVES = 4
 
 const FFT_OCEAN_INIT = preload("res://resources/shaders/fft_ocean_init.glsl")
@@ -75,14 +74,17 @@ var _readback_in_flight: bool = false
 var _async_received: int = 0
 var _async_scratch: Array[PackedFloat32Array] = []
 var _async_delta_snapshot: float = 0.0
+var _gpu_fft_ms: float = -1.0
+var _cpu_submit_ms: float = 0.0
 
-# Cap FFT compute below display refresh — visuals sample the latest maps;
-# 30 Hz sim is plenty for wave motion and halves GPU compute vs 60.
+# Full temporal fidelity. GPU savings come from the frame cap, clipmap geometry,
+# and non-blocking readback rather than reducing ocean simulation quality.
 var _sim_timer: float = 0.0
-const SIM_TICK_RATE: float = 30.0
+const SIM_TICK_RATE: float = 60.0
 const SIM_STEP: float = 1.0 / SIM_TICK_RATE
 
 func _ready() -> void:
+	add_to_group("fft_water_system")
 	buoyancy_data.resize(4)
 	prev_buoyancy_data.resize(4)
 	_async_scratch.resize(4)
@@ -100,6 +102,7 @@ func _ready() -> void:
 
 func _process(delta: float) -> void:
 	if not rd: return
+	_collect_gpu_profile()
 	
 	_sim_timer += delta
 	if _sim_timer < SIM_STEP:
@@ -132,7 +135,7 @@ func _kick_async_buoyancy_readback() -> void:
 			return
 
 
-func _on_buoyancy_async(layer: int, bytes: PackedByteArray) -> void:
+func _on_buoyancy_async(bytes: PackedByteArray, layer: int) -> void:
 	if bytes.size() == RESOLUTION * RESOLUTION * 4:
 		_async_scratch[layer] = bytes.to_float32_array()
 	_async_received += 1
@@ -146,6 +149,62 @@ func _on_buoyancy_async(layer: int, bytes: PackedByteArray) -> void:
 	prev_delta = maxf(_async_delta_snapshot, 0.001)
 	_accumulated_delta = 0.0
 	_readback_in_flight = false
+
+
+func get_debug_stats() -> Dictionary:
+	var resolution_f := float(RESOLUTION)
+	# Persistent GPU textures:
+	# initial/displacement: 4×RGBA32F each; spectrum: 8×RGBA32F;
+	# slope: 4×RG32F; buoyancy: 4×R32F.
+	var texture_bytes := resolution_f * resolution_f * (
+		4.0 * 16.0 + 8.0 * 16.0 + 4.0 * 16.0 + 4.0 * 8.0 + 4.0 * 4.0
+	)
+	var readback_mb_s := (
+		resolution_f * resolution_f * 4.0 * 4.0
+		* (SIM_TICK_RATE / float(BUOYANCY_READBACK_INTERVAL))
+		/ (1024.0 * 1024.0)
+	)
+	var tile_dispatches := 2 * (RESOLUTION / 8) * (RESOLUTION / 8)
+	var fft_dispatches := 2 * RESOLUTION
+	return {
+		"resolution": RESOLUTION,
+		"cascades": MAX_WAVES,
+		"sim_hz": SIM_TICK_RATE,
+		"gpu_fft_ms": _gpu_fft_ms,
+		"cpu_submit_ms": _cpu_submit_ms,
+		"workgroups_per_tick": tile_dispatches + fft_dispatches,
+		"texture_mb": texture_bytes / (1024.0 * 1024.0),
+		"readback_mb_s": readback_mb_s,
+		"readback_hz": SIM_TICK_RATE / float(BUOYANCY_READBACK_INTERVAL),
+		"readback_in_flight": _readback_in_flight,
+	}
+
+
+func _profile_enabled() -> bool:
+	var hud := get_node_or_null("/root/DebugHud")
+	return hud != null and hud.has_method("is_open") and bool(hud.call("is_open"))
+
+
+func _collect_gpu_profile() -> void:
+	if not _profile_enabled():
+		return
+	var begin_usec := -1
+	var end_usec := -1
+	for i in range(rd.get_captured_timestamps_count()):
+		var marker := rd.get_captured_timestamp_name(i)
+		if marker == "WaterFFT.Begin":
+			begin_usec = int(rd.get_captured_timestamp_gpu_time(i))
+		elif marker == "WaterFFT.End":
+			end_usec = int(rd.get_captured_timestamp_gpu_time(i))
+	if begin_usec >= 0 and end_usec >= begin_usec:
+		# Godot 4.6's D3D12 backend reports these values at nanosecond scale
+		# despite the API documentation describing microseconds. The old /1000
+		# conversion produced impossible 700 ms samples in a 2 ms frame.
+		var sample_ms := float(end_usec - begin_usec) / 1_000_000.0
+		# Reject mismatched/ring-buffer timestamp pairs instead of poisoning the
+		# running average. A single FFT tick cannot exceed this and sustain play.
+		if sample_ms >= 0.0 and sample_ms < 50.0:
+			_gpu_fft_ms = sample_ms if _gpu_fft_ms < 0.0 else lerpf(_gpu_fft_ms, sample_ms, 0.2)
 
 
 func _compile_shaders() -> void:
@@ -392,6 +451,10 @@ func _run_init_pack() -> void:
 
 
 func _run_update_fft_assemble(delta: float) -> void:
+	var profile := _profile_enabled()
+	var cpu_begin := Time.get_ticks_usec()
+	if profile:
+		rd.capture_timestamp("WaterFFT.Begin")
 	_update_push_constants(delta)
 	var compute_list = rd.compute_list_begin()
 	
@@ -426,4 +489,8 @@ func _run_update_fft_assemble(delta: float) -> void:
 	rd.compute_list_dispatch(compute_list, RESOLUTION / 8, RESOLUTION / 8, 1)
 	
 	rd.compute_list_end()
+	if profile:
+		rd.capture_timestamp("WaterFFT.End")
+	var cpu_sample_ms := float(Time.get_ticks_usec() - cpu_begin) / 1000.0
+	_cpu_submit_ms = lerpf(_cpu_submit_ms, cpu_sample_ms, 0.2)
 	# rd.submit() and rd.sync() removed because we are on the global RenderingDevice

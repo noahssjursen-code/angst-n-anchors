@@ -56,17 +56,43 @@ var _shelter_texture_bound : bool = false
 
 
 func _ready() -> void:
-	if not Engine.is_editor_hint():
-		_fft_system = FFT_WATER_SYSTEM_SCRIPT.new()
-		_fft_system.name = "FFTWaterSystem"
-		add_child(_fft_system)
-		WaveSurface.fft_system = _fft_system
+	add_to_group("world_renderer")
+	# This script is @tool, but the full runtime ocean must not be built in the
+	# editor viewport. Otherwise the editor renders one ocean while the embedded
+	# game renders another (measured: ~65% + ~32% GPU on the same card).
+	if Engine.is_editor_hint():
+		set_process(false)
+		return
+
+	_fft_system = FFT_WATER_SYSTEM_SCRIPT.new()
+	_fft_system.name = "FFTWaterSystem"
+	add_child(_fft_system)
+	WaveSurface.fft_system = _fft_system
 
 	_build_sky()
 	_build_ocean()
 	_build_screen_effects()
 	_connect_weather_lighting()
 	_apply_weather_lighting()
+
+
+func get_ocean_debug_stats() -> Dictionary:
+	var near_vertices := (NEAR_OCEAN_SUBDIVISIONS + 2) * (NEAR_OCEAN_SUBDIVISIONS + 2)
+	var mid_vertices := (MID_OCEAN_SUBDIVISIONS + 2) * (MID_OCEAN_SUBDIVISIONS + 2)
+	var horizon_vertices := (HORIZON_OCEAN_SUBDIVISIONS + 2) * (HORIZON_OCEAN_SUBDIVISIONS + 2)
+	var near_triangles := 2 * (NEAR_OCEAN_SUBDIVISIONS + 1) * (NEAR_OCEAN_SUBDIVISIONS + 1)
+	var mid_triangles := 2 * (MID_OCEAN_SUBDIVISIONS + 1) * (MID_OCEAN_SUBDIVISIONS + 1)
+	var horizon_triangles := 2 * (HORIZON_OCEAN_SUBDIVISIONS + 1) * (HORIZON_OCEAN_SUBDIVISIONS + 1)
+	return {
+		"near_size": NEAR_OCEAN_SIZE,
+		"near_subdivisions": NEAR_OCEAN_SUBDIVISIONS,
+		"mid_size": MID_OCEAN_SIZE,
+		"mid_subdivisions": MID_OCEAN_SUBDIVISIONS,
+		"horizon_size": HORIZON_OCEAN_SIZE,
+		"horizon_subdivisions": HORIZON_OCEAN_SUBDIVISIONS,
+		"vertices": near_vertices + mid_vertices + horizon_vertices,
+		"triangles": near_triangles + mid_triangles + horizon_triangles,
+	}
 
 
 func _process(_delta: float) -> void:

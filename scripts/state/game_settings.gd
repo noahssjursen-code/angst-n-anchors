@@ -21,7 +21,10 @@ var music_volume:  float = 0.7
 enum WindowMode { WINDOWED, FULLSCREEN, BORDERLESS }
 var window_mode:    WindowMode = WindowMode.WINDOWED
 var vsync_enabled:  bool       = true
-var max_fps:        int        = 0           # 0 = uncapped
+# V-Sync is not guaranteed in the editor's embedded game window. A finite
+# default also stops release builds from converting every spare GPU cycle into
+# frames above the display's refresh rate. Players can still opt into uncapped.
+var max_fps:        int        = 120
 
 # ── Input ─────────────────────────────────────────────────────────────────────
 var mouse_sensitivity: float = 1.0           # multiplier applied to player.gd's base sensitivity
@@ -43,7 +46,13 @@ func load_settings() -> void:
 	music_volume      = float(cfg.get_value("audio",    "music",         music_volume))
 	window_mode       = int(cfg.get_value("graphics",  "window_mode",   window_mode)) as WindowMode
 	vsync_enabled     = bool(cfg.get_value("graphics", "vsync",         vsync_enabled))
-	max_fps           = int(cfg.get_value("graphics",  "max_fps",       max_fps))
+	var saved_max_fps := int(cfg.get_value("graphics", "max_fps", max_fps))
+	# Before this marker existed, 0 was the shipped default rather than
+	# necessarily a deliberate choice. Migrate that legacy default once.
+	if saved_max_fps == 0 and not cfg.has_section_key("graphics", "fps_cap_user_selected"):
+		max_fps = 120
+	else:
+		max_fps = saved_max_fps
 	mouse_sensitivity = float(cfg.get_value("input",   "mouse_sens",    mouse_sensitivity))
 	invert_mouse_y    = bool(cfg.get_value("input",    "invert_mouse_y", invert_mouse_y))
 
@@ -65,6 +74,7 @@ func save_settings() -> void:
 	cfg.set_value("graphics", "window_mode",    int(window_mode))
 	cfg.set_value("graphics", "vsync",          vsync_enabled)
 	cfg.set_value("graphics", "max_fps",        max_fps)
+	cfg.set_value("graphics", "fps_cap_user_selected", true)
 	cfg.set_value("input",    "mouse_sens",     mouse_sensitivity)
 	cfg.set_value("input",    "invert_mouse_y", invert_mouse_y)
 	cfg.save(CFG_PATH)
