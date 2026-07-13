@@ -37,9 +37,13 @@ uniform vec2 boat_velocity = vec2(0.0, 0.0);
 uniform sampler2D land_shelter_map  : filter_linear, repeat_disable;
 uniform vec2      land_shelter_origin = vec2(0.0);
 uniform float     land_shelter_size   = 0.0;
+## Mid-ring clipmap: discard the near patch so only the outer ring draws.
+## 0 = disabled (near patch).
+uniform float     discard_half = 0.0;
 
 varying vec3 v_world_pos;
 varying vec3 v_world_normal;
+varying vec3 v_local_pos;
 varying float v_wave_steep;
 varying float v_foam;
 varying float v_fresnel; // for light() soft reflections
@@ -86,6 +90,7 @@ vec2 wf_cheap_chop_grad(vec2 xz, float wt) {
 }
 
 void vertex() {
+	v_local_pos = VERTEX;
 	vec4 w4 = MODEL_MATRIX * vec4(VERTEX, 1.0);
 	vec3 wp = w4.xyz;
 
@@ -176,6 +181,9 @@ void vertex() {
 }
 
 void fragment() {
+	if (discard_half > 0.0 && abs(v_local_pos.x) < discard_half && abs(v_local_pos.z) < discard_half) {
+		discard;
+	}
 	vec3 nm = normalize(v_world_normal);
 	vec2 xz = v_world_pos.xz;
 	float wt = wave_time;

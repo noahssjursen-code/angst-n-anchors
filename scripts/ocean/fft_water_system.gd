@@ -15,8 +15,8 @@ const FFT_OCEAN_FFT_X = preload("res://resources/shaders/fft_ocean_fft_x.glsl")
 const FFT_OCEAN_FFT_Y = preload("res://resources/shaders/fft_ocean_fft_y.glsl")
 const FFT_OCEAN_ASSEMBLE = preload("res://resources/shaders/fft_ocean_assemble.glsl")
 
-## How many compute frames between each CPU readback of the buoyancy LUT.
-## At 30 Hz sim, N=2 ≈ 15 Hz buoyancy — still smooth for StripBuoyancy.
+## How many compute frames between buoyancy readback requests.
+## Readback is async (non-blocking) — this only caps request rate.
 const BUOYANCY_READBACK_INTERVAL: int = 2
 
 var rd: RenderingDevice
@@ -64,12 +64,17 @@ var push_constant_params := PackedByteArray()
 var buoyancy_data: Array[PackedFloat32Array] = []
 var prev_buoyancy_data: Array[PackedFloat32Array] = []
 var prev_delta: float = 0.016
-## Counts compute frames since the last buoyancy readback. Wraps at
-## BUOYANCY_READBACK_INTERVAL so we read exactly once every N frames.
+## Counts compute frames since the last buoyancy readback request.
 var _readback_counter: int = 0
 ## Accumulates frame deltas between readbacks; becomes `prev_delta` for the
 ## CPU-side vertical-velocity calculation in WaveSurface.
 var _accumulated_delta: float = 0.0
+## Async GPU→CPU buoyancy download — never call blocking texture_get_data
+## on the render device (that stalls the whole GPU and pegs utilization).
+var _readback_in_flight: bool = false
+var _async_received: int = 0
+var _async_scratch: Array[PackedFloat32Array] = []
+var _async_delta_snapshot: float = 0.0
 
 # Cap FFT compute below display refresh — visuals sample the latest maps;
 # 30 Hz sim is plenty for wave motion and halves GPU compute vs 60.
@@ -80,6 +85,7 @@ const SIM_STEP: float = 1.0 / SIM_TICK_RATE
 func _ready() -> void:
 	buoyancy_data.resize(4)
 	prev_buoyancy_data.resize(4)
+	_async_scratch.resize(4)
 	push_constant_params.resize(80)
 	rd = RenderingServer.get_rendering_device()
 	if not rd:
@@ -95,8 +101,6 @@ func _ready() -> void:
 func _process(delta: float) -> void:
 	if not rd: return
 	
-	# Cap the expensive GPU compute simulation to exactly 60Hz to slash GPU utilization,
-	# while letting the rest of the game render at the monitor's full 100Hz refresh rate.
 	_sim_timer += delta
 	if _sim_timer < SIM_STEP:
 		return
@@ -107,24 +111,42 @@ func _process(delta: float) -> void:
 	time += sim_delta
 	_run_update_fft_assemble(sim_delta)
 
-	# GPU↔CPU sync stall — skip on non-readback frames. Visual waves still
-	# update at full rate because they sample the GPU-side displacement/slope
-	# textures directly; only the CPU-side buoyancy LUT runs at the lower
-	# tick. See BUOYANCY_READBACK_INTERVAL.
 	_accumulated_delta += sim_delta
 	_readback_counter += 1
-	if _readback_counter < BUOYANCY_READBACK_INTERVAL:
-		return
-	_readback_counter = 0
+	if _readback_counter >= BUOYANCY_READBACK_INTERVAL and not _readback_in_flight:
+		_readback_counter = 0
+		_kick_async_buoyancy_readback()
 
+
+func _kick_async_buoyancy_readback() -> void:
+	_readback_in_flight = true
+	_async_received = 0
+	_async_delta_snapshot = _accumulated_delta
 	for i in range(4):
-		var bytes = rd.texture_get_data(buoyancy_tex, i)
-		if bytes.size() == RESOLUTION * RESOLUTION * 4:
-			if buoyancy_data[i] and not buoyancy_data[i].is_empty():
+		var err := rd.texture_get_data_async(
+			buoyancy_tex, i, Callable(self, "_on_buoyancy_async").bind(i)
+		)
+		if err != OK:
+			push_warning("FFTWaterSystem: async buoyancy readback failed (%s)" % error_string(err))
+			_readback_in_flight = false
+			return
+
+
+func _on_buoyancy_async(layer: int, bytes: PackedByteArray) -> void:
+	if bytes.size() == RESOLUTION * RESOLUTION * 4:
+		_async_scratch[layer] = bytes.to_float32_array()
+	_async_received += 1
+	if _async_received < 4:
+		return
+	for i in range(4):
+		if not _async_scratch[i].is_empty():
+			if not buoyancy_data[i].is_empty():
 				prev_buoyancy_data[i] = buoyancy_data[i]
-				prev_delta = _accumulated_delta
-			buoyancy_data[i] = bytes.to_float32_array()
+			buoyancy_data[i] = _async_scratch[i]
+	prev_delta = maxf(_async_delta_snapshot, 0.001)
 	_accumulated_delta = 0.0
+	_readback_in_flight = false
+
 
 func _compile_shaders() -> void:
 	pipeline_init = _load_shader_pipeline(FFT_OCEAN_INIT)
