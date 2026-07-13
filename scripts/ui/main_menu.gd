@@ -18,9 +18,9 @@ var _pending_seed := 0
 
 var _captains = CaptainServiceScript.new()
 var _backdrop
-var _mode_root: CenterContainer
-var _sp_root: CenterContainer
-var _mp_root: CenterContainer
+var _mode_root: MarginContainer
+var _sp_root: MarginContainer
+var _mp_root: MarginContainer
 var _sp_roster
 var _mp_roster
 var _creator: CharacterCreatorPanel
@@ -67,64 +67,108 @@ func _ready() -> void:
 
 
 func _build_vignette() -> void:
-	var vignette := ColorRect.new()
-	vignette.set_anchors_preset(Control.PRESET_FULL_RECT)
-	vignette.color = Color(0.01, 0.02, 0.04, 0.34)
-	vignette.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	add_child(vignette)
+	# Light overall wash only — ocean stays the stage.
+	var wash := ColorRect.new()
+	wash.set_anchors_preset(Control.PRESET_FULL_RECT)
+	wash.color = Color(0.02, 0.04, 0.05, 0.16)
+	wash.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(wash)
 
 
 func _build_mode_page() -> void:
-	_mode_root = _make_page_root("ModeSelectPage")
-	var vbox := _make_panel(_mode_root, Vector2(400, 0))
-	_add_title(vbox, "ANGST 'N ANCHORS", 28)
-	_add_tag(vbox, "Maritime trade on a cold coast")
-	vbox.add_child(HSeparator.new())
-	_add_button(vbox, "Singleplayer", func() -> void: _show_page(Page.SINGLEPLAYER))
-	_add_button(vbox, "Multiplayer", func() -> void: _show_page(Page.MULTIPLAYER))
-	vbox.add_child(HSeparator.new())
-	_add_button(vbox, "Quit", _on_quit)
+	_mode_root = _make_brand_page_root("ModeSelectPage")
+	var stack := _mode_root.get_node("Align/Stack") as VBoxContainer
+
+	var brand := VBoxContainer.new()
+	brand.add_theme_constant_override("separation", 0)
+	stack.add_child(brand)
+
+	var angst := Label.new()
+	angst.text = "ANGST"
+	angst.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	HudStyle.apply_display_font(angst, 92, HudStyle.C_TEXT)
+	brand.add_child(angst)
+
+	var anchors := Label.new()
+	anchors.text = "'N ANCHORS"
+	anchors.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	HudStyle.apply_display_font(anchors, 56, HudStyle.C_AMBER)
+	brand.add_child(anchors)
+
+	var rule := ColorRect.new()
+	rule.custom_minimum_size = Vector2(148, 2)
+	rule.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+	rule.color = HudStyle.C_COPPER
+	rule.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var rule_pad := MarginContainer.new()
+	rule_pad.add_theme_constant_override("margin_top", 8)
+	rule_pad.add_theme_constant_override("margin_bottom", 12)
+	rule_pad.add_child(rule)
+	brand.add_child(rule_pad)
+
+	var tag := Label.new()
+	tag.text = "Cold-coast cargo on Norwegian waters"
+	HudStyle.apply_body_font(tag, 15, HudStyle.C_LABEL)
+	brand.add_child(tag)
+
+	var actions := VBoxContainer.new()
+	actions.add_theme_constant_override("separation", 4)
+	var actions_pad := MarginContainer.new()
+	actions_pad.add_theme_constant_override("margin_top", 32)
+	actions_pad.add_child(actions)
+	stack.add_child(actions_pad)
+
+	_add_action(actions, "Singleplayer", func() -> void: _show_page(Page.SINGLEPLAYER))
+	_add_action(actions, "Multiplayer", func() -> void: _show_page(Page.MULTIPLAYER))
+
+	var quit_pad := MarginContainer.new()
+	quit_pad.add_theme_constant_override("margin_top", 20)
+	stack.add_child(quit_pad)
+	var quit := MenuActionButton.new()
+	quit.text = "Quit"
+	HudStyle.apply_body_font(quit, 14, HudStyle.C_LABEL, false)
+	quit.pressed.connect(_on_quit)
+	quit_pad.add_child(quit)
 
 
 func _build_singleplayer_page() -> void:
-	_sp_root = _make_page_root("SingleplayerPage")
+	_sp_root = _make_side_page_root("SingleplayerPage")
 	_sp_root.visible = false
-	var vbox := _make_panel(_sp_root, Vector2(520, 0))
-	_add_title(vbox, "SINGLEPLAYER", 18)
-	vbox.add_child(HSeparator.new())
+	var vbox := _sp_root.get_node("Panel/Margin/VBox") as VBoxContainer
+	_add_page_heading(vbox, "SINGLEPLAYER", "Local captains · private waters")
 	_sp_roster = RosterPanelScript.new()
 	_sp_roster.configure(true, false)
 	_sp_roster.sail_pressed.connect(_on_sp_sail)
 	_sp_roster.delete_pressed.connect(func(id: String) -> void: _captains.delete_selected_or(id))
 	_sp_roster.create_pressed.connect(_on_new_captain)
 	_sp_roster.selected.connect(func(id: String) -> void: _captains.select(id))
+	_sp_roster.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	vbox.add_child(_sp_roster)
-	vbox.add_child(HSeparator.new())
-	_add_button(vbox, "Back", func() -> void: _show_page(Page.MODE_SELECT))
+	_add_action(vbox, "Back", func() -> void: _show_page(Page.MODE_SELECT))
 
 
 func _build_multiplayer_page() -> void:
-	_mp_root = _make_page_root("MultiplayerPage")
+	_mp_root = _make_side_page_root("MultiplayerPage")
 	_mp_root.visible = false
-	var vbox := _make_panel(_mp_root, Vector2(560, 0))
-	_add_title(vbox, "MULTIPLAYER", 18)
-	vbox.add_child(HSeparator.new())
+	var vbox := _mp_root.get_node("Panel/Margin/VBox") as VBoxContainer
+	_add_page_heading(vbox, "MULTIPLAYER", "Shared waters · pick a harbour net")
 
 	var servers_lbl := Label.new()
 	servers_lbl.text = "SERVERS"
-	servers_lbl.add_theme_font_size_override("font_size", 12)
-	servers_lbl.add_theme_color_override("font_color", HudStyle.C_AMBER)
+	HudStyle.apply_body_font(servers_lbl, 11, HudStyle.C_COPPER, true)
 	vbox.add_child(servers_lbl)
 
 	var scroll := ScrollContainer.new()
-	scroll.custom_minimum_size = Vector2(0, 90)
+	scroll.custom_minimum_size = Vector2(0, 100)
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	vbox.add_child(scroll)
 	_server_list = VBoxContainer.new()
-	_server_list.add_theme_constant_override("separation", 4)
+	_server_list.add_theme_constant_override("separation", 6)
 	scroll.add_child(_server_list)
 
-	vbox.add_child(HSeparator.new())
+	var rule := HSeparator.new()
+	vbox.add_child(rule)
+
 	_mp_roster = RosterPanelScript.new()
 	_mp_roster.configure(false, OS.is_debug_build(), func(entry: Dictionary) -> void:
 		_captains.remote.update_marks(str(entry.get("id", "")), int(entry.get("marks", 0)) + 1_000_000)
@@ -133,15 +177,14 @@ func _build_multiplayer_page() -> void:
 	_mp_roster.delete_pressed.connect(func(id: String) -> void: _captains.delete_selected_or(id))
 	_mp_roster.create_pressed.connect(_on_new_captain)
 	_mp_roster.selected.connect(_on_mp_select)
+	_mp_roster.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	vbox.add_child(_mp_roster)
 
 	_mp_status = Label.new()
-	_mp_status.add_theme_font_size_override("font_size", 11)
-	_mp_status.add_theme_color_override("font_color", HudStyle.C_LABEL)
+	HudStyle.apply_body_font(_mp_status, 12, HudStyle.C_LABEL)
 	vbox.add_child(_mp_status)
 
-	vbox.add_child(HSeparator.new())
-	_add_button(vbox, "Back", func() -> void: _show_page(Page.MODE_SELECT))
+	_add_action(vbox, "Back", func() -> void: _show_page(Page.MODE_SELECT))
 
 
 func _build_creator() -> void:
@@ -436,6 +479,91 @@ func _on_quit() -> void:
 	get_tree().quit()
 
 
+func _make_brand_page_root(page_name: String) -> MarginContainer:
+	var root := MarginContainer.new()
+	root.name = page_name
+	root.set_anchors_preset(Control.PRESET_FULL_RECT)
+	root.add_theme_constant_override("margin_left", 56)
+	root.add_theme_constant_override("margin_right", 56)
+	root.add_theme_constant_override("margin_top", 48)
+	root.add_theme_constant_override("margin_bottom", 48)
+	add_child(root)
+
+	var align := VBoxContainer.new()
+	align.name = "Align"
+	align.set_anchors_preset(Control.PRESET_FULL_RECT)
+	align.alignment = BoxContainer.ALIGNMENT_CENTER
+	root.add_child(align)
+
+	var stack := VBoxContainer.new()
+	stack.name = "Stack"
+	stack.add_theme_constant_override("separation", 8)
+	stack.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+	stack.custom_minimum_size = Vector2(420, 0)
+	align.add_child(stack)
+	return root
+
+
+func _make_side_page_root(page_name: String) -> MarginContainer:
+	var root := MarginContainer.new()
+	root.name = page_name
+	root.set_anchors_preset(Control.PRESET_FULL_RECT)
+	root.add_theme_constant_override("margin_left", 48)
+	root.add_theme_constant_override("margin_right", 48)
+	root.add_theme_constant_override("margin_top", 48)
+	root.add_theme_constant_override("margin_bottom", 48)
+	add_child(root)
+
+	var panel := Panel.new()
+	panel.name = "Panel"
+	panel.theme = HudStyle.make_theme()
+	panel.add_theme_stylebox_override("panel", HudStyle.make_title_panel_style())
+	panel.custom_minimum_size = Vector2(520, 520)
+	panel.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+	panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	root.add_child(panel)
+
+	var margin := MarginContainer.new()
+	margin.name = "Margin"
+	margin.add_theme_constant_override("margin_left", 28)
+	margin.add_theme_constant_override("margin_right", 28)
+	margin.add_theme_constant_override("margin_top", 24)
+	margin.add_theme_constant_override("margin_bottom", 24)
+	panel.add_child(margin)
+
+	var vbox := VBoxContainer.new()
+	vbox.name = "VBox"
+	vbox.add_theme_constant_override("separation", 14)
+	margin.add_child(vbox)
+	return root
+
+
+func _add_page_heading(parent: Node, title_text: String, subtitle: String) -> void:
+	var title := Label.new()
+	title.text = title_text
+	HudStyle.apply_display_font(title, 42, HudStyle.C_TEXT)
+	parent.add_child(title)
+	var sub := Label.new()
+	sub.text = subtitle
+	HudStyle.apply_body_font(sub, 13, HudStyle.C_LABEL)
+	parent.add_child(sub)
+	var rule := ColorRect.new()
+	rule.custom_minimum_size = Vector2(120, 2)
+	rule.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+	rule.color = HudStyle.C_COPPER
+	rule.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	parent.add_child(rule)
+
+
+func _add_action(parent: Node, text: String, on_press: Callable) -> MenuActionButton:
+	var button := MenuActionButton.new()
+	button.text = text
+	button.pressed.connect(on_press)
+	parent.add_child(button)
+	return button
+
+
+## Legacy helpers kept for any remaining call sites.
 func _make_page_root(page_name: String) -> CenterContainer:
 	var root := CenterContainer.new()
 	root.name = page_name
@@ -447,6 +575,7 @@ func _make_page_root(page_name: String) -> CenterContainer:
 func _make_panel(root: CenterContainer, min_size: Vector2) -> VBoxContainer:
 	var panel := Panel.new()
 	panel.theme = HudStyle.make_theme()
+	panel.add_theme_stylebox_override("panel", HudStyle.make_title_panel_style())
 	panel.custom_minimum_size = min_size
 	root.add_child(panel)
 	var margin := MarginContainer.new()
@@ -464,24 +593,17 @@ func _make_panel(root: CenterContainer, min_size: Vector2) -> VBoxContainer:
 func _add_title(parent: Node, text: String, size: int) -> void:
 	var title := Label.new()
 	title.text = text
-	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	title.add_theme_font_size_override("font_size", size)
-	title.add_theme_color_override("font_color", HudStyle.C_AMBER)
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	HudStyle.apply_display_font(title, size, HudStyle.C_TEXT)
 	parent.add_child(title)
 
 
 func _add_tag(parent: Node, text: String) -> void:
 	var tag := Label.new()
 	tag.text = text
-	tag.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	tag.add_theme_font_size_override("font_size", 13)
-	tag.add_theme_color_override("font_color", HudStyle.C_LABEL)
+	HudStyle.apply_body_font(tag, 13, HudStyle.C_LABEL)
 	parent.add_child(tag)
 
 
 func _add_button(parent: Node, text: String, on_press: Callable) -> Button:
-	var button := Button.new()
-	button.text = text
-	button.pressed.connect(on_press)
-	parent.add_child(button)
-	return button
+	return _add_action(parent, text, on_press)

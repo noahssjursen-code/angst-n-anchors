@@ -47,6 +47,16 @@ func _initialize() -> void:
 	assert(Store.delete_captain("captain-two"))
 	assert(Store.list_captains().size() == 1)
 
+	# Corrupt/legacy title autosaves could leave index-only "Captain" rows.
+	# They are not save slots and must be repaired out of the roster.
+	Store._upsert_index_entry({
+		"id": "orphan-title-autosave",
+		"display_name": "Captain",
+		"world_seed": 0,
+	})
+	assert(Store.list_captains().size() == 1)
+	assert(Store._read_index().size() == 1)
+
 	# Seed policy
 	var seed_a := Bootstrap.roll_seed()
 	var seed_b := Bootstrap.roll_seed()
@@ -65,6 +75,9 @@ func _initialize() -> void:
 	var service := Service.new()
 	service.configure_local()
 	assert(service.entries().size() == 1)
+	Store.clear_active()
+	service.select("legacy-captain-1")
+	assert(not Store.has_active())
 
 	_wipe(root_path)
 	Store.root_override = ""

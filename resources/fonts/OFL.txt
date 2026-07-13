@@ -1,0 +1,6 @@
+These fonts are licensed under the SIL Open Font License, Version 1.1.
+
+- Bebas Neue — Digitized data copyright (c) 2010, Dharma Type
+- IBM Plex Sans — Copyright © 2017 IBM Corp.
+
+Full OFL text: https://openfontlicense.org/

@@ -209,6 +209,10 @@ func has_local_save() -> bool:
 func save_now() -> bool:
 	if not _persistent_io_enabled:
 		return true
+	# The title screen starts with an empty PlayerData. Never manufacture an
+	# identity or save slot until the player creates/loads a local captain.
+	if not LocalCaptainStore.has_active():
+		return true
 	# Let LocalPlayerView capture in-world state (contracts, ship pose,
 	# world clock) into PlayerData before we serialise. If LocalPlayerView
 	# is the caller, it skips this leg to avoid infinite recursion.
@@ -317,6 +321,9 @@ func _flush_save() -> bool:
 	if not _persistent_io_enabled:
 		return true
 	_save_pending = false
+	if not LocalCaptainStore.has_active():
+		save_completed.emit(true)
+		return true
 	_ensure_local_identity()
 	_restore_vessel_archives()
 	var owner_id := _vessel_owner_id()

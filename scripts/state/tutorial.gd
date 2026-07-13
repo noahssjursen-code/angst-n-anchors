@@ -19,11 +19,11 @@ const HINTS := {
 		"duration": 8.0,
 	},
 	"first_berth": {
-		"text": "Your vessel is at the dock. Step aboard and press F on the helm wheel to take the helm.",
-		"duration": 8.0,
+		"text": "Your vessel is moored. Press F at both quay bollards to untie the lines, then board and press F at the helm.",
+		"duration": 10.0,
 	},
 	"first_helm": {
-		"text": "W/S adjusts throttle, A/D steers. Press F again to leave the helm. V toggles first / third person. Sea chart on [M].",
+		"text": "W/S adjusts throttle, A/D steers. T cycles bow/crab thrusters; Q/R applies them. V toggles camera. Sea chart on [M].",
 		"duration": 9.0,
 	},
 	"first_journal": {

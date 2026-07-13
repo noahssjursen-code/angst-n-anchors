@@ -78,6 +78,9 @@ static func return_to_title(tree: SceneTree) -> void:
 	var session := tree.root.get_node_or_null("PlayerSession")
 	if session != null and session.has_method("save_now"):
 		session.call("save_now")
+	# The title has no active persistence target. A roster selection remains
+	# UI-only until Sail explicitly loads that captain.
+	LocalCaptainStore.clear_active()
 	var network := tree.root.get_node_or_null("NetworkManager")
 	if network != null and network.has_method("end_multiplayer_session"):
 		network.call("end_multiplayer_session", true)

@@ -139,8 +139,7 @@ enum FaceAxis { PLUS_X = 0, MINUS_X = 1, PLUS_Z = 2, MINUS_Z = 3 }
 		fuel_capacity_l = maxf(v, 1.0)
 		fuel_l = minf(fuel_l, fuel_capacity_l)
 
-## Current fuel level in litres. Persisted via PlayerData.ship_runtime_state
-## as a fraction so different hulls round-trip cleanly.
+## Current fuel level in litres for this spawned vessel instance.
 @export var fuel_l: float = 400.0:
 	set(v):
 		var clamped := clampf(v, 0.0, fuel_capacity_l)

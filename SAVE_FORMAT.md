@@ -55,24 +55,12 @@ archives under `user://save/vessels/` move with that captain.
 New captains pick it from a chart after character creation. Defaults to
 `port-home` for legacy saves.
 
-## Ship runtime resume
+## Ship deployment state
 
-When `ship_runtime_state` is non-empty and the world context matches,
-`LocalPlayerView` respawns the active vessel at the saved pose and places the
-captain on deck (optionally resuming helm). Empty runtime means the captain
-starts on the home quay with no hull in the water — deploy via the harbour
-master.
-
-```json
-{
-  "world_pos": [x, y, z],
-  "yaw": 0.0,
-  "throttle_stage_idx": 1,
-  "fuel_fraction": 1.0,
-  "aboard": true,
-  "helming": false
-}
-```
+Loading a captain always starts them on foot at their home quay with no hull in
+the water. Their active vessel remains in the ownership ledger and is deployed
+normally through the harbour master. New saves omit `ship_runtime_state`; old
+runtime coordinates, vessel state, boarding state, and helm state are ignored.
 
 ## World context (v3)
 
@@ -101,6 +89,7 @@ Multiplayer worlds still take `world_seed` from the server (`GET /v1/world-optio
 
 - v1 lacked runtime contract/ship/time snapshots.
 - v2 added accepted contracts, ship runtime state, and world-clock hours.
+  Ship runtime state is now ignored.
 - v3 added generated-world identity.
 - Multi-captain folders + `index.json` are additive; legacy single-file saves migrate automatically.
 

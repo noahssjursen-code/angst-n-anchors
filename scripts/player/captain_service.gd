@@ -62,8 +62,8 @@ func select(captain_id: String) -> Dictionary:
 		if str(entry.get("id", "")) != id:
 			continue
 		selected_id = id
-		if mode == Mode.LOCAL:
-			LocalCaptainStore.activate(id)
+		# Selecting a roster row must not redirect persistence. The slot only
+		# becomes active when Sail loads that captain into PlayerSession.
 		captain_selected.emit(entry)
 		return entry
 	return {}

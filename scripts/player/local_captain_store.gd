@@ -47,12 +47,21 @@ static func ensure_migrated() -> void:
 static func list_captains() -> Array[Dictionary]:
 	ensure_migrated()
 	var entries: Array[Dictionary] = []
+	var dropped_orphans := false
 	for raw in _read_index():
 		if typeof(raw) != TYPE_DICTIONARY:
 			continue
 		var entry := _normalize_index_entry(raw as Dictionary)
-		if not entry.is_empty():
-			entries.append(entry)
+		if entry.is_empty():
+			continue
+		# Older title-screen autosaves could add an index row without ever
+		# creating a captain directory. Such rows are not real save slots.
+		if not DirAccess.dir_exists_absolute(captain_dir(str(entry["id"]))):
+			dropped_orphans = true
+			continue
+		entries.append(entry)
+	if dropped_orphans:
+		_write_index(entries)
 	entries.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
 		return int(a.get("last_played_unix", 0)) > int(b.get("last_played_unix", 0))
 	)
@@ -79,6 +88,10 @@ static func activate(captain_id: String) -> bool:
 static func clear_active() -> void:
 	active_id = ""
 	PlayerSaveStore.storage_root_override = ""
+
+
+static func has_active() -> bool:
+	return not active_id.is_empty() and not PlayerSaveStore.storage_root_override.is_empty()
 
 
 static func create_slot(captain_id: String, summary: Dictionary = {}) -> bool:

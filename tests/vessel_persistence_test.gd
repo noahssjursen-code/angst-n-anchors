@@ -41,6 +41,14 @@ func _initialize() -> void:
 		expected[uid] = layout
 		index += 1
 	source.set_active_vessel(source.find_owned_vessel("persistence_passenger_catamaran"))
+	source.ship_runtime_state = {
+		"world_pos": Vector3(10.0, -0.4, 30.0),
+		"yaw": 0.4,
+		"throttle_stage_idx": 1,
+		"fuel_fraction": 0.62,
+		"aboard": true,
+		"helming": false,
+	}
 
 	# This is the actual inter-instance boundary: Variant data -> JSON text ->
 	# fresh PlayerData. Every current hull goes through the exact same path.
@@ -61,6 +69,7 @@ func _initialize() -> void:
 		str(restored.active_vessel.get("uid", "")) == "persistence_passenger_catamaran",
 		"active configured vessel survives reload",
 	)
+	_check(restored.ship_runtime_state.is_empty(), "legacy resume-in-vessel state is discarded")
 
 	# A stale multiplayer pull may fill a bare local record, but must never
 	# overwrite an already configured local deck.
