@@ -215,23 +215,19 @@ func _build_ocean() -> void:
 	sm.shader = OCEAN_SHADER
 	sm.set_shader_parameter("wave_time",             WaveSurface.get_sim_time())
 	sm.set_shader_parameter("water_level",           WaveSurface.WATER_LEVEL)
-
-	sm.set_shader_parameter("shallow_albedo",        Vector3(0.015, 0.045, 0.075))
-	sm.set_shader_parameter("deep_albedo",           Vector3(0.003, 0.010, 0.020))
+	sm.set_shader_parameter("shallow_albedo",        Vector3(0.022, 0.085, 0.130))
+	sm.set_shader_parameter("deep_albedo",           Vector3(0.005, 0.022, 0.045))
 	sm.set_shader_parameter("sky_top_color",         Vector3(0.07, 0.28, 0.62))
 	sm.set_shader_parameter("sky_horizon_color",     Vector3(0.34, 0.54, 0.78))
 	sm.set_shader_parameter("sun_direction",         Vector3(0.0, 1.0, 0.0))
 	sm.set_shader_parameter("sun_color",             Vector3(1.0, 0.9, 0.8))
-	sm.set_shader_parameter("fresnel_sky_mix",       0.28)
-	sm.set_shader_parameter("fresnel_power",         4.0)
-	sm.set_shader_parameter("foam_strength",         0.52)
-	sm.set_shader_parameter("foam_steep_start",      0.60)
-	sm.set_shader_parameter("foam_steep_end",        0.92)
-	sm.set_shader_parameter("near_color_lift",       0.10)
-	sm.set_shader_parameter("roughness",             0.35)
-	sm.set_shader_parameter("metallic",             0.0)
-	sm.set_shader_parameter("specular",             0.15)
-	sm.set_shader_parameter("chop_strength",         0.12)
+	sm.set_shader_parameter("fresnel_sky_mix",       0.52)
+	sm.set_shader_parameter("foam_strength",         0.7)
+	sm.set_shader_parameter("foam_steep_start",      0.22)
+	sm.set_shader_parameter("foam_steep_end",        0.65)
+	sm.set_shader_parameter("near_color_lift",       0.14)
+	sm.set_shader_parameter("chop_strength",         0.14)
+	sm.set_shader_parameter("glint_strength",        0.55)
 
 	ocean.material_override = sm
 	_ocean_shader_material  = sm
@@ -247,16 +243,13 @@ func _build_ocean() -> void:
 	var sm_outer    := ShaderMaterial.new()
 	sm_outer.shader = OCEAN_HORIZON_SHADER
 	sm_outer.set_shader_parameter("water_level",     WaveSurface.WATER_LEVEL)
-	sm_outer.set_shader_parameter("shallow_albedo",  Vector3(0.015, 0.045, 0.075))
-	sm_outer.set_shader_parameter("deep_albedo",     Vector3(0.003, 0.010, 0.020))
+	sm_outer.set_shader_parameter("shallow_albedo",  Vector3(0.022, 0.085, 0.130))
+	sm_outer.set_shader_parameter("deep_albedo",     Vector3(0.005, 0.022, 0.045))
 	sm_outer.set_shader_parameter("sky_top_color",     Vector3(0.07, 0.28, 0.62))
 	sm_outer.set_shader_parameter("sky_horizon_color", Vector3(0.34, 0.54, 0.78))
-	sm_outer.set_shader_parameter("fresnel_sky_mix", 0.28)
-	sm_outer.set_shader_parameter("fresnel_power",   4.0)
-	sm_outer.set_shader_parameter("near_color_lift", 0.10)
-	sm_outer.set_shader_parameter("roughness",       0.35)
-	sm_outer.set_shader_parameter("metallic",        0.0)
-	sm_outer.set_shader_parameter("specular",        0.15)
+	sm_outer.set_shader_parameter("fresnel_sky_mix", 0.52)
+	sm_outer.set_shader_parameter("near_color_lift", 0.14)
+	sm_outer.set_shader_parameter("glint_strength",  0.18)
 	sm_outer.set_shader_parameter("discard_half",    HORIZON_DISCARD_HALF)
 
 	ocean_outer.material_override = sm_outer
@@ -425,28 +418,26 @@ func _apply_ocean_shader(daylight: float, cloud: float, rain: float, wind: float
 	if _ocean_shader_material == null:
 		return
 	var fog_w := fog_t * fog_t
+	## Teal-absorbing ocean body — not pitch black (black + gloss = plastic).
 	var ocean_color := (
-		Color(0.007, 0.015, 0.025)
-		.lerp(C_OCEAN, daylight)
-		.lerp(Color(0.025, 0.035, 0.045), storm)
+		Color(0.012, 0.035, 0.055)
+		.lerp(Color(0.018, 0.055, 0.085), daylight)
+		.lerp(Color(0.028, 0.040, 0.050), storm)
 	)
-	# Enrich deep and shallow albedos so the water volume reads as deep blue/teal rather than pitch black
-	var deep      := ocean_color * lerpf(0.40, 0.55, rain)
-	var shallow_w := ocean_color * lerpf(1.20, 1.60, rain)
+	var deep      := ocean_color * lerpf(0.45, 0.65, rain)
+	var shallow_w := ocean_color * lerpf(1.35, 1.85, rain)
 
-	## Low visibility → flat, desaturated swell (no horizon glitter).
-	var fog_murk := Color(0.030, 0.035, 0.040)
-	shallow_w = shallow_w.lerp(fog_murk.lightened(0.04), fog_w * 0.88)
-	deep      = deep.lerp(fog_murk.darkened(0.12), fog_w * 0.94)
+	var fog_murk := Color(0.035, 0.040, 0.048)
+	shallow_w = shallow_w.lerp(fog_murk.lightened(0.05), fog_w * 0.85)
+	deep      = deep.lerp(fog_murk.darkened(0.08), fog_w * 0.90)
 
-	var foam_driver  := clampf(rain + wind * 0.55, 0.0, 1.0)
-	var steep_driver := clampf(maxf(storm, wind * 0.65), 0.0, 1.0)
-	var rough_driver := clampf(maxf(rain,  wind * 0.55) + fog_w * 0.35, 0.0, 1.0)
+	var foam_driver  := clampf(rain * 0.55 + wind * 0.7 + storm * 0.45, 0.0, 1.0)
+	var steep_driver := clampf(maxf(storm, wind * 0.75), 0.0, 1.0)
 
-	var chop_val := lerpf(0.10, 0.26, clampf(wind * 1.02 + storm * 0.40 + rain * 0.22, 0.0, 1.0))
-	chop_val *= lerpf(1.0, 0.78, fog_w)
+	## Capillary chop stays subtle — high gain reads as hammered metal up close.
+	var chop_val := lerpf(0.10, 0.22, clampf(wind * 1.05 + storm * 0.35 + rain * 0.25, 0.0, 1.0))
+	chop_val *= lerpf(1.0, 0.72, fog_w)
 
-	# Recompute sky horizon and zenith colors to dynamically reflect on the water surface
 	var top_col := (
 		Color(0.006, 0.009, 0.028)
 		.lerp(Color(0.07, 0.28, 0.62), daylight)
@@ -458,45 +449,41 @@ func _apply_ocean_shader(daylight: float, cloud: float, rain: float, wind: float
 		.lerp(Color(0.22, 0.24, 0.28), cloud)
 	)
 
-	# Calculate sun direction and color intensity for backlit subsurface scattering (SSS)
 	var sun_dir := _celestial_dir(0.0)
 	var sun_col_base := Color(1.0, 0.62, 0.30).lerp(Color(1.0, 0.96, 0.88), daylight)
 	var sun_energy := lerpf(0.03, 1.6, daylight) * lerpf(1.0, 0.10, cloud)
 	var sun_col := sun_col_base * sun_energy
 
-	_ocean_shader_material.set_shader_parameter("shallow_albedo",         Vector3(shallow_w.r, shallow_w.g, shallow_w.b))
-	_ocean_shader_material.set_shader_parameter("deep_albedo",            Vector3(deep.r,      deep.g,      deep.b))
-	_ocean_shader_material.set_shader_parameter("sky_top_color",         Vector3(top_col.r, top_col.g, top_col.b))
-	_ocean_shader_material.set_shader_parameter("sky_horizon_color",     Vector3(horiz.r, horiz.g, horiz.b))
-	_ocean_shader_material.set_shader_parameter("sun_direction",         sun_dir)
-	_ocean_shader_material.set_shader_parameter("sun_color",             Vector3(sun_col.r, sun_col.g, sun_col.b))
+	_ocean_shader_material.set_shader_parameter("shallow_albedo",     Vector3(shallow_w.r, shallow_w.g, shallow_w.b))
+	_ocean_shader_material.set_shader_parameter("deep_albedo",        Vector3(deep.r, deep.g, deep.b))
+	_ocean_shader_material.set_shader_parameter("sky_top_color",      Vector3(top_col.r, top_col.g, top_col.b))
+	_ocean_shader_material.set_shader_parameter("sky_horizon_color",  Vector3(horiz.r, horiz.g, horiz.b))
+	_ocean_shader_material.set_shader_parameter("sun_direction",      sun_dir)
+	_ocean_shader_material.set_shader_parameter("sun_color",          Vector3(sun_col.r, sun_col.g, sun_col.b))
 
-	# Increase fresnel mix on clear days so it mirrors the sky colors beautifully
-	var fres_cloud := lerpf(0.88, 0.55, cloud)
-	var fres_blend := lerpf(fres_cloud, fres_cloud * 0.72, fog_w)
-	_ocean_shader_material.set_shader_parameter("fresnel_sky_mix",        fres_blend)
-	_ocean_shader_material.set_shader_parameter("foam_strength",          lerpf(0.38, 0.92, foam_driver))
-	_ocean_shader_material.set_shader_parameter("foam_steep_start",       lerpf(0.62, 0.34, steep_driver))
-	_ocean_shader_material.set_shader_parameter("foam_steep_end",         lerpf(0.94, 0.62, steep_driver))
-	var near_lift := lerpf(0.14, 0.052, cloud) * lerpf(1.0, 0.42, fog_w)
-	_ocean_shader_material.set_shader_parameter("near_color_lift",        near_lift)
-	_ocean_shader_material.set_shader_parameter("chop_strength", chop_val)
-	var spec_drive := lerpf(0.36, 0.48, daylight) * lerpf(1.0, 0.88, rough_driver)
-	spec_drive *= lerpf(1.0, 0.88, clampf(rain + cloud * 0.35, 0.0, 1.0))
-	_ocean_shader_material.set_shader_parameter("specular", spec_drive)
-	_ocean_shader_material.set_shader_parameter("roughness",              lerpf(0.20, 0.48, rough_driver))
-	_ocean_shader_material.set_shader_parameter("metallic",               lerpf(0.01, 0.03, rough_driver))
+	## Fresnel sky mix — reflective at graze, never a full-face mirror.
+	var fres_blend := lerpf(0.58, 0.36, cloud) * lerpf(1.0, 0.55, fog_w)
+	_ocean_shader_material.set_shader_parameter("fresnel_sky_mix", fres_blend)
+	_ocean_shader_material.set_shader_parameter("foam_strength",    lerpf(0.55, 1.05, foam_driver))
+	_ocean_shader_material.set_shader_parameter("foam_steep_start", lerpf(0.26, 0.14, steep_driver))
+	_ocean_shader_material.set_shader_parameter("foam_steep_end",   lerpf(0.70, 0.45, steep_driver))
+	var near_lift := lerpf(0.16, 0.05, cloud) * lerpf(1.0, 0.40, fog_w)
+	_ocean_shader_material.set_shader_parameter("near_color_lift", near_lift)
+	_ocean_shader_material.set_shader_parameter("chop_strength",   chop_val)
+	## Soft glitter — not silver sheets. Dies under overcast / fog.
+	var glint := 0.55 * lerpf(1.0, 0.08, cloud) * lerpf(1.0, 0.0, fog_w) * lerpf(0.15, 1.0, daylight)
+	_ocean_shader_material.set_shader_parameter("glint_strength", glint)
 
 	if _ocean_horizon_material != null:
-		_ocean_horizon_material.set_shader_parameter("shallow_albedo",         Vector3(shallow_w.r, shallow_w.g, shallow_w.b))
-		_ocean_horizon_material.set_shader_parameter("deep_albedo",            Vector3(deep.r,      deep.g,      deep.b))
-		_ocean_horizon_material.set_shader_parameter("sky_top_color",         Vector3(top_col.r, top_col.g, top_col.b))
-		_ocean_horizon_material.set_shader_parameter("sky_horizon_color",     Vector3(horiz.r, horiz.g, horiz.b))
-		_ocean_horizon_material.set_shader_parameter("fresnel_sky_mix",        fres_blend)
-		_ocean_horizon_material.set_shader_parameter("near_color_lift",        near_lift)
-		_ocean_horizon_material.set_shader_parameter("specular", spec_drive)
-		_ocean_horizon_material.set_shader_parameter("roughness",              lerpf(0.20, 0.48, rough_driver))
-		_ocean_horizon_material.set_shader_parameter("metallic",               lerpf(0.01, 0.03, rough_driver))
+		_ocean_horizon_material.set_shader_parameter("shallow_albedo",    Vector3(shallow_w.r, shallow_w.g, shallow_w.b))
+		_ocean_horizon_material.set_shader_parameter("deep_albedo",       Vector3(deep.r, deep.g, deep.b))
+		_ocean_horizon_material.set_shader_parameter("sky_top_color",     Vector3(top_col.r, top_col.g, top_col.b))
+		_ocean_horizon_material.set_shader_parameter("sky_horizon_color", Vector3(horiz.r, horiz.g, horiz.b))
+		_ocean_horizon_material.set_shader_parameter("sun_direction",     sun_dir)
+		_ocean_horizon_material.set_shader_parameter("sun_color",         Vector3(sun_col.r, sun_col.g, sun_col.b))
+		_ocean_horizon_material.set_shader_parameter("fresnel_sky_mix",   fres_blend)
+		_ocean_horizon_material.set_shader_parameter("near_color_lift",   near_lift)
+		_ocean_horizon_material.set_shader_parameter("glint_strength",    glint * 0.32)
 
 
 func _celestial_dir(tod_offset: float) -> Vector3:

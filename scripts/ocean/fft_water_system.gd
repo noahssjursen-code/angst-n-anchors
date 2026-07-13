@@ -63,10 +63,13 @@ var _last_short_wave := -1.0
 @export var low_cutoff: float = 0.0001
 @export var high_cutoff: float = 9000.0
 
-@export var foam_bias: float = 2.0
-@export var foam_decay_rate: float = 0.5
+# Jacobian ~1.0 on flat water; < 1 means pinching (breaking crest).
+# bias 1.0 + tiny threshold = foam only where waves actually break.
+# (bias 2.0 made biasedJacobian ~1 EVERYWHERE -> uniform foam wash.)
+@export var foam_bias: float = 1.0
+@export var foam_decay_rate: float = 0.08
 @export var foam_add: float = 1.0
-@export var foam_threshold: float = 0.4
+@export var foam_threshold: float = 0.05
 @export var lambda := Vector2(0.5, 0.5)
 
 var push_constant_params := PackedByteArray()

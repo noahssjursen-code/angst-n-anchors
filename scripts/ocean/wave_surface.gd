@@ -247,4 +247,4 @@ static func _vessel_dip_at(x: float, z: float) -> float:
 	var exp_a: float = exp(-a * D)
 	var exp_b: float = exp(-b * D)
 
-	return amp * (exp_a - c * D * exp_b)
+	return maxf(amp * (exp_a - c * D * exp_b), 0.0)

@@ -1,5 +1,7 @@
 shader_type spatial;
-render_mode specular_schlick_ggx;
+// Water owns its specular — Godot GGX on a flat ocean reads as plastic wrap.
+render_mode diffuse_burley, specular_disabled;
+
 
 uniform sampler2DArray displacement_map : filter_linear, repeat_enable;
 uniform sampler2DArray slope_map : filter_linear, repeat_enable;
@@ -10,48 +12,37 @@ uniform float water_level = -1.5;
 uniform float wave_intensity = 1.0;
 uniform float wave_energy_multiplier = 1.0;
 
-uniform vec3 shallow_albedo : source_color = vec3(0.028, 0.074, 0.118);
-uniform vec3 deep_albedo    : source_color = vec3(0.006, 0.018, 0.036);
+// Absorbing volume colors (linear RGB). Deep = looking straight down.
+uniform vec3 shallow_albedo : source_color = vec3(0.02, 0.08, 0.12);
+uniform vec3 deep_albedo    : source_color = vec3(0.004, 0.02, 0.04);
 uniform vec3 sky_top_color     : source_color = vec3(0.07, 0.28, 0.62);
 uniform vec3 sky_horizon_color : source_color = vec3(0.34, 0.54, 0.78);
 uniform vec3 sun_direction     = vec3(0.0, 1.0, 0.0);
 uniform vec3 sun_color         : source_color = vec3(1.0, 0.9, 0.8);
-uniform float roughness     : hint_range(0.0, 1.0) = 0.20;
-uniform float metallic      : hint_range(0.0, 1.0) = 0.0;
-uniform float specular      : hint_range(0.0, 1.0) = 0.40;
-uniform float fresnel_power : hint_range(0.5, 10.0) = 3.1;
-uniform float fresnel_sky_mix : hint_range(0.0, 1.0) = 0.48;
+
+uniform float fresnel_sky_mix : hint_range(0.0, 1.0) = 0.52;
 uniform float near_color_lift : hint_range(0.0, 1.0) = 0.14;
+uniform float chop_strength : hint_range(0.0, 1.0) = 0.14;
+uniform float glint_strength : hint_range(0.0, 4.0) = 0.55;
 
-// Wind chop — per-pixel normal perturbation strength (independent of geometry waves).
-uniform float chop_strength : hint_range(0.0, 1.0) = 0.12;
-
-uniform float foam_strength    : hint_range(0.0, 2.0) = 0.55;
-uniform float foam_steep_start : hint_range(0.0, 1.0) = 0.60;
-uniform float foam_steep_end   : hint_range(0.0, 1.0) = 0.92;
+uniform float foam_strength    : hint_range(0.0, 2.0) = 0.7;
+uniform float foam_steep_start : hint_range(0.0, 1.0) = 0.22;
+uniform float foam_steep_end   : hint_range(0.0, 1.0) = 0.65;
 
 uniform vec4 boat_coupling = vec4(0.0, 0.0, 0.0, 0.0);
 uniform vec2 boat_coupling_axes = vec2(1.0, 1.0);
 uniform vec4 boat_basis = vec4(1.0, 0.0, 0.0, 1.0);
 uniform vec2 boat_velocity = vec2(0.0, 0.0);
 
-// ── Land shelter (baked SDF) ───────────────────────────────────────────────
-// LandField bakes a 2D R32F shelter texture at world init covering all
-// islands + their falloff zones. Each texel stores the precomputed
-// `shore_shelter` value (0 inside land, 1 in open water, smoothstepped in
-// between). The vertex shader does a single texture sample here instead of
-// iterating up to 64 land_disks per vertex — the per-frame difference is
-// ~4.4M distance() ops at typical port counts.
 uniform sampler2D land_shelter_map  : filter_linear, repeat_disable;
 uniform vec2      land_shelter_origin = vec2(0.0);
-uniform float     land_shelter_size   = 0.0;  // 0 means "no bake → open water"
+uniform float     land_shelter_size   = 0.0;
 
 varying vec3 v_world_pos;
 varying vec3 v_world_normal;
 varying float v_wave_steep;
 varying float v_foam;
-
-/* Smooth procedural noise — pure sine grids read as tiling under one sun/light. */
+varying float v_fresnel; // for light() soft reflections
 
 float wf_hash21(vec2 p) {
 	vec2 hp = fract(p * vec2(123.344, 445.891));
@@ -70,43 +61,38 @@ float wf_vnoise(vec2 p) {
 	return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
 }
 
+float wf_fbm(vec2 p) {
+	float v = 0.0;
+	float a = 0.5;
+	mat2 m = mat2(vec2(0.80, -0.60), vec2(0.60, 0.80));
+	for (int i = 0; i < 3; i++) {
+		v += a * wf_vnoise(p);
+		p = m * p * 2.07;
+		a *= 0.5;
+	}
+	return v;
+}
+
 float wf_ocean_ripple_eta(vec2 xz, float wt) {
 	mat2 ra = mat2(vec2(0.809174, -0.587582), vec2(0.587582, 0.809174));
 	mat2 rb = mat2(vec2(0.422618, -0.906308), vec2(0.906308, 0.422618));
-
 	vec2 a = ra * xz;
 	vec2 b = rb * xz;
-	float wt_e = wt * 1.38;
-
-	// Suppress broad stationary bowl-like features: favor finer octaves + faster drift.
-	float eta = wf_vnoise(a * 1.58 + wt_e * vec2(-0.63, 0.71)) * 0.36
-			+ wf_vnoise(b * 2.74 + wt_e * vec2(0.88, -0.73)) * 0.31
-			+ wf_vnoise(
-				  a * 4.95
-				  + vec2(b.x * (-0.24) + b.y * 0.17, b.x * 0.19 + b.y * 0.26)
-				  + wt_e * vec2(-0.96, 0.91))
-				* 0.11;
-
-	eta += sin(dot(a, vec2(1.21, -0.93)) + wt_e * 1.37) * 0.046;
-	eta += sin(dot(b * vec2(2.64, -2.21), vec2(0.92, 0.78)) + wt_e * (-1.61)) * 0.034;
-
+	float wt_e = wt * 1.55;
+	float eta = wf_fbm(a * 1.85 + wt_e * vec2(-0.71, 0.63)) * 0.55
+			+ wf_fbm(b * 3.40 + wt_e * vec2(0.92, -0.68)) * 0.32
+			+ wf_vnoise(a * 7.1 + b * 0.3 + wt_e * vec2(-1.1, 0.95)) * 0.13;
+	eta += sin(dot(a, vec2(1.31, -0.87)) + wt_e * 1.55) * 0.04;
+	eta += sin(dot(b, vec2(0.77, 1.12)) + wt_e * (-1.72)) * 0.03;
 	return eta;
 }
 
 vec2 wf_ocean_eta_gradient(vec2 xz, float wt, float e) {
-	// 4-tap central-difference cross instead of an 8-tap Sobel.
-	// Each call to wf_ocean_ripple_eta does 3 vnoise samples + 2 sin, so
-	// dropping from 8 → 4 samples halves the per-fragment gradient cost
-	// (~440 ALU ops/fragment saved). Sobel's extra smoothing is invisible
-	// here because wf_ocean_ripple_eta already sums three noise octaves +
-	// two sinusoids; the noise field is smooth at the stencil scale.
 	float e2 = max(e, 1e-4);
-
 	float h_xm = wf_ocean_ripple_eta(xz + vec2(-e2, 0.0), wt);
 	float h_xp = wf_ocean_ripple_eta(xz + vec2( e2, 0.0), wt);
 	float h_zm = wf_ocean_ripple_eta(xz + vec2(0.0, -e2), wt);
 	float h_zp = wf_ocean_ripple_eta(xz + vec2(0.0,  e2), wt);
-
 	float inv = 1.0 / max(2.0 * e2, 1e-4);
 	return vec2((h_xp - h_xm) * inv, (h_zp - h_zm) * inv);
 }
@@ -119,22 +105,17 @@ void vertex() {
 	vec2 slopes = vec2(0.0);
 	float fft_foam = 0.0;
 
-	for(int i = 0; i < 4; i++) {
+	for (int i = 0; i < 4; i++) {
 		float lScale = length_scales[i];
 		vec2 uv = wp.xz / lScale;
-		
 		vec4 disp_sample = textureLod(displacement_map, vec3(uv, float(i)), 0.0);
 		vec4 slope_sample = textureLod(slope_map, vec3(uv, float(i)), 0.0);
-		
 		displacement += disp_sample.xyz;
 		slopes += slope_sample.xy;
 		fft_foam += clamp(disp_sample.w, 0.0, 1.0);
 	}
+	fft_foam = clamp(fft_foam, 0.0, 1.0);
 
-	fft_foam = clamp(fft_foam * 0.22, 0.0, 1.0);
-
-	// Shore shelter — sample the LandField bake. Constant cost per vertex.
-	// Outside the baked region (or before LandField init) we're "open ocean".
 	float shelter = 1.0;
 	if (land_shelter_size > 0.0) {
 		vec2 shelter_uv = (wp.xz - land_shelter_origin) / land_shelter_size;
@@ -144,18 +125,15 @@ void vertex() {
 		}
 	}
 
-	// Increase the FFT base amplitude slightly so shapes have mass.
 	float amp_scale = wave_intensity * wave_energy_multiplier * 0.42 * shelter;
 	displacement *= amp_scale;
 	slopes *= amp_scale;
 
-	// Full summed slopes define geometry / lighting.
 	vec3 displaced_world = vec3(wp.x + displacement.x, water_level + displacement.y, wp.z + displacement.z);
 
 	float boat_dip = 0.0;
 	float ddip_dx = 0.0;
 	float ddip_dz = 0.0;
-	vec2 outward_disp = vec2(0.0);
 	if (boat_coupling.z > 0.0001) {
 		float bx = boat_coupling.x;
 		float bz = boat_coupling.y;
@@ -164,71 +142,48 @@ void vertex() {
 		float sz = max(boat_coupling_axes.y, 0.01);
 		float dx = displaced_world.x - bx;
 		float dz = displaced_world.z - bz;
-		
 		float right_x = boat_basis.x;
 		float right_z = boat_basis.y;
 		float fwd_x = boat_basis.z;
 		float fwd_z = boat_basis.w;
-		
 		float local_x = dx * right_x + dz * right_z;
 		float local_z = dx * fwd_x + dz * fwd_z;
-
 		float u = local_x / sx;
 		float v = local_z / sz;
-
-		// Circular Mexican Hat: D = u² + v². See wave_surface.gd:_vessel_displacement_params
-		// for the geometry rationale. MUST match the CPU sample (get_height_at) exactly,
-		// otherwise the visible water surface and the boat's physics surface diverge.
 		float D = u * u + v * v;
-
 		if (D < 4.0) {
 			float a = 1.8;
 			float b = 0.8;
 			float c = 0.5;
-
 			float exp_a = exp(-a * D);
 			float exp_b = exp(-b * D);
-
 			boat_dip = amp * (exp_a - c * D * exp_b);
 			float d_dip_dD = amp * (-a * exp_a - c * exp_b * (1.0 - b * D));
-
-			// Fold outward: push the rising water ring away from the hull. 0.25 (was 0.8)
-			// keeps the curl visible without inflating the footprint past the hull edge —
-			// the visible ridge used to bulge ~70cm outward for a tanker, now ~20cm.
+			// Depression only — negative lobe would raise a berm around the hull.
 			if (boat_dip < 0.0) {
-				float fold_amount = -boat_dip * 0.25;
-				float dist_xz = max(length(vec2(dx, dz)), 0.1);
-				outward_disp = (vec2(dx, dz) / dist_xz) * fold_amount;
+				boat_dip = 0.0;
+				d_dip_dD = 0.0;
 			}
-
-			// Chain rule: d(dip)/du = d(dip)/dD · dD/du. dD/du = 2u for circular D.
 			float ddip_dlocal_x = d_dip_dD * 2.0 * u / sx;
 			float ddip_dlocal_z = d_dip_dD * 2.0 * v / sz;
-
 			ddip_dx = ddip_dlocal_x * right_x + ddip_dlocal_z * fwd_x;
 			ddip_dz = ddip_dlocal_x * right_z + ddip_dlocal_z * fwd_z;
 		}
 	}
 	displaced_world.y -= boat_dip;
-	displaced_world.x += outward_disp.x;
-	displaced_world.z += outward_disp.y;
 	slopes.x += ddip_dx;
 	slopes.y += ddip_dz;
 
 	vec3 world_n_geom = normalize(vec3(-slopes.x, 1.0, -slopes.y));
 	vec3 world_n_foam_metric = normalize(vec3(-slopes.x * 0.25, 1.0, -slopes.y * 0.25));
 
-	// One inverse, two uses. Compiler may already CSE this but it's not
-	// guaranteed across drivers — be explicit. ~30-40 ALU saved per vertex.
 	mat4 inv_model = inverse(MODEL_MATRIX);
 	VERTEX = (inv_model * vec4(displaced_world, 1.0)).xyz;
 	NORMAL = normalize((inv_model * vec4(world_n_geom, 0.0)).xyz);
 
-	v_world_pos   = displaced_world;
+	v_world_pos = displaced_world;
 	v_world_normal = world_n_geom;
-	float foam_steep_raw = 1.0 - clamp(world_n_foam_metric.y, 0.0, 1.0);
-	// Tighter power curve here reduces the area of wave peaks classified as "steep"
-	v_wave_steep = pow(foam_steep_raw, 2.75);
+	v_wave_steep = pow(1.0 - clamp(world_n_geom.y, 0.0, 1.0), 1.15);
 	v_foam = fft_foam;
 }
 
@@ -238,96 +193,104 @@ void fragment() {
 	float wt = wave_time;
 	float dist_to_cam = length(CAMERA_POSITION_WORLD - v_world_pos);
 
-	/* Stable finite-difference width */
-	float epsilon = mix(0.74, 0.98, chop_strength);
-
-	vec2 xz_eff = xz + wt * vec2(0.42, -0.35) + vec2(sin(wt * 0.21), cos(wt * 0.17)) * 0.75;
+	// Capillary chop — subtle. Overdriven gain made hammered metal (close-up).
+	float epsilon = mix(1.2, 2.0, chop_strength);
+	vec2 xz_eff = xz + wt * vec2(0.22, -0.18);
 	vec2 g_eta = wf_ocean_eta_gradient(xz_eff, wt, epsilon);
-
-	float dh_dx = g_eta.x;
-	float dh_dz = g_eta.y;
-
-	float grad_mag = length(g_eta);
-	float grad_damp = 1.0 / (1.0 + grad_mag * 1.7);
-	float ripple_gain = chop_strength * mix(7.8, 5.9, chop_strength) * mix(1.0, 0.74, clamp(v_wave_steep, 0.0, 1.0));
-	ripple_gain *= mix(1.0, grad_damp, 0.38);
-	
-	// Smoothly fade out procedural normal ripples in the far distance (between 80m and 600m)
-	float ripple_dist_fade = 1.0 - smoothstep(80.0, 600.0, dist_to_cam);
-	ripple_gain *= ripple_dist_fade;
-	
-	vec3 lateral = vec3(-dh_dx, 0.0, -dh_dz) * ripple_gain;
-
+	float ripple_gain = chop_strength * 1.85;
+	ripple_gain *= 1.0 - smoothstep(40.0, 350.0, dist_to_cam);
+	vec3 lateral = vec3(-g_eta.x, 0.0, -g_eta.y) * ripple_gain;
 	vec3 ripple = lateral - nm * dot(nm, lateral);
 	vec3 world_n = normalize(nm + ripple);
-
 	NORMAL = normalize((VIEW_MATRIX * vec4(world_n, 0.0)).xyz);
 
 	vec3 view_dir = normalize(CAMERA_POSITION_WORLD - v_world_pos);
-	
-	float flat_ndv = clamp(dot(nm, view_dir), 0.001, 1.0);
-	float look_graze = 1.0 - pow(flat_ndv, 1.18);
-	vec3 body = mix(deep_albedo, shallow_albedo, look_graze * (0.22 + near_color_lift * 0.25));
-	
-	// Dynamic sky reflection based on PBR reflection vector and sky color gradients
-	vec3 ref_dir = reflect(-view_dir, world_n);
-	float sky_mix = clamp(ref_dir.y, 0.0, 1.0);
-	vec3 sky_ref_color = mix(sky_horizon_color, sky_top_color, pow(sky_mix, 0.85));
+	vec3 sun_n = normalize(sun_direction);
+	float sun_up = clamp(sun_n.y, 0.0, 1.0);
 
-	// Enhanced Fresnel equation for lifelike, mirror-like horizon reflection
-	float fres = pow(look_graze, fresnel_power);
-	vec3 col = mix(body, sky_ref_color, fres * fresnel_sky_mix);
+	// Fresnel from macro normal so sky follows swell, not chop noise.
+	float ndv_macro = clamp(dot(nm, view_dir), 0.001, 1.0);
+	float fres = 0.02 + 0.98 * pow(1.0 - ndv_macro, 5.0);
+	v_fresnel = fres;
 
-	// Subsurface Scattering (SSS) backlit wave crest glow
-	float sss_dot = clamp(dot(-view_dir, sun_direction), 0.0, 1.0);
-	float sss_factor = pow(sss_dot, 8.0) * clamp(v_wave_steep * 1.5, 0.0, 1.0);
-	vec3 sss_glow = vec3(0.04, 0.46, 0.38) * sun_color * wave_intensity;
-	col += sss_glow * sss_factor;
+	float facing = pow(ndv_macro, 0.7);
+	float steep = clamp(v_wave_steep, 0.0, 1.0);
+	float height_rel = clamp((v_world_pos.y - water_level) * 0.55, -0.5, 1.0);
+
+	// Crest teal must NOT follow absolute height — FFT wind seas make long
+	// parallel ridges, and height→color paints straight green stripes (max waves).
+	// Prefer local steepness + noise breakup; keep height as a weak hint only.
+	float crest_noise = wf_fbm(xz * 0.28 + wt * 0.07) * 0.55
+			+ wf_vnoise(xz * 1.15 + wt * 0.19) * 0.45;
+	float crest_geom = steep * 0.9 + max(height_rel, 0.0) * 0.2;
+	float crest = smoothstep(0.22, 0.78, crest_geom) * mix(0.4, 1.0, crest_noise);
+	// Tall seas exaggerate height banding — pull crest color back with intensity.
+	crest *= mix(1.0, 0.5, clamp((wave_intensity - 0.8) * 0.4, 0.0, 1.0));
+	crest = clamp(crest, 0.0, 1.0);
+
+	vec3 body = mix(deep_albedo, shallow_albedo, (1.0 - facing) * (0.25 + near_color_lift * 0.4));
+	vec3 crest_teal = vec3(0.015, 0.11, 0.13);
+	body = mix(body, crest_teal, crest * 0.32);
+	// Soft trough darken — noisy so dips aren't solid blue planks.
+	float trough = clamp(-height_rel, 0.0, 0.4) * mix(0.55, 1.0, crest_noise);
+	body *= 1.0 - trough * 0.28;
+
+	vec3 ref_dir = reflect(-view_dir, nm);
+	float sky_t = pow(clamp(ref_dir.y * 0.5 + 0.5, 0.0, 1.0), 0.85);
+	vec3 sky_col = mix(sky_horizon_color, sky_top_color, sky_t);
+	float sky_w = fres * fresnel_sky_mix * mix(1.15, 0.35, facing);
+	vec3 col = mix(body, sky_col, clamp(sky_w, 0.0, 0.92));
+
+	// Soft glitter (refs), not silver sheets. Clamp for tonemap.
+	float ndh = clamp(dot(world_n, normalize(view_dir + sun_n)), 0.0, 1.0);
+	float glint = pow(ndh, 96.0) * 0.35 + pow(ndh, 420.0) * 0.55;
+	glint *= 1.0 - smoothstep(50.0, 450.0, dist_to_cam) * 0.9;
+	glint = min(glint, 0.85);
+	col += sun_color * glint * glint_strength * sun_up * (0.2 + fres * 0.5);
+
+	float toward_sun = clamp(dot(-view_dir, sun_n), 0.0, 1.0);
+	float sss = pow(toward_sun, 4.0) * crest * (0.4 + 0.6 * (1.0 - smoothstep(0.15, 0.8, sun_up)));
+	col += vec3(0.04, 0.22, 0.20) * sun_color * sss * 0.55 * clamp(wave_intensity, 0.25, 1.6);
+
+	// White slosh — FFT Jacobian foam sampled PER PIXEL from the two large
+	// cascades only. Per-vertex sampling showed triangle blotches, and the
+	// small cascades (16 m / 4 m) contribute per-texel speckle, not foam.
+	float jac_foam = textureLod(displacement_map, vec3(xz / length_scales.x, 0.0), 0.0).w * 0.75
+			+ textureLod(displacement_map, vec3(xz / length_scales.y, 1.0), 0.0).w * 0.45;
+	jac_foam = clamp(jac_foam, 0.0, 1.0);
 
 	mat2 ROT_A = mat2(vec2(0.809174, -0.587582), vec2(0.587582, 0.809174));
 	mat2 ROT_B = mat2(vec2(0.422618, -0.906308), vec2(0.906308, 0.422618));
-
 	vec2 xz_a = ROT_A * xz;
 	vec2 xz_b = ROT_B * xz;
-	vec2 foam_uv = xz_a + xz_b * vec2(-0.27, 0.41);
+	// Soft edge erosion — foam dissolves into lace at its borders.
+	float n1 = wf_fbm(xz_a * 0.9 + wt * vec2(0.4, -0.32));
+	float n2 = wf_fbm(xz_b * 2.4 + xz_a * 0.3 + wt * vec2(-0.5, 0.62));
+	float erode = n1 * 0.6 + n2 * 0.4;
+	float foam_shape = smoothstep(0.15 + erode * 0.45, 0.85, jac_foam + steep * 0.3);
 
-	float foam_noise = wf_vnoise(
-		foam_uv * 5.974 + xz_b.xx * vec2(-0.31, -0.22) + wt * vec2(1.47, -1.21));
+	float foam = foam_shape * foam_strength;
+	foam = clamp(foam, 0.0, 1.0);
+	foam *= 1.0 - smoothstep(300.0, 1600.0, dist_to_cam) * 0.55;
 
-	// Combine steepness-driven foam + FFT Jacobian foam (squash cascade stacking).
-	float steep_foam = smoothstep(foam_steep_start, foam_steep_end, v_wave_steep) * foam_strength;
-	float fft_foam_w = clamp(v_foam, 0.0, 1.0) * foam_strength * 0.16;
-	float foam = steep_foam + fft_foam_w; 
-	
-	foam *= mix(0.15, 1.0, foam_noise);
-	// Lower the floor for foam, make it slightly translucent, and mix based on final foam scalar.
-	// This helps foam look like a surface layer rather than a solid opaque mesh.
-	float foam_mask = clamp(foam, 0.0, 1.0);
-	col = mix(col, vec3(0.86, 0.90, 0.93), foam_mask * 0.85);
-
-	vec2 jitter_c = xz_a * 21.974 + xz_b.yy * vec2(-9.834, 7.917) + wt * vec2(8.93, -6.71);
-	vec2 jitter_d = xz_b.yx * vec2(17.401, -14.917) + wt * vec2(-7.61, 8.734);
-
-	// Distance-based grain/noise fading to completely prevent sparkling/glittering digital static in the distance
-	float noise_fade = 1.0 - smoothstep(15.0, 120.0, dist_to_cam);
-	float raw_sp = wf_vnoise(jitter_c) * 0.68 + wf_vnoise(jitter_d * 6.417 + vec2(83.917, -41.734)) * 0.32;
-	float sp = mix(0.5, raw_sp, noise_fade);
+	float foam_mask = foam;
+	vec3 foam_col = mix(vec3(0.75, 0.84, 0.88), vec3(0.97, 0.98, 1.0), foam_mask);
+	col = mix(col, foam_col, foam_mask * 0.9);
 
 	ALBEDO = col;
+	ROUGHNESS = mix(0.58, 0.95, foam_mask);
+	METALLIC = 0.0;
+	SPECULAR = 0.0;
+}
 
-	/* FFT macro-normals are already directional; killing roughness (*0.45) reads as lacquered glass. */
-	float chop_rough_boost = chop_strength * 0.12;
-	float r_base = max(roughness * 1.18 + chop_rough_boost, 0.16);
-	
-	// Added more aggressive grain/micro-roughness to break up smooth reflections
-	float r_micro = clamp(
-		r_base + 0.18 * (sp - 0.5) + v_wave_steep * 0.035, 0.12, 0.93);
-
-	// Also slightly multiply albedo by the high-freq noise to add visual grain directly to the color
-	ALBEDO *= mix(0.92, 1.08, sp);
-
-	ROUGHNESS = mix(r_micro, mix(0.78, 0.92, foam_noise * 0.35), foam_mask);
-
-	METALLIC = metallic * 0.65;
-	SPECULAR = mix(specular * 0.72, 0.10, foam_mask);
+// Local lights only. Directional sun is in fragment — lighting it here again
+// painted soft plastic white across every swell face.
+void light() {
+	if (!LIGHT_IS_DIRECTIONAL) {
+		float ndl = max(dot(NORMAL, LIGHT), 0.0);
+		DIFFUSE_LIGHT += ALBEDO * LIGHT_COLOR * ATTENUATION * ndl * 0.10;
+		vec3 h = normalize(VIEW + LIGHT);
+		float ndh = max(dot(NORMAL, h), 0.0);
+		SPECULAR_LIGHT += LIGHT_COLOR * ATTENUATION * pow(ndh, 80.0) * v_fresnel * 0.35;
+	}
 }

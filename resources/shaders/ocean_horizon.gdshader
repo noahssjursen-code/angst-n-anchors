@@ -1,11 +1,10 @@
 shader_type spatial;
-render_mode specular_schlick_ggx;
+render_mode diffuse_burley, specular_disabled;
 
-// ── Wave field (FFT cascade 0 only) ───────────────────────────────────────
-// The horizon mesh is too coarse (~210 m verts at 20 km / 96 subdivs) to
-// sample the smaller cascades without aliasing. Cascade 0 has the longest
-// wavelength (~256 m) and carries the storm swell that the user actually
-// reads at distance, so we sample it alone.
+
+// Horizon ring — cascade 0 only. Same water shading language as the inner mesh
+// so the seam doesn't turn into a plastic mirror.
+
 uniform sampler2DArray displacement_map : filter_linear, repeat_enable;
 uniform sampler2DArray slope_map        : filter_linear, repeat_enable;
 uniform float length_scale_0 = 256.0;
@@ -14,64 +13,35 @@ uniform float wave_time = 0.0;
 uniform float wave_intensity = 1.0;
 uniform float wave_energy_multiplier = 1.0;
 
-// Distance from camera at which horizon waves start fading to flat. The
-// inner ocean mesh extends to `discard_half` so amplitude should still be
-// near-full at that boundary — the seam is invisible because the inner mesh
-// is already discarding the horizon mesh's pixels there.
 uniform float wave_fade_near : hint_range(200.0, 5000.0) = 900.0;
 uniform float wave_fade_far  : hint_range(1000.0, 12000.0) = 5500.0;
-
-// Half-extent of the inner ocean mesh — we discard fragments inside that
-// square so the inner mesh is the only thing visible in the foreground.
-// Set by world_renderer.gd to match INNER_OCEAN_SIZE.
 uniform float discard_half = 298.0;
 
 uniform float water_level = -1.5;
 
-uniform vec3 shallow_albedo : source_color = vec3(0.028, 0.074, 0.118);
-uniform vec3 deep_albedo    : source_color = vec3(0.006, 0.018, 0.036);
+uniform vec3 shallow_albedo : source_color = vec3(0.02, 0.08, 0.12);
+uniform vec3 deep_albedo    : source_color = vec3(0.004, 0.02, 0.04);
 uniform vec3 sky_top_color     : source_color = vec3(0.07, 0.28, 0.62);
 uniform vec3 sky_horizon_color : source_color = vec3(0.34, 0.54, 0.78);
-uniform float roughness     : hint_range(0.0, 1.0) = 0.20;
-uniform float metallic      : hint_range(0.0, 1.0) = 0.0;
-uniform float specular      : hint_range(0.0, 1.0) = 0.40;
-uniform float fresnel_power : hint_range(0.5, 10.0) = 3.1;
-uniform float fresnel_sky_mix : hint_range(0.0, 1.0) = 0.48;
+uniform vec3 sun_direction     = vec3(0.0, 1.0, 0.0);
+uniform vec3 sun_color         : source_color = vec3(1.0, 0.9, 0.8);
+
+uniform float fresnel_sky_mix : hint_range(0.0, 1.0) = 0.52;
 uniform float near_color_lift : hint_range(0.0, 1.0) = 0.14;
+uniform float glint_strength : hint_range(0.0, 4.0) = 0.18;
 
 varying vec3 v_world_pos;
 varying vec3 v_local_pos;
 varying vec3 v_world_normal;
-varying float v_wave_fade;
-
-float wf_hash21(vec2 p) {
-	vec2 hp = fract(p * vec2(123.344, 445.891));
-	hp += dot(hp, hp + 341.743);
-	return fract(hp.x * hp.y * 9571.834);
-}
-
-float wf_vnoise(vec2 p) {
-	vec2 i = floor(p);
-	vec2 f = fract(p);
-	vec2 u = f * f * (3.0 - 2.0 * f);
-	float a = wf_hash21(i);
-	float b = wf_hash21(i + vec2(1.0, 0.0));
-	float c = wf_hash21(i + vec2(0.0, 1.0));
-	float d = wf_hash21(i + vec2(1.0, 1.0));
-	return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
-}
+varying float v_fresnel;
 
 void vertex() {
 	v_local_pos = VERTEX;
 	vec4 w4 = MODEL_MATRIX * vec4(VERTEX, 1.0);
 	vec3 wp = w4.xyz;
 
-	// Distance-based amplitude fade. At the inner-mesh boundary the
-	// amplitude matches what the inner shader uses (* 0.42), then quietly
-	// flattens past `wave_fade_far` so the literal horizon line is calm.
 	float dist_from_cam = length(wp.xz - CAMERA_POSITION_WORLD.xz);
 	float wave_fade = 1.0 - smoothstep(wave_fade_near, wave_fade_far, dist_from_cam);
-	v_wave_fade = wave_fade;
 
 	float amp_scale = wave_intensity * wave_energy_multiplier * 0.42 * wave_fade;
 
@@ -92,33 +62,54 @@ void vertex() {
 }
 
 void fragment() {
-	// Cut a square hole exactly where the inner ocean mesh sits so it's the
-	// only thing visible in the foreground. discard_half is set by
-	// world_renderer to (INNER_OCEAN_SIZE * 0.5 - 15.0) — 15 m overlap prevents
-	// microscopic gap seams at the boundary.
 	if (abs(v_local_pos.x) < discard_half && abs(v_local_pos.z) < discard_half) {
 		discard;
 	}
 
 	vec3 nm = normalize(v_world_normal);
 	vec3 view_dir = normalize(CAMERA_POSITION_WORLD - v_world_pos);
+	vec3 sun_n = normalize(sun_direction);
+	float sun_up = clamp(sun_n.y, 0.0, 1.0);
 
-	float flat_ndv = clamp(dot(nm, view_dir), 0.001, 1.0);
-	float look_graze = 1.0 - pow(flat_ndv, 1.18);
+	float ndv = clamp(dot(nm, view_dir), 0.001, 1.0);
+	float fres = 0.02 + 0.98 * pow(1.0 - ndv, 5.0);
+	v_fresnel = fres;
 
-	vec3 body = mix(deep_albedo, shallow_albedo, look_graze * (0.22 + near_color_lift * 0.25));
+	float facing = pow(ndv, 0.7);
+	float height_rel = clamp((v_world_pos.y - water_level) * 0.45, -0.4, 0.8);
+	// Steepness from normal; avoid height-only stripes on long swell ridges.
+	float steep = clamp(1.0 - nm.y, 0.0, 1.0);
+	float crest_noise = fract(sin(dot(v_world_pos.xz * 0.07, vec2(12.9898, 78.233))) * 43758.5453);
+	float crest = smoothstep(0.2, 0.7, steep * 0.85 + max(height_rel, 0.0) * 0.2)
+			* mix(0.45, 1.0, crest_noise);
+	crest *= mix(1.0, 0.5, clamp((wave_intensity - 0.8) * 0.4, 0.0, 1.0));
 
-	// Dynamic sky reflection based on PBR reflection vector and sky color gradients
+	vec3 body = mix(deep_albedo, shallow_albedo, (1.0 - facing) * (0.25 + near_color_lift * 0.4));
+	body = mix(body, vec3(0.015, 0.10, 0.12), crest * 0.28);
+	body *= 1.0 - clamp(-height_rel, 0.0, 0.35) * 0.22;
+
 	vec3 ref_dir = reflect(-view_dir, nm);
-	float sky_mix = clamp(ref_dir.y, 0.0, 1.0);
-	vec3 sky_ref_color = mix(sky_horizon_color, sky_top_color, pow(sky_mix, 0.85));
+	float sky_t = pow(clamp(ref_dir.y * 0.5 + 0.5, 0.0, 1.0), 0.85);
+	vec3 sky_col = mix(sky_horizon_color, sky_top_color, sky_t);
+	float sky_w = fres * fresnel_sky_mix * mix(1.1, 0.4, facing);
+	vec3 col = mix(body, sky_col, clamp(sky_w, 0.0, 0.9));
 
-	// Enhanced Fresnel equation for lifelike, mirror-like horizon reflection
-	float fres = pow(look_graze, fresnel_power);
-	vec3 col = mix(body, sky_ref_color, fres * fresnel_sky_mix);
+	float ndh = clamp(dot(nm, normalize(view_dir + sun_n)), 0.0, 1.0);
+	float glint = min(pow(ndh, 140.0) * 0.4, 0.35);
+	col += sun_color * glint * glint_strength * sun_up * (0.15 + fres * 0.4);
 
 	ALBEDO = col;
-	ROUGHNESS = roughness;
-	METALLIC = metallic;
-	SPECULAR = specular;
+	ROUGHNESS = 0.78;
+	METALLIC = 0.0;
+	SPECULAR = 0.0;
+}
+
+void light() {
+	if (!LIGHT_IS_DIRECTIONAL) {
+		float ndl = max(dot(NORMAL, LIGHT), 0.0);
+		DIFFUSE_LIGHT += ALBEDO * LIGHT_COLOR * ATTENUATION * ndl * 0.06;
+		vec3 h = normalize(VIEW + LIGHT);
+		float ndh = max(dot(NORMAL, h), 0.0);
+		SPECULAR_LIGHT += LIGHT_COLOR * ATTENUATION * pow(ndh, 64.0) * v_fresnel * 0.2;
+	}
 }
