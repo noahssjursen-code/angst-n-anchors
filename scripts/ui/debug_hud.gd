@@ -79,7 +79,6 @@ func _input(event: InputEvent) -> void:
 func _apply_debug_day_calm_preset() -> void:
 	var wl := get_node_or_null("/root/WeatherLighting") as WeatherLightingState
 	if wl != null:
-		wl.automatic_time_enabled = false
 		wl.apply_weather_state(WeatherState.create_clear_calm())
 
 	WorldWeather.set_blend_to_lighting_paused(true)

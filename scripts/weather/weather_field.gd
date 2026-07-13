@@ -8,13 +8,9 @@ extends RefCounted
 ## no per-frame sync needed — two clients with the same seed + clock produce
 ## bit-identical samples.
 ##
-## Phase 2 (this file): layered FastNoiseLite drives pressure, cloud, and a
-##                       local jitter band. Wind falls out of the pressure
-##                       gradient. WorldWeather still post-processes PORT_CALM
-##                       until Phase 2.5 replaces it with a land SDF.
-## Phase 3: starts wiring `WeatherSample.wind` through downstream consumers
-##           (rain tilt, sails, flags).
-## Phase 4: seasons modulate noise params via game_time (year-scale envelope).
+## Layered FastNoiseLite drives pressure, cloud, and a local jitter band. Wind
+## falls out of the pressure gradient. Geographic exposure and moving fronts
+## are composed later by WeatherComposer.
 
 ## World generation seed — set once at world init, identical on every client.
 static var world_seed: int = 0
@@ -27,7 +23,7 @@ static var world_seed: int = 0
 const PRESSURE_FEATURE_SCALE_M := 8000.0   ## metres per pressure "cell"
 const PRESSURE_TIME_SCALE_H    := 18.0     ## game-hours for a cell to evolve
 const PRESSURE_BASE_HPA        := 1013.0
-const PRESSURE_AMPLITUDE_HPA   := 28.0     ## ±28 hPa gives 985–1041, realistic
+const PRESSURE_AMPLITUDE_HPA   := 20.0
 
 # Cloud: mid-scale cover field.
 const CLOUD_FEATURE_SCALE_M := 2800.0
@@ -44,9 +40,10 @@ const LOCAL_TIME_SCALE_H    := 1.5
 const WIND_GRADIENT_EPS_M    := 350.0
 ## Maps pressure gradient (hPa/m) to wind force [0..1].
 ## Rebalanced for the wider stencil + larger features (smaller gradients).
-const WIND_GRADIENT_GAIN     := 220.0
-## Baseline easterly trade so wind is never exactly zero in dead-flat pressure.
-const BASELINE_WIND          := Vector3(0.12, 0.0, 0.04)
+const WIND_GRADIENT_GAIN     := 145.0
+## A light prevailing breeze. Strong winds are supplied by fronts/composition.
+const BASELINE_WIND          := Vector3(0.055, 0.0, 0.018)
+const MAX_SYNOPTIC_WIND_MS   := 14.0
 
 # Temperature: seasonal envelope arrives in Phase 4. For now a flat constant.
 const TEMPERATURE_BASE_C := 15.0
@@ -115,22 +112,24 @@ static func sample(world_pos: Vector3, game_time: float = -1.0) -> WeatherSample
 									 float(season["baseline_wind_mul"]))
 	s.wind        = wind
 	s.wind_force  = clampf(wind.length(), 0.0, 1.0)
+	s.wind_speed_ms = s.wind_force * MAX_SYNOPTIC_WIND_MS
+	s.wind_velocity_ms = wind.normalized() * s.wind_speed_ms
 
 	# Cloud: low pressure → more cloud, plus an independent cloud noise band
 	# so coverage doesn't track pressure perfectly. Winter adds an overcast bias.
 	var cloud_n      := _sample3(_cloud_noise, world_pos, game_time,
 								   CLOUD_FEATURE_SCALE_M, CLOUD_TIME_SCALE_H)
 	var pressure_bias := clampf((PRESSURE_BASE_HPA - pressure_hpa) / PRESSURE_AMPLITUDE_HPA, -1.0, 1.0)
-	var cloud := clampf(0.45 + 0.35 * cloud_n + 0.30 * pressure_bias + float(season["cloud_bias"]),
+	var cloud := clampf(0.28 + 0.30 * cloud_n + 0.25 * pressure_bias + float(season["cloud_bias"]),
 						 0.0, 1.0)
 	s.cloud_cover = cloud
 
 	# Precipitation: needs cloud cover AND low pressure. Locally jittered.
 	var local_n := _sample3(_local_noise, world_pos, game_time,
 							 LOCAL_FEATURE_SCALE_M, LOCAL_TIME_SCALE_H)
-	var rain_drive := clampf(cloud - 0.55, 0.0, 1.0) * clampf(pressure_bias, 0.0, 1.0)
+	var rain_drive := clampf(cloud - 0.62, 0.0, 1.0) * clampf(pressure_bias, 0.0, 1.0)
 	# rain_drive is 0..~0.45; scale up and modulate with local jitter.
-	var precip := clampf(rain_drive * 2.2 * (0.65 + 0.35 * local_n), 0.0, 1.0)
+	var precip := clampf(rain_drive * 1.55 * (0.72 + 0.28 * local_n), 0.0, 1.0)
 	s.precipitation = precip
 
 	# Visibility: clear by default; cloud + rain + local fog band cut it.

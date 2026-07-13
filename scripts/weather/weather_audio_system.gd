@@ -172,8 +172,8 @@ var _thunder_pool    : Array[AudioStreamPlayer] = []
 var _thunder_cooldown: float = 2.0
 
 # Wave intensity window for ocean blend.
-const _WAVE_CALM: float = 0.55
-const _WAVE_GALE: float = 3.40
+const _WAVE_CALM: float = 0.33
+const _WAVE_GALE: float = 1.10
 
 # Smoothed source parameters.
 var _wave_t : float = 0.0

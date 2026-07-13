@@ -37,6 +37,7 @@ var _cache_rows:    int   = -1
 var _cache_pressure: PackedFloat32Array = PackedFloat32Array()
 var _cache_wind_x:   PackedFloat32Array = PackedFloat32Array()
 var _cache_wind_z:   PackedFloat32Array = PackedFloat32Array()
+var _cache_rebuilds: int = 0
 
 
 ## Render all weather overlay layers onto `canvas`. `ctx` carries the
@@ -47,12 +48,14 @@ var _cache_wind_z:   PackedFloat32Array = PackedFloat32Array()
 ##   hover_pos          : Vector2 mouse position in canvas space, or NaN
 ##   hover_inside       : bool    whether the cursor is over the chart
 func render(canvas: CanvasItem, ctx: Dictionary) -> void:
-	if not WorldWeather.is_initialized():
+	var world_weather := _world_weather()
+	if world_weather == null or not bool(world_weather.call("is_initialized")):
 		return
 	var time_h := WeatherField.current_game_time()
 	var g := _grid(ctx)
 	_ensure_cache(time_h, g)
-	_draw_pressure_field(canvas, g)
+	# Intentionally no full-screen pressure wash: pressure is represented by
+	# sparse H/L extrema so coastline, routes, and traffic remain readable.
 	_draw_wind_field(canvas, g)
 	_draw_extrema(canvas, g)
 	_draw_legend(canvas, ctx)
@@ -115,6 +118,7 @@ func _ensure_cache(time_h: float, g: Dictionary) -> void:
 	if view_unchanged and absf(time_h - _cache_time_h) < WX_CACHE_MAX_AGE_GAME_H:
 		return
 	_cache_time_h = time_h
+	_cache_rebuilds += 1
 	_cache_wx0    = wx0
 	_cache_wz0    = wz0
 	_cache_cell_m = cell_m
@@ -135,6 +139,14 @@ func _ensure_cache(time_h: float, g: Dictionary) -> void:
 			_cache_wind_z[idx] = w.z
 
 
+func get_debug_stats() -> Dictionary:
+	return {
+		"cache_cells": _cache_cols * _cache_rows if _cache_cols > 0 and _cache_rows > 0 else 0,
+		"cache_rebuilds": _cache_rebuilds,
+		"cache_time_h": _cache_time_h,
+	}
+
+
 static func _cell_avg_sample(time_h: float, wx0: float, wz0: float, cell_m: float) -> Dictionary:
 	var step := cell_m / float(WX_SUBSAMPLES)
 	var p_sum := 0.0
@@ -143,8 +155,9 @@ static func _cell_avg_sample(time_h: float, wx0: float, wz0: float, cell_m: floa
 		var wz := wz0 + (float(j) + 0.5) * step
 		for i in range(WX_SUBSAMPLES):
 			var wx := wx0 + (float(i) + 0.5) * step
-			p_sum += WeatherField.pressure_at(Vector3(wx, 0.0, wz), time_h)
-			w_sum += WeatherField.sample_wind(Vector3(wx, 0.0, wz), time_h)
+			var sample := _sample_at(Vector3(wx, 0.0, wz), time_h)
+			p_sum += sample.pressure
+			w_sum += sample.wind
 	var n := float(WX_SUBSAMPLES * WX_SUBSAMPLES)
 	return {"pressure": p_sum / n, "wind": w_sum / n}
 
@@ -181,6 +194,14 @@ func _draw_wind_field(canvas: CanvasItem, g: Dictionary) -> void:
 	var cols   : int   = g["cols"]
 	var rows   : int   = g["rows"]
 	var arrow_len := minf(cell_w, cell_h) * 0.78
+	var chart_left := float(g["cpx"])
+	var chart_top := float(g["cpy"])
+	var chart_right := chart_left + float(g["cpw"])
+	var chart_bottom := chart_top + float(g["cph"])
+	var edge_margin := minf(
+		arrow_len * 0.55,
+		maxf(minf(float(g["cpw"]), float(g["cph"])) * 0.5 - 1.0, 0.0)
+	)
 	for j in range(rows):
 		var wz0 : float = float(g["wz0"]) + float(j) * cell_m
 		for i in range(cols):
@@ -192,9 +213,16 @@ func _draw_wind_field(canvas: CanvasItem, g: Dictionary) -> void:
 			if mag < 0.05:
 				continue
 			mag = minf(mag, 1.0)
-			var screen_dir := Vector2(wx_v, -wz_v) / maxf(sqrt(wx_v*wx_v + wz_v*wz_v), 1e-4)
+			var screen_dir := wind_to_screen_direction(Vector3(wx_v, 0.0, wz_v))
 			var cx := _wx_to_sx(wx0 + cell_m * 0.5, g)
 			var cy := _wz_to_sy(wz0 + cell_m * 0.5, g)
+			if (
+				cx < chart_left + edge_margin
+				or cx > chart_right - edge_margin
+				or cy < chart_top + edge_margin
+				or cy > chart_bottom - edge_margin
+			):
+				continue
 			var tail := Vector2(cx, cy) - screen_dir * arrow_len * 0.5
 			var head := Vector2(cx, cy) + screen_dir * arrow_len * 0.5
 			var col  := Color(0.95, 0.95, 1.00, 0.35 + 0.55 * mag)
@@ -242,27 +270,14 @@ func _draw_extrema(canvas: CanvasItem, g: Dictionary) -> void:
 
 
 func _draw_legend(canvas: CanvasItem, ctx: Dictionary) -> void:
-	var w := 130.0
-	var h := 9.0
 	var x : float = float(ctx["cpx"]) + 10.0
 	var y : float = float(ctx["cpy"]) + float(ctx["cph"]) - 26.0
 	var font := ThemeDB.fallback_font
-	canvas.draw_string(font, Vector2(x, y - 4.0),
-					   "Pressure (hPa)", HORIZONTAL_ALIGNMENT_LEFT, -1, 10,
-					   Color(0.82, 0.86, 0.92, 0.80))
-	var stops := 18
-	var stop_w := w / float(stops)
-	for i in range(stops):
-		var hpa := lerpf(WX_PRESSURE_LO, WX_PRESSURE_HI, float(i) / float(stops - 1))
-		var col := _pressure_color(hpa)
-		col.a = 0.85
-		canvas.draw_rect(Rect2(x + float(i) * stop_w, y + 4.0, stop_w + 0.5, h), col, true)
-	canvas.draw_string(font, Vector2(x - 2.0, y + 4.0 + h + 9.0),
-					   "%d  Low" % int(WX_PRESSURE_LO), HORIZONTAL_ALIGNMENT_LEFT, -1, 9,
-					   Color(1.0, 0.65, 0.55, 0.88))
-	canvas.draw_string(font, Vector2(x + w - 36.0, y + 4.0 + h + 9.0),
-					   "High  %d" % int(WX_PRESSURE_HI), HORIZONTAL_ALIGNMENT_LEFT, -1, 9,
-					   Color(0.65, 0.82, 1.0, 0.88))
+	var label := "WIND →   FRONTS ◯   PRESSURE H/L"
+	var size := font.get_string_size(label, HORIZONTAL_ALIGNMENT_LEFT, -1, 9)
+	canvas.draw_rect(Rect2(x - 5.0, y - 13.0, size.x + 10.0, 18.0), Color(0.02, 0.04, 0.10, 0.78))
+	canvas.draw_string(font, Vector2(x, y), label, HORIZONTAL_ALIGNMENT_LEFT, -1, 9,
+					   Color(0.78, 0.86, 0.94, 0.86))
 
 
 func _draw_season_banner(canvas: CanvasItem, time_h: float, ctx: Dictionary) -> void:
@@ -298,14 +313,14 @@ func _draw_hover(canvas: CanvasItem, time_h: float, g: Dictionary, ctx: Dictiona
 		return
 	var cell_wx : float = float(g["wx0"]) + (float(i) + 0.5) * cell_m
 	var cell_wz : float = float(g["wz0"]) + (float(j) + 0.5) * cell_m
-	var s := WeatherField.sample(Vector3(cell_wx, 0.0, cell_wz), time_h)
+	var s := _sample_at(Vector3(cell_wx, 0.0, cell_wz), time_h)
 
 	var pressure_label := "Normal"
 	if s.pressure < 1000.0:
 		pressure_label = "Low (stormy)"
 	elif s.pressure > 1020.0:
 		pressure_label = "High (clear)"
-	var wind_kts := s.wind_force * 50.0
+	var wind_kts := s.wind_speed_ms * 1.94384
 	var wind_dir_label := _compass_label_for(s.wind)
 	var precip_pct := int(s.precipitation * 100.0)
 	var cloud_pct  := int(s.cloud_cover * 100.0)
@@ -319,6 +334,8 @@ func _draw_hover(canvas: CanvasItem, time_h: float, g: Dictionary, ctx: Dictiona
 		"Precip:    %d %%"          % precip_pct,
 		"Visibility:%d %%"          % vis_pct,
 		"Temp:      %.1f °C"        % s.temperature,
+		"Sea:       %.1f m Hs"      % s.significant_wave_height_m,
+		"Zone:      %s"             % s.zone_label,
 	]
 	var font := ThemeDB.fallback_font
 	var line_h := 13
@@ -358,3 +375,23 @@ static func _compass_label_for(wind: Vector3) -> String:
 	var dirs := ["N","NE","E","SE","S","SW","W","NW"]
 	var idx := int(round(ang / 45.0)) % 8
 	return dirs[idx]
+
+
+static func wind_to_screen_direction(wind: Vector3) -> Vector2:
+	# World +Z maps downward on this chart, matching _world_to_screen.
+	var horizontal := Vector2(wind.x, wind.z)
+	return horizontal.normalized() if horizontal.length_squared() > 1.0e-8 else Vector2.ZERO
+
+
+static func _sample_at(position: Vector3, game_hours: float) -> WeatherSample:
+	var world_weather := _world_weather()
+	if world_weather != null and world_weather.has_method("sample_at"):
+		return world_weather.call("sample_at", position, game_hours) as WeatherSample
+	return WeatherComposer.sample(position, game_hours)
+
+
+static func _world_weather() -> Node:
+	var loop := Engine.get_main_loop() as SceneTree
+	if loop == null or loop.root == null:
+		return null
+	return loop.root.get_node_or_null("WorldWeather")

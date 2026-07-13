@@ -468,16 +468,18 @@ func _init_spectrums() -> void:
 	rd.buffer_update(spectrums_buffer, 0, bytes.size(), bytes)
 
 var _last_wind_angle := -10.0  # sentinel: outside the [-PI, PI] band
+var weather_repack_count := 0
 
 func sync_weather(wind: float, storm: float, short_wave: float, wind_angle: float = 0.0) -> void:
 	if not rd or not spectrums_buffer.is_valid(): return
 
-	# Re-pack only on a meaningful change — wind direction shifts slowly, so
-	# we tolerate ~3° before paying the buffer-update + init-pack cost.
-	if (is_equal_approx(wind, _last_wind)
-			and is_equal_approx(storm, _last_storm)
-			and is_equal_approx(short_wave, _last_short_wave)
-			and absf(wind_angle - _last_wind_angle) < 0.05):
+	# Presentation interpolates continuously; FFT spectrum changes are expensive
+	# and only need repacking when the physical envelope moves meaningfully.
+	var angle_delta := absf(wrapf(wind_angle - _last_wind_angle, -PI, PI))
+	if (absf(wind - _last_wind) < 0.025
+			and absf(storm - _last_storm) < 0.04
+			and absf(short_wave - _last_short_wave) < 0.04
+			and angle_delta < 0.08):
 		return
 
 	_last_wind = wind
@@ -506,6 +508,7 @@ func sync_weather(wind: float, storm: float, short_wave: float, wind_angle: floa
 
 	rd.buffer_update(spectrums_buffer, 0, bytes.size(), bytes)
 	_run_init_pack()
+	weather_repack_count += 1
 
 func _update_push_constants(delta_time: float) -> void:
 	push_constant_params.encode_float(0, time)

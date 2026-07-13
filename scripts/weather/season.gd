@@ -64,8 +64,8 @@ static func progress_within_current(game_time_h: float) -> float:
 static func modifiers(game_time_h: float) -> Dictionary:
 	var cos_y := cos(year_phase(game_time_h) * TAU)  # +1 at winter, −1 at summer
 	return {
-		"pressure_amplitude_mul": 1.0 + 0.40 * cos_y,
-		"baseline_wind_mul":      1.0 + 0.40 * cos_y,
+		"pressure_amplitude_mul": 1.0 + 0.22 * cos_y,
+		"baseline_wind_mul":      1.0 + 0.24 * cos_y,
 		"temperature_offset_c":  -8.0 * cos_y,
-		"cloud_bias":             0.025 + 0.125 * cos_y,
+		"cloud_bias":             0.015 + 0.060 * cos_y,
 	}

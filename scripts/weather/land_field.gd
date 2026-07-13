@@ -1,7 +1,7 @@
 class_name LandField
 extends RefCounted
 
-## Static distance-to-land query — the deterministic replacement for PORT_CALM.
+## Static distance-to-land and coastal-exposure query.
 ##
 ## At world generation, `initialize(islands)` is called with one entry per
 ## island: `{ center: Vector3, radius: float }`. After that, any system can
@@ -11,8 +11,7 @@ extends RefCounted
 ##   LandField.shore_shelter(world_pos)      →   0.0 on shore, 1.0 fully open water
 ##
 ## The wave system multiplies its amplitude by `shore_shelter`, so storms can
-## rage in open water while harbours stay placid — without the brittle
-## PORT_CALM zones that used to hard-override weather.
+## rage in open water while harbours stay placid, with no area overrides.
 ##
 ## Performance: CPU calls are O(N_islands) per query. The ocean vertex shader
 ## was doing the same loop per vertex (68k verts × up to 64 islands = ~4.4M
@@ -20,8 +19,10 @@ extends RefCounted
 ## the shader samples once per vertex — constant cost regardless of island
 ## count, frees the GPU vertex stage.
 
-## Distance from shore at which waves recover to 100 %.
-const SHELTER_FALLOFF_M : float = 300.0
+## Coastal exposure builds over kilometres. The OBB shoreline, rather than a
+## circular port radius, anchors the transition so long islands shelter their
+## full approaches without hard seams.
+const SHELTER_FALLOFF_M : float = 3000.0
 
 ## Extra padding around the visual island polygon — the polygon edge is noisy
 ## (see IslandMeshBuilder.build_polygon) so we treat the disk as slightly
@@ -147,14 +148,20 @@ static func shore_shelter(world_pos: Vector3) -> float:
 	if not _initialized or _centers_xz.is_empty():
 		return 1.0
 	var pos2 := Vector2(world_pos.x, world_pos.z)
-	var best : float = INF
+	var best: float = INF
 	for i in range(_centers_xz.size()):
 		var r := _radii[i]
 		var threshold := SHELTER_FALLOFF_M + r
 		var d2 := pos2.distance_squared_to(_centers_xz[i])
 		if d2 > threshold * threshold:
 			continue  # this island is fully open-water (shelter=1) from here
-		var d := sqrt(d2) - r
+		var d := _obb_signed_distance(
+			pos2,
+			_centers_xz[i],
+			_obb_half_x[i],
+			_obb_half_z[i],
+			_obb_rot_y[i],
+		)
 		if d < best:
 			best = d
 			if best <= 0.0:
@@ -178,8 +185,7 @@ static func get_island_count() -> int:
 
 
 ## Returns Array[Dictionary] of `{center: Vector2, radius: float}` — used by
-## the map overlay so harbours visibly read as shelter zones, not as the old
-## hard-coded PORT_CALM circles.
+## the map overlay so harbours visibly read as smooth shelter regions.
 static func get_island_disks() -> Array:
 	var out: Array = []
 	for i in range(_centers_xz.size()):

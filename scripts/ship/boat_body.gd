@@ -950,19 +950,38 @@ func _ensure_walk_deck() -> void:
 	var walk_parent := _walk_deck.get_parent()
 	if walk_parent == null:
 		if parent_node != null:
-			parent_node.add_child(_walk_deck)
+			_defer_walk_deck_attachment(parent_node)
 		else:
 			add_child(_walk_deck)
 	elif parent_node != null and walk_parent == self:
-		var xf := _walk_deck.global_transform
-		remove_child(_walk_deck)
-		parent_node.add_child(_walk_deck)
-		_walk_deck.global_transform = xf
+		_defer_walk_deck_attachment(parent_node)
 
 	_walk_deck.set_meta("_boat_owner", self)
 	_ensure_walk_hull_collider()
 	_sync_walk_deck_transform()
 	call_deferred("_enable_walk_deck_collision")
+
+
+func _defer_walk_deck_attachment(target_parent: Node) -> void:
+	if _walk_deck.get_meta("_attachment_pending", false):
+		return
+	_walk_deck.set_meta("_attachment_pending", true)
+	call_deferred("_attach_walk_deck_deferred", target_parent)
+
+
+func _attach_walk_deck_deferred(target_parent: Node) -> void:
+	if _walk_deck == null or not is_instance_valid(_walk_deck):
+		return
+	_walk_deck.set_meta("_attachment_pending", false)
+	if target_parent == null or not is_instance_valid(target_parent):
+		return
+	var current_parent := _walk_deck.get_parent()
+	if current_parent == target_parent:
+		return
+	if current_parent == null:
+		target_parent.add_child(_walk_deck)
+	elif current_parent == self:
+		_walk_deck.reparent(target_parent, true)
 
 
 func _walk_deck_box_size() -> Vector3:

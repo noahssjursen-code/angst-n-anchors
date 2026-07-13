@@ -14,19 +14,14 @@ var _lightning_cooldown:   float = 2.0
 var _lightning_phase:      int   = 0   # 0=idle  1=flash1  2=gap  3=flash2
 var _lightning_phase_t:    float = 0.0
 
-const ZONE_TICK     : float = 0.5    # seconds between zone polls
-## Lerp weight per tick. ~0.006 = ≈60s half-life on wind_force, so a calm-to-
-## storm transition takes minutes of real time even if the underlying noise
-## sample changes abruptly (e.g. when the boat sails into a new pressure
-## system). Higher values feel jittery; lower than this feels laggy.
-const ZONE_WEIGHT   : float = 0.006
-## Wind-direction lerp. Slightly faster than wind_force so big rotations
-## feel responsive; still smooth enough to never look like a snap.
-const WIND_DIR_LERP : float = 0.035
+const PRESENTATION_TICK: float = 0.5
+## Time-domain hysteresis: roughly 19 seconds half-life at the normal cadence,
+## faster near land so entering/leaving shelter remains legible.
+const PRESENTATION_WEIGHT: float = 0.018
 ## When the boat is hugging the shore the field can step hard (you cross
 ## the harbour edge and shelter goes 1→0). Cap how much faster lerping gets.
-const SHORE_LERP_BOOST : float = 0.025
-var _zone_timer     : float = 0.0
+const SHORE_LERP_BOOST : float = 0.035
+var _presentation_timer: float = 0.0
 
 
 func _ready() -> void:
@@ -38,10 +33,10 @@ func _ready() -> void:
 
 func _process(delta: float) -> void:
 	_update_lightning(delta)
-	_zone_timer += delta
-	if _zone_timer >= ZONE_TICK:
-		_zone_timer = 0.0
-		_tick_zone_weather()
+	_presentation_timer += delta
+	if _presentation_timer >= PRESENTATION_TICK:
+		_presentation_timer = 0.0
+		_tick_local_presentation()
 
 
 func _spawn_rain_field() -> void:
@@ -150,7 +145,7 @@ func _update_lightning(delta: float) -> void:
 				_lightning_phase = 0
 
 
-func _tick_zone_weather() -> void:
+func _tick_local_presentation() -> void:
 	if WorldWeather.is_blend_to_lighting_paused():
 		return
 	if not WorldWeather.is_initialized():
@@ -158,25 +153,12 @@ func _tick_zone_weather() -> void:
 	var boat_pos := _get_boat_position()
 	if boat_pos.x == INF:
 		return
-	var target := WorldWeather.get_state_at(boat_pos) as WeatherState
+	var target := WorldWeather.sample_at(boat_pos).to_weather_state()
+	var exposure := target.exposure
 
-	# Geographic wave shelter is sampled per water query and per shader vertex.
-	# Never feed the local player's shelter back into global storm amplitude:
-	# that changed the whole world's sea state when one boat entered harbour.
-	var shelter := LandField.shore_shelter(boat_pos)
-	# Slight precip dampening near shore too — looks better, and matches
-	# real-world lee-side calm.
-	target.precipitation = target.precipitation * lerpf(0.55, 1.0, shelter)
-
-	# Slight boost to lerp weight near land so the shore transition isn't laggy,
-	# but capped at SHORE_LERP_BOOST so even at the shoreline it stays smooth.
-	var weight := lerpf(ZONE_WEIGHT, SHORE_LERP_BOOST, 1.0 - shelter)
+	# Composition is authoritative; this node only time-smooths the local view.
+	var weight := lerpf(PRESENTATION_WEIGHT, SHORE_LERP_BOOST, 1.0 - exposure)
 	WeatherLighting.blend_towards(target, weight)
-
-	# Wind direction: same geostrophic vector that drove `target.wind_force`,
-	# blended toward smoothly so direction shifts feel natural.
-	var wind_vec   := WeatherField.sample_wind(boat_pos) * lerpf(0.15, 1.0, shelter)
-	WeatherLighting.wind_dir = WeatherLighting.wind_dir.lerp(wind_vec, WIND_DIR_LERP)
 
 
 func _get_boat_position() -> Vector3:

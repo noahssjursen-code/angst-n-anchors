@@ -1,708 +1,341 @@
 class_name MapOverlay
 extends Control
 
-## Procedural sea chart drawn via _draw().
-## Axis convention matches `NavigationAxes`: north-up ⇒ world −Z, east ⇒ +X.
-## Supports scroll-wheel zoom, left-drag pan, and click-to-select ports.
+## Marine chart shell retained for GameMenu compatibility. Camera, navigation
+## snapshot, declutter policy, and ordered layer drawing live under ui/chart.
 
-const MARGIN    := 60.0
-const CHART_PAD := 52.0
+const MARGIN := 48.0
+const HEADER_H := 76.0
+const STATUS_H := 34.0
+const REDRAW_INTERVAL_S := 0.20
+const C_SEA := Color(0.03, 0.04, 0.10, 0.97)
+const C_BORDER := Color(0.30, 0.44, 0.68, 0.80)
+const ChartCameraClass = preload("res://scripts/ui/chart/chart_camera.gd")
+const ChartLayerManagerClass = preload("res://scripts/ui/chart/chart_layer_manager.gd")
+const ChartLayerRendererClass = preload("res://scripts/ui/chart/chart_layer_renderer.gd")
+const ChartNavSnapshotClass = preload("res://scripts/ui/chart/chart_nav_snapshot.gd")
 
-const ZOOM_IN  := 0.82
-const ZOOM_OUT := 1.0 / 0.82
-const SPAN_MIN := 300.0
-const SPAN_MAX := 500000.0
-
-const C_SEA          := Color(0.03, 0.04, 0.10, 0.97)
-const C_BORDER       := Color(0.30, 0.44, 0.68, 0.80)
-const C_GRID         := Color(0.18, 0.26, 0.44, 0.18)
-const C_ISLAND       := Color(0.22, 0.30, 0.20, 0.90)
-const C_ISLAND_SEL   := Color(0.34, 0.48, 0.28, 1.00)
-const C_ISLAND_DEST  := Color(0.32, 0.28, 0.12, 0.90)
-const C_EDGE         := Color(0.38, 0.52, 0.32, 0.70)
-const C_EDGE_SEL     := Color(0.60, 0.80, 0.50, 1.00)
-const C_EDGE_DEST    := Color(0.80, 0.60, 0.20, 0.85)
-const C_PORT_LABEL   := Color(0.70, 0.84, 0.60, 0.90)
-const C_PORT_LBL_SEL := Color(0.90, 1.00, 0.82, 1.00)
-const C_SHIP         := Color(0.96, 0.86, 0.12, 1.00)
-const C_TITLE        := Color(0.96, 0.86, 0.12, 0.92)
-const C_HINT         := Color(0.40, 0.50, 0.66, 0.55)
-
-var _cam_center:         Vector2 = Vector2.ZERO
-var _cam_span:           float   = 10000.0
-var _user_moved:         bool    = false
-var _dragging:           bool    = false
-var _drag_origin_mouse:  Vector2 = Vector2.ZERO
-var _drag_origin_center: Vector2 = Vector2.ZERO
-var _drag_dist:          float   = 0.0
-var _was_visible:        bool    = false
-var _selected_port:      String  = ""
-var _poly_cache:         Dictionary = {}  ## port_id -> PackedVector2Array local XZ
-var _show_weather:       bool       = true
-var _show_fishing:       bool       = false
-
-## Weather overlay rendering — pressure heatmap, wind arrows, L/H markers,
-## legend, season banner, hover tooltip. Pulled into its own file so the
-## chart code can be read without scrolling past 350 lines of noise sampling.
-var _weather_view: MapWeatherView = MapWeatherView.new()
-var _fishing_view: MapFishingView = MapFishingView.new()
-
-## Set each frame in _draw; used by _try_select without re-computing.
-var _cpx: float = 0.0
-var _cpy: float = 0.0
-var _cpw: float = 0.0
-var _cph: float = 0.0
-var _wx_min: float = 0.0
-var _wx_max: float = 1.0
-var _wz_min: float = 0.0
-var _wz_max: float = 1.0
-
-## Port size → short class label for display
-const SIZE_CLASS_LABEL: Array[String] = [
-	"Coastal", "Coastal", "Short Sea", "Handysize", "Deep Sea"
-]
+var _camera := ChartCameraClass.new()
+var _layers := ChartLayerManagerClass.new()
+var _renderer := ChartLayerRendererClass.new()
+var _nav := ChartNavSnapshotClass.new()
+var _selected_port := ""
+var _dragging := false
+var _drag_origin_mouse := Vector2.ZERO
+var _drag_origin_center := Vector2.ZERO
+var _drag_distance := 0.0
+var _hover_pos := Vector2(-1.0, -1.0)
+var _redraw_elapsed := REDRAW_INTERVAL_S
+var _was_visible := false
+var _last_ctx: Dictionary = {}
+var _preset_select: OptionButton
+var _layer_buttons: Dictionary = {}
+var _route_waypoints := PackedVector3Array()
+var _last_draw_usec := 0
+var _draw_count := 0
 
 
 func _ready() -> void:
+	add_to_group("marine_chart")
 	set_anchors_preset(Control.PRESET_FULL_RECT)
 	mouse_filter = Control.MOUSE_FILTER_STOP
+	_build_controls()
 
 
-func _process(_delta: float) -> void:
-	if visible:
-		if not _was_visible:
-			if not _user_moved:
-				_reset_view()
-			_was_visible = true
-		queue_redraw()
-	else:
+func _process(delta: float) -> void:
+	if not visible:
 		_was_visible = false
-		_dragging    = false
+		_dragging = false
+		return
+	if not _was_visible:
+		_capture_nav()
+		if not _camera.user_moved:
+			_home()
+		_was_visible = true
+		_mark_dirty()
+	_redraw_elapsed += delta
+	if _redraw_elapsed >= REDRAW_INTERVAL_S:
+		_redraw_elapsed = 0.0
+		_capture_nav()
+		queue_redraw()
 
 
 func _input(event: InputEvent) -> void:
 	if not visible:
 		return
 	if event is InputEventKey:
-		var ke := event as InputEventKey
-		if ke.pressed and not ke.echo:
-			if ke.keycode == KEY_H:
-				_user_moved = false
-				_reset_view()
+		var key := event as InputEventKey
+		if key.pressed and not key.echo:
+			if key.keycode == KEY_H:
+				_home()
 				get_viewport().set_input_as_handled()
-				return
-			if ke.keycode == KEY_F:
-				_show_weather = not _show_weather
+			elif key.keycode == KEY_F:
+				_set_layer("weather", _layers.toggle("weather"))
 				get_viewport().set_input_as_handled()
-				return
-			if ke.keycode == KEY_G:
-				_show_fishing = not _show_fishing
+			elif key.keycode == KEY_G:
+				_set_layer("fishing", _layers.toggle("fishing"))
 				get_viewport().set_input_as_handled()
-				return
-	if event is InputEventMouseButton:
-		var mb := event as InputEventMouseButton
-		if mb.pressed and mb.button_index == MOUSE_BUTTON_WHEEL_UP:
-			_cam_span   = maxf(_cam_span * ZOOM_IN, SPAN_MIN)
-			_user_moved = true
+	elif event is InputEventMouseButton:
+		var mouse := event as InputEventMouseButton
+		if not _chart_rect().has_point(mouse.position):
+			return
+		if mouse.pressed and mouse.button_index == MOUSE_BUTTON_WHEEL_UP:
+			_camera.zoom(1)
+			_mark_dirty()
 			get_viewport().set_input_as_handled()
-		elif mb.pressed and mb.button_index == MOUSE_BUTTON_WHEEL_DOWN:
-			_cam_span   = minf(_cam_span * ZOOM_OUT, SPAN_MAX)
-			_user_moved = true
+		elif mouse.pressed and mouse.button_index == MOUSE_BUTTON_WHEEL_DOWN:
+			_camera.zoom(-1)
+			_mark_dirty()
 			get_viewport().set_input_as_handled()
-		elif mb.button_index == MOUSE_BUTTON_LEFT:
-			if mb.pressed:
-				_dragging            = true
-				_drag_dist           = 0.0
-				_drag_origin_mouse   = mb.position
-				_drag_origin_center  = _cam_center
+		elif mouse.button_index == MOUSE_BUTTON_LEFT:
+			if mouse.pressed:
+				_dragging = true
+				_drag_distance = 0.0
+				_drag_origin_mouse = mouse.position
+				_drag_origin_center = _camera.center
 			else:
 				_dragging = false
-				if _drag_dist < 5.0:
-					_try_select(mb.position)
+				if _drag_distance < 5.0:
+					_select_port(mouse.position)
+			get_viewport().set_input_as_handled()
+		elif mouse.pressed and mouse.button_index == MOUSE_BUTTON_RIGHT:
+			_route_waypoints.append(_screen_to_world(mouse.position))
+			_capture_nav()
+			_mark_dirty()
 			get_viewport().set_input_as_handled()
 	elif event is InputEventMouseMotion:
-		var mm := event as InputEventMouseMotion
-		_hover_pos = mm.position
-		_hover_inside = (
-			mm.position.x >= _cpx and mm.position.x <= _cpx + _cpw
-			and mm.position.y >= _cpy and mm.position.y <= _cpy + _cph
-		)
+		var motion := event as InputEventMouseMotion
+		_hover_pos = motion.position
 		if _dragging:
-			var ppu := _ppu()
-			var dm  := mm.position - _drag_origin_mouse
-			_drag_dist    += mm.relative.length()
-			_cam_center.x  = _drag_origin_center.x - dm.x / ppu
-			_cam_center.y  = _drag_origin_center.y - dm.y / ppu
-			_user_moved    = true
+			_drag_distance += motion.relative.length()
+			_camera.pan_pixels(
+				motion.position - _drag_origin_mouse,
+				_camera.pixels_per_world_unit(_chart_rect().size),
+				_drag_origin_center
+			)
+			_mark_dirty()
 			get_viewport().set_input_as_handled()
 
 
-func _try_select(screen_pos: Vector2) -> void:
+func _draw() -> void:
+	var draw_started := Time.get_ticks_usec()
+	var panel := Rect2(
+		Vector2(MARGIN, MARGIN),
+		get_viewport_rect().size - Vector2(MARGIN * 2.0, MARGIN * 2.0)
+	)
+	var chart := _chart_rect()
+	draw_rect(panel, C_SEA)
+	draw_rect(panel, C_BORDER, false, 2.0)
+	draw_rect(chart, Color(0.025, 0.045, 0.095, 1.0))
+	draw_rect(chart, Color(0.28, 0.40, 0.64, 0.45), false, 1.0)
+	var bounds := _camera.world_bounds(chart.size)
+	_last_ctx = {
+		"chart_rect": chart,
+		"world_bounds": bounds,
+		"world_span": _camera.span,
+		"cpx": chart.position.x,
+		"cpy": chart.position.y,
+		"cpw": chart.size.x,
+		"cph": chart.size.y,
+		"wx_min": bounds.position.x,
+		"wx_max": bounds.end.x,
+		"wz_min": bounds.position.y,
+		"wz_max": bounds.end.y,
+		"hover_pos": _hover_pos,
+		"hover_inside": chart.has_point(_hover_pos),
+	}
+	_renderer.render(self, _last_ctx, _layers, _nav, _selected_port, _route_waypoints)
+	_draw_compass(Vector2(chart.end.x - 38.0, chart.position.y + 38.0))
+	_draw_status(panel)
+	_last_draw_usec = Time.get_ticks_usec() - draw_started
+	_draw_count += 1
+
+
+func _build_controls() -> void:
+	var bar := HBoxContainer.new()
+	bar.name = "ChartControls"
+	bar.position = Vector2(MARGIN + 14.0, MARGIN + 10.0)
+	bar.size = Vector2(get_viewport_rect().size.x - MARGIN * 2.0 - 28.0, 32.0)
+	bar.add_theme_constant_override("separation", 8)
+	add_child(bar)
+
+	var title := Label.new()
+	title.text = "MARINE CHART"
+	title.add_theme_font_size_override("font_size", 16)
+	title.add_theme_color_override("font_color", Color(0.96, 0.86, 0.12, 0.95))
+	bar.add_child(title)
+
+	_preset_select = OptionButton.new()
+	for preset_name in ChartLayerManagerClass.PRESET_NAMES:
+		_preset_select.add_item(preset_name)
+	_preset_select.select(_layers.preset)
+	_preset_select.item_selected.connect(_on_preset_selected)
+	bar.add_child(_preset_select)
+
+	var home := Button.new()
+	home.text = "Home"
+	home.pressed.connect(_home)
+	bar.add_child(home)
+	var clear_route := Button.new()
+	clear_route.text = "Clear route"
+	clear_route.tooltip_text = "Right-click chart to add waypoints"
+	clear_route.pressed.connect(_clear_route)
+	bar.add_child(clear_route)
+	for spec in [
+		["Weather", "weather"],
+		["Fishing", "fishing"],
+		["Traffic", "traffic"],
+		["Routes", "routes"],
+		["Approach", "approaches"],
+		["Labels", "annotations"],
+	]:
+		var button := CheckButton.new()
+		var layer_name := str(spec[1])
+		button.text = str(spec[0])
+		button.button_pressed = _layers.is_visible(layer_name)
+		button.toggled.connect(_on_layer_toggled.bind(layer_name))
+		_layer_buttons[layer_name] = button
+		bar.add_child(button)
+
+
+func _on_preset_selected(index: int) -> void:
+	_layers.apply_preset(index)
+	for layer_name in _layer_buttons:
+		(_layer_buttons[layer_name] as CheckButton).set_pressed_no_signal(
+			_layers.is_visible(layer_name)
+		)
+	_mark_dirty()
+
+
+func _on_layer_toggled(shown: bool, layer_name: String) -> void:
+	_layers.set_visible(layer_name, shown)
+	_mark_dirty()
+
+
+func _set_layer(layer_name: String, shown: bool) -> void:
+	if _layer_buttons.has(layer_name):
+		(_layer_buttons[layer_name] as CheckButton).set_pressed_no_signal(shown)
+	_mark_dirty()
+
+
+func get_debug_stats() -> Dictionary:
+	var weather_stats := _renderer.weather_adapter.get_debug_stats() as Dictionary
+	return {
+		"draw_usec": _last_draw_usec,
+		"draw_count": _draw_count,
+		"weather_cache_cells": weather_stats.get("cache_cells", 0),
+		"weather_cache_rebuilds": weather_stats.get("cache_rebuilds", 0),
+		"preset": ChartLayerManagerClass.PRESET_NAMES[_layers.preset],
+	}
+
+
+func _capture_nav() -> void:
+	_nav = ChartNavSnapshotClass.capture(get_tree())
+	if not _route_waypoints.is_empty():
+		_nav.set_waypoint(_route_waypoints[0])
+
+
+func _clear_route() -> void:
+	_route_waypoints.clear()
+	_capture_nav()
+	_mark_dirty()
+
+
+func _screen_to_world(screen: Vector2) -> Vector3:
+	var chart := _chart_rect()
+	var bounds := _camera.world_bounds(chart.size)
+	var uv := (screen - chart.position) / chart.size
+	return Vector3(
+		lerpf(bounds.position.x, bounds.end.x, uv.x),
+		0.0,
+		lerpf(bounds.position.y, bounds.end.y, uv.y),
+	)
+
+
+func _home() -> void:
+	var points: Array[Vector3] = []
 	var registry := get_node_or_null("/root/ContractRegistry")
-	if registry == null:
+	if registry != null:
+		for pid in registry.call("get_port_ids"):
+			var pos := registry.call("get_port_position", str(pid)) as Vector3
+			if pos.is_finite():
+				points.append(pos)
+	_camera.home(_nav.ship_position, points)
+	_mark_dirty()
+
+
+func _select_port(screen_position: Vector2) -> void:
+	var registry := get_node_or_null("/root/ContractRegistry")
+	if registry == null or _last_ctx.is_empty():
 		return
-	for pid in registry.get_port_ids():
-		var info := registry.get_port_info(str(pid)) as Dictionary
-		if info.is_empty():
+	for pid_raw in registry.call("get_port_ids"):
+		var pid := str(pid_raw)
+		var info := registry.call("get_port_info", pid) as Dictionary
+		var pos := info.get("position", Vector3(INF, INF, INF)) as Vector3
+		if not pos.is_finite():
 			continue
-		var wpos := info.get("position", Vector3(INF, INF, INF)) as Vector3
-		if wpos.x == INF:
-			continue
-		var spoly := _to_screen_poly(str(pid), wpos, info)
-		if spoly.size() >= 3 and Geometry2D.is_point_in_polygon(screen_pos, spoly):
-			_selected_port = "" if _selected_port == str(pid) else str(pid)
+		var polygon := _renderer.screen_polygon(pid, pos, info, _last_ctx)
+		if polygon.size() >= 3 and Geometry2D.is_point_in_polygon(screen_position, polygon):
+			_selected_port = "" if _selected_port == pid else pid
+			_mark_dirty()
 			return
 	_selected_port = ""
+	_mark_dirty()
 
 
-func _to_screen_poly(pid: String, wpos: Vector3, info: Dictionary) -> PackedVector2Array:
-	if not _poly_cache.has(pid):
-		var iw := float(info.get("island_width", 80.0))
-		var pd := float(info.get("plot_depth",   140.0))
-		var ls := int(info.get("layout_seed",    0))
-		_poly_cache[pid] = IslandMeshBuilder.build_polygon(iw, pd, ls)
-	var local_poly := _poly_cache[pid] as PackedVector2Array
-	var ry := float(info.get("rotation_y", 0.0))
-	var cy := cos(ry)
-	var sy := sin(ry)
-	var out := PackedVector2Array()
-	for p in local_poly:
-		var rx := p.x * cy + p.y * sy
-		var rz := -p.x * sy + p.y * cy
-		out.append(_w2s_f(wpos.x + rx, wpos.z + rz))
-	return out
+func _draw_status(panel: Rect2) -> void:
+	var status_y := panel.end.y - 13.0
+	var values: Array[String] = [
+		"HDG %s" % _degrees(_nav.heading_deg if _nav.has_ship() else NAN),
+		"COG %s" % _degrees(_nav.course_deg),
+		"SOG %.1f kt" % _nav.speed_knots,
+		"BRG %s" % _degrees(_nav.bearing_deg),
+		"LEE %s" % _signed_degrees(_nav.leeway_deg),
+		"WIND %s %.1f kt" % [_degrees(_nav.wind_direction_deg), _nav.wind_speed_knots],
+		"FUEL %s" % ("%.0f%%" % (_nav.fuel_fraction * 100.0) if is_finite(_nav.fuel_fraction) else "—"),
+		"TIME %s" % _nav.time_label,
+		"SCALE %s" % _distance(_camera.span),
+	]
+	draw_string(
+		ThemeDB.fallback_font, Vector2(panel.position.x + 14.0, status_y),
+		"    ".join(values), HORIZONTAL_ALIGNMENT_LEFT, -1, 11,
+		Color(0.76, 0.86, 0.94, 0.92)
+	)
 
 
-# ── Camera helpers ────────────────────────────────────────────────────────────
+func _draw_compass(center: Vector2) -> void:
+	draw_circle(center, 25.0, Color(0.03, 0.05, 0.14, 0.88))
+	draw_arc(center, 24.0, 0.0, TAU, 32, Color(0.48, 0.62, 0.82, 0.62), 1.0)
+	draw_line(center, center + Vector2(0.0, -19.0), Color(0.96, 0.30, 0.25), 2.0)
+	draw_string(
+		ThemeDB.fallback_font, center + Vector2(-4.0, -7.0), "N",
+		HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color(0.96, 0.86, 0.12)
+	)
 
-func _ppu() -> float:
-	var vp  := get_viewport_rect().size
-	var cpw := vp.x - MARGIN * 2.0 - CHART_PAD * 2.0
-	var cph := vp.y - MARGIN * 2.0 - CHART_PAD * 2.0 - 10.0
-	return minf(cpw, cph) / _cam_span
 
-
-func _reset_view() -> void:
-	var registry := get_node_or_null("/root/ContractRegistry")
-	var all_x: Array[float] = []
-	var all_z: Array[float] = []
-
-	if registry != null:
-		for pid in registry.get_port_ids():
-			var wpos: Vector3 = registry.get_port_position(str(pid))
-			if wpos.x != INF:
-				all_x.append(wpos.x)
-				all_z.append(wpos.z)
-
-	var ship_pos := Vector3(INF, INF, INF)
-	for n in get_tree().get_nodes_in_group("player_boat"):
-		var rb := n as RigidBody3D
-		if rb != null:
-			ship_pos = rb.global_position
-			break
-
-	if ship_pos.x != INF:
-		_cam_center = Vector2(ship_pos.x, ship_pos.z)
-		all_x.append(ship_pos.x)
-		all_z.append(ship_pos.z)
-	elif not all_x.is_empty():
-		_cam_center = Vector2(
-			(all_x.min() + all_x.max()) * 0.5,
-			(all_z.min() + all_z.max()) * 0.5
+func _chart_rect() -> Rect2:
+	var size := get_viewport_rect().size
+	return Rect2(
+		Vector2(MARGIN + 14.0, MARGIN + HEADER_H),
+		Vector2(
+			maxf(size.x - (MARGIN + 14.0) * 2.0, 1.0),
+			maxf(size.y - MARGIN * 2.0 - HEADER_H - STATUS_H, 1.0)
 		)
+	)
 
-	if not all_x.is_empty():
-		var dx := maxf(all_x.max() - all_x.min(), 200.0)
-		var dz := maxf(all_z.max() - all_z.min(), 200.0)
-		_cam_span = maxf(dx, dz) * 1.6
-	else:
-		_cam_span = 10000.0
 
+func _mark_dirty() -> void:
+	_redraw_elapsed = REDRAW_INTERVAL_S
+	queue_redraw()
 
-# ── Drawing ───────────────────────────────────────────────────────────────────
 
-func _draw() -> void:
-	var vp   := get_viewport_rect().size
-	var font := ThemeDB.fallback_font
+static func _degrees(value: float) -> String:
+	return "%03d°" % int(round(value)) if is_finite(value) else "—"
 
-	# Outer panel
-	var px := MARGIN
-	var py := MARGIN
-	var pw := vp.x - MARGIN * 2.0
-	var ph := vp.y - MARGIN * 2.0
 
-	draw_rect(Rect2(px, py, pw, ph), C_SEA)
-	draw_rect(Rect2(px, py, pw, ph), C_BORDER, false, 2.0)
-	draw_rect(Rect2(px + 6, py + 6, pw - 12, ph - 12),
-			  Color(0.20, 0.30, 0.52, 0.20), false, 1.0)
+static func _signed_degrees(value: float) -> String:
+	return "%+.1f°" % value if is_finite(value) else "—"
 
-	# Title
-	var title    := "SEA CHART"
-	var title_fs := 20
-	var ttw      := font.get_string_size(title, HORIZONTAL_ALIGNMENT_LEFT, -1, title_fs).x
-	draw_string(font, Vector2(vp.x * 0.5 - ttw * 0.5, py + 38.0),
-				title, HORIZONTAL_ALIGNMENT_LEFT, -1, title_fs, C_TITLE)
 
-	var hint    := "scroll  zoom    drag  pan    H  home    F  weather    G  fishing    M  close    click island  info"
-	var hint_tw := font.get_string_size(hint, HORIZONTAL_ALIGNMENT_LEFT, -1, 10).x
-	draw_string(font, Vector2(px + pw - hint_tw - 14, py + 32.0),
-				hint, HORIZONTAL_ALIGNMENT_LEFT, -1, 10, C_HINT)
-
-	draw_line(Vector2(px + 16, py + 46), Vector2(px + pw - 16, py + 46),
-			  Color(0.28, 0.40, 0.64, 0.35), 1.0)
-
-	# Chart bounds (store for _try_select)
-	_cpx = px + CHART_PAD
-	_cpy = py + CHART_PAD + 10.0
-	_cpw = pw - CHART_PAD * 2.0
-	_cph = ph - CHART_PAD * 2.0 - 10.0
-
-	# World extents from camera
-	var ppu := _ppu()
-	_wx_min = _cam_center.x - _cpw * 0.5 / ppu
-	_wx_max = _cam_center.x + _cpw * 0.5 / ppu
-	_wz_min = _cam_center.y - _cph * 0.5 / ppu
-	_wz_max = _cam_center.y + _cph * 0.5 / ppu
-
-	var registry := get_node_or_null("/root/ContractRegistry")
-	var accepted: Array[Contract] = []
-	var dest_ids: Dictionary      = {}
-
-	if registry != null:
-		accepted = registry.get_accepted_contracts()
-		for c in accepted:
-			dest_ids[c.destination_port_id] = true
-
-	var ship_pos:    Vector3 = Vector3(INF, INF, INF)
-	var ship_bow_hz := Vector2(0.0, -1.0)
-	for n in get_tree().get_nodes_in_group("player_boat"):
-		var rb := n as RigidBody3D
-		if rb != null:
-			ship_pos    = rb.global_position
-			ship_bow_hz = NavigationAxes.vessel_bow_horizontal(rb)
-			break
-
-	# Grid interval
-	var raw_interval := _cam_span / 6.0
-	var nice_steps: Array[float] = [
-		100.0, 200.0, 500.0, 1000.0,
-		1852.0, 3704.0, 9260.0, 18520.0, 37040.0
-	]
-	var grid_interval := nice_steps[nice_steps.size() - 1]
-	for s in nice_steps:
-		if s >= raw_interval:
-			grid_interval = s
-			break
-
-	# Grid
-	var gx: float = floor(_wx_min / grid_interval) * grid_interval
-	while gx <= _wx_max:
-		var sx: float = _cpx + (gx - _wx_min) / (_wx_max - _wx_min) * _cpw
-		if sx >= _cpx - 1.0 and sx <= _cpx + _cpw + 1.0:
-			draw_line(Vector2(sx, _cpy), Vector2(sx, _cpy + _cph), C_GRID, 1.0)
-		gx += grid_interval
-
-	var gz: float = floor(_wz_min / grid_interval) * grid_interval
-	while gz <= _wz_max:
-		var sy: float = _cpy + (gz - _wz_min) / (_wz_max - _wz_min) * _cph
-		if sy >= _cpy - 1.0 and sy <= _cpy + _cph + 1.0:
-			draw_line(Vector2(_cpx, sy), Vector2(_cpx + _cpw, sy), C_GRID, 1.0)
-		gz += grid_interval
-
-	# Weather zones — pressure heatmap, wind, L/H markers, legend, hover.
-	# All rendering lives in MapWeatherView; we hand it the chart context.
-	var chart_ctx := {
-		"cpx": _cpx,
-		"cpy": _cpy,
-		"cpw": _cpw,
-		"cph": _cph,
-		"wx_min": _wx_min,
-		"wx_max": _wx_max,
-		"wz_min": _wz_min,
-		"wz_max": _wz_max,
-		"hover_pos": _hover_pos,
-		"hover_inside": _hover_inside,
-	}
-	if _show_fishing:
-		_fishing_view.render(self, chart_ctx)
-	if _show_weather:
-		_weather_view.render(self, chart_ctx)
-
-	# Fuel range ring — drawn under contract routes / islands so the ring
-	# never obscures port detail. Only shown when there's an active ship
-	# with a propulsion component reporting a finite range.
-	if ship_pos.x != INF:
-		var boat: BoatBody = null
-		for n in get_tree().get_nodes_in_group("player_boat"):
-			boat = n as BoatBody
-			break
-		if boat != null and boat.has_method("get_estimated_range_m"):
-			var range_m: float = boat.get_estimated_range_m()
-			if range_m > 1.0:
-				_draw_fuel_range_ring(_w2s(ship_pos), range_m, ppu, boat)
-
-	# Contract routes
-	if registry != null:
-		for c in accepted:
-			var op: Vector3 = registry.get_port_position(c.origin_port_id)
-			var dp: Vector3 = registry.get_port_position(c.destination_port_id)
-			if op.x == INF or dp.x == INF:
-				continue
-			var op2 := _w2s(op)
-			var dp2 := _w2s(dp)
-			_draw_dashed_line(op2, dp2, Color(1.0, 0.58, 0.06, 0.28), 1.5, 10.0)
-			# Distance label at midpoint
-			var mid      := (op2 + dp2) * 0.5
-			var route_d  := op.distance_to(dp)
-			var route_lbl := "%.0f m" % route_d if route_d < 1852.0 else "%.1f nm" % (route_d / 1852.0)
-			var rtw      := font.get_string_size(route_lbl, HORIZONTAL_ALIGNMENT_LEFT, -1, 9).x
-			draw_string(font, mid + Vector2(-rtw * 0.5, -4.0),
-						route_lbl, HORIZONTAL_ALIGNMENT_LEFT, -1, 9, Color(1.0, 0.65, 0.15, 0.65))
-
-	# Islands
-	if registry != null:
-		for pid in registry.get_port_ids():
-			var info := registry.get_port_info(str(pid)) as Dictionary
-			if info.is_empty():
-				continue
-			var wpos := info.get("position", Vector3(INF, INF, INF)) as Vector3
-			if wpos.x == INF:
-				continue
-
-			var is_sel  := _selected_port == str(pid)
-			var is_dest := dest_ids.has(str(pid))
-
-			var spoly := _to_screen_poly(str(pid), wpos, info)
-			if spoly.size() < 3:
-				continue
-
-			var fill_col: Color
-			var edge_col: Color
-			if is_sel:
-				fill_col = C_ISLAND_SEL
-				edge_col = C_EDGE_SEL
-			elif is_dest:
-				fill_col = C_ISLAND_DEST
-				edge_col = C_EDGE_DEST
-			else:
-				fill_col = C_ISLAND
-				edge_col = C_EDGE
-
-			draw_colored_polygon(spoly, fill_col)
-			var outline := PackedVector2Array(spoly)
-			outline.append(spoly[0])
-			draw_polyline(outline, edge_col, 1.5, true)
-
-			# Only draw label when island is large enough on screen to read
-			var poly_h := _poly_screen_height(spoly)
-			if poly_h >= 10.0 or is_sel or is_dest:
-				var sp       := _w2s(wpos)
-				var pname    := str(info.get("display_name", ""))
-				var lbl_size := 13 if is_sel else 11
-				var ntw      := font.get_string_size(pname, HORIZONTAL_ALIGNMENT_LEFT, -1, lbl_size).x
-				var lbl_col  := C_PORT_LBL_SEL if is_sel else C_PORT_LABEL
-				draw_string(font, sp + Vector2(-ntw * 0.5, -poly_h * 0.5 - 6.0),
-							pname, HORIZONTAL_ALIGNMENT_LEFT, -1, lbl_size, lbl_col)
-
-	# Ship (bow projected to horizontal so chart agrees with helm after wave roll/pitch).
-	if ship_pos.x != INF:
-		var sp := _w2s(ship_pos)
-		var fwd := ship_bow_hz
-		if fwd.length_squared() < 1e-10:
-			fwd = Vector2(0.0, -1.0)
-		else:
-			fwd = fwd.normalized()
-		var perp := Vector2(-fwd.y, fwd.x)
-		var sz   := 11.0
-		draw_circle(sp, sz + 4.0, Color(C_SHIP.r, C_SHIP.g, C_SHIP.b, 0.20))
-		draw_colored_polygon(PackedVector2Array([
-			sp + fwd  * sz,
-			sp - fwd  * sz * 0.5 + perp * sz * 0.5,
-			sp - fwd  * sz * 0.5 - perp * sz * 0.5,
-		]), C_SHIP)
-
-	# Port info panel
-	if not _selected_port.is_empty() and registry != null:
-		_draw_port_panel(font, registry)
-
-	# Compass rose — top-right inside chart
-	_draw_compass_rose(Vector2(_cpx + _cpw - 48.0, _cpy + 50.0), 28.0)
-
-	# Scale bar
-	var scale_w_world := (_wx_max - _wx_min) * 0.2
-	var scale_w_px    := scale_w_world / (_wx_max - _wx_min) * _cpw
-	var bx := _cpx
-	var by := _cpy + _cph + 18.0
-	draw_line(Vector2(bx, by),                  Vector2(bx + scale_w_px, by),         Color(0.55, 0.68, 0.86, 0.70), 2.0)
-	draw_line(Vector2(bx, by - 4),              Vector2(bx, by + 4),                  Color(0.55, 0.68, 0.86, 0.70), 1.5)
-	draw_line(Vector2(bx + scale_w_px, by - 4), Vector2(bx + scale_w_px, by + 4),     Color(0.55, 0.68, 0.86, 0.70), 1.5)
-
-	var scale_label := "%.0f m" % scale_w_world if scale_w_world < 1852.0 else "%.1f nm" % (scale_w_world / 1852.0)
-	draw_string(font, Vector2(bx, by + 14), scale_label,
-				HORIZONTAL_ALIGNMENT_LEFT, -1, 9, Color(0.45, 0.58, 0.76, 0.60))
-
-	var grid_label := "grid  %.0f m" % grid_interval if grid_interval < 1852.0 else "grid  %.0f nm" % (grid_interval / 1852.0)
-	draw_string(font, Vector2(bx, by + 26), grid_label,
-				HORIZONTAL_ALIGNMENT_LEFT, -1, 9, Color(0.35, 0.48, 0.66, 0.45))
-
-
-func _draw_port_panel(font: Font, registry: Node) -> void:
-	var info := registry.get_port_info(_selected_port) as Dictionary
-	if info.is_empty():
-		return
-
-	var pop         := int(info.get("population", 0))
-	var exports     := str(info.get("commodity_export", ""))
-	var imports     := info.get("commodity_imports", []) as Array
-	var berths      := int(info.get("berth_count", 1))
-	var port_size   := int(info.get("size", 1))
-	var class_label := SIZE_CLASS_LABEL[clampi(port_size, 0, SIZE_CLASS_LABEL.size() - 1)]
-
-	# Filter the feature pool to only things that are actually in-game.
-	const IMPLEMENTED_FEATURES: Array[String] = [
-		"Fuel Dock", "Lighthouse", "Fog Horn", "Harbour Master",
-	]
-	var raw_features := info.get("features", []) as Array
-	var facilities: Array[String] = []
-	for f in raw_features:
-		if IMPLEMENTED_FEATURES.has(str(f)):
-			facilities.append(str(f))
-
-	var contracts := registry.get_contracts_from_port(_selected_port) as Array
-	var avail     := 0
-	for c in contracts:
-		if (c as Contract).state == Contract.State.AVAILABLE:
-			avail += 1
-
-	var wpos     := info.get("position", Vector3.ZERO) as Vector3
-	var ship_pos := Vector3(INF, INF, INF)
-	for n in get_tree().get_nodes_in_group("player_boat"):
-		var rb := n as RigidBody3D
-		if rb != null:
-			ship_pos = rb.global_position
-			break
-
-	var lh    := 18.0
-	var lh_sm := 16.0
-	var pad   := 12.0
-
-	var panel_w := 264.0
-	var panel_h := (pad
-		+ 18.0    # port name
-		+ 4.0
-		+ lh      # pop + berths
-		+ 8.0
-		+ lh      # exports
-		+ lh      # imports
-		+ 8.0
-		+ lh_sm   # facilities line (always shown)
-		+ 8.0
-		+ lh      # contracts + distance
-		+ pad)
-
-	var panel_x := _cpx + _cpw - panel_w - 8.0
-	var panel_y := _cpy + _cph - panel_h - 8.0
-
-	draw_rect(Rect2(panel_x, panel_y, panel_w, panel_h), Color(0.04, 0.07, 0.16, 0.95))
-	draw_rect(Rect2(panel_x, panel_y, panel_w, panel_h), C_EDGE_SEL, false, 1.5)
-
-	var tx := panel_x + pad
-	var ty := panel_y + pad + 14.0
-
-	# Port name + class badge
-	draw_string(font, Vector2(tx, ty),
-				str(info.get("display_name", "")).to_upper(),
-				HORIZONTAL_ALIGNMENT_LEFT, -1, 14, C_PORT_LBL_SEL)
-	var nw := font.get_string_size(str(info.get("display_name", "")).to_upper(),
-				HORIZONTAL_ALIGNMENT_LEFT, -1, 14).x
-	draw_string(font, Vector2(tx + nw, ty),
-				"  [%s]" % class_label,
-				HORIZONTAL_ALIGNMENT_LEFT, -1, 9, Color(0.50, 0.65, 0.48, 0.70))
-	ty += 4.0 + lh
-
-	# Pop + berths
-	draw_string(font, Vector2(tx, ty),
-				"~%s  ·  %d berth%s" % [_format_population(pop), berths, "s" if berths != 1 else ""],
-				HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color(0.65, 0.75, 0.60, 0.75))
-	ty += lh + 8.0
-
-	draw_line(Vector2(panel_x + 8, ty - 4), Vector2(panel_x + panel_w - 8, ty - 4),
-			  Color(0.38, 0.52, 0.32, 0.30), 1.0)
-
-	# Exports
-	draw_string(font, Vector2(tx, ty),
-				"Exports   " + (exports.capitalize() if not exports.is_empty() else "—"),
-				HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color(0.62, 0.80, 0.55, 0.90))
-	ty += lh
-
-	# Imports
-	var imp_parts: Array[String] = []
-	for s in imports:
-		imp_parts.append(str(s).capitalize())
-	draw_string(font, Vector2(tx, ty),
-				"Imports   " + (", ".join(imp_parts) if not imp_parts.is_empty() else "—"),
-				HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color(0.55, 0.72, 0.50, 0.75))
-	ty += lh + 8.0
-
-	draw_line(Vector2(panel_x + 8, ty - 4), Vector2(panel_x + panel_w - 8, ty - 4),
-			  Color(0.38, 0.52, 0.32, 0.30), 1.0)
-
-	# Facilities — only implemented ones, joined on one line
-	var fac_label := "  ·  ".join(facilities) if not facilities.is_empty() else "—"
-	draw_string(font, Vector2(tx, ty),
-				fac_label,
-				HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color(0.58, 0.72, 0.52, 0.80))
-	ty += lh_sm + 8.0
-
-	draw_line(Vector2(panel_x + 8, ty - 4), Vector2(panel_x + panel_w - 8, ty - 4),
-			  Color(0.38, 0.52, 0.32, 0.30), 1.0)
-
-	# Contracts + distance
-	draw_string(font, Vector2(tx, ty),
-				"%d contract%s" % [avail, "s" if avail != 1 else ""],
-				HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color(0.65, 0.82, 0.58, 0.80))
-
-	if ship_pos.x != INF:
-		var dist     := Vector2(wpos.x, wpos.z).distance_to(Vector2(ship_pos.x, ship_pos.z))
-		var dist_str := "%.0f m" % dist if dist < 1852.0 else "%.1f nm" % (dist / 1852.0)
-		var dtw      := font.get_string_size(dist_str, HORIZONTAL_ALIGNMENT_LEFT, -1, 11).x
-		draw_string(font, Vector2(panel_x + panel_w - pad - dtw, ty),
-					dist_str,
-					HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color(0.50, 0.65, 0.78, 0.80))
-
-
-func _format_population(pop: int) -> String:
-	if pop >= 10000:
-		return "%dk" % (pop / 1000)
-	if pop >= 1000:
-		return "%.1fk" % (float(pop) / 1000.0)
-	return str(pop)
-
-
-# ── Helpers ───────────────────────────────────────────────────────────────────
-
-func _w2s(world: Vector3) -> Vector2:
-	return _w2s_f(world.x, world.z)
-
-
-func _w2s_f(wx: float, wz: float) -> Vector2:
-	var tx := (wx - _wx_min) / (_wx_max - _wx_min)
-	var tz := (wz - _wz_min) / (_wz_max - _wz_min)
-	return Vector2(_cpx + tx * _cpw, _cpy + tz * _cph)
-
-
-func _poly_screen_height(poly: PackedVector2Array) -> float:
-	if poly.is_empty():
-		return 0.0
-	var mn := poly[0].y
-	var mx := poly[0].y
-	for p in poly:
-		mn = minf(mn, p.y)
-		mx = maxf(mx, p.y)
-	return mx - mn
-
-
-func _draw_compass_rose(center: Vector2, r: float) -> void:
-	var font := ThemeDB.fallback_font
-	draw_circle(center, r + 5.0, Color(0.03, 0.05, 0.14, 0.88))
-	draw_arc(center, r + 3.0, 0.0, TAU, 48, Color(0.28, 0.42, 0.66, 0.55), 1.5, true)
-
-	# Intercardinal ticks
-	for d in [45, 135, 225, 315]:
-		var a := deg_to_rad(float(d)) - PI * 0.5
-		draw_line(center + Vector2(cos(a), sin(a)) * r * 0.78,
-				  center + Vector2(cos(a), sin(a)) * r,
-				  Color(0.35, 0.46, 0.62, 0.38), 1.0, true)
-
-	# Cardinals: N red, E/S/W pale blue
-	var cdata: Array = [
-		["N", 0,   Color(0.95, 0.28, 0.28, 1.00), true ],
-		["E", 90,  Color(0.68, 0.80, 0.92, 0.80), false],
-		["S", 180, Color(0.68, 0.80, 0.92, 0.80), false],
-		["W", 270, Color(0.68, 0.80, 0.92, 0.80), false],
-	]
-	for entry in cdata:
-		var e    := entry as Array
-		var a    := deg_to_rad(float(int(e[1]))) - PI * 0.5
-		var col  := e[2] as Color
-		var bold := bool(e[3])
-		var inner := r * (0.52 if bold else 0.68)
-		draw_line(center + Vector2(cos(a), sin(a)) * inner,
-				  center + Vector2(cos(a), sin(a)) * r,
-				  col, 2.5 if bold else 1.5, true)
-		var lp   := center + Vector2(cos(a), sin(a)) * (r - 17.0)
-		var lstr := str(e[0])
-		var tw   := font.get_string_size(lstr, HORIZONTAL_ALIGNMENT_LEFT, -1, 10).x
-		draw_string(font, lp + Vector2(-tw * 0.5, 5.0), lstr,
-					HORIZONTAL_ALIGNMENT_LEFT, -1, 10, col)
-
-	# North pointer (gold up-triangle) and south pointer (dim down-triangle)
-	draw_colored_polygon(PackedVector2Array([
-		center + Vector2(0.0,   -r * 0.53),
-		center + Vector2(-r * 0.12, -r * 0.08),
-		center + Vector2( r * 0.12, -r * 0.08),
-	]), Color(0.96, 0.86, 0.12, 0.92))
-	draw_colored_polygon(PackedVector2Array([
-		center + Vector2(0.0,    r * 0.53),
-		center + Vector2(-r * 0.12,  r * 0.08),
-		center + Vector2( r * 0.12,  r * 0.08),
-	]), Color(0.42, 0.52, 0.68, 0.42))
-	draw_circle(center, 3.5, Color(0.82, 0.88, 1.00, 0.72))
-
-
-## Last cursor position over the chart (for the weather hover-inspect
-## tooltip rendered by `_weather_view`). Tracked in `_input` so we don't
-## depend on `get_local_mouse_position()` during `_draw`.
-var _hover_pos        : Vector2 = Vector2(-1.0, -1.0)
-var _hover_inside     : bool    = false
-
-
-
-
-## Render the fuel-range ring centred on the player ship. Amber fade —
-## brighter at the edge, near-transparent in the centre — so it reads as a
-## reachable horizon rather than a circle of doom. Colour shifts to red
-## when fuel is below ~15% so the captain notices at a glance.
-func _draw_fuel_range_ring(center: Vector2, range_m: float, ppu: float, boat: BoatBody) -> void:
-	var r_px := range_m * ppu
-	if r_px <= 4.0 or r_px > 4000.0:
-		return
-	var frac := boat.get_fuel_fraction()
-	var col := Color(1.0, 0.65, 0.15, 0.32)
-	if frac < 0.15:
-		col = Color(0.95, 0.30, 0.20, 0.42)
-	# Filled disc, very faint, for the reachable area.
-	var fill := Color(col.r, col.g, col.b, 0.06)
-	draw_circle(center, r_px, fill)
-	# Outline ring — dashed via short arcs around the circle.
-	var segments := 96
-	for i in range(segments):
-		var a0 := float(i)     / float(segments) * TAU
-		var a1 := float(i + 1) / float(segments) * TAU
-		if i % 2 == 0:
-			var p0 := center + Vector2(cos(a0), sin(a0)) * r_px
-			var p1 := center + Vector2(cos(a1), sin(a1)) * r_px
-			draw_line(p0, p1, col, 1.5, true)
-	# Label at the top of the ring.
-	var font := ThemeDB.fallback_font
-	var range_nm := range_m / 1852.0
-	var lbl := "%.1f nm" % range_nm if range_nm >= 0.5 else "%.0f m" % range_m
-	var fs := 10
-	var tw := font.get_string_size(lbl, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
-	var lp := center + Vector2(-tw * 0.5, -r_px - 6.0)
-	draw_string(font, lp, lbl, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, col)
-
-
-func _draw_dashed_line(a: Vector2, b: Vector2, col: Color, width: float, dash: float) -> void:
-	var total := a.distance_to(b)
-	if total < 1.0:
-		return
-	var dir := (b - a) / total
-	var t   := 0.0
-	var on  := true
-	while t < total:
-		var seg := minf(dash, total - t)
-		if on:
-			draw_line(a + dir * t, a + dir * (t + seg), col, width, true)
-		t  += seg
-		on  = not on
+static func _distance(metres: float) -> String:
+	return "%.0f m" % metres if metres < 1852.0 else "%.1f nm" % (metres / 1852.0)
