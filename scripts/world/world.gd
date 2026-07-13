@@ -11,6 +11,7 @@ const ATMOSPHERIC_SCRIPT := preload("res://scripts/world/atmospheric_effects.gd"
 const WORLD_LAYOUT_GENERATOR := preload("res://scripts/world/world_layout_generator.gd")
 const COASTAL_PORT_PLACER := preload("res://scripts/world/coastal_port_placer.gd")
 const WORLD_TERRAIN_STREAMER := preload("res://scripts/world/world_terrain_streamer.gd")
+const WORLD_FOREST_STREAMER := preload("res://scripts/world/world_forest_streamer.gd")
 
 const LOAD_RADIUS           : float = 1500.0
 const EDITOR_PREVIEW_RADIUS : float = 600.0
@@ -36,6 +37,7 @@ var _world_layout: WorldLayout
 var _layout_generation_usec := 0
 var _requested_generation_version := WORLD_GENERATION_VERSION
 var _terrain_streamer: WorldTerrainStreamer
+var _forest_streamer: WorldForestStreamer
 
 @export var world_seed:   int = 42:
 	set(v): world_seed = v; if _ready_complete and is_inside_tree(): _rebuild()
@@ -108,7 +110,10 @@ func _rebuild() -> void:
 			for child in get_children():
 				_own_subtree(child)
 	else:
+		var flatten_zones := WORLD_TERRAIN_STREAMER.make_flatten_zones(defs, 0.0)
+		ForestField.initialize(_world_layout, world_seed, flatten_zones)
 		_add_terrain_streamer(defs)
+		_add_forest_streamer(flatten_zones)
 		_add_atmospheric_effects()
 		_setup_ports(defs)
 		_bake_berth_lanes(t, defs)
@@ -190,6 +195,14 @@ func _add_terrain_streamer(defs: Array[PortDefinition]) -> void:
 	_terrain_streamer.add_to_group("world_terrain_streamer")
 	add_child(_terrain_streamer)
 	_terrain_streamer.configure(_world_layout, defs)
+
+
+func _add_forest_streamer(flatten_zones: Array) -> void:
+	_forest_streamer = WORLD_FOREST_STREAMER.new() as WorldForestStreamer
+	_forest_streamer.name = "WorldForestStreamer"
+	_forest_streamer.add_to_group("world_forest_streamer")
+	add_child(_forest_streamer)
+	_forest_streamer.configure(_world_layout, flatten_zones)
 
 
 func _add_editor_preview(defs: Array[PortDefinition]) -> void:

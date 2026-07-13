@@ -18,6 +18,12 @@ const DEFAULT_LOD_DISTANCES := [2200.0, 4800.0, 9000.0, 15000.0]
 const DEFAULT_VISUAL_RADIUS_M := 20000.0
 const SKIRT_DEPTH_M := 12.0
 const LOD_HYSTERESIS_M := 350.0
+## Terrain datum sits below sea level so the rock shelf continues underwater.
+## Port flatten zones still target y=0 and are therefore unchanged.
+const TERRAIN_SINK_M := 2.5
+const SUBMERGED_SHELF_EXTENT_M := 28.0
+const COASTAL_COATING_MAX_LOD := 2
+const COASTAL_COATING_OFFSET_M := 0.08
 const BYTES_PER_VERTEX_ESTIMATE := 40
 const BYTES_PER_INDEX_ESTIMATE := 4
 const PORT_PAD_WIDTH_BY_SIZE := [120.0, 152.0, 232.0, 352.0, 532.0]
@@ -39,6 +45,7 @@ var _chunks: Dictionary = {}
 var _jobs: Array[Dictionary] = []
 var _queued: Dictionary = {}
 var _material: ShaderMaterial
+var _coastal_slate_material: StandardMaterial3D
 var _frame_index := 0
 var _last_build_ms := 0.0
 var _total_build_ms := 0.0
@@ -49,6 +56,7 @@ func configure(layout: Object, port_definitions: Array = []) -> void:
 	_clear_chunks()
 	_layout = layout
 	_material = null
+	_coastal_slate_material = null
 	_flatten_zones = make_flatten_zones(port_definitions, sea_level_pad_height_m)
 	_frame_index = 0
 	set_process(_layout != null)
@@ -204,6 +212,18 @@ func _build_chunk(coord: Vector2i, lod: int, stream_position: Vector3) -> void:
 	mesh_instance.material_override = _terrain_material()
 	root.add_child(mesh_instance)
 
+	# Svaberg is a continuous terrain coating, not a collection of rock props.
+	# Only coastal triangles are copied, so inland chunks gain no extra draw.
+	if lod <= COASTAL_COATING_MAX_LOD:
+		var coating_data := build_coastal_coating_mesh_data(data)
+		if not (coating_data["indices"] as PackedInt32Array).is_empty():
+			var coating := MeshInstance3D.new()
+			coating.name = "CoastalSlate"
+			coating.mesh = _array_mesh_from_data(coating_data)
+			coating.material_override = _coastal_coating_material()
+			coating.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+			root.add_child(coating)
+
 	var record := {
 		"node": root,
 		"lod": lod,
@@ -231,6 +251,16 @@ func _array_mesh_from_data(data: Dictionary) -> ArrayMesh:
 	return mesh
 
 
+func _coastal_coating_material() -> StandardMaterial3D:
+	if _coastal_slate_material == null:
+		_coastal_slate_material = StandardMaterial3D.new()
+		_coastal_slate_material.albedo_color = Color(0.095, 0.115, 0.135)
+		_coastal_slate_material.roughness = 0.93
+		_coastal_slate_material.metallic = 0.03
+		_coastal_slate_material.metallic_specular = 0.18
+	return _coastal_slate_material
+
+
 func _terrain_material() -> ShaderMaterial:
 	if _material == null:
 		_material = ShaderMaterial.new()
@@ -239,7 +269,19 @@ func _terrain_material() -> ShaderMaterial:
 		if _layout != null and _layout.get("seed") != null:
 			bake_seed = int(_layout.get("seed"))
 		TERRAIN_SURFACE_MAPS.bind_to_material(_material, bake_seed)
+		_bind_forest_coverage(_material)
 	return _material
+
+
+func _bind_forest_coverage(material: ShaderMaterial) -> void:
+	if ForestField.is_initialized():
+		material.set_shader_parameter("forest_map", ForestField.coverage_texture())
+		material.set_shader_parameter("forest_world_half_extent_m", ForestField.world_half_extent_m())
+	else:
+		var blank := Image.create(4, 4, false, Image.FORMAT_R8)
+		blank.fill(Color(0, 0, 0))
+		material.set_shader_parameter("forest_map", ImageTexture.create_from_image(blank))
+		material.set_shader_parameter("forest_world_half_extent_m", 20000.0)
 
 
 func _sync_collisions(stream_position: Vector3) -> void:
@@ -356,7 +398,30 @@ static func make_flatten_zones(port_definitions: Array, default_pad_height_m := 
 ## Pure deterministic terrain sample including configured flatten pads.
 static func sample_terrain_height(layout: Object, world_xz: Vector2, flatten_zones: Array = []) -> float:
 	var signed_distance := float(layout.sample_signed_distance(world_xz))
-	var height := 0.0 if signed_distance >= 0.0 else float(layout.sample_height(world_xz))
+	var height := 0.0 if signed_distance >= 0.0 \
+		else float(layout.sample_height(world_xz)) - TERRAIN_SINK_M
+	height = _apply_flatten_zones(height, signed_distance, world_xz, flatten_zones)
+	return height
+
+
+## Render sample includes a short submerged continuation beyond the SDF coast.
+## This lets water cover the shelf instead of meeting a perfectly smooth edge.
+static func sample_render_terrain_height(
+		layout: Object,
+		world_xz: Vector2,
+		flatten_zones: Array = [],
+) -> float:
+	var signed_distance := float(layout.sample_signed_distance(world_xz))
+	var height := float(layout.sample_height(world_xz)) - TERRAIN_SINK_M
+	return _apply_flatten_zones(height, signed_distance, world_xz, flatten_zones)
+
+
+static func _apply_flatten_zones(
+		height: float,
+		signed_distance: float,
+		world_xz: Vector2,
+		flatten_zones: Array,
+) -> float:
 	for zone_variant in flatten_zones:
 		var zone := zone_variant as Dictionary
 		var local := (world_xz - (zone["center"] as Vector2)).rotated(-float(zone["yaw"]))
@@ -372,13 +437,16 @@ static func sample_terrain_height(layout: Object, world_xz: Vector2, flatten_zon
 		var blend := 1.0 - smoothstep(0.0, falloff, maxf(edge_distance, 0.0))
 		if edge_distance <= 0.0:
 			blend = 1.0
-		height = lerpf(height, float(zone["height"]), blend)
+		# Pads keep land at the authored port datum. Their seaward overlap stays
+		# submerged so it cannot create a water-level terrain sheet.
+		if signed_distance < 0.0:
+			height = lerpf(height, float(zone["height"]), blend)
 	return height
 
 
 ## Pure helper returning render-ready packed arrays. Full land cells keep their
-## two triangles. Mixed shoreline cells use marching-squares clipping against the
-## SDF zero-crossing so coasts follow the isocontour instead of 90° grid stairs.
+## two triangles. Mixed shoreline cells clip against a short submerged SDF
+## offset, allowing the shelf to continue beneath the ocean.
 static func build_chunk_mesh_data(
 		layout: Object,
 		coord: Vector2i,
@@ -393,22 +461,20 @@ static func build_chunk_mesh_data(
 	var vertices := PackedVector3Array()
 	var colors := PackedColorArray()
 	var signed_distances := PackedFloat32Array()
+	var clip_distances := PackedFloat32Array()
 	vertices.resize(side * side)
 	colors.resize(side * side)
 	signed_distances.resize(side * side)
+	clip_distances.resize(side * side)
 	for z in range(side):
 		for x in range(side):
 			var index := z * side + x
 			var world_xz := origin + Vector2(float(x) * step_m, float(z) * step_m)
 			var distance := float(layout.sample_signed_distance(world_xz))
-			var height := sample_terrain_height(layout, world_xz, flatten_zones)
-			# Water-grid samples stay at sea level; shoreline clipping never
-			# emits those vertices into the surface, so they only matter for
-			# skirts / diagnostics.
-			if distance >= 0.0:
-				height = 0.0
+			var height := sample_render_terrain_height(layout, world_xz, flatten_zones)
 			vertices[index] = Vector3(world_xz.x, height, world_xz.y)
 			signed_distances[index] = distance
+			clip_distances[index] = distance - SUBMERGED_SHELF_EXTENT_M
 			colors[index] = terrain_color(height, distance)
 
 	var indices := PackedInt32Array()
@@ -422,7 +488,7 @@ static func build_chunk_mesh_data(
 				vertices,
 				colors,
 				indices,
-				signed_distances,
+				clip_distances,
 				a, b, c, d,
 			)
 
@@ -437,7 +503,7 @@ static func build_chunk_mesh_data(
 	if not indices.is_empty():
 		# Surface normals must be finished before skirts add vertical triangles;
 		# otherwise every chunk edge becomes a dark one-kilometre frame.
-		_append_skirts(vertices, colors, indices, signed_distances, side, skirt_depth_m, normals)
+		_append_skirts(vertices, colors, indices, clip_distances, side, skirt_depth_m, normals)
 	return {
 		"vertices": vertices,
 		"normals": normals,
@@ -448,6 +514,143 @@ static func build_chunk_mesh_data(
 		"surface_vertex_count": surface_vertex_count,
 		"coord": coord,
 		"step_m": step_m,
+	}
+
+
+## Extracts one continuous, slightly raised surface from coastal terrain
+## triangles. Vertex alpha already carries the world-space shore-band weight.
+## The result uses only referenced coastal vertices, avoiding full-mesh copies.
+static func build_coastal_coating_mesh_data(
+		terrain_data: Dictionary,
+		min_coast_weight: float = 0.32,
+		max_height_m: float = 12.0,
+) -> Dictionary:
+	var source_vertices: PackedVector3Array = terrain_data["vertices"]
+	var source_normals: PackedVector3Array = terrain_data["normals"]
+	var source_colors: PackedColorArray = terrain_data["colors"]
+	var source_indices: PackedInt32Array = terrain_data["indices"]
+	var surface_limit := int(terrain_data["surface_vertex_count"])
+	var vertices := PackedVector3Array()
+	var normals := PackedVector3Array()
+	var colors := PackedColorArray()
+	var indices := PackedInt32Array()
+
+	for triangle in range(0, source_indices.size(), 3):
+		var ia := source_indices[triangle]
+		var ib := source_indices[triangle + 1]
+		var ic := source_indices[triangle + 2]
+		# Exclude crack skirts. The coating belongs to the terrain top only.
+		if ia >= surface_limit or ib >= surface_limit or ic >= surface_limit:
+			continue
+		# Cheap reject before allocating clipping dictionaries. Almost every
+		# inland triangle exits here.
+		if maxf(
+			source_colors[ia].a,
+			maxf(source_colors[ib].a, source_colors[ic].a),
+		) < min_coast_weight:
+			continue
+		if minf(
+			source_vertices[ia].y,
+			minf(source_vertices[ib].y, source_vertices[ic].y),
+		) > max_height_m:
+			continue
+		var polygon: Array[Dictionary] = [
+			{
+				"position": source_vertices[ia],
+				"normal": source_normals[ia],
+				"coast": source_colors[ia].a,
+			},
+			{
+				"position": source_vertices[ib],
+				"normal": source_normals[ib],
+				"coast": source_colors[ib].a,
+			},
+			{
+				"position": source_vertices[ic],
+				"normal": source_normals[ic],
+				"coast": source_colors[ic].a,
+			},
+		]
+		polygon = _clip_coating_by_coast(polygon, min_coast_weight)
+		polygon = _clip_coating_by_height(polygon, max_height_m)
+		if polygon.size() < 3:
+			continue
+		for fan_index in range(1, polygon.size() - 1):
+			for point in [polygon[0], polygon[fan_index], polygon[fan_index + 1]]:
+				var normal := (point["normal"] as Vector3).normalized()
+				vertices.append(
+					(point["position"] as Vector3) + normal * COASTAL_COATING_OFFSET_M
+				)
+				colors.append(Color.WHITE)
+				normals.append(normal)
+				indices.append(vertices.size() - 1)
+
+	return {
+		"vertices": vertices,
+		"normals": normals,
+		"colors": colors,
+		"indices": indices,
+	}
+
+
+static func _clip_coating_by_coast(
+		polygon: Array[Dictionary],
+		min_coast_weight: float,
+) -> Array[Dictionary]:
+	if polygon.is_empty():
+		return []
+	var result: Array[Dictionary] = []
+	var previous: Dictionary = polygon.back()
+	var previous_inside := float(previous["coast"]) >= min_coast_weight
+	for current in polygon:
+		var current_inside := float(current["coast"]) >= min_coast_weight
+		if current_inside != previous_inside:
+			var denominator := float(current["coast"]) - float(previous["coast"])
+			var t := 0.5 if absf(denominator) < 0.000001 \
+				else clampf(
+					(min_coast_weight - float(previous["coast"])) / denominator,
+					0.0,
+					1.0,
+				)
+			result.append(_lerp_coating_point(previous, current, t))
+		if current_inside:
+			result.append(current)
+		previous = current
+		previous_inside = current_inside
+	return result
+
+
+static func _clip_coating_by_height(
+		polygon: Array[Dictionary],
+		max_height_m: float,
+) -> Array[Dictionary]:
+	if polygon.is_empty():
+		return []
+	var result: Array[Dictionary] = []
+	var previous: Dictionary = polygon.back()
+	var previous_height := (previous["position"] as Vector3).y
+	var previous_inside := previous_height <= max_height_m
+	for current in polygon:
+		var current_height := (current["position"] as Vector3).y
+		var current_inside := current_height <= max_height_m
+		if current_inside != previous_inside:
+			var denominator := current_height - previous_height
+			var t := 0.5 if absf(denominator) < 0.000001 \
+				else clampf((max_height_m - previous_height) / denominator, 0.0, 1.0)
+			result.append(_lerp_coating_point(previous, current, t))
+		if current_inside:
+			result.append(current)
+		previous = current
+		previous_height = current_height
+		previous_inside = current_inside
+	return result
+
+
+static func _lerp_coating_point(a: Dictionary, b: Dictionary, t: float) -> Dictionary:
+	return {
+		"position": (a["position"] as Vector3).lerp(b["position"] as Vector3, t),
+		"normal": (a["normal"] as Vector3).lerp(b["normal"] as Vector3, t).normalized(),
+		"coast": lerpf(float(a["coast"]), float(b["coast"]), t),
 	}
 
 
@@ -526,9 +729,8 @@ static func _shore_edge_vertex(
 	var pa := vertices[ia]
 	var pb := vertices[ib]
 	var point := pa.lerp(pb, t)
-	point.y = 0.0
 	vertices.append(point)
-	colors.append(terrain_color(0.0, 0.0))
+	colors.append(terrain_color(point.y, SUBMERGED_SHELF_EXTENT_M))
 	return vertices.size() - 1
 
 
@@ -654,12 +856,11 @@ static func estimate_mesh_memory(data: Dictionary) -> int:
 
 
 static func terrain_color(height: float, signed_distance: float = -999.0) -> Color:
-	# Shader owns albedo. Vertex colour only carries coastal weight in alpha
-	# (1 = at the waterline / svaberg band, 0 = deep inland).
+	# Shader owns albedo. Vertex colour alpha = coastal rock weight
+	# (1 = waterline / svaberg / rock-face band, 0 = deep inland).
 	var inland := maxf(-signed_distance, 0.0) if signed_distance > -900.0 else maxf(height * 8.0, 0.0)
-	var coast_w := 1.0 - smoothstep(8.0, 140.0, inland)
-	# Mild RGB tint kept as a debug fallback if maps fail to bind.
-	var tint := Color(0.45, 0.46, 0.44).lerp(Color(0.22, 0.30, 0.16), 1.0 - coast_w)
+	var coast_w := 1.0 - smoothstep(6.0, 130.0, inland)
+	var tint := Color(0.32, 0.33, 0.325).lerp(Color(0.18, 0.26, 0.14), 1.0 - coast_w)
 	tint.a = coast_w
 	return tint
 
@@ -708,10 +909,18 @@ static func calculate_terrain_normals(
 			continue
 		var vertex := vertices[vertex_index]
 		var xz := Vector2(vertex.x, vertex.z)
-		var left := sample_terrain_height(layout, xz - Vector2(SAMPLE_OFFSET_M, 0.0), flatten_zones)
-		var right := sample_terrain_height(layout, xz + Vector2(SAMPLE_OFFSET_M, 0.0), flatten_zones)
-		var north := sample_terrain_height(layout, xz - Vector2(0.0, SAMPLE_OFFSET_M), flatten_zones)
-		var south := sample_terrain_height(layout, xz + Vector2(0.0, SAMPLE_OFFSET_M), flatten_zones)
+		var left := sample_render_terrain_height(
+			layout, xz - Vector2(SAMPLE_OFFSET_M, 0.0), flatten_zones
+		)
+		var right := sample_render_terrain_height(
+			layout, xz + Vector2(SAMPLE_OFFSET_M, 0.0), flatten_zones
+		)
+		var north := sample_render_terrain_height(
+			layout, xz - Vector2(0.0, SAMPLE_OFFSET_M), flatten_zones
+		)
+		var south := sample_render_terrain_height(
+			layout, xz + Vector2(0.0, SAMPLE_OFFSET_M), flatten_zones
+		)
 		normals[vertex_index] = Vector3(
 			left - right,
 			SAMPLE_OFFSET_M * 2.0,

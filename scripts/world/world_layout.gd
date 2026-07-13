@@ -128,9 +128,9 @@ func classify_region(world_xz: Vector2) -> Region:
 	return _regions[z * _resolution + x] as Region
 
 
-## Continuous deterministic terrain height. The coast starts as low exposed
-## svaberg, then rises rapidly into noise-carved ridges. Signed distance supplies
-## the fjord-wall shape; seeded fields break it into Norwegian-style rock masses.
+## Continuous deterministic terrain height. The coastline itself is rock:
+## either wide polished svaberg shelves or steep rock faces dropping to water.
+## No separate rock props — the mesh/shader are the shore.
 func sample_height(world_xz: Vector2) -> float:
 	var distance := sample_signed_distance(world_xz)
 	if distance >= 0.0:
@@ -141,29 +141,40 @@ func sample_height(world_xz: Vector2) -> float:
 	var inland := minf(-distance, 6500.0)
 	var coast_var := _noise_01(_coast_noise, world_xz)
 	var shelf_shape := _noise_01(_shelf_noise, world_xz)
-	# Alternating narrow rubble coves and broad glacially polished rock shelves.
-	var shelf_width := lerpf(24.0, 105.0, coast_var)
-	var shelf_height := lerpf(1.4, 6.5, coast_var)
+	# High coast_var = broad svaberg slabs; low = cliffy rock-face shoreline.
+	var face_amt := 1.0 - coast_var
+	var shelf_width := lerpf(12.0, 120.0, coast_var)
+	var shelf_height := lerpf(0.55, 4.8, coast_var)
 	var shelf_t := clampf(inland / maxf(shelf_width, 1.0), 0.0, 1.0)
-	var shelf := shelf_height * (1.0 - pow(1.0 - shelf_t, 2.15))
-	var beach_rubble := (_detail_noise.get_noise_2d(world_xz.x, world_xz.y)) \
-		* lerpf(1.2, 0.25, coast_var) * (0.25 + shelf_t * 0.75)
-	var slab_roll := (shelf_shape - 0.5) * 2.2 * shelf_t
+	# Svaberg eases convex/flat; face coasts stay low then climb hard after the lip.
+	var shelf_ease := 1.0 - pow(1.0 - shelf_t, lerpf(1.35, 2.6, coast_var))
+	var shelf := shelf_height * shelf_ease
+	var slab_roll := (shelf_shape - 0.5) * lerpf(0.35, 2.4, coast_var) * shelf_t
+	var micro := _detail_noise.get_noise_2d(world_xz.x, world_xz.y) \
+		* lerpf(0.35, 0.9, face_amt) * (1.0 - shelf_t * 0.5)
 	if inland <= shelf_width:
-		return maxf(0.04, shelf + beach_rubble + slab_roll)
+		return maxf(0.04, shelf + slab_roll + micro)
 
 	var past_shelf := maxf(inland - shelf_width, 0.0)
+	# Continuous rock face: steep rise right off the shelf on face coasts.
+	var face_reach := lerpf(220.0, 55.0, face_amt)
+	var face_height := lerpf(18.0, 95.0, face_amt) * lerpf(0.75, 1.2, shelf_shape)
+	var face_t := 1.0 - exp(-past_shelf / maxf(face_reach, 1.0))
+	var rock_face := face_height * face_t
+
 	var mountain := _noise_01(_mountain_noise, world_xz)
 	var ridge_raw := absf(_ridge_noise.get_noise_2d(world_xz.x, world_xz.y))
 	var ridge := pow(1.0 - clampf(ridge_raw, 0.0, 1.0), 2.5)
 	var rise_t := 1.0 - exp(-past_shelf / 1450.0)
-	# Fjord walls are decisive but bounded to plausible south/west Norway relief.
-	var base_uplift := minf(past_shelf, 3600.0) * lerpf(0.10, 0.27, mountain)
-	var ridge_relief := ridge * lerpf(24.0, 390.0, rise_t) * lerpf(0.62, 1.05, mountain)
-	var rolling_relief := (shelf_shape - 0.5) * lerpf(8.0, 95.0, rise_t)
+	var base_uplift := minf(past_shelf, 3600.0) * lerpf(0.08, 0.24, mountain)
+	var ridge_relief := ridge * lerpf(20.0, 360.0, rise_t) * lerpf(0.62, 1.05, mountain)
+	var rolling_relief := (shelf_shape - 0.5) * lerpf(6.0, 85.0, rise_t)
 	var rock_detail := _detail_noise.get_noise_2d(world_xz.x, world_xz.y) \
 		* lerpf(1.0, 6.0, rise_t)
-	return maxf(shelf_height, shelf_height + base_uplift + ridge_relief + rolling_relief + rock_detail)
+	return maxf(
+		shelf_height,
+		shelf_height + rock_face + base_uplift + ridge_relief + rolling_relief + rock_detail,
+	)
 
 
 static func _noise_01(noise: FastNoiseLite, world_xz: Vector2) -> float:

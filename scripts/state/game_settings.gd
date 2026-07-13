@@ -33,7 +33,7 @@ var invert_mouse_y:    bool  = false
 ## Offline default or authoritative server-selected generation seed/version.
 ## These are intentionally not written to settings.cfg.
 var map_generation_seed: int = 42
-var map_generation_version: int = 3
+var map_generation_version: int = 4
 var map_layout_checksum: String = ""
 
 

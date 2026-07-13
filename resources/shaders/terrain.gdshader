@@ -9,6 +9,8 @@ uniform sampler2D moss_map : filter_linear_mipmap, repeat_enable;
 uniform sampler2D grass_map : filter_linear_mipmap, repeat_enable;
 uniform sampler2D lichen_map : filter_linear_mipmap, repeat_enable;
 uniform sampler2D macro_map : filter_linear_mipmap, repeat_enable;
+uniform sampler2D forest_map : filter_linear_mipmap, repeat_disable;
+uniform float forest_world_half_extent_m = 20000.0;
 
 uniform float rock_scale : hint_range(0.002, 0.08) = 0.018;
 uniform float moss_scale : hint_range(0.002, 0.08) = 0.012;
@@ -52,6 +54,8 @@ void fragment() {
 	vec3 wet_rock = vec3(0.105, 0.125, 0.135);
 	vec3 dry_rock = vec3(0.285, 0.295, 0.285);
 	vec3 cliff_rock = vec3(0.235, 0.250, 0.255);
+	// Flat coastal shelf (svaberg) — dark cool slate, not pale concrete.
+	vec3 slate = vec3(0.085, 0.115, 0.140);
 	vec3 rock = mix(wet_rock, dry_rock, rock_s.r);
 	rock = mix(rock, cliff_rock, slope * 0.68);
 	rock *= mix(0.76, 1.10, rock_s.b);
@@ -74,37 +78,58 @@ void fragment() {
 	snow = mix(snow, vec3(0.54, 0.59, 0.63), macro_s.b * 0.28);
 
 	// --- Weights -------------------------------------------------------------
-	float wet_edge = coast_w * (1.0 - smoothstep(1.0, 4.5, h));
-	float svaberg = coast_w * smoothstep(0.50, 0.94, n.y);
+	// The coastline IS rock: continuous svaberg shelves and steep shore faces.
+	// Greenery stays inland; coast_w owns the shore band.
+	float wet_edge = coast_w * (1.0 - smoothstep(0.4, 3.5, h));
+	// Coarse terrain can interpolate coast_w away across a wide shoreline cell.
+	// Low + flat is therefore the authoritative shelf mask; coast_w extends it
+	// into raised svaberg without making inland hills slate.
+	float low_flat_shelf = smoothstep(0.58, 0.90, n.y)
+		* (1.0 - smoothstep(8.0, 42.0, h));
+	float coastal_shelf = coast_w * smoothstep(0.50, 0.90, n.y)
+		* (1.0 - smoothstep(18.0, 60.0, h));
+	float flat_shelf = clamp(max(low_flat_shelf, coastal_shelf), 0.0, 1.0);
+	float svaberg = flat_shelf;
+	float shore_face = coast_w * smoothstep(0.12, 0.55, slope);
 	float cliff = smoothstep(0.16, 0.52, slope);
 	float lowland = 1.0 - smoothstep(260.0, 620.0, h);
-	float soil = smoothstep(0.76, 0.96, n.y) * (1.0 - coast_w * 0.72);
+	float soil = smoothstep(0.76, 0.96, n.y) * (1.0 - coast_w);
 	float moisture = smoothstep(0.28, 0.72, macro_s.g);
 	float moss_w = soil * lowland * mix(0.12, 0.72, moisture) * mix(0.25, 0.85, moss_s.r);
 	float heath_w = soil * lowland * mix(0.16, 0.68, grass_s.g);
-	// Vegetation remains patchy; bare bedrock is the dominant surface.
 	moss_w *= 1.0 - cliff * 0.92;
 	heath_w *= (1.0 - cliff) * smoothstep(0.24, 0.57, macro_s.r);
 	float snow_w = smoothstep(850.0, 1250.0, h) * smoothstep(0.72, 0.94, n.y)
 		* smoothstep(0.42, 0.68, macro_s.b);
-	float lichen_w = coast_w * smoothstep(0.2, 0.7, lichen_s.r)
-		* (1.0 - cliff * 0.4) * smoothstep(0.5, 4.0, h);
+	float lichen_w = coast_w * smoothstep(0.25, 0.75, lichen_s.r)
+		* (1.0 - shore_face * 0.55) * smoothstep(0.3, 3.5, h);
 
-	// Macro breakup so large faces are not a single paint bucket.
 	float macro_rock = mix(0.85, 1.15, macro_s.r);
 	float macro_green = mix(0.8, 1.2, macro_s.g);
 	moss_w *= macro_green;
 	heath_w *= macro_green;
 	svaberg *= macro_rock;
+	shore_face *= macro_rock;
 	cliff *= macro_rock;
 
 	vec3 albedo = rock;
-	albedo = mix(albedo, lichen, clamp(lichen_w * 0.48, 0.0, 0.56));
-	albedo = mix(albedo, mix(rock, dry_rock, 0.22), clamp(svaberg * 0.42, 0.0, 0.56));
-	albedo = mix(albedo, wet_rock * mix(0.82, 1.05, rock_s.b), clamp(wet_edge, 0.0, 1.0));
-	albedo = mix(albedo, cliff_rock * mix(0.78, 1.08, rock_s.r), clamp(cliff * 0.72, 0.0, 0.82));
-	albedo = mix(albedo, moss, clamp(moss_w, 0.0, 0.56));
-	albedo = mix(albedo, heath, clamp(heath_w, 0.0, 0.52));
+	// Flat coastal svaberg → slate. Nearly opaque so the shelf reads as one rock band.
+	albedo = mix(albedo, slate * mix(0.92, 1.06, rock_s.r * 0.5 + macro_s.b * 0.5), clamp(svaberg, 0.0, 1.0));
+	albedo = mix(albedo, wet_rock * mix(0.78, 1.08, rock_s.b), clamp(wet_edge * 0.85, 0.0, 1.0));
+	albedo = mix(albedo, cliff_rock * mix(0.72, 1.12, rock_s.r), clamp(max(shore_face, cliff * 0.55), 0.0, 1.0));
+	albedo = mix(albedo, lichen, clamp(lichen_w * 0.35 * (1.0 - svaberg), 0.0, 0.45));
+	albedo = mix(albedo, moss, clamp(moss_w * (1.0 - coast_w), 0.0, 0.56));
+	albedo = mix(albedo, heath, clamp(heath_w * (1.0 - coast_w), 0.0, 0.52));
+
+	// Far canopy massing: ForestField coverage darkens wooded slopes without
+	// placing tree geometry beyond the prop LOD radius.
+	vec2 forest_uv = world_pos.xz / max(forest_world_half_extent_m * 2.0, 1.0) + vec2(0.5);
+	float forest_w = texture(forest_map, clamp(forest_uv, vec2(0.0), vec2(1.0))).r;
+	forest_w *= (1.0 - cliff * 0.85) * (1.0 - coast_w * 0.7)
+		* (1.0 - flat_shelf) * (1.0 - snow_w);
+	vec3 canopy = vec3(0.022, 0.048, 0.026);
+	albedo = mix(albedo, canopy, clamp(forest_w * 0.88, 0.0, 0.86));
+
 	albedo = mix(albedo, snow, clamp(snow_w, 0.0, 1.0));
 
 	// Fine contrast so mid-range mountains are not chalk-white.
@@ -112,7 +137,6 @@ void fragment() {
 	albedo = clamp(albedo, vec3(0.015), vec3(0.78));
 
 	ALBEDO = albedo;
-	ROUGHNESS = mix(0.96, 0.78, heath_w * 0.22 + snow_w * 0.5);
-	// Cheap slope darkening for readable ridges without a normal map.
-	ALBEDO *= mix(1.0, 0.70, cliff * 0.62);
+	ROUGHNESS = mix(0.96, 0.72, heath_w * 0.22 + snow_w * 0.5 + wet_edge * 0.35);
+	ALBEDO *= mix(1.0, 0.68, max(shore_face, cliff) * 0.7);
 }
