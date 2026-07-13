@@ -30,6 +30,7 @@ func _process(delta: float) -> void:
 		return
 	_tick = 0.5
 	_update_auto_nav()
+	_apply_day_scales()
 
 
 func cycle_preset() -> void:
@@ -66,6 +67,7 @@ func _gather_lights() -> void:
 			ShipLight.LightType.WINDOW:
 				_window_lights.append(sl)
 
+	_apply_day_scales()
 	_apply_preset()
 
 
@@ -84,6 +86,20 @@ func _update_auto_nav() -> void:
 	if should_auto != _auto_nav_active:
 		_auto_nav_active = should_auto
 		_apply_preset()
+
+
+func _apply_day_scales() -> void:
+	var weather := get_node_or_null("/root/WeatherLighting")
+	var light_scale := 1.0
+	var vol_scale := 1.0
+	if weather != null:
+		if weather.has_method("artificial_light_scale"):
+			light_scale = float(weather.call("artificial_light_scale"))
+		if weather.has_method("artificial_volumetric_scale"):
+			vol_scale = float(weather.call("artificial_volumetric_scale"))
+	_set_group_day_scale(_nav_lights, light_scale, vol_scale)
+	_set_group_day_scale(_work_lights, light_scale, vol_scale)
+	_set_group_day_scale(_window_lights, light_scale, vol_scale)
 
 
 func _apply_preset() -> void:
@@ -117,3 +133,9 @@ func _set_group(lights: Array[Node], on: bool) -> void:
 	for light in lights:
 		if is_instance_valid(light):
 			light.call("set_active", on)
+
+
+func _set_group_day_scale(lights: Array[Node], light_scale: float, vol_scale: float) -> void:
+	for light in lights:
+		if is_instance_valid(light) and light.has_method("set_day_scale"):
+			light.call("set_day_scale", light_scale, vol_scale)

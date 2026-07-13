@@ -22,7 +22,8 @@ func zoom(steps: int) -> void:
 func pan_pixels(delta_pixels: Vector2, pixels_per_world_unit: float, origin: Vector2) -> void:
 	if pixels_per_world_unit <= 0.0:
 		return
-	center = origin - delta_pixels / pixels_per_world_unit
+	# Chart is north-up: screen +Y is world −Z, so grab-pan must flip the Y axis.
+	center = origin - Vector2(delta_pixels.x, -delta_pixels.y) / pixels_per_world_unit
 	user_moved = true
 
 

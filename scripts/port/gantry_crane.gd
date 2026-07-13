@@ -330,6 +330,8 @@ func _build_lights() -> void:
 		flood.basis = Basis(x_axis, y_axis, z_axis)
 		flood.light_color = Color(1.0, 0.94, 0.82)
 		flood.light_energy = 4.0
+		flood.set_meta("base_energy", 4.0)
+		flood.light_volumetric_fog_energy = 0.0
 		flood.spot_range = 32.0
 		flood.spot_angle = 55.0
 		flood.spot_attenuation = 0.6
@@ -345,6 +347,8 @@ func _build_lights() -> void:
 	_beacon.position = Vector3(0.0, 18.2, 0.0)
 	_beacon.light_color = Color(1.0, 0.1, 0.1)
 	_beacon.light_energy = 1.0
+	_beacon.set_meta("base_energy", 1.0)
+	_beacon.light_volumetric_fog_energy = 0.0
 	_beacon.omni_range = 6.0
 	_beacon.shadow_enabled = false
 	_gantry_frame.add_child(_beacon)
@@ -727,7 +731,15 @@ func _update_beacon(delta: float) -> void:
 	_beacon_phase = fmod(_beacon_phase + delta * 1.6, TAU)
 	# Sharp pulse — bright for ~0.2 s, then dim, every ~3.9 s.
 	var pulse := pow(maxf(sin(_beacon_phase), 0.0), 12.0)
-	_beacon.light_energy = 0.2 + pulse * 5.0
+	var light_scale := 1.0
+	var weather := get_node_or_null("/root/WeatherLighting")
+	if weather != null and weather.has_method("artificial_light_scale"):
+		light_scale = float(weather.call("artificial_light_scale"))
+	_beacon.light_energy = (0.2 + pulse * 5.0) * light_scale
+	for flood in _floods:
+		if flood != null and is_instance_valid(flood):
+			var base := float(flood.get_meta("base_energy", 4.0))
+			flood.light_energy = base * light_scale
 
 	# Update the painted berth number — off-white normally, bright green
 	# when this crane's berth has the player's ship moored.

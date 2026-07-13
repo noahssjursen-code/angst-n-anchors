@@ -78,16 +78,14 @@ func _process(delta: float) -> void:
 	var dist_from_noon = abs(time - 0.5)
 	var night_factor = smoothstep(0.15, 0.35, dist_from_noon)
 	var fog_factor = smoothstep(0.1, 0.4, fog)
-	var raw_factor: float = night_factor + fog_factor
+	# Fog reinforces beams at night/twilight only — never turns the lamp on at noon.
+	var raw_factor: float = night_factor * (1.0 + fog_factor)
 
 	# Toggle hard off when contribution would be invisible — kills the spotlight
 	# contribution to volumetric fog (each spot was injecting up to 1500 units
 	# of fog energy over a 4 km range, very expensive) and stops the alpha-blended
-	# beam meshes from drawing transparent overdraw across the screen. Threshold
-	# matches the old 0.05 clamp floor: at high noon with no fog the lighthouse
-	# was only contributing 5% energy anyway, which is below visual perception
-	# through the existing dim/grade pipeline.
-	var should_be_active: bool = raw_factor > 0.04
+	# beam meshes from drawing transparent overdraw across the screen.
+	var should_be_active: bool = raw_factor > 0.08
 	if should_be_active != _is_active:
 		_is_active = should_be_active
 		if _spot1: _spot1.visible = should_be_active
@@ -99,18 +97,24 @@ func _process(delta: float) -> void:
 	if not _is_active:
 		return
 
-	var active_factor = clampf(raw_factor, 0.05, 1.0)
+	var active_factor = clampf(raw_factor, 0.0, 1.0)
+	var light_scale := 1.0
+	var vol_scale := 1.0
+	if weather.has_method("artificial_light_scale"):
+		light_scale = float(weather.call("artificial_light_scale"))
+	if weather.has_method("artificial_volumetric_scale"):
+		vol_scale = float(weather.call("artificial_volumetric_scale"))
 	if _spot1:
-		_spot1.light_energy = 400.0 * active_factor
-		_spot1.light_volumetric_fog_energy = 1500.0 * active_factor
+		_spot1.light_energy = 400.0 * active_factor * light_scale
+		_spot1.light_volumetric_fog_energy = 1500.0 * active_factor * vol_scale
 	if _spot2:
-		_spot2.light_energy = 400.0 * active_factor
-		_spot2.light_volumetric_fog_energy = 1500.0 * active_factor
+		_spot2.light_energy = 400.0 * active_factor * light_scale
+		_spot2.light_volumetric_fog_energy = 1500.0 * active_factor * vol_scale
 	if _omni:
-		_omni.light_energy = 20.0 * active_factor
-		_omni.light_volumetric_fog_energy = 5.0 * active_factor
+		_omni.light_energy = 20.0 * active_factor * light_scale
+		_omni.light_volumetric_fog_energy = 5.0 * active_factor * vol_scale
 	if _beam_mat:
-		_beam_mat.set_shader_parameter("energy", 1.0 * active_factor)
+		_beam_mat.set_shader_parameter("energy", 1.0 * active_factor * light_scale)
 		_beam_mat.set_shader_parameter("fog_density", fog)
 
 func _build() -> void:

@@ -39,6 +39,11 @@ var _bulb: OmniLight3D
 var _lens_mat: StandardMaterial3D
 var _lens_mesh: MeshInstance3D
 var _active: bool = false
+var _base_energy: float = 0.0
+var _base_vol_energy: float = 0.0
+var _base_bulb_energy: float = 0.0
+var _day_scale: float = 1.0
+var _vol_scale: float = 1.0
 
 
 func _ready() -> void:
@@ -54,6 +59,13 @@ func set_active(on: bool) -> void:
 	_apply_active()
 
 
+## Daylight energy / volumetric damp from ShipLighting (preserves night look).
+func set_day_scale(light_scale: float, volumetric_scale: float) -> void:
+	_day_scale = clampf(light_scale, 0.0, 1.0)
+	_vol_scale = clampf(volumetric_scale, 0.0, 1.0)
+	_apply_energies()
+
+
 func _apply_active() -> void:
 	if _light != null and is_instance_valid(_light):
 		_light.visible = _active
@@ -61,8 +73,22 @@ func _apply_active() -> void:
 		_bulb.visible = _active
 	if _lens_mat != null:
 		_lens_mat.emission_enabled = _active
-		_lens_mat.emission_energy_multiplier = _lens_on_energy() if _active else 0.0
 		_lens_mat.albedo_color = _lens_mat.emission if _active else _lens_mat.emission.darkened(0.55)
+	_apply_energies()
+
+
+func _apply_energies() -> void:
+	var energy_mul := _day_scale if _active else 0.0
+	var vol_mul := _vol_scale if _active else 0.0
+	if _light != null and is_instance_valid(_light):
+		_light.light_energy = _base_energy * energy_mul
+		_light.light_volumetric_fog_energy = _base_vol_energy * vol_mul
+	if _bulb != null and is_instance_valid(_bulb):
+		_bulb.light_energy = _base_bulb_energy * energy_mul
+	if _lens_mat != null:
+		_lens_mat.emission_energy_multiplier = (
+			_lens_on_energy() * energy_mul if _active else 0.0
+		)
 
 
 func _lens_on_energy() -> float:
@@ -85,6 +111,9 @@ func _rebuild() -> void:
 	_bulb = null
 	_lens_mat = null
 	_lens_mesh = null
+	_base_energy = 0.0
+	_base_vol_energy = 0.0
+	_base_bulb_energy = 0.0
 
 	for child in get_children():
 		if Engine.is_editor_hint():
@@ -232,8 +261,10 @@ func _make_omni(color: Color, range_m: float, energy: float, vol_energy: float) 
 	light.light_color = color
 	light.omni_range = range_m
 	light.omni_attenuation = 1.5
-	light.light_energy = energy
-	light.light_volumetric_fog_energy = vol_energy
+	_base_energy = energy
+	_base_vol_energy = vol_energy
+	light.light_energy = energy * _day_scale
+	light.light_volumetric_fog_energy = vol_energy * _vol_scale
 	light.light_specular = 0.7
 	light.light_size = 0.1
 	light.shadow_enabled = false
@@ -248,7 +279,8 @@ func _make_bulb(color: Color, range_m: float, energy: float) -> OmniLight3D:
 	light.light_color = color
 	light.omni_range = range_m
 	light.omni_attenuation = 3.5
-	light.light_energy = energy
+	_base_bulb_energy = energy
+	light.light_energy = energy * _day_scale
 	light.light_volumetric_fog_energy = 0.0
 	light.light_specular = 0.2
 	light.light_size = 0.02
@@ -267,8 +299,10 @@ func _make_spot(pitch_deg: float, range_m: float, energy: float, angle_deg: floa
 	light.light_color = Color(1.0, 0.96, 0.88)
 	light.spot_range = range_m
 	light.spot_attenuation = 1.25
-	light.light_energy = energy
-	light.light_volumetric_fog_energy = maxf(energy * 0.9, 28.0)
+	_base_energy = energy
+	_base_vol_energy = maxf(energy * 0.9, 28.0)
+	light.light_energy = energy * _day_scale
+	light.light_volumetric_fog_energy = _base_vol_energy * _vol_scale
 	light.spot_angle = angle_deg
 	light.spot_angle_attenuation = 1.8
 	light.light_specular = 0.85

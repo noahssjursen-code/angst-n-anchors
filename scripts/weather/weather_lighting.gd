@@ -165,6 +165,26 @@ func _ready() -> void:
 	_sync_wave_intensity()
 
 
+## Same sun-elevation daylight curve WorldRenderer uses for sun/ambient.
+## 0 at night → 1 near noon.
+func daylight_factor() -> float:
+	var elev_norm := -cos(time_of_day * TAU)
+	return smoothstep(-0.18, 0.55, elev_norm)
+
+
+## Multiplier for artificial light_energy / emission. Night stays 1.0; noon
+## keeps a tiny residual so deliberate daytime work lights still read as on.
+func artificial_light_scale() -> float:
+	return lerpf(1.0, 0.05, daylight_factor())
+
+
+## Multiplier for light_volumetric_fog_energy. Clear day kills peripheral fog
+## wash from fixtures; dense fog still allows a little daytime scatter.
+func artificial_volumetric_scale() -> float:
+	var fog_keep := smoothstep(0.25, 0.55, fog_density)
+	return lerpf(1.0, fog_keep * 0.25, daylight_factor())
+
+
 func _sync_wave_intensity() -> void:
 	if not weather_drives_waves:
 		return
