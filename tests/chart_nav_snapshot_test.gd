@@ -37,6 +37,31 @@ func _initialize() -> void:
 		-20.0,
 		"leeway wraps counter-clockwise"
 	)
+
+	# Vessel convention: Bow = −Z. Identity basis faces +Z (stern ahead of origin
+	# along +Z), so bow horizontal is −Z → heading 180° (south).
+	var vessel := Node3D.new()
+	root.add_child(vessel)
+	var stern_facing := NavigationAxes.vessel_bow_horizontal(vessel)
+	_check_close(stern_facing.x, 0.0, "identity bow x")
+	_check_close(stern_facing.y, -1.0, "identity bow is −Z")
+	_check_close(
+		NavigationAxes.heading_deg_horizontal(stern_facing),
+		180.0,
+		"identity vessel heads south"
+	)
+	# Yaw 180°: local −Z aligns with world +Z (north).
+	vessel.rotation_degrees = Vector3(0.0, 180.0, 0.0)
+	vessel.force_update_transform()
+	var north_bow := NavigationAxes.vessel_bow_horizontal(vessel)
+	_check_close(north_bow.x, 0.0, "yaw-180 bow x")
+	_check_close(north_bow.y, 1.0, "yaw-180 bow is +Z north")
+	_check_close(
+		NavigationAxes.heading_deg_horizontal(north_bow),
+		0.0,
+		"yaw-180 vessel heads north"
+	)
+	vessel.queue_free()
 	_finish()
 
 

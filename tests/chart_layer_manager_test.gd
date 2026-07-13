@@ -36,6 +36,13 @@ func _initialize() -> void:
 	camera.home(Vector3(100.0, 0.0, -200.0), [])
 	var bounds := camera.world_bounds(Vector2(800.0, 400.0))
 	_check(bounds.has_point(Vector2(100.0, -200.0)), "home keeps ship in camera bounds")
+	var origin := camera.center
+	var ppu := camera.pixels_per_world_unit(Vector2(800.0, 400.0))
+	camera.pan_pixels(Vector2(40.0, 0.0), ppu, origin)
+	_check(camera.center.x < origin.x, "drag right moves chart center west")
+	camera.center = origin
+	camera.pan_pixels(Vector2(0.0, 40.0), ppu, origin)
+	_check(camera.center.y > origin.y, "drag down moves chart center north")
 	_finish()
 
 

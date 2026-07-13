@@ -23,10 +23,11 @@ static func compass_card_rotation_rad(heading_rad: float) -> float:
 	return -heading_rad
 
 
-## Horizontal bow from a vessel node (meshes authored with bow at local +Z).
+## Horizontal bow from a vessel node (Bow = −Z, Stern = +Z).
 static func vessel_bow_horizontal(node: Node3D) -> Vector2:
 	var b := node.global_transform.basis
-	return Vector2(b.z.x, b.z.z)
+	# basis.z is local +Z in world space (stern); bow is the opposite.
+	return Vector2(-b.z.x, -b.z.z)
 
 
 ## Bearing from world-space delta.xyz on the XZ plane, clockwise from north.
