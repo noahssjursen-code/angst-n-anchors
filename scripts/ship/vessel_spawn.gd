@@ -177,10 +177,8 @@ static func _apply_fitout(boat: BoatBody, layout: Dictionary) -> void:
 
 static func _instantiate_hull(hull_id: String) -> BoatBody:
 	var id := HullRegistry.resolve_network_hull_id(hull_id)
-	if HullCatalog.has_id(id):
-		return HullRegistry.build_hull(id)
 	var scene_path := HullRegistry.scene_path_for(id)
-	if not scene_path.is_empty() and ResourceLoader.exists(scene_path):
+	if ResourceLoader.exists(scene_path):
 		var packed := load(scene_path) as PackedScene
 		if packed != null:
 			var node := packed.instantiate()
@@ -190,7 +188,16 @@ static func _instantiate_hull(hull_id: String) -> BoatBody:
 				return boat
 			if node != null:
 				node.queue_free()
-	return HullRegistry.build_hull(id)
+	var script_path := TRAWLER_SMALL_SCRIPT
+	if id == WORKBOAT_ID:
+		script_path = WORKBOAT_SCRIPT
+	elif id == PASSENGER_CATAMARAN_ID:
+		script_path = PASSENGER_CATAMARAN_SCRIPT
+	var script := load(script_path) as GDScript
+	if script != null and script.has_method("build"):
+		return script.call("build") as BoatBody
+	push_error("VesselSpawn: hull missing id=%s" % id)
+	return null
 
 
 static func _ensure_assembled(boat: BoatBody) -> void:

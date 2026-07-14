@@ -10,7 +10,6 @@ const PASSENGER_CATAMARAN_SCENE := "res://scenes/vessels/passenger_catamaran.tsc
 const _WORKBOAT_SCRIPT := preload("res://scripts/ship/vessels/workboat.gd")
 const _TRAWLER_SMALL_SCRIPT := preload("res://scripts/ship/vessels/fishing_trawler_small.gd")
 const _PASSENGER_CATAMARAN_SCRIPT := preload("res://scripts/ship/vessels/passenger_catamaran.gd")
-const _CATALOG_HULL_SCRIPT := preload("res://scripts/ship/vessels/catalog_hull_vessel.gd")
 
 const WORKBOAT := {
 	"id": "workboat",
@@ -86,27 +85,15 @@ const LEGACY_ID_ALIASES: Dictionary = {
 
 
 static func catalog() -> Array[Dictionary]:
-	var entries: Array[Dictionary] = [
+	return [
 		FISHING_TRAWLER_SMALL.duplicate(true),
 		WORKBOAT.duplicate(true),
 		PASSENGER_CATAMARAN.duplicate(true),
 	]
-	for entry in HullCatalog.catalog_entries():
-		entries.append(entry)
-	entries.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
-		var loa_a := float(a.get("loa_m", 0.0))
-		var loa_b := float(b.get("loa_m", 0.0))
-		if is_equal_approx(loa_a, loa_b):
-			return str(a.get("id", "")) < str(b.get("id", ""))
-		return loa_a < loa_b
-	)
-	return entries
 
 
 static func get_by_id(hull_id: String) -> Dictionary:
 	var id := resolve_network_hull_id(hull_id)
-	if HullCatalog.has_id(id):
-		return HullCatalog.get_by_id(id)
 	match id:
 		"fishing_trawler_small":
 			return FISHING_TRAWLER_SMALL.duplicate(true)
@@ -135,8 +122,6 @@ static func resolve_network_hull_id(hull_id: String) -> String:
 	var id := hull_id.strip_edges()
 	if id.is_empty():
 		return "workboat"
-	if HullCatalog.has_id(id):
-		return id
 	if id == "workboat" or id == "fishing_trawler_small" or id == "passenger_catamaran":
 		return id
 	if LEGACY_ID_ALIASES.has(id):
@@ -156,10 +141,7 @@ static func scene_path_for(hull_id: String) -> String:
 
 
 static func make_grid(hull_id: String) -> DeckGrid:
-	var id := resolve_network_hull_id(hull_id)
-	if HullCatalog.has_id(id):
-		return _CATALOG_HULL_SCRIPT.make_grid(id)
-	match id:
+	match resolve_network_hull_id(hull_id):
 		"fishing_trawler_small":
 			return _TRAWLER_SMALL_SCRIPT.make_grid()
 		"passenger_catamaran":
@@ -169,10 +151,7 @@ static func make_grid(hull_id: String) -> DeckGrid:
 
 
 static func build_hull(hull_id: String) -> BoatBody:
-	var id := resolve_network_hull_id(hull_id)
-	if HullCatalog.has_id(id):
-		return _CATALOG_HULL_SCRIPT.build(id) as BoatBody
-	match id:
+	match resolve_network_hull_id(hull_id):
 		"fishing_trawler_small":
 			return _TRAWLER_SMALL_SCRIPT.build() as BoatBody
 		"passenger_catamaran":
