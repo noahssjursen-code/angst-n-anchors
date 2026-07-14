@@ -65,7 +65,7 @@ func _capture_all() -> void:
 					camera.position = Vector3(
 						0.0,
 						height * 0.82,
-						-length * 0.5 - maxf(beam * 1.9, height * 5.0)
+						-length * 0.5 - maxf(beam * 1.15, height * 2.6)
 					)
 				"side":
 					boat.rotation_degrees.y = 0.0
