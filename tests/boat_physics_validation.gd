@@ -88,6 +88,19 @@ func _test_hydrostatic_profiles() -> void:
 		)
 	var cat_entry := HullRegistry.get_by_id(CATAMARAN.VESSEL_ID)
 	_check(int(cat_entry.get("price_marks", -1)) == 0, "catamaran hull costs zero")
+	for entry in HullRegistry.catalog():
+		var hull_id := str(entry.get("id", ""))
+		var boat := HullRegistry.build_hull(hull_id)
+		_check(boat != null, "registered hull builds: %s" % hull_id)
+		if boat == null:
+			continue
+		var target := boat.displacement_t * 1000.0 / 1025.0
+		var actual := boat.hull_stations.volume_below(boat.draft_m)
+		_check(
+			absf(actual - target) / maxf(target, 0.001) < 0.015,
+			"registered hull draft calibration: %s" % hull_id
+		)
+		boat.free()
 
 
 func _test_mass_and_moments() -> void:
