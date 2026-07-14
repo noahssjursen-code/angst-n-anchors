@@ -54,7 +54,6 @@ func _capture_all() -> void:
 			push_error("Hull visual capture: cannot build %s" % hull_id)
 			continue
 		boat.freeze = true
-		boat.rotation_degrees.y = -18.0
 		world.add_child(boat)
 		var length := maxf(boat.length_m, 10.0)
 		var beam := maxf(boat.beam_m, 5.0)
@@ -62,18 +61,21 @@ func _capture_all() -> void:
 		for view in ["front", "side", "three_quarter"]:
 			match view:
 				"front":
+					boat.rotation_degrees.y = 0.0
 					camera.position = Vector3(
 						0.0,
 						height * 0.82,
-						-maxf(beam * 1.9, height * 5.0)
+						-length * 0.5 - maxf(beam * 1.9, height * 5.0)
 					)
 				"side":
+					boat.rotation_degrees.y = 0.0
 					camera.position = Vector3(
-						maxf(length * 0.76, height * 5.0),
+						beam * 0.5 + maxf(length * 0.76, height * 5.0),
 						height * 0.68,
 						0.0
 					)
 				_:
+					boat.rotation_degrees.y = -18.0
 					var distance := maxf(length * 0.64, beam * 1.45)
 					camera.position = Vector3(
 						distance * 0.55,
