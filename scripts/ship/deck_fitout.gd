@@ -286,6 +286,16 @@ static func _collider_spec(brick_id: String) -> Dictionary:
 				"size": Vector3(sz.x, sz.y * 0.5, sz.z),
 				"offset": Vector3(0.0, -sz.y * 0.25, 0.0),
 			}
+		"roof_slope":
+			return {
+				"size": Vector3(sz.x, sz.y * 0.5, sz.z),
+				"offset": Vector3(0.0, -sz.y * 0.25, 0.0),
+			}
+		"roof_slope_inv":
+			return {
+				"size": Vector3(sz.x, sz.y * 0.5, sz.z),
+				"offset": Vector3(0.0, sz.y * 0.25, 0.0),
+			}
 		"block_window":
 			## Thin wall on the glazed −Z face.
 			return {

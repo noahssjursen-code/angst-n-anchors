@@ -29,7 +29,9 @@ func _test_count_and_metadata(ports: Array[PortDefinition]) -> void:
 		return
 	_check(ports[0].port_id == "port-home", "home port id is first")
 	_check(ports[0].display_name == "Haugsvik", "home port name is first")
+	var represented_sizes := {}
 	for port in ports:
+		represented_sizes[port.size] = true
 		_check(port.has_explicit_rotation, "%s owns explicit yaw" % port.port_id)
 		_check(
 			port.ground_mode == PortDefinition.GroundMode.WORLD_TERRAIN,
@@ -39,6 +41,7 @@ func _test_count_and_metadata(ports: Array[PortDefinition]) -> void:
 			port.region_kind != PortDefinition.RegionKind.LEGACY_ISLAND,
 			"%s has coastal region kind" % port.port_id
 		)
+	_check(represented_sizes.size() >= 3, "coast supports at least three port sizes")
 
 
 func _test_determinism(first: Array[PortDefinition], second: Array[PortDefinition]) -> void:
@@ -82,6 +85,10 @@ func _test_geography(layout: WorldLayout, ports: Array[PortDefinition]) -> void:
 		_check(
 			PLACER.is_land_footprint_valid(layout, point, seaward),
 			"%s facilities footprint is land" % port.port_id
+		)
+		_check(
+			PLACER.is_size_footprint_valid(layout, point, seaward, port.size),
+			"%s full size-%d settlement footprint is land" % [port.port_id, port.size],
 		)
 		_check(
 			PLACER.has_seaward_clearance(layout, point, seaward),

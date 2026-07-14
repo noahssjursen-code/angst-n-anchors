@@ -251,7 +251,7 @@ func _setup_ports(defs: Array[PortDefinition]) -> void:
 				data.port_id, data.display_name, data.world_position,
 				Vector3(INF, INF, INF),
 				data.commodity_export, data.commodity_imports,
-				data.island_width, 140.0, data.layout_seed,
+				data.island_width, PortSizing.PLOT_DEPTH_M, data.layout_seed,
 				data.population, data.features, data.rotation_y,
 				data.berth_count, data.size,
 			)
@@ -384,13 +384,9 @@ func _safe_spawn_position(home: PortPlot) -> Vector3:
 	return candidate
 
 
-## Mirrors PortExpander.ISLAND_WIDTH_BY_SIZE so LandField can be seeded without
-## paying for a full PortExpander.expand() round-trip per island at init time.
 ## Returns the island's nominal half-width (radius before LandField padding).
 func _island_radius_for_size(size: int) -> float:
-	var size_clamped := clampi(size, 0, 4)
-	const HALF_WIDTHS := [30.0, 40.0, 60.0, 100.0, 170.0]  # ISLAND_WIDTH_BY_SIZE * 0.5
-	return HALF_WIDTHS[size_clamped]
+	return PortSizing.island_width_m(size) * 0.5
 
 
 func _own_subtree(node: Node) -> void:

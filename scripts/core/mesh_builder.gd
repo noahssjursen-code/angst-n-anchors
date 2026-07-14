@@ -246,6 +246,48 @@ static func wedge_45(size: Vector3, color: Color, roughness: float = 0.92, metal
 	return mi
 
 
+## Inverted right-triangle wedge — solid above the diagonal (upside-down roof / eave).
+## High edge at local −Z, underside slopes up toward +Z.
+static func wedge_45_inverted(size: Vector3, color: Color, roughness: float = 0.92, metallic: float = 0.0) -> MeshInstance3D:
+	var hx := size.x * 0.5
+	var hy := size.y * 0.5
+	var hz := size.z * 0.5
+	var v0 := Vector3(-hx,  hy, -hz)
+	var v1 := Vector3( hx,  hy, -hz)
+	var v2 := Vector3( hx,  hy,  hz)
+	var v3 := Vector3(-hx,  hy,  hz)
+	var v4 := Vector3(-hx, -hy, -hz)
+	var v5 := Vector3( hx, -hy, -hz)
+
+	var mat := make_material(color, roughness, metallic)
+	mat.metallic = 0.0
+	mat.metallic_specular = 0.0
+	mat.roughness = 1.0
+
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	st.set_smooth_group(-1)
+	st.set_material(mat)
+
+	var faces: Array = [
+		[v0, v1, v2], [v0, v2, v3], # top
+		[v0, v4, v5], [v0, v5, v1], # high back (−Z)
+		[v4, v3, v2], [v4, v2, v5], # underside slope
+		[v0, v3, v4],               # port
+		[v1, v5, v2],               # starboard
+	]
+	for face in faces:
+		st.add_vertex(face[0])
+		st.add_vertex(face[1])
+		st.add_vertex(face[2])
+	st.generate_normals()
+
+	var mi := MeshInstance3D.new()
+	mi.mesh = st.commit()
+	mi.material_override = mat
+	return mi
+
+
 static func plane(
 	size: Vector2,
 	color: Color,

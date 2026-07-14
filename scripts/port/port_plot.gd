@@ -17,21 +17,24 @@ const SHIP_CLASS_BY_SIZE: Dictionary = {
 ## so noise hills never bleed into building collision. Combined with
 ## IslandMeshBuilder.PAD_BLEND_M, this gives buildings ~8 m of pad + ~10 m of
 ## ramp before the noise terrain reaches full height.
-const PAD_SAFE_MARGIN: float = 8.0
+const PAD_SAFE_MARGIN: float = PortSizing.PAD_SAFE_MARGIN_M
 
 @export var port_id: String = ""
 
 @export var port_label: String = "Port":
 	set(v): port_label = v; if is_inside_tree() and not _configuring: _rebuild()
 
-@export var plot_width: float = 80.0:
+@export var plot_width: float = PortSizing.dock_length_m(1):
 	set(v): plot_width = v; if is_inside_tree() and not _configuring: _rebuild()
 
-@export var plot_depth: float = 140.0:
+@export var plot_depth: float = PortSizing.PLOT_DEPTH_M:
 	set(v): plot_depth = v; if is_inside_tree() and not _configuring: _rebuild()
 
 @export var port_size: int = 1:
 	set(v): port_size = v; if is_inside_tree() and not _configuring: _rebuild()
+
+@export var service_blueprint_ids: Dictionary = {}:
+	set(v): service_blueprint_ids = v; if is_inside_tree() and not _configuring: _rebuild()
 
 var _configuring:         bool       = false
 var _berth_types_data:    Array[int] = []
@@ -39,7 +42,7 @@ var _has_fuel_point_data: bool       = true
 var _has_lighthouse_data: bool       = false
 var _has_fog_horn_data:   bool       = false
 var _layout_seed_data:    int        = 0
-var _island_width_data:   float      = 80.0
+var _island_width_data:   float      = PortSizing.island_width_m(1)
 var _ground_mode_data: PortDefinition.GroundMode = PortDefinition.GroundMode.LOCAL_ISLAND
 
 ## Runtime streamed build: ground first, then dock → facilities → NPCs.
@@ -50,6 +53,12 @@ var _wait_target: Node = null
 
 func _ready() -> void:
 	call_deferred("_rebuild")
+
+
+func _exit_tree() -> void:
+	# Bound Callables retain their target during interrupted streamed builds.
+	_stream_jobs.clear()
+	_wait_target = null
 
 
 func _rebuild() -> void:
@@ -171,6 +180,7 @@ func _add_facilities(hd: float) -> PortFacilities:
 	facilities.layout_seed    = _layout_seed_data
 	facilities.has_lighthouse = _has_lighthouse_data
 	facilities.has_fog_horn   = _has_fog_horn_data
+	facilities.service_blueprint_ids = service_blueprint_ids.duplicate()
 	facilities.position       = Vector3(0.0, 0.0, -hd + PortDock.INLAND_DEPTH)
 	add_child(facilities)
 	return facilities

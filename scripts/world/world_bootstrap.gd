@@ -7,6 +7,7 @@ extends RefCounted
 
 const WORLD_SCENE := "res://scenes/world.tscn"
 const MAIN_MENU_SCENE := "res://scenes/ui/main_menu.tscn"
+const PORT_OVERHAUL_PREVIOUS_GENERATION := 4
 
 
 static func roll_seed() -> int:
@@ -42,6 +43,14 @@ static func apply_player_world_context(player: PlayerData) -> void:
 		if seed_val <= 0:
 			seed_val = roll_seed()
 		ctx["seed"] = seed_val
+		player.world_context = ctx
+	var saved_version := int(ctx.get("generation_version", 0))
+	if saved_version == PORT_OVERHAUL_PREVIOUS_GENERATION \
+			and WorldLayoutGenerator.GENERATION_VERSION == 5:
+		# v5 changes deterministic port sizing/settlements but not macro
+		# geography. Resume-in-place coordinates no longer exist, so retaining
+		# the captain's seed/checksum and adopting v5 is safe.
+		ctx["generation_version"] = WorldLayoutGenerator.GENERATION_VERSION
 		player.world_context = ctx
 	apply_seed(
 		seed_val,

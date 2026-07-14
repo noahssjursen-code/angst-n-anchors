@@ -10,7 +10,6 @@ Category subfolders keep large flat lists manageable. Prefer **`res://` paths** 
 |--------|----------|
 | `ships/` | Hulls, deck houses, railings, hand-authored tanker pieces |
 | `docks/` | Quay pieces, bollards, piers |
-| `port_buildings/` | Harbour master, warehouse, town tiles, warehouse scene props |
 | `foghorn/` | Foghorn kit meshes (tower, horn, roof, …) |
 | `lighthouse/` | Lighthouse kit meshes |
 | `characters/` | NPC body, hats |
@@ -29,6 +28,50 @@ Multi-part assemblies (`ModelAssembler` root JSON with a `parts` array).
 | `buildings/` | Composed structures (lighthouse, foghorn building) |
 
 Other game data (ports, contracts, themes) stays in sibling folders under `resources/data/` as before.
+
+## `buildings/`
+
+Source-controlled voxel-building blueprints. The **filename stem is the
+blueprint id** — do not invent separate typed ids. Each JSON stores metadata
+plus sparse brick-grid instructions; no generated mesh vertices.
+
+```json
+{
+  "format_version": 1,
+  "id": "example_workshop",
+  "display_name": "Example Workshop",
+  "role": "harbour_master",
+  "grid_size": [32, 16, 32],
+  "cells": {
+    "2,0,1": { "brick_id": "foundation", "yaw": 0 },
+    "2,1,1": { "brick_id": "block", "yaw": 0, "color": [0.62, 0.32, 0.24] },
+    "3,0,1": { "brick_id": "block_door", "yaw": 0 }
+  }
+}
+```
+
+Authoring tools (run the scene directly in Godot):
+
+| Scene | Purpose |
+|-------|---------|
+| `res://scenes/building_brick_editor.tscn` | Paint bricks, Save / Save As into this folder |
+| `res://scenes/port_slot_editor.tscn` | Place service slots on the default port and attach a building JSON |
+| `res://scenes/port_showcase.tscn` | Inspect the runtime port shell |
+
+The catalog starts empty. Building blueprints use the same
+`BrickCatalog` kit as vessel decks; marine-only bricks are filtered via
+`ship_only`. Authoring pads start at 32×16×32 m and grow as you build —
+there is no fixed building size ceiling. Optional per-cell `"color": [r,g,b]` overrides the brick’s catalog colour.
+Floor bricks are surfaces: they share a cell with walls/props via an optional
+`"surface"` object on the content cell (erase removes content first, then floor).
+
+## `ports/`
+
+Default-port service layout authored by the port slot editor.
+
+`default_service_slots.json` — array of slots (`harbour_master`, `shipwright`,
+future roles…). Each slot has a pad pose plus an optional `blueprint_id` that
+names a file under `buildings/` (stem only, no path).
 
 ## `vessels/prebuilt/`
 

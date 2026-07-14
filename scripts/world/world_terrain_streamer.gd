@@ -26,9 +26,8 @@ const COASTAL_COATING_MAX_LOD := 2
 const COASTAL_COATING_OFFSET_M := 0.08
 const BYTES_PER_VERTEX_ESTIMATE := 40
 const BYTES_PER_INDEX_ESTIMATE := 4
-const PORT_PAD_WIDTH_BY_SIZE := [120.0, 152.0, 232.0, 352.0, 532.0]
-## Matches CoastalPortPlacer.DOCK_OVERHANG_M so the flatten pad covers the quay.
-const PORT_PAD_SEAWARD_SHIFT_M := 14.0
+const PORT_PAD_WIDTH_BY_SIZE := PortSizing.TERRAIN_PAD_WIDTH_BY_SIZE
+const PORT_PAD_SEAWARD_SHIFT_M := PortSizing.PAD_SEAWARD_SHIFT_M
 
 @export_range(1000.0, 28000.0, 250.0) var visual_radius_m := DEFAULT_VISUAL_RADIUS_M
 @export_range(0.0, 5000.0, 100.0) var collision_radius_m := 1800.0
@@ -481,7 +480,10 @@ static func make_flatten_zones(port_definitions: Array, default_pad_height_m := 
 		if pad_size == Vector2.ZERO:
 			# Mirrors PortExpander island/facility widths plus PortPlot's safe
 			# margin. Depth remains compact because every plot is 140 m deep.
-			pad_size = Vector2(PORT_PAD_WIDTH_BY_SIZE[clampi(size_class, 0, 4)], 172.0)
+			pad_size = Vector2(
+				PORT_PAD_WIDTH_BY_SIZE[PortSizing.normalized_size(size_class)],
+				PortSizing.PAD_DEPTH_M,
+			)
 		if falloff < 0.0:
 			falloff = 70.0 + float(clampi(size_class, 0, 4)) * 15.0
 		var seaward := Vector2(-sin(yaw), -cos(yaw))

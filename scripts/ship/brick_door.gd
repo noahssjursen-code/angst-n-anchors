@@ -1,7 +1,7 @@
 class_name BrickDoor
 extends Node3D
 
-## Interactable cabin door on a `block_door` brick.
+## Interactable door on a `block_door` brick (vessel cabin or land building).
 ## Look at the leaf (camera ray) + F to open / close.
 ## Closed = walk blocker; open = pass-through.
 
@@ -19,6 +19,7 @@ var _animating := false
 var _hinge: Node3D
 var _leaf: Node3D
 var _boat: BoatBody
+var _leaf_body: StaticBody3D
 var _collider: CollisionShape3D
 var _interact_area: Area3D
 var _prompt_layer: CanvasLayer
@@ -34,6 +35,7 @@ func configure(
 	yaw_deg: float,
 	leaf_size: Vector3,
 ) -> void:
+	## `boat` may be null for land buildings — leaf collider is owned locally then.
 	_boat = boat
 	_boat_local = boat_local
 	_yaw_deg = yaw_deg
@@ -97,7 +99,7 @@ func _can_interact() -> bool:
 	var to := from - camera.global_transform.basis.z * interact_range
 	var space := get_world_3d().direct_space_state
 
-	## Prefer the leaf Area so the closed walk-slab on WalkDeck doesn't steal the hit.
+	## Prefer the leaf Area so the closed walk-slab doesn't steal the hit.
 	var area_q := PhysicsRayQueryParameters3D.create(from, to)
 	area_q.exclude = [player.get_rid()]
 	area_q.collide_with_areas = true
@@ -122,12 +124,14 @@ func _can_interact() -> bool:
 
 
 func _is_own_door_body_hit(hit: Dictionary) -> bool:
-	## Closed leaf walk collider lives on WalkDeck — treat as this door if near the leaf.
+	## Closed leaf walk collider — treat as this door if it is ours / near the leaf.
 	if _leaf == null or not is_instance_valid(_leaf):
 		return false
 	var collider := hit.get("collider") as Node
 	if collider == null:
 		return false
+	if _leaf_body != null and is_instance_valid(_leaf_body) and collider == _leaf_body:
+		return true
 	var walk: Node = null if _boat == null else _boat.get_walk_deck()
 	if collider != walk and collider != _boat:
 		return false
@@ -187,17 +191,30 @@ func _ensure_interact_area() -> void:
 
 
 func _ensure_collider() -> void:
-	if _boat == null or not is_instance_valid(_boat):
+	var size := Vector3(_leaf_size.x * 0.95, _leaf_size.y * 0.95, maxf(_leaf_size.z, 0.12))
+	if _boat != null and is_instance_valid(_boat):
+		## Thin slab in the doorway when closed — disabled while open.
+		var basis := Basis.from_euler(Vector3(0.0, deg_to_rad(_yaw_deg), 0.0))
+		var leaf_center_local := _boat_local + basis * Vector3(0.0, 0.0, 0.0)
+		_collider = _boat.add_walk_brick_collider(
+			"door_%d_%d_%d" % [int(_boat_local.x * 10.0), int(_boat_local.y * 10.0), int(_boat_local.z * 10.0)],
+			leaf_center_local,
+			size,
+			_yaw_deg,
+		)
 		return
-	## Thin slab in the doorway when closed — disabled while open.
-	var basis := Basis.from_euler(Vector3(0.0, deg_to_rad(_yaw_deg), 0.0))
-	var leaf_center_local := _boat_local + basis * Vector3(0.0, 0.0, 0.0)
-	_collider = _boat.add_walk_brick_collider(
-		"door_%d_%d_%d" % [int(_boat_local.x * 10.0), int(_boat_local.y * 10.0), int(_boat_local.z * 10.0)],
-		leaf_center_local,
-		Vector3(_leaf_size.x * 0.95, _leaf_size.y * 0.95, maxf(_leaf_size.z, 0.12)),
-		_yaw_deg,
-	)
+	## Land building: own static leaf blocker under this door node.
+	_leaf_body = StaticBody3D.new()
+	_leaf_body.name = "DoorLeafBody"
+	_leaf_body.collision_layer = LAYER_WORLD
+	_leaf_body.collision_mask = 0
+	_collider = CollisionShape3D.new()
+	_collider.name = "Shape"
+	var box := BoxShape3D.new()
+	box.size = size
+	_collider.shape = box
+	_leaf_body.add_child(_collider)
+	add_child(_leaf_body)
 
 
 func _ensure_prompt_ui() -> void:

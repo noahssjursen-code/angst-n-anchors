@@ -13,19 +13,17 @@ const STRICT_SPACING_M := 800.0
 const MIN_SPACING_M := 450.0
 const STRICT_WATERWAY_REACH_M := 1800.0
 const MAX_WATERWAY_REACH_M := 5000.0
-## Matches PortPlot's default plot_depth * 0.5 (dock face at local -Z = -hd).
-const PLOT_HALF_DEPTH_M := 70.0
-## Quay face sits this far past the SDF coastline into open water.
-const DOCK_OVERHANG_M := 14.0
+## Public aliases retained for placement tooling and tests.
+const PLOT_HALF_DEPTH_M := PortSizing.PLOT_DEPTH_M * 0.5
+const DOCK_OVERHANG_M := PortSizing.DOCK_OVERHANG_M
 const INLAND_ORIGIN_OFFSET_M := PLOT_HALF_DEPTH_M - DOCK_OVERHANG_M
-const FOOTPRINT_HALF_WIDTH_M := 46.0
-const FOOTPRINT_SEAWARD_M := 18.0
-const FOOTPRINT_INLAND_M := 76.0
+const FOOTPRINT_HALF_WIDTH_M := PortSizing.SITE_FOOTPRINT_HALF_WIDTH_M
+const FOOTPRINT_SEAWARD_M := PortSizing.SITE_FOOTPRINT_SEAWARD_M
+const FOOTPRINT_INLAND_M := PortSizing.SITE_FOOTPRINT_INLAND_M
 const APPROACH_START_M := 92.0
 const APPROACH_END_M := 650.0
 const APPROACH_HALF_WIDTH_M := 38.0
-## Half-lengths that fit each PortExpander dock_length = berths × slot width.
-const QUAY_HALF_LENGTH_BY_SIZE := [20.0, 50.0, 93.0, 152.0, 230.0]
+const QUAY_HALF_LENGTH_BY_SIZE := PortSizing.QUAY_HALF_LENGTH_BY_SIZE
 const QUAY_CLEAR_STEP_M := 8.0
 ## Samples from the quay face into the berth pocket; land here blocks docking.
 const QUAY_BERTH_OFFSETS_M := [0.0, 8.0, 20.0, 38.0, 56.0]
@@ -141,6 +139,41 @@ static func is_land_footprint_valid(
 	return true
 
 
+## Validates the complete land-side width for a selected port tier. Candidate
+## discovery uses the size-0 footprint; final tier assignment must call this so
+## a long quay cannot authorize a wide settlement across a narrow headland.
+static func is_size_footprint_valid(
+		layout: WorldLayout,
+		world_xz: Vector2,
+		seaward: Vector2,
+		size: int,
+		min_inland_distance_m: float = 0.0,
+) -> bool:
+	if layout == null or seaward.length_squared() < 0.5:
+		return false
+	var forward := seaward.normalized()
+	var right := Vector2(-forward.y, forward.x)
+	var half_width := PortSizing.island_width_m(size) * 0.5
+	var depths := PackedFloat32Array([
+		-FOOTPRINT_SEAWARD_M,
+		(FOOTPRINT_INLAND_M - FOOTPRINT_SEAWARD_M) * 0.5,
+		FOOTPRINT_INLAND_M,
+	])
+	var widths := PackedFloat32Array([
+		-half_width,
+		-half_width * 0.5,
+		0.0,
+		half_width * 0.5,
+		half_width,
+	])
+	for depth in depths:
+		for width in widths:
+			var sample := world_xz - forward * depth + right * width
+			if layout.sample_signed_distance(sample) >= -min_inland_distance_m:
+				return false
+	return true
+
+
 ## Verifies the dock face and a three-lane offshore approach. This invariant is
 ## retained through every relaxation tier: a port is never allowed to face land.
 static func has_seaward_clearance(
@@ -245,6 +278,8 @@ static func validate_ports(
 		var report := validate_site(layout, point, seaward)
 		if not bool(report["land_footprint"]):
 			errors.append("%s has invalid land footprint" % port.port_id)
+		if not is_size_footprint_valid(layout, point, seaward, port.size):
+			errors.append("%s size-%d settlement crosses the coastline" % [port.port_id, port.size])
 		if not bool(report["seaward_clearance"]):
 			errors.append("%s has blocked seaward approach" % port.port_id)
 		var needed_half := float(QUAY_HALF_LENGTH_BY_SIZE[clampi(port.size, 0, 4)])
@@ -464,6 +499,13 @@ static func _make_definition(
 	if index == 0:
 		# Home port prefers a useful berth count, but never a corner-cut quay.
 		port.size = maxi(port.size, mini(2, max_size))
+	while port.size > 0 and not is_size_footprint_valid(
+			layout,
+			point,
+			candidate["seaward"],
+			port.size,
+	):
+		port.size -= 1
 	port.has_lighthouse = index == 0 or value % 5 == 0
 	port.has_fog_horn = index == 0 or value % 7 == 0
 	port.rotation_y = yaw_for_seaward(candidate["seaward"])

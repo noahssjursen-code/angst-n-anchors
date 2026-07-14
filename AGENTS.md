@@ -27,13 +27,15 @@ scripts/
   weather/      # Deterministic field/front/composer, WorldWeather API, local presentation, rain/audio/HUD
   time/         # WorldClock autoload
   world/        # Norway macro layout/SDF, coastal ports, streamed terrain, renderer/loading
-  port/         # PortPlot, PortDock, PortFacilities, FuelStation, LighthouseBuilding, FogHornBuilding
+  port/         # PortPlot, PortDock, PortFacilities, PortSlotEditor, FuelStation, LighthouseBuilding, FogHornBuilding
   npc/          # NpcBase, NpcInteractable, HarbourMasterNpc, ShipwrightNpc, ContractNpc, DeliveryNpc
   cargo/        # Contract, CargoItem, CargoPickup, DeliveryZone, Warehouse, ContractRegistry autoload — and later cranes
   ui/           # HUDs, menus, overlays, GameMenu + DebugHud autoloads
   state/        # GameState autoload (cross-system read model), sub-states: PlayerState, ShipState, ContractState, WorldState
 
 resources/data/
+  buildings/    # Voxel building blueprints (filename stem = id); BuildingBrickEditor
+  ports/        # default_service_slots.json authored by PortSlotEditor
   models/
     buildings/  # Fog horn, lighthouse
   meshes/       # Raw {vertices, indices} JSON by category (hulls/, docks/, buildings/, props/, …)
@@ -114,6 +116,8 @@ boat.place_at_waterline(water_y)
 
 Role (ferry / cargo / trawler-with-crane) comes from bricks + rules (`BrickRules`), not kit ids. Do **not** revive `WheelhouseVisual`, hull JSON `bridge` slots, or `ShipBuilder`.
 
+`BrickCatalog` is the shared construction kit for vessel decks and land buildings. Marine-only pieces carry the `ship_only` tag and are filtered out of the building editor palette.
+
 ### Orientation (workboat)
 
 **Bow = −Z, Stern = +Z, Port = −X, Starboard = +X.** Grid cells are vessel metres.
@@ -156,7 +160,7 @@ Use it when you need live part/role lookups, articulation, or per-instance colli
 For repeated static props (port street buildings, bollards), build once and stamp:
 
 ```gdscript
-var visual := ModelCache.instance("res://resources/data/meshes/port_buildings/town_building.json")
+var visual := ModelCache.instance("res://resources/data/models/buildings/foghorn_building.json")
 visual.name = "Model"
 body.add_child(visual)
 ```
