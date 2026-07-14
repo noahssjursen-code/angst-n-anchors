@@ -101,12 +101,19 @@ enum FaceAxis { PLUS_X = 0, MINUS_X = 1, PLUS_Z = 2, MINUS_Z = 3 }
 
 ## Authoritative SI physics contract for hand-authored vessels.
 @export var physics_profile: HullPhysicsProfile
+## Serializable paint choices. Call apply_hull_livery() after changing values.
+@export var hull_livery: Dictionary = {}
 
 @export_group("Simulation LOD")
 @export var automatic_physics_lod: bool = true
 @export var medium_physics_distance_m: float = 350.0
 @export var sleep_physics_distance_m: float = 1200.0
 @export var physics_quality: PhysicsQuality = PhysicsQuality.FULL
+
+
+func apply_hull_livery(livery: Dictionary = {}) -> void:
+	hull_livery = HullLivery.to_dict(livery)
+	HullLivery.apply_to_boat(self, hull_livery)
 
 @export_group("Component masses (kg)")
 ## Engine + drivetrain (steel block, low and aft).

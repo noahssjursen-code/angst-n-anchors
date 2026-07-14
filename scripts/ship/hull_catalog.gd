@@ -95,6 +95,10 @@ static func _normalize(raw: Dictionary) -> Dictionary:
 	if raw_overrides is Dictionary:
 		form_overrides = raw_overrides as Dictionary
 	entry["hull_form"] = HullFormProfile.resolve(form_id, form_overrides)
+	var raw_livery = raw.get("livery", {})
+	entry["livery"] = HullLivery.to_dict(
+		raw_livery as Dictionary if raw_livery is Dictionary else {}
+	)
 	entry["scene_path"] = str(raw.get("scene_path", ""))
 	entry["role"] = _parse_role(str(raw.get("role", "cargo")))
 	entry["ship_class"] = _parse_ship_class(str(raw.get("ship_class", "coastal_trader")))

@@ -173,6 +173,7 @@ func _assemble() -> void:
 
 	_clear_generated()
 	_build_hull_visual(stations)
+	apply_hull_livery(hull_livery)
 	_build_hull_collision(stations)
 	_add_systems(profile, stations)
 	_refresh_mass()

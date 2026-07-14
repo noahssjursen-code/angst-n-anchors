@@ -197,6 +197,7 @@ func _assemble() -> void:
 
 	_clear_generated()
 	_build_lofted_hull_visual(stations, cfg_loa, cfg_beam, profile.bow_taper_fraction)
+	apply_hull_livery(_config.get("livery", {}) as Dictionary)
 	_build_lofted_hull_collision(stations, cfg_loa)
 	_add_systems(profile, stations, cfg_loa, cfg_depth, cfg_displacement)
 	_refresh_mass()

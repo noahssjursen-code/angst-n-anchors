@@ -194,6 +194,7 @@ func _assemble() -> void:
 
 	_clear_generated()
 	_build_hull_visual(demihull_stations)
+	apply_hull_livery(hull_livery)
 	_build_hull_collision(demihull_stations)
 	_add_systems(profile, demihull_stations)
 	_refresh_mass()

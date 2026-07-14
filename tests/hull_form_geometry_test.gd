@@ -6,6 +6,7 @@ var _failures := PackedStringArray()
 func _ready() -> void:
 	_test_registered_hulls()
 	_test_catamaran_twin_hulls()
+	_test_livery_material_slots()
 	_test_prebuilt_catalog_workflow()
 	if _failures.is_empty():
 		print("Hull form geometry: all loft, collision, physics, and yard checks passed")
@@ -78,6 +79,39 @@ func _test_catamaran_twin_hulls() -> void:
 			and visual.get_node_or_null("HullStarboard") != null,
 		"catamaran renders two lofted demihulls"
 	)
+	boat.free()
+
+
+func _test_livery_material_slots() -> void:
+	var boat := HullRegistry.build_hull("workboat")
+	if boat == null:
+		_check(false, "workboat builds for livery checks")
+		return
+	var hull := boat.get_node_or_null("HullVisual/HullShell") as MeshInstance3D
+	_check(hull != null and hull.mesh.get_surface_count() == 2, "hull exposes topside and keel paint slots")
+	if hull != null and hull.mesh.get_surface_count() == 2:
+		var default_keel := hull.get_active_material(1) as StandardMaterial3D
+		_check(
+			default_keel != null and default_keel.albedo_color.r > default_keel.albedo_color.g * 3.0,
+			"default anti-fouling keel is red"
+		)
+		var custom_top := Color(0.08, 0.24, 0.52)
+		var custom_keel := Color(0.08, 0.12, 0.10)
+		var custom_deck := Color(0.62, 0.58, 0.44)
+		boat.apply_hull_livery({
+			"topsides_color": custom_top,
+			"keel_color": custom_keel,
+			"deck_color": custom_deck,
+		})
+		var top_material := hull.get_active_material(0) as StandardMaterial3D
+		var keel_material := hull.get_active_material(1) as StandardMaterial3D
+		var deck := boat.get_node_or_null("HullVisual/Deck") as MeshInstance3D
+		var deck_material := deck.get_active_material(0) as StandardMaterial3D
+		_check(top_material.albedo_color.is_equal_approx(custom_top), "runtime livery recolors topsides")
+		_check(keel_material.albedo_color.is_equal_approx(custom_keel), "runtime livery recolors keel")
+		_check(deck_material.albedo_color.is_equal_approx(custom_deck), "runtime livery recolors deck")
+		var saved := boat.get_meta("hull_livery", {}) as Dictionary
+		_check(saved.get("topsides_color", []) is Array, "livery colors serialize as JSON-safe arrays")
 	boat.free()
 
 

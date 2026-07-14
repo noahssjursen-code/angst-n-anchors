@@ -161,11 +161,13 @@ static func lofted_hull_shell(
 	roughness: float = 0.9,
 	metallic: float = 0.05,
 	double_sided: bool = false,
+	keel_color: Color = Color(0.34, 0.055, 0.04),
 ) -> MeshInstance3D:
 	var mi := MeshInstance3D.new()
 	if hull_stations == null or hull_stations.stations.size() < 2:
 		return mi
-	var faces: Array = []
+	var upper_faces: Array = []
+	var keel_faces: Array = []
 	var station_count := hull_stations.stations.size()
 	for i in range(station_count - 1):
 		var section_a: Array = hull_stations.stations[i]["section"]
@@ -180,6 +182,11 @@ static func lofted_hull_shell(
 			var a1: Vector2 = section_a[j + 1]
 			var b0: Vector2 = section_b[j]
 			var b1: Vector2 = section_b[j + 1]
+			var faces := (
+				keel_faces
+				if maxf(a1.x, b1.x) <= hull_stations.design_draft_m + 0.001
+				else upper_faces
+			)
 			## Starboard side.
 			faces.append([
 				Vector3(a0.y, a0.x, za),
@@ -205,31 +212,54 @@ static func lofted_hull_shell(
 		## Flat bottom between the lowest port/starboard rails.
 		var low_a: Vector2 = section_a[0]
 		var low_b: Vector2 = section_b[0]
-		faces.append([
+		keel_faces.append([
 			Vector3(-low_a.y, low_a.x, za),
 			Vector3(-low_b.y, low_b.x, zb),
 			Vector3(low_b.y, low_b.x, zb),
 		])
-		faces.append([
+		keel_faces.append([
 			Vector3(-low_a.y, low_a.x, za),
 			Vector3(low_b.y, low_b.x, zb),
 			Vector3(low_a.y, low_a.x, za),
 		])
 
-	_append_loft_cap(faces, hull_stations.stations[0] as Dictionary)
-	_append_loft_cap(faces, hull_stations.stations[station_count - 1] as Dictionary)
-	var mat := make_material(color, roughness, metallic, double_sided)
+	_append_loft_cap(
+		upper_faces,
+		keel_faces,
+		hull_stations.stations[0] as Dictionary,
+		hull_stations.design_draft_m
+	)
+	_append_loft_cap(
+		upper_faces,
+		keel_faces,
+		hull_stations.stations[station_count - 1] as Dictionary,
+		hull_stations.design_draft_m
+	)
+	var upper_mat := make_material(color, roughness, metallic, double_sided)
+	upper_mat.resource_name = "Hull Topsides"
+	var keel_mat := make_material(keel_color, 0.96, 0.0, double_sided)
+	keel_mat.resource_name = "Anti-fouling Keel"
+	var center := Vector3(0.0, hull_stations.height_m * 0.5, 0.0)
+	var mesh := _commit_loft_surface(upper_faces, upper_mat, center)
+	mesh = _commit_loft_surface(keel_faces, keel_mat, center, mesh)
+	mi.mesh = mesh
+	return mi
+
+
+static func _commit_loft_surface(
+	faces: Array,
+	material: Material,
+	hull_center: Vector3,
+	existing_mesh: ArrayMesh = null,
+) -> ArrayMesh:
 	var st := SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
 	st.set_smooth_group(-1)
-	st.set_material(mat)
-	var center := Vector3(0.0, hull_stations.height_m * 0.5, 0.0)
+	st.set_material(material)
 	for face in faces:
-		_add_clockwise_outward_face(st, face as Array, center)
+		_add_clockwise_outward_face(st, face as Array, hull_center)
 	st.generate_normals()
-	mi.mesh = st.commit()
-	mi.material_override = mat
-	return mi
+	return st.commit(existing_mesh)
 
 
 ## Convex point clouds for a bounded longitudinal decomposition. Jolt computes
@@ -263,7 +293,12 @@ static func lofted_collision_slices(
 	return result
 
 
-static func _append_loft_cap(faces: Array, station: Dictionary) -> void:
+static func _append_loft_cap(
+	upper_faces: Array,
+	keel_faces: Array,
+	station: Dictionary,
+	design_draft_m: float,
+) -> void:
 	var section: Array = station["section"]
 	if section.size() < 2:
 		return
@@ -280,7 +315,14 @@ static func _append_loft_cap(faces: Array, station: Dictionary) -> void:
 		center += point
 	center /= float(outline.size())
 	for j in range(outline.size()):
-		faces.append([center, outline[j], outline[(j + 1) % outline.size()]])
+		var face := [center, outline[j], outline[(j + 1) % outline.size()]]
+		var average_y := (
+			center.y + outline[j].y + outline[(j + 1) % outline.size()].y
+		) / 3.0
+		if average_y <= design_draft_m:
+			keel_faces.append(face)
+		else:
+			upper_faces.append(face)
 
 
 static func _add_clockwise_outward_face(
