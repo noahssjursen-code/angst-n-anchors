@@ -1,16 +1,27 @@
-extends SceneTree
+extends Node
 
 const PROFILE := preload("res://scripts/ship/hull_physics_profile.gd")
 
 
-func _initialize() -> void:
+func _ready() -> void:
 	for profile in [
 		_make_profile(30.0, 24.0, 6.0, 3.0, 960.0, 0.0, 10),
 		_make_profile(28.0, 10.0, 5.6, 2.8, 256.0, 0.3, 8),
 	]:
 		_verify_profile(profile)
+	for entry in HullRegistry.catalog():
+		var hull_id := str(entry.get("id", ""))
+		var boat := HullRegistry.build_hull(hull_id)
+		assert(boat != null, "Registered hull must build: %s" % hull_id)
+		var target_volume := boat.displacement_t * 1000.0 / 1025.0
+		var actual_volume := boat.hull_stations.volume_below(boat.draft_m)
+		assert(
+			absf(actual_volume - target_volume) / target_volume < 0.015,
+			"Registered hull design volume mismatch: %s" % hull_id
+		)
+		boat.free()
 	print("Hull hydrostatics smoke: design volumes and drafts are coherent")
-	quit()
+	get_tree().quit()
 
 
 func _make_profile(

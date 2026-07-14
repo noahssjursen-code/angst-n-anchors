@@ -32,7 +32,7 @@ static func build() -> BoatBody:
 
 
 static func make_grid() -> DeckGrid:
-	return DeckGrid.from_hull(LOA_M, BEAM_M, DEPTH_M * 0.85 + 0.12, BOW_LENGTH_M)
+	return DeckGrid.from_hull(LOA_M, BEAM_M, DEPTH_M + 0.12, BOW_LENGTH_M)
 
 
 static func make_physics_profile() -> HullPhysicsProfile:
@@ -44,6 +44,7 @@ static func make_physics_profile() -> HullPhysicsProfile:
 	profile.design_displacement_t = DISPLACEMENT_T
 	profile.bow_taper_fraction = BOW_FRAC
 	profile.station_count = 8
+	profile.hull_form = HullFormProfile.resolve("trawler")
 	profile.hull_center_of_mass = Vector3(0.0, 0.72, LOA_M * BOW_FRAC * 0.16)
 	profile.engine_mass_kg = 11200.0
 	profile.engine_position = Vector3(0.0, 0.9, LOA_M * 0.30)
@@ -176,8 +177,9 @@ func _assemble() -> void:
 	linear_damp = linear_damp_coeff
 
 	_clear_generated()
-	_build_hull_visual()
-	_build_hull_collision()
+	_build_hull_visual(stations)
+	apply_hull_livery(hull_livery)
+	_build_hull_collision(stations)
 	_add_systems(profile, stations)
 	_refresh_mass()
 
@@ -192,6 +194,10 @@ func _clear_generated() -> void:
 		if n != null:
 			remove_child(n)
 			n.free()
+	for child in get_children():
+		if str(child.name).begins_with("HullCollisionSlice"):
+			remove_child(child)
+			child.free()
 	DeckFitout.clear(self)
 	if has_meta("fitout_applied"):
 		remove_meta("fitout_applied")
@@ -199,42 +205,39 @@ func _clear_generated() -> void:
 		remove_meta("loadout_applied")
 
 
-func _build_hull_visual() -> void:
+func _build_hull_visual(stations: HullStations) -> void:
 	var root := Node3D.new()
 	root.name = "HullVisual"
 	add_child(root)
 
-	var shell_h := DEPTH_M * 0.85
-	var hull := MeshBuilder.pointed_hull_shell(
-		LOA_M, BEAM_M, shell_h, BOW_FRAC, Color(0.14, 0.16, 0.18), 0.9, 0.05
+	var hull := MeshBuilder.lofted_hull_shell(
+		stations, Color(0.14, 0.16, 0.18), 0.9, 0.05
 	)
 	hull.name = "HullShell"
 	root.add_child(hull)
 
 	var deck := MeshBuilder.pointed_deck_plate(
-		LOA_M, BEAM_M, shell_h + 0.1, 0.1, BOW_FRAC, Color(0.38, 0.34, 0.28), 0.95
+		LOA_M,
+		BEAM_M,
+		stations.deck_y + 0.1,
+		0.1,
+		BOW_FRAC,
+		Color(0.38, 0.34, 0.28),
+		0.95
 	)
 	deck.name = "Deck"
 	root.add_child(deck)
 
 
-func _build_hull_collision() -> void:
-	var shell_h := DEPTH_M * 0.85
-	var bow_len := LOA_M * BOW_FRAC
-	var body_col := CollisionShape3D.new()
-	body_col.name = "HullCollision"
-	var box := BoxShape3D.new()
-	var body_len := LOA_M - bow_len
-	box.size = Vector3(BEAM_M, shell_h, body_len)
-	body_col.shape = box
-	body_col.position = Vector3(0.0, shell_h * 0.5, bow_len * 0.5)
-	add_child(body_col)
-	var bow_col := CollisionShape3D.new()
-	bow_col.name = "BowCollision"
-	var convex := ConvexPolygonShape3D.new()
-	convex.points = MeshBuilder.pointed_bow_collision_points(LOA_M, BEAM_M, shell_h, BOW_FRAC)
-	bow_col.shape = convex
-	add_child(bow_col)
+func _build_hull_collision(stations: HullStations) -> void:
+	var slices := MeshBuilder.lofted_collision_slices(stations, 5)
+	for i in range(slices.size()):
+		var body_col := CollisionShape3D.new()
+		body_col.name = "HullCollisionSlice%02d" % i
+		var convex := ConvexPolygonShape3D.new()
+		convex.points = slices[i]
+		body_col.shape = convex
+		add_child(body_col)
 
 
 func _add_systems(profile: HullPhysicsProfile, stations: HullStations) -> void:
@@ -315,4 +318,4 @@ func _add_systems(profile: HullPhysicsProfile, stations: HullStations) -> void:
 
 
 func _deck_y() -> float:
-	return DEPTH_M * 0.85 + 0.1
+	return DEPTH_M + 0.1

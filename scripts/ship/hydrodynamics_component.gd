@@ -19,6 +19,7 @@ extends Node3D
 @export var mesh_scale: float = 1.0
 @export var water_density: float = 1025.0
 @export var gravity: float = 9.81
+@export_range(1.0, 4.0, 0.1) var wetted_area_multiplier: float = 1.0
 
 @export_group("Hull drag")
 ## ITTC-style frictional drag coefficient over the wetted hull surface. Real-world cargo
@@ -91,7 +92,7 @@ func _recompute_geometry() -> void:
 		var side_perim: float = _draft_m + hb_keel
 		var ring_perim: float = 2.0 * side_perim  # both sides
 		total_S += ring_perim * st_len
-	_wetted_area_m2 = total_S
+	_wetted_area_m2 = total_S * wetted_area_multiplier
 
 
 func _physics_process(_delta: float) -> void:

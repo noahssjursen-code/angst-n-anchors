@@ -28,6 +28,7 @@ const BODY_FRAME_Y_ROT := deg_to_rad(-90.0)
 @export var design_draft_m: float = 0.0
 @export var design_displacement_m3: float = 0.0
 @export var section_fullness_exponent: float = 1.0
+@export var form_id: String = ""
 
 
 ## Submerged half-section area at one station, given a waterline Y in ship-local space.
@@ -205,7 +206,7 @@ static func from_pointed(
 	var D := maxf(depth_m, 0.5)
 	var hb := B * 0.5
 	var n := maxi(station_count, 3)
-	var bow_len := clampf(bow_frac, 0.0, 0.45) * L
+	var bow_len := clampf(bow_frac, 0.0, 0.5) * L
 	var tip_z := -L * 0.5
 	var shoulder_z := tip_z + bow_len
 	result.length_m = L
@@ -266,7 +267,7 @@ static func from_design(
 		var t := float(i) / float(count - 1)
 		var z := lerpf(-length * 0.5, length * 0.5, t)
 		var taper := 1.0
-		var bow_length := clampf(bow_frac, 0.0, 0.45) * length
+		var bow_length := clampf(bow_frac, 0.0, 0.5) * length
 		if bow_length > 0.001:
 			var shoulder_z := -length * 0.5 + bow_length
 			if z < shoulder_z:
@@ -295,6 +296,148 @@ static func from_design(
 	)
 	result.displacement_volume_m3 = result.volume_below(depth)
 	return result
+
+
+## Build a faceted, flared hull from one normalized form preset. The underwater
+## widths are solved against declared displacement while the deck edge remains
+## exactly the declared beam.
+static func from_form(
+	length_m: float,
+	beam_m: float,
+	depth_m: float,
+	draft_m: float,
+	displacement_t: float,
+	form: Dictionary,
+	water_density: float = 1025.0,
+	deck_bow_taper_m: float = 0.0,
+	station_count: int = 12,
+) -> HullStations:
+	var result := HullStations.new()
+	var length := maxf(length_m, 1.0)
+	var beam := maxf(beam_m, 1.0)
+	var depth := maxf(depth_m, 0.5)
+	var draft := clampf(draft_m, 0.05, depth * 0.98)
+	var target_volume := maxf(
+		displacement_t * 1000.0 / maxf(water_density, 1.0),
+		0.01
+	)
+	var count := maxi(station_count, 7)
+	result.length_m = length
+	result.beam_m = beam
+	result.height_m = depth
+	result.keel_y = 0.0
+	result.deck_y = depth
+	result.design_draft_m = draft
+	result.design_displacement_m3 = target_volume
+	result.form_id = str(form.get("id", HullFormProfile.DEFAULT_ID))
+
+	var low := 0.05
+	var high := 1.35
+	for _iteration in range(44):
+		var fullness := (low + high) * 0.5
+		_assign_form_sections(
+			result, length, beam, depth, draft, form,
+			deck_bow_taper_m, count, fullness
+		)
+		var volume := result.volume_below(draft)
+		if volume < target_volume:
+			low = fullness
+		else:
+			high = fullness
+
+	result.section_fullness_exponent = (low + high) * 0.5
+	_assign_form_sections(
+		result, length, beam, depth, draft, form,
+		deck_bow_taper_m, count, result.section_fullness_exponent
+	)
+	var actual := result.volume_below(draft)
+	if absf(actual - target_volume) / target_volume > 0.01:
+		push_warning(
+			"HullStations: form '%s' cannot match %.1f t inside %.1f × %.1f × %.1f m"
+			% [result.form_id, displacement_t, length, beam, draft]
+		)
+	result.displacement_volume_m3 = result.volume_below(depth)
+	return result
+
+
+static func _assign_form_sections(
+	result: HullStations,
+	length: float,
+	beam: float,
+	depth: float,
+	draft: float,
+	form: Dictionary,
+	deck_bow_taper_m: float,
+	station_count: int,
+	fullness: float,
+) -> void:
+	result.stations.clear()
+	var half_beam := beam * 0.5
+	var deck_bow_length := clampf(deck_bow_taper_m, 0.0, length * 0.45)
+	var underwater_bow_length := maxf(
+		deck_bow_length,
+		length * clampf(float(form.get("underwater_bow_fraction", 0.22)), 0.02, 0.45)
+	)
+	var stern_length := length * clampf(
+		float(form.get("stern_taper_fraction", 0.08)), 0.0, 0.35
+	)
+	var chine_y := draft * clampf(
+		float(form.get("chine_draft_fraction", 0.36)), 0.12, 0.85
+	)
+	var shoulder_y := lerpf(
+		draft,
+		depth,
+		clampf(float(form.get("shoulder_freeboard_fraction", 0.58)), 0.1, 0.95)
+	)
+	var base_widths := [
+		clampf(float(form.get("bottom_width", 0.5)) * fullness, 0.02, 1.0),
+		clampf(float(form.get("chine_width", 0.75)) * fullness, 0.02, 1.0),
+		clampf(float(form.get("waterline_width", 0.88)) * fullness, 0.02, 1.0),
+		clampf(float(form.get("shoulder_width", 0.98)), 0.02, 1.0),
+		1.0,
+	]
+	var vertical_y := [0.0, chine_y, draft, shoulder_y, depth]
+	var bow_rise := depth * clampf(float(form.get("bow_keel_rise", 0.2)), 0.0, 0.7)
+	var stern_rise := depth * clampf(float(form.get("stern_keel_rise", 0.05)), 0.0, 0.5)
+	var stern_width := clampf(float(form.get("stern_underwater_width", 0.72)), 0.1, 1.0)
+
+	for i in range(station_count):
+		var t := float(i) / float(station_count - 1)
+		var z := lerpf(-length * 0.5, length * 0.5, t)
+		var bow_distance := z + length * 0.5
+		var stern_distance := length * 0.5 - z
+		var bow_keel_factor := 1.0 - smoothstep(
+			0.0, maxf(underwater_bow_length, 0.001), bow_distance
+		)
+		var stern_keel_factor := 1.0 - smoothstep(
+			0.0, maxf(stern_length, 0.001), stern_distance
+		) if stern_length > 0.001 else 0.0
+		var local_keel := maxf(
+			bow_rise * bow_keel_factor,
+			stern_rise * stern_keel_factor
+		)
+		local_keel = minf(local_keel, chine_y * 0.82)
+		var section: Array[Vector2] = []
+		for j in range(vertical_y.size()):
+			var y := maxf(float(vertical_y[j]), local_keel) if j == 0 else float(vertical_y[j])
+			var y_normalized := clampf(y / depth, 0.0, 1.0)
+			var bow_length := lerpf(
+				underwater_bow_length,
+				deck_bow_length,
+				smoothstep(0.45, 1.0, y_normalized)
+			)
+			var longitudinal := 1.0
+			if bow_length > 0.001 and bow_distance < bow_length:
+				longitudinal *= smoothstep(0.0, bow_length, bow_distance)
+			if stern_length > 0.001 and stern_distance < stern_length:
+				var stern_blend := smoothstep(0.0, stern_length, stern_distance)
+				var stern_edge_width := lerpf(stern_width, 1.0, y_normalized)
+				longitudinal *= lerpf(stern_edge_width, 1.0, stern_blend)
+			section.append(Vector2(
+				y,
+				half_beam * float(base_widths[j]) * longitudinal
+			))
+		result.stations.append({"z": z, "section": section})
 
 
 static func _assign_design_sections(

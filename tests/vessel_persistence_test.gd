@@ -1,9 +1,9 @@
-extends SceneTree
+extends Node
 
 var _failures := PackedStringArray()
 
 
-func _initialize() -> void:
+func _ready() -> void:
 	var source := PlayerData.new()
 	var expected: Dictionary = {}
 	var index := 0
@@ -134,6 +134,7 @@ func _initialize() -> void:
 
 	var prebuilts := PrebuiltVesselCatalog.catalog_entries()
 	var found_prebuilt := false
+	var found_catalog_prebuilt := false
 	for prebuilt in prebuilts:
 		if str(prebuilt.get("prebuilt_id", "")) == "fishing_trawler":
 			found_prebuilt = true
@@ -144,7 +145,28 @@ func _initialize() -> void:
 				}).get("cells", {}) as Dictionary).size() > 0,
 				"ready-built catalog loads the exported deck layout",
 			)
+		if str(prebuilt.get("prebuilt_id", "")) == "short_sea_container_150":
+			found_catalog_prebuilt = true
+			_check(
+				str(prebuilt.get("scene_path", "")).is_empty(),
+				"catalog prebuilt persists without a dedicated scene",
+			)
+			_check(
+				int(prebuilt.get("price_marks", -1)) == 0,
+				"catalog prebuilt preserves an explicit zero price",
+			)
+			var catalog_record := VesselSpawn.normalize_record({
+				"uid": "catalog_persistence_test",
+				"hull_id": str(prebuilt.get("hull_id", "")),
+				"scene_path": "",
+				"brick_layout": prebuilt.get("prebuilt_layout", {}),
+			})
+			_check(
+				not VesselSpawn.resolve_deployable_record(catalog_record).is_empty(),
+				"catalog prebuilt remains deployable after persistence normalization",
+			)
 	_check(found_prebuilt, "exported official prebuilt appears in shipwright catalog")
+	_check(found_catalog_prebuilt, "scene-less container prebuilt appears in shipwright catalog")
 
 	var archive_owner := PlayerData.new_uuid()
 	var archive_uid := "archive_roundtrip_test"
@@ -182,8 +204,8 @@ func _check(condition: bool, label: String) -> void:
 func _finish() -> void:
 	if _failures.is_empty():
 		print("Vessel persistence tests: all checks passed")
-		quit()
+		get_tree().quit()
 		return
 	for failure in _failures:
 		push_error("Vessel persistence test: " + failure)
-	quit(1)
+	get_tree().quit(1)

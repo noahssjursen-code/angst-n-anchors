@@ -736,12 +736,16 @@ func spawn_player_ship(index: int, ship_scene_path: String = "", brick_layout: D
 		PlayerVessel.replace_before_spawn(tree)
 
 	var path := ship_scene_path.strip_edges()
-	if path.is_empty():
-		path = WORKBOAT_SCENE_PATH
-
-	var ship: Node3D = VESSEL_SPAWN_SCRIPT.instantiate_from_path(path, brick_layout) as Node3D
+	var ship: Node3D = null
+	if not path.is_empty() and ResourceLoader.exists(path):
+		ship = VESSEL_SPAWN_SCRIPT.instantiate_from_path(path, brick_layout) as Node3D
+	else:
+		var hull_id := str(brick_layout.get("hull_id", "fishing_trawler_small")).strip_edges()
+		ship = VESSEL_SPAWN_SCRIPT.instantiate(hull_id, brick_layout) as Node3D
 	if ship == null:
-		push_error("PortDock: failed to spawn vessel from: %s" % path)
+		push_error("PortDock: failed to spawn vessel from: %s" % (
+			path if not path.is_empty() else str(brick_layout.get("hull_id", "?"))
+		))
 		return null
 
 	var plot := get_parent()

@@ -108,8 +108,10 @@ func _on_commission_requested(entry: Dictionary) -> void:
 
 
 func _try_pay_for_commission(entry: Dictionary) -> bool:
-	var scene_path := str(entry.get("scene_path", VesselSpawn.WORKBOAT_SCENE))
-	if scene_path.is_empty() or not ResourceLoader.exists(scene_path):
+	var hull_id := str(entry.get("id", entry.get("hull_id", "workboat"))).strip_edges()
+	var scene_path := str(entry.get("scene_path", "")).strip_edges()
+	var has_scene := not scene_path.is_empty() and ResourceLoader.exists(scene_path)
+	if not has_scene and not HullRegistry.is_known_hull(hull_id):
 		_show_commission_error("That hull is unavailable in the yard right now.")
 		return false
 
@@ -143,13 +145,13 @@ func _show_commission_error(line: String) -> void:
 
 
 func _commission(entry: Dictionary, layout: Dictionary, vessel_name: String) -> void:
-	var hull_id := str(entry.get("id", "workboat")).strip_edges()
+	var hull_id := str(entry.get("id", entry.get("hull_id", "workboat"))).strip_edges()
 	if hull_id.is_empty():
 		hull_id = "workboat"
 	var uid := VesselSpawn.new_vessel_uid(hull_id)
-	var scene_path := str(entry.get("scene_path", VesselSpawn.WORKBOAT_SCENE)).strip_edges()
-	if scene_path.is_empty():
-		scene_path = HullRegistry.scene_path_for(hull_id)
+	var scene_path := str(entry.get("scene_path", "")).strip_edges()
+	if scene_path.is_empty() or not ResourceLoader.exists(scene_path):
+		scene_path = ""
 	var name := vessel_name.strip_edges()
 	if name.is_empty():
 		name = VesselSpawn.vessel_name_of({"display": str(entry.get("display", "Workboat"))})

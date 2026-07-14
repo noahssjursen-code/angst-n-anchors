@@ -141,7 +141,8 @@ static func pointed_bow_collision_points(
 ) -> PackedVector3Array:
 	var hz := loa * 0.5
 	var hb := beam * 0.5
-	var bow_len := clampf(bow_frac, 0.12, 0.45) * loa
+	## bow_frac = bow_len/LOA. Half-beam run (bow_frac = beam/(2*loa)) is exactly 45° in plan.
+	var bow_len := clampf(bow_frac, 0.0, 0.5) * loa
 	var shoulder_z := -hz + bow_len
 	var pts := PackedVector3Array()
 	for y in [0.0, height]:
@@ -151,11 +152,209 @@ static func pointed_bow_collision_points(
 	return pts
 
 
+## Low-poly shell lofted through HullStations. The station lattice is shared
+## with buoyancy, so the rendered bilges, waterline, flare, and end taper agree
+## with the physical hull.
+static func lofted_hull_shell(
+	hull_stations: HullStations,
+	color: Color = Color(0.12, 0.14, 0.16),
+	roughness: float = 0.9,
+	metallic: float = 0.05,
+	double_sided: bool = false,
+	keel_color: Color = Color(0.34, 0.055, 0.04),
+) -> MeshInstance3D:
+	var mi := MeshInstance3D.new()
+	if hull_stations == null or hull_stations.stations.size() < 2:
+		return mi
+	var upper_faces: Array = []
+	var keel_faces: Array = []
+	var station_count := hull_stations.stations.size()
+	for i in range(station_count - 1):
+		var section_a: Array = hull_stations.stations[i]["section"]
+		var section_b: Array = hull_stations.stations[i + 1]["section"]
+		var level_count := mini(section_a.size(), section_b.size())
+		if level_count < 2:
+			continue
+		var za := float(hull_stations.stations[i]["z"])
+		var zb := float(hull_stations.stations[i + 1]["z"])
+		for j in range(level_count - 1):
+			var a0: Vector2 = section_a[j]
+			var a1: Vector2 = section_a[j + 1]
+			var b0: Vector2 = section_b[j]
+			var b1: Vector2 = section_b[j + 1]
+			var faces := (
+				keel_faces
+				if maxf(a1.x, b1.x) <= hull_stations.design_draft_m + 0.001
+				else upper_faces
+			)
+			## Starboard side.
+			faces.append([
+				Vector3(a0.y, a0.x, za),
+				Vector3(b0.y, b0.x, zb),
+				Vector3(b1.y, b1.x, zb),
+			])
+			faces.append([
+				Vector3(a0.y, a0.x, za),
+				Vector3(b1.y, b1.x, zb),
+				Vector3(a1.y, a1.x, za),
+			])
+			## Port side.
+			faces.append([
+				Vector3(-a0.y, a0.x, za),
+				Vector3(-b1.y, b1.x, zb),
+				Vector3(-b0.y, b0.x, zb),
+			])
+			faces.append([
+				Vector3(-a0.y, a0.x, za),
+				Vector3(-a1.y, a1.x, za),
+				Vector3(-b1.y, b1.x, zb),
+			])
+		## Flat bottom between the lowest port/starboard rails.
+		var low_a: Vector2 = section_a[0]
+		var low_b: Vector2 = section_b[0]
+		keel_faces.append([
+			Vector3(-low_a.y, low_a.x, za),
+			Vector3(-low_b.y, low_b.x, zb),
+			Vector3(low_b.y, low_b.x, zb),
+		])
+		keel_faces.append([
+			Vector3(-low_a.y, low_a.x, za),
+			Vector3(low_b.y, low_b.x, zb),
+			Vector3(low_a.y, low_a.x, za),
+		])
+
+	_append_loft_cap(
+		upper_faces,
+		keel_faces,
+		hull_stations.stations[0] as Dictionary,
+		hull_stations.design_draft_m
+	)
+	_append_loft_cap(
+		upper_faces,
+		keel_faces,
+		hull_stations.stations[station_count - 1] as Dictionary,
+		hull_stations.design_draft_m
+	)
+	var upper_mat := make_material(color, roughness, metallic, double_sided)
+	upper_mat.resource_name = "Hull Topsides"
+	var keel_mat := make_material(keel_color, 0.96, 0.0, double_sided)
+	keel_mat.resource_name = "Anti-fouling Keel"
+	var center := Vector3(0.0, hull_stations.height_m * 0.5, 0.0)
+	var mesh := _commit_loft_surface(upper_faces, upper_mat, center)
+	mesh = _commit_loft_surface(keel_faces, keel_mat, center, mesh)
+	mi.mesh = mesh
+	return mi
+
+
+static func _commit_loft_surface(
+	faces: Array,
+	material: Material,
+	hull_center: Vector3,
+	existing_mesh: ArrayMesh = null,
+) -> ArrayMesh:
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	st.set_smooth_group(-1)
+	st.set_material(material)
+	for face in faces:
+		_add_clockwise_outward_face(st, face as Array, hull_center)
+	st.generate_normals()
+	return st.commit(existing_mesh)
+
+
+## Convex point clouds for a bounded longitudinal decomposition. Jolt computes
+## one convex hull per cloud; no concave trimesh is attached to a dynamic boat.
+static func lofted_collision_slices(
+	hull_stations: HullStations,
+	max_slices: int = 10,
+) -> Array[PackedVector3Array]:
+	var result: Array[PackedVector3Array] = []
+	if hull_stations == null or hull_stations.stations.size() < 2:
+		return result
+	var segment_count := hull_stations.stations.size() - 1
+	var slice_count := clampi(max_slices, 1, segment_count)
+	for slice_idx in range(slice_count):
+		var first := floori(float(slice_idx) * float(segment_count) / float(slice_count))
+		var last := ceili(
+			float(slice_idx + 1) * float(segment_count) / float(slice_count)
+		)
+		last = clampi(last, first + 1, segment_count)
+		var points := PackedVector3Array()
+		for station_idx in range(first, last + 1):
+			var station: Dictionary = hull_stations.stations[station_idx]
+			var z := float(station["z"])
+			var section: Array = station["section"]
+			for raw_point in section:
+				var point := raw_point as Vector2
+				points.append(Vector3(-point.y, point.x, z))
+				points.append(Vector3(point.y, point.x, z))
+		if points.size() >= 4:
+			result.append(points)
+	return result
+
+
+static func _append_loft_cap(
+	upper_faces: Array,
+	keel_faces: Array,
+	station: Dictionary,
+	design_draft_m: float,
+) -> void:
+	var section: Array = station["section"]
+	if section.size() < 2:
+		return
+	var z := float(station["z"])
+	var outline: Array[Vector3] = []
+	for raw_point in section:
+		var point := raw_point as Vector2
+		outline.append(Vector3(-point.y, point.x, z))
+	for j in range(section.size() - 1, -1, -1):
+		var point := section[j] as Vector2
+		outline.append(Vector3(point.y, point.x, z))
+	var center := Vector3.ZERO
+	for point in outline:
+		center += point
+	center /= float(outline.size())
+	for j in range(outline.size()):
+		var face := [center, outline[j], outline[(j + 1) % outline.size()]]
+		var average_y := (
+			center.y + outline[j].y + outline[(j + 1) % outline.size()].y
+		) / 3.0
+		if average_y <= design_draft_m:
+			keel_faces.append(face)
+		else:
+			upper_faces.append(face)
+
+
+static func _add_clockwise_outward_face(
+	st: SurfaceTool,
+	face: Array,
+	hull_center: Vector3,
+) -> void:
+	var a := face[0] as Vector3
+	var b := face[1] as Vector3
+	var c := face[2] as Vector3
+	var geometric_normal := (b - a).cross(c - a)
+	if geometric_normal.length_squared() <= 0.0000000001:
+		return
+	var face_center := (a + b + c) / 3.0
+	## Godot's visible front face is clockwise, opposite the geometric
+	## cross-product winding used to decide which direction is outward.
+	if geometric_normal.dot(face_center - hull_center) > 0.0:
+		st.add_vertex(a)
+		st.add_vertex(c)
+		st.add_vertex(b)
+	else:
+		st.add_vertex(a)
+		st.add_vertex(b)
+		st.add_vertex(c)
+
+
 static func _pointed_plan_ring(loa: float, beam: float, bow_frac: float) -> PackedVector2Array:
 	## XZ ring, CCW when viewed from above: stern → stbd shoulder → tip → port shoulder.
 	var hz := loa * 0.5
 	var hb := beam * 0.5
-	var bow_len := clampf(bow_frac, 0.12, 0.45) * loa
+	## Do not floor bow_frac at 0.12 — long feeders need ~0.10 for a true 45° bow.
+	var bow_len := clampf(bow_frac, 0.0, 0.5) * loa
 	var shoulder_z := -hz + bow_len
 	return PackedVector2Array([
 		Vector2(-hb, hz),           ## stern port

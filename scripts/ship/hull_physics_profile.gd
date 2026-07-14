@@ -11,9 +11,10 @@ extends Resource
 @export var depth_m: float = 3.0
 @export var design_draft_m: float = 1.5
 @export var design_displacement_t: float = 50.0
-@export_range(0.0, 0.45, 0.01) var bow_taper_fraction: float = 0.2
+@export_range(0.0, 0.5, 0.01) var bow_taper_fraction: float = 0.2
 @export_range(5, 32, 1) var station_count: int = 10
 @export var water_density: float = 1025.0
+@export var hull_form: Dictionary = {}
 
 @export_group("Mass distribution")
 @export var hull_center_of_mass: Vector3 = Vector3.ZERO
@@ -80,6 +81,18 @@ func validate() -> PackedStringArray:
 func make_stations() -> HullStations:
 	var errors := validate()
 	assert(errors.is_empty(), "Invalid HullPhysicsProfile: %s" % "; ".join(errors))
+	if not hull_form.is_empty():
+		return HullStations.from_form(
+			length_m,
+			beam_m,
+			depth_m,
+			design_draft_m,
+			design_displacement_t,
+			hull_form,
+			water_density,
+			length_m * bow_taper_fraction,
+			station_count
+		)
 	return HullStations.from_design(
 		length_m,
 		beam_m,

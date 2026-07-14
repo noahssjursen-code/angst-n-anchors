@@ -11,6 +11,8 @@ extends Node3D
 @export var gravity: float = 9.81
 @export_range(0.5, 2.0, 0.01) var buoyancy_multiplier: float = 1.0
 @export var heave_damping_per_m2: float = 11000.0 ## Legacy fallback only.
+@export var hull_center_x_m: float = 0.0
+@export_range(0.1, 1.0, 0.05) var damping_mass_fraction: float = 1.0
 
 var _body: RigidBody3D
 
@@ -84,7 +86,7 @@ func _build_side_sample(
 	side_sign: float,
 ) -> Dictionary:
 	var proxy_world := _body.to_global(Vector3(
-		x_proxy, hull_stations.design_draft_m, z_local
+		hull_center_x_m + x_proxy, hull_stations.design_draft_m, z_local
 	))
 	var water := WaveSurface.sample_at(proxy_world.x, proxy_world.z)
 	var water_local := _body.to_local(Vector3(
@@ -101,7 +103,9 @@ func _build_side_sample(
 		station_idx, waterline_y
 	)
 	return {
-		"force_point": _body.to_global(Vector3(centroid_x, centroid_y, z_local)),
+		"force_point": _body.to_global(Vector3(
+			hull_center_x_m + centroid_x, centroid_y, z_local
+		)),
 		"volume": half_area * station_length,
 		"waterplane_area": hull_stations.half_beam_at(
 			station_idx, waterline_y
@@ -145,7 +149,10 @@ func _apply_forces(samples: Array[Dictionary]) -> void:
 		target_ratio = profile.heave_damping_ratio
 		max_damping_accel = profile.max_heave_damping_accel
 	var stiffness := water_density * gravity * waterplane_area_m2
-	var critical_damping := 2.0 * sqrt(maxf(_body.mass * stiffness, 0.0))
+	var critical_damping := 2.0 * sqrt(maxf(
+		_body.mass * damping_mass_fraction * stiffness,
+		0.0
+	))
 	var damping_coefficient := target_ratio * critical_damping
 	effective_damping_ratio = (
 		damping_coefficient / critical_damping if critical_damping > 1e-6 else 0.0

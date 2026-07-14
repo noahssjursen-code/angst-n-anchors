@@ -58,11 +58,18 @@ static func _load_entry(path: String) -> Dictionary:
 	var suffix := "  •  %s" % dimensions[1] if dimensions.size() > 1 else ""
 	entry["display"] = "%s  •  READY-BUILT%s" % [vessel_name, suffix]
 	entry["ship_class_label"] = "Ready-built · %s" % str(entry.get("ship_class_label", "Vessel"))
+	entry["hull_id"] = hull_id
 	entry["is_prebuilt"] = true
 	entry["prebuilt_id"] = preset_id
 	entry["prebuilt_name"] = vessel_name
 	entry["prebuilt_layout"] = layout.duplicate(true)
 	entry["prebuilt_path"] = path
+	## Catalog hulls have no .tscn — keep empty scene_path and spawn by hull_id.
+	var scene_path := str(preset.get("scene_path", entry.get("scene_path", ""))).strip_edges()
+	if scene_path.is_empty() or not ResourceLoader.exists(scene_path):
+		entry["scene_path"] = ""
+	else:
+		entry["scene_path"] = scene_path
 	if preset.has("price_marks"):
 		entry["price_marks"] = maxi(int(preset.get("price_marks", 0)), 0)
 	return entry
