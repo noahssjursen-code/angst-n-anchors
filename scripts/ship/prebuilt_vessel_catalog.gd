@@ -1,8 +1,8 @@
 class_name PrebuiltVesselCatalog
 extends RefCounted
 
-## Source-controlled, ready-built vessel configurations exported by the
-## shipyard DEV button. These augment bare hulls in the public catalog.
+## Source-controlled, ready-built vessel configurations authored by the
+## ShipyardBrickEditor engine tool. Shipwright sells only these presets.
 
 const PREBUILT_DIR := "res://resources/data/vessels/prebuilt"
 const FORMAT_VERSION := 1

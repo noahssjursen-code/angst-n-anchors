@@ -87,9 +87,25 @@
 				"brick_id": "block",
 				"yaw": 90.0
 			},
-			"0,0,8": {
-				"brick_id": "ledge_45",
+			"0,0,4": {
+				"brick_id": "block_45",
 				"yaw": 180.0
+			},
+			"0,0,5": {
+				"brick_id": "block",
+				"yaw": 0.0
+			},
+			"0,0,6": {
+				"brick_id": "block",
+				"yaw": 0.0
+			},
+			"0,0,7": {
+				"brick_id": "block",
+				"yaw": 0.0
+			},
+			"0,0,8": {
+				"brick_id": "block",
+				"yaw": 0.0
 			},
 			"0,0,9": {
 				"brick_id": "block",
@@ -97,7 +113,7 @@
 			},
 			"0,1,10": {
 				"brick_id": "bollard",
-				"yaw": 90
+				"yaw": 90.0
 			},
 			"0,1,11": {
 				"brick_id": "railing",
@@ -167,33 +183,29 @@
 				"brick_id": "block",
 				"yaw": 180.0
 			},
+			"0,1,8": {
+				"brick_id": "ledge_45_inner",
+				"yaw": 180
+			},
 			"0,1,9": {
 				"brick_id": "block",
-				"yaw": 90
+				"yaw": 90.0
 			},
 			"0,2,27": {
 				"brick_id": "bollard",
-				"yaw": 90
-			},
-			"0,3,5": {
-				"brick_id": "ledge_45",
-				"yaw": 270.0
-			},
-			"0,3,6": {
-				"brick_id": "ledge_45",
-				"yaw": 270.0
-			},
-			"0,3,7": {
-				"brick_id": "ledge_45",
-				"yaw": 270.0
+				"yaw": 90.0
 			},
 			"1,0,27": {
 				"brick_id": "block",
 				"yaw": 90.0
 			},
-			"1,0,7": {
-				"brick_id": "ledge_45",
+			"1,0,3": {
+				"brick_id": "block_45",
 				"yaw": 180.0
+			},
+			"1,0,4": {
+				"brick_id": "block_45",
+				"yaw": 0.0
 			},
 			"1,0,8": {
 				"brick_id": "block",
@@ -203,128 +215,168 @@
 				"brick_id": "ledge_45",
 				"yaw": 90.0
 			},
+			"1,1,5": {
+				"brick_id": "block_windshield",
+				"yaw": 270
+			},
+			"1,1,6": {
+				"brick_id": "block_windshield",
+				"occupied_by": "1,1,5",
+				"yaw": 270
+			},
+			"1,1,7": {
+				"brick_id": "block_windshield",
+				"occupied_by": "1,1,5",
+				"yaw": 270
+			},
 			"1,1,8": {
 				"brick_id": "block",
 				"yaw": 90.0
 			},
+			"1,2,5": {
+				"brick_id": "block_windshield",
+				"yaw": 270
+			},
+			"1,2,6": {
+				"brick_id": "block_windshield",
+				"occupied_by": "1,2,5",
+				"yaw": 270
+			},
+			"1,2,7": {
+				"brick_id": "block_windshield",
+				"occupied_by": "1,2,5",
+				"yaw": 270
+			},
 			"1,2,8": {
-				"brick_id": "ledge_45",
-				"yaw": 270.0
+				"brick_id": "block",
+				"yaw": 180
 			},
 			"1,3,4": {
-				"brick_id": "ledge_45",
-				"yaw": 180.0
+				"brick_id": "block_45",
+				"light_id": "light_external",
+				"light_yaw": 45,
+				"yaw": 180
 			},
 			"1,3,5": {
 				"brick_id": "block",
-				"light_id": "light_nav_port",
-				"light_yaw": 90.0,
-				"yaw": 180.0
+				"yaw": 0
 			},
 			"1,3,6": {
 				"brick_id": "block",
-				"light_id": "light_external",
-				"light_yaw": 90.0,
-				"yaw": 180.0
+				"light_id": "light_nav_port",
+				"light_yaw": 90,
+				"yaw": 0
 			},
 			"1,3,7": {
 				"brick_id": "block",
-				"light_id": "light_external",
-				"light_yaw": 135.0,
-				"yaw": 180.0
+				"yaw": 0
 			},
 			"1,3,8": {
+				"brick_id": "block",
+				"light_id": "light_external",
+				"light_yaw": 135,
+				"yaw": 0
+			},
+			"1,4,5": {
 				"brick_id": "ledge_45",
+				"yaw": 270
+			},
+			"1,4,6": {
+				"brick_id": "ledge_45",
+				"yaw": 270
+			},
+			"1,4,7": {
+				"brick_id": "ledge_45",
+				"yaw": 270
+			},
+			"1,4,8": {
+				"brick_id": "ledge_45_corner",
+				"yaw": 270
+			},
+			"2,0,2": {
+				"brick_id": "block_45",
+				"yaw": 180.0
+			},
+			"2,0,3": {
+				"brick_id": "block_45",
 				"yaw": 0.0
 			},
 			"2,0,4": {
-				"brick_id": "ledge_45",
+				"brick_id": "block_45",
 				"yaw": 180.0
 			},
 			"2,0,5": {
 				"brick_id": "block",
-				"yaw": 90.0
+				"yaw": 270.0
 			},
 			"2,0,6": {
 				"brick_id": "block",
-				"yaw": 90.0
+				"yaw": 270.0
 			},
 			"2,0,7": {
 				"brick_id": "block",
-				"yaw": 90.0
+				"yaw": 270.0
 			},
 			"2,0,8": {
 				"brick_id": "block",
 				"yaw": 90.0
 			},
 			"2,1,4": {
-				"brick_id": "block_window_corner",
-				"yaw": 180.0
-			},
-			"2,1,5": {
-				"brick_id": "block_window",
-				"yaw": 90.0
-			},
-			"2,1,6": {
-				"brick_id": "block_window",
-				"yaw": 90.0
-			},
-			"2,1,7": {
-				"brick_id": "block_window",
-				"yaw": 90.0
+				"brick_id": "block_window_45",
+				"yaw": 180
 			},
 			"2,1,8": {
 				"brick_id": "block",
 				"yaw": 90.0
 			},
 			"2,2,4": {
-				"brick_id": "block_window_corner",
-				"yaw": 180.0
-			},
-			"2,2,5": {
-				"brick_id": "block_window",
-				"yaw": 90.0
-			},
-			"2,2,6": {
-				"brick_id": "block_window",
-				"yaw": 90.0
-			},
-			"2,2,7": {
-				"brick_id": "block_window",
-				"yaw": 90.0
+				"brick_id": "block_window_45",
+				"yaw": 180
 			},
 			"2,2,8": {
 				"brick_id": "block",
 				"yaw": 90.0
 			},
 			"2,3,3": {
-				"brick_id": "ledge_45",
-				"yaw": 180.0
+				"brick_id": "block_45",
+				"yaw": 180
 			},
 			"2,3,4": {
-				"brick_id": "block",
-				"light_id": "light_external",
-				"light_yaw": 45.0,
-				"yaw": 180.0
-			},
-			"2,3,5": {
-				"brick_id": "block",
-				"light_id": "light_external",
-				"light_yaw": 0.0,
-				"yaw": 180.0
-			},
-			"2,3,6": {
-				"brick_id": "block",
-				"yaw": 180.0
-			},
-			"2,3,7": {
-				"brick_id": "block",
-				"yaw": 0.0
+				"brick_id": "block_45",
+				"yaw": 0
 			},
 			"2,3,8": {
-				"brick_id": "ledge_45",
+				"brick_id": "block",
 				"light_id": "light_deck",
-				"light_yaw": 180.0,
+				"light_yaw": 180,
+				"yaw": 90
+			},
+			"2,4,4": {
+				"brick_id": "block_45",
+				"yaw": 180
+			},
+			"2,4,5": {
+				"brick_id": "block",
+				"yaw": 90
+			},
+			"2,4,6": {
+				"brick_id": "block",
+				"yaw": 90
+			},
+			"2,4,7": {
+				"brick_id": "block",
+				"yaw": 90
+			},
+			"2,4,8": {
+				"brick_id": "ledge_45",
+				"yaw": 0
+			},
+			"3,0,1": {
+				"brick_id": "block_45",
+				"yaw": 180.0
+			},
+			"3,0,2": {
+				"brick_id": "block_45",
 				"yaw": 0.0
 			},
 			"3,0,26": {
@@ -337,63 +389,85 @@
 				"yaw": 90.0
 			},
 			"3,0,3": {
-				"brick_id": "ledge_45",
+				"brick_id": "block_45",
 				"yaw": 180.0
 			},
 			"3,0,4": {
-				"brick_id": "block",
-				"yaw": 90.0
+				"brick_id": "block_45",
+				"yaw": 0.0
 			},
 			"3,0,8": {
 				"brick_id": "block",
 				"yaw": 90.0
 			},
 			"3,1,3": {
-				"brick_id": "block_window_corner",
-				"yaw": 180.0
+				"brick_id": "block_window_45",
+				"yaw": 180
 			},
 			"3,1,8": {
 				"brick_id": "block",
 				"yaw": 90.0
 			},
 			"3,2,3": {
-				"brick_id": "block_window_corner",
-				"yaw": 180.0
+				"brick_id": "block_window_45",
+				"yaw": 180
 			},
 			"3,2,8": {
 				"brick_id": "block",
 				"yaw": 90.0
 			},
 			"3,3,2": {
-				"brick_id": "ledge_45",
-				"yaw": 180.0
+				"brick_id": "block_45",
+				"light_id": "light_external",
+				"light_yaw": 0,
+				"yaw": 180
 			},
 			"3,3,3": {
-				"brick_id": "block",
-				"yaw": 180.0
-			},
-			"3,3,4": {
-				"brick_id": "block",
-				"yaw": 180.0
-			},
-			"3,3,5": {
-				"brick_id": "block",
-				"yaw": 180.0
+				"brick_id": "block_45",
+				"yaw": 0
 			},
 			"3,3,6": {
-				"brick_id": "block",
-				"yaw": 180.0
-			},
-			"3,3,7": {
-				"brick_id": "block",
-				"yaw": 0.0
+				"brick_id": "light_ceiling",
+				"yaw": 180
 			},
 			"3,3,8": {
+				"brick_id": "block",
+				"yaw": 90
+			},
+			"3,4,3": {
+				"brick_id": "block_45",
+				"yaw": 180
+			},
+			"3,4,4": {
+				"brick_id": "block",
+				"yaw": 90
+			},
+			"3,4,5": {
+				"brick_id": "block",
+				"yaw": 90
+			},
+			"3,4,6": {
+				"brick_id": "block",
+				"yaw": 90
+			},
+			"3,4,7": {
+				"brick_id": "block",
+				"yaw": 90
+			},
+			"3,4,8": {
 				"brick_id": "ledge_45",
+				"yaw": 0
+			},
+			"4,0,0": {
+				"brick_id": "block_45",
+				"yaw": 180.0
+			},
+			"4,0,1": {
+				"brick_id": "block_45",
 				"yaw": 0.0
 			},
 			"4,0,2": {
-				"brick_id": "ledge_45",
+				"brick_id": "block_45",
 				"yaw": 180.0
 			},
 			"4,0,26": {
@@ -407,16 +481,16 @@
 				"yaw": 90.0
 			},
 			"4,0,3": {
-				"brick_id": "block",
-				"yaw": 90.0
+				"brick_id": "block_45",
+				"yaw": 0.0
 			},
 			"4,0,8": {
 				"brick_id": "block_door",
 				"yaw": 180.0
 			},
 			"4,1,2": {
-				"brick_id": "block_window",
-				"yaw": 180.0
+				"brick_id": "block_window_45",
+				"yaw": 180
 			},
 			"4,1,8": {
 				"brick_id": "block_door",
@@ -424,49 +498,69 @@
 				"yaw": 180.0
 			},
 			"4,2,2": {
-				"brick_id": "block_window",
-				"yaw": 180.0
+				"brick_id": "block_window_45",
+				"yaw": 180
 			},
 			"4,2,8": {
 				"brick_id": "block_door",
 				"occupied_by": "4,0,8",
 				"yaw": 180.0
 			},
+			"4,3,1": {
+				"brick_id": "block_45",
+				"yaw": 180
+			},
 			"4,3,2": {
-				"brick_id": "ledge_45",
-				"yaw": 180.0
-			},
-			"4,3,3": {
-				"brick_id": "block",
-				"yaw": 180.0
-			},
-			"4,3,4": {
-				"brick_id": "block",
-				"yaw": 180.0
-			},
-			"4,3,5": {
-				"brick_id": "block",
-				"yaw": 180.0
-			},
-			"4,3,6": {
-				"brick_id": "block",
-				"yaw": 180.0
-			},
-			"4,3,7": {
-				"brick_id": "block",
-				"yaw": 0.0
+				"brick_id": "block_45",
+				"yaw": 0
 			},
 			"4,3,8": {
-				"brick_id": "ledge_45",
-				"yaw": 0.0
+				"brick_id": "block",
+				"yaw": 90
+			},
+			"4,4,2": {
+				"brick_id": "block_45",
+				"yaw": 180
+			},
+			"4,4,3": {
+				"brick_id": "block",
+				"yaw": 90
+			},
+			"4,4,4": {
+				"brick_id": "block",
+				"yaw": 90
 			},
 			"4,4,5": {
+				"brick_id": "block",
+				"yaw": 90
+			},
+			"4,4,6": {
+				"brick_id": "block",
+				"yaw": 90
+			},
+			"4,4,7": {
+				"brick_id": "block",
+				"yaw": 0
+			},
+			"4,4,8": {
+				"brick_id": "ledge_45",
+				"yaw": 0
+			},
+			"4,5,3": {
 				"brick_id": "light_nav_white",
-				"yaw": 0.0
+				"yaw": 45
+			},
+			"5,0,0": {
+				"brick_id": "block_45",
+				"yaw": 90.0
+			},
+			"5,0,1": {
+				"brick_id": "block_45",
+				"yaw": 270.0
 			},
 			"5,0,2": {
-				"brick_id": "ledge_45",
-				"yaw": 180.0
+				"brick_id": "block_45",
+				"yaw": 90.0
 			},
 			"5,0,26": {
 				"brick_id": "trommel_small",
@@ -479,16 +573,17 @@
 				"yaw": 90.0
 			},
 			"5,0,3": {
-				"brick_id": "block",
-				"yaw": 180.0
-			},
-			"5,0,4": {
-				"brick_id": "block",
-				"yaw": 0.0
+				"brick_id": "block_45",
+				"yaw": 270.0
 			},
 			"5,0,5": {
 				"brick_id": "block",
-				"yaw": 0.0
+				"color": [
+					0.180000007152557,
+					0.180000007152557,
+					0.200000002980232
+				],
+				"yaw": 180
 			},
 			"5,0,8": {
 				"brick_id": "block_door",
@@ -496,8 +591,8 @@
 				"yaw": 180.0
 			},
 			"5,1,2": {
-				"brick_id": "block_window",
-				"yaw": 180.0
+				"brick_id": "block_window_45",
+				"yaw": 90
 			},
 			"5,1,5": {
 				"brick_id": "helm",
@@ -509,41 +604,65 @@
 				"yaw": 180.0
 			},
 			"5,2,2": {
-				"brick_id": "block_window",
-				"yaw": 180.0
+				"brick_id": "block_window_45",
+				"yaw": 270
 			},
 			"5,2,8": {
 				"brick_id": "block_door",
 				"occupied_by": "4,0,8",
 				"yaw": 180.0
 			},
+			"5,3,1": {
+				"brick_id": "block_45",
+				"yaw": 90
+			},
 			"5,3,2": {
-				"brick_id": "ledge_45",
-				"yaw": 180.0
-			},
-			"5,3,3": {
-				"brick_id": "block",
-				"yaw": 180.0
-			},
-			"5,3,4": {
-				"brick_id": "block",
-				"yaw": 180.0
-			},
-			"5,3,5": {
-				"brick_id": "block",
-				"yaw": 180.0
-			},
-			"5,3,6": {
-				"brick_id": "block",
-				"yaw": 180.0
-			},
-			"5,3,7": {
-				"brick_id": "block",
-				"yaw": 0.0
+				"brick_id": "block_45",
+				"yaw": 270
 			},
 			"5,3,8": {
+				"brick_id": "block",
+				"yaw": 90
+			},
+			"5,4,2": {
+				"brick_id": "block_45",
+				"yaw": 90
+			},
+			"5,4,3": {
+				"brick_id": "block",
+				"yaw": 90
+			},
+			"5,4,4": {
+				"brick_id": "block",
+				"yaw": 90
+			},
+			"5,4,5": {
+				"brick_id": "block",
+				"yaw": 90
+			},
+			"5,4,6": {
+				"brick_id": "block",
+				"yaw": 90
+			},
+			"5,4,7": {
+				"brick_id": "block",
+				"yaw": 0
+			},
+			"5,4,8": {
 				"brick_id": "ledge_45",
-				"yaw": 0.0
+				"yaw": 0
+			},
+			"5,5,3": {
+				"brick_id": "light_nav_white",
+				"yaw": 315
+			},
+			"6,0,1": {
+				"brick_id": "block_45",
+				"yaw": 90.0
+			},
+			"6,0,2": {
+				"brick_id": "block_45",
+				"yaw": 270.0
 			},
 			"6,0,26": {
 				"brick_id": "trommel_small",
@@ -556,134 +675,192 @@
 				"yaw": 90.0
 			},
 			"6,0,3": {
-				"brick_id": "ledge_45",
-				"yaw": 180.0
+				"brick_id": "block_45",
+				"yaw": 90.0
 			},
 			"6,0,4": {
-				"brick_id": "block",
-				"yaw": 90.0
+				"brick_id": "block_45",
+				"yaw": 270.0
 			},
 			"6,0,8": {
 				"brick_id": "block",
 				"yaw": 90.0
 			},
 			"6,1,3": {
-				"brick_id": "block_window_corner",
-				"yaw": 90.0
+				"brick_id": "block_window_45",
+				"yaw": 90
 			},
 			"6,1,8": {
 				"brick_id": "block",
 				"yaw": 90.0
 			},
 			"6,2,3": {
-				"brick_id": "block_window_corner",
-				"yaw": 90.0
+				"brick_id": "block_window_45",
+				"yaw": 270
 			},
 			"6,2,8": {
 				"brick_id": "block",
 				"yaw": 90.0
 			},
 			"6,3,2": {
-				"brick_id": "ledge_45",
-				"yaw": 180.0
+				"brick_id": "block_45",
+				"light_id": "light_external",
+				"light_yaw": 0,
+				"yaw": 90
 			},
 			"6,3,3": {
-				"brick_id": "block",
-				"yaw": 180.0
-			},
-			"6,3,4": {
-				"brick_id": "block",
-				"yaw": 180.0
-			},
-			"6,3,5": {
-				"brick_id": "block",
-				"yaw": 180.0
+				"brick_id": "block_45",
+				"yaw": 270
 			},
 			"6,3,6": {
-				"brick_id": "block",
-				"yaw": 180.0
-			},
-			"6,3,7": {
-				"brick_id": "block",
-				"yaw": 180.0
+				"brick_id": "light_ceiling",
+				"yaw": 180
 			},
 			"6,3,8": {
+				"brick_id": "block",
+				"yaw": 90
+			},
+			"6,4,3": {
+				"brick_id": "block_45",
+				"yaw": 90
+			},
+			"6,4,4": {
+				"brick_id": "block",
+				"yaw": 90
+			},
+			"6,4,5": {
+				"brick_id": "block",
+				"yaw": 90
+			},
+			"6,4,6": {
+				"brick_id": "block",
+				"yaw": 90
+			},
+			"6,4,7": {
+				"brick_id": "block",
+				"yaw": 0
+			},
+			"6,4,8": {
 				"brick_id": "ledge_45",
-				"yaw": 0.0
+				"yaw": 0
+			},
+			"7,0,2": {
+				"brick_id": "block_45",
+				"yaw": 90.0
+			},
+			"7,0,3": {
+				"brick_id": "block_45",
+				"yaw": 270.0
 			},
 			"7,0,4": {
-				"brick_id": "ledge_45",
-				"yaw": 180.0
+				"brick_id": "block_45",
+				"yaw": 90.0
 			},
 			"7,0,5": {
 				"brick_id": "block",
-				"yaw": 90.0
+				"yaw": 270.0
 			},
 			"7,0,6": {
 				"brick_id": "block",
-				"yaw": 90.0
+				"yaw": 270.0
 			},
 			"7,0,7": {
 				"brick_id": "block",
-				"yaw": 90.0
+				"yaw": 270.0
 			},
 			"7,0,8": {
 				"brick_id": "block",
 				"yaw": 90.0
 			},
 			"7,1,4": {
-				"brick_id": "block_window_corner",
-				"yaw": 90.0
+				"brick_id": "block_window_45",
+				"yaw": 90
+			},
+			"7,1,5": {
+				"brick_id": "block_windshield",
+				"yaw": 270
+			},
+			"7,1,6": {
+				"brick_id": "block_windshield",
+				"occupied_by": "7,1,5",
+				"yaw": 270
+			},
+			"7,1,7": {
+				"brick_id": "block_windshield",
+				"occupied_by": "7,1,5",
+				"yaw": 270
 			},
 			"7,1,8": {
 				"brick_id": "block",
 				"yaw": 90.0
 			},
 			"7,2,4": {
-				"brick_id": "block_window_corner",
-				"yaw": 90.0
+				"brick_id": "block_window_45",
+				"yaw": 270
+			},
+			"7,2,5": {
+				"brick_id": "block_windshield",
+				"yaw": 270
+			},
+			"7,2,6": {
+				"brick_id": "block_windshield",
+				"occupied_by": "7,2,5",
+				"yaw": 270
+			},
+			"7,2,7": {
+				"brick_id": "block_windshield",
+				"occupied_by": "7,2,5",
+				"yaw": 270
 			},
 			"7,2,8": {
 				"brick_id": "block",
 				"yaw": 90.0
 			},
 			"7,3,3": {
-				"brick_id": "ledge_45",
-				"yaw": 180.0
+				"brick_id": "block_45",
+				"yaw": 90
 			},
 			"7,3,4": {
-				"brick_id": "block",
-				"light_id": "light_external",
-				"light_yaw": 315.0,
-				"yaw": 180.0
-			},
-			"7,3,5": {
-				"brick_id": "block",
-				"light_id": "light_external",
-				"light_yaw": 0.0,
-				"yaw": 180.0
-			},
-			"7,3,6": {
-				"brick_id": "block",
-				"yaw": 180.0
-			},
-			"7,3,7": {
-				"brick_id": "block",
-				"yaw": 180.0
+				"brick_id": "block_45",
+				"yaw": 270
 			},
 			"7,3,8": {
-				"brick_id": "ledge_45",
+				"brick_id": "block",
 				"light_id": "light_deck",
-				"light_yaw": 180.0,
-				"yaw": 0.0
+				"light_yaw": 180,
+				"yaw": 90
+			},
+			"7,4,4": {
+				"brick_id": "block_45",
+				"yaw": 90
+			},
+			"7,4,5": {
+				"brick_id": "block",
+				"yaw": 90
+			},
+			"7,4,6": {
+				"brick_id": "block",
+				"yaw": 90
+			},
+			"7,4,7": {
+				"brick_id": "block",
+				"yaw": 90
+			},
+			"7,4,8": {
+				"brick_id": "ledge_45",
+				"yaw": 0
 			},
 			"8,0,27": {
 				"brick_id": "block",
 				"yaw": 90.0
 			},
-			"8,0,7": {
-				"brick_id": "ledge_45",
-				"yaw": 180.0
+			"8,0,3": {
+				"brick_id": "block_45",
+				"yaw": 90.0
+			},
+			"8,0,4": {
+				"brick_id": "block_45",
+				"yaw": 270.0
 			},
 			"8,0,8": {
 				"brick_id": "block",
@@ -693,63 +870,55 @@
 				"brick_id": "ledge_45",
 				"yaw": 270.0
 			},
-			"8,1,5": {
-				"brick_id": "block_window",
-				"yaw": 90.0
-			},
-			"8,1,6": {
-				"brick_id": "block_window",
-				"yaw": 90.0
-			},
-			"8,1,7": {
-				"brick_id": "block_window",
-				"yaw": 90.0
-			},
 			"8,1,8": {
 				"brick_id": "block",
 				"yaw": 90.0
 			},
-			"8,2,5": {
-				"brick_id": "block_window",
-				"yaw": 90.0
-			},
-			"8,2,6": {
-				"brick_id": "block_window",
-				"yaw": 90.0
-			},
-			"8,2,7": {
-				"brick_id": "block_window",
-				"yaw": 90.0
-			},
 			"8,2,8": {
-				"brick_id": "ledge_45",
-				"yaw": 90.0
+				"brick_id": "block",
+				"yaw": 180
 			},
 			"8,3,4": {
-				"brick_id": "ledge_45",
-				"yaw": 180.0
+				"brick_id": "block_45",
+				"light_id": "light_external",
+				"light_yaw": 315,
+				"yaw": 90
 			},
 			"8,3,5": {
 				"brick_id": "block",
-				"light_id": "light_nav_stbd",
-				"light_yaw": 270.0,
-				"yaw": 180.0
+				"yaw": 90
 			},
 			"8,3,6": {
 				"brick_id": "block",
-				"light_id": "light_external",
-				"light_yaw": 270.0,
-				"yaw": 180.0
+				"light_id": "light_nav_stbd",
+				"light_yaw": 270,
+				"yaw": 90
 			},
 			"8,3,7": {
 				"brick_id": "block",
-				"light_id": "light_external",
-				"light_yaw": 225.0,
-				"yaw": 180.0
+				"yaw": 90
 			},
 			"8,3,8": {
+				"brick_id": "block",
+				"light_id": "light_external",
+				"light_yaw": 225,
+				"yaw": 90
+			},
+			"8,4,5": {
 				"brick_id": "ledge_45",
-				"yaw": 0.0
+				"yaw": 90
+			},
+			"8,4,6": {
+				"brick_id": "ledge_45",
+				"yaw": 90
+			},
+			"8,4,7": {
+				"brick_id": "ledge_45",
+				"yaw": 90
+			},
+			"8,4,8": {
+				"brick_id": "ledge_45_corner",
+				"yaw": 0
 			},
 			"9,0,10": {
 				"brick_id": "block",
@@ -803,9 +972,25 @@
 				"brick_id": "block",
 				"yaw": 90.0
 			},
+			"9,0,4": {
+				"brick_id": "block_45",
+				"yaw": 90.0
+			},
+			"9,0,5": {
+				"brick_id": "block",
+				"yaw": 270.0
+			},
+			"9,0,6": {
+				"brick_id": "block",
+				"yaw": 270.0
+			},
+			"9,0,7": {
+				"brick_id": "block",
+				"yaw": 270.0
+			},
 			"9,0,8": {
-				"brick_id": "ledge_45",
-				"yaw": 180.0
+				"brick_id": "block",
+				"yaw": 270.0
 			},
 			"9,0,9": {
 				"brick_id": "block",
@@ -813,11 +998,11 @@
 			},
 			"9,1,10": {
 				"brick_id": "bollard",
-				"yaw": 90
+				"yaw": 90.0
 			},
 			"9,1,18": {
 				"brick_id": "railing",
-				"yaw": 90
+				"yaw": 90.0
 			},
 			"9,1,19": {
 				"brick_id": "railing",
@@ -855,24 +1040,16 @@
 				"brick_id": "block",
 				"yaw": 180.0
 			},
+			"9,1,8": {
+				"brick_id": "ledge_45_inner",
+				"yaw": 90
+			},
 			"9,1,9": {
 				"brick_id": "block",
-				"yaw": 90
+				"yaw": 90.0
 			},
 			"9,2,27": {
 				"brick_id": "bollard",
-				"yaw": 90
-			},
-			"9,3,5": {
-				"brick_id": "ledge_45",
-				"yaw": 90.0
-			},
-			"9,3,6": {
-				"brick_id": "ledge_45",
-				"yaw": 90.0
-			},
-			"9,3,7": {
-				"brick_id": "ledge_45",
 				"yaw": 90.0
 			}
 		},

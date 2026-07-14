@@ -30,16 +30,22 @@ scripts/
   port/         # PortPlot, PortDock, PortFacilities, FuelStation, LighthouseBuilding, FogHornBuilding
   npc/          # NpcBase, NpcInteractable, HarbourMasterNpc, ShipwrightNpc, ContractNpc, DeliveryNpc
   cargo/        # Contract, CargoItem, CargoPickup, DeliveryZone, Warehouse, ContractRegistry autoload — and later cranes
+  apps/         # Engine authoring apps (BuildingBrickEditor, PortSlotEditor, ShipyardBrickEditor)
   ui/           # HUDs, menus, overlays, GameMenu + DebugHud autoloads
   state/        # GameState autoload (cross-system read model), sub-states: PlayerState, ShipState, ContractState, WorldState
 
 resources/data/
+  buildings/    # Voxel building blueprints (filename stem = id); BuildingBrickEditor
+  ports/        # default_service_slots.json authored by PortSlotEditor
+  vessels/prebuilt/  # Official ready-built vessels; ShipyardBrickEditor
   models/
     buildings/  # Fog horn, lighthouse
   meshes/       # Raw {vertices, indices} JSON by category (hulls/, docks/, buildings/, props/, …)
   lights/       # Nav-light JSON configs
   world/        # Procedural archetype parameters only; never generated mesh vertices
-scenes/vessels/ # Hand-authored vessel scenes (workboat.tscn)
+scenes/apps/       # Authoring apps (run directly in Godot)
+scenes/showcases/  # Visual inspect fixtures (not authoring)
+scenes/vessels/    # Hand-authored vessel scenes (workboat.tscn)
 ```
 
 ---
@@ -95,7 +101,7 @@ In multiplayer this autoload becomes a per-client object the network layer popul
 
 ## Vessel System — Deck-grid bricks
 
-Hand-authored vessel scenes (`scenes/vessels/`) own hull geometry and core systems. Deck fit-out is a **1×1×1 m brick grid** painted in the shipwright fullscreen editor (`ShipyardBrickEditor`). Layout persists as `brick_layout` on the owned-vessel ledger; spawn rebuilds via `DeckFitout`.
+Hand-authored vessel scenes (`scenes/vessels/`) own hull geometry and core systems. Deck fit-out is a **1×1×1 m brick grid**. Official ready-builts are authored in the engine app `ShipyardBrickEditor` (`scenes/apps/shipyard_brick_editor.tscn`) and sold by the shipwright from `resources/data/vessels/prebuilt/`. Layout persists as `brick_layout` on the owned-vessel ledger; spawn rebuilds via `DeckFitout`.
 
 ```gdscript
 var boat := VesselSpawn.instantiate_from_record(owned_vessel_record)
@@ -113,6 +119,8 @@ boat.place_at_waterline(water_y)
 | WalkDeck | |
 
 Role (ferry / cargo / trawler-with-crane) comes from bricks + rules (`BrickRules`), not kit ids. Do **not** revive `WheelhouseVisual`, hull JSON `bridge` slots, or `ShipBuilder`.
+
+`BrickCatalog` is the shared construction kit for vessel decks and land buildings. Marine-only pieces carry the `ship_only` tag and are filtered out of the building editor palette.
 
 ### Orientation (workboat)
 
@@ -156,7 +164,7 @@ Use it when you need live part/role lookups, articulation, or per-instance colli
 For repeated static props (port street buildings, bollards), build once and stamp:
 
 ```gdscript
-var visual := ModelCache.instance("res://resources/data/meshes/port_buildings/town_building.json")
+var visual := ModelCache.instance("res://resources/data/models/buildings/foghorn_building.json")
 visual.name = "Model"
 body.add_child(visual)
 ```

@@ -22,13 +22,15 @@ const LOD_HYSTERESIS_M := 350.0
 ## Port flatten zones still target y=0 and are therefore unchanged.
 const TERRAIN_SINK_M := 2.5
 const SUBMERGED_SHELF_EXTENT_M := 28.0
+## Submerged terrain is visual bathymetry only. Physical beaching/grounding will
+## be owned by dedicated gameplay logic rather than hidden terrain collision.
+const COLLISION_COAST_CUTOFF_Y := WaveSurface.WATER_LEVEL
 const COASTAL_COATING_MAX_LOD := 2
 const COASTAL_COATING_OFFSET_M := 0.08
 const BYTES_PER_VERTEX_ESTIMATE := 40
 const BYTES_PER_INDEX_ESTIMATE := 4
-const PORT_PAD_WIDTH_BY_SIZE := [120.0, 152.0, 232.0, 352.0, 532.0]
-## Matches CoastalPortPlacer.DOCK_OVERHANG_M so the flatten pad covers the quay.
-const PORT_PAD_SEAWARD_SHIFT_M := 14.0
+const PORT_PAD_WIDTH_BY_SIZE := PortSizing.TERRAIN_PAD_WIDTH_BY_SIZE
+const PORT_PAD_SEAWARD_SHIFT_M := PortSizing.PAD_SEAWARD_SHIFT_M
 
 @export_range(1000.0, 28000.0, 250.0) var visual_radius_m := DEFAULT_VISUAL_RADIUS_M
 @export_range(0.0, 5000.0, 100.0) var collision_radius_m := 1800.0
@@ -481,7 +483,10 @@ static func make_flatten_zones(port_definitions: Array, default_pad_height_m := 
 		if pad_size == Vector2.ZERO:
 			# Mirrors PortExpander island/facility widths plus PortPlot's safe
 			# margin. Depth remains compact because every plot is 140 m deep.
-			pad_size = Vector2(PORT_PAD_WIDTH_BY_SIZE[clampi(size_class, 0, 4)], 172.0)
+			pad_size = Vector2(
+				PORT_PAD_WIDTH_BY_SIZE[PortSizing.normalized_size(size_class)],
+				PortSizing.PAD_DEPTH_M,
+			)
 		if falloff < 0.0:
 			falloff = 70.0 + float(clampi(size_class, 0, 4)) * 15.0
 		var seaward := Vector2(-sin(yaw), -cos(yaw))
@@ -945,11 +950,47 @@ static func collision_faces(data: Dictionary) -> PackedVector3Array:
 	var surface_limit := int(data["surface_vertex_count"])
 	var faces := PackedVector3Array()
 	for i in range(0, indices.size(), 3):
-		if indices[i] < surface_limit and indices[i + 1] < surface_limit and indices[i + 2] < surface_limit:
-			faces.append(vertices[indices[i]])
-			faces.append(vertices[indices[i + 1]])
-			faces.append(vertices[indices[i + 2]])
+		if indices[i] >= surface_limit or indices[i + 1] >= surface_limit or indices[i + 2] >= surface_limit:
+			continue
+		var polygon := _clip_collision_triangle_above_height(
+			vertices[indices[i]],
+			vertices[indices[i + 1]],
+			vertices[indices[i + 2]],
+			COLLISION_COAST_CUTOFF_Y,
+		)
+		for fan_index in range(1, polygon.size() - 1):
+			# Clipping preserves the source triangle's clockwise winding.
+			faces.append(polygon[0])
+			faces.append(polygon[fan_index])
+			faces.append(polygon[fan_index + 1])
 	return faces
+
+
+static func _clip_collision_triangle_above_height(
+		a: Vector3,
+		b: Vector3,
+		c: Vector3,
+		min_height_m: float,
+) -> Array[Vector3]:
+	var polygon: Array[Vector3] = [a, b, c]
+	var result: Array[Vector3] = []
+	var previous: Vector3 = polygon.back()
+	var previous_inside: bool = previous.y >= min_height_m
+	for current_variant in polygon:
+		var current: Vector3 = current_variant
+		var current_inside: bool = current.y >= min_height_m
+		if current_inside != previous_inside:
+			var denominator: float = current.y - previous.y
+			var t: float = 0.5 if absf(denominator) < 0.000001 \
+				else clampf((min_height_m - previous.y) / denominator, 0.0, 1.0)
+			var intersection: Vector3 = previous.lerp(current, t)
+			intersection.y = min_height_m
+			result.append(intersection)
+		if current_inside:
+			result.append(current)
+		previous = current
+		previous_inside = current_inside
+	return result
 
 
 static func estimate_mesh_memory(data: Dictionary) -> int:

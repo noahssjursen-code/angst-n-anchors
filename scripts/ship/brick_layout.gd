@@ -53,6 +53,9 @@ func set_brick(cell: Vector3i, brick_id: String, yaw: int = 0, props: Dictionary
 	}
 	if props.has("text"):
 		entry["text"] = str(props["text"])
+	var painted := color_to_array(props.get("color", null))
+	if not painted.is_empty():
+		entry["color"] = painted
 	## Preserve a mounted sign when replacing non-text bricks? No — full replace.
 	cells[cell_key(cell)] = entry
 
@@ -158,7 +161,14 @@ func place_footprint(
 	var occupied := grid.footprint_cells(origin, fp, yaw_steps)
 	var allow_on_cargo := BrickCatalog.has_tag(brick_id, "text")
 	for c in occupied:
-		if not grid.in_bounds(c):
+		if grid.is_partial_bow_cell(c):
+			if (
+				not BrickCatalog.has_tag(brick_id, "diagonal_plan")
+				or occupied.size() != 1
+				or yaw_n != grid.partial_bow_yaw_degrees(c)
+			):
+				return false
+		elif not grid.in_bounds(c):
 			return false
 		if has_cell(c):
 			return false
@@ -166,16 +176,20 @@ func place_footprint(
 			return false
 	# Primary cell stores brick; extras marked as occupied-by.
 	var primary := true
+	var painted := color_to_array(props.get("color", null))
 	for c in occupied:
 		if primary:
 			set_brick(c, brick_id, yaw_n, props)
 			primary = false
 		else:
-			cells[cell_key(c)] = {
+			var filler := {
 				"brick_id": brick_id.strip_edges(),
 				"yaw": yaw_n,
 				"occupied_by": cell_key(origin),
 			}
+			if not painted.is_empty():
+				filler["color"] = painted.duplicate()
+			cells[cell_key(c)] = filler
 	return true
 
 
@@ -437,6 +451,27 @@ func _migrate_legacy_cargo_tiles() -> void:
 
 static func _norm_yaw(yaw: int) -> int:
 	return norm_yaw_step(yaw, 90)
+
+
+static func color_to_array(color: Variant) -> Array:
+	if color == null:
+		return []
+	if color is Color:
+		var c := color as Color
+		return [c.r, c.g, c.b]
+	if color is Array:
+		var arr := color as Array
+		if arr.size() >= 3:
+			return [float(arr[0]), float(arr[1]), float(arr[2])]
+	return []
+
+
+static func color_from_entry(entry: Dictionary, brick_id: String = "") -> Color:
+	var painted := color_to_array(entry.get("color", null))
+	if painted.size() >= 3:
+		return Color(float(painted[0]), float(painted[1]), float(painted[2]))
+	var id := brick_id if not brick_id.is_empty() else str(entry.get("brick_id", ""))
+	return BrickCatalog.get_entry(id).get("color", Color(0.7, 0.7, 0.7)) as Color
 
 
 static func norm_yaw_step(yaw: int, step: int = 90) -> int:

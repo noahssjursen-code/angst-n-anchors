@@ -1,0 +1,3 @@
+# Source-controlled voxel-building blueprints live here.
+# Author them with res://scenes/building_brick_editor.tscn.
+# Filename stem = blueprint id. Do not invent placeholder buildings by hand.

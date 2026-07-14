@@ -9,9 +9,6 @@ const PrebuiltCatalogScript := preload("res://scripts/ship/prebuilt_vessel_catal
 
 const DISPLAY_PREBUILT_ID := "fishing_trawler"
 const STRIP_CHILDREN := ["BoatController", "BoatCamera", "BoatAudio"]
-const WAREHOUSE_PATH := "res://resources/data/meshes/port_buildings/warehouse_building.json"
-const TOWN_PATH := "res://resources/data/meshes/port_buildings/town_building.json"
-const HARBOUR_PATH := "res://resources/data/meshes/port_buildings/harbour_master_building.json"
 const HARBOUR_SEED := 81427
 const HARBOUR_WIDTH := 92.0
 const HARBOUR_DEPTH := 104.0
@@ -118,24 +115,20 @@ func _build_coastal_harbour() -> void:
 	harbour.add_child(dock)
 	_display_dock = dock
 
-	# Existing in-house port-building meshes, stamped as visual-only scenery.
-	_add_cached_building(harbour, WAREHOUSE_PATH, Vector3(-23, 0.0, -24), -0.08)
-	_add_cached_building(harbour, HARBOUR_PATH, Vector3(5, 0.0, -22), 0.04)
-	_add_cached_building(harbour, TOWN_PATH, Vector3(27, 0.0, -12), -0.05)
+	# The same empty service-slot shell as runtime ports.
+	var facilities := PortFacilities.new()
+	facilities.name = "PresentationFacilities"
+	facilities.plot_width = HARBOUR_WIDTH
+	facilities.plot_depth = HARBOUR_DEPTH - PortDock.INLAND_DEPTH
+	facilities.layout_seed = HARBOUR_SEED
+	facilities.position = Vector3(0.0, 0.0, -HARBOUR_DEPTH * 0.5 + PortDock.INLAND_DEPTH)
+	harbour.add_child(facilities)
 
 	# Use the actual lighthouse model and sweep implementation.
 	var lighthouse := LighthouseBuilding.new()
 	lighthouse.name = "PresentationLighthouse"
 	lighthouse.position = Vector3(40, 0.0, -4)
 	harbour.add_child(lighthouse)
-
-
-func _add_cached_building(parent: Node3D, path: String, pos: Vector3, yaw: float) -> void:
-	var visual := ModelCache.instance(path)
-	visual.position = pos
-	visual.rotation.y = yaw
-	parent.add_child(visual)
-
 
 func _spawn_display_vessel() -> void:
 	var entry := _pick_display_entry()

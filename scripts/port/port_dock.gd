@@ -39,7 +39,7 @@ var _build_queue: Array = []  ## Array[Callable]
 const DOCK_JOBS_PER_FRAME: int = 1
 
 const QUAY_HEIGHT    := 0.6
-const QUAY_DEPTH     := 8.0
+const QUAY_DEPTH     := PortSizing.QUAY_DEPTH_M
 ## Dark lip along the water-facing edge — must not share volume/facets with the main slab or Z‑fights.
 const QUAY_LIP_DEPTH := 0.35
 const QUAY_LIP_SLAB_GAP := 0.002
@@ -53,11 +53,11 @@ const BERTH_MARGIN   := 1.5
 
 const CRANE_W        := 6.0
 const CRANE_H        := 18.0
-const CRANE_D        := 6.0
-const CRANE_QUAY_GAP := 3.0
-const APRON_GAP      := 2.0
+const CRANE_D        := PortSizing.CRANE_DEPTH_M
+const CRANE_QUAY_GAP := PortSizing.CRANE_QUAY_GAP_M
+const APRON_GAP      := PortSizing.APRON_GAP_M
 ## Apron runs inland (+Z). Keep shallow so the quay does not swallow the town.
-const APRON_DEPTH    := 14.0
+const APRON_DEPTH    := PortSizing.APRON_DEPTH_M
 const APRON_DEPTH_MAX := 16.0
 const APRON_CELL_M   := 1.5
 ## Extra apron cells beyond the ship-class hint for contract staging overflow.
@@ -69,7 +69,7 @@ const CRANE_SHIP_LENGTH_FRAC := 0.58
 
 ## Total inland footprint from dock face to back of cargo aprons + buffer.
 ## PortPlot reads this to position PortFacilities without guessing.
-const INLAND_DEPTH := QUAY_DEPTH + CRANE_QUAY_GAP + CRANE_D + APRON_GAP + APRON_DEPTH + 3.0
+const INLAND_DEPTH := PortSizing.DOCK_INLAND_DEPTH_M
 
 @export var dock_length: float = 80.0:
 	set(v): dock_length = v; if is_inside_tree(): _rebuild()
@@ -97,6 +97,10 @@ func _ready() -> void:
 	else:
 		# Sync so PortPlot can wait on a populated build queue immediately.
 		_rebuild()
+
+
+func _exit_tree() -> void:
+	_build_queue.clear()
 
 
 func is_build_complete() -> bool:

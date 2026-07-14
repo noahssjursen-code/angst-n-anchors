@@ -1,0 +1,68 @@
+{
+	"format_version": 1,
+	"slots": [
+		{
+			"blueprint_id": "building",
+			"color": [
+				0.579999983310699,
+				0.469999998807907,
+				0.180000007152557
+			],
+			"display_name": "HARBOUR MASTER",
+			"footprint": [
+				10.0,
+				0.119999997317791,
+				8.0
+			],
+			"id": "harbour_master",
+			"position": [
+				-9.5,
+				0.0,
+				12.0
+			],
+			"yaw_degrees": 90.0
+		},
+		{
+			"blueprint_id": "contractorhouse",
+			"color": [
+				0.180000007152557,
+				0.46000000834465,
+				0.28999999165535
+			],
+			"display_name": "CONTRACTOR",
+			"footprint": [
+				10.0,
+				0.119999997317791,
+				8.0
+			],
+			"id": "contractor",
+			"position": [
+				13.0,
+				0.0,
+				5.0
+			],
+			"yaw_degrees": 90.0
+		},
+		{
+			"blueprint_id": "building",
+			"color": [
+				0.5,
+				0.25,
+				0.140000000596046
+			],
+			"display_name": "SHIPWRIGHT",
+			"footprint": [
+				12.0,
+				0.119999997317791,
+				10.0
+			],
+			"id": "shipwright",
+			"position": [
+				33.0,
+				0.0,
+				11.0
+			],
+			"yaw_degrees": 90.0
+		}
+	]
+}

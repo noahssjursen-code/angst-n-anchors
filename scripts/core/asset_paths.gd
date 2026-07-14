@@ -17,17 +17,6 @@ const HAT_PEAKED_CAP := CHARACTER_BASE_DIR + "hat_peaked_cap.json"
 const VESSEL_SCENE_DIR := "res://scenes/vessels/"
 const WORKBOAT_SCENE   := VESSEL_SCENE_DIR + "workboat.tscn"
 
-# ── Port building meshes (port_facilities.gd is the sole consumer for these,
-#     pulled here as documentation — not currently imported elsewhere) ────────
-const PORT_BUILDINGS_DIR  := "res://resources/data/meshes/port_buildings/"
-const PORT_HARBOURMASTER  := PORT_BUILDINGS_DIR + "harbour_master_building.json"
-const PORT_SHIPPING_AGENT := PORT_BUILDINGS_DIR + "shipping_agent_building.json"
-const PORT_CUSTOMS        := PORT_BUILDINGS_DIR + "customs_building.json"
-const PORT_MARINE_ENG     := PORT_BUILDINGS_DIR + "marine_engineer_building.json"
-const PORT_SHIPWRIGHT     := PORT_BUILDINGS_DIR + "shipwright_building.json"
-const PORT_WAREHOUSE      := PORT_BUILDINGS_DIR + "warehouse_building.json"
-const PORT_TOWN           := PORT_BUILDINGS_DIR + "town_building.json"
-
 # ── Dock + lighthouse + foghorn meshes ───────────────────────────────────────
 const DOCK_BOLLARD       := "res://resources/data/meshes/docks/docking_bollard.json"
 const DOCK_PLANK         := "res://resources/data/meshes/docks/dock.json"

@@ -1,8 +1,9 @@
 class_name BrickCatalog
 extends RefCounted
 
-## Lego-like ship fit-out bricks.
-## Footprint is in cells (x,y,z) = (width, height, length). Cell size = DeckGrid.CELL_M (1.0 m).
+## Shared construction kit for vessel decks and land buildings.
+## Footprint is in cells (x,y,z) = (width, height, length). Cell size = 1.0 m.
+## Tag `ship_only` hides a brick from the land building editor palette.
 
 ## Shared window frame / glass metrics so corners seam with straight panes.
 const WIN_POST := 0.08
@@ -17,6 +18,15 @@ const BRICKS: Dictionary = {
 		"mass_kg": 80.0,
 		"color": Color(0.78, 0.80, 0.84),
 	},
+	"block_45": {
+		"display": "45° angled block",
+		## Vertical triangular prism for diagonal walls and pointed hull edges.
+		## Missing plan corner is local (+X,+Z).
+		"footprint": [1, 1, 1],
+		"tags": ["wall", "solid", "diagonal_plan"],
+		"mass_kg": 40.0,
+		"color": Color(0.78, 0.80, 0.84),
+	},
 	"block_window": {
 		"display": "Window",
 		## 1×1×1 — glass flush on local −Z face.
@@ -24,6 +34,22 @@ const BRICKS: Dictionary = {
 		"tags": ["window"],
 		"mass_kg": 35.0,
 		"color": Color(0.55, 0.72, 0.88, 0.22),
+	},
+	"block_window_45": {
+		"display": "45° angled window",
+		## Triangular plan piece; glazing follows the diagonal cut face.
+		"footprint": [1, 1, 1],
+		"tags": ["window", "diagonal_plan"],
+		"mass_kg": 28.0,
+		"color": Color(0.55, 0.72, 0.88, 0.22),
+	},
+	"block_windshield": {
+		"display": "Panoramic windshield",
+		## One uninterrupted 3 m pane with only a perimeter frame.
+		"footprint": [3, 1, 1],
+		"tags": ["window", "ship_only", "windshield"],
+		"mass_kg": 90.0,
+		"color": Color(0.48, 0.68, 0.84, 0.20),
 	},
 	"block_window_corner": {
 		"display": "Window corner",
@@ -35,17 +61,120 @@ const BRICKS: Dictionary = {
 	},
 	"block_door": {
 		"display": "Door",
-		## 2 m wide × 3 m tall × 1 m deep — spans three layers.
+		## 2 m wide × 3 m tall × 1 m deep — spans three layers (player ~1.8 m).
 		"footprint": [2, 3, 1],
 		"tags": ["door"],
 		"mass_kg": 90.0,
 		"color": Color(0.48, 0.32, 0.20),
+	},
+	"foundation": {
+		"display": "Foundation",
+		"footprint": [1, 1, 1],
+		"tags": ["solid", "foundation"],
+		"mass_kg": 110.0,
+		"color": Color(0.34, 0.35, 0.36),
+	},
+	"floor": {
+		"display": "Floor",
+		## Thin surface underlay — shares a cell with walls/props placed on top.
+		"footprint": [1, 1, 1],
+		"tags": ["floor", "surface"],
+		"mass_kg": 35.0,
+		"color": Color(0.48, 0.38, 0.27),
+	},
+	"roof_flat": {
+		"display": "Flat roof",
+		"footprint": [1, 1, 1],
+		"tags": ["solid", "roof"],
+		"mass_kg": 45.0,
+		"color": Color(0.22, 0.24, 0.25),
+	},
+	"roof_slope": {
+		"display": "Sloped roof",
+		"footprint": [1, 1, 1],
+		"tags": ["solid", "roof", "slope"],
+		"mass_kg": 40.0,
+		"color": Color(0.25, 0.27, 0.28),
+	},
+	"roof_slope_inv": {
+		"display": "Inverted sloped roof",
+		"footprint": [1, 1, 1],
+		"tags": ["solid", "roof", "slope"],
+		"mass_kg": 40.0,
+		"color": Color(0.25, 0.27, 0.28),
+	},
+	"roof_corner": {
+		"display": "Corner roof",
+		## Hip / outer corner — peak at local (−X, −Z); yaw to seat against two slopes.
+		"footprint": [1, 1, 1],
+		"tags": ["solid", "roof", "slope", "corner"],
+		"mass_kg": 35.0,
+		"color": Color(0.25, 0.27, 0.28),
+	},
+	"roof_corner_inv": {
+		"display": "Inverted corner roof",
+		"footprint": [1, 1, 1],
+		"tags": ["solid", "roof", "slope", "corner"],
+		"mass_kg": 35.0,
+		"color": Color(0.25, 0.27, 0.28),
+	},
+	"roof_corner_inner": {
+		"display": "Inner corner roof",
+		## Valley / inside corner — high L along (−X, −Z); yaw to seat between two slopes.
+		"footprint": [1, 1, 1],
+		"tags": ["solid", "roof", "slope", "corner"],
+		"mass_kg": 40.0,
+		"color": Color(0.25, 0.27, 0.28),
+	},
+	"roof_corner_inner_inv": {
+		"display": "Inverted inner corner roof",
+		"footprint": [1, 1, 1],
+		"tags": ["solid", "roof", "slope", "corner"],
+		"mass_kg": 40.0,
+		"color": Color(0.25, 0.27, 0.28),
+	},
+	"beam": {
+		"display": "Beam",
+		"footprint": [1, 1, 1],
+		"tags": ["solid", "structure"],
+		"mass_kg": 30.0,
+		"color": Color(0.30, 0.22, 0.15),
 	},
 	"ledge_45": {
 		"display": "45° wedge",
 		## Full cell cut on the diagonal — triangle brick / ramp.
 		"footprint": [1, 1, 1],
 		"tags": ["slope", "solid"],
+		"mass_kg": 40.0,
+		"color": Color(0.78, 0.80, 0.84),
+	},
+	"ledge_45_corner": {
+		"display": "45° corner wedge",
+		## Peak at local (−X, −Z) — ship-coloured hip / corner piece.
+		"footprint": [1, 1, 1],
+		"tags": ["slope", "solid", "corner"],
+		"mass_kg": 35.0,
+		"color": Color(0.78, 0.80, 0.84),
+	},
+	"ledge_45_corner_inv": {
+		"display": "Inverted 45° corner wedge",
+		"footprint": [1, 1, 1],
+		"tags": ["slope", "solid", "corner"],
+		"mass_kg": 35.0,
+		"color": Color(0.78, 0.80, 0.84),
+	},
+	"ledge_45_inner": {
+		"display": "45° inner corner wedge",
+		## High L along (−X, −Z), low tip at (+X, +Z) — valley piece.
+		"footprint": [1, 1, 1],
+		"tags": ["slope", "solid", "corner"],
+		"mass_kg": 40.0,
+		"color": Color(0.78, 0.80, 0.84),
+	},
+	"ledge_45_inner_inv": {
+		"display": "Inverted 45° inner corner wedge",
+		"footprint": [1, 1, 1],
+		"tags": ["slope", "solid", "corner"],
 		"mass_kg": 40.0,
 		"color": Color(0.78, 0.80, 0.84),
 	},
@@ -72,7 +201,7 @@ const BRICKS: Dictionary = {
 		"display": "Helm console",
 		## Bridge console — place in the bridge; F only when looking at this brick.
 		"footprint": [1, 1, 1],
-		"tags": ["helm"],
+		"tags": ["helm", "ship_only"],
 		"mass_kg": 55.0,
 		"color": Color(0.32, 0.34, 0.38),
 	},
@@ -108,7 +237,7 @@ const BRICKS: Dictionary = {
 	},
 	"light_cabin": {
 		"display": "Cabin light",
-		## Mounts on a block; warm omni.
+		## Bulkhead / overhead dome — warm omni.
 		"footprint": [1, 1, 1],
 		"tags": ["light", "cabin_light", "attach"],
 		"light_type": 5, ## ShipLight.LightType.WINDOW (warm omni)
@@ -116,11 +245,23 @@ const BRICKS: Dictionary = {
 		"mass_kg": 8.0,
 		"color": Color(0.85, 0.78, 0.55),
 	},
+	"light_ceiling": {
+		"display": "Ceiling light",
+		## Flush ceiling pan + frosted disc — hang from the cell soffit.
+		"footprint": [1, 1, 1],
+		"tags": ["light", "cabin_light", "ceiling", "attach"],
+		"light_type": 5, ## ShipLight.LightType.WINDOW (warm omni)
+		"omni_range_m": 7.0,
+		"omni_energy": 3.2,
+		"yaw_step": 90,
+		"mass_kg": 10.0,
+		"color": Color(0.88, 0.86, 0.78),
+	},
 	"light_nav_port": {
 		"display": "Nav light (port)",
 		## Mounts on a block; yaw aims the lens (−Z) in 45° steps.
 		"footprint": [1, 1, 1],
-		"tags": ["light", "nav", "attach"],
+		"tags": ["light", "nav", "attach", "ship_only"],
 		"light_type": 0,
 		"yaw_step": 45,
 		"mass_kg": 10.0,
@@ -129,7 +270,7 @@ const BRICKS: Dictionary = {
 	"light_nav_stbd": {
 		"display": "Nav light (stbd)",
 		"footprint": [1, 1, 1],
-		"tags": ["light", "nav", "attach"],
+		"tags": ["light", "nav", "attach", "ship_only"],
 		"light_type": 1,
 		"yaw_step": 45,
 		"mass_kg": 10.0,
@@ -138,7 +279,7 @@ const BRICKS: Dictionary = {
 	"light_nav_white": {
 		"display": "Nav light (white)",
 		"footprint": [1, 1, 1],
-		"tags": ["light", "nav", "attach"],
+		"tags": ["light", "nav", "attach", "ship_only"],
 		"light_type": 2,
 		"yaw_step": 45,
 		"mass_kg": 12.0,
@@ -155,14 +296,14 @@ const BRICKS: Dictionary = {
 		"display": "Bollard",
 		## Mooring post — often on a bulwark / half-wall, not only bare deck.
 		"footprint": [1, 1, 1],
-		"tags": ["mooring", "cleat"],
+		"tags": ["mooring", "cleat", "ship_only"],
 		"mass_kg": 55.0,
 		"color": Color(0.42, 0.40, 0.36),
 	},
 	"cargo_zone": {
 		"display": "Cargo zone",
 		"footprint": [1, 1, 1],
-		"tags": ["cargo", "floor", "zone"],
+		"tags": ["cargo", "floor", "zone", "ship_only"],
 		"mass_kg": 20.0,
 		"color": Color(0.40, 0.36, 0.30),
 		## Click corner A, then corner B — not a per-cell brick.
@@ -172,14 +313,14 @@ const BRICKS: Dictionary = {
 		"display": "Crane base",
 		## 2×2 m pad.
 		"footprint": [2, 1, 2],
-		"tags": ["crane_base"],
+		"tags": ["crane_base", "ship_only"],
 		"mass_kg": 400.0,
 		"color": Color(0.55, 0.45, 0.22),
 	},
 	"crane": {
 		"display": "Crane arm",
 		"footprint": [1, 2, 1],
-		"tags": ["crane"],
+		"tags": ["crane", "ship_only"],
 		"mass_kg": 600.0,
 		"color": Color(0.62, 0.52, 0.24),
 	},
@@ -187,7 +328,7 @@ const BRICKS: Dictionary = {
 		"display": "Hull ladder",
 		## 2×2 m pad on the deck edge; rungs hang outboard so you climb aboard from the quay.
 		"footprint": [2, 1, 2],
-		"tags": ["ladder", "edge"],
+		"tags": ["ladder", "edge", "ship_only"],
 		"mass_kg": 45.0,
 		"color": Color(0.42, 0.44, 0.48),
 		"deck_only": true,
@@ -197,7 +338,7 @@ const BRICKS: Dictionary = {
 		"display": "Trommel (small)",
 		## 2×4 m deck winch — mounts FishingSystem for trawl cast/haul.
 		"footprint": [2, 1, 4],
-		"tags": ["fishing", "trommel"],
+		"tags": ["fishing", "trommel", "ship_only"],
 		"mass_kg": 1800.0,
 		"color": Color(0.22, 0.24, 0.26),
 		"deck_only": true,
@@ -206,7 +347,7 @@ const BRICKS: Dictionary = {
 		"display": "Floor text",
 		## Flat Label3D on the deck — vessel name, draft marks, etc.
 		"footprint": [6, 1, 1],
-		"tags": ["text", "sign", "floor"],
+		"tags": ["text", "sign", "floor", "ship_only"],
 		"mass_kg": 5.0,
 		"color": Color(0.92, 0.86, 0.55),
 		"deck_only": true,
@@ -247,6 +388,16 @@ static func ids() -> Array[String]:
 	for k in BRICKS.keys():
 		out.append(str(k))
 	out.sort()
+	return out
+
+
+static func ids_for_buildings() -> Array[String]:
+	## Land building editor palette — shared kit minus marine-only systems.
+	var out: Array[String] = []
+	for brick_id in ids():
+		if has_tag(brick_id, "ship_only"):
+			continue
+		out.append(brick_id)
 	return out
 
 
@@ -296,23 +447,64 @@ static func has_tag(brick_id: String, tag: String) -> bool:
 static func create_visual(brick_id: String, opts: Dictionary = {}) -> Node3D:
 	## Mesh is centred on the origin; caller places the node at the footprint AABB centre.
 	## opts.preview_mesh — when true, cargo tiles get a temporary plate (ghost / palette thumb).
+	## opts.color — optional Color override (painted buildings / custom bricks).
 	var root := Node3D.new()
 	root.name = brick_id
 	var entry := get_entry(brick_id)
 	var color: Color = entry.get("color", Color(0.7, 0.7, 0.7)) as Color
+	if opts.has("color") and opts["color"] is Color:
+		color = opts["color"] as Color
 	var sz := size_m(brick_id)
 	var s := DeckGrid.CELL_M
 	match brick_id:
 		"block":
 			root.add_child(MeshBuilder.box(sz, color, 0.85, 0.0))
+		"block_45":
+			root.add_child(MeshBuilder.wedge_45_plan(sz, color, 0.85, 0.0))
 		"block_window":
+			_add_window_visual(root, sz, color)
+		"block_window_45":
+			_add_window_45_visual(root, sz, color)
+		"block_windshield":
 			_add_window_visual(root, sz, color)
 		"block_window_corner":
 			_add_window_corner_visual(root, sz, color)
 		"block_door":
 			_add_door_visual(root, sz, color)
+		"foundation":
+			root.add_child(MeshBuilder.box(sz, color, 0.92, 0.0))
+		"floor":
+			var floor_plate := MeshBuilder.box(Vector3(sz.x, 0.12, sz.z), color, 0.9, 0.0)
+			floor_plate.position = Vector3(0.0, -sz.y * 0.5 + 0.06, 0.0)
+			root.add_child(floor_plate)
+		"roof_flat":
+			var roof := MeshBuilder.box(Vector3(sz.x, 0.18, sz.z), color, 0.8, 0.1)
+			roof.position = Vector3(0.0, sz.y * 0.5 - 0.09, 0.0)
+			root.add_child(roof)
+		"roof_slope":
+			root.add_child(MeshBuilder.wedge_45(sz, color, 0.82, 0.08))
+		"roof_slope_inv":
+			root.add_child(MeshBuilder.wedge_45_inverted(sz, color, 0.82, 0.08))
+		"roof_corner":
+			root.add_child(MeshBuilder.wedge_45_corner(sz, color, 0.82, 0.08))
+		"roof_corner_inv":
+			root.add_child(MeshBuilder.wedge_45_corner_inverted(sz, color, 0.82, 0.08))
+		"roof_corner_inner":
+			root.add_child(MeshBuilder.wedge_45_inner(sz, color, 0.82, 0.08))
+		"roof_corner_inner_inv":
+			root.add_child(MeshBuilder.wedge_45_inner_inverted(sz, color, 0.82, 0.08))
+		"beam":
+			root.add_child(MeshBuilder.box(Vector3(0.22, sz.y, 0.22), color, 0.88, 0.0))
 		"ledge_45":
 			root.add_child(MeshBuilder.wedge_45(sz, color, 0.92, 0.0))
+		"ledge_45_corner":
+			root.add_child(MeshBuilder.wedge_45_corner(sz, color, 0.92, 0.0))
+		"ledge_45_corner_inv":
+			root.add_child(MeshBuilder.wedge_45_corner_inverted(sz, color, 0.92, 0.0))
+		"ledge_45_inner":
+			root.add_child(MeshBuilder.wedge_45_inner(sz, color, 0.92, 0.0))
+		"ledge_45_inner_inv":
+			root.add_child(MeshBuilder.wedge_45_inner_inverted(sz, color, 0.92, 0.0))
 		"stairs", "staircase":
 			_add_stairs_visual(root, sz, color, int(entry.get("stair_steps", 4)))
 		"helm":
@@ -327,6 +519,10 @@ static func create_visual(brick_id: String, opts: Dictionary = {}) -> Node3D:
 				_add_light_aim_gizmo(root, brick_id)
 		"light_cabin":
 			_add_light_cabin_visual(root, sz, color)
+			if bool(opts.get("show_aim_gizmo", false)):
+				_add_light_aim_gizmo(root, brick_id)
+		"light_ceiling":
+			_add_light_ceiling_visual(root, sz, color)
 			if bool(opts.get("show_aim_gizmo", false)):
 				_add_light_aim_gizmo(root, brick_id)
 		"light_nav_port", "light_nav_stbd", "light_nav_white":
@@ -757,6 +953,45 @@ static func _add_light_cabin_visual(root: Node3D, sz: Vector3, color: Color) -> 
 	root.add_child(bowl)
 
 
+static func _add_light_ceiling_visual(root: Node3D, sz: Vector3, color: Color) -> void:
+	## Flush ceiling fixture: rose → stem → frosted disc diffuser (glowing face = Lens).
+	var metal := Color(0.38, 0.39, 0.41)
+	var trim := Color(color.r * 0.72, color.g * 0.72, color.b * 0.70)
+	var frost := Color(0.92, 0.88, 0.78)
+	var top_y := sz.y * 0.5
+
+	var rose := MeshBuilder.cylinder(0.16, 0.04, metal, 0.65, 0.35)
+	rose.position = Vector3(0.0, top_y - 0.02, 0.0)
+	root.add_child(rose)
+
+	var stem := MeshBuilder.cylinder(0.035, 0.12, metal, 0.6, 0.4)
+	stem.position = Vector3(0.0, top_y - 0.10, 0.0)
+	root.add_child(stem)
+
+	var pan := MeshBuilder.cylinder(0.28, 0.05, trim, 0.72, 0.2)
+	pan.position = Vector3(0.0, top_y - 0.18, 0.0)
+	root.add_child(pan)
+
+	## Shallow dish rim (wider top, narrower bottom) hanging under the pan.
+	var rim := MeshInstance3D.new()
+	var rim_mesh := CylinderMesh.new()
+	rim_mesh.top_radius = 0.34
+	rim_mesh.bottom_radius = 0.30
+	rim_mesh.height = 0.06
+	rim_mesh.radial_segments = 20
+	rim.mesh = rim_mesh
+	rim.material_override = MeshBuilder.make_material(trim, 0.7, 0.25)
+	rim.position = Vector3(0.0, top_y - 0.22, 0.0)
+	rim.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	root.add_child(rim)
+
+	var lens := MeshBuilder.cylinder(0.30, 0.04, frost, 0.2, 0.0)
+	lens.name = "Lens"
+	lens.position = Vector3(0.0, top_y - 0.24, 0.0)
+	lens.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	root.add_child(lens)
+
+
 static func _add_light_nav_visual(root: Node3D, sz: Vector3, color: Color, brick_id: String) -> void:
 	## Compact running-light housing; lens faces local −Z.
 	var metal := Color(0.3, 0.32, 0.34)
@@ -869,6 +1104,44 @@ static func _add_window_visual(root: Node3D, sz: Vector3, glass_color: Color) ->
 	root.add_child(pane)
 
 
+static func _add_window_45_visual(root: Node3D, sz: Vector3, glass_color: Color) -> void:
+	## Pane lies on the triangular block's diagonal face; missing corner is (+X,+Z).
+	var post_w := WIN_POST
+	var pane_t := WIN_PANE_T
+	var frame_col := WIN_FRAME
+	var glass := _window_glass_color(glass_color)
+	var diagonal := sqrt(sz.x * sz.x + sz.z * sz.z)
+	var tangent := Vector3(sz.x, 0.0, -sz.z).normalized()
+	var outward := Vector3(sz.z, 0.0, sz.x).normalized()
+	var yaw_deg := rad_to_deg(atan2(sz.z, sz.x))
+	var frame_d := maxf(minf(sz.x, sz.z) * 0.22, 0.16)
+	var face_offset := outward * pane_t * 0.5
+	var frame_offset := outward * frame_d * 0.25
+
+	for side in [-1.0, 1.0]:
+		var post := MeshBuilder.box(Vector3(post_w, sz.y, frame_d), frame_col, 0.85, 0.05)
+		post.rotation_degrees.y = yaw_deg
+		post.position = tangent * side * (diagonal * 0.5 - post_w * 0.5) + frame_offset
+		root.add_child(post)
+
+	for side in [-1.0, 1.0]:
+		var rail := MeshBuilder.box(Vector3(diagonal, post_w, frame_d), frame_col, 0.85, 0.05)
+		rail.rotation_degrees.y = yaw_deg
+		rail.position = Vector3(0.0, side * (sz.y * 0.5 - post_w * 0.5), 0.0) + frame_offset
+		root.add_child(rail)
+
+	var pane := MeshBuilder.box(
+		Vector3(diagonal - post_w * 2.0, sz.y - post_w * 2.0, pane_t),
+		glass,
+		0.05,
+		0.15,
+	)
+	pane.rotation_degrees.y = yaw_deg
+	pane.position = face_offset
+	pane.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	root.add_child(pane)
+
+
 static func _add_window_corner_visual(root: Node3D, sz: Vector3, glass_color: Color) -> void:
 	## Outer corner: glass on −Z and −X faces, shared stile at the outer edge.
 	var post_w := WIN_POST
@@ -919,38 +1192,107 @@ static func _add_window_corner_visual(root: Node3D, sz: Vector3, glass_color: Co
 
 
 static func _add_door_visual(root: Node3D, sz: Vector3, color: Color) -> void:
-	## Frame + hinged leaf. Leaf swings on local −X (yaw aims the doorway).
-	var frame_col := Color(color.r * 0.75, color.g * 0.75, color.b * 0.75)
-	var leaf_col := Color(color.r * 1.05, color.g * 0.95, color.b * 0.85)
-	## Outer frame (open centre).
-	var post_w := 0.12
-	var lintel_h := 0.14
-	var left := MeshBuilder.box(Vector3(post_w, sz.y, sz.z * 0.35), frame_col, 0.85, 0.05)
+	## Wall-cutout doorway with a real two-faced leaf (panels + handles both sides).
+	## Hinge on local -X; yaw aims the passage along +/-Z.
+	var frame_col := Color(color.r * 0.72, color.g * 0.72, color.b * 0.72)
+	var leaf_col := Color(minf(color.r * 1.12, 1.0), color.g * 0.98, color.b * 0.88)
+	var panel_col := Color(leaf_col.r * 0.86, leaf_col.g * 0.86, leaf_col.b * 0.86)
+	var trim_col := Color(color.r * 0.55, color.g * 0.55, color.b * 0.55)
+	var brass := Color(0.78, 0.64, 0.30)
+	var post_w := 0.16
+	var lintel_h := 0.28
+	var sill_h := 0.10
+	var frame_d := sz.z
+
+	var left := MeshBuilder.box(Vector3(post_w, sz.y, frame_d), frame_col, 0.88, 0.04)
 	left.position = Vector3(-sz.x * 0.5 + post_w * 0.5, 0.0, 0.0)
 	root.add_child(left)
-	var right := MeshBuilder.box(Vector3(post_w, sz.y, sz.z * 0.35), frame_col, 0.85, 0.05)
+	var right := MeshBuilder.box(Vector3(post_w, sz.y, frame_d), frame_col, 0.88, 0.04)
 	right.position = Vector3(sz.x * 0.5 - post_w * 0.5, 0.0, 0.0)
 	root.add_child(right)
-	var lintel := MeshBuilder.box(Vector3(sz.x, lintel_h, sz.z * 0.35), frame_col, 0.85, 0.05)
+
+	var open_w := sz.x - post_w * 2.0
+	var lintel := MeshBuilder.box(Vector3(open_w, lintel_h, frame_d), frame_col, 0.88, 0.04)
 	lintel.position = Vector3(0.0, sz.y * 0.5 - lintel_h * 0.5, 0.0)
 	root.add_child(lintel)
+	var sill := MeshBuilder.box(Vector3(open_w, sill_h, frame_d), trim_col, 0.9, 0.04)
+	sill.position = Vector3(0.0, -sz.y * 0.5 + sill_h * 0.5, 0.0)
+	root.add_child(sill)
 
-	var leaf_w := sz.x - post_w * 2.0 - 0.04
-	var leaf_h := sz.y - lintel_h - 0.06
-	var leaf_t := 0.08
+	var leaf_w := open_w - 0.05
+	var leaf_h := sz.y - lintel_h - sill_h - 0.06
+	var leaf_t := 0.10
 	var hinge := Node3D.new()
 	hinge.name = "DoorHinge"
-	## Hinge on the port (−X) jamb, leaf extends toward +X.
-	hinge.position = Vector3(-sz.x * 0.5 + post_w, 0.0, 0.0)
+	hinge.position = Vector3(
+		-sz.x * 0.5 + post_w + 0.01,
+		(sill_h - lintel_h) * 0.5,
+		0.0,
+	)
 	root.add_child(hinge)
-	var leaf := MeshBuilder.box(Vector3(leaf_w, leaf_h, leaf_t), leaf_col, 0.8, 0.05)
+
+	## Visible hinge barrels on the jamb edge.
+	for i in range(3):
+		var t := (float(i) + 0.5) / 3.0
+		var barrel := MeshBuilder.cylinder(0.035, 0.14, brass, 0.45, 0.55)
+		barrel.rotation_degrees = Vector3(0.0, 0.0, 90.0)
+		barrel.position = Vector3(0.02, -leaf_h * 0.5 + t * leaf_h, 0.0)
+		hinge.add_child(barrel)
+
+	var leaf := MeshBuilder.box(Vector3(leaf_w, leaf_h, leaf_t), leaf_col, 0.78, 0.05)
 	leaf.name = "DoorLeaf"
-	leaf.position = Vector3(leaf_w * 0.5, -lintel_h * 0.5, 0.0)
+	leaf.position = Vector3(leaf_w * 0.5, 0.0, 0.0)
 	hinge.add_child(leaf)
-	## Handle nub on the free edge.
-	var handle := MeshBuilder.box(Vector3(0.04, 0.18, 0.06), Color(0.75, 0.62, 0.28), 0.55, 0.4)
-	handle.position = Vector3(leaf_w - 0.18, 0.0, leaf_t * 0.5 + 0.03)
-	leaf.add_child(handle)
+
+	## Both faces get the same stile/rail + recessed panels + handle.
+	_add_door_face(leaf, leaf_w, leaf_h, leaf_t * 0.5 + 0.01, panel_col, brass, false)
+	_add_door_face(leaf, leaf_w, leaf_h, -(leaf_t * 0.5 + 0.01), panel_col, brass, true)
+
+
+static func _add_door_face(
+		leaf: Node3D,
+		leaf_w: float,
+		leaf_h: float,
+		face_z: float,
+		panel_col: Color,
+		brass: Color,
+		back_face: bool,
+) -> void:
+	var stile_w := 0.12
+	var rail_h := 0.12
+	var inset := 0.02
+	var left_stile := MeshBuilder.box(Vector3(stile_w, leaf_h - inset * 2.0, inset), panel_col, 0.8, 0.04)
+	left_stile.position = Vector3(-leaf_w * 0.5 + stile_w * 0.5 + inset, 0.0, face_z)
+	leaf.add_child(left_stile)
+	var right_stile := MeshBuilder.box(Vector3(stile_w, leaf_h - inset * 2.0, inset), panel_col, 0.8, 0.04)
+	right_stile.position = Vector3(leaf_w * 0.5 - stile_w * 0.5 - inset, 0.0, face_z)
+	leaf.add_child(right_stile)
+	var top_rail := MeshBuilder.box(Vector3(leaf_w - inset * 2.0, rail_h, inset), panel_col, 0.8, 0.04)
+	top_rail.position = Vector3(0.0, leaf_h * 0.5 - rail_h * 0.5 - inset, face_z)
+	leaf.add_child(top_rail)
+	var mid_rail := MeshBuilder.box(Vector3(leaf_w - stile_w * 2.0 - inset, rail_h * 0.85, inset), panel_col, 0.8, 0.04)
+	mid_rail.position = Vector3(0.0, leaf_h * 0.08, face_z)
+	leaf.add_child(mid_rail)
+	var bot_rail := MeshBuilder.box(Vector3(leaf_w - inset * 2.0, rail_h, inset), panel_col, 0.8, 0.04)
+	bot_rail.position = Vector3(0.0, -leaf_h * 0.5 + rail_h * 0.5 + inset, face_z)
+	leaf.add_child(bot_rail)
+
+	var panel_w := leaf_w - stile_w * 2.0 - 0.08
+	var upper := MeshBuilder.box(Vector3(panel_w, leaf_h * 0.42, 0.015), panel_col, 0.84, 0.03)
+	upper.position = Vector3(0.0, leaf_h * 0.28, face_z)
+	leaf.add_child(upper)
+	var lower := MeshBuilder.box(Vector3(panel_w, leaf_h * 0.28, 0.015), panel_col, 0.84, 0.03)
+	lower.position = Vector3(0.0, -leaf_h * 0.26, face_z)
+	leaf.add_child(lower)
+
+	var handle_x := leaf_w * 0.5 - 0.18
+	var handle_z := face_z + (0.035 if face_z > 0.0 else -0.035)
+	var plate := MeshBuilder.box(Vector3(0.08, 0.28, 0.02), brass, 0.45, 0.55)
+	plate.position = Vector3(handle_x, 0.0, handle_z)
+	leaf.add_child(plate)
+	var lever := MeshBuilder.box(Vector3(0.16, 0.04, 0.04), brass, 0.45, 0.55)
+	lever.position = Vector3(handle_x - 0.04, 0.0, handle_z + (0.03 if not back_face else -0.03))
+	leaf.add_child(lever)
 
 
 static func _add_bollard_visual(root: Node3D, sz: Vector3, color: Color) -> void:

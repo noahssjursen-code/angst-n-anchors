@@ -95,11 +95,29 @@ One port as a place. Macro worlds retain the existing port content and replace
 only its placement and ground.
 - `PortPlot` — composition root: optional legacy island ground, `PortDock`, `PortFacilities`
 - `PortDock` — berths, mooring, cargo aprons, fuel point, ship spawner
-- `PortFacilities` — land-side layout: buildings, NPC spawn positions
+- `PortFacilities` — service slots from `PortServiceSlotCatalog` plus lighthouse/fog-horn landmarks
+- `PortServiceSlotCatalog` — default-port slot poses + optional building JSON bindings
 - `FuelStation`, `LighthouseBuilding`, `FogHornBuilding` — physical buildings
 - `DockTerminal`, `DockCargoRamp` — dock interaction points
-- `PortData`, `PortDefinition` — typed records including coast yaw, region, and ground mode
-- `PortExpander` — expands `PortDefinition` → `PortData`; random yaw is legacy fallback only
+- `PortData`, `PortDefinition` — lean site truth plus derived runtime dock data
+- `PortExpander` — expands `PortDefinition` → `PortData`
+- `PortSizing` — shared dock, facilities, coast-validation, and terrain-pad dimensions
+- `BuildingBlueprintCatalog` — `buildings/*.json` addressed by filename stem
+- `BuildingGrid` / `BuildingLayout` — portable JSON building instructions on the shared `BrickCatalog` kit
+- `BuildingRules` / `BuildingFitout` — validation and identical editor/runtime assembly
+- `PortShowcase` — inspect runtime port shell (`scenes/showcases/`)
+
+### `scripts/apps/`
+
+Engine authoring apps (run via `scenes/apps/*.tscn`, not in-game UI).
+- `BuildingBrickEditor` — voxel buildings → `resources/data/buildings/`
+- `PortSlotEditor` — default-port service slots → `resources/data/ports/`
+- `ShipyardBrickEditor` — official vessel prebuilts → `resources/data/vessels/prebuilt/`
+
+Player-owned ports are a future authoritative overlay, not part of world
+generation. Immutable `WorldLayout` geography stays seed-derived; ownership,
+expansion, and player building diffs will be persisted separately by stable
+port/site ID.
 
 ### `scripts/npc/`
 
@@ -107,7 +125,7 @@ All NPCs.
 - `NpcBase` — shared base class
 - `NpcInteractable` — the interactable wrapper for NPCs
 - `HarbourMasterNpc` — berth assignment, vessel info, dues
-- `ShipwrightNpc` — hull catalog → shipyard outfit (job kits) → commission
+- `ShipwrightNpc` — sells official ready-builts from `PrebuiltVesselCatalog`
 - `ContractNpc` — post/accept contracts
 - `DeliveryNpc` — receive deliveries
 
@@ -193,7 +211,7 @@ DeckFitout.ensure_auto_utilities()     # cleats + nav lights
 ```
 
 Workboat orientation: **Bow = −Z, Stern = +Z, Port = −X, Starboard = +X.**
-Shipwright: fullscreen `ShipyardBrickEditor` paints the grid; ledger stores `brick_layout`.
+Official decks are painted in the `ShipyardBrickEditor` engine tool; shipwright sells those prebuilts; ledger stores `brick_layout`.
 
 ---
 

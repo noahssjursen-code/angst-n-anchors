@@ -1046,6 +1046,26 @@ func add_walk_brick_collider(
 	return cs
 
 
+func add_walk_brick_convex_collider(
+	name_suffix: String,
+	boat_local_center: Vector3,
+	points: PackedVector3Array,
+	yaw_deg: float,
+) -> CollisionShape3D:
+	var walk := ensure_walk_deck()
+	if walk == null or points.size() < 4:
+		return null
+	var cs := CollisionShape3D.new()
+	cs.name = "%s%s" % [BRICK_COL_PREFIX, name_suffix]
+	var convex := ConvexPolygonShape3D.new()
+	convex.points = points
+	cs.shape = convex
+	cs.position = boat_to_walk_deck_local(boat_local_center)
+	cs.rotation_degrees = Vector3(0.0, yaw_deg, 0.0)
+	walk.add_child(cs)
+	return cs
+
+
 func clear_walk_brick_colliders() -> void:
 	var walk := get_walk_deck()
 	if walk == null:

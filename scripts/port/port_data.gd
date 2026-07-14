@@ -12,7 +12,7 @@ var world_position: Vector3 = Vector3.ZERO
 var size:           int     = 1
 
 # Dock layout
-var dock_length:     float              = 60.0
+var dock_length:     float              = PortSizing.dock_length_m(1)
 var max_ship_class:  ShipClass.Type     = ShipClass.Type.COASTAL_TRADER
 var berth_types:     Array[int]         = []   ## CargoBerthType.Type per slot
 var has_fuel_point:  bool               = true
@@ -24,7 +24,7 @@ var commodity_export:  String         = ""
 var commodity_imports: Array[String]  = []
 
 # Layout
-var island_width: float = 80.0
+var island_width: float = PortSizing.island_width_m(1)
 var layout_seed:  int   = 0
 var rotation_y:   float = 0.0
 var region_kind: PortDefinition.RegionKind = PortDefinition.RegionKind.LEGACY_ISLAND
