@@ -1,0 +1,429 @@
+[gd_scene format=3 uid="uid://ca624v8ivndfg"]
+
+[ext_resource type="Script" uid="uid://myq2gwt1t874" path="res://scripts/cargo/cargo_showcase.gd" id="1_wvjac"]
+[ext_resource type="Script" uid="uid://cs42c03vcyvvl" path="res://scripts/cargo/pallet_node.gd" id="2_fqhcd"]
+
+[sub_resource type="Environment" id="Env_csc"]
+background_mode = 1
+background_color = Color(0.12, 0.13, 0.14, 1)
+ambient_light_source = 2
+ambient_light_color = Color(0.9, 0.9, 1, 1)
+ambient_light_energy = 0.6
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_utc24"]
+albedo_color = Color(0.34, 0.32, 0.3, 1)
+
+[sub_resource type="BoxMesh" id="BoxMesh_3qdec"]
+size = Vector3(23.8, 0.12, 48.5)
+
+[node name="CargoShowcase" type="Node3D" unique_id=222406651]
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="." unique_id=1282310458]
+environment = SubResource("Env_csc")
+
+[node name="Sun" type="DirectionalLight3D" parent="." unique_id=1455027296]
+transform = Transform3D(0.866, -0.25, 0.433, 0, 0.866, 0.5, -0.5, -0.433, 0.75, 0, 12, 0)
+
+[node name="Camera3D" type="Camera3D" parent="." unique_id=89095188]
+transform = Transform3D(1, 0, 0, 0, 0.643, 0.766, 0, -0.766, 0.643, 14, 38, 30)
+current = true
+fov = 65.0
+
+[node name="Showcase" type="Node3D" parent="." unique_id=840336746]
+script = ExtResource("1_wvjac")
+
+[node name="GroundPad" type="MeshInstance3D" parent="Showcase" unique_id=1453753205]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 9.9, 0.06, 23.25)
+material_override = SubResource("StandardMaterial3D_utc24")
+cast_shadow = 0
+mesh = SubResource("BoxMesh_3qdec")
+
+[node name="grain_1" type="Node3D" parent="Showcase" unique_id=217746530]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.75, 0.12, 1.75)
+script = ExtResource("2_fqhcd")
+
+[node name="Label_grain_1" type="Label3D" parent="Showcase" unique_id=1851414918]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.75, 2.6, 1.75)
+pixel_size = 0.0045
+billboard = 1
+no_depth_test = true
+modulate = Color(0.95, 0.92, 0.78, 1)
+text = "Grain ×1
+1×1 cells"
+font_size = 36
+
+[node name="grain_2" type="Node3D" parent="Showcase" unique_id=841717306]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 4.05, 0.12, 2.5)
+script = ExtResource("2_fqhcd")
+
+[node name="Label_grain_2" type="Label3D" parent="Showcase" unique_id=1826354879]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 4.05, 2.6, 2.5)
+pixel_size = 0.0045
+billboard = 1
+no_depth_test = true
+modulate = Color(0.95, 0.92, 0.78, 1)
+text = "Grain ×2
+1×2 cells"
+font_size = 36
+
+[node name="grain_3" type="Node3D" parent="Showcase" unique_id=2127452826]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 7.1, 0.12, 2.5)
+script = ExtResource("2_fqhcd")
+
+[node name="Label_grain_3" type="Label3D" parent="Showcase" unique_id=1721694913]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 7.1, 2.6, 2.5)
+pixel_size = 0.0045
+billboard = 1
+no_depth_test = true
+modulate = Color(0.95, 0.92, 0.78, 1)
+text = "Grain ×3
+2×2 cells"
+font_size = 36
+
+[node name="grain_4" type="Node3D" parent="Showcase" unique_id=1406260822]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 10.9, 0.12, 2.5)
+script = ExtResource("2_fqhcd")
+
+[node name="Label_grain_4" type="Label3D" parent="Showcase" unique_id=893917647]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 10.9, 2.6, 2.5)
+pixel_size = 0.0045
+billboard = 1
+no_depth_test = true
+modulate = Color(0.95, 0.92, 0.78, 1)
+text = "Grain ×4
+2×2 cells"
+font_size = 36
+
+[node name="Row_grain" type="Label3D" parent="Showcase" unique_id=949007425]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1.5, 3.2, 2.5)
+pixel_size = 0.006
+billboard = 1
+no_depth_test = true
+modulate = Color(0.9, 0.78, 0.3, 1)
+text = "GRAIN"
+font_size = 48
+
+[node name="timber_1" type="Node3D" parent="Showcase" unique_id=1613339466]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.75, 0.12, 9.25)
+script = ExtResource("2_fqhcd")
+
+[node name="Label_timber_1" type="Label3D" parent="Showcase" unique_id=428854090]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.75, 2.6, 9.25)
+pixel_size = 0.0045
+billboard = 1
+no_depth_test = true
+modulate = Color(0.95, 0.92, 0.78, 1)
+text = "Timber ×1
+1×1 cells"
+font_size = 36
+
+[node name="timber_2" type="Node3D" parent="Showcase" unique_id=2085264350]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 4.05, 0.12, 10)
+script = ExtResource("2_fqhcd")
+
+[node name="Label_timber_2" type="Label3D" parent="Showcase" unique_id=536375600]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 4.05, 2.6, 10)
+pixel_size = 0.0045
+billboard = 1
+no_depth_test = true
+modulate = Color(0.95, 0.92, 0.78, 1)
+text = "Timber ×2
+1×2 cells"
+font_size = 36
+
+[node name="timber_3" type="Node3D" parent="Showcase" unique_id=1487503001]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 7.1, 0.12, 10)
+script = ExtResource("2_fqhcd")
+
+[node name="Label_timber_3" type="Label3D" parent="Showcase" unique_id=1832973937]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 7.1, 2.6, 10)
+pixel_size = 0.0045
+billboard = 1
+no_depth_test = true
+modulate = Color(0.95, 0.92, 0.78, 1)
+text = "Timber ×3
+2×2 cells"
+font_size = 36
+
+[node name="timber_4" type="Node3D" parent="Showcase" unique_id=419138814]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 10.9, 0.12, 10)
+script = ExtResource("2_fqhcd")
+
+[node name="Label_timber_4" type="Label3D" parent="Showcase" unique_id=1000424277]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 10.9, 2.6, 10)
+pixel_size = 0.0045
+billboard = 1
+no_depth_test = true
+modulate = Color(0.95, 0.92, 0.78, 1)
+text = "Timber ×4
+2×2 cells"
+font_size = 36
+
+[node name="Row_timber" type="Label3D" parent="Showcase" unique_id=1126098027]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1.5, 3.2, 10)
+pixel_size = 0.006
+billboard = 1
+no_depth_test = true
+modulate = Color(0.52, 0.33, 0.18, 1)
+text = "TIMBER"
+font_size = 48
+
+[node name="iron_ore_1" type="Node3D" parent="Showcase" unique_id=1479620477]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.75, 0.12, 16.75)
+script = ExtResource("2_fqhcd")
+
+[node name="Label_iron_ore_1" type="Label3D" parent="Showcase" unique_id=1219713063]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.75, 2.6, 16.75)
+pixel_size = 0.0045
+billboard = 1
+no_depth_test = true
+modulate = Color(0.95, 0.92, 0.78, 1)
+text = "Iron Ore ×1
+1×1 cells"
+font_size = 36
+
+[node name="iron_ore_2" type="Node3D" parent="Showcase" unique_id=1957484942]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 4.05, 0.12, 17.5)
+script = ExtResource("2_fqhcd")
+
+[node name="Label_iron_ore_2" type="Label3D" parent="Showcase" unique_id=690789197]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 4.05, 2.6, 17.5)
+pixel_size = 0.0045
+billboard = 1
+no_depth_test = true
+modulate = Color(0.95, 0.92, 0.78, 1)
+text = "Iron Ore ×2
+1×2 cells"
+font_size = 36
+
+[node name="Row_iron_ore" type="Label3D" parent="Showcase" unique_id=1046519874]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1.5, 3.2, 17.5)
+pixel_size = 0.006
+billboard = 1
+no_depth_test = true
+modulate = Color(0.5, 0.42, 0.38, 1)
+text = "IRON ORE"
+font_size = 48
+
+[node name="coal_1" type="Node3D" parent="Showcase" unique_id=1372656165]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.75, 0.12, 24.25)
+script = ExtResource("2_fqhcd")
+
+[node name="Label_coal_1" type="Label3D" parent="Showcase" unique_id=1615224369]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.75, 2.6, 24.25)
+pixel_size = 0.0045
+billboard = 1
+no_depth_test = true
+modulate = Color(0.95, 0.92, 0.78, 1)
+text = "Coal ×1
+1×1 cells"
+font_size = 36
+
+[node name="coal_2" type="Node3D" parent="Showcase" unique_id=669180749]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 4.05, 0.12, 25)
+script = ExtResource("2_fqhcd")
+
+[node name="Label_coal_2" type="Label3D" parent="Showcase" unique_id=672093925]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 4.05, 2.6, 25)
+pixel_size = 0.0045
+billboard = 1
+no_depth_test = true
+modulate = Color(0.95, 0.92, 0.78, 1)
+text = "Coal ×2
+1×2 cells"
+font_size = 36
+
+[node name="coal_3" type="Node3D" parent="Showcase" unique_id=1361954975]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 7.1, 0.12, 25)
+script = ExtResource("2_fqhcd")
+
+[node name="Label_coal_3" type="Label3D" parent="Showcase" unique_id=11988299]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 7.1, 2.6, 25)
+pixel_size = 0.0045
+billboard = 1
+no_depth_test = true
+modulate = Color(0.95, 0.92, 0.78, 1)
+text = "Coal ×3
+2×2 cells"
+font_size = 36
+
+[node name="coal_4" type="Node3D" parent="Showcase" unique_id=607646972]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 10.9, 0.12, 25)
+script = ExtResource("2_fqhcd")
+
+[node name="Label_coal_4" type="Label3D" parent="Showcase" unique_id=2021589709]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 10.9, 2.6, 25)
+pixel_size = 0.0045
+billboard = 1
+no_depth_test = true
+modulate = Color(0.95, 0.92, 0.78, 1)
+text = "Coal ×4
+2×2 cells"
+font_size = 36
+
+[node name="Row_coal" type="Label3D" parent="Showcase" unique_id=592583441]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1.5, 3.2, 25)
+pixel_size = 0.006
+billboard = 1
+no_depth_test = true
+modulate = Color(0.2, 0.2, 0.22, 1)
+text = "COAL"
+font_size = 48
+
+[node name="provisions_1" type="Node3D" parent="Showcase" unique_id=1569967903]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.75, 0.12, 31.75)
+script = ExtResource("2_fqhcd")
+
+[node name="Label_provisions_1" type="Label3D" parent="Showcase" unique_id=127780680]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.75, 2.6, 31.75)
+pixel_size = 0.0045
+billboard = 1
+no_depth_test = true
+modulate = Color(0.95, 0.92, 0.78, 1)
+text = "Provisions ×1
+1×1 cells"
+font_size = 36
+
+[node name="provisions_2" type="Node3D" parent="Showcase" unique_id=1552356987]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 4.05, 0.12, 32.5)
+script = ExtResource("2_fqhcd")
+
+[node name="Label_provisions_2" type="Label3D" parent="Showcase" unique_id=1951786393]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 4.05, 2.6, 32.5)
+pixel_size = 0.0045
+billboard = 1
+no_depth_test = true
+modulate = Color(0.95, 0.92, 0.78, 1)
+text = "Provisions ×2
+1×2 cells"
+font_size = 36
+
+[node name="provisions_3" type="Node3D" parent="Showcase" unique_id=378571659]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 7.1, 0.12, 32.5)
+script = ExtResource("2_fqhcd")
+
+[node name="Label_provisions_3" type="Label3D" parent="Showcase" unique_id=424093603]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 7.1, 2.6, 32.5)
+pixel_size = 0.0045
+billboard = 1
+no_depth_test = true
+modulate = Color(0.95, 0.92, 0.78, 1)
+text = "Provisions ×3
+2×2 cells"
+font_size = 36
+
+[node name="provisions_4" type="Node3D" parent="Showcase" unique_id=198743482]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 10.9, 0.12, 32.5)
+script = ExtResource("2_fqhcd")
+
+[node name="Label_provisions_4" type="Label3D" parent="Showcase" unique_id=1144758319]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 10.9, 2.6, 32.5)
+pixel_size = 0.0045
+billboard = 1
+no_depth_test = true
+modulate = Color(0.95, 0.92, 0.78, 1)
+text = "Provisions ×4
+2×2 cells"
+font_size = 36
+
+[node name="provisions_5" type="Node3D" parent="Showcase" unique_id=17240867]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 14.7, 0.12, 33.25)
+script = ExtResource("2_fqhcd")
+
+[node name="Label_provisions_5" type="Label3D" parent="Showcase" unique_id=1116091192]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 14.7, 2.6, 33.25)
+pixel_size = 0.0045
+billboard = 1
+no_depth_test = true
+modulate = Color(0.95, 0.92, 0.78, 1)
+text = "Provisions ×5
+2×3 cells"
+font_size = 36
+
+[node name="provisions_6" type="Node3D" parent="Showcase" unique_id=1065720134]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 18.5, 0.12, 33.25)
+script = ExtResource("2_fqhcd")
+
+[node name="Label_provisions_6" type="Label3D" parent="Showcase" unique_id=798530235]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 18.5, 2.6, 33.25)
+pixel_size = 0.0045
+billboard = 1
+no_depth_test = true
+modulate = Color(0.95, 0.92, 0.78, 1)
+text = "Provisions ×6
+2×3 cells"
+font_size = 36
+
+[node name="Row_provisions" type="Label3D" parent="Showcase" unique_id=1045236428]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1.5, 3.2, 33.25)
+pixel_size = 0.006
+billboard = 1
+no_depth_test = true
+modulate = Color(0.72, 0.3, 0.22, 1)
+text = "PROVISIONS"
+font_size = 48
+
+[node name="fish_1" type="Node3D" parent="Showcase" unique_id=1146984724]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.75, 0.12, 40.75)
+script = ExtResource("2_fqhcd")
+
+[node name="Label_fish_1" type="Label3D" parent="Showcase" unique_id=1671862109]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.75, 2.6, 40.75)
+pixel_size = 0.0045
+billboard = 1
+no_depth_test = true
+modulate = Color(0.95, 0.92, 0.78, 1)
+text = "Fresh Fish ×1
+1×1 cells"
+font_size = 36
+
+[node name="fish_2" type="Node3D" parent="Showcase" unique_id=980637494]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 4.05, 0.12, 41.5)
+script = ExtResource("2_fqhcd")
+
+[node name="Label_fish_2" type="Label3D" parent="Showcase" unique_id=2110920984]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 4.05, 2.6, 41.5)
+pixel_size = 0.0045
+billboard = 1
+no_depth_test = true
+modulate = Color(0.95, 0.92, 0.78, 1)
+text = "Fresh Fish ×2
+1×2 cells"
+font_size = 36
+
+[node name="fish_3" type="Node3D" parent="Showcase" unique_id=421545071]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 7.1, 0.12, 41.5)
+script = ExtResource("2_fqhcd")
+
+[node name="Label_fish_3" type="Label3D" parent="Showcase" unique_id=1789384325]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 7.1, 2.6, 41.5)
+pixel_size = 0.0045
+billboard = 1
+no_depth_test = true
+modulate = Color(0.95, 0.92, 0.78, 1)
+text = "Fresh Fish ×3
+2×2 cells"
+font_size = 36
+
+[node name="fish_4" type="Node3D" parent="Showcase" unique_id=675907085]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 10.9, 0.12, 41.5)
+script = ExtResource("2_fqhcd")
+
+[node name="Label_fish_4" type="Label3D" parent="Showcase" unique_id=53337785]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 10.9, 2.6, 41.5)
+pixel_size = 0.0045
+billboard = 1
+no_depth_test = true
+modulate = Color(0.95, 0.92, 0.78, 1)
+text = "Fresh Fish ×4
+2×2 cells"
+font_size = 36
+
+[node name="Row_fish" type="Label3D" parent="Showcase" unique_id=1830996753]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1.5, 3.2, 41.5)
+pixel_size = 0.006
+billboard = 1
+no_depth_test = true
+modulate = Color(0.35, 0.65, 0.85, 1)
+text = "FRESH FISH"
+font_size = 48
