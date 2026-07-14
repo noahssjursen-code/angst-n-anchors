@@ -252,10 +252,39 @@ static func _add_collider(
 		## Upper half above the underside slope — eave / overhang mass.
 		size.y = size.y * 0.5
 		center.y += BuildingGrid.CELL_M * 0.25
+	elif brick_id == "roof_corner":
+		size.y = size.y * 0.5
+		center.y -= BuildingGrid.CELL_M * 0.25
+	elif brick_id == "roof_corner_inv":
+		size.y = size.y * 0.5
+		center.y += BuildingGrid.CELL_M * 0.25
+	elif brick_id == "ledge_45_corner":
+		size.y = size.y * 0.5
+		center.y -= BuildingGrid.CELL_M * 0.25
+	elif brick_id == "ledge_45_corner_inv":
+		size.y = size.y * 0.5
+		center.y += BuildingGrid.CELL_M * 0.25
+	elif brick_id == "roof_corner_inner" or brick_id == "ledge_45_inner":
+		size.y = size.y * 0.5
+		center.y -= BuildingGrid.CELL_M * 0.25
+	elif brick_id == "roof_corner_inner_inv" or brick_id == "ledge_45_inner_inv":
+		size.y = size.y * 0.5
+		center.y += BuildingGrid.CELL_M * 0.25
 	elif brick_id == "beam":
 		size = Vector3(0.22, size.y, 0.22)
-	shape.size = size
-	shape_node.shape = shape
+	if BrickCatalog.has_tag(brick_id, "diagonal_plan"):
+		var hx := size.x * 0.5
+		var hy := size.y * 0.5
+		var hz := size.z * 0.5
+		var convex := ConvexPolygonShape3D.new()
+		convex.points = PackedVector3Array([
+			Vector3(-hx, -hy, -hz), Vector3(hx, -hy, -hz), Vector3(-hx, -hy, hz),
+			Vector3(-hx, hy, -hz), Vector3(hx, hy, -hz), Vector3(-hx, hy, hz),
+		])
+		shape_node.shape = convex
+	else:
+		shape.size = size
+		shape_node.shape = shape
 	shape_node.position = center
 	shape_node.rotation_degrees.y = float(yaw)
 	body.add_child(shape_node)

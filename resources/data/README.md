@@ -50,13 +50,15 @@ plus sparse brick-grid instructions; no generated mesh vertices.
 }
 ```
 
-Authoring tools (run the scene directly in Godot):
+Authoring apps (run the scene directly in Godot — under `scenes/apps/`):
 
 | Scene | Purpose |
 |-------|---------|
-| `res://scenes/building_brick_editor.tscn` | Paint bricks, Save / Save As into this folder |
-| `res://scenes/port_slot_editor.tscn` | Place service slots on the default port and attach a building JSON |
-| `res://scenes/port_showcase.tscn` | Inspect the runtime port shell |
+| `res://scenes/apps/building_brick_editor.tscn` | Paint bricks, Save / Save As into this folder |
+| `res://scenes/apps/port_slot_editor.tscn` | Place service slots on the default port and attach a building JSON |
+| `res://scenes/apps/shipyard_brick_editor.tscn` | Paint decks on official hulls; Save official prebuilt JSON |
+
+Inspect-only fixtures live under `scenes/showcases/` (port / player / cargo / ship).
 
 The catalog starts empty. Building blueprints use the same
 `BrickCatalog` kit as vessel decks; marine-only bricks are filtered via
@@ -75,8 +77,9 @@ names a file under `buildings/` (stem only, no path).
 
 ## `vessels/prebuilt/`
 
-Source-controlled deck-grid vessel presets exported from the shipyard's
-debug-only **DEV · Save official prebuilt JSON** button.
+Source-controlled deck-grid vessel presets authored by the
+**Shipyard brick editor** app
+(`scenes/apps/shipyard_brick_editor.tscn`).
 
 ```json
 {
@@ -95,6 +98,21 @@ debug-only **DEV · Save official prebuilt JSON** button.
 ```
 
 These files are game-owned presets and should be committed. Every valid preset
-is automatically appended to the shipwright catalog as a ready-built purchase;
-buying one skips the deck editor and commissions a fresh owned copy. Player-owned
+is listed in the shipwright catalog as a ready-built purchase. Player-owned
 vessel records remain in `user://save/player.json`.
+
+## Engine apps
+
+Runnable Godot apps for authoring (not in-game UI). Scripts in `scripts/apps/`;
+scenes in `scenes/apps/`.
+
+| Scene | Script | Writes |
+|-------|--------|--------|
+| `building_brick_editor.tscn` | `BuildingBrickEditor` | `resources/data/buildings/*.json` |
+| `port_slot_editor.tscn` | `PortSlotEditor` | `resources/data/ports/default_service_slots.json` |
+| `shipyard_brick_editor.tscn` | `ShipyardBrickEditor` | `resources/data/vessels/prebuilt/*.json` |
+
+## Showcases
+
+Inspect-only fixtures under `scenes/showcases/` (port / player / cargo / ship).
+They do not write game data.

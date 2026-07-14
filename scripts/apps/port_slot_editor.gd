@@ -1,9 +1,10 @@
 class_name PortSlotEditor
 extends CanvasLayer
 
-## Developer tool: place service slots on a default port and attach building
+## Engine app: place service slots on a default port and attach building
 ## JSON files (filename stem = blueprint id). Saves
 ## resources/data/ports/default_service_slots.json.
+## Run `scenes/apps/port_slot_editor.tscn`.
 
 const NUDGE_M := 1.0
 const NUDGE_FINE_M := 0.25

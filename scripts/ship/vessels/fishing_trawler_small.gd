@@ -14,7 +14,9 @@ const DEPTH_M := 2.8 * WORLD_FEEL_SCALE
 const DRAFT_M := 1.4 * WORLD_FEEL_SCALE
 ## Volume scales ~L³.
 const DISPLACEMENT_T := 32.0 * WORLD_FEEL_SCALE * WORLD_FEEL_SCALE * WORLD_FEEL_SCALE
-const BOW_FRAC := 0.30
+## Half-beam run makes each bow side exactly 45 degrees in plan view.
+const BOW_LENGTH_M := BEAM_M * 0.5
+const BOW_FRAC := BOW_LENGTH_M / LOA_M
 const TARGET_CRUISE_MS := 5.0
 const BOLLARD_THRUST_N := 232000.0
 const PROPULSIVE_EFFICIENCY := 0.62
@@ -30,7 +32,7 @@ static func build() -> BoatBody:
 
 
 static func make_grid() -> DeckGrid:
-	return DeckGrid.from_hull(LOA_M, BEAM_M, DEPTH_M * 0.85 + 0.12)
+	return DeckGrid.from_hull(LOA_M, BEAM_M, DEPTH_M * 0.85 + 0.12, BOW_LENGTH_M)
 
 
 static func make_physics_profile() -> HullPhysicsProfile:

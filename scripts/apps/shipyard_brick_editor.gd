@@ -1,16 +1,34 @@
 class_name ShipyardBrickEditor
 extends CanvasLayer
 
-## Fullscreen build window: bare hull canvas + left item list.
-## Shipwright catalog only picks the hull; humans do the building here.
+## Deck-grid brick painter for official hulls.
+## Run `scenes/apps/shipyard_brick_editor.tscn` as an engine app to author
+## `resources/data/vessels/prebuilt/*.json`. Shipwright sells those presets in-game.
 
 signal closed
 signal layout_confirmed(hull_entry: Dictionary, layout: Dictionary, vessel_name: String, editing_uid: String)
 
 enum Tool { PLACE = 0, ERASE = 1 }
 
+## When true (tool scene), open immediately and Save writes official prebuilt JSON.
+@export var standalone_tool: bool = false
+
+const COLOR_PRESETS := [
+	{"name": "Catalog", "custom": false},
+	{"name": "Steel", "color": Color(0.78, 0.80, 0.84)},
+	{"name": "White", "color": Color(0.92, 0.91, 0.88)},
+	{"name": "Cream", "color": Color(0.86, 0.80, 0.68)},
+	{"name": "Timber", "color": Color(0.48, 0.34, 0.22)},
+	{"name": "Charcoal", "color": Color(0.18, 0.18, 0.20)},
+	{"name": "Slate", "color": Color(0.32, 0.36, 0.40)},
+	{"name": "Hull red", "color": Color(0.55, 0.18, 0.14)},
+	{"name": "Harbour", "color": Color(0.22, 0.38, 0.48)},
+	{"name": "Yellow", "color": Color(0.82, 0.68, 0.22)},
+]
+
 var _hull_entry: Dictionary = {}
 var _editing_uid: String = ""
+var _authoring_mode := false
 var _layout: BrickLayout = BrickLayout.new()
 var _grid: DeckGrid
 var _layer_y: int = 0
@@ -19,6 +37,8 @@ var _brick_id: String = "block"
 var _tool: int = Tool.PLACE
 var _painting := false
 var _last_paint_cell: Vector3i = Vector3i(-999, -999, -999)
+var _paint_color := Color(0.78, 0.80, 0.84)
+var _use_catalog_color := true
 ## Cargo zone: click corner A, then corner B.
 var _cargo_anchor: Vector3i = Vector3i(-999, -999, -999)
 var _cargo_anchor_set := false
@@ -36,6 +56,7 @@ var _ghost_brick_id: String = ""
 var _ghost_cell: Vector3i = Vector3i(-999, -999, -999)
 var _ghost_yaw: int = -1
 var _ghost_valid: bool = false
+var _ghost_color := Color(0, 0, 0, 0)
 const EDITOR_BRICK_ROOT := "EditorBricks"
 const PREBUILT_DIR := "res://resources/data/vessels/prebuilt"
 const PREBUILT_FORMAT_VERSION := 1
@@ -58,10 +79,19 @@ var _sign_text_edit: LineEdit
 var _brick_rows: Dictionary = {} ## brick_id → PanelContainer
 var _confirm_btn: Button
 var _back_btn: Button
+var _hull_option: OptionButton
+var _prebuilt_option: OptionButton
+var _authoring_prebuilt_id: String = ""
+var _option_guard := false
+var _show_light_cones := true
+var _cone_btn: Button
+var _color_picker: ColorPickerButton
+var _color_preset_btns: Array[Button] = []
 var _dev_save_lbl: Label
 var _vp_host: SubViewportContainer
 const THUMB_PX := 80
 const MAX_VESSEL_NAME_LEN := 28
+const PREBUILT_BLANK_META := "__blank__"
 
 
 func _init() -> void:
@@ -84,6 +114,8 @@ func _ready() -> void:
 			thumb.texture = _thumb_cache[id] as Texture2D
 		else:
 			_bake_brick_thumbnail(str(id), thumb)
+	if standalone_tool:
+		call_deferred("_boot_standalone_tool")
 
 
 func _row_thumb_rect(row: PanelContainer) -> TextureRect:
@@ -100,6 +132,158 @@ func _row_thumb_rect(row: PanelContainer) -> TextureRect:
 
 func is_open() -> bool:
 	return _root != null and _root.visible
+
+
+func _boot_standalone_tool() -> void:
+	_authoring_mode = true
+	var title := _root.find_child("TitleLabel", true, false) as Label
+	if title != null:
+		title.text = "PREBUILT AUTHORING"
+	_status_lbl.text = (
+		"Load an existing prebuilt or start blank on a hull.\n"
+		+ "Save overwrites the loaded preset id (or creates from the vessel name).\n"
+		+ "LMB place · RMB orbit · MMB pan · Scroll zoom · [ ] layer · R rotate · X erase"
+	)
+	_confirm_btn.text = "Save official prebuilt JSON"
+	_back_btn.text = "Quit tool"
+	var hull_hint := Label.new()
+	hull_hint.text = "Hull (blank)"
+	hull_hint.add_theme_font_size_override("font_size", 11)
+	hull_hint.add_theme_color_override("font_color", HudStyle.C_LABEL)
+	_hull_option.get_parent().add_child(hull_hint)
+	_hull_option.get_parent().move_child(hull_hint, _hull_option.get_index())
+	var pre_hint := Label.new()
+	pre_hint.text = "Load existing prebuilt"
+	pre_hint.add_theme_font_size_override("font_size", 11)
+	pre_hint.add_theme_color_override("font_color", HudStyle.C_LABEL)
+	_prebuilt_option.get_parent().add_child(pre_hint)
+	_prebuilt_option.get_parent().move_child(pre_hint, _prebuilt_option.get_index())
+	_populate_hull_option()
+	_populate_prebuilt_option()
+	if _hull_option != null:
+		_hull_option.visible = true
+	if _prebuilt_option != null:
+		_prebuilt_option.visible = true
+	if _prebuilt_option != null and _prebuilt_option.item_count > 1:
+		## Prefer first existing preset so the tool opens with something to edit.
+		_prebuilt_option.select(1)
+		_on_standalone_prebuilt_selected(1)
+	elif _hull_option != null and _hull_option.item_count > 0:
+		_on_standalone_hull_selected(0)
+	else:
+		push_error("ShipyardBrickEditor: no hulls in HullRegistry")
+
+
+func _populate_hull_option() -> void:
+	if _hull_option == null:
+		return
+	_option_guard = true
+	_hull_option.clear()
+	var i := 0
+	for entry in HullRegistry.catalog():
+		_hull_option.add_item(str(entry.get("display", entry.get("id", "Hull"))), i)
+		_hull_option.set_item_metadata(i, entry)
+		i += 1
+	_option_guard = false
+	if not _hull_option.item_selected.is_connected(_on_standalone_hull_selected):
+		_hull_option.item_selected.connect(_on_standalone_hull_selected)
+
+
+func _populate_prebuilt_option(select_prebuilt_id: String = "") -> void:
+	if _prebuilt_option == null:
+		return
+	_option_guard = true
+	_prebuilt_option.clear()
+	_prebuilt_option.add_item("— New blank deck —", 0)
+	_prebuilt_option.set_item_metadata(0, PREBUILT_BLANK_META)
+	var select_index := 0
+	var i := 1
+	for entry in PrebuiltVesselCatalog.catalog_entries():
+		var preset_id := str(entry.get("prebuilt_id", ""))
+		var label := "%s  (%s)" % [
+			str(entry.get("prebuilt_name", preset_id)),
+			preset_id,
+		]
+		_prebuilt_option.add_item(label, i)
+		_prebuilt_option.set_item_metadata(i, entry)
+		if not select_prebuilt_id.is_empty() and preset_id == select_prebuilt_id:
+			select_index = i
+		i += 1
+	_prebuilt_option.select(select_index)
+	_option_guard = false
+	if not _prebuilt_option.item_selected.is_connected(_on_standalone_prebuilt_selected):
+		_prebuilt_option.item_selected.connect(_on_standalone_prebuilt_selected)
+
+
+func _on_standalone_hull_selected(index: int) -> void:
+	if _option_guard or _hull_option == null or index < 0:
+		return
+	var entry: Variant = _hull_option.get_item_metadata(index)
+	if typeof(entry) != TYPE_DICTIONARY:
+		return
+	_authoring_prebuilt_id = ""
+	if _prebuilt_option != null:
+		_option_guard = true
+		_prebuilt_option.select(0)
+		_option_guard = false
+	open_for_authoring(entry as Dictionary)
+
+
+func _on_standalone_prebuilt_selected(index: int) -> void:
+	if _option_guard or _prebuilt_option == null or index < 0:
+		return
+	var meta: Variant = _prebuilt_option.get_item_metadata(index)
+	if typeof(meta) == TYPE_STRING and str(meta) == PREBUILT_BLANK_META:
+		_authoring_prebuilt_id = ""
+		if _hull_option != null and _hull_option.item_count > 0:
+			var hull_meta: Variant = _hull_option.get_item_metadata(_hull_option.selected)
+			if typeof(hull_meta) == TYPE_DICTIONARY:
+				open_for_authoring(hull_meta as Dictionary)
+		return
+	if typeof(meta) != TYPE_DICTIONARY:
+		return
+	_load_prebuilt_entry(meta as Dictionary)
+
+
+func _load_prebuilt_entry(entry: Dictionary) -> void:
+	var hull_id := str(entry.get("id", entry.get("hull_id", ""))).strip_edges()
+	var hull := HullRegistry.get_by_id(hull_id)
+	if hull.is_empty():
+		_show_dev_save_result("LOAD FAILED · unknown hull '%s'" % hull_id, true)
+		return
+	var layout_raw: Variant = entry.get("prebuilt_layout", {})
+	var layout: Dictionary = (
+		(layout_raw as Dictionary).duplicate(true)
+		if typeof(layout_raw) == TYPE_DICTIONARY
+		else {}
+	)
+	_authoring_prebuilt_id = str(entry.get("prebuilt_id", "")).strip_edges()
+	var vessel_name := str(entry.get("prebuilt_name", entry.get("display", ""))).strip_edges()
+	## Sync hull dropdown to the preset's hull without clearing the load.
+	if _hull_option != null:
+		_option_guard = true
+		for i in range(_hull_option.item_count):
+			var hm: Variant = _hull_option.get_item_metadata(i)
+			if typeof(hm) == TYPE_DICTIONARY and str((hm as Dictionary).get("id", "")) == hull_id:
+				_hull_option.select(i)
+				break
+		_option_guard = false
+	open_for_authoring(hull, layout, vessel_name)
+	if _dev_save_lbl != null:
+		_dev_save_lbl.text = "Loaded · %s" % str(entry.get("prebuilt_path", _authoring_prebuilt_id))
+		_dev_save_lbl.add_theme_color_override("font_color", HudStyle.C_LABEL)
+
+
+func open_for_authoring(
+	hull_entry: Dictionary,
+	existing_layout: Dictionary = {},
+	vessel_name: String = "",
+) -> void:
+	_authoring_mode = true
+	var name := vessel_name.strip_edges()
+	if name.is_empty():
+		name = str(hull_entry.get("display", ""))
+	open_for_hull(hull_entry, existing_layout, "", name)
 
 
 func open_for_hull(
@@ -128,7 +312,11 @@ func open_for_hull(
 		_boat = null
 		_brick_root = null
 	var hull_label := str(hull_entry.get("display", "Vessel"))
-	if _editing_uid.is_empty():
+	if _authoring_mode or standalone_tool:
+		_hull_lbl.text = "Official prebuilt — %s" % hull_label
+		_confirm_btn.text = "Save official prebuilt JSON"
+		_back_btn.text = "Quit tool"
+	elif _editing_uid.is_empty():
 		_hull_lbl.text = "New build — %s" % hull_label
 		_confirm_btn.text = "Confirm build"
 		_back_btn.text = "Back to hulls"
@@ -165,6 +353,9 @@ func hide_editor() -> void:
 
 
 func _close() -> void:
+	if standalone_tool or _authoring_mode:
+		get_tree().quit()
+		return
 	hide_editor()
 	closed.emit()
 
@@ -210,6 +401,7 @@ func _build_chrome() -> void:
 	margin.add_child(col)
 
 	var title := Label.new()
+	title.name = "TitleLabel"
 	title.text = "BUILD"
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	title.add_theme_font_size_override("font_size", 20)
@@ -223,11 +415,23 @@ func _build_chrome() -> void:
 	_hull_lbl.add_theme_color_override("font_color", HudStyle.C_TEXT)
 	col.add_child(_hull_lbl)
 
+	_hull_option = OptionButton.new()
+	_hull_option.visible = false
+	_hull_option.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_hull_option.tooltip_text = "Hull class for a blank new deck"
+	col.add_child(_hull_option)
+
+	_prebuilt_option = OptionButton.new()
+	_prebuilt_option.visible = false
+	_prebuilt_option.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_prebuilt_option.tooltip_text = "Load an existing official prebuilt JSON"
+	col.add_child(_prebuilt_option)
+
 	_status_lbl = Label.new()
 	_status_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_status_lbl.add_theme_font_size_override("font_size", 12)
 	_status_lbl.add_theme_color_override("font_color", HudStyle.C_LABEL)
-	_status_lbl.text = "Empty deck — place items yourself.\nLMB place · RMB orbit · MMB pan · Scroll zoom\n[ ] layer (shows this floor + below) · R rotate · X erase\nCargo zone: click A, then B · Doors open with F after deploy\nCell = 1.0 m  ·  Hull = 30×24 m  ·  Grid = 30×24"
+	_status_lbl.text = "Empty deck — place items yourself.\nLMB place · RMB orbit · MMB pan · Scroll zoom\n[ ] layer (shows this floor + below) · R rotate · X erase\nCargo zone: click A, then B · Doors open with F after deploy\nCell = 1.0 m"
 	col.add_child(_status_lbl)
 
 	col.add_child(HSeparator.new())
@@ -276,6 +480,57 @@ func _build_chrome() -> void:
 	clear_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	clear_btn.pressed.connect(_clear_layout)
 	tool_row2.add_child(clear_btn)
+
+	_cone_btn = UiBuilder.button("Light cones: ON")
+	_cone_btn.pressed.connect(_toggle_light_cones)
+	col.add_child(_cone_btn)
+
+	col.add_child(HSeparator.new())
+	var color_hdr := Label.new()
+	color_hdr.text = "COLOUR"
+	color_hdr.add_theme_color_override("font_color", HudStyle.C_AMBER)
+	col.add_child(color_hdr)
+
+	var color_row := HBoxContainer.new()
+	color_row.add_theme_constant_override("separation", 8)
+	col.add_child(color_row)
+	_color_picker = ColorPickerButton.new()
+	_color_picker.custom_minimum_size = Vector2(72, 28)
+	_color_picker.edit_alpha = false
+	_color_picker.color = _paint_color
+	_color_picker.color_changed.connect(_on_paint_color_changed)
+	color_row.add_child(_color_picker)
+	var catalog_btn := UiBuilder.button("Catalog default")
+	catalog_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	catalog_btn.pressed.connect(_use_brick_catalog_color)
+	color_row.add_child(catalog_btn)
+
+	var preset_grid := HFlowContainer.new()
+	preset_grid.add_theme_constant_override("h_separation", 4)
+	preset_grid.add_theme_constant_override("v_separation", 4)
+	col.add_child(preset_grid)
+	_color_preset_btns.clear()
+	for preset in COLOR_PRESETS:
+		var swatch := Button.new()
+		swatch.custom_minimum_size = Vector2(28, 28)
+		swatch.focus_mode = Control.FOCUS_NONE
+		swatch.tooltip_text = str(preset.get("name", "Colour"))
+		var sb := StyleBoxFlat.new()
+		sb.set_border_width_all(1)
+		sb.border_color = HudStyle.C_BRASS
+		sb.set_corner_radius_all(2)
+		if bool(preset.get("custom", true)) == false:
+			sb.bg_color = Color(0.2, 0.2, 0.22)
+			swatch.text = "·"
+		else:
+			sb.bg_color = preset["color"] as Color
+		swatch.add_theme_stylebox_override("normal", sb)
+		swatch.add_theme_stylebox_override("hover", sb)
+		swatch.add_theme_stylebox_override("pressed", sb)
+		var preset_copy: Dictionary = preset
+		swatch.pressed.connect(func() -> void: _apply_color_preset(preset_copy))
+		preset_grid.add_child(swatch)
+		_color_preset_btns.append(swatch)
 
 	_layer_lbl = Label.new()
 	_layer_lbl.add_theme_color_override("font_color", HudStyle.C_TEXT)
@@ -337,15 +592,11 @@ func _build_chrome() -> void:
 	_confirm_btn.pressed.connect(_on_confirm)
 	col.add_child(_confirm_btn)
 
-	if OS.is_debug_build():
-		var dev_save_btn := UiBuilder.button("DEV · Save official prebuilt JSON")
-		dev_save_btn.pressed.connect(_on_dev_save_prebuilt)
-		col.add_child(dev_save_btn)
-		_dev_save_lbl = Label.new()
-		_dev_save_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		_dev_save_lbl.add_theme_font_size_override("font_size", 10)
-		_dev_save_lbl.add_theme_color_override("font_color", HudStyle.C_LABEL)
-		col.add_child(_dev_save_lbl)
+	_dev_save_lbl = Label.new()
+	_dev_save_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_dev_save_lbl.add_theme_font_size_override("font_size", 10)
+	_dev_save_lbl.add_theme_color_override("font_color", HudStyle.C_LABEL)
+	col.add_child(_dev_save_lbl)
 
 	_back_btn = UiBuilder.button("Back to hulls")
 	_back_btn.pressed.connect(_close)
@@ -614,6 +865,11 @@ func _try_place(cell: Vector3i) -> bool:
 		return _try_place_light(cell)
 	var fp := BrickCatalog.footprint_of(_brick_id)
 	var yaw := _yaw
+	if _grid.is_partial_bow_cell(cell):
+		if not BrickCatalog.has_tag(_brick_id, "diagonal_plan") or fp != Vector3i.ONE:
+			return false
+		yaw = _grid.partial_bow_yaw_degrees(cell)
+		_yaw = yaw
 	# Edge pieces (hull ladder) snap yaw outboard and must sit on the perimeter.
 	if bool(entry.get("edge_only", false)):
 		if cell.y != 0:
@@ -626,14 +882,20 @@ func _try_place(cell: Vector3i) -> bool:
 	var yaw_steps := int(round(float(yaw) / 90.0)) % 4
 	var cells := _grid.footprint_cells(cell, fp, yaw_steps)
 	for c in cells:
-		if not _grid.in_bounds(c):
+		if _grid.is_partial_bow_cell(c):
+			if not BrickCatalog.has_tag(_brick_id, "diagonal_plan") or cells.size() != 1:
+				return false
+		elif not _grid.in_bounds(c):
 			return false
 		if _layout.cargo_contains(c):
 			return false
 	for c in cells:
 		if _layout.has_cell(c):
 			_layout.erase_footprint_at(c)
-	return _layout.place_footprint(cell, _brick_id, yaw, _grid)
+	var props := {}
+	if not _use_catalog_color:
+		props["color"] = _paint_color
+	return _layout.place_footprint(cell, _brick_id, yaw, _grid, props)
 
 
 func _try_place_text(cell: Vector3i) -> bool:
@@ -719,6 +981,12 @@ func _placement_legal(cell: Vector3i, brick_id: String, yaw: int) -> bool:
 		return false
 	var fp := BrickCatalog.footprint_of(brick_id)
 	var use_yaw := yaw
+	if _grid.is_partial_bow_cell(cell):
+		return (
+			BrickCatalog.has_tag(brick_id, "diagonal_plan")
+			and fp == Vector3i.ONE
+			and not _layout.cargo_contains(cell)
+		)
 	if bool(entry.get("edge_only", false)):
 		if cell.y != 0:
 			return false
@@ -747,6 +1015,8 @@ func _ghost_position_for(cell: Vector3i, brick_id: String, yaw: int) -> Vector3:
 
 func _ghost_yaw_for(cell: Vector3i, brick_id: String) -> int:
 	var entry := BrickCatalog.get_entry(brick_id)
+	if _grid.is_partial_bow_cell(cell) and BrickCatalog.has_tag(brick_id, "diagonal_plan"):
+		return _grid.partial_bow_yaw_degrees(cell)
 	if bool(entry.get("edge_only", false)):
 		return _grid.outboard_yaw_degrees(cell, BrickCatalog.footprint_of(brick_id), 0)
 	return _yaw
@@ -774,12 +1044,14 @@ func _update_ghost_at_screen(screen_pos: Vector2) -> void:
 	var yaw := _ghost_yaw_for(cell, _brick_id)
 	var valid := _placement_legal(cell, _brick_id, yaw)
 	var sign := _sign_text() if BrickCatalog.has_tag(_brick_id, "text") else ""
+	var paint_color := _active_paint_color()
 	if (
 		_ghost != null and is_instance_valid(_ghost)
 		and _ghost_brick_id == _brick_id
 		and _ghost_cell == cell
 		and _ghost_yaw == yaw
 		and _ghost_valid == valid
+		and _ghost_color.is_equal_approx(paint_color)
 		and str(_ghost.get_meta("sign_text", "")) == sign
 	):
 		return
@@ -787,6 +1059,7 @@ func _update_ghost_at_screen(screen_pos: Vector2) -> void:
 		_ghost != null and is_instance_valid(_ghost)
 		and _ghost_brick_id == _brick_id
 		and _ghost_valid == valid
+		and _ghost_color.is_equal_approx(paint_color)
 		and not _is_cargo_tool()
 		and str(_ghost.get_meta("sign_text", "")) == sign
 		and not BrickCatalog.has_tag(_brick_id, "text")
@@ -801,7 +1074,8 @@ func _update_ghost_at_screen(screen_pos: Vector2) -> void:
 	_ghost_cell = cell
 	_ghost_yaw = yaw
 	_ghost_valid = valid
-	var ghost_opts: Dictionary = {"preview_mesh": true}
+	_ghost_color = paint_color
+	var ghost_opts: Dictionary = {"preview_mesh": true, "color": paint_color}
 	if BrickCatalog.has_tag(_brick_id, "text"):
 		ghost_opts["text"] = sign
 	if BrickCatalog.has_tag(_brick_id, "light"):
@@ -809,6 +1083,7 @@ func _update_ghost_at_screen(screen_pos: Vector2) -> void:
 	_ghost = BrickCatalog.create_visual(_brick_id, ghost_opts)
 	_ghost.name = "PlaceGhost"
 	_ghost.set_meta("sign_text", sign)
+	_apply_aim_gizmo_visibility(_ghost)
 	_ghost.position = _ghost_position_for(cell, _brick_id, yaw)
 	_ghost.rotation_degrees = Vector3(0.0, float(yaw), 0.0)
 	_tint_ghost(_ghost, valid)
@@ -930,6 +1205,7 @@ func _clear_ghost() -> void:
 	_ghost_cell = Vector3i(-999, -999, -999)
 	_ghost_yaw = -1
 	_ghost_valid = false
+	_ghost_color = Color(0, 0, 0, 0)
 
 
 func _pick_cell(screen_pos: Vector2) -> Vector3i:
@@ -946,7 +1222,7 @@ func _pick_cell(screen_pos: Vector2) -> Vector3i:
 	var hit := from + dir * t
 	var cell := _grid.local_to_cell(hit)
 	cell.y = _layer_y
-	if not _grid.in_bounds(cell):
+	if not _grid.has_deck_cell(cell):
 		return Vector3i(-1, -1, -1)
 	return cell
 
@@ -1102,12 +1378,56 @@ func _select_brick(id: String) -> void:
 	_tool = Tool.PLACE
 	_yaw = BrickLayout.norm_yaw_step(_yaw, BrickCatalog.yaw_step_of(id))
 	_clear_cargo_anchor()
+	if _use_catalog_color:
+		_sync_color_picker_from_catalog()
 	_refresh_palette_selection()
 	_clear_ghost()
 	_refresh_ghost_from_mouse()
 	if BrickCatalog.has_tag(id, "text") and _sign_text_edit != null:
 		_sign_text_edit.grab_focus()
 		_sign_text_edit.select_all()
+
+
+func _active_paint_color() -> Color:
+	if _use_catalog_color:
+		return BrickCatalog.get_entry(_brick_id).get("color", Color(0.7, 0.7, 0.7)) as Color
+	return _paint_color
+
+
+func _on_paint_color_changed(color: Color) -> void:
+	_paint_color = color
+	_use_catalog_color = false
+	_clear_ghost()
+	_refresh_ghost_from_mouse()
+
+
+func _use_brick_catalog_color() -> void:
+	_use_catalog_color = true
+	_sync_color_picker_from_catalog()
+	_clear_ghost()
+	_refresh_ghost_from_mouse()
+
+
+func _apply_color_preset(preset: Dictionary) -> void:
+	if bool(preset.get("custom", true)) == false:
+		_use_brick_catalog_color()
+		return
+	_paint_color = preset["color"] as Color
+	_use_catalog_color = false
+	if _color_picker != null:
+		_color_picker.set_block_signals(true)
+		_color_picker.color = _paint_color
+		_color_picker.set_block_signals(false)
+	_clear_ghost()
+	_refresh_ghost_from_mouse()
+
+
+func _sync_color_picker_from_catalog() -> void:
+	_paint_color = BrickCatalog.get_entry(_brick_id).get("color", Color(0.7, 0.7, 0.7)) as Color
+	if _color_picker != null:
+		_color_picker.set_block_signals(true)
+		_color_picker.color = _paint_color
+		_color_picker.set_block_signals(false)
 
 
 func _refresh_palette_selection() -> void:
@@ -1125,6 +1445,35 @@ func _refresh_palette_selection() -> void:
 	_layer_lbl.text = "Layer %d  (%.1f m)  ·  showing 0–%d  ·  Yaw %d°  ·  %s" % [
 		_layer_y, float(_layer_y) * DeckGrid.CELL_M, _layer_y, _yaw, mode,
 	]
+
+
+func _toggle_light_cones() -> void:
+	_show_light_cones = not _show_light_cones
+	_refresh_cone_button()
+	_apply_all_aim_gizmo_visibility()
+	_clear_ghost()
+	_refresh_ghost_from_mouse()
+
+
+func _refresh_cone_button() -> void:
+	if _cone_btn == null:
+		return
+	_cone_btn.text = "Light cones: ON" if _show_light_cones else "Light cones: OFF"
+
+
+func _apply_aim_gizmo_visibility(root: Node) -> void:
+	if root == null:
+		return
+	var gizmo := root.find_child("AimGizmo", true, false) as Node3D
+	if gizmo != null:
+		gizmo.visible = _show_light_cones
+
+
+func _apply_all_aim_gizmo_visibility() -> void:
+	for key in _brick_visuals.keys():
+		var node: Node = _brick_visuals[key] as Node
+		if node != null and is_instance_valid(node):
+			_apply_aim_gizmo_visibility(node)
 
 
 func _clear_layout() -> void:
@@ -1223,10 +1572,13 @@ func _sync_brick_visuals() -> void:
 		var want_id := str(want.get("brick_id", ""))
 		var want_yaw := int(want.get("yaw", 0))
 		var want_text := str(want.get("text", ""))
+		var want_color := BrickLayout.color_from_entry(want, want_id)
+		var want_color_key := "%.3f,%.3f,%.3f" % [want_color.r, want_color.g, want_color.b]
 		if (
 			str(node.get_meta("brick_id", "")) != want_id
 			or int(node.get_meta("yaw", 0)) != want_yaw
 			or str(node.get_meta("sign_text", "")) != want_text
+			or str(node.get_meta("color_key", "")) != want_color_key
 		):
 			stale.append(k)
 
@@ -1246,7 +1598,9 @@ func _sync_brick_visuals() -> void:
 		var yaw := int(item.get("yaw", 0))
 		if not BrickCatalog.has(brick_id):
 			continue
-		var opts: Dictionary = {}
+		var color := BrickLayout.color_from_entry(item, brick_id)
+		var color_key := "%.3f,%.3f,%.3f" % [color.r, color.g, color.b]
+		var opts: Dictionary = {"color": color}
 		if BrickCatalog.has_tag(brick_id, "text"):
 			opts["text"] = str(item.get("text", ""))
 		if BrickCatalog.has_tag(brick_id, "light"):
@@ -1256,7 +1610,9 @@ func _sync_brick_visuals() -> void:
 		visual.set_meta("brick_id", brick_id)
 		visual.set_meta("yaw", yaw)
 		visual.set_meta("sign_text", str(item.get("text", "")))
+		visual.set_meta("color_key", color_key)
 		visual.set_meta("cell_y", cell.y)
+		_apply_aim_gizmo_visibility(visual)
 		if bool(item.get("is_sign", false)):
 			visual.position = _grid.cell_center_local(cell)
 		elif bool(item.get("is_light", false)):
@@ -1365,14 +1721,26 @@ func _refresh_grid_overlay() -> void:
 	var half_z := _grid.half_loa
 	var cell := DeckGrid.CELL_M
 
-	# Soft deck wash so the grid reads clearly.
-	var wash := MeshBuilder.box(
-		Vector3(float(_grid.width) * cell, 0.01, float(_grid.length) * cell),
-		Color(0.15, 0.45, 0.75, 0.12),
-		1.0,
-		0.0,
-	)
-	wash.position = Vector3(0.0, y - 0.02, 0.0)
+	# Soft deck wash follows the actual buildable hull plan.
+	var wash: MeshInstance3D
+	if _grid.bow_taper_cells > 0:
+		wash = MeshBuilder.pointed_deck_plate(
+			float(_grid.length) * cell,
+			float(_grid.width) * cell,
+			y - 0.015,
+			0.01,
+			float(_grid.bow_taper_cells) / float(_grid.length),
+			Color(0.15, 0.45, 0.75, 0.12),
+			1.0,
+		)
+	else:
+		wash = MeshBuilder.box(
+			Vector3(float(_grid.width) * cell, 0.01, float(_grid.length) * cell),
+			Color(0.15, 0.45, 0.75, 0.12),
+			1.0,
+			0.0,
+		)
+		wash.position = Vector3(0.0, y - 0.02, 0.0)
 	var wash_mat := wash.material_override as StandardMaterial3D
 	if wash_mat != null:
 		wash_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
@@ -1383,18 +1751,46 @@ func _refresh_grid_overlay() -> void:
 	var st := SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_LINES)
 	var line_col := Color(0.55, 0.85, 1.0, 0.85)
-	for ix in range(_grid.width + 1):
-		var x := -half_x + float(ix) * cell
-		st.set_color(line_col)
-		st.add_vertex(Vector3(x, y, -half_z))
-		st.set_color(line_col)
-		st.add_vertex(Vector3(x, y, half_z))
-	for iz in range(_grid.length + 1):
-		var z := -half_z + float(iz) * cell
-		st.set_color(line_col)
-		st.add_vertex(Vector3(-half_x, y, z))
-		st.set_color(line_col)
-		st.add_vertex(Vector3(half_x, y, z))
+	if _grid.bow_taper_cells <= 0:
+		for ix in range(_grid.width + 1):
+			var x := -half_x + float(ix) * cell
+			st.set_color(line_col)
+			st.add_vertex(Vector3(x, y, -half_z))
+			st.set_color(line_col)
+			st.add_vertex(Vector3(x, y, half_z))
+		for iz in range(_grid.length + 1):
+			var z := -half_z + float(iz) * cell
+			st.set_color(line_col)
+			st.add_vertex(Vector3(-half_x, y, z))
+			st.set_color(line_col)
+			st.add_vertex(Vector3(half_x, y, z))
+	else:
+		## Draw full squares and exact triangular half-cells at the 45° bow.
+		for iz in range(_grid.length):
+			for ix in range(_grid.width):
+				var shape := _grid.cell_shape(ix, iz)
+				if shape == DeckGrid.CellShape.NONE:
+					continue
+				var x0 := -half_x + float(ix) * cell
+				var x1 := x0 + cell
+				var z0 := -half_z + float(iz) * cell
+				var z1 := z0 + cell
+				var corners: Array[Vector3]
+				match shape:
+					DeckGrid.CellShape.BOW_PORT_HALF:
+						corners = [Vector3(x1, y, z0), Vector3(x1, y, z1), Vector3(x0, y, z1)]
+					DeckGrid.CellShape.BOW_STARBOARD_HALF:
+						corners = [Vector3(x0, y, z0), Vector3(x1, y, z1), Vector3(x0, y, z1)]
+					_:
+						corners = [
+							Vector3(x0, y, z0), Vector3(x1, y, z0),
+							Vector3(x1, y, z1), Vector3(x0, y, z1),
+						]
+				for i in range(corners.size()):
+					st.set_color(line_col)
+					st.add_vertex(corners[i])
+					st.set_color(line_col)
+					st.add_vertex(corners[(i + 1) % corners.size()])
 	var mesh := st.commit()
 	var mi := MeshInstance3D.new()
 	mi.mesh = mesh
@@ -1411,12 +1807,23 @@ func _refresh_grid_overlay() -> void:
 	border.begin(Mesh.PRIMITIVE_LINES)
 	var edge := Color(1.0, 0.78, 0.25, 1.0)
 	var yb := y + 0.01
-	var corners := [
-		Vector3(-half_x, yb, -half_z), Vector3(half_x, yb, -half_z),
-		Vector3(half_x, yb, -half_z), Vector3(half_x, yb, half_z),
-		Vector3(half_x, yb, half_z), Vector3(-half_x, yb, half_z),
-		Vector3(-half_x, yb, half_z), Vector3(-half_x, yb, -half_z),
-	]
+	var corners: Array[Vector3] = []
+	if _grid.bow_taper_cells > 0:
+		var shoulder_z := -half_z + float(_grid.bow_taper_cells) * cell
+		corners = [
+			Vector3(0.0, yb, -half_z), Vector3(half_x, yb, shoulder_z),
+			Vector3(half_x, yb, shoulder_z), Vector3(half_x, yb, half_z),
+			Vector3(half_x, yb, half_z), Vector3(-half_x, yb, half_z),
+			Vector3(-half_x, yb, half_z), Vector3(-half_x, yb, shoulder_z),
+			Vector3(-half_x, yb, shoulder_z), Vector3(0.0, yb, -half_z),
+		]
+	else:
+		corners = [
+			Vector3(-half_x, yb, -half_z), Vector3(half_x, yb, -half_z),
+			Vector3(half_x, yb, -half_z), Vector3(half_x, yb, half_z),
+			Vector3(half_x, yb, half_z), Vector3(-half_x, yb, half_z),
+			Vector3(-half_x, yb, half_z), Vector3(-half_x, yb, -half_z),
+		]
 	for i in range(0, corners.size(), 2):
 		border.set_color(edge)
 		border.add_vertex(corners[i])
@@ -1559,6 +1966,9 @@ func _refresh_rules() -> void:
 
 
 func _on_confirm() -> void:
+	if _authoring_mode or standalone_tool:
+		_on_dev_save_prebuilt()
+		return
 	var vessel_name := _name_edit.text.strip_edges()
 	if vessel_name.is_empty():
 		vessel_name = VesselSpawn.vessel_name_of({
@@ -1577,7 +1987,9 @@ func _on_dev_save_prebuilt() -> void:
 	var vessel_name := _name_edit.text.strip_edges()
 	if vessel_name.is_empty():
 		vessel_name = str(_hull_entry.get("display", _layout.hull_id))
-	var preset_id := _prebuilt_slug(vessel_name)
+	var preset_id := _authoring_prebuilt_id.strip_edges()
+	if preset_id.is_empty():
+		preset_id = _prebuilt_slug(vessel_name)
 	if preset_id.is_empty():
 		preset_id = "%s_prebuilt" % _prebuilt_slug(_layout.hull_id)
 	var payload := make_prebuilt_payload(
@@ -1619,6 +2031,8 @@ func _on_dev_save_prebuilt() -> void:
 	if err != OK:
 		_show_dev_save_result("SAVE FAILED · could not install preset", true)
 		return
+	_authoring_prebuilt_id = preset_id
+	_populate_prebuilt_option(preset_id)
 	_show_dev_save_result("SAVED · %s" % path, false)
 	print("[Shipyard] Saved official prebuilt preset: %s" % ProjectSettings.globalize_path(path))
 

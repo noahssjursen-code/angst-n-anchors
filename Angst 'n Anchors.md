@@ -27,7 +27,7 @@ A maritime trading game built in Godot. The player drives a boat, picks up cargo
 
 ## Vessel System (active focus)
 
-Hand-authored vessel scenes under `scenes/vessels/` own SI hull geometry, core systems, and a **1×1×1 m deck brick grid**. Players fit out vessels in the shipwright fullscreen editor (`ShipyardBrickEditor`). Layout is `brick_layout` on the owned-vessel ledger; `DeckFitout` rebuilds bricks + derived gameplay (cargo deck, helm, crane) at spawn.
+Hand-authored vessel scenes under `scenes/vessels/` own SI hull geometry, core systems, and a **1×1×1 m deck brick grid**. Official ready-builts are authored in the `ShipyardBrickEditor` engine tool and sold by the shipwright. Layout is `brick_layout` on the owned-vessel ledger; `DeckFitout` rebuilds bricks + derived gameplay (cargo deck, helm, crane) at spawn.
 
 ```gdscript
 var boat := VesselSpawn.instantiate_from_record(owned_vessel_record)

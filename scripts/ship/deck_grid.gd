@@ -13,15 +13,34 @@ var length: int = 1
 var deck_y: float = 0.0
 var half_beam: float = 0.5
 var half_loa: float = 0.5
+## Length of a 45-degree pointed bow in whole cells. Zero keeps a rectangular deck.
+var bow_taper_cells: int = 0
+
+enum CellShape {
+	NONE,
+	FULL,
+	BOW_PORT_HALF,
+	BOW_STARBOARD_HALF,
+}
 
 
-static func from_hull(loa_m: float, beam_m: float, deck_y_m: float) -> DeckGrid:
+static func from_hull(
+	loa_m: float,
+	beam_m: float,
+	deck_y_m: float,
+	bow_taper_m: float = 0.0,
+) -> DeckGrid:
 	var g := DeckGrid.new()
 	g.width = maxi(1, int(floor(beam_m / CELL_M)))
 	g.length = maxi(1, int(floor(loa_m / CELL_M)))
 	g.deck_y = deck_y_m
 	g.half_beam = float(g.width) * CELL_M * 0.5
 	g.half_loa = float(g.length) * CELL_M * 0.5
+	g.bow_taper_cells = clampi(
+		int(round(bow_taper_m / CELL_M)),
+		0,
+		mini(g.length, int(g.width / 2)),
+	)
 	return g
 
 
@@ -30,9 +49,44 @@ func cell_count_xz() -> int:
 
 
 func in_bounds(cell: Vector3i) -> bool:
-	return cell.x >= 0 and cell.x < width \
-		and cell.z >= 0 and cell.z < length \
-		and cell.y >= 0
+	return cell.y >= 0 and cell_shape(cell.x, cell.z) == CellShape.FULL
+
+
+func has_deck_cell(cell: Vector3i) -> bool:
+	return cell.y >= 0 and cell_shape(cell.x, cell.z) != CellShape.NONE
+
+
+func is_partial_bow_cell(cell: Vector3i) -> bool:
+	var shape := cell_shape(cell.x, cell.z)
+	return cell.y >= 0 and (shape == CellShape.BOW_PORT_HALF or shape == CellShape.BOW_STARBOARD_HALF)
+
+
+func cell_shape(ix: int, iz: int) -> CellShape:
+	if ix < 0 or ix >= width or iz < 0 or iz >= length:
+		return CellShape.NONE
+	if bow_taper_cells <= 0 or iz >= bow_taper_cells:
+		return CellShape.FULL
+	var inset := bow_taper_cells - iz
+	var first_full := inset
+	var last_full := width - inset - 1
+	if ix >= first_full and ix <= last_full:
+		return CellShape.FULL
+	if ix == first_full - 1:
+		return CellShape.BOW_PORT_HALF
+	if ix == last_full + 1:
+		return CellShape.BOW_STARBOARD_HALF
+	return CellShape.NONE
+
+
+## Required yaw for wedge_45_plan's missing (+X,+Z) corner to face outside the bow.
+func partial_bow_yaw_degrees(cell: Vector3i) -> int:
+	match cell_shape(cell.x, cell.z):
+		CellShape.BOW_PORT_HALF:
+			return 180
+		CellShape.BOW_STARBOARD_HALF:
+			return 90
+		_:
+			return 0
 
 
 func cell_center_local(cell: Vector3i) -> Vector3:
@@ -60,7 +114,12 @@ func local_to_cell(local: Vector3) -> Vector3i:
 
 
 func is_edge_cell(ix: int, iz: int) -> bool:
-	return ix == 0 or iz == 0 or ix == width - 1 or iz == length - 1
+	if cell_shape(ix, iz) != CellShape.FULL:
+		return false
+	return cell_shape(ix - 1, iz) != CellShape.FULL \
+		or cell_shape(ix + 1, iz) != CellShape.FULL \
+		or cell_shape(ix, iz - 1) != CellShape.FULL \
+		or cell_shape(ix, iz + 1) != CellShape.FULL
 
 
 func footprint_touches_edge(origin: Vector3i, footprint: Vector3i, yaw_steps: int = 0) -> bool:
@@ -125,4 +184,5 @@ func to_dict() -> Dictionary:
 		"length": length,
 		"deck_y": deck_y,
 		"cell_m": CELL_M,
+		"bow_taper_cells": bow_taper_cells,
 	}

@@ -105,7 +105,14 @@ only its placement and ground.
 - `BuildingBlueprintCatalog` — `buildings/*.json` addressed by filename stem
 - `BuildingGrid` / `BuildingLayout` — portable JSON building instructions on the shared `BrickCatalog` kit
 - `BuildingRules` / `BuildingFitout` — validation and identical editor/runtime assembly
-- `PortShowcase` / `BuildingBrickEditor` / `PortSlotEditor` — port fixture + authoring tools
+- `PortShowcase` — inspect runtime port shell (`scenes/showcases/`)
+
+### `scripts/apps/`
+
+Engine authoring apps (run via `scenes/apps/*.tscn`, not in-game UI).
+- `BuildingBrickEditor` — voxel buildings → `resources/data/buildings/`
+- `PortSlotEditor` — default-port service slots → `resources/data/ports/`
+- `ShipyardBrickEditor` — official vessel prebuilts → `resources/data/vessels/prebuilt/`
 
 Player-owned ports are a future authoritative overlay, not part of world
 generation. Immutable `WorldLayout` geography stays seed-derived; ownership,
@@ -118,7 +125,7 @@ All NPCs.
 - `NpcBase` — shared base class
 - `NpcInteractable` — the interactable wrapper for NPCs
 - `HarbourMasterNpc` — berth assignment, vessel info, dues
-- `ShipwrightNpc` — hull catalog → shipyard outfit (job kits) → commission
+- `ShipwrightNpc` — sells official ready-builts from `PrebuiltVesselCatalog`
 - `ContractNpc` — post/accept contracts
 - `DeliveryNpc` — receive deliveries
 
@@ -204,7 +211,7 @@ DeckFitout.ensure_auto_utilities()     # cleats + nav lights
 ```
 
 Workboat orientation: **Bow = −Z, Stern = +Z, Port = −X, Starboard = +X.**
-Shipwright: fullscreen `ShipyardBrickEditor` paints the grid; ledger stores `brick_layout`.
+Official decks are painted in the `ShipyardBrickEditor` engine tool; shipwright sells those prebuilts; ledger stores `brick_layout`.
 
 ---
 

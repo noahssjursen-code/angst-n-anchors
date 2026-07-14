@@ -204,6 +204,52 @@ static func _extrude_plan_ring(st: SurfaceTool, ring: PackedVector2Array, y0: fl
 
 ## Right-triangle wedge filling `size` AABB.
 ## High edge at local −Z, slopes down to +Z (rotate yaw to aim the slope).
+## Emit triangles with outward windings. SurfaceTool treats clockwise triangles as
+## front-facing, so outward geometric (CCW) faces must be emitted in reverse order.
+static func _commit_solid_mesh(faces: Array, color: Color, roughness: float, metallic: float) -> MeshInstance3D:
+	var mat := make_material(color, roughness, metallic)
+	mat.metallic = 0.0
+	mat.metallic_specular = 0.0
+	mat.roughness = 1.0
+
+	var centroid := Vector3.ZERO
+	var vert_count := 0
+	for face in faces:
+		centroid += face[0] as Vector3
+		centroid += face[1] as Vector3
+		centroid += face[2] as Vector3
+		vert_count += 3
+	if vert_count > 0:
+		centroid /= float(vert_count)
+
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	st.set_smooth_group(-1)
+	st.set_material(mat)
+	for face in faces:
+		var a: Vector3 = face[0]
+		var b: Vector3 = face[1]
+		var c: Vector3 = face[2]
+		var n := (b - a).cross(c - a)
+		var face_center := (a + b + c) / 3.0
+		## A positive dot means the cross-product normal points outward. Reverse
+		## that CCW triangle because Godot's visible front face is clockwise.
+		if n.dot(face_center - centroid) > 0.0:
+			st.add_vertex(a)
+			st.add_vertex(c)
+			st.add_vertex(b)
+		else:
+			st.add_vertex(a)
+			st.add_vertex(b)
+			st.add_vertex(c)
+	st.generate_normals()
+
+	var mi := MeshInstance3D.new()
+	mi.mesh = st.commit()
+	mi.material_override = mat
+	return mi
+
+
 static func wedge_45(size: Vector3, color: Color, roughness: float = 0.92, metallic: float = 0.0) -> MeshInstance3D:
 	var hx := size.x * 0.5
 	var hy := size.y * 0.5
@@ -215,35 +261,13 @@ static func wedge_45(size: Vector3, color: Color, roughness: float = 0.92, metal
 	var v4 := Vector3(-hx,  hy, -hz)
 	var v5 := Vector3( hx,  hy, -hz)
 
-	var mat := make_material(color, roughness, metallic)
-	mat.metallic = 0.0
-	mat.metallic_specular = 0.0
-	mat.roughness = 1.0
-
-	var st := SurfaceTool.new()
-	st.begin(Mesh.PRIMITIVE_TRIANGLES)
-	# Flat shading — averaged normals on the slope read as chrome streaks.
-	st.set_smooth_group(-1)
-	st.set_material(mat)
-
-	var faces: Array = [
+	return _commit_solid_mesh([
 		[v0, v2, v1], [v0, v3, v2], # bottom
 		[v0, v1, v5], [v0, v5, v4], # high back (−Z)
 		[v4, v5, v2], [v4, v2, v3], # slope
 		[v0, v4, v3],               # port
 		[v1, v2, v5],               # starboard
-	]
-	for face in faces:
-		# Unique verts per triangle so generate_normals cannot smooth across edges.
-		st.add_vertex(face[0])
-		st.add_vertex(face[1])
-		st.add_vertex(face[2])
-	st.generate_normals()
-
-	var mi := MeshInstance3D.new()
-	mi.mesh = st.commit()
-	mi.material_override = mat
-	return mi
+	], color, roughness, metallic)
 
 
 ## Inverted right-triangle wedge — solid above the diagonal (upside-down roof / eave).
@@ -259,33 +283,123 @@ static func wedge_45_inverted(size: Vector3, color: Color, roughness: float = 0.
 	var v4 := Vector3(-hx, -hy, -hz)
 	var v5 := Vector3( hx, -hy, -hz)
 
-	var mat := make_material(color, roughness, metallic)
-	mat.metallic = 0.0
-	mat.metallic_specular = 0.0
-	mat.roughness = 1.0
-
-	var st := SurfaceTool.new()
-	st.begin(Mesh.PRIMITIVE_TRIANGLES)
-	st.set_smooth_group(-1)
-	st.set_material(mat)
-
-	var faces: Array = [
+	return _commit_solid_mesh([
 		[v0, v1, v2], [v0, v2, v3], # top
 		[v0, v4, v5], [v0, v5, v1], # high back (−Z)
 		[v4, v3, v2], [v4, v2, v5], # underside slope
 		[v0, v3, v4],               # port
 		[v1, v5, v2],               # starboard
-	]
-	for face in faces:
-		st.add_vertex(face[0])
-		st.add_vertex(face[1])
-		st.add_vertex(face[2])
-	st.generate_normals()
+	], color, roughness, metallic)
 
-	var mi := MeshInstance3D.new()
-	mi.mesh = st.commit()
-	mi.material_override = mat
-	return mi
+
+## Corner / hip wedge — full bottom, peak only at local (−X, −Z).
+## Yaw to seat the high corner against two meeting roof slopes.
+static func wedge_45_corner(size: Vector3, color: Color, roughness: float = 0.92, metallic: float = 0.0) -> MeshInstance3D:
+	var hx := size.x * 0.5
+	var hy := size.y * 0.5
+	var hz := size.z * 0.5
+	var b0 := Vector3(-hx, -hy, -hz)
+	var b1 := Vector3( hx, -hy, -hz)
+	var b2 := Vector3( hx, -hy,  hz)
+	var b3 := Vector3(-hx, -hy,  hz)
+	var t0 := Vector3(-hx,  hy, -hz)
+
+	return _commit_solid_mesh([
+		[b0, b1, b2], [b0, b2, b3], # bottom
+		[b0, b1, t0],               # −Z wall
+		[b0, t0, b3],               # −X wall
+		[t0, b1, b2], [t0, b2, b3], # outer slopes
+	], color, roughness, metallic)
+
+
+## Inverted corner wedge — full top, only (−X, −Z) drops to the cell floor.
+static func wedge_45_corner_inverted(size: Vector3, color: Color, roughness: float = 0.92, metallic: float = 0.0) -> MeshInstance3D:
+	var hx := size.x * 0.5
+	var hy := size.y * 0.5
+	var hz := size.z * 0.5
+	var t0 := Vector3(-hx,  hy, -hz)
+	var t1 := Vector3( hx,  hy, -hz)
+	var t2 := Vector3( hx,  hy,  hz)
+	var t3 := Vector3(-hx,  hy,  hz)
+	var b0 := Vector3(-hx, -hy, -hz)
+
+	return _commit_solid_mesh([
+		[t0, t1, t2], [t0, t2, t3], # top
+		[t0, b0, t1],               # −Z wall
+		[t0, t3, b0],               # −X wall
+		[b0, t1, t2], [b0, t2, t3], # underside slopes
+	], color, roughness, metallic)
+
+
+## Inner / valley corner — high along −X and −Z (three high corners), low tip at (+X, +Z).
+## Complements the outer corner wedge when two slopes meet in an inside corner.
+static func wedge_45_inner(size: Vector3, color: Color, roughness: float = 0.92, metallic: float = 0.0) -> MeshInstance3D:
+	var hx := size.x * 0.5
+	var hy := size.y * 0.5
+	var hz := size.z * 0.5
+	var b0 := Vector3(-hx, -hy, -hz)
+	var b1 := Vector3( hx, -hy, -hz)
+	var b2 := Vector3( hx, -hy,  hz)
+	var b3 := Vector3(-hx, -hy,  hz)
+	var t0 := Vector3(-hx,  hy, -hz)
+	var t1 := Vector3( hx,  hy, -hz)
+	var t3 := Vector3(-hx,  hy,  hz)
+
+	return _commit_solid_mesh([
+		[b0, b1, b2], [b0, b2, b3], # bottom
+		[b0, b1, t1], [b0, t1, t0], # −Z wall (full)
+		[b0, t0, t3], [b0, t3, b3], # −X wall (full)
+		[t0, t3, t1],               # top L
+		[b1, t1, b2],               # +X wall
+		[b3, b2, t3],               # +Z wall
+		[t1, t0, b2], [t0, t3, b2], # valley slopes
+	], color, roughness, metallic)
+
+
+## Inverted inner corner — full top, low L hanging along −X / −Z (soffit for inside corner).
+static func wedge_45_inner_inverted(size: Vector3, color: Color, roughness: float = 0.92, metallic: float = 0.0) -> MeshInstance3D:
+	var hx := size.x * 0.5
+	var hy := size.y * 0.5
+	var hz := size.z * 0.5
+	var t0 := Vector3(-hx,  hy, -hz)
+	var t1 := Vector3( hx,  hy, -hz)
+	var t2 := Vector3( hx,  hy,  hz)
+	var t3 := Vector3(-hx,  hy,  hz)
+	var b0 := Vector3(-hx, -hy, -hz)
+	var b1 := Vector3( hx, -hy, -hz)
+	var b3 := Vector3(-hx, -hy,  hz)
+
+	return _commit_solid_mesh([
+		[t0, t1, t2], [t0, t2, t3], # top
+		[t0, t1, b1], [t0, b1, b0], # −Z wall
+		[t0, b0, b3], [t0, b3, t3], # −X wall
+		[b0, b1, b3],               # bottom L
+		[t1, t2, b1],               # +X face
+		[t3, b3, t2],               # +Z face
+		[t2, b3, b1],               # underside toward (+X, +Z)
+	], color, roughness, metallic)
+
+
+## Vertical block with a right-triangle plan footprint. The missing corner is
+## local (+X,+Z); yaw rotates that cut face around a 45-degree hull/building edge.
+static func wedge_45_plan(size: Vector3, color: Color, roughness: float = 0.92, metallic: float = 0.0) -> MeshInstance3D:
+	var hx := size.x * 0.5
+	var hy := size.y * 0.5
+	var hz := size.z * 0.5
+	var b0 := Vector3(-hx, -hy, -hz)
+	var b1 := Vector3( hx, -hy, -hz)
+	var b3 := Vector3(-hx, -hy,  hz)
+	var t0 := Vector3(-hx,  hy, -hz)
+	var t1 := Vector3( hx,  hy, -hz)
+	var t3 := Vector3(-hx,  hy,  hz)
+
+	return _commit_solid_mesh([
+		[b0, b1, b3],               # bottom
+		[t0, t3, t1],               # top
+		[b0, t0, t1], [b0, t1, b1], # −Z wall
+		[b0, b3, t3], [b0, t3, t0], # −X wall
+		[b1, t1, t3], [b1, t3, b3], # diagonal wall
+	], color, roughness, metallic)
 
 
 static func plane(

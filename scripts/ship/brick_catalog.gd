@@ -18,6 +18,15 @@ const BRICKS: Dictionary = {
 		"mass_kg": 80.0,
 		"color": Color(0.78, 0.80, 0.84),
 	},
+	"block_45": {
+		"display": "45° angled block",
+		## Vertical triangular prism for diagonal walls and pointed hull edges.
+		## Missing plan corner is local (+X,+Z).
+		"footprint": [1, 1, 1],
+		"tags": ["wall", "solid", "diagonal_plan"],
+		"mass_kg": 40.0,
+		"color": Color(0.78, 0.80, 0.84),
+	},
 	"block_window": {
 		"display": "Window",
 		## 1×1×1 — glass flush on local −Z face.
@@ -25,6 +34,22 @@ const BRICKS: Dictionary = {
 		"tags": ["window"],
 		"mass_kg": 35.0,
 		"color": Color(0.55, 0.72, 0.88, 0.22),
+	},
+	"block_window_45": {
+		"display": "45° angled window",
+		## Triangular plan piece; glazing follows the diagonal cut face.
+		"footprint": [1, 1, 1],
+		"tags": ["window", "diagonal_plan"],
+		"mass_kg": 28.0,
+		"color": Color(0.55, 0.72, 0.88, 0.22),
+	},
+	"block_windshield": {
+		"display": "Panoramic windshield",
+		## One uninterrupted 3 m pane with only a perimeter frame.
+		"footprint": [3, 1, 1],
+		"tags": ["window", "ship_only", "windshield"],
+		"mass_kg": 90.0,
+		"color": Color(0.48, 0.68, 0.84, 0.20),
 	},
 	"block_window_corner": {
 		"display": "Window corner",
@@ -78,6 +103,36 @@ const BRICKS: Dictionary = {
 		"mass_kg": 40.0,
 		"color": Color(0.25, 0.27, 0.28),
 	},
+	"roof_corner": {
+		"display": "Corner roof",
+		## Hip / outer corner — peak at local (−X, −Z); yaw to seat against two slopes.
+		"footprint": [1, 1, 1],
+		"tags": ["solid", "roof", "slope", "corner"],
+		"mass_kg": 35.0,
+		"color": Color(0.25, 0.27, 0.28),
+	},
+	"roof_corner_inv": {
+		"display": "Inverted corner roof",
+		"footprint": [1, 1, 1],
+		"tags": ["solid", "roof", "slope", "corner"],
+		"mass_kg": 35.0,
+		"color": Color(0.25, 0.27, 0.28),
+	},
+	"roof_corner_inner": {
+		"display": "Inner corner roof",
+		## Valley / inside corner — high L along (−X, −Z); yaw to seat between two slopes.
+		"footprint": [1, 1, 1],
+		"tags": ["solid", "roof", "slope", "corner"],
+		"mass_kg": 40.0,
+		"color": Color(0.25, 0.27, 0.28),
+	},
+	"roof_corner_inner_inv": {
+		"display": "Inverted inner corner roof",
+		"footprint": [1, 1, 1],
+		"tags": ["solid", "roof", "slope", "corner"],
+		"mass_kg": 40.0,
+		"color": Color(0.25, 0.27, 0.28),
+	},
 	"beam": {
 		"display": "Beam",
 		"footprint": [1, 1, 1],
@@ -90,6 +145,36 @@ const BRICKS: Dictionary = {
 		## Full cell cut on the diagonal — triangle brick / ramp.
 		"footprint": [1, 1, 1],
 		"tags": ["slope", "solid"],
+		"mass_kg": 40.0,
+		"color": Color(0.78, 0.80, 0.84),
+	},
+	"ledge_45_corner": {
+		"display": "45° corner wedge",
+		## Peak at local (−X, −Z) — ship-coloured hip / corner piece.
+		"footprint": [1, 1, 1],
+		"tags": ["slope", "solid", "corner"],
+		"mass_kg": 35.0,
+		"color": Color(0.78, 0.80, 0.84),
+	},
+	"ledge_45_corner_inv": {
+		"display": "Inverted 45° corner wedge",
+		"footprint": [1, 1, 1],
+		"tags": ["slope", "solid", "corner"],
+		"mass_kg": 35.0,
+		"color": Color(0.78, 0.80, 0.84),
+	},
+	"ledge_45_inner": {
+		"display": "45° inner corner wedge",
+		## High L along (−X, −Z), low tip at (+X, +Z) — valley piece.
+		"footprint": [1, 1, 1],
+		"tags": ["slope", "solid", "corner"],
+		"mass_kg": 40.0,
+		"color": Color(0.78, 0.80, 0.84),
+	},
+	"ledge_45_inner_inv": {
+		"display": "Inverted 45° inner corner wedge",
+		"footprint": [1, 1, 1],
+		"tags": ["slope", "solid", "corner"],
 		"mass_kg": 40.0,
 		"color": Color(0.78, 0.80, 0.84),
 	},
@@ -374,7 +459,13 @@ static func create_visual(brick_id: String, opts: Dictionary = {}) -> Node3D:
 	match brick_id:
 		"block":
 			root.add_child(MeshBuilder.box(sz, color, 0.85, 0.0))
+		"block_45":
+			root.add_child(MeshBuilder.wedge_45_plan(sz, color, 0.85, 0.0))
 		"block_window":
+			_add_window_visual(root, sz, color)
+		"block_window_45":
+			_add_window_45_visual(root, sz, color)
+		"block_windshield":
 			_add_window_visual(root, sz, color)
 		"block_window_corner":
 			_add_window_corner_visual(root, sz, color)
@@ -394,10 +485,26 @@ static func create_visual(brick_id: String, opts: Dictionary = {}) -> Node3D:
 			root.add_child(MeshBuilder.wedge_45(sz, color, 0.82, 0.08))
 		"roof_slope_inv":
 			root.add_child(MeshBuilder.wedge_45_inverted(sz, color, 0.82, 0.08))
+		"roof_corner":
+			root.add_child(MeshBuilder.wedge_45_corner(sz, color, 0.82, 0.08))
+		"roof_corner_inv":
+			root.add_child(MeshBuilder.wedge_45_corner_inverted(sz, color, 0.82, 0.08))
+		"roof_corner_inner":
+			root.add_child(MeshBuilder.wedge_45_inner(sz, color, 0.82, 0.08))
+		"roof_corner_inner_inv":
+			root.add_child(MeshBuilder.wedge_45_inner_inverted(sz, color, 0.82, 0.08))
 		"beam":
 			root.add_child(MeshBuilder.box(Vector3(0.22, sz.y, 0.22), color, 0.88, 0.0))
 		"ledge_45":
 			root.add_child(MeshBuilder.wedge_45(sz, color, 0.92, 0.0))
+		"ledge_45_corner":
+			root.add_child(MeshBuilder.wedge_45_corner(sz, color, 0.92, 0.0))
+		"ledge_45_corner_inv":
+			root.add_child(MeshBuilder.wedge_45_corner_inverted(sz, color, 0.92, 0.0))
+		"ledge_45_inner":
+			root.add_child(MeshBuilder.wedge_45_inner(sz, color, 0.92, 0.0))
+		"ledge_45_inner_inv":
+			root.add_child(MeshBuilder.wedge_45_inner_inverted(sz, color, 0.92, 0.0))
 		"stairs", "staircase":
 			_add_stairs_visual(root, sz, color, int(entry.get("stair_steps", 4)))
 		"helm":
@@ -993,6 +1100,44 @@ static func _add_window_visual(root: Node3D, sz: Vector3, glass_color: Color) ->
 		0.15,
 	)
 	pane.position = Vector3(0.0, 0.0, face_z)
+	pane.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	root.add_child(pane)
+
+
+static func _add_window_45_visual(root: Node3D, sz: Vector3, glass_color: Color) -> void:
+	## Pane lies on the triangular block's diagonal face; missing corner is (+X,+Z).
+	var post_w := WIN_POST
+	var pane_t := WIN_PANE_T
+	var frame_col := WIN_FRAME
+	var glass := _window_glass_color(glass_color)
+	var diagonal := sqrt(sz.x * sz.x + sz.z * sz.z)
+	var tangent := Vector3(sz.x, 0.0, -sz.z).normalized()
+	var outward := Vector3(sz.z, 0.0, sz.x).normalized()
+	var yaw_deg := rad_to_deg(atan2(sz.z, sz.x))
+	var frame_d := maxf(minf(sz.x, sz.z) * 0.22, 0.16)
+	var face_offset := outward * pane_t * 0.5
+	var frame_offset := outward * frame_d * 0.25
+
+	for side in [-1.0, 1.0]:
+		var post := MeshBuilder.box(Vector3(post_w, sz.y, frame_d), frame_col, 0.85, 0.05)
+		post.rotation_degrees.y = yaw_deg
+		post.position = tangent * side * (diagonal * 0.5 - post_w * 0.5) + frame_offset
+		root.add_child(post)
+
+	for side in [-1.0, 1.0]:
+		var rail := MeshBuilder.box(Vector3(diagonal, post_w, frame_d), frame_col, 0.85, 0.05)
+		rail.rotation_degrees.y = yaw_deg
+		rail.position = Vector3(0.0, side * (sz.y * 0.5 - post_w * 0.5), 0.0) + frame_offset
+		root.add_child(rail)
+
+	var pane := MeshBuilder.box(
+		Vector3(diagonal - post_w * 2.0, sz.y - post_w * 2.0, pane_t),
+		glass,
+		0.05,
+		0.15,
+	)
+	pane.rotation_degrees.y = yaw_deg
+	pane.position = face_offset
 	pane.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	root.add_child(pane)
 

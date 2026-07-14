@@ -38,9 +38,19 @@ static func apply(boat: BoatBody, layout: BrickLayout, grid: DeckGrid = null) ->
 		var yaw := int(item.get("yaw", 0))
 		if not BrickCatalog.has(brick_id):
 			continue
+		if g.is_partial_bow_cell(cell):
+			if (
+				not BrickCatalog.has_tag(brick_id, "diagonal_plan")
+				or yaw != g.partial_bow_yaw_degrees(cell)
+			):
+				continue
+		elif not g.in_bounds(cell):
+			## Do not resurrect legacy rectangular-grid bricks outside a tapered hull.
+			continue
 		var opts: Dictionary = {}
 		if BrickCatalog.has_tag(brick_id, "text"):
 			opts["text"] = str(item.get("text", ""))
+		opts["color"] = BrickLayout.color_from_entry(item, brick_id)
 		var visual := BrickCatalog.create_visual(brick_id, opts)
 		visual.name = "%s_%d_%d_%d" % [brick_id, cell.x, cell.y, cell.z]
 		var boat_local := footprint_center_local(g, cell, brick_id, yaw)
@@ -296,7 +306,37 @@ static func _collider_spec(brick_id: String) -> Dictionary:
 				"size": Vector3(sz.x, sz.y * 0.5, sz.z),
 				"offset": Vector3(0.0, sz.y * 0.25, 0.0),
 			}
-		"block_window":
+		"roof_corner":
+			return {
+				"size": Vector3(sz.x, sz.y * 0.5, sz.z),
+				"offset": Vector3(0.0, -sz.y * 0.25, 0.0),
+			}
+		"roof_corner_inv":
+			return {
+				"size": Vector3(sz.x, sz.y * 0.5, sz.z),
+				"offset": Vector3(0.0, sz.y * 0.25, 0.0),
+			}
+		"ledge_45_corner":
+			return {
+				"size": Vector3(sz.x, sz.y * 0.5, sz.z),
+				"offset": Vector3(0.0, -sz.y * 0.25, 0.0),
+			}
+		"ledge_45_corner_inv":
+			return {
+				"size": Vector3(sz.x, sz.y * 0.5, sz.z),
+				"offset": Vector3(0.0, sz.y * 0.25, 0.0),
+			}
+		"roof_corner_inner", "ledge_45_inner":
+			return {
+				"size": Vector3(sz.x, sz.y * 0.5, sz.z),
+				"offset": Vector3(0.0, -sz.y * 0.25, 0.0),
+			}
+		"roof_corner_inner_inv", "ledge_45_inner_inv":
+			return {
+				"size": Vector3(sz.x, sz.y * 0.5, sz.z),
+				"offset": Vector3(0.0, sz.y * 0.25, 0.0),
+			}
+		"block_window", "block_windshield":
 			## Thin wall on the glazed −Z face.
 			return {
 				"size": Vector3(sz.x * 0.95, sz.y * 0.95, 0.14),
@@ -369,6 +409,20 @@ static func _add_brick_collider(
 	var offset: Vector3 = spec["offset"]
 	var basis := Basis.from_euler(Vector3(0.0, deg_to_rad(float(yaw)), 0.0))
 	var boat_point := boat_local + basis * offset
+	if BrickCatalog.has_tag(brick_id, "diagonal_plan"):
+		var hx := size.x * 0.5
+		var hy := size.y * 0.5
+		var hz := size.z * 0.5
+		boat.add_walk_brick_convex_collider(
+			"%s_%d" % [brick_id, index],
+			boat_point,
+			PackedVector3Array([
+				Vector3(-hx, -hy, -hz), Vector3(hx, -hy, -hz), Vector3(-hx, -hy, hz),
+				Vector3(-hx, hy, -hz), Vector3(hx, hy, -hz), Vector3(-hx, hy, hz),
+			]),
+			float(yaw),
+		)
+		return
 	boat.add_walk_brick_collider(
 		"%s_%d" % [brick_id, index],
 		boat_point,

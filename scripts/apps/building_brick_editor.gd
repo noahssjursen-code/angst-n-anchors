@@ -1,8 +1,8 @@
 class_name BuildingBrickEditor
 extends CanvasLayer
 
-## Developer building authoring tool. Same interaction language as
-## ShipyardBrickEditor: left palette, mouse paint/erase, ghost preview,
+## Developer building authoring app (scenes/apps/).
+## Same interaction language as ShipyardBrickEditor: left palette, mouse paint/erase,
 ## layer filter, orbit/pan/zoom. Exports JSON blueprints under
 ## resources/data/buildings/.
 

@@ -124,7 +124,7 @@ func _build_chrome() -> void:
 	root_v.add_child(title)
 
 	var tagline := Label.new()
-	tagline.text = "Choose a bare hull to build, or purchase a ready-built vessel."
+	tagline.text = "Official ready-built vessels — purchase and berth at the Harbour Master."
 	tagline.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	tagline.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	tagline.add_theme_font_size_override("font_size", 13)
@@ -248,7 +248,7 @@ func _build_chrome() -> void:
 	spacer.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	sheet.add_child(spacer)
 
-	_commission_btn = UiBuilder.button("Select hull — build")
+	_commission_btn = UiBuilder.button("Purchase ready-built")
 	_commission_btn.pressed.connect(_on_commission_pressed)
 	sheet.add_child(_commission_btn)
 
@@ -344,11 +344,7 @@ func _refresh_entry() -> void:
 	var can_afford := balance >= price
 	_commission_btn.disabled = not can_afford
 	if can_afford:
-		_commission_btn.text = (
-			"Purchase ready-built — %s" % PlayerSession.format_money(price)
-			if bool(entry.get("is_prebuilt", false))
-			else "Select hull — %s" % PlayerSession.format_money(price)
-		)
+		_commission_btn.text = "Purchase ready-built — %s" % PlayerSession.format_money(price)
 	else:
 		_commission_btn.text = "Need %s" % PlayerSession.format_money(price - balance)
 
