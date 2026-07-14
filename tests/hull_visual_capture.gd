@@ -59,22 +59,41 @@ func _capture_all() -> void:
 		var length := maxf(boat.length_m, 10.0)
 		var beam := maxf(boat.beam_m, 5.0)
 		var height := maxf(boat.depth_m, 3.0)
-		var distance := maxf(length * 0.72, beam * 2.4)
-		camera.position = Vector3(distance * 0.62, height * 2.2, -distance)
-		camera.look_at_from_position(
-			camera.position,
-			Vector3(0.0, height * 0.48, 0.0),
-			Vector3.UP
-		)
-		for _frame in range(4):
-			await get_tree().process_frame
-		var image := viewport.get_texture().get_image()
-		var path := "%s/%s.png" % [OUTPUT_DIR, hull_id]
-		var error := image.save_png(path)
-		if error != OK:
-			push_error("Hull visual capture: failed %s (error %d)" % [path, error])
-		else:
-			print("Hull visual capture: " + path)
+		for view in ["front", "side", "three_quarter"]:
+			match view:
+				"front":
+					camera.position = Vector3(
+						0.0,
+						height * 0.82,
+						-maxf(beam * 1.9, height * 5.0)
+					)
+				"side":
+					camera.position = Vector3(
+						maxf(length * 0.76, height * 5.0),
+						height * 0.68,
+						0.0
+					)
+				_:
+					var distance := maxf(length * 0.64, beam * 1.45)
+					camera.position = Vector3(
+						distance * 0.55,
+						height * 1.35,
+						-distance
+					)
+			camera.look_at_from_position(
+				camera.position,
+				Vector3(0.0, height * 0.48, 0.0),
+				Vector3.UP
+			)
+			for _frame in range(3):
+				await get_tree().process_frame
+			var image := viewport.get_texture().get_image()
+			var path := "%s/%s_%s.png" % [OUTPUT_DIR, hull_id, view]
+			var error := image.save_png(path)
+			if error != OK:
+				push_error("Hull visual capture: failed %s (error %d)" % [path, error])
+			else:
+				print("Hull visual capture: " + path)
 		world.remove_child(boat)
 		boat.free()
 
