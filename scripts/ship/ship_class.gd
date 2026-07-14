@@ -18,8 +18,8 @@ const MAX_LENGTH_M: Dictionary = {
 	Type.LAUNCH:              10.0,
 	Type.COASTAL_TRADER:     35.0,
 	Type.SHORT_SEA_COASTER:  50.0,
-	Type.HANDYSIZE_FEEDER:   70.0,
-	Type.DEEP_SEA_FREIGHTER: 100.0,
+	Type.HANDYSIZE_FEEDER:  120.0,
+	Type.DEEP_SEA_FREIGHTER: 160.0,
 }
 
 ## Typical beam (m) — sets how far berth indicators extend into the water.
@@ -27,8 +27,8 @@ const BEAM_M: Dictionary = {
 	Type.LAUNCH:              4.0,
 	Type.COASTAL_TRADER:     24.0,
 	Type.SHORT_SEA_COASTER:  14.0,
-	Type.HANDYSIZE_FEEDER:   18.0,
-	Type.DEEP_SEA_FREIGHTER: 24.0,
+	Type.HANDYSIZE_FEEDER:   28.0,
+	Type.DEEP_SEA_FREIGHTER: 32.0,
 }
 
 const DISPLAY_NAME: Dictionary = {

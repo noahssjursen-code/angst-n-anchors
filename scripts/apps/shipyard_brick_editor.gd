@@ -75,6 +75,7 @@ var _rules_lbl: Label
 var _caps_lbl: Label
 var _layer_lbl: Label
 var _name_edit: LineEdit
+var _price_edit: LineEdit
 var _sign_text_edit: LineEdit
 var _brick_rows: Dictionary = {} ## brick_id → PanelContainer
 var _confirm_btn: Button
@@ -269,6 +270,7 @@ func _load_prebuilt_entry(entry: Dictionary) -> void:
 				break
 		_option_guard = false
 	open_for_authoring(hull, layout, vessel_name)
+	_set_price_field(int(entry.get("price_marks", hull.get("price_marks", 0))))
 	if _dev_save_lbl != null:
 		_dev_save_lbl.text = "Loaded · %s" % str(entry.get("prebuilt_path", _authoring_prebuilt_id))
 		_dev_save_lbl.add_theme_color_override("font_color", HudStyle.C_LABEL)
@@ -331,6 +333,7 @@ func open_for_hull(
 			"display": hull_label,
 		})
 	_name_edit.text = suggested
+	_set_price_field(int(hull_entry.get("price_marks", 0)))
 	if _sign_text_edit != null:
 		_sign_text_edit.text = suggested
 	if _dev_save_lbl != null:
@@ -587,6 +590,18 @@ func _build_chrome() -> void:
 	_name_edit.max_length = MAX_VESSEL_NAME_LEN
 	_name_edit.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	col.add_child(_name_edit)
+
+	var price_lbl := Label.new()
+	price_lbl.text = "Shipwright price (marks) — 0 = free"
+	price_lbl.add_theme_font_size_override("font_size", 12)
+	price_lbl.add_theme_color_override("font_color", HudStyle.C_LABEL)
+	col.add_child(price_lbl)
+
+	_price_edit = LineEdit.new()
+	_price_edit.placeholder_text = "0"
+	_price_edit.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_price_edit.tooltip_text = "Sale price in the shipwright catalog. 0 = free."
+	col.add_child(_price_edit)
 
 	_confirm_btn = UiBuilder.button("Confirm build")
 	_confirm_btn.pressed.connect(_on_confirm)
@@ -1997,6 +2012,7 @@ func _on_dev_save_prebuilt() -> void:
 		vessel_name,
 		_hull_entry,
 		_layout.to_dict(),
+		_authoring_price_marks(),
 	)
 	var absolute_dir := ProjectSettings.globalize_path(PREBUILT_DIR)
 	var err := DirAccess.make_dir_recursive_absolute(absolute_dir)
@@ -2033,8 +2049,12 @@ func _on_dev_save_prebuilt() -> void:
 		return
 	_authoring_prebuilt_id = preset_id
 	_populate_prebuilt_option(preset_id)
-	_show_dev_save_result("SAVED · %s" % path, false)
-	print("[Shipyard] Saved official prebuilt preset: %s" % ProjectSettings.globalize_path(path))
+	var saved_price := int(payload.get("price_marks", 0))
+	_show_dev_save_result("SAVED · %s marks · %s" % [saved_price, path], false)
+	print("[Shipyard] Saved official prebuilt preset: %s (price_marks=%d)" % [
+		ProjectSettings.globalize_path(path),
+		saved_price,
+	])
 
 
 static func make_prebuilt_payload(
@@ -2042,18 +2062,42 @@ static func make_prebuilt_payload(
 	vessel_name: String,
 	hull_entry: Dictionary,
 	layout: Dictionary,
+	price_marks: int = -1,
 ) -> Dictionary:
 	var hull_id := str(layout.get("hull_id", hull_entry.get("id", "workboat")))
 	var scene_path := str(hull_entry.get("scene_path", HullRegistry.scene_path_for(hull_id)))
+	var price := price_marks
+	if price < 0:
+		price = maxi(int(hull_entry.get("price_marks", 0)), 0)
 	return {
 		"format_version": PREBUILT_FORMAT_VERSION,
 		"id": preset_id,
 		"name": vessel_name,
 		"hull_id": hull_id,
 		"scene_path": scene_path,
-		"price_marks": maxi(int(hull_entry.get("price_marks", 0)), 0),
+		"price_marks": maxi(price, 0),
 		"brick_layout": layout.duplicate(true),
 	}
+
+
+func _set_price_field(price_marks: int) -> void:
+	if _price_edit == null:
+		return
+	_price_edit.text = str(maxi(price_marks, 0))
+
+
+func _authoring_price_marks() -> int:
+	if _price_edit == null:
+		return maxi(int(_hull_entry.get("price_marks", 0)), 0)
+	var typed := _price_edit.text.strip_edges().replace(",", "").replace(" ", "")
+	if typed.is_empty():
+		return 0
+	if typed.is_valid_int():
+		return maxi(typed.to_int(), 0)
+	if typed.is_valid_float():
+		return maxi(int(typed.to_float()), 0)
+	push_warning("ShipyardBrickEditor: invalid price '%s' — saving as 0" % typed)
+	return 0
 
 
 static func _prebuilt_slug(value: String) -> String:

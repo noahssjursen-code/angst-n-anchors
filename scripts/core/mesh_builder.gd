@@ -141,7 +141,8 @@ static func pointed_bow_collision_points(
 ) -> PackedVector3Array:
 	var hz := loa * 0.5
 	var hb := beam * 0.5
-	var bow_len := clampf(bow_frac, 0.12, 0.45) * loa
+	## bow_frac = bow_len/LOA. Half-beam run (bow_frac = beam/(2*loa)) is exactly 45° in plan.
+	var bow_len := clampf(bow_frac, 0.0, 0.5) * loa
 	var shoulder_z := -hz + bow_len
 	var pts := PackedVector3Array()
 	for y in [0.0, height]:
@@ -155,7 +156,8 @@ static func _pointed_plan_ring(loa: float, beam: float, bow_frac: float) -> Pack
 	## XZ ring, CCW when viewed from above: stern → stbd shoulder → tip → port shoulder.
 	var hz := loa * 0.5
 	var hb := beam * 0.5
-	var bow_len := clampf(bow_frac, 0.12, 0.45) * loa
+	## Do not floor bow_frac at 0.12 — long feeders need ~0.10 for a true 45° bow.
+	var bow_len := clampf(bow_frac, 0.0, 0.5) * loa
 	var shoulder_z := -hz + bow_len
 	return PackedVector2Array([
 		Vector2(-hb, hz),           ## stern port

@@ -74,9 +74,11 @@ func open_catalog(catalog: Array, start_index: int = 0) -> void:
 	_catalog.clear()
 	for item in catalog:
 		var entry := item as Dictionary
-		# Drop any stale entries that no longer have a real scene.
-		var scene_path := str(entry.get("scene_path", ""))
-		if scene_path.is_empty() or not ResourceLoader.exists(scene_path):
+		var hull_id := str(entry.get("id", entry.get("hull_id", ""))).strip_edges()
+		var scene_path := str(entry.get("scene_path", "")).strip_edges()
+		var has_scene := not scene_path.is_empty() and ResourceLoader.exists(scene_path)
+		# Catalog hulls have no .tscn — sell them by hull_id.
+		if not has_scene and not HullRegistry.is_known_hull(hull_id):
 			continue
 		_catalog.append(entry)
 	_index = clampi(start_index, 0, maxi(_catalog.size() - 1, 0))

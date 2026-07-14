@@ -157,9 +157,12 @@ static func resolve_deployable_record(record: Dictionary) -> Dictionary:
 	if record.is_empty():
 		return {}
 	var out := normalize_record(record)
+	var hull_id := str(out.get("hull_id", "")).strip_edges()
 	var path := resolve_template_path(out)
-	if path.is_empty():
+	## Catalog hulls have no .tscn — still deployable via hull_id.
+	if path.is_empty() and not HullRegistry.is_known_hull(hull_id):
 		return {}
+	out["hull_id"] = hull_id
 	out["template_path"] = path
 	out["scene_path"] = path
 	return out
@@ -177,8 +180,10 @@ static func _apply_fitout(boat: BoatBody, layout: Dictionary) -> void:
 
 static func _instantiate_hull(hull_id: String) -> BoatBody:
 	var id := HullRegistry.resolve_network_hull_id(hull_id)
+	if HullCatalog.has_id(id):
+		return HullRegistry.build_hull(id)
 	var scene_path := HullRegistry.scene_path_for(id)
-	if ResourceLoader.exists(scene_path):
+	if not scene_path.is_empty() and ResourceLoader.exists(scene_path):
 		var packed := load(scene_path) as PackedScene
 		if packed != null:
 			var node := packed.instantiate()
@@ -188,16 +193,7 @@ static func _instantiate_hull(hull_id: String) -> BoatBody:
 				return boat
 			if node != null:
 				node.queue_free()
-	var script_path := TRAWLER_SMALL_SCRIPT
-	if id == WORKBOAT_ID:
-		script_path = WORKBOAT_SCRIPT
-	elif id == PASSENGER_CATAMARAN_ID:
-		script_path = PASSENGER_CATAMARAN_SCRIPT
-	var script := load(script_path) as GDScript
-	if script != null and script.has_method("build"):
-		return script.call("build") as BoatBody
-	push_error("VesselSpawn: hull missing id=%s" % id)
-	return null
+	return HullRegistry.build_hull(id)
 
 
 static func _ensure_assembled(boat: BoatBody) -> void:

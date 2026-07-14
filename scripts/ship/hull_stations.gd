@@ -205,7 +205,7 @@ static func from_pointed(
 	var D := maxf(depth_m, 0.5)
 	var hb := B * 0.5
 	var n := maxi(station_count, 3)
-	var bow_len := clampf(bow_frac, 0.0, 0.45) * L
+	var bow_len := clampf(bow_frac, 0.0, 0.5) * L
 	var tip_z := -L * 0.5
 	var shoulder_z := tip_z + bow_len
 	result.length_m = L
@@ -266,7 +266,7 @@ static func from_design(
 		var t := float(i) / float(count - 1)
 		var z := lerpf(-length * 0.5, length * 0.5, t)
 		var taper := 1.0
-		var bow_length := clampf(bow_frac, 0.0, 0.45) * length
+		var bow_length := clampf(bow_frac, 0.0, 0.5) * length
 		if bow_length > 0.001:
 			var shoulder_z := -length * 0.5 + bow_length
 			if z < shoulder_z:

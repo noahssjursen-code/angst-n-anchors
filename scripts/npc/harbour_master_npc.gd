@@ -292,10 +292,10 @@ func _spawn_chosen_ship(resolved: Dictionary) -> void:
 
 	_pending_berth_index = -1
 
-	var scene_path := str(resolved.get("scene_path", resolved.get("template_path", VesselSpawn.WORKBOAT_SCENE)))
-	if scene_path.is_empty():
-		scene_path = VesselSpawn.WORKBOAT_SCENE
+	var scene_path := str(resolved.get("scene_path", resolved.get("template_path", ""))).strip_edges()
 	var brick_layout: Dictionary = VesselSpawn.brick_layout_of(resolved)
+	if str(brick_layout.get("hull_id", "")).is_empty():
+		brick_layout["hull_id"] = str(resolved.get("hull_id", "fishing_trawler_small"))
 	var ship := dock.spawn_player_ship(idx, scene_path, brick_layout)
 	if ship == null:
 		dock.release_berth(idx)

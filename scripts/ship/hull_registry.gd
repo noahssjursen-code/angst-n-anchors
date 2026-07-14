@@ -1,7 +1,7 @@
 class_name HullRegistry
 extends RefCounted
 
-## Vessel catalog. Each entry needs a hand-authored scene under scenes/vessels/.
+## Vessel catalog. Hand-authored scenes plus data-driven hulls from HullCatalog.
 ## Legacy hull ids still resolve so old saves / network packets keep working.
 
 const WORKBOAT_SCENE := "res://scenes/vessels/workboat.tscn"
@@ -10,6 +10,7 @@ const PASSENGER_CATAMARAN_SCENE := "res://scenes/vessels/passenger_catamaran.tsc
 const _WORKBOAT_SCRIPT := preload("res://scripts/ship/vessels/workboat.gd")
 const _TRAWLER_SMALL_SCRIPT := preload("res://scripts/ship/vessels/fishing_trawler_small.gd")
 const _PASSENGER_CATAMARAN_SCRIPT := preload("res://scripts/ship/vessels/passenger_catamaran.gd")
+const _CATALOG_HULL_SCRIPT := preload("res://scripts/ship/vessels/catalog_hull_vessel.gd")
 
 const WORKBOAT := {
 	"id": "workboat",
@@ -66,15 +67,15 @@ const LEGACY_ID_ALIASES: Dictionary = {
 	"cargo_ship_large": "workboat",
 	"cargo_ship_huge": "workboat",
 	"cargo_ship_ultra": "workboat",
-	"liquid_tanker": "workboat",
-	"liquid_tanker_small": "workboat",
-	"liquid_tanker_large": "workboat",
-	"liquid_tanker_huge": "workboat",
-	"liquid_tanker_ultra": "workboat",
-	"container_ship_small": "workboat",
-	"container_ship_medium": "workboat",
-	"container_ship_large": "workboat",
-	"container_ship_ultra": "workboat",
+	"liquid_tanker": "tanker_product",
+	"liquid_tanker_small": "tanker_coastal",
+	"liquid_tanker_large": "tanker_lng",
+	"liquid_tanker_huge": "tanker_lng",
+	"liquid_tanker_ultra": "tanker_lng",
+	"container_ship_small": "container_feeder_small",
+	"container_ship_medium": "container_feeder_mid",
+	"container_ship_large": "container_short_sea",
+	"container_ship_ultra": "container_short_sea",
 	"ferry": "passenger_catamaran",
 	"ferry_small": "passenger_catamaran",
 	"ferry_large": "passenger_catamaran",
@@ -85,15 +86,27 @@ const LEGACY_ID_ALIASES: Dictionary = {
 
 
 static func catalog() -> Array[Dictionary]:
-	return [
+	var entries: Array[Dictionary] = [
 		FISHING_TRAWLER_SMALL.duplicate(true),
 		WORKBOAT.duplicate(true),
 		PASSENGER_CATAMARAN.duplicate(true),
 	]
+	for entry in HullCatalog.catalog_entries():
+		entries.append(entry)
+	entries.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+		var loa_a := float(a.get("loa_m", 0.0))
+		var loa_b := float(b.get("loa_m", 0.0))
+		if is_equal_approx(loa_a, loa_b):
+			return str(a.get("id", "")) < str(b.get("id", ""))
+		return loa_a < loa_b
+	)
+	return entries
 
 
 static func get_by_id(hull_id: String) -> Dictionary:
 	var id := resolve_network_hull_id(hull_id)
+	if HullCatalog.has_id(id):
+		return HullCatalog.get_by_id(id)
 	match id:
 		"fishing_trawler_small":
 			return FISHING_TRAWLER_SMALL.duplicate(true)
@@ -122,6 +135,8 @@ static func resolve_network_hull_id(hull_id: String) -> String:
 	var id := hull_id.strip_edges()
 	if id.is_empty():
 		return "workboat"
+	if HullCatalog.has_id(id):
+		return id
 	if id == "workboat" or id == "fishing_trawler_small" or id == "passenger_catamaran":
 		return id
 	if LEGACY_ID_ALIASES.has(id):
@@ -140,8 +155,18 @@ static func scene_path_for(hull_id: String) -> String:
 	return str(entry.get("scene_path", WORKBOAT_SCENE))
 
 
+static func is_known_hull(hull_id: String) -> bool:
+	var id := resolve_network_hull_id(hull_id)
+	if HullCatalog.has_id(id):
+		return true
+	return id == "workboat" or id == "fishing_trawler_small" or id == "passenger_catamaran"
+
+
 static func make_grid(hull_id: String) -> DeckGrid:
-	match resolve_network_hull_id(hull_id):
+	var id := resolve_network_hull_id(hull_id)
+	if HullCatalog.has_id(id):
+		return _CATALOG_HULL_SCRIPT.make_grid(id)
+	match id:
 		"fishing_trawler_small":
 			return _TRAWLER_SMALL_SCRIPT.make_grid()
 		"passenger_catamaran":
@@ -151,7 +176,10 @@ static func make_grid(hull_id: String) -> DeckGrid:
 
 
 static func build_hull(hull_id: String) -> BoatBody:
-	match resolve_network_hull_id(hull_id):
+	var id := resolve_network_hull_id(hull_id)
+	if HullCatalog.has_id(id):
+		return _CATALOG_HULL_SCRIPT.build(id) as BoatBody
+	match id:
 		"fishing_trawler_small":
 			return _TRAWLER_SMALL_SCRIPT.build() as BoatBody
 		"passenger_catamaran":
