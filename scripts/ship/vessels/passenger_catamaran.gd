@@ -12,7 +12,10 @@ const DEMIHULL_BEAM_M := 3.6
 const DEPTH_M := 5.5
 const DRAFT_M := 2.2
 const DISPLACEMENT_T := 520.0
-const BOW_FRAC := 0.30
+const DECK_BOW_LENGTH_M := BEAM_M * 0.5
+const DECK_BOW_FRAC := DECK_BOW_LENGTH_M / LOA_M
+const DEMIHULL_BOW_LENGTH_M := DEMIHULL_BEAM_M * 0.5
+const DEMIHULL_BOW_FRAC := DEMIHULL_BOW_LENGTH_M / LOA_M
 ## ~38 kn design cruise — high-speed passenger cat.
 const TARGET_CRUISE_MS := 19.5
 const BOLLARD_THRUST_N := 2400000.0
@@ -29,7 +32,7 @@ static func build() -> BoatBody:
 
 
 static func make_grid() -> DeckGrid:
-	return DeckGrid.from_hull(LOA_M, BEAM_M, DEPTH_M * 0.85 + 0.12)
+	return DeckGrid.from_hull(LOA_M, BEAM_M, DEPTH_M + 0.12, DECK_BOW_LENGTH_M)
 
 
 static func make_physics_profile() -> HullPhysicsProfile:
@@ -39,9 +42,10 @@ static func make_physics_profile() -> HullPhysicsProfile:
 	profile.depth_m = DEPTH_M
 	profile.design_draft_m = DRAFT_M
 	profile.design_displacement_t = DISPLACEMENT_T
-	profile.bow_taper_fraction = BOW_FRAC
+	profile.bow_taper_fraction = DECK_BOW_FRAC
 	profile.station_count = 10
-	profile.hull_center_of_mass = Vector3(0.0, 0.9, LOA_M * BOW_FRAC * 0.12)
+	profile.hull_form = HullFormProfile.resolve("catamaran_demihull")
+	profile.hull_center_of_mass = Vector3(0.0, 0.9, LOA_M * DECK_BOW_FRAC * 0.12)
 	profile.engine_mass_kg = 28000.0
 	profile.engine_position = Vector3(0.0, 1.0, LOA_M * 0.34)
 	profile.ballast_mass_kg = 22000.0
@@ -82,6 +86,20 @@ static func make_physics_profile() -> HullPhysicsProfile:
 	profile.wind_center_of_effort = Vector3(0.0, DEPTH_M * 0.8, 0.0)
 	profile.calibrate_longitudinal_mass_center()
 	return profile
+
+
+static func make_demihull_stations() -> HullStations:
+	return HullStations.from_form(
+		LOA_M,
+		DEMIHULL_BEAM_M,
+		DEPTH_M,
+		DRAFT_M,
+		DISPLACEMENT_T * 0.5,
+		HullFormProfile.resolve("catamaran_demihull"),
+		1025.0,
+		DEMIHULL_BOW_LENGTH_M,
+		10
+	)
 
 
 func _ready() -> void:
@@ -162,11 +180,12 @@ func _assemble() -> void:
 	linear_damp = linear_damp_coeff
 	angular_damp = angular_damp_coeff
 
-	var stations := profile.make_stations()
-	hull_stations = stations
+	var aggregate_stations := profile.make_stations()
+	var demihull_stations := make_demihull_stations()
+	hull_stations = aggregate_stations
 	hull_size = Vector3(BEAM_M, DEPTH_M, LOA_M)
 	hull_center = Vector3(0.0, DEPTH_M * 0.5, 0.0)
-	center_of_mass_longitudinal_m = LOA_M * BOW_FRAC * 0.18
+	center_of_mass_longitudinal_m = LOA_M * DECK_BOW_FRAC * 0.18
 
 	angular_damp_coeff = 0.30
 	angular_damp = angular_damp_coeff
@@ -174,9 +193,9 @@ func _assemble() -> void:
 	linear_damp = linear_damp_coeff
 
 	_clear_generated()
-	_build_hull_visual()
-	_build_hull_collision()
-	_add_systems(profile, stations)
+	_build_hull_visual(demihull_stations)
+	_build_hull_collision(demihull_stations)
+	_add_systems(profile, demihull_stations)
 	_refresh_mass()
 
 
@@ -185,7 +204,7 @@ func _clear_generated() -> void:
 		"HullVisual",
 		"HullCollisionPort", "HullCollisionStarboard",
 		"BowCollisionPort", "BowCollisionStarboard",
-		"StripBuoyancyComponent", "HydrodynamicsComponent",
+		"StripBuoyancyComponent", "StripBuoyancyStarboard", "HydrodynamicsComponent",
 		"PropulsionComponent", "RudderComponent", "BowThrusterComponent", "BoatController",
 		"BoatCamera", "ShipLighting", "ShipGameplay", "Sockets", "DeckFitout", "AutoUtilities",
 	]:
@@ -193,6 +212,11 @@ func _clear_generated() -> void:
 		if n != null:
 			remove_child(n)
 			n.free()
+	for child in get_children():
+		if str(child.name).begins_with("HullCollisionPortSlice") \
+				or str(child.name).begins_with("HullCollisionStarboardSlice"):
+			remove_child(child)
+			child.free()
 	DeckFitout.clear(self)
 	if has_meta("fitout_applied"):
 		remove_meta("fitout_applied")
@@ -200,87 +224,67 @@ func _clear_generated() -> void:
 		remove_meta("loadout_applied")
 
 
-func _build_hull_visual() -> void:
+func _build_hull_visual(stations: HullStations) -> void:
 	var root := Node3D.new()
 	root.name = "HullVisual"
 	add_child(root)
 
-	var shell_h := DEPTH_M * 0.85
 	var hull_offset := (BEAM_M - DEMIHULL_BEAM_M) * 0.5
 	for side in [-1.0, 1.0]:
-		## Double-sided: bow tip tops are thin fans — single-sided cull reads as hollow.
-		var hull := MeshBuilder.pointed_hull_shell(
-			LOA_M,
-			DEMIHULL_BEAM_M,
-			shell_h,
-			BOW_FRAC,
-			Color(0.14, 0.16, 0.18),
-			0.9,
-			0.05,
-			true
+		var hull := MeshBuilder.lofted_hull_shell(
+			stations, Color(0.14, 0.16, 0.18), 0.9, 0.05, true
 		)
 		hull.name = "HullPort" if side < 0.0 else "HullStarboard"
 		hull.position.x = hull_offset * side
 		root.add_child(hull)
 
-	## Full rectangular deck across both hulls — not a pointed planform.
-	var deck := MeshBuilder.box(
-		Vector3(BEAM_M, 0.12, LOA_M),
+	## Full buildable bridge deck, with the same 45° bow contract as DeckGrid.
+	var deck := MeshBuilder.pointed_deck_plate(
+		LOA_M,
+		BEAM_M,
+		stations.deck_y + 0.1,
+		0.1,
+		DECK_BOW_FRAC,
 		Color(0.38, 0.34, 0.28),
-		0.95,
-		0.0
+		0.95
 	)
 	deck.name = "Deck"
-	deck.position = Vector3(0.0, shell_h + 0.06, 0.0)
 	root.add_child(deck)
 
 
-func _build_hull_collision() -> void:
-	var shell_h := DEPTH_M * 0.85
-	var bow_len := LOA_M * BOW_FRAC
-	var body_len := LOA_M - bow_len
+func _build_hull_collision(stations: HullStations) -> void:
 	var hull_offset := (BEAM_M - DEMIHULL_BEAM_M) * 0.5
+	var slices := MeshBuilder.lofted_collision_slices(stations, 6)
 	for side in [-1.0, 1.0]:
 		var suffix := "Port" if side < 0.0 else "Starboard"
-		var body_col := CollisionShape3D.new()
-		body_col.name = "HullCollision" + suffix
-		var box := BoxShape3D.new()
-		box.size = Vector3(DEMIHULL_BEAM_M, shell_h, body_len)
-		body_col.shape = box
-		body_col.position = Vector3(
-			hull_offset * side,
-			shell_h * 0.5,
-			bow_len * 0.5
-		)
-		add_child(body_col)
-
-		var bow_col := CollisionShape3D.new()
-		bow_col.name = "BowCollision" + suffix
-		var convex := ConvexPolygonShape3D.new()
-		var points := MeshBuilder.pointed_bow_collision_points(
-			LOA_M,
-			DEMIHULL_BEAM_M,
-			shell_h,
-			BOW_FRAC
-		)
-		for i in range(points.size()):
-			points[i].x += hull_offset * side
-		convex.points = points
-		bow_col.shape = convex
-		add_child(bow_col)
+		for i in range(slices.size()):
+			var body_col := CollisionShape3D.new()
+			body_col.name = "HullCollision%sSlice%02d" % [suffix, i]
+			var convex := ConvexPolygonShape3D.new()
+			var points := slices[i].duplicate()
+			for point_idx in range(points.size()):
+				points[point_idx].x += hull_offset * side
+			convex.points = points
+			body_col.shape = convex
+			add_child(body_col)
 
 
 func _add_systems(profile: HullPhysicsProfile, stations: HullStations) -> void:
-	var buoy := StripBuoyancyComponent.new()
-	buoy.name = "StripBuoyancyComponent"
-	buoy.hull_stations = stations
-	buoy.mesh_scale = 1.0
-	buoy.heave_damping_per_m2 = 42000.0
-	add_child(buoy)
+	var hull_offset := (BEAM_M - DEMIHULL_BEAM_M) * 0.5
+	for side in [-1.0, 1.0]:
+		var buoy := StripBuoyancyComponent.new()
+		buoy.name = "StripBuoyancyComponent" if side < 0.0 else "StripBuoyancyStarboard"
+		buoy.hull_stations = stations
+		buoy.hull_center_x_m = hull_offset * side
+		buoy.damping_mass_fraction = 0.5
+		buoy.mesh_scale = 1.0
+		buoy.heave_damping_per_m2 = 42000.0
+		add_child(buoy)
 
 	var hydro := HydrodynamicsComponent.new()
 	hydro.name = "HydrodynamicsComponent"
 	hydro.hull_stations = stations
+	hydro.wetted_area_multiplier = 2.0
 	hydro.mesh_scale = 1.0
 	hydro.frictional_coeff = profile.frictional_coeff
 	hydro.form_factor = profile.form_factor
@@ -347,4 +351,4 @@ func _add_systems(profile: HullPhysicsProfile, stations: HullStations) -> void:
 
 
 func _deck_y() -> float:
-	return DEPTH_M * 0.85 + 0.12
+	return DEPTH_M + 0.12

@@ -88,6 +88,13 @@ static func _normalize(raw: Dictionary) -> Dictionary:
 	entry["draft_m"] = draft_m
 	entry["bow_taper_m"] = bow_taper_m
 	entry["displacement_t"] = displacement_t
+	var form_id := str(raw.get("form", _default_form_for_role(str(raw.get("role", "cargo")))))
+	entry["form"] = form_id
+	var form_overrides: Dictionary = {}
+	var raw_overrides = raw.get("form_overrides", {})
+	if raw_overrides is Dictionary:
+		form_overrides = raw_overrides as Dictionary
+	entry["hull_form"] = HullFormProfile.resolve(form_id, form_overrides)
 	entry["scene_path"] = str(raw.get("scene_path", ""))
 	entry["role"] = _parse_role(str(raw.get("role", "cargo")))
 	entry["ship_class"] = _parse_ship_class(str(raw.get("ship_class", "coastal_trader")))
@@ -98,6 +105,16 @@ static func _normalize(raw: Dictionary) -> Dictionary:
 			beam_m,
 		]
 	return entry
+
+
+static func _default_form_for_role(role: String) -> String:
+	match role.strip_edges().to_lower():
+		"container":
+			return "container"
+		"tanker":
+			return "tanker"
+		_:
+			return HullFormProfile.DEFAULT_ID
 
 
 static func _parse_role(name: String) -> int:

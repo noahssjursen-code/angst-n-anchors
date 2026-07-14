@@ -36,7 +36,7 @@ static func make_grid(hull_id: String) -> DeckGrid:
 	var bow_taper_m := 0.0
 	if str(config.get("shape", "pointed")) != "box":
 		bow_taper_m = beam_m * 0.5
-	var deck_y := depth_m * 0.85 + 0.12
+	var deck_y := depth_m + 0.12
 	return DeckGrid.from_hull(loa_m, beam_m, deck_y, bow_taper_m)
 
 
@@ -58,6 +58,12 @@ static func make_physics_profile(config: Dictionary) -> HullPhysicsProfile:
 	profile.design_displacement_t = displacement_t
 	profile.bow_taper_fraction = bow_frac
 	profile.station_count = clampi(int(round(loa_m / 8.0)), 8, 16)
+	var raw_form = config.get("hull_form", {})
+	profile.hull_form = (
+		(raw_form as Dictionary).duplicate(true)
+		if raw_form is Dictionary
+		else HullFormProfile.resolve(str(config.get("form", "container")))
+	)
 	profile.hull_center_of_mass = Vector3(0.0, depth_m * 0.14, loa_m * bow_frac * 0.12)
 	profile.engine_mass_kg = displacement_t * 8.5
 	profile.engine_position = Vector3(0.0, depth_m * 0.16, loa_m * 0.30)
@@ -190,12 +196,8 @@ func _assemble() -> void:
 	center_of_mass_longitudinal_m = cfg_loa * profile.bow_taper_fraction * 0.22
 
 	_clear_generated()
-	if str(_config.get("shape", "pointed")) == "box":
-		_build_box_hull_visual(cfg_loa, cfg_beam, cfg_depth)
-		_build_box_hull_collision(cfg_loa, cfg_beam, cfg_depth)
-	else:
-		_build_pointed_hull_visual(cfg_loa, cfg_beam, cfg_depth, profile.bow_taper_fraction)
-		_build_pointed_hull_collision(cfg_loa, cfg_beam, cfg_depth, profile.bow_taper_fraction)
+	_build_lofted_hull_visual(stations, cfg_loa, cfg_beam, profile.bow_taper_fraction)
+	_build_lofted_hull_collision(stations, cfg_loa)
 	_add_systems(profile, stations, cfg_loa, cfg_depth, cfg_displacement)
 	_refresh_mass()
 
@@ -211,6 +213,10 @@ func _clear_generated() -> void:
 		if n != null:
 			remove_child(n)
 			n.free()
+	for child in get_children():
+		if str(child.name).begins_with("HullCollisionSlice"):
+			remove_child(child)
+			child.free()
 	DeckFitout.clear(self)
 	if has_meta("fitout_applied"):
 		remove_meta("fitout_applied")
@@ -218,76 +224,43 @@ func _clear_generated() -> void:
 		remove_meta("loadout_applied")
 
 
-func _build_box_hull_visual(loa_m: float, beam_m: float, depth_m: float) -> void:
+func _build_lofted_hull_visual(
+	stations: HullStations,
+	loa_m: float,
+	beam_m: float,
+	bow_frac: float,
+) -> void:
 	var root := Node3D.new()
 	root.name = "HullVisual"
 	add_child(root)
-	var shell_h := depth_m * 0.85
-	var hull := MeshBuilder.box(
-		Vector3(beam_m, shell_h, loa_m),
-		Color(0.12, 0.14, 0.16),
-		0.9,
-		0.05,
-	)
-	hull.name = "HullShell"
-	hull.position = Vector3(0.0, shell_h * 0.5, 0.0)
-	root.add_child(hull)
-	var deck := MeshBuilder.box(
-		Vector3(beam_m, 0.12, loa_m),
-		Color(0.35, 0.32, 0.28),
-		0.95,
-		0.0,
-	)
-	deck.name = "Deck"
-	deck.position = Vector3(0.0, shell_h + 0.06, 0.0)
-	root.add_child(deck)
-
-
-func _build_box_hull_collision(loa_m: float, beam_m: float, depth_m: float) -> void:
-	var shell_h := depth_m * 0.85
-	var body_col := CollisionShape3D.new()
-	body_col.name = "HullCollision"
-	var box := BoxShape3D.new()
-	box.size = Vector3(beam_m, shell_h, loa_m)
-	body_col.shape = box
-	body_col.position = Vector3(0.0, shell_h * 0.5, 0.0)
-	add_child(body_col)
-
-
-func _build_pointed_hull_visual(loa_m: float, beam_m: float, depth_m: float, bow_frac: float) -> void:
-	var root := Node3D.new()
-	root.name = "HullVisual"
-	add_child(root)
-	var shell_h := depth_m * 0.85
-	var hull := MeshBuilder.pointed_hull_shell(
-		loa_m, beam_m, shell_h, bow_frac, Color(0.14, 0.16, 0.18), 0.9, 0.05
+	var hull := MeshBuilder.lofted_hull_shell(
+		stations, Color(0.14, 0.16, 0.18), 0.9, 0.05
 	)
 	hull.name = "HullShell"
 	root.add_child(hull)
 	var deck := MeshBuilder.pointed_deck_plate(
-		loa_m, beam_m, shell_h + 0.1, 0.1, bow_frac, Color(0.38, 0.34, 0.28), 0.95
+		loa_m,
+		beam_m,
+		stations.deck_y + 0.1,
+		0.1,
+		bow_frac,
+		Color(0.38, 0.34, 0.28),
+		0.95
 	)
 	deck.name = "Deck"
 	root.add_child(deck)
 
 
-func _build_pointed_hull_collision(loa_m: float, beam_m: float, depth_m: float, bow_frac: float) -> void:
-	var shell_h := depth_m * 0.85
-	var bow_len := loa_m * bow_frac
-	var body_col := CollisionShape3D.new()
-	body_col.name = "HullCollision"
-	var box := BoxShape3D.new()
-	var body_len := loa_m - bow_len
-	box.size = Vector3(beam_m, shell_h, body_len)
-	body_col.shape = box
-	body_col.position = Vector3(0.0, shell_h * 0.5, bow_len * 0.5)
-	add_child(body_col)
-	var bow_col := CollisionShape3D.new()
-	bow_col.name = "BowCollision"
-	var convex := ConvexPolygonShape3D.new()
-	convex.points = MeshBuilder.pointed_bow_collision_points(loa_m, beam_m, shell_h, bow_frac)
-	bow_col.shape = convex
-	add_child(bow_col)
+func _build_lofted_hull_collision(stations: HullStations, loa_m: float) -> void:
+	var max_slices := clampi(int(ceil(loa_m / 20.0)), 4, 10)
+	var slices := MeshBuilder.lofted_collision_slices(stations, max_slices)
+	for i in range(slices.size()):
+		var body_col := CollisionShape3D.new()
+		body_col.name = "HullCollisionSlice%02d" % i
+		var convex := ConvexPolygonShape3D.new()
+		convex.points = slices[i]
+		body_col.shape = convex
+		add_child(body_col)
 
 
 func _add_systems(
