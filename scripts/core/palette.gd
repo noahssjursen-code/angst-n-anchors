@@ -133,16 +133,118 @@ const KEEL_RED := {
 	metallic  = 0.0,
 }
 
+const MATERIAL_TAGS := {
+	"weathered_wood": TIMBER,
+	"dark_wood": {color = Color(0.35, 0.25, 0.15), roughness = 1.0, metallic = 0.0},
+	"aged_wood_plank": {color = Color(0.38, 0.28, 0.20), roughness = 0.85, metallic = 0.0},
+	"structured_timber": TIMBER_LIGHT,
+	"polished_wood": {color = Color(0.40, 0.25, 0.15), roughness = 0.30, metallic = 0.0},
+	"teak_wood": {color = Color(0.35, 0.20, 0.12), roughness = 0.30, metallic = 0.0},
+	"weathered_iron": {color = Color(0.15, 0.16, 0.18), roughness = 0.78, metallic = 0.65},
+	"forged_iron": {color = Color(0.20, 0.20, 0.20), roughness = 0.40, metallic = 0.80},
+	"railing_steel": PAINTED_STEEL,
+	"polished_chrome": {color = Color(0.80, 0.80, 0.85), roughness = 0.10, metallic = 1.0},
+	"dark_steel": STEEL_FRAME,
+	"hull_paint_black": HULL_PAINT,
+	"keel_anti_fouling": KEEL_RED,
+	"superstructure_paint": WHITE_PAINT,
+	"deck_steel": DECK_GREY,
+	"concrete": CONCRETE,
+	"concrete_dark": CONCRETE_DARK,
+	"concrete_painted": {color = Color(0.90, 0.90, 0.90), roughness = 0.40, metallic = 0.10},
+	"steel_frame": STEEL_FRAME,
+	"cladding": CLADDING,
+	"roofing_panels": {color = Color(0.24, 0.25, 0.27), roughness = 0.84, metallic = 0.08},
+	"reinforced_glass": {color = Color(0.40, 0.60, 0.70, 0.72), roughness = 0.10, metallic = 0.0},
+	"emission_glass": {
+		color = Color(1.0, 0.30, 0.10), roughness = 0.10, metallic = 0.0,
+		emission = Color(1.0, 0.18, 0.04), emission_energy = 2.0,
+	},
+	"weathered_granite": {color = Color(0.32, 0.34, 0.38), roughness = 0.85, metallic = 0.10},
+	"mossy_turf": {color = Color(0.18, 0.28, 0.15), roughness = 0.95, metallic = 0.0},
+	"cold_sand": {color = Color(0.55, 0.52, 0.48), roughness = 1.0, metallic = 0.0},
+	"skin": {color = Color(0.72, 0.55, 0.40), roughness = 0.60, metallic = 0.0},
+	"rough_cloth": {color = Color(0.18, 0.20, 0.30), roughness = 0.90, metallic = 0.0},
+	"worn_trousers": {color = Color(0.18, 0.18, 0.20), roughness = 0.88, metallic = 0.0},
+	"face_ink": {color = Color(0.05, 0.04, 0.04), roughness = 0.80, metallic = 0.0},
+	"fuel_tank_steel": {color = Color(0.42, 0.08, 0.06), roughness = 0.72, metallic = 0.35},
+	"industrial_yellow": {color = Color(0.78, 0.66, 0.08), roughness = 0.68, metallic = 0.08},
+	"safety_stripe": {color = Color(0.95, 0.75, 0.05), roughness = 0.65, metallic = 0.05},
+	"iron_pipe": {color = Color(0.18, 0.18, 0.20), roughness = 0.62, metallic = 0.55},
+}
+
+static var _material_cache: Dictionary = {}
+static var _wetness := 0.0
+
 # ---------------------------------------------------------------------------
 # Factory
 # ---------------------------------------------------------------------------
 
 ## Return a ready-to-use StandardMaterial3D from a preset dict.
 ## Pass `double_sided: true` for thin shells visible from inside.
-static func make(preset: Dictionary, double_sided: bool = false) -> StandardMaterial3D:
-	return MeshBuilder.make_material(
-		preset.get("color",    Color(0.5, 0.5, 0.5)),
-		preset.get("roughness", 0.85),
-		preset.get("metallic",  0.0),
-		double_sided
-	)
+static func make(preset: Dictionary, double_sided: bool = false, exposed: bool = true) -> StandardMaterial3D:
+	var color: Color = preset.get("color", Color(0.5, 0.5, 0.5))
+	var roughness := float(preset.get("roughness", 0.85))
+	var metallic := float(preset.get("metallic", 0.0))
+	var emission: Color = preset.get("emission", Color.BLACK)
+	var emission_energy := float(preset.get("emission_energy", 0.0))
+	var is_emissive := emission_energy > 0.0
+	var actual_exposed := exposed and not is_emissive
+	var key := "%s|%.4f|%.4f|%s|%.3f|%s|%s" % [
+		color.to_html(true), roughness, metallic, emission.to_html(true),
+		emission_energy, double_sided, actual_exposed,
+	]
+	if _material_cache.has(key):
+		return _material_cache[key] as StandardMaterial3D
+	var material := MeshBuilder.make_material(color, roughness, metallic, double_sided)
+	if is_emissive:
+		material.emission_enabled = true
+		material.emission = emission
+		material.emission_energy_multiplier = emission_energy
+	material.set_meta("palette_base_color", color)
+	material.set_meta("palette_base_roughness", roughness)
+	material.set_meta("palette_exposed", actual_exposed)
+	_material_cache[key] = material
+	_apply_wetness_to_material(material)
+	return material
+
+
+static func preset_for_tag(tag: String) -> Dictionary:
+	return (MATERIAL_TAGS.get(tag.to_lower(), {}) as Dictionary).duplicate()
+
+
+static func has_tag(tag: String) -> bool:
+	return MATERIAL_TAGS.has(tag.to_lower())
+
+
+static func make_tagged(tag: String, fallback: Dictionary = {}, double_sided: bool = false, exposed: bool = true) -> StandardMaterial3D:
+	var preset := preset_for_tag(tag)
+	if preset.is_empty():
+		preset = fallback
+	return make(preset, double_sided, exposed)
+
+
+static func set_wetness(amount: float) -> void:
+	var next := clampf(amount, 0.0, 1.0)
+	if is_equal_approx(next, _wetness):
+		return
+	_wetness = next
+	for value in _material_cache.values():
+		_apply_wetness_to_material(value as StandardMaterial3D)
+
+
+static func clear_cache() -> void:
+	_material_cache.clear()
+
+
+static func cached_material_count() -> int:
+	return _material_cache.size()
+
+
+static func _apply_wetness_to_material(material: StandardMaterial3D) -> void:
+	if material == null or not bool(material.get_meta("palette_exposed", false)):
+		return
+	var base_color: Color = material.get_meta("palette_base_color", material.albedo_color)
+	var base_roughness := float(material.get_meta("palette_base_roughness", material.roughness))
+	material.albedo_color = base_color.darkened(_wetness * 0.18)
+	material.roughness = lerpf(base_roughness, maxf(0.18, base_roughness * 0.48), _wetness)

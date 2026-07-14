@@ -27,6 +27,10 @@ extends Resource
 ## Geographic/open-water and coherent-front diagnostics.
 @export_range(0.0, 1.0, 0.001) var exposure: float = 1.0
 @export_range(0.0, 1.0, 0.001) var front_intensity: float = 0.0
+@export_range(0.0, 1.0, 0.001) var convection_index: float = 0.0
+@export_range(0.0, 1.0, 0.001) var humidity: float = 0.5
+@export var weather_cell_id: String = ""
+@export var component_ids: Dictionary = {}
 @export var zone_label: String = "Open ocean"
 @export var front_label: String = ""
 
@@ -52,6 +56,10 @@ func to_weather_state() -> WeatherState:
 	s.temperature_c = temperature
 	s.exposure = exposure
 	s.front_intensity = front_intensity
+	s.convection_index = convection_index
+	s.humidity = humidity
+	s.weather_cell_id = weather_cell_id
+	s.component_ids = component_ids.duplicate()
 	s.zone_label = zone_label
 	s.front_label = front_label
 	return s
@@ -75,6 +83,10 @@ static func from_weather_state(state: WeatherState) -> WeatherSample:
 	s.temperature = state.temperature_c
 	s.exposure = state.exposure
 	s.front_intensity = state.front_intensity
+	s.convection_index = state.convection_index
+	s.humidity = state.humidity
+	s.weather_cell_id = state.weather_cell_id
+	s.component_ids = state.component_ids.duplicate()
 	s.zone_label = state.zone_label
 	s.front_label = state.front_label
 	return s

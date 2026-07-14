@@ -21,6 +21,7 @@ const LOAD_RADIUS           : float = 1500.0
 const EDITOR_PREVIEW_RADIUS : float = 600.0
 const EDITOR_PREVIEW_MAX    : int   = 6
 const WORLD_GENERATION_VERSION := WORLD_LAYOUT_GENERATOR.GENERATION_VERSION
+const WEATHER_GENERATION_VERSION := 3
 
 const PORT_NAMES : Array[String] = [
 	"Holmvik",  "Sandvær",  "Bergnes",  "Kloven",
@@ -40,6 +41,7 @@ var _layout_checksum := ""
 var _world_layout: WorldLayout
 var _layout_generation_usec := 0
 var _requested_generation_version := WORLD_GENERATION_VERSION
+var _requested_weather_generation_version := WEATHER_GENERATION_VERSION
 var _terrain_streamer: WorldTerrainStreamer
 var _forest_streamer: WorldForestStreamer
 
@@ -57,6 +59,7 @@ func _ready() -> void:
 		if settings != null:
 			world_seed = int(settings.get("map_generation_seed"))
 			_requested_generation_version = int(settings.get("map_generation_version"))
+			_requested_weather_generation_version = int(settings.get("weather_generation_version"))
 	_ready_complete = true
 	call_deferred("_rebuild")
 
@@ -66,6 +69,12 @@ func _rebuild() -> void:
 		push_error(
 			"World: generation version mismatch (requested %d, runtime %d)"
 			% [_requested_generation_version, WORLD_GENERATION_VERSION]
+		)
+		return
+	if _requested_weather_generation_version != WEATHER_GENERATION_VERSION:
+		push_error(
+			"World: weather generation version mismatch (requested %d, runtime %d)"
+			% [_requested_weather_generation_version, WEATHER_GENERATION_VERSION]
 		)
 		return
 	var t := _telemetry()
@@ -91,6 +100,7 @@ func _rebuild() -> void:
 			world_seed,
 			WORLD_GENERATION_VERSION,
 			_layout_checksum,
+			WEATHER_GENERATION_VERSION,
 		)
 
 	_add_world_renderer()
@@ -104,7 +114,7 @@ func _rebuild() -> void:
 		LandField.initialize(_world_layout)
 		if t != null:
 			t.end_load_event(lf_handle)
-		WorldWeather.initialize(world_seed, positions)
+		WorldWeather.initialize(world_seed, positions, _requested_weather_generation_version)
 		FishingField.initialize(world_seed)
 
 	if Engine.is_editor_hint() and get_tree() != null:
@@ -138,6 +148,7 @@ func get_world_context() -> Dictionary:
 	return {
 		"seed": world_seed,
 		"generation_version": WORLD_GENERATION_VERSION,
+		"weather_generation_version": WEATHER_GENERATION_VERSION,
 		"layout_checksum": _layout_checksum,
 	}
 

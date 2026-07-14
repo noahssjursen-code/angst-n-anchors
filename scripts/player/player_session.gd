@@ -173,7 +173,12 @@ func begin_new_captain(
 	var home := home_port_id.strip_edges()
 	data.home_port_id = home if not home.is_empty() else "port-home"
 	if world_seed > 0:
-		data.world_context = {"seed": world_seed, "generation_version": 0, "layout_checksum": ""}
+		data.world_context = {
+			"seed": world_seed,
+			"generation_version": 0,
+			"weather_generation_version": 3,
+			"layout_checksum": "",
+		}
 	# One hand-authored workboat on the registry so harbour deploy works immediately.
 	var starter := VesselSpawn.default_owned_record()
 	data.upsert_owned_vessel(starter)

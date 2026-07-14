@@ -7,8 +7,9 @@ extends Node
 ## function of (seed, game_time, pos), so every client with the same seed +
 ## WorldClock sees bit-identical weather without any replication.
 ##
-## Harbour calm comes from composed `LandField` exposure. No local scene node
-## can override the deterministic weather authority.
+## Harbour wave shelter comes from composed `LandField` exposure on sea state
+## only — sky/rain/fog stay authentic. No local scene node can override the
+## deterministic weather authority.
 
 var _initialized: bool = false
 var _blend_to_lighting_paused: bool = false
@@ -17,8 +18,12 @@ var _cache_hits: int = 0
 var _cache_misses: int = 0
 var _last_sample_usec: int = 0
 const CACHE_POSITION_M := 125.0
-const CACHE_TIME_HOURS := 0.10
+## Presentation only needs a fresh compose a few times per game-hour. The old
+## 0.10 bucket expired every ~6 real seconds and forced LandField fetch rays
+## on the gameplay thread — the hitch cadence players were feeling.
+const CACHE_TIME_HOURS := 0.5
 const CACHE_LIMIT := 4096
+const WEATHER_GENERATION_VERSION := 3
 
 
 func set_blend_to_lighting_paused(paused: bool) -> void:
@@ -29,11 +34,22 @@ func is_blend_to_lighting_paused() -> bool:
 	return _blend_to_lighting_paused
 
 
-func initialize(seed: int, _port_positions: Array[Vector3]) -> void:
+func initialize(
+		seed: int,
+		_port_positions: Array[Vector3],
+		weather_generation_version: int = WEATHER_GENERATION_VERSION,
+) -> void:
 	# Seed the deterministic noise field — every client with this seed gets
 	# bit-identical weather from WeatherField.sample().
 	WeatherField.world_seed = seed
+	if weather_generation_version != WEATHER_GENERATION_VERSION:
+		push_error(
+			"WorldWeather: generation version mismatch (requested %d, runtime %d)"
+			% [weather_generation_version, WEATHER_GENERATION_VERSION]
+		)
 	WeatherFrontField.initialize(seed)
+	WeatherProfileCatalog.clear_cache()
+	WeatherCellSampler.clear_cache()
 	_sample_cache.clear()
 	_initialized = true
 
@@ -98,6 +114,15 @@ func sample_route(points: PackedVector3Array, spacing_m: float = 500.0,
 	return samples
 
 
+## Batched canonical sampling for chart rasters and forecast grids.
+func sample_batch(points: PackedVector3Array, game_hours: float = -1.0) -> Array[WeatherSample]:
+	var result: Array[WeatherSample] = []
+	result.resize(points.size())
+	for i in range(points.size()):
+		result[i] = sample_at(points[i], game_hours)
+	return result
+
+
 func active_fronts(bounds: Rect2, game_hours: float = -1.0) -> Array[Dictionary]:
 	if game_hours < 0.0:
 		game_hours = WeatherField.current_game_time()
@@ -119,4 +144,5 @@ func get_debug_metrics() -> Dictionary:
 		"cache_hits": _cache_hits,
 		"cache_misses": _cache_misses,
 		"front_count": WeatherFrontField.active_fronts().size(),
+		"weather_generation_version": WEATHER_GENERATION_VERSION,
 	}

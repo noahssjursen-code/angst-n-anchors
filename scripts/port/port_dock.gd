@@ -24,8 +24,8 @@ const C_CARGO_YARD     := Color(0.34, 0.32, 0.30)
 const FUEL_STATION_SCENE  := preload("res://scenes/systems/fuel_station.tscn")
 const WORKBOAT_SCENE_PATH := "res://scenes/vessels/workboat.tscn"
 const VESSEL_SPAWN_SCRIPT := preload("res://scripts/ship/vessel_spawn.gd")
-## Main quay deck — lit asphalt probe (adjust in `resources/materials/asphalt_dock.tres`).
-const QUAY_BODY_MATERIAL: StandardMaterial3D = preload(
+## Main quay deck — procedural texture-free asphalt.
+const QUAY_BODY_MATERIAL: ShaderMaterial = preload(
 	"res://resources/materials/asphalt_dock.tres"
 )
 
@@ -92,6 +92,13 @@ const INLAND_DEPTH := PortSizing.DOCK_INLAND_DEPTH_M
 
 func _ready() -> void:
 	add_to_group("port_docks")
+	if not Engine.is_editor_hint():
+		var weather := get_node_or_null("/root/WeatherLighting")
+		if weather != null:
+			var callback := Callable(self, "_update_quay_wetness")
+			if not weather.is_connected("state_changed", callback):
+				weather.connect("state_changed", callback)
+			_update_quay_wetness()
 	if Engine.is_editor_hint():
 		call_deferred("_rebuild")
 	else:
@@ -101,6 +108,17 @@ func _ready() -> void:
 
 func _exit_tree() -> void:
 	_build_queue.clear()
+	var weather := get_node_or_null("/root/WeatherLighting")
+	if weather != null:
+		var callback := Callable(self, "_update_quay_wetness")
+		if weather.is_connected("state_changed", callback):
+			weather.disconnect("state_changed", callback)
+
+
+func _update_quay_wetness() -> void:
+	var weather := get_node_or_null("/root/WeatherLighting")
+	var rain := float(weather.get("rain_amount")) if weather != null else 0.0
+	QUAY_BODY_MATERIAL.set_shader_parameter("wetness", smoothstep(0.08, 0.72, rain))
 
 
 func is_build_complete() -> bool:

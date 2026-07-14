@@ -1,5 +1,5 @@
 shader_type spatial;
-render_mode diffuse_burley, specular_disabled;
+render_mode diffuse_burley, specular_disabled, cull_disabled;
 
 
 // Horizon ring — cascade 0 only. Same water shading language as the inner mesh
@@ -80,6 +80,9 @@ void fragment() {
 		discard;
 	}
 	vec3 nm = normalize(v_world_normal);
+	if (!FRONT_FACING) {
+		nm = -nm;
+	}
 	vec3 view_dir = normalize(CAMERA_POSITION_WORLD - v_world_pos);
 	vec3 sun_n = normalize(sun_direction);
 	float sun_up = clamp(sun_n.y, 0.0, 1.0);

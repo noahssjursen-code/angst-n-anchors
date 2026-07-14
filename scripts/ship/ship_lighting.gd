@@ -75,11 +75,11 @@ func _update_auto_nav() -> void:
 	var weather := get_node_or_null("/root/WeatherLighting")
 	if weather == null:
 		return
-	var tod := float(weather.get("time_of_day"))
 	var fog := float(weather.get("fog_density"))
 
-	var dist_from_noon := absf(tod - 0.5)
-	var is_night       := smoothstep(0.15, 0.35, dist_from_noon) > 0.5
+	var daylight := float(weather.call("daylight_factor")) \
+		if weather.has_method("daylight_factor") else 0.0
+	var is_night := daylight < 0.35
 	var is_foggy       := fog > 0.25
 
 	var should_auto := is_night or is_foggy

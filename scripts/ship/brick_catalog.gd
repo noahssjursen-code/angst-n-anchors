@@ -444,6 +444,12 @@ static func has_tag(brick_id: String, tag: String) -> bool:
 	return tags is Array and (tags as Array).has(tag)
 
 
+static func _painted_palette_material(preset: Dictionary, color: Color, exposed: bool) -> StandardMaterial3D:
+	var painted := preset.duplicate()
+	painted["color"] = color
+	return Palette.make(painted, false, exposed)
+
+
 static func create_visual(brick_id: String, opts: Dictionary = {}) -> Node3D:
 	## Mesh is centred on the origin; caller places the node at the footprint AABB centre.
 	## opts.preview_mesh — when true, cargo tiles get a temporary plate (ghost / palette thumb).
@@ -479,20 +485,33 @@ static func create_visual(brick_id: String, opts: Dictionary = {}) -> Node3D:
 			root.add_child(floor_plate)
 		"roof_flat":
 			var roof := MeshBuilder.box(Vector3(sz.x, 0.18, sz.z), color, 0.8, 0.1)
+			roof.material_override = _painted_palette_material(Palette.CLADDING, color, true)
 			roof.position = Vector3(0.0, sz.y * 0.5 - 0.09, 0.0)
 			root.add_child(roof)
 		"roof_slope":
-			root.add_child(MeshBuilder.wedge_45(sz, color, 0.82, 0.08))
+			var roof := MeshBuilder.wedge_45(sz, color, 0.82, 0.08)
+			roof.material_override = _painted_palette_material(Palette.CLADDING, color, true)
+			root.add_child(roof)
 		"roof_slope_inv":
-			root.add_child(MeshBuilder.wedge_45_inverted(sz, color, 0.82, 0.08))
+			var roof := MeshBuilder.wedge_45_inverted(sz, color, 0.82, 0.08)
+			roof.material_override = _painted_palette_material(Palette.CLADDING, color, true)
+			root.add_child(roof)
 		"roof_corner":
-			root.add_child(MeshBuilder.wedge_45_corner(sz, color, 0.82, 0.08))
+			var roof := MeshBuilder.wedge_45_corner(sz, color, 0.82, 0.08)
+			roof.material_override = _painted_palette_material(Palette.CLADDING, color, true)
+			root.add_child(roof)
 		"roof_corner_inv":
-			root.add_child(MeshBuilder.wedge_45_corner_inverted(sz, color, 0.82, 0.08))
+			var roof := MeshBuilder.wedge_45_corner_inverted(sz, color, 0.82, 0.08)
+			roof.material_override = _painted_palette_material(Palette.CLADDING, color, true)
+			root.add_child(roof)
 		"roof_corner_inner":
-			root.add_child(MeshBuilder.wedge_45_inner(sz, color, 0.82, 0.08))
+			var roof := MeshBuilder.wedge_45_inner(sz, color, 0.82, 0.08)
+			roof.material_override = _painted_palette_material(Palette.CLADDING, color, true)
+			root.add_child(roof)
 		"roof_corner_inner_inv":
-			root.add_child(MeshBuilder.wedge_45_inner_inverted(sz, color, 0.82, 0.08))
+			var roof := MeshBuilder.wedge_45_inner_inverted(sz, color, 0.82, 0.08)
+			roof.material_override = _painted_palette_material(Palette.CLADDING, color, true)
+			root.add_child(roof)
 		"beam":
 			root.add_child(MeshBuilder.box(Vector3(0.22, sz.y, 0.22), color, 0.88, 0.0))
 		"ledge_45":
@@ -531,15 +550,19 @@ static func create_visual(brick_id: String, opts: Dictionary = {}) -> Node3D:
 				_add_light_aim_gizmo(root, brick_id)
 		"railing":
 			var post_a := MeshBuilder.cylinder(0.04, sz.y * 0.95, color, 0.7, 0.2)
+			post_a.material_override = _painted_palette_material(Palette.PAINTED_STEEL, color, true)
 			post_a.position = Vector3(-sz.x * 0.35, 0.0, 0.0)
 			root.add_child(post_a)
 			var post_b := MeshBuilder.cylinder(0.04, sz.y * 0.95, color, 0.7, 0.2)
+			post_b.material_override = post_a.material_override
 			post_b.position = Vector3(sz.x * 0.35, 0.0, 0.0)
 			root.add_child(post_b)
 			var rail := MeshBuilder.box(Vector3(sz.x, 0.06, 0.06), color, 0.7, 0.25)
+			rail.material_override = post_a.material_override
 			rail.position = Vector3(0.0, sz.y * 0.4, 0.0)
 			root.add_child(rail)
 			var kick := MeshBuilder.box(Vector3(sz.x, 0.08, 0.08), color, 0.85, 0.1)
+			kick.material_override = post_a.material_override
 			kick.position = Vector3(0.0, -sz.y * 0.44, 0.0)
 			root.add_child(kick)
 		"bollard":

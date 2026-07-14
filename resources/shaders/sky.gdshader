@@ -12,13 +12,13 @@ uniform vec3 sky_zenith_deep   : source_color = vec3(0.02, 0.08, 0.22);
 uniform float sky_zenith_mix   : hint_range(0.0, 1.0) = 0.38;
 
 // --- Sun disk (world-space direction TO the sun, passed from GDScript each frame) ---
-uniform vec3  sun_direction : source_color = vec3(0.0, 1.0, 0.0);
-uniform float sun_size      : hint_range(0.0, 0.2) = 0.003;
-uniform float sun_bloom     : hint_range(0.0, 5.0) = 2.5;
+uniform vec3  sun_direction = vec3(0.0, 1.0, 0.0);
+uniform float sun_size      : hint_range(0.0, 0.02) = 0.0008;
+uniform float sun_bloom     : hint_range(0.0, 5.0) = 1.8;
 uniform vec3  sun_color     : source_color          = vec3(1.0, 0.94, 0.82);
 
 // --- Moon disk (world-space direction TO the moon, passed from GDScript each frame) ---
-uniform vec3  moon_direction : source_color = vec3(0.0, -1.0, 0.0);
+uniform vec3  moon_direction = vec3(0.0, -1.0, 0.0);
 uniform float moon_size      : hint_range(0.0, 0.1) = 0.004;
 uniform vec3  moon_color     : source_color          = vec3(0.82, 0.86, 0.96);
 
@@ -36,6 +36,7 @@ uniform float storm_intensity : hint_range(0.0, 1.0) = 0.0;
 
 // Night sky — driven from WorldRenderer from WeatherLighting daytime factor (sun height).
 uniform float star_visibility : hint_range(0.0, 1.0) = 0.0;
+uniform float daylight_factor : hint_range(0.0, 1.0) = 1.0;
 
 
 // ---------------------------------------------------------------------------
@@ -86,7 +87,7 @@ vec3 sky_gradient(vec3 dir) {
 		return mix(sky_horizon_color, vec3(0.0), ground_t);
 	}
 
-	float day = smoothstep(-0.08, 0.22, sun_direction.y);
+	float day = daylight_factor;
 
 	// Vault curve: slower rise than up² → richer blue occupies more of the sky.
 	float vault = pow(max(up, 0.001), 0.52);
@@ -168,15 +169,18 @@ float cloud_density(vec3 dir, float shape) {
 
 vec3 sun_contribution(vec3 dir) {
 	float cos_angle = dot(dir, sun_direction);
-	// Hard bright core
-	float disk   = step(1.0 - sun_size, cos_angle) * 6.0;
-	// Tight inner corona (bright ring just outside the disk)
-	float corona = pow(max(cos_angle, 0.0), 512.0) * sun_bloom * 3.5;
-	// Wide atmospheric glow — makes the sun locatable against blue sky (~25° spread)
-	float glow   = pow(max(cos_angle, 0.0), 8.0) * sun_bloom * 0.22;
+	// Antialiased HDR core. Environment glow now owns bloom; the sky shader
+	// provides a controlled source instead of a clipped white step.
+	float disk_edge = max(sun_size * 0.18, 0.00008);
+	float disk   = smoothstep(1.0 - sun_size - disk_edge, 1.0 - sun_size + disk_edge, cos_angle) * 8.0;
+	float corona = pow(max(cos_angle, 0.0), 512.0) * sun_bloom * 1.8;
+	// Wide atmospheric glow keeps the sun findable without whitening the dome.
+	float glow   = pow(max(cos_angle, 0.0), 8.0) * sun_bloom * 0.15;
 	// Fade out as sun drops below the horizon so glow doesn't bleed at night
 	float elev_fade = smoothstep(-0.10, 0.05, sun_direction.y);
-	return sun_color * (disk + corona + glow) * elev_fade;
+	vec3 hot_core = vec3(1.0, 0.97, 0.90) * disk;
+	vec3 warm_scatter = sun_color * (corona + glow);
+	return (hot_core + warm_scatter) * elev_fade;
 }
 
 
@@ -360,7 +364,7 @@ void sky() {
 		cloud_col += sun_color * silver_lining * 1.5 * (1.0 - storm_intensity * 0.8);
 		
 		// 5. Day/Night Cycle Dimming
-		float day_cloud_lit = smoothstep(-0.05, 0.32, sun_direction.y);
+		float day_cloud_lit = daylight_factor;
 		cloud_col *= mix(0.045, 1.0, day_cloud_lit);
 		
 		float moon_up = max(moon_direction.y, 0.0);

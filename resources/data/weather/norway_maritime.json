@@ -1,0 +1,107 @@
+{
+  "id": "norway_maritime",
+  "version": 3,
+  "cell_size_m": 4200.0,
+  "cell_epoch_hours": 14.0,
+  "drift_m_per_game_hour": [95.0, 38.0],
+  "dimensions": {
+    "sky": [
+      {"id": "clear", "label": "Clear", "range": [0.0, 0.1], "weight": 0.18},
+      {"id": "light_cloud", "label": "Light cloud", "range": [0.12, 0.35], "weight": 0.22},
+      {"id": "broken", "label": "Broken cloud", "range": [0.4, 0.72], "weight": 0.28},
+      {"id": "overcast", "label": "Overcast", "range": [0.8, 1.0], "weight": 0.32}
+    ],
+    "precipitation": [
+      {"id": "none", "label": "Dry", "range": [0.0, 0.0], "weight": 0.38},
+      {"id": "drizzle", "label": "Drizzle", "range": [0.25, 0.48], "weight": 0.22},
+      {"id": "rain", "label": "Rain", "range": [0.52, 0.8], "weight": 0.26},
+      {"id": "heavy_rain", "label": "Heavy rain", "range": [0.82, 1.0], "weight": 0.14}
+    ],
+    "fog": [
+      {"id": "none", "label": "Clear visibility", "range": [0.0, 0.01], "weight": 0.68},
+      {"id": "haze", "label": "Haze", "range": [0.04, 0.14], "weight": 0.18},
+      {"id": "patchy", "label": "Patchy fog", "range": [0.18, 0.36], "weight": 0.1},
+      {"id": "dense", "label": "Dense fog", "range": [0.4, 0.65], "weight": 0.04}
+    ],
+    "wind": [
+      {"id": "calm", "label": "Calm", "range": [0.0, 0.08], "weight": 0.14},
+      {"id": "light", "label": "Light wind", "range": [0.12, 0.34], "weight": 0.28},
+      {"id": "fresh", "label": "Fresh wind", "range": [0.38, 0.66], "weight": 0.34},
+      {"id": "gale", "label": "Gale", "range": [0.72, 1.0], "weight": 0.24}
+    ],
+    "sea": [
+      {"id": "calm", "label": "Calm sea", "range": [0.0, 0.1], "weight": 0.12},
+      {"id": "low", "label": "Low waves", "range": [0.14, 0.36], "weight": 0.28},
+      {"id": "medium", "label": "Medium waves", "range": [0.4, 0.7], "weight": 0.36},
+      {"id": "high", "label": "High swell", "range": [0.74, 1.0], "weight": 0.24}
+    ],
+    "convection": [
+      {"id": "none", "label": "No convection", "range": [0.0, 0.0], "weight": 0.78},
+      {"id": "isolated", "label": "Isolated lightning", "range": [0.35, 0.62], "weight": 0.15},
+      {"id": "storm", "label": "Thunderstorm", "range": [0.7, 1.0], "weight": 0.07}
+    ]
+  },
+  "compatibility": {
+    "sky|precipitation": {
+      "clear|drizzle": 0.05,
+      "clear|rain": 0.0,
+      "clear|heavy_rain": 0.0,
+      "light_cloud|rain": 0.25,
+      "light_cloud|heavy_rain": 0.04,
+      "broken|rain": 1.3,
+      "broken|heavy_rain": 0.75,
+      "overcast|drizzle": 1.35,
+      "overcast|rain": 1.7,
+      "overcast|heavy_rain": 1.55
+    },
+    "wind|fog": {
+      "calm|patchy": 1.15,
+      "calm|dense": 1.2,
+      "light|dense": 0.55,
+      "fresh|patchy": 0.35,
+      "fresh|dense": 0.05,
+      "gale|patchy": 0.0,
+      "gale|dense": 0.0
+    },
+    "wind|sea": {
+      "calm|calm": 1.25,
+      "calm|low": 1.1,
+      "calm|medium": 0.45,
+      "calm|high": 0.12,
+      "light|low": 1.2,
+      "light|medium": 1.05,
+      "fresh|medium": 1.4,
+      "fresh|high": 1.25,
+      "gale|medium": 1.1,
+      "gale|high": 1.85
+    },
+    "sky|convection": {
+      "clear|isolated": 0.0,
+      "clear|storm": 0.0,
+      "light_cloud|isolated": 0.02,
+      "light_cloud|storm": 0.0,
+      "broken|isolated": 0.55,
+      "broken|storm": 0.2,
+      "overcast|isolated": 1.25,
+      "overcast|storm": 1.5
+    },
+    "precipitation|convection": {
+      "none|isolated": 0.0,
+      "none|storm": 0.0,
+      "drizzle|isolated": 0.05,
+      "drizzle|storm": 0.0,
+      "rain|isolated": 0.85,
+      "rain|storm": 0.5,
+      "heavy_rain|isolated": 1.15,
+      "heavy_rain|storm": 1.8
+    }
+  },
+  "moods": [
+    {"id": "clear_low_sea", "label": "Low waves · light cloud · clear", "sky": "light_cloud", "precipitation": "none", "fog": "none", "wind": "light", "sea": "low", "convection": "none"},
+    {"id": "foggy_calm", "label": "Low waves · dense fog · calm", "sky": "broken", "precipitation": "none", "fog": "dense", "wind": "calm", "sea": "low", "convection": "none"},
+    {"id": "rainy_medium_sea", "label": "Medium waves · heavy rain · overcast", "sky": "overcast", "precipitation": "heavy_rain", "fog": "none", "wind": "light", "sea": "medium", "convection": "none"},
+    {"id": "dry_gale", "label": "High swell · dry gale", "sky": "light_cloud", "precipitation": "none", "fog": "none", "wind": "gale", "sea": "high", "convection": "none"},
+    {"id": "grey_drizzle", "label": "Low sea · grey drizzle", "sky": "overcast", "precipitation": "drizzle", "fog": "haze", "wind": "light", "sea": "low", "convection": "none"},
+    {"id": "thunderstorm", "label": "Convective rainstorm", "sky": "overcast", "precipitation": "heavy_rain", "fog": "haze", "wind": "fresh", "sea": "medium", "convection": "storm"}
+  ]
+}

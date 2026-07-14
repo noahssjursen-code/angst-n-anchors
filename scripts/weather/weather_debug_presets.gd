@@ -58,6 +58,23 @@ func _build_ui() -> void:
 	col.add_theme_constant_override("separation", 4)
 	scroll.add_child(col)
 
+	var authored := Label.new()
+	authored.text = "── Authored component moods"
+	authored.add_theme_color_override("font_color", Color(0.55, 0.68, 0.88, 0.70))
+	col.add_child(authored)
+	for raw_mood in WeatherProfileCatalog.moods():
+		var mood := raw_mood as Dictionary
+		var mood_button := Button.new()
+		mood_button.text = str(mood.get("label", mood.get("id", "Weather")))
+		var mood_id := str(mood.get("id", ""))
+		mood_button.pressed.connect(func() -> void: _apply_mood(mood_id))
+		col.add_child(mood_button)
+	_add_component_picker(col)
+
+	var legacy := Label.new()
+	legacy.text = "── Legacy quick moods"
+	legacy.add_theme_color_override("font_color", Color(0.55, 0.68, 0.88, 0.70))
+	col.add_child(legacy)
 	for entry in _preset_entries():
 		if entry.has("sep"):
 			var sep := Label.new()
@@ -87,6 +104,29 @@ func _build_ui() -> void:
 		var c: float = entry.cloud
 		b.pressed.connect(func() -> void: _apply(p, w, v, c))
 		col.add_child(b)
+
+
+func _add_component_picker(parent: VBoxContainer) -> void:
+	var selectors := {}
+	for dimension in ["sky", "precipitation", "fog", "wind", "sea", "convection"]:
+		var row := HBoxContainer.new()
+		var label := Label.new()
+		label.text = dimension.capitalize()
+		label.custom_minimum_size.x = 82.0
+		row.add_child(label)
+		var choices := OptionButton.new()
+		choices.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		for raw in WeatherProfileCatalog.bands(dimension):
+			var entry := raw as Dictionary
+			choices.add_item(str(entry.get("label", entry.get("id", ""))))
+			choices.set_item_metadata(choices.item_count - 1, str(entry.get("id", "")))
+		row.add_child(choices)
+		parent.add_child(row)
+		selectors[dimension] = choices
+	var apply_button := Button.new()
+	apply_button.text = "Apply component mix"
+	apply_button.pressed.connect(func() -> void: _apply_components(selectors))
+	parent.add_child(apply_button)
 
 
 func _hover_style(from: StyleBoxFlat) -> StyleBoxFlat:
@@ -159,6 +199,50 @@ func _apply(precip: float, wind: float, vis: float, cloud: float) -> void:
 	var s := WeatherState.new()
 	s.precipitation = precip
 	s.wind_force = wind
+	s.wind_speed_ms = wind * 22.0
 	s.visibility = vis
 	s.cloud_cover = cloud
+	s.sea_state = wind
+	s.significant_wave_height_m = lerpf(0.25, 10.0, pow(s.sea_state, 1.65))
+	s.convection_index = 0.0
+	WorldWeather.set_blend_to_lighting_paused(true)
+	wl.apply_weather_state(s)
+
+
+func _apply_mood(mood_id: String) -> void:
+	var mood := WeatherProfileCatalog.mood(mood_id)
+	if mood.is_empty():
+		return
+	_apply_component_ids(mood)
+
+
+func _apply_components(selectors: Dictionary) -> void:
+	var ids := {}
+	for dimension in selectors.keys():
+		var choices := selectors[dimension] as OptionButton
+		ids[dimension] = str(choices.get_item_metadata(choices.selected))
+	_apply_component_ids(ids)
+
+
+func _apply_component_ids(ids: Dictionary) -> void:
+	var wl := get_node_or_null("/root/WeatherLighting") as WeatherLightingState
+	if wl == null:
+		return
+	var s := WeatherState.new()
+	s.component_ids = ids.duplicate()
+	s.cloud_cover = WeatherProfileCatalog.value_for_band("sky", str(ids.get("sky", "clear")), 0.5)
+	s.precipitation = WeatherProfileCatalog.value_for_band("precipitation", str(ids.get("precipitation", "none")), 0.5)
+	var fog := WeatherProfileCatalog.value_for_band("fog", str(ids.get("fog", "none")), 0.5)
+	s.visibility = 1.0 - fog
+	s.wind_force = WeatherProfileCatalog.value_for_band("wind", str(ids.get("wind", "calm")), 0.5)
+	s.wind_speed_ms = s.wind_force * 22.0
+	s.sea_state = WeatherProfileCatalog.value_for_band("sea", str(ids.get("sea", "calm")), 0.5)
+	s.significant_wave_height_m = lerpf(0.25, 10.0, pow(s.sea_state, 1.65))
+	s.convection_index = WeatherProfileCatalog.value_for_band(
+		"convection",
+		str(ids.get("convection", "none")),
+		0.5,
+	)
+	s.weather_cell_id = "debug:%s" % str(ids.values())
+	WorldWeather.set_blend_to_lighting_paused(true)
 	wl.apply_weather_state(s)

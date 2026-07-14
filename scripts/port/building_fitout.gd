@@ -9,6 +9,9 @@ static func build(layout: BuildingLayout, collision_enabled: bool = true) -> Nod
 	root.name = ROOT_NAME
 	if layout == null:
 		return root
+	var lighting := BuildingLighting.new()
+	lighting.name = "BuildingLighting"
+	root.add_child(lighting)
 	root.set_meta("building_blueprint_id", layout.blueprint_id)
 	var grid := layout.grid()
 	var collision_body: StaticBody3D = null
@@ -151,7 +154,10 @@ static func _add_brick_light(visual: Node3D, brick_id: String) -> void:
 	light.omni_range = float(entry.get("omni_range_m", 6.0))
 	light.omni_attenuation = 1.4
 	light.light_energy = float(entry.get("omni_energy", 2.8))
+	light.set_meta("building_light_base_energy", light.light_energy)
+	light.set_meta("building_light_base_volumetric", 0.45)
 	light.light_specular = 0.45
+	light.light_volumetric_fog_energy = 0.45
 	light.light_size = 0.12
 	light.shadow_enabled = false
 	if lens != null:
@@ -163,6 +169,7 @@ static func _add_brick_light(visual: Node3D, brick_id: String) -> void:
 		mat.emission = Color(1.0, 0.82, 0.5)
 		mat.emission_energy_multiplier = 2.4
 		lens.material_override = mat
+		lens.set_meta("building_lens_base_emission", 2.4)
 		lens.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	else:
 		light.position = Vector3(0.0, BuildingGrid.CELL_M * 0.35, 0.0)

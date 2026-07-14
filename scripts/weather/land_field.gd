@@ -37,6 +37,11 @@ static var _obb_half_z : PackedFloat32Array = PackedFloat32Array()
 static var _obb_rot_y  : PackedFloat32Array = PackedFloat32Array()
 static var _initialized: bool = false
 static var _layout: WorldLayout = null
+## Geography-only exposure cache. Coastal openness does not depend on game time,
+## so weather time-bucket misses must not redo 16 fetch rays every few seconds.
+static var _exposure_cache: Dictionary = {}
+const EXPOSURE_CACHE_CELL_M := 250.0
+const EXPOSURE_CACHE_LIMIT := 2048
 
 # ── Baked shelter texture (CPU-baked, GPU-sampled) ────────────────────────────
 static var _baked_shelter_texture: ImageTexture = null
@@ -62,6 +67,7 @@ static func initialize_from_layout(layout: WorldLayout) -> void:
 	assert(layout != null, "LandField requires a WorldLayout")
 	_clear_legacy_islands()
 	_layout = layout
+	_exposure_cache.clear()
 	_initialized = true
 	_bake_shelter_texture()
 
@@ -76,6 +82,7 @@ static func initialize_from_layout(layout: WorldLayout) -> void:
 static func _initialize_legacy(islands: Array) -> void:
 	_clear_legacy_islands()
 	_layout = null
+	_exposure_cache.clear()
 	for island in islands:
 		var center_v: Vector3 = island.get("center", Vector3.ZERO)
 		var center := Vector2(center_v.x, center_v.z)
@@ -245,16 +252,26 @@ static func directional_fetch(world_pos: Vector3, direction: Vector2) -> float:
 static func coastal_exposure(world_pos: Vector3) -> float:
 	if not _initialized:
 		return 1.0
+	var cache_key := Vector2i(
+		roundi(world_pos.x / EXPOSURE_CACHE_CELL_M),
+		roundi(world_pos.z / EXPOSURE_CACHE_CELL_M),
+	)
+	if _exposure_cache.has(cache_key):
+		return float(_exposure_cache[cache_key])
 	var coast_distance := distance_to_land(world_pos)
-	if coast_distance <= 0.0:
-		return 0.0
-	var fetch_sum := 0.0
-	for ray_index in range(FETCH_RAY_COUNT):
-		var angle := TAU * float(ray_index) / float(FETCH_RAY_COUNT)
-		fetch_sum += directional_fetch(world_pos, Vector2(cos(angle), sin(angle)))
-	var mean_fetch := fetch_sum / float(FETCH_RAY_COUNT)
-	var coastal_opening := smoothstep(80.0, COASTAL_DISTANCE_M, coast_distance)
-	return clampf(coastal_opening * pow(mean_fetch, 0.65), 0.0, 1.0)
+	var exposure := 0.0
+	if coast_distance > 0.0:
+		var fetch_sum := 0.0
+		for ray_index in range(FETCH_RAY_COUNT):
+			var angle := TAU * float(ray_index) / float(FETCH_RAY_COUNT)
+			fetch_sum += directional_fetch(world_pos, Vector2(cos(angle), sin(angle)))
+		var mean_fetch := fetch_sum / float(FETCH_RAY_COUNT)
+		var coastal_opening := smoothstep(80.0, COASTAL_DISTANCE_M, coast_distance)
+		exposure = clampf(coastal_opening * pow(mean_fetch, 0.65), 0.0, 1.0)
+	if _exposure_cache.size() >= EXPOSURE_CACHE_LIMIT:
+		_exposure_cache.clear()
+	_exposure_cache[cache_key] = exposure
+	return exposure
 
 
 ## Compatibility inverse of local wave shelter.

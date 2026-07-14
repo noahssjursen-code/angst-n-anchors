@@ -41,6 +41,12 @@ const HORIZON_DISCARD_HALF : float = MID_OCEAN_SIZE * 0.5 - 15.0
 
 ## Temporary A/B fallback while validating the generated clipmap in builds.
 @export var use_legacy_ocean := false
+## Expensive presentation features remain independently switchable for GPU
+## profiling and future quality presets.
+@export var enable_ssao := true
+@export var enable_glow := true
+@export var enable_volumetric_fog := true
+@export var enable_weather_post_fx := true
 
 var _ocean_shader_material: ShaderMaterial
 var _ocean_mid_material:    ShaderMaterial
@@ -50,6 +56,9 @@ var _sky_shader_material:   ShaderMaterial
 var _environment:           Environment
 var _sun:                   DirectionalLight3D
 var _fill_light:            DirectionalLight3D
+var _moon_light:            DirectionalLight3D
+var _screen_material:       ShaderMaterial
+var _screen_rect:           ColorRect
 var _ocean_mesh:            MeshInstance3D
 var _ocean_mesh_mid:        MeshInstance3D
 var _ocean_mesh_outer:      MeshInstance3D
@@ -58,6 +67,10 @@ var _fft_system:            Node # Use Node instead of FFTWaterSystem to avoid u
 var _wake_field:            OceanWakeField
 var _fft_maps_bound:        bool = false
 var _ocean_debug_false_color := false
+var _camera_water_signed_distance := 10.0
+var _underwater_environment_active := false
+var _underwater_camera: Camera3D
+var _above_water_camera_far := 0.0
 
 ## Tracks whether the baked LandField shelter texture is currently bound to
 ## the ocean shader, so we re-upload exactly once when LandField finishes
@@ -110,6 +123,30 @@ func get_ocean_debug_stats() -> Dictionary:
 	}
 
 
+func get_lighting_debug_state() -> Dictionary:
+	if _environment == null:
+		return {}
+	return {
+		"tonemap_mode": _environment.tonemap_mode,
+		"tonemap_exposure": _environment.tonemap_exposure,
+		"tonemap_white": _environment.tonemap_white,
+		"ssao_enabled": _environment.ssao_enabled,
+		"glow_enabled": _environment.glow_enabled,
+		"fog_density": _environment.fog_density,
+		"volumetric_fog_enabled": _environment.volumetric_fog_enabled,
+		"volumetric_fog_density": _environment.volumetric_fog_density,
+		"sun_energy": _sun.light_energy if _sun != null else 0.0,
+		"moon_energy": _moon_light.light_energy if _moon_light != null else 0.0,
+		"ambient_energy": _environment.ambient_light_energy,
+		"camera_water_signed_distance": _camera_water_signed_distance,
+		"camera_far": (
+			get_viewport().get_camera_3d().far
+			if get_viewport().get_camera_3d() != null
+			else 0.0
+		),
+	}
+
+
 func set_ocean_ring_debug(enabled: bool) -> void:
 	_ocean_debug_false_color = enabled
 	if _ocean_clipmap != null and is_instance_valid(_ocean_clipmap):
@@ -124,6 +161,7 @@ func _unhandled_key_input(event: InputEvent) -> void:
 
 func _process(_delta: float) -> void:
 	_follow_camera_xz()
+	_update_underwater_effect()
 	if _ocean_shader_material:
 		_ocean_shader_material.set_shader_parameter("wave_time",      WaveSurface.get_sim_time())
 		_ocean_shader_material.set_shader_parameter("wave_intensity", WaveSurface.wave_intensity)
@@ -209,6 +247,111 @@ func _follow_camera_xz() -> void:
 		_ocean_mesh_outer.position.z = pz
 
 
+func _update_underwater_effect() -> void:
+	if _screen_material == null:
+		return
+	var camera := get_viewport().get_camera_3d()
+	if camera == null:
+		_restore_underwater_camera_far()
+		_camera_water_signed_distance = 10.0
+		_screen_material.set_shader_parameter("camera_water_signed_distance", 10.0)
+		return
+
+	var surface_height := WaveSurface.WATER_LEVEL
+	var surface_normal := Vector3.UP
+	# FFT readback is useful only close to the waterline. Deep underwater or
+	# high above it, the mean plane is enough and avoids an unnecessary query.
+	if absf(camera.global_position.y - WaveSurface.WATER_LEVEL) < 8.0:
+		surface_height = WaveSurface.get_base_wave_height_at(
+			camera.global_position.x,
+			camera.global_position.z,
+		)
+		surface_normal = WaveSurface.get_surface_normal_at(
+			camera.global_position.x,
+			camera.global_position.z,
+		).normalized()
+		if surface_normal.y < 0.15:
+			surface_normal = Vector3.UP
+
+	var surface_point := Vector3(
+		camera.global_position.x,
+		surface_height,
+		camera.global_position.z,
+	)
+	_camera_water_signed_distance = (
+		camera.global_position - surface_point
+	).dot(surface_normal)
+	_update_underwater_environment(camera)
+
+	var viewport_size := get_viewport().get_visible_rect().size
+	if viewport_size.x < 2.0 or viewport_size.y < 2.0:
+		return
+	_screen_material.set_shader_parameter(
+		"ray_top_left",
+		camera.project_ray_normal(Vector2.ZERO),
+	)
+	_screen_material.set_shader_parameter(
+		"ray_top_right",
+		camera.project_ray_normal(Vector2(viewport_size.x, 0.0)),
+	)
+	_screen_material.set_shader_parameter(
+		"ray_bottom_left",
+		camera.project_ray_normal(Vector2(0.0, viewport_size.y)),
+	)
+	_screen_material.set_shader_parameter(
+		"ray_bottom_right",
+		camera.project_ray_normal(viewport_size),
+	)
+	_screen_material.set_shader_parameter("water_surface_normal", surface_normal)
+	_screen_material.set_shader_parameter(
+		"camera_water_signed_distance",
+		_camera_water_signed_distance,
+	)
+
+
+func _update_underwater_environment(camera: Camera3D) -> void:
+	if _environment == null:
+		return
+	var depth := -_camera_water_signed_distance
+	if depth > 0.02:
+		var depth_factor := smoothstep(0.02, 2.0, depth)
+		_underwater_environment_active = true
+		if _underwater_camera != camera:
+			_restore_underwater_camera_far()
+			_underwater_camera = camera
+			_above_water_camera_far = camera.far
+		# Hard culling backs up the fog so distant islands/terrain cannot remain
+		# readable as silhouettes through the post grade.
+		camera.far = minf(
+			_above_water_camera_far,
+			lerpf(140.0, 65.0, depth_factor),
+		)
+		# Depth-aware fog supplies actual short visibility range, unlike a flat
+		# overlay. Keep volumetrics off: underwater haze should be cheap/stable.
+		_environment.fog_enabled = true
+		_environment.fog_light_color = Color(0.008, 0.050, 0.026)
+		_environment.fog_density = lerpf(0.085, 0.18, depth_factor)
+		_environment.fog_aerial_perspective = 1.0
+		_environment.fog_sky_affect = 1.0
+		_environment.volumetric_fog_enabled = false
+	elif _underwater_environment_active:
+		_underwater_environment_active = false
+		_restore_underwater_camera_far()
+		# Restore the current atmospheric weather once, on exit.
+		_apply_weather_lighting()
+
+
+func _restore_underwater_camera_far() -> void:
+	if (
+		_underwater_camera != null
+		and is_instance_valid(_underwater_camera)
+		and _above_water_camera_far > 0.0
+	):
+		_underwater_camera.far = _above_water_camera_far
+	_underwater_camera = null
+	_above_water_camera_far = 0.0
+
+
 func _sync_wake_field() -> void:
 	if _wake_field == null or _wake_field.get_wake_texture() == null:
 		return
@@ -243,12 +386,21 @@ func _build_sky() -> void:
 	environ.ambient_light_source = Environment.AMBIENT_SOURCE_SKY
 	environ.ambient_light_energy = 0.18
 
-	environ.tonemap_mode     = Environment.TONE_MAPPER_FILMIC
-	environ.tonemap_exposure = 0.95
-	environ.tonemap_white    = 6.0
+	environ.tonemap_mode     = Environment.TONE_MAPPER_ACES
+	environ.tonemap_exposure = 1.0
+	environ.tonemap_white    = 2.8
 
-	environ.ssao_enabled = false
-	environ.glow_enabled = false
+	environ.ssao_enabled = enable_ssao
+	environ.ssao_radius = 1.4
+	environ.ssao_intensity = 1.25
+	environ.ssao_power = 1.15
+	environ.ssao_detail = 0.35
+	environ.glow_enabled = enable_glow
+	environ.glow_intensity = 0.85
+	environ.glow_strength = 0.75
+	environ.glow_bloom = 0.08
+	environ.glow_hdr_threshold = 1.25
+	environ.glow_hdr_scale = 1.6
 	environ.ssr_enabled  = false
 
 	environ.adjustment_enabled    = true
@@ -299,6 +451,15 @@ func _build_sky() -> void:
 	fill.sky_mode         = DirectionalLight3D.SKY_MODE_LIGHT_ONLY
 	add_child(fill)
 
+	var moon := DirectionalLight3D.new()
+	_moon_light = moon
+	moon.name = "MoonLight"
+	moon.light_color = Color(0.50, 0.62, 0.88)
+	moon.light_energy = 0.0
+	moon.shadow_enabled = false
+	moon.sky_mode = DirectionalLight3D.SKY_MODE_LIGHT_ONLY
+	add_child(moon)
+
 	# Apply initial sky uniforms so the shader has values before the ocean is ready.
 	_apply_weather_lighting()
 
@@ -312,11 +473,13 @@ func _build_screen_effects() -> void:
 	add_child(layer)
 
 	var rect              := ColorRect.new()
+	_screen_rect           = rect
 	rect.name             = "EffectsRect"
 	rect.set_anchors_preset(Control.PRESET_FULL_RECT)
 	rect.mouse_filter     = Control.MOUSE_FILTER_IGNORE
 	var mat               := ShaderMaterial.new()
 	mat.shader            = SCREEN_SHADER
+	_screen_material      = mat
 	rect.material         = mat
 	layer.add_child(rect)
 
@@ -435,6 +598,7 @@ func _connect_weather_lighting() -> void:
 
 
 func _exit_tree() -> void:
+	_restore_underwater_camera_far()
 	var weather := _get_weather()
 	if weather != null:
 		var cb := Callable(self, "_apply_weather_lighting")
@@ -446,19 +610,24 @@ func _apply_weather_lighting() -> void:
 	var weather := _get_weather()
 	var tod   := float(weather.get("time_of_day"))     if weather else 0.42
 	var sea   := float(weather.get("sea_state"))       if weather else 0.0
+	var air_wind := float(weather.get("wind_force"))   if weather else 0.0
 	var vis   := float(weather.get("visibility"))      if weather else 1.0
 	var cloud := float(weather.get("cloud_coverage"))  if weather else 0.0
 	var rain  := float(weather.get("rain_amount"))     if weather else 0.0
 	var storm := float(weather.get("storm_intensity")) if weather else 0.0
 
-	var elev_norm := -cos(tod * TAU)
-	var daylight  := smoothstep(-0.18, 0.55, elev_norm)
+	var solar := SolarCycle.sample(tod)
+	var daylight := float(solar["daylight"])
+	var direct_light := float(solar["direct_light"])
 	var fog_t     := 1.0 - vis
 
-	_apply_sun(tod, daylight, cloud, storm)
+	_apply_sun(solar, daylight, direct_light, cloud, storm)
+	_apply_exposure(daylight, cloud, storm, fog_t)
 	_apply_fog(fog_t, daylight, storm)
 	_apply_sky_shader(daylight, cloud, storm)
-	_apply_ocean_shader(daylight, cloud, rain, sea, storm, fog_t)
+	_apply_ocean_shader(daylight, cloud, rain, sea, air_wind, storm, fog_t)
+	_apply_screen_effects(daylight, cloud, rain, storm, fog_t)
+	Palette.set_wetness(smoothstep(0.08, 0.72, rain))
 
 	# Optional: Sync FFT parameters based on weather
 	if _fft_system:
@@ -469,24 +638,41 @@ func _apply_weather_lighting() -> void:
 		_fft_system.sync_weather(sea, storm, WaveSurface.short_wave_factor, wind_angle)
 
 
-func _apply_sun(tod: float, daylight: float, cloud: float, storm: float) -> void:
-	var elev_norm := -cos(tod * TAU)
+func _apply_sun(solar: Dictionary, daylight: float, direct_light: float, cloud: float, storm: float) -> void:
+	var sun_dir: Vector3 = solar["sun_direction"]
+	var moon_dir: Vector3 = solar["moon_direction"]
+	var sun_energy := 1.45 * direct_light * lerpf(1.0, 0.18, cloud)
 	if _sun != null:
 		# Sunrise +X (east), noon +Z (south), sunset −X (west).
 		# Matches NavigationAxes / chart (+X east, −Z north).
-		_sun.rotation_degrees = Vector3(-elev_norm * 55.0, 180.0 - tod * 360.0, 0.0)
-		_sun.light_energy     = lerpf(0.03, 1.6, daylight) * lerpf(1.0, 0.10, cloud)
+		_sun.basis = Basis.looking_at(-sun_dir, Vector3.UP)
+		_sun.light_energy     = sun_energy
 		_sun.light_color      = (
 			Color(1.0, 0.68, 0.42)
 			.lerp(Color(1.0, 0.95, 0.82), daylight)
 			.lerp(Color(0.48, 0.55, 0.68), storm)
 		)
 	if _fill_light != null:
-		_fill_light.light_energy = lerpf(0.18, 0.03, cloud) * lerpf(0.03, 1.0, daylight)
+		_fill_light.light_energy = lerpf(0.025, 0.16, daylight) * lerpf(1.0, 0.55, cloud)
+	if _moon_light != null:
+		_moon_light.basis = Basis.looking_at(-moon_dir, Vector3.UP)
+		_moon_light.light_energy = (
+			0.12 * float(solar["moonlight"]) * lerpf(1.0, 0.28, cloud)
+		)
 	if _environment != null:
 		_environment.ambient_light_energy = (
-			lerpf(0.006, 0.22, daylight * daylight) * lerpf(1.0, 0.52, cloud)
+			lerpf(0.085, 0.24, daylight * daylight) * lerpf(1.0, 0.62, cloud)
 		)
+
+
+func _apply_exposure(daylight: float, cloud: float, storm: float, fog_t: float) -> void:
+	if _environment == null:
+		return
+	## Deterministic adaptation avoids auto-exposure pumping between reflective
+	## ocean, white superstructures, and dark interiors.
+	var night_lift := lerpf(1.38, 1.0, daylight)
+	var weather_lift := cloud * 0.08 + storm * 0.06 + fog_t * 0.04
+	_environment.tonemap_exposure = clampf(night_lift + weather_lift, 0.9, 1.46)
 
 
 func _apply_fog(fog_t: float, daylight: float, storm: float) -> void:
@@ -500,26 +686,28 @@ func _apply_fog(fog_t: float, daylight: float, storm: float) -> void:
 	)
 	
 	# Traditional Screen-Space Fog (Handles skybox blending and distant occlusion)
+	# Keep the response soft: haze should read as atmosphere, not a white wall.
 	_environment.fog_light_color = base_fog_col
-	_environment.fog_density            = lerpf(0.0, 0.025, fog_t * fog_t)
-	_environment.fog_aerial_perspective = lerpf(0.0, 0.65, fog_t)
-	_environment.fog_sky_affect = lerpf(0.0, 0.85, fog_t * fog_t)
+	_environment.fog_density            = lerpf(0.0, 0.014, fog_t * fog_t)
+	_environment.fog_aerial_perspective = lerpf(0.0, 0.38, fog_t)
+	_environment.fog_sky_affect = lerpf(0.0, 0.48, fog_t * fog_t)
 
 	# Volumetric Fog (Physical 3D depth, light shafts, and realistic thickness).
 	# Godot runs the full 64³ froxel compute every frame as long as
 	# volumetric_fog_enabled = true — density only scales the visible
 	# contribution, not the compute cost. In clear weather we'd be paying ~2-4 ms
 	# for fog with zero visible effect, so we gate the whole pass on a small
-	# density threshold (~visibility 0.95). At that level the fog has zero
-	# perceptible contribution; toggling the pass off is free perf.
-	var vol_density := lerpf(0.0, 0.09, fog_t)
-	var want_volumetric := vol_density > 0.005
+	# density threshold. Mid fog should stay translucent; only dense bands crush.
+	const VOLUMETRIC_FOG_START := 0.16
+	var vol_amount := smoothstep(VOLUMETRIC_FOG_START, 0.78, fog_t)
+	var vol_density := 0.048 * vol_amount
+	var want_volumetric := enable_volumetric_fog and fog_t > VOLUMETRIC_FOG_START
 	_environment.volumetric_fog_enabled = want_volumetric
 	if want_volumetric:
 		_environment.volumetric_fog_albedo  = base_fog_col
 		_environment.volumetric_fog_density = vol_density
-		# Push the fog rendering distance out based on visibility
-		_environment.volumetric_fog_length  = lerpf(480.0, 120.0, fog_t)
+		# Keep fog farther out so near-field ships/ports stay readable.
+		_environment.volumetric_fog_length  = lerpf(520.0, 200.0, fog_t)
 
 
 func _apply_sky_shader(daylight: float, cloud: float, storm: float) -> void:
@@ -562,6 +750,20 @@ func _apply_sky_shader(daylight: float, cloud: float, storm: float) -> void:
 	_sky_shader_material.set_shader_parameter("storm_intensity",   storm)
 	_sky_shader_material.set_shader_parameter("sun_color",         Vector3(sun_col.r,  sun_col.g,  sun_col.b))
 	_sky_shader_material.set_shader_parameter("star_visibility",   clampf(star_vis, 0.0, 1.0))
+	_sky_shader_material.set_shader_parameter("daylight_factor",   daylight)
+
+
+func _apply_screen_effects(daylight: float, cloud: float, rain: float, storm: float, fog_t: float) -> void:
+	if _screen_material == null:
+		return
+	if _screen_rect != null:
+		_screen_rect.visible = enable_weather_post_fx
+	var active := 1.0 if enable_weather_post_fx else 0.0
+	_screen_material.set_shader_parameter("outline_strength", lerpf(0.025, 0.04, daylight) * active)
+	_screen_material.set_shader_parameter("grain_strength", lerpf(0.012, 0.024, 1.0 - daylight) * active)
+	_screen_material.set_shader_parameter("vignette_strength", lerpf(0.06, 0.13, storm) * active)
+	_screen_material.set_shader_parameter("weather_desaturation", clampf(cloud * 0.04 + storm * 0.13 + fog_t * 0.08, 0.0, 0.2) * active)
+	_screen_material.set_shader_parameter("rain_cool_shift", rain * 0.035 * active)
 
 
 ## Binds LandField's baked shelter texture to the ocean shader. The texture is
@@ -594,7 +796,15 @@ func _sync_land_shelter() -> void:
 	_shelter_texture_bound = true
 
 
-func _apply_ocean_shader(daylight: float, cloud: float, rain: float, wind: float, storm: float, fog_t: float) -> void:
+func _apply_ocean_shader(
+		daylight: float,
+		cloud: float,
+		rain: float,
+		sea_state: float,
+		air_wind: float,
+		storm: float,
+		fog_t: float,
+) -> void:
 	if _ocean_shader_material == null:
 		return
 	var fog_w := fog_t * fog_t
@@ -608,14 +818,14 @@ func _apply_ocean_shader(daylight: float, cloud: float, rain: float, wind: float
 	var shallow_w := ocean_color * lerpf(1.35, 1.85, rain)
 
 	var fog_murk := Color(0.035, 0.040, 0.048)
-	shallow_w = shallow_w.lerp(fog_murk.lightened(0.05), fog_w * 0.85)
-	deep      = deep.lerp(fog_murk.darkened(0.08), fog_w * 0.90)
+	shallow_w = shallow_w.lerp(fog_murk.lightened(0.05), fog_w * 0.55)
+	deep      = deep.lerp(fog_murk.darkened(0.08), fog_w * 0.60)
 
-	var foam_driver  := clampf(rain * 0.55 + wind * 0.7 + storm * 0.45, 0.0, 1.0)
-	var steep_driver := clampf(maxf(storm, wind * 0.75), 0.0, 1.0)
+	var foam_driver  := clampf(rain * 0.45 + sea_state * 0.72 + storm * 0.25, 0.0, 1.0)
+	var steep_driver := clampf(maxf(sea_state * 0.82, storm * 0.55), 0.0, 1.0)
 
 	## Capillary chop stays subtle — high gain reads as hammered metal up close.
-	var chop_val := lerpf(0.10, 0.22, clampf(wind * 1.05 + storm * 0.35 + rain * 0.25, 0.0, 1.0))
+	var chop_val := lerpf(0.10, 0.22, clampf(air_wind * 0.85 + sea_state * 0.28 + rain * 0.18, 0.0, 1.0))
 	chop_val *= lerpf(1.0, 0.72, fog_w)
 
 	var top_col := (
@@ -630,9 +840,9 @@ func _apply_ocean_shader(daylight: float, cloud: float, rain: float, wind: float
 	)
 
 	var sun_dir := _celestial_dir(0.0)
-	var sun_col_base := Color(1.0, 0.62, 0.30).lerp(Color(1.0, 0.96, 0.88), daylight)
-	var sun_energy := lerpf(0.03, 1.6, daylight) * lerpf(1.0, 0.10, cloud)
-	var sun_col := sun_col_base * sun_energy
+	## Chromaticity only. Direct-light energy belongs to the DirectionalLight3D;
+	## multiplying it into the ocean glint a second time blew out noon highlights.
+	var sun_col := Color(1.0, 0.62, 0.30).lerp(Color(1.0, 0.96, 0.88), daylight)
 
 	_ocean_shader_material.set_shader_parameter("shallow_albedo",     Vector3(shallow_w.r, shallow_w.g, shallow_w.b))
 	_ocean_shader_material.set_shader_parameter("deep_albedo",        Vector3(deep.r, deep.g, deep.b))
@@ -695,14 +905,12 @@ func _apply_ocean_shader(daylight: float, cloud: float, rain: float, wind: float
 func _celestial_dir(tod_offset: float) -> Vector3:
 	var weather := _get_weather()
 	var tod     := float(weather.get("time_of_day")) if weather else 0.42
-	var t       := fmod(tod + tod_offset, 1.0)
-	var elev    := -cos(t * TAU)
-	var rot     := Basis.from_euler(Vector3(
-		deg_to_rad(-elev * 55.0),
-		deg_to_rad(180.0 - t * 360.0),
-		0.0,
-	))
-	return -(rot * Vector3(0.0, 0.0, -1.0))
+	var solar := SolarCycle.sample(tod)
+	if is_equal_approx(absf(tod_offset), 0.5):
+		return solar["moon_direction"] as Vector3
+	if is_zero_approx(tod_offset):
+		return solar["sun_direction"] as Vector3
+	return SolarCycle.sample(wrapf(tod + tod_offset, 0.0, 1.0))["sun_direction"] as Vector3
 
 
 func _get_weather() -> Node:

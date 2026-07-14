@@ -1,5 +1,5 @@
 shader_type spatial;
-render_mode diffuse_burley, specular_disabled;
+render_mode diffuse_burley, specular_disabled, cull_disabled;
 
 #define OCEAN_CASCADE_COUNT 3
 #define OCEAN_FOAM 1

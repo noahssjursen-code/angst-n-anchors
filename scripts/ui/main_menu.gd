@@ -315,6 +315,7 @@ func _on_home_port_confirmed(port_id: String) -> void:
 		session.data.world_context = {
 			"seed": _pending_seed,
 			"generation_version": gen_version,
+			"weather_generation_version": 3,
 			"layout_checksum": preview_checksum,
 		}
 		# Save without letting an empty live-world snapshot wipe the seed again.

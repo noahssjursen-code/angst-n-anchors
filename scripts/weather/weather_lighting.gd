@@ -46,8 +46,6 @@ const WIND_SPEED_MAX     : float = 30.0  # m/s. ~58 knots, Beaufort 10/11
 @export_range(0.0, 1.0, 0.001) var precipitation: float = 0.0:
 	set(v):
 		precipitation = clampf(v, 0.0, 1.0)
-		if not _suppress_wave_sync:
-			_sync_wave_intensity()
 		if not _suppress_emit:
 			state_changed.emit()
 
@@ -58,8 +56,6 @@ const WIND_SPEED_MAX     : float = 30.0  # m/s. ~58 knots, Beaufort 10/11
 @export_range(0.0, 1.0, 0.001) var wind_force: float = 0.0:
 	set(v):
 		wind_force = clampf(v, 0.0, 1.0)
-		if not _suppress_wave_sync:
-			_sync_wave_intensity()
 		if not _suppress_emit:
 			state_changed.emit()
 
@@ -78,6 +74,10 @@ const WIND_SPEED_MAX     : float = 30.0  # m/s. ~58 knots, Beaufort 10/11
 @export var temperature_c: float = 15.0
 @export_range(0.0, 1.0, 0.001) var exposure: float = 1.0
 @export_range(0.0, 1.0, 0.001) var front_intensity: float = 0.0
+@export_range(0.0, 1.0, 0.001) var convection_index: float = 0.0
+@export_range(0.0, 1.0, 0.001) var humidity: float = 0.5
+@export var weather_cell_id: String = ""
+@export var component_ids: Dictionary = {}
 @export var zone_label: String = "Open ocean"
 @export var front_label: String = ""
 
@@ -119,11 +119,11 @@ var wind_velocity_ms: Vector3:
 ## Effective sky cloud opacity 0–1: explicit `cloud_cover` plus rain-grey when precip is high.
 ## Wind does **not** add fake overcast (dry squalls stay visually clear).
 var cloud_coverage: float:
-	get: return clampf(maxf(cloud_cover, precipitation * 0.88), 0.0, 1.0)
+	get: return cloud_cover
 
 ## Rain visual amount 0–1: only appears past the first 30% precipitation.
 var rain_amount: float:
-	get: return smoothstep(0.30, 1.0, precipitation)
+	get: return smoothstep(0.18, 1.0, precipitation)
 
 ## Thunder / lightning 0–1: driven by the *combined* storminess of the
 ## weather. Heavy rain alone (calm-air thunderstorm) ramps it up, but a
@@ -133,14 +133,13 @@ var rain_amount: float:
 ## the heart of a deep low; now the gate opens earlier and tracks the joint
 ## storm signal.
 var thunder_intensity: float:
-	get:
-		var rain_drive := smoothstep(0.35, 0.85, precipitation)
-		var wind_drive := smoothstep(0.55, 0.90, wind_force) * 0.45
-		return clampf(rain_drive + wind_drive, 0.0, 1.0)
+	get: return convection_index
 
 ## Storm darkness 0–1: sky/ocean grimness driven primarily by heavy rain, allowing storms without huge waves.
 var storm_intensity: float:
-	get: return clampf(smoothstep(0.45, 1.0, precipitation) + (precipitation * wind_force * 0.2), 0.0, 1.0)
+	get:
+		var rain_darkness := smoothstep(0.48, 1.0, precipitation) * cloud_cover
+		return maxf(rain_darkness, convection_index)
 
 ## Fog density 0–1 (inverted visibility).
 var fog_density: float:
@@ -165,11 +164,10 @@ func _ready() -> void:
 	_sync_wave_intensity()
 
 
-## Same sun-elevation daylight curve WorldRenderer uses for sun/ambient.
-## 0 at night → 1 near noon.
+## Shared solar daylight used by sky, sun, exposure, and artificial lights.
+## Includes long Norwegian maritime twilight instead of a fixed 06–18 day.
 func daylight_factor() -> float:
-	var elev_norm := -cos(time_of_day * TAU)
-	return smoothstep(-0.18, 0.55, elev_norm)
+	return SolarCycle.daylight_factor(time_of_day)
 
 
 ## Multiplier for artificial light_energy / emission. Night stays 1.0; noon
@@ -230,6 +228,10 @@ func get_weather_state() -> WeatherState:
 	s.temperature_c = temperature_c
 	s.exposure = exposure
 	s.front_intensity = front_intensity
+	s.convection_index = convection_index
+	s.humidity = humidity
+	s.weather_cell_id = weather_cell_id
+	s.component_ids = component_ids.duplicate()
 	s.zone_label = zone_label
 	s.front_label = front_label
 	return s
@@ -239,8 +241,11 @@ func get_weather_state() -> WeatherState:
 ## Bulk-updates all axes then emits `state_changed` once + resyncs waves
 ## once — without the suppression flags this fired multiple redundant emits, each
 ## triggering a full sky/sun/ocean shader-uniform reapply in WorldRenderer.
-func apply_weather_state(next: WeatherState) -> void:
+func apply_weather_state(next: WeatherState, emit_epsilon: float = 0.0) -> void:
 	if next == null:
+		return
+	var next_sea := next.sea_state if next.sea_state >= 0.0 else next.wind_force
+	if emit_epsilon > 0.0 and _near_weather_state(next, next_sea, emit_epsilon):
 		return
 	_suppress_emit      = true
 	_suppress_wave_sync = true
@@ -249,13 +254,17 @@ func apply_weather_state(next: WeatherState) -> void:
 	wind_speed_ms  = next.wind_speed_ms
 	visibility     = next.visibility
 	cloud_cover    = next.cloud_cover
-	sea_state      = next.sea_state if next.sea_state >= 0.0 else next.wind_force
+	sea_state      = next_sea
 	significant_wave_height_m = next.significant_wave_height_m
 	wind_dir = next.wind_direction
 	pressure_hpa = next.pressure_hpa
 	temperature_c = next.temperature_c
 	exposure = next.exposure
 	front_intensity = next.front_intensity
+	convection_index = next.convection_index
+	humidity = next.humidity
+	weather_cell_id = next.weather_cell_id
+	component_ids = next.component_ids.duplicate()
 	zone_label = next.zone_label
 	front_label = next.front_label
 	_suppress_wave_sync = false
@@ -265,10 +274,23 @@ func apply_weather_state(next: WeatherState) -> void:
 
 
 ## Convenience for drift / biome edges: blend current weather toward target (weight 1 = adopt target).
-func blend_towards(target: WeatherState, weight: float) -> void:
+func blend_towards(target: WeatherState, weight: float, emit_epsilon: float = 0.0) -> void:
 	if target == null:
 		return
-	apply_weather_state(WeatherState.lerp_states(get_weather_state(), target, weight))
+	apply_weather_state(WeatherState.lerp_states(get_weather_state(), target, weight), emit_epsilon)
+
+
+func _near_weather_state(next: WeatherState, next_sea: float, epsilon: float) -> bool:
+	return (
+		absf(precipitation - next.precipitation) < epsilon
+		and absf(wind_force - next.wind_force) < epsilon
+		and absf(wind_speed_ms - next.wind_speed_ms) < epsilon * 30.0
+		and absf(visibility - next.visibility) < epsilon
+		and absf(cloud_cover - next.cloud_cover) < epsilon
+		and absf(sea_state - next_sea) < epsilon
+		and absf(convection_index - next.convection_index) < epsilon
+		and absf(exposure - next.exposure) < epsilon
+	)
 
 func bump_time(delta: float) -> void:
 	var clock := get_node_or_null("/root/WorldClock")

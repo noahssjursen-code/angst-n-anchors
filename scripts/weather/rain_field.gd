@@ -4,7 +4,6 @@ extends Node3D
 ## Camera-following rain volume driven by `precipitation` / `rain_amount` on WeatherLighting.
 ## Uses procedural streak meshes only: no imported textures or VFX assets.
 
-@export_range(0.0, 1.0, 0.001) var rain_start: float = 0.58
 @export var max_amount: int = 1800
 @export var field_extents: Vector3 = Vector3(34.0, 12.0, 34.0)
 @export var height_above_camera: float = 7.0
@@ -80,16 +79,15 @@ func _apply_weather() -> void:
 	if _particles == null or _process_material == null:
 		return
 
-	var precip   := 0.0
+	var rain_amount := 0.0
 	var wind     := 0.0
 	var wind_dir := Vector3(-1.0, 0.0, 0.0)
 	var weather  := _weather_lighting()
 	if weather != null:
-		precip   = float(weather.get("precipitation"))
+		rain_amount = float(weather.get("rain_amount"))
 		wind     = float(weather.get("wind_force"))
 		wind_dir = weather.get("wind_dir") as Vector3
 
-	var rain_amount := smoothstep(rain_start, 1.0, precip)
 	_particles.emitting = rain_amount > 0.01
 	_particles.amount_ratio = rain_amount
 

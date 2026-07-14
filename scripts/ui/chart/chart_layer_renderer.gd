@@ -133,6 +133,18 @@ func overlay_readout(world: Vector2, layers: ChartLayerManager, game_hours: floa
 			float(data.get("pressure", 1013.0)),
 			roundi(float(data.get("cloud_cover", 0.0)) * 100.0),
 		])
+		rows.append("Rain %d%%   Fog %d%%   Waves %.1f m" % [
+			roundi(float(data.get("precipitation", 0.0)) * 100.0),
+			roundi((1.0 - float(data.get("visibility", 1.0))) * 100.0),
+			float(data.get("significant_wave_height_m", 0.25)),
+		])
+		var components: Dictionary = data.get("component_ids", {})
+		if not components.is_empty():
+			rows.append("%s · %s · %s" % [
+				WeatherProfileCatalog.label_for_band("sky", str(components.get("sky", ""))),
+				WeatherProfileCatalog.label_for_band("precipitation", str(components.get("precipitation", ""))),
+				WeatherProfileCatalog.label_for_band("sea", str(components.get("sea", ""))),
+			])
 	if layers.is_visible("fishing"):
 		var zone := fishing.sample_at(world, game_hours)
 		rows.append(

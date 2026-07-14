@@ -1,5 +1,7 @@
 class_name AtmosphericEffects
 extends Node3D
+signal lightning_strike(intensity: float, distance_m: float)
+
 
 ## Runtime-only atmospheric layer: rain particles, lightning, weather audio, and debug HUD.
 ## Reads weather state from the WeatherLighting autoload. No world or port knowledge.
@@ -10,18 +12,19 @@ const WEATHER_AUDIO_SCRIPT := preload("res://scripts/weather/weather_audio_syste
 
 var _lightning_light:      DirectionalLight3D
 var _lightning_flash_rect: ColorRect
-var _lightning_cooldown:   float = 2.0
 var _lightning_phase:      int   = 0   # 0=idle  1=flash1  2=gap  3=flash2
 var _lightning_phase_t:    float = 0.0
+var _active_bolt:          float = 0.0
+var _last_lightning_window := -9223372036854775808
 
-const PRESENTATION_TICK: float = 0.5
-## Time-domain hysteresis: roughly 19 seconds half-life at the normal cadence,
-## faster near land so entering/leaving shelter remains legible.
-const PRESENTATION_WEIGHT: float = 0.018
-## When the boat is hugging the shore the field can step hard (you cross
-## the harbour edge and shelter goes 1→0). Cap how much faster lerping gets.
-const SHORE_LERP_BOOST : float = 0.035
+const PRESENTATION_TICK: float = 1.0
+## Steady blend toward the composed sample. No harbour-specific grace ramp —
+## join snaps to the live sample on the first tick.
+const PRESENTATION_WEIGHT: float = 0.08
+## Skip lighting/VFX fan-out when the blend moved less than this.
+const PRESENTATION_EMIT_EPSILON := 0.004
 var _presentation_timer: float = 0.0
+var _presentation_primed: bool = false
 
 
 func _ready() -> void:
@@ -71,6 +74,8 @@ func _spawn_weather_audio() -> void:
 	var audio      := WEATHER_AUDIO_SCRIPT.new()
 	audio.name     = "WeatherAudio"
 	add_child(audio)
+	if audio.has_method("_on_lightning_strike"):
+		lightning_strike.connect(Callable(audio, "_on_lightning_strike"))
 
 
 func _spawn_weather_hud() -> void:
@@ -80,43 +85,47 @@ func _spawn_weather_hud() -> void:
 
 
 func _update_lightning(delta: float) -> void:
-	var thunder := 0.0
 	var daylight := 0.5
 	var w := _get_weather()
-	if w:
-		thunder = float(w.get("thunder_intensity"))
-		var tod := float(w.get("time_of_day"))
-		var elev_norm := -cos(tod * TAU)
-		daylight = smoothstep(-0.18, 0.55, elev_norm)
-
-	var bolt := thunder * lerpf(0.12, 1.0, daylight)
-
-	# Slightly lower than the old 0.08 floor — pairs with the new wider
-	# thunder formula so distant squalls still get the occasional flicker
-	# instead of being totally silent.
-	if bolt < 0.05:
+	if w != null:
+		if w.has_method("daylight_factor"):
+			daylight = float(w.call("daylight_factor"))
+	var convection := float(w.get("convection_index")) if w != null else 0.0
+	if convection < 0.22:
 		if _lightning_light:      _lightning_light.light_energy = 0.0
 		if _lightning_flash_rect: _lightning_flash_rect.color.a = 0.0
 		_lightning_phase    = 0
-		_lightning_cooldown = randf_range(3.0, 8.0)
+		_active_bolt = 0.0
 		return
 
 	if _lightning_phase == 0:
-		_lightning_cooldown -= delta
-		if _lightning_cooldown <= 0.0:
-			if _lightning_light:
-				_lightning_light.rotation_degrees = Vector3(
-					randf_range(-70.0, -30.0),
-					randf_range(0.0, 360.0),
-					0.0
-				)
-			_lightning_phase    = 1
-			_lightning_phase_t  = 0.0
-			# Cooldown is inversely proportional to bolt strength, with a
-			# 3 s floor so peak storms flicker like a real thunderstorm
-			# instead of strobing. Light storms get a long quiet between
-			# strikes; heavy storms still feel active.
-			_lightning_cooldown = maxf(3.0, randf_range(4.0, 14.0) / maxf(bolt, 0.05))
+		var game_hours := WeatherField.current_game_time()
+		var window := WeatherEventClock.window_at(game_hours)
+		if window == _last_lightning_window:
+			return
+		_last_lightning_window = window
+		var cell_id := str(w.get("weather_cell_id"))
+		var event := WeatherEventClock.lightning_for_window(
+			WeatherField.world_seed,
+			cell_id,
+			window,
+			convection,
+		)
+		if not bool(event.get("occurs", false)):
+			return
+		_active_bolt = float(event.get("intensity", 0.0)) * lerpf(0.35, 1.0, daylight)
+		if _lightning_light:
+			_lightning_light.rotation_degrees = Vector3(
+				-50.0,
+				float(event.get("bearing_degrees", 0.0)),
+				0.0,
+			)
+		_lightning_phase = 1
+		_lightning_phase_t = 0.0
+		lightning_strike.emit(
+			_active_bolt,
+			float(event.get("distance_m", 1000.0)),
+		)
 		return
 
 	_lightning_phase_t += delta
@@ -124,8 +133,8 @@ func _update_lightning(delta: float) -> void:
 	match _lightning_phase:
 		1: # First flash — sharp spike, quick fade.
 			var fade := 1.0 - minf(_lightning_phase_t / 0.07, 1.0)
-			if _lightning_light:      _lightning_light.light_energy = fade * 9.0 * bolt
-			if _lightning_flash_rect: _lightning_flash_rect.color.a = fade * 0.40 * bolt
+			if _lightning_light:      _lightning_light.light_energy = fade * 9.0 * _active_bolt
+			if _lightning_flash_rect: _lightning_flash_rect.color.a = fade * 0.40 * _active_bolt
 			if _lightning_phase_t > 0.07:
 				_lightning_phase   = 2
 				_lightning_phase_t = 0.0
@@ -137,8 +146,8 @@ func _update_lightning(delta: float) -> void:
 				_lightning_phase_t = 0.0
 		3: # Second flash — dimmer, slightly longer.
 			var fade := 1.0 - minf(_lightning_phase_t / 0.10, 1.0)
-			if _lightning_light:      _lightning_light.light_energy = fade * 5.5 * bolt
-			if _lightning_flash_rect: _lightning_flash_rect.color.a = fade * 0.24 * bolt
+			if _lightning_light:      _lightning_light.light_energy = fade * 5.5 * _active_bolt
+			if _lightning_flash_rect: _lightning_flash_rect.color.a = fade * 0.24 * _active_bolt
 			if _lightning_phase_t > 0.10:
 				if _lightning_light:      _lightning_light.light_energy = 0.0
 				if _lightning_flash_rect: _lightning_flash_rect.color.a = 0.0
@@ -154,11 +163,13 @@ func _tick_local_presentation() -> void:
 	if boat_pos.x == INF:
 		return
 	var target := WorldWeather.sample_at(boat_pos).to_weather_state()
-	var exposure := target.exposure
-
-	# Composition is authoritative; this node only time-smooths the local view.
-	var weight := lerpf(PRESENTATION_WEIGHT, SHORE_LERP_BOOST, 1.0 - exposure)
-	WeatherLighting.blend_towards(target, weight)
+	# First live sample snaps — avoid the old clear→weather / weather→harbour-clear
+	# grace fade that made ports look artificially fair for the first minute.
+	if not _presentation_primed:
+		WeatherLighting.apply_weather_state(target)
+		_presentation_primed = true
+		return
+	WeatherLighting.blend_towards(target, PRESENTATION_WEIGHT, PRESENTATION_EMIT_EPSILON)
 
 
 func _get_boat_position() -> Vector3:

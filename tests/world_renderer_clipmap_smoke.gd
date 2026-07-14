@@ -27,6 +27,47 @@ func _run() -> void:
 	assert(renderer.get_node("OceanClipmap").get_child_count() == 9)
 	assert(is_equal_approx(renderer.get_node("OceanClipmap").position.x, 17.25))
 	assert(is_equal_approx(renderer.get_node("OceanClipmap").position.z, -31.5))
+	var lighting: Dictionary = renderer.get_lighting_debug_state()
+	assert(int(lighting["tonemap_mode"]) == Environment.TONE_MAPPER_ACES)
+	assert(float(lighting["tonemap_white"]) <= 3.0)
+	assert(bool(lighting["ssao_enabled"]))
+	assert(bool(lighting["glow_enabled"]))
+	assert(float(lighting["ambient_energy"]) >= 0.04)
+	var weather := root.get_node_or_null("WeatherLighting")
+	if weather != null:
+		weather.set("visibility", 0.96)
+		await process_frame
+		lighting = renderer.get_lighting_debug_state()
+		assert(not bool(lighting["volumetric_fog_enabled"]))
+		weather.set("visibility", 0.88)
+		await process_frame
+		lighting = renderer.get_lighting_debug_state()
+		assert(not bool(lighting["volumetric_fog_enabled"]))
+		weather.set("visibility", 0.80)
+		await process_frame
+		lighting = renderer.get_lighting_debug_state()
+		assert(bool(lighting["volumetric_fog_enabled"]))
+		assert(float(lighting["volumetric_fog_density"]) < 0.01)
+		weather.set("visibility", 1.0)
+		await process_frame
+
+	# Camera crossing the wave surface must drive the underwater split in both
+	# directions; the ocean itself remains double-sided for the submerged view.
+	var above_water_far := camera.far
+	camera.position.y = WaveSurface.WATER_LEVEL + 1.0
+	await process_frame
+	lighting = renderer.get_lighting_debug_state()
+	assert(float(lighting["camera_water_signed_distance"]) > 0.0)
+	camera.position.y = WaveSurface.WATER_LEVEL - 1.0
+	await process_frame
+	lighting = renderer.get_lighting_debug_state()
+	assert(float(lighting["camera_water_signed_distance"]) < 0.0)
+	assert(float(lighting["fog_density"]) >= 0.03)
+	assert(not bool(lighting["volumetric_fog_enabled"]))
+	assert(float(lighting["camera_far"]) <= 140.0)
+	camera.position.y = 8.0
+	await process_frame
+	assert(is_equal_approx(camera.far, above_water_far))
 
 	var fft := renderer.get_node("FFTWaterSystem")
 	var fft_stats: Dictionary = fft.get_debug_stats()

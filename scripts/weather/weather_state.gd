@@ -30,6 +30,11 @@ extends Resource
 @export var temperature_c: float = 15.0
 @export_range(0.0, 1.0, 0.001) var exposure: float = 1.0
 @export_range(0.0, 1.0, 0.001) var front_intensity: float = 0.0
+## Independent convective potential. The only authority for lightning/thunder.
+@export_range(0.0, 1.0, 0.001) var convection_index: float = 0.0
+@export_range(0.0, 1.0, 0.001) var humidity: float = 0.5
+@export var weather_cell_id: String = ""
+@export var component_ids: Dictionary = {}
 @export var zone_label: String = "Open ocean"
 @export var front_label: String = ""
 
@@ -80,6 +85,10 @@ static func lerp_states(a: WeatherState, b: WeatherState, t: float) -> WeatherSt
 	o.temperature_c = lerpf(a.temperature_c, b.temperature_c, t)
 	o.exposure = lerpf(a.exposure, b.exposure, t)
 	o.front_intensity = lerpf(a.front_intensity, b.front_intensity, t)
+	o.convection_index = lerpf(a.convection_index, b.convection_index, t)
+	o.humidity = lerpf(a.humidity, b.humidity, t)
+	o.weather_cell_id = b.weather_cell_id if t >= 0.5 else a.weather_cell_id
+	o.component_ids = (b.component_ids if t >= 0.5 else a.component_ids).duplicate()
 	o.zone_label = b.zone_label if t >= 0.5 else a.zone_label
 	o.front_label = b.front_label if t >= 0.5 else a.front_label
 	return o

@@ -27,7 +27,7 @@ var mesh_data: Dictionary = {}:
 		if is_node_ready():
 			rebuild()
 
-@export var mesh_roughness: float = 0.96:
+@export var mesh_roughness: float = 0.85:
 	set(v):
 		if is_equal_approx(mesh_roughness, v):
 			return
@@ -42,6 +42,16 @@ var mesh_data: Dictionary = {}:
 		mesh_metallic = v
 		if is_node_ready():
 			rebuild()
+
+@export var mesh_material_tag: String = "":
+	set(v):
+		if mesh_material_tag == v:
+			return
+		mesh_material_tag = v
+		if is_node_ready():
+			rebuild()
+
+@export var material_exposed_to_weather := true
 
 ## Single uniform scale factor for the mesh. No independent X/Y/Z stretching.
 @export var absolute_scale: float = 1.0:
@@ -314,6 +324,18 @@ func _build_mesh(params: Dictionary) -> void:
 		mesh_roughness, 
 		mesh_metallic
 	)
+	if not mesh_material_tag.is_empty():
+		var fallback := {
+			"color": mesh_color,
+			"roughness": mesh_roughness,
+			"metallic": mesh_metallic,
+		}
+		mi.material_override = Palette.make_tagged(
+			mesh_material_tag,
+			fallback,
+			false,
+			material_exposed_to_weather,
+		)
 	
 	mi.scale = params["scale"]
 	mi.rotation_degrees = mesh_rotation_degrees

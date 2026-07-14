@@ -19,7 +19,12 @@ static func roll_seed() -> int:
 	return seed_val
 
 
-static func apply_seed(seed_val: int, version: int = 0, checksum: String = "") -> void:
+static func apply_seed(
+		seed_val: int,
+		version: int = 0,
+		checksum: String = "",
+		weather_version: int = 3,
+) -> void:
 	var tree := Engine.get_main_loop() as SceneTree
 	if tree == null or tree.root == null:
 		return
@@ -29,7 +34,7 @@ static func apply_seed(seed_val: int, version: int = 0, checksum: String = "") -
 	var gen_version := version
 	if gen_version <= 0:
 		gen_version = int(settings.get("map_generation_version"))
-	settings.call("set_world_generation_context", seed_val, gen_version, checksum)
+	settings.call("set_world_generation_context", seed_val, gen_version, checksum, weather_version)
 
 
 static func apply_player_world_context(player: PlayerData) -> void:
@@ -52,10 +57,19 @@ static func apply_player_world_context(player: PlayerData) -> void:
 		# the captain's seed/checksum and adopting v5 is safe.
 		ctx["generation_version"] = WorldLayoutGenerator.GENERATION_VERSION
 		player.world_context = ctx
+	# Legacy saves without an explicit weather version, or an older fog
+	# contract, adopt the current forecast instead of keeping obsolete density.
+	const CURRENT_WEATHER_VERSION := 3
+	var weather_version := int(ctx.get("weather_generation_version", CURRENT_WEATHER_VERSION))
+	if not ctx.has("weather_generation_version") or weather_version != CURRENT_WEATHER_VERSION:
+		weather_version = CURRENT_WEATHER_VERSION
+		ctx["weather_generation_version"] = weather_version
+		player.world_context = ctx
 	apply_seed(
 		seed_val,
 		int(ctx.get("generation_version", 0)),
 		str(ctx.get("layout_checksum", "")),
+		weather_version,
 	)
 
 
@@ -63,7 +77,12 @@ static func apply_mp_world_options(options: Dictionary) -> int:
 	var seed_val := int(options.get("world_seed", 42))
 	if seed_val <= 0:
 		seed_val = 42
-	apply_seed(seed_val)
+	apply_seed(
+		seed_val,
+		int(options.get("generation_version", 0)),
+		str(options.get("layout_checksum", "")),
+		int(options.get("weather_generation_version", 3)),
+	)
 	return seed_val
 
 

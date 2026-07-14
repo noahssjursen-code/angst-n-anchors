@@ -105,6 +105,9 @@ void vertex() {
 
 void fragment() {
 	vec3 normal_world = normalize(v_world_normal);
+	if (!FRONT_FACING) {
+		normal_world = -normal_world;
+	}
 #if OCEAN_WAKE
 	vec2 wake_sample = vec2(0.0);
 	if (wake_field_extent > 0.0) {

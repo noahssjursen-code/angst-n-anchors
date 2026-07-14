@@ -1,6 +1,10 @@
 @tool
 class_name LighthouseBuilding
 extends Node3D
+const BEAM_LIGHT_ENERGY := 220.0
+const BEAM_VOLUMETRIC_ENERGY := 420.0
+const LANTERN_ENERGY := 12.0
+
 
 ## Procedural lighthouse. Rotating beam uses volumetric spotlights.
 
@@ -72,11 +76,9 @@ func _process(delta: float) -> void:
 		return
 
 	var fog = float(weather.get("fog_density"))
-	var time = float(weather.get("time_of_day"))
-
-	# Night factor: time_of_day is 0.0 to 1.0. 0.5 is noon.
-	var dist_from_noon = abs(time - 0.5)
-	var night_factor = smoothstep(0.15, 0.35, dist_from_noon)
+	var daylight := float(weather.call("daylight_factor")) \
+		if weather.has_method("daylight_factor") else 0.0
+	var night_factor := 1.0 - daylight
 	var fog_factor = smoothstep(0.1, 0.4, fog)
 	# Fog reinforces beams at night/twilight only — never turns the lamp on at noon.
 	var raw_factor: float = night_factor * (1.0 + fog_factor)
@@ -105,13 +107,13 @@ func _process(delta: float) -> void:
 	if weather.has_method("artificial_volumetric_scale"):
 		vol_scale = float(weather.call("artificial_volumetric_scale"))
 	if _spot1:
-		_spot1.light_energy = 400.0 * active_factor * light_scale
-		_spot1.light_volumetric_fog_energy = 1500.0 * active_factor * vol_scale
+		_spot1.light_energy = BEAM_LIGHT_ENERGY * active_factor * light_scale
+		_spot1.light_volumetric_fog_energy = BEAM_VOLUMETRIC_ENERGY * active_factor * vol_scale
 	if _spot2:
-		_spot2.light_energy = 400.0 * active_factor * light_scale
-		_spot2.light_volumetric_fog_energy = 1500.0 * active_factor * vol_scale
+		_spot2.light_energy = BEAM_LIGHT_ENERGY * active_factor * light_scale
+		_spot2.light_volumetric_fog_energy = BEAM_VOLUMETRIC_ENERGY * active_factor * vol_scale
 	if _omni:
-		_omni.light_energy = 20.0 * active_factor * light_scale
+		_omni.light_energy = LANTERN_ENERGY * active_factor * light_scale
 		_omni.light_volumetric_fog_energy = 5.0 * active_factor * vol_scale
 	if _beam_mat:
 		_beam_mat.set_shader_parameter("energy", 1.0 * active_factor * light_scale)
@@ -173,8 +175,8 @@ func _build() -> void:
 	_spot1.name = "Spot1"
 	_spot1.spot_range = 4000.0
 	_spot1.spot_angle = 1.0
-	_spot1.light_energy = 400.0
-	_spot1.light_volumetric_fog_energy = 1500.0
+	_spot1.light_energy = BEAM_LIGHT_ENERGY
+	_spot1.light_volumetric_fog_energy = BEAM_VOLUMETRIC_ENERGY
 	_spot1.light_color = Color(1.0, 0.97, 0.88)
 	_spot1.shadow_enabled = false
 	# Offset outward so they don't clip inside the lantern glass and cause crazy bloom
@@ -186,8 +188,8 @@ func _build() -> void:
 	_spot2.name = "Spot2"
 	_spot2.spot_range = 4000.0
 	_spot2.spot_angle = 1.0
-	_spot2.light_energy = 400.0
-	_spot2.light_volumetric_fog_energy = 1500.0
+	_spot2.light_energy = BEAM_LIGHT_ENERGY
+	_spot2.light_volumetric_fog_energy = BEAM_VOLUMETRIC_ENERGY
 	_spot2.light_color = Color(1.0, 0.97, 0.88)
 	_spot2.shadow_enabled = false
 	# Offset outward so they don't clip inside the lantern glass
@@ -199,7 +201,7 @@ func _build() -> void:
 	_omni = OmniLight3D.new()
 	_omni.name                        = "LanternOmni"
 	_omni.omni_range                  = 50.0
-	_omni.light_energy                = 20.0
+	_omni.light_energy                = LANTERN_ENERGY
 	_omni.light_color                 = Color(1.0, 0.92, 0.72)
 	_omni.light_volumetric_fog_energy = 5.0
 	_omni.position.y                  = 22.0

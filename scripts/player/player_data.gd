@@ -75,7 +75,8 @@ var ship_runtime_state: Dictionary = {}
 ## resetting to noon.
 var world_clock_hours: float = -1.0
 ## World identity associated with coordinate-bearing state:
-## { "seed": int, "generation_version": int, "layout_checksum": String }.
+## { "seed": int, "generation_version": int, "weather_generation_version": int,
+##   "layout_checksum": String }.
 ## Empty on legacy saves; those restore using the current world once, then adopt it.
 var world_context: Dictionary = {}
 

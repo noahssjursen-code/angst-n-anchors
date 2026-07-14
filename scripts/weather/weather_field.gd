@@ -100,6 +100,7 @@ static func sample(world_pos: Vector3, game_time: float = -1.0) -> WeatherSample
 	var season := Season.modifiers(game_time)
 
 	var s := WeatherSample.new()
+	var components := WeatherCellSampler.sample(world_seed, world_pos, game_time)
 
 	# Pressure: smooth synoptic field, hPa. Amplitude scales with season.
 	var pressure_hpa := pressure_at(world_pos, game_time, float(season["pressure_amplitude_mul"]))
@@ -107,35 +108,26 @@ static func sample(world_pos: Vector3, game_time: float = -1.0) -> WeatherSample
 
 	# Wind: geostrophic-ish — perpendicular to pressure gradient, magnitude
 	# proportional to |gradient|. Plus a baseline trade wind (winter stronger).
-	var wind := _wind_from_gradient(world_pos, game_time,
+	var synoptic_wind := _wind_from_gradient(world_pos, game_time,
 									 float(season["pressure_amplitude_mul"]),
 									 float(season["baseline_wind_mul"]))
-	s.wind        = wind
-	s.wind_force  = clampf(wind.length(), 0.0, 1.0)
-	s.wind_speed_ms = s.wind_force * MAX_SYNOPTIC_WIND_MS
-	s.wind_velocity_ms = wind.normalized() * s.wind_speed_ms
+	var wind_direction := synoptic_wind.normalized()
+	if wind_direction.length_squared() < 0.1:
+		wind_direction = Vector3(0.95, 0.0, 0.30).normalized()
+	s.wind_force = clampf(float(components.get("wind_force", 0.15)), 0.0, 1.0)
+	s.wind_speed_ms = s.wind_force * 22.0
+	s.wind = wind_direction * s.wind_force
+	s.wind_velocity_ms = wind_direction * s.wind_speed_ms
 
-	# Cloud: low pressure → more cloud, plus an independent cloud noise band
-	# so coverage doesn't track pressure perfectly. Winter adds an overcast bias.
-	var cloud_n      := _sample3(_cloud_noise, world_pos, game_time,
-								   CLOUD_FEATURE_SCALE_M, CLOUD_TIME_SCALE_H)
-	var pressure_bias := clampf((PRESSURE_BASE_HPA - pressure_hpa) / PRESSURE_AMPLITUDE_HPA, -1.0, 1.0)
-	var cloud := clampf(0.28 + 0.30 * cloud_n + 0.25 * pressure_bias + float(season["cloud_bias"]),
-						 0.0, 1.0)
-	s.cloud_cover = cloud
-
-	# Precipitation: needs cloud cover AND low pressure. Locally jittered.
-	var local_n := _sample3(_local_noise, world_pos, game_time,
-							 LOCAL_FEATURE_SCALE_M, LOCAL_TIME_SCALE_H)
-	var rain_drive := clampf(cloud - 0.62, 0.0, 1.0) * clampf(pressure_bias, 0.0, 1.0)
-	# rain_drive is 0..~0.45; scale up and modulate with local jitter.
-	var precip := clampf(rain_drive * 1.55 * (0.72 + 0.28 * local_n), 0.0, 1.0)
-	s.precipitation = precip
-
-	# Visibility: clear by default; cloud + rain + local fog band cut it.
-	var fog_band := clampf((local_n - 0.25) * 0.8, 0.0, 0.5)  # only positive humps fog
-	var vis := 1.0 - clampf(0.45 * precip + 0.20 * cloud + fog_band, 0.0, 0.85)
-	s.visibility = clampf(vis, 0.15, 1.0)
+	# Independent authored components selected by deterministic moving cells.
+	s.cloud_cover = clampf(float(components.get("cloud_cover", 0.2)), 0.0, 1.0)
+	s.precipitation = clampf(float(components.get("precipitation", 0.0)), 0.0, 1.0)
+	s.visibility = 1.0 - clampf(float(components.get("fog_density", 0.0)), 0.0, 1.0)
+	s.sea_state = clampf(float(components.get("sea_state", 0.2)), 0.0, 1.0)
+	s.convection_index = clampf(float(components.get("convection_index", 0.0)), 0.0, 1.0)
+	s.humidity = clampf(float(components.get("humidity", 0.5)), 0.0, 1.0)
+	s.weather_cell_id = str(components.get("weather_cell_id", ""))
+	s.component_ids = (components.get("component_ids", {}) as Dictionary).duplicate()
 
 	# Temperature: base + seasonal offset. Phase 5+ may add latitude / land bias.
 	s.temperature = TEMPERATURE_BASE_C + float(season["temperature_offset_c"])

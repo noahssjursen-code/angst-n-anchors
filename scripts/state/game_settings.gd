@@ -40,12 +40,19 @@ var minimap_collapsed: bool = false
 ## These are intentionally not written to settings.cfg.
 var map_generation_seed: int = 42
 var map_generation_version: int = 5
+var weather_generation_version: int = 3
 var map_layout_checksum: String = ""
 
 
-func set_world_generation_context(seed: int, version: int, checksum: String = "") -> void:
+func set_world_generation_context(
+		seed: int,
+		version: int,
+		checksum: String = "",
+		weather_version: int = 3,
+) -> void:
 	map_generation_seed = seed
 	map_generation_version = maxi(version, 1)
+	weather_generation_version = maxi(weather_version, 1)
 	map_layout_checksum = checksum
 
 

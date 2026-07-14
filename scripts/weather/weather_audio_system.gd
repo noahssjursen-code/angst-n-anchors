@@ -169,7 +169,7 @@ var _atm_dry_squall   := VariantSlot.new()
 var _atm_full_storm   := VariantSlot.new()
 
 var _thunder_pool    : Array[AudioStreamPlayer] = []
-var _thunder_cooldown: float = 2.0
+var _pending_thunder: Array[Dictionary] = []
 
 # Wave intensity window for ocean blend.
 const _WAVE_CALM: float = 0.33
@@ -180,7 +180,6 @@ var _wave_t : float = 0.0
 var _wind   : float = 0.0
 var _precip : float = 0.0
 var _rain   : float = 0.0
-var _thunder: float = 0.0
 
 
 # ---------------------------------------------------------------------------
@@ -221,7 +220,8 @@ func _process(delta: float) -> void:
 	var wind_raw    := float(wl.get("wind_force"))        if wl else 0.0
 	var precip_raw  := float(wl.get("precipitation"))     if wl else 0.0
 	var rain_raw    := float(wl.get("rain_amount"))       if wl else 0.0
-	var thunder_raw := float(wl.get("thunder_intensity")) if wl else 0.0
+	var cloud_raw   := float(wl.get("cloud_cover"))       if wl else 0.0
+	var fog_raw     := float(wl.get("fog_density"))       if wl else 0.0
 	var wave_raw   := clampf(
 		(WaveSurface.wave_intensity - _WAVE_CALM) / (_WAVE_GALE - _WAVE_CALM), 0.0, 1.0)
 
@@ -231,7 +231,6 @@ func _process(delta: float) -> void:
 	_wind    = lerpf(_wind,    wind_raw,    k)
 	_precip  = lerpf(_precip,  precip_raw,  k)
 	_rain    = lerpf(_rain,    rain_raw,    k)
-	_thunder = lerpf(_thunder, thunder_raw, k)
 
 	# --- Apply volumes ---
 	_blend_sequential(
@@ -243,9 +242,9 @@ func _process(delta: float) -> void:
 	_blend_sequential(
 		[_rain_drizzle, _rain_moderate, _rain_heavy],
 		smoothstep(0.08, 0.40, _rain), _rain, rain_db)
-	_blend_atmosphere(_precip, _wind)
+	_blend_atmosphere(cloud_raw, fog_raw)
 
-	_update_thunder(delta, _thunder)
+	_update_pending_thunder(delta)
 
 
 # ---------------------------------------------------------------------------
@@ -295,18 +294,18 @@ func _blend_sequential(
 
 ## Corner-focused bilinear blend across all four weather-plane corners.
 ## Near-clear weather forces only the calm slot so the compass centre is not a storm mix.
-func _blend_atmosphere(p: float, w: float) -> void:
-	if maxf(p, w) < 0.12:
+func _blend_atmosphere(cloud: float, fog: float) -> void:
+	if maxf(cloud, fog) < 0.12:
 		_atm_calm_clear.apply_volume(atmosphere_db)
 		_atm_grey_drizzle.apply_volume(-80.0)
 		_atm_dry_squall.apply_volume(-80.0)
 		_atm_full_storm.apply_volume(-80.0)
 		return
 
-	var cc := pow((1.0 - p) * (1.0 - w), 2.0)
-	var gd := pow(p * (1.0 - w), 2.0)
-	var ds := pow((1.0 - p) * w, 2.0)
-	var fs := pow(p * w, 2.0)
+	var cc := pow((1.0 - cloud) * (1.0 - fog), 2.0)
+	var gd := pow(cloud * (1.0 - fog), 2.0)
+	var ds := pow((1.0 - cloud) * fog, 2.0)
+	var fs := pow(cloud * fog, 2.0)
 	var sum := cc + gd + ds + fs + 1e-6
 	cc /= sum
 	gd /= sum
@@ -329,29 +328,40 @@ func _atm_apply_weight(slot: VariantSlot, weight: float) -> void:
 # Thunder
 # ---------------------------------------------------------------------------
 
-func _update_thunder(delta: float, thunder: float) -> void:
+func _on_lightning_strike(intensity: float, distance_m: float) -> void:
+	_pending_thunder.append({
+		"delay": clampf(distance_m / 343.0, 0.15, 18.0),
+		"intensity": intensity,
+		"distance_m": distance_m,
+	})
+
+
+func _update_pending_thunder(delta: float) -> void:
+	for i in range(_pending_thunder.size() - 1, -1, -1):
+		var event := _pending_thunder[i]
+		event["delay"] = float(event.get("delay", 0.0)) - delta
+		if float(event["delay"]) > 0.0:
+			_pending_thunder[i] = event
+			continue
+		_play_thunder(float(event.get("intensity", 0.5)), float(event.get("distance_m", 1000.0)))
+		_pending_thunder.remove_at(i)
+
+
+func _play_thunder(intensity: float, distance_m: float) -> void:
 	if _thunder_pool.is_empty():
 		return
-	if thunder < 0.12:
-		_thunder_cooldown = randf_range(3.0, 8.0)
-		return
-	_thunder_cooldown -= delta
-	if _thunder_cooldown > 0.0:
-		return
-
 	var idle: Array[AudioStreamPlayer] = []
 	for p: AudioStreamPlayer in _thunder_pool:
 		if not p.playing:
 			idle.append(p)
 	if idle.is_empty():
-		_thunder_cooldown = 0.5
 		return
 
 	var p := idle[randi() % idle.size()]
-	p.volume_db   = thunder_db + randf_range(-4.0, 2.0)
+	var distance_attenuation := clampf(inverse_lerp(8000.0, 500.0, distance_m), 0.15, 1.0)
+	p.volume_db = thunder_db + linear_to_db(maxf(intensity * distance_attenuation, 0.01))
 	p.pitch_scale = randf_range(0.88, 1.08)
 	p.play()
-	_thunder_cooldown = randf_range(2.0, 12.0) / maxf(thunder, 0.01)
 
 
 func _load_thunder_variants(dir: String, base: String) -> Array[AudioStreamPlayer]:

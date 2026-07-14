@@ -17,6 +17,7 @@ var last_build_usec := 0
 var _time_bucket := -9223372036854775808
 var _view_key := ""
 var _wind: PackedVector2Array = PackedVector2Array()
+var _sea: PackedFloat32Array = PackedFloat32Array()
 var _raster_cols := COLS
 var _raster_rows := ROWS
 
@@ -95,8 +96,6 @@ func draw_wind(canvas: CanvasItem, chart_rect: Rect2, visible_world: Rect2) -> v
 		for x in range(2, _raster_cols, step_x):
 			var idx := y * _raster_cols + x
 			var wind := _wind[idx]
-			if wind.length_squared() < 0.0025:
-				continue
 			var world := Vector2(
 				lerpf(world_rect.position.x, world_rect.end.x, (float(x) + 0.5) / _raster_cols),
 				lerpf(world_rect.position.y, world_rect.end.y, (float(y) + 0.5) / _raster_rows),
@@ -104,6 +103,20 @@ func draw_wind(canvas: CanvasItem, chart_rect: Rect2, visible_world: Rect2) -> v
 			if not visible_world.has_point(world):
 				continue
 			var center := _world_to_screen(world, chart_rect, visible_world)
+			var sea := _sea[idx] if idx < _sea.size() else 0.0
+			if sea > 0.32:
+				canvas.draw_arc(
+					center,
+					3.0 + sea * 4.0,
+					0.0,
+					TAU,
+					12,
+					Color(0.34, 0.78, 0.94, 0.25 + sea * 0.35),
+					1.0,
+					true,
+				)
+			if wind.length_squared() < 0.0025:
+				continue
 			var direction := wind.normalized()
 			var length := 11.0 + minf(wind.length(), 1.0) * 9.0
 			var tail := center - direction * length * 0.5
@@ -118,7 +131,7 @@ func draw_wind(canvas: CanvasItem, chart_rect: Rect2, visible_world: Rect2) -> v
 func sample_at(world: Vector2, game_hours: float) -> Dictionary:
 	if kind == Kind.FISHING:
 		return FishingField.sample_chart(Vector3(world.x, 0.0, world.y))
-	var sample := WeatherField.sample(Vector3(world.x, 0.0, world.y), game_hours)
+	var sample := _canonical_weather_sample(Vector3(world.x, 0.0, world.y), game_hours)
 	return {
 		"pressure": sample.pressure,
 		"wind": sample.wind,
@@ -127,6 +140,11 @@ func sample_at(world: Vector2, game_hours: float) -> Dictionary:
 		"precipitation": sample.precipitation,
 		"visibility": sample.visibility,
 		"temperature": sample.temperature,
+		"sea_state": sample.sea_state,
+		"significant_wave_height_m": sample.significant_wave_height_m,
+		"convection_index": sample.convection_index,
+		"component_ids": sample.component_ids.duplicate(),
+		"weather_cell_id": sample.weather_cell_id,
 	}
 
 
@@ -146,6 +164,19 @@ func _build(snapshot, game_hours: float) -> void:
 		FishingField.initialize(snapshot.world_seed)
 	var image := Image.create(_raster_cols, _raster_rows, false, Image.FORMAT_RGBA8)
 	_wind.resize(_raster_cols * _raster_rows)
+	_sea.resize(_raster_cols * _raster_rows)
+	var weather_samples: Array[WeatherSample] = []
+	if kind == Kind.WEATHER:
+		var positions := PackedVector3Array()
+		positions.resize(_raster_cols * _raster_rows)
+		for sample_y in range(_raster_rows):
+			for sample_x in range(_raster_cols):
+				var sample_world := Vector2(
+					lerpf(world_rect.position.x, world_rect.end.x, (float(sample_x) + 0.5) / _raster_cols),
+					lerpf(world_rect.position.y, world_rect.end.y, (float(sample_y) + 0.5) / _raster_rows),
+				)
+				positions[sample_y * _raster_cols + sample_x] = Vector3(sample_world.x, 0.0, sample_world.y)
+		weather_samples = _canonical_weather_batch(positions, game_hours)
 	sample_count = 0
 	for y in range(_raster_rows):
 		for x in range(_raster_cols):
@@ -155,13 +186,15 @@ func _build(snapshot, game_hours: float) -> void:
 			)
 			var idx := y * _raster_cols + x
 			if kind == Kind.WEATHER:
-				var sample := WeatherField.sample(Vector3(world.x, 0.0, world.y), game_hours)
+				var sample := weather_samples[idx]
 				image.set_pixel(x, y, _weather_color(sample))
 				_wind[idx] = Vector2(sample.wind.x, sample.wind.z)
+				_sea[idx] = sample.sea_state
 			else:
 				var zone := FishingField.sample_chart(Vector3(world.x, 0.0, world.y))
 				image.set_pixel(x, y, _fishing_color(zone))
 				_wind[idx] = Vector2.ZERO
+				_sea[idx] = 0.0
 			sample_count += 1
 	texture = ImageTexture.create_from_image(image)
 	rebuild_count += 1
@@ -181,13 +214,46 @@ func _snap_bounds(bounds: Rect2) -> Rect2:
 
 
 static func _weather_color(sample: WeatherSample) -> Color:
-	var pressure_t := clampf(inverse_lerp(988.0, 1032.0, sample.pressure), 0.0, 1.0)
-	var low := Color(0.64, 0.14, 0.16, 0.48)
-	var high := Color(0.12, 0.30, 0.68, 0.42)
-	var color := low.lerp(high, pressure_t)
-	color = color.lerp(Color(0.36, 0.36, 0.40, color.a), sample.cloud_cover * 0.32)
-	color.a += sample.precipitation * 0.14
+	# High-contrast chart grade so cells read as distinct weather, not one blue wash.
+	var clear := Color(0.18, 0.62, 0.92, 0.22)
+	var overcast := Color(0.42, 0.45, 0.50, 0.48)
+	var rain := Color(0.16, 0.34, 0.28, 0.62)
+	var storm := Color(0.52, 0.18, 0.22, 0.72)
+	var fog := Color(0.86, 0.88, 0.90, 0.58)
+	var color := clear.lerp(overcast, sample.cloud_cover)
+	color = color.lerp(rain, smoothstep(0.12, 0.75, sample.precipitation))
+	color = color.lerp(storm, smoothstep(0.35, 0.9, sample.convection_index))
+	color = color.lerp(fog, smoothstep(0.12, 0.7, sample.fog_density))
+	# Sea state darkens/teals the tint so high swell is visible even under clear sky.
+	color = color.lerp(Color(0.05, 0.28, 0.42, 0.70), smoothstep(0.25, 0.85, sample.sea_state) * 0.55)
+	color.a = clampf(color.a, 0.18, 0.78)
 	return color
+
+
+static func _canonical_weather_sample(world_pos: Vector3, game_hours: float) -> WeatherSample:
+	var loop := Engine.get_main_loop() as SceneTree
+	var world_weather := loop.root.get_node_or_null("WorldWeather") if loop != null else null
+	if world_weather != null and bool(world_weather.call("is_initialized")):
+		return world_weather.call("sample_at", world_pos, game_hours) as WeatherSample
+	return WeatherComposer.sample(world_pos, game_hours)
+
+
+static func _canonical_weather_batch(
+		positions: PackedVector3Array,
+		game_hours: float,
+) -> Array[WeatherSample]:
+	var loop := Engine.get_main_loop() as SceneTree
+	var world_weather := loop.root.get_node_or_null("WorldWeather") if loop != null else null
+	if world_weather != null and bool(world_weather.call("is_initialized")):
+		var canonical: Array[WeatherSample] = []
+		for item in world_weather.call("sample_batch", positions, game_hours):
+			canonical.append(item as WeatherSample)
+		return canonical
+	var result: Array[WeatherSample] = []
+	result.resize(positions.size())
+	for i in range(positions.size()):
+		result[i] = WeatherComposer.sample(positions[i], game_hours)
+	return result
 
 
 static func _fishing_color(zone: Dictionary) -> Color:

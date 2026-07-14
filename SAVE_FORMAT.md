@@ -73,6 +73,7 @@ Each singleplayer captain owns a world seed. New captains roll a fresh seed via
   "world_context": {
     "seed": 123456,
     "generation_version": 1,
+    "weather_generation_version": 3,
     "layout_checksum": "sha256..."
   }
 }
@@ -83,7 +84,8 @@ the current generated world matches this identity. Marks, appearance, and the
 owned-vessel ledger are not world-local and remain available. Legacy saves with
 no context are accepted once and adopt the current context on their next save.
 
-Multiplayer worlds still take `world_seed` from the server (`GET /v1/world-options`).
+Multiplayer worlds take `world_seed`, `generation_version`, and
+`weather_generation_version` from the server (`GET /v1/world-options`).
 
 ## Compatibility
 

@@ -1,6 +1,6 @@
 shader_type spatial;
 // Water owns its specular — Godot GGX on a flat ocean reads as plastic wrap.
-render_mode diffuse_burley, specular_disabled;
+render_mode diffuse_burley, specular_disabled, cull_disabled;
 
 
 uniform sampler2DArray displacement_map : filter_linear, repeat_enable;
@@ -176,6 +176,9 @@ void fragment() {
 		discard;
 	}
 	vec3 nm = normalize(v_world_normal);
+	if (!FRONT_FACING) {
+		nm = -nm;
+	}
 	vec2 xz = v_world_pos.xz;
 	float wt = wave_time;
 	float dist_to_cam = length(CAMERA_POSITION_WORLD - v_world_pos);
@@ -215,7 +218,8 @@ void fragment() {
 	vec3 sun_n = normalize(sun_direction);
 	float sun_up = clamp(sun_n.y, 0.0, 1.0);
 
-	// Fresnel from macro normal so sky follows swell, not chop noise.
+	// The underside is visible when the camera submerges. Fresnel from the
+	// flipped macro normal keeps the surface legible instead of clipping out.
 	float ndv_macro = clamp(dot(nm, view_dir), 0.001, 1.0);
 	float fres = ocean_fresnel(nm, view_dir);
 	v_fresnel = fres;
