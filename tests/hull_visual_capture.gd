@@ -1,4 +1,4 @@
-extends SceneTree
+extends Node
 
 const OUTPUT_DIR := "/opt/cursor/artifacts/hull-forms"
 const HULL_IDS := [
@@ -11,7 +11,7 @@ const HULL_IDS := [
 ]
 
 
-func _initialize() -> void:
+func _ready() -> void:
 	call_deferred("_capture_all")
 
 
@@ -22,7 +22,7 @@ func _capture_all() -> void:
 	viewport.own_world_3d = true
 	viewport.render_target_update_mode = SubViewport.UPDATE_ALWAYS
 	viewport.render_target_clear_mode = SubViewport.CLEAR_MODE_ALWAYS
-	get_root().add_child(viewport)
+	get_tree().root.add_child(viewport)
 
 	var world := Node3D.new()
 	viewport.add_child(world)
@@ -67,7 +67,7 @@ func _capture_all() -> void:
 			Vector3.UP
 		)
 		for _frame in range(4):
-			await process_frame
+			await get_tree().process_frame
 		var image := viewport.get_texture().get_image()
 		var path := "%s/%s.png" % [OUTPUT_DIR, hull_id]
 		var error := image.save_png(path)
@@ -79,4 +79,4 @@ func _capture_all() -> void:
 		boat.free()
 
 	viewport.queue_free()
-	quit()
+	get_tree().quit()

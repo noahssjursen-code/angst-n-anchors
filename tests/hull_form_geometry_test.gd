@@ -1,19 +1,19 @@
-extends SceneTree
+extends Node
 
 var _failures := PackedStringArray()
 
 
-func _initialize() -> void:
+func _ready() -> void:
 	_test_registered_hulls()
 	_test_catamaran_twin_hulls()
 	_test_prebuilt_catalog_workflow()
 	if _failures.is_empty():
 		print("Hull form geometry: all loft, collision, physics, and yard checks passed")
-		quit()
+		get_tree().quit()
 	else:
 		for failure in _failures:
 			push_error("Hull form geometry: " + failure)
-		quit(1)
+		get_tree().quit(1)
 
 
 func _test_registered_hulls() -> void:
