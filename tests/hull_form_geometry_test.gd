@@ -129,7 +129,7 @@ func _mesh_faces_are_valid(boat: BoatBody) -> bool:
 		for i in range(0, faces.size(), 3):
 			var area := ((faces[i + 1] - faces[i]).cross(faces[i + 2] - faces[i])).length() * 0.5
 			if area <= 0.000001:
-				continue
+				return false
 			triangle_count += 1
 	return triangle_count > 8
 

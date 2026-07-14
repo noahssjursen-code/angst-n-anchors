@@ -1,9 +1,9 @@
-extends SceneTree
+extends Node
 
 const PROFILE := preload("res://scripts/ship/hull_physics_profile.gd")
 
 
-func _initialize() -> void:
+func _ready() -> void:
 	for profile in [
 		_make_profile(30.0, 24.0, 6.0, 3.0, 960.0, 0.0, 10),
 		_make_profile(28.0, 10.0, 5.6, 2.8, 256.0, 0.3, 8),
@@ -21,7 +21,7 @@ func _initialize() -> void:
 		)
 		boat.free()
 	print("Hull hydrostatics smoke: design volumes and drafts are coherent")
-	quit()
+	get_tree().quit()
 
 
 func _make_profile(

@@ -292,6 +292,8 @@ static func _add_clockwise_outward_face(
 	var b := face[1] as Vector3
 	var c := face[2] as Vector3
 	var geometric_normal := (b - a).cross(c - a)
+	if geometric_normal.length_squared() <= 0.0000000001:
+		return
 	var face_center := (a + b + c) / 3.0
 	## Godot's visible front face is clockwise, opposite the geometric
 	## cross-product winding used to decide which direction is outward.
