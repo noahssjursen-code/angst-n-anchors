@@ -12,6 +12,7 @@ func _initialize() -> void:
 	_test_deterministic_mesh(layout)
 	_test_shared_borders(layout)
 	_test_water_and_shoreline(layout)
+	_test_submerged_shelf_has_no_collision()
 	_test_water_edge_skirts()
 	_test_flatten_pads(layout)
 	_test_collision_selection()
@@ -103,6 +104,40 @@ func _test_water_and_shoreline(layout: WorldLayout) -> void:
 		if shoreline_found:
 			break
 	_check(shoreline_found, "test locates a generated shoreline chunk")
+
+
+func _test_submerged_shelf_has_no_collision() -> void:
+	var cutoff := STREAMER.COLLISION_COAST_CUTOFF_Y
+	var mixed := {
+		"vertices": PackedVector3Array([
+			Vector3(-1.0, cutoff + 2.0, 0.0),
+			Vector3(1.0, cutoff - 2.0, -1.0),
+			Vector3(1.0, cutoff - 2.0, 1.0),
+		]),
+		"indices": PackedInt32Array([0, 1, 2]),
+		"surface_vertex_count": 3,
+	}
+	var clipped := STREAMER.collision_faces(mixed)
+	_check(clipped.size() == 3, "shore collision clips a mixed triangle at water level")
+	for point in clipped:
+		_check(
+			point.y >= cutoff - 0.0001,
+			"terrain collision never extends below the waterline",
+		)
+
+	var submerged := {
+		"vertices": PackedVector3Array([
+			Vector3(-1.0, cutoff - 1.0, 0.0),
+			Vector3(1.0, cutoff - 1.0, -1.0),
+			Vector3(1.0, cutoff - 1.0, 1.0),
+		]),
+		"indices": PackedInt32Array([0, 1, 2]),
+		"surface_vertex_count": 3,
+	}
+	_check(
+		STREAMER.collision_faces(submerged).is_empty(),
+		"fully submerged svaberg remains visual-only",
+	)
 
 
 func _test_water_edge_skirts() -> void:
