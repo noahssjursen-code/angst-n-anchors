@@ -441,10 +441,16 @@ func _spawn_foundation_hull(
 	var yaw_degrees := rad_to_deg(atan2(world_dir.x, world_dir.z))
 	boat.name = "%s_%s" % [hull_id, str(int(along_fraction * 100.0))]
 	boat.freeze = true
+	boat.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	parent.add_child(boat)
 	boat.global_position = world_pos
 	boat.global_rotation_degrees.y = yaw_degrees
 	boat.place_at_waterline(WaveSurface.WATER_LEVEL)
+	var pad_local_y := float(foundation.get("surface_y_m", PortCoastTracer.FOUNDATION_SURFACE_Y_M)) \
+			+ PortCoastTracer.FOUNDATION_TERRAIN_CLEARANCE_M
+	var pad_world_y := plot.to_global(Vector3(local.x, pad_local_y, local.z)).y
+	if boat.global_position.y < pad_world_y + 0.05:
+		boat.global_position.y = pad_world_y + 0.05
 	boat.freeze = true
 	var loa := float(entry.get("loa_m", 0.0))
 	var beam := float(entry.get("beam_m", 0.0))

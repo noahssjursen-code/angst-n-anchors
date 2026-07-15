@@ -18,9 +18,9 @@ const SLOT_COLORS := {
 }
 
 const STEEL := Color(0.45, 0.46, 0.48)
-## Coastal turf — bright enough to read on water; matches terrain lowland heath tone.
-const FOUNDATION_GROUND_COLOR := Color(0.24, 0.28, 0.15)
-const FOUNDATION_GROUND_ROUGHNESS := 0.97
+## Weathered harbour pavement — neutral concrete/asphalt, not turf.
+const FOUNDATION_PAVEMENT_COLOR := Color(0.34, 0.34, 0.36)
+const FOUNDATION_PAVEMENT_ROUGHNESS := 0.93
 
 ## Shared materials across stamps — recreating StandardMaterial3D per box was a hitch.
 static var _material_cache: Dictionary = {}
@@ -132,65 +132,66 @@ func _stamp_foundation() -> void:
 		true,
 	)
 	var sea_bot := sea_top
-	var material := MeshBuilder.make_material(FOUNDATION_GROUND_COLOR, FOUNDATION_GROUND_ROUGHNESS, 0.0)
+	var shore_top := spine_pts
+	var material := MeshBuilder.make_material(FOUNDATION_PAVEMENT_COLOR, FOUNDATION_PAVEMENT_ROUGHNESS, 0.0)
+	material.render_priority = 1
 	var surface := SurfaceTool.new()
 	surface.begin(Mesh.PRIMITIVE_TRIANGLES)
 	surface.set_material(material)
 	for index in range(spine.size() - 1):
-		## Winding is seaward → inland so +Y normals face up (cull_back).
-		_add_quad(
+		_add_ribbon_link(
 			surface,
-			_foundation_vertex(sea_top, index, top_y),
-			_foundation_vertex(sea_top, index + 1, top_y),
-			_foundation_vertex(inland_top, index + 1, top_y),
-			_foundation_vertex(inland_top, index, top_y),
+			sea_top,
+			shore_top,
+			inland_top,
+			index,
+			top_y,
+			water_bottom_y,
+			land_bottom_y,
 		)
-		_add_quad(
+		_add_ribbon_side_wall(
 			surface,
-			_foundation_vertex(inland_bot, index + 1, land_bottom_y),
-			_foundation_vertex(sea_bot, index + 1, water_bottom_y),
-			_foundation_vertex(sea_bot, index, water_bottom_y),
-			_foundation_vertex(inland_bot, index, land_bottom_y),
+			sea_top,
+			sea_bot,
+			index,
+			top_y,
+			water_bottom_y,
+			false,
 		)
-		_add_quad(
+		_add_ribbon_side_wall(
 			surface,
-			_foundation_vertex(inland_top, index + 1, top_y),
-			_foundation_vertex(inland_bot, index + 1, land_bottom_y),
-			_foundation_vertex(inland_bot, index, land_bottom_y),
-			_foundation_vertex(inland_top, index, top_y),
+			inland_top,
+			inland_bot,
+			index,
+			top_y,
+			land_bottom_y,
+			true,
 		)
-		_add_quad(
-			surface,
-			_foundation_vertex(sea_top, index, top_y),
-			_foundation_vertex(sea_bot, index, water_bottom_y),
-			_foundation_vertex(sea_bot, index + 1, water_bottom_y),
-			_foundation_vertex(sea_top, index + 1, top_y),
-		)
-	var shore_top := spine_pts
-	_add_tri(
+	_stamp_foundation_end_cap(
 		surface,
-		_foundation_vertex(sea_top, 0, top_y),
-		_foundation_vertex(shore_top, 0, top_y),
-		_foundation_vertex(inland_top, 0, top_y),
+		sea_top,
+		shore_top,
+		inland_top,
+		sea_bot,
+		inland_bot,
+		0,
+		top_y,
+		water_bottom_y,
+		land_bottom_y,
+		false,
 	)
-	_add_tri(
+	_stamp_foundation_end_cap(
 		surface,
-		_foundation_vertex(sea_bot, 0, water_bottom_y),
-		_foundation_vertex(inland_bot, 0, land_bottom_y),
-		_foundation_vertex(shore_top, 0, land_bottom_y),
-	)
-	var last := spine.size() - 1
-	_add_tri(
-		surface,
-		_foundation_vertex(inland_top, last, top_y),
-		_foundation_vertex(shore_top, last, top_y),
-		_foundation_vertex(sea_top, last, top_y),
-	)
-	_add_tri(
-		surface,
-		_foundation_vertex(sea_bot, last, water_bottom_y),
-		_foundation_vertex(shore_top, last, land_bottom_y),
-		_foundation_vertex(inland_bot, last, land_bottom_y),
+		sea_top,
+		shore_top,
+		inland_top,
+		sea_bot,
+		inland_bot,
+		spine.size() - 1,
+		top_y,
+		water_bottom_y,
+		land_bottom_y,
+		true,
 	)
 	surface.generate_normals()
 	var mesh := MeshInstance3D.new()
@@ -198,8 +199,90 @@ func _stamp_foundation() -> void:
 	mesh.mesh = surface.commit()
 	mesh.material_override = material
 	mesh.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	mesh.receive_shadows = false
 	mesh.extra_cull_margin = 24.0
 	add_child(mesh)
+
+
+## Four planar triangles per link — hinge at the shore row so bends never bow-tie overlap.
+func _add_ribbon_link(
+		surface: SurfaceTool,
+		sea: PackedVector2Array,
+		shore: PackedVector2Array,
+		inland: PackedVector2Array,
+		index: int,
+		top_y: float,
+		sea_bottom_y: float,
+		land_bottom_y: float,
+) -> void:
+	var s0 := _foundation_vertex(sea, index, top_y)
+	var s1 := _foundation_vertex(sea, index + 1, top_y)
+	var h0 := _foundation_vertex(shore, index, top_y)
+	var h1 := _foundation_vertex(shore, index + 1, top_y)
+	var l0 := _foundation_vertex(inland, index, top_y)
+	var l1 := _foundation_vertex(inland, index + 1, top_y)
+	_add_tri(surface, s0, s1, h1)
+	_add_tri(surface, s0, h1, h0)
+	_add_tri(surface, h0, h1, l1)
+	_add_tri(surface, h0, l1, l0)
+	var sb0 := _foundation_vertex(sea, index, sea_bottom_y)
+	var sb1 := _foundation_vertex(sea, index + 1, sea_bottom_y)
+	var hb0 := _foundation_vertex(shore, index, land_bottom_y)
+	var hb1 := _foundation_vertex(shore, index + 1, land_bottom_y)
+	var lb0 := _foundation_vertex(inland, index, land_bottom_y)
+	var lb1 := _foundation_vertex(inland, index + 1, land_bottom_y)
+	_add_tri(surface, sb0, hb0, hb1)
+	_add_tri(surface, sb0, hb1, sb1)
+	_add_tri(surface, hb0, lb0, lb1)
+	_add_tri(surface, hb0, lb1, hb1)
+
+
+func _add_ribbon_side_wall(
+		surface: SurfaceTool,
+		top_path: PackedVector2Array,
+		bot_path: PackedVector2Array,
+		index: int,
+		top_y: float,
+		bottom_y: float,
+		is_inland_side: bool,
+) -> void:
+	var t0 := _foundation_vertex(top_path, index, top_y)
+	var t1 := _foundation_vertex(top_path, index + 1, top_y)
+	var b0 := _foundation_vertex(bot_path, index, bottom_y)
+	var b1 := _foundation_vertex(bot_path, index + 1, bottom_y)
+	if is_inland_side:
+		_add_quad(surface, t0, t1, b1, b0)
+	else:
+		_add_quad(surface, t0, b0, b1, t1)
+
+
+func _stamp_foundation_end_cap(
+		surface: SurfaceTool,
+		sea: PackedVector2Array,
+		shore: PackedVector2Array,
+		inland: PackedVector2Array,
+		sea_bot: PackedVector2Array,
+		inland_bot: PackedVector2Array,
+		index: int,
+		top_y: float,
+		sea_bottom_y: float,
+		land_bottom_y: float,
+		is_far_end: bool,
+) -> void:
+	var sea_top_v := _foundation_vertex(sea, index, top_y)
+	var shore_top_v := _foundation_vertex(shore, index, top_y)
+	var inland_top_v := _foundation_vertex(inland, index, top_y)
+	var sea_bot_v := _foundation_vertex(sea_bot, index, sea_bottom_y)
+	var shore_bot_v := _foundation_vertex(shore, index, land_bottom_y)
+	var inland_bot_v := _foundation_vertex(inland_bot, index, land_bottom_y)
+	if is_far_end:
+		_add_tri(surface, sea_top_v, shore_top_v, inland_top_v)
+		_add_tri(surface, sea_bot_v, inland_bot_v, shore_bot_v)
+		_add_quad(surface, sea_top_v, inland_top_v, inland_bot_v, sea_bot_v)
+	else:
+		_add_tri(surface, sea_top_v, inland_top_v, shore_top_v)
+		_add_tri(surface, sea_bot_v, shore_bot_v, inland_bot_v)
+		_add_quad(surface, sea_top_v, sea_bot_v, inland_bot_v, inland_top_v)
 
 
 func _add_tri(surface: SurfaceTool, a: Vector3, b: Vector3, c: Vector3) -> void:
