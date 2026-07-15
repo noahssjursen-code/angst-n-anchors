@@ -282,51 +282,80 @@ func flatten_zone_records(
 	if pad_height < 0.0:
 		pad_height = float(foundation.get("surface_y_m", PortCoastTracer.FOUNDATION_SURFACE_Y_M)) - 0.12
 	var foundation_segments := foundation.get("segments", []) as Array
-	if not foundation_segments.is_empty():
-		for index in range(foundation_segments.size()):
-			var segment := foundation_segments[index] as Dictionary
-			var center_local := segment.get("center", [0.0, 0.0]) as Array
-			if center_local.size() < 2:
+	var footprint_quads := foundation.get("footprint_quads", []) as Array
+	var inland_blend_quads := foundation.get("inland_blend_quads", []) as Array
+	if not footprint_quads.is_empty():
+		var world_water_edge := PackedVector2Array()
+		for raw_water in foundation.get("water_edge", []) as Array:
+			var water := raw_water as Array
+			if water.size() < 2:
 				continue
-			var center := world_position + port_basis * Vector3(
-				float(center_local[0]), 0.0, float(center_local[1])
+			var world := world_position + port_basis * Vector3(
+				float(water[0]), 0.0, float(water[1])
 			)
-			records.append({
-				"center": Vector2(center.x, center.z),
-				"yaw": _world_zone_yaw(port_basis, segment),
-				"half_size": Vector2(
-					float(segment.get("length_m", 1.0)) * 0.5,
-					float(segment.get("width_m", 1.0)) * 0.5,
-				),
-				"falloff": 10.0,
-				"height": pad_height,
-				"shape": "rectangle",
-				"carve": false,
-				"facility_id": "%s:foundation_%d" % [port_id, index],
-			})
-		for reclaim_index in range((foundation.get("reclaim_zones", []) as Array).size()):
-			var reclaim_local := (foundation.get("reclaim_zones", []) as Array)[reclaim_index] as Dictionary
-			var reclaim_center := reclaim_local.get("center", [0.0, 0.0]) as Array
-			if reclaim_center.size() < 2:
+			world_water_edge.append(Vector2(world.x, world.z))
+		var near_field := Rect2()
+		for quad_index in range(footprint_quads.size()):
+			var quad := footprint_quads[quad_index] as Dictionary
+			var corners := quad.get("corners", []) as Array
+			if corners.size() < 4:
 				continue
-			var center := world_position + port_basis * Vector3(
-				float(reclaim_center[0]), 0.0, float(reclaim_center[1])
-			)
-			var half_size := reclaim_local.get("half_size", [1.0, 1.0]) as Array
+			var world_polygon := PackedVector2Array()
+			for raw_corner in corners:
+				var corner := raw_corner as Array
+				if corner.size() < 2:
+					continue
+				var world := world_position + port_basis * Vector3(
+					float(corner[0]), 0.0, float(corner[1])
+				)
+				world_polygon.append(Vector2(world.x, world.z))
+			if world_polygon.size() < 4:
+				continue
+			var quad_bounds := WorldTerrainStreamer._polygon_bounds(world_polygon)
+			near_field = quad_bounds if near_field.size == Vector2.ZERO else near_field.merge(quad_bounds)
 			records.append({
-				"center": Vector2(center.x, center.z),
-				"yaw": _world_zone_yaw(port_basis, reclaim_local),
-				"half_size": Vector2(float(half_size[0]), float(half_size[1])),
-				"falloff": float(reclaim_local.get("falloff", 12.0)),
+				"polygon": world_polygon,
+				"water_edge": world_water_edge,
+				"falloff": 0.0,
 				"height": pad_height,
-				"shape": String(reclaim_local.get("shape", "rectangle")),
 				"reclaim": true,
+				"ribbon_fill": true,
 				"carve": false,
-				"facility_id": "%s:reclaim_%d" % [port_id, reclaim_index],
+				"facility_id": "%s:plate_%d" % [port_id, quad_index],
+			})
+		if near_field.size != Vector2.ZERO:
+			near_field = near_field.grow(WorldTerrainStreamer.PLATE_NEAR_FIELD_PAD_M)
+			for record in records:
+				if bool(record.get("ribbon_fill", false)):
+					record["near_field_bounds"] = near_field
+		for blend_index in range(inland_blend_quads.size()):
+			var blend_quad := inland_blend_quads[blend_index] as Dictionary
+			var corners := blend_quad.get("corners", []) as Array
+			if corners.size() < 4:
+				continue
+			var world_polygon := PackedVector2Array()
+			for raw_corner in corners:
+				var corner := raw_corner as Array
+				if corner.size() < 2:
+					continue
+				var world := world_position + port_basis * Vector3(
+					float(corner[0]), 0.0, float(corner[1])
+				)
+				world_polygon.append(Vector2(world.x, world.z))
+			if world_polygon.size() < 4:
+				continue
+			records.append({
+				"polygon": world_polygon,
+				"falloff": 0.0,
+				"height": pad_height,
+				"inland_blend": true,
+				"blend_depth_m": float(blend_quad.get("blend_depth_m", 72.0)),
+				"carve": false,
+				"facility_id": "%s:merge_%d" % [port_id, blend_index],
 			})
 		return records
 	var graph_bounds := bounds()
-	if graph_bounds.size.length_squared() > 0.01:
+	if graph_bounds.size.length_squared() > 0.01 and foundation_segments.is_empty() and footprint_quads.is_empty():
 		var size_class := PortSizing.normalized_size(int(initial_attributes.get("size", 1)))
 		var seaward := Vector2(-sin(rotation_y), -cos(rotation_y))
 		var center_world := world_position + port_basis * graph_bounds.get_center()

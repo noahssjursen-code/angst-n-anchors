@@ -17,7 +17,12 @@ const POPULATION_RANGE: Dictionary = {
 }
 
 
-static func expand(definition: PortDefinition, world_seed: int, world_layout: WorldLayout = null) -> PortData:
+static func expand(
+		definition: PortDefinition,
+		world_seed: int,
+		world_layout: WorldLayout = null,
+		extra_attributes: Dictionary = {},
+) -> PortData:
 	assert(
 		definition.port_generation_version == PortDefinition.CURRENT_PORT_GENERATION_VERSION,
 		"PortExpander: incompatible port generation version %d" % definition.port_generation_version,
@@ -38,16 +43,18 @@ static func expand(definition: PortDefinition, world_seed: int, world_layout: Wo
 	data.has_fuel_point = true
 	data.has_lighthouse = definition.has_lighthouse or (data.size >= 1 and rng.randf() < 0.3)
 	data.has_fog_horn = definition.has_fog_horn or (data.size >= 0 and rng.randf() < 0.4)
+	var layout_attrs := {
+		"has_fuel_point": data.has_fuel_point,
+		"has_lighthouse": data.has_lighthouse,
+		"has_fog_horn": data.has_fog_horn,
+		"world_layout": world_layout,
+	}
+	layout_attrs.merge(extra_attributes, true)
 	data.layout_graph = PortLayoutGenerator.generate(
 		definition,
 		data.trade_profile,
 		site_seed,
-		{
-			"has_fuel_point": data.has_fuel_point,
-			"has_lighthouse": data.has_lighthouse,
-			"has_fog_horn": data.has_fog_horn,
-			"world_layout": world_layout,
-		},
+		layout_attrs,
 	)
 
 	var graph_bounds := data.layout_graph.bounds()

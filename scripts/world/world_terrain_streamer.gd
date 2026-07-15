@@ -30,6 +30,8 @@ const COASTAL_COATING_OFFSET_M := 0.08
 ## Macro terrain remains coarse, but authored port cuts need enough vertices to
 ## show basin/quay outlines instead of collapsing to one 40 m cell.
 const PORT_CARVE_STEP_M := 10.0
+const PLATE_NEAR_FIELD_PAD_M := 48.0
+const PLATE_SEAWARD_CLIP_M := 72.0
 const BYTES_PER_VERTEX_ESTIMATE := 40
 const BYTES_PER_INDEX_ESTIMATE := 4
 const PORT_PAD_WIDTH_BY_SIZE := PortSizing.TERRAIN_PAD_WIDTH_BY_SIZE
@@ -319,8 +321,9 @@ func _build_chunk(coord: Vector2i, lod: int, stream_position: Vector3) -> void:
 
 	# Svaberg is a continuous terrain coating, not a collection of rock props.
 	# Only coastal triangles are copied, so inland chunks gain no extra draw.
-	if lod <= COASTAL_COATING_MAX_LOD:
-		var coating_data := build_coastal_coating_mesh_data(data)
+	# Port near-field chunks already suppress coastal tint — skip the extra pass.
+	if lod <= COASTAL_COATING_MAX_LOD and not _chunk_intersects_port_edit_zone(coord):
+		var coating_data := build_coastal_coating_mesh_data(data, 0.32, 12.0, _flatten_zones)
 		if not (coating_data["indices"] as PackedInt32Array).is_empty():
 			var coating := MeshInstance3D.new()
 			coating.name = "CoastalSlate"
@@ -347,18 +350,10 @@ func _chunk_intersects_port_edit_zone(coord: Vector2i) -> bool:
 	var chunk_rect := Rect2(chunk_origin(coord), Vector2(CHUNK_SIZE_M, CHUNK_SIZE_M))
 	for zone_variant in _flatten_zones:
 		var zone := zone_variant as Dictionary
-		if not bool(zone.get("carve", false)) and not bool(zone.get("reclaim", false)):
+		if not bool(zone.get("ribbon_fill", false)):
 			continue
-		var half_size := zone.get("half_size", Vector2.ZERO) as Vector2
-		var yaw := float(zone.get("yaw", 0.0))
-		var c := absf(cos(yaw))
-		var s := absf(sin(yaw))
-		var extent := Vector2(
-			c * half_size.x + s * half_size.y,
-			s * half_size.x + c * half_size.y,
-		) + Vector2.ONE * 2.0
-		var center := zone.get("center", Vector2.ZERO) as Vector2
-		if chunk_rect.intersects(Rect2(center - extent, extent * 2.0), true):
+		var near_field := zone.get("near_field_bounds", Rect2()) as Rect2
+		if near_field.size != Vector2.ZERO and chunk_rect.intersects(near_field, true):
 			return true
 	return false
 
@@ -583,7 +578,7 @@ static func sample_terrain_height(layout: Object, world_xz: Vector2, flatten_zon
 	var signed_distance := sample_effective_signed_distance(layout, world_xz, flatten_zones)
 	var height := 0.0 if signed_distance >= 0.0 \
 		else float(layout.sample_height(world_xz)) - TERRAIN_SINK_M
-	height = _apply_flatten_zones(height, signed_distance, world_xz, flatten_zones)
+	height = _apply_flatten_zones(height, signed_distance, world_xz, flatten_zones, layout)
 	return height
 
 
@@ -599,7 +594,7 @@ static func sample_render_terrain_height(
 	var height := float(layout.sample_height(world_xz)) - TERRAIN_SINK_M
 	if original_distance < 0.0 and signed_distance >= 0.0:
 		height = minf(height, WaveSurface.WATER_LEVEL - 3.0)
-	return _apply_flatten_zones(height, signed_distance, world_xz, flatten_zones)
+	return _apply_flatten_zones(height, signed_distance, world_xz, flatten_zones, layout)
 
 
 static func sample_effective_signed_distance(
@@ -660,24 +655,211 @@ static func _apply_flatten_zones(
 		signed_distance: float,
 		world_xz: Vector2,
 		flatten_zones: Array,
+		layout: Object = null,
 ) -> float:
+	var plate_height := NAN
 	for zone_variant in flatten_zones:
 		var zone := zone_variant as Dictionary
 		if bool(zone.get("carve", false)):
+			continue
+		if bool(zone.get("ribbon_fill", false)):
+			var near_field := zone.get("near_field_bounds", Rect2()) as Rect2
+			if near_field.size != Vector2.ZERO and not near_field.has_point(world_xz):
+				continue
+			var polygon := zone.get("polygon", PackedVector2Array()) as PackedVector2Array
+			if polygon.size() >= 3 and _point_in_polygon(world_xz, polygon):
+				plate_height = float(zone["height"])
+			continue
+		if bool(zone.get("inland_blend", false)):
+			if signed_distance >= 0.0:
+				continue
+			var polygon := zone.get("polygon", PackedVector2Array()) as PackedVector2Array
+			if polygon.size() < 4:
+				continue
+			var blend_t := _inland_blend_t(world_xz, polygon)
+			if blend_t < 0.0:
+				continue
+			var pad := float(zone["height"])
+			var natural := float(layout.sample_height(world_xz)) - TERRAIN_SINK_M if layout != null else height
+			var merged := lerpf(natural, pad, smoothstep(0.0, 1.0, blend_t))
+			height = lerpf(height, merged, 1.0)
 			continue
 		var falloff := maxf(float(zone["falloff"]), 0.001)
 		var edge_distance := _zone_edge_distance(zone, world_xz)
 		var blend := 1.0 - smoothstep(0.0, falloff, maxf(edge_distance, 0.0))
 		if edge_distance <= 0.0:
 			blend = 1.0
-		# Pads keep land at the authored port datum. Their seaward overlap stays
-		# submerged so it cannot create a water-level terrain sheet.
-		if signed_distance < 0.0 or bool(zone.get("reclaim", false)):
+		if bool(zone.get("blend_terrain", false)):
+			if signed_distance >= 0.0:
+				continue
+			var target_height := float(zone["height"])
+			if layout != null:
+				var natural := float(layout.sample_height(world_xz)) - TERRAIN_SINK_M
+				var terrain_t := clampf(edge_distance / falloff, 0.0, 1.0) if edge_distance > 0.0 else 0.0
+				target_height = lerpf(float(zone["height"]), natural, smoothstep(0.0, 1.0, terrain_t))
+			height = lerpf(height, target_height, blend)
+		elif signed_distance >= 0.0 or bool(zone.get("reclaim", false)):
 			height = lerpf(height, float(zone["height"]), blend)
+	if not is_nan(plate_height):
+		return plate_height
 	return height
 
 
+static func _port_ground_suppression(world_xz: Vector2, flatten_zones: Array) -> float:
+	var strength := 0.0
+	for zone_variant in flatten_zones:
+		var zone := zone_variant as Dictionary
+		if bool(zone.get("carve", false)):
+			continue
+		var facility_id := String(zone.get("facility_id", ""))
+		var tagged := bool(zone.get("reclaim", false)) \
+				or bool(zone.get("blend_terrain", false)) \
+				or bool(zone.get("ribbon_fill", false)) \
+				or bool(zone.get("inland_blend", false)) \
+				or facility_id.contains("foundation") \
+				or facility_id.contains("reclaim") \
+				or facility_id.contains("backdrop") \
+				or facility_id.contains("ribbon") \
+				or facility_id.contains("plate") \
+				or facility_id.contains("merge")
+		if not tagged:
+			continue
+		var falloff := maxf(float(zone.get("falloff", 0.0)), 0.001)
+		var edge_distance := _zone_edge_distance(zone, world_xz)
+		var zone_t := 1.0 if edge_distance <= 0.0 \
+				else 1.0 - smoothstep(0.0, falloff, edge_distance)
+		strength = maxf(strength, zone_t)
+	return clampf(strength, 0.0, 1.0)
+
+
+static func _polygon_bounds(polygon: PackedVector2Array) -> Rect2:
+	if polygon.is_empty():
+		return Rect2()
+	var min_v := polygon[0]
+	var max_v := polygon[0]
+	for index in range(1, polygon.size()):
+		min_v = min_v.min(polygon[index])
+		max_v = max_v.max(polygon[index])
+	return Rect2(min_v, max_v - min_v)
+
+
+static func _point_in_polygon(point: Vector2, polygon: PackedVector2Array) -> bool:
+	if polygon.size() < 3:
+		return false
+	var inside := false
+	var previous := polygon[polygon.size() - 1]
+	for current in polygon:
+		var prev_y := previous.y
+		var curr_y := current.y
+		if ((curr_y > point.y) != (prev_y > point.y)) \
+				and (point.x < (previous.x - current.x) * (point.y - curr_y) / (prev_y - curr_y + 0.000001) + current.x):
+			inside = not inside
+		previous = current
+	return inside
+
+
+static func _point_segment_distance(point: Vector2, a: Vector2, b: Vector2) -> float:
+	var ab := b - a
+	var length_sq := ab.length_squared()
+	if length_sq < 0.000001:
+		return point.distance_to(a)
+	var t := clampf((point - a).dot(ab) / length_sq, 0.0, 1.0)
+	return point.distance_to(a + ab * t)
+
+
+static func _polygon_signed_distance(point: Vector2, polygon: PackedVector2Array) -> float:
+	if polygon.size() < 3:
+		return INF
+	var inside := _point_in_polygon(point, polygon)
+	var min_dist := INF
+	for index in range(polygon.size()):
+		var a := polygon[index]
+		var b := polygon[(index + 1) % polygon.size()]
+		min_dist = minf(min_dist, _point_segment_distance(point, a, b))
+	return -min_dist if inside else min_dist
+
+
+## 0 at the far mainland edge, 1 at the dock back edge (plate height).
+static func _inland_blend_t(point: Vector2, polygon: PackedVector2Array) -> float:
+	if polygon.size() < 4 or not _point_in_polygon(point, polygon):
+		return -1.0
+	var far_a := polygon[0]
+	var far_b := polygon[1]
+	var near_b := polygon[2]
+	var near_a := polygon[3]
+	var far_mid := (far_a + far_b) * 0.5
+	var near_mid := (near_a + near_b) * 0.5
+	var depth_vec := near_mid - far_mid
+	var depth := depth_vec.length()
+	if depth < 0.001:
+		return -1.0
+	var inward := depth_vec / depth
+	return clampf((point - far_mid).dot(inward) / depth, 0.0, 1.0)
+
+
+static func _seaward_past_plate_lip(world_xz: Vector2, flatten_zones: Array) -> bool:
+	for zone_variant in flatten_zones:
+		var zone := zone_variant as Dictionary
+		if not bool(zone.get("ribbon_fill", false)):
+			continue
+		var near_field := zone.get("near_field_bounds", Rect2()) as Rect2
+		if near_field.size == Vector2.ZERO or not near_field.has_point(world_xz):
+			continue
+		var footprint := zone.get("polygon", PackedVector2Array()) as PackedVector2Array
+		if footprint.size() >= 3 and _point_in_polygon(world_xz, footprint):
+			return false
+		var water_edge := zone.get("water_edge", PackedVector2Array()) as PackedVector2Array
+		if water_edge.size() < 2:
+			continue
+		if _seaward_of_water_edge(world_xz, water_edge, footprint, PLATE_SEAWARD_CLIP_M) > 0.5:
+			return true
+	return false
+
+
+static func _seaward_of_water_edge(
+		point: Vector2,
+		water_edge: PackedVector2Array,
+		footprint: PackedVector2Array,
+		max_segment_dist_m: float,
+) -> float:
+	if water_edge.size() < 2:
+		return -1.0
+	var center := _polygon_bounds(footprint).get_center() if footprint.size() >= 3 else water_edge[0]
+	var best := -INF
+	for index in range(water_edge.size() - 1):
+		var a := water_edge[index]
+		var b := water_edge[index + 1]
+		var ab := b - a
+		var length_sq := ab.length_squared()
+		if length_sq < 0.000001:
+			continue
+		var t := clampf((point - a).dot(ab) / length_sq, 0.0, 1.0)
+		var closest := a + ab * t
+		if closest.distance_to(point) > max_segment_dist_m:
+			continue
+		var outward := (closest - center).normalized()
+		best = maxf(best, (point - closest).dot(outward))
+	return best
+
+
+static func _inside_any_ribbon_polygon(world_xz: Vector2, flatten_zones: Array) -> bool:
+	for zone_variant in flatten_zones:
+		var zone := zone_variant as Dictionary
+		if not bool(zone.get("ribbon_fill", false)):
+			continue
+		var near_field := zone.get("near_field_bounds", Rect2()) as Rect2
+		if near_field.size != Vector2.ZERO and not near_field.has_point(world_xz):
+			continue
+		var polygon := zone.get("polygon", PackedVector2Array()) as PackedVector2Array
+		if polygon.size() >= 3 and _point_in_polygon(world_xz, polygon):
+			return true
+	return false
+
+
 static func _zone_edge_distance(zone: Dictionary, world_xz: Vector2) -> float:
+	if zone.has("polygon"):
+		var polygon := zone.get("polygon", PackedVector2Array()) as PackedVector2Array
+		return _polygon_signed_distance(world_xz, polygon)
 	var local := (world_xz - (zone["center"] as Vector2)).rotated(-float(zone["yaw"]))
 	var half_size: Vector2 = zone["half_size"]
 	if String(zone.get("shape", "rectangle")) == "ellipse":
@@ -721,8 +903,14 @@ static func build_chunk_mesh_data(
 			var height := sample_render_terrain_height(layout, world_xz, flatten_zones)
 			vertices[index] = Vector3(world_xz.x, height, world_xz.y)
 			signed_distances[index] = distance
-			clip_distances[index] = distance - SUBMERGED_SHELF_EXTENT_M
-			colors[index] = terrain_color(height, distance)
+			if _inside_any_ribbon_polygon(world_xz, flatten_zones):
+				clip_distances[index] = minf(distance, -0.01)
+			elif _seaward_past_plate_lip(world_xz, flatten_zones):
+				clip_distances[index] = maxf(distance, SUBMERGED_SHELF_EXTENT_M + 4.0)
+				signed_distances[index] = maxf(distance, SUBMERGED_SHELF_EXTENT_M + 4.0)
+			else:
+				clip_distances[index] = distance - SUBMERGED_SHELF_EXTENT_M
+			colors[index] = terrain_color(height, distance, world_xz, flatten_zones)
 
 	var indices := PackedInt32Array()
 	for z in range(cells):
@@ -771,6 +959,7 @@ static func build_coastal_coating_mesh_data(
 		terrain_data: Dictionary,
 		min_coast_weight: float = 0.32,
 		max_height_m: float = 12.0,
+		flatten_zones: Array = [],
 ) -> Dictionary:
 	var source_vertices: PackedVector3Array = terrain_data["vertices"]
 	var source_normals: PackedVector3Array = terrain_data["normals"]
@@ -800,6 +989,17 @@ static func build_coastal_coating_mesh_data(
 			source_vertices[ia].y,
 			minf(source_vertices[ib].y, source_vertices[ic].y),
 		) > max_height_m:
+			continue
+		var axz := Vector2(source_vertices[ia].x, source_vertices[ia].z)
+		var bxz := Vector2(source_vertices[ib].x, source_vertices[ib].z)
+		var cxz := Vector2(source_vertices[ic].x, source_vertices[ic].z)
+		if maxf(
+			_port_ground_suppression(axz, flatten_zones),
+			maxf(
+				_port_ground_suppression(bxz, flatten_zones),
+				_port_ground_suppression(cxz, flatten_zones),
+			),
+		) > 0.2:
 			continue
 		var polygon: Array[Dictionary] = [
 			{
@@ -1138,11 +1338,18 @@ static func estimate_mesh_memory(data: Dictionary) -> int:
 		+ (data["indices"] as PackedInt32Array).size() * BYTES_PER_INDEX_ESTIMATE
 
 
-static func terrain_color(height: float, signed_distance: float = -999.0) -> Color:
+static func terrain_color(
+		height: float,
+		signed_distance: float = -999.0,
+		world_xz: Vector2 = Vector2.ZERO,
+		flatten_zones: Array = [],
+) -> Color:
 	# Shader owns albedo. Vertex colour alpha = coastal rock weight
 	# (1 = waterline / svaberg / rock-face band, 0 = deep inland).
 	var inland := maxf(-signed_distance, 0.0) if signed_distance > -900.0 else maxf(height * 8.0, 0.0)
 	var coast_w := 1.0 - smoothstep(6.0, 130.0, inland)
+	if not flatten_zones.is_empty():
+		coast_w = lerpf(coast_w, 0.0, _port_ground_suppression(world_xz, flatten_zones))
 	var tint := Color(0.32, 0.33, 0.325).lerp(Color(0.18, 0.26, 0.14), 1.0 - coast_w)
 	tint.a = coast_w
 	return tint

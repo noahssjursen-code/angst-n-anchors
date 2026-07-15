@@ -52,6 +52,8 @@ static func generate(
 		traced_coast,
 		size,
 		site_seed,
+		0.0,
+		str(attributes.get("length_profile_override", "")),
 	)
 	var coast_path: PackedVector2Array = fit.get("harbour_coast", PackedVector2Array()) as PackedVector2Array
 	var natural_shore: PackedVector2Array = fit.get("natural_shore", PackedVector2Array()) as PackedVector2Array
@@ -63,6 +65,7 @@ static func generate(
 		"natural_shore_polyline": _polyline_to_array(natural_shore),
 		"terrain_coast_polyline": _polyline_to_array(traced_coast),
 		"harbour_style": str(fit.get("style", "")),
+		"length_profile": str(fit.get("length_profile", "")),
 		"span_coast_polyline": _polyline_to_array(fit.get("span_coast", PackedVector2Array()) as PackedVector2Array),
 	}
 	var center := coast_path[int(float(coast_path.size()) * 0.5)] if not coast_path.is_empty() else Vector2.ZERO
@@ -70,6 +73,8 @@ static func generate(
 	var foundation: Dictionary = fit.get("foundation", {}) as Dictionary
 	foundation["dock_reach_m"] = fit.get("dock_reach_m", foundation.get("dock_reach_m", 0.0))
 	foundation["shore_length_m"] = fit.get("shore_length_m", 0.0)
+	foundation["length_profile"] = fit.get("length_profile", foundation.get("length_profile", ""))
+	foundation["design_hull_loa_m"] = fit.get("design_hull_loa_m", PortSizing.design_hull_loa_m(size))
 	graph.initial_attributes["foundation"] = foundation
 	return graph
 

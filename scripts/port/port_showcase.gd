@@ -18,6 +18,7 @@ const SHOWCASE_PORT_NAMES: Array[String] = [
 	"Bremsund", "Tysneset", "Fjelltun", "Grønnvik", "Harberg", "Innvær",
 ]
 const REF_HULL_ID := "hull_28x10"
+const LENGTH_PROFILES: Array[String] = ["compact", "standard", "extended"]
 
 @export_range(0, 8) var port_size := 2:
 	set(value):
@@ -34,6 +35,12 @@ const REF_HULL_ID := "hull_28x10"
 @export_range(0, 4) var seed_index := 0:
 	set(value):
 		seed_index = clampi(value, 0, SEEDS.size() - 1)
+		if is_inside_tree() and not _configuring:
+			_request_rebuild()
+
+@export_range(0, 2) var length_profile_index := 1:
+	set(value):
+		length_profile_index = clampi(value, 0, LENGTH_PROFILES.size() - 1)
 		if is_inside_tree() and not _configuring:
 			_request_rebuild()
 
@@ -186,8 +193,12 @@ func _unhandled_input(event: InputEvent) -> void:
 		KEY_DOWN:
 			region_index = wrapi(region_index + 1, 0, 3)
 		KEY_COMMA:
-			seed_index = wrapi(seed_index - 1, 0, SEEDS.size())
+			length_profile_index = wrapi(length_profile_index - 1, 0, LENGTH_PROFILES.size())
 		KEY_PERIOD:
+			length_profile_index = wrapi(length_profile_index + 1, 0, LENGTH_PROFILES.size())
+		KEY_MINUS:
+			seed_index = wrapi(seed_index - 1, 0, SEEDS.size())
+		KEY_EQUAL:
 			seed_index = wrapi(seed_index + 1, 0, SEEDS.size())
 		KEY_1, KEY_2, KEY_3, KEY_4, KEY_5, KEY_6, KEY_7, KEY_8, KEY_9:
 			port_size = int((event as InputEventKey).keycode) - int(KEY_1)
@@ -232,7 +243,9 @@ func _rebuild() -> void:
 		^ definition.port_id.hash()
 	)
 	_active_definition = definition
-	_last_data = PortExpander.expand(definition, layout.seed, layout)
+	_last_data = PortExpander.expand(definition, layout.seed, layout, {
+		"length_profile_override": LENGTH_PROFILES[length_profile_index],
+	})
 	var graph_bounds := _last_data.layout_graph.bounds()
 	var graph_center := graph_bounds.get_center()
 	var world_center := _last_data.world_position \
@@ -282,23 +295,24 @@ func _rebuild() -> void:
 	plot.configure(_last_data)
 	generated.add_child(plot)
 	plot.global_position = _last_data.world_position
-	## Hull builds are expensive — defer so the graph paints first frame.
-	if not Engine.is_editor_hint():
-		call_deferred("_dock_scale_hulls", generated, plot)
+	call_deferred("_dock_scale_hulls", generated, plot)
 	_refresh_hud()
 
 
-## Frozen real HullRegistry boats alongside quay faces — catalog LOA/beam only.
+## Design + reference hulls alongside the foundation dock for scale.
 func _dock_scale_hulls(parent: Node3D, plot: PortPlot) -> void:
 	if not is_instance_valid(parent) or not is_instance_valid(plot):
 		return
 	var graph := plot.layout_graph()
 	if graph == null:
 		return
-	## Drop any previous deferred hulls if a newer rebuild already ran.
 	var existing := parent.get_node_or_null("DockedScaleHulls")
 	if existing != null:
 		existing.free()
+	var foundation := graph.initial_attributes.get("foundation", {}) as Dictionary
+	var segments := foundation.get("segments", []) as Array
+	if segments.is_empty():
+		return
 	var design_hull_id := PortSizing.design_hull_id(port_size)
 	var design_loa := PortSizing.design_hull_loa_m(port_size)
 	var design_beam := PortSizing.design_hull_beam_m(port_size)
@@ -308,53 +322,92 @@ func _dock_scale_hulls(parent: Node3D, plot: PortPlot) -> void:
 	var holder := Node3D.new()
 	holder.name = "DockedScaleHulls"
 	parent.add_child(holder)
-	var ship_index := 0
-	var ref_count := 0
-	for instance_id in graph.module_ids():
-		if ship_index >= 1 and (ref_count >= 1 or design_hull_id == REF_HULL_ID):
-			break
-		var placed := graph.modules[instance_id] as PortPlacedModule
-		var definition := graph.module_definition(placed.module_id)
-		if definition == null or definition.kind != "quay":
-			continue
-		var berth_len := definition.footprint_m.z
-		var side := 1.0 if (ship_index + ref_count) % 2 == 0 else -1.0
-		var local_basis := Basis(Vector3.UP, deg_to_rad(placed.yaw_degrees))
-		var port_basis := Basis(Vector3.UP, plot.rotation.y)
-		if ship_index < 1 and berth_len + 0.5 >= design_loa:
-			var local := Vector3(
-				side * (definition.footprint_m.x * 0.5 + design_beam * 0.5 + 3.0),
-				0.0,
-				0.0,
-			)
-			var world_pos := plot.global_position + port_basis * (placed.position_m + local_basis * local)
-			_spawn_docked_hull(
-				holder,
-				"DesignHull_0",
-				design_hull_id,
-				world_pos,
-				rad_to_deg(plot.rotation.y) + placed.yaw_degrees,
-				Color(0.75, 0.88, 1.0),
-			)
-			ship_index += 1
-		elif ref_count < 1 and berth_len + 0.5 >= ref_loa and design_hull_id != REF_HULL_ID:
-			var ref_local := Vector3(
-				-side * (definition.footprint_m.x * 0.5 + ref_beam * 0.5 + 3.0),
-				0.0,
-				0.0,
-			)
-			var ref_world := plot.global_position + port_basis * (
-				placed.position_m + local_basis * ref_local
-			)
-			_spawn_docked_hull(
-				holder,
-				"RefHull_0",
-				REF_HULL_ID,
-				ref_world,
-				rad_to_deg(plot.rotation.y) + placed.yaw_degrees,
-				Color(0.7, 0.95, 0.75),
-			)
-			ref_count += 1
+	var best_segment: Dictionary = {}
+	var best_length := 0.0
+	for raw in segments:
+		var segment := raw as Dictionary
+		var length_m := float(segment.get("length_m", 0.0))
+		if length_m > best_length:
+			best_length = length_m
+			best_segment = segment
+	if best_segment.is_empty():
+		return
+	_spawn_foundation_hull(
+		holder,
+		plot,
+		foundation,
+		best_segment,
+		0.5,
+		design_hull_id,
+		design_beam,
+		Color(0.75, 0.88, 1.0),
+		1.0,
+	)
+	var shore_length := float(foundation.get("shore_length_m", best_length))
+	if shore_length >= ref_loa * 1.35 and design_hull_id != REF_HULL_ID:
+		_spawn_foundation_hull(
+			holder,
+			plot,
+			foundation,
+			best_segment,
+			0.22,
+			REF_HULL_ID,
+			ref_beam,
+			Color(0.7, 0.95, 0.75),
+			-1.0,
+		)
+
+
+func _spawn_foundation_hull(
+		parent: Node3D,
+		plot: PortPlot,
+		foundation: Dictionary,
+		segment: Dictionary,
+		along_fraction: float,
+		hull_id: String,
+		beam_m: float,
+		label_color: Color,
+		side_sign: float,
+) -> void:
+	var entry := HullRegistry.get_by_id(hull_id)
+	var boat := HullRegistry.build_hull(hull_id)
+	if boat == null:
+		push_warning("PortShowcase: failed to build hull %s" % hull_id)
+		return
+	var center_arr := segment.get("center", [0.0, 0.0]) as Array
+	var dir_arr := segment.get("direction_local", [1.0, 0.0]) as Array
+	var tangent := Vector2(float(dir_arr[0]), float(dir_arr[1])).normalized()
+	var water_normal := Vector2(tangent.y, -tangent.x)
+	var length_m := float(segment.get("length_m", 40.0))
+	var dock_reach := float(foundation.get("dock_reach_m", 24.0))
+	var along := (along_fraction - 0.5) * length_m
+	var local := Vector3(
+		float(center_arr[0]) + tangent.x * along + water_normal.x * (dock_reach + beam_m * 0.5 + 5.0) * side_sign,
+		0.0,
+		float(center_arr[1]) + tangent.y * along + water_normal.y * (dock_reach + beam_m * 0.5 + 5.0) * side_sign,
+	)
+	var port_basis := Basis(Vector3.UP, plot.rotation.y)
+	var world_pos := plot.global_position + port_basis * local
+	var world_dir := port_basis * Vector3(tangent.x, 0.0, tangent.y)
+	var yaw_degrees := rad_to_deg(atan2(world_dir.x, world_dir.z))
+	boat.name = "%s_%s" % [hull_id, str(int(along_fraction * 100.0))]
+	boat.freeze = true
+	parent.add_child(boat)
+	boat.global_position = world_pos
+	boat.global_rotation_degrees.y = yaw_degrees
+	boat.place_at_waterline(WaveSurface.WATER_LEVEL)
+	boat.freeze = true
+	var loa := float(entry.get("loa_m", 0.0))
+	var beam := float(entry.get("beam_m", 0.0))
+	var label := Label3D.new()
+	label.name = "%s_Label" % boat.name
+	label.text = "%s\n%.0f×%.0f m" % [hull_id.to_upper(), loa, beam]
+	label.pixel_size = 0.028
+	label.modulate = label_color
+	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	label.no_depth_test = true
+	parent.add_child(label)
+	label.global_position = world_pos + Vector3(0.0, maxf(beam * 0.65, 8.0), 0.0)
 
 
 func _spawn_docked_hull(
@@ -534,12 +587,16 @@ func _refresh_hud() -> void:
 	var pier_target_line := ""
 	var bay_style := str(graph.initial_attributes.get("port_area", {}).get("harbour_style", ""))
 	if not bay_style.is_empty():
-		pier_target_line = "Grown dock · %.0f m shore · %.0f m reach" % [
+		var profile := str(recipe.get("length_profile", port_area.get("length_profile", "standard")))
+		pier_target_line = "%s dock · %.0f m shore (hull %.0f m) · %.0f m reach" % [
+			profile,
 			float(recipe.get("shore_length_m", 0.0)),
+			float(recipe.get("design_hull_loa_m", PortSizing.design_hull_loa_m(port_size))),
 			float(recipe.get("dock_reach_m", 0.0)),
 		]
 	var stat_lines: PackedStringArray = PackedStringArray([
 		"Seed: %d (#%d)" % [SEEDS[seed_index], seed_index + 1],
+		"Length: %s" % LENGTH_PROFILES[length_profile_index],
 		"Size: %d — %s" % [port_size, SIZE_LABELS[port_size]],
 		"Region: %s" % REGION_LABELS[region_index],
 		"World site: %.0f, %.0f · terrain near-field 700 m" % [
@@ -584,7 +641,7 @@ func _refresh_hud() -> void:
 			family_labels.append(CommodityCatalog.terminal_family_display(str(family)))
 		_trade.text += "[b]Terminals[/b]\n%s\n\n" % ", ".join(family_labels)
 	_trade.text += "[b]Reading the layout[/b]\n"
-	_trade.text += "Natural shore → seaward dock growth → bay stays outside\n"
-	_trade.text += "Mash , . to compare seed recipes on real terrain\n"
-	_trade.text += "Grey ribbon = 36 m land + 30 m dock foundation"
-	_instructions.text = "WASD move · Q/E · Shift · MMB pan · scroll · Home · ←→ size · ↑↓ region · , . seed · L/F · R rebuild"
+	_trade.text += "Natural shore → seaward dock growth → blended town backdrop\n"
+	_trade.text += "Mash , . to compare length profiles (compact / standard / extended)\n"
+	_trade.text += "Blue hull = design size · green = 28 m reference"
+	_instructions.text = "WASD move · Q/E · Shift · MMB pan · scroll · Home · ←→ size · ↑↓ region · , . length · - = seed · L/F · R rebuild"

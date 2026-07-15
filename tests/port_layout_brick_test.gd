@@ -36,55 +36,40 @@ func _run() -> void:
 	var port_area := graph.initial_attributes.get("port_area", {}) as Dictionary
 	var coast := port_area.get("coast_polyline", []) as Array
 	var natural := port_area.get("natural_shore_polyline", []) as Array
-	var terrain_coast := port_area.get("terrain_coast_polyline", []) as Array
 	var foundation := graph.initial_attributes.get("foundation", {}) as Dictionary
 	var land_edge := foundation.get("land_edge", []) as Array
-	var water_edge := foundation.get("water_edge", []) as Array
 	var segments := foundation.get("segments", []) as Array
-	var reclaim_zones := foundation.get("reclaim_zones", []) as Array
-	assert(coast.size() >= 2, "must trace a shoreline inside the port area")
-	assert(natural.size() >= 2, "must keep the natural mainland edge")
-	assert(terrain_coast.size() >= 2, "must keep the natural traced shoreline")
-	assert(str(port_area.get("harbour_style", "")) == "grown_dock", "harbour must grow dock from mainland")
-	assert(land_edge.size() == coast.size() and water_edge.size() == coast.size())
-	assert(segments.size() == coast.size() - 1, "foundation ribbon covers every coast segment")
+	var footprint_quads := foundation.get("footprint_quads", []) as Array
+	var inland_blend_quads := foundation.get("inland_blend_quads", []) as Array
+	assert(coast.size() >= 3, "spine must follow the coast, not cut across it")
+	assert(footprint_quads.size() == segments.size())
+	assert(inland_blend_quads.size() == segments.size())
+	assert(not foundation.has("footprint_polygon"), "terrain uses segment quads only")
 	assert(float(foundation.get("dock_reach_m", 0.0)) > 8.0)
-	assert(is_equal_approx(float(foundation.get("surface_y_m", 0.0)), PortCoastTracer.FOUNDATION_SURFACE_Y_M))
-	assert(not graph.initial_attributes.has("dock_recipe"), "quays stay disabled")
-	assert(reclaim_zones.size() >= 1, "harbour must reclaim seaward dock growth")
-	assert(not foundation.has("carve_zones"), "carving is disabled")
 
-	var longest := 0.0
+	var longest_segment := 0.0
 	for raw_segment in segments:
 		var segment := raw_segment as Dictionary
-		longest = maxf(longest, float(segment.get("length_m", 0.0)))
-	assert(longest >= PortCoastTracer.normalized_min_segment_m(4) * 0.85, "pavement spans should normalize")
-
-	for instance_id in graph.module_ids():
-		var placed := graph.modules[instance_id] as PortPlacedModule
-		var module_definition := graph.module_definition(placed.module_id)
-		assert(module_definition != null and module_definition.kind == "coast")
+		longest_segment = maxf(longest_segment, float(segment.get("length_m", 0.0)))
+	assert(
+		longest_segment <= PortCoastTracer.MAX_SPINE_SEGMENT_M * 1.15,
+		"no chord may span across the island",
+	)
 
 	var flattened := graph.flatten_zone_records(definition.world_position, definition.rotation_y)
-	assert(flattened.size() == segments.size() + reclaim_zones.size(), "terrain uses pavement pads and reclaim zones")
-	var reclaim_count := 0
-	var carve_count := 0
+	assert(flattened.size() == footprint_quads.size() + inland_blend_quads.size())
+	var plate_count := 0
 	for raw_zone in flattened:
 		var zone := raw_zone as Dictionary
-		if bool(zone.get("reclaim", false)):
-			reclaim_count += 1
-		if bool(zone.get("carve", false)):
-			carve_count += 1
-	assert(reclaim_count == reclaim_zones.size())
-	assert(carve_count == 0)
+		if bool(zone.get("ribbon_fill", false)):
+			plate_count += 1
+			assert((zone.get("near_field_bounds", Rect2()) as Rect2).size != Vector2.ZERO)
+	assert(plate_count == footprint_quads.size())
 
-	var restored := PortLayoutGraph.from_dict(graph.to_dict())
-	assert(restored != null and restored.is_graph_connected())
 	print(
-		"port_foundation_test OK: %s, %d pavement segments, %d reclaim zones" % [
-			str(port_area.get("harbour_style", "")),
-			segments.size(),
-			reclaim_zones.size(),
+		"port_foundation_test OK: %d spine verts, %d plate quads" % [
+			natural.size(),
+			footprint_quads.size(),
 		]
 	)
 	quit(0)

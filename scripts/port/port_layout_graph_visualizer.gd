@@ -103,26 +103,33 @@ func _stamp_module(placed: PortPlacedModule) -> void:
 func _stamp_foundation() -> void:
 	var plan := _graph.initial_attributes.get("foundation", {}) as Dictionary
 	var land_edge := plan.get("land_edge", []) as Array
-	var water_edge := plan.get("water_edge", []) as Array
+	var water_edge := plan.get("visual_water_edge", plan.get("water_edge", [])) as Array
 	if land_edge.size() < 2 or land_edge.size() != water_edge.size():
 		return
 	var surface_y := float(plan.get("surface_y_m", PortCoastTracer.FOUNDATION_SURFACE_Y_M))
+	var thickness := float(plan.get("thickness_m", PortCoastTracer.FOUNDATION_THICKNESS_M))
+	var top_y := surface_y + 0.04
+	var bottom_y := surface_y - thickness
 	var material := MeshBuilder.make_material(Color(0.33, 0.35, 0.37), 0.96, 0.0, true)
 	material.render_priority = 2
 	var surface := SurfaceTool.new()
 	surface.begin(Mesh.PRIMITIVE_TRIANGLES)
 	surface.set_material(material)
 	for index in range(land_edge.size() - 1):
-		var land_a := _foundation_point(land_edge[index], surface_y)
-		var land_b := _foundation_point(land_edge[index + 1], surface_y)
-		var water_a := _foundation_point(water_edge[index], surface_y)
-		var water_b := _foundation_point(water_edge[index + 1], surface_y)
-		surface.add_vertex(land_a)
-		surface.add_vertex(water_b)
-		surface.add_vertex(water_a)
-		surface.add_vertex(land_a)
-		surface.add_vertex(land_b)
-		surface.add_vertex(water_b)
+		var land_a_top := _foundation_point(land_edge[index], top_y)
+		var land_b_top := _foundation_point(land_edge[index + 1], top_y)
+		var water_a_top := _foundation_point(water_edge[index], top_y)
+		var water_b_top := _foundation_point(water_edge[index + 1], top_y)
+		var land_a_bottom := _foundation_point(land_edge[index], bottom_y)
+		var land_b_bottom := _foundation_point(land_edge[index + 1], bottom_y)
+		var water_a_bottom := _foundation_point(water_edge[index], bottom_y)
+		var water_b_bottom := _foundation_point(water_edge[index + 1], bottom_y)
+		_add_quad(surface, land_a_top, land_b_top, water_b_top, water_a_top)
+		_add_quad(surface, land_a_bottom, water_a_bottom, water_b_bottom, land_b_bottom)
+		_add_quad(surface, land_a_top, land_a_bottom, land_b_bottom, land_b_top)
+		_add_quad(surface, water_a_top, water_b_top, water_b_bottom, water_a_bottom)
+		_add_quad(surface, land_a_top, water_a_top, water_a_bottom, land_a_bottom)
+		_add_quad(surface, land_b_top, land_b_bottom, water_b_bottom, water_b_top)
 	surface.generate_normals()
 	var mesh := MeshInstance3D.new()
 	mesh.name = "TerrainFollowingFoundation"
@@ -130,8 +137,22 @@ func _stamp_foundation() -> void:
 	mesh.material_override = material
 	mesh.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	mesh.extra_cull_margin = 8.0
-	mesh.position.y = 0.04
 	add_child(mesh)
+
+
+func _add_quad(
+		surface: SurfaceTool,
+		a: Vector3,
+		b: Vector3,
+		c: Vector3,
+		d: Vector3,
+) -> void:
+	surface.add_vertex(a)
+	surface.add_vertex(b)
+	surface.add_vertex(c)
+	surface.add_vertex(a)
+	surface.add_vertex(c)
+	surface.add_vertex(d)
 
 
 func _foundation_point(raw: Variant, surface_y: float) -> Vector3:
@@ -179,200 +200,132 @@ func _stamp_jib_crane(placed: PortPlacedModule, definition: PortModuleDefinition
 	_equip_label(placed, "JIB CRANE", mast_h + 1.5, accent)
 
 
-func _stamp_fish_derrick(placed: PortPlacedModule, definition: PortModuleDefinition) -> void:
-	var root := _equip_root(placed, "FishDerrick")
-	var accent := Color(0.45, 0.78, 0.88)
-	_pad(root, definition.footprint_m, STEEL.darkened(0.1))
-	var mast_h := 12.0
-	var mast := MeshBuilder.cylinder(0.35, mast_h, accent, 0.65, 0.25)
-	mast.position.y = mast_h * 0.5
-	root.add_child(mast)
-	var boom_side := _jib_side(placed)
-	var boom := MeshBuilder.box(Vector3(14.0, 0.5, 0.5), accent.lightened(0.1), 0.7, 0.15)
-	boom.position = Vector3(boom_side * 6.0, mast_h - 1.5, 0.0)
-	boom.rotation_degrees.z = boom_side * -18.0
-	root.add_child(boom)
-	_equip_label(placed, "FISH DERRICK", mast_h + 1.2, accent)
-
-
 func _stamp_sts_gantry(placed: PortPlacedModule, definition: PortModuleDefinition) -> void:
 	var root := _equip_root(placed, "StsGantry")
-	var accent := Color(0.25, 0.55, 0.85)
-	_pad(root, definition.footprint_m, STEEL.darkened(0.2))
+	var accent := Color(0.92, 0.72, 0.10)
+	var fp := definition.footprint_m
+	_pad(root, fp, STEEL.darkened(0.15))
 	var size := _size_class()
-	var height := clampf(22.0 + float(size) * 3.0, 22.0, 42.0)
-	var span := clampf(28.0 + float(size) * 4.0, 28.0, 56.0)
-	var side := _jib_side(placed)
-	## Portal legs + crossbeam reaching over the berth (ship-to-shore silhouette).
-	var leg_l := MeshBuilder.box(Vector3(1.4, height, 1.4), accent, 0.7, 0.2)
-	leg_l.position = Vector3(-4.0, height * 0.5, 0.0)
-	root.add_child(leg_l)
-	var leg_r := MeshBuilder.box(Vector3(1.4, height, 1.4), accent, 0.7, 0.2)
-	leg_r.position = Vector3(4.0, height * 0.5, 0.0)
-	root.add_child(leg_r)
-	var beam := MeshBuilder.box(Vector3(span, 1.2, 1.6), accent.lightened(0.08), 0.65, 0.25)
-	beam.position = Vector3(side * span * 0.28, height - 0.8, 0.0)
+	var leg_h := clampf(18.0 + float(size) * 3.0, 18.0, 36.0)
+	var leg_span := fp.x * 0.38
+	for side in [-1.0, 1.0]:
+		var leg := MeshBuilder.box(Vector3(1.4, leg_h, 1.4), accent, 0.75, 0.2)
+		leg.position = Vector3(side * leg_span, leg_h * 0.5, 0.0)
+		root.add_child(leg)
+	var beam := MeshBuilder.box(Vector3(fp.x * 0.82, 1.2, 2.4), STEEL, 0.8, 0.3)
+	beam.position = Vector3(0.0, leg_h - 0.6, 0.0)
 	root.add_child(beam)
-	var trolley := MeshBuilder.box(Vector3(3.0, 1.5, 2.4), STEEL.lightened(0.1), 0.6, 0.3)
-	trolley.position = Vector3(side * span * 0.45, height - 2.2, 0.0)
-	root.add_child(trolley)
-	var spreader := MeshBuilder.box(Vector3(6.0, 0.6, 2.0), Color(0.85, 0.55, 0.12), 0.7, 0.1)
-	spreader.position = Vector3(side * span * 0.45, height * 0.45, 0.0)
-	root.add_child(spreader)
-	_equip_label(placed, "STS GANTRY", height + 1.5, accent)
+	_equip_label(placed, "STS GANTRY", leg_h + 2.0, accent)
 
 
 func _stamp_grab_unloader(placed: PortPlacedModule, definition: PortModuleDefinition) -> void:
 	var root := _equip_root(placed, "GrabUnloader")
-	var accent := Color(0.78, 0.48, 0.22)
-	_pad(root, definition.footprint_m, STEEL.darkened(0.15))
-	var mast_h := clampf(18.0 + float(_size_class()) * 3.0, 18.0, 36.0)
-	var tower := MeshBuilder.box(Vector3(3.2, mast_h, 3.2), accent, 0.8, 0.15)
-	tower.position.y = mast_h * 0.5
+	var accent := Color(0.92, 0.72, 0.10)
+	var fp := definition.footprint_m
+	_pad(root, fp, STEEL.darkened(0.15))
+	var tower_h := clampf(20.0 + float(_size_class()) * 2.5, 20.0, 34.0)
+	var tower := MeshBuilder.box(Vector3(3.0, tower_h, 3.0), accent, 0.75, 0.2)
+	tower.position = Vector3(0.0, tower_h * 0.5, 0.0)
 	root.add_child(tower)
-	var side := _jib_side(placed)
-	var boom := MeshBuilder.box(Vector3(22.0, 1.4, 1.8), accent.lightened(0.05), 0.75, 0.2)
-	boom.position = Vector3(side * 10.0, mast_h - 2.0, 0.0)
+	var boom := MeshBuilder.box(Vector3(fp.x * 0.55, 0.8, 1.0), STEEL, 0.8, 0.3)
+	boom.position = Vector3(0.0, tower_h - 1.0, fp.z * 0.2)
 	root.add_child(boom)
-	var grab := MeshBuilder.box(Vector3(3.5, 2.2, 3.5), STEEL.darkened(0.25), 0.85, 0.4)
-	grab.position = Vector3(side * 18.0, mast_h * 0.4, 0.0)
-	root.add_child(grab)
-	_equip_label(placed, "GRAB UNLOADER", mast_h + 1.4, accent)
+	_equip_label(placed, "GRAB UNLOADER", tower_h + 1.5, accent)
 
 
 func _stamp_grain_elevator(placed: PortPlacedModule, definition: PortModuleDefinition) -> void:
 	var root := _equip_root(placed, "GrainElevator")
-	var accent := Color(0.88, 0.78, 0.28)
-	_pad(root, definition.footprint_m, STEEL.darkened(0.1))
-	var tower_h := clampf(20.0 + float(_size_class()) * 3.5, 20.0, 40.0)
-	var tower := MeshBuilder.box(Vector3(4.0, tower_h, 4.0), accent, 0.75, 0.05)
-	tower.position.y = tower_h * 0.5
-	root.add_child(tower)
-	var silo := MeshBuilder.cylinder(2.4, tower_h * 0.7, accent.darkened(0.12), 0.7, 0.0)
-	silo.position = Vector3(-5.0, tower_h * 0.35, 0.0)
+	var accent := Color(0.84, 0.62, 0.18)
+	var fp := definition.footprint_m
+	_pad(root, fp, STEEL.darkened(0.15))
+	var silo_h := clampf(24.0 + float(_size_class()) * 3.0, 24.0, 42.0)
+	var silo := MeshBuilder.cylinder(2.8, silo_h, accent, 0.8, 0.2)
+	silo.position = Vector3(0.0, silo_h * 0.5, 0.0)
 	root.add_child(silo)
-	var side := _jib_side(placed)
-	var spout := MeshBuilder.box(Vector3(16.0, 0.9, 0.9), STEEL.lightened(0.15), 0.6, 0.35)
-	spout.position = Vector3(side * 7.0, tower_h * 0.7, 0.0)
-	spout.rotation_degrees.z = side * -12.0
-	root.add_child(spout)
-	_equip_label(placed, "GRAIN ELEVATOR", tower_h + 1.4, accent)
+	_equip_label(placed, "GRAIN ELEVATOR", silo_h + 1.5, accent)
+
+
+func _stamp_fish_derrick(placed: PortPlacedModule, definition: PortModuleDefinition) -> void:
+	var root := _equip_root(placed, "FishDerrick")
+	var accent := Color(0.55, 0.72, 0.92)
+	var fp := definition.footprint_m
+	_pad(root, fp, STEEL.darkened(0.15))
+	var mast_h := clampf(12.0 + float(_size_class()) * 2.0, 12.0, 24.0)
+	var mast := MeshBuilder.box(Vector3(1.2, mast_h, 1.2), accent, 0.75, 0.2)
+	mast.position = Vector3(0.0, mast_h * 0.5, 0.0)
+	root.add_child(mast)
+	_equip_label(placed, "FISH DERRICK", mast_h + 1.5, accent)
 
 
 func _stamp_loading_arm(placed: PortPlacedModule, definition: PortModuleDefinition) -> void:
 	var root := _equip_root(placed, "LoadingArm")
-	var accent := Color(0.55, 0.62, 0.72)
-	_pad(root, definition.footprint_m, STEEL.darkened(0.12))
-	var pedestal_h := 4.5
-	var pedestal := MeshBuilder.cylinder(0.45, pedestal_h, accent, 0.7, 0.25)
-	pedestal.position.y = pedestal_h * 0.5
-	root.add_child(pedestal)
-	var side := _jib_side(placed)
-	var knuckle := MeshBuilder.box(Vector3(1.2, 1.0, 1.2), accent.lightened(0.05), 0.65, 0.2)
-	knuckle.position = Vector3(0.0, pedestal_h, 0.0)
-	root.add_child(knuckle)
-	var pipe := MeshBuilder.cylinder(0.22, 10.0, Color(0.72, 0.74, 0.78), 0.55, 0.45)
-	pipe.position = Vector3(side * 4.5, pedestal_h - 1.0, -2.0)
-	pipe.rotation_degrees.z = side * 28.0
-	pipe.rotation_degrees.x = -18.0
-	root.add_child(pipe)
-	var hose := MeshBuilder.cylinder(0.14, 6.0, Color(0.35, 0.38, 0.42), 0.5, 0.35)
-	hose.position = Vector3(side * 8.0, pedestal_h - 3.5, -5.0)
-	hose.rotation_degrees.x = -55.0
-	root.add_child(hose)
-	_equip_label(placed, "LOADING ARM", pedestal_h + 2.0, accent)
+	var accent := Color(0.72, 0.78, 0.86)
+	var fp := definition.footprint_m
+	_pad(root, fp, STEEL.darkened(0.15))
+	var base_h := 4.0
+	var base := MeshBuilder.cylinder(1.8, base_h, STEEL, 0.85, 0.2)
+	base.position = Vector3(0.0, base_h * 0.5, 0.0)
+	root.add_child(base)
+	var arm := MeshBuilder.box(Vector3(10.0, 0.7, 0.7), accent, 0.75, 0.2)
+	arm.position = Vector3(5.0, base_h + 1.0, 0.0)
+	root.add_child(arm)
+	_equip_label(placed, "LOADING ARM", base_h + 3.0, accent)
 
 
 func _stamp_fuel_tank(placed: PortPlacedModule, definition: PortModuleDefinition) -> void:
-	var root := _equip_root(placed, "Fuel")
+	var root := _equip_root(placed, "FuelTank")
 	var fp := definition.footprint_m
-	var pad := MeshBuilder.box(Vector3(fp.x, 0.4, fp.z), Color(0.25, 0.25, 0.26), 0.9, 0.05)
-	pad.position.y = 0.2
-	root.add_child(pad)
-	var radius := minf(fp.x, fp.z) * 0.35
-	var tank := MeshBuilder.cylinder(radius, maxf(fp.y * 4.0, 6.0), Color(0.75, 0.16, 0.12), 0.55, 0.35)
-	tank.position.y = maxf(fp.y * 2.0, 3.2)
+	_pad(root, fp, STEEL.darkened(0.15))
+	var tank_h := clampf(6.0 + float(_size_class()), 6.0, 12.0)
+	var tank := MeshBuilder.cylinder(minf(fp.x, fp.z) * 0.35, tank_h, Color(0.62, 0.64, 0.66), 0.85, 0.2)
+	tank.position = Vector3(0.0, tank_h * 0.5, 0.0)
 	root.add_child(tank)
-	_equip_label(placed, "FUEL", tank.position.y + radius + 1.2, Color(1.0, 0.55, 0.45))
-
-
-func _should_stamp_open_slot(slot: Dictionary) -> bool:
-	var parent := _graph.modules.get(str(slot.get("parent_instance_id", ""))) as PortPlacedModule
-	var parent_definition := _graph.module_definition(parent.module_id) if parent != null else null
-	if parent_definition != null and parent_definition.kind == "coast":
-		return false
-	var slot_key := str(slot.get("slot_id", ""))
-	var parent_slot := slot_key.split(":")[-1] if slot_key.contains(":") else slot_key
-	if PortSizing.is_inland_side_slot(parent_slot):
-		return false
-	## Unfilled pier roots on the asphalt apron read as "half built" in inspect scenes.
-	if str(slot.get("type", "")) == "harbour_branch" \
-			and str(slot.get("parent_instance_id", "")) == "root":
-		return false
-	if str(slot.get("type", "")) in ["quay_branch", "coast_chain"]:
-		return false
-	return true
+	_label("FuelLabel_%s" % placed.instance_id, "FUEL", placed.position_m + Vector3(0.0, tank_h + 1.2, 0.0), Color(0.95, 0.9, 0.7), 0.028)
 
 
 func _stamp_open_slot(slot: Dictionary) -> void:
-	var slot_type := str(slot.get("type", "slot"))
-	var size := _slot_marker_size(slot_type)
+	var slot_type := str(slot.get("type", ""))
+	var color: Color = SLOT_COLORS.get(slot_type, Color(0.5, 0.5, 0.5, 0.5))
 	var position := slot.get("position_m", Vector3.ZERO) as Vector3
+	var yaw := float(slot.get("yaw_degrees", 0.0))
 	_box(
-		"Open_%s" % str(slot.get("slot_id", "")).replace(":", "_"),
-		size,
-		position + Vector3(0.0, size.y * 0.5 + 0.08, 0.0),
-		float(slot.get("yaw_degrees", 0.0)),
-		SLOT_COLORS.get(slot_type, Color(0.7, 0.3, 0.7, 0.58)) as Color,
+		"OpenSlot_%s" % str(slot.get("slot_id", "slot")),
+		Vector3(8.0, 0.4, 8.0),
+		position + Vector3(0.0, 0.2, 0.0),
+		yaw,
+		color,
 		true,
 	)
-	_label(
-		"OpenLabel_%s" % str(slot.get("slot_id", "")).replace(":", "_"),
-		"OPEN: %s" % slot_type.to_upper().replace("_", " "),
-		position + Vector3(0.0, size.y + 0.9, 0.0),
-		Color(0.96, 0.84, 1.0),
-		0.023,
-	)
 
 
-func _equip_root(placed: PortPlacedModule, prefix: String) -> Node3D:
+func _should_stamp_open_slot(slot: Dictionary) -> bool:
+	var slot_type := str(slot.get("type", ""))
+	return slot_type not in ["coast_chain", "shore_chain"]
+
+
+func _equip_root(placed: PortPlacedModule, name: String) -> Node3D:
 	var root := Node3D.new()
-	root.name = "%s_%s" % [prefix, placed.instance_id]
+	root.name = "%s_%s" % [name, placed.instance_id]
 	root.position = placed.position_m
 	root.rotation_degrees.y = placed.yaw_degrees
 	add_child(root)
 	return root
 
 
-func _pad(root: Node3D, fp: Vector3, color: Color) -> void:
-	var pad := MeshBuilder.box(
-		Vector3(maxf(fp.x, 8.0), 1.0, maxf(fp.z, 8.0)),
-		color,
-		0.9,
-		0.15,
-	)
-	pad.position.y = 0.5
-	root.add_child(pad)
-
-
-func _jib_side(placed: PortPlacedModule) -> float:
-	return 1.0 if int(placed.assignment.get("berth_index", 0)) % 2 == 0 else -1.0
-
-
-func _size_class() -> int:
-	return _graph.size_class() if _graph != null else 1
-
-
 func _equip_label(placed: PortPlacedModule, text: String, height: float, color: Color) -> void:
-	if not show_module_labels:
-		return
 	_label(
-		"Label_%s" % placed.instance_id,
+		"EquipLabel_%s" % placed.instance_id,
 		text,
 		placed.position_m + Vector3(0.0, height, 0.0),
-		color.lightened(0.25),
-		0.026,
+		color,
+		0.028,
 	)
+
+
+func _pad(root: Node3D, footprint: Vector3, color: Color) -> void:
+	var pad := MeshBuilder.box(Vector3(footprint.x, 0.35, footprint.z), color.darkened(0.1), 0.9, 0.05)
+	pad.position = Vector3(0.0, 0.175, 0.0)
+	root.add_child(pad)
 
 
 func _box(
@@ -383,44 +336,19 @@ func _box(
 		color: Color,
 		transparent: bool,
 ) -> MeshInstance3D:
-	var out := MeshInstance3D.new()
-	out.name = node_name
-	var mesh := BoxMesh.new()
-	mesh.size = size
-	out.mesh = mesh
-	out.material_override = _material_for(color, transparent)
-	out.position = position
-	out.rotation_degrees.y = yaw_degrees
-	add_child(out)
-	return out
+	var mesh_instance := MeshInstance3D.new()
+	mesh_instance.name = node_name
+	var box := BoxMesh.new()
+	box.size = size
+	mesh_instance.mesh = box
+	mesh_instance.material_override = _cached_material(color, transparent)
+	mesh_instance.position = position
+	mesh_instance.rotation_degrees.y = yaw_degrees
+	add_child(mesh_instance)
+	return mesh_instance
 
 
-func _material_for(color: Color, transparent: bool) -> StandardMaterial3D:
-	var key := "%s|%d" % [color.to_html(true), 1 if transparent else 0]
-	var cached: StandardMaterial3D = _material_cache.get(key) as StandardMaterial3D
-	if cached != null:
-		return cached
-	var material := StandardMaterial3D.new()
-	material.albedo_color = color
-	material.roughness = 0.86
-	material.metallic = 0.02
-	material.emission_enabled = true
-	material.emission = Color(color.r, color.g, color.b)
-	material.emission_energy_multiplier = 0.12
-	if transparent:
-		material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-		material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	_material_cache[key] = material
-	return material
-
-
-func _label(
-		node_name: String,
-		text: String,
-		position: Vector3,
-		color: Color,
-		pixel_size: float,
-) -> void:
+func _label(node_name: String, text: String, position: Vector3, color: Color, pixel_size: float) -> void:
 	var label := Label3D.new()
 	label.name = node_name
 	label.text = text
@@ -432,32 +360,24 @@ func _label(
 	add_child(label)
 
 
-static func _module_color(
-		definition: PortModuleDefinition,
-		assignment: Dictionary,
-) -> Color:
-	var commodity := str(assignment.get("commodity_id", ""))
-	if not commodity.is_empty():
-		var color := CommodityCatalog.commodity_color(commodity)
-		return color.darkened(0.18) if str(assignment.get("role", "")) == "import" \
-				else color.lightened(0.08)
-	var family := str(assignment.get("family", ""))
-	if definition.kind == "quay" and not family.is_empty():
-		return CommodityCatalog.terminal_family_color(family)
-	return definition.color
+func _cached_material(color: Color, transparent: bool) -> StandardMaterial3D:
+	var key := "%s_%s" % [color, transparent]
+	if not _material_cache.has(key):
+		_material_cache[key] = MeshBuilder.make_material(color, 0.9, 0.05, transparent)
+	return _material_cache[key]
 
 
-static func _slot_marker_size(slot_type: String) -> Vector3:
-	match slot_type:
-		"harbour_branch", "quay_extension":
-			return Vector3(7.0, 0.35, 5.0)
-		"quay_branch":
-			return Vector3(5.5, 0.32, 4.5)
-		"cargo_facility":
-			return Vector3(6.0, 0.3, 5.0)
-		"equipment_pad", "service_pad":
-			return Vector3(4.5, 0.3, 4.0)
-		"road_extension", "road_branch":
-			return Vector3(4.0, 0.25, 4.0)
-		_:
-			return Vector3(4.0, 0.3, 4.0)
+func _module_color(definition: PortModuleDefinition, assignment: Dictionary) -> Color:
+	if definition.kind == "quay":
+		var family := str(assignment.get("family", ""))
+		if not family.is_empty():
+			return CommodityCatalog.terminal_family_color(family)
+	return Color(0.42, 0.44, 0.46, 0.72 if definition.kind != "coast" else 0.58)
+
+
+func _jib_side(placed: PortPlacedModule) -> float:
+	return -1.0 if str(placed.assignment.get("side", "port")) == "port" else 1.0
+
+
+func _size_class() -> int:
+	return _graph.size_class() if _graph != null else 2
