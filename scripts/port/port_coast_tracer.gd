@@ -6,6 +6,7 @@ extends RefCounted
 ## only merges nearly-straight runs; 90° / 45° snap is optional on long spans.
 
 const FOUNDATION_SURFACE_Y_M := 0.62
+const FOUNDATION_TERRAIN_CLEARANCE_M := 0.18
 const FOUNDATION_EMBED_DEPTH_M := 48.0
 const FOUNDATION_SEAWARD_DEPTH_M := 14.0
 ## Town concrete back from the shore line (+Z local). Fixed — size only lengthens alongshore.
