@@ -45,35 +45,36 @@ const DESIGN_HULL_BEAM_BY_SIZE := [
 	10.0, 16.0, 18.0, 24.0, 24.0, 28.0, 28.0, 32.0, 32.0,
 ]
 const BERTH_COUNT_BY_SIZE := [1, 2, 2, 3, 4, 5, 6, 7, 8]
-const SLOT_WIDTH_BY_SIZE := [
-	40.0, 56.0, 82.0, 102.0, 114.0, 134.0, 146.0, 168.0, 180.0,
-]
+## Strictly increasing tier ladder. quay_half drives alongshore length; pad ≈ 5× quay_half.
 const QUAY_HALF_LENGTH_BY_SIZE := [
-	24.0, 56.0, 100.0, 160.0, 240.0, 340.0, 460.0, 600.0, 760.0,
+	80.0, 110.0, 150.0, 200.0, 260.0, 330.0, 410.0, 500.0, 600.0,
+]
+const SLOT_WIDTH_BY_SIZE := [
+	44.0, 58.0, 80.0, 100.0, 112.0, 132.0, 144.0, 166.0, 178.0,
 ]
 const ISLAND_WIDTH_BY_SIZE := [
-	320.0, 420.0, 560.0, 720.0, 920.0, 1160.0, 1420.0, 1720.0, 2040.0,
+	280.0, 385.0, 525.0, 700.0, 910.0, 1155.0, 1435.0, 1750.0, 2100.0,
 ]
 const TERRAIN_PAD_WIDTH_BY_SIZE := [
-	480.0, 580.0, 720.0, 900.0, 1120.0, 1380.0, 1680.0, 2020.0, 2400.0,
+	400.0, 550.0, 750.0, 1000.0, 1300.0, 1650.0, 2050.0, 2500.0, 3000.0,
 ]
 const TERRAIN_PAD_DEPTH_BY_SIZE := [
-	420.0, 480.0, 560.0, 660.0, 780.0, 920.0, 1080.0, 1260.0, 1460.0,
+	360.0, 420.0, 480.0, 540.0, 620.0, 700.0, 800.0, 920.0, 1060.0,
 ]
 const QUAY_DECK_WIDTH_BY_SIZE := [
-	18.0, 24.0, 28.0, 34.0, 36.0, 42.0, 44.0, 50.0, 54.0,
+	20.0, 24.0, 28.0, 34.0, 36.0, 42.0, 44.0, 50.0, 54.0,
 ]
 const APRON_WIDTH_BY_SIZE := [
-	48.0, 80.0, 120.0, 180.0, 260.0, 360.0, 480.0, 620.0, 780.0,
+	56.0, 80.0, 120.0, 180.0, 260.0, 360.0, 480.0, 620.0, 780.0,
 ]
 const APRON_DEPTH_BY_SIZE := [
-	36.0, 48.0, 64.0, 80.0, 100.0, 120.0, 140.0, 160.0, 180.0,
+	32.0, 48.0, 64.0, 80.0, 100.0, 120.0, 140.0, 160.0, 180.0,
 ]
 const CARGO_YARD_WIDTH_BY_SIZE := [
-	16.0, 20.0, 24.0, 28.0, 32.0, 40.0, 48.0, 56.0, 64.0,
+	18.0, 20.0, 24.0, 28.0, 32.0, 40.0, 48.0, 56.0, 64.0,
 ]
 const CARGO_YARD_DEPTH_BY_SIZE := [
-	12.0, 14.0, 16.0, 18.0, 20.0, 24.0, 28.0, 32.0, 36.0,
+	14.0, 14.0, 16.0, 18.0, 20.0, 24.0, 28.0, 32.0, 36.0,
 ]
 
 
@@ -107,6 +108,20 @@ static func dock_length_m(size: int) -> float:
 
 static func quay_half_length_m(size: int) -> float:
 	return float(QUAY_HALF_LENGTH_BY_SIZE[normalized_size(size)])
+
+
+## Spine link count tracks quay length so landing tiers are not a 3-quad sliver.
+static func foundation_min_spine_links(size: int) -> int:
+	var spacing := foundation_spine_spacing_m(size)
+	var quay_m := quay_half_length_m(size) * 2.0
+	return maxi(12, int(ceil(quay_m / spacing)) + 2)
+
+
+static func foundation_spine_spacing_m(size: int) -> float:
+	var n := normalized_size(size)
+	if n == 0:
+		return 8.0
+	return lerpf(10.0, 20.0, float(n) / float(MAX_SIZE))
 
 
 static func island_width_m(size: int) -> float:

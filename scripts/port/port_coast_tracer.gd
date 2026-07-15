@@ -20,6 +20,7 @@ const FOUNDATION_SPINE_SAMPLE_M := 22.0
 const TRACE_MAX_HALF_DEPTH_M := 280.0
 const PORT_LOCAL_INLAND_DIR := Vector2(0.0, 1.0)
 const PORT_LOCAL_SEAWARD_DIR := Vector2(0.0, -1.0)
+const PORT_LOCAL_ALONGSHORE_DIR := Vector2(1.0, 0.0)
 const MAX_SPINE_SEGMENT_M := 72.0
 const SPINE_RESAMPLE_STEP_M := 36.0
 const STRAIGHT_RUN_ANGLE_DEG := 12.0
@@ -80,10 +81,11 @@ static func _trace_shoreline_scanline(
 ) -> PackedVector2Array:
 	var row_step_m := clampf(column_step_m * 0.45, 4.0, 10.0)
 	var out := PackedVector2Array()
+	var carry := Vector2.ZERO
+	var has_carry := false
 	var x := -half_width_m
 	while x <= half_width_m + 0.01:
-		var best_local := Vector2.ZERO
-		var best_score := INF
+		var crossings: Array[Vector2] = []
 		var z := -half_depth_m
 		var prev_sd := layout.sample_signed_distance(
 			_port_local_to_world(Vector2(x, z), port_origin, port_yaw),
@@ -97,17 +99,33 @@ static func _trace_shoreline_scanline(
 			if prev_sd > 0.0 and sd <= 0.0:
 				var denom := prev_sd - sd
 				var t := 0.5 if absf(denom) < 0.0001 else clampf(prev_sd / denom, 0.0, 1.0)
-				var cross := Vector2(x, z - row_step_m + row_step_m * t)
-				var score := cross.distance_to(Vector2.ZERO)
-				if score < best_score:
-					best_score = score
-					best_local = cross
+				crossings.append(Vector2(x, z - row_step_m + row_step_m * t))
 			prev_sd = sd
 			z += row_step_m
-		if best_score < INF:
-			out.append(best_local)
+		if not crossings.is_empty():
+			var pick := _pick_shore_crossing(crossings, carry, has_carry)
+			out.append(pick)
+			carry = pick
+			has_carry = true
 		x += column_step_m
 	return _dedupe_close_points(out, 3.0)
+
+
+static func _pick_shore_crossing(
+		crossings: Array[Vector2],
+		carry: Vector2,
+		has_carry: bool,
+) -> Vector2:
+	if crossings.is_empty():
+		return Vector2.ZERO
+	var pick: Vector2 = crossings[0]
+	var best_score := INF
+	for crossing in crossings:
+		var score := carry.distance_to(crossing) if has_carry else crossing.distance_to(Vector2.ZERO)
+		if score < best_score:
+			best_score = score
+			pick = crossing
+	return pick
 
 
 ## Dense samples along the best traced-coast span for this port size/seed.
@@ -119,6 +137,7 @@ static func select_harbour_span(
 ) -> PackedVector2Array:
 	if coast_path.size() < 2:
 		return coast_path
+	coast_path = orient_alongshore(coast_path)
 	var arc_lengths := path_arc_lengths(coast_path)
 	var total_length := float(arc_lengths[arc_lengths.size() - 1])
 	if total_length <= 1.0:
@@ -129,32 +148,24 @@ static func select_harbour_span(
 	var quay_run_m := PortSizing.quay_half_length_m(size) * 2.0
 	var desired_length := maxf(quay_run_m * lerpf(0.92, 1.06, span_fraction), min_shore_m)
 	var span_length := minf(desired_length, total_length)
-	var anchor_arc := _harbour_anchor_arc_m(total_length, site_seed)
-	var span_start := clampf(anchor_arc - span_length * 0.5, 0.0, maxf(0.0, total_length - span_length))
-	var sample_step := clampf(span_length / 28.0, 10.0, 22.0)
+	## Grow one continuous chain from the site origin toward port +X — not a random mid-coast window.
+	var origin_arc := _closest_arc_to_point(coast_path, arc_lengths, Vector2.ZERO)
+	var span_start := origin_arc
+	var span_end := minf(origin_arc + span_length, total_length)
+	if span_end - span_start < span_length * 0.85:
+		span_start = maxf(0.0, span_end - span_length)
+	var min_links := PortSizing.foundation_min_spine_links(size)
+	var actual_length := span_end - span_start
+	var sample_step := clampf(actual_length / float(maxi(min_links - 1, 1)), 6.0, 22.0)
 	var out := PackedVector2Array()
 	var arc_s := span_start
-	while arc_s <= span_start + span_length + 0.01:
+	while arc_s <= span_end + 0.01:
 		var sample := point_at_arc_s(coast_path, arc_lengths, arc_s)
 		out.append(sample.get("position", Vector2.ZERO) as Vector2)
 		arc_s += sample_step
-	var end_sample := point_at_arc_s(coast_path, arc_lengths, span_start + span_length)
+	var end_sample := point_at_arc_s(coast_path, arc_lengths, span_end)
 	out.append(end_sample.get("position", Vector2.ZERO) as Vector2)
 	return _dedupe_close_points(out, 4.0)
-
-
-static func _harbour_anchor_fraction(site_seed: int) -> float:
-	var value := int(site_seed) ^ 0x414E4348
-	value = ((value ^ (value >> 16)) * 0x45d9f3b) & 0x7fffffff
-	return float(value % 10000) / 9999.0
-
-
-## Fixed along-shore anchor for a site. Size only widens the span around this point.
-static func _harbour_anchor_arc_m(total_length: float, site_seed: int) -> float:
-	if total_length <= 1.0:
-		return 0.0
-	var margin := minf(total_length * 0.12, 80.0)
-	return lerpf(margin, total_length - margin, _harbour_anchor_fraction(site_seed))
 
 
 ## Grows the mainland edge seaward to meet the dock. Bay water stays outside;
@@ -170,9 +181,12 @@ static func fit_port_shoreline(
 		profile_override: String = "",
 ) -> Dictionary:
 	var length_options := harbour_length_options(size, site_seed, profile_override)
-	var coast_dots := select_harbour_span(traced_coast, size, site_seed, length_options)
+	var traced := orient_alongshore(traced_coast)
+	var coast_dots := select_harbour_span(traced, size, site_seed, length_options)
+	coast_dots = orient_alongshore(coast_dots)
 	coast_dots = _prune_spine_jumps(coast_dots)
-	coast_dots = resample_spine_even(coast_dots, FOUNDATION_SPINE_SAMPLE_M)
+	coast_dots = resample_spine_even(coast_dots, PortSizing.foundation_spine_spacing_m(size))
+	coast_dots = _ensure_min_spine_links(coast_dots, PortSizing.foundation_min_spine_links(size))
 	if coast_dots.size() < 2:
 		return _empty_shoreline_fit(size, length_options)
 	var reach_scale := {"compact": 0.92, "standard": 1.0, "extended": 1.06}
@@ -231,6 +245,47 @@ static func _prune_spine_jumps(
 	return out if out.size() >= 2 else path
 
 
+static func _ensure_min_spine_links(
+		path: PackedVector2Array,
+		min_points: int,
+) -> PackedVector2Array:
+	if path.size() >= min_points or path.size() < 2:
+		return path
+	var length_m := _polyline_length_m(path)
+	if length_m <= 1.0:
+		return path
+	return resample_spine_even(path, length_m / float(maxi(min_points - 1, 1)))
+
+
+## Harbour spine always grows port-local -X → +X (one continuous A→B chain).
+static func orient_alongshore(path: PackedVector2Array) -> PackedVector2Array:
+	if path.size() < 2:
+		return path
+	if (path[path.size() - 1] - path[0]).dot(PORT_LOCAL_ALONGSHORE_DIR) < 0.0:
+		var reversed := PackedVector2Array()
+		for index in range(path.size() - 1, -1, -1):
+			reversed.append(path[index])
+		return reversed
+	return path
+
+
+static func _closest_arc_to_point(
+		path: PackedVector2Array,
+		arc_lengths: Array[float],
+		point: Vector2,
+) -> float:
+	if path.is_empty():
+		return 0.0
+	var best_arc := 0.0
+	var best_dist := INF
+	for index in range(path.size()):
+		var dist := path[index].distance_to(point)
+		if dist < best_dist:
+			best_dist = dist
+			best_arc = float(arc_lengths[index])
+	return best_arc
+
+
 static func harbour_length_options(
 		size: int,
 		site_seed: int,
@@ -250,6 +305,8 @@ static func harbour_length_options(
 		"extended": 0.84,
 	}
 	var min_shore := PortSizing.design_hull_loa_m(size) * 1.2
+	if PortSizing.normalized_size(size) == 0:
+		min_shore = maxf(min_shore, PortSizing.quay_half_length_m(size) * 1.5)
 	return {
 		"profile": profile,
 		"span_fraction": float(fractions.get(profile, 0.62)),

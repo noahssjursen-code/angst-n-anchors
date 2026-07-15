@@ -73,10 +73,11 @@ func _test_seed_variation(first: Array[PortDefinition], varied: Array[PortDefini
 
 
 func _test_geography(layout: WorldLayout, ports: Array[PortDefinition]) -> void:
-	_check(PLACER.max_size_for_quay_half(23.0) < 0, "too-short quay admits no size")
-	_check(PLACER.max_size_for_quay_half(24.0) == 0, "24 m half fits size 0")
-	_check(PLACER.max_size_for_quay_half(100.0) == 2, "100 m half fits size 2")
-	_check(PLACER.max_size_for_quay_half(240.0) == 4, "240 m half fits size 4")
+	_check(PLACER.max_size_for_quay_half(79.0) < 0, "too-short quay admits no size")
+	_check(PLACER.max_size_for_quay_half(80.0) == 0, "80 m half fits size 0")
+	_check(PLACER.max_size_for_quay_half(110.0) == 1, "110 m half fits size 1")
+	_check(PLACER.max_size_for_quay_half(150.0) == 2, "150 m half fits size 2")
+	_check(PLACER.max_size_for_quay_half(260.0) == 4, "260 m half fits size 4")
 	var errors := PLACER.validate_ports(layout, ports, PLACER.MIN_SPACING_M)
 	for error in errors:
 		_check(false, error)

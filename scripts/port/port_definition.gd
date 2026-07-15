@@ -6,7 +6,7 @@ extends RefCounted
 
 enum RegionKind { LEGACY_ISLAND, MAINLAND, FJORD, ARCHIPELAGO }
 enum GroundMode { LOCAL_ISLAND, WORLD_TERRAIN }
-const CURRENT_PORT_GENERATION_VERSION := 41
+const CURRENT_PORT_GENERATION_VERSION := 43
 
 var port_id: String = ""
 var display_name: String = ""
