@@ -59,7 +59,7 @@ func _show_yard_menu() -> void:
 func _open_catalog() -> void:
 	if _dialogue != null and _dialogue.is_open():
 		_dialogue.hide_panel()
-	var catalog: Array[Dictionary] = PrebuiltVesselCatalog.catalog_entries()
+	var catalog: Array[Dictionary] = PrebuiltVesselCatalog.for_sale_entries()
 	_catalog.open_catalog(catalog, 0)
 	_catalog.show_panel()
 
@@ -102,22 +102,33 @@ func _on_commission_requested(entry: Dictionary) -> void:
 	if layout.is_empty():
 		_show_commission_error("That ready-built vessel has no valid fit-out.")
 		return
+	var hull_id := str(entry.get("hull_id", ""))
+	var registration_id := str(entry.get("registration_id", ""))
+	var compliance := VesselCompliance.validate(
+		BrickLayout.from_dict(layout),
+		hull_id,
+		registration_id,
+		HullRegistry.make_grid(hull_id),
+	)
+	if not bool(compliance.get("ok", false)):
+		_show_commission_error("That vessel's registration paperwork is not valid.")
+		return
 	if not _try_pay_for_commission(entry):
 		return
 	_commission(entry, layout, str(entry.get("prebuilt_name", "Vessel")))
 
 
 func _try_pay_for_commission(entry: Dictionary) -> bool:
-	var hull_id := str(entry.get("id", entry.get("hull_id", "workboat"))).strip_edges()
+	var hull_id := str(entry.get("hull_id", "fishing_trawler_small")).strip_edges()
 	var scene_path := str(entry.get("scene_path", "")).strip_edges()
 	var has_scene := not scene_path.is_empty() and ResourceLoader.exists(scene_path)
 	if not has_scene and not HullRegistry.is_known_hull(hull_id):
 		_show_commission_error("That hull is unavailable in the yard right now.")
 		return false
 
-	var loa := float(entry.get("loa_m", Workboat.LOA_M))
-	var beam := float(entry.get("beam_m", Workboat.BEAM_M))
-	var depth := float(entry.get("depth_m", Workboat.DEPTH_M))
+	var loa := float(entry.get("loa_m", 28.0))
+	var beam := float(entry.get("beam_m", 10.0))
+	var depth := float(entry.get("depth_m", 5.6))
 	var stations: HullStations = HullStations.from_box(loa, beam, depth, 10)
 	var session := get_node_or_null("/root/PlayerSession")
 	if session == null:
@@ -145,16 +156,16 @@ func _show_commission_error(line: String) -> void:
 
 
 func _commission(entry: Dictionary, layout: Dictionary, vessel_name: String) -> void:
-	var hull_id := str(entry.get("id", entry.get("hull_id", "workboat"))).strip_edges()
+	var hull_id := str(entry.get("hull_id", "fishing_trawler_small")).strip_edges()
 	if hull_id.is_empty():
-		hull_id = "workboat"
+		hull_id = "fishing_trawler_small"
 	var uid := VesselSpawn.new_vessel_uid(hull_id)
 	var scene_path := str(entry.get("scene_path", "")).strip_edges()
 	if scene_path.is_empty() or not ResourceLoader.exists(scene_path):
 		scene_path = ""
 	var name := vessel_name.strip_edges()
 	if name.is_empty():
-		name = VesselSpawn.vessel_name_of({"display": str(entry.get("display", "Workboat"))})
+		name = VesselSpawn.vessel_name_of({"display": str(entry.get("display", "Vessel"))})
 	if not _register_commissioned_vessel(entry, scene_path, uid, layout, name):
 		_show_commission_error(
 			"The yard could not verify this vessel on disk. Ask again in a moment."
@@ -193,9 +204,9 @@ func _register_commissioned_vessel(
 	var session := get_node_or_null("/root/PlayerSession")
 	if session == null or session.data == null:
 		return false
-	var hull_id := str(entry.get("id", "workboat")).strip_edges()
+	var hull_id := str(entry.get("hull_id", "fishing_trawler_small")).strip_edges()
 	if hull_id.is_empty():
-		hull_id = "workboat"
+		hull_id = "fishing_trawler_small"
 	var safe_layout: Dictionary = layout.duplicate(true) if typeof(layout) == TYPE_DICTIONARY else {}
 	if safe_layout.is_empty():
 		safe_layout = VesselSpawn.default_brick_layout(hull_id)
@@ -203,9 +214,10 @@ func _register_commissioned_vessel(
 		"uid":           uid,
 		"hull_id":       hull_id,
 		"name":          vessel_name,
-		"display":       str(entry.get("display", "Workboat")),
-		"template_path": scene_path,
+		"display":       str(entry.get("display", "Vessel")),
 		"scene_path":    scene_path,
+		"registration_id": str(entry.get("registration_id", "")),
+		"shaft_power_kw": float(entry.get("shaft_power_kw", 1.0)),
 		"brick_layout":  safe_layout,
 	})
 	## JSON-safe ledger row only — never persist catalog Colors / enums.

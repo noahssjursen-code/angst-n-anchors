@@ -1,6 +1,5 @@
 extends Node
 
-const WORKBOAT := preload("res://scripts/ship/vessels/workboat.gd")
 const TRAWLER := preload("res://scripts/ship/vessels/fishing_trawler_small.gd")
 const CATAMARAN := preload("res://scripts/ship/vessels/passenger_catamaran.gd")
 
@@ -233,7 +232,6 @@ func _test_handling_targets() -> void:
 		_check(rudder_force > 0.0, "rudder force authority")
 		_check(typed_profile.prop_wash_speed_ms > 0.0, "bounded low-speed prop wash")
 	for vessel_profile in [
-		WORKBOAT.make_physics_profile(),
 		TRAWLER.make_physics_profile(),
 		CATAMARAN.make_physics_profile(),
 	]:
@@ -252,12 +250,11 @@ func _test_dynamic_cruise_acceleration() -> void:
 	WaveSurface.fft_system = null
 	WaveSurface.clear_sample_cache()
 	var vessels: Array[BoatBody] = [
-		WORKBOAT.new() as BoatBody,
 		TRAWLER.new() as BoatBody,
 	]
 	for i in range(vessels.size()):
 		var boat := vessels[i]
-		boat.name = "ValidationWorkboat" if i == 0 else "ValidationTrawler"
+		boat.name = "ValidationTrawler%d" % i
 		boat.automatic_physics_lod = false
 		boat.position = Vector3(float(i) * 100.0, 0.0, 0.0)
 		add_child(boat)

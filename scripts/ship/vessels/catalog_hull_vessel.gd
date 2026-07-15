@@ -49,7 +49,21 @@ static func make_physics_profile(config: Dictionary) -> HullPhysicsProfile:
 	## 45° plan bow: run = half beam.
 	var bow_taper_m := beam_m * 0.5 if str(config.get("shape", "pointed")) != "box" else 0.0
 	var bow_frac := clampf(bow_taper_m / maxf(loa_m, 0.1), 0.0, 0.5)
-	var bollard := displacement_t * 750.0
+	var fallback_bollard := displacement_t * 750.0
+	var fallback_power_kw := (
+		fallback_bollard * TARGET_CRUISE_MS / (PROPULSIVE_EFFICIENCY * 1000.0)
+	)
+	var shaft_power_kw := maxf(
+		float(config.get("default_shaft_power_kw", fallback_power_kw)),
+		1.0
+	)
+	var bollard := maxf(
+		float(config.get(
+			"default_bollard_thrust_n",
+			shaft_power_kw * PROPULSIVE_EFFICIENCY * 1000.0 / TARGET_CRUISE_MS
+		)),
+		1.0
+	)
 	var profile := HullPhysicsProfile.new()
 	profile.length_m = loa_m
 	profile.beam_m = beam_m
@@ -62,7 +76,7 @@ static func make_physics_profile(config: Dictionary) -> HullPhysicsProfile:
 	profile.hull_form = (
 		(raw_form as Dictionary).duplicate(true)
 		if raw_form is Dictionary
-		else HullFormProfile.resolve(str(config.get("form", "container")))
+		else HullFormProfile.resolve(str(config.get("form", HullFormProfile.DEFAULT_ID)))
 	)
 	profile.hull_center_of_mass = Vector3(0.0, depth_m * 0.14, loa_m * bow_frac * 0.12)
 	profile.engine_mass_kg = displacement_t * 8.5
@@ -78,7 +92,7 @@ static func make_physics_profile(config: Dictionary) -> HullPhysicsProfile:
 	profile.max_heave_damping_accel = 5.0
 	profile.bollard_thrust_n = bollard
 	profile.propulsive_efficiency = PROPULSIVE_EFFICIENCY
-	profile.shaft_power_kw = bollard * TARGET_CRUISE_MS / (PROPULSIVE_EFFICIENCY * 1000.0)
+	profile.shaft_power_kw = shaft_power_kw
 	profile.propeller_position = Vector3(0.0, depth_m * 0.20, loa_m * 0.45)
 	profile.fuel_burn_l_per_sec_full = clampf(displacement_t * 0.000115, 0.05, 0.28)
 	profile.rudder_area_m2 = beam_m * depth_m * 0.04

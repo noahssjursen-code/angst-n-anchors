@@ -7,7 +7,7 @@ extends RefCounted
 
 var cells: Dictionary = {} ## String → Dictionary
 var cargo_zones: Array = [] ## [{ "a": [x,y,z], "b": [x,y,z] }, …] inclusive corners
-var hull_id: String = "workboat"
+var hull_id: String = "fishing_trawler_small"
 
 
 static func cell_key(cell: Vector3i) -> String:
@@ -246,7 +246,7 @@ static func zone_min(zone: Dictionary) -> Vector3i:
 	var b: Array = zone.get("b", [0, 0, 0]) as Array
 	return Vector3i(
 		mini(int(a[0]), int(b[0])),
-		0,
+		mini(int(a[1]) if a.size() > 1 else 0, int(b[1]) if b.size() > 1 else 0),
 		mini(int(a[2]) if a.size() > 2 else 0, int(b[2]) if b.size() > 2 else 0),
 	)
 
@@ -256,7 +256,7 @@ static func zone_max(zone: Dictionary) -> Vector3i:
 	var b: Array = zone.get("b", [0, 0, 0]) as Array
 	return Vector3i(
 		maxi(int(a[0]), int(b[0])),
-		0,
+		maxi(int(a[1]) if a.size() > 1 else 0, int(b[1]) if b.size() > 1 else 0),
 		maxi(int(a[2]) if a.size() > 2 else 0, int(b[2]) if b.size() > 2 else 0),
 	)
 
@@ -352,6 +352,8 @@ func iter_primary_cells() -> Array:
 			"yaw": int(e.get("yaw", 0)),
 			"text": str(e.get("text", "")),
 		}
+		if e.has("color"):
+			row["color"] = (e.get("color", []) as Array).duplicate()
 		if e.has("sign_id"):
 			row["sign_id"] = str(e.get("sign_id", ""))
 			row["sign_yaw"] = int(e.get("sign_yaw", 0))
@@ -390,7 +392,7 @@ func to_dict() -> Dictionary:
 
 static func from_dict(d: Dictionary) -> BrickLayout:
 	var layout := BrickLayout.new()
-	layout.hull_id = str(d.get("hull_id", "workboat"))
+	layout.hull_id = str(d.get("hull_id", "fishing_trawler_small"))
 	var raw: Variant = d.get("cells", {})
 	if typeof(raw) == TYPE_DICTIONARY:
 		layout.cells = (raw as Dictionary).duplicate(true)
@@ -412,10 +414,18 @@ static func from_dict(d: Dictionary) -> BrickLayout:
 			if a_raw is Array and b_raw is Array:
 				var aa: Array = a_raw
 				var bb: Array = b_raw
-				layout.cargo_zones.append(normalize_cargo_rect(
-					Vector3i(int(aa[0]), 0, int(aa[2]) if aa.size() > 2 else 0),
-					Vector3i(int(bb[0]), 0, int(bb[2]) if bb.size() > 2 else 0),
-				))
+				## Preserve authored Y so VesselOutfit can reject hidden/layered holds.
+				## Editor placement still forces y = 0 via normalize_cargo_rect / add_cargo_zone.
+				var ax := int(aa[0])
+				var ay := int(aa[1]) if aa.size() > 1 else 0
+				var az := int(aa[2]) if aa.size() > 2 else 0
+				var bx := int(bb[0])
+				var by := int(bb[1]) if bb.size() > 1 else 0
+				var bz := int(bb[2]) if bb.size() > 2 else 0
+				layout.cargo_zones.append({
+					"a": [mini(ax, bx), mini(ay, by), mini(az, bz)],
+					"b": [maxi(ax, bx), maxi(ay, by), maxi(az, bz)],
+				})
 	layout._migrate_legacy_cargo_tiles()
 	return layout
 

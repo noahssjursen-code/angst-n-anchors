@@ -161,7 +161,7 @@ func _show_request_berth() -> void:
 	if not _captain_can_deploy_vessel():
 		_dialogue.add_quote(
 			"You've no vessel on the registry yet, Captain.\n"
-			+ "Visit the Shipwright and commission a workboat first — then come back for a berth."
+			+ "Visit the Shipwright and commission a vessel first — then come back for a berth."
 		)
 		_dialogue.add_back_button(_show_main)
 		return
@@ -232,7 +232,7 @@ func _show_ship_select() -> void:
 		_release_pending_berth()
 		_dialogue.add_quote(
 			"No commissioned vessel on file, Captain.\n"
-			+ "The Shipwright builds workboats — your berth has been released."
+			+ "The Shipwright builds replacement vessels — your berth has been released."
 		)
 		_dialogue.add_back_button(_show_request_berth)
 		return
@@ -281,6 +281,13 @@ func _deploy_fleet_vessel(record: Dictionary) -> void:
 		if session.has_method("save_now"):
 			session.call("save_now")
 	var resolved := VesselSpawn.resolve_deployable_record(record)
+	if resolved.is_empty():
+		_dialogue.clear()
+		_dialogue.add_quote(
+			"That vessel cannot sail until its registration checklist passes at the shipyard."
+		)
+		_dialogue.add_back_button(_show_main)
+		return
 	_spawn_chosen_ship(resolved)
 
 
@@ -296,7 +303,12 @@ func _spawn_chosen_ship(resolved: Dictionary) -> void:
 	var brick_layout: Dictionary = VesselSpawn.brick_layout_of(resolved)
 	if str(brick_layout.get("hull_id", "")).is_empty():
 		brick_layout["hull_id"] = str(resolved.get("hull_id", "fishing_trawler_small"))
-	var ship := dock.spawn_player_ship(idx, scene_path, brick_layout)
+	var ship := dock.spawn_player_ship(
+		idx,
+		scene_path,
+		brick_layout,
+		str(resolved.get("registration_id", "")),
+	)
 	if ship == null:
 		dock.release_berth(idx)
 		_dialogue.clear()
@@ -305,6 +317,7 @@ func _spawn_chosen_ship(resolved: Dictionary) -> void:
 		return
 
 	if ship is BoatBody:
+		VesselSpawn.apply_propulsion_override(ship as BoatBody, resolved)
 		VesselSpawn.apply_identity(ship as BoatBody, resolved)
 
 	_network_register_ship(ship, scene_path)
@@ -437,7 +450,7 @@ func _network_register_ship(ship_node: Node3D, template_path: String, preferred_
 		preferred_hull_id if not preferred_hull_id.is_empty() else record_hull_id
 	)
 	if hull_id.is_empty():
-		hull_id = "workboat"
+		hull_id = "fishing_trawler_small"
 
 	var ship_id := "player_ship"
 	if session != null and session.get("data") != null:

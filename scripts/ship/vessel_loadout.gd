@@ -1,24 +1,24 @@
 class_name VesselLoadout
 extends RefCounted
 
-## Owned-vessel `attachments[]` helpers. Empty socket = nothing mounted.
+## LEGACY / QUARANTINED attachment helpers. Owned vessels now persist a
+## BrickLayout; store ships must not use this socket/loadout path.
 
 
 static func entry(socket: String, attachment: String) -> Dictionary:
 	return {"socket": socket, "attachment": attachment}
 
 
-static func default_for(vessel_id: String = "workboat") -> Array:
+static func default_for(vessel_id: String = "fishing_trawler_small") -> Array:
 	var id := HullRegistry.resolve_network_hull_id(vessel_id)
 	match id:
 		_:
-			return workboat_default()
+			return default_loadout()
 
 
-static func workboat_default() -> Array:
-	## Full-capability starter: cabin, cargo, fishing, cleats, nav lights.
+static func default_loadout() -> Array:
+	## Legacy attachment fallback. Deck-grid bricks own vessel role now.
 	return [
-		entry("cabin", "cabin_workboat_basic"),
 		entry("cargo_main", "cargo_deck_grid"),
 		entry("fishing_stern", "trawl_system"),
 		entry("mooring_port_fwd", "mooring_cleat"),
@@ -35,7 +35,7 @@ static func workboat_default() -> Array:
 static func normalize(record: Dictionary) -> Dictionary:
 	## Ensure a ledger row has a valid attachments array (fills defaults once).
 	var out := record.duplicate(true)
-	var hull_id := str(out.get("hull_id", "workboat"))
+	var hull_id := str(out.get("hull_id", "fishing_trawler_small"))
 	var raw: Variant = out.get("attachments", null)
 	if raw == null or typeof(raw) != TYPE_ARRAY or (raw as Array).is_empty():
 		out["attachments"] = default_for(hull_id)

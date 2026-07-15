@@ -8,7 +8,7 @@ A maritime trading game built in Godot. The player drives a boat, picks up cargo
 
 1. **Driving the boat is the game.** Physics-driven helm — propulsion, rudder, bow thruster, hydrodynamics, buoyancy on a wave surface. Distance and weather matter. Sailing the route yourself is the loop.
 2. **Cargo delivery between ports.** Buy or accept a contract at one port, load, sail, unload, get paid. Spot trading and contract board both exist as concepts; contracts are the working path in code today.
-3. **Modular ship design.** A hand-authored hull scene plus socket-mounted attachments (cabin, cargo, fishing, crane). Loadout is data on the owned-vessel ledger; job kits are presets. Shipyard UI outfits a hull before commission.
+3. **Modular ship design.** A hull is a reusable L×B geometry component. Finished store ships add their own name, price, shaft power, and deck-brick fit-out; many ships with different roles and performance can share one hull.
 4. **MMO is the destination.** State model (berth reservation, harbour master mediation, contract registry) is being designed shared-session-aware from the start, even though the game currently runs single-player.
 
 ---
@@ -27,7 +27,7 @@ A maritime trading game built in Godot. The player drives a boat, picks up cargo
 
 ## Vessel System (active focus)
 
-Hand-authored vessel scenes under `scenes/vessels/` own SI hull geometry, core systems, and a **1×1×1 m deck brick grid**. Official ready-builts are authored in the `ShipyardBrickEditor` engine tool and sold by the shipwright. Layout is `brick_layout` on the owned-vessel ledger; `DeckFitout` rebuilds bricks + derived gameplay (cargo deck, helm, crane) at spawn.
+Reusable hull components own SI geometry and core systems. Official store ships are authored in `ShipyardBrickEditor` by choosing a hull, painting a **1×1×1 m deck brick grid**, and setting product name, price, and `shaft_power_kw`. The shipwright sells those prebuilts. The ledger stores hull, power, and layout; `VesselSpawn` rebuilds the finished ship.
 
 ```gdscript
 var boat := VesselSpawn.instantiate_from_record(owned_vessel_record)
@@ -35,11 +35,11 @@ get_tree().current_scene.add_child(boat)
 boat.place_at_waterline(water_y)
 ```
 
-Owned vessels persist `brick_layout: { hull_id, cells }`. `BrickRules` enforces height, part budget, doors, crane-on-base. Do not revive `WheelhouseVisual`, hull JSON bridge slots, or `ShipBuilder`.
+Owned vessels persist `hull_id`, `shaft_power_kw`, and `brick_layout: { hull_id, cells }`. Role and appearance come from bricks. Do not revive socket kits, `VesselLoadout`, `WheelhouseVisual`, hull JSON bridge slots, or `ShipBuilder`.
 
-### Orientation (workboat)
+### Vessel orientation
 
-**Bow = −Z, Stern = +Z, Port = −X, Starboard = +X.** Sockets are in vessel metres.
+**Bow = −Z, Stern = +Z, Port = −X, Starboard = +X.** Grid cells are vessel metres.
 
 ### Deck bricks (starter catalog)
 
@@ -53,7 +53,7 @@ Owned vessels persist `brick_layout: { hull_id, cells }`. `BrickRules` enforces 
 
 ### Available hulls
 
-Hand-authored vessel scenes under `scenes/vessels/` (currently the workboat). Catalog entries live in `HullRegistry`.
+Generic platforms live in `resources/data/vessels/hulls/catalog.json` with dimension-based ids such as `hull_90x24`. The trawler and catamaran scenes are frozen exceptions; new store stock uses catalog hulls.
 
 ### Ship components
 
@@ -124,7 +124,7 @@ Core on every vessel: `BoatBody`, buoyancy, hydrodynamics, propulsion, rudder, t
 
 ```
 scenes/
-  vessels/                   # Hand-authored workboat.tscn
+  vessels/                   # Hand-authored vessel scenes
   shared/                    # player.tscn, npc_base.tscn
   systems/                   # port_dock, port_facilities, fuel_station, lighthouse, fog_horn
   ui/

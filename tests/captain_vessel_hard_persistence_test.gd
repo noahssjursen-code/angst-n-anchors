@@ -21,25 +21,23 @@ func _run_hard_test() -> void:
 	_check(not captain_a.is_empty(), "captain A receives UUID")
 
 	# Commission a boat, then refit the same UUID twice.
-	var vessel_uid := VesselSpawn.new_vessel_uid("passenger_catamaran")
-	var layout_v1 := {
-		"hull_id": "passenger_catamaran",
-		"cells": {
-			"2,0,3": {"brick_id": "block", "yaw": 0},
-			"3,0,3": {"brick_id": "door", "yaw": 90},
-		},
-		"cargo_zones": [{"a": [5, 0, 5], "b": [8, 0, 9]}],
-	}
+	var vessel_uid := VesselSpawn.new_vessel_uid("hull_28x10")
+	var layout_v1: Dictionary = {}
+	for entry in PrebuiltVesselCatalog.catalog_entries():
+		if str(entry.get("prebuilt_id", "")) == "fishing_trawler":
+			layout_v1 = (entry.get("prebuilt_layout", {}) as Dictionary).duplicate(true)
+			break
+	_check(not layout_v1.is_empty(), "certified fixture layout is available")
 	var vessel := _vessel_record(vessel_uid, layout_v1)
 	_check(first.persist_vessel_configuration(vessel, true), "commission save succeeds")
 	var layout_v2 := layout_v1.duplicate(true)
-	(layout_v2["cells"] as Dictionary)["4,0,3"] = {
+	(layout_v2["cells"] as Dictionary)["0,6,20"] = {
 		"brick_id": "table",
 		"yaw": 180,
 		"text": "HARD SAVE",
 		"light_id": "light_work_flood",
 	}
-	(layout_v2["cells"] as Dictionary)["5,1,4"] = {
+	(layout_v2["cells"] as Dictionary)["1,6,20"] = {
 		"brick_id": "window",
 		"yaw": 270,
 	}
@@ -169,10 +167,11 @@ func _free_session(session: Node) -> void:
 func _vessel_record(uid: String, layout: Dictionary) -> Dictionary:
 	return {
 		"uid": uid,
-		"hull_id": "passenger_catamaran",
-		"name": "Hard-Test Catamaran",
-		"display": "Passenger Catamaran",
-		"scene_path": HullRegistry.scene_path_for("passenger_catamaran"),
+		"hull_id": "hull_28x10",
+		"registration_id": "fishing_vessel",
+		"name": "Hard-Test Trawler",
+		"display": "Fishing Trawler",
+		"scene_path": HullRegistry.scene_path_for("hull_28x10"),
 		"server_vessel_id": "hard-server-vessel",
 		"layout_hash": "local-hard-layout",
 		"brick_layout": layout,

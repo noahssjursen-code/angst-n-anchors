@@ -50,11 +50,12 @@ Two shared bases to be added during cleanup:
 
 ### `scripts/ship/`
 
-Everything the boat does. Hand-authored `BoatBody` vessels plus socket-mounted attachments:
+Everything the boat does. Reusable hull components plus brick-built store ships:
 - Core: buoyancy, hydro, propulsion, rudder, thruster, controller, camera, mooring solver, walk deck
-- Attachments: cabin/helm, cargo decks, fishing, cleats, lights, ship crane stub
-- `VesselSpawn` + `AttachmentMount` + `VesselLoadout` / `VesselKits`
-- `HullRegistry` (catalog), shipwright catalog → shipyard outfit UI
+- `HullRegistry` / `HullCatalog` own geometry platforms identified by dimensions
+- `PrebuiltVesselCatalog` owns store ships: hull + bricks + shaft power + price
+- `VesselSpawn` builds the hull, applies the brick fit-out, then applies ship power
+- `VesselKits`, `VesselLoadout`, and attachment sockets are quarantined legacy code
 
 ### `scripts/ocean/`
 
@@ -199,19 +200,30 @@ No UI node should reach into a system node to read values. No system should reac
 
 ## Vessel Pipeline
 
-Hand-authored hull + 1×1×1 m brick deck fit-out.
+Hull components and store ships are separate data:
 
 ```
-scenes/vessels/workboat.tscn  +  Workboat._assemble()
+resources/data/vessels/hulls/catalog.json
+          ↓ reusable L×B hull component
+registration catalog + ShipyardBrickEditor
+          ↓ {id, name, hull_id, registration_id, price_marks, shaft_power_kw, brick_layout}
+resources/data/vessels/prebuilt/<store_ship>.json
           ↓
-BoatBody (SI sizes + faces + core systems)
+Shipwright → owned ledger → VesselSpawn
           ↓
-DeckFitout.apply(boat, brick_layout)   # walls, cargo, crane, helm
-DeckFitout.ensure_auto_utilities()     # cleats + nav lights
+VesselCompliance → hull geometry + DeckFitout + per-ship propulsion override
 ```
 
-Workboat orientation: **Bow = −Z, Stern = +Z, Port = −X, Starboard = +X.**
-Official decks are painted in the `ShipyardBrickEditor` engine tool; shipwright sells those prebuilts; ledger stores `brick_layout`.
+Vessel orientation: **Bow = −Z, Stern = +Z, Port = −X, Starboard = +X.**
+One hull can support any number of differently outfitted and powered store ships.
+`ShipClass` is physical size; `VesselRegistration` is declared legal role.
+`VesselCompliance` intersects registration law with `VesselOutfit`'s physical budget.
+Save, commission, and deployment require a passing checklist; `DeckFitout` mounts only
+accepted gear and `BoatBody` discovery is the gameplay seam.
+
+Developer paperwork runs from `scenes/apps/vessel_registration_audit.tscn`. It edits
+`resources/data/vessels/registrations/catalog.json` and audits raw prebuilt files,
+including invalid files that the runtime catalog correctly refuses to list.
 
 ---
 
@@ -227,7 +239,7 @@ resources/data/
     lighthouse/ foghorn/ props/ characters/ terrain/
   lights/             # Nav-light configs
   world/              # Procedural archetype parameters (no generated geometry)
-scenes/vessels/       # Hand-authored BoatBody scenes (workboat.tscn)
+scenes/vessels/       # Hand-authored BoatBody scenes
 ```
 
 Rule: `meshes/` contains only `{vertices, indices}` files. `models/` contains only `{parts}` files that reference meshes. No mixing.

@@ -3,7 +3,7 @@ class_name FishingTrawlerSmall
 extends BoatBody
 
 ## Free starter fishing hull. Metres only — WorldUnits (1 unit = 1 m).
-## Real reference ~14 × 5 m; in-world size uses WORLD_FEEL_SCALE (same as workboat).
+## Real reference ~14 × 5 m; dimensions are authored directly in world metres.
 ## Deck: 1.0 m cells → 28 × 10 grid. Bow −Z, stern +Z, port −X, starboard +X.
 
 const VESSEL_ID := "fishing_trawler_small"
@@ -44,7 +44,7 @@ static func make_physics_profile() -> HullPhysicsProfile:
 	profile.design_displacement_t = DISPLACEMENT_T
 	profile.bow_taper_fraction = BOW_FRAC
 	profile.station_count = 8
-	profile.hull_form = HullFormProfile.resolve("trawler")
+	profile.hull_form = HullFormProfile.resolve("fine_entry")
 	profile.hull_center_of_mass = Vector3(0.0, 0.72, LOA_M * BOW_FRAC * 0.16)
 	profile.engine_mass_kg = 11200.0
 	profile.engine_position = Vector3(0.0, 0.9, LOA_M * 0.30)

@@ -6,7 +6,7 @@ extends CanvasLayer
 ## layer filter, orbit/pan/zoom. Exports JSON blueprints under
 ## resources/data/buildings/.
 
-enum Tool { PLACE = 0, ERASE = 1 }
+enum Tool { PLACE = 0, ERASE = 1, MARK = 2 }
 
 const THUMB_PX := 80
 const DEFAULT_GRID := Vector3i(32, 16, 32)
@@ -36,6 +36,15 @@ var _last_paint_cell: Vector3i = Vector3i(-999, -999, -999)
 var _thumb_cache: Dictionary = {}
 var _paint_color := Color(0.78, 0.80, 0.84)
 var _use_catalog_color := true
+## Mark region for copy/paste: click A, then B (3D box — change layer between clicks).
+var _mark_anchor: Vector3i = Vector3i(-999, -999, -999)
+var _mark_anchor_set := false
+var _mark_complete := false
+var _mark_min := Vector3i.ZERO
+var _mark_max := Vector3i.ZERO
+var _clipboard: Dictionary = {}
+## Absolute min corner of the last copied region (for “paste on this layer”).
+var _clipboard_src_min := Vector3i.ZERO
 
 var _root: Control
 var _viewport: SubViewport
@@ -45,6 +54,8 @@ var _brick_root: Node3D
 var _brick_visuals: Dictionary = {}
 var _grid_overlay: Node3D
 var _ghost: Node3D
+var _mark_preview: Node3D
+var _paste_preview: Node3D
 var _ghost_brick_id: String = ""
 var _ghost_cell: Vector3i = Vector3i(-999, -999, -999)
 var _ghost_yaw: int = -1
@@ -61,6 +72,7 @@ var _orbit_last: Vector2 = Vector2.ZERO
 
 var _title_lbl: Label
 var _status_lbl: Label
+var _hint_lbl: Label
 var _rules_lbl: Label
 var _layer_lbl: Label
 var _file_lbl: Label
@@ -75,6 +87,13 @@ var _export_lbl: Label
 var _open_dialog: FileDialog
 var _save_dialog: FileDialog
 var _current_path: String = ""
+var _place_btn: Button
+var _erase_btn: Button
+var _mark_btn: Button
+var _copy_btn: Button
+var _paste_btn: Button
+var _paste_layer_btn: Button
+var _paste_up_btn: Button
 
 
 func _init() -> void:
@@ -121,6 +140,7 @@ func _open_editor() -> void:
 	_yaw = 0
 	_brick_id = "block"
 	_tool = Tool.PLACE
+	_clear_mark()
 	_name_edit.text = _layout.display_name
 	_select_role(_layout.role)
 	_use_catalog_color = true
@@ -134,6 +154,7 @@ func _open_editor() -> void:
 	_rebuild_preview()
 	_refresh_rules()
 	_refresh_palette_selection()
+	_refresh_hint()
 
 
 func _build_chrome() -> void:
@@ -192,17 +213,20 @@ func _build_chrome() -> void:
 
 	_status_lbl = Label.new()
 	_status_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	_status_lbl.add_theme_font_size_override("font_size", 12)
+	_status_lbl.add_theme_font_size_override("font_size", 11)
 	_status_lbl.add_theme_color_override("font_color", HudStyle.C_LABEL)
 	_status_lbl.text = (
-		"Empty pad — place bricks yourself.\n"
-		+ "LMB place · RMB orbit · MMB pan · Scroll zoom\n"
-		+ "[ ] layer (shows this floor + below) · R rotate · X erase\n"
-		+ "Cell = 1.0 m  ·  Pad starts 32×16×32 and grows as you build\n"
-		+ "Colour presets / picker paint the next bricks you place\n"
-		+ "Floor is a surface — paint it under walls/props in the same cell"
+		"LMB paint · RMB orbit · MMB pan · Scroll zoom · [ ] layer · R rotate · X erase\n"
+		+ "Copy a floor: Mark → two clicks → Copy → Layer+ → Paste this layer"
 	)
 	col.add_child(_status_lbl)
+
+	_hint_lbl = Label.new()
+	_hint_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_hint_lbl.add_theme_font_size_override("font_size", 13)
+	_hint_lbl.add_theme_color_override("font_color", HudStyle.C_AMBER)
+	_hint_lbl.text = "Place bricks, or press Mark to copy a region."
+	col.add_child(_hint_lbl)
 
 	col.add_child(HSeparator.new())
 
@@ -262,22 +286,19 @@ func _build_chrome() -> void:
 	var tool_row := HBoxContainer.new()
 	tool_row.add_theme_constant_override("separation", 6)
 	col.add_child(tool_row)
-	var place_btn := UiBuilder.button("Place")
-	place_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	place_btn.pressed.connect(func() -> void:
-		_tool = Tool.PLACE
-		_refresh_palette_selection()
-		_refresh_ghost_from_mouse()
-	)
-	tool_row.add_child(place_btn)
-	var erase_btn := UiBuilder.button("Erase")
-	erase_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	erase_btn.pressed.connect(func() -> void:
-		_tool = Tool.ERASE
-		_refresh_palette_selection()
-		_clear_ghost()
-	)
-	tool_row.add_child(erase_btn)
+	_place_btn = UiBuilder.button("Place")
+	_place_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_place_btn.pressed.connect(func() -> void: _set_tool(Tool.PLACE))
+	tool_row.add_child(_place_btn)
+	_erase_btn = UiBuilder.button("Erase")
+	_erase_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_erase_btn.pressed.connect(func() -> void: _set_tool(Tool.ERASE))
+	tool_row.add_child(_erase_btn)
+	_mark_btn = UiBuilder.button("Mark")
+	_mark_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_mark_btn.tooltip_text = "Click two opposite corners to select a region (M)"
+	_mark_btn.pressed.connect(func() -> void: _set_tool(Tool.MARK))
+	tool_row.add_child(_mark_btn)
 
 	col.add_child(HSeparator.new())
 	var color_hdr := Label.new()
@@ -315,7 +336,6 @@ func _build_chrome() -> void:
 		sb.set_corner_radius_all(2)
 		if bool(preset.get("custom", true)) == false:
 			sb.bg_color = Color(0.2, 0.2, 0.22)
-			# Checker hint for "catalog default"
 			swatch.text = "·"
 		else:
 			sb.bg_color = preset["color"] as Color
@@ -358,6 +378,39 @@ func _build_chrome() -> void:
 	up.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	up.pressed.connect(func() -> void: _set_layer_y(_layer_y + 1))
 	layer_row.add_child(up)
+
+	var clip_hdr := Label.new()
+	clip_hdr.text = "COPY / PASTE"
+	clip_hdr.add_theme_color_override("font_color", HudStyle.C_AMBER)
+	col.add_child(clip_hdr)
+
+	var clip_row := HBoxContainer.new()
+	clip_row.add_theme_constant_override("separation", 6)
+	col.add_child(clip_row)
+	_copy_btn = UiBuilder.button("Copy")
+	_copy_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_copy_btn.tooltip_text = "Copy the marked region (Ctrl+C)"
+	_copy_btn.pressed.connect(_copy_marked_region)
+	clip_row.add_child(_copy_btn)
+	_paste_btn = UiBuilder.button("Paste at cursor")
+	_paste_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_paste_btn.tooltip_text = "Stamp clipboard with min corner under the mouse (Ctrl+V)"
+	_paste_btn.pressed.connect(_paste_clipboard_at_cursor)
+	clip_row.add_child(_paste_btn)
+
+	var clip_row2 := HBoxContainer.new()
+	clip_row2.add_theme_constant_override("separation", 6)
+	col.add_child(clip_row2)
+	_paste_layer_btn = UiBuilder.button("Paste this layer")
+	_paste_layer_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_paste_layer_btn.tooltip_text = "Same XZ as the copy, on the current layer — use for floors"
+	_paste_layer_btn.pressed.connect(_paste_clipboard_on_layer)
+	clip_row2.add_child(_paste_layer_btn)
+	_paste_up_btn = UiBuilder.button("Paste ↑")
+	_paste_up_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_paste_up_btn.tooltip_text = "Paste one storey above the original copy"
+	_paste_up_btn.pressed.connect(_paste_clipboard_one_up)
+	clip_row2.add_child(_paste_up_btn)
 
 	col.add_child(HSeparator.new())
 
@@ -489,22 +542,39 @@ func _resize() -> void:
 func _unhandled_input(event: InputEvent) -> void:
 	if _root == null or not _root.visible:
 		return
+	if event.is_action_pressed("ui_cancel"):
+		if _mark_anchor_set or _tool == Tool.MARK:
+			_set_tool(Tool.PLACE)
+			_set_hint("Mark cancelled.", HudStyle.C_LABEL)
+			get_viewport().set_input_as_handled()
+			return
 	if event is InputEventKey and event.pressed and not event.echo:
 		var key := event as InputEventKey
 		var focus_owner := get_viewport().gui_get_focus_owner()
 		if focus_owner is LineEdit or focus_owner is TextEdit:
 			return
 		match key.keycode:
+			KEY_M:
+				_set_tool(Tool.MARK if _tool != Tool.MARK else Tool.PLACE)
+				get_viewport().set_input_as_handled()
+			KEY_C:
+				if key.ctrl_pressed:
+					_copy_marked_region()
+					get_viewport().set_input_as_handled()
+			KEY_V:
+				if key.ctrl_pressed:
+					if key.shift_pressed:
+						_paste_clipboard_on_layer()
+					else:
+						_paste_clipboard_at_cursor()
+					get_viewport().set_input_as_handled()
 			KEY_R:
 				_rotate_yaw()
 				_refresh_rules()
 				_refresh_ghost_from_mouse()
 				get_viewport().set_input_as_handled()
 			KEY_X:
-				_tool = Tool.ERASE if _tool == Tool.PLACE else Tool.PLACE
-				_refresh_palette_selection()
-				_clear_ghost()
-				_refresh_ghost_from_mouse()
+				_set_tool(Tool.ERASE if _tool == Tool.PLACE else Tool.PLACE)
 				get_viewport().set_input_as_handled()
 			KEY_BRACKETLEFT:
 				_set_layer_y(_layer_y - 1)
@@ -536,6 +606,18 @@ func _on_viewport_gui_input(event: InputEvent) -> void:
 		elif mb.button_index == MOUSE_BUTTON_LEFT:
 			_painting = mb.pressed
 			if mb.pressed:
+				## Ctrl+click pastes clipboard at the cursor when one exists.
+				if (
+					not _clipboard.is_empty()
+					and _tool == Tool.PLACE
+					and Input.is_key_pressed(KEY_CTRL)
+				):
+					_last_paint_cell = Vector3i(-999, -999, -999)
+					var paste_cell := _pick_cell(mb.position)
+					if paste_cell.y >= 0:
+						_ghost_cell = paste_cell
+						_paste_at(paste_cell)
+					return
 				_last_paint_cell = Vector3i(-999, -999, -999)
 				_paint_at_screen(mb.position)
 			else:
@@ -558,7 +640,10 @@ func _on_viewport_gui_input(event: InputEvent) -> void:
 			_cam_target += (-right * delta.x + forward * delta.y) * scale
 			_update_camera()
 		elif _painting and Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
-			_paint_at_screen(mm.position)
+			if _tool != Tool.MARK:
+				_paint_at_screen(mm.position)
+			else:
+				_update_ghost_at_screen(mm.position)
 		else:
 			_update_ghost_at_screen(mm.position)
 
@@ -571,15 +656,25 @@ func _set_layer_y(y: int) -> void:
 	_refresh_palette_selection()
 	_refresh_rules()
 	_refresh_ghost_from_mouse()
+	if _tool == Tool.MARK and _mark_anchor_set:
+		_update_mark_preview()
+	elif not _clipboard.is_empty():
+		_update_paste_preview()
+	_refresh_hint()
 
 
 func _apply_layer_visibility() -> void:
+	var stale_keys: Array[String] = []
 	for key in _brick_visuals.keys():
-		var node: Node3D = _brick_visuals[key]
-		if node == null or not is_instance_valid(node):
+		var node_v: Variant = _brick_visuals[key]
+		if not (node_v is Node3D) or not is_instance_valid(node_v):
+			stale_keys.append(str(key))
 			continue
+		var node: Node3D = node_v as Node3D
 		var cell_y := int(node.get_meta("cell_y", 0))
 		node.visible = cell_y <= _layer_y
+	for k in stale_keys:
+		_brick_visuals.erase(k)
 
 
 func _paint_at_screen(screen_pos: Vector2) -> void:
@@ -589,6 +684,9 @@ func _paint_at_screen(screen_pos: Vector2) -> void:
 	if cell == _last_paint_cell:
 		return
 	_last_paint_cell = cell
+	if _tool == Tool.MARK:
+		_handle_mark_click(cell)
+		return
 	if _tool == Tool.ERASE:
 		if not _layout.has_cell(cell):
 			return
@@ -659,13 +757,25 @@ func _refresh_ghost_from_mouse() -> void:
 func _update_ghost_at_screen(screen_pos: Vector2) -> void:
 	if _root == null or not _root.visible or _world == null or _grid == null:
 		return
+	if _tool == Tool.MARK:
+		var mark_cell := _pick_cell(screen_pos)
+		if mark_cell.y < 0:
+			return
+		_ghost_cell = mark_cell
+		_update_mark_preview()
+		return
 	if _tool == Tool.ERASE:
 		_clear_ghost()
+		_clear_paste_preview()
 		return
 	var cell := _pick_cell(screen_pos)
 	if cell.y < 0:
 		_clear_ghost()
+		_clear_paste_preview()
 		return
+	_ghost_cell = cell
+	if not _clipboard.is_empty():
+		_update_paste_preview()
 	var valid := _placement_legal(cell)
 	var paint_color := _active_paint_color()
 	if (
@@ -880,13 +990,18 @@ func _bake_brick_thumbnail(brick_id: String, target: TextureRect) -> void:
 
 func _select_brick(id: String) -> void:
 	_brick_id = id
-	_tool = Tool.PLACE
+	## Keep clipboard; only leave mark mode so painting works again.
+	if _tool == Tool.MARK:
+		_set_tool(Tool.PLACE)
+	else:
+		_tool = Tool.PLACE
+		_refresh_palette_selection()
 	_yaw = BuildingLayout.norm_yaw(_yaw, BrickCatalog.yaw_step_of(id))
 	if _use_catalog_color:
 		_sync_color_picker_from_catalog()
-	_refresh_palette_selection()
 	_clear_ghost()
 	_refresh_ghost_from_mouse()
+	_refresh_hint()
 
 
 func _active_paint_color() -> Color:
@@ -940,35 +1055,366 @@ func _refresh_palette_selection() -> void:
 			sb.border_color = HudStyle.C_AMBER if selected else HudStyle.C_BRASS
 			sb.set_border_width_all(2 if selected else 1)
 			sb.bg_color = Color(0.16, 0.14, 0.10) if selected else HudStyle.C_BG_INNER
-	var mode := "ERASE" if _tool == Tool.ERASE else "PLACE"
-	_layer_lbl.text = "Layer %d  (%.1f m)  ·  pad %d×%d×%d m  ·  Yaw %d°  ·  %s" % [
+	var mode := "Place"
+	match _tool:
+		Tool.ERASE:
+			mode = "Erase"
+		Tool.MARK:
+			if not _mark_anchor_set:
+				mode = "Mark · click corner A"
+			elif not _mark_complete:
+				mode = "Mark · click corner B"
+			else:
+				mode = "Marked · ready to Copy"
+	var clip_note := ""
+	if not _clipboard.is_empty():
+		var sz := BrickRegionClipboard.size_cells(_clipboard)
+		clip_note = " · clipboard %d (%d×%d×%d)" % [
+			int(_clipboard.get("cell_count", 0)), sz.x, sz.y, sz.z,
+		]
+	_layer_lbl.text = "Layer %d  (%.1f m)  ·  pad %d×%d×%d  ·  %s%s" % [
 		_layer_y,
 		float(_layer_y) * BuildingGrid.CELL_M,
 		_grid.width,
 		_grid.height,
 		_grid.depth,
-		_yaw,
 		mode,
+		clip_note,
 	]
+	_refresh_tool_buttons()
+	_refresh_hint()
+
+
+func _refresh_tool_buttons() -> void:
+	_style_tool_button(_place_btn, _tool == Tool.PLACE)
+	_style_tool_button(_erase_btn, _tool == Tool.ERASE)
+	_style_tool_button(_mark_btn, _tool == Tool.MARK)
+	if _copy_btn != null:
+		_copy_btn.disabled = not _mark_complete
+	var has_clip := not _clipboard.is_empty()
+	if _paste_btn != null:
+		_paste_btn.disabled = not has_clip
+	if _paste_layer_btn != null:
+		_paste_layer_btn.disabled = not has_clip
+	if _paste_up_btn != null:
+		_paste_up_btn.disabled = not has_clip
+
+
+func _style_tool_button(btn: Button, active: bool) -> void:
+	if btn == null:
+		return
+	btn.modulate = Color(1.15, 1.05, 0.75) if active else Color(1, 1, 1)
+
+
+func _set_hint(text: String, color: Color = HudStyle.C_AMBER) -> void:
+	if _hint_lbl == null:
+		return
+	_hint_lbl.text = text
+	_hint_lbl.add_theme_color_override("font_color", color)
+
+
+func _refresh_hint() -> void:
+	if _hint_lbl == null:
+		return
+	if _tool == Tool.MARK:
+		if not _mark_anchor_set:
+			_set_hint("MARK: click the first corner of the region.")
+		elif not _mark_complete:
+			_set_hint("MARK: click the opposite corner (change layer first if you want height).")
+		else:
+			var sz := _mark_max - _mark_min + Vector3i.ONE
+			_set_hint("Marked %d×%d×%d — press Copy (Ctrl+C)." % [sz.x, sz.y, sz.z])
+		return
+	if not _clipboard.is_empty():
+		var n := int(_clipboard.get("cell_count", 0))
+		_set_hint(
+			"Clipboard: %d bricks. Layer+ then “Paste this layer”, or hover + Ctrl+V." % n,
+			HudStyle.C_GREEN,
+		)
+		return
+	if _tool == Tool.ERASE:
+		_set_hint("ERASE: click or drag to remove bricks.", HudStyle.C_LABEL)
+		return
+	_set_hint("PLACE: paint bricks. Mark a region when you want to copy a floor.", HudStyle.C_LABEL)
+
+
+func _set_tool(tool: int) -> void:
+	_tool = tool
+	if tool != Tool.MARK:
+		_clear_mark()
+		_clear_mark_preview()
+	else:
+		_clear_mark()
+		_clear_ghost()
+		_clear_paste_preview()
+	_refresh_palette_selection()
+	_refresh_ghost_from_mouse()
+	_refresh_hint()
+
+
+func _clear_mark() -> void:
+	_mark_anchor_set = false
+	_mark_complete = false
+	_mark_anchor = Vector3i(-999, -999, -999)
+	_mark_min = Vector3i.ZERO
+	_mark_max = Vector3i.ZERO
+
+
+func _clear_mark_preview() -> void:
+	if _mark_preview != null and is_instance_valid(_mark_preview):
+		_mark_preview.queue_free()
+	_mark_preview = null
+
+
+func _clear_paste_preview() -> void:
+	if _paste_preview != null and is_instance_valid(_paste_preview):
+		_paste_preview.queue_free()
+	_paste_preview = null
+
+
+func _handle_mark_click(cell: Vector3i) -> void:
+	if _mark_complete or not _mark_anchor_set:
+		_mark_anchor = cell
+		_mark_anchor_set = true
+		_mark_complete = false
+		_ghost_cell = cell
+		_set_hint("Corner A set at %d,%d,%d — click corner B." % [cell.x, cell.y, cell.z])
+	else:
+		var bounds := BrickRegionClipboard.bounds_from_corners(_mark_anchor, cell)
+		_mark_min = bounds["min"]
+		_mark_max = bounds["max"]
+		_mark_complete = true
+		var sz := _mark_max - _mark_min + Vector3i.ONE
+		_set_hint("Marked %d×%d×%d — press Copy (Ctrl+C)." % [sz.x, sz.y, sz.z], HudStyle.C_GREEN)
+	_refresh_palette_selection()
+	_update_mark_preview()
+
+
+func _update_mark_preview() -> void:
+	if _tool != Tool.MARK or not _mark_anchor_set or _grid == null:
+		return
+	var cursor := _ghost_cell
+	if cursor.y < 0 and _vp_host != null:
+		cursor = _pick_cell(_vp_host.get_local_mouse_position())
+	if cursor.y < 0:
+		cursor = _mark_anchor
+	var min_c := _mark_min
+	var max_c := _mark_max
+	if not _mark_complete:
+		var bounds := BrickRegionClipboard.bounds_from_corners(_mark_anchor, cursor)
+		min_c = bounds["min"]
+		max_c = bounds["max"]
+	var key := "%d,%d,%d:%d,%d,%d" % [min_c.x, min_c.y, min_c.z, max_c.x, max_c.y, max_c.z]
+	if (
+		_mark_preview != null and is_instance_valid(_mark_preview)
+		and str(_mark_preview.get_meta("mark_key", "")) == key
+	):
+		return
+	_clear_mark_preview()
+	_mark_preview = _make_volume_box(min_c, max_c, Color(0.35, 0.72, 1.0, 0.28))
+	_mark_preview.name = "MarkPreview"
+	_mark_preview.set_meta("mark_key", key)
+	_attach_preview(_mark_preview)
+
+
+func _update_paste_preview() -> void:
+	if _clipboard.is_empty() or _tool == Tool.MARK or _grid == null:
+		_clear_paste_preview()
+		return
+	var dest := _ghost_cell
+	if dest.y < 0 and _vp_host != null:
+		dest = _pick_cell(_vp_host.get_local_mouse_position())
+	if dest.y < 0:
+		_clear_paste_preview()
+		return
+	var sz := BrickRegionClipboard.size_cells(_clipboard)
+	if sz.x <= 0:
+		_clear_paste_preview()
+		return
+	var max_c := dest + sz - Vector3i.ONE
+	var ok := _can_paste_at(dest)
+	var col := Color(0.35, 0.95, 0.55, 0.28) if ok else Color(0.95, 0.28, 0.25, 0.32)
+	var key := "paste:%d,%d,%d:%s" % [dest.x, dest.y, dest.z, str(ok)]
+	if (
+		_paste_preview != null and is_instance_valid(_paste_preview)
+		and str(_paste_preview.get_meta("paste_key", "")) == key
+	):
+		return
+	_clear_paste_preview()
+	_paste_preview = _make_volume_box(dest, max_c, col)
+	_paste_preview.name = "PastePreview"
+	_paste_preview.set_meta("paste_key", key)
+	_attach_preview(_paste_preview)
+
+
+func _attach_preview(node: Node3D) -> void:
+	if _pad_root != null and is_instance_valid(_pad_root):
+		_pad_root.add_child(node)
+	elif _world != null and is_instance_valid(_world):
+		_world.add_child(node)
+
+
+func _make_volume_box(min_c: Vector3i, max_c: Vector3i, col: Color) -> Node3D:
+	var w := float(max_c.x - min_c.x + 1) * BuildingGrid.CELL_M
+	var h := float(max_c.y - min_c.y + 1) * BuildingGrid.CELL_M
+	var l := float(max_c.z - min_c.z + 1) * BuildingGrid.CELL_M
+	var min_center := _grid.cell_center_local(min_c)
+	var max_center := _grid.cell_center_local(max_c)
+	var root := Node3D.new()
+	root.position = (min_center + max_center) * 0.5
+	var box := MeshBuilder.box(
+		Vector3(maxf(w, 0.05) * 0.98, maxf(h, 0.05) * 0.98, maxf(l, 0.05) * 0.98),
+		col,
+		0.9,
+		0.0,
+	)
+	var mat := box.material_override as StandardMaterial3D
+	if mat != null:
+		mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+		mat.no_depth_test = true
+		mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	root.add_child(box)
+	return root
+
+
+func _copy_marked_region() -> void:
+	if not _mark_complete:
+		_set_hint("Nothing marked yet — press Mark, then click two corners.", HudStyle.C_RED)
+		return
+	_clipboard = BrickRegionClipboard.extract_region(_layout.cells, _mark_min, _mark_max)
+	_clipboard_src_min = _mark_min
+	var n := int(_clipboard.get("cell_count", 0))
+	if n <= 0:
+		_clipboard.clear()
+		_set_hint("Marked region is empty — nothing to copy.", HudStyle.C_RED)
+		_refresh_palette_selection()
+		return
+	## Leave mark mode so the next action is paste, not another mark click.
+	_set_tool(Tool.PLACE)
+	_set_hint(
+		"Copied %d bricks. Layer+ then “Paste this layer”, or hover + Ctrl+V." % n,
+		HudStyle.C_GREEN,
+	)
+	_refresh_palette_selection()
+	_update_paste_preview()
+
+
+func _building_paste_blocks(dest: Vector3i) -> bool:
+	var key := BuildingLayout.cell_key(dest)
+	if not _layout.cells.has(key):
+		return false
+	var existing: Dictionary = _layout.cells[key]
+	return not BuildingLayout.entry_is_surface_only(existing)
+
+
+func _can_paste_at(dest: Vector3i) -> bool:
+	if _clipboard.is_empty() or _grid == null:
+		return false
+	for cell in BrickRegionClipboard.iter_dest_cells(_clipboard, dest):
+		if _grid.in_bounds(cell) and _building_paste_blocks(cell):
+			return false
+	return true
+
+
+func _paste_at(dest: Vector3i) -> bool:
+	if _clipboard.is_empty():
+		_set_hint("Clipboard empty — Mark a region and Copy first.", HudStyle.C_RED)
+		return false
+	if not _can_paste_at(dest):
+		_set_hint("Can't paste there — clear blocking bricks first.", HudStyle.C_RED)
+		_update_paste_preview()
+		return false
+	var needed := BrickRegionClipboard.iter_dest_cells(_clipboard, dest)
+	if needed.is_empty():
+		_set_hint("Clipboard empty.", HudStyle.C_RED)
+		return false
+	var before_size := _layout.grid_size
+	var shift := _layout.ensure_fit_cells(needed)
+	dest += shift
+	_clipboard_src_min += shift
+	## Re-check after any remap from pad growth.
+	if not _can_paste_at(dest):
+		_set_hint("Can't paste there — clear blocking bricks first.", HudStyle.C_RED)
+		return false
+	_layout.cells = BrickRegionClipboard.paste_region(_clipboard, dest, _layout.cells)
+	if before_size != _layout.grid_size:
+		_grid = _layout.grid()
+		_rebuild_preview()
+	else:
+		_sync_brick_visuals()
+	_refresh_rules()
+	_set_hint(
+		"Pasted %d bricks at %d,%d,%d." % [
+			int(_clipboard.get("cell_count", 0)), dest.x, dest.y, dest.z,
+		],
+		HudStyle.C_GREEN,
+	)
+	_update_paste_preview()
+	return true
+
+
+func _paste_clipboard_at_cursor() -> void:
+	var dest := _ghost_cell
+	if dest.y < 0 and _vp_host != null:
+		dest = _pick_cell(_vp_host.get_local_mouse_position())
+	if dest.y < 0:
+		_set_hint("Aim at the pad, then Paste (Ctrl+V).", HudStyle.C_RED)
+		return
+	_paste_at(dest)
+
+
+func _paste_clipboard_on_layer() -> void:
+	if _clipboard.is_empty():
+		_set_hint("Clipboard empty — Mark + Copy first.", HudStyle.C_RED)
+		return
+	var dest := Vector3i(_clipboard_src_min.x, _layer_y, _clipboard_src_min.z)
+	_paste_at(dest)
+
+
+func _paste_clipboard_one_up() -> void:
+	if _clipboard.is_empty():
+		_set_hint("Clipboard empty — Mark + Copy first.", HudStyle.C_RED)
+		return
+	var sz := BrickRegionClipboard.size_cells(_clipboard)
+	var dest := Vector3i(
+		_clipboard_src_min.x,
+		_clipboard_src_min.y + maxi(sz.y, 1),
+		_clipboard_src_min.z,
+	)
+	_set_layer_y(dest.y)
+	_paste_at(dest)
 
 
 func _clear_layout() -> void:
 	_layout.clear()
+	_clear_mark()
+	_clear_mark_preview()
+	_clear_paste_preview()
 	_sync_brick_visuals()
 	_refresh_rules()
+	_refresh_hint()
 
 
 func _rebuild_preview() -> void:
 	_clear_ghost()
+	_clear_mark_preview()
+	_clear_paste_preview()
 	_ensure_pad()
 	_sync_brick_visuals()
 	_refresh_grid_overlay()
 	_update_camera()
 	_refresh_ghost_from_mouse()
+	if _tool == Tool.MARK:
+		_update_mark_preview()
+	elif not _clipboard.is_empty():
+		_update_paste_preview()
 
 
 func _ensure_pad() -> void:
 	if _pad_root != null and is_instance_valid(_pad_root):
+		_clear_mark_preview()
+		_clear_paste_preview()
 		_pad_root.queue_free()
 	_pad_root = Node3D.new()
 	_pad_root.name = "BuildingPad"
@@ -1037,10 +1483,10 @@ func _sync_brick_visuals() -> void:
 		if not keep.has(key):
 			remove_keys.append(key)
 	for key in remove_keys:
-		var node: Node3D = _brick_visuals[key]
+		var node_v: Variant = _brick_visuals.get(key, null)
 		_brick_visuals.erase(key)
-		if node != null and is_instance_valid(node):
-			node.queue_free()
+		if node_v is Node3D and is_instance_valid(node_v):
+			(node_v as Node).queue_free()
 	_apply_layer_visibility()
 
 

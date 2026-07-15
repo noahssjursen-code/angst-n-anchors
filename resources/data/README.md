@@ -57,6 +57,7 @@ Authoring apps (run the scene directly in Godot — under `scenes/apps/`):
 | `res://scenes/apps/building_brick_editor.tscn` | Paint bricks, Save / Save As into this folder |
 | `res://scenes/apps/port_slot_editor.tscn` | Place service slots on the default port and attach a building JSON |
 | `res://scenes/apps/shipyard_brick_editor.tscn` | Paint decks on official hulls; Save official prebuilt JSON |
+| `res://scenes/apps/vessel_registration_audit.tscn` | Edit vessel law and audit official registration paperwork |
 
 Inspect-only fixtures live under `scenes/showcases/` (port / player / cargo / ship).
 
@@ -77,20 +78,21 @@ names a file under `buildings/` (stem only, no path).
 
 ## `vessels/prebuilt/`
 
-Source-controlled deck-grid vessel presets authored by the
+Source-controlled finished store ships authored by the
 **Shipyard brick editor** app
 (`scenes/apps/shipyard_brick_editor.tscn`).
 
 ```json
 {
-  "format_version": 1,
+  "format_version": 2,
   "id": "testvik_ferry",
   "name": "Testvik Ferry",
-  "hull_id": "passenger_catamaran",
-  "scene_path": "res://scenes/vessels/passenger_catamaran.tscn",
-  "price_marks": 0,
+  "hull_id": "hull_45x16_cat",
+  "registration_id": "passenger_vessel",
+  "price_marks": 42000,
+  "shaft_power_kw": 18000,
   "brick_layout": {
-    "hull_id": "passenger_catamaran",
+    "hull_id": "hull_45x16_cat",
     "cells": {},
     "cargo_zones": []
   }
@@ -100,6 +102,17 @@ Source-controlled deck-grid vessel presets authored by the
 These files are game-owned presets and should be committed. Every valid preset
 is listed in the shipwright catalog as a ready-built purchase. Player-owned
 vessel records remain in `user://save/player.json`.
+
+`vessels/registrations/catalog.json` is the versioned legal code. Registrations
+inherit the general-vessel checklist and define typed count, capacity, equipment
+rating, and placement rules. Hull budgets are absolute physical ceilings;
+registration limits may only tighten them. Use the registration audit app to edit
+the catalog and certify every prebuilt. Do not hand-author a stored “passed” flag.
+
+`vessels/hulls/catalog.json` contains reusable geometry components only:
+dimension-based `hull_id`, L×B×depth/draft, form, and optional default power.
+It never contains product names, prices, roles, or brick capabilities. Multiple
+prebuilts may reference the same hull with different layouts and shaft power.
 
 ## Engine apps
 
@@ -111,6 +124,7 @@ scenes in `scenes/apps/`.
 | `building_brick_editor.tscn` | `BuildingBrickEditor` | `resources/data/buildings/*.json` |
 | `port_slot_editor.tscn` | `PortSlotEditor` | `resources/data/ports/default_service_slots.json` |
 | `shipyard_brick_editor.tscn` | `ShipyardBrickEditor` | `resources/data/vessels/prebuilt/*.json` |
+| `vessel_registration_audit.tscn` | `VesselRegistrationAudit` | registration catalog; audits prebuilts |
 
 ## Showcases
 

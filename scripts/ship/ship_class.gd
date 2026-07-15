@@ -13,7 +13,7 @@ enum Type {
 }
 
 ## Game-scale maximum length (m) per class. Real metres — no feel multipliers.
-## The player's workboat is 30 m LOA × 24 m beam (COASTAL_TRADER must fit it).
+## Class limits are broad gameplay categories, not exact hull dimensions.
 const MAX_LENGTH_M: Dictionary = {
 	Type.LAUNCH:              10.0,
 	Type.COASTAL_TRADER:     35.0,

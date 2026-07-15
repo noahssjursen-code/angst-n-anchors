@@ -4,38 +4,18 @@ extends RefCounted
 ## Vessel catalog. Hand-authored scenes plus data-driven hulls from HullCatalog.
 ## Legacy hull ids still resolve so old saves / network packets keep working.
 
-const WORKBOAT_SCENE := "res://scenes/vessels/workboat.tscn"
 const TRAWLER_SMALL_SCENE := "res://scenes/vessels/fishing_trawler_small.tscn"
 const PASSENGER_CATAMARAN_SCENE := "res://scenes/vessels/passenger_catamaran.tscn"
-const _WORKBOAT_SCRIPT := preload("res://scripts/ship/vessels/workboat.gd")
 const _TRAWLER_SMALL_SCRIPT := preload("res://scripts/ship/vessels/fishing_trawler_small.gd")
 const _PASSENGER_CATAMARAN_SCRIPT := preload("res://scripts/ship/vessels/passenger_catamaran.gd")
 const _CATALOG_HULL_SCRIPT := preload("res://scripts/ship/vessels/catalog_hull_vessel.gd")
 
-const WORKBOAT := {
-	"id": "workboat",
-	"display": "Workboat  •  30 × 24 m",
-	"role": VesselRole.Type.FISHING,
-	"ship_class": ShipClass.Type.COASTAL_TRADER,
-	"ship_class_label": "Coastal workboat",
-	"scene_path": WORKBOAT_SCENE,
-	"capabilities": ["fishing", "cargo"],
-	"price_marks": 5000,
-	"displacement_t": 960.0,
-	"loa_m": 30.0,
-	"beam_m": 24.0,
-	"depth_m": 6.0,
-}
-
 const FISHING_TRAWLER_SMALL := {
-	"id": "fishing_trawler_small",
-	"display": "Fishing trawler  •  28 × 10 m",
-	"role": VesselRole.Type.FISHING,
+	"id": "hull_28x10",
+	"display": "28 × 10 m",
 	"ship_class": ShipClass.Type.COASTAL_TRADER,
-	"ship_class_label": "Coastal day trawler",
 	"scene_path": TRAWLER_SMALL_SCENE,
-	"capabilities": ["fishing"],
-	"price_marks": 0,
+	"default_shaft_power_kw": 1871.0,
 	"displacement_t": 256.0,
 	"loa_m": 28.0,
 	"beam_m": 10.0,
@@ -43,14 +23,11 @@ const FISHING_TRAWLER_SMALL := {
 }
 
 const PASSENGER_CATAMARAN := {
-	"id": "passenger_catamaran",
-	"display": "Passenger catamaran  •  45 × 16 m",
-	"role": VesselRole.Type.PASSENGER,
+	"id": "hull_45x16_cat",
+	"display": "45 × 16 m · catamaran",
 	"ship_class": ShipClass.Type.SHORT_SEA_COASTER,
-	"ship_class_label": "High-speed catamaran hull",
 	"scene_path": PASSENGER_CATAMARAN_SCENE,
-	"capabilities": [],
-	"price_marks": 0,
+	"default_shaft_power_kw": 65000.0,
 	"displacement_t": 520.0,
 	"loa_m": 45.0,
 	"beam_m": 16.0,
@@ -59,36 +36,44 @@ const PASSENGER_CATAMARAN := {
 
 ## Old hull ids from the deleted fleet — map to a live hull, never listed in catalog.
 const LEGACY_ID_ALIASES: Dictionary = {
-	"fishing_trawler_medium": "fishing_trawler_small",
-	"fishing_trawler_large": "workboat",
-	"cargo_ship": "workboat",
-	"cargo_ship_small": "workboat",
-	"cargo_ship_medium": "workboat",
-	"cargo_ship_large": "workboat",
-	"cargo_ship_huge": "workboat",
-	"cargo_ship_ultra": "workboat",
-	"liquid_tanker": "tanker_product",
-	"liquid_tanker_small": "tanker_coastal",
-	"liquid_tanker_large": "tanker_lng",
-	"liquid_tanker_huge": "tanker_lng",
-	"liquid_tanker_ultra": "tanker_lng",
-	"container_ship_small": "container_feeder_small",
-	"container_ship_medium": "container_feeder_mid",
-	"container_ship_large": "container_short_sea",
-	"container_ship_ultra": "container_short_sea",
-	"ferry": "passenger_catamaran",
-	"ferry_small": "passenger_catamaran",
-	"ferry_large": "passenger_catamaran",
-	"fishing_boat": "fishing_trawler_small",
-	"fishing_boat_small": "fishing_trawler_small",
-	"fishing_boat_large": "workboat",
+	"workboat": "hull_28x10",
+	"fishing_trawler_small": "hull_28x10",
+	"fishing_trawler_medium": "hull_28x10",
+	"fishing_trawler_large": "hull_28x10",
+	"cargo_ship": "hull_90x24",
+	"cargo_ship_small": "hull_90x24",
+	"cargo_ship_medium": "hull_120x28",
+	"cargo_ship_large": "hull_150x32",
+	"cargo_ship_huge": "hull_150x32",
+	"cargo_ship_ultra": "hull_150x32",
+	"liquid_tanker": "hull_100x24",
+	"liquid_tanker_small": "hull_70x18",
+	"liquid_tanker_large": "hull_130x28",
+	"liquid_tanker_huge": "hull_130x28",
+	"liquid_tanker_ultra": "hull_130x28",
+	"container_ship_small": "hull_90x24",
+	"container_ship_medium": "hull_120x28",
+	"container_ship_large": "hull_150x32",
+	"container_ship_ultra": "hull_150x32",
+	"container_feeder_small": "hull_90x24",
+	"container_feeder_mid": "hull_120x28",
+	"container_short_sea": "hull_150x32",
+	"tanker_coastal": "hull_70x18",
+	"tanker_product": "hull_100x24",
+	"tanker_lng": "hull_130x28",
+	"passenger_catamaran": "hull_45x16_cat",
+	"ferry": "hull_45x16_cat",
+	"ferry_small": "hull_45x16_cat",
+	"ferry_large": "hull_45x16_cat",
+	"fishing_boat": "hull_28x10",
+	"fishing_boat_small": "hull_28x10",
+	"fishing_boat_large": "hull_28x10",
 }
 
 
 static func catalog() -> Array[Dictionary]:
 	var entries: Array[Dictionary] = [
 		FISHING_TRAWLER_SMALL.duplicate(true),
-		WORKBOAT.duplicate(true),
 		PASSENGER_CATAMARAN.duplicate(true),
 	]
 	for entry in HullCatalog.catalog_entries():
@@ -108,40 +93,40 @@ static func get_by_id(hull_id: String) -> Dictionary:
 	if HullCatalog.has_id(id):
 		return HullCatalog.get_by_id(id)
 	match id:
-		"fishing_trawler_small":
+		"hull_28x10":
 			return FISHING_TRAWLER_SMALL.duplicate(true)
-		"passenger_catamaran":
+		"hull_45x16_cat":
 			return PASSENGER_CATAMARAN.duplicate(true)
 		_:
-			return WORKBOAT.duplicate(true)
+			return FISHING_TRAWLER_SMALL.duplicate(true)
 
 
 static func get_by_file(_filename: String) -> Dictionary:
-	return WORKBOAT.duplicate(true)
+	return FISHING_TRAWLER_SMALL.duplicate(true)
 
 
-static func resolve_id_from_template(template_path: String, fallback: String = "workboat") -> String:
+static func resolve_id_from_template(template_path: String, fallback: String = "fishing_trawler_small") -> String:
 	var path := template_path.strip_edges()
 	if path.contains("passenger_catamaran"):
-		return "passenger_catamaran"
+		return "hull_45x16_cat"
 	if path.contains("fishing_trawler_small"):
-		return "fishing_trawler_small"
+		return "hull_28x10"
 	if path.contains("workboat"):
-		return "workboat"
+		return "hull_28x10"
 	return resolve_network_hull_id(fallback)
 
 
 static func resolve_network_hull_id(hull_id: String) -> String:
 	var id := hull_id.strip_edges()
 	if id.is_empty():
-		return "workboat"
+		return "hull_28x10"
 	if HullCatalog.has_id(id):
 		return id
-	if id == "workboat" or id == "fishing_trawler_small" or id == "passenger_catamaran":
+	if id == "hull_28x10" or id == "hull_45x16_cat":
 		return id
 	if LEGACY_ID_ALIASES.has(id):
 		return str(LEGACY_ID_ALIASES[id])
-	return "workboat"
+	return "hull_28x10"
 
 
 static func hull_id_from_network_type(network_type: String) -> String:
@@ -152,14 +137,14 @@ static func hull_id_from_network_type(network_type: String) -> String:
 
 static func scene_path_for(hull_id: String) -> String:
 	var entry := get_by_id(hull_id)
-	return str(entry.get("scene_path", WORKBOAT_SCENE))
+	return str(entry.get("scene_path", TRAWLER_SMALL_SCENE))
 
 
 static func is_known_hull(hull_id: String) -> bool:
 	var id := resolve_network_hull_id(hull_id)
 	if HullCatalog.has_id(id):
 		return true
-	return id == "workboat" or id == "fishing_trawler_small" or id == "passenger_catamaran"
+	return id == "hull_28x10" or id == "hull_45x16_cat"
 
 
 static func make_grid(hull_id: String) -> DeckGrid:
@@ -167,12 +152,12 @@ static func make_grid(hull_id: String) -> DeckGrid:
 	if HullCatalog.has_id(id):
 		return _CATALOG_HULL_SCRIPT.make_grid(id)
 	match id:
-		"fishing_trawler_small":
+		"hull_28x10":
 			return _TRAWLER_SMALL_SCRIPT.make_grid()
-		"passenger_catamaran":
+		"hull_45x16_cat":
 			return _PASSENGER_CATAMARAN_SCRIPT.make_grid()
 		_:
-			return _WORKBOAT_SCRIPT.make_grid()
+			return _TRAWLER_SMALL_SCRIPT.make_grid()
 
 
 static func build_hull(hull_id: String) -> BoatBody:
@@ -180,24 +165,23 @@ static func build_hull(hull_id: String) -> BoatBody:
 	if HullCatalog.has_id(id):
 		return _CATALOG_HULL_SCRIPT.build(id) as BoatBody
 	match id:
-		"fishing_trawler_small":
+		"hull_28x10":
 			return _TRAWLER_SMALL_SCRIPT.build() as BoatBody
-		"passenger_catamaran":
+		"hull_45x16_cat":
 			return _PASSENGER_CATAMARAN_SCRIPT.build() as BoatBody
 		_:
-			return _WORKBOAT_SCRIPT.build() as BoatBody
+			return _TRAWLER_SMALL_SCRIPT.build() as BoatBody
 
 
-static func has_capability(hull_id: String, capability: String) -> bool:
-	var entry := get_by_id(hull_id)
-	var caps = entry.get("capabilities", [])
-	return caps is Array and (caps as Array).has(capability)
+static func has_capability(_hull_id: String, _capability: String) -> bool:
+	## Hulls are geometry components. Gameplay capabilities come from fit-out bricks.
+	return false
 
 
 ## Prefer this for owned vessels — capabilities come from the brick fit-out.
 static func record_has_capability(record: Dictionary, capability: String) -> bool:
 	var cap := capability.strip_edges()
-	var hull_id := str(record.get("hull_id", "workboat"))
+	var hull_id := str(record.get("hull_id", "fishing_trawler_small"))
 	var layout := BrickLayout.from_dict(VesselSpawn.brick_layout_of(record))
 	var report := BrickRules.validate(layout, make_grid(hull_id))
 	var caps: Dictionary = report.get("capabilities", {})
@@ -211,6 +195,6 @@ static func record_has_capability(record: Dictionary, capability: String) -> boo
 		"helm":
 			return bool(caps.get("has_helm", false))
 		"fishing":
-			return layout.count_tag("fishing") > 0
+			return bool(caps.get("has_fishing", false))
 		_:
 			return has_capability(hull_id, cap)

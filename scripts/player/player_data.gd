@@ -47,8 +47,9 @@ var total_marks_earned:  int   = 0
 var contracts_completed: int   = 0
 var distance_sailed_m:   float = 0.0
 ## Ledger records for every hull the captain owns.
-## Each entry: { uid, hull_id, name, display, template_path / scene_path, brick_layout{}, server_vessel_id? }.
-## `name` is captain-chosen; `display` remains the hull catalog label.
+## Each entry: { uid, hull_id, registration_id, name, display, shaft_power_kw,
+## scene_path?, brick_layout{}, server_vessel_id? }.
+## `name`/`display` identify the finished ship; `hull_id` identifies its reusable platform.
 var owned_vessels: Array = []
 ## Hull currently deployed in the world (must match one entry in owned_vessels).
 var active_vessel: Dictionary = {}
@@ -147,9 +148,9 @@ static func json_equivalent(a: Variant, b: Variant) -> bool:
 static func ledger_vessel_record(record: Dictionary) -> Dictionary:
 	if record.is_empty():
 		return {}
-	var hull_id := str(record.get("hull_id", "workboat")).strip_edges()
+	var hull_id := str(record.get("hull_id", "fishing_trawler_small")).strip_edges()
 	if hull_id.is_empty():
-		hull_id = "workboat"
+		hull_id = "fishing_trawler_small"
 	var scene_path := str(record.get("scene_path", record.get("template_path", ""))).strip_edges()
 	if scene_path.is_empty():
 		scene_path = HullRegistry.scene_path_for(hull_id)
@@ -162,12 +163,18 @@ static func ledger_vessel_record(record: Dictionary) -> Dictionary:
 	var out := {
 		"uid": str(record.get("uid", "")).strip_edges(),
 		"hull_id": hull_id,
+		"registration_id": str(record.get("registration_id", "review_required")).strip_edges(),
 		"name": str(record.get("name", "")).strip_edges(),
 		"display": str(record.get("display", "")).strip_edges(),
-		"template_path": scene_path,
-		"scene_path": scene_path,
+		"shaft_power_kw": maxf(float(record.get(
+			"shaft_power_kw",
+			HullRegistry.get_by_id(hull_id).get("default_shaft_power_kw", 1.0)
+		)), 1.0),
 		"brick_layout": layout,
 	}
+	## New records spawn by hull_id. Keep scene_path only for frozen hand-scene hulls.
+	if not scene_path.is_empty():
+		out["scene_path"] = scene_path
 	var server_id := str(record.get("server_vessel_id", "")).strip_edges()
 	if not server_id.is_empty():
 		out["server_vessel_id"] = server_id
@@ -278,7 +285,7 @@ func has_active_vessel_record() -> bool:
 static func is_legacy_starter_vessel(record: Dictionary) -> bool:
 	if record.is_empty():
 		return false
-	var path := str(record.get("template_path", ""))
+	var path := str(record.get("scene_path", record.get("template_path", "")))
 	var hull_id := str(record.get("hull_id", ""))
 	if path == LEGACY_STARTER_TEMPLATE_PATH:
 		return true
@@ -311,7 +318,7 @@ func repair_save_consistency() -> void:
 			uid = (
 				"server_%s" % server_id
 				if not server_id.is_empty()
-				else VesselSpawn.new_vessel_uid(str(normalized.get("hull_id", "workboat")))
+				else VesselSpawn.new_vessel_uid(str(normalized.get("hull_id", "fishing_trawler_small")))
 			)
 			normalized["uid"] = uid
 		seen_uids[uid] = true

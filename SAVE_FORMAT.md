@@ -33,7 +33,7 @@ user://save/
 
 ```json
 {
-  "version": 3,
+  "version": 4,
   "player": {},
   "saved_at_unix": 0
 }
@@ -48,6 +48,12 @@ tutorial flags, and starter-vessel state. Vector values inside JSON are arrays.
 A legacy single-slot `user://save/player.json` is moved into
 `captains/{account_id}/` on first boot by `LocalCaptainStore`. Matching vessel
 archives under `user://save/vessels/` move with that captain.
+
+Save v4 adds `registration_id` to every owned-vessel ledger row. Legacy rows
+without a declaration migrate to `review_required` and cannot deploy until they
+pass a shipyard registration/refit audit. Registration compliance is recomputed
+from the current legal-code catalog and brick layout; no certification boolean is
+persisted.
 
 ## Home port
 

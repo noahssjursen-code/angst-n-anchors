@@ -1,7 +1,7 @@
 class_name HullCatalog
 extends RefCounted
 
-## Data-driven hull sizes for the shipyard editor.
+## Reusable data-driven hull components for the shipyard editor.
 ## Edit resources/data/vessels/hulls/catalog.json — dimensions are in-world metres (2× real).
 
 const CATALOG_PATH := "res://resources/data/vessels/hulls/catalog.json"
@@ -88,7 +88,7 @@ static func _normalize(raw: Dictionary) -> Dictionary:
 	entry["draft_m"] = draft_m
 	entry["bow_taper_m"] = bow_taper_m
 	entry["displacement_t"] = displacement_t
-	var form_id := str(raw.get("form", _default_form_for_role(str(raw.get("role", "cargo")))))
+	var form_id := str(raw.get("form", HullFormProfile.DEFAULT_ID))
 	entry["form"] = form_id
 	var form_overrides: Dictionary = {}
 	var raw_overrides = raw.get("form_overrides", {})
@@ -100,39 +100,10 @@ static func _normalize(raw: Dictionary) -> Dictionary:
 		raw_livery as Dictionary if raw_livery is Dictionary else {}
 	)
 	entry["scene_path"] = str(raw.get("scene_path", ""))
-	entry["role"] = _parse_role(str(raw.get("role", "cargo")))
 	entry["ship_class"] = _parse_ship_class(str(raw.get("ship_class", "coastal_trader")))
 	if not entry.has("display"):
-		entry["display"] = "%s  •  %.0f × %.0f m" % [
-			str(entry.get("ship_class_label", "Hull")),
-			loa_m,
-			beam_m,
-		]
+		entry["display"] = "%.0f × %.0f m" % [loa_m, beam_m]
 	return entry
-
-
-static func _default_form_for_role(role: String) -> String:
-	match role.strip_edges().to_lower():
-		"container":
-			return "container"
-		"tanker":
-			return "tanker"
-		_:
-			return HullFormProfile.DEFAULT_ID
-
-
-static func _parse_role(name: String) -> int:
-	match name.strip_edges().to_lower():
-		"fishing":
-			return VesselRole.Type.FISHING
-		"passenger":
-			return VesselRole.Type.PASSENGER
-		"tanker":
-			return VesselRole.Type.TANKER
-		"container":
-			return VesselRole.Type.CONTAINER
-		_:
-			return VesselRole.Type.CARGO
 
 
 static func _parse_ship_class(name: String) -> int:

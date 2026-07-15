@@ -6,9 +6,15 @@ extends CanvasLayer
 ## `resources/data/vessels/prebuilt/*.json`. Shipwright sells those presets in-game.
 
 signal closed
-signal layout_confirmed(hull_entry: Dictionary, layout: Dictionary, vessel_name: String, editing_uid: String)
+signal layout_confirmed(
+	hull_entry: Dictionary,
+	layout: Dictionary,
+	vessel_name: String,
+	editing_uid: String,
+	registration_id: String,
+)
 
-enum Tool { PLACE = 0, ERASE = 1 }
+enum Tool { PLACE = 0, ERASE = 1, MARK = 2 }
 
 ## When true (tool scene), open immediately and Save writes official prebuilt JSON.
 @export var standalone_tool: bool = false
@@ -42,6 +48,14 @@ var _use_catalog_color := true
 ## Cargo zone: click corner A, then corner B.
 var _cargo_anchor: Vector3i = Vector3i(-999, -999, -999)
 var _cargo_anchor_set := false
+## Mark region for copy/paste: click A, then B (3D box — change layer between clicks).
+var _mark_anchor: Vector3i = Vector3i(-999, -999, -999)
+var _mark_anchor_set := false
+var _mark_complete := false
+var _mark_min := Vector3i.ZERO
+var _mark_max := Vector3i.ZERO
+var _clipboard: Dictionary = {}
+var _clipboard_src_min := Vector3i.ZERO
 var _thumb_cache: Dictionary = {} ## brick_id → ImageTexture
 
 var _root: Control
@@ -52,6 +66,7 @@ var _brick_root: Node3D
 var _brick_visuals: Dictionary = {} ## cell_key → Node3D
 var _grid_overlay: Node3D
 var _ghost: Node3D
+var _mark_preview: Node3D
 var _ghost_brick_id: String = ""
 var _ghost_cell: Vector3i = Vector3i(-999, -999, -999)
 var _ghost_yaw: int = -1
@@ -59,7 +74,7 @@ var _ghost_valid: bool = false
 var _ghost_color := Color(0, 0, 0, 0)
 const EDITOR_BRICK_ROOT := "EditorBricks"
 const PREBUILT_DIR := "res://resources/data/vessels/prebuilt"
-const PREBUILT_FORMAT_VERSION := 1
+const PREBUILT_FORMAT_VERSION := 2
 var _camera: Camera3D
 var _cam_yaw: float = 35.0
 var _cam_pitch: float = -35.0
@@ -71,11 +86,15 @@ var _orbit_last: Vector2 = Vector2.ZERO
 
 var _hull_lbl: Label
 var _status_lbl: Label
+var _hint_lbl: Label
 var _rules_lbl: Label
 var _caps_lbl: Label
 var _layer_lbl: Label
 var _name_edit: LineEdit
 var _price_edit: LineEdit
+var _power_edit: LineEdit
+var _registration_option: OptionButton
+var _registration_id: String = ""
 var _sign_text_edit: LineEdit
 var _brick_rows: Dictionary = {} ## brick_id → PanelContainer
 var _confirm_btn: Button
@@ -90,9 +109,30 @@ var _color_picker: ColorPickerButton
 var _color_preset_btns: Array[Button] = []
 var _dev_save_lbl: Label
 var _vp_host: SubViewportContainer
-const THUMB_PX := 80
+var _palette_search: LineEdit
+var _palette_category: OptionButton
+var _palette_empty_lbl: Label
+var _context_drawer: PanelContainer
+var _context_title: Label
+var _context_info: Label
+var _color_section: VBoxContainer
+var _sign_section: VBoxContainer
+var _light_section: VBoxContainer
+var _clipboard_section: VBoxContainer
+var _cargo_section: VBoxContainer
+var _tool_place_btn: Button
+var _tool_erase_btn: Button
+var _tool_mark_btn: Button
+var _ship_dialog: PanelContainer
+var _authoring_section: VBoxContainer
+var _help_overlay: PanelContainer
+var _clear_confirm: PanelContainer
+var _toast_lbl: Label
+var _toast_until_msec: int = 0
+const THUMB_PX := 64
 const MAX_VESSEL_NAME_LEN := 28
 const PREBUILT_BLANK_META := "__blank__"
+const PALETTE_CATEGORIES := ["All", "Structure", "Openings", "Deck", "Equipment", "Lights", "Signs"]
 
 
 func _init() -> void:
@@ -122,13 +162,7 @@ func _ready() -> void:
 func _row_thumb_rect(row: PanelContainer) -> TextureRect:
 	if row == null:
 		return null
-	var h := row.get_child(0) as HBoxContainer
-	if h == null or h.get_child_count() < 1:
-		return null
-	var plate := h.get_child(0) as PanelContainer
-	if plate == null or plate.get_child_count() < 1:
-		return null
-	return plate.get_child(0) as TextureRect
+	return row.find_child("Thumb", true, false) as TextureRect
 
 
 func is_open() -> bool:
@@ -137,13 +171,16 @@ func is_open() -> bool:
 
 func _boot_standalone_tool() -> void:
 	_authoring_mode = true
+	_refresh_authoring_chrome()
 	var title := _root.find_child("TitleLabel", true, false) as Label
 	if title != null:
 		title.text = "PREBUILT AUTHORING"
 	_status_lbl.text = (
 		"Load an existing prebuilt or start blank on a hull.\n"
 		+ "Save overwrites the loaded preset id (or creates from the vessel name).\n"
-		+ "LMB place · RMB orbit · MMB pan · Scroll zoom · [ ] layer · R rotate · X erase"
+		+ "Incomplete legal checklists can still Save as draft (not sold by the Shipwright).\n"
+		+ "LMB place · RMB orbit · MMB pan · Scroll zoom · [ ] layer · R rotate · X erase\n"
+		+ "M mark A→B · Ctrl+C copy · Ctrl+V paste"
 	)
 	_confirm_btn.text = "Save official prebuilt JSON"
 	_back_btn.text = "Quit tool"
@@ -205,6 +242,8 @@ func _populate_prebuilt_option(select_prebuilt_id: String = "") -> void:
 			str(entry.get("prebuilt_name", preset_id)),
 			preset_id,
 		]
+		if bool(entry.get("is_draft", false)):
+			label = "[DRAFT] " + label
 		_prebuilt_option.add_item(label, i)
 		_prebuilt_option.set_item_metadata(i, entry)
 		if not select_prebuilt_id.is_empty() and preset_id == select_prebuilt_id:
@@ -247,7 +286,7 @@ func _on_standalone_prebuilt_selected(index: int) -> void:
 
 
 func _load_prebuilt_entry(entry: Dictionary) -> void:
-	var hull_id := str(entry.get("id", entry.get("hull_id", ""))).strip_edges()
+	var hull_id := str(entry.get("hull_id", entry.get("id", ""))).strip_edges()
 	var hull := HullRegistry.get_by_id(hull_id)
 	if hull.is_empty():
 		_show_dev_save_result("LOAD FAILED · unknown hull '%s'" % hull_id, true)
@@ -269,23 +308,58 @@ func _load_prebuilt_entry(entry: Dictionary) -> void:
 				_hull_option.select(i)
 				break
 		_option_guard = false
-	open_for_authoring(hull, layout, vessel_name)
+	open_for_authoring(
+		hull,
+		layout,
+		vessel_name,
+		str(entry.get("registration_id", "")),
+	)
 	_set_price_field(int(entry.get("price_marks", hull.get("price_marks", 0))))
+	_set_power_field(float(entry.get(
+		"shaft_power_kw",
+		hull.get("default_shaft_power_kw", 1.0)
+	)))
 	if _dev_save_lbl != null:
-		_dev_save_lbl.text = "Loaded · %s" % str(entry.get("prebuilt_path", _authoring_prebuilt_id))
-		_dev_save_lbl.add_theme_color_override("font_color", HudStyle.C_LABEL)
+		var draft_note := " · DRAFT" if bool(entry.get("is_draft", false)) else ""
+		_dev_save_lbl.text = "Loaded%s · %s" % [
+			draft_note,
+			str(entry.get("prebuilt_path", _authoring_prebuilt_id)),
+		]
+		_dev_save_lbl.add_theme_color_override(
+			"font_color",
+			HudStyle.C_AMBER if bool(entry.get("is_draft", false)) else HudStyle.C_LABEL,
+		)
+	_show_toast("Loaded %s" % vessel_name)
 
 
 func open_for_authoring(
 	hull_entry: Dictionary,
 	existing_layout: Dictionary = {},
 	vessel_name: String = "",
+	registration_id: String = "",
 ) -> void:
 	_authoring_mode = true
+	_refresh_authoring_chrome()
 	var name := vessel_name.strip_edges()
 	if name.is_empty():
 		name = str(hull_entry.get("display", ""))
-	open_for_hull(hull_entry, existing_layout, "", name)
+	open_for_hull(hull_entry, existing_layout, "", name, registration_id)
+
+
+func _refresh_authoring_chrome() -> void:
+	var authoring := _authoring_mode or standalone_tool
+	if _authoring_section != null:
+		_authoring_section.visible = authoring
+	if _price_edit != null:
+		_price_edit.visible = authoring
+	if _power_edit != null:
+		_power_edit.visible = authoring
+	var price_header := _root.find_child("PriceHeader", true, false) as Control
+	if price_header != null:
+		price_header.visible = authoring
+	var power_header := _root.find_child("PowerHeader", true, false) as Control
+	if power_header != null:
+		power_header.visible = authoring
 
 
 func open_for_hull(
@@ -293,13 +367,16 @@ func open_for_hull(
 	existing_layout: Dictionary = {},
 	editing_uid: String = "",
 	vessel_name: String = "",
+	registration_id: String = "",
 ) -> void:
 	_hull_entry = hull_entry.duplicate(true)
 	_editing_uid = editing_uid.strip_edges()
-	var hull_id := str(hull_entry.get("id", "workboat"))
+	var hull_id := str(hull_entry.get("id", "fishing_trawler_small"))
 	_grid = HullRegistry.make_grid(hull_id)
 	_layout = BrickLayout.new()
 	_layout.hull_id = hull_id
+	_registration_id = registration_id.strip_edges()
+	_select_registration_option(_registration_id)
 	# Only restore a prior layout when explicitly passed — never auto-configure.
 	if not existing_layout.is_empty():
 		_layout = BrickLayout.from_dict(existing_layout)
@@ -308,11 +385,15 @@ func open_for_hull(
 	_brick_id = "block"
 	_tool = Tool.PLACE
 	_clear_cargo_anchor()
-	## Hull change must rebuild the editor boat (workboat vs trawler sizes).
+	_clear_mark()
+	_clear_mark_preview()
+	## Hull change must rebuild the editor boat for the selected dimensions.
 	if _boat != null and is_instance_valid(_boat):
 		_boat.queue_free()
 		_boat = null
 		_brick_root = null
+		_brick_visuals.clear()
+		_clear_mark_preview()
 	var hull_label := str(hull_entry.get("display", "Vessel"))
 	if _authoring_mode or standalone_tool:
 		_hull_lbl.text = "Official prebuilt — %s" % hull_label
@@ -334,6 +415,7 @@ func open_for_hull(
 		})
 	_name_edit.text = suggested
 	_set_price_field(int(hull_entry.get("price_marks", 0)))
+	_set_power_field(float(hull_entry.get("default_shaft_power_kw", 1.0)))
 	if _sign_text_edit != null:
 		_sign_text_edit.text = suggested
 	if _dev_save_lbl != null:
@@ -364,6 +446,562 @@ func _close() -> void:
 
 
 func _build_chrome() -> void:
+	_root = Control.new()
+	_root.name = "EditorRoot"
+	_root.visible = false
+	_root.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_root.theme = HudStyle.make_theme()
+	add_child(_root)
+
+	var bg := ColorRect.new()
+	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
+	bg.color = Color(0.025, 0.04, 0.05, 1.0)
+	bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_root.add_child(bg)
+
+	var shell := VBoxContainer.new()
+	shell.name = "EditorShell"
+	shell.set_anchors_preset(Control.PRESET_FULL_RECT)
+	shell.add_theme_constant_override("separation", 0)
+	_root.add_child(shell)
+
+	_build_top_bar(shell)
+
+	var workspace := HBoxContainer.new()
+	workspace.name = "Workspace"
+	workspace.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	workspace.add_theme_constant_override("separation", 0)
+	shell.add_child(workspace)
+
+	_build_palette(workspace)
+
+	var center := VBoxContainer.new()
+	center.name = "ViewportColumn"
+	center.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	center.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	center.add_theme_constant_override("separation", 0)
+	workspace.add_child(center)
+	_build_viewport(center)
+	_build_viewport_chrome(center)
+
+	_build_context_drawer(workspace)
+	_build_ship_dialog()
+	_build_help_overlay()
+	_build_clear_confirmation()
+
+
+func _build_top_bar(parent: VBoxContainer) -> void:
+	var panel := UiBuilder.inner_panel()
+	panel.name = "TopBar"
+	panel.custom_minimum_size.y = 54.0
+	parent.add_child(panel)
+
+	var bar := HBoxContainer.new()
+	bar.add_theme_constant_override("separation", 8)
+	panel.add_child(bar)
+
+	var title := Label.new()
+	title.name = "TitleLabel"
+	title.text = "VESSEL BUILDER"
+	HudStyle.apply_display_font(title, 24, HudStyle.C_AMBER)
+	bar.add_child(title)
+
+	var rule := VSeparator.new()
+	rule.custom_minimum_size.x = 1.0
+	bar.add_child(rule)
+
+	_hull_lbl = Label.new()
+	_hull_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_hull_lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	HudStyle.apply_body_font(_hull_lbl, 13, HudStyle.C_LABEL)
+	bar.add_child(_hull_lbl)
+
+	var ship_btn := UiBuilder.compact_button("Ship", 70)
+	ship_btn.tooltip_text = "Vessel metadata, validation and authoring options"
+	ship_btn.pressed.connect(_toggle_ship_dialog)
+	bar.add_child(ship_btn)
+
+	var help_btn := UiBuilder.compact_button("?", 36)
+	help_btn.tooltip_text = "Controls and shortcuts"
+	help_btn.pressed.connect(_toggle_help_overlay)
+	bar.add_child(help_btn)
+
+	_confirm_btn = UiBuilder.compact_button("Confirm", 112)
+	_confirm_btn.pressed.connect(_on_confirm)
+	bar.add_child(_confirm_btn)
+
+	_back_btn = UiBuilder.compact_button("Back", 70)
+	_back_btn.pressed.connect(_close)
+	bar.add_child(_back_btn)
+
+
+func _build_palette(parent: HBoxContainer) -> void:
+	var side := UiBuilder.panel(Vector2(292, 0))
+	side.name = "PartsPalette"
+	side.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	parent.add_child(side)
+
+	var col := VBoxContainer.new()
+	col.add_theme_constant_override("separation", 8)
+	side.add_child(col)
+
+	var heading := HBoxContainer.new()
+	col.add_child(heading)
+	var title := UiBuilder.section_header("PARTS")
+	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	heading.add_child(title)
+	var count := Label.new()
+	count.name = "PaletteCount"
+	count.text = str(BrickCatalog.ids().size())
+	count.add_theme_color_override("font_color", HudStyle.C_LABEL)
+	heading.add_child(count)
+
+	_palette_search = LineEdit.new()
+	_palette_search.name = "PaletteSearch"
+	_palette_search.placeholder_text = "Search parts…"
+	_palette_search.clear_button_enabled = true
+	_palette_search.text_changed.connect(func(_text: String) -> void: _filter_palette())
+	col.add_child(_palette_search)
+
+	_palette_category = OptionButton.new()
+	_palette_category.name = "PaletteCategory"
+	for category in PALETTE_CATEGORIES:
+		_palette_category.add_item(category)
+	_palette_category.item_selected.connect(func(_index: int) -> void: _filter_palette())
+	col.add_child(_palette_category)
+
+	var brick_scroll := ScrollContainer.new()
+	brick_scroll.name = "PartsScroll"
+	brick_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	brick_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	col.add_child(brick_scroll)
+
+	var grid := GridContainer.new()
+	grid.name = "PartsGrid"
+	grid.columns = 2
+	grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	grid.add_theme_constant_override("h_separation", 6)
+	grid.add_theme_constant_override("v_separation", 6)
+	brick_scroll.add_child(grid)
+
+	_brick_rows.clear()
+	for id in BrickCatalog.ids():
+		var row := _make_item_row(id)
+		grid.add_child(row)
+		_brick_rows[id] = row
+
+	_palette_empty_lbl = UiBuilder.subtitle_label("No matching parts", 12)
+	_palette_empty_lbl.visible = false
+	col.add_child(_palette_empty_lbl)
+
+
+func _build_viewport(parent: VBoxContainer) -> void:
+	_vp_host = SubViewportContainer.new()
+	_vp_host.name = "BuildViewport"
+	_vp_host.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_vp_host.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_vp_host.stretch = true
+	_vp_host.mouse_filter = Control.MOUSE_FILTER_STOP
+	_vp_host.gui_input.connect(_on_viewport_gui_input)
+	parent.add_child(_vp_host)
+
+	_viewport = SubViewport.new()
+	_viewport.own_world_3d = true
+	_viewport.size = Vector2i(1280, 720)
+	_viewport.render_target_update_mode = SubViewport.UPDATE_WHEN_VISIBLE
+	_viewport.handle_input_locally = true
+	_vp_host.add_child(_viewport)
+
+	_world = Node3D.new()
+	_world.name = "EditorWorld"
+	_viewport.add_child(_world)
+
+	_camera = Camera3D.new()
+	_camera.fov = 50.0
+	_camera.current = true
+	_world.add_child(_camera)
+
+	var sun := DirectionalLight3D.new()
+	sun.rotation_degrees = Vector3(-48.0, 40.0, 0.0)
+	sun.light_energy = 1.2
+	_world.add_child(sun)
+
+	var fill := DirectionalLight3D.new()
+	fill.rotation_degrees = Vector3(-15.0, -130.0, 0.0)
+	fill.light_energy = 0.35
+	_world.add_child(fill)
+
+	var env := WorldEnvironment.new()
+	var we := Environment.new()
+	we.background_mode = Environment.BG_COLOR
+	we.background_color = Color(0.06, 0.08, 0.11)
+	we.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
+	we.ambient_light_color = Color(0.2, 0.22, 0.26)
+	we.ambient_light_energy = 0.95
+	env.environment = we
+	_world.add_child(env)
+
+
+func _build_viewport_chrome(parent: VBoxContainer) -> void:
+	var strip := UiBuilder.inner_panel()
+	strip.name = "ContextStrip"
+	strip.custom_minimum_size.y = 48.0
+	parent.add_child(strip)
+
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 6)
+	strip.add_child(row)
+
+	_tool_place_btn = UiBuilder.tool_button("Place")
+	_tool_place_btn.pressed.connect(func() -> void: _set_tool(Tool.PLACE))
+	row.add_child(_tool_place_btn)
+	_tool_erase_btn = UiBuilder.tool_button("Erase")
+	_tool_erase_btn.pressed.connect(func() -> void: _set_tool(Tool.ERASE))
+	row.add_child(_tool_erase_btn)
+	_tool_mark_btn = UiBuilder.tool_button("Select")
+	_tool_mark_btn.pressed.connect(func() -> void: _set_tool(Tool.MARK))
+	row.add_child(_tool_mark_btn)
+
+	var rotate := UiBuilder.compact_button("Rotate  R", 86)
+	rotate.pressed.connect(func() -> void:
+		_rotate_yaw()
+		_refresh_rules()
+		_refresh_ghost_from_mouse()
+	)
+	row.add_child(rotate)
+
+	var layer_down := UiBuilder.compact_button("−", 34)
+	layer_down.tooltip_text = "Previous layer ([)"
+	layer_down.pressed.connect(func() -> void: _set_layer_y(_layer_y - 1))
+	row.add_child(layer_down)
+
+	_layer_lbl = Label.new()
+	_layer_lbl.custom_minimum_size.x = 92.0
+	_layer_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_layer_lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	HudStyle.apply_body_font(_layer_lbl, 12, HudStyle.C_TEXT, true)
+	row.add_child(_layer_lbl)
+
+	var layer_up := UiBuilder.compact_button("+", 34)
+	layer_up.tooltip_text = "Next layer (])"
+	layer_up.pressed.connect(func() -> void: _set_layer_y(_layer_y + 1))
+	row.add_child(layer_up)
+
+	_hint_lbl = Label.new()
+	_hint_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_hint_lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_hint_lbl.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	HudStyle.apply_body_font(_hint_lbl, 12, HudStyle.C_LABEL)
+	row.add_child(_hint_lbl)
+
+	_toast_lbl = Label.new()
+	_toast_lbl.visible = false
+	_toast_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	_toast_lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	HudStyle.apply_body_font(_toast_lbl, 12, HudStyle.C_GREEN, true)
+	row.add_child(_toast_lbl)
+
+
+func _build_context_drawer(parent: HBoxContainer) -> void:
+	_context_drawer = UiBuilder.panel(Vector2(272, 0))
+	_context_drawer.name = "PropertiesDrawer"
+	_context_drawer.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	parent.add_child(_context_drawer)
+
+	var col := VBoxContainer.new()
+	col.add_theme_constant_override("separation", 10)
+	_context_drawer.add_child(col)
+	_context_title = UiBuilder.section_header("PROPERTIES")
+	col.add_child(_context_title)
+	_context_info = Label.new()
+	_context_info.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	HudStyle.apply_body_font(_context_info, 12, HudStyle.C_LABEL)
+	col.add_child(_context_info)
+
+	_color_section = VBoxContainer.new()
+	_color_section.add_child(UiBuilder.section_header("COLOUR"))
+	var color_row := HBoxContainer.new()
+	color_row.add_theme_constant_override("separation", 6)
+	_color_section.add_child(color_row)
+	_color_picker = ColorPickerButton.new()
+	_color_picker.custom_minimum_size = Vector2(52, 34)
+	_color_picker.edit_alpha = false
+	_color_picker.color = _paint_color
+	_color_picker.color_changed.connect(_on_paint_color_changed)
+	color_row.add_child(_color_picker)
+	var default_btn := UiBuilder.compact_button("Default")
+	default_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	default_btn.pressed.connect(_use_brick_catalog_color)
+	color_row.add_child(default_btn)
+	var presets := HFlowContainer.new()
+	presets.add_theme_constant_override("h_separation", 4)
+	presets.add_theme_constant_override("v_separation", 4)
+	_color_section.add_child(presets)
+	_color_preset_btns.clear()
+	for preset in COLOR_PRESETS:
+		if bool(preset.get("custom", true)) == false:
+			continue
+		var swatch := Button.new()
+		swatch.custom_minimum_size = Vector2(26, 26)
+		swatch.focus_mode = Control.FOCUS_NONE
+		swatch.tooltip_text = str(preset.get("name", "Colour"))
+		var sb := StyleBoxFlat.new()
+		sb.bg_color = preset["color"] as Color
+		sb.border_color = HudStyle.C_BRASS
+		sb.set_border_width_all(1)
+		sb.set_corner_radius_all(2)
+		swatch.add_theme_stylebox_override("normal", sb)
+		swatch.add_theme_stylebox_override("hover", sb)
+		var preset_copy: Dictionary = preset
+		swatch.pressed.connect(func() -> void: _apply_color_preset(preset_copy))
+		presets.add_child(swatch)
+		_color_preset_btns.append(swatch)
+	col.add_child(_color_section)
+
+	_sign_section = VBoxContainer.new()
+	_sign_section.add_child(UiBuilder.section_header("SIGN TEXT"))
+	_sign_text_edit = LineEdit.new()
+	_sign_text_edit.placeholder_text = "Vessel name / custom text…"
+	_sign_text_edit.max_length = 32
+	_sign_text_edit.text_changed.connect(func(_t: String) -> void: _refresh_ghost_from_mouse())
+	_sign_section.add_child(_sign_text_edit)
+	col.add_child(_sign_section)
+
+	_light_section = VBoxContainer.new()
+	_light_section.add_child(UiBuilder.section_header("LIGHT"))
+	_cone_btn = UiBuilder.compact_button("Aim preview: on")
+	_cone_btn.pressed.connect(_toggle_light_cones)
+	_light_section.add_child(_cone_btn)
+	col.add_child(_light_section)
+
+	_cargo_section = VBoxContainer.new()
+	_cargo_section.add_child(UiBuilder.section_header("CARGO ZONE"))
+	var cargo_help := UiBuilder.body_label("Click two corners on deck to define the cargo area.", 12)
+	cargo_help.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_cargo_section.add_child(cargo_help)
+	col.add_child(_cargo_section)
+
+	_clipboard_section = VBoxContainer.new()
+	_clipboard_section.add_child(UiBuilder.section_header("SELECTION"))
+	var copy := UiBuilder.compact_button("Copy selection  Ctrl+C")
+	copy.pressed.connect(_copy_marked_region)
+	_clipboard_section.add_child(copy)
+	var paste := UiBuilder.compact_button("Paste at cursor  Ctrl+V")
+	paste.pressed.connect(_paste_clipboard_at_cursor)
+	_clipboard_section.add_child(paste)
+	var paste_layer := UiBuilder.compact_button("Paste on this layer")
+	paste_layer.pressed.connect(_paste_clipboard_on_layer)
+	_clipboard_section.add_child(paste_layer)
+	col.add_child(_clipboard_section)
+
+
+func _build_ship_dialog() -> void:
+	_ship_dialog = UiBuilder.panel(Vector2(410, 0))
+	_ship_dialog.name = "ShipDialog"
+	_ship_dialog.visible = false
+	_ship_dialog.set_anchors_preset(Control.PRESET_CENTER_RIGHT)
+	_ship_dialog.offset_left = -430.0
+	_ship_dialog.offset_right = -20.0
+	_ship_dialog.offset_top = -300.0
+	_ship_dialog.offset_bottom = 300.0
+	_root.add_child(_ship_dialog)
+
+	var col := VBoxContainer.new()
+	col.add_theme_constant_override("separation", 9)
+	_ship_dialog.add_child(col)
+	var heading := HBoxContainer.new()
+	col.add_child(heading)
+	var title := UiBuilder.title_label("SHIP", 20)
+	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	heading.add_child(title)
+	var close := UiBuilder.compact_button("×", 34)
+	close.pressed.connect(func() -> void: _ship_dialog.visible = false)
+	heading.add_child(close)
+
+	_status_lbl = UiBuilder.subtitle_label("", 11)
+	_status_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	col.add_child(_status_lbl)
+
+	_authoring_section = VBoxContainer.new()
+	_authoring_section.visible = false
+	_authoring_section.add_theme_constant_override("separation", 7)
+	col.add_child(_authoring_section)
+	_hull_option = OptionButton.new()
+	_hull_option.tooltip_text = "Hull class for a blank new deck"
+	_authoring_section.add_child(UiBuilder.section_header("HULL"))
+	_authoring_section.add_child(_hull_option)
+	_prebuilt_option = OptionButton.new()
+	_prebuilt_option.tooltip_text = "Load an existing official prebuilt JSON"
+	_authoring_section.add_child(UiBuilder.section_header("PREBUILT"))
+	_authoring_section.add_child(_prebuilt_option)
+
+	col.add_child(UiBuilder.section_header("VESSEL NAME"))
+	_name_edit = LineEdit.new()
+	_name_edit.placeholder_text = "Name your vessel"
+	_name_edit.max_length = MAX_VESSEL_NAME_LEN
+	_name_edit.text_changed.connect(func(_text: String) -> void: _refresh_ship_summary())
+	col.add_child(_name_edit)
+	_add_registration_picker(col)
+	var price_header := UiBuilder.section_header("PRICE (MARKS)")
+	price_header.name = "PriceHeader"
+	price_header.visible = false
+	col.add_child(price_header)
+	_price_edit = LineEdit.new()
+	_price_edit.visible = false
+	_price_edit.placeholder_text = "0"
+	_price_edit.tooltip_text = "Authoring catalog price. 0 = free."
+	col.add_child(_price_edit)
+	var power_header := UiBuilder.section_header("SHAFT POWER (kW)")
+	power_header.name = "PowerHeader"
+	power_header.visible = false
+	col.add_child(power_header)
+	_power_edit = LineEdit.new()
+	_power_edit.visible = false
+	_power_edit.placeholder_text = "1"
+	_power_edit.tooltip_text = "Engine power for this finished store ship, independent of its hull."
+	_power_edit.text_changed.connect(func(_text: String) -> void: _refresh_ship_summary())
+	col.add_child(_power_edit)
+
+	col.add_child(UiBuilder.separator())
+	_rules_lbl = Label.new()
+	_rules_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	HudStyle.apply_body_font(_rules_lbl, 12, HudStyle.C_TEXT)
+	col.add_child(_rules_lbl)
+	_caps_lbl = Label.new()
+	_caps_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	HudStyle.apply_body_font(_caps_lbl, 12, HudStyle.C_LABEL)
+	col.add_child(_caps_lbl)
+
+	_dev_save_lbl = Label.new()
+	_dev_save_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	HudStyle.apply_body_font(_dev_save_lbl, 11, HudStyle.C_LABEL)
+	col.add_child(_dev_save_lbl)
+
+	var clear := UiBuilder.compact_button("Clear deck…")
+	clear.pressed.connect(_request_clear_layout)
+	col.add_child(clear)
+
+
+func _add_registration_picker(col: VBoxContainer) -> void:
+	var header := UiBuilder.section_header("LEGAL REGISTRATION")
+	header.name = "RegistrationHeader"
+	col.add_child(header)
+	_registration_option = OptionButton.new()
+	_registration_option.name = "RegistrationOption"
+	_registration_option.tooltip_text = (
+		"Choose the vessel's legal operating type before placing any parts."
+	)
+	col.add_child(_registration_option)
+	_populate_registration_option()
+	_registration_option.item_selected.connect(_on_registration_selected)
+
+
+func _populate_registration_option() -> void:
+	if _registration_option == null:
+		return
+	_registration_option.clear()
+	_registration_option.add_item("Choose registration…")
+	_registration_option.set_item_metadata(0, "")
+	var i := 1
+	for entry in VesselRegistrationCatalog.registrations():
+		_registration_option.add_item(str(entry.get("display", entry.get("id", ""))))
+		_registration_option.set_item_metadata(i, str(entry.get("id", "")))
+		i += 1
+	_select_registration_option(_registration_id)
+
+
+func _select_registration_option(registration_id: String) -> void:
+	if _registration_option == null:
+		return
+	for i in range(_registration_option.item_count):
+		if str(_registration_option.get_item_metadata(i)) == registration_id:
+			_registration_option.select(i)
+			return
+	_registration_option.select(0)
+
+
+func _on_registration_selected(index: int) -> void:
+	if _registration_option == null or index < 0:
+		return
+	if not _layout.is_empty() and str(_registration_option.get_item_metadata(index)) != _registration_id:
+		_select_registration_option(_registration_id)
+		_show_toast("Clear the deck before changing legal registration")
+		return
+	_registration_id = str(_registration_option.get_item_metadata(index))
+	_refresh_rules()
+	if not _brick_id.is_empty() and not _brick_allowed_for_registration(_brick_id):
+		var denied := VesselCompliance.brick_placement_denied_reason(
+			_registration_id, _layout.hull_id if _layout != null else "", _brick_id
+		)
+		_brick_id = "block"
+		_show_toast(denied)
+	_refresh_palette_selection()
+
+
+func _build_help_overlay() -> void:
+	_help_overlay = UiBuilder.panel(Vector2(460, 0))
+	_help_overlay.name = "HelpOverlay"
+	_help_overlay.visible = false
+	_help_overlay.set_anchors_preset(Control.PRESET_CENTER)
+	_help_overlay.offset_left = -230
+	_help_overlay.offset_right = 230
+	_help_overlay.offset_top = -190
+	_help_overlay.offset_bottom = 190
+	_root.add_child(_help_overlay)
+	var col := VBoxContainer.new()
+	col.add_theme_constant_override("separation", 9)
+	_help_overlay.add_child(col)
+	col.add_child(UiBuilder.title_label("BUILDER CONTROLS", 22))
+	var help := UiBuilder.body_label(
+		"Place: left-click or drag\n"
+		+ "Erase: X, then click or drag\n"
+		+ "Select: M, click two opposite corners\n"
+		+ "Copy / paste: Ctrl+C / Ctrl+V\n"
+		+ "Rotate: R\n"
+		+ "Layer: [ and ]\n"
+		+ "Orbit / pan / zoom: RMB / MMB / wheel\n"
+		+ "Cancel selection: Esc",
+		13,
+	)
+	help.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	col.add_child(help)
+	var close := UiBuilder.compact_button("Close")
+	close.pressed.connect(func() -> void: _help_overlay.visible = false)
+	col.add_child(close)
+
+
+func _build_clear_confirmation() -> void:
+	_clear_confirm = UiBuilder.panel(Vector2(380, 0))
+	_clear_confirm.name = "ClearConfirmation"
+	_clear_confirm.visible = false
+	_clear_confirm.set_anchors_preset(Control.PRESET_CENTER)
+	_clear_confirm.offset_left = -190
+	_clear_confirm.offset_right = 190
+	_clear_confirm.offset_top = -100
+	_clear_confirm.offset_bottom = 100
+	_root.add_child(_clear_confirm)
+	var col := VBoxContainer.new()
+	col.add_theme_constant_override("separation", 12)
+	_clear_confirm.add_child(col)
+	col.add_child(UiBuilder.title_label("CLEAR DECK?", 20))
+	var warning := UiBuilder.body_label("This removes every placed brick and cargo zone.", 13)
+	warning.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	col.add_child(warning)
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 8)
+	col.add_child(row)
+	var cancel := UiBuilder.compact_button("Cancel")
+	cancel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	cancel.pressed.connect(func() -> void: _clear_confirm.visible = false)
+	row.add_child(cancel)
+	var clear := UiBuilder.compact_button("Clear deck")
+	clear.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	clear.pressed.connect(_confirm_clear_layout)
+	row.add_child(clear)
+
+
+func _build_legacy_chrome() -> void:
 	_root = Control.new()
 	_root.name = "EditorRoot"
 	_root.visible = false
@@ -434,7 +1072,14 @@ func _build_chrome() -> void:
 	_status_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_status_lbl.add_theme_font_size_override("font_size", 12)
 	_status_lbl.add_theme_color_override("font_color", HudStyle.C_LABEL)
-	_status_lbl.text = "Empty deck — place items yourself.\nLMB place · RMB orbit · MMB pan · Scroll zoom\n[ ] layer (shows this floor + below) · R rotate · X erase\nCargo zone: click A, then B · Doors open with F after deploy\nCell = 1.0 m"
+	_status_lbl.text = (
+		"Empty deck — place items yourself.\n"
+		+ "LMB place · RMB orbit · MMB pan · Scroll zoom\n"
+		+ "[ ] layer (shows this floor + below) · R rotate · X erase\n"
+		+ "M mark A→B · Ctrl+C copy · Ctrl+V paste (stamp another layer/spot)\n"
+		+ "Cargo zone: click A, then B · Doors open with F after deploy\n"
+		+ "Cell = 1.0 m"
+	)
 	col.add_child(_status_lbl)
 
 	col.add_child(HSeparator.new())
@@ -465,11 +1110,11 @@ func _build_chrome() -> void:
 	col.add_child(tool_row)
 	var place_btn := UiBuilder.button("Place")
 	place_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	place_btn.pressed.connect(func() -> void: _tool = Tool.PLACE; _clear_cargo_anchor(); _refresh_palette_selection(); _refresh_ghost_from_mouse())
+	place_btn.pressed.connect(func() -> void: _tool = Tool.PLACE; _clear_cargo_anchor(); _clear_mark(); _refresh_palette_selection(); _refresh_ghost_from_mouse())
 	tool_row.add_child(place_btn)
 	var erase_btn := UiBuilder.button("Erase")
 	erase_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	erase_btn.pressed.connect(func() -> void: _tool = Tool.ERASE; _clear_cargo_anchor(); _refresh_palette_selection(); _clear_ghost())
+	erase_btn.pressed.connect(func() -> void: _tool = Tool.ERASE; _clear_cargo_anchor(); _clear_mark(); _refresh_palette_selection(); _clear_ghost())
 	tool_row.add_child(erase_btn)
 
 	var tool_row2 := HBoxContainer.new()
@@ -550,6 +1195,34 @@ func _build_chrome() -> void:
 	up.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	up.pressed.connect(func() -> void: _set_layer_y(_layer_y + 1))
 	layer_row.add_child(up)
+
+	var clip_row := HBoxContainer.new()
+	clip_row.add_theme_constant_override("separation", 6)
+	col.add_child(clip_row)
+	var mark_btn := UiBuilder.button("Mark")
+	mark_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	mark_btn.tooltip_text = "Click two corners to select (M)"
+	mark_btn.pressed.connect(_toggle_mark_tool)
+	clip_row.add_child(mark_btn)
+	var copy_btn := UiBuilder.button("Copy")
+	copy_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	copy_btn.tooltip_text = "Copy marked region (Ctrl+C)"
+	copy_btn.pressed.connect(_copy_marked_region)
+	clip_row.add_child(copy_btn)
+
+	var clip_row2 := HBoxContainer.new()
+	clip_row2.add_theme_constant_override("separation", 6)
+	col.add_child(clip_row2)
+	var paste_btn := UiBuilder.button("Paste at cursor")
+	paste_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	paste_btn.tooltip_text = "Stamp at mouse (Ctrl+V)"
+	paste_btn.pressed.connect(_paste_clipboard_at_cursor)
+	clip_row2.add_child(paste_btn)
+	var paste_layer_btn := UiBuilder.button("Paste this layer")
+	paste_layer_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	paste_layer_btn.tooltip_text = "Same XZ as the copy, on the current layer"
+	paste_layer_btn.pressed.connect(_paste_clipboard_on_layer)
+	clip_row2.add_child(paste_layer_btn)
 
 	var sign_lbl := Label.new()
 	sign_lbl.text = "Sign text (floor / wall)"
@@ -663,6 +1336,184 @@ func _build_chrome() -> void:
 	_world.add_child(env)
 
 
+func _process(_delta: float) -> void:
+	if _toast_lbl == null or not _toast_lbl.visible or _toast_until_msec <= 0:
+		return
+	if Time.get_ticks_msec() >= _toast_until_msec:
+		_toast_lbl.visible = false
+		_toast_until_msec = 0
+
+
+func _set_tool(tool: int) -> void:
+	_tool = tool
+	_clear_cargo_anchor()
+	if tool != Tool.MARK:
+		_clear_mark()
+		_clear_mark_preview()
+	else:
+		_clear_mark()
+		_clear_ghost()
+	_refresh_palette_selection()
+	_refresh_ghost_from_mouse()
+
+
+func _toggle_ship_dialog() -> void:
+	if _ship_dialog != null:
+		_ship_dialog.visible = not _ship_dialog.visible
+	if _help_overlay != null:
+		_help_overlay.visible = false
+
+
+func _toggle_help_overlay() -> void:
+	if _help_overlay != null:
+		_help_overlay.visible = not _help_overlay.visible
+	if _ship_dialog != null:
+		_ship_dialog.visible = false
+
+
+func _show_toast(message: String, failed: bool = false, persistent: bool = false) -> void:
+	if _toast_lbl == null:
+		return
+	_toast_lbl.text = message
+	_toast_lbl.visible = true
+	_toast_lbl.add_theme_color_override(
+		"font_color",
+		HudStyle.C_RED if failed else HudStyle.C_GREEN,
+	)
+	_toast_until_msec = 0 if persistent else Time.get_ticks_msec() + 3200
+
+
+func _request_clear_layout() -> void:
+	if _clear_confirm != null:
+		_clear_confirm.visible = true
+	if _ship_dialog != null:
+		_ship_dialog.visible = false
+
+
+func _confirm_clear_layout() -> void:
+	if _clear_confirm != null:
+		_clear_confirm.visible = false
+	_clear_layout()
+	_show_toast("Deck cleared")
+
+
+func _palette_category_of(brick_id: String) -> String:
+	if BrickCatalog.has_tag(brick_id, "text"):
+		return "Signs"
+	if BrickCatalog.has_tag(brick_id, "light"):
+		return "Lights"
+	if (
+		BrickCatalog.has_tag(brick_id, "window")
+		or BrickCatalog.has_tag(brick_id, "door")
+	):
+		return "Openings"
+	if (
+		BrickCatalog.has_tag(brick_id, "floor")
+		or BrickCatalog.has_tag(brick_id, "railing")
+		or BrickCatalog.has_tag(brick_id, "ladder")
+	):
+		return "Deck"
+	if (
+		BrickCatalog.has_tag(brick_id, "helm")
+		or BrickCatalog.has_tag(brick_id, "cargo")
+		or BrickCatalog.has_tag(brick_id, "crane")
+		or BrickCatalog.has_tag(brick_id, "crane_base")
+		or BrickCatalog.has_tag(brick_id, "fishing")
+		or BrickCatalog.has_tag(brick_id, "mooring")
+		or BrickCatalog.has_tag(brick_id, "mast")
+		or BrickCatalog.has_tag(brick_id, "chimney")
+		or BrickCatalog.has_tag(brick_id, "prop")
+	):
+		return "Equipment"
+	return "Structure"
+
+
+func _filter_palette() -> void:
+	var query := ""
+	if _palette_search != null:
+		query = _palette_search.text.strip_edges().to_lower()
+	var category := "All"
+	if _palette_category != null and _palette_category.selected >= 0:
+		category = _palette_category.get_item_text(_palette_category.selected)
+	var shown := 0
+	for id_v in _brick_rows.keys():
+		var id := str(id_v)
+		var row := _brick_rows[id] as PanelContainer
+		if row == null:
+			continue
+		var category_match := category == "All" or _palette_category_of(id) == category
+		var name := BrickCatalog.display_name(id).to_lower()
+		var search_match := query.is_empty() or query in name or query in id.to_lower()
+		row.visible = category_match and search_match
+		if row.visible:
+			shown += 1
+	if _palette_empty_lbl != null:
+		_palette_empty_lbl.visible = shown == 0
+	var count := _root.find_child("PaletteCount", true, false) as Label
+	if count != null:
+		count.text = str(shown)
+
+
+func _brick_supports_color(brick_id: String) -> bool:
+	return (
+		BrickCatalog.has(brick_id)
+		and not BrickCatalog.has_tag(brick_id, "cargo")
+		and not BrickCatalog.has_tag(brick_id, "text")
+		and not BrickCatalog.has_tag(brick_id, "light")
+	)
+
+
+func _refresh_context_drawer() -> void:
+	if _context_drawer == null:
+		return
+	var erase := _tool == Tool.ERASE
+	_context_drawer.visible = not erase
+	if erase:
+		return
+	var is_mark := _tool == Tool.MARK
+	if is_mark:
+		_context_title.text = "SELECTION"
+		if not _mark_anchor_set:
+			_context_info.text = "Click the first corner of the region."
+		elif not _mark_complete:
+			_context_info.text = "Click the opposite corner. Change layer first to include height."
+		else:
+			var size := _mark_max - _mark_min + Vector3i.ONE
+			_context_info.text = "Selected %d × %d × %d cells." % [size.x, size.y, size.z]
+	else:
+		_context_title.text = BrickCatalog.display_name(_brick_id).to_upper()
+		var fp := BrickCatalog.footprint_of(_brick_id)
+		var size := BrickCatalog.size_m(_brick_id)
+		_context_info.text = "%d × %d × %d cells  ·  %.1f × %.1f × %.1f m" % [
+			fp.x, fp.y, fp.z, size.x, size.y, size.z,
+		]
+	_color_section.visible = not is_mark and _brick_supports_color(_brick_id)
+	_sign_section.visible = not is_mark and BrickCatalog.has_tag(_brick_id, "text")
+	_light_section.visible = not is_mark and BrickCatalog.has_tag(_brick_id, "light")
+	_cargo_section.visible = not is_mark and _is_cargo_tool()
+	_clipboard_section.visible = is_mark or not _clipboard.is_empty()
+
+
+func _refresh_hint() -> void:
+	if _hint_lbl == null:
+		return
+	if _tool == Tool.ERASE:
+		_hint_lbl.text = "Click or drag to erase. Press X to return to Place."
+	elif _tool == Tool.MARK:
+		if not _mark_anchor_set:
+			_hint_lbl.text = "Select: click corner A."
+		elif not _mark_complete:
+			_hint_lbl.text = "Select: click corner B. Change layer first to include height."
+		else:
+			_hint_lbl.text = "Selection ready — Copy in the properties drawer or press Ctrl+C."
+	elif _is_cargo_tool():
+		_hint_lbl.text = "Cargo zone: click two corners on deck."
+	elif not _clipboard.is_empty():
+		_hint_lbl.text = "Clipboard ready — Ctrl+V at cursor, or Paste on this layer."
+	else:
+		_hint_lbl.text = "LMB place · RMB orbit · MMB pan · wheel zoom"
+
+
 func _resize() -> void:
 	if _viewport == null or _vp_host == null:
 		return
@@ -675,6 +1526,22 @@ func _unhandled_input(event: InputEvent) -> void:
 	if not is_open():
 		return
 	if event.is_action_pressed("ui_cancel"):
+		if _clear_confirm != null and _clear_confirm.visible:
+			_clear_confirm.visible = false
+			get_viewport().set_input_as_handled()
+			return
+		if _help_overlay != null and _help_overlay.visible:
+			_help_overlay.visible = false
+			get_viewport().set_input_as_handled()
+			return
+		if _ship_dialog != null and _ship_dialog.visible:
+			_ship_dialog.visible = false
+			get_viewport().set_input_as_handled()
+			return
+		if _mark_anchor_set:
+			_set_tool(Tool.PLACE)
+			get_viewport().set_input_as_handled()
+			return
 		if _cargo_anchor_set:
 			_clear_cargo_anchor()
 			_refresh_palette_selection()
@@ -687,17 +1554,24 @@ func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventKey and event.pressed and not event.echo:
 		var key := event as InputEventKey
 		match key.keycode:
+			KEY_M:
+				_set_tool(Tool.MARK if _tool != Tool.MARK else Tool.PLACE)
+				get_viewport().set_input_as_handled()
+			KEY_C:
+				if key.ctrl_pressed:
+					_copy_marked_region()
+					get_viewport().set_input_as_handled()
+			KEY_V:
+				if key.ctrl_pressed:
+					_paste_clipboard_at_cursor()
+					get_viewport().set_input_as_handled()
 			KEY_R:
 				_rotate_yaw()
 				_refresh_rules()
 				_refresh_ghost_from_mouse()
 				get_viewport().set_input_as_handled()
 			KEY_X:
-				_tool = Tool.ERASE if _tool == Tool.PLACE else Tool.PLACE
-				_clear_cargo_anchor()
-				_refresh_palette_selection()
-				_clear_ghost()
-				_refresh_ghost_from_mouse()
+				_set_tool(Tool.ERASE if _tool == Tool.PLACE else Tool.PLACE)
 				get_viewport().set_input_as_handled()
 			KEY_BRACKETLEFT:
 				_set_layer_y(_layer_y - 1)
@@ -751,8 +1625,8 @@ func _on_viewport_gui_input(event: InputEvent) -> void:
 			_cam_target += (-right * delta.x + forward * delta.y) * scale
 			_update_camera()
 		elif _painting and Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
-			# Cargo zones are click-A / click-B — never drag-paint.
-			if not _is_cargo_tool():
+			# Cargo zones and mark corners are click-A / click-B — never drag-paint.
+			if not _is_cargo_tool() and _tool != Tool.MARK:
 				_paint_at_screen(mm.position)
 			else:
 				_update_ghost_at_screen(mm.position)
@@ -766,17 +1640,29 @@ func _set_layer_y(y: int) -> void:
 	_apply_layer_visibility()
 	_refresh_palette_selection()
 	_refresh_rules()
-	_refresh_ghost_from_mouse()
+	if _tool == Tool.MARK:
+		if _vp_host != null:
+			var layer_cell := _pick_cell(_vp_host.get_local_mouse_position())
+			if layer_cell.x >= 0:
+				_ghost_cell = layer_cell
+		_update_mark_preview()
+	else:
+		_refresh_ghost_from_mouse()
 
 
 func _apply_layer_visibility() -> void:
 	## Current edit layer and everything below stay visible; hide floors above.
+	var stale_keys: Array[String] = []
 	for key in _brick_visuals.keys():
-		var node: Node3D = _brick_visuals[key]
-		if node == null or not is_instance_valid(node):
+		var node_v: Variant = _brick_visuals[key]
+		if not (node_v is Node3D) or not is_instance_valid(node_v):
+			stale_keys.append(str(key))
 			continue
+		var node: Node3D = node_v as Node3D
 		var cell_y := int(node.get_meta("cell_y", 0))
 		node.visible = cell_y <= _layer_y
+	for k in stale_keys:
+		_brick_visuals.erase(k)
 	## Cargo zones live on deck (y=0).
 	if _brick_root != null:
 		var cargo := _brick_root.get_node_or_null("CargoZonePreview")
@@ -803,6 +1689,10 @@ func _paint_at_screen(screen_pos: Vector2) -> void:
 
 	if _is_cargo_tool():
 		_paint_cargo_at(cell)
+		return
+
+	if _tool == Tool.MARK:
+		_handle_mark_click(cell)
 		return
 
 	if _tool == Tool.ERASE:
@@ -834,6 +1724,9 @@ func _paint_at_screen(screen_pos: Vector2) -> void:
 func _paint_cargo_at(cell: Vector3i) -> void:
 	## Place: corner A then B. Erase: remove the whole zone under the cursor.
 	if cell.y != 0:
+		return
+	if _tool != Tool.ERASE and _registration_id.is_empty():
+		_show_toast("Choose a legal vessel registration before building")
 		return
 	if _tool == Tool.ERASE:
 		if not _layout.erase_cargo_zone_at(cell):
@@ -869,6 +1762,9 @@ func _rotate_yaw() -> void:
 
 
 func _try_place(cell: Vector3i) -> bool:
+	if _registration_id.is_empty():
+		_show_toast("Choose a legal vessel registration before building")
+		return false
 	var entry := BrickCatalog.get_entry(_brick_id)
 	if entry.is_empty():
 		return false
@@ -904,6 +1800,10 @@ func _try_place(cell: Vector3i) -> bool:
 			return false
 		if _layout.cargo_contains(c):
 			return false
+	var denied := _registration_place_denied(_brick_id, cells)
+	if not denied.is_empty():
+		_show_toast(denied)
+		return false
 	for c in cells:
 		if _layout.has_cell(c):
 			_layout.erase_footprint_at(c)
@@ -944,27 +1844,45 @@ func _try_place_text(cell: Vector3i) -> bool:
 
 
 func _try_place_light(cell: Vector3i) -> bool:
-	## Lights mount onto existing walls/blocks — cone gizmo shows aim (45° yaw).
+	## Attach lights mount on host faces. Top-mount floods sit on a block roof (layer above).
 	if cell.x < 0 or _grid == null:
 		return false
 	var yaw := BrickLayout.norm_yaw_step(_yaw, BrickCatalog.yaw_step_of(_brick_id))
 	_yaw = yaw
+	if BrickCatalog.has_tag(_brick_id, "attach"):
+		if _layout.has_cell(cell):
+			var host := _layout.get_brick(_layout.primary_cell_of(cell))
+			var host_id := str(host.get("brick_id", ""))
+			if BrickCatalog.has_tag(host_id, "light"):
+				_layout.erase_footprint_at(cell)
+				return _layout.place_footprint(cell, _brick_id, yaw, _grid)
+			return _layout.attach_light(cell, _brick_id, yaw)
+		var fp_attach := BrickCatalog.footprint_of(_brick_id)
+		var yaw_steps_attach := int(round(float(yaw) / 90.0)) % 4
+		for c in _grid.footprint_cells(cell, fp_attach, yaw_steps_attach):
+			if not _grid.in_bounds(c):
+				return false
+			if _layout.has_cell(c):
+				return false
+		return _layout.place_footprint(cell, _brick_id, yaw, _grid)
+
+	## Freestanding / roof floods — click a block to stack on the cell above it.
+	var place_cell := cell
 	if _layout.has_cell(cell):
 		var host := _layout.get_brick(_layout.primary_cell_of(cell))
 		var host_id := str(host.get("brick_id", ""))
 		if BrickCatalog.has_tag(host_id, "light"):
 			_layout.erase_footprint_at(cell)
 			return _layout.place_footprint(cell, _brick_id, yaw, _grid)
-		return _layout.attach_light(cell, _brick_id, yaw)
-	## Empty cell — free-standing fixture.
+		place_cell = Vector3i(cell.x, cell.y + 1, cell.z)
 	var fp := BrickCatalog.footprint_of(_brick_id)
 	var yaw_steps := int(round(float(yaw) / 90.0)) % 4
-	for c in _grid.footprint_cells(cell, fp, yaw_steps):
+	for c in _grid.footprint_cells(place_cell, fp, yaw_steps):
 		if not _grid.in_bounds(c):
 			return false
 		if _layout.has_cell(c):
 			return false
-	return _layout.place_footprint(cell, _brick_id, yaw, _grid)
+	return _layout.place_footprint(place_cell, _brick_id, yaw, _grid)
 
 
 func _sign_text() -> String:
@@ -997,11 +1915,13 @@ func _placement_legal(cell: Vector3i, brick_id: String, yaw: int) -> bool:
 	var fp := BrickCatalog.footprint_of(brick_id)
 	var use_yaw := yaw
 	if _grid.is_partial_bow_cell(cell):
-		return (
+		if not (
 			BrickCatalog.has_tag(brick_id, "diagonal_plan")
 			and fp == Vector3i.ONE
 			and not _layout.cargo_contains(cell)
-		)
+		):
+			return false
+		return _registration_place_denied(brick_id, [cell]).is_empty()
 	if bool(entry.get("edge_only", false)):
 		if cell.y != 0:
 			return false
@@ -1011,20 +1931,39 @@ func _placement_legal(cell: Vector3i, brick_id: String, yaw: int) -> bool:
 			return false
 	var yaw_steps := int(round(float(use_yaw) / 90.0)) % 4
 	var allow_on_cargo := BrickCatalog.has_tag(brick_id, "text")
-	for c in _grid.footprint_cells(cell, fp, yaw_steps):
+	var cells := _grid.footprint_cells(cell, fp, yaw_steps)
+	for c in cells:
 		if not _grid.in_bounds(c):
 			return false
 		if not allow_on_cargo and _layout.cargo_contains(c):
 			return false
-	return true
+	return _registration_place_denied(brick_id, cells).is_empty()
+
+
+func _registration_place_denied(brick_id: String, replace_cells: Array = []) -> String:
+	var hull_id := _layout.hull_id if _layout != null else ""
+	return VesselCompliance.brick_placement_denied_reason(
+		_registration_id, hull_id, brick_id, _layout, replace_cells
+	)
+
+
+func _brick_allowed_for_registration(brick_id: String) -> bool:
+	var hull_id := _layout.hull_id if _layout != null else ""
+	return VesselCompliance.brick_allowed_for_registration(_registration_id, hull_id, brick_id)
 
 
 func _ghost_position_for(cell: Vector3i, brick_id: String, yaw: int) -> Vector3:
-	## Mounted lights sit on the host face; everything else uses footprint centre.
+	## Face-mount attach lights; top-mount floods preview on the roof cell above a host block.
 	if BrickCatalog.has_tag(brick_id, "light") and _layout.has_cell(cell):
 		var host := _layout.get_brick(_layout.primary_cell_of(cell))
-		if not BrickCatalog.has_tag(str(host.get("brick_id", "")), "light"):
-			return _grid.cell_center_local(cell) + DeckFitout.light_mount_offset(yaw, brick_id)
+		var host_id := str(host.get("brick_id", ""))
+		if not BrickCatalog.has_tag(host_id, "light"):
+			if BrickCatalog.has_tag(brick_id, "attach"):
+				return _grid.cell_center_local(cell) + DeckFitout.light_mount_offset(yaw, brick_id)
+			if BrickCatalog.has_tag(brick_id, "top_mount"):
+				var above := Vector3i(cell.x, cell.y + 1, cell.z)
+				if _grid.in_bounds(above):
+					return DeckFitout.footprint_center_local(_grid, above, brick_id, yaw)
 	return DeckFitout.footprint_center_local(_grid, cell, brick_id, yaw)
 
 
@@ -1045,6 +1984,14 @@ func _refresh_ghost_from_mouse() -> void:
 
 func _update_ghost_at_screen(screen_pos: Vector2) -> void:
 	if not is_open() or _world == null or _grid == null:
+		return
+	if _tool == Tool.MARK:
+		var mark_cell := _pick_cell(screen_pos)
+		if mark_cell.x < 0:
+			_clear_ghost()
+			return
+		_ghost_cell = mark_cell
+		_update_mark_preview()
 		return
 	if _tool == Tool.ERASE:
 		_clear_ghost()
@@ -1244,8 +2191,10 @@ func _pick_cell(screen_pos: Vector2) -> Vector3i:
 
 func _make_item_row(brick_id: String) -> PanelContainer:
 	var row := PanelContainer.new()
-	row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row.custom_minimum_size = Vector2(124, 98)
 	row.mouse_filter = Control.MOUSE_FILTER_STOP
+	row.tooltip_text = _brick_tooltip(brick_id)
+	row.set_meta("category", _palette_category_of(brick_id))
 	row.gui_input.connect(func(ev: InputEvent) -> void:
 		if ev is InputEventMouseButton:
 			var mb := ev as InputEventMouseButton
@@ -1256,26 +2205,33 @@ func _make_item_row(brick_id: String) -> PanelContainer:
 	sb.bg_color = HudStyle.C_BG_INNER
 	sb.border_color = HudStyle.C_BRASS
 	sb.set_border_width_all(1)
-	sb.set_content_margin_all(6)
+	sb.set_corner_radius_all(3)
+	sb.set_content_margin_all(5)
 	row.add_theme_stylebox_override("panel", sb)
 	row.set_meta("style", sb)
+	row.mouse_entered.connect(func() -> void:
+		if not (_tool == Tool.PLACE and _brick_id == brick_id):
+			sb.border_color = HudStyle.C_COPPER
+	)
+	row.mouse_exited.connect(func() -> void: _refresh_palette_selection())
 
-	var h := HBoxContainer.new()
-	h.add_theme_constant_override("separation", 10)
-	row.add_child(h)
+	var col := VBoxContainer.new()
+	col.alignment = BoxContainer.ALIGNMENT_CENTER
+	col.add_theme_constant_override("separation", 3)
+	row.add_child(col)
 
-	# Thumbnail plate — baked ImageTexture (live SubViewports in ScrollContainer stay blank).
 	var thumb_plate := PanelContainer.new()
-	thumb_plate.custom_minimum_size = Vector2(THUMB_PX + 4, THUMB_PX + 4)
+	thumb_plate.custom_minimum_size = Vector2(THUMB_PX, THUMB_PX)
+	thumb_plate.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	thumb_plate.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var plate_sb := StyleBoxFlat.new()
-	plate_sb.bg_color = Color(0.10, 0.11, 0.13, 1.0)
-	plate_sb.set_corner_radius_all(4)
-	plate_sb.set_content_margin_all(2)
+	plate_sb.bg_color = Color(0.08, 0.10, 0.11, 0.9)
+	plate_sb.set_corner_radius_all(3)
 	thumb_plate.add_theme_stylebox_override("panel", plate_sb)
-	h.add_child(thumb_plate)
+	col.add_child(thumb_plate)
 
 	var thumb := TextureRect.new()
+	thumb.name = "Thumb"
 	thumb.custom_minimum_size = Vector2(THUMB_PX, THUMB_PX)
 	thumb.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	thumb.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
@@ -1283,46 +2239,36 @@ func _make_item_row(brick_id: String) -> PanelContainer:
 	thumb_plate.add_child(thumb)
 	if _thumb_cache.has(brick_id):
 		thumb.texture = _thumb_cache[brick_id] as Texture2D
-	# else: baked from _ready once the editor is in the scene tree
-
-	var text_col := VBoxContainer.new()
-	text_col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	text_col.alignment = BoxContainer.ALIGNMENT_CENTER
-	h.add_child(text_col)
 
 	var name_lbl := Label.new()
 	name_lbl.text = BrickCatalog.display_name(brick_id)
-	name_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	name_lbl.add_theme_font_size_override("font_size", 14)
+	name_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	name_lbl.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	name_lbl.custom_minimum_size.x = 112
+	name_lbl.add_theme_font_size_override("font_size", 11)
 	name_lbl.add_theme_color_override("font_color", HudStyle.C_TEXT)
-	text_col.add_child(name_lbl)
-
-	var fp := BrickCatalog.footprint_of(brick_id)
-	var sz := BrickCatalog.size_m(brick_id)
-	var size_lbl := Label.new()
-	if BrickCatalog.has_tag(brick_id, "cargo"):
-		size_lbl.text = "Click A → B rectangle on deck"
-	elif brick_id == "deck_text":
-		size_lbl.text = "Flat on deck  ·  %d×%d m" % [fp.x, fp.z]
-	elif brick_id == "wall_text":
-		size_lbl.text = "Mounts on wall  ·  rotate to face  ·  erase peels sign first"
-	elif BrickCatalog.has_tag(brick_id, "external"):
-		size_lbl.text = "Outboard flood  ·  25° down  ·  yaw aims quay / sea"
-	elif BrickCatalog.has_tag(brick_id, "work") and BrickCatalog.has_tag(brick_id, "light"):
-		size_lbl.text = "Deck flood  ·  45° down  ·  mount high, yaw aims throw"
-	elif BrickCatalog.has_tag(brick_id, "light"):
-		size_lbl.text = "Mounts on block  ·  rotate 45°  ·  cone shows aim"
-	elif BrickCatalog.has_tag(brick_id, "text"):
-		size_lbl.text = "Sign  ·  edit text below"
-	else:
-		size_lbl.text = "%d×%d×%d cells  (%.1f×%.1f×%.1f m)" % [
-			fp.x, fp.y, fp.z, sz.x, sz.y, sz.z
-		]
-	size_lbl.add_theme_font_size_override("font_size", 11)
-	size_lbl.add_theme_color_override("font_color", HudStyle.C_LABEL)
-	text_col.add_child(size_lbl)
-
+	col.add_child(name_lbl)
 	return row
+
+
+func _brick_tooltip(brick_id: String) -> String:
+	var fp := BrickCatalog.footprint_of(brick_id)
+	var size := BrickCatalog.size_m(brick_id)
+	var detail := "%d×%d×%d cells · %.1f×%.1f×%.1f m" % [
+		fp.x, fp.y, fp.z, size.x, size.y, size.z,
+	]
+	if BrickCatalog.has_tag(brick_id, "cargo"):
+		detail = "Click two corners to define a cargo zone"
+	elif BrickCatalog.has_tag(brick_id, "text"):
+		detail += "\nText options appear after selection"
+	elif BrickCatalog.has_tag(brick_id, "external"):
+		detail += "\nExternal light · rotate to aim"
+	elif BrickCatalog.has_tag(brick_id, "light"):
+		detail += "\nMount on a block · rotate to aim"
+	var denied := _registration_place_denied(brick_id)
+	if not denied.is_empty():
+		detail += "\n" + denied
+	return "%s\n%s" % [BrickCatalog.display_name(brick_id), detail]
 
 
 func _bake_brick_thumbnail(brick_id: String, target: TextureRect) -> void:
@@ -1389,10 +2335,19 @@ func _bake_brick_thumbnail(brick_id: String, target: TextureRect) -> void:
 
 
 func _select_brick(id: String) -> void:
+	if not _brick_allowed_for_registration(id):
+		_show_toast(
+			VesselCompliance.brick_placement_denied_reason(
+				_registration_id, _layout.hull_id if _layout != null else "", id
+			)
+		)
+		return
 	_brick_id = id
 	_tool = Tool.PLACE
 	_yaw = BrickLayout.norm_yaw_step(_yaw, BrickCatalog.yaw_step_of(id))
 	_clear_cargo_anchor()
+	_clear_mark()
+	_clear_mark_preview()
 	if _use_catalog_color:
 		_sync_color_picker_from_catalog()
 	_refresh_palette_selection()
@@ -1448,18 +2403,25 @@ func _sync_color_picker_from_catalog() -> void:
 func _refresh_palette_selection() -> void:
 	for id in _brick_rows.keys():
 		var row: PanelContainer = _brick_rows[id]
-		var selected := _tool == Tool.PLACE and str(id) == _brick_id
+		var allowed := _brick_allowed_for_registration(str(id))
+		var selected := _tool == Tool.PLACE and str(id) == _brick_id and allowed
+		row.modulate = Color(1.0, 1.0, 1.0, 1.0) if allowed else Color(1.0, 1.0, 1.0, 0.38)
+		row.tooltip_text = _brick_tooltip(str(id))
 		var sb: StyleBoxFlat = row.get_meta("style") as StyleBoxFlat
 		if sb != null:
 			sb.border_color = HudStyle.C_AMBER if selected else HudStyle.C_BRASS
 			sb.set_border_width_all(2 if selected else 1)
 			sb.bg_color = Color(0.16, 0.14, 0.10) if selected else HudStyle.C_BG_INNER
-	var mode := "ERASE" if _tool == Tool.ERASE else "PLACE"
-	if _tool == Tool.PLACE and _is_cargo_tool():
-		mode = "CARGO A" if not _cargo_anchor_set else "CARGO B"
-	_layer_lbl.text = "Layer %d  (%.1f m)  ·  showing 0–%d  ·  Yaw %d°  ·  %s" % [
-		_layer_y, float(_layer_y) * DeckGrid.CELL_M, _layer_y, _yaw, mode,
-	]
+	if _layer_lbl != null:
+		_layer_lbl.text = "Layer %d · %d°" % [_layer_y, _yaw]
+	if _tool_place_btn != null:
+		_tool_place_btn.set_pressed_no_signal(_tool == Tool.PLACE)
+	if _tool_erase_btn != null:
+		_tool_erase_btn.set_pressed_no_signal(_tool == Tool.ERASE)
+	if _tool_mark_btn != null:
+		_tool_mark_btn.set_pressed_no_signal(_tool == Tool.MARK)
+	_refresh_context_drawer()
+	_refresh_hint()
 
 
 func _toggle_light_cones() -> void:
@@ -1473,7 +2435,7 @@ func _toggle_light_cones() -> void:
 func _refresh_cone_button() -> void:
 	if _cone_btn == null:
 		return
-	_cone_btn.text = "Light cones: ON" if _show_light_cones else "Light cones: OFF"
+	_cone_btn.text = "Aim preview: on" if _show_light_cones else "Aim preview: off"
 
 
 func _apply_aim_gizmo_visibility(root: Node) -> void:
@@ -1491,9 +2453,152 @@ func _apply_all_aim_gizmo_visibility() -> void:
 			_apply_aim_gizmo_visibility(node)
 
 
+func _clear_mark() -> void:
+	_mark_anchor_set = false
+	_mark_complete = false
+	_mark_anchor = Vector3i(-999, -999, -999)
+	_mark_min = Vector3i.ZERO
+	_mark_max = Vector3i.ZERO
+
+
+func _toggle_mark_tool() -> void:
+	if _tool == Tool.MARK:
+		_tool = Tool.PLACE
+		_clear_mark()
+		_clear_mark_preview()
+	else:
+		_tool = Tool.MARK
+		_clear_cargo_anchor()
+		_clear_mark()
+		_clear_ghost()
+	_refresh_palette_selection()
+	_refresh_ghost_from_mouse()
+
+
+func _clear_mark_preview() -> void:
+	if _mark_preview != null and is_instance_valid(_mark_preview):
+		_mark_preview.queue_free()
+	_mark_preview = null
+
+
+func _handle_mark_click(cell: Vector3i) -> void:
+	if _mark_complete or not _mark_anchor_set:
+		_mark_anchor = cell
+		_mark_anchor_set = true
+		_mark_complete = false
+	else:
+		var bounds := BrickRegionClipboard.bounds_from_corners(_mark_anchor, cell)
+		_mark_min = bounds["min"]
+		_mark_max = bounds["max"]
+		_mark_complete = true
+	_refresh_palette_selection()
+	_update_mark_preview()
+
+
+func _update_mark_preview() -> void:
+	if _tool != Tool.MARK or not _mark_anchor_set or _grid == null:
+		return
+	var min_c := _mark_min
+	var max_c := _mark_max
+	if not _mark_complete:
+		var bounds := BrickRegionClipboard.bounds_from_corners(_mark_anchor, _ghost_cell)
+		min_c = bounds["min"]
+		max_c = bounds["max"]
+	var key := "%d,%d,%d:%d,%d,%d" % [min_c.x, min_c.y, min_c.z, max_c.x, max_c.y, max_c.z]
+	if (
+		_mark_preview != null and is_instance_valid(_mark_preview)
+		and str(_mark_preview.get_meta("mark_key", "")) == key
+	):
+		return
+	_clear_mark_preview()
+	_mark_preview = _make_mark_box_visual(min_c, max_c)
+	_mark_preview.name = "MarkPreview"
+	_mark_preview.set_meta("mark_key", key)
+	if _boat != null and is_instance_valid(_boat):
+		_boat.add_child(_mark_preview)
+	elif _world != null and is_instance_valid(_world):
+		_world.add_child(_mark_preview)
+
+
+func _make_mark_box_visual(min_c: Vector3i, max_c: Vector3i) -> Node3D:
+	var w := float(max_c.x - min_c.x + 1) * DeckGrid.CELL_M
+	var h := float(max_c.y - min_c.y + 1) * DeckGrid.CELL_M
+	var l := float(max_c.z - min_c.z + 1) * DeckGrid.CELL_M
+	var min_center := _grid.cell_center_local(min_c)
+	var max_center := _grid.cell_center_local(max_c)
+	var root := Node3D.new()
+	root.position = (min_center + max_center) * 0.5
+	var col := Color(0.35, 0.72, 1.0, 0.22)
+	var box := MeshBuilder.box(Vector3(w * 0.98, h * 0.98, l * 0.98), col, 0.9, 0.0)
+	var mat := box.material_override as StandardMaterial3D
+	if mat != null:
+		mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+		mat.no_depth_test = true
+		mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	root.add_child(box)
+	return root
+
+
+func _copy_marked_region() -> void:
+	if not _mark_complete:
+		_show_toast("Select two corners first", true, true)
+		return
+	_clipboard = BrickRegionClipboard.extract_region(_layout.cells, _mark_min, _mark_max)
+	_clipboard_src_min = _mark_min
+	var n := int(_clipboard.get("cell_count", 0))
+	if n <= 0:
+		_clipboard.clear()
+		_show_toast("Selection is empty", true, true)
+		_refresh_palette_selection()
+		return
+	_tool = Tool.PLACE
+	_clear_mark()
+	_clear_mark_preview()
+	_refresh_palette_selection()
+	_refresh_ghost_from_mouse()
+	_show_toast("Copied %d bricks" % n)
+
+
+func _paste_clipboard_at_cursor() -> void:
+	if _clipboard.is_empty():
+		_show_toast("Clipboard empty", true, true)
+		return
+	var dest := _ghost_cell
+	if dest.x < 0 and _vp_host != null:
+		dest = _pick_cell(_vp_host.get_local_mouse_position())
+	if dest.x < 0:
+		_show_toast("Aim at the deck, then paste", true, true)
+		return
+	_paste_at(dest)
+
+
+func _paste_clipboard_on_layer() -> void:
+	if _registration_id.is_empty():
+		_show_toast("Choose a legal vessel registration before building")
+		return
+	if _clipboard.is_empty():
+		_show_toast("Clipboard empty", true, true)
+		return
+	_paste_at(Vector3i(_clipboard_src_min.x, _layer_y, _clipboard_src_min.z))
+
+
+func _paste_at(dest: Vector3i) -> void:
+	var allowed := func(c: Vector3i) -> bool:
+		return _grid != null and _grid.has_deck_cell(c)
+	if not BrickRegionClipboard.can_paste(_clipboard, dest, _layout.cells, allowed):
+		_show_toast("Paste blocked — choose empty deck cells", true, true)
+		return
+	_layout.cells = BrickRegionClipboard.paste_region(_clipboard, dest, _layout.cells)
+	_sync_brick_visuals()
+	_refresh_rules()
+	_show_toast("Pasted %d bricks" % int(_clipboard.get("cell_count", 0)))
+
+
 func _clear_layout() -> void:
 	_layout.clear()
 	_clear_cargo_anchor()
+	_clear_mark()
 	_sync_brick_visuals()
 	_refresh_rules()
 
@@ -1501,6 +2606,7 @@ func _clear_layout() -> void:
 func _rebuild_preview() -> void:
 	## Build the bare hull once; brick meshes are maintained incrementally afterward.
 	_clear_ghost()
+	_clear_mark_preview()
 	_ensure_editor_boat()
 	_sync_brick_visuals()
 	_refresh_grid_overlay()
@@ -1509,13 +2615,15 @@ func _rebuild_preview() -> void:
 
 
 func _ensure_editor_boat() -> void:
-	var want_id := str(_hull_entry.get("id", "workboat"))
+	var want_id := str(_hull_entry.get("id", "fishing_trawler_small"))
 	if _boat != null and is_instance_valid(_boat):
 		if str(_boat.get_meta("editor_hull_id", "")) == want_id:
 			return
 		_boat.queue_free()
 		_boat = null
 		_brick_root = null
+		_brick_visuals.clear()
+		_clear_mark_preview()
 	_boat = HullRegistry.build_hull(want_id)
 	_boat.name = "EditorBoat"
 	_boat.set_meta("editor_hull_id", want_id)
@@ -1579,10 +2687,11 @@ func _sync_brick_visuals() -> void:
 		if not wanted.has(k):
 			stale.append(k)
 			continue
-		var node: Node3D = _brick_visuals[k]
-		if node == null or not is_instance_valid(node):
+		var node_v: Variant = _brick_visuals[k]
+		if not (node_v is Node3D) or not is_instance_valid(node_v):
 			stale.append(k)
 			continue
+		var node: Node3D = node_v as Node3D
 		var want: Dictionary = wanted[k]
 		var want_id := str(want.get("brick_id", ""))
 		var want_yaw := int(want.get("yaw", 0))
@@ -1712,6 +2821,7 @@ func _cargo_zone_corner(
 
 func _clear_preview() -> void:
 	_clear_ghost()
+	_clear_mark_preview()
 	_brick_visuals.clear()
 	_brick_root = null
 	if _boat != null and is_instance_valid(_boat):
@@ -1961,27 +3071,70 @@ func _refresh_rules() -> void:
 	_refresh_palette_selection()
 	if _grid == null:
 		return
-	var report := BrickRules.validate(_layout, _grid)
-	if _layout.is_empty():
-		_rules_lbl.text = "Free build — 1.0 m cells. Place anything."
+	var report := BrickRules.validate(_layout, _grid, 0, 0, _registration_id)
+	var budget: Dictionary = report.get("budget", {})
+	var usage: Dictionary = report.get("usage", {})
+	var summary := VesselOutfit.budget_summary(budget, usage)
+	var errors: PackedStringArray = report.get("errors", PackedStringArray())
+	var warnings: PackedStringArray = report.get("warnings", PackedStringArray())
+	var registration_name := (
+		VesselRegistrationCatalog.display_name(_registration_id)
+		if not _registration_id.is_empty()
+		else "Unregistered"
+	)
+	_rules_lbl.text = "%s · %s\n" % [registration_name, summary]
+	var checklist: Array = report.get("checklist", [])
+	if checklist.is_empty():
+		_rules_lbl.text += "✗ Choose a registration before building."
 	else:
-		_rules_lbl.text = "Free build — no constraints."
+		for raw in checklist:
+			var item := raw as Dictionary
+			_rules_lbl.text += "%s %s — %s (current: %s)\n" % [
+				"✓" if bool(item.get("ok", false)) else "✗",
+				str(item.get("label", "Requirement")),
+				str(item.get("requirement", "required")),
+				str(item.get("current", 0)),
+			]
+	if not warnings.is_empty():
+		_rules_lbl.text += "\n" + "\n".join(warnings)
+	if not errors.is_empty() and checklist.is_empty():
+		_rules_lbl.text += "\n" + "\n".join(errors)
 	var caps: Dictionary = report.get("capabilities", {})
 	_caps_lbl.text = (
-		"Cargo cells: %d\nHelm: %s\nCabin: %s\nShip crane: %s\nParts: %d"
+		"%s\nHelm live: %s\nCabin: %s\nFishing live: %s\nParts: %d"
 		% [
-			int(caps.get("cargo_cells", 0)),
+			summary,
 			"yes" if bool(caps.get("has_helm", false)) else "no",
 			"yes" if bool(caps.get("has_cabin", false)) else "no",
-			"yes" if bool(caps.get("has_crane", false)) else "no",
+			"yes" if bool(caps.get("has_fishing", false)) else "no",
 			int(caps.get("brick_count", 0)),
 		]
 	)
-	_confirm_btn.disabled = false
+	## Authoring: incomplete checklists stay savable as drafts. In-game refit still hard-gates.
+	var authoring := _authoring_mode or standalone_tool
+	var ok := bool(report.get("ok", false))
+	if authoring:
+		_confirm_btn.disabled = _registration_id.is_empty()
+		_confirm_btn.text = (
+			"Save official prebuilt JSON" if ok else "Save draft (not for sale)"
+		)
+	else:
+		_confirm_btn.disabled = not ok
+	if _registration_option != null:
+		_registration_option.disabled = not _layout.is_empty()
 
 
 func _on_confirm() -> void:
-	if _authoring_mode or standalone_tool:
+	var report := BrickRules.validate(_layout, _grid, 0, 0, _registration_id)
+	var authoring := _authoring_mode or standalone_tool
+	if not authoring and not bool(report.get("ok", false)):
+		var errors: PackedStringArray = report.get("errors", PackedStringArray())
+		_show_dev_save_result("OUTFIT INVALID · " + " · ".join(errors), true)
+		return
+	if authoring:
+		if _registration_id.is_empty():
+			_show_dev_save_result("SAVE BLOCKED · choose a registration first", true)
+			return
 		_on_dev_save_prebuilt()
 		return
 	var vessel_name := _name_edit.text.strip_edges()
@@ -1995,10 +3148,16 @@ func _on_confirm() -> void:
 		_layout.to_dict(),
 		vessel_name,
 		_editing_uid,
+		_registration_id,
 	)
 
 
 func _on_dev_save_prebuilt() -> void:
+	if _registration_id.is_empty():
+		_show_dev_save_result("SAVE BLOCKED · choose a registration first", true)
+		return
+	var report := BrickRules.validate(_layout, _grid, 0, 0, _registration_id)
+	var as_draft := not bool(report.get("ok", false))
 	var vessel_name := _name_edit.text.strip_edges()
 	if vessel_name.is_empty():
 		vessel_name = str(_hull_entry.get("display", _layout.hull_id))
@@ -2013,6 +3172,9 @@ func _on_dev_save_prebuilt() -> void:
 		_hull_entry,
 		_layout.to_dict(),
 		_authoring_price_marks(),
+		_authoring_shaft_power_kw(),
+		_registration_id,
+		as_draft,
 	)
 	var absolute_dir := ProjectSettings.globalize_path(PREBUILT_DIR)
 	var err := DirAccess.make_dir_recursive_absolute(absolute_dir)
@@ -2050,11 +3212,19 @@ func _on_dev_save_prebuilt() -> void:
 	_authoring_prebuilt_id = preset_id
 	_populate_prebuilt_option(preset_id)
 	var saved_price := int(payload.get("price_marks", 0))
-	_show_dev_save_result("SAVED · %s marks · %s" % [saved_price, path], false)
-	print("[Shipyard] Saved official prebuilt preset: %s (price_marks=%d)" % [
-		ProjectSettings.globalize_path(path),
-		saved_price,
-	])
+	if as_draft:
+		var errors: PackedStringArray = report.get("errors", PackedStringArray())
+		_show_dev_save_result(
+			"DRAFT SAVED · not for sale · %s · %s" % [path, " · ".join(errors)],
+			false,
+		)
+		print("[Shipyard] Saved draft prebuilt preset: %s" % ProjectSettings.globalize_path(path))
+	else:
+		_show_dev_save_result("SAVED · %s marks · %s" % [saved_price, path], false)
+		print("[Shipyard] Saved official prebuilt preset: %s (price_marks=%d)" % [
+			ProjectSettings.globalize_path(path),
+			saved_price,
+		])
 
 
 static func make_prebuilt_payload(
@@ -2063,21 +3233,30 @@ static func make_prebuilt_payload(
 	hull_entry: Dictionary,
 	layout: Dictionary,
 	price_marks: int = -1,
+	shaft_power_kw: float = -1.0,
+	registration_id: String = "",
+	as_draft: bool = false,
 ) -> Dictionary:
-	var hull_id := str(layout.get("hull_id", hull_entry.get("id", "workboat")))
-	var scene_path := str(hull_entry.get("scene_path", HullRegistry.scene_path_for(hull_id)))
+	var hull_id := str(layout.get("hull_id", hull_entry.get("id", "fishing_trawler_small")))
 	var price := price_marks
 	if price < 0:
 		price = maxi(int(hull_entry.get("price_marks", 0)), 0)
-	return {
+	var power_kw := shaft_power_kw
+	if power_kw <= 0.0:
+		power_kw = maxf(float(hull_entry.get("default_shaft_power_kw", 1.0)), 1.0)
+	var payload := {
 		"format_version": PREBUILT_FORMAT_VERSION,
 		"id": preset_id,
 		"name": vessel_name,
 		"hull_id": hull_id,
-		"scene_path": scene_path,
 		"price_marks": maxi(price, 0),
+		"shaft_power_kw": power_kw,
+		"registration_id": registration_id,
 		"brick_layout": layout.duplicate(true),
 	}
+	if as_draft:
+		payload["draft"] = true
+	return payload
 
 
 func _set_price_field(price_marks: int) -> void:
@@ -2100,6 +3279,37 @@ func _authoring_price_marks() -> int:
 	return 0
 
 
+func _set_power_field(shaft_power_kw: float) -> void:
+	if _power_edit == null:
+		return
+	_power_edit.text = "%.0f" % maxf(shaft_power_kw, 1.0)
+	_refresh_ship_summary()
+
+
+func _authoring_shaft_power_kw() -> float:
+	var fallback := maxf(float(_hull_entry.get("default_shaft_power_kw", 1.0)), 1.0)
+	if _power_edit == null:
+		return fallback
+	var typed := _power_edit.text.strip_edges().replace(",", "").replace(" ", "")
+	if typed.is_valid_float():
+		return maxf(typed.to_float(), 1.0)
+	push_warning("ShipyardBrickEditor: invalid shaft power '%s' — using hull default" % typed)
+	return fallback
+
+
+func _refresh_ship_summary() -> void:
+	if _status_lbl == null or _hull_entry.is_empty():
+		return
+	var name := _name_edit.text.strip_edges() if _name_edit != null else "Vessel"
+	var power_kw := _authoring_shaft_power_kw()
+	_status_lbl.text = "%s\n%.0f × %.0f m · %.0f kW" % [
+		name if not name.is_empty() else "Unnamed vessel",
+		float(_hull_entry.get("loa_m", 0.0)),
+		float(_hull_entry.get("beam_m", 0.0)),
+		power_kw,
+	]
+
+
 static func _prebuilt_slug(value: String) -> String:
 	var out := ""
 	var lowered := value.strip_edges().to_lower()
@@ -2115,10 +3325,10 @@ static func _prebuilt_slug(value: String) -> String:
 
 
 func _show_dev_save_result(message: String, failed: bool) -> void:
-	if _dev_save_lbl == null:
-		return
-	_dev_save_lbl.text = message
-	_dev_save_lbl.add_theme_color_override(
-		"font_color",
-		HudStyle.C_RED if failed else HudStyle.C_GREEN,
-	)
+	if _dev_save_lbl != null:
+		_dev_save_lbl.text = message
+		_dev_save_lbl.add_theme_color_override(
+			"font_color",
+			HudStyle.C_RED if failed else HudStyle.C_GREEN,
+		)
+	_show_toast(message, failed, failed)

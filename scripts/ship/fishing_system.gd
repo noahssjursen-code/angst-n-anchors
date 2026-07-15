@@ -35,7 +35,6 @@ const NET_MOUTH_AFT_OFFSET := 2.6
 
 var _body: BoatBody = null
 var _propulsion: PropulsionComponent = null
-var _cargo_deck: CargoDeckComponent = null
 
 var _trommel_winch: Node3D
 var _drum_rotation_node: Node3D
@@ -63,9 +62,7 @@ func _ready() -> void:
 			p = p.get_parent()
 	
 	if _body != null:
-		# Find siblings
 		_propulsion = _body.find_child("PropulsionComponent", true, false) as PropulsionComponent
-		_cargo_deck = _body.find_child("CargoDeck_*", true, false) as CargoDeckComponent
 
 	_setup_visuals()
 	_update_trawl_visuals()
@@ -368,8 +365,7 @@ func _try_start_haul() -> void:
 	if float(zone.get("catch_mul", 1.0)) < 0.2:
 		return
 
-	var decks := _body.find_children("*", "CargoDeckComponent", true, false)
-	if decks.is_empty():
+	if _body.get_cargo_decks().is_empty():
 		return
 
 	var crate_count := _crates_for_zone(zone)
@@ -415,9 +411,7 @@ func _place_one_fish_crate() -> bool:
 	fish_pallet.mass_kg = FISH_CRATE_MASS_PER_UNIT_KG * FISH_CRATE_UNITS
 	fish_pallet.value_gold = crate_value
 
-	var decks := _body.find_children("*", "CargoDeckComponent", true, false)
-	for deck_node in decks:
-		var deck := deck_node as CargoDeckComponent
+	for deck in _body.get_cargo_decks():
 		if deck.add_pallet(fish_pallet) >= 0:
 			if not _haul_toast_sent:
 				_haul_toast_sent = true
@@ -456,9 +450,8 @@ func _fish_deck_has_space() -> bool:
 		return false
 	var fish_crate := Pallet.new()
 	fish_crate.footprint = FISH_CRATE_FOOTPRINT
-	for deck_node in _body.find_children("*", "CargoDeckComponent", true, false):
-		var deck := deck_node as CargoDeckComponent
-		if deck == null or not deck.port_id.is_empty():
+	for deck in _body.get_cargo_decks():
+		if not deck.port_id.is_empty():
 			continue
 		if deck.accepts_pallet(fish_crate):
 			return true

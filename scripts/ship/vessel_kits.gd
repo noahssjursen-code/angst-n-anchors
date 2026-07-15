@@ -1,7 +1,8 @@
 class_name VesselKits
 extends RefCounted
 
-## Job kits — constrained loadout presets (one attachment per socket; kinds must match).
+## LEGACY / QUARANTINED. The active vessel pipeline derives role and fit-out from
+## BrickLayout + BrickRules. Do not add new store ships or features here.
 
 const KIT_FISHING := "fishing"
 const KIT_CARGO := "cargo"
@@ -50,13 +51,12 @@ static func get_by_id(kit_id: String) -> Dictionary:
 static func attachments_for(kit_id: String) -> Array:
 	var kit := get_by_id(kit_id)
 	if kit.is_empty():
-		return VesselLoadout.workboat_default()
+		return VesselLoadout.default_loadout()
 	return (kit.get("attachments", []) as Array).duplicate(true)
 
 
 static func _with_core(job_rows: Array) -> Array:
 	var rows: Array = [
-		VesselLoadout.entry("cabin", "cabin_workboat_basic"),
 		VesselLoadout.entry("mooring_port_fwd", "mooring_cleat"),
 		VesselLoadout.entry("mooring_stbd_fwd", "mooring_cleat"),
 		VesselLoadout.entry("mooring_port_aft", "mooring_cleat"),

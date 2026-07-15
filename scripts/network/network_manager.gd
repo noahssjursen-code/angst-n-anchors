@@ -459,7 +459,7 @@ func _ensure_local_ship_registered() -> void:
 			if hull_id.is_empty() and not template_path.is_empty():
 				hull_id = HullRegistry.resolve_id_from_template(template_path, hull_id)
 	if hull_id.is_empty():
-		hull_id = "workboat"
+		hull_id = "fishing_trawler_small"
 	register_ship_spawn(ship_id, hull_id, ship)
 
 
@@ -497,9 +497,10 @@ func _register_ship_sender(ship_id: String, hull_id: String, ship_node: Node3D, 
 				parts.append("pilot=" + pilot)
 			if not berth_tag.is_empty():
 				parts.append(berth_tag)
-			var fishing := ship_node.find_child("FishingSystem", true, false) as FishingSystem
-			if fishing != null and fishing.trawling:
-				parts.append("trawl=1")
+			if ship_node is BoatBody:
+				var systems: Array[FishingSystem] = (ship_node as BoatBody).get_fishing_systems()
+				if not systems.is_empty() and systems[0].trawling:
+					parts.append("trawl=1")
 			## Deck fit-out identity — remotes fetch layout via HTTP using vid + lh.
 			var session := get_node_or_null("/root/PlayerSession")
 			if session != null and session.get("data") != null:

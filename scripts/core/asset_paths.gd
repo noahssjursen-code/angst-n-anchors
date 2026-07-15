@@ -15,7 +15,6 @@ const HAT_PEAKED_CAP := CHARACTER_BASE_DIR + "hat_peaked_cap.json"
 
 # ── Vessels (hand-authored scenes; no hull JSON catalog) ─────────────────────
 const VESSEL_SCENE_DIR := "res://scenes/vessels/"
-const WORKBOAT_SCENE   := VESSEL_SCENE_DIR + "workboat.tscn"
 
 # ── Dock + lighthouse + foghorn meshes ───────────────────────────────────────
 const DOCK_BOLLARD       := "res://resources/data/meshes/docks/docking_bollard.json"

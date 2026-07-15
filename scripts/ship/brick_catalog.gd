@@ -205,13 +205,23 @@ const BRICKS: Dictionary = {
 		"mass_kg": 55.0,
 		"color": Color(0.32, 0.34, 0.38),
 	},
+	"passenger_seat": {
+		"display": "Passenger seat",
+		## One certified passenger place. Capacity is derived from these bricks.
+		"footprint": [1, 1, 1],
+		"tags": ["passenger", "seat", "ship_only"],
+		"passenger_capacity": 1,
+		"equipment_rating": 1,
+		"mass_kg": 24.0,
+		"color": Color(0.20, 0.32, 0.46),
+	},
 	"light_deck": {
 		"display": "Deck flood",
-		## High mount; yaw aims across deck; housing/beam 45° down toward the deck.
+		## Sits on a block roof / deck; yaw aims across deck; housing ~25° down.
 		"footprint": [1, 1, 1],
-		"tags": ["light", "work", "attach"],
+		"tags": ["light", "work", "top_mount", "ship_only"],
 		"light_type": 4, ## ShipLight.LightType.WORK
-		"housing_pitch_deg": -45.0,
+		"housing_pitch_deg": -25.0,
 		"spot_pitch_deg": 0.0, ## Beam parented under FloodHead.
 		"spot_range_m": 22.0,
 		"spot_energy": 95.0,
@@ -222,11 +232,11 @@ const BRICKS: Dictionary = {
 	},
 	"light_external": {
 		"display": "External flood",
-		## Outboard flood for quay / sea — yaw aims out; housing ~25° down.
+		## Roof / deck pedestal flood for quay / sea — yaw aims out; nearly level throw.
 		"footprint": [1, 1, 1],
-		"tags": ["light", "work", "external", "attach"],
+		"tags": ["light", "work", "external", "top_mount", "ship_only"],
 		"light_type": 4,
-		"housing_pitch_deg": -25.0,
+		"housing_pitch_deg": 5.0,
 		"spot_pitch_deg": 0.0,
 		"spot_range_m": 42.0,
 		"spot_energy": 120.0,
@@ -278,27 +288,88 @@ const BRICKS: Dictionary = {
 	},
 	"light_nav_white": {
 		"display": "Nav light (white)",
+		## All-round white point light — visible from every bearing.
 		"footprint": [1, 1, 1],
-		"tags": ["light", "nav", "attach", "ship_only"],
+		"tags": ["light", "nav", "nav_white", "attach", "ship_only"],
 		"light_type": 2,
-		"yaw_step": 45,
+		"yaw_step": 90,
 		"mass_kg": 12.0,
+		"color": Color(0.92, 0.92, 0.88),
+	},
+	"light_mast_white": {
+		"display": "Mast light (white)",
+		## 2×2 all-round masthead lantern — centres on the mast column.
+		"footprint": [2, 1, 2],
+		"tags": ["light", "nav", "nav_white", "mast", "ship_only"],
+		"light_type": 2,
+		"yaw_step": 90,
+		"mass_kg": 35.0,
 		"color": Color(0.92, 0.92, 0.88),
 	},
 	"railing": {
 		"display": "Railing",
+		## Sits on local −Z face (yaw so −Z points outboard), matching windows.
 		"footprint": [1, 1, 1],
 		"tags": ["railing", "edge"],
 		"mass_kg": 15.0,
 		"color": Color(0.35, 0.38, 0.42),
 	},
+	"railing_mooring": {
+		"display": "Railing + mooring",
+		## Edge railing with a cell-centred mooring bit — rail hugs −Z, bit sits mid-cell.
+		"footprint": [1, 1, 1],
+		"tags": ["railing", "edge", "mooring", "cleat", "ship_only"],
+		"mass_kg": 35.0,
+		"color": Color(0.35, 0.38, 0.42),
+	},
+	"railing_45": {
+		"display": "45° angled railing",
+		## Same diagonal as block_45: missing (+X,+Z). Posts land on cell corners
+		## so edge-aligned straight railings meet the run without a gap.
+		"footprint": [1, 1, 1],
+		"tags": ["railing", "edge", "diagonal_plan", "diagonal_railing"],
+		"mass_kg": 20.0,
+		"color": Color(0.35, 0.38, 0.42),
+	},
 	"bollard": {
 		"display": "Bollard",
-		## Mooring post — often on a bulwark / half-wall, not only bare deck.
+		## Vertical mooring post for open deck / bulwark tops.
 		"footprint": [1, 1, 1],
 		"tags": ["mooring", "cleat", "ship_only"],
 		"mass_kg": 55.0,
 		"color": Color(0.42, 0.40, 0.36),
+	},
+	"mast_base": {
+		"display": "Mast base",
+		## 2×2 m deck tabernacle — centred on four cells; stack mast_pole above.
+		"footprint": [2, 1, 2],
+		"tags": ["mast", "mast_base", "prop", "ship_only"],
+		"mass_kg": 120.0,
+		"color": Color(0.38, 0.36, 0.32),
+	},
+	"mast_pole": {
+		"display": "Mast pole",
+		## 1 m spar segment on the same 2×2 column — stack layers for mast height.
+		"footprint": [2, 1, 2],
+		"tags": ["mast", "mast_pole", "prop", "ship_only"],
+		"mass_kg": 45.0,
+		"color": Color(0.40, 0.38, 0.34),
+	},
+	"chimney_2x3x2": {
+		"display": "Chimney 2×3×2",
+		## Compact funnel / stack — 2 m × 3 m tall × 2 m.
+		"footprint": [2, 3, 2],
+		"tags": ["chimney", "prop"],
+		"mass_kg": 220.0,
+		"color": Color(0.22, 0.23, 0.24),
+	},
+	"chimney_4x5x4": {
+		"display": "Chimney 4×5×4",
+		## Large funnel / stack — 4 m × 5 m tall × 4 m.
+		"footprint": [4, 5, 4],
+		"tags": ["chimney", "prop"],
+		"mass_kg": 980.0,
+		"color": Color(0.20, 0.21, 0.22),
 	},
 	"cargo_zone": {
 		"display": "Cargo zone",
@@ -528,12 +599,22 @@ static func create_visual(brick_id: String, opts: Dictionary = {}) -> Node3D:
 			_add_stairs_visual(root, sz, color, int(entry.get("stair_steps", 4)))
 		"helm":
 			_add_helm_visual(root, sz, color)
+		"passenger_seat":
+			var cushion := MeshBuilder.box(Vector3(0.62, 0.14, 0.58), color, 0.72, 0.0)
+			cushion.position = Vector3(0.0, -0.24, 0.05)
+			root.add_child(cushion)
+			var back := MeshBuilder.box(Vector3(0.62, 0.66, 0.12), color, 0.72, 0.0)
+			back.position = Vector3(0.0, 0.05, 0.30)
+			root.add_child(back)
+			var pedestal := MeshBuilder.cylinder(0.08, 0.42, Color(0.18, 0.19, 0.21), 0.65, 0.3)
+			pedestal.position = Vector3(0.0, -0.40, 0.0)
+			root.add_child(pedestal)
 		"light_deck":
-			_add_light_deck_visual(root, sz, color, float(entry.get("housing_pitch_deg", -45.0)))
+			_add_light_deck_visual(root, sz, color, float(entry.get("housing_pitch_deg", -25.0)))
 			if bool(opts.get("show_aim_gizmo", false)):
 				_add_light_aim_gizmo(root, brick_id)
 		"light_external":
-			_add_light_deck_visual(root, sz, color, float(entry.get("housing_pitch_deg", -25.0)))
+			_add_light_external_visual(root, sz, color, float(entry.get("housing_pitch_deg", 5.0)))
 			if bool(opts.get("show_aim_gizmo", false)):
 				_add_light_aim_gizmo(root, brick_id)
 		"light_cabin":
@@ -544,29 +625,33 @@ static func create_visual(brick_id: String, opts: Dictionary = {}) -> Node3D:
 			_add_light_ceiling_visual(root, sz, color)
 			if bool(opts.get("show_aim_gizmo", false)):
 				_add_light_aim_gizmo(root, brick_id)
-		"light_nav_port", "light_nav_stbd", "light_nav_white":
+		"light_nav_port", "light_nav_stbd":
 			_add_light_nav_visual(root, sz, color, brick_id)
 			if bool(opts.get("show_aim_gizmo", false)):
 				_add_light_aim_gizmo(root, brick_id)
+		"light_nav_white":
+			_add_light_nav_white_visual(root, sz, color)
+			if bool(opts.get("show_aim_gizmo", false)):
+				_add_light_aim_gizmo(root, brick_id)
+		"light_mast_white":
+			_add_light_mast_white_visual(root, sz, color)
+			if bool(opts.get("show_aim_gizmo", false)):
+				_add_light_aim_gizmo(root, brick_id)
 		"railing":
-			var post_a := MeshBuilder.cylinder(0.04, sz.y * 0.95, color, 0.7, 0.2)
-			post_a.material_override = _painted_palette_material(Palette.PAINTED_STEEL, color, true)
-			post_a.position = Vector3(-sz.x * 0.35, 0.0, 0.0)
-			root.add_child(post_a)
-			var post_b := MeshBuilder.cylinder(0.04, sz.y * 0.95, color, 0.7, 0.2)
-			post_b.material_override = post_a.material_override
-			post_b.position = Vector3(sz.x * 0.35, 0.0, 0.0)
-			root.add_child(post_b)
-			var rail := MeshBuilder.box(Vector3(sz.x, 0.06, 0.06), color, 0.7, 0.25)
-			rail.material_override = post_a.material_override
-			rail.position = Vector3(0.0, sz.y * 0.4, 0.0)
-			root.add_child(rail)
-			var kick := MeshBuilder.box(Vector3(sz.x, 0.08, 0.08), color, 0.85, 0.1)
-			kick.material_override = post_a.material_override
-			kick.position = Vector3(0.0, -sz.y * 0.44, 0.0)
-			root.add_child(kick)
+			## Exact cell span on the −Z face so neighbours + 45° corners meet.
+			_add_railing_visual(root, sz.x, sz.y, color, _railing_edge_z(sz))
+		"railing_mooring":
+			_add_railing_mooring_visual(root, sz, color)
+		"railing_45":
+			_add_railing_45_visual(root, sz, color)
 		"bollard":
 			_add_bollard_visual(root, sz, color)
+		"mast_base":
+			_add_mast_base_visual(root, sz, color)
+		"mast_pole":
+			_add_mast_pole_visual(root, sz, color)
+		"chimney_2x3x2", "chimney_4x5x4":
+			_add_chimney_visual(root, sz, color)
 		"cargo_zone", "cargo_tile":
 			## Thumbnail / ghost: small plate with L-corners — runtime uses BrickLayout rects.
 			if bool(opts.get("preview_mesh", false)):
@@ -920,43 +1005,150 @@ static func _add_helm_visual(root: Node3D, sz: Vector3, color: Color) -> void:
 	root.add_child(eye)
 
 
-static func _add_light_deck_visual(root: Node3D, sz: Vector3, color: Color, pitch_deg: float = -45.0) -> void:
-	## Flood can on a high mount — pitched toward local −Z (yaw aims the throw).
-	var metal := Color(0.35, 0.36, 0.38)
-	var mount := MeshBuilder.box(Vector3(0.16, 0.12, 0.16), metal, 0.7, 0.35)
-	mount.position = Vector3(0.0, sz.y * 0.15, 0.12)
-	root.add_child(mount)
-	var arm := MeshBuilder.box(Vector3(0.06, 0.06, 0.28), metal, 0.65, 0.4)
-	arm.position = Vector3(0.0, sz.y * 0.2, 0.0)
-	arm.rotation_degrees = Vector3(pitch_deg, 0.0, 0.0)
-	root.add_child(arm)
+static func _add_light_deck_visual(root: Node3D, sz: Vector3, color: Color, pitch_deg: float = -25.0) -> void:
+	## Rectangular deck flood on a roof / deck pedestal — throw along local −Z.
+	var metal := Color(0.28, 0.30, 0.32)
+	var dark := Color(0.18, 0.19, 0.20)
+	var steel := _painted_palette_material(Palette.PAINTED_STEEL, metal, true)
+	var housing := _painted_palette_material(Palette.PAINTED_STEEL, color, true)
+	var y0 := -sz.y * 0.5
+
+	var pad := MeshBuilder.box(Vector3(0.42, 0.05, 0.42), dark, 0.88, 0.15)
+	pad.material_override = steel
+	pad.position = Vector3(0.0, y0 + 0.03, 0.0)
+	root.add_child(pad)
+
+	var post := MeshBuilder.cylinder(0.045, 0.28, metal, 0.7, 0.3)
+	post.material_override = steel
+	post.position = Vector3(0.0, y0 + 0.20, 0.0)
+	root.add_child(post)
+
+	var pivot_y := y0 + 0.38
+	## Twin yoke arms from the post to the can.
+	for x in [-0.12, 0.12]:
+		var yoke := MeshBuilder.box(Vector3(0.04, 0.04, 0.18), metal, 0.7, 0.3)
+		yoke.material_override = steel
+		yoke.position = Vector3(x, pivot_y, -0.02)
+		root.add_child(yoke)
+
 	var head := Node3D.new()
 	head.name = "FloodHead"
-	head.position = Vector3(0.0, sz.y * 0.2, 0.0)
+	head.position = Vector3(0.0, pivot_y, 0.0)
 	head.rotation_degrees = Vector3(pitch_deg, 0.0, 0.0)
 	root.add_child(head)
-	## Housing can + open reflector so the lamp face is obvious from deck.
-	var can := MeshBuilder.cylinder(0.15, 0.18, color, 0.72, 0.25)
-	can.rotation_degrees = Vector3(-90.0, 0.0, 0.0)
-	can.position = Vector3(0.0, 0.0, -0.18)
+
+	var can := MeshBuilder.box(Vector3(0.34, 0.22, 0.28), color, 0.75, 0.2)
+	can.material_override = housing
+	can.position = Vector3(0.0, 0.0, -0.20)
 	can.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	head.add_child(can)
+
+	var rear := MeshBuilder.box(Vector3(0.30, 0.18, 0.04), dark, 0.8, 0.15)
+	rear.material_override = steel
+	rear.position = Vector3(0.0, 0.0, -0.04)
+	head.add_child(rear)
+
+	for i in range(4):
+		var fin := MeshBuilder.box(Vector3(0.28, 0.02, 0.03), metal, 0.7, 0.25)
+		fin.material_override = steel
+		fin.position = Vector3(0.0, 0.13, -0.10 - float(i) * 0.05)
+		head.add_child(fin)
+
+	var lip := MeshBuilder.box(Vector3(0.36, 0.24, 0.03), dark, 0.65, 0.2)
+	lip.material_override = steel
+	lip.position = Vector3(0.0, 0.0, -0.35)
+	head.add_child(lip)
+
+	var lens := MeshBuilder.box(Vector3(0.30, 0.18, 0.04), Color(0.55, 0.52, 0.42), 0.12, 0.0)
+	lens.name = "Lens"
+	lens.position = Vector3(0.0, 0.0, -0.34)
+	lens.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	head.add_child(lens)
+
+
+static func _add_light_external_visual(root: Node3D, sz: Vector3, color: Color, pitch_deg: float = 5.0) -> void:
+	## Round marine flood on a deck pedestal — throw along local −Z.
+	var metal := Color(0.30, 0.32, 0.34)
+	var dark := Color(0.16, 0.17, 0.18)
+	var steel := _painted_palette_material(Palette.PAINTED_STEEL, metal, true)
+	var housing := _painted_palette_material(Palette.PAINTED_STEEL, color, true)
+	var y0 := -sz.y * 0.5
+
+	var pad := MeshBuilder.box(Vector3(0.48, 0.06, 0.48), dark, 0.88, 0.15)
+	pad.material_override = steel
+	pad.position = Vector3(0.0, y0 + 0.04, 0.0)
+	root.add_child(pad)
+
+	var column := MeshBuilder.cylinder(0.07, 0.32, metal, 0.7, 0.3)
+	column.material_override = steel
+	column.position = Vector3(0.0, y0 + 0.24, 0.0)
+	root.add_child(column)
+
+	var collar := MeshBuilder.cylinder(0.10, 0.05, metal, 0.65, 0.35)
+	collar.material_override = steel
+	collar.position = Vector3(0.0, y0 + 0.42, 0.0)
+	root.add_child(collar)
+
+	var pivot_y := y0 + 0.48
+	var yoke_bar := MeshBuilder.box(Vector3(0.36, 0.05, 0.05), metal, 0.7, 0.3)
+	yoke_bar.material_override = steel
+	yoke_bar.position = Vector3(0.0, pivot_y, 0.0)
+	root.add_child(yoke_bar)
+	for x in [-0.16, 0.16]:
+		var arm := MeshBuilder.box(Vector3(0.05, 0.05, 0.22), metal, 0.7, 0.3)
+		arm.material_override = steel
+		arm.position = Vector3(x, pivot_y, -0.08)
+		root.add_child(arm)
+
+	var head := Node3D.new()
+	head.name = "FloodHead"
+	head.position = Vector3(0.0, pivot_y, -0.02)
+	head.rotation_degrees = Vector3(pitch_deg, 0.0, 0.0)
+	root.add_child(head)
+
+	var drum := MeshBuilder.cylinder(0.18, 0.32, color, 0.72, 0.22)
+	drum.material_override = housing
+	drum.rotation_degrees = Vector3(-90.0, 0.0, 0.0)
+	drum.position = Vector3(0.0, 0.0, -0.22)
+	drum.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	head.add_child(drum)
+
+	var back_cap := MeshBuilder.cylinder(0.16, 0.05, dark, 0.8, 0.15)
+	back_cap.material_override = steel
+	back_cap.rotation_degrees = Vector3(-90.0, 0.0, 0.0)
+	back_cap.position = Vector3(0.0, 0.0, -0.04)
+	head.add_child(back_cap)
+
+	for x in [-0.20, 0.20]:
+		var knob := MeshBuilder.cylinder(0.035, 0.06, metal, 0.6, 0.4)
+		knob.material_override = steel
+		knob.rotation_degrees = Vector3(0.0, 0.0, 90.0)
+		knob.position = Vector3(x, 0.0, -0.08)
+		head.add_child(knob)
+
+	var guard := MeshBuilder.torus(0.18, 0.22, metal, 0.65, 0.35)
+	guard.material_override = steel
+	guard.rotation_degrees = Vector3(90.0, 0.0, 0.0)
+	guard.position = Vector3(0.0, 0.0, -0.40)
+	head.add_child(guard)
+
 	var dish := MeshInstance3D.new()
 	var dish_mesh := CylinderMesh.new()
-	dish_mesh.top_radius = 0.18
-	dish_mesh.bottom_radius = 0.09
-	dish_mesh.height = 0.08
-	dish_mesh.radial_segments = 16
+	dish_mesh.top_radius = 0.20
+	dish_mesh.bottom_radius = 0.12
+	dish_mesh.height = 0.07
+	dish_mesh.radial_segments = 20
 	dish.mesh = dish_mesh
-	dish.material_override = MeshBuilder.make_material(Color(0.42, 0.42, 0.4), 0.55, 0.35)
+	dish.material_override = MeshBuilder.make_material(Color(0.48, 0.48, 0.45), 0.45, 0.4)
 	dish.rotation_degrees = Vector3(-90.0, 0.0, 0.0)
-	dish.position = Vector3(0.0, 0.0, -0.28)
+	dish.position = Vector3(0.0, 0.0, -0.36)
 	dish.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	head.add_child(dish)
-	var lens := MeshBuilder.cylinder(0.1, 0.03, Color(0.4, 0.38, 0.32), 0.15, 0.0)
+
+	var lens := MeshBuilder.cylinder(0.12, 0.035, Color(0.58, 0.55, 0.45), 0.12, 0.0)
 	lens.name = "Lens"
 	lens.rotation_degrees = Vector3(-90.0, 0.0, 0.0)
-	lens.position = Vector3(0.0, 0.0, -0.33)
+	lens.position = Vector3(0.0, 0.0, -0.40)
 	lens.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	head.add_child(lens)
 
@@ -1016,21 +1208,93 @@ static func _add_light_ceiling_visual(root: Node3D, sz: Vector3, color: Color) -
 
 
 static func _add_light_nav_visual(root: Node3D, sz: Vector3, color: Color, brick_id: String) -> void:
-	## Compact running-light housing; lens faces local −Z.
+	## Compact running-light housing; lens faces local −Z (port / starboard arcs).
 	var metal := Color(0.3, 0.32, 0.34)
 	var body := MeshBuilder.box(Vector3(0.22, 0.18, 0.28), metal, 0.7, 0.35)
 	body.position = Vector3(0.0, -sz.y * 0.15, 0.05)
 	root.add_child(body)
-	var lens_col := color
-	if brick_id == "light_nav_white":
-		lens_col = Color(0.92, 0.92, 0.88)
-	var lens := MeshBuilder.box(Vector3(0.16, 0.12, 0.06), lens_col, 0.2, 0.05)
+	var lens := MeshBuilder.box(Vector3(0.16, 0.12, 0.06), color, 0.2, 0.05)
 	lens.name = "Lens"
 	lens.position = Vector3(0.0, -sz.y * 0.15, -0.12)
 	root.add_child(lens)
 	var post := MeshBuilder.cylinder(0.04, 0.35, metal, 0.7, 0.3)
 	post.position = Vector3(0.0, -sz.y * 0.35, 0.05)
 	root.add_child(post)
+
+
+static func _add_light_nav_white_visual(root: Node3D, sz: Vector3, color: Color) -> void:
+	## Compact all-round white lantern — point light, visible from every bearing.
+	var metal := Color(0.32, 0.34, 0.36)
+	var stem := MeshBuilder.cylinder(0.035, 0.28, metal, 0.7, 0.3)
+	stem.position = Vector3(0.0, -sz.y * 0.32, 0.0)
+	root.add_child(stem)
+	var base := MeshBuilder.cylinder(0.08, 0.04, metal, 0.75, 0.25)
+	base.position = Vector3(0.0, -sz.y * 0.18, 0.0)
+	root.add_child(base)
+	var globe := MeshBuilder.sphere(0.09, color, 0.08, 0.02)
+	globe.name = "Lens"
+	globe.position = Vector3(0.0, -sz.y * 0.05, 0.0)
+	globe.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	root.add_child(globe)
+	var cap := MeshBuilder.cylinder(0.07, 0.03, metal, 0.65, 0.35)
+	cap.position = Vector3(0.0, 0.05, 0.0)
+	root.add_child(cap)
+	var emitter := Marker3D.new()
+	emitter.name = "Emitter"
+	emitter.position = Vector3(0.0, 0.12, 0.0)
+	root.add_child(emitter)
+
+
+static func _add_light_mast_white_visual(root: Node3D, sz: Vector3, color: Color) -> void:
+	## 2×2 masthead lantern — open cage so the all-round globe (and OmniLight) are not buried.
+	var metal := Color(0.30, 0.32, 0.34)
+	var steel := _painted_palette_material(Palette.PAINTED_STEEL, metal, true)
+	var y0 := -sz.y * 0.5
+
+	var pad := MeshBuilder.box(Vector3(0.55, 0.06, 0.55), metal, 0.85, 0.2)
+	pad.material_override = steel
+	pad.position = Vector3(0.0, y0 + 0.04, 0.0)
+	root.add_child(pad)
+
+	var column := MeshBuilder.cylinder(0.06, 0.38, metal, 0.7, 0.3)
+	column.material_override = steel
+	column.position = Vector3(0.0, y0 + 0.26, 0.0)
+	root.add_child(column)
+
+	var platform := MeshBuilder.cylinder(0.16, 0.04, metal, 0.75, 0.25)
+	platform.material_override = steel
+	platform.position = Vector3(0.0, y0 + 0.46, 0.0)
+	root.add_child(platform)
+
+	## Open wire cage — bars only, so the globe stays visible from every bearing.
+	var cage_y := y0 + 0.62
+	for i in range(6):
+		var ang := float(i) * TAU / 6.0
+		var bar := MeshBuilder.box(Vector3(0.025, 0.28, 0.025), metal, 0.65, 0.35)
+		bar.material_override = steel
+		bar.position = Vector3(cos(ang) * 0.14, cage_y, sin(ang) * 0.14)
+		root.add_child(bar)
+	var ring := MeshBuilder.torus(0.13, 0.155, metal, 0.65, 0.35)
+	ring.material_override = steel
+	ring.position = Vector3(0.0, cage_y + 0.12, 0.0)
+	root.add_child(ring)
+
+	var globe := MeshBuilder.sphere(0.12, color, 0.08, 0.02)
+	globe.name = "Lens"
+	globe.position = Vector3(0.0, cage_y, 0.0)
+	globe.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	root.add_child(globe)
+
+	var hood := MeshBuilder.cylinder(0.17, 0.045, metal, 0.65, 0.35)
+	hood.material_override = steel
+	hood.position = Vector3(0.0, cage_y + 0.16, 0.0)
+	root.add_child(hood)
+
+	## Emitter sits above the hood so the OmniLight is never inside solid mesh.
+	var emitter := Marker3D.new()
+	emitter.name = "Emitter"
+	emitter.position = Vector3(0.0, cage_y + 0.22, 0.0)
+	root.add_child(emitter)
 
 
 static func _add_light_aim_gizmo(root: Node3D, brick_id: String) -> void:
@@ -1053,12 +1317,17 @@ static func _add_light_aim_gizmo(root: Node3D, brick_id: String) -> void:
 			cone.rotation_degrees = Vector3(-90.0, 0.0, 0.0)
 			cone.position = Vector3(0.0, 0.0, -length * 0.5)
 			aim.add_child(cone)
-		5: ## Cabin omni — soft sphere.
-			var ball := MeshBuilder.sphere(2.5, Color(1.0, 0.75, 0.4, 0.12), 0.9, 0.0)
+		2, 5: ## Masthead white / cabin omni — soft sphere (all bearings).
+			var radius := 4.0 if has_tag(brick_id, "nav_white") else 2.5
+			var ball_col := (
+				Color(0.95, 0.95, 0.9, 0.14) if has_tag(brick_id, "nav_white")
+				else Color(1.0, 0.75, 0.4, 0.12)
+			)
+			var ball := MeshBuilder.sphere(radius, ball_col, 0.9, 0.0)
 			ball.position = Vector3.ZERO
 			ball.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 			gizmo.add_child(ball)
-		_: ## Nav / directional — cone along −Z.
+		_: ## Port / stbd directional — cone along −Z.
 			var nav_cone := _make_aim_cone(Color(0.7, 0.85, 1.0, 0.2), 6.0, 2.2)
 			nav_cone.rotation_degrees = Vector3(-90.0, 0.0, 0.0)
 			nav_cone.position = Vector3(0.0, 0.0, -3.0)
@@ -1125,6 +1394,89 @@ static func _add_window_visual(root: Node3D, sz: Vector3, glass_color: Color) ->
 	pane.position = Vector3(0.0, 0.0, face_z)
 	pane.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	root.add_child(pane)
+
+
+static func _railing_edge_z(sz: Vector3) -> float:
+	## Centre the thin rail on the local −Z cell face (outboard when yaw matches).
+	return -sz.z * 0.5 + 0.028
+
+
+static func _add_railing_visual(
+	root: Node3D,
+	length: float,
+	height: float,
+	color: Color,
+	edge_z: float = 0.0,
+) -> void:
+	## Tileable maritime pipe railing.
+	## Rails / toe plate span the full cell. Stanchions sit only on the ± cell
+	## edges so neighbouring tiles share one post at each joint instead of
+	## reading as many short independent railings. `edge_z` shifts the run onto
+	## a face (straight bricks use the −Z face; 45° bricks stay on the diagonal).
+	var material := _painted_palette_material(Palette.PAINTED_STEEL, color, true)
+	var post_height := height * 0.88
+	var half := length * 0.5
+	## Tiny overlap so rail seams don't flash a gap under perspective.
+	var rail_span := length + 0.02
+	for x in [-half, half]:
+		var post := MeshBuilder.cylinder(0.035, post_height, color, 0.68, 0.25)
+		post.material_override = material
+		post.position = Vector3(x, -height * 0.03, edge_z)
+		root.add_child(post)
+	for rail_data in [
+		{"y": height * 0.41, "radius": 0.045},
+		{"y": height * 0.10, "radius": 0.032},
+	]:
+		var rail := MeshBuilder.cylinder(
+			float(rail_data["radius"]), rail_span, color, 0.65, 0.28
+		)
+		rail.material_override = material
+		rail.position = Vector3(0.0, float(rail_data["y"]), edge_z)
+		rail.rotation_degrees.z = 90.0
+		root.add_child(rail)
+	var toe_plate := MeshBuilder.box(
+		Vector3(rail_span, height * 0.14, 0.055), color, 0.78, 0.18
+	)
+	toe_plate.material_override = material
+	toe_plate.position = Vector3(0.0, -height * 0.42, edge_z)
+	root.add_child(toe_plate)
+
+
+static func _add_railing_mooring_visual(root: Node3D, sz: Vector3, color: Color) -> void:
+	## Edge railing on −Z; mooring bit stays cell-centred so ropes clear the sheer rail.
+	_add_railing_visual(root, sz.x, sz.y, color, _railing_edge_z(sz))
+	var steel := _painted_palette_material(Palette.PAINTED_STEEL, color, true)
+	var accent := Color(0.55, 0.52, 0.46)
+	var bit_h := sz.y * 0.55
+	var bit := MeshBuilder.cylinder(0.09, bit_h, color, 0.68, 0.3)
+	bit.material_override = steel
+	bit.position = Vector3(0.0, -sz.y * 0.5 + bit_h * 0.5 + 0.04, 0.0)
+	root.add_child(bit)
+	var base := MeshBuilder.cylinder(0.16, 0.05, Color(color.r * 0.85, color.g * 0.85, color.b * 0.85), 0.8, 0.2)
+	base.material_override = steel
+	base.position = Vector3(0.0, -sz.y * 0.5 + 0.05, 0.0)
+	root.add_child(base)
+	var horn := MeshBuilder.cylinder(0.04, 0.32, accent, 0.6, 0.4)
+	horn.material_override = steel
+	horn.rotation_degrees = Vector3(0.0, 0.0, 90.0)
+	horn.position = Vector3(0.0, -sz.y * 0.5 + bit_h * 0.72, 0.0)
+	root.add_child(horn)
+	var cap := MeshBuilder.cylinder(0.11, 0.05, accent, 0.55, 0.4)
+	cap.material_override = steel
+	cap.position = Vector3(0.0, -sz.y * 0.5 + bit_h + 0.02, 0.0)
+	root.add_child(cap)
+
+
+static func _add_railing_45_visual(root: Node3D, sz: Vector3, color: Color) -> void:
+	## Diagonal matches block_45 / window_45 (missing corner = local +X,+Z).
+	## Posts land on the two kept outer corners so an edge-aligned straight
+	## railing on a neighbour cell meets the run with no centre-cell gap.
+	var diagonal_len := sqrt(sz.x * sz.x + sz.z * sz.z)
+	var yaw_deg := rad_to_deg(atan2(sz.z, sz.x))
+	var segment := Node3D.new()
+	segment.rotation_degrees.y = yaw_deg
+	root.add_child(segment)
+	_add_railing_visual(segment, diagonal_len, sz.y, color, 0.0)
 
 
 static func _add_window_45_visual(root: Node3D, sz: Vector3, glass_color: Color) -> void:
@@ -1331,6 +1683,125 @@ static func _add_bollard_visual(root: Node3D, sz: Vector3, color: Color) -> void
 	horn.rotation_degrees = Vector3(0.0, 0.0, 90.0)
 	horn.position = Vector3(0.0, -sz.y * 0.5 + post_h * 0.7, 0.0)
 	root.add_child(horn)
+
+
+static func _add_mast_base_visual(root: Node3D, sz: Vector3, color: Color) -> void:
+	## 2×2 deck tabernacle with a short spar stub — stack mast_pole layers above.
+	var steel := _painted_palette_material(Palette.PAINTED_STEEL, color, true)
+	var dark := Color(color.r * 0.75, color.g * 0.75, color.b * 0.78)
+	var y0 := -sz.y * 0.5
+
+	var pad := MeshBuilder.box(Vector3(sz.x * 0.92, 0.10, sz.z * 0.92), dark, 0.88, 0.18)
+	pad.material_override = steel
+	pad.position = Vector3(0.0, y0 + 0.05, 0.0)
+	root.add_child(pad)
+
+	var plinth := MeshBuilder.box(Vector3(0.85, 0.16, 0.85), color, 0.8, 0.22)
+	plinth.material_override = steel
+	plinth.position = Vector3(0.0, y0 + 0.18, 0.0)
+	root.add_child(plinth)
+
+	var collar := MeshBuilder.cylinder(0.18, 0.14, color, 0.7, 0.3)
+	collar.material_override = steel
+	collar.position = Vector3(0.0, y0 + 0.34, 0.0)
+	root.add_child(collar)
+
+	var stub_h := sz.y - 0.40
+	var stub := MeshBuilder.cylinder(0.095, stub_h, color, 0.68, 0.28)
+	stub.material_override = steel
+	stub.position = Vector3(0.0, y0 + 0.40 + stub_h * 0.5, 0.0)
+	root.add_child(stub)
+
+	var joint := MeshBuilder.cylinder(0.11, 0.06, Color(0.55, 0.52, 0.46), 0.65, 0.35)
+	joint.material_override = steel
+	joint.position = Vector3(0.0, y0 + sz.y - 0.03, 0.0)
+	root.add_child(joint)
+
+
+static func _add_mast_pole_visual(root: Node3D, sz: Vector3, color: Color) -> void:
+	## One-metre spar segment centred on the 2×2 mast column. Stack for height.
+	var steel := _painted_palette_material(Palette.PAINTED_STEEL, color, true)
+	var accent := Color(0.55, 0.52, 0.46)
+	## Slight length overlap so stacked segments read as one continuous spar.
+	var spar_h := sz.y + 0.04
+	var spar := MeshBuilder.cylinder(0.085, spar_h, color, 0.66, 0.28)
+	spar.material_override = steel
+	spar.position = Vector3.ZERO
+	root.add_child(spar)
+
+	for side in [-1.0, 1.0]:
+		var cuff := MeshBuilder.cylinder(0.105, 0.05, accent, 0.6, 0.35)
+		cuff.material_override = steel
+		cuff.position = Vector3(0.0, side * (sz.y * 0.5 - 0.02), 0.0)
+		root.add_child(cuff)
+
+
+static func _add_chimney_visual(root: Node3D, sz: Vector3, color: Color) -> void:
+	## Marine funnel / stack scaled to the brick footprint (base → trunk → cowl).
+	var steel := _painted_palette_material(Palette.PAINTED_STEEL, color, true)
+	var dark := Color(color.r * 0.7, color.g * 0.7, color.b * 0.72)
+	var soot := Color(0.12, 0.12, 0.13)
+	var accent := Color(0.55, 0.18, 0.14)
+	var y0 := -sz.y * 0.5
+	var plan := minf(sz.x, sz.z)
+	var trunk_r := plan * 0.28
+	var base_h := clampf(sz.y * 0.12, 0.22, 0.55)
+	var cowl_h := clampf(sz.y * 0.14, 0.28, 0.70)
+	var trunk_h := maxf(sz.y - base_h - cowl_h, sz.y * 0.5)
+
+	var plinth := MeshBuilder.box(
+		Vector3(sz.x * 0.88, base_h, sz.z * 0.88), dark, 0.88, 0.15
+	)
+	plinth.material_override = steel
+	plinth.position = Vector3(0.0, y0 + base_h * 0.5, 0.0)
+	root.add_child(plinth)
+
+	var skirt := MeshBuilder.cylinder(trunk_r * 1.25, base_h * 0.55, color, 0.75, 0.2)
+	skirt.material_override = steel
+	skirt.position = Vector3(0.0, y0 + base_h * 0.75, 0.0)
+	root.add_child(skirt)
+
+	var trunk := MeshBuilder.cylinder(trunk_r, trunk_h, color, 0.72, 0.22)
+	trunk.material_override = steel
+	trunk.position = Vector3(0.0, y0 + base_h + trunk_h * 0.5, 0.0)
+	root.add_child(trunk)
+
+	## Mid banding rings.
+	var band_n := 2 if sz.y < 4.0 else 3
+	for i in range(band_n):
+		var t := (float(i) + 1.0) / float(band_n + 1)
+		var band := MeshBuilder.cylinder(trunk_r * 1.08, 0.06, dark, 0.7, 0.3)
+		band.material_override = steel
+		band.position = Vector3(0.0, y0 + base_h + trunk_h * t, 0.0)
+		root.add_child(band)
+
+	## Top cowl / lip with a dark soot throat.
+	var cowl_y := y0 + base_h + trunk_h
+	var cowl := MeshBuilder.cylinder(trunk_r * 1.22, cowl_h * 0.55, color, 0.7, 0.25)
+	cowl.material_override = steel
+	cowl.position = Vector3(0.0, cowl_y + cowl_h * 0.28, 0.0)
+	root.add_child(cowl)
+
+	var lip := MeshInstance3D.new()
+	var lip_mesh := CylinderMesh.new()
+	lip_mesh.top_radius = trunk_r * 1.35
+	lip_mesh.bottom_radius = trunk_r * 1.05
+	lip_mesh.height = cowl_h * 0.4
+	lip_mesh.radial_segments = 20
+	lip.mesh = lip_mesh
+	lip.material_override = MeshBuilder.make_material(dark, 0.75, 0.2)
+	lip.position = Vector3(0.0, cowl_y + cowl_h * 0.65, 0.0)
+	root.add_child(lip)
+
+	var throat := MeshBuilder.cylinder(trunk_r * 0.72, cowl_h * 0.2, soot, 0.95, 0.0)
+	throat.position = Vector3(0.0, cowl_y + cowl_h * 0.78, 0.0)
+	root.add_child(throat)
+
+	## Small recognition band near the top (ship funnel cue).
+	var stripe := MeshBuilder.cylinder(trunk_r * 1.06, 0.08, accent, 0.6, 0.15)
+	stripe.material_override = steel
+	stripe.position = Vector3(0.0, cowl_y - trunk_h * 0.12, 0.0)
+	root.add_child(stripe)
 
 
 static func _add_hull_ladder_visual(root: Node3D, sz: Vector3, color: Color) -> void:

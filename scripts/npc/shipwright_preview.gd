@@ -2,7 +2,7 @@
 class_name ShipwrightPreview
 extends Node3D
 
-## Visual-only workboat preview for the shipwright catalog SubViewport.
+## Visual-only vessel preview for the shipwright catalog SubViewport.
 
 var _pivot: Node3D
 var _spin_enabled: bool = true
@@ -19,10 +19,10 @@ func _process(delta: float) -> void:
 
 func show_entry(entry: Dictionary, brick_layout: Dictionary = {}) -> HullStations:
 	_clear_models()
-	var hull_id := str(entry.get("id", "workboat"))
-	var loa := float(entry.get("loa_m", Workboat.LOA_M))
-	var beam := float(entry.get("beam_m", Workboat.BEAM_M))
-	var depth := float(entry.get("depth_m", Workboat.DEPTH_M))
+	var hull_id := str(entry.get("hull_id", entry.get("id", "fishing_trawler_small")))
+	var loa := float(entry.get("loa_m", 28.0))
+	var beam := float(entry.get("beam_m", 10.0))
+	var depth := float(entry.get("depth_m", 5.6))
 	var stations: HullStations = HullStations.from_box(loa, beam, depth, 10)
 
 	if _pivot == null:
