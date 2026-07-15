@@ -1,0 +1,174 @@
+{
+  "version": 1,
+  "registrations": [
+    {
+      "id": "general_vessel",
+      "display": "General vessel",
+      "description": "Minimum legal equipment for any powered registered vessel.",
+      "budget_caps": {
+        "fishing": 0,
+        "crane": 0,
+        "tow": 0
+      },
+      "rules": [
+        {
+          "id": "helm",
+          "label": "One working helm",
+          "kind": "slot_count",
+          "slot": "helm",
+          "min": 1,
+          "max": 1
+        },
+        {
+          "id": "port_light",
+          "label": "Port navigation light",
+          "kind": "brick_count",
+          "brick_id": "light_nav_port",
+          "min": 1,
+          "max": 1
+        },
+        {
+          "id": "starboard_light",
+          "label": "Starboard navigation light",
+          "kind": "brick_count",
+          "brick_id": "light_nav_stbd",
+          "min": 1,
+          "max": 1
+        },
+        {
+          "id": "white_light",
+          "label": "White masthead light",
+          "kind": "tag_count",
+          "tag": "nav_white",
+          "min": 1,
+          "max": 2
+        },
+        {
+          "id": "port_light_side",
+          "label": "Port light mounted on port side",
+          "kind": "brick_side",
+          "brick_id": "light_nav_port",
+          "side": "port"
+        },
+        {
+          "id": "starboard_light_side",
+          "label": "Starboard light mounted on starboard side",
+          "kind": "brick_side",
+          "brick_id": "light_nav_stbd",
+          "side": "starboard"
+        },
+		{
+          "id": "white_light_height",
+          "label": "White light above side lights",
+          "kind": "white_above_sidelights"
+        },
+        {
+          "id": "mooring_points",
+          "label": "At least four mooring points",
+          "kind": "tag_count",
+          "tag": "mooring",
+          "min": 4
+        }
+      ]
+    },
+    {
+      "id": "fishing_vessel",
+      "display": "Fishing vessel",
+      "description": "Licensed to operate fishing gear and land a catch.",
+      "inherits": "general_vessel",
+      "budget_caps": {
+        "fishing": 1,
+        "cargo_cells": 140,
+        "crane": 0,
+        "tow": 0
+      },
+      "rules": [
+        {
+          "id": "fishing_gear",
+          "label": "One working fishing system",
+          "kind": "slot_count",
+          "slot": "fishing",
+          "min": 1,
+          "max": 1
+        },
+        {
+          "id": "catch_deck",
+          "label": "Exposed catch deck",
+          "kind": "cargo_cells",
+          "min": 4,
+          "max": 140
+        }
+      ]
+    },
+    {
+      "id": "cargo_vessel",
+      "display": "Cargo vessel",
+      "description": "Licensed for commercial deck cargo.",
+      "inherits": "general_vessel",
+      "budget_caps": {
+        "fishing": 0,
+        "cargo_cells": 600,
+        "crane": 0,
+        "tow": 0
+      },
+      "rules": [
+        {
+          "id": "cargo_deck",
+          "label": "Commercial cargo deck",
+          "kind": "cargo_cells",
+          "min": 8,
+          "max": 600
+        },
+        {
+          "id": "crane_rating",
+          "label": "Crane within cargo licence rating",
+          "kind": "equipment_rating_max",
+          "tag": "crane",
+          "max_rating": 0
+        }
+      ]
+    },
+    {
+      "id": "passenger_vessel",
+      "display": "Passenger vessel",
+      "description": "Licensed to carry fare-paying passengers.",
+      "inherits": "general_vessel",
+      "budget_caps": {
+        "fishing": 0,
+        "cargo_cells": 24,
+        "crane": 0,
+        "tow": 0
+      },
+      "rules": [
+        {
+          "id": "passenger_capacity",
+          "label": "At least four passenger seats",
+          "kind": "capacity",
+          "field": "passenger_capacity",
+          "min": 4
+        },
+        {
+          "id": "cabin",
+          "label": "Enclosed passenger accommodation",
+          "kind": "capability",
+          "capability": "has_cabin",
+          "required": true
+        },
+        {
+          "id": "egress",
+          "label": "At least one marked door",
+          "kind": "metric_range",
+          "metric": "doors",
+          "min": 1
+        },
+        {
+          "id": "passenger_cargo_limit",
+          "label": "Passenger-vessel cargo limit",
+          "kind": "cargo_cells",
+          "min": 0,
+          "max": 24
+        }
+      ]
+    }
+  ]
+}

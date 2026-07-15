@@ -3,60 +3,80 @@ extends RefCounted
 
 ## Instantiates hand-authored vessels and applies brick fit-out layouts.
 
-const WORKBOAT_ID := "workboat"
-const WORKBOAT_SCENE := "res://scenes/vessels/workboat.tscn"
-const WORKBOAT_SCRIPT := "res://scripts/ship/vessels/workboat.gd"
-const TRAWLER_SMALL_ID := "fishing_trawler_small"
+const TRAWLER_SMALL_ID := "hull_28x10"
 const TRAWLER_SMALL_SCENE := "res://scenes/vessels/fishing_trawler_small.tscn"
 const TRAWLER_SMALL_SCRIPT := "res://scripts/ship/vessels/fishing_trawler_small.gd"
-const PASSENGER_CATAMARAN_ID := "passenger_catamaran"
+const PASSENGER_CATAMARAN_ID := "hull_45x16_cat"
 const PASSENGER_CATAMARAN_SCENE := "res://scenes/vessels/passenger_catamaran.tscn"
 const PASSENGER_CATAMARAN_SCRIPT := "res://scripts/ship/vessels/passenger_catamaran.gd"
 
 
-static func instantiate(vessel_id: String = TRAWLER_SMALL_ID, brick_layout: Dictionary = {}) -> BoatBody:
+static func instantiate(
+	vessel_id: String = TRAWLER_SMALL_ID,
+	brick_layout: Dictionary = {},
+	registration_id: String = "",
+) -> BoatBody:
 	var id := HullRegistry.resolve_network_hull_id(vessel_id)
 	var boat := _instantiate_hull(id)
 	if boat != null:
-		_apply_fitout(boat, brick_layout if not brick_layout.is_empty() else default_brick_layout(id))
+		_apply_fitout(
+			boat,
+			brick_layout if not brick_layout.is_empty() else default_brick_layout(id),
+			registration_id,
+		)
 	return boat
 
 
-static func instantiate_from_path(path: String, brick_layout: Dictionary = {}) -> BoatBody:
+static func instantiate_from_path(
+	path: String,
+	brick_layout: Dictionary = {},
+	registration_id: String = "",
+) -> BoatBody:
 	var p := path.strip_edges()
 	if p.is_empty():
-		return instantiate(TRAWLER_SMALL_ID, brick_layout)
+		return instantiate(TRAWLER_SMALL_ID, brick_layout, registration_id)
 	if p.ends_with(".tscn") or p.ends_with(".scn"):
 		if not ResourceLoader.exists(p):
 			push_error("VesselSpawn: scene missing: " + p)
-			return instantiate(TRAWLER_SMALL_ID, brick_layout)
+			return instantiate(TRAWLER_SMALL_ID, brick_layout, registration_id)
 		var packed := load(p) as PackedScene
 		if packed == null:
 			push_error("VesselSpawn: not a PackedScene: " + p)
-			return instantiate(TRAWLER_SMALL_ID, brick_layout)
+			return instantiate(TRAWLER_SMALL_ID, brick_layout, registration_id)
 		var node := packed.instantiate()
 		if node is BoatBody:
 			var boat := node as BoatBody
 			_ensure_assembled(boat)
 			var hull_id := HullRegistry.resolve_id_from_template(p, TRAWLER_SMALL_ID)
-			_apply_fitout(boat, brick_layout if not brick_layout.is_empty() else default_brick_layout(hull_id))
+			_apply_fitout(
+				boat,
+				brick_layout if not brick_layout.is_empty() else default_brick_layout(hull_id),
+				registration_id,
+			)
 			return boat
 		push_error("VesselSpawn: scene root must be BoatBody: " + p)
 		if node != null:
 			node.queue_free()
-		return instantiate(TRAWLER_SMALL_ID, brick_layout)
-	return instantiate(TRAWLER_SMALL_ID, brick_layout)
+		return instantiate(TRAWLER_SMALL_ID, brick_layout, registration_id)
+	return instantiate(TRAWLER_SMALL_ID, brick_layout, registration_id)
 
 
 static func instantiate_from_record(record: Dictionary) -> BoatBody:
-	var normalized := normalize_record(record)
+	var normalized := resolve_deployable_record(record)
+	if normalized.is_empty():
+		push_error("VesselSpawn: refused unregistered or noncompliant vessel record")
+		return null
 	var path := resolve_template_path(normalized)
 	var layout: Dictionary = brick_layout_of(normalized)
+	var registration_id := str(normalized.get("registration_id", ""))
 	var boat: BoatBody = null
 	if not path.is_empty():
-		boat = instantiate_from_path(path, layout)
+		boat = instantiate_from_path(path, layout, registration_id)
 	else:
-		boat = instantiate(str(normalized.get("hull_id", TRAWLER_SMALL_ID)), layout)
+		boat = instantiate(
+			str(normalized.get("hull_id", TRAWLER_SMALL_ID)), layout, registration_id
+		)
+	apply_propulsion_override(boat, normalized)
 	apply_identity(boat, normalized)
 	return boat
 
@@ -73,14 +93,19 @@ static func default_brick_layout(vessel_id: String = TRAWLER_SMALL_ID) -> Dictio
 static func default_owned_record() -> Dictionary:
 	## Free starter — small coastal trawler.
 	var uid := new_vessel_uid(TRAWLER_SMALL_ID)
+	var layout := default_brick_layout(TRAWLER_SMALL_ID)
+	for entry in PrebuiltVesselCatalog.catalog_entries():
+		if str(entry.get("prebuilt_id", "")) == "fishing_trawler":
+			layout = (entry.get("prebuilt_layout", {}) as Dictionary).duplicate(true)
+			break
 	return normalize_record({
 		"uid": uid,
 		"hull_id": TRAWLER_SMALL_ID,
 		"name": "Day Trawler",
-		"display": "Fishing trawler  •  14 × 5 m",
-		"template_path": TRAWLER_SMALL_SCENE,
-		"scene_path": TRAWLER_SMALL_SCENE,
-		"brick_layout": default_brick_layout(TRAWLER_SMALL_ID),
+		"display": "Day Trawler",
+		"shaft_power_kw": 1871.0,
+		"registration_id": "fishing_vessel",
+		"brick_layout": layout,
 	})
 
 
@@ -125,6 +150,28 @@ static func apply_identity(boat: BoatBody, record: Dictionary) -> void:
 	var ctrl := boat.get_node_or_null("BoatController") as BoatController
 	if ctrl != null:
 		ctrl.ship_name = vessel_name
+	boat.set_meta("registration_id", str(record.get("registration_id", "")))
+
+
+## Power belongs to the finished store ship, not the reusable hull component.
+## Scale bollard thrust with power so each hull keeps its authored cruise/thrust ratio.
+static func apply_propulsion_override(boat: BoatBody, record: Dictionary) -> void:
+	if boat == null or not record.has("shaft_power_kw"):
+		return
+	var requested_kw := maxf(float(record.get("shaft_power_kw", 0.0)), 1.0)
+	var profile := boat.physics_profile
+	var original_kw := requested_kw
+	var original_bollard := 0.0
+	if profile != null:
+		original_kw = maxf(profile.shaft_power_kw, 1.0)
+		original_bollard = maxf(profile.bollard_thrust_n, 1.0)
+		profile.shaft_power_kw = requested_kw
+		profile.bollard_thrust_n = original_bollard * requested_kw / original_kw
+	var prop := boat.get_node_or_null("PropulsionComponent") as PropulsionComponent
+	if prop != null:
+		prop.shaft_power_kw = requested_kw
+		if original_bollard > 0.0:
+			prop.max_thrust = original_bollard * requested_kw / original_kw
 
 
 static func normalize_record(record: Dictionary) -> Dictionary:
@@ -139,6 +186,13 @@ static func normalize_record(record: Dictionary) -> Dictionary:
 		out["name"] = vessel_name_of(out)
 	else:
 		out["name"] = custom_name
+	if out.has("shaft_power_kw"):
+		out["shaft_power_kw"] = maxf(float(out.get("shaft_power_kw", 0.0)), 1.0)
+	else:
+		var hull := HullRegistry.get_by_id(hull_id)
+		out["shaft_power_kw"] = maxf(float(hull.get("default_shaft_power_kw", 1.0)), 1.0)
+	var registration_id := str(out.get("registration_id", "")).strip_edges()
+	out["registration_id"] = registration_id if not registration_id.is_empty() else "review_required"
 	return out
 
 
@@ -162,15 +216,28 @@ static func resolve_deployable_record(record: Dictionary) -> Dictionary:
 	## Catalog hulls have no .tscn — still deployable via hull_id.
 	if path.is_empty() and not HullRegistry.is_known_hull(hull_id):
 		return {}
+	var registration_id := str(out.get("registration_id", ""))
+	if not VesselRegistrationCatalog.has(registration_id):
+		return {}
+	var layout := BrickLayout.from_dict(brick_layout_of(out))
+	var compliance := VesselCompliance.validate(
+		layout, hull_id, registration_id, HullRegistry.make_grid(hull_id)
+	)
+	if not bool(compliance.get("ok", false)):
+		return {}
 	out["hull_id"] = hull_id
-	out["template_path"] = path
 	out["scene_path"] = path
 	return out
 
 
-static func _apply_fitout(boat: BoatBody, layout: Dictionary) -> void:
+static func _apply_fitout(
+	boat: BoatBody,
+	layout: Dictionary,
+	registration_id: String = "",
+) -> void:
 	if boat == null:
 		return
+	boat.set_meta("registration_id", registration_id)
 	if boat.has_method("apply_brick_layout"):
 		boat.call("apply_brick_layout", layout)
 	else:

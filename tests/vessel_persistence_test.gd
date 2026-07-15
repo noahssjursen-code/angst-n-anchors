@@ -34,13 +34,14 @@ func _ready() -> void:
 			"hull_id": hull_id,
 			"name": "Configured %s" % hull_id,
 			"display": str(hull.get("display", hull_id)),
+			"shaft_power_kw": 1000.0 + index * 500.0,
 			"scene_path": str(hull.get("scene_path", "")),
 			"brick_layout": layout,
 		}
 		source.upsert_owned_vessel(record)
 		expected[uid] = layout
 		index += 1
-	source.set_active_vessel(source.find_owned_vessel("persistence_passenger_catamaran"))
+	source.set_active_vessel(source.find_owned_vessel("persistence_hull_45x16_cat"))
 	source.ship_runtime_state = {
 		"world_pos": Vector3(10.0, -0.4, 30.0),
 		"yaw": 0.4,
@@ -65,24 +66,25 @@ func _ready() -> void:
 			PlayerData.json_equivalent(VesselSpawn.brick_layout_of(restored_record), expected[uid]),
 			"%s brick layout survives reload exactly" % uid,
 		)
+		_check(float(restored_record.get("shaft_power_kw", 0.0)) > 0.0, "%s power survives reload" % uid)
 	_check(
-		str(restored.active_vessel.get("uid", "")) == "persistence_passenger_catamaran",
+		str(restored.active_vessel.get("uid", "")) == "persistence_hull_45x16_cat",
 		"active configured vessel survives reload",
 	)
 	_check(restored.ship_runtime_state.is_empty(), "legacy resume-in-vessel state is discarded")
 
 	# A stale multiplayer pull may fill a bare local record, but must never
 	# overwrite an already configured local deck.
-	var configured := source.find_owned_vessel("persistence_workboat")
+	var configured := source.find_owned_vessel("persistence_hull_28x10")
 	var stale_server := {
 		"layout_hash": "stale",
-		"brick_layout": {"hull_id": "workboat", "cells": {}},
+		"brick_layout": {"hull_id": "fishing_trawler_small", "cells": {}},
 	}
 	var protected_patch := VesselSync._layout_patch_from_row(stale_server, configured)
 	_check(not protected_patch.has("brick_layout"), "stale server layout cannot erase local fit-out")
 	var hydrate_patch := VesselSync._layout_patch_from_row(stale_server, {
-		"hull_id": "workboat",
-		"brick_layout": {"hull_id": "workboat", "cells": {}},
+		"hull_id": "fishing_trawler_small",
+		"brick_layout": {"hull_id": "fishing_trawler_small", "cells": {}},
 	})
 	_check(hydrate_patch.has("brick_layout"), "server can hydrate a bare local vessel")
 	var server_linked := configured.duplicate(true)
@@ -93,20 +95,20 @@ func _ready() -> void:
 		"pull omission cannot delete a server-linked local vessel",
 	)
 
-	var uid_a := VesselSpawn.new_vessel_uid("workboat")
-	var uid_b := VesselSpawn.new_vessel_uid("workboat")
+	var uid_a := VesselSpawn.new_vessel_uid("fishing_trawler_small")
+	var uid_b := VesselSpawn.new_vessel_uid("fishing_trawler_small")
 	_check(uid_a != uid_b, "commissioned vessel UIDs do not collide")
 
-	var collision_layout_a := {"hull_id": "workboat", "cells": {"1,0,1": {"brick_id": "block", "yaw": 0}}}
-	var collision_layout_b := {"hull_id": "workboat", "cells": {"2,0,2": {"brick_id": "bench", "yaw": 90}}}
+	var collision_layout_a := {"hull_id": "fishing_trawler_small", "cells": {"1,0,1": {"brick_id": "block", "yaw": 0}}}
+	var collision_layout_b := {"hull_id": "fishing_trawler_small", "cells": {"2,0,2": {"brick_id": "bench", "yaw": 90}}}
 	var repaired_collision := PlayerData.from_dict({
 		"owned_vessels": [
-			{"uid": "old_second_uid", "hull_id": "workboat", "server_vessel_id": "server-a", "brick_layout": collision_layout_a},
-			{"uid": "old_second_uid", "hull_id": "workboat", "server_vessel_id": "server-b", "brick_layout": collision_layout_b},
+			{"uid": "old_second_uid", "hull_id": "fishing_trawler_small", "server_vessel_id": "server-a", "brick_layout": collision_layout_a},
+			{"uid": "old_second_uid", "hull_id": "fishing_trawler_small", "server_vessel_id": "server-b", "brick_layout": collision_layout_b},
 		],
 		"active_vessel": {
 			"uid": "old_second_uid",
-			"hull_id": "workboat",
+			"hull_id": "fishing_trawler_small",
 			"server_vessel_id": "server-b",
 			"brick_layout": collision_layout_b,
 		},
@@ -134,31 +136,25 @@ func _ready() -> void:
 
 	var prebuilts := PrebuiltVesselCatalog.catalog_entries()
 	var found_prebuilt := false
-	var found_catalog_prebuilt := false
 	for prebuilt in prebuilts:
 		if str(prebuilt.get("prebuilt_id", "")) == "fishing_trawler":
 			found_prebuilt = true
 			_check(
 				(VesselSpawn.brick_layout_of({
-					"hull_id": prebuilt.get("id", ""),
+					"hull_id": prebuilt.get("hull_id", ""),
 					"brick_layout": prebuilt.get("prebuilt_layout", {}),
 				}).get("cells", {}) as Dictionary).size() > 0,
 				"ready-built catalog loads the exported deck layout",
 			)
-		if str(prebuilt.get("prebuilt_id", "")) == "short_sea_container_150":
-			found_catalog_prebuilt = true
 			_check(
-				str(prebuilt.get("scene_path", "")).is_empty(),
-				"catalog prebuilt persists without a dedicated scene",
-			)
-			_check(
-				int(prebuilt.get("price_marks", -1)) == 0,
-				"catalog prebuilt preserves an explicit zero price",
+				str(prebuilt.get("registration_id", "")) == "fishing_vessel",
+				"ready-built catalog persists declared legal registration",
 			)
 			var catalog_record := VesselSpawn.normalize_record({
 				"uid": "catalog_persistence_test",
 				"hull_id": str(prebuilt.get("hull_id", "")),
 				"scene_path": "",
+				"registration_id": prebuilt.get("registration_id", ""),
 				"brick_layout": prebuilt.get("prebuilt_layout", {}),
 			})
 			_check(
@@ -166,7 +162,6 @@ func _ready() -> void:
 				"catalog prebuilt remains deployable after persistence normalization",
 			)
 	_check(found_prebuilt, "exported official prebuilt appears in shipwright catalog")
-	_check(found_catalog_prebuilt, "scene-less container prebuilt appears in shipwright catalog")
 
 	var archive_owner := PlayerData.new_uuid()
 	var archive_uid := "archive_roundtrip_test"

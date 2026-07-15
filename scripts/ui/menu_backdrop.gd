@@ -170,7 +170,9 @@ func _spawn_display_vessel() -> void:
 
 
 func _pick_display_entry() -> Dictionary:
-	var entries: Array = PrebuiltCatalogScript.catalog_entries()
+	var entries: Array = PrebuiltCatalogScript.for_sale_entries()
+	if entries.is_empty():
+		entries = PrebuiltCatalogScript.catalog_entries()
 	for raw in entries:
 		var entry := raw as Dictionary
 		if str(entry.get("prebuilt_id", "")) == DISPLAY_PREBUILT_ID:

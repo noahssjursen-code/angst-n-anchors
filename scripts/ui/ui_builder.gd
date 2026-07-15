@@ -145,6 +145,23 @@ static func button(text: String, min_size: Vector2 = Vector2(264, 42)) -> Button
 	return btn
 
 
+## Compact toolbar action. Keeps secondary controls visually subordinate to
+## the editor's primary save/confirm action.
+static func compact_button(text: String, min_width: float = 0.0) -> Button:
+	var btn := button(text, Vector2.ZERO)
+	btn.custom_minimum_size = Vector2(min_width, 34.0)
+	btn.add_theme_font_size_override("font_size", 12)
+	return btn
+
+
+## Toggle-mode button for mutually exclusive editor tools.
+static func tool_button(text: String, min_width: float = 78.0) -> Button:
+	var btn := compact_button(text, min_width)
+	btn.toggle_mode = true
+	btn.focus_mode = Control.FOCUS_NONE
+	return btn
+
+
 # ── Separators ───────────────────────────────────────────────────────────────
 
 ## Thin horizontal separator in the maritime palette.

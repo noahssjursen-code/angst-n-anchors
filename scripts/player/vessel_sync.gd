@@ -24,7 +24,7 @@ static func publish_commission(
 	if captain_id.is_empty():
 		return
 
-	var hull_id := str(entry.get("id", ""))
+	var hull_id := str(entry.get("hull_id", entry.get("id", "")))
 	var display := vessel_name.strip_edges()
 	if display.is_empty():
 		display = str(entry.get("display", "Vessel"))
@@ -40,12 +40,14 @@ static func publish_commission(
 			"hull_id": hull_id,
 			"name": display,
 			"display": display,
+			"shaft_power_kw": float(entry.get("shaft_power_kw", 1.0)),
 			"template_path": template_path,
 			"scene_path": template_path,
 		}
 	else:
 		record["hull_id"] = hull_id
 		record["name"] = display
+		record["shaft_power_kw"] = float(entry.get("shaft_power_kw", 1.0))
 		record["template_path"] = template_path
 		record["scene_path"] = template_path
 	ensure_vessel_registered(session, record)
@@ -630,11 +632,11 @@ static func _ensure_local_template(
 		if not server_vessel_id.is_empty()
 		else VesselSpawn.new_vessel_uid(hull_id)
 	)
-	var scene_path := str(entry.get("scene_path", VesselSpawn.WORKBOAT_SCENE))
+	var scene_path := str(entry.get("scene_path", VesselSpawn.TRAWLER_SMALL_SCENE))
 	return {
 		"uid": uid,
 		"template_path": scene_path,
 		"scene_path": scene_path,
 		"display": display,
-		"hull_id": str(entry.get("id", "workboat")),
+		"hull_id": str(entry.get("id", "fishing_trawler_small")),
 	}

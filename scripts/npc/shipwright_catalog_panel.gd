@@ -74,7 +74,7 @@ func open_catalog(catalog: Array, start_index: int = 0) -> void:
 	_catalog.clear()
 	for item in catalog:
 		var entry := item as Dictionary
-		var hull_id := str(entry.get("id", entry.get("hull_id", ""))).strip_edges()
+		var hull_id := str(entry.get("hull_id", entry.get("id", ""))).strip_edges()
 		var scene_path := str(entry.get("scene_path", "")).strip_edges()
 		var has_scene := not scene_path.is_empty() and ResourceLoader.exists(scene_path)
 		# Catalog hulls have no .tscn — sell them by hull_id.
@@ -311,17 +311,17 @@ func _refresh_entry() -> void:
 		_stations.length_m if _stations != null else 18.0
 	)
 
-	var display := str(entry.get("display", "Vessel"))
-	var short_name := display.split("  •  ")[0] if "  •  " in display else display
-	_name_lbl.text = short_name
-	_class_lbl.text = str(entry.get("ship_class_label", ""))
+	var display := str(entry.get("prebuilt_name", entry.get("display", "Vessel")))
+	_name_lbl.text = display
+	_class_lbl.text = str(entry.get("hull_display", "Hull platform"))
 
-	var len_m := _stations.length_m if _stations != null else Workboat.LOA_M
-	var beam_m := _stations.beam_m if _stations != null else Workboat.BEAM_M
-	var disp_t := float(entry.get("displacement_t", Workboat.DISPLACEMENT_T))
+	var len_m := _stations.length_m if _stations != null else 28.0
+	var beam_m := _stations.beam_m if _stations != null else 10.0
+	var disp_t := float(entry.get("displacement_t", 256.0))
+	var shaft_kw := float(entry.get("shaft_power_kw", 0.0))
 	_specs_lbl.text = (
-		"%s\nLength %.0f m  •  Beam %.1f m\nDisplacement ~%.0f t"
-		% [display, len_m, beam_m, disp_t]
+		"Length %.0f m  •  Beam %.1f m\nShaft power %.0f kW  •  Displacement ~%.0f t"
+		% [len_m, beam_m, shaft_kw, disp_t]
 	)
 
 	var multi := _catalog.size() > 1

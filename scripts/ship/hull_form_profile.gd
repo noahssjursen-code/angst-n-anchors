@@ -5,10 +5,10 @@ extends RefCounted
 ## longitudinal values are fractions of LOA. HullStations turns these presets
 ## into the single station lattice consumed by visuals, collision, and physics.
 
-const DEFAULT_ID := "workboat"
+const DEFAULT_ID := "fine_entry"
 
 const PRESETS: Dictionary = {
-	"container": {
+	"full_bodied": {
 		"bottom_width": 0.58,
 		"chine_width": 0.78,
 		"waterline_width": 0.88,
@@ -21,7 +21,7 @@ const PRESETS: Dictionary = {
 		"bow_keel_rise": 0.18,
 		"stern_keel_rise": 0.05,
 	},
-	"tanker": {
+	"rounded_full": {
 		"bottom_width": 0.48,
 		"chine_width": 0.76,
 		"waterline_width": 0.91,
@@ -34,7 +34,7 @@ const PRESETS: Dictionary = {
 		"bow_keel_rise": 0.22,
 		"stern_keel_rise": 0.07,
 	},
-	"lng": {
+	"high_volume": {
 		"bottom_width": 0.50,
 		"chine_width": 0.78,
 		"waterline_width": 0.90,
@@ -47,20 +47,7 @@ const PRESETS: Dictionary = {
 		"bow_keel_rise": 0.24,
 		"stern_keel_rise": 0.08,
 	},
-	"workboat": {
-		"bottom_width": 0.50,
-		"chine_width": 0.74,
-		"waterline_width": 0.87,
-		"shoulder_width": 0.98,
-		"chine_draft_fraction": 0.36,
-		"shoulder_freeboard_fraction": 0.60,
-		"underwater_bow_fraction": 0.24,
-		"stern_taper_fraction": 0.07,
-		"stern_underwater_width": 0.78,
-		"bow_keel_rise": 0.24,
-		"stern_keel_rise": 0.04,
-	},
-	"trawler": {
+	"fine_entry": {
 		"bottom_width": 0.18,
 		"chine_width": 0.60,
 		"waterline_width": 0.82,
@@ -88,9 +75,17 @@ const PRESETS: Dictionary = {
 	},
 }
 
+const LEGACY_ALIASES := {
+	"container": "full_bodied",
+	"tanker": "rounded_full",
+	"lng": "high_volume",
+	"trawler": "fine_entry",
+}
+
 
 static func resolve(profile_id: String, overrides: Dictionary = {}) -> Dictionary:
 	var id := profile_id.strip_edges().to_lower()
+	id = str(LEGACY_ALIASES.get(id, id))
 	if not PRESETS.has(id):
 		id = DEFAULT_ID
 	var result := (PRESETS[id] as Dictionary).duplicate(true)

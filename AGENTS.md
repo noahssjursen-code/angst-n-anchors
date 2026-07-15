@@ -45,7 +45,7 @@ resources/data/
   world/        # Procedural archetype parameters only; never generated mesh vertices
 scenes/apps/       # Authoring apps (run directly in Godot)
 scenes/showcases/  # Visual inspect fixtures (not authoring)
-scenes/vessels/    # Hand-authored vessel scenes (workboat.tscn)
+scenes/vessels/    # Hand-authored vessel scenes (trawler, catamaran)
 ```
 
 ---
@@ -99,9 +99,45 @@ In multiplayer this autoload becomes a per-client object the network layer popul
 
 ---
 
-## Vessel System — Deck-grid bricks
+## Vessel System — Deck-grid bricks + outfit budget
 
-Hand-authored vessel scenes (`scenes/vessels/`) own hull geometry and core systems. Deck fit-out is a **1×1×1 m brick grid**. Official ready-builts are authored in the engine app `ShipyardBrickEditor` (`scenes/apps/shipyard_brick_editor.tscn`) and sold by the shipwright from `resources/data/vessels/prebuilt/`. Layout persists as `brick_layout` on the owned-vessel ledger; spawn rebuilds via `DeckFitout`.
+Hulls are reusable geometry components, not ships. A finished store ship (prebuilt)
+combines one `hull_id` with a name, price, `shaft_power_kw`, and **1×1×1 m brick
+grid**. Many differently powered and outfitted ships may share the same hull.
+
+A vessel is a **fair, registered data model** (same hard rules for official store ships and UGC):
+
+1. **Hull** — geometry platform (L×B), physical `ShipClass`, and outfit ceiling
+2. **Registration** — declared before building; legal requirements and stricter limits
+3. **Brick layout** — visuals + which slots are filled (surplus functional gear fails validate)
+4. **Live components** — `DeckFitout` mounts only compliance-accepted slots
+5. **Discovery** — gameplay asks `BoatBody` (`get_fishing_systems()`, `get_cargo_decks()`,
+   `get_bridge_stations()`), never hunts brick names
+
+| Slot (v1) | Budget rule |
+|---|---|
+| `fishing` | max 1 |
+| `helm` | max 1 |
+| `cargo_cells` | fraction of exposed deck (y = 0 only; no hidden holds) |
+| `crane` / `tow` | 0 until those systems exist |
+
+`VesselCompliance.validate` is the final authority. It intersects the hull budget from
+`VesselOutfit` with the declared rules in
+`resources/data/vessels/registrations/catalog.json`. `BrickRules` is its editor wrapper.
+Illegal or unregistered ships hard-fail save, commission, and deployment; spawn still
+mounts only accepted slots so network/save cheats cannot activate surplus gear.
+
+`ShipClass` means physical berth/length category. `registration_id` means legal
+operating type (`general_vessel`, `fishing_vessel`, `cargo_vessel`,
+`passenger_vessel`). Never infer registration from installed bricks.
+
+Run `scenes/apps/vessel_registration_audit.tscn` to edit the source-controlled legal
+code and batch-audit every official prebuilt. Registration reports are derived, never
+stored as a stale “passed” flag.
+
+Official prebuilts are authored in `ShipyardBrickEditor` and sold from
+`resources/data/vessels/prebuilt/`. The owned-vessel ledger persists the hull,
+power, and `brick_layout`; spawn rebuilds via `VesselSpawn` + `DeckFitout`.
 
 ```gdscript
 var boat := VesselSpawn.instantiate_from_record(owned_vessel_record)
@@ -112,17 +148,24 @@ boat.place_at_waterline(water_y)
 | Always on BoatBody (core) | Brick fit-out (player) |
 |---|---|
 | Hull visual + collision | Wall / window / door / ledge / railing bricks |
-| Strip buoyancy + hydro | Cargo tiles → cargo deck |
-| Propulsion, rudder, thruster | Crane base + crane → ship crane |
+| Strip buoyancy + hydro | Cargo tiles → cargo deck (within cell budget) |
+| Propulsion, rudder, thruster | Fishing trommel → one FishingSystem when accepted |
 | BoatController / Camera / Audio | Enclosed cabin + door → helm boarding |
 | MooringComponent + auto cleats/lights | |
 | WalkDeck | |
 
-Role (ferry / cargo / trawler-with-crane) comes from bricks + rules (`BrickRules`), not kit ids. Do **not** revive `WheelhouseVisual`, hull JSON `bridge` slots, or `ShipBuilder`.
+Operating role comes from declared registration plus a passing checklist, not kit ids. Do **not**
+revive `WheelhouseVisual`, hull JSON `bridge` slots, `ShipBuilder`, `VesselKits`,
+`VesselLoadout`, or the attachment socket stack.
+
+New hull platforms belong in `resources/data/vessels/hulls/catalog.json` and use
+dimension-based ids such as `hull_90x24`. Do not name hulls after cargo, tanker,
+fishing, passenger, or other ship roles. Do not add new hand-authored vessel
+scenes for store stock; the trawler and catamaran scenes are frozen exceptions.
 
 `BrickCatalog` is the shared construction kit for vessel decks and land buildings. Marine-only pieces carry the `ship_only` tag and are filtered out of the building editor palette.
 
-### Orientation (workboat)
+### Vessel orientation
 
 **Bow = −Z, Stern = +Z, Port = −X, Starboard = +X.** Grid cells are vessel metres.
 
@@ -245,7 +288,7 @@ Port definitions, ship templates, commodities live in `resources/data/`. Scripts
 
 ## Save Format
 
-Persistence flows through `PlayerSession.save_now()` → `_snapshot_into_player_data()` (via `LocalPlayerView`) → `PlayerSaveStore.save_player()`. The save envelope is `{version, player, saved_at_unix}`; format version is currently **3**. See [`SAVE_FORMAT.md`](SAVE_FORMAT.md) for the field schema and upgrade behaviour.
+Persistence flows through `PlayerSession.save_now()` → `_snapshot_into_player_data()` (via `LocalPlayerView`) → `PlayerSaveStore.save_player()`. The save envelope is `{version, player, saved_at_unix}`; format version is currently **4**. See [`SAVE_FORMAT.md`](SAVE_FORMAT.md) for the field schema and upgrade behaviour.
 
 Saved per-captain state covers: marks, lifetime stats, appearance, active vessel ledger record, accepted contracts (with delivered counts; in-flight cargo is forfeited on load), ship runtime state (position, yaw, throttle, fuel fraction), world identity, world-clock hours, and tutorial-hint-seen flags. Autosave heartbeats every 60 s of wall-clock; `_notification(NOTIFICATION_WM_CLOSE_REQUEST)` and window focus loss both force a flush.
 

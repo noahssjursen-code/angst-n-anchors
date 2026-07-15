@@ -12,8 +12,6 @@ const DEMIHULL_BEAM_M := 3.6
 const DEPTH_M := 5.5
 const DRAFT_M := 2.2
 const DISPLACEMENT_T := 520.0
-const DECK_BOW_LENGTH_M := BEAM_M * 0.5
-const DECK_BOW_FRAC := DECK_BOW_LENGTH_M / LOA_M
 const DEMIHULL_BOW_LENGTH_M := DEMIHULL_BEAM_M * 0.5
 const DEMIHULL_BOW_FRAC := DEMIHULL_BOW_LENGTH_M / LOA_M
 ## ~38 kn design cruise — high-speed passenger cat.
@@ -32,7 +30,9 @@ static func build() -> BoatBody:
 
 
 static func make_grid() -> DeckGrid:
-	return DeckGrid.from_hull(LOA_M, BEAM_M, DEPTH_M + 0.12, DECK_BOW_LENGTH_M)
+	## Catamaran bridge decks are rectangular even though each demihull has
+	## a fine entry below it.
+	return DeckGrid.from_hull(LOA_M, BEAM_M, DEPTH_M + 0.12, 0.0)
 
 
 static func make_physics_profile() -> HullPhysicsProfile:
@@ -42,10 +42,10 @@ static func make_physics_profile() -> HullPhysicsProfile:
 	profile.depth_m = DEPTH_M
 	profile.design_draft_m = DRAFT_M
 	profile.design_displacement_t = DISPLACEMENT_T
-	profile.bow_taper_fraction = DECK_BOW_FRAC
+	profile.bow_taper_fraction = DEMIHULL_BOW_FRAC
 	profile.station_count = 10
 	profile.hull_form = HullFormProfile.resolve("catamaran_demihull")
-	profile.hull_center_of_mass = Vector3(0.0, 0.9, LOA_M * DECK_BOW_FRAC * 0.12)
+	profile.hull_center_of_mass = Vector3(0.0, 0.9, LOA_M * DEMIHULL_BOW_FRAC * 0.12)
 	profile.engine_mass_kg = 28000.0
 	profile.engine_position = Vector3(0.0, 1.0, LOA_M * 0.34)
 	profile.ballast_mass_kg = 22000.0
@@ -185,7 +185,7 @@ func _assemble() -> void:
 	hull_stations = aggregate_stations
 	hull_size = Vector3(BEAM_M, DEPTH_M, LOA_M)
 	hull_center = Vector3(0.0, DEPTH_M * 0.5, 0.0)
-	center_of_mass_longitudinal_m = LOA_M * DECK_BOW_FRAC * 0.18
+	center_of_mass_longitudinal_m = LOA_M * DEMIHULL_BOW_FRAC * 0.18
 
 	angular_damp_coeff = 0.30
 	angular_damp = angular_damp_coeff
@@ -239,17 +239,15 @@ func _build_hull_visual(stations: HullStations) -> void:
 		hull.position.x = hull_offset * side
 		root.add_child(hull)
 
-	## Full buildable bridge deck, with the same 45° bow contract as DeckGrid.
-	var deck := MeshBuilder.pointed_deck_plate(
-		LOA_M,
-		BEAM_M,
-		stations.deck_y + 0.1,
-		0.1,
-		DECK_BOW_FRAC,
+	## Flat rectangular bridge deck; the demihulls remain pointed below it.
+	var deck := MeshBuilder.box(
+		Vector3(BEAM_M, 0.1, LOA_M),
 		Color(0.38, 0.34, 0.28),
-		0.95
+		0.95,
+		0.0,
 	)
 	deck.name = "Deck"
+	deck.position.y = stations.deck_y + 0.05
 	root.add_child(deck)
 
 

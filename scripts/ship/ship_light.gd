@@ -11,7 +11,7 @@ const GROUP := "ship_light"
 enum LightType {
 	NAV_PORT      = 0,  ## Red port-side running light
 	NAV_STARBOARD = 1,  ## Green starboard running light
-	NAV_MASTHEAD  = 2,  ## White masthead steaming light (high, forward arc)
+	NAV_MASTHEAD  = 2,  ## White all-round masthead light (omni, every bearing)
 	NAV_STERN     = 3,  ## White stern light (low aft)
 	WORK          = 4,  ## White deck / external flood
 	WINDOW        = 5,  ## Warm amber cabin / wheelhouse glow
@@ -138,8 +138,10 @@ func _rebuild() -> void:
 			if build_housing:
 				_load_model("res://resources/data/lights/nav_light_masthead.json",
 						"glass_panel", Color(0.88, 0.88, 0.82))
-			_light = _make_omni(Color(1.0, 1.0, 0.95), 12.0, 4.5, 1.5)
-			_bulb = _make_bulb(Color(1.0, 0.98, 0.9), 1.1, 2.5)
+			## Point light — masthead / all-round white must read from every bearing.
+			## Stronger fill so a deck-mounted lantern still washes the topsides.
+			_light = _make_omni(Color(1.0, 1.0, 0.95), 22.0, 8.0, 2.4)
+			_bulb = _make_bulb(Color(1.0, 0.98, 0.9), 1.6, 3.5)
 		LightType.NAV_STERN:
 			if build_housing:
 				_load_model("res://resources/data/lights/nav_light_stern.json",

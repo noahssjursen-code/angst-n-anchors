@@ -794,6 +794,26 @@ func get_cargo_decks() -> Array[CargoDeckComponent]:
 	return CargoDeckComponent.get_all_for_ship(self)
 
 
+func get_fishing_systems() -> Array[FishingSystem]:
+	## Live FishingSystem nodes mounted by DeckFitout for accepted fishing slots.
+	var out: Array[FishingSystem] = []
+	for n in find_children("*", "FishingSystem", true, false):
+		var fishing := n as FishingSystem
+		if fishing != null:
+			out.append(fishing)
+	return out
+
+
+func get_bridge_stations() -> Array[BridgeInteractable]:
+	## Live helm interactables mounted for accepted helm slots.
+	var out: Array[BridgeInteractable] = []
+	for n in find_children("*", "BridgeInteractable", true, false):
+		var station := n as BridgeInteractable
+		if station != null:
+			out.append(station)
+	return out
+
+
 func get_cargo_capacity_units() -> int:
 	var total := 0
 	for deck in get_cargo_decks():
@@ -996,7 +1016,7 @@ func _walk_deck_box_size() -> Vector3:
 
 
 func _walk_deck_local_origin() -> Vector3:
-	# Prefer the brick-grid deck plane when this hull exposes one (Workboat).
+	# Prefer the brick-grid deck plane when this hull exposes one.
 	if has_method("_deck_y"):
 		return Vector3(0.0, float(call("_deck_y")) + 0.04, 0.0)
 	# Slightly above geometric deck so the slab clears the hull collider visually.

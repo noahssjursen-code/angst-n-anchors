@@ -1,14 +1,10 @@
 class_name AttachmentCatalog
 extends RefCounted
 
-## Registry of mountable modules. Scripts are loaded by path to avoid parse cycles.
+## LEGACY / QUARANTINED socket registry. Deck bricks and DeckFitout own active
+## ship equipment; do not add store-ship content to this catalog.
 
 const ENTRIES: Dictionary = {
-	"cabin_workboat_basic": {
-		"kind": "cabin",
-		"display": "Workboat cabin",
-		"script": "res://scripts/ship/attachments/cabin_workboat_basic.gd",
-	},
 	"cargo_deck_grid": {
 		"kind": "cargo",
 		"display": "Cargo deck grid",

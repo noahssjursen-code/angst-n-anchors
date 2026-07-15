@@ -8,6 +8,7 @@ func _ready() -> void:
 	_test_catamaran_twin_hulls()
 	_test_livery_material_slots()
 	_test_prebuilt_catalog_workflow()
+	_test_shared_hull_power_variants()
 	if _failures.is_empty():
 		print("Hull form geometry: all loft, collision, physics, and yard checks passed")
 		get_tree().quit()
@@ -19,7 +20,7 @@ func _ready() -> void:
 
 func _test_registered_hulls() -> void:
 	var entries := HullRegistry.catalog()
-	_check(entries.size() >= 9, "all hand-authored and catalog hulls are registered")
+	_check(entries.size() >= 8, "all hand-authored and catalog hulls are registered")
 	for entry in entries:
 		var hull_id := str(entry.get("id", ""))
 		var boat := HullRegistry.build_hull(hull_id)
@@ -41,10 +42,13 @@ func _test_registered_hulls() -> void:
 			_check(bottom < waterline, "%s bottom tapers into bilge" % hull_id)
 			_check(waterline < deck, "%s waterline flares outward to deck" % hull_id)
 		var grid := HullRegistry.make_grid(hull_id)
-		_check(
-			grid.bow_taper_cells == int(grid.width / 2),
-			"%s deck bow is an exact half-beam 45-degree taper" % hull_id
-		)
+		if hull_id == "hull_45x16_cat":
+			_check(grid.bow_taper_cells == 0, "catamaran bridge deck is rectangular")
+		else:
+			_check(
+				grid.bow_taper_cells == int(grid.width / 2),
+				"%s deck bow uses its declared 45-degree taper" % hull_id
+			)
 		_check(_mesh_faces_are_valid(boat), "%s loft mesh has valid triangles" % hull_id)
 		var collision_count := _collision_shape_count(boat)
 		_check(collision_count >= 4, "%s has convex collision slices" % hull_id)
@@ -53,7 +57,7 @@ func _test_registered_hulls() -> void:
 
 
 func _test_catamaran_twin_hulls() -> void:
-	var boat := HullRegistry.build_hull("passenger_catamaran")
+	var boat := HullRegistry.build_hull("hull_45x16_cat")
 	if boat == null:
 		_check(false, "catamaran builds for twin-hull checks")
 		return
@@ -83,9 +87,9 @@ func _test_catamaran_twin_hulls() -> void:
 
 
 func _test_livery_material_slots() -> void:
-	var boat := HullRegistry.build_hull("workboat")
+	var boat := HullRegistry.build_hull("hull_28x10")
 	if boat == null:
-		_check(false, "workboat builds for livery checks")
+		_check(false, "trawler builds for livery checks")
 		return
 	var hull := boat.get_node_or_null("HullVisual/HullShell") as MeshInstance3D
 	_check(hull != null and hull.mesh.get_surface_count() == 2, "hull exposes topside and keel paint slots")
@@ -118,16 +122,21 @@ func _test_livery_material_slots() -> void:
 func _test_prebuilt_catalog_workflow() -> void:
 	var found := false
 	for entry in PrebuiltVesselCatalog.catalog_entries():
-		if str(entry.get("prebuilt_id", "")) != "short_sea_container_150":
+		if str(entry.get("prebuilt_id", "")) != "fishing_trawler":
 			continue
 		found = true
-		_check(int(entry.get("price_marks", -1)) == 0, "saved zero shipwright price is preserved")
-		_check(str(entry.get("scene_path", "")).is_empty(), "catalog hull needs no scene path")
+		_check(int(entry.get("price_marks", -1)) >= 0, "ship SKU owns its shipwright price")
+		_check(float(entry.get("shaft_power_kw", 0.0)) > 0.0, "ship SKU owns shaft power")
+		_check(
+			str(entry.get("registration_id", "")) == "fishing_vessel",
+			"ship SKU owns its legal registration",
+		)
 		var record := VesselSpawn.normalize_record({
 			"uid": "hull_form_catalog_test",
 			"hull_id": str(entry.get("hull_id", "")),
 			"name": "Loft Test",
 			"scene_path": "",
+			"registration_id": entry.get("registration_id", ""),
 			"brick_layout": entry.get("prebuilt_layout", {}),
 		})
 		_check(
@@ -135,15 +144,53 @@ func _test_prebuilt_catalog_workflow() -> void:
 			"catalog hull remains Harbour Master deployable without a scene"
 		)
 		break
-	_check(found, "saved container appears in shipwright prebuilt catalog")
+	_check(found, "certified fishing trawler appears in shipwright prebuilt catalog")
 	var payload := ShipyardBrickEditor.make_prebuilt_payload(
 		"price_test",
 		"Price Test",
-		HullRegistry.get_by_id("container_feeder_small"),
-		{"hull_id": "container_feeder_small", "cells": {}},
-		4321
+		HullRegistry.get_by_id("hull_90x24"),
+		{"hull_id": "hull_90x24", "cells": {}},
+		4321,
+		9876.0
 	)
 	_check(int(payload.get("price_marks", 0)) == 4321, "editor payload preserves explicit price")
+	_check(float(payload.get("shaft_power_kw", 0.0)) == 9876.0, "editor payload preserves ship power")
+	_check(not payload.has("scene_path"), "store SKU spawns by hull_id without a scene key")
+
+
+func _test_shared_hull_power_variants() -> void:
+	var layout: Dictionary = {}
+	for entry in PrebuiltVesselCatalog.catalog_entries():
+		if str(entry.get("prebuilt_id", "")) == "fishing_trawler":
+			layout = (entry.get("prebuilt_layout", {}) as Dictionary).duplicate(true)
+			break
+	if layout.is_empty():
+		_check(false, "certified layout exists for shared-hull power variants")
+		return
+	var slow := VesselSpawn.instantiate_from_record({
+		"hull_id": "hull_28x10",
+		"name": "Slow fishing workboat",
+		"registration_id": "fishing_vessel",
+		"shaft_power_kw": 2500.0,
+		"brick_layout": layout,
+	})
+	var fast := VesselSpawn.instantiate_from_record({
+		"hull_id": "hull_28x10",
+		"name": "Fast fishing workboat",
+		"registration_id": "fishing_vessel",
+		"shaft_power_kw": 12000.0,
+		"brick_layout": layout,
+	})
+	_check(slow != null and fast != null, "two store ships build from one hull component")
+	if slow != null and fast != null:
+		_check(is_equal_approx(slow.length_m, fast.length_m), "shared hull keeps identical geometry")
+		_check(
+			is_equal_approx(slow.physics_profile.shaft_power_kw, 2500.0)
+				and is_equal_approx(fast.physics_profile.shaft_power_kw, 12000.0),
+			"shared hull accepts different per-ship power",
+		)
+		slow.free()
+		fast.free()
 
 
 func _mesh_faces_are_valid(boat: BoatBody) -> bool:

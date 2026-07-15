@@ -2,12 +2,11 @@ extends Node
 
 const OUTPUT_DIR := "/opt/cursor/artifacts/hull-forms"
 const HULL_IDS := [
-	"fishing_trawler_small",
-	"workboat",
-	"passenger_catamaran",
-	"container_short_sea",
-	"tanker_product",
-	"tanker_lng",
+	"hull_28x10",
+	"hull_45x16_cat",
+	"hull_150x32",
+	"hull_100x24",
+	"hull_130x28",
 ]
 
 

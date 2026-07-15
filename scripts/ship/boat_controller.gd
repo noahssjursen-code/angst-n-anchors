@@ -115,9 +115,10 @@ func _physics_process(delta: float) -> void:
 		_thruster_mode = (_thruster_mode + 1) % 3
 
 	if Input.is_action_just_pressed("boat_trawl_toggle"):
-		var fishing := _boat_body.find_child("FishingSystem", true, false) as FishingSystem
-		if fishing != null:
-			fishing.toggle_trawling()
+		if _boat_body != null:
+			var systems: Array[FishingSystem] = _boat_body.get_fishing_systems()
+			if not systems.is_empty():
+				systems[0].toggle_trawling()
 
 	if Input.is_action_just_pressed("move_forward"):
 		_step_throttle_stage(1)

@@ -187,7 +187,7 @@ func station_length(idx: int) -> float:
 	return 0.5 * (z_next - z_prev)
 
 
-## Rectangular barge/workboat stations in metres (bow −Z, stern +Z, keel y=0).
+## Rectangular barge stations in metres (bow −Z, stern +Z, keel y=0).
 static func from_box(length_m: float, beam_m: float, depth_m: float, station_count: int = 10) -> HullStations:
 	return from_pointed(length_m, beam_m, depth_m, 0.0, station_count)
 

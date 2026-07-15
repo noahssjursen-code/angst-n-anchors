@@ -5,10 +5,13 @@ extends Node3D
 ## Pure visual and tree management; no socket I/O or packet routing.
 
 const VehicleGroups = preload("res://scripts/ship/vehicle_groups.gd")
+const LARGE_SHIP_FULL_DETAIL_DISTANCE_M := 50.0
+const SHIP_DETAIL_REFRESH_S := 0.5
 
 # Tracks active visual remote representations: id -> { "node": Node3D, "type": String, "target_pos": Vector3, "target_payload": Array, "interpolated_payload": Array, "meta": String, "last_seen_ms": int }
 var _visible_entities: Dictionary = {}
 var _wake_field: OceanWakeField
+var _ship_detail_elapsed := 0.0
 
 
 func _live_node(state: Dictionary) -> Node3D:
@@ -193,6 +196,10 @@ func interpolate_entities(delta: float, position_smoothness: float, payload_smoo
 	_prune_stale_entries()
 	var pos_alpha := 1.0 - exp(-position_smoothness * delta)
 	var pay_alpha := 1.0 - exp(-payload_smoothness * delta)
+	_ship_detail_elapsed += delta
+	var refresh_ship_detail := _ship_detail_elapsed >= SHIP_DETAIL_REFRESH_S
+	if refresh_ship_detail:
+		_ship_detail_elapsed = 0.0
 	
 	for id in _visible_entities.keys():
 		var state: Dictionary = _visible_entities[id]
@@ -223,6 +230,8 @@ func interpolate_entities(delta: float, position_smoothness: float, payload_smoo
 		_apply_state_to_node(node, state["type"], current_payload, state["meta"])
 		if str(state["type"]).begins_with("ship_") and node is BoatBody:
 			_submit_remote_ship_wake(str(id), node as BoatBody, state, delta)
+			if refresh_ship_detail:
+				_promote_remote_ship_detail(str(id), node as BoatBody, state)
 
 		if state["type"] == "player":
 			_drive_player_walk_cycle(state, node, delta)
@@ -430,6 +439,7 @@ func _spawn_dynamic_entity_node(id: String, type: String, meta: String = "") -> 
 		var ship := VesselSpawn.instantiate(hull_id) as BoatBody
 		if ship != null:
 			ship.name = "RemoteShip_" + id
+			ship.set_meta("remote_replica", true)
 			ship.freeze = true
 			ship.freeze_mode = RigidBody3D.FREEZE_MODE_KINEMATIC
 			_disable_physics_in_subtree(ship)
@@ -509,9 +519,45 @@ func _sync_remote_ship_layout(entity_id: String, ship: BoatBody, meta: String, s
 func _apply_remote_ship_layout(ship: BoatBody, layout: Dictionary) -> void:
 	if ship == null or not is_instance_valid(ship) or layout.is_empty():
 		return
+	ship.set_meta("remote_replica", true)
 	if ship.has_method("apply_brick_layout"):
 		ship.call("apply_brick_layout", layout)
 	## Keep remote ships kinematic / owner-stripped after fit-out rebuild.
+	ship.freeze = true
+	ship.freeze_mode = RigidBody3D.FREEZE_MODE_KINEMATIC
+	_disable_physics_in_subtree(ship)
+	_strip_owner_only_after_fitout(ship)
+	var job := ship.get_node_or_null(DeckFitout.FITOUT_JOB)
+	if job != null and job.has_signal("readiness_changed"):
+		var callback := Callable(self, "_on_remote_fitout_readiness").bind(ship)
+		if not job.is_connected("readiness_changed", callback):
+			job.connect("readiness_changed", callback)
+
+
+func _promote_remote_ship_detail(
+	entity_id: String,
+	ship: BoatBody,
+	state: Dictionary,
+) -> void:
+	if ship == null or bool(state.get("full_detail_requested", false)):
+		return
+	if ship.get_node_or_null(DeckFitout.FITOUT_JOB) == null:
+		return
+	var observer := WorldReference.stream_position(get_viewport())
+	if not should_promote_large_ship(observer, ship.global_position):
+		return
+	state["full_detail_requested"] = true
+	_visible_entities[entity_id] = state
+	DeckFitout.request_full_detail(ship)
+
+
+static func should_promote_large_ship(observer: Vector3, ship_position: Vector3) -> bool:
+	return observer.distance_to(ship_position) <= LARGE_SHIP_FULL_DETAIL_DISTANCE_M
+
+
+func _on_remote_fitout_readiness(readiness: int, ship: BoatBody) -> void:
+	if readiness < DeckFitout.READINESS_INTERACTIVE or ship == null or not is_instance_valid(ship):
+		return
 	ship.freeze = true
 	ship.freeze_mode = RigidBody3D.FREEZE_MODE_KINEMATIC
 	_disable_physics_in_subtree(ship)
@@ -702,10 +748,11 @@ func _apply_state_to_node(node: Node3D, type: String, payload: Array, meta: Stri
 	elif type.begins_with("ship_"):
 		if node.has_method("_sync_walk_deck_transform"):
 			node.call("_sync_walk_deck_transform")
-		var fishing := node.find_child("FishingSystem", true, false) as FishingSystem
-		if fishing != null:
-			var ship_meta := _parse_meta_map(meta)
-			fishing.trawling = ship_meta.get("trawl", "0") == "1"
+		if node is BoatBody:
+			var systems: Array[FishingSystem] = (node as BoatBody).get_fishing_systems()
+			if not systems.is_empty():
+				var ship_meta := _parse_meta_map(meta)
+				systems[0].trawling = ship_meta.get("trawl", "0") == "1"
 
 	elif type == "crane" or type.begins_with("crane"):
 		# Cranes use Format 6 payload: [base_x, base_y, base_z, gantry_x, trolley_z, hoist_drop]

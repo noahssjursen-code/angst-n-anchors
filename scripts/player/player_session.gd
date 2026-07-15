@@ -179,7 +179,7 @@ func begin_new_captain(
 			"weather_generation_version": 3,
 			"layout_checksum": "",
 		}
-	# One hand-authored workboat on the registry so harbour deploy works immediately.
+	# One starter vessel on the registry so harbour deploy works immediately.
 	var starter := VesselSpawn.default_owned_record()
 	data.upsert_owned_vessel(starter)
 	data.set_active_vessel(starter)
@@ -237,6 +237,21 @@ func persist_vessel_configuration(record: Dictionary, make_active: bool = false)
 	var layout_raw: Variant = safe.get("brick_layout", null)
 	if uid.is_empty() or typeof(layout_raw) != TYPE_DICTIONARY:
 		push_error("PlayerSession: refused invalid configured vessel record")
+		return false
+	var hull_id := str(safe.get("hull_id", ""))
+	var registration_id := str(safe.get("registration_id", ""))
+	var compliance := VesselCompliance.validate(
+		BrickLayout.from_dict(layout_raw as Dictionary),
+		hull_id,
+		registration_id,
+		HullRegistry.make_grid(hull_id),
+	)
+	if not bool(compliance.get("ok", false)):
+		var findings: PackedStringArray = compliance.get("errors", PackedStringArray())
+		push_error(
+			"PlayerSession: refused uncertified vessel uid=%s — %s"
+			% [uid, " · ".join(findings)]
+		)
 		return false
 	if not _persistent_io_enabled:
 		data.upsert_owned_vessel(safe)
