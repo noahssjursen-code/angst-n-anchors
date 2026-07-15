@@ -6,7 +6,7 @@ extends RefCounted
 
 const PATCH_SCALE_M := 2800.0
 const DETAIL_SCALE_M := 520.0
-## Keep a thin bare rock/svaberg strip, then let canopy start close to shore.
+## Keep a thin bare rock strip at the shore, then let canopy start close inland.
 const MIN_INLAND_M := 22.0
 const FULL_INLAND_M := 95.0
 const MAX_SLOPE := 0.58

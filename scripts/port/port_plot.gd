@@ -11,6 +11,8 @@ extends Node3D
 @export var plot_depth := 140.0
 @export var port_size := 1
 
+@export var show_site_gizmos := false
+
 var _data: PortData
 var _layout_graph: PortLayoutGraph
 
@@ -41,6 +43,11 @@ func _rebuild() -> void:
 	visualizer.name = "PortLayoutGraph"
 	visualizer.configure(_layout_graph)
 	add_child(visualizer)
+	if show_site_gizmos:
+		var gizmos := PortDebugGizmos.new()
+		gizmos.name = "PortDebugGizmos"
+		gizmos.configure(_layout_graph)
+		add_child(gizmos)
 
 	if not port_label.is_empty():
 		var label := Label3D.new()

@@ -6,11 +6,23 @@ extends RefCounted
 ## only merges nearly-straight runs; 90° / 45° snap is optional on long spans.
 
 const FOUNDATION_SURFACE_Y_M := 0.62
-const FOUNDATION_THICKNESS_M := 3.6
-const FOUNDATION_LAND_DEPTH_M := 40.0
+const FOUNDATION_EMBED_DEPTH_M := 48.0
+const FOUNDATION_SEAWARD_DEPTH_M := 14.0
+## Town concrete back from the shore line (+Z local). Fixed — size only lengthens alongshore.
+const FOUNDATION_TOWN_INLAND_M := 88.0
+## Extra underground mass tying the platform into the island bedrock.
+const FOUNDATION_BURIAL_EXTRA_M := 52.0
+const FOUNDATION_DOCK_REACH_M := 26.0
 const FOUNDATION_BAY_LIP_M := 6.0
+## Even spacing along the harbour spine — mesh quads stay uniform on bends.
+const FOUNDATION_SPINE_SAMPLE_M := 22.0
+## Coast scan must stay near the registered site — not across a whole fjord.
+const TRACE_MAX_HALF_DEPTH_M := 280.0
+const PORT_LOCAL_INLAND_DIR := Vector2(0.0, 1.0)
+const PORT_LOCAL_SEAWARD_DIR := Vector2(0.0, -1.0)
 const MAX_SPINE_SEGMENT_M := 72.0
 const SPINE_RESAMPLE_STEP_M := 36.0
+const STRAIGHT_RUN_ANGLE_DEG := 12.0
 
 
 static func port_area_half_width_m(size: int) -> float:
@@ -19,6 +31,10 @@ static func port_area_half_width_m(size: int) -> float:
 
 static func port_area_half_depth_m(size: int) -> float:
 	return PortSizing.terrain_pad_depth_m(size) * 0.5
+
+
+static func trace_half_depth_m(size: int) -> float:
+	return minf(port_area_half_depth_m(size), TRACE_MAX_HALF_DEPTH_M)
 
 
 static func port_area_half_extent_m(size: int) -> float:
@@ -39,45 +55,59 @@ static func trace_in_port_area(
 ) -> PackedVector2Array:
 	if layout == null:
 		return PackedVector2Array()
-	var span_x := half_width_m * 2.0
-	var span_z := half_depth_m * 2.0
-	var grid_n := clampi(int(ceil(maxf(span_x, span_z) / sample_step_m)), 12, 96)
-	var land_grid: Array = []
-	for _z in range(grid_n + 1):
-		var row: Array = []
-		for _x in range(grid_n + 1):
-			row.append(false)
-		land_grid.append(row)
+	var coast := _trace_shoreline_scanline(
+		layout,
+		port_origin,
+		port_yaw,
+		half_width_m,
+		half_depth_m,
+		sample_step_m,
+	)
+	if coast.size() >= 3:
+		return coast
+	return synthetic_coast(0, half_width_m, half_depth_m)
 
-	for iz in range(grid_n + 1):
-		for ix in range(grid_n + 1):
-			var local := Vector2(
-				- half_width_m + float(ix) / float(grid_n) * span_x,
-				- half_depth_m + float(iz) / float(grid_n) * span_z,
+
+## One point per alongshore column where the SDF crosses water → land.
+## Left-to-right order — no greedy chaining, no self-intersecting loops.
+static func _trace_shoreline_scanline(
+		layout: WorldLayout,
+		port_origin: Vector3,
+		port_yaw: float,
+		half_width_m: float,
+		half_depth_m: float,
+		column_step_m: float = 10.0,
+) -> PackedVector2Array:
+	var row_step_m := clampf(column_step_m * 0.45, 4.0, 10.0)
+	var out := PackedVector2Array()
+	var x := -half_width_m
+	while x <= half_width_m + 0.01:
+		var best_local := Vector2.ZERO
+		var best_score := INF
+		var z := -half_depth_m
+		var prev_sd := layout.sample_signed_distance(
+			_port_local_to_world(Vector2(x, z), port_origin, port_yaw),
+		)
+		z += row_step_m
+		while z <= half_depth_m + 0.01:
+			var local := Vector2(x, z)
+			var sd := layout.sample_signed_distance(
+				_port_local_to_world(local, port_origin, port_yaw),
 			)
-			var world := _port_local_to_world(local, port_origin, port_yaw)
-			land_grid[iz][ix] = layout.is_land(world)
-
-	var edge_points: Array[Vector2] = []
-	for iz in range(grid_n):
-		for ix in range(grid_n):
-			var bl := bool(land_grid[iz][ix])
-			var br := bool(land_grid[iz][ix + 1])
-			var tl := bool(land_grid[iz + 1][ix])
-			var tr := bool(land_grid[iz + 1][ix + 1])
-			var x0 := -half_width_m + float(ix) / float(grid_n) * span_x
-			var x1 := -half_width_m + float(ix + 1) / float(grid_n) * span_x
-			var z0 := -half_depth_m + float(iz) / float(grid_n) * span_z
-			var z1 := -half_depth_m + float(iz + 1) / float(grid_n) * span_z
-			_collect_edge(edge_points, bl, br, Vector2(lerpf(x0, x1, 0.5), z0))
-			_collect_edge(edge_points, tl, tr, Vector2(lerpf(x0, x1, 0.5), z1))
-			_collect_edge(edge_points, bl, tl, Vector2(x0, lerpf(z0, z1, 0.5)))
-			_collect_edge(edge_points, br, tr, Vector2(x1, lerpf(z0, z1, 0.5)))
-
-	if edge_points.is_empty():
-		return synthetic_coast(0, half_width_m, half_depth_m)
-	var chain := _chain_edge_points(edge_points, maxf(48.0, half_width_m * 0.05))
-	return simplify_coast_path(chain, 5.0, 18.0)
+			if prev_sd > 0.0 and sd <= 0.0:
+				var denom := prev_sd - sd
+				var t := 0.5 if absf(denom) < 0.0001 else clampf(prev_sd / denom, 0.0, 1.0)
+				var cross := Vector2(x, z - row_step_m + row_step_m * t)
+				var score := cross.distance_to(Vector2.ZERO)
+				if score < best_score:
+					best_score = score
+					best_local = cross
+			prev_sd = sd
+			z += row_step_m
+		if best_score < INF:
+			out.append(best_local)
+		x += column_step_m
+	return _dedupe_close_points(out, 3.0)
 
 
 ## Dense samples along the best traced-coast span for this port size/seed.
@@ -93,23 +123,14 @@ static func select_harbour_span(
 	var total_length := float(arc_lengths[arc_lengths.size() - 1])
 	if total_length <= 1.0:
 		return coast_path
-	var pad_width := PortSizing.terrain_pad_width_m(size)
 	var span_fraction := float(length_options.get("span_fraction", 0.62))
-	var min_shore_m := float(length_options.get("min_shore_m", PortSizing.design_hull_loa_m(size) * 1.15))
-	var desired_length := maxf(pad_width * span_fraction, min_shore_m)
+	var min_shore_m := float(length_options.get("min_shore_m", PortSizing.design_hull_loa_m(size) * 1.1))
+	## Along-shore quay length only — never terrain pad width (that balloons into open water).
+	var quay_run_m := PortSizing.quay_half_length_m(size) * 2.0
+	var desired_length := maxf(quay_run_m * lerpf(0.92, 1.06, span_fraction), min_shore_m)
 	var span_length := minf(desired_length, total_length)
-	var candidate_count := clampi(int(total_length / maxf(48.0, pad_width * 0.08)), 3, 18)
-	var best_center := total_length * 0.5
-	var best_score := INF
-	for index in range(candidate_count):
-		var fraction := (float(index) + 0.5) / float(candidate_count)
-		var center := lerpf(span_length * 0.5, total_length - span_length * 0.5, fraction)
-		var score := _span_turn_score(coast_path, arc_lengths, center, span_length)
-		score += float(abs((site_seed ^ (index * 92821)) % 997)) * 0.0001
-		if score < best_score:
-			best_score = score
-			best_center = center
-	var span_start := best_center - span_length * 0.5
+	var anchor_arc := _harbour_anchor_arc_m(total_length, site_seed)
+	var span_start := clampf(anchor_arc - span_length * 0.5, 0.0, maxf(0.0, total_length - span_length))
 	var sample_step := clampf(span_length / 28.0, 10.0, 22.0)
 	var out := PackedVector2Array()
 	var arc_s := span_start
@@ -120,6 +141,20 @@ static func select_harbour_span(
 	var end_sample := point_at_arc_s(coast_path, arc_lengths, span_start + span_length)
 	out.append(end_sample.get("position", Vector2.ZERO) as Vector2)
 	return _dedupe_close_points(out, 4.0)
+
+
+static func _harbour_anchor_fraction(site_seed: int) -> float:
+	var value := int(site_seed) ^ 0x414E4348
+	value = ((value ^ (value >> 16)) * 0x45d9f3b) & 0x7fffffff
+	return float(value % 10000) / 9999.0
+
+
+## Fixed along-shore anchor for a site. Size only widens the span around this point.
+static func _harbour_anchor_arc_m(total_length: float, site_seed: int) -> float:
+	if total_length <= 1.0:
+		return 0.0
+	var margin := minf(total_length * 0.12, 80.0)
+	return lerpf(margin, total_length - margin, _harbour_anchor_fraction(site_seed))
 
 
 ## Grows the mainland edge seaward to meet the dock. Bay water stays outside;
@@ -135,42 +170,65 @@ static func fit_port_shoreline(
 		profile_override: String = "",
 ) -> Dictionary:
 	var length_options := harbour_length_options(size, site_seed, profile_override)
-	var raw_span := select_harbour_span(traced_coast, size, site_seed, length_options)
-	var natural := simplify_coast_path(raw_span, 14.0, 26.0)
-	natural = merge_long_runs(natural, _target_segment_m(size, length_options) * 1.15, 20.0)
-	natural = _conform_spine_to_arc(natural, raw_span, MAX_SPINE_SEGMENT_M, SPINE_RESAMPLE_STEP_M)
-	natural = _ensure_ribbon_spine(natural, raw_span)
-	natural = orient_seaward(layout, port_origin, port_yaw, natural)
-	var rng := RandomNumberGenerator.new()
-	rng.seed = int(site_seed) ^ 0x504F5254 ^ (size * 31337)
-	var size_t := float(size) / float(PortSizing.MAX_SIZE)
-	var reach_scale := {"compact": 0.88, "standard": 1.0, "extended": 1.14}
+	var coast_dots := select_harbour_span(traced_coast, size, site_seed, length_options)
+	coast_dots = _prune_spine_jumps(coast_dots)
+	coast_dots = resample_spine_even(coast_dots, FOUNDATION_SPINE_SAMPLE_M)
+	if coast_dots.size() < 2:
+		return _empty_shoreline_fit(size, length_options)
+	var reach_scale := {"compact": 0.92, "standard": 1.0, "extended": 1.06}
 	var profile_name := str(length_options.get("profile", "standard"))
-	var dock_reach := lerpf(22.0, 52.0, size_t) \
-			* float(reach_scale.get(profile_name, 1.0)) \
-			* rng.randf_range(0.92, 1.08)
-	var dock_face := offset_polyline(natural, dock_reach, true)
-	var foundation := foundation_ribbon_grown(natural, dock_face, dock_reach)
-	foundation["footprint_quads"] = _footprint_quads(
-		foundation.get("land_edge", []) as Array,
-		foundation.get("water_edge", []) as Array,
-	)
-	foundation["inland_blend_quads"] = _inland_blend_quads(
-		foundation.get("land_edge", []) as Array,
-		_inland_blend_depth_m(size),
-	)
+	var dock_reach := FOUNDATION_DOCK_REACH_M * float(reach_scale.get(profile_name, 1.0))
+	var foundation := build_foundation_plan(coast_dots, dock_reach)
 	foundation["length_profile"] = profile_name
+	var dock_face_pts := _polyline_from_array(foundation.get("dock_face_polyline", []) as Array)
 	return {
-		"harbour_coast": dock_face,
-		"natural_shore": natural,
-		"span_coast": raw_span,
-		"style": "grown_dock",
+		"harbour_coast": dock_face_pts,
+		"natural_shore": coast_dots,
+		"span_coast": coast_dots,
+		"style": "coast_dots",
 		"length_profile": profile_name,
-		"shore_length_m": _polyline_length_m(natural),
+		"shore_length_m": _polyline_length_m(coast_dots),
 		"dock_reach_m": dock_reach,
 		"design_hull_loa_m": PortSizing.design_hull_loa_m(size),
 		"foundation": foundation,
 	}
+
+
+static func _empty_shoreline_fit(size: int, length_options: Dictionary) -> Dictionary:
+	var profile_name := str(length_options.get("profile", "standard"))
+	return {
+		"harbour_coast": PackedVector2Array(),
+		"natural_shore": PackedVector2Array(),
+		"span_coast": PackedVector2Array(),
+		"style": "coast_dots",
+		"length_profile": profile_name,
+		"shore_length_m": 0.0,
+		"dock_reach_m": FOUNDATION_DOCK_REACH_M,
+		"design_hull_loa_m": PortSizing.design_hull_loa_m(size),
+		"foundation": {"spine": [], "segments": []},
+	}
+
+
+## Drop hairpin jumps that only happen when a coast polyline self-crosses.
+static func _prune_spine_jumps(
+		path: PackedVector2Array,
+		max_segment_m: float = 56.0,
+) -> PackedVector2Array:
+	if path.size() < 2:
+		return path
+	var out := PackedVector2Array([path[0]])
+	for index in range(1, path.size()):
+		var step := path[index] - out[out.size() - 1]
+		var length := step.length()
+		if length > max_segment_m or length < 0.5:
+			continue
+		if out.size() >= 2:
+			var prev := (out[out.size() - 1] - out[out.size() - 2]).normalized()
+			var dir := step / length
+			if prev.dot(dir) < -0.12:
+				continue
+		out.append(path[index])
+	return out if out.size() >= 2 else path
 
 
 static func harbour_length_options(
@@ -179,7 +237,7 @@ static func harbour_length_options(
 		profile_override: String = "",
 ) -> Dictionary:
 	var rng := RandomNumberGenerator.new()
-	rng.seed = int(site_seed) ^ 0x4C454E47 ^ (size * 7717)
+	rng.seed = int(site_seed) ^ 0x4C454E47
 	var profiles: Array[String] = ["compact", "standard", "extended"]
 	var profile: String
 	if profile_override in profiles:
@@ -203,6 +261,94 @@ static func _target_segment_m(size: int, length_options: Dictionary) -> float:
 	var profile := str(length_options.get("profile", "standard"))
 	var scale := {"compact": 0.85, "standard": 1.0, "extended": 1.15}
 	return normalized_min_segment_m(size) * float(scale.get(profile, 1.0))
+
+
+## Merge consecutive segments that agree with the run's average bearing. Corners
+## survive only where the chain actually turns — interior wiggle becomes one plank.
+static func straighten_spine_runs(
+		points: PackedVector2Array,
+		min_run_m: float,
+		angle_tolerance_deg: float = STRAIGHT_RUN_ANGLE_DEG,
+) -> PackedVector2Array:
+	if points.size() < 3:
+		return points
+	var run_starts: Array[int] = [0]
+	var run_dirs: Array[Vector2] = []
+	for index in range(1, points.size()):
+		var seg := points[index] - points[index - 1]
+		if seg.length_squared() < 0.25:
+			continue
+		var seg_dir := seg.normalized()
+		if run_dirs.is_empty():
+			run_dirs.append(seg_dir)
+			continue
+		var mean_dir := _average_direction(run_dirs)
+		if _angle_delta_deg(mean_dir, seg_dir) > angle_tolerance_deg:
+			run_starts.append(index - 1)
+			run_dirs = [seg_dir]
+		else:
+			run_dirs.append(seg_dir)
+	if run_starts.is_empty():
+		return points
+	var merged_starts: Array[int] = [int(run_starts[0])]
+	for run_index in range(1, run_starts.size()):
+		var start_i: int = int(run_starts[run_index - 1])
+		var end_i: int = int(run_starts[run_index])
+		var run_len := points[end_i].distance_to(points[start_i])
+		if run_len < min_run_m and merged_starts.size() > 1:
+			continue
+		merged_starts.append(int(run_starts[run_index]))
+	var corners := PackedVector2Array()
+	for start_i in merged_starts:
+		corners.append(points[start_i])
+	corners.append(points[points.size() - 1])
+	return _dedupe_close_points(corners, 4.0)
+
+
+## Split long straight edges without re-bending them back onto the traced coast.
+static func subdivide_straight_runs(
+		points: PackedVector2Array,
+		max_segment_m: float,
+) -> PackedVector2Array:
+	if points.size() < 2 or max_segment_m <= 0.0:
+		return points
+	var out := PackedVector2Array([points[0]])
+	for index in range(1, points.size()):
+		var start := points[index - 1]
+		var end := points[index]
+		var span := end - start
+		var length := span.length()
+		if length <= max_segment_m:
+			if out[out.size() - 1].distance_to(end) > 0.5:
+				out.append(end)
+			continue
+		var direction := span / length
+		var dist := max_segment_m
+		while dist < length - 0.5:
+			var sample := start + direction * dist
+			if out[out.size() - 1].distance_to(sample) > 0.5:
+				out.append(sample)
+			dist += max_segment_m
+		if out[out.size() - 1].distance_to(end) > 0.5:
+			out.append(end)
+	return out
+
+
+static func _average_direction(directions: Array[Vector2]) -> Vector2:
+	var sum := Vector2.ZERO
+	for dir in directions:
+		sum += dir
+	return sum.normalized() if sum.length_squared() > 0.001 else Vector2.RIGHT
+
+
+static func _angle_delta_deg(a: Vector2, b: Vector2) -> float:
+	if a.length_squared() < 0.001 or b.length_squared() < 0.001:
+		return 0.0
+	return absf(wrapf(
+		rad_to_deg(atan2(b.y, b.x)) - rad_to_deg(atan2(a.y, a.x)),
+		-180.0,
+		180.0,
+	))
 
 
 ## Drop points closer than min_point_dist_m; merge corners gentler than merge_angle_deg.
@@ -347,84 +493,143 @@ static func offset_polyline(
 	return out
 
 
-static func foundation_ribbon_grown(
-		natural_shore: PackedVector2Array,
-		dock_face: PackedVector2Array,
+## Spine-only harbour plan. Mesh rows are derived at stamp time from spine + constants.
+static func build_foundation_plan(
+		spine: PackedVector2Array,
 		dock_reach_m: float,
-		land_depth_m: float = FOUNDATION_LAND_DEPTH_M,
 		bay_lip_m: float = FOUNDATION_BAY_LIP_M,
+		town_inland_m: float = FOUNDATION_TOWN_INLAND_M,
+		burial_extra_m: float = FOUNDATION_BURIAL_EXTRA_M,
 ) -> Dictionary:
-	var land_edge: Array = []
-	var water_edge: Array = []
-	var visual_water_edge: Array = []
 	var segments: Array = []
-	if natural_shore.size() < 2 or natural_shore.size() != dock_face.size():
-		return {"land_edge": land_edge, "water_edge": water_edge, "segments": segments}
-	var inland := offset_polyline(natural_shore, -land_depth_m, false)
-	var seaward := offset_polyline(dock_face, 0.0, false)
-	var visual := offset_polyline(dock_face, bay_lip_m, true)
-	for index in range(natural_shore.size()):
-		land_edge.append([inland[index].x, inland[index].y])
-		water_edge.append([seaward[index].x, seaward[index].y])
-		visual_water_edge.append([visual[index].x, visual[index].y])
+	if spine.size() < 2:
+		return {"spine": [], "segments": segments}
+	var dock_face := offset_spine_perpendicular(spine, dock_reach_m, PORT_LOCAL_INLAND_DIR, false)
 	for index in range(dock_face.size() - 1):
 		var a := dock_face[index]
 		var b := dock_face[index + 1]
 		if a.distance_to(b) < 0.5:
 			continue
-		segments.append(_make_segment_record(a, b, land_depth_m + dock_reach_m))
+		segments.append(_make_segment_record(a, b, dock_reach_m + bay_lip_m))
 	return {
-		"land_edge": land_edge,
-		"water_edge": water_edge,
-		"visual_water_edge": visual_water_edge,
-		"segments": segments,
-		"land_depth_m": land_depth_m,
+		"spine": _polyline_to_array(spine),
+		"town_inland_m": town_inland_m,
+		"burial_extra_m": burial_extra_m,
 		"dock_reach_m": dock_reach_m,
 		"bay_lip_m": bay_lip_m,
-		"thickness_m": FOUNDATION_THICKNESS_M,
+		"embed_depth_m": FOUNDATION_EMBED_DEPTH_M,
+		"seaward_depth_m": FOUNDATION_SEAWARD_DEPTH_M,
 		"surface_y_m": FOUNDATION_SURFACE_Y_M,
-		"natural_shore_polyline": _polyline_to_array(natural_shore),
+		"natural_shore_polyline": _polyline_to_array(spine),
 		"dock_face_polyline": _polyline_to_array(dock_face),
 		"coast_polyline": _polyline_to_array(dock_face),
-	}
-
-
-static func foundation_ribbon(
-		coast_path: PackedVector2Array,
-		land_depth_m: float = FOUNDATION_LAND_DEPTH_M,
-		water_depth_m: float = FOUNDATION_BAY_LIP_M,
-) -> Dictionary:
-	var land_edge: Array = []
-	var water_edge: Array = []
-	var segments: Array = []
-	if coast_path.size() < 2:
-		return {"land_edge": land_edge, "water_edge": water_edge, "segments": segments}
-	for index in range(coast_path.size()):
-		var previous := coast_path[maxi(index - 1, 0)]
-		var next := coast_path[mini(index + 1, coast_path.size() - 1)]
-		var tangent := (next - previous).normalized()
-		if tangent.length_squared() < 0.001:
-			tangent = Vector2(1.0, 0.0)
-		var water_normal := Vector2(tangent.y, -tangent.x)
-		var coast := coast_path[index]
-		land_edge.append([coast.x - water_normal.x * land_depth_m, coast.y - water_normal.y * land_depth_m])
-		water_edge.append([coast.x + water_normal.x * water_depth_m, coast.y + water_normal.y * water_depth_m])
-	for index in range(coast_path.size() - 1):
-		var a := coast_path[index]
-		var b := coast_path[index + 1]
-		var direction := b - a
-		if direction.length() < 0.5:
-			continue
-		segments.append(_make_segment_record(a, b, land_depth_m + water_depth_m))
-	return {
-		"land_edge": land_edge,
-		"water_edge": water_edge,
 		"segments": segments,
-		"land_depth_m": land_depth_m,
-		"water_depth_m": water_depth_m,
-		"surface_y_m": FOUNDATION_SURFACE_Y_M,
-		"coast_polyline": _polyline_to_array(coast_path),
 	}
+
+
+## Push spine samples onto land when they sit in open water. Never drops points.
+static func nudge_spine_onto_land(
+		layout: WorldLayout,
+		port_origin: Vector3,
+		port_yaw: float,
+		path: PackedVector2Array,
+) -> PackedVector2Array:
+	if layout == null or path.is_empty():
+		return path
+	var out := PackedVector2Array()
+	for index in range(path.size()):
+		var local := path[index]
+		var inland := spine_inland_normal(path, index, PORT_LOCAL_INLAND_DIR)
+		for _step in range(32):
+			var world := _port_local_to_world(local, port_origin, port_yaw)
+			if layout.sample_signed_distance(world) <= 0.0:
+				break
+			local += inland * 5.0
+		out.append(local)
+	return out
+
+
+## Unit normal perpendicular to the spine, pointing toward port inland (+Z local).
+static func spine_inland_normal(
+		path: PackedVector2Array,
+		index: int,
+		reference_inland: Vector2 = PORT_LOCAL_INLAND_DIR,
+) -> Vector2:
+	if path.size() < 2:
+		return reference_inland.normalized()
+	var previous := path[maxi(index - 1, 0)]
+	var next := path[mini(index + 1, path.size() - 1)]
+	var tangent := (next - previous).normalized()
+	if tangent.length_squared() < 0.001:
+		return reference_inland.normalized()
+	var left := Vector2(-tangent.y, tangent.x)
+	var right := Vector2(tangent.y, -tangent.x)
+	var ref := reference_inland.normalized()
+	if left.dot(ref) >= right.dot(ref):
+		return left.normalized() if left.length_squared() > 0.001 else ref
+	return right.normalized() if right.length_squared() > 0.001 else ref
+
+
+## Offset each spine sample perpendicular to the traced coast.
+static func offset_spine_perpendicular(
+		path: PackedVector2Array,
+		distance_m: float,
+		reference_inland: Vector2 = PORT_LOCAL_INLAND_DIR,
+		toward_inland: bool = true,
+) -> PackedVector2Array:
+	if path.is_empty() or is_equal_approx(distance_m, 0.0):
+		return path
+	var sign := 1.0 if toward_inland else -1.0
+	var out := PackedVector2Array()
+	for index in range(path.size()):
+		var normal := spine_inland_normal(path, index, reference_inland)
+		out.append(path[index] + normal * distance_m * sign)
+	return out
+
+
+## Even arc-length resample so ruled quads stay consistent on curves.
+static func resample_spine_even(path: PackedVector2Array, spacing_m: float) -> PackedVector2Array:
+	if path.size() < 2 or spacing_m <= 0.5:
+		return path
+	var arcs := path_arc_lengths(path)
+	var total := float(arcs[arcs.size() - 1])
+	if total <= spacing_m:
+		return path
+	var out := PackedVector2Array()
+	var arc_s := 0.0
+	while arc_s <= total + 0.01:
+		out.append(point_at_arc_s(path, arcs, arc_s).get("position", Vector2.ZERO) as Vector2)
+		arc_s += spacing_m
+	var end_pt := point_at_arc_s(path, arcs, total).get("position", Vector2.ZERO) as Vector2
+	if out.is_empty() or out[out.size() - 1].distance_to(end_pt) > 1.0:
+		out.append(end_pt)
+	return out if out.size() >= 2 else path
+
+
+static func _polyline_from_array(points: Array) -> PackedVector2Array:
+	var out := PackedVector2Array()
+	for raw in points:
+		var pt := raw as Array
+		if pt.size() >= 2:
+			out.append(Vector2(float(pt[0]), float(pt[1])))
+	return out
+
+
+## Uniform translation — stable inland burial without curve-normal blowout into the sea.
+static func offset_polyline_along(
+		path: PackedVector2Array,
+		direction_local: Vector2,
+		distance_m: float,
+) -> PackedVector2Array:
+	if path.is_empty() or is_equal_approx(distance_m, 0.0):
+		return path
+	var dir := direction_local.normalized()
+	if dir.length_squared() < 0.001:
+		dir = Vector2(0.0, 1.0)
+	var out := PackedVector2Array()
+	for point in path:
+		out.append(point + dir * distance_m)
+	return out
 
 
 static func orient_seaward(
@@ -658,56 +863,6 @@ static func _ensure_ribbon_spine(spine: PackedVector2Array, arc: PackedVector2Ar
 	if spine.size() >= min_points:
 		return spine
 	return _resample_arc_uniform(arc, min_points)
-
-
-static func _inland_blend_depth_m(size: int) -> float:
-	var size_t := float(size) / float(PortSizing.MAX_SIZE)
-	return lerpf(72.0, 160.0, size_t)
-
-
-static func _footprint_quads(land_edge: Array, water_edge: Array) -> Array:
-	var quads: Array = []
-	if land_edge.size() < 2 or land_edge.size() != water_edge.size():
-		return quads
-	for index in range(land_edge.size() - 1):
-		quads.append({
-			"corners": [
-				land_edge[index],
-				land_edge[index + 1],
-				water_edge[index + 1],
-				water_edge[index],
-			],
-		})
-	return quads
-
-
-static func _inland_blend_quads(land_edge: Array, blend_depth_m: float) -> Array:
-	var quads: Array = []
-	if land_edge.size() < 2 or blend_depth_m <= 0.0:
-		return quads
-	for index in range(land_edge.size() - 1):
-		var near_a := land_edge[index] as Array
-		var near_b := land_edge[index + 1] as Array
-		if near_a.size() < 2 or near_b.size() < 2:
-			continue
-		var a := Vector2(float(near_a[0]), float(near_a[1]))
-		var b := Vector2(float(near_b[0]), float(near_b[1]))
-		var tangent := (b - a).normalized()
-		if tangent.length_squared() < 0.001:
-			continue
-		var inland_normal := Vector2(-tangent.y, tangent.x)
-		var far_a := a + inland_normal * blend_depth_m
-		var far_b := b + inland_normal * blend_depth_m
-		quads.append({
-			"corners": [
-				[far_a.x, far_a.y],
-				[far_b.x, far_b.y],
-				near_b,
-				near_a,
-			],
-			"blend_depth_m": blend_depth_m,
-		})
-	return quads
 
 
 static func _make_segment_record(a: Vector2, b: Vector2, width_m: float) -> Dictionary:

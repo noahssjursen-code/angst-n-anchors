@@ -63,11 +63,6 @@ func _test_shared_borders(layout: WorldLayout) -> void:
 func _test_water_and_shoreline(layout: WorldLayout) -> void:
 	var open_water := STREAMER.build_chunk_mesh_data(layout, Vector2i(-16, 14), 50.0)
 	_check((open_water["indices"] as PackedInt32Array).size() == 0, "fully submerged chunk excludes terrain")
-	var open_coating := STREAMER.build_coastal_coating_mesh_data(open_water)
-	_check(
-		(open_coating["indices"] as PackedInt32Array).is_empty(),
-		"open water emits no svaberg coating",
-	)
 
 	var shoreline_found := false
 	for z in range(-16, 16):
@@ -94,11 +89,6 @@ func _test_water_and_shoreline(layout: WorldLayout) -> void:
 			_check(
 				vertices.size() > side * side,
 				"shoreline chunk adds zero-crossing vertices instead of stair-step quads",
-			)
-			var coating := STREAMER.build_coastal_coating_mesh_data(data)
-			_check(
-				not (coating["indices"] as PackedInt32Array).is_empty(),
-				"shoreline chunk emits continuous svaberg coating",
 			)
 			break
 		if shoreline_found:
@@ -136,7 +126,7 @@ func _test_submerged_shelf_has_no_collision() -> void:
 	}
 	_check(
 		STREAMER.collision_faces(submerged).is_empty(),
-		"fully submerged svaberg remains visual-only",
+		"fully submerged shelf remains visual-only",
 	)
 
 

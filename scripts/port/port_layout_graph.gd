@@ -165,16 +165,30 @@ func bounds() -> AABB:
 			max_point.z = maxf(max_point.z, corner.y)
 		max_height = maxf(max_height, definition.footprint_m.y)
 	var foundation := initial_attributes.get("foundation", {}) as Dictionary
-	for edge_key in ["land_edge", "water_edge"]:
-		for raw_point in foundation.get(edge_key, []) as Array:
-			var point := raw_point as Array
-			if point.size() < 2:
-				continue
-			min_point.x = minf(min_point.x, float(point[0]))
-			min_point.z = minf(min_point.z, float(point[1]))
-			max_point.x = maxf(max_point.x, float(point[0]))
-			max_point.z = maxf(max_point.z, float(point[1]))
-			max_height = maxf(max_height, 0.9)
+	var spine := foundation.get("spine", []) as Array
+	var inland_m := float(foundation.get("town_inland_m", PortCoastTracer.FOUNDATION_TOWN_INLAND_M))
+	var sea_m := float(foundation.get("dock_reach_m", PortCoastTracer.FOUNDATION_DOCK_REACH_M)) \
+			+ float(foundation.get("bay_lip_m", PortCoastTracer.FOUNDATION_BAY_LIP_M))
+	var spine_pts := PackedVector2Array()
+	for raw_point in spine:
+		var point := raw_point as Array
+		if point.size() < 2:
+			continue
+		spine_pts.append(Vector2(float(point[0]), float(point[1])))
+	if spine_pts.size() >= 2:
+		var inland_pts := PortCoastTracer.offset_spine_perpendicular(
+			spine_pts, inland_m, PortCoastTracer.PORT_LOCAL_INLAND_DIR, true,
+		)
+		var sea_pts := PortCoastTracer.offset_spine_perpendicular(
+			spine_pts, sea_m, PortCoastTracer.PORT_LOCAL_INLAND_DIR, false,
+		)
+		for corner_set in [spine_pts, inland_pts, sea_pts]:
+			for corner in corner_set:
+				min_point.x = minf(min_point.x, corner.x)
+				min_point.z = minf(min_point.z, corner.y)
+				max_point.x = maxf(max_point.x, corner.x)
+				max_point.z = maxf(max_point.z, corner.y)
+				max_height = maxf(max_height, 0.9)
 	if not min_point.is_finite() or not max_point.is_finite():
 		return AABB(Vector3.ZERO, Vector3.ZERO)
 	return AABB(
@@ -282,80 +296,12 @@ func flatten_zone_records(
 	if pad_height < 0.0:
 		pad_height = float(foundation.get("surface_y_m", PortCoastTracer.FOUNDATION_SURFACE_Y_M)) - 0.12
 	var foundation_segments := foundation.get("segments", []) as Array
-	var footprint_quads := foundation.get("footprint_quads", []) as Array
-	var inland_blend_quads := foundation.get("inland_blend_quads", []) as Array
-	if not footprint_quads.is_empty():
-		var world_water_edge := PackedVector2Array()
-		for raw_water in foundation.get("water_edge", []) as Array:
-			var water := raw_water as Array
-			if water.size() < 2:
-				continue
-			var world := world_position + port_basis * Vector3(
-				float(water[0]), 0.0, float(water[1])
-			)
-			world_water_edge.append(Vector2(world.x, world.z))
-		var near_field := Rect2()
-		for quad_index in range(footprint_quads.size()):
-			var quad := footprint_quads[quad_index] as Dictionary
-			var corners := quad.get("corners", []) as Array
-			if corners.size() < 4:
-				continue
-			var world_polygon := PackedVector2Array()
-			for raw_corner in corners:
-				var corner := raw_corner as Array
-				if corner.size() < 2:
-					continue
-				var world := world_position + port_basis * Vector3(
-					float(corner[0]), 0.0, float(corner[1])
-				)
-				world_polygon.append(Vector2(world.x, world.z))
-			if world_polygon.size() < 4:
-				continue
-			var quad_bounds := WorldTerrainStreamer._polygon_bounds(world_polygon)
-			near_field = quad_bounds if near_field.size == Vector2.ZERO else near_field.merge(quad_bounds)
-			records.append({
-				"polygon": world_polygon,
-				"water_edge": world_water_edge,
-				"falloff": 0.0,
-				"height": pad_height,
-				"reclaim": true,
-				"ribbon_fill": true,
-				"carve": false,
-				"facility_id": "%s:plate_%d" % [port_id, quad_index],
-			})
-		if near_field.size != Vector2.ZERO:
-			near_field = near_field.grow(WorldTerrainStreamer.PLATE_NEAR_FIELD_PAD_M)
-			for record in records:
-				if bool(record.get("ribbon_fill", false)):
-					record["near_field_bounds"] = near_field
-		for blend_index in range(inland_blend_quads.size()):
-			var blend_quad := inland_blend_quads[blend_index] as Dictionary
-			var corners := blend_quad.get("corners", []) as Array
-			if corners.size() < 4:
-				continue
-			var world_polygon := PackedVector2Array()
-			for raw_corner in corners:
-				var corner := raw_corner as Array
-				if corner.size() < 2:
-					continue
-				var world := world_position + port_basis * Vector3(
-					float(corner[0]), 0.0, float(corner[1])
-				)
-				world_polygon.append(Vector2(world.x, world.z))
-			if world_polygon.size() < 4:
-				continue
-			records.append({
-				"polygon": world_polygon,
-				"falloff": 0.0,
-				"height": pad_height,
-				"inland_blend": true,
-				"blend_depth_m": float(blend_quad.get("blend_depth_m", 72.0)),
-				"carve": false,
-				"facility_id": "%s:merge_%d" % [port_id, blend_index],
-			})
-		return records
+	var spine := foundation.get("spine", []) as Array
 	var graph_bounds := bounds()
-	if graph_bounds.size.length_squared() > 0.01 and foundation_segments.is_empty() and footprint_quads.is_empty():
+	if not spine.is_empty():
+		## Harbour foundations are extruded meshes — natural terrain is untouched.
+		pass
+	elif graph_bounds.size.length_squared() > 0.01 and foundation_segments.is_empty():
 		var size_class := PortSizing.normalized_size(int(initial_attributes.get("size", 1)))
 		var seaward := Vector2(-sin(rotation_y), -cos(rotation_y))
 		var center_world := world_position + port_basis * graph_bounds.get_center()

@@ -28,6 +28,10 @@ const QUAY_CLEAR_STEP_M := 8.0
 const QUAY_BERTH_OFFSETS_M := [0.0, 8.0, 20.0, 38.0, 56.0]
 ## Require open water (positive SDF) with a small margin so coastline graze fails.
 const QUAY_WATER_MARGIN_M := 0.75
+## Default backshore grade for explicit checks (~21°). Placement tiers may relax this.
+const BACKSHORE_GRADE_MAX := 0.38
+const BACKSHORE_GRADE_VALIDATE := 0.52
+const BACKSHORE_SAMPLE_DEPTHS_M := [0.0, 24.0, 48.0, 96.0, 160.0, 220.0]
 
 const FALLBACK_NAMES := [
 	"Haugsvik", "Alesund", "Bremanger", "Dyrvik", "Eidsund", "Floro",
@@ -57,10 +61,10 @@ static func place_ports(
 
 	var selected: Array[Dictionary] = []
 	var tiers := [
-		{"spacing": STRICT_SPACING_M, "reach": STRICT_WATERWAY_REACH_M, "land_margin": 6.0, "quay_half": 93.0},
-		{"spacing": 680.0, "reach": 2600.0, "land_margin": 2.0, "quay_half": 50.0},
-		{"spacing": 560.0, "reach": 3800.0, "land_margin": 0.25, "quay_half": 50.0},
-		{"spacing": MIN_SPACING_M, "reach": MAX_WATERWAY_REACH_M, "land_margin": 0.0, "quay_half": 20.0},
+		{"spacing": STRICT_SPACING_M, "reach": STRICT_WATERWAY_REACH_M, "land_margin": 6.0, "quay_half": 93.0, "backshore_grade": 0.30},
+		{"spacing": 680.0, "reach": 2600.0, "land_margin": 2.0, "quay_half": 50.0, "backshore_grade": 0.36},
+		{"spacing": 560.0, "reach": 3800.0, "land_margin": 0.25, "quay_half": 50.0, "backshore_grade": 0.42},
+		{"spacing": MIN_SPACING_M, "reach": MAX_WATERWAY_REACH_M, "land_margin": 0.0, "quay_half": 20.0, "backshore_grade": 0.52},
 	]
 	for tier in tiers:
 		# Keep the playable network representative of the generated archetype,
@@ -106,6 +110,7 @@ static func validate_site(
 		"origin_on_land": layout != null and layout.is_land(world_xz),
 		"land_footprint": is_land_footprint_valid(layout, world_xz, seaward, land_margin_m),
 		"seaward_clearance": has_seaward_clearance(layout, world_xz, seaward),
+		"gentle_backshore": has_gentle_backshore(layout, world_xz, seaward, BACKSHORE_GRADE_VALIDATE),
 		"quay_clearance": has_quay_clearance(layout, world_xz, seaward, QUAY_HALF_LENGTH_BY_SIZE[1]),
 		"quay_half_length_m": quay_half,
 		"waterway_connection": connection,
@@ -176,6 +181,29 @@ static func has_seaward_clearance(
 		for lateral in PackedFloat32Array([-APPROACH_HALF_WIDTH_M, 0.0, APPROACH_HALF_WIDTH_M]):
 			if layout.sample_signed_distance(center + right * lateral) <= 0.0:
 				return false
+	return true
+
+
+## Rejects quay sites where the backshore climbs faster than a walkable grade.
+static func has_gentle_backshore(
+		layout: WorldLayout,
+		world_xz: Vector2,
+		seaward: Vector2,
+		max_grade: float = BACKSHORE_GRADE_MAX,
+) -> bool:
+	if layout == null or seaward.length_squared() < 0.5:
+		return false
+	var inland := -seaward.normalized()
+	var heights: Array[float] = []
+	for depth in BACKSHORE_SAMPLE_DEPTHS_M:
+		heights.append(layout.sample_height(world_xz + inland * float(depth)))
+	for i in range(1, heights.size()):
+		var run := float(BACKSHORE_SAMPLE_DEPTHS_M[i] - BACKSHORE_SAMPLE_DEPTHS_M[i - 1])
+		if run <= 0.001:
+			continue
+		var rise := heights[i] - heights[i - 1]
+		if rise / run > max_grade:
+			return false
 	return true
 
 
@@ -266,6 +294,8 @@ static func validate_ports(
 			errors.append("%s size footprint crosses the coastline" % port.port_id)
 		if not bool(report["seaward_clearance"]):
 			errors.append("%s has blocked seaward approach" % port.port_id)
+		if not bool(report.get("gentle_backshore", true)):
+			errors.append("%s backshore is too steep" % port.port_id)
 		var needed_half := float(QUAY_HALF_LENGTH_BY_SIZE[PortSizing.normalized_size(port.size)])
 		if not has_quay_clearance(layout, point, seaward, needed_half):
 			errors.append("%s quay is cut by a coastline corner" % port.port_id)
@@ -445,6 +475,13 @@ static func _candidate_fits_tier(
 	):
 		return false
 	if not has_seaward_clearance(layout, candidate["position"], candidate["seaward"]):
+		return false
+	if not has_gentle_backshore(
+			layout,
+			candidate["position"],
+			candidate["seaward"],
+			float(tier.get("backshore_grade", BACKSHORE_GRADE_MAX)),
+	):
 		return false
 	if float(candidate.get("quay_half_length_m", 0.0)) + 0.01 < float(tier["quay_half"]):
 		return false

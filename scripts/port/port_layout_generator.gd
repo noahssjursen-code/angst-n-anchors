@@ -31,19 +31,13 @@ static func generate(
 
 	var layout := attributes.get("world_layout") as WorldLayout
 	var half_width := CoastTracer.port_area_half_width_m(size)
-	var half_depth := CoastTracer.port_area_half_depth_m(size)
+	var half_depth := CoastTracer.trace_half_depth_m(size)
 	var traced_coast := _trace_coast(
 		layout,
 		definition,
 		site_seed,
 		half_width,
 		half_depth,
-	)
-	traced_coast = CoastTracer.orient_seaward(
-		layout,
-		definition.world_position,
-		definition.rotation_y,
-		traced_coast,
 	)
 	var fit := CoastTracer.fit_port_shoreline(
 		layout,
@@ -58,9 +52,14 @@ static func generate(
 	var coast_path: PackedVector2Array = fit.get("harbour_coast", PackedVector2Array()) as PackedVector2Array
 	var natural_shore: PackedVector2Array = fit.get("natural_shore", PackedVector2Array()) as PackedVector2Array
 	graph.initial_attributes["port_area"] = {
-		"half_width_m": half_width,
-		"half_depth_m": half_depth,
-		"half_extent_m": maxf(half_width, half_depth),
+		"half_width_m": CoastTracer.port_area_half_width_m(size),
+		"half_depth_m": CoastTracer.port_area_half_depth_m(size),
+		"trace_half_width_m": half_width,
+		"trace_half_depth_m": half_depth,
+		"half_extent_m": maxf(
+			CoastTracer.port_area_half_width_m(size),
+			CoastTracer.port_area_half_depth_m(size),
+		),
 		"coast_polyline": _polyline_to_array(coast_path),
 		"natural_shore_polyline": _polyline_to_array(natural_shore),
 		"terrain_coast_polyline": _polyline_to_array(traced_coast),

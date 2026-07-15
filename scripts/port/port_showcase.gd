@@ -13,6 +13,7 @@ const SIZE_LABELS: Array[String] = [
 const WORLD_LAYOUT_GENERATOR := preload("res://scripts/world/world_layout_generator.gd")
 const COASTAL_PORT_PLACER := preload("res://scripts/world/coastal_port_placer.gd")
 const TERRAIN_STREAMER := preload("res://scripts/world/world_terrain_streamer.gd")
+const WORLD_RENDERER := preload("res://scripts/world/world_renderer.gd")
 const SHOWCASE_PORT_NAMES: Array[String] = [
 	"Holmvik", "Sandvær", "Bergnes", "Kloven", "Strandnes", "Kvamsvik",
 	"Bremsund", "Tysneset", "Fjelltun", "Grønnvik", "Harberg", "Innvær",
@@ -63,13 +64,15 @@ var _cam_yaw := -0.75
 var _cam_pitch := -0.55
 var _move_speed := 80.0
 var _panning := false
-var _pan_last := Vector2.ZERO
+var _looking := false
+var _mouse_last := Vector2.ZERO
 var _last_data: PortData
 var _active_definition: PortDefinition
 var _layout_cache: Dictionary = {}
 var _definitions_cache: Dictionary = {}
 var _terrain: WorldTerrainStreamer
 var _last_terrain_seed := -1
+var _terrain_boot_focus := Vector3.ZERO
 var _title: Label
 var _stats: Label
 var _trade: RichTextLabel
@@ -91,8 +94,17 @@ func _request_rebuild() -> void:
 	_rebuild()
 
 
+func _showcase_playing() -> bool:
+	## @tool scenes stay live in the editor, but only F6/F5 sets current_scene.
+	var tree := get_tree()
+	return tree != null and tree.current_scene != null
+
+
 func _process(delta: float) -> void:
-	if Engine.is_editor_hint() or _camera == null:
+	_update_terrain_boot_priority()
+	if _showcase_playing():
+		_ensure_ocean_renderer()
+	if not _showcase_playing() or _camera == null:
 		return
 	var wish := Vector3.ZERO
 	if Input.is_key_pressed(KEY_W):
@@ -118,6 +130,15 @@ func _process(delta: float) -> void:
 		_apply_camera_basis()
 
 
+## Boot priority is only for the first visible ring. Leaving it active makes
+## every later showcase rebuild consume the streamer's elevated frame budget.
+func _update_terrain_boot_priority() -> void:
+	if _terrain == null or not is_instance_valid(_terrain) or not _terrain.is_boot_priority():
+		return
+	if _terrain.pending_near(_terrain_boot_focus, _terrain.visual_radius_m) == 0:
+		_terrain.end_boot_priority()
+
+
 func _apply_camera_basis() -> void:
 	if _camera == null:
 		return
@@ -127,17 +148,13 @@ func _apply_camera_basis() -> void:
 func _frame_port() -> void:
 	if _camera == null or _last_data == null or _last_data.layout_graph == null:
 		return
-	var graph_bounds := _last_data.layout_graph.bounds()
-	var graph_center := graph_bounds.get_center()
-	var target := _last_data.world_position \
-			+ Basis(Vector3.UP, _last_data.rotation_y) * graph_center \
-			+ Vector3(0.0, 2.0, 0.0)
-	var span := clampf(maxf(graph_bounds.size.x, graph_bounds.size.z) * 2.0, 180.0, 1400.0)
+	var target := _port_dock_focus_world()
+	var span := _port_camera_span_m()
 	_cam_yaw = -0.75
 	_cam_pitch = -0.55
 	_camera.global_position = target + Vector3(
 		sin(_cam_yaw) * span,
-		span * 0.62,
+		span * 0.48,
 		cos(_cam_yaw) * span,
 	)
 	_camera.look_at(target, Vector3.UP)
@@ -146,14 +163,54 @@ func _frame_port() -> void:
 	_cam_pitch = euler.x
 
 
+## Dock apron centre in world space — never the buried inland foundation wedge.
+func _port_dock_focus_world() -> Vector3:
+	if _last_data == null or _last_data.layout_graph == null:
+		return Vector3.ZERO
+	var graph := _last_data.layout_graph
+	var port_basis := Basis(Vector3.UP, _last_data.rotation_y)
+	var recipe := graph.initial_attributes.get("foundation", {}) as Dictionary
+	var dock_poly := recipe.get("dock_face_polyline", []) as Array
+	if dock_poly.is_empty():
+		dock_poly = recipe.get("shore_line_polyline", recipe.get("coast_polyline", [])) as Array
+	if not dock_poly.is_empty():
+		var local := Vector3.ZERO
+		for raw in dock_poly:
+			var pt := raw as Array
+			if pt.size() >= 2:
+				local += Vector3(float(pt[0]), 0.0, float(pt[1]))
+		local /= float(dock_poly.size())
+		return _last_data.world_position + port_basis * local + Vector3(0.0, 1.5, 0.0)
+	var root := graph.modules.get("root") as PortPlacedModule
+	if root != null:
+		return _last_data.world_position + port_basis * root.position_m + Vector3(0.0, 1.5, 0.0)
+	return _last_data.world_position + Vector3(0.0, 1.5, 0.0)
+
+
+## Camera distance from the dock — along-shore span only, not inland burial depth.
+func _port_camera_span_m() -> float:
+	if _last_data == null or _last_data.layout_graph == null:
+		return 200.0
+	var recipe := _last_data.layout_graph.initial_attributes.get("foundation", {}) as Dictionary
+	var shore_length := float(recipe.get("shore_length_m", 120.0))
+	return clampf(shore_length * 0.42 + 90.0, 140.0, 280.0)
+
+
 func _unhandled_input(event: InputEvent) -> void:
-	if Engine.is_editor_hint():
+	if not _showcase_playing():
 		return
 	if event is InputEventMouseButton:
 		var mb := event as InputEventMouseButton
+		if mb.button_index == MOUSE_BUTTON_RIGHT:
+			_looking = mb.pressed
+			_panning = false
+			_mouse_last = mb.position
+			get_viewport().set_input_as_handled()
+			return
 		if mb.button_index == MOUSE_BUTTON_MIDDLE:
 			_panning = mb.pressed
-			_pan_last = mb.position
+			_looking = false
+			_mouse_last = mb.position
 			get_viewport().set_input_as_handled()
 			return
 		if not mb.pressed:
@@ -161,26 +218,40 @@ func _unhandled_input(event: InputEvent) -> void:
 		if mb.button_index == MOUSE_BUTTON_WHEEL_UP:
 			_move_speed = clampf(_move_speed * 1.12, 12.0, 400.0)
 			if _camera != null:
-				_camera.global_position += _camera.global_basis * Vector3(0.0, 0.0, -_move_speed * 0.08)
+				var focus := _port_dock_focus_world()
+				var to_focus := focus - _camera.global_position
+				if to_focus.length_squared() > 1.0:
+					_camera.global_position += to_focus.normalized() * (_move_speed * 0.08)
 			get_viewport().set_input_as_handled()
 			return
 		if mb.button_index == MOUSE_BUTTON_WHEEL_DOWN:
 			_move_speed = clampf(_move_speed / 1.12, 12.0, 400.0)
 			if _camera != null:
-				_camera.global_position += _camera.global_basis * Vector3(0.0, 0.0, _move_speed * 0.08)
+				var focus := _port_dock_focus_world()
+				var to_focus := _camera.global_position - focus
+				if to_focus.length_squared() > 1.0:
+					_camera.global_position += to_focus.normalized() * (_move_speed * 0.08)
 			get_viewport().set_input_as_handled()
 			return
-	if event is InputEventMouseMotion and _panning and _camera != null:
+	if event is InputEventMouseMotion and _camera != null:
 		var motion := event as InputEventMouseMotion
-		var delta := motion.position - _pan_last
-		_pan_last = motion.position
-		## MMB drag pans in the ground plane (editor-style).
-		var right := Vector3(cos(_cam_yaw), 0.0, -sin(_cam_yaw))
-		var forward := Vector3(-sin(_cam_yaw), 0.0, -cos(_cam_yaw))
-		var pan_scale := _move_speed * 0.012
-		_camera.global_position += (-right * delta.x + forward * delta.y) * pan_scale
-		get_viewport().set_input_as_handled()
-		return
+		var delta := motion.position - _mouse_last
+		_mouse_last = motion.position
+		if _looking:
+			const LOOK_SENS := 0.004
+			_cam_yaw -= delta.x * LOOK_SENS
+			_cam_pitch = clampf(_cam_pitch - delta.y * LOOK_SENS, -1.35, -0.1)
+			_apply_camera_basis()
+			get_viewport().set_input_as_handled()
+			return
+		if _panning:
+			## MMB drag pans in the ground plane (editor-style).
+			var right := Vector3(cos(_cam_yaw), 0.0, -sin(_cam_yaw))
+			var forward := Vector3(-sin(_cam_yaw), 0.0, -cos(_cam_yaw))
+			var pan_scale := _move_speed * 0.012
+			_camera.global_position += (-right * delta.x + forward * delta.y) * pan_scale
+			get_viewport().set_input_as_handled()
+			return
 	if event is not InputEventKey or not event.is_pressed() or event.echo:
 		return
 	match (event as InputEventKey).keycode:
@@ -222,9 +293,6 @@ func _rebuild() -> void:
 	var old_hulls := get_node_or_null("GeneratedPort/DockedScaleHulls")
 	if old_hulls != null:
 		old_hulls.free()
-	var old_water := get_node_or_null("GeneratedPort/WaterReference")
-	if old_water != null:
-		old_water.free()
 
 	var generated := get_node_or_null("GeneratedPort") as Node3D
 	if generated == null:
@@ -234,11 +302,10 @@ func _rebuild() -> void:
 
 	var layout := _world_layout()
 	var definition := _select_world_port(layout)
-	## Showcase entropy: same coastal site + different size/seed must reshuffle layout.
+	## Showcase entropy: same coastal site — size only extends the dock span.
 	definition.site_seed = (
 		int(definition.site_seed)
 		^ SEEDS[seed_index]
-		^ (port_size * 104729)
 		^ (region_index * 224737)
 		^ definition.port_id.hash()
 	)
@@ -246,28 +313,8 @@ func _rebuild() -> void:
 	_last_data = PortExpander.expand(definition, layout.seed, layout, {
 		"length_profile_override": LENGTH_PROFILES[length_profile_index],
 	})
-	var graph_bounds := _last_data.layout_graph.bounds()
-	var graph_center := graph_bounds.get_center()
-	var world_center := _last_data.world_position \
-			+ Basis(Vector3.UP, _last_data.rotation_y) * graph_center
 	_frame_port()
-
-	var water := MeshInstance3D.new()
-	water.name = "WaterReference"
-	var plane := PlaneMesh.new()
-	plane.size = Vector2(2000.0, 2000.0)
-	water.mesh = plane
-	var water_material := StandardMaterial3D.new()
-	water_material.albedo_color = Color(0.055, 0.18, 0.25)
-	water_material.metallic = 0.2
-	water_material.roughness = 0.3
-	water.material_override = water_material
-	water.position = Vector3(
-		_last_data.world_position.x,
-		WaveSurface.WATER_LEVEL - 0.24,
-		_last_data.world_position.z,
-	)
-	generated.add_child(water)
+	var world_center := _port_dock_focus_world()
 
 	var world_seed := SEEDS[seed_index]
 	if _terrain == null or _last_terrain_seed != world_seed or not is_instance_valid(_terrain):
@@ -277,21 +324,23 @@ func _rebuild() -> void:
 		_terrain = TERRAIN_STREAMER.new() as WorldTerrainStreamer
 		_terrain.name = "WorldTerrain"
 		## Showcase only needs near-field context — full 1.8 km rebuilds hitch hard.
-		_terrain.visual_radius_m = 1600.0
+		_terrain.visual_radius_m = 2200.0
 		_terrain.collision_radius_m = 0.0
 		_terrain.build_budget_ms = 4.0
 		_terrain.max_jobs_per_frame = 1
 		generated.add_child(_terrain)
 		_terrain.configure(layout, [_last_data])
 		_last_terrain_seed = world_seed
+		_terrain_boot_focus = world_center
 		_terrain.begin_boot_priority(world_center)
 	else:
-		## Same world seed: retarget focus and refresh flatten/reclaim zones for the new port layout.
-		_terrain.set_port_definitions([_last_data])
+		## Same world seed: retarget focus only — foundation is mesh-only.
+		_terrain_boot_focus = world_center
 		_terrain.begin_boot_priority(world_center)
 
 	var plot := PortPlot.new()
 	plot.name = "PortPlot"
+	plot.show_site_gizmos = true
 	plot.configure(_last_data)
 	generated.add_child(plot)
 	plot.global_position = _last_data.world_position
@@ -466,22 +515,13 @@ func _select_world_port(layout: WorldLayout) -> PortDefinition:
 	var seed := SEEDS[seed_index]
 	var definitions := _definitions_cache.get(seed, []) as Array
 	var desired_region := _region_kind()
-	var exact: Array[PortDefinition] = []
 	var regional: Array[PortDefinition] = []
 	for raw in definitions:
 		var candidate := raw as PortDefinition
 		if candidate == null or candidate.region_kind != desired_region:
 			continue
 		regional.append(candidate)
-		var seaward := COASTAL_PORT_PLACER.seaward_from_yaw(candidate.rotation_y)
-		if COASTAL_PORT_PLACER.is_size_footprint_valid(
-			layout,
-			Vector2(candidate.world_position.x, candidate.world_position.z),
-			seaward,
-			port_size,
-		):
-			exact.append(candidate)
-	var pool: Array[PortDefinition] = exact if not exact.is_empty() else regional
+	var pool: Array[PortDefinition] = regional
 	if pool.is_empty():
 		for raw in definitions:
 			var candidate := raw as PortDefinition
@@ -517,24 +557,14 @@ func _region_kind() -> PortDefinition.RegionKind:
 
 
 func _ensure_world() -> void:
-	if get_node_or_null("WorldEnvironment") == null:
-		var node := WorldEnvironment.new()
-		node.name = "WorldEnvironment"
-		var environment := Environment.new()
-		environment.background_mode = Environment.BG_COLOR
-		environment.background_color = Color(0.13, 0.16, 0.20)
-		environment.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
-		environment.ambient_light_color = Color(0.72, 0.78, 0.86)
-		environment.ambient_light_energy = 0.75
-		node.environment = environment
-		add_child(node)
-	if get_node_or_null("Sun") == null:
-		var sun := DirectionalLight3D.new()
-		sun.name = "Sun"
-		sun.rotation_degrees = Vector3(-50.0, -35.0, 0.0)
-		sun.light_energy = 1.2
-		sun.shadow_enabled = true
-		add_child(sun)
+	_ensure_camera()
+	if _showcase_playing():
+		_ensure_ocean_renderer()
+	elif get_node_or_null("WorldEnvironment") == null:
+		_ensure_preview_lighting()
+
+
+func _ensure_camera() -> void:
 	_camera = get_node_or_null("Camera3D") as Camera3D
 	if _camera == null:
 		_camera = Camera3D.new()
@@ -542,6 +572,45 @@ func _ensure_world() -> void:
 		_camera.current = true
 		_camera.fov = 58.0
 		add_child(_camera)
+	if _showcase_playing():
+		_camera.far = 40000.0
+
+
+func _ensure_preview_lighting() -> void:
+	var node := WorldEnvironment.new()
+	node.name = "WorldEnvironment"
+	var environment := Environment.new()
+	environment.background_mode = Environment.BG_COLOR
+	environment.background_color = Color(0.13, 0.16, 0.20)
+	environment.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
+	environment.ambient_light_color = Color(0.72, 0.78, 0.86)
+	environment.ambient_light_energy = 0.75
+	node.environment = environment
+	add_child(node)
+	var sun := DirectionalLight3D.new()
+	sun.name = "Sun"
+	sun.rotation_degrees = Vector3(-50.0, -35.0, 0.0)
+	sun.light_energy = 1.2
+	sun.shadow_enabled = true
+	add_child(sun)
+
+
+func _ensure_ocean_renderer() -> void:
+	if get_node_or_null("ShowcaseWorldRenderer") != null:
+		return
+	var preview_env := get_node_or_null("WorldEnvironment")
+	if preview_env != null:
+		preview_env.free()
+	var preview_sun := get_node_or_null("Sun")
+	if preview_sun != null:
+		preview_sun.free()
+	var renderer := WORLD_RENDERER.new() as WorldRenderer
+	renderer.name = "ShowcaseWorldRenderer"
+	renderer.force_runtime_build = true
+	renderer.enable_volumetric_fog = false
+	renderer.enable_ssao = false
+	renderer.enable_weather_post_fx = false
+	add_child(renderer)
 
 
 func _ensure_hud() -> void:
@@ -599,7 +668,7 @@ func _refresh_hud() -> void:
 		"Length: %s" % LENGTH_PROFILES[length_profile_index],
 		"Size: %d — %s" % [port_size, SIZE_LABELS[port_size]],
 		"Region: %s" % REGION_LABELS[region_index],
-		"World site: %.0f, %.0f · terrain near-field 700 m" % [
+		"World site: %.0f, %.0f · terrain near-field 2.2 km" % [
 			site_position.x, site_position.z,
 		],
 		"Modules: %d · Open slots: %d · coast verts: %d" % [
@@ -613,6 +682,12 @@ func _refresh_hud() -> void:
 			float(recipe.get("total_coast_arc_m", 0.0)),
 			graph.total_quay_length_m(),
 		],
+		"Scan box: %.0f × %.0f m · trace verts: %d" % [
+			float(port_area.get("trace_half_width_m", 0.0)) * 2.0,
+			float(port_area.get("trace_half_depth_m", 0.0)) * 2.0,
+			(port_area.get("terrain_coast_polyline", []) as Array).size(),
+		],
+		"Gizmos: red=origin · green=size · yellow=scan · orange=trace · magenta=spine",
 		"Design hull: %s (%.0f×%.0f m) · Quay half %.0f · Slot %.0f" % [
 			PortSizing.design_hull_id(port_size),
 			PortSizing.design_hull_loa_m(port_size),
@@ -644,4 +719,4 @@ func _refresh_hud() -> void:
 	_trade.text += "Natural shore → seaward dock growth → blended town backdrop\n"
 	_trade.text += "Mash , . to compare length profiles (compact / standard / extended)\n"
 	_trade.text += "Blue hull = design size · green = 28 m reference"
-	_instructions.text = "WASD move · Q/E · Shift · MMB pan · scroll · Home · ←→ size · ↑↓ region · , . length · - = seed · L/F · R rebuild"
+	_instructions.text = "WASD move · Q/E · Shift · RMB look · MMB pan · scroll · Home · ←→ size · ↑↓ region · , . length · - = seed · L/F · R rebuild"

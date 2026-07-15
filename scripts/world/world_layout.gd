@@ -139,42 +139,52 @@ func sample_height(world_xz: Vector2) -> float:
 		var shelf := clampf(1.0 - distance / 28.0, 0.0, 1.0)
 		return -distance * 0.12 * shelf - (1.0 - shelf) * minf(140.0, 3.0 + distance * 0.02)
 	var inland := minf(-distance, 6500.0)
-	var coast_var := _noise_01(_coast_noise, world_xz)
+	# Bias toward broad svaberg shelves so harbours get workable backshore grades.
+	var coast_var := pow(_noise_01(_coast_noise, world_xz), 0.68)
 	var shelf_shape := _noise_01(_shelf_noise, world_xz)
 	# High coast_var = broad svaberg slabs; low = cliffy rock-face shoreline.
 	var face_amt := 1.0 - coast_var
-	var shelf_width := lerpf(12.0, 120.0, coast_var)
-	var shelf_height := lerpf(0.55, 4.8, coast_var)
+	var shelf_width := lerpf(36.0, 220.0, coast_var)
+	var shelf_height := lerpf(0.45, 4.2, coast_var)
 	var shelf_t := clampf(inland / maxf(shelf_width, 1.0), 0.0, 1.0)
 	# Svaberg eases convex/flat; face coasts stay low then climb hard after the lip.
-	var shelf_ease := 1.0 - pow(1.0 - shelf_t, lerpf(1.35, 2.6, coast_var))
+	var shelf_ease := 1.0 - pow(1.0 - shelf_t, lerpf(1.1, 1.65, coast_var))
 	var shelf := shelf_height * shelf_ease
-	var slab_roll := (shelf_shape - 0.5) * lerpf(0.35, 2.4, coast_var) * shelf_t
+	var slab_roll := (shelf_shape - 0.5) * lerpf(0.28, 1.8, coast_var) * shelf_t
 	var micro := _detail_noise.get_noise_2d(world_xz.x, world_xz.y) \
-		* lerpf(0.35, 0.9, face_amt) * (1.0 - shelf_t * 0.5)
+		* lerpf(0.28, 0.65, face_amt) * (1.0 - shelf_t * 0.5)
 	if inland <= shelf_width:
 		return maxf(0.04, shelf + slab_roll + micro)
 
 	var past_shelf := maxf(inland - shelf_width, 0.0)
-	# Continuous rock face: steep rise right off the shelf on face coasts.
-	var face_reach := lerpf(220.0, 55.0, face_amt)
-	var face_height := lerpf(18.0, 95.0, face_amt) * lerpf(0.75, 1.2, shelf_shape)
+	# Continuous rock face: gentler rise off the shelf so terminals are not cliff-backed.
+	var face_reach := lerpf(320.0, 110.0, face_amt)
+	var face_height := lerpf(10.0, 52.0, face_amt) * lerpf(0.68, 1.0, shelf_shape)
 	var face_t := 1.0 - exp(-past_shelf / maxf(face_reach, 1.0))
 	var rock_face := face_height * face_t
 
 	var mountain := _noise_01(_mountain_noise, world_xz)
 	var ridge_raw := absf(_ridge_noise.get_noise_2d(world_xz.x, world_xz.y))
 	var ridge := pow(1.0 - clampf(ridge_raw, 0.0, 1.0), 2.5)
-	var rise_t := 1.0 - exp(-past_shelf / 1450.0)
-	var base_uplift := minf(past_shelf, 3600.0) * lerpf(0.08, 0.24, mountain)
-	var ridge_relief := ridge * lerpf(20.0, 360.0, rise_t) * lerpf(0.62, 1.05, mountain)
-	var rolling_relief := (shelf_shape - 0.5) * lerpf(6.0, 85.0, rise_t)
+	var rise_t := 1.0 - exp(-past_shelf / 1850.0)
+	var near_coast_damp := smoothstep(0.0, 420.0, past_shelf)
+	var base_uplift := minf(past_shelf, 3600.0) * lerpf(0.05, 0.20, mountain) * near_coast_damp
+	var ridge_relief := ridge * lerpf(16.0, 320.0, rise_t) * lerpf(0.58, 1.0, mountain) * near_coast_damp
+	var rolling_relief := (shelf_shape - 0.5) * lerpf(4.0, 72.0, rise_t) * near_coast_damp
 	var rock_detail := _detail_noise.get_noise_2d(world_xz.x, world_xz.y) \
-		* lerpf(1.0, 6.0, rise_t)
-	return maxf(
+		* lerpf(0.8, 5.0, rise_t) * near_coast_damp
+	var full_height := maxf(
 		shelf_height,
 		shelf_height + rock_face + base_uplift + ridge_relief + rolling_relief + rock_detail,
 	)
+	# Cap early backshore rise so quay faces do not climb into cliff terrain.
+	if inland <= shelf_width + 360.0:
+		var gentle_cap := shelf_height \
+				+ lerpf(8.0, 26.0, coast_var) \
+				+ past_shelf * lerpf(0.04, 0.10, coast_var)
+		var blend := smoothstep(0.0, 1.0, past_shelf / 300.0)
+		return maxf(0.04, lerpf(gentle_cap, full_height, blend) + slab_roll * 0.35 + micro * 0.5)
+	return full_height
 
 
 static func _noise_01(noise: FastNoiseLite, world_xz: Vector2) -> float:

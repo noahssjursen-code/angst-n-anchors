@@ -73,10 +73,10 @@ func _test_seed_variation(first: Array[PortDefinition], varied: Array[PortDefini
 
 
 func _test_geography(layout: WorldLayout, ports: Array[PortDefinition]) -> void:
-	_check(PLACER.max_size_for_quay_half(19.0) < 0, "too-short quay admits no size")
-	_check(PLACER.max_size_for_quay_half(20.0) == 0, "20 m half fits size 0")
-	_check(PLACER.max_size_for_quay_half(93.0) == 2, "93 m half fits size 2")
-	_check(PLACER.max_size_for_quay_half(230.0) == 4, "230 m half fits size 4")
+	_check(PLACER.max_size_for_quay_half(23.0) < 0, "too-short quay admits no size")
+	_check(PLACER.max_size_for_quay_half(24.0) == 0, "24 m half fits size 0")
+	_check(PLACER.max_size_for_quay_half(100.0) == 2, "100 m half fits size 2")
+	_check(PLACER.max_size_for_quay_half(240.0) == 4, "240 m half fits size 4")
 	var errors := PLACER.validate_ports(layout, ports, PLACER.MIN_SPACING_M)
 	for error in errors:
 		_check(false, error)
@@ -91,8 +91,12 @@ func _test_geography(layout: WorldLayout, ports: Array[PortDefinition]) -> void:
 				+ Basis(Vector3.UP, port.rotation_y) * root.position_m
 		var root_xz := Vector2(root_world.x, root_world.z)
 		_check(
-			(root_xz - point).dot(seaward) > 40.0,
-			"%s graph root is offset from inland datum toward water" % port.port_id,
+			absf(layout.sample_signed_distance(root_xz)) < 160.0,
+			"%s graph root hugs the shoreline band" % port.port_id,
+		)
+		_check(
+			layout.sample_signed_distance(root_xz) > layout.sample_signed_distance(point) - 40.0,
+			"%s graph root is not far inland of the site datum" % port.port_id,
 		)
 		var terrain_zones := expanded.flatten_zone_records()
 		var quay := expanded.layout_graph.modules.get("arm_general") as PortPlacedModule

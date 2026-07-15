@@ -37,15 +37,17 @@ func _run() -> void:
 	var coast := port_area.get("coast_polyline", []) as Array
 	var natural := port_area.get("natural_shore_polyline", []) as Array
 	var foundation := graph.initial_attributes.get("foundation", {}) as Dictionary
-	var land_edge := foundation.get("land_edge", []) as Array
+	var spine := foundation.get("spine", []) as Array
 	var segments := foundation.get("segments", []) as Array
-	var footprint_quads := foundation.get("footprint_quads", []) as Array
-	var inland_blend_quads := foundation.get("inland_blend_quads", []) as Array
 	assert(coast.size() >= 3, "spine must follow the coast, not cut across it")
-	assert(footprint_quads.size() == segments.size())
-	assert(inland_blend_quads.size() == segments.size())
-	assert(not foundation.has("footprint_polygon"), "terrain uses segment quads only")
+	assert(spine.size() >= 3)
+	assert(not foundation.has("footprint_polygon"), "foundation is mesh-only")
+	assert(not foundation.has("footprint_quads"), "foundation does not rebake terrain")
+	assert(not foundation.has("land_edge"), "edge arrays are derived at stamp time")
 	assert(float(foundation.get("dock_reach_m", 0.0)) > 8.0)
+	assert(float(foundation.get("embed_depth_m", 0.0)) >= PortCoastTracer.FOUNDATION_EMBED_DEPTH_M * 0.5)
+	assert(float(foundation.get("town_inland_m", 0.0)) >= PortCoastTracer.FOUNDATION_TOWN_INLAND_M * 0.99)
+	assert(float(foundation.get("dock_reach_m", 0.0)) <= PortCoastTracer.FOUNDATION_DOCK_REACH_M * 1.1)
 
 	var longest_segment := 0.0
 	for raw_segment in segments:
@@ -57,19 +59,15 @@ func _run() -> void:
 	)
 
 	var flattened := graph.flatten_zone_records(definition.world_position, definition.rotation_y)
-	assert(flattened.size() == footprint_quads.size() + inland_blend_quads.size())
-	var plate_count := 0
 	for raw_zone in flattened:
 		var zone := raw_zone as Dictionary
-		if bool(zone.get("ribbon_fill", false)):
-			plate_count += 1
-			assert((zone.get("near_field_bounds", Rect2()) as Rect2).size != Vector2.ZERO)
-	assert(plate_count == footprint_quads.size())
+		assert(not bool(zone.get("ribbon_fill", false)), "foundation must not emit terrain ribbon zones")
+		assert(not bool(zone.get("inland_blend", false)), "foundation must not emit inland blend zones")
 
 	print(
-		"port_foundation_test OK: %d spine verts, %d plate quads" % [
-			natural.size(),
-			footprint_quads.size(),
+		"port_foundation_test OK: %d spine verts, %d segments, extruded mesh" % [
+			spine.size(),
+			segments.size(),
 		]
 	)
 	quit(0)

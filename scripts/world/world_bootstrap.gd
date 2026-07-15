@@ -8,6 +8,7 @@ extends RefCounted
 const WORLD_SCENE := "res://scenes/world.tscn"
 const MAIN_MENU_SCENE := "res://scenes/ui/main_menu.tscn"
 const PORT_OVERHAUL_PREVIOUS_GENERATION := 5
+const TERRAIN_COAST_PREVIOUS_GENERATION := 6
 
 
 static func roll_seed() -> int:
@@ -55,6 +56,13 @@ static func apply_player_world_context(player: PlayerData) -> void:
 		# v6 replaces every port footprint and operational identity. Keep the
 		# captain and seed, but explicitly invalidate world-local contracts and
 		# vessel calls rather than restoring them into different facilities.
+		player.accepted_contracts = []
+		player.port_operations_state = {}
+		ctx["generation_version"] = WorldLayoutGenerator.GENERATION_VERSION
+		player.world_context = ctx
+	if saved_version == TERRAIN_COAST_PREVIOUS_GENERATION \
+			and WorldLayoutGenerator.GENERATION_VERSION == 7:
+		# v7 reshapes coast SDF and backshore grades; port sites move on the same seed.
 		player.accepted_contracts = []
 		player.port_operations_state = {}
 		ctx["generation_version"] = WorldLayoutGenerator.GENERATION_VERSION

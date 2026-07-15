@@ -102,42 +102,122 @@ func _stamp_module(placed: PortPlacedModule) -> void:
 
 func _stamp_foundation() -> void:
 	var plan := _graph.initial_attributes.get("foundation", {}) as Dictionary
-	var land_edge := plan.get("land_edge", []) as Array
-	var water_edge := plan.get("visual_water_edge", plan.get("water_edge", [])) as Array
-	if land_edge.size() < 2 or land_edge.size() != water_edge.size():
+	var spine := plan.get("spine", []) as Array
+	if spine.size() < 2:
 		return
+	var inland_m := float(plan.get("town_inland_m", PortCoastTracer.FOUNDATION_TOWN_INLAND_M))
+	var burial_extra := float(plan.get("burial_extra_m", PortCoastTracer.FOUNDATION_BURIAL_EXTRA_M))
+	var sea_m := float(plan.get("dock_reach_m", PortCoastTracer.FOUNDATION_DOCK_REACH_M)) \
+			+ float(plan.get("bay_lip_m", PortCoastTracer.FOUNDATION_BAY_LIP_M))
 	var surface_y := float(plan.get("surface_y_m", PortCoastTracer.FOUNDATION_SURFACE_Y_M))
-	var thickness := float(plan.get("thickness_m", PortCoastTracer.FOUNDATION_THICKNESS_M))
+	var embed_depth := float(plan.get("embed_depth_m", PortCoastTracer.FOUNDATION_EMBED_DEPTH_M))
+	var seaward_depth := float(plan.get("seaward_depth_m", PortCoastTracer.FOUNDATION_SEAWARD_DEPTH_M))
 	var top_y := surface_y + 0.04
-	var bottom_y := surface_y - thickness
-	var material := MeshBuilder.make_material(Color(0.33, 0.35, 0.37), 0.96, 0.0, true)
-	material.render_priority = 2
+	var land_bottom_y := surface_y - embed_depth
+	var water_bottom_y := WaveSurface.WATER_LEVEL - seaward_depth
+	var spine_pts := _foundation_spine_polyline(spine)
+	var inland_top := PortCoastTracer.offset_spine_perpendicular(
+		spine_pts, inland_m, PortCoastTracer.PORT_LOCAL_INLAND_DIR, true,
+	)
+	var shore_top := spine_pts
+	var sea_top := PortCoastTracer.offset_spine_perpendicular(
+		spine_pts, sea_m, PortCoastTracer.PORT_LOCAL_INLAND_DIR, false,
+	)
+	var inland_bot := PortCoastTracer.offset_spine_perpendicular(
+		spine_pts,
+		inland_m + burial_extra,
+		PortCoastTracer.PORT_LOCAL_INLAND_DIR,
+		true,
+	)
+	var shore_bot := spine_pts
+	var sea_bot := sea_top
+	var material := MeshBuilder.make_material(Color(0.40, 0.39, 0.37), 0.94, 0.0, true)
+	material.render_priority = 1
 	var surface := SurfaceTool.new()
 	surface.begin(Mesh.PRIMITIVE_TRIANGLES)
 	surface.set_material(material)
-	for index in range(land_edge.size() - 1):
-		var land_a_top := _foundation_point(land_edge[index], top_y)
-		var land_b_top := _foundation_point(land_edge[index + 1], top_y)
-		var water_a_top := _foundation_point(water_edge[index], top_y)
-		var water_b_top := _foundation_point(water_edge[index + 1], top_y)
-		var land_a_bottom := _foundation_point(land_edge[index], bottom_y)
-		var land_b_bottom := _foundation_point(land_edge[index + 1], bottom_y)
-		var water_a_bottom := _foundation_point(water_edge[index], bottom_y)
-		var water_b_bottom := _foundation_point(water_edge[index + 1], bottom_y)
-		_add_quad(surface, land_a_top, land_b_top, water_b_top, water_a_top)
-		_add_quad(surface, land_a_bottom, water_a_bottom, water_b_bottom, land_b_bottom)
-		_add_quad(surface, land_a_top, land_a_bottom, land_b_bottom, land_b_top)
-		_add_quad(surface, water_a_top, water_b_top, water_b_bottom, water_a_bottom)
-		_add_quad(surface, land_a_top, water_a_top, water_a_bottom, land_a_bottom)
-		_add_quad(surface, land_b_top, land_b_bottom, water_b_bottom, water_b_top)
+	for index in range(spine.size() - 1):
+		_add_quad(
+			surface,
+			_foundation_vertex(inland_top, index, top_y),
+			_foundation_vertex(inland_top, index + 1, top_y),
+			_foundation_vertex(shore_top, index + 1, top_y),
+			_foundation_vertex(shore_top, index, top_y),
+		)
+		_add_quad(
+			surface,
+			_foundation_vertex(shore_top, index, top_y),
+			_foundation_vertex(shore_top, index + 1, top_y),
+			_foundation_vertex(sea_top, index + 1, top_y),
+			_foundation_vertex(sea_top, index, top_y),
+		)
+		_add_quad(
+			surface,
+			_foundation_vertex(inland_bot, index, land_bottom_y),
+			_foundation_vertex(shore_bot, index, land_bottom_y),
+			_foundation_vertex(shore_bot, index + 1, land_bottom_y),
+			_foundation_vertex(inland_bot, index + 1, land_bottom_y),
+		)
+		_add_quad(
+			surface,
+			_foundation_vertex(shore_bot, index, land_bottom_y),
+			_foundation_vertex(sea_bot, index, water_bottom_y),
+			_foundation_vertex(sea_bot, index + 1, water_bottom_y),
+			_foundation_vertex(shore_bot, index + 1, land_bottom_y),
+		)
+		_add_quad(
+			surface,
+			_foundation_vertex(inland_top, index, top_y),
+			_foundation_vertex(inland_bot, index, land_bottom_y),
+			_foundation_vertex(inland_bot, index + 1, land_bottom_y),
+			_foundation_vertex(inland_top, index + 1, top_y),
+		)
+		_add_quad(
+			surface,
+			_foundation_vertex(sea_top, index, top_y),
+			_foundation_vertex(sea_top, index + 1, top_y),
+			_foundation_vertex(sea_bot, index + 1, water_bottom_y),
+			_foundation_vertex(sea_bot, index, water_bottom_y),
+		)
+	_add_tri(
+		surface,
+		_foundation_vertex(inland_top, 0, top_y),
+		_foundation_vertex(shore_top, 0, top_y),
+		_foundation_vertex(sea_top, 0, top_y),
+	)
+	_add_tri(
+		surface,
+		_foundation_vertex(inland_bot, 0, land_bottom_y),
+		_foundation_vertex(sea_bot, 0, water_bottom_y),
+		_foundation_vertex(shore_bot, 0, land_bottom_y),
+	)
+	var last := spine.size() - 1
+	_add_tri(
+		surface,
+		_foundation_vertex(inland_top, last, top_y),
+		_foundation_vertex(sea_top, last, top_y),
+		_foundation_vertex(shore_top, last, top_y),
+	)
+	_add_tri(
+		surface,
+		_foundation_vertex(inland_bot, last, land_bottom_y),
+		_foundation_vertex(shore_bot, last, land_bottom_y),
+		_foundation_vertex(sea_bot, last, water_bottom_y),
+	)
 	surface.generate_normals()
 	var mesh := MeshInstance3D.new()
-	mesh.name = "TerrainFollowingFoundation"
+	mesh.name = "HarbourFoundation"
 	mesh.mesh = surface.commit()
 	mesh.material_override = material
 	mesh.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	mesh.extra_cull_margin = 8.0
+	mesh.extra_cull_margin = 12.0
 	add_child(mesh)
+
+
+func _add_tri(surface: SurfaceTool, a: Vector3, b: Vector3, c: Vector3) -> void:
+	surface.add_vertex(a)
+	surface.add_vertex(b)
+	surface.add_vertex(c)
 
 
 func _add_quad(
@@ -153,6 +233,19 @@ func _add_quad(
 	surface.add_vertex(a)
 	surface.add_vertex(c)
 	surface.add_vertex(d)
+
+
+func _foundation_spine_polyline(spine: Array) -> PackedVector2Array:
+	var out := PackedVector2Array()
+	for raw in spine:
+		var pt := raw as Array
+		out.append(Vector2(float(pt[0]), float(pt[1])))
+	return out
+
+
+func _foundation_vertex(path: PackedVector2Array, index: int, y: float) -> Vector3:
+	var point := path[index]
+	return Vector3(point.x, y, point.y)
 
 
 func _foundation_point(raw: Variant, surface_y: float) -> Vector3:
