@@ -49,8 +49,9 @@ func _purge_entities_under(root: Node) -> void:
 	for id in stale:
 		_visible_entities.erase(id)
 
-# Keep track of active berth locks established by remote ships: "portID_berthIndex" -> ship_entity_id
-var _occupied_berths: Dictionary = {}
+# Active continuous-quay call locks established by remote ships:
+# call_id -> { ship_id, port_id, start_m, end_m }.
+var _occupied_calls: Dictionary = {}
 
 ## Cache of fetched deck layouts: server_vessel_id -> { "hash": String, "layout": Dictionary }
 var _layout_cache: Dictionary = {}
@@ -92,7 +93,7 @@ func apply_entities(entities_list: Array, local_id: String, scene_nodes: Diction
 	_prune_stale_entries()
 	var active_snapshot_ids: Dictionary = {}
 	var active_pilot_ids: Dictionary = {}
-	var current_frame_berths: Dictionary = {}
+	var current_frame_calls: Dictionary = {}
 	
 	for ent: Dictionary in entities_list:
 		var id: String = ent["id"]
@@ -150,8 +151,7 @@ func apply_entities(entities_list: Array, local_id: String, scene_nodes: Diction
 			state["last_seen_ms"] = now_ms
 			_visible_entities[id] = state
 			
-			# Process Berth Occupancy Meta: "berth=portID_index"
-			_parse_berth_meta(id, ent["type"], meta, current_frame_berths)
+			_parse_call_meta(id, ent["type"], meta, current_frame_calls)
 			
 			# Process Dynamic Parent/Relational Attachment Meta: "parent=parent_entity_id"
 			_process_attachment_meta(node, id, meta)
@@ -165,8 +165,8 @@ func apply_entities(entities_list: Array, local_id: String, scene_nodes: Diction
 	# Update remote players avatar visibility (hide those driving ships/cranes)
 	_update_avatar_visibilities(active_pilot_ids)
 	
-	# Reconcile Berth Occupancy changes
-	_reconcile_berth_locks(current_frame_berths)
+	# Reconcile shared-quay call occupancy changes.
+	_reconcile_call_locks(current_frame_calls)
 			
 	# 3. Clean up expired/lost entities.
 	# With standstill throttling, an entity might be omitted from snapshot packets simply because
@@ -300,13 +300,29 @@ func _update_avatar_visibilities(piloting_player_ids: Dictionary) -> void:
 				node.visible = not piloting_player_ids.has(id)
 
 
-## Resolves and parses berth tags from metadata: "berth=portID_index"
-func _parse_berth_meta(ship_id: String, type: String, meta: String, current_frame_berths: Dictionary) -> void:
-	if type.begins_with("ship_"):
-		var parsed := _parse_meta_map(meta)
-		var berth_tag: String = parsed.get("berth", "")
-		if not berth_tag.is_empty():
-			current_frame_berths[berth_tag] = ship_id
+## Parses `call=port_id,call_id,start_m,end_m` from ship metadata.
+func _parse_call_meta(ship_id: String, type: String, meta: String, current_frame_calls: Dictionary) -> void:
+	if not type.begins_with("ship_"):
+		return
+	var parsed := _parse_meta_map(meta)
+	var raw := str(parsed.get("call", ""))
+	var fields := raw.split(",")
+	if fields.size() != 4:
+		return
+	var call_id := str(fields[1])
+	if call_id.is_empty():
+		return
+	current_frame_calls[call_id] = {
+		"ship_id": ship_id,
+		"port_id": str(fields[0]),
+		"call_id": call_id,
+		"start_m": float(fields[2]),
+		"end_m": float(fields[3]),
+		"crane_ids": str(parsed.get("cranes", "")).split(
+			",",
+			false,
+		),
+	}
 
 
 ## Handles generic parent-child reparenting loops
@@ -340,49 +356,37 @@ func _process_attachment_meta(node: Node3D, entity_id: String, meta: String) -> 
 		node.reparent(self, true)
 
 
-## Updates and matches Godot physical docks to active lock registrations
-func _reconcile_berth_locks(current_frame_berths: Dictionary) -> void:
-	# 1. Establish new locks
-	for berth_tag in current_frame_berths.keys():
-		if not _occupied_berths.has(berth_tag):
-			var ship_id: String = current_frame_berths[berth_tag]
-			_set_berth_lock_state(berth_tag, ship_id, true)
-			_occupied_berths[berth_tag] = ship_id
-			
-	# 2. Release lost locks
-	for berth_tag in _occupied_berths.keys():
-		if not current_frame_berths.has(berth_tag):
-			var ship_id: String = _occupied_berths[berth_tag]
-			_set_berth_lock_state(berth_tag, ship_id, false)
-			_occupied_berths.erase(berth_tag)
+## Projects server-owned VesselCall locks onto streamed port presentation.
+func _reconcile_call_locks(current_frame_calls: Dictionary) -> void:
+	for call_id in current_frame_calls.keys():
+		var call_data := current_frame_calls[call_id] as Dictionary
+		_set_call_lock_state(call_data, true)
+		_occupied_calls[call_id] = call_data
+	for call_id in _occupied_calls.keys().duplicate():
+		if current_frame_calls.has(call_id):
+			continue
+		_set_call_lock_state(_occupied_calls[call_id] as Dictionary, false)
+		_occupied_calls.erase(call_id)
 
 
-func _set_berth_lock_state(berth_tag: String, ship_id: String, active: bool) -> void:
-	var parts := berth_tag.split("_")
-	if parts.size() < 2:
-		return
-		
-	var port_id := parts[0]
-	var berth_index := int(parts[1])
-	
-	# Find matching physical PortDock in scene
-	var docks := get_tree().get_nodes_in_group("port_docks")
-	for dock in docks:
-		var port_dock := dock as PortDock
-		if port_dock != null and port_dock.port_id == port_id:
-			if active:
-				var ship_node: BoatBody = null
-				if _visible_entities.has(ship_id):
-					ship_node = _live_node(_visible_entities[ship_id]) as BoatBody
-				
-				# Occupy the dock slot
-				print("[Replication] Remote lock established on port: ", port_id, " berth: ", berth_index)
-				port_dock.register_ship_at_berth(berth_index, ship_node, "remote")
-			else:
-				# Free up dock slot
-				print("[Replication] Remote lock released on port: ", port_id, " berth: ", berth_index)
-				port_dock.release_berth(berth_index)
-			break
+func _set_call_lock_state(call_data: Dictionary, active: bool) -> void:
+	var port_id := str(call_data.get("port_id", ""))
+	var ship_id := str(call_data.get("ship_id", ""))
+	for dock in get_tree().get_nodes_in_group("port_docks"):
+		var port_dock := dock as Node
+		if port_dock == null or str(port_dock.get("port_id")) != port_id:
+			continue
+		var ship_node: BoatBody = null
+		if active and _visible_entities.has(ship_id):
+			ship_node = _live_node(_visible_entities[ship_id]) as BoatBody
+		if port_dock.has_method("set_remote_call_lock"):
+			port_dock.call("set_remote_call_lock", call_data, ship_node, active)
+		if ship_node != null:
+			ship_node.set_meta("port_call_id", str(call_data.get("call_id", "")))
+			ship_node.set_meta("port_call_port_id", port_id)
+			ship_node.set_meta("quay_start_m", float(call_data.get("start_m", 0.0)))
+			ship_node.set_meta("quay_end_m", float(call_data.get("end_m", 0.0)))
+		break
 
 
 ## Spawns custom visual remote scenes based on generic types.
@@ -602,7 +606,7 @@ func _cargo_pallet_from_meta(id: String, meta: String) -> Pallet:
 	var commodity := str(parsed.get("com", "cargo"))
 	var units := maxi(int(parsed.get("units", "1")), 1)
 	var footprint := _cargo_footprint_from_meta(parsed, commodity, units)
-	var info := ContractRegistry.commodity_info(commodity)
+	var info := CommodityCatalog.commodity_info(commodity)
 
 	var pallet_res := Pallet.new()
 	pallet_res.id = id
@@ -623,7 +627,7 @@ func _cargo_footprint_from_meta(parsed: Dictionary, commodity: String, units: in
 		var bits := fp_raw.split(",")
 		if bits.size() >= 2:
 			return Vector2i(maxi(int(bits[0]), 1), maxi(int(bits[1]), 1))
-	var max_units := int(ContractRegistry.commodity_info(commodity).get("max_pallet_units", 4))
+	var max_units := int(CommodityCatalog.commodity_info(commodity).get("max_pallet_units", 4))
 	max_units = maxi(max_units, 1)
 	return PalletFactory.best_footprint(units, max_units)
 

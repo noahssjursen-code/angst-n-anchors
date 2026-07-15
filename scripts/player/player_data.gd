@@ -67,6 +67,11 @@ const LEGACY_STARTER_HULL_ID := "cargo_ship"
 ## existing "ship despawn forfeits cargo" rule.
 var accepted_contracts: Array = []
 
+## Save v5 port-operations snapshot. Runtime nodes are projections and are
+## rebuilt from this stable call/yard ledger after the matching world loads.
+## Shape: { "active_call": Dictionary, "yard_cargo": Array }.
+var port_operations_state: Dictionary = {}
+
 ## Deprecated compatibility field. Resume-in-vessel persistence was removed;
 ## old save values are ignored and new saves omit this field.
 var ship_runtime_state: Dictionary = {}
@@ -367,6 +372,7 @@ func to_dict() -> Dictionary:
 		"appearance":               appearance.to_dict(),
 		# v2 additions
 		"accepted_contracts":       accepted_contracts.duplicate(true),
+		"port_operations_state":    port_operations_state.duplicate(true),
 		"world_clock_hours":        world_clock_hours,
 		"world_context":            world_context.duplicate(),
 		"tutorial_seen":            tutorial_seen.duplicate(),
@@ -397,6 +403,9 @@ static func from_dict(d: Dictionary) -> PlayerData:
 	var contracts_raw: Variant = d.get("accepted_contracts", [])
 	if typeof(contracts_raw) == TYPE_ARRAY:
 		pd.accepted_contracts = (contracts_raw as Array).duplicate(true)
+	var port_ops_raw: Variant = d.get("port_operations_state", {})
+	if typeof(port_ops_raw) == TYPE_DICTIONARY:
+		pd.port_operations_state = (port_ops_raw as Dictionary).duplicate(true)
 	pd.ship_runtime_state = {}
 	pd.world_clock_hours = float(d.get("world_clock_hours", -1.0))
 	var world_context_raw: Variant = d.get("world_context", {})

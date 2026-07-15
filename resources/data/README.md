@@ -70,11 +70,14 @@ Floor bricks are surfaces: they share a cell with walls/props via an optional
 
 ## `ports/`
 
-Default-port service layout authored by the port slot editor.
+`modules/catalog.json` contains data-only port module templates: labeled box
+footprints, colors, tags, and typed input/output attachment sockets. It contains
+no meshes or gameplay functionality.
 
-`default_service_slots.json` — array of slots (`harbour_master`, `shipwright`,
-future roles…). Each slot has a pad pose plus an optional `blueprint_id` that
-names a file under `buildings/` (stem only, no path).
+Trade imports/exports are derived by `PortTradeProfile`. `PortLayoutGenerator`
+uses those seeded attributes to fill compatible sockets and produce the initial
+`PortLayoutGraph`. Later growth persists that graph; it does not alter this
+template catalog or regenerate a finished harbour shape from the seed.
 
 ## `vessels/prebuilt/`
 

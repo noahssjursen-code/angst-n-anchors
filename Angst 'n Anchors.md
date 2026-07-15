@@ -69,22 +69,19 @@ Core on every vessel: `BoatBody`, buoyancy, hydrodynamics, propulsion, rudder, t
 ## Ports & World
 
 - **`world.tscn`** is the runnable scene. `World` generates port definitions from a seed (default `world_seed=42`, `port_count=35`) and uses `ProximityLoader` (radius 1500) to instantiate ports near the player. The home port loads eagerly.
-- **`PortPlot`** is the composition root for one port: ground polygon (organic visual, box collision), `PortDock` on the water side, `PortFacilities` on the land side. Driven by `port_size` (0–4) and plot dimensions.
-- **`PortDock`** owns berths, typed cranes (placeholder), cargo aprons, fuel point. Berth slots sized to the port's max ship class.
-- **Ship classes** (`ShipClass.Type`): `COASTAL_TRADER`, `SHORT_SEA_COASTER`, `HANDYSIZE_FEEDER`, `DEEP_SEA_FREIGHTER`. `port_size → max ship class` mapping lives in `PortPlot.SHIP_CLASS_BY_SIZE`.
-- **Port NPCs:** `HarbourMasterNpc` (berth assignment, vessel info, dues — VHF planned), `ShipwrightNpc` (commission ships), `ContractNpc` (post / accept contracts), `DeliveryNpc`, plus a `Warehouse` with `WarehouseContractZone`.
-- **Port facilities (props):** `FuelStation`, `LighthouseBuilding`, `FogHornBuilding`.
+- Pipeline: `PortDefinition` (seeded site/size) → seeded attributes + `PortTradeProfile` → `PortLayoutGenerator` → authoritative socketed `PortLayoutGraph`.
+- **`PortPlot`** currently renders only labeled color-coded boxes for placed modules and translucent boxes for open growth sockets.
+- Filling a socket consumes it, aligns the child module, and exposes the child's sockets. The seed creates the initial graph; later port growth must persist the evolved graph.
+- Port functionality, final assets, NPCs, contracts, mooring, and operable equipment are deferred.
 - **Naming:** Norwegian-style names from a fixed pool (`Holmvik`, `Sandvær`, `Bergnes`, …).
 
 ---
 
 ## Cargo & Contracts
 
-- **`ContractRegistry`** (autoload) is the single source of truth for ports and contracts. No knowledge of the physical world.
-- **Commodities** (current set): `grain`, `timber`, `iron_ore`, `coal`, `provisions`. Each has `mass_kg` and `value`.
-- **Contracts:** `Contract`, `CargoItem`, `CargoManifest`. `MAX_ACTIVE_CONTRACTS = 3`, generation radius 3500.
-- **Pickup / delivery:** `CargoPickup`, `DeliveryZone`, `CargoDeckComponent` on the ship, `PlayerCarryComponent` for the placeholder player-carry mechanic (until crane systems are built).
-- **Player flow:** talk to a contract NPC → accept contract → pick up at warehouse → load onto ship → sail → unload at delivery port → reward.
+- **`PortCatalog`** is the live port directory. **`CommodityCatalog`** owns packing/pricing.
+- Trade contracts are purged pending rewrite. Playable commodities for future slots: `timber`, `provisions` (plus fish bias on small fjord/archipelago ports).
+- Physical pallets remain for fishing crates and future cargo handling.
 
 ---
 
@@ -103,7 +100,7 @@ Core on every vessel: `BoatBody`, buoyancy, hydrodynamics, propulsion, rudder, t
 | `WorldWeather` | World-level weather state |
 | `WeatherLighting` | Lighting driven by weather |
 | `WorldClock` | Game time |
-| `ContractRegistry` | Ports and contracts (data only) |
+| `PortCatalog` | Live port directory |
 | `PlayerSession` | Persistent player data (`marks`, name) |
 | `GameMenu` | Pause / menu system |
 | `GameState` | Read model: `player`, `ship`, `contract`, `world` sub-states |
@@ -113,10 +110,8 @@ Core on every vessel: `BoatBody`, buoyancy, hydrodynamics, propulsion, rudder, t
 
 ## Multiplayer / MMO Notes
 
-- Berths have explicit state (free / reserved / occupied). Harbour master is the mediator, by design.
-- `ContractRegistry` is a single registry — fits a server-authoritative model.
-- `ShipBuilder` produces a deterministic ship from a template path — replicable across clients.
-- Nothing networked is wired up yet. The architecture is the prep work, not the implementation.
+- Port catalog + seed-derived trade profiles fit a server-authoritative model.
+- Nothing networked is fully wired yet. The architecture is the prep work, not the implementation.
 
 ---
 

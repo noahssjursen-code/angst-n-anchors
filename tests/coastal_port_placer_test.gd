@@ -32,6 +32,9 @@ func _test_count_and_metadata(ports: Array[PortDefinition]) -> void:
 	var represented_sizes := {}
 	for port in ports:
 		represented_sizes[port.size] = true
+		_check(port.size >= 0, "%s has a size class" % port.port_id)
+		_check(not port.site_id.is_empty(), "%s has stable site identity" % port.port_id)
+		_check(port.site_seed != 0, "%s has deterministic site seed" % port.port_id)
 		_check(port.has_explicit_rotation, "%s owns explicit yaw" % port.port_id)
 		_check(
 			port.ground_mode == PortDefinition.GroundMode.WORLD_TERRAIN,
@@ -41,7 +44,7 @@ func _test_count_and_metadata(ports: Array[PortDefinition]) -> void:
 			port.region_kind != PortDefinition.RegionKind.LEGACY_ISLAND,
 			"%s has coastal region kind" % port.port_id
 		)
-	_check(represented_sizes.size() >= 3, "coast supports at least three port sizes")
+	_check(represented_sizes.size() >= 2, "coast supports multiple terminal archetypes")
 
 
 func _test_determinism(first: Array[PortDefinition], second: Array[PortDefinition]) -> void:
@@ -82,13 +85,43 @@ func _test_geography(layout: WorldLayout, ports: Array[PortDefinition]) -> void:
 		var point := Vector2(port.world_position.x, port.world_position.z)
 		var seaward := PLACER.seaward_from_yaw(port.rotation_y)
 		_check(layout.is_land(point), "%s origin is on land" % port.port_id)
+		var expanded := PortExpander.expand(port, layout.seed)
+		var root := expanded.layout_graph.modules.get("root") as PortPlacedModule
+		var root_world := port.world_position \
+				+ Basis(Vector3.UP, port.rotation_y) * root.position_m
+		var root_xz := Vector2(root_world.x, root_world.z)
+		_check(
+			(root_xz - point).dot(seaward) > 40.0,
+			"%s graph root is offset from inland datum toward water" % port.port_id,
+		)
+		var terrain_zones := expanded.flatten_zone_records()
+		var quay := expanded.layout_graph.modules.get("arm_general") as PortPlacedModule
+		if quay == null:
+			for instance_id in expanded.layout_graph.module_ids():
+				var placed := expanded.layout_graph.modules[instance_id] as PortPlacedModule
+				var module := expanded.layout_graph.module_definition(placed.module_id)
+				if module != null and module.kind == "quay":
+					quay = placed
+					break
+		if quay != null:
+			var quay_world := port.world_position \
+					+ Basis(Vector3.UP, port.rotation_y) * quay.position_m
+			var quay_xz := Vector2(quay_world.x, quay_world.z)
+			_check(
+				WorldTerrainStreamer.sample_effective_signed_distance(
+					layout,
+					quay_xz,
+					terrain_zones,
+				) >= 0.0,
+				"%s quay carve keeps berth water open" % port.port_id,
+			)
 		_check(
 			PLACER.is_land_footprint_valid(layout, point, seaward),
 			"%s facilities footprint is land" % port.port_id
 		)
 		_check(
 			PLACER.is_size_footprint_valid(layout, point, seaward, port.size),
-			"%s full size-%d settlement footprint is land" % [port.port_id, port.size],
+			"%s size footprint is land" % port.port_id
 		)
 		_check(
 			PLACER.has_seaward_clearance(layout, point, seaward),
@@ -100,7 +133,7 @@ func _test_geography(layout: WorldLayout, ports: Array[PortDefinition]) -> void:
 			dock_sd > -8.0 and dock_sd < 80.0,
 			"%s quay face sits on/near the waterline" % port.port_id
 		)
-		var needed_half := float(PLACER.QUAY_HALF_LENGTH_BY_SIZE[clampi(port.size, 0, 4)])
+		var needed_half := float(PLACER.QUAY_HALF_LENGTH_BY_SIZE[PortSizing.normalized_size(port.size)])
 		_check(
 			PLACER.has_quay_clearance(layout, point, seaward, needed_half),
 			"%s straight quay clears coastline corners" % port.port_id

@@ -2,9 +2,8 @@ class_name CoastalPortPlacer
 extends RefCounted
 
 ## Pure deterministic conversion from a WorldLayout to coastal PortDefinitions.
-## Local -Z is always the seaward direction. PortPlot places PortDock at local
-## Z = -plot_depth/2, so the plot origin is offset inland from the coastline by
-## that half-depth minus a small overhang that keeps the quay face in the water.
+## Local -Z is always the seaward direction. The selected site datum is inland;
+## PortSizing.COASTAL_GRAPH_ROOT_Z_M moves the graph apron to the shoreline.
 
 const DEFAULT_PORT_COUNT := 35
 const PORT_DEFINITION := preload("res://scripts/port/port_definition.gd")
@@ -114,29 +113,14 @@ static func validate_site(
 	}
 
 
-## Samples the facilities rectangle, including all corners and edge midpoints.
+## Validates the conservative size-0 land footprint used during candidate search.
 static func is_land_footprint_valid(
 		layout: WorldLayout,
 		world_xz: Vector2,
 		seaward: Vector2,
 		min_inland_distance_m: float = 0.0,
 ) -> bool:
-	if layout == null or seaward.length_squared() < 0.5:
-		return false
-	var forward := seaward.normalized()
-	var right := Vector2(-forward.y, forward.x)
-	var depths := PackedFloat32Array([
-		-FOOTPRINT_SEAWARD_M,
-		(FOOTPRINT_INLAND_M - FOOTPRINT_SEAWARD_M) * 0.5,
-		FOOTPRINT_INLAND_M,
-	])
-	var widths := PackedFloat32Array([-FOOTPRINT_HALF_WIDTH_M, 0.0, FOOTPRINT_HALF_WIDTH_M])
-	for depth in depths:
-		for width in widths:
-			var sample := world_xz - forward * depth + right * width
-			if layout.sample_signed_distance(sample) >= -min_inland_distance_m:
-				return false
-	return true
+	return is_size_footprint_valid(layout, world_xz, seaward, 0, min_inland_distance_m)
 
 
 ## Validates the complete land-side width for a selected port tier. Candidate
@@ -217,7 +201,7 @@ static func quay_clear_half_length_m(
 		layout: WorldLayout,
 		world_xz: Vector2,
 		seaward: Vector2,
-		max_half_m: float = QUAY_HALF_LENGTH_BY_SIZE[4],
+		max_half_m: float = QUAY_HALF_LENGTH_BY_SIZE[PortSizing.MAX_SIZE],
 ) -> float:
 	if layout == null or seaward.length_squared() < 0.5:
 		return 0.0
@@ -279,10 +263,10 @@ static func validate_ports(
 		if not bool(report["land_footprint"]):
 			errors.append("%s has invalid land footprint" % port.port_id)
 		if not is_size_footprint_valid(layout, point, seaward, port.size):
-			errors.append("%s size-%d settlement crosses the coastline" % [port.port_id, port.size])
+			errors.append("%s size footprint crosses the coastline" % port.port_id)
 		if not bool(report["seaward_clearance"]):
 			errors.append("%s has blocked seaward approach" % port.port_id)
-		var needed_half := float(QUAY_HALF_LENGTH_BY_SIZE[clampi(port.size, 0, 4)])
+		var needed_half := float(QUAY_HALF_LENGTH_BY_SIZE[PortSizing.normalized_size(port.size)])
 		if not has_quay_clearance(layout, point, seaward, needed_half):
 			errors.append("%s quay is cut by a coastline corner" % port.port_id)
 		if float(report["waterway_distance_m"]) > MAX_WATERWAY_REACH_M:
@@ -485,27 +469,30 @@ static func _make_definition(
 	# Preserve the established IDs so economy/contracts do not need a port rewrite.
 	port.port_id = "port-home" if index == 0 else "port-%d" % index
 	port.display_name = _name_for_index(index, names)
-	# PortPlot is authored around sea level: its local ground/pad is Y=0 and
-	# PortDock places the water-facing structures relative to that datum.
+	# PortLayoutGraph uses this inland datum and offsets its root seaward.
 	port.world_position = Vector3(point.x, 0.0, point.y)
 	var value := _stable_score(layout.seed ^ 0x706f7274, point, index)
 	var quay_half := float(candidate.get("quay_half_length_m", quay_clear_half_length_m(
 		layout, point, candidate["seaward"]
 	)))
-	var max_size := max_size_for_quay_half(quay_half)
-	if max_size < 0:
-		max_size = 0
-	port.size = clampi(mini(int(value % 5), max_size), 0, 4)
+	var max_size := maxi(max_size_for_quay_half(quay_half), 0)
+	var requested_size := clampi(
+		mini(int(value % (PortSizing.MAX_SIZE + 1)), max_size),
+		PortSizing.MIN_SIZE,
+		PortSizing.MAX_SIZE,
+	)
 	if index == 0:
 		# Home port prefers a useful berth count, but never a corner-cut quay.
-		port.size = maxi(port.size, mini(2, max_size))
-	while port.size > 0 and not is_size_footprint_valid(
-			layout,
-			point,
-			candidate["seaward"],
-			port.size,
+		requested_size = maxi(requested_size, mini(2, max_size))
+	while requested_size > 0 and not is_size_footprint_valid(
+			layout, point, candidate["seaward"], requested_size
 	):
-		port.size -= 1
+		requested_size -= 1
+	port.size = requested_size
+	port.site_quay_half_m = quay_half
+	port.port_generation_version = PortDefinition.CURRENT_PORT_GENERATION_VERSION
+	port.site_id = "coast-segment-%05d" % int(candidate["contour_index"])
+	port.site_seed = _stable_score(layout.seed ^ 0x73697465, point, int(candidate["contour_index"]))
 	port.has_lighthouse = index == 0 or value % 5 == 0
 	port.has_fog_horn = index == 0 or value % 7 == 0
 	port.rotation_y = yaw_for_seaward(candidate["seaward"])
@@ -532,6 +519,16 @@ static func _port_region(region: WorldLayout.Region) -> PortDefinition.RegionKin
 			return PortDefinition.RegionKind.ARCHIPELAGO
 		_:
 			return PortDefinition.RegionKind.MAINLAND
+
+
+static func _region_name(region: WorldLayout.Region) -> String:
+	match region:
+		WorldLayout.Region.FJORD:
+			return "fjord"
+		WorldLayout.Region.ARCHIPELAGO:
+			return "archipelago"
+		_:
+			return "mainland"
 
 
 static func _project_to_segment(point: Vector2, a: Vector2, b: Vector2) -> Dictionary:

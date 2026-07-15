@@ -13,7 +13,6 @@ var _wired_controllers: Array = []
 
 func _ready() -> void:
 	_wire_player_session()
-	_wire_contract_registry()
 	_wire_weather()
 	get_tree().node_added.connect(_on_node_added)
 	for n in get_tree().root.find_children("*", "BoatController", true, false):
@@ -35,24 +34,7 @@ func _wire_player_session() -> void:
 		player.marks        = d.marks
 		player.display_name = d.display_name
 	)
-
-
-# ── ContractRegistry ──────────────────────────────────────────────────────────
-
-func _wire_contract_registry() -> void:
-	var registry := get_node_or_null("/root/ContractRegistry")
-	if registry == null:
-		return
-	registry.contract_accepted.connect(func(_c: Contract, _pallets: Array[Pallet]) -> void: _refresh_contracts())
-	registry.contract_completed.connect(func(_c: Contract) -> void: _refresh_contracts())
-	registry.contract_transit_forfeited.connect(func(_c: Contract, _u: int) -> void: _refresh_contracts())
-
-
-func _refresh_contracts() -> void:
-	var registry := get_node_or_null("/root/ContractRegistry")
-	if registry == null:
-		return
-	contract.active = registry.get_accepted_contracts()
+	contract.active = []
 
 
 # ── WeatherLighting ───────────────────────────────────────────────────────────

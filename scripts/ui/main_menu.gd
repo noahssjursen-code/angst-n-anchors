@@ -307,7 +307,7 @@ func _on_home_port_confirmed(port_id: String) -> void:
 	_teardown_home_port_chart()
 	# Keep the exact seed shown on the picker — do not re-roll after create.
 	var settings := get_node_or_null("/root/GameSettings")
-	var gen_version := int(settings.get("map_generation_version")) if settings != null else 4
+	var gen_version := int(settings.get("map_generation_version")) if settings != null else 6
 	WorldBootstrapScript.apply_seed(_pending_seed, gen_version, preview_checksum)
 	_captains.create_local(_pending_name, _pending_appearance, port_id, _pending_seed)
 	var session := get_node_or_null("/root/PlayerSession")

@@ -396,7 +396,7 @@ func _place_one_fish_crate() -> bool:
 	var zone := _haul_zone
 	var price_mul := float(zone.get("price_mul", 1.0)) if not zone.is_empty() else 1.0
 	var tier_label := str(zone.get("tier_label", ""))
-	var crate_value := ContractRegistry.fish_crate_value(price_mul) * FISH_CRATE_UNITS
+	var crate_value := CommodityCatalog.fish_crate_value(price_mul) * FISH_CRATE_UNITS
 
 	var fish_pallet := Pallet.new()
 	fish_pallet.id = UuidUtil.generate()

@@ -1,0 +1,430 @@
+{
+  "format_version": 1,
+  "modules": [
+    {
+      "id": "coast_vertex",
+      "display_name": "COAST EDGE",
+      "kind": "coast",
+      "footprint_m": [6.0, 0.8, 6.0],
+      "color": [0.44, 0.45, 0.46],
+      "tags": ["root", "coast"],
+      "slots": [
+        {"id": "along_prev", "type": "coast_chain", "accepts": ["coast_chain"], "position_m": [-3.0, 0.0, 0.0], "yaw_degrees": -90.0, "direction": "input"},
+        {"id": "along_next", "type": "coast_chain", "position_m": [3.0, 0.0, 0.0], "yaw_degrees": 90.0, "direction": "output"},
+        {"id": "extrude", "type": "harbour_branch", "position_m": [0.0, 0.0, -3.0], "yaw_degrees": 0.0, "direction": "output"},
+        {"id": "backland", "type": "road_extension", "position_m": [0.0, 0.0, 3.0], "yaw_degrees": 180.0, "direction": "output"}
+      ]
+    },
+      {
+        "id": "land_pavement",
+        "display_name": "MAINLAND PAVEMENT",
+        "kind": "pavement",
+        "footprint_m": [34.0, 0.7, 20.0],
+        "color": [0.30, 0.32, 0.34],
+        "tags": ["pavement", "land"],
+        "slots": [
+          {"id": "root", "type": "module_input", "accepts": ["road_extension"], "position_m": [0.0, 0.0, -10.0], "yaw_degrees": 0.0, "direction": "input"},
+          {"id": "extend", "type": "road_extension", "position_m": [0.0, 0.0, 10.0], "yaw_degrees": 180.0, "direction": "output"}
+        ]
+      },
+      {
+        "id": "dock_pavement",
+        "display_name": "DOCK PAVEMENT",
+        "kind": "pavement",
+        "footprint_m": [28.0, 0.9, 20.0],
+        "color": [0.36, 0.39, 0.42],
+        "tags": ["pavement", "waterfront", "foundation"],
+        "slots": [
+          {"id": "root", "type": "module_input", "accepts": ["harbour_branch"], "position_m": [0.0, 0.0, 10.0], "yaw_degrees": 180.0, "direction": "input"}
+        ]
+      },
+      {
+        "id": "shore_wall",
+      "display_name": "SHORE WALL",
+      "kind": "shore",
+      "footprint_m": [32.0, 1.2, 10.0],
+      "color": [0.40, 0.41, 0.42],
+      "tags": ["root", "shore", "coast"],
+      "slots": [
+        {"id": "along_prev", "type": "shore_chain", "accepts": ["shore_chain"], "position_m": [-16.0, 0.0, 0.0], "yaw_degrees": -90.0, "direction": "input"},
+        {"id": "along_next", "type": "shore_chain", "position_m": [16.0, 0.0, 0.0], "yaw_degrees": 90.0, "direction": "output"},
+        {"id": "pier_a", "type": "harbour_branch", "position_m": [-8.0, 0.0, -5.0], "yaw_degrees": 0.0, "direction": "output"},
+        {"id": "pier_b", "type": "harbour_branch", "position_m": [8.0, 0.0, -5.0], "yaw_degrees": 0.0, "direction": "output"},
+        {"id": "backland", "type": "road_extension", "position_m": [0.0, 0.0, 5.0], "yaw_degrees": 180.0, "direction": "output"},
+        {"id": "yard_a", "type": "cargo_facility", "position_m": [-10.0, 0.0, 5.0], "yaw_degrees": 180.0, "direction": "output"},
+        {"id": "yard_b", "type": "cargo_facility", "position_m": [10.0, 0.0, 5.0], "yaw_degrees": 180.0, "direction": "output"}
+      ]
+    },
+    {
+      "id": "harbour_root_small",
+      "display_name": "TERMINAL APRON",
+      "kind": "apron",
+      "footprint_m": [70.0, 0.5, 48.0],
+      "color": [0.32, 0.33, 0.34],
+      "tags": ["root", "land", "apron"],
+      "slots": [
+        {"id": "arm_front", "type": "harbour_branch", "position_m": [0.0, 0.0, -24.0], "yaw_degrees": 0.0, "direction": "output"},
+        {"id": "arm_port", "type": "harbour_branch", "position_m": [-35.0, 0.0, -6.0], "yaw_degrees": 90.0, "direction": "output"},
+        {"id": "road", "type": "road_extension", "position_m": [0.0, 0.0, 24.0], "yaw_degrees": 180.0, "direction": "output"},
+        {"id": "yard_port", "type": "cargo_facility", "position_m": [-28.0, 0.0, 24.0], "yaw_degrees": 180.0, "direction": "output"},
+        {"id": "yard_starboard", "type": "cargo_facility", "position_m": [28.0, 0.0, 24.0], "yaw_degrees": 180.0, "direction": "output"},
+        {"id": "service", "type": "service_pad", "position_m": [0.0, 0.0, 18.0], "yaw_degrees": 180.0, "direction": "output"}
+      ]
+    },
+	{
+      "id": "harbour_root_large",
+      "display_name": "TERMINAL APRON",
+      "kind": "apron",
+      "footprint_m": [110.0, 0.5, 64.0],
+      "color": [0.30, 0.31, 0.32],
+      "tags": ["root", "land", "apron"],
+      "slots": [
+        {"id": "arm_front", "type": "harbour_branch", "position_m": [0.0, 0.0, -32.0], "yaw_degrees": 0.0, "direction": "output"},
+        {"id": "finger_port", "type": "harbour_branch", "position_m": [-36.0, 0.0, -32.0], "yaw_degrees": 0.0, "direction": "output"},
+        {"id": "finger_starboard", "type": "harbour_branch", "position_m": [36.0, 0.0, -32.0], "yaw_degrees": 0.0, "direction": "output"},
+        {"id": "arm_port", "type": "harbour_branch", "position_m": [-55.0, 0.0, -8.0], "yaw_degrees": 90.0, "direction": "output"},
+        {"id": "arm_starboard", "type": "harbour_branch", "position_m": [55.0, 0.0, -8.0], "yaw_degrees": -90.0, "direction": "output"},
+        {"id": "road", "type": "road_extension", "position_m": [0.0, 0.0, 32.0], "yaw_degrees": 180.0, "direction": "output"},
+        {"id": "yard_a", "type": "cargo_facility", "position_m": [-40.0, 0.0, 32.0], "yaw_degrees": 180.0, "direction": "output"},
+        {"id": "yard_b", "type": "cargo_facility", "position_m": [-18.0, 0.0, 32.0], "yaw_degrees": 180.0, "direction": "output"},
+        {"id": "yard_c", "type": "cargo_facility", "position_m": [18.0, 0.0, 32.0], "yaw_degrees": 180.0, "direction": "output"},
+        {"id": "yard_d", "type": "cargo_facility", "position_m": [40.0, 0.0, 32.0], "yaw_degrees": 180.0, "direction": "output"},
+        {"id": "service_port", "type": "service_pad", "position_m": [-28.0, 0.0, 20.0], "yaw_degrees": 180.0, "direction": "output"},
+        {"id": "service_starboard", "type": "service_pad", "position_m": [28.0, 0.0, 20.0], "yaw_degrees": 180.0, "direction": "output"}
+      ]
+    },
+    {
+      "id": "harbour_root_mega",
+      "display_name": "MEGA TERMINAL APRON",
+      "kind": "apron",
+      "footprint_m": [180.0, 0.55, 90.0],
+      "color": [0.26, 0.27, 0.28],
+      "tags": ["root", "land", "apron", "mega"],
+      "slots": [
+        {"id": "arm_front", "type": "harbour_branch", "position_m": [0.0, 0.0, -45.0], "yaw_degrees": 0.0, "direction": "output"},
+        {"id": "finger_port", "type": "harbour_branch", "position_m": [-40.0, 0.0, -45.0], "yaw_degrees": 0.0, "direction": "output"},
+        {"id": "finger_starboard", "type": "harbour_branch", "position_m": [40.0, 0.0, -45.0], "yaw_degrees": 0.0, "direction": "output"},
+        {"id": "finger_outer_port", "type": "harbour_branch", "position_m": [-80.0, 0.0, -45.0], "yaw_degrees": 0.0, "direction": "output"},
+        {"id": "finger_outer_starboard", "type": "harbour_branch", "position_m": [80.0, 0.0, -45.0], "yaw_degrees": 0.0, "direction": "output"},
+        {"id": "arm_port", "type": "harbour_branch", "position_m": [-90.0, 0.0, -10.0], "yaw_degrees": 90.0, "direction": "output"},
+        {"id": "arm_starboard", "type": "harbour_branch", "position_m": [90.0, 0.0, -10.0], "yaw_degrees": -90.0, "direction": "output"},
+        {"id": "road", "type": "road_extension", "position_m": [0.0, 0.0, 45.0], "yaw_degrees": 180.0, "direction": "output"},
+        {"id": "yard_a", "type": "cargo_facility", "position_m": [-70.0, 0.0, 45.0], "yaw_degrees": 180.0, "direction": "output"},
+        {"id": "yard_b", "type": "cargo_facility", "position_m": [-42.0, 0.0, 45.0], "yaw_degrees": 180.0, "direction": "output"},
+        {"id": "yard_c", "type": "cargo_facility", "position_m": [-14.0, 0.0, 45.0], "yaw_degrees": 180.0, "direction": "output"},
+        {"id": "yard_d", "type": "cargo_facility", "position_m": [14.0, 0.0, 45.0], "yaw_degrees": 180.0, "direction": "output"},
+        {"id": "yard_e", "type": "cargo_facility", "position_m": [42.0, 0.0, 45.0], "yaw_degrees": 180.0, "direction": "output"},
+        {"id": "yard_f", "type": "cargo_facility", "position_m": [70.0, 0.0, 45.0], "yaw_degrees": 180.0, "direction": "output"},
+        {"id": "service_port", "type": "service_pad", "position_m": [-50.0, 0.0, 28.0], "yaw_degrees": 180.0, "direction": "output"},
+        {"id": "service_mid", "type": "service_pad", "position_m": [0.0, 0.0, 28.0], "yaw_degrees": 180.0, "direction": "output"},
+        {"id": "service_starboard", "type": "service_pad", "position_m": [50.0, 0.0, 28.0], "yaw_degrees": 180.0, "direction": "output"}
+      ]
+    },
+    {
+      "id": "quay_general",
+      "display_name": "GENERAL QUAY",
+      "kind": "quay",
+      "footprint_m": [28.0, 1.4, 62.0],
+      "color": [0.34, 0.38, 0.44],
+      "tags": ["waterfront", "general"],
+      "slots": [
+        {"id": "root", "type": "module_input", "accepts": ["harbour_branch"], "position_m": [0.0, 0.0, 31.0], "yaw_degrees": 180.0, "direction": "input"},
+        {"id": "extend", "type": "quay_extension", "position_m": [0.0, 0.0, -31.0], "yaw_degrees": 0.0, "direction": "output"},
+        {"id": "branch_port", "type": "quay_branch", "position_m": [-14.0, 0.0, -14.0], "yaw_degrees": -90.0, "direction": "output"},
+        {"id": "branch_starboard", "type": "quay_branch", "position_m": [14.0, 0.0, -14.0], "yaw_degrees": 90.0, "direction": "output"},
+        {"id": "equip_a", "type": "equipment_pad", "position_m": [0.0, 0.0, 12.0], "yaw_degrees": 0.0, "direction": "output"},
+        {"id": "equip_b", "type": "equipment_pad", "position_m": [0.0, 0.0, -12.0], "yaw_degrees": 0.0, "direction": "output"}
+      ]
+    },
+    {
+      "id": "quay_fishing",
+      "display_name": "FISHING QUAY",
+      "kind": "quay",
+      "footprint_m": [22.0, 1.2, 52.0],
+      "color": [0.22, 0.55, 0.68],
+      "tags": ["waterfront", "fishing"],
+      "slots": [
+        {"id": "root", "type": "module_input", "accepts": ["harbour_branch"], "position_m": [0.0, 0.0, 26.0], "yaw_degrees": 180.0, "direction": "input"},
+        {"id": "extend", "type": "quay_extension", "position_m": [0.0, 0.0, -26.0], "yaw_degrees": 0.0, "direction": "output"},
+        {"id": "equip_a", "type": "equipment_pad", "position_m": [0.0, 0.0, 10.0], "yaw_degrees": 0.0, "direction": "output"},
+        {"id": "equip_b", "type": "equipment_pad", "position_m": [0.0, 0.0, -10.0], "yaw_degrees": 0.0, "direction": "output"}
+      ]
+    },
+    {
+      "id": "quay_container",
+      "display_name": "CONTAINER QUAY",
+      "kind": "quay",
+      "footprint_m": [36.0, 1.5, 72.0],
+      "color": [0.16, 0.38, 0.62],
+      "tags": ["waterfront", "container"],
+      "slots": [
+        {"id": "root", "type": "module_input", "accepts": ["harbour_branch"], "position_m": [0.0, 0.0, 36.0], "yaw_degrees": 180.0, "direction": "input"},
+        {"id": "extend", "type": "quay_extension", "position_m": [0.0, 0.0, -36.0], "yaw_degrees": 0.0, "direction": "output"},
+        {"id": "equip_a", "type": "equipment_pad", "position_m": [0.0, 0.0, 14.0], "yaw_degrees": 0.0, "direction": "output"},
+        {"id": "equip_b", "type": "equipment_pad", "position_m": [0.0, 0.0, -14.0], "yaw_degrees": 0.0, "direction": "output"}
+      ]
+    },
+    {
+      "id": "quay_bulk",
+      "display_name": "ORE / COAL QUAY",
+      "kind": "quay",
+      "footprint_m": [32.0, 1.4, 72.0],
+      "color": [0.42, 0.30, 0.24],
+      "tags": ["waterfront", "bulk_ore"],
+      "slots": [
+        {"id": "root", "type": "module_input", "accepts": ["harbour_branch"], "position_m": [0.0, 0.0, 36.0], "yaw_degrees": 180.0, "direction": "input"},
+        {"id": "extend", "type": "quay_extension", "position_m": [0.0, 0.0, -36.0], "yaw_degrees": 0.0, "direction": "output"},
+        {"id": "equip_a", "type": "equipment_pad", "position_m": [0.0, 0.0, 14.0], "yaw_degrees": 0.0, "direction": "output"},
+        {"id": "equip_b", "type": "equipment_pad", "position_m": [0.0, 0.0, -14.0], "yaw_degrees": 0.0, "direction": "output"}
+      ]
+    },
+    {
+      "id": "quay_grain",
+      "display_name": "GRAIN QUAY",
+      "kind": "quay",
+      "footprint_m": [30.0, 1.4, 68.0],
+      "color": [0.72, 0.62, 0.28],
+      "tags": ["waterfront", "bulk_grain"],
+      "slots": [
+        {"id": "root", "type": "module_input", "accepts": ["harbour_branch"], "position_m": [0.0, 0.0, 34.0], "yaw_degrees": 180.0, "direction": "input"},
+        {"id": "extend", "type": "quay_extension", "position_m": [0.0, 0.0, -34.0], "yaw_degrees": 0.0, "direction": "output"},
+        {"id": "equip_a", "type": "equipment_pad", "position_m": [0.0, 0.0, 13.0], "yaw_degrees": 0.0, "direction": "output"},
+        {"id": "equip_b", "type": "equipment_pad", "position_m": [0.0, 0.0, -13.0], "yaw_degrees": 0.0, "direction": "output"}
+      ]
+    },
+    {
+      "id": "quay_liquid",
+      "display_name": "LIQUID JETTY",
+      "kind": "quay",
+      "footprint_m": [14.0, 1.2, 48.0],
+      "color": [0.16, 0.20, 0.26],
+      "tags": ["waterfront", "liquid"],
+      "slots": [
+        {"id": "root", "type": "module_input", "accepts": ["harbour_branch"], "position_m": [0.0, 0.0, 24.0], "yaw_degrees": 180.0, "direction": "input"},
+        {"id": "extend", "type": "quay_extension", "position_m": [0.0, 0.0, -24.0], "yaw_degrees": 0.0, "direction": "output"},
+        {"id": "branch_port", "type": "quay_branch", "position_m": [-7.0, 0.0, -10.0], "yaw_degrees": -90.0, "direction": "output"},
+        {"id": "branch_starboard", "type": "quay_branch", "position_m": [7.0, 0.0, -10.0], "yaw_degrees": 90.0, "direction": "output"},
+        {"id": "branch_tip", "type": "quay_branch", "position_m": [0.0, 0.0, -22.0], "yaw_degrees": 0.0, "direction": "output"},
+        {"id": "equip_a", "type": "equipment_pad", "position_m": [0.0, 0.0, 8.0], "yaw_degrees": 0.0, "direction": "output"},
+        {"id": "equip_b", "type": "equipment_pad", "position_m": [0.0, 0.0, -6.0], "yaw_degrees": 0.0, "direction": "output"}
+      ]
+    },
+    {
+      "id": "quay_branch_stub",
+      "display_name": "QUAY BRANCH",
+      "kind": "quay",
+      "footprint_m": [10.0, 1.1, 28.0],
+      "color": [0.22, 0.26, 0.32],
+      "tags": ["waterfront", "branch"],
+      "slots": [
+        {"id": "root", "type": "module_input", "accepts": ["quay_branch"], "position_m": [0.0, 0.0, 14.0], "yaw_degrees": 180.0, "direction": "input"},
+        {"id": "extend", "type": "quay_extension", "position_m": [0.0, 0.0, -14.0], "yaw_degrees": 0.0, "direction": "output"},
+        {"id": "equip_a", "type": "equipment_pad", "position_m": [0.0, 0.0, 0.0], "yaw_degrees": 0.0, "direction": "output"}
+      ]
+    },
+    {
+      "id": "quay_extension",
+      "display_name": "QUAY EXTENSION",
+      "kind": "quay",
+      "footprint_m": [28.0, 1.4, 62.0],
+      "color": [0.40, 0.42, 0.46],
+      "tags": ["waterfront", "extension"],
+      "slots": [
+        {"id": "root", "type": "module_input", "accepts": ["quay_extension"], "position_m": [0.0, 0.0, 31.0], "yaw_degrees": 180.0, "direction": "input"},
+        {"id": "extend", "type": "quay_extension", "position_m": [0.0, 0.0, -31.0], "yaw_degrees": 0.0, "direction": "output"},
+        {"id": "equip_a", "type": "equipment_pad", "position_m": [0.0, 0.0, 12.0], "yaw_degrees": 0.0, "direction": "output"},
+        {"id": "equip_b", "type": "equipment_pad", "position_m": [0.0, 0.0, -12.0], "yaw_degrees": 0.0, "direction": "output"}
+      ]
+    },
+    {
+      "id": "yard_general",
+      "display_name": "PALLET YARD",
+      "kind": "cargo",
+      "footprint_m": [28.0, 0.7, 20.0],
+      "color": [0.52, 0.36, 0.22],
+      "tags": ["cargo", "land", "general"],
+      "slots": [
+        {"id": "root", "type": "module_input", "accepts": ["cargo_facility"], "position_m": [0.0, 0.0, 10.0], "yaw_degrees": 180.0, "direction": "input"}
+      ]
+    },
+    {
+      "id": "yard_fish",
+      "display_name": "FISH SHED",
+      "kind": "cargo",
+      "footprint_m": [24.0, 0.8, 18.0],
+      "color": [0.28, 0.58, 0.72],
+      "tags": ["cargo", "land", "fishing"],
+      "slots": [
+        {"id": "root", "type": "module_input", "accepts": ["cargo_facility"], "position_m": [0.0, 0.0, 9.0], "yaw_degrees": 180.0, "direction": "input"}
+      ]
+    },
+    {
+      "id": "yard_container",
+      "display_name": "CONTAINER STACK",
+      "kind": "cargo",
+      "footprint_m": [36.0, 0.9, 24.0],
+      "color": [0.14, 0.36, 0.58],
+      "tags": ["cargo", "land", "container"],
+      "slots": [
+        {"id": "root", "type": "module_input", "accepts": ["cargo_facility"], "position_m": [0.0, 0.0, 12.0], "yaw_degrees": 180.0, "direction": "input"}
+      ]
+    },
+    {
+      "id": "yard_ore",
+      "display_name": "ORE STOCKPILE",
+      "kind": "cargo",
+      "footprint_m": [32.0, 0.8, 22.0],
+      "color": [0.48, 0.34, 0.26],
+      "tags": ["cargo", "land", "bulk_ore"],
+      "slots": [
+        {"id": "root", "type": "module_input", "accepts": ["cargo_facility"], "position_m": [0.0, 0.0, 11.0], "yaw_degrees": 180.0, "direction": "input"}
+      ]
+    },
+    {
+      "id": "yard_grain",
+      "display_name": "GRAIN SILO YARD",
+      "kind": "cargo",
+      "footprint_m": [28.0, 0.8, 20.0],
+      "color": [0.82, 0.70, 0.32],
+      "tags": ["cargo", "land", "bulk_grain"],
+      "slots": [
+        {"id": "root", "type": "module_input", "accepts": ["cargo_facility"], "position_m": [0.0, 0.0, 10.0], "yaw_degrees": 180.0, "direction": "input"}
+      ]
+    },
+    {
+      "id": "yard_tank",
+      "display_name": "TANK FARM",
+      "kind": "cargo",
+      "footprint_m": [32.0, 1.0, 24.0],
+      "color": [0.14, 0.16, 0.20],
+      "tags": ["cargo", "land", "liquid"],
+      "slots": [
+        {"id": "root", "type": "module_input", "accepts": ["cargo_facility"], "position_m": [0.0, 0.0, 12.0], "yaw_degrees": 180.0, "direction": "input"}
+      ]
+    },
+    {
+      "id": "cargo_yard",
+      "display_name": "CARGO YARD",
+      "kind": "cargo",
+      "footprint_m": [28.0, 0.7, 20.0],
+      "color": [0.24, 0.62, 0.32],
+      "tags": ["cargo", "land"],
+      "slots": [
+        {"id": "root", "type": "module_input", "accepts": ["cargo_facility"], "position_m": [0.0, 0.0, 10.0], "yaw_degrees": 180.0, "direction": "input"}
+      ]
+    },
+    {
+      "id": "equip_jib_crane",
+      "display_name": "JIB CRANE",
+      "kind": "equipment",
+      "footprint_m": [10.0, 1.0, 10.0],
+      "color": [0.92, 0.76, 0.14],
+      "tags": ["equipment", "general", "jib_crane"],
+      "slots": [
+        {"id": "root", "type": "module_input", "accepts": ["equipment_pad"], "position_m": [0.0, 0.0, 0.0], "yaw_degrees": 180.0, "direction": "input"}
+      ]
+    },
+    {
+      "id": "equip_fish_derrick",
+      "display_name": "FISH DERRICK",
+      "kind": "equipment",
+      "footprint_m": [8.0, 1.0, 8.0],
+      "color": [0.45, 0.78, 0.88],
+      "tags": ["equipment", "fishing", "fish_derrick"],
+      "slots": [
+        {"id": "root", "type": "module_input", "accepts": ["equipment_pad"], "position_m": [0.0, 0.0, 0.0], "yaw_degrees": 180.0, "direction": "input"}
+      ]
+    },
+    {
+      "id": "equip_sts_gantry",
+      "display_name": "STS GANTRY",
+      "kind": "equipment",
+      "footprint_m": [14.0, 1.2, 12.0],
+      "color": [0.25, 0.55, 0.85],
+      "tags": ["equipment", "container", "sts_gantry"],
+      "slots": [
+        {"id": "root", "type": "module_input", "accepts": ["equipment_pad"], "position_m": [0.0, 0.0, 0.0], "yaw_degrees": 180.0, "direction": "input"}
+      ]
+    },
+    {
+      "id": "equip_grab_unloader",
+      "display_name": "GRAB UNLOADER",
+      "kind": "equipment",
+      "footprint_m": [12.0, 1.1, 12.0],
+      "color": [0.78, 0.48, 0.22],
+      "tags": ["equipment", "bulk_ore", "grab_unloader"],
+      "slots": [
+        {"id": "root", "type": "module_input", "accepts": ["equipment_pad"], "position_m": [0.0, 0.0, 0.0], "yaw_degrees": 180.0, "direction": "input"}
+      ]
+    },
+    {
+      "id": "equip_grain_elevator",
+      "display_name": "GRAIN ELEVATOR",
+      "kind": "equipment",
+      "footprint_m": [10.0, 1.0, 10.0],
+      "color": [0.88, 0.78, 0.28],
+      "tags": ["equipment", "bulk_grain", "grain_elevator"],
+      "slots": [
+        {"id": "root", "type": "module_input", "accepts": ["equipment_pad"], "position_m": [0.0, 0.0, 0.0], "yaw_degrees": 180.0, "direction": "input"}
+      ]
+    },
+    {
+      "id": "equip_loading_arm",
+      "display_name": "LOADING ARM",
+      "kind": "equipment",
+      "footprint_m": [6.0, 1.0, 6.0],
+      "color": [0.55, 0.62, 0.72],
+      "tags": ["equipment", "liquid", "loading_arm"],
+      "slots": [
+        {"id": "root", "type": "module_input", "accepts": ["equipment_pad"], "position_m": [0.0, 0.0, 0.0], "yaw_degrees": 180.0, "direction": "input"}
+      ]
+    },
+    {
+      "id": "crane_pad",
+      "display_name": "CRANE PAD",
+      "kind": "equipment",
+      "footprint_m": [10.0, 1.0, 10.0],
+      "color": [0.92, 0.76, 0.14],
+      "tags": ["equipment", "legacy"],
+      "slots": [
+        {"id": "root", "type": "module_input", "accepts": ["equipment_pad"], "position_m": [0.0, 0.0, 0.0], "yaw_degrees": 180.0, "direction": "input"}
+      ]
+    },
+    {
+      "id": "fuel_pad",
+      "display_name": "FUEL PAD",
+      "kind": "service",
+      "footprint_m": [16.0, 0.9, 12.0],
+      "color": [0.84, 0.18, 0.16],
+      "tags": ["service", "fuel", "land"],
+      "slots": [
+        {"id": "root", "type": "module_input", "accepts": ["service_pad"], "position_m": [0.0, 0.0, 6.0], "yaw_degrees": 180.0, "direction": "input"}
+      ]
+    },
+    {
+      "id": "service_pad",
+      "display_name": "SERVICE PAD",
+      "kind": "service",
+      "footprint_m": [22.0, 0.7, 16.0],
+      "color": [0.46, 0.52, 0.38],
+      "tags": ["service", "land"],
+      "slots": [
+        {"id": "root", "type": "module_input", "accepts": ["service_pad"], "position_m": [0.0, 0.0, 8.0], "yaw_degrees": 180.0, "direction": "input"}
+      ]
+    },
+    {
+      "id": "road_spine",
+      "display_name": "ROAD SPINE",
+      "kind": "road",
+      "footprint_m": [10.0, 0.35, 36.0],
+      "color": [0.20, 0.21, 0.23],
+      "tags": ["road", "land"],
+      "slots": [
+        {"id": "root", "type": "module_input", "accepts": ["road_extension"], "position_m": [0.0, 0.0, 18.0], "yaw_degrees": 180.0, "direction": "input"},
+        {"id": "extend", "type": "road_extension", "position_m": [0.0, 0.0, -18.0], "yaw_degrees": 0.0, "direction": "output"},
+        {"id": "yard_port", "type": "cargo_facility", "position_m": [-5.0, 0.0, 0.0], "yaw_degrees": 90.0, "direction": "output"},
+        {"id": "yard_starboard", "type": "cargo_facility", "position_m": [5.0, 0.0, 0.0], "yaw_degrees": -90.0, "direction": "output"}
+      ]
+    }
+  ]
+}

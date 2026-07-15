@@ -9,7 +9,7 @@ extends RefCounted
 const DEFAULT_CONFIG_PATH := "res://resources/data/world/norway_coast.json"
 const LAYOUT_SCRIPT := preload("res://scripts/world/world_layout.gd")
 ## Increment whenever deterministic generation logic changes incompatibly.
-const GENERATION_VERSION := 5
+const GENERATION_VERSION := 6
 const CACHE_LIMIT := 4
 const TARGET_WORLD_SIZE_M := 40000.0
 const WORLD_HALF_EXTENT_M := TARGET_WORLD_SIZE_M * 0.5

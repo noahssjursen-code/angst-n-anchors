@@ -906,14 +906,22 @@ func _equilibrium_draft_fraction() -> float:
 	return clampf((lo + hi) * 0.5, 0.05, 0.98)
 
 
-## Place alongside a berth: correct heading, actual half-beam offset from quay, waterline.
-func dock_at_berth(dock: PortDock, berth_index: int) -> void:
-	if dock == null or berth_index < 0:
+## Place alongside a quay face: correct heading, offset from quay, waterline.
+func dock_at_berth(dock: Node3D, _berth_index: int = 0) -> void:
+	if dock == null:
 		return
 	refresh_hull_bounds_from_visuals()
-	var xform := dock.get_berth_spawn_transform(berth_index, get_half_beam_m())
+	var half_beam := get_half_beam_m()
+	var local := Vector3(0.0, 0.0, -(half_beam + 1.5))
+	# Face along quay (local +X), hull bow = -Z so yaw = PI/2 in dock space.
+	var xform := dock.global_transform * Transform3D(Basis.from_euler(Vector3(0.0, PI * 0.5, 0.0)), local)
 	snap_to_transform(xform)
 	place_at_waterline(WaveSurface.WATER_LEVEL)
+
+
+## Compatibility alias — continuous vessel calls are deferred.
+func dock_at_call(dock: Node3D, _call: Variant = null) -> void:
+	dock_at_berth(dock, 0)
 
 
 func get_half_beam_m() -> float:
@@ -921,7 +929,7 @@ func get_half_beam_m() -> float:
 
 
 ## Deprecated — kept so old call sites do nothing harmful.
-func fit_to_port_berth(dock: PortDock, berth_index: int) -> void:
+func fit_to_port_berth(dock: Node3D, berth_index: int) -> void:
 	if not berth_auto_fit_enabled:
 		return
 	dock_at_berth(dock, berth_index)

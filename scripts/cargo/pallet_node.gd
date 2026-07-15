@@ -164,7 +164,7 @@ func _process(delta: float) -> void:
 func _destination_display() -> String:
 	if pallet == null or pallet.destination_port_id.is_empty():
 		return ""
-	var registry := get_node_or_null("/root/ContractRegistry")
+	var registry := get_node_or_null("/root/PortCatalog")
 	if registry == null:
 		return ""
 	return str(registry.call("get_port_display_name", pallet.destination_port_id))

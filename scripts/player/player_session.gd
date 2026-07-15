@@ -55,7 +55,7 @@ func _ready() -> void:
 	LocalCaptainStore.clear_active()
 	data = PlayerData.new()
 	data_loaded.emit(data)
-	call_deferred("_connect_registry")
+	call_deferred("_connect_economy")
 
 
 func _process(delta: float) -> void:
@@ -412,24 +412,9 @@ static func _is_test_script_process() -> bool:
 
 # ── Internal ──────────────────────────────────────────────────────────────────
 
-func _connect_registry() -> void:
-	var registry := get_node_or_null("/root/ContractRegistry")
-	if registry == null:
-		push_error("PlayerSession: ContractRegistry autoload not found — check autoload order in Project Settings.")
-		return
-	if not registry.unit_delivered.is_connected(_on_unit_delivered):
-		registry.unit_delivered.connect(_on_unit_delivered)
-	if not registry.contract_completed.is_connected(_on_contract_completed):
-		registry.contract_completed.connect(_on_contract_completed)
-
-
-func _on_unit_delivered(_contract: Contract, reward: int) -> void:
-	earn_marks(reward)
-
-
-func _on_contract_completed(_contract: Contract) -> void:
-	data.contracts_completed += 1
-	_request_save()
+func _connect_economy() -> void:
+	# Contract trade is purged; marks come from other systems until trade returns.
+	pass
 
 
 func _request_marks_server_sync() -> void:

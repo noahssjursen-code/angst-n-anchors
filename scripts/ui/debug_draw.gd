@@ -455,7 +455,7 @@ func _build_gameplay(e: Array) -> void:
 		_sec(e, "GAMEPLAY")
 		_stub(e, "Status", "GameState autoload missing")
 		return
-	var registry := get_node_or_null("/root/ContractRegistry")
+	var registry := get_node_or_null("/root/PortCatalog")
 
 	# ── Player ────────────────────────────────────────────────────────────────
 	_sec(e, "PLAYER")
@@ -493,26 +493,7 @@ func _build_gameplay(e: Array) -> void:
 	# ── Contracts ─────────────────────────────────────────────────────────────
 	_sep(e)
 	_sec(e, "CONTRACTS")
-	var active: Array = gs.contract.active
-	if active.is_empty():
-		_stub(e, "—", "none active")
-	else:
-		for c in active:
-			var contract := c as Contract
-			if contract == null:
-				continue
-			var dest: String = registry.get_port_display_name(contract.destination_port_id) \
-				if registry != null else "?"
-			_row(e, contract.display_name,
-				"× %d  →  %s" % [contract.quantity, dest], C_VALUE)
-			_row(e, "  Delivered",
-				"%d / %d" % [contract.delivered_count, contract.quantity], C_VALUE)
-			_row(e, "  Reward", PlayerSession.format_money(contract.reward_gold), C_GOLD)
-			var apron := _count_apron_cargo(contract.id)
-			if apron > 0:
-				_row(e, "  Apron cargo", "%d crates" % apron, C_VALUE)
-			else:
-				_stub(e, "  Apron cargo", "none staged")
+	_stub(e, "—", "trade rewrite pending")
 
 	# ── World ─────────────────────────────────────────────────────────────────
 	_sep(e)

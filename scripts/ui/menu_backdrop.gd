@@ -28,7 +28,6 @@ var _target_look_at := Vector3(2.5, 2.2, 0.0)
 var _orbit_amp := 0.18
 
 var _boat: Node3D
-var _display_dock: PortDock
 var _boat_base_y := 0.0
 var _boat_base_yaw := -PI * 0.5
 var _bob_t := 0.0
@@ -91,8 +90,8 @@ func _build_coastal_harbour() -> void:
 	ground.name = "IslandGround"
 	ground.mesh = IslandMeshBuilder.to_mesh(
 		polygon,
-		HARBOUR_WIDTH + PortPlot.PAD_SAFE_MARGIN * 2.0,
-		HARBOUR_DEPTH + PortPlot.PAD_SAFE_MARGIN * 2.0,
+		HARBOUR_WIDTH + PortSizing.PAD_SAFE_MARGIN_M * 2.0,
+		HARBOUR_DEPTH + PortSizing.PAD_SAFE_MARGIN_M * 2.0,
 		HARBOUR_SEED,
 		HARBOUR_WIDTH,
 		HARBOUR_DEPTH,
@@ -102,27 +101,18 @@ func _build_coastal_harbour() -> void:
 	ground.material_override = terrain_material
 	harbour.add_child(ground)
 
-	# Use the real dock builder: quay slab, lip, bollards, apron and gantry.
-	# Empty port_id keeps this presentation set out of registries/contracts.
-	var dock := PortDock.new()
-	dock.name = "PresentationDock"
-	dock.port_id = ""
-	dock.dock_length = 70.0
-	dock.has_fuel_point = false
-	dock.max_ship_class = ShipClass.Type.COASTAL_TRADER
-	dock.berth_types = [CargoBerthType.Type.GENERAL]
-	dock.position = Vector3(0.0, 0.0, -HARBOUR_DEPTH * 0.5)
-	harbour.add_child(dock)
-	_display_dock = dock
-
-	# The same empty service-slot shell as runtime ports.
-	var facilities := PortFacilities.new()
-	facilities.name = "PresentationFacilities"
-	facilities.plot_width = HARBOUR_WIDTH
-	facilities.plot_depth = HARBOUR_DEPTH - PortDock.INLAND_DEPTH
-	facilities.layout_seed = HARBOUR_SEED
-	facilities.position = Vector3(0.0, 0.0, -HARBOUR_DEPTH * 0.5 + PortDock.INLAND_DEPTH)
-	harbour.add_child(facilities)
+	# Show the same socketed port graph as the runtime, using labeled boxes.
+	var def := PortDefinition.new()
+	def.port_id = "menu"
+	def.display_name = "Menu Harbour"
+	def.size = 1
+	def.site_seed = HARBOUR_SEED
+	def.port_generation_version = PortDefinition.CURRENT_PORT_GENERATION_VERSION
+	var data := PortExpander.expand(def, HARBOUR_SEED)
+	var plot := PortPlot.new()
+	plot.name = "PresentationPort"
+	plot.configure(data)
+	harbour.add_child(plot)
 
 	# Use the actual lighthouse model and sweep implementation.
 	var lighthouse := LighthouseBuilding.new()
@@ -144,14 +134,8 @@ func _spawn_display_vessel() -> void:
 	boat.name = "MenuDisplayVessel"
 	_prepare_display_boat(boat)
 	add_child(boat)
-	if _display_dock != null:
-		var half_beam := 2.5
-		if boat is BoatBody:
-			half_beam = maxf((boat as BoatBody).hull_size.x * 0.5, 1.0)
-		boat.global_transform = _display_dock.get_berth_spawn_transform(0, half_beam)
-	else:
-		boat.global_position = Vector3(0.0, WaveSurface.WATER_LEVEL, 7.0)
-		boat.rotation.y = _boat_base_yaw
+	boat.global_position = Vector3(0.0, WaveSurface.WATER_LEVEL, 7.0)
+	boat.rotation.y = _boat_base_yaw
 	if boat.has_method("place_at_waterline"):
 		boat.call("place_at_waterline", WaveSurface.WATER_LEVEL)
 	if boat is BoatBody:

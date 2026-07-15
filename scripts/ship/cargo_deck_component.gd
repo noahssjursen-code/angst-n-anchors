@@ -9,6 +9,13 @@ extends Node3D
 const DECK_GROUP := "cargo_deck"
 
 signal cargo_changed(component: CargoDeckComponent)
+signal cargo_landed(component: CargoDeckComponent, pallet: Pallet)
+
+enum StorageRole {
+	SHIP_DECK = 0,
+	EXPORT_STAGING = 1,
+	IMPORT_BUFFER = 2,
+}
 
 @export var deck_width_m: float = 5.0:
 	set(v):
@@ -38,6 +45,11 @@ signal cargo_changed(component: CargoDeckComponent)
 ##   * accepts_delivery (selling) succeeds when pallet.destination_port_id == port_id
 ## Ship decks leave it empty: they accept anything, and never deliver.
 @export var port_id: String = ""
+## Stable port-facility lot id. Empty for ship decks.
+@export var lot_id: String = ""
+## Vessel call this temporary projection is servicing. Empty means unassigned.
+@export var active_call_id: String = ""
+@export var storage_role: StorageRole = StorageRole.SHIP_DECK
 
 @export_group("Debug")
 @export var show_debug_grid: bool = false:
@@ -118,34 +130,36 @@ func can_accept(count: int = 1) -> bool:
 func accepts_pallet(pallet: Pallet) -> bool:
 	if pallet == null:
 		return false
-	if not port_id.is_empty() and pallet.origin_port_id != port_id:
-		return false
+	match storage_role:
+		StorageRole.EXPORT_STAGING:
+			if port_id.is_empty() or pallet.origin_port_id != port_id:
+				return false
+		StorageRole.IMPORT_BUFFER:
+			if port_id.is_empty():
+				return false
+			if pallet.commodity != "fish" and pallet.destination_port_id != port_id:
+				return false
 	# Footprint must fit somewhere on the grid.
 	if _find_free_block(_footprint_of(pallet), Vector3.ZERO, false) < 0:
 		return false
 	return true
 
 
-## Whether this deck represents the destination for a pallet — i.e. dropping
-## the pallet here counts as a delivery (and a sale). Only port apron decks
-## return true; ship decks never do.
+## Whether this lot is a physical import buffer for the pallet. Landing here
+## never changes ownership or pays the player; tally closes that transaction.
 func accepts_delivery(pallet: Pallet) -> bool:
-	if pallet == null or port_id.is_empty():
-		return false
-	if pallet.commodity == "fish":
-		return true
-	return pallet.destination_port_id == port_id
+	return storage_role == StorageRole.IMPORT_BUFFER and accepts_pallet(pallet)
 
 
-## Sell the pallet via ContractRegistry. Caller is responsible for removing
-## the pallet visual. Returns the gold reward (0 on failure).
-func deliver_pallet(pallet: Pallet) -> int:
+## Place landed cargo into the import buffer. Payment is deliberately absent:
+## PortOperationsService/TallySession is the sole economic authority.
+func land_pallet(pallet: Pallet, world_hint: Vector3 = Vector3.INF) -> int:
 	if not accepts_delivery(pallet):
-		return 0
-	var registry := get_node_or_null("/root/ContractRegistry")
-	if registry == null:
-		return pallet.value_gold
-	return int(registry.deliver_pallet(pallet))
+		return -1
+	var cell := add_pallet(pallet, world_hint)
+	if cell >= 0:
+		cargo_landed.emit(self, pallet)
+	return cell
 
 
 # ── Pallet API ────────────────────────────────────────────────────────────────
@@ -155,7 +169,7 @@ func deliver_pallet(pallet: Pallet) -> int:
 func add_pallet(pallet: Pallet, world_hint: Vector3 = Vector3.INF) -> int:
 	if pallet == null:
 		return -1
-	if not port_id.is_empty() and pallet.origin_port_id != port_id:
+	if not accepts_pallet(pallet):
 		return -1
 
 	var preferred_local := Vector3.ZERO

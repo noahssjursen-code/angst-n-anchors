@@ -46,14 +46,8 @@ static func despawn_all_ships(tree: SceneTree, except: BoatBody = null) -> void:
 		ship.free()
 
 
-static func unregister_ship_from_docks(ship: BoatBody) -> void:
-	if ship == null or not is_instance_valid(ship):
-		return
-	var tree := ship.get_tree()
-	if tree == null:
-		return
-	for dock in tree.root.find_children("*", "PortDock", true, false):
-		(dock as PortDock).unregister_ship(ship)
+static func unregister_ship_from_docks(_ship: BoatBody) -> void:
+	pass
 
 
 static func replace_before_spawn(tree: SceneTree) -> void:
@@ -80,23 +74,10 @@ static func _prepare_despawn(ship: BoatBody, tree: SceneTree) -> void:
 		mooring.release_mooring()
 
 
-static func _forfeit_cargo_on_ship(ship: BoatBody, tree: SceneTree) -> void:
-	if ship == null or tree == null or tree.root == null:
+static func _forfeit_cargo_on_ship(ship: BoatBody, _tree: SceneTree) -> void:
+	if ship == null:
 		return
-	var registry := tree.root.get_node_or_null("/root/ContractRegistry")
-	if registry == null or not registry.has_method("forfeit_transit_units"):
-		return
-	var lost: Dictionary = {}
 	for node in ship.find_children("*", "CargoDeckComponent", true, false):
 		var deck := node as CargoDeckComponent
-		if deck == null or not deck.affects_boat_cargo_mass:
-			continue
-		for pallet in deck.get_all_pallets():
-			if pallet == null:
-				continue
-			var cid := str(pallet.contract_id)
-			if cid.is_empty():
-				continue
-			lost[cid] = int(lost.get(cid, 0)) + pallet.units
-	for cid in lost.keys():
-		registry.call("forfeit_transit_units", str(cid), int(lost[cid]))
+		if deck != null:
+			deck.clear_all()

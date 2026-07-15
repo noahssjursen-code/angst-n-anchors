@@ -131,7 +131,7 @@ func auto_moor(tree: SceneTree) -> void:
 	auto_moor_at_berth(tree, -1)
 
 
-## Prefer bollards on the same berth slot so lines do not yank the ship along the quay.
+## Compatibility entry point for old showcase scenes.
 func auto_moor_at_berth(tree: SceneTree, berth_index: int) -> void:
 	if tree == null:
 		return
@@ -163,26 +163,19 @@ func auto_moor_at_berth(tree: SceneTree, berth_index: int) -> void:
 	moor_to_posts(front, rear)
 
 
-func _berth_bollard_candidates(tree: SceneTree, berth_index: int) -> Array[Node]:
+func auto_moor_at_call(tree: SceneTree, _call_id: String) -> void:
+	auto_moor_at_berth(tree, -1)
+
+
+func _berth_bollard_candidates(tree: SceneTree, _berth_index: int) -> Array[Node]:
 	var out: Array[Node] = []
-	if berth_index < 0:
-		return out
-	if _body == null:
-		_body = _resolve_boat_rigid_body()
-	if _body == null:
-		return out
 	var dock := _find_port_dock()
-	if dock == null:
-		return out
-	var berth_cx := dock.get_berth_cx(berth_index)
-	var slot_half := dock.get_berth_slot_half_width(berth_index)
-	var reach := slot_half + 4.0
 	for n in tree.get_nodes_in_group(DOCK_MOORING_GROUP):
 		if not n.has_method("get_anchor_global_position"):
 			continue
-		var local := dock.to_local(dock_post_anchor_world(n))
-		if absf(local.x - berth_cx) <= reach:
-			out.append(n)
+		if dock != null and _dock_from_node(n) != dock:
+			continue
+		out.append(n)
 	return out
 
 
@@ -451,12 +444,13 @@ func release_mooring() -> void:
 	stern_line_tied = false
 	_rest_distance_bow = -1.0
 	_rest_distance_stern = -1.0
+	# Resolve and release the call while the dock posts still identify the quay.
+	_sync_berth_with_dock()
 	_front_post = null
 	_rear_post = null
 	_bow_point = null
 	_stern_point = null
 	_hide_all_rope_segments()
-	_sync_berth_with_dock()
 
 
 func is_mooring_line_tied_from_post(post: Node) -> bool:
@@ -481,7 +475,7 @@ func toggle_line_from_post(post: Node) -> bool:
 	var next_tied := not is_slot_tied(forward_slot)
 
 	if next_tied and _would_split_berths(post):
-		last_mooring_reject = "Both lines must be made fast within the same berth."
+		last_mooring_reject = "Both lines must be made fast within your assigned quay range."
 		mooring_rejected.emit(last_mooring_reject)
 		return false
 
@@ -626,18 +620,18 @@ func _resolve_boat_rigid_body() -> RigidBody3D:
 	return null
 
 
-func _dock_from_node(node: Node) -> PortDock:
+func _dock_from_node(node: Node) -> Node:
 	var n: Node = node
 	while n != null:
-		if n is PortDock:
-			return n as PortDock
+		if n is PortPlot:
+			return n
 		n = n.get_parent()
 	return null
 
 
 ## Resolve the quay you are tied to. Sailed-in vessels live under World, not
 ## PortPlot — walk up from the bollard posts, not only from the ship hierarchy.
-func _find_port_dock() -> PortDock:
+func _find_port_dock() -> Node:
 	if bow_line_tied and _front_post != null:
 		var bow_dock := _dock_from_node(_front_post)
 		if bow_dock != null:
@@ -648,87 +642,47 @@ func _find_port_dock() -> PortDock:
 			return stern_dock
 	var n: Node = get_parent()
 	while n != null:
-		if n is PortDock:
-			return n as PortDock
 		if n is PortPlot:
-			return (n as PortPlot).get_node_or_null("PortDock") as PortDock
+			return n
 		n = n.get_parent()
 	return null
 
 
 func _sync_berth_with_dock() -> void:
-	var dock := _find_port_dock()
-	if dock == null:
-		return
-	var ship := get_boat_rigid_body() as BoatBody
-	if ship == null:
-		return
-	var owner_id: String = PortDock.local_player_owner_id()
-	if is_moored and bow_line_tied and stern_line_tied:
-		if _mooring_splits_berths(dock):
-			dock.unregister_ship(ship)
-			return
-		var idx: int = _resolved_berth_index(dock, ship)
-		if idx >= 0:
-			dock.register_ship_at_berth(idx, ship, owner_id)
-			var plot := dock.get_parent() as PortPlot
-			if plot != null and plot.has_method("respawn_staged_cargo"):
-				plot.call_deferred("respawn_staged_cargo")
-	else:
-		dock.unregister_ship(ship)
+	# Vessel-call / tally gating is deferred until the functional port layer returns.
+	pass
 
 
-func _berth_index_for_post(dock: PortDock, post: Node) -> int:
+func _posts_fit_call(_dock: Node, _call: Variant) -> bool:
+	return true
+
+
+func _berth_index_for_post(dock: Node, post: Node) -> int:
 	if dock == null or post == null:
 		return -1
-	return dock.find_berth_index_at_position(_post_anchor(post))
+	return 0
 
 
 func _would_split_berths(new_post: Node) -> bool:
 	var new_dock := _dock_from_node(new_post)
 	if new_dock == null:
 		return false
-	var new_berth := _berth_index_for_post(new_dock, new_post)
-	if new_berth < 0:
-		return false
-	var other_post: Node = null
-	if bow_line_tied and _front_post != null and new_post != _front_post:
-		other_post = _front_post
-	elif stern_line_tied and _rear_post != null and new_post != _rear_post:
-		other_post = _rear_post
-	if other_post == null:
-		return false
-	var other_dock := _dock_from_node(other_post)
-	if other_dock == null:
-		return false
-	if other_dock != new_dock:
+	var other: Node = _front_post if bow_line_tied else _rear_post
+	if other != null and _dock_from_node(other) != new_dock:
 		return true
-	var other_berth := _berth_index_for_post(other_dock, other_post)
-	return other_berth >= 0 and other_berth != new_berth
+	return false
 
 
-func _mooring_splits_berths(dock: PortDock) -> bool:
+func _mooring_splits_berths(dock: Node) -> bool:
 	if not bow_line_tied or not stern_line_tied:
 		return false
 	if _front_post == null or _rear_post == null:
 		return false
-	var bow_berth := _berth_index_for_post(dock, _front_post)
-	var stern_berth := _berth_index_for_post(dock, _rear_post)
-	return bow_berth >= 0 and stern_berth >= 0 and bow_berth != stern_berth
+	return _dock_from_node(_front_post) != _dock_from_node(_rear_post)
 
 
-func _resolved_berth_index(dock: PortDock, ship: BoatBody) -> int:
-	var bow_berth := _berth_index_for_post(dock, _front_post) if _front_post != null else -1
-	var stern_berth := _berth_index_for_post(dock, _rear_post) if _rear_post != null else -1
-	if bow_berth >= 0 and bow_berth == stern_berth:
-		return bow_berth
-	if bow_berth >= 0 and stern_berth < 0:
-		return bow_berth
-	if stern_berth >= 0 and bow_berth < 0:
-		return stern_berth
-	if ship != null:
-		return dock.find_berth_index_at_position(ship.global_position)
-	return -1
+func _resolved_berth_index(_dock: Node, _ship: BoatBody) -> int:
+	return 0
 
 
 func _ship_cleat_nodes() -> Array[Node3D]:

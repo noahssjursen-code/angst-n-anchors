@@ -13,7 +13,7 @@ func _initialize() -> void:
 
 
 func _run() -> void:
-	var registry := root.get_node_or_null("ContractRegistry")
+	var registry := root.get_node_or_null("PortCatalog")
 	var registry_ids: Array = registry.call("get_port_ids") if registry != null else []
 	var snapshot = SnapshotClass.for_preview(90210, 20)
 	assert(snapshot.is_valid())

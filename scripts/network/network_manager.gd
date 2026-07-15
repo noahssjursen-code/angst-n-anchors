@@ -480,23 +480,9 @@ func _register_ship_sender(ship_id: String, hull_id: String, ship_node: Node3D, 
 			return [pos.x, pos.y, pos.z, rot.x, rot.y, rot.z],
 		func():
 			var pilot := get_local_player_id() if boarded else ""
-			var berth_tag := ""
-			
-			# Scan PortDock instances to check if this ship is currently moored/berthed locally
-			var docks := get_tree().get_nodes_in_group("port_docks")
-			for dock in docks:
-				var port_dock := dock as PortDock
-				if port_dock != null:
-					var idx := port_dock.find_player_berth(PortDock.local_player_owner_id())
-					if idx >= 0 and port_dock.get_ship_at_berth(idx) == ship_node:
-						berth_tag = "berth=%s_%d" % [port_dock.port_id, idx]
-						break
-			
 			var parts: PackedStringArray = []
 			if not pilot.is_empty():
 				parts.append("pilot=" + pilot)
-			if not berth_tag.is_empty():
-				parts.append(berth_tag)
 			if ship_node is BoatBody:
 				var systems: Array[FishingSystem] = (ship_node as BoatBody).get_fishing_systems()
 				if not systems.is_empty() and systems[0].trawling:

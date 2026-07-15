@@ -25,11 +25,17 @@ func _initialize() -> void:
 	definition.port_id = "coast-test"
 	definition.rotation_y = 1.25
 	definition.has_explicit_rotation = true
+	definition.size = 2
+	definition.site_id = "coast-segment-00042"
+	definition.site_seed = 123456
 	definition.region_kind = PORT_DEFINITION.RegionKind.FJORD
 	definition.ground_mode = PORT_DEFINITION.GroundMode.WORLD_TERRAIN
 	var restored = PORT_DEFINITION.from_dict(definition.to_dict())
 	assert(restored.has_explicit_rotation)
 	assert(is_equal_approx(restored.rotation_y, 1.25))
+	assert(restored.size == 2)
+	assert(restored.site_id == "coast-segment-00042")
+	assert(restored.site_seed == 123456)
 	assert(restored.region_kind == PORT_DEFINITION.RegionKind.FJORD)
 	assert(restored.ground_mode == PORT_DEFINITION.GroundMode.WORLD_TERRAIN)
 

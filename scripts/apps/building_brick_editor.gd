@@ -252,12 +252,6 @@ func _build_chrome() -> void:
 	_role_option.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_role_option.add_item("decorative", 0)
 	_role_option.set_item_metadata(0, "decorative")
-	var role_index := 1
-	for preset in PortServiceSlotCatalog.ROLE_PRESETS:
-		var role_id := str(preset["id"])
-		_role_option.add_item(str(preset["display_name"]), role_index)
-		_role_option.set_item_metadata(role_index, role_id)
-		role_index += 1
 	col.add_child(_role_option)
 
 	col.add_child(HSeparator.new())

@@ -17,7 +17,7 @@ func _ready() -> void:
 
 
 func _tick() -> void:
-	var registry := get_node_or_null("/root/ContractRegistry")
+	var registry := get_node_or_null("/root/PortCatalog")
 	if registry == null:
 		return
 	var tree := get_tree()

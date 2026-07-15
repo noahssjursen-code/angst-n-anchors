@@ -39,7 +39,7 @@ var minimap_collapsed: bool = false
 ## Offline default or authoritative server-selected generation seed/version.
 ## These are intentionally not written to settings.cfg.
 var map_generation_seed: int = 42
-var map_generation_version: int = 5
+var map_generation_version: int = 6
 var weather_generation_version: int = 3
 var map_layout_checksum: String = ""
 

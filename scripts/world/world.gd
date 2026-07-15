@@ -124,7 +124,9 @@ func _rebuild() -> void:
 			for child in get_children():
 				_own_subtree(child)
 	else:
-		var flatten_zones := WORLD_TERRAIN_STREAMER.make_flatten_zones(defs, 0.0)
+		var flatten_zones := WORLD_TERRAIN_STREAMER.make_flatten_zones(
+			defs, 0.0, world_seed, _world_layout
+		)
 		ForestField.initialize(_world_layout, world_seed, flatten_zones)
 		_add_terrain_streamer(defs)
 		_add_forest_streamer(flatten_zones)
@@ -227,7 +229,7 @@ func _add_editor_preview(defs: Array[PortDefinition]) -> void:
 			break
 		if def.world_position.length() > EDITOR_PREVIEW_RADIUS:
 			continue
-		var data := PortExpander.expand(def, world_seed)
+		var data := PortExpander.expand(def, world_seed, _world_layout)
 		var plot  := PortPlot.new()
 		plot.name = "Port_%s" % def.port_id
 		plot.configure(data)
@@ -245,7 +247,7 @@ func _setup_ports(defs: Array[PortDefinition]) -> void:
 	port_proximity.name = "PortProximity"
 	add_child(port_proximity)
 
-	var registry := get_node_or_null("/root/ContractRegistry")
+	var registry := get_node_or_null("/root/PortCatalog")
 	var home_port_id := "port-home"
 	var session := get_node_or_null("/root/PlayerSession")
 	if session != null and session.get("data") != null:
@@ -255,14 +257,16 @@ func _setup_ports(defs: Array[PortDefinition]) -> void:
 
 	for i in range(defs.size()):
 		var def  := defs[i]
-		var data := PortExpander.expand(def, world_seed)
+		var data := PortExpander.expand(def, world_seed, _world_layout)
 
 		if registry != null:
 			registry.register_port(
 				data.port_id, data.display_name, data.world_position,
 				Vector3(INF, INF, INF),
 				data.commodity_export, data.commodity_imports,
-				data.island_width, PortSizing.PLOT_DEPTH_M, data.layout_seed,
+				data.island_width,
+				data.plot_depth,
+				data.layout_seed,
 				data.population, data.features, data.rotation_y,
 				data.berth_count, data.size,
 			)
@@ -289,7 +293,7 @@ func _setup_ports(defs: Array[PortDefinition]) -> void:
 
 	# Fallback if the saved home port id no longer exists in this seed.
 	if get_node_or_null("HomePort") == null and not defs.is_empty():
-		var fallback := PortExpander.expand(defs[0], world_seed)
+		var fallback := PortExpander.expand(defs[0], world_seed, _world_layout)
 		var plot := PortPlot.new()
 		plot.name = "HomePort"
 		plot.configure(fallback)
@@ -309,8 +313,7 @@ func _generate_definitions() -> Array[PortDefinition]:
 
 
 func _spawn_player() -> void:
-	# PortPlot._rebuild and PortFacilities._rebuild are both deferred.
-	# Two frames is enough for that chain to settle before we query spawn_pos.
+	# PortPlot builds its graph visualizer deferred; wait before querying spawn.
 	await get_tree().process_frame
 	await get_tree().process_frame
 

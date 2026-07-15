@@ -27,6 +27,9 @@ const SUBMERGED_SHELF_EXTENT_M := 28.0
 const COLLISION_COAST_CUTOFF_Y := WaveSurface.WATER_LEVEL
 const COASTAL_COATING_MAX_LOD := 2
 const COASTAL_COATING_OFFSET_M := 0.08
+## Macro terrain remains coarse, but authored port cuts need enough vertices to
+## show basin/quay outlines instead of collapsing to one 40 m cell.
+const PORT_CARVE_STEP_M := 10.0
 const BYTES_PER_VERTEX_ESTIMATE := 40
 const BYTES_PER_INDEX_ESTIMATE := 4
 const PORT_PAD_WIDTH_BY_SIZE := PortSizing.TERRAIN_PAD_WIDTH_BY_SIZE
@@ -65,7 +68,12 @@ func configure(layout: Object, port_definitions: Array = []) -> void:
 	_layout = layout
 	_material = null
 	_coastal_slate_material = null
-	_flatten_zones = make_flatten_zones(port_definitions, sea_level_pad_height_m)
+	_flatten_zones = make_flatten_zones(
+		port_definitions,
+		sea_level_pad_height_m,
+		_layout_seed(layout),
+		layout as WorldLayout,
+	)
 	_frame_index = 0
 	set_process(_layout != null)
 	if _layout != null:
@@ -79,7 +87,12 @@ func set_layout(layout: Object) -> void:
 
 
 func set_port_definitions(port_definitions: Array) -> void:
-	_flatten_zones = make_flatten_zones(port_definitions, sea_level_pad_height_m)
+	_flatten_zones = make_flatten_zones(
+		port_definitions,
+		sea_level_pad_height_m,
+		_layout_seed(_layout),
+		_layout as WorldLayout,
+	)
 	_rebuild_loaded_chunks()
 
 
@@ -291,6 +304,8 @@ func _build_chunk(coord: Vector2i, lod: int, stream_position: Vector3) -> void:
 	var key := chunk_key(coord)
 	_unload_chunk(key)
 	var step := float(lod_steps_m[clampi(lod, 0, lod_steps_m.size() - 1)])
+	if _chunk_intersects_port_edit_zone(coord):
+		step = minf(step, PORT_CARVE_STEP_M)
 	var data := build_chunk_mesh_data(_layout, coord, step, _flatten_zones, SKIRT_DEPTH_M)
 	var root := Node3D.new()
 	root.name = "Terrain_%d_%d_L%d" % [coord.x, coord.y, lod]
@@ -326,6 +341,30 @@ func _build_chunk(coord: Vector2i, lod: int, stream_position: Vector3) -> void:
 	_chunks[key] = record
 	if chunk_needs_collision(coord, Vector2(stream_position.x, stream_position.z), collision_radius_m):
 		_add_collision(key)
+
+
+func _chunk_intersects_port_edit_zone(coord: Vector2i) -> bool:
+	var chunk_rect := Rect2(chunk_origin(coord), Vector2(CHUNK_SIZE_M, CHUNK_SIZE_M))
+	for zone_variant in _flatten_zones:
+		var zone := zone_variant as Dictionary
+		if not bool(zone.get("carve", false)) and not bool(zone.get("reclaim", false)):
+			continue
+		var half_size := zone.get("half_size", Vector2.ZERO) as Vector2
+		var yaw := float(zone.get("yaw", 0.0))
+		var c := absf(cos(yaw))
+		var s := absf(sin(yaw))
+		var extent := Vector2(
+			c * half_size.x + s * half_size.y,
+			s * half_size.x + c * half_size.y,
+		) + Vector2.ONE * 2.0
+		var center := zone.get("center", Vector2.ZERO) as Vector2
+		if chunk_rect.intersects(Rect2(center - extent, extent * 2.0), true):
+			return true
+	return false
+
+
+func _chunk_intersects_carve_zone(coord: Vector2i) -> bool:
+	return _chunk_intersects_port_edit_zone(coord)
 
 
 func _array_mesh_from_data(data: Dictionary) -> ArrayMesh:
@@ -450,12 +489,39 @@ func _rebuild_loaded_chunks() -> void:
 		_enqueue({"coord": parse_chunk_key(StringName(key)), "lod": int(record["lod"]), "distance": 0.0})
 
 
-## Pure helper. Port records may be PortDefinition objects or dictionaries.
+## Pure helper. Port records may be PortDefinition / PortData objects or dictionaries.
 ## Optional dictionary keys: flatten_shape ("ellipse"/"rectangle"), pad_size_m
 ## (Vector2 or [x,z]), flatten_falloff_m, and pad_height_m.
-static func make_flatten_zones(port_definitions: Array, default_pad_height_m := 0.0) -> Array[Dictionary]:
+static func make_flatten_zones(
+		port_definitions: Array,
+		default_pad_height_m := 0.0,
+		world_seed := 0,
+		world_layout: WorldLayout = null,
+) -> Array[Dictionary]:
 	var zones: Array[Dictionary] = []
 	for definition in port_definitions:
+		var layout_graph: PortLayoutGraph
+		var facility_position := Vector3.ZERO
+		var facility_yaw := 0.0
+		if definition is PortData:
+			var data := definition as PortData
+			layout_graph = data.layout_graph
+			facility_position = data.world_position
+			facility_yaw = data.rotation_y
+		elif definition is PortDefinition:
+			var port_definition := definition as PortDefinition
+			var expand_seed := world_seed if world_seed != 0 else port_definition.site_seed
+			var expanded := PortExpander.expand(port_definition, expand_seed, world_layout)
+			layout_graph = expanded.layout_graph
+			facility_position = port_definition.world_position
+			facility_yaw = port_definition.rotation_y
+		if layout_graph != null:
+			zones.append_array(layout_graph.flatten_zone_records(
+				facility_position,
+				facility_yaw,
+				default_pad_height_m,
+			))
+			continue
 		var position := Vector3.ZERO
 		var yaw := 0.0
 		var size_class := 1
@@ -502,9 +568,19 @@ static func make_flatten_zones(port_definitions: Array, default_pad_height_m := 
 	return zones
 
 
+static func _layout_seed(layout: Object) -> int:
+	if layout == null:
+		return 0
+	if layout is WorldLayout:
+		return int((layout as WorldLayout).seed)
+	if layout.has_method("get"):
+		return int(layout.get("seed"))
+	return 0
+
+
 ## Pure deterministic terrain sample including configured flatten pads.
 static func sample_terrain_height(layout: Object, world_xz: Vector2, flatten_zones: Array = []) -> float:
-	var signed_distance := float(layout.sample_signed_distance(world_xz))
+	var signed_distance := sample_effective_signed_distance(layout, world_xz, flatten_zones)
 	var height := 0.0 if signed_distance >= 0.0 \
 		else float(layout.sample_height(world_xz)) - TERRAIN_SINK_M
 	height = _apply_flatten_zones(height, signed_distance, world_xz, flatten_zones)
@@ -518,9 +594,65 @@ static func sample_render_terrain_height(
 		world_xz: Vector2,
 		flatten_zones: Array = [],
 ) -> float:
-	var signed_distance := float(layout.sample_signed_distance(world_xz))
+	var original_distance := float(layout.sample_signed_distance(world_xz))
+	var signed_distance := _apply_port_terrain_zones(original_distance, world_xz, flatten_zones)
 	var height := float(layout.sample_height(world_xz)) - TERRAIN_SINK_M
+	if original_distance < 0.0 and signed_distance >= 0.0:
+		height = minf(height, WaveSurface.WATER_LEVEL - 3.0)
 	return _apply_flatten_zones(height, signed_distance, world_xz, flatten_zones)
+
+
+static func sample_effective_signed_distance(
+		layout: Object,
+		world_xz: Vector2,
+		terrain_zones: Array = [],
+) -> float:
+	return _apply_port_terrain_zones(
+		float(layout.sample_signed_distance(world_xz)),
+		world_xz,
+		terrain_zones,
+	)
+
+
+static func _apply_port_terrain_zones(
+		signed_distance: float,
+		world_xz: Vector2,
+		terrain_zones: Array,
+) -> float:
+	var effective := _apply_carve_zones(signed_distance, world_xz, terrain_zones)
+	return _apply_reclaim_zones(effective, world_xz, terrain_zones)
+
+
+static func _apply_reclaim_zones(
+		signed_distance: float,
+		world_xz: Vector2,
+		terrain_zones: Array,
+) -> float:
+	var effective := signed_distance
+	for zone_variant in terrain_zones:
+		var zone := zone_variant as Dictionary
+		if not bool(zone.get("reclaim", false)):
+			continue
+		var edge_distance := _zone_edge_distance(zone, world_xz)
+		if edge_distance <= 0.0:
+			effective = minf(effective, edge_distance)
+	return effective
+
+
+static func _apply_carve_zones(
+		signed_distance: float,
+		world_xz: Vector2,
+		terrain_zones: Array,
+) -> float:
+	var effective := signed_distance
+	for zone_variant in terrain_zones:
+		var zone := zone_variant as Dictionary
+		if not bool(zone.get("carve", false)):
+			continue
+		## Zone edge distance is negative inside, matching the inverse of the
+		## world's convention (positive water). Negate it to cut a water basin.
+		effective = maxf(effective, -_zone_edge_distance(zone, world_xz))
+	return effective
 
 
 static func _apply_flatten_zones(
@@ -531,24 +663,32 @@ static func _apply_flatten_zones(
 ) -> float:
 	for zone_variant in flatten_zones:
 		var zone := zone_variant as Dictionary
-		var local := (world_xz - (zone["center"] as Vector2)).rotated(-float(zone["yaw"]))
-		var half_size: Vector2 = zone["half_size"]
+		if bool(zone.get("carve", false)):
+			continue
 		var falloff := maxf(float(zone["falloff"]), 0.001)
-		var edge_distance: float
-		if String(zone.get("shape", "rectangle")) == "ellipse":
-			var normalized := Vector2(local.x / maxf(half_size.x, 0.001), local.y / maxf(half_size.y, 0.001))
-			edge_distance = (normalized.length() - 1.0) * minf(half_size.x, half_size.y)
-		else:
-			var q := Vector2(absf(local.x), absf(local.y)) - half_size
-			edge_distance = Vector2(maxf(q.x, 0.0), maxf(q.y, 0.0)).length() + minf(maxf(q.x, q.y), 0.0)
+		var edge_distance := _zone_edge_distance(zone, world_xz)
 		var blend := 1.0 - smoothstep(0.0, falloff, maxf(edge_distance, 0.0))
 		if edge_distance <= 0.0:
 			blend = 1.0
 		# Pads keep land at the authored port datum. Their seaward overlap stays
 		# submerged so it cannot create a water-level terrain sheet.
-		if signed_distance < 0.0:
+		if signed_distance < 0.0 or bool(zone.get("reclaim", false)):
 			height = lerpf(height, float(zone["height"]), blend)
 	return height
+
+
+static func _zone_edge_distance(zone: Dictionary, world_xz: Vector2) -> float:
+	var local := (world_xz - (zone["center"] as Vector2)).rotated(-float(zone["yaw"]))
+	var half_size: Vector2 = zone["half_size"]
+	if String(zone.get("shape", "rectangle")) == "ellipse":
+		var normalized := Vector2(
+			local.x / maxf(half_size.x, 0.001),
+			local.y / maxf(half_size.y, 0.001),
+		)
+		return (normalized.length() - 1.0) * minf(half_size.x, half_size.y)
+	var q := Vector2(absf(local.x), absf(local.y)) - half_size
+	return Vector2(maxf(q.x, 0.0), maxf(q.y, 0.0)).length() \
+			+ minf(maxf(q.x, q.y), 0.0)
 
 
 ## Pure helper returning render-ready packed arrays. Full land cells keep their
@@ -577,7 +717,7 @@ static func build_chunk_mesh_data(
 		for x in range(side):
 			var index := z * side + x
 			var world_xz := origin + Vector2(float(x) * step_m, float(z) * step_m)
-			var distance := float(layout.sample_signed_distance(world_xz))
+			var distance := sample_effective_signed_distance(layout, world_xz, flatten_zones)
 			var height := sample_render_terrain_height(layout, world_xz, flatten_zones)
 			vertices[index] = Vector3(world_xz.x, height, world_xz.y)
 			signed_distances[index] = distance
