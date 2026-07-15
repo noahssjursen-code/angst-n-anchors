@@ -2,7 +2,36 @@
 class_name PortDebugGizmos
 extends Node3D
 
-## Visualise where the port is registered, what size box was used, and where coast dots landed.
+## Debug overlays for port site registration / coast tracing.
+## Stamped into named layer nodes so each group can be shown or hidden independently.
+
+const LAYER_ORIGIN := "origin"
+const LAYER_AXES := "axes"
+const LAYER_SIZE_BOX := "size_box"
+const LAYER_TRACE_BOX := "trace_box"
+const LAYER_TERRAIN_TRACE := "terrain_trace"
+const LAYER_SPINE := "spine"
+const LAYER_SHORE_SPAN := "shore_span"
+const LAYER_DOCK_FACE := "dock_face"
+const LAYER_GRAPH_ROOT := "graph_root"
+const LAYER_ASPHALT_BERTHS := "asphalt_berths"
+const LAYER_QUAY_ROOTS := "quay_roots"
+const LAYER_QUAY_ARMS := "quay_arms"
+
+const LAYER_IDS: PackedStringArray = [
+	LAYER_ORIGIN,
+	LAYER_AXES,
+	LAYER_SIZE_BOX,
+	LAYER_TRACE_BOX,
+	LAYER_TERRAIN_TRACE,
+	LAYER_SPINE,
+	LAYER_SHORE_SPAN,
+	LAYER_DOCK_FACE,
+	LAYER_GRAPH_ROOT,
+	LAYER_ASPHALT_BERTHS,
+	LAYER_QUAY_ROOTS,
+	LAYER_QUAY_ARMS,
+]
 
 const ORIGIN_COLOR := Color(1.0, 0.15, 0.15)
 const SIZE_BOX_COLOR := Color(0.2, 0.95, 0.35)
@@ -14,48 +43,246 @@ const SPINE_COLOR := Color(0.95, 0.2, 0.95)
 const DOCK_COLOR := Color(0.2, 0.85, 1.0)
 const ANCHOR_COLOR := Color(1.0, 1.0, 0.2)
 
+## layer_id → visible. Missing keys default to true when a master enable is on.
+var _layer_visible: Dictionary = {}
+var _graph: PortLayoutGraph
 
-func configure(graph: PortLayoutGraph) -> void:
+
+func configure(graph: PortLayoutGraph, layer_visible: Dictionary = {}) -> void:
+	_graph = graph
+	_layer_visible = _normalized_layers(layer_visible)
+	_rebuild()
+
+
+func set_layer_visible(layer_id: String, enabled: bool) -> void:
+	if layer_id not in LAYER_IDS:
+		return
+	_layer_visible[layer_id] = enabled
+	_apply_layer_visibility()
+
+
+func set_all_layers_visible(enabled: bool) -> void:
+	for layer_id in LAYER_IDS:
+		_layer_visible[layer_id] = enabled
+	_apply_layer_visibility()
+
+
+func is_layer_visible(layer_id: String) -> bool:
+	return bool(_layer_visible.get(layer_id, false))
+
+
+func any_layer_visible() -> bool:
+	for layer_id in LAYER_IDS:
+		if is_layer_visible(layer_id):
+			return true
+	return false
+
+
+func layer_state() -> Dictionary:
+	return _layer_visible.duplicate()
+
+
+static func default_layers(enabled: bool = false) -> Dictionary:
+	var out := {}
+	for layer_id in LAYER_IDS:
+		out[layer_id] = enabled
+	return out
+
+
+func _rebuild() -> void:
 	for child in get_children():
 		child.free()
-	if graph == null:
+	if _graph == null:
 		return
-	var port_area := graph.initial_attributes.get("port_area", {}) as Dictionary
-	var foundation := graph.initial_attributes.get("foundation", {}) as Dictionary
-	var size := int(graph.initial_attributes.get("size", 1))
+	var port_area := _graph.initial_attributes.get("port_area", {}) as Dictionary
+	var foundation := _graph.initial_attributes.get("foundation", {}) as Dictionary
+	var size := int(_graph.initial_attributes.get("size", 1))
 	var half_w := float(port_area.get("half_width_m", 0.0))
 	var half_d := float(port_area.get("half_depth_m", 0.0))
 	var trace_w := float(port_area.get("trace_half_width_m", half_w))
 	var trace_d := float(port_area.get("trace_half_depth_m", half_d))
-	_stamp_origin(size, half_w, half_d, trace_w, trace_d)
-	_stamp_axis_arrow(Vector3(0.0, 0.0, -1.0), 90.0, SEAWARD_COLOR, "SEAWARD -Z")
-	_stamp_axis_arrow(Vector3(0.0, 0.0, 1.0), 90.0, INLAND_COLOR, "INLAND +Z")
-	_stamp_axis_arrow(Vector3(1.0, 0.0, 0.0), 70.0, Color(0.9, 0.9, 0.9), "ALONG +X")
-	_stamp_ground_rect("SizeBox", half_w, half_d, SIZE_BOX_COLOR, 0.8)
-	_stamp_ground_rect("TraceBox", trace_w, trace_d, TRACE_BOX_COLOR, 1.2)
+
+	var origin := _ensure_layer(LAYER_ORIGIN)
+	_stamp_origin(origin, size, half_w, half_d, trace_w, trace_d)
+
+	var axes := _ensure_layer(LAYER_AXES)
+	_stamp_axis_arrow(axes, Vector3(0.0, 0.0, -1.0), 90.0, SEAWARD_COLOR, "SEAWARD -Z")
+	_stamp_axis_arrow(axes, Vector3(0.0, 0.0, 1.0), 90.0, INLAND_COLOR, "INLAND +Z")
+	_stamp_axis_arrow(axes, Vector3(1.0, 0.0, 0.0), 70.0, Color(0.9, 0.9, 0.9), "ALONG +X")
+
+	_stamp_ground_rect(_ensure_layer(LAYER_SIZE_BOX), "SizeBox", half_w, half_d, SIZE_BOX_COLOR, 0.8)
+	_stamp_ground_rect(_ensure_layer(LAYER_TRACE_BOX), "TraceBox", trace_w, trace_d, TRACE_BOX_COLOR, 1.2)
+
 	_stamp_polyline_dots(
+		_ensure_layer(LAYER_TERRAIN_TRACE),
 		port_area.get("terrain_coast_polyline", []) as Array,
 		TERRAIN_COAST_COLOR,
 		2.4,
 		"TerrainTrace",
 	)
-	_stamp_polyline_dots(foundation.get("spine", []) as Array, SPINE_COLOR, 3.2, "Spine")
+
+	var spine_layer := _ensure_layer(LAYER_SPINE)
+	_stamp_polyline_dots(spine_layer, foundation.get("spine", []) as Array, SPINE_COLOR, 3.2, "Spine")
+	_stamp_polyline_lines(spine_layer, foundation.get("spine", []) as Array, SPINE_COLOR, 1.4)
+
 	_stamp_polyline_dots(
+		_ensure_layer(LAYER_SHORE_SPAN),
 		port_area.get("natural_shore_polyline", []) as Array,
 		Color(0.95, 0.45, 0.95),
 		2.0,
 		"ShoreSpan",
 	)
-	_stamp_polyline_dots(port_area.get("coast_polyline", []) as Array, DOCK_COLOR, 2.6, "DockFace")
-	_stamp_polyline_lines(foundation.get("spine", []) as Array, SPINE_COLOR, 1.4)
-	var modules := graph.modules
+	_stamp_polyline_dots(
+		_ensure_layer(LAYER_DOCK_FACE),
+		port_area.get("coast_polyline", []) as Array,
+		DOCK_COLOR,
+		2.6,
+		"DockFace",
+	)
+
+	var root_layer := _ensure_layer(LAYER_GRAPH_ROOT)
+	var modules := _graph.modules
 	for instance_id in modules:
 		var placed := modules[instance_id] as PortPlacedModule
 		if str(placed.assignment.get("role", "")) == "foundation_anchor":
-			_stamp_dot(placed.position_m, ANCHOR_COLOR, 5.0, "GraphRoot")
+			_stamp_dot(root_layer, placed.position_m, ANCHOR_COLOR, 5.0, "GraphRoot")
+
+	_stamp_berth_plan(_graph.initial_attributes.get("berth_plan", {}) as Dictionary)
+	_apply_layer_visibility()
+
+
+func _stamp_berth_plan(plan: Dictionary) -> void:
+	if plan.is_empty():
+		_ensure_layer(LAYER_ASPHALT_BERTHS)
+		_ensure_layer(LAYER_QUAY_ROOTS)
+		_ensure_layer(LAYER_QUAY_ARMS)
+		return
+	var asphalt_layer := _ensure_layer(LAYER_ASPHALT_BERTHS)
+	for raw in plan.get("asphalt_stations", []) as Array:
+		var station := raw as Dictionary
+		var origin := _xz(station.get("origin", [0.0, 0.0]))
+		var family := str(station.get("family", "general"))
+		var color := CommodityCatalog.terminal_family_color(family).lightened(0.25)
+		_stamp_dot(asphalt_layer, Vector3(origin.x, 5.0, origin.y), color, 3.4, str(station.get("id", "asphalt")))
+		var depth := float(station.get("depth_m", 16.0))
+		var length := float(station.get("length_m", 24.0))
+		var tangent := _xz(station.get("tangent", [1.0, 0.0])).normalized()
+		var seaward := _xz(station.get("direction", [0.0, -1.0])).normalized()
+		var pad := MeshBuilder.box(Vector3(length, 0.6, depth), color, 0.9, 0.0)
+		pad.name = "%s_pad" % str(station.get("id", "asphalt"))
+		asphalt_layer.add_child(pad)
+		pad.position = Vector3(
+			origin.x + seaward.x * depth * 0.5,
+			3.2,
+			origin.y + seaward.y * depth * 0.5,
+		)
+		_align_basis_on_tangent(pad, tangent, seaward)
+		_label(
+			asphalt_layer,
+			"%s_lbl" % str(station.get("id", "asphalt")),
+			"%s\n%s · asphalt" % [
+				CommodityCatalog.commodity_display(str(station.get("commodity_id", ""))),
+				str(station.get("role", "")).to_upper(),
+			],
+			Vector3(origin.x, 14.0, origin.y),
+			color,
+		)
+
+	var roots := _ensure_layer(LAYER_QUAY_ROOTS)
+	var arms := _ensure_layer(LAYER_QUAY_ARMS)
+	for raw in plan.get("quay_stations", []) as Array:
+		var station := raw as Dictionary
+		var origin := _xz(station.get("origin", [0.0, 0.0]))
+		var tip := _xz(station.get("tip", [origin.x, origin.y]))
+		var family := str(station.get("family", "general"))
+		var color := CommodityCatalog.terminal_family_color(family)
+		_stamp_dot(roots, Vector3(origin.x, 6.0, origin.y), color, 4.2, "%s_root" % str(station.get("id", "quay")))
+		_stamp_dot(arms, Vector3(tip.x, 5.0, tip.y), color.lightened(0.35), 2.8, "%s_tip" % str(station.get("id", "quay")))
+		var length_m := float(station.get("length_m", origin.distance_to(tip)))
+		var width_m := float(station.get("width_m", 12.0))
+		var seaward := _xz(station.get("direction", [0.0, -1.0])).normalized()
+		## Outline only — solid deck + crane live on the foundation visualizer.
+		var outline := color
+		outline.a = 0.35
+		var arm := MeshBuilder.box(Vector3(width_m, 0.4, length_m), outline, 0.85, 0.05)
+		arm.name = "%s_arm" % str(station.get("id", "quay"))
+		arms.add_child(arm)
+		arm.position = Vector3(
+			(origin.x + tip.x) * 0.5,
+			4.2,
+			(origin.y + tip.y) * 0.5,
+		)
+		var tangent := _xz(station.get("tangent", [1.0, 0.0])).normalized()
+		_align_basis_on_tangent(arm, tangent, seaward)
+		var commodity_bits: PackedStringArray = []
+		for commodity in station.get("commodities", []) as Array:
+			commodity_bits.append(CommodityCatalog.commodity_display(str(commodity)))
+		_label(
+			roots,
+			"%s_lbl" % str(station.get("id", "quay")),
+			"%s\n%s\n%.0f×%.0f m quay" % [
+				CommodityCatalog.terminal_family_display(family),
+				", ".join(commodity_bits),
+				width_m,
+				length_m,
+			],
+			Vector3(origin.x, 18.0, origin.y) + Vector3(seaward.x, 0.0, seaward.y) * (length_m * 0.35),
+			color,
+		)
+
+
+func _xz(raw: Variant) -> Vector2:
+	var arr := raw as Array
+	if arr.size() < 2:
+		return Vector2.ZERO
+	return Vector2(float(arr[0]), float(arr[1]))
+
+
+## Box local Z = seaward, local X = alongshore tangent.
+func _align_basis_on_tangent(node: Node3D, tangent: Vector2, seaward: Vector2) -> void:
+	var z_axis := Vector3(seaward.x, 0.0, seaward.y)
+	if z_axis.length_squared() < 0.001:
+		z_axis = Vector3(0.0, 0.0, -1.0)
+	else:
+		z_axis = z_axis.normalized()
+	var x_axis := Vector3(tangent.x, 0.0, tangent.y)
+	if x_axis.length_squared() < 0.001:
+		x_axis = Vector3.UP.cross(z_axis).normalized()
+	else:
+		x_axis = x_axis.normalized()
+	## Re-orthogonalise if tangent wasn't perpendicular.
+	x_axis = Vector3.UP.cross(z_axis).normalized()
+	var y_axis := z_axis.cross(x_axis).normalized()
+	node.basis = Basis(x_axis, y_axis, z_axis)
+
+
+func _ensure_layer(layer_id: String) -> Node3D:
+	var existing := get_node_or_null(layer_id) as Node3D
+	if existing != null:
+		return existing
+	var layer := Node3D.new()
+	layer.name = layer_id
+	add_child(layer)
+	return layer
+
+
+func _apply_layer_visibility() -> void:
+	for layer_id in LAYER_IDS:
+		var layer := get_node_or_null(layer_id) as Node3D
+		if layer != null:
+			layer.visible = is_layer_visible(layer_id)
+
+
+func _normalized_layers(raw: Dictionary) -> Dictionary:
+	var out := default_layers(false)
+	for layer_id in LAYER_IDS:
+		if raw.has(layer_id):
+			out[layer_id] = bool(raw[layer_id])
+	return out
 
 
 func _stamp_origin(
+		parent: Node3D,
 		size: int,
 		half_w: float,
 		half_d: float,
@@ -65,9 +292,10 @@ func _stamp_origin(
 	var pole := MeshBuilder.cylinder(1.8, 28.0, ORIGIN_COLOR, 0.7, 0.1)
 	pole.name = "PortOrigin"
 	pole.position = Vector3(0.0, 14.0, 0.0)
-	add_child(pole)
-	_stamp_dot(Vector3.ZERO, ORIGIN_COLOR, 4.5, "OriginDot")
+	parent.add_child(pole)
+	_stamp_dot(parent, Vector3.ZERO, ORIGIN_COLOR, 4.5, "OriginDot")
 	_label(
+		parent,
 		"OriginLabel",
 		"PORT ORIGIN (registered site)\nsize %d · area %.0f×%.0f m\nscan %.0f×%.0f m" % [
 			size,
@@ -81,20 +309,33 @@ func _stamp_origin(
 	)
 
 
-func _stamp_axis_arrow(direction: Vector3, length_m: float, color: Color, text: String) -> void:
+func _stamp_axis_arrow(
+		parent: Node3D,
+		direction: Vector3,
+		length_m: float,
+		color: Color,
+		text: String,
+) -> void:
 	var shaft := MeshBuilder.box(Vector3(1.2, 1.2, length_m), color, 0.75, 0.0)
 	shaft.name = "Axis_%s" % text
 	shaft.position = direction * (length_m * 0.5) + Vector3(0.0, 2.0, 0.0)
-	add_child(shaft)
-	_label("AxisLabel_%s" % text, text, shaft.position + Vector3(0.0, 8.0, 0.0), color)
+	parent.add_child(shaft)
+	_label(parent, "AxisLabel_%s" % text, text, shaft.position + Vector3(0.0, 8.0, 0.0), color)
 
 
-func _stamp_ground_rect(node_name: String, half_x: float, half_z: float, color: Color, y: float) -> void:
+func _stamp_ground_rect(
+		parent: Node3D,
+		node_name: String,
+		half_x: float,
+		half_z: float,
+		color: Color,
+		y: float,
+) -> void:
 	if half_x < 1.0 or half_z < 1.0:
 		return
 	var root := Node3D.new()
 	root.name = node_name
-	add_child(root)
+	parent.add_child(root)
 	var thickness := 1.4
 	var y_pos := y
 	var corners := [
@@ -114,6 +355,7 @@ func _stamp_ground_rect(node_name: String, half_x: float, half_z: float, color: 
 		root.add_child(edge)
 		_align_segment(edge, a, b)
 	_label(
+		parent,
 		"%sLabel" % node_name,
 		node_name.replace("Box", " box ") + " %.0f × %.0f m" % [half_x * 2.0, half_z * 2.0],
 		Vector3(0.0, y + 10.0, -half_z - 12.0),
@@ -121,16 +363,27 @@ func _stamp_ground_rect(node_name: String, half_x: float, half_z: float, color: 
 	)
 
 
-func _stamp_polyline_dots(points: Array, color: Color, radius: float, prefix: String) -> void:
+func _stamp_polyline_dots(
+		parent: Node3D,
+		points: Array,
+		color: Color,
+		radius: float,
+		prefix: String,
+) -> void:
 	for index in range(points.size()):
 		var raw := points[index] as Array
 		if raw.size() < 2:
 			continue
 		var pos := Vector3(float(raw[0]), 3.0, float(raw[1]))
-		_stamp_dot(pos, color, radius, "%s_%d" % [prefix, index])
+		_stamp_dot(parent, pos, color, radius, "%s_%d" % [prefix, index])
 
 
-func _stamp_polyline_lines(points: Array, color: Color, thickness: float) -> void:
+func _stamp_polyline_lines(
+		parent: Node3D,
+		points: Array,
+		color: Color,
+		thickness: float,
+) -> void:
 	if points.size() < 2:
 		return
 	for index in range(points.size() - 1):
@@ -144,7 +397,7 @@ func _stamp_polyline_lines(points: Array, color: Color, thickness: float) -> voi
 		if span < 0.5:
 			continue
 		var edge := MeshBuilder.box(Vector3(thickness, thickness, span), color, 0.75, 0.0)
-		add_child(edge)
+		parent.add_child(edge)
 		_align_segment(edge, a, b)
 
 
@@ -162,14 +415,14 @@ func _align_segment(node: Node3D, a: Vector3, b: Vector3) -> void:
 	node.basis = Basis.looking_at(direction, up)
 
 
-func _stamp_dot(position: Vector3, color: Color, radius: float, node_name: String) -> void:
+func _stamp_dot(parent: Node3D, position: Vector3, color: Color, radius: float, node_name: String) -> void:
 	var dot := MeshBuilder.sphere(radius, color, 0.7, 0.05)
 	dot.name = node_name
 	dot.position = position
-	add_child(dot)
+	parent.add_child(dot)
 
 
-func _label(node_name: String, text: String, position: Vector3, color: Color) -> void:
+func _label(parent: Node3D, node_name: String, text: String, position: Vector3, color: Color) -> void:
 	var label := Label3D.new()
 	label.name = node_name
 	label.text = text
@@ -180,4 +433,4 @@ func _label(node_name: String, text: String, position: Vector3, color: Color) ->
 	label.no_depth_test = true
 	label.outline_size = 6
 	label.outline_modulate = Color(0.0, 0.0, 0.0, 0.85)
-	add_child(label)
+	parent.add_child(label)

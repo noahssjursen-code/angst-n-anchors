@@ -207,6 +207,69 @@ static func has_gentle_backshore(
 	return true
 
 
+## How far seaward from `origin_xz` stays open water before hitting land.
+## Used to cap pier finger length in tight bays / inner fjords.
+## Origin may sit on the dock apron (coast / slight land); we skip inland until
+## water, then measure the continuous water run to the opposite shore.
+static func seaward_water_clearance_m(
+		layout: WorldLayout,
+		origin_xz: Vector2,
+		seaward: Vector2,
+		max_m: float = 480.0,
+		step_m: float = 8.0,
+		water_margin_m: float = QUAY_WATER_MARGIN_M,
+) -> float:
+	if layout == null or seaward.length_squared() < 0.5:
+		return 0.0
+	var forward := seaward.normalized()
+	var step := maxf(step_m, 1.0)
+	var travelled := 0.0
+	var found_water := false
+	## Reach open water first (dock face often sits on the SDF zero contour).
+	while travelled + step <= max_m + 0.01:
+		var reach := origin_xz + forward * (travelled + step)
+		if layout.sample_signed_distance(reach) > water_margin_m:
+			found_water = true
+			break
+		travelled += step
+	if not found_water:
+		return 0.0
+	var clear := 0.0
+	while travelled + clear + step <= max_m + 0.01:
+		var probe := origin_xz + forward * (travelled + clear + step)
+		if layout.sample_signed_distance(probe) <= water_margin_m:
+			return clear
+		clear += step
+	return clear
+
+
+## Across-bay water half-width from `origin_xz` along ±`along` (shore-parallel).
+## Low values mean a narrow pocket that cannot host a wide pier comb.
+static func across_water_clearance_m(
+		layout: WorldLayout,
+		origin_xz: Vector2,
+		along: Vector2,
+		max_m: float = 320.0,
+		step_m: float = 8.0,
+		water_margin_m: float = QUAY_WATER_MARGIN_M,
+) -> float:
+	if layout == null or along.length_squared() < 0.5:
+		return 0.0
+	var axis := along.normalized()
+	var left := 0.0
+	var right := 0.0
+	var step := maxf(step_m, 1.0)
+	while left + step <= max_m + 0.01:
+		if layout.sample_signed_distance(origin_xz - axis * (left + step)) <= water_margin_m:
+			break
+		left += step
+	while right + step <= max_m + 0.01:
+		if layout.sample_signed_distance(origin_xz + axis * (right + step)) <= water_margin_m:
+			break
+		right += step
+	return minf(left, right)
+
+
 ## True when a straight quay of the given half-length has open water along the
 ## full berth pocket. Rejects convex coastline corners that wedge land through
 ## the dock face (the "can't berth at a bend" case).
@@ -526,6 +589,8 @@ static func _make_definition(
 	):
 		requested_size -= 1
 	port.size = requested_size
+	## Geography ceiling — player upgrades cannot grow past this site.
+	port.site_max_size = clampi(max_size, PortSizing.MIN_SIZE, PortSizing.MAX_SIZE)
 	port.site_quay_half_m = quay_half
 	port.port_generation_version = PortDefinition.CURRENT_PORT_GENERATION_VERSION
 	port.site_id = "coast-segment-%05d" % int(candidate["contour_index"])

@@ -58,6 +58,7 @@ func _rebuild() -> void:
 	if _graph == null:
 		return
 	_stamp_foundation()
+	_stamp_berth_terminals()
 	for instance_id in _graph.module_ids():
 		_stamp_module(_graph.modules[instance_id] as PortPlacedModule)
 	if show_open_slots:
@@ -209,6 +210,504 @@ func _stamp_foundation() -> void:
 	mesh.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	mesh.extra_cull_margin = 24.0
 	add_child(mesh)
+
+
+## Trade berths planned on the asphalt dock face — wide decks with gear + yard.
+func _stamp_berth_terminals() -> void:
+	if not show_equipment_shapes:
+		return
+	var plan := _graph.initial_attributes.get("berth_plan", {}) as Dictionary
+	if plan.is_empty():
+		return
+	var foundation := _graph.initial_attributes.get("foundation", {}) as Dictionary
+	var surface_y := float(foundation.get("surface_y_m", PortCoastTracer.FOUNDATION_SURFACE_Y_M)) \
+			+ PortCoastTracer.FOUNDATION_TERRAIN_CLEARANCE_M
+	var root := Node3D.new()
+	root.name = "BerthTerminals"
+	add_child(root)
+	for index in range((plan.get("quay_stations", []) as Array).size()):
+		var station := (plan.get("quay_stations", []) as Array)[index] as Dictionary
+		## Prefer plan berth_side when present (gameplay / docking later).
+		var berth_sign := float(station.get("berth_side", 1 if (index % 2) == 0 else -1))
+		if is_zero_approx(berth_sign):
+			berth_sign = 1.0 if (index % 2) == 0 else -1.0
+		_stamp_berth_quay(root, station, surface_y, berth_sign)
+	for raw in plan.get("asphalt_stations", []) as Array:
+		_stamp_berth_asphalt(root, raw as Dictionary, surface_y)
+
+
+func _stamp_berth_quay(
+		parent: Node3D,
+		station: Dictionary,
+		surface_y: float,
+		berth_sign: float = 1.0,
+) -> void:
+	var origin := _xz2(station.get("origin", [0.0, 0.0]))
+	var tip := _xz2(station.get("tip", [origin.x, origin.y]))
+	var seaward := _xz2(station.get("direction", [0.0, -1.0])).normalized()
+	if seaward.length_squared() < 0.001:
+		seaward = PortCoastTracer.PORT_LOCAL_SEAWARD_DIR
+	var length_m := float(station.get("length_m", origin.distance_to(tip)))
+	var width_m := float(station.get("width_m", PortSizing.quay_deck_width_m(_size_class())))
+	var family := str(station.get("family", "general"))
+	var family_color := CommodityCatalog.terminal_family_color(family)
+	var mid := origin.lerp(tip, 0.5)
+	var terminal := Node3D.new()
+	terminal.name = str(station.get("id", "quay"))
+	terminal.position = Vector3(mid.x, surface_y, mid.y)
+	_align_node_seaward(terminal, seaward)
+	parent.add_child(terminal)
+	terminal.set_meta("deck_half_w", width_m * 0.5)
+
+	## Cross-section (local X): storage | road | crane.
+	## berth_sign · +X = ship face; opposite flank = cargo/storage.
+	var crane_lane_w := clampf(width_m * 0.34, 14.0, 36.0)
+	var road_w := clampf(width_m * 0.22, 8.0, 16.0)
+	var storage_w := maxf(width_m - crane_lane_w - road_w, width_m * 0.34)
+	var lane_sum := storage_w + road_w + crane_lane_w
+	if lane_sum > width_m:
+		var scale := width_m / lane_sum
+		storage_w *= scale
+		road_w *= scale
+		crane_lane_w *= scale
+	var storage_x := -berth_sign * (width_m * 0.5 - storage_w * 0.5)
+	var road_x := storage_x + berth_sign * (storage_w * 0.5 + road_w * 0.5)
+	var crane_x := berth_sign * (width_m * 0.5 - crane_lane_w * 0.5)
+	var usable_len := length_m * 0.90
+	var z0 := -usable_len * 0.5
+
+	var deck := MeshBuilder.box(
+		Vector3(width_m, 0.55, length_m),
+		FOUNDATION_PAVEMENT_COLOR.lightened(0.04),
+		1.0,
+		0.0,
+	)
+	deck.name = "Deck"
+	deck.position = Vector3(0.0, 0.28, 0.0)
+	terminal.add_child(deck)
+
+	## Coping marks the ship berth edge
+	var coping := MeshBuilder.box(
+		Vector3(1.2, 0.7, length_m * 0.96),
+		Color(0.55, 0.56, 0.58),
+		0.9,
+		0.05,
+	)
+	coping.name = "BerthEdge"
+	coping.position = Vector3(berth_sign * (width_m * 0.5 - 0.6), 0.55, 0.0)
+	terminal.add_child(coping)
+
+	var road := MeshBuilder.box(
+		Vector3(road_w, 0.22, usable_len),
+		Color(0.07, 0.07, 0.08),
+		1.0,
+		0.0,
+	)
+	road.name = "Road"
+	road.position = Vector3(road_x, 0.50, 0.0)
+	terminal.add_child(road)
+
+	_stamp_quay_storage_lane(
+		terminal,
+		station,
+		storage_x,
+		storage_w,
+		usable_len,
+		z0,
+		berth_sign,
+	)
+	_stamp_quay_crane_lane(
+		terminal,
+		station,
+		crane_x,
+		crane_lane_w,
+		usable_len,
+		z0,
+		berth_sign,
+	)
+
+	if show_module_labels:
+		var zone_bits: PackedStringArray = []
+		for zone in station.get("zones", []) as Array:
+			var z := zone as Dictionary
+			var role := str(z.get("role", "")).to_upper()
+			var name := CommodityCatalog.commodity_display(str(z.get("commodity_id", "")))
+			if bool(z.get("bidirectional", false)):
+				zone_bits.append("IN/OUT %s" % name)
+			elif not role.is_empty():
+				zone_bits.append("%s %s" % [role, name])
+			else:
+				zone_bits.append(name)
+		if zone_bits.is_empty():
+			for commodity in station.get("commodities", []) as Array:
+				zone_bits.append(CommodityCatalog.commodity_display(str(commodity)))
+		_label(
+			"BerthLabel_%s" % str(station.get("id", "quay")),
+			"%s\n%.0f m quay" % ["\n".join(zone_bits), length_m],
+			Vector3(mid.x, surface_y + 18.0, mid.y) + Vector3(seaward.x, 0.0, seaward.y) * (length_m * 0.15),
+			CommodityCatalog.commodity_color(str((station.get("commodities", ["containers"]) as Array)[0])) \
+					if not (station.get("commodities", []) as Array).is_empty() \
+					else family_color.lightened(0.2),
+			0.03,
+		)
+
+
+## Pack cargo along the storage flank, split into commodity zones when shared.
+func _stamp_quay_storage_lane(
+		terminal: Node3D,
+		station: Dictionary,
+		lane_x: float,
+		lane_w: float,
+		usable_len: float,
+		z0: float,
+		berth_sign: float,
+) -> void:
+	var lane := Node3D.new()
+	lane.name = "StorageLane"
+	terminal.add_child(lane)
+	var zones: Array = station.get("zones", []) as Array
+	if zones.is_empty():
+		var family := str(station.get("family", "general"))
+		zones = [{
+			"commodity_id": "",
+			"role": "",
+			"family": family,
+			"t0": 0.0,
+			"t1": 1.0,
+			"label": CommodityCatalog.terminal_family_display(family),
+		}]
+	for zone_index in range(zones.size()):
+		var zone: Dictionary = zones[zone_index]
+		var t0 := float(zone.get("t0", 0.0))
+		var t1 := float(zone.get("t1", 1.0))
+		var zone_len := usable_len * maxf(t1 - t0, 0.05)
+		var zone_mid_z := z0 + usable_len * ((t0 + t1) * 0.5)
+		var commodity_id := str(zone.get("commodity_id", ""))
+		var zone_family := str(zone.get("family", station.get("family", "general")))
+		var color := CommodityCatalog.commodity_color(commodity_id) if not commodity_id.is_empty() \
+				else CommodityCatalog.terminal_family_color(zone_family)
+		var color_arr := zone.get("color", []) as Array
+		if color_arr.size() >= 3:
+			color = Color(float(color_arr[0]), float(color_arr[1]), float(color_arr[2]))
+
+		## Full commodity colour on the storage apron — readable from above.
+		var apron := MeshBuilder.box(
+			Vector3(lane_w * 0.96, 0.22, zone_len * 0.96),
+			color,
+			0.9,
+			0.0,
+		)
+		apron.name = "ZoneApron_%d" % zone_index
+		apron.position = Vector3(lane_x, 0.50, zone_mid_z)
+		lane.add_child(apron)
+
+		## Side stripe on the berth face matching this zone's product
+		var half_w := float(terminal.get_meta("deck_half_w", absf(lane_x) + lane_w))
+		var stripe := MeshBuilder.box(
+			Vector3(1.1, 0.85, zone_len * 0.92),
+			color.lightened(0.12),
+			0.75,
+			0.05,
+		)
+		stripe.name = "ZoneStripe_%d" % zone_index
+		stripe.position = Vector3(berth_sign * (half_w - 0.55), 0.6, zone_mid_z)
+		lane.add_child(stripe)
+
+		## Divider stripe between commodity bands
+		if zone_index > 0:
+			var divider_z := z0 + usable_len * t0
+			var divider := MeshBuilder.box(
+				Vector3(lane_w * 1.05, 0.7, 1.8),
+				Color(0.95, 0.95, 0.92),
+				0.7,
+				0.05,
+			)
+			divider.name = "ZoneDivide_%d" % zone_index
+			divider.position = Vector3(lane_x, 0.75, divider_z)
+			lane.add_child(divider)
+
+		var pad_len := clampf(zone_len * 0.42, 14.0, 36.0)
+		var gap := 3.5
+		var count := maxi(1, int(floor((zone_len * 0.9 + gap) / (pad_len + gap))))
+		var span := float(count) * pad_len + float(maxi(count - 1, 0)) * gap
+		var start_z := zone_mid_z - span * 0.5 + pad_len * 0.5
+		var stack_w := lane_w * 0.82
+		for pad_i in range(count):
+			var z := start_z + float(pad_i) * (pad_len + gap)
+			var height := _storage_stack_height(zone_family, pad_i)
+			var stack := _make_storage_stack(
+				zone_family,
+				color,
+				Vector3(stack_w, height, pad_len * 0.88),
+			)
+			stack.name = "Cargo_%d_%d" % [zone_index, pad_i]
+			stack.position = Vector3(lane_x, 0.55 + height * 0.5, z)
+			lane.add_child(stack)
+
+		if show_module_labels:
+			var role := str(zone.get("role", ""))
+			var role_color := Color(0.35, 0.9, 0.45) if role == "export" \
+					else (Color(0.95, 0.7, 0.25) if role == "import" else color.lightened(0.2))
+			if bool(zone.get("bidirectional", false)):
+				role_color = Color(0.55, 0.82, 0.95)
+			var label_x := lane_x - berth_sign * (lane_w * 0.2)
+			_label(
+				"ZoneLabel_%s_%d" % [str(station.get("id", "quay")), zone_index],
+				str(zone.get("label", commodity_id)).to_upper(),
+				terminal.to_global(Vector3(label_x, 10.0, zone_mid_z)),
+				role_color,
+				0.032,
+			)
+
+
+## Load/unload tools — one per commodity zone when shared, else spaced by length.
+func _stamp_quay_crane_lane(
+		terminal: Node3D,
+		station: Dictionary,
+		lane_x: float,
+		lane_w: float,
+		usable_len: float,
+		z0: float,
+		berth_sign: float,
+) -> void:
+	var lane := Node3D.new()
+	lane.name = "CraneLane"
+	terminal.add_child(lane)
+	var rail := MeshBuilder.box(
+		Vector3(lane_w * 0.9, 0.16, usable_len),
+		STEEL.darkened(0.2),
+		0.75,
+		0.25,
+	)
+	rail.name = "CraneRail"
+	rail.position = Vector3(lane_x, 0.48, 0.0)
+	lane.add_child(rail)
+
+	var zones: Array = station.get("zones", []) as Array
+	var tool_positions: Array[float] = []
+	if zones.size() >= 2:
+		for zone in zones:
+			var t0 := float(zone.get("t0", 0.0))
+			var t1 := float(zone.get("t1", 1.0))
+			tool_positions.append(z0 + usable_len * ((t0 + t1) * 0.5))
+	else:
+		var tool_count := 1
+		if usable_len >= 160.0:
+			tool_count = 3
+		elif usable_len >= 90.0:
+			tool_count = 2
+		if tool_count == 1:
+			tool_positions.append(0.0)
+		else:
+			var tool_span := usable_len * 0.72
+			var step := tool_span / float(tool_count - 1)
+			var start_z := z0 + (usable_len - tool_span) * 0.5
+			for index in range(tool_count):
+				tool_positions.append(start_z + float(index) * step)
+
+	var family := str(station.get("family", "general"))
+	var fp := Vector3(
+		clampf(lane_w * 0.85, 10.0, 28.0),
+		1.0,
+		clampf(lane_w * 0.7, 10.0, 24.0),
+	)
+	for index in range(tool_positions.size()):
+		var z := float(tool_positions[index])
+		var equip_kind := str(station.get("equipment_kind", "equip_jib_crane"))
+		if index < zones.size():
+			var zone_family := str((zones[index] as Dictionary).get("family", family))
+			equip_kind = PortBerthPlan.equipment_for_family(zone_family)
+		var equip_root := Node3D.new()
+		equip_root.name = "Tool_%d" % index
+		equip_root.position = Vector3(lane_x, 0.55, z)
+		if berth_sign < 0.0:
+			equip_root.rotation_degrees.y = 180.0
+		lane.add_child(equip_root)
+		_stamp_equipment_kind(equip_root, equip_kind, fp, family)
+
+
+func _storage_stack_height(family: String, index: int) -> float:
+	match family:
+		"container":
+			return 4.4 + float(index % 3) * 2.6
+		"bulk_ore", "bulk_grain":
+			return 5.0 + float(index % 2) * 1.5
+		"liquid":
+			return 8.0
+		"fishing":
+			return 3.2
+		_:
+			return 3.6 + float(index % 2) * 1.2
+
+
+func _make_storage_stack(family: String, family_color: Color, size: Vector3) -> Node3D:
+	var root := Node3D.new()
+	match family:
+		"liquid":
+			var tank := MeshBuilder.cylinder(
+				minf(size.x, size.z) * 0.38,
+				size.y,
+				family_color.lightened(0.05),
+				0.85,
+				0.15,
+			)
+			root.add_child(tank)
+		"bulk_ore", "bulk_grain":
+			root.add_child(MeshBuilder.box(size, family_color.darkened(0.1), 0.95, 0.0))
+		"container":
+			var tiers := maxi(1, int(round(size.y / 2.6)))
+			var tier_h := size.y / float(tiers)
+			for tier in range(tiers):
+				var box := MeshBuilder.box(
+					Vector3(size.x * 0.92, tier_h * 0.88, size.z * 0.9),
+					family_color.lightened(0.05 * float(tier % 2)),
+					0.8,
+					0.05,
+				)
+				box.position = Vector3(0.0, -size.y * 0.5 + tier_h * (float(tier) + 0.5), 0.0)
+				root.add_child(box)
+		_:
+			root.add_child(MeshBuilder.box(size * Vector3(0.9, 1.0, 0.85), family_color.darkened(0.05), 0.9, 0.0))
+	return root
+
+
+func _stamp_berth_asphalt(parent: Node3D, station: Dictionary, surface_y: float) -> void:
+	var origin := _xz2(station.get("origin", [0.0, 0.0]))
+	var seaward := _xz2(station.get("direction", [0.0, -1.0])).normalized()
+	if seaward.length_squared() < 0.001:
+		seaward = PortCoastTracer.PORT_LOCAL_SEAWARD_DIR
+	var depth := float(station.get("depth_m", 16.0))
+	var length := float(station.get("length_m", 24.0))
+	var family := str(station.get("family", "general"))
+	var color := CommodityCatalog.terminal_family_color(family).lightened(0.2)
+	var pad_center := origin + seaward * (depth * 0.5)
+	var pad_root := Node3D.new()
+	pad_root.name = str(station.get("id", "asphalt"))
+	pad_root.position = Vector3(pad_center.x, surface_y, pad_center.y)
+	_align_node_seaward(pad_root, seaward)
+	parent.add_child(pad_root)
+	var pad := MeshBuilder.box(Vector3(length, 0.45, depth), color.darkened(0.25), 0.9, 0.0)
+	pad.position = Vector3(0.0, 0.25, 0.0)
+	pad_root.add_child(pad)
+	if show_module_labels:
+		_label(
+			"AsphaltLabel_%s" % str(station.get("id", "asphalt")),
+			"%s\n%s · apron" % [
+				CommodityCatalog.commodity_display(str(station.get("commodity_id", ""))).to_upper(),
+				str(station.get("role", "")).to_upper(),
+			],
+			Vector3(origin.x, surface_y + 10.0, origin.y),
+			color,
+			0.026,
+		)
+
+
+func _stamp_equipment_kind(root: Node3D, kind: String, footprint: Vector3, family: String) -> void:
+	match kind:
+		"equip_sts_gantry":
+			_stamp_sts_gantry_at(root, footprint)
+		"equip_grab_unloader":
+			_stamp_grab_unloader_at(root, footprint)
+		"equip_grain_elevator":
+			_stamp_grain_elevator_at(root, footprint)
+		"equip_fish_derrick":
+			_stamp_fish_derrick_at(root, footprint)
+		"equip_loading_arm":
+			_stamp_loading_arm_at(root, footprint)
+		_:
+			_stamp_jib_crane_at(root, footprint, family)
+
+
+func _stamp_jib_crane_at(root: Node3D, footprint: Vector3, _family: String) -> void:
+	var accent := Color(0.92, 0.72, 0.10)
+	_pad(root, footprint, STEEL.darkened(0.15))
+	var size := _size_class()
+	var mast_h := clampf(14.0 + float(size) * 4.0, 14.0, 34.0)
+	var mast := MeshBuilder.box(Vector3(1.6, mast_h, 1.6), accent, 0.75, 0.2)
+	mast.position = Vector3(0.0, mast_h * 0.5, 0.0)
+	root.add_child(mast)
+	var jib_len := clampf(mast_h * 0.95 + float(size) * 2.0, 16.0, 44.0)
+	var jib := MeshBuilder.box(Vector3(jib_len, 0.9, 1.1), accent.lightened(0.08), 0.7, 0.25)
+	jib.position = Vector3(jib_len * 0.42, mast_h - 0.8, 0.0)
+	root.add_child(jib)
+	var counter := MeshBuilder.box(Vector3(jib_len * 0.28, 0.9, 1.1), STEEL, 0.8, 0.3)
+	counter.position = Vector3(-jib_len * 0.18, mast_h - 0.8, 0.0)
+	root.add_child(counter)
+
+
+func _stamp_sts_gantry_at(root: Node3D, footprint: Vector3) -> void:
+	var accent := Color(0.92, 0.72, 0.10)
+	_pad(root, footprint, STEEL.darkened(0.15))
+	var size := _size_class()
+	var leg_h := clampf(18.0 + float(size) * 3.0, 18.0, 36.0)
+	var leg_span := footprint.x * 0.38
+	for side in [-1.0, 1.0]:
+		var leg := MeshBuilder.box(Vector3(1.4, leg_h, 1.4), accent, 0.75, 0.2)
+		leg.position = Vector3(side * leg_span, leg_h * 0.5, 0.0)
+		root.add_child(leg)
+	var beam := MeshBuilder.box(Vector3(footprint.x * 0.82, 1.2, 2.4), STEEL, 0.8, 0.3)
+	beam.position = Vector3(0.0, leg_h - 0.6, 0.0)
+	root.add_child(beam)
+
+
+func _stamp_grab_unloader_at(root: Node3D, footprint: Vector3) -> void:
+	var accent := Color(0.92, 0.72, 0.10)
+	_pad(root, footprint, STEEL.darkened(0.15))
+	var tower_h := clampf(20.0 + float(_size_class()) * 2.5, 20.0, 34.0)
+	var tower := MeshBuilder.box(Vector3(3.0, tower_h, 3.0), accent, 0.75, 0.2)
+	tower.position = Vector3(0.0, tower_h * 0.5, 0.0)
+	root.add_child(tower)
+	var boom := MeshBuilder.box(Vector3(footprint.x * 0.55, 0.8, 1.0), STEEL, 0.8, 0.3)
+	boom.position = Vector3(0.0, tower_h - 1.0, footprint.z * 0.2)
+	root.add_child(boom)
+
+
+func _stamp_grain_elevator_at(root: Node3D, footprint: Vector3) -> void:
+	var accent := Color(0.84, 0.62, 0.18)
+	_pad(root, footprint, STEEL.darkened(0.15))
+	var silo_h := clampf(24.0 + float(_size_class()) * 3.0, 24.0, 42.0)
+	var silo := MeshBuilder.cylinder(2.8, silo_h, accent, 0.8, 0.2)
+	silo.position = Vector3(0.0, silo_h * 0.5, 0.0)
+	root.add_child(silo)
+
+
+func _stamp_fish_derrick_at(root: Node3D, footprint: Vector3) -> void:
+	var accent := Color(0.55, 0.72, 0.92)
+	_pad(root, footprint, STEEL.darkened(0.15))
+	var mast_h := clampf(12.0 + float(_size_class()) * 2.0, 12.0, 24.0)
+	var mast := MeshBuilder.box(Vector3(1.2, mast_h, 1.2), accent, 0.75, 0.2)
+	mast.position = Vector3(0.0, mast_h * 0.5, 0.0)
+	root.add_child(mast)
+
+
+func _stamp_loading_arm_at(root: Node3D, footprint: Vector3) -> void:
+	var accent := Color(0.72, 0.78, 0.86)
+	_pad(root, footprint, STEEL.darkened(0.15))
+	var base_h := 4.0
+	var base := MeshBuilder.cylinder(1.8, base_h, STEEL, 0.85, 0.2)
+	base.position = Vector3(0.0, base_h * 0.5, 0.0)
+	root.add_child(base)
+	var arm := MeshBuilder.box(Vector3(10.0, 0.7, 0.7), accent, 0.75, 0.2)
+	arm.position = Vector3(5.0, base_h + 1.0, 0.0)
+	root.add_child(arm)
+
+
+func _align_node_seaward(node: Node3D, seaward: Vector2) -> void:
+	var z_axis := Vector3(seaward.x, 0.0, seaward.y)
+	if z_axis.length_squared() < 0.001:
+		z_axis = Vector3(0.0, 0.0, -1.0)
+	else:
+		z_axis = z_axis.normalized()
+	var x_axis := Vector3.UP.cross(z_axis).normalized()
+	var y_axis := z_axis.cross(x_axis).normalized()
+	node.basis = Basis(x_axis, y_axis, z_axis)
+
+
+func _xz2(raw: Variant) -> Vector2:
+	var arr := raw as Array
+	if arr.size() < 2:
+		return Vector2.ZERO
+	return Vector2(float(arr[0]), float(arr[1]))
 
 
 ## Four planar triangles per link — hinge at the shore row so bends never bow-tie overlap.

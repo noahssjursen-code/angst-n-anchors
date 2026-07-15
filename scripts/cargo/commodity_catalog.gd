@@ -72,7 +72,7 @@ const COMMODITIES := [
 		"mass_kg": 480.0,
 		"value": 18,
 		"max_pallet_units": 2,
-		"color": [0.50, 0.42, 0.38],
+		"color": [0.72, 0.32, 0.18],
 	},
 	{
 		"id": "coal",
@@ -82,7 +82,7 @@ const COMMODITIES := [
 		"mass_kg": 280.0,
 		"value": 10,
 		"max_pallet_units": 4,
-		"color": [0.20, 0.20, 0.22],
+		"color": [0.18, 0.18, 0.22],
 	},
 	{
 		"id": "crude_oil",
@@ -92,7 +92,7 @@ const COMMODITIES := [
 		"mass_kg": 850.0,
 		"value": 22,
 		"max_pallet_units": 1,
-		"color": [0.12, 0.10, 0.08],
+		"color": [0.32, 0.18, 0.08],
 	},
 	{
 		"id": "diesel",
@@ -102,7 +102,7 @@ const COMMODITIES := [
 		"mass_kg": 820.0,
 		"value": 28,
 		"max_pallet_units": 1,
-		"color": [0.55, 0.42, 0.12],
+		"color": [0.88, 0.62, 0.10],
 	},
 	{
 		"id": "lng",
@@ -112,7 +112,7 @@ const COMMODITIES := [
 		"mass_kg": 450.0,
 		"value": 35,
 		"max_pallet_units": 1,
-		"color": [0.42, 0.72, 0.88],
+		"color": [0.25, 0.82, 0.95],
 	},
 ]
 
@@ -129,8 +129,11 @@ const TERMINAL_FAMILY_DISPLAY := {
 	"container": "Container",
 	"bulk_ore": "Bulk ore / coal",
 	"bulk_grain": "Bulk grain",
-	"liquid": "Liquid bulk (oil / LNG)",
+	"liquid": "Liquid jetty",
 }
+
+## Unused — pad exclusivity is enforced by berth_group_id (per commodity + role).
+const EXCLUSIVE_PRODUCT_FAMILIES: Array[String] = []
 
 const FISH_CRATE_BASE_GOLD := 500
 
@@ -166,6 +169,37 @@ static func commodity_terminal_family(commodity_id: String) -> String:
 	if info.has("terminal_family"):
 		return str(info["terminal_family"])
 	return commodity_handling_mode(commodity_id)
+
+
+## One dedicated pad per commodity direction.
+## Containers alone share a single bidirectional pad (load + unload).
+static func berth_group_id(commodity_id: String, role: String = "") -> String:
+	var id := str(commodity_id)
+	if id == "containers":
+		return "pad:containers"
+	var r := str(role)
+	if r.is_empty():
+		r = "trade"
+	return "pad:%s:%s" % [id, r]
+
+
+## Pads never share — iron export and coal import are different stations.
+static func family_allows_shared_quay(_family: String) -> bool:
+	return false
+
+
+## Small apron cargo — no dedicated pier.
+static func uses_asphalt_dock(commodity_id: String) -> bool:
+	match str(commodity_id):
+		"fish", "provisions":
+			return true
+		_:
+			return false
+
+
+## Deprecated alias — exclusivity is now per pad via berth_group_id.
+static func is_exclusive_berth_commodity(_commodity_id: String) -> bool:
+	return true
 
 
 static func commodity_display(commodity_id: String) -> String:

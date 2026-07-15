@@ -14,6 +14,30 @@ extends RefCounted
 const MIN_SIZE := 0
 const MAX_SIZE := 8
 const CATALOG_REFERENCE_SIZE := 2
+## By this size every destiny import/export is unlocked. Larger sizes grow
+## quay length / decks / fairway — not more commodities — and only if trade
+## volume justifies a bigger harbour (see max_size_for_trade_products).
+const TRADE_COMPLETE_SIZE := 5
+
+
+## Largest harbour size a destiny with `product_count` unique commodities may reach.
+## Sparse economies stop early; rich hubs can still grow past trade-complete.
+static func max_size_for_trade_products(product_count: int) -> int:
+	match clampi(product_count, 0, 99):
+		0, 1:
+			return 2
+		2:
+			return 3
+		3:
+			return 4
+		4:
+			return TRADE_COMPLETE_SIZE
+		5:
+			return 6
+		6:
+			return 7
+		_:
+			return MAX_SIZE
 
 const PLOT_DEPTH_M := 140.0
 const QUAY_DEPTH_M := 8.0
@@ -61,8 +85,10 @@ const TERRAIN_PAD_WIDTH_BY_SIZE := [
 const TERRAIN_PAD_DEPTH_BY_SIZE := [
 	360.0, 420.0, 480.0, 540.0, 620.0, 700.0, 800.0, 920.0, 1060.0,
 ]
+## Wide enough for crane rail + roadway + on-deck storage.
+## Grows slowly — pier *length* is the main size signal, not deck width.
 const QUAY_DECK_WIDTH_BY_SIZE := [
-	20.0, 24.0, 28.0, 34.0, 36.0, 42.0, 44.0, 50.0, 54.0,
+	36.0, 40.0, 44.0, 48.0, 52.0, 56.0, 60.0, 64.0, 68.0,
 ]
 const APRON_WIDTH_BY_SIZE := [
 	56.0, 80.0, 120.0, 180.0, 260.0, 360.0, 480.0, 620.0, 780.0,
@@ -71,10 +97,10 @@ const APRON_DEPTH_BY_SIZE := [
 	32.0, 48.0, 64.0, 80.0, 100.0, 120.0, 140.0, 160.0, 180.0,
 ]
 const CARGO_YARD_WIDTH_BY_SIZE := [
-	18.0, 20.0, 24.0, 28.0, 32.0, 40.0, 48.0, 56.0, 64.0,
+	22.0, 26.0, 32.0, 40.0, 48.0, 56.0, 64.0, 72.0, 80.0,
 ]
 const CARGO_YARD_DEPTH_BY_SIZE := [
-	14.0, 14.0, 16.0, 18.0, 20.0, 24.0, 28.0, 32.0, 36.0,
+	16.0, 18.0, 22.0, 26.0, 32.0, 38.0, 44.0, 50.0, 56.0,
 ]
 
 
@@ -138,6 +164,45 @@ static func terrain_pad_depth_m(size: int) -> float:
 
 static func quay_deck_width_m(size: int) -> float:
 	return float(QUAY_DECK_WIDTH_BY_SIZE[normalized_size(size)])
+
+
+## One working berth: design ship LOA + fender/approach margin.
+static func min_ship_berth_m(size: int) -> float:
+	return design_hull_loa_m(size) * 1.15 + 12.0
+
+
+## Quay must fit one design ship per commodity zone sharing the pier.
+static func min_quay_length_m(size: int, zone_count: int = 1) -> float:
+	return min_ship_berth_m(size) * float(maxi(zone_count, 1))
+
+
+## Hard cap on dedicated quay arms — by size 3 the harbour can host a full
+## destiny (≤3 pads). Later sizes lengthen piers; they do not add pad types.
+static func max_dedicated_quays(size: int) -> int:
+	match normalized_size(size):
+		0, 1:
+			return 1
+		2:
+			return 2
+		_:
+			return 3
+
+
+## Deck width keyed to how long a pier can actually run (basin / water), so
+## size-up never fattens a finger that was soft-capped short.
+static func quay_deck_width_for_arm_m(arm_length_m: float, size: int) -> float:
+	var from_arm := max_size_for_arm_budget_m(arm_length_m)
+	return quay_deck_width_m(mini(normalized_size(size), from_arm))
+
+
+## Largest size whose minimum single-zone pier still fits `arm_budget_m`.
+static func max_size_for_arm_budget_m(arm_budget_m: float) -> int:
+	if arm_budget_m < 24.0:
+		return MIN_SIZE
+	for size in range(MAX_SIZE, MIN_SIZE - 1, -1):
+		if min_quay_length_m(size, 1) <= arm_budget_m + 0.01:
+			return size
+	return MIN_SIZE
 
 
 static func cargo_yard_size_m(size: int) -> Vector2:

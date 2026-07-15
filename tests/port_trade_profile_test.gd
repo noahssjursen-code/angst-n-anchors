@@ -24,9 +24,90 @@ func _run() -> void:
 	assert(a.layout_graph != null and b.layout_graph != null)
 	assert(JSON.stringify(a.layout_graph.to_dict()) == JSON.stringify(b.layout_graph.to_dict()))
 	assert(not a.trade_profile.export_slots.is_empty())
+	assert(not str(a.trade_profile.theme_id).is_empty())
+	## Size 2 always gets at least one import from themes.
 	assert(not a.trade_profile.import_slots.is_empty())
+	## Quay commodities in the profile must appear in the berth plan.
+	var plan: Dictionary = a.layout_graph.initial_attributes.get("berth_plan", {}) as Dictionary
+	var planned: Dictionary = {}
+	for raw in plan.get("quay_stations", []) as Array:
+		for zone in (raw as Dictionary).get("zones", []) as Array:
+			planned[str((zone as Dictionary).get("commodity_id", ""))] = true
+	for raw in plan.get("asphalt_stations", []) as Array:
+		planned[str((raw as Dictionary).get("commodity_id", ""))] = true
+	for id in a.trade_profile.all_slots():
+		assert(planned.has(str(id)), "berth plan missing trade commodity %s" % id)
+	## Different products never share a pad (containers are still one commodity).
+	for raw in plan.get("quay_stations", []) as Array:
+		var commodities: Array = (raw as Dictionary).get("commodities", []) as Array
+		assert(commodities.size() <= 1, "pad shares multiple commodities: %s" % str(commodities))
 	assert(a.layout_graph.local_footprints().size() >= 1)
 	assert(a.layout_seed == b.layout_seed)
+
+	## Growing size unlocks destiny — never re-rolls theme or mature lists.
+	var def_small := PortDefinition.new()
+	def_small.port_id = definition.port_id
+	def_small.display_name = definition.display_name
+	def_small.size = 1
+	def_small.region_kind = definition.region_kind
+	def_small.port_generation_version = definition.port_generation_version
+	def_small.site_seed = definition.site_seed
+	var def_big := PortDefinition.new()
+	def_big.port_id = definition.port_id
+	def_big.display_name = definition.display_name
+	def_big.size = 6
+	def_big.region_kind = definition.region_kind
+	def_big.port_generation_version = definition.port_generation_version
+	def_big.site_seed = definition.site_seed
+	var grown_small := PortTradeProfile.derive(def_small, 424242)
+	var grown_big := PortTradeProfile.derive(def_big, 424242)
+	assert(grown_small.theme_id == grown_big.theme_id)
+	assert(grown_small.destiny_export_slots == grown_big.destiny_export_slots)
+	assert(grown_small.destiny_import_slots == grown_big.destiny_import_slots)
+	## Unlocked exports are a prefix of destiny.
+	for index in range(grown_small.export_slots.size()):
+		assert(grown_small.export_slots[index] == grown_small.destiny_export_slots[index])
+	assert(grown_big.export_slots.size() >= grown_small.export_slots.size())
+	## Unlock is monotonic — growing never re-locks a destiny commodity.
+	var prev_exports: Array[String] = []
+	var prev_imports: Array[String] = []
+	for grow_size in range(0, PortSizing.TRADE_COMPLETE_SIZE + 1):
+		var def_g := PortDefinition.new()
+		def_g.port_id = definition.port_id
+		def_g.display_name = definition.display_name
+		def_g.size = grow_size
+		def_g.region_kind = definition.region_kind
+		def_g.port_generation_version = definition.port_generation_version
+		def_g.site_seed = definition.site_seed
+		var grown := PortTradeProfile.derive(def_g, 424242)
+		for id in prev_exports:
+			assert(grown.export_slots.has(id), "size %d dropped export %s" % [grow_size, id])
+		for id in prev_imports:
+			assert(grown.import_slots.has(id), "size %d dropped import %s" % [grow_size, id])
+		prev_exports = grown.export_slots.duplicate()
+		prev_imports = grown.import_slots.duplicate()
+	## By TRADE_COMPLETE_SIZE the full destiny is unlocked.
+	var def_complete := PortDefinition.new()
+	def_complete.port_id = definition.port_id
+	def_complete.display_name = definition.display_name
+	def_complete.size = PortSizing.TRADE_COMPLETE_SIZE
+	def_complete.region_kind = definition.region_kind
+	def_complete.port_generation_version = definition.port_generation_version
+	def_complete.site_seed = definition.site_seed
+	var complete := PortTradeProfile.derive(def_complete, 424242)
+	assert(complete.export_slots == complete.destiny_export_slots)
+	assert(complete.import_slots == complete.destiny_import_slots)
+
+	## Sparse destinies cannot grow into mega hubs.
+	assert(PortSizing.max_size_for_trade_products(2) <= 3)
+	assert(PortSizing.max_size_for_trade_products(4) <= PortSizing.TRADE_COMPLETE_SIZE)
+	assert(PortTradeProfile.max_size_for_profile(complete) \
+			<= PortSizing.max_size_for_trade_products(
+				PortTradeProfile.destiny_product_count(complete)
+			))
+	var sparse := PortTradeProfile.derive(def_small, 424242)
+	var sparse_max := PortTradeProfile.max_size_for_profile(sparse)
+	assert(sparse_max < PortSizing.MAX_SIZE or PortTradeProfile.destiny_product_count(sparse) >= 7)
 
 	print("Port trade profile tests: all checks passed")
 	quit()

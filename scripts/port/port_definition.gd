@@ -6,12 +6,14 @@ extends RefCounted
 
 enum RegionKind { LEGACY_ISLAND, MAINLAND, FJORD, ARCHIPELAGO }
 enum GroundMode { LOCAL_ISLAND, WORLD_TERRAIN }
-const CURRENT_PORT_GENERATION_VERSION := 43
+const CURRENT_PORT_GENERATION_VERSION := 44
 
 var port_id: String = ""
 var display_name: String = ""
 var world_position: Vector3 = Vector3.ZERO
 var size: int = 1 ## 0 (landing) → 8 (mega hub)
+## Hard growth ceiling for this site (geography). Never expand past this.
+var site_max_size: int = PortSizing.MAX_SIZE
 var site_id: String = ""
 var site_seed: int = 0
 ## Lateral clear water half-width measured at placement (metres). Drives shore chain length.
@@ -32,6 +34,7 @@ func to_dict() -> Dictionary:
 		"display_name": display_name,
 		"world_position": { "x": world_position.x, "y": world_position.y, "z": world_position.z },
 		"size": size,
+		"site_max_size": site_max_size,
 		"site_id": site_id,
 		"site_seed": site_seed,
 		"site_quay_half_m": site_quay_half_m,
@@ -56,6 +59,11 @@ static func from_dict(d: Dictionary) -> PortDefinition:
 		float(wp.get("z", 0.0)),
 	)
 	p.size = int(d.get("size", 1))
+	p.site_max_size = clampi(
+		int(d.get("site_max_size", PortSizing.MAX_SIZE)),
+		PortSizing.MIN_SIZE,
+		PortSizing.MAX_SIZE,
+	)
 	p.site_id = str(d.get("site_id", ""))
 	p.site_seed = int(d.get("site_seed", 0))
 	p.site_quay_half_m = float(d.get("site_quay_half_m", -1.0))

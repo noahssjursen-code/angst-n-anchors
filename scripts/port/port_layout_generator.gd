@@ -2,6 +2,7 @@ class_name PortLayoutGenerator
 extends RefCounted
 
 const CoastTracer := preload("res://scripts/port/port_coast_tracer.gd")
+const BerthPlan := preload("res://scripts/port/port_berth_plan.gd")
 
 ## Terrain-traced port layout:
 ##   1) square port area
@@ -24,8 +25,10 @@ static func generate(
 	graph.initial_attributes = attributes.duplicate(true)
 	graph.initial_attributes.erase("world_layout")
 	var size := PortSizing.normalized_size(definition.size)
+	definition.size = size
 	graph.initial_attributes["size"] = size
 	graph.initial_attributes["region_kind"] = int(definition.region_kind)
+	PortTradeProfile.resync_for_size(profile, size)
 	graph.initial_attributes["exports"] = profile.export_slots.duplicate()
 	graph.initial_attributes["imports"] = profile.import_slots.duplicate()
 
@@ -74,7 +77,25 @@ static func generate(
 	foundation["shore_length_m"] = fit.get("shore_length_m", 0.0)
 	foundation["length_profile"] = fit.get("length_profile", foundation.get("length_profile", ""))
 	foundation["design_hull_loa_m"] = fit.get("design_hull_loa_m", PortSizing.design_hull_loa_m(size))
+	foundation["basin"] = BerthPlan.measure_basin(layout, definition, foundation)
+	var basin: Dictionary = foundation["basin"]
+	## Basin only soft-clamps pier length. Do not rewrite site_max_size here —
+	## that ceiling is mini(geo, trade) from PortExpander. Lowering it after a
+	## larger build makes the size dial wrap below the live harbour.
 	graph.initial_attributes["foundation"] = foundation
+	graph.initial_attributes["basin"] = basin
+	graph.initial_attributes["basin_max_size"] = int(basin.get("site_max_size", definition.site_max_size))
+	graph.initial_attributes["site_max_size"] = definition.site_max_size
+	graph.initial_attributes["exports"] = profile.export_slots.duplicate()
+	graph.initial_attributes["imports"] = profile.import_slots.duplicate()
+	graph.initial_attributes["berth_plan"] = BerthPlan.build(
+		profile,
+		size,
+		foundation,
+		site_seed,
+		layout,
+		definition,
+	)
 	return graph
 
 

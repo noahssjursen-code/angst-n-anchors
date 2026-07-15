@@ -33,13 +33,30 @@ static func expand(
 	data.world_position = definition.world_position
 	data.site_id = definition.site_id
 	data.port_generation_version = definition.port_generation_version
-	data.size = PortSizing.normalized_size(definition.size)
+	## Geography ceiling first — trade unlocks follow the allowed size.
+	definition.site_max_size = clampi(
+		definition.site_max_size if definition.site_max_size > 0 else PortSizing.MAX_SIZE,
+		PortSizing.MIN_SIZE,
+		PortSizing.MAX_SIZE,
+	)
+	data.size = mini(
+		PortSizing.normalized_size(definition.size),
+		definition.site_max_size,
+	)
+	definition.size = data.size
 
 	var site_seed := definition.site_seed if definition.site_seed != 0 \
 			else world_seed ^ _hash_id(definition.port_id)
 	var rng := RandomNumberGenerator.new()
 	rng.seed = site_seed
 	data.trade_profile = PortTradeProfile.derive(definition, world_seed)
+	## Economy volume caps growth: sparse destinies cannot inflate into hubs.
+	var trade_max := PortTradeProfile.max_size_for_profile(data.trade_profile)
+	definition.site_max_size = mini(definition.site_max_size, trade_max)
+	if data.size > definition.site_max_size:
+		data.size = definition.site_max_size
+		definition.size = data.size
+		PortTradeProfile.resync_for_size(data.trade_profile, data.size)
 	data.has_fuel_point = true
 	data.has_lighthouse = definition.has_lighthouse or (data.size >= 1 and rng.randf() < 0.3)
 	data.has_fog_horn = definition.has_fog_horn or (data.size >= 0 and rng.randf() < 0.4)
@@ -48,6 +65,7 @@ static func expand(
 		"has_lighthouse": data.has_lighthouse,
 		"has_fog_horn": data.has_fog_horn,
 		"world_layout": world_layout,
+		"trade_max_size": trade_max,
 	}
 	layout_attrs.merge(extra_attributes, true)
 	data.layout_graph = PortLayoutGenerator.generate(
@@ -56,6 +74,8 @@ static func expand(
 		site_seed,
 		layout_attrs,
 	)
+	## Basin may record a water hint; live size stays whatever Expander clamped.
+	data.size = PortSizing.normalized_size(definition.size)
 
 	var graph_bounds := data.layout_graph.bounds()
 	var quay_pose := data.layout_graph.primary_quay_pose()

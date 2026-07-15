@@ -6,6 +6,5 @@
 script = ExtResource("1_showcase")
 port_size = 2
 region_index = 0
-seed_index = 0
 has_lighthouse = true
 has_fog_horn = true

@@ -960,7 +960,18 @@ static func _span_turn_score(
 	return score
 
 
-static func _port_local_to_world(local: Vector2, origin: Vector3, yaw: float) -> Vector2:
+static func port_local_to_world(local: Vector2, origin: Vector3, yaw: float) -> Vector2:
 	var local3 := Vector3(local.x, 0.0, local.y)
 	var world := origin + Basis(Vector3.UP, yaw) * local3
 	return Vector2(world.x, world.z)
+
+
+static func port_local_dir_to_world(local_dir: Vector2, yaw: float) -> Vector2:
+	if local_dir.length_squared() < 0.000001:
+		return Vector2.ZERO
+	var world := Basis(Vector3.UP, yaw) * Vector3(local_dir.x, 0.0, local_dir.y)
+	return Vector2(world.x, world.z).normalized()
+
+
+static func _port_local_to_world(local: Vector2, origin: Vector3, yaw: float) -> Vector2:
+	return port_local_to_world(local, origin, yaw)

@@ -3,8 +3,8 @@ class_name PortShowcase
 extends Node3D
 
 ## F6 gallery for socket graphs placed in their actual seeded world terrain.
+## Each F6 run rolls a fresh world seed so ports don't always look identical.
 
-const SEEDS: Array[int] = [424242, 111111, 777001, 90210, 314159]
 const REGION_LABELS: Array[String] = ["mainland", "fjord", "archipelago"]
 const SIZE_LABELS: Array[String] = [
 	"landing", "local", "regional", "large", "industrial",
@@ -14,12 +14,50 @@ const WORLD_LAYOUT_GENERATOR := preload("res://scripts/world/world_layout_genera
 const COASTAL_PORT_PLACER := preload("res://scripts/world/coastal_port_placer.gd")
 const TERRAIN_STREAMER := preload("res://scripts/world/world_terrain_streamer.gd")
 const WORLD_RENDERER := preload("res://scripts/world/world_renderer.gd")
+const BERTH_PLAN := preload("res://scripts/port/port_berth_plan.gd")
 const SHOWCASE_PORT_NAMES: Array[String] = [
 	"Holmvik", "Sandvær", "Bergnes", "Kloven", "Strandnes", "Kvamsvik",
 	"Bremsund", "Tysneset", "Fjelltun", "Grønnvik", "Harberg", "Innvær",
 ]
 const REF_HULL_ID := "hull_28x10"
 const LENGTH_PROFILES: Array[String] = ["compact", "standard", "extended"]
+
+## G cycles these packs (index 0 = off). Add a new debug pack here when you need one:
+## {
+##   "id": "my_pack",
+##   "label": "My pack",
+##   "hint": "short colour legend",
+##   "site_layers": { PortDebugGizmos.LAYER_SPINE: true },  # optional subset
+## }
+const GIZMO_PACKS: Array[Dictionary] = [
+	{
+		"id": "site",
+		"label": "Site",
+		"hint": "origin · size · scan · coast · spine",
+		"site_layers": {
+			PortDebugGizmos.LAYER_ORIGIN: true,
+			PortDebugGizmos.LAYER_AXES: true,
+			PortDebugGizmos.LAYER_SIZE_BOX: true,
+			PortDebugGizmos.LAYER_TRACE_BOX: true,
+			PortDebugGizmos.LAYER_TERRAIN_TRACE: true,
+			PortDebugGizmos.LAYER_SPINE: true,
+			PortDebugGizmos.LAYER_SHORE_SPAN: true,
+			PortDebugGizmos.LAYER_DOCK_FACE: true,
+			PortDebugGizmos.LAYER_GRAPH_ROOT: true,
+		},
+	},
+	{
+		"id": "quays",
+		"label": "Quays",
+		"hint": "dock face · asphalt · quay markers (terminals always on)",
+		"site_layers": {
+			PortDebugGizmos.LAYER_DOCK_FACE: true,
+			PortDebugGizmos.LAYER_ASPHALT_BERTHS: true,
+			PortDebugGizmos.LAYER_QUAY_ROOTS: true,
+			PortDebugGizmos.LAYER_QUAY_ARMS: true,
+		},
+	},
+]
 
 @export_range(0, 8) var port_size := 2:
 	set(value):
@@ -33,15 +71,16 @@ const LENGTH_PROFILES: Array[String] = ["compact", "standard", "extended"]
 		if is_inside_tree() and not _configuring:
 			_request_rebuild()
 
-@export_range(0, 4) var seed_index := 0:
-	set(value):
-		seed_index = clampi(value, 0, SEEDS.size() - 1)
-		if is_inside_tree() and not _configuring:
-			_request_rebuild()
-
 @export_range(0, 2) var length_profile_index := 1:
 	set(value):
 		length_profile_index = clampi(value, 0, LENGTH_PROFILES.size() - 1)
+		if is_inside_tree() and not _configuring:
+			_request_rebuild()
+
+## Active world seed. Rolled on each F6 start; - / = rolls a new one in-session.
+@export var world_seed := 424242:
+	set(value):
+		world_seed = value if value != 0 else 1
 		if is_inside_tree() and not _configuring:
 			_request_rebuild()
 
@@ -56,6 +95,12 @@ const LENGTH_PROFILES: Array[String] = ["compact", "standard", "extended"]
 		has_fog_horn = value
 		if is_inside_tree() and not _configuring:
 			_request_rebuild()
+
+## 0 = gizmos off. 1..N = GIZMO_PACKS[index - 1]. G / Shift+G cycles.
+@export_range(0, 16) var gizmo_pack_index := 0:
+	set(value):
+		gizmo_pack_index = clampi(value, 0, GIZMO_PACKS.size())
+		_apply_gizmo_pack()
 
 var _configuring := false
 var _rebuild_seq := 0
@@ -74,15 +119,36 @@ var _terrain: WorldTerrainStreamer
 var _last_terrain_seed := -1
 var _terrain_boot_focus := Vector3.ZERO
 var _title: Label
+var _status: Label
 var _stats: Label
-var _trade: RichTextLabel
-var _instructions: Label
+var _gizmo_line: Label
+var _controls: Label
+var _meta_title: Label
+var _meta_identity: Label
+var _meta_trade: RichTextLabel
+var _meta_sizing: Label
+var _meta_foundation: Label
+var _meta_graph: Label
+var _meta_panel: PanelContainer
 
 
 func _ready() -> void:
 	_ensure_world()
 	_ensure_hud()
+	## F6 / play: fresh world every run. Editor preview keeps the exported seed.
+	if not Engine.is_editor_hint():
+		_roll_world_seed(false)
 	_rebuild()
+
+
+func _roll_world_seed(rebuild_now: bool = true) -> void:
+	_configuring = true
+	world_seed = randi()
+	if world_seed == 0:
+		world_seed = 1
+	_configuring = false
+	if rebuild_now and is_inside_tree():
+		_request_rebuild()
 
 
 func _request_rebuild() -> void:
@@ -256,9 +322,9 @@ func _unhandled_input(event: InputEvent) -> void:
 		return
 	match (event as InputEventKey).keycode:
 		KEY_LEFT, KEY_BRACKETLEFT:
-			port_size = wrapi(port_size - 1, 0, 9)
+			_cycle_port_size(-1)
 		KEY_RIGHT, KEY_BRACKETRIGHT:
-			port_size = wrapi(port_size + 1, 0, 9)
+			_cycle_port_size(1)
 		KEY_UP:
 			region_index = wrapi(region_index - 1, 0, 3)
 		KEY_DOWN:
@@ -267,21 +333,87 @@ func _unhandled_input(event: InputEvent) -> void:
 			length_profile_index = wrapi(length_profile_index - 1, 0, LENGTH_PROFILES.size())
 		KEY_PERIOD:
 			length_profile_index = wrapi(length_profile_index + 1, 0, LENGTH_PROFILES.size())
-		KEY_MINUS:
-			seed_index = wrapi(seed_index - 1, 0, SEEDS.size())
-		KEY_EQUAL:
-			seed_index = wrapi(seed_index + 1, 0, SEEDS.size())
+		KEY_MINUS, KEY_EQUAL:
+			_roll_world_seed(true)
 		KEY_1, KEY_2, KEY_3, KEY_4, KEY_5, KEY_6, KEY_7, KEY_8, KEY_9:
-			port_size = int((event as InputEventKey).keycode) - int(KEY_1)
+			var requested := int((event as InputEventKey).keycode) - int(KEY_1)
+			port_size = clampi(requested, PortSizing.MIN_SIZE, _size_cycle_max())
 		KEY_L:
 			has_lighthouse = not has_lighthouse
 		KEY_F:
 			has_fog_horn = not has_fog_horn
+		KEY_G:
+			var step := -1 if (event as InputEventKey).shift_pressed else 1
+			gizmo_pack_index = wrapi(gizmo_pack_index + step, 0, GIZMO_PACKS.size() + 1)
+			_refresh_hud()
 		KEY_R:
 			_request_rebuild()
 		KEY_HOME:
 			_frame_port()
 			_refresh_hud()
+
+
+## Wrap size within this port's live ceiling so capped harbours don't dead-cycle 5→8.
+func _size_cycle_max() -> int:
+	if _last_data != null and _last_data.layout_graph != null:
+		return clampi(
+			int(_last_data.layout_graph.initial_attributes.get(
+				"site_max_size",
+				PortSizing.MAX_SIZE,
+			)),
+			PortSizing.MIN_SIZE,
+			PortSizing.MAX_SIZE,
+		)
+	if _active_definition != null:
+		return clampi(
+			_active_definition.site_max_size if _active_definition.site_max_size > 0 \
+					else PortSizing.MAX_SIZE,
+			PortSizing.MIN_SIZE,
+			PortSizing.MAX_SIZE,
+		)
+	return PortSizing.MAX_SIZE
+
+
+func _cycle_port_size(delta: int) -> void:
+	var lo := PortSizing.MIN_SIZE
+	var hi := _size_cycle_max()
+	var span := hi - lo + 1
+	var current := clampi(port_size, lo, hi)
+	port_size = lo + posmod(current - lo + delta, span)
+
+
+func _gizmo_pack_label() -> String:
+	if gizmo_pack_index <= 0 or gizmo_pack_index > GIZMO_PACKS.size():
+		return "Off"
+	return str(GIZMO_PACKS[gizmo_pack_index - 1].get("label", "Pack"))
+
+
+func _gizmo_pack_hint() -> String:
+	if gizmo_pack_index <= 0 or gizmo_pack_index > GIZMO_PACKS.size():
+		return "G cycle packs"
+	return str(GIZMO_PACKS[gizmo_pack_index - 1].get("hint", ""))
+
+
+func _apply_gizmo_pack() -> void:
+	var plot := get_node_or_null("GeneratedPort/PortPlot") as PortPlot
+	if plot == null:
+		return
+	if gizmo_pack_index <= 0 or gizmo_pack_index > GIZMO_PACKS.size():
+		plot.clear_gizmo_layer_overrides()
+		plot.show_site_gizmos = false
+		return
+	var pack: Dictionary = GIZMO_PACKS[gizmo_pack_index - 1]
+	var site_layers: Dictionary = pack.get("site_layers", {}) as Dictionary
+	if site_layers.is_empty():
+		plot.clear_gizmo_layer_overrides()
+		plot.show_site_gizmos = true
+	else:
+		## Explicit subset: start all site layers off, then enable listed ones.
+		plot.show_site_gizmos = false
+		var resolved := PortDebugGizmos.default_layers(false)
+		for layer_id in site_layers:
+			resolved[str(layer_id)] = bool(site_layers[layer_id])
+		plot.set_gizmo_layers(resolved)
 
 
 func _rebuild() -> void:
@@ -305,7 +437,7 @@ func _rebuild() -> void:
 	## Showcase entropy: same coastal site — size only extends the dock span.
 	definition.site_seed = (
 		int(definition.site_seed)
-		^ SEEDS[seed_index]
+		^ world_seed
 		^ (region_index * 224737)
 		^ definition.port_id.hash()
 	)
@@ -313,10 +445,14 @@ func _rebuild() -> void:
 	_last_data = PortExpander.expand(definition, layout.seed, layout, {
 		"length_profile_override": LENGTH_PROFILES[length_profile_index],
 	})
+	## Keep the size dial on the live clamped size so cycling wraps at the ceiling.
+	if _last_data != null and port_size != _last_data.size:
+		_configuring = true
+		port_size = PortSizing.normalized_size(_last_data.size)
+		_configuring = false
 	_frame_port()
 	var world_center := _port_dock_focus_world()
 
-	var world_seed := SEEDS[seed_index]
 	if _terrain == null or _last_terrain_seed != world_seed or not is_instance_valid(_terrain):
 		var old_terrain := generated.get_node_or_null("WorldTerrain")
 		if old_terrain != null:
@@ -340,10 +476,10 @@ func _rebuild() -> void:
 
 	var plot := PortPlot.new()
 	plot.name = "PortPlot"
-	plot.show_site_gizmos = true
 	plot.configure(_last_data)
 	generated.add_child(plot)
 	plot.global_position = _last_data.world_position
+	_apply_gizmo_pack()
 	call_deferred("_dock_scale_hulls", generated, plot)
 	_refresh_hud()
 
@@ -362,9 +498,10 @@ func _dock_scale_hulls(parent: Node3D, plot: PortPlot) -> void:
 	var segments := foundation.get("segments", []) as Array
 	if segments.is_empty():
 		return
-	var design_hull_id := PortSizing.design_hull_id(port_size)
-	var design_loa := PortSizing.design_hull_loa_m(port_size)
-	var design_beam := PortSizing.design_hull_beam_m(port_size)
+	var design_size := PortSizing.normalized_size(_last_data.size if _last_data != null else port_size)
+	var design_hull_id := PortSizing.design_hull_id(design_size)
+	var design_loa := PortSizing.design_hull_loa_m(design_size)
+	var design_beam := PortSizing.design_hull_beam_m(design_size)
 	var ref_entry := HullRegistry.get_by_id(REF_HULL_ID)
 	var ref_loa := float(ref_entry.get("loa_m", 28.0))
 	var ref_beam := float(ref_entry.get("beam_m", 10.0))
@@ -498,7 +635,7 @@ func _spawn_docked_hull(
 
 
 func _world_layout() -> WorldLayout:
-	var seed := SEEDS[seed_index]
+	var seed := world_seed
 	if not _layout_cache.has(seed):
 		var layout := WORLD_LAYOUT_GENERATOR.generate(seed)
 		_layout_cache[seed] = layout
@@ -517,7 +654,7 @@ func _place_showcase_ports(layout: WorldLayout) -> Array:
 
 
 func _select_world_port(layout: WorldLayout) -> PortDefinition:
-	var seed := SEEDS[seed_index]
+	var seed := world_seed
 	var definitions := _definitions_cache.get(seed, []) as Array
 	var desired_region := _region_kind()
 	var regional: Array[PortDefinition] = []
@@ -540,10 +677,18 @@ func _select_world_port(layout: WorldLayout) -> PortDefinition:
 			if candidate != null:
 				pool.append(candidate)
 	assert(not pool.is_empty(), "PortShowcase requires at least one generated port site")
-	var picked := pool[seed_index % pool.size()]
+	var picked := pool[absi(world_seed) % pool.size()]
 	var definition := PortDefinition.from_dict(picked.to_dict())
 	definition.display_name = "%s — TERRAIN FIT" % picked.display_name
+	## Geography ceiling from placement. Trade volume clamps further in PortExpander.
+	var geo_max := clampi(
+		picked.site_max_size if picked.site_max_size > 0 else PortSizing.MAX_SIZE,
+		PortSizing.MIN_SIZE,
+		PortSizing.MAX_SIZE,
+	)
+	definition.site_max_size = geo_max
 	definition.size = port_size
+	definition.set_meta("showcase_geo_max_size", geo_max)
 	definition.has_lighthouse = has_lighthouse
 	definition.has_fog_horn = has_fog_horn
 	definition.ground_mode = PortDefinition.GroundMode.WORLD_TERRAIN
@@ -624,104 +769,358 @@ func _ensure_hud() -> void:
 	var layer := CanvasLayer.new()
 	layer.name = "HudLayer"
 	add_child(layer)
+
 	var panel := PanelContainer.new()
-	panel.position = Vector2(18.0, 18.0)
-	panel.custom_minimum_size = Vector2(500.0, 410.0)
+	panel.name = "HudPanel"
+	panel.position = Vector2(16.0, 16.0)
+	panel.custom_minimum_size = Vector2(340.0, 0.0)
+	panel.add_theme_stylebox_override("panel", _hud_panel_style())
 	layer.add_child(panel)
+
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", 6)
+	panel.add_child(box)
+
+	_title = Label.new()
+	_title.add_theme_font_size_override("font_size", 18)
+	_title.add_theme_color_override("font_color", Color(0.95, 0.93, 0.88))
+	box.add_child(_title)
+
+	_status = Label.new()
+	_status.add_theme_font_size_override("font_size", 13)
+	_status.add_theme_color_override("font_color", Color(0.72, 0.78, 0.84))
+	box.add_child(_status)
+
+	_stats = Label.new()
+	_stats.add_theme_font_size_override("font_size", 12)
+	_stats.add_theme_color_override("font_color", Color(0.86, 0.88, 0.90))
+	box.add_child(_stats)
+
+	_gizmo_line = Label.new()
+	_gizmo_line.add_theme_font_size_override("font_size", 12)
+	_gizmo_line.add_theme_color_override("font_color", Color(0.78, 0.90, 0.72))
+	box.add_child(_gizmo_line)
+
+	_controls = Label.new()
+	_controls.add_theme_font_size_override("font_size", 11)
+	_controls.add_theme_color_override("font_color", Color(0.58, 0.62, 0.68))
+	_controls.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_controls.custom_minimum_size = Vector2(312.0, 0.0)
+	box.add_child(_controls)
+
+	_ensure_meta_panel(layer)
+
+
+func _hud_panel_style() -> StyleBoxFlat:
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color(0.06, 0.07, 0.09, 0.78)
+	style.set_content_margin_all(14.0)
+	style.set_corner_radius_all(6)
+	return style
+
+
+func _ensure_meta_panel(layer: CanvasLayer) -> void:
+	_meta_panel = PanelContainer.new()
+	_meta_panel.name = "MetaPanel"
+	_meta_panel.custom_minimum_size = Vector2(360.0, 0.0)
+	_meta_panel.add_theme_stylebox_override("panel", _hud_panel_style())
+	_meta_panel.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+	_meta_panel.grow_horizontal = Control.GROW_DIRECTION_BEGIN
+	_meta_panel.offset_left = -376.0
+	_meta_panel.offset_right = -16.0
+	_meta_panel.offset_top = 16.0
+	_meta_panel.offset_bottom = 16.0
+	layer.add_child(_meta_panel)
+
 	var box := VBoxContainer.new()
 	box.add_theme_constant_override("separation", 8)
-	panel.add_child(box)
-	_title = Label.new()
-	_title.add_theme_font_size_override("font_size", 20)
-	box.add_child(_title)
-	_stats = Label.new()
-	box.add_child(_stats)
-	_trade = RichTextLabel.new()
-	_trade.bbcode_enabled = true
-	_trade.fit_content = true
-	_trade.scroll_active = false
-	_trade.custom_minimum_size = Vector2(460.0, 150.0)
-	box.add_child(_trade)
-	_instructions = Label.new()
-	_instructions.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	box.add_child(_instructions)
+	_meta_panel.add_child(box)
+
+	_meta_title = Label.new()
+	_meta_title.text = "Port data"
+	_meta_title.add_theme_font_size_override("font_size", 18)
+	_meta_title.add_theme_color_override("font_color", Color(0.95, 0.93, 0.88))
+	box.add_child(_meta_title)
+
+	_meta_identity = _meta_section_label(Color(0.72, 0.78, 0.84))
+	box.add_child(_meta_identity)
+
+	_meta_trade = RichTextLabel.new()
+	_meta_trade.bbcode_enabled = true
+	_meta_trade.fit_content = true
+	_meta_trade.scroll_active = false
+	_meta_trade.custom_minimum_size = Vector2(332.0, 0.0)
+	_meta_trade.add_theme_font_size_override("normal_font_size", 12)
+	box.add_child(_meta_trade)
+
+	_meta_sizing = _meta_section_label(Color(0.86, 0.88, 0.90))
+	box.add_child(_meta_sizing)
+
+	_meta_foundation = _meta_section_label(Color(0.86, 0.88, 0.90))
+	box.add_child(_meta_foundation)
+
+	_meta_graph = _meta_section_label(Color(0.70, 0.74, 0.78))
+	box.add_child(_meta_graph)
+
+
+func _meta_section_label(color: Color) -> Label:
+	var label := Label.new()
+	label.add_theme_font_size_override("font_size", 12)
+	label.add_theme_color_override("font_color", color)
+	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	label.custom_minimum_size = Vector2(332.0, 0.0)
+	return label
 
 
 func _refresh_hud() -> void:
 	if Engine.is_editor_hint() or _title == null:
 		return
-	_title.text = "TERRAIN-TRACED PORT — WORLD FIT"
+	_title.text = "Port showcase"
 	if _last_data == null or _last_data.layout_graph == null:
+		_status.text = "No port loaded"
+		_stats.text = ""
+		_gizmo_line.text = "Gizmos  Off"
+		_controls.text = "G cycle · R rebuild"
+		_refresh_meta()
 		return
+
 	var graph := _last_data.layout_graph
-	var graph_bounds := graph.bounds()
-	var site_position := _last_data.world_position
-	var port_area: Dictionary = graph.initial_attributes.get("port_area", {}) as Dictionary
 	var recipe: Dictionary = graph.initial_attributes.get("foundation", {}) as Dictionary
-	var pier_target_line := ""
-	var bay_style := str(graph.initial_attributes.get("port_area", {}).get("harbour_style", ""))
-	if not bay_style.is_empty():
-		var profile := str(recipe.get("length_profile", port_area.get("length_profile", "standard")))
-		pier_target_line = "%s dock · %.0f m shore (hull %.0f m) · %.0f m reach" % [
-			profile,
+	var profile := str(recipe.get("length_profile", LENGTH_PROFILES[length_profile_index]))
+	var port_name := _last_data.display_name
+	if port_name.is_empty() and _active_definition != null:
+		port_name = _active_definition.display_name
+
+	var live_size := PortSizing.normalized_size(_last_data.size)
+	var geo_max := PortSizing.MAX_SIZE
+	if _active_definition != null and _active_definition.has_meta("showcase_geo_max_size"):
+		geo_max = int(_active_definition.get_meta("showcase_geo_max_size"))
+	geo_max = int(graph.initial_attributes.get(
+		"site_max_size",
+		geo_max,
+	))
+	_status.text = "%s  ·  %s  ·  size %d %s" % [
+		port_name,
+		REGION_LABELS[region_index],
+		live_size,
+		SIZE_LABELS[live_size],
+	]
+	_stats.text = "\n".join(PackedStringArray([
+		"Seed %d   length %s" % [world_seed, profile],
+		"Shore %.0f m   reach %.0f m   hull %s" % [
 			float(recipe.get("shore_length_m", 0.0)),
-			float(recipe.get("design_hull_loa_m", PortSizing.design_hull_loa_m(port_size))),
 			float(recipe.get("dock_reach_m", 0.0)),
-		]
-	var stat_lines: PackedStringArray = PackedStringArray([
-		"Seed: %d (#%d)" % [SEEDS[seed_index], seed_index + 1],
-		"Length: %s" % LENGTH_PROFILES[length_profile_index],
-		"Size: %d — %s" % [port_size, SIZE_LABELS[port_size]],
-		"Region: %s" % REGION_LABELS[region_index],
-		"World site: %.0f, %.0f · terrain near-field 2.2 km" % [
-			site_position.x, site_position.z,
+			PortSizing.design_hull_id(live_size),
 		],
-		"Modules: %d · Open slots: %d · coast verts: %d" % [
-			graph.modules.size(),
-			graph.open_slots().size(),
-			(port_area.get("coast_polyline", []) as Array).size(),
-		],
-		"Port area: %.0f × %.0f m half · coast arc: %.0f m · quay: %.0f m" % [
-			float(port_area.get("half_width_m", port_area.get("half_extent_m", 0.0))),
-			float(port_area.get("half_depth_m", port_area.get("half_extent_m", 0.0))),
-			float(recipe.get("total_coast_arc_m", 0.0)),
-			graph.total_quay_length_m(),
-		],
-		"Scan box: %.0f × %.0f m · trace verts: %d" % [
-			float(port_area.get("trace_half_width_m", 0.0)) * 2.0,
-			float(port_area.get("trace_half_depth_m", 0.0)) * 2.0,
-			(port_area.get("terrain_coast_polyline", []) as Array).size(),
-		],
-		"Gizmos: red=origin · green=size · yellow=scan · orange=trace · magenta=spine",
-		"Design hull: %s (%.0f×%.0f m) · Quay half %.0f · Slot %.0f" % [
-			PortSizing.design_hull_id(port_size),
-			PortSizing.design_hull_loa_m(port_size),
-			PortSizing.design_hull_beam_m(port_size),
-			PortSizing.quay_half_length_m(port_size),
-			PortSizing.slot_width_m(port_size),
-		],
-		"Bounds: %.0f × %.0f m" % [graph_bounds.size.x, graph_bounds.size.z],
-		"Graph format: %d · generation: %d" % [
-			PortLayoutGraph.FORMAT_VERSION,
+		"Quay½ %.0f m   geo ceiling %d   gen %d" % [
+			PortSizing.quay_half_length_m(live_size),
+			geo_max,
 			graph.generation_version,
 		],
-		"Move speed: %.0f m/s (scroll adjusts)" % _move_speed,
-	])
-	if not pier_target_line.is_empty():
-		stat_lines.insert(6, pier_target_line)
-	_stats.text = "\n".join(stat_lines)
-	_trade.text = "[b]Exports[/b]\n%s\n\n[b]Imports[/b]\n%s\n\n" % [
-		", ".join(_last_data.trade_profile.export_slots),
-		", ".join(_last_data.trade_profile.import_slots),
+	]))
+
+	var pack_label := _gizmo_pack_label()
+	var pack_hint := _gizmo_pack_hint()
+	if pack_hint.is_empty():
+		_gizmo_line.text = "Gizmos  %s   ·  G / Shift+G" % pack_label
+	else:
+		_gizmo_line.text = "Gizmos  %s   ·  %s" % [pack_label, pack_hint]
+
+	_controls.text = "←→ size  ↑↓ region  , . length  - = roll seed\nWASD move  RMB look  Home frame  R rebuild  G gizmos"
+	_refresh_meta()
+
+
+func _refresh_meta() -> void:
+	if Engine.is_editor_hint() or _meta_identity == null:
+		return
+	if _last_data == null or _last_data.layout_graph == null:
+		_meta_identity.text = "No port loaded"
+		_meta_trade.text = ""
+		_meta_sizing.text = ""
+		_meta_foundation.text = ""
+		_meta_graph.text = ""
+		return
+
+	var data := _last_data
+	var graph := data.layout_graph
+	var recipe: Dictionary = graph.initial_attributes.get("foundation", {}) as Dictionary
+	var spine := recipe.get("spine", []) as Array
+	var size := PortSizing.normalized_size(data.size)
+	var region := "legacy"
+	match data.region_kind:
+		PortDefinition.RegionKind.MAINLAND:
+			region = "mainland"
+		PortDefinition.RegionKind.FJORD:
+			region = "fjord"
+		PortDefinition.RegionKind.ARCHIPELAGO:
+			region = "archipelago"
+		_:
+			region = "legacy"
+
+	var port_name := data.display_name
+	if port_name.is_empty() and _active_definition != null:
+		port_name = _active_definition.display_name
+
+	var trade := data.trade_profile
+	var geo_ceiling := int(graph.initial_attributes.get("site_max_size", PortSizing.MAX_SIZE))
+	if _active_definition != null and _active_definition.has_meta("showcase_geo_max_size"):
+		geo_ceiling = int(_active_definition.get_meta("showcase_geo_max_size"))
+	var trade_ceiling := int(graph.initial_attributes.get(
+		"trade_max_size",
+		PortTradeProfile.max_size_for_profile(trade) if trade != null else PortSizing.MAX_SIZE,
+	))
+	_meta_identity.text = "\n".join(PackedStringArray([
+		"%s" % port_name,
+		"id  %s" % data.port_id,
+		"size  %d — %s" % [size, SIZE_LABELS[size]],
+		"ceiling  %d  (geo %d · trade %d · %d products)" % [
+			int(graph.initial_attributes.get("site_max_size", size)),
+			geo_ceiling,
+			trade_ceiling,
+			PortTradeProfile.destiny_product_count(trade) if trade != null else 0,
+		],
+		"region  %s" % region,
+		"site seed  %d" % data.layout_seed,
+		"generation  %d" % data.port_generation_version,
+	]))
+
+	var primary := ""
+	if trade != null:
+		primary = trade.primary_export()
+	var trade_bb := "[b]Trade[/b]\n"
+	if trade != null and not str(trade.theme_id).is_empty():
+		trade_bb += "theme  %s  (destiny fixed)\n" % str(trade.theme_id).replace("_", " ")
+	trade_bb += "unlocked  %d export / %d import at this size" % [
+		trade.export_slots.size() if trade != null else 0,
+		trade.import_slots.size() if trade != null else 0,
 	]
-	var families: Array = graph.initial_attributes.get("terminal_families", [])
-	if not families.is_empty():
-		var family_labels: PackedStringArray = []
-		for family in families:
-			family_labels.append(CommodityCatalog.terminal_family_display(str(family)))
-		_trade.text += "[b]Terminals[/b]\n%s\n\n" % ", ".join(family_labels)
-	_trade.text += "[b]Reading the layout[/b]\n"
-	_trade.text += "Natural shore → seaward dock growth → blended town backdrop\n"
-	_trade.text += "Mash , . to compare length profiles (compact / standard / extended)\n"
-	_trade.text += "Blue hull = design size · green = 28 m reference"
-	_instructions.text = "WASD move · Q/E · Shift · RMB look · MMB pan · scroll · Home · ←→ size · ↑↓ region · , . length · - = seed · L/F · R rebuild"
+	if size >= PortSizing.TRADE_COMPLETE_SIZE:
+		trade_bb += "  ·  trade complete\n"
+	else:
+		trade_bb += "  ·  full by size %d\n" % PortSizing.TRADE_COMPLETE_SIZE
+	if primary.is_empty():
+		trade_bb += "primary export  —\n"
+	else:
+		trade_bb += "primary export  %s\n" % CommodityCatalog.commodity_display(primary)
+	trade_bb += "\n[b]Exports[/b]\n"
+	trade_bb += _format_trade_slots(trade.export_slots if trade != null else [])
+	if trade != null:
+		for id in trade.locked_export_slots():
+			trade_bb += "  [color=#666666]□[/color] %s  ·  locked\n" % CommodityCatalog.commodity_display(id)
+	trade_bb += "\n[b]Imports[/b]\n"
+	trade_bb += _format_trade_slots(trade.import_slots if trade != null else [])
+	if trade != null:
+		for id in trade.locked_import_slots():
+			trade_bb += "  [color=#666666]□[/color] %s  ·  locked\n" % CommodityCatalog.commodity_display(id)
+	var berth_plan: Dictionary = graph.initial_attributes.get("berth_plan", {}) as Dictionary
+	if not berth_plan.is_empty():
+		trade_bb += "\n[b]Berth plan[/b]\n"
+		trade_bb += "asphalt docks  %d   dedicated quays  %d\n" % [
+			int(berth_plan.get("asphalt_slot_count", 0)),
+			int(berth_plan.get("quay_count", 0)),
+		]
+		for note in berth_plan.get("notes", []) as Array:
+			trade_bb += "%s\n" % str(note)
+		for raw in berth_plan.get("quay_stations", []) as Array:
+			var station := raw as Dictionary
+			for zone_raw in station.get("zones", []) as Array:
+				var zone := zone_raw as Dictionary
+				var cid := str(zone.get("commodity_id", ""))
+				var zcolor := CommodityCatalog.commodity_color(cid) if not cid.is_empty() \
+						else CommodityCatalog.terminal_family_color(str(station.get("family", "")))
+				trade_bb += "  [color=#%s]■[/color] %s  ·  %.0f m quay\n" % [
+					zcolor.to_html(false),
+					str(zone.get("label", cid)).replace("\n", " · "),
+					float(station.get("length_m", 0.0)) * maxf(
+						float(zone.get("t1", 1.0)) - float(zone.get("t0", 0.0)),
+						0.05,
+					),
+				]
+		for raw in berth_plan.get("asphalt_stations", []) as Array:
+			var station := raw as Dictionary
+			var commodity_id := str(station.get("commodity_id", ""))
+			var color := CommodityCatalog.terminal_family_color(
+				CommodityCatalog.commodity_terminal_family(commodity_id),
+			)
+			trade_bb += "  [color=#%s]●[/color] %s  ·  asphalt\n" % [
+				color.to_html(false),
+				CommodityCatalog.commodity_display(commodity_id),
+			]
+	_meta_trade.text = trade_bb
+
+	var planned_quays := int(berth_plan.get("quay_count", 0))
+	var planned_asphalt := int(berth_plan.get("asphalt_slot_count", 0))
+	var live_berths := data.berth_count
+	var berth_note := "live modules %d   planned quays %d + asphalt %d" % [
+		live_berths, planned_quays, planned_asphalt,
+	]
+	if live_berths <= 1 and planned_quays > 0:
+		berth_note += "\n(wide berth terminals on foundation · max %d quays)" % PortSizing.max_dedicated_quays(size)
+	_meta_sizing.text = "\n".join(PackedStringArray([
+		"[Sizing]",
+		"quay½  %.0f m   deck  %.0f m" % [
+			PortSizing.quay_half_length_m(size),
+			PortSizing.quay_deck_width_m(size),
+		],
+		"pad  %.0f × %.0f m" % [
+			PortSizing.terrain_pad_width_m(size),
+			PortSizing.terrain_pad_depth_m(size),
+		],
+		"hull  %s  (%.0f×%.0f m)" % [
+			PortSizing.design_hull_id(size),
+			PortSizing.design_hull_loa_m(size),
+			PortSizing.design_hull_beam_m(size),
+		],
+		berth_note,
+	]))
+
+	_meta_foundation.text = "\n".join(PackedStringArray([
+		"[Foundation]",
+		"profile  %s" % str(recipe.get("length_profile", LENGTH_PROFILES[length_profile_index])),
+		"shore  %.0f m   reach  %.0f m" % [
+			float(recipe.get("shore_length_m", 0.0)),
+			float(recipe.get("dock_reach_m", 0.0)),
+		],
+		"spine  %d verts" % spine.size(),
+		_basin_hud_line(graph.initial_attributes.get("basin", recipe.get("basin", {}))),
+	]))
+
+	_meta_graph.text = "\n".join(PackedStringArray([
+		"[Layout graph]",
+		"modules  %d   open slots  %d" % [graph.modules.size(), graph.open_slots().size()],
+		"graph format  %d" % PortLayoutGraph.FORMAT_VERSION,
+	]))
+
+
+func _basin_hud_line(basin: Variant) -> String:
+	if typeof(basin) != TYPE_DICTIONARY or (basin as Dictionary).is_empty():
+		return "basin  —"
+	var b := basin as Dictionary
+	if bool(b.get("probe_failed", false)):
+		return "basin  probe skipped — no length clamp"
+	var arm := float(b.get("max_arm_m", 0.0))
+	var arm_txt := "∞" if not is_finite(arm) else "%.0f m" % arm
+	return "basin  sea %.0f m  across %.0f m  arm≤%s  site≤%d  tight %.0f%%" % [
+		float(b.get("seaward_clear_m", 0.0)),
+		float(b.get("across_clear_m", 0.0)),
+		arm_txt,
+		int(b.get("site_max_size", PortSizing.MAX_SIZE)),
+		float(b.get("tightness", 0.0)) * 100.0,
+	]
+
+
+func _format_trade_slots(slots: Array) -> String:
+	if slots.is_empty():
+		return "  —\n"
+	var lines := ""
+	for raw in slots:
+		var commodity_id := str(raw)
+		var color := CommodityCatalog.commodity_color(commodity_id)
+		var hex := color.to_html(false)
+		var dock := "asphalt" if BERTH_PLAN.uses_asphalt_dock(commodity_id) else "quay"
+		lines += "  [color=#%s]■[/color] %s  ·  %s\n" % [
+			hex,
+			CommodityCatalog.commodity_display(commodity_id),
+			dock,
+		]
+	return lines

@@ -11,10 +11,16 @@ extends Node3D
 @export var plot_depth := 140.0
 @export var port_size := 1
 
-@export var show_site_gizmos := false
+## Master switch for site debug overlays. Geometry stays stamped; layers toggle visibility.
+@export var show_site_gizmos := false:
+	set(value):
+		show_site_gizmos = value
+		_sync_site_gizmo_layers()
 
 var _data: PortData
 var _layout_graph: PortLayoutGraph
+## Optional per-layer overrides. Empty = all site layers follow show_site_gizmos.
+var _gizmo_layer_overrides: Dictionary = {}
 
 
 func _ready() -> void:
@@ -34,6 +40,28 @@ func configure(data: PortData, _legacy_brick_mode: bool = true) -> void:
 		_rebuild()
 
 
+func set_gizmo_layer(layer_id: String, enabled: bool) -> void:
+	_gizmo_layer_overrides[layer_id] = enabled
+	_sync_site_gizmo_layers()
+
+
+func set_gizmo_layers(layer_visible: Dictionary) -> void:
+	_gizmo_layer_overrides = layer_visible.duplicate()
+	_sync_site_gizmo_layers()
+
+
+func clear_gizmo_layer_overrides() -> void:
+	_gizmo_layer_overrides.clear()
+	_sync_site_gizmo_layers()
+
+
+func gizmo_layer_state() -> Dictionary:
+	var gizmos := get_node_or_null("PortDebugGizmos") as PortDebugGizmos
+	if gizmos != null:
+		return gizmos.layer_state()
+	return PortDebugGizmos.default_layers(show_site_gizmos)
+
+
 func _rebuild() -> void:
 	for child in get_children():
 		child.free()
@@ -43,11 +71,12 @@ func _rebuild() -> void:
 	visualizer.name = "PortLayoutGraph"
 	visualizer.configure(_layout_graph)
 	add_child(visualizer)
-	if show_site_gizmos:
-		var gizmos := PortDebugGizmos.new()
-		gizmos.name = "PortDebugGizmos"
-		gizmos.configure(_layout_graph)
-		add_child(gizmos)
+
+	## Always stamp gizmos so layers can be toggled without a full rebuild.
+	var gizmos := PortDebugGizmos.new()
+	gizmos.name = "PortDebugGizmos"
+	gizmos.configure(_layout_graph, _resolved_gizmo_layers())
+	add_child(gizmos)
 
 	if not port_label.is_empty():
 		var label := Label3D.new()
@@ -67,6 +96,23 @@ func _rebuild() -> void:
 		if root != null:
 			for child in get_children():
 				_own_subtree(child, root)
+
+
+func _resolved_gizmo_layers() -> Dictionary:
+	var layers := PortDebugGizmos.default_layers(show_site_gizmos)
+	for layer_id in _gizmo_layer_overrides:
+		if layer_id in PortDebugGizmos.LAYER_IDS:
+			layers[layer_id] = bool(_gizmo_layer_overrides[layer_id])
+	return layers
+
+
+func _sync_site_gizmo_layers() -> void:
+	var gizmos := get_node_or_null("PortDebugGizmos") as PortDebugGizmos
+	if gizmos == null:
+		return
+	var layers := _resolved_gizmo_layers()
+	for layer_id in PortDebugGizmos.LAYER_IDS:
+		gizmos.set_layer_visible(layer_id, bool(layers.get(layer_id, false)))
 
 
 func get_spawn_position() -> Vector3:

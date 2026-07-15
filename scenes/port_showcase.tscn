@@ -11,8 +11,6 @@ ambient_light_energy = 0.65
 
 [node name="PortShowcase" type="Node3D" unique_id=517865394]
 script = ExtResource("1_showcase")
-region_index = null
-seed_index = null
 
 [node name="WorldEnvironment" type="WorldEnvironment" parent="." unique_id=1045639757]
 environment = SubResource("Environment_showcase")
