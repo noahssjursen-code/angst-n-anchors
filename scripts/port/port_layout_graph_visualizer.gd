@@ -18,9 +18,19 @@ const SLOT_COLORS := {
 }
 
 const STEEL := Color(0.45, 0.46, 0.48)
-## Weathered harbour pavement — neutral concrete/asphalt, not turf.
-const FOUNDATION_PAVEMENT_COLOR := Color(0.34, 0.34, 0.36)
-const FOUNDATION_PAVEMENT_ROUGHNESS := 0.93
+## Solid harbour pavement — flat #222222, no lighting variation.
+const FOUNDATION_PAVEMENT_COLOR := Color(0.133, 0.133, 0.133)
+
+
+static func _foundation_pavement_material() -> StandardMaterial3D:
+	var material := StandardMaterial3D.new()
+	material.albedo_color = FOUNDATION_PAVEMENT_COLOR
+	material.roughness = 1.0
+	material.metallic = 0.0
+	material.metallic_specular = 0.0
+	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	material.disable_receive_shadows = true
+	return material
 
 ## Shared materials across stamps — recreating StandardMaterial3D per box was a hitch.
 static var _material_cache: Dictionary = {}
@@ -133,11 +143,9 @@ func _stamp_foundation() -> void:
 	)
 	var sea_bot := sea_top
 	var shore_top := spine_pts
-	var material := MeshBuilder.make_material(FOUNDATION_PAVEMENT_COLOR, FOUNDATION_PAVEMENT_ROUGHNESS, 0.0)
-	material.render_priority = 1
+	var material := _foundation_pavement_material()
 	var surface := SurfaceTool.new()
 	surface.begin(Mesh.PRIMITIVE_TRIANGLES)
-	surface.set_material(material)
 	for index in range(spine.size() - 1):
 		_add_ribbon_link(
 			surface,
@@ -199,7 +207,6 @@ func _stamp_foundation() -> void:
 	mesh.mesh = surface.commit()
 	mesh.material_override = material
 	mesh.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	mesh.receive_shadows = false
 	mesh.extra_cull_margin = 24.0
 	add_child(mesh)
 

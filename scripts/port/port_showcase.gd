@@ -441,7 +441,6 @@ func _spawn_foundation_hull(
 	var yaw_degrees := rad_to_deg(atan2(world_dir.x, world_dir.z))
 	boat.name = "%s_%s" % [hull_id, str(int(along_fraction * 100.0))]
 	boat.freeze = true
-	boat.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	parent.add_child(boat)
 	boat.global_position = world_pos
 	boat.global_rotation_degrees.y = yaw_degrees
