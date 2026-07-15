@@ -5,8 +5,8 @@ extends Node3D
 ## Visualise where the port is registered, what size box was used, and where coast dots landed.
 
 const ORIGIN_COLOR := Color(1.0, 0.15, 0.15)
-const SIZE_BOX_COLOR := Color(0.2, 0.95, 0.35, 0.85)
-const TRACE_BOX_COLOR := Color(1.0, 0.85, 0.1, 0.85)
+const SIZE_BOX_COLOR := Color(0.2, 0.95, 0.35)
+const TRACE_BOX_COLOR := Color(1.0, 0.85, 0.1)
 const SEAWARD_COLOR := Color(0.25, 0.55, 1.0)
 const INLAND_COLOR := Color(0.35, 1.0, 0.45)
 const TERRAIN_COAST_COLOR := Color(1.0, 0.55, 0.1)
@@ -47,7 +47,7 @@ func configure(graph: PortLayoutGraph) -> void:
 		"ShoreSpan",
 	)
 	_stamp_polyline_dots(port_area.get("coast_polyline", []) as Array, DOCK_COLOR, 2.6, "DockFace")
-	_stamp_polyline_lines(foundation.get("spine", []) as Array, SPINE_COLOR, 0.35)
+	_stamp_polyline_lines(foundation.get("spine", []) as Array, SPINE_COLOR, 1.4)
 	var modules := graph.modules
 	for instance_id in modules:
 		var placed := modules[instance_id] as PortPlacedModule
@@ -111,9 +111,8 @@ func _stamp_ground_rect(node_name: String, half_x: float, half_z: float, color: 
 		var a: Vector3 = corners[pair[0]]
 		var b: Vector3 = corners[pair[1]]
 		var edge := MeshBuilder.box(Vector3(thickness, thickness, a.distance_to(b)), color, 0.8, 0.0)
-		edge.position = (a + b) * 0.5
-		edge.look_at(b, Vector3.UP)
 		root.add_child(edge)
+		_align_segment(edge, a, b)
 	_label(
 		"%sLabel" % node_name,
 		node_name.replace("Box", " box ") + " %.0f × %.0f m" % [half_x * 2.0, half_z * 2.0],
@@ -145,9 +144,22 @@ func _stamp_polyline_lines(points: Array, color: Color, thickness: float) -> voi
 		if span < 0.5:
 			continue
 		var edge := MeshBuilder.box(Vector3(thickness, thickness, span), color, 0.75, 0.0)
-		edge.position = (a + b) * 0.5
-		edge.look_at(b, Vector3.UP)
 		add_child(edge)
+		_align_segment(edge, a, b)
+
+
+## Box meshes are authored length-on-local-Z; align -Z from midpoint → b without look_at tree quirks.
+func _align_segment(node: Node3D, a: Vector3, b: Vector3) -> void:
+	var delta := b - a
+	var span := delta.length()
+	if span < 0.001:
+		return
+	var direction := delta / span
+	node.position = (a + b) * 0.5
+	var up := Vector3.UP
+	if absf(direction.dot(Vector3.UP)) > 0.999:
+		up = Vector3.FORWARD
+	node.basis = Basis.looking_at(direction, up)
 
 
 func _stamp_dot(position: Vector3, color: Color, radius: float, node_name: String) -> void:

@@ -30,8 +30,6 @@ static func generate(
 	graph.initial_attributes["imports"] = profile.import_slots.duplicate()
 
 	var layout := attributes.get("world_layout") as WorldLayout
-	if layout != null:
-		graph.initial_attributes["terrain_bake_seed"] = layout.seed
 	var half_width := CoastTracer.port_area_half_width_m(size)
 	var half_depth := CoastTracer.trace_half_depth_m(size)
 	var traced_coast := _trace_coast(

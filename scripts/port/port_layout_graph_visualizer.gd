@@ -18,8 +18,9 @@ const SLOT_COLORS := {
 }
 
 const STEEL := Color(0.45, 0.46, 0.48)
-const TERRAIN_SHADER := preload("res://resources/shaders/terrain.gdshader")
-const TERRAIN_SURFACE_MAPS := preload("res://scripts/world/terrain_surface_maps.gd")
+## Coastal turf — bright enough to read on water; matches terrain lowland heath tone.
+const FOUNDATION_GROUND_COLOR := Color(0.24, 0.28, 0.15)
+const FOUNDATION_GROUND_ROUGHNESS := 0.97
 
 ## Shared materials across stamps — recreating StandardMaterial3D per box was a hitch.
 static var _material_cache: Dictionary = {}
@@ -131,66 +132,65 @@ func _stamp_foundation() -> void:
 		true,
 	)
 	var sea_bot := sea_top
-	var bake_seed := int(_graph.initial_attributes.get("terrain_bake_seed", _graph.site_seed))
-	var material := _foundation_ground_material(bake_seed)
+	var material := MeshBuilder.make_material(FOUNDATION_GROUND_COLOR, FOUNDATION_GROUND_ROUGHNESS, 0.0)
 	var surface := SurfaceTool.new()
 	surface.begin(Mesh.PRIMITIVE_TRIANGLES)
 	surface.set_material(material)
 	for index in range(spine.size() - 1):
-		## One horizontal slab per link — avoids coplanar inland/shore/sea quads z-fighting on the hinge row.
-		_add_quad(
-			surface,
-			_foundation_vertex(inland_top, index, top_y),
-			_foundation_vertex(inland_top, index + 1, top_y),
-			_foundation_vertex(sea_top, index + 1, top_y),
-			_foundation_vertex(sea_top, index, top_y),
-		)
-		_add_quad(
-			surface,
-			_foundation_vertex(inland_bot, index, land_bottom_y),
-			_foundation_vertex(sea_bot, index, water_bottom_y),
-			_foundation_vertex(sea_bot, index + 1, water_bottom_y),
-			_foundation_vertex(inland_bot, index + 1, land_bottom_y),
-		)
-		_add_quad(
-			surface,
-			_foundation_vertex(inland_top, index, top_y),
-			_foundation_vertex(inland_bot, index, land_bottom_y),
-			_foundation_vertex(inland_bot, index + 1, land_bottom_y),
-			_foundation_vertex(inland_top, index + 1, top_y),
-		)
+		## Winding is seaward → inland so +Y normals face up (cull_back).
 		_add_quad(
 			surface,
 			_foundation_vertex(sea_top, index, top_y),
 			_foundation_vertex(sea_top, index + 1, top_y),
+			_foundation_vertex(inland_top, index + 1, top_y),
+			_foundation_vertex(inland_top, index, top_y),
+		)
+		_add_quad(
+			surface,
+			_foundation_vertex(inland_bot, index + 1, land_bottom_y),
 			_foundation_vertex(sea_bot, index + 1, water_bottom_y),
 			_foundation_vertex(sea_bot, index, water_bottom_y),
+			_foundation_vertex(inland_bot, index, land_bottom_y),
+		)
+		_add_quad(
+			surface,
+			_foundation_vertex(inland_top, index + 1, top_y),
+			_foundation_vertex(inland_bot, index + 1, land_bottom_y),
+			_foundation_vertex(inland_bot, index, land_bottom_y),
+			_foundation_vertex(inland_top, index, top_y),
+		)
+		_add_quad(
+			surface,
+			_foundation_vertex(sea_top, index, top_y),
+			_foundation_vertex(sea_bot, index, water_bottom_y),
+			_foundation_vertex(sea_bot, index + 1, water_bottom_y),
+			_foundation_vertex(sea_top, index + 1, top_y),
 		)
 	var shore_top := spine_pts
 	_add_tri(
 		surface,
-		_foundation_vertex(inland_top, 0, top_y),
-		_foundation_vertex(shore_top, 0, top_y),
 		_foundation_vertex(sea_top, 0, top_y),
+		_foundation_vertex(shore_top, 0, top_y),
+		_foundation_vertex(inland_top, 0, top_y),
 	)
 	_add_tri(
 		surface,
-		_foundation_vertex(inland_bot, 0, land_bottom_y),
 		_foundation_vertex(sea_bot, 0, water_bottom_y),
+		_foundation_vertex(inland_bot, 0, land_bottom_y),
 		_foundation_vertex(shore_top, 0, land_bottom_y),
 	)
 	var last := spine.size() - 1
 	_add_tri(
 		surface,
 		_foundation_vertex(inland_top, last, top_y),
-		_foundation_vertex(sea_top, last, top_y),
 		_foundation_vertex(shore_top, last, top_y),
+		_foundation_vertex(sea_top, last, top_y),
 	)
 	_add_tri(
 		surface,
-		_foundation_vertex(inland_bot, last, land_bottom_y),
-		_foundation_vertex(shore_top, last, land_bottom_y),
 		_foundation_vertex(sea_bot, last, water_bottom_y),
+		_foundation_vertex(shore_top, last, land_bottom_y),
+		_foundation_vertex(inland_bot, last, land_bottom_y),
 	)
 	surface.generate_normals()
 	var mesh := MeshInstance3D.new()
@@ -198,28 +198,8 @@ func _stamp_foundation() -> void:
 	mesh.mesh = surface.commit()
 	mesh.material_override = material
 	mesh.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	mesh.extra_cull_margin = 12.0
-	mesh.sorting_offset = 1.0
+	mesh.extra_cull_margin = 24.0
 	add_child(mesh)
-
-
-func _foundation_ground_material(bake_seed: int) -> ShaderMaterial:
-	var cache_key := "foundation_terrain_%d" % bake_seed
-	if _material_cache.has(cache_key):
-		return (_material_cache[cache_key] as ShaderMaterial).duplicate()
-	var material := ShaderMaterial.new()
-	material.shader = TERRAIN_SHADER
-	TERRAIN_SURFACE_MAPS.bind_to_material(material, bake_seed)
-	if ForestField.is_initialized():
-		material.set_shader_parameter("forest_map", ForestField.coverage_texture())
-		material.set_shader_parameter("forest_world_half_extent_m", ForestField.world_half_extent_m())
-	else:
-		var blank := Image.create(4, 4, false, Image.FORMAT_R8)
-		blank.fill(Color(0, 0, 0))
-		material.set_shader_parameter("forest_map", ImageTexture.create_from_image(blank))
-		material.set_shader_parameter("forest_world_half_extent_m", 20000.0)
-	_material_cache[cache_key] = material
-	return material.duplicate()
 
 
 func _add_tri(surface: SurfaceTool, a: Vector3, b: Vector3, c: Vector3) -> void:
