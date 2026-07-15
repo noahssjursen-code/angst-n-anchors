@@ -2,9 +2,8 @@ class_name PortBerthPlan
 extends RefCounted
 
 ## Plans docking stations from trade slots onto the asphalt dock face.
-## Small cargo (fish, provisions) uses the harbour apron; larger cargo gets
-## dedicated quay arms. Quays share one seaward heading so they stay parallel
-## on curved coasts and do not collide.
+## Fish/provisions hug the dock-face waterline with local edge orientation and
+## stay clear of quay loading roots. Dedicated cargo gets parallel quay arms.
 
 const CoastTracer := preload("res://scripts/port/port_coast_tracer.gd")
 const CoastalPortPlacer := preload("res://scripts/world/coastal_port_placer.gd")
@@ -173,27 +172,62 @@ static func build(
 		basin = measure_basin(layout, definition, foundation)
 	## Place every unlocked pad. Destiny is already trimmed to ≤3 quay groups.
 	quay_list = _cap_quay_families(quay_list, n)
+	asphalt_slots = _merge_asphalt_slots(asphalt_slots)
 
 	var dock_face := _polyline_from_array(foundation.get("dock_face_polyline", []) as Array)
 	if dock_face.size() < 2:
 		dock_face = _polyline_from_array(foundation.get("spine", []) as Array)
 
-	var quay_stations := _place_quays(quay_list, dock_face, n, site_seed, basin, layout, definition)
-	var asphalt_stations := _place_asphalt(asphalt_slots, dock_face, n, quay_stations)
 	var seaward := _consensus_seaward(dock_face)
+	## Quays take the full comb first; apron berths pack into free face arcs after.
+	var quay_stations := _place_quays(
+		quay_list,
+		dock_face,
+		n,
+		site_seed,
+		basin,
+		layout,
+		definition,
+	)
+	var asphalt_stations := _place_asphalt_on_face(
+		asphalt_slots,
+		dock_face,
+		n,
+		quay_stations,
+	)
 	var notes := _notes(asphalt_slots, quay_stations)
 	var site_max := int(basin.get("site_max_size", PortSizing.MAX_SIZE))
 	if site_max < PortSizing.MAX_SIZE:
 		notes.append("site max size %d — harbour pocket limits growth" % site_max)
 	if float(basin.get("tightness", 0.0)) > 0.35 and not bool(basin.get("probe_failed", false)):
 		notes.append("basin tight — pier length shortened to open water")
+	if not asphalt_stations.is_empty():
+		notes.append("apron berths hug dock face with local edge orientation")
 
+	var apron_arc_lo := INF
+	var apron_arc_hi := -INF
+	for raw in asphalt_stations:
+		var arc := float((raw as Dictionary).get("arc_m", 0.0))
+		var half := float((raw as Dictionary).get("length_m", 0.0)) * 0.5
+		apron_arc_lo = minf(apron_arc_lo, arc - half)
+		apron_arc_hi = maxf(apron_arc_hi, arc + half)
+	if apron_arc_lo > apron_arc_hi:
+		apron_arc_lo = 0.0
+		apron_arc_hi = 0.0
+
+	var quay_berth_faces := 0
+	for raw in quay_stations:
+		quay_berth_faces += int((raw as Dictionary).get("berth_faces", 1))
 	return {
 		"asphalt_stations": asphalt_stations,
 		"quay_stations": quay_stations,
-		"asphalt_slot_count": asphalt_slots.size(),
-		"quay_count": quay_stations.size(),
+		"asphalt_slot_count": asphalt_stations.size(),
+		"quay_count": quay_berth_faces,
 		"seaward_dir": [seaward.x, seaward.y],
+		"apron_district": {
+			"arc_lo": apron_arc_lo,
+			"arc_hi": apron_arc_hi,
+		},
 		"basin": basin,
 		"notes": notes,
 	}
@@ -252,11 +286,21 @@ static func _place_quays(
 		basin: Dictionary = {},
 		layout: WorldLayout = null,
 		definition: PortDefinition = null,
+		proj_lo: float = NAN,
+		proj_hi: float = NAN,
 ) -> Array:
 	var out: Array = []
 	if quay_list.is_empty() or dock_face.size() < 2:
 		return out
 	var count := quay_list.size()
+	## Two trade pads share one pier: dock|crane|cargo|road|cargo|crane|dock.
+	if count == 2:
+		var twin := _place_twin_quay(
+			quay_list, dock_face, size, site_seed, basin, layout, definition, proj_lo, proj_hi
+		)
+		if not twin.is_empty():
+			out.append(twin)
+			return out
 	var max_arm_m := float(basin.get("max_arm_m", INF))
 	var lengths := PortSizing.arm_target_lengths_m(size, "solo_jetty", count)
 	## One shared seaward heading — parallel fingers never converge on a bend.
@@ -285,6 +329,10 @@ static func _place_quays(
 		var proj: float = sample["proj"]
 		proj_min = minf(proj_min, proj)
 		proj_max = maxf(proj_max, proj)
+	## Optional apron-district reservation shrinks the quay comb span.
+	if is_finite(proj_lo) and is_finite(proj_hi) and proj_hi > proj_lo + 1.0:
+		proj_min = maxf(proj_min, proj_lo)
+		proj_max = minf(proj_max, proj_hi)
 	var margin := minf((proj_max - proj_min) * 0.08, 28.0)
 	var span := maxf(proj_max - proj_min - margin * 2.0, deck_w)
 	## Ideal fairway spacing; compress only enough to fit every family without overlap.
@@ -349,6 +397,7 @@ static func _place_quays(
 		out.append({
 			"id": "quay_%s" % str(family_info.get("group_id", family_info.get("family", index))).replace(":", "_"),
 			"mode": MODE_QUAY,
+			"layout": "single",
 			"family": str(family_info.get("family", "general")),
 			"group_id": str(family_info.get("group_id", "")),
 			"commodities": commodities,
@@ -368,10 +417,149 @@ static func _place_quays(
 			"yard_width_m": yard.x,
 			"yard_depth_m": yard.y,
 			"berth_side": 1 if (index % 2) == 0 else -1,
-			"lanes": ["storage", "road", "crane"],
+			"berth_faces": 1,
+			"lanes": ["dock", "crane", "cargo", "road"],
 			"seaward_clear_m": local_clear,
 		})
 	return out
+
+
+## One shared pier for exactly two trade pads — outer docks, centre road.
+static func _place_twin_quay(
+		quay_list: Array,
+		dock_face: PackedVector2Array,
+		size: int,
+		site_seed: int,
+		basin: Dictionary = {},
+		layout: WorldLayout = null,
+		definition: PortDefinition = null,
+		proj_lo: float = NAN,
+		proj_hi: float = NAN,
+) -> Dictionary:
+	if quay_list.size() != 2 or dock_face.size() < 2:
+		return {}
+	var max_arm_m := float(basin.get("max_arm_m", INF))
+	var lengths := PortSizing.arm_target_lengths_m(size, "solo_jetty", 2)
+	var seaward := _consensus_seaward(dock_face)
+	var along := Vector2(-seaward.y, seaward.x)
+	if along.dot(Vector2(1.0, 0.0)) < 0.0:
+		along = -along
+	var port_origin := definition.world_position if definition != null else Vector3.ZERO
+	var port_yaw := definition.rotation_y if definition != null else 0.0
+	var seaward_world := CoastTracer.port_local_dir_to_world(seaward, port_yaw)
+	if seaward_world.length_squared() < 0.25:
+		seaward_world = seaward
+	var face_samples := _sample_face(dock_face, 6.0)
+	if face_samples.is_empty():
+		return {}
+	var soft_cap := layout != null and not bool(basin.get("probe_failed", false)) \
+			and is_finite(max_arm_m)
+	var proj_min := INF
+	var proj_max := -INF
+	for sample in face_samples:
+		var proj: float = sample["proj"]
+		proj_min = minf(proj_min, proj)
+		proj_max = maxf(proj_max, proj)
+	if is_finite(proj_lo) and is_finite(proj_hi) and proj_hi > proj_lo + 1.0:
+		proj_min = maxf(proj_min, proj_lo)
+		proj_max = minf(proj_max, proj_hi)
+	var target_proj := (proj_min + proj_max) * 0.5
+	var snap := _snap_to_face_proj(face_samples, target_proj)
+	var origin: Vector2 = snap.get("position", Vector2.ZERO)
+
+	var sides: Array = []
+	var all_commodities: Array = []
+	var all_roles: Array = []
+	var zone_count := 0
+	for index in range(2):
+		var family_info: Dictionary = quay_list[index]
+		var trade_slots: Array = (family_info.get("trade_slots", []) as Array).duplicate(true)
+		if trade_slots.is_empty():
+			for commodity in family_info.get("commodities", []) as Array:
+				trade_slots.append({
+					"commodity_id": str(commodity),
+					"role": "trade",
+					"family": str(family_info.get("family", "general")),
+				})
+		var zones := _build_commodity_zones(trade_slots)
+		zone_count = maxi(zone_count, zones.size())
+		var commodities: Array = []
+		var roles: Array = []
+		for slot in trade_slots:
+			var cid := str(slot.get("commodity_id", ""))
+			if not cid.is_empty() and not commodities.has(cid):
+				commodities.append(cid)
+				if not all_commodities.has(cid):
+					all_commodities.append(cid)
+			var role := str(slot.get("role", ""))
+			if not role.is_empty() and not roles.has(role):
+				roles.append(role)
+				if not all_roles.has(role):
+					all_roles.append(role)
+		var berth_side := -1 if index == 0 else 1
+		sides.append({
+			"id": "side_%s" % str(family_info.get("group_id", family_info.get("family", index))).replace(":", "_"),
+			"family": str(family_info.get("family", "general")),
+			"group_id": str(family_info.get("group_id", "")),
+			"commodities": commodities,
+			"roles": roles,
+			"trade_slots": trade_slots,
+			"zones": zones,
+			"berth_side": berth_side,
+			"equipment_kind": equipment_for_family(str(family_info.get("family", "general"))),
+		})
+
+	var length_m := maxf(float(lengths[0]), float(lengths[1]))
+	length_m = maxf(length_m, PortSizing.min_quay_length_m(size, maxi(zone_count, 1)))
+	var local_clear := max_arm_m if soft_cap else length_m
+	var arm_budget := length_m
+	if soft_cap:
+		var world_origin := CoastTracer.port_local_to_world(origin, port_origin, port_yaw)
+		local_clear = CoastalPortPlacer.seaward_water_clearance_m(
+			layout, world_origin, seaward_world, BASIN_PROBE_MAX_M
+		)
+		arm_budget = minf(max_arm_m, maxf(local_clear - ARM_WATER_TAIL_M, 0.0))
+		if arm_budget > 0.0:
+			length_m = minf(length_m, arm_budget)
+	var rng := RandomNumberGenerator.new()
+	rng.seed = int(site_seed) ^ 0x5457494E ^ size
+	length_m *= rng.randf_range(0.98, 1.02)
+	if soft_cap and arm_budget > 0.0:
+		length_m = minf(length_m, arm_budget)
+	length_m = maxf(length_m, 24.0)
+	var pier_w := PortSizing.twin_quay_deck_width_for_arm_m(length_m, size)
+	var tip := origin + seaward * length_m
+	var yard := PortSizing.cargo_yard_size_m(mini(size, PortSizing.max_size_for_arm_budget_m(length_m)))
+	var id_a := str((sides[0] as Dictionary).get("group_id", "a")).replace(":", "_")
+	var id_b := str((sides[1] as Dictionary).get("group_id", "b")).replace(":", "_")
+	return {
+		"id": "quay_twin_%s_%s" % [id_a, id_b],
+		"mode": MODE_QUAY,
+		"layout": "twin_joined",
+		"family": "twin",
+		"group_id": "twin:%s:%s" % [id_a, id_b],
+		"commodities": all_commodities,
+		"roles": all_roles,
+		"trade_slots": [],
+		"zones": [],
+		"sides": sides,
+		"origin": [origin.x, origin.y],
+		"tip": [tip.x, tip.y],
+		"direction": [seaward.x, seaward.y],
+		"tangent": [along.x, along.y],
+		"length_m": length_m,
+		"min_length_m": PortSizing.min_quay_length_m(size, maxi(zone_count, 1)),
+		"ship_berth_m": PortSizing.min_ship_berth_m(size),
+		"width_m": pier_w,
+		"spacing_m": 0.0,
+		"equipment_kind": "",
+		"yard_width_m": yard.x,
+		"yard_depth_m": yard.y,
+		"berth_side": 0,
+		"berth_faces": 2,
+		"lanes": ["dock", "crane", "cargo", "road", "cargo", "crane", "dock"],
+		"seaward_clear_m": local_clear,
+	}
 
 
 ## Along-pier bands — one zone per commodity. Containers import+export merge into one.
@@ -481,7 +669,54 @@ static func _quay_keep_priority(entry: Dictionary) -> int:
 	return role_rank * 10 + family_rank
 
 
-static func _place_asphalt(
+static func _merge_asphalt_slots(asphalt_slots: Array) -> Array:
+	## One apron berth per commodity — import+export share the same pad.
+	var by_id: Dictionary = {}
+	var order: Array[String] = []
+	for raw in asphalt_slots:
+		var slot: Dictionary = raw
+		var commodity_id := str(slot.get("commodity_id", ""))
+		if commodity_id.is_empty():
+			continue
+		if not by_id.has(commodity_id):
+			by_id[commodity_id] = {
+				"commodity_id": commodity_id,
+				"role": str(slot.get("role", "")),
+				"family": str(slot.get("family", CommodityCatalog.commodity_terminal_family(commodity_id))),
+				"mode": MODE_ASPHALT,
+				"roles": [str(slot.get("role", ""))],
+			}
+			order.append(commodity_id)
+			continue
+		var entry: Dictionary = by_id[commodity_id]
+		var role := str(slot.get("role", ""))
+		var roles: Array = entry["roles"]
+		if not role.is_empty() and not roles.has(role):
+			roles.append(role)
+		if roles.has("import") and roles.has("export"):
+			entry["role"] = "import_export"
+		elif not role.is_empty():
+			entry["role"] = role
+	var out: Array = []
+	## Fish first (working waterfront), then provisions / general.
+	order.sort_custom(func(a: String, b: String) -> bool:
+		var fa := CommodityCatalog.commodity_terminal_family(a)
+		var fb := CommodityCatalog.commodity_terminal_family(b)
+		if fa == "fishing" and fb != "fishing":
+			return true
+		if fb == "fishing" and fa != "fishing":
+			return false
+		return a < b
+	)
+	for commodity_id in order:
+		out.append(by_id[commodity_id])
+	return out
+
+
+## Pack apron berths onto free dock-face arcs. Each pad inherits the local
+## edge tangent/seaward so it hugs the curved waterline, and stays clear of
+## quay roots + loading-side approach pockets.
+static func _place_asphalt_on_face(
 		asphalt_slots: Array,
 		dock_face: PackedVector2Array,
 		size: int,
@@ -490,33 +725,187 @@ static func _place_asphalt(
 	var out: Array = []
 	if asphalt_slots.is_empty() or dock_face.size() < 2:
 		return out
-	var seaward := _consensus_seaward(dock_face)
-	var along := Vector2(-seaward.y, seaward.x)
-	if along.dot(Vector2(1.0, 0.0)) < 0.0:
-		along = -along
-	var face_len := _polyline_length_m(dock_face)
+	var total_arc := _polyline_length_m(dock_face)
+	if total_arc < 8.0:
+		return out
+	var gap_m := PortSizing.asphalt_berth_gap_m(size)
+	var length_m := PortSizing.asphalt_berth_length_m(size)
+	var depth_m := PortSizing.asphalt_apron_depth_m(size)
 	var count := asphalt_slots.size()
-	var samples := _asphalt_sample_arcs(face_len, count, quay_stations)
+	var need := length_m * float(count) + gap_m * float(maxi(count - 1, 0))
+	var blocked := _quay_loading_exclusions_along_face(dock_face, quay_stations, size)
+	var free_spans := _free_arc_spans(total_arc, blocked, gap_m)
+	if free_spans.is_empty():
+		## Soft fallback when exclusions cover the face — use the full usable run.
+		free_spans = [{
+			"lo": gap_m,
+			"hi": maxf(total_arc - gap_m, gap_m + 1.0),
+			"length": maxf(total_arc - gap_m * 2.0, 1.0),
+		}]
+	## Prefer the longest free waterfront run so pads share one edge neighbourhood.
+	free_spans.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+		return float(a.get("length", 0.0)) > float(b.get("length", 0.0))
+	)
+	var span: Dictionary = free_spans[0]
+	var span_len := float(span.get("length", 0.0))
+	if need > span_len and count > 0:
+		var shrink := span_len / need
+		length_m = maxf(length_m * shrink, PortSizing.design_hull_loa_m(size) * 0.75)
+		need = length_m * float(count) + gap_m * float(maxi(count - 1, 0))
+	need = minf(need, span_len)
+	var span_lo := float(span.get("lo", 0.0))
+	## Centre the pack inside the free span (not jammed against a pier exclusion).
+	var pack_lo := span_lo + maxf((span_len - need) * 0.5, 0.0)
+	var yard := PortSizing.cargo_yard_size_m(size)
+	var cursor := pack_lo + length_m * 0.5
 	for index in range(count):
 		var slot: Dictionary = asphalt_slots[index]
-		var arc := float(samples[index]) if index < samples.size() else face_len * 0.5
-		var sample := _point_at_arc(dock_face, arc)
+		var sample := _point_at_arc(dock_face, cursor)
 		var origin: Vector2 = sample.get("position", Vector2.ZERO)
-		var depth_m := clampf(PortSizing.design_hull_beam_m(size) * 0.85 + 6.0, 12.0, 28.0)
-		var along_m := clampf(PortSizing.design_hull_loa_m(size) * 0.55, 18.0, 48.0)
+		var tangent: Vector2 = sample.get("tangent", Vector2(1.0, 0.0))
+		if tangent.length_squared() < 0.0001:
+			tangent = Vector2(1.0, 0.0)
+		else:
+			tangent = tangent.normalized()
+		var local_seaward := _seaward_normal(tangent)
+		var inland := -local_seaward
+		var family := str(slot.get("family", "general"))
+		var role := str(slot.get("role", ""))
+		var roles: Array = slot.get("roles", [role]) as Array
 		out.append({
-			"id": "asphalt_%s_%s" % [str(slot.get("role", "")), str(slot.get("commodity_id", index))],
+			"id": "asphalt_%s" % str(slot.get("commodity_id", index)),
 			"mode": MODE_ASPHALT,
 			"commodity_id": str(slot.get("commodity_id", "")),
-			"role": str(slot.get("role", "")),
-			"family": str(slot.get("family", "general")),
+			"role": role,
+			"roles": roles,
+			"family": family,
+			## Root on dock face; pad extends seaward outside the apron.
 			"origin": [origin.x, origin.y],
-			"direction": [seaward.x, seaward.y],
-			"tangent": [along.x, along.y],
+			"direction": [local_seaward.x, local_seaward.y],
+			"inland_dir": [inland.x, inland.y],
+			"tangent": [tangent.x, tangent.y],
+			"extends": "seaward",
+			"arc_m": cursor,
 			"depth_m": depth_m,
-			"length_m": along_m,
+			"length_m": length_m,
+			"ship_berth_m": length_m,
+			"equipment_kind": equipment_for_family(family),
+			"yard_width_m": yard.x,
+			"yard_depth_m": maxf(yard.y * 0.45, depth_m * 0.8),
+			"lanes": ["storage", "road", "berth"],
+			"district_index": index,
 		})
+		cursor += length_m + gap_m
 	return out
+
+
+## Arc-length exclusion around each pier root, widened on the loading/berth side.
+static func _quay_loading_exclusions_along_face(
+		dock_face: PackedVector2Array,
+		quay_stations: Array,
+		size: int,
+) -> Array:
+	var out: Array = []
+	if quay_stations.is_empty() or dock_face.size() < 2:
+		return out
+	var loading_clear := PortSizing.asphalt_quay_loading_clearance_m(size)
+	for raw in quay_stations:
+		var station: Dictionary = raw
+		var origin := Vector2(
+			float((station.get("origin", [0.0, 0.0]) as Array)[0]),
+			float((station.get("origin", [0.0, 0.0]) as Array)[1]),
+		)
+		var tip := Vector2(
+			float((station.get("tip", [origin.x, origin.y]) as Array)[0]),
+			float((station.get("tip", [origin.x, origin.y]) as Array)[1]),
+		)
+		var root_arc := _nearest_arc_on_polyline(dock_face, origin)
+		var half_w := float(station.get("width_m", PortSizing.quay_deck_width_m(size))) * 0.5
+		var lo := root_arc - half_w - loading_clear
+		var hi := root_arc + half_w + loading_clear
+		## Bias the keep-clear toward the pier's loading face along the dock edge.
+		var berth_side := float(station.get("berth_side", 1.0))
+		var pier_dir := (tip - origin)
+		var face_sample := _point_at_arc(dock_face, root_arc)
+		var face_tangent: Vector2 = face_sample.get("tangent", Vector2(1.0, 0.0))
+		if face_tangent.length_squared() > 0.0001:
+			face_tangent = face_tangent.normalized()
+		## Local +X after seaward align ≈ UP×seaward; berth_side picks ship face.
+		var local_seaward := _seaward_normal(face_tangent)
+		var local_x := Vector2(-local_seaward.y, local_seaward.x)
+		if local_x.dot(face_tangent) < 0.0:
+			local_x = -local_x
+		var loading_along := local_x * berth_side
+		if loading_along.dot(face_tangent) >= 0.0:
+			hi += loading_clear * 0.65
+		else:
+			lo -= loading_clear * 0.65
+		## Also keep clear near the first stretch of the pier (approach pocket).
+		if pier_dir.length_squared() > 1.0:
+			var approach := minf(pier_dir.length() * 0.22, 48.0)
+			lo -= approach * 0.15
+			hi += approach * 0.15
+		out.append({"lo": lo, "hi": hi})
+	return _merge_arc_intervals(out)
+
+
+static func _free_arc_spans(total_arc: float, blocked: Array, edge_pad_m: float) -> Array:
+	var usable_lo := edge_pad_m
+	var usable_hi := maxf(total_arc - edge_pad_m, usable_lo)
+	var free: Array = []
+	var cursor := usable_lo
+	for raw in blocked:
+		var lo := maxf(float((raw as Dictionary).get("lo", 0.0)), usable_lo)
+		var hi := minf(float((raw as Dictionary).get("hi", 0.0)), usable_hi)
+		if hi <= lo:
+			continue
+		if lo > cursor + 1.0:
+			free.append({"lo": cursor, "hi": lo, "length": lo - cursor})
+		cursor = maxf(cursor, hi)
+	if usable_hi > cursor + 1.0:
+		free.append({"lo": cursor, "hi": usable_hi, "length": usable_hi - cursor})
+	return free
+
+
+static func _merge_arc_intervals(intervals: Array) -> Array:
+	if intervals.is_empty():
+		return []
+	var sorted: Array = intervals.duplicate()
+	sorted.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+		return float(a.get("lo", 0.0)) < float(b.get("lo", 0.0))
+	)
+	var merged: Array = []
+	var cur: Dictionary = (sorted[0] as Dictionary).duplicate(true)
+	for index in range(1, sorted.size()):
+		var nxt: Dictionary = sorted[index]
+		if float(nxt.get("lo", 0.0)) <= float(cur.get("hi", 0.0)) + 0.5:
+			cur["hi"] = maxf(float(cur.get("hi", 0.0)), float(nxt.get("hi", 0.0)))
+		else:
+			merged.append(cur)
+			cur = nxt.duplicate(true)
+	merged.append(cur)
+	return merged
+
+
+static func _nearest_arc_on_polyline(path: PackedVector2Array, point: Vector2) -> float:
+	if path.size() < 2:
+		return 0.0
+	var best_arc := 0.0
+	var best_dist := INF
+	var arc := 0.0
+	for index in range(path.size() - 1):
+		var a := path[index]
+		var b := path[index + 1]
+		var ab := b - a
+		var len_sq := ab.length_squared()
+		var t := 0.0 if len_sq < 0.0001 else clampf((point - a).dot(ab) / len_sq, 0.0, 1.0)
+		var closest := a + ab * t
+		var dist := closest.distance_squared_to(point)
+		if dist < best_dist:
+			best_dist = dist
+			best_arc = arc + ab.length() * t
+		arc += ab.length()
+	return best_arc
 
 
 static func _consensus_seaward(dock_face: PackedVector2Array) -> Vector2:
@@ -550,6 +939,7 @@ static func _sample_face(dock_face: PackedVector2Array, step_m: float) -> Array:
 		out.append({
 			"position": pos,
 			"tangent": sample.get("tangent", along),
+			"seaward": _seaward_normal((sample.get("tangent", along) as Vector2)),
 			"proj": pos.dot(along),
 			"arc": arc,
 		})
@@ -568,38 +958,25 @@ static func _snap_to_face_proj(face_samples: Array, target_proj: float) -> Dicti
 	return best
 
 
-static func _asphalt_sample_arcs(face_len: float, count: int, quay_stations: Array) -> Array[float]:
-	var arcs: Array[float] = []
-	if count <= 0:
-		return arcs
-	if quay_stations.is_empty():
-		for index in range(count):
-			var t := 0.5 if count == 1 else (float(index) + 0.5) / float(count)
-			arcs.append(face_len * t)
-		return arcs
-	var dividers: Array[float] = [0.0]
-	for index in range(quay_stations.size()):
-		var t := 0.5 if quay_stations.size() == 1 else float(index) / float(quay_stations.size() - 1)
-		dividers.append(face_len * t)
-	dividers.append(face_len)
-	var gap_mids: Array[float] = []
-	for index in range(dividers.size() - 1):
-		gap_mids.append((dividers[index] + dividers[index + 1]) * 0.5)
-	for index in range(count):
-		arcs.append(gap_mids[index % gap_mids.size()])
-	arcs.sort()
-	return arcs
-
-
 static func _notes(asphalt_slots: Array, quay_stations: Array) -> PackedStringArray:
 	var notes: PackedStringArray = []
 	if not asphalt_slots.is_empty():
-		notes.append("%d asphalt dock(s) for small cargo (fish/provisions — no pier)" % asphalt_slots.size())
+		notes.append("%d apron berth(s) hugging dock face (local edge orientation)" % asphalt_slots.size())
 	if not quay_stations.is_empty():
-		notes.append(
-			"%d quay(s) · storage | road | crane · ≥1 ship berth per commodity zone"
-			% quay_stations.size()
-		)
+		var twin := false
+		for raw in quay_stations:
+			if str((raw as Dictionary).get("layout", "")) == "twin_joined":
+				twin = true
+				break
+		if twin:
+			notes.append(
+				"joined twin quay · dock|crane|cargo|road|cargo|crane|dock"
+			)
+		else:
+			notes.append(
+				"%d quay(s) · dock|crane|cargo|road · ≥1 ship berth per commodity zone"
+				% quay_stations.size()
+			)
 	elif not asphalt_slots.is_empty():
 		notes.append("no dedicated quays yet — unlock timber/bulk/liquid/containers")
 	if asphalt_slots.is_empty() and quay_stations.is_empty():

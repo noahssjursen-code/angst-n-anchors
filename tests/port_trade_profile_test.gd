@@ -31,16 +31,77 @@ func _run() -> void:
 	var plan: Dictionary = a.layout_graph.initial_attributes.get("berth_plan", {}) as Dictionary
 	var planned: Dictionary = {}
 	for raw in plan.get("quay_stations", []) as Array:
-		for zone in (raw as Dictionary).get("zones", []) as Array:
+		var station: Dictionary = raw
+		for zone in station.get("zones", []) as Array:
 			planned[str((zone as Dictionary).get("commodity_id", ""))] = true
+		for commodity in station.get("commodities", []) as Array:
+			planned[str(commodity)] = true
+		for side in station.get("sides", []) as Array:
+			for commodity in (side as Dictionary).get("commodities", []) as Array:
+				planned[str(commodity)] = true
+			for zone in (side as Dictionary).get("zones", []) as Array:
+				planned[str((zone as Dictionary).get("commodity_id", ""))] = true
 	for raw in plan.get("asphalt_stations", []) as Array:
 		planned[str((raw as Dictionary).get("commodity_id", ""))] = true
 	for id in a.trade_profile.all_slots():
 		assert(planned.has(str(id)), "berth plan missing trade commodity %s" % id)
-	## Different products never share a pad (containers are still one commodity).
+	## Different products never share a pad side (twin pier keeps one commodity per side).
 	for raw in plan.get("quay_stations", []) as Array:
-		var commodities: Array = (raw as Dictionary).get("commodities", []) as Array
-		assert(commodities.size() <= 1, "pad shares multiple commodities: %s" % str(commodities))
+		var station: Dictionary = raw
+		if str(station.get("layout", "")) == "twin_joined":
+			assert(int(station.get("berth_faces", 0)) == 2, "twin quay must expose two berth faces")
+			assert((station.get("sides", []) as Array).size() == 2, "twin quay needs two sides")
+			for side in station.get("sides", []) as Array:
+				var side_commodities: Array = (side as Dictionary).get("commodities", []) as Array
+				assert(side_commodities.size() <= 1, "twin side shares commodities: %s" % str(side_commodities))
+		else:
+			var commodities: Array = station.get("commodities", []) as Array
+			assert(commodities.size() <= 1, "pad shares multiple commodities: %s" % str(commodities))
+	## Apron berths hug the dock face with local orientation and stay clear of quay loading roots.
+	var asphalt_seen: Dictionary = {}
+	for raw in plan.get("asphalt_stations", []) as Array:
+		var station: Dictionary = raw
+		var cid := str(station.get("commodity_id", ""))
+		assert(not asphalt_seen.has(cid), "duplicate asphalt berth for %s" % cid)
+		asphalt_seen[cid] = true
+		assert(
+			float(station.get("length_m", 0.0)) >= PortSizing.design_hull_loa_m(a.size) * 0.7,
+			"asphalt berth too short for %s" % cid,
+		)
+		assert(
+			float(station.get("depth_m", 0.0)) >= 20.0,
+			"asphalt berth too short seaward for %s" % cid,
+		)
+		assert(
+			str(station.get("extends", "")) == "seaward",
+			"asphalt berth must extend outside the apron (%s)" % cid,
+		)
+		var dir: Array = station.get("direction", []) as Array
+		assert(dir.size() >= 2, "asphalt berth missing local seaward for %s" % cid)
+		assert(
+			Vector2(float(dir[0]), float(dir[1])).length_squared() > 0.25,
+			"asphalt berth seaward degenerate for %s" % cid,
+		)
+	if not plan.get("asphalt_stations", []).is_empty() and not plan.get("quay_stations", []).is_empty():
+		var dock_face := PackedVector2Array()
+		var foundation: Dictionary = a.layout_graph.initial_attributes.get("foundation", {}) as Dictionary
+		for pt in foundation.get("dock_face_polyline", []) as Array:
+			var arr := pt as Array
+			if arr.size() >= 2:
+				dock_face.append(Vector2(float(arr[0]), float(arr[1])))
+		if dock_face.size() >= 2:
+			var blocked: Array = PortBerthPlan._quay_loading_exclusions_along_face(
+				dock_face, plan.get("quay_stations", []) as Array, a.size
+			)
+			for raw in plan.get("asphalt_stations", []) as Array:
+				var arc := float((raw as Dictionary).get("arc_m", -1.0))
+				for block in blocked:
+					var lo := float((block as Dictionary).get("lo", 0.0))
+					var hi := float((block as Dictionary).get("hi", 0.0))
+					assert(
+						arc < lo - 0.5 or arc > hi + 0.5,
+						"apron berth arc %.1f inside quay loading exclusion [%.1f, %.1f]" % [arc, lo, hi],
+					)
 	assert(a.layout_graph.local_footprints().size() >= 1)
 	assert(a.layout_seed == b.layout_seed)
 

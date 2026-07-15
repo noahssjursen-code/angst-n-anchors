@@ -1023,6 +1023,21 @@ func _refresh_meta() -> void:
 			trade_bb += "%s\n" % str(note)
 		for raw in berth_plan.get("quay_stations", []) as Array:
 			var station := raw as Dictionary
+			if str(station.get("layout", "")) == "twin_joined":
+				trade_bb += "  twin quay  ·  dock|crane|cargo|road|cargo|crane|dock\n"
+				for side_raw in station.get("sides", []) as Array:
+					var side := side_raw as Dictionary
+					for zone_raw in side.get("zones", []) as Array:
+						var zone := zone_raw as Dictionary
+						var cid := str(zone.get("commodity_id", ""))
+						var zcolor := CommodityCatalog.commodity_color(cid) if not cid.is_empty() \
+								else CommodityCatalog.terminal_family_color(str(side.get("family", "")))
+						trade_bb += "  [color=#%s]■[/color] %s  ·  twin side  %.0f m\n" % [
+							zcolor.to_html(false),
+							str(zone.get("label", cid)).replace("\n", " · "),
+							float(station.get("length_m", 0.0)),
+						]
+				continue
 			for zone_raw in station.get("zones", []) as Array:
 				var zone := zone_raw as Dictionary
 				var cid := str(zone.get("commodity_id", ""))
@@ -1042,9 +1057,11 @@ func _refresh_meta() -> void:
 			var color := CommodityCatalog.terminal_family_color(
 				CommodityCatalog.commodity_terminal_family(commodity_id),
 			)
-			trade_bb += "  [color=#%s]●[/color] %s  ·  asphalt\n" % [
+			trade_bb += "  [color=#%s]●[/color] %s  ·  apron  %.0f×%.0f m\n" % [
 				color.to_html(false),
 				CommodityCatalog.commodity_display(commodity_id),
+				float(station.get("length_m", 0.0)),
+				float(station.get("depth_m", 0.0)),
 			]
 	_meta_trade.text = trade_bb
 

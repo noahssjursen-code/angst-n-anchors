@@ -164,8 +164,8 @@ func _stamp_berth_plan(plan: Dictionary) -> void:
 		var family := str(station.get("family", "general"))
 		var color := CommodityCatalog.terminal_family_color(family).lightened(0.25)
 		_stamp_dot(asphalt_layer, Vector3(origin.x, 5.0, origin.y), color, 3.4, str(station.get("id", "asphalt")))
-		var depth := float(station.get("depth_m", 16.0))
-		var length := float(station.get("length_m", 24.0))
+		var depth := float(station.get("depth_m", 36.0))
+		var length := float(station.get("length_m", 40.0))
 		var tangent := _xz(station.get("tangent", [1.0, 0.0])).normalized()
 		var seaward := _xz(station.get("direction", [0.0, -1.0])).normalized()
 		var pad := MeshBuilder.box(Vector3(length, 0.6, depth), color, 0.9, 0.0)
@@ -180,11 +180,13 @@ func _stamp_berth_plan(plan: Dictionary) -> void:
 		_label(
 			asphalt_layer,
 			"%s_lbl" % str(station.get("id", "asphalt")),
-			"%s\n%s · asphalt" % [
+			"%s\n%s · apron  %.0f×%.0f m" % [
 				CommodityCatalog.commodity_display(str(station.get("commodity_id", ""))),
 				str(station.get("role", "")).to_upper(),
+				length,
+				depth,
 			],
-			Vector3(origin.x, 14.0, origin.y),
+			Vector3(origin.x, 14.0, origin.y) + Vector3(seaward.x, 0.0, seaward.y) * (depth * 0.45),
 			color,
 		)
 
@@ -217,11 +219,18 @@ func _stamp_berth_plan(plan: Dictionary) -> void:
 		var commodity_bits: PackedStringArray = []
 		for commodity in station.get("commodities", []) as Array:
 			commodity_bits.append(CommodityCatalog.commodity_display(str(commodity)))
+		for side in station.get("sides", []) as Array:
+			for commodity in (side as Dictionary).get("commodities", []) as Array:
+				var name := CommodityCatalog.commodity_display(str(commodity))
+				if not commodity_bits.has(name):
+					commodity_bits.append(name)
+		var layout_name := "twin quay" if str(station.get("layout", "")) == "twin_joined" \
+				else CommodityCatalog.terminal_family_display(family)
 		_label(
 			roots,
 			"%s_lbl" % str(station.get("id", "quay")),
-			"%s\n%s\n%.0f×%.0f m quay" % [
-				CommodityCatalog.terminal_family_display(family),
+			"%s\n%s\n%.0f×%.0f m" % [
+				layout_name,
 				", ".join(commodity_bits),
 				width_m,
 				length_m,

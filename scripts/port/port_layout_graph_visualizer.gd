@@ -227,6 +227,9 @@ func _stamp_berth_terminals() -> void:
 	add_child(root)
 	for index in range((plan.get("quay_stations", []) as Array).size()):
 		var station := (plan.get("quay_stations", []) as Array)[index] as Dictionary
+		if str(station.get("layout", "")) == "twin_joined":
+			_stamp_berth_quay_twin(root, station, surface_y)
+			continue
 		## Prefer plan berth_side when present (gameplay / docking later).
 		var berth_sign := float(station.get("berth_side", 1 if (index % 2) == 0 else -1))
 		if is_zero_approx(berth_sign):
@@ -259,8 +262,7 @@ func _stamp_berth_quay(
 	parent.add_child(terminal)
 	terminal.set_meta("deck_half_w", width_m * 0.5)
 
-	## Cross-section (local X): storage | road | crane.
-	## berth_sign · +X = ship face; opposite flank = cargo/storage.
+	## Cross-section (local X): cargo | road | crane · berth_sign · +X = ship face.
 	var crane_lane_w := clampf(width_m * 0.34, 14.0, 36.0)
 	var road_w := clampf(width_m * 0.22, 8.0, 16.0)
 	var storage_w := maxf(width_m - crane_lane_w - road_w, width_m * 0.34)
@@ -348,6 +350,96 @@ func _stamp_berth_quay(
 			CommodityCatalog.commodity_color(str((station.get("commodities", ["containers"]) as Array)[0])) \
 					if not (station.get("commodities", []) as Array).is_empty() \
 					else family_color.lightened(0.2),
+			0.03,
+		)
+
+
+## Twin pier: dock|crane|cargo|road|cargo|crane|dock — one deck, two outer berths.
+func _stamp_berth_quay_twin(parent: Node3D, station: Dictionary, surface_y: float) -> void:
+	var origin := _xz2(station.get("origin", [0.0, 0.0]))
+	var tip := _xz2(station.get("tip", [origin.x, origin.y]))
+	var seaward := _xz2(station.get("direction", [0.0, -1.0])).normalized()
+	if seaward.length_squared() < 0.001:
+		seaward = PortCoastTracer.PORT_LOCAL_SEAWARD_DIR
+	var length_m := float(station.get("length_m", origin.distance_to(tip)))
+	var width_m := float(station.get("width_m", PortSizing.twin_quay_deck_width_m(_size_class())))
+	var mid := origin.lerp(tip, 0.5)
+	var terminal := Node3D.new()
+	terminal.name = str(station.get("id", "quay_twin"))
+	terminal.position = Vector3(mid.x, surface_y, mid.y)
+	_align_node_seaward(terminal, seaward)
+	parent.add_child(terminal)
+	terminal.set_meta("deck_half_w", width_m * 0.5)
+
+	var unit := PortSizing.quay_deck_width_for_arm_m(length_m, _size_class())
+	var crane_lane_w := clampf(unit * 0.34, 14.0, 36.0)
+	var storage_w := clampf(unit * 0.34, 14.0, 36.0)
+	var road_w := clampf(unit * 0.22, 8.0, 16.0)
+	var lane_sum := crane_lane_w * 2.0 + storage_w * 2.0 + road_w
+	if lane_sum > width_m and lane_sum > 0.01:
+		var scale := width_m / lane_sum
+		crane_lane_w *= scale
+		storage_w *= scale
+		road_w *= scale
+	var usable_len := length_m * 0.90
+	var z0 := -usable_len * 0.5
+
+	var deck := MeshBuilder.box(
+		Vector3(width_m, 0.55, length_m),
+		FOUNDATION_PAVEMENT_COLOR.lightened(0.04),
+		1.0,
+		0.0,
+	)
+	deck.name = "Deck"
+	deck.position = Vector3(0.0, 0.28, 0.0)
+	terminal.add_child(deck)
+
+	var road := MeshBuilder.box(
+		Vector3(road_w, 0.22, usable_len),
+		Color(0.07, 0.07, 0.08),
+		1.0,
+		0.0,
+	)
+	road.name = "CentreRoad"
+	road.position = Vector3(0.0, 0.50, 0.0)
+	terminal.add_child(road)
+
+	var sides: Array = station.get("sides", []) as Array
+	for side_index in range(mini(sides.size(), 2)):
+		var side: Dictionary = sides[side_index]
+		var berth_sign := float(side.get("berth_side", -1.0 if side_index == 0 else 1.0))
+		if is_zero_approx(berth_sign):
+			berth_sign = -1.0 if side_index == 0 else 1.0
+		var crane_x := berth_sign * (width_m * 0.5 - crane_lane_w * 0.5)
+		var storage_x := berth_sign * (
+			width_m * 0.5 - crane_lane_w - storage_w * 0.5
+		)
+		var coping := MeshBuilder.box(
+			Vector3(1.2, 0.7, length_m * 0.96),
+			Color(0.55, 0.56, 0.58),
+			0.9,
+			0.05,
+		)
+		coping.name = "BerthEdge_%d" % side_index
+		coping.position = Vector3(berth_sign * (width_m * 0.5 - 0.6), 0.55, 0.0)
+		terminal.add_child(coping)
+		_stamp_quay_storage_lane(
+			terminal, side, storage_x, storage_w, usable_len, z0, berth_sign
+		)
+		_stamp_quay_crane_lane(
+			terminal, side, crane_x, crane_lane_w, usable_len, z0, berth_sign
+		)
+
+	if show_module_labels:
+		var zone_bits: PackedStringArray = []
+		for side in sides:
+			for commodity in (side as Dictionary).get("commodities", []) as Array:
+				zone_bits.append(CommodityCatalog.commodity_display(str(commodity)))
+		_label(
+			"BerthLabel_%s" % str(station.get("id", "quay_twin")),
+			"TWIN QUAY\n%s\n%.0f m" % [" · ".join(zone_bits), length_m],
+			Vector3(mid.x, surface_y + 18.0, mid.y) + Vector3(seaward.x, 0.0, seaward.y) * (length_m * 0.15),
+			Color(0.85, 0.85, 0.7),
 			0.03,
 		)
 
@@ -576,10 +668,11 @@ func _stamp_berth_asphalt(parent: Node3D, station: Dictionary, surface_y: float)
 	var seaward := _xz2(station.get("direction", [0.0, -1.0])).normalized()
 	if seaward.length_squared() < 0.001:
 		seaward = PortCoastTracer.PORT_LOCAL_SEAWARD_DIR
-	var depth := float(station.get("depth_m", 16.0))
-	var length := float(station.get("length_m", 24.0))
+	var depth := float(station.get("depth_m", 36.0))
+	var length := float(station.get("length_m", 40.0))
 	var family := str(station.get("family", "general"))
 	var color := CommodityCatalog.terminal_family_color(family).lightened(0.2)
+	## Berth deck protrudes seaward of the dock face (outside the apron).
 	var pad_center := origin + seaward * (depth * 0.5)
 	var pad_root := Node3D.new()
 	pad_root.name = str(station.get("id", "asphalt"))
@@ -589,14 +682,55 @@ func _stamp_berth_asphalt(parent: Node3D, station: Dictionary, surface_y: float)
 	var pad := MeshBuilder.box(Vector3(length, 0.45, depth), color.darkened(0.25), 0.9, 0.0)
 	pad.position = Vector3(0.0, 0.25, 0.0)
 	pad_root.add_child(pad)
+	## Coping on the outer (seaward) edge — local +Z after align.
+	var coping := MeshBuilder.box(
+		Vector3(length * 0.96, 0.55, 1.1),
+		Color(0.55, 0.56, 0.58),
+		0.9,
+		0.05,
+	)
+	coping.name = "BerthEdge"
+	coping.position = Vector3(0.0, 0.45, depth * 0.5 - 0.55)
+	pad_root.add_child(coping)
+	## Apron junction strip where the pad meets the harbour face (local −Z).
+	var junction := MeshBuilder.box(
+		Vector3(length * 0.98, 0.5, 1.4),
+		FOUNDATION_PAVEMENT_COLOR.lightened(0.08),
+		1.0,
+		0.0,
+	)
+	junction.name = "ApronJunction"
+	junction.position = Vector3(0.0, 0.35, -depth * 0.5 + 0.7)
+	pad_root.add_child(junction)
+	var road_w := clampf(length * 0.18, 6.0, 12.0)
+	var road := MeshBuilder.box(
+		Vector3(road_w, 0.2, depth * 0.82),
+		Color(0.07, 0.07, 0.08),
+		1.0,
+		0.0,
+	)
+	road.name = "Road"
+	road.position = Vector3(0.0, 0.48, 0.0)
+	pad_root.add_child(road)
+	var kind := str(station.get("equipment_kind", ""))
+	if not kind.is_empty():
+		var gear_root := Node3D.new()
+		gear_root.name = "Equipment"
+		## Keep gear near the apron junction, not the outer tip.
+		gear_root.position = Vector3(length * 0.28, 0.0, -depth * 0.22)
+		pad_root.add_child(gear_root)
+		_stamp_equipment_kind(gear_root, kind, Vector3(length * 0.35, 1.0, depth * 0.35), family)
 	if show_module_labels:
+		var role := str(station.get("role", "")).to_upper()
 		_label(
 			"AsphaltLabel_%s" % str(station.get("id", "asphalt")),
-			"%s\n%s · apron" % [
+			"%s\n%s · apron  %.0f×%.0f m" % [
 				CommodityCatalog.commodity_display(str(station.get("commodity_id", ""))).to_upper(),
-				str(station.get("role", "")).to_upper(),
+				role,
+				length,
+				depth,
 			],
-			Vector3(origin.x, surface_y + 10.0, origin.y),
+			Vector3(origin.x, surface_y + 10.0, origin.y) + Vector3(seaward.x, 0.0, seaward.y) * (depth * 0.45),
 			color,
 			0.026,
 		)

@@ -166,6 +166,20 @@ static func quay_deck_width_m(size: int) -> float:
 	return float(QUAY_DECK_WIDTH_BY_SIZE[normalized_size(size)])
 
 
+## Twin joined pier: dock|crane|cargo|road|cargo|crane|dock (shared centre road).
+static func twin_quay_deck_width_m(size: int) -> float:
+	var unit := quay_deck_width_m(size)
+	var crane := unit * 0.34
+	var cargo := unit * 0.34
+	var road := unit * 0.22
+	return crane * 2.0 + cargo * 2.0 + road
+
+
+static func twin_quay_deck_width_for_arm_m(arm_length_m: float, size: int) -> float:
+	var from_arm := max_size_for_arm_budget_m(arm_length_m)
+	return twin_quay_deck_width_m(mini(normalized_size(size), from_arm))
+
+
 ## One working berth: design ship LOA + fender/approach margin.
 static func min_ship_berth_m(size: int) -> float:
 	return design_hull_loa_m(size) * 1.15 + 12.0
@@ -208,6 +222,27 @@ static func max_size_for_arm_budget_m(arm_budget_m: float) -> int:
 static func cargo_yard_size_m(size: int) -> Vector2:
 	var n := normalized_size(size)
 	return Vector2(CARGO_YARD_WIDTH_BY_SIZE[n], CARGO_YARD_DEPTH_BY_SIZE[n])
+
+
+## Face-length of one asphalt apron berth (fish / provisions). Full design-hull
+## working berth — not a stub marker.
+static func asphalt_berth_length_m(size: int) -> float:
+	return min_ship_berth_m(size)
+
+
+## Seaward reach of an asphalt berth past the dock face (outside the apron).
+static func asphalt_apron_depth_m(size: int) -> float:
+	return clampf(design_hull_beam_m(size) * 1.15 + 10.0, 24.0, 52.0)
+
+
+## Gap between adjacent asphalt berths, and keep-clear from pier loading roots.
+static func asphalt_berth_gap_m(size: int) -> float:
+	return clampf(12.0 + float(normalized_size(size)) * 2.0, 12.0, 22.0)
+
+
+## Extra keep-clear past pier half-width so apron pads stay off the quay berth face.
+static func asphalt_quay_loading_clearance_m(size: int) -> float:
+	return design_hull_beam_m(size) * 0.85 + asphalt_berth_gap_m(size) + 14.0
 
 
 static func facilities_depth_m(dock_inland_depth_m: float) -> float:
