@@ -1,8 +1,10 @@
 class_name PortLayoutGraph
 extends RefCounted
 
-## Authoritative socketed layout. Seed generation creates the first graph;
-## future upgrades mutate this graph by filling open slots.
+## Authoritative port layout container. Live generation stores a foundation
+## anchor plus `initial_attributes["berth_plan"]` (asphalt / quay stations).
+## Module attach/open-slot APIs remain for future growth; they are not how
+## trade berths are placed today.
 
 const FORMAT_VERSION := 1
 const OVERLAP_EPS_M := 0.05
@@ -210,6 +212,9 @@ func spawn_local_position() -> Vector3:
 
 
 func primary_quay_pose() -> Dictionary:
+	var from_plan := _primary_quay_pose_from_berth_plan()
+	if not from_plan.is_empty():
+		return from_plan
 	var best := {
 		"position_m": Vector3(0.0, 0.0, -15.0),
 		"yaw_degrees": 0.0,
@@ -254,7 +259,13 @@ func primary_quay_pose() -> Dictionary:
 
 
 func total_quay_length_m() -> float:
+	var plan := initial_attributes.get("berth_plan", {}) as Dictionary
+	var stations: Array = plan.get("quay_stations", []) as Array
 	var total := 0.0
+	if not stations.is_empty():
+		for raw in stations:
+			total += float((raw as Dictionary).get("length_m", 0.0))
+		return total
 	for instance_id in module_ids():
 		var placed := modules[instance_id] as PortPlacedModule
 		var definition := module_definition(placed.module_id)
@@ -265,6 +276,18 @@ func total_quay_length_m() -> float:
 
 ## Centers of seaward-pointing quay roots (yaw near 0 in port space), sorted by X.
 func parallel_seaward_pier_centers() -> Array[Vector2]:
+	var plan := initial_attributes.get("berth_plan", {}) as Dictionary
+	var stations: Array = plan.get("quay_stations", []) as Array
+	if not stations.is_empty():
+		var from_plan: Array[Vector2] = []
+		for raw in stations:
+			var station := raw as Dictionary
+			var origin: Array = station.get("origin", []) as Array
+			if origin.size() < 2:
+				continue
+			from_plan.append(Vector2(float(origin[0]), float(origin[1])))
+		from_plan.sort_custom(func(a: Vector2, b: Vector2) -> bool: return a.x < b.x)
+		return from_plan
 	var centers: Array[Vector2] = []
 	for instance_id in module_ids():
 		var placed := modules[instance_id] as PortPlacedModule
@@ -438,6 +461,44 @@ func is_graph_connected() -> bool:
 		if not children.has(instance_id):
 			return false
 	return children.size() == modules.size() - 1
+
+
+func _primary_quay_pose_from_berth_plan() -> Dictionary:
+	var plan := initial_attributes.get("berth_plan", {}) as Dictionary
+	var stations: Array = plan.get("quay_stations", []) as Array
+	if stations.is_empty():
+		stations = plan.get("asphalt_stations", []) as Array
+	if stations.is_empty():
+		return {}
+	var best: Dictionary = {}
+	var best_length := -1.0
+	for raw in stations:
+		var station := raw as Dictionary
+		var length_m := float(station.get("length_m", 0.0))
+		if length_m <= best_length:
+			continue
+		var origin: Array = station.get("origin", []) as Array
+		var direction: Array = station.get("direction", []) as Array
+		if origin.size() < 2:
+			continue
+		var dir := Vector2(
+			float(direction[0]) if direction.size() > 0 else 0.0,
+			float(direction[1]) if direction.size() > 1 else -1.0,
+		)
+		if dir.length_squared() < 0.0001:
+			dir = Vector2(0.0, -1.0)
+		else:
+			dir = dir.normalized()
+		## Port-local: X across, Z along seaward. Yaw 0 faces −Z.
+		var yaw_degrees := rad_to_deg(atan2(dir.x, -dir.y))
+		best_length = length_m
+		best = {
+			"position_m": Vector3(float(origin[0]), 0.0, float(origin[1])),
+			"yaw_degrees": yaw_degrees,
+			"length_m": length_m,
+			"width_m": float(station.get("width_m", station.get("depth_m", 8.0))),
+		}
+	return best
 
 
 func _overlaps_existing(candidate: PortPlacedModule, definition: PortModuleDefinition) -> bool:

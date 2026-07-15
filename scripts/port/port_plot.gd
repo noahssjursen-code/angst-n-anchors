@@ -3,7 +3,8 @@ class_name PortPlot
 extends Node3D
 
 ## Runtime composition root for the visualize-first port graph.
-## Stamps module footprints, rough equipment silhouettes, and scale hulls.
+## Stamps foundation, berth_plan pads/quays, and scale hulls.
+
 
 @export var port_id := ""
 @export var port_label := "Port"
@@ -27,7 +28,7 @@ func _ready() -> void:
 	call_deferred("_rebuild")
 
 
-func configure(data: PortData, _legacy_brick_mode: bool = true) -> void:
+func configure(data: PortData) -> void:
 	_data = data
 	port_id = data.port_id
 	port_label = data.display_name

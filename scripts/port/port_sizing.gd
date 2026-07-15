@@ -2,14 +2,14 @@ class_name PortSizing
 extends RefCounted
 
 ## Shared physical contract for generated ports. Coast validation, terrain pads,
-## dock construction, and settlement planning must all read dimensions here.
+## berth planning, and settlement planning must all read dimensions here.
 ##
 ## Size class 0–8. Berth length / deck width / fairway are keyed to the design
 ## hull's catalog LOA×beam (already world metres) so a docked HullRegistry boat
 ## always fits its berth segment.
 ##
-## Layout archetypes (morphology) define the SILHOUETTE — pier count, spacing,
-## and length ratios. Trade families only decide quay/yard/gear colours.
+## Live layout is foundation + PortBerthPlan (asphalt / dedicated quays), not
+## socket-filled harbour morphologies.
 
 const MIN_SIZE := 0
 const MAX_SIZE := 8
@@ -266,257 +266,26 @@ static func basin_depth_m(size: int) -> float:
 	return apron_depth_m(size)
 
 
-static func is_inland_side_slot(slot_id: String) -> bool:
-	return slot_id == "arm_port" or slot_id == "arm_starboard"
-
-
-static func is_seaward_harbour_slot(slot_id: String) -> bool:
-	match slot_id:
-		"arm_front", "finger_port", "finger_starboard", \
-		"finger_outer_port", "finger_outer_starboard":
-			return true
-		_:
-			return false
-
-
-static func layout_arm_count_range(size: int) -> Vector2i:
-	match normalized_size(size):
-		0, 1:
-			return Vector2i(1, 1)
-		2, 3:
-			return Vector2i(2, 2)
-		4, 5:
-			return Vector2i(3, 3)
-		6, 7:
-			return Vector2i(3, 4)
-		_:
-			return Vector2i(4, 4)
-
-
 ## Hard cap — piers longer than this read as absurd in the showcase.
 static func max_quay_segments_per_arm(size: int) -> int:
 	return clampi(2 + normalized_size(size) / 3, 2, 4)
 
 
-## Per-pier berth multiplier baked into each archetype silhouette.
-static func morphology_length_ratios(morphology: String) -> Array[float]:
-	match morphology:
-		"solo_jetty", "liquid_jetty":
-			return [1.35]
-		"solo_offset_port", "solo_offset_starboard":
-			return [1.05]
-		"twin_equal", "offset_pair":
-			return [1.0, 1.0]
-		"twin_stagger":
-			return [1.4, 0.72]
-		"main_and_spur":
-			return [1.3, 0.58]
-		"main_and_stub":
-			return [1.45, 0.42]
-		"comb_stagger":
-			return [0.72, 1.38, 0.78]
-		"comb_wide":
-			return [0.88, 1.22, 0.88]
-		"offset_liquid":
-			return [1.42, 0.82]
-		"quad_comb":
-			return [0.62, 1.05, 1.05, 0.62]
-		_:
-			return [1.0]
-
-
-static func morphology_display_name(morphology: String) -> String:
-	match morphology:
-		"solo_jetty":
-			return "Solo jetty"
-		"solo_offset_port":
-			return "Offset pier (port)"
-		"solo_offset_starboard":
-			return "Offset pier (starboard)"
-		"liquid_jetty":
-			return "Liquid jetty"
-		"offset_liquid":
-			return "Liquid offset + dry pier"
-		"twin_equal":
-			return "Twin piers"
-		"twin_stagger":
-			return "Twin staggered"
-		"offset_pair":
-			return "Offset pair (no centre)"
-		"main_and_spur":
-			return "Main + spur"
-		"main_and_stub":
-			return "Main + stub"
-		"comb_stagger":
-			return "Comb staggered"
-		"comb_wide":
-			return "Comb wide"
-		"quad_comb":
-			return "Quad comb"
-		_:
-			return morphology.replace("_", " ").capitalize()
-
-
-static func pick_layout_plan(
-		size: int,
-		trade_family_count: int,
-		site_seed: int,
-		has_liquid: bool = false,
-) -> Dictionary:
-	var n := normalized_size(size)
-	var rng := RandomNumberGenerator.new()
-	rng.seed = int(site_seed) ^ 0x4D4F5250 ^ (n * 7919) ^ (trade_family_count * 104729)
-
-	var min_arms := layout_arm_count_range(n).x
-	var pool := morphology_pool_for_arms(n, min_arms, has_liquid)
-	var morphology := str(pool[rng.randi_range(0, pool.size() - 1)])
-
-	var slots := Array(morphology_arm_slots(morphology))
-	## Keep socket order — silhouette position is part of the archetype.
-	var arm_slots: PackedStringArray = PackedStringArray()
-	for slot_id in slots:
-		var id := str(slot_id)
-		if is_inland_side_slot(id) or not is_seaward_harbour_slot(id):
-			continue
-		arm_slots.append(id)
-
-	if arm_slots.is_empty():
-		arm_slots = PackedStringArray(["arm_front"])
-
-	var length_scales: Array[float] = []
-	for i in range(arm_slots.size()):
-		length_scales.append(clampf(rng.randf_range(0.97, 1.03), 0.95, 1.05))
-
-	return {
-		"morphology": morphology,
-		"morphology_display": morphology_display_name(morphology),
-		"arm_slots": arm_slots,
-		"length_scales": length_scales,
-	}
-
-
-static func morphology_pool(size: int) -> PackedStringArray:
-	return morphology_pool_for_arms(size, 1, false)
-
-
-static func morphology_pool_for_arms(
-		size: int,
-		min_arms: int,
-		has_liquid: bool,
-) -> PackedStringArray:
-	var pool: PackedStringArray
-	match normalized_size(size):
-		0:
-			pool = PackedStringArray([
-				"solo_jetty", "solo_offset_port", "solo_offset_starboard",
-			])
-		1:
-			pool = PackedStringArray([
-				"solo_jetty", "solo_offset_port", "solo_offset_starboard", "twin_equal",
-			])
-		2, 3:
-			pool = PackedStringArray([
-				"twin_equal", "twin_stagger", "main_and_spur", "offset_pair",
-			])
-		4, 5:
-			pool = PackedStringArray([
-				"comb_stagger", "offset_pair", "main_and_stub", "twin_stagger",
-			])
-		6, 7:
-			pool = PackedStringArray([
-				"comb_stagger", "comb_wide", "quad_comb", "twin_stagger",
-			])
-		_:
-			pool = PackedStringArray([
-				"quad_comb", "comb_wide", "comb_stagger",
-			])
-	if has_liquid:
-		if normalized_size(size) <= 2:
-			pool.append("liquid_jetty")
-		else:
-			pool.append("offset_liquid")
-	var filtered := PackedStringArray()
-	for morph in pool:
-		if morphology_arm_slots(morph).size() >= min_arms or morph in [
-			"solo_jetty", "solo_offset_port", "solo_offset_starboard", "liquid_jetty",
-		]:
-			filtered.append(morph)
-	return filtered if not filtered.is_empty() else pool
-
-
-static func morphology_arm_slots(morphology: String) -> PackedStringArray:
-	match morphology:
-		"solo_jetty", "liquid_jetty":
-			return PackedStringArray(["arm_front"])
-		"solo_offset_port":
-			return PackedStringArray(["finger_port"])
-		"solo_offset_starboard":
-			return PackedStringArray(["finger_starboard"])
-		"twin_equal", "offset_pair", "twin_stagger":
-			return PackedStringArray(["finger_port", "finger_starboard"])
-		"main_and_spur":
-			return PackedStringArray(["arm_front", "finger_port"])
-		"main_and_stub":
-			return PackedStringArray(["arm_front", "finger_starboard"])
-		"comb_stagger", "comb_wide":
-			return PackedStringArray(["finger_port", "arm_front", "finger_starboard"])
-		"offset_liquid":
-			return PackedStringArray(["finger_port", "finger_starboard"])
-		"quad_comb":
-			return PackedStringArray([
-				"finger_outer_port", "finger_port", "finger_starboard", "finger_outer_starboard",
-			])
-		## Legacy aliases (old saves / tests).
-		"jetty", "jetty_long", "single_mole":
-			return PackedStringArray(["arm_front"])
-		"offset_port":
-			return PackedStringArray(["finger_port"])
-		"offset_starboard":
-			return PackedStringArray(["finger_starboard"])
-		"twin_pier", "fingers_2", "staggered_twin":
-			return PackedStringArray(["finger_port", "finger_starboard"])
-		"fingers_3", "fingers_3_wide", "staggered_triple":
-			return PackedStringArray(["finger_port", "arm_front", "finger_starboard"])
-		"fingers_4", "mega_fingers":
-			return PackedStringArray([
-				"finger_outer_port", "finger_port", "finger_starboard", "finger_outer_starboard",
-			])
-		_:
-			return PackedStringArray(["arm_front"])
-
-
-static func harbour_root_module_id(size: int, morphology: String = "") -> String:
-	var n := normalized_size(size)
-	if morphology == "quad_comb" or n >= 7:
-		return "harbour_root_mega"
-	if morphology in ["solo_jetty", "solo_offset_port", "solo_offset_starboard"] and n <= 1:
-		return "harbour_root_small"
-	if n <= 1 and morphology in ["twin_equal", "main_and_spur", "offset_pair"]:
-		return "harbour_root_large"
-	if n <= 5:
-		return "harbour_root_large"
-	return "harbour_root_mega"
-
-
-static func inland_road_segments(size: int) -> int:
-	return clampi(2 + normalized_size(size) / 2, 2, 5)
-
-
-## Pier lengths keyed to design hull LOA — not abstract dock_length fractions.
+## Pier lengths keyed to design hull LOA. `morphology` kept for call-site compat
+## (berth plan always passes solo_jetty); ratios no longer select socket silhouettes.
 static func arm_target_lengths_m(
 		size: int,
-		morphology: String,
+		_morphology: String,
 		arm_count: int,
 		length_scales: Array = [],
 ) -> Array[float]:
 	var loa := design_hull_loa_m(size)
 	var berth := slot_width_m(size)
 	var max_seg := float(max_quay_segments_per_arm(size))
-	var ratios := morphology_length_ratios(morphology)
 	var lengths: Array[float] = []
 
 	for arm_index in range(maxi(arm_count, 1)):
-		var ratio := ratios[arm_index] if arm_index < ratios.size() else 1.0
+		var ratio := 1.35 if arm_index == 0 else 1.0
 		if arm_index < length_scales.size():
 			ratio *= float(length_scales[arm_index])
 		var target_berths := clampf(1.0 + ratio * 1.15, 1.0, max_seg)
@@ -524,55 +293,3 @@ static func arm_target_lengths_m(
 		target = clampf(target, loa * 1.08, loa * 2.35)
 		lengths.append(target)
 	return lengths
-
-
-## One distinct trade family per pier where possible.
-static func assign_families_to_arms(
-		families: Array[String],
-		arm_count: int,
-		morphology: String,
-		site_seed: int,
-) -> Array[String]:
-	var out: Array[String] = []
-	if families.is_empty():
-		for i in range(arm_count):
-			out.append("general")
-		return out
-
-	var ordered: Array[String] = families.duplicate()
-	var rng := RandomNumberGenerator.new()
-	rng.seed = int(site_seed) ^ 0x46414D49 ^ arm_count
-
-	if morphology == "liquid_jetty":
-		for i in range(arm_count):
-			out.append("liquid" if ordered.has("liquid") else ordered[0])
-		return out
-
-	if morphology == "offset_liquid":
-		out.append("liquid" if ordered.has("liquid") else ordered[0])
-		var dry_family := "general"
-		for f in ordered:
-			if f != "liquid":
-				dry_family = f
-				break
-		for i in range(1, arm_count):
-			out.append(dry_family)
-		return out
-
-	## Put liquid on its own offset pier when present — not shared with bulk ladder.
-	if ordered.has("liquid") and arm_count >= 2:
-		var liquid_first: Array[String] = ["liquid"]
-		for f in ordered:
-			if f != "liquid":
-				liquid_first.append(f)
-		ordered = liquid_first
-
-	for i in range(ordered.size() - 1, 0, -1):
-		var j := rng.randi_range(0, i)
-		var tmp: String = ordered[i]
-		ordered[i] = ordered[j]
-		ordered[j] = tmp
-
-	for arm_index in range(arm_count):
-		out.append(ordered[arm_index % ordered.size()])
-	return out

@@ -69,9 +69,9 @@ Core on every vessel: `BoatBody`, buoyancy, hydrodynamics, propulsion, rudder, t
 ## Ports & World
 
 - **`world.tscn`** is the runnable scene. `World` generates port definitions from a seed (default `world_seed=42`, `port_count=35`) and uses `ProximityLoader` (radius 1500) to instantiate ports near the player. The home port loads eagerly.
-- Pipeline: `PortDefinition` (seeded site/size) → seeded attributes + `PortTradeProfile` → `PortLayoutGenerator` → authoritative socketed `PortLayoutGraph`.
-- **`PortPlot`** currently renders only labeled color-coded boxes for placed modules and translucent boxes for open growth sockets.
-- Filling a socket consumes it, aligns the child module, and exposes the child's sockets. The seed creates the initial graph; later port growth must persist the evolved graph.
+- Pipeline: `PortDefinition` (seeded site/size, geography×trade ceiling) → `PortTradeProfile` → `PortLayoutGenerator` (coast foundation + `berth_plan`) → `PortLayoutGraph`.
+- **`PortPlot`** currently stamps foundation, asphalt pads, and dedicated quays from `berth_plan`.
+- Trade berths are planned attributes, not socket-filled harbour modules. Later growth must persist the evolved graph/plan.
 - Port functionality, final assets, NPCs, contracts, mooring, and operable equipment are deferred.
 - **Naming:** Norwegian-style names from a fixed pool (`Holmvik`, `Sandvær`, `Bergnes`, …).
 

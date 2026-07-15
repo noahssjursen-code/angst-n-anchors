@@ -2,7 +2,7 @@
 class_name PortShowcase
 extends Node3D
 
-## F6 gallery for socket graphs placed in their actual seeded world terrain.
+## F6 gallery for terrain-traced ports (foundation + berth_plan) on seeded coast.
 ## Each F6 run rolls a fresh world seed so ports don't always look identical.
 
 const REGION_LABELS: Array[String] = ["mainland", "fjord", "archipelago"]

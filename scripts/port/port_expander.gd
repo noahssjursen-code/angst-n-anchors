@@ -2,7 +2,7 @@ class_name PortExpander
 extends RefCounted
 
 ## Deterministic converter: PortDefinition + world_seed → initial PortData.
-## Pipeline: seeded attributes → trade profile → socketed layout graph.
+## Pipeline: trade profile → coast-traced foundation + berth_plan → PortData.
 
 const POPULATION_RANGE: Dictionary = {
 	0: [50, 300],
@@ -86,7 +86,7 @@ static func expand(
 	data.island_width = maxf(graph_bounds.size.x + 36.0, PortSizing.island_width_m(data.size))
 	data.plot_depth = maxf(graph_bounds.size.z + 36.0, PortSizing.PLOT_DEPTH_M)
 	data.max_ship_class = _ship_class_for_size(data.size)
-	data.berth_count = _count_quay_modules(data.layout_graph)
+	data.berth_count = _count_berths(data.layout_graph)
 	data.commodity_export = data.trade_profile.primary_export()
 	data.commodity_imports = data.trade_profile.import_slots.duplicate()
 	data.layout_seed = site_seed
@@ -114,7 +114,11 @@ static func _hash_id(port_id: String) -> int:
 	return port_id.hash()
 
 
-static func _count_quay_modules(graph: PortLayoutGraph) -> int:
+static func _count_berths(graph: PortLayoutGraph) -> int:
+	var plan := graph.initial_attributes.get("berth_plan", {}) as Dictionary
+	var planned := int(plan.get("quay_count", 0)) + int(plan.get("asphalt_slot_count", 0))
+	if planned > 0:
+		return planned
 	var count := 0
 	for instance_id in graph.module_ids():
 		var placed := graph.modules[instance_id] as PortPlacedModule

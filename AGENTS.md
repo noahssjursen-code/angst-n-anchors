@@ -27,7 +27,7 @@ scripts/
   weather/      # Deterministic field/front/composer, WorldWeather API, local presentation, rain/audio/HUD
   time/         # WorldClock autoload
   world/        # Norway macro layout/SDF, coastal ports, streamed terrain, renderer/loading
-  port/         # PortCatalog, trade profiles, layout specs, PortPlot/PortDock presentation
+  port/         # PortCatalog, trade profiles, berth_plan layout, PortPlot presentation
   npc/          # NpcBase, ShipwrightNpc (parked; port NPCs rebuilt later)
   cargo/        # CommodityCatalog, pallets, packing helpers (contracts deferred)
   apps/         # Engine authoring apps (BuildingBrickEditor, PortSlotEditor, ShipyardBrickEditor)
@@ -63,7 +63,7 @@ Conventions:
 - Name it `<feature>_showcase.tscn` or `<feature>_visual_demo.tscn`
 
 Current demos:
-- `scenes/showcases/port_showcase.tscn` — socketed port pipeline at real seeded coastal terrain sites
+- `scenes/showcases/port_showcase.tscn` — terrain-traced port pipeline at real seeded coastal terrain sites
 - `scenes/showcases/ship_showcase.tscn` / `player_showcase.tscn` / `cargo_showcase.tscn`
 - `tests/staged_vessel_visual_demo.tscn` — staged deck fitout construction
 
@@ -107,9 +107,9 @@ and waterway graph. It is the shared geographic truth for terrain, `LandField`,
 ports, charting, weather, and navigation.
 
 - `CoastalPortPlacer` places `PortDefinition` sites (pose, size class, region); local `-Z` faces water.
-- `PortExpander` derives seeded attributes + `PortTradeProfile`, then `PortLayoutGenerator` fills typed sockets to create the initial `PortLayoutGraph`.
-- `PortLayoutGraph` is the authoritative module graph. Modules consume parent sockets and expose new open sockets; persist/sync this graph, never generated meshes.
-- `PortLayoutGraphVisualizer` stamps the exact module footprints and open sockets as labeled color-coded boxes. This is intentionally the only port presentation for now.
+- `PortExpander` derives seeded attributes + `PortTradeProfile`, then `PortLayoutGenerator` traces the coast, fits a foundation, and builds `berth_plan` (asphalt pads + dedicated quays) on a foundation-anchor `PortLayoutGraph`.
+- `PortLayoutGraph` holds the foundation anchor plus layout attrs (`berth_plan`, basin, coast polylines). Persist/sync this graph, never generated meshes. Module attach/open-slot APIs are reserved for later growth — they are not how trade berths are placed today.
+- `PortLayoutGraphVisualizer` stamps foundation, berth pads/quays, and debug gizmos. This is intentionally the only port presentation for now.
 - `WorldTerrainStreamer` owns 1 km terrain chunks, LOD, nearby collision, and layout footprint flattening.
 - `LandField.wave_shelter()` is short-range wave attenuation. Weather/fishing
   use `coastal_exposure()` / `directional_fetch()`.
@@ -121,13 +121,13 @@ ports, charting, weather, and navigation.
 
 Ports follow a strict rebuild order:
 
-1. **Seeded initial record** — site, size, attributes, deterministic imports/exports
-2. **Socket graph** — generator fills compatible module slots; the resulting graph is the port
-3. **Layout visualization** — labeled colored boxes for modules and open growth sockets
+1. **Seeded initial record** — site, size (clamped by geography × trade product count), destiny imports/exports
+2. **Coast foundation + berth_plan** — shoreline fit, basin soft-clamp on pier length, asphalt vs dedicated quays from unlocked trade
+3. **Layout visualization** — foundation, berth pads/quays, optional site gizmos
 4. **Decoration/functionality** — explicitly deferred
 
-Do not regenerate a finished L/U harbour after players modify it. Seed generation
-creates only the initial graph; later growth fills open slots on the persisted graph.
+Do not regenerate a finished harbour after players modify it. Seed generation
+creates only the initial graph + berth plan; later growth must persist the evolved record.
 
 Trade contracts and harbour NPCs are purged for now. Starter vessels come from
 `PlayerSession` / `VesselSpawn`. Commodity packing/pricing lives in `CommodityCatalog`.

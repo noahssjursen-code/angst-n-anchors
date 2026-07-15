@@ -92,22 +92,24 @@ truth for rendering, weather, ports, charting, and navigation.
 
 ### `scripts/port/`
 
-Ports are seeded once as a socketed module graph. The graph, not a finished
-shape selected by seed, defines later growth.
+Ports are seeded as a coast-traced foundation plus a trade `berth_plan`. The
+graph record (not a finished mesh) is what later growth must persist.
 - `PortCatalog` autoload — live port directory for chart / proximity / spawn
-- `PortTradeProfile` — deterministic import/export commodity slots
-- `PortModuleCatalog` / `PortModuleDefinition` — data-only box footprints and typed attachment sockets
-- `PortLayoutGenerator` — fills compatible open sockets from seeded attributes/trade
-- `PortLayoutGraph` / `PortPlacedModule` — serialisable authoritative module graph
-- `PortLayoutGraphVisualizer` — labeled colored module/open-slot boxes; only current port presentation
+- `PortTradeProfile` — deterministic destiny imports/exports; size unlocks commodities
+- `PortBerthPlan` — asphalt pads vs dedicated quay arms from unlocked trade
+- `PortCoastTracer` — shoreline fit / foundation for the harbour apron
+- `PortModuleCatalog` / `PortModuleDefinition` — foundation root templates (module attach reserved for later growth)
+- `PortLayoutGenerator` — coast foundation + berth_plan into `PortLayoutGraph` attrs
+- `PortLayoutGraph` / `PortPlacedModule` — serialisable layout record (foundation + attrs)
+- `PortLayoutGraphVisualizer` — foundation / berth pads / quays; only current port presentation
 - `PortPlot` — streamed graph visualization root
 - `PortData`, `PortDefinition` — lean site truth plus derived layout/trade data
-- `PortExpander` — `PortDefinition` → attributes/trade → initial graph → `PortData`
-- `PortSizing` — shared metres for placement and layout derivation
+- `PortExpander` — `PortDefinition` → trade → layout → `PortData`
+- `PortSizing` — shared metres, trade size ceilings, berth length tables
 - `BuildingBlueprintCatalog` — `buildings/*.json` addressed by filename stem
 - `BuildingGrid` / `BuildingLayout` — portable JSON building instructions on the shared `BrickCatalog` kit
 - `BuildingRules` / `BuildingFitout` — validation and identical editor/runtime assembly
-- `PortShowcase` — inspect seeded graphs and open growth slots (`scenes/showcases/`)
+- `PortShowcase` — inspect seeded coastal ports (`scenes/showcases/`)
 
 ### `scripts/apps/`
 
@@ -116,9 +118,9 @@ Engine authoring apps (run via `scenes/apps/*.tscn`, not in-game UI).
 - `ShipyardBrickEditor` — official vessel prebuilts → `resources/data/vessels/prebuilt/`
 
 Player-owned port persistence/networking is deferred, but the data boundary is
-already explicit: immutable geography and the initial graph are seed-derived;
-later ownership and expansion persist the exact `PortLayoutGraph` by stable
-port/site ID instead of regenerating layout.
+already explicit: immutable geography and the initial graph/berth plan are
+seed-derived; later ownership and expansion persist the exact `PortLayoutGraph`
+by stable port/site ID instead of regenerating layout.
 
 ### `scripts/npc/`
 

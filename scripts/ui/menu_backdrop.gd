@@ -101,7 +101,7 @@ func _build_coastal_harbour() -> void:
 	ground.material_override = terrain_material
 	harbour.add_child(ground)
 
-	# Show the same socketed port graph as the runtime, using labeled boxes.
+	# Show the same terrain-traced port layout as the runtime.
 	var def := PortDefinition.new()
 	def.port_id = "menu"
 	def.display_name = "Menu Harbour"

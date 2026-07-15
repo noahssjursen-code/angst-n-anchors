@@ -15,7 +15,7 @@ extends NpcBase
 @export var npc_index:    int   = 0
 @export var port_radius:  float = 50.0
 ## Local-space anchor for the patrol loop centre. Usually the
-## `PortFacilities.position` within the port plot.
+## foundation / apron centre within the port plot.
 @export var anchor_offset: Vector3 = Vector3.ZERO
 
 var _anim: WalkAnimator

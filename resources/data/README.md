@@ -55,7 +55,6 @@ Authoring apps (run the scene directly in Godot — under `scenes/apps/`):
 | Scene | Purpose |
 |-------|---------|
 | `res://scenes/apps/building_brick_editor.tscn` | Paint bricks, Save / Save As into this folder |
-| `res://scenes/apps/port_slot_editor.tscn` | Place service slots on the default port and attach a building JSON |
 | `res://scenes/apps/shipyard_brick_editor.tscn` | Paint decks on official hulls; Save official prebuilt JSON |
 | `res://scenes/apps/vessel_registration_audit.tscn` | Edit vessel law and audit official registration paperwork |
 
@@ -70,14 +69,15 @@ Floor bricks are surfaces: they share a cell with walls/props via an optional
 
 ## `ports/`
 
-`modules/catalog.json` contains data-only port module templates: labeled box
-footprints, colors, tags, and typed input/output attachment sockets. It contains
-no meshes or gameplay functionality.
+`modules/catalog.json` contains data-only port module templates used for the
+foundation root (and reserved for later growth). It contains no meshes or
+gameplay functionality.
 
 Trade imports/exports are derived by `PortTradeProfile`. `PortLayoutGenerator`
-uses those seeded attributes to fill compatible sockets and produce the initial
-`PortLayoutGraph`. Later growth persists that graph; it does not alter this
-template catalog or regenerate a finished harbour shape from the seed.
+traces the coast, fits a foundation, and stores `berth_plan` (asphalt pads +
+dedicated quays) on the initial `PortLayoutGraph`. Later growth persists that
+graph; it does not alter this template catalog or regenerate a finished harbour
+shape from the seed.
 
 ## `vessels/prebuilt/`
 
@@ -125,7 +125,6 @@ scenes in `scenes/apps/`.
 | Scene | Script | Writes |
 |-------|--------|--------|
 | `building_brick_editor.tscn` | `BuildingBrickEditor` | `resources/data/buildings/*.json` |
-| `port_slot_editor.tscn` | `PortSlotEditor` | `resources/data/ports/default_service_slots.json` |
 | `shipyard_brick_editor.tscn` | `ShipyardBrickEditor` | `resources/data/vessels/prebuilt/*.json` |
 | `vessel_registration_audit.tscn` | `VesselRegistrationAudit` | registration catalog; audits prebuilts |
 

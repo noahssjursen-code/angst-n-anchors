@@ -1,6 +1,6 @@
 extends SceneTree
 
-## Terrain-following foundation invariants. Harbours have no terminals yet.
+## Terrain-following foundation invariants. Trade berths live in berth_plan attrs.
 
 const WORLD_LAYOUT_GENERATOR := preload("res://scripts/world/world_layout_generator.gd")
 

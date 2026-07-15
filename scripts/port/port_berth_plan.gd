@@ -26,8 +26,8 @@ static func dock_mode_for_commodity(commodity_id: String) -> String:
 
 
 ## Measures open-water envelope for this harbour pocket.
-## Result caps site growth (`site_max_size`) and soft-clamps pier length —
-## it must never starve pier count. Dock face is port-local; SDF is world XZ.
+## Soft-clamps pier length from seaward clearance — must never starve pier
+## count or rewrite the live size ceiling mid-build.
 static func measure_basin(
 		layout: WorldLayout,
 		definition: PortDefinition,
