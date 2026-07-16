@@ -27,7 +27,7 @@ scripts/
   weather/      # Deterministic field/front/composer, WorldWeather API, local presentation, rain/audio/HUD
   time/         # WorldClock autoload
   world/        # Norway macro layout/SDF, coastal ports, streamed terrain, renderer/loading
-  port/         # PortCatalog, trade profiles, berth_plan layout, PortPlot presentation
+  port/         # PortCatalog, trade profiles, berth_plan + land_plan, PortPlot presentation
   npc/          # NpcBase, ShipwrightNpc (parked; port NPCs rebuilt later)
   cargo/        # CommodityCatalog, pallets, packing helpers (contracts deferred)
   apps/         # Engine authoring apps (BuildingBrickEditor, PortSlotEditor, ShipyardBrickEditor)
@@ -107,9 +107,9 @@ and waterway graph. It is the shared geographic truth for terrain, `LandField`,
 ports, charting, weather, and navigation.
 
 - `CoastalPortPlacer` places `PortDefinition` sites (pose, size class, region); local `-Z` faces water.
-- `PortExpander` derives seeded attributes + `PortTradeProfile`, then `PortLayoutGenerator` traces the coast, fits a foundation, and builds `berth_plan` (asphalt pads + dedicated quays) on a foundation-anchor `PortLayoutGraph`.
-- `PortLayoutGraph` holds the foundation anchor plus layout attrs (`berth_plan`, basin, coast polylines). Persist/sync this graph, never generated meshes. Module attach/open-slot APIs are reserved for later growth — they are not how trade berths are placed today.
-- `PortLayoutGraphVisualizer` stamps foundation, berth pads/quays, and debug gizmos. This is intentionally the only port presentation for now.
+- `PortExpander` derives seeded attributes + `PortTradeProfile`, then `PortLayoutGenerator` traces the coast, fits a foundation, and builds `berth_plan` (asphalt pads + dedicated quays) plus `land_plan` (inland buildable zone covering apron + hinterland) on a foundation-anchor `PortLayoutGraph`.
+- `PortLayoutGraph` holds the foundation anchor plus layout attrs (`berth_plan`, `land_plan`, basin, coast polylines). Persist/sync this graph, never generated meshes. Module attach/open-slot APIs are reserved for later growth — they are not how trade berths are placed today.
+- `PortLayoutGraphVisualizer` stamps foundation, berth pads/quays, and debug gizmos (including the land buildable zone). This is intentionally the only port presentation for now.
 - `WorldTerrainStreamer` owns 1 km terrain chunks, LOD, nearby collision, and layout footprint flattening.
 - `LandField.wave_shelter()` is short-range wave attenuation. Weather/fishing
   use `coastal_exposure()` / `directional_fetch()`.
@@ -123,8 +123,8 @@ Ports follow a strict rebuild order:
 
 1. **Seeded initial record** — site, size (clamped by geography × trade product count), destiny imports/exports
 2. **Coast foundation + berth_plan** — shoreline fit, basin soft-clamp on pier length, asphalt vs dedicated quays from unlocked trade
-3. **Layout visualization** — foundation, berth pads/quays, optional site gizmos
-4. **Decoration/functionality** — explicitly deferred
+3. **Layout visualization** — foundation, berth pads/quays, land buildable zone gizmo (apron + hinterland; structure bands later), optional site gizmos
+4. **Gameplay functionality** — explicitly deferred (operable businesses, NPCs)
 
 Do not regenerate a finished harbour after players modify it. Seed generation
 creates only the initial graph + berth plan; later growth must persist the evolved record.

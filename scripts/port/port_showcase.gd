@@ -57,6 +57,15 @@ const GIZMO_PACKS: Array[Dictionary] = [
 			PortDebugGizmos.LAYER_QUAY_ARMS: true,
 		},
 	},
+	{
+		"id": "land",
+		"label": "Land",
+		"hint": "trapezoid + terrain stake grid",
+		"site_layers": {
+			PortDebugGizmos.LAYER_DOCK_FACE: true,
+			PortDebugGizmos.LAYER_LAND_ZONE: true,
+		},
+	},
 ]
 
 @export_range(0, 8) var port_size := 2:

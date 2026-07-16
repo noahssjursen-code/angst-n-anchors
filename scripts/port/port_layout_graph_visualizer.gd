@@ -59,6 +59,7 @@ func _rebuild() -> void:
 		return
 	_stamp_foundation()
 	_stamp_berth_terminals()
+	_stamp_land_structures()
 	for instance_id in _graph.module_ids():
 		_stamp_module(_graph.modules[instance_id] as PortPlacedModule)
 	if show_open_slots:
@@ -661,6 +662,199 @@ func _make_storage_stack(family: String, family_color: Color, size: Vector3) -> 
 		_:
 			root.add_child(MeshBuilder.box(size * Vector3(0.9, 1.0, 0.85), family_color.darkened(0.05), 0.9, 0.0))
 	return root
+
+
+func _stamp_land_structures() -> void:
+	## Structures deferred — land_plan currently defines the buildable zone only.
+	if not show_equipment_shapes:
+		return
+	var plan := _graph.initial_attributes.get("land_plan", {}) as Dictionary
+	if plan.is_empty():
+		return
+	if (plan.get("structures", []) as Array).is_empty():
+		return
+	var foundation := _graph.initial_attributes.get("foundation", {}) as Dictionary
+	var surface_y := float(foundation.get("surface_y_m", PortCoastTracer.FOUNDATION_SURFACE_Y_M)) \
+			+ PortCoastTracer.FOUNDATION_TERRAIN_CLEARANCE_M
+	var root := Node3D.new()
+	root.name = "LandStructures"
+	add_child(root)
+	for raw in plan.get("structures", []) as Array:
+		_stamp_land_structure(root, raw as Dictionary, surface_y)
+
+
+func _stamp_land_structure(parent: Node3D, entry: Dictionary, surface_y: float) -> void:
+	var origin := _xz2(entry.get("origin", [0.0, 0.0]))
+	var size_arr: Array = entry.get("size_m", [10.0, 5.0, 8.0]) as Array
+	var size := Vector3(
+		float(size_arr[0]) if size_arr.size() > 0 else 10.0,
+		float(size_arr[1]) if size_arr.size() > 1 else 5.0,
+		float(size_arr[2]) if size_arr.size() > 2 else 8.0,
+	)
+	var color_arr: Array = entry.get("color", [0.5, 0.5, 0.45]) as Array
+	var color := Color(
+		float(color_arr[0]) if color_arr.size() > 0 else 0.5,
+		float(color_arr[1]) if color_arr.size() > 1 else 0.5,
+		float(color_arr[2]) if color_arr.size() > 2 else 0.45,
+	)
+	var kind := str(entry.get("kind", "housing"))
+	var cluster := Node3D.new()
+	cluster.name = str(entry.get("id", kind))
+	cluster.position = Vector3(origin.x, surface_y, origin.y)
+	cluster.rotation.y = deg_to_rad(float(entry.get("yaw_degrees", 0.0)))
+	parent.add_child(cluster)
+	match kind:
+		"housing":
+			_stamp_land_housing(cluster, size, color)
+		"fish_market":
+			_stamp_land_market(cluster, size, color)
+		"warehouse":
+			_stamp_land_warehouse(cluster, size, color)
+		"silos":
+			_stamp_land_silos(cluster, size, color)
+		"farm":
+			_stamp_land_farm(cluster, size, color)
+		"sawmill":
+			_stamp_land_sawmill(cluster, size, color)
+		"tree_stand":
+			_stamp_land_trees(cluster, size, color)
+		"ore_mound":
+			_stamp_land_ore_mound(cluster, size, color)
+		"minehead":
+			_stamp_land_minehead(cluster, size, color)
+		"yard_blocks":
+			_stamp_land_yard_blocks(cluster, size, color)
+		"tank_farm":
+			_stamp_land_tank_farm(cluster, size, color)
+		_:
+			var box := MeshBuilder.box(size, color.darkened(0.1), 0.9, 0.0)
+			box.position = Vector3(0.0, size.y * 0.5, 0.0)
+			cluster.add_child(box)
+	if show_module_labels:
+		_label(
+			"LandLabel_%s" % str(entry.get("id", kind)),
+			str(entry.get("label", kind)).to_upper(),
+			Vector3(origin.x, surface_y + size.y + 8.0, origin.y),
+			color.lightened(0.2),
+			0.022,
+		)
+
+
+func _stamp_land_housing(root: Node3D, size: Vector3, color: Color) -> void:
+	var body := MeshBuilder.box(size * Vector3(1.0, 0.7, 1.0), color.darkened(0.15), 0.95, 0.0)
+	body.position = Vector3(0.0, size.y * 0.35, 0.0)
+	root.add_child(body)
+	var roof := MeshBuilder.box(size * Vector3(1.08, 0.22, 1.08), color.lightened(0.1), 0.9, 0.0)
+	roof.position = Vector3(0.0, size.y * 0.75, 0.0)
+	root.add_child(roof)
+
+
+func _stamp_land_market(root: Node3D, size: Vector3, color: Color) -> void:
+	var hall := MeshBuilder.box(size, color.darkened(0.2), 0.9, 0.0)
+	hall.position = Vector3(0.0, size.y * 0.5, 0.0)
+	root.add_child(hall)
+	var awning := MeshBuilder.box(Vector3(size.x * 1.15, 0.4, size.z * 0.35), color.lightened(0.15), 0.85, 0.0)
+	awning.position = Vector3(0.0, size.y * 0.85, size.z * 0.4)
+	root.add_child(awning)
+
+
+func _stamp_land_warehouse(root: Node3D, size: Vector3, color: Color) -> void:
+	var body := MeshBuilder.box(size, color.darkened(0.25), 0.95, 0.0)
+	body.position = Vector3(0.0, size.y * 0.5, 0.0)
+	root.add_child(body)
+	var door := MeshBuilder.box(Vector3(size.x * 0.28, size.y * 0.55, 0.6), Color(0.2, 0.2, 0.22), 0.9, 0.05)
+	door.position = Vector3(0.0, size.y * 0.28, size.z * 0.5)
+	root.add_child(door)
+
+
+func _stamp_land_silos(root: Node3D, size: Vector3, color: Color) -> void:
+	var radius := minf(size.x, size.z) * 0.22
+	for i in range(3):
+		var silo := MeshBuilder.cylinder(radius, size.y, color.darkened(0.05), 0.85, 0.05)
+		silo.position = Vector3((float(i) - 1.0) * radius * 2.4, size.y * 0.5, 0.0)
+		root.add_child(silo)
+
+
+func _stamp_land_farm(root: Node3D, size: Vector3, color: Color) -> void:
+	var field := MeshBuilder.box(Vector3(size.x, 0.35, size.z), color.darkened(0.1), 1.0, 0.0)
+	field.position = Vector3(0.0, 0.2, 0.0)
+	root.add_child(field)
+	var shed := MeshBuilder.box(Vector3(size.x * 0.28, size.y * 1.4, size.z * 0.22), Color(0.45, 0.38, 0.28), 0.9, 0.0)
+	shed.position = Vector3(-size.x * 0.28, size.y * 0.7, -size.z * 0.28)
+	root.add_child(shed)
+
+
+func _stamp_land_sawmill(root: Node3D, size: Vector3, color: Color) -> void:
+	var mill := MeshBuilder.box(size * Vector3(0.85, 0.8, 0.7), color.darkened(0.2), 0.9, 0.0)
+	mill.position = Vector3(0.0, size.y * 0.4, 0.0)
+	root.add_child(mill)
+	var ramp := MeshBuilder.box(Vector3(size.x * 0.35, 0.5, size.z * 0.9), color.lightened(0.05), 0.95, 0.0)
+	ramp.position = Vector3(size.x * 0.35, 0.4, 0.0)
+	root.add_child(ramp)
+
+
+func _stamp_land_trees(root: Node3D, size: Vector3, color: Color) -> void:
+	var trunk_c := Color(0.35, 0.22, 0.12)
+	var leaf_c := color.darkened(0.05) if color.g > 0.3 else Color(0.22, 0.42, 0.18)
+	for i in range(5):
+		var ox := (float(i % 3) - 1.0) * size.x * 0.28
+		var oz := (float(int(i / 3)) - 0.5) * size.z * 0.35
+		var trunk := MeshBuilder.cylinder(0.45, size.y * 0.45, trunk_c, 0.95, 0.0)
+		trunk.position = Vector3(ox, size.y * 0.22, oz)
+		root.add_child(trunk)
+		var canopy := MeshBuilder.sphere(size.y * 0.22, leaf_c, 0.9, 0.0)
+		canopy.position = Vector3(ox, size.y * 0.55, oz)
+		root.add_child(canopy)
+
+
+func _stamp_land_ore_mound(root: Node3D, size: Vector3, color: Color) -> void:
+	var mound := MeshBuilder.sphere(minf(size.x, size.z) * 0.42, color.darkened(0.15), 1.0, 0.0)
+	mound.position = Vector3(0.0, size.y * 0.35, 0.0)
+	mound.scale = Vector3(1.2, 0.7, 1.0)
+	root.add_child(mound)
+	var pile := MeshBuilder.sphere(minf(size.x, size.z) * 0.28, color.lightened(0.05), 1.0, 0.0)
+	pile.position = Vector3(size.x * 0.25, size.y * 0.22, size.z * 0.15)
+	pile.scale = Vector3(1.1, 0.6, 1.0)
+	root.add_child(pile)
+
+
+func _stamp_land_minehead(root: Node3D, size: Vector3, color: Color) -> void:
+	var headframe := MeshBuilder.box(Vector3(size.x * 0.25, size.y, size.z * 0.25), STEEL, 0.75, 0.2)
+	headframe.position = Vector3(0.0, size.y * 0.5, 0.0)
+	root.add_child(headframe)
+	var shed := MeshBuilder.box(Vector3(size.x * 0.7, size.y * 0.45, size.z * 0.55), color.darkened(0.25), 0.9, 0.0)
+	shed.position = Vector3(size.x * 0.2, size.y * 0.22, 0.0)
+	root.add_child(shed)
+	var tip := MeshBuilder.box(Vector3(size.x * 0.9, 0.5, 0.6), Color(0.55, 0.55, 0.5), 0.8, 0.1)
+	tip.position = Vector3(0.0, size.y * 0.95, 0.0)
+	root.add_child(tip)
+
+
+func _stamp_land_yard_blocks(root: Node3D, size: Vector3, color: Color) -> void:
+	for row in range(2):
+		for col in range(3):
+			var block := MeshBuilder.box(
+				Vector3(size.x * 0.22, size.y * (0.55 + float(row) * 0.2), size.z * 0.28),
+				color.darkened(0.05 * float(col)),
+				0.85,
+				0.05,
+			)
+			block.position = Vector3(
+				(float(col) - 1.0) * size.x * 0.28,
+				size.y * (0.3 + float(row) * 0.25),
+				(float(row) - 0.5) * size.z * 0.35,
+			)
+			root.add_child(block)
+
+
+func _stamp_land_tank_farm(root: Node3D, size: Vector3, color: Color) -> void:
+	var radius := minf(size.x, size.z) * 0.2
+	for i in range(4):
+		var tank := MeshBuilder.cylinder(radius, size.y * 0.7, color.darkened(0.2), 0.8, 0.15)
+		var ox := (float(i % 2) - 0.5) * radius * 2.6
+		var oz := (float(int(i / 2)) - 0.5) * radius * 2.6
+		tank.position = Vector3(ox, size.y * 0.35, oz)
+		root.add_child(tank)
 
 
 func _stamp_berth_asphalt(parent: Node3D, station: Dictionary, surface_y: float) -> void:

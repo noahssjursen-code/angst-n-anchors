@@ -17,6 +17,8 @@ const LAYER_GRAPH_ROOT := "graph_root"
 const LAYER_ASPHALT_BERTHS := "asphalt_berths"
 const LAYER_QUAY_ROOTS := "quay_roots"
 const LAYER_QUAY_ARMS := "quay_arms"
+const LAYER_LAND_ZONE := "land_zone"
+const LAYER_LAND_STRUCTURES := "land_structures"
 
 const LAYER_IDS: PackedStringArray = [
 	LAYER_ORIGIN,
@@ -31,6 +33,8 @@ const LAYER_IDS: PackedStringArray = [
 	LAYER_ASPHALT_BERTHS,
 	LAYER_QUAY_ROOTS,
 	LAYER_QUAY_ARMS,
+	LAYER_LAND_ZONE,
+	LAYER_LAND_STRUCTURES,
 ]
 
 const ORIGIN_COLOR := Color(1.0, 0.15, 0.15)
@@ -42,6 +46,10 @@ const TERRAIN_COAST_COLOR := Color(1.0, 0.55, 0.1)
 const SPINE_COLOR := Color(0.95, 0.2, 0.95)
 const DOCK_COLOR := Color(0.2, 0.85, 1.0)
 const ANCHOR_COLOR := Color(1.0, 1.0, 0.2)
+const LAND_ZONE_COLOR := Color(0.25, 0.95, 0.55, 0.38)
+const LAND_ZONE_EDGE := Color(0.15, 1.0, 0.45)
+const LAND_GRID_SPHERE := Color(0.95, 0.12, 0.1)
+const LAND_GRID_POLE := Color(0.55, 0.08, 0.08)
 
 ## layer_id → visible. Missing keys default to true when a master enable is on.
 var _layer_visible: Dictionary = {}
@@ -148,6 +156,9 @@ func _rebuild() -> void:
 			_stamp_dot(root_layer, placed.position_m, ANCHOR_COLOR, 5.0, "GraphRoot")
 
 	_stamp_berth_plan(_graph.initial_attributes.get("berth_plan", {}) as Dictionary)
+	_stamp_land_zone(_graph.initial_attributes.get("land_plan", {}) as Dictionary)
+	_stamp_land_terrain_grid(_graph.initial_attributes.get("land_plan", {}) as Dictionary)
+	_stamp_land_plan(_graph.initial_attributes.get("land_plan", {}) as Dictionary)
 	_apply_layer_visibility()
 
 
@@ -237,6 +248,219 @@ func _stamp_berth_plan(plan: Dictionary) -> void:
 			],
 			Vector3(origin.x, 18.0, origin.y) + Vector3(seaward.x, 0.0, seaward.y) * (length_m * 0.35),
 			color,
+		)
+
+
+func _stamp_land_zone(plan: Dictionary) -> void:
+	var layer := _ensure_layer(LAYER_LAND_ZONE)
+	var zone: Dictionary = plan.get("buildable_zone", {}) as Dictionary
+	if zone.is_empty():
+		return
+	var span_sea := float(zone.get("along_span_seaward_m", zone.get("along_span_m", 0.0)))
+	var span_in := float(zone.get("along_span_inland_m", span_sea))
+	var inland_depth := float(zone.get("inland_depth_m", 0.0))
+	if span_sea < 1.0 or inland_depth < 1.0:
+		return
+	var origin := _xz(zone.get("origin", zone.get("center", [0.0, 0.0])))
+	var along_dir := _xz(zone.get("along_dir", [1.0, 0.0])).normalized()
+	var inland_dir := _xz(zone.get("inland_dir", [0.0, 1.0])).normalized()
+	if along_dir.length_squared() < 0.01:
+		along_dir = Vector2(1.0, 0.0)
+	if inland_dir.length_squared() < 0.01:
+		inland_dir = Vector2(0.0, 1.0)
+	var h_sea := float(zone.get("height_seaward_m", 12.0))
+	var h_in := float(zone.get("height_inland_m", 110.0))
+	var y_base := 0.4
+	## Inverse trapezoid: narrow at apron, blooms wider + taller into the hills.
+	var volume := _make_rising_land_volume(
+		span_sea,
+		span_in,
+		inland_depth,
+		h_sea,
+		h_in,
+		LAND_ZONE_COLOR,
+	)
+	volume.name = "LandBuildableArea"
+	layer.add_child(volume)
+	## Bottom sits on apron; volume extends inland along +Z local after basis align.
+	volume.position = Vector3(
+		origin.x + inland_dir.x * inland_depth * 0.5,
+		y_base,
+		origin.y + inland_dir.y * inland_depth * 0.5,
+	)
+	## Local +Z = inland (rising / blooming edge).
+	_align_basis_on_tangent(volume, along_dir, inland_dir)
+
+	## Four corner markers only — no ribbon slats.
+	for raw in zone.get("corners", []) as Array:
+		var c := raw as Array
+		if c.size() < 2:
+			continue
+		_stamp_dot(layer, Vector3(float(c[0]), y_base + 8.0, float(c[1])), LAND_ZONE_EDGE, 4.0, "LandCorner")
+
+	var center_arr: Array = zone.get("center", [0.0, 0.0]) as Array
+	var cx := float(center_arr[0]) if center_arr.size() > 0 else 0.0
+	var cz := float(center_arr[1]) if center_arr.size() > 1 else 0.0
+	_stamp_dot(layer, Vector3(cx, y_base + h_in * 0.55, cz), LAND_ZONE_EDGE, 5.5, "LandZoneCenter")
+	_label(
+		layer,
+		"LandZoneLabel",
+		"BUILDABLE AREA\n%.0f → %.0f m wide\n%.0f m inland · h %.0f→%.0f" % [
+			span_sea,
+			span_in,
+			inland_depth,
+			h_sea,
+			h_in,
+		],
+		Vector3(cx, y_base + h_in + 18.0, cz),
+		LAND_ZONE_EDGE.lightened(0.15),
+	)
+
+
+## Red spheres on terrain at each trapezoid-grid corner; thin poles drive down to them.
+func _stamp_land_terrain_grid(plan: Dictionary) -> void:
+	var layer := _ensure_layer(LAYER_LAND_ZONE)
+	var grid: Dictionary = plan.get("terrain_grid", {}) as Dictionary
+	if grid.is_empty():
+		return
+	var zone: Dictionary = plan.get("buildable_zone", {}) as Dictionary
+	var h_sea := float(zone.get("height_seaward_m", 12.0))
+	var h_in := float(zone.get("height_inland_m", 110.0))
+	var points: Array = grid.get("points", []) as Array
+	for index in range(points.size()):
+		var entry: Dictionary = points[index]
+		var local_arr: Array = entry.get("local", [0.0, 0.0]) as Array
+		if local_arr.size() < 2:
+			continue
+		var lx := float(local_arr[0])
+		var lz := float(local_arr[1])
+		var terrain_y := float(entry.get("y", 0.0))
+		var v := float(entry.get("v", 0.0))
+		## Pole top follows the rising volume roof so stakes read inside the green area.
+		var roof_y := lerpf(h_sea, h_in, v) + 0.4
+		var pole_top := maxf(roof_y, terrain_y + 14.0)
+		var pole_len := maxf(pole_top - terrain_y, 2.0)
+		var pole := MeshBuilder.cylinder(0.45, pole_len, LAND_GRID_POLE, 0.85, 0.05)
+		pole.name = "LandStakePole_%d" % index
+		pole.position = Vector3(lx, terrain_y + pole_len * 0.5, lz)
+		layer.add_child(pole)
+		var sphere_r := 3.6
+		_stamp_dot(
+			layer,
+			Vector3(lx, terrain_y + sphere_r, lz),
+			LAND_GRID_SPHERE,
+			sphere_r,
+			"LandStake_%d" % index,
+		)
+	var center_arr: Array = zone.get("center", [0.0, 0.0]) as Array
+	var gx := float(center_arr[0]) if center_arr.size() > 0 else 0.0
+	var gz := float(center_arr[1]) if center_arr.size() > 1 else 0.0
+	_label(
+		layer,
+		"LandGridLabel",
+		"TERRAIN GRID\n%d stakes · %d skipped\nsetback %.0f m · +%.0f m above water" % [
+			points.size(),
+			int(grid.get("rejected_count", 0)),
+			float(grid.get("beach_setback_m", 32.0)),
+			float(grid.get("min_height_above_water_m", 4.0)),
+		],
+		Vector3(gx, h_in + 36.0, gz),
+		LAND_GRID_SPHERE.lightened(0.2),
+	)
+
+
+## Trapezoid footprint (narrow seaward → wide inland); top rises inland.
+## Local space: X = along-shore, Z = inland (−hd seaward … +hd hills).
+func _make_rising_land_volume(
+		width_seaward_m: float,
+		width_inland_m: float,
+		depth_m: float,
+		height_seaward_m: float,
+		height_inland_m: float,
+		color: Color,
+) -> MeshInstance3D:
+	var hw_sea := maxf(width_seaward_m, 4.0) * 0.5
+	var hw_in := maxf(width_inland_m, hw_sea * 2.0) * 0.5
+	var hd := depth_m * 0.5
+	var z_sea := -hd
+	var z_in := hd
+	var hs := maxf(height_seaward_m, 2.0)
+	var hi := maxf(height_inland_m, hs + 1.0)
+	var verts := PackedVector3Array([
+		## bottom
+		Vector3(-hw_sea, 0.0, z_sea),
+		Vector3(hw_sea, 0.0, z_sea),
+		Vector3(hw_in, 0.0, z_in),
+		Vector3(-hw_in, 0.0, z_in),
+		## top (rises + blooms inland)
+		Vector3(-hw_sea, hs, z_sea),
+		Vector3(hw_sea, hs, z_sea),
+		Vector3(hw_in, hi, z_in),
+		Vector3(-hw_in, hi, z_in),
+	])
+	var faces := [
+		[0, 1, 2, 3], ## bottom
+		[4, 7, 6, 5], ## top
+		[0, 4, 5, 1], ## seaward
+		[3, 2, 6, 7], ## inland
+		[0, 3, 7, 4], ## −X
+		[1, 5, 6, 2], ## +X
+	]
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	for face in faces:
+		var a: Vector3 = verts[face[0]]
+		var b: Vector3 = verts[face[1]]
+		var c: Vector3 = verts[face[2]]
+		var d: Vector3 = verts[face[3]]
+		st.add_vertex(a)
+		st.add_vertex(b)
+		st.add_vertex(c)
+		st.add_vertex(a)
+		st.add_vertex(c)
+		st.add_vertex(d)
+	st.generate_normals()
+	var mi := MeshInstance3D.new()
+	mi.mesh = st.commit()
+	mi.material_override = MeshBuilder.make_material(color, 0.95, 0.0)
+	return mi
+
+
+func _stamp_land_plan(plan: Dictionary) -> void:
+	var layer := _ensure_layer(LAYER_LAND_STRUCTURES)
+	if plan.is_empty():
+		return
+	for raw in plan.get("structures", []) as Array:
+		var entry: Dictionary = raw
+		var origin := _xz(entry.get("origin", [0.0, 0.0]))
+		var size_arr: Array = entry.get("size_m", [10.0, 5.0, 8.0]) as Array
+		var size := Vector3(
+			float(size_arr[0]) if size_arr.size() > 0 else 10.0,
+			float(size_arr[1]) if size_arr.size() > 1 else 5.0,
+			float(size_arr[2]) if size_arr.size() > 2 else 8.0,
+		)
+		var color_arr: Array = entry.get("color", [0.5, 0.5, 0.45]) as Array
+		var color := Color(
+			float(color_arr[0]) if color_arr.size() > 0 else 0.5,
+			float(color_arr[1]) if color_arr.size() > 1 else 0.5,
+			float(color_arr[2]) if color_arr.size() > 2 else 0.45,
+		)
+		color.a = 0.55
+		var box := MeshBuilder.box(size, color, 0.9, 0.0)
+		box.name = str(entry.get("id", "land"))
+		layer.add_child(box)
+		box.position = Vector3(origin.x, 2.0 + size.y * 0.5, origin.y)
+		box.rotation.y = deg_to_rad(float(entry.get("yaw_degrees", 0.0)))
+		_stamp_dot(layer, Vector3(origin.x, 8.0, origin.y), color.lightened(0.2), 2.4, str(entry.get("id", "land")))
+		_label(
+			layer,
+			"%s_lbl" % str(entry.get("id", "land")),
+			"%s\n%s" % [
+				str(entry.get("label", entry.get("kind", "land"))),
+				str(entry.get("band", "")).to_upper(),
+			],
+			Vector3(origin.x, 14.0 + size.y, origin.y),
+			color.lightened(0.25),
 		)
 
 

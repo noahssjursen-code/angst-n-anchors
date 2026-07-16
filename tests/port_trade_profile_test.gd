@@ -105,6 +105,25 @@ func _run() -> void:
 	assert(a.layout_graph.local_footprints().size() >= 1)
 	assert(a.layout_seed == b.layout_seed)
 
+	## Land plan defines the inland buildable zone (apron + hinterland).
+	var land: Dictionary = a.layout_graph.initial_attributes.get("land_plan", {}) as Dictionary
+	assert(not land.is_empty(), "land_plan missing")
+	var zone: Dictionary = land.get("buildable_zone", {}) as Dictionary
+	assert(not zone.is_empty(), "buildable_zone missing")
+	assert((zone.get("seaward_edge", []) as Array).size() >= 2, "zone needs seaward edge")
+	assert((zone.get("inland_edge", []) as Array).size() >= 2, "zone needs inland edge")
+	assert(float(zone.get("inland_depth_m", 0.0)) >= 400.0, "buildable zone too shallow inland")
+	assert(float(zone.get("along_span_m", 0.0)) >= 20.0, "buildable zone too narrow")
+	assert(
+		float(zone.get("along_span_inland_m", 0.0)) > float(zone.get("along_span_seaward_m", 0.0)),
+		"zone must bloom wider inland",
+	)
+	assert(float(zone.get("height_inland_m", 0.0)) > float(zone.get("height_seaward_m", 0.0)), "zone must rise inland")
+	var grid: Dictionary = land.get("terrain_grid", {}) as Dictionary
+	assert(not grid.is_empty(), "terrain_grid missing")
+	assert(int(grid.get("u_count", 0)) >= 2 and int(grid.get("v_count", 0)) >= 2, "terrain grid too small")
+	assert((grid.get("points", []) as Array).size() >= 4, "terrain grid needs stake points")
+
 	## Growing size unlocks destiny — never re-rolls theme or mature lists.
 	var def_small := PortDefinition.new()
 	def_small.port_id = definition.port_id

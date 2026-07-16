@@ -3,15 +3,17 @@ extends RefCounted
 
 const CoastTracer := preload("res://scripts/port/port_coast_tracer.gd")
 const BerthPlan := preload("res://scripts/port/port_berth_plan.gd")
+const LandPlan := preload("res://scripts/port/port_land_plan.gd")
 
 ## Terrain-traced port layout (current authority):
 ##   1) square port area + coast trace
 ##   2) fit harbour spine / asphalt dock face on the shoreline
 ##   3) measure basin water envelope
 ##   4) build berth_plan (asphalt pads + dedicated quay arms)
+##   5) build land_plan (inland buildable zone: apron + hinterland)
 ##
 ## The graph currently holds a single foundation anchor. Trade berths live in
-## initial_attributes["berth_plan"] and are stamped by the visualizer.
+## initial_attributes["berth_plan"]; buildable land footprint in ["land_plan"].
 
 
 static func generate(
@@ -97,6 +99,17 @@ static func generate(
 		site_seed,
 		layout,
 		definition,
+	)
+	graph.initial_attributes["land_plan"] = LandPlan.build(
+		profile,
+		size,
+		foundation,
+		graph.initial_attributes["berth_plan"] as Dictionary,
+		site_seed,
+		graph.initial_attributes["port_area"] as Dictionary,
+		layout,
+		definition.world_position,
+		definition.rotation_y,
 	)
 	return graph
 
