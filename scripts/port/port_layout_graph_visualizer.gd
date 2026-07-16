@@ -22,9 +22,15 @@ const STEEL := Color(0.45, 0.46, 0.48)
 const FOUNDATION_PAVEMENT_COLOR := Color(0.133, 0.133, 0.133)
 ## Quay pier mass (underwater face) — slightly lighter so depth reads in clear water.
 const QUAY_PIER_MASS_COLOR := Color(0.18, 0.19, 0.20)
-## Deck top height above the berth terminal origin (foundation surface).
-const QUAY_DECK_TOP_LOCAL_Y := 0.55
+## Deck top above the berth terminal origin (foundation apron crown).
+## Keep nearly flush — a raised pad reads as a step out of the apron.
+const QUAY_DECK_TOP_LOCAL_Y := 0.02
 const QUAY_DECK_SLAB_H := 0.55
+## Asphalt berth pad crown / thickness (same flush rule as quay decks).
+const ASPHALT_PAD_TOP_LOCAL_Y := 0.02
+const ASPHALT_PAD_H := 0.40
+## Convex footing slab — CharacterBody3D needs a thick box crown, not a thin mesh.
+const DECK_WALK_THICKNESS_M := 0.55
 const BULK_CRANE_SCRIPT := preload("res://scripts/port/bulk_crane.gd")
 const BULK_CRANE_AUTO_SCRIPT := preload("res://scripts/port/bulk_crane_auto_operator.gd")
 const BULK_EQUIP_JOB_SCRIPT := preload("res://scripts/port/bulk_crane_equipment_job.gd")
@@ -452,7 +458,7 @@ func _stamp_asphalt_bollards(
 		post.name = "Bollard_%d" % i
 		post.mooring_visual = MooringPost.MooringVisual.DOCKING_BOLLARD
 		post.bollard_scale = 1.1
-		post.position = Vector3(start_x + float(i) * step, 0.95, edge_z)
+		post.position = Vector3(start_x + float(i) * step, ASPHALT_PAD_TOP_LOCAL_Y, edge_z)
 		pad_root.add_child(post)
 		slot.add_bollard(post)
 
@@ -670,26 +676,29 @@ func _stamp_quay_pier_model(
 	))
 	var deck_top := QUAY_DECK_TOP_LOCAL_Y
 	var deck_bottom := deck_top - QUAY_DECK_SLAB_H
-	## Mass stops under the deck slab — coplanar tops z-fight / flicker.
-	var mass_top := deck_bottom - 0.02
 	var water_bottom_world := WaveSurface.WATER_LEVEL - seaward_depth
 	var bottom_local := water_bottom_world - surface_y
-	var pier_h := maxf(mass_top - bottom_local, 2.0)
-	var pier_center_y := mass_top - pier_h * 0.5
+	## One column from basin floor through the deck crown — boats cannot slip
+	## under the arm and the player walks on the same surface as the mesh.
+	var pier_h := maxf(deck_top - bottom_local, 2.0)
+	var pier_center_y := bottom_local + pier_h * 0.5
 
 	var root := Node3D.new()
 	root.name = "QuayPier"
 	terminal.add_child(root)
 
 	## Underwater / freeboard mass — opaque so the camera cannot see “through” the pier.
+	var mass_top := deck_bottom - 0.02
+	var mass_h := maxf(mass_top - bottom_local, 2.0)
+	var mass_center_y := bottom_local + mass_h * 0.5
 	var mass := MeshBuilder.box(
-		Vector3(width_m, pier_h, length_m),
+		Vector3(width_m, mass_h, length_m),
 		QUAY_PIER_MASS_COLOR,
 		0.95,
 		0.0,
 	)
 	mass.name = "PierMass"
-	mass.position = Vector3(0.0, pier_center_y, 0.0)
+	mass.position = Vector3(0.0, mass_center_y, 0.0)
 	mass.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	root.add_child(mass)
 
@@ -705,7 +714,6 @@ func _stamp_quay_pier_model(
 	deck.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	root.add_child(deck)
 
-	## World collision — blocks boats and camera from travelling under the arm.
 	var body := StaticBody3D.new()
 	body.name = "PierCollision"
 	body.collision_layer = 1
@@ -718,6 +726,13 @@ func _stamp_quay_pier_model(
 	col.shape = shape
 	col.position = Vector3(0.0, pier_center_y, 0.0)
 	body.add_child(col)
+	## Belt-and-suspenders footing slab on the deck crown for CB3D floor snaps.
+	_add_deck_walk_collision(
+		root,
+		"DeckWalkCollision",
+		Vector2(width_m, length_m),
+		deck_top,
+	)
 
 
 ## Pack cargo along the storage flank, split into commodity zones when shared.
@@ -769,7 +784,7 @@ func _stamp_quay_storage_lane(
 				0.0,
 			)
 			apron.name = "ZoneApron_%d" % zone_index
-			apron.position = Vector3(lane_x, 0.50, zone_mid_z)
+			apron.position = Vector3(lane_x, QUAY_DECK_TOP_LOCAL_Y + 0.12, zone_mid_z)
 			lane.add_child(apron)
 
 		var pad_len := clampf(zone_len * 0.42, 14.0, 36.0)
@@ -890,7 +905,7 @@ func _stamp_quay_crane_lane(
 			equip_kind = str(station.get("equipment_kind", "equip_jib_crane"))
 		var equip_root := Node3D.new()
 		equip_root.name = "Tool_%d" % index
-		equip_root.position = Vector3(lane_x, 0.55, z)
+		equip_root.position = Vector3(lane_x, QUAY_DECK_TOP_LOCAL_Y, z)
 		if berth_sign < 0.0:
 			equip_root.rotation_degrees.y = 180.0
 		lane.add_child(equip_root)
@@ -1315,37 +1330,50 @@ func _stamp_berth_asphalt(parent: Node3D, station: Dictionary, surface_y: float)
 		1.0,
 		Vector3(0.0, 0.0, 1.0),
 	)
-	var pad := MeshBuilder.box(Vector3(length, 0.45, depth), color.darkened(0.25), 0.9, 0.0)
-	pad.position = Vector3(0.0, 0.25, 0.0)
+	## Pad hangs below the apron crown so the walking surface stays flush.
+	var pad_center_y := ASPHALT_PAD_TOP_LOCAL_Y - ASPHALT_PAD_H * 0.5
+	var pad := MeshBuilder.box(
+		Vector3(length, ASPHALT_PAD_H, depth),
+		color.darkened(0.25),
+		0.9,
+		0.0,
+	)
+	pad.position = Vector3(0.0, pad_center_y, 0.0)
 	pad_root.add_child(pad)
-	_add_box_collision(
+	_add_deck_walk_collision(
 		pad_root,
-		"PadCollision",
-		Vector3(length, 0.45, depth),
-		Vector3(0.0, 0.25, 0.0),
+		"PadWalkCollision",
+		Vector2(length, depth),
+		ASPHALT_PAD_TOP_LOCAL_Y,
 	)
 	## Bollards on the seaward face — player/ship mooring interaction.
 	_stamp_asphalt_bollards(pad_root, slot, length, depth)
-	## Apron junction strip where the pad meets the harbour face (local −Z).
+	## Thin seam where the pad meets the harbour face (local −Z).
+	var junction_h := 0.08
 	var junction := MeshBuilder.box(
-		Vector3(length * 0.98, 0.5, 1.4),
+		Vector3(length * 0.98, junction_h, 1.4),
 		FOUNDATION_PAVEMENT_COLOR.lightened(0.08),
 		1.0,
 		0.0,
 	)
 	junction.name = "ApronJunction"
-	junction.position = Vector3(0.0, 0.35, -depth * 0.5 + 0.7)
+	junction.position = Vector3(
+		0.0,
+		ASPHALT_PAD_TOP_LOCAL_Y + junction_h * 0.5,
+		-depth * 0.5 + 0.7,
+	)
 	pad_root.add_child(junction)
 	var road_w := clampf(length * 0.18, 6.0, 12.0)
+	var road_h := 0.08
 	var road := MeshBuilder.box(
-		Vector3(road_w, 0.12, depth * 0.82),
+		Vector3(road_w, road_h, depth * 0.82),
 		Color(0.07, 0.07, 0.08),
 		1.0,
 		0.0,
 	)
 	road.name = "Road"
-	## Sit on pad crown (pad top ≈ 0.475) — avoid coplanar flicker.
-	road.position = Vector3(0.0, 0.54, 0.0)
+	## Sit just above pad crown to avoid coplanar flicker.
+	road.position = Vector3(0.0, ASPHALT_PAD_TOP_LOCAL_Y + road_h * 0.5 + 0.01, 0.0)
 	pad_root.add_child(road)
 	var kind := str(station.get("equipment_kind", ""))
 	if not kind.is_empty():
@@ -1506,14 +1534,15 @@ func _stamp_loading_arm_at(root: Node3D, footprint: Vector3) -> void:
 
 
 func _align_node_seaward(node: Node3D, seaward: Vector2) -> void:
-	var z_axis := Vector3(seaward.x, 0.0, seaward.y)
-	if z_axis.length_squared() < 0.001:
-		z_axis = Vector3(0.0, 0.0, -1.0)
+	## Yaw only — never rebuild a full basis. Some headings used to flip local +Y
+	## (east-facing pads), which broke CharacterBody floor normals so players
+	## fell through asphalt/quay decks.
+	var dir := Vector2(seaward.x, seaward.y)
+	if dir.length_squared() < 0.001:
+		dir = Vector2(0.0, -1.0)
 	else:
-		z_axis = z_axis.normalized()
-	var x_axis := Vector3.UP.cross(z_axis).normalized()
-	var y_axis := z_axis.cross(x_axis).normalized()
-	node.basis = Basis(x_axis, y_axis, z_axis)
+		dir = dir.normalized()
+	node.rotation = Vector3(0.0, atan2(dir.x, dir.y), 0.0)
 
 
 func _xz2(raw: Variant) -> Vector2:
@@ -1826,6 +1855,23 @@ func _add_trimesh_collision(mesh_instance: MeshInstance3D, body_name: String) ->
 	col.shape = shape
 	body.add_child(col)
 	mesh_instance.add_child(body)
+
+
+func _add_deck_walk_collision(
+		parent: Node3D,
+		body_name: String,
+		footprint: Vector2,
+		deck_top_local_y: float,
+) -> void:
+	if parent == null:
+		return
+	var walk_h := DECK_WALK_THICKNESS_M
+	_add_box_collision(
+		parent,
+		body_name,
+		Vector3(footprint.x, walk_h, footprint.y),
+		Vector3(0.0, deck_top_local_y - walk_h * 0.5, 0.0),
+	)
 
 
 func _add_box_collision(
