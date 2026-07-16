@@ -438,7 +438,27 @@ func _build_collision_concave(params: Dictionary) -> void:
 func _get_collision_parent() -> CollisionObject3D:
 	if not collision_parent_path.is_empty():
 		return get_node_or_null(collision_parent_path) as CollisionObject3D
-	return get_parent() as CollisionObject3D
+	var parent_body := get_parent() as CollisionObject3D
+	if parent_body != null:
+		return parent_body
+	## Orphan CollisionShape3D under a bare Node3D is ignored by physics — host a body.
+	if create_collision:
+		return _ensure_local_collision_body()
+	return null
+
+
+func _ensure_local_collision_body() -> StaticBody3D:
+	var existing := get_node_or_null("CollisionBody") as StaticBody3D
+	if existing != null:
+		return existing
+	var body := StaticBody3D.new()
+	body.name = "CollisionBody"
+	body.collision_layer = 1
+	body.collision_mask = 0
+	add_child(body)
+	if Engine.is_editor_hint() and is_inside_tree():
+		body.owner = get_tree().edited_scene_root
+	return body
 
 
 func _generated_prefix() -> String:

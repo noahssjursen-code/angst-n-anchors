@@ -1,7 +1,7 @@
 class_name ProvisionCraneEquipmentJob
 extends QuayEquipmentJob
 
-## QuayEquipmentJob adapter for ProvisionCrane container load/unload.
+## QuayEquipmentJob adapter for ProvisionCrane general-cargo load/unload.
 
 var _crane: ProvisionCrane
 
@@ -49,7 +49,7 @@ func can_serve(ship: BoatBody, mode: String) -> bool:
 	if m == MODE_LOAD:
 		return _has_yard_container() and _has_free_pad_slot(ship)
 	if m == MODE_UNLOAD:
-		return _has_ship_container(ship)
+		return _has_ship_container(ship) and _has_yard_slot()
 	return false
 
 
@@ -86,19 +86,21 @@ func serve_hint(ship: BoatBody, mode: String) -> String:
 	if ship == null or not is_instance_valid(ship):
 		return "No ship at berth"
 	if ship.get_cargo_pads().is_empty():
-		return "Ship has no container pads"
+		return "Ship has no cargo pads"
 	if not _crane.can_reach_ship(ship):
 		return "Sorry mac — crane won't reach."
 	var m := mode.strip_edges().to_lower()
 	if m == MODE_LOAD:
 		if not _has_yard_container():
-			return "No containers in the yard"
+			return "No general cargo in the yard"
 		if not _has_free_pad_slot(ship):
 			return "Cargo pad is full"
 		return ""
 	if m == MODE_UNLOAD:
 		if not _has_ship_container(ship):
-			return "No containers on ship"
+			return "No general cargo on ship"
+		if not _has_yard_slot():
+			return "Yard is full"
 		return ""
 	return "Unknown job"
 
@@ -114,6 +116,16 @@ func _has_free_pad_slot(ship: BoatBody) -> bool:
 	return false
 
 
+func _has_yard_slot() -> bool:
+	if _crane == null or not is_instance_valid(_crane) or not _crane.is_inside_tree():
+		return false
+	var pad := CargoSlotPadComponent.find_nearest_yard_pad(
+		_crane.get_tree(),
+		_crane.get_hook_global(),
+	)
+	return pad != null and pad.find_free_slot() >= 0
+
+
 func _has_ship_container(ship: BoatBody) -> bool:
 	for pad in ship.get_cargo_pads():
 		if not pad.iter_container_nodes().is_empty():
@@ -124,11 +136,22 @@ func _has_ship_container(ship: BoatBody) -> bool:
 func _find_yard_container() -> ContainerNode:
 	if _crane == null or not is_instance_valid(_crane) or not _crane.is_inside_tree():
 		return null
+	var yard := CargoSlotPadComponent.find_nearest_yard_pad(
+		_crane.get_tree(),
+		_crane.get_hook_global(),
+	)
+	var best: ContainerNode = null
+	var best_d := INF
 	for node in _crane.get_tree().get_nodes_in_group(ContainerNode.GROUP):
 		if node is not ContainerNode:
 			continue
 		var cn := node as ContainerNode
-		if CargoSlotPadComponent.find_pad_for_node(cn) != null:
+		if CargoSlotPadComponent.is_on_ship_pad(cn):
 			continue
-		return cn
-	return null
+		if yard != null and CargoSlotPadComponent.is_on_yard_pad(cn) and not yard.contains_node(cn):
+			continue
+		var d := _crane.get_hook_global().distance_to(cn.global_position)
+		if d < best_d:
+			best_d = d
+			best = cn
+	return best

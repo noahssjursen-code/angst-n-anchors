@@ -167,6 +167,34 @@ func auto_moor_at_call(tree: SceneTree, _call_id: String) -> void:
 	auto_moor_at_berth(tree, -1)
 
 
+## Tie bow/stern to the nearest posts in `posts` (not quay endpoints).
+## Used by harbour deploy so short ships on long berths don't stretch to the far bollards.
+func moor_to_nearest_of(posts: Array) -> void:
+	var candidates: Array[Node] = []
+	for raw in posts:
+		var p := raw as Node
+		if p == null or not is_instance_valid(p):
+			continue
+		if not p.has_method("get_anchor_global_position") and p is not Node3D:
+			continue
+		candidates.append(p)
+	if candidates.size() < 2:
+		push_warning("MooringComponent: need ≥2 bollards to moor_to_nearest_of")
+		return
+	var cleats := _ship_cleat_nodes()
+	if cleats.is_empty():
+		push_warning("MooringComponent: no cleats for moor_to_nearest_of")
+		return
+	var bow_pos := _mean_cleat_position(cleats, "bow")
+	var stern_pos := _mean_cleat_position(cleats, "stern")
+	var front := _closest_post_to(bow_pos, candidates, null)
+	var rear := _closest_post_to(stern_pos, candidates, front)
+	if front == null or rear == null:
+		push_warning("MooringComponent: could not pair bollards for moor_to_nearest_of")
+		return
+	moor_to_posts(front, rear)
+
+
 func _berth_bollard_candidates(tree: SceneTree, _berth_index: int) -> Array[Node]:
 	var out: Array[Node] = []
 	var dock := _find_port_dock()

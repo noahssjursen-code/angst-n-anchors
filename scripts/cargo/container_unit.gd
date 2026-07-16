@@ -1,17 +1,17 @@
 class_name ContainerUnit
 extends Resource
 
-## One cubed shipping container for general cargo.
-## Footprint is deck grid cells (1 m); default 4×4 m square (~2 wide on a 8 m pad).
+## One cubed general-cargo unit (break-bulk). Same footprint grid as shipping boxes.
+## Commodity id is usually provisions — not ISO shipping containers.
 
 const DEFAULT_FOOTPRINT := Vector2i(4, 4)
 const DEFAULT_SIZE_M := 4.0
 const DEFAULT_HEIGHT_M := 4.0
-const DEFAULT_COMMODITY := "containers"
+const DEFAULT_COMMODITY := "provisions"
 
 @export var id: String = ""
 @export var commodity_id: String = DEFAULT_COMMODITY
-@export var mass_kg: float = 12000.0
+@export var mass_kg: float = 3200.0
 @export var value_gold: int = 0
 @export var footprint: Vector2i = DEFAULT_FOOTPRINT
 @export var origin_port_id: String = ""
@@ -30,7 +30,10 @@ static func create(
 	if mass >= 0.0:
 		u.mass_kg = mass
 	else:
-		u.mass_kg = CommodityCatalog.container_mass_kg()
+		u.mass_kg = float(CommodityCatalog.commodity_info(u.commodity_id).get(
+			"mass_kg",
+			CommodityCatalog.general_cargo_mass_kg(),
+		))
 	u.value_gold = int(CommodityCatalog.commodity_info(u.commodity_id).get("value", 0))
 	return u
 
@@ -51,7 +54,7 @@ static func from_dict(data: Dictionary) -> ContainerUnit:
 	var u := ContainerUnit.new()
 	u.id = str(data.get("id", ""))
 	u.commodity_id = str(data.get("commodity_id", DEFAULT_COMMODITY))
-	u.mass_kg = float(data.get("mass_kg", CommodityCatalog.container_mass_kg()))
+	u.mass_kg = float(data.get("mass_kg", CommodityCatalog.general_cargo_mass_kg()))
 	u.value_gold = int(data.get("value_gold", 0))
 	var fp: Variant = data.get("footprint", [4, 4])
 	if fp is Array and (fp as Array).size() >= 2:

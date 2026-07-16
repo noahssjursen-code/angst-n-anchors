@@ -659,23 +659,32 @@ static func _mount_container_pad(
 ) -> void:
 	var mn := BrickLayout.zone_min(pad)
 	var mx := BrickLayout.zone_max(pad)
-	var w := float(mx.x - mn.x + 1) * DeckGrid.CELL_M
-	var l := float(mx.z - mn.z + 1) * DeckGrid.CELL_M
-	var sum := Vector3.ZERO
-	var n := 0
-	for ix in range(mn.x, mx.x + 1):
-		for iz in range(mn.z, mx.z + 1):
-			sum += grid.cell_center_local(Vector3i(ix, 0, iz))
-			n += 1
-	if n <= 0:
+	var fp := ContainerUnit.DEFAULT_FOOTPRINT
+	var cell_cols := mx.x - mn.x + 1
+	var cell_rows := mx.z - mn.z + 1
+	var slot_cols := cell_cols / fp.x
+	var slot_rows := cell_rows / fp.y
+	if slot_cols < 1 or slot_rows < 1:
+		push_warning(
+			"DeckFitout: container pad %d too small for %dx%d footprint (%dx%d cells)"
+			% [index, fp.x, fp.y, cell_cols, cell_rows]
+		)
 		return
+	var w := float(slot_cols * fp.x) * DeckGrid.CELL_M
+	var l := float(slot_rows * fp.y) * DeckGrid.CELL_M
+	var min_x := -grid.half_beam + float(mn.x) * DeckGrid.CELL_M
+	var min_z := -grid.half_loa + float(mn.z) * DeckGrid.CELL_M
 	var slot_pad := CargoSlotPadComponent.new()
 	slot_pad.name = "CargoSlotPad_%d" % index
 	slot_pad.deck_width_m = w
 	slot_pad.deck_length_m = l
 	slot_pad.cell_size_m = DeckGrid.CELL_M
-	var center := sum / float(n)
-	center.y = grid.deck_y + 0.06
+	slot_pad.container_footprint = fp
+	var center := Vector3(
+		min_x + w * 0.5,
+		grid.deck_y + 0.06,
+		min_z + l * 0.5,
+	)
 	slot_pad.position = center
 	root.add_child(slot_pad)
 

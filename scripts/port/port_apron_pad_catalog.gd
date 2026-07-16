@@ -124,6 +124,24 @@ const ROLES := {
 		"precinct": "trade_containers",
 		"commodity_ids": ["containers"],
 	},
+	"provisions_depot": {
+		"id": "provisions_depot",
+		"label": "General cargo depot",
+		"pad_template_id": "pad_2x2",
+		"kind": "trade",
+		"zone": ZONE_WATERSIDE,
+		"precinct": "trade_provisions",
+		"commodity_ids": ["provisions"],
+	},
+	"provisions_cold": {
+		"id": "provisions_cold",
+		"label": "General cargo store",
+		"pad_template_id": "pad_1x2",
+		"kind": "trade",
+		"zone": ZONE_WATERSIDE,
+		"precinct": "trade_provisions",
+		"commodity_ids": ["provisions"],
+	},
 }
 
 ## Always placed — harbourmaster / shipwright live here later.
@@ -146,6 +164,8 @@ const UNIVERSAL_V1 := [
 
 ## V1 trade roles — only when commodity is unlocked.
 const TRADE_V1 := [
+	"provisions_depot",
+	"provisions_cold",
 	"container_yard",
 	"container_stack",
 ]

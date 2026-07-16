@@ -18,51 +18,57 @@ var theme_id: String = ""
 ## Weights are by region only — size no longer picks a different economy.
 const THEMES: Array[Dictionary] = [
 	{
-		"id": "container_feeder",
-		"exports": ["containers"],
-		"imports": ["containers", "diesel"],
-		"w_mainland": 8.0, "w_fjord": 6.0, "w_archipelago": 7.0,
+		"id": "provisions_depot",
+		"exports": ["provisions"],
+		"imports": ["grain", "diesel"],
+		"w_mainland": 4.0, "w_fjord": 3.0, "w_archipelago": 5.0,
 	},
 	{
 		"id": "farm_harbour",
-		"exports": ["grain"],
-		"imports": ["containers", "diesel"],
+		"exports": ["grain", "provisions"],
+		"imports": ["diesel"],
 		"w_mainland": 7.0, "w_fjord": 3.0, "w_archipelago": 1.0,
 	},
 	{
 		"id": "mining_outpost",
 		"exports": ["iron_ore"],
-		"imports": ["containers", "diesel"],
+		"imports": ["provisions", "diesel"],
 		"w_mainland": 5.0, "w_fjord": 4.0, "w_archipelago": 2.0,
 	},
 	{
 		"id": "coal_port",
 		"exports": ["coal"],
-		"imports": ["containers", "diesel"],
+		"imports": ["provisions", "containers"],
 		"w_mainland": 4.0, "w_fjord": 3.0, "w_archipelago": 1.5,
 	},
 	{
 		"id": "refinery",
 		"exports": ["diesel"],
-		"imports": ["crude_oil", "containers"],
+		"imports": ["crude_oil", "provisions"],
 		"w_mainland": 1.5, "w_fjord": 2.0, "w_archipelago": 7.0,
 	},
 	{
 		"id": "lng_terminal",
 		"exports": ["lng"],
-		"imports": ["containers", "diesel"],
+		"imports": ["provisions", "containers"],
 		"w_mainland": 2.0, "w_fjord": 3.0, "w_archipelago": 5.0,
+	},
+	{
+		"id": "container_feeder",
+		"exports": ["containers"],
+		"imports": ["containers", "provisions"],
+		"w_mainland": 6.0, "w_fjord": 3.0, "w_archipelago": 4.0,
 	},
 	{
 		"id": "industrial_hub",
 		"exports": ["containers", "iron_ore"],
-		"imports": ["coal", "diesel"],
+		"imports": ["coal", "provisions"],
 		"w_mainland": 8.0, "w_fjord": 3.0, "w_archipelago": 3.0,
 	},
 	{
 		"id": "bulk_hub",
 		"exports": ["grain", "coal"],
-		"imports": ["containers", "diesel"],
+		"imports": ["provisions", "containers"],
 		"w_mainland": 6.0, "w_fjord": 2.0, "w_archipelago": 2.0,
 	},
 ]
@@ -186,8 +192,8 @@ static func _pick_theme(
 		total += w
 	if candidates.is_empty():
 		return {
-			"id": "fallback_containers",
-			"exports": ["containers"],
+			"id": "fallback_provisions",
+			"exports": ["provisions"],
 			"imports": ["diesel"],
 		}
 	var roll := rng.randf() * total

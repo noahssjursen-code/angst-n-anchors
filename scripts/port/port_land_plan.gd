@@ -408,7 +408,7 @@ static func _sprinkle_trade_decorations(
 	grid["points"] = kept
 
 
-## Live unlocks only. Export and import are separate offers (containers share one yard).
+## Live unlocks only. Export and import are separate offers (shipping containers share one yard).
 static func _trade_decoration_jobs(profile: PortTradeProfile) -> Array[Dictionary]:
 	var jobs: Array[Dictionary] = []
 	var seen_bidirectional: Dictionary = {}

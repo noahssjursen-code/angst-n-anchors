@@ -1,9 +1,9 @@
 class_name PortBerthPlan
 extends RefCounted
 
-## Plans docking stations from trade slots onto the asphalt dock face.
-## Fish/provisions hug the dock-face waterline with local edge orientation and
-## stay clear of quay loading roots. Dedicated cargo gets parallel quay arms.
+## Plans docking stations from trade slots.
+## Fish (legacy) may hug the asphalt dock face; general cargo and bulk/liquid
+## get dedicated quay fingers (short T/L arms off the harbour edge).
 
 const CoastTracer := preload("res://scripts/port/port_coast_tracer.gd")
 const CoastalPortPlacer := preload("res://scripts/world/coastal_port_placer.gd")
@@ -625,6 +625,8 @@ static func equipment_for_family(family: String) -> String:
 			return "equip_fish_derrick"
 		"container":
 			return "equip_sts_gantry"
+		"general":
+			return "equip_provision_crane"
 		"bulk_ore":
 			return "equip_grab_unloader"
 		"bulk_grain":

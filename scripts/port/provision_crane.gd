@@ -97,6 +97,8 @@ func reload_model() -> void:
 	_assembler = ASSEMBLER_SCRIPT.new()
 	_assembler.name = "Model"
 	_assembler.absolute_scale = model_scale
+	## Part meshes host their own StaticBody3D via MeshTransformer (pad/mast/boom…).
+	_assembler.build_part_colliders = true
 	add_child(_assembler)
 	_assembler.model_data_path = model_path
 	call_deferred("_bind_rig")
@@ -347,7 +349,8 @@ func attach_container(node: ContainerNode) -> bool:
 	node.rotation = Vector3.ZERO
 	_attached_container = node
 	node.notify_grabbed()
-	node.set_highlighted(true)
+	## Floor halo is pad-selection only — hide while airborne under the hook.
+	node.set_highlighted(false)
 	return true
 
 
@@ -363,6 +366,20 @@ func release_container() -> ContainerNode:
 	if is_inside_tree():
 		var pad := CargoSlotPadComponent.find_nearest_pad(get_tree(), hook_pos)
 		if pad != null and pad.try_place_container_node(node, hook_pos):
+			return node
+	return _drop_container_to_quay(node)
+
+
+func release_container_on_pad(pad: CargoSlotPadComponent) -> ContainerNode:
+	if _attached_container == null or not is_instance_valid(_attached_container):
+		_attached_container = null
+		return null
+	var node := _attached_container
+	_attached_container = null
+	node.set_highlighted(false)
+	node.notify_released()
+	if pad != null and is_instance_valid(pad) and is_inside_tree():
+		if pad.try_place_container_node(node, get_hook_global()):
 			return node
 	return _drop_container_to_quay(node)
 
@@ -399,7 +416,7 @@ func _drop_container_to_quay(node: ContainerNode) -> ContainerNode:
 func _quay_drop_parent() -> Node:
 	var drop_parent := get_parent()
 	while drop_parent != null and drop_parent.get_parent() != null \
-			and str(drop_parent.name) != "QuayRow" and not (drop_parent is CraneShowcase):
+			and str(drop_parent.name) != "QuayRow" and str(drop_parent.name) != "CraneShowcase":
 		if str(drop_parent.name).begins_with("Bay_"):
 			break
 		drop_parent = drop_parent.get_parent()
@@ -415,20 +432,24 @@ func ik_hook_to(delta: float, target: Vector3, hoist_mode: String = "track") -> 
 
 	var to_target := Vector2(target.x - pivot.x, target.z - pivot.z)
 	var to_hook := Vector2(hook.x - pivot.x, hook.z - pivot.z)
+	var slew_err := 0.0
 	if to_target.length() > 0.4 and to_hook.length() > 0.4:
-		var slew_err := rad_to_deg(to_hook.angle_to(to_target))
-		if absf(slew_err) > 1.5:
+		slew_err = rad_to_deg(to_hook.angle_to(to_target))
+		if absf(slew_err) > 2.0:
 			slew_degrees -= clampf(slew_err, -slew_step, slew_step)
 
-	if _boom != null and is_instance_valid(_boom):
-		var boom_fwd := -_boom.global_transform.basis.z
-		boom_fwd.y = 0.0
-		if boom_fwd.length_squared() > 0.0001:
-			boom_fwd = boom_fwd.normalized()
-			var rel := Vector3(target.x - pivot.x, 0.0, target.z - pivot.z)
-			var along := rel.dot(boom_fwd)
-			var want_z := clampf(-along, trolley_min_z_m, trolley_max_z_m)
-			trolley_z_m = move_toward(trolley_z_m, want_z, trolley_step)
+	## Trolley — radial reach from slew pivot. Gated on azimuth (like bulk boom IK)
+	## so slewing does not pump the talje in and out on a rotating jib bearing.
+	var target_reach := to_target.length()
+	var hook_reach := to_hook.length()
+	var reach_err := target_reach - hook_reach
+	var want_z := clampf(-target_reach, trolley_min_z_m, trolley_max_z_m)
+	if absf(slew_err) < 12.0 and target_reach > 0.4 and absf(want_z - trolley_z_m) > 0.5:
+		var reach_deadzone := 2.0 if hoist_mode == "raise" else 1.25
+		if absf(reach_err) > reach_deadzone:
+			var soft := clampf(absf(reach_err) / 8.0, 0.15, 1.0)
+			var rate := 0.35 if hoist_mode == "raise" else 0.55
+			trolley_z_m = move_toward(trolley_z_m, want_z, trolley_step * soft * rate)
 
 	match hoist_mode:
 		"raise":
@@ -453,7 +474,7 @@ func hook_horizontal_distance_to(target: Vector3) -> float:
 	return Vector2(target.x - hook.x, target.z - hook.z).length()
 
 
-func is_hook_near(target: Vector3, radius_m: float = NEAR_M) -> bool:
+func is_hook_near(target: Vector3, radius_m: float = 3.5) -> bool:
 	return hook_distance_to(target) <= radius_m
 
 
@@ -461,12 +482,22 @@ func is_hook_over(target: Vector3, radius_m: float = 4.0) -> bool:
 	return hook_horizontal_distance_to(target) <= radius_m
 
 
+## Trolley rail span along the jib (metres from slew pivot).
+func horizontal_reach_limits_m() -> Vector2:
+	var inner := absf(trolley_max_z_m)
+	var outer := absf(trolley_min_z_m)
+	if inner > outer:
+		var swap := inner
+		inner = outer
+		outer = swap
+	return Vector2(inner, outer)
+
+
 func can_reach_point(target: Vector3, margin_m: float = 3.0) -> bool:
 	var pivot := get_slew_pivot_global()
 	var horiz := Vector2(target.x - pivot.x, target.z - pivot.z).length()
-	var min_r := absf(trolley_min_z_m) - margin_m
-	var max_r := absf(trolley_max_z_m) + margin_m
-	return horiz >= min_r and horiz <= max_r
+	var limits := horizontal_reach_limits_m()
+	return horiz >= limits.x - margin_m and horiz <= limits.y + margin_m
 
 
 func can_reach_ship(ship: BoatBody) -> bool:
@@ -478,33 +509,33 @@ func can_reach_ship(ship: BoatBody) -> bool:
 	return can_reach_point(ship.global_position)
 
 
-func get_auto_operator() -> ProvisionCraneAutoOperator:
-	return get_node_or_null("AutoOperator") as ProvisionCraneAutoOperator
+func get_auto_operator() -> Node:
+	return get_node_or_null("AutoOperator")
 
 
 func start_auto_load(ship: BoatBody) -> bool:
 	var op := get_auto_operator()
-	if op == null:
+	if op == null or not op.has_method("start_load"):
 		return false
 	return op.start_load(ship)
 
 
 func start_auto_unload(ship: BoatBody) -> bool:
 	var op := get_auto_operator()
-	if op == null:
+	if op == null or not op.has_method("start_unload"):
 		return false
 	return op.start_unload(ship)
 
 
 func stop_auto() -> void:
 	var op := get_auto_operator()
-	if op != null:
+	if op != null and op.has_method("stop"):
 		op.stop()
 
 
 func is_auto_active() -> bool:
 	var op := get_auto_operator()
-	return op != null and op.is_active()
+	return op != null and op.has_method("is_active") and op.is_active()
 
 
 func _tick_attached_container() -> void:

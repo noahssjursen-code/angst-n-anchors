@@ -445,6 +445,11 @@ func _draw_port_card(
 	var export_id := str(info.get("commodity_export", ""))
 	var export_label := CommodityCatalog.commodity_display(export_id) if not export_id.is_empty() \
 			else "—"
+	var imports: Array = info.get("commodity_imports", []) as Array
+	var import_bits: PackedStringArray = PackedStringArray()
+	for raw in imports:
+		import_bits.append(CommodityCatalog.commodity_display(str(raw)))
+	var import_line := ", ".join(import_bits) if not import_bits.is_empty() else "—"
 	var rows: Array[String] = [
 		str(info.get("display_name", port_id)).to_upper(),
 		"%s  ·  size %d  ·  %d berths" % [
@@ -453,6 +458,7 @@ func _draw_port_card(
 			int(info.get("berth_count", 1)),
 		],
 		"Export %s   Pop %d" % [export_label, int(info.get("population", 0))],
+		"Imports %s" % import_line,
 		"Class %s   Range %s" % [
 			str(info.get("max_ship_class_name", "Vessel")),
 			range,

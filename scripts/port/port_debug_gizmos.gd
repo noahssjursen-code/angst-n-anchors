@@ -98,10 +98,14 @@ func _unbind_harbour_signals() -> void:
 
 
 func _on_harbour_occupancy_changed(_berth_id: String = "", _ship: BoatBody = null) -> void:
-	_refresh_harbour_berths()
+	## Defer — plug/unplug often fires from BoatBody._exit_tree while the scene
+	## is mid-teardown; stamping globals synchronously hits !is_inside_tree().
+	call_deferred("_refresh_harbour_berths")
 
 
 func _refresh_harbour_berths() -> void:
+	if not is_inside_tree():
+		return
 	var layer := get_node_or_null(LAYER_HARBOUR_BERTHS) as Node3D
 	if layer == null:
 		return
@@ -212,17 +216,20 @@ func _rebuild() -> void:
 
 
 func _stamp_harbour_berths() -> void:
+	if not is_inside_tree():
+		return
 	var layer := _ensure_layer(LAYER_HARBOUR_BERTHS)
 	if _harbour == null:
 		return
 	for slot in _harbour.berths():
 		var s := slot as QuayBerthSlot
-		if s == null or not is_instance_valid(s):
+		if s == null or not is_instance_valid(s) or not s.is_inside_tree():
 			continue
 		var occupied := _harbour.moored_ship(s.berth_id) != null
 		var color := Color(0.95, 0.35, 0.2, 0.55) if occupied else Color(0.25, 0.85, 0.55, 0.45)
 		var half_l := maxf(s.length_m * 0.45, 8.0)
 		var half_w := maxf(s.width_m * 0.35, 6.0)
+		var slot_xf := s.global_transform
 		var box := MeshBuilder.box(
 			Vector3(half_w * 2.0, 0.8, half_l * 2.0),
 			color,
@@ -231,8 +238,7 @@ func _stamp_harbour_berths() -> void:
 		)
 		box.name = "HarbourBerth_%s" % s.station_id.replace("/", "_")
 		layer.add_child(box)
-		box.global_position = s.global_position + Vector3(0.0, 1.2, 0.0)
-		box.global_rotation = s.global_rotation
+		box.global_transform = Transform3D(slot_xf.basis, slot_xf.origin + Vector3(0.0, 1.2, 0.0))
 		var lbl := Label3D.new()
 		lbl.name = "HarbourBerthLbl_%s" % s.station_id.replace("/", "_")
 		lbl.text = "%s\n%s" % [
@@ -244,7 +250,7 @@ func _stamp_harbour_berths() -> void:
 		lbl.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 		lbl.no_depth_test = true
 		layer.add_child(lbl)
-		lbl.global_position = s.global_position + Vector3(0.0, 14.0, 0.0)
+		lbl.global_position = slot_xf.origin + Vector3(0.0, 14.0, 0.0)
 
 
 func _stamp_berth_plan(plan: Dictionary) -> void:

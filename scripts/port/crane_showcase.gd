@@ -13,6 +13,10 @@ const PROVISION_CRANE_SCRIPT := preload("res://scripts/port/provision_crane.gd")
 const CRANE_OPERATOR_SCRIPT := preload("res://scripts/port/crane_operator_npc.gd")
 const DOCKED_PREBUILT_ID := "bulk_small"
 const PROVISION_DOCKED_PREBUILT_ID := "28_10_m"
+const YARD_PAD_WIDTH_M := 8.0
+const YARD_SLOT_ROWS := 16
+const YARD_PAD_LENGTH_M := float(YARD_SLOT_ROWS) * ContainerUnit.DEFAULT_SIZE_M
+const YARD_START_CONTAINERS := 16
 const SHOWCASE_PORT_ID := "crane_showcase"
 const SHOWCASE_BERTH_ID := "crane_showcase/ore_quay"
 const SHOWCASE_PROVISION_BERTH_ID := "crane_showcase/container_quay"
@@ -64,6 +68,7 @@ var _orbit_pitch := -22.0
 var _focus_tool := true
 var _focus := Vector3(18.0, 8.0, 0.0)
 var _hud_timer := 0.0
+var _last_action_hint := ""
 
 
 func _ready() -> void:
@@ -277,7 +282,7 @@ func _refresh_hud() -> void:
 		if _bulk_auto != null:
 			lines.append(_bulk_auto.get_status_line())
 			if _bulk_auto.is_active():
-				lines.append("Ellipse  A=green pickup · B=orange drop · cyan=arc")
+				lines.append("Ellipse  A=green pickup · B=orange drop · cyan=arc  (F3 then G)")
 			lines.append("")
 		if _bulk_crane != null:
 			lines.append_array(_bulk_crane.get_status_lines())
@@ -317,8 +322,14 @@ func _refresh_hud() -> void:
 			lines.append("")
 		if _provision_auto != null:
 			lines.append(_provision_auto.get_status_line())
+			if _provision_auto.is_active():
+				lines.append("Path  A=green pickup · B=orange drop · cyan=travel  (F3 then G)")
+			lines.append("")
 		if _provision_crane != null:
 			lines.append_array(_provision_crane.get_status_lines())
+	if not _last_action_hint.is_empty():
+		lines.append("")
+		lines.append(_last_action_hint)
 	_hud.text = "\n".join(lines)
 
 
@@ -358,7 +369,7 @@ func _spawn_bay_provisions(bay: Node3D) -> void:
 	_spawn_docked_ship(bay, PROVISION_DOCKED_PREBUILT_ID, false)
 	var label := Label3D.new()
 	label.name = "BayLabel"
-	label.text = "PROVISIONS / GENERAL"
+	label.text = "GENERAL CARGO"
 	label.font = HudStyle.font_display()
 	label.font_size = 96
 	label.pixel_size = 0.012
@@ -521,9 +532,9 @@ func _setup_provision_harbour(bay: Node3D) -> void:
 	var slot := QuayBerthSlot.new()
 	slot.setup(
 		SHOWCASE_PROVISION_BERTH_ID,
-		"container_quay",
-		"container",
-		PackedStringArray(["containers"]),
+		"general_cargo_quay",
+		"general",
+		PackedStringArray(["provisions"]),
 		QUAY_LENGTH_M,
 		QUAY_WIDTH_M,
 		1.0,
@@ -572,11 +583,6 @@ func _stamp_crate_yard(parent: Node3D) -> void:
 
 	var half_w := QUAY_WIDTH_M * 0.5
 	var lane_x := -(half_w - STORAGE_LANE_W * 0.5)
-	var drop := Node3D.new()
-	drop.name = "YardDrop"
-	drop.position = Vector3(lane_x, QUAY_DECK_TOP_Y, -18.0)
-	drop.add_to_group("container_yard_drop")
-	yard.add_child(drop)
 	var stripe := MeshBuilder.box(
 		Vector3(1.1, 0.85, QUAY_LENGTH_M * 0.9),
 		Color(0.18, 0.32, 0.48),
@@ -587,29 +593,29 @@ func _stamp_crate_yard(parent: Node3D) -> void:
 	stripe.position = Vector3(-(half_w - 0.55), QUAY_DECK_TOP_Y + 0.08, 0.0)
 	yard.add_child(stripe)
 
-	var stack_z := [-40.0, -18.0, 6.0, 30.0]
-	for si in range(stack_z.size()):
-		var stack := Node3D.new()
-		stack.name = "ContainerStack_%d" % si
-		stack.position = Vector3(lane_x, QUAY_DECK_TOP_Y, float(stack_z[si]))
-		yard.add_child(stack)
-		var cols := 2
-		var rows := 2
-		var tiers := 2
-		for t in range(tiers):
-			for r in range(rows):
-				for c in range(cols):
-					var unit := ContainerFactory.make_one()
-					var node := ContainerNode.new()
-					node.name = "Container_%d_%d_%d" % [si, t, c * rows + r]
-					var gap := 0.12
-					node.position = Vector3(
-						(float(c) - float(cols - 1) * 0.5) * (ContainerUnit.DEFAULT_SIZE_M + gap),
-						float(t) * (ContainerUnit.DEFAULT_HEIGHT_M + gap),
-						(float(r) - float(rows - 1) * 0.5) * (ContainerUnit.DEFAULT_SIZE_M + gap),
-					)
-					stack.add_child(node)
-					node.setup(unit)
+	var yard_pad := CargoSlotPadComponent.new()
+	yard_pad.name = "YardSlotPad"
+	yard_pad.is_quay_yard_pad = true
+	yard_pad.affects_boat_cargo_mass = false
+	yard_pad.deck_width_m = YARD_PAD_WIDTH_M
+	yard_pad.deck_length_m = YARD_PAD_LENGTH_M
+	yard_pad.cell_size_m = 1.0
+	yard_pad.container_footprint = ContainerUnit.DEFAULT_FOOTPRINT
+	yard_pad.pad_color = Color(0.14, 0.22, 0.34, 0.88)
+	yard_pad.slot_line_color = Color(0.42, 0.62, 0.82, 0.55)
+	yard_pad.position = Vector3(lane_x, QUAY_DECK_TOP_Y + 0.06, 0.0)
+	yard.add_child(yard_pad)
+
+	var drop := Node3D.new()
+	drop.name = "YardDrop"
+	drop.position = Vector3.ZERO
+	drop.add_to_group("container_yard_drop")
+	yard_pad.add_child(drop)
+
+	for i in range(YARD_START_CONTAINERS):
+		var unit := ContainerFactory.make_one()
+		if yard_pad.add_container(unit) < 0:
+			break
 
 
 func _crane_mount_position() -> Vector3:
@@ -674,10 +680,15 @@ func _start_auto_load() -> void:
 	var harbour := _active_harbour()
 	var berth := _active_berth_id()
 	if harbour != null:
+		var ok := false
 		if str(_active_bay().get("crane", "")) == "bulk":
-			harbour.request_load(berth, "iron_ore")
+			ok = harbour.request_load(berth, "iron_ore")
 		else:
-			harbour.request_load(berth)
+			ok = harbour.request_load(berth)
+		if not ok:
+			_last_action_hint = "Load refused — crane reach, yard stock, or pad space"
+		else:
+			_last_action_hint = ""
 		return
 	var ship := _docked_ship()
 	if ship == null:

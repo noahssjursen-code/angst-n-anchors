@@ -426,7 +426,7 @@ func _refresh_pick_panel() -> void:
 		pick_title.text = "Select a harbour"
 		pick_meta.text = "Click a marker on the chart"
 		pick_body.text = \
-				"Your home port is where you begin. Look for a harbour that matches the trade you want — fish, ore, timber, containers."
+				"Your home port is where you begin. Look for a harbour that matches the trade you want — ore, grain, general cargo, or containers."
 		if pick_confirm != null:
 			pick_confirm.disabled = true
 		return

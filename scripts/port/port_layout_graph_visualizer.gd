@@ -36,6 +36,9 @@ const DECK_WALK_THICKNESS_M := 0.55
 const BULK_CRANE_SCRIPT := preload("res://scripts/port/bulk_crane.gd")
 const BULK_CRANE_AUTO_SCRIPT := preload("res://scripts/port/bulk_crane_auto_operator.gd")
 const BULK_EQUIP_JOB_SCRIPT := preload("res://scripts/port/bulk_crane_equipment_job.gd")
+const PROVISION_CRANE_SCRIPT := preload("res://scripts/port/provision_crane.gd")
+const PROVISION_CRANE_AUTO_SCRIPT := preload("res://scripts/port/provision_crane_auto_operator.gd")
+const PROVISION_EQUIP_JOB_SCRIPT := preload("res://scripts/port/provision_crane_equipment_job.gd")
 const CRANE_OPERATOR_SCRIPT := preload("res://scripts/port/crane_operator_npc.gd")
 const MOORING_POST_SCRIPT := preload("res://scripts/port/mooring_post.gd")
 
@@ -277,6 +280,12 @@ func _stamp_foundation_walk_boxes(
 		)
 
 
+func _foundation_surface_y() -> float:
+	var foundation := _graph.initial_attributes.get("foundation", {}) as Dictionary
+	return float(foundation.get("surface_y_m", PortCoastTracer.FOUNDATION_SURFACE_Y_M)) \
+			+ PortCoastTracer.FOUNDATION_TERRAIN_CLEARANCE_M
+
+
 ## Trade berths planned on the asphalt dock face — wide decks with gear + yard.
 func _stamp_berth_terminals() -> void:
 	if not show_equipment_shapes:
@@ -284,9 +293,7 @@ func _stamp_berth_terminals() -> void:
 	var plan := _graph.initial_attributes.get("berth_plan", {}) as Dictionary
 	if plan.is_empty():
 		return
-	var foundation := _graph.initial_attributes.get("foundation", {}) as Dictionary
-	var surface_y := float(foundation.get("surface_y_m", PortCoastTracer.FOUNDATION_SURFACE_Y_M)) \
-			+ PortCoastTracer.FOUNDATION_TERRAIN_CLEARANCE_M
+	var surface_y := _foundation_surface_y()
 	var root := Node3D.new()
 	root.name = "BerthTerminals"
 	add_child(root)
@@ -570,7 +577,7 @@ func _stamp_berth_quay(
 			"BerthLabel_%s" % str(station.get("id", "quay")),
 			"%s\n%.0f m quay" % ["\n".join(zone_bits), length_m],
 			Vector3(mid.x, surface_y + 18.0, mid.y) + Vector3(seaward.x, 0.0, seaward.y) * (length_m * 0.15),
-			CommodityCatalog.commodity_color(str((station.get("commodities", ["containers"]) as Array)[0])) \
+			CommodityCatalog.commodity_color(str((station.get("commodities", ["provisions"]) as Array)[0])) \
 					if not (station.get("commodities", []) as Array).is_empty() \
 					else family_color.lightened(0.2),
 			0.03,
@@ -764,6 +771,24 @@ func _stamp_quay_storage_lane(
 			"t1": 1.0,
 			"label": CommodityCatalog.terminal_family_display(family),
 		}]
+	## General cargo: one live yard pad per crane bay (same plan as crane lane).
+	var general_tools := _plan_quay_tools(station, usable_len, z0)
+	var general_bay_i := 0
+	for tool in general_tools:
+		if str(tool.get("family", "")) != "general":
+			continue
+		_stamp_general_cargo_quay_yard(
+			lane,
+			lane_x,
+			lane_w,
+			float(tool.get("bay_len", usable_len * 0.85)),
+			float(tool.get("z", 0.0)),
+			slot,
+			general_bay_i,
+			str(tool.get("role", "")),
+		)
+		general_bay_i += 1
+
 	for zone_index in range(zones.size()):
 		var zone: Dictionary = zones[zone_index]
 		var t0 := float(zone.get("t0", 0.0))
@@ -778,47 +803,49 @@ func _stamp_quay_storage_lane(
 		if color_arr.size() >= 3:
 			color = Color(float(color_arr[0]), float(color_arr[1]), float(color_arr[2]))
 
-		## Full commodity colour on the storage apron — readable from above.
-		## Bulk ore skips the pad: stockpile mounds already mark the zone.
-		if zone_family != "bulk_ore":
-			var apron := MeshBuilder.box(
-				Vector3(lane_w * 0.96, 0.22, zone_len * 0.96),
-				color,
-				0.9,
-				0.0,
-			)
-			apron.name = "ZoneApron_%d" % zone_index
-			apron.position = Vector3(lane_x, QUAY_DECK_TOP_LOCAL_Y + 0.12, zone_mid_z)
-			lane.add_child(apron)
-
-		var pad_len := clampf(zone_len * 0.42, 14.0, 36.0)
-		var gap := 3.5
-		var count := maxi(1, int(floor((zone_len * 0.9 + gap) / (pad_len + gap))))
-		var span := float(count) * pad_len + float(maxi(count - 1, 0)) * gap
-		var start_z := zone_mid_z - span * 0.5 + pad_len * 0.5
-		var stack_w := lane_w * 0.82
-		for pad_i in range(count):
-			var z := start_z + float(pad_i) * (pad_len + gap)
-			var height := _storage_stack_height(zone_family, pad_i)
-			var stack_size := Vector3(stack_w, height, pad_len * 0.88)
-			var stack: Node3D
-			if zone_family == "bulk_ore":
-				var cid := commodity_id if not commodity_id.is_empty() else "iron_ore"
-				var mound := OreMound.create(
-					cid,
-					stack_size,
-					cid.hash() + pad_i * 17 + zone_index * 31,
+		## Non-general families keep decorative storage stacks / mounds.
+		if zone_family != "general":
+			## Full commodity colour on the storage apron — readable from above.
+			## Bulk ore skips the pad: stockpile mounds already mark the zone.
+			if zone_family != "bulk_ore":
+				var apron := MeshBuilder.box(
+					Vector3(lane_w * 0.96, 0.22, zone_len * 0.96),
+					color,
+					0.9,
+					0.0,
 				)
-				mound.name = "Cargo_%d_%d" % [zone_index, pad_i]
-				mound.position = Vector3(lane_x, QUAY_DECK_TOP_LOCAL_Y, z)
-				lane.add_child(mound)
-				if slot != null and _harbour != null:
-					_harbour.register_yard(mound, slot.berth_id)
-				continue
-			stack = _make_storage_stack(zone_family, color, stack_size, commodity_id)
-			stack.name = "Cargo_%d_%d" % [zone_index, pad_i]
-			stack.position = Vector3(lane_x, QUAY_DECK_TOP_LOCAL_Y, z)
-			lane.add_child(stack)
+				apron.name = "ZoneApron_%d" % zone_index
+				apron.position = Vector3(lane_x, QUAY_DECK_TOP_LOCAL_Y + 0.12, zone_mid_z)
+				lane.add_child(apron)
+
+			var pad_len := clampf(zone_len * 0.42, 14.0, 36.0)
+			var gap := 3.5
+			var count := maxi(1, int(floor((zone_len * 0.9 + gap) / (pad_len + gap))))
+			var span := float(count) * pad_len + float(maxi(count - 1, 0)) * gap
+			var start_z := zone_mid_z - span * 0.5 + pad_len * 0.5
+			var stack_w := lane_w * 0.82
+			for pad_i in range(count):
+				var z := start_z + float(pad_i) * (pad_len + gap)
+				var height := _storage_stack_height(zone_family, pad_i)
+				var stack_size := Vector3(stack_w, height, pad_len * 0.88)
+				var stack: Node3D
+				if zone_family == "bulk_ore":
+					var cid := commodity_id if not commodity_id.is_empty() else "iron_ore"
+					var mound := OreMound.create(
+						cid,
+						stack_size,
+						cid.hash() + pad_i * 17 + zone_index * 31,
+					)
+					mound.name = "Cargo_%d_%d" % [zone_index, pad_i]
+					mound.position = Vector3(lane_x, QUAY_DECK_TOP_LOCAL_Y, z)
+					lane.add_child(mound)
+					if slot != null and _harbour != null:
+						_harbour.register_yard(mound, slot.berth_id)
+					continue
+				stack = _make_storage_stack(zone_family, color, stack_size, commodity_id)
+				stack.name = "Cargo_%d_%d" % [zone_index, pad_i]
+				stack.position = Vector3(lane_x, QUAY_DECK_TOP_LOCAL_Y, z)
+				lane.add_child(stack)
 
 		if show_module_labels:
 			var role := str(zone.get("role", ""))
@@ -836,6 +863,89 @@ func _stamp_quay_storage_lane(
 			)
 
 
+## Shared crane/yard bay plan — one entry per tool along the quay.
+## Each: { z, family, role, bay_len }.
+func _plan_quay_tools(station: Dictionary, usable_len: float, z0: float) -> Array[Dictionary]:
+	var tools: Array[Dictionary] = []
+	var zones: Array = station.get("zones", []) as Array
+	var family_for_spacing := str(station.get("family", "general"))
+	var station_role := str(station.get("role", ""))
+	## Bulk grab unloaders need denser coverage — short boats only sit under one bay.
+	var bulk_spacing_m := 32.0
+	if zones.size() >= 2:
+		for zone in zones:
+			var zd := zone as Dictionary
+			var t0 := float(zd.get("t0", 0.0))
+			var t1 := float(zd.get("t1", 1.0))
+			var zone_mid := z0 + usable_len * ((t0 + t1) * 0.5)
+			var zone_len := usable_len * maxf(t1 - t0, 0.05)
+			var zone_family := str(zd.get("family", family_for_spacing))
+			var zone_role := str(zd.get("role", station_role))
+			if zone_family.begins_with("bulk") and zone_len >= bulk_spacing_m * 1.5:
+				var count := maxi(1, int(ceil(zone_len / bulk_spacing_m)))
+				var span := minf(zone_len * 0.9, float(maxi(count - 1, 0)) * bulk_spacing_m)
+				var start := zone_mid - span * 0.5
+				var step := span / float(maxi(count - 1, 1)) if count > 1 else 0.0
+				var bay_len := zone_len / float(count)
+				for i in range(count):
+					tools.append({
+						"z": start + float(i) * step,
+						"family": zone_family,
+						"role": zone_role,
+						"bay_len": bay_len,
+					})
+			else:
+				tools.append({
+					"z": zone_mid,
+					"family": zone_family,
+					"role": zone_role,
+					"bay_len": zone_len,
+				})
+		return tools
+
+	## Prefer the sole zone's role when present (station dict uses "roles" array).
+	var spaced_role := station_role
+	var spaced_family := family_for_spacing
+	if zones.size() == 1:
+		var sole := zones[0] as Dictionary
+		spaced_role = str(sole.get("role", spaced_role))
+		spaced_family = str(sole.get("family", spaced_family))
+	elif spaced_role.is_empty():
+		var roles: Array = station.get("roles", []) as Array
+		if roles.size() == 1:
+			spaced_role = str(roles[0])
+		elif roles.has("import") and roles.has("export"):
+			spaced_role = "import_export"
+
+	var tool_count := 1
+	if spaced_family.begins_with("bulk"):
+		tool_count = maxi(1, int(ceil(usable_len / bulk_spacing_m)))
+	elif usable_len >= 160.0:
+		tool_count = 3
+	elif usable_len >= 90.0:
+		tool_count = 2
+	var bay_len := usable_len / float(tool_count)
+	if tool_count == 1:
+		tools.append({
+			"z": 0.0,
+			"family": spaced_family,
+			"role": spaced_role,
+			"bay_len": usable_len * 0.85,
+		})
+		return tools
+	var tool_span := usable_len * (0.88 if spaced_family.begins_with("bulk") else 0.72)
+	var step := tool_span / float(tool_count - 1)
+	var start_z := z0 + (usable_len - tool_span) * 0.5
+	for index in range(tool_count):
+		tools.append({
+			"z": start_z + float(index) * step,
+			"family": spaced_family,
+			"role": spaced_role,
+			"bay_len": bay_len * 0.92,
+		})
+	return tools
+
+
 ## Load/unload tools — one per commodity zone when shared, else spaced by length.
 func _stamp_quay_crane_lane(
 		terminal: Node3D,
@@ -851,48 +961,7 @@ func _stamp_quay_crane_lane(
 	lane.name = "CraneLane"
 	terminal.add_child(lane)
 
-	var zones: Array = station.get("zones", []) as Array
-	## Each entry: { "z": float, "family": String }
-	var tools: Array[Dictionary] = []
-	var family_for_spacing := str(station.get("family", "general"))
-	## Bulk grab unloaders need denser coverage — short boats only sit under one bay.
-	var bulk_spacing_m := 32.0
-	if zones.size() >= 2:
-		for zone in zones:
-			var t0 := float(zone.get("t0", 0.0))
-			var t1 := float(zone.get("t1", 1.0))
-			var zone_mid := z0 + usable_len * ((t0 + t1) * 0.5)
-			var zone_len := usable_len * maxf(t1 - t0, 0.05)
-			var zone_family := str((zone as Dictionary).get("family", family_for_spacing))
-			if zone_family.begins_with("bulk") and zone_len >= bulk_spacing_m * 1.5:
-				var count := maxi(1, int(ceil(zone_len / bulk_spacing_m)))
-				var span := minf(zone_len * 0.9, float(maxi(count - 1, 0)) * bulk_spacing_m)
-				var start := zone_mid - span * 0.5
-				var step := span / float(maxi(count - 1, 1)) if count > 1 else 0.0
-				for i in range(count):
-					tools.append({"z": start + float(i) * step, "family": zone_family})
-			else:
-				tools.append({"z": zone_mid, "family": zone_family})
-	else:
-		var tool_count := 1
-		if family_for_spacing.begins_with("bulk"):
-			tool_count = maxi(1, int(ceil(usable_len / bulk_spacing_m)))
-		elif usable_len >= 160.0:
-			tool_count = 3
-		elif usable_len >= 90.0:
-			tool_count = 2
-		if tool_count == 1:
-			tools.append({"z": 0.0, "family": family_for_spacing})
-		else:
-			var tool_span := usable_len * (0.88 if family_for_spacing.begins_with("bulk") else 0.72)
-			var step := tool_span / float(tool_count - 1)
-			var start_z := z0 + (usable_len - tool_span) * 0.5
-			for index in range(tool_count):
-				tools.append({
-					"z": start_z + float(index) * step,
-					"family": family_for_spacing,
-				})
-
+	var tools := _plan_quay_tools(station, usable_len, z0)
 	var family := str(station.get("family", "general"))
 	var fp := Vector3(
 		clampf(lane_w * 0.85, 10.0, 28.0),
@@ -942,30 +1011,49 @@ func _make_storage_stack(
 	var root := Node3D.new()
 	match family:
 		"liquid":
+			var tank_h := size.y
 			var tank := MeshBuilder.cylinder(
 				minf(size.x, size.z) * 0.38,
-				size.y,
+				tank_h,
 				family_color.lightened(0.05),
 				0.85,
 				0.15,
 			)
+			tank.position.y = tank_h * 0.5
 			root.add_child(tank)
 		"bulk_grain":
-			root.add_child(MeshBuilder.box(size, family_color.darkened(0.1), 0.95, 0.0))
-		"container":
+			var grain_h := size.y * 0.88
+			var grain := MeshBuilder.box(
+				Vector3(size.x * 0.9, grain_h, size.z * 0.85),
+				family_color.darkened(0.1),
+				0.95,
+				0.0,
+			)
+			grain.position.y = grain_h * 0.5
+			root.add_child(grain)
+		"container", "general":
 			var tiers := maxi(1, int(round(size.y / 2.6)))
 			var tier_h := size.y / float(tiers)
 			for tier in range(tiers):
+				var box_h := tier_h * 0.88
 				var box := MeshBuilder.box(
-					Vector3(size.x * 0.92, tier_h * 0.88, size.z * 0.9),
+					Vector3(size.x * 0.92, box_h, size.z * 0.9),
 					family_color.lightened(0.05 * float(tier % 2)),
 					0.8,
 					0.05,
 				)
-				box.position = Vector3(0.0, -size.y * 0.5 + tier_h * (float(tier) + 0.5), 0.0)
+				box.position = Vector3(0.0, box_h * 0.5 + tier_h * float(tier), 0.0)
 				root.add_child(box)
 		_:
-			root.add_child(MeshBuilder.box(size * Vector3(0.9, 1.0, 0.85), family_color.darkened(0.05), 0.9, 0.0))
+			var lump_h := size.y * 0.85
+			var lump := MeshBuilder.box(
+				size * Vector3(0.9, 0.85, 0.85),
+				family_color.darkened(0.05),
+				0.9,
+				0.0,
+			)
+			lump.position.y = lump_h * 0.5
+			root.add_child(lump)
 	return root
 
 
@@ -1201,6 +1289,7 @@ func _stamp_land_structures() -> void:
 	var root := Node3D.new()
 	root.name = "LandDecor"
 	add_child(root)
+	var apron_y := _foundation_surface_y()
 	for index in range(points.size()):
 		var entry: Dictionary = points[index]
 		var local_arr: Array = entry.get("local", [0.0, 0.0]) as Array
@@ -1209,11 +1298,13 @@ func _stamp_land_structures() -> void:
 		var lx := float(local_arr[0])
 		var lz := float(local_arr[1])
 		var terrain_y := float(entry.get("y", 0.0))
+		## Apron pavement is flattened — never let decor sample below the crown.
+		var place_y := maxf(terrain_y, apron_y)
 		var kind := str(entry.get("kind", PortLandPlan.KIND_HOUSE))
 		if kind == PortLandPlan.KIND_TRADE:
-			_stamp_land_trade_point(root, entry, index, lx, terrain_y, lz)
+			_stamp_land_trade_point(root, entry, index, lx, place_y, lz)
 		else:
-			_stamp_land_house_point(root, entry, index, lx, terrain_y, lz)
+			_stamp_land_house_point(root, entry, index, lx, place_y, lz)
 
 
 func _stamp_land_house_point(
@@ -1498,15 +1589,16 @@ func _stamp_land_minehead(root: Node3D, size: Vector3, color: Color) -> void:
 func _stamp_land_yard_blocks(root: Node3D, size: Vector3, color: Color) -> void:
 	for row in range(2):
 		for col in range(3):
+			var h := size.y * (0.55 + float(row) * 0.2)
 			var block := MeshBuilder.box(
-				Vector3(size.x * 0.22, size.y * (0.55 + float(row) * 0.2), size.z * 0.28),
+				Vector3(size.x * 0.22, h, size.z * 0.28),
 				color.darkened(0.05 * float(col)),
 				0.85,
 				0.05,
 			)
 			block.position = Vector3(
 				(float(col) - 1.0) * size.x * 0.28,
-				size.y * (0.3 + float(row) * 0.25),
+				h * 0.5,
 				(float(row) - 0.5) * size.z * 0.35,
 			)
 			root.add_child(block)
@@ -1605,7 +1697,15 @@ func _stamp_berth_asphalt(parent: Node3D, station: Dictionary, surface_y: float)
 		## Keep gear near the apron junction, not the outer tip.
 		gear_root.position = Vector3(length * 0.28, 0.0, -depth * 0.22)
 		pad_root.add_child(gear_root)
-		_stamp_equipment_kind(gear_root, kind, Vector3(length * 0.35, 1.0, depth * 0.35), family)
+		_stamp_equipment_kind(
+			gear_root,
+			kind,
+			Vector3(length * 0.35, 1.0, depth * 0.35),
+			family,
+			1.0,
+			slot.berth_id if slot != null else "",
+			0,
+		)
 	if show_module_labels:
 		var role := str(station.get("role", "")).to_upper()
 		_label(
@@ -1634,6 +1734,8 @@ func _stamp_equipment_kind(
 	match kind:
 		"equip_sts_gantry":
 			_stamp_sts_gantry_at(root, footprint)
+		"equip_provision_crane":
+			_stamp_provision_crane_at(root, footprint, berth_sign, berth_id, tool_index)
 		"equip_grab_unloader":
 			_stamp_bulk_crane_at(root, footprint, berth_sign, berth_id, tool_index)
 		"equip_grain_elevator":
@@ -1676,6 +1778,96 @@ func _stamp_sts_gantry_at(root: Node3D, footprint: Vector3) -> void:
 	var beam := MeshBuilder.box(Vector3(footprint.x * 0.82, 1.2, 2.4), STEEL, 0.8, 0.3)
 	beam.position = Vector3(0.0, leg_h - 0.6, 0.0)
 	root.add_child(beam)
+
+
+## Live general-cargo yard on a dedicated quay finger deck (pier crown Y).
+## Export yards read full; import yards nearly empty.
+func _stamp_general_cargo_quay_yard(
+		lane: Node3D,
+		lane_x: float,
+		lane_w: float,
+		zone_len: float,
+		zone_mid_z: float,
+		slot: QuayBerthSlot,
+		zone_index: int,
+		role: String = "",
+) -> void:
+	var yard_w := clampf(lane_w * 0.88, 8.0, 28.0)
+	var yard_len := clampf(zone_len * 0.88, 12.0, 80.0)
+	## Snap length to whole container footprints so slots pack cleanly.
+	var fp := ContainerUnit.DEFAULT_FOOTPRINT
+	var cell := 1.0
+	yard_w = maxf(float(fp.x) * cell, floor(yard_w / (float(fp.x) * cell)) * float(fp.x) * cell)
+	yard_len = maxf(float(fp.y) * cell, floor(yard_len / (float(fp.y) * cell)) * float(fp.y) * cell)
+
+	var yard_pad := CargoSlotPadComponent.new()
+	yard_pad.name = "GeneralCargoYard_%d" % zone_index
+	yard_pad.is_quay_yard_pad = true
+	yard_pad.affects_boat_cargo_mass = false
+	yard_pad.deck_width_m = yard_w
+	yard_pad.deck_length_m = yard_len
+	yard_pad.cell_size_m = cell
+	yard_pad.container_footprint = fp
+	yard_pad.pad_color = Color(0.28, 0.22, 0.18, 0.92)
+	yard_pad.slot_line_color = Color(0.82, 0.55, 0.32, 0.55)
+	## Sit on the pier crown — same reference as bulk mounds / quay decks.
+	yard_pad.position = Vector3(lane_x, QUAY_DECK_TOP_LOCAL_Y + 0.06, zone_mid_z)
+	lane.add_child(yard_pad)
+
+	var drop := Node3D.new()
+	drop.name = "YardDrop"
+	drop.add_to_group("container_yard_drop")
+	yard_pad.add_child(drop)
+
+	var fill := _general_cargo_fill_fraction(role, zone_index)
+	yard_pad.call_deferred("prefill_general_cargo", -1, _port_id(), fill)
+	if slot != null and _harbour != null:
+		_harbour.register_yard(yard_pad, slot.berth_id)
+
+
+static func _general_cargo_fill_fraction(role: String, salt: int) -> float:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = int(role.hash()) ^ int(salt) ^ 0xC4A60F11
+	match str(role):
+		"export":
+			return rng.randf_range(0.78, 0.96)
+		"import":
+			return rng.randf_range(0.0, 0.14)
+		"import_export", "bidirectional":
+			return rng.randf_range(0.38, 0.58)
+		_:
+			return rng.randf_range(0.45, 0.65)
+
+
+func _stamp_provision_crane_at(
+		root: Node3D,
+		_footprint: Vector3,
+		_berth_sign: float,
+		berth_id: String = "",
+		tool_index: int = 0,
+) -> void:
+	var crane := PROVISION_CRANE_SCRIPT.new() as ProvisionCrane
+	crane.name = "ProvisionCrane"
+	crane.rotation_degrees.y = -90.0
+	var auto := PROVISION_CRANE_AUTO_SCRIPT.new() as ProvisionCraneAutoOperator
+	auto.name = "AutoOperator"
+	crane.add_child(auto)
+	root.add_child(crane)
+
+	if berth_id.is_empty() or _harbour == null:
+		return
+	var equip_id := HarbourController.make_equip_id(berth_id, "equip_provision_crane", tool_index)
+	var job := PROVISION_EQUIP_JOB_SCRIPT.new() as ProvisionCraneEquipmentJob
+	job.setup(equip_id, "equip_provision_crane", berth_id)
+	job.bind_crane(crane)
+	crane.add_child(job)
+	_harbour.register_equipment(job, berth_id)
+
+	var operator := CRANE_OPERATOR_SCRIPT.new() as CraneOperatorNpc
+	operator.name = "CraneOperator"
+	operator.position = Vector3(-2.2, 0.0, 3.5)
+	operator.configure(_harbour, berth_id, equip_id)
+	root.add_child(operator)
 
 
 func _stamp_bulk_crane_at(

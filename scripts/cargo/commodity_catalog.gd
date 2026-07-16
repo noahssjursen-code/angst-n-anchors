@@ -1,16 +1,27 @@
 class_name CommodityCatalog
 extends RefCounted
 
-## Trade / berth / bulk colour table. Unitized packing (pallets, fish crates) is gone.
-## General cargo is containers only; bulk ore/grain/liquid stay for berths + grabs.
+## Trade / berth / bulk colour table.
+## General cargo (provisions) = cubed break-bulk on short finger quays + T-crane.
+## Shipping containers are a separate commodity (STS gantry, large freighters).
 ##
 ## terminal_family groups commodities onto the same berth / yard / handling gear:
-##   container  — cubed boxes, T-crane / stack yards
+##   general    — break-bulk / general cargo finger quay (provisions)
+##   container  — ISO shipping containers, STS gantries, stack yards
 ##   bulk_ore   — ore / coal grabs and stockpiles
 ##   bulk_grain — grain elevators, silos
 ##   liquid     — oil / refined products / LNG jetties
 
 const COMMODITIES := [
+	{
+		"id": "provisions",
+		"display": "General Cargo",
+		"handling_mode": "general",
+		"terminal_family": "general",
+		"mass_kg": 3200.0,
+		"value": 14,
+		"color": [0.72, 0.30, 0.22],
+	},
 	{
 		"id": "containers",
 		"display": "Containers",
@@ -78,11 +89,12 @@ const COMMODITIES := [
 
 ## Full trade pool for seeded port profiles (import/export slots).
 const PLAYABLE_TRADE := [
-	"containers", "grain", "iron_ore", "coal",
+	"provisions", "containers", "grain", "iron_ore", "coal",
 	"crude_oil", "diesel", "lng",
 ]
 
 const TERMINAL_FAMILY_DISPLAY := {
+	"general": "General cargo",
 	"container": "Container",
 	"bulk_ore": "Bulk ore / coal",
 	"bulk_grain": "Bulk grain",
@@ -108,13 +120,13 @@ static func commodity_color(commodity_id: String) -> Color:
 
 
 static func commodity_handling_mode(commodity_id: String) -> String:
-	return str(commodity_info(commodity_id).get("handling_mode", "container"))
+	return str(commodity_info(commodity_id).get("handling_mode", "general"))
 
 
 static func commodity_terminal_family(commodity_id: String) -> String:
 	var info := commodity_info(commodity_id)
 	if info.is_empty():
-		return "container"
+		return "general"
 	if info.has("terminal_family"):
 		return str(info["terminal_family"])
 	return commodity_handling_mode(commodity_id)
@@ -134,9 +146,10 @@ static func family_allows_shared_quay(_family: String) -> bool:
 	return false
 
 
-## Small apron cargo — asphalt dock (containers only for general cargo).
+## Legacy dock-face asphalt berths (fish landings). General cargo uses short
+## finger quays instead — the asphalt path buried yards in the apron slab.
 static func uses_asphalt_dock(commodity_id: String) -> bool:
-	return str(commodity_id) == "containers"
+	return str(commodity_id) == "fish"
 
 
 static func is_exclusive_berth_commodity(_commodity_id: String) -> bool:
@@ -153,6 +166,8 @@ static func terminal_family_display(family: String) -> String:
 
 static func terminal_family_color(family: String) -> Color:
 	match family:
+		"general":
+			return Color(0.34, 0.38, 0.44)
 		"container":
 			return Color(0.16, 0.38, 0.62)
 		"bulk_ore":
@@ -163,6 +178,10 @@ static func terminal_family_color(family: String) -> Color:
 			return Color(0.16, 0.20, 0.26)
 		_:
 			return Color(0.40, 0.42, 0.46)
+
+
+static func general_cargo_mass_kg() -> float:
+	return float(commodity_info("provisions").get("mass_kg", 3200.0))
 
 
 static func container_mass_kg() -> float:

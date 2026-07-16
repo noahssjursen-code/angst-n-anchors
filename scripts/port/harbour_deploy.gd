@@ -166,6 +166,5 @@ static func _auto_moor_slot(ship: BoatBody, slot: QuayBerthSlot) -> void:
 	if posts.size() < 2:
 		mooring.call_deferred("auto_moor", ship.get_tree())
 		return
-	var bow_post := posts[0]
-	var stern_post := posts[posts.size() - 1]
-	mooring.call_deferred("moor_to_posts", bow_post, stern_post)
+	## Nearest berth bollards to bow/stern — not the quay end-posts.
+	mooring.call_deferred("moor_to_nearest_of", posts)

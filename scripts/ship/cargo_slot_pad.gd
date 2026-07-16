@@ -6,6 +6,7 @@ extends Node3D
 ## Containers reserve a footprint block (default 4×4 m — two wide on an 8 m pad).
 
 const PAD_GROUP := "cargo_slot_pad"
+const YARD_PAD_GROUP := "container_yard_pad"
 const MASS_PREFIX := "cargo_pad_"
 const SNAP_RADIUS_M := 6.0
 
@@ -30,6 +31,8 @@ signal container_landed(component: CargoSlotPadComponent, unit: ContainerUnit)
 ## When true, each container on this pad adds mass (category cargo) and shifts CoM.
 ## Loaded cargo should sink the hull slightly; disable for visual-only pads.
 @export var affects_boat_cargo_mass: bool = true
+## Quay stack yard — same slot tiling as ship pads; joins container_yard_pad.
+@export var is_quay_yard_pad: bool = false
 @export var pad_color: Color = Color(0.16, 0.18, 0.22, 0.92):
 	set(v):
 		pad_color = v
@@ -39,6 +42,9 @@ signal container_landed(component: CargoSlotPadComponent, unit: ContainerUnit)
 	set(v):
 		slot_line_color = v
 		_rebuild_visual()
+
+## Container slot size in pad cells (default 4×4 m). Pad dimensions should be whole multiples.
+@export var container_footprint: Vector2i = ContainerUnit.DEFAULT_FOOTPRINT
 
 ## cell_idx → ContainerUnit (origin cell owns the unit; footprint cells share it)
 var _cells: Dictionary = {}
@@ -51,6 +57,8 @@ var _deck_mass_kg: float = 0.0
 func _ready() -> void:
 	if not Engine.is_editor_hint():
 		add_to_group(PAD_GROUP)
+		if is_quay_yard_pad:
+			add_to_group(YARD_PAD_GROUP)
 	_rebuild_visual()
 
 
@@ -70,8 +78,34 @@ func get_rows() -> int:
 	return maxi(int(floor(deck_length_m / maxf(cell_size_m, 0.2))), 1)
 
 
-func get_capacity_cells() -> int:
-	return get_cols() * get_rows()
+func get_slot_footprint() -> Vector2i:
+	var fp := container_footprint
+	if fp.x < 1 or fp.y < 1:
+		fp = ContainerUnit.DEFAULT_FOOTPRINT
+	return fp
+
+
+func get_slot_cols() -> int:
+	var fp := get_slot_footprint()
+	return maxi(get_cols() / fp.x, 0)
+
+
+func get_slot_rows() -> int:
+	var fp := get_slot_footprint()
+	return maxi(get_rows() / fp.y, 0)
+
+
+func get_max_slots() -> int:
+	return get_slot_cols() * get_slot_rows()
+
+
+func get_free_slot_count(fp: Vector2i = Vector2i.ZERO) -> int:
+	var use_fp := fp if fp.x >= 1 and fp.y >= 1 else get_slot_footprint()
+	var n := 0
+	for origin in _iter_slot_origins(use_fp):
+		if _block_free(origin, use_fp):
+			n += 1
+	return n
 
 
 func get_containers() -> Array[ContainerUnit]:
@@ -86,6 +120,21 @@ func get_containers() -> Array[ContainerUnit]:
 		seen[u.id] = true
 		out.append(u)
 	return out
+
+
+## Fill yard slots. Prefer `fill_fraction` (0–1 of capacity); else exact `count`.
+func prefill_general_cargo(
+		count: int = -1,
+		origin_port_id: String = "",
+		fill_fraction: float = -1.0,
+) -> void:
+	var n := count
+	if fill_fraction >= 0.0:
+		n = int(round(float(get_max_slots()) * clampf(fill_fraction, 0.0, 1.0)))
+	for _i in range(maxi(n, 0)):
+		var unit := ContainerFactory.make_one(origin_port_id, "", "provisions")
+		if add_container(unit) < 0:
+			break
 
 
 func clear_all() -> void:
@@ -148,6 +197,7 @@ func place_container_node(node: ContainerNode, world_hint: Vector3 = Vector3.INF
 	if node.get_parent() != _container_root:
 		node.reparent(_container_root, true)
 	node.position = _cell_center_local(origin, fp)
+	node.position.y = ContainerNode.floor_offset_y()
 	node.rotation = Vector3.ZERO
 	_nodes[origin] = node
 	_refresh_mass()
@@ -216,6 +266,43 @@ static func find_nearest_pad(
 	return best
 
 
+static func find_yard_pad(tree: SceneTree) -> CargoSlotPadComponent:
+	return find_nearest_yard_pad(tree, Vector3.INF)
+
+
+## Prefer the yard closest to `near_world` (crane / hook). Falls back to first yard.
+static func find_nearest_yard_pad(
+		tree: SceneTree,
+		near_world: Vector3 = Vector3.INF,
+) -> CargoSlotPadComponent:
+	if tree == null:
+		return null
+	var best: CargoSlotPadComponent = null
+	var best_d := INF
+	var use_near := near_world != Vector3.INF
+	for node in tree.get_nodes_in_group(YARD_PAD_GROUP):
+		if node is not CargoSlotPadComponent:
+			continue
+		var pad := node as CargoSlotPadComponent
+		if not use_near:
+			return pad
+		var d := pad.global_position.distance_squared_to(near_world)
+		if d < best_d:
+			best_d = d
+			best = pad
+	return best
+
+
+static func is_on_ship_pad(node: ContainerNode) -> bool:
+	var pad := find_pad_for_node(node)
+	return pad != null and not pad.is_quay_yard_pad
+
+
+static func is_on_yard_pad(node: ContainerNode) -> bool:
+	var pad := find_pad_for_node(node)
+	return pad != null and pad.is_quay_yard_pad
+
+
 static func find_pad_for_node(node: ContainerNode) -> CargoSlotPadComponent:
 	if node == null:
 		return null
@@ -245,8 +332,17 @@ func remove_container_at(origin_idx: int) -> ContainerUnit:
 	return unit
 
 
-func find_free_slot(fp: Vector2i = ContainerUnit.DEFAULT_FOOTPRINT) -> int:
-	return _find_free_block(fp, Vector2.ZERO, false)
+func find_free_slot(fp: Vector2i = Vector2i.ZERO) -> int:
+	var use_fp := fp if fp.x >= 1 and fp.y >= 1 else get_slot_footprint()
+	return _find_free_block(use_fp, Vector2.ZERO, false)
+
+
+func slot_drop_world_for_free(fp: Vector2i = Vector2i.ZERO) -> Vector3:
+	var use_fp := fp if fp.x >= 1 and fp.y >= 1 else get_slot_footprint()
+	var origin := _find_free_block(use_fp, Vector2.ZERO, false)
+	if origin < 0:
+		return Vector3.INF
+	return to_global(_cell_center_local(origin, use_fp))
 
 
 func iter_container_nodes() -> Array[ContainerNode]:
@@ -263,30 +359,31 @@ func iter_container_nodes() -> Array[ContainerNode]:
 	return out
 
 
-func slot_drop_world_for_free(fp: Vector2i = ContainerUnit.DEFAULT_FOOTPRINT) -> Vector3:
-	var origin := _find_free_block(fp, Vector2.ZERO, false)
-	if origin < 0:
-		return Vector3.INF
-	return to_global(_cell_center_local(origin, fp))
+func _iter_slot_origins(fp: Vector2i) -> Array[int]:
+	var cols := get_cols()
+	var rows := get_rows()
+	var out: Array[int] = []
+	for r in range(0, rows - fp.y + 1, fp.y):
+		for c in range(0, cols - fp.x + 1, fp.x):
+			out.append(r * cols + c)
+	return out
 
 
 func _find_free_block(fp: Vector2i, preferred_local: Vector2, use_hint: bool) -> int:
-	var cols := get_cols()
-	var rows := get_rows()
+	if fp.x < 1 or fp.y < 1:
+		fp = get_slot_footprint()
 	var best := -1
 	var best_dist := INF
-	for r in range(rows - fp.y + 1):
-		for c in range(cols - fp.x + 1):
-			var origin := r * cols + c
-			if not _block_free(origin, fp):
-				continue
-			if not use_hint:
-				return origin
-			var center := _cell_center_local(origin, fp)
-			var d := preferred_local.distance_squared_to(Vector2(center.x, center.z))
-			if d < best_dist:
-				best_dist = d
-				best = origin
+	for origin in _iter_slot_origins(fp):
+		if not _block_free(origin, fp):
+			continue
+		if not use_hint:
+			return origin
+		var center := _cell_center_local(origin, fp)
+		var d := preferred_local.distance_squared_to(Vector2(center.x, center.z))
+		if d < best_dist:
+			best_dist = d
+			best = origin
 	return best
 
 
@@ -328,6 +425,7 @@ func _spawn_node(origin: int, unit: ContainerUnit) -> void:
 		add_child(_container_root)
 	_container_root.add_child(node)
 	node.position = _cell_center_local(origin, unit.footprint)
+	node.position.y = ContainerNode.floor_offset_y()
 	node.setup(unit)
 	_nodes[origin] = node
 
@@ -381,22 +479,20 @@ func _rebuild_visual() -> void:
 		)
 		line2.position = Vector3(0.0, line_y, z)
 		_visual_root.add_child(line2)
-	## Container bay outlines (one per slot footprint)
-	var fp := ContainerUnit.DEFAULT_FOOTPRINT
+	## Container bay outlines — one per tiled slot (no leftover fringe).
+	var fp := get_slot_footprint()
 	var bay_w := float(fp.x) * cell_size_m
 	var bay_l := float(fp.y) * cell_size_m
-	for r in range(0, rows, fp.y):
-		for c in range(0, cols, fp.x):
-			var cx := -half_w + (float(c) + float(fp.x) * 0.5) * cell_size_m
-			var cz := -half_l + (float(r) + float(fp.y) * 0.5) * cell_size_m
-			var mark := MeshBuilder.box(
-				Vector3(bay_w * 0.94, 0.015, bay_l * 0.94),
-				Color(slot_line_color.r, slot_line_color.g, slot_line_color.b, 0.22),
-				1.0,
-				0.0,
-			)
-			mark.position = Vector3(cx, 0.01, cz)
-			_visual_root.add_child(mark)
+	for origin in _iter_slot_origins(fp):
+		var center := _cell_center_local(origin, fp)
+		var mark := MeshBuilder.box(
+			Vector3(bay_w * 0.98, 0.015, bay_l * 0.98),
+			Color(slot_line_color.r, slot_line_color.g, slot_line_color.b, 0.22),
+			1.0,
+			0.0,
+		)
+		mark.position = Vector3(center.x, -0.01, center.z)
+		_visual_root.add_child(mark)
 
 
 func _refresh_mass() -> void:
