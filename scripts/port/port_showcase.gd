@@ -60,7 +60,7 @@ const GIZMO_PACKS: Array[Dictionary] = [
 	{
 		"id": "land",
 		"label": "Land",
-		"hint": "trapezoid + terrain stake grid",
+		"hint": "buildable zone overlay",
 		"site_layers": {
 			PortDebugGizmos.LAYER_DOCK_FACE: true,
 			PortDebugGizmos.LAYER_LAND_ZONE: true,

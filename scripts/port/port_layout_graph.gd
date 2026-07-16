@@ -360,7 +360,28 @@ func flatten_zone_records(
 			"carve": carve,
 			"facility_id": "%s:%s" % [port_id, instance_id],
 		})
+	## Town trapezoid clears forest only — does not flatten hinterland hills.
+	var town_clear := forest_clear_polygon(world_position, rotation_y)
+	if town_clear.size() >= 3:
+		records.append({
+			"forest_clear_only": true,
+			"polygon": town_clear,
+			"facility_id": "%s:town_forest_clear" % port_id,
+		})
 	return records
+
+
+## World-space buildable land polygon (apron + hinterland), padded for tree clear.
+func forest_clear_polygon(
+		world_position: Vector3,
+		rotation_y: float,
+		pad_m: float = PortLandPlan.FOREST_CLEAR_PAD_M,
+) -> PackedVector2Array:
+	var land: Dictionary = initial_attributes.get("land_plan", {}) as Dictionary
+	var zone: Dictionary = land.get("buildable_zone", {}) as Dictionary
+	if zone.is_empty():
+		return PackedVector2Array()
+	return PortLandPlan.world_buildable_polygon(zone, world_position, rotation_y, pad_m)
 
 
 func local_footprints() -> Array[Dictionary]:

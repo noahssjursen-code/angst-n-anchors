@@ -97,7 +97,7 @@ graph record (not a finished mesh) is what later growth must persist.
 - `PortCatalog` autoload — live port directory for chart / proximity / spawn
 - `PortTradeProfile` — deterministic destiny imports/exports; size unlocks commodities
 - `PortBerthPlan` — asphalt pads vs dedicated quay arms from unlocked trade
-- `PortLandPlan` — inland buildable zone (apron + hinterland); structure bands deferred
+- `PortLandPlan` — inland buildable zone + terrain stake grid (houses + role-correct trade yards)
 - `PortCoastTracer` — shoreline fit / foundation for the harbour apron
 - `PortModuleCatalog` / `PortModuleDefinition` — foundation root templates (module attach reserved for later growth)
 - `PortLayoutGenerator` — coast foundation + berth_plan into `PortLayoutGraph` attrs

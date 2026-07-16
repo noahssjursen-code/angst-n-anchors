@@ -123,6 +123,43 @@ func _run() -> void:
 	assert(not grid.is_empty(), "terrain_grid missing")
 	assert(int(grid.get("u_count", 0)) >= 2 and int(grid.get("v_count", 0)) >= 2, "terrain grid too small")
 	assert((grid.get("points", []) as Array).size() >= 4, "terrain grid needs stake points")
+	var house_n := 0
+	var trade_n := 0
+	for raw in grid.get("points", []) as Array:
+		var kind := str((raw as Dictionary).get("kind", ""))
+		if kind == PortLandPlan.KIND_TRADE:
+			trade_n += 1
+			assert(not str((raw as Dictionary).get("commodity_id", "")).is_empty(), "trade stake needs commodity")
+			assert(float((raw as Dictionary).get("radius_m", 0.0)) > PortLandPlan.HOUSE_RADIUS_M, "trade sphere should be larger")
+		elif kind == PortLandPlan.KIND_HOUSE:
+			house_n += 1
+	assert(house_n >= 1, "need house stakes")
+	if not a.trade_profile.all_slots().is_empty():
+		assert(trade_n >= 1, "trade profile should sprinkle trade decorations")
+	## Trade stakes follow the live recipe roles — never invent the opposite direction.
+	for raw in grid.get("points", []) as Array:
+		var entry: Dictionary = raw
+		if str(entry.get("kind", "")) != PortLandPlan.KIND_TRADE:
+			continue
+		var cid := str(entry.get("commodity_id", ""))
+		var role := str(entry.get("role", ""))
+		match role:
+			"export":
+				assert(a.trade_profile.export_slots.has(cid), "export stake for unoffered %s" % cid)
+				assert(not a.trade_profile.import_slots.has(cid) or PortTradeProfile.is_bidirectional_trade(cid),
+						"one-way export stake must not also be an import-only commodity")
+			"import":
+				assert(a.trade_profile.import_slots.has(cid), "import stake for unoffered %s" % cid)
+				assert(not a.trade_profile.export_slots.has(cid),
+						"import stake must not invent export for %s" % cid)
+			"bidirectional":
+				assert(PortTradeProfile.is_bidirectional_trade(cid), "bidirectional only for containers")
+				assert(
+					a.trade_profile.export_slots.has(cid) or a.trade_profile.import_slots.has(cid),
+					"bidirectional stake not in recipe",
+				)
+			_:
+				assert(false, "unknown trade role %s" % role)
 
 	## Growing size unlocks destiny — never re-rolls theme or mature lists.
 	var def_small := PortDefinition.new()

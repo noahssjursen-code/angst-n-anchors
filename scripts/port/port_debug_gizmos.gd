@@ -46,10 +46,8 @@ const TERRAIN_COAST_COLOR := Color(1.0, 0.55, 0.1)
 const SPINE_COLOR := Color(0.95, 0.2, 0.95)
 const DOCK_COLOR := Color(0.2, 0.85, 1.0)
 const ANCHOR_COLOR := Color(1.0, 1.0, 0.2)
-const LAND_ZONE_COLOR := Color(0.25, 0.95, 0.55, 0.38)
+const LAND_ZONE_COLOR := Color(0.25, 0.95, 0.55, 0.12)
 const LAND_ZONE_EDGE := Color(0.15, 1.0, 0.45)
-const LAND_GRID_SPHERE := Color(0.95, 0.12, 0.1)
-const LAND_GRID_POLE := Color(0.55, 0.08, 0.08)
 
 ## layer_id → visible. Missing keys default to true when a master enable is on.
 var _layer_visible: Dictionary = {}
@@ -157,7 +155,6 @@ func _rebuild() -> void:
 
 	_stamp_berth_plan(_graph.initial_attributes.get("berth_plan", {}) as Dictionary)
 	_stamp_land_zone(_graph.initial_attributes.get("land_plan", {}) as Dictionary)
-	_stamp_land_terrain_grid(_graph.initial_attributes.get("land_plan", {}) as Dictionary)
 	_stamp_land_plan(_graph.initial_attributes.get("land_plan", {}) as Dictionary)
 	_apply_layer_visibility()
 
@@ -314,58 +311,6 @@ func _stamp_land_zone(plan: Dictionary) -> void:
 		],
 		Vector3(cx, y_base + h_in + 18.0, cz),
 		LAND_ZONE_EDGE.lightened(0.15),
-	)
-
-
-## Red spheres on terrain at each trapezoid-grid corner; thin poles drive down to them.
-func _stamp_land_terrain_grid(plan: Dictionary) -> void:
-	var layer := _ensure_layer(LAYER_LAND_ZONE)
-	var grid: Dictionary = plan.get("terrain_grid", {}) as Dictionary
-	if grid.is_empty():
-		return
-	var zone: Dictionary = plan.get("buildable_zone", {}) as Dictionary
-	var h_sea := float(zone.get("height_seaward_m", 12.0))
-	var h_in := float(zone.get("height_inland_m", 110.0))
-	var points: Array = grid.get("points", []) as Array
-	for index in range(points.size()):
-		var entry: Dictionary = points[index]
-		var local_arr: Array = entry.get("local", [0.0, 0.0]) as Array
-		if local_arr.size() < 2:
-			continue
-		var lx := float(local_arr[0])
-		var lz := float(local_arr[1])
-		var terrain_y := float(entry.get("y", 0.0))
-		var v := float(entry.get("v", 0.0))
-		## Pole top follows the rising volume roof so stakes read inside the green area.
-		var roof_y := lerpf(h_sea, h_in, v) + 0.4
-		var pole_top := maxf(roof_y, terrain_y + 14.0)
-		var pole_len := maxf(pole_top - terrain_y, 2.0)
-		var pole := MeshBuilder.cylinder(0.45, pole_len, LAND_GRID_POLE, 0.85, 0.05)
-		pole.name = "LandStakePole_%d" % index
-		pole.position = Vector3(lx, terrain_y + pole_len * 0.5, lz)
-		layer.add_child(pole)
-		var sphere_r := 3.6
-		_stamp_dot(
-			layer,
-			Vector3(lx, terrain_y + sphere_r, lz),
-			LAND_GRID_SPHERE,
-			sphere_r,
-			"LandStake_%d" % index,
-		)
-	var center_arr: Array = zone.get("center", [0.0, 0.0]) as Array
-	var gx := float(center_arr[0]) if center_arr.size() > 0 else 0.0
-	var gz := float(center_arr[1]) if center_arr.size() > 1 else 0.0
-	_label(
-		layer,
-		"LandGridLabel",
-		"TERRAIN GRID\n%d stakes · %d skipped\nsetback %.0f m · +%.0f m above water" % [
-			points.size(),
-			int(grid.get("rejected_count", 0)),
-			float(grid.get("beach_setback_m", 32.0)),
-			float(grid.get("min_height_above_water_m", 4.0)),
-		],
-		Vector3(gx, h_in + 36.0, gz),
-		LAND_GRID_SPHERE.lightened(0.2),
 	)
 
 

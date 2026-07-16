@@ -33,6 +33,25 @@ func _test_density(layout: WorldLayout) -> void:
 	if shore.size() >= 2:
 		var mid: Vector2 = shore[0].lerp(shore[1], 0.5)
 		_check(ForestField.sample(mid) <= 0.05, "waterline itself stays bare")
+	## Port town trapezoid must zero canopy (forest_clear_only polygon).
+	var inland := Vector2(12000.0, 8000.0)
+	var before := ForestField.sample(inland)
+	ForestField.clear()
+	var town := PackedVector2Array([
+		inland + Vector2(-80.0, -80.0),
+		inland + Vector2(80.0, -80.0),
+		inland + Vector2(80.0, 80.0),
+		inland + Vector2(-80.0, 80.0),
+	])
+	ForestField.initialize(layout, SEED, [{
+		"forest_clear_only": true,
+		"polygon": town,
+		"facility_id": "test:town_forest_clear",
+	}])
+	_check(ForestField.sample(inland) <= 0.001, "town forest clear zeros canopy")
+	_check(before >= 0.0, "baseline inland sample ran")
+	ForestField.clear()
+	ForestField.initialize(layout, SEED, [])
 
 
 func _test_meshes() -> void:

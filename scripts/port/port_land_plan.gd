@@ -2,8 +2,10 @@ class_name PortLandPlan
 extends RefCounted
 
 ## Inland buildable land for port decoration / settlement.
-## v1: trapezoid volume (narrow apron → wide hills) plus a terrain-sampled
-## stake grid. Stakes only land inland of the beach band and above sea level.
+## Trapezoid volume + terrain stake grid:
+##   - house stakes (primitive cottages) on dry land past the beach band
+##   - larger trade-decoration stakes sprinkled among houses, coloured by
+##     import/export terminal family (mills, markets, yards — later)
 
 const CoastTracer := preload("res://scripts/port/port_coast_tracer.gd")
 const TerrainStreamer := preload("res://scripts/world/world_terrain_streamer.gd")
@@ -26,13 +28,29 @@ const BEACH_SETBACK_M := 32.0
 ## Terrain surface must clear the ocean by at least this much (no beach shelves).
 const MIN_HEIGHT_ABOVE_WATER_M := 4.0
 
+const KIND_HOUSE := "house"
+const KIND_TRADE := "trade_decoration"
+
+const HOUSE_RADIUS_M := 3.6
+## Trade yards / mills cover a wider footprint than a single house plot.
+const TRADE_RADIUS_M := 16.0
+## Clear house stakes under a trade footprint so colours stay readable.
+const TRADE_HOUSE_CLEAR_M := 22.0
+## Minimum centre-to-centre spacing between trade decorations.
+const TRADE_MIN_SPACING_M := 70.0
+## Inflate the town trapezoid when clearing forest around the village.
+const FOREST_CLEAR_PAD_M := 18.0
+## Keep village decoration on the seaward half of the buildable zone so it
+## reads from the harbour without reshaping streamed terrain.
+const HOUSE_MAX_INLAND_V := 0.42
+
 
 static func build(
-		_profile: PortTradeProfile,
+		profile: PortTradeProfile,
 		size: int,
 		foundation: Dictionary,
 		_berth_plan: Dictionary,
-		_site_seed: int,
+		site_seed: int,
 		_port_area: Dictionary = {},
 		world_layout: WorldLayout = null,
 		world_position: Vector3 = Vector3.ZERO,
@@ -82,16 +100,6 @@ static func build(
 	var polygon := PackedVector2Array([corners[0], corners[1], corners[2], corners[3]])
 	var center := (corners[0] + corners[1] + corners[2] + corners[3]) * 0.25
 
-	var terrain_grid := _build_terrain_grid(
-		corners,
-		along_span_sea,
-		along_span_in,
-		inland_depth,
-		world_layout,
-		world_position,
-		rotation_y,
-	)
-
 	var zone := {
 		"seaward_edge": _polyline_to_array(seaward_edge),
 		"inland_edge": _polyline_to_array(inland_edge),
@@ -109,6 +117,25 @@ static func build(
 		"height_inland_m": ZONE_HEIGHT_INLAND_M,
 		"center": [center.x, center.y],
 	}
+	var terrain_grid := _build_terrain_grid(
+		corners,
+		along_span_sea,
+		along_span_in,
+		inland_depth,
+		world_layout,
+		world_position,
+		rotation_y,
+	)
+	_sprinkle_trade_decorations(terrain_grid, profile, n, site_seed)
+
+	var house_n := 0
+	var trade_n := 0
+	for raw in terrain_grid.get("points", []) as Array:
+		match str((raw as Dictionary).get("kind", KIND_HOUSE)):
+			KIND_TRADE:
+				trade_n += 1
+			_:
+				house_n += 1
 	var notes: PackedStringArray = PackedStringArray([
 		"buildable land trapezoid  %.0f→%.0f m wide × %.0f m inland · height %.0f→%.0f m" % [
 			along_span_sea,
@@ -117,10 +144,10 @@ static func build(
 			ZONE_HEIGHT_SEAWARD_M,
 			ZONE_HEIGHT_INLAND_M,
 		],
-		"terrain grid  %d stakes kept · %d rejected (ocean/beach) @ %.0f m" % [
-			(terrain_grid.get("points", []) as Array).size(),
+		"land stakes  %d house · %d trade · %d rejected (ocean/beach/ledge)" % [
+			house_n,
+			trade_n,
 			int(terrain_grid.get("rejected_count", 0)),
-			float(terrain_grid.get("step_m", GRID_STEP_M)),
 		],
 	])
 	return {
@@ -132,8 +159,9 @@ static func build(
 	}
 
 
-## UV grid over the trapezoid. Each kept corner is a stake on buildable land.
-## Ocean, beach shelves, and too-low rock are dropped — no houses in the wet.
+## UV grid over the trapezoid. Each kept corner is a house stake on buildable land.
+## One-row ledge margin: if the seaward neighbour cell failed terrain checks,
+## skip this cell too so stakes do not sit on the first lip above the beach.
 static func _build_terrain_grid(
 		corners: PackedVector2Array,
 		span_sea: float,
@@ -147,44 +175,204 @@ static func _build_terrain_grid(
 	var u_count := maxi(2, int(ceil(maxf(span_sea, span_in) / step)) + 1)
 	var v_count := maxi(2, int(ceil(depth_m / step)) + 1)
 	var port_basis := Basis(Vector3.UP, rotation_y)
-	var points: Array = []
-	var rejected := 0
 	var min_surface_y := WaveSurface.WATER_LEVEL + MIN_HEIGHT_ABOVE_WATER_M
+
+	## Pass 1 — terrain / beach fitness per cell (row-major: vi * u_count + ui).
+	var terrain_ok: Array[bool] = []
+	terrain_ok.resize(u_count * v_count)
+	var local_xz_cache: Array[Vector2] = []
+	local_xz_cache.resize(u_count * v_count)
+	var rejected_terrain := 0
 	for vi in range(v_count):
 		var v := float(vi) / float(v_count - 1)
 		for ui in range(u_count):
 			var u := float(ui) / float(u_count - 1)
 			var local_xz := _trapezoid_point(corners, u, v)
-			if not _is_buildable_stake(
-					world_layout,
-					world_position,
-					port_basis,
-					local_xz,
-					min_surface_y,
-			):
-				rejected += 1
+			var idx := vi * u_count + ui
+			local_xz_cache[idx] = local_xz
+			var ok := _is_buildable_stake(
+				world_layout,
+				world_position,
+				port_basis,
+				local_xz,
+				min_surface_y,
+			)
+			terrain_ok[idx] = ok
+			if not ok:
+				rejected_terrain += 1
+
+	## Pass 2 — place only where this cell and the seaward row neighbour are dry.
+	## Cap inland V so cottages stay on the harbour-facing band (no terrain reshape).
+	var points: Array = []
+	var rejected_ledge := 0
+	var rejected_far := 0
+	for vi in range(v_count):
+		var v := float(vi) / float(v_count - 1)
+		for ui in range(u_count):
+			var idx := vi * u_count + ui
+			if not terrain_ok[idx]:
 				continue
+			if vi > 0 and not terrain_ok[(vi - 1) * u_count + ui]:
+				## Seaward neighbour was ocean/beach/too low — this row is ledge margin.
+				rejected_ledge += 1
+				continue
+			if v > HOUSE_MAX_INLAND_V:
+				rejected_far += 1
+				continue
+			var local_xz := local_xz_cache[idx]
 			var terrain_y := _sample_terrain_y(
 				world_layout,
 				world_position,
 				port_basis,
 				local_xz,
 			)
+			var u := float(ui) / float(u_count - 1)
 			points.append({
+				"kind": KIND_HOUSE,
 				"u": u,
 				"v": v,
 				"local": [local_xz.x, local_xz.y],
 				"y": terrain_y,
+				"radius_m": HOUSE_RADIUS_M,
 			})
 	return {
 		"step_m": step,
 		"u_count": u_count,
 		"v_count": v_count,
 		"points": points,
-		"rejected_count": rejected,
+		"rejected_count": rejected_terrain + rejected_ledge + rejected_far,
+		"rejected_terrain_count": rejected_terrain,
+		"rejected_ledge_count": rejected_ledge,
+		"rejected_far_count": rejected_far,
 		"beach_setback_m": BEACH_SETBACK_M,
 		"min_height_above_water_m": MIN_HEIGHT_ABOVE_WATER_M,
+		"house_radius_m": HOUSE_RADIUS_M,
+		"trade_radius_m": TRADE_RADIUS_M,
+		"house_max_inland_v": HOUSE_MAX_INLAND_V,
 	}
+
+
+## Promote a spaced subset of house stakes into larger trade decorations.
+## One job per offered (role, commodity) from the live recipe — never invent the
+## opposite direction (import fish ≠ export fish building).
+static func _sprinkle_trade_decorations(
+		grid: Dictionary,
+		profile: PortTradeProfile,
+		size: int,
+		site_seed: int,
+) -> void:
+	var points: Array = grid.get("points", []) as Array
+	if points.is_empty() or profile == null:
+		return
+	var jobs := _trade_decoration_jobs(profile)
+	if jobs.is_empty():
+		return
+	var rng := RandomNumberGenerator.new()
+	rng.seed = int(site_seed) ^ 0x7A1D5A7E
+	## Prefer seaward / mid band for yards — still harbour-visible, not cliff-top.
+	var candidates: Array[int] = []
+	for index in range(points.size()):
+		var entry: Dictionary = points[index]
+		var v := float(entry.get("v", 0.0))
+		if v < 0.12 or v > HOUSE_MAX_INLAND_V:
+			continue
+		candidates.append(index)
+	if candidates.is_empty():
+		for index in range(points.size()):
+			candidates.append(index)
+	## Shuffle candidates.
+	for i in range(candidates.size() - 1, 0, -1):
+		var j := rng.randi_range(0, i)
+		var tmp := candidates[i]
+		candidates[i] = candidates[j]
+		candidates[j] = tmp
+
+	var placed_centres: Array[Vector2] = []
+	var per_job := clampi(1 + size / 3, 1, 3)
+	for job in jobs:
+		var commodity_id := str(job.get("commodity_id", ""))
+		var role := str(job.get("role", ""))
+		if commodity_id.is_empty() or role.is_empty():
+			continue
+		var family := CommodityCatalog.commodity_terminal_family(commodity_id)
+		var need := per_job
+		for cand_i in candidates:
+			if need <= 0:
+				break
+			var entry: Dictionary = points[cand_i]
+			if str(entry.get("kind", "")) != KIND_HOUSE:
+				continue
+			var local_arr: Array = entry.get("local", [0.0, 0.0]) as Array
+			if local_arr.size() < 2:
+				continue
+			var centre := Vector2(float(local_arr[0]), float(local_arr[1]))
+			var ok := true
+			for other in placed_centres:
+				if centre.distance_to(other) < TRADE_MIN_SPACING_M:
+					ok = false
+					break
+			if not ok:
+				continue
+			entry["kind"] = KIND_TRADE
+			entry["commodity_id"] = commodity_id
+			entry["family"] = family
+			entry["radius_m"] = TRADE_RADIUS_M
+			entry["role"] = role
+			points[cand_i] = entry
+			placed_centres.append(centre)
+			need -= 1
+
+	## Drop houses that sit under a trade footprint.
+	if placed_centres.is_empty():
+		return
+	var kept: Array = []
+	for raw in points:
+		var entry: Dictionary = raw
+		if str(entry.get("kind", "")) == KIND_TRADE:
+			kept.append(entry)
+			continue
+		var local_arr: Array = entry.get("local", [0.0, 0.0]) as Array
+		if local_arr.size() < 2:
+			continue
+		var centre := Vector2(float(local_arr[0]), float(local_arr[1]))
+		var under_trade := false
+		for trade_c in placed_centres:
+			if centre.distance_to(trade_c) < TRADE_HOUSE_CLEAR_M:
+				under_trade = true
+				break
+		if not under_trade:
+			kept.append(entry)
+	grid["points"] = kept
+
+
+## Live unlocks only. Export and import are separate offers (containers share one yard).
+static func _trade_decoration_jobs(profile: PortTradeProfile) -> Array[Dictionary]:
+	var jobs: Array[Dictionary] = []
+	var seen_bidirectional: Dictionary = {}
+	for commodity_id in profile.export_slots:
+		var id := str(commodity_id)
+		if id.is_empty():
+			continue
+		if PortTradeProfile.is_bidirectional_trade(id):
+			if seen_bidirectional.has(id):
+				continue
+			seen_bidirectional[id] = true
+			jobs.append({"commodity_id": id, "role": "bidirectional"})
+			continue
+		jobs.append({"commodity_id": id, "role": "export"})
+	for commodity_id in profile.import_slots:
+		var id := str(commodity_id)
+		if id.is_empty():
+			continue
+		if PortTradeProfile.is_bidirectional_trade(id):
+			if seen_bidirectional.has(id):
+				continue
+			seen_bidirectional[id] = true
+			jobs.append({"commodity_id": id, "role": "bidirectional"})
+			continue
+		## One-way imports only — never invent an export building for these.
+		jobs.append({"commodity_id": id, "role": "import"})
+	return jobs
 
 
 static func _trapezoid_point(corners: PackedVector2Array, u: float, v: float) -> Vector2:
@@ -227,14 +415,12 @@ static func _sample_terrain_y(
 	if world_layout == null:
 		return float(CoastTracer.FOUNDATION_SURFACE_Y_M)
 	var world := world_position + port_basis * Vector3(local_xz.x, 0.0, local_xz.y)
-	## Match streamed terrain (natural hills; harbour pads do not flatten).
-	## Stored as port-local Y (plot sits at world_position).
+	## Natural streamed height only — no flatten/grade post-process.
 	return TerrainStreamer.sample_terrain_height(
 		world_layout,
 		Vector2(world.x, world.z),
 		[],
 	) - world_position.y
-
 
 
 static func _polyline_from_array(raw: Array) -> PackedVector2Array:
@@ -258,3 +444,37 @@ static func _polyline_length_m(path: PackedVector2Array) -> float:
 	for index in range(path.size() - 1):
 		total += path[index].distance_to(path[index + 1])
 	return total
+
+
+## Transform buildable_zone local polygon to world XZ and inflate for tree clear.
+static func world_buildable_polygon(
+		zone: Dictionary,
+		world_position: Vector3,
+		rotation_y: float,
+		pad_m: float = FOREST_CLEAR_PAD_M,
+) -> PackedVector2Array:
+	var local := _polyline_from_array(zone.get("polygon", []) as Array)
+	if local.size() < 3:
+		local = _polyline_from_array(zone.get("corners", []) as Array)
+	if local.size() < 3:
+		return PackedVector2Array()
+	var port_basis := Basis(Vector3.UP, rotation_y)
+	var world := PackedVector2Array()
+	var center := Vector2.ZERO
+	for point in local:
+		var wp := world_position + port_basis * Vector3(point.x, 0.0, point.y)
+		var xz := Vector2(wp.x, wp.z)
+		world.append(xz)
+		center += xz
+	center /= float(world.size())
+	if pad_m <= 0.01:
+		return world
+	var inflated := PackedVector2Array()
+	for point in world:
+		var delta := point - center
+		var length := delta.length()
+		if length < 0.01:
+			inflated.append(point)
+		else:
+			inflated.append(center + delta * ((length + pad_m) / length))
+	return inflated

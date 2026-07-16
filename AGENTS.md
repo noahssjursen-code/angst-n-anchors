@@ -109,7 +109,7 @@ ports, charting, weather, and navigation.
 - `CoastalPortPlacer` places `PortDefinition` sites (pose, size class, region); local `-Z` faces water.
 - `PortExpander` derives seeded attributes + `PortTradeProfile`, then `PortLayoutGenerator` traces the coast, fits a foundation, and builds `berth_plan` (asphalt pads + dedicated quays) plus `land_plan` (inland buildable zone covering apron + hinterland) on a foundation-anchor `PortLayoutGraph`.
 - `PortLayoutGraph` holds the foundation anchor plus layout attrs (`berth_plan`, `land_plan`, basin, coast polylines). Persist/sync this graph, never generated meshes. Module attach/open-slot APIs are reserved for later growth — they are not how trade berths are placed today.
-- `PortLayoutGraphVisualizer` stamps foundation, berth pads/quays, and debug gizmos (including the land buildable zone). This is intentionally the only port presentation for now.
+- `PortLayoutGraphVisualizer` stamps foundation, berth pads/quays, cheap inland land decor (primitive houses + trade yards from `land_plan.terrain_grid`), and debug gizmos (including the land buildable zone). This is intentionally the only port presentation for now.
 - `WorldTerrainStreamer` owns 1 km terrain chunks, LOD, nearby collision, and layout footprint flattening.
 - `LandField.wave_shelter()` is short-range wave attenuation. Weather/fishing
   use `coastal_exposure()` / `directional_fetch()`.
@@ -123,7 +123,7 @@ Ports follow a strict rebuild order:
 
 1. **Seeded initial record** — site, size (clamped by geography × trade product count), destiny imports/exports
 2. **Coast foundation + berth_plan** — shoreline fit, basin soft-clamp on pier length, asphalt vs dedicated quays from unlocked trade
-3. **Layout visualization** — foundation, berth pads/quays, land buildable zone gizmo (apron + hinterland; structure bands later), optional site gizmos
+3. **Layout visualization** — foundation, berth pads/quays, inland land decor from `land_plan` (primitive houses + trade yards on terrain), optional site gizmos
 4. **Gameplay functionality** — explicitly deferred (operable businesses, NPCs)
 
 Do not regenerate a finished harbour after players modify it. Seed generation

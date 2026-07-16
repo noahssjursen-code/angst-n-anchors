@@ -665,22 +665,167 @@ func _make_storage_stack(family: String, family_color: Color, size: Vector3) -> 
 
 
 func _stamp_land_structures() -> void:
-	## Structures deferred — land_plan currently defines the buildable zone only.
+	## Cheap primitive village from land_plan.terrain_grid — houses + trade yards
+	## on sampled terrain. No authored building meshes.
 	if not show_equipment_shapes:
 		return
 	var plan := _graph.initial_attributes.get("land_plan", {}) as Dictionary
 	if plan.is_empty():
 		return
-	if (plan.get("structures", []) as Array).is_empty():
+	var grid: Dictionary = plan.get("terrain_grid", {}) as Dictionary
+	var points: Array = grid.get("points", []) as Array
+	if points.is_empty():
 		return
-	var foundation := _graph.initial_attributes.get("foundation", {}) as Dictionary
-	var surface_y := float(foundation.get("surface_y_m", PortCoastTracer.FOUNDATION_SURFACE_Y_M)) \
-			+ PortCoastTracer.FOUNDATION_TERRAIN_CLEARANCE_M
 	var root := Node3D.new()
-	root.name = "LandStructures"
+	root.name = "LandDecor"
 	add_child(root)
-	for raw in plan.get("structures", []) as Array:
-		_stamp_land_structure(root, raw as Dictionary, surface_y)
+	for index in range(points.size()):
+		var entry: Dictionary = points[index]
+		var local_arr: Array = entry.get("local", [0.0, 0.0]) as Array
+		if local_arr.size() < 2:
+			continue
+		var lx := float(local_arr[0])
+		var lz := float(local_arr[1])
+		var terrain_y := float(entry.get("y", 0.0))
+		var kind := str(entry.get("kind", PortLandPlan.KIND_HOUSE))
+		if kind == PortLandPlan.KIND_TRADE:
+			_stamp_land_trade_point(root, entry, index, lx, terrain_y, lz)
+		else:
+			_stamp_land_house_point(root, entry, index, lx, terrain_y, lz)
+
+
+func _stamp_land_house_point(
+		parent: Node3D,
+		entry: Dictionary,
+		index: int,
+		lx: float,
+		terrain_y: float,
+		lz: float,
+) -> void:
+	var house := _make_village_house(index, float(entry.get("u", 0.0)), float(entry.get("v", 0.0)))
+	house.name = "House_%d" % index
+	house.position = Vector3(lx, terrain_y, lz)
+	house.rotation.y = deg_to_rad(180.0 + float(index % 5) * 12.0 - 24.0)
+	parent.add_child(house)
+
+
+func _stamp_land_trade_point(
+		parent: Node3D,
+		entry: Dictionary,
+		index: int,
+		lx: float,
+		terrain_y: float,
+		lz: float,
+) -> void:
+	var commodity_id := str(entry.get("commodity_id", ""))
+	var role := str(entry.get("role", "trade"))
+	var family := str(entry.get("family", ""))
+	if family.is_empty():
+		family = CommodityCatalog.commodity_terminal_family(commodity_id)
+	var decor_kind := _trade_decor_kind(commodity_id, role, family)
+	var radius := float(entry.get("radius_m", PortLandPlan.TRADE_RADIUS_M))
+	var size := Vector3(radius * 2.0, maxf(radius * 0.85, 8.0), radius * 2.0)
+	var color := CommodityCatalog.terminal_family_color(family)
+	var cluster := Node3D.new()
+	cluster.name = "Trade_%s_%d" % [commodity_id, index]
+	cluster.position = Vector3(lx, terrain_y, lz)
+	cluster.rotation.y = deg_to_rad(float(index % 7) * 18.0)
+	parent.add_child(cluster)
+	match decor_kind:
+		"fish_market":
+			_stamp_land_market(cluster, size, color)
+		"warehouse":
+			_stamp_land_warehouse(cluster, size, color)
+		"silos":
+			_stamp_land_silos(cluster, size, color)
+		"farm":
+			_stamp_land_farm(cluster, size, color)
+		"sawmill":
+			_stamp_land_sawmill(cluster, size, color)
+		"tree_stand":
+			_stamp_land_trees(cluster, size, color)
+		"ore_mound":
+			_stamp_land_ore_mound(cluster, size, color)
+		"minehead":
+			_stamp_land_minehead(cluster, size, color)
+		"yard_blocks":
+			_stamp_land_yard_blocks(cluster, size, color)
+		"tank_farm":
+			_stamp_land_tank_farm(cluster, size, color)
+		_:
+			_stamp_land_warehouse(cluster, size, color)
+	if show_module_labels:
+		_label(
+			"TradeLabel_%d" % index,
+			"%s\n%s" % [
+				CommodityCatalog.commodity_display(commodity_id).to_upper(),
+				role.to_upper(),
+			],
+			Vector3(lx, terrain_y + size.y + 6.0, lz),
+			color.lightened(0.2),
+			0.02,
+		)
+
+
+func _trade_decor_kind(commodity_id: String, role: String, family: String) -> String:
+	match str(commodity_id):
+		"fish":
+			return "fish_market"
+		"grain":
+			return "silos" if role == "export" else "farm"
+		"timber":
+			return "sawmill" if role == "export" else "tree_stand"
+		"coal", "iron_ore":
+			return "minehead" if role == "export" else "ore_mound"
+		"diesel", "crude_oil", "lng":
+			return "tank_farm"
+		"containers":
+			return "yard_blocks"
+		"provisions":
+			return "warehouse"
+		_:
+			match family:
+				"fishing":
+					return "fish_market"
+				"bulk_grain":
+					return "silos"
+				"bulk_ore":
+					return "ore_mound"
+				"liquid":
+					return "tank_farm"
+				"container":
+					return "yard_blocks"
+				_:
+					return "warehouse"
+
+
+## Cheap village house: walls + pitched roof + door/window/chimney (~8×7 m).
+func _make_village_house(index: int, u: float, v: float) -> Node3D:
+	var root := Node3D.new()
+	var tint := fmod(float(index) * 0.17 + u * 0.4 + v * 0.25, 1.0)
+	var wall := Color(0.72, 0.28, 0.22).lerp(Color(0.55, 0.42, 0.32), tint)
+	var roof_col := Color(0.28, 0.22, 0.20).lerp(Color(0.38, 0.18, 0.14), 1.0 - tint)
+	var w := lerpf(7.2, 9.0, fmod(tint * 3.1, 1.0))
+	var d := lerpf(6.0, 7.6, fmod(tint * 5.7, 1.0))
+	var wall_h := lerpf(3.4, 4.2, fmod(tint * 2.3, 1.0))
+	var roof_h := lerpf(2.2, 2.8, fmod(tint * 4.1, 1.0))
+
+	var body := MeshBuilder.box(Vector3(w, wall_h, d), wall, 0.92, 0.0)
+	body.position = Vector3(0.0, wall_h * 0.5, 0.0)
+	root.add_child(body)
+	var roof := MeshBuilder.prism(Vector3(w * 1.08, roof_h, d * 1.04), roof_col, 0.88, 0.0)
+	roof.position = Vector3(0.0, wall_h + roof_h * 0.5, 0.0)
+	root.add_child(roof)
+	var door := MeshBuilder.box(Vector3(w * 0.22, wall_h * 0.55, 0.35), Color(0.22, 0.16, 0.12), 0.9, 0.05)
+	door.position = Vector3(0.0, wall_h * 0.28, d * 0.5)
+	root.add_child(door)
+	var window := MeshBuilder.box(Vector3(w * 0.18, wall_h * 0.28, 0.25), Color(0.55, 0.72, 0.82), 0.35, 0.1)
+	window.position = Vector3(w * 0.28, wall_h * 0.55, d * 0.5)
+	root.add_child(window)
+	var chimney := MeshBuilder.box(Vector3(0.7, roof_h * 0.85, 0.7), Color(0.35, 0.28, 0.26), 0.95, 0.0)
+	chimney.position = Vector3(-w * 0.28, wall_h + roof_h * 0.55, -d * 0.15)
+	root.add_child(chimney)
+	return root
 
 
 func _stamp_land_structure(parent: Node3D, entry: Dictionary, surface_y: float) -> void:

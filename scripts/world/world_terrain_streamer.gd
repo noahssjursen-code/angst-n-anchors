@@ -644,9 +644,14 @@ static func _apply_flatten_zones(
 ) -> float:
 	for zone_variant in flatten_zones:
 		var zone := zone_variant as Dictionary
+		## Town trapezoids clear trees only — do not flatten hinterland hills.
+		if bool(zone.get("forest_clear_only", false)):
+			continue
 		if bool(zone.get("carve", false)):
 			continue
-		var falloff := maxf(float(zone["falloff"]), 0.001)
+		if not zone.has("height"):
+			continue
+		var falloff := maxf(float(zone.get("falloff", 0.001)), 0.001)
 		var edge_distance := _zone_edge_distance(zone, world_xz)
 		var blend := 1.0 - smoothstep(0.0, falloff, maxf(edge_distance, 0.0))
 		if edge_distance <= 0.0:
