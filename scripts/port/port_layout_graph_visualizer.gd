@@ -56,7 +56,7 @@ static func _foundation_pavement_material() -> StandardMaterial3D:
 ## Shared materials across stamps — recreating StandardMaterial3D per box was a hitch.
 static var _material_cache: Dictionary = {}
 
-@export var show_module_labels := true
+@export var show_module_labels := false
 @export var show_open_slots := true
 @export var show_equipment_shapes := true
 
@@ -242,9 +242,7 @@ func _stamp_foundation() -> void:
 	mesh.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	mesh.extra_cull_margin = 24.0
 	add_child(mesh)
-	_add_trimesh_collision(mesh, "FoundationCollision")
-	## Convex top walk slabs along the apron — reliable CharacterBody footing
-	## even if trimesh is slow to cook on first frame.
+	## Walk slabs only — trimesh cook was a first-frame hitch with little gameplay gain.
 	_stamp_foundation_walk_boxes(spine_pts, sea_top, inland_top, top_y)
 
 
@@ -1105,7 +1103,7 @@ func _stamp_apron_pads() -> void:
 
 		var layout := BuildingBlueprintCatalog.find_for_pad(role_id, template_id)
 		if layout != null:
-			var building := BuildingFitout.build(layout, true)
+			var building := BuildingCache.instance(layout, true)
 			if building != null:
 				building.name = "Building"
 				site.add_child(building)
@@ -1315,7 +1313,7 @@ func _stamp_land_house_point(
 		terrain_y: float,
 		lz: float,
 ) -> void:
-	var house := _make_village_house(index, float(entry.get("u", 0.0)), float(entry.get("v", 0.0)))
+	var house := LandDecorCache.house_instance(index, float(entry.get("u", 0.0)), float(entry.get("v", 0.0)))
 	house.name = "House_%d" % index
 	house.position = Vector3(lx, terrain_y, lz)
 	house.rotation.y = deg_to_rad(180.0 + float(index % 5) * 12.0 - 24.0)

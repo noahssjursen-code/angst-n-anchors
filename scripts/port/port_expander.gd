@@ -99,6 +99,15 @@ static func expand(
 		world_layout: WorldLayout = null,
 		extra_attributes: Dictionary = {},
 ) -> PortData:
+	return PortDataCache.expand(definition, world_seed, world_layout, extra_attributes)
+
+
+static func expand_uncached(
+		definition: PortDefinition,
+		world_seed: int,
+		world_layout: WorldLayout = null,
+		extra_attributes: Dictionary = {},
+) -> PortData:
 	assert(
 		definition.port_generation_version == PortDefinition.CURRENT_PORT_GENERATION_VERSION,
 		"PortExpander: incompatible port generation version %d" % definition.port_generation_version,

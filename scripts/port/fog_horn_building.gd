@@ -36,20 +36,16 @@ func _build() -> void:
 
 	if assembler != null:
 		assembler.queue_free()
+		assembler = null
 
 	for child in get_children():
-		if child is ModelAssembler:
+		if child is ModelAssembler or child.name == "FogHornModel":
 			child.queue_free()
 
-	assembler = ModelAssembler.new()
-	assembler.name = "FogHornModel"
-	assembler.model_data_path = MODEL_PATH
-	assembler.build_part_colliders = not Engine.is_editor_hint()
-	add_child(assembler)
-
-	if Engine.is_editor_hint() and get_tree() != null:
-		assembler.owner = get_tree().edited_scene_root
-		_own_subtree(assembler)
+	var visual := ModelCache.instance(MODEL_PATH)
+	visual.name = "FogHornModel"
+	add_child(visual)
+	assembler = null
 
 
 ## Idempotent: if a FogHorn child already exists (baked .tscn, hot-reload),
