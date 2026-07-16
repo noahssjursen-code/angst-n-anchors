@@ -232,6 +232,15 @@ static func finish_fitout(
 		if accepted_cargo.has(zone_i):
 			_mount_cargo_zone(boat, root, grid, zone as Dictionary, zone_i)
 		zone_i += 1
+	var accepted_bulk: Dictionary = {}
+	var accepted_slots: Dictionary = outfit.get("accepted_slots", {})
+	for idx in accepted_slots.get("bulk_hold_indices", []):
+		accepted_bulk[int(idx)] = true
+	var hold_i := 0
+	for hold in layout.iter_bulk_holds():
+		if accepted_bulk.has(hold_i):
+			_mount_bulk_hold(boat, root, grid, hold as Dictionary, hold_i)
+		hold_i += 1
 	var ladder_n := int(state.get("ladder_n", 0))
 	var caps: Dictionary = outfit.get("capabilities", {}).duplicate(true)
 	caps["has_ladder"] = ladder_n > 0
@@ -677,6 +686,43 @@ static func _mount_cargo_zone(
 	center.y = grid.deck_y + 0.06
 	deck.position = center
 	root.add_child(deck)
+
+
+static func _mount_bulk_hold(
+	boat: BoatBody,
+	root: Node3D,
+	grid: DeckGrid,
+	hold: Dictionary,
+	index: int,
+) -> void:
+	var mn := BrickLayout.zone_min(hold)
+	var mx := BrickLayout.zone_max(hold)
+	var w := float(mx.x - mn.x + 1) * DeckGrid.CELL_M
+	var l := float(mx.z - mn.z + 1) * DeckGrid.CELL_M
+	var sum := Vector3.ZERO
+	var n := 0
+	for ix in range(mn.x, mx.x + 1):
+		for iz in range(mn.z, mx.z + 1):
+			sum += grid.cell_center_local(Vector3i(ix, 0, iz))
+			n += 1
+	if n <= 0:
+		return
+	var brick_id := str(hold.get("brick_id", "bulk_hold_6x12"))
+	var entry := BrickCatalog.get_entry(brick_id)
+	var depth_m := float(entry.get("hold_depth_m", 2.5))
+	var hold_node := BulkHoldComponent.new()
+	hold_node.name = "BulkHold_%d" % index
+	hold_node.configure(
+		"hold_%d" % index,
+		w,
+		l,
+		depth_m,
+	)
+	var center := sum / float(n)
+	center.y = grid.deck_y + 0.04
+	hold_node.position = center
+	hold_node.rotation_degrees = Vector3(0.0, float(int(hold.get("yaw", 0))), 0.0)
+	root.add_child(hold_node)
 
 
 static func _mount_helm(visual: Node3D) -> void:

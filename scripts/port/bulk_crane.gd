@@ -1,28 +1,26 @@
 class_name BulkCrane
 extends Node3D
 
-## Harbour bulk crane — A/D slew · W/S boom · Q/E hoist · Space bucket jaws.
+## Harbour bulk crane rig. Drive via `step()` / `steer_toward()`; attach `BulkCraneAutoOperator` for auto load/unload.
 
 const DEFAULT_MODEL := "res://resources/data/models/dockyard/bulk_crane.json"
 const ASSEMBLER_SCRIPT := preload("res://scripts/core/model_assembler.gd")
 
-## Per-shell jaw angles (degrees X). Closed = lips meet at bottom. Open = spread (img2).
-const RIGHT_CLOSED_DEG := -32.0
-const RIGHT_OPEN_DEG := 6.0
-const LEFT_CLOSED_DEG := 32.0
-const LEFT_OPEN_DEG := -6.0
+## Per-shell jaw angles (degrees X). Open = spread; closed = lips meet.
+const RIGHT_CLOSED_DEG := 6.0
+const RIGHT_OPEN_DEG := -32.0
+const LEFT_CLOSED_DEG := -6.0
+const LEFT_OPEN_DEG := 32.0
 const WIRE_REST_LENGTH_M := 10.0
 const HOIST_CABIN_CLEARANCE_M := 0.35
-const MAX_BUCKET_FILL := 1.0
-const PICKUP_RATE := 0.45
 const PICKUP_RADIUS_BASE_M := 8.0
 const PICKUP_HEIGHT_TOLERANCE_BASE_M := 4.0
 const PICKUP_OPEN_THRESHOLD := 0.55
 const DROP_CLOSE_THRESHOLD := 0.12
 const BUCKET_MOUTH_OFFSET_Y_M := -1.6
 
-signal bucket_fill_changed(fill: float, commodity_id: String)
-signal material_dropped(commodity_id: String, world_position: Vector3)
+signal bucket_fill_changed(lot: BulkCargoLot, capacity_tonnes_t: float)
+signal material_dropped(lot: BulkCargoLot, world_position: Vector3)
 
 signal model_loaded(path: String)
 signal slew_changed(degrees: float)
@@ -63,7 +61,7 @@ signal bucket_changed(open_amount: float)
 @export var boom_max_deg: float = 72.0
 @export var hoist_min_m: float = 3.0
 @export var hoist_max_m: float = 28.0
-@export var slew_speed_deg: float = 40.0
+@export var slew_speed_deg: float = 55.0
 @export var boom_speed_deg: float = 28.0
 @export var hoist_speed_m: float = 8.0
 @export var bucket_speed: float = 2.5
@@ -78,8 +76,7 @@ signal bucket_changed(open_amount: float)
 		_apply_bucket_scale()
 @export var simulate_bulk_material := true
 
-var bucket_fill := 0.0
-var bucket_commodity_id := ""
+var bucket_lot := BulkCargoLot.empty()
 
 var _assembler: Node3D
 var _cabin: Node3D
@@ -151,6 +148,38 @@ func _bind_rig() -> void:
 	model_loaded.emit(model_path)
 
 
+func _bind_shells() -> void:
+	_shell_left = null
+	_shell_right = null
+	if _bucket == null or not is_instance_valid(_bucket):
+		return
+	if _bucket.has_method("get_part"):
+		_shell_right = _bucket.get_part("shell_right") as Node3D
+		_shell_left = _bucket.get_part("shell_left") as Node3D
+	if _shell_right == null:
+		_shell_right = _bucket.find_child("ModelPart_shell_right", true, false) as Node3D
+	if _shell_left == null:
+		_shell_left = _bucket.find_child("ModelPart_shell_left", true, false) as Node3D
+	if _shell_right == null or _shell_left == null:
+		## Nested bucket assembler may still be building.
+		call_deferred("_bind_shells_retry")
+
+
+func _bind_shells_retry() -> void:
+	if _bucket == null or not is_instance_valid(_bucket):
+		return
+	if _bucket.has_method("get_part"):
+		if _shell_right == null:
+			_shell_right = _bucket.get_part("shell_right") as Node3D
+		if _shell_left == null:
+			_shell_left = _bucket.get_part("shell_left") as Node3D
+	if _shell_right == null:
+		_shell_right = _bucket.find_child("ModelPart_shell_right", true, false) as Node3D
+	if _shell_left == null:
+		_shell_left = _bucket.find_child("ModelPart_shell_left", true, false) as Node3D
+	_apply_bucket()
+
+
 func _rig_hoist_parts() -> void:
 	if _wire == null or _boom == null:
 		return
@@ -161,16 +190,7 @@ func _rig_hoist_parts() -> void:
 	if _bucket != null and is_instance_valid(_bucket):
 		## Bucket must not inherit wire scale — only the cable mesh stretches.
 		_bucket.reparent(_boom, false)
-
-
-func _bind_shells() -> void:
-	_shell_left = null
-	_shell_right = null
-	if _bucket == null:
-		return
-	if _bucket.has_method("get_part"):
-		_shell_right = _bucket.get_part("shell_right") as Node3D
-		_shell_left = _bucket.get_part("shell_left") as Node3D
+		call_deferred("_bind_shells")
 
 
 func _model_meta() -> Dictionary:
@@ -370,20 +390,229 @@ func _apply_bucket_scale() -> void:
 	_bucket.scale = Vector3.ONE
 	if _bucket is ModelAssembler:
 		(_bucket as ModelAssembler).absolute_scale = bucket_scale
-	_bind_shells()
+	call_deferred("_bind_shells")
 
 
-func _bucket_mouth_global() -> Vector3:
+func get_bucket_mouth_global() -> Vector3:
 	if _bucket == null or not is_instance_valid(_bucket):
 		return global_position
 	return _bucket.global_position + _bucket.global_basis * Vector3(
 		0.0, BUCKET_MOUTH_OFFSET_Y_M * bucket_scale, 0.0)
 
 
-func _nearest_ore_mound() -> OreMound:
+func get_bucket_global() -> Vector3:
+	if _bucket == null or not is_instance_valid(_bucket):
+		return global_position
+	return _bucket.global_position
+
+
+func get_boom_hinge_global() -> Vector3:
+	if _boom == null or not is_instance_valid(_boom):
+		return global_position
+	return _boom.global_position
+
+
+func get_boom_tip_global() -> Vector3:
+	if _boom == null or _wire == null:
+		return get_boom_hinge_global()
+	return _boom.to_global(_wire.position)
+
+
+func get_boom_length_m() -> float:
+	return get_boom_hinge_global().distance_to(get_boom_tip_global())
+
+
+func get_slew_pivot_global() -> Vector3:
+	if _cabin != null and is_instance_valid(_cabin):
+		return _cabin.global_position
+	return global_position
+
+
+func get_tower_global() -> Vector3:
+	return get_slew_pivot_global() + Vector3(0.0, 3.6 * model_scale, 0.0)
+
+
+func get_effective_hoist_max_m() -> float:
+	return _effective_hoist_max_m()
+
+
+## Inverse kinematics from bucket position.
+## `hoist_mode`: "hold" = leave hoist alone · "raise" = reel up · "track" = match target Y
+func ik_bucket_to(delta: float, target: Vector3, hoist_mode: String = "track") -> void:
+	if _cabin == null or not is_instance_valid(_cabin):
+		return
+	var bucket := get_bucket_global()
+	var pivot := get_slew_pivot_global()
+	var hinge := get_boom_hinge_global()
+
+	## Slew — azimuth error, deadzoned to kill jitter.
+	var bucket_az := Vector2(bucket.x - pivot.x, bucket.z - pivot.z)
+	var target_az := Vector2(target.x - pivot.x, target.z - pivot.z)
+	var slew_err_deg := 0.0
+	if bucket_az.length() > 0.3 and target_az.length() > 0.3:
+		slew_err_deg = rad_to_deg(bucket_az.angle_to(target_az))
+		if absf(slew_err_deg) > 2.0:
+			var slew_step := slew_speed_deg * delta
+			slew_degrees -= clampf(slew_err_deg, -slew_step, slew_step)
+
+	## Boom — only once slew is roughly on target, with a wide deadzone + soft gain.
+	var bucket_reach := Vector2(bucket.x - hinge.x, bucket.z - hinge.z).length()
+	var target_reach := Vector2(target.x - hinge.x, target.z - hinge.z).length()
+	var reach_err := target_reach - bucket_reach
+	if absf(slew_err_deg) < 12.0 and absf(reach_err) > 1.25:
+		var boom_step := boom_speed_deg * delta * 0.55
+		var soft := clampf(absf(reach_err) / 8.0, 0.15, 1.0)
+		boom_angle_deg += clampf(-reach_err * 1.1 * soft, -boom_step, boom_step)
+
+	## Hoist — explicit modes so travel does not fight the ellipse height.
+	var hoist_step := hoist_speed_m * delta * 1.5
+	match hoist_mode:
+		"raise":
+			var raised := hoist_min_m + 1.2
+			hoist_length_m = move_toward(hoist_length_m, raised, hoist_step)
+		"track":
+			var y_err := target.y - bucket.y
+			if y_err < -0.35:
+				hoist_length_m += hoist_step
+			elif y_err > 0.35:
+				hoist_length_m -= hoist_step
+		_:
+			pass
+
+
+func bucket_distance_to(target: Vector3) -> float:
+	return get_bucket_global().distance_to(target)
+
+
+func bucket_horizontal_distance_to(target: Vector3) -> float:
+	var bucket := get_bucket_global()
+	return Vector2(target.x - bucket.x, target.z - bucket.z).length()
+
+
+func is_bucket_near(target: Vector3, radius_m: float = 2.5) -> bool:
+	return bucket_distance_to(target) <= radius_m
+
+
+func is_bucket_over(target: Vector3, radius_m: float = 3.5) -> bool:
+	return bucket_horizontal_distance_to(target) <= radius_m
+
+
+## @deprecated — use ik_bucket_to
+func drive_toward_target(delta: float, target: Vector3, travel_high: bool = false) -> void:
+	ik_bucket_to(delta, target, "raise" if travel_high else "track")
+
+
+func is_close_to_target(target: Vector3, travel_high: bool = false) -> bool:
+	if travel_high:
+		return is_bucket_over(target, 3.5)
+	return is_bucket_near(target, 2.5)
+
+
+func aim_at_target(delta: float, target: Vector3, travel_high: bool = false) -> bool:
+	ik_bucket_to(delta, target, "raise" if travel_high else "track")
+	return is_close_to_target(target, travel_high)
+
+
+func find_nearest_ore_mound(commodity_id: String = "") -> OreMound:
 	if not is_inside_tree():
 		return null
-	var mouth := _bucket_mouth_global()
+	var origin := global_position
+	var cid := commodity_id.strip_edges()
+	var best: OreMound = null
+	var best_dist := INF
+	for node in get_tree().get_nodes_in_group("ore_mound"):
+		if node is not OreMound:
+			continue
+		var mound := node as OreMound
+		if not cid.is_empty() and mound.commodity_id != cid:
+			continue
+		var dist := origin.distance_to(mound.global_position)
+		if dist < best_dist:
+			best_dist = dist
+			best = mound
+	return best
+
+
+func set_bucket_jaws_target(open_amount: float) -> void:
+	_bucket_open_target = clampf(open_amount, 0.0, 1.0)
+
+
+func get_bucket_jaws_target() -> float:
+	return _bucket_open_target
+
+
+func is_bucket_at_target(tolerance: float = 0.04) -> bool:
+	return absf(bucket_open - _bucket_open_target) <= tolerance
+
+
+func step(delta: float, command: BulkCraneCommand = null) -> void:
+	if command == null:
+		command = BulkCraneCommand.new()
+	if not is_zero_approx(command.slew_rate):
+		slew_degrees = slew_degrees + command.slew_rate * slew_speed_deg * delta
+	if not is_zero_approx(command.boom_rate):
+		boom_angle_deg = boom_angle_deg + command.boom_rate * boom_speed_deg * delta
+	if not is_zero_approx(command.hoist_rate):
+		hoist_length_m = hoist_length_m + command.hoist_rate * hoist_speed_m * delta
+	if command.bucket_target >= 0.0:
+		_bucket_open_target = clampf(command.bucket_target, 0.0, 1.0)
+	step_jaws(delta)
+	_tick_bulk_material(delta)
+
+
+func step_jaws(delta: float) -> void:
+	if _shell_left == null or _shell_right == null:
+		_bind_shells()
+	if not is_equal_approx(bucket_open, _bucket_open_target):
+		bucket_open = move_toward(bucket_open, _bucket_open_target, bucket_speed * delta)
+
+
+func grab_from_mound(mound: OreMound) -> void:
+	if mound == null:
+		return
+	var capacity_t := bucket_capacity_tonnes_t()
+	bucket_lot = BulkCargoLot.create(mound.commodity_id, capacity_t)
+	mound.take(capacity_t)
+	bucket_fill_changed.emit(bucket_lot.duplicate_lot(), capacity_t)
+
+
+func grab_from_hold(hold: BulkHoldComponent) -> void:
+	if hold == null:
+		return
+	var capacity_t := bucket_capacity_tonnes_t()
+	var withdrawn := hold.withdraw_lot(capacity_t)
+	if withdrawn.is_empty():
+		return
+	bucket_lot = withdrawn.duplicate_lot()
+	bucket_fill_changed.emit(bucket_lot.duplicate_lot(), capacity_t)
+
+
+func force_release_at(world_pos: Vector3) -> void:
+	if bucket_lot.is_empty():
+		_drop_armed = false
+		return
+	_drop_armed = true
+	var dropped := bucket_lot.duplicate_lot()
+	var drop_parent := get_parent()
+	if drop_parent == null:
+		drop_parent = self
+	BulkMaterialDrop.spawn(
+		drop_parent,
+		dropped,
+		world_pos,
+		Vector3.DOWN * 1.5,
+		bucket_capacity_tonnes_t(),
+		bucket_scale,
+	)
+	material_dropped.emit(dropped, world_pos)
+	bucket_lot = BulkCargoLot.empty()
+	bucket_fill_changed.emit(bucket_lot.duplicate_lot(), bucket_capacity_tonnes_t())
+
+
+func _pickup_mound() -> OreMound:
+	if not is_inside_tree():
+		return null
+	var mouth := get_bucket_mouth_global()
 	var best: OreMound = null
 	var best_dist := PICKUP_RADIUS_BASE_M * bucket_scale
 	for node in get_tree().get_nodes_in_group("ore_mound"):
@@ -397,36 +626,76 @@ func _nearest_ore_mound() -> OreMound:
 	return best
 
 
-func _tick_bulk_material(delta: float) -> void:
+func _tick_bulk_material(_delta: float) -> void:
 	if not simulate_bulk_material:
 		return
-	_try_pickup_from_mound(delta)
+	_try_pickup_from_mound()
+	_try_pickup_from_hold()
 	_try_drop_material()
 
 
-func _try_pickup_from_mound(delta: float) -> void:
-	if bucket_open < PICKUP_OPEN_THRESHOLD or bucket_fill >= MAX_BUCKET_FILL:
+func bucket_capacity_tonnes_t() -> float:
+	return BulkCargoRules.bucket_capacity_tonnes(bucket_scale)
+
+
+func get_bucket_lot() -> BulkCargoLot:
+	return bucket_lot.duplicate_lot()
+
+
+func _try_pickup_from_mound() -> void:
+	var capacity_t := bucket_capacity_tonnes_t()
+	if bucket_open < PICKUP_OPEN_THRESHOLD:
 		return
-	var mound := _nearest_ore_mound()
+	if (
+		not bucket_lot.is_empty()
+		and bucket_lot.tonnes_t >= capacity_t - BulkCargoLot.TONNES_EPS
+	):
+		return
+	var mound := _pickup_mound()
 	if mound == null:
 		return
-	var mouth := _bucket_mouth_global()
+	var mouth := get_bucket_mouth_global()
 	var pick := mound.pickup_global()
+	if mouth.distance_to(pick) > PICKUP_RADIUS_BASE_M * bucket_scale:
+		return
 	if absf(mouth.y - pick.y) > PICKUP_HEIGHT_TOLERANCE_BASE_M * bucket_scale:
 		return
-	var taken := mound.take(PICKUP_RATE * delta)
-	if taken <= 0.0:
+	bucket_lot = BulkCargoLot.create(mound.commodity_id, capacity_t)
+	mound.take(capacity_t)
+	bucket_fill_changed.emit(bucket_lot.duplicate_lot(), capacity_t)
+
+
+func _try_pickup_from_hold() -> void:
+	var capacity_t := bucket_capacity_tonnes_t()
+	if bucket_open < PICKUP_OPEN_THRESHOLD:
 		return
-	if bucket_commodity_id.is_empty():
-		bucket_commodity_id = mound.commodity_id
-	elif bucket_commodity_id != mound.commodity_id:
+	if (
+		not bucket_lot.is_empty()
+		and bucket_lot.tonnes_t >= capacity_t - BulkCargoLot.TONNES_EPS
+	):
 		return
-	bucket_fill = minf(MAX_BUCKET_FILL, bucket_fill + taken)
-	bucket_fill_changed.emit(bucket_fill, bucket_commodity_id)
+	var mouth := get_bucket_mouth_global()
+	var hold := BulkHoldComponent.find_filled_hold_at(mouth)
+	if hold == null:
+		return
+	var aim := hold.get_crane_aim_global()
+	if mouth.distance_to(aim) > PICKUP_RADIUS_BASE_M * bucket_scale:
+		return
+	if absf(mouth.y - aim.y) > PICKUP_HEIGHT_TOLERANCE_BASE_M * bucket_scale:
+		return
+	var need_t := capacity_t - bucket_lot.tonnes_t
+	var withdrawn := hold.withdraw_lot(need_t)
+	if withdrawn.is_empty():
+		return
+	if bucket_lot.is_empty():
+		bucket_lot = withdrawn.duplicate_lot()
+	else:
+		bucket_lot.tonnes_t += withdrawn.tonnes_t
+	bucket_fill_changed.emit(bucket_lot.duplicate_lot(), capacity_t)
 
 
 func _try_drop_material() -> void:
-	if bucket_fill <= 0.05:
+	if bucket_lot.is_empty():
 		_drop_armed = false
 		return
 	if bucket_open > DROP_CLOSE_THRESHOLD:
@@ -435,24 +704,23 @@ func _try_drop_material() -> void:
 	if _drop_armed:
 		return
 	_drop_armed = true
-	var commodity := bucket_commodity_id if not bucket_commodity_id.is_empty() else "iron_ore"
-	var mouth := _bucket_mouth_global()
+	var dropped := bucket_lot.duplicate_lot()
+	var mouth := get_bucket_mouth_global()
 	var drop_parent := get_parent()
 	if drop_parent == null:
 		drop_parent = self
 	var drop_vel := Vector3.DOWN * 2.0 + _bucket.global_basis.x * 1.2
 	BulkMaterialDrop.spawn(
 		drop_parent,
-		commodity,
+		dropped,
 		mouth,
 		drop_vel,
-		bucket_fill,
+		bucket_capacity_tonnes_t(),
 		bucket_scale,
 	)
-	material_dropped.emit(commodity, mouth)
-	bucket_fill = 0.0
-	bucket_commodity_id = ""
-	bucket_fill_changed.emit(bucket_fill, bucket_commodity_id)
+	material_dropped.emit(dropped, mouth)
+	bucket_lot = BulkCargoLot.empty()
+	bucket_fill_changed.emit(bucket_lot.duplicate_lot(), bucket_capacity_tonnes_t())
 
 
 func _apply_bucket() -> void:
@@ -467,54 +735,79 @@ func _apply_bucket() -> void:
 
 
 func toggle_bucket() -> void:
-	_bucket_open_target = 0.0 if _bucket_open_target > 0.5 else 1.0
+	set_bucket_jaws_target(0.0 if _bucket_open_target > 0.5 else 1.0)
 
 
 func playtest_input(delta: float) -> void:
-	var slew_dir := 0.0
+	var cmd := BulkCraneCommand.new()
 	if Input.is_key_pressed(KEY_A):
-		slew_dir += 1.0
+		cmd.slew_rate += 1.0
 	if Input.is_key_pressed(KEY_D):
-		slew_dir -= 1.0
-	if not is_zero_approx(slew_dir):
-		slew_degrees = slew_degrees + slew_dir * slew_speed_deg * delta
-
-	var boom_dir := 0.0
+		cmd.slew_rate -= 1.0
 	if Input.is_key_pressed(KEY_W):
-		boom_dir += 1.0
+		cmd.boom_rate += 1.0
 	if Input.is_key_pressed(KEY_S):
-		boom_dir -= 1.0
-	if not is_zero_approx(boom_dir):
-		boom_angle_deg = boom_angle_deg + boom_dir * boom_speed_deg * delta
-
-	var hoist_dir := 0.0
+		cmd.boom_rate -= 1.0
 	if Input.is_key_pressed(KEY_Q):
-		hoist_dir -= 1.0
+		cmd.hoist_rate -= 1.0
 	if Input.is_key_pressed(KEY_E):
-		hoist_dir += 1.0
-	if not is_zero_approx(hoist_dir):
-		hoist_length_m = hoist_length_m + hoist_dir * hoist_speed_m * delta
-
+		cmd.hoist_rate += 1.0
 	var space_down := Input.is_physical_key_pressed(KEY_SPACE)
 	if space_down and not _space_held:
 		toggle_bucket()
 	_space_held = space_down
-
-	if not is_equal_approx(bucket_open, _bucket_open_target):
-		bucket_open = move_toward(bucket_open, _bucket_open_target, bucket_speed * delta)
-
-	_tick_bulk_material(delta)
+	step(delta, cmd)
 
 
 func get_bucket() -> Node3D:
 	return _bucket
 
 
+func get_auto_operator() -> BulkCraneAutoOperator:
+	return get_node_or_null("AutoOperator") as BulkCraneAutoOperator
+
+
+func start_auto_load(
+		ship: BoatBody,
+		commodity_id: String = "iron_ore",
+		mound: OreMound = null,
+		hold: BulkHoldComponent = null,
+) -> bool:
+	var op := get_auto_operator()
+	if op == null:
+		return false
+	return op.start_load(ship, commodity_id, mound, hold)
+
+
+func start_auto_unload(
+		ship: BoatBody,
+		commodity_id: String = "",
+		mound: OreMound = null,
+		hold: BulkHoldComponent = null,
+) -> bool:
+	var op := get_auto_operator()
+	if op == null:
+		return false
+	return op.start_unload(ship, commodity_id, mound, hold)
+
+
+func stop_auto() -> void:
+	var op := get_auto_operator()
+	if op != null:
+		op.stop()
+
+
+func is_auto_active() -> bool:
+	var op := get_auto_operator()
+	return op != null and op.is_active()
+
+
 func get_status_lines() -> PackedStringArray:
 	var jaw := "open" if bucket_open > 0.5 else "closed"
 	var cargo := "empty"
-	if bucket_fill > 0.05:
-		cargo = "%s %.0f%%" % [bucket_commodity_id, bucket_fill * 100.0]
+	if not bucket_lot.is_empty():
+		var cap_t := bucket_capacity_tonnes_t()
+		cargo = "%s %.1f / %.1f t" % [bucket_lot.commodity_id, bucket_lot.tonnes_t, cap_t]
 	return PackedStringArray([
 		"Model  %s" % model_path.get_file(),
 		"Slew   %.1f°   (A / D)" % slew_degrees,

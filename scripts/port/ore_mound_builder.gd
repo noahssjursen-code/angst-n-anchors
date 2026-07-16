@@ -144,3 +144,7 @@ static func _material_for(commodity_id: String) -> ShaderMaterial:
 		))
 	_material_cache[key] = mat
 	return mat.duplicate()
+
+
+static func material_for(commodity_id: String) -> Material:
+	return _material_for(resolve_commodity(commodity_id))

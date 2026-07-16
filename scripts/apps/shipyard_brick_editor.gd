@@ -1415,6 +1415,7 @@ func _palette_category_of(brick_id: String) -> String:
 		return "Deck"
 	if (
 		BrickCatalog.has_tag(brick_id, "helm")
+		or BrickCatalog.has_tag(brick_id, "bulk_hold")
 		or BrickCatalog.has_tag(brick_id, "cargo")
 		or BrickCatalog.has_tag(brick_id, "crane")
 		or BrickCatalog.has_tag(brick_id, "crane_base")
@@ -1490,7 +1491,7 @@ func _refresh_context_drawer() -> void:
 	_color_section.visible = not is_mark and _brick_supports_color(_brick_id)
 	_sign_section.visible = not is_mark and BrickCatalog.has_tag(_brick_id, "text")
 	_light_section.visible = not is_mark and BrickCatalog.has_tag(_brick_id, "light")
-	_cargo_section.visible = not is_mark and _is_cargo_tool()
+	_cargo_section.visible = not is_mark and _is_cargo_zone_tool()
 	_clipboard_section.visible = is_mark or not _clipboard.is_empty()
 
 
@@ -1506,8 +1507,10 @@ func _refresh_hint() -> void:
 			_hint_lbl.text = "Select: click corner B. Change layer first to include height."
 		else:
 			_hint_lbl.text = "Selection ready — Copy in the properties drawer or press Ctrl+C."
-	elif _is_cargo_tool():
+	elif _is_cargo_zone_tool():
 		_hint_lbl.text = "Cargo zone: click two corners on deck."
+	elif _is_fixed_rect_tool():
+		_hint_lbl.text = "Bulk hold: click once on deck. R rotates footprint."
 	elif not _clipboard.is_empty():
 		_hint_lbl.text = "Clipboard ready — Ctrl+V at cursor, or Paste on this layer."
 	else:
@@ -1626,7 +1629,7 @@ func _on_viewport_gui_input(event: InputEvent) -> void:
 			_update_camera()
 		elif _painting and Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
 			# Cargo zones and mark corners are click-A / click-B — never drag-paint.
-			if not _is_cargo_tool() and _tool != Tool.MARK:
+			if not _is_cargo_zone_tool() and not _is_fixed_rect_tool() and _tool != Tool.MARK:
 				_paint_at_screen(mm.position)
 			else:
 				_update_ghost_at_screen(mm.position)
@@ -1668,10 +1671,17 @@ func _apply_layer_visibility() -> void:
 		var cargo := _brick_root.get_node_or_null("CargoZonePreview")
 		if cargo != null:
 			cargo.visible = _layer_y >= 0
+		var bulk := _brick_root.get_node_or_null("BulkHoldPreview")
+		if bulk != null:
+			bulk.visible = _layer_y >= 0
 
 
-func _is_cargo_tool() -> bool:
-	return BrickCatalog.has_tag(_brick_id, "cargo") or str(BrickCatalog.get_entry(_brick_id).get("place_mode", "")) == "rect"
+func _is_cargo_zone_tool() -> bool:
+	return str(BrickCatalog.get_entry(_brick_id).get("place_mode", "")) == "rect"
+
+
+func _is_fixed_rect_tool() -> bool:
+	return str(BrickCatalog.get_entry(_brick_id).get("place_mode", "")) == "fixed_rect"
 
 
 func _clear_cargo_anchor() -> void:
@@ -1687,8 +1697,11 @@ func _paint_at_screen(screen_pos: Vector2) -> void:
 		return
 	_last_paint_cell = cell
 
-	if _is_cargo_tool():
+	if _is_cargo_zone_tool():
 		_paint_cargo_at(cell)
+		return
+	if _is_fixed_rect_tool():
+		_paint_fixed_rect_at(cell)
 		return
 
 	if _tool == Tool.MARK:
@@ -1696,6 +1709,11 @@ func _paint_at_screen(screen_pos: Vector2) -> void:
 		return
 
 	if _tool == Tool.ERASE:
+		if _layout.erase_bulk_hold_at(cell):
+			_clear_cargo_anchor()
+			_sync_brick_visuals()
+			_refresh_rules()
+			return
 		if _layout.erase_cargo_zone_at(cell):
 			_clear_cargo_anchor()
 			_sync_brick_visuals()
@@ -1756,6 +1774,29 @@ func _paint_cargo_at(cell: Vector3i) -> void:
 	_refresh_ghost_from_mouse()
 
 
+func _paint_fixed_rect_at(cell: Vector3i) -> void:
+	if cell.y != 0:
+		return
+	if _tool == Tool.ERASE:
+		if not _layout.erase_bulk_hold_at(cell):
+			return
+		_sync_brick_visuals()
+		_refresh_rules()
+		_refresh_ghost_from_mouse()
+		return
+	if _registration_id.is_empty():
+		_show_toast("Choose a legal vessel registration before building")
+		return
+	var yaw := _yaw
+	if not _fixed_rect_placeable(cell, _brick_id, yaw):
+		return
+	if not _layout.add_bulk_hold(cell, _brick_id, yaw, _grid):
+		return
+	_sync_brick_visuals()
+	_refresh_rules()
+	_refresh_ghost_from_mouse()
+
+
 func _rotate_yaw() -> void:
 	var step := BrickCatalog.yaw_step_of(_brick_id) if BrickCatalog.has(_brick_id) else 90
 	_yaw = (_yaw + step) % 360
@@ -1799,6 +1840,8 @@ func _try_place(cell: Vector3i) -> bool:
 		elif not _grid.in_bounds(c):
 			return false
 		if _layout.cargo_contains(c):
+			return false
+		if _layout.bulk_hold_contains(c):
 			return false
 	var denied := _registration_place_denied(_brick_id, cells)
 	if not denied.is_empty():
@@ -1905,6 +1948,8 @@ func _placement_legal(cell: Vector3i, brick_id: String, yaw: int) -> bool:
 		return false
 	if BrickCatalog.has_tag(brick_id, "cargo") or str(entry.get("place_mode", "")) == "rect":
 		return cell.y == 0 and _grid.in_bounds(Vector3i(cell.x, 0, cell.z))
+	if str(entry.get("place_mode", "")) == "fixed_rect":
+		return _fixed_rect_placeable(cell, brick_id, yaw)
 	## Signs / lights can mount on existing walls / sit on empty deck.
 	if BrickCatalog.has_tag(brick_id, "text") or BrickCatalog.has_tag(brick_id, "light"):
 		if bool(entry.get("deck_only", false)) and cell.y != 0:
@@ -1935,7 +1980,7 @@ func _placement_legal(cell: Vector3i, brick_id: String, yaw: int) -> bool:
 	for c in cells:
 		if not _grid.in_bounds(c):
 			return false
-		if not allow_on_cargo and _layout.cargo_contains(c):
+		if not allow_on_cargo and _layout.deck_reserved_contains(c):
 			return false
 	return _registration_place_denied(brick_id, cells).is_empty()
 
@@ -2000,7 +2045,7 @@ func _update_ghost_at_screen(screen_pos: Vector2) -> void:
 	if cell.x < 0:
 		_clear_ghost()
 		return
-	if _is_cargo_tool():
+	if _is_cargo_zone_tool():
 		_update_cargo_ghost(cell)
 		return
 	var yaw := _ghost_yaw_for(cell, _brick_id)
@@ -2022,7 +2067,7 @@ func _update_ghost_at_screen(screen_pos: Vector2) -> void:
 		and _ghost_brick_id == _brick_id
 		and _ghost_valid == valid
 		and _ghost_color.is_equal_approx(paint_color)
-		and not _is_cargo_tool()
+		and not _is_cargo_zone_tool()
 		and str(_ghost.get_meta("sign_text", "")) == sign
 		and not BrickCatalog.has_tag(_brick_id, "text")
 	):
@@ -2099,6 +2144,21 @@ func _cargo_rect_placeable(zone: Dictionary) -> bool:
 			if _layout.has_cell(c):
 				return false
 	return true
+
+
+func _fixed_rect_placeable(cell: Vector3i, brick_id: String, yaw: int) -> bool:
+	if cell.y != 0 or _grid == null:
+		return false
+	var fp := BrickCatalog.footprint_of(brick_id)
+	var yaw_steps := int(round(float(yaw) / 90.0)) % 4
+	for c in _grid.footprint_cells(cell, fp, yaw_steps):
+		if not _grid.in_bounds(c):
+			return false
+		if _layout.has_cell(c):
+			return false
+		if _layout.deck_reserved_contains(c):
+			return false
+	return _registration_place_denied(brick_id, _grid.footprint_cells(cell, fp, yaw_steps)).is_empty()
 
 
 func _make_cargo_zone_visual(zone: Dictionary) -> Node3D:
@@ -2748,6 +2808,7 @@ func _sync_brick_visuals() -> void:
 		_brick_visuals[k] = visual
 
 	_refresh_cargo_zone_preview(_layout.iter_cargo_zones())
+	_refresh_bulk_hold_preview(_layout.iter_bulk_holds())
 	_apply_layer_visibility()
 
 
@@ -2798,6 +2859,46 @@ func _refresh_cargo_zone_preview(zones: Array) -> void:
 		_cargo_zone_corner(pad, hx, -hz, -1.0, 1.0, arm, thick, h, col)
 		_cargo_zone_corner(pad, -hx, hz, 1.0, -1.0, arm, thick, h, col)
 		_cargo_zone_corner(pad, hx, hz, -1.0, -1.0, arm, thick, h, col)
+
+
+func _refresh_bulk_hold_preview(holds: Array) -> void:
+	if _brick_root == null:
+		return
+	var existing := _brick_root.get_node_or_null("BulkHoldPreview")
+	if existing != null:
+		_brick_root.remove_child(existing)
+		existing.free()
+	if holds.is_empty() or _grid == null:
+		return
+
+	var root := Node3D.new()
+	root.name = "BulkHoldPreview"
+	_brick_root.add_child(root)
+
+	for hold_v in holds:
+		var hold := hold_v as Dictionary
+		var mn := BrickLayout.zone_min(hold)
+		var mx := BrickLayout.zone_max(hold)
+		var w := float(mx.x - mn.x + 1) * DeckGrid.CELL_M
+		var l := float(mx.z - mn.z + 1) * DeckGrid.CELL_M
+		var sum := Vector3.ZERO
+		var n := 0
+		for ix in range(mn.x, mx.x + 1):
+			for iz in range(mn.z, mx.z + 1):
+				sum += _grid.cell_center_local(Vector3i(ix, 0, iz))
+				n += 1
+		if n <= 0:
+			continue
+		var brick_id := str(hold.get("brick_id", "bulk_hold_6x12"))
+		var entry := BrickCatalog.get_entry(brick_id)
+		var depth_m := float(entry.get("hold_depth_m", 2.5))
+		var pad := Node3D.new()
+		pad.position = sum / float(n)
+		pad.position.y = _grid.deck_y + 0.04
+		pad.rotation_degrees = Vector3(0.0, float(int(hold.get("yaw", 0))), 0.0)
+		root.add_child(pad)
+		var visual := BulkHoldComponent.build_visual(w, l, depth_m, true)
+		pad.add_child(visual)
 
 
 func _cargo_zone_corner(

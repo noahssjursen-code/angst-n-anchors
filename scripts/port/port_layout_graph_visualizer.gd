@@ -26,6 +26,7 @@ const QUAY_PIER_MASS_COLOR := Color(0.18, 0.19, 0.20)
 const QUAY_DECK_TOP_LOCAL_Y := 0.55
 const QUAY_DECK_SLAB_H := 0.55
 const BULK_CRANE_SCRIPT := preload("res://scripts/port/bulk_crane.gd")
+const BULK_CRANE_AUTO_SCRIPT := preload("res://scripts/port/bulk_crane_auto_operator.gd")
 
 
 static func _foundation_pavement_material() -> StandardMaterial3D:
@@ -1186,6 +1187,10 @@ func _stamp_bulk_crane_at(root: Node3D, _footprint: Vector3, _berth_sign: float)
 	crane.boom_angle_deg = 38.0
 	crane.hoist_length_m = 10.0
 	crane.bucket_open = 0.0
+	crane.set_bucket_jaws_target(0.0)
+	var auto := BULK_CRANE_AUTO_SCRIPT.new() as BulkCraneAutoOperator
+	auto.name = "AutoOperator"
+	crane.add_child(auto)
 	root.add_child(crane)
 
 

@@ -794,6 +794,17 @@ func get_cargo_decks() -> Array[CargoDeckComponent]:
 	return CargoDeckComponent.get_all_for_ship(self)
 
 
+func get_bulk_holds() -> Array[BulkHoldComponent]:
+	return BulkHoldComponent.get_all_for_ship(self)
+
+
+func get_bulk_hold_states() -> Array[Dictionary]:
+	var out: Array[Dictionary] = []
+	for hold in get_bulk_holds():
+		out.append(hold.get_state().to_dict())
+	return out
+
+
 func get_fishing_systems() -> Array[FishingSystem]:
 	## Live FishingSystem nodes mounted by DeckFitout for accepted fishing slots.
 	var out: Array[FishingSystem] = []

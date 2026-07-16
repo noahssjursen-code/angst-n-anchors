@@ -33,7 +33,8 @@ func pickup_global() -> Vector3:
 	return global_position + Vector3(0.0, _size.y * 0.42, 0.0)
 
 
-func take(amount: float) -> float:
-	if amount <= 0.0:
+func take(tonnes_t: float) -> float:
+	## Returns tonnes offered — mound visuals stay fixed.
+	if tonnes_t <= 0.0:
 		return 0.0
-	return amount
+	return tonnes_t

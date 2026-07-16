@@ -150,10 +150,48 @@ static func validate(
 		cargo_used += cells_n
 		zone_i += 1
 
+	var accepted_bulk_indices: Array[int] = []
+	var hold_i := 0
+	for hold_raw in layout.iter_bulk_holds():
+		var hold := hold_raw as Dictionary
+		var mn := BrickLayout.zone_min(hold)
+		var mx := BrickLayout.zone_max(hold)
+		if mn.y != 0 or mx.y != 0:
+			errors.append(
+				"Bulk hold %d must sit on the exposed deck (y = 0), not layered/hidden holds."
+				% (hold_i + 1)
+			)
+			hold_i += 1
+			continue
+		var cells_n := BrickLayout.zone_cell_count(hold)
+		var invalid := false
+		for ix in range(mn.x, mx.x + 1):
+			for iz in range(mn.z, mx.z + 1):
+				var c := Vector3i(ix, 0, iz)
+				if not g.has_deck_cell(c):
+					invalid = true
+					break
+			if invalid:
+				break
+		if invalid:
+			errors.append("Bulk hold %d covers cells outside the exposed deck." % (hold_i + 1))
+			hold_i += 1
+			continue
+		if cargo_used + cells_n > cargo_max:
+			errors.append(
+				"Cargo exceeds hull budget (%d / %d cells). Shrink or remove holds/zones."
+				% [cargo_used + cells_n, cargo_max]
+			)
+			hold_i += 1
+			continue
+		accepted_bulk_indices.append(hold_i)
+		cargo_used += cells_n
+		hold_i += 1
+
 	var usage := {
 		"fishing": fishing_cells.size(),
 		"helm": helm_cells.size(),
-		"cargo_cells": layout.cargo_cell_count(),
+		"cargo_cells": layout.deck_cargo_cell_count(),
 		"crane": crane_cells.size(),
 		"tow": tow_cells.size(),
 		"accepted_cargo_cells": cargo_used,
@@ -164,6 +202,7 @@ static func validate(
 		"crane": accepted_crane,
 		"tow": accepted_tow,
 		"cargo_zone_indices": accepted_cargo_indices,
+		"bulk_hold_indices": accepted_bulk_indices,
 	}
 	var caps := {
 		"cargo_cells": cargo_used,

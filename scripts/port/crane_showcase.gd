@@ -5,7 +5,8 @@ extends Node3D
 ## F6 bulk-quay vignette — ore yard, grab crane, docked bulk carrier.
 
 const BULK_CRANE_SCRIPT := preload("res://scripts/port/bulk_crane.gd")
-const DOCKED_HULL_ID := "hull_90x24"
+const BULK_CRANE_AUTO_SCRIPT := preload("res://scripts/port/bulk_crane_auto_operator.gd")
+const DOCKED_PREBUILT_ID := "bulk_small"
 
 const QUAY_LENGTH_M := 140.0
 const QUAY_WIDTH_M := 72.0
@@ -22,6 +23,7 @@ const PIER_MASS_COLOR := Color(0.18, 0.19, 0.20)
 @export var orbit_distance := 72.0
 
 var _crane: BulkCrane
+var _auto: BulkCraneAutoOperator
 var _camera: Camera3D
 var _hud: Label
 var _orbiting := false
@@ -46,15 +48,22 @@ func _ready() -> void:
 	_refresh_hud()
 
 
+var _hud_timer := 0.0
+
+
 func _process(delta: float) -> void:
 	if Engine.is_editor_hint():
 		return
 	if _crane != null:
-		_crane.playtest_input(delta)
+		if _auto == null or not _auto.is_active():
+			_crane.playtest_input(delta)
 		if _focus_bucket:
 			_track_bucket_focus()
 			_update_camera()
-	_refresh_hud()
+	_hud_timer += delta
+	if _hud_timer >= 0.12:
+		_hud_timer = 0.0
+		_refresh_hud()
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -72,6 +81,12 @@ func _unhandled_input(event: InputEvent) -> void:
 			KEY_B:
 				_focus_on_bucket()
 				_update_camera()
+			KEY_L:
+				_start_auto_load()
+			KEY_O:
+				_start_auto_unload()
+			KEY_X:
+				_stop_auto()
 	if event is InputEventMouseButton:
 		var mb := event as InputEventMouseButton
 		if mb.button_index == MOUSE_BUTTON_RIGHT:
@@ -127,14 +142,39 @@ func _refresh_hud() -> void:
 	var mode := "BUCKET FOCUS" if _focus_bucket else "quay overview"
 	var lines: PackedStringArray = PackedStringArray([
 		"CRANE SHOWCASE — %s" % mode,
-		"quay · ore mounds · grab crane · docked %s" % DOCKED_HULL_ID,
+		"quay · ore mounds · grab crane · docked %s" % _docked_vessel_label(),
 		"B  bucket focus · Home  overview",
+		"L  auto load ship · O  auto unload · X  stop auto",
 		"A D  slew · W S  boom · Q E  hoist · Space  jaws · RMB orbit",
-		"Lower open bucket into mound to load · close jaws to dump",
 		"",
 	])
+	if _auto != null:
+		lines.append(_auto.get_status_line())
+		if _auto.is_active():
+			lines.append("Ellipse  A=green pickup · B=orange drop · cyan=arc")
+			lines.append("         yellow=aim on arc · pink=bucket · magenta=gap")
+		lines.append("")
 	if _crane != null:
 		lines.append_array(_crane.get_status_lines())
+	var ship := get_node_or_null("QuayScene/DockedShip") as BoatBody
+	if ship != null:
+		lines.append("")
+		lines.append("Ship holds")
+		for hold in ship.get_bulk_holds():
+			var st := hold.get_state()
+			if st.is_empty():
+				lines.append(
+					"  %s  empty / %.0f t" % [st.hold_id, st.capacity_tonnes_t]
+				)
+			else:
+				lines.append(
+					"  %s  %s %.1f / %.0f t" % [
+						st.hold_id,
+						st.commodity_id,
+						st.filled_tonnes_t,
+						st.capacity_tonnes_t,
+					]
+				)
 	_hud.text = "\n".join(lines)
 
 
@@ -253,8 +293,11 @@ func _stamp_ore_yard(parent: Node3D) -> void:
 
 func _crane_mount_position() -> Vector3:
 	var half_w := QUAY_WIDTH_M * 0.5
-	var crane_x := half_w - CRANE_LANE_W * 0.5
-	return Vector3(crane_x, QUAY_DECK_TOP_Y, 0.0)
+	var storage_x := -(half_w - STORAGE_LANE_W * 0.5)
+	var berth_edge_x := half_w - CRANE_LANE_W * 0.5
+	var road_center_x := (storage_x + berth_edge_x) * 0.5
+	## Just seaward of the road — between asphalt and ore yard.
+	return Vector3(road_center_x + 4.0, QUAY_DECK_TOP_Y, 0.0)
 
 
 func _spawn_crane() -> void:
@@ -273,7 +316,37 @@ func _spawn_crane() -> void:
 	## Match port quay rigs: boom reaches seaward (+X) toward the ship.
 	_crane.rotation_degrees.y = -90.0
 	mount.add_child(_crane)
+	_auto = BULK_CRANE_AUTO_SCRIPT.new() as BulkCraneAutoOperator
+	_auto.name = "AutoOperator"
+	_crane.add_child(_auto)
 	call_deferred("_pose_crane")
+
+
+func _docked_ship() -> BoatBody:
+	return get_node_or_null("QuayScene/DockedShip") as BoatBody
+
+
+func _start_auto_load() -> void:
+	if _crane == null:
+		return
+	var ship := _docked_ship()
+	if ship == null:
+		return
+	_crane.start_auto_load(ship, "iron_ore")
+
+
+func _start_auto_unload() -> void:
+	if _crane == null:
+		return
+	var ship := _docked_ship()
+	if ship == null:
+		return
+	_crane.start_auto_unload(ship)
+
+
+func _stop_auto() -> void:
+	if _crane != null:
+		_crane.stop_auto()
 
 
 func _pose_crane() -> void:
@@ -282,7 +355,22 @@ func _pose_crane() -> void:
 	_crane.boom_angle_deg = 42.0
 	_crane.hoist_length_m = 18.0
 	_crane.bucket_open = 0.0
-	_crane.set("_bucket_open_target", 0.0)
+	_crane.set_bucket_jaws_target(0.0)
+
+
+func _docked_vessel_label() -> String:
+	var preset := _prebuilt_entry(DOCKED_PREBUILT_ID)
+	if preset.is_empty():
+		return DOCKED_PREBUILT_ID
+	return str(preset.get("prebuilt_name", DOCKED_PREBUILT_ID))
+
+
+static func _prebuilt_entry(preset_id: String) -> Dictionary:
+	for raw in PrebuiltVesselCatalog.catalog_entries():
+		var entry := raw as Dictionary
+		if str(entry.get("prebuilt_id", "")) == preset_id:
+			return entry
+	return {}
 
 
 func _spawn_docked_ship() -> void:
@@ -291,18 +379,31 @@ func _spawn_docked_ship() -> void:
 	var quay := get_node_or_null("QuayScene") as Node3D
 	if quay == null:
 		return
-	var entry := HullRegistry.get_by_id(DOCKED_HULL_ID)
-	var beam_m := float(entry.get("beam_m", 24.0))
-	var half_w := QUAY_WIDTH_M * 0.5
-	var ship := HullRegistry.build_hull(DOCKED_HULL_ID)
-	if ship == null:
-		push_warning("CraneShowcase: failed to build hull %s" % DOCKED_HULL_ID)
+	var preset := _prebuilt_entry(DOCKED_PREBUILT_ID)
+	if preset.is_empty():
+		push_warning("CraneShowcase: missing prebuilt %s" % DOCKED_PREBUILT_ID)
 		return
+	var hull_id := str(preset.get("hull_id", ""))
+	var hull_entry := HullRegistry.get_by_id(hull_id)
+	var beam_m := float(hull_entry.get("beam_m", 10.0))
+	var half_w := QUAY_WIDTH_M * 0.5
+	var layout: Dictionary = preset.get("prebuilt_layout", {}) as Dictionary
+	var registration_id := str(preset.get("registration_id", ""))
+	var ship := VesselSpawn.instantiate(hull_id, layout, registration_id)
+	if ship == null:
+		push_warning("CraneShowcase: failed to spawn prebuilt %s" % DOCKED_PREBUILT_ID)
+		return
+	VesselSpawn.apply_propulsion_override(ship, preset)
+	VesselSpawn.apply_identity(ship, {
+		"name": str(preset.get("prebuilt_name", "Bulk Small")),
+		"registration_id": registration_id,
+		"uid": "showcase_%s" % DOCKED_PREBUILT_ID,
+	})
 	ship.name = "DockedShip"
 	ship.freeze = true
 	quay.add_child(ship)
 	## Bow −Z, stern +Z; port (−X) faces the quay coping on +X.
-	ship.position = Vector3(half_w + beam_m * 0.5 + 4.0, 0.0, 0.0)
+	ship.position = Vector3(half_w + beam_m * 0.5 + 4.0, 0.0, 6.0)
 	ship.rotation_degrees.y = 0.0
 	call_deferred("_place_docked_ship", ship)
 

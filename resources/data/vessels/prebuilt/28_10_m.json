@@ -388,32 +388,32 @@
 			},
 			"2,4,25": {
 				"brick_id": "chimney_2x3x2",
-				"yaw": 0
+				"yaw": 0.0
 			},
 			"2,4,26": {
 				"brick_id": "chimney_2x3x2",
 				"occupied_by": "2,4,25",
-				"yaw": 0
+				"yaw": 0.0
 			},
 			"2,5,25": {
 				"brick_id": "chimney_2x3x2",
 				"occupied_by": "2,4,25",
-				"yaw": 0
+				"yaw": 0.0
 			},
 			"2,5,26": {
 				"brick_id": "chimney_2x3x2",
 				"occupied_by": "2,4,25",
-				"yaw": 0
+				"yaw": 0.0
 			},
 			"2,6,25": {
 				"brick_id": "chimney_2x3x2",
 				"occupied_by": "2,4,25",
-				"yaw": 0
+				"yaw": 0.0
 			},
 			"2,6,26": {
 				"brick_id": "chimney_2x3x2",
 				"occupied_by": "2,4,25",
-				"yaw": 0
+				"yaw": 0.0
 			},
 			"3,0,1": {
 				"brick_id": "block_45",
@@ -482,32 +482,32 @@
 			"3,4,25": {
 				"brick_id": "chimney_2x3x2",
 				"occupied_by": "2,4,25",
-				"yaw": 0
+				"yaw": 0.0
 			},
 			"3,4,26": {
 				"brick_id": "chimney_2x3x2",
 				"occupied_by": "2,4,25",
-				"yaw": 0
+				"yaw": 0.0
 			},
 			"3,5,25": {
 				"brick_id": "chimney_2x3x2",
 				"occupied_by": "2,4,25",
-				"yaw": 0
+				"yaw": 0.0
 			},
 			"3,5,26": {
 				"brick_id": "chimney_2x3x2",
 				"occupied_by": "2,4,25",
-				"yaw": 0
+				"yaw": 0.0
 			},
 			"3,6,25": {
 				"brick_id": "chimney_2x3x2",
 				"occupied_by": "2,4,25",
-				"yaw": 0
+				"yaw": 0.0
 			},
 			"3,6,26": {
 				"brick_id": "chimney_2x3x2",
 				"occupied_by": "2,4,25",
-				"yaw": 0
+				"yaw": 0.0
 			},
 			"4,0,0": {
 				"brick_id": "block_45",
@@ -1239,7 +1239,7 @@
 	"format_version": 2,
 	"hull_id": "hull_28x10",
 	"id": "28_10_m",
-	"name": "28 × 10 m",
+	"name": "28x10 Cargo",
 	"price_marks": 0,
 	"registration_id": "cargo_vessel",
 	"shaft_power_kw": 2400.0

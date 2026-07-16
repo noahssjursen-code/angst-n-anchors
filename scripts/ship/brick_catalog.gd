@@ -380,6 +380,16 @@ const BRICKS: Dictionary = {
 		## Click corner A, then corner B — not a per-cell brick.
 		"place_mode": "rect",
 	},
+	"bulk_hold_6x12": {
+		"display": "Bulk hold 6×12",
+		"footprint": [6, 1, 12],
+		"tags": ["bulk_hold", "cargo", "floor", "zone", "ship_only"],
+		"place_mode": "fixed_rect",
+		"deck_only": true,
+		"mass_kg": 540.0,
+		"color": Color(0.04, 0.04, 0.05),
+		"hold_depth_m": 2.5,
+	},
 	"crane_base": {
 		"display": "Crane base",
 		## 2×2 m pad.
@@ -677,6 +687,11 @@ static func create_visual(brick_id: String, opts: Dictionary = {}) -> Node3D:
 					var b := MeshBuilder.box(Vector3(thick, h, arm), col, 0.85, 0.0)
 					b.position = corner + Vector3(0.0, 0.0, szn * arm * 0.5)
 					root.add_child(b)
+		"bulk_hold_6x12":
+			var depth_m := float(entry.get("hold_depth_m", 2.5))
+			var hold_visual := BulkHoldComponent.build_visual(sz.x, sz.z, depth_m, true)
+			hold_visual.position = Vector3(0.0, -sz.y * 0.5 + 0.02, 0.0)
+			root.add_child(hold_visual)
 		"crane_base":
 			var base := MeshBuilder.box(Vector3(sz.x, sz.y * 0.5, sz.z), color, 0.85, 0.15)
 			base.position = Vector3(0.0, -sz.y * 0.25, 0.0)
