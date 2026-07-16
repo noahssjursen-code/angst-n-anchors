@@ -602,7 +602,7 @@ static func _collider_spec(brick_id: String) -> Dictionary:
 				"size": Vector3(sz.x * 0.9, sz.y * 0.92, sz.z * 0.9),
 				"offset": Vector3(0.0, -sz.y * 0.04, 0.0),
 			}
-		"deck_text", "wall_text":
+		"deck_text", "wall_text_sm", "wall_text", "wall_text_lg":
 			return {"size": Vector3.ZERO, "offset": Vector3.ZERO}
 		_:
 			return {"size": sz, "offset": Vector3.ZERO}

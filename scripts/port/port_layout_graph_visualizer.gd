@@ -29,6 +29,8 @@ const QUAY_DECK_SLAB_H := 0.55
 ## Asphalt berth pad crown / thickness (same flush rule as quay decks).
 const ASPHALT_PAD_TOP_LOCAL_Y := 0.02
 const ASPHALT_PAD_H := 0.40
+## Small apron props sit on the same flat crown as berth decks.
+const APRON_PROP_TOP_Y := 0.02
 ## Convex footing slab — CharacterBody3D needs a thick box crown, not a thin mesh.
 const DECK_WALK_THICKNESS_M := 0.55
 const BULK_CRANE_SCRIPT := preload("res://scripts/port/bulk_crane.gd")
@@ -76,7 +78,9 @@ func _rebuild() -> void:
 	if _graph == null:
 		return
 	_stamp_foundation()
+	## Apron props deferred — layout first via asphalt/apron gizmos, then decorate.
 	_stamp_berth_terminals()
+	_stamp_apron_pads()
 	_stamp_land_structures()
 	for instance_id in _graph.module_ids():
 		_stamp_module(_graph.modules[instance_id] as PortPlacedModule)
@@ -963,6 +967,225 @@ func _make_storage_stack(
 		_:
 			root.add_child(MeshBuilder.box(size * Vector3(0.9, 1.0, 0.85), family_color.darkened(0.05), 0.9, 0.0))
 	return root
+
+
+func _stamp_apron_pads() -> void:
+	## Always stamp a pad marker on every placed site; swap in BuildingFitout when designed.
+	var land_plan := _graph.initial_attributes.get("land_plan", {}) as Dictionary
+	if land_plan.is_empty():
+		return
+	var apron_pads: Dictionary = land_plan.get("apron_pads", {}) as Dictionary
+	var pads: Array = apron_pads.get("pads", []) as Array
+	if pads.is_empty():
+		return
+	var foundation := _graph.initial_attributes.get("foundation", {}) as Dictionary
+	var surface_y := float(foundation.get("surface_y_m", PortCoastTracer.FOUNDATION_SURFACE_Y_M)) \
+			+ PortCoastTracer.FOUNDATION_TERRAIN_CLEARANCE_M
+	var root := Node3D.new()
+	root.name = "ApronPads"
+	add_child(root)
+	for raw in pads:
+		var pad: Dictionary = raw
+		var role_id := str(pad.get("role", ""))
+		var template_id := str(pad.get("pad_template_id", ""))
+		if role_id.is_empty():
+			continue
+		var origin := _xz2(pad.get("origin", [0.0, 0.0]))
+		var along := _xz2(pad.get("along_dir", [1.0, 0.0])).normalized()
+		var inland := _xz2(pad.get("inland_dir", [0.0, 1.0])).normalized()
+		if along.length_squared() < 0.01:
+			along = Vector2(1.0, 0.0)
+		if inland.length_squared() < 0.01:
+			inland = PortCoastTracer.PORT_LOCAL_INLAND_DIR
+		var size_arr: Array = pad.get("size_m", [
+			PortApronPadCatalog.CELL_M, PortApronPadCatalog.CELL_M,
+		]) as Array
+		var size_x := float(size_arr[0]) if size_arr.size() > 0 else PortApronPadCatalog.CELL_M
+		var size_z := float(size_arr[1]) if size_arr.size() > 1 else PortApronPadCatalog.CELL_M
+		var site := Node3D.new()
+		site.name = str(pad.get("id", role_id))
+		site.position = Vector3(origin.x, surface_y, origin.y)
+		var z_axis := Vector3(inland.x, 0.0, inland.y).normalized()
+		var x_axis := Vector3.UP.cross(z_axis).normalized()
+		if x_axis.dot(Vector3(along.x, 0.0, along.y)) < 0.0:
+			x_axis = -x_axis
+		var y_axis := z_axis.cross(x_axis).normalized()
+		site.basis = Basis(x_axis, y_axis, z_axis)
+		root.add_child(site)
+		site.set_meta("apron_pad_role", role_id)
+		site.set_meta("apron_pad_template", template_id)
+
+		var layout := BuildingBlueprintCatalog.find_for_pad(role_id, template_id)
+		if layout != null:
+			var building := BuildingFitout.build(layout, true)
+			if building != null:
+				building.name = "Building"
+				site.add_child(building)
+				continue
+		## Placeholder so every pad site always reads in-world (until you save a blueprint).
+		_stamp_apron_pad_placeholder(site, size_x, size_z, role_id)
+
+
+func _stamp_apron_pad_placeholder(
+		parent: Node3D,
+		size_x: float,
+		size_z: float,
+		role_id: String,
+) -> void:
+	var pad_col := Color(0.22, 0.62, 0.88, 1.0)
+	if role_id.begins_with("fish") or role_id.begins_with("provisions"):
+		pad_col = Color(0.92, 0.48, 0.22, 1.0)
+	var slab := MeshBuilder.box(Vector3(size_x * 0.92, 0.45, size_z * 0.92), pad_col, 0.9, 0.0)
+	slab.name = "PadSlab"
+	slab.position = Vector3(0.0, 0.22, 0.0)
+	parent.add_child(slab)
+	## Simple massing so the site reads as a building lot, not an empty plate.
+	var body_h := clampf(minf(size_x, size_z) * 0.28, 4.0, 10.0)
+	var body := MeshBuilder.box(
+		Vector3(size_x * 0.55, body_h, size_z * 0.45),
+		pad_col.lightened(0.12),
+		0.88,
+		0.0,
+	)
+	body.name = "PadMass"
+	body.position = Vector3(0.0, 0.45 + body_h * 0.5, 0.0)
+	parent.add_child(body)
+
+
+func _stamp_apron_decor() -> void:
+	var land_plan := _graph.initial_attributes.get("land_plan", {}) as Dictionary
+	if land_plan.is_empty():
+		return
+	var apron: Dictionary = land_plan.get("apron_decor", {}) as Dictionary
+	var points: Array = apron.get("points", []) as Array
+	if points.is_empty():
+		return
+	var foundation := _graph.initial_attributes.get("foundation", {}) as Dictionary
+	var surface_y := float(foundation.get("surface_y_m", PortCoastTracer.FOUNDATION_SURFACE_Y_M)) \
+			+ PortCoastTracer.FOUNDATION_TERRAIN_CLEARANCE_M
+	var root := Node3D.new()
+	root.name = "ApronDecor"
+	add_child(root)
+	for index in range(points.size()):
+		var entry: Dictionary = points[index]
+		var local_arr: Array = entry.get("local", [0.0, 0.0]) as Array
+		if local_arr.size() < 2:
+			continue
+		var lx := float(local_arr[0])
+		var lz := float(local_arr[1])
+		var yaw_deg := float(entry.get("yaw_deg", 0.0))
+		var family := str(entry.get("family", "general"))
+		var color := CommodityCatalog.terminal_family_color(family)
+		var prop := Node3D.new()
+		prop.name = "Apron_%s_%d" % [str(entry.get("kind", "prop")), index]
+		prop.position = Vector3(lx, surface_y, lz)
+		prop.rotation.y = deg_to_rad(yaw_deg)
+		root.add_child(prop)
+		match str(entry.get("kind", "")):
+			PortLandPlan.APRON_KIND_LAMP:
+				_stamp_apron_lamp(prop)
+			PortLandPlan.APRON_KIND_CRATES:
+				_stamp_apron_crates(prop, color)
+			PortLandPlan.APRON_KIND_PALLETS:
+				_stamp_apron_pallets(prop, color)
+			PortLandPlan.APRON_KIND_DRUMS:
+				_stamp_apron_drums(prop, color)
+			PortLandPlan.APRON_KIND_HOSE:
+				_stamp_apron_hose_reel(prop, color)
+			PortLandPlan.APRON_KIND_BOLLARD:
+				_stamp_apron_bollard(prop)
+			PortLandPlan.APRON_KIND_SIGN:
+				_stamp_apron_sign(prop, family)
+			PortLandPlan.APRON_KIND_HATCH:
+				_stamp_apron_hatch(prop)
+			_:
+				_stamp_apron_crates(prop, color)
+
+
+func _stamp_apron_lamp(parent: Node3D) -> void:
+	var pole := MeshBuilder.cylinder(0.14, 5.6, Color(0.42, 0.43, 0.45), 0.88, 0.05)
+	pole.position = Vector3(0.0, APRON_PROP_TOP_Y + 2.8, 0.0)
+	parent.add_child(pole)
+	var head := MeshBuilder.box(Vector3(0.55, 0.35, 0.55), Color(0.92, 0.88, 0.72), 0.75, 0.0)
+	head.position = Vector3(0.0, APRON_PROP_TOP_Y + 5.75, 0.0)
+	parent.add_child(head)
+	var base := MeshBuilder.cylinder(0.28, 0.18, Color(0.30, 0.31, 0.33), 0.92, 0.0)
+	base.position = Vector3(0.0, APRON_PROP_TOP_Y + 0.09, 0.0)
+	parent.add_child(base)
+
+
+func _stamp_apron_crates(parent: Node3D, color: Color) -> void:
+	var crate_col := color.darkened(0.12).lerp(Color(0.48, 0.40, 0.32), 0.35)
+	for i in range(3):
+		var w := lerpf(1.1, 1.5, float(i) * 0.35)
+		var h := lerpf(1.0, 1.35, float(i) * 0.25)
+		var crate := MeshBuilder.box(Vector3(w, h, w * 0.92), crate_col, 0.9, 0.0)
+		crate.position = Vector3(
+			float(i - 1) * 1.15,
+			APRON_PROP_TOP_Y + h * 0.5,
+			float(i % 2) * 0.55 - 0.25,
+		)
+		parent.add_child(crate)
+
+
+func _stamp_apron_pallets(parent: Node3D, color: Color) -> void:
+	var plank := color.darkened(0.18).lerp(Color(0.55, 0.42, 0.30), 0.4)
+	for tier in range(2):
+		var pallet := MeshBuilder.box(Vector3(1.8, 0.22, 1.2), plank, 0.92, 0.0)
+		pallet.position = Vector3(0.0, APRON_PROP_TOP_Y + 0.11 + float(tier) * 0.24, 0.0)
+		parent.add_child(pallet)
+		var load := MeshBuilder.box(Vector3(1.5, 0.85, 1.0), color.darkened(0.05), 0.88, 0.0)
+		load.position = Vector3(0.15, APRON_PROP_TOP_Y + 0.55 + float(tier) * 0.24, -0.1)
+		parent.add_child(load)
+
+
+func _stamp_apron_drums(parent: Node3D, color: Color) -> void:
+	var drum_col := color.darkened(0.08).lerp(Color(0.42, 0.44, 0.48), 0.45)
+	for i in range(2):
+		var drum := MeshBuilder.cylinder(0.42, 1.05, drum_col, 0.82, 0.12)
+		drum.position = Vector3(float(i) * 1.05 - 0.52, APRON_PROP_TOP_Y + 0.52, 0.0)
+		parent.add_child(drum)
+		var band := MeshBuilder.torus(0.38, 0.44, Color(0.28, 0.28, 0.30), 0.7, 0.35)
+		band.rotation.x = deg_to_rad(90.0)
+		band.position = Vector3(float(i) * 1.05 - 0.52, APRON_PROP_TOP_Y + 0.52, 0.0)
+		parent.add_child(band)
+
+
+func _stamp_apron_hose_reel(parent: Node3D, color: Color) -> void:
+	var stand := MeshBuilder.box(Vector3(0.9, 0.65, 0.7), Color(0.38, 0.39, 0.41), 0.9, 0.05)
+	stand.position = Vector3(0.0, APRON_PROP_TOP_Y + 0.32, 0.0)
+	parent.add_child(stand)
+	var reel := MeshBuilder.cylinder(0.55, 0.45, color.darkened(0.1), 0.85, 0.1)
+	reel.rotation.z = deg_to_rad(90.0)
+	reel.position = Vector3(0.0, APRON_PROP_TOP_Y + 0.95, 0.0)
+	parent.add_child(reel)
+
+
+func _stamp_apron_bollard(parent: Node3D) -> void:
+	var post: MooringPost = MOORING_POST_SCRIPT.new() as MooringPost
+	post.name = "ApronBollard"
+	post.mooring_visual = MooringPost.MooringVisual.DOCKING_BOLLARD
+	post.bollard_scale = 1.0
+	post.position = Vector3(0.0, APRON_PROP_TOP_Y, 0.0)
+	parent.add_child(post)
+
+
+func _stamp_apron_sign(parent: Node3D, family: String) -> void:
+	var pole := MeshBuilder.cylinder(0.08, 2.8, Color(0.40, 0.41, 0.43), 0.9, 0.0)
+	pole.position = Vector3(0.0, APRON_PROP_TOP_Y + 1.4, 0.0)
+	parent.add_child(pole)
+	var board := MeshBuilder.box(Vector3(1.4, 0.9, 0.08), CommodityCatalog.terminal_family_color(family), 0.82, 0.0)
+	board.position = Vector3(0.0, APRON_PROP_TOP_Y + 2.95, 0.0)
+	parent.add_child(board)
+
+
+func _stamp_apron_hatch(parent: Node3D) -> void:
+	var frame := MeshBuilder.box(Vector3(1.6, 0.06, 1.1), Color(0.22, 0.22, 0.24), 0.95, 0.0)
+	frame.position = Vector3(0.0, APRON_PROP_TOP_Y + 0.03, 0.0)
+	parent.add_child(frame)
+	var grate := MeshBuilder.box(Vector3(1.35, 0.04, 0.85), Color(0.48, 0.50, 0.52), 0.88, 0.15)
+	grate.position = Vector3(0.0, APRON_PROP_TOP_Y + 0.08, 0.0)
+	parent.add_child(grate)
 
 
 func _stamp_land_structures() -> void:

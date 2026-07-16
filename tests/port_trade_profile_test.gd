@@ -136,6 +136,72 @@ func _run() -> void:
 	assert(house_n >= 1, "need house stakes")
 	if not a.trade_profile.all_slots().is_empty():
 		assert(trade_n >= 1, "trade profile should sprinkle trade decorations")
+	var apron: Dictionary = land.get("apron_decor", {}) as Dictionary
+	assert(int(apron.get("point_count", 0)) >= 3, "apron should sprinkle service props")
+	for raw in apron.get("points", []) as Array:
+		var entry: Dictionary = raw
+		var local_arr: Array = entry.get("local", []) as Array
+		assert(local_arr.size() >= 2, "apron prop needs local XZ")
+		assert(not str(entry.get("kind", "")).is_empty(), "apron prop needs kind")
+	var apron_pads: Dictionary = land.get("apron_pads", {}) as Dictionary
+	assert(int(apron_pads.get("pad_count", 0)) >= PortApronPadCatalog.UNIVERSAL_REQUIRED_V1.size(),
+			"apron should seed every required brick pad")
+	assert(is_equal_approx(float(apron_pads.get("cell_m", 0.0)), PortApronPadCatalog.CELL_M), "pad cell size")
+	assert(int(apron_pads.get("host_count", 0)) >= 1, "uniform clipped grid needs host cells")
+	var grid_summary: Dictionary = apron_pads.get("grid", {}) as Dictionary
+	assert(int(grid_summary.get("host_count", 0)) >= 1, "apron_pads.grid should summarize host lattice")
+	var host := PortApronPadCatalog.build_host_grid(
+		a.layout_graph.initial_attributes.get("foundation", {}) as Dictionary,
+		a.layout_graph.initial_attributes.get("berth_plan", {}) as Dictionary,
+	)
+	var host_mask: Dictionary = host.get("mask", {}) as Dictionary
+	var host_poly := PackedVector2Array()
+	for raw_pt in host.get("polygon", []) as Array:
+		if raw_pt is Array and (raw_pt as Array).size() >= 2:
+			var arr: Array = raw_pt
+			host_poly.append(Vector2(float(arr[0]), float(arr[1])))
+	var pad_roles: Dictionary = {}
+	for raw in apron_pads.get("pads", []) as Array:
+		var pad: Dictionary = raw
+		assert(not str(pad.get("role", "")).is_empty(), "pad needs role")
+		assert(not str(pad.get("pad_template_id", "")).is_empty(), "pad needs template")
+		assert((pad.get("origin", []) as Array).size() >= 2, "pad needs origin")
+		assert((pad.get("cells", []) as Array).size() >= 2, "pad needs cell footprint")
+		var ij: Array = pad.get("grid_ij", []) as Array
+		assert(ij.size() >= 2, "pad needs grid_ij")
+		var footprint: Array = pad.get("cells", []) as Array
+		var w := int(footprint[0])
+		var h := int(footprint[1])
+		var i0 := int(ij[0])
+		var j0 := int(ij[1])
+		for jj in range(j0, j0 + h):
+			for ii in range(i0, i0 + w):
+				assert(host_mask.has("%d,%d" % [ii, jj]),
+						"pad %s footprint leaves host grid at %d,%d" % [str(pad.get("role", "")), ii, jj])
+		var origin_arr: Array = pad.get("origin", []) as Array
+		var origin := Vector2(float(origin_arr[0]), float(origin_arr[1]))
+		assert(Geometry2D.is_point_in_polygon(origin, host_poly),
+				"pad %s origin outside apron polygon" % str(pad.get("role", "")))
+		pad_roles[str(pad.get("role", ""))] = true
+	## Harbour office is mandatory on every port.
+	for role_id in PortApronPadCatalog.UNIVERSAL_REQUIRED_V1:
+		assert(pad_roles.has(role_id), "missing required apron pad role %s" % role_id)
+	assert(not pad_roles.has("parking_apron"), "parking apron should not auto-place")
+	## Unlocked asphalt trades must get waterside handling pads.
+	for commodity_id in a.trade_profile.all_slots():
+		var cid := str(commodity_id)
+		if not CommodityCatalog.uses_asphalt_dock(cid):
+			continue
+		var found_trade := false
+		for raw in apron_pads.get("pads", []) as Array:
+			var pad: Dictionary = raw
+			if str(pad.get("commodity_id", "")) != cid:
+				continue
+			assert(str(pad.get("zone", "")) == PortApronPadCatalog.ZONE_WATERSIDE,
+					"trade pad %s should be waterside" % str(pad.get("role", "")))
+			found_trade = true
+			break
+		assert(found_trade, "missing waterside trade pad for asphalt commodity %s" % cid)
 	## Trade stakes follow the live recipe roles — never invent the opposite direction.
 	for raw in grid.get("points", []) as Array:
 		var entry: Dictionary = raw

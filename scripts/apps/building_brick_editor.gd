@@ -2,13 +2,13 @@ class_name BuildingBrickEditor
 extends CanvasLayer
 
 ## Developer building authoring app (scenes/apps/).
-## Same interaction language as ShipyardBrickEditor: left palette, mouse paint/erase,
-## layer filter, orbit/pan/zoom. Exports JSON blueprints under
+## Same shell as ShipyardBrickEditor: PARTS grid, viewport tool strip, properties
+## drawer, Building dialog for file/role/pad. Exports JSON under
 ## resources/data/buildings/.
 
 enum Tool { PLACE = 0, ERASE = 1, MARK = 2 }
 
-const THUMB_PX := 80
+const THUMB_PX := 64
 const DEFAULT_GRID := Vector3i(32, 16, 32)
 const COLOR_PRESETS := [
 	{"name": "Catalog", "custom": false},
@@ -45,6 +45,8 @@ var _mark_max := Vector3i.ZERO
 var _clipboard: Dictionary = {}
 ## Absolute min corner of the last copied region (for “paste on this layer”).
 var _clipboard_src_min := Vector3i.ZERO
+## Anchor of the last successful paste — “Paste ↑” stacks above this, not the original copy.
+var _last_paste_anchor := Vector3i(-999, -999, -999)
 
 var _root: Control
 var _viewport: SubViewport
@@ -61,6 +63,7 @@ var _ghost_cell: Vector3i = Vector3i(-999, -999, -999)
 var _ghost_yaw: int = -1
 var _ghost_valid: bool = false
 var _ghost_color := Color(0, 0, 0, 0)
+var _ghost_sign_text: String = ""
 var _camera: Camera3D
 var _cam_yaw: float = 35.0
 var _cam_pitch: float = -35.0
@@ -70,14 +73,15 @@ var _orbiting := false
 var _panning := false
 var _orbit_last: Vector2 = Vector2.ZERO
 
-var _title_lbl: Label
-var _status_lbl: Label
 var _hint_lbl: Label
+var _toast_lbl: Label
 var _rules_lbl: Label
 var _layer_lbl: Label
+var _summary_lbl: Label
 var _file_lbl: Label
 var _name_edit: LineEdit
 var _role_option: OptionButton
+var _pad_template_option: OptionButton
 var _load_option: OptionButton
 var _color_picker: ColorPickerButton
 var _color_preset_btns: Array[Button] = []
@@ -94,6 +98,15 @@ var _copy_btn: Button
 var _paste_btn: Button
 var _paste_layer_btn: Button
 var _paste_up_btn: Button
+var _confirm_btn: Button
+var _context_drawer: PanelContainer
+var _context_title: Label
+var _context_info: Label
+var _color_section: VBoxContainer
+var _sign_section: VBoxContainer
+var _sign_text_edit: LineEdit
+var _clipboard_section: VBoxContainer
+var _building_dialog: PanelContainer
 
 
 func _init() -> void:
@@ -126,13 +139,7 @@ func _ready() -> void:
 func _row_thumb_rect(row: PanelContainer) -> TextureRect:
 	if row == null:
 		return null
-	var h := row.get_child(0) as HBoxContainer
-	if h == null or h.get_child_count() < 1:
-		return null
-	var plate := h.get_child(0) as PanelContainer
-	if plate == null or plate.get_child_count() < 1:
-		return null
-	return plate.get_child(0) as TextureRect
+	return row.find_child("Thumb", true, false) as TextureRect
 
 
 func _open_editor() -> void:
@@ -141,13 +148,16 @@ func _open_editor() -> void:
 	_brick_id = "block"
 	_tool = Tool.PLACE
 	_clear_mark()
-	_name_edit.text = _layout.display_name
+	if _name_edit != null:
+		_name_edit.text = _layout.display_name
 	_select_role(_layout.role)
+	_select_pad_template(_layout.pad_template_id)
 	_use_catalog_color = true
 	_sync_color_picker_from_catalog()
 	_refresh_file_label()
 	_refresh_load_options()
-	_export_lbl.text = ""
+	if _export_lbl != null:
+		_export_lbl.text = ""
 	_resize()
 	_root.visible = true
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
@@ -155,6 +165,8 @@ func _open_editor() -> void:
 	_refresh_rules()
 	_refresh_palette_selection()
 	_refresh_hint()
+	_refresh_context_drawer()
+	_refresh_summary()
 
 
 func _build_chrome() -> void:
@@ -167,299 +179,140 @@ func _build_chrome() -> void:
 
 	var bg := ColorRect.new()
 	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
-	bg.color = Color(0.04, 0.05, 0.07, 1.0)
+	bg.color = Color(0.025, 0.04, 0.05, 1.0)
+	bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_root.add_child(bg)
 
-	var main := HBoxContainer.new()
-	main.set_anchors_preset(Control.PRESET_FULL_RECT)
-	main.add_theme_constant_override("separation", 0)
-	_root.add_child(main)
+	var shell := VBoxContainer.new()
+	shell.name = "EditorShell"
+	shell.set_anchors_preset(Control.PRESET_FULL_RECT)
+	shell.add_theme_constant_override("separation", 0)
+	_root.add_child(shell)
 
-	var side := PanelContainer.new()
-	side.custom_minimum_size = Vector2(360, 0)
+	_build_top_bar(shell)
+
+	var workspace := HBoxContainer.new()
+	workspace.name = "Workspace"
+	workspace.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	workspace.add_theme_constant_override("separation", 0)
+	shell.add_child(workspace)
+
+	_build_palette(workspace)
+
+	var center := VBoxContainer.new()
+	center.name = "ViewportColumn"
+	center.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	center.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	center.add_theme_constant_override("separation", 0)
+	workspace.add_child(center)
+	_build_viewport(center)
+	_build_viewport_chrome(center)
+
+	_build_context_drawer(workspace)
+	_build_building_dialog()
+
+	_open_dialog = FileDialog.new()
+	_open_dialog.file_mode = FileDialog.FILE_MODE_OPEN_FILE
+	_open_dialog.access = FileDialog.ACCESS_FILESYSTEM
+	_open_dialog.add_filter("*.json", "Building blueprints")
+	_open_dialog.file_selected.connect(_load_json)
+	_root.add_child(_open_dialog)
+
+	_save_dialog = FileDialog.new()
+	_save_dialog.file_mode = FileDialog.FILE_MODE_SAVE_FILE
+	_save_dialog.access = FileDialog.ACCESS_FILESYSTEM
+	_save_dialog.add_filter("*.json", "Building blueprints")
+	_save_dialog.file_selected.connect(_save_to_path)
+	_root.add_child(_save_dialog)
+
+
+func _build_top_bar(parent: VBoxContainer) -> void:
+	var panel := UiBuilder.inner_panel()
+	panel.name = "TopBar"
+	panel.custom_minimum_size.y = 54.0
+	parent.add_child(panel)
+
+	var bar := HBoxContainer.new()
+	bar.add_theme_constant_override("separation", 8)
+	panel.add_child(bar)
+
+	var title := Label.new()
+	title.name = "TitleLabel"
+	title.text = "BUILDING"
+	HudStyle.apply_display_font(title, 24, HudStyle.C_AMBER)
+	bar.add_child(title)
+
+	var rule := VSeparator.new()
+	rule.custom_minimum_size.x = 1.0
+	bar.add_child(rule)
+
+	_summary_lbl = Label.new()
+	_summary_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_summary_lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_summary_lbl.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	HudStyle.apply_body_font(_summary_lbl, 13, HudStyle.C_LABEL)
+	bar.add_child(_summary_lbl)
+
+	var building_btn := UiBuilder.compact_button("Building", 90)
+	building_btn.tooltip_text = "Name, role, pad template, load / save"
+	building_btn.pressed.connect(_toggle_building_dialog)
+	bar.add_child(building_btn)
+
+	_confirm_btn = UiBuilder.compact_button("Save", 90)
+	_confirm_btn.pressed.connect(_save_json)
+	bar.add_child(_confirm_btn)
+
+
+func _build_palette(parent: HBoxContainer) -> void:
+	var side := UiBuilder.panel(Vector2(292, 0))
+	side.name = "PartsPalette"
 	side.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	var side_sb := StyleBoxFlat.new()
-	side_sb.bg_color = HudStyle.C_BG
-	side_sb.border_color = HudStyle.C_BRASS
-	side_sb.set_border_width_all(1)
-	side.add_theme_stylebox_override("panel", side_sb)
-	main.add_child(side)
-
-	var margin := MarginContainer.new()
-	margin.add_theme_constant_override("margin_left", 14)
-	margin.add_theme_constant_override("margin_right", 14)
-	margin.add_theme_constant_override("margin_top", 12)
-	margin.add_theme_constant_override("margin_bottom", 12)
-	side.add_child(margin)
+	parent.add_child(side)
 
 	var col := VBoxContainer.new()
 	col.add_theme_constant_override("separation", 8)
-	margin.add_child(col)
+	side.add_child(col)
 
-	var title := Label.new()
-	title.text = "BUILDING"
-	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	title.add_theme_font_size_override("font_size", 20)
-	title.add_theme_color_override("font_color", HudStyle.C_AMBER)
-	col.add_child(title)
-
-	_title_lbl = Label.new()
-	_title_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_title_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	_title_lbl.add_theme_font_size_override("font_size", 13)
-	_title_lbl.add_theme_color_override("font_color", HudStyle.C_TEXT)
-	_title_lbl.text = "Official voxel blueprint authoring"
-	col.add_child(_title_lbl)
-
-	_status_lbl = Label.new()
-	_status_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	_status_lbl.add_theme_font_size_override("font_size", 11)
-	_status_lbl.add_theme_color_override("font_color", HudStyle.C_LABEL)
-	_status_lbl.text = (
-		"LMB paint · RMB orbit · MMB pan · Scroll zoom · [ ] layer · R rotate · X erase\n"
-		+ "Copy a floor: Mark → two clicks → Copy → Layer+ → Paste this layer"
-	)
-	col.add_child(_status_lbl)
-
-	_hint_lbl = Label.new()
-	_hint_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	_hint_lbl.add_theme_font_size_override("font_size", 13)
-	_hint_lbl.add_theme_color_override("font_color", HudStyle.C_AMBER)
-	_hint_lbl.text = "Place bricks, or press Mark to copy a region."
-	col.add_child(_hint_lbl)
-
-	col.add_child(HSeparator.new())
-
-	var file_hdr := Label.new()
-	file_hdr.text = "JSON FILE"
-	file_hdr.add_theme_color_override("font_color", HudStyle.C_AMBER)
-	col.add_child(file_hdr)
-
-	_file_lbl = Label.new()
-	_file_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	_file_lbl.add_theme_font_size_override("font_size", 12)
-	_file_lbl.add_theme_color_override("font_color", HudStyle.C_TEXT)
-	col.add_child(_file_lbl)
-
-	_name_edit = _add_labeled_edit(col, "Display name", "Untitled Building")
-
-	var role_lbl := Label.new()
-	role_lbl.text = "Service role"
-	role_lbl.add_theme_font_size_override("font_size", 12)
-	role_lbl.add_theme_color_override("font_color", HudStyle.C_LABEL)
-	col.add_child(role_lbl)
-	_role_option = OptionButton.new()
-	_role_option.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_role_option.add_item("decorative", 0)
-	_role_option.set_item_metadata(0, "decorative")
-	col.add_child(_role_option)
-
-	col.add_child(HSeparator.new())
-
-	var items_hdr := Label.new()
-	items_hdr.text = "ITEMS"
-	items_hdr.add_theme_color_override("font_color", HudStyle.C_AMBER)
-	col.add_child(items_hdr)
+	var heading := HBoxContainer.new()
+	col.add_child(heading)
+	var title := UiBuilder.section_header("PARTS")
+	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	heading.add_child(title)
+	var count := Label.new()
+	count.text = str(BrickCatalog.ids_for_buildings().size())
+	count.add_theme_color_override("font_color", HudStyle.C_LABEL)
+	heading.add_child(count)
 
 	var brick_scroll := ScrollContainer.new()
+	brick_scroll.name = "PartsScroll"
 	brick_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	brick_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	col.add_child(brick_scroll)
 
-	var brick_col := VBoxContainer.new()
-	brick_col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	brick_col.add_theme_constant_override("separation", 6)
-	brick_scroll.add_child(brick_col)
+	var grid := GridContainer.new()
+	grid.name = "PartsGrid"
+	grid.columns = 2
+	grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	grid.add_theme_constant_override("h_separation", 6)
+	grid.add_theme_constant_override("v_separation", 6)
+	brick_scroll.add_child(grid)
 
 	_brick_rows.clear()
 	for id in BrickCatalog.ids_for_buildings():
 		var row := _make_item_row(id)
-		brick_col.add_child(row)
+		grid.add_child(row)
 		_brick_rows[id] = row
 
-	var tool_row := HBoxContainer.new()
-	tool_row.add_theme_constant_override("separation", 6)
-	col.add_child(tool_row)
-	_place_btn = UiBuilder.button("Place")
-	_place_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_place_btn.pressed.connect(func() -> void: _set_tool(Tool.PLACE))
-	tool_row.add_child(_place_btn)
-	_erase_btn = UiBuilder.button("Erase")
-	_erase_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_erase_btn.pressed.connect(func() -> void: _set_tool(Tool.ERASE))
-	tool_row.add_child(_erase_btn)
-	_mark_btn = UiBuilder.button("Mark")
-	_mark_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_mark_btn.tooltip_text = "Click two opposite corners to select a region (M)"
-	_mark_btn.pressed.connect(func() -> void: _set_tool(Tool.MARK))
-	tool_row.add_child(_mark_btn)
 
-	col.add_child(HSeparator.new())
-	var color_hdr := Label.new()
-	color_hdr.text = "COLOUR"
-	color_hdr.add_theme_color_override("font_color", HudStyle.C_AMBER)
-	col.add_child(color_hdr)
-
-	var color_row := HBoxContainer.new()
-	color_row.add_theme_constant_override("separation", 8)
-	col.add_child(color_row)
-	_color_picker = ColorPickerButton.new()
-	_color_picker.custom_minimum_size = Vector2(72, 28)
-	_color_picker.edit_alpha = false
-	_color_picker.color = _paint_color
-	_color_picker.color_changed.connect(_on_paint_color_changed)
-	color_row.add_child(_color_picker)
-	var catalog_btn := UiBuilder.button("Catalog default")
-	catalog_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	catalog_btn.pressed.connect(_use_brick_catalog_color)
-	color_row.add_child(catalog_btn)
-
-	var preset_grid := HFlowContainer.new()
-	preset_grid.add_theme_constant_override("h_separation", 4)
-	preset_grid.add_theme_constant_override("v_separation", 4)
-	col.add_child(preset_grid)
-	_color_preset_btns.clear()
-	for preset in COLOR_PRESETS:
-		var swatch := Button.new()
-		swatch.custom_minimum_size = Vector2(28, 28)
-		swatch.focus_mode = Control.FOCUS_NONE
-		swatch.tooltip_text = str(preset.get("name", "Colour"))
-		var sb := StyleBoxFlat.new()
-		sb.set_border_width_all(1)
-		sb.border_color = HudStyle.C_BRASS
-		sb.set_corner_radius_all(2)
-		if bool(preset.get("custom", true)) == false:
-			sb.bg_color = Color(0.2, 0.2, 0.22)
-			swatch.text = "·"
-		else:
-			sb.bg_color = preset["color"] as Color
-		swatch.add_theme_stylebox_override("normal", sb)
-		swatch.add_theme_stylebox_override("hover", sb)
-		swatch.add_theme_stylebox_override("pressed", sb)
-		var preset_copy: Dictionary = preset
-		swatch.pressed.connect(func() -> void: _apply_color_preset(preset_copy))
-		preset_grid.add_child(swatch)
-		_color_preset_btns.append(swatch)
-
-	var tool_row2 := HBoxContainer.new()
-	tool_row2.add_theme_constant_override("separation", 6)
-	col.add_child(tool_row2)
-	var rot_btn := UiBuilder.button("Rotate")
-	rot_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	rot_btn.pressed.connect(func() -> void:
-		_rotate_yaw()
-		_refresh_rules()
-		_refresh_ghost_from_mouse()
-	)
-	tool_row2.add_child(rot_btn)
-	var clear_btn := UiBuilder.button("Clear pad")
-	clear_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	clear_btn.pressed.connect(_clear_layout)
-	tool_row2.add_child(clear_btn)
-
-	_layer_lbl = Label.new()
-	_layer_lbl.add_theme_color_override("font_color", HudStyle.C_TEXT)
-	col.add_child(_layer_lbl)
-
-	var layer_row := HBoxContainer.new()
-	layer_row.add_theme_constant_override("separation", 6)
-	col.add_child(layer_row)
-	var down := UiBuilder.button("Layer −")
-	down.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	down.pressed.connect(func() -> void: _set_layer_y(_layer_y - 1))
-	layer_row.add_child(down)
-	var up := UiBuilder.button("Layer +")
-	up.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	up.pressed.connect(func() -> void: _set_layer_y(_layer_y + 1))
-	layer_row.add_child(up)
-
-	var clip_hdr := Label.new()
-	clip_hdr.text = "COPY / PASTE"
-	clip_hdr.add_theme_color_override("font_color", HudStyle.C_AMBER)
-	col.add_child(clip_hdr)
-
-	var clip_row := HBoxContainer.new()
-	clip_row.add_theme_constant_override("separation", 6)
-	col.add_child(clip_row)
-	_copy_btn = UiBuilder.button("Copy")
-	_copy_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_copy_btn.tooltip_text = "Copy the marked region (Ctrl+C)"
-	_copy_btn.pressed.connect(_copy_marked_region)
-	clip_row.add_child(_copy_btn)
-	_paste_btn = UiBuilder.button("Paste at cursor")
-	_paste_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_paste_btn.tooltip_text = "Stamp clipboard with min corner under the mouse (Ctrl+V)"
-	_paste_btn.pressed.connect(_paste_clipboard_at_cursor)
-	clip_row.add_child(_paste_btn)
-
-	var clip_row2 := HBoxContainer.new()
-	clip_row2.add_theme_constant_override("separation", 6)
-	col.add_child(clip_row2)
-	_paste_layer_btn = UiBuilder.button("Paste this layer")
-	_paste_layer_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_paste_layer_btn.tooltip_text = "Same XZ as the copy, on the current layer — use for floors"
-	_paste_layer_btn.pressed.connect(_paste_clipboard_on_layer)
-	clip_row2.add_child(_paste_layer_btn)
-	_paste_up_btn = UiBuilder.button("Paste ↑")
-	_paste_up_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_paste_up_btn.tooltip_text = "Paste one storey above the original copy"
-	_paste_up_btn.pressed.connect(_paste_clipboard_one_up)
-	clip_row2.add_child(_paste_up_btn)
-
-	col.add_child(HSeparator.new())
-
-	_rules_lbl = Label.new()
-	_rules_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	_rules_lbl.add_theme_font_size_override("font_size", 12)
-	_rules_lbl.add_theme_color_override("font_color", HudStyle.C_TEXT)
-	col.add_child(_rules_lbl)
-
-	col.add_child(HSeparator.new())
-
-	var load_hdr := Label.new()
-	load_hdr.text = "Existing buildings"
-	load_hdr.add_theme_font_size_override("font_size", 12)
-	load_hdr.add_theme_color_override("font_color", HudStyle.C_LABEL)
-	col.add_child(load_hdr)
-	_load_option = OptionButton.new()
-	_load_option.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	col.add_child(_load_option)
-
-	var load_row := HBoxContainer.new()
-	load_row.add_theme_constant_override("separation", 6)
-	col.add_child(load_row)
-	var load_selected := UiBuilder.button("Load selected")
-	load_selected.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	load_selected.pressed.connect(_load_selected_json)
-	load_row.add_child(load_selected)
-	var browse_btn := UiBuilder.button("Browse…")
-	browse_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	browse_btn.pressed.connect(_show_open_dialog)
-	load_row.add_child(browse_btn)
-
-	var save_btn := UiBuilder.button("Save JSON")
-	save_btn.pressed.connect(_save_json)
-	col.add_child(save_btn)
-	var save_as_btn := UiBuilder.button("Save As…")
-	save_as_btn.pressed.connect(_show_save_dialog)
-	col.add_child(save_as_btn)
-	var new_btn := UiBuilder.button("New blank")
-	new_btn.pressed.connect(_new_blank)
-	col.add_child(new_btn)
-
-	_export_lbl = Label.new()
-	_export_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	_export_lbl.add_theme_font_size_override("font_size", 10)
-	_export_lbl.add_theme_color_override("font_color", HudStyle.C_LABEL)
-	col.add_child(_export_lbl)
-
+func _build_viewport(parent: VBoxContainer) -> void:
 	_vp_host = SubViewportContainer.new()
+	_vp_host.name = "BuildViewport"
 	_vp_host.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_vp_host.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	_vp_host.stretch = true
 	_vp_host.mouse_filter = Control.MOUSE_FILTER_STOP
 	_vp_host.gui_input.connect(_on_viewport_gui_input)
-	main.add_child(_vp_host)
+	parent.add_child(_vp_host)
 
 	_viewport = SubViewport.new()
 	_viewport.own_world_3d = true
@@ -497,32 +350,307 @@ func _build_chrome() -> void:
 	env.environment = we
 	_world.add_child(env)
 
-	_open_dialog = FileDialog.new()
-	_open_dialog.file_mode = FileDialog.FILE_MODE_OPEN_FILE
-	_open_dialog.access = FileDialog.ACCESS_FILESYSTEM
-	_open_dialog.add_filter("*.json", "Building blueprints")
-	_open_dialog.file_selected.connect(_load_json)
-	_root.add_child(_open_dialog)
 
-	_save_dialog = FileDialog.new()
-	_save_dialog.file_mode = FileDialog.FILE_MODE_SAVE_FILE
-	_save_dialog.access = FileDialog.ACCESS_FILESYSTEM
-	_save_dialog.add_filter("*.json", "Building blueprints")
-	_save_dialog.file_selected.connect(_save_to_path)
-	_root.add_child(_save_dialog)
+func _build_viewport_chrome(parent: VBoxContainer) -> void:
+	var strip := UiBuilder.inner_panel()
+	strip.name = "ContextStrip"
+	strip.custom_minimum_size.y = 48.0
+	parent.add_child(strip)
+
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 6)
+	strip.add_child(row)
+
+	_place_btn = UiBuilder.tool_button("Place")
+	_place_btn.pressed.connect(func() -> void: _set_tool(Tool.PLACE))
+	row.add_child(_place_btn)
+	_erase_btn = UiBuilder.tool_button("Erase")
+	_erase_btn.pressed.connect(func() -> void: _set_tool(Tool.ERASE))
+	row.add_child(_erase_btn)
+	_mark_btn = UiBuilder.tool_button("Mark")
+	_mark_btn.tooltip_text = "Click two opposite corners to select a region (M). Press again or Esc to clear."
+	_mark_btn.pressed.connect(_toggle_mark_tool)
+	row.add_child(_mark_btn)
+
+	var rotate := UiBuilder.compact_button("Rotate  R", 86)
+	rotate.pressed.connect(func() -> void:
+		_rotate_yaw()
+		_refresh_rules()
+		_refresh_ghost_from_mouse()
+	)
+	row.add_child(rotate)
+
+	var clear_btn := UiBuilder.compact_button("Clear", 70)
+	clear_btn.tooltip_text = "Clear all bricks on this pad"
+	clear_btn.pressed.connect(_clear_layout)
+	row.add_child(clear_btn)
+
+	var layer_down := UiBuilder.compact_button("−", 34)
+	layer_down.tooltip_text = "Previous layer ([)"
+	layer_down.pressed.connect(func() -> void: _set_layer_y(_layer_y - 1))
+	row.add_child(layer_down)
+
+	_layer_lbl = Label.new()
+	_layer_lbl.custom_minimum_size.x = 92.0
+	_layer_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_layer_lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	HudStyle.apply_body_font(_layer_lbl, 12, HudStyle.C_TEXT, true)
+	row.add_child(_layer_lbl)
+
+	var layer_up := UiBuilder.compact_button("+", 34)
+	layer_up.tooltip_text = "Next layer (])"
+	layer_up.pressed.connect(func() -> void: _set_layer_y(_layer_y + 1))
+	row.add_child(layer_up)
+
+	_hint_lbl = Label.new()
+	_hint_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_hint_lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_hint_lbl.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	HudStyle.apply_body_font(_hint_lbl, 12, HudStyle.C_LABEL)
+	row.add_child(_hint_lbl)
+
+	_toast_lbl = Label.new()
+	_toast_lbl.visible = false
+	_toast_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	_toast_lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	HudStyle.apply_body_font(_toast_lbl, 12, HudStyle.C_GREEN, true)
+	row.add_child(_toast_lbl)
 
 
-func _add_labeled_edit(parent: VBoxContainer, label_text: String, value: String) -> LineEdit:
-	var label := Label.new()
-	label.text = label_text
-	label.add_theme_font_size_override("font_size", 12)
-	label.add_theme_color_override("font_color", HudStyle.C_LABEL)
-	parent.add_child(label)
-	var edit := LineEdit.new()
-	edit.text = value
-	edit.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	parent.add_child(edit)
-	return edit
+func _build_context_drawer(parent: HBoxContainer) -> void:
+	_context_drawer = UiBuilder.panel(Vector2(272, 0))
+	_context_drawer.name = "PropertiesDrawer"
+	_context_drawer.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	parent.add_child(_context_drawer)
+
+	var col := VBoxContainer.new()
+	col.add_theme_constant_override("separation", 10)
+	_context_drawer.add_child(col)
+
+	_context_title = UiBuilder.section_header("PROPERTIES")
+	col.add_child(_context_title)
+	_context_info = Label.new()
+	_context_info.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	HudStyle.apply_body_font(_context_info, 12, HudStyle.C_LABEL)
+	col.add_child(_context_info)
+
+	_color_section = VBoxContainer.new()
+	_color_section.add_theme_constant_override("separation", 6)
+	_color_section.add_child(UiBuilder.section_header("COLOUR"))
+	var color_row := HBoxContainer.new()
+	color_row.add_theme_constant_override("separation", 6)
+	_color_section.add_child(color_row)
+	_color_picker = ColorPickerButton.new()
+	_color_picker.custom_minimum_size = Vector2(52, 34)
+	_color_picker.edit_alpha = false
+	_color_picker.color = _paint_color
+	_color_picker.color_changed.connect(_on_paint_color_changed)
+	color_row.add_child(_color_picker)
+	var default_btn := UiBuilder.compact_button("Default")
+	default_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	default_btn.pressed.connect(_use_brick_catalog_color)
+	color_row.add_child(default_btn)
+	var presets := HFlowContainer.new()
+	presets.add_theme_constant_override("h_separation", 4)
+	presets.add_theme_constant_override("v_separation", 4)
+	_color_section.add_child(presets)
+	_color_preset_btns.clear()
+	for preset in COLOR_PRESETS:
+		var swatch := Button.new()
+		swatch.custom_minimum_size = Vector2(26, 26)
+		swatch.focus_mode = Control.FOCUS_NONE
+		swatch.tooltip_text = str(preset.get("name", "Colour"))
+		var sb := StyleBoxFlat.new()
+		sb.set_border_width_all(1)
+		sb.border_color = HudStyle.C_BRASS
+		sb.set_corner_radius_all(2)
+		if bool(preset.get("custom", true)) == false:
+			sb.bg_color = Color(0.2, 0.2, 0.22)
+			swatch.text = "·"
+		else:
+			sb.bg_color = preset["color"] as Color
+		swatch.add_theme_stylebox_override("normal", sb)
+		swatch.add_theme_stylebox_override("hover", sb)
+		swatch.add_theme_stylebox_override("pressed", sb)
+		var preset_copy: Dictionary = preset
+		swatch.pressed.connect(func() -> void: _apply_color_preset(preset_copy))
+		presets.add_child(swatch)
+		_color_preset_btns.append(swatch)
+	col.add_child(_color_section)
+
+	_sign_section = VBoxContainer.new()
+	_sign_section.add_theme_constant_override("separation", 6)
+	_sign_section.add_child(UiBuilder.section_header("SIGN TEXT"))
+	_sign_text_edit = LineEdit.new()
+	_sign_text_edit.placeholder_text = "Building name / label…"
+	_sign_text_edit.max_length = 32
+	_sign_text_edit.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_sign_text_edit.text_changed.connect(func(_t: String) -> void: _refresh_ghost_from_mouse())
+	_sign_section.add_child(_sign_text_edit)
+	col.add_child(_sign_section)
+
+	_clipboard_section = VBoxContainer.new()
+	_clipboard_section.add_theme_constant_override("separation", 6)
+	_clipboard_section.add_child(UiBuilder.section_header("SELECTION"))
+	_copy_btn = UiBuilder.compact_button("Copy selection  Ctrl+C")
+	_copy_btn.pressed.connect(_copy_marked_region)
+	_clipboard_section.add_child(_copy_btn)
+	_paste_btn = UiBuilder.compact_button("Paste at cursor  Ctrl+V")
+	_paste_btn.pressed.connect(_paste_clipboard_at_cursor)
+	_clipboard_section.add_child(_paste_btn)
+	_paste_layer_btn = UiBuilder.compact_button("Paste on this layer")
+	_paste_layer_btn.tooltip_text = "Same XZ as the copy, on the current layer — Layer+ between presses"
+	_paste_layer_btn.pressed.connect(_paste_clipboard_on_layer)
+	_clipboard_section.add_child(_paste_layer_btn)
+	_paste_up_btn = UiBuilder.compact_button("Paste one storey ↑")
+	_paste_up_btn.tooltip_text = "Stack another copy above the last paste (keeps going each press)"
+	_paste_up_btn.pressed.connect(_paste_clipboard_one_up)
+	_clipboard_section.add_child(_paste_up_btn)
+	col.add_child(_clipboard_section)
+
+
+func _build_building_dialog() -> void:
+	_building_dialog = UiBuilder.panel(Vector2(410, 0))
+	_building_dialog.name = "BuildingDialog"
+	_building_dialog.visible = false
+	_building_dialog.set_anchors_preset(Control.PRESET_CENTER_RIGHT)
+	_building_dialog.offset_left = -430.0
+	_building_dialog.offset_right = -20.0
+	_building_dialog.offset_top = -320.0
+	_building_dialog.offset_bottom = 320.0
+	_root.add_child(_building_dialog)
+
+	var scroll := ScrollContainer.new()
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	_building_dialog.add_child(scroll)
+
+	var col := VBoxContainer.new()
+	col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	col.add_theme_constant_override("separation", 9)
+	scroll.add_child(col)
+
+	var heading := HBoxContainer.new()
+	col.add_child(heading)
+	var title := UiBuilder.title_label("BUILDING", 20)
+	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	heading.add_child(title)
+	var close := UiBuilder.compact_button("×", 34)
+	close.pressed.connect(func() -> void: _building_dialog.visible = false)
+	heading.add_child(close)
+
+	var help := UiBuilder.subtitle_label(
+		"LMB paint · RMB orbit · MMB pan · Scroll zoom · [ ] layer · R rotate · X erase\n"
+		+ "M mark A→B · Ctrl+C copy · Ctrl+V paste",
+		11,
+	)
+	help.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	col.add_child(help)
+
+	col.add_child(UiBuilder.section_header("FILE"))
+	_file_lbl = Label.new()
+	_file_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	HudStyle.apply_body_font(_file_lbl, 12, HudStyle.C_TEXT)
+	col.add_child(_file_lbl)
+
+	col.add_child(UiBuilder.section_header("DISPLAY NAME"))
+	_name_edit = LineEdit.new()
+	_name_edit.placeholder_text = "Untitled Building"
+	_name_edit.text_changed.connect(func(_t: String) -> void:
+		_apply_metadata_from_fields()
+		_refresh_summary()
+		_refresh_rules()
+	)
+	col.add_child(_name_edit)
+
+	col.add_child(UiBuilder.section_header("SERVICE ROLE"))
+	_role_option = OptionButton.new()
+	_populate_role_options()
+	_role_option.item_selected.connect(_on_role_selected)
+	col.add_child(_role_option)
+
+	col.add_child(UiBuilder.section_header("APRON PAD"))
+	_pad_template_option = OptionButton.new()
+	_populate_pad_template_options()
+	_pad_template_option.item_selected.connect(_on_pad_template_selected)
+	col.add_child(_pad_template_option)
+	var pad_hint := UiBuilder.subtitle_label("Locks volume to N×22 × M×22 m for port pads", 11)
+	pad_hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	col.add_child(pad_hint)
+
+	col.add_child(UiBuilder.separator())
+	_rules_lbl = Label.new()
+	_rules_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	HudStyle.apply_body_font(_rules_lbl, 12, HudStyle.C_TEXT)
+	col.add_child(_rules_lbl)
+
+	col.add_child(UiBuilder.section_header("EXISTING"))
+	_load_option = OptionButton.new()
+	col.add_child(_load_option)
+	var load_row := HBoxContainer.new()
+	load_row.add_theme_constant_override("separation", 6)
+	col.add_child(load_row)
+	var load_selected := UiBuilder.compact_button("Load")
+	load_selected.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	load_selected.pressed.connect(_load_selected_json)
+	load_row.add_child(load_selected)
+	var browse_btn := UiBuilder.compact_button("Browse…")
+	browse_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	browse_btn.pressed.connect(_show_open_dialog)
+	load_row.add_child(browse_btn)
+
+	var save_row := HBoxContainer.new()
+	save_row.add_theme_constant_override("separation", 6)
+	col.add_child(save_row)
+	var save_btn := UiBuilder.compact_button("Save")
+	save_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	save_btn.pressed.connect(_save_json)
+	save_row.add_child(save_btn)
+	var save_as_btn := UiBuilder.compact_button("Save As…")
+	save_as_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	save_as_btn.pressed.connect(_show_save_dialog)
+	save_row.add_child(save_as_btn)
+
+	var util_row := HBoxContainer.new()
+	util_row.add_theme_constant_override("separation", 6)
+	col.add_child(util_row)
+	var new_btn := UiBuilder.compact_button("New blank")
+	new_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	new_btn.pressed.connect(_new_blank)
+	util_row.add_child(new_btn)
+	var clear_btn := UiBuilder.compact_button("Clear pad")
+	clear_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	clear_btn.pressed.connect(_clear_layout)
+	util_row.add_child(clear_btn)
+
+	_export_lbl = Label.new()
+	_export_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	HudStyle.apply_body_font(_export_lbl, 11, HudStyle.C_LABEL)
+	col.add_child(_export_lbl)
+
+
+func _toggle_building_dialog() -> void:
+	if _building_dialog == null:
+		return
+	_building_dialog.visible = not _building_dialog.visible
+	if _building_dialog.visible:
+		_refresh_rules()
+		_refresh_file_label()
+		_refresh_load_options()
+
+
+func _refresh_summary() -> void:
+	if _summary_lbl == null:
+		return
+	var name_s := _layout.display_name.strip_edges()
+	if name_s.is_empty():
+		name_s = "Untitled Building"
+	var role_s := _layout.role if not _layout.role.is_empty() else "decorative"
+	var pad_s := _layout.pad_template_id if not _layout.pad_template_id.is_empty() else "freeform"
+	_summary_lbl.text = "%s  ·  %s  ·  %s  ·  %d×%d×%d" % [
+		name_s, role_s, pad_s, _grid.width, _grid.height, _grid.depth,
+	]
 
 
 func _resize() -> void:
@@ -643,8 +771,8 @@ func _on_viewport_gui_input(event: InputEvent) -> void:
 
 
 func _set_layer_y(y: int) -> void:
-	# No upper clamp — painting above the pad grows building height.
-	_layer_y = maxi(y, 0)
+	var max_y := maxi(_grid.height - 1, 0) if _pad_volume_locked() and _grid != null else 9999
+	_layer_y = clampi(y, 0, max_y)
 	_refresh_grid_overlay()
 	_apply_layer_visibility()
 	_refresh_palette_selection()
@@ -655,6 +783,11 @@ func _set_layer_y(y: int) -> void:
 	elif not _clipboard.is_empty():
 		_update_paste_preview()
 	_refresh_hint()
+
+
+## Apron pad templates lock the authoring volume — no grow-on-paint.
+func _pad_volume_locked() -> bool:
+	return not _layout.pad_template_id.strip_edges().is_empty()
 
 
 func _apply_layer_visibility() -> void:
@@ -682,6 +815,11 @@ func _paint_at_screen(screen_pos: Vector2) -> void:
 		_handle_mark_click(cell)
 		return
 	if _tool == Tool.ERASE:
+		## Peel mounted sign first so erase doesn't need to delete the wall.
+		if _layout.clear_sign(cell):
+			_sync_brick_visuals()
+			_refresh_rules()
+			return
 		if not _layout.has_cell(cell):
 			return
 		_layout.erase_footprint_at(cell)
@@ -697,10 +835,22 @@ func _rotate_yaw() -> void:
 	_yaw = (_yaw + step) % 360
 
 
+func _sign_text() -> String:
+	if _sign_text_edit != null:
+		var t := _sign_text_edit.text.strip_edges()
+		if not t.is_empty():
+			return t
+	return str(BrickCatalog.get_entry(_brick_id).get("default_text", "NAME"))
+
+
 func _try_place(cell: Vector3i) -> bool:
 	if not BrickCatalog.has(_brick_id):
 		return false
 	if BrickCatalog.has_tag(_brick_id, "ship_only"):
+		return false
+	if BrickCatalog.has_tag(_brick_id, "text"):
+		return _try_place_text(cell)
+	if not _placement_legal(cell):
 		return false
 	var fp := BrickCatalog.footprint_of(_brick_id)
 	var yaw_steps := int(round(float(_yaw) / 90.0)) % 4
@@ -715,6 +865,31 @@ func _try_place(cell: Vector3i) -> bool:
 	if not _layout.place_footprint(cell, _brick_id, _yaw, null, paint):
 		return false
 	if _layout.grid_size != before:
+		## Freeform only — locked pads reject OOB in _placement_legal first.
+		_grid = _layout.grid()
+		_layer_y = clampi(_layer_y, 0, maxi(_grid.height - 1, 0))
+		_rebuild_preview()
+	return true
+
+
+func _try_place_text(cell: Vector3i) -> bool:
+	## Mount onto an existing wall/block, or place free-standing on empty cells.
+	if cell.y < 0 or _grid == null:
+		return false
+	if not _placement_legal(cell):
+		return false
+	var text := _sign_text()
+	if _layout.has_cell(cell) and _layout.has_blocking_content(cell):
+		var host := _layout.get_brick(_layout.primary_cell_of(cell))
+		var host_id := str(host.get("brick_id", ""))
+		if BrickCatalog.has_tag(host_id, "text"):
+			_layout.erase_footprint_at(cell)
+			return _layout.place_footprint(cell, _brick_id, _yaw, null, null, {"text": text})
+		return _layout.attach_sign(cell, _brick_id, _yaw, text)
+	var before := _layout.grid_size
+	if not _layout.place_footprint(cell, _brick_id, _yaw, null, null, {"text": text}):
+		return false
+	if _layout.grid_size != before:
 		_grid = _layout.grid()
 		_layer_y = clampi(_layer_y, 0, maxi(_grid.height - 1, 0))
 		_rebuild_preview()
@@ -726,11 +901,34 @@ func _placement_legal(cell: Vector3i) -> bool:
 		return false
 	if BrickCatalog.has_tag(_brick_id, "ship_only"):
 		return false
+	## Signs can mount on a host cell, or sit free-standing when the footprint is clear.
+	if BrickCatalog.has_tag(_brick_id, "text"):
+		if not _grid.in_bounds(cell):
+			return false
+		if _layout.has_cell(cell) and _layout.has_blocking_content(cell):
+			var host := _layout.get_brick(_layout.primary_cell_of(cell))
+			return not BrickCatalog.has_tag(str(host.get("brick_id", "")), "text") \
+				or str(host.get("brick_id", "")) == _brick_id
+		var fp := BrickCatalog.footprint_of(_brick_id)
+		var yaw_steps := int(round(float(_yaw) / 90.0)) % 4
+		var locked := _pad_volume_locked()
+		for occupied in _grid.footprint_cells(cell, fp, yaw_steps):
+			if not _grid.in_bounds(occupied):
+				if locked:
+					return false
+				continue
+			if _layout.has_blocking_content(occupied):
+				return false
+		return true
 	var fp := BrickCatalog.footprint_of(_brick_id)
 	var yaw_steps := int(round(float(_yaw) / 90.0)) % 4
 	var placing_floor := BuildingLayout.is_surface_brick(_brick_id)
+	var locked := _pad_volume_locked()
 	for occupied in _grid.footprint_cells(cell, fp, yaw_steps):
 		if not _grid.in_bounds(occupied):
+			## Locked apron pads reject out-of-bounds instead of growing.
+			if locked:
+				return false
 			continue
 		var existing := _layout.get_brick(occupied)
 		if existing.is_empty():
@@ -767,11 +965,12 @@ func _update_ghost_at_screen(screen_pos: Vector2) -> void:
 		_clear_ghost()
 		_clear_paste_preview()
 		return
-	_ghost_cell = cell
-	if not _clipboard.is_empty():
-		_update_paste_preview()
 	var valid := _placement_legal(cell)
 	var paint_color := _active_paint_color()
+	var sign_text := _sign_text() if BrickCatalog.has_tag(_brick_id, "text") else ""
+	## Do not assign _ghost_cell before these checks — that made the early-out
+	## always succeed and skipped the cheap move path, forcing a full mesh rebuild
+	## whenever validity flipped between cells.
 	if (
 		_ghost != null and is_instance_valid(_ghost)
 		and _ghost_brick_id == _brick_id
@@ -779,18 +978,26 @@ func _update_ghost_at_screen(screen_pos: Vector2) -> void:
 		and _ghost_yaw == _yaw
 		and _ghost_valid == valid
 		and _ghost_color.is_equal_approx(paint_color)
+		and _ghost_sign_text == sign_text
 	):
+		if not _clipboard.is_empty():
+			_update_paste_preview()
 		return
 	if (
 		_ghost != null and is_instance_valid(_ghost)
 		and _ghost_brick_id == _brick_id
-		and _ghost_valid == valid
 		and _ghost_color.is_equal_approx(paint_color)
+		and _ghost_sign_text == sign_text
 	):
 		_ghost_cell = cell
 		_ghost_yaw = _yaw
-		_ghost.position = BuildingFitout.footprint_center_local(_grid, cell, _brick_id, _yaw)
+		_ghost.position = _ghost_position_for(cell, _brick_id, _yaw)
 		_ghost.rotation_degrees = Vector3(0.0, float(_yaw), 0.0)
+		if _ghost_valid != valid:
+			_ghost_valid = valid
+			_tint_ghost(_ghost, valid)
+		if not _clipboard.is_empty():
+			_update_paste_preview()
 		return
 	_clear_ghost()
 	_ghost_brick_id = _brick_id
@@ -798,12 +1005,29 @@ func _update_ghost_at_screen(screen_pos: Vector2) -> void:
 	_ghost_yaw = _yaw
 	_ghost_valid = valid
 	_ghost_color = paint_color
-	_ghost = BrickCatalog.create_visual(_brick_id, {"preview_mesh": true, "color": paint_color})
+	_ghost_sign_text = sign_text
+	var ghost_opts: Dictionary = {"preview_mesh": true, "color": paint_color}
+	if BrickCatalog.has_tag(_brick_id, "text"):
+		ghost_opts["text"] = sign_text
+	_ghost = BrickCatalog.create_visual(_brick_id, ghost_opts)
 	_ghost.name = "PlaceGhost"
-	_ghost.position = BuildingFitout.footprint_center_local(_grid, cell, _brick_id, _yaw)
+	_ghost.position = _ghost_position_for(cell, _brick_id, _yaw)
 	_ghost.rotation_degrees = Vector3(0.0, float(_yaw), 0.0)
 	_tint_ghost(_ghost, valid)
 	_pad_root.add_child(_ghost)
+	if not _clipboard.is_empty():
+		_update_paste_preview()
+
+
+func _ghost_position_for(cell: Vector3i, brick_id: String, yaw: int) -> Vector3:
+	## Mounted signs preview on the host cell centre; free-standing use footprint centre.
+	if (
+		BrickCatalog.has_tag(brick_id, "text")
+		and _layout.has_cell(cell)
+		and _layout.has_blocking_content(cell)
+	):
+		return _grid.cell_center_local(cell)
+	return BuildingFitout.footprint_center_local(_grid, cell, brick_id, yaw)
 
 
 func _tint_ghost(root: Node3D, valid: bool) -> void:
@@ -816,14 +1040,23 @@ func _tint_ghost(root: Node3D, valid: bool) -> void:
 		var mi := n as MeshInstance3D
 		if mi == null:
 			continue
-		var mat := StandardMaterial3D.new()
-		if mi.material_override is StandardMaterial3D:
-			mat = (mi.material_override as StandardMaterial3D).duplicate() as StandardMaterial3D
+		var mat := mi.material_override as StandardMaterial3D
+		if mat == null:
+			mat = StandardMaterial3D.new()
+		else:
+			mat = mat.duplicate() as StandardMaterial3D
+		## Keep the untinted albedo so green↔red flips don't compound or rebuild mesh.
+		var base: Color
+		if mi.has_meta("ghost_base_albedo"):
+			base = mi.get_meta("ghost_base_albedo") as Color
+		else:
+			base = mat.albedo_color
+			mi.set_meta("ghost_base_albedo", base)
 		mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 		mat.albedo_color = Color(
-			tint.r * 0.55 + mat.albedo_color.r * 0.45,
-			tint.g * 0.55 + mat.albedo_color.g * 0.45,
-			tint.b * 0.55 + mat.albedo_color.b * 0.45,
+			tint.r * 0.55 + base.r * 0.45,
+			tint.g * 0.55 + base.g * 0.45,
+			tint.b * 0.55 + base.b * 0.45,
 			tint.a,
 		)
 		mat.roughness = 0.85
@@ -843,6 +1076,7 @@ func _clear_ghost() -> void:
 	_ghost_yaw = -1
 	_ghost_valid = false
 	_ghost_color = Color(0, 0, 0, 0)
+	_ghost_sign_text = ""
 
 
 func _pick_cell(screen_pos: Vector2) -> Vector3i:
@@ -859,14 +1093,21 @@ func _pick_cell(screen_pos: Vector2) -> Vector3i:
 	var hit := from + dir * t
 	var cell := _grid.local_to_cell(hit)
 	cell.y = _layer_y
-	# Pad grows on place — allow aiming past the current edge.
+	## Locked pads stay fixed — ignore aim outside the volume.
+	if _pad_volume_locked() and not _grid.in_bounds(cell):
+		return Vector3i(0, -1, 0)
 	return cell
 
 
 func _make_item_row(brick_id: String) -> PanelContainer:
 	var row := PanelContainer.new()
-	row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row.custom_minimum_size = Vector2(124, 98)
 	row.mouse_filter = Control.MOUSE_FILTER_STOP
+	var fp := BrickCatalog.footprint_of(brick_id)
+	var sz := BrickCatalog.size_m(brick_id)
+	row.tooltip_text = "%s\n%d×%d×%d cells · %.1f×%.1f×%.1f m" % [
+		BrickCatalog.display_name(brick_id), fp.x, fp.y, fp.z, sz.x, sz.y, sz.z,
+	]
 	row.gui_input.connect(func(ev: InputEvent) -> void:
 		if ev is InputEventMouseButton:
 			var mb := ev as InputEventMouseButton
@@ -877,52 +1118,49 @@ func _make_item_row(brick_id: String) -> PanelContainer:
 	sb.bg_color = HudStyle.C_BG_INNER
 	sb.border_color = HudStyle.C_BRASS
 	sb.set_border_width_all(1)
-	sb.set_content_margin_all(6)
+	sb.set_corner_radius_all(3)
+	sb.set_content_margin_all(5)
 	row.add_theme_stylebox_override("panel", sb)
 	row.set_meta("style", sb)
+	row.mouse_entered.connect(func() -> void:
+		if not (_tool == Tool.PLACE and _brick_id == brick_id):
+			sb.border_color = HudStyle.C_COPPER
+	)
+	row.mouse_exited.connect(func() -> void: _refresh_palette_selection())
 
-	var h := HBoxContainer.new()
-	h.add_theme_constant_override("separation", 10)
-	row.add_child(h)
+	var col := VBoxContainer.new()
+	col.alignment = BoxContainer.ALIGNMENT_CENTER
+	col.add_theme_constant_override("separation", 3)
+	row.add_child(col)
 
 	var thumb_plate := PanelContainer.new()
-	thumb_plate.custom_minimum_size = Vector2(THUMB_PX + 4, THUMB_PX + 4)
+	thumb_plate.custom_minimum_size = Vector2(THUMB_PX, THUMB_PX)
+	thumb_plate.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	thumb_plate.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var plate_sb := StyleBoxFlat.new()
-	plate_sb.bg_color = Color(0.10, 0.11, 0.13, 1.0)
-	plate_sb.set_corner_radius_all(4)
-	plate_sb.set_content_margin_all(2)
+	plate_sb.bg_color = Color(0.08, 0.10, 0.11, 0.9)
+	plate_sb.set_corner_radius_all(3)
 	thumb_plate.add_theme_stylebox_override("panel", plate_sb)
-	h.add_child(thumb_plate)
+	col.add_child(thumb_plate)
 
 	var thumb := TextureRect.new()
+	thumb.name = "Thumb"
 	thumb.custom_minimum_size = Vector2(THUMB_PX, THUMB_PX)
 	thumb.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	thumb.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	thumb.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	thumb_plate.add_child(thumb)
-
-	var text_col := VBoxContainer.new()
-	text_col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	text_col.alignment = BoxContainer.ALIGNMENT_CENTER
-	h.add_child(text_col)
+	if _thumb_cache.has(brick_id):
+		thumb.texture = _thumb_cache[brick_id] as Texture2D
 
 	var name_lbl := Label.new()
 	name_lbl.text = BrickCatalog.display_name(brick_id)
-	name_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	name_lbl.add_theme_font_size_override("font_size", 14)
+	name_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	name_lbl.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	name_lbl.custom_minimum_size.x = 112
+	name_lbl.add_theme_font_size_override("font_size", 11)
 	name_lbl.add_theme_color_override("font_color", HudStyle.C_TEXT)
-	text_col.add_child(name_lbl)
-
-	var fp := BrickCatalog.footprint_of(brick_id)
-	var sz := BrickCatalog.size_m(brick_id)
-	var size_lbl := Label.new()
-	size_lbl.text = "%d×%d×%d cells  (%.1f×%.1f×%.1f m)" % [
-		fp.x, fp.y, fp.z, sz.x, sz.y, sz.z,
-	]
-	size_lbl.add_theme_font_size_override("font_size", 11)
-	size_lbl.add_theme_color_override("font_color", HudStyle.C_LABEL)
-	text_col.add_child(size_lbl)
+	col.add_child(name_lbl)
 	return row
 
 
@@ -996,6 +1234,7 @@ func _select_brick(id: String) -> void:
 	_clear_ghost()
 	_refresh_ghost_from_mouse()
 	_refresh_hint()
+	_refresh_context_drawer()
 
 
 func _active_paint_color() -> Color:
@@ -1049,34 +1288,12 @@ func _refresh_palette_selection() -> void:
 			sb.border_color = HudStyle.C_AMBER if selected else HudStyle.C_BRASS
 			sb.set_border_width_all(2 if selected else 1)
 			sb.bg_color = Color(0.16, 0.14, 0.10) if selected else HudStyle.C_BG_INNER
-	var mode := "Place"
-	match _tool:
-		Tool.ERASE:
-			mode = "Erase"
-		Tool.MARK:
-			if not _mark_anchor_set:
-				mode = "Mark · click corner A"
-			elif not _mark_complete:
-				mode = "Mark · click corner B"
-			else:
-				mode = "Marked · ready to Copy"
-	var clip_note := ""
-	if not _clipboard.is_empty():
-		var sz := BrickRegionClipboard.size_cells(_clipboard)
-		clip_note = " · clipboard %d (%d×%d×%d)" % [
-			int(_clipboard.get("cell_count", 0)), sz.x, sz.y, sz.z,
-		]
-	_layer_lbl.text = "Layer %d  (%.1f m)  ·  pad %d×%d×%d  ·  %s%s" % [
-		_layer_y,
-		float(_layer_y) * BuildingGrid.CELL_M,
-		_grid.width,
-		_grid.height,
-		_grid.depth,
-		mode,
-		clip_note,
-	]
+	if _layer_lbl != null:
+		_layer_lbl.text = "Layer %d" % _layer_y
 	_refresh_tool_buttons()
 	_refresh_hint()
+	_refresh_context_drawer()
+	_refresh_summary()
 
 
 func _refresh_tool_buttons() -> void:
@@ -1134,16 +1351,56 @@ func _refresh_hint() -> void:
 
 func _set_tool(tool: int) -> void:
 	_tool = tool
-	if tool != Tool.MARK:
-		_clear_mark()
-		_clear_mark_preview()
-	else:
-		_clear_mark()
+	_clear_mark()
+	_clear_mark_preview()
+	if tool == Tool.MARK:
 		_clear_ghost()
 		_clear_paste_preview()
 	_refresh_palette_selection()
 	_refresh_ghost_from_mouse()
 	_refresh_hint()
+	_refresh_context_drawer()
+
+
+func _toggle_mark_tool() -> void:
+	if _tool == Tool.MARK:
+		_set_tool(Tool.PLACE)
+		_set_hint("Mark cleared.", HudStyle.C_LABEL)
+	else:
+		_set_tool(Tool.MARK)
+
+
+func _refresh_context_drawer() -> void:
+	if _context_drawer == null:
+		return
+	var erase := _tool == Tool.ERASE
+	_context_drawer.visible = not erase
+	if erase:
+		return
+	var is_mark := _tool == Tool.MARK
+	if is_mark:
+		_context_title.text = "SELECTION"
+		if not _mark_anchor_set:
+			_context_info.text = "Click the first corner of the region."
+		elif not _mark_complete:
+			_context_info.text = "Click the opposite corner. Change layer first to include height."
+		else:
+			var size := _mark_max - _mark_min + Vector3i.ONE
+			_context_info.text = "Selected %d × %d × %d cells." % [size.x, size.y, size.z]
+	else:
+		_context_title.text = BrickCatalog.display_name(_brick_id).to_upper()
+		var fp := BrickCatalog.footprint_of(_brick_id)
+		var size := BrickCatalog.size_m(_brick_id)
+		_context_info.text = "%d × %d × %d cells  ·  %.1f × %.1f × %.1f m\nPad %d×%d×%d" % [
+			fp.x, fp.y, fp.z, size.x, size.y, size.z,
+			_grid.width, _grid.height, _grid.depth,
+		]
+	if _color_section != null:
+		_color_section.visible = not is_mark and not BrickCatalog.has_tag(_brick_id, "text")
+	if _sign_section != null:
+		_sign_section.visible = not is_mark and BrickCatalog.has_tag(_brick_id, "text")
+	if _clipboard_section != null:
+		_clipboard_section.visible = is_mark or not _clipboard.is_empty()
 
 
 func _clear_mark() -> void:
@@ -1186,6 +1443,7 @@ func _handle_mark_click(cell: Vector3i) -> void:
 
 func _update_mark_preview() -> void:
 	if _tool != Tool.MARK or not _mark_anchor_set or _grid == null:
+		_clear_mark_preview()
 		return
 	var cursor := _ghost_cell
 	if cursor.y < 0 and _vp_host != null:
@@ -1278,6 +1536,7 @@ func _copy_marked_region() -> void:
 		return
 	_clipboard = BrickRegionClipboard.extract_region(_layout.cells, _mark_min, _mark_max)
 	_clipboard_src_min = _mark_min
+	_last_paste_anchor = Vector3i(-999, -999, -999)
 	var n := int(_clipboard.get("cell_count", 0))
 	if n <= 0:
 		_clipboard.clear()
@@ -1287,7 +1546,7 @@ func _copy_marked_region() -> void:
 	## Leave mark mode so the next action is paste, not another mark click.
 	_set_tool(Tool.PLACE)
 	_set_hint(
-		"Copied %d bricks. Layer+ then “Paste this layer”, or hover + Ctrl+V." % n,
+		"Copied %d bricks. Layer+ → Paste on this layer, or Paste ↑ to stack floors." % n,
 		HudStyle.C_GREEN,
 	)
 	_refresh_palette_selection()
@@ -1324,14 +1583,21 @@ func _paste_at(dest: Vector3i) -> bool:
 		_set_hint("Clipboard empty.", HudStyle.C_RED)
 		return false
 	var before_size := _layout.grid_size
-	var shift := _layout.ensure_fit_cells(needed)
-	dest += shift
-	_clipboard_src_min += shift
+	if _pad_volume_locked():
+		for cell in needed:
+			if not _grid.in_bounds(cell):
+				_set_hint("Paste stays inside the locked pad.", HudStyle.C_RED)
+				return false
+	else:
+		var shift := _layout.ensure_fit_cells(needed)
+		dest += shift
+		_clipboard_src_min += shift
 	## Re-check after any remap from pad growth.
 	if not _can_paste_at(dest):
 		_set_hint("Can't paste there — clear blocking bricks first.", HudStyle.C_RED)
 		return false
 	_layout.cells = BrickRegionClipboard.paste_region(_clipboard, dest, _layout.cells)
+	_last_paste_anchor = dest
 	if before_size != _layout.grid_size:
 		_grid = _layout.grid()
 		_rebuild_preview()
@@ -1362,6 +1628,7 @@ func _paste_clipboard_on_layer() -> void:
 	if _clipboard.is_empty():
 		_set_hint("Clipboard empty — Mark + Copy first.", HudStyle.C_RED)
 		return
+	## Stamp at the current layer (same XZ as the copy). Change layer between presses.
 	var dest := Vector3i(_clipboard_src_min.x, _layer_y, _clipboard_src_min.z)
 	_paste_at(dest)
 
@@ -1371,11 +1638,12 @@ func _paste_clipboard_one_up() -> void:
 		_set_hint("Clipboard empty — Mark + Copy first.", HudStyle.C_RED)
 		return
 	var sz := BrickRegionClipboard.size_cells(_clipboard)
-	var dest := Vector3i(
-		_clipboard_src_min.x,
-		_clipboard_src_min.y + maxi(sz.y, 1),
-		_clipboard_src_min.z,
-	)
+	var step := maxi(sz.y, 1)
+	## Stack above the last paste (or the original copy on first press).
+	var base_y := _clipboard_src_min.y
+	if _last_paste_anchor.y >= 0:
+		base_y = _last_paste_anchor.y
+	var dest := Vector3i(_clipboard_src_min.x, base_y + step, _clipboard_src_min.z)
 	_set_layer_y(dest.y)
 	_paste_at(dest)
 
@@ -1458,7 +1726,7 @@ func _sync_brick_visuals() -> void:
 				"%s#floor" % BuildingLayout.cell_key(cell),
 				true,
 			)
-	## Content primaries.
+	## Content primaries (+ mounted wall plaques).
 	for item in _layout.iter_primary_cells():
 		if BuildingLayout.entry_is_surface_only(item):
 			continue
@@ -1472,6 +1740,22 @@ func _sync_brick_visuals() -> void:
 			BuildingLayout.cell_key(cell),
 			false,
 		)
+		var sign_id := str(item.get("sign_id", ""))
+		if BrickCatalog.has(sign_id) and BrickCatalog.has_tag(sign_id, "text"):
+			var sign_entry := {
+				"brick_id": sign_id,
+				"yaw": int(item.get("sign_yaw", item.get("yaw", 0))),
+				"text": str(item.get("text", "")),
+			}
+			_sync_one_visual(
+				keep,
+				cell,
+				sign_id,
+				int(sign_entry["yaw"]),
+				sign_entry,
+				"%s#sign" % BuildingLayout.cell_key(cell),
+				false,
+			)
 	var remove_keys: Array = []
 	for key in _brick_visuals.keys():
 		if not keep.has(key):
@@ -1498,7 +1782,9 @@ func _sync_one_visual(
 	keep[key] = true
 	var color := BuildingLayout.color_from_entry(entry, brick_id)
 	var color_key := "%.3f,%.3f,%.3f" % [color.r, color.g, color.b]
-	var pos := _grid.cell_center_local(cell) if surface_tile \
+	var sign_text := str(entry.get("text", "")) if BrickCatalog.has_tag(brick_id, "text") else ""
+	var mounted_sign := str(key).ends_with("#sign")
+	var pos := _grid.cell_center_local(cell) if surface_tile or mounted_sign \
 		else BuildingFitout.footprint_center_local(_grid, cell, brick_id, yaw)
 	var existing: Node3D = _brick_visuals.get(key) as Node3D
 	if (
@@ -1506,6 +1792,7 @@ func _sync_one_visual(
 		and str(existing.get_meta("brick_id", "")) == brick_id
 		and int(existing.get_meta("yaw", 0)) == yaw
 		and str(existing.get_meta("color_key", "")) == color_key
+		and str(existing.get_meta("sign_text", "")) == sign_text
 	):
 		existing.position = pos
 		existing.rotation_degrees = Vector3(0.0, float(yaw), 0.0)
@@ -1513,13 +1800,17 @@ func _sync_one_visual(
 		return
 	if existing != null and is_instance_valid(existing):
 		existing.queue_free()
-	var visual := BrickCatalog.create_visual(brick_id, {"color": color})
+	var opts: Dictionary = {"color": color}
+	if BrickCatalog.has_tag(brick_id, "text"):
+		opts["text"] = sign_text
+	var visual := BrickCatalog.create_visual(brick_id, opts)
 	visual.name = "%s_%s" % [brick_id, key]
 	visual.position = pos
 	visual.rotation_degrees = Vector3(0.0, float(yaw), 0.0)
 	visual.set_meta("brick_id", brick_id)
 	visual.set_meta("yaw", yaw)
 	visual.set_meta("color_key", color_key)
+	visual.set_meta("sign_text", sign_text)
 	visual.set_meta("cell_y", cell.y)
 	_brick_root.add_child(visual)
 	_brick_visuals[key] = visual
@@ -1618,7 +1909,9 @@ func _refresh_rules() -> void:
 			lines.append("Error: %s" % str(err))
 	for warning in report.get("warnings", PackedStringArray()):
 		lines.append("Warn: %s" % str(warning))
-	_rules_lbl.text = "\n".join(lines)
+	if _rules_lbl != null:
+		_rules_lbl.text = "\n".join(lines)
+	_refresh_summary()
 
 
 func _apply_metadata_from_fields() -> void:
@@ -1626,6 +1919,82 @@ func _apply_metadata_from_fields() -> void:
 		_layout.display_name = _name_edit.text.strip_edges()
 	if _role_option != null and _role_option.selected >= 0:
 		_layout.role = str(_role_option.get_item_metadata(_role_option.selected))
+	if _pad_template_option != null and _pad_template_option.selected >= 0:
+		_layout.pad_template_id = str(_pad_template_option.get_item_metadata(_pad_template_option.selected))
+
+
+func _populate_role_options() -> void:
+	if _role_option == null:
+		return
+	_role_option.clear()
+	_role_option.add_item("decorative", 0)
+	_role_option.set_item_metadata(0, "decorative")
+	var index := 1
+	for role_id in PortApronPadCatalog.role_ids():
+		_role_option.add_item(PortApronPadCatalog.role_label(role_id), index)
+		_role_option.set_item_metadata(index, role_id)
+		index += 1
+
+
+func _populate_pad_template_options() -> void:
+	if _pad_template_option == null:
+		return
+	_pad_template_option.clear()
+	_pad_template_option.add_item("(freeform — no pad)", 0)
+	_pad_template_option.set_item_metadata(0, "")
+	var index := 1
+	for template_id in PortApronPadCatalog.template_ids():
+		var entry: Dictionary = PortApronPadCatalog.template(template_id)
+		var label := str(entry.get("label", template_id))
+		_pad_template_option.add_item("%s — %s" % [template_id, label], index)
+		_pad_template_option.set_item_metadata(index, template_id)
+		index += 1
+
+
+func _select_pad_template(template_id: String) -> void:
+	if _pad_template_option == null:
+		return
+	var wanted := template_id.strip_edges()
+	for i in range(_pad_template_option.item_count):
+		if str(_pad_template_option.get_item_metadata(i)) == wanted:
+			_pad_template_option.select(i)
+			return
+	_pad_template_option.select(0)
+
+
+func _on_role_selected(_index: int) -> void:
+	_apply_metadata_from_fields()
+	## When picking a pad role, default the template size if still freeform.
+	var role_id := _layout.role
+	if role_id == "decorative" or role_id.is_empty():
+		_refresh_rules()
+		return
+	if _layout.pad_template_id.is_empty():
+		var default_pad := PortApronPadCatalog.default_template_for_role(role_id)
+		_select_pad_template(default_pad)
+		_apply_pad_template_volume(default_pad)
+	_refresh_rules()
+
+
+func _on_pad_template_selected(_index: int) -> void:
+	_apply_metadata_from_fields()
+	_apply_pad_template_volume(_layout.pad_template_id)
+	_refresh_rules()
+
+
+func _apply_pad_template_volume(template_id: String) -> void:
+	var trimmed := template_id.strip_edges()
+	if trimmed.is_empty():
+		return
+	var volume := PortApronPadCatalog.brick_volume(trimmed)
+	if volume == _layout.grid_size:
+		_layout.pad_template_id = trimmed
+		return
+	_layout.pad_template_id = trimmed
+	_layout.grid_size = volume
+	_grid = _layout.grid()
+	_layer_y = clampi(_layer_y, 0, maxi(_grid.height - 1, 0))
+	_rebuild_preview()
 
 
 func _refresh_file_label() -> void:
@@ -1654,7 +2023,7 @@ func _filename_slug() -> String:
 		elif not out.is_empty() and not out.ends_with("_"):
 			out += "_"
 	out = out.trim_suffix("_")
-	if out.is_empty() or out == "untitled_building" or out == "untitled":
+	if out.is_empty():
 		return "building"
 	return out
 
@@ -1694,7 +2063,10 @@ func _show_save_dialog() -> void:
 	var directory := ProjectSettings.globalize_path(BuildingBlueprintCatalog.BLUEPRINT_DIR)
 	DirAccess.make_dir_recursive_absolute(directory)
 	_save_dialog.current_dir = directory
-	_save_dialog.current_file = _filename_slug() + ".json"
+	if not _current_path.is_empty():
+		_save_dialog.current_file = _current_path.get_file()
+	else:
+		_save_dialog.current_file = _filename_slug() + ".json"
 	_save_dialog.popup_centered_ratio(0.7)
 
 
@@ -1722,6 +2094,7 @@ func _load_json(path: String) -> void:
 	_current_path = BuildingBlueprintCatalog.path_for(_layout.blueprint_id)
 	_name_edit.text = _layout.display_name
 	_select_role(_layout.role)
+	_select_pad_template(_layout.pad_template_id)
 	_refresh_file_label()
 	_refresh_load_options()
 	_rebuild_preview()
@@ -1735,12 +2108,14 @@ func _new_blank() -> void:
 	_layout.blueprint_id = ""
 	_layout.display_name = "Untitled Building"
 	_layout.role = "decorative"
+	_layout.pad_template_id = ""
 	_layout.grid_size = DEFAULT_GRID
 	_grid = _layout.grid()
 	_current_path = ""
 	_layer_y = 0
 	_name_edit.text = _layout.display_name
 	_select_role(_layout.role)
+	_select_pad_template("")
 	_refresh_file_label()
 	_rebuild_preview()
 	_refresh_rules()
@@ -1748,9 +2123,9 @@ func _new_blank() -> void:
 
 
 func _save_json() -> void:
-	# One click: overwrite current file, or write buildings/<display_name>.json.
+	## First save: ask for a filename. Later saves overwrite the loaded/saved path.
 	if _current_path.is_empty():
-		_save_to_path(BuildingBlueprintCatalog.path_for(_filename_slug()))
+		_show_save_dialog()
 		return
 	_save_to_path(_current_path)
 

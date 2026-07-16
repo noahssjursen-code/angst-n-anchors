@@ -86,6 +86,8 @@ static func _add_brick_visual(
 	var opts := {}
 	if entry.has("color"):
 		opts["color"] = BuildingLayout.color_from_entry(entry, brick_id)
+	if BrickCatalog.has_tag(brick_id, "text"):
+		opts["text"] = str(entry.get("text", ""))
 	var visual := BrickCatalog.create_visual(brick_id, opts)
 	visual.name = node_name
 	if surface_tile:
@@ -96,12 +98,32 @@ static func _add_brick_visual(
 		visual.position = footprint_center_local(grid, cell, brick_id, yaw)
 		visual.rotation_degrees.y = float(yaw)
 	root.add_child(visual)
+	if not surface_tile:
+		_add_mounted_sign(root, grid, cell, entry, yaw)
 	if BrickCatalog.has_tag(brick_id, "door") and not surface_tile:
 		_add_brick_door(visual, collision_body, grid, cell, brick_id, yaw)
 	elif BrickCatalog.has_tag(brick_id, "light") and not surface_tile:
 		_add_brick_light(visual, brick_id)
 	elif collision_body != null and _needs_collider(brick_id):
 		_add_collider(collision_body, grid, cell, brick_id, yaw, surface_tile)
+
+
+static func _add_mounted_sign(
+		root: Node3D,
+		grid: BuildingGrid,
+		cell: Vector3i,
+		entry: Dictionary,
+		host_yaw: int,
+) -> void:
+	var sign_id := str(entry.get("sign_id", ""))
+	if not BrickCatalog.has(sign_id) or not BrickCatalog.has_tag(sign_id, "text"):
+		return
+	var sign_yaw := int(entry.get("sign_yaw", host_yaw))
+	var sign := BrickCatalog.create_visual(sign_id, {"text": str(entry.get("text", ""))})
+	sign.name = "Sign_%s" % BuildingLayout.cell_key(cell)
+	sign.position = grid.cell_center_local(cell)
+	sign.rotation_degrees = Vector3(0.0, float(sign_yaw), 0.0)
+	root.add_child(sign)
 
 
 static func _add_brick_door(

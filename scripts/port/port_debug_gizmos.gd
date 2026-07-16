@@ -50,6 +50,15 @@ const DOCK_COLOR := Color(0.2, 0.85, 1.0)
 const ANCHOR_COLOR := Color(1.0, 1.0, 0.2)
 const LAND_ZONE_COLOR := Color(0.25, 0.95, 0.55, 0.12)
 const LAND_ZONE_EDGE := Color(0.15, 1.0, 0.45)
+## Line grid on the foundation apron pavement (dock face → town inland).
+const ASPHALT_GRID_STEP_M := PortApronPadCatalog.CELL_M
+const ASPHALT_GRID_LINE_THICK_M := 0.85
+const ASPHALT_GRID_COLOR := Color(1.0, 0.92, 0.12)
+const ASPHALT_GRID_OUTLINE_COLOR := Color(1.0, 0.85, 0.2, 0.65)
+const ASPHALT_PAD_OUTLINE_COLOR := Color(1.0, 0.55, 0.08, 0.55)
+const ASPHALT_PAD_FILL_COLOR := Color(0.15, 0.75, 0.95, 0.42)
+const ASPHALT_GRID_EDGE_PAD_M := 2.0
+const ASPHALT_GRID_DOT_R := 1.6
 
 ## layer_id → visible. Missing keys default to true when a master enable is on.
 var _layer_visible: Dictionary = {}
@@ -239,44 +248,203 @@ func _stamp_harbour_berths() -> void:
 
 
 func _stamp_berth_plan(plan: Dictionary) -> void:
+	var asphalt_layer := _ensure_layer(LAYER_ASPHALT_BERTHS)
+	var foundation := _graph.initial_attributes.get("foundation", {}) as Dictionary \
+			if _graph != null else {}
+	## Always: line grid on the grey foundation apron (what you're looking at).
+	_stamp_foundation_apron_grid(asphalt_layer, foundation)
+	var surface_y := float(foundation.get("surface_y_m", PortCoastTracer.FOUNDATION_SURFACE_Y_M)) \
+			+ PortCoastTracer.FOUNDATION_TERRAIN_CLEARANCE_M
+	_stamp_apron_pad_footprints(asphalt_layer, surface_y)
 	if plan.is_empty():
-		_ensure_layer(LAYER_ASPHALT_BERTHS)
 		_ensure_layer(LAYER_QUAY_ROOTS)
 		_ensure_layer(LAYER_QUAY_ARMS)
 		return
-	var asphalt_layer := _ensure_layer(LAYER_ASPHALT_BERTHS)
+	## Also outline any asphalt berth pads that stick seaward of the dock face.
 	for raw in plan.get("asphalt_stations", []) as Array:
 		var station := raw as Dictionary
 		var origin := _xz(station.get("origin", [0.0, 0.0]))
-		var family := str(station.get("family", "general"))
-		var color := CommodityCatalog.terminal_family_color(family).lightened(0.25)
-		_stamp_dot(asphalt_layer, Vector3(origin.x, 5.0, origin.y), color, 3.4, str(station.get("id", "asphalt")))
 		var depth := float(station.get("depth_m", 36.0))
 		var length := float(station.get("length_m", 40.0))
 		var tangent := _xz(station.get("tangent", [1.0, 0.0])).normalized()
 		var seaward := _xz(station.get("direction", [0.0, -1.0])).normalized()
-		var pad := MeshBuilder.box(Vector3(length, 0.6, depth), color, 0.9, 0.0)
+		if tangent.length_squared() < 0.01:
+			tangent = Vector2(-seaward.y, seaward.x)
+		if seaward.length_squared() < 0.01:
+			seaward = PortCoastTracer.PORT_LOCAL_SEAWARD_DIR
+		var pad := MeshBuilder.box(
+			Vector3(length, 0.18, depth),
+			ASPHALT_PAD_OUTLINE_COLOR,
+			0.9,
+			0.0,
+		)
 		pad.name = "%s_pad" % str(station.get("id", "asphalt"))
 		asphalt_layer.add_child(pad)
 		pad.position = Vector3(
 			origin.x + seaward.x * depth * 0.5,
-			3.2,
+			surface_y + 0.1,
 			origin.y + seaward.y * depth * 0.5,
 		)
 		_align_basis_on_tangent(pad, tangent, seaward)
+
+	_stamp_berth_plan_quays(plan)
+
+
+## Solid N×M brick-pad footprints from land_plan.apron_pads.
+func _stamp_apron_pad_footprints(parent: Node3D, surface_y: float) -> void:
+	if _graph == null:
+		return
+	var land: Dictionary = _graph.initial_attributes.get("land_plan", {}) as Dictionary
+	var apron_pads: Dictionary = land.get("apron_pads", {}) as Dictionary
+	var pads: Array = apron_pads.get("pads", []) as Array
+	if pads.is_empty():
+		return
+	var root := Node3D.new()
+	root.name = "ApronPadFootprints"
+	parent.add_child(root)
+	for raw in pads:
+		var pad: Dictionary = raw
+		var origin := _xz(pad.get("origin", [0.0, 0.0]))
+		var size_arr: Array = pad.get("size_m", [PortApronPadCatalog.CELL_M, PortApronPadCatalog.CELL_M]) as Array
+		var size_x := float(size_arr[0]) if size_arr.size() > 0 else PortApronPadCatalog.CELL_M
+		var size_z := float(size_arr[1]) if size_arr.size() > 1 else PortApronPadCatalog.CELL_M
+		var along := _xz(pad.get("along_dir", [1.0, 0.0])).normalized()
+		var inland := _xz(pad.get("inland_dir", [0.0, 1.0])).normalized()
+		if along.length_squared() < 0.01:
+			along = Vector2(1.0, 0.0)
+		if inland.length_squared() < 0.01:
+			inland = Vector2(0.0, 1.0)
+		var fill := ASPHALT_PAD_FILL_COLOR
+		if str(pad.get("kind", "")) == "trade":
+			fill = Color(0.95, 0.45, 0.2, 0.45)
+		var box := MeshBuilder.box(Vector3(size_x * 0.96, 0.35, size_z * 0.96), fill, 0.9, 0.0)
+		box.name = str(pad.get("id", "pad"))
+		var mat := box.material_override as StandardMaterial3D
+		if mat != null:
+			mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+			mat.disable_receive_shadows = true
+		box.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		root.add_child(box)
+		box.position = Vector3(origin.x, surface_y + 0.22, origin.y)
+		## Local X = along, local Z = inland (same as foundation apron UV).
+		_align_basis_on_tangent(box, along, inland)
+		var role_id := str(pad.get("role", "pad"))
+		var cells_arr: Array = pad.get("cells", [1, 1]) as Array
 		_label(
-			asphalt_layer,
-			"%s_lbl" % str(station.get("id", "asphalt")),
-			"%s\n%s · apron  %.0f×%.0f m" % [
-				CommodityCatalog.commodity_display(str(station.get("commodity_id", ""))),
-				str(station.get("role", "")).to_upper(),
-				length,
-				depth,
+			root,
+			"%s_lbl" % str(pad.get("id", "pad")),
+			"%s\n%s · %s · %d×%d" % [
+				PortApronPadCatalog.role_label(role_id).to_upper(),
+				str(pad.get("zone", "")).to_upper(),
+				str(pad.get("pad_template_id", "")),
+				int(cells_arr[0]) if cells_arr.size() > 0 else 1,
+				int(cells_arr[1]) if cells_arr.size() > 1 else 1,
 			],
-			Vector3(origin.x, 14.0, origin.y) + Vector3(seaward.x, 0.0, seaward.y) * (depth * 0.45),
-			color,
+			Vector3(origin.x, surface_y + 8.0, origin.y),
+			ASPHALT_GRID_COLOR,
 		)
 
+
+## Uniform port-local lattice clipped to the apron pavement polygon (no warp).
+func _stamp_foundation_apron_grid(parent: Node3D, foundation: Dictionary) -> void:
+	if foundation.is_empty():
+		return
+	var berth_plan: Dictionary = {}
+	if _graph != null:
+		berth_plan = _graph.initial_attributes.get("berth_plan", {}) as Dictionary
+	var host := PortApronPadCatalog.build_host_grid(foundation, berth_plan)
+	var cells: Array = host.get("cells", []) as Array
+	if cells.is_empty():
+		return
+	var surface_y := float(foundation.get("surface_y_m", PortCoastTracer.FOUNDATION_SURFACE_Y_M)) \
+			+ PortCoastTracer.FOUNDATION_TERRAIN_CLEARANCE_M
+	var y := surface_y + 0.35
+	var step := float(host.get("cell_m", ASPHALT_GRID_STEP_M))
+
+	var root := Node3D.new()
+	root.name = "ApronSurfaceGrid"
+	parent.add_child(root)
+
+	for raw in cells:
+		var entry: Dictionary = raw
+		var corners_raw: Array = entry.get("corners", []) as Array
+		if corners_raw.size() < 4:
+			continue
+		var corners := PackedVector2Array()
+		for c in corners_raw:
+			if c is Array and (c as Array).size() >= 2:
+				var arr: Array = c
+				corners.append(Vector2(float(arr[0]), float(arr[1])))
+		if corners.size() < 4:
+			continue
+		for k in range(4):
+			_stamp_grid_line(root, corners[k], corners[(k + 1) % 4], y, ASPHALT_GRID_COLOR)
+
+	## Apron clip outline so the silhouette reads against the lattice.
+	var poly := _polyline2(host.get("polygon", []) as Array)
+	if poly.size() >= 2:
+		for index in range(poly.size()):
+			_stamp_grid_line(
+				root,
+				poly[index],
+				poly[(index + 1) % poly.size()],
+				y + 0.05,
+				ASPHALT_GRID_OUTLINE_COLOR,
+			)
+
+	var origin_arr: Array = host.get("origin", [0.0, 0.0]) as Array
+	var along_arr: Array = host.get("along_dir", [1.0, 0.0]) as Array
+	var inland_arr: Array = host.get("inland_dir", [0.0, 1.0]) as Array
+	var label_xz := Vector2.ZERO
+	if origin_arr.size() >= 2 and along_arr.size() >= 2 and inland_arr.size() >= 2:
+		var o := Vector2(float(origin_arr[0]), float(origin_arr[1]))
+		var along_n := Vector2(float(along_arr[0]), float(along_arr[1])).normalized()
+		var inland_n := Vector2(float(inland_arr[0]), float(inland_arr[1])).normalized()
+		label_xz = o \
+				+ along_n * (float(host.get("along_count", 0)) * step * 0.5) \
+				+ inland_n * (float(host.get("inland_count", 0)) * step * 0.45)
+	_label(
+		root,
+		"ApronGridLabel",
+		"APRON GRID\n%.0f m uniform · %d host cells (clipped)" % [step, cells.size()],
+		Vector3(label_xz.x, y + 14.0, label_xz.y),
+		ASPHALT_GRID_COLOR,
+	)
+
+
+func _stamp_grid_line(
+		parent: Node3D,
+		a_xz: Vector2,
+		b_xz: Vector2,
+		y: float,
+		color: Color = ASPHALT_GRID_COLOR,
+) -> void:
+	var a := Vector3(a_xz.x, y, a_xz.y)
+	var b := Vector3(b_xz.x, y, b_xz.y)
+	var span := a.distance_to(b)
+	if span < 0.5:
+		return
+	var t := ASPHALT_GRID_LINE_THICK_M
+	var edge := MeshBuilder.box(Vector3(t, t, span), color, 0.75, 0.0)
+	var mat := edge.material_override as StandardMaterial3D
+	if mat != null:
+		mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		mat.disable_receive_shadows = true
+	edge.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	parent.add_child(edge)
+	_align_segment(edge, a, b)
+
+
+func _polyline2(raw: Array) -> PackedVector2Array:
+	var out := PackedVector2Array()
+	for point in raw:
+		var arr := point as Array
+		if arr.size() >= 2:
+			out.append(Vector2(float(arr[0]), float(arr[1])))
+	return out
+
+
+func _stamp_berth_plan_quays(plan: Dictionary) -> void:
 	var roots := _ensure_layer(LAYER_QUAY_ROOTS)
 	var arms := _ensure_layer(LAYER_QUAY_ARMS)
 	for raw in plan.get("quay_stations", []) as Array:
@@ -676,6 +844,19 @@ func _stamp_dot(parent: Node3D, position: Vector3, color: Color, radius: float, 
 	var dot := MeshBuilder.sphere(radius, color, 0.7, 0.05)
 	dot.name = node_name
 	dot.position = position
+	parent.add_child(dot)
+
+
+## Bright unshaded stake — readable on black unlit apron / pad surfaces.
+func _stamp_grid_stake(parent: Node3D, position: Vector3, node_name: String) -> void:
+	var dot := MeshBuilder.sphere(ASPHALT_GRID_DOT_R, ASPHALT_GRID_COLOR, 0.7, 0.0)
+	dot.name = node_name
+	dot.position = position
+	var mat := dot.material_override as StandardMaterial3D
+	if mat != null:
+		mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		mat.disable_receive_shadows = true
+	dot.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	parent.add_child(dot)
 
 

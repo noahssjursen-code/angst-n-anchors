@@ -46,9 +46,17 @@ const GIZMO_PACKS: Array[Dictionary] = [
 		},
 	},
 	{
+		"id": "asphalt",
+		"label": "Asphalt",
+		"hint": "yellow square cells · red = warped (no pads) · cyan/orange footprints",
+		"site_layers": {
+			PortDebugGizmos.LAYER_ASPHALT_BERTHS: true,
+		},
+	},
+	{
 		"id": "quays",
 		"label": "Quays",
-		"hint": "dock face · asphalt · quay markers (terminals always on)",
+		"hint": "dock face · asphalt pad grid · quay markers",
 		"site_layers": {
 			PortDebugGizmos.LAYER_DOCK_FACE: true,
 			PortDebugGizmos.LAYER_ASPHALT_BERTHS: true,

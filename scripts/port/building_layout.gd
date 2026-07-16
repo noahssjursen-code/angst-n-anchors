@@ -6,6 +6,8 @@ const FORMAT_VERSION := 1
 var blueprint_id: String = "untitled_building"
 var display_name: String = "Untitled Building"
 var role: String = "decorative"
+## Apron pad template this blueprint fills (e.g. pad_2x2). Empty = freeform.
+var pad_template_id: String = ""
 var grid_size: Vector3i = Vector3i(32, 16, 32)
 var cells: Dictionary = {}
 
@@ -61,12 +63,50 @@ func place_footprint(
 		yaw: int,
 		_building_grid: BuildingGrid = null,
 		color: Variant = null,
+		props: Dictionary = {},
 ) -> bool:
 	if not BrickCatalog.has(brick_id):
 		return false
 	if is_surface_brick(brick_id):
 		return _place_surface(origin, brick_id, yaw, color)
-	return _place_content(origin, brick_id, yaw, color)
+	return _place_content(origin, brick_id, yaw, color, props)
+
+
+func attach_sign(cell: Vector3i, sign_id: String, yaw: int, text: String) -> bool:
+	## Mount a plaque on an existing brick without removing the host.
+	if not BrickCatalog.has_tag(sign_id, "text"):
+		return false
+	var origin := primary_cell_of(cell)
+	var e := get_brick(origin)
+	if e.is_empty():
+		return false
+	if BrickCatalog.has_tag(str(e.get("brick_id", "")), "text"):
+		return false
+	e = e.duplicate(true)
+	e["sign_id"] = sign_id.strip_edges()
+	e["sign_yaw"] = norm_yaw(yaw, BrickCatalog.yaw_step_of(sign_id))
+	e["text"] = text
+	cells[cell_key(origin)] = e
+	return true
+
+
+func clear_sign(cell: Vector3i) -> bool:
+	var origin := primary_cell_of(cell)
+	var e := get_brick(origin)
+	if e.is_empty() or not e.has("sign_id"):
+		return false
+	e = e.duplicate(true)
+	e.erase("sign_id")
+	e.erase("sign_yaw")
+	if not BrickCatalog.has_tag(str(e.get("brick_id", "")), "text"):
+		e.erase("text")
+	cells[cell_key(origin)] = e
+	return true
+
+
+func has_sign(cell: Vector3i) -> bool:
+	var e := get_brick(primary_cell_of(cell))
+	return not e.is_empty() and e.has("sign_id")
 
 
 func _place_surface(origin: Vector3i, brick_id: String, yaw: int, color: Variant) -> bool:
@@ -103,7 +143,13 @@ func _place_surface(origin: Vector3i, brick_id: String, yaw: int, color: Variant
 	return true
 
 
-func _place_content(origin: Vector3i, brick_id: String, yaw: int, color: Variant) -> bool:
+func _place_content(
+		origin: Vector3i,
+		brick_id: String,
+		yaw: int,
+		color: Variant,
+		props: Dictionary = {},
+) -> bool:
 	var fp := BrickCatalog.footprint_of(brick_id)
 	var yaw_n := norm_yaw(yaw, BrickCatalog.yaw_step_of(brick_id))
 	var yaw_steps := int(round(float(yaw_n) / 90.0)) % 4
@@ -137,6 +183,8 @@ func _place_content(origin: Vector3i, brick_id: String, yaw: int, color: Variant
 			}
 			if not painted.is_empty():
 				entry["color"] = painted.duplicate()
+			if props.has("text"):
+				entry["text"] = str(props["text"])
 			if preserved_surfaces.has(key):
 				entry["surface"] = (preserved_surfaces[key] as Dictionary).duplicate(true)
 			cells[key] = entry
@@ -329,7 +377,7 @@ func iter_cells() -> Array[Dictionary]:
 
 
 func to_dict() -> Dictionary:
-	return {
+	var out := {
 		"format_version": FORMAT_VERSION,
 		"id": blueprint_id,
 		"display_name": display_name,
@@ -337,6 +385,9 @@ func to_dict() -> Dictionary:
 		"grid_size": [grid_size.x, grid_size.y, grid_size.z],
 		"cells": cells.duplicate(true),
 	}
+	if not pad_template_id.is_empty():
+		out["pad_template_id"] = pad_template_id
+	return out
 
 
 static func from_dict(data: Dictionary) -> BuildingLayout:
@@ -344,6 +395,7 @@ static func from_dict(data: Dictionary) -> BuildingLayout:
 	layout.blueprint_id = str(data.get("id", "untitled_building"))
 	layout.display_name = str(data.get("display_name", layout.blueprint_id.capitalize()))
 	layout.role = str(data.get("role", "decorative"))
+	layout.pad_template_id = str(data.get("pad_template_id", ""))
 	var raw_size := data.get("grid_size", [32, 16, 32]) as Array
 	if raw_size.size() >= 3:
 		layout.grid_size = Vector3i(
