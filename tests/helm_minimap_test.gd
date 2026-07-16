@@ -18,7 +18,7 @@ func _test_settings_round_trip() -> void:
 	var saved := SettingsClass.new()
 	saved.chart_weather_enabled = true
 	saved.chart_fishing_enabled = true
-	saved.chart_profile = ChartLayerManager.Preset.HARBOUR
+	saved.chart_profile = ChartLayerManager.Preset.NAVIGATION
 	saved.minimap_collapsed = true
 	saved.save_settings(path)
 
@@ -26,7 +26,7 @@ func _test_settings_round_trip() -> void:
 	loaded.load_settings(path)
 	assert(loaded.chart_weather_enabled)
 	assert(loaded.chart_fishing_enabled)
-	assert(loaded.chart_profile == ChartLayerManager.Preset.HARBOUR)
+	assert(loaded.chart_profile == ChartLayerManager.Preset.NAVIGATION)
 	assert(loaded.minimap_collapsed)
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
 	saved.free()

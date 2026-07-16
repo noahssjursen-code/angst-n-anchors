@@ -5,8 +5,9 @@ enum Kind { WEATHER, FISHING }
 
 const COLS := 32
 const ROWS := 24
-const FISHING_RESOLUTION := 256
-const WEATHER_MAX_AGE_H := 0.05
+const FISHING_RESOLUTION := 96
+const WEATHER_MAX_AGE_H := 0.08
+const WEATHER_OVERSCAN := 0.85
 
 var kind := Kind.WEATHER
 var texture: ImageTexture
@@ -46,22 +47,25 @@ func prepare(snapshot, visible_world: Rect2, game_hours: float) -> bool:
 		world_rect = Rect2(-half, -half, half * 2.0, half * 2.0)
 		_build(snapshot, game_hours)
 		return true
-	var snapped := _snap_bounds(visible_world)
+	var lod := _weather_lod(visible_world)
+	var snapped := _snap_bounds(visible_world, lod.x, lod.y)
 	var bucket := floori(game_hours / WEATHER_MAX_AGE_H)
-	var next_key := "%d:%d:%d:%d:%d:%d" % [
+	var next_key := "%d:%d:%d:%d:%d:%d:%d:%d" % [
 		snapshot.world_seed,
 		roundi(snapped.position.x),
 		roundi(snapped.position.y),
 		roundi(snapped.size.x),
 		roundi(snapped.size.y),
 		bucket,
+		lod.x,
+		lod.y,
 	]
 	if next_key == _view_key and texture != null:
 		return false
 	_view_key = next_key
 	_time_bucket = bucket
-	_raster_cols = COLS
-	_raster_rows = ROWS
+	_raster_cols = lod.x
+	_raster_rows = lod.y
 	world_rect = snapped
 	_build(snapshot, game_hours)
 	return true
@@ -90,8 +94,8 @@ func draw(canvas: CanvasItem, chart_rect: Rect2, visible_world: Rect2) -> void:
 func draw_wind(canvas: CanvasItem, chart_rect: Rect2, visible_world: Rect2) -> void:
 	if kind != Kind.WEATHER or _wind.is_empty():
 		return
-	var step_x := 4
-	var step_y := 4
+	var step_x := maxi(3, _raster_cols / 8)
+	var step_y := maxi(3, _raster_rows / 6)
 	for y in range(2, _raster_rows, step_y):
 		for x in range(2, _raster_cols, step_x):
 			var idx := y * _raster_cols + x
@@ -131,7 +135,7 @@ func draw_wind(canvas: CanvasItem, chart_rect: Rect2, visible_world: Rect2) -> v
 func sample_at(world: Vector2, game_hours: float) -> Dictionary:
 	if kind == Kind.FISHING:
 		return FishingField.sample_chart(Vector3(world.x, 0.0, world.y))
-	var sample := _canonical_weather_sample(Vector3(world.x, 0.0, world.y), game_hours)
+	var sample := WeatherComposer.sample_chart(Vector3(world.x, 0.0, world.y), game_hours)
 	return {
 		"pressure": sample.pressure,
 		"wind": sample.wind,
@@ -162,59 +166,79 @@ func _build(snapshot, game_hours: float) -> void:
 	WeatherField.world_seed = snapshot.world_seed
 	if kind == Kind.FISHING and FishingField.world_seed != snapshot.world_seed:
 		FishingField.initialize(snapshot.world_seed)
-	var image := Image.create(_raster_cols, _raster_rows, false, Image.FORMAT_RGBA8)
 	_wind.resize(_raster_cols * _raster_rows)
 	_sea.resize(_raster_cols * _raster_rows)
-	var weather_samples: Array[WeatherSample] = []
-	if kind == Kind.WEATHER:
-		var positions := PackedVector3Array()
-		positions.resize(_raster_cols * _raster_rows)
-		for sample_y in range(_raster_rows):
-			for sample_x in range(_raster_cols):
-				var sample_world := Vector2(
-					lerpf(world_rect.position.x, world_rect.end.x, (float(sample_x) + 0.5) / _raster_cols),
-					lerpf(world_rect.position.y, world_rect.end.y, (float(sample_y) + 0.5) / _raster_rows),
-				)
-				positions[sample_y * _raster_cols + sample_x] = Vector3(sample_world.x, 0.0, sample_world.y)
-		weather_samples = _canonical_weather_batch(positions, game_hours)
 	sample_count = 0
-	for y in range(_raster_rows):
-		for x in range(_raster_cols):
-			var world := Vector2(
-				lerpf(world_rect.position.x, world_rect.end.x, (float(x) + 0.5) / _raster_cols),
-				lerpf(world_rect.position.y, world_rect.end.y, (float(y) + 0.5) / _raster_rows),
-			)
-			var idx := y * _raster_cols + x
-			if kind == Kind.WEATHER:
-				var sample := weather_samples[idx]
-				image.set_pixel(x, y, _weather_color(sample))
+	var bytes := PackedByteArray()
+	bytes.resize(_raster_cols * _raster_rows * 4)
+	if kind == Kind.WEATHER:
+		for y in range(_raster_rows):
+			for x in range(_raster_cols):
+				var world := Vector2(
+					lerpf(world_rect.position.x, world_rect.end.x, (float(x) + 0.5) / _raster_cols),
+					lerpf(world_rect.position.y, world_rect.end.y, (float(y) + 0.5) / _raster_rows),
+				)
+				var idx := y * _raster_cols + x
+				var sample := WeatherComposer.sample_chart(
+					Vector3(world.x, 0.0, world.y), game_hours
+				)
+				var color := _weather_color(sample)
+				_write_rgba(bytes, idx, color)
 				_wind[idx] = Vector2(sample.wind.x, sample.wind.z)
 				_sea[idx] = sample.sea_state
-			else:
-				var zone := FishingField.sample_chart(Vector3(world.x, 0.0, world.y))
-				image.set_pixel(x, y, _fishing_color(zone))
-				_wind[idx] = Vector2.ZERO
-				_sea[idx] = 0.0
-			sample_count += 1
+				sample_count += 1
+	else:
+		for y2 in range(_raster_rows):
+			for x2 in range(_raster_cols):
+				var world2 := Vector2(
+					lerpf(world_rect.position.x, world_rect.end.x, (float(x2) + 0.5) / _raster_cols),
+					lerpf(world_rect.position.y, world_rect.end.y, (float(y2) + 0.5) / _raster_rows),
+				)
+				var idx2 := y2 * _raster_cols + x2
+				var zone := FishingField.sample_chart(Vector3(world2.x, 0.0, world2.y))
+				_write_rgba(bytes, idx2, _fishing_color(zone))
+				_wind[idx2] = Vector2.ZERO
+				_sea[idx2] = 0.0
+				sample_count += 1
+	var image := Image.create_from_data(
+		_raster_cols, _raster_rows, false, Image.FORMAT_RGBA8, bytes
+	)
 	texture = ImageTexture.create_from_image(image)
 	rebuild_count += 1
 	last_build_usec = Time.get_ticks_usec() - started
 
 
-func _snap_bounds(bounds: Rect2) -> Rect2:
-	# Overscan by one quarter-view. The texture remains useful while panning;
-	# rebuilding happens after input settles, never on pointer motion.
-	var grown := bounds.grow(maxf(bounds.size.x, bounds.size.y) * 0.25)
-	var cell := maxf(grown.size.x / COLS, grown.size.y / ROWS)
+static func _write_rgba(bytes: PackedByteArray, pixel_index: int, color: Color) -> void:
+	var i := pixel_index * 4
+	bytes[i] = int(clampf(color.r * 255.0, 0.0, 255.0))
+	bytes[i + 1] = int(clampf(color.g * 255.0, 0.0, 255.0))
+	bytes[i + 2] = int(clampf(color.b * 255.0, 0.0, 255.0))
+	bytes[i + 3] = int(clampf(color.a * 255.0, 0.0, 255.0))
+
+
+static func _weather_lod(visible_world: Rect2) -> Vector2i:
+	var span := maxf(visible_world.size.x, visible_world.size.y)
+	if span >= 28000.0:
+		return Vector2i(16, 12)
+	if span >= 12000.0:
+		return Vector2i(24, 18)
+	return Vector2i(COLS, ROWS)
+
+
+func _snap_bounds(bounds: Rect2, cols: int, rows: int) -> Rect2:
+	## Large overscan so typical pans reuse the last weather texture.
+	var grown := bounds.grow(maxf(bounds.size.x, bounds.size.y) * WEATHER_OVERSCAN)
+	var cell := maxf(grown.size.x / float(cols), grown.size.y / float(rows))
+	## Coarse snap — avoids rebuilds for small camera nudges.
+	cell = maxf(cell, 250.0)
 	var origin := Vector2(
 		floorf(grown.position.x / cell) * cell,
 		floorf(grown.position.y / cell) * cell,
 	)
-	return Rect2(origin, Vector2(cell * COLS, cell * ROWS))
+	return Rect2(origin, Vector2(cell * float(cols), cell * float(rows)))
 
 
 static func _weather_color(sample: WeatherSample) -> Color:
-	# High-contrast chart grade so cells read as distinct weather, not one blue wash.
 	var clear := Color(0.18, 0.62, 0.92, 0.22)
 	var overcast := Color(0.42, 0.45, 0.50, 0.48)
 	var rain := Color(0.16, 0.34, 0.28, 0.62)
@@ -224,36 +248,9 @@ static func _weather_color(sample: WeatherSample) -> Color:
 	color = color.lerp(rain, smoothstep(0.12, 0.75, sample.precipitation))
 	color = color.lerp(storm, smoothstep(0.35, 0.9, sample.convection_index))
 	color = color.lerp(fog, smoothstep(0.12, 0.7, sample.fog_density))
-	# Sea state darkens/teals the tint so high swell is visible even under clear sky.
 	color = color.lerp(Color(0.05, 0.28, 0.42, 0.70), smoothstep(0.25, 0.85, sample.sea_state) * 0.55)
 	color.a = clampf(color.a, 0.18, 0.78)
 	return color
-
-
-static func _canonical_weather_sample(world_pos: Vector3, game_hours: float) -> WeatherSample:
-	var loop := Engine.get_main_loop() as SceneTree
-	var world_weather := loop.root.get_node_or_null("WorldWeather") if loop != null else null
-	if world_weather != null and bool(world_weather.call("is_initialized")):
-		return world_weather.call("sample_at", world_pos, game_hours) as WeatherSample
-	return WeatherComposer.sample(world_pos, game_hours)
-
-
-static func _canonical_weather_batch(
-		positions: PackedVector3Array,
-		game_hours: float,
-) -> Array[WeatherSample]:
-	var loop := Engine.get_main_loop() as SceneTree
-	var world_weather := loop.root.get_node_or_null("WorldWeather") if loop != null else null
-	if world_weather != null and bool(world_weather.call("is_initialized")):
-		var canonical: Array[WeatherSample] = []
-		for item in world_weather.call("sample_batch", positions, game_hours):
-			canonical.append(item as WeatherSample)
-		return canonical
-	var result: Array[WeatherSample] = []
-	result.resize(positions.size())
-	for i in range(positions.size()):
-		result[i] = WeatherComposer.sample(positions[i], game_hours)
-	return result
 
 
 static func _fishing_color(zone: Dictionary) -> Color:

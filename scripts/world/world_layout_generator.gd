@@ -9,7 +9,7 @@ extends RefCounted
 const DEFAULT_CONFIG_PATH := "res://resources/data/world/norway_coast.json"
 const LAYOUT_SCRIPT := preload("res://scripts/world/world_layout.gd")
 ## Increment whenever deterministic generation logic changes incompatibly.
-const GENERATION_VERSION := 5
+const GENERATION_VERSION := 7
 const CACHE_LIMIT := 4
 const TARGET_WORLD_SIZE_M := 40000.0
 const WORLD_HALF_EXTENT_M := TARGET_WORLD_SIZE_M * 0.5
@@ -38,7 +38,7 @@ static func generate(layout_seed: int, config_path: String = DEFAULT_CONFIG_PATH
 	}
 	var waterways := _build_waterways(rng, config, coast_shape)
 	var island_lobes := _build_island_lobes(rng, config)
-	var field_data := _bake_field(config, coast_shape, waterways, island_lobes)
+	var field_data := _bake_field(layout_seed, config, coast_shape, waterways, island_lobes)
 	var distances: PackedFloat32Array = field_data["distances"]
 	var regions: PackedByteArray = field_data["regions"]
 	var contours := _extract_contours(distances, resolution, size_m)
@@ -225,6 +225,7 @@ static func _build_island_lobes(rng: RandomNumberGenerator, config: Dictionary) 
 
 
 static func _bake_field(
+	layout_seed: int,
 	config: Dictionary,
 	coast_shape: Dictionary,
 	waterways: Array[Dictionary],
@@ -234,6 +235,10 @@ static func _bake_field(
 	var size_m := float(config["world_size_m"])
 	var half := size_m * 0.5
 	var cell := size_m / float(resolution - 1)
+	var coast_erosion := _make_bake_noise(layout_seed ^ 0x45524f53, 0.00042, 4, 0.55)
+	var coast_fingers := _make_bake_noise(layout_seed ^ 0x46494e47, 0.00155, 3, 0.50)
+	var island_erosion := _make_bake_noise(layout_seed ^ 0x49534c45, 0.00095, 3, 0.48)
+	var island_bite := _make_bake_noise(layout_seed ^ 0x42495445, 0.0022, 2, 0.45)
 	var distances := PackedFloat32Array()
 	var regions := PackedByteArray()
 	distances.resize(resolution * resolution)
@@ -263,8 +268,17 @@ static func _bake_field(
 			var point := Vector2(x, z)
 			# Negative east of the mainland coast.
 			var land_distance := coast - x
+			var erosion := coast_erosion.get_noise_2d(x, z) * 520.0
+			var fingers := coast_fingers.get_noise_2d(x + 9000.0, z - 4200.0) * 190.0
+			land_distance += erosion + fingers
 			for lobe in island_lobes:
-				var island_distance := point.distance_to(Vector2(lobe.x, lobe.y)) - lobe.z
+				var island_distance := _eroded_island_distance(
+					point,
+					Vector2(lobe.x, lobe.y),
+					lobe.z,
+					island_erosion,
+					island_bite,
+				)
 				land_distance = minf(land_distance, island_distance)
 			var nearest_waterway := INF
 			var water_cut_distance := INF
@@ -308,8 +322,44 @@ static func _coast_x(z: float, mainland: Dictionary, shape: Dictionary) -> float
 	var amplitude := float(mainland["coast_amplitude_m"])
 	for i in range(phases.size()):
 		var frequency := float(i + 1)
-		x += sin(z * frequency * 0.00019 + phases[i]) * amplitude / (frequency * 1.55)
+		var damp := lerpf(1.18, 1.48, float(i) / maxf(float(phases.size() - 1), 1.0))
+		x += sin(z * frequency * 0.00019 + phases[i]) * amplitude / (frequency * damp)
 	return x
+
+
+static func _make_bake_noise(
+		noise_seed: int,
+		frequency: float,
+		octaves: int,
+		gain: float,
+) -> FastNoiseLite:
+	var noise := FastNoiseLite.new()
+	noise.seed = noise_seed
+	noise.noise_type = FastNoiseLite.TYPE_SIMPLEX_SMOOTH
+	noise.frequency = frequency
+	noise.fractal_type = FastNoiseLite.FRACTAL_FBM
+	noise.fractal_octaves = octaves
+	noise.fractal_gain = gain
+	noise.fractal_lacunarity = 2.08
+	return noise
+
+
+static func _eroded_island_distance(
+		point: Vector2,
+		center: Vector2,
+		radius: float,
+		erosion_noise: FastNoiseLite,
+		bite_noise: FastNoiseLite,
+) -> float:
+	var offset := point - center
+	var dist := offset.length()
+	if dist < 0.01:
+		return -radius
+	var dir := offset / dist
+	var coast_wobble := erosion_noise.get_noise_2d(dir.x * 4.4, dir.y * 4.4)
+	var radius_mod := radius * (1.0 + coast_wobble * 0.44)
+	var bite := maxf(0.0, bite_noise.get_noise_2d(point.x, point.y)) * radius * 0.30
+	return dist - radius_mod + bite
 
 
 static func _distance_to_polyline(point: Vector2, points: PackedVector2Array) -> float:

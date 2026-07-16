@@ -19,9 +19,6 @@ extends Node3D
 ## Crates per successful haul (placed one at a time).
 @export var crates_per_haul: int = 4
 
-const FISH_CRATE_FOOTPRINT := Vector2i(2, 2)
-const FISH_CRATE_UNITS := 4
-const FISH_CRATE_MASS_PER_UNIT_KG := 200.0
 ## How far the net mouth sits below the wave surface when trawling.
 @export var net_mouth_submerge: float = 0.45
 ## Pay-out rope length from the trommel drum to the net head (metres, before hull scale).
@@ -69,9 +66,7 @@ func _ready() -> void:
 
 
 func toggle_trawling() -> void:
-	if not trawling and not _fish_deck_has_space():
-		_notify_trawl("Deck is FULL! Stow cargo before trawling.")
-		return
+	## Catch no longer lands as deck cargo this pass — always allow cast.
 	trawling = not trawling
 	if not trawling:
 		_cancel_haul(false)
@@ -279,10 +274,6 @@ func _physics_process(delta: float) -> void:
 		_cancel_haul(false)
 		return
 
-	if not _fish_deck_has_space():
-		_retract_trawl("Deck is FULL! Net retracted.")
-		return
-
 	if _body != null and _body.freeze:
 		var sim_dt := delta
 		_update_zone_catch_rate(_body.global_position)
@@ -329,7 +320,7 @@ func _process_haul(delta: float) -> void:
 	_haul_stagger_timer -= delta
 	if _haul_stagger_timer > 0.0:
 		return
-	if _place_one_fish_crate():
+	if _complete_one_haul_crate():
 		_haul_crates_remaining -= 1
 		if _haul_crates_remaining > 0:
 			_haul_stagger_timer = crate_stagger_seconds
@@ -337,7 +328,7 @@ func _process_haul(delta: float) -> void:
 			_haul_zone = {}
 			_haul_toast_sent = false
 	else:
-		_retract_trawl("Deck is FULL! Net retracted.")
+		_retract_trawl()
 
 
 func _cancel_haul(reset_catch_timer: bool) -> void:
@@ -353,19 +344,12 @@ func _try_start_haul() -> void:
 	if _body == null or _haul_crates_remaining > 0:
 		return
 
-	if not _fish_deck_has_space():
-		_retract_trawl()
-		return
-
 	var sample_pos := _body.global_position
 	var zone := FishingField.sample(sample_pos) if FishingField.is_initialized() else {}
 	if FishingField.is_initialized() and not bool(zone.get("open_water", false)):
 		_notify_trawl("No trawling near mainland — steam for the outer islands")
 		return
 	if float(zone.get("catch_mul", 1.0)) < 0.2:
-		return
-
-	if _body.get_cargo_decks().is_empty():
 		return
 
 	var crate_count := _crates_for_zone(zone)
@@ -389,47 +373,23 @@ func _crates_for_zone(zone: Dictionary) -> int:
 	return maxi(mini(crates_per_haul, 2), 1)
 
 
-func _place_one_fish_crate() -> bool:
+func _complete_one_haul_crate() -> bool:
+	## Packing/deck cargo purged — haul completes without landing crates on deck.
 	if _body == null:
 		return false
-
-	var zone := _haul_zone
-	var price_mul := float(zone.get("price_mul", 1.0)) if not zone.is_empty() else 1.0
-	var tier_label := str(zone.get("tier_label", ""))
-	var crate_value := ContractRegistry.fish_crate_value(price_mul) * FISH_CRATE_UNITS
-
-	var fish_pallet := Pallet.new()
-	fish_pallet.id = UuidUtil.generate()
-	fish_pallet.contract_id = ""
-	fish_pallet.origin_port_id = ""
-	fish_pallet.destination_port_id = ""
-	fish_pallet.commodity = "fish"
-	fish_pallet.display_name = "Fresh Fish" if tier_label.is_empty() else "Fresh Fish (%s)" % tier_label
-	fish_pallet.units = FISH_CRATE_UNITS
-	fish_pallet.max_units = FISH_CRATE_UNITS
-	fish_pallet.footprint = FISH_CRATE_FOOTPRINT
-	fish_pallet.mass_kg = FISH_CRATE_MASS_PER_UNIT_KG * FISH_CRATE_UNITS
-	fish_pallet.value_gold = crate_value
-
-	for deck in _body.get_cargo_decks():
-		if deck.add_pallet(fish_pallet) >= 0:
-			if not _haul_toast_sent:
-				_haul_toast_sent = true
-				var pay_line := PlayerData.format_money(crate_value)
-				if tier_label.is_empty() or tier_label == "Normal":
-					_notify_trawl("Fish on deck — %s per crate at port" % pay_line)
-				else:
-					_notify_trawl("%s grounds — %s per crate" % [tier_label, pay_line])
-			return true
-	return false
+	if not _haul_toast_sent:
+		_haul_toast_sent = true
+		var zone := _haul_zone
+		var tier_label := str(zone.get("tier_label", "")) if not zone.is_empty() else ""
+		if tier_label.is_empty() or tier_label == "Normal":
+			_notify_trawl("Haul complete — fish packing returns later")
+		else:
+			_notify_trawl("%s grounds — haul complete (packing returns later)" % tier_label)
+	return true
 
 
-## External trawl control (e.g. autonomous NPC sim). Skips cast when deck is full.
+## External trawl control (e.g. autonomous NPC sim).
 func apply_trawl_desired(enabled: bool) -> void:
-	if enabled and not _fish_deck_has_space():
-		if trawling:
-			_retract_trawl("Deck is FULL! Net retracted.")
-		return
 	if trawling == enabled:
 		return
 	trawling = enabled
@@ -443,19 +403,6 @@ func _retract_trawl(notify_message: String = "") -> void:
 	_cancel_haul(false)
 	if was_trawling and not notify_message.is_empty():
 		_notify_trawl(notify_message)
-
-
-func _fish_deck_has_space() -> bool:
-	if _body == null:
-		return false
-	var fish_crate := Pallet.new()
-	fish_crate.footprint = FISH_CRATE_FOOTPRINT
-	for deck in _body.get_cargo_decks():
-		if not deck.port_id.is_empty():
-			continue
-		if deck.accepts_pallet(fish_crate):
-			return true
-	return false
 
 
 func _notify_trawl(message: String) -> void:

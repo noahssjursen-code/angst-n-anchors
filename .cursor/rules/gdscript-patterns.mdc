@@ -18,7 +18,7 @@ scripts/ocean/       # FftWaterSystem, WaveSurface
 scripts/weather/     # WorldWeather + WeatherLighting autoloads, WeatherState, WeatherZone
 scripts/time/        # WorldClock autoload
 scripts/world/       # World, ProximityLoader, WorldRenderer, AtmosphericEffects
-scripts/port/        # PortPlot, PortDock, PortFacilities, buildings, PortData
+scripts/port/        # PortPlot, berth_plan layout, buildings, PortData
 scripts/npc/         # NpcBase, HarbourMasterNpc, ShipwrightNpc, ContractNpc, DeliveryNpc
 scripts/cargo/       # ContractRegistry autoload, Contract, CargoItem, CargoPickup, Warehouse
 scripts/ui/          # GameMenu + DebugHud autoloads, HUDs, overlays

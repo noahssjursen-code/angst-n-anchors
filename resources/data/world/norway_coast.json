@@ -3,8 +3,8 @@
   "raster_resolution": 257,
   "mainland": {
     "coast_x_m": 6500.0,
-    "coast_amplitude_m": 1850.0,
-    "coast_harmonics": 4
+    "coast_amplitude_m": 2100.0,
+    "coast_harmonics": 5
   },
   "fjords": {
     "root_count_min": 3,
@@ -24,8 +24,8 @@
     "belt_x_max_m": 1800.0,
     "radius_min_m": 220.0,
     "radius_max_m": 780.0,
-    "lobes_min": 2,
-    "lobes_max": 4
+    "lobes_min": 3,
+    "lobes_max": 5
   },
   "classification": {
     "fjord_influence_m": 1500.0,

@@ -27,8 +27,10 @@ func _initialize() -> void:
 	assert(layers.is_visible("fishing"))
 	assert(layers.is_visible("routes"))
 
-	layers.apply_preset(LayersClass.Preset.HARBOUR)
-	assert(layers.is_visible("approaches"))
+	## Legacy Harbour profile (3) folds into Navigation.
+	layers.apply_preset(LayersClass.LEGACY_HARBOUR_PROFILE)
+	assert(layers.preset == LayersClass.Preset.NAVIGATION)
+	assert(not layers.is_visible("approaches"))
 	assert(layers.is_visible("annotations"))
 
 	var camera := CameraClass.new()

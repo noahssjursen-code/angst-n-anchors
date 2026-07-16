@@ -1,12 +1,14 @@
 class_name ChartLayerManager
 extends RefCounted
 
-## Shared chart state. Navigation/Harbour are display profiles; Weather and
-## Fishing are independent overlays and may be enabled together.
+## Shared chart state. Navigation is the display profile; Weather and Fishing
+## are independent overlays and may be enabled together.
 
-enum Preset { NAVIGATION, WEATHER, FISHING, HARBOUR }
+enum Preset { NAVIGATION, WEATHER, FISHING }
+## Legacy saved `chart_profile` value for the removed Harbour tab.
+const LEGACY_HARBOUR_PROFILE := 3
 
-const PRESET_NAMES: Array[String] = ["Navigation", "Weather", "Fishing", "Harbour"]
+const PRESET_NAMES: Array[String] = ["Navigation", "Weather", "Fishing"]
 const LAYER_ORDER: Array[String] = [
 	"base", "weather", "fishing", "routes", "approaches",
 	"traffic", "nav_vectors", "annotations",
@@ -31,16 +33,15 @@ func _init() -> void:
 
 
 func apply_preset(next_preset: int) -> void:
-	preset = clampi(next_preset, Preset.NAVIGATION, Preset.HARBOUR)
+	## Old saves may still store Harbour (3) — fold into Navigation.
+	if next_preset == LEGACY_HARBOUR_PROFILE:
+		next_preset = Preset.NAVIGATION
+	preset = clampi(next_preset, Preset.NAVIGATION, Preset.FISHING)
 	match preset:
 		Preset.WEATHER:
 			_layers["weather"] = true
 		Preset.FISHING:
 			_layers["fishing"] = true
-		Preset.HARBOUR:
-			_layers["routes"] = true
-			_layers["approaches"] = true
-			_layers["annotations"] = true
 		_:
 			_layers["routes"] = true
 			_layers["approaches"] = false

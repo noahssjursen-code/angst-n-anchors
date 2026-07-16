@@ -67,3 +67,23 @@ static func load_path(path: String) -> BuildingLayout:
 static func build(blueprint_id: String, collision_enabled: bool = true) -> Node3D:
 	var layout := by_id(blueprint_id)
 	return BuildingFitout.build(layout, collision_enabled) if layout != null else null
+
+
+## First blueprint matching apron pad role + template size (exact), else role only.
+static func find_for_pad(role_id: String, pad_template_id: String) -> BuildingLayout:
+	var wanted_role := role_id.strip_edges()
+	var wanted_pad := pad_template_id.strip_edges()
+	if wanted_role.is_empty():
+		return null
+	var role_only: BuildingLayout = null
+	for blueprint_id in ids():
+		var layout := by_id(blueprint_id)
+		if layout == null:
+			continue
+		if layout.role != wanted_role:
+			continue
+		if not wanted_pad.is_empty() and layout.pad_template_id == wanted_pad:
+			return layout
+		if role_only == null:
+			role_only = layout
+	return role_only

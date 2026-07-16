@@ -8,10 +8,11 @@ extends RefCounted
 ## v1 → v2 adds: accepted_contracts, ship_runtime_state, world_clock_hours.
 ## v3 associates coordinate-bearing state with a deterministic world context.
 ## v4 adds declared vessel registration; legacy rows require a shipyard review.
+## v5 adds the reconstructible vessel-call and port yard cargo ledger.
 ## PlayerData.from_dict tolerates missing keys, so v1 saves auto-upgrade
 ## on first load + save (in-flight contract counts will be left as-is for
 ## the migration tick, but any subsequent save snapshots properly).
-const SAVE_VERSION: int = 4
+const SAVE_VERSION: int = 5
 const SAVE_DIR: String = "user://save"
 const SAVE_PATH: String = SAVE_DIR + "/player.json"
 const SAVE_TEMP_PATH: String = SAVE_DIR + "/player.json.tmp"

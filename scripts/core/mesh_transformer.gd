@@ -25,7 +25,7 @@ var mesh_data: Dictionary = {}:
 			return
 		mesh_color = v
 		if is_node_ready():
-			rebuild()
+			_refresh_appearance_or_rebuild()
 
 @export var mesh_roughness: float = 0.85:
 	set(v):
@@ -33,7 +33,7 @@ var mesh_data: Dictionary = {}:
 			return
 		mesh_roughness = v
 		if is_node_ready():
-			rebuild()
+			_refresh_appearance_or_rebuild()
 
 @export var mesh_metallic: float = 0.0:
 	set(v):
@@ -41,7 +41,7 @@ var mesh_data: Dictionary = {}:
 			return
 		mesh_metallic = v
 		if is_node_ready():
-			rebuild()
+			_refresh_appearance_or_rebuild()
 
 @export var mesh_material_tag: String = "":
 	set(v):
@@ -49,7 +49,7 @@ var mesh_data: Dictionary = {}:
 			return
 		mesh_material_tag = v
 		if is_node_ready():
-			rebuild()
+			_refresh_appearance_or_rebuild()
 
 @export var material_exposed_to_weather := true
 
@@ -128,6 +128,53 @@ var _current_data: Dictionary = {}
 
 func _ready() -> void:
 	rebuild()
+
+
+## Tint / roughness / metallic / tag changes should not rebuild geometry.
+## Full rebuilds thrash the D3D12 resource descriptor heap and spam the debugger.
+func _refresh_appearance_or_rebuild() -> void:
+	if rebuild_suspended:
+		return
+	if _apply_appearance():
+		return
+	rebuild()
+
+
+func _generated_mesh_instance() -> MeshInstance3D:
+	var want := _generated_prefix() + "Mesh"
+	for child in get_children():
+		if child is MeshInstance3D and child.name == want:
+			return child as MeshInstance3D
+	return null
+
+
+func _apply_appearance() -> bool:
+	var mi := _generated_mesh_instance()
+	if mi == null:
+		return false
+	if not mesh_material_tag.is_empty():
+		var fallback := {
+			"color": mesh_color,
+			"roughness": mesh_roughness,
+			"metallic": mesh_metallic,
+		}
+		## Palette tags are cached — safe to swap without churning unique materials.
+		mi.material_override = Palette.make_tagged(
+			mesh_material_tag,
+			fallback,
+			false,
+			material_exposed_to_weather,
+		)
+		return true
+	var mat := mi.material_override as StandardMaterial3D
+	if mat == null:
+		mi.material_override = MeshBuilder.make_material(mesh_color, mesh_roughness, mesh_metallic)
+		return true
+	## Mutate in place so we don't allocate a new GPU material per tint.
+	mat.albedo_color = mesh_color
+	mat.roughness = mesh_roughness
+	mat.metallic = mesh_metallic
+	return true
 
 
 func rebuild() -> void:
@@ -438,7 +485,27 @@ func _build_collision_concave(params: Dictionary) -> void:
 func _get_collision_parent() -> CollisionObject3D:
 	if not collision_parent_path.is_empty():
 		return get_node_or_null(collision_parent_path) as CollisionObject3D
-	return get_parent() as CollisionObject3D
+	var parent_body := get_parent() as CollisionObject3D
+	if parent_body != null:
+		return parent_body
+	## Orphan CollisionShape3D under a bare Node3D is ignored by physics — host a body.
+	if create_collision:
+		return _ensure_local_collision_body()
+	return null
+
+
+func _ensure_local_collision_body() -> StaticBody3D:
+	var existing := get_node_or_null("CollisionBody") as StaticBody3D
+	if existing != null:
+		return existing
+	var body := StaticBody3D.new()
+	body.name = "CollisionBody"
+	body.collision_layer = 1
+	body.collision_mask = 0
+	add_child(body)
+	if Engine.is_editor_hint() and is_inside_tree():
+		body.owner = get_tree().edited_scene_root
+	return body
 
 
 func _generated_prefix() -> String:

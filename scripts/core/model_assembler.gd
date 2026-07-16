@@ -110,18 +110,18 @@ func rebuild() -> void:
 		_build_part(raw_part)
 
 
-func get_part(part_name: String) -> MeshTransformer:
+func get_part(part_name: String) -> Node3D:
 	var node: Variant = _part_nodes_by_name.get(part_name, null)
 	if node == null or not is_instance_valid(node):
 		return null
-	return node as MeshTransformer
+	return node as Node3D
 
 
-func get_first_part_by_role(role: String) -> MeshTransformer:
+func get_first_part_by_role(role: String) -> Node3D:
 	var parts: Array = _part_nodes_by_role.get(role, [])
 	if parts.is_empty():
 		return null
-	return parts[0] as MeshTransformer
+	return parts[0] as Node3D
 
 
 ## Roles are declared on MeshTransformer leaf parts; `model` nests another assembler in between.
@@ -179,7 +179,15 @@ func _build_part(part: Dictionary) -> void:
 	else:
 		node.mesh_data_path = _resolve_mesh_path(str(mesh_value))
 	node.absolute_scale = absolute_scale * float(part.get("scale", 1.0))
-	node.mesh_rotation_degrees = _vector3_from_array(part.get("rotation_degrees", []), Vector3.ZERO)
+	var part_rot := _vector3_from_array(part.get("rotation_degrees", []), Vector3.ZERO)
+	## Parent-chain parts need Node3D rotation so children inherit it.
+	## Flat assemblies keep mesh-local rotation (collision_parent + legacy kits).
+	if part.has("parent"):
+		node.rotation_degrees = part_rot
+		node.mesh_rotation_degrees = Vector3.ZERO
+	else:
+		node.rotation_degrees = Vector3.ZERO
+		node.mesh_rotation_degrees = part_rot
 	node.center_mesh = bool(part.get("center_mesh", false))
 	node.mesh_color = _color_from_array(part.get("color", [0.5, 0.5, 0.5]), Color(0.5, 0.5, 0.5))
 	node.mesh_roughness = float(part.get("roughness", 0.85))

@@ -2,9 +2,8 @@ class_name CoastalPortPlacer
 extends RefCounted
 
 ## Pure deterministic conversion from a WorldLayout to coastal PortDefinitions.
-## Local -Z is always the seaward direction. PortPlot places PortDock at local
-## Z = -plot_depth/2, so the plot origin is offset inland from the coastline by
-## that half-depth minus a small overhang that keeps the quay face in the water.
+## Local -Z is always the seaward direction. The selected site datum is inland;
+## PortSizing.COASTAL_GRAPH_ROOT_Z_M moves the graph apron to the shoreline.
 
 const DEFAULT_PORT_COUNT := 35
 const PORT_DEFINITION := preload("res://scripts/port/port_definition.gd")
@@ -29,6 +28,10 @@ const QUAY_CLEAR_STEP_M := 8.0
 const QUAY_BERTH_OFFSETS_M := [0.0, 8.0, 20.0, 38.0, 56.0]
 ## Require open water (positive SDF) with a small margin so coastline graze fails.
 const QUAY_WATER_MARGIN_M := 0.75
+## Default backshore grade for explicit checks (~21°). Placement tiers may relax this.
+const BACKSHORE_GRADE_MAX := 0.38
+const BACKSHORE_GRADE_VALIDATE := 0.52
+const BACKSHORE_SAMPLE_DEPTHS_M := [0.0, 24.0, 48.0, 96.0, 160.0, 220.0]
 
 const FALLBACK_NAMES := [
 	"Haugsvik", "Alesund", "Bremanger", "Dyrvik", "Eidsund", "Floro",
@@ -58,10 +61,10 @@ static func place_ports(
 
 	var selected: Array[Dictionary] = []
 	var tiers := [
-		{"spacing": STRICT_SPACING_M, "reach": STRICT_WATERWAY_REACH_M, "land_margin": 6.0, "quay_half": 93.0},
-		{"spacing": 680.0, "reach": 2600.0, "land_margin": 2.0, "quay_half": 50.0},
-		{"spacing": 560.0, "reach": 3800.0, "land_margin": 0.25, "quay_half": 50.0},
-		{"spacing": MIN_SPACING_M, "reach": MAX_WATERWAY_REACH_M, "land_margin": 0.0, "quay_half": 20.0},
+		{"spacing": STRICT_SPACING_M, "reach": STRICT_WATERWAY_REACH_M, "land_margin": 6.0, "quay_half": 93.0, "backshore_grade": 0.30},
+		{"spacing": 680.0, "reach": 2600.0, "land_margin": 2.0, "quay_half": 50.0, "backshore_grade": 0.36},
+		{"spacing": 560.0, "reach": 3800.0, "land_margin": 0.25, "quay_half": 50.0, "backshore_grade": 0.42},
+		{"spacing": MIN_SPACING_M, "reach": MAX_WATERWAY_REACH_M, "land_margin": 0.0, "quay_half": 20.0, "backshore_grade": 0.52},
 	]
 	for tier in tiers:
 		# Keep the playable network representative of the generated archetype,
@@ -107,6 +110,7 @@ static func validate_site(
 		"origin_on_land": layout != null and layout.is_land(world_xz),
 		"land_footprint": is_land_footprint_valid(layout, world_xz, seaward, land_margin_m),
 		"seaward_clearance": has_seaward_clearance(layout, world_xz, seaward),
+		"gentle_backshore": has_gentle_backshore(layout, world_xz, seaward, BACKSHORE_GRADE_VALIDATE),
 		"quay_clearance": has_quay_clearance(layout, world_xz, seaward, QUAY_HALF_LENGTH_BY_SIZE[1]),
 		"quay_half_length_m": quay_half,
 		"waterway_connection": connection,
@@ -114,29 +118,14 @@ static func validate_site(
 	}
 
 
-## Samples the facilities rectangle, including all corners and edge midpoints.
+## Validates the conservative size-0 land footprint used during candidate search.
 static func is_land_footprint_valid(
 		layout: WorldLayout,
 		world_xz: Vector2,
 		seaward: Vector2,
 		min_inland_distance_m: float = 0.0,
 ) -> bool:
-	if layout == null or seaward.length_squared() < 0.5:
-		return false
-	var forward := seaward.normalized()
-	var right := Vector2(-forward.y, forward.x)
-	var depths := PackedFloat32Array([
-		-FOOTPRINT_SEAWARD_M,
-		(FOOTPRINT_INLAND_M - FOOTPRINT_SEAWARD_M) * 0.5,
-		FOOTPRINT_INLAND_M,
-	])
-	var widths := PackedFloat32Array([-FOOTPRINT_HALF_WIDTH_M, 0.0, FOOTPRINT_HALF_WIDTH_M])
-	for depth in depths:
-		for width in widths:
-			var sample := world_xz - forward * depth + right * width
-			if layout.sample_signed_distance(sample) >= -min_inland_distance_m:
-				return false
-	return true
+	return is_size_footprint_valid(layout, world_xz, seaward, 0, min_inland_distance_m)
 
 
 ## Validates the complete land-side width for a selected port tier. Candidate
@@ -195,6 +184,92 @@ static func has_seaward_clearance(
 	return true
 
 
+## Rejects quay sites where the backshore climbs faster than a walkable grade.
+static func has_gentle_backshore(
+		layout: WorldLayout,
+		world_xz: Vector2,
+		seaward: Vector2,
+		max_grade: float = BACKSHORE_GRADE_MAX,
+) -> bool:
+	if layout == null or seaward.length_squared() < 0.5:
+		return false
+	var inland := -seaward.normalized()
+	var heights: Array[float] = []
+	for depth in BACKSHORE_SAMPLE_DEPTHS_M:
+		heights.append(layout.sample_height(world_xz + inland * float(depth)))
+	for i in range(1, heights.size()):
+		var run := float(BACKSHORE_SAMPLE_DEPTHS_M[i] - BACKSHORE_SAMPLE_DEPTHS_M[i - 1])
+		if run <= 0.001:
+			continue
+		var rise := heights[i] - heights[i - 1]
+		if rise / run > max_grade:
+			return false
+	return true
+
+
+## How far seaward from `origin_xz` stays open water before hitting land.
+## Used to cap pier finger length in tight bays / inner fjords.
+## Origin may sit on the dock apron (coast / slight land); we skip inland until
+## water, then measure the continuous water run to the opposite shore.
+static func seaward_water_clearance_m(
+		layout: WorldLayout,
+		origin_xz: Vector2,
+		seaward: Vector2,
+		max_m: float = 480.0,
+		step_m: float = 8.0,
+		water_margin_m: float = QUAY_WATER_MARGIN_M,
+) -> float:
+	if layout == null or seaward.length_squared() < 0.5:
+		return 0.0
+	var forward := seaward.normalized()
+	var step := maxf(step_m, 1.0)
+	var travelled := 0.0
+	var found_water := false
+	## Reach open water first (dock face often sits on the SDF zero contour).
+	while travelled + step <= max_m + 0.01:
+		var reach := origin_xz + forward * (travelled + step)
+		if layout.sample_signed_distance(reach) > water_margin_m:
+			found_water = true
+			break
+		travelled += step
+	if not found_water:
+		return 0.0
+	var clear := 0.0
+	while travelled + clear + step <= max_m + 0.01:
+		var probe := origin_xz + forward * (travelled + clear + step)
+		if layout.sample_signed_distance(probe) <= water_margin_m:
+			return clear
+		clear += step
+	return clear
+
+
+## Across-bay water half-width from `origin_xz` along ±`along` (shore-parallel).
+## Low values mean a narrow pocket that cannot host a wide pier comb.
+static func across_water_clearance_m(
+		layout: WorldLayout,
+		origin_xz: Vector2,
+		along: Vector2,
+		max_m: float = 320.0,
+		step_m: float = 8.0,
+		water_margin_m: float = QUAY_WATER_MARGIN_M,
+) -> float:
+	if layout == null or along.length_squared() < 0.5:
+		return 0.0
+	var axis := along.normalized()
+	var left := 0.0
+	var right := 0.0
+	var step := maxf(step_m, 1.0)
+	while left + step <= max_m + 0.01:
+		if layout.sample_signed_distance(origin_xz - axis * (left + step)) <= water_margin_m:
+			break
+		left += step
+	while right + step <= max_m + 0.01:
+		if layout.sample_signed_distance(origin_xz + axis * (right + step)) <= water_margin_m:
+			break
+		right += step
+	return minf(left, right)
+
+
 ## True when a straight quay of the given half-length has open water along the
 ## full berth pocket. Rejects convex coastline corners that wedge land through
 ## the dock face (the "can't berth at a bend" case).
@@ -217,7 +292,7 @@ static func quay_clear_half_length_m(
 		layout: WorldLayout,
 		world_xz: Vector2,
 		seaward: Vector2,
-		max_half_m: float = QUAY_HALF_LENGTH_BY_SIZE[4],
+		max_half_m: float = QUAY_HALF_LENGTH_BY_SIZE[PortSizing.MAX_SIZE],
 ) -> float:
 	if layout == null or seaward.length_squared() < 0.5:
 		return 0.0
@@ -279,10 +354,12 @@ static func validate_ports(
 		if not bool(report["land_footprint"]):
 			errors.append("%s has invalid land footprint" % port.port_id)
 		if not is_size_footprint_valid(layout, point, seaward, port.size):
-			errors.append("%s size-%d settlement crosses the coastline" % [port.port_id, port.size])
+			errors.append("%s size footprint crosses the coastline" % port.port_id)
 		if not bool(report["seaward_clearance"]):
 			errors.append("%s has blocked seaward approach" % port.port_id)
-		var needed_half := float(QUAY_HALF_LENGTH_BY_SIZE[clampi(port.size, 0, 4)])
+		if not bool(report.get("gentle_backshore", true)):
+			errors.append("%s backshore is too steep" % port.port_id)
+		var needed_half := float(QUAY_HALF_LENGTH_BY_SIZE[PortSizing.normalized_size(port.size)])
 		if not has_quay_clearance(layout, point, seaward, needed_half):
 			errors.append("%s quay is cut by a coastline corner" % port.port_id)
 		if float(report["waterway_distance_m"]) > MAX_WATERWAY_REACH_M:
@@ -462,6 +539,13 @@ static func _candidate_fits_tier(
 		return false
 	if not has_seaward_clearance(layout, candidate["position"], candidate["seaward"]):
 		return false
+	if not has_gentle_backshore(
+			layout,
+			candidate["position"],
+			candidate["seaward"],
+			float(tier.get("backshore_grade", BACKSHORE_GRADE_MAX)),
+	):
+		return false
 	if float(candidate.get("quay_half_length_m", 0.0)) + 0.01 < float(tier["quay_half"]):
 		return false
 	return _has_spacing(selected, candidate["position"], float(tier["spacing"]))
@@ -485,27 +569,32 @@ static func _make_definition(
 	# Preserve the established IDs so economy/contracts do not need a port rewrite.
 	port.port_id = "port-home" if index == 0 else "port-%d" % index
 	port.display_name = _name_for_index(index, names)
-	# PortPlot is authored around sea level: its local ground/pad is Y=0 and
-	# PortDock places the water-facing structures relative to that datum.
+	# PortLayoutGraph uses this inland datum and offsets its root seaward.
 	port.world_position = Vector3(point.x, 0.0, point.y)
 	var value := _stable_score(layout.seed ^ 0x706f7274, point, index)
 	var quay_half := float(candidate.get("quay_half_length_m", quay_clear_half_length_m(
 		layout, point, candidate["seaward"]
 	)))
-	var max_size := max_size_for_quay_half(quay_half)
-	if max_size < 0:
-		max_size = 0
-	port.size = clampi(mini(int(value % 5), max_size), 0, 4)
+	var max_size := maxi(max_size_for_quay_half(quay_half), 0)
+	var requested_size := clampi(
+		mini(int(value % (PortSizing.MAX_SIZE + 1)), max_size),
+		PortSizing.MIN_SIZE,
+		PortSizing.MAX_SIZE,
+	)
 	if index == 0:
 		# Home port prefers a useful berth count, but never a corner-cut quay.
-		port.size = maxi(port.size, mini(2, max_size))
-	while port.size > 0 and not is_size_footprint_valid(
-			layout,
-			point,
-			candidate["seaward"],
-			port.size,
+		requested_size = maxi(requested_size, mini(2, max_size))
+	while requested_size > 0 and not is_size_footprint_valid(
+			layout, point, candidate["seaward"], requested_size
 	):
-		port.size -= 1
+		requested_size -= 1
+	port.size = requested_size
+	## Geography ceiling — player upgrades cannot grow past this site.
+	port.site_max_size = clampi(max_size, PortSizing.MIN_SIZE, PortSizing.MAX_SIZE)
+	port.site_quay_half_m = quay_half
+	port.port_generation_version = PortDefinition.CURRENT_PORT_GENERATION_VERSION
+	port.site_id = "coast-segment-%05d" % int(candidate["contour_index"])
+	port.site_seed = _stable_score(layout.seed ^ 0x73697465, point, int(candidate["contour_index"]))
 	port.has_lighthouse = index == 0 or value % 5 == 0
 	port.has_fog_horn = index == 0 or value % 7 == 0
 	port.rotation_y = yaw_for_seaward(candidate["seaward"])
@@ -532,6 +621,16 @@ static func _port_region(region: WorldLayout.Region) -> PortDefinition.RegionKin
 			return PortDefinition.RegionKind.ARCHIPELAGO
 		_:
 			return PortDefinition.RegionKind.MAINLAND
+
+
+static func _region_name(region: WorldLayout.Region) -> String:
+	match region:
+		WorldLayout.Region.FJORD:
+			return "fjord"
+		WorldLayout.Region.ARCHIPELAGO:
+			return "archipelago"
+		_:
+			return "mainland"
 
 
 static func _project_to_segment(point: Vector2, a: Vector2, b: Vector2) -> Dictionary:

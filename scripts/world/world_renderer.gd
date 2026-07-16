@@ -41,6 +41,8 @@ const HORIZON_DISCARD_HALF : float = MID_OCEAN_SIZE * 0.5 - 15.0
 
 ## Temporary A/B fallback while validating the generated clipmap in builds.
 @export var use_legacy_ocean := false
+## F6 showcases run with Engine.is_editor_hint() true — set before add_child.
+@export var force_runtime_build := false
 ## Expensive presentation features remain independently switchable for GPU
 ## profiling and future quality presets.
 @export var enable_ssao := true
@@ -83,7 +85,7 @@ func _ready() -> void:
 	# This script is @tool, but the full runtime ocean must not be built in the
 	# editor viewport. Otherwise the editor renders one ocean while the embedded
 	# game renders another (measured: ~65% + ~32% GPU on the same card).
-	if Engine.is_editor_hint():
+	if Engine.is_editor_hint() and not force_runtime_build:
 		set_process(false)
 		return
 

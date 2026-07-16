@@ -7,7 +7,8 @@ extends RefCounted
 
 const WORLD_SCENE := "res://scenes/world.tscn"
 const MAIN_MENU_SCENE := "res://scenes/ui/main_menu.tscn"
-const PORT_OVERHAUL_PREVIOUS_GENERATION := 4
+const PORT_OVERHAUL_PREVIOUS_GENERATION := 5
+const TERRAIN_COAST_PREVIOUS_GENERATION := 6
 
 
 static func roll_seed() -> int:
@@ -51,10 +52,19 @@ static func apply_player_world_context(player: PlayerData) -> void:
 		player.world_context = ctx
 	var saved_version := int(ctx.get("generation_version", 0))
 	if saved_version == PORT_OVERHAUL_PREVIOUS_GENERATION \
-			and WorldLayoutGenerator.GENERATION_VERSION == 5:
-		# v5 changes deterministic port sizing/settlements but not macro
-		# geography. Resume-in-place coordinates no longer exist, so retaining
-		# the captain's seed/checksum and adopting v5 is safe.
+			and WorldLayoutGenerator.GENERATION_VERSION == 6:
+		# v6 replaces every port footprint and operational identity. Keep the
+		# captain and seed, but explicitly invalidate world-local contracts and
+		# vessel calls rather than restoring them into different facilities.
+		player.accepted_contracts = []
+		player.port_operations_state = {}
+		ctx["generation_version"] = WorldLayoutGenerator.GENERATION_VERSION
+		player.world_context = ctx
+	if saved_version == TERRAIN_COAST_PREVIOUS_GENERATION \
+			and WorldLayoutGenerator.GENERATION_VERSION == 7:
+		# v7 reshapes coast SDF and backshore grades; port sites move on the same seed.
+		player.accepted_contracts = []
+		player.port_operations_state = {}
 		ctx["generation_version"] = WorldLayoutGenerator.GENERATION_VERSION
 		player.world_context = ctx
 	# Legacy saves without an explicit weather version, or an older fog

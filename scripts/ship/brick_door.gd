@@ -1,12 +1,14 @@
 class_name BrickDoor
 extends Node3D
 
-## Interactable door on a `block_door` brick (vessel cabin or land building).
-## Look at the leaf (camera ray) + F to open / close.
+## Interactable door on a `block_door` / `block_door_double` brick.
+## Look at a leaf (camera ray) + F to open / close.
 ## Closed = walk blocker; open = pass-through.
+## Double doors also drive `DoorHingeR` (opposite swing) when present.
 
 const GROUP := "brick_door"
 const OPEN_ANGLE_DEG := -95.0
+const OPEN_ANGLE_R_DEG := 95.0
 const ANIM_SEC := 0.28
 const LAYER_WORLD := 1
 
@@ -17,11 +19,14 @@ const LAYER_WORLD := 1
 var _open := false
 var _animating := false
 var _hinge: Node3D
+var _hinge_r: Node3D
 var _leaf: Node3D
+var _leaf_r: Node3D
 var _boat: BoatBody
 var _leaf_body: StaticBody3D
 var _collider: CollisionShape3D
 var _interact_area: Area3D
+var _interact_area_r: Area3D
 var _prompt_layer: CanvasLayer
 var _prompt_label: Label
 var _yaw_deg: float = 0.0
@@ -44,8 +49,11 @@ func configure(
 
 func _ready() -> void:
 	add_to_group(GROUP)
-	_hinge = get_parent().get_node_or_null("DoorHinge") as Node3D
+	var parent := get_parent()
+	_hinge = parent.get_node_or_null("DoorHinge") as Node3D if parent != null else null
 	_leaf = null if _hinge == null else _hinge.get_node_or_null("DoorLeaf") as Node3D
+	_hinge_r = parent.get_node_or_null("DoorHingeR") as Node3D if parent != null else null
+	_leaf_r = null if _hinge_r == null else _hinge_r.get_node_or_null("DoorLeaf") as Node3D
 	if _hinge == null or _leaf == null:
 		push_warning("BrickDoor: missing DoorHinge / DoorLeaf under parent")
 		return
@@ -99,13 +107,14 @@ func _can_interact() -> bool:
 	var to := from - camera.global_transform.basis.z * interact_range
 	var space := get_world_3d().direct_space_state
 
-	## Prefer the leaf Area so the closed walk-slab doesn't steal the hit.
+	## Prefer a leaf Area so the closed walk-slab doesn't steal the hit.
 	var area_q := PhysicsRayQueryParameters3D.create(from, to)
 	area_q.exclude = [player.get_rid()]
 	area_q.collide_with_areas = true
 	area_q.collide_with_bodies = false
 	var area_hit := space.intersect_ray(area_q)
-	if area_hit.is_empty() or area_hit.get("collider") != _interact_area:
+	var hit_area := area_hit.get("collider") as Area3D if not area_hit.is_empty() else null
+	if hit_area == null or (hit_area != _interact_area and hit_area != _interact_area_r):
 		return false
 
 	## Block if a solid body is clearly closer (wall / other brick in front).
@@ -124,7 +133,7 @@ func _can_interact() -> bool:
 
 
 func _is_own_door_body_hit(hit: Dictionary) -> bool:
-	## Closed leaf walk collider — treat as this door if it is ours / near the leaf.
+	## Closed leaf walk collider — treat as this door if it is ours / near a leaf.
 	if _leaf == null or not is_instance_valid(_leaf):
 		return false
 	var collider := hit.get("collider") as Node
@@ -136,13 +145,19 @@ func _is_own_door_body_hit(hit: Dictionary) -> bool:
 	if collider != walk and collider != _boat:
 		return false
 	var hit_pos: Vector3 = hit.position as Vector3
-	return hit_pos.distance_to(_leaf.global_position) <= 1.6
+	if hit_pos.distance_to(_leaf.global_position) <= 1.6:
+		return true
+	if _leaf_r != null and is_instance_valid(_leaf_r):
+		return hit_pos.distance_to(_leaf_r.global_position) <= 1.6
+	return false
 
 
 func _nearest_player_in_range() -> CharacterBody3D:
 	if not is_inside_tree():
 		return null
 	var hinge_pos := _hinge.global_position if _hinge != null else global_position
+	if _hinge_r != null and is_instance_valid(_hinge_r):
+		hinge_pos = (hinge_pos + _hinge_r.global_position) * 0.5
 	for node in get_tree().get_nodes_in_group("player"):
 		var body := node as CharacterBody3D
 		if body == null:
@@ -154,40 +169,57 @@ func _nearest_player_in_range() -> CharacterBody3D:
 
 func _apply_open_state(open: bool, instant: bool) -> void:
 	var target := OPEN_ANGLE_DEG if open else 0.0
+	var target_r := OPEN_ANGLE_R_DEG if open else 0.0
 	if _collider != null and is_instance_valid(_collider):
 		_collider.disabled = open
 	if instant or _hinge == null:
 		_hinge.rotation_degrees.y = target
+		if _hinge_r != null and is_instance_valid(_hinge_r):
+			_hinge_r.rotation_degrees.y = target_r
 		_animating = false
 		return
 	_animating = true
 	var tw := create_tween()
 	tw.set_trans(Tween.TRANS_CUBIC)
 	tw.set_ease(Tween.EASE_OUT)
+	tw.set_parallel(true)
 	tw.tween_property(_hinge, "rotation_degrees:y", target, ANIM_SEC)
+	if _hinge_r != null and is_instance_valid(_hinge_r):
+		tw.tween_property(_hinge_r, "rotation_degrees:y", target_r, ANIM_SEC)
 	tw.finished.connect(func() -> void: _animating = false)
 
 
 func _ensure_interact_area() -> void:
-	## Area on the leaf so the look-target swings open/closed with the door.
+	## Area on each leaf so the look-target swings open/closed with the door.
 	## Slightly thicker than the mesh so the ray hits this before the walk brick.
-	_interact_area = Area3D.new()
-	_interact_area.name = "DoorInteractArea"
-	_interact_area.collision_layer = LAYER_WORLD
-	_interact_area.collision_mask = 0
-	_interact_area.monitoring = false
-	_interact_area.monitorable = true
+	var per_leaf_w := _leaf_size.x
+	if _leaf_r != null:
+		per_leaf_w = maxf(_leaf_size.x * 0.5, 0.4)
+	_interact_area = _make_leaf_interact_area("DoorInteractArea", per_leaf_w)
+	_leaf.add_child(_interact_area)
+	if _leaf_r != null and is_instance_valid(_leaf_r):
+		_interact_area_r = _make_leaf_interact_area("DoorInteractAreaR", per_leaf_w)
+		_leaf_r.add_child(_interact_area_r)
+
+
+func _make_leaf_interact_area(area_name: String, width: float) -> Area3D:
+	var area := Area3D.new()
+	area.name = area_name
+	area.collision_layer = LAYER_WORLD
+	area.collision_mask = 0
+	area.monitoring = false
+	area.monitorable = true
 	var col := CollisionShape3D.new()
 	col.name = "Shape"
 	var box := BoxShape3D.new()
 	box.size = Vector3(
-		maxf(_leaf_size.x, 0.4),
+		maxf(width, 0.4),
 		maxf(_leaf_size.y, 0.8),
 		maxf(_leaf_size.z, 0.22),
 	)
 	col.shape = box
-	_interact_area.add_child(col)
-	_leaf.add_child(_interact_area)
+	area.add_child(col)
+	return area
 
 
 func _ensure_collider() -> void:

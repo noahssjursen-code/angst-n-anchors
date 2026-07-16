@@ -33,7 +33,7 @@ user://save/
 
 ```json
 {
-  "version": 4,
+  "version": 5,
   "player": {},
   "saved_at_unix": 0
 }
@@ -55,6 +55,12 @@ pass a shipyard registration/refit audit. Registration compliance is recomputed
 from the current legal-code catalog and brick layout; no certification boolean is
 persisted.
 
+Save v5 previously stored `port_operations_state` (vessel calls / yard ledger).
+That system was purged in the port rebuild; the field is cleared on snapshot and
+ignored on restore. Contract accept/deliver restore is also inactive until the
+trade rewrite returns. Vessel acquisition is starter-ledger / shipwright-later;
+loading still starts the captain on foot at their home quay.
+
 ## Home port
 
 `home_port_id` selects which coastal quay is named `HomePort` on world load.
@@ -65,7 +71,7 @@ New captains pick it from a chart after character creation. Defaults to
 
 Loading a captain always starts them on foot at their home quay with no hull in
 the water. Their active vessel remains in the ownership ledger and is deployed
-normally through the harbour master. New saves omit `ship_runtime_state`; old
+through vessel spawn / future shipyard UI. New saves omit `ship_runtime_state`; old
 runtime coordinates, vessel state, boarding state, and helm state are ignored.
 
 ## World context (v3)
@@ -99,6 +105,8 @@ Multiplayer worlds take `world_seed`, `generation_version`, and
 - v2 added accepted contracts, ship runtime state, and world-clock hours.
   Ship runtime state is now ignored.
 - v3 added generated-world identity.
+- v4 added vessel registration declarations.
+- v5 added vessel-call and port-yard cargo state (legacy unitized packing removed; containers/pads are layout-driven, not saved as in-flight pallets).
 - Multi-captain folders + `index.json` are additive; legacy single-file saves migrate automatically.
 
 `PlayerData.from_dict()` supplies defaults for missing fields, so old envelopes

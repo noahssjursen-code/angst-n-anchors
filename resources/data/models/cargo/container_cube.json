@@ -1,0 +1,18 @@
+{
+	"name": "container_cube",
+	"_doc": "4×4×4 m general-cargo cube container.",
+	"parts": [
+		{
+			"name": "body",
+			"role": "physics_body",
+			"mesh": "cargo/container_cube.json",
+			"position": [0, 0, 0],
+			"scale": 1.0,
+			"center_mesh": false,
+			"color": [0.18, 0.42, 0.72],
+			"roughness": 0.72,
+			"metallic": 0.18,
+			"collision": "convex"
+		}
+	]
+}

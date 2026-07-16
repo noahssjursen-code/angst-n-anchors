@@ -790,8 +790,46 @@ func get_hull_displacement_kg() -> float:
 	return _hull_displacement_kg()
 
 
-func get_cargo_decks() -> Array[CargoDeckComponent]:
-	return CargoDeckComponent.get_all_for_ship(self)
+func get_cargo_pads() -> Array[CargoSlotPadComponent]:
+	var out: Array[CargoSlotPadComponent] = []
+	_collect_cargo_pads(self, out)
+	return out
+
+
+func _collect_cargo_pads(n: Node, out: Array[CargoSlotPadComponent]) -> void:
+	if n is CargoSlotPadComponent:
+		out.append(n as CargoSlotPadComponent)
+	for c in n.get_children():
+		_collect_cargo_pads(c, out)
+
+
+func get_bulk_holds() -> Array[BulkHoldComponent]:
+	return BulkHoldComponent.get_all_for_ship(self)
+
+
+func get_bulk_hold_states() -> Array[Dictionary]:
+	var out: Array[Dictionary] = []
+	for hold in get_bulk_holds():
+		out.append(hold.get_state().to_dict())
+	return out
+
+
+func get_moored_berth_id() -> String:
+	return str(get_meta("harbour_berth_id", ""))
+
+
+func get_harbour_port_id() -> String:
+	return str(get_meta("harbour_port_id", ""))
+
+
+func get_moored_berth() -> Node:
+	var port_id := get_harbour_port_id()
+	if port_id.is_empty():
+		return null
+	var hc = HarbourRegistry.controller(port_id)
+	if hc == null:
+		return null
+	return hc.ship_berth(self)
 
 
 func get_fishing_systems() -> Array[FishingSystem]:
@@ -812,20 +850,6 @@ func get_bridge_stations() -> Array[BridgeInteractable]:
 		if station != null:
 			out.append(station)
 	return out
-
-
-func get_cargo_capacity_units() -> int:
-	var total := 0
-	for deck in get_cargo_decks():
-		total += deck.get_capacity()
-	return total
-
-
-func get_cargo_available_units() -> int:
-	var total := 0
-	for deck in get_cargo_decks():
-		total += deck.get_available()
-	return total
 
 
 ## Position the ship so that the keel is `total_height × draft_fraction` below water_y.
@@ -906,14 +930,30 @@ func _equilibrium_draft_fraction() -> float:
 	return clampf((lo + hi) * 0.5, 0.05, 0.98)
 
 
-## Place alongside a berth: correct heading, actual half-beam offset from quay, waterline.
-func dock_at_berth(dock: PortDock, berth_index: int) -> void:
-	if dock == null or berth_index < 0:
+## Place alongside a quay face: correct heading, offset from quay, waterline.
+func dock_at_berth(dock: Node3D, _berth_index: int = 0) -> void:
+	if dock == null:
 		return
 	refresh_hull_bounds_from_visuals()
-	var xform := dock.get_berth_spawn_transform(berth_index, get_half_beam_m())
+	var half_beam := get_half_beam_m()
+	var xform: Transform3D
+	if dock is QuayBerthSlot:
+		var slot := dock as QuayBerthSlot
+		xform = slot.global_transform * slot.ship_dock_local(half_beam)
+	else:
+		var local := Vector3(0.0, 0.0, -(half_beam + 1.5))
+		## Legacy PortDock faces: offset −Z, bow along +X.
+		xform = dock.global_transform * Transform3D(
+			Basis.from_euler(Vector3(0.0, PI * 0.5, 0.0)),
+			local,
+		)
 	snap_to_transform(xform)
 	place_at_waterline(WaveSurface.WATER_LEVEL)
+
+
+## Compatibility alias — continuous vessel calls are deferred.
+func dock_at_call(dock: Node3D, _call: Variant = null) -> void:
+	dock_at_berth(dock, 0)
 
 
 func get_half_beam_m() -> float:
@@ -921,7 +961,7 @@ func get_half_beam_m() -> float:
 
 
 ## Deprecated — kept so old call sites do nothing harmful.
-func fit_to_port_berth(dock: PortDock, berth_index: int) -> void:
+func fit_to_port_berth(dock: Node3D, berth_index: int) -> void:
 	if not berth_auto_fit_enabled:
 		return
 	dock_at_berth(dock, berth_index)

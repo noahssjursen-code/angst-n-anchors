@@ -60,32 +60,7 @@ func _draw() -> void:
 	draw_string(_font, Vector2(ox + pad_h, oy + pad_v + fs - 2),
 				marks_str, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, HudStyle.C_AMBER)
 
-	# Player-local data (active contracts) goes through the view.
-	# World-state lookups (port display names) still use the registry —
-	# port catalog isn't player-specific so it stays globally accessible.
+	# Player-local contracts deferred until trade rewrite.
 	var contracts: Array = view.get_active_contracts()
 	if contracts.is_empty():
 		return
-	var registry := get_node_or_null("/root/ContractRegistry")
-	if registry == null:
-		return
-
-	var cfs   := 12
-	var cph   := float(cfs) + 8.0
-	var cy    := oy + ph + 6.0
-	var c_pad := 10.0
-
-	for raw in contracts:
-		var contract := raw as Contract
-		if contract == null:
-			continue
-		var dest: String = registry.get_port_display_name(contract.destination_port_id)
-		var in_transit: int = contract.taken_count - contract.delivered_count
-		var c_str  := "%s  →  %s   ×%d" % [contract.display_name, dest, in_transit]
-		var c_tw   := _font.get_string_size(c_str, HORIZONTAL_ALIGNMENT_LEFT, -1, cfs).x
-		var c_pw   := c_tw + c_pad * 2.0
-		draw_rect(Rect2(ox, cy, c_pw, cph), HudStyle.C_BG)
-		draw_rect(Rect2(ox, cy, c_pw, cph), HudStyle.C_BRASS, false, 1.0)
-		draw_string(_font, Vector2(ox + c_pad, cy + cph - 5.0),
-					c_str, HORIZONTAL_ALIGNMENT_LEFT, -1, cfs, HudStyle.C_TEXT)
-		cy += cph + 3.0

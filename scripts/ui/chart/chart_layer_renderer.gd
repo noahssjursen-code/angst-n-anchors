@@ -14,6 +14,11 @@ const C_PORT := Color(0.10, 0.24, 0.28, 1.0)
 const C_PORT_SELECTED := Color(0.95, 0.55, 0.10, 1.0)
 const C_SHIP := Color(0.94, 0.28, 0.12, 1.0)
 const C_ROUTE := Color(0.74, 0.22, 0.12, 0.90)
+## Pay expand cost a few harbours per frame so world-view open stays smooth.
+const HARBOUR_EXPAND_BUDGET := 4
+const HARBOUR_VIEW_MARGIN_M := 900.0
+const HARBOUR_LABEL_SPAN_M := 4500.0
+const HARBOUR_OCCUPANCY_SPAN_M := 2800.0
 
 var snapshot
 var base := BaseRaster.new()
@@ -28,6 +33,7 @@ func set_snapshot(next) -> void:
 	snapshot = next
 	weather.invalidate()
 	fishing.invalidate()
+	ChartHarbourPlan.clear_cache()
 	if snapshot != null and snapshot.layout != null:
 		base.prepare(snapshot.layout)
 		coastline.prepare(snapshot.layout)
@@ -48,6 +54,7 @@ func render(
 	layers: ChartLayerManager,
 	nav: ChartNavSnapshot,
 	selected_port: String,
+	show_port_card: bool = true,
 ) -> void:
 	var started := Time.get_ticks_usec()
 	var chart: Rect2 = ctx["chart_rect"]
@@ -64,10 +71,13 @@ func render(
 	_draw_grid(canvas, ctx)
 	if layers.is_visible("routes"):
 		_draw_contract_routes(canvas, ctx, nav)
+	## Lazy harbour silhouettes under port dots (all visible sites).
+	_draw_visible_harbours(canvas, ctx)
 	_draw_ports(canvas, ctx, selected_port, layers.is_visible("annotations"))
 	if layers.is_visible("nav_vectors"):
 		_draw_ship(canvas, ctx, nav)
-	if not selected_port.is_empty():
+	## Home-port pick uses a Control dossier panel — skip the canvas card.
+	if show_port_card and not selected_port.is_empty():
 		_draw_port_card(canvas, ctx, selected_port, nav)
 	last_draw_usec = Time.get_ticks_usec() - started
 	draw_count += 1
@@ -91,6 +101,7 @@ func render_minimap(
 	_draw_coastline(canvas, ctx)
 	if layers.is_visible("routes"):
 		_draw_contract_routes(canvas, ctx, nav)
+	_draw_visible_harbours(canvas, ctx)
 	_draw_ports(canvas, ctx, "", false)
 	_draw_ship(canvas, ctx, nav)
 
@@ -299,6 +310,118 @@ func _draw_fronts(canvas: CanvasItem, ctx: Dictionary) -> void:
 			)
 
 
+## Lazy-load harbour silhouettes for every port currently on-screen.
+func _draw_visible_harbours(canvas: CanvasItem, ctx: Dictionary) -> void:
+	if snapshot == null:
+		return
+	var bounds: Rect2 = ctx["world_bounds"]
+	var span := float(ctx.get("world_span", bounds.size.x))
+	var show_labels := span <= HARBOUR_LABEL_SPAN_M
+	var show_occupancy := span <= HARBOUR_OCCUPANCY_SPAN_M
+	var view := bounds.grow(HARBOUR_VIEW_MARGIN_M)
+	var tree := Engine.get_main_loop() as SceneTree
+	var expands_left := HARBOUR_EXPAND_BUDGET
+	var need_more := false
+	for port in snapshot.ports:
+		var position := port.get("position", Vector3(INF, INF, INF)) as Vector3
+		if not position.is_finite():
+			continue
+		var xz := Vector2(position.x, position.z)
+		if not view.has_point(xz):
+			continue
+		var port_id := str(port.get("id", ""))
+		if port_id.is_empty():
+			continue
+		var plan: ChartHarbourPlan = null
+		if ChartHarbourPlan.is_cached(port_id):
+			plan = ChartHarbourPlan.for_port(port_id, tree, snapshot)
+		elif expands_left > 0:
+			expands_left -= 1
+			plan = ChartHarbourPlan.for_port(port_id, tree, snapshot)
+		else:
+			need_more = true
+			continue
+		if plan == null:
+			continue
+		## Skip draw if plan bounds miss the view (origin may sit outside margin).
+		if plan.bounds.size.x > 1.0 and not view.intersects(plan.bounds):
+			continue
+		plan.draw(canvas, ctx, show_labels)
+		if show_occupancy:
+			_draw_harbour_occupancy(canvas, ctx, port_id)
+	if need_more:
+		## Fill remaining plans over subsequent frames.
+		canvas.queue_redraw()
+
+
+func _draw_harbour_occupancy(canvas: CanvasItem, ctx: Dictionary, port_id: String) -> void:
+	var harbour := HarbourRegistry.controller(port_id)
+	if harbour == null:
+		return
+	var snap: Dictionary = harbour.snapshot()
+	var jobs_by_berth := _harbour_jobs_by_berth(
+		snap.get("jobs", []) as Array,
+		snap.get("equipment", []) as Array,
+	)
+	var chart: Rect2 = ctx["chart_rect"]
+	for raw in snap.get("berths", []) as Array:
+		var row := raw as Dictionary
+		var berth_id := str(row.get("berth_id", ""))
+		var slot := harbour.berth(berth_id)
+		if slot == null or not is_instance_valid(slot):
+			continue
+		var free := bool(row.get("free", true))
+		var label_at := _world_to_screen(slot.global_position, ctx)
+		if not chart.grow(48.0).has_point(label_at):
+			continue
+		var status := "FREE" if free else "TAKEN"
+		var ship_id := str(row.get("ship_id", "")).strip_edges()
+		var job := str(jobs_by_berth.get(berth_id, ""))
+		var badge := status
+		if not free and not ship_id.is_empty():
+			badge = "%s · %s" % [status, ship_id]
+		if not job.is_empty():
+			badge = "%s · %s" % [badge, job]
+		if badge.length() > 36:
+			badge = badge.substr(0, 35) + "…"
+		var col := Color(0.35, 0.9, 0.55, 0.95) if free else Color(0.95, 0.55, 0.25, 0.98)
+		## Below pad centre — station commodity labels sit above.
+		var badge_at := label_at + Vector2(0.0, 10.0)
+		canvas.draw_circle(badge_at, 3.5, col)
+		canvas.draw_string(
+			ThemeDB.fallback_font,
+			badge_at + Vector2(6.0, 4.0),
+			badge,
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 10, col,
+		)
+
+
+static func _harbour_jobs_by_berth(jobs: Array, equipment: Array) -> Dictionary:
+	var equip_berth: Dictionary = {}
+	for raw in equipment:
+		var row := raw as Dictionary
+		equip_berth[str(row.get("equip_id", ""))] = str(row.get("berth_id", ""))
+	var out: Dictionary = {}
+	for raw in jobs:
+		var job := raw as Dictionary
+		var equip_id := str(job.get("equip_id", ""))
+		var berth_id := str(equip_berth.get(equip_id, ""))
+		if berth_id.is_empty():
+			var slash := equip_id.rfind("/")
+			if slash > 0:
+				berth_id = equip_id.substr(0, slash)
+		if berth_id.is_empty():
+			continue
+		var mode := str(job.get("mode", "")).to_upper()
+		var commodity := CommodityCatalog.commodity_display(str(job.get("commodity_id", "")))
+		var bit := mode if commodity.is_empty() or commodity == "—" else "%s %s" % [mode, commodity]
+		if out.has(berth_id):
+			out[berth_id] = "%s + %s" % [out[berth_id], bit]
+		else:
+			out[berth_id] = bit
+	return out
+
+
 func _draw_port_card(
 	canvas: CanvasItem,
 	ctx: Dictionary,
@@ -311,26 +434,40 @@ func _draw_port_card(
 	if info.is_empty():
 		return
 	var chart: Rect2 = ctx["chart_rect"]
-	var panel := Rect2(chart.end.x - 252.0, chart.end.y - 108.0, 240.0, 96.0)
+	## Navigation mode only — home-port pick uses the Control dossier panel.
+	var panel := Rect2(chart.end.x - 268.0, chart.end.y - 132.0, 256.0, 118.0)
 	canvas.draw_rect(panel, Color(0.92, 0.91, 0.82, 0.97))
 	canvas.draw_rect(panel, Color(0.12, 0.20, 0.20, 0.88), false, 1.0)
 	var range := "—"
 	var position := info.get("position", Vector3.ZERO) as Vector3
 	if nav != null and nav.has_ship():
 		range = _distance(position.distance_to(nav.ship_position))
+	var export_id := str(info.get("commodity_export", ""))
+	var export_label := CommodityCatalog.commodity_display(export_id) if not export_id.is_empty() \
+			else "—"
+	var imports: Array = info.get("commodity_imports", []) as Array
+	var import_bits: PackedStringArray = PackedStringArray()
+	for raw in imports:
+		import_bits.append(CommodityCatalog.commodity_display(str(raw)))
+	var import_line := ", ".join(import_bits) if not import_bits.is_empty() else "—"
 	var rows: Array[String] = [
 		str(info.get("display_name", port_id)).to_upper(),
-		"Berths %d   Population %d" % [
+		"%s  ·  size %d  ·  %d berths" % [
+			str(info.get("region", "coastal")).capitalize(),
+			int(info.get("size", 0)),
 			int(info.get("berth_count", 1)),
-			int(info.get("population", 0)),
 		],
-		"Export %s" % str(info.get("commodity_export", "—")).capitalize(),
-		"Range %s" % range,
+		"Export %s   Pop %d" % [export_label, int(info.get("population", 0))],
+		"Imports %s" % import_line,
+		"Class %s   Range %s" % [
+			str(info.get("max_ship_class_name", "Vessel")),
+			range,
+		],
 	]
 	for index in range(rows.size()):
 		canvas.draw_string(
 			ThemeDB.fallback_font,
-			panel.position + Vector2(10.0, 19.0 + index * 20.0),
+			panel.position + Vector2(10.0, 19.0 + index * 24.0),
 			rows[index],
 			HORIZONTAL_ALIGNMENT_LEFT, -1, 11,
 			Color(0.08, 0.14, 0.14),

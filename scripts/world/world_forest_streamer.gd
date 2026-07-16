@@ -280,7 +280,14 @@ static func build_chunk_transforms(
 static func _in_flatten(world_xz: Vector2, flatten_zones: Array) -> bool:
 	for zone_variant in flatten_zones:
 		var zone := zone_variant as Dictionary
-		var local := (world_xz - (zone["center"] as Vector2)).rotated(-float(zone["yaw"]))
+		if zone.has("polygon"):
+			var polygon := zone.get("polygon", PackedVector2Array()) as PackedVector2Array
+			if polygon.size() >= 3 and Geometry2D.is_point_in_polygon(world_xz, polygon):
+				return true
+			continue
+		if not zone.has("center") or not zone.has("half_size"):
+			continue
+		var local := (world_xz - (zone["center"] as Vector2)).rotated(-float(zone.get("yaw", 0.0)))
 		var half_size: Vector2 = zone["half_size"]
 		var falloff := maxf(float(zone.get("falloff", 0.0)), 0.0)
 		var pad := half_size + Vector2(falloff * 0.5, falloff * 0.5)

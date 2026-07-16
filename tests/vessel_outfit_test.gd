@@ -49,16 +49,16 @@ func _test_hidden_cargo_rejected() -> void:
 	var grid := HullRegistry.make_grid("hull_28x10")
 	var layout := BrickLayout.new()
 	layout.hull_id = "hull_28x10"
-	layout.cargo_zones = [{
+	layout.container_pads = [{
 		"a": [2, 1, 10],
-		"b": [4, 1, 12],
+		"b": [5, 1, 13],
 	}]
 	var report := VesselOutfit.validate(layout, "hull_28x10", grid)
-	_check(not bool(report.get("ok", true)), "layered cargo at y=1 fails validate")
+	_check(not bool(report.get("ok", true)), "layered container pad at y=1 fails validate")
 	var accepted: Dictionary = report.get("accepted_slots", {})
 	_check(
-		(accepted.get("cargo_zone_indices", []) as Array).is_empty(),
-		"hidden cargo zones are not accepted for mount",
+		(accepted.get("container_pad_indices", []) as Array).is_empty(),
+		"hidden container pads are not accepted for mount",
 	)
 
 

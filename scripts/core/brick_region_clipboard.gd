@@ -84,7 +84,13 @@ static func paste_region(
 		if rel.x < 0:
 			continue
 		var dest := dest_anchor + rel
-		merged[cell_key(dest)] = (clip_cells[rel_key] as Dictionary).duplicate(true)
+		var entry := (clip_cells[rel_key] as Dictionary).duplicate(true)
+		## occupied_by is stored relative to the clip min — remap to absolute dest.
+		if entry.has("occupied_by"):
+			var origin_rel := parse_key(str(entry.get("occupied_by", "")))
+			if origin_rel.x >= 0:
+				entry["occupied_by"] = cell_key(dest_anchor + origin_rel)
+		merged[cell_key(dest)] = entry
 	return merged
 
 

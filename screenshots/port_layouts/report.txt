@@ -1,0 +1,12 @@
+seed=424242 generation=5
+
+size=0 morphology=jetty modules=6 open=9 primary=40m total_quay=40m bounds=48x132 contract_half=20 OK
+  exports=timber imports=provisions
+size=1 morphology=L modules=10 open=9 primary=100m total_quay=150m bounds=120x220 contract_half=50 OK
+  exports=provisions imports=provisions,timber
+size=2 morphology=L modules=15 open=15 primary=186m total_quay=248m bounds=172x382 contract_half=93 OK
+  exports=provisions,timber imports=timber,provisions
+size=3 morphology=U modules=20 open=21 primary=304m total_quay=608m bounds=464x592 contract_half=152 OK
+  exports=timber,provisions imports=timber,provisions
+size=4 morphology=fingers modules=26 open=28 primary=460m total_quay=1196m bounds=404x856 contract_half=230 OK
+  exports=provisions,timber imports=provisions,timber

@@ -1,26 +1,10 @@
-[gd_scene load_steps=3 format=3]
+[gd_scene load_steps=2 format=3]
 
 [ext_resource type="Script" path="res://scripts/port/port_showcase.gd" id="1_showcase"]
 
-[sub_resource type="Environment" id="Environment_showcase"]
-background_mode = 1
-background_color = Color(0.16, 0.19, 0.22, 1)
-ambient_light_source = 2
-ambient_light_color = Color(0.72, 0.78, 0.86, 1)
-ambient_light_energy = 0.65
-
 [node name="PortShowcase" type="Node3D"]
 script = ExtResource("1_showcase")
-
-[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
-environment = SubResource("Environment_showcase")
-
-[node name="Sun" type="DirectionalLight3D" parent="."]
-rotation_degrees = Vector3(-48, -32, 0)
-light_energy = 1.15
-shadow_enabled = true
-
-[node name="Camera3D" type="Camera3D" parent="."]
-position = Vector3(-76, 58, 76)
-current = true
-fov = 58.0
+port_size = 2
+region_index = 0
+has_lighthouse = true
+has_fog_horn = true

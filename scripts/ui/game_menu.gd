@@ -18,7 +18,6 @@ var _helm_cursor_released: bool  = false
 var _hud_layer:   CanvasLayer
 var _menu_layer:  CanvasLayer
 var _walking_hud: WalkingHud
-var _journal:     ContractJournalOverlay
 var _hints:       HintOverlay
 var _bg:          ColorRect
 var _pause_root:  Control
@@ -36,9 +35,6 @@ func _ready() -> void:
 
 	_walking_hud = WalkingHud.new()
 	_hud_layer.add_child(_walking_hud)
-
-	_journal = ContractJournalOverlay.new()
-	_hud_layer.add_child(_journal)
 
 	_hints = HintOverlay.new()
 	_hud_layer.add_child(_hints)
@@ -135,10 +131,6 @@ func _unhandled_input(event: InputEvent) -> void:
 			return
 		_set_screen(Screen.MAP if _screen != Screen.MAP else Screen.NONE)
 		get_viewport().set_input_as_handled()
-	elif event.is_action_pressed("open_journal") and _screen == Screen.NONE:
-		if _journal != null:
-			_journal.toggle()
-		get_viewport().set_input_as_handled()
 
 
 # ── Screen switching ──────────────────────────────────────────────────────────
@@ -161,8 +153,6 @@ func _set_screen(s: Screen) -> void:
 	_settings.visible    = s == Screen.SETTINGS
 	if _minimap != null:
 		_minimap.set_modal_hidden(modal)
-	if _journal != null:
-		_journal.visible = not modal
 	# Pause while on Pause OR Settings — both are reached from the pause menu
 	# and a moving world behind the settings panel is jarring.
 	# However, in multiplayer mode, we must never pause the tree!

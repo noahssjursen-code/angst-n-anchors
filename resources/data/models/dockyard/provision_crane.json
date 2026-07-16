@@ -1,0 +1,126 @@
+{
+	"name": "provision_crane",
+	"_doc": "Harbour T-crane for provisions / general cargo — pad, mast, slewing house, T-jib, rails, talje, wire, hook.",
+	"meta": {
+		"pad_top_y_m": 1.0,
+		"girder_height_m": 30.0,
+		"girder_section_m": 2.0,
+		"girder_top_y_m": 30.0,
+		"boom_length_m": 55.0,
+		"boom_back_m": 20.0,
+		"boom_forward_m": 55.0,
+		"rail_z_min_m": -54.0,
+		"rail_z_max_m": -1.0,
+		"wire_rest_length_m": 10.0,
+		"parts": ["pad", "girder", "cabin", "engine", "boom", "counterweight", "waist_rails", "talje", "wire", "hook"]
+	},
+	"parts": [
+		{
+			"name": "pad",
+			"role": "base",
+			"mesh": "cranes/provision_crane_pad.json",
+			"position": [0, 0, 0],
+			"color": [0.58, 0.58, 0.56],
+			"roughness": 0.95,
+			"metallic": 0.0,
+			"collision": "convex"
+		},
+		{
+			"name": "girder",
+			"role": "mast",
+			"parent": "pad",
+			"mesh": "cranes/provision_crane_girder.json",
+			"position": [0, 1.0, 0],
+			"color": [0.90, 0.72, 0.12],
+			"roughness": 0.72,
+			"metallic": 0.18,
+			"collision": "convex"
+		},
+		{
+			"name": "cabin",
+			"role": "cabin",
+			"parent": "girder",
+			"model": "bulk_crane_cabin.json",
+			"position": [0, 30.0, 0]
+		},
+		{
+			"name": "engine",
+			"role": "engine",
+			"parent": "cabin",
+			"model": "bulk_crane_engine.json",
+			"position": [0, 0, 0]
+		},
+		{
+			"name": "boom",
+			"role": "boom",
+			"parent": "engine",
+			"mesh": "cranes/provision_crane_boom.json",
+			"position": [-1.75, 3.7, -0.25],
+			"rotation_degrees": [0, 0, 0],
+			"color": [0.90, 0.72, 0.12],
+			"roughness": 0.65,
+			"metallic": 0.2,
+			"collision": "convex"
+		},
+		{
+			"name": "counterweight",
+			"role": "counterweight",
+			"parent": "boom",
+			"mesh": "cranes/provision_crane_counterweight.json",
+			"position": [0, -2.9, 16.5],
+			"center_mesh": false,
+			"color": [0.38, 0.37, 0.35],
+			"roughness": 0.95,
+			"metallic": 0.0,
+			"collision": "convex"
+		},
+		{
+			"name": "waist_rails",
+			"role": "waist_rails",
+			"parent": "boom",
+			"mesh": "cranes/provision_crane_waist_rails.json",
+			"position": [0, 0, 0],
+			"center_mesh": false,
+			"color": [0.22, 0.22, 0.24],
+			"roughness": 0.55,
+			"metallic": 0.55,
+			"collision": "none"
+		},
+		{
+			"name": "talje",
+			"role": "talje",
+			"parent": "waist_rails",
+			"mesh": "cranes/provision_crane_talje.json",
+			"position": [0, -0.78, -14.0],
+			"center_mesh": false,
+			"color": [0.78, 0.58, 0.10],
+			"roughness": 0.65,
+			"metallic": 0.25,
+			"collision": "convex"
+		},
+		{
+			"name": "wire",
+			"role": "wire",
+			"parent": "talje",
+			"mesh": "cranes/provision_crane_wire.json",
+			"position": [0, -1.05, 0],
+			"center_mesh": false,
+			"color": [0.14, 0.14, 0.15],
+			"roughness": 0.45,
+			"metallic": 0.4,
+			"collision": "none"
+		},
+		{
+			"name": "hook",
+			"role": "hook",
+			"parent": "wire",
+			"mesh": "cranes/provision_crane_hook.json",
+			"position": [0, -10.0, 0],
+			"center_mesh": false,
+			"color": [0.16, 0.16, 0.18],
+			"roughness": 0.4,
+			"metallic": 0.7,
+			"collision": "convex"
+		}
+	]
+}

@@ -1,8 +1,7 @@
 class_name ShipClass
 extends RefCounted
 
-## Ship size classification. Used by PortDock to enforce max vessel size
-## and calculate how many berths are available for a given class.
+## Ship size classification used by port metadata and vessel systems.
 
 enum Type {
 	LAUNCH             = 0,  ## < 10 m  — tenders, pilot boats, small ferries
@@ -12,8 +11,11 @@ enum Type {
 	DEEP_SEA_FREIGHTER = 4,  ## 100 m+  — ocean-going bulk and general cargo
 }
 
-## Game-scale maximum length (m) per class. Real metres — no feel multipliers.
-## Class limits are broad gameplay categories, not exact hull dimensions.
+## Catalog length/beam are authored in "actual" metres. World hulls and berth
+## clearances use 2× those values (a 5 m beam ship occupies 10 m in world space).
+const METRIC_SCALE := 2.0
+
+## Authored maximum length (m) per class — multiply by METRIC_SCALE for world space.
 const MAX_LENGTH_M: Dictionary = {
 	Type.LAUNCH:              10.0,
 	Type.COASTAL_TRADER:     35.0,
@@ -22,7 +24,7 @@ const MAX_LENGTH_M: Dictionary = {
 	Type.DEEP_SEA_FREIGHTER: 160.0,
 }
 
-## Typical beam (m) — sets how far berth indicators extend into the water.
+## Authored typical beam (m) — multiply by METRIC_SCALE for world space.
 const BEAM_M: Dictionary = {
 	Type.LAUNCH:              4.0,
 	Type.COASTAL_TRADER:     24.0,
@@ -39,10 +41,8 @@ const DISPLAY_NAME: Dictionary = {
 	Type.DEEP_SEA_FREIGHTER: "Deep Sea Freighter",
 }
 
-## Indicative cargo grid cells a ship of this class is built to hold. Used by
-## the ContractNpc UI to show "X cells free / Y needed" before accepting.
-## Actual capacity comes from the ship's CargoDeckComponent(s); this is just
-## an upper-bound hint when no boat is currently berthed.
+## Indicative cargo grid cells a ship of this class is built to hold.
+## Upper-bound hint for outfit budgets; live capacity comes from mounted holds.
 const CARGO_CELLS: Dictionary = {
 	Type.LAUNCH:              2,
 	Type.COASTAL_TRADER:      8,
@@ -72,6 +72,22 @@ static func max_length(type: Type) -> float:
 
 static func beam(type: Type) -> float:
 	return float(BEAM_M.get(type, 3.0))
+
+## World-space length/beam (authored × METRIC_SCALE). Use for berths, fairways,
+## and anything that must clear a live hull mesh.
+static func world_max_length(type: Type) -> float:
+	return max_length(type) * METRIC_SCALE
+
+static func world_beam(type: Type) -> float:
+	return beam(type) * METRIC_SCALE
+
+## @deprecated: use world_max_length
+static func physical_max_length(type: Type) -> float:
+	return world_max_length(type)
+
+## @deprecated: use world_beam
+static func physical_beam(type: Type) -> float:
+	return world_beam(type)
 
 static func display_name(type: Type) -> String:
 	return str(DISPLAY_NAME.get(type, "Unknown"))

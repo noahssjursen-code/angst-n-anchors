@@ -89,7 +89,7 @@ func _test_fixed_queries(layout: WorldLayout) -> void:
 		Vector2(7200.0, -4100.0),
 		Vector2(-6400.0, 8300.0),
 	])
-	var expected := PackedFloat32Array([5174.157, -2616.645, 1252.452, 590.345, 1030.766])
+	var expected := PackedFloat32Array([3779.949, -10.969, 1592.266, 1169.726, 1552.424])
 	for i in range(points.size()):
 		var actual := layout.sample_signed_distance(points[i])
 		_check(absf(actual - expected[i]) <= 0.06, "fixed signed-distance sample %d" % i)
@@ -104,7 +104,7 @@ func _test_fixed_queries(layout: WorldLayout) -> void:
 		var inland_dir := normal if layout.sample_signed_distance(mid + normal * 80.0) < 0.0 else -normal
 		var near_shore := layout.sample_height(mid + inland_dir * 12.0)
 		var inland_h := layout.sample_height(mid + inland_dir * 420.0)
-		_check(near_shore >= 0.0 and near_shore < 8.0, "svaberg shelf stays low near the waterline")
+		_check(near_shore >= 0.0 and near_shore < 8.0, "coastal shelf stays low near the waterline")
 		_check(inland_h > near_shore + 40.0, "mainland rises into visible mountains inland of the shelf")
 
 

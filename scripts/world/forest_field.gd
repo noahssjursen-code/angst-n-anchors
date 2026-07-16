@@ -6,7 +6,7 @@ extends RefCounted
 
 const PATCH_SCALE_M := 2800.0
 const DETAIL_SCALE_M := 520.0
-## Keep a thin bare rock/svaberg strip, then let canopy start close to shore.
+## Keep a thin bare rock strip at the shore, then let canopy start close inland.
 const MIN_INLAND_M := 22.0
 const FULL_INLAND_M := 95.0
 const MAX_SLOPE := 0.58
@@ -67,6 +67,7 @@ static func sample(world_xz: Vector2) -> float:
 	if inland < MIN_INLAND_M:
 		return 0.0
 	if _inside_flatten_zone(world_xz):
+		## Rectangular facility pads + port town forest_clear polygons.
 		return 0.0
 
 	var height := float(_layout.sample_height(world_xz))
@@ -116,7 +117,15 @@ static func _estimate_slope(world_xz: Vector2) -> float:
 static func _inside_flatten_zone(world_xz: Vector2) -> bool:
 	for zone_variant in _flatten_zones:
 		var zone := zone_variant as Dictionary
-		var local := (world_xz - (zone["center"] as Vector2)).rotated(-float(zone["yaw"]))
+		## Town / polygon clears (forest only) and legacy rectangular pads.
+		if zone.has("polygon"):
+			var polygon := zone.get("polygon", PackedVector2Array()) as PackedVector2Array
+			if polygon.size() >= 3 and Geometry2D.is_point_in_polygon(world_xz, polygon):
+				return true
+			continue
+		if not zone.has("center") or not zone.has("half_size"):
+			continue
+		var local := (world_xz - (zone["center"] as Vector2)).rotated(-float(zone.get("yaw", 0.0)))
 		var half_size: Vector2 = zone["half_size"]
 		var falloff := maxf(float(zone.get("falloff", 0.0)), 0.0)
 		var pad := half_size + Vector2(falloff, falloff)

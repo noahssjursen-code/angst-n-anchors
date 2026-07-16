@@ -1,7 +1,8 @@
 class_name HarbourMasterNpc
 extends NpcInteractable
 
-## Harbour master NPC. Handles berth booking and harbour dues enquiries.
+## Harbour master — class-aware deploy, refuel, abandon.
+## Harbour schematic lives on the marine chart (M → Harbour), not in dialogue.
 
 const PEAKED_CAP_PATH := AssetPaths.HAT_PEAKED_CAP
 
@@ -9,19 +10,16 @@ const PEAKED_CAP_PATH := AssetPaths.HAT_PEAKED_CAP
 
 var _dialogue: DialoguePanel
 
-enum _Screen { MAIN, REQUEST_BERTH, VESSEL_INFO, SHIP_SELECT, REFUEL, ABANDON_CONFIRM }
+enum _Screen { MAIN, REQUEST_BERTH, SHIP_SELECT, VESSEL_INFO, REFUEL, ABANDON_CONFIRM }
 
-## Price per litre of diesel. Tuned so a full 400 L tank costs ~200 marks —
-## a starter player earns enough from one delivery to cover the return trip.
-const FUEL_PRICE_PER_LITRE : float = 0.5
+const FUEL_PRICE_PER_LITRE := 0.5
 var _screen: _Screen = _Screen.MAIN
-var _pending_berth_index: int = -1
 
 
 func _ready() -> void:
 	clothing_color = Color(0.15, 0.22, 0.45)
 	trousers_color = Color(0.12, 0.16, 0.32)
-	prompt_text    = "Press F — Harbour Master"
+	prompt_text = "Press F — Harbour Master"
 	super._ready()
 	if not Engine.is_editor_hint():
 		call_deferred("_build_ui")
@@ -39,15 +37,13 @@ func _wire_session() -> void:
 
 
 func _on_vessels_synced() -> void:
-	if _screen == _Screen.SHIP_SELECT and _pending_berth_index >= 0:
+	if _screen == _Screen.SHIP_SELECT:
 		_show_ship_select()
 
 
 func _add_hat() -> void:
 	add_overlay("hat", PEAKED_CAP_PATH)
 
-
-# ── NpcInteractable hooks ──────────────────────────────────────────────────────
 
 func _on_interact() -> void:
 	var session := get_node_or_null("/root/PlayerSession")
@@ -56,7 +52,6 @@ func _on_interact() -> void:
 		_dialogue.show_panel()
 		open_ui()
 		return
-	## Singleplayer: local ledger is authoritative — never wait on / wipe from server.
 	var config := get_node_or_null("/root/ServerConfig")
 	if config == null or not bool(config.get("is_multiplayer_mode")):
 		_show_main()
@@ -72,7 +67,6 @@ func _on_interact() -> void:
 
 func _on_ui_cancel() -> void:
 	if _screen == _Screen.SHIP_SELECT:
-		_release_pending_berth()
 		_show_request_berth()
 	elif _screen == _Screen.MAIN:
 		_dialogue.hide_panel()
@@ -81,10 +75,7 @@ func _on_ui_cancel() -> void:
 		_show_main()
 
 
-# ── Screens ───────────────────────────────────────────────────────────────────
-
 func _close() -> void:
-	_release_pending_berth()
 	_dialogue.hide_panel()
 	close_ui()
 
@@ -92,21 +83,22 @@ func _close() -> void:
 func _show_main() -> void:
 	_screen = _Screen.MAIN
 	_dialogue.clear()
-	_dialogue.add_quote("Good day, Captain. What can I do for you?")
-	_dialogue.add_option("I would like to request a berth.",  _show_request_berth)
+	_dialogue.add_quote(
+		"Good day, Captain. What can I do for you?\n"
+		+ "(Harbour board is on your chart — press M, then Harbour.)"
+	)
+	_dialogue.add_option("Request a berth / deploy my vessel.", _show_request_berth)
 	if _can_offer_refuel():
-		_dialogue.add_option("Refuel my ship.",                _show_refuel)
-	_dialogue.add_option("What vessels can dock here?",        _show_vessel_info)
+		_dialogue.add_option("Refuel my ship.", _show_refuel)
+	_dialogue.add_option("What vessels can dock here?", _show_vessel_info)
 	if LocalPlayerView.has_active_ship():
-		_dialogue.add_option("Abandon my vessel.",             _show_abandon_confirm)
-	_dialogue.add_option("Nothing, thank you.",                _close)
+		_dialogue.add_option("Abandon my vessel.", _show_abandon_confirm)
+	_dialogue.add_option("Nothing, thank you.", _close)
 
-
-# ── Refuel ────────────────────────────────────────────────────────────────────
 
 func _can_offer_refuel() -> bool:
-	var dock := _get_dock()
-	if dock == null or not dock.has_fuel_point:
+	var data := _port_data()
+	if data != null and not data.has_fuel_point:
 		return false
 	return LocalPlayerView.has_active_ship()
 
@@ -127,8 +119,9 @@ func _show_refuel() -> void:
 	var price := int(ceil(needed * FUEL_PRICE_PER_LITRE))
 	var pct := int(round(ship.get_fuel_fraction() * 100.0))
 	_dialogue.add_quote(
-		"Your tank reads %d%% — fill her up for %s?\n(%d L of diesel)" %
-		[pct, PlayerSession.format_money(price), int(round(needed))]
+		"Your tank reads %d%% — fill her up for %s?\n(%d L of diesel)" % [
+			pct, PlayerSession.format_money(price), int(round(needed)),
+		]
 	)
 	_dialogue.add_option("Yes — top her off.", _commit_refuel.bind(needed, price))
 	_dialogue.add_back_button(_show_main)
@@ -166,112 +159,85 @@ func _show_request_berth() -> void:
 		_dialogue.add_back_button(_show_main)
 		return
 
-	var dock := _get_dock()
-	if dock == null:
-		_dialogue.add_quote("I'm afraid the dock is not operational at the moment.")
+	var harbour := _harbour()
+	if harbour == null:
+		_dialogue.add_quote("I'm afraid the harbour board is offline at the moment.")
 		_dialogue.add_back_button(_show_main)
 		return
 
-	var berths     := dock.get_berths()
-	var free_count := 0
-	for b in berths:
-		if int((b as Dictionary)["status"]) == PortDock.BerthStatus.FREE:
-			free_count += 1
-
+	var free_count := harbour.free_berths().size()
 	if free_count == 0:
 		_dialogue.add_quote("I'm sorry, Captain — we have no berths free at present.")
 		_dialogue.add_back_button(_show_main)
 		return
 
-	_dialogue.add_quote("We have %d berth%s available. Which would you like?" % [
-		free_count, "s" if free_count != 1 else ""
-	])
-
-	for i in range(berths.size()):
-		var b      := berths[i] as Dictionary
-		var status := int(b["status"])
-		if status == PortDock.BerthStatus.FREE:
-			var idx := i
-			_dialogue.add_option("Berth #%d — assign me here." % (i + 1),
-				func() -> void: _on_berth_selected(idx))
-		else:
-			var by  : String = str(b["reserved_by"])
-			var lbl : String = "Berth #%d — %s" % [
-				i + 1,
-				("reserved by %s" % by) if status == PortDock.BerthStatus.RESERVED else "occupied",
-			]
-			_dialogue.add_disabled_option(lbl)
-
+	_dialogue.add_quote(
+		"We have %d free berth%s. I'll match your hull to the right quay family — "
+		+ "bulk carriers go to bulk, deck cargo to the apron."
+		% [free_count, "s" if free_count != 1 else ""]
+	)
+	_dialogue.add_option("Assign me a berth for my vessel.", _show_ship_select)
 	_dialogue.add_back_button(_show_main)
-
-
-func _on_berth_selected(index: int) -> void:
-	var dock := _get_dock()
-	if dock == null:
-		return
-	if dock.reserve_berth(index, PortDock.local_player_owner_id()):
-		_pending_berth_index = index
-		_show_ship_select()
-	else:
-		_dialogue.clear()
-		_dialogue.add_quote("I'm sorry — that berth was just taken.")
-		_dialogue.add_back_button(_show_main)
 
 
 func _show_ship_select() -> void:
 	_screen = _Screen.SHIP_SELECT
 	_dialogue.clear()
 
-	var berth_n := _pending_berth_index + 1
 	var session := get_node_or_null("/root/PlayerSession")
 	var fleet: Array = []
 	if session != null and session.data != null:
 		fleet = session.data.get_harbour_vessel_records()
 
 	if fleet.is_empty():
-		_release_pending_berth()
 		_dialogue.add_quote(
 			"No commissioned vessel on file, Captain.\n"
-			+ "The Shipwright builds replacement vessels — your berth has been released."
+			+ "The Shipwright builds replacement vessels."
 		)
 		_dialogue.add_back_button(_show_request_berth)
 		return
 
-	var replace_note := (
-		" (replaces current)"
-		if LocalPlayerView.has_active_ship()
-		else ""
-	)
-
+	var harbour := _harbour()
+	var max_class := _max_ship_class()
+	var replace_note := " (replaces current)" if LocalPlayerView.has_active_ship() else ""
 	_dialogue.add_quote(
-		"Berth #%d is held. One alongside at a time — which hull from your registry?"
-		% berth_n
+		"Which hull from your registry?\nPort accepts up to %s."
+		% ShipClass.display_name(max_class)
 	)
 
 	for entry_raw in fleet:
 		var record := entry_raw as Dictionary
-		var vessel_name := VesselSpawn.vessel_name_of(record)
+		var req := HarbourDeploy.ship_requirements(record)
+		var vessel_name := str(req.get("display", VesselSpawn.vessel_name_of(record)))
+		var class_name_str := str(req.get("ship_class_name", "Vessel"))
+		var loa := float(req.get("loa_m", 0.0))
+		var fits_port := ShipClass.fits(req["ship_class"] as ShipClass.Type, max_class)
+		var slots := HarbourDeploy.free_slots_for(harbour, record, max_class) if harbour != null \
+				else []
+		var families: PackedStringArray = req["terminal_families"]
+		var family_note := ""
+		if not families.is_empty():
+			family_note = " · %s" % CommodityCatalog.terminal_family_display(families[0])
+		if not fits_port or slots.is_empty():
+			_dialogue.add_disabled_option(
+				"%s — %.0f m %s%s (no free matching berth)" % [
+					vessel_name, loa, class_name_str, family_note,
+				]
+			)
+			continue
+		var best := slots[0] as QuayBerthSlot
+		var quay_note := ""
+		if best != null:
+			quay_note = " → %s" % CommodityCatalog.terminal_family_display(best.family)
 		_dialogue.add_option(
-			"Deploy %s%s" % [vessel_name, replace_note],
+			"Deploy %s — %.0f m %s%s%s%s" % [
+				vessel_name, loa, class_name_str, family_note, quay_note, replace_note,
+			],
 			_deploy_fleet_vessel.bind(record),
 		)
 
-	_dialogue.add_option("Never mind — release the berth.", _cancel_ship_select)
-	_dialogue.add_back_button(_cancel_ship_select)
-
-
-func _cancel_ship_select() -> void:
-	_release_pending_berth()
-	_show_request_berth()
-
-
-func _release_pending_berth() -> void:
-	if _pending_berth_index < 0:
-		return
-	var dock := _get_dock()
-	if dock != null:
-		dock.release_berth(_pending_berth_index)
-	_pending_berth_index = -1
+	_dialogue.add_option("Never mind.", _show_request_berth)
+	_dialogue.add_back_button(_show_request_berth)
 
 
 func _deploy_fleet_vessel(record: Dictionary) -> void:
@@ -292,53 +258,40 @@ func _deploy_fleet_vessel(record: Dictionary) -> void:
 
 
 func _spawn_chosen_ship(resolved: Dictionary) -> void:
-	var dock := _get_dock()
-	var idx  := _pending_berth_index
-	if dock == null or idx < 0:
-		return
-
-	_pending_berth_index = -1
-
-	var scene_path := str(resolved.get("scene_path", resolved.get("template_path", ""))).strip_edges()
-	var brick_layout: Dictionary = VesselSpawn.brick_layout_of(resolved)
-	if str(brick_layout.get("hull_id", "")).is_empty():
-		brick_layout["hull_id"] = str(resolved.get("hull_id", "fishing_trawler_small"))
-	var ship := dock.spawn_player_ship(
-		idx,
-		scene_path,
-		brick_layout,
-		str(resolved.get("registration_id", "")),
-	)
-	if ship == null:
-		dock.release_berth(idx)
+	var plot := _plot()
+	if plot == null:
 		_dialogue.clear()
-		_dialogue.add_quote("Couldn't ready that vessel. Your berth has been released.")
+		_dialogue.add_quote("Harbour plot missing — cannot deploy.")
+		_dialogue.add_back_button(_show_main)
+		return
+	var ship := HarbourDeploy.deploy(plot, resolved)
+	if ship == null:
+		_dialogue.clear()
+		_dialogue.add_quote(
+			"Couldn't ready that vessel alongside. No free berth matches her class and quay type.\n"
+			+ "Check the chart harbour board (M → Harbour) for free bulk / cargo faces."
+		)
 		_dialogue.add_back_button(_show_main)
 		return
 
-	if ship is BoatBody:
-		VesselSpawn.apply_propulsion_override(ship as BoatBody, resolved)
-		VesselSpawn.apply_identity(ship as BoatBody, resolved)
-
-	_network_register_ship(ship, scene_path)
-	_finish_berth_assignment(idx)
-
-
-func _finish_berth_assignment(idx: int) -> void:
-	var plot := get_parent() as PortPlot
-	if plot != null:
-		plot.respawn_staged_cargo()
-
+	var scene_path := str(resolved.get("scene_path", resolved.get("template_path", ""))).strip_edges()
+	_network_register_ship(ship, scene_path, str(resolved.get("hull_id", "")))
+	var berth_id := str(ship.get_meta("harbour_berth_id", ""))
+	var slot := _harbour().berth(berth_id) if _harbour() != null else null
+	var family := slot.family if slot != null else ""
 	_dialogue.clear()
-	_dialogue.add_quote("Berth #%d is yours, Captain. Mind the tides." % (idx + 1))
+	_dialogue.add_quote(
+		"She's alongside at %s%s, Captain. Mind the tides."
+		% [
+			berth_id.get_file() if not berth_id.is_empty() else "her berth",
+			(" (%s)" % CommodityCatalog.terminal_family_display(family)) if not family.is_empty() else "",
+		]
+	)
 	_dialogue.add_option("Thank you.", _close)
-
 	var tut := get_node_or_null("/root/Tutorial")
 	if tut != null:
 		tut.call_deferred("show", "first_berth")
 
-
-# ── Abandon ship ──────────────────────────────────────────────────────────────
 
 func _show_abandon_confirm() -> void:
 	_screen = _Screen.ABANDON_CONFIRM
@@ -351,26 +304,18 @@ func _show_abandon_confirm() -> void:
 		"Abandon your vessel? She'll be towed away and any cargo aboard "
 		+ "will be forfeit. Your hull stays on the registry — request a berth to deploy her again."
 	)
-	_dialogue.add_option("Yes — scrap her.",   _commit_abandon)
+	_dialogue.add_option("Yes — scrap her.", _commit_abandon)
 	_dialogue.add_back_button(_show_main)
 
 
 func _commit_abandon() -> void:
-	# Despawn the ship — PlayerVessel handles cargo forfeit, dock unregister,
-	# and mooring release as part of _prepare_despawn.
 	PlayerVessel.despawn_all_ships(get_tree())
-
-	# Drop saved ship pose — the hull record stays so the harbour master can redeploy.
 	var session := get_node_or_null("/root/PlayerSession")
 	if session != null and session.data != null:
 		session.data.ship_runtime_state = {}
 		if session.has_method("save_now"):
 			session.call("save_now")
-
-	# Move the player back to the home port spawn anchor so they're not
-	# left floating where their ship used to be.
 	_teleport_player_to_home()
-
 	_dialogue.clear()
 	_dialogue.add_quote("She's gone, Captain. Come back when you'd like her alongside again.")
 	_dialogue.add_option("Thank you.", _close)
@@ -381,6 +326,8 @@ func _teleport_player_to_home() -> void:
 	if tree == null or tree.root == null:
 		return
 	var home := tree.root.find_child("HomePort", true, false) as PortPlot
+	if home == null:
+		home = _plot()
 	if home == null:
 		return
 	var spawn_pos := home.get_spawn_position()
@@ -393,23 +340,29 @@ func _teleport_player_to_home() -> void:
 func _show_vessel_info() -> void:
 	_screen = _Screen.VESSEL_INFO
 	_dialogue.clear()
-	var dock := _get_dock()
-	if dock == null:
-		_dialogue.add_quote("Dock information unavailable.")
-		_dialogue.add_back_button(_show_main)
-		return
-	var class_name_str : String = ShipClass.display_name(dock.max_ship_class)
-	var max_len        : float  = ShipClass.max_length(dock.max_ship_class)
-	var slots          : int    = dock.berth_count()
+	var harbour := _harbour()
+	var max_class := _max_ship_class()
+	var slots := harbour.berths().size() if harbour != null else 0
+	var free_n := harbour.free_berths().size() if harbour != null else 0
+	var data := _port_data()
+	var export_line := "—"
+	if data != null and not data.commodity_export.is_empty():
+		export_line = CommodityCatalog.commodity_display(data.commodity_export)
 	_dialogue.add_quote(
-		"This port accepts vessels up to %s class (max %.0f m).\n%d berth%s available." % [
-			class_name_str, max_len, slots, "s" if slots != 1 else ""
+		"This port accepts vessels up to %s class (max %.0f m).\n"
+		+ "%d berth%s (%d free).\nPrimary export: %s.\n"
+		+ "Open the chart (M) and switch to Harbour for the live board."
+		% [
+			ShipClass.display_name(max_class),
+			ShipClass.max_length(max_class),
+			slots,
+			"s" if slots != 1 else "",
+			free_n,
+			export_line,
 		]
 	)
 	_dialogue.add_back_button(_show_main)
 
-
-# ── Dock lookup ───────────────────────────────────────────────────────────────
 
 func _captain_can_deploy_vessel() -> bool:
 	var session := get_node_or_null("/root/PlayerSession")
@@ -418,44 +371,56 @@ func _captain_can_deploy_vessel() -> bool:
 	return session.data.can_deploy_at_harbour()
 
 
-func _get_dock() -> PortDock:
-	var parent := get_parent()
-	if parent == null:
-		return null
-	return parent.get_node_or_null("PortDock") as PortDock
+func _plot() -> PortPlot:
+	return get_parent() as PortPlot
 
 
-# ── Build UI ──────────────────────────────────────────────────────────────────
+func _harbour() -> HarbourController:
+	var plot := _plot()
+	return plot.harbour_controller() if plot != null else null
+
+
+func _port_data() -> PortData:
+	var plot := _plot()
+	return plot.port_data() if plot != null else null
+
+
+func _max_ship_class() -> ShipClass.Type:
+	var data := _port_data()
+	if data != null:
+		return data.max_ship_class
+	return ShipClass.Type.COASTAL_TRADER
+
 
 func _build_ui() -> void:
 	add_overlay("hat", PEAKED_CAP_PATH)
-	_dialogue = DialoguePanel.new("HARBOUR MASTER")
+	_dialogue = DialoguePanel.new("HARBOUR MASTER", Vector2(640.0, 480.0))
 	add_child(_dialogue)
 
 
-func _network_register_ship(ship_node: Node3D, template_path: String, preferred_hull_id: String = "") -> void:
+func _network_register_ship(
+		ship_node: Node3D,
+		template_path: String,
+		preferred_hull_id: String = "",
+) -> void:
 	var manager := get_node_or_null("/root/NetworkManager")
 	if manager == null:
 		return
-
 	var session := get_node_or_null("/root/PlayerSession")
 	var record_hull_id := ""
 	if session != null and session.get("data") != null:
 		var record: Dictionary = session.data.get_active_vessel_record()
 		if not record.is_empty():
 			record_hull_id = str(record.get("hull_id", ""))
-
 	var hull_id := HullRegistry.resolve_id_from_template(
 		template_path,
-		preferred_hull_id if not preferred_hull_id.is_empty() else record_hull_id
+		preferred_hull_id if not preferred_hull_id.is_empty() else record_hull_id,
 	)
 	if hull_id.is_empty():
 		hull_id = "fishing_trawler_small"
-
 	var ship_id := "player_ship"
 	if session != null and session.get("data") != null:
-		var record: Dictionary = session.data.get_active_vessel_record()
-		if not record.is_empty():
-			ship_id = String(record.get("uid", "player_ship"))
-
+		var record2: Dictionary = session.data.get_active_vessel_record()
+		if not record2.is_empty():
+			ship_id = String(record2.get("uid", "player_ship"))
 	manager.call("register_ship_spawn", ship_id, hull_id, ship_node)

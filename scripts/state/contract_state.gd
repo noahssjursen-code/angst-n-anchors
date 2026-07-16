@@ -1,10 +1,6 @@
 class_name ContractState
 extends RefCounted
 
-signal active_changed(contracts: Array)
+## Placeholder until the trade rewrite returns. Kept so GameState shape stays stable.
 
-## Currently accepted contracts. Empty when none are active.
-var active: Array[Contract] = []:
-	set(v):
-		active = v
-		active_changed.emit(v)
+var active: Array = []

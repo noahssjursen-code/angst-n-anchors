@@ -55,6 +55,8 @@ Everything the boat does. Reusable hull components plus brick-built store ships:
 - `HullRegistry` / `HullCatalog` own geometry platforms identified by dimensions
 - `PrebuiltVesselCatalog` owns store ships: hull + bricks + shaft power + price
 - `VesselSpawn` builds the hull, applies the brick fit-out, then applies ship power
+- `CargoSlotPadComponent` — visible container slot pads from `BrickLayout.container_pads`
+- Bulk holds — ore/coal/grain via hold components (separate from containers)
 - `VesselKits`, `VesselLoadout`, and attachment sockets are quarantined legacy code
 
 ### `scripts/ocean/`
@@ -83,8 +85,8 @@ World-level generation. A deterministic 40×40 km Norway archetype is the shared
 truth for rendering, weather, ports, charting, and navigation.
 - `World` (`@tool` Node3D, scene root) — resolves seed/version, owns layout bootstrap and consumers
 - `WorldLayoutGenerator` / `WorldLayout` — eastern mainland, branching navigable fjords, western skerries, SDF, heights, contours, waterway graph, checksum
-- `CoastalPortPlacer` — validates coast sites and aligns existing ports with local `-Z` seaward
-- `WorldTerrainStreamer` — incremental 1 km `ArrayMesh` chunks, distance LOD, nearby concave collision, flattened port pads
+- `CoastalPortPlacer` — fits deterministic terminal archetypes to navigable coastal sites; local `-Z` remains seaward
+- `WorldTerrainStreamer` — incremental 1 km `ArrayMesh` chunks, distance LOD, nearby concave collision, compound facility footprints
 - `ProximityLoader` — lazy-instantiates nodes near the player
 - `WorldRenderer` — ocean shader plane, sky
 - `AtmosphericEffects` — fog, atmospheric post-processing
@@ -92,52 +94,51 @@ truth for rendering, weather, ports, charting, and navigation.
 
 ### `scripts/port/`
 
-One port as a place. Macro worlds retain the existing port content and replace
-only its placement and ground.
-- `PortPlot` — composition root: optional legacy island ground, `PortDock`, `PortFacilities`
-- `PortDock` — berths, mooring, cargo aprons, fuel point, ship spawner
-- `PortFacilities` — service slots from `PortServiceSlotCatalog` plus lighthouse/fog-horn landmarks
-- `PortServiceSlotCatalog` — default-port slot poses + optional building JSON bindings
-- `FuelStation`, `LighthouseBuilding`, `FogHornBuilding` — physical buildings
-- `DockTerminal`, `DockCargoRamp` — dock interaction points
-- `PortData`, `PortDefinition` — lean site truth plus derived runtime dock data
-- `PortExpander` — expands `PortDefinition` → `PortData`
-- `PortSizing` — shared dock, facilities, coast-validation, and terrain-pad dimensions
+Ports are seeded as a coast-traced foundation plus a trade `berth_plan`. The
+graph record (not a finished mesh) is what later growth must persist.
+- `PortCatalog` autoload — live port directory for chart / proximity / spawn
+- `PortTradeProfile` — deterministic destiny imports/exports; size unlocks commodities
+- `PortBerthPlan` — asphalt pads vs dedicated quay arms from unlocked trade
+- `PortLandPlan` — inland buildable zone + terrain stake grid (houses + role-correct trade yards)
+- `PortCoastTracer` — shoreline fit / foundation for the harbour apron
+- `PortModuleCatalog` / `PortModuleDefinition` — foundation root templates (module attach reserved for later growth)
+- `PortLayoutGenerator` — coast foundation + berth_plan into `PortLayoutGraph` attrs
+- `PortLayoutGraph` / `PortPlacedModule` — serialisable layout record (foundation + attrs)
+- `PortLayoutGraphVisualizer` — foundation / berth pads / quays; only current port presentation
+- `PortPlot` — streamed graph visualization root
+- `PortData`, `PortDefinition` — lean site truth plus derived layout/trade data
+- `PortExpander` — `PortDefinition` → trade → layout → `PortData`
+- `PortSizing` — shared metres, trade size ceilings, berth length tables
 - `BuildingBlueprintCatalog` — `buildings/*.json` addressed by filename stem
 - `BuildingGrid` / `BuildingLayout` — portable JSON building instructions on the shared `BrickCatalog` kit
 - `BuildingRules` / `BuildingFitout` — validation and identical editor/runtime assembly
-- `PortShowcase` — inspect runtime port shell (`scenes/showcases/`)
+- `PortShowcase` — inspect seeded coastal ports (`scenes/showcases/`)
 
 ### `scripts/apps/`
 
 Engine authoring apps (run via `scenes/apps/*.tscn`, not in-game UI).
 - `BuildingBrickEditor` — voxel buildings → `resources/data/buildings/`
-- `PortSlotEditor` — default-port service slots → `resources/data/ports/`
 - `ShipyardBrickEditor` — official vessel prebuilts → `resources/data/vessels/prebuilt/`
 
-Player-owned ports are a future authoritative overlay, not part of world
-generation. Immutable `WorldLayout` geography stays seed-derived; ownership,
-expansion, and player building diffs will be persisted separately by stable
-port/site ID.
+Player-owned port persistence/networking is deferred, but the data boundary is
+already explicit: immutable geography and the initial graph/berth plan are
+seed-derived; later ownership and expansion persist the exact `PortLayoutGraph`
+by stable port/site ID instead of regenerating layout.
 
 ### `scripts/npc/`
 
 All NPCs.
 - `NpcBase` — shared base class
 - `NpcInteractable` — the interactable wrapper for NPCs
-- `HarbourMasterNpc` — berth assignment, vessel info, dues
-- `ShipwrightNpc` — sells official ready-builts from `PrebuiltVesselCatalog`
-- `ContractNpc` — post/accept contracts
-- `DeliveryNpc` — receive deliveries
+- `ShipwrightNpc` — sells official ready-builts (parked from port spawn until replaced)
 
 ### `scripts/cargo/`
 
-Contracts, cargo, and eventually cranes.
-- `ContractRegistry` autoload — single source of truth for contracts and commodities
-- `Contract`, `CargoItem`, `CargoManifest` — data classes
-- `CargoPickup`, `DeliveryZone` — world interaction nodes
-- `Warehouse`, `WarehouseContractZone` — warehouse system
-- `CargoBerthType` — berth capability data
+Trade commodity metadata and physical container units. Contract trade is deferred.
+- `CommodityCatalog` — containers + bulk/liquid families, berth colours, playable trade helpers
+- `ContainerUnit`, `ContainerFactory`, `ContainerNode` — cubed general-cargo units (4×4×4 m default)
+- Bulk hold lots/rules (`bulk_hold_lot.gd`, `bulk_hold_rules.gd`) — ore/coal/grain in holds
+- Ship pads live in `scripts/ship/cargo_slot_pad.gd` (`CargoSlotPadComponent`)
 
 ### `scripts/ui/`
 
@@ -166,7 +167,7 @@ Each autoload lives in its system folder and is registered in `project.godot` fr
 | `WorldWeather` | `weather/` | `res://scripts/weather/world_weather.gd` |
 | `WeatherLighting` | `weather/` | `res://scripts/weather/weather_lighting.gd` |
 | `WorldClock` | `time/` | `res://scripts/time/world_clock.gd` |
-| `ContractRegistry` | `cargo/` | `res://scripts/cargo/contract_registry.gd` |
+| `PortCatalog` | `port/` | `res://scripts/port/port_catalog.gd` |
 | `PlayerSession` | `player/` | `res://scripts/player/player_session.gd` |
 | `GameMenu` | `ui/` | `res://scripts/ui/game_menu.gd` |
 | `GameState` | `state/` | `res://scripts/state/game_state.gd` |
@@ -177,7 +178,7 @@ Each autoload lives in its system folder and is registered in `project.godot` fr
 
 ### `LocalPlayerView` — the MP seam
 
-`LocalPlayerView` is a per-client view of the local player's projection of the world. UI consults it instead of touching `PlayerSession` / `ContractRegistry` directly; gameplay-mutating code (NPC commerce, ship spawning, contract acceptance) continues to use the autoloads. When multiplayer lands, every UI that reads through `LocalPlayerView` keeps working with no further changes — only the autoload's internals switch from "delegate to local autoloads" to "consume the server projection."
+`LocalPlayerView` is a per-client view of the local player's projection of the world. UI consults it instead of touching `PlayerSession` / `PortCatalog` directly; gameplay-mutating code continues to use the autoloads. When multiplayer lands, every UI that reads through `LocalPlayerView` keeps working with no further changes — only the autoload's internals switch from "delegate to local autoloads" to "consume the server projection."
 
 ---
 

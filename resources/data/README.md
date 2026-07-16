@@ -13,7 +13,9 @@ Category subfolders keep large flat lists manageable. Prefer **`res://` paths** 
 | `foghorn/` | Foghorn kit meshes (tower, horn, roof, …) |
 | `lighthouse/` | Lighthouse kit meshes |
 | `characters/` | NPC body, hats |
-| `props/` | Crates, fuel station pad, portable props |
+| `props/` | Fuel station pad, portable props |
+| `cargo/` | Cubed container mesh |
+| `cranes/` | Bulk / provision crane part meshes |
 | `terrain/` | Island / landmass meshes |
 
 Authoring rules and mesh recipes: [`meshes/GUIDE.md`](meshes/GUIDE.md).
@@ -26,6 +28,8 @@ Multi-part assemblies (`ModelAssembler` root JSON with a `parts` array).
 |--------|----------|
 | `ships/` | Vessel assemblies (e.g. tanker, bulk carrier) |
 | `buildings/` | Composed structures (lighthouse, foghorn building) |
+| `cargo/` | Container cube assembly |
+| `dockyard/` | Quay cranes (bulk grab, provision T-crane) |
 
 Other game data (ports, contracts, themes) stays in sibling folders under `resources/data/` as before.
 
@@ -55,7 +59,6 @@ Authoring apps (run the scene directly in Godot — under `scenes/apps/`):
 | Scene | Purpose |
 |-------|---------|
 | `res://scenes/apps/building_brick_editor.tscn` | Paint bricks, Save / Save As into this folder |
-| `res://scenes/apps/port_slot_editor.tscn` | Place service slots on the default port and attach a building JSON |
 | `res://scenes/apps/shipyard_brick_editor.tscn` | Paint decks on official hulls; Save official prebuilt JSON |
 | `res://scenes/apps/vessel_registration_audit.tscn` | Edit vessel law and audit official registration paperwork |
 
@@ -70,11 +73,15 @@ Floor bricks are surfaces: they share a cell with walls/props via an optional
 
 ## `ports/`
 
-Default-port service layout authored by the port slot editor.
+`modules/catalog.json` contains data-only port module templates used for the
+foundation root (and reserved for later growth). It contains no meshes or
+gameplay functionality.
 
-`default_service_slots.json` — array of slots (`harbour_master`, `shipwright`,
-future roles…). Each slot has a pad pose plus an optional `blueprint_id` that
-names a file under `buildings/` (stem only, no path).
+Trade imports/exports are derived by `PortTradeProfile`. `PortLayoutGenerator`
+traces the coast, fits a foundation, and stores `berth_plan` (asphalt pads +
+dedicated quays) on the initial `PortLayoutGraph`. Later growth persists that
+graph; it does not alter this template catalog or regenerate a finished harbour
+shape from the seed.
 
 ## `vessels/prebuilt/`
 
@@ -94,7 +101,8 @@ Source-controlled finished store ships authored by the
   "brick_layout": {
     "hull_id": "hull_45x16_cat",
     "cells": {},
-    "cargo_zones": []
+    "container_pads": [],
+    "bulk_holds": []
   }
 }
 ```
@@ -122,7 +130,6 @@ scenes in `scenes/apps/`.
 | Scene | Script | Writes |
 |-------|--------|--------|
 | `building_brick_editor.tscn` | `BuildingBrickEditor` | `resources/data/buildings/*.json` |
-| `port_slot_editor.tscn` | `PortSlotEditor` | `resources/data/ports/default_service_slots.json` |
 | `shipyard_brick_editor.tscn` | `ShipyardBrickEditor` | `resources/data/vessels/prebuilt/*.json` |
 | `vessel_registration_audit.tscn` | `VesselRegistrationAudit` | registration catalog; audits prebuilts |
 

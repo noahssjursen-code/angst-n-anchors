@@ -27,16 +27,16 @@ scripts/
   weather/      # Deterministic field/front/composer, WorldWeather API, local presentation, rain/audio/HUD
   time/         # WorldClock autoload
   world/        # Norway macro layout/SDF, coastal ports, streamed terrain, renderer/loading
-  port/         # PortPlot, PortDock, PortFacilities, FuelStation, LighthouseBuilding, FogHornBuilding
-  npc/          # NpcBase, NpcInteractable, HarbourMasterNpc, ShipwrightNpc, ContractNpc, DeliveryNpc
-  cargo/        # Contract, CargoItem, CargoPickup, DeliveryZone, Warehouse, ContractRegistry autoload — and later cranes
+  port/         # PortCatalog, trade profiles, berth_plan + land_plan, PortPlot presentation
+  npc/          # NpcBase, ShipwrightNpc (parked; port NPCs rebuilt later)
+  cargo/        # CommodityCatalog, ContainerUnit/Node/Factory, bulk hold lots/rules
   apps/         # Engine authoring apps (BuildingBrickEditor, PortSlotEditor, ShipyardBrickEditor)
   ui/           # HUDs, menus, overlays, GameMenu + DebugHud autoloads
   state/        # GameState autoload (cross-system read model), sub-states: PlayerState, ShipState, ContractState, WorldState
 
 resources/data/
   buildings/    # Voxel building blueprints (filename stem = id); BuildingBrickEditor
-  ports/        # default_service_slots.json authored by PortSlotEditor
+  ports/        # Service-slot authoring data (trade slots are code+seed, not JSON metres)
   vessels/prebuilt/  # Official ready-built vessels; ShipyardBrickEditor
   models/
     buildings/  # Fog horn, lighthouse
@@ -44,9 +44,29 @@ resources/data/
   lights/       # Nav-light JSON configs
   world/        # Procedural archetype parameters only; never generated mesh vertices
 scenes/apps/       # Authoring apps (run directly in Godot)
-scenes/showcases/  # Visual inspect fixtures (not authoring)
+scenes/showcases/  # F6 visual demos — one playable inspect scene per feature
 scenes/vessels/    # Hand-authored vessel scenes (trawler, catamaran)
 ```
+
+### Visual demos (F6 pattern)
+
+Every new system/feature should ship a **runnable inspect scene** under
+`scenes/showcases/` (or `tests/` for pipeline demos that started there) so you
+can F6 it in the editor, cycle examples, and review without launching the full
+game.
+
+Conventions:
+- Self-contained: builds its own lighting / camera / HUD
+- Keyboard cycling for variants (sizes, seeds, modes)
+- No dependence on a running world scene, saves, or multiplayer. A showcase may
+  invoke deterministic world generation when that context is the feature under inspection.
+- Name it `<feature>_showcase.tscn` or `<feature>_visual_demo.tscn`
+
+Current demos:
+- `scenes/showcases/port_showcase.tscn` — terrain-traced port pipeline at real seeded coastal terrain sites
+- `scenes/showcases/ship_showcase.tscn` / `player_showcase.tscn`
+- `scenes/showcases/crane_showcase.tscn` — bulk grab + provision T-crane (containers)
+- `tests/staged_vessel_visual_demo.tscn` — staged deck fitout construction
 
 ---
 
@@ -60,20 +80,20 @@ Each autoload lives in its system folder and is registered in `project.godot`.
 | `WorldWeather` | `weather/` | Deterministic weather query API: composed samples, routes, fronts, local projection |
 | `WeatherLighting` | `weather/` | Smoothed local presentation only: sky, fog, ocean, audio, wind |
 | `WorldClock` | `time/` | Game time. Emits `day_changed` + `hour_changed` (1 game hr = 60 real s) |
-| `ContractRegistry` | `cargo/` | Port registry, contracts, commodities, restock loop |
-| `PlayerSession` | `player/` | Persistent player data (marks, name, contracts, ship pose, world clock). Autosaves every 60 s + on focus loss |
-| `GameMenu` | `ui/` | Pause / map / settings / journal / hint overlay |
+| `PortCatalog` | `port/` | Live port directory (ids, names, positions, spawn, commodities) |
+| `PlayerSession` | `player/` | Persistent player data (marks, name, ship ledger, world clock). Autosaves every 60 s + on focus loss |
+| `GameMenu` | `ui/` | Pause / map / settings / hint overlay |
 | `GameState` | `state/` | Read model: player/ship/contract/world sub-states |
 | `DebugHud` | `ui/` | F3 debug overlay |
 | `Telemetry` | `state/` | Spawn-timing / load-events telemetry |
 | `LocalPlayerView` | `state/` | **The MP seam.** Per-client view of the local player's world. UI reads through here, not direct autoloads |
 | `Tutorial` | `state/` | First-time hint chain (fires once per captain, persisted) |
 
-The autoloads listed above are the **actual** registered singletons. Do not reference `Economy`, `ContractBoard`, `FleetManager`, or `World` — those don't exist yet.
+The autoloads listed above are the **actual** registered singletons. Do not reference `Economy`, `ContractBoard`, `FleetManager`, `ContractRegistry`, `PortOperations`, or `World` — those don't exist (or were purged).
 
 ### Convention — `LocalPlayerView` is the MP seam
 
-UI code (HUDs, menus, debug overlays, hint banners) should **only** read per-player state through `LocalPlayerView`. NPCs and gameplay-mutating systems (`VesselSpawn`, `PortDock`, contract acceptance) may continue to consult the autoloads directly — they're the world-authority side, not a per-client view.
+UI code (HUDs, menus, debug overlays, hint banners) should **only** read per-player state through `LocalPlayerView`. Gameplay-mutating systems may consult autoloads directly — they're the world-authority side, not a per-client view.
 
 Weather has a parallel read seam: gameplay/map queries call `WorldWeather.sample_at()` /
 `sample_route()` / `active_fronts()`. Local VFX reads `WorldWeather.local_presentation`
@@ -87,15 +107,31 @@ Weather has a parallel read seam: gameplay/map queries call `WorldWeather.sample
 and waterway graph. It is the shared geographic truth for terrain, `LandField`,
 ports, charting, weather, and navigation.
 
-- `CoastalPortPlacer` owns `PortDefinition` position/yaw; local `-Z` faces water.
-- `WorldTerrainStreamer` owns 1 km terrain chunks, LOD, nearby collision, and port pads.
+- `CoastalPortPlacer` places `PortDefinition` sites (pose, size class, region); local `-Z` faces water.
+- `PortExpander` derives seeded attributes + `PortTradeProfile`, then `PortLayoutGenerator` traces the coast, fits a foundation, and builds `berth_plan` (asphalt pads + dedicated quays) plus `land_plan` (inland buildable zone covering apron + hinterland) on a foundation-anchor `PortLayoutGraph`.
+- `PortLayoutGraph` holds the foundation anchor plus layout attrs (`berth_plan`, `land_plan`, basin, coast polylines). Persist/sync this graph, never generated meshes. Module attach/open-slot APIs are reserved for later growth — they are not how trade berths are placed today.
+- `PortLayoutGraphVisualizer` stamps foundation, berth pads/quays, cheap inland land decor (primitive houses + trade yards from `land_plan.terrain_grid`), and debug gizmos (including the land buildable zone). This is intentionally the only port presentation for now.
+- `WorldTerrainStreamer` owns 1 km terrain chunks, LOD, nearby collision, and layout footprint flattening.
 - `LandField.wave_shelter()` is short-range wave attenuation. Weather/fishing
   use `coastal_exposure()` / `directional_fetch()`.
 - Do not reintroduce island-disk geography or per-port weather calm.
 - Seed + generation version + layout checksum identify a world. Coordinate
   saves must not restore into a mismatched context.
 
-In multiplayer this autoload becomes a per-client object the network layer populates with the local player's projection of the world. Every UI that already reads from here will keep working unchanged; the gameplay-mutating code stays on the (per-server) authority.
+### Port pipeline contract
+
+Ports follow a strict rebuild order:
+
+1. **Seeded initial record** — site, size (clamped by geography × trade product count), destiny imports/exports
+2. **Coast foundation + berth_plan** — shoreline fit, basin soft-clamp on pier length, asphalt vs dedicated quays from unlocked trade
+3. **Layout visualization** — foundation, berth pads/quays, inland land decor from `land_plan` (primitive houses + trade yards on terrain), optional site gizmos
+4. **Gameplay functionality** — explicitly deferred (operable businesses, NPCs)
+
+Do not regenerate a finished harbour after players modify it. Seed generation
+creates only the initial graph + berth plan; later growth must persist the evolved record.
+
+Trade contracts and harbour NPCs are purged for now. Starter vessels come from
+`PlayerSession` / `VesselSpawn`. Commodity packing/pricing lives in `CommodityCatalog`.
 
 ---
 
@@ -111,14 +147,14 @@ A vessel is a **fair, registered data model** (same hard rules for official stor
 2. **Registration** — declared before building; legal requirements and stricter limits
 3. **Brick layout** — visuals + which slots are filled (surplus functional gear fails validate)
 4. **Live components** — `DeckFitout` mounts only compliance-accepted slots
-5. **Discovery** — gameplay asks `BoatBody` (`get_fishing_systems()`, `get_cargo_decks()`,
-   `get_bridge_stations()`), never hunts brick names
+5. **Discovery** — gameplay asks `BoatBody` (`get_fishing_systems()`, `get_cargo_pads()`,
+ `get_bridge_stations()`), never hunts brick names
 
 | Slot (v1) | Budget rule |
 |---|---|
 | `fishing` | max 1 |
 | `helm` | max 1 |
-| `cargo_cells` | fraction of exposed deck (y = 0 only; no hidden holds) |
+| `cargo_cells` | container pads + bulk holds (deck metres; y = 0 pads only) |
 | `crane` / `tow` | 0 until those systems exist |
 
 `VesselCompliance.validate` is the final authority. It intersects the hull budget from
@@ -148,7 +184,7 @@ boat.place_at_waterline(water_y)
 | Always on BoatBody (core) | Brick fit-out (player) |
 |---|---|
 | Hull visual + collision | Wall / window / door / ledge / railing bricks |
-| Strip buoyancy + hydro | Cargo tiles → cargo deck (within cell budget) |
+| Strip buoyancy + hydro | Container pads + bulk holds (within cargo_cells) |
 | Propulsion, rudder, thruster | Fishing trommel → one FishingSystem when accepted |
 | BoatController / Camera / Audio | Enclosed cabin + door → helm boarding |
 | MooringComponent + auto cleats/lights | |
@@ -288,7 +324,7 @@ Port definitions, ship templates, commodities live in `resources/data/`. Scripts
 
 ## Save Format
 
-Persistence flows through `PlayerSession.save_now()` → `_snapshot_into_player_data()` (via `LocalPlayerView`) → `PlayerSaveStore.save_player()`. The save envelope is `{version, player, saved_at_unix}`; format version is currently **4**. See [`SAVE_FORMAT.md`](SAVE_FORMAT.md) for the field schema and upgrade behaviour.
+Persistence flows through `PlayerSession.save_now()` → `_snapshot_into_player_data()` (via `LocalPlayerView`) → `PlayerSaveStore.save_player()`. The save envelope is `{version, player, saved_at_unix}`; format version is currently **5**. See [`SAVE_FORMAT.md`](SAVE_FORMAT.md) for the field schema and upgrade behaviour.
 
 Saved per-captain state covers: marks, lifetime stats, appearance, active vessel ledger record, accepted contracts (with delivered counts; in-flight cargo is forfeited on load), ship runtime state (position, yaw, throttle, fuel fraction), world identity, world-clock hours, and tutorial-hint-seen flags. Autosave heartbeats every 60 s of wall-clock; `_notification(NOTIFICATION_WM_CLOSE_REQUEST)` and window focus loss both force a flush.
 

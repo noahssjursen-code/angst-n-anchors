@@ -12,7 +12,7 @@ func _init() -> void:
 ## Activate/deactivate is called by CaptainsChair when the player boards or exits.
 
 ## How many helms are currently being controlled. Lets unrelated systems
-## (e.g. PalletNode label visibility) tell whether the player is sailing.
+## tell whether the player is sailing.
 static var helmed_count: int = 0
 ##
 ## Input mapping:

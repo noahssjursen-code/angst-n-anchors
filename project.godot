@@ -23,7 +23,7 @@ GameSettings="*res://scripts/state/game_settings.gd"
 WorldWeather="*res://scripts/weather/world_weather.gd"
 WeatherLighting="*res://scripts/weather/weather_lighting.gd"
 WorldClock="*res://scripts/time/world_clock.gd"
-ContractRegistry="*res://scripts/cargo/contract_registry.gd"
+PortCatalog="*res://scripts/port/port_catalog.gd"
 PlayerSession="*res://scripts/player/player_session.gd"
 LoadingGate="*res://scripts/ui/loading_gate.gd"
 GameMenu="*res://scripts/ui/game_menu.gd"
@@ -120,3 +120,5 @@ toggle_camera={
 [rendering]
 
 rendering_device/driver.windows="d3d12"
+; Port scenes stamp many unique JSON-mesh materials; default 65536 overflows D3D12.
+rendering_device/d3d12/max_resource_descriptors=262144

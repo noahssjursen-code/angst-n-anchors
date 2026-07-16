@@ -128,6 +128,15 @@ static func _measure(layout: BrickLayout, grid: DeckGrid, outfit: Dictionary) ->
 				_measure_equipment(
 					mounted_light, cell, brick_counts, tag_counts, positions, capacity, max_ratings
 				)
+		## Bulk holds live outside the brick cell map — count them for registration rules.
+		var bulk_n := layout.count_tag("bulk_hold")
+		if bulk_n > 0:
+			tag_counts["bulk_hold"] = bulk_n
+		for hold_raw in layout.iter_bulk_holds():
+			var hold := hold_raw as Dictionary
+			var hold_brick := str(hold.get("brick_id", "bulk_hold_6x12"))
+			brick_counts[hold_brick] = int(brick_counts.get(hold_brick, 0)) + 1
+			tag_counts["cargo"] = int(tag_counts.get("cargo", 0)) + BrickLayout.zone_cell_count(hold)
 	var usage: Dictionary = outfit.get("usage", {}).duplicate(true)
 	var capabilities: Dictionary = outfit.get("capabilities", {}).duplicate(true)
 	for field in capacity.keys():

@@ -55,30 +55,4 @@ func _initialize() -> void:
 		assert(loaded != null)
 		assert(loaded.blueprint_id == blueprint_id)
 
-	var slots := PortServiceSlotCatalog.slots()
-	assert(slots.size() >= 3)
-	assert(str(slots[0].get("id", "")) == "harbour_master")
-
-	var facilities := PortFacilities.new()
-	facilities.has_lighthouse = false
-	facilities.has_fog_horn = false
-	get_root().add_child(facilities)
-	for _frame in range(8):
-		await process_frame
-	assert(facilities.is_build_complete())
-	assert(facilities.get_node_or_null("HarbourMasterSlot") == null, "colored pads are off by default")
-	assert(facilities.get_harbour_master_local_pos() == Vector3(-13.0, 0.0, 10.0))
-
-	var yawed := slots.duplicate(true)
-	yawed[0] = yawed[0].duplicate(true)
-	yawed[0]["yaw_degrees"] = 90.0
-	yawed[0]["blueprint_id"] = "building"
-	facilities.apply_slots(yawed)
-	for _frame2 in range(12):
-		await process_frame
-	assert(facilities.is_build_complete())
-	var building := facilities.get_node_or_null("HarbourMasterBuilding") as Node3D
-	assert(building != null, "bound blueprint mounts a building")
-	assert(is_equal_approx(building.rotation_degrees.y, 90.0), "slot yaw rotates the building")
-	facilities.free()
 	quit()

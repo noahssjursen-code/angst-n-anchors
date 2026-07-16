@@ -2,7 +2,7 @@ class_name ChartDataSnapshot
 extends RefCounted
 
 ## Immutable input for a chart session. Rendering never discovers geography or
-## ports through the scene tree and preview mode never mutates ContractRegistry.
+## ports through the scene tree and preview mode never mutates PortCatalog.
 
 const GENERATOR := preload("res://scripts/world/world_layout_generator.gd")
 const PLACER := preload("res://scripts/world/coastal_port_placer.gd")
@@ -42,12 +42,17 @@ static func from_live_tree(tree: SceneTree) -> ChartDataSnapshot:
 		out.world_seed = int(context.get("seed", 42))
 		out.generation_version = int(context.get("generation_version", 0))
 		out.layout_checksum = str(context.get("layout_checksum", ""))
-	var registry := tree.root.get_node_or_null("ContractRegistry")
+	var registry := tree.root.get_node_or_null("PortCatalog")
 	if registry != null:
 		for id_raw in registry.call("get_port_ids"):
 			var info := (registry.call("get_port_info", str(id_raw)) as Dictionary).duplicate(true)
 			out.ports.append(info)
 	out._index_ports()
+	## Gameplay chart path — keep field APIs aligned with the live world.
+	if out.layout != null:
+		LandField.initialize(out.layout)
+		FishingField.initialize(out.world_seed)
+		WeatherField.world_seed = out.world_seed
 	return out
 
 
@@ -66,17 +71,9 @@ static func for_preview(seed: int, port_count: int = 35) -> ChartDataSnapshot:
 		PackedStringArray(PORT_NAMES),
 	)
 	for definition in definitions:
-		var data := PortExpander.expand(definition, seed)
-		out.ports.append({
-			"id": data.port_id,
-			"display_name": data.display_name,
-			"position": data.world_position,
-			"commodity_export": data.commodity_export,
-			"commodity_imports": data.commodity_imports.duplicate(),
-			"population": data.population,
-			"berth_count": data.berth_count,
-			"features": data.features.duplicate(),
-		})
+		## Lightweight trade/size summary — full PortLayoutGenerator is too
+		## expensive for the captain home-port picker (dozens of ports).
+		out.ports.append(PortExpander.chart_summary(definition, seed))
 	out._index_ports()
 	# These are deterministic field APIs, not world scene construction.
 	LandField.initialize(out.layout)

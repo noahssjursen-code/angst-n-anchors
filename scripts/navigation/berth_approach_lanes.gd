@@ -1,7 +1,7 @@
 class_name BerthApproachLanes
 extends RefCounted
 
-## Island-owned berth lanes — three port-relative paths per berth:
+## Island-owned quay approach lanes — three port-relative paths per target:
 ##   SPINE: straight seaward (approach from ahead)
 ##   FLANK_PORT / FLANK_STARBOARD: curve along island sides (behind / abeam)
 
@@ -29,8 +29,8 @@ const ROUTE_CLEARANCE_M := 18.0
 const FLANK_DEFLECT_DEG: Array[float] = [12.0, 24.0, 36.0, 48.0, 60.0, 75.0]
 
 static var _initialized: bool = false
-static var _lanes: Dictionary = {}  ## port_id -> berth_index -> lane_kind -> Array[Vector3]
-static var _berth_positions: Dictionary = {}
+static var _lanes: Dictionary = {}  ## port_id -> target id -> lane kind -> Array[Vector3]
+static var _berth_positions: Dictionary = {} # compatibility name: quay/call targets
 static var _islands: Dictionary = {}
 static var _live_baked_ports: Dictionary = {}
 static var debug_visible: bool = false
@@ -66,77 +66,39 @@ static func bake_from_port_data(data: PortData) -> int:
 	_islands[data.port_id] = island
 	var frame := _port_frame(data.rotation_y)
 
-	var berth_n := data.berth_types.size()
-	if berth_n <= 0:
-		berth_n = maxi(data.berth_count, 1)
 	var half_beam := ShipClass.beam(data.max_ship_class) * 0.5
-	var slot_w := data.dock_length / float(berth_n)
 	var port_lanes: Dictionary = {}
 	var port_berths: Dictionary = {}
 	var baked := 0
 
-	for berth_index in range(berth_n):
-		var cx := -data.dock_length * 0.5 + slot_w * (float(berth_index) + 0.5)
+	for target_id in ["quay"]:
+		var quay_pose := data.layout_graph.primary_quay_pose() if data.layout_graph != null else {}
+		var quay_center := quay_pose.get("position_m", Vector3.ZERO) as Vector3
+		var quay_yaw := deg_to_rad(float(quay_pose.get("yaw_degrees", 0.0)))
+		var quay_width := float(quay_pose.get("width_m", 8.0))
+		var berth_local := quay_center + Basis(Vector3.UP, quay_yaw) * Vector3(
+			-(half_beam + quay_width * 0.5 + 2.5),
+			WaveSurface.WATER_LEVEL,
+			0.0,
+		)
 		var berth_pos := _berth_world_from_plot_local(
 			data.world_position,
 			data.rotation_y,
-			Vector3(cx, WaveSurface.WATER_LEVEL, -(half_beam + PortDock.BERTH_QUAY_GAP_M)),
+			berth_local,
 		)
 		if not _vec3_is_valid(berth_pos):
 			continue
-		port_berths[berth_index] = berth_pos
+		port_berths[target_id] = berth_pos
 		var kind_lanes: Dictionary = {}
 		for kind in range(LANE_KIND_COUNT):
 			var lane := _build_lane(berth_pos, kind, frame, island)
 			kind_lanes[kind] = lane
 			if lane.size() >= 2:
 				baked += 1
-		port_lanes[berth_index] = kind_lanes
+		port_lanes[target_id] = kind_lanes
 
 	_lanes[data.port_id] = port_lanes
 	_berth_positions[data.port_id] = port_berths
-	return baked
-
-
-static func bake_from_dock(port_id: String, dock: PortDock) -> int:
-	if port_id.is_empty() or dock == null or not is_instance_valid(dock):
-		return 0
-	if not LandField.is_initialized():
-		return 0
-
-	var plot := dock.get_parent() as PortPlot
-	var island := _islands.get(port_id, {}) as Dictionary
-	if island.is_empty() and plot != null:
-		island = _island_meta_from_plot(plot)
-	_islands[port_id] = island
-	var ry := plot.rotation.y if plot != null else float(island.get("rotation_y", 0.0))
-	var frame := _port_frame(ry)
-
-	var count := dock.berth_count()
-	var port_lanes: Dictionary = {}
-	var port_berths: Dictionary = {}
-	var baked := 0
-
-	for berth_index in range(count):
-		var local := dock.berth_reference_local_midship(berth_index)
-		var berth_pos := dock.to_global(local) as Vector3
-		berth_pos.y = WaveSurface.WATER_LEVEL
-		if not _vec3_is_valid(berth_pos):
-			continue
-		port_berths[berth_index] = berth_pos
-		var kind_lanes: Dictionary = {}
-		for kind in range(LANE_KIND_COUNT):
-			var lane := _build_lane(berth_pos, kind, frame, island)
-			kind_lanes[kind] = lane
-			if lane.size() >= 2:
-				baked += 1
-		port_lanes[berth_index] = kind_lanes
-
-	_lanes[port_id] = port_lanes
-	_berth_positions[port_id] = port_berths
-	_live_baked_ports[port_id] = true
-	_initialized = true
-	print("[BerthApproachLanes] Dock bake %s: %d berth(s), %d lane(s)" % [port_id, count, baked])
 	return baked
 
 
@@ -175,10 +137,14 @@ static func debug_polyline_count() -> int:
 
 
 static func berth_world_position(port_id: String, berth_index: int = 0) -> Vector3:
+	return target_world_position(port_id, "quay" if berth_index == 0 else str(berth_index))
+
+
+static func target_world_position(port_id: String, target_id: String = "quay") -> Vector3:
 	var by_port: Variant = _berth_positions.get(port_id, {})
 	if typeof(by_port) != TYPE_DICTIONARY:
 		return Vector3.ZERO
-	var pos: Variant = (by_port as Dictionary).get(berth_index, Vector3.ZERO)
+	var pos: Variant = (by_port as Dictionary).get(target_id, Vector3.ZERO)
 	return pos as Vector3 if pos is Vector3 else Vector3.ZERO
 
 
@@ -190,10 +156,14 @@ static func berth_count_for_port(port_id: String) -> int:
 
 
 static func get_lane(port_id: String, berth_index: int, lane_kind: int) -> Array:
+	return get_target_lane(port_id, "quay" if berth_index == 0 else str(berth_index), lane_kind)
+
+
+static func get_target_lane(port_id: String, target_id: String, lane_kind: int) -> Array:
 	var by_port: Variant = _lanes.get(port_id, {})
 	if typeof(by_port) != TYPE_DICTIONARY:
 		return []
-	var by_berth: Variant = (by_port as Dictionary).get(berth_index, {})
+	var by_berth: Variant = (by_port as Dictionary).get(target_id, {})
 	if typeof(by_berth) != TYPE_DICTIONARY:
 		return []
 	var lane: Variant = (by_berth as Dictionary).get(lane_kind, [])
@@ -205,6 +175,13 @@ static func lane_outer_point(port_id: String, berth_index: int, lane_kind: int) 
 	if lane.size() >= 2:
 		return lane[lane.size() - 1] as Vector3
 	return berth_world_position(port_id, berth_index)
+
+
+static func call_lane_outer_point(port_id: String, call_id: String, lane_kind: int) -> Vector3:
+	var lane := get_target_lane(port_id, call_id, lane_kind)
+	if lane.size() >= 2:
+		return lane[lane.size() - 1] as Vector3
+	return target_world_position(port_id, call_id)
 
 
 ## Map travel direction (world XZ) to spine / port flank / starboard flank.
@@ -278,18 +255,16 @@ static func _island_meta_from_data(data: PortData) -> Dictionary:
 		"port_id": data.port_id,
 		"center": data.world_position,
 		"half_x": data.island_width * 0.5 + LAND_PAD_M,
-		"half_z": PLOT_DEPTH_M * 0.5 + LAND_PAD_M,
+		"half_z": data.plot_depth * 0.5 + LAND_PAD_M,
 		"rotation_y": data.rotation_y,
 	}
 
 
 static func _island_meta_from_plot(plot: PortPlot) -> Dictionary:
-	var facilities := plot.get_node_or_null("PortFacilities") as PortFacilities
-	var island_w := facilities.plot_width if facilities != null else plot.plot_width
 	return {
 		"port_id": plot.port_id,
 		"center": plot.global_position,
-		"half_x": island_w * 0.5 + LAND_PAD_M,
+		"half_x": plot.plot_width * 0.5 + LAND_PAD_M,
 		"half_z": plot.plot_depth * 0.5 + LAND_PAD_M,
 		"rotation_y": plot.rotation.y,
 	}
@@ -307,10 +282,8 @@ static func _berth_world_from_plot_local(
 	rotation_y: float,
 	dock_local: Vector3,
 ) -> Vector3:
-	var hd := PLOT_DEPTH_M * 0.5
-	var plot_local := Vector3(0.0, 0.0, -hd) + dock_local
 	var basis := Basis.from_euler(Vector3(0.0, rotation_y, 0.0))
-	var world := world_center + basis * plot_local
+	var world := world_center + basis * dock_local
 	world.y = WaveSurface.WATER_LEVEL
 	return world
 

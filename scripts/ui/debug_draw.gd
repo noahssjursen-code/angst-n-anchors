@@ -106,7 +106,8 @@ func _draw() -> void:
 	var ty := oy + PAD_Y + 12.0
 	draw_string(font, Vector2(ox + PAD_X, ty),
 		"DEBUG", HORIZONTAL_ALIGNMENT_LEFT, -1, 11, C_TITLE)
-	var hint   := "F3 · F3+P cam · F8 ocean LOD · B lanes · F4 wx · O I fleet"
+	var giz := "ON" if WorldGizmos.is_enabled() else "off"
+	var hint   := "F3 · G gizmos (%s) · B lanes · P scale · F4 wx · E calm" % giz
 	var hint_w := font.get_string_size(hint, HORIZONTAL_ALIGNMENT_LEFT, -1, 9).x
 	draw_string(font, Vector2(ox + PANEL_W - hint_w - PAD_X, ty),
 		hint, HORIZONTAL_ALIGNMENT_LEFT, -1, 9, C_LABEL)
@@ -455,7 +456,7 @@ func _build_gameplay(e: Array) -> void:
 		_sec(e, "GAMEPLAY")
 		_stub(e, "Status", "GameState autoload missing")
 		return
-	var registry := get_node_or_null("/root/ContractRegistry")
+	var registry := get_node_or_null("/root/PortCatalog")
 
 	# ── Player ────────────────────────────────────────────────────────────────
 	_sec(e, "PLAYER")
@@ -478,41 +479,14 @@ func _build_gameplay(e: Array) -> void:
 		_row(e,  "Vessel", sd.display_name, C_VALUE)
 		_stub(e, "Hull",   "not implemented")
 		_stub(e, "Fuel",   "not implemented")
-		if sd.cargo != null:
-			_row(e, "Cargo",
-				"%d / %d units" % [sd.cargo.total_units(), sd.cargo.capacity],
-				C_VALUE)
-			for entry in sd.cargo.entries:
-				var ce := entry as CargoEntry
-				_row(e, "  " + ce.display_name, "× %d" % ce.quantity, C_VALUE)
-		else:
-			_stub(e, "Cargo", "no manifest")
+		_stub(e, "Cargo",  "packing purged")
 	else:
 		_stub(e, "Status", "not helming")
 
 	# ── Contracts ─────────────────────────────────────────────────────────────
 	_sep(e)
 	_sec(e, "CONTRACTS")
-	var active: Array = gs.contract.active
-	if active.is_empty():
-		_stub(e, "—", "none active")
-	else:
-		for c in active:
-			var contract := c as Contract
-			if contract == null:
-				continue
-			var dest: String = registry.get_port_display_name(contract.destination_port_id) \
-				if registry != null else "?"
-			_row(e, contract.display_name,
-				"× %d  →  %s" % [contract.quantity, dest], C_VALUE)
-			_row(e, "  Delivered",
-				"%d / %d" % [contract.delivered_count, contract.quantity], C_VALUE)
-			_row(e, "  Reward", PlayerSession.format_money(contract.reward_gold), C_GOLD)
-			var apron := _count_apron_cargo(contract.id)
-			if apron > 0:
-				_row(e, "  Apron cargo", "%d crates" % apron, C_VALUE)
-			else:
-				_stub(e, "  Apron cargo", "none staged")
+	_stub(e, "—", "trade rewrite pending")
 
 	# ── World ─────────────────────────────────────────────────────────────────
 	_sep(e)
@@ -595,12 +569,3 @@ static func _band(value: float, good_th: float, warn_th: float) -> Color:
 	if value >= warn_th:
 		return C_WARN
 	return C_BAD
-
-
-func _count_apron_cargo(contract_id: String) -> int:
-	var count := 0
-	for node in get_tree().get_nodes_in_group("cargo_pickup"):
-		var cp := node as CargoPickup
-		if cp != null and cp.cargo_item != null and cp.cargo_item.contract_id == contract_id:
-			count += 1
-	return count
