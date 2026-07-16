@@ -158,9 +158,6 @@ func apply_entities(entities_list: Array, local_id: String, scene_nodes: Diction
 
 			if str(ent["type"]).begins_with("ship_"):
 				_sync_remote_ship_layout(id, node as BoatBody, meta, state)
-
-			if ent["type"] == "cargo":
-				_sync_remote_cargo_visual(node as PalletNode, id, meta, state)
 		
 	# Update remote players avatar visibility (hide those driving ships/cranes)
 	_update_avatar_visibilities(active_pilot_ids)
@@ -423,17 +420,10 @@ func _spawn_dynamic_entity_node(id: String, type: String, meta: String = "") -> 
 		root.add_child(label)
 		return root
 		
-	# B. Remote Cargo Pallets
+	# B. Remote cargo packing removed — ignore legacy type until containers land.
 	if type == "cargo":
-		var pallet_res := _cargo_pallet_from_meta(id, meta)
-		var fp := pallet_res.footprint
-		var cell_w := 1.5 * float(fp.x)
-		var cell_d := 1.5 * float(fp.y)
-		var pallet_node := PalletNode.new()
-		pallet_node.name = "RemoteCargo_" + id
-		pallet_node.setup(pallet_res, cell_w, cell_d, fp)
-		return pallet_node
-		
+		return null
+
 	# C. Remote Ships
 	if type.begins_with("ship_"):
 		var hull_id := HullRegistry.resolve_network_hull_id(
@@ -599,53 +589,6 @@ func _despawn_remote_entity(id: String, scene_nodes: Dictionary) -> void:
 		if not scene_nodes.has(id) and node.get_parent() == self:
 			node.queue_free()
 	_visible_entities.erase(id)
-
-
-func _cargo_pallet_from_meta(id: String, meta: String) -> Pallet:
-	var parsed := _parse_meta_map(meta)
-	var commodity := str(parsed.get("com", "cargo"))
-	var units := maxi(int(parsed.get("units", "1")), 1)
-	var footprint := _cargo_footprint_from_meta(parsed, commodity, units)
-	var info := CommodityCatalog.commodity_info(commodity)
-
-	var pallet_res := Pallet.new()
-	pallet_res.id = id
-	pallet_res.commodity = commodity
-	pallet_res.units = units
-	pallet_res.max_units = units
-	pallet_res.footprint = footprint
-	var display := str(parsed.get("dn", ""))
-	if display.is_empty() and not info.is_empty():
-		display = str(info.get("display", commodity.capitalize()))
-	pallet_res.display_name = display
-	return pallet_res
-
-
-func _cargo_footprint_from_meta(parsed: Dictionary, commodity: String, units: int) -> Vector2i:
-	var fp_raw := str(parsed.get("fp", ""))
-	if fp_raw.contains(","):
-		var bits := fp_raw.split(",")
-		if bits.size() >= 2:
-			return Vector2i(maxi(int(bits[0]), 1), maxi(int(bits[1]), 1))
-	var max_units := int(CommodityCatalog.commodity_info(commodity).get("max_pallet_units", 4))
-	max_units = maxi(max_units, 1)
-	return PalletFactory.best_footprint(units, max_units)
-
-
-func _cargo_visual_key(meta: String) -> String:
-	return meta.strip_edges()
-
-
-func _sync_remote_cargo_visual(node: PalletNode, id: String, meta: String, state: Dictionary) -> void:
-	if node == null or not is_instance_valid(node):
-		return
-	var key := _cargo_visual_key(meta)
-	if str(state.get("cargo_visual_key", "")) == key:
-		return
-	state["cargo_visual_key"] = key
-	var pallet_res := _cargo_pallet_from_meta(id, meta)
-	var fp := pallet_res.footprint
-	node.setup(pallet_res, 1.5 * float(fp.x), 1.5 * float(fp.y), fp)
 
 
 func _disable_physics_in_subtree(n: Node) -> void:

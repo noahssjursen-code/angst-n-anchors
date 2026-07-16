@@ -3,11 +3,11 @@ extends RefCounted
 
 ## Sparse voxel fit-out. Cells keyed as "x,y,z" → { brick_id, yaw }.
 ## yaw is degrees in 90° steps (0, 90, 180, 270).
-## Cargo is NOT per-cell bricks — it is one or more deck rectangles {a,b}.
+## Bulk holds are deck rectangles {a,b,brick_id,yaw} outside the cell map.
 
 var cells: Dictionary = {} ## String → Dictionary
-var cargo_zones: Array = [] ## [{ "a": [x,y,z], "b": [x,y,z] }, …] inclusive corners
 var bulk_holds: Array = [] ## [{ "a", "b", "brick_id", "yaw" }, …] fixed-size bulk holds
+var container_pads: Array = [] ## [{ "a": [x,y,z], "b": [x,y,z] }, …] inclusive corners
 var hull_id: String = "fishing_trawler_small"
 
 
@@ -24,12 +24,12 @@ static func parse_key(key: String) -> Vector3i:
 
 func clear() -> void:
 	cells.clear()
-	cargo_zones.clear()
 	bulk_holds.clear()
+	container_pads.clear()
 
 
 func is_empty() -> bool:
-	return cells.is_empty() and cargo_zones.is_empty() and bulk_holds.is_empty()
+	return cells.is_empty() and bulk_holds.is_empty() and container_pads.is_empty()
 
 
 func count() -> int:
@@ -229,7 +229,7 @@ func erase_footprint_at(cell: Vector3i) -> void:
 							erase_cell(c)
 
 
-# ── Cargo zones (inclusive corner rects on the deck) ─────────────────────────
+# ── Deck rectangles (bulk holds) ─────────────────────────────────────────────
 
 static func normalize_cargo_rect(a: Vector3i, b: Vector3i) -> Dictionary:
 	var min_x := mini(a.x, b.x)
@@ -277,54 +277,23 @@ static func zone_contains_cell(zone: Dictionary, cell: Vector3i) -> bool:
 	return cell.x >= mn.x and cell.x <= mx.x and cell.z >= mn.z and cell.z <= mx.z
 
 
-func cargo_contains(cell: Vector3i) -> bool:
-	return cargo_zone_index_at(cell) >= 0
-
-
 func bulk_hold_contains(cell: Vector3i) -> bool:
 	return bulk_hold_index_at(cell) >= 0
 
 
-func deck_reserved_contains(cell: Vector3i) -> bool:
-	return cargo_contains(cell) or bulk_hold_contains(cell)
+func container_pad_contains(cell: Vector3i) -> bool:
+	return container_pad_index_at(cell) >= 0
 
 
-func cargo_zone_index_at(cell: Vector3i) -> int:
-	for i in range(cargo_zones.size()):
-		if zone_contains_cell(cargo_zones[i] as Dictionary, cell):
+func container_pad_index_at(cell: Vector3i) -> int:
+	for i in range(container_pads.size()):
+		if zone_contains_cell(container_pads[i] as Dictionary, cell):
 			return i
 	return -1
 
 
-func add_cargo_zone(a: Vector3i, b: Vector3i) -> bool:
-	## Replaces any overlapping zones. Fails if brick cells sit inside the rect.
-	var zone := normalize_cargo_rect(a, b)
-	var mn := zone_min(zone)
-	var mx := zone_max(zone)
-	for ix in range(mn.x, mx.x + 1):
-		for iz in range(mn.z, mx.z + 1):
-			if has_cell(Vector3i(ix, 0, iz)):
-				return false
-			if bulk_hold_contains(Vector3i(ix, 0, iz)):
-				return false
-	# Drop overlapping zones so one click-drag region stays a single pad.
-	var keep: Array = []
-	for z in cargo_zones:
-		var zd := z as Dictionary
-		if _zones_overlap(zd, zone):
-			continue
-		keep.append(zd)
-	keep.append(zone)
-	cargo_zones = keep
-	return true
-
-
-func erase_cargo_zone_at(cell: Vector3i) -> bool:
-	var idx := cargo_zone_index_at(cell)
-	if idx < 0:
-		return false
-	cargo_zones.remove_at(idx)
-	return true
+func deck_reserved_contains(cell: Vector3i) -> bool:
+	return bulk_hold_contains(cell) or container_pad_contains(cell)
 
 
 func bulk_hold_index_at(cell: Vector3i) -> int:
@@ -400,19 +369,57 @@ func iter_bulk_holds() -> Array:
 	return bulk_holds.duplicate(true)
 
 
-func deck_cargo_cell_count() -> int:
-	return cargo_cell_count() + bulk_cell_count()
-
-
-func cargo_cell_count() -> int:
+func container_pad_cell_count() -> int:
 	var n := 0
-	for z in cargo_zones:
-		n += zone_cell_count(z as Dictionary)
+	for p in container_pads:
+		n += zone_cell_count(p as Dictionary)
 	return n
 
 
-func iter_cargo_zones() -> Array:
-	return cargo_zones.duplicate(true)
+func iter_container_pads() -> Array:
+	return container_pads.duplicate(true)
+
+
+func add_container_pad(a: Vector3i, b: Vector3i, grid: DeckGrid) -> bool:
+	var zone := normalize_cargo_rect(a, b)
+	var mn := zone_min(zone)
+	var mx := zone_max(zone)
+	## Prefer spans that tile the default container footprint cleanly.
+	var fp := ContainerUnit.DEFAULT_FOOTPRINT
+	var span_x := mx.x - mn.x + 1
+	var span_z := mx.z - mn.z + 1
+	if (span_x % fp.x) != 0 or (span_z % fp.y) != 0:
+		return false
+	for ix in range(mn.x, mx.x + 1):
+		for iz in range(mn.z, mx.z + 1):
+			var c := Vector3i(ix, 0, iz)
+			if grid != null and not grid.has_deck_cell(c):
+				return false
+			if has_cell(c):
+				return false
+			if bulk_hold_contains(c):
+				return false
+	var keep: Array = []
+	for p in container_pads:
+		var pd := p as Dictionary
+		if _zones_overlap(pd, zone):
+			continue
+		keep.append(pd)
+	keep.append(zone)
+	container_pads = keep
+	return true
+
+
+func erase_container_pad_at(cell: Vector3i) -> bool:
+	var idx := container_pad_index_at(cell)
+	if idx < 0:
+		return false
+	container_pads.remove_at(idx)
+	return true
+
+
+func deck_cargo_cell_count() -> int:
+	return bulk_cell_count() + container_pad_cell_count()
 
 
 static func _zones_overlap(a: Dictionary, b: Dictionary) -> bool:
@@ -425,14 +432,14 @@ static func _zones_overlap(a: Dictionary, b: Dictionary) -> bool:
 
 func iter_primary_cells() -> Array:
 	## Returns [{ cell, brick_id, yaw }, …] skipping occupied-by filler cells.
-	## Cargo zones are separate — not listed here.
+	## Bulk holds are separate — not listed here.
 	var out: Array = []
 	for k in cells.keys():
 		var e: Dictionary = cells[k]
 		if e.has("occupied_by"):
 			continue
 		var brick_id := str(e.get("brick_id", ""))
-		# Legacy cargo_tile cells are migrated on load; skip if any remain.
+		## Drop purged packing bricks if an old save still has them.
 		if brick_id == "cargo_tile" or brick_id == "cargo_zone":
 			continue
 		var row := {
@@ -466,6 +473,8 @@ func count_tag(tag: String) -> int:
 		return deck_cargo_cell_count()
 	if tag == "bulk_hold":
 		return bulk_holds.size()
+	if tag == "container_pad":
+		return container_pads.size()
 	var n := 0
 	for item in iter_primary_cells():
 		if BrickCatalog.has_tag(str(item.get("brick_id", "")), tag):
@@ -477,7 +486,8 @@ func to_dict() -> Dictionary:
 	return {
 		"hull_id": hull_id,
 		"cells": cells.duplicate(true),
-		"cargo_zones": cargo_zones.duplicate(true),
+		"cargo_zones": [],
+		"container_pads": container_pads.duplicate(true),
 		"bulk_holds": bulk_holds.duplicate(true),
 	}
 
@@ -495,29 +505,28 @@ static func from_dict(d: Dictionary) -> BrickLayout:
 			var e := item as Dictionary
 			var cell := Vector3i(int(e.get("x", 0)), int(e.get("y", 0)), int(e.get("z", 0)))
 			layout.set_brick(cell, str(e.get("brick_id", "block")), int(e.get("yaw", 0)))
-	var zones_raw: Variant = d.get("cargo_zones", [])
-	if typeof(zones_raw) == TYPE_ARRAY:
-		for z in zones_raw as Array:
-			if typeof(z) != TYPE_DICTIONARY:
+	## Migrate legacy cargo_zones → container_pads once.
+	var pads_raw: Variant = d.get("container_pads", null)
+	if pads_raw == null:
+		pads_raw = d.get("cargo_zones", [])
+	if typeof(pads_raw) == TYPE_ARRAY:
+		for p in pads_raw as Array:
+			if typeof(p) != TYPE_DICTIONARY:
 				continue
-			var zd := z as Dictionary
-			var a_raw: Variant = zd.get("a", null)
-			var b_raw: Variant = zd.get("b", null)
-			if a_raw is Array and b_raw is Array:
-				var aa: Array = a_raw
-				var bb: Array = b_raw
-				## Preserve authored Y so VesselOutfit can reject hidden/layered holds.
-				## Editor placement still forces y = 0 via normalize_cargo_rect / add_cargo_zone.
-				var ax := int(aa[0])
-				var ay := int(aa[1]) if aa.size() > 1 else 0
-				var az := int(aa[2]) if aa.size() > 2 else 0
-				var bx := int(bb[0])
-				var by := int(bb[1]) if bb.size() > 1 else 0
-				var bz := int(bb[2]) if bb.size() > 2 else 0
-				layout.cargo_zones.append({
-					"a": [mini(ax, bx), mini(ay, by), mini(az, bz)],
-					"b": [maxi(ax, bx), maxi(ay, by), maxi(az, bz)],
-				})
+			var pd := p as Dictionary
+			var pa: Variant = pd.get("a", null)
+			var pb: Variant = pd.get("b", null)
+			if pa is Array and pb is Array:
+				var paa: Array = pa
+				var pbb: Array = pb
+				var pax := int(paa[0])
+				var paz := int(paa[2]) if paa.size() > 2 else 0
+				var pbx := int(pbb[0])
+				var pbz := int(pbb[2]) if pbb.size() > 2 else 0
+				layout.container_pads.append(normalize_cargo_rect(
+					Vector3i(pax, 0, paz),
+					Vector3i(pbx, 0, pbz),
+				))
 	var holds_raw: Variant = d.get("bulk_holds", [])
 	if typeof(holds_raw) == TYPE_ARRAY:
 		for h in holds_raw as Array:
@@ -541,37 +550,19 @@ static func from_dict(d: Dictionary) -> BrickLayout:
 					"brick_id": str(hd.get("brick_id", "bulk_hold_6x12")),
 					"yaw": int(hd.get("yaw", 0)),
 				})
-	layout._migrate_legacy_cargo_tiles()
+	layout._strip_legacy_cargo_tiles()
 	return layout
 
 
-func _migrate_legacy_cargo_tiles() -> void:
-	## Old saves painted cargo_tile per cell — fold into one AABB zone.
-	var min_x := 999999
-	var max_x := -999999
-	var min_z := 999999
-	var max_z := -999999
-	var found := false
+func _strip_legacy_cargo_tiles() -> void:
 	var kill: Array[String] = []
 	for k in cells.keys():
 		var e: Dictionary = cells[k]
 		var id := str(e.get("brick_id", ""))
-		if id != "cargo_tile" and id != "cargo_zone":
-			continue
-		found = true
-		var c := parse_key(str(k))
-		min_x = mini(min_x, c.x)
-		max_x = maxi(max_x, c.x)
-		min_z = mini(min_z, c.z)
-		max_z = maxi(max_z, c.z)
-		kill.append(str(k))
+		if id == "cargo_tile" or id == "cargo_zone":
+			kill.append(str(k))
 	for k in kill:
 		cells.erase(k)
-	if found and cargo_zones.is_empty():
-		cargo_zones.append(normalize_cargo_rect(
-			Vector3i(min_x, 0, min_z),
-			Vector3i(max_x, 0, max_z),
-		))
 
 
 static func _norm_yaw(yaw: int) -> int:
@@ -612,7 +603,6 @@ static func starter_cargo(hull_id: String, grid: DeckGrid) -> BrickLayout:
 	var layout := BrickLayout.new()
 	layout.hull_id = hull_id
 	_paint_cabin(layout, grid, int(grid.length * 0.65))
-	_paint_cargo_mid(layout, grid)
 	_paint_edge_railings(layout, grid)
 	return layout
 
@@ -637,14 +627,6 @@ static func _paint_cabin(layout: BrickLayout, grid: DeckGrid, z0: int) -> void:
 				layout.set_brick(Vector3i(ix, 2, iz), "block", 0)
 
 
-static func _paint_cargo_mid(layout: BrickLayout, grid: DeckGrid) -> void:
-	var x0 := 2
-	var x1 := grid.width - 3
-	var z0 := 2
-	var z1 := int(grid.length * 0.55)
-	layout.add_cargo_zone(Vector3i(x0, 0, z0), Vector3i(x1, 0, z1))
-
-
 static func _paint_edge_railings(layout: BrickLayout, grid: DeckGrid) -> void:
 	for ix in range(grid.width):
 		for iz in range(grid.length):
@@ -653,6 +635,6 @@ static func _paint_edge_railings(layout: BrickLayout, grid: DeckGrid) -> void:
 			var c := Vector3i(ix, 0, iz)
 			if layout.has_cell(c):
 				continue
-			if layout.cargo_contains(c):
+			if layout.deck_reserved_contains(c):
 				continue
 			layout.set_brick(c, "railing", 0)

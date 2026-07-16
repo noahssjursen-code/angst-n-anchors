@@ -18,76 +18,51 @@ var theme_id: String = ""
 ## Weights are by region only — size no longer picks a different economy.
 const THEMES: Array[Dictionary] = [
 	{
-		"id": "fishing_village",
-		"exports": ["fish"],
-		"imports": ["provisions", "timber"],
-		"w_mainland": 2.0, "w_fjord": 10.0, "w_archipelago": 8.0,
-	},
-	{
-		"id": "timber_town",
-		"exports": ["timber", "provisions"],
-		"imports": ["fish", "provisions", "grain"],
-		"w_mainland": 9.0, "w_fjord": 4.0, "w_archipelago": 2.0,
+		"id": "container_feeder",
+		"exports": ["containers"],
+		"imports": ["containers", "diesel"],
+		"w_mainland": 8.0, "w_fjord": 6.0, "w_archipelago": 7.0,
 	},
 	{
 		"id": "farm_harbour",
-		"exports": ["grain", "provisions"],
-		"imports": ["timber", "fish", "diesel"],
+		"exports": ["grain"],
+		"imports": ["containers", "diesel"],
 		"w_mainland": 7.0, "w_fjord": 3.0, "w_archipelago": 1.0,
-	},
-	{
-		"id": "provisions_depot",
-		"exports": ["provisions"],
-		"imports": ["fish", "timber", "grain"],
-		"w_mainland": 4.0, "w_fjord": 3.0, "w_archipelago": 5.0,
 	},
 	{
 		"id": "mining_outpost",
 		"exports": ["iron_ore"],
-		"imports": ["provisions", "diesel", "timber"],
+		"imports": ["containers", "diesel"],
 		"w_mainland": 5.0, "w_fjord": 4.0, "w_archipelago": 2.0,
 	},
 	{
 		"id": "coal_port",
 		"exports": ["coal"],
-		"imports": ["provisions", "timber", "containers"],
+		"imports": ["containers", "diesel"],
 		"w_mainland": 4.0, "w_fjord": 3.0, "w_archipelago": 1.5,
 	},
 	{
-		## Crude in, diesel out — separate pads, unlock diesel first then crude.
 		"id": "refinery",
 		"exports": ["diesel"],
-		"imports": ["crude_oil", "provisions"],
+		"imports": ["crude_oil", "containers"],
 		"w_mainland": 1.5, "w_fjord": 2.0, "w_archipelago": 7.0,
 	},
 	{
 		"id": "lng_terminal",
 		"exports": ["lng"],
-		"imports": ["provisions", "containers"],
+		"imports": ["containers", "diesel"],
 		"w_mainland": 2.0, "w_fjord": 3.0, "w_archipelago": 5.0,
 	},
 	{
-		"id": "container_feeder",
-		"exports": ["containers"],
-		"imports": ["containers", "provisions", "timber"],
-		"w_mainland": 6.0, "w_fjord": 3.0, "w_archipelago": 4.0,
-	},
-	{
-		"id": "general_trade",
-		"exports": ["timber", "provisions"],
-		"imports": ["fish", "grain", "diesel"],
-		"w_mainland": 5.0, "w_fjord": 4.0, "w_archipelago": 3.0,
-	},
-	{
 		"id": "industrial_hub",
-		"exports": ["containers", "timber"],
-		"imports": ["iron_ore", "provisions", "coal"],
+		"exports": ["containers", "iron_ore"],
+		"imports": ["coal", "diesel"],
 		"w_mainland": 8.0, "w_fjord": 3.0, "w_archipelago": 3.0,
 	},
 	{
 		"id": "bulk_hub",
-		"exports": ["grain", "timber"],
-		"imports": ["coal", "provisions", "containers"],
+		"exports": ["grain", "coal"],
+		"imports": ["containers", "diesel"],
 		"w_mainland": 6.0, "w_fjord": 2.0, "w_archipelago": 2.0,
 	},
 ]
@@ -139,7 +114,7 @@ static func destiny_product_count(profile: PortTradeProfile) -> int:
 	return seen.size()
 
 
-## Growth ceiling from economy size — timber+provisions must not become a mega hub.
+## Growth ceiling from economy size — small trade destinies stay small ports.
 static func max_size_for_profile(profile: PortTradeProfile) -> int:
 	return PortSizing.max_size_for_trade_products(destiny_product_count(profile))
 
@@ -211,9 +186,9 @@ static func _pick_theme(
 		total += w
 	if candidates.is_empty():
 		return {
-			"id": "fallback_timber",
-			"exports": ["timber"],
-			"imports": ["provisions"],
+			"id": "fallback_containers",
+			"exports": ["containers"],
+			"imports": ["diesel"],
 		}
 	var roll := rng.randf() * total
 	var acc := 0.0

@@ -59,9 +59,6 @@ static func apply_sync(
 	var accepted: Dictionary = outfit.get("accepted_slots", {})
 	var accepted_fishing: Dictionary = _cell_set(accepted.get("fishing", []))
 	var accepted_helm: Dictionary = _cell_set(accepted.get("helm", []))
-	var accepted_cargo: Dictionary = {}
-	for idx in accepted.get("cargo_zone_indices", []):
-		accepted_cargo[int(idx)] = true
 
 	var root := Node3D.new()
 	root.name = FITOUT_ROOT
@@ -83,7 +80,7 @@ static func apply_sync(
 			mount_item_gameplay(
 				boat, root, g, item, visual, accepted_fishing, accepted_helm, state
 			)
-	return finish_fitout(boat, root, layout, g, outfit, accepted_cargo, declared, state)
+	return finish_fitout(boat, root, layout, g, outfit, declared, state)
 
 
 static func apply_staged(
@@ -223,19 +220,21 @@ static func finish_fitout(
 	layout: BrickLayout,
 	grid: DeckGrid,
 	outfit: Dictionary,
-	accepted_cargo: Dictionary,
 	declared: String,
 	state: Dictionary,
 ) -> Dictionary:
-	var zone_i := 0
-	for zone in layout.iter_cargo_zones():
-		if accepted_cargo.has(zone_i):
-			_mount_cargo_zone(boat, root, grid, zone as Dictionary, zone_i)
-		zone_i += 1
 	var accepted_bulk: Dictionary = {}
+	var accepted_pads: Dictionary = {}
 	var accepted_slots: Dictionary = outfit.get("accepted_slots", {})
 	for idx in accepted_slots.get("bulk_hold_indices", []):
 		accepted_bulk[int(idx)] = true
+	for idx in accepted_slots.get("container_pad_indices", []):
+		accepted_pads[int(idx)] = true
+	var pad_i := 0
+	for pad in layout.iter_container_pads():
+		if accepted_pads.has(pad_i):
+			_mount_container_pad(boat, root, grid, pad as Dictionary, pad_i)
+		pad_i += 1
 	var hold_i := 0
 	for hold in layout.iter_bulk_holds():
 		if accepted_bulk.has(hold_i):
@@ -565,11 +564,6 @@ static func _collider_spec(brick_id: String) -> Dictionary:
 				"size": Vector3(DeckGrid.CELL_M * sqrt(2.0), sz.y * 0.94, 0.12),
 				"offset": Vector3.ZERO,
 			}
-		"cargo_zone", "cargo_tile":
-			return {
-				"size": Vector3(sz.x * 0.95, 0.1, sz.z * 0.95),
-				"offset": Vector3(0.0, -sz.y * 0.5 + 0.05, 0.0),
-			}
 		"crane_base":
 			return {
 				"size": Vector3(sz.x, sz.y * 0.55, sz.z),
@@ -656,15 +650,15 @@ static func _add_brick_collider(
 	)
 
 
-static func _mount_cargo_zone(
-	boat: BoatBody,
+static func _mount_container_pad(
+	_boat: BoatBody,
 	root: Node3D,
 	grid: DeckGrid,
-	zone: Dictionary,
+	pad: Dictionary,
 	index: int,
 ) -> void:
-	var mn := BrickLayout.zone_min(zone)
-	var mx := BrickLayout.zone_max(zone)
+	var mn := BrickLayout.zone_min(pad)
+	var mx := BrickLayout.zone_max(pad)
 	var w := float(mx.x - mn.x + 1) * DeckGrid.CELL_M
 	var l := float(mx.z - mn.z + 1) * DeckGrid.CELL_M
 	var sum := Vector3.ZERO
@@ -675,17 +669,15 @@ static func _mount_cargo_zone(
 			n += 1
 	if n <= 0:
 		return
-	var deck := CargoDeckComponent.new()
-	deck.name = "CargoDeck_%d" % index
-	deck.affects_boat_cargo_mass = true
-	deck.deck_width_m = w
-	deck.deck_length_m = l
-	deck.cell_size_x_m = DeckGrid.CELL_M
-	deck.cell_size_z_m = DeckGrid.CELL_M
+	var slot_pad := CargoSlotPadComponent.new()
+	slot_pad.name = "CargoSlotPad_%d" % index
+	slot_pad.deck_width_m = w
+	slot_pad.deck_length_m = l
+	slot_pad.cell_size_m = DeckGrid.CELL_M
 	var center := sum / float(n)
 	center.y = grid.deck_y + 0.06
-	deck.position = center
-	root.add_child(deck)
+	slot_pad.position = center
+	root.add_child(slot_pad)
 
 
 static func _mount_bulk_hold(

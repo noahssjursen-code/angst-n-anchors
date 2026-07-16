@@ -154,7 +154,7 @@ func _test_seeded_registration_types() -> void:
 			registration_id + " rejects fishing gear on a trawler layout",
 		)
 	var passenger := BrickLayout.from_dict(original)
-	passenger.cargo_zones.clear()
+	passenger.container_pads.clear()
 	var fishing_cells: Array[Vector3i] = []
 	for item in passenger.iter_primary_cells():
 		var brick_id := str(item.get("brick_id", ""))

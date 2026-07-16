@@ -44,7 +44,6 @@ var _interior: Array = []
 var _all_items: Array = []
 var _accepted_fishing: Dictionary = {}
 var _accepted_helm: Dictionary = {}
-var _accepted_cargo: Dictionary = {}
 var _visual_by_key: Dictionary = {}
 var _mount_state := {"brick_i": 0, "ladder_n": 0}
 var _phase: Phase = Phase.EXTERIOR_VISUALS
@@ -147,7 +146,6 @@ func _step() -> bool:
 				_layout,
 				_grid,
 				_outfit,
-				_accepted_cargo,
 				_declared,
 				_mount_state,
 			)
@@ -165,9 +163,6 @@ func _prepare_gameplay() -> void:
 	var accepted: Dictionary = _outfit.get("accepted_slots", {})
 	_accepted_fishing = _cell_set(accepted.get("fishing", []))
 	_accepted_helm = _cell_set(accepted.get("helm", []))
-	_accepted_cargo.clear()
-	for idx in accepted.get("cargo_zone_indices", []):
-		_accepted_cargo[int(idx)] = true
 	_gameplay_prepared = true
 
 

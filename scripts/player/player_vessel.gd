@@ -72,19 +72,9 @@ static func _find_legacy_player_ship(tree: SceneTree) -> BoatBody:
 	return null
 
 
-static func _prepare_despawn(ship: BoatBody, tree: SceneTree) -> void:
-	_forfeit_cargo_on_ship(ship, tree)
+static func _prepare_despawn(ship: BoatBody, _tree: SceneTree) -> void:
 	unmark_player_ship(ship)
 	unregister_ship_from_docks(ship)
 	var mooring := ship.find_child("MooringComponent", true, false) as MooringComponent
 	if mooring != null:
 		mooring.release_mooring()
-
-
-static func _forfeit_cargo_on_ship(ship: BoatBody, _tree: SceneTree) -> void:
-	if ship == null:
-		return
-	for node in ship.find_children("*", "CargoDeckComponent", true, false):
-		var deck := node as CargoDeckComponent
-		if deck != null:
-			deck.clear_all()

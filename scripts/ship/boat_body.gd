@@ -790,8 +790,17 @@ func get_hull_displacement_kg() -> float:
 	return _hull_displacement_kg()
 
 
-func get_cargo_decks() -> Array[CargoDeckComponent]:
-	return CargoDeckComponent.get_all_for_ship(self)
+func get_cargo_pads() -> Array[CargoSlotPadComponent]:
+	var out: Array[CargoSlotPadComponent] = []
+	_collect_cargo_pads(self, out)
+	return out
+
+
+func _collect_cargo_pads(n: Node, out: Array[CargoSlotPadComponent]) -> void:
+	if n is CargoSlotPadComponent:
+		out.append(n as CargoSlotPadComponent)
+	for c in n.get_children():
+		_collect_cargo_pads(c, out)
 
 
 func get_bulk_holds() -> Array[BulkHoldComponent]:
@@ -841,20 +850,6 @@ func get_bridge_stations() -> Array[BridgeInteractable]:
 		if station != null:
 			out.append(station)
 	return out
-
-
-func get_cargo_capacity_units() -> int:
-	var total := 0
-	for deck in get_cargo_decks():
-		total += deck.get_capacity()
-	return total
-
-
-func get_cargo_available_units() -> int:
-	var total := 0
-	for deck in get_cargo_decks():
-		total += deck.get_available()
-	return total
 
 
 ## Position the ship so that the keel is `total_height × draft_fraction` below water_y.

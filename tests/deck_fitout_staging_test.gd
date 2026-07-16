@@ -254,7 +254,7 @@ func _count_primary_visuals(boat: BoatBody) -> int:
 	for child in root.get_children():
 		if child is Node3D and not str(child.name).begins_with("Sign_") \
 				and not str(child.name).begins_with("Light_") \
-				and not str(child.name).begins_with("CargoDeck_"):
+				and not str(child.name).begins_with("CargoSlotPad_"):
 			count += 1
 	return count
 

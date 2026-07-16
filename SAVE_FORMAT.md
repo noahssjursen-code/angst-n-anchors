@@ -106,7 +106,7 @@ Multiplayer worlds take `world_seed`, `generation_version`, and
   Ship runtime state is now ignored.
 - v3 added generated-world identity.
 - v4 added vessel registration declarations.
-- v5 added vessel-call and port-yard cargo state.
+- v5 added vessel-call and port-yard cargo state (legacy unitized packing removed; containers/pads are layout-driven, not saved as in-flight pallets).
 - Multi-captain folders + `index.json` are additive; legacy single-file saves migrate automatically.
 
 `PlayerData.from_dict()` supplies defaults for missing fields, so old envelopes

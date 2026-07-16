@@ -1,19 +1,5 @@
 {
 	"brick_layout": {
-		"cargo_zones": [
-			{
-				"a": [
-					1,
-					0,
-					5
-				],
-				"b": [
-					8,
-					0,
-					20
-				]
-			}
-		],
 		"cells": {
 			"0,0,10": {
 				"brick_id": "block",
@@ -1234,7 +1220,21 @@
 				"yaw": 90.0
 			}
 		},
-		"hull_id": "hull_28x10"
+		"hull_id": "hull_28x10",
+		"container_pads": [
+			{
+				"a": [
+					1,
+					0,
+					5
+				],
+				"b": [
+					8,
+					0,
+					20
+				]
+			}
+		]
 	},
 	"format_version": 2,
 	"hull_id": "hull_28x10",

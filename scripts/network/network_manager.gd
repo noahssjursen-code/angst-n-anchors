@@ -294,21 +294,6 @@ func _flush_crane_vacated(crane_id: String) -> void:
 	client.call("send_packet", pkt)
 
 
-func register_cargo_spawn(cargo_id: String, pallet: Resource, node: Node3D) -> void:
-	if cargo_id.is_empty() or node == null or not is_instance_valid(node):
-		return
-	register_sender(
-		node,
-		cargo_id,
-		"cargo",
-		4, # Vector4: [x, y, z, yaw]
-		func():
-			return _cargo_replication_state(node),
-		func():
-			return _cargo_replication_meta(pallet, node)
-	)
-
-
 func entity_id_for_node(target: Node) -> String:
 	if target == null:
 		return ""
@@ -320,88 +305,6 @@ func entity_id_for_node(target: Node) -> String:
 		if n == target or n.is_ancestor_of(target):
 			return str(sender_id)
 	return ""
-
-
-func _cargo_replication_state(node: Node3D) -> Array:
-	var ship := _boat_body_ancestor(node)
-	var ship_id := entity_id_for_node(ship)
-	if ship != null and not ship_id.is_empty():
-		var local_xform := ship.global_transform.affine_inverse() * node.global_transform
-		var origin := local_xform.origin
-		return [origin.x, origin.y, origin.z, local_xform.basis.get_euler().y]
-	return [node.global_position.x, node.global_position.y, node.global_position.z, node.rotation.y]
-
-
-func _boat_body_ancestor(node: Node) -> BoatBody:
-	var current := node
-	while current != null:
-		if current is BoatBody:
-			return current as BoatBody
-		current = current.get_parent()
-	return null
-
-
-func _cargo_replication_meta(pallet: Resource, node: Node3D) -> String:
-	var com := String(pallet.get("commodity")) if pallet.get("commodity") != null else "cargo"
-	var units := int(pallet.get("units")) if pallet.get("units") != null else 1
-	var fp := Vector2i(1, 1)
-	var fp_raw: Variant = pallet.get("footprint")
-	if fp_raw is Vector2i:
-		fp = fp_raw
-	var parts: PackedStringArray = [
-		"com=%s" % com,
-		"units=%d" % units,
-		"fp=%d,%d" % [fp.x, fp.y],
-	]
-	var display := str(pallet.get("display_name")) if pallet.get("display_name") != null else ""
-	if not display.is_empty():
-		parts.append("dn=%s" % display)
-	var ship := _boat_body_ancestor(node)
-	var parent_id := entity_id_for_node(ship) if ship != null else ""
-	if not parent_id.is_empty():
-		parts.append("parent=%s" % parent_id)
-	return ";".join(parts)
-
-
-func unregister_cargo(cargo_id: String, delivered: bool = false) -> void:
-	if delivered:
-		_flush_cargo_delivered(cargo_id)
-	if drawing_service != null and drawing_service.has_method("clear_entity_remote_state"):
-		drawing_service.call("clear_entity_remote_state", cargo_id)
-	unregister_sender(cargo_id)
-
-
-func _flush_cargo_delivered(cargo_id: String) -> void:
-	var sender: Variant = _local_senders.get(cargo_id, null)
-	if sender == null or client == null:
-		return
-	var node: Node3D = sender["node"] as Node3D
-	if node == null or not is_instance_valid(node):
-		return
-	var payload: Array = sender["state_callable"].call()
-	var local_id := get_local_player_id()
-	if local_id.is_empty():
-		return
-	var observer_pos := Vector3.ZERO
-	var vp := get_viewport()
-	if vp != null:
-		var cam := vp.get_camera_3d()
-		if cam != null:
-			observer_pos = cam.global_position
-	_outbound_seq += 1
-	var pkt := WireProtocolClass.encode_client_update(
-		_outbound_seq,
-		local_id,
-		observer_pos,
-		[{
-			"id": cargo_id,
-			"type": "cargo",
-			"format": 4,
-			"payload": payload,
-			"meta": "state=delivered",
-		}]
-	)
-	client.call("send_packet", pkt)
 
 
 func register_ship_spawn(ship_id: String, hull_id: String, ship_node: Node3D) -> void:

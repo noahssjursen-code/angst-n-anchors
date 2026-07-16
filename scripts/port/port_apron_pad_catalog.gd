@@ -106,41 +106,23 @@ const ROLES := {
 		"precinct": "parking",
 		"commodity_ids": [],
 	},
-	"fish_market": {
-		"id": "fish_market",
-		"label": "Fish market",
+	"container_yard": {
+		"id": "container_yard",
+		"label": "Container yard",
 		"pad_template_id": "pad_2x2",
 		"kind": "trade",
 		"zone": ZONE_WATERSIDE,
-		"precinct": "trade_fish",
-		"commodity_ids": ["fish"],
+		"precinct": "trade_containers",
+		"commodity_ids": ["containers"],
 	},
-	"fish_ice_plant": {
-		"id": "fish_ice_plant",
-		"label": "Fish ice plant",
+	"container_stack": {
+		"id": "container_stack",
+		"label": "Container stack",
 		"pad_template_id": "pad_1x2",
 		"kind": "trade",
 		"zone": ZONE_WATERSIDE,
-		"precinct": "trade_fish",
-		"commodity_ids": ["fish"],
-	},
-	"provisions_depot": {
-		"id": "provisions_depot",
-		"label": "Provisions depot",
-		"pad_template_id": "pad_2x2",
-		"kind": "trade",
-		"zone": ZONE_WATERSIDE,
-		"precinct": "trade_provisions",
-		"commodity_ids": ["provisions"],
-	},
-	"provisions_cold": {
-		"id": "provisions_cold",
-		"label": "Provisions cold store",
-		"pad_template_id": "pad_1x2",
-		"kind": "trade",
-		"zone": ZONE_WATERSIDE,
-		"precinct": "trade_provisions",
-		"commodity_ids": ["provisions"],
+		"precinct": "trade_containers",
+		"commodity_ids": ["containers"],
 	},
 }
 
@@ -164,10 +146,8 @@ const UNIVERSAL_V1 := [
 
 ## V1 trade roles — only when commodity is unlocked.
 const TRADE_V1 := [
-	"fish_market",
-	"fish_ice_plant",
-	"provisions_depot",
-	"provisions_cold",
+	"container_yard",
+	"container_stack",
 ]
 
 

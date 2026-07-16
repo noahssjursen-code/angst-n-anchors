@@ -26,7 +26,7 @@ func _ready() -> void:
 		var layout := {
 			"hull_id": hull_id,
 			"cells": cells,
-			"cargo_zones": [{"a": [index, 0, 2], "b": [index + 2, 0, 4]}],
+			"container_pads": [{"a": [index, 0, 2], "b": [index + 3, 0, 5]}],
 		}
 		var uid := "persistence_%s" % hull_id
 		var record := {
@@ -187,7 +187,7 @@ func _ready() -> void:
 		"brick_layout": {
 			"hull_id": "passenger_catamaran",
 			"cells": {"3,0,4": {"brick_id": "table", "yaw": 90}},
-			"cargo_zones": [],
+			"container_pads": [],
 		},
 	}
 	_check(VesselArchive.save_record(archive_owner, archive_record), "per-vessel archive writes atomically")

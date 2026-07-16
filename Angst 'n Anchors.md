@@ -48,7 +48,7 @@ Owned vessels persist `hull_id`, `shaft_power_kw`, and `brick_layout: { hull_id,
 | `block` / `block_window` / `block_door` | Cabin walls |
 | `ledge_45` | Roof / sheer break |
 | `railing` | Deck edge |
-| `cargo_zone` | Deck cargo rectangle (corner A → B) |
+| `container_pad` | Deck container slot rectangle (corner A → B) |
 | `crane_base` / `crane` | Ship-mounted crane |
 
 ### Available hulls
@@ -57,7 +57,7 @@ Generic platforms live in `resources/data/vessels/hulls/catalog.json` with dimen
 
 ### Ship components
 
-Core on every vessel: `BoatBody`, buoyancy, hydrodynamics, propulsion, rudder, thruster, controller, camera, `MooringComponent`, walk deck, auto cleats/lights. Deck fit-out is a 1×1×1 m brick grid (`BrickCatalog` / `DeckFitout`) — walls, cargo tiles, crane, helm from layout. Shipwright fullscreen editor paints the grid; `BrickRules` keeps builds legal.
+Core on every vessel: `BoatBody`, buoyancy, hydrodynamics, propulsion, rudder, thruster, controller, camera, `MooringComponent`, walk deck, auto cleats/lights. Deck fit-out is a 1×1×1 m brick grid (`BrickCatalog` / `DeckFitout`) — walls, container pads, bulk holds, crane, helm from layout. Shipwright fullscreen editor paints the grid; `BrickRules` keeps builds legal.
 
 ### Authoring entry points
 
@@ -79,9 +79,9 @@ Core on every vessel: `BoatBody`, buoyancy, hydrodynamics, propulsion, rudder, t
 
 ## Cargo & Contracts
 
-- **`PortCatalog`** is the live port directory. **`CommodityCatalog`** owns packing/pricing.
-- Trade contracts are purged pending rewrite. Playable commodities for future slots: `timber`, `provisions` (plus fish bias on small fjord/archipelago ports).
-- Physical pallets remain for fishing crates and future cargo handling.
+- **`PortCatalog`** is the live port directory. **`CommodityCatalog`** owns commodity metadata (containers + bulk/liquid families, berth colours).
+- General cargo is cubed **containers** (`ContainerUnit` / `ContainerNode`) on ship **`CargoSlotPadComponent`** grids. Bulk ore/coal/grain use hold systems separately.
+- Trade contracts are purged pending rewrite. Playable trade pool: `containers`, grain, iron ore, coal, crude oil, diesel, LNG.
 
 ---
 

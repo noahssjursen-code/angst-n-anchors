@@ -55,6 +55,8 @@ Everything the boat does. Reusable hull components plus brick-built store ships:
 - `HullRegistry` / `HullCatalog` own geometry platforms identified by dimensions
 - `PrebuiltVesselCatalog` owns store ships: hull + bricks + shaft power + price
 - `VesselSpawn` builds the hull, applies the brick fit-out, then applies ship power
+- `CargoSlotPadComponent` — visible container slot pads from `BrickLayout.container_pads`
+- Bulk holds — ore/coal/grain via hold components (separate from containers)
 - `VesselKits`, `VesselLoadout`, and attachment sockets are quarantined legacy code
 
 ### `scripts/ocean/`
@@ -132,11 +134,11 @@ All NPCs.
 
 ### `scripts/cargo/`
 
-Commodity packing and physical cargo units. Contract trade is deferred.
-- `CommodityCatalog` — packing rules, colours, fish crate pricing
-- `Pallet`, `PalletFactory`, `PalletNode` — unitized physical cargo
-- `CargoDeckComponent` — ship deck cargo grid
-- `CargoItem`, `CargoManifest` — data classes
+Trade commodity metadata and physical container units. Contract trade is deferred.
+- `CommodityCatalog` — containers + bulk/liquid families, berth colours, playable trade helpers
+- `ContainerUnit`, `ContainerFactory`, `ContainerNode` — cubed general-cargo units (4×4×4 m default)
+- Bulk hold lots/rules (`bulk_hold_lot.gd`, `bulk_hold_rules.gd`) — ore/coal/grain in holds
+- Ship pads live in `scripts/ship/cargo_slot_pad.gd` (`CargoSlotPadComponent`)
 
 ### `scripts/ui/`
 

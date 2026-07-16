@@ -88,7 +88,6 @@ func _on_helm_on(bc: BoatController) -> void:
 	sd.display_name = bc.ship_name
 	sd.hull_health  = 1.0
 	sd.fuel         = 1.0
-	sd.cargo        = CargoManifest.new()
 	ship.data       = sd
 
 

@@ -29,7 +29,7 @@ scripts/
   world/        # Norway macro layout/SDF, coastal ports, streamed terrain, renderer/loading
   port/         # PortCatalog, trade profiles, berth_plan + land_plan, PortPlot presentation
   npc/          # NpcBase, ShipwrightNpc (parked; port NPCs rebuilt later)
-  cargo/        # CommodityCatalog, pallets, packing helpers (contracts deferred)
+  cargo/        # CommodityCatalog, ContainerUnit/Node/Factory, bulk hold lots/rules
   apps/         # Engine authoring apps (BuildingBrickEditor, PortSlotEditor, ShipyardBrickEditor)
   ui/           # HUDs, menus, overlays, GameMenu + DebugHud autoloads
   state/        # GameState autoload (cross-system read model), sub-states: PlayerState, ShipState, ContractState, WorldState
@@ -64,8 +64,8 @@ Conventions:
 
 Current demos:
 - `scenes/showcases/port_showcase.tscn` — terrain-traced port pipeline at real seeded coastal terrain sites
-- `scenes/showcases/ship_showcase.tscn` / `player_showcase.tscn` / `cargo_showcase.tscn`
-- `scenes/showcases/crane_showcase.tscn` — bulk crane parts (one piece at a time)
+- `scenes/showcases/ship_showcase.tscn` / `player_showcase.tscn`
+- `scenes/showcases/crane_showcase.tscn` — bulk grab + provision T-crane (containers)
 - `tests/staged_vessel_visual_demo.tscn` — staged deck fitout construction
 
 ---
@@ -147,14 +147,14 @@ A vessel is a **fair, registered data model** (same hard rules for official stor
 2. **Registration** — declared before building; legal requirements and stricter limits
 3. **Brick layout** — visuals + which slots are filled (surplus functional gear fails validate)
 4. **Live components** — `DeckFitout` mounts only compliance-accepted slots
-5. **Discovery** — gameplay asks `BoatBody` (`get_fishing_systems()`, `get_cargo_decks()`,
-   `get_bridge_stations()`), never hunts brick names
+5. **Discovery** — gameplay asks `BoatBody` (`get_fishing_systems()`, `get_cargo_pads()`,
+ `get_bridge_stations()`), never hunts brick names
 
 | Slot (v1) | Budget rule |
 |---|---|
 | `fishing` | max 1 |
 | `helm` | max 1 |
-| `cargo_cells` | fraction of exposed deck (y = 0 only; no hidden holds) |
+| `cargo_cells` | container pads + bulk holds (deck metres; y = 0 pads only) |
 | `crane` / `tow` | 0 until those systems exist |
 
 `VesselCompliance.validate` is the final authority. It intersects the hull budget from
@@ -184,7 +184,7 @@ boat.place_at_waterline(water_y)
 | Always on BoatBody (core) | Brick fit-out (player) |
 |---|---|
 | Hull visual + collision | Wall / window / door / ledge / railing bricks |
-| Strip buoyancy + hydro | Cargo tiles → cargo deck (within cell budget) |
+| Strip buoyancy + hydro | Container pads + bulk holds (within cargo_cells) |
 | Propulsion, rudder, thruster | Fishing trommel → one FishingSystem when accepted |
 | BoatController / Camera / Audio | Enclosed cabin + door → helm boarding |
 | MooringComponent + auto cleats/lights | |

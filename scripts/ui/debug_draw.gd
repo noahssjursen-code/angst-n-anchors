@@ -479,15 +479,7 @@ func _build_gameplay(e: Array) -> void:
 		_row(e,  "Vessel", sd.display_name, C_VALUE)
 		_stub(e, "Hull",   "not implemented")
 		_stub(e, "Fuel",   "not implemented")
-		if sd.cargo != null:
-			_row(e, "Cargo",
-				"%d / %d units" % [sd.cargo.total_units(), sd.cargo.capacity],
-				C_VALUE)
-			for entry in sd.cargo.entries:
-				var ce := entry as CargoEntry
-				_row(e, "  " + ce.display_name, "× %d" % ce.quantity, C_VALUE)
-		else:
-			_stub(e, "Cargo", "no manifest")
+		_stub(e, "Cargo",  "packing purged")
 	else:
 		_stub(e, "Status", "not helming")
 
@@ -577,12 +569,3 @@ static func _band(value: float, good_th: float, warn_th: float) -> Color:
 	if value >= warn_th:
 		return C_WARN
 	return C_BAD
-
-
-func _count_apron_cargo(contract_id: String) -> int:
-	var count := 0
-	for node in get_tree().get_nodes_in_group("cargo_pickup"):
-		var cp := node as CargoPickup
-		if cp != null and cp.cargo_item != null and cp.cargo_item.contract_id == contract_id:
-			count += 1
-	return count

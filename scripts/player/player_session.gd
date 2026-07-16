@@ -398,8 +398,11 @@ static func _layout_has_configuration(layout: Dictionary) -> bool:
 	var cells_raw: Variant = layout.get("cells", {})
 	if typeof(cells_raw) == TYPE_DICTIONARY and not (cells_raw as Dictionary).is_empty():
 		return true
-	var zones_raw: Variant = layout.get("cargo_zones", [])
-	return typeof(zones_raw) == TYPE_ARRAY and not (zones_raw as Array).is_empty()
+	var holds_raw: Variant = layout.get("bulk_holds", [])
+	if typeof(holds_raw) == TYPE_ARRAY and not (holds_raw as Array).is_empty():
+		return true
+	var pads_raw: Variant = layout.get("container_pads", [])
+	return typeof(pads_raw) == TYPE_ARRAY and not (pads_raw as Array).is_empty()
 
 
 static func _is_test_script_process() -> bool:

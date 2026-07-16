@@ -41,10 +41,8 @@ const DISPLAY_NAME: Dictionary = {
 	Type.DEEP_SEA_FREIGHTER: "Deep Sea Freighter",
 }
 
-## Indicative cargo grid cells a ship of this class is built to hold. Used by
-## the ContractNpc UI to show "X cells free / Y needed" before accepting.
-## Actual capacity comes from the ship's CargoDeckComponent(s); this is just
-## an upper-bound hint when no boat is currently berthed.
+## Indicative cargo grid cells a ship of this class is built to hold.
+## Upper-bound hint for outfit budgets; live capacity comes from mounted holds.
 const CARGO_CELLS: Dictionary = {
 	Type.LAUNCH:              2,
 	Type.COASTAL_TRADER:      8,

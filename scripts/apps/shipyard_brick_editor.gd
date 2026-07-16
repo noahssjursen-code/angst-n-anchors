@@ -43,11 +43,11 @@ var _brick_id: String = "block"
 var _tool: int = Tool.PLACE
 var _painting := false
 var _last_paint_cell: Vector3i = Vector3i(-999, -999, -999)
+## Container-pad rect tool: corner A, then corner B.
+var _rect_anchor: Vector3i = Vector3i(-999, -999, -999)
+var _rect_anchor_set := false
 var _paint_color := Color(0.78, 0.80, 0.84)
 var _use_catalog_color := true
-## Cargo zone: click corner A, then corner B.
-var _cargo_anchor: Vector3i = Vector3i(-999, -999, -999)
-var _cargo_anchor_set := false
 ## Mark region for copy/paste: click A, then B (3D box — change layer between clicks).
 var _mark_anchor: Vector3i = Vector3i(-999, -999, -999)
 var _mark_anchor_set := false
@@ -119,7 +119,6 @@ var _color_section: VBoxContainer
 var _sign_section: VBoxContainer
 var _light_section: VBoxContainer
 var _clipboard_section: VBoxContainer
-var _cargo_section: VBoxContainer
 var _tool_place_btn: Button
 var _tool_erase_btn: Button
 var _tool_mark_btn: Button
@@ -384,7 +383,6 @@ func open_for_hull(
 	_yaw = 0
 	_brick_id = "block"
 	_tool = Tool.PLACE
-	_clear_cargo_anchor()
 	_clear_mark()
 	_clear_mark_preview()
 	## Hull change must rebuild the editor boat for the selected dimensions.
@@ -774,13 +772,6 @@ func _build_context_drawer(parent: HBoxContainer) -> void:
 	_light_section.add_child(_cone_btn)
 	col.add_child(_light_section)
 
-	_cargo_section = VBoxContainer.new()
-	_cargo_section.add_child(UiBuilder.section_header("CARGO ZONE"))
-	var cargo_help := UiBuilder.body_label("Click two corners on deck to define the cargo area.", 12)
-	cargo_help.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	_cargo_section.add_child(cargo_help)
-	col.add_child(_cargo_section)
-
 	_clipboard_section = VBoxContainer.new()
 	_clipboard_section.add_child(UiBuilder.section_header("SELECTION"))
 	var copy := UiBuilder.compact_button("Copy selection  Ctrl+C")
@@ -1110,11 +1101,11 @@ func _build_legacy_chrome() -> void:
 	col.add_child(tool_row)
 	var place_btn := UiBuilder.button("Place")
 	place_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	place_btn.pressed.connect(func() -> void: _tool = Tool.PLACE; _clear_cargo_anchor(); _clear_mark(); _refresh_palette_selection(); _refresh_ghost_from_mouse())
+	place_btn.pressed.connect(func() -> void: _tool = Tool.PLACE; _clear_mark(); _refresh_palette_selection(); _refresh_ghost_from_mouse())
 	tool_row.add_child(place_btn)
 	var erase_btn := UiBuilder.button("Erase")
 	erase_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	erase_btn.pressed.connect(func() -> void: _tool = Tool.ERASE; _clear_cargo_anchor(); _clear_mark(); _refresh_palette_selection(); _clear_ghost())
+	erase_btn.pressed.connect(func() -> void: _tool = Tool.ERASE; _clear_mark(); _refresh_palette_selection(); _clear_ghost())
 	tool_row.add_child(erase_btn)
 
 	var tool_row2 := HBoxContainer.new()
@@ -1346,7 +1337,6 @@ func _process(_delta: float) -> void:
 
 func _set_tool(tool: int) -> void:
 	_tool = tool
-	_clear_cargo_anchor()
 	if tool != Tool.MARK:
 		_clear_mark()
 		_clear_mark_preview()
@@ -1416,6 +1406,7 @@ func _palette_category_of(brick_id: String) -> String:
 	if (
 		BrickCatalog.has_tag(brick_id, "helm")
 		or BrickCatalog.has_tag(brick_id, "bulk_hold")
+		or BrickCatalog.has_tag(brick_id, "container_pad")
 		or BrickCatalog.has_tag(brick_id, "cargo")
 		or BrickCatalog.has_tag(brick_id, "crane")
 		or BrickCatalog.has_tag(brick_id, "crane_base")
@@ -1491,7 +1482,6 @@ func _refresh_context_drawer() -> void:
 	_color_section.visible = not is_mark and _brick_supports_color(_brick_id)
 	_sign_section.visible = not is_mark and BrickCatalog.has_tag(_brick_id, "text")
 	_light_section.visible = not is_mark and BrickCatalog.has_tag(_brick_id, "light")
-	_cargo_section.visible = not is_mark and _is_cargo_zone_tool()
 	_clipboard_section.visible = is_mark or not _clipboard.is_empty()
 
 
@@ -1507,8 +1497,6 @@ func _refresh_hint() -> void:
 			_hint_lbl.text = "Select: click corner B. Change layer first to include height."
 		else:
 			_hint_lbl.text = "Selection ready — Copy in the properties drawer or press Ctrl+C."
-	elif _is_cargo_zone_tool():
-		_hint_lbl.text = "Cargo zone: click two corners on deck."
 	elif _is_fixed_rect_tool():
 		_hint_lbl.text = "Bulk hold: click once on deck. R rotates footprint."
 	elif not _clipboard.is_empty():
@@ -1543,12 +1531,6 @@ func _unhandled_input(event: InputEvent) -> void:
 			return
 		if _mark_anchor_set:
 			_set_tool(Tool.PLACE)
-			get_viewport().set_input_as_handled()
-			return
-		if _cargo_anchor_set:
-			_clear_cargo_anchor()
-			_refresh_palette_selection()
-			_refresh_ghost_from_mouse()
 			get_viewport().set_input_as_handled()
 			return
 		_close()
@@ -1628,8 +1610,8 @@ func _on_viewport_gui_input(event: InputEvent) -> void:
 			_cam_target += (-right * delta.x + forward * delta.y) * scale
 			_update_camera()
 		elif _painting and Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
-			# Cargo zones and mark corners are click-A / click-B — never drag-paint.
-			if not _is_cargo_zone_tool() and not _is_fixed_rect_tool() and _tool != Tool.MARK:
+			# Fixed-rect and mark corners are click-A / click-B — never drag-paint.
+			if not _is_fixed_rect_tool() and _tool != Tool.MARK:
 				_paint_at_screen(mm.position)
 			else:
 				_update_ghost_at_screen(mm.position)
@@ -1668,25 +1650,18 @@ func _apply_layer_visibility() -> void:
 		_brick_visuals.erase(k)
 	## Cargo zones live on deck (y=0).
 	if _brick_root != null:
-		var cargo := _brick_root.get_node_or_null("CargoZonePreview")
-		if cargo != null:
-			cargo.visible = _layer_y >= 0
 		var bulk := _brick_root.get_node_or_null("BulkHoldPreview")
 		if bulk != null:
 			bulk.visible = _layer_y >= 0
-
-
-func _is_cargo_zone_tool() -> bool:
-	return str(BrickCatalog.get_entry(_brick_id).get("place_mode", "")) == "rect"
 
 
 func _is_fixed_rect_tool() -> bool:
 	return str(BrickCatalog.get_entry(_brick_id).get("place_mode", "")) == "fixed_rect"
 
 
-func _clear_cargo_anchor() -> void:
-	_cargo_anchor_set = false
-	_cargo_anchor = Vector3i(-999, -999, -999)
+func _is_container_pad_tool() -> bool:
+	return str(BrickCatalog.get_entry(_brick_id).get("place_mode", "")) == "rect" \
+		or BrickCatalog.has_tag(_brick_id, "container_pad")
 
 
 func _paint_at_screen(screen_pos: Vector2) -> void:
@@ -1697,11 +1672,12 @@ func _paint_at_screen(screen_pos: Vector2) -> void:
 		return
 	_last_paint_cell = cell
 
-	if _is_cargo_zone_tool():
-		_paint_cargo_at(cell)
-		return
 	if _is_fixed_rect_tool():
 		_paint_fixed_rect_at(cell)
+		return
+
+	if _is_container_pad_tool():
+		_paint_container_pad_at(cell)
 		return
 
 	if _tool == Tool.MARK:
@@ -1709,13 +1685,11 @@ func _paint_at_screen(screen_pos: Vector2) -> void:
 		return
 
 	if _tool == Tool.ERASE:
-		if _layout.erase_bulk_hold_at(cell):
-			_clear_cargo_anchor()
+		if _layout.erase_container_pad_at(cell):
 			_sync_brick_visuals()
 			_refresh_rules()
 			return
-		if _layout.erase_cargo_zone_at(cell):
-			_clear_cargo_anchor()
+		if _layout.erase_bulk_hold_at(cell):
 			_sync_brick_visuals()
 			_refresh_rules()
 			return
@@ -1739,41 +1713,6 @@ func _paint_at_screen(screen_pos: Vector2) -> void:
 	_refresh_rules()
 
 
-func _paint_cargo_at(cell: Vector3i) -> void:
-	## Place: corner A then B. Erase: remove the whole zone under the cursor.
-	if cell.y != 0:
-		return
-	if _tool != Tool.ERASE and _registration_id.is_empty():
-		_show_toast("Choose a legal vessel registration before building")
-		return
-	if _tool == Tool.ERASE:
-		if not _layout.erase_cargo_zone_at(cell):
-			return
-		_clear_cargo_anchor()
-		_sync_brick_visuals()
-		_refresh_rules()
-		_refresh_palette_selection()
-		_refresh_ghost_from_mouse()
-		return
-
-	if not _cargo_anchor_set:
-		_cargo_anchor = Vector3i(cell.x, 0, cell.z)
-		_cargo_anchor_set = true
-		_refresh_palette_selection()
-		_refresh_ghost_from_mouse()
-		return
-
-	var ok := _layout.add_cargo_zone(_cargo_anchor, Vector3i(cell.x, 0, cell.z))
-	_clear_cargo_anchor()
-	_refresh_palette_selection()
-	if not ok:
-		_refresh_ghost_from_mouse()
-		return
-	_sync_brick_visuals()
-	_refresh_rules()
-	_refresh_ghost_from_mouse()
-
-
 func _paint_fixed_rect_at(cell: Vector3i) -> void:
 	if cell.y != 0:
 		return
@@ -1791,6 +1730,36 @@ func _paint_fixed_rect_at(cell: Vector3i) -> void:
 	if not _fixed_rect_placeable(cell, _brick_id, yaw):
 		return
 	if not _layout.add_bulk_hold(cell, _brick_id, yaw, _grid):
+		return
+	_sync_brick_visuals()
+	_refresh_rules()
+	_refresh_ghost_from_mouse()
+
+
+func _paint_container_pad_at(cell: Vector3i) -> void:
+	if cell.y != 0:
+		return
+	if _tool == Tool.ERASE:
+		_rect_anchor_set = false
+		if not _layout.erase_container_pad_at(cell):
+			return
+		_sync_brick_visuals()
+		_refresh_rules()
+		_refresh_ghost_from_mouse()
+		return
+	if _registration_id.is_empty():
+		_show_toast("Choose a legal vessel registration before building")
+		return
+	if not _rect_anchor_set:
+		_rect_anchor = cell
+		_rect_anchor_set = true
+		_show_toast("Container pad: click opposite corner (multiples of %d×%d m)"
+			% [ContainerUnit.DEFAULT_FOOTPRINT.x, ContainerUnit.DEFAULT_FOOTPRINT.y])
+		return
+	var a := _rect_anchor
+	_rect_anchor_set = false
+	if not _layout.add_container_pad(a, cell, _grid):
+		_show_toast("Invalid container pad — need even width/depth on open deck")
 		return
 	_sync_brick_visuals()
 	_refresh_rules()
@@ -1839,9 +1808,7 @@ func _try_place(cell: Vector3i) -> bool:
 				return false
 		elif not _grid.in_bounds(c):
 			return false
-		if _layout.cargo_contains(c):
-			return false
-		if _layout.bulk_hold_contains(c):
+		if _layout.deck_reserved_contains(c):
 			return false
 	var denied := _registration_place_denied(_brick_id, cells)
 	if not denied.is_empty():
@@ -1946,8 +1913,6 @@ func _placement_legal(cell: Vector3i, brick_id: String, yaw: int) -> bool:
 	var entry := BrickCatalog.get_entry(brick_id)
 	if entry.is_empty():
 		return false
-	if BrickCatalog.has_tag(brick_id, "cargo") or str(entry.get("place_mode", "")) == "rect":
-		return cell.y == 0 and _grid.in_bounds(Vector3i(cell.x, 0, cell.z))
 	if str(entry.get("place_mode", "")) == "fixed_rect":
 		return _fixed_rect_placeable(cell, brick_id, yaw)
 	## Signs / lights can mount on existing walls / sit on empty deck.
@@ -1963,7 +1928,7 @@ func _placement_legal(cell: Vector3i, brick_id: String, yaw: int) -> bool:
 		if not (
 			BrickCatalog.has_tag(brick_id, "diagonal_plan")
 			and fp == Vector3i.ONE
-			and not _layout.cargo_contains(cell)
+			and not _layout.deck_reserved_contains(cell)
 		):
 			return false
 		return _registration_place_denied(brick_id, [cell]).is_empty()
@@ -2045,9 +2010,6 @@ func _update_ghost_at_screen(screen_pos: Vector2) -> void:
 	if cell.x < 0:
 		_clear_ghost()
 		return
-	if _is_cargo_zone_tool():
-		_update_cargo_ghost(cell)
-		return
 	var yaw := _ghost_yaw_for(cell, _brick_id)
 	var valid := _placement_legal(cell, _brick_id, yaw)
 	var sign := _sign_text() if BrickCatalog.has_tag(_brick_id, "text") else ""
@@ -2067,7 +2029,6 @@ func _update_ghost_at_screen(screen_pos: Vector2) -> void:
 		and _ghost_brick_id == _brick_id
 		and _ghost_valid == valid
 		and _ghost_color.is_equal_approx(paint_color)
-		and not _is_cargo_zone_tool()
 		and str(_ghost.get_meta("sign_text", "")) == sign
 		and not BrickCatalog.has_tag(_brick_id, "text")
 	):
@@ -2100,52 +2061,6 @@ func _update_ghost_at_screen(screen_pos: Vector2) -> void:
 		_world.add_child(_ghost)
 
 
-func _update_cargo_ghost(cell: Vector3i) -> void:
-	var a := _cargo_anchor if _cargo_anchor_set else Vector3i(cell.x, 0, cell.z)
-	var b := Vector3i(cell.x, 0, cell.z)
-	var zone := BrickLayout.normalize_cargo_rect(a, b)
-	var key := "cargo:%d,%d:%d,%d:%s" % [
-		BrickLayout.zone_min(zone).x, BrickLayout.zone_min(zone).z,
-		BrickLayout.zone_max(zone).x, BrickLayout.zone_max(zone).z,
-		str(_cargo_anchor_set),
-	]
-	var valid := cell.y == 0 and _cargo_rect_placeable(zone)
-	if (
-		_ghost != null and is_instance_valid(_ghost)
-		and str(_ghost.get_meta("cargo_key", "")) == key
-		and _ghost_valid == valid
-	):
-		return
-	_clear_ghost()
-	_ghost_brick_id = _brick_id
-	_ghost_cell = cell
-	_ghost_yaw = 0
-	_ghost_valid = valid
-	_ghost = _make_cargo_zone_visual(zone)
-	_ghost.name = "PlaceGhost"
-	_ghost.set_meta("cargo_key", key)
-	_tint_ghost(_ghost, valid)
-	if _boat != null and is_instance_valid(_boat):
-		_boat.add_child(_ghost)
-	else:
-		_world.add_child(_ghost)
-
-
-func _cargo_rect_placeable(zone: Dictionary) -> bool:
-	var mn := BrickLayout.zone_min(zone)
-	var mx := BrickLayout.zone_max(zone)
-	if _grid == null:
-		return false
-	for ix in range(mn.x, mx.x + 1):
-		for iz in range(mn.z, mx.z + 1):
-			var c := Vector3i(ix, 0, iz)
-			if not _grid.in_bounds(c):
-				return false
-			if _layout.has_cell(c):
-				return false
-	return true
-
-
 func _fixed_rect_placeable(cell: Vector3i, brick_id: String, yaw: int) -> bool:
 	if cell.y != 0 or _grid == null:
 		return false
@@ -2159,36 +2074,6 @@ func _fixed_rect_placeable(cell: Vector3i, brick_id: String, yaw: int) -> bool:
 		if _layout.deck_reserved_contains(c):
 			return false
 	return _registration_place_denied(brick_id, _grid.footprint_cells(cell, fp, yaw_steps)).is_empty()
-
-
-func _make_cargo_zone_visual(zone: Dictionary) -> Node3D:
-	var mn := BrickLayout.zone_min(zone)
-	var mx := BrickLayout.zone_max(zone)
-	var w := float(mx.x - mn.x + 1) * DeckGrid.CELL_M
-	var l := float(mx.z - mn.z + 1) * DeckGrid.CELL_M
-	var sum := Vector3.ZERO
-	var n := 0
-	for ix in range(mn.x, mx.x + 1):
-		for iz in range(mn.z, mx.z + 1):
-			sum += _grid.cell_center_local(Vector3i(ix, 0, iz))
-			n += 1
-	var root := Node3D.new()
-	if n <= 0:
-		return root
-	var center := sum / float(n)
-	center.y = _grid.deck_y + 0.08
-	root.position = center
-	var plate := MeshBuilder.box(Vector3(w * 0.98, 0.04, l * 0.98), Color(0.40, 0.36, 0.30), 0.95, 0.0)
-	root.add_child(plate)
-	var hx := w * 0.5
-	var hz := l * 0.5
-	var arm := clampf(minf(hx, hz) * 0.25, 0.3, 1.2)
-	var col := Color(0.95, 0.82, 0.12)
-	_cargo_zone_corner(root, -hx, -hz, 1.0, 1.0, arm, 0.12, 0.03, col)
-	_cargo_zone_corner(root, hx, -hz, -1.0, 1.0, arm, 0.12, 0.03, col)
-	_cargo_zone_corner(root, -hx, hz, 1.0, -1.0, arm, 0.12, 0.03, col)
-	_cargo_zone_corner(root, hx, hz, -1.0, -1.0, arm, 0.12, 0.03, col)
-	return root
 
 
 func _tint_ghost(root: Node3D, valid: bool) -> void:
@@ -2317,8 +2202,8 @@ func _brick_tooltip(brick_id: String) -> String:
 	var detail := "%d×%d×%d cells · %.1f×%.1f×%.1f m" % [
 		fp.x, fp.y, fp.z, size.x, size.y, size.z,
 	]
-	if BrickCatalog.has_tag(brick_id, "cargo"):
-		detail = "Click two corners to define a cargo zone"
+	if BrickCatalog.has_tag(brick_id, "bulk_hold"):
+		detail = "Click once on deck to place a bulk hold"
 	elif BrickCatalog.has_tag(brick_id, "text"):
 		detail += "\nText options appear after selection"
 	elif BrickCatalog.has_tag(brick_id, "external"):
@@ -2405,7 +2290,6 @@ func _select_brick(id: String) -> void:
 	_brick_id = id
 	_tool = Tool.PLACE
 	_yaw = BrickLayout.norm_yaw_step(_yaw, BrickCatalog.yaw_step_of(id))
-	_clear_cargo_anchor()
 	_clear_mark()
 	_clear_mark_preview()
 	if _use_catalog_color:
@@ -2528,8 +2412,7 @@ func _toggle_mark_tool() -> void:
 		_clear_mark_preview()
 	else:
 		_tool = Tool.MARK
-		_clear_cargo_anchor()
-		_clear_mark()
+			_clear_mark()
 		_clear_ghost()
 	_refresh_palette_selection()
 	_refresh_ghost_from_mouse()
@@ -2657,7 +2540,6 @@ func _paste_at(dest: Vector3i) -> void:
 
 func _clear_layout() -> void:
 	_layout.clear()
-	_clear_cargo_anchor()
 	_clear_mark()
 	_sync_brick_visuals()
 	_refresh_rules()
@@ -2807,30 +2689,28 @@ func _sync_brick_visuals() -> void:
 		_brick_root.add_child(visual)
 		_brick_visuals[k] = visual
 
-	_refresh_cargo_zone_preview(_layout.iter_cargo_zones())
 	_refresh_bulk_hold_preview(_layout.iter_bulk_holds())
+	_refresh_container_pad_preview(_layout.iter_container_pads())
 	_apply_layer_visibility()
 
 
-func _refresh_cargo_zone_preview(zones: Array) -> void:
-	## One pad + yellow corner brackets per cargo rect.
+func _refresh_container_pad_preview(pads: Array) -> void:
 	if _brick_root == null:
 		return
-	var existing := _brick_root.get_node_or_null("CargoZonePreview")
+	var existing := _brick_root.get_node_or_null("ContainerPadPreview")
 	if existing != null:
 		_brick_root.remove_child(existing)
 		existing.free()
-	if zones.is_empty() or _grid == null:
+	if pads.is_empty() or _grid == null:
 		return
-
 	var root := Node3D.new()
-	root.name = "CargoZonePreview"
+	root.name = "ContainerPadPreview"
 	_brick_root.add_child(root)
-
-	for zone_v in zones:
-		var zone := zone_v as Dictionary
-		var mn := BrickLayout.zone_min(zone)
-		var mx := BrickLayout.zone_max(zone)
+	var color := BrickCatalog.get_entry("container_pad").get("color", Color(0.16, 0.22, 0.32)) as Color
+	for pad_v in pads:
+		var pad := pad_v as Dictionary
+		var mn := BrickLayout.zone_min(pad)
+		var mx := BrickLayout.zone_max(pad)
 		var w := float(mx.x - mn.x + 1) * DeckGrid.CELL_M
 		var l := float(mx.z - mn.z + 1) * DeckGrid.CELL_M
 		var sum := Vector3.ZERO
@@ -2841,24 +2721,9 @@ func _refresh_cargo_zone_preview(zones: Array) -> void:
 				n += 1
 		if n <= 0:
 			continue
-		var center := sum / float(n)
-		center.y = _grid.deck_y + 0.06
-		var pad := Node3D.new()
-		pad.position = center
-		root.add_child(pad)
-		var plate := MeshBuilder.box(Vector3(w * 0.995, 0.03, l * 0.995), Color(0.32, 0.30, 0.26), 0.95, 0.0)
-		plate.position = Vector3(0.0, -0.01, 0.0)
-		pad.add_child(plate)
-		var hx := w * 0.5
-		var hz := l * 0.5
-		var arm := clampf(minf(hx, hz) * 0.25, 0.3, 1.2)
-		var thick := 0.12
-		var h := 0.02
-		var col := Color(0.95, 0.82, 0.12)
-		_cargo_zone_corner(pad, -hx, -hz, 1.0, 1.0, arm, thick, h, col)
-		_cargo_zone_corner(pad, hx, -hz, -1.0, 1.0, arm, thick, h, col)
-		_cargo_zone_corner(pad, -hx, hz, 1.0, -1.0, arm, thick, h, col)
-		_cargo_zone_corner(pad, hx, hz, -1.0, -1.0, arm, thick, h, col)
+		var plate := MeshBuilder.box(Vector3(w, 0.08, l), color, 0.9, 0.05)
+		plate.position = sum / float(n) + Vector3(0.0, 0.04, 0.0)
+		root.add_child(plate)
 
 
 func _refresh_bulk_hold_preview(holds: Array) -> void:
@@ -2899,25 +2764,6 @@ func _refresh_bulk_hold_preview(holds: Array) -> void:
 		root.add_child(pad)
 		var visual := BulkHoldComponent.build_visual(w, l, depth_m, true)
 		pad.add_child(visual)
-
-
-func _cargo_zone_corner(
-	root: Node3D,
-	cx: float,
-	cz: float,
-	sx: float,
-	sz: float,
-	arm: float,
-	thick: float,
-	h: float,
-	color: Color,
-) -> void:
-	var a := MeshBuilder.box(Vector3(arm, h, thick), color, 0.85, 0.0)
-	a.position = Vector3(cx + sx * arm * 0.5, h * 0.5, cz)
-	root.add_child(a)
-	var b := MeshBuilder.box(Vector3(thick, h, arm), color, 0.85, 0.0)
-	b.position = Vector3(cx, h * 0.5, cz + sz * arm * 0.5)
-	root.add_child(b)
 
 
 func _clear_preview() -> void:

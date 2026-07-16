@@ -449,14 +449,14 @@ const BRICKS: Dictionary = {
 		"mass_kg": 980.0,
 		"color": Color(0.20, 0.21, 0.22),
 	},
-	"cargo_zone": {
-		"display": "Cargo zone",
-		"footprint": [1, 1, 1],
-		"tags": ["cargo", "floor", "zone", "ship_only"],
-		"mass_kg": 20.0,
-		"color": Color(0.40, 0.36, 0.30),
-		## Click corner A, then corner B — not a per-cell brick.
+	"container_pad": {
+		"display": "Container pad",
+		"footprint": [2, 1, 2],
+		"tags": ["container_pad", "cargo", "floor", "zone", "ship_only"],
 		"place_mode": "rect",
+		"deck_only": true,
+		"mass_kg": 80.0,
+		"color": Color(0.16, 0.22, 0.32),
 	},
 	"bulk_hold_6x12": {
 		"display": "Bulk hold 6×12",
@@ -762,31 +762,13 @@ static func create_visual(brick_id: String, opts: Dictionary = {}) -> Node3D:
 			_add_mast_pole_visual(root, sz, color)
 		"chimney_2x3x2", "chimney_4x5x4":
 			_add_chimney_visual(root, sz, color)
-		"cargo_zone", "cargo_tile":
-			## Thumbnail / ghost: small plate with L-corners — runtime uses BrickLayout rects.
-			if bool(opts.get("preview_mesh", false)):
-				var tile := MeshBuilder.box(Vector3(sz.x * 0.92, 0.06, sz.z * 0.92), color, 0.95, 0.0)
-				tile.position = Vector3(0.0, -sz.y * 0.5 + 0.03, 0.0)
-				root.add_child(tile)
-				var arm := 0.28
-				var thick := 0.06
-				var h := 0.04
-				var yc := -sz.y * 0.5 + 0.06
-				var hx := sz.x * 0.42
-				var hz := sz.z * 0.42
-				var col := Color(0.95, 0.82, 0.12)
-				for corner in [
-					Vector3(-hx, yc, -hz), Vector3(hx, yc, -hz),
-					Vector3(-hx, yc, hz), Vector3(hx, yc, hz),
-				]:
-					var sx := 1.0 if corner.x < 0.0 else -1.0
-					var szn := 1.0 if corner.z < 0.0 else -1.0
-					var a := MeshBuilder.box(Vector3(arm, h, thick), col, 0.85, 0.0)
-					a.position = corner + Vector3(sx * arm * 0.5, 0.0, 0.0)
-					root.add_child(a)
-					var b := MeshBuilder.box(Vector3(thick, h, arm), col, 0.85, 0.0)
-					b.position = corner + Vector3(0.0, 0.0, szn * arm * 0.5)
-					root.add_child(b)
+		"container_pad":
+			var pad := MeshBuilder.box(Vector3(sz.x, 0.08, sz.z), color, 0.9, 0.05)
+			pad.position = Vector3(0.0, -sz.y * 0.5 + 0.04, 0.0)
+			root.add_child(pad)
+			var rim := MeshBuilder.box(Vector3(sz.x * 0.98, 0.02, sz.z * 0.98), color.lightened(0.15), 0.85, 0.1)
+			rim.position = Vector3(0.0, -sz.y * 0.5 + 0.09, 0.0)
+			root.add_child(rim)
 		"bulk_hold_6x12":
 			var depth_m := float(entry.get("hold_depth_m", 2.5))
 			var hold_visual := BulkHoldComponent.build_visual(sz.x, sz.z, depth_m, true)

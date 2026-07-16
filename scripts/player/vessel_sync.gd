@@ -598,7 +598,7 @@ static func _layout_patch_from_row(row: Dictionary, existing: Dictionary = {}) -
 		VesselSpawn.brick_layout_of(existing)
 	)
 	if not layout.is_empty() and (
-		layout.has("cells") or layout.has("cargo_zones") or layout.has("hull_id")
+		layout.has("cells") or layout.has("bulk_holds") or layout.has("container_pads") or layout.has("hull_id")
 	) and not local_is_configured:
 		patch["brick_layout"] = layout
 		if not hash.is_empty():
@@ -610,8 +610,8 @@ static func _layout_has_configuration(layout: Dictionary) -> bool:
 	var cells_raw: Variant = layout.get("cells", {})
 	if typeof(cells_raw) == TYPE_DICTIONARY and not (cells_raw as Dictionary).is_empty():
 		return true
-	var zones_raw: Variant = layout.get("cargo_zones", [])
-	return typeof(zones_raw) == TYPE_ARRAY and not (zones_raw as Array).is_empty()
+	var holds_raw: Variant = layout.get("bulk_holds", [])
+	return typeof(holds_raw) == TYPE_ARRAY and not (holds_raw as Array).is_empty()
 
 
 static func _fleet_patch_from_row(_row: Dictionary) -> Dictionary:

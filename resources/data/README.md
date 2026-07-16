@@ -13,7 +13,9 @@ Category subfolders keep large flat lists manageable. Prefer **`res://` paths** 
 | `foghorn/` | Foghorn kit meshes (tower, horn, roof, …) |
 | `lighthouse/` | Lighthouse kit meshes |
 | `characters/` | NPC body, hats |
-| `props/` | Crates, fuel station pad, portable props |
+| `props/` | Fuel station pad, portable props |
+| `cargo/` | Cubed container mesh |
+| `cranes/` | Bulk / provision crane part meshes |
 | `terrain/` | Island / landmass meshes |
 
 Authoring rules and mesh recipes: [`meshes/GUIDE.md`](meshes/GUIDE.md).
@@ -26,6 +28,8 @@ Multi-part assemblies (`ModelAssembler` root JSON with a `parts` array).
 |--------|----------|
 | `ships/` | Vessel assemblies (e.g. tanker, bulk carrier) |
 | `buildings/` | Composed structures (lighthouse, foghorn building) |
+| `cargo/` | Container cube assembly |
+| `dockyard/` | Quay cranes (bulk grab, provision T-crane) |
 
 Other game data (ports, contracts, themes) stays in sibling folders under `resources/data/` as before.
 
@@ -97,7 +101,8 @@ Source-controlled finished store ships authored by the
   "brick_layout": {
     "hull_id": "hull_45x16_cat",
     "cells": {},
-    "cargo_zones": []
+    "container_pads": [],
+    "bulk_holds": []
   }
 }
 ```
