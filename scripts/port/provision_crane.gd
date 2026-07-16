@@ -364,19 +364,147 @@ func release_container() -> ContainerNode:
 		var pad := CargoSlotPadComponent.find_nearest_pad(get_tree(), hook_pos)
 		if pad != null and pad.try_place_container_node(node, hook_pos):
 			return node
-	## Yard / quay drop when no pad accepts the snap.
+	return _drop_container_to_quay(node)
+
+
+func release_container_to_world(world_pos: Vector3, parent: Node = null) -> ContainerNode:
+	if _attached_container == null or not is_instance_valid(_attached_container):
+		_attached_container = null
+		return null
+	var node := _attached_container
+	_attached_container = null
+	node.set_highlighted(false)
+	node.notify_released()
+	var drop_parent := parent
+	if drop_parent == null:
+		drop_parent = _quay_drop_parent()
+	if drop_parent == null and is_inside_tree():
+		drop_parent = get_tree().current_scene
+	node.reparent(drop_parent, true)
+	node.global_position = world_pos
+	node.rotation = Vector3.ZERO
+	return node
+
+
+func _drop_container_to_quay(node: ContainerNode) -> ContainerNode:
+	var drop_parent := _quay_drop_parent()
+	if drop_parent == null and is_inside_tree():
+		drop_parent = get_tree().current_scene
+	var world_xf := node.global_transform
+	node.reparent(drop_parent, true)
+	node.global_transform = world_xf
+	return node
+
+
+func _quay_drop_parent() -> Node:
 	var drop_parent := get_parent()
 	while drop_parent != null and drop_parent.get_parent() != null \
 			and str(drop_parent.name) != "QuayRow" and not (drop_parent is CraneShowcase):
 		if str(drop_parent.name).begins_with("Bay_"):
 			break
 		drop_parent = drop_parent.get_parent()
-	if drop_parent == null:
-		drop_parent = get_tree().current_scene
-	var world_xf := node.global_transform
-	node.reparent(drop_parent, true)
-	node.global_transform = world_xf
-	return node
+	return drop_parent
+
+
+func ik_hook_to(delta: float, target: Vector3, hoist_mode: String = "track") -> void:
+	var pivot := get_slew_pivot_global()
+	var hook := get_hook_global()
+	var slew_step := slew_speed_deg * delta
+	var trolley_step := trolley_speed_m * delta
+	var hoist_step := hoist_speed_m * delta * 1.4
+
+	var to_target := Vector2(target.x - pivot.x, target.z - pivot.z)
+	var to_hook := Vector2(hook.x - pivot.x, hook.z - pivot.z)
+	if to_target.length() > 0.4 and to_hook.length() > 0.4:
+		var slew_err := rad_to_deg(to_hook.angle_to(to_target))
+		if absf(slew_err) > 1.5:
+			slew_degrees -= clampf(slew_err, -slew_step, slew_step)
+
+	if _boom != null and is_instance_valid(_boom):
+		var boom_fwd := -_boom.global_transform.basis.z
+		boom_fwd.y = 0.0
+		if boom_fwd.length_squared() > 0.0001:
+			boom_fwd = boom_fwd.normalized()
+			var rel := Vector3(target.x - pivot.x, 0.0, target.z - pivot.z)
+			var along := rel.dot(boom_fwd)
+			var want_z := clampf(-along, trolley_min_z_m, trolley_max_z_m)
+			trolley_z_m = move_toward(trolley_z_m, want_z, trolley_step)
+
+	match hoist_mode:
+		"raise":
+			var raised := hoist_min_m + 2.0
+			hoist_length_m = move_toward(hoist_length_m, raised, hoist_step)
+		"track":
+			var y_err := target.y - hook.y
+			if y_err < -0.35:
+				hoist_length_m += hoist_step
+			elif y_err > 0.35:
+				hoist_length_m -= hoist_step
+		_:
+			pass
+
+
+func hook_distance_to(target: Vector3) -> float:
+	return get_hook_global().distance_to(target)
+
+
+func hook_horizontal_distance_to(target: Vector3) -> float:
+	var hook := get_hook_global()
+	return Vector2(target.x - hook.x, target.z - hook.z).length()
+
+
+func is_hook_near(target: Vector3, radius_m: float = NEAR_M) -> bool:
+	return hook_distance_to(target) <= radius_m
+
+
+func is_hook_over(target: Vector3, radius_m: float = 4.0) -> bool:
+	return hook_horizontal_distance_to(target) <= radius_m
+
+
+func can_reach_point(target: Vector3, margin_m: float = 3.0) -> bool:
+	var pivot := get_slew_pivot_global()
+	var horiz := Vector2(target.x - pivot.x, target.z - pivot.z).length()
+	var min_r := absf(trolley_min_z_m) - margin_m
+	var max_r := absf(trolley_max_z_m) + margin_m
+	return horiz >= min_r and horiz <= max_r
+
+
+func can_reach_ship(ship: BoatBody) -> bool:
+	if ship == null or not is_instance_valid(ship):
+		return false
+	for pad in ship.get_cargo_pads():
+		if can_reach_point(pad.global_position):
+			return true
+	return can_reach_point(ship.global_position)
+
+
+func get_auto_operator() -> ProvisionCraneAutoOperator:
+	return get_node_or_null("AutoOperator") as ProvisionCraneAutoOperator
+
+
+func start_auto_load(ship: BoatBody) -> bool:
+	var op := get_auto_operator()
+	if op == null:
+		return false
+	return op.start_load(ship)
+
+
+func start_auto_unload(ship: BoatBody) -> bool:
+	var op := get_auto_operator()
+	if op == null:
+		return false
+	return op.start_unload(ship)
+
+
+func stop_auto() -> void:
+	var op := get_auto_operator()
+	if op != null:
+		op.stop()
+
+
+func is_auto_active() -> bool:
+	var op := get_auto_operator()
+	return op != null and op.is_active()
 
 
 func _tick_attached_container() -> void:

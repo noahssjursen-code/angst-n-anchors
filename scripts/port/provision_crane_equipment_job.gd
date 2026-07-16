@@ -1,0 +1,134 @@
+class_name ProvisionCraneEquipmentJob
+extends QuayEquipmentJob
+
+## QuayEquipmentJob adapter for ProvisionCrane container load/unload.
+
+var _crane: ProvisionCrane
+
+
+func bind_crane(crane: ProvisionCrane) -> void:
+	_crane = crane
+	var op := crane.get_auto_operator() if crane != null else null
+	if op != null:
+		if not op.job_finished.is_connected(_on_auto_job_finished):
+			op.job_finished.connect(_on_auto_job_finished)
+		if not op.job_stopped.is_connected(_on_auto_job_stopped):
+			op.job_stopped.connect(_on_auto_job_stopped)
+
+
+func _on_auto_job_finished(_operation: Variant = null, _cycles: int = 0) -> void:
+	_clear_job_state()
+
+
+func _on_auto_job_stopped() -> void:
+	_clear_job_state()
+
+
+func _clear_job_state() -> void:
+	_served_ship = null
+	_job_mode = ""
+	_commodity_id = ""
+
+
+func is_job_active() -> bool:
+	if _crane != null and is_instance_valid(_crane) and _crane.is_auto_active():
+		return true
+	return super.is_job_active()
+
+
+func can_serve(ship: BoatBody, mode: String) -> bool:
+	if _crane == null or not is_instance_valid(_crane):
+		return false
+	if ship == null or not is_instance_valid(ship):
+		return false
+	if ship.get_cargo_pads().is_empty():
+		return false
+	if not _crane.can_reach_ship(ship):
+		return false
+	var m := mode.strip_edges().to_lower()
+	if m == MODE_LOAD:
+		return _has_yard_container() and _has_free_pad_slot(ship)
+	if m == MODE_UNLOAD:
+		return _has_ship_container(ship)
+	return false
+
+
+func can_reach_ship(ship: BoatBody) -> bool:
+	if _crane == null or not is_instance_valid(_crane):
+		return false
+	return _crane.can_reach_ship(ship)
+
+
+func _begin_job(ship: BoatBody, mode: String, _commodity_id: String) -> bool:
+	if _crane == null:
+		return false
+	if mode == MODE_LOAD:
+		return _crane.start_auto_load(ship)
+	return _crane.start_auto_unload(ship)
+
+
+func _end_job() -> void:
+	if _crane != null and is_instance_valid(_crane):
+		_crane.stop_auto()
+
+
+func status_lines() -> PackedStringArray:
+	var lines := super.status_lines()
+	if _crane != null and is_instance_valid(_crane):
+		for line in _crane.get_status_lines():
+			lines.append(line)
+	return lines
+
+
+func serve_hint(ship: BoatBody, mode: String) -> String:
+	if _crane == null or not is_instance_valid(_crane):
+		return "No crane on this tool"
+	if ship == null or not is_instance_valid(ship):
+		return "No ship at berth"
+	if ship.get_cargo_pads().is_empty():
+		return "Ship has no container pads"
+	if not _crane.can_reach_ship(ship):
+		return "Sorry mac — crane won't reach."
+	var m := mode.strip_edges().to_lower()
+	if m == MODE_LOAD:
+		if not _has_yard_container():
+			return "No containers in the yard"
+		if not _has_free_pad_slot(ship):
+			return "Cargo pad is full"
+		return ""
+	if m == MODE_UNLOAD:
+		if not _has_ship_container(ship):
+			return "No containers on ship"
+		return ""
+	return "Unknown job"
+
+
+func _has_yard_container() -> bool:
+	return _find_yard_container() != null
+
+
+func _has_free_pad_slot(ship: BoatBody) -> bool:
+	for pad in ship.get_cargo_pads():
+		if pad.find_free_slot() >= 0:
+			return true
+	return false
+
+
+func _has_ship_container(ship: BoatBody) -> bool:
+	for pad in ship.get_cargo_pads():
+		if not pad.iter_container_nodes().is_empty():
+			return true
+	return false
+
+
+func _find_yard_container() -> ContainerNode:
+	if _crane == null or not is_instance_valid(_crane) or not _crane.is_inside_tree():
+		return null
+	for node in _crane.get_tree().get_nodes_in_group(ContainerNode.GROUP):
+		if node is not ContainerNode:
+			continue
+		var cn := node as ContainerNode
+		if CargoSlotPadComponent.find_pad_for_node(cn) != null:
+			continue
+		return cn
+	return null

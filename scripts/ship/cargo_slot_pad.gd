@@ -249,6 +249,27 @@ func find_free_slot(fp: Vector2i = ContainerUnit.DEFAULT_FOOTPRINT) -> int:
 	return _find_free_block(fp, Vector2.ZERO, false)
 
 
+func iter_container_nodes() -> Array[ContainerNode]:
+	var out: Array[ContainerNode] = []
+	var seen: Dictionary = {}
+	for node in _nodes.values():
+		if node == null or not (node is ContainerNode):
+			continue
+		var cn := node as ContainerNode
+		if seen.has(cn.get_instance_id()):
+			continue
+		seen[cn.get_instance_id()] = true
+		out.append(cn)
+	return out
+
+
+func slot_drop_world_for_free(fp: Vector2i = ContainerUnit.DEFAULT_FOOTPRINT) -> Vector3:
+	var origin := _find_free_block(fp, Vector2.ZERO, false)
+	if origin < 0:
+		return Vector3.INF
+	return to_global(_cell_center_local(origin, fp))
+
+
 func _find_free_block(fp: Vector2i, preferred_local: Vector2, use_hint: bool) -> int:
 	var cols := get_cols()
 	var rows := get_rows()

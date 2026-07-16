@@ -7,12 +7,15 @@ extends Node3D
 const BULK_CRANE_SCRIPT := preload("res://scripts/port/bulk_crane.gd")
 const BULK_CRANE_AUTO_SCRIPT := preload("res://scripts/port/bulk_crane_auto_operator.gd")
 const BULK_EQUIP_JOB_SCRIPT := preload("res://scripts/port/bulk_crane_equipment_job.gd")
+const PROVISION_CRANE_AUTO_SCRIPT := preload("res://scripts/port/provision_crane_auto_operator.gd")
+const PROVISION_EQUIP_JOB_SCRIPT := preload("res://scripts/port/provision_crane_equipment_job.gd")
 const PROVISION_CRANE_SCRIPT := preload("res://scripts/port/provision_crane.gd")
 const CRANE_OPERATOR_SCRIPT := preload("res://scripts/port/crane_operator_npc.gd")
 const DOCKED_PREBUILT_ID := "bulk_small"
 const PROVISION_DOCKED_PREBUILT_ID := "28_10_m"
 const SHOWCASE_PORT_ID := "crane_showcase"
 const SHOWCASE_BERTH_ID := "crane_showcase/ore_quay"
+const SHOWCASE_PROVISION_BERTH_ID := "crane_showcase/container_quay"
 
 const QUAY_LENGTH_M := 140.0
 const QUAY_WIDTH_M := 72.0
@@ -47,9 +50,12 @@ var _bay_roots: Array[Node3D] = []
 var _bay_index := 0
 var _bulk_crane: BulkCrane
 var _provision_crane: ProvisionCrane
-var _auto: BulkCraneAutoOperator
-var _harbour: HarbourController
-var _equip_id := ""
+var _bulk_auto: BulkCraneAutoOperator
+var _provision_auto: ProvisionCraneAutoOperator
+var _bulk_harbour: HarbourController
+var _provision_harbour: HarbourController
+var _bulk_equip_id := ""
+var _provision_equip_id := ""
 var _camera: Camera3D
 var _hud: Label
 var _orbiting := false
@@ -73,10 +79,14 @@ func _ready() -> void:
 
 
 func _exit_tree() -> void:
-	if _harbour != null:
-		_harbour.unregister_all()
-		_harbour.deactivate()
-		_harbour = null
+	if _bulk_harbour != null:
+		_bulk_harbour.unregister_all()
+		_bulk_harbour.deactivate()
+		_bulk_harbour = null
+	if _provision_harbour != null:
+		_provision_harbour.unregister_all()
+		_provision_harbour.deactivate()
+		_provision_harbour = null
 
 
 func _process(delta: float) -> void:
@@ -187,10 +197,11 @@ func _drive_active_crane(delta: float) -> void:
 	var bay := _active_bay()
 	var kind := str(bay.get("crane", ""))
 	if kind == "bulk" and _bulk_crane != null:
-		if _auto == null or not _auto.is_active():
+		if _bulk_auto == null or not _bulk_auto.is_active():
 			_bulk_crane.playtest_input(delta)
 	elif kind == "provision" and _provision_crane != null:
-		_provision_crane.playtest_input(delta)
+		if _provision_auto == null or not _provision_auto.is_active():
+			_provision_crane.playtest_input(delta)
 
 
 func _focus_on_tool() -> void:
@@ -253,8 +264,8 @@ func _refresh_hud() -> void:
 		lines.append("L  harbour load · O  harbour unload · X  stop")
 		lines.append("Talk to crane operator  ·  A/D W/S Q/E Space")
 		lines.append("")
-		if _harbour != null:
-			var snap := _harbour.snapshot()
+		if _bulk_harbour != null:
+			var snap := _bulk_harbour.snapshot()
 			lines.append(
 				"Harbour  berths %d  ships %d  jobs %d" % [
 					(snap.get("berths", []) as Array).size(),
@@ -263,9 +274,9 @@ func _refresh_hud() -> void:
 				]
 			)
 			lines.append("")
-		if _auto != null:
-			lines.append(_auto.get_status_line())
-			if _auto.is_active():
+		if _bulk_auto != null:
+			lines.append(_bulk_auto.get_status_line())
+			if _bulk_auto.is_active():
 				lines.append("Ellipse  A=green pickup · B=orange drop · cyan=arc")
 			lines.append("")
 		if _bulk_crane != null:
@@ -291,8 +302,21 @@ func _refresh_hud() -> void:
 					)
 	elif kind == "provision":
 		lines.append("Container bay  ·  docked %s" % _docked_vessel_label())
-		lines.append("A/D slew · W/S trolley · Q/E hoist · Space grab/drop")
+		lines.append("L  harbour load · O  harbour unload · X  stop")
+		lines.append("Talk to crane operator  ·  A/D W/S Q/E Space")
 		lines.append("")
+		if _provision_harbour != null:
+			var snap := _provision_harbour.snapshot()
+			lines.append(
+				"Harbour  berths %d  ships %d  jobs %d" % [
+					(snap.get("berths", []) as Array).size(),
+					(snap.get("ships", []) as Array).size(),
+					(snap.get("jobs", []) as Array).size(),
+				]
+			)
+			lines.append("")
+		if _provision_auto != null:
+			lines.append(_provision_auto.get_status_line())
 		if _provision_crane != null:
 			lines.append_array(_provision_crane.get_status_lines())
 	_hud.text = "\n".join(lines)
@@ -329,6 +353,7 @@ func _spawn_bay_bulk_ore(bay: Node3D) -> void:
 
 func _spawn_bay_provisions(bay: Node3D) -> void:
 	_stamp_crate_yard(bay)
+	_setup_provision_harbour(bay)
 	_spawn_provision_crane(bay)
 	_spawn_docked_ship(bay, PROVISION_DOCKED_PREBUILT_ID, false)
 	var label := Label3D.new()
@@ -359,6 +384,23 @@ func _spawn_provision_crane(bay: Node3D) -> void:
 	## Local −Z = jib outboard (same as BulkCrane).
 	_provision_crane.rotation_degrees.y = -90.0
 	mount.add_child(_provision_crane)
+	_provision_auto = PROVISION_CRANE_AUTO_SCRIPT.new() as ProvisionCraneAutoOperator
+	_provision_auto.name = "AutoOperator"
+	_provision_crane.add_child(_provision_auto)
+	_provision_equip_id = HarbourController.make_equip_id(
+		SHOWCASE_PROVISION_BERTH_ID, "equip_provision_crane", 0
+	)
+	if _provision_harbour != null:
+		var job := PROVISION_EQUIP_JOB_SCRIPT.new() as ProvisionCraneEquipmentJob
+		job.setup(_provision_equip_id, "equip_provision_crane", SHOWCASE_PROVISION_BERTH_ID)
+		job.bind_crane(_provision_crane)
+		_provision_crane.add_child(job)
+		_provision_harbour.register_equipment(job, SHOWCASE_PROVISION_BERTH_ID)
+		var operator := CRANE_OPERATOR_SCRIPT.new() as CraneOperatorNpc
+		operator.name = "CraneOperator"
+		operator.position = Vector3(-2.2, 0.0, 3.5)
+		operator.configure(_provision_harbour, SHOWCASE_PROVISION_BERTH_ID, _provision_equip_id)
+		mount.add_child(operator)
 
 
 func _stamp_quay_pier(parent: Node3D) -> void:
@@ -438,15 +480,15 @@ func _stamp_quay_pier(parent: Node3D) -> void:
 
 
 func _setup_harbour(bay: Node3D) -> void:
-	if _harbour != null:
-		_harbour.unregister_all()
-		_harbour.deactivate()
-		_harbour.queue_free()
-		_harbour = null
-	_harbour = HarbourController.new()
-	_harbour.setup(SHOWCASE_PORT_ID)
-	add_child(_harbour)
-	_harbour.activate()
+	if _bulk_harbour != null:
+		_bulk_harbour.unregister_all()
+		_bulk_harbour.deactivate()
+		_bulk_harbour.queue_free()
+		_bulk_harbour = null
+	_bulk_harbour = HarbourController.new()
+	_bulk_harbour.setup(SHOWCASE_PORT_ID)
+	add_child(_bulk_harbour)
+	_bulk_harbour.activate()
 	var slot := QuayBerthSlot.new()
 	slot.setup(
 		SHOWCASE_BERTH_ID,
@@ -458,12 +500,39 @@ func _setup_harbour(bay: Node3D) -> void:
 		1.0,
 	)
 	bay.add_child(slot)
-	_harbour.register_berth(slot)
+	_bulk_harbour.register_berth(slot)
 	var yard := bay.get_node_or_null("OreYard")
 	if yard != null:
 		for child in yard.get_children():
 			if child is OreMound:
-				_harbour.register_yard(child, SHOWCASE_BERTH_ID)
+				_bulk_harbour.register_yard(child, SHOWCASE_BERTH_ID)
+
+
+func _setup_provision_harbour(bay: Node3D) -> void:
+	if _provision_harbour != null:
+		_provision_harbour.unregister_all()
+		_provision_harbour.deactivate()
+		_provision_harbour.queue_free()
+		_provision_harbour = null
+	_provision_harbour = HarbourController.new()
+	_provision_harbour.setup(SHOWCASE_PORT_ID)
+	add_child(_provision_harbour)
+	_provision_harbour.activate()
+	var slot := QuayBerthSlot.new()
+	slot.setup(
+		SHOWCASE_PROVISION_BERTH_ID,
+		"container_quay",
+		"container",
+		PackedStringArray(["containers"]),
+		QUAY_LENGTH_M,
+		QUAY_WIDTH_M,
+		1.0,
+	)
+	bay.add_child(slot)
+	_provision_harbour.register_berth(slot)
+	var yard := bay.get_node_or_null("ContainerYard")
+	if yard != null:
+		_provision_harbour.register_yard(yard, SHOWCASE_PROVISION_BERTH_ID)
 
 
 func _stamp_ore_yard(parent: Node3D) -> void:
@@ -503,6 +572,11 @@ func _stamp_crate_yard(parent: Node3D) -> void:
 
 	var half_w := QUAY_WIDTH_M * 0.5
 	var lane_x := -(half_w - STORAGE_LANE_W * 0.5)
+	var drop := Node3D.new()
+	drop.name = "YardDrop"
+	drop.position = Vector3(lane_x, QUAY_DECK_TOP_Y, -18.0)
+	drop.add_to_group("container_yard_drop")
+	yard.add_child(drop)
 	var stripe := MeshBuilder.box(
 		Vector3(1.1, 0.85, QUAY_LENGTH_M * 0.9),
 		Color(0.18, 0.32, 0.48),
@@ -558,76 +632,100 @@ func _spawn_bulk_crane(bay: Node3D) -> void:
 	_bulk_crane.name = "BulkCrane"
 	_bulk_crane.rotation_degrees.y = -90.0
 	mount.add_child(_bulk_crane)
-	_auto = BULK_CRANE_AUTO_SCRIPT.new() as BulkCraneAutoOperator
-	_auto.name = "AutoOperator"
-	_bulk_crane.add_child(_auto)
-	_equip_id = HarbourController.make_equip_id(SHOWCASE_BERTH_ID, "equip_grab_unloader", 0)
-	if _harbour != null:
+	_bulk_auto = BULK_CRANE_AUTO_SCRIPT.new() as BulkCraneAutoOperator
+	_bulk_auto.name = "AutoOperator"
+	_bulk_crane.add_child(_bulk_auto)
+	_bulk_equip_id = HarbourController.make_equip_id(SHOWCASE_BERTH_ID, "equip_grab_unloader", 0)
+	if _bulk_harbour != null:
 		var job := BULK_EQUIP_JOB_SCRIPT.new() as BulkCraneEquipmentJob
-		job.setup(_equip_id, "equip_grab_unloader", SHOWCASE_BERTH_ID)
+		job.setup(_bulk_equip_id, "equip_grab_unloader", SHOWCASE_BERTH_ID)
 		job.bind_crane(_bulk_crane)
 		_bulk_crane.add_child(job)
-		_harbour.register_equipment(job, SHOWCASE_BERTH_ID)
+		_bulk_harbour.register_equipment(job, SHOWCASE_BERTH_ID)
 		var operator := CRANE_OPERATOR_SCRIPT.new() as CraneOperatorNpc
 		operator.name = "CraneOperator"
 		operator.position = Vector3(-2.2, 0.0, 3.5)
-		operator.configure(_harbour, SHOWCASE_BERTH_ID, _equip_id)
+		operator.configure(_bulk_harbour, SHOWCASE_BERTH_ID, _bulk_equip_id)
 		mount.add_child(operator)
 	call_deferred("_pose_bulk_crane")
 
 
 func _docked_ship() -> BoatBody:
-	var bay := _bay_roots[0] if not _bay_roots.is_empty() else null
+	var bay := _active_bay_root()
 	if bay == null:
 		return null
 	return bay.get_node_or_null("DockedShip") as BoatBody
 
 
+func _active_harbour() -> HarbourController:
+	if str(_active_bay().get("crane", "")) == "provision":
+		return _provision_harbour
+	return _bulk_harbour
+
+
+func _active_berth_id() -> String:
+	if str(_active_bay().get("crane", "")) == "provision":
+		return SHOWCASE_PROVISION_BERTH_ID
+	return SHOWCASE_BERTH_ID
+
+
 func _start_auto_load() -> void:
-	if str(_active_bay().get("crane", "")) != "bulk":
-		return
 	_ensure_ship_plugged()
-	if _harbour != null:
-		_harbour.request_load(SHOWCASE_BERTH_ID, "iron_ore")
-		return
-	if _bulk_crane == null:
+	var harbour := _active_harbour()
+	var berth := _active_berth_id()
+	if harbour != null:
+		if str(_active_bay().get("crane", "")) == "bulk":
+			harbour.request_load(berth, "iron_ore")
+		else:
+			harbour.request_load(berth)
 		return
 	var ship := _docked_ship()
 	if ship == null:
 		return
-	_bulk_crane.start_auto_load(ship, "iron_ore")
+	if str(_active_bay().get("crane", "")) == "bulk" and _bulk_crane != null:
+		_bulk_crane.start_auto_load(ship, "iron_ore")
+	elif str(_active_bay().get("crane", "")) == "provision" and _provision_crane != null:
+		_provision_crane.start_auto_load(ship)
 
 
 func _start_auto_unload() -> void:
-	if str(_active_bay().get("crane", "")) != "bulk":
-		return
 	_ensure_ship_plugged()
-	if _harbour != null:
-		_harbour.request_unload(SHOWCASE_BERTH_ID)
-		return
-	if _bulk_crane == null:
+	var harbour := _active_harbour()
+	var berth := _active_berth_id()
+	if harbour != null:
+		harbour.request_unload(berth)
 		return
 	var ship := _docked_ship()
 	if ship == null:
 		return
-	_bulk_crane.start_auto_unload(ship)
+	if str(_active_bay().get("crane", "")) == "bulk" and _bulk_crane != null:
+		_bulk_crane.start_auto_unload(ship)
+	elif str(_active_bay().get("crane", "")) == "provision" and _provision_crane != null:
+		_provision_crane.start_auto_unload(ship)
 
 
 func _stop_auto() -> void:
-	if _harbour != null and not _equip_id.is_empty():
-		_harbour.stop_equipment(_equip_id)
+	var harbour := _active_harbour()
+	if harbour != null:
+		if str(_active_bay().get("crane", "")) == "provision" and not _provision_equip_id.is_empty():
+			harbour.stop_equipment(_provision_equip_id)
+		elif not _bulk_equip_id.is_empty():
+			harbour.stop_equipment(_bulk_equip_id)
 		return
 	if _bulk_crane != null:
 		_bulk_crane.stop_auto()
+	if _provision_crane != null:
+		_provision_crane.stop_auto()
 
 
 func _ensure_ship_plugged() -> void:
-	if _harbour == null:
+	var harbour := _active_harbour()
+	if harbour == null:
 		return
 	var ship := _docked_ship()
 	if ship == null:
 		return
-	_harbour.plug_ship(SHOWCASE_BERTH_ID, ship)
+	harbour.plug_ship(_active_berth_id(), ship)
 
 
 func _pose_bulk_crane() -> void:
@@ -640,10 +738,13 @@ func _pose_bulk_crane() -> void:
 
 
 func _docked_vessel_label() -> String:
-	var preset := _prebuilt_entry(DOCKED_PREBUILT_ID)
+	var preset_id := DOCKED_PREBUILT_ID
+	if str(_active_bay().get("crane", "")) == "provision":
+		preset_id = PROVISION_DOCKED_PREBUILT_ID
+	var preset := _prebuilt_entry(preset_id)
 	if preset.is_empty():
-		return DOCKED_PREBUILT_ID
-	return str(preset.get("prebuilt_name", DOCKED_PREBUILT_ID))
+		return preset_id
+	return str(preset.get("prebuilt_name", preset_id))
 
 
 static func _prebuilt_entry(preset_id: String) -> Dictionary:
@@ -693,6 +794,8 @@ func _place_docked_ship(ship: BoatBody) -> void:
 	ship.freeze = true
 	if bool(ship.get_meta("showcase_plug_harbour", false)):
 		_ensure_ship_plugged()
+	elif _provision_harbour != null:
+		_provision_harbour.plug_ship(SHOWCASE_PROVISION_BERTH_ID, ship)
 
 
 func _ensure_environment() -> void:
