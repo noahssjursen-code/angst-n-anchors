@@ -666,9 +666,7 @@ func _make_storage_stack(family: String, family_color: Color, size: Vector3) -> 
 
 func _stamp_land_structures() -> void:
 	## Cheap primitive village from land_plan.terrain_grid — houses + trade yards
-	## on sampled terrain. No authored building meshes.
-	if not show_equipment_shapes:
-		return
+	## on sampled terrain. Always stamped with the port (not a gizmo / equipment toggle).
 	var plan := _graph.initial_attributes.get("land_plan", {}) as Dictionary
 	if plan.is_empty():
 		return

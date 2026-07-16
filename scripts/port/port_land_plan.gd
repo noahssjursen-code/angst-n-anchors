@@ -24,9 +24,9 @@ const ZONE_HEIGHT_INLAND_M := 110.0
 ## Spacing between grid stakes along the trapezoid UV (metres).
 const GRID_STEP_M := 52.0
 ## Must sit this far inland of the coastline (negative SDF magnitude).
-const BEACH_SETBACK_M := 32.0
+const BEACH_SETBACK_M := 18.0
 ## Terrain surface must clear the ocean by at least this much (no beach shelves).
-const MIN_HEIGHT_ABOVE_WATER_M := 4.0
+const MIN_HEIGHT_ABOVE_WATER_M := 1.5
 
 const KIND_HOUSE := "house"
 const KIND_TRADE := "trade_decoration"
@@ -40,9 +40,8 @@ const TRADE_HOUSE_CLEAR_M := 22.0
 const TRADE_MIN_SPACING_M := 70.0
 ## Inflate the town trapezoid when clearing forest around the village.
 const FOREST_CLEAR_PAD_M := 18.0
-## Keep village decoration on the seaward half of the buildable zone so it
-## reads from the harbour without reshaping streamed terrain.
-const HOUSE_MAX_INLAND_V := 0.42
+## Keep village decoration on the harbour-facing band of the buildable zone.
+const HOUSE_MAX_INLAND_V := 0.55
 
 
 static func build(
@@ -175,7 +174,7 @@ static func _build_terrain_grid(
 	var u_count := maxi(2, int(ceil(maxf(span_sea, span_in) / step)) + 1)
 	var v_count := maxi(2, int(ceil(depth_m / step)) + 1)
 	var port_basis := Basis(Vector3.UP, rotation_y)
-	var min_surface_y := WaveSurface.WATER_LEVEL + MIN_HEIGHT_ABOVE_WATER_M
+	var min_abs_surface_y := WaveSurface.WATER_LEVEL + MIN_HEIGHT_ABOVE_WATER_M
 
 	## Pass 1 — terrain / beach fitness per cell (row-major: vi * u_count + ui).
 	var terrain_ok: Array[bool] = []
@@ -195,14 +194,15 @@ static func _build_terrain_grid(
 				world_position,
 				port_basis,
 				local_xz,
-				min_surface_y,
+				min_abs_surface_y,
 			)
 			terrain_ok[idx] = ok
 			if not ok:
 				rejected_terrain += 1
 
-	## Pass 2 — place only where this cell and the seaward row neighbour are dry.
-	## Cap inland V so cottages stay on the harbour-facing band (no terrain reshape).
+	## Pass 2 — place on dry cells inside the harbour-facing band.
+	## One-row ledge margin: skip a cell whose seaward neighbour failed, so the
+	## first lip above beach/ocean is empty — but do not cascade forever.
 	var points: Array = []
 	var rejected_ledge := 0
 	var rejected_far := 0
@@ -212,29 +212,42 @@ static func _build_terrain_grid(
 			var idx := vi * u_count + ui
 			if not terrain_ok[idx]:
 				continue
-			if vi > 0 and not terrain_ok[(vi - 1) * u_count + ui]:
-				## Seaward neighbour was ocean/beach/too low — this row is ledge margin.
-				rejected_ledge += 1
-				continue
 			if v > HOUSE_MAX_INLAND_V:
 				rejected_far += 1
 				continue
-			var local_xz := local_xz_cache[idx]
-			var terrain_y := _sample_terrain_y(
+			if vi > 0 and not terrain_ok[(vi - 1) * u_count + ui]:
+				rejected_ledge += 1
+				continue
+			points.append(_make_house_point(
+				local_xz_cache[idx],
+				float(ui) / float(u_count - 1),
+				v,
 				world_layout,
 				world_position,
 				port_basis,
-				local_xz,
-			)
-			var u := float(ui) / float(u_count - 1)
-			points.append({
-				"kind": KIND_HOUSE,
-				"u": u,
-				"v": v,
-				"local": [local_xz.x, local_xz.y],
-				"y": terrain_y,
-				"radius_m": HOUSE_RADIUS_M,
-			})
+			))
+
+	## Steep / skinny coasts often wipe the grid. Fall back to any dry cell in
+	## the harbour band (no ledge skip) so the village still stamps.
+	if points.is_empty():
+		for vi in range(v_count):
+			var v := float(vi) / float(v_count - 1)
+			if v > HOUSE_MAX_INLAND_V:
+				continue
+			for ui in range(u_count):
+				var idx := vi * u_count + ui
+				if not terrain_ok[idx]:
+					continue
+				points.append(_make_house_point(
+					local_xz_cache[idx],
+					float(ui) / float(u_count - 1),
+					v,
+					world_layout,
+					world_position,
+					port_basis,
+				))
+		rejected_ledge = 0
+
 	return {
 		"step_m": step,
 		"u_count": u_count,
@@ -249,6 +262,24 @@ static func _build_terrain_grid(
 		"house_radius_m": HOUSE_RADIUS_M,
 		"trade_radius_m": TRADE_RADIUS_M,
 		"house_max_inland_v": HOUSE_MAX_INLAND_V,
+	}
+
+
+static func _make_house_point(
+		local_xz: Vector2,
+		u: float,
+		v: float,
+		world_layout: WorldLayout,
+		world_position: Vector3,
+		port_basis: Basis,
+) -> Dictionary:
+	return {
+		"kind": KIND_HOUSE,
+		"u": u,
+		"v": v,
+		"local": [local_xz.x, local_xz.y],
+		"y": _sample_terrain_y(world_layout, world_position, port_basis, local_xz),
+		"radius_m": HOUSE_RADIUS_M,
 	}
 
 
@@ -388,7 +419,7 @@ static func _is_buildable_stake(
 		world_position: Vector3,
 		port_basis: Basis,
 		local_xz: Vector2,
-		min_surface_y: float,
+		min_abs_surface_y: float,
 ) -> bool:
 	if world_layout == null:
 		## No layout in unit tests — keep the full UV lattice.
@@ -399,9 +430,9 @@ static func _is_buildable_stake(
 	## Positive SDF = water; need enough negative depth inland past the beach.
 	if signed >= -BEACH_SETBACK_M:
 		return false
-	var terrain_y := TerrainStreamer.sample_terrain_height(world_layout, world_xz, []) \
-			- world_position.y
-	if terrain_y < min_surface_y:
+	## Compare absolute terrain height to water — not port-local Y.
+	var abs_y := TerrainStreamer.sample_terrain_height(world_layout, world_xz, [])
+	if abs_y < min_abs_surface_y:
 		return false
 	return true
 
