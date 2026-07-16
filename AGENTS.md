@@ -65,6 +65,7 @@ Conventions:
 Current demos:
 - `scenes/showcases/port_showcase.tscn` — terrain-traced port pipeline at real seeded coastal terrain sites
 - `scenes/showcases/ship_showcase.tscn` / `player_showcase.tscn` / `cargo_showcase.tscn`
+- `scenes/showcases/crane_showcase.tscn` — bulk crane parts (one piece at a time)
 - `tests/staged_vessel_visual_demo.tscn` — staged deck fitout construction
 
 ---

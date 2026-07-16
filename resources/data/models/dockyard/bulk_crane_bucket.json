@@ -1,0 +1,60 @@
+{
+  "name": "bulk_crane_bucket",
+  "_doc": "Simple clamshell grab. Hang y=0. Hinge y=-1.0. Shells: right scoops +Z, left scoops -Z. Closed = opposite X pitch.",
+  "meta": {
+    "hinge_y_m": -1.0,
+    "shell_right_closed_deg": -32.0,
+    "shell_right_open_deg": 6.0,
+    "shell_left_closed_deg": 32.0,
+    "shell_left_open_deg": -6.0
+  },
+  "parts": [
+    {
+      "name": "hanger",
+      "role": "hanger",
+      "mesh": "cranes/bulk_crane_bucket_hanger.json",
+      "color": [0.25, 0.27, 0.29],
+      "roughness": 0.5,
+      "metallic": 0.35
+    },
+    {
+      "name": "frame",
+      "role": "bucket_frame",
+      "mesh": "cranes/bulk_crane_bucket_frame.json",
+      "color": [0.22, 0.50, 0.78],
+      "roughness": 0.55,
+      "metallic": 0.15,
+      "collision": "convex"
+    },
+    {
+      "name": "actuator",
+      "role": "actuator",
+      "mesh": "cranes/bulk_crane_bucket_actuator.json",
+      "color": [0.58, 0.60, 0.62],
+      "roughness": 0.4,
+      "metallic": 0.45
+    },
+    {
+      "name": "shell_right",
+      "role": "shell_right",
+      "parent": "frame",
+      "mesh": "cranes/bulk_crane_bucket_shell_right.json",
+      "position": [0, -1.0, 0],
+      "color": [0.15, 0.40, 0.70],
+      "roughness": 0.6,
+      "metallic": 0.1,
+      "collision": "convex"
+    },
+    {
+      "name": "shell_left",
+      "role": "shell_left",
+      "parent": "frame",
+      "mesh": "cranes/bulk_crane_bucket_shell_left.json",
+      "position": [0, -1.0, 0],
+      "color": [0.15, 0.40, 0.70],
+      "roughness": 0.6,
+      "metallic": 0.1,
+      "collision": "convex"
+    }
+  ]
+}

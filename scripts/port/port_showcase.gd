@@ -19,7 +19,6 @@ const SHOWCASE_PORT_NAMES: Array[String] = [
 	"Holmvik", "Sandvær", "Bergnes", "Kloven", "Strandnes", "Kvamsvik",
 	"Bremsund", "Tysneset", "Fjelltun", "Grønnvik", "Harberg", "Innvær",
 ]
-const REF_HULL_ID := "hull_28x10"
 const LENGTH_PROFILES: Array[String] = ["compact", "standard", "extended"]
 
 ## G cycles these packs (index 0 = off). Add a new debug pack here when you need one:
@@ -426,14 +425,11 @@ func _apply_gizmo_pack() -> void:
 
 
 func _rebuild() -> void:
-	## Tear down port/hulls only. Terrain is reused across rebuilds when the
+	## Tear down port only. Terrain is reused across rebuilds when the
 	## world seed is unchanged — recreating the streamer every tweak was the hitch.
 	var old_plot := get_node_or_null("GeneratedPort/PortPlot")
 	if old_plot != null:
 		old_plot.free()
-	var old_hulls := get_node_or_null("GeneratedPort/DockedScaleHulls")
-	if old_hulls != null:
-		old_hulls.free()
 
 	var generated := get_node_or_null("GeneratedPort") as Node3D
 	if generated == null:
@@ -489,158 +485,7 @@ func _rebuild() -> void:
 	generated.add_child(plot)
 	plot.global_position = _last_data.world_position
 	_apply_gizmo_pack()
-	call_deferred("_dock_scale_hulls", generated, plot)
 	_refresh_hud()
-
-
-## Design + reference hulls alongside the foundation dock for scale.
-func _dock_scale_hulls(parent: Node3D, plot: PortPlot) -> void:
-	if not is_instance_valid(parent) or not is_instance_valid(plot):
-		return
-	var graph := plot.layout_graph()
-	if graph == null:
-		return
-	var existing := parent.get_node_or_null("DockedScaleHulls")
-	if existing != null:
-		existing.free()
-	var foundation := graph.initial_attributes.get("foundation", {}) as Dictionary
-	var segments := foundation.get("segments", []) as Array
-	if segments.is_empty():
-		return
-	var design_size := PortSizing.normalized_size(_last_data.size if _last_data != null else port_size)
-	var design_hull_id := PortSizing.design_hull_id(design_size)
-	var design_loa := PortSizing.design_hull_loa_m(design_size)
-	var design_beam := PortSizing.design_hull_beam_m(design_size)
-	var ref_entry := HullRegistry.get_by_id(REF_HULL_ID)
-	var ref_loa := float(ref_entry.get("loa_m", 28.0))
-	var ref_beam := float(ref_entry.get("beam_m", 10.0))
-	var holder := Node3D.new()
-	holder.name = "DockedScaleHulls"
-	parent.add_child(holder)
-	var best_segment: Dictionary = {}
-	var best_length := 0.0
-	for raw in segments:
-		var segment := raw as Dictionary
-		var length_m := float(segment.get("length_m", 0.0))
-		if length_m > best_length:
-			best_length = length_m
-			best_segment = segment
-	if best_segment.is_empty():
-		return
-	_spawn_foundation_hull(
-		holder,
-		plot,
-		foundation,
-		best_segment,
-		0.5,
-		design_hull_id,
-		design_beam,
-		Color(0.75, 0.88, 1.0),
-		1.0,
-	)
-	var shore_length := float(foundation.get("shore_length_m", best_length))
-	if shore_length >= ref_loa * 1.35 and design_hull_id != REF_HULL_ID:
-		_spawn_foundation_hull(
-			holder,
-			plot,
-			foundation,
-			best_segment,
-			0.22,
-			REF_HULL_ID,
-			ref_beam,
-			Color(0.7, 0.95, 0.75),
-			-1.0,
-		)
-
-
-func _spawn_foundation_hull(
-		parent: Node3D,
-		plot: PortPlot,
-		foundation: Dictionary,
-		segment: Dictionary,
-		along_fraction: float,
-		hull_id: String,
-		beam_m: float,
-		label_color: Color,
-		side_sign: float,
-) -> void:
-	var entry := HullRegistry.get_by_id(hull_id)
-	var boat := HullRegistry.build_hull(hull_id)
-	if boat == null:
-		push_warning("PortShowcase: failed to build hull %s" % hull_id)
-		return
-	var center_arr := segment.get("center", [0.0, 0.0]) as Array
-	var dir_arr := segment.get("direction_local", [1.0, 0.0]) as Array
-	var tangent := Vector2(float(dir_arr[0]), float(dir_arr[1])).normalized()
-	var water_normal := Vector2(tangent.y, -tangent.x)
-	var length_m := float(segment.get("length_m", 40.0))
-	var dock_reach := float(foundation.get("dock_reach_m", 24.0))
-	var along := (along_fraction - 0.5) * length_m
-	var local := Vector3(
-		float(center_arr[0]) + tangent.x * along + water_normal.x * (dock_reach + beam_m * 0.5 + 5.0) * side_sign,
-		0.0,
-		float(center_arr[1]) + tangent.y * along + water_normal.y * (dock_reach + beam_m * 0.5 + 5.0) * side_sign,
-	)
-	var port_basis := Basis(Vector3.UP, plot.rotation.y)
-	var world_pos := plot.global_position + port_basis * local
-	var world_dir := port_basis * Vector3(tangent.x, 0.0, tangent.y)
-	var yaw_degrees := rad_to_deg(atan2(world_dir.x, world_dir.z))
-	boat.name = "%s_%s" % [hull_id, str(int(along_fraction * 100.0))]
-	boat.freeze = true
-	parent.add_child(boat)
-	boat.global_position = world_pos
-	boat.global_rotation_degrees.y = yaw_degrees
-	boat.place_at_waterline(WaveSurface.WATER_LEVEL)
-	var pad_local_y := float(foundation.get("surface_y_m", PortCoastTracer.FOUNDATION_SURFACE_Y_M)) \
-			+ PortCoastTracer.FOUNDATION_TERRAIN_CLEARANCE_M
-	var pad_world_y := plot.to_global(Vector3(local.x, pad_local_y, local.z)).y
-	if boat.global_position.y < pad_world_y + 0.05:
-		boat.global_position.y = pad_world_y + 0.05
-	boat.freeze = true
-	var loa := float(entry.get("loa_m", 0.0))
-	var beam := float(entry.get("beam_m", 0.0))
-	var label := Label3D.new()
-	label.name = "%s_Label" % boat.name
-	label.text = "%s\n%.0f×%.0f m" % [hull_id.to_upper(), loa, beam]
-	label.pixel_size = 0.028
-	label.modulate = label_color
-	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
-	label.no_depth_test = true
-	parent.add_child(label)
-	label.global_position = world_pos + Vector3(0.0, maxf(beam * 0.65, 8.0), 0.0)
-
-
-func _spawn_docked_hull(
-		parent: Node3D,
-		node_name: String,
-		hull_id: String,
-		world_position: Vector3,
-		yaw_degrees: float,
-		label_color: Color,
-) -> void:
-	var entry := HullRegistry.get_by_id(hull_id)
-	var boat := HullRegistry.build_hull(hull_id)
-	if boat == null:
-		push_warning("PortShowcase: failed to build hull %s" % hull_id)
-		return
-	boat.name = node_name
-	boat.freeze = true
-	parent.add_child(boat)
-	boat.global_position = world_position
-	boat.global_rotation_degrees.y = yaw_degrees
-	boat.place_at_waterline(WaveSurface.WATER_LEVEL)
-	boat.freeze = true
-	var loa := float(entry.get("loa_m", 0.0))
-	var beam := float(entry.get("beam_m", 0.0))
-	var label := Label3D.new()
-	label.name = "%s_Label" % node_name
-	label.text = "%s\n%.0f×%.0f m" % [hull_id.to_upper(), loa, beam]
-	label.pixel_size = 0.028
-	label.modulate = label_color
-	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
-	label.no_depth_test = true
-	label.position = world_position + Vector3(0.0, maxf(beam * 0.6, 8.0), 0.0)
-	parent.add_child(label)
 
 
 func _world_layout() -> WorldLayout:
@@ -916,10 +761,11 @@ func _refresh_hud() -> void:
 	]
 	_stats.text = "\n".join(PackedStringArray([
 		"Seed %d   length %s" % [world_seed, profile],
-		"Shore %.0f m   reach %.0f m   hull %s" % [
+		"Shore %.0f m   reach %.0f m   design %.0f×%.0f m" % [
 			float(recipe.get("shore_length_m", 0.0)),
 			float(recipe.get("dock_reach_m", 0.0)),
-			PortSizing.design_hull_id(live_size),
+			PortSizing.design_hull_loa_m(live_size),
+			PortSizing.design_hull_beam_m(live_size),
 		],
 		"Quay½ %.0f m   geo ceiling %d   gen %d" % [
 			PortSizing.quay_half_length_m(live_size),
@@ -1092,8 +938,7 @@ func _refresh_meta() -> void:
 			PortSizing.terrain_pad_width_m(size),
 			PortSizing.terrain_pad_depth_m(size),
 		],
-		"hull  %s  (%.0f×%.0f m)" % [
-			PortSizing.design_hull_id(size),
+		"design  %.0f×%.0f m" % [
 			PortSizing.design_hull_loa_m(size),
 			PortSizing.design_hull_beam_m(size),
 		],

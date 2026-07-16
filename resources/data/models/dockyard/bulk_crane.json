@@ -1,0 +1,64 @@
+{
+  "name": "bulk_crane",
+  "_doc": "Harbour bulk crane — base, cabin, engine+mast, lattice boom, wire, clamshell bucket.",
+  "meta": {
+    "pad_top_y_m": 2.27,
+    "boom_length_m": 30.0,
+    "wire_rest_length_m": 10.0,
+    "parts": ["base", "cabin", "engine", "boom", "wire", "bucket"]
+  },
+  "parts": [
+    {
+      "name": "base",
+      "role": "base",
+      "mesh": "cranes/bulk_crane_base.json",
+      "position": [0, 0, 0],
+      "color": [0.72, 0.55, 0.08],
+      "roughness": 0.75,
+      "metallic": 0.15,
+      "collision": "convex"
+    },
+    {
+      "name": "cabin",
+      "role": "cabin",
+      "parent": "base",
+      "model": "bulk_crane_cabin.json",
+      "position": [0, 2.29, 0]
+    },
+    {
+      "name": "engine",
+      "role": "engine",
+      "parent": "cabin",
+      "model": "bulk_crane_engine.json",
+      "position": [0, 0, 0]
+    },
+    {
+      "name": "boom",
+      "role": "boom",
+      "parent": "engine",
+      "mesh": "cranes/bulk_crane_boom.json",
+      "position": [-1.75, 3.7, -0.25],
+      "rotation_degrees": [0, 0, 0],
+      "color": [0.86, 0.66, 0.12],
+      "roughness": 0.65,
+      "metallic": 0.2
+    },
+    {
+      "name": "wire",
+      "role": "wire",
+      "parent": "boom",
+      "mesh": "cranes/bulk_crane_wire.json",
+      "position": [0, 0, -30],
+      "color": [0.14, 0.14, 0.15],
+      "roughness": 0.45,
+      "metallic": 0.4
+    },
+    {
+      "name": "bucket",
+      "role": "bucket",
+      "parent": "wire",
+      "model": "bulk_crane_bucket.json",
+      "position": [0, -10, 0]
+    }
+  ]
+}

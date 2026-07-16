@@ -3,7 +3,7 @@ class_name PortPlot
 extends Node3D
 
 ## Runtime composition root for the visualize-first port graph.
-## Stamps foundation, berth_plan pads/quays, and scale hulls.
+## Stamps foundation, berth_plan pads/quays, land decor, and harbour props.
 
 
 @export var port_id := ""

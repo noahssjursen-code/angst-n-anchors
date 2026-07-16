@@ -1,0 +1,39 @@
+{
+  "name": "bulk_crane_cabin",
+  "_doc": "Clean white cabin: welded corner posts + sill/header frames, glass only. No vent/rails/door trim.",
+  "parts": [
+    {
+      "name": "body",
+      "role": "cabin_body",
+      "mesh": "cranes/bulk_crane_cabin_body.json",
+      "color": [0.92, 0.93, 0.94],
+      "roughness": 0.55,
+      "metallic": 0.05,
+      "collision": "convex"
+    },
+    {
+      "name": "glass_front",
+      "role": "glass",
+      "mesh": "cranes/bulk_crane_cabin_glass_front.json",
+      "color": [0.12, 0.16, 0.2, 0.42],
+      "roughness": 0.12,
+      "metallic": 0.15
+    },
+    {
+      "name": "glass_left",
+      "role": "glass",
+      "mesh": "cranes/bulk_crane_cabin_glass_door.json",
+      "color": [0.1, 0.12, 0.14, 0.48],
+      "roughness": 0.15,
+      "metallic": 0.1
+    },
+    {
+      "name": "glass_right",
+      "role": "glass",
+      "mesh": "cranes/bulk_crane_cabin_glass_side.json",
+      "color": [0.1, 0.12, 0.14, 0.48],
+      "roughness": 0.15,
+      "metallic": 0.1
+    }
+  ]
+}

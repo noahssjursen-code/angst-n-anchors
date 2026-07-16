@@ -20,6 +20,11 @@ const SLOT_COLORS := {
 const STEEL := Color(0.45, 0.46, 0.48)
 ## Solid harbour pavement — flat #222222, no lighting variation.
 const FOUNDATION_PAVEMENT_COLOR := Color(0.133, 0.133, 0.133)
+## Quay pier mass (underwater face) — slightly lighter so depth reads in clear water.
+const QUAY_PIER_MASS_COLOR := Color(0.18, 0.19, 0.20)
+## Deck top height above the berth terminal origin (foundation surface).
+const QUAY_DECK_TOP_LOCAL_Y := 0.55
+const QUAY_DECK_SLAB_H := 0.55
 
 
 static func _foundation_pavement_material() -> StandardMaterial3D:
@@ -279,15 +284,7 @@ func _stamp_berth_quay(
 	var usable_len := length_m * 0.90
 	var z0 := -usable_len * 0.5
 
-	var deck := MeshBuilder.box(
-		Vector3(width_m, 0.55, length_m),
-		FOUNDATION_PAVEMENT_COLOR.lightened(0.04),
-		1.0,
-		0.0,
-	)
-	deck.name = "Deck"
-	deck.position = Vector3(0.0, 0.28, 0.0)
-	terminal.add_child(deck)
+	_stamp_quay_pier_model(terminal, length_m, width_m, surface_y)
 
 	## Coping marks the ship berth edge
 	var coping := MeshBuilder.box(
@@ -297,7 +294,7 @@ func _stamp_berth_quay(
 		0.05,
 	)
 	coping.name = "BerthEdge"
-	coping.position = Vector3(berth_sign * (width_m * 0.5 - 0.6), 0.55, 0.0)
+	coping.position = Vector3(berth_sign * (width_m * 0.5 - 0.6), QUAY_DECK_TOP_LOCAL_Y, 0.0)
 	terminal.add_child(coping)
 
 	var road := MeshBuilder.box(
@@ -307,7 +304,7 @@ func _stamp_berth_quay(
 		0.0,
 	)
 	road.name = "Road"
-	road.position = Vector3(road_x, 0.50, 0.0)
+	road.position = Vector3(road_x, QUAY_DECK_TOP_LOCAL_Y - 0.05, 0.0)
 	terminal.add_child(road)
 
 	_stamp_quay_storage_lane(
@@ -385,15 +382,7 @@ func _stamp_berth_quay_twin(parent: Node3D, station: Dictionary, surface_y: floa
 	var usable_len := length_m * 0.90
 	var z0 := -usable_len * 0.5
 
-	var deck := MeshBuilder.box(
-		Vector3(width_m, 0.55, length_m),
-		FOUNDATION_PAVEMENT_COLOR.lightened(0.04),
-		1.0,
-		0.0,
-	)
-	deck.name = "Deck"
-	deck.position = Vector3(0.0, 0.28, 0.0)
-	terminal.add_child(deck)
+	_stamp_quay_pier_model(terminal, length_m, width_m, surface_y)
 
 	var road := MeshBuilder.box(
 		Vector3(road_w, 0.22, usable_len),
@@ -402,7 +391,7 @@ func _stamp_berth_quay_twin(parent: Node3D, station: Dictionary, surface_y: floa
 		0.0,
 	)
 	road.name = "CentreRoad"
-	road.position = Vector3(0.0, 0.50, 0.0)
+	road.position = Vector3(0.0, QUAY_DECK_TOP_LOCAL_Y - 0.05, 0.0)
 	terminal.add_child(road)
 
 	var sides: Array = station.get("sides", []) as Array
@@ -422,7 +411,7 @@ func _stamp_berth_quay_twin(parent: Node3D, station: Dictionary, surface_y: floa
 			0.05,
 		)
 		coping.name = "BerthEdge_%d" % side_index
-		coping.position = Vector3(berth_sign * (width_m * 0.5 - 0.6), 0.55, 0.0)
+		coping.position = Vector3(berth_sign * (width_m * 0.5 - 0.6), QUAY_DECK_TOP_LOCAL_Y, 0.0)
 		terminal.add_child(coping)
 		_stamp_quay_storage_lane(
 			terminal, side, storage_x, storage_w, usable_len, z0, berth_sign
@@ -443,6 +432,69 @@ func _stamp_berth_quay_twin(parent: Node3D, station: Dictionary, surface_y: floa
 			Color(0.85, 0.85, 0.7),
 			0.03,
 		)
+
+
+## Solid quay arm: pavement deck + underwater pier mass + collision.
+## Extends from the asphalt apron into the basin; depth matches foundation seaward embed
+## so boat cameras cannot slip under the pier.
+func _stamp_quay_pier_model(
+		terminal: Node3D,
+		length_m: float,
+		width_m: float,
+		surface_y: float,
+) -> void:
+	var foundation := _graph.initial_attributes.get("foundation", {}) as Dictionary
+	var seaward_depth := float(foundation.get(
+		"seaward_depth_m",
+		PortCoastTracer.FOUNDATION_SEAWARD_DEPTH_M,
+	))
+	var deck_top := QUAY_DECK_TOP_LOCAL_Y
+	var water_bottom_world := WaveSurface.WATER_LEVEL - seaward_depth
+	var bottom_local := water_bottom_world - surface_y
+	var pier_h := maxf(deck_top - bottom_local, QUAY_DECK_SLAB_H + 2.0)
+	var pier_center_y := deck_top - pier_h * 0.5
+
+	var root := Node3D.new()
+	root.name = "QuayPier"
+	terminal.add_child(root)
+
+	## Underwater / freeboard mass — opaque so the camera cannot see “through” the pier.
+	var mass := MeshBuilder.box(
+		Vector3(width_m, pier_h, length_m),
+		QUAY_PIER_MASS_COLOR,
+		0.95,
+		0.0,
+	)
+	mass.name = "PierMass"
+	mass.position = Vector3(0.0, pier_center_y, 0.0)
+	mass.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	root.add_child(mass)
+
+	## Deck slab on the pier crown (same pavement language as the asphalt apron).
+	var deck := MeshBuilder.box(
+		Vector3(width_m, QUAY_DECK_SLAB_H, length_m),
+		FOUNDATION_PAVEMENT_COLOR.lightened(0.04),
+		1.0,
+		0.0,
+	)
+	deck.name = "Deck"
+	deck.position = Vector3(0.0, deck_top - QUAY_DECK_SLAB_H * 0.5, 0.0)
+	deck.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	root.add_child(deck)
+
+	## World collision — blocks boats and camera from travelling under the arm.
+	var body := StaticBody3D.new()
+	body.name = "PierCollision"
+	body.collision_layer = 1
+	body.collision_mask = 0
+	root.add_child(body)
+	var shape := BoxShape3D.new()
+	shape.size = Vector3(width_m, pier_h, length_m)
+	var col := CollisionShape3D.new()
+	col.name = "Shape"
+	col.shape = shape
+	col.position = Vector3(0.0, pier_center_y, 0.0)
+	body.add_child(col)
 
 
 ## Pack cargo along the storage flank, split into commodity zones when shared.
@@ -566,15 +618,6 @@ func _stamp_quay_crane_lane(
 	var lane := Node3D.new()
 	lane.name = "CraneLane"
 	terminal.add_child(lane)
-	var rail := MeshBuilder.box(
-		Vector3(lane_w * 0.9, 0.16, usable_len),
-		STEEL.darkened(0.2),
-		0.75,
-		0.25,
-	)
-	rail.name = "CraneRail"
-	rail.position = Vector3(lane_x, 0.48, 0.0)
-	lane.add_child(rail)
 
 	var zones: Array = station.get("zones", []) as Array
 	var tool_positions: Array[float] = []
