@@ -25,6 +25,7 @@ const QUAY_PIER_MASS_COLOR := Color(0.18, 0.19, 0.20)
 ## Deck top height above the berth terminal origin (foundation surface).
 const QUAY_DECK_TOP_LOCAL_Y := 0.55
 const QUAY_DECK_SLAB_H := 0.55
+const BULK_CRANE_SCRIPT := preload("res://scripts/port/bulk_crane.gd")
 
 
 static func _foundation_pavement_material() -> StandardMaterial3D:
@@ -584,9 +585,10 @@ func _stamp_quay_storage_lane(
 				zone_family,
 				color,
 				Vector3(stack_w, height, pad_len * 0.88),
+				commodity_id,
 			)
 			stack.name = "Cargo_%d_%d" % [zone_index, pad_i]
-			stack.position = Vector3(lane_x, 0.55 + height * 0.5, z)
+			stack.position = Vector3(lane_x, QUAY_DECK_TOP_LOCAL_Y, z)
 			lane.add_child(stack)
 
 		if show_module_labels:
@@ -659,7 +661,7 @@ func _stamp_quay_crane_lane(
 		if berth_sign < 0.0:
 			equip_root.rotation_degrees.y = 180.0
 		lane.add_child(equip_root)
-		_stamp_equipment_kind(equip_root, equip_kind, fp, family)
+		_stamp_equipment_kind(equip_root, equip_kind, fp, family, berth_sign)
 
 
 func _storage_stack_height(family: String, index: int) -> float:
@@ -676,7 +678,15 @@ func _storage_stack_height(family: String, index: int) -> float:
 			return 3.6 + float(index % 2) * 1.2
 
 
-func _make_storage_stack(family: String, family_color: Color, size: Vector3) -> Node3D:
+func _make_storage_stack(
+		family: String,
+		family_color: Color,
+		size: Vector3,
+		commodity_id: String = "",
+) -> Node3D:
+	if family == "bulk_ore":
+		var cid := commodity_id if not commodity_id.is_empty() else "iron_ore"
+		return OreMoundBuilder.build_mound(cid, size, cid.hash() + int(size.length() * 100.0))
 	var root := Node3D.new()
 	match family:
 		"liquid":
@@ -688,7 +698,7 @@ func _make_storage_stack(family: String, family_color: Color, size: Vector3) -> 
 				0.15,
 			)
 			root.add_child(tank)
-		"bulk_ore", "bulk_grain":
+		"bulk_grain":
 			root.add_child(MeshBuilder.box(size, family_color.darkened(0.1), 0.95, 0.0))
 		"container":
 			var tiers := maxi(1, int(round(size.y / 2.6)))
@@ -786,7 +796,7 @@ func _stamp_land_trade_point(
 		"tree_stand":
 			_stamp_land_trees(cluster, size, color)
 		"ore_mound":
-			_stamp_land_ore_mound(cluster, size, color)
+			_stamp_land_ore_mound(cluster, size, commodity_id)
 		"minehead":
 			_stamp_land_minehead(cluster, size, color)
 		"yard_blocks":
@@ -905,7 +915,11 @@ func _stamp_land_structure(parent: Node3D, entry: Dictionary, surface_y: float) 
 		"tree_stand":
 			_stamp_land_trees(cluster, size, color)
 		"ore_mound":
-			_stamp_land_ore_mound(cluster, size, color)
+			_stamp_land_ore_mound(
+				cluster,
+				size,
+				str(entry.get("commodity_id", "iron_ore")),
+			)
 		"minehead":
 			_stamp_land_minehead(cluster, size, color)
 		"yard_blocks":
@@ -993,15 +1007,9 @@ func _stamp_land_trees(root: Node3D, size: Vector3, color: Color) -> void:
 		root.add_child(canopy)
 
 
-func _stamp_land_ore_mound(root: Node3D, size: Vector3, color: Color) -> void:
-	var mound := MeshBuilder.sphere(minf(size.x, size.z) * 0.42, color.darkened(0.15), 1.0, 0.0)
-	mound.position = Vector3(0.0, size.y * 0.35, 0.0)
-	mound.scale = Vector3(1.2, 0.7, 1.0)
+func _stamp_land_ore_mound(root: Node3D, size: Vector3, commodity_id: String) -> void:
+	var mound := OreMoundBuilder.build_mound(commodity_id, size, commodity_id.hash())
 	root.add_child(mound)
-	var pile := MeshBuilder.sphere(minf(size.x, size.z) * 0.28, color.lightened(0.05), 1.0, 0.0)
-	pile.position = Vector3(size.x * 0.25, size.y * 0.22, size.z * 0.15)
-	pile.scale = Vector3(1.1, 0.6, 1.0)
-	root.add_child(pile)
 
 
 func _stamp_land_minehead(root: Node3D, size: Vector3, color: Color) -> void:
@@ -1116,12 +1124,18 @@ func _stamp_berth_asphalt(parent: Node3D, station: Dictionary, surface_y: float)
 		)
 
 
-func _stamp_equipment_kind(root: Node3D, kind: String, footprint: Vector3, family: String) -> void:
+func _stamp_equipment_kind(
+		root: Node3D,
+		kind: String,
+		footprint: Vector3,
+		family: String,
+		berth_sign: float = 1.0,
+) -> void:
 	match kind:
 		"equip_sts_gantry":
 			_stamp_sts_gantry_at(root, footprint)
 		"equip_grab_unloader":
-			_stamp_grab_unloader_at(root, footprint)
+			_stamp_bulk_crane_at(root, footprint, berth_sign)
 		"equip_grain_elevator":
 			_stamp_grain_elevator_at(root, footprint)
 		"equip_fish_derrick":
@@ -1162,6 +1176,17 @@ func _stamp_sts_gantry_at(root: Node3D, footprint: Vector3) -> void:
 	var beam := MeshBuilder.box(Vector3(footprint.x * 0.82, 1.2, 2.4), STEEL, 0.8, 0.3)
 	beam.position = Vector3(0.0, leg_h - 0.6, 0.0)
 	root.add_child(beam)
+
+
+func _stamp_bulk_crane_at(root: Node3D, _footprint: Vector3, _berth_sign: float) -> void:
+	var crane := BULK_CRANE_SCRIPT.new() as BulkCrane
+	crane.name = "BulkCrane"
+	## Authored boom is −Z; berth face is local ±X (equip_root yaw handles sign).
+	crane.rotation_degrees.y = -90.0
+	crane.boom_angle_deg = 38.0
+	crane.hoist_length_m = 10.0
+	crane.bucket_open = 0.0
+	root.add_child(crane)
 
 
 func _stamp_grab_unloader_at(root: Node3D, footprint: Vector3) -> void:

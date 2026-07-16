@@ -13,6 +13,16 @@ const LEFT_CLOSED_DEG := 32.0
 const LEFT_OPEN_DEG := -6.0
 const WIRE_REST_LENGTH_M := 10.0
 const HOIST_CABIN_CLEARANCE_M := 0.35
+const MAX_BUCKET_FILL := 1.0
+const PICKUP_RATE := 0.45
+const PICKUP_RADIUS_BASE_M := 8.0
+const PICKUP_HEIGHT_TOLERANCE_BASE_M := 4.0
+const PICKUP_OPEN_THRESHOLD := 0.55
+const DROP_CLOSE_THRESHOLD := 0.12
+const BUCKET_MOUTH_OFFSET_Y_M := -1.6
+
+signal bucket_fill_changed(fill: float, commodity_id: String)
+signal material_dropped(commodity_id: String, world_position: Vector3)
 
 signal model_loaded(path: String)
 signal slew_changed(degrees: float)
@@ -58,6 +68,18 @@ signal bucket_changed(open_amount: float)
 @export var hoist_speed_m: float = 8.0
 @export var bucket_speed: float = 2.5
 @export var show_operator: bool = true
+@export var model_scale: float = 1.5:
+	set(v):
+		model_scale = maxf(v, 0.01)
+		scale = Vector3.ONE * model_scale
+@export var bucket_scale: float = 1.5:
+	set(v):
+		bucket_scale = maxf(v, 0.01)
+		_apply_bucket_scale()
+@export var simulate_bulk_material := true
+
+var bucket_fill := 0.0
+var bucket_commodity_id := ""
 
 var _assembler: Node3D
 var _cabin: Node3D
@@ -73,9 +95,11 @@ var _wire_rest_length := WIRE_REST_LENGTH_M
 var _cabin_top_y_global := 0.0
 var _bucket_open_target := 0.0
 var _space_held := false
+var _drop_armed := false
 
 
 func _ready() -> void:
+	scale = Vector3.ONE * model_scale
 	reload_model()
 
 
@@ -120,6 +144,7 @@ func _bind_rig() -> void:
 	_apply_slew()
 	_apply_boom()
 	_apply_hoist()
+	_apply_bucket_scale()
 	_apply_bucket()
 	if show_operator:
 		_spawn_operator()
@@ -336,8 +361,98 @@ func _apply_hoist() -> void:
 	if _bucket != null and is_instance_valid(_bucket):
 		_bucket.position = _hoist_attachment_on_boom()
 		_bucket.rotation = _wire.rotation
-		_bucket.scale = Vector3.ONE
 	hoist_changed.emit(hoist_length_m)
+
+
+func _apply_bucket_scale() -> void:
+	if _bucket == null or not is_instance_valid(_bucket):
+		return
+	_bucket.scale = Vector3.ONE
+	if _bucket is ModelAssembler:
+		(_bucket as ModelAssembler).absolute_scale = bucket_scale
+	_bind_shells()
+
+
+func _bucket_mouth_global() -> Vector3:
+	if _bucket == null or not is_instance_valid(_bucket):
+		return global_position
+	return _bucket.global_position + _bucket.global_basis * Vector3(
+		0.0, BUCKET_MOUTH_OFFSET_Y_M * bucket_scale, 0.0)
+
+
+func _nearest_ore_mound() -> OreMound:
+	if not is_inside_tree():
+		return null
+	var mouth := _bucket_mouth_global()
+	var best: OreMound = null
+	var best_dist := PICKUP_RADIUS_BASE_M * bucket_scale
+	for node in get_tree().get_nodes_in_group("ore_mound"):
+		if node is not OreMound:
+			continue
+		var mound := node as OreMound
+		var dist := mouth.distance_to(mound.pickup_global())
+		if dist < best_dist:
+			best_dist = dist
+			best = mound
+	return best
+
+
+func _tick_bulk_material(delta: float) -> void:
+	if not simulate_bulk_material:
+		return
+	_try_pickup_from_mound(delta)
+	_try_drop_material()
+
+
+func _try_pickup_from_mound(delta: float) -> void:
+	if bucket_open < PICKUP_OPEN_THRESHOLD or bucket_fill >= MAX_BUCKET_FILL:
+		return
+	var mound := _nearest_ore_mound()
+	if mound == null:
+		return
+	var mouth := _bucket_mouth_global()
+	var pick := mound.pickup_global()
+	if absf(mouth.y - pick.y) > PICKUP_HEIGHT_TOLERANCE_BASE_M * bucket_scale:
+		return
+	var taken := mound.take(PICKUP_RATE * delta)
+	if taken <= 0.0:
+		return
+	if bucket_commodity_id.is_empty():
+		bucket_commodity_id = mound.commodity_id
+	elif bucket_commodity_id != mound.commodity_id:
+		return
+	bucket_fill = minf(MAX_BUCKET_FILL, bucket_fill + taken)
+	bucket_fill_changed.emit(bucket_fill, bucket_commodity_id)
+
+
+func _try_drop_material() -> void:
+	if bucket_fill <= 0.05:
+		_drop_armed = false
+		return
+	if bucket_open > DROP_CLOSE_THRESHOLD:
+		_drop_armed = false
+		return
+	if _drop_armed:
+		return
+	_drop_armed = true
+	var commodity := bucket_commodity_id if not bucket_commodity_id.is_empty() else "iron_ore"
+	var mouth := _bucket_mouth_global()
+	var drop_parent := get_parent()
+	if drop_parent == null:
+		drop_parent = self
+	var drop_vel := Vector3.DOWN * 2.0 + _bucket.global_basis.x * 1.2
+	BulkMaterialDrop.spawn(
+		drop_parent,
+		commodity,
+		mouth,
+		drop_vel,
+		bucket_fill,
+		bucket_scale,
+	)
+	material_dropped.emit(commodity, mouth)
+	bucket_fill = 0.0
+	bucket_commodity_id = ""
+	bucket_fill_changed.emit(bucket_fill, bucket_commodity_id)
 
 
 func _apply_bucket() -> void:
@@ -388,6 +503,8 @@ func playtest_input(delta: float) -> void:
 	if not is_equal_approx(bucket_open, _bucket_open_target):
 		bucket_open = move_toward(bucket_open, _bucket_open_target, bucket_speed * delta)
 
+	_tick_bulk_material(delta)
+
 
 func get_bucket() -> Node3D:
 	return _bucket
@@ -395,10 +512,14 @@ func get_bucket() -> Node3D:
 
 func get_status_lines() -> PackedStringArray:
 	var jaw := "open" if bucket_open > 0.5 else "closed"
+	var cargo := "empty"
+	if bucket_fill > 0.05:
+		cargo = "%s %.0f%%" % [bucket_commodity_id, bucket_fill * 100.0]
 	return PackedStringArray([
 		"Model  %s" % model_path.get_file(),
 		"Slew   %.1f°   (A / D)" % slew_degrees,
 		"Boom   %.1f°   (W / S)" % boom_angle_deg,
 		"Hoist  %.1f m  (Q / E)" % hoist_length_m,
 		"Bucket %s (%.0f%%)  (Space)" % [jaw, bucket_open * 100.0],
+		"Cargo  %s" % cargo,
 	])
