@@ -866,6 +866,6 @@
 	"id": "bulk_small",
 	"name": "Bulk Small",
 	"price_marks": 0,
-	"registration_id": "cargo_vessel",
+	"registration_id": "bulk_vessel",
 	"shaft_power_kw": 1871.0
 }

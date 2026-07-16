@@ -66,19 +66,9 @@ static func for_preview(seed: int, port_count: int = 35) -> ChartDataSnapshot:
 		PackedStringArray(PORT_NAMES),
 	)
 	for definition in definitions:
-		var data := PortExpander.expand(definition, seed)
-		out.ports.append({
-			"id": data.port_id,
-			"display_name": data.display_name,
-			"position": data.world_position,
-			"commodity_export": data.commodity_export,
-			"commodity_imports": data.commodity_imports.duplicate(),
-			"population": data.population,
-			"berth_count": data.berth_count,
-			"features": data.features.duplicate(),
-			"facility_footprints": data.layout_graph.local_footprints() \
-					if data.layout_graph != null else [],
-		})
+		## Lightweight trade/size summary — full PortLayoutGenerator is too
+		## expensive for the captain home-port picker (dozens of ports).
+		out.ports.append(PortExpander.chart_summary(definition, seed))
 	out._index_ports()
 	# These are deterministic field APIs, not world scene construction.
 	LandField.initialize(out.layout)

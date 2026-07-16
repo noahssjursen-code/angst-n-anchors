@@ -497,6 +497,40 @@ func is_bucket_over(target: Vector3, radius_m: float = 3.5) -> bool:
 	return bucket_horizontal_distance_to(target) <= radius_m
 
 
+## Horizontal working envelope from boom hinge (min steep → max flat), metres.
+func horizontal_reach_limits_m() -> Vector2:
+	var boom_len := maxf(get_boom_length_m(), 8.0)
+	var r_min := boom_len * cos(deg_to_rad(boom_max_deg))
+	var r_max := boom_len * cos(deg_to_rad(boom_min_deg))
+	if r_min > r_max:
+		var swap := r_min
+		r_min = r_max
+		r_max = swap
+	return Vector2(r_min, r_max)
+
+
+## True when the grab can plumb over `target` within boom angle limits.
+func can_reach_point(target: Vector3, margin_m: float = 2.0) -> bool:
+	var hinge := get_boom_hinge_global()
+	var horiz := Vector2(target.x - hinge.x, target.z - hinge.z).length()
+	var limits := horizontal_reach_limits_m()
+	return horiz >= limits.x - margin_m and horiz <= limits.y + margin_m
+
+
+## True when at least one bulk hold lip is inside this crane's reach.
+func can_reach_ship(ship: BoatBody) -> bool:
+	if ship == null or not is_instance_valid(ship):
+		return false
+	var any_hold := false
+	for hold in ship.get_bulk_holds():
+		any_hold = true
+		if can_reach_point(hold.get_crane_aim_global()):
+			return true
+	if any_hold:
+		return false
+	return can_reach_point(ship.global_position)
+
+
 ## @deprecated — use ik_bucket_to
 func drive_toward_target(delta: float, target: Vector3, travel_high: bool = false) -> void:
 	ik_bucket_to(delta, target, "raise" if travel_high else "track")

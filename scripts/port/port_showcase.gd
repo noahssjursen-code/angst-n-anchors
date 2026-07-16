@@ -57,6 +57,16 @@ const GIZMO_PACKS: Array[Dictionary] = [
 		},
 	},
 	{
+		"id": "harbour",
+		"label": "Harbour",
+		"hint": "HarbourController berth slots · free/occupied",
+		"site_layers": {
+			PortDebugGizmos.LAYER_DOCK_FACE: true,
+			PortDebugGizmos.LAYER_QUAY_ARMS: true,
+			PortDebugGizmos.LAYER_HARBOUR_BERTHS: true,
+		},
+	},
+	{
 		"id": "land",
 		"label": "Land",
 		"hint": "buildable zone overlay",
@@ -917,6 +927,24 @@ func _refresh_meta() -> void:
 				CommodityCatalog.commodity_display(commodity_id),
 				float(station.get("length_m", 0.0)),
 				float(station.get("depth_m", 0.0)),
+			]
+	var plot := get_node_or_null("GeneratedPort/PortPlot") as PortPlot
+	var harbour := plot.harbour_controller() if plot != null else null
+	if harbour != null:
+		var snap := harbour.snapshot()
+		trade_bb += "\n[b]HarbourController[/b]\n"
+		trade_bb += "berths  %d   ships  %d   equipment  %d   jobs  %d\n" % [
+			(snap.get("berths", []) as Array).size(),
+			(snap.get("ships", []) as Array).size(),
+			(snap.get("equipment", []) as Array).size(),
+			(snap.get("jobs", []) as Array).size(),
+		]
+		for raw in snap.get("berths", []) as Array:
+			var row := raw as Dictionary
+			var free := bool(row.get("free", true))
+			trade_bb += "  %s  ·  %s\n" % [
+				str(row.get("berth_id", "")),
+				("free" if free else "ship %s" % str(row.get("ship_id", ""))),
 			]
 	_meta_trade.text = trade_bb
 

@@ -805,6 +805,24 @@ func get_bulk_hold_states() -> Array[Dictionary]:
 	return out
 
 
+func get_moored_berth_id() -> String:
+	return str(get_meta("harbour_berth_id", ""))
+
+
+func get_harbour_port_id() -> String:
+	return str(get_meta("harbour_port_id", ""))
+
+
+func get_moored_berth() -> Node:
+	var port_id := get_harbour_port_id()
+	if port_id.is_empty():
+		return null
+	var hc = HarbourRegistry.controller(port_id)
+	if hc == null:
+		return null
+	return hc.ship_berth(self)
+
+
 func get_fishing_systems() -> Array[FishingSystem]:
 	## Live FishingSystem nodes mounted by DeckFitout for accepted fishing slots.
 	var out: Array[FishingSystem] = []
@@ -923,9 +941,17 @@ func dock_at_berth(dock: Node3D, _berth_index: int = 0) -> void:
 		return
 	refresh_hull_bounds_from_visuals()
 	var half_beam := get_half_beam_m()
-	var local := Vector3(0.0, 0.0, -(half_beam + 1.5))
-	# Face along quay (local +X), hull bow = -Z so yaw = PI/2 in dock space.
-	var xform := dock.global_transform * Transform3D(Basis.from_euler(Vector3(0.0, PI * 0.5, 0.0)), local)
+	var xform: Transform3D
+	if dock is QuayBerthSlot:
+		var slot := dock as QuayBerthSlot
+		xform = slot.global_transform * slot.ship_dock_local(half_beam)
+	else:
+		var local := Vector3(0.0, 0.0, -(half_beam + 1.5))
+		## Legacy PortDock faces: offset −Z, bow along +X.
+		xform = dock.global_transform * Transform3D(
+			Basis.from_euler(Vector3(0.0, PI * 0.5, 0.0)),
+			local,
+		)
 	snap_to_transform(xform)
 	place_at_waterline(WaveSurface.WATER_LEVEL)
 

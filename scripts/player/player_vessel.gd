@@ -46,8 +46,15 @@ static func despawn_all_ships(tree: SceneTree, except: BoatBody = null) -> void:
 		ship.free()
 
 
-static func unregister_ship_from_docks(_ship: BoatBody) -> void:
-	pass
+static func unregister_ship_from_docks(ship: BoatBody) -> void:
+	if ship == null or not is_instance_valid(ship):
+		return
+	var port_id := str(ship.get_meta("harbour_port_id", ""))
+	if port_id.is_empty():
+		return
+	var harbour := HarbourRegistry.controller(port_id)
+	if harbour != null:
+		harbour.unplug_ship(ship)
 
 
 static func replace_before_spawn(tree: SceneTree) -> void:

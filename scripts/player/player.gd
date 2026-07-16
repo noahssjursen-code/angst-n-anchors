@@ -61,7 +61,8 @@ var _water_submerge_time: float = 0.0
 func _ready() -> void:
 	add_to_group("player")
 	collision_layer = LAYER_PLAYER
-	collision_mask |= LAYER_BOAT_WALK
+	## World (1) for terrain / quay / asphalt; boat_walk (4) for ship decks.
+	collision_mask |= 1 | LAYER_BOAT_WALK
 	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 	_current_speed = walk_speed
 	_last_safe_position = global_position

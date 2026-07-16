@@ -168,15 +168,21 @@ static func _resolve(
 	var resolved := own.duplicate(true)
 	var rules: Array = []
 	var caps: Dictionary = {}
+	var terminal_families: Array = []
 	var parent := str(own.get("inherits", "")).strip_edges()
 	if not parent.is_empty():
 		var inherited := _resolve(parent, visiting, errors)
 		rules.append_array(inherited.get("rules", []) as Array)
 		caps.merge(inherited.get("budget_caps", {}) as Dictionary, true)
+		terminal_families = (inherited.get("terminal_families", []) as Array).duplicate()
 	rules.append_array(own.get("rules", []) as Array)
 	caps.merge(own.get("budget_caps", {}) as Dictionary, true)
+	if own.has("terminal_families"):
+		terminal_families = (own.get("terminal_families", []) as Array).duplicate()
 	resolved["rules"] = rules
 	resolved["budget_caps"] = caps
+	if not terminal_families.is_empty():
+		resolved["terminal_families"] = terminal_families
 	visiting.erase(registration_id)
 	return resolved
 

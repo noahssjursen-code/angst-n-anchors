@@ -19,6 +19,7 @@ const LAYER_QUAY_ROOTS := "quay_roots"
 const LAYER_QUAY_ARMS := "quay_arms"
 const LAYER_LAND_ZONE := "land_zone"
 const LAYER_LAND_STRUCTURES := "land_structures"
+const LAYER_HARBOUR_BERTHS := "harbour_berths"
 
 const LAYER_IDS: PackedStringArray = [
 	LAYER_ORIGIN,
@@ -35,6 +36,7 @@ const LAYER_IDS: PackedStringArray = [
 	LAYER_QUAY_ARMS,
 	LAYER_LAND_ZONE,
 	LAYER_LAND_STRUCTURES,
+	LAYER_HARBOUR_BERTHS,
 ]
 
 const ORIGIN_COLOR := Color(1.0, 0.15, 0.15)
@@ -52,12 +54,52 @@ const LAND_ZONE_EDGE := Color(0.15, 1.0, 0.45)
 ## layer_id → visible. Missing keys default to true when a master enable is on.
 var _layer_visible: Dictionary = {}
 var _graph: PortLayoutGraph
+var _harbour: HarbourController
 
 
-func configure(graph: PortLayoutGraph, layer_visible: Dictionary = {}) -> void:
+func configure(
+		graph: PortLayoutGraph,
+		layer_visible: Dictionary = {},
+		harbour: HarbourController = null,
+) -> void:
+	_unbind_harbour_signals()
 	_graph = graph
+	_harbour = harbour
+	_bind_harbour_signals()
 	_layer_visible = _normalized_layers(layer_visible)
 	_rebuild()
+
+
+func _bind_harbour_signals() -> void:
+	if _harbour == null:
+		return
+	if not _harbour.ship_plugged.is_connected(_on_harbour_occupancy_changed):
+		_harbour.ship_plugged.connect(_on_harbour_occupancy_changed)
+	if not _harbour.ship_unplugged.is_connected(_on_harbour_occupancy_changed):
+		_harbour.ship_unplugged.connect(_on_harbour_occupancy_changed)
+
+
+func _unbind_harbour_signals() -> void:
+	if _harbour == null:
+		return
+	if _harbour.ship_plugged.is_connected(_on_harbour_occupancy_changed):
+		_harbour.ship_plugged.disconnect(_on_harbour_occupancy_changed)
+	if _harbour.ship_unplugged.is_connected(_on_harbour_occupancy_changed):
+		_harbour.ship_unplugged.disconnect(_on_harbour_occupancy_changed)
+
+
+func _on_harbour_occupancy_changed(_berth_id: String = "", _ship: BoatBody = null) -> void:
+	_refresh_harbour_berths()
+
+
+func _refresh_harbour_berths() -> void:
+	var layer := get_node_or_null(LAYER_HARBOUR_BERTHS) as Node3D
+	if layer == null:
+		return
+	for child in layer.get_children():
+		child.free()
+	_stamp_harbour_berths()
+	_apply_layer_visibility()
 
 
 func set_layer_visible(layer_id: String, enabled: bool) -> void:
@@ -156,7 +198,44 @@ func _rebuild() -> void:
 	_stamp_berth_plan(_graph.initial_attributes.get("berth_plan", {}) as Dictionary)
 	_stamp_land_zone(_graph.initial_attributes.get("land_plan", {}) as Dictionary)
 	_stamp_land_plan(_graph.initial_attributes.get("land_plan", {}) as Dictionary)
+	_stamp_harbour_berths()
 	_apply_layer_visibility()
+
+
+func _stamp_harbour_berths() -> void:
+	var layer := _ensure_layer(LAYER_HARBOUR_BERTHS)
+	if _harbour == null:
+		return
+	for slot in _harbour.berths():
+		var s := slot as QuayBerthSlot
+		if s == null or not is_instance_valid(s):
+			continue
+		var occupied := _harbour.moored_ship(s.berth_id) != null
+		var color := Color(0.95, 0.35, 0.2, 0.55) if occupied else Color(0.25, 0.85, 0.55, 0.45)
+		var half_l := maxf(s.length_m * 0.45, 8.0)
+		var half_w := maxf(s.width_m * 0.35, 6.0)
+		var box := MeshBuilder.box(
+			Vector3(half_w * 2.0, 0.8, half_l * 2.0),
+			color,
+			0.85,
+			0.0,
+		)
+		box.name = "HarbourBerth_%s" % s.station_id.replace("/", "_")
+		layer.add_child(box)
+		box.global_position = s.global_position + Vector3(0.0, 1.2, 0.0)
+		box.global_rotation = s.global_rotation
+		var lbl := Label3D.new()
+		lbl.name = "HarbourBerthLbl_%s" % s.station_id.replace("/", "_")
+		lbl.text = "%s\n%s" % [
+			s.berth_id,
+			"OCCUPIED" if occupied else "FREE",
+		]
+		lbl.pixel_size = 0.028
+		lbl.modulate = color.lightened(0.25)
+		lbl.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+		lbl.no_depth_test = true
+		layer.add_child(lbl)
+		lbl.global_position = s.global_position + Vector3(0.0, 14.0, 0.0)
 
 
 func _stamp_berth_plan(plan: Dictionary) -> void:

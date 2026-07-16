@@ -6,7 +6,11 @@ extends Node3D
 
 const BULK_CRANE_SCRIPT := preload("res://scripts/port/bulk_crane.gd")
 const BULK_CRANE_AUTO_SCRIPT := preload("res://scripts/port/bulk_crane_auto_operator.gd")
+const BULK_EQUIP_JOB_SCRIPT := preload("res://scripts/port/bulk_crane_equipment_job.gd")
+const CRANE_OPERATOR_SCRIPT := preload("res://scripts/port/crane_operator_npc.gd")
 const DOCKED_PREBUILT_ID := "bulk_small"
+const SHOWCASE_PORT_ID := "crane_showcase"
+const SHOWCASE_BERTH_ID := "crane_showcase/ore_quay"
 
 const QUAY_LENGTH_M := 140.0
 const QUAY_WIDTH_M := 72.0
@@ -24,6 +28,8 @@ const PIER_MASS_COLOR := Color(0.18, 0.19, 0.20)
 
 var _crane: BulkCrane
 var _auto: BulkCraneAutoOperator
+var _harbour: HarbourController
+var _equip_id := ""
 var _camera: Camera3D
 var _hud: Label
 var _orbiting := false
@@ -40,12 +46,20 @@ func _ready() -> void:
 	_ensure_camera()
 	_ensure_hud()
 	_spawn_quay_scene()
+	_setup_harbour()
 	_spawn_crane()
 	_spawn_docked_ship()
 	_ensure_scale_human()
 	_focus_on_bucket()
 	_update_camera()
 	_refresh_hud()
+
+
+func _exit_tree() -> void:
+	if _harbour != null:
+		_harbour.unregister_all()
+		_harbour.deactivate()
+		_harbour = null
 
 
 var _hud_timer := 0.0
@@ -144,10 +158,20 @@ func _refresh_hud() -> void:
 		"CRANE SHOWCASE — %s" % mode,
 		"quay · ore mounds · grab crane · docked %s" % _docked_vessel_label(),
 		"B  bucket focus · Home  overview",
-		"L  auto load ship · O  auto unload · X  stop auto",
-		"A D  slew · W S  boom · Q E  hoist · Space  jaws · RMB orbit",
+		"L  harbour load · O  harbour unload · X  stop  (via HarbourController)",
+		"Talk to crane operator at the cabin  ·  A/D W/S Q/E Space · RMB orbit",
 		"",
 	])
+	if _harbour != null:
+		var snap := _harbour.snapshot()
+		lines.append(
+			"Harbour  berths %d  ships %d  jobs %d" % [
+				(snap.get("berths", []) as Array).size(),
+				(snap.get("ships", []) as Array).size(),
+				(snap.get("jobs", []) as Array).size(),
+			]
+		)
+		lines.append("")
 	if _auto != null:
 		lines.append(_auto.get_status_line())
 		if _auto.is_active():
@@ -224,6 +248,19 @@ func _stamp_quay_pier(parent: Node3D) -> void:
 	deck.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	pier.add_child(deck)
 
+	var body := StaticBody3D.new()
+	body.name = "PierCollision"
+	body.collision_layer = 1
+	body.collision_mask = 0
+	pier.add_child(body)
+	var shape := BoxShape3D.new()
+	shape.size = Vector3(QUAY_WIDTH_M, pier_h, QUAY_LENGTH_M)
+	var col := CollisionShape3D.new()
+	col.name = "Shape"
+	col.shape = shape
+	col.position = Vector3(0.0, pier_center_y, 0.0)
+	body.add_child(col)
+
 	var coping := MeshBuilder.box(
 		Vector3(1.2, 0.7, QUAY_LENGTH_M * 0.96),
 		Color(0.55, 0.56, 0.58),
@@ -251,6 +288,38 @@ func _stamp_quay_pier(parent: Node3D) -> void:
 	pier.add_child(road)
 
 
+func _setup_harbour() -> void:
+	if _harbour != null:
+		_harbour.unregister_all()
+		_harbour.deactivate()
+	_harbour = HarbourController.new()
+	_harbour.setup(SHOWCASE_PORT_ID)
+	add_child(_harbour)
+	_harbour.activate()
+	var slot := QuayBerthSlot.new()
+	slot.setup(
+		SHOWCASE_BERTH_ID,
+		"ore_quay",
+		"bulk_ore",
+		PackedStringArray(["iron_ore"]),
+		QUAY_LENGTH_M,
+		QUAY_WIDTH_M,
+		1.0,
+	)
+	var quay := get_node_or_null("QuayScene") as Node3D
+	if quay != null:
+		quay.add_child(slot)
+	else:
+		add_child(slot)
+	_harbour.register_berth(slot)
+	if quay != null:
+		var yard := quay.get_node_or_null("OreYard")
+		if yard != null:
+			for child in yard.get_children():
+				if child is OreMound:
+					_harbour.register_yard(child, SHOWCASE_BERTH_ID)
+
+
 func _stamp_ore_yard(parent: Node3D) -> void:
 	var yard := Node3D.new()
 	yard.name = "OreYard"
@@ -259,16 +328,7 @@ func _stamp_ore_yard(parent: Node3D) -> void:
 	var half_w := QUAY_WIDTH_M * 0.5
 	var lane_x := -(half_w - STORAGE_LANE_W * 0.5)
 	var ore_color := CommodityCatalog.commodity_color("iron_ore")
-	var apron := MeshBuilder.box(
-		Vector3(STORAGE_LANE_W * 0.96, 0.22, QUAY_LENGTH_M * 0.88),
-		ore_color,
-		0.9,
-		0.0,
-	)
-	apron.name = "OreApron"
-	apron.position = Vector3(lane_x, QUAY_DECK_TOP_Y + 0.02, 0.0)
-	yard.add_child(apron)
-
+	## Edge stripe only — no full orange apron (matches live bulk quay).
 	var stripe := MeshBuilder.box(
 		Vector3(1.1, 0.85, QUAY_LENGTH_M * 0.9),
 		ore_color.lightened(0.12),
@@ -319,6 +379,18 @@ func _spawn_crane() -> void:
 	_auto = BULK_CRANE_AUTO_SCRIPT.new() as BulkCraneAutoOperator
 	_auto.name = "AutoOperator"
 	_crane.add_child(_auto)
+	_equip_id = HarbourController.make_equip_id(SHOWCASE_BERTH_ID, "equip_grab_unloader", 0)
+	if _harbour != null:
+		var job := BULK_EQUIP_JOB_SCRIPT.new() as BulkCraneEquipmentJob
+		job.setup(_equip_id, "equip_grab_unloader", SHOWCASE_BERTH_ID)
+		job.bind_crane(_crane)
+		_crane.add_child(job)
+		_harbour.register_equipment(job, SHOWCASE_BERTH_ID)
+		var operator := CRANE_OPERATOR_SCRIPT.new() as CraneOperatorNpc
+		operator.name = "CraneOperator"
+		operator.position = Vector3(-2.2, 0.0, 3.5)
+		operator.configure(_harbour, SHOWCASE_BERTH_ID, _equip_id)
+		mount.add_child(operator)
 	call_deferred("_pose_crane")
 
 
@@ -327,6 +399,10 @@ func _docked_ship() -> BoatBody:
 
 
 func _start_auto_load() -> void:
+	_ensure_ship_plugged()
+	if _harbour != null:
+		_harbour.request_load(SHOWCASE_BERTH_ID, "iron_ore")
+		return
 	if _crane == null:
 		return
 	var ship := _docked_ship()
@@ -336,6 +412,10 @@ func _start_auto_load() -> void:
 
 
 func _start_auto_unload() -> void:
+	_ensure_ship_plugged()
+	if _harbour != null:
+		_harbour.request_unload(SHOWCASE_BERTH_ID)
+		return
 	if _crane == null:
 		return
 	var ship := _docked_ship()
@@ -345,8 +425,20 @@ func _start_auto_unload() -> void:
 
 
 func _stop_auto() -> void:
+	if _harbour != null and not _equip_id.is_empty():
+		_harbour.stop_equipment(_equip_id)
+		return
 	if _crane != null:
 		_crane.stop_auto()
+
+
+func _ensure_ship_plugged() -> void:
+	if _harbour == null:
+		return
+	var ship := _docked_ship()
+	if ship == null:
+		return
+	_harbour.plug_ship(SHOWCASE_BERTH_ID, ship)
 
 
 func _pose_crane() -> void:
@@ -413,6 +505,7 @@ func _place_docked_ship(ship: BoatBody) -> void:
 		return
 	ship.place_at_waterline(WaveSurface.WATER_LEVEL)
 	ship.freeze = true
+	_ensure_ship_plugged()
 
 
 func _ensure_environment() -> void:

@@ -24,6 +24,11 @@ const ELLIPSE_SPEED := 0.18 ## fraction of arc per second
 const NEAR_M := 4.0
 const WORK_S := 0.55
 const TIMEOUT_S := 16.0
+## Lower phases used to wait TIMEOUT_S/2 (8s) when 3D near-miss failed on deep holds.
+const LOWER_TIMEOUT_S := 5.0
+const LOWER_VERT_READY_M := 3.2
+const LOWER_VERT_SOFT_M := 5.5
+const DUMP_OPEN_FRAC := 0.5
 const ELLIPSE_GIZMO_SEGS := 24
 const AIM_SMOOTH := 4.0 ## higher = snappier smoothed aim
 
@@ -34,6 +39,7 @@ signal job_stopped()
 signal phase_changed(phase: Phase)
 
 @export var max_cycles := 0
+## Local preference; still gated by DebugHud world gizmos (F3 → G).
 @export var show_target_gizmos := true
 @export var arc_height_m := ARC_HEIGHT_M
 @export var ellipse_speed := ELLIPSE_SPEED
@@ -66,10 +72,21 @@ var _g_holds: Array[MeshInstance3D] = []
 
 
 func _ready() -> void:
+	add_to_group("bulk_crane_auto")
 	_crane = get_parent() as BulkCrane
 	if _crane == null:
 		push_warning("BulkCraneAutoOperator: parent must be BulkCrane")
 	_build_gizmos()
+	show_target_gizmos = WorldGizmos.is_enabled()
+	var hud := get_node_or_null("/root/DebugHud")
+	if hud != null and hud.has_signal("world_gizmos_changed"):
+		if not hud.world_gizmos_changed.is_connected(set_show_target_gizmos):
+			hud.world_gizmos_changed.connect(set_show_target_gizmos)
+
+
+func set_show_target_gizmos(enabled: bool) -> void:
+	show_target_gizmos = enabled
+	_update_gizmos()
 
 
 func is_active() -> bool:
@@ -195,13 +212,20 @@ func _set_phase(phase: Phase) -> void:
 func point_a() -> Vector3:
 	if operation == Operation.LOAD:
 		return _mound.pickup_global() if _mound != null else _crane.global_position
-	return _hold.get_crane_aim_global() if _hold != null else _crane.global_position
+	return _hold_aim() if _hold != null else _crane.global_position
 
 
 func point_b() -> Vector3:
 	if operation == Operation.LOAD:
-		return _hold.get_crane_aim_global() if _hold != null else _crane.global_position
+		return _hold_aim() if _hold != null else _crane.global_position
 	return _mound.pickup_global() if _mound != null else _crane.global_position
+
+
+func _hold_aim() -> Vector3:
+	if _hold == null:
+		return _crane.global_position if _crane != null else Vector3.ZERO
+	var hint := _crane.get_boom_hinge_global() if _crane != null else _crane.global_position
+	return _hold.get_crane_aim_toward(hint)
 
 
 func ellipse_point(t: float) -> Vector3:
@@ -256,10 +280,7 @@ func _tick(delta: float) -> void:
 			_crane.set_bucket_jaws_target(1.0)
 			_crane.ik_bucket_to(delta, point_a(), "track")
 			_crane.step_jaws(delta)
-			if (
-				(_crane.is_bucket_near(point_a(), NEAR_M) and _crane.is_bucket_at_target(0.1))
-				or _timer >= TIMEOUT_S * 0.5
-			):
+			if _lower_ready(point_a()):
 				_set_phase(Phase.GRAB_A)
 
 		Phase.GRAB_A:
@@ -304,21 +325,22 @@ func _tick(delta: float) -> void:
 			_crane.set_bucket_jaws_target(0.0)
 			_crane.ik_bucket_to(delta, point_b(), "track")
 			_crane.step_jaws(delta)
-			if (
-				(_crane.is_bucket_near(point_b(), NEAR_M) and _crane.is_bucket_at_target(0.1))
-				or _timer >= TIMEOUT_S * 0.5
-			):
+			if _lower_ready(point_b()):
 				_set_phase(Phase.DUMP_B)
 
 		Phase.DUMP_B:
-			## Open jaws and release.
+			## Open jaws and release — dump as soon as shells are half open.
 			_crane.set_bucket_jaws_target(1.0)
 			_crane.ik_bucket_to(delta, point_b(), "hold")
 			_crane.step_jaws(delta)
-			if not _did_act and (_crane.is_bucket_at_target(0.08) or _timer >= WORK_S + 1.0):
+			if not _did_act and (
+				_crane.bucket_open >= DUMP_OPEN_FRAC
+				or _crane.is_bucket_at_target(0.08)
+				or _timer >= WORK_S + 0.35
+			):
 				_crane.force_release_at(point_b())
 				_did_act = true
-			if _did_act and _crane.get_bucket_lot().is_empty():
+			if _did_act and (_crane.get_bucket_lot().is_empty() or _timer >= WORK_S + 0.6):
 				_set_phase(Phase.RAISE_B)
 
 		Phase.RAISE_B:
@@ -354,6 +376,31 @@ func _tick(delta: float) -> void:
 				_finish()
 
 
+## Dump/grab only after the bucket has actually lowered. Horizontal "over" alone
+## is already true at travel height when ARC_TO_B finishes.
+func _lower_ready(target: Vector3) -> bool:
+	if _crane == null:
+		return _timer >= LOWER_TIMEOUT_S
+	if _crane.is_bucket_near(target, NEAR_M):
+		return true
+	var bucket := _crane.get_bucket_global()
+	var horiz := Vector2(target.x - bucket.x, target.z - bucket.z).length()
+	var above := bucket.y - target.y
+	if horiz <= NEAR_M * 1.35 and above <= LOWER_VERT_READY_M and above >= -2.5:
+		return true
+	## Soft: near-low after a real lower attempt.
+	if horiz <= NEAR_M * 1.5 and above <= LOWER_VERT_SOFT_M and _timer >= 1.4:
+		return true
+	## As low as the wire allows while still over the hatch.
+	if (
+		horiz <= NEAR_M * 1.5
+		and _timer >= 1.0
+		and _crane.hoist_length_m >= _crane.get_effective_hoist_max_m() - 0.35
+	):
+		return true
+	return _timer >= LOWER_TIMEOUT_S
+
+
 func _finish() -> void:
 	var op := operation
 	var n := _cycles
@@ -380,33 +427,59 @@ func _rebind_targets() -> void:
 
 
 func _best_load_hold(ship: BoatBody, commodity_id: String) -> BulkHoldComponent:
-	var best: BulkHoldComponent = null
-	var best_free := -1.0
-	for hold in ship.get_bulk_holds():
-		if not hold.can_accept_commodity(commodity_id):
-			continue
-		var free_t := hold.state.available_tonnes_t()
-		if free_t <= BulkCargoLot.TONNES_EPS:
-			continue
-		if free_t > best_free:
-			best_free = free_t
-			best = hold
-	return best
+	return _pick_hold(ship, commodity_id, true)
 
 
 func _best_unload_hold(ship: BoatBody, commodity_id: String) -> BulkHoldComponent:
+	return _pick_hold(ship, commodity_id, false)
+
+
+## Multi-crane safe: only holds this boom can reach, prefer fewer workers + nearer
+## so parallel tools split hatches instead of stacking on one lip.
+func _pick_hold(ship: BoatBody, commodity_id: String, loading: bool) -> BulkHoldComponent:
+	if ship == null or _crane == null:
+		return null
 	var cid := commodity_id.strip_edges()
 	var best: BulkHoldComponent = null
-	var best_fill := -1.0
+	var best_score := -INF
+	var hinge := _crane.get_boom_hinge_global()
 	for hold in ship.get_bulk_holds():
-		if hold.state.is_empty():
+		if loading:
+			if cid.is_empty() or not hold.can_accept_commodity(cid):
+				continue
+			if hold.state.available_tonnes_t() <= BulkCargoLot.TONNES_EPS:
+				continue
+		else:
+			if hold.state.is_empty():
+				continue
+			if not cid.is_empty() and hold.state.commodity_id != cid:
+				continue
+		var aim := hold.get_crane_aim_toward(hinge)
+		if not _crane.can_reach_point(aim):
 			continue
-		if not cid.is_empty() and hold.state.commodity_id != cid:
-			continue
-		if hold.state.filled_tonnes_t > best_fill:
-			best_fill = hold.state.filled_tonnes_t
+		var dist := Vector2(aim.x - hinge.x, aim.z - hinge.z).length()
+		var workers := _active_workers_on_hold(hold)
+		var cargo_term := (
+			hold.state.available_tonnes_t() if loading else hold.state.filled_tonnes_t
+		)
+		var score := -float(workers) * 1000.0 - dist * 10.0 + cargo_term * 0.05
+		if score > best_score:
+			best_score = score
 			best = hold
 	return best
+
+
+func _active_workers_on_hold(hold: BulkHoldComponent) -> int:
+	if hold == null or not is_inside_tree():
+		return 0
+	var n := 0
+	for node in get_tree().get_nodes_in_group("bulk_crane_auto"):
+		if node == self or node is not BulkCraneAutoOperator:
+			continue
+		var op := node as BulkCraneAutoOperator
+		if op.is_active() and op.get_active_hold() == hold:
+			n += 1
+	return n
 
 
 func _phase_label() -> String:
@@ -511,7 +584,7 @@ func _ensure_hold_gizmos() -> void:
 func _update_gizmos() -> void:
 	if _gizmos == null:
 		return
-	_gizmos.visible = show_target_gizmos and _active
+	_gizmos.visible = show_target_gizmos and WorldGizmos.is_enabled() and _active
 	if not _gizmos.visible or _crane == null:
 		return
 	_ensure_hold_gizmos()

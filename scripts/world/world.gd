@@ -313,9 +313,11 @@ func _generate_definitions() -> Array[PortDefinition]:
 
 
 func _spawn_player() -> void:
-	# PortPlot builds its graph visualizer deferred; wait before querying spawn.
+	# PortPlot builds its graph visualizer deferred; wait for foundation /
+	# asphalt StaticBody colliders before raycasting spawn.
 	await get_tree().process_frame
 	await get_tree().process_frame
+	await get_tree().physics_frame
 
 	var home      := get_node_or_null("HomePort") as PortPlot
 	var spawn_pos := _safe_spawn_position(home)
@@ -378,22 +380,34 @@ func _safe_spawn_position(home: PortPlot) -> Vector3:
 	if candidate.y < water_y + 1.0:
 		candidate.y = water_y + 1.5
 
-	# Cast a short ray downward at the candidate to ensure there's ground
-	# (the dock plate or terrain) beneath us. If not, raise to a safe height
-	# above water so the player falls onto whatever's there.
+	# Cast downward for foundation / asphalt / terrain. Probe nearby if the
+	# first ray misses (spawn can sit just past an apron edge).
 	var space := get_world_3d().direct_space_state
 	if space != null:
-		var from := candidate + Vector3.UP * 5.0
-		var to   := candidate + Vector3.DOWN * 20.0
-		var q    := PhysicsRayQueryParameters3D.create(from, to)
-		q.collide_with_areas = false
-		var hit := space.intersect_ray(q)
-		if hit.is_empty():
+		var probes: Array[Vector3] = [
+			candidate,
+			candidate + Vector3(0.0, 0.0, 6.0),
+			candidate + Vector3(0.0, 0.0, -6.0),
+			candidate + Vector3(6.0, 0.0, 0.0),
+			candidate + Vector3(-6.0, 0.0, 0.0),
+			candidate + Vector3(0.0, 0.0, 12.0),
+		]
+		var grounded := false
+		for probe in probes:
+			var from := probe + Vector3.UP * 8.0
+			var to := probe + Vector3.DOWN * 24.0
+			var q := PhysicsRayQueryParameters3D.create(from, to)
+			q.collide_with_areas = false
+			q.collision_mask = 1
+			var hit := space.intersect_ray(q)
+			if hit.is_empty():
+				continue
+			candidate = (hit["position"] as Vector3) + Vector3.UP * 0.6
+			grounded = true
+			break
+		if not grounded:
 			push_warning("World: no ground beneath spawn at %s; raising" % candidate)
 			candidate.y = water_y + 6.0
-		else:
-			# Hit the deck/terrain — snap to slightly above it.
-			candidate = (hit["position"] as Vector3) + Vector3.UP * 0.6
 
 	return candidate
 

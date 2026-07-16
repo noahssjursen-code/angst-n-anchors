@@ -27,6 +27,9 @@ const QUAY_DECK_TOP_LOCAL_Y := 0.55
 const QUAY_DECK_SLAB_H := 0.55
 const BULK_CRANE_SCRIPT := preload("res://scripts/port/bulk_crane.gd")
 const BULK_CRANE_AUTO_SCRIPT := preload("res://scripts/port/bulk_crane_auto_operator.gd")
+const BULK_EQUIP_JOB_SCRIPT := preload("res://scripts/port/bulk_crane_equipment_job.gd")
+const CRANE_OPERATOR_SCRIPT := preload("res://scripts/port/crane_operator_npc.gd")
+const MOORING_POST_SCRIPT := preload("res://scripts/port/mooring_post.gd")
 
 
 static func _foundation_pavement_material() -> StandardMaterial3D:
@@ -47,10 +50,12 @@ static var _material_cache: Dictionary = {}
 @export var show_equipment_shapes := true
 
 var _graph: PortLayoutGraph
+var _harbour: HarbourController
 
 
-func configure(graph: PortLayoutGraph) -> void:
+func configure(graph: PortLayoutGraph, harbour: HarbourController = null) -> void:
 	_graph = graph
+	_harbour = harbour
 	if is_inside_tree():
 		_rebuild()
 
@@ -73,6 +78,12 @@ func _rebuild() -> void:
 		for slot in _graph.open_slots():
 			if _should_stamp_open_slot(slot):
 				_stamp_open_slot(slot)
+
+
+func _port_id() -> String:
+	if _harbour != null:
+		return _harbour.port_id()
+	return "port"
 
 
 func _stamp_module(placed: PortPlacedModule) -> void:
@@ -218,6 +229,42 @@ func _stamp_foundation() -> void:
 	mesh.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	mesh.extra_cull_margin = 24.0
 	add_child(mesh)
+	_add_trimesh_collision(mesh, "FoundationCollision")
+	## Convex top walk slabs along the apron — reliable CharacterBody footing
+	## even if trimesh is slow to cook on first frame.
+	_stamp_foundation_walk_boxes(spine_pts, sea_top, inland_top, top_y)
+
+
+func _stamp_foundation_walk_boxes(
+		spine_pts: PackedVector2Array,
+		sea_top: PackedVector2Array,
+		inland_top: PackedVector2Array,
+		top_y: float,
+) -> void:
+	if spine_pts.size() < 2:
+		return
+	var root := Node3D.new()
+	root.name = "FoundationWalkCollision"
+	add_child(root)
+	var slab_h := 0.55
+	for index in range(spine_pts.size() - 1):
+		var a_sea := sea_top[index]
+		var b_sea := sea_top[index + 1]
+		var a_in := inland_top[index]
+		var b_in := inland_top[index + 1]
+		var center := (a_sea + b_sea + a_in + b_in) * 0.25
+		var along := (b_sea - a_sea + b_in - a_in) * 0.5
+		var across := (a_in - a_sea + b_in - b_sea) * 0.5
+		var length := maxf(along.length(), 1.0)
+		var width := maxf(across.length(), 1.0)
+		var yaw := atan2(along.x, along.y)
+		_add_box_collision(
+			root,
+			"WalkSlab_%d" % index,
+			Vector3(width, slab_h, length),
+			Vector3(center.x, top_y - slab_h * 0.5, center.y),
+			yaw,
+		)
 
 
 ## Trade berths planned on the asphalt dock face — wide decks with gear + yard.
@@ -247,6 +294,169 @@ func _stamp_berth_terminals() -> void:
 		_stamp_berth_asphalt(root, raw as Dictionary, surface_y)
 
 
+func _commodities_from_station(station: Dictionary) -> PackedStringArray:
+	var out := PackedStringArray()
+	for commodity in station.get("commodities", []) as Array:
+		var cid := str(commodity)
+		if not cid.is_empty() and cid not in out:
+			out.append(cid)
+	for zone in station.get("zones", []) as Array:
+		var cid := str((zone as Dictionary).get("commodity_id", ""))
+		if not cid.is_empty() and cid not in out:
+			out.append(cid)
+	return out
+
+
+func _make_berth_slot(
+		terminal: Node3D,
+		station_id: String,
+		family: String,
+		commodities: PackedStringArray,
+		length_m: float,
+		width_m: float,
+		berth_sign: float,
+		water_dir_local: Vector3 = Vector3(0.0, 0.0, 1.0),
+		face_offset_m: float = -1.0,
+) -> QuayBerthSlot:
+	var berth_id := HarbourController.make_berth_id(_port_id(), station_id)
+	var slot := QuayBerthSlot.new()
+	slot.setup(
+		berth_id,
+		station_id,
+		family,
+		commodities,
+		length_m,
+		width_m,
+		berth_sign,
+		water_dir_local,
+		face_offset_m,
+	)
+	terminal.add_child(slot)
+	terminal.set_meta("berth_id", berth_id)
+	if _harbour != null:
+		_harbour.register_berth(slot)
+	_stamp_ship_berth_pocket(slot)
+	return slot
+
+
+## Water-side legal ship pocket — visual only (no collision). Ships dock into this volume.
+func _stamp_ship_berth_pocket(slot: QuayBerthSlot) -> void:
+	if slot == null:
+		return
+	var design_beam := PortSizing.design_hull_beam_m(_size_class())
+	var design_loa := PortSizing.design_hull_loa_m(_size_class())
+	var water := slot.water_dir_local.normalized()
+	if water.length_squared() < 0.0001:
+		water = Vector3(0.0, 0.0, 1.0)
+	var along := Vector3(-water.z, 0.0, water.x)
+	if along.length_squared() < 0.0001:
+		along = Vector3(0.0, 0.0, -1.0)
+	else:
+		along = along.normalized()
+	var loa := clampf(design_loa * 1.05, 16.0, maxf(slot.length_m * 0.9, 16.0))
+	var pocket_out := design_beam + slot.berth_gap_m * 2.0
+	var centre := water * (slot.face_offset_m + slot.berth_gap_m + design_beam * 0.5)
+	## Parent terminal sits on the apron surface; waterline is below that in local Y.
+	var surface_y := 0.0
+	var parent_n := slot.get_parent() as Node3D
+	if parent_n != null:
+		surface_y = parent_n.position.y
+	var water_local_y := WaveSurface.WATER_LEVEL - surface_y
+	## Size: along quay × thin slab × out into basin.
+	var size := Vector3(
+		absf(along.x) * loa + absf(water.x) * pocket_out,
+		0.4,
+		absf(along.z) * loa + absf(water.z) * pocket_out,
+	)
+	var family_color := CommodityCatalog.terminal_family_color(slot.family)
+	var fill := Color(family_color.r, family_color.g, family_color.b, 0.32)
+	var pocket := MeshBuilder.box(size, fill, 1.0, 0.0)
+	pocket.name = "ShipBerthPocket"
+	pocket.position = centre + Vector3(0.0, water_local_y + 0.15, 0.0)
+	pocket.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	slot.add_child(pocket)
+	WorldGizmos.register(pocket)
+
+	## Bright face line — land ends here; ships stay outside.
+	var edge_size := Vector3(
+		absf(along.x) * loa * 0.98 + absf(water.x) * 0.85,
+		0.55,
+		absf(along.z) * loa * 0.98 + absf(water.z) * 0.85,
+	)
+	var edge := MeshBuilder.box(
+		edge_size,
+		Color(0.95, 0.72, 0.22, 0.9),
+		0.7,
+		0.1,
+	)
+	edge.name = "ShipBerthFace"
+	edge.position = water * (slot.face_offset_m + 0.4) + Vector3(0.0, QUAY_DECK_TOP_LOCAL_Y + 0.15, 0.0)
+	edge.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	slot.add_child(edge)
+	WorldGizmos.register(edge)
+
+	var label := Label3D.new()
+	label.name = "ShipBerthLabel"
+	label.text = "SHIP BERTH\n%s" % CommodityCatalog.terminal_family_display(slot.family).to_upper()
+	label.pixel_size = 0.018
+	label.modulate = Color(0.98, 0.90, 0.55)
+	label.outline_modulate = Color(0.05, 0.06, 0.08, 0.85)
+	label.outline_size = 6
+	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	label.no_depth_test = true
+	label.position = centre + Vector3(0.0, water_local_y + 5.0, 0.0)
+	slot.add_child(label)
+	WorldGizmos.register(label)
+
+
+func _stamp_berth_bollards(
+		terminal: Node3D,
+		slot: QuayBerthSlot,
+		length_m: float,
+		width_m: float,
+		berth_sign: float,
+) -> void:
+	if slot == null:
+		return
+	var edge_x := berth_sign * (width_m * 0.5 - 0.85)
+	var usable := length_m * 0.88
+	var count := clampi(int(floor(usable / 18.0)) + 1, 2, 8)
+	var span := usable * 0.92
+	var start_z := -span * 0.5
+	var step := span / float(maxi(count - 1, 1))
+	for i in range(count):
+		var post: MooringPost = MOORING_POST_SCRIPT.new() as MooringPost
+		post.name = "Bollard_%d" % i
+		post.mooring_visual = MooringPost.MooringVisual.DOCKING_BOLLARD
+		post.bollard_scale = 1.15
+		post.position = Vector3(edge_x, QUAY_DECK_TOP_LOCAL_Y, start_z + float(i) * step)
+		terminal.add_child(post)
+		slot.add_bollard(post)
+
+
+func _stamp_asphalt_bollards(
+		pad_root: Node3D,
+		slot: QuayBerthSlot,
+		length_m: float,
+		depth_m: float,
+) -> void:
+	if slot == null:
+		return
+	var count := clampi(int(floor(length_m / 16.0)) + 1, 2, 6)
+	var span := length_m * 0.82
+	var start_x := -span * 0.5
+	var step := span / float(maxi(count - 1, 1))
+	var edge_z := depth_m * 0.5 - 1.1
+	for i in range(count):
+		var post: MooringPost = MOORING_POST_SCRIPT.new() as MooringPost
+		post.name = "Bollard_%d" % i
+		post.mooring_visual = MooringPost.MooringVisual.DOCKING_BOLLARD
+		post.bollard_scale = 1.1
+		post.position = Vector3(start_x + float(i) * step, 0.95, edge_z)
+		pad_root.add_child(post)
+		slot.add_bollard(post)
+
+
 func _stamp_berth_quay(
 		parent: Node3D,
 		station: Dictionary,
@@ -263,12 +473,24 @@ func _stamp_berth_quay(
 	var family := str(station.get("family", "general"))
 	var family_color := CommodityCatalog.terminal_family_color(family)
 	var mid := origin.lerp(tip, 0.5)
+	var station_id := str(station.get("id", "quay"))
 	var terminal := Node3D.new()
-	terminal.name = str(station.get("id", "quay"))
+	terminal.name = station_id
 	terminal.position = Vector3(mid.x, surface_y, mid.y)
 	_align_node_seaward(terminal, seaward)
 	parent.add_child(terminal)
 	terminal.set_meta("deck_half_w", width_m * 0.5)
+	var slot := _make_berth_slot(
+		terminal,
+		station_id,
+		family,
+		_commodities_from_station(station),
+		length_m,
+		width_m,
+		berth_sign,
+		Vector3(berth_sign, 0.0, 0.0),
+	)
+	_stamp_berth_bollards(terminal, slot, length_m, width_m, berth_sign)
 
 	## Cross-section (local X): cargo | road | crane · berth_sign · +X = ship face.
 	var crane_lane_w := clampf(width_m * 0.34, 14.0, 36.0)
@@ -288,7 +510,7 @@ func _stamp_berth_quay(
 
 	_stamp_quay_pier_model(terminal, length_m, width_m, surface_y)
 
-	## Coping marks the ship berth edge
+	## Coping marks the ship berth edge — sit clearly on the deck (not coplanar).
 	var coping := MeshBuilder.box(
 		Vector3(1.2, 0.7, length_m * 0.96),
 		Color(0.55, 0.56, 0.58),
@@ -296,17 +518,21 @@ func _stamp_berth_quay(
 		0.05,
 	)
 	coping.name = "BerthEdge"
-	coping.position = Vector3(berth_sign * (width_m * 0.5 - 0.6), QUAY_DECK_TOP_LOCAL_Y, 0.0)
+	coping.position = Vector3(
+		berth_sign * (width_m * 0.5 - 0.6),
+		QUAY_DECK_TOP_LOCAL_Y + 0.35,
+		0.0,
+	)
 	terminal.add_child(coping)
 
 	var road := MeshBuilder.box(
-		Vector3(road_w, 0.22, usable_len),
+		Vector3(road_w, 0.14, usable_len),
 		Color(0.07, 0.07, 0.08),
 		1.0,
 		0.0,
 	)
 	road.name = "Road"
-	road.position = Vector3(road_x, QUAY_DECK_TOP_LOCAL_Y - 0.05, 0.0)
+	road.position = Vector3(road_x, QUAY_DECK_TOP_LOCAL_Y + 0.08, 0.0)
 	terminal.add_child(road)
 
 	_stamp_quay_storage_lane(
@@ -317,6 +543,7 @@ func _stamp_berth_quay(
 		usable_len,
 		z0,
 		berth_sign,
+		slot,
 	)
 	_stamp_quay_crane_lane(
 		terminal,
@@ -326,6 +553,7 @@ func _stamp_berth_quay(
 		usable_len,
 		z0,
 		berth_sign,
+		slot,
 	)
 
 	if show_module_labels:
@@ -387,15 +615,16 @@ func _stamp_berth_quay_twin(parent: Node3D, station: Dictionary, surface_y: floa
 	_stamp_quay_pier_model(terminal, length_m, width_m, surface_y)
 
 	var road := MeshBuilder.box(
-		Vector3(road_w, 0.22, usable_len),
+		Vector3(road_w, 0.14, usable_len),
 		Color(0.07, 0.07, 0.08),
 		1.0,
 		0.0,
 	)
 	road.name = "CentreRoad"
-	road.position = Vector3(0.0, QUAY_DECK_TOP_LOCAL_Y - 0.05, 0.0)
+	road.position = Vector3(0.0, QUAY_DECK_TOP_LOCAL_Y + 0.08, 0.0)
 	terminal.add_child(road)
 
+	var base_station_id := str(station.get("id", "quay_twin"))
 	var sides: Array = station.get("sides", []) as Array
 	for side_index in range(mini(sides.size(), 2)):
 		var side: Dictionary = sides[side_index]
@@ -406,6 +635,18 @@ func _stamp_berth_quay_twin(parent: Node3D, station: Dictionary, surface_y: floa
 		var storage_x := berth_sign * (
 			width_m * 0.5 - crane_lane_w - storage_w * 0.5
 		)
+		var side_id := "%s/side_%d" % [base_station_id, side_index]
+		var side_family := str(side.get("family", station.get("family", "general")))
+		var slot := _make_berth_slot(
+			terminal,
+			side_id,
+			side_family,
+			_commodities_from_station(side),
+			length_m,
+			width_m,
+			berth_sign,
+			Vector3(berth_sign, 0.0, 0.0),
+		)
 		var coping := MeshBuilder.box(
 			Vector3(1.2, 0.7, length_m * 0.96),
 			Color(0.55, 0.56, 0.58),
@@ -413,13 +654,18 @@ func _stamp_berth_quay_twin(parent: Node3D, station: Dictionary, surface_y: floa
 			0.05,
 		)
 		coping.name = "BerthEdge_%d" % side_index
-		coping.position = Vector3(berth_sign * (width_m * 0.5 - 0.6), QUAY_DECK_TOP_LOCAL_Y, 0.0)
+		coping.position = Vector3(
+			berth_sign * (width_m * 0.5 - 0.6),
+			QUAY_DECK_TOP_LOCAL_Y + 0.35,
+			0.0,
+		)
 		terminal.add_child(coping)
+		_stamp_berth_bollards(terminal, slot, length_m, width_m, berth_sign)
 		_stamp_quay_storage_lane(
-			terminal, side, storage_x, storage_w, usable_len, z0, berth_sign
+			terminal, side, storage_x, storage_w, usable_len, z0, berth_sign, slot
 		)
 		_stamp_quay_crane_lane(
-			terminal, side, crane_x, crane_lane_w, usable_len, z0, berth_sign
+			terminal, side, crane_x, crane_lane_w, usable_len, z0, berth_sign, slot
 		)
 
 	if show_module_labels:
@@ -451,10 +697,13 @@ func _stamp_quay_pier_model(
 		PortCoastTracer.FOUNDATION_SEAWARD_DEPTH_M,
 	))
 	var deck_top := QUAY_DECK_TOP_LOCAL_Y
+	var deck_bottom := deck_top - QUAY_DECK_SLAB_H
+	## Mass stops under the deck slab — coplanar tops z-fight / flicker.
+	var mass_top := deck_bottom - 0.02
 	var water_bottom_world := WaveSurface.WATER_LEVEL - seaward_depth
 	var bottom_local := water_bottom_world - surface_y
-	var pier_h := maxf(deck_top - bottom_local, QUAY_DECK_SLAB_H + 2.0)
-	var pier_center_y := deck_top - pier_h * 0.5
+	var pier_h := maxf(mass_top - bottom_local, 2.0)
+	var pier_center_y := mass_top - pier_h * 0.5
 
 	var root := Node3D.new()
 	root.name = "QuayPier"
@@ -480,7 +729,7 @@ func _stamp_quay_pier_model(
 		0.0,
 	)
 	deck.name = "Deck"
-	deck.position = Vector3(0.0, deck_top - QUAY_DECK_SLAB_H * 0.5, 0.0)
+	deck.position = Vector3(0.0, deck_bottom + QUAY_DECK_SLAB_H * 0.5, 0.0)
 	deck.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	root.add_child(deck)
 
@@ -508,6 +757,7 @@ func _stamp_quay_storage_lane(
 		usable_len: float,
 		z0: float,
 		berth_sign: float,
+		slot: QuayBerthSlot = null,
 ) -> void:
 	var lane := Node3D.new()
 	lane.name = "StorageLane"
@@ -538,15 +788,17 @@ func _stamp_quay_storage_lane(
 			color = Color(float(color_arr[0]), float(color_arr[1]), float(color_arr[2]))
 
 		## Full commodity colour on the storage apron — readable from above.
-		var apron := MeshBuilder.box(
-			Vector3(lane_w * 0.96, 0.22, zone_len * 0.96),
-			color,
-			0.9,
-			0.0,
-		)
-		apron.name = "ZoneApron_%d" % zone_index
-		apron.position = Vector3(lane_x, 0.50, zone_mid_z)
-		lane.add_child(apron)
+		## Bulk ore skips the pad: stockpile mounds already mark the zone.
+		if zone_family != "bulk_ore":
+			var apron := MeshBuilder.box(
+				Vector3(lane_w * 0.96, 0.22, zone_len * 0.96),
+				color,
+				0.9,
+				0.0,
+			)
+			apron.name = "ZoneApron_%d" % zone_index
+			apron.position = Vector3(lane_x, 0.50, zone_mid_z)
+			lane.add_child(apron)
 
 		## Side stripe on the berth face matching this zone's product
 		var half_w := float(terminal.get_meta("deck_half_w", absf(lane_x) + lane_w))
@@ -582,12 +834,22 @@ func _stamp_quay_storage_lane(
 		for pad_i in range(count):
 			var z := start_z + float(pad_i) * (pad_len + gap)
 			var height := _storage_stack_height(zone_family, pad_i)
-			var stack := _make_storage_stack(
-				zone_family,
-				color,
-				Vector3(stack_w, height, pad_len * 0.88),
-				commodity_id,
-			)
+			var stack_size := Vector3(stack_w, height, pad_len * 0.88)
+			var stack: Node3D
+			if zone_family == "bulk_ore":
+				var cid := commodity_id if not commodity_id.is_empty() else "iron_ore"
+				var mound := OreMound.create(
+					cid,
+					stack_size,
+					cid.hash() + pad_i * 17 + zone_index * 31,
+				)
+				mound.name = "Cargo_%d_%d" % [zone_index, pad_i]
+				mound.position = Vector3(lane_x, QUAY_DECK_TOP_LOCAL_Y, z)
+				lane.add_child(mound)
+				if slot != null and _harbour != null:
+					_harbour.register_yard(mound, slot.berth_id)
+				continue
+			stack = _make_storage_stack(zone_family, color, stack_size, commodity_id)
 			stack.name = "Cargo_%d_%d" % [zone_index, pad_i]
 			stack.position = Vector3(lane_x, QUAY_DECK_TOP_LOCAL_Y, z)
 			lane.add_child(stack)
@@ -617,32 +879,53 @@ func _stamp_quay_crane_lane(
 		usable_len: float,
 		z0: float,
 		berth_sign: float,
+		slot: QuayBerthSlot = null,
 ) -> void:
 	var lane := Node3D.new()
 	lane.name = "CraneLane"
 	terminal.add_child(lane)
 
 	var zones: Array = station.get("zones", []) as Array
-	var tool_positions: Array[float] = []
+	## Each entry: { "z": float, "family": String }
+	var tools: Array[Dictionary] = []
+	var family_for_spacing := str(station.get("family", "general"))
+	## Bulk grab unloaders need denser coverage — short boats only sit under one bay.
+	var bulk_spacing_m := 32.0
 	if zones.size() >= 2:
 		for zone in zones:
 			var t0 := float(zone.get("t0", 0.0))
 			var t1 := float(zone.get("t1", 1.0))
-			tool_positions.append(z0 + usable_len * ((t0 + t1) * 0.5))
+			var zone_mid := z0 + usable_len * ((t0 + t1) * 0.5)
+			var zone_len := usable_len * maxf(t1 - t0, 0.05)
+			var zone_family := str((zone as Dictionary).get("family", family_for_spacing))
+			if zone_family.begins_with("bulk") and zone_len >= bulk_spacing_m * 1.5:
+				var count := maxi(1, int(ceil(zone_len / bulk_spacing_m)))
+				var span := minf(zone_len * 0.9, float(maxi(count - 1, 0)) * bulk_spacing_m)
+				var start := zone_mid - span * 0.5
+				var step := span / float(maxi(count - 1, 1)) if count > 1 else 0.0
+				for i in range(count):
+					tools.append({"z": start + float(i) * step, "family": zone_family})
+			else:
+				tools.append({"z": zone_mid, "family": zone_family})
 	else:
 		var tool_count := 1
-		if usable_len >= 160.0:
+		if family_for_spacing.begins_with("bulk"):
+			tool_count = maxi(1, int(ceil(usable_len / bulk_spacing_m)))
+		elif usable_len >= 160.0:
 			tool_count = 3
 		elif usable_len >= 90.0:
 			tool_count = 2
 		if tool_count == 1:
-			tool_positions.append(0.0)
+			tools.append({"z": 0.0, "family": family_for_spacing})
 		else:
-			var tool_span := usable_len * 0.72
+			var tool_span := usable_len * (0.88 if family_for_spacing.begins_with("bulk") else 0.72)
 			var step := tool_span / float(tool_count - 1)
 			var start_z := z0 + (usable_len - tool_span) * 0.5
 			for index in range(tool_count):
-				tool_positions.append(start_z + float(index) * step)
+				tools.append({
+					"z": start_z + float(index) * step,
+					"family": family_for_spacing,
+				})
 
 	var family := str(station.get("family", "general"))
 	var fp := Vector3(
@@ -650,19 +933,21 @@ func _stamp_quay_crane_lane(
 		1.0,
 		clampf(lane_w * 0.7, 10.0, 24.0),
 	)
-	for index in range(tool_positions.size()):
-		var z := float(tool_positions[index])
-		var equip_kind := str(station.get("equipment_kind", "equip_jib_crane"))
-		if index < zones.size():
-			var zone_family := str((zones[index] as Dictionary).get("family", family))
-			equip_kind = PortBerthPlan.equipment_for_family(zone_family)
+	var berth_id := slot.berth_id if slot != null else ""
+	for index in range(tools.size()):
+		var tool: Dictionary = tools[index]
+		var z := float(tool.get("z", 0.0))
+		var tool_family := str(tool.get("family", family))
+		var equip_kind := PortBerthPlan.equipment_for_family(tool_family)
+		if equip_kind.is_empty():
+			equip_kind = str(station.get("equipment_kind", "equip_jib_crane"))
 		var equip_root := Node3D.new()
 		equip_root.name = "Tool_%d" % index
 		equip_root.position = Vector3(lane_x, 0.55, z)
 		if berth_sign < 0.0:
 			equip_root.rotation_degrees.y = 180.0
 		lane.add_child(equip_root)
-		_stamp_equipment_kind(equip_root, equip_kind, fp, family, berth_sign)
+		_stamp_equipment_kind(equip_root, equip_kind, fp, tool_family, berth_sign, berth_id, index)
 
 
 func _storage_stack_height(family: String, index: int) -> float:
@@ -1063,14 +1348,35 @@ func _stamp_berth_asphalt(parent: Node3D, station: Dictionary, surface_y: float)
 	var color := CommodityCatalog.terminal_family_color(family).lightened(0.2)
 	## Berth deck protrudes seaward of the dock face (outside the apron).
 	var pad_center := origin + seaward * (depth * 0.5)
+	var station_id := str(station.get("id", "asphalt"))
 	var pad_root := Node3D.new()
-	pad_root.name = str(station.get("id", "asphalt"))
+	pad_root.name = station_id
 	pad_root.position = Vector3(pad_center.x, surface_y, pad_center.y)
 	_align_node_seaward(pad_root, seaward)
 	parent.add_child(pad_root)
+	var commodities := PackedStringArray()
+	var cid := str(station.get("commodity_id", ""))
+	if not cid.is_empty():
+		commodities.append(cid)
+	var slot := _make_berth_slot(
+		pad_root,
+		station_id,
+		family,
+		commodities,
+		length,
+		depth,
+		1.0,
+		Vector3(0.0, 0.0, 1.0),
+	)
 	var pad := MeshBuilder.box(Vector3(length, 0.45, depth), color.darkened(0.25), 0.9, 0.0)
 	pad.position = Vector3(0.0, 0.25, 0.0)
 	pad_root.add_child(pad)
+	_add_box_collision(
+		pad_root,
+		"PadCollision",
+		Vector3(length, 0.45, depth),
+		Vector3(0.0, 0.25, 0.0),
+	)
 	## Coping on the outer (seaward) edge — local +Z after align.
 	var coping := MeshBuilder.box(
 		Vector3(length * 0.96, 0.55, 1.1),
@@ -1079,8 +1385,16 @@ func _stamp_berth_asphalt(parent: Node3D, station: Dictionary, surface_y: float)
 		0.05,
 	)
 	coping.name = "BerthEdge"
-	coping.position = Vector3(0.0, 0.45, depth * 0.5 - 0.55)
+	coping.position = Vector3(0.0, 0.70, depth * 0.5 - 0.55)
 	pad_root.add_child(coping)
+	_add_box_collision(
+		pad_root,
+		"CopingCollision",
+		Vector3(length * 0.96, 0.55, 1.1),
+		Vector3(0.0, 0.70, depth * 0.5 - 0.55),
+	)
+	## Bollards on the seaward coping — player/ship mooring interaction.
+	_stamp_asphalt_bollards(pad_root, slot, length, depth)
 	## Apron junction strip where the pad meets the harbour face (local −Z).
 	var junction := MeshBuilder.box(
 		Vector3(length * 0.98, 0.5, 1.4),
@@ -1093,13 +1407,14 @@ func _stamp_berth_asphalt(parent: Node3D, station: Dictionary, surface_y: float)
 	pad_root.add_child(junction)
 	var road_w := clampf(length * 0.18, 6.0, 12.0)
 	var road := MeshBuilder.box(
-		Vector3(road_w, 0.2, depth * 0.82),
+		Vector3(road_w, 0.12, depth * 0.82),
 		Color(0.07, 0.07, 0.08),
 		1.0,
 		0.0,
 	)
 	road.name = "Road"
-	road.position = Vector3(0.0, 0.48, 0.0)
+	## Sit on pad crown (pad top ≈ 0.475) — avoid coplanar flicker.
+	road.position = Vector3(0.0, 0.54, 0.0)
 	pad_root.add_child(road)
 	var kind := str(station.get("equipment_kind", ""))
 	if not kind.is_empty():
@@ -1131,12 +1446,14 @@ func _stamp_equipment_kind(
 		footprint: Vector3,
 		family: String,
 		berth_sign: float = 1.0,
+		berth_id: String = "",
+		tool_index: int = 0,
 ) -> void:
 	match kind:
 		"equip_sts_gantry":
 			_stamp_sts_gantry_at(root, footprint)
 		"equip_grab_unloader":
-			_stamp_bulk_crane_at(root, footprint, berth_sign)
+			_stamp_bulk_crane_at(root, footprint, berth_sign, berth_id, tool_index)
 		"equip_grain_elevator":
 			_stamp_grain_elevator_at(root, footprint)
 		"equip_fish_derrick":
@@ -1179,7 +1496,13 @@ func _stamp_sts_gantry_at(root: Node3D, footprint: Vector3) -> void:
 	root.add_child(beam)
 
 
-func _stamp_bulk_crane_at(root: Node3D, _footprint: Vector3, _berth_sign: float) -> void:
+func _stamp_bulk_crane_at(
+		root: Node3D,
+		_footprint: Vector3,
+		_berth_sign: float,
+		berth_id: String = "",
+		tool_index: int = 0,
+) -> void:
 	var crane := BULK_CRANE_SCRIPT.new() as BulkCrane
 	crane.name = "BulkCrane"
 	## Authored boom is −Z; berth face is local ±X (equip_root yaw handles sign).
@@ -1192,6 +1515,21 @@ func _stamp_bulk_crane_at(root: Node3D, _footprint: Vector3, _berth_sign: float)
 	auto.name = "AutoOperator"
 	crane.add_child(auto)
 	root.add_child(crane)
+
+	if berth_id.is_empty() or _harbour == null:
+		return
+	var equip_id := HarbourController.make_equip_id(berth_id, "equip_grab_unloader", tool_index)
+	var job := BULK_EQUIP_JOB_SCRIPT.new() as BulkCraneEquipmentJob
+	job.setup(equip_id, "equip_grab_unloader", berth_id)
+	job.bind_crane(crane)
+	crane.add_child(job)
+	_harbour.register_equipment(job, berth_id)
+
+	var operator := CRANE_OPERATOR_SCRIPT.new() as CraneOperatorNpc
+	operator.name = "CraneOperator"
+	operator.position = Vector3(-2.2, 0.0, 3.5)
+	operator.configure(_harbour, berth_id, equip_id)
+	root.add_child(operator)
 
 
 func _stamp_grab_unloader_at(root: Node3D, footprint: Vector3) -> void:
@@ -1542,6 +1880,47 @@ func _pad(root: Node3D, footprint: Vector3, color: Color) -> void:
 	root.add_child(pad)
 
 
+func _add_trimesh_collision(mesh_instance: MeshInstance3D, body_name: String) -> void:
+	if mesh_instance == null or mesh_instance.mesh == null:
+		return
+	var shape := mesh_instance.mesh.create_trimesh_shape()
+	if shape == null:
+		return
+	var body := StaticBody3D.new()
+	body.name = body_name
+	body.collision_layer = 1
+	body.collision_mask = 0
+	var col := CollisionShape3D.new()
+	col.name = "Shape"
+	col.shape = shape
+	body.add_child(col)
+	mesh_instance.add_child(body)
+
+
+func _add_box_collision(
+		parent: Node3D,
+		body_name: String,
+		size: Vector3,
+		local_position: Vector3,
+		yaw_radians: float = 0.0,
+) -> void:
+	if parent == null:
+		return
+	var body := StaticBody3D.new()
+	body.name = body_name
+	body.collision_layer = 1
+	body.collision_mask = 0
+	body.position = local_position
+	body.rotation.y = yaw_radians
+	var col := CollisionShape3D.new()
+	col.name = "Shape"
+	var shape := BoxShape3D.new()
+	shape.size = size
+	col.shape = shape
+	body.add_child(col)
+	parent.add_child(body)
+
+
 func _box(
 		node_name: String,
 		size: Vector3,
@@ -1572,6 +1951,7 @@ func _label(node_name: String, text: String, position: Vector3, color: Color, pi
 	label.no_depth_test = true
 	label.position = position
 	add_child(label)
+	WorldGizmos.register(label)
 
 
 func _cached_material(color: Color, transparent: bool) -> StandardMaterial3D:

@@ -105,6 +105,7 @@
       "display": "Cargo vessel",
       "description": "Licensed for commercial deck cargo.",
       "inherits": "general_vessel",
+      "terminal_families": ["general", "container", "timber"],
       "budget_caps": {
         "fishing": 0,
         "cargo_cells": 600,
@@ -122,6 +123,43 @@
         {
           "id": "crane_rating",
           "label": "Crane within cargo licence rating",
+          "kind": "equipment_rating_max",
+          "tag": "crane",
+          "max_rating": 0
+        }
+      ]
+    },
+    {
+      "id": "bulk_vessel",
+      "display": "Bulk carrier",
+      "description": "Licensed for dry bulk in holds — ore, coal, grain. Berths at bulk quays.",
+      "inherits": "general_vessel",
+      "terminal_families": ["bulk_ore", "bulk_grain"],
+      "budget_caps": {
+        "fishing": 0,
+        "cargo_cells": 600,
+        "crane": 0,
+        "tow": 0
+      },
+      "rules": [
+        {
+          "id": "bulk_hold",
+          "label": "At least one bulk hold",
+          "kind": "tag_count",
+          "tag": "bulk_hold",
+          "min": 1,
+          "max": 16
+        },
+        {
+          "id": "bulk_cargo_budget",
+          "label": "Bulk / deck cargo within hull budget",
+          "kind": "cargo_cells",
+          "min": 8,
+          "max": 600
+        },
+        {
+          "id": "crane_rating",
+          "label": "Crane within bulk licence rating",
           "kind": "equipment_rating_max",
           "tag": "crane",
           "max_rating": 0

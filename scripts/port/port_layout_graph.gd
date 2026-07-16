@@ -200,7 +200,40 @@ func bounds() -> AABB:
 
 
 func spawn_local_position() -> Vector3:
-	var best := Vector3(0.0, 1.2, 18.0)
+	## Prefer foundation apron (landward of the dock spine) — berth_plan ports
+	## no longer stamp road modules, so the old road search always missed.
+	var foundation := initial_attributes.get("foundation", {}) as Dictionary
+	var surface_y := float(foundation.get("surface_y_m", PortCoastTracer.FOUNDATION_SURFACE_Y_M))
+	var top_y := surface_y + PortCoastTracer.FOUNDATION_TERRAIN_CLEARANCE_M
+	var spine := foundation.get("spine", []) as Array
+	if spine.size() >= 2:
+		var mid_i := int(spine.size() / 2)
+		var mid_raw: Array = spine[mid_i] as Array
+		if mid_raw.size() >= 2:
+			var inland := PortCoastTracer.PORT_LOCAL_INLAND_DIR
+			var inland_m := clampf(
+				float(foundation.get("town_inland_m", PortCoastTracer.FOUNDATION_TOWN_INLAND_M)) * 0.35,
+				8.0,
+				18.0,
+			)
+			return Vector3(
+				float(mid_raw[0]) + inland.x * inland_m,
+				top_y + 1.0,
+				float(mid_raw[1]) + inland.y * inland_m,
+			)
+	var berth_plan := initial_attributes.get("berth_plan", {}) as Dictionary
+	var asphalt: Array = berth_plan.get("asphalt_stations", []) as Array
+	if not asphalt.is_empty():
+		var station: Dictionary = asphalt[0] as Dictionary
+		var origin: Array = station.get("origin", [0.0, 0.0]) as Array
+		if origin.size() >= 2:
+			var inland2 := PortCoastTracer.PORT_LOCAL_INLAND_DIR
+			return Vector3(
+				float(origin[0]) + inland2.x * 10.0,
+				top_y + 1.0,
+				float(origin[1]) + inland2.y * 10.0,
+			)
+	var best := Vector3(0.0, top_y + 1.0, 18.0)
 	var best_landward := -INF
 	for instance_id in module_ids():
 		var placed := modules[instance_id] as PortPlacedModule

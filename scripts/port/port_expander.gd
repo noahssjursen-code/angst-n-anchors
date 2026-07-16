@@ -17,6 +17,77 @@ const POPULATION_RANGE: Dictionary = {
 }
 
 
+## Chart / menu summary without coast tracing or PortLayoutGraph generation.
+## Same trade + size rules as `expand`, cheap enough for dozens of ports.
+static func chart_summary(definition: PortDefinition, world_seed: int) -> Dictionary:
+	assert(
+		definition.port_generation_version == PortDefinition.CURRENT_PORT_GENERATION_VERSION,
+		"PortExpander: incompatible port generation version %d" % definition.port_generation_version,
+	)
+	var site_max := clampi(
+		definition.site_max_size if definition.site_max_size > 0 else PortSizing.MAX_SIZE,
+		PortSizing.MIN_SIZE,
+		PortSizing.MAX_SIZE,
+	)
+	var size := mini(PortSizing.normalized_size(definition.size), site_max)
+	var site_seed := definition.site_seed if definition.site_seed != 0 \
+			else world_seed ^ _hash_id(definition.port_id)
+	var rng := RandomNumberGenerator.new()
+	rng.seed = site_seed
+	## Clone definition fields the trade profile may read without mutating caller size forever.
+	var def_size := definition.size
+	definition.size = size
+	var trade := PortTradeProfile.derive(definition, world_seed)
+	var trade_max := PortTradeProfile.max_size_for_profile(trade)
+	site_max = mini(site_max, trade_max)
+	if size > site_max:
+		size = site_max
+		definition.size = size
+		PortTradeProfile.resync_for_size(trade, size)
+	definition.size = def_size
+
+	var has_lighthouse := definition.has_lighthouse or (size >= 1 and rng.randf() < 0.3)
+	var has_fog_horn := definition.has_fog_horn or (size >= 0 and rng.randf() < 0.4)
+	var features: Array[String] = []
+	if has_lighthouse:
+		features.append("Lighthouse")
+	if has_fog_horn:
+		features.append("Fog Horn")
+	for commodity in trade.export_slots:
+		features.append("Export:%s" % commodity)
+
+	var region := "coastal"
+	match definition.region_kind:
+		PortDefinition.RegionKind.MAINLAND:
+			region = "mainland"
+		PortDefinition.RegionKind.FJORD:
+			region = "fjord"
+		PortDefinition.RegionKind.ARCHIPELAGO:
+			region = "archipelago"
+		_:
+			region = "coastal"
+
+	var berths := maxi(PortSizing.berth_count(size), 1)
+
+	return {
+		"id": definition.port_id,
+		"display_name": definition.display_name,
+		"position": definition.world_position,
+		"size": size,
+		"region": region,
+		"commodity_export": trade.primary_export(),
+		"commodity_imports": trade.import_slots.duplicate(),
+		"export_slots": trade.export_slots.duplicate(),
+		"population": _population(rng, size),
+		"berth_count": berths,
+		"features": features,
+		"max_ship_class": int(_ship_class_for_size(size)),
+		"max_ship_class_name": str(ShipClass.DISPLAY_NAME.get(_ship_class_for_size(size), "Vessel")),
+		"has_lighthouse": has_lighthouse,
+		"has_fog_horn": has_fog_horn,
+	}
+
+
 static func expand(
 		definition: PortDefinition,
 		world_seed: int,

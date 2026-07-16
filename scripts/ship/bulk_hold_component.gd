@@ -116,6 +116,17 @@ func get_crane_aim_global() -> Vector3:
 	return global_position + global_basis * Vector3(0.0, 0.2, 0.0)
 
 
+## Aim toward a crane so parallel grabs work different ends of a long hatch.
+func get_crane_aim_toward(world_hint: Vector3) -> Vector3:
+	var local := global_transform.affine_inverse() * world_hint
+	var hx := hold_width_m * 0.5 * 0.7
+	var hz := hold_length_m * 0.5 * 0.7
+	local.x = clampf(local.x, -hx, hx)
+	local.z = clampf(local.z, -hz, hz)
+	local.y = 0.2
+	return global_transform * local
+
+
 ## High approach point — slew here first, then plumb hoist straight down.
 func get_crane_approach_high_global(clearance_m: float = 5.5) -> Vector3:
 	return get_crane_aim_global() + Vector3(0.0, clearance_m, 0.0)

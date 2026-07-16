@@ -106,7 +106,8 @@ func _draw() -> void:
 	var ty := oy + PAD_Y + 12.0
 	draw_string(font, Vector2(ox + PAD_X, ty),
 		"DEBUG", HORIZONTAL_ALIGNMENT_LEFT, -1, 11, C_TITLE)
-	var hint   := "F3 · F3+P cam · F8 ocean LOD · B lanes · F4 wx · O I fleet"
+	var giz := "ON" if WorldGizmos.is_enabled() else "off"
+	var hint   := "F3 · G gizmos (%s) · B lanes · P scale · F4 wx · E calm" % giz
 	var hint_w := font.get_string_size(hint, HORIZONTAL_ALIGNMENT_LEFT, -1, 9).x
 	draw_string(font, Vector2(ox + PANEL_W - hint_w - PAD_X, ty),
 		hint, HORIZONTAL_ALIGNMENT_LEFT, -1, 9, C_LABEL)

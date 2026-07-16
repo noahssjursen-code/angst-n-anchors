@@ -22,6 +22,8 @@ func register_port(
 		rotation_y: float = -INF,
 		berth_count: int = 0,
 		size: int = -1,
+		region: String = "",
+		max_ship_class_name: String = "",
 ) -> void:
 	if port_id.is_empty():
 		return
@@ -41,6 +43,8 @@ func register_port(
 		"rotation_y": rotation_y if rotation_y != -INF else 0.0,
 		"berth_count": berth_count if berth_count > 0 else 1,
 		"size": size if size >= 0 else 1,
+		"region": region if not region.is_empty() else "coastal",
+		"max_ship_class_name": max_ship_class_name if not max_ship_class_name.is_empty() else "Vessel",
 	}
 	if already_known:
 		var prev := _ports[port_id] as Dictionary
@@ -64,6 +68,10 @@ func register_port(
 			entry["size"] = prev.get("size", 1)
 		if spawn_pos == Vector3(INF, INF, INF):
 			entry["spawn_pos"] = prev.get("spawn_pos", world_pos)
+		if region.is_empty():
+			entry["region"] = prev.get("region", "coastal")
+		if max_ship_class_name.is_empty():
+			entry["max_ship_class_name"] = prev.get("max_ship_class_name", "Vessel")
 	_ports[port_id] = entry
 
 

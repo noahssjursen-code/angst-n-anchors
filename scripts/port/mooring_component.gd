@@ -649,8 +649,56 @@ func _find_port_dock() -> Node:
 
 
 func _sync_berth_with_dock() -> void:
-	# Vessel-call / tally gating is deferred until the functional port layer returns.
-	pass
+	var ship := _resolve_boat_body()
+	if ship == null:
+		return
+	var harbour := _resolve_harbour_controller()
+	if harbour == null:
+		return
+	if bow_line_tied and stern_line_tied:
+		var slot := _resolve_berth_slot(harbour)
+		if slot != null:
+			harbour.plug_ship(slot.berth_id, ship)
+		return
+	## Full cast-off only. Keep harbour assignment through single-line / deploy
+	## states — otherwise HarbourDeploy.plug_ship is wiped before lines finish.
+	if not bow_line_tied and not stern_line_tied and not harbour.ship_berth_id(ship).is_empty():
+		harbour.unplug_ship(ship)
+
+
+func _resolve_boat_body() -> BoatBody:
+	var n: Node = get_parent()
+	while n != null:
+		if n is BoatBody:
+			return n as BoatBody
+		n = n.get_parent()
+	return null
+
+
+func _resolve_harbour_controller() -> HarbourController:
+	var plot := _find_port_dock() as PortPlot
+	if plot != null:
+		var hc := plot.harbour_controller()
+		if hc != null:
+			return hc
+	var ship := _resolve_boat_body()
+	if ship != null:
+		var port_id := str(ship.get_meta("harbour_port_id", ""))
+		if not port_id.is_empty():
+			return HarbourRegistry.controller(port_id)
+	return null
+
+
+func _resolve_berth_slot(harbour: HarbourController) -> QuayBerthSlot:
+	if harbour == null:
+		return null
+	for post in [_front_post, _rear_post]:
+		if post == null:
+			continue
+		var slot := harbour.berth_for_bollard(post)
+		if slot != null:
+			return slot
+	return null
 
 
 func _posts_fit_call(_dock: Node, _call: Variant) -> bool:
@@ -664,11 +712,21 @@ func _berth_index_for_post(dock: Node, post: Node) -> int:
 
 
 func _would_split_berths(new_post: Node) -> bool:
+	var harbour := _resolve_harbour_controller()
+	if harbour != null:
+		var new_slot := harbour.berth_for_bollard(new_post)
+		var other: Node = _front_post if bow_line_tied else _rear_post
+		if other != null:
+			var other_slot := harbour.berth_for_bollard(other)
+			if new_slot != null and other_slot != null and new_slot != other_slot:
+				return true
+			if new_slot != null or other_slot != null:
+				return false
 	var new_dock := _dock_from_node(new_post)
 	if new_dock == null:
 		return false
-	var other: Node = _front_post if bow_line_tied else _rear_post
-	if other != null and _dock_from_node(other) != new_dock:
+	var other_post: Node = _front_post if bow_line_tied else _rear_post
+	if other_post != null and _dock_from_node(other_post) != new_dock:
 		return true
 	return false
 

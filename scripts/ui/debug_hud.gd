@@ -1,9 +1,11 @@
 extends Node
 
 ## Autoload — owns the F3 debug overlay. F4 weather presets + E midday/calm while panel is open.
+## F3 then G toggles world gizmos (ports, berth pockets, crane targets, …).
 ## Layer 100: always above every other UI element.
 
 signal visibility_changed(visible: bool)
+signal world_gizmos_changed(enabled: bool)
 
 const _WEATHER_PANEL := preload("res://scripts/weather/weather_debug_presets.gd")
 
@@ -13,9 +15,26 @@ var _weather_preset_panel: Control
 var _shown:   bool = false
 var _scale_probe: Node3D = null
 
+## Master playtest flag — every `world_gizmo` node + PortPlot site overlays follow this.
+var world_gizmos_enabled := false
+
 
 func is_open() -> bool:
 	return _shown
+
+
+func set_world_gizmos_enabled(enabled: bool) -> void:
+	if world_gizmos_enabled == enabled:
+		return
+	world_gizmos_enabled = enabled
+	_apply_world_gizmos()
+	world_gizmos_changed.emit(world_gizmos_enabled)
+	if _overlay != null:
+		_overlay.queue_redraw()
+
+
+func toggle_world_gizmos() -> void:
+	set_world_gizmos_enabled(not world_gizmos_enabled)
 
 
 func _ready() -> void:
@@ -71,9 +90,30 @@ func _input(event: InputEvent) -> void:
 			_refresh_lane_debug_draw()
 			_overlay.queue_redraw()
 			get_viewport().set_input_as_handled()
+		KEY_G:
+			toggle_world_gizmos()
+			get_viewport().set_input_as_handled()
 		KEY_P:
 			_toggle_scale_probe()
 			get_viewport().set_input_as_handled()
+
+
+func _apply_world_gizmos() -> void:
+	var tree := get_tree()
+	if tree == null:
+		return
+	WorldGizmos.apply_all(tree, world_gizmos_enabled)
+	## Port site overlays (spine / quay roots / harbour berths / …).
+	for node in tree.get_nodes_in_group("port_plot"):
+		var plot := node as PortPlot
+		if plot != null:
+			plot.show_site_gizmos = world_gizmos_enabled
+	## Crane auto-aim targets.
+	for node in tree.get_nodes_in_group("bulk_crane_auto"):
+		if node != null and node.has_method("set_show_target_gizmos"):
+			node.call("set_show_target_gizmos", world_gizmos_enabled)
+		elif node != null and "show_target_gizmos" in node:
+			node.set("show_target_gizmos", world_gizmos_enabled)
 
 
 func _apply_debug_day_calm_preset() -> void:

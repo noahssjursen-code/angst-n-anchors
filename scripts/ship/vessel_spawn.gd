@@ -150,6 +150,7 @@ static func apply_identity(boat: BoatBody, record: Dictionary) -> void:
 	var ctrl := boat.get_node_or_null("BoatController") as BoatController
 	if ctrl != null:
 		ctrl.ship_name = vessel_name
+	boat.set_meta("vessel_display_name", vessel_name)
 	boat.set_meta("registration_id", str(record.get("registration_id", "")))
 	boat.set_meta("vessel_uid", str(record.get("uid", "")))
 

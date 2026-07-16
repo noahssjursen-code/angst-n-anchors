@@ -1,8 +1,8 @@
 class_name MapOverlay
 extends Control
 
-## Full-screen, north-up marine chart. This is one UI in two contexts:
-## navigation and one-click home-port onboarding.
+## Full-screen, north-up marine chart. Navigation mode, or home-port pick
+## (select a harbour → review info → confirm).
 
 signal close_requested
 signal home_port_confirmed(port_id: String)
@@ -52,6 +52,15 @@ var fishing_button: Button
 var center_button: Button
 var close_button: Button
 
+var pick_panel: PanelContainer
+var pick_title: Label
+var pick_meta: Label
+var pick_body: RichTextLabel
+var pick_confirm: Button
+var pick_back: Button
+
+var harbour_board: HarbourBoardPanel
+
 
 func _ready() -> void:
 	add_to_group("marine_chart")
@@ -61,8 +70,12 @@ func _ready() -> void:
 	texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	theme = HudStyle.make_theme()
 	_build_toolbar()
+	_build_pick_panel()
+	_build_harbour_board()
 	_load_layer_preferences()
 	_apply_mode_ui()
+	_refresh_pick_panel()
+	_refresh_harbour_board()
 
 
 func set_data_snapshot(snapshot) -> void:
@@ -73,22 +86,29 @@ func set_data_snapshot(snapshot) -> void:
 	first_visible_frame = true
 
 
-func enter_home_port_pick_mode(_preselect_port_id: String = "") -> void:
+func enter_home_port_pick_mode(preselect_port_id: String = "") -> void:
 	mode = Mode.HOME_PORT_PICK
-	selected_port = ""
+	selected_port = preselect_port_id.strip_edges()
 	layers.apply_preset(ChartLayerManager.Preset.NAVIGATION)
 	layers.set_visible("routes", false)
 	layers.set_visible("approaches", false)
+	## Heavy field overlays — leave off during onboarding for responsiveness.
+	layers.set_visible("weather", false)
+	layers.set_visible("fishing", false)
 	_apply_mode_ui()
+	_refresh_mode_buttons()
+	_refresh_pick_panel()
 	camera.user_moved = false
-	overlays_dirty = true
+	overlays_dirty = false
 	first_visible_frame = true
 	visible = true
 
 
 func exit_home_port_pick_mode() -> void:
 	mode = Mode.NAVIGATION
+	selected_port = ""
 	_apply_mode_ui()
+	_refresh_pick_panel()
 	visible = false
 
 
@@ -106,6 +126,7 @@ func open_navigation() -> void:
 		set_data_snapshot(Snapshot.from_live_tree(get_tree()))
 	layers.apply_preset(ChartLayerManager.Preset.NAVIGATION)
 	_apply_mode_ui()
+	_refresh_harbour_board()
 	first_visible_frame = true
 	visible = true
 
@@ -117,6 +138,10 @@ func get_debug_stats() -> Dictionary:
 
 
 func ensure_live_data() -> bool:
+	## Home-port pick uses the preview snapshot only — never rebuild from the
+	## live world tree (and never thrash PortCatalog while the menu is up).
+	if mode == Mode.HOME_PORT_PICK:
+		return data != null and data.is_valid()
 	if data == null or not data.is_valid():
 		set_data_snapshot(Snapshot.from_live_tree(get_tree()))
 	return data != null and data.is_valid()
@@ -146,16 +171,20 @@ func _process(delta: float) -> void:
 	if not ensure_live_data():
 		return
 	if first_visible_frame:
-		_capture_nav()
+		if mode != Mode.HOME_PORT_PICK:
+			_capture_nav()
 		_home()
 		first_visible_frame = false
-		overlays_dirty = true
-	nav_elapsed += delta
-	if nav_elapsed >= NAV_REFRESH_S:
-		nav_elapsed = 0.0
-		_capture_nav()
+		if mode != Mode.HOME_PORT_PICK:
+			overlays_dirty = true
 		queue_redraw()
-	if overlays_dirty:
+	if mode != Mode.HOME_PORT_PICK:
+		nav_elapsed += delta
+		if nav_elapsed >= NAV_REFRESH_S:
+			nav_elapsed = 0.0
+			_capture_nav()
+			queue_redraw()
+	if overlays_dirty and mode != Mode.HOME_PORT_PICK:
 		overlay_debounce -= delta
 		if overlay_debounce <= 0.0 and not dragging:
 			renderer.prepare_overlays(
@@ -185,6 +214,11 @@ func _input(event: InputEvent) -> void:
 		return
 	if event is InputEventMouseButton:
 		var mouse := event as InputEventMouseButton
+		## Let the pick panel / toolbar own their clicks (Confirm, Back, etc.).
+		if _pointer_over_chrome(mouse.position):
+			if not mouse.pressed and dragging:
+				dragging = false
+			return
 		var chart := _chart_rect()
 		if mouse.button_index == MOUSE_BUTTON_LEFT:
 			if mouse.pressed and chart.has_point(mouse.position):
@@ -195,9 +229,8 @@ func _input(event: InputEvent) -> void:
 				get_viewport().set_input_as_handled()
 			elif not mouse.pressed and dragging:
 				dragging = false
-				_schedule_overlays()
-				# Consume the release before port selection emits. In onboarding,
-				# that signal immediately changes scene and detaches this Control.
+				if mode != Mode.HOME_PORT_PICK:
+					_schedule_overlays()
 				var viewport := get_viewport()
 				if viewport != null:
 					viewport.set_input_as_handled()
@@ -234,10 +267,10 @@ func _input(event: InputEvent) -> void:
 	elif key.keycode == KEY_H:
 		_home()
 		get_viewport().set_input_as_handled()
-	elif key.keycode == KEY_W:
+	elif key.keycode == KEY_W and mode != Mode.HOME_PORT_PICK:
 		_toggle_overlay("weather")
 		get_viewport().set_input_as_handled()
-	elif key.keycode == KEY_F:
+	elif key.keycode == KEY_F and mode != Mode.HOME_PORT_PICK:
 		_toggle_overlay("fishing")
 		get_viewport().set_input_as_handled()
 	elif key.keycode == KEY_N:
@@ -256,10 +289,194 @@ func _draw() -> void:
 		"world_bounds": bounds,
 		"world_span": camera.span,
 	}
-	renderer.render(self, last_ctx, layers, nav, selected_port)
+	renderer.render(
+		self,
+		last_ctx,
+		layers,
+		nav,
+		selected_port,
+		mode != Mode.HOME_PORT_PICK,
+	)
 	_draw_compass(chart)
 	_draw_scale(chart, bounds)
 	_draw_status(chart)
+
+
+func _build_pick_panel() -> void:
+	pick_panel = PanelContainer.new()
+	pick_panel.name = "HomePortPickPanel"
+	pick_panel.visible = false
+	pick_panel.mouse_filter = Control.MOUSE_FILTER_STOP
+	## Left dock — coastal harbours sit on the east; keep that chart clear.
+	pick_panel.set_anchors_and_offsets_preset(Control.PRESET_TOP_LEFT)
+	pick_panel.anchor_left = 0.0
+	pick_panel.anchor_top = 0.0
+	pick_panel.anchor_right = 0.0
+	pick_panel.anchor_bottom = 1.0
+	pick_panel.offset_left = FRAME
+	pick_panel.offset_top = TOP_H + 6.0
+	pick_panel.offset_right = FRAME + 320.0
+	pick_panel.offset_bottom = -(BOTTOM_H + 10.0)
+	var panel_sb := StyleBoxFlat.new()
+	panel_sb.bg_color = Color(HudStyle.C_BG.r, HudStyle.C_BG.g, HudStyle.C_BG.b, 0.94)
+	panel_sb.border_color = HudStyle.C_BRASS
+	panel_sb.set_border_width_all(1)
+	panel_sb.set_content_margin_all(16)
+	pick_panel.add_theme_stylebox_override("panel", panel_sb)
+	add_child(pick_panel)
+
+	var vbox := VBoxContainer.new()
+	vbox.add_theme_constant_override("separation", 10)
+	vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	vbox.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	pick_panel.add_child(vbox)
+
+	var eyebrow := Label.new()
+	eyebrow.text = "HOME HARBOUR"
+	eyebrow.add_theme_font_size_override("font_size", 12)
+	eyebrow.add_theme_color_override("font_color", HudStyle.C_LABEL)
+	if HudStyle.font_medium() != null:
+		eyebrow.add_theme_font_override("font", HudStyle.font_medium())
+	vbox.add_child(eyebrow)
+
+	pick_title = Label.new()
+	pick_title.text = "Select a harbour"
+	pick_title.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	pick_title.add_theme_font_size_override("font_size", 28)
+	pick_title.add_theme_color_override("font_color", HudStyle.C_TEXT)
+	if HudStyle.font_display() != null:
+		pick_title.add_theme_font_override("font", HudStyle.font_display())
+	vbox.add_child(pick_title)
+
+	pick_meta = Label.new()
+	pick_meta.text = "Click a marker on the chart"
+	pick_meta.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	pick_meta.add_theme_font_size_override("font_size", 13)
+	pick_meta.add_theme_color_override("font_color", HudStyle.C_COPPER)
+	vbox.add_child(pick_meta)
+
+	pick_body = RichTextLabel.new()
+	pick_body.bbcode_enabled = true
+	pick_body.fit_content = true
+	pick_body.scroll_active = false
+	pick_body.custom_minimum_size = Vector2(0, 120)
+	pick_body.add_theme_font_size_override("normal_font_size", 14)
+	pick_body.add_theme_color_override("default_color", HudStyle.C_TEXT)
+	vbox.add_child(pick_body)
+
+	## Push actions to the bottom of the dock.
+	var spacer := Control.new()
+	spacer.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	spacer.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	vbox.add_child(spacer)
+
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 10)
+	row.size_flags_vertical = Control.SIZE_SHRINK_END
+	vbox.add_child(row)
+
+	pick_back = Button.new()
+	pick_back.text = "Back"
+	pick_back.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	pick_back.pressed.connect(func() -> void: home_port_cancelled.emit())
+	row.add_child(pick_back)
+
+	pick_confirm = Button.new()
+	pick_confirm.text = "Sail from here"
+	pick_confirm.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	pick_confirm.disabled = true
+	pick_confirm.pressed.connect(_confirm_home_port)
+	var confirm_normal := StyleBoxFlat.new()
+	confirm_normal.bg_color = Color(0.22, 0.42, 0.36, 1.0)
+	confirm_normal.border_color = HudStyle.C_COPPER
+	confirm_normal.set_border_width_all(1)
+	confirm_normal.set_content_margin_all(10)
+	var confirm_hover := confirm_normal.duplicate()
+	confirm_hover.bg_color = Color(0.28, 0.52, 0.44, 1.0)
+	var confirm_disabled := confirm_normal.duplicate()
+	confirm_disabled.bg_color = Color(0.16, 0.20, 0.19, 1.0)
+	confirm_disabled.border_color = Color(0.30, 0.34, 0.32, 0.6)
+	pick_confirm.add_theme_stylebox_override("normal", confirm_normal)
+	pick_confirm.add_theme_stylebox_override("hover", confirm_hover)
+	pick_confirm.add_theme_stylebox_override("pressed", confirm_hover)
+	pick_confirm.add_theme_stylebox_override("disabled", confirm_disabled)
+	pick_confirm.add_theme_color_override("font_color", HudStyle.C_TEXT)
+	pick_confirm.add_theme_color_override("font_disabled_color", Color(0.45, 0.50, 0.48))
+	row.add_child(pick_confirm)
+
+
+func _confirm_home_port() -> void:
+	if mode != Mode.HOME_PORT_PICK:
+		return
+	if selected_port.is_empty():
+		return
+	home_port_confirmed.emit(selected_port)
+
+
+func _refresh_pick_panel() -> void:
+	if pick_panel == null:
+		return
+	var picking := mode == Mode.HOME_PORT_PICK
+	pick_panel.visible = picking
+	if not picking:
+		return
+	if selected_port.is_empty() or data == null:
+		pick_title.text = "Select a harbour"
+		pick_meta.text = "Click a marker on the chart"
+		pick_body.text = \
+				"Your home port is where you begin. Look for a harbour that matches the trade you want — fish, ore, timber, containers."
+		if pick_confirm != null:
+			pick_confirm.disabled = true
+		return
+	var info: Dictionary = data.port_info(selected_port)
+	if info.is_empty():
+		pick_title.text = selected_port
+		pick_meta.text = "No dossier for this harbour"
+		pick_body.text = "Chart data missing for this port id."
+		if pick_confirm != null:
+			pick_confirm.disabled = true
+		return
+	pick_title.text = str(info.get("display_name", selected_port))
+	var region := str(info.get("region", "coastal")).capitalize()
+	var size_n := int(info.get("size", 0))
+	pick_meta.text = "%s  ·  size %d  ·  %d berths" % [
+		region,
+		size_n,
+		int(info.get("berth_count", 1)),
+	]
+	var export_id := str(info.get("commodity_export", ""))
+	var export_label := CommodityCatalog.commodity_display(export_id) if not export_id.is_empty() \
+			else "—"
+	var imports: Array = info.get("commodity_imports", []) as Array
+	var import_bits: PackedStringArray = PackedStringArray()
+	for raw in imports:
+		import_bits.append(CommodityCatalog.commodity_display(str(raw)))
+	var import_line := ", ".join(import_bits) if not import_bits.is_empty() else "—"
+	var ship_class := str(info.get("max_ship_class_name", "Vessel"))
+	var feature_bits: PackedStringArray = PackedStringArray()
+	for raw in info.get("features", []) as Array:
+		var feature := str(raw)
+		if feature.begins_with("Export:"):
+			continue
+		feature_bits.append(feature)
+	var features_line := ", ".join(feature_bits) if not feature_bits.is_empty() else "Standard apron"
+	pick_body.text = "\n".join(PackedStringArray([
+		"[color=#8a9a94]Population[/color]  %s" % _format_population(int(info.get("population", 0))),
+		"[color=#8a9a94]Primary export[/color]  %s" % export_label,
+		"[color=#8a9a94]Imports[/color]  %s" % import_line,
+		"[color=#8a9a94]Max class[/color]  %s" % ship_class,
+		"[color=#8a9a94]Facilities[/color]  %s" % features_line,
+	]))
+	if pick_confirm != null:
+		pick_confirm.disabled = false
+
+
+static func _format_population(value: int) -> String:
+	if value >= 1000000:
+		return "%.1fM" % (float(value) / 1000000.0)
+	if value >= 1000:
+		return "%.1fk" % (float(value) / 1000.0)
+	return str(value)
 
 
 func _build_toolbar() -> void:
@@ -282,7 +499,7 @@ func _build_toolbar() -> void:
 
 	hint_label = Label.new()
 	hint_label.visible = false
-	hint_label.text = "Click a port to begin"
+	hint_label.text = "Click a harbour for details, then confirm"
 	hint_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	hint_label.add_theme_font_size_override("font_size", 15)
 	hint_label.add_theme_color_override("font_color", Color(0.90, 0.92, 0.82))
@@ -328,13 +545,26 @@ func _apply_mode_ui() -> void:
 	if title_label != null:
 		title_label.text = "CHOOSE YOUR HOME PORT" if picking else "NAVIGATION CHART"
 	if hint_label != null:
-		hint_label.visible = picking
+		hint_label.visible = picking or layers.preset == ChartLayerManager.Preset.HARBOUR
+		if picking:
+			hint_label.text = "Click a harbour for details, then confirm"
+		elif layers.preset == ChartLayerManager.Preset.HARBOUR:
+			hint_label.text = "Harbour board — click a port on the chart"
 	for index in range(mode_buttons.size()):
-		mode_buttons[index].visible = not picking or index == 0
+		mode_buttons[index].visible = not picking
+	if weather_button != null:
+		weather_button.visible = not picking
+	if fishing_button != null:
+		fishing_button.visible = not picking
 	if center_button != null:
 		center_button.visible = not picking
 	if close_button != null:
 		close_button.visible = not picking
+	if pick_panel != null:
+		pick_panel.visible = picking
+	if pick_back != null:
+		pick_back.visible = picking
+	_refresh_harbour_board()
 
 
 func _set_preset(next: int) -> void:
@@ -346,6 +576,7 @@ func _set_preset(next: int) -> void:
 	_persist_chart_settings()
 	_refresh_hover_readout(true)
 	_schedule_overlays()
+	_apply_mode_ui()
 	queue_redraw()
 
 
@@ -360,6 +591,8 @@ func _refresh_mode_buttons() -> void:
 
 
 func _toggle_overlay(layer_name: String) -> void:
+	if mode == Mode.HOME_PORT_PICK:
+		return
 	layers.toggle(layer_name)
 	_refresh_mode_buttons()
 	_persist_chart_settings()
@@ -397,17 +630,20 @@ func _persist_chart_settings() -> void:
 
 
 func _click_chart(screen: Vector2) -> void:
-	var hit := renderer.hit_test_port(screen, last_ctx, 26.0 if mode == Mode.HOME_PORT_PICK else 18.0)
+	var hit := renderer.hit_test_port(screen, last_ctx, 28.0 if mode == Mode.HOME_PORT_PICK else 18.0)
 	if hit.is_empty():
 		if mode == Mode.NAVIGATION:
 			selected_port = ""
+			_refresh_harbour_board()
 			queue_redraw()
 		return
 	selected_port = hit
 	if mode == Mode.HOME_PORT_PICK:
-		home_port_confirmed.emit(hit)
+		_refresh_pick_panel()
+		queue_redraw()
 	else:
 		port_selected.emit(hit)
+		_refresh_harbour_board()
 		queue_redraw()
 
 
@@ -461,8 +697,81 @@ func _screen_to_world(screen: Vector2) -> Vector2:
 	return bounds.position + (screen - chart.position) / chart.size * bounds.size
 
 
+func _pointer_over_chrome(screen: Vector2) -> bool:
+	if pick_panel != null and pick_panel.visible and pick_panel.get_global_rect().has_point(screen):
+		return true
+	if harbour_board != null and harbour_board.visible \
+			and harbour_board.get_global_rect().has_point(screen):
+		return true
+	var toolbar := get_node_or_null("ChartToolbar") as Control
+	if toolbar != null and toolbar.get_global_rect().has_point(screen):
+		return true
+	return false
+
+
+func _build_harbour_board() -> void:
+	harbour_board = HarbourBoardPanel.new()
+	harbour_board.name = "HarbourBoard"
+	harbour_board.visible = false
+	harbour_board.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_RIGHT)
+	harbour_board.anchor_left = 1.0
+	harbour_board.anchor_top = 1.0
+	harbour_board.anchor_right = 1.0
+	harbour_board.anchor_bottom = 1.0
+	harbour_board.offset_left = -380.0
+	harbour_board.offset_top = -320.0
+	harbour_board.offset_right = -FRAME
+	harbour_board.offset_bottom = -(BOTTOM_H + 10.0)
+	add_child(harbour_board)
+
+
+func _refresh_harbour_board() -> void:
+	if harbour_board == null:
+		return
+	var show_board := (
+		mode == Mode.NAVIGATION
+		and layers.preset == ChartLayerManager.Preset.HARBOUR
+	)
+	harbour_board.visible = show_board
+	if not show_board:
+		return
+	var port_id := selected_port.strip_edges()
+	if port_id.is_empty():
+		port_id = _default_harbour_board_port()
+		if not port_id.is_empty():
+			selected_port = port_id
+	var plot := _resolve_port_plot(port_id)
+	harbour_board.bind_port(port_id, plot, true)
+
+
+func _default_harbour_board_port() -> String:
+	var home := get_tree().root.find_child("HomePort", true, false) as PortPlot
+	if home != null and not home.port_id.is_empty():
+		return home.port_id
+	var live := HarbourRegistry.all_port_ids()
+	if not live.is_empty():
+		return live[0]
+	if data != null and data.is_valid():
+		var ids: PackedStringArray = data.port_ids()
+		if not ids.is_empty():
+			return ids[0]
+	return ""
+
+
+func _resolve_port_plot(port_id: String) -> PortPlot:
+	if port_id.is_empty():
+		return null
+	var harbour := HarbourRegistry.controller(port_id)
+	if harbour != null:
+		return harbour.get_parent() as PortPlot
+	var home := get_tree().root.find_child("HomePort", true, false) as PortPlot
+	if home != null and home.port_id == port_id:
+		return home
+	return null
+
+
 func _refresh_hover_readout(force: bool = false) -> void:
-	if not _chart_rect().has_point(hover_screen):
+	if not _chart_rect().has_point(hover_screen) or _pointer_over_chrome(hover_screen):
 		hover_rows.clear()
 		return
 	if (
@@ -473,6 +782,16 @@ func _refresh_hover_readout(force: bool = false) -> void:
 		return
 	hover_sample_screen = hover_screen
 	hover_layer_revision = layers.revision
+	if mode == Mode.HOME_PORT_PICK:
+		var hit := renderer.hit_test_port(hover_screen, last_ctx, 28.0)
+		hover_rows.clear()
+		if not hit.is_empty() and data != null:
+			var info: Dictionary = data.port_info(hit)
+			hover_rows.append(str(info.get("display_name", hit)))
+			var export_id := str(info.get("commodity_export", ""))
+			if not export_id.is_empty():
+				hover_rows.append("Export %s" % CommodityCatalog.commodity_display(export_id))
+		return
 	# Snapshot once per cursor move/layer change. Nav refreshes and chart redraws
 	# reuse these strings instead of continuously re-sampling weather.
 	hover_rows = renderer.overlay_readout(
@@ -515,7 +834,12 @@ func _draw_scale(chart: Rect2, bounds: Rect2) -> void:
 func _draw_status(chart: Rect2) -> void:
 	var text := ""
 	if mode == Mode.HOME_PORT_PICK:
-		text = "CLICK A PORT TO BEGIN   ·   ESC BACK"
+		if selected_port.is_empty():
+			text = "SELECT A HARBOUR ON THE CHART   ·   ESC BACK"
+		else:
+			var info: Dictionary = data.port_info(selected_port) if data != null else {}
+			text = "SELECTED  %s   ·   CONFIRM IN THE PANEL   ·   ESC BACK" % \
+					str(info.get("display_name", selected_port)).to_upper()
 	else:
 		text = "HDG %s   COG %s   SOG %.1f kt   WIND %s %.1f kt   FUEL %s   TIME %s" % [
 			_format_degrees(nav.heading_deg if nav.has_ship() else NAN),

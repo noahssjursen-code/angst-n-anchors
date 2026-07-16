@@ -34,6 +34,36 @@ var features: Array[String] = []
 var berth_count: int = 1
 
 
+## Chart / menu dossier fields (no layout mesh data).
+func to_chart_dict() -> Dictionary:
+	var region := "coastal"
+	match region_kind:
+		PortDefinition.RegionKind.MAINLAND:
+			region = "mainland"
+		PortDefinition.RegionKind.FJORD:
+			region = "fjord"
+		PortDefinition.RegionKind.ARCHIPELAGO:
+			region = "archipelago"
+		_:
+			region = "coastal"
+	return {
+		"id": port_id,
+		"display_name": display_name,
+		"position": world_position,
+		"size": size,
+		"region": region,
+		"commodity_export": commodity_export,
+		"commodity_imports": commodity_imports.duplicate(),
+		"population": population,
+		"berth_count": maxi(berth_count, 1),
+		"features": features.duplicate(),
+		"max_ship_class": int(max_ship_class),
+		"max_ship_class_name": str(ShipClass.DISPLAY_NAME.get(max_ship_class, "Vessel")),
+		"has_lighthouse": has_lighthouse,
+		"has_fog_horn": has_fog_horn,
+	}
+
+
 func flatten_zone_records(height_m := 0.0) -> Array[Dictionary]:
 	if layout_graph == null:
 		return []
