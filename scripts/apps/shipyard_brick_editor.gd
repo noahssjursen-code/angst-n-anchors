@@ -2412,7 +2412,7 @@ func _toggle_mark_tool() -> void:
 		_clear_mark_preview()
 	else:
 		_tool = Tool.MARK
-			_clear_mark()
+		_clear_mark()
 		_clear_ghost()
 	_refresh_palette_selection()
 	_refresh_ghost_from_mouse()
