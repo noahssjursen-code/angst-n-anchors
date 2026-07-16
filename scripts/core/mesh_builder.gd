@@ -144,6 +144,9 @@ static func merged_boxes(size_positions: Array, color: Color, roughness: float =
 	mi.mesh = st.commit()
 	mi.material_override = mat
 	return mi
+
+
+## Ship planform: parallel midbody + pointed bow at −Z (bow), blunt stern at +Z.
 ## Origin at midships; keel at y=0; deck at y=height.
 static func pointed_hull_shell(
 	loa: float,
