@@ -73,6 +73,11 @@ static func chart_summary(definition: PortDefinition, world_seed: int) -> Dictio
 		"id": definition.port_id,
 		"display_name": definition.display_name,
 		"position": definition.world_position,
+		## Chart harbour silhouettes expand from this summary — yaw + site seed
+		## must match the placer or every quay faces world −Z (north-up).
+		"rotation_y": definition.rotation_y,
+		"layout_seed": site_seed,
+		"site_max_size": site_max,
 		"size": size,
 		"region": region,
 		"commodity_export": trade.primary_export(),

@@ -8,6 +8,27 @@ extends RefCounted
 ## sky, rain, fog, or convection — ports keep authentic local weather.
 
 
+## Chart / overlay path — skips kilometre-scale coastal_exposure (16 fetch rays).
+## Gameplay must keep calling `sample()`; this is presentation-only.
+static func sample_chart(world_pos: Vector3, game_hours: float = -1.0) -> WeatherSample:
+	if game_hours < 0.0:
+		game_hours = WeatherField.current_game_time()
+	var base := WeatherField.sample(world_pos, game_hours)
+	var front_data := WeatherFrontField.sample_at(world_pos, game_hours)
+	var front_intensity := float(front_data.get("intensity", 0.0))
+	var base_direction := base.wind.normalized()
+	if base_direction.length_squared() < 0.25:
+		base_direction = Vector3(0.95, 0.0, 0.30).normalized()
+	## Chart: open-sea assumption. Skip wave_shelter too — dock calm is
+	## invisible at chart scale and was still per-cell LandField work.
+	var exposure := 1.0
+	var storm_access := 1.0
+	var local_sea_access := 1.0
+	return _compose_from_parts(
+		base, front_data, front_intensity, base_direction, exposure, storm_access, local_sea_access
+	)
+
+
 static func sample(world_pos: Vector3, game_hours: float = -1.0) -> WeatherSample:
 	if game_hours < 0.0:
 		game_hours = WeatherField.current_game_time()
@@ -21,6 +42,20 @@ static func sample(world_pos: Vector3, game_hours: float = -1.0) -> WeatherSampl
 	## Front gale boost needs open fetch; dock wave calm uses local shelter only.
 	var storm_access := pow(exposure, 0.72)
 	var local_sea_access := _local_sea_access(world_pos)
+	return _compose_from_parts(
+		base, front_data, front_intensity, base_direction, exposure, storm_access, local_sea_access
+	)
+
+
+static func _compose_from_parts(
+		base: WeatherSample,
+		front_data: Dictionary,
+		front_intensity: float,
+		base_direction: Vector3,
+		exposure: float,
+		storm_access: float,
+		local_sea_access: float,
+) -> WeatherSample:
 
 	var sample := WeatherSample.new()
 	sample.pressure = base.pressure - front_intensity * 13.0

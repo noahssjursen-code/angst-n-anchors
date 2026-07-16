@@ -510,21 +510,6 @@ func _stamp_berth_quay(
 
 	_stamp_quay_pier_model(terminal, length_m, width_m, surface_y)
 
-	## Coping marks the ship berth edge — sit clearly on the deck (not coplanar).
-	var coping := MeshBuilder.box(
-		Vector3(1.2, 0.7, length_m * 0.96),
-		Color(0.55, 0.56, 0.58),
-		0.9,
-		0.05,
-	)
-	coping.name = "BerthEdge"
-	coping.position = Vector3(
-		berth_sign * (width_m * 0.5 - 0.6),
-		QUAY_DECK_TOP_LOCAL_Y + 0.35,
-		0.0,
-	)
-	terminal.add_child(coping)
-
 	var road := MeshBuilder.box(
 		Vector3(road_w, 0.14, usable_len),
 		Color(0.07, 0.07, 0.08),
@@ -647,19 +632,6 @@ func _stamp_berth_quay_twin(parent: Node3D, station: Dictionary, surface_y: floa
 			berth_sign,
 			Vector3(berth_sign, 0.0, 0.0),
 		)
-		var coping := MeshBuilder.box(
-			Vector3(1.2, 0.7, length_m * 0.96),
-			Color(0.55, 0.56, 0.58),
-			0.9,
-			0.05,
-		)
-		coping.name = "BerthEdge_%d" % side_index
-		coping.position = Vector3(
-			berth_sign * (width_m * 0.5 - 0.6),
-			QUAY_DECK_TOP_LOCAL_Y + 0.35,
-			0.0,
-		)
-		terminal.add_child(coping)
 		_stamp_berth_bollards(terminal, slot, length_m, width_m, berth_sign)
 		_stamp_quay_storage_lane(
 			terminal, side, storage_x, storage_w, usable_len, z0, berth_sign, slot
@@ -799,31 +771,6 @@ func _stamp_quay_storage_lane(
 			apron.name = "ZoneApron_%d" % zone_index
 			apron.position = Vector3(lane_x, 0.50, zone_mid_z)
 			lane.add_child(apron)
-
-		## Side stripe on the berth face matching this zone's product
-		var half_w := float(terminal.get_meta("deck_half_w", absf(lane_x) + lane_w))
-		var stripe := MeshBuilder.box(
-			Vector3(1.1, 0.85, zone_len * 0.92),
-			color.lightened(0.12),
-			0.75,
-			0.05,
-		)
-		stripe.name = "ZoneStripe_%d" % zone_index
-		stripe.position = Vector3(berth_sign * (half_w - 0.55), 0.6, zone_mid_z)
-		lane.add_child(stripe)
-
-		## Divider stripe between commodity bands
-		if zone_index > 0:
-			var divider_z := z0 + usable_len * t0
-			var divider := MeshBuilder.box(
-				Vector3(lane_w * 1.05, 0.7, 1.8),
-				Color(0.95, 0.95, 0.92),
-				0.7,
-				0.05,
-			)
-			divider.name = "ZoneDivide_%d" % zone_index
-			divider.position = Vector3(lane_x, 0.75, divider_z)
-			lane.add_child(divider)
 
 		var pad_len := clampf(zone_len * 0.42, 14.0, 36.0)
 		var gap := 3.5
@@ -1377,23 +1324,7 @@ func _stamp_berth_asphalt(parent: Node3D, station: Dictionary, surface_y: float)
 		Vector3(length, 0.45, depth),
 		Vector3(0.0, 0.25, 0.0),
 	)
-	## Coping on the outer (seaward) edge — local +Z after align.
-	var coping := MeshBuilder.box(
-		Vector3(length * 0.96, 0.55, 1.1),
-		Color(0.55, 0.56, 0.58),
-		0.9,
-		0.05,
-	)
-	coping.name = "BerthEdge"
-	coping.position = Vector3(0.0, 0.70, depth * 0.5 - 0.55)
-	pad_root.add_child(coping)
-	_add_box_collision(
-		pad_root,
-		"CopingCollision",
-		Vector3(length * 0.96, 0.55, 1.1),
-		Vector3(0.0, 0.70, depth * 0.5 - 0.55),
-	)
-	## Bollards on the seaward coping — player/ship mooring interaction.
+	## Bollards on the seaward face — player/ship mooring interaction.
 	_stamp_asphalt_bollards(pad_root, slot, length, depth)
 	## Apron junction strip where the pad meets the harbour face (local −Z).
 	var junction := MeshBuilder.box(

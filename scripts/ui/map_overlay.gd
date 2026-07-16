@@ -20,7 +20,7 @@ const FRAME := 26.0
 const TOP_H := 58.0
 const BOTTOM_H := 48.0
 const NAV_REFRESH_S := 0.20
-const OVERLAY_DEBOUNCE_S := 0.14
+const OVERLAY_DEBOUNCE_S := 0.28
 
 var mode := Mode.NAVIGATION
 var data
@@ -46,7 +46,6 @@ var hover_layer_revision := -1
 
 var title_label: Label
 var hint_label: Label
-var mode_buttons: Array[Button] = []
 var weather_button: Button
 var fishing_button: Button
 var center_button: Button
@@ -59,8 +58,6 @@ var pick_body: RichTextLabel
 var pick_confirm: Button
 var pick_back: Button
 
-var harbour_board: HarbourBoardPanel
-
 
 func _ready() -> void:
 	add_to_group("marine_chart")
@@ -71,11 +68,9 @@ func _ready() -> void:
 	theme = HudStyle.make_theme()
 	_build_toolbar()
 	_build_pick_panel()
-	_build_harbour_board()
 	_load_layer_preferences()
 	_apply_mode_ui()
 	_refresh_pick_panel()
-	_refresh_harbour_board()
 
 
 func set_data_snapshot(snapshot) -> void:
@@ -92,14 +87,16 @@ func enter_home_port_pick_mode(preselect_port_id: String = "") -> void:
 	layers.apply_preset(ChartLayerManager.Preset.NAVIGATION)
 	layers.set_visible("routes", false)
 	layers.set_visible("approaches", false)
-	## Heavy field overlays — leave off during onboarding for responsiveness.
+	## Weather stays off during onboarding; fishing grounds stay on so captains
+	## can judge open-water access when picking a home harbour.
 	layers.set_visible("weather", false)
-	layers.set_visible("fishing", false)
+	layers.set_visible("fishing", true)
 	_apply_mode_ui()
 	_refresh_mode_buttons()
 	_refresh_pick_panel()
 	camera.user_moved = false
-	overlays_dirty = false
+	overlays_dirty = true
+	overlay_debounce = 0.0
 	first_visible_frame = true
 	visible = true
 
@@ -124,9 +121,12 @@ func open_navigation() -> void:
 	mode = Mode.NAVIGATION
 	if data == null or not data.is_valid():
 		set_data_snapshot(Snapshot.from_live_tree(get_tree()))
-	layers.apply_preset(ChartLayerManager.Preset.NAVIGATION)
+	## Reload prefs — home-port pick forces its own overlay set and must not
+	## stick on the shared gameplay chart after the captain sails.
+	_load_layer_preferences()
 	_apply_mode_ui()
-	_refresh_harbour_board()
+	overlays_dirty = true
+	overlay_debounce = 0.0
 	first_visible_frame = true
 	visible = true
 
@@ -184,7 +184,7 @@ func _process(delta: float) -> void:
 			nav_elapsed = 0.0
 			_capture_nav()
 			queue_redraw()
-	if overlays_dirty and mode != Mode.HOME_PORT_PICK:
+	if overlays_dirty:
 		overlay_debounce -= delta
 		if overlay_debounce <= 0.0 and not dragging:
 			renderer.prepare_overlays(
@@ -209,6 +209,10 @@ func _input(event: InputEvent) -> void:
 				camera.pixels_per_world_unit(_chart_rect().size),
 				drag_origin_center,
 			)
+			## Skip weather/fishing hover samples while panning — those compose
+			## per cursor move and dominate drag lag when overlays are on.
+			queue_redraw()
+			return
 		_refresh_hover_readout()
 		queue_redraw()
 		return
@@ -231,6 +235,7 @@ func _input(event: InputEvent) -> void:
 				dragging = false
 				if mode != Mode.HOME_PORT_PICK:
 					_schedule_overlays()
+				_refresh_hover_readout(true)
 				var viewport := get_viewport()
 				if viewport != null:
 					viewport.set_input_as_handled()
@@ -270,11 +275,8 @@ func _input(event: InputEvent) -> void:
 	elif key.keycode == KEY_W and mode != Mode.HOME_PORT_PICK:
 		_toggle_overlay("weather")
 		get_viewport().set_input_as_handled()
-	elif key.keycode == KEY_F and mode != Mode.HOME_PORT_PICK:
+	elif key.keycode == KEY_F:
 		_toggle_overlay("fishing")
-		get_viewport().set_input_as_handled()
-	elif key.keycode == KEY_N:
-		_set_preset(ChartLayerManager.Preset.NAVIGATION)
 		get_viewport().set_input_as_handled()
 
 
@@ -505,17 +507,6 @@ func _build_toolbar() -> void:
 	hint_label.add_theme_color_override("font_color", Color(0.90, 0.92, 0.82))
 	bar.add_child(hint_label)
 
-	for spec in [
-		["Navigate", ChartLayerManager.Preset.NAVIGATION],
-		["Harbour", ChartLayerManager.Preset.HARBOUR],
-	]:
-		var button := Button.new()
-		button.text = str(spec[0])
-		button.toggle_mode = true
-		button.pressed.connect(_set_preset.bind(int(spec[1])))
-		mode_buttons.append(button)
-		bar.add_child(button)
-
 	weather_button = Button.new()
 	weather_button.text = "Weather"
 	weather_button.toggle_mode = true
@@ -545,17 +536,14 @@ func _apply_mode_ui() -> void:
 	if title_label != null:
 		title_label.text = "CHOOSE YOUR HOME PORT" if picking else "NAVIGATION CHART"
 	if hint_label != null:
-		hint_label.visible = picking or layers.preset == ChartLayerManager.Preset.HARBOUR
+		hint_label.visible = picking
 		if picking:
 			hint_label.text = "Click a harbour for details, then confirm"
-		elif layers.preset == ChartLayerManager.Preset.HARBOUR:
-			hint_label.text = "Harbour board — click a port on the chart"
-	for index in range(mode_buttons.size()):
-		mode_buttons[index].visible = not picking
 	if weather_button != null:
 		weather_button.visible = not picking
 	if fishing_button != null:
-		fishing_button.visible = not picking
+		## Available during home-port pick so fishing grounds stay inspectable.
+		fishing_button.visible = true
 	if center_button != null:
 		center_button.visible = not picking
 	if close_button != null:
@@ -564,26 +552,9 @@ func _apply_mode_ui() -> void:
 		pick_panel.visible = picking
 	if pick_back != null:
 		pick_back.visible = picking
-	_refresh_harbour_board()
-
-
-func _set_preset(next: int) -> void:
-	layers.apply_preset(next)
-	if mode == Mode.HOME_PORT_PICK:
-		layers.set_visible("routes", false)
-		layers.set_visible("approaches", false)
-	_refresh_mode_buttons()
-	_persist_chart_settings()
-	_refresh_hover_readout(true)
-	_schedule_overlays()
-	_apply_mode_ui()
-	queue_redraw()
 
 
 func _refresh_mode_buttons() -> void:
-	if mode_buttons.size() >= 2:
-		mode_buttons[0].set_pressed_no_signal(layers.preset == ChartLayerManager.Preset.NAVIGATION)
-		mode_buttons[1].set_pressed_no_signal(layers.preset == ChartLayerManager.Preset.HARBOUR)
 	if weather_button != null:
 		weather_button.set_pressed_no_signal(layers.is_visible("weather"))
 	if fishing_button != null:
@@ -591,11 +562,12 @@ func _refresh_mode_buttons() -> void:
 
 
 func _toggle_overlay(layer_name: String) -> void:
-	if mode == Mode.HOME_PORT_PICK:
+	if mode == Mode.HOME_PORT_PICK and layer_name != "fishing":
 		return
 	layers.toggle(layer_name)
 	_refresh_mode_buttons()
-	_persist_chart_settings()
+	if mode != Mode.HOME_PORT_PICK:
+		_persist_chart_settings()
 	_refresh_hover_readout(true)
 	_schedule_overlays()
 	queue_redraw()
@@ -605,15 +577,11 @@ func _load_layer_preferences() -> void:
 	var settings := get_node_or_null("/root/GameSettings")
 	if settings == null:
 		return
+	## Preset first, then overlay prefs so Weather/Fishing toggles always win.
+	layers.apply_preset(int(settings.get("chart_profile")))
 	layers.set_overlay_preferences(
 		bool(settings.get("chart_weather_enabled")),
 		bool(settings.get("chart_fishing_enabled")),
-	)
-	var saved_profile := int(settings.get("chart_profile"))
-	layers.apply_preset(
-		ChartLayerManager.Preset.HARBOUR
-		if saved_profile == ChartLayerManager.Preset.HARBOUR
-		else ChartLayerManager.Preset.NAVIGATION
 	)
 	_refresh_mode_buttons()
 
@@ -634,7 +602,6 @@ func _click_chart(screen: Vector2) -> void:
 	if hit.is_empty():
 		if mode == Mode.NAVIGATION:
 			selected_port = ""
-			_refresh_harbour_board()
 			queue_redraw()
 		return
 	selected_port = hit
@@ -643,7 +610,6 @@ func _click_chart(screen: Vector2) -> void:
 		queue_redraw()
 	else:
 		port_selected.emit(hit)
-		_refresh_harbour_board()
 		queue_redraw()
 
 
@@ -700,74 +666,10 @@ func _screen_to_world(screen: Vector2) -> Vector2:
 func _pointer_over_chrome(screen: Vector2) -> bool:
 	if pick_panel != null and pick_panel.visible and pick_panel.get_global_rect().has_point(screen):
 		return true
-	if harbour_board != null and harbour_board.visible \
-			and harbour_board.get_global_rect().has_point(screen):
-		return true
 	var toolbar := get_node_or_null("ChartToolbar") as Control
 	if toolbar != null and toolbar.get_global_rect().has_point(screen):
 		return true
 	return false
-
-
-func _build_harbour_board() -> void:
-	harbour_board = HarbourBoardPanel.new()
-	harbour_board.name = "HarbourBoard"
-	harbour_board.visible = false
-	harbour_board.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_RIGHT)
-	harbour_board.anchor_left = 1.0
-	harbour_board.anchor_top = 1.0
-	harbour_board.anchor_right = 1.0
-	harbour_board.anchor_bottom = 1.0
-	harbour_board.offset_left = -380.0
-	harbour_board.offset_top = -320.0
-	harbour_board.offset_right = -FRAME
-	harbour_board.offset_bottom = -(BOTTOM_H + 10.0)
-	add_child(harbour_board)
-
-
-func _refresh_harbour_board() -> void:
-	if harbour_board == null:
-		return
-	var show_board := (
-		mode == Mode.NAVIGATION
-		and layers.preset == ChartLayerManager.Preset.HARBOUR
-	)
-	harbour_board.visible = show_board
-	if not show_board:
-		return
-	var port_id := selected_port.strip_edges()
-	if port_id.is_empty():
-		port_id = _default_harbour_board_port()
-		if not port_id.is_empty():
-			selected_port = port_id
-	var plot := _resolve_port_plot(port_id)
-	harbour_board.bind_port(port_id, plot, true)
-
-
-func _default_harbour_board_port() -> String:
-	var home := get_tree().root.find_child("HomePort", true, false) as PortPlot
-	if home != null and not home.port_id.is_empty():
-		return home.port_id
-	var live := HarbourRegistry.all_port_ids()
-	if not live.is_empty():
-		return live[0]
-	if data != null and data.is_valid():
-		var ids: PackedStringArray = data.port_ids()
-		if not ids.is_empty():
-			return ids[0]
-	return ""
-
-
-func _resolve_port_plot(port_id: String) -> PortPlot:
-	if port_id.is_empty():
-		return null
-	var harbour := HarbourRegistry.controller(port_id)
-	if harbour != null:
-		return harbour.get_parent() as PortPlot
-	var home := get_tree().root.find_child("HomePort", true, false) as PortPlot
-	if home != null and home.port_id == port_id:
-		return home
-	return null
 
 
 func _refresh_hover_readout(force: bool = false) -> void:

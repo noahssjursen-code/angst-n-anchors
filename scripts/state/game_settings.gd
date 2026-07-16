@@ -30,8 +30,8 @@ var mouse_sensitivity: float = 1.0           # multiplier applied to player.gd's
 var invert_mouse_y:    bool  = false
 
 # ── Chart / helm minimap ──────────────────────────────────────────────────────
-var chart_weather_enabled: bool = false
-var chart_fishing_enabled: bool = false
+var chart_weather_enabled: bool = true
+var chart_fishing_enabled: bool = true
 var chart_profile: int = 0
 var minimap_collapsed: bool = false
 

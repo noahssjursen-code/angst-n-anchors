@@ -48,6 +48,11 @@ static func from_live_tree(tree: SceneTree) -> ChartDataSnapshot:
 			var info := (registry.call("get_port_info", str(id_raw)) as Dictionary).duplicate(true)
 			out.ports.append(info)
 	out._index_ports()
+	## Gameplay chart path — keep field APIs aligned with the live world.
+	if out.layout != null:
+		LandField.initialize(out.layout)
+		FishingField.initialize(out.world_seed)
+		WeatherField.world_seed = out.world_seed
 	return out
 
 

@@ -27,6 +27,13 @@ func pan_pixels(delta_pixels: Vector2, pixels_per_world_unit: float, origin: Vec
 	user_moved = true
 
 
+## Birdseye a harbour (or any coastal site) at a tight span.
+func focus_harbour(world_xz: Vector2, span_m: float) -> void:
+	center = world_xz
+	span = clampf(span_m, SPAN_MIN, SPAN_MAX)
+	user_moved = true
+
+
 func home(ship_position: Vector3, points: Array[Vector3]) -> void:
 	var all_points := points.duplicate()
 	if ship_position.is_finite():

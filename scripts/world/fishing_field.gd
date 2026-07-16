@@ -75,10 +75,27 @@ static func sample(world_pos: Vector3) -> Dictionary:
 	}
 
 
-## Constant-time chart path. Same mainland/island rule as live trawling; never
-## runs directional-fetch rays from map rendering.
+## Fast chart path — noise + water clearance + mainland X cut.
+## Skips region classification (extra layout work on every texel).
 static func sample_chart(world_pos: Vector3) -> Dictionary:
-	return sample(world_pos)
+	_ensure_noise()
+	var noise_val := _ground_noise.get_noise_2d(
+		world_pos.x / FEATURE_SCALE_M,
+		world_pos.z / FEATURE_SCALE_M,
+	)
+	var open_water := world_pos.x <= MAX_MAINLAND_APPROACH_X_M
+	if open_water and LandField.is_initialized():
+		open_water = LandField.distance_to_land(world_pos) >= MIN_WATER_CLEARANCE_M
+	var tier := TIERS[0] if not open_water else _tier_for_noise(noise_val)
+	var availability := 1.0 if open_water else 0.0
+	return {
+		"tier_id": str(tier["id"]),
+		"tier_label": str(tier["label"]),
+		"price_mul": float(tier["price_mul"]) * availability,
+		"catch_mul": float(tier["catch_mul"]) * availability,
+		"noise": noise_val,
+		"open_water": open_water,
+	}
 
 
 static func tier_color(tier_id: String) -> Color:
