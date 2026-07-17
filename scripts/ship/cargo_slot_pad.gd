@@ -9,6 +9,8 @@ const PAD_GROUP := "cargo_slot_pad"
 const YARD_PAD_GROUP := "container_yard_pad"
 const MASS_PREFIX := "cargo_pad_"
 const SNAP_RADIUS_M := 6.0
+## Decorative quay yards cap visible containers — full yards use impostor stacks.
+const MAX_DECOR_PREFILL := 28
 
 signal cargo_changed(component: CargoSlotPadComponent)
 signal container_landed(component: CargoSlotPadComponent, unit: ContainerUnit)
@@ -131,10 +133,14 @@ func prefill_general_cargo(
 	var n := count
 	if fill_fraction >= 0.0:
 		n = int(round(float(get_max_slots()) * clampf(fill_fraction, 0.0, 1.0)))
+	if not affects_boat_cargo_mass:
+		n = mini(maxi(n, 0), MAX_DECOR_PREFILL)
 	for _i in range(maxi(n, 0)):
 		var unit := ContainerFactory.make_one(origin_port_id, "", "provisions")
 		if add_container(unit) < 0:
 			break
+	if not affects_boat_cargo_mass:
+		_add_decor_impostor_stack()
 
 
 func clear_all() -> void:
@@ -426,7 +432,8 @@ func _spawn_node(origin: int, unit: ContainerUnit) -> void:
 	_container_root.add_child(node)
 	node.position = _cell_center_local(origin, unit.footprint)
 	node.position.y = ContainerNode.floor_offset_y()
-	node.setup(unit)
+	var decorative := is_quay_yard_pad and not affects_boat_cargo_mass
+	node.setup(unit, decorative)
 	_nodes[origin] = node
 
 
@@ -453,46 +460,59 @@ func _rebuild_visual() -> void:
 	plate.name = "Plate"
 	plate.position = Vector3(0.0, -0.03, 0.0)
 	_visual_root.add_child(plate)
-	## Slot grid lines + container bay outlines
+	## Slot grid lines + container bay outlines — merged to cut draw calls.
 	var cols := get_cols()
 	var rows := get_rows()
 	var half_w := deck_width_m * 0.5
 	var half_l := deck_length_m * 0.5
 	var line_y := 0.02
+	var line_parts: Array = []
 	for c in range(cols + 1):
 		var x := -half_w + float(c) * cell_size_m
-		var line := MeshBuilder.box(
-			Vector3(0.03, 0.02, deck_length_m),
-			slot_line_color,
-			1.0,
-			0.0,
-		)
-		line.position = Vector3(x, line_y, 0.0)
-		_visual_root.add_child(line)
+		line_parts.append({
+			"size": Vector3(0.03, 0.02, deck_length_m),
+			"position": Vector3(x, line_y, 0.0),
+		})
 	for r in range(rows + 1):
 		var z := -half_l + float(r) * cell_size_m
-		var line2 := MeshBuilder.box(
-			Vector3(deck_width_m, 0.02, 0.03),
-			slot_line_color,
-			1.0,
-			0.0,
-		)
-		line2.position = Vector3(0.0, line_y, z)
-		_visual_root.add_child(line2)
-	## Container bay outlines — one per tiled slot (no leftover fringe).
+		line_parts.append({
+			"size": Vector3(deck_width_m, 0.02, 0.03),
+			"position": Vector3(0.0, line_y, z),
+		})
+	if not line_parts.is_empty():
+		var lines := MeshBuilder.merged_boxes(line_parts, slot_line_color, 1.0, 0.0)
+		lines.name = "GridLines"
+		_visual_root.add_child(lines)
 	var fp := get_slot_footprint()
 	var bay_w := float(fp.x) * cell_size_m
 	var bay_l := float(fp.y) * cell_size_m
+	var mark_parts: Array = []
 	for origin in _iter_slot_origins(fp):
 		var center := _cell_center_local(origin, fp)
-		var mark := MeshBuilder.box(
-			Vector3(bay_w * 0.98, 0.015, bay_l * 0.98),
-			Color(slot_line_color.r, slot_line_color.g, slot_line_color.b, 0.22),
-			1.0,
-			0.0,
-		)
-		mark.position = Vector3(center.x, -0.01, center.z)
-		_visual_root.add_child(mark)
+		mark_parts.append({
+			"size": Vector3(bay_w * 0.98, 0.015, bay_l * 0.98),
+			"position": Vector3(center.x, -0.01, center.z),
+		})
+	if not mark_parts.is_empty():
+		var mark_color := Color(slot_line_color.r, slot_line_color.g, slot_line_color.b, 0.22)
+		var marks := MeshBuilder.merged_boxes(mark_parts, mark_color, 1.0, 0.0)
+		marks.name = "SlotMarks"
+		_visual_root.add_child(marks)
+
+
+func _add_decor_impostor_stack() -> void:
+	if _visual_root == null or not is_quay_yard_pad:
+		return
+	var stack_h := clampf(deck_length_m * 0.18, 2.4, 6.5)
+	var stack := MeshBuilder.box(
+		Vector3(deck_width_m * 0.72, stack_h, deck_length_m * 0.42),
+		Color(0.42, 0.38, 0.34, 0.88),
+		0.92,
+		0.04,
+	)
+	stack.name = "DecorStackImpostor"
+	stack.position = Vector3(0.0, stack_h * 0.5, deck_length_m * 0.12)
+	_visual_root.add_child(stack)
 
 
 func _refresh_mass() -> void:

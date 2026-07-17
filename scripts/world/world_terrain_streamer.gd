@@ -361,10 +361,18 @@ func _bind_forest_coverage(material: ShaderMaterial) -> void:
 
 
 func _sync_collisions(stream_position: Vector3) -> void:
+	if _frame_index % 2 != 0:
+		return
 	var stream_xz := Vector2(stream_position.x, stream_position.z)
+	var center_coord := world_to_chunk(stream_xz)
+	var chunk_radius := int(ceil(collision_radius_m / CHUNK_SIZE_M)) + 1
 	for key in _chunks:
 		var coord := parse_chunk_key(StringName(key))
+		if absi(coord.x - center_coord.x) > chunk_radius or absi(coord.y - center_coord.y) > chunk_radius:
+			continue
 		var record := _chunks[key] as Dictionary
+		if record.get("collision", null) == true:
+			continue
 		var wanted := chunk_needs_collision(coord, stream_xz, collision_radius_m)
 		if wanted and not _has_collision_state(record):
 			_add_collision(StringName(key))

@@ -76,7 +76,20 @@ func configure(
 	_harbour = harbour
 	_bind_harbour_signals()
 	_layer_visible = _normalized_layers(layer_visible)
-	_rebuild()
+	if any_layer_visible():
+		_rebuild()
+	else:
+		_clear_layers()
+
+
+func _clear_layers() -> void:
+	for child in get_children():
+		child.free()
+
+
+func _ensure_built() -> void:
+	if get_child_count() == 0 and _graph != null:
+		_rebuild()
 
 
 func _bind_harbour_signals() -> void:
@@ -106,6 +119,9 @@ func _on_harbour_occupancy_changed(_berth_id: String = "", _ship: BoatBody = nul
 func _refresh_harbour_berths() -> void:
 	if not is_inside_tree():
 		return
+	if not is_layer_visible(LAYER_HARBOUR_BERTHS):
+		return
+	_ensure_built()
 	var layer := get_node_or_null(LAYER_HARBOUR_BERTHS) as Node3D
 	if layer == null:
 		return
@@ -119,12 +135,16 @@ func set_layer_visible(layer_id: String, enabled: bool) -> void:
 	if layer_id not in LAYER_IDS:
 		return
 	_layer_visible[layer_id] = enabled
+	if enabled:
+		_ensure_built()
 	_apply_layer_visibility()
 
 
 func set_all_layers_visible(enabled: bool) -> void:
 	for layer_id in LAYER_IDS:
 		_layer_visible[layer_id] = enabled
+	if enabled:
+		_ensure_built()
 	_apply_layer_visibility()
 
 

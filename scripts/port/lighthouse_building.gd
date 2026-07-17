@@ -120,22 +120,34 @@ func _process(delta: float) -> void:
 		_beam_mat.set_shader_parameter("fog_density", fog)
 
 func _build() -> void:
+	if Engine.is_editor_hint():
+		var existing := get_node_or_null("LighthouseModel") as ModelAssembler
+		if existing != null:
+			assembler = existing
+			_build_lights()
+			return
+
 	if assembler != null:
 		assembler.queue_free()
+		assembler = null
 
 	for child in get_children():
-		if child is ModelAssembler or child.name == "LightRotor" or child.name == "LanternOmni":
+		if child is ModelAssembler or child.name == "LighthouseModel":
 			if Engine.is_editor_hint():
 				child.free()
 			else:
 				child.queue_free()
 
-	assembler = ModelAssembler.new()
-	assembler.name = "LighthouseModel"
-	assembler.model_data_path = MODEL_PATH
-	assembler.build_part_colliders = not Engine.is_editor_hint()
-	add_child(assembler)
+	var visual := ModelCache.instance(MODEL_PATH)
+	visual.name = "LighthouseModel"
+	add_child(visual)
+	assembler = null
+	_build_lights()
 
+
+func _build_lights() -> void:
+	if _rotor != null and is_instance_valid(_rotor):
+		return
 	_rotor = Node3D.new()
 	_rotor.name = "LightRotor"
 	_rotor.position.y = 22.0

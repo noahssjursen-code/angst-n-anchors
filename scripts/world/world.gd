@@ -65,6 +65,10 @@ func _ready() -> void:
 
 
 func _rebuild() -> void:
+	PortDataCache.clear()
+	BuildingCache.clear()
+	LandDecorCache.clear()
+	MeshBuilder.clear_material_cache()
 	if _requested_generation_version != WORLD_GENERATION_VERSION:
 		push_error(
 			"World: generation version mismatch (requested %d, runtime %d)"
@@ -172,7 +176,7 @@ func get_world_generation_debug_stats() -> Dictionary:
 
 func _bake_berth_lanes(t: Node, defs: Array[PortDefinition]) -> void:
 	var lane_handle: int = t.mark_load_event("berth_lanes.bake") if t != null else 0
-	BerthApproachLanes.bake_all_ports(defs, world_seed)
+	BerthApproachLanes.bake_all_ports(defs, world_seed, _world_layout)
 	call_deferred("_refresh_berth_lane_debug")
 	if t != null:
 		t.end_load_event(lane_handle)
