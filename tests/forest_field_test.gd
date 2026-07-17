@@ -17,6 +17,7 @@ func _initialize() -> void:
 	_test_meshes()
 	_test_transforms(layout)
 	_test_requests(layout)
+	_test_refresh_gate()
 	ForestField.clear()
 	_finish()
 
@@ -92,6 +93,14 @@ func _test_requests(layout: WorldLayout) -> void:
 		) == PROP_LOD.Tier.FULL,
 		"LOD hysteresis keeps FULL briefly when leaving near ring",
 	)
+
+
+func _test_refresh_gate() -> void:
+	var streamer := FOREST_STREAMER.new()
+	streamer._last_request_xz = Vector2.ZERO
+	_check(not streamer._should_refresh_requests(Vector2(20.0, 10.0)), "forest skips stationary request rebuilds")
+	_check(streamer._should_refresh_requests(Vector2(60.0, 0.0)), "forest refreshes after meaningful movement")
+	streamer.free()
 
 
 func _check(condition: bool, label: String) -> void:

@@ -36,7 +36,11 @@ static var _live_baked_ports: Dictionary = {}
 static var debug_visible: bool = false
 
 
-static func bake_all_ports(defs: Array, world_seed: int) -> void:
+static func bake_all_ports(
+		defs: Array,
+		world_seed: int,
+		world_layout: WorldLayout = null,
+) -> void:
 	if not LandField.is_initialized():
 		push_warning("BerthApproachLanes: LandField not ready — skipping port bake")
 		return
@@ -45,7 +49,7 @@ static func bake_all_ports(defs: Array, world_seed: int) -> void:
 		var def := def_raw as PortDefinition
 		if def == null:
 			continue
-		var data := PortExpander.expand(def, world_seed)
+		var data := PortExpander.expand(def, world_seed, world_layout)
 		lane_count += bake_from_port_data(data)
 	_initialized = true
 	print(

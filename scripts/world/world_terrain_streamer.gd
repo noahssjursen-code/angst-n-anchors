@@ -7,17 +7,24 @@ extends Node3D
 
 const WorldReferenceScript := preload("res://scripts/world/world_reference.gd")
 const TERRAIN_SHADER := preload("res://resources/shaders/terrain.gdshader")
+const TERRAIN_FAR_SHADER := preload("res://resources/shaders/terrain_far.gdshader")
 const TERRAIN_SURFACE_MAPS := preload("res://scripts/world/terrain_surface_maps.gd")
 
 const CHUNK_SIZE_M := 1000.0
 ## The macro SDF itself is 156.25 m, so denser-than-40 m runtime tessellation adds
 ## build cost without coastline information. All steps divide 1 km exactly.
-## Far rings use 500 m so a ~20 km visual radius stays affordable.
-const DEFAULT_LOD_STEPS := [40.0, 50.0, 100.0, 200.0, 500.0]
-const DEFAULT_LOD_DISTANCES := [2200.0, 4800.0, 9000.0, 15000.0]
+## Far rings use 200 m so a ~20 km visual radius stays affordable.
+## Nested steps divide CHUNK_SIZE_M (1000); each tier doubles grid spacing.
+## (Dropped non-nested 40↔50 and 200↔500 which caused T-junction height seams.)
+const DEFAULT_LOD_STEPS := [25.0, 50.0, 100.0, 200.0]
+const DEFAULT_LOD_DISTANCES := [2200.0, 4800.0, 9000.0]
 const DEFAULT_VISUAL_RADIUS_M := 20000.0
 const SKIRT_DEPTH_M := 12.0
 const LOD_HYSTERESIS_M := 350.0
+## A 1 km chunk grid does not need request/collision reconciliation every few
+## frames. Movement gates remove the steady-state dictionary scans and sorts.
+const REQUEST_MOVE_THRESHOLD_M := 50.0
+const COLLISION_MOVE_THRESHOLD_M := 25.0
 ## Terrain datum sits below sea level so the rock shelf continues underwater.
 ## Port flatten zones still target y=0 and are therefore unchanged.
 const TERRAIN_SINK_M := 2.5
@@ -35,7 +42,7 @@ const PORT_PAD_SEAWARD_SHIFT_M := PortSizing.PAD_SEAWARD_SHIFT_M
 @export_range(0.0, 5000.0, 100.0) var collision_radius_m := 1800.0
 @export_range(0.25, 16.0, 0.25) var build_budget_ms := 4.5
 @export_range(1, 8, 1) var max_jobs_per_frame := 1
-@export_range(1, 16, 1) var queue_refresh_frames := 4
+@export var background_mesh_builds := true
 @export var lod_steps_m := PackedFloat32Array(DEFAULT_LOD_STEPS)
 @export var lod_distances_m := PackedFloat32Array(DEFAULT_LOD_DISTANCES)
 @export var sea_level_pad_height_m := 0.0
@@ -49,19 +56,26 @@ var _flatten_zones: Array[Dictionary] = []
 var _chunks: Dictionary = {}
 var _jobs: Array[Dictionary] = []
 var _queued: Dictionary = {}
-var _material: ShaderMaterial
+var _near_material: ShaderMaterial
+var _far_material: ShaderMaterial
 var _frame_index := 0
 var _last_build_ms := 0.0
 var _total_build_ms := 0.0
 var _completed_builds := 0
 var _boot_priority := false
 var _boot_focus := Vector3.ZERO
+var _last_request_xz := Vector2(INF, INF)
+var _last_collision_xz := Vector2(INF, INF)
+var _build_task_id := -1
+var _build_task_state: Dictionary = {}
+var _build_task_job: Dictionary = {}
 
 
 func configure(layout: Object, port_definitions: Array = []) -> void:
 	_clear_chunks()
 	_layout = layout
-	_material = null
+	_near_material = null
+	_far_material = null
 	_flatten_zones = make_flatten_zones(
 		port_definitions,
 		sea_level_pad_height_m,
@@ -69,11 +83,14 @@ func configure(layout: Object, port_definitions: Array = []) -> void:
 		layout as WorldLayout,
 	)
 	_frame_index = 0
+	_last_request_xz = Vector2(INF, INF)
+	_last_collision_xz = Vector2(INF, INF)
 	set_process(_layout != null)
 	if _layout != null:
 		# Bake surface maps up-front so the first streamed chunk stays cheap.
-		_terrain_material()
-		_refresh_requests(WorldReferenceScript.stream_position(get_viewport()))
+		_terrain_material(0)
+		_terrain_material(lod_steps_m.size() - 1)
+		_refresh_requests(WorldReferenceScript.visual_position(get_viewport()))
 
 
 func set_layout(layout: Object) -> void:
@@ -93,20 +110,34 @@ func set_port_definitions(port_definitions: Array) -> void:
 
 func _ready() -> void:
 	set_process(_layout != null)
+	var telemetry := get_node_or_null("/root/Telemetry")
+	if telemetry != null and telemetry.has_method("register_provider"):
+		telemetry.register_provider(&"world.terrain", self, &"get_debug_stats", &"world", {
+			"last_build_ms": {"unit": "ms"},
+			"average_build_ms": {"unit": "ms"},
+			"memory_estimate_bytes": {"unit": "bytes"},
+			"retained_cpu_bytes": {"unit": "bytes"},
+		})
 
 
 func _exit_tree() -> void:
+	var telemetry := get_node_or_null("/root/Telemetry")
+	if telemetry != null and telemetry.has_method("unregister_provider"):
+		telemetry.unregister_provider(&"world.terrain", self)
 	_clear_chunks()
 
 
 func _process(_delta: float) -> void:
 	if _layout == null:
 		return
-	var stream_position := _boot_focus if _boot_priority else WorldReferenceScript.stream_position(get_viewport())
-	if _boot_priority or _frame_index % maxi(queue_refresh_frames, 1) == 0:
+	var stream_position := _boot_focus if _boot_priority else WorldReferenceScript.visual_position(get_viewport())
+	var collision_position := _boot_focus if _boot_priority \
+			else WorldReferenceScript.gameplay_position(get_tree())
+	var stream_xz := Vector2(stream_position.x, stream_position.z)
+	if _boot_priority or _should_refresh_requests(stream_xz):
 		_refresh_requests(stream_position)
-	_process_jobs(stream_position)
-	_sync_collisions(stream_position)
+	_process_jobs(collision_position)
+	_sync_collisions(collision_position)
 	_frame_index += 1
 
 
@@ -193,6 +224,9 @@ func get_debug_stats() -> Dictionary:
 	var triangles := 0
 	var collision_count := 0
 	var memory_bytes := 0
+	var visual_chunks := 0
+	var empty_water_chunks := 0
+	var retained_cpu_bytes := 0
 	for value in _chunks.values():
 		var record := value as Dictionary
 		var lod := int(record.get("lod", 0))
@@ -201,15 +235,27 @@ func get_debug_stats() -> Dictionary:
 		vertices += int(record.get("vertices", 0))
 		triangles += int(record.get("triangles", 0))
 		memory_bytes += int(record.get("memory_bytes", 0))
-		if record.get("collision", null) != null:
+		if record.get("node", null) is Node3D:
+			visual_chunks += 1
+		else:
+			empty_water_chunks += 1
+		var surface_data := record.get("surface_data", {}) as Dictionary
+		if not surface_data.is_empty():
+			retained_cpu_bytes += (surface_data["vertices"] as PackedVector3Array).size() * 12
+			retained_cpu_bytes += (surface_data["indices"] as PackedInt32Array).size() * 4
+		if record.get("collision", null) is StaticBody3D:
 			collision_count += 1
 	return {
 		"loaded": _chunks.size(),
-		"pending": _jobs.size(),
+		"pending": _jobs.size() + (1 if _build_task_id >= 0 else 0),
+		"build_in_flight": _build_task_id >= 0,
 		"lod_counts": lod_counts,
 		"vertices": vertices,
 		"triangles": triangles,
 		"collision_count": collision_count,
+		"visual_chunks": visual_chunks,
+		"empty_water_chunks": empty_water_chunks,
+		"retained_cpu_bytes": retained_cpu_bytes,
 		"last_build_ms": _last_build_ms,
 		"average_build_ms": _total_build_ms / float(maxi(_completed_builds, 1)),
 		"memory_estimate_bytes": memory_bytes,
@@ -217,6 +263,7 @@ func get_debug_stats() -> Dictionary:
 
 
 func _refresh_requests(stream_position: Vector3) -> void:
+	_last_request_xz = Vector2(stream_position.x, stream_position.z)
 	var desired := select_chunk_requests(
 		Vector2(stream_position.x, stream_position.z),
 		float(_layout.half_extent_m),
@@ -245,7 +292,7 @@ func _refresh_requests(stream_position: Vector3) -> void:
 		if not desired_keys.has(key):
 			remove_keys.append(key)
 	for key in remove_keys:
-		_unload_chunk(StringName(key))
+		_unload_chunk(key)
 
 	var retained_jobs: Array[Dictionary] = []
 	_queued.clear()
@@ -255,6 +302,12 @@ func _refresh_requests(stream_position: Vector3) -> void:
 			retained_jobs.append(job)
 			_queued[key] = int(job["lod"])
 	_jobs = retained_jobs
+	if _build_task_id >= 0:
+		var task_coord := _build_task_job.get("coord", Vector2i.ZERO) as Vector2i
+		var task_lod := int(_build_task_job.get("lod", -1))
+		var task_key := chunk_key(task_coord)
+		if desired_keys.has(task_key) and int(desired_keys[task_key]) == task_lod:
+			_queued[task_key] = task_lod
 	for request in desired:
 		var coord: Vector2i = request["coord"]
 		var key := chunk_key(coord)
@@ -272,7 +325,34 @@ func _enqueue(request: Dictionary) -> void:
 	_jobs.append(request)
 
 
-func _process_jobs(stream_position: Vector3) -> void:
+func _process_jobs(collision_position: Vector3) -> void:
+	if _build_task_id >= 0:
+		if not WorkerThreadPool.is_task_completed(_build_task_id):
+			return
+		WorkerThreadPool.wait_for_task_completion(_build_task_id)
+		var finished_job := _build_task_job
+		var finished_state := _build_task_state
+		_build_task_id = -1
+		_build_task_job = {}
+		_build_task_state = {}
+		var finished_coord := finished_job.get("coord", Vector2i.ZERO) as Vector2i
+		var finished_lod := int(finished_job.get("lod", 0))
+		var finished_key := chunk_key(finished_coord)
+		var still_wanted := int(_queued.get(finished_key, -1)) == finished_lod
+		_queued.erase(finished_key)
+		_last_build_ms = float(finished_state.get("duration_ms", 0.0))
+		_total_build_ms += _last_build_ms
+		_completed_builds += 1
+		if still_wanted and finished_state.get("data", null) is Dictionary:
+			_install_chunk_data(
+				finished_coord,
+				finished_lod,
+				finished_job.get("collision_position", collision_position) as Vector3,
+				finished_state["data"] as Dictionary,
+			)
+		# Finalizing one mesh may create an ArrayMesh/collider. Do not also start
+		# and finish synchronous work in this frame.
+		return
 	var frame_started := Time.get_ticks_usec()
 	var completed := 0
 	var budget := BOOT_BUDGET_MS if _boot_priority else build_budget_ms
@@ -286,20 +366,70 @@ func _process_jobs(stream_position: Vector3) -> void:
 			break
 		var job := _jobs.pop_front() as Dictionary
 		var coord: Vector2i = job["coord"]
+		if background_mesh_builds:
+			_start_background_build(job, collision_position)
+			return
 		_queued.erase(chunk_key(coord))
 		var started := Time.get_ticks_usec()
-		_build_chunk(coord, int(job["lod"]), stream_position)
+		_build_chunk(coord, int(job["lod"]), collision_position)
 		_last_build_ms = float(Time.get_ticks_usec() - started) / 1000.0
 		_total_build_ms += _last_build_ms
 		_completed_builds += 1
 		completed += 1
 
 
-func _build_chunk(coord: Vector2i, lod: int, stream_position: Vector3) -> void:
+func _start_background_build(job: Dictionary, collision_position: Vector3) -> void:
+	var coord := job.get("coord", Vector2i.ZERO) as Vector2i
+	var lod := int(job.get("lod", 0))
+	var step := float(lod_steps_m[clampi(lod, 0, lod_steps_m.size() - 1)])
+	var layout := _layout
+	var zones := zones_intersecting_chunk(_flatten_zones, coord)
+	var task_state := {"data": null, "duration_ms": 0.0}
+	_build_task_state = task_state
+	_build_task_job = job.duplicate()
+	_build_task_job["collision_position"] = collision_position
+	_build_task_id = WorkerThreadPool.add_task(func() -> void:
+		var started := Time.get_ticks_usec()
+		task_state["data"] = build_chunk_mesh_data(
+			layout, coord, step, zones, SKIRT_DEPTH_M
+		)
+		task_state["duration_ms"] = float(Time.get_ticks_usec() - started) / 1000.0
+	, _boot_priority, "terrain_chunk_%d_%d_lod%d" % [coord.x, coord.y, lod])
+
+
+func _build_chunk(coord: Vector2i, lod: int, collision_position: Vector3) -> void:
+	var step := float(lod_steps_m[clampi(lod, 0, lod_steps_m.size() - 1)])
+	# Port terrain modifiers are geographically tiny compared with the world.
+	# Passing every port zone into every vertex sample made one terrain chunk scan
+	# the complete harbour catalogue several times per vertex.
+	var chunk_zones := zones_intersecting_chunk(_flatten_zones, coord)
+	var data := build_chunk_mesh_data(_layout, coord, step, chunk_zones, SKIRT_DEPTH_M)
+	_install_chunk_data(coord, lod, collision_position, data)
+
+
+func _install_chunk_data(
+		coord: Vector2i,
+		lod: int,
+		collision_position: Vector3,
+		data: Dictionary,
+) -> void:
 	var key := chunk_key(coord)
 	_unload_chunk(key)
-	var step := float(lod_steps_m[clampi(lod, 0, lod_steps_m.size() - 1)])
-	var data := build_chunk_mesh_data(_layout, coord, step, _flatten_zones, SKIRT_DEPTH_M)
+	var indices := data["indices"] as PackedInt32Array
+	if indices.is_empty():
+		# Open water is still a resolved/loaded chunk, but it needs no scene node,
+		# ArrayMesh, or retained CPU sampling arrays.
+		_chunks[key] = {
+			"node": null,
+			"coord": coord,
+			"lod": lod,
+			"vertices": 0,
+			"triangles": 0,
+			"memory_bytes": 0,
+			"collision": true,
+			"surface_data": {},
+		}
+		return
 	var root := Node3D.new()
 	root.name = "Terrain_%d_%d_L%d" % [coord.x, coord.y, lod]
 	add_child(root)
@@ -307,20 +437,32 @@ func _build_chunk(coord: Vector2i, lod: int, stream_position: Vector3) -> void:
 	var mesh_instance := MeshInstance3D.new()
 	mesh_instance.name = "Visual"
 	mesh_instance.mesh = _array_mesh_from_data(data)
-	mesh_instance.material_override = _terrain_material()
+	mesh_instance.material_override = _terrain_material(lod)
+	# Terrain beyond the sun's short 180 m shadow range never contributes useful
+	# shadow detail; disabling it on coarse rings avoids needless shadow work.
+	if lod >= 1:
+		mesh_instance.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	root.add_child(mesh_instance)
 
 	var record := {
 		"node": root,
+		"coord": coord,
 		"lod": lod,
 		"vertices": (data["vertices"] as PackedVector3Array).size(),
 		"triangles": (data["indices"] as PackedInt32Array).size() / 3,
 		"memory_bytes": estimate_mesh_memory(data),
 		"collision": null,
-		"surface_data": data,
+		# Only the finest ring can normally enter the 1.8 km collision radius.
+		# Retain the compact collision inputs there; far rings release all CPU
+		# mesh arrays once ArrayMesh has uploaded them.
+		"surface_data": _collision_source_from_data(data) if lod == 0 else {},
 	}
 	_chunks[key] = record
-	if chunk_needs_collision(coord, Vector2(stream_position.x, stream_position.z), collision_radius_m):
+	if chunk_needs_collision(
+			coord,
+			Vector2(collision_position.x, collision_position.z),
+			collision_radius_m,
+	):
 		_add_collision(key)
 
 
@@ -337,16 +479,22 @@ func _array_mesh_from_data(data: Dictionary) -> ArrayMesh:
 	return mesh
 
 
-func _terrain_material() -> ShaderMaterial:
-	if _material == null:
-		_material = ShaderMaterial.new()
-		_material.shader = TERRAIN_SHADER
+func _terrain_material(lod: int) -> ShaderMaterial:
+	if lod >= lod_steps_m.size() - 1:
+		if _far_material == null:
+			_far_material = ShaderMaterial.new()
+			_far_material.shader = TERRAIN_FAR_SHADER
+			_bind_forest_coverage(_far_material)
+		return _far_material
+	if _near_material == null:
+		_near_material = ShaderMaterial.new()
+		_near_material.shader = TERRAIN_SHADER
 		var bake_seed := 90210
 		if _layout != null and _layout.get("seed") != null:
 			bake_seed = int(_layout.get("seed"))
-		TERRAIN_SURFACE_MAPS.bind_to_material(_material, bake_seed)
-		_bind_forest_coverage(_material)
-	return _material
+		TERRAIN_SURFACE_MAPS.bind_to_material(_near_material, bake_seed)
+		_bind_forest_coverage(_near_material)
+	return _near_material
 
 
 func _bind_forest_coverage(material: ShaderMaterial) -> void:
@@ -356,18 +504,27 @@ func _bind_forest_coverage(material: ShaderMaterial) -> void:
 	else:
 		var blank := Image.create(4, 4, false, Image.FORMAT_R8)
 		blank.fill(Color(0, 0, 0))
+		blank.generate_mipmaps()
 		material.set_shader_parameter("forest_map", ImageTexture.create_from_image(blank))
 		material.set_shader_parameter("forest_world_half_extent_m", 20000.0)
 
 
 func _sync_collisions(stream_position: Vector3) -> void:
 	var stream_xz := Vector2(stream_position.x, stream_position.z)
+	if is_finite(_last_collision_xz.x) \
+			and _last_collision_xz.distance_squared_to(stream_xz) \
+			< COLLISION_MOVE_THRESHOLD_M * COLLISION_MOVE_THRESHOLD_M:
+		return
+	_last_collision_xz = stream_xz
 	for key in _chunks:
-		var coord := parse_chunk_key(StringName(key))
 		var record := _chunks[key] as Dictionary
+		var coord := record.get("coord", Vector2i.ZERO) as Vector2i
+		var collision_state: Variant = record.get("collision", null)
+		if collision_state is bool:
+			continue
 		var wanted := chunk_needs_collision(coord, stream_xz, collision_radius_m)
 		if wanted and not _has_collision_state(record):
-			_add_collision(StringName(key))
+			_add_collision(key)
 		elif not wanted and _has_collision_state(record):
 			var body: Variant = record["collision"]
 			if body is StaticBody3D and is_instance_valid(body):
@@ -375,13 +532,28 @@ func _sync_collisions(stream_position: Vector3) -> void:
 			record["collision"] = null
 
 
-func _add_collision(key: StringName) -> void:
+func _add_collision(key: Variant) -> void:
 	if not _chunks.has(key):
 		return
 	var record := _chunks[key] as Dictionary
 	if _has_collision_state(record):
 		return
 	var data := record["surface_data"] as Dictionary
+	if data.is_empty():
+		# Supports non-default collision radii without permanently retaining CPU
+		# mesh copies for every distant chunk.
+		var coord := record.get("coord", Vector2i.ZERO) as Vector2i
+		var lod := int(record.get("lod", 0))
+		var step := float(lod_steps_m[clampi(lod, 0, lod_steps_m.size() - 1)])
+		var rebuilt := build_chunk_mesh_data(
+			_layout,
+			coord,
+			step,
+			zones_intersecting_chunk(_flatten_zones, coord),
+			SKIRT_DEPTH_M,
+		)
+		data = _collision_source_from_data(rebuilt)
+		record["surface_data"] = data
 	var faces := collision_faces(data)
 	if faces.is_empty():
 		# Open-water / fully submerged chunks have no walkable faces. Mark them
@@ -403,13 +575,21 @@ func _has_collision_state(record: Dictionary) -> bool:
 	return record.get("collision", null) != null
 
 
+static func _collision_source_from_data(data: Dictionary) -> Dictionary:
+	return {
+		"vertices": data["vertices"],
+		"indices": data["indices"],
+		"surface_vertex_count": data["surface_vertex_count"],
+	}
+
+
 ## Boot/visual readiness: chunk is loaded and, if inside the collision ring,
 ## collision has been built or explicitly skipped (open water).
 func _chunk_collision_ready(record: Dictionary) -> bool:
 	return _has_collision_state(record)
 
 
-func _unload_chunk(key: StringName) -> void:
+func _unload_chunk(key: Variant) -> void:
 	if not _chunks.has(key):
 		return
 	var record := _chunks[key] as Dictionary
@@ -420,8 +600,15 @@ func _unload_chunk(key: StringName) -> void:
 
 
 func _clear_chunks() -> void:
+	if _build_task_id >= 0:
+		# WorkerThreadPool tasks must always be joined before their captured layout
+		# and zone data can be released.
+		WorkerThreadPool.wait_for_task_completion(_build_task_id)
+		_build_task_id = -1
+		_build_task_state = {}
+		_build_task_job = {}
 	for key in _chunks.keys():
-		_unload_chunk(StringName(key))
+		_unload_chunk(key)
 	_jobs.clear()
 	_queued.clear()
 
@@ -447,7 +634,7 @@ func _rebuild_chunks_intersecting(previous_zones: Array, current_zones: Array) -
 	_jobs = retained
 	for key in _chunks:
 		var record := _chunks[key] as Dictionary
-		var coord := parse_chunk_key(StringName(key))
+		var coord := record.get("coord", Vector2i.ZERO) as Vector2i
 		var chunk_rect := Rect2(chunk_origin(coord), Vector2(CHUNK_SIZE_M, CHUNK_SIZE_M))
 		if chunk_rect.intersects(affected_bounds, true):
 			_enqueue({"coord": coord, "lod": int(record["lod"]), "distance": 0.0})
@@ -466,6 +653,36 @@ static func _terrain_zone_bounds(zones: Array) -> Rect2:
 		if bounds.size != Vector2.ZERO:
 			result = bounds if result.size == Vector2.ZERO else result.merge(bounds)
 	return result
+
+
+## Return only terrain modifiers whose influence can reach this 1 km chunk.
+## The conservative bounds include falloff and rotation, so filtering cannot
+## change terrain output; it only removes guaranteed-distant work.
+static func zones_intersecting_chunk(zones: Array, coord: Vector2i) -> Array:
+	if zones.is_empty():
+		return []
+	var chunk_bounds := Rect2(chunk_origin(coord), Vector2(CHUNK_SIZE_M, CHUNK_SIZE_M))
+	var result: Array = []
+	for zone_variant in zones:
+		var zone := zone_variant as Dictionary
+		var bounds := _zone_influence_bounds(zone)
+		if bounds.size == Vector2.ZERO or bounds.intersects(chunk_bounds, true):
+			result.append(zone_variant)
+	return result
+
+
+static func _zone_influence_bounds(zone: Dictionary) -> Rect2:
+	var bounds := zone.get("near_field_bounds", Rect2()) as Rect2
+	if bounds.size == Vector2.ZERO and zone.has("polygon"):
+		bounds = _polygon_bounds(zone.get("polygon", PackedVector2Array()) as PackedVector2Array)
+	if bounds.size == Vector2.ZERO and zone.has("center"):
+		# A radius is a conservative AABB for rectangles at any yaw and ellipses.
+		var half := zone.get("half_size", Vector2.ZERO) as Vector2
+		var radius := half.length()
+		var center := zone.get("center", Vector2.ZERO) as Vector2
+		bounds = Rect2(center - Vector2.ONE * radius, Vector2.ONE * radius * 2.0)
+	var falloff := maxf(float(zone.get("falloff", 0.0)), 0.0)
+	return bounds.grow(falloff) if bounds.size != Vector2.ZERO else bounds
 
 
 ## Pure helper. Port records may be PortDefinition / PortData objects or dictionaries.
@@ -1002,13 +1219,22 @@ static func chunk_origin(coord: Vector2i) -> Vector2:
 	return Vector2(float(coord.x) * CHUNK_SIZE_M, float(coord.y) * CHUNK_SIZE_M)
 
 
-static func chunk_key(coord: Vector2i) -> StringName:
-	return StringName("%d:%d" % [coord.x, coord.y])
+static func chunk_key(coord: Vector2i) -> Vector2i:
+	return coord
 
 
-static func parse_chunk_key(key: StringName) -> Vector2i:
+static func parse_chunk_key(key: Variant) -> Vector2i:
+	if key is Vector2i:
+		return key as Vector2i
 	var parts := String(key).split(":")
 	return Vector2i(int(parts[0]), int(parts[1]))
+
+
+func _should_refresh_requests(stream_xz: Vector2) -> bool:
+	if not is_finite(_last_request_xz.x):
+		return true
+	return _last_request_xz.distance_squared_to(stream_xz) \
+			>= REQUEST_MOVE_THRESHOLD_M * REQUEST_MOVE_THRESHOLD_M
 
 
 static func collision_faces(data: Dictionary) -> PackedVector3Array:

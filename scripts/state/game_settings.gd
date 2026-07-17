@@ -39,9 +39,12 @@ var minimap_collapsed: bool = false
 ## Offline default or authoritative server-selected generation seed/version.
 ## These are intentionally not written to settings.cfg.
 var map_generation_seed: int = 42
-var map_generation_version: int = 7
+var map_generation_version: int = 8
 var weather_generation_version: int = 3
 var map_layout_checksum: String = ""
+## Square world extent metres (small/standard/large presets or custom 10–120 km).
+var map_world_size_m: float = 40000.0
+var map_world_preset: String = "standard"
 
 
 func set_world_generation_context(
@@ -49,11 +52,23 @@ func set_world_generation_context(
 		version: int,
 		checksum: String = "",
 		weather_version: int = 3,
+		world_size_m: float = -1.0,
+		preset_id: String = "",
 ) -> void:
 	map_generation_seed = seed
 	map_generation_version = maxi(version, 1)
 	weather_generation_version = maxi(weather_version, 1)
 	map_layout_checksum = checksum
+	if not preset_id.strip_edges().is_empty():
+		apply_world_size_preset(preset_id)
+	if world_size_m > 0.0:
+		map_world_size_m = clampf(world_size_m, 10000.0, 120000.0)
+
+
+func apply_world_size_preset(preset_id: String) -> void:
+	var WorldConfigScript := load("res://scripts/world/world_config.gd")
+	map_world_preset = preset_id.strip_edges().to_lower()
+	map_world_size_m = float(WorldConfigScript.preset_size_m(map_world_preset))
 
 
 func _ready() -> void:

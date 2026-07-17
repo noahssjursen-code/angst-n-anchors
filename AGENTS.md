@@ -85,7 +85,7 @@ Each autoload lives in its system folder and is registered in `project.godot`.
 | `GameMenu` | `ui/` | Pause / map / settings / hint overlay |
 | `GameState` | `state/` | Read model: player/ship/contract/world sub-states |
 | `DebugHud` | `ui/` | F3 debug overlay |
-| `Telemetry` | `state/` | Spawn-timing / load-events telemetry |
+| `Telemetry` | `state/` | Central debug/performance service: hardware samples, published metrics, peaks, context flags, events, and copyable reports |
 | `LocalPlayerView` | `state/` | **The MP seam.** Per-client view of the local player's world. UI reads through here, not direct autoloads |
 | `Tutorial` | `state/` | First-time hint chain (fires once per captain, persisted) |
 

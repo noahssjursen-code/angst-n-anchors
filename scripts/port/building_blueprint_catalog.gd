@@ -66,7 +66,7 @@ static func load_path(path: String) -> BuildingLayout:
 
 static func build(blueprint_id: String, collision_enabled: bool = true) -> Node3D:
 	var layout := by_id(blueprint_id)
-	return BuildingFitout.build(layout, collision_enabled) if layout != null else null
+	return BuildingCache.instance(layout, collision_enabled) if layout != null else null
 
 
 ## First blueprint matching apron pad role + template size (exact), else role only.

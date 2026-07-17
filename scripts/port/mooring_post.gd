@@ -50,6 +50,7 @@ const DEFAULT_DOCKING_BOLLARD_MODEL := "res://resources/data/meshes/docks/dockin
 		_rebuild_if_docking_bollard_visual()
 
 var _moor_interact_range: float = 3.2
+var _prompt_tick: int = 0
 
 ## Max distance / ray depth for mooring prompts and E toggle.
 @export var interact_range: float:
@@ -84,7 +85,25 @@ func _ready() -> void:
 func _process(_delta: float) -> void:
 	if Engine.is_editor_hint():
 		return
+	_prompt_tick += 1
+	if _prompt_tick % 4 != 0:
+		return
+	if not _any_player_nearby():
+		if _prompt_label != null:
+			_prompt_label.visible = false
+		return
 	_update_prompt()
+
+
+func _any_player_nearby() -> bool:
+	var range_sq := interact_range * interact_range * 4.0
+	for node in get_tree().get_nodes_in_group("player"):
+		var body := node as Node3D
+		if body == null:
+			continue
+		if global_position.distance_squared_to(body.global_position) <= range_sq:
+			return true
+	return false
 
 
 func _unhandled_input(event: InputEvent) -> void:

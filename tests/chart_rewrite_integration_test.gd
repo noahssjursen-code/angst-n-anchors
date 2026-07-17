@@ -26,6 +26,10 @@ func _run() -> void:
 	base.prepare(snapshot.layout)
 	assert(base.texture != null)
 	assert(base.build_usec < 2000000)
+	## Zoom tile path samples layout SDF only (no terrain meshes).
+	base.prepare_visible(Rect2(-2500.0, -2500.0, 5000.0, 5000.0))
+	assert(base.texture != null)
+	assert(base.world_rect.size.x < float(snapshot.layout.world_size_m))
 
 	var weather = RasterClass.new(RasterClass.Kind.WEATHER)
 	var bounds := Rect2(-20000.0, -20000.0, 40000.0, 40000.0)

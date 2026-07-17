@@ -1,0 +1,17 @@
+{
+	"default": {
+		"detailed_m": 280.0,
+		"impostor_m": 2200.0,
+		"hysteresis_m": 120.0
+	},
+	"tall": {
+		"detailed_m": 560.0,
+		"impostor_m": 4000.0,
+		"hysteresis_m": 160.0
+	},
+	"port_shell": {
+		"detailed_m": 800.0,
+		"impostor_m": 6000.0,
+		"hysteresis_m": 400.0
+	}
+}

@@ -1,0 +1,104 @@
+{
+	"brick_layout": {
+		"bulk_holds": [],
+		"cargo_zones": [],
+		"cells": {
+			"0,0,31": {
+				"brick_id": "hull_ladder",
+				"yaw": 0
+			},
+			"0,0,32": {
+				"brick_id": "hull_ladder",
+				"occupied_by": "0,0,31",
+				"yaw": 0
+			},
+			"1,0,31": {
+				"brick_id": "hull_ladder",
+				"occupied_by": "0,0,31",
+				"yaw": 0
+			},
+			"1,0,32": {
+				"brick_id": "hull_ladder",
+				"occupied_by": "0,0,31",
+				"yaw": 0
+			},
+			"1,1,11": {
+				"brick_id": "bollard",
+				"yaw": 0.0
+			},
+			"1,1,34": {
+				"brick_id": "bollard",
+				"yaw": 0.0
+			},
+			"10,0,37": {
+				"brick_id": "light_nav_white",
+				"yaw": 0.0
+			},
+			"13,1,32": {
+				"brick_id": "bollard",
+				"yaw": 0.0
+			},
+			"13,1,8": {
+				"brick_id": "bollard",
+				"yaw": 0.0
+			},
+			"14,0,31": {
+				"brick_id": "hull_ladder",
+				"yaw": 180
+			},
+			"14,0,32": {
+				"brick_id": "hull_ladder",
+				"occupied_by": "14,0,31",
+				"yaw": 180
+			},
+			"15,0,31": {
+				"brick_id": "hull_ladder",
+				"occupied_by": "14,0,31",
+				"yaw": 180
+			},
+			"15,0,32": {
+				"brick_id": "hull_ladder",
+				"occupied_by": "14,0,31",
+				"yaw": 180
+			},
+			"3,0,36": {
+				"brick_id": "light_nav_port",
+				"yaw": 0.0
+			},
+			"7,1,38": {
+				"brick_id": "light_nav_white",
+				"yaw": 0.0
+			},
+			"8,0,26": {
+				"brick_id": "helm",
+				"yaw": 0.0
+			},
+			"9,0,34": {
+				"brick_id": "light_nav_stbd",
+				"yaw": 0.0
+			}
+		},
+		"container_pads": [
+			{
+				"a": [
+					0,
+					0,
+					6
+				],
+				"b": [
+					7,
+					0,
+					13
+				]
+			}
+		],
+		"hull_id": "hull_45x16_cat"
+	},
+	"format_version": 2,
+	"hull_id": "hull_45x16_cat",
+	"id": "45_16_m_catamaran",
+	"name": "45 × 16 m · catamaran",
+	"price_marks": 0,
+	"registration_id": "cargo_vessel",
+	"shaft_power_kw": 650000.0
+}

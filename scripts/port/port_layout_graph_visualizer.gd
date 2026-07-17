@@ -41,6 +41,8 @@ const PROVISION_CRANE_AUTO_SCRIPT := preload("res://scripts/port/provision_crane
 const PROVISION_EQUIP_JOB_SCRIPT := preload("res://scripts/port/provision_crane_equipment_job.gd")
 const CRANE_OPERATOR_SCRIPT := preload("res://scripts/port/crane_operator_npc.gd")
 const MOORING_POST_SCRIPT := preload("res://scripts/port/mooring_post.gd")
+const PORT_STRUCTURE_LOD := preload("res://scripts/core/port_structure_lod.gd")
+const IMPOSTOR_SERVICE := preload("res://scripts/core/impostor_service.gd")
 
 
 static func _foundation_pavement_material() -> StandardMaterial3D:
@@ -56,7 +58,7 @@ static func _foundation_pavement_material() -> StandardMaterial3D:
 ## Shared materials across stamps — recreating StandardMaterial3D per box was a hitch.
 static var _material_cache: Dictionary = {}
 
-@export var show_module_labels := true
+@export var show_module_labels := false
 @export var show_open_slots := true
 @export var show_equipment_shapes := true
 
@@ -242,9 +244,7 @@ func _stamp_foundation() -> void:
 	mesh.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	mesh.extra_cull_margin = 24.0
 	add_child(mesh)
-	_add_trimesh_collision(mesh, "FoundationCollision")
-	## Convex top walk slabs along the apron — reliable CharacterBody footing
-	## even if trimesh is slow to cook on first frame.
+	## Walk slabs only — trimesh cook was a first-frame hitch with little gameplay gain.
 	_stamp_foundation_walk_boxes(spine_pts, sea_top, inland_top, top_y)
 
 
@@ -1105,11 +1105,20 @@ func _stamp_apron_pads() -> void:
 
 		var layout := BuildingBlueprintCatalog.find_for_pad(role_id, template_id)
 		if layout != null:
-			var building := BuildingFitout.build(layout, true)
-			if building != null:
-				building.name = "Building"
-				site.add_child(building)
-				continue
+			var blueprint_id := layout.blueprint_id.strip_edges()
+			var lod = PORT_STRUCTURE_LOD.new()
+			lod.name = "BuildingLod"
+			site.add_child(lod)
+			var captured := layout
+			lod.setup(
+				IMPOSTOR_SERVICE.building_key(blueprint_id),
+				func() -> Node3D:
+					var building := BuildingCache.instance(captured, true)
+					if building != null:
+						building.name = "Building"
+					return building if building != null else Node3D.new(),
+			)
+			continue
 		## Placeholder so every pad site always reads in-world (until you save a blueprint).
 		_stamp_apron_pad_placeholder(site, size_x, size_z, role_id)
 
@@ -1315,11 +1324,21 @@ func _stamp_land_house_point(
 		terrain_y: float,
 		lz: float,
 ) -> void:
-	var house := _make_village_house(index, float(entry.get("u", 0.0)), float(entry.get("v", 0.0)))
-	house.name = "House_%d" % index
-	house.position = Vector3(lx, terrain_y, lz)
-	house.rotation.y = deg_to_rad(180.0 + float(index % 5) * 12.0 - 24.0)
-	parent.add_child(house)
+	var u := float(entry.get("u", 0.0))
+	var v := float(entry.get("v", 0.0))
+	var variant := LandDecorCache.variant_index(index, u, v)
+	var lod = PORT_STRUCTURE_LOD.new()
+	lod.name = "House_%d" % index
+	lod.position = Vector3(lx, terrain_y, lz)
+	lod.rotation.y = deg_to_rad(180.0 + float(index % 5) * 12.0 - 24.0)
+	parent.add_child(lod)
+	lod.setup(
+		IMPOSTOR_SERVICE.land_house_key(variant),
+		func() -> Node3D:
+			var house := LandDecorCache.house_instance(index, u, v)
+			house.name = "House"
+			return house,
+	)
 
 
 func _stamp_land_trade_point(
@@ -1846,28 +1865,51 @@ func _stamp_provision_crane_at(
 		berth_id: String = "",
 		tool_index: int = 0,
 ) -> void:
+	var equip_id := ""
+	if not berth_id.is_empty():
+		equip_id = HarbourController.make_equip_id(berth_id, "equip_provision_crane", tool_index)
+	var harbour := _harbour
+	var lod = PORT_STRUCTURE_LOD.new()
+	lod.name = "ProvisionCraneLod"
+	root.add_child(lod)
+	lod.setup(
+		IMPOSTOR_SERVICE.crane_key("provision"),
+		func() -> Node3D:
+			return _build_provision_crane_full(berth_id, equip_id, harbour),
+		PORT_STRUCTURE_LOD.PROFILE_TALL,
+		func() -> void:
+			if harbour != null and not equip_id.is_empty():
+				harbour.unregister_equipment(equip_id),
+	)
+
+
+func _build_provision_crane_full(
+		berth_id: String,
+		equip_id: String,
+		harbour: HarbourController,
+) -> Node3D:
+	var holder := Node3D.new()
+	holder.name = "ProvisionCraneFull"
 	var crane := PROVISION_CRANE_SCRIPT.new() as ProvisionCrane
 	crane.name = "ProvisionCrane"
 	crane.rotation_degrees.y = -90.0
 	var auto := PROVISION_CRANE_AUTO_SCRIPT.new() as ProvisionCraneAutoOperator
 	auto.name = "AutoOperator"
 	crane.add_child(auto)
-	root.add_child(crane)
-
-	if berth_id.is_empty() or _harbour == null:
-		return
-	var equip_id := HarbourController.make_equip_id(berth_id, "equip_provision_crane", tool_index)
+	holder.add_child(crane)
+	if berth_id.is_empty() or harbour == null or equip_id.is_empty():
+		return holder
 	var job := PROVISION_EQUIP_JOB_SCRIPT.new() as ProvisionCraneEquipmentJob
 	job.setup(equip_id, "equip_provision_crane", berth_id)
 	job.bind_crane(crane)
 	crane.add_child(job)
-	_harbour.register_equipment(job, berth_id)
-
+	harbour.register_equipment(job, berth_id)
 	var operator := CRANE_OPERATOR_SCRIPT.new() as CraneOperatorNpc
 	operator.name = "CraneOperator"
 	operator.position = Vector3(-2.2, 0.0, 3.5)
-	operator.configure(_harbour, berth_id, equip_id)
-	root.add_child(operator)
+	operator.configure(harbour, berth_id, equip_id)
+	holder.add_child(operator)
+	return holder
 
 
 func _stamp_bulk_crane_at(
@@ -1877,6 +1919,31 @@ func _stamp_bulk_crane_at(
 		berth_id: String = "",
 		tool_index: int = 0,
 ) -> void:
+	var equip_id := ""
+	if not berth_id.is_empty():
+		equip_id = HarbourController.make_equip_id(berth_id, "equip_grab_unloader", tool_index)
+	var harbour := _harbour
+	var lod = PORT_STRUCTURE_LOD.new()
+	lod.name = "BulkCraneLod"
+	root.add_child(lod)
+	lod.setup(
+		IMPOSTOR_SERVICE.crane_key("bulk"),
+		func() -> Node3D:
+			return _build_bulk_crane_full(berth_id, equip_id, harbour),
+		PORT_STRUCTURE_LOD.PROFILE_TALL,
+		func() -> void:
+			if harbour != null and not equip_id.is_empty():
+				harbour.unregister_equipment(equip_id),
+	)
+
+
+func _build_bulk_crane_full(
+		berth_id: String,
+		equip_id: String,
+		harbour: HarbourController,
+) -> Node3D:
+	var holder := Node3D.new()
+	holder.name = "BulkCraneFull"
 	var crane := BULK_CRANE_SCRIPT.new() as BulkCrane
 	crane.name = "BulkCrane"
 	## Authored boom is −Z; berth face is local ±X (equip_root yaw handles sign).
@@ -1888,22 +1955,20 @@ func _stamp_bulk_crane_at(
 	var auto := BULK_CRANE_AUTO_SCRIPT.new() as BulkCraneAutoOperator
 	auto.name = "AutoOperator"
 	crane.add_child(auto)
-	root.add_child(crane)
-
-	if berth_id.is_empty() or _harbour == null:
-		return
-	var equip_id := HarbourController.make_equip_id(berth_id, "equip_grab_unloader", tool_index)
+	holder.add_child(crane)
+	if berth_id.is_empty() or harbour == null or equip_id.is_empty():
+		return holder
 	var job := BULK_EQUIP_JOB_SCRIPT.new() as BulkCraneEquipmentJob
 	job.setup(equip_id, "equip_grab_unloader", berth_id)
 	job.bind_crane(crane)
 	crane.add_child(job)
-	_harbour.register_equipment(job, berth_id)
-
+	harbour.register_equipment(job, berth_id)
 	var operator := CRANE_OPERATOR_SCRIPT.new() as CraneOperatorNpc
 	operator.name = "CraneOperator"
 	operator.position = Vector3(-2.2, 0.0, 3.5)
-	operator.configure(_harbour, berth_id, equip_id)
-	root.add_child(operator)
+	operator.configure(harbour, berth_id, equip_id)
+	holder.add_child(operator)
+	return holder
 
 
 func _stamp_grab_unloader_at(root: Node3D, footprint: Vector3) -> void:

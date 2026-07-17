@@ -76,6 +76,8 @@ func _ready() -> void:
 func set_data_snapshot(snapshot) -> void:
 	data = snapshot
 	renderer.set_snapshot(data)
+	if data != null and data.layout != null:
+		camera.configure_world(float(data.layout.half_extent_m))
 	camera.user_moved = false
 	overlays_dirty = true
 	first_visible_frame = true

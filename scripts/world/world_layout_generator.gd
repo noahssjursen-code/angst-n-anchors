@@ -1,30 +1,33 @@
 class_name WorldLayoutGenerator
 extends RefCounted
 
-## Deterministic macro generator for the bounded Norway-esque coast archetype.
-## Generation bakes analytic mainland/island/fjord CSG into a 257² signed
-## distance raster. The one-time bake is intentionally moderate; all runtime
-## geography queries on WorldLayout are O(1).
+## Deterministic macro generator for the Norway-inspired coast archetype.
+## World size comes from WorldConfig (10–120 km). Never imports a real DEM.
 
 const DEFAULT_CONFIG_PATH := "res://resources/data/world/norway_coast.json"
 const LAYOUT_SCRIPT := preload("res://scripts/world/world_layout.gd")
+const WORLD_CONFIG := preload("res://scripts/world/world_config.gd")
 ## Increment whenever deterministic generation logic changes incompatibly.
-const GENERATION_VERSION := 7
+const GENERATION_VERSION := 8
 const CACHE_LIMIT := 4
-const TARGET_WORLD_SIZE_M := 40000.0
-const WORLD_HALF_EXTENT_M := TARGET_WORLD_SIZE_M * 0.5
 
 static var _layout_cache: Dictionary = {}
 static var _cache_order := PackedStringArray()
 
 
-static func generate(layout_seed: int, config_path: String = DEFAULT_CONFIG_PATH) -> WorldLayout:
-	var cache_key := "%d:%d:%s" % [GENERATION_VERSION, layout_seed, config_path]
+static func generate(
+		layout_seed: int,
+		config_path: String = DEFAULT_CONFIG_PATH,
+		world_size_m: float = -1.0,
+) -> WorldLayout:
+	var size_hint := world_size_m if world_size_m > 0.0 else WORLD_CONFIG.REFERENCE_SIZE_M
+	var cache_key := "%d:%d:%.0f:%s" % [GENERATION_VERSION, layout_seed, size_hint, config_path]
 	if _layout_cache.has(cache_key):
 		return _layout_cache[cache_key] as WorldLayout
-	var config := _load_config(config_path)
+	var config := WORLD_CONFIG.resolve(size_hint, config_path)
 	var size_m := float(config["world_size_m"])
 	var resolution := int(config["raster_resolution"])
+	var half := size_m * 0.5
 	var rng := RandomNumberGenerator.new()
 	rng.seed = layout_seed
 	var coast_phases := PackedFloat32Array()
@@ -33,16 +36,16 @@ static func generate(layout_seed: int, config_path: String = DEFAULT_CONFIG_PATH
 		coast_phases.append(rng.randf() * TAU)
 	var coast_shape := {
 		"phases": coast_phases,
-		"offset_m": rng.randf_range(-1100.0, 1100.0),
+		"offset_m": rng.randf_range(-1100.0, 1100.0) * WORLD_CONFIG.scale_factor(size_m),
 		"tilt": rng.randf_range(-0.055, 0.055),
 	}
-	var waterways := _build_waterways(rng, config, coast_shape)
-	var island_lobes := _build_island_lobes(rng, config)
+	var waterways := _build_waterways(rng, config, coast_shape, half)
+	var island_lobes := _build_island_lobes(rng, config, half)
 	var field_data := _bake_field(layout_seed, config, coast_shape, waterways, island_lobes)
 	var distances: PackedFloat32Array = field_data["distances"]
 	var regions: PackedByteArray = field_data["regions"]
 	var contours := _extract_contours(distances, resolution, size_m)
-	var checksum := _checksum(layout_seed, resolution, distances, regions, contours, waterways)
+	var checksum := _checksum(layout_seed, resolution, size_m, distances, regions, contours, waterways)
 	var layout := LAYOUT_SCRIPT.new() as WorldLayout
 	layout._initialize(layout_seed, size_m, resolution, distances, regions, contours, waterways, checksum)
 	_layout_cache[cache_key] = layout
@@ -58,107 +61,149 @@ static func clear_cache() -> void:
 	_cache_order.clear()
 
 
-static func _load_config(path: String) -> Dictionary:
-	var file := FileAccess.open(path, FileAccess.READ)
-	assert(file != null, "Unable to open world-layout config: %s" % path)
-	var parsed: Variant = JSON.parse_string(file.get_as_text())
-	assert(parsed is Dictionary, "World-layout config must be a JSON object")
-	var config := parsed as Dictionary
-	assert(
-		is_equal_approx(float(config.get("world_size_m", 0.0)), TARGET_WORLD_SIZE_M),
-		"World layout must match the generation contract",
-	)
-	var resolution := int(config.get("raster_resolution", 0))
-	assert(resolution >= 129 and resolution <= 513 and resolution % 2 == 1, "Raster resolution must be odd and practical")
-	return config
-
-
 static func _build_waterways(
-	rng: RandomNumberGenerator,
-	config: Dictionary,
-	coast_shape: Dictionary,
+		rng: RandomNumberGenerator,
+		config: Dictionary,
+		coast_shape: Dictionary,
+		half: float,
 ) -> Array[Dictionary]:
 	var fjords := config["fjords"] as Dictionary
 	var root_count := rng.randi_range(int(fjords["root_count_min"]), int(fjords["root_count_max"]))
 	var usable_z := float(config["world_size_m"]) * 0.84
-	var band_height := usable_z / float(root_count)
-	var first_band_z := -usable_z * 0.5
+	var spacing := float(fjords.get("root_spacing_m", usable_z / float(maxi(root_count, 1))))
+	var meander := float(fjords.get("meander_m", 1800.0))
+	var width_noise := clampf(float(fjords.get("width_noise", 0.25)), 0.0, 0.6)
+	var trunk_samples := maxi(int(fjords.get("trunk_samples", 12)), 6)
+	var branch_samples := maxi(int(fjords.get("branch_samples", 7)), 4)
+	## Poisson-ish mouths along Z using spacing + jitter (not equal bands).
+	var mouths := _place_mouths(rng, root_count, usable_z, spacing)
 	var waterways: Array[Dictionary] = []
-	for root_idx in range(root_count):
-		var mouth_z := first_band_z + (float(root_idx) + 0.5) * band_height \
-			+ rng.randf_range(-band_height * 0.30, band_height * 0.30)
+	for root_idx in range(mouths.size()):
+		var mouth_z := float(mouths[root_idx])
 		var mouth_x := _coast_x(mouth_z, config["mainland"], coast_shape)
 		var reach := rng.randf_range(
 			float(fjords["inland_reach_min_m"]),
-			float(fjords["inland_reach_max_m"])
+			float(fjords["inland_reach_max_m"]),
 		)
-		var bend := rng.randf_range(-band_height * 0.48, band_height * 0.48)
-		var outer_shift := rng.randf_range(-band_height * 0.38, band_height * 0.38)
-		var approach_shift := rng.randf_range(-band_height * 0.32, band_height * 0.32)
-		var inner_wiggle := rng.randf_range(-band_height * 0.26, band_height * 0.26)
 		var trunk_width := rng.randf_range(
 			float(fjords["trunk_width_min_m"]),
-			float(fjords["trunk_width_max_m"])
+			float(fjords["trunk_width_max_m"]),
 		)
+		var bend := rng.randf_range(-meander, meander)
+		var outer_shift := rng.randf_range(-meander * 0.55, meander * 0.55)
+		var approach_shift := rng.randf_range(-meander * 0.45, meander * 0.45)
 		var trunk := _sample_cubic(
-			Vector2(-WORLD_HALF_EXTENT_M, mouth_z + outer_shift),
-			Vector2(mouth_x - 3600.0, mouth_z + approach_shift),
-			Vector2(mouth_x + reach * 0.48, mouth_z + bend * 0.46 + inner_wiggle),
-			Vector2(minf(WORLD_HALF_EXTENT_M - 900.0, mouth_x + reach), mouth_z + bend),
-			7,
+			_clamp_to_half(Vector2(-half, mouth_z + outer_shift), half),
+			_clamp_to_half(Vector2(mouth_x - reach * 0.22, mouth_z + approach_shift), half),
+			_clamp_to_half(Vector2(mouth_x + reach * 0.48, mouth_z + bend * 0.55), half),
+			_clamp_to_half(Vector2(minf(half - 900.0, mouth_x + reach), mouth_z + bend), half),
+			trunk_samples,
+			half,
 		)
-		var trunk_widths := _taper_widths(trunk_width * 1.35, trunk_width * 0.52, trunk.size())
+		trunk = _apply_meander(trunk, rng, meander * 0.35, half)
+		var mouth_w := trunk_width * rng.randf_range(1.15, 1.55)
+		var tip_w := trunk_width * rng.randf_range(0.42, 0.72)
+		var trunk_widths := _path_widths(mouth_w, tip_w, trunk.size(), rng, width_noise)
 		var trunk_id := "fjord_%02d" % root_idx
 		waterways.append({
 			"id": trunk_id,
 			"kind": "trunk",
-			"width_m": trunk_width * 0.55,
+			"width_m": trunk_width * 0.75,
 			"widths_m": trunk_widths,
 			"points": trunk,
 			"connects_to": PackedStringArray(["open_ocean"]),
 		})
-		var branch_count := 1 + int(rng.randi() % 2)
+		var branch_count := 1 + int(rng.randi() % 3)
 		for branch_idx in range(branch_count):
-			var junction_index := 3 if branch_idx == 0 else 4
+			var junction_index := clampi(
+				int(round(float(trunk.size() - 1) * rng.randf_range(0.28, 0.72))),
+				2,
+				trunk.size() - 2,
+			)
 			var junction := trunk[junction_index]
 			var direction := -1.0 if rng.randf() < 0.5 else 1.0
-			var branch_length := rng.randf_range(2400.0, 4300.0)
-			var branch_wiggle := rng.randf_range(-520.0, 520.0)
+			var branch_length := rng.randf_range(reach * 0.18, reach * 0.38)
+			var branch_wiggle := rng.randf_range(-meander * 0.4, meander * 0.4)
 			var branch_width := rng.randf_range(
 				float(fjords["branch_width_min_m"]),
-				float(fjords["branch_width_max_m"])
+				float(fjords["branch_width_max_m"]),
 			)
-			var branch_end_z := clampf(
-				junction.y + direction * branch_length,
-				first_band_z + float(root_idx) * band_height + 300.0,
-				first_band_z + float(root_idx + 1) * band_height - 300.0,
-			)
-			var branch_end := _clamp_to_map(Vector2(
-				junction.x + branch_length * rng.randf_range(0.52, 0.82),
-				branch_end_z,
-			))
+			var branch_end := _clamp_to_half(Vector2(
+				junction.x + branch_length * rng.randf_range(0.45, 0.95),
+				junction.y + direction * branch_length + branch_wiggle,
+			), half)
 			var branch := _sample_cubic(
 				junction,
-				_clamp_to_map(junction + Vector2(
-					branch_length * 0.24,
-					direction * branch_length * 0.24 + branch_wiggle,
-				)),
-				_clamp_to_map(branch_end + Vector2(
-					-branch_length * 0.20,
-					-branch_wiggle * 0.45,
-				)),
+				_clamp_to_half(junction + Vector2(
+					branch_length * 0.28,
+					direction * branch_length * 0.22 + branch_wiggle * 0.5,
+				), half),
+				_clamp_to_half(branch_end + Vector2(-branch_length * 0.18, -branch_wiggle * 0.35), half),
 				branch_end,
-				4,
+				branch_samples,
+				half,
 			)
 			waterways.append({
 				"id": "%s_branch_%02d" % [trunk_id, branch_idx],
 				"kind": "branch",
-				"width_m": branch_width * 0.62,
-				"widths_m": _taper_widths(branch_width, branch_width * 0.62, branch.size()),
+				"width_m": branch_width * 0.7,
+				"widths_m": _path_widths(
+					branch_width * 1.05,
+					branch_width * 0.55,
+					branch.size(),
+					rng,
+					width_noise,
+				),
 				"points": branch,
 				"connects_to": PackedStringArray([trunk_id]),
 			})
 	return waterways
+
+
+static func _place_mouths(
+		rng: RandomNumberGenerator,
+		count: int,
+		usable_z: float,
+		spacing: float,
+) -> PackedFloat32Array:
+	var mouths := PackedFloat32Array()
+	var z_min := -usable_z * 0.5
+	var z_max := usable_z * 0.5
+	var cursor := z_min + spacing * rng.randf_range(0.35, 0.85)
+	for _i in range(count):
+		if cursor > z_max:
+			break
+		mouths.append(clampf(cursor + rng.randf_range(-spacing * 0.22, spacing * 0.22), z_min, z_max))
+		cursor += spacing * rng.randf_range(0.72, 1.35)
+	## Top up if spacing left gaps at the end.
+	while mouths.size() < count:
+		mouths.append(rng.randf_range(z_min, z_max))
+	mouths.sort()
+	return mouths
+
+
+static func _apply_meander(
+		points: PackedVector2Array,
+		rng: RandomNumberGenerator,
+		amplitude: float,
+		half: float,
+) -> PackedVector2Array:
+	if points.size() < 3 or amplitude <= 1.0:
+		return points
+	var out := PackedVector2Array()
+	out.append(points[0])
+	for i in range(1, points.size() - 1):
+		var prev := points[i - 1]
+		var cur := points[i]
+		var nxt := points[i + 1]
+		var tangent := (nxt - prev).normalized()
+		var normal := Vector2(-tangent.y, tangent.x)
+		var t := float(i) / float(points.size() - 1)
+		var envelope := sin(t * PI) ## stronger mid-fjord, calm at mouth/tip
+		var offset := normal * rng.randf_range(-amplitude, amplitude) * envelope
+		out.append(_clamp_to_half(cur + offset, half))
+	out.append(points[points.size() - 1])
+	return out
 
 
 static func _sample_cubic(
@@ -167,49 +212,62 @@ static func _sample_cubic(
 		c: Vector2,
 		d: Vector2,
 		count: int,
+		half: float,
 ) -> PackedVector2Array:
 	var points := PackedVector2Array()
 	for i in range(maxi(count, 2)):
 		var t := float(i) / float(maxi(count - 1, 1))
 		var omt := 1.0 - t
-		points.append(_clamp_to_map(
+		points.append(_clamp_to_half(
 			a * omt * omt * omt
 			+ b * 3.0 * omt * omt * t
 			+ c * 3.0 * omt * t * t
-			+ d * t * t * t
+			+ d * t * t * t,
+			half,
 		))
 	return points
 
 
-static func _taper_widths(start_width: float, end_width: float, count: int) -> PackedFloat32Array:
+static func _path_widths(
+		start_width: float,
+		end_width: float,
+		count: int,
+		rng: RandomNumberGenerator,
+		noise_amt: float,
+) -> PackedFloat32Array:
 	var widths := PackedFloat32Array()
 	for i in range(maxi(count, 1)):
 		var t := float(i) / float(maxi(count - 1, 1))
-		widths.append(lerpf(start_width, end_width, smoothstep(0.0, 1.0, t)))
+		## Mouth-wide basins mid-path, narrower tip — not a pure X lerp.
+		var basin := 1.0 + 0.22 * sin(t * PI)
+		var base := lerpf(start_width, end_width, smoothstep(0.0, 1.0, t)) * basin
+		var n := 1.0 + rng.randf_range(-noise_amt, noise_amt)
+		widths.append(maxf(base * n, end_width * 0.35))
 	return widths
 
 
-static func _clamp_to_map(point: Vector2) -> Vector2:
+static func _clamp_to_half(point: Vector2, half: float) -> Vector2:
 	return Vector2(
-		clampf(point.x, -WORLD_HALF_EXTENT_M, WORLD_HALF_EXTENT_M),
-		clampf(point.y, -WORLD_HALF_EXTENT_M, WORLD_HALF_EXTENT_M),
+		clampf(point.x, -half, half),
+		clampf(point.y, -half, half),
 	)
 
 
-## The western island belt is generated as clustered overlapping circles
-## (metaball lobes). Their min-union SDF creates irregular skerries without
-## authored geometry or imported assets.
-static func _build_island_lobes(rng: RandomNumberGenerator, config: Dictionary) -> Array[Vector3]:
+static func _build_island_lobes(
+		rng: RandomNumberGenerator,
+		config: Dictionary,
+		half: float,
+) -> Array[Vector3]:
 	var arch := config["archipelago"] as Dictionary
 	var cluster_count := rng.randi_range(
 		int(arch["cluster_count_min"]),
-		int(arch["cluster_count_max"])
+		int(arch["cluster_count_max"]),
 	)
 	var lobes: Array[Vector3] = []
 	for _cluster_idx in range(cluster_count):
 		var center := Vector2(
 			rng.randf_range(float(arch["belt_x_min_m"]), float(arch["belt_x_max_m"])),
-			rng.randf_range(-WORLD_HALF_EXTENT_M * 0.925, WORLD_HALF_EXTENT_M * 0.925)
+			rng.randf_range(-half * 0.925, half * 0.925),
 		)
 		var base_radius := rng.randf_range(float(arch["radius_min_m"]), float(arch["radius_max_m"]))
 		var lobe_count := rng.randi_range(int(arch["lobes_min"]), int(arch["lobes_max"]))
@@ -225,20 +283,21 @@ static func _build_island_lobes(rng: RandomNumberGenerator, config: Dictionary) 
 
 
 static func _bake_field(
-	layout_seed: int,
-	config: Dictionary,
-	coast_shape: Dictionary,
-	waterways: Array[Dictionary],
-	island_lobes: Array[Vector3],
+		layout_seed: int,
+		config: Dictionary,
+		coast_shape: Dictionary,
+		waterways: Array[Dictionary],
+		island_lobes: Array[Vector3],
 ) -> Dictionary:
 	var resolution := int(config["raster_resolution"])
 	var size_m := float(config["world_size_m"])
 	var half := size_m * 0.5
 	var cell := size_m / float(resolution - 1)
-	var coast_erosion := _make_bake_noise(layout_seed ^ 0x45524f53, 0.00042, 4, 0.55)
-	var coast_fingers := _make_bake_noise(layout_seed ^ 0x46494e47, 0.00155, 3, 0.50)
-	var island_erosion := _make_bake_noise(layout_seed ^ 0x49534c45, 0.00095, 3, 0.48)
-	var island_bite := _make_bake_noise(layout_seed ^ 0x42495445, 0.0022, 2, 0.45)
+	var scale := WORLD_CONFIG.scale_factor(size_m)
+	var coast_erosion := _make_bake_noise(layout_seed ^ 0x45524f53, 0.00042 / maxf(scale, 0.25), 4, 0.55)
+	var coast_fingers := _make_bake_noise(layout_seed ^ 0x46494e47, 0.00155 / maxf(scale, 0.25), 3, 0.50)
+	var island_erosion := _make_bake_noise(layout_seed ^ 0x49534c45, 0.00095 / maxf(scale, 0.25), 3, 0.48)
+	var island_bite := _make_bake_noise(layout_seed ^ 0x42495445, 0.0022 / maxf(scale, 0.25), 2, 0.45)
 	var distances := PackedFloat32Array()
 	var regions := PackedByteArray()
 	distances.resize(resolution * resolution)
@@ -247,29 +306,28 @@ static func _bake_field(
 	var fjord_influence := float(classification["fjord_influence_m"])
 	var open_water_x := float(classification["open_water_x_m"])
 	var corridor_points: Array[PackedVector2Array] = []
-	var corridor_width_start := PackedFloat32Array()
-	var corridor_width_end := PackedFloat32Array()
-	var corridor_start_x := PackedFloat32Array()
-	var corridor_inv_span_x := PackedFloat32Array()
+	var corridor_widths: Array[PackedFloat32Array] = []
+	var corridor_cumlen: Array[PackedFloat32Array] = []
 	for waterway in waterways:
 		var points: PackedVector2Array = waterway["points"]
 		var widths: PackedFloat32Array = waterway.get("widths_m", PackedFloat32Array())
 		var fallback := float(waterway["width_m"])
+		if widths.size() != points.size():
+			widths = PackedFloat32Array()
+			for _i in range(points.size()):
+				widths.append(fallback)
 		corridor_points.append(points)
-		corridor_width_start.append(widths[0] if widths.size() == points.size() else fallback)
-		corridor_width_end.append(widths[-1] if widths.size() == points.size() else fallback)
-		corridor_start_x.append(points[0].x)
-		corridor_inv_span_x.append(1.0 / maxf(points[-1].x - points[0].x, 1.0))
+		corridor_widths.append(widths)
+		corridor_cumlen.append(_polyline_cumlen(points))
 	for z_idx in range(resolution):
 		var z := -half + float(z_idx) * cell
 		var coast := _coast_x(z, config["mainland"], coast_shape)
 		for x_idx in range(resolution):
 			var x := -half + float(x_idx) * cell
 			var point := Vector2(x, z)
-			# Negative east of the mainland coast.
 			var land_distance := coast - x
-			var erosion := coast_erosion.get_noise_2d(x, z) * 520.0
-			var fingers := coast_fingers.get_noise_2d(x + 9000.0, z - 4200.0) * 190.0
+			var erosion := coast_erosion.get_noise_2d(x, z) * 520.0 * scale
+			var fingers := coast_fingers.get_noise_2d(x + 9000.0, z - 4200.0) * 190.0 * scale
 			land_distance += erosion + fingers
 			for lobe in island_lobes:
 				var island_distance := _eroded_island_distance(
@@ -283,37 +341,63 @@ static func _bake_field(
 			var nearest_waterway := INF
 			var water_cut_distance := INF
 			for waterway_index in range(corridor_points.size()):
-				var waterway_points := corridor_points[waterway_index]
-				var center_distance := _distance_to_polyline(point, waterway_points)
-				nearest_waterway = minf(nearest_waterway, center_distance)
-				var progress := clampf(
-					(point.x - corridor_start_x[waterway_index])
-					* corridor_inv_span_x[waterway_index],
-					0.0,
-					1.0,
+				var sample := _distance_and_width_on_polyline(
+					point,
+					corridor_points[waterway_index],
+					corridor_widths[waterway_index],
+					corridor_cumlen[waterway_index],
 				)
-				var effective_width := lerpf(
-					corridor_width_start[waterway_index],
-					corridor_width_end[waterway_index],
-					progress,
-				)
+				nearest_waterway = minf(nearest_waterway, float(sample["distance"]))
 				water_cut_distance = minf(
 					water_cut_distance,
-					center_distance - effective_width * 0.5,
+					float(sample["distance"]) - float(sample["width"]) * 0.5,
 				)
-			# CSG difference: land minus guaranteed navigable water corridors.
 			var signed_distance := maxf(land_distance, -water_cut_distance)
 			var index := z_idx * resolution + x_idx
 			distances[index] = signed_distance
 			if nearest_waterway <= fjord_influence and x > open_water_x:
 				regions[index] = WorldLayout.Region.FJORD
-			elif x >= coast - 900.0:
+			elif x >= coast - 900.0 * scale:
 				regions[index] = WorldLayout.Region.MAINLAND
 			elif x > open_water_x:
 				regions[index] = WorldLayout.Region.ARCHIPELAGO
 			else:
 				regions[index] = WorldLayout.Region.OPEN_WATER
 	return {"distances": distances, "regions": regions}
+
+
+static func _polyline_cumlen(points: PackedVector2Array) -> PackedFloat32Array:
+	var cum := PackedFloat32Array()
+	cum.resize(points.size())
+	cum[0] = 0.0
+	for i in range(1, points.size()):
+		cum[i] = cum[i - 1] + points[i].distance_to(points[i - 1])
+	return cum
+
+
+static func _distance_and_width_on_polyline(
+		point: Vector2,
+		points: PackedVector2Array,
+		widths: PackedFloat32Array,
+		cumlen: PackedFloat32Array,
+) -> Dictionary:
+	var best_d := INF
+	var best_w := widths[0] if widths.size() > 0 else 1.0
+	for i in range(points.size() - 1):
+		var a := points[i]
+		var b := points[i + 1]
+		var ab := b - a
+		var length_squared := ab.length_squared()
+		var t := 0.0
+		if length_squared > 0.0001:
+			t = clampf((point - a).dot(ab) / length_squared, 0.0, 1.0)
+		var d := point.distance_to(a + ab * t)
+		if d < best_d:
+			best_d = d
+			var wa := widths[i] if i < widths.size() else best_w
+			var wb := widths[i + 1] if i + 1 < widths.size() else wa
+			best_w = lerpf(wa, wb, t)
+	return {"distance": best_d, "width": best_w}
 
 
 static func _coast_x(z: float, mainland: Dictionary, shape: Dictionary) -> float:
@@ -324,6 +408,9 @@ static func _coast_x(z: float, mainland: Dictionary, shape: Dictionary) -> float
 		var frequency := float(i + 1)
 		var damp := lerpf(1.18, 1.48, float(i) / maxf(float(phases.size() - 1), 1.0))
 		x += sin(z * frequency * 0.00019 + phases[i]) * amplitude / (frequency * damp)
+		## Extra irregularity so the outer coast is not one sine wall.
+		if i == 0:
+			x += sin(z * 0.00041 + phases[i] * 1.7) * amplitude * 0.18
 	return x
 
 
@@ -362,28 +449,10 @@ static func _eroded_island_distance(
 	return dist - radius_mod + bite
 
 
-static func _distance_to_polyline(point: Vector2, points: PackedVector2Array) -> float:
-	var best := INF
-	for i in range(points.size() - 1):
-		best = minf(best, _distance_to_segment(point, points[i], points[i + 1]))
-	return best
-
-
-static func _distance_to_segment(point: Vector2, a: Vector2, b: Vector2) -> float:
-	var ab := b - a
-	var length_squared := ab.length_squared()
-	if length_squared <= 0.0001:
-		return point.distance_to(a)
-	var t := clampf((point - a).dot(ab) / length_squared, 0.0, 1.0)
-	return point.distance_to(a + ab * t)
-
-
-## Deterministic marching-squares segments. Every two-point entry is directly
-## chart-renderable; ambiguous saddles use a fixed lower-left connection rule.
 static func _extract_contours(
-	field: PackedFloat32Array,
-	resolution: int,
-	size_m: float,
+		field: PackedFloat32Array,
+		resolution: int,
+		size_m: float,
 ) -> Array[PackedVector2Array]:
 	var contours: Array[PackedVector2Array] = []
 	var half := size_m * 0.5
@@ -431,17 +500,19 @@ static func _add_segment(contours: Array[PackedVector2Array], a: Vector2, b: Vec
 
 
 static func _checksum(
-	layout_seed: int,
-	resolution: int,
-	distances: PackedFloat32Array,
-	regions: PackedByteArray,
-	contours: Array[PackedVector2Array],
-	waterways: Array[Dictionary],
+		layout_seed: int,
+		resolution: int,
+		size_m: float,
+		distances: PackedFloat32Array,
+		regions: PackedByteArray,
+		contours: Array[PackedVector2Array],
+		waterways: Array[Dictionary],
 ) -> String:
 	var bytes := PackedByteArray()
-	bytes.resize(8)
+	bytes.resize(12)
 	bytes.encode_s32(0, layout_seed)
 	bytes.encode_s32(4, resolution)
+	bytes.encode_s32(8, int(round(size_m)))
 	for distance in distances:
 		var offset := bytes.size()
 		bytes.resize(offset + 4)

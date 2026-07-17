@@ -4,18 +4,33 @@ extends RefCounted
 const ZOOM_IN := 0.70
 const ZOOM_OUT := 1.0 / ZOOM_IN
 const SPAN_MIN := 300.0
-const SPAN_MAX := 500000.0
+const SPAN_MAX_FALLBACK := 500000.0
 
 var center := Vector2.ZERO
 var span := 10000.0
 var user_moved := false
+## Half-extent of the active WorldLayout (metres). ≤0 means unclamped.
+var world_half_extent_m := 0.0
+
+
+func configure_world(half_extent_m: float) -> void:
+	world_half_extent_m = maxf(half_extent_m, 0.0)
+	span = clampf(span, SPAN_MIN, span_max())
+	_clamp_center()
+
+
+func span_max() -> float:
+	if world_half_extent_m > 0.0:
+		return maxf(world_half_extent_m * 2.2, SPAN_MIN)
+	return SPAN_MAX_FALLBACK
 
 
 func zoom(steps: int) -> void:
 	if steps == 0:
 		return
 	var factor := pow(ZOOM_IN if steps > 0 else ZOOM_OUT, abs(steps))
-	span = clampf(span * factor, SPAN_MIN, SPAN_MAX)
+	span = clampf(span * factor, SPAN_MIN, span_max())
+	_clamp_center()
 	user_moved = true
 
 
@@ -24,13 +39,15 @@ func pan_pixels(delta_pixels: Vector2, pixels_per_world_unit: float, origin: Vec
 		return
 	# Chart is north-up: screen +Y is world +Z (south).
 	center = origin - delta_pixels / pixels_per_world_unit
+	_clamp_center()
 	user_moved = true
 
 
 ## Birdseye a harbour (or any coastal site) at a tight span.
 func focus_harbour(world_xz: Vector2, span_m: float) -> void:
 	center = world_xz
-	span = clampf(span_m, SPAN_MIN, SPAN_MAX)
+	span = clampf(span_m, SPAN_MIN, span_max())
+	_clamp_center()
 	user_moved = true
 
 
@@ -44,10 +61,11 @@ func home(ship_position: Vector3, points: Array[Vector3]) -> void:
 		center = (bounds.position + bounds.end) * 0.5
 
 	if all_points.is_empty():
-		span = 10000.0
+		span = minf(10000.0, span_max())
 	else:
 		var bounds := _bounds(all_points)
-		span = clampf(maxf(bounds.size.x, bounds.size.y) * 1.6, SPAN_MIN, SPAN_MAX)
+		span = clampf(maxf(bounds.size.x, bounds.size.y) * 1.6, SPAN_MIN, span_max())
+	_clamp_center()
 	user_moved = false
 
 
@@ -59,6 +77,14 @@ func world_bounds(chart_size: Vector2) -> Rect2:
 	var ppu := pixels_per_world_unit(chart_size)
 	var extent := chart_size * 0.5 / ppu
 	return Rect2(center - extent, extent * 2.0)
+
+
+func _clamp_center() -> void:
+	if world_half_extent_m <= 0.0:
+		return
+	var half := world_half_extent_m
+	center.x = clampf(center.x, -half, half)
+	center.y = clampf(center.y, -half, half)
 
 
 static func _bounds(points: Array[Vector3]) -> Rect2:

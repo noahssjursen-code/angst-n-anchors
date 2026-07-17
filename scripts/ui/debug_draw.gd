@@ -6,15 +6,18 @@ extends Control
 ##
 ## Redraws are signal-driven: gameplay sections refresh on the relevant
 ## state_changed signals; system stats refresh on Telemetry.sampled
-## (once per second). No per-frame work.
+## (four times per second). No per-frame monitoring work lives here.
 
-const PANEL_W := 360.0
+const PANEL_W := 520.0
 const PAD_X   := 12.0
 const PAD_Y   := 10.0
 const ROW_H   := 16.0
-const LABEL_W := 130.0
+const LABEL_W := 165.0
 const FS_ROW  := 10
 const FS_SEC  := 10
+const TAB_H := 22.0
+const HEADER_H := 58.0
+const TABS := ["PERF", "WORLD", "VESSEL", "EVENTS", "CONTEXT"]
 
 # Maritime palette (HudStyle) plus a couple of debug-only accent colours.
 const C_BG      := HudStyle.C_BG
@@ -30,11 +33,15 @@ const C_GOOD    := HudStyle.C_GREEN
 const C_WARN    := Color(0.92, 0.66, 0.28, 0.95)
 const C_BAD     := HudStyle.C_RED
 
+var active_tab := 0
+var use_peak_values := false
+var _status_text := ""
+var _status_until_ms := 0
+
 
 func _ready() -> void:
 	set_anchors_preset(Control.PRESET_FULL_RECT)
-	mouse_filter = Control.MOUSE_FILTER_IGNORE
-	RenderingServer.viewport_set_measure_render_time(get_viewport().get_viewport_rid(), visible)
+	mouse_filter = Control.MOUSE_FILTER_PASS
 
 	# Refresh on telemetry tick (system stats + loading log).
 	var t := get_node_or_null("/root/Telemetry")
@@ -60,6 +67,22 @@ func _ready() -> void:
 		wl.state_changed.connect(_on_state_changed)
 
 
+func _gui_input(event: InputEvent) -> void:
+	var click := event as InputEventMouseButton
+	if click == null or not click.pressed or click.button_index != MOUSE_BUTTON_LEFT:
+		return
+	var viewport_size := get_viewport_rect().size
+	var panel_x := viewport_size.x - PANEL_W - 14.0
+	var tab_y := 14.0 + 26.0
+	var tab_w := (PANEL_W - PAD_X * 2.0) / float(TABS.size())
+	for i in range(TABS.size()):
+		var rect := Rect2(panel_x + PAD_X + tab_w * i, tab_y, tab_w - 2.0, TAB_H)
+		if rect.has_point(click.position):
+			select_tab(i)
+			accept_event()
+			return
+
+
 static func _connect_if(obj: Object, signal_name: String, target: Callable) -> void:
 	if obj != null and obj.has_signal(signal_name) and not obj.is_connected(signal_name, target):
 		obj.connect(signal_name, target)
@@ -81,10 +104,6 @@ func _on_state_changed(_arg: Variant = null) -> void:
 # Redraw once when becoming visible (so the panel doesn't show stale data).
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_VISIBILITY_CHANGED:
-		var viewport := get_viewport()
-		if viewport == null:
-			return
-		RenderingServer.viewport_set_measure_render_time(viewport.get_viewport_rid(), visible)
 		if visible:
 			queue_redraw()
 
@@ -94,7 +113,7 @@ func _draw() -> void:
 	var font := ThemeDB.fallback_font
 	var entries: Array = _build()
 
-	var ph := PAD_Y + ROW_H + 6.0 + _content_h(entries) + PAD_Y
+	var ph := HEADER_H + _content_h(entries) + PAD_Y
 	var ox := vp.x - PANEL_W - 14.0
 	var oy := 14.0
 
@@ -103,36 +122,93 @@ func _draw() -> void:
 	draw_rect(Rect2(ox, oy, PANEL_W, ph), C_BORDER, false, 1.2)
 
 	# Title + hint.
-	var ty := oy + PAD_Y + 12.0
+	var ty := oy + PAD_Y + 11.0
 	draw_string(font, Vector2(ox + PAD_X, ty),
-		"DEBUG", HORIZONTAL_ALIGNMENT_LEFT, -1, 11, C_TITLE)
-	var giz := "ON" if WorldGizmos.is_enabled() else "off"
-	var hint   := "F3 · G gizmos (%s) · B lanes · P scale · F4 wx · E calm" % giz
+		"DEBUG  %s" % ("PEAK/WORST" if use_peak_values else "LIVE"),
+		HORIZONTAL_ALIGNMENT_LEFT, -1, 11, C_TITLE)
+	var hint := "Tab switch · H live/peak · C copy · R reset"
 	var hint_w := font.get_string_size(hint, HORIZONTAL_ALIGNMENT_LEFT, -1, 9).x
 	draw_string(font, Vector2(ox + PANEL_W - hint_w - PAD_X, ty),
 		hint, HORIZONTAL_ALIGNMENT_LEFT, -1, 9, C_LABEL)
-	draw_line(Vector2(ox + 6, oy + PAD_Y + ROW_H + 2),
-			  Vector2(ox + PANEL_W - 6, oy + PAD_Y + ROW_H + 2), C_SEP, 1.0)
+	var tab_y := oy + 26.0
+	var tab_w := (PANEL_W - PAD_X * 2.0) / float(TABS.size())
+	for i in range(TABS.size()):
+		var rect := Rect2(ox + PAD_X + tab_w * i, tab_y, tab_w - 2.0, TAB_H)
+		var fill := Color(C_BORDER.r, C_BORDER.g, C_BORDER.b, 0.24) if i == active_tab else C_BG
+		draw_rect(rect, fill)
+		draw_rect(rect, C_BORDER if i == active_tab else C_SEP, false, 1.0)
+		draw_string(font, Vector2(rect.position.x, rect.position.y + 15.0), TABS[i], HORIZONTAL_ALIGNMENT_CENTER, rect.size.x, 9, C_TITLE if i == active_tab else C_LABEL)
 
 	# Entries.
-	var cy := oy + PAD_Y + ROW_H + 6.0
+	var cy := oy + HEADER_H
 	for e in entries:
 		cy = _draw_entry(font, e, ox, cy)
+	if Time.get_ticks_msec() < _status_until_ms and not _status_text.is_empty():
+		draw_string(font, Vector2(ox + PAD_X, oy + ph - 2.0), _status_text, HORIZONTAL_ALIGNMENT_LEFT, -1, 9, C_GOOD)
 
 
 # ── Entry list builder ────────────────────────────────────────────────────────
 
 func _build() -> Array:
-	var e:        Array = []
-	_build_system(e)
-	_build_water_gpu(e)
-	_build_weather(e)
-	_build_world_generation(e)
-	_build_vessel_physics(e)
-	_build_loading(e)
-	_build_debug_tools(e)
-	_build_gameplay(e)
+	var e: Array = []
+	match active_tab:
+		0:
+			_build_system(e)
+			_build_water_gpu(e)
+		1:
+			_build_world_generation(e)
+			_build_weather(e)
+		2:
+			_build_vessel_physics(e)
+			_build_gameplay(e)
+		3:
+			_build_events(e)
+			_build_loading(e)
+		_:
+			_build_context(e)
+			_build_debug_tools(e)
 	return e
+
+
+func cycle_tab(delta: int) -> void:
+	active_tab = wrapi(active_tab + delta, 0, TABS.size())
+	queue_redraw()
+
+
+func select_tab(index: int) -> void:
+	active_tab = clampi(index, 0, TABS.size() - 1)
+	queue_redraw()
+
+
+func toggle_value_mode() -> void:
+	use_peak_values = not use_peak_values
+	queue_redraw()
+
+
+func copy_report() -> void:
+	var telemetry := get_node_or_null("/root/Telemetry")
+	if telemetry == null or not telemetry.has_method("generate_report"):
+		_show_status("Telemetry unavailable")
+		return
+	DisplayServer.clipboard_set(telemetry.generate_report(use_peak_values))
+	telemetry.record_action(&"debug_report_copied", {
+		"peak_mode": use_peak_values,
+		"tab": TABS[active_tab],
+	})
+	_show_status("Copied %s report" % ("peak" if use_peak_values else "live"))
+
+
+func reset_peaks() -> void:
+	var telemetry := get_node_or_null("/root/Telemetry")
+	if telemetry != null and telemetry.has_method("reset_peaks"):
+		telemetry.reset_peaks()
+	_show_status("Peak values reset")
+
+
+func _show_status(text: String) -> void:
+	_status_text = text
+	_status_until_ms = Time.get_ticks_msec() + 2400
+	queue_redraw()
 
 
 func _build_world_generation(e: Array) -> void:
@@ -156,7 +232,7 @@ func _build_world_generation(e: Array) -> void:
 	_row(e, "Checksum", checksum.left(12) if not checksum.is_empty() else "—", C_LABEL)
 	var terrain := get_tree().get_first_node_in_group("world_terrain_streamer")
 	if terrain != null and terrain.has_method("get_debug_stats"):
-		var terrain_stats := terrain.call("get_debug_stats") as Dictionary
+		var terrain_stats := _provider_stats(&"world.terrain", terrain.call("get_debug_stats") as Dictionary)
 		_row(e, "Terrain chunks", "%d loaded · %d queued · %d collision" % [
 			int(terrain_stats.get("loaded", 0)),
 			int(terrain_stats.get("pending", 0)),
@@ -167,10 +243,22 @@ func _build_world_generation(e: Array) -> void:
 			int(terrain_stats.get("triangles", 0)),
 			float(terrain_stats.get("memory_estimate_bytes", 0)) / (1024.0 * 1024.0),
 		], C_LABEL)
+		_row(e, "Terrain resident", "%d visual · %d water · %.1f MB CPU" % [
+			int(terrain_stats.get("visual_chunks", 0)),
+			int(terrain_stats.get("empty_water_chunks", 0)),
+			float(terrain_stats.get("retained_cpu_bytes", 0)) / (1024.0 * 1024.0),
+		], C_LABEL)
 		_row(e, "Terrain build", "%.2f ms last · %.2f ms avg" % [
 			float(terrain_stats.get("last_build_ms", 0.0)),
 			float(terrain_stats.get("average_build_ms", 0.0)),
 		], C_LABEL)
+	var port_registered := int(_metric(&"world.ports.registered", 0))
+	if port_registered > 0:
+		_row(e, "Port streaming", "%d / %d loaded - %d queued" % [
+			int(_metric(&"world.ports.loaded", 0)),
+			port_registered,
+			int(_metric(&"world.ports.pending_operations", 0)),
+		], C_VALUE)
 	_sep(e)
 
 
@@ -215,12 +303,8 @@ func _build_weather(e: Array) -> void:
 func _build_water_gpu(e: Array) -> void:
 	_sec(e, "WATER / GPU")
 
-	var viewport_rid := get_viewport().get_viewport_rid()
-	var frame_gpu_ms := RenderingServer.viewport_get_measured_render_time_gpu(viewport_rid)
-	var frame_cpu_render_ms := (
-		RenderingServer.viewport_get_measured_render_time_cpu(viewport_rid)
-		+ RenderingServer.get_frame_setup_time_cpu()
-	)
+	var frame_gpu_ms := float(_metric(&"hardware.gpu_frame_ms", 0.0))
+	var frame_cpu_render_ms := float(_metric(&"hardware.render_cpu_ms", 0.0))
 	var cap := Engine.max_fps
 	var target_fps := float(cap)
 	var refresh_hz := DisplayServer.screen_get_refresh_rate()
@@ -240,7 +324,7 @@ func _build_water_gpu(e: Array) -> void:
 
 	var fft := get_tree().get_first_node_in_group("fft_water_system")
 	if fft != null and fft.has_method("get_debug_stats"):
-		var s: Dictionary = fft.call("get_debug_stats")
+		var s: Dictionary = _provider_stats(&"ocean.fft", fft.call("get_debug_stats") as Dictionary)
 		var fft_gpu := float(s.get("gpu_fft_ms", -1.0))
 		if fft_gpu >= 0.0:
 			var fps := maxf(float(Performance.get_monitor(Performance.TIME_FPS)), 1.0)
@@ -273,7 +357,7 @@ func _build_water_gpu(e: Array) -> void:
 
 	var wake := get_tree().get_first_node_in_group("ocean_wake_field")
 	if wake != null and wake.has_method("get_debug_stats"):
-		var w: Dictionary = wake.call("get_debug_stats")
+		var w: Dictionary = _provider_stats(&"ocean.wake", wake.call("get_debug_stats") as Dictionary)
 		_row(e, "Wake field", "%d² / %.1f km · %.1f MB @ %.0fHz" % [
 			int(w.get("resolution", 0)),
 			float(w.get("extent_m", 0.0)) / 1000.0,
@@ -294,7 +378,7 @@ func _build_water_gpu(e: Array) -> void:
 
 	var renderer := get_tree().get_first_node_in_group("world_renderer")
 	if renderer != null and renderer.has_method("get_ocean_debug_stats"):
-		var r: Dictionary = renderer.call("get_ocean_debug_stats")
+		var r: Dictionary = _provider_stats(&"ocean.geometry", renderer.call("get_ocean_debug_stats") as Dictionary)
 		_row(e, "Ocean geometry", "%d verts · %d tris" % [
 			int(r.get("vertices", 0)),
 			int(r.get("triangles", 0)),
@@ -394,6 +478,52 @@ func _build_debug_tools(e: Array) -> void:
 	_sep(e)
 
 
+func _build_events(e: Array) -> void:
+	_sec(e, "DEBUG EVENTS")
+	var telemetry := get_node_or_null("/root/Telemetry")
+	if telemetry == null or telemetry.events.is_empty():
+		_stub(e, "Status", "no events recorded")
+		_sep(e)
+		return
+	var start := maxi(0, telemetry.events.size() - 14)
+	for i in range(telemetry.events.size() - 1, start - 1, -1):
+		var event := telemetry.events[i] as Dictionary
+		var severity := str(event.get("severity", "info"))
+		var color := C_BAD if severity == "error" else (C_WARN if severity == "warning" else C_VALUE)
+		var context := event.get("context", {}) as Dictionary
+		var summary := JSON.stringify(context)
+		if summary.length() > 42:
+			summary = summary.left(39) + "..."
+		_row(e, "%s.%s" % [event.get("source", ""), event.get("name", "")], summary, color)
+	_sep(e)
+
+
+func _build_context(e: Array) -> void:
+	_sec(e, "CONTEXT FLAGS")
+	var telemetry := get_node_or_null("/root/Telemetry")
+	if telemetry == null:
+		_stub(e, "Status", "Telemetry autoload missing")
+		return
+	if telemetry.context_flags.is_empty():
+		_stub(e, "Flags", "none published")
+	else:
+		var keys: Array = telemetry.context_flags.keys()
+		keys.sort_custom(func(a: Variant, b: Variant) -> bool: return str(a) < str(b))
+		for key in keys:
+			var flag := telemetry.context_flags[key] as Dictionary
+			_row(e, str(key), "%s  [%s]" % [flag.get("value"), flag.get("source", "")], C_VALUE)
+	_sep(e)
+	_sec(e, "DEBUG SERVICE")
+	_row(e, "Providers", "%d registered" % telemetry.providers.size(), C_VALUE)
+	_row(e, "Metrics", "%d live records" % telemetry.metrics.size(), C_VALUE)
+	_row(e, "Events", "%d / %d retained" % [telemetry.events.size(), telemetry.MAX_EVENTS], C_VALUE)
+	_row(e, "Sample rate", "%.0f Hz" % (1.0 / telemetry.SAMPLE_INTERVAL_S), C_VALUE)
+	_stub(e, "Publish metric", "Telemetry.publish_metric(key, value, options)")
+	_stub(e, "Publish flag", "Telemetry.set_context_flag(key, value)")
+	_stub(e, "Record action", "Telemetry.record_action(name, context)")
+	_sep(e)
+
+
 func _build_system(e: Array) -> void:
 	var t := get_node_or_null("/root/Telemetry")
 	_sec(e, "SYSTEM")
@@ -412,21 +542,26 @@ func _build_system(e: Array) -> void:
 	_sep(e)
 
 	# Live perf — colour-code values based on health thresholds.
-	var fps    := int(t.fps)
+	var fps := int(_metric(&"hardware.fps", t.fps))
 	var fps_c := _band(fps, 50, 30)
-	_row(e, "FPS", "%d  (frame %.2f ms)" % [fps, t.frame_time_ms], fps_c)
-	_row(e, "  Process",  "%.2f ms" % t.process_time_ms, C_VALUE)
-	_row(e, "  Physics",  "%.2f ms" % t.physics_time_ms, C_VALUE)
-	_row(e, "Draw calls", "%d  (%d prim)" % [int(t.draw_calls), int(t.primitives)], C_VALUE)
+	_row(e, "FPS", "%d  (frame %.2f ms)" % [fps, float(_metric(&"hardware.frame_ms", t.frame_time_ms))], fps_c)
+	_row(e, "  Process",  "%.2f ms" % float(_metric(&"hardware.process_ms", t.process_time_ms)), C_VALUE)
+	_row(e, "  Physics",  "%.2f ms" % float(_metric(&"hardware.physics_ms", t.physics_time_ms)), C_VALUE)
+	_row(e, "  Debug polling", "%.2f ms" % float(_metric(&"debug.provider_poll_ms", 0.0)), C_LABEL)
+	_row(e, "Draw calls", "%d  (%d prim)" % [int(_metric(&"hardware.draw_calls", t.draw_calls)), int(_metric(&"hardware.primitives", t.primitives))], C_VALUE)
 	_row(e, "Video mem",  "%s / %s tex / %s buf" % [
-		_mb(t.video_mem_mb), _mb(t.texture_mem_mb), _mb(t.buffer_mem_mb)
+		_mb(_metric(&"hardware.video_mem_mb", t.video_mem_mb)),
+		_mb(_metric(&"hardware.texture_mem_mb", t.texture_mem_mb)),
+		_mb(_metric(&"hardware.buffer_mem_mb", t.buffer_mem_mb)),
 	], C_VALUE)
-	_row(e, "RAM used",   "%d / %d MB free" % [int(t.ram_used_mb), int(t.ram_free_mb)], C_VALUE)
-	_row(e, "Heap",       _mb(t.heap_mb), C_VALUE)
-	var orph := int(t.orphan_count)
-	var orph_c := C_BAD if orph > 0 else C_VALUE
-	_row(e, "Nodes",      "%d  (orphan %d)" % [int(t.node_count), orph], orph_c)
-	_row(e, "Objects",    "%d" % int(t.object_count), C_VALUE)
+	_row(e, "RAM used", "%d / %d MB free" % [int(_metric(&"hardware.ram_used_mb", t.ram_used_mb)), int(t.ram_free_mb)], C_VALUE)
+	_row(e, "Heap", _mb(_metric(&"hardware.heap_mb", t.heap_mb)), C_VALUE)
+	var orph := int(_metric(&"hardware.orphans", t.orphan_count))
+	# Cached model/building prototypes deliberately live off-tree. Growth across
+	# repeated load/unload cycles is meaningful; a non-zero baseline is not.
+	var orph_c := C_WARN if orph > 10000 else C_LABEL
+	_row(e, "Nodes", "%d  (off-tree/cache %d)" % [int(_metric(&"hardware.nodes", t.node_count)), orph], orph_c)
+	_row(e, "Objects", "%d" % int(_metric(&"hardware.objects", t.object_count)), C_VALUE)
 	_sep(e)
 
 
@@ -554,6 +689,21 @@ func _sep(e: Array) -> void:
 
 
 # ── Formatting helpers ────────────────────────────────────────────────────────
+
+func _metric(key: StringName, fallback: Variant) -> Variant:
+	var telemetry := get_node_or_null("/root/Telemetry")
+	if telemetry == null or not telemetry.has_method("metric_value"):
+		return fallback
+	return telemetry.metric_value(key, use_peak_values, fallback)
+
+
+func _provider_stats(source: StringName, live: Dictionary) -> Dictionary:
+	if not use_peak_values:
+		return live
+	var result := live.duplicate()
+	for key in result:
+		result[key] = _metric(StringName("%s.%s" % [source, key]), result[key])
+	return result
 
 static func _mb(value_mb: Variant) -> String:
 	var v := float(value_mb)

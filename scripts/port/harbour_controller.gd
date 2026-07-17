@@ -56,6 +56,14 @@ func register_berth(slot: QuayBerthSlot) -> void:
 	_berths[slot.berth_id] = slot
 
 
+func unregister_equipment(equip_id: String) -> void:
+	var eid := equip_id.strip_edges()
+	if eid.is_empty():
+		return
+	unplug_equipment(eid)
+	_equipment.erase(eid)
+
+
 func register_equipment(equip: QuayEquipmentJob, berth_id: String = "") -> void:
 	if equip == null:
 		return

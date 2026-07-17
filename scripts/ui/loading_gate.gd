@@ -61,6 +61,11 @@ func notify_world_ready() -> void:
 		_detail.text = "Harbour ready"
 
 
+func set_detail(text: String) -> void:
+	if _detail != null and not text.is_empty():
+		_detail.text = text
+
+
 func _process(delta: float) -> void:
 	if not _active:
 		return

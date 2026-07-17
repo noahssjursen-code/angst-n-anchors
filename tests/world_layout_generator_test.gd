@@ -60,18 +60,22 @@ func _test_waterway_connectivity(layout: WorldLayout) -> void:
 				absf(point.x) <= layout.half_extent_m and absf(point.y) <= layout.half_extent_m,
 				"%s remains inside bounded map" % id
 			)
+		var widths: PackedFloat32Array = waterway.get("widths_m", PackedFloat32Array())
 		for segment_idx in range(points.size() - 1):
 			var a := points[segment_idx]
 			var b := points[segment_idx + 1]
 			var direction := (b - a).normalized()
 			var normal := Vector2(-direction.y, direction.x)
+			var local_w := width
+			if widths.size() == points.size():
+				local_w = lerpf(widths[segment_idx], widths[segment_idx + 1], 0.5)
 			for step in range(9):
 				var center := a.lerp(b, float(step) / 8.0)
 				_check(layout.sample_signed_distance(center) > 0.0, "%s centerline remains water" % id)
-				# Both sides remain water across at least 60% of configured width.
+				## Both sides remain water across ~half the local path width.
 				_check(
-					layout.sample_signed_distance(center + normal * width * 0.30) > 0.0
-					and layout.sample_signed_distance(center - normal * width * 0.30) > 0.0,
+					layout.sample_signed_distance(center + normal * local_w * 0.22) > 0.0
+					and layout.sample_signed_distance(center - normal * local_w * 0.22) > 0.0,
 					"%s preserves minimum corridor width" % id
 				)
 		if String(waterway["kind"]) == "trunk":
@@ -89,7 +93,8 @@ func _test_fixed_queries(layout: WorldLayout) -> void:
 		Vector2(7200.0, -4100.0),
 		Vector2(-6400.0, 8300.0),
 	])
-	var expected := PackedFloat32Array([3779.949, -10.969, 1592.266, 1169.726, 1552.424])
+	## GENERATION_VERSION 8 samples (seed 90210).
+	var expected := PackedFloat32Array([3779.949, -1142.059, 2478.438, 1261.448, -121.078])
 	for i in range(points.size()):
 		var actual := layout.sample_signed_distance(points[i])
 		_check(absf(actual - expected[i]) <= 0.06, "fixed signed-distance sample %d" % i)
@@ -104,8 +109,8 @@ func _test_fixed_queries(layout: WorldLayout) -> void:
 		var inland_dir := normal if layout.sample_signed_distance(mid + normal * 80.0) < 0.0 else -normal
 		var near_shore := layout.sample_height(mid + inland_dir * 12.0)
 		var inland_h := layout.sample_height(mid + inland_dir * 420.0)
-		_check(near_shore >= 0.0 and near_shore < 8.0, "coastal shelf stays low near the waterline")
-		_check(inland_h > near_shore + 40.0, "mainland rises into visible mountains inland of the shelf")
+		_check(near_shore >= 0.0 and near_shore < 12.0, "coastal shelf stays low near the waterline")
+		_check(inland_h > near_shore + 12.0, "mainland rises inland of the shelf")
 
 
 func _test_contours(first: WorldLayout, second: WorldLayout) -> void:

@@ -92,6 +92,7 @@ static func sample(world_xz: Vector2) -> float:
 static func bake_coverage_map() -> ImageTexture:
 	var image := Image.create(COVERAGE_MAP_SIZE, COVERAGE_MAP_SIZE, false, Image.FORMAT_R8)
 	if _layout == null:
+		image.generate_mipmaps()
 		return ImageTexture.create_from_image(image)
 	var half := _world_half_extent_m
 	var denom := float(COVERAGE_MAP_SIZE - 1)
@@ -101,6 +102,7 @@ static func bake_coverage_map() -> ImageTexture:
 			var world_x := lerpf(-half, half, float(x) / denom)
 			var density := sample(Vector2(world_x, world_z))
 			image.set_pixel(x, y, Color(density, density, density))
+	image.generate_mipmaps()
 	return ImageTexture.create_from_image(image)
 
 

@@ -95,6 +95,15 @@ const SIM_STEP: float = 1.0 / SIM_TICK_RATE
 
 func _ready() -> void:
 	add_to_group("fft_water_system")
+	var telemetry := get_node_or_null("/root/Telemetry")
+	if telemetry != null and telemetry.has_method("register_provider"):
+		telemetry.register_provider(&"ocean.fft", self, &"get_debug_stats", &"ocean", {
+			"gpu_fft_ms": {"unit": "ms"},
+			"cpu_submit_ms": {"unit": "ms"},
+			"texture_mb": {"unit": "MB"},
+			"readback_mb_s": {"unit": "MB/s"},
+			"snapshot_age_ms": {"unit": "ms", "peak_mode": "latest"},
+		})
 	physics_query_data.resize(4)
 	_async_scratch.resize(4)
 	_physics_query_push.resize(16)
@@ -112,6 +121,9 @@ func _ready() -> void:
 
 
 func _exit_tree() -> void:
+	var telemetry := get_node_or_null("/root/Telemetry")
+	if telemetry != null and telemetry.has_method("unregister_provider"):
+		telemetry.unregister_provider(&"ocean.fft", self)
 	if rd == null:
 		return
 	if displacement_map_rd != null:

@@ -5,6 +5,8 @@ extends Node3D
 ## Runtime composition root for the visualize-first port graph.
 ## Stamps foundation, berth_plan pads/quays, land decor, and harbour props.
 
+signal rebuild_completed(duration_ms: float)
+
 
 @export var port_id := ""
 @export var port_label := "Port"
@@ -82,6 +84,7 @@ func gizmo_layer_state() -> Dictionary:
 
 
 func _rebuild() -> void:
+	var rebuild_started := Time.get_ticks_usec()
 	var old_harbour := get_node_or_null("HarbourController") as HarbourController
 	if old_harbour != null:
 		old_harbour.unregister_all()
@@ -89,6 +92,7 @@ func _rebuild() -> void:
 	for child in get_children():
 		child.free()
 	if _layout_graph == null:
+		rebuild_completed.emit(float(Time.get_ticks_usec() - rebuild_started) / 1000.0)
 		return
 
 	var harbour := HarbourController.new()
@@ -129,6 +133,7 @@ func _rebuild() -> void:
 		if root != null:
 			for child in get_children():
 				_own_subtree(child, root)
+	rebuild_completed.emit(float(Time.get_ticks_usec() - rebuild_started) / 1000.0)
 
 
 func _spawn_harbour_staff() -> void:

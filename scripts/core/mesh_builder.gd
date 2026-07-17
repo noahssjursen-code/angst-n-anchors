@@ -4,7 +4,17 @@ extends RefCounted
 ## Shared factory for building in-world geometry from Godot primitives.
 ## No imported meshes. Every in-world object comes from here.
 
+static var _material_cache: Dictionary = {}
+
+
+static func clear_material_cache() -> void:
+	_material_cache.clear()
+
+
 static func make_material(color: Color, roughness: float = 0.85, metallic: float = 0.0, double_sided: bool = false) -> StandardMaterial3D:
+	var key := _material_cache_key(color, roughness, metallic, double_sided)
+	if _material_cache.has(key):
+		return _material_cache[key] as StandardMaterial3D
 	var mat := StandardMaterial3D.new()
 	mat.albedo_color = color
 	mat.roughness = roughness
@@ -19,7 +29,25 @@ static func make_material(color: Color, roughness: float = 0.85, metallic: float
 		mat.depth_draw_mode = BaseMaterial3D.DEPTH_DRAW_ALWAYS
 	elif double_sided:
 		mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+	_material_cache[key] = mat
 	return mat
+
+
+static func _material_cache_key(
+		color: Color,
+		roughness: float,
+		metallic: float,
+		double_sided: bool,
+) -> String:
+	return "%.4f,%.4f,%.4f,%.4f|%.3f|%.3f|%s" % [
+		color.r,
+		color.g,
+		color.b,
+		color.a,
+		roughness,
+		metallic,
+		double_sided,
+	]
 
 
 static func box(size: Vector3, color: Color, roughness: float = 0.85, metallic: float = 0.0) -> MeshInstance3D:
@@ -78,6 +106,43 @@ static func prism(size: Vector3, color: Color, roughness: float = 0.85, metallic
 	mesh.size = size
 	mi.mesh = mesh
 	mi.material_override = make_material(color, roughness, metallic)
+	return mi
+
+
+## Append an axis-aligned box (12 triangles) into an active SurfaceTool pass.
+static func append_axis_box(st: SurfaceTool, size: Vector3, center: Vector3) -> void:
+	var hx := size.x * 0.5
+	var hy := size.y * 0.5
+	var hz := size.z * 0.5
+	var faces: Array = [
+		[Vector3(-hx, -hy, hz), Vector3(hx, -hy, hz), Vector3(hx, hy, hz), Vector3(-hx, hy, hz)],
+		[Vector3(hx, -hy, -hz), Vector3(-hx, -hy, -hz), Vector3(-hx, hy, -hz), Vector3(hx, hy, -hz)],
+		[Vector3(-hx, hy, hz), Vector3(hx, hy, hz), Vector3(hx, hy, -hz), Vector3(-hx, hy, -hz)],
+		[Vector3(-hx, -hy, -hz), Vector3(hx, -hy, -hz), Vector3(hx, -hy, hz), Vector3(-hx, -hy, hz)],
+		[Vector3(hx, -hy, hz), Vector3(hx, -hy, -hz), Vector3(hx, hy, -hz), Vector3(hx, hy, hz)],
+		[Vector3(-hx, -hy, -hz), Vector3(-hx, -hy, hz), Vector3(-hx, hy, hz), Vector3(-hx, hy, -hz)],
+	]
+	for face in faces:
+		var quad: Array = face
+		st.add_vertex(center + quad[0])
+		st.add_vertex(center + quad[1])
+		st.add_vertex(center + quad[2])
+		st.add_vertex(center + quad[0])
+		st.add_vertex(center + quad[2])
+		st.add_vertex(center + quad[3])
+
+
+static func merged_boxes(size_positions: Array, color: Color, roughness: float = 0.85, metallic: float = 0.0) -> MeshInstance3D:
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var mat := make_material(color, roughness, metallic)
+	st.set_material(mat)
+	for entry in size_positions:
+		append_axis_box(st, entry["size"], entry["position"])
+	st.generate_normals()
+	var mi := MeshInstance3D.new()
+	mi.mesh = st.commit()
+	mi.material_override = mat
 	return mi
 
 
