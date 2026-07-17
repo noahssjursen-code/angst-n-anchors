@@ -29,6 +29,9 @@ func set_world_gizmos_enabled(enabled: bool) -> void:
 	world_gizmos_enabled = enabled
 	_apply_world_gizmos()
 	world_gizmos_changed.emit(world_gizmos_enabled)
+	var telemetry := get_node_or_null("/root/Telemetry")
+	if telemetry != null and telemetry.has_method("set_context_flag"):
+		telemetry.set_context_flag(&"debug.world_gizmos", enabled, &"debug_hud")
 	if _overlay != null:
 		_overlay.queue_redraw()
 
@@ -66,6 +69,9 @@ func _unhandled_input(event: InputEvent) -> void:
 			if not _shown:
 				_weather_preset_panel.visible = false
 			visibility_changed.emit(_shown)
+			var telemetry := get_node_or_null("/root/Telemetry")
+			if telemetry != null and telemetry.has_method("set_context_flag"):
+				telemetry.set_context_flag(&"debug.f3_open", _shown, &"debug_hud")
 			_refresh_lane_debug_draw()
 			get_viewport().set_input_as_handled()
 		elif ke.pressed and not ke.echo and ke.physical_keycode == KEY_F4 and _shown:
@@ -85,6 +91,21 @@ func _input(event: InputEvent) -> void:
 	if not ke.pressed or ke.echo:
 		return
 	match ke.physical_keycode:
+		KEY_TAB:
+			_overlay.cycle_tab(-1 if ke.shift_pressed else 1)
+			get_viewport().set_input_as_handled()
+		KEY_1, KEY_2, KEY_3, KEY_4, KEY_5:
+			_overlay.select_tab(int(ke.physical_keycode - KEY_1))
+			get_viewport().set_input_as_handled()
+		KEY_H:
+			_overlay.toggle_value_mode()
+			get_viewport().set_input_as_handled()
+		KEY_C:
+			_overlay.copy_report()
+			get_viewport().set_input_as_handled()
+		KEY_R:
+			_overlay.reset_peaks()
+			get_viewport().set_input_as_handled()
 		KEY_B:
 			BerthApproachLanes.toggle_debug()
 			_refresh_lane_debug_draw()

@@ -13,11 +13,11 @@ const PLAYER_SCENE := preload("res://scenes/shared/player.tscn")
 const WORLD_RENDERER_SCRIPT := preload("res://scripts/world/world_renderer.gd")
 const ATMOSPHERIC_SCRIPT := preload("res://scripts/world/atmospheric_effects.gd")
 const WORLD_LAYOUT_GENERATOR := preload("res://scripts/world/world_layout_generator.gd")
+const WORLD_CONFIG := preload("res://scripts/world/world_config.gd")
 const COASTAL_PORT_PLACER := preload("res://scripts/world/coastal_port_placer.gd")
 const WORLD_TERRAIN_STREAMER := preload("res://scripts/world/world_terrain_streamer.gd")
 const WORLD_FOREST_STREAMER := preload("res://scripts/world/world_forest_streamer.gd")
-const IMPOSTOR_CACHE := preload("res://scripts/core/impostor_cache.gd")
-const IMPOSTOR_WARMUP := preload("res://scripts/core/impostor_warmup.gd")
+const IMPOSTOR_SERVICE := preload("res://scripts/core/impostor_service.gd")
 
 ## Match terrain mid LOD (~4.8 km) so coasts are not empty until the last moment.
 const LOAD_RADIUS           : float = 4800.0
@@ -54,6 +54,13 @@ var _forest_streamer: WorldForestStreamer
 @export var port_count: int = 35:
 	set(v): port_count = v; if _ready_complete and is_inside_tree(): _rebuild()
 
+## Square world extent in metres (10–120 km). Session/server may override via GameSettings.
+@export_range(10000.0, 120000.0, 1000.0) var world_size_m: float = 40000.0:
+	set(v):
+		world_size_m = WORLD_CONFIG.validate_size_m(v)
+		if _ready_complete and is_inside_tree():
+			_rebuild()
+
 
 func _ready() -> void:
 	if not Engine.is_editor_hint():
@@ -63,6 +70,8 @@ func _ready() -> void:
 			world_seed = int(settings.get("map_generation_seed"))
 			_requested_generation_version = int(settings.get("map_generation_version"))
 			_requested_weather_generation_version = int(settings.get("weather_generation_version"))
+			if settings.get("map_world_size_m") != null:
+				world_size_m = float(settings.get("map_world_size_m"))
 	_ready_complete = true
 	call_deferred("_rebuild")
 
@@ -71,14 +80,15 @@ func _rebuild() -> void:
 	PortDataCache.clear()
 	BuildingCache.clear()
 	LandDecorCache.clear()
-	IMPOSTOR_CACHE.clear()
+	IMPOSTOR_SERVICE.clear()
 	MeshBuilder.clear_material_cache()
+	WORLD_LAYOUT_GENERATOR.clear_cache()
 	if _requested_generation_version != WORLD_GENERATION_VERSION:
-		push_error(
-			"World: generation version mismatch (requested %d, runtime %d)"
+		push_warning(
+			"World: generation version mismatch (requested %d, runtime %d) — regenerating"
 			% [_requested_generation_version, WORLD_GENERATION_VERSION]
 		)
-		return
+		_requested_generation_version = WORLD_GENERATION_VERSION
 	if _requested_weather_generation_version != WEATHER_GENERATION_VERSION:
 		push_error(
 			"World: weather generation version mismatch (requested %d, runtime %d)"
@@ -96,7 +106,11 @@ func _rebuild() -> void:
 
 	var layout_handle: int = t.mark_load_event("world.layout") if t != null else 0
 	var layout_started := Time.get_ticks_usec()
-	_world_layout = WORLD_LAYOUT_GENERATOR.generate(world_seed)
+	_world_layout = WORLD_LAYOUT_GENERATOR.generate(
+		world_seed,
+		WORLD_CONFIG.ARCHETYPE_PATH,
+		world_size_m,
+	)
 	_layout_generation_usec = Time.get_ticks_usec() - layout_started
 	_layout_checksum = _world_layout.layout_checksum
 	if t != null:
@@ -109,6 +123,7 @@ func _rebuild() -> void:
 			WORLD_GENERATION_VERSION,
 			_layout_checksum,
 			WEATHER_GENERATION_VERSION,
+			world_size_m,
 		)
 
 	_add_world_renderer()
@@ -155,8 +170,14 @@ func _telemetry() -> Node:
 
 
 func get_world_context() -> Dictionary:
+	var preset := "standard"
+	var settings := get_node_or_null("/root/GameSettings")
+	if settings != null:
+		preset = str(settings.get("map_world_preset"))
 	return {
 		"seed": world_seed,
+		"world_size_m": world_size_m,
+		"world_preset": preset,
 		"generation_version": WORLD_GENERATION_VERSION,
 		"weather_generation_version": WEATHER_GENERATION_VERSION,
 		"layout_checksum": _layout_checksum,
@@ -368,7 +389,7 @@ func _warm_impostors() -> void:
 		status_cb = gate.set_detail
 	elif gate != null and gate.has_method("notify_status"):
 		status_cb = gate.notify_status
-	await IMPOSTOR_WARMUP.warm_all(self, status_cb)
+	await IMPOSTOR_SERVICE.warm_catalog(self, status_cb)
 
 
 func _await_spawn_terrain(spawn_pos: Vector3) -> void:

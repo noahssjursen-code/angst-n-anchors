@@ -42,7 +42,7 @@ const PROVISION_EQUIP_JOB_SCRIPT := preload("res://scripts/port/provision_crane_
 const CRANE_OPERATOR_SCRIPT := preload("res://scripts/port/crane_operator_npc.gd")
 const MOORING_POST_SCRIPT := preload("res://scripts/port/mooring_post.gd")
 const PORT_STRUCTURE_LOD := preload("res://scripts/core/port_structure_lod.gd")
-const IMPOSTOR_WARMUP := preload("res://scripts/core/impostor_warmup.gd")
+const IMPOSTOR_SERVICE := preload("res://scripts/core/impostor_service.gd")
 
 
 static func _foundation_pavement_material() -> StandardMaterial3D:
@@ -1111,7 +1111,7 @@ func _stamp_apron_pads() -> void:
 			site.add_child(lod)
 			var captured := layout
 			lod.setup(
-				IMPOSTOR_WARMUP.building_key(blueprint_id),
+				IMPOSTOR_SERVICE.building_key(blueprint_id),
 				func() -> Node3D:
 					var building := BuildingCache.instance(captured, true)
 					if building != null:
@@ -1333,7 +1333,7 @@ func _stamp_land_house_point(
 	lod.rotation.y = deg_to_rad(180.0 + float(index % 5) * 12.0 - 24.0)
 	parent.add_child(lod)
 	lod.setup(
-		IMPOSTOR_WARMUP.land_house_key(variant),
+		IMPOSTOR_SERVICE.land_house_key(variant),
 		func() -> Node3D:
 			var house := LandDecorCache.house_instance(index, u, v)
 			house.name = "House"
@@ -1873,10 +1873,10 @@ func _stamp_provision_crane_at(
 	lod.name = "ProvisionCraneLod"
 	root.add_child(lod)
 	lod.setup(
-		IMPOSTOR_WARMUP.crane_key("provision"),
+		IMPOSTOR_SERVICE.crane_key("provision"),
 		func() -> Node3D:
 			return _build_provision_crane_full(berth_id, equip_id, harbour),
-		PORT_STRUCTURE_LOD.CRANE_FULL_RANGE_M,
+		PORT_STRUCTURE_LOD.PROFILE_TALL,
 		func() -> void:
 			if harbour != null and not equip_id.is_empty():
 				harbour.unregister_equipment(equip_id),
@@ -1927,10 +1927,10 @@ func _stamp_bulk_crane_at(
 	lod.name = "BulkCraneLod"
 	root.add_child(lod)
 	lod.setup(
-		IMPOSTOR_WARMUP.crane_key("bulk"),
+		IMPOSTOR_SERVICE.crane_key("bulk"),
 		func() -> Node3D:
 			return _build_bulk_crane_full(berth_id, equip_id, harbour),
-		PORT_STRUCTURE_LOD.CRANE_FULL_RANGE_M,
+		PORT_STRUCTURE_LOD.PROFILE_TALL,
 		func() -> void:
 			if harbour != null and not equip_id.is_empty():
 				harbour.unregister_equipment(equip_id),

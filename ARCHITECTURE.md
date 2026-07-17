@@ -176,6 +176,21 @@ Each autoload lives in its system folder and is registered in `project.godot` fr
 | `LocalPlayerView` | `state/` | `res://scripts/state/local_player_view.gd` |
 | `Tutorial` | `state/` | `res://scripts/state/tutorial.gd` |
 
+### `Telemetry` — the debug publishing seam
+
+`Telemetry` is the central debug/performance registry. Runtime systems should
+publish debug information there instead of adding new scene-tree searches to
+the F3 overlay. Use `publish_metric()` for a single value, `publish_metrics()`
+for a batch, or `register_provider()` when a node already exposes a cheap
+debug-stat dictionary. Context useful during a later spike investigation belongs
+in `set_context_flag()`; meaningful actions and lifecycle changes belong in
+`record_event()` or the `begin_action()` / `end_action()` pair. Providers are
+weakly held and must unregister on exit.
+
+F3 is the consumer: its tabs show performance, world, vessel, events, and
+context. It can switch between live and peak/worst values, reset retained peaks,
+and copy `Telemetry.generate_report()` to the clipboard.
+
 ### `LocalPlayerView` — the MP seam
 
 `LocalPlayerView` is a per-client view of the local player's projection of the world. UI consults it instead of touching `PlayerSession` / `PortCatalog` directly; gameplay-mutating code continues to use the autoloads. When multiplayer lands, every UI that reads through `LocalPlayerView` keeps working with no further changes — only the autoload's internals switch from "delegate to local autoloads" to "consume the server projection."

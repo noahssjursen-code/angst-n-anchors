@@ -15,9 +15,13 @@ func _initialize() -> void:
 	_test_submerged_shelf_has_no_collision()
 	_test_water_edge_skirts()
 	_test_flatten_pads(layout)
+	_test_chunk_zone_filtering()
 	_test_collision_selection()
+	_test_chunk_keys_and_refresh_gate()
 	_test_request_and_queue_limits(layout)
 	_test_runtime_queue(layout)
+	_test_empty_water_retention(layout)
+	_test_collision_cleanup_after_jump()
 	_test_boot_ready_ring(layout)
 	_finish()
 
@@ -189,10 +193,41 @@ func _test_flatten_pads(layout: WorldLayout) -> void:
 	_check(is_zero_approx(STREAMER.sample_terrain_height(layout, water_center, water_zone)), "flattening does not create a water island")
 
 
+func _test_chunk_zone_filtering() -> void:
+	var near_zone := {
+		"center": Vector2(950.0, 500.0),
+		"half_size": Vector2(20.0, 20.0),
+		"falloff": 40.0,
+		"height": 0.0,
+	}
+	var far_zone := {
+		"center": Vector2(5000.0, 5000.0),
+		"half_size": Vector2(50.0, 50.0),
+		"falloff": 20.0,
+		"height": 0.0,
+	}
+	var selected := STREAMER.zones_intersecting_chunk([near_zone, far_zone], Vector2i.ZERO)
+	_check(selected.size() == 1 and selected[0] == near_zone, "chunk filtering drops distant terrain zones")
+	var adjacent := STREAMER.zones_intersecting_chunk([near_zone], Vector2i(1, 0))
+	_check(adjacent.size() == 1, "chunk filtering retains zone falloff across a chunk edge")
+
+
 func _test_collision_selection() -> void:
 	_check(STREAMER.chunk_needs_collision(Vector2i(0, 0), Vector2(500.0, 500.0), 100.0), "near chunk receives collision")
 	_check(not STREAMER.chunk_needs_collision(Vector2i(3, 3), Vector2.ZERO, 1800.0), "far chunk omits collision")
 	_check(not STREAMER.chunk_needs_collision(Vector2i.ZERO, Vector2.ZERO, 0.0), "zero radius disables collision")
+
+
+func _test_chunk_keys_and_refresh_gate() -> void:
+	var coord := Vector2i(-17, 23)
+	_check(STREAMER.chunk_key(coord) == coord, "chunk dictionaries use Vector2i keys")
+	_check(STREAMER.parse_chunk_key(coord) == coord, "Vector2i chunk keys round-trip")
+	var streamer := STREAMER.new()
+	streamer.background_mesh_builds = false
+	streamer._last_request_xz = Vector2.ZERO
+	_check(not streamer._should_refresh_requests(Vector2(20.0, 10.0)), "small movement skips request rebuild")
+	_check(streamer._should_refresh_requests(Vector2(60.0, 0.0)), "meaningful movement refreshes requests")
+	streamer.free()
 
 
 func _test_request_and_queue_limits(layout: WorldLayout) -> void:
@@ -224,6 +259,7 @@ func _test_request_and_queue_limits(layout: WorldLayout) -> void:
 
 func _test_runtime_queue(layout: WorldLayout) -> void:
 	var streamer := STREAMER.new()
+	streamer.background_mesh_builds = false
 	streamer.visual_radius_m = 1200.0
 	streamer.collision_radius_m = 600.0
 	streamer.max_jobs_per_frame = 1
@@ -244,8 +280,45 @@ func _test_runtime_queue(layout: WorldLayout) -> void:
 	streamer.free()
 
 
+func _test_empty_water_retention(layout: WorldLayout) -> void:
+	var streamer := STREAMER.new()
+	streamer.background_mesh_builds = false
+	root.add_child(streamer)
+	streamer.configure(layout)
+	var coord := Vector2i(-16, 14)
+	streamer._build_chunk(coord, 1, Vector3.ZERO)
+	var record := streamer._chunks[coord] as Dictionary
+	_check(record.get("node", null) == null, "open-water chunk creates no scene node")
+	_check((record.get("surface_data", {}) as Dictionary).is_empty(), "open-water chunk drops CPU mesh arrays")
+	streamer.free()
+
+
+func _test_collision_cleanup_after_jump() -> void:
+	var streamer := STREAMER.new()
+	streamer.background_mesh_builds = false
+	streamer.collision_radius_m = 1800.0
+	root.add_child(streamer)
+	var chunk_root := Node3D.new()
+	streamer.add_child(chunk_root)
+	var body := StaticBody3D.new()
+	chunk_root.add_child(body)
+	var coord := Vector2i.ZERO
+	streamer._chunks[coord] = {
+		"node": chunk_root,
+		"coord": coord,
+		"lod": 0,
+		"collision": body,
+		"surface_data": {},
+	}
+	streamer._sync_collisions(Vector3(10000.0, 0.0, 0.0))
+	var record := streamer._chunks[coord] as Dictionary
+	_check(record.get("collision", null) == null, "teleport retires collision outside physics ring")
+	streamer.free()
+
+
 func _test_boot_ready_ring(layout: WorldLayout) -> void:
 	var streamer := STREAMER.new()
+	streamer.background_mesh_builds = false
 	streamer.visual_radius_m = 8000.0
 	streamer.collision_radius_m = 1800.0
 	streamer.max_jobs_per_frame = 1
@@ -273,6 +346,7 @@ func _test_boot_ready_ring(layout: WorldLayout) -> void:
 	# Open-water chunks have verts but no walkable collision faces; boot must
 	# still complete instead of waiting forever on null collision.
 	var ocean := STREAMER.new()
+	ocean.background_mesh_builds = false
 	ocean.visual_radius_m = 4000.0
 	ocean.collision_radius_m = 1800.0
 	root.add_child(ocean)

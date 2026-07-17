@@ -307,20 +307,24 @@ func _on_home_port_confirmed(port_id: String) -> void:
 	_teardown_home_port_chart()
 	# Keep the exact seed shown on the picker — do not re-roll after create.
 	var settings := get_node_or_null("/root/GameSettings")
-	var gen_version := int(settings.get("map_generation_version")) if settings != null else 7
-	WorldBootstrapScript.apply_seed(_pending_seed, gen_version, preview_checksum)
+	var gen_version := int(settings.get("map_generation_version")) if settings != null else 8
+	var world_size_m := float(settings.get("map_world_size_m")) if settings != null else 40000.0
+	var world_preset := str(settings.get("map_world_preset")) if settings != null else "standard"
+	WorldBootstrapScript.apply_seed(_pending_seed, gen_version, preview_checksum, 3, world_size_m, world_preset)
 	_captains.create_local(_pending_name, _pending_appearance, port_id, _pending_seed)
 	var session := get_node_or_null("/root/PlayerSession")
 	if session != null and session.data != null:
 		session.data.world_context = {
 			"seed": _pending_seed,
+			"world_size_m": world_size_m,
+			"world_preset": world_preset,
 			"generation_version": gen_version,
 			"weather_generation_version": 3,
 			"layout_checksum": preview_checksum,
 		}
 		# Save without letting an empty live-world snapshot wipe the seed again.
 		session.save_now()
-		WorldBootstrapScript.apply_seed(_pending_seed, gen_version, preview_checksum)
+		WorldBootstrapScript.apply_seed(_pending_seed, gen_version, preview_checksum, 3, world_size_m, world_preset)
 	_creating_new = false
 	WorldBootstrapScript.enter_world(get_tree(), false)
 

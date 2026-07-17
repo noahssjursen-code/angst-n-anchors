@@ -42,6 +42,13 @@ var _last_local_strength := 0.0
 
 func _ready() -> void:
 	add_to_group("ocean_wake_field")
+	var telemetry := get_node_or_null("/root/Telemetry")
+	if telemetry != null and telemetry.has_method("register_provider"):
+		telemetry.register_provider(&"ocean.wake", self, &"get_debug_stats", &"ocean", {
+			"memory_mb": {"unit": "MB"},
+			"cpu_update_ms": {"unit": "ms"},
+			"gpu_update_ms": {"unit": "ms"},
+		})
 	_push.resize(32)
 	rd = RenderingServer.get_rendering_device()
 	if rd == null:
@@ -52,6 +59,9 @@ func _ready() -> void:
 
 
 func _exit_tree() -> void:
+	var telemetry := get_node_or_null("/root/Telemetry")
+	if telemetry != null and telemetry.has_method("unregister_provider"):
+		telemetry.unregister_provider(&"ocean.wake", self)
 	if rd == null:
 		return
 	if wake_texture_rd != null:

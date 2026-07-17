@@ -64,8 +64,10 @@ func _process(delta: float) -> void:
 func sync_follow_position() -> bool:
 	if source == null or source.nav == null or not source.nav.has_ship():
 		return false
+	if source.data != null and source.data.layout != null:
+		camera.configure_world(float(source.data.layout.half_extent_m))
 	camera.center = Vector2(source.nav.ship_position.x, source.nav.ship_position.z)
-	camera.span = SPAN_M
+	camera.span = minf(SPAN_M, camera.span_max())
 	return true
 
 

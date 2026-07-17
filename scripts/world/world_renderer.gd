@@ -82,6 +82,10 @@ var _shelter_texture_bound : bool = false
 
 func _ready() -> void:
 	add_to_group("world_renderer")
+	var telemetry := get_node_or_null("/root/Telemetry")
+	if telemetry != null and telemetry.has_method("register_provider"):
+		telemetry.register_provider(&"ocean.geometry", self, &"get_ocean_debug_stats", &"ocean")
+		telemetry.register_provider(&"render.lighting", self, &"get_lighting_debug_state", &"render")
 	# This script is @tool, but the full runtime ocean must not be built in the
 	# editor viewport. Otherwise the editor renders one ocean while the embedded
 	# game renders another (measured: ~65% + ~32% GPU on the same card).
@@ -600,6 +604,10 @@ func _connect_weather_lighting() -> void:
 
 
 func _exit_tree() -> void:
+	var telemetry := get_node_or_null("/root/Telemetry")
+	if telemetry != null and telemetry.has_method("unregister_provider"):
+		telemetry.unregister_provider(&"ocean.geometry", self)
+		telemetry.unregister_provider(&"render.lighting", self)
 	_restore_underwater_camera_far()
 	var weather := _get_weather()
 	if weather != null:

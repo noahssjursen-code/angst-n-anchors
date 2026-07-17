@@ -19,6 +19,7 @@ const LOD_HYSTERESIS_M := 220.0
 ## Decorative overscale so spruce massing reads from boat / freecam altitude.
 const TREE_SCALE_MIN := 1.92
 const TREE_SCALE_MAX := 3.36
+const REQUEST_MOVE_THRESHOLD_M := 50.0
 
 @export_range(0.25, 8.0, 0.25) var build_budget_ms := 2.0
 @export_range(1, 4, 1) var max_jobs_per_frame := 1
@@ -30,6 +31,7 @@ var _chunks: Dictionary = {}
 var _jobs: Array[Dictionary] = []
 var _queued: Dictionary = {}
 var _frame_index := 0
+var _last_request_xz := Vector2(INF, INF)
 
 
 func configure(layout: Object, flatten_zones: Array = []) -> void:
@@ -37,24 +39,32 @@ func configure(layout: Object, flatten_zones: Array = []) -> void:
 	_layout = layout
 	_flatten_zones = flatten_zones
 	_frame_index = 0
+	_last_request_xz = Vector2(INF, INF)
 	set_process(_layout != null)
 	if _layout != null:
-		_refresh_requests(WorldReferenceScript.stream_position(get_viewport()))
+		_refresh_requests(WorldReferenceScript.visual_position(get_viewport()))
 
 
 func _ready() -> void:
 	set_process(_layout != null)
+	var telemetry := get_node_or_null("/root/Telemetry")
+	if telemetry != null and telemetry.has_method("register_provider"):
+		telemetry.register_provider(&"world.forest", self, &"get_debug_stats", &"world")
 
 
 func _exit_tree() -> void:
+	var telemetry := get_node_or_null("/root/Telemetry")
+	if telemetry != null and telemetry.has_method("unregister_provider"):
+		telemetry.unregister_provider(&"world.forest", self)
 	_clear_chunks()
 
 
 func _process(_delta: float) -> void:
 	if _layout == null:
 		return
-	var stream_position := WorldReferenceScript.stream_position(get_viewport())
-	if _frame_index % maxi(queue_refresh_frames, 1) == 0:
+	var stream_position := WorldReferenceScript.visual_position(get_viewport())
+	if _frame_index % maxi(queue_refresh_frames, 1) == 0 \
+			and _should_refresh_requests(Vector2(stream_position.x, stream_position.z)):
 		_refresh_requests(stream_position)
 	_process_jobs()
 	_frame_index += 1
@@ -73,6 +83,7 @@ func get_debug_stats() -> Dictionary:
 
 func _refresh_requests(stream_position: Vector3) -> void:
 	var stream_xz := Vector2(stream_position.x, stream_position.z)
+	_last_request_xz = stream_xz
 	var half := float(_layout.half_extent_m)
 	var desired := select_chunk_requests(stream_xz, half, PROP_LOD.CULL_M)
 	var desired_keys := {}
@@ -96,7 +107,7 @@ func _refresh_requests(stream_position: Vector3) -> void:
 		if not desired_keys.has(key) or int(desired_keys[key]) == PROP_LOD.Tier.CULLED:
 			remove_keys.append(key)
 	for key in remove_keys:
-		_unload_chunk(StringName(key))
+		_unload_chunk(key)
 
 	var retained: Array[Dictionary] = []
 	_queued.clear()
@@ -115,6 +126,13 @@ func _refresh_requests(stream_position: Vector3) -> void:
 		if (loaded.is_empty() or int(loaded.get("tier", -1)) != int(request["tier"])) \
 				and not _queued.has(key):
 			_enqueue(request)
+
+
+func _should_refresh_requests(stream_xz: Vector2) -> bool:
+	if not is_finite(_last_request_xz.x):
+		return true
+	return _last_request_xz.distance_squared_to(stream_xz) \
+			>= REQUEST_MOVE_THRESHOLD_M * REQUEST_MOVE_THRESHOLD_M
 
 
 func _enqueue(request: Dictionary) -> void:
@@ -179,7 +197,7 @@ func _build_chunk(coord: Vector2i, tier: int) -> void:
 	}
 
 
-func _unload_chunk(key: StringName) -> void:
+func _unload_chunk(key: Variant) -> void:
 	var record := _chunks.get(key, {}) as Dictionary
 	if record.is_empty():
 		return
@@ -191,7 +209,7 @@ func _unload_chunk(key: StringName) -> void:
 
 func _clear_chunks() -> void:
 	for key in _chunks.keys():
-		_unload_chunk(StringName(key))
+		_unload_chunk(key)
 	_chunks.clear()
 	_jobs.clear()
 	_queued.clear()

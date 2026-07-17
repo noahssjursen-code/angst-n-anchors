@@ -173,8 +173,16 @@ func begin_new_captain(
 	var home := home_port_id.strip_edges()
 	data.home_port_id = home if not home.is_empty() else "port-home"
 	if world_seed > 0:
+		var settings := get_node_or_null("/root/GameSettings")
+		var size_m := 40000.0
+		var preset := "standard"
+		if settings != null:
+			size_m = float(settings.get("map_world_size_m"))
+			preset = str(settings.get("map_world_preset"))
 		data.world_context = {
 			"seed": world_seed,
+			"world_size_m": size_m,
+			"world_preset": preset,
 			"generation_version": 0,
 			"weather_generation_version": 3,
 			"layout_checksum": "",

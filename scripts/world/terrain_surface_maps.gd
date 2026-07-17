@@ -93,5 +93,6 @@ static func _bake_rgb(
 			if invert_g:
 				g = 1.0 - g
 			image.set_pixel(x, y, Color(r, g, b))
+	image.generate_mipmaps()
 	var tex := ImageTexture.create_from_image(image)
 	return tex
