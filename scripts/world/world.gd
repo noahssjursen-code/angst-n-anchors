@@ -16,8 +16,11 @@ const WORLD_LAYOUT_GENERATOR := preload("res://scripts/world/world_layout_genera
 const COASTAL_PORT_PLACER := preload("res://scripts/world/coastal_port_placer.gd")
 const WORLD_TERRAIN_STREAMER := preload("res://scripts/world/world_terrain_streamer.gd")
 const WORLD_FOREST_STREAMER := preload("res://scripts/world/world_forest_streamer.gd")
+const IMPOSTOR_CACHE := preload("res://scripts/core/impostor_cache.gd")
+const IMPOSTOR_WARMUP := preload("res://scripts/core/impostor_warmup.gd")
 
-const LOAD_RADIUS           : float = 1500.0
+## Match terrain mid LOD (~4.8 km) so coasts are not empty until the last moment.
+const LOAD_RADIUS           : float = 4800.0
 const EDITOR_PREVIEW_RADIUS : float = 600.0
 const EDITOR_PREVIEW_MAX    : int   = 6
 const WORLD_GENERATION_VERSION := WORLD_LAYOUT_GENERATOR.GENERATION_VERSION
@@ -68,6 +71,7 @@ func _rebuild() -> void:
 	PortDataCache.clear()
 	BuildingCache.clear()
 	LandDecorCache.clear()
+	IMPOSTOR_CACHE.clear()
 	MeshBuilder.clear_material_cache()
 	if _requested_generation_version != WORLD_GENERATION_VERSION:
 		push_error(
@@ -348,10 +352,23 @@ func _spawn_player() -> void:
 	if _terrain_streamer != null:
 		await _await_spawn_terrain(spawn_pos)
 
+	# Bake far-LOD impostors while the gate is still up (buildings + village houses).
+	await _warm_impostors()
+
 	boot_finished.emit()
 	var gate := get_node_or_null("/root/LoadingGate")
 	if gate != null and gate.has_method("notify_world_ready"):
 		gate.call("notify_world_ready")
+
+
+func _warm_impostors() -> void:
+	var gate := get_node_or_null("/root/LoadingGate")
+	var status_cb := Callable()
+	if gate != null and gate.has_method("set_detail"):
+		status_cb = gate.set_detail
+	elif gate != null and gate.has_method("notify_status"):
+		status_cb = gate.notify_status
+	await IMPOSTOR_WARMUP.warm_all(self, status_cb)
 
 
 func _await_spawn_terrain(spawn_pos: Vector3) -> void:

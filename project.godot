@@ -119,6 +119,5 @@ toggle_camera={
 
 [rendering]
 
-rendering_device/driver.windows="d3d12"
-; Port scenes stamp many unique JSON-mesh materials; default 65536 overflows D3D12.
 rendering_device/d3d12/max_resource_descriptors=262144
+rendering_device/driver.windows="d3d12"

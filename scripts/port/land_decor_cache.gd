@@ -19,11 +19,11 @@ static func clear() -> void:
 
 static func house_instance(index: int, u: float, v: float) -> Node3D:
 	_ensure_baked()
-	var variant := _variant_index(index, u, v)
+	var variant := variant_index(index, u, v)
 	return _stamp(_house_prototypes[variant])
 
 
-static func _variant_index(index: int, u: float, v: float) -> int:
+static func variant_index(index: int, u: float, v: float) -> int:
 	return int(index + int(u * 4.0) + int(v * 4.0)) % VARIANT_COUNT
 
 

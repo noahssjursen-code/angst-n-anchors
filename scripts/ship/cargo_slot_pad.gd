@@ -9,7 +9,7 @@ const PAD_GROUP := "cargo_slot_pad"
 const YARD_PAD_GROUP := "container_yard_pad"
 const MASS_PREFIX := "cargo_pad_"
 const SNAP_RADIUS_M := 6.0
-## Decorative quay yards cap visible containers — full yards use impostor stacks.
+## Decorative quay yards cap how many live containers we stamp.
 const MAX_DECOR_PREFILL := 28
 
 signal cargo_changed(component: CargoSlotPadComponent)
@@ -139,8 +139,6 @@ func prefill_general_cargo(
 		var unit := ContainerFactory.make_one(origin_port_id, "", "provisions")
 		if add_container(unit) < 0:
 			break
-	if not affects_boat_cargo_mass:
-		_add_decor_impostor_stack()
 
 
 func clear_all() -> void:
@@ -432,8 +430,8 @@ func _spawn_node(origin: int, unit: ContainerUnit) -> void:
 	_container_root.add_child(node)
 	node.position = _cell_center_local(origin, unit.footprint)
 	node.position.y = ContainerNode.floor_offset_y()
-	var decorative := is_quay_yard_pad and not affects_boat_cargo_mass
-	node.setup(unit, decorative)
+	## Quay yards still skip boat mass, but containers must block walking.
+	node.setup(unit, false)
 	_nodes[origin] = node
 
 
@@ -498,21 +496,6 @@ func _rebuild_visual() -> void:
 		var marks := MeshBuilder.merged_boxes(mark_parts, mark_color, 1.0, 0.0)
 		marks.name = "SlotMarks"
 		_visual_root.add_child(marks)
-
-
-func _add_decor_impostor_stack() -> void:
-	if _visual_root == null or not is_quay_yard_pad:
-		return
-	var stack_h := clampf(deck_length_m * 0.18, 2.4, 6.5)
-	var stack := MeshBuilder.box(
-		Vector3(deck_width_m * 0.72, stack_h, deck_length_m * 0.42),
-		Color(0.42, 0.38, 0.34, 0.88),
-		0.92,
-		0.04,
-	)
-	stack.name = "DecorStackImpostor"
-	stack.position = Vector3(0.0, stack_h * 0.5, deck_length_m * 0.12)
-	_visual_root.add_child(stack)
 
 
 func _refresh_mass() -> void:

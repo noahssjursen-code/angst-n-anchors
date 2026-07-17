@@ -7,8 +7,11 @@ extends Node
 ## is placed at the entry position and freed when they leave.
 ##
 ## Uses camera position (including freecam) so distant ports stream in while flying.
+## Unload sits farther than load so orbiting/panning at the edge does not thrash.
 
 const CHECK_INTERVAL := 1.0
+## Unload only when past load radius + this (orbit at the edge must not thrash).
+const UNLOAD_HYSTERESIS_M := 800.0
 const WorldReference := preload("res://scripts/world/world_reference.gd")
 
 var _entries: Array = []
@@ -36,9 +39,14 @@ func _process(delta: float) -> void:
 func _tick() -> void:
 	var ref_pos := _reference_position()
 	for entry in _entries:
-		if ref_pos.distance_to(entry["position"]) <= entry["radius"]:
-			_load(entry)
-		else:
+		var dist := ref_pos.distance_to(entry["position"] as Vector3)
+		var radius := float(entry["radius"])
+		var loaded := entry["instance"] != null and is_instance_valid(entry["instance"])
+		if not loaded:
+			entry["instance"] = null
+			if dist <= radius:
+				_load(entry)
+		elif dist > radius + UNLOAD_HYSTERESIS_M:
 			_unload(entry)
 
 

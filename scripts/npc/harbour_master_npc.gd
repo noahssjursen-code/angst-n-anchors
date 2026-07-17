@@ -172,8 +172,10 @@ func _show_request_berth() -> void:
 		return
 
 	_dialogue.add_quote(
-		"We have %d free berth%s. I'll match your hull to the right quay family — "
-		+ "bulk carriers go to bulk, deck cargo to the apron."
+		(
+			"We have %d free berth%s. I'll match your hull to the right quay family — "
+			+ "bulk carriers go to bulk, deck cargo to the apron."
+		)
 		% [free_count, "s" if free_count != 1 else ""]
 	)
 	_dialogue.add_option("Assign me a berth for my vessel.", _show_ship_select)
@@ -349,9 +351,11 @@ func _show_vessel_info() -> void:
 	if data != null and not data.commodity_export.is_empty():
 		export_line = CommodityCatalog.commodity_display(data.commodity_export)
 	_dialogue.add_quote(
-		"This port accepts vessels up to %s class (max %.0f m).\n"
-		+ "%d berth%s (%d free).\nPrimary export: %s.\n"
-		+ "Open the chart (M) and switch to Harbour for the live board."
+		(
+			"This port accepts vessels up to %s class (max %.0f m).\n"
+			+ "%d berth%s (%d free).\nPrimary export: %s.\n"
+			+ "Open the chart (M) and switch to Harbour for the live board."
+		)
 		% [
 			ShipClass.display_name(max_class),
 			ShipClass.max_length(max_class),

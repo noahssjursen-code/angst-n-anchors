@@ -371,7 +371,8 @@ func _sync_collisions(stream_position: Vector3) -> void:
 		if absi(coord.x - center_coord.x) > chunk_radius or absi(coord.y - center_coord.y) > chunk_radius:
 			continue
 		var record := _chunks[key] as Dictionary
-		if record.get("collision", null) == true:
+		var collision_state: Variant = record.get("collision", null)
+		if collision_state is bool:
 			continue
 		var wanted := chunk_needs_collision(coord, stream_xz, collision_radius_m)
 		if wanted and not _has_collision_state(record):
