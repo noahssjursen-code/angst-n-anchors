@@ -111,6 +111,7 @@ func _build_coastal_harbour() -> void:
 	var data := PortExpander.expand(def, HARBOUR_SEED)
 	var plot := PortPlot.new()
 	plot.name = "PresentationPort"
+	plot.presentation_only = true
 	plot.configure(data)
 	harbour.add_child(plot)
 

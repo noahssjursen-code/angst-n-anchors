@@ -14,6 +14,9 @@ enum Type {
 ## Catalog length/beam are authored in "actual" metres. World hulls and berth
 ## clearances use 2× those values (a 5 m beam ship occupies 10 m in world space).
 const METRIC_SCALE := 2.0
+## World/grid dimensions deliberately remain at the established 2x scale.
+## Player-facing vessel dimensions convert back to registered metres only.
+const DISPLAY_METRE_SCALE := 1.0 / METRIC_SCALE
 
 ## Authored maximum length (m) per class — multiply by METRIC_SCALE for world space.
 const MAX_LENGTH_M: Dictionary = {
@@ -91,6 +94,14 @@ static func physical_beam(type: Type) -> float:
 
 static func display_name(type: Type) -> String:
 	return str(DISPLAY_NAME.get(type, "Unknown"))
+
+
+static func display_metres(world_metres: float) -> float:
+	return world_metres * DISPLAY_METRE_SCALE
+
+
+static func format_display_dimensions(world_loa_m: float, world_beam_m: float) -> String:
+	return "%.1f × %.1f m" % [display_metres(world_loa_m), display_metres(world_beam_m)]
 
 ## Returns true if ship_type is small enough to dock at a port with dock_max.
 static func fits(ship_type: Type, dock_max: Type) -> bool:

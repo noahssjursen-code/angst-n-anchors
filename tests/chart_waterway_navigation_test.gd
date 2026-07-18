@@ -57,6 +57,20 @@ func _test_route_distances(layout: WorldLayout) -> void:
 	var distance_b := second_navigation.route_distance(a, b, 0.01)
 	_check_close(distance_a, expected, 0.01, "same-segment route follows polyline")
 	_check_close(distance_a, distance_b, 0.0001, "route distance is deterministic")
+	var direct_path := first_navigation.route_points(a, b, 0.01)
+	_check(direct_path.size() >= 2, "same-segment route returns chart waypoints")
+	_check(direct_path[0].is_equal_approx(a), "route starts at requested point")
+	_check(direct_path[-1].is_equal_approx(b), "route ends at requested point")
+	var waterways := layout.waterway_centerlines
+	if waterways.size() >= 2:
+		var other_points: PackedVector2Array = waterways[1]["points"]
+		var graph_path := first_navigation.route_points(points[-1], other_points[-1], 0.01)
+		_check(graph_path.size() > 2, "cross-waterway route exposes graph waypoints")
+		for i in range(1, graph_path.size() - 2):
+			_check(
+				_segment_stays_in_water(layout, graph_path[i], graph_path[i + 1]),
+				"smoothed route segment remains in navigable water",
+			)
 	_check(
 		not first_navigation.are_reachable(a + Vector2(0.0, 500.0), b, 10.0),
 		"access threshold rejects remote endpoints"
@@ -79,6 +93,14 @@ func _check(condition: bool, label: String) -> void:
 
 func _check_close(actual: float, expected: float, tolerance: float, label: String) -> void:
 	_check(absf(actual - expected) <= tolerance, "%s (%f != %f)" % [label, actual, expected])
+
+
+func _segment_stays_in_water(layout: WorldLayout, a: Vector2, b: Vector2) -> bool:
+	var probes := maxi(1, ceili(a.distance_to(b) / 60.0))
+	for i in range(1, probes):
+		if layout.sample_signed_distance(a.lerp(b, float(i) / float(probes))) < 12.0:
+			return false
+	return true
 
 
 func _finish() -> void:

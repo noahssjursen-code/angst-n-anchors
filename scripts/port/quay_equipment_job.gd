@@ -54,6 +54,12 @@ func can_serve(_ship: BoatBody, _mode: String) -> bool:
 	return false
 
 
+## Spatial compatibility used before freight is staged. Equipment subclasses
+## must verify their real reach rather than assuming every yard on a berth works.
+func can_reach_yard(_yard: Node) -> bool:
+	return false
+
+
 func start_job(ship: BoatBody, mode: String, commodity_id: String = "") -> bool:
 	if ship == null or not is_instance_valid(ship):
 		return false

@@ -17,6 +17,8 @@ static func ship_requirements(record: Dictionary) -> Dictionary:
 		"ship_class": ship_class,
 		"ship_class_name": ShipClass.display_name(ship_class),
 		"loa_m": loa_m,
+		"loa_display_m": ShipClass.display_metres(loa_m),
+		"beam_display_m": ShipClass.display_metres(beam_m),
 		"loa_world_m": loa_m,
 		"beam_world_m": beam_m,
 		"registration_id": registration_id,

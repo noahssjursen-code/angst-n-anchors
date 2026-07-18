@@ -88,6 +88,10 @@ static func derive(definition: PortDefinition, world_seed: int) -> PortTradeProf
 	profile.theme_id = str(theme.get("id", ""))
 	profile.destiny_export_slots = _unique_list(theme.get("exports", []) as Array)
 	profile.destiny_import_slots = _unique_list(theme.get("imports", []) as Array)
+	## Every harbour handles ordinary mixed freight in both directions. Themes
+	## describe the specialist economy layered on top of this universal service.
+	_ensure_list_starts_with(profile.destiny_export_slots, "provisions")
+	_ensure_list_starts_with(profile.destiny_import_slots, "provisions")
 	_strip_duplicate_one_way_lists(profile.destiny_export_slots, profile.destiny_import_slots)
 	if profile.destiny_export_slots.has("containers") \
 			or profile.destiny_import_slots.has("containers"):
@@ -148,23 +152,29 @@ static func _apply_size_unlock(profile: PortTradeProfile, size: int) -> void:
 	profile.export_slots = _take_head(profile.destiny_export_slots, export_n)
 	profile.import_slots = _take_head(profile.destiny_import_slots, import_n)
 	_strip_duplicate_one_way(profile)
+	_force_bidirectional_commodity(profile, "provisions")
 	if profile.export_slots.has("containers") or profile.import_slots.has("containers"):
-		_force_bidirectional_containers(profile)
+		_force_bidirectional_commodity(profile, "containers")
 
 
 ## Box terminals load and unload the same quay — never one-way containers.
 static func is_bidirectional_trade(commodity_id: String) -> bool:
-	return str(commodity_id) == "containers"
+	return str(commodity_id) in ["provisions", "containers"]
 
 
-static func _force_bidirectional_containers(profile: PortTradeProfile) -> void:
-	_ensure_list_has(profile.export_slots, "containers")
-	_ensure_list_has(profile.import_slots, "containers")
+static func _force_bidirectional_commodity(profile: PortTradeProfile, commodity_id: String) -> void:
+	_ensure_list_has(profile.export_slots, commodity_id)
+	_ensure_list_has(profile.import_slots, commodity_id)
 
 
 static func _ensure_list_has(slots: Array[String], commodity_id: String) -> void:
 	if not slots.has(commodity_id):
 		slots.append(commodity_id)
+
+
+static func _ensure_list_starts_with(slots: Array[String], commodity_id: String) -> void:
+	slots.erase(commodity_id)
+	slots.push_front(commodity_id)
 
 
 ## Region-weighted destiny pick — independent of current harbour size.

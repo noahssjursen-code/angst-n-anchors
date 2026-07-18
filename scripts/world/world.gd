@@ -83,6 +83,12 @@ func _rebuild() -> void:
 	IMPOSTOR_SERVICE.clear()
 	MeshBuilder.clear_material_cache()
 	WORLD_LAYOUT_GENERATOR.clear_cache()
+	## PortCatalog is the live world's directory. Discard stale records from a
+	## previous world or any presentation scene before generating contracts.
+	if not Engine.is_editor_hint():
+		var port_catalog := get_node_or_null("/root/PortCatalog")
+		if port_catalog != null:
+			port_catalog.clear()
 	if _requested_generation_version != WORLD_GENERATION_VERSION:
 		push_warning(
 			"World: generation version mismatch (requested %d, runtime %d) — regenerating"
@@ -330,6 +336,10 @@ func _setup_ports(defs: Array[PortDefinition]) -> void:
 		plot.global_position = defs[0].world_position
 		if session != null and session.get("data") != null:
 			session.data.home_port_id = fallback.port_id
+
+	var freight := get_node_or_null("/root/FreightService")
+	if freight != null and freight.has_method("prune_unknown_ports"):
+		freight.prune_unknown_ports()
 
 
 

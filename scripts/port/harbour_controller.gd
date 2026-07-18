@@ -7,6 +7,7 @@ signal ship_plugged(berth_id: String, ship: BoatBody)
 signal ship_unplugged(berth_id: String, ship: BoatBody)
 signal equipment_plugged(equip_id: String, ship: BoatBody, mode: String)
 signal equipment_unplugged(equip_id: String)
+signal traffic_changed
 
 var _port_id := ""
 var _berths: Dictionary = {} ## berth_id -> QuayBerthSlot
@@ -14,6 +15,10 @@ var _equipment: Dictionary = {} ## equip_id -> QuayEquipmentJob
 var _yards: Dictionary = {} ## yard_key -> { "berth_id", "node" }
 var _ship_at_berth: Dictionary = {} ## berth_id -> BoatBody
 var _berth_of_ship: Dictionary = {} ## ship instance_id -> berth_id
+var _berth_reservations: Dictionary = {} ## berth_id -> authority lease
+var _lane_lock: Dictionary = {} ## one harbour manoeuvre at a time in v1
+
+const DEFAULT_RESERVATION_LEASE_S := 180.0
 
 
 func _notification(what: int) -> void:
@@ -46,6 +51,8 @@ func unregister_all() -> void:
 	_yards.clear()
 	_ship_at_berth.clear()
 	_berth_of_ship.clear()
+	_berth_reservations.clear()
+	_lane_lock.clear()
 
 
 ## --- Registration -----------------------------------------------------------
@@ -54,6 +61,12 @@ func register_berth(slot: QuayBerthSlot) -> void:
 	if slot == null or slot.berth_id.is_empty():
 		return
 	_berths[slot.berth_id] = slot
+	call_deferred("_bake_registered_berth_lane", slot)
+
+
+func _bake_registered_berth_lane(slot: QuayBerthSlot) -> void:
+	if slot != null and is_instance_valid(slot) and slot.is_inside_tree():
+		BerthApproachLanes.bake_live_berth(_port_id, slot)
 
 
 func unregister_equipment(equip_id: String) -> void:
@@ -76,6 +89,9 @@ func register_equipment(equip: QuayEquipmentJob, berth_id: String = "") -> void:
 	if not _berths.has(bid):
 		push_warning("HarbourController: register_equipment unknown berth %s" % bid)
 	_equipment[equip.equipment_id()] = equip
+	var freight := get_node_or_null("/root/FreightService")
+	if freight != null and freight.has_method("stage_berth"):
+		freight.call_deferred("stage_berth", _port_id, bid)
 
 
 func register_yard(yard: Node, berth_id: String) -> void:
@@ -89,6 +105,9 @@ func register_yard(yard: Node, berth_id: String) -> void:
 	var slot := berth(bid)
 	if slot != null:
 		slot.add_yard(yard)
+	var freight := get_node_or_null("/root/FreightService")
+	if freight != null and freight.has_method("stage_berth"):
+		freight.call_deferred("stage_berth", _port_id, bid)
 
 
 ## --- Boat ↔ quay ------------------------------------------------------------
@@ -98,6 +117,11 @@ func plug_ship(berth_id: String, ship: BoatBody) -> bool:
 		return false
 	var bid := berth_id.strip_edges()
 	if not _berths.has(bid):
+		return false
+	_cleanup_traffic_leases()
+	var reservation := _berth_reservations.get(bid, {}) as Dictionary
+	var arriving_id := ship_id_of(ship)
+	if not reservation.is_empty() and str(reservation.get("vessel_id", "")) != arriving_id:
 		return false
 	var existing: BoatBody = _ship_at_berth.get(bid) as BoatBody
 	if existing != null and is_instance_valid(existing) and existing != ship:
@@ -110,6 +134,12 @@ func plug_ship(berth_id: String, ship: BoatBody) -> bool:
 	ship.set_meta("harbour_berth_id", bid)
 	ship.set_meta("harbour_port_id", _port_id)
 	ship_plugged.emit(bid, ship)
+	if not reservation.is_empty():
+		_berth_reservations.erase(bid)
+	traffic_changed.emit()
+	var freight := get_node_or_null("/root/FreightService")
+	if freight != null and freight.has_method("stage_berth"):
+		freight.call_deferred("stage_berth", _port_id, bid)
 	return true
 
 
@@ -119,6 +149,9 @@ func unplug_ship(ship: BoatBody) -> void:
 	var bid := ship_berth_id(ship)
 	if bid.is_empty():
 		return
+	var freight := get_node_or_null("/root/FreightService")
+	if freight != null and freight.has_method("unstage_berth"):
+		freight.call("unstage_berth", _port_id, bid, ship)
 	for equip_id in equipment_ids_on_berth(bid):
 		var equip := get_equipment(equip_id)
 		if equip != null and equip.served_ship() == ship:
@@ -267,15 +300,129 @@ func occupied_berths() -> Array:
 
 
 func free_berths(family: String = "") -> Array:
+	_cleanup_traffic_leases()
 	var out: Array = []
 	for slot in berths():
 		var s := slot as QuayBerthSlot
 		if moored_ship(s.berth_id) != null:
 			continue
+		if _berth_reservations.has(s.berth_id):
+			continue
 		if not s.matches_family(family):
 			continue
 		out.append(s)
 	return out
+
+
+## Server-authority seam. A reservation is separate from occupancy: it protects
+## an arrival before the vessel reaches the quay and expires if its owner dies.
+func request_berth_reservation(
+	vessel_id: String,
+	loa_m: float,
+	family: String = "",
+	preferred_berth_id: String = "",
+	lease_s: float = DEFAULT_RESERVATION_LEASE_S,
+) -> String:
+	var owner := vessel_id.strip_edges()
+	if owner.is_empty():
+		return ""
+	_cleanup_traffic_leases()
+	for berth_id in _berth_reservations:
+		var existing := _berth_reservations[berth_id] as Dictionary
+		if str(existing.get("vessel_id", "")) == owner:
+			_renew_reservation(str(berth_id), lease_s)
+			return str(berth_id)
+	var candidates := free_berths_for_loa(loa_m, family)
+	if not preferred_berth_id.is_empty():
+		candidates.sort_custom(func(a: QuayBerthSlot, b: QuayBerthSlot) -> bool:
+			return a.berth_id == preferred_berth_id and b.berth_id != preferred_berth_id
+		)
+	if candidates.is_empty():
+		return ""
+	var slot := candidates[0] as QuayBerthSlot
+	_berth_reservations[slot.berth_id] = {
+		"berth_id": slot.berth_id,
+		"vessel_id": owner,
+		"expires_msec": Time.get_ticks_msec() + int(maxf(lease_s, 5.0) * 1000.0),
+	}
+	traffic_changed.emit()
+	return slot.berth_id
+
+
+func release_berth_reservation(berth_id: String, vessel_id: String) -> bool:
+	var bid := berth_id.strip_edges()
+	var lease := _berth_reservations.get(bid, {}) as Dictionary
+	if lease.is_empty() or str(lease.get("vessel_id", "")) != vessel_id.strip_edges():
+		return false
+	_berth_reservations.erase(bid)
+	traffic_changed.emit()
+	return true
+
+
+func reservation_for_berth(berth_id: String) -> Dictionary:
+	_cleanup_traffic_leases()
+	return (_berth_reservations.get(berth_id.strip_edges(), {}) as Dictionary).duplicate(true)
+
+
+func request_lane_lock(berth_id: String, vessel_id: String, phase: String) -> bool:
+	_cleanup_traffic_leases()
+	var owner := vessel_id.strip_edges()
+	if owner.is_empty() or berth(berth_id) == null:
+		return false
+	if not _lane_lock.is_empty() and str(_lane_lock.get("vessel_id", "")) != owner:
+		return false
+	_lane_lock = {
+		"berth_id": berth_id.strip_edges(),
+		"vessel_id": owner,
+		"phase": phase.strip_edges(),
+		"expires_msec": Time.get_ticks_msec() + 60000,
+	}
+	traffic_changed.emit()
+	return true
+
+
+func release_lane_lock(vessel_id: String) -> bool:
+	if _lane_lock.is_empty() or str(_lane_lock.get("vessel_id", "")) != vessel_id.strip_edges():
+		return false
+	_lane_lock.clear()
+	traffic_changed.emit()
+	return true
+
+
+func traffic_snapshot() -> Dictionary:
+	_cleanup_traffic_leases()
+	var reservations: Array[Dictionary] = []
+	for berth_id in _berth_reservations:
+		reservations.append((_berth_reservations[berth_id] as Dictionary).duplicate(true))
+	return {
+		"port_id": _port_id,
+		"reservations": reservations,
+		"lane_lock": _lane_lock.duplicate(true),
+	}
+
+
+func _renew_reservation(berth_id: String, lease_s: float) -> void:
+	var lease := _berth_reservations.get(berth_id, {}) as Dictionary
+	if lease.is_empty():
+		return
+	lease["expires_msec"] = Time.get_ticks_msec() + int(maxf(lease_s, 5.0) * 1000.0)
+	_berth_reservations[berth_id] = lease
+
+
+func _cleanup_traffic_leases() -> void:
+	var now := Time.get_ticks_msec()
+	var changed := false
+	for berth_id in _berth_reservations.keys():
+		var lease := _berth_reservations[berth_id] as Dictionary
+		if int(lease.get("expires_msec", 0)) > now:
+			continue
+		_berth_reservations.erase(berth_id)
+		changed = true
+	if not _lane_lock.is_empty() and int(_lane_lock.get("expires_msec", 0)) <= now:
+		_lane_lock.clear()
+		changed = true
+	if changed:
+		traffic_changed.emit()
 
 
 func free_berths_for_loa(loa_world_m: float, family: String = "") -> Array:
@@ -389,11 +536,41 @@ func yards_on_berth(berth_id: String) -> Array:
 	return out
 
 
+func serviceable_yards_on_berth(berth_id: String, ship: BoatBody = null) -> Array:
+	var ranked: Array[Dictionary] = []
+	for yard in yards_on_berth(berth_id):
+		var paired_id := str((yard as Node).get_meta("equipment_id", ""))
+		var candidate_ids := PackedStringArray([paired_id]) if not paired_id.is_empty() \
+			else equipment_ids_on_berth(berth_id)
+		for equip_id in candidate_ids:
+			var equip := get_equipment(equip_id)
+			if equip == null or not equip.can_reach_yard(yard as Node):
+				continue
+			if ship != null and (
+				not equip.has_method("can_reach_ship")
+				or not bool(equip.call("can_reach_ship", ship))
+			):
+				continue
+			var score := 0.0
+			if ship != null:
+				score = _equipment_world_origin(equip).distance_squared_to(ship.global_position)
+			ranked.append({"yard": yard, "score": score})
+			break
+	ranked.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+		return float(a.get("score", INF)) < float(b.get("score", INF))
+	)
+	var out: Array = []
+	for row in ranked:
+		out.append((row as Dictionary).get("yard"))
+	return out
+
+
 func snapshot() -> Dictionary:
 	var berth_rows: Array = []
 	for slot in berths():
 		var s := slot as QuayBerthSlot
 		var ship := moored_ship(s.berth_id)
+		var reservation := reservation_for_berth(s.berth_id)
 		## Plot-local XZ for the harbour board (nudge by water face so twin sides separate).
 		var host := get_parent() as Node3D
 		var face_nudge := s.water_dir_local * maxf(s.width_m * 0.35, 8.0)
@@ -402,8 +579,9 @@ func snapshot() -> Dictionary:
 		berth_rows.append({
 			"berth_id": s.berth_id,
 			"station_id": s.station_id,
-			"free": ship == null,
+			"free": ship == null and reservation.is_empty(),
 			"ship_id": ship_id_of(ship),
+			"reserved_by": str(reservation.get("vessel_id", "")),
 			"family": s.family,
 			"commodities": Array(s.commodities),
 			"length_m": s.length_m,
@@ -435,6 +613,7 @@ func snapshot() -> Dictionary:
 		"ships": ship_rows,
 		"equipment": equip_rows,
 		"jobs": active_jobs(),
+		"traffic": traffic_snapshot(),
 	}
 
 

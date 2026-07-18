@@ -24,6 +24,9 @@ func _ready() -> void:
 	if _session != null:
 		if _session.has_signal("marks_changed") and not _session.marks_changed.is_connected(_emit_marks):
 			_session.marks_changed.connect(_emit_marks)
+	var freight := get_node_or_null("/root/FreightService")
+	if freight != null and not freight.contracts_changed.is_connected(_emit_contracts):
+		freight.contracts_changed.connect(_emit_contracts)
 
 	get_tree().node_added.connect(_on_node_added)
 	for n in get_tree().root.find_children("*", "BoatController", true, false):
@@ -60,8 +63,38 @@ func has_active_ship() -> bool:
 	return get_active_ship() != null
 
 
+func get_active_ship_berth_context() -> Dictionary:
+	var ship := get_active_ship()
+	if ship == null:
+		return {}
+	return {
+		"port_id": str(ship.call("get_harbour_port_id")) \
+			if ship.has_method("get_harbour_port_id") else "",
+		"berth_id": str(ship.call("get_moored_berth_id")) \
+			if ship.has_method("get_moored_berth_id") else "",
+	}
+
+
+func get_autopilot_snapshot() -> Dictionary:
+	var ship := get_active_ship()
+	if ship == null:
+		return {}
+	var autopilot := ship.get_node_or_null("VesselAutopilot") as VesselAutopilot
+	if autopilot == null:
+		return {}
+	var snapshot := autopilot.voyage_snapshot()
+	snapshot["remaining_distance_m"] = autopilot.remaining_distance_m()
+	if autopilot.route != null:
+		snapshot["destination_port_id"] = autopilot.route.destination_port_id
+	var watch := ship.get_node_or_null("BridgeWatchAlarm") as BridgeWatchAlarm
+	if watch != null:
+		snapshot["bridge_watch"] = watch.snapshot()
+	return snapshot
+
+
 func get_active_contracts() -> Array:
-	return []
+	var freight := get_node_or_null("/root/FreightService")
+	return freight.active_contracts() if freight != null else []
 
 
 func get_port_display_name(port_id: String) -> String:
@@ -111,7 +144,7 @@ func _snapshot_into_player_data() -> void:
 	if data == null:
 		return
 
-	data.accepted_contracts = []
+	data.accepted_contracts = get_active_contracts()
 	data.port_operations_state = {}
 	data.ship_runtime_state = {}
 
@@ -139,7 +172,15 @@ func restore_player_state() -> void:
 		var clock := get_node_or_null("/root/WorldClock")
 		if clock != null and clock.has_method("set_game_hours_elapsed"):
 			clock.call("set_game_hours_elapsed", data.world_clock_hours)
-	contracts_changed.emit([])
+	var freight := get_node_or_null("/root/FreightService")
+	if freight != null:
+		freight.restore_contracts(data.accepted_contracts)
+	else:
+		contracts_changed.emit([])
+
+
+func _emit_contracts(contracts: Array) -> void:
+	contracts_changed.emit(contracts)
 
 
 func _current_world_context() -> Dictionary:

@@ -24,7 +24,7 @@ signal released(node: ContainerNode)
 var unit: ContainerUnit = null
 var _visual: Node3D
 var _corners: Node3D
-var _label: Label3D
+var _labels: Array[Label3D] = []
 var _highlighted: bool = false
 var _halo: MeshInstance3D
 var _body: StaticBody3D
@@ -72,20 +72,44 @@ func _rebuild() -> void:
 	add_child(_visual)
 	if unit != null:
 		var seed := ContainerPaintMaterial.seed_from_unit(unit)
-		ContainerPaintMaterial.apply_to_node(_visual, unit.commodity_id, seed)
+		ContainerPaintMaterial.apply_to_unit(_visual, unit, seed)
 		_build_corners(unit.commodity_id, seed)
-	if _label == null:
-		_label = Label3D.new()
-		_label.name = "ContainerLabel"
-		_label.font_size = 48
-		_label.pixel_size = 0.005
-		_label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
-		_label.position = Vector3(0.0, HEIGHT_M * VISUAL_SCALE + 0.35, 0.0)
-		_label.visible = false
-		add_child(_label)
-	if unit != null:
-		_label.text = CommodityCatalog.commodity_display(unit.commodity_id)
+	_rebuild_route_labels()
 	_build_halo()
+
+
+func _rebuild_route_labels() -> void:
+	for old_label in _labels:
+		if old_label != null and is_instance_valid(old_label):
+			old_label.queue_free()
+	_labels.clear()
+	if unit == null or unit.destination_port_id.is_empty():
+		return
+	var face := SIZE_M * VISUAL_SCALE * 0.5 + 0.018
+	var placements := [
+		[Vector3(0.0, HEIGHT_M * 0.55, face), 0.0],
+		[Vector3(0.0, HEIGHT_M * 0.55, -face), PI],
+		[Vector3(face, HEIGHT_M * 0.55, 0.0), PI * 0.5],
+		[Vector3(-face, HEIGHT_M * 0.55, 0.0), -PI * 0.5],
+	]
+	for index in range(placements.size()):
+		var placement: Array = placements[index]
+		var label := Label3D.new()
+		label.name = "CargoMark_%d" % index
+		label.text = _route_label_text()
+		## Small painted shipping stencil, constrained to the container panel.
+		label.font_size = 36
+		label.pixel_size = 0.0036
+		label.width = 820.0
+		label.position = placement[0] as Vector3
+		label.rotation.y = float(placement[1])
+		label.outline_size = 7
+		label.modulate = Color(0.92, 0.92, 0.84)
+		label.outline_modulate = Color(0.015, 0.02, 0.025, 0.96)
+		label.visibility_range_end = 65.0
+		label.visibility_range_fade_mode = GeometryInstance3D.VISIBILITY_RANGE_FADE_SELF
+		add_child(label)
+		_labels.append(label)
 
 
 func _build_corners(commodity_id: String, seed: float) -> void:
@@ -108,15 +132,48 @@ func _build_corners(commodity_id: String, seed: float) -> void:
 			mi.name = "Corner"
 			mi.position = Vector3(sx * offset, CORNER_HEIGHT_M * 0.5, sz * offset)
 			_corners.add_child(mi)
-	ContainerPaintMaterial.apply_to_node(_corners, commodity_id, seed + 13.7)
+	if unit != null:
+		ContainerPaintMaterial.apply_to_unit(_corners, unit, seed + 13.7)
+	else:
+		ContainerPaintMaterial.apply_to_node(_corners, commodity_id, seed + 13.7)
 
 
 func set_highlighted(on: bool) -> void:
 	_highlighted = on
 	if _halo != null:
 		_halo.visible = on
-	if _label != null:
-		_label.visible = on and unit != null
+	for label in _labels:
+		if label != null:
+			label.modulate = Color.WHITE if on else Color(0.92, 0.92, 0.84)
+
+
+func _route_label_text() -> String:
+	if unit == null:
+		return ""
+	if unit.destination_port_id.is_empty():
+		return CommodityCatalog.commodity_display(unit.commodity_id)
+	var origin := unit.origin_port_id
+	var destination := unit.destination_port_id
+	var catalog := get_node_or_null("/root/PortCatalog")
+	if catalog != null:
+		origin = catalog.get_port_display_name(unit.origin_port_id)
+		destination = catalog.get_port_display_name(unit.destination_port_id)
+	return "TO    %s\nFROM  %s\n%s  |  %s" % [
+		_short_port_label(destination),
+		_short_port_label(origin),
+		_short_cargo_label(CommodityCatalog.commodity_display(unit.commodity_id)),
+		PlayerData.format_money(unit.delivery_value_marks),
+	]
+
+
+static func _short_port_label(port_name: String) -> String:
+	var clean := port_name.strip_edges().to_upper()
+	return clean.left(12) if clean.length() > 12 else clean
+
+
+static func _short_cargo_label(cargo_name: String) -> String:
+	var clean := cargo_name.strip_edges().to_upper()
+	return clean.left(12) if clean.length() > 12 else clean
 
 
 func _build_halo() -> void:

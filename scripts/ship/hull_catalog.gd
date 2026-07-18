@@ -101,8 +101,11 @@ static func _normalize(raw: Dictionary) -> Dictionary:
 	)
 	entry["scene_path"] = str(raw.get("scene_path", ""))
 	entry["ship_class"] = _parse_ship_class(str(raw.get("ship_class", "coastal_trader")))
-	if not entry.has("display"):
-		entry["display"] = "%.0f × %.0f m" % [loa_m, beam_m]
+	## Keep source dimensions for physics/grid construction; normalize only the
+	## player-facing catalog label.
+	entry["display"] = ShipClass.format_display_dimensions(loa_m, beam_m)
+	if shape == "catamaran":
+		entry["display"] += " · catamaran"
 	return entry
 
 

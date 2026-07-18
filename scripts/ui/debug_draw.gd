@@ -469,6 +469,11 @@ func _build_vessel_physics(e: Array) -> void:
 
 func _build_debug_tools(e: Array) -> void:
 	_sec(e, "DEBUG TOOLS")
+	var debug_hud := get_node_or_null("/root/DebugHud")
+	var clear_override := debug_hud != null \
+		and debug_hud.has_method("is_clear_weather_override_active") \
+		and bool(debug_hud.call("is_clear_weather_override_active"))
+	_row(e, "E weather", "CLEAR OVERRIDE" if clear_override else "LIVE WEATHER", C_WARN if clear_override else C_VALUE)
 	_row(e, "Berth lanes", "%s (%d ports, %d curves)" % [
 		BerthApproachLanes.debug_label(),
 		BerthApproachLanes.baked_port_count(),

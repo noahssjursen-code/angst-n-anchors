@@ -1,6 +1,6 @@
 class_name ContractState
 extends RefCounted
 
-## Placeholder until the trade rewrite returns. Kept so GameState shape stays stable.
+## Per-player projection of authoritative FreightService movements.
 
 var active: Array = []

@@ -114,7 +114,7 @@ func _begin(op: Operation, ship: BoatBody) -> bool:
 		return false
 	if not _crane.can_reach_ship(ship):
 		return false
-	if op == Operation.LOAD and (_find_yard_pickup() == null or _find_ship_drop(ship) == null):
+	if op == Operation.LOAD and (_find_yard_pickup(ship) == null or _find_ship_drop(ship) == null):
 		return false
 	if op == Operation.UNLOAD and (
 		_find_ship_pickup(ship) == null or not _yard_has_free_slot()
@@ -191,7 +191,7 @@ func _prepare_cycle() -> void:
 	_yard_pad = null
 	_drop_world = Vector3.ZERO
 	if operation == Operation.LOAD:
-		_pickup = _find_yard_pickup()
+		_pickup = _find_yard_pickup(_ship)
 		var drop := _find_ship_drop(_ship)
 		if _pickup == null or drop.is_empty():
 			stop()
@@ -212,6 +212,9 @@ func _prepare_cycle() -> void:
 
 
 func _finish_cycle() -> void:
+	if not _report_freight_movement():
+		stop()
+		return
 	_cycles += 1
 	cycle_completed.emit(operation, _cycles)
 	if max_cycles > 0 and _cycles >= max_cycles:
@@ -221,7 +224,7 @@ func _finish_cycle() -> void:
 		job_finished.emit(done_op, n)
 		return
 	if operation == Operation.LOAD:
-		if _find_yard_pickup() == null or _find_ship_drop(_ship) == null:
+		if _find_yard_pickup(_ship) == null or _find_ship_drop(_ship) == null:
 			var done_op := operation
 			var n := _cycles
 			stop()
@@ -264,10 +267,12 @@ func _drop_aim(raised: bool) -> Vector3:
 	return p
 
 
-func _find_yard_pickup() -> ContainerNode:
+func _find_yard_pickup(ship: BoatBody) -> ContainerNode:
 	if _crane == null or not _crane.is_inside_tree():
 		return null
 	var yard := _find_yard_pad()
+	if yard == null:
+		return null
 	var best: ContainerNode = null
 	var best_d := INF
 	for node in _crane.get_tree().get_nodes_in_group(ContainerNode.GROUP):
@@ -278,8 +283,10 @@ func _find_yard_pickup() -> ContainerNode:
 			continue
 		if _crane.get_attached_container() == cn:
 			continue
+		if not _is_loadable_here(cn, ship):
+			continue
 		## Prefer cargo on this crane's yard when several berths share the scene.
-		if yard != null and not yard.contains_node(cn):
+		if not yard.contains_node(cn):
 			var on_any_yard := CargoSlotPadComponent.is_on_yard_pad(cn)
 			if on_any_yard:
 				continue
@@ -290,6 +297,16 @@ func _find_yard_pickup() -> ContainerNode:
 	return best
 
 
+func _is_loadable_here(container: ContainerNode, ship: BoatBody) -> bool:
+	if container == null or container.unit == null or ship == null:
+		return false
+	var freight := get_node_or_null("/root/FreightService")
+	return freight != null \
+		and freight.has_method("can_load_unit") \
+		and bool(freight.call("can_load_unit", container.unit,
+			ship.get_harbour_port_id(), ship))
+
+
 func _find_ship_pickup(ship: BoatBody) -> ContainerNode:
 	if ship == null:
 		return null
@@ -297,10 +314,44 @@ func _find_ship_pickup(ship: BoatBody) -> ContainerNode:
 	var best_y := -INF
 	for pad in ship.get_cargo_pads():
 		for cn in pad.iter_container_nodes():
+			if not _is_deliverable_here(cn, ship):
+				continue
 			if cn.global_position.y > best_y:
 				best_y = cn.global_position.y
 				best = cn
 	return best
+
+
+func _is_deliverable_here(container: ContainerNode, ship: BoatBody) -> bool:
+	if container == null or container.unit == null or ship == null:
+		return false
+	var freight := get_node_or_null("/root/FreightService")
+	return freight != null \
+		and freight.has_method("can_deliver_unit") \
+		and bool(freight.call(
+			"can_deliver_unit",
+			container.unit,
+			ship.get_harbour_port_id(),
+			ship,
+		))
+
+
+func _report_freight_movement() -> bool:
+	if _pickup == null or not is_instance_valid(_pickup) or _pickup.unit == null or _ship == null:
+		return false
+	var freight := get_node_or_null("/root/FreightService")
+	if freight == null:
+		return false
+	var port_id := _ship.get_harbour_port_id()
+	if operation == Operation.LOAD and CargoSlotPadComponent.is_on_ship_pad(_pickup):
+		return bool(freight.call("record_unit_loaded", _pickup.unit, port_id, _ship))
+	elif operation == Operation.UNLOAD and CargoSlotPadComponent.is_on_yard_pad(_pickup):
+		var recorded := bool(freight.call("record_unit_delivered", _pickup.unit, port_id, _ship))
+		if recorded and _yard_pad != null:
+			_yard_pad.take_container_node(_pickup)
+			_pickup.queue_free()
+		return recorded
+	return false
 
 
 func _find_ship_drop(ship: BoatBody) -> Dictionary:
@@ -334,7 +385,27 @@ func _find_yard_pad() -> CargoSlotPadComponent:
 	return CargoSlotPadComponent.find_nearest_yard_pad(
 		_crane.get_tree(),
 		_crane.get_hook_global(),
+		_serving_berth_id(),
+		_serving_equipment_id(),
 	)
+
+
+func _serving_berth_id() -> String:
+	if _crane == null:
+		return ""
+	for child in _crane.get_children():
+		if child is QuayEquipmentJob:
+			return (child as QuayEquipmentJob).berth_id()
+	return ""
+
+
+func _serving_equipment_id() -> String:
+	if _crane == null:
+		return ""
+	for child in _crane.get_children():
+		if child is QuayEquipmentJob:
+			return (child as QuayEquipmentJob).equipment_id()
+	return ""
 
 
 func _yard_has_free_slot() -> bool:

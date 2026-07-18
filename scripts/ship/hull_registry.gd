@@ -12,7 +12,7 @@ const _CATALOG_HULL_SCRIPT := preload("res://scripts/ship/vessels/catalog_hull_v
 
 const FISHING_TRAWLER_SMALL := {
 	"id": "hull_28x10",
-	"display": "28 × 10 m",
+	"display": "14.0 × 5.0 m",
 	"ship_class": ShipClass.Type.COASTAL_TRADER,
 	"scene_path": TRAWLER_SMALL_SCENE,
 	"default_shaft_power_kw": 1871.0,
@@ -24,7 +24,7 @@ const FISHING_TRAWLER_SMALL := {
 
 const PASSENGER_CATAMARAN := {
 	"id": "hull_45x16_cat",
-	"display": "45 × 16 m · catamaran",
+	"display": "22.5 × 8.0 m · catamaran",
 	"ship_class": ShipClass.Type.SHORT_SEA_COASTER,
 	"scene_path": PASSENGER_CATAMARAN_SCENE,
 	"default_shaft_power_kw": 65000.0,

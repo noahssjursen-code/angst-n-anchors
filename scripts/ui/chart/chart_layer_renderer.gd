@@ -7,6 +7,7 @@ extends RefCounted
 const BaseRaster := preload("res://scripts/ui/chart/chart_base_raster.gd")
 const RasterLayer := preload("res://scripts/ui/chart/chart_raster_layer.gd")
 const CoastlineIndex := preload("res://scripts/ui/chart/chart_coastline_index.gd")
+const MarineRoutePlanner := preload("res://scripts/navigation/marine_route_planner.gd")
 
 const C_GRID := Color(0.12, 0.18, 0.22, 0.26)
 const C_GRID_TEXT := Color(0.25, 0.31, 0.32, 0.74)
@@ -27,16 +28,21 @@ var weather := RasterLayer.new(RasterLayer.Kind.WEATHER)
 var fishing := RasterLayer.new(RasterLayer.Kind.FISHING)
 var last_draw_usec := 0
 var draw_count := 0
+var _route_navigation: MarineRoutePlanner
+var _contract_route_cache: Dictionary = {}
 
 
 func set_snapshot(next) -> void:
 	snapshot = next
+	_contract_route_cache.clear()
+	_route_navigation = null
 	weather.invalidate()
 	fishing.invalidate()
 	ChartHarbourPlan.clear_cache()
 	if snapshot != null and snapshot.layout != null:
 		base.prepare(snapshot.layout)
 		coastline.prepare(snapshot.layout)
+		_route_navigation = MarineRoutePlanner.new(snapshot.layout)
 
 
 func prepare_overlays(bounds: Rect2, layers: ChartLayerManager, game_hours: float) -> void:
@@ -55,24 +61,27 @@ func render(
 	nav: ChartNavSnapshot,
 	selected_port: String,
 	show_port_card: bool = true,
+	fast_interaction: bool = false,
 ) -> void:
 	var started := Time.get_ticks_usec()
 	var chart: Rect2 = ctx["chart_rect"]
 	var bounds: Rect2 = ctx["world_bounds"]
-	base.draw(canvas, chart, bounds)
+	base.draw(canvas, chart, bounds, not fast_interaction)
 	if layers.is_visible("weather"):
 		weather.draw(canvas, chart, bounds)
 	if layers.is_visible("fishing"):
 		fishing.draw(canvas, chart, bounds)
-	if layers.is_visible("weather"):
+	if layers.is_visible("weather") and not fast_interaction:
 		weather.draw_wind(canvas, chart, bounds)
 		_draw_fronts(canvas, ctx)
-	_draw_coastline(canvas, ctx)
+	if not fast_interaction:
+		_draw_coastline(canvas, ctx)
 	_draw_grid(canvas, ctx)
 	if layers.is_visible("routes"):
 		_draw_contract_routes(canvas, ctx, nav)
 	## Lazy harbour silhouettes under port dots (all visible sites).
-	_draw_visible_harbours(canvas, ctx)
+	if not fast_interaction:
+		_draw_visible_harbours(canvas, ctx)
 	_draw_ports(canvas, ctx, selected_port, layers.is_visible("annotations"))
 	if layers.is_visible("nav_vectors"):
 		_draw_ship(canvas, ctx, nav)
@@ -278,16 +287,64 @@ func _draw_contract_routes(canvas: CanvasItem, ctx: Dictionary, nav: ChartNavSna
 	for contract in nav.contracts:
 		if contract == null:
 			continue
-		var origin: Vector3 = snapshot.port_position(str(contract.get("origin_port_id")))
-		var destination: Vector3 = snapshot.port_position(str(contract.get("destination_port_id")))
+		var origin_id := str(contract.get("origin_port_id"))
+		var destination_id := str(contract.get("destination_port_id"))
+		var origin_berth_id := str(contract.get("berth_id", ""))
+		if origin_berth_id.is_empty() and nav.moored_port_id == origin_id:
+			origin_berth_id = nav.moored_berth_id
+		var destination_berth_id := BerthApproachLanes.best_target_id(
+			destination_id,
+			str(contract.get("terminal_family", "")),
+			str(contract.get("commodity_id", "")),
+		)
+		var origin: Vector3 = snapshot.port_position(origin_id)
+		var destination: Vector3 = snapshot.port_position(destination_id)
 		if origin.is_finite() and destination.is_finite():
-			_draw_dashed(
-				canvas,
-				_world_to_screen(origin, ctx),
-				_world_to_screen(destination, ctx),
-				C_ROUTE,
-				2.0,
+			var route := _contract_route(
+				origin_id,
+				destination_id,
+				origin,
+				destination,
+				origin_berth_id,
+				destination_berth_id,
 			)
+			for i in range(route.size() - 1):
+				_draw_dashed(
+					canvas,
+					_world_to_screen(Vector3(route[i].x, 0.0, route[i].y), ctx),
+					_world_to_screen(Vector3(route[i + 1].x, 0.0, route[i + 1].y), ctx),
+					C_ROUTE,
+					2.0,
+					ctx["chart_rect"],
+				)
+
+
+func _contract_route(
+	origin_id: String,
+	destination_id: String,
+	origin: Vector3,
+	destination: Vector3,
+	origin_berth_id: String = "",
+	destination_berth_id: String = "",
+) -> PackedVector2Array:
+	var key := "%s:%s>%s:%s" % [
+		origin_id, origin_berth_id, destination_id, destination_berth_id,
+	]
+	if _contract_route_cache.has(key):
+		return _contract_route_cache[key] as PackedVector2Array
+	var from_xz := Vector2(origin.x, origin.z)
+	var to_xz := Vector2(destination.x, destination.z)
+	var route := PackedVector2Array()
+	if _route_navigation != null:
+		var plan := _route_navigation.plan_berth_to_berth(
+			from_xz, to_xz, origin_id, origin_berth_id,
+			destination_id, destination_berth_id,
+		)
+		route = plan.waypoints.duplicate()
+	if route.size() < 2:
+		route = PackedVector2Array([from_xz, to_xz])
+	_contract_route_cache[key] = route
+	return route
 
 
 func _draw_fronts(canvas: CanvasItem, ctx: Dictionary) -> void:
@@ -497,7 +554,14 @@ static func _draw_dashed(
 	b: Vector2,
 	color: Color,
 	width: float,
+	clip_rect: Rect2 = Rect2(),
 ) -> void:
+	if clip_rect.has_area():
+		var clipped := _clip_segment_to_rect(a, b, clip_rect)
+		if clipped.is_empty():
+			return
+		a = clipped[0]
+		b = clipped[1]
 	var distance := a.distance_to(b)
 	if distance < 1.0:
 		return
@@ -507,6 +571,34 @@ static func _draw_dashed(
 		var length := minf(8.0, distance - cursor)
 		canvas.draw_line(a + direction * cursor, a + direction * (cursor + length), color, width, true)
 		cursor += 16.0
+
+
+## Liang-Barsky line clipping keeps retained-canvas overlays inside compact
+## chart windows without requiring a SubViewport per minimap.
+static func _clip_segment_to_rect(a: Vector2, b: Vector2, rect: Rect2) -> PackedVector2Array:
+	var delta := b - a
+	var t_min := 0.0
+	var t_max := 1.0
+	var p := PackedFloat32Array([-delta.x, delta.x, -delta.y, delta.y])
+	var q := PackedFloat32Array([
+		a.x - rect.position.x,
+		rect.end.x - a.x,
+		a.y - rect.position.y,
+		rect.end.y - a.y,
+	])
+	for i in range(4):
+		if absf(p[i]) < 0.00001:
+			if q[i] < 0.0:
+				return PackedVector2Array()
+			continue
+		var t := q[i] / p[i]
+		if p[i] < 0.0:
+			t_min = maxf(t_min, t)
+		else:
+			t_max = minf(t_max, t)
+		if t_min > t_max:
+			return PackedVector2Array()
+	return PackedVector2Array([a + delta * t_min, a + delta * t_max])
 
 
 static func _format_grid(metres: float) -> String:

@@ -9,7 +9,7 @@ const LAND := Color(0.73, 0.70, 0.55, 1.0)
 const COAST := Color(0.12, 0.16, 0.15, 1.0)
 const MIN_RESOLUTION := 256
 const MAX_RESOLUTION := 512
-const DETAIL_RESOLUTION := 384
+const DETAIL_RESOLUTION := 256
 ## When overview metres/pixel exceed this, bake a viewport tile instead.
 const DETAIL_MPP_THRESHOLD := 90.0
 const DETAIL_CACHE_LIMIT := 8
@@ -131,8 +131,16 @@ func prepare_visible(visible_world: Rect2) -> void:
 	_resolution = _detail_resolution
 
 
-func draw(canvas: CanvasItem, chart_rect: Rect2, visible_world: Rect2) -> void:
-	prepare_visible(visible_world)
+func draw(
+	canvas: CanvasItem,
+	chart_rect: Rect2,
+	visible_world: Rect2,
+	allow_detail: bool = true,
+) -> void:
+	if allow_detail:
+		prepare_visible(visible_world)
+	else:
+		_use_overview()
 	if texture == null or world_rect.size.x <= 0.0:
 		canvas.draw_rect(chart_rect, SEA)
 		return

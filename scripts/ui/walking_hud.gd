@@ -9,6 +9,7 @@ extends Control
 ## per-frame redraw was wasted CPU when nothing actually changed.
 
 var _font: Font
+var _autopilot_refresh_s := 0.0
 
 
 func _ready() -> void:
@@ -33,6 +34,20 @@ func _ready() -> void:
 
 func _refresh_arg(_arg: Variant = null) -> void:
 	queue_redraw()
+
+
+func _process(delta: float) -> void:
+	if not visible:
+		return
+	_autopilot_refresh_s += delta
+	if _autopilot_refresh_s < 0.5:
+		return
+	_autopilot_refresh_s = 0.0
+	var view := get_node_or_null("/root/LocalPlayerView")
+	if view != null:
+		var snapshot: Dictionary = view.get_autopilot_snapshot()
+		if bool(snapshot.get("active", false)):
+			queue_redraw()
 
 
 func _notification(what: int) -> void:
@@ -60,7 +75,23 @@ func _draw() -> void:
 	draw_string(_font, Vector2(ox + pad_h, oy + pad_v + fs - 2),
 				marks_str, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, HudStyle.C_AMBER)
 
-	# Player-local contracts deferred until trade rewrite.
+	var autopilot: Dictionary = view.get_autopilot_snapshot()
+	if bool(autopilot.get("active", false)):
+		var destination_id := str(autopilot.get("destination_port_id", ""))
+		var destination: String = str(view.get_port_display_name(destination_id)).to_upper()
+		var remaining_nm := float(autopilot.get("remaining_distance_m", 0.0)) / 1852.0
+		var ap_text := "AUTOPILOT · %s · %.1f nm" % [destination, remaining_nm]
+		var watch := autopilot.get("bridge_watch", {}) as Dictionary
+		if bool(watch.get("alarm_active", false)):
+			ap_text = "BRIDGE WATCH ALARM · RETURN TO BRIDGE"
+		var ap_w := maxf(_font.get_string_size(ap_text, HORIZONTAL_ALIGNMENT_LEFT, -1, 13).x + 20.0, pw)
+		var ap_rect := Rect2(ox, oy + ph + 5.0, ap_w, 30.0)
+		draw_rect(ap_rect, HudStyle.C_BG)
+		var ap_color := HudStyle.C_RED if bool(watch.get("alarm_active", false)) else HudStyle.C_GREEN
+		draw_rect(ap_rect, ap_color, false, 1.0)
+		draw_string(_font, ap_rect.position + Vector2(10.0, 20.0), ap_text,
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 13, ap_color)
+
 	var contracts: Array = view.get_active_contracts()
 	if contracts.is_empty():
 		return
