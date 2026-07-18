@@ -638,13 +638,23 @@ func _conflict_between(a: Dictionary, b: Dictionary) -> Dictionary:
 	)
 	if tcpa <= 0.5 or separation >= safety:
 		return {}
+	var aid := str(a.get("vessel_id", ""))
+	var bid := str(b.get("vessel_id", ""))
+	var narrow_instructions := _narrow_lane_instructions(aid, bid)
+	if not narrow_instructions.is_empty():
+		return {
+			"vessel_ids": [aid, bid],
+			"situation": "narrow_channel",
+			"tcpa_seconds": tcpa,
+			"predicted_separation_m": separation,
+			"minimum_separation_m": safety,
+			"instructions": narrow_instructions,
+		}
 	var fa := _forward_from_heading(float(a.get("heading_deg", 0.0)))
 	var fb := _forward_from_heading(float(b.get("heading_deg", 0.0)))
 	var direction_alignment := fa.dot(fb)
 	var situation := "head_on" if direction_alignment < -0.7 else (
 		"overtaking" if direction_alignment > 0.7 else "crossing")
-	var aid := str(a.get("vessel_id", ""))
-	var bid := str(b.get("vessel_id", ""))
 	var instructions := {}
 	if situation == "head_on":
 		instructions[aid] = {"action": "alter_starboard", "heading_offset_deg": 18.0, "speed_limit": 0.72}
@@ -677,6 +687,36 @@ func _conflict_between(a: Dictionary, b: Dictionary) -> Dictionary:
 		"minimum_separation_m": safety,
 		"instructions": instructions,
 	}
+
+
+func _narrow_lane_instructions(aid: String, bid: String) -> Dictionary:
+	for block_raw in _blocks.values():
+		var block := block_raw as Dictionary
+		if str(block.get("kind", "")) != "shipping_lane" \
+				or int(block.get("capacity", 1)) > 1:
+			continue
+		var owners := block.get("owner_vessel_ids", []) as Array
+		var queued := PackedStringArray()
+		for request_raw in block.get("queue", []) as Array:
+			queued.append(str((request_raw as Dictionary).get("vessel_id", "")))
+		var owner := aid if owners.has(aid) and bid in queued else (
+			bid if owners.has(bid) and aid in queued else "")
+		if owner.is_empty():
+			continue
+		var waiting := bid if owner == aid else aid
+		var instructions := {}
+		instructions[owner] = {
+			"action": "proceed_narrow_channel",
+			"heading_offset_deg": 0.0,
+			"speed_limit": 0.62,
+		}
+		instructions[waiting] = {
+			"action": "hold_for_narrow_channel",
+			"heading_offset_deg": 0.0,
+			"speed_limit": 0.0,
+		}
+		return instructions
+	return {}
 
 
 func _overtaking_give_way(
@@ -779,6 +819,18 @@ func _vhf_for_agreement(agreement: Dictionary) -> Dictionary:
 			elif action == "stand_on":
 				leader = str(vessel_id)
 		text = "%s, reduce speed and maintain separation behind %s." % [following, leader]
+	elif situation == "narrow_channel":
+		var proceeding := "cleared vessel"
+		var waiting := "approaching traffic"
+		var instructions := agreement.get("instructions", {}) as Dictionary
+		for vessel_id in instructions.keys():
+			var action := str((instructions[vessel_id] as Dictionary).get("action", ""))
+			if action == "proceed_narrow_channel":
+				proceeding = str(vessel_id)
+			elif action == "hold_for_narrow_channel":
+				waiting = str(vessel_id)
+		text = "%s, narrow channel is yours. %s, hold outside until clear." % [
+			proceeding, waiting]
 	return {
 		"channel": 16,
 		"kind": "traffic_agreement",

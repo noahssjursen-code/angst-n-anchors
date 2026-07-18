@@ -20,6 +20,11 @@ func _init() -> void:
 	}
 	var wire := VesselAuthoritySnapshot.from_projection_record(record, plan, null, 123456)
 	_assert(VesselAuthoritySnapshot.is_valid(wire), "wire vessel validates")
+	var invalid_position := wire.duplicate(true)
+	invalid_position["navigation"] = (wire["navigation"] as Dictionary).duplicate(true)
+	invalid_position["navigation"]["position_xz"] = [INF, 0.0]
+	_assert(not VesselAuthoritySnapshot.is_valid(invalid_position),
+		"non-finite remote navigation is rejected")
 	var decoded := VesselAuthoritySnapshot.json_round_trip(wire)
 	_assert(VesselAuthoritySnapshot.is_valid(decoded), "wire vessel survives JSON")
 	_assert(int(decoded.get("server_unix_msec", 0)) == 123456, "server timestamp survives")

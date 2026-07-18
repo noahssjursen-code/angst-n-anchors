@@ -9,6 +9,7 @@ func _initialize() -> void:
 	var traffic := TrafficScript.new()
 	root.add_child(traffic)
 	_test_collision_agreement(traffic)
+	_test_narrow_channel_signal_overrides_head_on_turn(traffic)
 	_test_overtaking_agreement(traffic)
 	_test_port_queue(traffic)
 	_test_stale_port_ticket_recovery(traffic)
@@ -62,6 +63,40 @@ func _test_overtaking_agreement(traffic: Node) -> void:
 		"astern overtaking vessel reduces speed without leaving its lane")
 	traffic.withdraw_vessel("leader")
 	traffic.withdraw_vessel("follower")
+
+
+func _test_narrow_channel_signal_overrides_head_on_turn(traffic: Node) -> void:
+	var spec: Array[Dictionary] = [{
+		"block_id": "lane:narrow:test",
+		"direction": 1,
+		"capacity": 1,
+		"bidirectional": false,
+		"center_xz": [0.0, 0.0],
+	}]
+	traffic.request_lane_window("narrow-owner", spec)
+	spec[0]["direction"] = -1
+	traffic.request_lane_window("narrow-waiting", spec)
+	traffic.publish_intent({
+		"vessel_id": "narrow-owner", "position_xz": [-100.0, 0.0],
+		"velocity_xz": [5.0, 0.0], "heading_deg": 90.0, "length_m": 28.0,
+	})
+	traffic.publish_intent({
+		"vessel_id": "narrow-waiting", "position_xz": [100.0, 0.0],
+		"velocity_xz": [-5.0, 0.0], "heading_deg": 270.0, "length_m": 28.0,
+	})
+	traffic.call("_resolve_conflicts")
+	var owner_agreement: Dictionary = traffic.agreement_for("narrow-owner")
+	var waiting_agreement: Dictionary = traffic.agreement_for("narrow-waiting")
+	_check(str(owner_agreement.get("situation", "")) == "narrow_channel",
+		"one-lane signal replaces generic head-on alteration")
+	_check(float((owner_agreement.get("instruction", {}) as Dictionary).get(
+		"heading_offset_deg", 99.0)) == 0.0,
+		"cleared narrow-channel vessel remains on the safe centreline")
+	_check(float((waiting_agreement.get("instruction", {}) as Dictionary).get(
+		"speed_limit", 1.0)) == 0.0,
+		"opposing vessel receives a full hold outside the narrow channel")
+	traffic.withdraw_vessel("narrow-owner")
+	traffic.withdraw_vessel("narrow-waiting")
 
 
 func _test_port_queue(traffic: Node) -> void:
@@ -189,8 +224,9 @@ func _test_fifty_vessel_spatial_scan(traffic: Node) -> void:
 	var before := Time.get_ticks_usec()
 	traffic.call("_resolve_conflicts")
 	var elapsed_ms := float(Time.get_ticks_usec() - before) / 1000.0
-	_check(elapsed_ms < 500.0,
-		"50-vessel authority conflict pass remains within a broad test budget")
+	print("50-vessel traffic conflict scan: %.3f ms" % elapsed_ms)
+	_check(elapsed_ms < 25.0,
+		"50-vessel authority conflict pass remains below its 25 ms regression budget")
 
 
 func _test_snapshot_round_trip(traffic: Node) -> void:

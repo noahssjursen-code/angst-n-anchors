@@ -10,6 +10,7 @@ func _initialize() -> void:
 	root.add_child(authority)
 	var result: Dictionary = authority.apply_server_snapshot({
 		"schema_version": 1,
+		"revision": 2,
 		"server_unix_msec": 123456,
 		"vessels": [_wire("remote-1"), {"invalid": true}],
 	})
@@ -26,6 +27,23 @@ func _initialize() -> void:
 	var rejected_schema: Dictionary = authority.apply_server_snapshot({
 		"schema_version": 99, "vessels": []})
 	_check(not bool(rejected_schema.get("ok", true)), "unknown schema is rejected")
+	var duplicate_result: Dictionary = authority.apply_server_snapshot({
+		"schema_version": 1,
+		"revision": 3,
+		"server_unix_msec": 123456,
+		"vessels": [_wire("duplicate"), _wire("duplicate")],
+	})
+	_check(int(duplicate_result.get("accepted", 0)) == 1 \
+			and int(duplicate_result.get("rejected", 0)) == 1,
+		"duplicate server vessel identities cannot create two projections")
+	var stale_result: Dictionary = authority.apply_server_snapshot({
+		"schema_version": 1,
+		"revision": 1,
+		"server_unix_msec": 999999,
+		"vessels": [_wire("rewind")],
+	})
+	_check(str(stale_result.get("reason", "")) == "stale_revision",
+		"out-of-order network snapshots cannot rewind the local fleet")
 	authority.queue_free()
 	_finish()
 

@@ -9,11 +9,13 @@ signal company_changed(snapshot: Dictionary)
 
 const SCHEMA_VERSION := 1
 const DEFAULT_CRUISE_SPEED_MS := 7.2
+const MAX_REPLICATED_VESSELS := 512
 
 var _fleet: Dictionary = {}
 var _local_simulation: Dictionary = {}
 var _snapshot_server_unix_msec := 0
 var _snapshot_received_ticks_msec := 0
+var _revision := -1
 
 
 func _ready() -> void:
@@ -23,7 +25,12 @@ func _ready() -> void:
 func apply_server_snapshot(data: Dictionary, layout: WorldLayout = null) -> Dictionary:
 	if int(data.get("schema_version", 0)) != SCHEMA_VERSION:
 		return {"ok": false, "reason": "unsupported_schema", "accepted": 0}
+	var incoming_revision := int(data.get("revision", 0))
+	if incoming_revision < _revision:
+		return {"ok": false, "reason": "stale_revision", "accepted": 0}
 	var incoming := data.get("vessels", []) as Array
+	if incoming.size() > MAX_REPLICATED_VESSELS:
+		return {"ok": false, "reason": "fleet_limit_exceeded", "accepted": 0}
 	var rebuilt: Dictionary = {}
 	var rejected := 0
 	for raw in incoming:
@@ -32,9 +39,17 @@ func apply_server_snapshot(data: Dictionary, layout: WorldLayout = null) -> Dict
 			rejected += 1
 			continue
 		var uid := str(wire.get("vessel_id", "")).strip_edges()
+		if rebuilt.has(uid):
+			rejected += 1
+			continue
 		var plan := _rebuild_route(wire, layout)
 		var navigation := wire.get("navigation", {}) as Dictionary
 		var expected_route_id := str(navigation.get("route_id", ""))
+		var expected_layout := str(navigation.get("layout_checksum", ""))
+		if layout != null and not expected_layout.is_empty() \
+				and expected_layout != str(layout.layout_checksum):
+			rejected += 1
+			continue
 		if layout != null and (plan == null or not plan.is_valid() \
 				or (not expected_route_id.is_empty() and plan.route_id != expected_route_id)):
 			rejected += 1
@@ -47,7 +62,11 @@ func apply_server_snapshot(data: Dictionary, layout: WorldLayout = null) -> Dict
 			"runtime": (wire.get("runtime", {}) as Dictionary).duplicate(true),
 			"plan": plan,
 		}
+	if not incoming.is_empty() and rebuilt.is_empty():
+		return {"ok": false, "reason": "all_vessels_rejected", "accepted": 0,
+			"rejected": rejected}
 	_fleet = rebuilt
+	_revision = incoming_revision
 	_snapshot_server_unix_msec = int(data.get(
 		"server_unix_msec", Time.get_unix_time_from_system() * 1000.0))
 	_snapshot_received_ticks_msec = Time.get_ticks_msec()
@@ -59,6 +78,7 @@ func snapshot() -> Dictionary:
 	return {
 		"replicated": true,
 		"server_unix_msec": _snapshot_server_unix_msec,
+		"revision": _revision,
 		"fleet_count": _fleet.size(),
 	}
 

@@ -22,6 +22,7 @@ var _refreshing := false
 var _published_authority_ids: Dictionary = {}
 var _last_network_snapshot_bytes := 0
 var _last_network_snapshot_ms := 0.0
+var _network_snapshot_revision := 0
 
 
 func _ready() -> void:
@@ -116,6 +117,7 @@ func leg_route_plan(vessel_uid: String) -> MarineRoutePlan:
 
 func network_fleet_snapshot() -> Dictionary:
 	var started_usec := Time.get_ticks_usec()
+	_network_snapshot_revision += 1
 	var vessels: Array[Dictionary] = []
 	var server_time := int(Time.get_unix_time_from_system() * 1000.0)
 	for record in all_projection_records():
@@ -126,6 +128,7 @@ func network_fleet_snapshot() -> Dictionary:
 			vessels.append(wire)
 	var result := {
 		"schema_version": 1,
+		"revision": _network_snapshot_revision,
 		"server_unix_msec": server_time,
 		"vessels": vessels,
 	}

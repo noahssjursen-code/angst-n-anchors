@@ -6,6 +6,8 @@ extends RefCounted
 ## clients rebuild them from world identity + endpoints and verify route_id.
 
 const SCHEMA_VERSION := 1
+const MAX_WIRE_BYTES := 262144
+const MAX_VESSEL_ID_LENGTH := 96
 
 
 static func from_projection_record(
@@ -65,14 +67,21 @@ static func from_projection_record(
 static func is_valid(data: Dictionary) -> bool:
 	if int(data.get("schema_version", 0)) != SCHEMA_VERSION:
 		return false
-	if str(data.get("vessel_id", "")).strip_edges().is_empty():
+	var vessel_id := str(data.get("vessel_id", "")).strip_edges()
+	if vessel_id.is_empty() or vessel_id.length() > MAX_VESSEL_ID_LENGTH:
+		return false
+	if int(data.get("server_unix_msec", 0)) <= 0:
 		return false
 	var vessel := data.get("vessel", {}) as Dictionary
 	var assignment := data.get("assignment", {}) as Dictionary
 	var navigation := data.get("navigation", {}) as Dictionary
-	return not vessel.is_empty() and not assignment.is_empty() \
+	var position := _finite_pair(navigation.get("position_xz", []))
+	var progress := float(navigation.get("route_progress_m", -1.0))
+	return JSON.stringify(_json_safe(data)).to_utf8_buffer().size() <= MAX_WIRE_BYTES \
+		and not vessel.is_empty() and not assignment.is_empty() \
 		and str(navigation.get("origin_port_id", "")) != "" \
-		and str(navigation.get("destination_port_id", "")) != ""
+		and str(navigation.get("destination_port_id", "")) != "" \
+		and position.is_finite() and is_finite(progress) and progress >= 0.0
 
 
 static func json_round_trip(data: Dictionary) -> Dictionary:
@@ -129,3 +138,13 @@ static func _xy_of(value: Variant) -> Array:
 	if value is Array and (value as Array).size() >= 2:
 		return [float(value[0]), float(value[1])]
 	return [0.0, 0.0]
+
+
+static func _finite_pair(value: Variant) -> Vector2:
+	if value is Array and (value as Array).size() >= 2:
+		return Vector2(float(value[0]), float(value[1]))
+	if value is Vector2:
+		return value
+	if value is Vector3:
+		return Vector2(value.x, value.z)
+	return Vector2(INF, INF)
