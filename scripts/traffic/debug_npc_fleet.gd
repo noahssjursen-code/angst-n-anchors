@@ -14,11 +14,53 @@ const ABSTRACT_STEP_S := 0.25
 var _fleet: Dictionary = {}
 var _local_simulation: Dictionary = {}
 var _abstract_elapsed_s := 0.0
+var _route_plan_cache: Dictionary = {}
+var _route_plan_requests := 0
+var _route_plan_cache_hits := 0
 
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	add_to_group("vessel_fleet_authority")
+	call_deferred("_register_telemetry")
+
+
+func _exit_tree() -> void:
+	var telemetry := get_node_or_null("/root/Telemetry")
+	if telemetry != null:
+		telemetry.unregister_provider(&"debug_npc_fleet", self)
+
+
+func _register_telemetry() -> void:
+	var telemetry := get_node_or_null("/root/Telemetry")
+	if telemetry != null:
+		telemetry.register_provider(
+			&"debug_npc_fleet", self, &"get_debug_stats", &"traffic")
+
+
+func get_debug_stats() -> Dictionary:
+	var underway := 0
+	var general := 0
+	var bulk := 0
+	for record_raw in _fleet.values():
+		var assignment := (record_raw as Dictionary).get("assignment", {}) as Dictionary
+		if str(assignment.get("status", "")) == "underway":
+			underway += 1
+		if str((assignment.get("route", {}) as Dictionary).get("handling_mode", "")) == "bulk":
+			bulk += 1
+		else:
+			general += 1
+	return {
+		"authority_vessels": _fleet.size(),
+		"locally_simulated": _local_simulation.size(),
+		"abstract_simulated": maxi(_fleet.size() - _local_simulation.size(), 0),
+		"underway": underway,
+		"general_cargo": general,
+		"bulk": bulk,
+		"route_cache_entries": _route_plan_cache.size(),
+		"route_plan_requests": _route_plan_requests,
+		"route_plan_cache_hits": _route_plan_cache_hits,
+	}
 
 
 func _process(delta: float) -> void:
@@ -107,6 +149,9 @@ func spawn_server_join_fleet(count: int = DEFAULT_COUNT) -> bool:
 func clear_fleet() -> void:
 	_fleet.clear()
 	_local_simulation.clear()
+	_route_plan_cache.clear()
+	_route_plan_requests = 0
+	_route_plan_cache_hits = 0
 	company_changed.emit(snapshot())
 
 
@@ -504,13 +549,28 @@ func _return_commodity(origin: Dictionary, destination: Dictionary, handling: St
 
 
 func _plan_contract(contract: Dictionary, layout: WorldLayout) -> MarineRoutePlan:
+	_route_plan_requests += 1
+	var key := "%s|%s|%s|%s|%s" % [
+		str(layout.layout_checksum),
+		str(contract.get("origin_port_id", "")),
+		str(contract.get("origin_berth_id", "")),
+		str(contract.get("destination_port_id", "")),
+		str(contract.get("destination_berth_id", "")),
+	]
+	var cached := _route_plan_cache.get(key) as MarineRoutePlan
+	if cached != null and cached.is_valid():
+		_route_plan_cache_hits += 1
+		return cached
 	var catalog := get_node("/root/PortCatalog")
 	var origin := catalog.get_port_position(str(contract.get("origin_port_id", ""))) as Vector3
 	var destination := catalog.get_port_position(str(contract.get("destination_port_id", ""))) as Vector3
-	return MarineRoutePlanner.new(layout).plan_berth_to_berth(Vector2(origin.x, origin.z),
+	var plan := MarineRoutePlanner.new(layout).plan_berth_to_berth(Vector2(origin.x, origin.z),
 		Vector2(destination.x, destination.z), str(contract.get("origin_port_id", "")),
 		str(contract.get("origin_berth_id", "")), str(contract.get("destination_port_id", "")),
 		str(contract.get("destination_berth_id", "")))
+	if plan != null and plan.is_valid():
+		_route_plan_cache[key] = plan
+	return plan
 
 
 func _plan_assignment(row: Dictionary, layout: WorldLayout) -> MarineRoutePlan:

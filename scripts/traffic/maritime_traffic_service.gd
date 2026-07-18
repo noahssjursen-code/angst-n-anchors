@@ -298,6 +298,7 @@ func request_block(
 		direction: int,
 		priority: int = 0,
 		capacity: int = 1,
+		bidirectional: bool = false,
 ) -> bool:
 	if not is_world_authority():
 		return false
@@ -306,6 +307,7 @@ func request_block(
 	if bid.is_empty() or vid.is_empty():
 		return false
 	var block := _normalized_block(bid, _blocks.get(bid, {}) as Dictionary, capacity)
+	block["bidirectional"] = bool(block.get("bidirectional", false)) or bidirectional
 	var owners := block.get("owner_vessel_ids", []) as Array
 	var requested_direction := signi(direction)
 	if requested_direction == 0:
@@ -318,7 +320,9 @@ func request_block(
 		return true
 	var queue := (block.get("queue", []) as Array).duplicate(true)
 	var opposing_waits := _queue_has_opposing_direction(queue, int(block.get("direction", 0)))
-	var can_join := owners.is_empty() or (
+	var can_join_bidirectional := bool(block.get("bidirectional", false)) \
+			and owners.size() < int(block.get("capacity", 1)) and queue.is_empty()
+	var can_join := owners.is_empty() or can_join_bidirectional or (
 		int(block.get("direction", 0)) == requested_direction
 		and owners.size() < int(block.get("capacity", 1))
 		and not opposing_waits
@@ -329,9 +333,12 @@ func request_block(
 		owners.append(vid)
 		var leases := block.get("owner_lease_unix_msec", {}) as Dictionary
 		leases[vid] = _now_unix_msec() + BLOCK_LEASE_MSEC
+		var owner_directions := block.get("owner_directions", {}) as Dictionary
+		owner_directions[vid] = requested_direction
 		block["owner_vessel_ids"] = owners
 		block["owner_vessel_id"] = str(owners[0])
 		block["owner_lease_unix_msec"] = leases
+		block["owner_directions"] = owner_directions
 		_blocks[bid] = block
 		_publish()
 		return true
@@ -371,10 +378,24 @@ func release_block(block_id: String, vessel_id: String) -> bool:
 	owners.erase(vid)
 	var leases := block.get("owner_lease_unix_msec", {}) as Dictionary
 	leases.erase(vid)
+	var owner_directions := block.get("owner_directions", {}) as Dictionary
+	owner_directions.erase(vid)
 	block["owner_vessel_ids"] = owners
 	block["owner_lease_unix_msec"] = leases
+	block["owner_directions"] = owner_directions
 	if not owners.is_empty():
+		if bool(block.get("bidirectional", false)):
+			while not queue.is_empty() and owners.size() < int(block.get("capacity", 1)):
+				var promoted := queue.pop_front() as Dictionary
+				var promoted_id := str(promoted.get("vessel_id", ""))
+				owners.append(promoted_id)
+				owner_directions[promoted_id] = int(promoted.get("direction", 1))
+				leases[promoted_id] = _now_unix_msec() + BLOCK_LEASE_MSEC
+			block["owner_vessel_ids"] = owners
+			block["owner_lease_unix_msec"] = leases
+			block["owner_directions"] = owner_directions
 		block["owner_vessel_id"] = str(owners[0])
+		block["direction"] = int(owner_directions.get(str(owners[0]), block.get("direction", 1)))
 		block["queue"] = queue
 		_blocks[bid] = block
 		_publish()
@@ -389,16 +410,19 @@ func release_block(block_id: String, vessel_id: String) -> bool:
 	var capacity_value := int(block.get("capacity", 1))
 	while not queue.is_empty() and owners.size() < capacity_value:
 		var next := queue[0] as Dictionary
-		if int(next.get("direction", 0)) != next_direction:
+		if not bool(block.get("bidirectional", false)) \
+				and int(next.get("direction", 0)) != next_direction:
 			break
 		queue.pop_front()
 		var next_id := str(next.get("vessel_id", ""))
 		owners.append(next_id)
 		leases[next_id] = _now_unix_msec() + BLOCK_LEASE_MSEC
+		owner_directions[next_id] = int(next.get("direction", next_direction))
 	block["owner_vessel_ids"] = owners
 	block["owner_vessel_id"] = str(owners[0])
 	block["direction"] = next_direction
 	block["owner_lease_unix_msec"] = leases
+	block["owner_directions"] = owner_directions
 	block["queue"] = queue
 	_blocks[bid] = block
 	_publish()
@@ -425,6 +449,7 @@ func lane_block_spec(position_xz: Vector2, direction_xz: Vector2) -> Dictionary:
 		"block_id": "lane:%d:%d" % [cell.x, cell.y],
 		"direction": direction,
 		"capacity": capacity,
+		"bidirectional": clearance >= 180.0,
 		"clearance_m": clearance,
 		"center_xz": [
 			(float(cell.x) + 0.5) * LANE_BLOCK_SIZE_M,
@@ -466,7 +491,7 @@ func request_lane_window(vessel_id: String, specs: Array[Dictionary], priority: 
 			continue
 		wanted.append(block_id)
 		if request_block(block_id, vid, int(spec.get("direction", 1)), priority,
-				int(spec.get("capacity", 1))):
+				int(spec.get("capacity", 1)), bool(spec.get("bidirectional", false))):
 			_decorate_lane_block(block_id, spec)
 			acquired.append(block_id)
 		else:
@@ -806,6 +831,8 @@ func _normalized_block(block_id: String, raw: Dictionary, capacity: int) -> Dict
 	block["owner_vessel_ids"] = owners
 	block["owner_vessel_id"] = str(owners[0]) if not owners.is_empty() else ""
 	block["owner_lease_unix_msec"] = block.get("owner_lease_unix_msec", {})
+	block["owner_directions"] = block.get("owner_directions", {})
+	block["bidirectional"] = bool(block.get("bidirectional", false))
 	block["queue"] = block.get("queue", [])
 	return block
 

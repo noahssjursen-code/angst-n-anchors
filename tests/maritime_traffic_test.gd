@@ -15,6 +15,7 @@ func _initialize() -> void:
 	_test_parallel_port_resources(traffic)
 	_test_exclusive_block(traffic)
 	_test_directional_convoy_block(traffic)
+	_test_wide_bidirectional_block(traffic)
 	_test_lane_window(traffic)
 	_test_fifty_vessel_spatial_scan(traffic)
 	_test_snapshot_round_trip(traffic)
@@ -126,6 +127,20 @@ func _test_directional_convoy_block(traffic: Node) -> void:
 	var block: Dictionary = traffic.block_snapshot(block_id)
 	_check((block.get("owner_vessel_ids", []) as Array).has("west-1"),
 		"direction flips fairly after active convoy clears")
+
+
+func _test_wide_bidirectional_block(traffic: Node) -> void:
+	var block_id := "open-water:passing"
+	_check(traffic.request_block(block_id, "north", 1, 0, 2, true),
+		"first vessel enters a wide bidirectional block")
+	_check(traffic.request_block(block_id, "south", -1, 0, 2, true),
+		"opposing vessel can pass when the water block has safe capacity")
+	_check(not traffic.request_block(block_id, "queued", 1, 0, 2, true),
+		"third vessel queues when wide-water capacity is full")
+	traffic.release_block(block_id, "north")
+	var block: Dictionary = traffic.block_snapshot(block_id)
+	_check((block.get("owner_vessel_ids", []) as Array).has("queued"),
+		"wide-water release promotes the oldest queued vessel")
 
 
 func _test_lane_window(traffic: Node) -> void:

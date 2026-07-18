@@ -6,7 +6,7 @@ extends Node
 
 const INTEREST_RADIUS_M := 6500.0
 const UPDATE_INTERVAL_S := 0.1
-const MAX_PHYSICAL_NPC_VESSELS := 12
+const MAX_PHYSICAL_NPC_VESSELS := 8
 const ABSTRACT_TRAFFIC_INTERVAL_S := 0.5
 
 var _ships: Dictionary = {} # vessel uid -> BoatBody
@@ -25,6 +25,45 @@ var _published_authority_ids: Dictionary = {}
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_PAUSABLE
 	_connect_authority_signals()
+	call_deferred("_register_telemetry")
+
+
+func _exit_tree() -> void:
+	var telemetry := get_node_or_null("/root/Telemetry")
+	if telemetry != null:
+		telemetry.unregister_provider(&"fleet_projection", self)
+
+
+func _register_telemetry() -> void:
+	var telemetry := get_node_or_null("/root/Telemetry")
+	if telemetry != null:
+		telemetry.register_provider(
+			&"fleet_projection", self, &"get_debug_stats", &"traffic")
+
+
+func get_debug_stats() -> Dictionary:
+	var quality_counts := {"full": 0, "medium": 0, "low": 0, "sleep": 0}
+	var active_captains := 0
+	for ship_raw in _ships.values():
+		var ship := ship_raw as BoatBody
+		if ship == null or not is_instance_valid(ship):
+			continue
+		var quality := ship.get_physics_quality_name().to_lower()
+		quality_counts[quality] = int(quality_counts.get(quality, 0)) + 1
+		if ship.get_node_or_null("AutonomousVesselCaptain") != null:
+			active_captains += 1
+	var authority_count := all_projection_records().size()
+	return {
+		"authority_vessels": authority_count,
+		"physical_vessels": _ships.size(),
+		"abstract_vessels": maxi(authority_count - _ships.size(), 0),
+		"active_captains": active_captains,
+		"physics_full": quality_counts.full,
+		"physics_medium": quality_counts.medium,
+		"physics_low": quality_counts.low,
+		"physics_sleep": quality_counts.sleep,
+		"physical_cap": MAX_PHYSICAL_NPC_VESSELS,
+	}
 
 
 func _process(delta: float) -> void:
