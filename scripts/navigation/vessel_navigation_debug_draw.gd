@@ -308,6 +308,39 @@ func _draw_traffic_authority() -> void:
 			_add_polyline(PackedVector3Array([
 				_lift(center + Vector2(0.0, -radius)), _lift(center + Vector2(0.0, radius)),
 			]), HOLDING_COLOR, "HoldingCross")
+	for raw in (snapshot.get("blocks", {}) as Dictionary).values():
+		var block := raw as Dictionary
+		if str(block.get("kind", "")) != "shipping_lane":
+			continue
+		var center_raw := block.get("center_xz", []) as Array
+		if center_raw.size() < 2:
+			continue
+		var center := Vector2(float(center_raw[0]), float(center_raw[1]))
+		var half := MaritimeTrafficService.LANE_BLOCK_SIZE_M * 0.5
+		var owners := block.get("owner_vessel_ids", []) as Array
+		var queue := block.get("queue", []) as Array
+		var color := Color(0.25, 1.0, 0.42, 0.72) if queue.is_empty() \
+			else Color(1.0, 0.25, 0.12, 0.82)
+		_add_polyline(PackedVector3Array([
+			_lift(center + Vector2(-half, -half), 0.4),
+			_lift(center + Vector2(half, -half), 0.4),
+			_lift(center + Vector2(half, half), 0.4),
+			_lift(center + Vector2(-half, half), 0.4),
+			_lift(center + Vector2(-half, -half), 0.4),
+		]), color, "ShippingLaneBlock")
+		var label := Label3D.new()
+		label.text = "LANE SIGNAL  %s\n%d/%d IN BLOCK · %d WAITING" % [
+			"→" if int(block.get("direction", 1)) > 0 else "←",
+			owners.size(), int(block.get("capacity", 1)), queue.size(),
+		]
+		label.position = _lift(center, 8.0)
+		label.font_size = 22
+		label.pixel_size = 0.012
+		label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+		label.no_depth_test = true
+		label.modulate = color
+		label.outline_size = 5
+		add_child(label)
 
 
 func _add_polyline(points: PackedVector3Array, color: Color, node_name: String) -> void:

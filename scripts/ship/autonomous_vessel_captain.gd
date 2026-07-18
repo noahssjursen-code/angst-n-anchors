@@ -706,12 +706,19 @@ func _exit_tree() -> void:
 func _choose_destination_berth(destination: HarbourController) -> String:
 	if destination == null:
 		return ""
+	var candidates := PackedStringArray()
 	for raw in destination.berths():
 		var slot := raw as QuayBerthSlot
 		if slot != null and slot.matches_family(destination_family) \
 				and slot.accepts_loa_m(_body.hull_size.z):
-			return slot.berth_id
-	return ""
+			candidates.append(slot.berth_id)
+	if candidates.is_empty():
+		return ""
+	candidates.sort()
+	# Stable distribution prevents every vessel of one trade family from
+	# selecting berth zero and leaving parallel quays idle.
+	var vessel_id := HarbourController.ship_id_of(_body)
+	return candidates[posmod(vessel_id.hash(), candidates.size())]
 
 
 func _register_destination_holding_zones(traffic: Node, destination: HarbourController) -> void:

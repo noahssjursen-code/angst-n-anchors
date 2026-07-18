@@ -49,9 +49,27 @@ func _physics_process(delta: float) -> void:
 			if captain != null else ("autopilot" if autopilot != null and autopilot.active else "manual"),
 	})
 	if autopilot == null:
+		traffic.release_lane_window(HarbourController.ship_id_of(_body))
 		return
+	var vessel_id := HarbourController.ship_id_of(_body)
+	var lane_result: Dictionary = {}
+	if autopilot.route != null and autopilot.route.is_valid() \
+			and captain != null and captain.phase == AutonomousVesselCaptain.Phase.PASSAGE:
+		lane_result = traffic.request_lane_window(
+			vessel_id,
+			traffic.lane_window_for_route(autopilot.route, autopilot.progress_m),
+			0,
+		)
+	else:
+		traffic.release_lane_window(vessel_id)
 	var agreement: Dictionary = traffic.agreement_for(HarbourController.ship_id_of(_body))
-	if agreement.is_empty():
+	if not lane_result.is_empty() and not bool(lane_result.get("granted", false)):
+		autopilot.apply_traffic_instruction({
+			"action": "waiting_for_lane_signal",
+			"heading_offset_deg": 0.0,
+			"speed_limit": 0.18,
+		})
+	elif agreement.is_empty():
 		autopilot.clear_traffic_instruction()
 	else:
 		autopilot.apply_traffic_instruction(agreement.get("instruction", {}) as Dictionary)

@@ -10,7 +10,11 @@ func _initialize() -> void:
 	root.add_child(traffic)
 	_test_collision_agreement(traffic)
 	_test_port_queue(traffic)
+	_test_parallel_port_resources(traffic)
 	_test_exclusive_block(traffic)
+	_test_directional_convoy_block(traffic)
+	_test_lane_window(traffic)
+	_test_fifty_vessel_spatial_scan(traffic)
 	_test_snapshot_round_trip(traffic)
 	traffic.queue_free()
 	_finish()
@@ -53,6 +57,72 @@ func _test_exclusive_block(traffic: Node) -> void:
 	traffic.release_block("narrow:bridge", "first")
 	var block: Dictionary = traffic.block_snapshot("narrow:bridge")
 	_check(str(block.get("owner_vessel_id", "")) == "second", "block release promotes the queued vessel")
+
+
+func _test_parallel_port_resources(traffic: Node) -> void:
+	var first_a: Dictionary = traffic.request_port_arrival(
+		"port-parallel", "a-1", "general_cargo", "berth-a", 100, 0)
+	var second_a: Dictionary = traffic.request_port_arrival(
+		"port-parallel", "a-2", "general_cargo", "berth-a", 101, 0)
+	var first_b: Dictionary = traffic.request_port_arrival(
+		"port-parallel", "b-1", "general_cargo", "berth-b", 102, 0)
+	_check(bool(first_a.get("cleared_for_approach", false)),
+		"first vessel for berth A is cleared")
+	_check(not bool(second_a.get("cleared_for_approach", false)),
+		"second vessel for berth A waits")
+	_check(bool(first_b.get("cleared_for_approach", false)),
+		"free berth B is not clogged by berth A queue")
+
+
+func _test_directional_convoy_block(traffic: Node) -> void:
+	var block_id := "fjord:convoy"
+	_check(traffic.request_block(block_id, "east-1", 1, 0, 3),
+		"first same-direction vessel enters capacity block")
+	_check(traffic.request_block(block_id, "east-2", 1, 0, 3),
+		"second same-direction vessel convoys through wide block")
+	_check(not traffic.request_block(block_id, "west-1", -1, 0, 3),
+		"opposing vessel waits for convoy")
+	_check(not traffic.request_block(block_id, "east-3", 1, 0, 3),
+		"new same-direction traffic cannot starve an opposing queue")
+	traffic.release_block(block_id, "east-1")
+	traffic.release_block(block_id, "east-2")
+	var block: Dictionary = traffic.block_snapshot(block_id)
+	_check((block.get("owner_vessel_ids", []) as Array).has("west-1"),
+		"direction flips fairly after active convoy clears")
+
+
+func _test_lane_window(traffic: Node) -> void:
+	var specs: Array[Dictionary] = [
+		{"block_id": "lane:test:0", "direction": 1, "capacity": 2},
+		{"block_id": "lane:test:1", "direction": 1, "capacity": 2},
+	]
+	var first: Dictionary = traffic.request_lane_window("lane-a", specs)
+	var second: Dictionary = traffic.request_lane_window("lane-b", specs)
+	var opposing_specs: Array[Dictionary] = [{
+		"block_id": "lane:test:1", "direction": -1, "capacity": 2}]
+	var opposing: Dictionary = traffic.request_lane_window("lane-c", opposing_specs)
+	_check(bool(first.get("granted", false)) and bool(second.get("granted", false)),
+		"same-direction lane window admits a convoy up to capacity")
+	_check(not bool(opposing.get("granted", false)),
+		"opposing lane window stops at its first red signal")
+	traffic.release_lane_window("lane-a")
+	traffic.release_lane_window("lane-b")
+
+
+func _test_fifty_vessel_spatial_scan(traffic: Node) -> void:
+	for index in range(50):
+		traffic.publish_intent({
+			"vessel_id": "stress-%02d" % index,
+			"position_xz": [float(index % 10) * 90.0, float(index / 10) * 90.0],
+			"velocity_xz": [4.0 if index % 2 == 0 else -4.0, 0.0],
+			"heading_deg": 90.0 if index % 2 == 0 else 270.0,
+			"length_m": 28.0,
+		})
+	var before := Time.get_ticks_usec()
+	traffic.call("_resolve_conflicts")
+	var elapsed_ms := float(Time.get_ticks_usec() - before) / 1000.0
+	_check(elapsed_ms < 500.0,
+		"50-vessel authority conflict pass remains within a broad test budget")
 
 
 func _test_snapshot_round_trip(traffic: Node) -> void:
