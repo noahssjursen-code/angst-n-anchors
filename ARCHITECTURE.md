@@ -134,11 +134,41 @@ All NPCs.
 
 ### `scripts/cargo/`
 
-Trade commodity metadata and physical container units. Contract trade is deferred.
+Trade commodity metadata, freight authority, and physical container units.
 - `CommodityCatalog` — containers + bulk/liquid families, berth colours, playable trade helpers
+- `FreightService` — accepted player movements plus hidden company consignments used by quay equipment
 - `ContainerUnit`, `ContainerFactory`, `ContainerNode` — cubed general-cargo units (4×4×4 m default)
 - Bulk hold lots/rules (`bulk_hold_lot.gd`, `bulk_hold_rules.gd`) — ore/coal/grain in holds
 - Ship pads live in `scripts/ship/cargo_slot_pad.gd` (`CargoSlotPadComponent`)
+
+### `scripts/company/`
+
+Per-captain company authority and its disposable local presentation.
+- `CompanyService` — JSON-safe company name, employees, payroll, finance ledger,
+  route assignments, berth endpoints, cargo phases, and timestamp simulation.
+  `authority_snapshot()` / `apply_authority_snapshot()` form the MP replication
+  seam; only the server advances timestamps when a multiplayer peer is active.
+- `CompanyFleetProjection` — reconstructs nearby vessels, plugs/moors them into
+  free compatible berths, coordinates existing cranes, and smoothly projects
+  underway ships from the shared deterministic marine route. Timestamp progress
+  is used once when a dormant vessel enters interest; after spawning, the shared
+  `AutonomousVesselCaptain` / `VesselAutopilot` drives the ordinary BoatBody
+  propulsion, rudder, thruster, buoyancy, and built-in physics LOD.
+- `CompanyPanel` — full-screen LocalPlayerView consumer for overview, live
+  operations/traffic, fleet, crew hiring, route confirmation, recall, and finance
+
+### `scripts/traffic/`
+
+Serializable shared maritime-traffic authority and per-vessel adapters.
+- `MaritimeTrafficService` owns JSON-safe vessel intents, closest-point-of-approach
+  agreements, VHF events, exclusive route/harbour blocks, holding zones, and
+  deterministic port arrival queues. The single-player autoload is the world
+  authority; an MP server can own the same snapshot without changing captains.
+- `VesselTrafficAgent` publishes ordinary `BoatBody` motion for player and NPC
+  vessels and applies replicated traffic instructions to the shared autopilot.
+- `AutonomousVesselCaptain` requests port departure/approach blocks and only
+  reserves its destination berth when its arrival ticket reaches the head of
+  the queue. A berth is no longer locked for the entire passage.
 
 ### `scripts/ui/`
 
@@ -168,7 +198,11 @@ Each autoload lives in its system folder and is registered in `project.godot` fr
 | `WeatherLighting` | `weather/` | `res://scripts/weather/weather_lighting.gd` |
 | `WorldClock` | `time/` | `res://scripts/time/world_clock.gd` |
 | `PortCatalog` | `port/` | `res://scripts/port/port_catalog.gd` |
+| `MaritimeTraffic` | `traffic/` | `res://scripts/traffic/maritime_traffic_service.gd` |
+| `FreightService` | `cargo/` | `res://scripts/cargo/freight_service.gd` |
 | `PlayerSession` | `player/` | `res://scripts/player/player_session.gd` |
+| `CompanyService` | `company/` | `res://scripts/company/company_service.gd` |
+| `CompanyFleetProjection` | `company/` | `res://scripts/company/company_fleet_projection.gd` |
 | `GameMenu` | `ui/` | `res://scripts/ui/game_menu.gd` |
 | `GameState` | `state/` | `res://scripts/state/game_state.gd` |
 | `DebugHud` | `ui/` | `res://scripts/ui/debug_hud.gd` |

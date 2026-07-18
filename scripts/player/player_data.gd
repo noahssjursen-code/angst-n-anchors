@@ -72,6 +72,10 @@ var accepted_contracts: Array = []
 ## Shape: { "active_call": Dictionary, "yard_cargo": Array }.
 var port_operations_state: Dictionary = {}
 
+## Save v6 company simulation. Physical crew and autonomous vessels are
+## projections of this JSON-safe authority record so it can move server-side.
+var company_state: Dictionary = {}
+
 ## Deprecated compatibility field. Resume-in-vessel persistence was removed;
 ## old save values are ignored and new saves omit this field.
 var ship_runtime_state: Dictionary = {}
@@ -374,6 +378,7 @@ func to_dict() -> Dictionary:
 		# v2 additions
 		"accepted_contracts":       accepted_contracts.duplicate(true),
 		"port_operations_state":    port_operations_state.duplicate(true),
+		"company_state":            company_state.duplicate(true),
 		"world_clock_hours":        world_clock_hours,
 		"world_context":            world_context.duplicate(),
 		"tutorial_seen":            tutorial_seen.duplicate(),
@@ -407,6 +412,9 @@ static func from_dict(d: Dictionary) -> PlayerData:
 	var port_ops_raw: Variant = d.get("port_operations_state", {})
 	if typeof(port_ops_raw) == TYPE_DICTIONARY:
 		pd.port_operations_state = (port_ops_raw as Dictionary).duplicate(true)
+	var company_raw: Variant = d.get("company_state", {})
+	if typeof(company_raw) == TYPE_DICTIONARY:
+		pd.company_state = (company_raw as Dictionary).duplicate(true)
 	pd.ship_runtime_state = {}
 	pd.world_clock_hours = float(d.get("world_clock_hours", -1.0))
 	var world_context_raw: Variant = d.get("world_context", {})

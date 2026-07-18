@@ -209,6 +209,12 @@ func _show_ship_select() -> void:
 
 	for entry_raw in fleet:
 		var record := entry_raw as Dictionary
+		var vessel_uid := str(record.get("uid", ""))
+		var company := get_node_or_null("/root/CompanyService")
+		if company != null and company.is_vessel_assigned(vessel_uid):
+			_dialogue.add_disabled_option(
+				"%s — assigned to company service" % VesselSpawn.vessel_name_of(record))
+			continue
 		var req := HarbourDeploy.ship_requirements(record)
 		var vessel_name := str(req.get("display", VesselSpawn.vessel_name_of(record)))
 		var class_name_str := str(req.get("ship_class_name", "Vessel"))
@@ -243,6 +249,12 @@ func _show_ship_select() -> void:
 
 
 func _deploy_fleet_vessel(record: Dictionary) -> void:
+	var company := get_node_or_null("/root/CompanyService")
+	if company != null and company.is_vessel_assigned(str(record.get("uid", ""))):
+		_dialogue.clear()
+		_dialogue.add_quote("That vessel is currently assigned to your company fleet.")
+		_dialogue.add_back_button(_show_ship_select)
+		return
 	var session := get_node_or_null("/root/PlayerSession")
 	if session != null and session.data != null:
 		session.data.set_active_vessel(record)

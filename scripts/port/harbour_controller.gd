@@ -641,6 +641,14 @@ func ship_berth_meta(ship: BoatBody) -> String:
 static func ship_id_of(ship: BoatBody) -> String:
 	if ship == null or not is_instance_valid(ship):
 		return ""
+	# Traffic authority must use a stable unique identity. Display names are not
+	# unique and can make two vessels appear to own the same berth/lane lease.
+	var network_id := str(ship.get_meta("network_ship_id", "")).strip_edges()
+	if not network_id.is_empty():
+		return network_id
+	var uid := str(ship.get_meta("vessel_uid", "")).strip_edges()
+	if not uid.is_empty():
+		return uid
 	var display := str(ship.get_meta("vessel_display_name", "")).strip_edges()
 	if not display.is_empty():
 		return display
@@ -649,12 +657,6 @@ static func ship_id_of(ship: BoatBody) -> String:
 		var ship_name := ctrl.ship_name.strip_edges()
 		if not ship_name.is_empty() and ship_name != "Unnamed Vessel":
 			return ship_name
-	var named := str(ship.get_meta("network_ship_id", "")).strip_edges()
-	if not named.is_empty():
-		return named
-	var uid := str(ship.get_meta("vessel_uid", "")).strip_edges()
-	if not uid.is_empty():
-		return uid
 	if not ship.name.is_empty() and ship.name != "PlayerShip":
 		return ship.name
 	return "ship_%d" % ship.get_instance_id()

@@ -6,6 +6,7 @@ extends Node
 signal marks_changed(balance: int)
 signal helm_changed(boat: Node) # null when not helming
 signal contracts_changed(contracts: Array) # kept empty until trade rewrite
+signal company_changed(snapshot: Dictionary)
 
 
 var _session: Node = null
@@ -27,6 +28,12 @@ func _ready() -> void:
 	var freight := get_node_or_null("/root/FreightService")
 	if freight != null and not freight.contracts_changed.is_connected(_emit_contracts):
 		freight.contracts_changed.connect(_emit_contracts)
+	var company := get_node_or_null("/root/CompanyService")
+	if company != null and not company.company_changed.is_connected(_emit_company):
+		company.company_changed.connect(_emit_company)
+	var traffic := get_node_or_null("/root/MaritimeTraffic")
+	if traffic != null and not traffic.traffic_changed.is_connected(_emit_company_traffic):
+		traffic.traffic_changed.connect(_emit_company_traffic)
 
 	get_tree().node_added.connect(_on_node_added)
 	for n in get_tree().root.find_children("*", "BoatController", true, false):
@@ -95,6 +102,52 @@ func get_autopilot_snapshot() -> Dictionary:
 func get_active_contracts() -> Array:
 	var freight := get_node_or_null("/root/FreightService")
 	return freight.active_contracts() if freight != null else []
+
+
+func get_company_snapshot() -> Dictionary:
+	var company := get_node_or_null("/root/CompanyService")
+	if company == null:
+		return {}
+	var out: Dictionary = company.snapshot()
+	out["traffic"] = _company_traffic_snapshot(out)
+	return out
+
+
+func _company_traffic_snapshot(company_snapshot: Dictionary) -> Dictionary:
+	var traffic := get_node_or_null("/root/MaritimeTraffic")
+	if traffic == null:
+		return {}
+	var authority: Dictionary = traffic.snapshot()
+	var vessel_ids: Dictionary = {}
+	for uid in (company_snapshot.get("fleet", {}) as Dictionary).keys():
+		vessel_ids[str(uid)] = true
+	var intents: Array = []
+	for raw in (authority.get("intents", {}) as Dictionary).values():
+		var row := raw as Dictionary
+		if vessel_ids.has(str(row.get("vessel_id", ""))):
+			intents.append(row.duplicate(true))
+	var agreements: Array = []
+	for raw in (authority.get("agreements", {}) as Dictionary).values():
+		var row := raw as Dictionary
+		for vessel_id in row.get("vessel_ids", []) as Array:
+			if vessel_ids.has(str(vessel_id)):
+				agreements.append(row.duplicate(true))
+				break
+	var queues: Array = []
+	for port_id in (authority.get("port_queues", {}) as Dictionary).keys():
+		var queue := authority["port_queues"][port_id] as Array
+		for index in range(queue.size()):
+			var ticket := queue[index] as Dictionary
+			if vessel_ids.has(str(ticket.get("vessel_id", ""))):
+				var copy := ticket.duplicate(true)
+				copy["queue_position"] = index + 1
+				queues.append(copy)
+	return {
+		"revision": int(authority.get("revision", 0)),
+		"intents": intents,
+		"agreements": agreements,
+		"port_queues": queues,
+	}
 
 
 func get_port_display_name(port_id: String) -> String:
@@ -181,6 +234,14 @@ func restore_player_state() -> void:
 
 func _emit_contracts(contracts: Array) -> void:
 	contracts_changed.emit(contracts)
+
+
+func _emit_company(_snapshot: Dictionary) -> void:
+	company_changed.emit(get_company_snapshot())
+
+
+func _emit_company_traffic(_snapshot: Dictionary) -> void:
+	company_changed.emit(get_company_snapshot())
 
 
 func _current_world_context() -> Dictionary:

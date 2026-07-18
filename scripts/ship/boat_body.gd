@@ -2,7 +2,8 @@
 class_name BoatBody
 extends RigidBody3D
 
-enum PhysicsQuality { FULL, MEDIUM, SLEEP }
+## LOW is appended so serialized enum value 2 remains SLEEP in existing scenes.
+enum PhysicsQuality { FULL, MEDIUM, SLEEP, LOW }
 
 ## Root node of every boat. Owns physics properties.
 ## Visuals and collision are handled by the MeshTransformer child component.
@@ -107,6 +108,7 @@ enum FaceAxis { PLUS_X = 0, MINUS_X = 1, PLUS_Z = 2, MINUS_Z = 3 }
 @export_group("Simulation LOD")
 @export var automatic_physics_lod: bool = true
 @export var medium_physics_distance_m: float = 350.0
+@export var low_physics_distance_m: float = 900.0
 @export var sleep_physics_distance_m: float = 1200.0
 @export var physics_quality: PhysicsQuality = PhysicsQuality.FULL
 
@@ -346,6 +348,10 @@ func _ready() -> void:
 		lighting.name = "ShipLighting"
 		add_child(lighting)
 
+		var traffic_agent := VesselTrafficAgent.new()
+		traffic_agent.name = "VesselTrafficAgent"
+		add_child(traffic_agent)
+
 
 func _exit_tree() -> void:
 	PlayerVessel.unmark_player_ship(self)
@@ -419,6 +425,8 @@ func set_physics_quality(value: PhysicsQuality) -> void:
 
 
 func get_physics_station_stride() -> int:
+	if physics_quality == PhysicsQuality.LOW:
+		return 4
 	return 2 if physics_quality == PhysicsQuality.MEDIUM else 1
 
 
@@ -427,6 +435,8 @@ func get_physics_force_scale_for_tick() -> float:
 		return 0.0
 	if physics_quality == PhysicsQuality.MEDIUM:
 		return 2.0 if Engine.get_physics_frames() % 2 == 0 else 0.0
+	if physics_quality == PhysicsQuality.LOW:
+		return 4.0 if Engine.get_physics_frames() % 4 == 0 else 0.0
 	return 1.0
 
 
@@ -454,8 +464,10 @@ func _update_automatic_physics_quality() -> void:
 				)
 	if nearest_distance == INF or nearest_distance < medium_physics_distance_m:
 		set_physics_quality(PhysicsQuality.FULL)
-	elif nearest_distance < sleep_physics_distance_m:
+	elif nearest_distance < low_physics_distance_m:
 		set_physics_quality(PhysicsQuality.MEDIUM)
+	elif nearest_distance < sleep_physics_distance_m:
+		set_physics_quality(PhysicsQuality.LOW)
 	else:
 		set_physics_quality(PhysicsQuality.SLEEP)
 

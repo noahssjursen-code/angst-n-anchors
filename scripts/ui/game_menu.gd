@@ -9,7 +9,7 @@ const WorldBootstrapScript := preload("res://scripts/world/world_bootstrap.gd")
 ## Layer 5  — WalkingHud (always on during gameplay)
 ## Layer 20 — Pause / Map modal screens
 
-enum Screen { NONE, PAUSE, MAP, SETTINGS }
+enum Screen { NONE, PAUSE, MAP, COMPANY, SETTINGS }
 
 var _screen:          Screen     = Screen.NONE
 var _prev_mouse_mode: int        = Input.MOUSE_MODE_VISIBLE
@@ -24,6 +24,7 @@ var _pause_root:  Control
 var _map:         MapOverlay
 var _minimap
 var _settings:    SettingsPanel
+var _company:     CompanyPanel
 
 
 func _ready() -> void:
@@ -60,6 +61,11 @@ func _ready() -> void:
 	_map.close_requested.connect(func() -> void: _set_screen(Screen.NONE))
 	_menu_layer.add_child(_map)
 
+	_company = CompanyPanel.new()
+	_company.process_mode = Node.PROCESS_MODE_ALWAYS
+	_company.close_requested.connect(func() -> void: _set_screen(Screen.NONE))
+	_menu_layer.add_child(_company)
+
 	_minimap = HelmMinimapScript.new()
 	_minimap.name = "HelmMinimap"
 	_minimap.setup(_map)
@@ -69,6 +75,9 @@ func _ready() -> void:
 	_settings.process_mode = Node.PROCESS_MODE_ALWAYS
 	_settings.close_requested.connect(func() -> void: _set_screen(Screen.PAUSE))
 	_menu_layer.add_child(_settings)
+	var company_service := get_node_or_null("/root/CompanyService")
+	if company_service != null and not company_service.company_name_required.is_connected(_on_company_name_required):
+		company_service.company_name_required.connect(_on_company_name_required)
 
 	_set_screen(Screen.NONE)
 
@@ -116,6 +125,9 @@ func _unhandled_input(event: InputEvent) -> void:
 		if _screen == Screen.SETTINGS:
 			_set_screen(Screen.PAUSE)
 			get_viewport().set_input_as_handled()
+		elif _screen == Screen.COMPANY and _company.requires_name():
+			_company.focus_name_entry()
+			get_viewport().set_input_as_handled()
 		elif _screen != Screen.NONE:
 			_set_screen(Screen.NONE)
 			get_viewport().set_input_as_handled()
@@ -124,12 +136,24 @@ func _unhandled_input(event: InputEvent) -> void:
 			_set_screen(Screen.PAUSE)
 			get_viewport().set_input_as_handled()
 	elif event.is_action_pressed("open_map") and _screen != Screen.PAUSE:
+		if _screen == Screen.COMPANY and _company.requires_name():
+			_company.focus_name_entry()
+			get_viewport().set_input_as_handled()
+			return
 		# Main menu hosts its own chart for home-port pick; don't open the
 		# empty gameplay overlay over the title screen.
 		var scene := get_tree().current_scene
 		if scene != null and String(scene.scene_file_path).ends_with("main_menu.tscn"):
 			return
 		_set_screen(Screen.MAP if _screen != Screen.MAP else Screen.NONE)
+		get_viewport().set_input_as_handled()
+	elif event.is_action_pressed("open_company") and _screen not in [Screen.PAUSE, Screen.SETTINGS]:
+		if _is_main_menu():
+			return
+		if _screen == Screen.COMPANY and _company.requires_name():
+			_company.focus_name_entry()
+		else:
+			_set_screen(Screen.COMPANY if _screen != Screen.COMPANY else Screen.NONE)
 		get_viewport().set_input_as_handled()
 
 
@@ -148,11 +172,14 @@ func _set_screen(s: Screen) -> void:
 	_bg.visible          = modal
 	_pause_root.visible  = s == Screen.PAUSE
 	_map.visible         = s == Screen.MAP
+	_company.visible     = s == Screen.COMPANY
+	if s == Screen.COMPANY:
+		_company.refresh()
 	## The sea chart is opaque and simulation stays live, including in MP. Do
 	## not spend a full 3D frame rendering a world the chart completely covers.
 	var viewport := get_viewport()
 	if viewport != null:
-		RenderingServer.viewport_set_disable_3d(viewport.get_viewport_rid(), s == Screen.MAP)
+		RenderingServer.viewport_set_disable_3d(viewport.get_viewport_rid(), s in [Screen.MAP, Screen.COMPANY])
 	if s == Screen.MAP:
 		_map.open_navigation()
 	_settings.visible    = s == Screen.SETTINGS
@@ -216,6 +243,10 @@ func _build_pause() -> Control:
 	map_btn.pressed.connect(func() -> void: _set_screen(Screen.MAP))
 	vbox.add_child(map_btn)
 
+	var company_btn := UiBuilder.button("COMPANY  [ B ]")
+	company_btn.pressed.connect(func() -> void: _set_screen(Screen.COMPANY))
+	vbox.add_child(company_btn)
+
 	var settings_btn := UiBuilder.button("SETTINGS")
 	settings_btn.pressed.connect(func() -> void: _set_screen(Screen.SETTINGS))
 	vbox.add_child(settings_btn)
@@ -241,6 +272,25 @@ func _update_marks_label(lbl: Label) -> void:
 func _on_node_added(node: Node) -> void:
 	if node is BoatController:
 		_connect_controller(node as BoatController)
+		call_deferred("_open_company_name_if_needed")
+	elif node.is_in_group("world"):
+		call_deferred("_open_company_name_if_needed")
+
+
+func _on_company_name_required() -> void:
+	call_deferred("_open_company_name_if_needed")
+
+
+func _open_company_name_if_needed() -> void:
+	if _company == null or _is_main_menu() or not _company.requires_name():
+		return
+	_set_screen(Screen.COMPANY)
+	_company.focus_name_entry()
+
+
+func _is_main_menu() -> bool:
+	var scene := get_tree().current_scene
+	return scene == null or String(scene.scene_file_path).ends_with("main_menu.tscn")
 
 
 func _connect_controller(bc: BoatController) -> void:

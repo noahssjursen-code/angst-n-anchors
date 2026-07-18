@@ -104,6 +104,8 @@ func plan_berth_to_berth(
 	origin_berth_id: String,
 	destination_port_id: String,
 	destination_berth_id: String,
+	origin_exact_xz: Vector2 = Vector2(INF, INF),
+	destination_exact_xz: Vector2 = Vector2(INF, INF),
 ) -> MarineRoutePlan:
 	if _layout == null or _navigation == null or destination_berth_id.is_empty():
 		return plan_departure(from_xz, to_xz, origin_port_id, origin_berth_id,
@@ -116,9 +118,15 @@ func plan_berth_to_berth(
 		return plan_departure(from_xz, to_xz, origin_port_id, origin_berth_id,
 			destination_port_id)
 	var points := PackedVector2Array()
-	for raw in departure:
+	var departure_delta := Vector2.ZERO
+	if origin_exact_xz.is_finite() and not departure.is_empty():
+		var generic_origin := departure[0] as Vector3
+		departure_delta = origin_exact_xz - Vector2(generic_origin.x, generic_origin.z)
+	for departure_index in range(departure.size()):
+		var raw: Variant = departure[departure_index]
 		var point := raw as Vector3
-		points.append(Vector2(point.x, point.z))
+		var taper := 1.0 - float(departure_index) / float(maxi(departure.size() - 1, 1))
+		points.append(Vector2(point.x, point.z) + departure_delta * taper)
 	if points.is_empty():
 		points.append(from_xz)
 	var arrival_outer := arrival[-1] as Vector3
@@ -129,9 +137,14 @@ func plan_berth_to_berth(
 			points.append(point)
 	## Stored berth lanes run quay -> sea. Reverse the destination lane so the
 	## voyage becomes sea -> controlled approach -> berth.
+	var arrival_delta := Vector2.ZERO
+	if destination_exact_xz.is_finite():
+		var generic_destination := arrival[0] as Vector3
+		arrival_delta = destination_exact_xz - Vector2(generic_destination.x, generic_destination.z)
 	for index in range(arrival.size() - 2, -1, -1):
 		var point3 := arrival[index] as Vector3
-		var point2 := Vector2(point3.x, point3.z)
+		var arrival_taper := 1.0 - float(index) / float(maxi(arrival.size() - 1, 1))
+		var point2 := Vector2(point3.x, point3.z) + arrival_delta * arrival_taper
 		if not points[-1].is_equal_approx(point2):
 			points.append(point2)
 	return MarineRoutePlan.create(points, str(_layout.layout_checksum),

@@ -25,6 +25,9 @@ var active := false
 var last_reason := ""
 var target_point := Vector2(INF, INF)
 var arrival_stop_m := ARRIVAL_STOP_M
+var traffic_heading_offset_deg := 0.0
+var traffic_speed_limit := 1.0
+var traffic_instruction := ""
 
 var _body: BoatBody
 var _propulsion: PropulsionComponent
@@ -94,7 +97,21 @@ func voyage_snapshot() -> Dictionary:
 		) if _body != null else 0.0,
 		"speed_ms": Vector2(_body.linear_velocity.x, _body.linear_velocity.z).length() \
 			if _body != null else 0.0,
+		"traffic_instruction": traffic_instruction,
+		"traffic_speed_limit": traffic_speed_limit,
 	}
+
+
+func apply_traffic_instruction(instruction: Dictionary) -> void:
+	traffic_instruction = str(instruction.get("action", ""))
+	traffic_heading_offset_deg = clampf(float(instruction.get("heading_offset_deg", 0.0)), -45.0, 45.0)
+	traffic_speed_limit = clampf(float(instruction.get("speed_limit", 1.0)), 0.0, 1.0)
+
+
+func clear_traffic_instruction() -> void:
+	traffic_instruction = ""
+	traffic_heading_offset_deg = 0.0
+	traffic_speed_limit = 1.0
 
 
 func _physics_process(delta: float) -> void:
@@ -115,12 +132,14 @@ func _physics_process(delta: float) -> void:
 	var speed_ms := Vector2(_body.linear_velocity.x, _body.linear_velocity.z).length()
 	var lookahead := clampf(speed_ms * 18.0, LOOKAHEAD_MIN_M, LOOKAHEAD_MAX_M)
 	target_point = route.point_at_distance(minf(progress_m + lookahead, route.total_distance_m()))
-	var desired := (target_point - position).normalized()
+	var desired := (target_point - position).normalized().rotated(
+		deg_to_rad(traffic_heading_offset_deg))
 	var bow := NavigationAxes.vessel_bow_horizontal(_body).normalized()
 	var rudder_command := AutopilotMath.rudder_for_heading(bow, desired, full_rudder_error_deg)
 	var throttle_command := cruise_throttle
 	if remaining < ARRIVAL_SLOW_M:
 		throttle_command = 0.28 if remaining < 260.0 else 0.56
+	throttle_command = minf(throttle_command, traffic_speed_limit)
 	## PropulsionComponent uses negative values for ahead.
 	_propulsion.throttle = -throttle_command
 	_rudder.rudder_input = rudder_command

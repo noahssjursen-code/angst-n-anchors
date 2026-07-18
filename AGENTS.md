@@ -28,8 +28,10 @@ scripts/
   time/         # WorldClock autoload
   world/        # Norway macro layout/SDF, coastal ports, streamed terrain, renderer/loading
   port/         # PortCatalog, trade profiles, berth_plan + land_plan, PortPlot presentation
+  traffic/      # Serializable vessel intents, collision agreements, route blocks, port queues
   npc/          # NpcBase, ShipwrightNpc (parked; port NPCs rebuilt later)
   cargo/        # CommodityCatalog, ContainerUnit/Node/Factory, bulk hold lots/rules
+  company/      # Company authority, deterministic fleet projection, management UI
   apps/         # Engine authoring apps (BuildingBrickEditor, PortSlotEditor, ShipyardBrickEditor)
   ui/           # HUDs, menus, overlays, GameMenu + DebugHud autoloads
   state/        # GameState autoload (cross-system read model), sub-states: PlayerState, ShipState, ContractState, WorldState
@@ -66,6 +68,8 @@ Current demos:
 - `scenes/showcases/port_showcase.tscn` — terrain-traced port pipeline at real seeded coastal terrain sites
 - `scenes/showcases/ship_showcase.tscn` / `player_showcase.tscn`
 - `scenes/showcases/crane_showcase.tscn` — bulk grab + provision T-crane (containers)
+- `scenes/showcases/maritime_traffic_showcase.tscn` — live CPA agreement and port holding queue visualization
+- `scenes/showcases/company_management_showcase.tscn` — inert company/fleet UI preview
 - `scenes/showcases/marine_autopilot_showcase.tscn` — deterministic sea route + replicated progress viewer
 - `tests/staged_vessel_visual_demo.tscn` — staged deck fitout construction
 
@@ -82,8 +86,11 @@ Each autoload lives in its system folder and is registered in `project.godot`.
 | `WeatherLighting` | `weather/` | Smoothed local presentation only: sky, fog, ocean, audio, wind |
 | `WorldClock` | `time/` | Game time. Emits `day_changed` + `hour_changed` (1 game hr = 60 real s) |
 | `PortCatalog` | `port/` | Live port directory (ids, names, positions, spawn, commodities) |
+| `MaritimeTraffic` | `traffic/` | World-authoritative vessel intents, VHF agreements, exclusive lane blocks, and port holding queues |
 | `FreightService` | `cargo/` | Authoritative accepted container movements and deterministic port offers |
 | `PlayerSession` | `player/` | Persistent player data (marks, name, ship ledger, world clock). Autosaves every 60 s + on focus loss |
+| `CompanyService` | `company/` | Per-captain company, employee, payroll, and deterministic fleet authority |
+| `CompanyFleetProjection` | `company/` | Nearby disposable BoatBody projections reconstructed from company timestamps |
 | `GameMenu` | `ui/` | Pause / map / settings / hint overlay |
 | `GameState` | `state/` | Read model: player/ship/contract/world sub-states |
 | `DebugHud` | `ui/` | F3 debug overlay |
@@ -132,8 +139,9 @@ Ports follow a strict rebuild order:
 Do not regenerate a finished harbour after players modify it. Seed generation
 creates only the initial graph + berth plan; later growth must persist the evolved record.
 
-Trade contracts and harbour NPCs are purged for now. Starter vessels come from
-`PlayerSession` / `VesselSpawn`. Commodity packing/pricing lives in `CommodityCatalog`.
+Trade contracts and harbour NPCs are purged for now. New captains begin without
+an owned vessel and buy their first hull through a shipwright. Commodity
+packing/pricing lives in `CommodityCatalog`.
 
 `CargoConsignment` is the JSON-safe authority record shared by freight families.
 Physical `ContainerUnit`s and `BulkCargoLot`s reference its `consignment_id`; do
@@ -345,7 +353,7 @@ Port definitions, ship templates, commodities live in `resources/data/`. Scripts
 
 ## Save Format
 
-Persistence flows through `PlayerSession.save_now()` → `_snapshot_into_player_data()` (via `LocalPlayerView`) → `PlayerSaveStore.save_player()`. The save envelope is `{version, player, saved_at_unix}`; format version is currently **5**. See [`SAVE_FORMAT.md`](SAVE_FORMAT.md) for the field schema and upgrade behaviour.
+Persistence flows through `PlayerSession.save_now()` → `_snapshot_into_player_data()` (via `LocalPlayerView`) → `PlayerSaveStore.save_player()`. The save envelope is `{version, player, saved_at_unix}`; format version is currently **6**. See [`SAVE_FORMAT.md`](SAVE_FORMAT.md) for the field schema and upgrade behaviour.
 
 Saved per-captain state covers: marks, lifetime stats, appearance, active vessel ledger record, accepted contracts (with delivered counts; in-flight cargo is forfeited on load), ship runtime state (position, yaw, throttle, fuel fraction), world identity, world-clock hours, and tutorial-hint-seen flags. Autosave heartbeats every 60 s of wall-clock; `_notification(NOTIFICATION_WM_CLOSE_REQUEST)` and window focus loss both force a flush.
 
@@ -359,6 +367,7 @@ Actions registered in `project.godot` that gameplay code reads via `Input.is_act
 |---|---|---|
 | `ui_cancel` | Esc | Pause menu, close dialogues, leave UI |
 | `open_map` | M | Sea chart overlay |
+| `open_company` | B | Company, crew, fleet, and finance panel |
 | `open_journal` | J | Cargo journal overlay (toggle) |
 | `toggle_camera` | V | First / third-person camera switch |
 | `jump` | Space | Player jump |

@@ -33,7 +33,7 @@ user://save/
 
 ```json
 {
-  "version": 5,
+  "version": 6,
   "player": {},
   "saved_at_unix": 0
 }
@@ -41,7 +41,44 @@ user://save/
 
 `player` contains identity, marks/lifetime stats, appearance, owned and active
 vessels, home port id, accepted contracts, ship runtime state, world-clock hours,
-tutorial flags, and starter-vessel state. Vector values inside JSON are arrays.
+tutorial flags, and legacy starter-vessel state. New captains begin with an
+empty vessel registry. Vector values inside JSON are arrays.
+
+Save v6 adds `company_state`: the company name, named employees and hourly
+wages, vessel-to-crew route assignments, bounded finance ledger, and
+`last_simulated_unix`. These are authority data only. Physical workers and NPC
+ships are reconstructed projections, so the same record can later be stored on
+an authoritative multiplayer server.
+
+Underway dormant location is reconstructed from the assigned berth endpoints,
+sea-route algorithm, leg timestamps, and current wall-clock time. That position
+is only the initial condition when a vessel enters local simulation. From then
+until it leaves interest, ordinary BoatBody physics and the autonomous captain
+own movement. On interest exit, real autopilot progress is folded back into the
+dormant timestamps so a later reconstruction continues from the correct point.
+
+The deterministic voyage profile uses crab-speed clearance at each quay,
+harbour speed through approach lanes, and passage speed offshore. Thus clients
+reconstruct both the same sea path and the same point along it from timestamps.
+
+Company assignment rows also persist their operational phase (`preparing`,
+`underway`, `turnaround`, `inactive`, or `unpaid`), current route leg, crew,
+payroll totals, cargo-operation tokens, and a JSON-safe cargo manifest. General
+cargo stores the exact serialized `ContainerUnit` rows; bulk cargo stores each
+hold's `BulkHoldState`. Tokens and manifests are authority data, not scene nodes:
+nearby ships, mooring lines, yard containers, and crane jobs are rebuilt from the
+assignment when that harbour enters client interest.
+If no client is present, a bounded deterministic turnaround completes the same
+leg without simulating physical cargo. A departure timestamp is never issued
+until either the local crane flow or that abstract turnaround has completed.
+Freight revenue settles at that unload boundary; merely reaching the destination
+timestamp does not credit the company.
+
+Maritime traffic intents, collision agreements, route-block leases, and port
+arrival queues are world/server authority state rather than captain-save state.
+They are JSON-safe snapshots replicated with the live world and are rebuilt as
+vessels re-enter interest. Company assignment and cargo records remain durable;
+short-lived traffic leases do not survive a server restart.
 
 ## Migration
 
@@ -107,6 +144,7 @@ Multiplayer worlds take `world_seed`, `generation_version`, and
 - v3 added generated-world identity.
 - v4 added vessel registration declarations.
 - v5 added vessel-call and port-yard cargo state (legacy unitized packing removed; containers/pads are layout-driven, not saved as in-flight pallets).
+- v6 added deterministic company, employee, payroll, and autonomous fleet state.
 - Multi-captain folders + `index.json` are additive; legacy single-file saves migrate automatically.
 
 `PlayerData.from_dict()` supplies defaults for missing fields, so old envelopes

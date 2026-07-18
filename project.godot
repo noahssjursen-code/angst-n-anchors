@@ -24,8 +24,11 @@ WorldWeather="*res://scripts/weather/world_weather.gd"
 WeatherLighting="*res://scripts/weather/weather_lighting.gd"
 WorldClock="*res://scripts/time/world_clock.gd"
 PortCatalog="*res://scripts/port/port_catalog.gd"
+MaritimeTraffic="*res://scripts/traffic/maritime_traffic_service.gd"
 FreightService="*res://scripts/cargo/freight_service.gd"
 PlayerSession="*res://scripts/player/player_session.gd"
+CompanyService="*res://scripts/company/company_service.gd"
+CompanyFleetProjection="*res://scripts/company/company_fleet_projection.gd"
 LoadingGate="*res://scripts/ui/loading_gate.gd"
 GameMenu="*res://scripts/ui/game_menu.gd"
 GameState="*res://scripts/state/game_state.gd"
@@ -100,6 +103,11 @@ boat_autopilot_toggle={
 open_map={
 "deadzone": 0.5,
 "events": [Object(InputEventKey,"resource_local_to_scene":false,"resource_name":"","device":-1,"window_id":0,"alt_pressed":false,"shift_pressed":false,"ctrl_pressed":false,"meta_pressed":false,"pressed":false,"keycode":0,"physical_keycode":77,"key_label":0,"unicode":109,"location":0,"echo":false,"script":null)
+]
+}
+open_company={
+"deadzone": 0.5,
+"events": [Object(InputEventKey,"resource_local_to_scene":false,"resource_name":"","device":-1,"window_id":0,"alt_pressed":false,"shift_pressed":false,"ctrl_pressed":false,"meta_pressed":false,"pressed":false,"keycode":0,"physical_keycode":66,"key_label":0,"unicode":98,"location":0,"echo":false,"script":null)
 ]
 }
 open_journal={

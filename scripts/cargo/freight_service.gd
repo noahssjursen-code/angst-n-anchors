@@ -67,7 +67,73 @@ func _generated_offers(port_id: String, max_offers: int) -> Array[Dictionary]:
 
 
 func active_contracts() -> Array[Dictionary]:
-	return _active.duplicate(true)
+	var out: Array[Dictionary] = []
+	for contract in _active:
+		if not bool(contract.get("company_managed", false)):
+			out.append(contract.duplicate(true))
+	return out
+
+
+func register_company_contract(contract_data: Dictionary) -> bool:
+	var contract := contract_data.duplicate(true)
+	var contract_id := str(contract.get("id", "")).strip_edges()
+	if contract_id.is_empty():
+		return false
+	var existing := _contract_index(contract_id)
+	if existing >= 0:
+		return bool(_active[existing].get("company_managed", false))
+	contract["company_managed"] = true
+	contract["status"] = "accepted"
+	contract["loaded_quantity"] = float(contract.get("loaded_quantity", 0.0))
+	contract["delivered_quantity"] = float(contract.get("delivered_quantity", 0.0))
+	contract["issued_quantity"] = int(contract.get("issued_quantity", 0))
+	if not contract.has("consignment"):
+		contract["consignment"] = CARGO_CONSIGNMENT.from_contract(contract).to_dict()
+	_active.append(contract)
+	call_deferred("_stage_contract", contract_id)
+	return true
+
+
+func company_contract(contract_id: String) -> Dictionary:
+	var index := _contract_index(contract_id)
+	if index < 0 or not bool(_active[index].get("company_managed", false)):
+		return {}
+	return _active[index].duplicate(true)
+
+
+## Repair company crane accounting from the physical ship manifest. Company
+## vessels may cross an interest boundary between a crane callback and its next
+## frame; the actual units aboard are authoritative at that boundary.
+func reconcile_company_loaded_units(contract_id: String, onboard_units: int) -> bool:
+	var index := _contract_index(contract_id)
+	if index < 0 or not bool(_active[index].get("company_managed", false)):
+		return false
+	var contract := _active[index]
+	var quantity := maxi(int(round(float(contract.get("quantity", 0.0)))), 0)
+	var count := clampi(onboard_units, 0, quantity)
+	contract["loaded_quantity"] = float(count)
+	contract["issued_quantity"] = count
+	contract["status"] = "loaded" if count >= quantity else "accepted"
+	_active[index] = contract
+	return true
+
+
+func cancel_company_contract(contract_id: String) -> bool:
+	var index := _contract_index(contract_id)
+	if index < 0 or not bool(_active[index].get("company_managed", false)):
+		return false
+	for node in get_tree().get_nodes_in_group(ContainerNode.GROUP):
+		var container := node as ContainerNode
+		if container == null or container.unit == null:
+			continue
+		if container.unit.freight_contract_id != contract_id:
+			continue
+		var parent := container.get_parent()
+		if parent is CargoSlotPadComponent:
+			(parent as CargoSlotPadComponent).take_container_node(container)
+		container.queue_free()
+	_active.remove_at(index)
+	return true
 
 
 ## Called after the authoritative world port directory is populated. This also
@@ -91,7 +157,7 @@ func prune_unknown_ports() -> int:
 func accept_offer(offer: Dictionary) -> bool:
 	if offer.is_empty() or str(offer.get("status", "")) != "offered":
 		return false
-	if _active.size() >= MAX_ACTIVE_CONTRACTS or _contract_index(str(offer.get("id", ""))) >= 0:
+	if _player_contract_count() >= MAX_ACTIVE_CONTRACTS or _contract_index(str(offer.get("id", ""))) >= 0:
 		return false
 	var accepted := offer.duplicate(true)
 	accepted["status"] = "accepted"
@@ -146,7 +212,7 @@ func is_offer_compatible_with_ship(offer: Dictionary, ship: BoatBody) -> bool:
 func can_accept(offer: Dictionary) -> bool:
 	return not offer.is_empty() \
 		and str(offer.get("status", "")) == "offered" \
-		and _active.size() < MAX_ACTIVE_CONTRACTS \
+		and _player_contract_count() < MAX_ACTIVE_CONTRACTS \
 		and _contract_index(str(offer.get("id", ""))) < 0
 
 
@@ -391,6 +457,8 @@ func _publish() -> void:
 func _complete(index: int) -> void:
 	var contract := _active[index]
 	_active.remove_at(index)
+	if bool(contract.get("company_managed", false)):
+		return
 	var session := get_node_or_null("/root/PlayerSession")
 	if session != null:
 		session.earn_marks(int(contract.get("pay_marks", 0)))
@@ -403,6 +471,14 @@ func _contract_index(contract_id: String) -> int:
 		if str(_active[index].get("id", "")) == contract_id:
 			return index
 	return -1
+
+
+func _player_contract_count() -> int:
+	var count := 0
+	for contract in _active:
+		if not bool(contract.get("company_managed", false)):
+			count += 1
+	return count
 
 
 func _stage_contract(contract_id: String) -> void:

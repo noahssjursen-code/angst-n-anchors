@@ -194,10 +194,8 @@ func begin_new_captain(
 			"weather_generation_version": 3,
 			"layout_checksum": "",
 		}
-	# One starter vessel on the registry so harbour deploy works immediately.
-	var starter := VesselSpawn.default_owned_record()
-	data.upsert_owned_vessel(starter)
-	data.set_active_vessel(starter)
+	# New companies begin without a vessel. The first hull is bought through
+	# the shipwright, using the same registry and pricing rules as later ships.
 	data_loaded.emit(data)
 	save_now()
 
