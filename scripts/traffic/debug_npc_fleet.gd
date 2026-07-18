@@ -73,6 +73,8 @@ func _process(delta: float) -> void:
 	var step := _abstract_elapsed_s
 	_abstract_elapsed_s = 0.0
 	var changed := false
+	var traffic := get_node_or_null("/root/MaritimeTraffic")
+	var traffic_snapshot: Dictionary = traffic.snapshot() if traffic != null else {}
 	for uid_raw in _fleet.keys():
 		var uid := str(uid_raw)
 		if _local_simulation.has(uid):
@@ -83,8 +85,10 @@ func _process(delta: float) -> void:
 		if str(row.get("status", "")) != "underway" or plan == null or not plan.is_valid():
 			continue
 		var limit := maxf(plan.total_distance_m() - 45.0, 0.0)
+		var speed_factor := _authority_speed_factor(uid, traffic_snapshot)
 		var progress := minf(
-			float(row.get("route_progress_m", 0.0)) + ABSTRACT_CRUISE_SPEED_MS * step,
+			float(row.get("route_progress_m", 0.0)) \
+				+ ABSTRACT_CRUISE_SPEED_MS * speed_factor * step,
 			limit,
 		)
 		if not is_equal_approx(progress, float(row.get("route_progress_m", 0.0))):
@@ -93,6 +97,24 @@ func _process(delta: float) -> void:
 			changed = true
 	if changed:
 		company_changed.emit(snapshot())
+
+
+func _authority_speed_factor(uid: String, traffic_snapshot: Dictionary) -> float:
+	if traffic_snapshot.is_empty():
+		return 1.0
+	var intent := (traffic_snapshot.get("intents", {}) as Dictionary).get(uid, {}) as Dictionary
+	if str(intent.get("phase", "")) in ["holding", "waiting_approach"]:
+		return 0.0
+	for block_raw in (traffic_snapshot.get("blocks", {}) as Dictionary).values():
+		for queued_raw in (block_raw as Dictionary).get("queue", []) as Array:
+			if str((queued_raw as Dictionary).get("vessel_id", "")) == uid:
+				return 0.0
+	var traffic := get_node_or_null("/root/MaritimeTraffic")
+	var agreement: Dictionary = traffic.agreement_for(uid) if traffic != null else {}
+	if agreement.is_empty():
+		return 1.0
+	return clampf(float((agreement.get("instruction", {}) as Dictionary).get(
+		"speed_limit", 1.0)), 0.0, 1.0)
 
 
 func is_active() -> bool:

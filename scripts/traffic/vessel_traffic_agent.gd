@@ -67,7 +67,7 @@ func _physics_process(delta: float) -> void:
 		autopilot.apply_traffic_instruction({
 			"action": "waiting_for_lane_signal",
 			"heading_offset_deg": 0.0,
-			"speed_limit": 0.18,
+			"speed_limit": 0.0,
 		})
 	elif agreement.is_empty():
 		autopilot.clear_traffic_instruction()

@@ -6,7 +6,7 @@ extends Node3D
 
 # Most route geometry is static. Rebuilding ArrayMeshes several times per second
 # was itself a substantial debug-mode performance cost with a multi-ship fleet.
-const REFRESH_S := 1.5
+const REFRESH_S := 2.0
 const LINE_Y := 5.5
 const PLAYER_COLOR := Color(1.0, 0.62, 0.18, 0.96)
 const NPC_COLOR := Color(0.18, 0.86, 1.0, 0.94)
@@ -18,6 +18,8 @@ const PASSAGE_COLOR := Color(0.12, 0.82, 1.0, 0.98)
 const ARRIVAL_COLOR := Color(0.30, 1.0, 0.48, 0.98)
 
 var _elapsed_s := 0.0
+var _line_batches: Dictionary = {}
+var _drawn_handoffs: Dictionary = {}
 
 
 func _ready() -> void:
@@ -49,6 +51,8 @@ func _process(delta: float) -> void:
 
 func _rebuild() -> void:
 	_clear()
+	_line_batches.clear()
+	_drawn_handoffs.clear()
 	var live_ids: Dictionary = {}
 	for raw in get_tree().get_nodes_in_group("vessel_traffic_agent"):
 		var agent := raw as Node
@@ -67,6 +71,7 @@ func _rebuild() -> void:
 		_draw_vessel_navigation(boat)
 	_draw_dormant_company_routes(live_ids)
 	_draw_traffic_authority()
+	_flush_polylines()
 
 
 func _draw_vessel_navigation(boat: BoatBody) -> void:
@@ -180,6 +185,8 @@ func _draw_dormant_company_routes(live_ids: Dictionary) -> void:
 	var fleet_projection := get_node_or_null("/root/CompanyFleetProjection")
 	if fleet_projection == null or not fleet_projection.has_method("all_projection_records"):
 		return
+	var traffic := get_node_or_null("/root/MaritimeTraffic")
+	var traffic_snapshot: Dictionary = traffic.snapshot() if traffic != null else {}
 	for raw in fleet_projection.call("all_projection_records") as Array[Dictionary]:
 		var record := raw as Dictionary
 		var uid := str(record.get("uid", ""))
@@ -204,7 +211,11 @@ func _draw_dormant_company_routes(live_ids: Dictionary) -> void:
 					points.append(_lift(plan.waypoints[index]))
 			_add_polyline(points, Color(NPC_COLOR, 0.48), "DormantRoute_%s" % uid)
 		var label := Label3D.new()
-		label.text = "NPC AUTHORITY  |  DORMANT PROJECTION"
+		var vessel := record.get("vessel", {}) as Dictionary
+		label.text = "%s\n%s  |  ABSTRACT" % [
+			str(vessel.get("name", "NPC VESSEL")),
+			_dormant_state_text(uid, assignment, traffic_snapshot),
+		]
 		label.position = position + Vector3(0.0, 10.0, 0.0)
 		label.font_size = 28
 		label.pixel_size = 0.012
@@ -213,6 +224,31 @@ func _draw_dormant_company_routes(live_ids: Dictionary) -> void:
 		label.modulate = Color(NPC_COLOR, 0.62)
 		label.outline_size = 6
 		add_child(label)
+
+
+func _dormant_state_text(
+		uid: String,
+		assignment: Dictionary,
+		traffic_snapshot: Dictionary,
+) -> String:
+	var intent := (traffic_snapshot.get("intents", {}) as Dictionary).get(uid, {}) as Dictionary
+	var phase := str(intent.get("phase", "passage"))
+	var destination := _port_name(str(assignment.get("leg_destination_port_id", "")))
+	if phase in ["holding", "waiting_approach"]:
+		var queue_position := 0
+		var port_id := str(assignment.get("leg_destination_port_id", ""))
+		var queue_index := 0
+		for raw in (traffic_snapshot.get("port_queues", {}) as Dictionary).get(port_id, []) as Array:
+			queue_index += 1
+			var ticket := raw as Dictionary
+			if str(ticket.get("vessel_id", "")) == uid:
+				queue_position = queue_index
+				break
+		return "WAITING FOR %s%s" % [
+			destination,
+			" · QUEUE #%d" % queue_position if queue_position > 0 else "",
+		]
+	return "TRAVELING TO %s" % destination
 
 
 func _draw_segmented_route(plan: MarineRoutePlan, vessel_id: String, alpha: float = 1.0) -> void:
@@ -224,10 +260,13 @@ func _draw_segmented_route(plan: MarineRoutePlan, vessel_id: String, alpha: floa
 		"Passage_%s" % vessel_id)
 	_add_polyline(_route_section(plan, arrival, plan.total_distance_m()), Color(ARRIVAL_COLOR, alpha),
 		"Arrival_%s" % vessel_id)
-	_add_handoff_sphere(plan.departure_handoff_xz, Color(DEPARTURE_COLOR, alpha),
-		"DEPARTURE HANDOFF", "DepartureHandoff_%s" % vessel_id)
-	_add_handoff_sphere(plan.arrival_handoff_xz, Color(ARRIVAL_COLOR, alpha),
-		"ARRIVAL HANDOFF", "ArrivalHandoff_%s" % vessel_id)
+	var handoff_key := "%s:%0.2f" % [plan.route_id, alpha]
+	if not _drawn_handoffs.has(handoff_key):
+		_drawn_handoffs[handoff_key] = true
+		_add_handoff_sphere(plan.departure_handoff_xz, Color(DEPARTURE_COLOR, alpha),
+			"DEPARTURE HANDOFF", "DepartureHandoff_%s" % vessel_id)
+		_add_handoff_sphere(plan.arrival_handoff_xz, Color(ARRIVAL_COLOR, alpha),
+			"ARRIVAL HANDOFF", "ArrivalHandoff_%s" % vessel_id)
 
 
 func _route_section(plan: MarineRoutePlan, start_m: float, end_m: float) -> PackedVector3Array:
@@ -346,26 +385,42 @@ func _draw_traffic_authority() -> void:
 func _add_polyline(points: PackedVector3Array, color: Color, node_name: String) -> void:
 	if points.size() < 2:
 		return
-	var vertices := PackedVector3Array()
+	var key := "%0.4f:%0.4f:%0.4f:%0.4f" % [color.r, color.g, color.b, color.a]
+	var batch := _line_batches.get(key, {
+		"color": color,
+		"vertices": PackedVector3Array(),
+		"name": node_name,
+	}) as Dictionary
+	var vertices := batch.get("vertices", PackedVector3Array()) as PackedVector3Array
 	for index in range(points.size() - 1):
 		vertices.append(points[index])
 		vertices.append(points[index + 1])
-	var arrays: Array = []
-	arrays.resize(Mesh.ARRAY_MAX)
-	arrays[Mesh.ARRAY_VERTEX] = vertices
-	var mesh := ArrayMesh.new()
-	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_LINES, arrays)
-	var instance := MeshInstance3D.new()
-	instance.name = node_name
-	instance.mesh = mesh
-	instance.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	var material := StandardMaterial3D.new()
-	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	material.albedo_color = color
-	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	material.no_depth_test = true
-	instance.material_override = material
-	add_child(instance)
+	batch["vertices"] = vertices
+	_line_batches[key] = batch
+
+
+func _flush_polylines() -> void:
+	for batch_raw in _line_batches.values():
+		var batch := batch_raw as Dictionary
+		var vertices := batch.get("vertices", PackedVector3Array()) as PackedVector3Array
+		if vertices.size() < 2:
+			continue
+		var arrays: Array = []
+		arrays.resize(Mesh.ARRAY_MAX)
+		arrays[Mesh.ARRAY_VERTEX] = vertices
+		var mesh := ArrayMesh.new()
+		mesh.add_surface_from_arrays(Mesh.PRIMITIVE_LINES, arrays)
+		var instance := MeshInstance3D.new()
+		instance.name = str(batch.get("name", "NavigationLines"))
+		instance.mesh = mesh
+		instance.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		var material := StandardMaterial3D.new()
+		material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		material.albedo_color = batch.get("color", Color.WHITE) as Color
+		material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		material.no_depth_test = true
+		instance.material_override = material
+		add_child(instance)
 
 
 func _clear() -> void:

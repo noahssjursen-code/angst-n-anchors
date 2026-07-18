@@ -474,6 +474,7 @@ func advance_to(now_unix: int) -> void:
 	var previous := int(_state.get("last_simulated_unix", now_unix))
 	if now_unix <= previous:
 		return
+	_apply_live_traffic_delays(now_unix - previous)
 	var changed := false
 	# Settle globally by event time. This makes shared-payroll outcomes stable
 	# regardless of dictionary insertion order or how long the game was closed.
@@ -515,6 +516,46 @@ func advance_to(now_unix: int) -> void:
 	_state["last_simulated_unix"] = now_unix
 	if changed:
 		_publish(true)
+
+
+func _apply_live_traffic_delays(delta_s: int) -> void:
+	## Offline timestamps establish the initial deterministic point. Once the
+	## world is live, traffic authority may pause an abstract vessel just like a
+	## physical captain; shifting its leg clock preserves that delayed progress.
+	if delta_s <= 0:
+		return
+	var traffic := get_node_or_null("/root/MaritimeTraffic")
+	if traffic == null:
+		return
+	var traffic_snapshot: Dictionary = traffic.snapshot()
+	var intents := traffic_snapshot.get("intents", {}) as Dictionary
+	var blocks := traffic_snapshot.get("blocks", {}) as Dictionary
+	var fleet := _state.get("fleet", {}) as Dictionary
+	for uid_raw in fleet.keys():
+		var uid := str(uid_raw)
+		if _local_voyage_simulation.has(uid):
+			continue
+		var row := fleet[uid] as Dictionary
+		if str(row.get("status", "")) != "underway":
+			continue
+		var intent := intents.get(uid, {}) as Dictionary
+		var held := str(intent.get("phase", "")) in ["holding", "waiting_approach"]
+		if not held:
+			for block_raw in blocks.values():
+				for queued_raw in (block_raw as Dictionary).get("queue", []) as Array:
+					if str((queued_raw as Dictionary).get("vessel_id", "")) == uid:
+						held = true
+						break
+				if held:
+					break
+		if not held:
+			continue
+		for key in ["leg_started_unix", "departure_ready_unix", "leg_ends_unix"]:
+			if row.has(key):
+				row[key] = int(row[key]) + delta_s
+		row["traffic_delay_seconds"] = int(row.get("traffic_delay_seconds", 0)) + delta_s
+		fleet[uid] = row
+	_state["fleet"] = fleet
 
 
 func _complete_leg(vessel_uid: String, at_unix: int) -> void:

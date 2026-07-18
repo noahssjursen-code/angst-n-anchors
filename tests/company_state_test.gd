@@ -31,6 +31,7 @@ func _ready() -> void:
 	_test_cargo_manifest_survives_save_and_clears_after_delivery()
 	_test_abstract_departure_builds_deterministic_cargo()
 	_test_local_physics_suspends_timestamp_arrival()
+	_test_abstract_traffic_hold_pauses_leg_clock()
 	_test_preparation_departure_and_offline_arrival()
 	_test_payroll_holds_without_debt()
 	_test_stop_after_leg_settles_offline_and_holds()
@@ -199,6 +200,34 @@ func _test_local_physics_suspends_timestamp_arrival() -> void:
 	assert(str(row.get("current_berth_id", "")) == "port-b/general")
 	service.free()
 	session.queue_free()
+
+
+func _test_abstract_traffic_hold_pauses_leg_clock() -> void:
+	var service := CompanyServiceScript.new()
+	add_child(service)
+	var state := _simulation_state(100)
+	var row := (state["fleet"] as Dictionary)["vessel-1"] as Dictionary
+	row["status"] = "underway"
+	row["leg_started_unix"] = 90
+	row["departure_ready_unix"] = 90
+	row["leg_ends_unix"] = 101
+	service.set("_state", state)
+	var traffic := get_node_or_null("/root/MaritimeTraffic")
+	assert(traffic != null)
+	traffic.publish_intent({
+		"vessel_id": "vessel-1",
+		"position_xz": [0.0, 0.0],
+		"velocity_xz": [0.0, 0.0],
+		"phase": "holding",
+	})
+	service.advance_to(101)
+	row = (service.get("_state") as Dictionary)["fleet"]["vessel-1"] as Dictionary
+	assert(str(row.get("status", "")) == "underway",
+		"abstract vessel must not timestamp-arrive while traffic authority holds it")
+	assert(int(row.get("leg_ends_unix", 0)) == 112,
+		"traffic wait shifts the durable leg clock instead of faking a visual stop")
+	traffic.withdraw_vessel("vessel-1")
+	service.free()
 
 
 func _test_preparation_departure_and_offline_arrival() -> void:

@@ -17,6 +17,7 @@ func _initialize() -> void:
 	_test_directional_convoy_block(traffic)
 	_test_wide_bidirectional_block(traffic)
 	_test_lane_window(traffic)
+	_test_atomic_lane_window_rollback(traffic)
 	_test_fifty_vessel_spatial_scan(traffic)
 	_test_snapshot_round_trip(traffic)
 	traffic.queue_free()
@@ -159,6 +160,21 @@ func _test_lane_window(traffic: Node) -> void:
 		"opposing lane window stops at its first red signal")
 	traffic.release_lane_window("lane-a")
 	traffic.release_lane_window("lane-b")
+
+
+func _test_atomic_lane_window_rollback(traffic: Node) -> void:
+	traffic.request_block("lane:atomic:z", "blocker", -1)
+	var specs: Array[Dictionary] = [
+		{"block_id": "lane:atomic:a", "direction": 1, "capacity": 1},
+		{"block_id": "lane:atomic:z", "direction": 1, "capacity": 1},
+	]
+	var result: Dictionary = traffic.request_lane_window("requester", specs)
+	_check(not bool(result.get("granted", true)),
+		"multi-block lane window reports a downstream red signal")
+	var first: Dictionary = traffic.block_snapshot("lane:atomic:a")
+	_check(not (first.get("owner_vessel_ids", []) as Array).has("requester"),
+		"failed lane window rolls back new claims instead of holding half a route")
+	traffic.release_block("lane:atomic:z", "blocker")
 
 
 func _test_fifty_vessel_spatial_scan(traffic: Node) -> void:

@@ -20,6 +20,8 @@ var _elapsed := 0.0
 var _abstract_traffic_elapsed := 0.0
 var _refreshing := false
 var _published_authority_ids: Dictionary = {}
+var _last_network_snapshot_bytes := 0
+var _last_network_snapshot_ms := 0.0
 
 
 func _ready() -> void:
@@ -63,6 +65,8 @@ func get_debug_stats() -> Dictionary:
 		"physics_low": quality_counts.low,
 		"physics_sleep": quality_counts.sleep,
 		"physical_cap": MAX_PHYSICAL_NPC_VESSELS,
+		"snapshot_bytes": _last_network_snapshot_bytes,
+		"snapshot_build_ms": _last_network_snapshot_ms,
 	}
 
 
@@ -111,6 +115,7 @@ func leg_route_plan(vessel_uid: String) -> MarineRoutePlan:
 
 
 func network_fleet_snapshot() -> Dictionary:
+	var started_usec := Time.get_ticks_usec()
 	var vessels: Array[Dictionary] = []
 	var server_time := int(Time.get_unix_time_from_system() * 1000.0)
 	for record in all_projection_records():
@@ -119,11 +124,14 @@ func network_fleet_snapshot() -> Dictionary:
 			record, leg_route_plan(uid), _ships.get(uid) as Node3D, server_time)
 		if VesselAuthoritySnapshot.is_valid(wire):
 			vessels.append(wire)
-	return {
+	var result := {
 		"schema_version": 1,
 		"server_unix_msec": server_time,
 		"vessels": vessels,
 	}
+	_last_network_snapshot_bytes = JSON.stringify(result).to_utf8_buffer().size()
+	_last_network_snapshot_ms = float(Time.get_ticks_usec() - started_usec) / 1000.0
+	return result
 
 
 func _connect_authority_signals() -> void:

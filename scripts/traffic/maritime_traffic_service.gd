@@ -484,8 +484,16 @@ func request_lane_window(vessel_id: String, specs: Array[Dictionary], priority: 
 		return {}
 	var wanted := PackedStringArray()
 	var acquired := PackedStringArray()
+	var acquired_now := PackedStringArray()
 	var blocked_by := ""
-	for spec in specs:
+	var previous := _string_array(_lane_claims.get(vid, []))
+	# Every vessel acquires a multi-block window in the same canonical order.
+	# Opposing routes therefore cannot each hold half a window while waiting for
+	# the other half (the maritime equivalent of a rail-signal deadlock).
+	var ordered_specs: Array[Dictionary] = specs.duplicate(true)
+	ordered_specs.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+		return str(a.get("block_id", "")) < str(b.get("block_id", "")))
+	for spec in ordered_specs:
 		var block_id := str(spec.get("block_id", ""))
 		if block_id.is_empty():
 			continue
@@ -494,15 +502,24 @@ func request_lane_window(vessel_id: String, specs: Array[Dictionary], priority: 
 				int(spec.get("capacity", 1)), bool(spec.get("bidirectional", false))):
 			_decorate_lane_block(block_id, spec)
 			acquired.append(block_id)
+			if block_id not in previous:
+				acquired_now.append(block_id)
 		else:
 			_decorate_lane_block(block_id, spec)
 			blocked_by = block_id
 			break
-	var previous := _string_array(_lane_claims.get(vid, []))
-	for block_id in previous:
-		if block_id not in acquired:
+	if not blocked_by.is_empty():
+		for block_id in acquired_now:
 			release_block(block_id, vid)
-	_lane_claims[vid] = Array(acquired)
+			acquired.erase(block_id)
+	for block_id in previous:
+		if block_id not in wanted:
+			release_block(block_id, vid)
+	var retained := PackedStringArray()
+	for block_id in acquired:
+		if blocked_by.is_empty() or block_id in previous:
+			retained.append(block_id)
+	_lane_claims[vid] = Array(retained)
 	return {
 		"granted": blocked_by.is_empty(),
 		"blocked_by": blocked_by,
