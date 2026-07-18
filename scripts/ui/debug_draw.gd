@@ -126,7 +126,7 @@ func _draw() -> void:
 	draw_string(font, Vector2(ox + PAD_X, ty),
 		"DEBUG  %s" % ("PEAK/WORST" if use_peak_values else "LIVE"),
 		HORIZONTAL_ALIGNMENT_LEFT, -1, 11, C_TITLE)
-	var hint := "Tab switch · H live/peak · C copy · R reset"
+	var hint := "G gizmos · C cursor · Ctrl+C copy · H live/peak"
 	var hint_w := font.get_string_size(hint, HORIZONTAL_ALIGNMENT_LEFT, -1, 9).x
 	draw_string(font, Vector2(ox + PANEL_W - hint_w - PAD_X, ty),
 		hint, HORIZONTAL_ALIGNMENT_LEFT, -1, 9, C_LABEL)
@@ -474,12 +474,18 @@ func _build_debug_tools(e: Array) -> void:
 		and debug_hud.has_method("is_clear_weather_override_active") \
 		and bool(debug_hud.call("is_clear_weather_override_active"))
 	_row(e, "E weather", "CLEAR OVERRIDE" if clear_override else "LIVE WEATHER", C_WARN if clear_override else C_VALUE)
-	_row(e, "Berth lanes", "%s (%d ports, %d curves)" % [
-		BerthApproachLanes.debug_label(),
-		BerthApproachLanes.baked_port_count(),
-		BerthApproachLanes.debug_polyline_count(),
-	], C_VALUE)
-	_stub(e, "Toggle", "B lane overlay")
+	var cursor_enabled := debug_hud != null \
+		and debug_hud.has_method("is_debug_cursor_enabled") \
+		and bool(debug_hud.call("is_debug_cursor_enabled"))
+	_row(e, "C cursor", "VISIBLE" if cursor_enabled else "captured",
+		C_GOOD if cursor_enabled else C_LABEL)
+	if debug_hud != null:
+		for definition in WorldGizmos.LAYERS:
+			var layer_id := str(definition.get("id", ""))
+			var enabled := bool(debug_hud.call("is_gizmo_layer_enabled", layer_id))
+			_row(e, str(definition.get("label", layer_id)).capitalize(),
+				"ON" if enabled else "off", C_GOOD if enabled else C_LABEL)
+	_stub(e, "G gizmos", "open layer selector · B berth shortcut")
 	_sep(e)
 
 

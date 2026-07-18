@@ -93,12 +93,18 @@ Each autoload lives in its system folder and is registered in `project.godot`.
 | `CompanyFleetProjection` | `company/` | Nearby disposable BoatBody projections reconstructed from company timestamps |
 | `GameMenu` | `ui/` | Pause / map / settings / hint overlay |
 | `GameState` | `state/` | Read model: player/ship/contract/world sub-states |
-| `DebugHud` | `ui/` | F3 debug overlay |
+| `DebugHud` | `ui/` | F3 debug overlay; F3 then G opens independently selectable world-gizmo layers |
 | `Telemetry` | `state/` | Central debug/performance service: hardware samples, published metrics, peaks, context flags, events, and copyable reports |
 | `LocalPlayerView` | `state/` | **The MP seam.** Per-client view of the local player's world. UI reads through here, not direct autoloads |
 | `Tutorial` | `state/` | First-time hint chain (fires once per captain, persisted) |
 
 The autoloads listed above are the **actual** registered singletons. Do not reference `Economy`, `ContractBoard`, `FleetManager`, `ContractRegistry`, `PortOperations`, or `World` — those don't exist (or were purged).
+
+World debug geometry is registered through `WorldGizmos` with a layer id. Do
+not add another global boolean. Current layers are navigation (NPC + player
+autopilot routes, holding points, traffic agreements), berth lanes, port
+layout, crane operations, and general world geometry. The F3/G selector owns
+their runtime state.
 
 ### Convention — `LocalPlayerView` is the MP seam
 

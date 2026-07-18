@@ -21,6 +21,7 @@ const MAX_SPINE_STEPS := 36
 const MAX_FLANK_STEPS := 48
 const OPEN_WATER_END_M := 58.0
 const OPEN_WATER_RUN_STEPS := 4
+const LIVE_PORT_HANDOFF_M := 90.0
 const LAND_PAD_M := IslandMeshBuilder.MARGIN + IslandMeshBuilder.AMPLITUDE
 const QUAY_ZONE_M := 14.0
 const NEAR_SHORE_ZONE_M := 55.0
@@ -49,6 +50,7 @@ static func bake_all_ports(
 	_berth_positions.clear()
 	_target_meta.clear()
 	_islands.clear()
+	_live_baked_ports.clear()
 	var lane_count := 0
 	for def_raw in defs:
 		var def := def_raw as PortDefinition
@@ -145,7 +147,7 @@ static func _store_planned_lane(
 		berth,
 		crab,
 		crab + sea3 * (length_m * 0.5 + 45.0),
-		crab + sea3 * (length_m * 0.5 + 285.0),
+		crab + sea3 * (length_m * 0.5 + 45.0 + LIVE_PORT_HANDOFF_M),
 	])
 	port_lanes[target_id] = {
 		int(LaneKind.SPINE): canonical,
@@ -185,7 +187,9 @@ static func bake_live_berth(port_id: String, slot: QuayBerthSlot) -> int:
 	berth.y = WaveSurface.WATER_LEVEL
 	var crab_clear := berth + water * maxf(slot.berth_gap_m + 12.0, 16.0)
 	var clear_tip := crab_clear + seaward * (slot.length_m * 0.5 + 45.0)
-	var outer := clear_tip + seaward * 240.0
+	## End port authority shortly after the hull clears the pier. The marine
+	## passage planner owns everything beyond this compact handoff corridor.
+	var outer := clear_tip + seaward * LIVE_PORT_HANDOFF_M
 	var canonical := _densify_chain([
 		berth,
 		crab_clear,
@@ -211,6 +215,9 @@ static func bake_live_berth(port_id: String, slot: QuayBerthSlot) -> int:
 		"commodities": slot.commodities.duplicate(),
 	}
 	_target_meta[port_id] = metadata
+	# From this point the runtime slot transform is the authority for which face
+	# is water-side. Do not let a later planned-data bake replace this exact lane.
+	_live_baked_ports[port_id] = true
 	_initialized = true
 	return 3
 
@@ -366,7 +373,7 @@ static func collect_debug_polylines() -> Array:
 					continue
 				out.append({
 					"port_id": str(port_id),
-					"berth": int(berth_key),
+					"berth_id": str(berth_key),
 					"slice": int(kind_key),
 					"points": lane.duplicate(),
 				})

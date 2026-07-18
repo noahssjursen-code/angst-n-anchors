@@ -9,6 +9,12 @@ var _navigation: WaterwayNavigation
 var _cache: Dictionary = {}
 static var _navigation_by_layout: Dictionary = {}
 
+const TURN_MIN_ANGLE_DEG := 8.0
+const TURN_RADIUS_MAX_M := 90.0
+const TURN_TRIM_FRACTION := 0.32
+const TURN_CURVE_STEPS := 5
+const TURN_CLEARANCE_M := 14.0
+
 
 func _init(layout: WorldLayout = null) -> void:
 	if layout != null:
@@ -52,6 +58,7 @@ func plan(
 	## approach point and leaves berthing to the player.
 	if points.size() >= 3:
 		points.remove_at(points.size() - 1)
+	points = _round_open_water_corners(points, 1, points.size() - 2)
 	var result := MarineRoutePlan.create(
 		points,
 		str(_layout.layout_checksum),
@@ -81,20 +88,28 @@ func plan_departure(
 	var lane := BerthApproachLanes.get_target_lane(origin_port_id, origin_berth_id, lane_kind)
 	if lane.size() < 2:
 		return plan(from_xz, to_xz, origin_port_id, destination_port_id)
+	## The route has three explicit authority domains:
+	##   berth departure -> marine passage -> berth arrival.
+	## Quay manoeuvre points stay exact; only their open-water handoffs and the
+	## passage itself may be rounded.
 	var points := PackedVector2Array()
 	for raw_point in lane:
 		var point := raw_point as Vector3
 		points.append(Vector2(point.x, point.z))
+	var departure_handoff_index := points.size() - 1
+	var departure_handoff := points[departure_handoff_index]
 	var passage := plan(points[-1], to_xz, origin_port_id, destination_port_id)
 	for point in passage.waypoints:
 		if not points[-1].is_equal_approx(point):
 			points.append(point)
-	return MarineRoutePlan.create(
+	var result := MarineRoutePlan.create(
 		points,
 		str(_layout.layout_checksum) if _layout != null else "",
 		origin_port_id,
 		destination_port_id,
 	)
+	result.set_handoffs(departure_handoff)
+	return result
 
 
 func plan_berth_to_berth(
@@ -129,12 +144,16 @@ func plan_berth_to_berth(
 		points.append(Vector2(point.x, point.z) + departure_delta * taper)
 	if points.is_empty():
 		points.append(from_xz)
+	var departure_handoff_index := points.size() - 1
+	var departure_handoff := points[departure_handoff_index]
 	var arrival_outer := arrival[-1] as Vector3
 	var water_end := Vector2(arrival_outer.x, arrival_outer.z)
 	var water_points := _navigation.route_points(points[-1], water_end)
 	for point in water_points:
 		if not points[-1].is_equal_approx(point):
 			points.append(point)
+	var arrival_handoff_index := points.size() - 1
+	var arrival_handoff := points[arrival_handoff_index]
 	## Stored berth lanes run quay -> sea. Reverse the destination lane so the
 	## voyage becomes sea -> controlled approach -> berth.
 	var arrival_delta := Vector2.ZERO
@@ -147,5 +166,70 @@ func plan_berth_to_berth(
 		var point2 := Vector2(point3.x, point3.z) + arrival_delta * arrival_taper
 		if not points[-1].is_equal_approx(point2):
 			points.append(point2)
-	return MarineRoutePlan.create(points, str(_layout.layout_checksum),
+	points = _round_open_water_corners(
+		points, departure_handoff_index + 1, arrival_handoff_index - 1)
+	var result := MarineRoutePlan.create(points, str(_layout.layout_checksum),
 		origin_port_id, destination_port_id)
+	result.set_handoffs(departure_handoff, arrival_handoff)
+	return result
+
+
+func _round_open_water_corners(
+		points: PackedVector2Array,
+		first_corner_index: int,
+		last_corner_index: int,
+) -> PackedVector2Array:
+	if points.size() < 3:
+		return points
+	var out := PackedVector2Array([points[0]])
+	for index in range(1, points.size() - 1):
+		var corner := points[index]
+		if index < first_corner_index or index > last_corner_index:
+			_append_distinct(out, corner)
+			continue
+		var incoming := corner - points[index - 1]
+		var outgoing := points[index + 1] - corner
+		if incoming.length_squared() <= 1.0 or outgoing.length_squared() <= 1.0:
+			_append_distinct(out, corner)
+			continue
+		var turn_angle := absf(rad_to_deg(incoming.normalized().angle_to(outgoing.normalized())))
+		if turn_angle < TURN_MIN_ANGLE_DEG:
+			_append_distinct(out, corner)
+			continue
+		var trim := minf(TURN_RADIUS_MAX_M, minf(incoming.length(), outgoing.length()) * TURN_TRIM_FRACTION)
+		if trim < 4.0:
+			_append_distinct(out, corner)
+			continue
+		var entry := corner - incoming.normalized() * trim
+		var exit := corner + outgoing.normalized() * trim
+		var curve := _quadratic_corner(entry, corner, exit)
+		if not _curve_has_clearance(curve):
+			_append_distinct(out, corner)
+			continue
+		for point in curve:
+			_append_distinct(out, point)
+	_append_distinct(out, points[-1])
+	return out
+
+
+static func _quadratic_corner(entry: Vector2, corner: Vector2, exit: Vector2) -> PackedVector2Array:
+	var curve := PackedVector2Array()
+	for step in range(TURN_CURVE_STEPS + 1):
+		var t := float(step) / float(TURN_CURVE_STEPS)
+		var inverse := 1.0 - t
+		curve.append(entry * inverse * inverse + corner * 2.0 * inverse * t + exit * t * t)
+	return curve
+
+
+func _curve_has_clearance(curve: PackedVector2Array) -> bool:
+	if _layout == null or not _layout.has_method("sample_signed_distance"):
+		return true
+	for point in curve:
+		if float(_layout.call("sample_signed_distance", point)) < TURN_CLEARANCE_M:
+			return false
+	return true
+
+
+static func _append_distinct(points: PackedVector2Array, point: Vector2) -> void:
+	if points.is_empty() or not points[-1].is_equal_approx(point):
+		points.append(point)

@@ -173,7 +173,10 @@ Serializable shared maritime-traffic authority and per-vessel adapters.
 ### `scripts/ui/`
 
 - `GameMenu` autoload (pause/menu)
-- `DebugHud` autoload (F3 overlay)
+- `DebugHud` autoload (F3 overlay). F3/G opens a persistent layer selector for
+  navigation paths, berth lanes, port layout, crane operations, and general
+  world gizmos. `VesselNavigationDebugDraw` shows live and dormant NPC routes,
+  player autopilot targets, holding positions, captain phases, and agreements.
 - `MapOverlay` marine-chart shell with cached macro coastline, port markers,
   waterway route distance, and layered components under `ui/chart/`
 - `ShipHud`, `WalkingHud`

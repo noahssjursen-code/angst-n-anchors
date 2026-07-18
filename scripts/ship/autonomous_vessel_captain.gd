@@ -34,6 +34,13 @@ const DEPARTURE_TURN_RATE_TOLERANCE := 0.10
 const ALIGN_TOLERANCE_DEG := 5.0
 const BERTH_POSITION_TOLERANCE_M := 3.5
 const BERTH_SPEED_TOLERANCE_MS := 0.8
+const APPROACH_CAPTURE_OUTWARD_M := 14.0
+const APPROACH_CAPTURE_INWARD_M := 3.0
+const APPROACH_CAPTURE_SPEED_MS := 2.5
+const APPROACH_CAPTURE_HEADING_DEG := 18.0
+const APPROACH_ALIGN_RUN_MIN_M := 55.0
+const BERTH_REQUIRED_OVERLAP_FRACTION := 0.65
+const BERTH_MAX_CENTRE_OFFSET_FRACTION := 0.30
 const TRAFFIC_LEASE_REFRESH_S := 15.0
 
 var phase := Phase.IDLE
@@ -160,6 +167,8 @@ func _physics_process(delta: float) -> void:
 			_turn_for_departure()
 		Phase.PASSAGE:
 			_release_origin_lane_when_clear()
+		Phase.APPROACH:
+			_monitor_approach_capture()
 		Phase.WAITING_APPROACH:
 			_try_begin_approach()
 		Phase.HOLDING:
@@ -330,8 +339,7 @@ func _try_begin_approach() -> void:
 	if lane.size() < 2:
 		_fail("approach_lane_unavailable")
 		return
-	var dock := _destination_slot.global_transform * \
-		_destination_slot.ship_dock_local(_body.get_half_beam_m())
+	var dock := _destination_slot.global_transform * _operational_dock_local(false)
 	var water := _destination_slot.global_transform.basis * _destination_slot.water_dir_local
 	water.y = 0.0
 	water = water.normalized()
@@ -341,14 +349,26 @@ func _try_begin_approach() -> void:
 		CRAB_BERTH_STANDOFF_MAX_M,
 	)
 	var staging := dock.origin + water * standoff
+	var seaward := _destination_slot.global_transform.basis * Vector3(0.0, 0.0, 1.0)
+	seaward.y = 0.0
+	seaward = seaward.normalized()
+	var align_run := maxf(APPROACH_ALIGN_RUN_MIN_M, _body.hull_size.z * 1.10)
+	var aligned_entry := staging + seaward * align_run
 	var points := PackedVector2Array()
-	# Live lanes begin berth -> old 16 m crab point -> seaward approach.
-	# Arrival uses only the seaward portion, then a hull-specific staging point.
-	# This prevents forward autopilot from handing 16-20 m of lateral travel to
-	# the bow thruster after it aligns beside the quay.
-	for i in range(lane.size() - 1, 1, -1):
+	# Live lanes begin berth -> crab clearance -> seaward corridor. Consume only
+	# the part outside our hull-length alignment run, then finish on a line
+	# parallel to the pier. The old direct diagonal into `staging` left vessels
+	# pointing at the quay and forced them to rotate against its collision shape.
+	for i in range(lane.size() - 1, -1, -1):
 		var point := lane[i] as Vector3
+		var from_dock := point - dock.origin
+		from_dock.y = 0.0
+		if from_dock.dot(seaward) < align_run:
+			break
 		points.append(Vector2(point.x, point.z))
+	var aligned_entry_xz := Vector2(aligned_entry.x, aligned_entry.z)
+	if points.is_empty() or not points[-1].is_equal_approx(aligned_entry_xz):
+		points.append(aligned_entry_xz)
 	var staging_xz := Vector2(staging.x, staging.z)
 	if points.is_empty() or not points[-1].is_equal_approx(staging_xz):
 		points.append(staging_xz)
@@ -357,7 +377,50 @@ func _try_begin_approach() -> void:
 	if not _autopilot.engage(plan, -1.0, 4.0):
 		_fail("approach_route_failed")
 		return
+	_autopilot.set_maneuver_mode(true)
 	_set_phase(Phase.APPROACH)
+
+
+func _monitor_approach_capture() -> void:
+	## An angled quay can physically intercept the hull just short of the exact
+	## staging coordinate. Once the vessel is safely beside its reserved face,
+	## hand control to alignment/crabbing instead of pushing into the structure.
+	if _destination_slot == null or _autopilot == null or not _autopilot.is_engaged():
+		return
+	## At harbour speed the rudder alone has little authority. Assist its heading
+	## command with the ordinary bow thruster so the hull enters the curve early
+	## instead of tracing a large inertial arc across neighbouring lanes.
+	if _thruster != null and _autopilot.desired_course.length_squared() > 0.0001:
+		var current_bow := NavigationAxes.vessel_bow_horizontal(_body).normalized()
+		_thruster.crab_mode = false
+		_thruster.lateral_input = clampf(
+			VesselAutopilot.rudder_for_heading(
+				current_bow, _autopilot.desired_course, 55.0), -0.38, 0.38)
+	var errors := _berth_pose_errors()
+	if errors.is_empty():
+		return
+	var outward := float(errors.get("outward_from_dock_m", INF))
+	var along_error := absf(float(errors.get("along_error_m", INF)))
+	var along_capture := maxf(12.0, minf(
+		_destination_slot.length_m * 0.25,
+		maxf(_body.hull_size.z * 0.45, 12.0),
+	))
+	var speed := Vector2(_body.linear_velocity.x, _body.linear_velocity.z).length()
+	var water_world := _destination_slot.global_transform.basis * _destination_slot.water_dir_local
+	water_world.y = 0.0
+	var quay_along := Vector2(-water_world.z, water_world.x).normalized()
+	var bow := NavigationAxes.vessel_bow_horizontal(_body).normalized()
+	var heading_error := minf(
+		absf(rad_to_deg(bow.angle_to(quay_along))),
+		absf(rad_to_deg(bow.angle_to(-quay_along))),
+	)
+	if outward < -APPROACH_CAPTURE_INWARD_M \
+			or outward > APPROACH_CAPTURE_OUTWARD_M \
+			or along_error > along_capture \
+			or speed > APPROACH_CAPTURE_SPEED_MS \
+			or heading_error > APPROACH_CAPTURE_HEADING_DEG:
+		return
+	_autopilot.disengage("arrived")
 
 
 func _maintain_destination_lease(delta: float) -> void:
@@ -455,13 +518,30 @@ func _crab_into_berth() -> void:
 	if _destination_slot == null or _propulsion == null or _rudder == null or _thruster == null:
 		_fail("berthing_controls_unavailable")
 		return
-	var target := _destination_slot.to_global(
-		_destination_slot.ship_dock_local(_body.get_half_beam_m()).origin
-	)
+	var target := _destination_slot.to_global(_operational_dock_local(true).origin)
 	var delta := target - _body.global_position
 	delta.y = 0.0
 	var speed := Vector2(_body.linear_velocity.x, _body.linear_velocity.z).length()
-	if delta.length() <= BERTH_POSITION_TOLERANCE_M and speed <= BERTH_SPEED_TOLERANCE_MS:
+	var errors := _berth_pose_errors()
+	var normal_error := absf(float(errors.get("normal_error_m", INF)))
+	var along_error := absf(float(errors.get("along_error_m", INF)))
+	var water := _destination_slot.global_transform.basis * _destination_slot.water_dir_local
+	water.y = 0.0
+	var quay_along := Vector2(-water.z, water.x).normalized()
+	var bow := NavigationAxes.vessel_bow_horizontal(_body).normalized()
+	if bow.dot(quay_along) < 0.0:
+		quay_along = -quay_along
+	var heading_error := absf(rad_to_deg(bow.angle_to(quay_along)))
+	var normal_tolerance := maxf(BERTH_POSITION_TOLERANCE_M, _body.get_half_beam_m() * 0.55)
+	var along_tolerance := maxf(10.0, minf(
+		_destination_slot.length_m * 0.22,
+		maxf(_body.hull_size.z * 0.32, 10.0),
+	))
+	var acceptable_alongside := normal_error <= normal_tolerance \
+			and along_error <= along_tolerance \
+			and heading_error <= ALIGN_TOLERANCE_DEG * 1.6
+	if (delta.length() <= BERTH_POSITION_TOLERANCE_M or acceptable_alongside) \
+			and speed <= BERTH_SPEED_TOLERANCE_MS:
 		_zero_actuators()
 		_set_phase(Phase.SECURING)
 		return
@@ -472,7 +552,56 @@ func _crab_into_berth() -> void:
 	## removes residual along-quay error. Without this second axis a vessel can
 	## settle beside the correct berth but several metres ahead or astern of it.
 	_thruster.lateral_input = clampf(local_delta.x / 8.0, -0.55, 0.55)
-	_propulsion.throttle = clampf(local_delta.z / 24.0, -0.22, 0.16)
+	var along_throttle := clampf(local_delta.z / 24.0, -0.22, 0.16)
+	## Finish the sideways closure before making a substantial along-quay move;
+	## this avoids driving a bow/stern corner into an angled coping.
+	if normal_error > normal_tolerance:
+		along_throttle = clampf(along_throttle, -0.08, 0.06)
+	_propulsion.throttle = along_throttle
+
+
+func _berth_pose_errors() -> Dictionary:
+	if _destination_slot == null or _body == null:
+		return {}
+	var water := _destination_slot.water_dir_local.normalized()
+	if water.length_squared() <= 0.001:
+		return {}
+	var along := Vector3(-water.z, 0.0, water.x).normalized()
+	var dock_local := _operational_dock_local(true).origin
+	var ship_local := _destination_slot.to_local(_body.global_position)
+	var delta_local := dock_local - ship_local
+	return {
+		"normal_error_m": delta_local.dot(water),
+		"along_error_m": delta_local.dot(along),
+		"outward_from_dock_m": (ship_local - dock_local).dot(water),
+	}
+
+
+func _operational_dock_local(adapt_to_current_position: bool) -> Transform3D:
+	## A berth is an along-quay envelope, not one magic centre coordinate. This
+	## matters on short/angled piers where centring a long hull can be physically
+	## impossible even though it has ample safe overlap and reachable bollards.
+	var dock := _destination_slot.ship_dock_local(_body.get_half_beam_m())
+	var berth_length := maxf(_destination_slot.length_m, 1.0)
+	var hull_length := maxf(_body.hull_size.z, 1.0)
+	var required_overlap := minf(berth_length, hull_length) * BERTH_REQUIRED_OVERLAP_FRACTION
+	var geometric_offset := maxf(
+		(berth_length + hull_length) * 0.5 - required_overlap,
+		0.0,
+	)
+	var max_offset := minf(
+		geometric_offset,
+		berth_length * BERTH_MAX_CENTRE_OFFSET_FRACTION,
+	)
+	## Local +Z runs from shore toward the pier tip. Avoid selecting a deeply
+	## shoreward pose; the seaward half has better turning and collision room.
+	var shoreward_limit := -max_offset * 0.10
+	var desired_z := minf(max_offset, maxf(berth_length * 0.10, 4.0))
+	if adapt_to_current_position:
+		var current_z := _destination_slot.to_local(_body.global_position).z
+		desired_z = clampf(current_z, shoreward_limit, max_offset)
+	dock.origin.z = desired_z
+	return dock
 
 
 func _secure_lines() -> void:
@@ -500,6 +629,10 @@ func _secure_lines() -> void:
 
 
 func _on_autopilot_disengaged(reason: String) -> void:
+	if _autopilot != null:
+		_autopilot.set_maneuver_mode(false)
+	if _thruster != null and phase == Phase.APPROACH:
+		_thruster.lateral_input = 0.0
 	if reason == "arrived" and phase == Phase.PASSAGE:
 		var origin := HarbourRegistry.controller(origin_port_id)
 		if origin != null and not _origin_lane_released:

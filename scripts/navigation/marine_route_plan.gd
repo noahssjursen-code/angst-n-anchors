@@ -4,7 +4,7 @@ extends RefCounted
 ## Serializable deterministic voyage route. World identity + algorithm version
 ## let MP clients verify that reconstructing the route locally is safe.
 
-const ALGORITHM_VERSION := 1
+const ALGORITHM_VERSION := 3
 
 var route_id := ""
 var layout_checksum := ""
@@ -13,6 +13,10 @@ var origin_port_id := ""
 var destination_port_id := ""
 var waypoints := PackedVector2Array()
 var cumulative_distance_m := PackedFloat32Array()
+var departure_handoff_xz := Vector2(INF, INF)
+var arrival_handoff_xz := Vector2(INF, INF)
+var departure_handoff_m := -1.0
+var arrival_handoff_m := -1.0
 
 
 static func create(
@@ -41,6 +45,20 @@ func total_distance_m() -> float:
 	return cumulative_distance_m[-1] if not cumulative_distance_m.is_empty() else 0.0
 
 
+func set_handoffs(departure_xz: Vector2, arrival_xz: Vector2 = Vector2(INF, INF)) -> void:
+	departure_handoff_xz = departure_xz
+	arrival_handoff_xz = arrival_xz
+	departure_handoff_m = nearest_progress_m(departure_xz) if departure_xz.is_finite() else -1.0
+	arrival_handoff_m = nearest_progress_m(arrival_xz, departure_handoff_m) \
+		if arrival_xz.is_finite() else -1.0
+	route_id = _make_route_id()
+
+
+func has_berth_handoffs() -> bool:
+	return departure_handoff_xz.is_finite() and arrival_handoff_xz.is_finite() \
+		and departure_handoff_m >= 0.0 and arrival_handoff_m >= departure_handoff_m
+
+
 func point_at_distance(distance_m: float) -> Vector2:
 	if waypoints.is_empty():
 		return Vector2(INF, INF)
@@ -52,6 +70,16 @@ func point_at_distance(distance_m: float) -> Vector2:
 		var t := 0.0 if span <= 0.001 else (target - cumulative_distance_m[i - 1]) / span
 		return waypoints[i - 1].lerp(waypoints[i], t)
 	return waypoints[-1]
+
+
+func direction_at_distance(distance_m: float, sample_span_m: float = 20.0) -> Vector2:
+	if not is_valid():
+		return Vector2.ZERO
+	var span := maxf(sample_span_m, 1.0)
+	var before := point_at_distance(maxf(distance_m - span * 0.5, 0.0))
+	var after := point_at_distance(minf(distance_m + span * 0.5, total_distance_m()))
+	var direction := after - before
+	return direction.normalized() if direction.length_squared() > 0.0001 else Vector2.ZERO
 
 
 func nearest_progress_m(position: Vector2, hint_progress_m: float = 0.0) -> float:
@@ -92,6 +120,8 @@ func to_dict(include_waypoints: bool = true) -> Dictionary:
 		## waypoint, then verify the resulting route_id before displaying it.
 		"start_point": waypoints[0] if not waypoints.is_empty() else Vector2.ZERO,
 		"end_point": waypoints[-1] if not waypoints.is_empty() else Vector2.ZERO,
+		"departure_handoff_xz": departure_handoff_xz,
+		"arrival_handoff_xz": arrival_handoff_xz,
 	}
 	if include_waypoints:
 		out["waypoints"] = Array(waypoints)
@@ -110,6 +140,10 @@ static func from_dict(data: Dictionary) -> MarineRoutePlan:
 		str(data.get("destination_port_id", "")),
 	)
 	plan.algorithm_version = int(data.get("algorithm_version", ALGORITHM_VERSION))
+	var departure := data.get("departure_handoff_xz", Vector2(INF, INF)) as Vector2
+	var arrival := data.get("arrival_handoff_xz", Vector2(INF, INF)) as Vector2
+	if departure.is_finite() or arrival.is_finite():
+		plan.set_handoffs(departure, arrival)
 	var supplied_id := str(data.get("route_id", ""))
 	if not supplied_id.is_empty():
 		plan.route_id = supplied_id
@@ -136,4 +170,8 @@ func _make_route_id() -> String:
 	]
 	for point in waypoints:
 		identity += "|%d,%d" % [roundi(point.x), roundi(point.y)]
+	if departure_handoff_xz.is_finite():
+		identity += "|D%d,%d" % [roundi(departure_handoff_xz.x), roundi(departure_handoff_xz.y)]
+	if arrival_handoff_xz.is_finite():
+		identity += "|A%d,%d" % [roundi(arrival_handoff_xz.x), roundi(arrival_handoff_xz.y)]
 	return "%08x" % (identity.hash() & 0xffffffff)

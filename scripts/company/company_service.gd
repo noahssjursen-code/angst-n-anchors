@@ -827,14 +827,14 @@ func _cached_leg_plan(
 ) -> MarineRoutePlan:
 	if layout == null:
 		return MarineRoutePlan.new()
-	var origin_lane_size := BerthApproachLanes.get_target_lane(
-		origin_id, origin_berth_id, BerthApproachLanes.LaneKind.SPINE).size()
-	var destination_lane_size := BerthApproachLanes.get_target_lane(
-		destination_id, destination_berth_id, BerthApproachLanes.LaneKind.SPINE).size()
-	var cache_key := "%s|%s/%s:%d:%s>%s/%s:%d:%s" % [
+	var origin_lane := BerthApproachLanes.get_target_lane(
+		origin_id, origin_berth_id, BerthApproachLanes.LaneKind.SPINE)
+	var destination_lane := BerthApproachLanes.get_target_lane(
+		destination_id, destination_berth_id, BerthApproachLanes.LaneKind.SPINE)
+	var cache_key := "%s|%s/%s:%s:%s>%s/%s:%s:%s" % [
 		str(layout.layout_checksum), origin_id, origin_berth_id,
-		origin_lane_size, _xz_cache_token(origin_exact_xz),
-		destination_id, destination_berth_id, destination_lane_size,
+		_lane_cache_token(origin_lane), _xz_cache_token(origin_exact_xz),
+		destination_id, destination_berth_id, _lane_cache_token(destination_lane),
 		_xz_cache_token(destination_exact_xz),
 	]
 	var plan := _projection_plan_cache.get(cache_key) as MarineRoutePlan
@@ -846,6 +846,16 @@ func _cached_leg_plan(
 		)
 		_projection_plan_cache[cache_key] = plan
 	return plan
+
+
+func _lane_cache_token(lane: Array) -> String:
+	if lane.is_empty():
+		return "0"
+	var first := lane[0] as Vector3
+	var last := lane[-1] as Vector3
+	return "%d@%.2f,%.2f>%.2f,%.2f" % [
+		lane.size(), first.x, first.z, last.x, last.z,
+	]
 
 
 func _leg_wage(row: Dictionary, duration_s: int) -> int:

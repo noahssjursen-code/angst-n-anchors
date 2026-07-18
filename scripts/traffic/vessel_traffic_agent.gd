@@ -13,6 +13,7 @@ var _elapsed_s := 0.0
 
 func _ready() -> void:
 	_body = get_parent() as BoatBody
+	add_to_group("vessel_traffic_agent")
 
 
 func _physics_process(delta: float) -> void:

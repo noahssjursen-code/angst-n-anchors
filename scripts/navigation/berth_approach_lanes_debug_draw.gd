@@ -41,8 +41,10 @@ func _on_hud_visibility(open: bool) -> void:
 	sync_visibility(open)
 
 
-func sync_visibility(hud_open: bool) -> void:
-	var show := hud_open and BerthApproachLanes.debug_visible
+func sync_visibility(_hud_open: bool) -> void:
+	## Layer selection persists after the F3 panel closes, matching the other
+	## world gizmo layers. F3/G is the selector, not a visibility master.
+	var show := BerthApproachLanes.debug_visible
 	visible = show
 	set_process(show)
 	if show:
@@ -84,6 +86,7 @@ func _rebuild() -> void:
 
 
 func _draw_polylines(polylines: Array) -> void:
+	var seen: Dictionary = {}
 	for entry_raw in polylines:
 		if typeof(entry_raw) != TYPE_DICTIONARY:
 			continue
@@ -91,6 +94,15 @@ func _draw_polylines(polylines: Array) -> void:
 		var points: Array = entry.get("points", []) as Array
 		if points.size() < 2:
 			continue
+		var first := points[0] as Vector3
+		var last := points[-1] as Vector3
+		var fingerprint := "%s|%s|%.1f,%.1f>%.1f,%.1f" % [
+			str(entry.get("port_id", "")), str(entry.get("berth_id", "")),
+			first.x, first.z, last.x, last.z,
+		]
+		if seen.has(fingerprint):
+			continue
+		seen[fingerprint] = true
 		var kind := int(entry.get("slice", 0))
 		var verts := PackedVector3Array()
 		verts.resize((points.size() - 1) * 2)
@@ -100,7 +112,7 @@ func _draw_polylines(polylines: Array) -> void:
 			verts[idx + 1] = _lift(points[i + 1] as Vector3)
 			idx += 2
 		_add_line_mesh(
-			"Lane_%s_%d_%d" % [str(entry.get("port_id", "")), int(entry.get("berth", 0)), kind],
+			"Lane_%s_%s_%d" % [str(entry.get("port_id", "")), str(entry.get("berth_id", "")), kind],
 			verts,
 			LANE_COLORS[wrapi(kind, 0, LANE_COLORS.size())],
 		)

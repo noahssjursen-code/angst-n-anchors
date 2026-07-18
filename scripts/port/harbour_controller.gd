@@ -643,6 +643,12 @@ static func ship_id_of(ship: BoatBody) -> String:
 		return ""
 	# Traffic authority must use a stable unique identity. Display names are not
 	# unique and can make two vessels appear to own the same berth/lane lease.
+	# Company vessel UIDs are already authority-owned and persisted. Prefer that
+	# canonical identity over the transport alias so fleet state, traffic leases,
+	# berth occupancy, and debug projections all refer to the same vessel.
+	var company_uid := str(ship.get_meta("company_vessel_uid", "")).strip_edges()
+	if not company_uid.is_empty():
+		return company_uid
 	var network_id := str(ship.get_meta("network_ship_id", "")).strip_edges()
 	if not network_id.is_empty():
 		return network_id

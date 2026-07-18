@@ -15,7 +15,7 @@ func _ready() -> void:
 
 	var title := Label.new()
 	title.position = Vector2(36.0, 34.0)
-	title.text = "DEBUG SERVICE SHOWCASE\n\nPress F3 to open the monitor.\nTab / Shift+Tab: pages\nH: live vs peak/worst\nC: copy report\nR: reset peaks\n1-5: select page"
+	title.text = "DEBUG SERVICE SHOWCASE\n\nPress F3 to open the monitor.\nTab / Shift+Tab: pages\nH: live vs peak/worst\nC: cursor\nCtrl+C: copy report\nG: gizmo layers\nR: reset peaks\n1-5: select page"
 	title.add_theme_font_size_override("font_size", 20)
 	title.modulate = Color(0.88, 0.74, 0.36)
 	add_child(title)
