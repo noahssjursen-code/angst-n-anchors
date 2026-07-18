@@ -9,7 +9,9 @@ func _initialize() -> void:
 	var traffic := TrafficScript.new()
 	root.add_child(traffic)
 	_test_collision_agreement(traffic)
+	_test_overtaking_agreement(traffic)
 	_test_port_queue(traffic)
+	_test_stale_port_ticket_recovery(traffic)
 	_test_parallel_port_resources(traffic)
 	_test_exclusive_block(traffic)
 	_test_directional_convoy_block(traffic)
@@ -36,6 +38,28 @@ func _test_collision_agreement(traffic: Node) -> void:
 	var instruction := agreement.get("instruction", {}) as Dictionary
 	_check(float(instruction.get("heading_offset_deg", 0.0)) > 0.0,
 		"head-on vessel receives a starboard alteration")
+	traffic.withdraw_vessel("northbound")
+	traffic.withdraw_vessel("southbound")
+
+
+func _test_overtaking_agreement(traffic: Node) -> void:
+	traffic.publish_intent({
+		"vessel_id": "leader", "position_xz": [60.0, 0.0],
+		"velocity_xz": [3.0, 0.0], "heading_deg": 90.0, "length_m": 28.0,
+	})
+	traffic.publish_intent({
+		"vessel_id": "follower", "position_xz": [0.0, 0.0],
+		"velocity_xz": [6.0, 0.0], "heading_deg": 90.0, "length_m": 28.0,
+	})
+	traffic.call("_resolve_conflicts")
+	var agreement: Dictionary = traffic.agreement_for("follower")
+	_check(str(agreement.get("situation", "")) == "overtaking",
+		"closing traffic in one lane is classified as overtaking")
+	_check(str((agreement.get("instruction", {}) as Dictionary).get("action", "")) \
+			== "reduce_for_overtaking",
+		"astern overtaking vessel reduces speed without leaving its lane")
+	traffic.withdraw_vessel("leader")
+	traffic.withdraw_vessel("follower")
 
 
 func _test_port_queue(traffic: Node) -> void:
@@ -49,6 +73,19 @@ func _test_port_queue(traffic: Node) -> void:
 	_check(int(ordinary.get("queue_position", 0)) == 2, "ordinary vessel holds behind priority traffic")
 	_check((ordinary.get("holding_position_xz", []) as Array).size() == 2,
 		"queued vessel receives a holding position")
+
+
+func _test_stale_port_ticket_recovery(traffic: Node) -> void:
+	traffic.request_port_arrival("stale-port", "gone", "general_cargo", "berth-a")
+	traffic.request_port_arrival("stale-port", "waiting", "general_cargo", "berth-a")
+	var queues := traffic.get("_port_queues") as Dictionary
+	var queue := queues["stale-port"] as Array
+	(queue[0] as Dictionary)["last_refresh_unix_msec"] = 1
+	traffic.call("_cleanup_expired")
+	var refreshed: Dictionary = traffic.request_port_arrival(
+		"stale-port", "waiting", "general_cargo", "berth-a")
+	_check(bool(refreshed.get("cleared_for_approach", false)),
+		"stale disconnected vessel cannot permanently block a berth queue")
 
 
 func _test_exclusive_block(traffic: Node) -> void:

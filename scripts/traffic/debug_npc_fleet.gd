@@ -8,9 +8,12 @@ extends Node
 signal company_changed(snapshot: Dictionary)
 
 const DEFAULT_COUNT := 5
-const MAX_COUNT := 12
+const MAX_COUNT := 64
+const ABSTRACT_CRUISE_SPEED_MS := 7.2
+const ABSTRACT_STEP_S := 0.25
 var _fleet: Dictionary = {}
 var _local_simulation: Dictionary = {}
+var _abstract_elapsed_s := 0.0
 
 
 func _ready() -> void:
@@ -18,9 +21,36 @@ func _ready() -> void:
 	add_to_group("vessel_fleet_authority")
 
 
-func _process(_delta: float) -> void:
+func _process(delta: float) -> void:
 	if not _fleet.is_empty() and _is_main_menu():
 		clear_fleet()
+		return
+	_abstract_elapsed_s += delta
+	if _abstract_elapsed_s < ABSTRACT_STEP_S:
+		return
+	var step := _abstract_elapsed_s
+	_abstract_elapsed_s = 0.0
+	var changed := false
+	for uid_raw in _fleet.keys():
+		var uid := str(uid_raw)
+		if _local_simulation.has(uid):
+			continue
+		var record := _fleet[uid] as Dictionary
+		var row := record.get("assignment", {}) as Dictionary
+		var plan := record.get("plan") as MarineRoutePlan
+		if str(row.get("status", "")) != "underway" or plan == null or not plan.is_valid():
+			continue
+		var limit := maxf(plan.total_distance_m() - 45.0, 0.0)
+		var progress := minf(
+			float(row.get("route_progress_m", 0.0)) + ABSTRACT_CRUISE_SPEED_MS * step,
+			limit,
+		)
+		if not is_equal_approx(progress, float(row.get("route_progress_m", 0.0))):
+			row["route_progress_m"] = progress
+			record["assignment"] = row
+			changed = true
+	if changed:
+		company_changed.emit(snapshot())
 
 
 func is_active() -> bool:

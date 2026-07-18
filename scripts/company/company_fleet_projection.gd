@@ -6,6 +6,8 @@ extends Node
 
 const INTEREST_RADIUS_M := 6500.0
 const UPDATE_INTERVAL_S := 0.1
+const MAX_PHYSICAL_NPC_VESSELS := 12
+const ABSTRACT_TRAFFIC_INTERVAL_S := 0.5
 
 var _ships: Dictionary = {} # vessel uid -> BoatBody
 var _berths: Dictionary = {} # vessel uid -> { controller, berth_id }
@@ -15,7 +17,9 @@ var _operation_interest: Dictionary = {}
 var _restored_manifests: Dictionary = {}
 var _authority_by_uid: Dictionary = {}
 var _elapsed := 0.0
+var _abstract_traffic_elapsed := 0.0
 var _refreshing := false
+var _published_authority_ids: Dictionary = {}
 
 
 func _ready() -> void:
@@ -25,6 +29,7 @@ func _ready() -> void:
 
 func _process(delta: float) -> void:
 	_elapsed += delta
+	_abstract_traffic_elapsed += delta
 	if _elapsed < UPDATE_INTERVAL_S:
 		return
 	_elapsed = 0.0
@@ -66,6 +71,22 @@ func leg_route_plan(vessel_uid: String) -> MarineRoutePlan:
 	return MarineRoutePlan.new()
 
 
+func network_fleet_snapshot() -> Dictionary:
+	var vessels: Array[Dictionary] = []
+	var server_time := int(Time.get_unix_time_from_system() * 1000.0)
+	for record in all_projection_records():
+		var uid := str(record.get("uid", ""))
+		var wire := VesselAuthoritySnapshot.from_projection_record(
+			record, leg_route_plan(uid), _ships.get(uid) as Node3D, server_time)
+		if VesselAuthoritySnapshot.is_valid(wire):
+			vessels.append(wire)
+	return {
+		"schema_version": 1,
+		"server_unix_msec": server_time,
+		"vessels": vessels,
+	}
+
+
 func _connect_authority_signals() -> void:
 	for authority in authority_sources():
 		if authority.has_signal("company_changed"):
@@ -103,7 +124,11 @@ func _refresh() -> void:
 	var wanted: Dictionary = {}
 	var operation_interest: Dictionary = {}
 	_connect_authority_signals()
-	for raw in all_projection_records():
+	var records := all_projection_records()
+	records.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+		return _physical_priority(a, observer) < _physical_priority(b, observer))
+	var physical_count := 0
+	for raw in records:
 		var record := raw as Dictionary
 		var authority := record.get("_authority") as Node
 		var vessel := record.get("vessel", {}) as Dictionary
@@ -121,6 +146,9 @@ func _refresh() -> void:
 			else projection.get("position", Vector3(INF, INF, INF)) as Vector3
 		if not position.is_finite() or position.distance_to(observer) > INTEREST_RADIUS_M:
 			continue
+		if physical_count >= MAX_PHYSICAL_NPC_VESSELS:
+			continue
+		physical_count += 1
 		var waiting_at_berth := status != "underway"
 		if status in ["preparing", "turnaround"]:
 			operation_interest[uid] = true
@@ -151,7 +179,93 @@ func _refresh() -> void:
 			_call_authority(uid, "set_local_operations_active", [uid, false])
 	_operation_interest = operation_interest
 	_apply_shared_npc_physics_budget()
+	if _abstract_traffic_elapsed >= ABSTRACT_TRAFFIC_INTERVAL_S:
+		_abstract_traffic_elapsed = 0.0
+		_publish_authority_traffic(records)
 	_refreshing = false
+
+
+func _physical_priority(record: Dictionary, observer: Vector3) -> float:
+	var uid := str(record.get("uid", ""))
+	var assignment := record.get("assignment", {}) as Dictionary
+	var projection := record.get("projection", {}) as Dictionary
+	var position := projection.get("position", Vector3(INF, INF, INF)) as Vector3
+	var score := position.distance_to(observer) if position.is_finite() else INF
+	if _ships.has(uid):
+		score -= 250.0
+	if str(assignment.get("status", "")) != "underway":
+		score -= 5000.0
+	else:
+		var plan := leg_route_plan(uid)
+		if plan != null and plan.is_valid():
+			var remaining := plan.total_distance_m() - float(
+				projection.get("route_progress_m", assignment.get("route_progress_m", 0.0)))
+			if remaining < 1200.0:
+				score -= 3500.0
+	return score
+
+
+func _publish_authority_traffic(records: Array[Dictionary]) -> void:
+	var traffic := get_node_or_null("/root/MaritimeTraffic")
+	if traffic == null or not traffic.is_world_authority():
+		return
+	var current: Dictionary = {}
+	for record in records:
+		var uid := str(record.get("uid", ""))
+		var assignment := record.get("assignment", {}) as Dictionary
+		var projection := record.get("projection", {}) as Dictionary
+		if uid.is_empty() or str(assignment.get("status", "")) != "underway":
+			continue
+		var position := projection.get("position", Vector3(INF, INF, INF)) as Vector3
+		var heading := projection.get("heading_xz", Vector2.ZERO) as Vector2
+		if not position.is_finite() or heading.length_squared() < 0.1:
+			continue
+		current[uid] = true
+		var vessel := record.get("vessel", {}) as Dictionary
+		var speed_ms := float(assignment.get("cruise_speed_ms", 7.2))
+		var plan := leg_route_plan(uid)
+		var progress_m := float(projection.get("route_progress_m", 0.0))
+		var remaining_m := plan.total_distance_m() - progress_m if plan != null \
+				and plan.is_valid() else INF
+		var phase := "passage"
+		var velocity := heading * speed_ms
+		if not _ships.has(uid) and remaining_m < 1500.0:
+			var family := CommodityCatalog.commodity_terminal_family(
+				str(assignment.get("commodity_id", "")))
+			var ticket: Dictionary = traffic.request_port_arrival(
+				str(assignment.get("leg_destination_port_id", "")),
+				uid,
+				family,
+				str(assignment.get("leg_destination_berth_id", "")),
+				int(Time.get_unix_time_from_system() + remaining_m / maxf(speed_ms, 0.1)),
+			)
+			if not bool(ticket.get("cleared_for_approach", false)):
+				phase = "holding"
+				velocity = Vector2.ZERO
+			else:
+				phase = "waiting_approach"
+			traffic.release_lane_window(uid)
+		traffic.publish_intent({
+			"vessel_id": uid,
+			"owner_id": str(vessel.get("owner_id", "")),
+			"kind": "npc",
+			"position_xz": [position.x, position.z],
+			"velocity_xz": [velocity.x, velocity.y],
+			"heading_deg": NavigationAxes.heading_deg_horizontal(heading),
+			"length_m": float(vessel.get("display_length_m", 28.0)),
+			"beam_m": float(vessel.get("display_beam_m", 10.0)),
+			"route_id": plan.route_id if plan != null else "",
+			"route_progress_m": progress_m,
+			"phase": phase,
+		})
+		if not _ships.has(uid) and phase == "passage":
+			traffic.request_lane_window(uid, traffic.lane_window_for_route(
+				plan, progress_m))
+	for uid_raw in _published_authority_ids.keys():
+		var uid := str(uid_raw)
+		if not current.has(uid):
+			traffic.withdraw_vessel(uid)
+	_published_authority_ids = current
 
 
 func _spawn(record: Dictionary, uid: String) -> BoatBody:

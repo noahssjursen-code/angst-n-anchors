@@ -21,6 +21,7 @@ const CONFLICT_NEIGHBOUR_CELLS := 2
 const LANE_BLOCK_SIZE_M := 400.0
 const LANE_LOOKAHEAD_M := [120.0, 520.0, 920.0]
 const BLOCK_LEASE_MSEC := 30000
+const PORT_TICKET_TTL_MSEC := 45000
 
 var _intents: Dictionary = {} # vessel_id -> JSON-safe row
 var _agreements: Dictionary = {} # agreement_id -> JSON-safe row
@@ -31,10 +32,51 @@ var _lane_claims: Dictionary = {} # vessel_id -> Array[block_id]
 var _scan_elapsed := 0.0
 var _revision := 0
 var _request_sequence := 0
+var _last_conflict_scan_ms := 0.0
+var _last_conflict_pair_count := 0
+var _last_conflict_count := 0
 
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
+	call_deferred("_register_telemetry")
+
+
+func _exit_tree() -> void:
+	var telemetry := get_node_or_null("/root/Telemetry")
+	if telemetry != null:
+		telemetry.unregister_provider(&"maritime_traffic", self)
+
+
+func _register_telemetry() -> void:
+	var telemetry := get_node_or_null("/root/Telemetry")
+	if telemetry == null:
+		return
+	telemetry.register_provider(&"maritime_traffic", self, &"get_debug_stats", &"traffic", {
+		"conflict_scan_ms": {"unit": "ms"},
+		"intent_count": {"unit": "vessels"},
+		"queued_vessels": {"unit": "vessels"},
+	})
+
+
+func get_debug_stats() -> Dictionary:
+	var queued_vessels := 0
+	for queue_raw in _port_queues.values():
+		queued_vessels += (queue_raw as Array).size()
+	var lane_claim_count := 0
+	for claims_raw in _lane_claims.values():
+		lane_claim_count += (claims_raw as Array).size()
+	return {
+		"intent_count": _intents.size(),
+		"agreement_count": _agreements.size(),
+		"block_count": _blocks.size(),
+		"lane_claim_count": lane_claim_count,
+		"port_queue_count": _port_queues.size(),
+		"queued_vessels": queued_vessels,
+		"conflict_pairs": _last_conflict_pair_count,
+		"active_conflicts": _last_conflict_count,
+		"conflict_scan_ms": _last_conflict_scan_ms,
+	}
 
 
 func _process(delta: float) -> void:
@@ -197,6 +239,7 @@ func request_port_arrival(
 			else int((queue[found] as Dictionary).get("requested_unix_msec", _now_unix_msec())),
 		"request_sequence": _next_request_sequence() if found < 0 \
 			else int((queue[found] as Dictionary).get("request_sequence", 0)),
+		"last_refresh_unix_msec": _now_unix_msec(),
 	}
 	if found >= 0:
 		queue[found] = ticket
@@ -461,9 +504,12 @@ func _decorate_lane_block(block_id: String, spec: Dictionary) -> void:
 
 
 func _resolve_conflicts() -> bool:
+	var scan_started_usec := Time.get_ticks_usec()
 	var changed := false
 	var active_pairs: Dictionary = {}
-	for pair in _spatial_conflict_pairs():
+	var candidate_pairs := _spatial_conflict_pairs()
+	_last_conflict_pair_count = candidate_pairs.size()
+	for pair in candidate_pairs:
 			var aid := str(pair[0])
 			var bid := str(pair[1])
 			var a := _intents.get(aid, {}) as Dictionary
@@ -489,6 +535,8 @@ func _resolve_conflicts() -> bool:
 		if not active_pairs.has(agreement_id):
 			_agreements.erase(agreement_id)
 			changed = true
+	_last_conflict_count = active_pairs.size()
+	_last_conflict_scan_ms = float(Time.get_ticks_usec() - scan_started_usec) / 1000.0
 	return changed
 
 
@@ -550,13 +598,30 @@ func _conflict_between(a: Dictionary, b: Dictionary) -> Dictionary:
 		return {}
 	var fa := _forward_from_heading(float(a.get("heading_deg", 0.0)))
 	var fb := _forward_from_heading(float(b.get("heading_deg", 0.0)))
-	var situation := "head_on" if fa.dot(fb) < -0.7 else "crossing"
+	var direction_alignment := fa.dot(fb)
+	var situation := "head_on" if direction_alignment < -0.7 else (
+		"overtaking" if direction_alignment > 0.7 else "crossing")
 	var aid := str(a.get("vessel_id", ""))
 	var bid := str(b.get("vessel_id", ""))
 	var instructions := {}
 	if situation == "head_on":
 		instructions[aid] = {"action": "alter_starboard", "heading_offset_deg": 18.0, "speed_limit": 0.72}
 		instructions[bid] = {"action": "alter_starboard", "heading_offset_deg": 18.0, "speed_limit": 0.72}
+	elif situation == "overtaking":
+		var give_way := _overtaking_give_way(a, b, relative_position, fa, fb)
+		if give_way.is_empty():
+			return {}
+		var stand_on := bid if give_way == aid else aid
+		instructions[give_way] = {
+			"action": "reduce_for_overtaking",
+			"heading_offset_deg": 0.0,
+			"speed_limit": 0.48,
+		}
+		instructions[stand_on] = {
+			"action": "stand_on",
+			"heading_offset_deg": 0.0,
+			"speed_limit": 0.9,
+		}
 	else:
 		var give_way := _crossing_give_way(a, b, relative_position)
 		var stand_on := bid if give_way == aid else aid
@@ -570,6 +635,26 @@ func _conflict_between(a: Dictionary, b: Dictionary) -> Dictionary:
 		"minimum_separation_m": safety,
 		"instructions": instructions,
 	}
+
+
+func _overtaking_give_way(
+		a: Dictionary,
+		b: Dictionary,
+		a_to_b: Vector2,
+		forward_a: Vector2,
+		forward_b: Vector2,
+) -> String:
+	var speed_a := _vector2_value(a.get("velocity_xz", [])).length()
+	var speed_b := _vector2_value(b.get("velocity_xz", [])).length()
+	var b_ahead_of_a := a_to_b.dot(forward_a) > 0.0
+	var a_astern_and_closing := b_ahead_of_a and speed_a > speed_b + 0.15
+	var b_astern_and_closing := not b_ahead_of_a and speed_b > speed_a + 0.15
+	if a_astern_and_closing:
+		return str(a.get("vessel_id", ""))
+	if b_astern_and_closing:
+		return str(b.get("vessel_id", ""))
+	# Nearly parallel traffic at equal speed is not on an active collision course.
+	return ""
 
 
 func _crossing_give_way(a: Dictionary, b: Dictionary, a_to_b: Vector2) -> String:
@@ -605,6 +690,20 @@ func _cleanup_expired() -> bool:
 			if int(leases.get(owner, 0)) <= now:
 				release_block(str(block_id), owner)
 				changed = true
+	for port_id_raw in _port_queues.keys():
+		var port_id := str(port_id_raw)
+		var queue := _port_queues.get(port_id, []) as Array
+		var fresh: Array = queue.filter(func(ticket: Dictionary) -> bool:
+			return now - int(ticket.get("last_refresh_unix_msec",
+				ticket.get("requested_unix_msec", 0))) <= PORT_TICKET_TTL_MSEC)
+		if fresh.size() == queue.size():
+			continue
+		if fresh.is_empty():
+			_port_queues.erase(port_id)
+		else:
+			_port_queues[port_id] = fresh
+		port_queue_changed.emit(port_id, fresh.duplicate(true))
+		changed = true
 	return changed
 
 
@@ -627,6 +726,17 @@ func _vhf_for_agreement(agreement: Dictionary) -> Dictionary:
 				stand_on = str(vessel_id)
 		text = "%s, give way to starboard. %s, stand on and maintain reduced speed." % [
 			give_way, stand_on]
+	elif situation == "overtaking":
+		var following := "following vessel"
+		var leader := "vessel ahead"
+		var instructions := agreement.get("instructions", {}) as Dictionary
+		for vessel_id in instructions.keys():
+			var action := str((instructions[vessel_id] as Dictionary).get("action", ""))
+			if action == "reduce_for_overtaking":
+				following = str(vessel_id)
+			elif action == "stand_on":
+				leader = str(vessel_id)
+		text = "%s, reduce speed and maintain separation behind %s." % [following, leader]
 	return {
 		"channel": 16,
 		"kind": "traffic_agreement",

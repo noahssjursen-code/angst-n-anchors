@@ -185,14 +185,14 @@ func _input(event: InputEvent) -> void:
 			_toggle_gizmo_menu()
 			get_viewport().set_input_as_handled()
 		KEY_N:
-			_toggle_debug_traffic_fleet()
+			_toggle_debug_traffic_fleet(50 if ke.shift_pressed else 5)
 			get_viewport().set_input_as_handled()
 		KEY_P:
 			_toggle_scale_probe()
 			get_viewport().set_input_as_handled()
 
 
-func _toggle_debug_traffic_fleet() -> void:
+func _toggle_debug_traffic_fleet(spawn_count: int = 5) -> void:
 	if _debug_npc_fleet == null:
 		return
 	var active := _debug_npc_fleet.is_active()
@@ -200,7 +200,7 @@ func _toggle_debug_traffic_fleet() -> void:
 		_debug_npc_fleet.clear_fleet()
 	else:
 		set_gizmo_layer_enabled(WorldGizmos.LAYER_NAVIGATION, true)
-		_debug_npc_fleet.spawn_server_join_fleet(5)
+		_debug_npc_fleet.spawn_server_join_fleet(spawn_count)
 	var now_active := _debug_npc_fleet.is_active()
 	var telemetry := get_node_or_null("/root/Telemetry")
 	if telemetry != null:

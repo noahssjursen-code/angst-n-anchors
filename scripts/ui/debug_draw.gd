@@ -492,6 +492,7 @@ func _build_debug_tools(e: Array) -> void:
 		if debug_fleet_active else 0
 	_row(e, "N traffic fleet", "%d AUTONOMOUS SHIPS" % debug_fleet_count \
 		if debug_fleet_active else "spawn 5", C_WARN if debug_fleet_active else C_LABEL)
+	_stub(e, "Shift+N stress fleet", "spawn 50 authority vessels · max 12 physical")
 	_sep(e)
 
 
