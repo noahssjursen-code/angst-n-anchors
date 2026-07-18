@@ -13,6 +13,8 @@ signal rebuild_completed(duration_ms: float)
 @export var plot_width := 80.0
 @export var plot_depth := 140.0
 @export var port_size := 1
+## Visual-only plots (menus/showcases) must not publish gameplay state.
+@export var presentation_only := false
 
 ## Master switch for site debug overlays. Geometry stays stamped; layers toggle visibility.
 @export var show_site_gizmos := false:
@@ -95,10 +97,12 @@ func _rebuild() -> void:
 		rebuild_completed.emit(float(Time.get_ticks_usec() - rebuild_started) / 1000.0)
 		return
 
-	var harbour := HarbourController.new()
-	harbour.setup(port_id if not port_id.is_empty() else "port")
-	add_child(harbour)
-	harbour.activate()
+	var harbour: HarbourController = null
+	if not presentation_only:
+		harbour = HarbourController.new()
+		harbour.setup(port_id if not port_id.is_empty() else "port")
+		add_child(harbour)
+		harbour.activate()
 
 	var visualizer := PortLayoutGraphVisualizer.new()
 	visualizer.name = "PortLayoutGraph"
@@ -123,10 +127,10 @@ func _rebuild() -> void:
 		label.position = graph_bounds.get_center() + Vector3(0.0, 12.0, 0.0)
 		add_child(label)
 
-	if not Engine.is_editor_hint():
+	if not Engine.is_editor_hint() and not presentation_only:
 		_spawn_harbour_staff()
 
-	if is_inside_tree():
+	if is_inside_tree() and not presentation_only:
 		_register_with_catalog()
 	if Engine.is_editor_hint() and is_inside_tree():
 		var root := get_tree().edited_scene_root
@@ -139,7 +143,9 @@ func _rebuild() -> void:
 func _spawn_harbour_staff() -> void:
 	## Player spawn uses top_y+1 (CharacterBody origin). NPC feet sit on the deck.
 	var apron := _staff_apron_local()
-	var facing_seaward := PI  ## mesh faces +Z; seaward is typically −Z inland→sea flip
+	## The face is authored on local -Z, matching Godot's forward axis and the
+	## port contract that local -Z points seaward.
+	var facing_seaward := 0.0
 
 	var hm := HarbourMasterNpc.new()
 	hm.name = "HarbourMaster"
@@ -161,8 +167,17 @@ func _spawn_harbour_staff() -> void:
 	_add_staff_nameplate(sw, "SHIPWRIGHT")
 	sw.call_deferred("add_overlay", "hat", AssetPaths.HAT_FLAT_CAP)
 
+	var agent := CargoAgentNpc.new()
+	agent.name = "CargoAgent"
+	agent.port_id = port_id
+	agent.interact_range = 6.0
+	agent.position = apron + Vector3(0.0, 0.0, -2.5)
+	agent.rotation.y = facing_seaward
+	add_child(agent)
+	_add_staff_nameplate(agent, "CARGO AGENT")
+
 	## Snap feet onto apron/foundation collision once StaticBodies exist.
-	call_deferred("_snap_staff_to_ground", [hm, sw])
+	call_deferred("_snap_staff_to_ground", [hm, sw, agent])
 
 
 func _staff_apron_local() -> Vector3:
@@ -216,6 +231,11 @@ func _snap_staff_to_ground(staff: Array) -> void:
 		)
 		query.collide_with_areas = false
 		query.collision_mask = 1
+		## Service NPCs carry a layer-1 interaction body. Without excluding it,
+		## the grounding ray hits the NPC's own head and lifts the whole figure.
+		var interaction_body := npc.get_node_or_null("InteractBody") as StaticBody3D
+		if interaction_body != null:
+			query.exclude = [interaction_body.get_rid()]
 		var hit := space.intersect_ray(query)
 		if hit.is_empty():
 			continue
@@ -282,6 +302,7 @@ func _register_with_catalog() -> void:
 		_data.size,
 		str(chart.get("region", "")),
 		str(chart.get("max_ship_class_name", "")),
+		_data.trade_profile.export_slots if _data.trade_profile != null else [],
 	)
 
 

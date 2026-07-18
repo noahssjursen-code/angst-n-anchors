@@ -31,6 +31,7 @@ const FLANK_DEFLECT_DEG: Array[float] = [12.0, 24.0, 36.0, 48.0, 60.0, 75.0]
 static var _initialized: bool = false
 static var _lanes: Dictionary = {}  ## port_id -> target id -> lane kind -> Array[Vector3]
 static var _berth_positions: Dictionary = {} # compatibility name: quay/call targets
+static var _target_meta: Dictionary = {} ## port_id -> berth_id -> family/commodities
 static var _islands: Dictionary = {}
 static var _live_baked_ports: Dictionary = {}
 static var debug_visible: bool = false
@@ -44,6 +45,10 @@ static func bake_all_ports(
 	if not LandField.is_initialized():
 		push_warning("BerthApproachLanes: LandField not ready — skipping port bake")
 		return
+	_lanes.clear()
+	_berth_positions.clear()
+	_target_meta.clear()
+	_islands.clear()
 	var lane_count := 0
 	for def_raw in defs:
 		var def := def_raw as PortDefinition
@@ -66,44 +71,148 @@ static func bake_from_port_data(data: PortData) -> int:
 	if _live_baked_ports.has(data.port_id):
 		return 0
 
-	var island := _island_meta_from_data(data)
-	_islands[data.port_id] = island
-	var frame := _port_frame(data.rotation_y)
-
+	_islands[data.port_id] = _island_meta_from_data(data)
 	var half_beam := ShipClass.beam(data.max_ship_class) * 0.5
 	var port_lanes: Dictionary = {}
 	var port_berths: Dictionary = {}
+	var port_meta: Dictionary = {}
 	var baked := 0
-
-	for target_id in ["quay"]:
-		var quay_pose := data.layout_graph.primary_quay_pose() if data.layout_graph != null else {}
-		var quay_center := quay_pose.get("position_m", Vector3.ZERO) as Vector3
-		var quay_yaw := deg_to_rad(float(quay_pose.get("yaw_degrees", 0.0)))
-		var quay_width := float(quay_pose.get("width_m", 8.0))
-		var berth_local := quay_center + Basis(Vector3.UP, quay_yaw) * Vector3(
-			-(half_beam + quay_width * 0.5 + 2.5),
-			WaveSurface.WATER_LEVEL,
-			0.0,
-		)
-		var berth_pos := _berth_world_from_plot_local(
-			data.world_position,
-			data.rotation_y,
-			berth_local,
-		)
-		if not _vec3_is_valid(berth_pos):
-			continue
-		port_berths[target_id] = berth_pos
-		var kind_lanes: Dictionary = {}
-		for kind in range(LANE_KIND_COUNT):
-			var lane := _build_lane(berth_pos, kind, frame, island)
-			kind_lanes[kind] = lane
-			if lane.size() >= 2:
-				baked += 1
-		port_lanes[target_id] = kind_lanes
+	var plan := data.layout_graph.initial_attributes.get("berth_plan", {}) as Dictionary \
+		if data.layout_graph != null else {}
+	for raw in plan.get("asphalt_stations", []) as Array:
+		var station := raw as Dictionary
+		var local_origin := _array_xz(station.get("origin", [0.0, 0.0]))
+		var local_seaward := _array_xz(station.get("direction", [0.0, -1.0])).normalized()
+		var seaward := PortCoastTracer.port_local_dir_to_world(local_seaward, data.rotation_y)
+		var root_local := local_origin + local_seaward * float(station.get("depth_m", 36.0)) * 0.5
+		var root_world := PortCoastTracer.port_local_to_world(root_local, data.world_position, data.rotation_y)
+		var target_id := HarbourController.make_berth_id(data.port_id, str(station.get("id", "asphalt")))
+		baked += _store_planned_lane(port_lanes, port_berths, port_meta, target_id,
+			root_world, seaward, seaward, float(station.get("length_m", 40.0)),
+			float(station.get("depth_m", 36.0)), half_beam,
+			str(station.get("family", "general")),
+			[str(station.get("commodity_id", ""))])
+	for raw in plan.get("quay_stations", []) as Array:
+		var station := raw as Dictionary
+		var local_origin := _array_xz(station.get("origin", [0.0, 0.0]))
+		var local_tip := _array_xz(station.get("tip", [local_origin.x, local_origin.y]))
+		var local_seaward := _array_xz(station.get("direction", [0.0, -1.0])).normalized()
+		var seaward := PortCoastTracer.port_local_dir_to_world(local_seaward, data.rotation_y)
+		var mid_world := PortCoastTracer.port_local_to_world(
+			local_origin.lerp(local_tip, 0.5), data.world_position, data.rotation_y)
+		var right := Vector2(seaward.y, -seaward.x)
+		var station_id := str(station.get("id", "quay"))
+		var length_m := float(station.get("length_m", local_origin.distance_to(local_tip)))
+		var width_m := float(station.get("width_m", 24.0))
+		if str(station.get("layout", "single")) == "twin_joined":
+			var sides := station.get("sides", []) as Array
+			for side_index in range(mini(sides.size(), 2)):
+				var side := sides[side_index] as Dictionary
+				var sign := float(side.get("berth_side", -1.0 if side_index == 0 else 1.0))
+				var target_id := HarbourController.make_berth_id(
+					data.port_id, "%s/side_%d" % [station_id, side_index])
+				baked += _store_planned_lane(port_lanes, port_berths, port_meta, target_id,
+					mid_world, right * sign, seaward, length_m, width_m, half_beam,
+					str(side.get("family", "general")), side.get("commodities", []) as Array)
+		else:
+			var sign := float(station.get("berth_side", 1.0))
+			var target_id := HarbourController.make_berth_id(data.port_id, station_id)
+			baked += _store_planned_lane(port_lanes, port_berths, port_meta, target_id,
+				mid_world, right * sign, seaward, length_m, width_m, half_beam,
+				str(station.get("family", "general")), station.get("commodities", []) as Array)
 
 	_lanes[data.port_id] = port_lanes
 	_berth_positions[data.port_id] = port_berths
+	_target_meta[data.port_id] = port_meta
 	return baked
+
+
+static func _store_planned_lane(
+	port_lanes: Dictionary, port_berths: Dictionary, port_meta: Dictionary,
+	target_id: String, root_world: Vector2, water: Vector2, seaward: Vector2,
+	length_m: float, face_width_m: float, half_beam_m: float,
+	family: String, commodities_raw: Array,
+) -> int:
+	if target_id.is_empty() or water.length_squared() < 0.001 or seaward.length_squared() < 0.001:
+		return 0
+	water = water.normalized()
+	seaward = seaward.normalized()
+	var berth2 := root_world + water * (face_width_m * 0.5 + half_beam_m + 2.5)
+	var berth := Vector3(berth2.x, WaveSurface.WATER_LEVEL, berth2.y)
+	var crab := berth + Vector3(water.x, 0.0, water.y) * 16.0
+	var sea3 := Vector3(seaward.x, 0.0, seaward.y)
+	var canonical := _densify_chain([
+		berth,
+		crab,
+		crab + sea3 * (length_m * 0.5 + 45.0),
+		crab + sea3 * (length_m * 0.5 + 285.0),
+	])
+	port_lanes[target_id] = {
+		int(LaneKind.SPINE): canonical,
+		int(LaneKind.FLANK_PORT): canonical,
+		int(LaneKind.FLANK_STARBOARD): canonical,
+	}
+	port_berths[target_id] = berth
+	var commodities := PackedStringArray()
+	for raw in commodities_raw:
+		var commodity := str(raw)
+		if not commodity.is_empty():
+			commodities.append(commodity)
+	port_meta[target_id] = {"family": family, "commodities": commodities}
+	return 3
+
+
+## Runtime berth slots carry the exact station transform and water-side vector.
+## Publishing them by real berth_id replaces the old primary-"quay" ambiguity
+## and gives autonomous traffic stable network identifiers.
+static func bake_live_berth(port_id: String, slot: QuayBerthSlot) -> int:
+	if slot == null or not is_instance_valid(slot) or port_id.is_empty() or slot.berth_id.is_empty():
+		return 0
+	var water := slot.global_transform.basis * slot.water_dir_local
+	water.y = 0.0
+	if water.length_squared() <= 0.001:
+		return 0
+	water = water.normalized()
+	## Runtime terminals are authored with local +Z pointing from shore toward
+	## the pier tip. Deriving this from the berth-side normal is ambiguous: the
+	## opposite face reverses that cross product and used to send its lane inland.
+	var seaward := slot.global_transform.basis * Vector3(0.0, 0.0, 1.0)
+	seaward.y = 0.0
+	if seaward.length_squared() <= 0.001:
+		return 0
+	seaward = seaward.normalized()
+	var berth := slot.to_global(slot.ship_dock_local(8.0).origin)
+	berth.y = WaveSurface.WATER_LEVEL
+	var crab_clear := berth + water * maxf(slot.berth_gap_m + 12.0, 16.0)
+	var clear_tip := crab_clear + seaward * (slot.length_m * 0.5 + 45.0)
+	var outer := clear_tip + seaward * 240.0
+	var canonical := _densify_chain([
+		berth,
+		crab_clear,
+		clear_tip,
+		outer,
+	])
+	var by_port := _lanes.get(port_id, {}) as Dictionary
+	by_port[slot.berth_id] = {
+		## A live quay has one physically valid side-specific escape corridor.
+		## Publish it under every approach selector so destination bearing cannot
+		## choose a mirrored path through the terminal or neighbouring piers.
+		int(LaneKind.SPINE): canonical,
+		int(LaneKind.FLANK_PORT): canonical,
+		int(LaneKind.FLANK_STARBOARD): canonical,
+	}
+	_lanes[port_id] = by_port
+	var positions := _berth_positions.get(port_id, {}) as Dictionary
+	positions[slot.berth_id] = berth
+	_berth_positions[port_id] = positions
+	var metadata := _target_meta.get(port_id, {}) as Dictionary
+	metadata[slot.berth_id] = {
+		"family": slot.family,
+		"commodities": slot.commodities.duplicate(),
+	}
+	_target_meta[port_id] = metadata
+	_initialized = true
+	return 3
 
 
 static func is_initialized() -> bool:
@@ -172,6 +281,27 @@ static func get_target_lane(port_id: String, target_id: String, lane_kind: int) 
 		return []
 	var lane: Variant = (by_berth as Dictionary).get(lane_kind, [])
 	return lane as Array if typeof(lane) == TYPE_ARRAY else []
+
+
+static func best_target_id(port_id: String, family: String = "", commodity_id: String = "") -> String:
+	var metadata := _target_meta.get(port_id, {}) as Dictionary
+	var ids: Array = metadata.keys()
+	ids.sort_custom(func(a: Variant, b: Variant) -> bool: return str(a) < str(b))
+	var best := ""
+	var best_score := -1
+	for raw_id in ids:
+		var target_id := str(raw_id)
+		var row := metadata.get(target_id, {}) as Dictionary
+		var commodities := row.get("commodities", PackedStringArray()) as PackedStringArray
+		var score := 0
+		if not commodity_id.is_empty() and commodities.has(commodity_id):
+			score += 100
+		if not family.is_empty() and str(row.get("family", "")) == family:
+			score += 20
+		if score > best_score:
+			best_score = score
+			best = target_id
+	return best
 
 
 static func lane_outer_point(port_id: String, berth_index: int, lane_kind: int) -> Vector3:
@@ -422,6 +552,13 @@ static func _rotate_dir(dir: Vector3, rad: float) -> Vector3:
 	var c := cos(rad)
 	var s := sin(rad)
 	return Vector3(dir.x * c - dir.z * s, 0.0, dir.x * s + dir.z * c).normalized()
+
+
+static func _array_xz(raw: Variant) -> Vector2:
+	var values := raw as Array
+	if values.size() < 2:
+		return Vector2.ZERO
+	return Vector2(float(values[0]), float(values[1]))
 
 
 static func _vec3_is_valid(v: Vector3) -> bool:

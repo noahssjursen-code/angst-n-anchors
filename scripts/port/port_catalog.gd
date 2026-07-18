@@ -24,6 +24,7 @@ func register_port(
 		size: int = -1,
 		region: String = "",
 		max_ship_class_name: String = "",
+		commodity_exports: Array = [],
 ) -> void:
 	if port_id.is_empty():
 		return
@@ -34,6 +35,7 @@ func register_port(
 		"position": world_pos,
 		"spawn_pos": spawn_pos if spawn_pos != Vector3(INF, INF, INF) else world_pos,
 		"commodity_export": commodity_export,
+		"commodity_exports": commodity_exports.duplicate() if not commodity_exports.is_empty() else ([commodity_export] if not commodity_export.is_empty() else []),
 		"commodity_imports": commodity_imports.duplicate(),
 		"island_width": island_width,
 		"plot_depth": plot_depth,
@@ -54,6 +56,8 @@ func register_port(
 			entry["layout_seed"] = prev.get("layout_seed", 0)
 		if commodity_export.is_empty():
 			entry["commodity_export"] = prev.get("commodity_export", "")
+		if commodity_exports.is_empty():
+			entry["commodity_exports"] = prev.get("commodity_exports", [entry.get("commodity_export", "")])
 		if commodity_imports.is_empty():
 			entry["commodity_imports"] = prev.get("commodity_imports", [])
 		if population == 0:

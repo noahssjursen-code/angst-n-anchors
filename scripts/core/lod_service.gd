@@ -1,6 +1,6 @@
 extends Node
 
-## Game-wide LOD hub: DETAILED / IMPOSTOR / CULLED from player distance.
+## Game-wide LOD hub: DETAILED / IMPOSTOR / CULLED from active-view distance.
 ## Register subjects; one poll loop applies swaps. Do not invent per-asset distance logic.
 
 const LodProfilesScript := preload("res://scripts/core/lod_profiles.gd")
@@ -111,10 +111,11 @@ func tier_at(
 
 
 func observer_position() -> Vector3:
-	## CAMERA mode or F3 freecam → stream from the view so flying loads detail normally.
-	if observer_mode == ObserverMode.CAMERA or WorldReference.is_freecam_active(get_tree()):
-		return WorldReference.stream_position(get_viewport())
-	return WorldReference.gameplay_position(get_tree())
+	## LOD is presentation, so its observer is always the camera that renders the
+	## frame. The gameplay body can be intentionally dormant while helming and
+	## is only a fallback for camera-less startup/tests. This also naturally
+	## supports walking, helm FP/TP, freecam, and future spectator cameras.
+	return WorldReference.stream_position(get_viewport())
 
 
 func _tick(force: bool = false) -> void:

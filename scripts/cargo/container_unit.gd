@@ -16,6 +16,10 @@ const DEFAULT_COMMODITY := "provisions"
 @export var footprint: Vector2i = DEFAULT_FOOTPRINT
 @export var origin_port_id: String = ""
 @export var destination_port_id: String = ""
+@export var freight_contract_id: String = ""
+@export var consignment_id: String = ""
+@export var delivery_value_marks: int = 0
+@export var paint_variant: int = 0
 
 
 static func create(
@@ -24,7 +28,7 @@ static func create(
 	mass: float = -1.0,
 ) -> ContainerUnit:
 	var u := ContainerUnit.new()
-	u.id = unit_id if not unit_id.is_empty() else "ctr_%d" % Time.get_ticks_msec()
+	u.id = unit_id if not unit_id.is_empty() else "ctr_%s" % UuidUtil.generate()
 	u.commodity_id = commodity if not commodity.is_empty() else DEFAULT_COMMODITY
 	u.footprint = DEFAULT_FOOTPRINT
 	if mass >= 0.0:
@@ -35,6 +39,7 @@ static func create(
 			CommodityCatalog.general_cargo_mass_kg(),
 		))
 	u.value_gold = int(CommodityCatalog.commodity_info(u.commodity_id).get("value", 0))
+	u.paint_variant = posmod(u.id.hash(), 8)
 	return u
 
 
@@ -47,6 +52,10 @@ func to_dict() -> Dictionary:
 		"footprint": [footprint.x, footprint.y],
 		"origin_port_id": origin_port_id,
 		"destination_port_id": destination_port_id,
+		"freight_contract_id": freight_contract_id,
+		"consignment_id": consignment_id,
+		"delivery_value_marks": delivery_value_marks,
+		"paint_variant": paint_variant,
 	}
 
 
@@ -64,4 +73,8 @@ static func from_dict(data: Dictionary) -> ContainerUnit:
 		u.footprint = DEFAULT_FOOTPRINT
 	u.origin_port_id = str(data.get("origin_port_id", ""))
 	u.destination_port_id = str(data.get("destination_port_id", ""))
+	u.freight_contract_id = str(data.get("freight_contract_id", ""))
+	u.consignment_id = str(data.get("consignment_id", ""))
+	u.delivery_value_marks = maxi(int(data.get("delivery_value_marks", 0)), 0)
+	u.paint_variant = int(data.get("paint_variant", posmod(u.id.hash(), 8)))
 	return u

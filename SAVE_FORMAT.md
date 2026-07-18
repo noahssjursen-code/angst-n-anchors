@@ -56,10 +56,10 @@ from the current legal-code catalog and brick layout; no certification boolean i
 persisted.
 
 Save v5 previously stored `port_operations_state` (vessel calls / yard ledger).
-That system was purged in the port rebuild; the field is cleared on snapshot and
-ignored on restore. Contract accept/deliver restore is also inactive until the
-trade rewrite returns. Vessel acquisition is starter-ledger / shipwright-later;
-loading still starts the captain on foot at their home quay.
+That field is currently cleared on snapshot and ignored on restore. First Freight
+persists the complete accepted movement dictionary in `accepted_contracts`.
+Physical in-transit cargo is not restored yet, so a resumed movement returns
+to `accepted` with `loaded_count = 0` and must be loaded again.
 
 ## Home port
 
@@ -91,7 +91,7 @@ Each singleplayer captain owns a world seed. New captains roll a fresh seed via
 }
 ```
 
-`LocalPlayerView` restores accepted contracts and ship coordinates only when
+`LocalPlayerView` restores accepted freight movements only when
 the current generated world matches this identity. Marks, appearance, and the
 owned-vessel ledger are not world-local and remain available. Legacy saves with
 no context are accepted once and adopt the current context on their next save.

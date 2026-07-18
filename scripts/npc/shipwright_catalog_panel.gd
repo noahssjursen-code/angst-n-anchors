@@ -315,8 +315,8 @@ func _refresh_entry() -> void:
 	_name_lbl.text = display
 	_class_lbl.text = str(entry.get("hull_display", "Hull platform"))
 
-	var len_m := _stations.length_m if _stations != null else 28.0
-	var beam_m := _stations.beam_m if _stations != null else 10.0
+	var len_m := ShipClass.display_metres(_stations.length_m if _stations != null else 28.0)
+	var beam_m := ShipClass.display_metres(_stations.beam_m if _stations != null else 10.0)
 	var disp_t := float(entry.get("displacement_t", 256.0))
 	var shaft_kw := float(entry.get("shaft_power_kw", 0.0))
 	_specs_lbl.text = (

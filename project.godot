@@ -24,6 +24,7 @@ WorldWeather="*res://scripts/weather/world_weather.gd"
 WeatherLighting="*res://scripts/weather/weather_lighting.gd"
 WorldClock="*res://scripts/time/world_clock.gd"
 PortCatalog="*res://scripts/port/port_catalog.gd"
+FreightService="*res://scripts/cargo/freight_service.gd"
 PlayerSession="*res://scripts/player/player_session.gd"
 LoadingGate="*res://scripts/ui/loading_gate.gd"
 GameMenu="*res://scripts/ui/game_menu.gd"
@@ -89,6 +90,11 @@ boat_thrust_right={
 boat_docking_thrusters={
 "deadzone": 0.5,
 "events": [Object(InputEventKey,"resource_local_to_scene":false,"resource_name":"","device":-1,"window_id":0,"alt_pressed":false,"shift_pressed":false,"ctrl_pressed":false,"meta_pressed":false,"pressed":false,"keycode":0,"physical_keycode":84,"key_label":0,"unicode":116,"location":0,"echo":false,"script":null)
+]
+}
+boat_autopilot_toggle={
+"deadzone": 0.5,
+"events": [Object(InputEventKey,"resource_local_to_scene":false,"resource_name":"","device":-1,"window_id":0,"alt_pressed":false,"shift_pressed":false,"ctrl_pressed":false,"meta_pressed":false,"pressed":false,"keycode":0,"physical_keycode":80,"key_label":0,"unicode":112,"location":0,"echo":false,"script":null)
 ]
 }
 open_map={

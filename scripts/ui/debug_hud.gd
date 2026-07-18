@@ -1,6 +1,6 @@
 extends Node
 
-## Autoload — owns the F3 debug overlay. F4 weather presets + E midday/calm while panel is open.
+## Autoload — owns the F3 debug overlay. F4 weather presets + E clear/restore toggle.
 ## F3 then G toggles world gizmos (ports, berth pockets, crane targets, …).
 ## Layer 100: always above every other UI element.
 
@@ -14,6 +14,9 @@ var _overlay: DebugDraw
 var _weather_preset_panel: Control
 var _shown:   bool = false
 var _scale_probe: Node3D = null
+var _weather_before_clear: WeatherState = null
+var _time_before_clear: float = 0.5
+var _weather_blend_was_paused := false
 
 ## Master playtest flag — every `world_gizmo` node + PortPlot site overlays follow this.
 var world_gizmos_enabled := false
@@ -78,7 +81,7 @@ func _unhandled_input(event: InputEvent) -> void:
 			_weather_preset_panel.visible = not _weather_preset_panel.visible
 			get_viewport().set_input_as_handled()
 		elif ke.pressed and not ke.echo and ke.physical_keycode == KEY_E and _shown:
-			_apply_debug_day_calm_preset()
+			_toggle_debug_day_calm_preset()
 			get_viewport().set_input_as_handled()
 
 
@@ -137,16 +140,40 @@ func _apply_world_gizmos() -> void:
 			node.set("show_target_gizmos", world_gizmos_enabled)
 
 
-func _apply_debug_day_calm_preset() -> void:
+func is_clear_weather_override_active() -> bool:
+	return _weather_before_clear != null
+
+
+func _toggle_debug_day_calm_preset() -> void:
 	var wl := get_node_or_null("/root/WeatherLighting") as WeatherLightingState
-	if wl != null:
-		wl.apply_weather_state(WeatherState.create_clear_calm())
-
-	WorldWeather.set_blend_to_lighting_paused(true)
-
 	var wc := get_node_or_null("/root/WorldClock")
-	if wc != null and wc.has_method("snap_time_of_day"):
-		wc.snap_time_of_day(0.5)
+	if wl == null:
+		return
+	if _weather_before_clear == null:
+		_weather_before_clear = wl.get_weather_state()
+		_weather_blend_was_paused = WorldWeather.is_blend_to_lighting_paused()
+		if wc != null and wc.has_method("get_time_of_day"):
+			_time_before_clear = float(wc.call("get_time_of_day"))
+		WorldWeather.set_blend_to_lighting_paused(true)
+		wl.apply_weather_state(WeatherState.create_clear_calm())
+		if wc != null and wc.has_method("snap_time_of_day"):
+			wc.call("snap_time_of_day", 0.5)
+	else:
+		var restore := _weather_before_clear
+		_weather_before_clear = null
+		wl.apply_weather_state(restore)
+		if wc != null and wc.has_method("snap_time_of_day"):
+			wc.call("snap_time_of_day", _time_before_clear)
+		WorldWeather.set_blend_to_lighting_paused(_weather_blend_was_paused)
+	var telemetry := get_node_or_null("/root/Telemetry")
+	if telemetry != null and telemetry.has_method("set_context_flag"):
+		telemetry.set_context_flag(
+			&"debug.clear_weather",
+			is_clear_weather_override_active(),
+			&"debug_hud",
+		)
+	if _overlay != null:
+		_overlay.queue_redraw()
 
 
 ## F3 + P — drops a measured scale rig 3 m in front of the player: a 1.8 m

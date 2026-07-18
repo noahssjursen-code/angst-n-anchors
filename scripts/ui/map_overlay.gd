@@ -19,8 +19,9 @@ const Snapshot := preload("res://scripts/ui/chart/chart_data_snapshot.gd")
 const FRAME := 26.0
 const TOP_H := 58.0
 const BOTTOM_H := 48.0
-const NAV_REFRESH_S := 0.20
+const NAV_REFRESH_S := 0.35
 const OVERLAY_DEBOUNCE_S := 0.28
+const INTERACTION_SETTLE_S := 0.16
 
 var mode := Mode.NAVIGATION
 var data
@@ -39,6 +40,7 @@ var nav_elapsed := NAV_REFRESH_S
 var overlay_debounce := 0.0
 var overlays_dirty := true
 var first_visible_frame := true
+var interaction_settle := 0.0
 var last_ctx: Dictionary = {}
 var hover_rows: Array[String] = []
 var hover_sample_screen := Vector2(-1000.0, -1000.0)
@@ -172,6 +174,12 @@ func _process(delta: float) -> void:
 		return
 	if not ensure_live_data():
 		return
+	if interaction_settle > 0.0:
+		interaction_settle = maxf(interaction_settle - delta, 0.0)
+		if interaction_settle <= 0.0:
+			## One detailed redraw after movement settles. Expensive layers never
+			## execute in the mouse-motion path.
+			queue_redraw()
 	if first_visible_frame:
 		if mode != Mode.HOME_PORT_PICK:
 			_capture_nav()
@@ -205,6 +213,7 @@ func _input(event: InputEvent) -> void:
 		var motion := event as InputEventMouseMotion
 		hover_screen = motion.position
 		if dragging:
+			interaction_settle = INTERACTION_SETTLE_S
 			drag_distance += motion.relative.length()
 			camera.pan_pixels(
 				motion.position - drag_origin_mouse,
@@ -300,6 +309,7 @@ func _draw() -> void:
 		nav,
 		selected_port,
 		mode != Mode.HOME_PORT_PICK,
+		dragging or interaction_settle > 0.0,
 	)
 	_draw_compass(chart)
 	_draw_scale(chart, bounds)
@@ -631,6 +641,7 @@ func _zoom_at(screen: Vector2, steps: int) -> void:
 	var uv := (screen - chart.position) / chart.size
 	var after := bounds.position + uv * bounds.size
 	camera.center += before - after
+	interaction_settle = INTERACTION_SETTLE_S
 	_schedule_overlays()
 	queue_redraw()
 

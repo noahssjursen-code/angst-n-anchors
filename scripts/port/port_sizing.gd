@@ -252,7 +252,9 @@ static func facilities_depth_m(dock_inland_depth_m: float) -> float:
 static func design_ship_class(size: int) -> ShipClass.Type:
 	match normalized_size(size):
 		0:
-			return ShipClass.Type.LAUNCH
+			## Tier 0 is physically authored around hull_28x10 (14 m display),
+			## so advertising Launch-only rejects the very hull its berth fits.
+			return ShipClass.Type.COASTAL_TRADER
 		1:
 			return ShipClass.Type.COASTAL_TRADER
 		2, 3:

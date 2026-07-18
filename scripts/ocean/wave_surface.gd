@@ -113,14 +113,17 @@ static func _vessel_displacement_params(b: RigidBody3D) -> Dictionary:
 	# The absolute depth the keel is submerged under the wave
 	var depth_below_surface: float = maxf(surf_raw - keel_y, 0.0)
 
-	# Circular Mexican Hat Wavelet: D = u² + v². Zero crossing at D ≈ 0.85
-	# (where exp(-1.8D) = 0.5·D·exp(-0.8D)), which gives r = √0.85 ≈ 0.922.
-	# Setting sx = hs.x * 0.542 puts that zero crossing right at the hull edge
-	# (u·sx = 0.922 · 0.542 · hs.x = 0.5 · hs.x) along the cardinal axes AND on
-	# diagonals — true elliptical hug, no square-corner overshoot like the old
-	# u⁴+v⁴ super-ellipse had.
-	var sx: float = maxf(hs.x * 0.542, 0.5)
-	var sz: float = maxf(hs.z * 0.542, 0.5)
+	## Actual half-extents for a steep hull-footprint cutout. The previous
+	## Mexican-hat ellipse formed a visible sloped moat between water and hull.
+	## Keep the cutout comfortably inside the rendered shell. Water should meet
+	## the hull, not reveal the anti-fouling surface through a hull-sized hole.
+	var sx: float = maxf(hs.x * 0.30, 0.5)
+	var sz: float = maxf(hs.z * 0.30, 0.5)
+	var bow_frac := 0.0
+	if "physics_profile" in b:
+		var profile := b.get("physics_profile") as HullPhysicsProfile
+		if profile != null:
+			bow_frac = clampf(profile.bow_taper_fraction, 0.0, 0.45)
 	var amp: float = 0.0
 	
 	if depth_below_surface > 0.0:
@@ -143,7 +146,8 @@ static func _vessel_displacement_params(b: RigidBody3D) -> Dictionary:
 		"right_x": right.x,
 		"right_z": right.z,
 		"fwd_x": fwd.x,
-		"fwd_z": fwd.z
+		"fwd_z": fwd.z,
+		"bow_frac": bow_frac,
 	}
 
 static func get_vertical_velocity_at(x: float, z: float) -> float:
@@ -263,7 +267,9 @@ static func sync_ocean_coupling_to_shader(mat: ShaderMaterial) -> void:
 		mat.set_shader_parameter("boat_velocity", Vector2(p["vel_x"], p["vel_z"]))
 		mat.set_shader_parameter("boat_basis", Vector4(p["right_x"], p["right_z"], p["fwd_x"], p["fwd_z"]))
 		return
-	mat.set_shader_parameter("boat_coupling", Vector4(p["bx"], p["bz"], p["amp"], 0.0))
+	mat.set_shader_parameter("boat_coupling", Vector4(
+		p["bx"], p["bz"], p["amp"], p["bow_frac"]
+	))
 	mat.set_shader_parameter("boat_coupling_axes", Vector2(p["sx"], p["sz"]))
 	mat.set_shader_parameter("boat_velocity", Vector2(p["vel_x"], p["vel_z"]))
 	mat.set_shader_parameter("boat_basis", Vector4(p["right_x"], p["right_z"], p["fwd_x"], p["fwd_z"]))
@@ -292,20 +298,18 @@ static func _vessel_dip_at(x: float, z: float) -> float:
 	var u: float = local_x / sx
 	var v: float = local_z / sz
 
-	# Circular norm — see _vessel_displacement_params for the rationale.
-	# Cutoff D > 4.0 (was 8.0): at D=4 dip ≈ -0.08·amp, by D=5 it's already
-	# 1e-3·amp — past 4 we're integrating noise and visibly trailing the
-	# ridge way past the hull.
-	var D: float = u * u + v * v
-
-	if D > 4.0:
+	var edge := _hull_cut_edge(u, v, float(p.get("bow_frac", 0.0)))
+	if edge >= 1.0:
 		return 0.0
+	return amp * (1.0 - smoothstep(0.82, 1.0, edge))
 
-	var a: float = 1.8
-	var b: float = 0.8
-	var c: float = 0.5
 
-	var exp_a: float = exp(-a * D)
-	var exp_b: float = exp(-b * D)
-
-	return maxf(amp * (exp_a - c * D * exp_b), 0.0)
+static func _hull_cut_edge(u: float, v: float, bow_frac: float) -> float:
+	var width_factor := 1.0
+	if bow_frac > 0.001:
+		## Boat bow is local -Z. v=-1 is the stem; shoulder is the end of
+		## the authored plan taper.
+		var shoulder := -1.0 + bow_frac * 2.0
+		if v < shoulder:
+			width_factor = clampf((v + 1.0) / maxf(bow_frac * 2.0, 0.001), 0.04, 1.0)
+	return maxf(absf(v), absf(u) / width_factor)

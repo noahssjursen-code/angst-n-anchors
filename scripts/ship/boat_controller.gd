@@ -64,10 +64,12 @@ var _moored_toast_cooldown := 0.0
 
 var _hud_layer: CanvasLayer
 var _ship_hud: ShipHud
+var _autopilot: VesselAutopilot
 
 
 func _ready() -> void:
 	if not Engine.is_editor_hint():
+		call_deferred("_ensure_autopilot")
 		if not InputMap.has_action("boat_trawl_toggle"):
 			InputMap.add_action("boat_trawl_toggle")
 			var ev := InputEventKey.new()
@@ -84,6 +86,8 @@ func activate() -> void:
 	_set_hud_visible(true)
 	if _is_moored() and _ship_hud != null:
 		_ship_hud.show_toast("MOORED — leave helm and untie both quay lines [F]", 5.0)
+	elif _autopilot != null and _autopilot.is_engaged() and _ship_hud != null:
+		_ship_hud.show_toast("AUTOPILOT ENGAGED — [P] disengage, helm input overrides", 4.0)
 	helm_activated.emit()
 	var tut := get_node_or_null("/root/Tutorial")
 	if tut != null:
@@ -91,6 +95,7 @@ func activate() -> void:
 
 
 func deactivate() -> void:
+	var autopilot_keeps_watch := _autopilot != null and _autopilot.is_engaged()
 	if _active:
 		helmed_count = maxi(helmed_count - 1, 0)
 	_active         = false
@@ -101,7 +106,8 @@ func deactivate() -> void:
 	_throttle_stage_idx = _nearest_stage_idx(0.0)
 	if _boat_body != null:
 		WaveSurface.clear_coupled_vessel_if(_boat_body)
-	_push_to_components()
+	if not autopilot_keeps_watch:
+		_push_to_components()
 	_set_hud_visible(false)
 	helm_deactivated.emit()
 
@@ -110,6 +116,17 @@ func _physics_process(delta: float) -> void:
 	if Engine.is_editor_hint() or not _active:
 		return
 	_moored_toast_cooldown = maxf(_moored_toast_cooldown - delta, 0.0)
+
+	if Input.is_action_just_pressed("boat_autopilot_toggle"):
+		_toggle_autopilot()
+		if _autopilot != null and _autopilot.is_engaged():
+			return
+
+	if _autopilot != null and _autopilot.is_engaged():
+		if _manual_override_requested():
+			_autopilot.disengage("manual_override")
+		else:
+			return
 
 	if Input.is_action_just_pressed("boat_docking_thrusters"):
 		_thruster_mode = (_thruster_mode + 1) % 3
@@ -185,16 +202,22 @@ func _unhandled_input(event: InputEvent) -> void:
 
 	match key_event.keycode:
 		KEY_1:
+			_disengage_autopilot_for_manual_input()
 			_set_stage_from_percent(0.0)
 		KEY_2:
+			_disengage_autopilot_for_manual_input()
 			_set_stage_from_percent(0.25)
 		KEY_3:
+			_disengage_autopilot_for_manual_input()
 			_set_stage_from_percent(0.5)
 		KEY_4:
+			_disengage_autopilot_for_manual_input()
 			_set_stage_from_percent(0.75)
 		KEY_5:
+			_disengage_autopilot_for_manual_input()
 			_set_stage_from_percent(1.0)
 		KEY_X:
+			_disengage_autopilot_for_manual_input()
 			_set_stage_stop()
 		KEY_L:
 			var lighting := get_node_or_null("../ShipLighting") as ShipLighting
@@ -211,6 +234,103 @@ func _push_to_components() -> void:
 	if _bow_thruster != null:
 		_bow_thruster.lateral_input = _lateral
 		_bow_thruster.crab_mode = (_thruster_mode == 2)
+
+
+func _ensure_autopilot() -> void:
+	if _boat_body == null:
+		return
+	_autopilot = _boat_body.get_node_or_null("VesselAutopilot") as VesselAutopilot
+	if _autopilot == null:
+		_autopilot = VesselAutopilot.new()
+		_autopilot.name = "VesselAutopilot"
+		_boat_body.add_child(_autopilot)
+	if not _autopilot.disengaged.is_connected(_on_autopilot_disengaged):
+		_autopilot.disengaged.connect(_on_autopilot_disengaged)
+	var watch := _boat_body.get_node_or_null("BridgeWatchAlarm") as BridgeWatchAlarm
+	if watch == null:
+		watch = BridgeWatchAlarm.new()
+		watch.name = "BridgeWatchAlarm"
+		_boat_body.add_child(watch)
+
+
+func _toggle_autopilot() -> void:
+	if _autopilot == null:
+		_ensure_autopilot()
+	if _autopilot == null:
+		return
+	if _autopilot.is_engaged():
+		_autopilot.disengage("manual")
+		return
+	if _is_moored():
+		_show_autopilot_toast("AUTOPILOT UNAVAILABLE — untie before departure")
+		return
+	var world := get_tree().get_first_node_in_group("world")
+	if world == null or not world.has_method("get_world_layout"):
+		_show_autopilot_toast("AUTOPILOT UNAVAILABLE — no navigation data")
+		return
+	var view := get_node_or_null("/root/LocalPlayerView")
+	var contracts: Array = view.get_active_contracts() if view != null else []
+	if contracts.is_empty():
+		_show_autopilot_toast("AUTOPILOT NEEDS AN ACTIVE FREIGHT ROUTE")
+		return
+	var contract := contracts[0] as Dictionary
+	var destination_id := str(contract.get("destination_port_id", ""))
+	var destination := view.get_port_position(destination_id) as Vector3
+	if destination_id.is_empty() or not destination.is_finite():
+		_show_autopilot_toast("AUTOPILOT ROUTE DESTINATION UNAVAILABLE")
+		return
+	var layout := world.call("get_world_layout") as WorldLayout
+	var planner := MarineRoutePlanner.new(layout)
+	var start := Vector2(_boat_body.global_position.x, _boat_body.global_position.z)
+	var destination_berth_id := BerthApproachLanes.best_target_id(
+		destination_id,
+		str(contract.get("terminal_family", "")),
+		str(contract.get("commodity_id", "")),
+	)
+	var plan := planner.plan_berth_to_berth(
+		start,
+		Vector2(destination.x, destination.z),
+		str(contract.get("origin_port_id", "")),
+		str(contract.get("berth_id", "")),
+		destination_id,
+		destination_berth_id,
+	)
+	if not _autopilot.engage(plan):
+		_show_autopilot_toast("AUTOPILOT COULD NOT FIND A SAFE SEA ROUTE")
+		return
+	_thruster_mode = 0
+	_lateral = 0.0
+	_show_autopilot_toast("AUTOPILOT ENGAGED TO %s — [P] disengage" % \
+		str(view.get_port_display_name(destination_id)).to_upper(), 5.0)
+
+
+func _manual_override_requested() -> bool:
+	return Input.is_action_just_pressed("move_forward") \
+		or Input.is_action_just_pressed("move_back") \
+		or absf(Input.get_axis("move_left", "move_right")) > 0.1 \
+		or absf(Input.get_axis("boat_thrust_left", "boat_thrust_right")) > 0.1
+
+
+func _disengage_autopilot_for_manual_input() -> void:
+	if _autopilot != null and _autopilot.is_engaged():
+		_autopilot.disengage("manual_override")
+
+
+func _on_autopilot_disengaged(reason: String) -> void:
+	match reason:
+		"arrived":
+			_show_autopilot_toast("AUTOPILOT APPROACH COMPLETE — take the helm")
+		"off_route":
+			_show_autopilot_toast("AUTOPILOT DISENGAGED — vessel is off route")
+		"manual_override":
+			_show_autopilot_toast("AUTOPILOT DISENGAGED — manual helm")
+		_:
+			_show_autopilot_toast("AUTOPILOT DISENGAGED")
+
+
+func _show_autopilot_toast(text: String, duration_s: float = 3.0) -> void:
+	if _ship_hud != null:
+		_ship_hud.show_toast(text, duration_s)
 
 
 func _is_moored() -> bool:
@@ -287,3 +407,7 @@ func set_throttle_stage_idx(idx: int) -> void:
 
 func get_thruster_mode() -> int:
 	return _thruster_mode
+
+
+func get_autopilot() -> VesselAutopilot:
+	return _autopilot

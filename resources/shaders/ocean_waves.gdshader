@@ -134,24 +134,23 @@ void vertex() {
 		float local_z = dx * fwd_x + dz * fwd_z;
 		float u = local_x / sx;
 		float v = local_z / sz;
-		float D = u * u + v * v;
-		if (D < 4.0) {
-			float a = 1.8;
-			float b = 0.8;
-			float c = 0.5;
-			float exp_a = exp(-a * D);
-			float exp_b = exp(-b * D);
-			boat_dip = amp * (exp_a - c * D * exp_b);
-			float d_dip_dD = amp * (-a * exp_a - c * exp_b * (1.0 - b * D));
-			// Depression only — negative lobe would raise a berm around the hull.
-			if (boat_dip < 0.0) {
-				boat_dip = 0.0;
-				d_dip_dD = 0.0;
+		float width_factor = 1.0;
+		float bow_frac = clamp(boat_coupling.w, 0.0, 0.45);
+		if (bow_frac > 0.001) {
+			float shoulder = -1.0 + bow_frac * 2.0;
+			if (v < shoulder) {
+				width_factor = clamp((v + 1.0) / max(bow_frac * 2.0, 0.001), 0.04, 1.0);
 			}
-			float ddip_dlocal_x = d_dip_dD * 2.0 * u / sx;
-			float ddip_dlocal_z = d_dip_dD * 2.0 * v / sz;
-			ddip_dx = ddip_dlocal_x * right_x + ddip_dlocal_z * fwd_x;
-			ddip_dz = ddip_dlocal_x * right_z + ddip_dlocal_z * fwd_z;
+		}
+		float edge = max(abs(v), abs(u) / width_factor);
+		if (edge < 1.0) {
+			// Deep interior stays hidden by the hull; only a narrow edge band
+			// rises to meet the visible waterline. No exposed elliptical moat.
+			boat_dip = amp * (1.0 - smoothstep(0.82, 1.0, edge));
+			// Keep the cutout normal vertical. A derivative across the narrow
+			// masked edge produces a bright artificial trench around the ship.
+			ddip_dx = 0.0;
+			ddip_dz = 0.0;
 		}
 	}
 	displaced_world.y -= boat_dip;

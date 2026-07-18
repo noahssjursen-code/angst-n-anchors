@@ -14,6 +14,8 @@ var bearing_deg := NAN
 var leeway_deg := NAN
 var waypoint := Vector3(INF, INF, INF)
 var contracts: Array = []
+var moored_port_id := ""
+var moored_berth_id := ""
 var wind_direction_deg := NAN
 var wind_speed_knots := 0.0
 var fuel_fraction := NAN
@@ -28,6 +30,9 @@ static func capture(tree: SceneTree):
 		out.ship = view.call("get_active_ship") as Node3D
 		out.contracts = view.call("get_active_contracts") as Array
 		out.waypoint = _first_contract_waypoint(view, out.contracts)
+		var berth_context := view.call("get_active_ship_berth_context") as Dictionary
+		out.moored_port_id = str(berth_context.get("port_id", ""))
+		out.moored_berth_id = str(berth_context.get("berth_id", ""))
 
 	if out.ship != null and is_instance_valid(out.ship):
 		out.ship_position = out.ship.global_position

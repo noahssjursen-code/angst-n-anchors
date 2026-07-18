@@ -74,7 +74,10 @@ func delete_selected_or(captain_id: String) -> void:
 	if id.is_empty():
 		return
 	if mode == Mode.LOCAL:
+		var deleting_active := LocalCaptainStore.active_id == id
 		if LocalCaptainStore.delete_captain(id):
+			if deleting_active:
+				_clear_player_session()
 			if selected_id == id:
 				selected_id = ""
 			captain_deleted.emit(id)
@@ -203,10 +206,23 @@ func _on_remote_created(captain: Dictionary) -> void:
 
 
 func _on_remote_deleted(captain_id: String) -> void:
+	var tree := Engine.get_main_loop() as SceneTree
+	var session := tree.root.get_node_or_null("PlayerSession") if tree != null and tree.root != null else null
+	if session != null and str(session.data.captain_id) == captain_id:
+		session.clear_active_captain()
 	if selected_id == captain_id:
 		selected_id = ""
 	captain_deleted.emit(captain_id)
 	refresh()
+
+
+func _clear_player_session() -> void:
+	var tree := Engine.get_main_loop() as SceneTree
+	if tree == null or tree.root == null:
+		return
+	var session := tree.root.get_node_or_null("PlayerSession")
+	if session != null:
+		session.clear_active_captain()
 
 
 func _on_remote_updated(_captain: Dictionary) -> void:

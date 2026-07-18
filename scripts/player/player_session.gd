@@ -151,6 +151,13 @@ func notify_vessels_synced() -> void:
 	vessels_synced.emit()
 
 
+## Drop all per-captain runtime state when the active roster entry is deleted.
+## Autoload consumers (including FreightService) reset from data_loaded.
+func clear_active_captain() -> void:
+	data = PlayerData.new()
+	data_loaded.emit(data)
+
+
 func begin_new_captain(
 	display_name: String,
 	appearance: CharacterAppearance,

@@ -66,6 +66,7 @@ Current demos:
 - `scenes/showcases/port_showcase.tscn` — terrain-traced port pipeline at real seeded coastal terrain sites
 - `scenes/showcases/ship_showcase.tscn` / `player_showcase.tscn`
 - `scenes/showcases/crane_showcase.tscn` — bulk grab + provision T-crane (containers)
+- `scenes/showcases/marine_autopilot_showcase.tscn` — deterministic sea route + replicated progress viewer
 - `tests/staged_vessel_visual_demo.tscn` — staged deck fitout construction
 
 ---
@@ -81,6 +82,7 @@ Each autoload lives in its system folder and is registered in `project.godot`.
 | `WeatherLighting` | `weather/` | Smoothed local presentation only: sky, fog, ocean, audio, wind |
 | `WorldClock` | `time/` | Game time. Emits `day_changed` + `hour_changed` (1 game hr = 60 real s) |
 | `PortCatalog` | `port/` | Live port directory (ids, names, positions, spawn, commodities) |
+| `FreightService` | `cargo/` | Authoritative accepted container movements and deterministic port offers |
 | `PlayerSession` | `player/` | Persistent player data (marks, name, ship ledger, world clock). Autosaves every 60 s + on focus loss |
 | `GameMenu` | `ui/` | Pause / map / settings / hint overlay |
 | `GameState` | `state/` | Read model: player/ship/contract/world sub-states |
@@ -132,6 +134,11 @@ creates only the initial graph + berth plan; later growth must persist the evolv
 
 Trade contracts and harbour NPCs are purged for now. Starter vessels come from
 `PlayerSession` / `VesselSpawn`. Commodity packing/pricing lives in `CommodityCatalog`.
+
+`CargoConsignment` is the JSON-safe authority record shared by freight families.
+Physical `ContainerUnit`s and `BulkCargoLot`s reference its `consignment_id`; do
+not derive payment or routing authority from scene nodes. A future server should
+issue/revise consignments and validate delivered cargo.
 
 ---
 
@@ -204,6 +211,20 @@ scenes for store stock; the trawler and catamaran scenes are frozen exceptions.
 ### Vessel orientation
 
 **Bow = −Z, Stern = +Z, Port = −X, Starboard = +X.** Grid cells are vessel metres.
+
+### Navigation and autonomous vessels
+
+`MarineRoutePlanner` produces deterministic `MarineRoutePlan` data from the
+shared `WorldLayout`. `VesselAutopilot` is the only passage route follower for
+both player and NPC vessels; do not create separate player/NPC steering math.
+Compact authority snapshots send route identity, endpoints, progress, pose, and
+algorithm/layout versions so clients can rebuild and verify the route locally.
+
+`AutonomousVesselCaptain` layers harbour procedure around that shared follower:
+reserve berth → release lines → crab clear → passage → acquire approach lane →
+align/crab in → secure lines. `HarbourController` owns berth reservations and
+exclusive manoeuvre-lane leases. Player passage autopilot carries a three-minute
+`BridgeWatchAlarm`; NPC captains own their watch continuously and do not use it.
 
 ---
 
@@ -344,5 +365,6 @@ Actions registered in `project.godot` that gameplay code reads via `Input.is_act
 | `boat_lights_toggle` | L | Boat nav lights |
 | `boat_horn_press` | E | Foghorn |
 | `boat_docking_thrusters` | T | Bow thruster mode |
+| `boat_autopilot_toggle` | P | Engage/disengage active freight route autopilot |
 
 Add new actions to `project.godot` directly; there is no separate input-map JSON.

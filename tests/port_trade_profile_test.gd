@@ -24,6 +24,8 @@ func _run() -> void:
 	assert(a.layout_graph != null and b.layout_graph != null)
 	assert(JSON.stringify(a.layout_graph.to_dict()) == JSON.stringify(b.layout_graph.to_dict()))
 	assert(not a.trade_profile.export_slots.is_empty())
+	assert(a.trade_profile.export_slots.has("provisions"), "every port exports general cargo")
+	assert(a.trade_profile.import_slots.has("provisions"), "every port imports general cargo")
 	assert(not str(a.trade_profile.theme_id).is_empty())
 	## Size 2 always gets at least one import from themes.
 	assert(not a.trade_profile.import_slots.is_empty())

@@ -371,10 +371,30 @@ static func _fill_poly(
 ) -> void:
 	if world_poly.size() < 3:
 		return
+	var screen := _sanitized_screen_poly(world_poly, ctx)
+	if screen.size() < 3:
+		return
+	## CanvasItem logs a renderer error when handed a degenerate polygon. Some
+	## generated harbour outlines contain duplicate/collinear points, so verify
+	## triangulation before crossing the rendering boundary.
+	if Geometry2D.triangulate_polygon(screen).is_empty():
+		return
+	canvas.draw_colored_polygon(screen, color)
+
+
+static func _sanitized_screen_poly(world_poly: PackedVector2Array, ctx: Dictionary) -> PackedVector2Array:
 	var screen := PackedVector2Array()
 	for p in world_poly:
-		screen.append(ChartLayerRenderer._world_to_screen(Vector3(p.x, 0.0, p.y), ctx))
-	canvas.draw_colored_polygon(screen, color)
+		if not p.is_finite():
+			continue
+		var point := ChartLayerRenderer._world_to_screen(Vector3(p.x, 0.0, p.y), ctx)
+		if not point.is_finite():
+			continue
+		if screen.is_empty() or screen[screen.size() - 1].distance_squared_to(point) > 0.0001:
+			screen.append(point)
+	if screen.size() > 2 and screen[0].distance_squared_to(screen[screen.size() - 1]) <= 0.0001:
+		screen.resize(screen.size() - 1)
+	return screen
 
 
 static func _stroke_poly(

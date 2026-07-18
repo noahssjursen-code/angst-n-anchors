@@ -358,6 +358,9 @@ func _draw_dashboard(c: Vector2) -> void:
 	var stage_idx   := _controller.get_throttle_stage_idx()
 	var vals        := _controller.throttle_stage_values
 	var stage_val: float = vals[clampi(stage_idx, 0, vals.size() - 1)] if not vals.is_empty() else 0.0
+	var autopilot := _controller.get_autopilot()
+	if autopilot != null and autopilot.is_engaged():
+		stage_val = autopilot.cruise_throttle
 	var thruster    := _controller.get_thruster_mode()
 	var thruster_labels := ["OFF", "BOW ONLY", "CRAB"]
 	var dest_info   := _nearest_dest_info()
@@ -376,6 +379,16 @@ func _draw_dashboard(c: Vector2) -> void:
 		["THRUSTER", thruster_labels[clampi(thruster, 0, 2)],
 				HudStyle.C_AMBER if thruster > 0 else HudStyle.C_LABEL],
 	]
+	if autopilot != null and autopilot.is_engaged():
+		cells.append(["AUTOPILOT", "ENGAGED [P]", HudStyle.C_GREEN])
+		var watch := _boat.get_node_or_null("BridgeWatchAlarm") as BridgeWatchAlarm
+		if watch != null:
+			var watch_value := "ALARM" if watch.alarm_active else "%d:%02d" % [
+				int(watch.remaining_s) / 60,
+				int(watch.remaining_s) % 60,
+			]
+			cells.append(["BRIDGE WATCH", watch_value,
+				HudStyle.C_RED if watch.alarm_active else HudStyle.C_AMBER])
 	if _boat != null:
 		var systems: Array[FishingSystem] = _boat.get_fishing_systems()
 		if not systems.is_empty():
@@ -426,7 +439,14 @@ func _time_string() -> String:
 func _nearest_dest_info() -> Array:
 	if _boat == null:
 		return ["", ""]
-	# Contracts deferred until trade rewrite.
+	var autopilot := _controller.get_autopilot() if _controller != null else null
+	if autopilot != null and autopilot.route != null:
+		var destination_id := autopilot.route.destination_port_id
+		var catalog := get_node_or_null("/root/PortCatalog")
+		var label := str(catalog.get_port_display_name(destination_id)) \
+			if catalog != null else destination_id
+		var remaining_nm := autopilot.remaining_distance_m() / 1852.0
+		return [label, "%.1f nm" % remaining_nm]
 	return ["", ""]
 
 
@@ -447,7 +467,15 @@ func _throttle_color(val: float) -> Color:
 func _dest_bearing_rad() -> float:
 	if _boat == null:
 		return NAN
-	return NAN
+	var autopilot := _controller.get_autopilot() if _controller != null else null
+	if autopilot == null or not autopilot.is_engaged() or not autopilot.target_point.is_finite():
+		return NAN
+	var delta := Vector3(
+		autopilot.target_point.x - _boat.global_position.x,
+		0.0,
+		autopilot.target_point.y - _boat.global_position.z,
+	)
+	return NavigationAxes.bearing_rad_world_delta(delta)
 
 
 func _draw_centered(text: String, pos: Vector2, font_size: int, color: Color) -> void:

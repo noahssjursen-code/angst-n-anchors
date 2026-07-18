@@ -48,13 +48,7 @@ static func is_freecam_active(tree: SceneTree = null) -> bool:
 	return false
 
 
-## LOD / visual observer: player in normal play, camera while freecam is on.
+## LOD / visual observer: always the rendering camera. Gameplay queries still
+## use `gameplay_position`; visual detail must follow what is actually visible.
 static func visual_position(viewport: Viewport = null) -> Vector3:
-	var tree: SceneTree = null
-	if viewport != null:
-		tree = viewport.get_tree()
-	elif Engine.get_main_loop() is SceneTree:
-		tree = Engine.get_main_loop() as SceneTree
-	if is_freecam_active(tree):
-		return stream_position(viewport)
-	return gameplay_position(tree)
+	return stream_position(viewport)

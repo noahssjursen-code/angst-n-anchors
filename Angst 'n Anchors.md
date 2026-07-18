@@ -7,7 +7,7 @@ A maritime trading game built in Godot. The player drives a boat, picks up cargo
 ## Pillars
 
 1. **Driving the boat is the game.** Physics-driven helm — propulsion, rudder, bow thruster, hydrodynamics, buoyancy on a wave surface. Distance and weather matter. Sailing the route yourself is the loop.
-2. **Cargo delivery between ports.** Buy or accept a contract at one port, load, sail, unload, get paid. Spot trading and contract board both exist as concepts; contracts are the working path in code today.
+2. **Cargo delivery between ports.** Accept a movement at one port, load, sail, unload, get paid. First Freight currently generates deterministic container offers from compatible port exports/imports; physical crane-ledger integration is the active slice.
 3. **Modular ship design.** A hull is a reusable L×B geometry component. Finished store ships add their own name, price, shaft power, and deck-brick fit-out; many ships with different roles and performance can share one hull.
 4. **MMO is the destination.** State model (berth reservation, harbour master mediation, contract registry) is being designed shared-session-aware from the start, even though the game currently runs single-player.
 
@@ -72,7 +72,7 @@ Core on every vessel: `BoatBody`, buoyancy, hydrodynamics, propulsion, rudder, t
 - Pipeline: `PortDefinition` (seeded site/size, geography×trade ceiling) → `PortTradeProfile` → `PortLayoutGenerator` (coast foundation + `berth_plan`) → `PortLayoutGraph`.
 - **`PortPlot`** currently stamps foundation, asphalt pads, and dedicated quays from `berth_plan`.
 - Trade berths are planned attributes, not socket-filled harbour modules. Later growth must persist the evolved graph/plan.
-- Port functionality, final assets, NPCs, contracts, mooring, and operable equipment are deferred.
+- Ports currently provide Harbour Master, Shipwright, and Cargo Agent services, mooring, and operable quay equipment. Final assets and persistent player-driven harbour growth remain deferred.
 - **Naming:** Norwegian-style names from a fixed pool (`Holmvik`, `Sandvær`, `Bergnes`, …).
 
 ---
@@ -81,7 +81,7 @@ Core on every vessel: `BoatBody`, buoyancy, hydrodynamics, propulsion, rudder, t
 
 - **`PortCatalog`** is the live port directory. **`CommodityCatalog`** owns commodity metadata (containers + bulk/liquid families, berth colours).
 - General cargo is cubed **containers** (`ContainerUnit` / `ContainerNode`) on ship **`CargoSlotPadComponent`** grids. Bulk ore/coal/grain use hold systems separately.
-- Trade contracts are purged pending rewrite. Playable trade pool: `containers`, grain, iron ore, coal, crude oil, diesel, LNG.
+- `FreightService` owns accepted movements. Cargo Agents only expose offers after the player's active vessel is physically moored at that port, and filter by berth commodity, installed cargo system, free capacity, and existing manifest reservations. Completed handling modes are general cargo, containers, and dry bulk (grain, iron ore, coal). Liquid movements remain filtered until tanker holds and liquid-terminal handling are playable.
 
 ---
 

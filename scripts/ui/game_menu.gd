@@ -148,6 +148,11 @@ func _set_screen(s: Screen) -> void:
 	_bg.visible          = modal
 	_pause_root.visible  = s == Screen.PAUSE
 	_map.visible         = s == Screen.MAP
+	## The sea chart is opaque and simulation stays live, including in MP. Do
+	## not spend a full 3D frame rendering a world the chart completely covers.
+	var viewport := get_viewport()
+	if viewport != null:
+		RenderingServer.viewport_set_disable_3d(viewport.get_viewport_rid(), s == Screen.MAP)
 	if s == Screen.MAP:
 		_map.open_navigation()
 	_settings.visible    = s == Screen.SETTINGS

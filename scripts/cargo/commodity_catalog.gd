@@ -134,8 +134,8 @@ static func commodity_terminal_family(commodity_id: String) -> String:
 
 static func berth_group_id(commodity_id: String, role: String = "") -> String:
 	var id := str(commodity_id)
-	if id == "containers":
-		return "pad:containers"
+	if id in ["provisions", "containers"]:
+		return "pad:%s" % id
 	var r := str(role)
 	if r.is_empty():
 		r = "trade"

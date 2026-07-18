@@ -9,6 +9,10 @@ const TRAWLER_SMALL_SCRIPT := "res://scripts/ship/vessels/fishing_trawler_small.
 const PASSENGER_CATAMARAN_ID := "hull_45x16_cat"
 const PASSENGER_CATAMARAN_SCENE := "res://scenes/vessels/passenger_catamaran.tscn"
 const PASSENGER_CATAMARAN_SCRIPT := "res://scripts/ship/vessels/passenger_catamaran.gd"
+const LEGACY_STOCK_DISPLAY_NAMES := {
+	"28x10 Cargo": "14x5 Cargo",
+	"45 × 16 m · catamaran": "22.5 × 8 m · catamaran",
+}
 
 
 static func instantiate(
@@ -134,12 +138,12 @@ static func brick_layout_of(record: Dictionary) -> Dictionary:
 static func vessel_name_of(record: Dictionary) -> String:
 	var custom := str(record.get("name", "")).strip_edges()
 	if not custom.is_empty():
-		return custom
+		return str(LEGACY_STOCK_DISPLAY_NAMES.get(custom, custom))
 	var display := str(record.get("display", "")).strip_edges()
 	if "  •  " in display:
-		return display.split("  •  ")[0].strip_edges()
+		display = display.split("  •  ")[0].strip_edges()
 	if not display.is_empty():
-		return display
+		return str(LEGACY_STOCK_DISPLAY_NAMES.get(display, display))
 	return "Vessel"
 
 

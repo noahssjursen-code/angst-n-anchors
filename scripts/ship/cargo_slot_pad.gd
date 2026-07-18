@@ -278,6 +278,8 @@ static func find_yard_pad(tree: SceneTree) -> CargoSlotPadComponent:
 static func find_nearest_yard_pad(
 		tree: SceneTree,
 		near_world: Vector3 = Vector3.INF,
+		berth_id: String = "",
+		equipment_id: String = "",
 ) -> CargoSlotPadComponent:
 	if tree == null:
 		return null
@@ -288,6 +290,11 @@ static func find_nearest_yard_pad(
 		if node is not CargoSlotPadComponent:
 			continue
 		var pad := node as CargoSlotPadComponent
+		if not berth_id.is_empty() and str(pad.get_meta("berth_id", "")) != berth_id:
+			continue
+		if not equipment_id.is_empty() \
+				and str(pad.get_meta("equipment_id", "")) != equipment_id:
+			continue
 		if not use_near:
 			return pad
 		var d := pad.global_position.distance_squared_to(near_world)

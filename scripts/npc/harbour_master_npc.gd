@@ -212,7 +212,7 @@ func _show_ship_select() -> void:
 		var req := HarbourDeploy.ship_requirements(record)
 		var vessel_name := str(req.get("display", VesselSpawn.vessel_name_of(record)))
 		var class_name_str := str(req.get("ship_class_name", "Vessel"))
-		var loa := float(req.get("loa_m", 0.0))
+		var loa := float(req.get("loa_display_m", ShipClass.display_metres(float(req.get("loa_m", 0.0)))))
 		var fits_port := ShipClass.fits(req["ship_class"] as ShipClass.Type, max_class)
 		var slots := HarbourDeploy.free_slots_for(harbour, record, max_class) if harbour != null \
 				else []

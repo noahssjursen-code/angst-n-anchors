@@ -773,8 +773,8 @@ func _stamp_quay_storage_lane(
 		}]
 	## General cargo: one live yard pad per crane bay (same plan as crane lane).
 	var general_tools := _plan_quay_tools(station, usable_len, z0)
-	var general_bay_i := 0
-	for tool in general_tools:
+	for tool_index in range(general_tools.size()):
+		var tool := general_tools[tool_index] as Dictionary
 		if str(tool.get("family", "")) != "general":
 			continue
 		_stamp_general_cargo_quay_yard(
@@ -784,10 +784,9 @@ func _stamp_quay_storage_lane(
 			float(tool.get("bay_len", usable_len * 0.85)),
 			float(tool.get("z", 0.0)),
 			slot,
-			general_bay_i,
+			tool_index,
 			str(tool.get("role", "")),
 		)
-		general_bay_i += 1
 
 	for zone_index in range(zones.size()):
 		var zone: Dictionary = zones[zone_index]
@@ -1800,7 +1799,8 @@ func _stamp_sts_gantry_at(root: Node3D, footprint: Vector3) -> void:
 
 
 ## Live general-cargo yard on a dedicated quay finger deck (pier crown Y).
-## Export yards read full; import yards nearly empty.
+## Yards start empty. FreightService stages accepted contract cargo here; a
+## future warehouse/forklift system can replace that immediate staging step.
 func _stamp_general_cargo_quay_yard(
 		lane: Node3D,
 		lane_x: float,
@@ -1838,24 +1838,18 @@ func _stamp_general_cargo_quay_yard(
 	drop.add_to_group("container_yard_drop")
 	yard_pad.add_child(drop)
 
-	var fill := _general_cargo_fill_fraction(role, zone_index)
-	yard_pad.call_deferred("prefill_general_cargo", -1, _port_id(), fill)
 	if slot != null and _harbour != null:
+		## One long berth may contain several independent crane bays. Preserve
+		## the exact yard ↔ crane pairing instead of collapsing to berth only.
+		yard_pad.set_meta(
+			"equipment_id",
+			HarbourController.make_equip_id(
+				slot.berth_id,
+				"equip_provision_crane",
+				zone_index,
+			),
+		)
 		_harbour.register_yard(yard_pad, slot.berth_id)
-
-
-static func _general_cargo_fill_fraction(role: String, salt: int) -> float:
-	var rng := RandomNumberGenerator.new()
-	rng.seed = int(role.hash()) ^ int(salt) ^ 0xC4A60F11
-	match str(role):
-		"export":
-			return rng.randf_range(0.78, 0.96)
-		"import":
-			return rng.randf_range(0.0, 0.14)
-		"import_export", "bidirectional":
-			return rng.randf_range(0.38, 0.58)
-		_:
-			return rng.randf_range(0.45, 0.65)
 
 
 func _stamp_provision_crane_at(
