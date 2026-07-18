@@ -22,6 +22,8 @@ func _test_route_plan() -> void:
 	_check_close(plan.total_distance_m(), 200.0, 0.01, "route distance")
 	_check(plan.point_at_distance(150.0).is_equal_approx(Vector2(100.0, 50.0)), "distance interpolation")
 	_check_close(plan.nearest_progress_m(Vector2(98.0, 30.0)), 130.0, 0.1, "nearest route progress")
+	_check_close(plan.nearest_progress_m(Vector2(98.0, 30.0), 100.0, 80.0), 130.0, 0.1,
+		"bounded nearest route progress")
 	var restored := MarineRoutePlan.from_dict(plan.to_dict())
 	_check(restored.route_id == plan.route_id, "route identity survives serialization")
 	_check(restored.waypoints == plan.waypoints, "waypoints survive serialization")

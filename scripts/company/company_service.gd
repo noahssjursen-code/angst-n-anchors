@@ -29,6 +29,7 @@ var _local_voyage_simulation: Dictionary = {}
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
+	add_to_group("vessel_fleet_authority")
 	_session = get_node_or_null("/root/PlayerSession")
 	if _session != null:
 		if not _session.data_loaded.is_connected(_on_data_loaded):

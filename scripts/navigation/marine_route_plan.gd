@@ -63,13 +63,10 @@ func point_at_distance(distance_m: float) -> Vector2:
 	if waypoints.is_empty():
 		return Vector2(INF, INF)
 	var target := clampf(distance_m, 0.0, total_distance_m())
-	for i in range(1, cumulative_distance_m.size()):
-		if cumulative_distance_m[i] < target:
-			continue
-		var span := float(cumulative_distance_m[i] - cumulative_distance_m[i - 1])
-		var t := 0.0 if span <= 0.001 else (target - cumulative_distance_m[i - 1]) / span
-		return waypoints[i - 1].lerp(waypoints[i], t)
-	return waypoints[-1]
+	var index := _segment_end_index(target)
+	var span := float(cumulative_distance_m[index] - cumulative_distance_m[index - 1])
+	var t := 0.0 if span <= 0.001 else (target - cumulative_distance_m[index - 1]) / span
+	return waypoints[index - 1].lerp(waypoints[index], t)
 
 
 func direction_at_distance(distance_m: float, sample_span_m: float = 20.0) -> Vector2:
@@ -82,12 +79,25 @@ func direction_at_distance(distance_m: float, sample_span_m: float = 20.0) -> Ve
 	return direction.normalized() if direction.length_squared() > 0.0001 else Vector2.ZERO
 
 
-func nearest_progress_m(position: Vector2, hint_progress_m: float = 0.0) -> float:
+func nearest_progress_m(
+		position: Vector2,
+		hint_progress_m: float = 0.0,
+		local_search_radius_m: float = INF,
+) -> float:
 	if waypoints.size() < 2:
 		return 0.0
 	var best_progress := clampf(hint_progress_m, 0.0, total_distance_m())
 	var best_distance_sq := INF
-	for i in range(waypoints.size() - 1):
+	var first_segment := 0
+	var last_segment_exclusive := waypoints.size() - 1
+	if is_finite(local_search_radius_m):
+		var radius := maxf(local_search_radius_m, 50.0)
+		first_segment = maxi(_segment_end_index(maxf(best_progress - radius, 0.0)) - 1, 0)
+		last_segment_exclusive = mini(
+			_segment_end_index(minf(best_progress + radius, total_distance_m())) + 1,
+			waypoints.size() - 1,
+		)
+	for i in range(first_segment, last_segment_exclusive):
 		var segment_start := float(cumulative_distance_m[i])
 		var segment_end := float(cumulative_distance_m[i + 1])
 		## Once underway, do not snap far backward onto a nearby parallel leg.
@@ -105,6 +115,21 @@ func nearest_progress_m(position: Vector2, hint_progress_m: float = 0.0) -> floa
 		best_distance_sq = distance_sq
 		best_progress = lerpf(segment_start, segment_end, t)
 	return best_progress
+
+
+func _segment_end_index(distance_m: float) -> int:
+	if cumulative_distance_m.size() < 2:
+		return 0
+	var target := clampf(distance_m, 0.0, total_distance_m())
+	var low := 1
+	var high := cumulative_distance_m.size() - 1
+	while low < high:
+		var middle := (low + high) >> 1
+		if float(cumulative_distance_m[middle]) < target:
+			low = middle + 1
+		else:
+			high = middle
+	return low
 
 
 func to_dict(include_waypoints: bool = true) -> Dictionary:

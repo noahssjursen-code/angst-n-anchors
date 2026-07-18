@@ -1,8 +1,8 @@
 extends Node
 
-## Reconstructs nearby company vessels from authority timestamps. The durable
-## record remains in CompanyService; these BoatBodies are disposable client
-## projections and can be replaced by network interest-management later.
+## Reconstructs nearby vessels from fleet-authority timestamps. Player-owned,
+## ambient, and eventually server-owned records all enter through the same
+## projection, BoatBody, captain, autopilot, traffic, and port-operation path.
 
 const INTEREST_RADIUS_M := 6500.0
 const UPDATE_INTERVAL_S := 0.1
@@ -13,15 +13,14 @@ var _physical_contracts: Dictionary = {} # vessel uid -> company freight id
 var _last_status: Dictionary = {}
 var _operation_interest: Dictionary = {}
 var _restored_manifests: Dictionary = {}
+var _authority_by_uid: Dictionary = {}
 var _elapsed := 0.0
 var _refreshing := false
 
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_PAUSABLE
-	var service := get_node_or_null("/root/CompanyService")
-	if service != null and not service.company_changed.is_connected(_on_company_changed):
-		service.company_changed.connect(_on_company_changed)
+	_connect_authority_signals()
 
 
 func _process(delta: float) -> void:
@@ -36,13 +35,63 @@ func _on_company_changed(_snapshot: Dictionary) -> void:
 	_refresh()
 
 
+func authority_sources() -> Array[Node]:
+	var out: Array[Node] = []
+	for raw in get_tree().get_nodes_in_group("vessel_fleet_authority"):
+		var authority := raw as Node
+		if authority != null and authority.has_method("projection_records"):
+			out.append(authority)
+	return out
+
+
+func all_projection_records() -> Array[Dictionary]:
+	var out: Array[Dictionary] = []
+	for authority in authority_sources():
+		for raw in authority.call("projection_records") as Array:
+			var record := (raw as Dictionary).duplicate(true)
+			record["_authority"] = authority
+			out.append(record)
+	return out
+
+
+func leg_route_plan(vessel_uid: String) -> MarineRoutePlan:
+	var authority := _authority_for(vessel_uid)
+	if authority != null and authority.has_method("leg_route_plan"):
+		return authority.call("leg_route_plan", vessel_uid) as MarineRoutePlan
+	for source in authority_sources():
+		for raw in source.call("projection_records") as Array:
+			if str((raw as Dictionary).get("uid", "")) == vessel_uid:
+				_authority_by_uid[vessel_uid] = source
+				return source.call("leg_route_plan", vessel_uid) as MarineRoutePlan
+	return MarineRoutePlan.new()
+
+
+func _connect_authority_signals() -> void:
+	for authority in authority_sources():
+		if authority.has_signal("company_changed"):
+			var callback := Callable(self, "_on_company_changed")
+			if not authority.is_connected("company_changed", callback):
+				authority.connect("company_changed", callback)
+
+
+func _authority_for(uid: String) -> Node:
+	var authority := _authority_by_uid.get(uid) as Node
+	return authority if authority != null and is_instance_valid(authority) else null
+
+
+func _call_authority(uid: String, method: String, args: Array = []) -> Variant:
+	var authority := _authority_for(uid)
+	if authority == null or not authority.has_method(method):
+		return null
+	return authority.callv(method, args)
+
+
 func _refresh() -> void:
 	if _refreshing:
 		return
 	_refreshing = true
-	var service := get_node_or_null("/root/CompanyService")
 	var view := get_node_or_null("/root/LocalPlayerView")
-	if service == null or view == null or _is_main_menu():
+	if view == null or _is_main_menu():
 		_clear_all()
 		_refreshing = false
 		return
@@ -53,14 +102,17 @@ func _refresh() -> void:
 		return
 	var wanted: Dictionary = {}
 	var operation_interest: Dictionary = {}
-	for raw in service.projection_records() as Array:
+	_connect_authority_signals()
+	for raw in all_projection_records():
 		var record := raw as Dictionary
+		var authority := record.get("_authority") as Node
 		var vessel := record.get("vessel", {}) as Dictionary
 		var uid := str(record.get("uid", ""))
 		var assignment := record.get("assignment", {}) as Dictionary
 		var status := str(assignment.get("status", ""))
 		if uid.is_empty() or assignment.is_empty() or status not in ["underway", "preparing", "turnaround", "unpaid", "inactive", "berthed"]:
 			continue
+		_authority_by_uid[uid] = authority
 		_last_status[uid] = status
 		var projection := record.get("projection", {}) as Dictionary
 		var existing_ship := _ships.get(uid) as BoatBody
@@ -72,7 +124,7 @@ func _refresh() -> void:
 		var waiting_at_berth := status != "underway"
 		if status in ["preparing", "turnaround"]:
 			operation_interest[uid] = true
-			service.set_local_operations_active(uid, true)
+			_call_authority(uid, "set_local_operations_active", [uid, true])
 		if waiting_at_berth and not _berths.has(uid):
 			var harbour := HarbourRegistry.controller(str(projection.get("origin_port_id", "")))
 			if harbour == null or _pick_cargo_berth(harbour, vessel, assignment) == null:
@@ -88,7 +140,7 @@ func _refresh() -> void:
 			ship = _spawn(vessel, uid)
 		if ship == null:
 			continue
-		_project(ship, uid, vessel, assignment, projection)
+		_project(ship, uid, vessel, assignment, projection, authority)
 	for uid_raw in _ships.keys():
 		var uid := str(uid_raw)
 		if not wanted.has(uid):
@@ -96,8 +148,9 @@ func _refresh() -> void:
 	for uid_raw in _operation_interest.keys():
 		var uid := str(uid_raw)
 		if not operation_interest.has(uid):
-			service.set_local_operations_active(uid, false)
+			_call_authority(uid, "set_local_operations_active", [uid, false])
 	_operation_interest = operation_interest
+	_apply_shared_npc_physics_budget()
 	_refreshing = false
 
 
@@ -137,6 +190,7 @@ func _project(
 		record: Dictionary,
 		assignment: Dictionary,
 		projection: Dictionary,
+		authority: Node,
 ) -> void:
 	_restore_cargo_manifest(ship, uid, assignment)
 	var at_berth := str(assignment.get("status", "")) != "underway"
@@ -155,7 +209,7 @@ func _project(
 	if departed_from_visible_berth:
 		_berths.erase(uid)
 	_sync_exact_leg_endpoints(uid, ship, assignment)
-	if _begin_physical_voyage(ship, uid, assignment, projection, departed_from_visible_berth):
+	if _begin_physical_voyage(ship, uid, assignment, projection, departed_from_visible_berth, authority):
 		ship.visible = true
 
 
@@ -165,9 +219,9 @@ func _begin_physical_voyage(
 		assignment: Dictionary,
 		projection: Dictionary,
 		depart_from_berth: bool,
+		authority: Node,
 ) -> bool:
-	var service := get_node_or_null("/root/CompanyService")
-	if service == null:
+	if authority == null:
 		return false
 	var autopilot := ship.get_node_or_null("VesselAutopilot") as VesselAutopilot
 	if autopilot == null:
@@ -197,7 +251,7 @@ func _begin_physical_voyage(
 			str(assignment.get("leg_destination_berth_id", "")),
 		)
 	else:
-		var plan := service.leg_route_plan(uid) as MarineRoutePlan
+		var plan := authority.call("leg_route_plan", uid) as MarineRoutePlan
 		if plan == null or not plan.is_valid():
 			return false
 		var position := projection.get("position", Vector3.ZERO) as Vector3
@@ -221,7 +275,8 @@ func _begin_physical_voyage(
 		ship.process_mode = Node.PROCESS_MODE_DISABLED
 		return false
 	ship.set_meta("company_physics_started", true)
-	service.set_local_voyage_simulation(uid, true)
+	if authority.has_method("set_local_voyage_simulation"):
+		authority.call("set_local_voyage_simulation", uid, true)
 	return true
 
 
@@ -230,12 +285,38 @@ func _enable_boat_physics(ship: BoatBody) -> void:
 	if player_controller != null:
 		player_controller.process_mode = Node.PROCESS_MODE_DISABLED
 	ship.process_mode = Node.PROCESS_MODE_INHERIT
-	ship.automatic_physics_lod = true
-	ship.medium_physics_distance_m = 350.0
-	ship.low_physics_distance_m = 1200.0
-	ship.sleep_physics_distance_m = INTEREST_RADIUS_M + 500.0
+	# NPC precision follows manoeuvre state, not how many ships happen to be near
+	# the local player. This is deterministic and applies equally to every fleet
+	# authority while avoiding full strip-buoyancy work for open-water passage.
+	ship.automatic_physics_lod = false
+	ship.set_physics_quality(BoatBody.PhysicsQuality.MEDIUM)
 	ship.freeze = false
 	ship.sleeping = false
+
+
+func _apply_shared_npc_physics_budget() -> void:
+	for raw in _ships.values():
+		var ship := raw as BoatBody
+		if ship == null or not is_instance_valid(ship):
+			continue
+		var captain := ship.get_node_or_null("AutonomousVesselCaptain") as AutonomousVesselCaptain
+		if captain == null:
+			ship.set_physics_quality(BoatBody.PhysicsQuality.MEDIUM)
+			continue
+		match captain.phase:
+			AutonomousVesselCaptain.Phase.IDLE, AutonomousVesselCaptain.Phase.MOORED:
+				ship.set_physics_quality(BoatBody.PhysicsQuality.SLEEP)
+			AutonomousVesselCaptain.Phase.PASSAGE, \
+			AutonomousVesselCaptain.Phase.WAITING_APPROACH, \
+			AutonomousVesselCaptain.Phase.HOLDING:
+				ship.set_physics_quality(BoatBody.PhysicsQuality.LOW)
+			AutonomousVesselCaptain.Phase.DEPARTURE, \
+			AutonomousVesselCaptain.Phase.APPROACH:
+				ship.set_physics_quality(BoatBody.PhysicsQuality.MEDIUM)
+			_:
+				# Casting off, crabbing, alignment and securing need the exact
+				# hull/water response used by the player vessel.
+				ship.set_physics_quality(BoatBody.PhysicsQuality.FULL)
 
 
 func _on_voyage_completed(
@@ -244,8 +325,8 @@ func _on_voyage_completed(
 		captain: AutonomousVesselCaptain,
 ) -> void:
 	var ship := _ships.get(uid) as BoatBody
-	var service := get_node_or_null("/root/CompanyService")
-	if ship == null or service == null or captain == null:
+	var authority := _authority_for(uid)
+	if ship == null or authority == null or captain == null:
 		return
 	var controller := HarbourRegistry.controller(captain.destination_port_id)
 	if controller != null:
@@ -254,7 +335,7 @@ func _on_voyage_completed(
 			"berth_id": captain.destination_berth_id,
 		}
 	ship.remove_meta("company_physics_started")
-	service.complete_local_voyage(
+	authority.call("complete_local_voyage",
 		uid, captain.destination_berth_id, ship.rotation.y, ship.global_position)
 
 
@@ -293,14 +374,13 @@ func _ensure_berthed(
 		_berths.erase(uid)
 		return false
 	_enable_boat_physics(ship)
-	var service := get_node_or_null("/root/CompanyService")
-	if service != null:
-		service.set_current_berth(uid, slot.berth_id, ship.rotation.y, ship.global_position)
+	_call_authority(uid, "set_current_berth",
+		[uid, slot.berth_id, ship.rotation.y, ship.global_position])
 	return true
 
 
 func _drive_port_operations(ship: BoatBody, uid: String, assignment: Dictionary) -> void:
-	var service := get_node_or_null("/root/CompanyService")
+	var service := _authority_for(uid)
 	var berth_row := _berths.get(uid, {}) as Dictionary
 	var harbour := berth_row.get("controller") as HarbourController
 	var berth_id := str(berth_row.get("berth_id", ""))
@@ -346,7 +426,7 @@ func _finish_unit_arrival(
 		return true
 	var freight := get_node_or_null("/root/FreightService")
 	if freight == null or freight.company_contract(contract_id).is_empty():
-		get_node("/root/CompanyService").confirm_arrival_unloaded(uid)
+		_call_authority(uid, "confirm_arrival_unloaded", [uid])
 		# The settlement can also transition a stop-after-leg vessel to inactive.
 		# Re-read authority on the next projection tick before loading anything.
 		return false
@@ -363,8 +443,8 @@ func _prepare_unit_departure(
 		assignment: Dictionary,
 ) -> void:
 	var freight := get_node_or_null("/root/FreightService")
-	var service := get_node("/root/CompanyService")
-	if freight == null:
+	var service := _authority_for(uid)
+	if freight == null or service == null:
 		return
 	var contract_id := str(assignment.get("physical_contract_id", ""))
 	var contract: Dictionary = freight.company_contract(contract_id) if not contract_id.is_empty() else {}
@@ -428,7 +508,7 @@ func _finish_bulk_arrival(
 	if arriving_contract_id.is_empty():
 		return true
 	if _bulk_is_empty(ship):
-		get_node("/root/CompanyService").confirm_arrival_unloaded(uid)
+		_call_authority(uid, "confirm_arrival_unloaded", [uid])
 		return false
 	if not _has_active_job(harbour, berth_id, ship):
 		harbour.request_unload(berth_id)
@@ -442,7 +522,9 @@ func _prepare_bulk_departure(
 		berth_id: String,
 		assignment: Dictionary,
 ) -> void:
-	var service := get_node("/root/CompanyService")
+	var service := _authority_for(uid)
+	if service == null:
+		return
 	var cargo_token := str(assignment.get("physical_contract_id", ""))
 	if cargo_token.is_empty():
 		cargo_token = "company-bulk:%s:%d" % [uid, int(assignment.get("completed_legs", 0))]
@@ -519,12 +601,13 @@ func _despawn(uid: String) -> void:
 	if ship != null and is_instance_valid(ship):
 		var status := str(_last_status.get(uid, ""))
 		var contract_id := str(_physical_contracts.get(uid, ""))
-		var service_for_voyage := get_node_or_null("/root/CompanyService")
-		if status == "underway" and service_for_voyage != null:
+		var authority := _authority_for(uid)
+		if status == "underway" and authority != null:
 			var autopilot := ship.get_node_or_null("VesselAutopilot") as VesselAutopilot
 			if autopilot != null and autopilot.route != null:
-				service_for_voyage.suspend_local_voyage(
-					uid, autopilot.progress_m, autopilot.route.total_distance_m())
+				if authority.has_method("suspend_local_voyage"):
+					authority.call("suspend_local_voyage",
+						uid, autopilot.progress_m, autopilot.route.total_distance_m())
 		# Unplugging stops the crane and returns staged yard cargo first. This
 		# avoids deleting a box while an auto-operator still holds its node.
 		_release_berth(uid, ship)
@@ -533,29 +616,25 @@ func _despawn(uid: String) -> void:
 			if freight != null and not contract_id.is_empty():
 				freight.cancel_company_contract(contract_id)
 			if status != "underway":
-				var service_for_contract := get_node_or_null("/root/CompanyService")
-				if service_for_contract != null:
-					service_for_contract.set_physical_contract(uid, "")
+				_call_authority(uid, "set_physical_contract", [uid, ""])
 		ship.queue_free()
-	var service := get_node_or_null("/root/CompanyService")
-	if service != null:
-		service.set_local_operations_active(uid, false)
+	_call_authority(uid, "set_local_operations_active", [uid, false])
 	_ships.erase(uid)
 	_berths.erase(uid)
 	_last_status.erase(uid)
 	_physical_contracts.erase(uid)
 	_restored_manifests.erase(uid)
 	_operation_interest.erase(uid)
+	_authority_by_uid.erase(uid)
 
 
 func _clear_all() -> void:
 	for uid in _ships.keys():
 		_despawn(str(uid))
-	var service := get_node_or_null("/root/CompanyService")
-	if service != null:
-		for uid in _operation_interest.keys():
-			service.set_local_operations_active(str(uid), false)
+	for uid in _operation_interest.keys():
+		_call_authority(str(uid), "set_local_operations_active", [str(uid), false])
 	_operation_interest.clear()
+	_authority_by_uid.clear()
 
 
 func _observer_position() -> Vector3:
@@ -635,8 +714,8 @@ func _restore_cargo_manifest(ship: BoatBody, uid: String, assignment: Dictionary
 
 
 func _sync_exact_leg_endpoints(uid: String, ship: BoatBody, assignment: Dictionary) -> void:
-	var service := get_node_or_null("/root/CompanyService")
-	if service == null:
+	var authority := _authority_for(uid)
+	if authority == null:
 		return
 	var origin := Vector2(INF, INF)
 	var origin_raw := assignment.get("leg_origin_position_xz", []) as Array
@@ -649,7 +728,8 @@ func _sync_exact_leg_endpoints(uid: String, ship: BoatBody, assignment: Dictiona
 		if slot != null:
 			var dock := slot.global_transform * slot.ship_dock_local(ship.get_half_beam_m())
 			destination = Vector2(dock.origin.x, dock.origin.z)
-	service.set_leg_dock_endpoints(uid, origin, destination)
+	if authority.has_method("set_leg_dock_endpoints"):
+		authority.call("set_leg_dock_endpoints", uid, origin, destination)
 
 
 func _is_main_menu() -> bool:

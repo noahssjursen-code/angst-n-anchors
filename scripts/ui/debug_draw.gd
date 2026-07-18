@@ -486,6 +486,12 @@ func _build_debug_tools(e: Array) -> void:
 			_row(e, str(definition.get("label", layer_id)).capitalize(),
 				"ON" if enabled else "off", C_GOOD if enabled else C_LABEL)
 	_stub(e, "G gizmos", "open layer selector · B berth shortcut")
+	var debug_fleet_active := debug_hud != null \
+		and bool(debug_hud.call("is_debug_npc_fleet_active"))
+	var debug_fleet_count := int(debug_hud.call("debug_npc_fleet_count")) \
+		if debug_fleet_active else 0
+	_row(e, "N traffic fleet", "%d AUTONOMOUS SHIPS" % debug_fleet_count \
+		if debug_fleet_active else "spawn 5", C_WARN if debug_fleet_active else C_LABEL)
 	_sep(e)
 
 

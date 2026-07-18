@@ -10,11 +10,13 @@ signal gizmo_layers_changed(states: Dictionary)
 
 const _WEATHER_PANEL := preload("res://scripts/weather/weather_debug_presets.gd")
 const _GIZMO_MENU := preload("res://scripts/ui/gizmo_layer_menu.gd")
+const _DEBUG_NPC_FLEET := preload("res://scripts/traffic/debug_npc_fleet.gd")
 
 var _layer:   CanvasLayer
 var _overlay: DebugDraw
 var _weather_preset_panel: Control
 var _gizmo_menu: GizmoLayerMenu
+var _debug_npc_fleet: DebugNpcFleet
 var _shown:   bool = false
 var _scale_probe: Node3D = null
 var _weather_before_clear: WeatherState = null
@@ -112,6 +114,10 @@ func _ready() -> void:
 	_layer.add_child(_gizmo_menu)
 	_gizmo_menu.sync_states(gizmo_layers)
 
+	_debug_npc_fleet = _DEBUG_NPC_FLEET.new()
+	_debug_npc_fleet.name = "DebugNpcFleet"
+	add_child(_debug_npc_fleet)
+
 
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventKey:
@@ -178,9 +184,40 @@ func _input(event: InputEvent) -> void:
 		KEY_G:
 			_toggle_gizmo_menu()
 			get_viewport().set_input_as_handled()
+		KEY_N:
+			_toggle_debug_traffic_fleet()
+			get_viewport().set_input_as_handled()
 		KEY_P:
 			_toggle_scale_probe()
 			get_viewport().set_input_as_handled()
+
+
+func _toggle_debug_traffic_fleet() -> void:
+	if _debug_npc_fleet == null:
+		return
+	var active := _debug_npc_fleet.is_active()
+	if active:
+		_debug_npc_fleet.clear_fleet()
+	else:
+		set_gizmo_layer_enabled(WorldGizmos.LAYER_NAVIGATION, true)
+		_debug_npc_fleet.spawn_server_join_fleet(5)
+	var now_active := _debug_npc_fleet.is_active()
+	var telemetry := get_node_or_null("/root/Telemetry")
+	if telemetry != null:
+		telemetry.record_action(&"debug_traffic_fleet_toggled", {
+			"active": now_active,
+			"count": _debug_npc_fleet.vessel_count(),
+		})
+	if _overlay != null:
+		_overlay.queue_redraw()
+
+
+func is_debug_npc_fleet_active() -> bool:
+	return _debug_npc_fleet != null and _debug_npc_fleet.is_active()
+
+
+func debug_npc_fleet_count() -> int:
+	return _debug_npc_fleet.vessel_count() if _debug_npc_fleet != null else 0
 
 
 func _apply_world_gizmos() -> void:

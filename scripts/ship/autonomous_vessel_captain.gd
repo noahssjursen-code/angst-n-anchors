@@ -146,6 +146,8 @@ func authority_snapshot() -> Dictionary:
 		"origin_berth_id": origin_berth_id,
 		"destination_port_id": destination_port_id,
 		"destination_berth_id": destination_berth_id,
+		"arrival_queue_position": int(_arrival_ticket.get("queue_position", 0)),
+		"cleared_for_approach": bool(_arrival_ticket.get("cleared_for_approach", false)),
 		"navigation": _autopilot.voyage_snapshot() if _autopilot != null else {},
 	}
 

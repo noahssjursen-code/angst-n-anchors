@@ -4,7 +4,9 @@ extends Node3D
 ## F3/G navigation layer. Draws the route actually consumed by each shared
 ## VesselAutopilot, plus traffic agreements and port holding positions.
 
-const REFRESH_S := 0.4
+# Most route geometry is static. Rebuilding ArrayMeshes several times per second
+# was itself a substantial debug-mode performance cost with a multi-ship fleet.
+const REFRESH_S := 1.5
 const LINE_Y := 5.5
 const PLAYER_COLOR := Color(1.0, 0.62, 0.18, 0.96)
 const NPC_COLOR := Color(0.18, 0.86, 1.0, 0.94)
@@ -90,18 +92,15 @@ func _draw_vessel_navigation(boat: BoatBody) -> void:
 				_lift(Vector2(boat.global_position.x, boat.global_position.z), 1.0),
 				_lift(autopilot.target_point, 1.0),
 			]), TARGET_COLOR, "Target_%s" % HarbourController.ship_id_of(boat))
-	var phase_text := "MANUAL"
-	if captain != null:
-		phase_text = AutonomousVesselCaptain.Phase.keys()[captain.phase]
-	elif autopilot != null and autopilot.is_engaged():
-		phase_text = "AUTOPILOT"
+	var phase_text := _vessel_state_text(boat, captain, autopilot)
 	var instruction := autopilot.traffic_instruction if autopilot != null else ""
 	var label := Label3D.new()
 	label.name = "VesselLabel"
-	label.text = "%s  |  %s%s" % [
-		"PLAYER" if is_player else "NPC",
+	label.text = "%s\n%s%s  |  PHYS %s" % [
+		str(boat.get_meta("vessel_display_name", "PLAYER VESSEL" if is_player else "NPC VESSEL")),
 		phase_text,
 		"  |  %s" % instruction.replace("_", " ").to_upper() if not instruction.is_empty() else "",
+		boat.get_physics_quality_name(),
 	]
 	label.position = boat.global_position + Vector3(0.0, 10.0, 0.0)
 	label.font_size = 30
@@ -111,6 +110,59 @@ func _draw_vessel_navigation(boat: BoatBody) -> void:
 	label.modulate = color
 	label.outline_size = 6
 	add_child(label)
+
+
+func _vessel_state_text(
+		boat: BoatBody,
+		captain: AutonomousVesselCaptain,
+		autopilot: VesselAutopilot,
+) -> String:
+	if captain == null:
+		return "AUTOPILOT" if autopilot != null and autopilot.is_engaged() else "MANUAL"
+	var destination := _port_name(captain.destination_port_id)
+	var snapshot := captain.authority_snapshot()
+	var queue_position := int(snapshot.get("arrival_queue_position", 0))
+	match captain.phase:
+		AutonomousVesselCaptain.Phase.RESERVING:
+			return "RESERVING DEPARTURE"
+		AutonomousVesselCaptain.Phase.CASTING_OFF:
+			return "UNDOCKING · CASTING OFF"
+		AutonomousVesselCaptain.Phase.CRAB_CLEAR:
+			return "UNDOCKING · CLEARING QUAY"
+		AutonomousVesselCaptain.Phase.DEPARTURE:
+			return "DEPARTING FOR %s" % destination
+		AutonomousVesselCaptain.Phase.PASSAGE:
+			return "TRAVELING TO %s" % destination
+		AutonomousVesselCaptain.Phase.WAITING_APPROACH, \
+		AutonomousVesselCaptain.Phase.HOLDING:
+			return "WAITING FOR DOCK · QUEUE #%d" % queue_position if queue_position > 0 \
+				else "WAITING FOR AVAILABLE DOCK"
+		AutonomousVesselCaptain.Phase.APPROACH:
+			return "APPROACHING %s" % destination
+		AutonomousVesselCaptain.Phase.ALIGNING:
+			return "ALIGNING WITH QUAY"
+		AutonomousVesselCaptain.Phase.CRAB_BERTH:
+			return "CRABBING INTO BERTH"
+		AutonomousVesselCaptain.Phase.SECURING:
+			return "SECURING MOORING LINES"
+		AutonomousVesselCaptain.Phase.MOORED:
+			return "MOORED AT %s" % destination
+		AutonomousVesselCaptain.Phase.FAILED:
+			return "NAVIGATION FAILED"
+		_:
+			return AutonomousVesselCaptain.Phase.keys()[captain.phase].replace("_", " ")
+
+
+func _port_name(port_id: String) -> String:
+	if port_id.is_empty():
+		return "DESTINATION"
+	var catalog := get_node_or_null("/root/PortCatalog")
+	if catalog != null:
+		var info := catalog.get_port_info(port_id) as Dictionary
+		var display := str(info.get("name", "")).strip_edges()
+		if not display.is_empty():
+			return display.to_upper()
+	return port_id.replace("_", " ").to_upper()
 
 
 func _remaining_route_points(boat: BoatBody, autopilot: VesselAutopilot) -> PackedVector3Array:
@@ -125,10 +177,10 @@ func _remaining_route_points(boat: BoatBody, autopilot: VesselAutopilot) -> Pack
 
 
 func _draw_dormant_company_routes(live_ids: Dictionary) -> void:
-	var company := get_node_or_null("/root/CompanyService")
-	if company == null or not company.has_method("projection_records"):
+	var fleet_projection := get_node_or_null("/root/CompanyFleetProjection")
+	if fleet_projection == null or not fleet_projection.has_method("all_projection_records"):
 		return
-	for raw in company.projection_records() as Array[Dictionary]:
+	for raw in fleet_projection.call("all_projection_records") as Array[Dictionary]:
 		var record := raw as Dictionary
 		var uid := str(record.get("uid", ""))
 		if live_ids.has(uid):
@@ -136,7 +188,7 @@ func _draw_dormant_company_routes(live_ids: Dictionary) -> void:
 		var assignment := record.get("assignment", {}) as Dictionary
 		if str(assignment.get("status", "")) != "underway":
 			continue
-		var plan: MarineRoutePlan = company.leg_route_plan(uid)
+		var plan := fleet_projection.call("leg_route_plan", uid) as MarineRoutePlan
 		var projection := record.get("projection", {}) as Dictionary
 		var position := projection.get("position", Vector3.ZERO) as Vector3
 		var progress := float(projection.get("route_progress_m", 0.0))

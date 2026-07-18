@@ -132,7 +132,9 @@ func _physics_process(delta: float) -> void:
 	if not active or route == null or _body == null:
 		return
 	var position := Vector2(_body.global_position.x, _body.global_position.z)
-	var next_progress := route.nearest_progress_m(position, progress_m)
+	# Live vessels cannot jump kilometres between physics frames. Bounding the
+	# recovery window avoids rescanning an entire world route for every ship.
+	var next_progress := route.nearest_progress_m(position, progress_m, 1200.0)
 	if next_progress + 5.0 >= progress_m:
 		progress_m = next_progress
 	cross_track_error_m = position.distance_to(route.point_at_distance(progress_m))
