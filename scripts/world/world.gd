@@ -18,6 +18,8 @@ const COASTAL_PORT_PLACER := preload("res://scripts/world/coastal_port_placer.gd
 const WORLD_TERRAIN_STREAMER := preload("res://scripts/world/world_terrain_streamer.gd")
 const WORLD_FOREST_STREAMER := preload("res://scripts/world/world_forest_streamer.gd")
 const IMPOSTOR_SERVICE := preload("res://scripts/core/impostor_service.gd")
+const SHIPPING_LANE_NETWORK_BUILDER := preload("res://scripts/traffic/shipping_lane_network_builder.gd")
+const SHIPPING_LANE_DEBUG_DRAW := preload("res://scripts/traffic/shipping_lane_debug_draw.gd")
 
 ## Match terrain mid LOD (~4.8 km) so coasts are not empty until the last moment.
 const LOAD_RADIUS           : float = 4800.0
@@ -47,6 +49,7 @@ var _requested_generation_version := WORLD_GENERATION_VERSION
 var _requested_weather_generation_version := WEATHER_GENERATION_VERSION
 var _terrain_streamer: WorldTerrainStreamer
 var _forest_streamer: WorldForestStreamer
+var _shipping_lane_network: ShippingLaneNetwork
 
 @export var world_seed:   int = 42:
 	set(v): world_seed = v; if _ready_complete and is_inside_tree(): _rebuild()
@@ -162,6 +165,7 @@ func _rebuild() -> void:
 		_add_atmospheric_effects()
 		_setup_ports(defs)
 		_bake_berth_lanes(t, defs)
+		_build_shipping_lane_network(t, defs)
 		call_deferred("_spawn_player")
 
 	if t != null:
@@ -195,7 +199,7 @@ func get_world_layout() -> WorldLayout:
 
 
 func get_world_generation_debug_stats() -> Dictionary:
-	return {
+	var stats := {
 		"seed": world_seed,
 		"version": WORLD_GENERATION_VERSION,
 		"checksum": _layout_checksum,
@@ -203,6 +207,37 @@ func get_world_generation_debug_stats() -> Dictionary:
 		"raster_resolution": _world_layout.raster_resolution if _world_layout != null else 0,
 		"contour_segments": _world_layout.coastline_contours.size() if _world_layout != null else 0,
 	}
+	if _shipping_lane_network != null:
+		stats["shipping_lanes"] = _shipping_lane_network.summary()
+	return stats
+
+
+func get_shipping_lane_network() -> ShippingLaneNetwork:
+	return _shipping_lane_network
+
+
+func _build_shipping_lane_network(t: Node, defs: Array[PortDefinition]) -> void:
+	var handle: int = t.mark_load_event("shipping_lanes.bake") if t != null else 0
+	var ports: Array[PortData] = []
+	for definition in defs:
+		ports.append(PortExpander.expand(definition, world_seed, _world_layout))
+	var builder := SHIPPING_LANE_NETWORK_BUILDER.new() as ShippingLaneNetworkBuilder
+	_shipping_lane_network = builder.build(_world_layout, ports)
+	var debug_draw := SHIPPING_LANE_DEBUG_DRAW.new() as ShippingLaneDebugDraw
+	debug_draw.name = "ShippingLaneDebugDraw"
+	debug_draw.configure(_shipping_lane_network)
+	add_child(debug_draw)
+	var summary := _shipping_lane_network.summary()
+	print(
+		"Shipping lanes: %d nodes, %d edges, %d blocks, %d signals, %d holding slots, %d errors"
+		% [
+			int(summary.get("nodes", 0)), int(summary.get("edges", 0)),
+			int(summary.get("blocks", 0)), int(summary.get("signals", 0)),
+			int(summary.get("holding_slots", 0)), int(summary.get("errors", 0)),
+		]
+	)
+	if t != null:
+		t.end_load_event(handle)
 
 
 func _bake_berth_lanes(t: Node, defs: Array[PortDefinition]) -> void:

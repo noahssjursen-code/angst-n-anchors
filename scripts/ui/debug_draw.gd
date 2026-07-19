@@ -126,7 +126,7 @@ func _draw() -> void:
 	draw_string(font, Vector2(ox + PAD_X, ty),
 		"DEBUG  %s" % ("PEAK/WORST" if use_peak_values else "LIVE"),
 		HORIZONTAL_ALIGNMENT_LEFT, -1, 11, C_TITLE)
-	var hint := "Tab switch · H live/peak · C copy · R reset"
+	var hint := "G layers · C cursor · Ctrl+C copy · H live/peak"
 	var hint_w := font.get_string_size(hint, HORIZONTAL_ALIGNMENT_LEFT, -1, 9).x
 	draw_string(font, Vector2(ox + PANEL_W - hint_w - PAD_X, ty),
 		hint, HORIZONTAL_ALIGNMENT_LEFT, -1, 9, C_LABEL)

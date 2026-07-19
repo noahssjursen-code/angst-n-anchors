@@ -92,6 +92,27 @@ truth for rendering, weather, ports, charting, and navigation.
 - `AtmosphericEffects` — fog, atmospheric post-processing
 - `WaterwayNavigation` (`navigation/`) — deterministic reachability and navigable route distance over generated centerlines
 
+### `scripts/traffic/`
+
+Static, deterministic maritime traffic infrastructure. This layer contains no
+vessel agents and never advances a boat.
+
+- `ShippingLaneNetworkBuilder` converts `WorldLayout.waterway_centerlines` and
+  every seeded `PortData.berth_plan` into quay manoeuvre pockets, port gates,
+  holding queues, port connectors, separated directional highways, regular
+  blocks, and Factorio-style chain-signal regions.
+- `ShippingLaneNetwork` is the immutable authority record. It supports
+  vessel-dimension-aware route queries, deterministic checksums, and snapshot
+  round-tripping for either a local single-player authority or a future
+  persistent server.
+- `ShippingLaneReservationService` atomically reserves blocks and compact
+  harbour interlocking groups. Its snapshot is the small mutable state that an
+  authority replicates; clients do not independently decide traffic outcomes.
+- `ShippingLaneDebugDraw` streams only the F3/freecam region around the current
+  camera and remains completely unmaterialized while its gizmo layer is off.
+- `shipping_lane_network_showcase.tscn` is the F6 inspection scene. It draws no
+  autonomous vessels.
+
 ### `scripts/port/`
 
 Ports are seeded as a coast-traced foundation plus a trade `berth_plan`. The

@@ -220,6 +220,16 @@ both player and NPC vessels; do not create separate player/NPC steering math.
 Compact authority snapshots send route identity, endpoints, progress, pose, and
 algorithm/layout versions so clients can rebuild and verify the route locally.
 
+`ShippingLaneNetwork` is the newer traffic-infrastructure authority. It derives
+quay manoeuvre blocks, port gates, holding queues, connectors, directional
+highways, regular signals, and chain signals from the immutable `WorldLayout`
+plus seeded port berth plans. The network is data only: **do not attach an
+autonomous vessel controller to it until the traffic layout has been reviewed.**
+`ShippingLaneReservationService` is likewise a pure atomic reservation model,
+usable by a local single-player authority or a persistent server. Clients may
+render the network and consume authority snapshots, but must not independently
+resolve reservations or collision outcomes.
+
 `AutonomousVesselCaptain` layers harbour procedure around that shared follower:
 reserve berth → release lines → crab clear → passage → acquire approach lane →
 align/crab in → secure lines. `HarbourController` owns berth reservations and
