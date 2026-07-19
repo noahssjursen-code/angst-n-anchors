@@ -47,11 +47,24 @@ func _test_shape(network: ShippingLaneNetwork, ports: Array[PortData]) -> void:
 	for port in ports:
 		_check(network.port_gate_nodes.has(port.port_id), "%s has a traffic gate" % port.port_id)
 		var hold_count := 0
+		var junction_count := 0
 		for slot_value in network.holding_slots.values():
 			var slot := slot_value as Dictionary
 			if String(slot.get("port_id", "")) == port.port_id:
 				hold_count += 1
 		_check(hold_count == 4, "%s has a complete holding queue" % port.port_id)
+		for node_value in network.nodes.values():
+			var node := node_value as Dictionary
+			if String(node.get("port_id", "")) == port.port_id \
+					and String(node.get("kind", "")) == "quay_junction":
+				junction_count += 1
+		var plan := port.layout_graph.initial_attributes.get("berth_plan", {}) as Dictionary
+		var expected_junctions := (plan.get("asphalt_stations", []) as Array).size() \
+			+ (plan.get("quay_stations", []) as Array).size()
+		_check(
+			junction_count == expected_junctions,
+			"%s has exactly one junction per physical quay" % port.port_id,
+		)
 
 
 func _test_connectivity(network: ShippingLaneNetwork) -> void:
@@ -61,14 +74,21 @@ func _test_connectivity(network: ShippingLaneNetwork) -> void:
 		if String(node.get("kind", "")) != "quay":
 			continue
 		quays.append(node_id)
-		var junction_id := "%s:junction" % node_id
+		var junction_id := String(node.get("junction_node_id", ""))
 		_check(network.nodes.has(junction_id), "quay %s has its own clear-water junction" % node_id)
 		if network.nodes.has(junction_id):
-			var quay_position := node.get("position", Vector2.ZERO) as Vector2
-			var junction_position := network.node(junction_id).get("position", quay_position) as Vector2
+			var quay_tip := node.get("quay_tip_position", Vector2.ZERO) as Vector2
+			var junction := network.node(junction_id)
+			var junction_position := junction.get("position", quay_tip) as Vector2
 			_check(
-				quay_position.distance_to(junction_position) >= 130.0,
-				"quay %s completes departure before its first turn" % node_id,
+				quay_tip.distance_to(junction_position) >= 75.0,
+				"quay %s junction lies beyond its physical tip" % node_id,
+			)
+			var outbound := junction.get("outbound_vector", Vector2.ZERO) as Vector2
+			_check(
+				outbound.length_squared() > 0.5 \
+					and (junction_position - quay_tip).normalized().dot(outbound.normalized()) > 0.995,
+				"quay %s junction is straight out from its physical tip" % node_id,
 			)
 		_check(
 			network.can_reach_kind(node_id, PackedStringArray(["main_lane", "regional_lane"])),
