@@ -34,6 +34,10 @@ var _content: Node3D
 var _last_center := Vector3(1.0e20, 0.0, 1.0e20)
 var _elapsed := REBUILD_INTERVAL
 var _material_cache: Dictionary = {}
+var _last_rebuild_ms := 0.0
+var _visible_edge_count := 0
+var _line_vertex_count := 0
+var _rebuild_count := 0
 
 
 func configure(value: ShippingLaneNetwork, radius_m := DEFAULT_RADIUS, force_visible := false) -> void:
@@ -48,6 +52,7 @@ func configure(value: ShippingLaneNetwork, radius_m := DEFAULT_RADIUS, force_vis
 
 
 func _ready() -> void:
+	add_to_group("shipping_lane_debug")
 	_content = Node3D.new()
 	_content.name = "RegionGizmos"
 	add_child(_content)
@@ -88,6 +93,8 @@ func _on_visibility_changed() -> void:
 		for child in _content.get_children():
 			child.queue_free()
 		_last_center = Vector3(1.0e20, 0.0, 1.0e20)
+		_visible_edge_count = 0
+		_line_vertex_count = 0
 		return
 	if network != null:
 		_rebuild(_camera_center())
@@ -103,6 +110,7 @@ func _camera_center() -> Vector3:
 
 
 func _rebuild(center: Vector3) -> void:
+	var started_usec := Time.get_ticks_usec()
 	_last_center = center
 	if _content == null:
 		return
@@ -111,11 +119,13 @@ func _rebuild(center: Vector3) -> void:
 
 	var batches: Dictionary = {}
 	var visible_node_ids: Dictionary = {}
+	_visible_edge_count = 0
 	for edge_id in network.sorted_edge_ids():
 		var edge := network.edge(edge_id)
 		var points := edge.get("points", PackedVector2Array()) as PackedVector2Array
 		if points.size() < 2 or not _polyline_near(points, center, draw_radius):
 			continue
+		_visible_edge_count += 1
 		visible_node_ids[String(edge.get("from", ""))] = true
 		visible_node_ids[String(edge.get("to", ""))] = true
 		var color := _edge_color(edge)
@@ -124,12 +134,28 @@ func _rebuild(center: Vector3) -> void:
 		_add_direction_arrows(batches, color, points)
 		_add_block_crossbar(batches, edge)
 
+	_line_vertex_count = 0
 	for color_key in batches:
+		_line_vertex_count += (batches[color_key] as PackedVector3Array).size()
 		_add_line_mesh(batches[color_key] as PackedVector3Array, _color_from_key(String(color_key)))
 
 	_draw_nodes(visible_node_ids, center)
 	_draw_holding_slots(center)
 	_draw_validation_issues(center)
+	_rebuild_count += 1
+	_last_rebuild_ms = float(Time.get_ticks_usec() - started_usec) / 1000.0
+
+
+func get_debug_stats() -> Dictionary:
+	return {
+		"layer_visible": visible,
+		"draw_radius_m": draw_radius,
+		"visible_edges": _visible_edge_count,
+		"line_vertices": _line_vertex_count,
+		"resident_nodes": _content.get_child_count() if _content != null else 0,
+		"last_rebuild_ms": _last_rebuild_ms,
+		"rebuild_count": _rebuild_count,
+	}
 
 
 func _draw_nodes(visible_node_ids: Dictionary, center: Vector3) -> void:

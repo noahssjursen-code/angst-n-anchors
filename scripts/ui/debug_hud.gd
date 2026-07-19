@@ -1,7 +1,7 @@
 extends Node
 
 ## Autoload — owns the F3 debug overlay. F4 weather presets + E clear/restore toggle.
-## F3 then G toggles world gizmos (ports, berth pockets, crane targets, …).
+## F3 then G opens the selectable world-gizmo layer menu.
 ## Layer 100: always above every other UI element.
 
 signal visibility_changed(visible: bool)
@@ -183,21 +183,8 @@ func _input(event: InputEvent) -> void:
 
 
 func _apply_world_gizmos() -> void:
-	var tree := get_tree()
-	if tree == null:
-		return
-	WorldGizmos.apply_all(tree, world_gizmos_enabled)
-	## Port site overlays (spine / quay roots / harbour berths / …).
-	for node in tree.get_nodes_in_group("port_plot"):
-		var plot := node as PortPlot
-		if plot != null:
-			plot.show_site_gizmos = world_gizmos_enabled
-	## Crane auto-aim targets.
-	for node in tree.get_nodes_in_group("bulk_crane_auto"):
-		if node != null and node.has_method("set_show_target_gizmos"):
-			node.call("set_show_target_gizmos", world_gizmos_enabled)
-		elif node != null and "show_target_gizmos" in node:
-			node.set("show_target_gizmos", world_gizmos_enabled)
+	for layer_id in gizmo_layers:
+		_apply_gizmo_layer(str(layer_id), bool(gizmo_layers[layer_id]))
 
 
 func _apply_gizmo_layer(layer_id: String, enabled: bool) -> void:

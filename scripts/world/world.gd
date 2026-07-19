@@ -50,6 +50,7 @@ var _requested_weather_generation_version := WEATHER_GENERATION_VERSION
 var _terrain_streamer: WorldTerrainStreamer
 var _forest_streamer: WorldForestStreamer
 var _shipping_lane_network: ShippingLaneNetwork
+var _shipping_lane_generation_usec := 0
 
 @export var world_seed:   int = 42:
 	set(v): world_seed = v; if _ready_complete and is_inside_tree(): _rebuild()
@@ -208,7 +209,9 @@ func get_world_generation_debug_stats() -> Dictionary:
 		"contour_segments": _world_layout.coastline_contours.size() if _world_layout != null else 0,
 	}
 	if _shipping_lane_network != null:
-		stats["shipping_lanes"] = _shipping_lane_network.summary()
+		var lane_stats := _shipping_lane_network.summary()
+		lane_stats["generation_usec"] = _shipping_lane_generation_usec
+		stats["shipping_lanes"] = lane_stats
 	return stats
 
 
@@ -218,11 +221,13 @@ func get_shipping_lane_network() -> ShippingLaneNetwork:
 
 func _build_shipping_lane_network(t: Node, defs: Array[PortDefinition]) -> void:
 	var handle: int = t.mark_load_event("shipping_lanes.bake") if t != null else 0
+	var started_usec := Time.get_ticks_usec()
 	var ports: Array[PortData] = []
 	for definition in defs:
 		ports.append(PortExpander.expand(definition, world_seed, _world_layout))
 	var builder := SHIPPING_LANE_NETWORK_BUILDER.new() as ShippingLaneNetworkBuilder
 	_shipping_lane_network = builder.build(_world_layout, ports)
+	_shipping_lane_generation_usec = Time.get_ticks_usec() - started_usec
 	var debug_draw := SHIPPING_LANE_DEBUG_DRAW.new() as ShippingLaneDebugDraw
 	debug_draw.name = "ShippingLaneDebugDraw"
 	debug_draw.configure(_shipping_lane_network)

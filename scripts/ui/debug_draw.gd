@@ -230,6 +230,25 @@ func _build_world_generation(e: Array) -> void:
 	], C_VALUE)
 	var checksum := str(stats.get("checksum", ""))
 	_row(e, "Checksum", checksum.left(12) if not checksum.is_empty() else "—", C_LABEL)
+	var lanes := stats.get("shipping_lanes", {}) as Dictionary
+	if not lanes.is_empty():
+		var issue_color := C_WARN if int(lanes.get("errors", 0)) > 0 else C_VALUE
+		_row(e, "Shipping network", "%d blocks · %d signals · %d ports · %.1f ms" % [
+			int(lanes.get("blocks", 0)), int(lanes.get("signals", 0)),
+			int(lanes.get("ports", 0)), float(lanes.get("generation_usec", 0)) / 1000.0,
+		], issue_color)
+		_row(e, "Traffic validation", "%d errors · %d warnings · %s" % [
+			int(lanes.get("errors", 0)), int(lanes.get("warnings", 0)),
+			str(lanes.get("network_checksum", "")).left(12),
+		], issue_color)
+	var lane_draw := get_tree().get_first_node_in_group("shipping_lane_debug")
+	if lane_draw != null and lane_draw.has_method("get_debug_stats"):
+		var draw_stats := lane_draw.call("get_debug_stats") as Dictionary
+		_row(e, "Traffic gizmos", "%s · %d edges · %.2f ms rebuild" % [
+			"visible" if bool(draw_stats.get("layer_visible", false)) else "off",
+			int(draw_stats.get("visible_edges", 0)),
+			float(draw_stats.get("last_rebuild_ms", 0.0)),
+		], C_LABEL)
 	var terrain := get_tree().get_first_node_in_group("world_terrain_streamer")
 	if terrain != null and terrain.has_method("get_debug_stats"):
 		var terrain_stats := _provider_stats(&"world.terrain", terrain.call("get_debug_stats") as Dictionary)

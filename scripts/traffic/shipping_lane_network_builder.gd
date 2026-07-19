@@ -63,6 +63,11 @@ func validate(network: ShippingLaneNetwork, layout: WorldLayout) -> Array[Dictio
 		if layout != null and kind not in ["quay_maneuver", "holding_link"]:
 			var minimum_clearance := SHORE_CLEARANCE_M if kind in ["main_lane", "regional_lane"] else 1.0
 			for point in _sample_polyline(points, 60.0):
+				# The western main bus deliberately meets the open-world boundary,
+				# where the macro SDF clamps to zero rather than representing land.
+				if absf(point.x) >= layout.half_extent_m - 520.0 \
+						or absf(point.y) >= layout.half_extent_m - 520.0:
+					continue
 				var clearance := layout.sample_signed_distance(point)
 				if clearance + 0.1 < minimum_clearance:
 					issues.append(_issue("warning", "shore_clearance",
