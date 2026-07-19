@@ -22,6 +22,8 @@ func _run() -> void:
 	_assert(general_mesh == same_mesh, "identical layouts reuse one mesh resource")
 	_assert(general_mesh.get_surface_count() <= 8, "proxy surface budget is bounded")
 	_assert(bulk_mesh.get_surface_count() <= 8, "bulk proxy surface budget is bounded")
+	_assert(_mesh_vertex_count(general_mesh) > 1000,
+		"proxy preserves authored brick geometry instead of box placeholders")
 
 	var renderer := VesselProxyRenderer.new()
 	root.add_child(renderer)
@@ -71,6 +73,14 @@ func _prebuilt(prebuilt_id: String, uid: String) -> Dictionary:
 			"brick_layout": entry.get("prebuilt_layout", {}) as Dictionary,
 		})
 	return {}
+
+
+func _mesh_vertex_count(mesh: ArrayMesh) -> int:
+	var total := 0
+	for surface in range(mesh.get_surface_count()):
+		var arrays := mesh.surface_get_arrays(surface)
+		total += (arrays[Mesh.ARRAY_VERTEX] as PackedVector3Array).size()
+	return total
 
 
 func _assert(ok: bool, message: String) -> void:

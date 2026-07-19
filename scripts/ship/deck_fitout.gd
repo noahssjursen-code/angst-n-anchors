@@ -58,8 +58,41 @@ static func apply_authority_projection(
 	var root := Node3D.new()
 	root.name = FITOUT_ROOT
 	boat.add_child(root)
+	_register_projection_brick_mass(boat, layout, grid)
 	return finish_fitout(boat, root, layout, grid, outfit, declared,
 		{"brick_i": 0, "ladder_n": 0})
+
+
+static func _register_projection_brick_mass(
+		boat: BoatBody,
+		layout: BrickLayout,
+		grid: DeckGrid,
+) -> void:
+	## Preserve the exact total brick weight and first moment used by a fully
+	## constructed vessel without retaining one mass entry per construction node.
+	var total_mass := 0.0
+	var weighted_position := Vector3.ZERO
+	for item_raw in layout.iter_primary_cells():
+		var item := item_raw as Dictionary
+		var cell: Vector3i = item.get("cell", Vector3i(-1, -1, -1))
+		var brick_id := str(item.get("brick_id", ""))
+		var yaw := int(item.get("yaw", 0))
+		if not _item_is_valid(grid, cell, brick_id, yaw):
+			continue
+		var brick_mass := maxf(float(
+			BrickCatalog.get_entry(brick_id).get("mass_kg", 0.0)), 0.0)
+		if brick_mass <= 0.0:
+			continue
+		var local_position := footprint_center_local(grid, cell, brick_id, yaw)
+		total_mass += brick_mass
+		weighted_position += local_position * brick_mass
+	if total_mass > 0.0:
+		boat.set_mass_entry(
+			"brick:authority_projection",
+			total_mass,
+			weighted_position / total_mass,
+			"brick",
+		)
 
 
 static func apply_sync(

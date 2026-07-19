@@ -670,11 +670,10 @@ func _enable_boat_physics(ship: BoatBody) -> void:
 	if player_controller != null:
 		player_controller.process_mode = Node.PROCESS_MODE_DISABLED
 	ship.process_mode = Node.PROCESS_MODE_INHERIT
-	# NPC precision follows manoeuvre state, not how many ships happen to be near
-	# the local player. This is deterministic and applies equally to every fleet
-	# authority while avoiding full strip-buoyancy work for open-water passage.
+	# Only a small fixed number of vessels are promoted to BoatBody authority.
+	# Those few use the same stable water response as the player vessel.
 	ship.automatic_physics_lod = false
-	ship.set_physics_quality(BoatBody.PhysicsQuality.MEDIUM)
+	ship.set_physics_quality(BoatBody.PhysicsQuality.FULL)
 	ship.freeze = false
 	ship.sleeping = false
 
@@ -696,10 +695,10 @@ func _apply_shared_npc_physics_budget() -> void:
 			AutonomousVesselCaptain.Phase.PASSAGE, \
 			AutonomousVesselCaptain.Phase.WAITING_APPROACH, \
 			AutonomousVesselCaptain.Phase.HOLDING:
-				ship.set_physics_quality(BoatBody.PhysicsQuality.LOW)
+				ship.set_physics_quality(BoatBody.PhysicsQuality.FULL)
 			AutonomousVesselCaptain.Phase.DEPARTURE, \
 			AutonomousVesselCaptain.Phase.APPROACH:
-				ship.set_physics_quality(BoatBody.PhysicsQuality.MEDIUM)
+				ship.set_physics_quality(BoatBody.PhysicsQuality.FULL)
 			_:
 				# Casting off, crabbing, alignment and securing need the exact
 				# hull/water response used by the player vessel.
