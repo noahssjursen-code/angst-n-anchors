@@ -15,6 +15,8 @@ const C_PORT := Color(0.10, 0.24, 0.28, 1.0)
 const C_PORT_SELECTED := Color(0.95, 0.55, 0.10, 1.0)
 const C_SHIP := Color(0.94, 0.28, 0.12, 1.0)
 const C_ROUTE := Color(0.74, 0.22, 0.12, 0.90)
+const C_TRAFFIC_MAIN := Color(0.08, 0.55, 0.72, 0.58)
+const C_TRAFFIC_PORT := Color(0.20, 0.66, 0.62, 0.46)
 ## Pay expand cost a few harbours per frame so world-view open stays smooth.
 const HARBOUR_EXPAND_BUDGET := 4
 const HARBOUR_VIEW_MARGIN_M := 900.0
@@ -30,11 +32,15 @@ var last_draw_usec := 0
 var draw_count := 0
 var _route_navigation: MarineRoutePlanner
 var _contract_route_cache: Dictionary = {}
+var _shipping_lane_lines: Array[Dictionary] = []
+var _shipping_breakoffs := PackedVector2Array()
 
 
 func set_snapshot(next) -> void:
 	snapshot = next
 	_contract_route_cache.clear()
+	_shipping_lane_lines.clear()
+	_shipping_breakoffs.clear()
 	_route_navigation = null
 	weather.invalidate()
 	fishing.invalidate()
@@ -43,6 +49,7 @@ func set_snapshot(next) -> void:
 		base.prepare(snapshot.layout)
 		coastline.prepare(snapshot.layout)
 		_route_navigation = MarineRoutePlanner.new(snapshot.layout)
+		_prepare_shipping_lanes()
 
 
 func prepare_overlays(bounds: Rect2, layers: ChartLayerManager, game_hours: float) -> void:
@@ -77,6 +84,8 @@ func render(
 	if not fast_interaction:
 		_draw_coastline(canvas, ctx)
 	_draw_grid(canvas, ctx)
+	if layers.is_visible("traffic"):
+		_draw_shipping_lanes(canvas, ctx)
 	if layers.is_visible("routes"):
 		_draw_contract_routes(canvas, ctx, nav)
 	## Lazy harbour silhouettes under port dots (all visible sites).
@@ -108,6 +117,8 @@ func render_minimap(
 	if layers.is_visible("weather"):
 		weather.draw_wind(canvas, chart, bounds)
 	_draw_coastline(canvas, ctx)
+	if layers.is_visible("traffic"):
+		_draw_shipping_lanes(canvas, ctx)
 	if layers.is_visible("routes"):
 		_draw_contract_routes(canvas, ctx, nav)
 	_draw_visible_harbours(canvas, ctx)
@@ -182,7 +193,67 @@ func debug_stats() -> Dictionary:
 		"base_build_usec": base.build_usec,
 		"weather": weather.debug_stats(),
 		"fishing": fishing.debug_stats(),
+		"shipping_lane_lines": _shipping_lane_lines.size(),
 	}
+
+
+func _prepare_shipping_lanes() -> void:
+	if snapshot == null or snapshot.shipping_lane_network == null:
+		return
+	var network := snapshot.shipping_lane_network as ShippingLaneNetwork
+	var seen := {}
+	for edge_id in network.sorted_edge_ids():
+		var edge := network.edges[edge_id] as Dictionary
+		var kind := str(edge.get("kind", ""))
+		if kind not in ["main_lane", "regional_lane", "port_connector", "port_approach", "port_merge"]:
+			continue
+		var points := edge.get("points", PackedVector2Array()) as PackedVector2Array
+		if points.size() < 2:
+			continue
+		var first := points[0]
+		var last := points[points.size() - 1]
+		var a := "%d,%d" % [roundi(first.x * 10.0), roundi(first.y * 10.0)]
+		var b := "%d,%d" % [roundi(last.x * 10.0), roundi(last.y * 10.0)]
+		var ordered := PackedStringArray([a, b])
+		ordered.sort()
+		var signature := "%s|%s|%s" % [kind, ordered[0], ordered[1]]
+		if seen.has(signature):
+			continue
+		seen[signature] = true
+		_shipping_lane_lines.append({"kind": kind, "points": points})
+	for breakoff_id in network.sorted_port_breakoff_ids():
+		var record := network.port_breakoffs[breakoff_id] as Dictionary
+		var point := record.get("position", Vector2(INF, INF)) as Vector2
+		if point.is_finite():
+			_shipping_breakoffs.append(point)
+
+
+func _draw_shipping_lanes(canvas: CanvasItem, ctx: Dictionary) -> void:
+	var bounds := ctx["world_bounds"] as Rect2
+	var span := float(ctx["world_span"])
+	var show_port_links := span <= 9000.0
+	for line in _shipping_lane_lines:
+		var kind := str(line.get("kind", ""))
+		if kind not in ["main_lane", "regional_lane"] and not show_port_links:
+			continue
+		var points := line.get("points", PackedVector2Array()) as PackedVector2Array
+		for index in range(points.size() - 1):
+			var segment_bounds := Rect2(points[index], Vector2.ZERO).expand(points[index + 1])
+			if not bounds.intersects(segment_bounds.grow(80.0)):
+				continue
+			canvas.draw_line(
+				_world_to_screen(Vector3(points[index].x, 0.0, points[index].y), ctx),
+				_world_to_screen(Vector3(points[index + 1].x, 0.0, points[index + 1].y), ctx),
+				C_TRAFFIC_MAIN if kind in ["main_lane", "regional_lane"] else C_TRAFFIC_PORT,
+				1.4 if kind == "main_lane" else 1.0,
+				true,
+			)
+	if span <= 12000.0:
+		for point in _shipping_breakoffs:
+			if bounds.has_point(point):
+				canvas.draw_circle(
+					_world_to_screen(Vector3(point.x, 0.0, point.y), ctx),
+					2.2, C_TRAFFIC_PORT)
 
 
 func _draw_coastline(canvas: CanvasItem, ctx: Dictionary) -> void:

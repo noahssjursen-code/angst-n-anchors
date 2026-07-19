@@ -42,7 +42,6 @@ var _metrics := {
 	"total_distance_m": 0.0,
 	"max_wait_seconds": 0.0,
 	"max_port_queue": 0,
-	"traffic_yields": 0,
 }
 
 
@@ -78,7 +77,6 @@ func configure(value: ShippingLaneNetwork, vessel_count := 24, seed := 77127,
 		"total_distance_m": 0.0,
 		"max_wait_seconds": 0.0,
 		"max_port_queue": 0,
-		"traffic_yields": 0,
 	}
 	if network == null or _token_ids.size() < 2:
 		return

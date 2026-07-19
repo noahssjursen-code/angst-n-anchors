@@ -123,9 +123,24 @@ data-only simulator for exercising the authority without BoatBody physics.
   retain signal blocks until their stern clears,
   request berth tokens, enter FIFO queues, and emit a copyable authority report.
   It is not the production NPC controller.
+- `ShippingOpenWaterSchedule` is the standalone spatial/time reservation
+  prototype for free-sailing passages. It reduces trajectories to coarse ocean
+  cells, gives same-direction convoys headway, and keeps crossing/opposing paths
+  exclusive. It remains deliberately outside the live simulator until its
+  breakoff waiting semantics pass the long traffic lab without reducing throughput.
+- Traffic presentation is interest-managed independently of authority. Every
+  vessel remains a data record; a deterministic policy selects a capped nearby
+  set of full official vessel builds, lightweight nearby proxies, and data-only
+  distant records. Full builds are frozen presentations and never become a
+  second traffic authority.
 - `shipping_lane_network_showcase.tscn` is the F6 traffic lab. It displays those
-  test records, accelerates or pauses time, and copies both human-readable
-  validation and machine-readable authority state with Ctrl+C.
+  test records with the mixed presentation tiers, accelerates or pauses time,
+  and copies both human-readable validation and machine-readable authority state
+  with Ctrl+C. The headless artifact test also writes an SVG/PNG network snapshot
+  plus clocked JSON summary for visual regression inspection.
+- The navigation chart caches a clean traffic layer from the same immutable
+  network: highways at world scale, port links when zoomed in, and subtle legal
+  breakoff markers. It never draws F3 block/signal geometry on the player chart.
 
 ### `scripts/port/`
 

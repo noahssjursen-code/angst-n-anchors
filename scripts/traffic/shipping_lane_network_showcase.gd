@@ -6,9 +6,16 @@ extends Node3D
 
 const WORLD_LAYOUT_GENERATOR := preload("res://scripts/world/world_layout_generator.gd")
 const COASTAL_PORT_PLACER := preload("res://scripts/world/coastal_port_placer.gd")
+const PRESENTATION_POLICY := preload(
+	"res://scripts/traffic/traffic_vessel_presentation_policy.gd")
+const PREBUILT_CATALOG := preload("res://scripts/ship/prebuilt_vessel_catalog.gd")
+const VESSEL_SPAWN := preload("res://scripts/ship/vessel_spawn.gd")
 const SEED := 77127
 const PORT_COUNT := 10
 const VESSEL_COUNT := 32
+const FULL_VESSEL_RADIUS_M := 900.0
+const PROXY_VESSEL_RADIUS_M := 3600.0
+const MAXIMUM_FULL_VESSELS := 4
 
 var _layout: WorldLayout
 var _ports: Array[PortData] = []
@@ -21,15 +28,25 @@ var _traffic_status: Label
 var _report_preview: TextEdit
 var _focus_index := 0
 var _ship_markers: Dictionary = {}
+var _full_ships: Dictionary = {}
 var _passage_lines: Dictionary = {}
 var _state_materials: Dictionary = {}
 var _simulation_speed := 120.0
 var _paused := false
 var _ui_elapsed := 0.0
+var _presentation_elapsed := 0.0
+var _presentation_summary: Dictionary = {}
+var _materialization_ms := 0.0
+var _prebuilt_entries: Array[Dictionary] = []
 
 
 func _ready() -> void:
 	_build_environment()
+	for entry in PREBUILT_CATALOG.for_sale_entries():
+		# The traffic lab exercises runtime-authored hulls, not the two frozen
+		# hand-authored vessel-scene exceptions with owner-only systems.
+		if HullCatalog.has_id(str(entry.get("hull_id", ""))):
+			_prebuilt_entries.append(entry)
 	_status.text = "Generating deterministic lane graph..."
 	await get_tree().process_frame
 	_layout = WORLD_LAYOUT_GENERATOR.generate(SEED)
@@ -78,6 +95,10 @@ func _process(delta: float) -> void:
 	if _simulator != null and not _paused:
 		_simulator.advance(delta * _simulation_speed)
 		_update_ship_markers()
+	_presentation_elapsed += delta
+	if _presentation_elapsed >= 0.5:
+		_presentation_elapsed = 0.0
+		_update_vessel_presentation()
 	_ui_elapsed += delta
 	if _ui_elapsed >= 0.25:
 		_ui_elapsed = 0.0
@@ -187,6 +208,7 @@ func _build_ui() -> void:
 
 
 func _reset_simulation() -> void:
+	_clear_full_ships()
 	for marker_value in _ship_markers.values():
 		(marker_value as Node).queue_free()
 	_ship_markers.clear()
@@ -198,6 +220,7 @@ func _reset_simulation() -> void:
 	_paused = false
 	_build_ship_markers()
 	_update_ship_markers()
+	_update_vessel_presentation()
 	_refresh_traffic_ui()
 
 
@@ -206,15 +229,17 @@ func _build_ship_markers() -> void:
 		var marker := Node3D.new()
 		marker.name = str(vessel.get("id", "TrafficVessel"))
 		var hull := MeshInstance3D.new()
+		hull.name = "ProxyHull"
 		var mesh := BoxMesh.new()
 		mesh.size = Vector3(float(vessel.get("beam_m", 10.0)), 5.0,
 			float(vessel.get("length_m", 45.0)))
 		hull.mesh = mesh
 		hull.material_override = _state_material("planning")
+		hull.position.y = 3.0
 		marker.add_child(hull)
 		var label := Label3D.new()
 		label.name = "State"
-		label.position = Vector3(0.0, 9.0, 0.0)
+		label.position = Vector3(0.0, 14.0, 0.0)
 		label.font_size = 20
 		label.outline_size = 5
 		label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
@@ -231,15 +256,102 @@ func _update_ship_markers() -> void:
 		if marker == null:
 			continue
 		var point := vessel.get("position", Vector2.ZERO) as Vector2
-		marker.position = Vector3(point.x, 7.0, point.y)
+		marker.position = Vector3(point.x, 0.6, point.y)
 		var heading := vessel.get("heading", Vector2(0.0, -1.0)) as Vector2
 		marker.rotation.y = atan2(-heading.x, -heading.y)
 		var state := str(vessel.get("state", "unknown"))
-		(marker.get_child(0) as MeshInstance3D).material_override = _state_material(state)
+		(marker.get_node("ProxyHull") as MeshInstance3D).material_override = _state_material(state)
 		var label := marker.get_node("State") as Label3D
 		label.text = "%s\n%s" % [vessel_id, state.replace("_", " ")]
 		label.modulate = _state_color(state)
 		_update_passage_line(vessel)
+
+
+func _update_vessel_presentation() -> void:
+	if _simulator == null or _camera == null:
+		return
+	var records := _simulator.vessel_records()
+	_presentation_summary = PRESENTATION_POLICY.select(
+		records,
+		Vector2(_camera.position.x, _camera.position.z),
+		FULL_VESSEL_RADIUS_M,
+		PROXY_VESSEL_RADIUS_M,
+		MAXIMUM_FULL_VESSELS,
+	)
+	var wanted := {}
+	for vessel_id in _presentation_summary.get("full_ids", PackedStringArray()):
+		wanted[str(vessel_id)] = true
+	for vessel_id in _full_ships.keys():
+		if not wanted.has(str(vessel_id)):
+			_demote_full_ship(str(vessel_id))
+	var started_us := Time.get_ticks_usec()
+	for vessel_id in wanted:
+		if not _full_ships.has(vessel_id):
+			_promote_full_ship(str(vessel_id))
+	_materialization_ms = float(Time.get_ticks_usec() - started_us) / 1000.0
+	var proxy_ids := {}
+	for vessel_id in _presentation_summary.get("proxy_ids", PackedStringArray()):
+		proxy_ids[str(vessel_id)] = true
+	for vessel_id in _ship_markers:
+		var marker := _ship_markers[vessel_id] as Node3D
+		var hull := marker.get_node_or_null("ProxyHull") as MeshInstance3D
+		if hull != null:
+			hull.visible = proxy_ids.has(str(vessel_id)) and not wanted.has(str(vessel_id))
+		var label := marker.get_node_or_null("State") as Label3D
+		if label != null:
+			label.visible = proxy_ids.has(str(vessel_id)) or wanted.has(str(vessel_id))
+
+
+func _promote_full_ship(vessel_id: String) -> void:
+	var marker := _ship_markers.get(vessel_id) as Node3D
+	if marker == null:
+		return
+	if _prebuilt_entries.is_empty():
+		return
+	var entry: Dictionary = _prebuilt_entries[abs(vessel_id.hash()) % _prebuilt_entries.size()]
+	var record := {
+		"uid": "traffic-lab-%s" % vessel_id,
+		"hull_id": str(entry.get("hull_id", "")),
+		"name": "Traffic %s" % vessel_id,
+		"shaft_power_kw": float(entry.get("shaft_power_kw", 1.0)),
+		"registration_id": str(entry.get("registration_id", "")),
+		"brick_layout": (entry.get("prebuilt_layout", {}) as Dictionary).duplicate(true),
+	}
+	var ship := VESSEL_SPAWN.instantiate_from_record(record) as BoatBody
+	if ship == null:
+		return
+	ship.name = "FullDetail"
+	ship.freeze = true
+	ship.freeze_mode = RigidBody3D.FREEZE_MODE_KINEMATIC
+	_disable_simulation(ship)
+	marker.add_child(ship)
+	ship.position = Vector3.ZERO
+	ship.rotation = Vector3.ZERO
+	call_deferred("_disable_simulation", ship)
+	_full_ships[vessel_id] = ship
+
+
+func _demote_full_ship(vessel_id: String) -> void:
+	var ship := _full_ships.get(vessel_id) as Node
+	if ship != null and is_instance_valid(ship):
+		ship.queue_free()
+	_full_ships.erase(vessel_id)
+
+
+func _clear_full_ships() -> void:
+	for vessel_id in _full_ships.keys():
+		_demote_full_ship(str(vessel_id))
+
+
+func _disable_simulation(node: Node) -> void:
+	node.set_process(false)
+	node.set_physics_process(false)
+	if node is CollisionObject3D:
+		var collision := node as CollisionObject3D
+		collision.collision_layer = 0
+		collision.collision_mask = 0
+	for child in node.get_children():
+		_disable_simulation(child)
 
 
 func _update_passage_line(vessel: Dictionary) -> void:
@@ -289,7 +401,8 @@ func _refresh_traffic_ui() -> void:
 		"%s | %s | %.0fx | %.0f simulated seconds\n"
 		+ "%d ships | %d trips | %d queued\n"
 		+ "collisions %d | deadlocks %d | starved %d | route failures %d\n"
-		+ "max queue %d | max wait %.0fs | signal stops %d"
+		+ "max queue %d | max wait %.0fs | signal stops %d\n"
+		+ "presentation: %d full | %d proxy | %d data-only | promotion %.2f ms"
 	) % [str(data.get("status", "FAIL")), "PAUSED" if _paused else "RUNNING",
 		_simulation_speed, float(data.get("simulated_seconds", 0.0)),
 		int(data.get("vessel_count", 0)), int(data.get("trips_completed", 0)),
@@ -297,7 +410,10 @@ func _refresh_traffic_ui() -> void:
 		int(data.get("deadlocks", 0)), int(data.get("starved_vessels", 0)),
 		int(data.get("route_failures", 0)),
 		int(data.get("max_port_queue", 0)), float(data.get("max_wait_seconds", 0.0)),
-		int(data.get("reservation_denials", 0))]
+		int(data.get("reservation_denials", 0)),
+		_full_ships.size(),
+		(_presentation_summary.get("proxy_ids", PackedStringArray()) as PackedStringArray).size(),
+		int(_presentation_summary.get("data_only_count", 0)), _materialization_ms]
 	_traffic_status.modulate = Color(0.35, 1.0, 0.55) \
 		if str(data.get("status", "FAIL")) == "PASS" else Color(1.0, 0.55, 0.25)
 	if _report_preview != null:

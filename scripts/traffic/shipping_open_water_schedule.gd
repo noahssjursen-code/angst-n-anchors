@@ -17,6 +17,7 @@ const MAX_RESCHEDULE_PASSES := 128
 var _occupancy_by_cell: Dictionary = {} # cell id -> Array[interval]
 var _allocations: Dictionary = {} # vessel|section -> internal record
 var _passage_cache: Dictionary = {} # stable breakoff link -> relative cell passages
+var _next_start_by_route_key: Dictionary = {} # convoy headway for identical direction/path
 var _requests := 0
 var _delayed_requests := 0
 var _maximum_delay_s := 0.0
@@ -47,10 +48,13 @@ func request(
 		if not cache_key.is_empty():
 			_passage_cache[cache_key] = passages
 	var start_s := ceilf(requested_start_s / START_QUANTUM_S) * START_QUANTUM_S
+	if not route_key.is_empty():
+		start_s = maxf(start_s, float(_next_start_by_route_key.get(route_key, start_s)))
 	var latest_s := start_s + MAX_START_DELAY_S
 	var scheduled := false
 	for _pass_index in range(MAX_RESCHEDULE_PASSES):
-		var next_start_s := _first_safe_start(passages, start_s, clearance_s, allocation_id)
+		var next_start_s := _first_safe_start(
+			passages, start_s, clearance_s, allocation_id, route_key)
 		if next_start_s <= start_s + 0.001:
 			scheduled = true
 			break
@@ -64,6 +68,7 @@ func request(
 		var cell_id := str(passage.get("cell_id", ""))
 		var interval := {
 			"allocation_id": allocation_id,
+			"route_key": route_key,
 			"start_s": start_s + float(passage.get("entry_s", 0.0)) - clearance_s,
 			"end_s": start_s + float(passage.get("exit_s", 0.0)) + clearance_s,
 		}
@@ -84,6 +89,8 @@ func request(
 		"reservations": reservations,
 	}
 	_allocations[allocation_id] = record
+	if not route_key.is_empty():
+		_next_start_by_route_key[route_key] = start_s + clearance_s
 	if delay_s > 0.001:
 		_delayed_requests += 1
 		_maximum_delay_s = maxf(_maximum_delay_s, delay_s)
@@ -140,7 +147,7 @@ func snapshot() -> Dictionary:
 
 func _first_safe_start(
 		passages: Array[Dictionary], candidate_s: float, clearance_s: float,
-		allocation_id: String,
+		allocation_id: String, route_key: String,
 ) -> float:
 	var required_start_s := candidate_s
 	for passage in passages:
@@ -150,6 +157,10 @@ func _first_safe_start(
 		for interval_value in _occupancy_by_cell.get(str(passage.get("cell_id", "")), []) as Array:
 			var interval := interval_value as Dictionary
 			if str(interval.get("allocation_id", "")) == allocation_id:
+				continue
+			# Same path and direction is a convoy, not a crossing movement. Its
+			# launch headway is enforced by `_next_start_by_route_key`.
+			if not route_key.is_empty() and str(interval.get("route_key", "")) == route_key:
 				continue
 			var occupied_start := float(interval.get("start_s", 0.0))
 			var occupied_end := float(interval.get("end_s", 0.0))
