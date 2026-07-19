@@ -7,6 +7,7 @@ signal marks_changed(balance: int)
 signal helm_changed(boat: Node) # null when not helming
 signal contracts_changed(contracts: Array) # kept empty until trade rewrite
 signal company_changed(snapshot: Dictionary)
+signal company_traffic_changed
 
 
 var _session: Node = null
@@ -32,8 +33,12 @@ func _ready() -> void:
 	if company != null and not company.company_changed.is_connected(_emit_company):
 		company.company_changed.connect(_emit_company)
 	var traffic := get_node_or_null("/root/MaritimeTraffic")
-	if traffic != null and not traffic.traffic_changed.is_connected(_emit_company_traffic):
-		traffic.traffic_changed.connect(_emit_company_traffic)
+	if traffic != null:
+		if traffic.has_signal("traffic_invalidated"):
+			if not traffic.traffic_invalidated.is_connected(_emit_company_traffic):
+				traffic.traffic_invalidated.connect(_emit_company_traffic)
+		elif not traffic.traffic_changed.is_connected(_emit_company_traffic):
+			traffic.traffic_changed.connect(_emit_company_traffic)
 
 	get_tree().node_added.connect(_on_node_added)
 	for n in get_tree().root.find_children("*", "BoatController", true, false):
@@ -240,8 +245,12 @@ func _emit_company(_snapshot: Dictionary) -> void:
 	company_changed.emit(get_company_snapshot())
 
 
-func _emit_company_traffic(_snapshot: Dictionary) -> void:
-	company_changed.emit(get_company_snapshot())
+func _emit_company_traffic(_payload: Variant = null) -> void:
+	# Traffic authority can update several times per second for dozens of ambient
+	# ships. It must not rebuild the entire company read model (and all five UI
+	# tabs) synchronously on every lane lease. Consumers that are actually visible
+	# can pull the current filtered traffic view on this lightweight invalidation.
+	company_traffic_changed.emit()
 
 
 func _current_world_context() -> Dictionary:

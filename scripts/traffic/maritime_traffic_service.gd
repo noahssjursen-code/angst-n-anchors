@@ -6,6 +6,7 @@ extends Node
 ## Clients apply snapshots and execute agreements through their local autopilots.
 
 signal traffic_changed(snapshot: Dictionary)
+signal traffic_invalidated(revision: int)
 signal agreement_issued(agreement: Dictionary)
 signal vhf_message(message: Dictionary)
 signal port_queue_changed(port_id: String, queue: Array)
@@ -155,7 +156,7 @@ func apply_authority_snapshot(data: Dictionary) -> bool:
 	_port_queues = (data.get("port_queues", {}) as Dictionary).duplicate(true)
 	_holding_zones = (data.get("holding_zones", {}) as Dictionary).duplicate(true)
 	_lane_claims = (data.get("lane_claims", {}) as Dictionary).duplicate(true)
-	traffic_changed.emit(snapshot())
+	_emit_change_signals()
 	return true
 
 
@@ -985,4 +986,13 @@ func _publish() -> void:
 		_batch_dirty = true
 		return
 	_revision += 1
-	traffic_changed.emit(snapshot())
+	_emit_change_signals()
+
+
+func _emit_change_signals() -> void:
+	# Most local consumers only need to know that their filtered view is stale.
+	# Building a deep, wire-safe authority snapshot several times per second is
+	# reserved for an actual replication/debug subscriber.
+	traffic_invalidated.emit(_revision)
+	if not traffic_changed.get_connections().is_empty():
+		traffic_changed.emit(snapshot())

@@ -36,6 +36,7 @@ var _visibility_cache: Dictionary = {}
 var _last_authority_count := 0
 var _last_refresh_ms := 0.0
 var _last_record_build_ms := 0.0
+var _last_traffic_publish_ms := 0.0
 var _last_visibility_probes := 0
 var _last_occluded_count := 0
 
@@ -91,6 +92,7 @@ func get_debug_stats() -> Dictionary:
 		"snapshot_build_ms": _last_network_snapshot_ms,
 		"interest_refresh_ms": _last_refresh_ms,
 		"record_build_ms": _last_record_build_ms,
+		"traffic_publish_ms": _last_traffic_publish_ms,
 		"visibility_probes": _last_visibility_probes,
 		"terrain_occluded": _last_occluded_count,
 	}
@@ -329,7 +331,10 @@ func _refresh() -> void:
 	_apply_shared_npc_physics_budget()
 	if _abstract_traffic_elapsed >= ABSTRACT_TRAFFIC_INTERVAL_S:
 		_abstract_traffic_elapsed = 0.0
+		var traffic_started := Time.get_ticks_usec()
 		_publish_authority_traffic(records)
+		_last_traffic_publish_ms = float(
+			Time.get_ticks_usec() - traffic_started) / 1000.0
 	_last_refresh_ms = float(Time.get_ticks_usec() - refresh_started) / 1000.0
 	_refreshing = false
 

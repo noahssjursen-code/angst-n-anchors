@@ -59,9 +59,25 @@ func _connect_player_view() -> void:
 	if view == null:
 		call_deferred("_connect_player_view")
 		return
-	if not view.company_changed.is_connected(_rebuild):
-		view.company_changed.connect(_rebuild)
+	if not view.company_changed.is_connected(_on_company_changed):
+		view.company_changed.connect(_on_company_changed)
+	if view.has_signal("company_traffic_changed") \
+			and not view.company_traffic_changed.is_connected(_on_company_traffic_changed):
+		view.company_traffic_changed.connect(_on_company_traffic_changed)
 	refresh()
+
+
+func _on_company_changed(snapshot: Dictionary) -> void:
+	# GameMenu refreshes on open. Reconstructing every tab while this full-screen
+	# panel is hidden was pure main-thread work during ordinary sailing.
+	if not is_visible_in_tree():
+		return
+	_rebuild(snapshot)
+
+
+func _on_company_traffic_changed() -> void:
+	if is_visible_in_tree():
+		refresh()
 
 
 func _build() -> void:
