@@ -42,10 +42,10 @@ func _test_shape(network: ShippingLaneNetwork, ports: Array[PortData]) -> void:
 	_check(network.edges.size() > 30, "network has useful edge density")
 	_check(network.blocks.size() == network.edges.size(), "every directed edge owns one block")
 	_check(network.signals.size() > 20, "block boundaries have signals")
-	_check(network.port_gate_nodes.size() == ports.size(), "every port has one traffic gate")
+	_check(network.port_gate_nodes.size() == ports.size(), "every port publishes traffic gates")
 	_check(network.holding_slots.size() == ports.size() * 4, "every port has four holding slots")
 	for port in ports:
-		_check(network.port_gate_nodes.has(port.port_id), "%s has a traffic gate" % port.port_id)
+		_check(network.port_gate_nodes.has(port.port_id), "%s has traffic gates" % port.port_id)
 		var hold_count := 0
 		var junction_count := 0
 		for slot_value in network.holding_slots.values():
@@ -64,6 +64,30 @@ func _test_shape(network: ShippingLaneNetwork, ports: Array[PortData]) -> void:
 		_check(
 			junction_count == expected_junctions,
 			"%s has exactly one junction per physical quay" % port.port_id,
+		)
+		var published_gates := network.port_gate_nodes.get(port.port_id, []) as Array
+		_check(
+			published_gates.size() == expected_junctions,
+			"%s publishes every physical quay junction independently" % port.port_id,
+		)
+		var unique_gates: Dictionary = {}
+		for gate_value in published_gates:
+			var gate_id := str(gate_value)
+			unique_gates[gate_id] = true
+			var gate := network.nodes.get(gate_id, {}) as Dictionary
+			_check(
+				str(gate.get("kind", "")) == "quay_junction",
+				"%s publishes the physical quay junction itself as its gate" % gate_id,
+			)
+		_check(
+			unique_gates.size() == expected_junctions,
+			"%s does not collapse physical quays into a shared gate" % port.port_id,
+		)
+	for node_value in network.nodes.values():
+		var node := node_value as Dictionary
+		_check(
+			str(node.get("kind", "")) != "port_gate",
+			"network contains no legacy shared port-gate knot",
 		)
 
 
@@ -113,7 +137,8 @@ func _test_connectivity(network: ShippingLaneNetwork) -> void:
 		_check(uses_highway, "port-to-port route joins the shipping highway")
 	var gates := PackedStringArray()
 	for port_id in ShippingLaneNetwork._sorted_ids(network.port_gate_nodes):
-		gates.append(str(network.port_gate_nodes[port_id]))
+		for gate_id in network.port_gate_nodes[port_id] as Array:
+			gates.append(str(gate_id))
 	for from_index in range(gates.size()):
 		for to_index in range(gates.size()):
 			if from_index == to_index:

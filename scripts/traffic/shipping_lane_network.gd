@@ -14,7 +14,7 @@ var edges: Dictionary = {}       # edge_id -> directed record
 var blocks: Dictionary = {}      # block_id -> exclusive corridor record
 var signals: Dictionary = {}     # signal_id -> record
 var holding_slots: Dictionary = {} # holding_id -> record
-var port_gate_nodes: Dictionary = {} # port_id -> gate node id
+var port_gate_nodes: Dictionary = {} # port_id -> Array[String] of physical-quay gates
 var validation_issues: Array[Dictionary] = []
 var _outgoing_edge_ids: Dictionary = {} # node_id -> PackedStringArray
 
@@ -262,6 +262,10 @@ func rebuild_checksum() -> String:
 		var point := record.get("position", Vector2.ZERO) as Vector2
 		identity += "|H:%s:%s:%d,%d" % [slot_id, record.get("port_id", ""),
 			roundi(point.x), roundi(point.y)]
+	for port_id in _sorted_ids(port_gate_nodes):
+		identity += "|P:%s" % port_id
+		for gate_id in port_gate_nodes[port_id] as Array:
+			identity += ":%s" % str(gate_id)
 	var context := HashingContext.new()
 	context.start(HashingContext.HASH_SHA256)
 	context.update(identity.to_utf8_buffer())
@@ -302,6 +306,9 @@ func to_snapshot() -> Dictionary:
 		var record := (holding_slots[slot_id] as Dictionary).duplicate(true)
 		record["position"] = _vector_to_wire(record.get("position", Vector2.ZERO) as Vector2)
 		wire_holding[slot_id] = record
+	var wire_port_gates: Dictionary = {}
+	for port_id in _sorted_ids(port_gate_nodes):
+		wire_port_gates[port_id] = (port_gate_nodes[port_id] as Array).duplicate()
 	return {
 		"format_version": FORMAT_VERSION,
 		"layout_checksum": layout_checksum,
@@ -311,7 +318,7 @@ func to_snapshot() -> Dictionary:
 		"blocks": wire_blocks,
 		"signals": wire_signals,
 		"holding_slots": wire_holding,
-		"port_gate_nodes": port_gate_nodes.duplicate(true),
+		"port_gate_nodes": wire_port_gates,
 	}
 
 
@@ -346,7 +353,10 @@ static func from_snapshot(snapshot: Dictionary) -> ShippingLaneNetwork:
 		var record := ((snapshot.get("holding_slots", {}) as Dictionary)[slot_id] as Dictionary).duplicate(true)
 		record["position"] = _vector_from_wire(record.get("position", []))
 		restored.add_holding_slot(record)
-	restored.port_gate_nodes = (snapshot.get("port_gate_nodes", {}) as Dictionary).duplicate(true)
+	for port_id in _sorted_ids(snapshot.get("port_gate_nodes", {}) as Dictionary):
+		restored.port_gate_nodes[port_id] = Array(
+			(snapshot.get("port_gate_nodes", {}) as Dictionary)[port_id],
+		).duplicate()
 	var expected := str(snapshot.get("network_checksum", ""))
 	restored.rebuild_checksum()
 	if not expected.is_empty() and expected != restored.network_checksum:
