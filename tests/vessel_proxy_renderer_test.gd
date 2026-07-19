@@ -22,6 +22,10 @@ func _run() -> void:
 	_assert(general_mesh == same_mesh, "identical layouts reuse one mesh resource")
 	_assert(general_mesh.get_surface_count() <= 8, "proxy surface budget is bounded")
 	_assert(bulk_mesh.get_surface_count() <= 8, "bulk proxy surface budget is bounded")
+	_assert(_proxy_hull_is_visible(general_mesh),
+		"cached proxy keeps a bright, ocean-readable hull topside")
+	_assert(_proxy_hull_is_visible(bulk_mesh),
+		"every cached vessel type keeps its visible hull shell")
 	_assert(_mesh_vertex_count(general_mesh) > 1000,
 		"proxy preserves authored brick geometry instead of box placeholders")
 
@@ -81,6 +85,13 @@ func _mesh_vertex_count(mesh: ArrayMesh) -> int:
 		var arrays := mesh.surface_get_arrays(surface)
 		total += (arrays[Mesh.ARRAY_VERTEX] as PackedVector3Array).size()
 	return total
+
+
+func _proxy_hull_is_visible(mesh: ArrayMesh) -> bool:
+	if mesh == null or mesh.get_surface_count() == 0:
+		return false
+	var material := mesh.surface_get_material(0) as StandardMaterial3D
+	return material != null and material.albedo_color.get_luminance() >= 0.70
 
 
 func _assert(ok: bool, message: String) -> void:

@@ -13,6 +13,10 @@ const HEADING_RESPONSE := 7.0
 const MAX_PROXY_SURFACES := 8
 const MAX_PREDICTION_S := 0.45
 const MAX_PROXY_SPEED_MS := 24.0
+## Fleet proxies need a high-contrast topside at horizon scale. The normal dark
+## hull paint merges with the ocean once the full vessel has been demoted to a
+## cached MultiMesh, making a healthy proxy look as if its hull was missing.
+const PROXY_TOPSIDES_COLOR := Color(0.78, 0.80, 0.83)
 
 static var _mesh_cache: Dictionary = {} # visual key -> ArrayMesh
 static var _mesh_surface_counts: Dictionary = {}
@@ -367,7 +371,7 @@ static func _append_authored_hull(
 			- PassengerCatamaran.DEMIHULL_BEAM_M) * 0.5
 		for side in [-1.0, 1.0]:
 			_append_transformed_instance(target, MeshBuilder.lofted_hull_shell(
-				stations, Color(0.14, 0.16, 0.18), 0.9, 0.05, true),
+				stations, PROXY_TOPSIDES_COLOR, 0.9, 0.05, true),
 				Transform3D(Basis.IDENTITY, Vector3(hull_offset * side, 0.0, 0.0)))
 		var deck := MeshBuilder.box(
 			Vector3(beam, 0.1, loa), Color(0.38, 0.34, 0.28), 0.95, 0.0)
@@ -379,7 +383,7 @@ static func _append_authored_hull(
 		else CatalogHullVessel.make_physics_profile(config)
 	var stations := profile.make_stations()
 	_append_instance(target, MeshBuilder.lofted_hull_shell(
-		stations, Color(0.14, 0.16, 0.18), 0.9, 0.05))
+		stations, PROXY_TOPSIDES_COLOR, 0.9, 0.05))
 	_append_instance(target, MeshBuilder.pointed_deck_plate(
 		loa, beam, stations.deck_y + 0.1, 0.1, bow_frac,
 		Color(0.38, 0.34, 0.28), 0.95))
