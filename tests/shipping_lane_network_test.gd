@@ -43,16 +43,18 @@ func _test_shape(network: ShippingLaneNetwork, ports: Array[PortData]) -> void:
 	_check(network.blocks.size() == network.edges.size(), "every directed edge owns one block")
 	_check(network.signals.size() > 20, "block boundaries have signals")
 	_check(network.port_gate_nodes.size() == ports.size(), "every port publishes traffic gates")
-	_check(network.holding_slots.size() == ports.size() * 4, "every port has four holding slots")
+	_check(network.port_queue_slots.size() >= ports.size() * 2,
+		"ports have block-based inbound queue capacity")
+	_check(not network.passing_zones.is_empty(), "wide waterways publish passing zones")
 	for port in ports:
 		_check(network.port_gate_nodes.has(port.port_id), "%s has traffic gates" % port.port_id)
-		var hold_count := 0
+		var queue_count := 0
 		var junction_count := 0
-		for slot_value in network.holding_slots.values():
+		for slot_value in network.port_queue_slots.values():
 			var slot := slot_value as Dictionary
 			if String(slot.get("port_id", "")) == port.port_id:
-				hold_count += 1
-		_check(hold_count == 4, "%s has a complete holding queue" % port.port_id)
+				queue_count += 1
+		_check(queue_count >= 2, "%s has inbound queue blocks" % port.port_id)
 		for node_value in network.nodes.values():
 			var node := node_value as Dictionary
 			if String(node.get("port_id", "")) == port.port_id \
@@ -83,6 +85,11 @@ func _test_shape(network: ShippingLaneNetwork, ports: Array[PortData]) -> void:
 			unique_gates.size() == expected_junctions,
 			"%s does not collapse physical quays into a shared gate" % port.port_id,
 		)
+		var berth_count := 0
+		for token_value in network.berth_tokens.values():
+			if str((token_value as Dictionary).get("port_id", "")) == port.port_id:
+				berth_count += 1
+		_check(berth_count >= expected_junctions, "%s publishes reservable berths" % port.port_id)
 	for node_value in network.nodes.values():
 		var node := node_value as Dictionary
 		_check(
@@ -164,6 +171,12 @@ func _test_snapshot(network: ShippingLaneNetwork) -> void:
 	_check(restored.summary().get("errors", 0) == 0, "valid authority snapshot restores without errors")
 	_check(restored.nodes.size() == network.nodes.size(), "authority snapshot preserves nodes")
 	_check(restored.blocks.size() == network.blocks.size(), "authority snapshot preserves blocks")
+	_check(restored.port_queue_slots.size() == network.port_queue_slots.size(),
+		"authority snapshot preserves inbound queues")
+	_check(restored.berth_tokens.size() == network.berth_tokens.size(),
+		"authority snapshot preserves berth tokens")
+	_check(restored.passing_zones.size() == network.passing_zones.size(),
+		"authority snapshot preserves passing zones")
 
 
 func _test_reservations(network: ShippingLaneNetwork) -> void:
@@ -192,6 +205,79 @@ func _test_reservations(network: ShippingLaneNetwork) -> void:
 	var replica := ShippingLaneReservationService.new(network)
 	_check(replica.apply_authority_snapshot(snapshot), "reservation authority snapshot applies to replica")
 	_check(replica.snapshot() == snapshot, "reservation replica matches authority state")
+	_test_berth_queue_authority(network)
+	_test_passing_authority(network)
+
+
+func _test_berth_queue_authority(network: ShippingLaneNetwork) -> void:
+	var service := ShippingLaneReservationService.new(network)
+	var first_token := network.berth_tokens[network.sorted_berth_token_ids()[0]] as Dictionary
+	var port_id := str(first_token.get("port_id", ""))
+	var port_tokens := PackedStringArray()
+	for token_id in network.sorted_berth_token_ids():
+		if str((network.berth_tokens[token_id] as Dictionary).get("port_id", "")) == port_id:
+			port_tokens.append(token_id)
+	for index in range(port_tokens.size()):
+		var result := service.request_berth("berth-vessel-%d" % index, port_id)
+		_check(str(result.get("status", "")) == "assigned", "free quay assigns immediately")
+	var queued_id := "berth-vessel-queued"
+	var queued := service.request_berth(queued_id, port_id,
+		PackedStringArray([port_tokens[0]]))
+	_check(str(queued.get("status", "")) == "queued", "full port creates FIFO lane queue")
+	var second_queued_id := "berth-vessel-queued-second"
+	var second_queued := service.request_berth(second_queued_id, port_id,
+		PackedStringArray([port_tokens[0]]))
+	_check(str(second_queued.get("status", "")) == "queued", "queue accepts a second vessel")
+	var front_slot := service.assigned_queue_slot(queued_id, 0)
+	var second_slot := service.assigned_queue_slot(second_queued_id, 0)
+	_check(int(front_slot.get("queue_index", -1)) == 0, "FIFO head receives the front lane block")
+	_check(int(second_slot.get("queue_index", -1)) == 1, "next vessel receives the following lane block")
+	var queue_block_id := ""
+	var vessel_slots := service.queue_slots_for_vessel(queued_id)
+	if not vessel_slots.is_empty():
+		queue_block_id = str(vessel_slots[0].get("block_id", ""))
+	_check(not queue_block_id.is_empty(), "queued port has an inbound block")
+	if not queue_block_id.is_empty():
+		_check(not bool(service.try_reserve("unannounced-vessel",
+			PackedStringArray([queue_block_id])).get("ok", false)),
+			"vessel cannot enter port queue before requesting a berth")
+		_check(not service.occupy("unannounced-vessel", queue_block_id),
+			"direct occupancy cannot bypass berth queue authority")
+		_check(not bool(service.try_reserve(second_queued_id,
+			PackedStringArray([queue_block_id])).get("ok", false)),
+			"queued vessel cannot skip the FIFO lane position ahead of it")
+		_check(bool(service.try_reserve(queued_id,
+			PackedStringArray([queue_block_id])).get("ok", false)),
+			"queued vessel may occupy its inbound queue")
+	var second_block_id := str(second_slot.get("block_id", ""))
+	if not second_block_id.is_empty():
+		_check(bool(service.try_reserve(second_queued_id,
+			PackedStringArray([second_block_id])).get("ok", false)),
+			"second queued vessel may reserve its own FIFO lane position")
+	var promoted := service.release_berth("berth-vessel-0")
+	_check(str(promoted.get("vessel_id", "")) == queued_id, "berth release promotes FIFO head")
+	_check(not service.berth_assignment(queued_id).is_empty(), "promoted vessel owns the berth")
+	_check(int(service.assigned_queue_slot(second_queued_id, 0).get("queue_index", -1)) == 0,
+		"remaining vessel advances to the front queue block")
+	var authority_snapshot := service.snapshot()
+	var replica := ShippingLaneReservationService.new(network)
+	var authority_wire := JSON.parse_string(JSON.stringify(authority_snapshot)) as Dictionary
+	_check(replica.apply_authority_snapshot(authority_wire),
+		"berth and FIFO authority state replicates")
+	var replica_wire := JSON.parse_string(JSON.stringify(replica.snapshot())) as Dictionary
+	_check(replica_wire == authority_wire,
+		"berth queue replica is exact after JSON transport")
+
+
+func _test_passing_authority(network: ShippingLaneNetwork) -> void:
+	var service := ShippingLaneReservationService.new(network)
+	var zone_id := network.sorted_passing_zone_ids()[0]
+	_check(str(service.try_reserve_passing("invalid-vessel", zone_id, "sideways").get(
+		"reason", "")) == "invalid_travel_direction", "passing rejects an invalid direction")
+	var first := service.try_reserve_passing("passing-vessel", zone_id, "forward")
+	_check(bool(first.get("ok", false)), "passing vessel may atomically borrow an open opposing lane")
+	var blocked := service.try_reserve_passing("opposing-vessel", zone_id, "forward")
+	_check(not bool(blocked.get("ok", false)), "passing authority excludes conflicting traffic")
 
 
 func _check(condition: bool, label: String) -> void:

@@ -99,14 +99,15 @@ vessel agents and never advances a boat.
 
 - `ShippingLaneNetworkBuilder` converts `WorldLayout.waterway_centerlines` and
   every seeded `PortData.berth_plan` into quay manoeuvre pockets, port gates,
-  holding queues, port connectors, separated directional highways, regular
+  block-based inbound queues, port connectors, separated directional highways, regular
   blocks, and Factorio-style chain-signal regions.
 - `ShippingLaneNetwork` is the immutable authority record. It supports
   vessel-dimension-aware route queries, deterministic checksums, and snapshot
   round-tripping for either a local single-player authority or a future
   persistent server.
-- `ShippingLaneReservationService` atomically reserves blocks and compact
-  harbour interlocking groups. Its snapshot is the small mutable state that an
+- `ShippingLaneReservationService` atomically reserves blocks, berth tokens,
+  FIFO port queues, on-demand opposing-lane passing zones, and compact harbour
+  interlocking groups. Its snapshot is the small mutable state that an
   authority replicates; clients do not independently decide traffic outcomes.
 - `ShippingLaneDebugDraw` streams only the F3/freecam region around the current
   camera and remains completely unmaterialized while its gizmo layer is off.

@@ -5,7 +5,7 @@ extends RefCounted
 ## truth for a future local single-player authority and dedicated MP authority.
 ## It deliberately contains no BoatBody, autopilot, company, or vessel state.
 
-const FORMAT_VERSION := 1
+const FORMAT_VERSION := 2
 
 var layout_checksum := ""
 var network_checksum := ""
@@ -13,7 +13,9 @@ var nodes: Dictionary = {}       # node_id -> record
 var edges: Dictionary = {}       # edge_id -> directed record
 var blocks: Dictionary = {}      # block_id -> exclusive corridor record
 var signals: Dictionary = {}     # signal_id -> record
-var holding_slots: Dictionary = {} # holding_id -> record
+var port_queue_slots: Dictionary = {} # queue slot id -> inbound connector block record
+var berth_tokens: Dictionary = {} # berth token id -> one reservable quay station
+var passing_zones: Dictionary = {} # passing zone id -> deterministic opposing-lane block set
 var port_gate_nodes: Dictionary = {} # port_id -> Array[String] of physical-quay gates
 var validation_issues: Array[Dictionary] = []
 var _outgoing_edge_ids: Dictionary = {} # node_id -> PackedStringArray
@@ -87,15 +89,49 @@ func add_signal(record: Dictionary) -> bool:
 	return true
 
 
-func add_holding_slot(record: Dictionary) -> bool:
+func add_port_queue_slot(record: Dictionary) -> bool:
 	var slot_id := str(record.get("id", ""))
-	var node_id := str(record.get("node_id", ""))
-	if slot_id.is_empty() or holding_slots.has(slot_id) or not nodes.has(node_id):
+	var block_id := str(record.get("block_id", ""))
+	if slot_id.is_empty() or port_queue_slots.has(slot_id) or not blocks.has(block_id):
 		return false
 	var stored := record.duplicate(true)
 	stored["id"] = slot_id
+	stored["block_id"] = block_id
+	port_queue_slots[slot_id] = stored
+	return true
+
+
+func add_berth_token(record: Dictionary) -> bool:
+	var token_id := str(record.get("id", ""))
+	var node_id := str(record.get("node_id", ""))
+	if token_id.is_empty() or berth_tokens.has(token_id) or not nodes.has(node_id):
+		return false
+	var stored := record.duplicate(true)
+	stored["id"] = token_id
 	stored["node_id"] = node_id
-	holding_slots[slot_id] = stored
+	berth_tokens[token_id] = stored
+	return true
+
+
+func add_passing_zone(record: Dictionary) -> bool:
+	var zone_id := str(record.get("id", ""))
+	if zone_id.is_empty() or passing_zones.has(zone_id):
+		return false
+	var forward_blocks := PackedStringArray(record.get("forward_blocks", PackedStringArray()))
+	var reverse_blocks := PackedStringArray(record.get("reverse_blocks", PackedStringArray()))
+	if forward_blocks.is_empty() or reverse_blocks.is_empty():
+		return false
+	for block_id in forward_blocks:
+		if not blocks.has(block_id):
+			return false
+	for block_id in reverse_blocks:
+		if not blocks.has(block_id):
+			return false
+	var stored := record.duplicate(true)
+	stored["id"] = zone_id
+	stored["forward_blocks"] = forward_blocks
+	stored["reverse_blocks"] = reverse_blocks
+	passing_zones[zone_id] = stored
 	return true
 
 
@@ -134,8 +170,16 @@ func sorted_signal_ids() -> Array[String]:
 	return _sorted_ids(signals)
 
 
-func sorted_holding_slot_ids() -> Array[String]:
-	return _sorted_ids(holding_slots)
+func sorted_port_queue_slot_ids() -> Array[String]:
+	return _sorted_ids(port_queue_slots)
+
+
+func sorted_berth_token_ids() -> Array[String]:
+	return _sorted_ids(berth_tokens)
+
+
+func sorted_passing_zone_ids() -> Array[String]:
+	return _sorted_ids(passing_zones)
 
 
 func nearest_node(position: Vector2, allowed_kinds: PackedStringArray = PackedStringArray()) -> String:
@@ -257,11 +301,23 @@ func rebuild_checksum() -> String:
 		identity += "|S:%s:%s:%s" % [signal_id, record.get("kind", ""), record.get("node_id", "")]
 		for block_id in record.get("protected_blocks", PackedStringArray()) as PackedStringArray:
 			identity += ":%s" % block_id
-	for slot_id in _sorted_ids(holding_slots):
-		var record := holding_slots[slot_id] as Dictionary
+	for slot_id in _sorted_ids(port_queue_slots):
+		var record := port_queue_slots[slot_id] as Dictionary
 		var point := record.get("position", Vector2.ZERO) as Vector2
-		identity += "|H:%s:%s:%d,%d" % [slot_id, record.get("port_id", ""),
+		identity += "|Q:%s:%s:%s:%d:%d,%d" % [slot_id, record.get("port_id", ""),
+			record.get("block_id", ""), int(record.get("queue_index", -1)),
 			roundi(point.x), roundi(point.y)]
+	for token_id in _sorted_ids(berth_tokens):
+		var record := berth_tokens[token_id] as Dictionary
+		identity += "|T:%s:%s:%s:%s" % [token_id, record.get("port_id", ""),
+			record.get("node_id", ""), record.get("physical_quay_id", "")]
+	for zone_id in _sorted_ids(passing_zones):
+		var record := passing_zones[zone_id] as Dictionary
+		identity += "|Z:%s:%s" % [zone_id, record.get("waterway_id", "")]
+		for block_id in record.get("forward_blocks", PackedStringArray()) as PackedStringArray:
+			identity += ":F:%s" % block_id
+		for block_id in record.get("reverse_blocks", PackedStringArray()) as PackedStringArray:
+			identity += ":R:%s" % block_id
 	for port_id in _sorted_ids(port_gate_nodes):
 		identity += "|P:%s" % port_id
 		for gate_id in port_gate_nodes[port_id] as Array:
@@ -301,11 +357,20 @@ func to_snapshot() -> Dictionary:
 		record["protected_blocks"] = _strings_to_wire(
 			record.get("protected_blocks", PackedStringArray()) as PackedStringArray)
 		wire_signals[signal_id] = record
-	var wire_holding: Dictionary = {}
-	for slot_id in sorted_holding_slot_ids():
-		var record := (holding_slots[slot_id] as Dictionary).duplicate(true)
+	var wire_queue_slots: Dictionary = {}
+	for slot_id in sorted_port_queue_slot_ids():
+		var record := (port_queue_slots[slot_id] as Dictionary).duplicate(true)
 		record["position"] = _vector_to_wire(record.get("position", Vector2.ZERO) as Vector2)
-		wire_holding[slot_id] = record
+		wire_queue_slots[slot_id] = record
+	var wire_passing_zones: Dictionary = {}
+	for zone_id in sorted_passing_zone_ids():
+		var record := (passing_zones[zone_id] as Dictionary).duplicate(true)
+		record["position"] = _vector_to_wire(record.get("position", Vector2.ZERO) as Vector2)
+		record["forward_blocks"] = _strings_to_wire(
+			record.get("forward_blocks", PackedStringArray()) as PackedStringArray)
+		record["reverse_blocks"] = _strings_to_wire(
+			record.get("reverse_blocks", PackedStringArray()) as PackedStringArray)
+		wire_passing_zones[zone_id] = record
 	var wire_port_gates: Dictionary = {}
 	for port_id in _sorted_ids(port_gate_nodes):
 		wire_port_gates[port_id] = (port_gate_nodes[port_id] as Array).duplicate()
@@ -317,7 +382,9 @@ func to_snapshot() -> Dictionary:
 		"edges": wire_edges,
 		"blocks": wire_blocks,
 		"signals": wire_signals,
-		"holding_slots": wire_holding,
+		"port_queue_slots": wire_queue_slots,
+		"berth_tokens": berth_tokens.duplicate(true),
+		"passing_zones": wire_passing_zones,
 		"port_gate_nodes": wire_port_gates,
 	}
 
@@ -349,10 +416,19 @@ static func from_snapshot(snapshot: Dictionary) -> ShippingLaneNetwork:
 		var record := ((snapshot.get("signals", {}) as Dictionary)[signal_id] as Dictionary).duplicate(true)
 		record["protected_blocks"] = PackedStringArray(record.get("protected_blocks", []))
 		restored.add_signal(record)
-	for slot_id in _sorted_ids(snapshot.get("holding_slots", {}) as Dictionary):
-		var record := ((snapshot.get("holding_slots", {}) as Dictionary)[slot_id] as Dictionary).duplicate(true)
+	for slot_id in _sorted_ids(snapshot.get("port_queue_slots", {}) as Dictionary):
+		var record := ((snapshot.get("port_queue_slots", {}) as Dictionary)[slot_id] as Dictionary).duplicate(true)
 		record["position"] = _vector_from_wire(record.get("position", []))
-		restored.add_holding_slot(record)
+		restored.add_port_queue_slot(record)
+	for token_id in _sorted_ids(snapshot.get("berth_tokens", {}) as Dictionary):
+		var record := ((snapshot.get("berth_tokens", {}) as Dictionary)[token_id] as Dictionary).duplicate(true)
+		restored.add_berth_token(record)
+	for zone_id in _sorted_ids(snapshot.get("passing_zones", {}) as Dictionary):
+		var record := ((snapshot.get("passing_zones", {}) as Dictionary)[zone_id] as Dictionary).duplicate(true)
+		record["position"] = _vector_from_wire(record.get("position", []))
+		record["forward_blocks"] = PackedStringArray(record.get("forward_blocks", []))
+		record["reverse_blocks"] = PackedStringArray(record.get("reverse_blocks", []))
+		restored.add_passing_zone(record)
 	for port_id in _sorted_ids(snapshot.get("port_gate_nodes", {}) as Dictionary):
 		restored.port_gate_nodes[port_id] = Array(
 			(snapshot.get("port_gate_nodes", {}) as Dictionary)[port_id],
@@ -400,7 +476,9 @@ func summary() -> Dictionary:
 		"edges": edges.size(),
 		"blocks": blocks.size(),
 		"signals": signals.size(),
-		"holding_slots": holding_slots.size(),
+		"port_queue_slots": port_queue_slots.size(),
+		"berth_tokens": berth_tokens.size(),
+		"passing_zones": passing_zones.size(),
 		"ports": port_gate_nodes.size(),
 		"errors": errors,
 		"warnings": warnings,

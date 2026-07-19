@@ -6,18 +6,13 @@ extends RefCounted
 
 const BLOCK_TARGET_M := 320.0
 const CONNECTOR_BLOCK_M := 180.0
+const QUEUE_BLOCK_TARGET_M := 140.0
 const LANE_SEPARATION_M := 34.0
 const LANE_HALF_WIDTH_M := 24.0
 const SHORE_CLEARANCE_M := 10.0
-const PORT_HOLDING_COUNT := 4
-const HOLDING_SLOT_LATERAL_M := 150.0
-const HOLDING_SLOT_LONGITUDINAL_M := 180.0
-const HOLDING_MIN_TRAFFIC_CLEARANCE_M := 110.0
-const HOLDING_MIN_SHORE_CLEARANCE_M := 42.0
-const HOLDING_SEARCH_MIN_M := 300.0
-const HOLDING_SEARCH_MAX_M := 1050.0
-const HOLDING_SEARCH_STEP_M := 75.0
-const HOLDING_SEARCH_ANGLE_COUNT := 32
+const PASSING_MIN_WIDTH_M := 180.0
+const PASSING_ZONE_SEGMENTS := 3
+const PASSING_ZONE_STRIDE := 8
 const QUAY_CRAB_CLEARANCE_M := 48.0
 const QUAY_TIP_CLEARANCE_M := 85.0
 
@@ -25,14 +20,12 @@ var _layout: WorldLayout
 var _network: ShippingLaneNetwork
 var _navigation: WaterwayNavigation
 var _corridors: Dictionary = {} # waterway id -> directional node arrays
-var _pending_holdings: Array[Dictionary] = []
 
 
 func build(layout: WorldLayout, ports: Array) -> ShippingLaneNetwork:
 	_layout = layout
 	_network = ShippingLaneNetwork.new()
 	_corridors.clear()
-	_pending_holdings.clear()
 	if layout == null:
 		_network.validation_issues.append(_issue("error", "missing_layout", "World layout is missing"))
 		return _network
@@ -48,14 +41,6 @@ func build(layout: WorldLayout, ports: Array) -> ShippingLaneNetwork:
 		var data := raw as PortData
 		if data != null:
 			_build_port(data)
-	# Anchorages are selected only after every highway and port connector exists,
-	# so a later-built neighbouring port cannot put a lane through an earlier queue.
-	for pending in _pending_holdings:
-		_build_holding_slots(
-			pending.get("data") as PortData,
-			pending.get("gates", {}) as Dictionary,
-			pending.get("seaward", Vector2.ZERO) as Vector2,
-		)
 	validate(_network, layout)
 	_network.rebuild_checksum()
 	return _network
@@ -75,7 +60,7 @@ func validate(network: ShippingLaneNetwork, layout: WorldLayout) -> Array[Dictio
 			issues.append(_issue("error", "unblocked_edge", "Lane edge has no traffic block", edge_id,
 				points[0]))
 		var kind := str(edge.get("kind", ""))
-		if layout != null and kind not in ["quay_maneuver", "holding_link"]:
+		if layout != null and kind != "quay_maneuver":
 			var minimum_clearance := SHORE_CLEARANCE_M if kind in ["main_lane", "regional_lane"] else 1.0
 			for point in _sample_polyline(points, 60.0):
 				# The western main bus deliberately meets the open-world boundary,
@@ -139,36 +124,37 @@ func validate(network: ShippingLaneNetwork, layout: WorldLayout) -> Array[Dictio
 			if not network.nodes.has(gate_id):
 				issues.append(_issue("error", "unknown_port_gate",
 					"Port references an unknown quay gate", gate_id))
-		var has_holding := false
-		for slot in network.holding_slots.values():
+		var has_queue := false
+		for slot in network.port_queue_slots.values():
 			if str((slot as Dictionary).get("port_id", "")) == port_id:
-				has_holding = true
+				has_queue = true
 				break
-		if not has_holding:
-			issues.append(_issue("error", "missing_holding", "Port has no holding slots", port_id))
-	var traffic_segments := _nearby_traffic_segments(Vector2.ZERO, INF)
-	var holding_by_port: Dictionary = {}
-	for slot_id in network.sorted_holding_slot_ids():
-		var slot := network.holding_slots[slot_id] as Dictionary
-		var position := slot.get("position", Vector2.ZERO) as Vector2
-		var port_id := str(slot.get("port_id", ""))
-		if layout != null and layout.sample_signed_distance(position) < HOLDING_MIN_SHORE_CLEARANCE_M:
-			issues.append(_issue("error", "holding_shore_clearance",
-				"Holding slot is too close to shore", slot_id, position))
-		var traffic_clearance := _minimum_segment_clearance(position, traffic_segments)
-		if traffic_clearance < HOLDING_MIN_TRAFFIC_CLEARANCE_M:
-			issues.append(_issue("error", "holding_lane_clearance",
-				"Holding slot intrudes into a traffic corridor (%.1f m clear)" % traffic_clearance,
-				slot_id, position))
-		var siblings := holding_by_port.get(port_id, []) as Array
-		for sibling_value in siblings:
-			var sibling := sibling_value as Vector2
-			if sibling.distance_to(position) < minf(
-					HOLDING_SLOT_LATERAL_M, HOLDING_SLOT_LONGITUDINAL_M) * 0.9:
-				issues.append(_issue("error", "holding_slot_overlap",
-					"Holding slots do not have ship-sized separation", slot_id, position))
-		siblings.append(position)
-		holding_by_port[port_id] = siblings
+		if not has_queue:
+			issues.append(_issue("error", "missing_port_queue",
+				"Port has no inbound queue blocks", port_id))
+	for slot_id in network.sorted_port_queue_slot_ids():
+		var slot := network.port_queue_slots[slot_id] as Dictionary
+		var block_id := str(slot.get("block_id", ""))
+		if not network.blocks.has(block_id):
+			issues.append(_issue("error", "unknown_queue_block",
+				"Port queue slot references an unknown block", slot_id))
+			continue
+		var block := network.blocks[block_id] as Dictionary
+		if str(block.get("queue_slot_id", "")) != slot_id:
+			issues.append(_issue("error", "unmarked_queue_block",
+				"Inbound queue block is missing its queue identity", slot_id))
+	for token_id in network.sorted_berth_token_ids():
+		var token := network.berth_tokens[token_id] as Dictionary
+		if not network.nodes.has(str(token.get("node_id", ""))):
+			issues.append(_issue("error", "unknown_berth_token_node",
+				"Berth token references an unknown quay", token_id))
+	for zone_id in network.sorted_passing_zone_ids():
+		var zone := network.passing_zones[zone_id] as Dictionary
+		for key in ["forward_blocks", "reverse_blocks"]:
+			for block_id in zone.get(key, PackedStringArray()) as PackedStringArray:
+				if not network.blocks.has(block_id):
+					issues.append(_issue("error", "unknown_passing_block",
+						"Passing zone references an unknown lane block", zone_id))
 	network.validation_issues = issues
 	return issues
 
@@ -287,6 +273,8 @@ func _add_directional_corridor(
 	var reverse_points := _offset_path(centerline, -1.0, waterway_width_m)
 	var forward_ids := PackedStringArray()
 	var reverse_ids := PackedStringArray()
+	var forward_blocks := PackedStringArray()
+	var reverse_blocks := PackedStringArray()
 	for index in range(centerline.size()):
 		var forward_id := "%s:in:%03d" % [prefix, index]
 		var reverse_id := "%s:out:%03d" % [prefix, index]
@@ -309,7 +297,49 @@ func _add_directional_corridor(
 		# genuinely narrow single-track reach shares one exclusive signal block.
 		if waterway_width_m < 90.0:
 			_network.add_block_conflict(forward_block, reverse_block)
+		forward_blocks.append(forward_block)
+		reverse_blocks.append(reverse_block)
+	if waterway_width_m >= PASSING_MIN_WIDTH_M:
+		_build_passing_zones(waterway_id, centerline, forward_blocks, reverse_blocks)
 	return {"forward": forward_ids, "reverse": reverse_ids}
+
+
+func _build_passing_zones(
+		waterway_id: String,
+		centerline: PackedVector2Array,
+		forward_blocks: PackedStringArray,
+		reverse_blocks: PackedStringArray,
+) -> void:
+	var segment_count := mini(forward_blocks.size(), reverse_blocks.size())
+	var zone_number := 0
+	var start := 1
+	while start + PASSING_ZONE_SEGMENTS <= segment_count:
+		var zone_forward := PackedStringArray()
+		var zone_reverse := PackedStringArray()
+		for index in range(start, start + PASSING_ZONE_SEGMENTS):
+			zone_forward.append(forward_blocks[index])
+			zone_reverse.append(reverse_blocks[index])
+		var zone_id := "passing:%s:%02d" % [waterway_id, zone_number]
+		for block_id in zone_forward:
+			var block := _network.blocks[block_id] as Dictionary
+			block["passing_zone_id"] = zone_id
+			_network.blocks[block_id] = block
+		for block_id in zone_reverse:
+			var block := _network.blocks[block_id] as Dictionary
+			block["passing_zone_id"] = zone_id
+			_network.blocks[block_id] = block
+		var midpoint_index := mini(
+			start + PASSING_ZONE_SEGMENTS / 2, centerline.size() - 1)
+		_network.add_passing_zone({
+			"id": zone_id,
+			"waterway_id": waterway_id,
+			"position": centerline[midpoint_index],
+			"forward_blocks": zone_forward,
+			"reverse_blocks": zone_reverse,
+			"activation": "on_demand",
+		})
+		zone_number += 1
+		start += PASSING_ZONE_STRIDE
 
 
 func _build_port(data: PortData) -> void:
@@ -353,6 +383,13 @@ func _build_port(data: PortData) -> void:
 			"port_id": port_id, "berth_id": berth_id, "physical_quay_id": physical_quay_id,
 			"junction_node_id": junction_node, "quay_tip_position": quay_tip_position,
 			"direction": "station"})
+		_network.add_berth_token({
+			"id": "berth:%s:%s" % [port_id, berth_id],
+			"port_id": port_id,
+			"berth_id": berth_id,
+			"physical_quay_id": physical_quay_id,
+			"node_id": quay_node,
+		})
 		_network.add_node({"id": clearance_node, "kind": "quay_clearance", "position": clearance_position,
 			"port_id": port_id, "berth_id": berth_id, "direction": "maneuver"})
 		var maneuver_path := _add_bidirectional_segmented_path(
@@ -388,7 +425,6 @@ func _build_port(data: PortData) -> void:
 		gate_ids.append(str((junction_records[physical_quay_id] as Dictionary).get("id", "")))
 	_network.port_gate_nodes[port_id] = gate_ids
 	_connect_port_gates_to_lane(data, junction_records)
-	_pending_holdings.append({"data": data, "gates": junction_records, "seaward": seaward})
 
 
 func _connect_port_gates_to_lane(data: PortData, gates: Dictionary) -> void:
@@ -437,171 +473,65 @@ func _connect_port_gates_to_lane(data: PortData, gates: Dictionary) -> void:
 				data.port_id, str(gate.get("physical_quay_id", gate_index)), direction_index,
 			]
 			var connector_path := _add_bidirectional_segmented_path(
-				prefix, gate_id, target_id, points, "port_connector", true, CONNECTOR_BLOCK_M)
+				prefix, gate_id, target_id, points, "port_connector", true, QUEUE_BLOCK_TARGET_M)
+			_register_inbound_queue(data.port_id, gate, direction_index,
+				target_id, connector_path)
 			_network.add_signal({"id": "signal:%s:depart" % prefix,
 				"kind": "chain", "node_id": gate_id, "port_id": data.port_id,
 				"protected_blocks": connector_path.get("forward", PackedStringArray())})
+			var inbound := connector_path.get("reverse", PackedStringArray()) as PackedStringArray
 			_network.add_signal({"id": "signal:%s:arrive" % prefix,
 				"kind": "chain", "node_id": target_id, "port_id": data.port_id,
-				"protected_blocks": connector_path.get("reverse", PackedStringArray())})
+				"protected_blocks": PackedStringArray([inbound[0]]) \
+					if not inbound.is_empty() else PackedStringArray()})
 
 
-func _build_holding_slots(
-		data: PortData,
-		gates: Dictionary,
-		seaward: Vector2,
-) -> PackedStringArray:
-	var all_blocks := PackedStringArray()
-	var ordered_gates: Array = []
-	for gate_id in ShippingLaneNetwork._sorted_ids(gates):
-		ordered_gates.append(gates[gate_id])
-	if ordered_gates.is_empty():
-		return all_blocks
-	var gate_centroid := Vector2.ZERO
-	for gate_value in ordered_gates:
-		gate_centroid += (gate_value as Dictionary).get("position", Vector2.ZERO) as Vector2
-	gate_centroid /= float(ordered_gates.size())
-	var positions := _find_holding_basin(gate_centroid, seaward)
-	for index in range(positions.size()):
-		var position := positions[index]
-		var gate := _nearest_gate(ordered_gates, position)
-		var gate_id := str(gate.get("id", ""))
-		var gate_position := gate.get("position", Vector2.ZERO) as Vector2
-		var node_id := "port:%s:holding:%02d" % [data.port_id, index]
-		_network.add_node({"id": node_id, "kind": "holding", "position": position,
-			"port_id": data.port_id, "holding_index": index})
-		var slot_id := "holding:%s:%02d" % [data.port_id, index]
-		_network.add_holding_slot({"id": slot_id, "node_id": node_id,
-			"port_id": data.port_id, "position": position, "queue_index": index})
-		var link_points := _safe_connector_points(gate_position, position)
-		var path := _add_bidirectional_segmented_path(slot_id, gate_id, node_id,
-			link_points, "holding_link", true)
-		all_blocks.append_array(_path_blocks(path))
-		_network.add_signal({"id": "signal:%s:enter" % slot_id, "kind": "chain",
-			"node_id": gate_id, "port_id": data.port_id,
-			"protected_blocks": path.get("forward", PackedStringArray())})
-		_network.add_signal({"id": "signal:%s:exit" % slot_id, "kind": "chain",
-			"node_id": node_id, "port_id": data.port_id,
-			"protected_blocks": path.get("reverse", PackedStringArray())})
-	return all_blocks
-
-
-func _find_holding_basin(origin: Vector2, seaward: Vector2) -> PackedVector2Array:
-	var traffic_segments := _nearby_traffic_segments(origin, HOLDING_SEARCH_MAX_M + 500.0)
-	var best_positions := PackedVector2Array()
-	var best_score := -INF
-	var best_relaxed_positions := PackedVector2Array()
-	var best_relaxed_score := -INF
-	var radius := HOLDING_SEARCH_MIN_M
-	while radius <= HOLDING_SEARCH_MAX_M + 0.1:
-		for angle_index in range(HOLDING_SEARCH_ANGLE_COUNT):
-			var angle := TAU * float(angle_index) / float(HOLDING_SEARCH_ANGLE_COUNT)
-			var radial := seaward.rotated(angle).normalized()
-			var lateral := Vector2(-radial.y, radial.x)
-			var center := origin + radial * radius
-			var positions := PackedVector2Array([
-				center - lateral * HOLDING_SLOT_LATERAL_M * 0.5 \
-					- radial * HOLDING_SLOT_LONGITUDINAL_M * 0.5,
-				center + lateral * HOLDING_SLOT_LATERAL_M * 0.5 \
-					- radial * HOLDING_SLOT_LONGITUDINAL_M * 0.5,
-				center - lateral * HOLDING_SLOT_LATERAL_M * 0.5 \
-					+ radial * HOLDING_SLOT_LONGITUDINAL_M * 0.5,
-				center + lateral * HOLDING_SLOT_LATERAL_M * 0.5 \
-					+ radial * HOLDING_SLOT_LONGITUDINAL_M * 0.5,
-			])
-			var quality := _holding_basin_quality(positions, traffic_segments)
-			var traffic_clearance := float(quality.get("traffic_clearance", -INF))
-			var shore_clearance := float(quality.get("shore_clearance", -INF))
-			var score := minf(traffic_clearance, 420.0) * 2.5 \
-				+ minf(shore_clearance, 240.0) - radius * 0.10
-			if score > best_relaxed_score:
-				best_relaxed_score = score
-				best_relaxed_positions = positions
-			if traffic_clearance >= HOLDING_MIN_TRAFFIC_CLEARANCE_M \
-					and shore_clearance >= HOLDING_MIN_SHORE_CLEARANCE_M \
-					and score > best_score:
-				best_score = score
-				best_positions = positions
-		radius += HOLDING_SEARCH_STEP_M
-	if not best_positions.is_empty():
-		return best_positions
-	_network.validation_issues.append(_issue(
-		"warning", "relaxed_holding_basin",
-		"No fully clear anchorage basin was available; using the safest nearby water",
-		"", _holding_center(best_relaxed_positions),
-	))
-	return best_relaxed_positions
-
-
-func _holding_basin_quality(positions: PackedVector2Array, traffic_segments: Array) -> Dictionary:
-	var minimum_traffic := INF
-	var minimum_shore := INF
-	for position in positions:
-		minimum_shore = minf(minimum_shore, _layout.sample_signed_distance(position))
-		minimum_traffic = minf(
-			minimum_traffic, _minimum_segment_clearance(position, traffic_segments))
-	return {"traffic_clearance": minimum_traffic, "shore_clearance": minimum_shore}
-
-
-func _nearby_traffic_segments(origin: Vector2, radius: float) -> Array:
-	var segments: Array = []
-	for edge_id in _network.sorted_edge_ids():
-		var edge := _network.edges[edge_id] as Dictionary
-		var kind := str(edge.get("kind", ""))
-		if kind in ["holding_link", "quay_maneuver"]:
-			continue
+func _register_inbound_queue(
+		port_id: String,
+		gate: Dictionary,
+		direction_index: int,
+		entry_node_id: String,
+		connector_path: Dictionary,
+) -> void:
+	var inbound := connector_path.get("reverse", PackedStringArray()) as PackedStringArray
+	var physical_quay_id := str(gate.get("physical_quay_id", ""))
+	# Reverse blocks are stored in travel order from the highway toward the quay.
+	# Queue index zero is the front position closest to the assigned berth.
+	for queue_index in range(inbound.size()):
+		var block_id := inbound[inbound.size() - 1 - queue_index]
+		var block := _network.blocks.get(block_id, {}) as Dictionary
+		var edge := _network.edges.get(str(block.get("edge_id", "")), {}) as Dictionary
 		var points := edge.get("points", PackedVector2Array()) as PackedVector2Array
-		var half_width := float(edge.get("lane_width_m", 0.0)) * 0.5
-		for index in range(points.size() - 1):
-			var a := points[index]
-			var b := points[index + 1]
-			if _distance_to_segment(origin, a, b) > radius:
-				continue
-			segments.append({"a": a, "b": b, "half_width_m": half_width})
-	return segments
+		var position := points[0].lerp(points[-1], 0.5) if points.size() >= 2 else Vector2.ZERO
+		var slot_id := "queue:%s:%s:%d:%02d" % [
+			port_id, physical_quay_id, direction_index, queue_index,
+		]
+		block["queue_slot_id"] = slot_id
+		block["queue_port_id"] = port_id
+		block["queue_physical_quay_id"] = physical_quay_id
+		block["queue_direction_index"] = direction_index
+		block["queue_index"] = queue_index
+		_network.blocks[block_id] = block
+		_network.add_port_queue_slot({
+			"id": slot_id,
+			"port_id": port_id,
+			"physical_quay_id": physical_quay_id,
+			"gate_node_id": str(gate.get("id", "")),
+			"entry_node_id": entry_node_id,
+			"direction_index": direction_index,
+			"queue_index": queue_index,
+			"block_id": block_id,
+			"position": position,
+		})
+		_network.add_signal({
+			"id": "signal:%s" % slot_id,
+			"kind": "regular",
+			"node_id": str(edge.get("from_node_id", "")),
+			"port_id": port_id,
+			"protected_blocks": PackedStringArray([block_id]),
+		})
 
 
-static func _minimum_segment_clearance(position: Vector2, segments: Array) -> float:
-	var clearance := INF
-	for segment_value in segments:
-		var segment := segment_value as Dictionary
-		var distance := _distance_to_segment(position,
-			segment.get("a", position) as Vector2,
-			segment.get("b", position) as Vector2)
-		distance -= float(segment.get("half_width_m", 0.0))
-		clearance = minf(clearance, distance)
-	return clearance
-
-
-func _nearest_gate(gates: Array, position: Vector2) -> Dictionary:
-	var nearest := gates[0] as Dictionary
-	var nearest_distance := INF
-	for gate_value in gates:
-		var gate := gate_value as Dictionary
-		var gate_position := gate.get("position", position) as Vector2
-		var distance := gate_position.distance_squared_to(position)
-		if distance < nearest_distance:
-			nearest_distance = distance
-			nearest = gate
-	return nearest
-
-
-static func _holding_center(positions: PackedVector2Array) -> Vector2:
-	if positions.is_empty():
-		return Vector2.ZERO
-	var center := Vector2.ZERO
-	for position in positions:
-		center += position
-	return center / float(positions.size())
-
-
-static func _distance_to_segment(point: Vector2, a: Vector2, b: Vector2) -> float:
-	var ab := b - a
-	var length_squared := ab.length_squared()
-	if length_squared < 0.001:
-		return point.distance_to(a)
-	var t := clampf((point - a).dot(ab) / length_squared, 0.0, 1.0)
-	return point.distance_to(a + ab * t)
 
 
 func _ordered_quay_gates(gates: Dictionary, corridor_ids: PackedStringArray,
@@ -793,8 +723,8 @@ func _add_edge_with_block(
 		chain_region: bool,
 		waterway_width_m: float = 120.0,
 ) -> String:
-	var speed := 4.0 if kind in ["quay_maneuver", "port_approach", "port_merge", "holding_link"] else 7.2
-	var close_quarters := kind in ["quay_maneuver", "port_approach", "port_merge", "holding_link", "port_connector"]
+	var speed := 4.0 if kind in ["quay_maneuver", "port_approach", "port_merge"] else 7.2
+	var close_quarters := kind in ["quay_maneuver", "port_approach", "port_merge", "port_connector"]
 	var width := 34.0 if close_quarters else minf(maxf(waterway_width_m * 0.14, 30.0), 34.0)
 	_network.add_edge({
 		"id": edge_id,
@@ -813,7 +743,7 @@ func _add_edge_with_block(
 	_network.add_block({"id": block_id, "edge_id": edge_id,
 		"length_m": ShippingLaneNetwork._polyline_length(points), "kind": kind,
 		"chain_region": chain_region})
-	if not chain_region and kind not in ["holding_link", "waterway_junction", "ocean_merge"]:
+	if not chain_region and kind not in ["waterway_junction", "ocean_merge"]:
 		_network.add_signal({"id": "signal:%s" % edge_id, "kind": "regular",
 			"node_id": from_id, "protected_blocks": PackedStringArray([block_id])})
 	return block_id

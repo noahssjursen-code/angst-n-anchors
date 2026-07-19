@@ -22,7 +22,8 @@ const COLOR_BOUNDARY := Color(0.74, 0.88, 0.92, 0.26)
 const COLOR_BLOCK := Color(0.92, 0.96, 1.0, 0.72)
 const COLOR_REGULAR_SIGNAL := Color(0.28, 1.0, 0.38, 1.0)
 const COLOR_CHAIN_SIGNAL := Color(0.35, 0.74, 1.0, 1.0)
-const COLOR_HOLDING := Color(0.92, 0.35, 1.0, 0.95)
+const COLOR_QUEUE := Color(0.92, 0.35, 1.0, 0.95)
+const COLOR_PASSING := Color(0.35, 0.95, 0.78, 0.9)
 const COLOR_GATE := Color(1.0, 0.68, 0.18, 1.0)
 const COLOR_ERROR := Color(1.0, 0.10, 0.22, 1.0)
 
@@ -140,7 +141,8 @@ func _rebuild(center: Vector3) -> void:
 		_add_line_mesh(batches[color_key] as PackedVector3Array, _color_from_key(String(color_key)))
 
 	_draw_nodes(visible_node_ids, center)
-	_draw_holding_slots(center)
+	_draw_port_queue_slots(center)
+	_draw_passing_zones(center)
 	_draw_validation_issues(center)
 	_rebuild_count += 1
 	_last_rebuild_ms = float(Time.get_ticks_usec() - started_usec) / 1000.0
@@ -191,15 +193,30 @@ func _draw_nodes(visible_node_ids: Dictionary, center: Vector3) -> void:
 	_add_line_mesh(chain_vertices, COLOR_CHAIN_SIGNAL)
 
 
-func _draw_holding_slots(center: Vector3) -> void:
-	for slot_id in network.sorted_holding_slot_ids():
-		var slot := network.holding_slots[slot_id] as Dictionary
+func _draw_port_queue_slots(center: Vector3) -> void:
+	var vertices := PackedVector3Array()
+	for slot_id in network.sorted_port_queue_slot_ids():
+		var slot := network.port_queue_slots[slot_id] as Dictionary
 		var point := slot.get("position", Vector2.ZERO) as Vector2
 		var position := Vector3(point.x, WATER_Y + 0.5, point.y)
 		if Vector2(position.x - center.x, position.z - center.z).length_squared() > draw_radius * draw_radius:
 			continue
-		_add_cross(position, 18.0, COLOR_HOLDING)
-		_add_label(position + Vector3(0.0, 4.0, 0.0), "HOLD %d" % (int(slot.get("queue_index", 0)) + 1), COLOR_HOLDING)
+		vertices = _append_cross(vertices, position, 3.5)
+		_add_label(position + Vector3(0.0, 2.0, 0.0),
+			"Q%d" % (int(slot.get("queue_index", 0)) + 1), COLOR_QUEUE)
+	_add_line_mesh(vertices, COLOR_QUEUE)
+
+
+func _draw_passing_zones(center: Vector3) -> void:
+	var vertices := PackedVector3Array()
+	for zone_id in network.sorted_passing_zone_ids():
+		var zone := network.passing_zones[zone_id] as Dictionary
+		var point := zone.get("position", Vector2.ZERO) as Vector2
+		var position := Vector3(point.x, WATER_Y + 0.35, point.y)
+		if Vector2(position.x - center.x, position.z - center.z).length_squared() > draw_radius * draw_radius:
+			continue
+		vertices = _append_cross(vertices, position, 5.0)
+	_add_line_mesh(vertices, COLOR_PASSING)
 
 
 func _draw_validation_issues(center: Vector3) -> void:
@@ -341,7 +358,7 @@ func _material(color: Color) -> StandardMaterial3D:
 
 func _edge_color(edge: Dictionary) -> Color:
 	var kind := String(edge.get("kind", ""))
-	if kind == "port_approach" or kind == "holding_link":
+	if kind == "port_approach":
 		return COLOR_APPROACH
 	if kind == "quay_maneuver":
 		return COLOR_QUAY

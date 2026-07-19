@@ -234,11 +234,12 @@ func _build_shipping_lane_network(t: Node, defs: Array[PortDefinition]) -> void:
 	add_child(debug_draw)
 	var summary := _shipping_lane_network.summary()
 	print(
-		"Shipping lanes: %d nodes, %d edges, %d blocks, %d signals, %d holding slots, %d errors"
+		"Shipping lanes: %d nodes, %d edges, %d blocks, %d signals, %d queue slots, %d berths, %d passing zones, %d errors"
 		% [
 			int(summary.get("nodes", 0)), int(summary.get("edges", 0)),
 			int(summary.get("blocks", 0)), int(summary.get("signals", 0)),
-			int(summary.get("holding_slots", 0)), int(summary.get("errors", 0)),
+			int(summary.get("port_queue_slots", 0)), int(summary.get("berth_tokens", 0)),
+			int(summary.get("passing_zones", 0)), int(summary.get("errors", 0)),
 		]
 	)
 	if t != null:
