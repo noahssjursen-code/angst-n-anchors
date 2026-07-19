@@ -25,6 +25,7 @@ const COLOR_CHAIN_SIGNAL := Color(0.35, 0.74, 1.0, 1.0)
 const COLOR_QUEUE := Color(0.92, 0.35, 1.0, 0.95)
 const COLOR_PASSING := Color(0.35, 0.95, 0.78, 0.9)
 const COLOR_GATE := Color(1.0, 0.68, 0.18, 1.0)
+const COLOR_BREAKOFF := Color(0.20, 1.0, 0.92, 1.0)
 const COLOR_ERROR := Color(1.0, 0.10, 0.22, 1.0)
 
 var network: ShippingLaneNetwork
@@ -143,6 +144,7 @@ func _rebuild(center: Vector3) -> void:
 	_draw_nodes(visible_node_ids, center)
 	_draw_port_queue_slots(center)
 	_draw_passing_zones(center)
+	_draw_port_breakoffs(center)
 	_draw_validation_issues(center)
 	_rebuild_count += 1
 	_last_rebuild_ms = float(Time.get_ticks_usec() - started_usec) / 1000.0
@@ -217,6 +219,18 @@ func _draw_passing_zones(center: Vector3) -> void:
 			continue
 		vertices = _append_cross(vertices, position, 5.0)
 	_add_line_mesh(vertices, COLOR_PASSING)
+
+
+func _draw_port_breakoffs(center: Vector3) -> void:
+	for breakoff_id in network.sorted_port_breakoff_ids():
+		var record := network.port_breakoffs[breakoff_id] as Dictionary
+		var point := record.get("position", Vector2.ZERO) as Vector2
+		var position := Vector3(point.x, WATER_Y + 0.8, point.y)
+		if Vector2(position.x - center.x, position.z - center.z).length_squared() \
+				> draw_radius * draw_radius:
+			continue
+		_add_marker(position, 6.5, COLOR_BREAKOFF,
+			"BREAKOFF · %s" % str(record.get("port_id", "")))
 
 
 func _draw_validation_issues(center: Vector3) -> void:

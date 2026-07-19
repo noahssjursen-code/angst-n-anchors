@@ -5,7 +5,7 @@ extends RefCounted
 ## truth for a future local single-player authority and dedicated MP authority.
 ## It deliberately contains no BoatBody, autopilot, company, or vessel state.
 
-const FORMAT_VERSION := 2
+const FORMAT_VERSION := 3
 
 var layout_checksum := ""
 var network_checksum := ""
@@ -17,6 +17,7 @@ var port_queue_slots: Dictionary = {} # queue slot id -> inbound connector block
 var berth_tokens: Dictionary = {} # berth token id -> one reservable quay station
 var passing_zones: Dictionary = {} # passing zone id -> deterministic opposing-lane block set
 var port_gate_nodes: Dictionary = {} # port_id -> Array[String] of physical-quay gates
+var port_breakoffs: Dictionary = {} # breakoff id -> legal lane/open-water transition
 var validation_issues: Array[Dictionary] = []
 var _outgoing_edge_ids: Dictionary = {} # node_id -> PackedStringArray
 
@@ -135,6 +136,26 @@ func add_passing_zone(record: Dictionary) -> bool:
 	return true
 
 
+func add_port_breakoff(record: Dictionary) -> bool:
+	var breakoff_id := str(record.get("id", ""))
+	var lane_node_id := str(record.get("lane_node_id", ""))
+	var gate_node_id := str(record.get("gate_node_id", ""))
+	if breakoff_id.is_empty() or port_breakoffs.has(breakoff_id) \
+			or not nodes.has(lane_node_id) or not nodes.has(gate_node_id):
+		return false
+	var stored := record.duplicate(true)
+	stored["id"] = breakoff_id
+	stored["lane_node_id"] = lane_node_id
+	stored["gate_node_id"] = gate_node_id
+	stored["position"] = (nodes[lane_node_id] as Dictionary).get("position", Vector2.ZERO)
+	stored["outbound_edge_ids"] = PackedStringArray(
+		stored.get("outbound_edge_ids", PackedStringArray()))
+	stored["inbound_edge_ids"] = PackedStringArray(
+		stored.get("inbound_edge_ids", PackedStringArray()))
+	port_breakoffs[breakoff_id] = stored
+	return true
+
+
 func add_block_conflict(a_id: String, b_id: String) -> void:
 	if a_id == b_id or not blocks.has(a_id) or not blocks.has(b_id):
 		return
@@ -180,6 +201,23 @@ func sorted_berth_token_ids() -> Array[String]:
 
 func sorted_passing_zone_ids() -> Array[String]:
 	return _sorted_ids(passing_zones)
+
+
+func sorted_port_breakoff_ids() -> Array[String]:
+	return _sorted_ids(port_breakoffs)
+
+
+func breakoffs_for_port(port_id: String, physical_quay_id := "") -> Array[Dictionary]:
+	var result: Array[Dictionary] = []
+	for breakoff_id in sorted_port_breakoff_ids():
+		var record := port_breakoffs[breakoff_id] as Dictionary
+		if str(record.get("port_id", "")) != port_id:
+			continue
+		if not physical_quay_id.is_empty() \
+				and str(record.get("physical_quay_id", "")) != physical_quay_id:
+			continue
+		result.append(record)
+	return result
 
 
 func nearest_node(position: Vector2, allowed_kinds: PackedStringArray = PackedStringArray()) -> String:
@@ -229,17 +267,17 @@ func route_edge_ids(
 ) -> PackedStringArray:
 	if not nodes.has(from_node_id) or not nodes.has(to_node_id):
 		return PackedStringArray()
-	var frontier: Array[String] = [from_node_id]
+	var frontier: Array[Dictionary] = []
+	_heap_push(frontier, {"node_id": from_node_id, "cost": 0.0})
 	var distance := {from_node_id: 0.0}
 	var previous_node: Dictionary = {}
 	var previous_edge: Dictionary = {}
 	while not frontier.is_empty():
-		var best_index := 0
-		for index in range(1, frontier.size()):
-			if float(distance.get(frontier[index], INF)) < float(distance.get(frontier[best_index], INF)):
-				best_index = index
-		var current := frontier[best_index]
-		frontier.remove_at(best_index)
+		var entry := _heap_pop(frontier)
+		var current := str(entry.get("node_id", ""))
+		var current_cost := float(entry.get("cost", INF))
+		if current_cost > float(distance.get(current, INF)) + 0.0001:
+			continue
 		if current == to_node_id:
 			break
 		for connection in outgoing_edges(current):
@@ -255,8 +293,7 @@ func route_edge_ids(
 			distance[next_id] = candidate
 			previous_node[next_id] = current
 			previous_edge[next_id] = str(connection.get("id", ""))
-			if not frontier.has(next_id):
-				frontier.append(next_id)
+			_heap_push(frontier, {"node_id": next_id, "cost": candidate})
 	if not distance.has(to_node_id):
 		return PackedStringArray()
 	var reversed := PackedStringArray()
@@ -270,6 +307,51 @@ func route_edge_ids(
 	for index in range(reversed.size() - 1, -1, -1):
 		result.append(reversed[index])
 	return result
+
+
+static func _heap_push(heap: Array[Dictionary], entry: Dictionary) -> void:
+	heap.append(entry)
+	var index := heap.size() - 1
+	while index > 0:
+		var parent := (index - 1) / 2
+		if not _heap_entry_less(heap[index], heap[parent]):
+			break
+		var swap := heap[parent]
+		heap[parent] = heap[index]
+		heap[index] = swap
+		index = parent
+
+
+static func _heap_pop(heap: Array[Dictionary]) -> Dictionary:
+	var result := heap[0]
+	var tail := heap.pop_back() as Dictionary
+	if heap.is_empty():
+		return result
+	heap[0] = tail
+	var index := 0
+	while true:
+		var left := index * 2 + 1
+		if left >= heap.size():
+			break
+		var right := left + 1
+		var smallest := left
+		if right < heap.size() and _heap_entry_less(heap[right], heap[left]):
+			smallest = right
+		if not _heap_entry_less(heap[smallest], heap[index]):
+			break
+		var swap := heap[index]
+		heap[index] = heap[smallest]
+		heap[smallest] = swap
+		index = smallest
+	return result
+
+
+static func _heap_entry_less(a: Dictionary, b: Dictionary) -> bool:
+	var a_cost := float(a.get("cost", INF))
+	var b_cost := float(b.get("cost", INF))
+	if not is_equal_approx(a_cost, b_cost):
+		return a_cost < b_cost
+	return str(a.get("node_id", "")) < str(b.get("node_id", ""))
 
 
 func rebuild_checksum() -> String:
@@ -322,6 +404,16 @@ func rebuild_checksum() -> String:
 		identity += "|P:%s" % port_id
 		for gate_id in port_gate_nodes[port_id] as Array:
 			identity += ":%s" % str(gate_id)
+	for breakoff_id in sorted_port_breakoff_ids():
+		var record := port_breakoffs[breakoff_id] as Dictionary
+		var point := record.get("position", Vector2.ZERO) as Vector2
+		identity += "|X:%s:%s:%s:%s:%d,%d" % [breakoff_id,
+			record.get("port_id", ""), record.get("gate_node_id", ""),
+			record.get("lane_node_id", ""), roundi(point.x), roundi(point.y)]
+		for edge_id in record.get("outbound_edge_ids", PackedStringArray()) as PackedStringArray:
+			identity += ":O:%s" % edge_id
+		for edge_id in record.get("inbound_edge_ids", PackedStringArray()) as PackedStringArray:
+			identity += ":I:%s" % edge_id
 	var context := HashingContext.new()
 	context.start(HashingContext.HASH_SHA256)
 	context.update(identity.to_utf8_buffer())
@@ -374,6 +466,15 @@ func to_snapshot() -> Dictionary:
 	var wire_port_gates: Dictionary = {}
 	for port_id in _sorted_ids(port_gate_nodes):
 		wire_port_gates[port_id] = (port_gate_nodes[port_id] as Array).duplicate()
+	var wire_breakoffs: Dictionary = {}
+	for breakoff_id in sorted_port_breakoff_ids():
+		var record := (port_breakoffs[breakoff_id] as Dictionary).duplicate(true)
+		record["position"] = _vector_to_wire(record.get("position", Vector2.ZERO) as Vector2)
+		record["outbound_edge_ids"] = _strings_to_wire(
+			record.get("outbound_edge_ids", PackedStringArray()) as PackedStringArray)
+		record["inbound_edge_ids"] = _strings_to_wire(
+			record.get("inbound_edge_ids", PackedStringArray()) as PackedStringArray)
+		wire_breakoffs[breakoff_id] = record
 	return {
 		"format_version": FORMAT_VERSION,
 		"layout_checksum": layout_checksum,
@@ -386,6 +487,7 @@ func to_snapshot() -> Dictionary:
 		"berth_tokens": berth_tokens.duplicate(true),
 		"passing_zones": wire_passing_zones,
 		"port_gate_nodes": wire_port_gates,
+		"port_breakoffs": wire_breakoffs,
 	}
 
 
@@ -433,6 +535,13 @@ static func from_snapshot(snapshot: Dictionary) -> ShippingLaneNetwork:
 		restored.port_gate_nodes[port_id] = Array(
 			(snapshot.get("port_gate_nodes", {}) as Dictionary)[port_id],
 		).duplicate()
+	for breakoff_id in _sorted_ids(snapshot.get("port_breakoffs", {}) as Dictionary):
+		var record := ((snapshot.get("port_breakoffs", {}) as Dictionary)[breakoff_id] \
+			as Dictionary).duplicate(true)
+		record["position"] = _vector_from_wire(record.get("position", []))
+		record["outbound_edge_ids"] = PackedStringArray(record.get("outbound_edge_ids", []))
+		record["inbound_edge_ids"] = PackedStringArray(record.get("inbound_edge_ids", []))
+		restored.add_port_breakoff(record)
 	var expected := str(snapshot.get("network_checksum", ""))
 	restored.rebuild_checksum()
 	if not expected.is_empty() and expected != restored.network_checksum:
@@ -479,6 +588,7 @@ func summary() -> Dictionary:
 		"port_queue_slots": port_queue_slots.size(),
 		"berth_tokens": berth_tokens.size(),
 		"passing_zones": passing_zones.size(),
+		"port_breakoffs": port_breakoffs.size(),
 		"ports": port_gate_nodes.size(),
 		"errors": errors,
 		"warnings": warnings,

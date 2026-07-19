@@ -15,6 +15,7 @@ const PASSING_ZONE_SEGMENTS := 3
 const PASSING_ZONE_STRIDE := 8
 const QUAY_CRAB_CLEARANCE_M := 48.0
 const QUAY_TIP_CLEARANCE_M := 85.0
+const BREAKOFF_MIN_PORT_CLEARANCE_M := 180.0
 
 var _layout: WorldLayout
 var _network: ShippingLaneNetwork
@@ -148,6 +149,20 @@ func validate(network: ShippingLaneNetwork, layout: WorldLayout) -> Array[Dictio
 		if not network.nodes.has(str(token.get("node_id", ""))):
 			issues.append(_issue("error", "unknown_berth_token_node",
 				"Berth token references an unknown quay", token_id))
+	for breakoff_id in network.sorted_port_breakoff_ids():
+		var breakoff := network.port_breakoffs[breakoff_id] as Dictionary
+		var lane_node := network.node(str(breakoff.get("lane_node_id", "")))
+		var gate_node := network.node(str(breakoff.get("gate_node_id", "")))
+		if str(lane_node.get("kind", "")) not in ["main_lane", "regional_lane"]:
+			issues.append(_issue("error", "breakoff_inside_port",
+				"Breakoff must lie on a regional or main lane beyond port control", breakoff_id,
+				breakoff.get("position", Vector2.ZERO) as Vector2))
+		if not gate_node.is_empty() and (gate_node.get("position", Vector2.ZERO) as Vector2) \
+				.distance_to(breakoff.get("position", Vector2.ZERO) as Vector2) \
+				< BREAKOFF_MIN_PORT_CLEARANCE_M:
+			issues.append(_issue("error", "breakoff_too_close",
+				"Breakoff is still inside the port approach envelope", breakoff_id,
+				breakoff.get("position", Vector2.ZERO) as Vector2))
 	for zone_id in network.sorted_passing_zone_ids():
 		var zone := network.passing_zones[zone_id] as Dictionary
 		for key in ["forward_blocks", "reverse_blocks"]:
@@ -461,11 +476,13 @@ func _connect_port_gates_to_lane(data: PortData, gates: Dictionary) -> void:
 		var gate_id := str(gate.get("id", ""))
 		var gate_position := gate.get("position", Vector2.ZERO) as Vector2
 		var lane_index := mini(first_index + gate_index, available_count - 1)
-		var targets := PackedStringArray([forward_ids[lane_index], reverse_ids[lane_index]])
 		var connector_branches: Array[Dictionary] = []
-		for direction_index in range(targets.size()):
-			var target_id := targets[direction_index]
-			if target_id.is_empty() or targets.find(target_id) < direction_index:
+		for direction_index in range(2):
+			var lane_ids := forward_ids if direction_index == 0 else reverse_ids
+			var target_index := _breakoff_lane_index(
+				lane_ids, gate_position, lane_index, direction_index)
+			var target_id := lane_ids[target_index]
+			if target_id.is_empty():
 				continue
 			var highway_position := (_network.nodes[target_id] as Dictionary).get(
 				"position", gate_position) as Vector2
@@ -475,6 +492,19 @@ func _connect_port_gates_to_lane(data: PortData, gates: Dictionary) -> void:
 			]
 			var connector_path := _add_bidirectional_segmented_path(
 				prefix, gate_id, target_id, points, "port_connector", true, QUEUE_BLOCK_TARGET_M)
+			_network.add_port_breakoff({
+				"id": "breakoff:%s:%s:%d" % [data.port_id,
+					str(gate.get("physical_quay_id", gate_index)), direction_index],
+				"port_id": data.port_id,
+				"physical_quay_id": str(gate.get("physical_quay_id", gate_index)),
+				"gate_node_id": gate_id,
+				"lane_node_id": target_id,
+				"direction_index": direction_index,
+				"outbound_edge_ids": _edge_ids_for_blocks(
+					connector_path.get("forward", PackedStringArray()) as PackedStringArray),
+				"inbound_edge_ids": _edge_ids_for_blocks(
+					connector_path.get("reverse", PackedStringArray()) as PackedStringArray),
+			})
 			for existing_branch in connector_branches:
 				_add_connector_cross_conflicts(existing_branch, connector_path)
 			connector_branches.append(connector_path)
@@ -510,6 +540,16 @@ func _add_connector_cross_conflicts(a_path: Dictionary, b_path: Dictionary) -> v
 				continue
 			if _segment_clearance(a_points[0], a_points[-1], b_points[0], b_points[-1]) <= 20.0:
 				_network.add_block_conflict(a_block_id, b_block_id)
+
+
+func _edge_ids_for_blocks(block_ids: PackedStringArray) -> PackedStringArray:
+	var result := PackedStringArray()
+	for block_id in block_ids:
+		var block := _network.blocks.get(block_id, {}) as Dictionary
+		var edge_id := str(block.get("edge_id", ""))
+		if not edge_id.is_empty():
+			result.append(edge_id)
+	return result
 
 
 static func _segment_clearance(a0: Vector2, a1: Vector2, b0: Vector2, b1: Vector2) -> float:
@@ -614,6 +654,27 @@ func _nearest_index(ids: PackedStringArray, position: Vector2) -> int:
 			best_distance = distance
 			best_index = index
 	return best_index
+
+
+func _breakoff_lane_index(ids: PackedStringArray, gate_position: Vector2,
+		preferred_index: int, direction_index: int) -> int:
+	if ids.is_empty():
+		return 0
+	var clamped := clampi(preferred_index, 0, ids.size() - 1)
+	var preferred_sign := -1 if direction_index == 0 else 1
+	for radius in range(ids.size()):
+		var candidates := PackedInt32Array([
+			clamped + radius * preferred_sign,
+			clamped - radius * preferred_sign,
+		])
+		for candidate in candidates:
+			if candidate < 0 or candidate >= ids.size():
+				continue
+			var point := (_network.nodes[ids[candidate]] as Dictionary).get(
+				"position", gate_position) as Vector2
+			if point.distance_to(gate_position) >= BREAKOFF_MIN_PORT_CLEARANCE_M:
+				return candidate
+	return clamped
 
 
 func _safe_connector_points(from: Vector2, to: Vector2) -> PackedVector2Array:

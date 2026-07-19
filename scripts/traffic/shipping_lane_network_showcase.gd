@@ -21,6 +21,7 @@ var _traffic_status: Label
 var _report_preview: TextEdit
 var _focus_index := 0
 var _ship_markers: Dictionary = {}
+var _passage_lines: Dictionary = {}
 var _state_materials: Dictionary = {}
 var _simulation_speed := 120.0
 var _paused := false
@@ -52,7 +53,8 @@ func _ready() -> void:
 		"SHIPPING LANE TRAFFIC LAB\n"
 		+ "Q/E port   WASD pan   wheel zoom   Space pause   +/- speed   R reset   Ctrl+C copy\n"
 		+ "cyan highways   yellow connectors   green/orange interlocking   purple queues\n"
-		+ "mint passing zones   blue ships moving   yellow signal wait   magenta berth wait\n"
+		+ "mint passing zones   teal breakoffs   pale-green open-water passages\n"
+		+ "blue ships moving   yellow signal wait   magenta berth wait\n"
 		+ "%d ports | %d nodes | %d blocks | %d signals | checksum %s"
 		% [PORT_COUNT, int(graph.nodes), int(graph.blocks), int(graph.signals),
 			str(graph.network_checksum).left(12)]
@@ -188,8 +190,11 @@ func _reset_simulation() -> void:
 	for marker_value in _ship_markers.values():
 		(marker_value as Node).queue_free()
 	_ship_markers.clear()
+	for line_value in _passage_lines.values():
+		(line_value as Node).queue_free()
+	_passage_lines.clear()
 	_simulator = ShippingLaneTrafficSimulator.new()
-	_simulator.configure(_network, VESSEL_COUNT, SEED)
+	_simulator.configure(_network, VESSEL_COUNT, SEED, _layout)
 	_paused = false
 	_build_ship_markers()
 	_update_ship_markers()
@@ -234,6 +239,46 @@ func _update_ship_markers() -> void:
 		var label := marker.get_node("State") as Label3D
 		label.text = "%s\n%s" % [vessel_id, state.replace("_", " ")]
 		label.modulate = _state_color(state)
+		_update_passage_line(vessel)
+
+
+func _update_passage_line(vessel: Dictionary) -> void:
+	var vessel_id := str(vessel.get("id", ""))
+	var signature := "%s|%s|%d" % [vessel.get("source_token_id", ""),
+		vessel.get("destination_token_id", ""), int(vessel.get("open_water_sections", 0))]
+	var existing := _passage_lines.get(vessel_id) as MeshInstance3D
+	if existing != null and str(existing.get_meta("signature", "")) == signature:
+		return
+	if existing != null:
+		existing.queue_free()
+		_passage_lines.erase(vessel_id)
+	var vertices := PackedVector3Array()
+	for raw_step in vessel.get("route_steps", []) as Array:
+		var step := raw_step as Dictionary
+		if str(step.get("kind", "")) != "open_water":
+			continue
+		var points := step.get("points", PackedVector2Array()) as PackedVector2Array
+		for index in range(points.size() - 1):
+			vertices.append(Vector3(points[index].x, 4.2, points[index].y))
+			vertices.append(Vector3(points[index + 1].x, 4.2, points[index + 1].y))
+	if vertices.is_empty():
+		return
+	var arrays := []
+	arrays.resize(Mesh.ARRAY_MAX)
+	arrays[Mesh.ARRAY_VERTEX] = vertices
+	var mesh := ArrayMesh.new()
+	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_LINES, arrays)
+	var line := MeshInstance3D.new()
+	line.mesh = mesh
+	var material := StandardMaterial3D.new()
+	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	material.albedo_color = Color(0.62, 1.0, 0.74, 0.68)
+	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	material.no_depth_test = true
+	line.material_override = material
+	line.set_meta("signature", signature)
+	add_child(line)
+	_passage_lines[vessel_id] = line
 
 
 func _refresh_traffic_ui() -> void:
@@ -276,7 +321,7 @@ func _state_material(state: String) -> StandardMaterial3D:
 
 static func _state_color(state: String) -> Color:
 	match state:
-		"traveling", "departing": return Color(0.18, 0.78, 1.0)
+		"traveling", "traveling_open_water", "departing": return Color(0.18, 0.78, 1.0)
 		"waiting_signal": return Color(1.0, 0.78, 0.18)
 		"waiting_berth": return Color(0.92, 0.35, 1.0)
 		"docked": return Color(0.25, 1.0, 0.48)

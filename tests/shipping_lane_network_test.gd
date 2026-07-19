@@ -31,6 +31,7 @@ func _run() -> void:
 	print("Shipping lane test: validating")
 	_test_shape(first, ports)
 	_test_connectivity(first)
+	_test_hybrid_passages(first, layout)
 	_test_determinism(first, second)
 	_test_snapshot(first)
 	_test_reservations(first)
@@ -85,6 +86,17 @@ func _test_shape(network: ShippingLaneNetwork, ports: Array[PortData]) -> void:
 			unique_gates.size() == expected_junctions,
 			"%s does not collapse physical quays into a shared gate" % port.port_id,
 		)
+		var port_breakoffs := network.breakoffs_for_port(port.port_id)
+		_check(port_breakoffs.size() >= expected_junctions * 2,
+			"%s publishes directional breakoffs beyond every quay junction" % port.port_id)
+		for breakoff in port_breakoffs:
+			var lane_node := network.node(str(breakoff.get("lane_node_id", "")))
+			var gate_node := network.node(str(breakoff.get("gate_node_id", "")))
+			_check(str(lane_node.get("kind", "")) in ["main_lane", "regional_lane"],
+				"%s breakoff is outside the port approach on a shipping lane" % port.port_id)
+			_check((lane_node.get("position", Vector2.ZERO) as Vector2).distance_to(
+				gate_node.get("position", Vector2.ZERO) as Vector2) >= 180.0,
+				"%s breakoff clears the harbour approach envelope" % port.port_id)
 		var berth_count := 0
 		for token_value in network.berth_tokens.values():
 			if str((token_value as Dictionary).get("port_id", "")) == port.port_id:
@@ -156,6 +168,41 @@ func _test_connectivity(network: ShippingLaneNetwork) -> void:
 			)
 
 
+func _test_hybrid_passages(network: ShippingLaneNetwork, layout: WorldLayout) -> void:
+	var token_ids := network.sorted_berth_token_ids()
+	var from_id := ""
+	var to_id := ""
+	var farthest := -1.0
+	for a_index in range(token_ids.size()):
+		var a := network.berth_tokens[token_ids[a_index]] as Dictionary
+		var a_node := network.node(str(a.get("node_id", "")))
+		for b_index in range(a_index + 1, token_ids.size()):
+			var b := network.berth_tokens[token_ids[b_index]] as Dictionary
+			if str(a.get("port_id", "")) == str(b.get("port_id", "")):
+				continue
+			var b_node := network.node(str(b.get("node_id", "")))
+			var distance := (a_node.get("position", Vector2.ZERO) as Vector2).distance_squared_to(
+				b_node.get("position", Vector2.ZERO) as Vector2)
+			if distance > farthest:
+				farthest = distance
+				from_id = str(a.get("node_id", ""))
+				to_id = str(b.get("node_id", ""))
+	var planner := HybridShippingRoutePlanner.new()
+	planner.configure(network, layout)
+	var passage := planner.plan(from_id, to_id,
+		{"draft_m": 4.0, "beam_m": 12.0, "length_m": 55.0})
+	_check(not passage.is_empty(), "hybrid planner finds a berth-to-berth passage")
+	_check(int(passage.get("open_water_sections", 0)) > 0,
+		"distant voyage may break off for a shorter open-water passage")
+	for raw_step in passage.get("steps", []) as Array:
+		var step := raw_step as Dictionary
+		if str(step.get("kind", "")) != "open_water":
+			continue
+		_check(network.port_breakoffs.has(str(step.get("from_breakoff_id", ""))) \
+			and network.port_breakoffs.has(str(step.get("to_breakoff_id", ""))),
+			"open-water passage begins and ends only at published breakoffs")
+
+
 func _test_determinism(first: ShippingLaneNetwork, second: ShippingLaneNetwork) -> void:
 	_check(not first.network_checksum.is_empty(), "network has an identity checksum")
 	_check(first.network_checksum == second.network_checksum, "same layout produces identical network")
@@ -177,6 +224,8 @@ func _test_snapshot(network: ShippingLaneNetwork) -> void:
 		"authority snapshot preserves berth tokens")
 	_check(restored.passing_zones.size() == network.passing_zones.size(),
 		"authority snapshot preserves passing zones")
+	_check(restored.port_breakoffs.size() == network.port_breakoffs.size(),
+		"authority snapshot preserves legal open-water breakoffs")
 
 
 func _test_reservations(network: ShippingLaneNetwork) -> void:

@@ -15,6 +15,7 @@ const COLLISION_DISTANCE_M := 6.0
 
 var network: ShippingLaneNetwork
 var authority: ShippingLaneReservationService
+var route_planner: HybridShippingRoutePlanner
 var scenario_seed := 0
 var simulated_seconds := 0.0
 var vessels: Dictionary = {} # vessel id -> pure-data runtime record
@@ -42,9 +43,12 @@ var _metrics := {
 }
 
 
-func configure(value: ShippingLaneNetwork, vessel_count := 24, seed := 77127) -> void:
+func configure(value: ShippingLaneNetwork, vessel_count := 24, seed := 77127,
+		world_layout: WorldLayout = null) -> void:
 	network = value
 	authority = ShippingLaneReservationService.new(network)
+	route_planner = HybridShippingRoutePlanner.new()
+	route_planner.configure(network, world_layout)
 	scenario_seed = seed
 	simulated_seconds = 0.0
 	vessels.clear()
@@ -90,7 +94,11 @@ func configure(value: ShippingLaneNetwork, vessel_count := 24, seed := 77127) ->
 			"destination_token_id": destination_id,
 			"destination_requested": false,
 			"route_edge_ids": PackedStringArray(),
+			"route_steps": [],
+			"route_mode": "",
+			"open_water_sections": 0,
 			"route_index": 0,
+			"step_active": false,
 			"current_block_id": "",
 			"trailing_blocks": [],
 			"edge_progress_m": 0.0,
@@ -125,12 +133,15 @@ func vessel_records() -> Array[Dictionary]:
 
 func summary() -> Dictionary:
 	var states: Dictionary = {}
+	var passage_modes: Dictionary = {}
 	var active_queue_count := 0
 	var starved_vessels := 0
 	for vessel_value in vessels.values():
 		var vessel := vessel_value as Dictionary
 		var state := str(vessel.get("state", "unknown"))
 		states[state] = int(states.get(state, 0)) + 1
+		var passage_mode := str(vessel.get("route_mode", "unknown"))
+		passage_modes[passage_mode] = int(passage_modes.get(passage_mode, 0)) + 1
 		if state == "waiting_berth":
 			active_queue_count += 1
 		if float(vessel.get("wait_seconds", 0.0)) >= DEADLOCK_WINDOW_S:
@@ -144,6 +155,7 @@ func summary() -> Dictionary:
 		"simulated_seconds": simulated_seconds,
 		"vessel_count": vessels.size(),
 		"states": states,
+		"passage_modes": passage_modes,
 		"active_port_queue": active_queue_count,
 		"starved_vessels": starved_vessels,
 		"average_trip_seconds": float(_metrics.get("total_trip_seconds", 0.0)) \
@@ -171,6 +183,9 @@ func generate_report() -> String:
 			float(data.get("simulated_seconds", 0.0)), int(data.get("vessel_count", 0)),
 			int(data.get("trips_completed", 0))],
 		"States: %s" % JSON.stringify(data.get("states", {})),
+		"Passages: %s | cached water links %d" % [
+			JSON.stringify(data.get("passage_modes", {})),
+			route_planner.cached_water_link_count() if route_planner != null else 0],
 		"Queues: active %d | maximum %d | max wait %.1f s" % [
 			int(data.get("active_port_queue", 0)), int(data.get("max_port_queue", 0)),
 			float(data.get("max_wait_seconds", 0.0))],
@@ -225,10 +240,27 @@ func _vessel_wire_snapshot() -> Array[Dictionary]:
 			"source_token_id": str(vessel.get("source_token_id", "")),
 			"destination_token_id": str(vessel.get("destination_token_id", "")),
 			"route_index": int(vessel.get("route_index", 0)),
+			"route_mode": str(vessel.get("route_mode", "")),
+			"open_water_sections": int(vessel.get("open_water_sections", 0)),
+			"open_water_links": _open_water_link_snapshot(vessel),
 			"current_block_id": str(vessel.get("current_block_id", "")),
 			"trailing_blocks": (vessel.get("trailing_blocks", []) as Array).duplicate(true),
 			"wait_seconds": float(vessel.get("wait_seconds", 0.0)),
 			"deliveries": int(vessel.get("deliveries", 0)),
+		})
+	return result
+
+
+static func _open_water_link_snapshot(vessel: Dictionary) -> Array[Dictionary]:
+	var result: Array[Dictionary] = []
+	for raw_step in vessel.get("route_steps", []) as Array:
+		var step := raw_step as Dictionary
+		if str(step.get("kind", "")) != "open_water":
+			continue
+		result.append({
+			"from_breakoff_id": str(step.get("from_breakoff_id", "")),
+			"to_breakoff_id": str(step.get("to_breakoff_id", "")),
+			"length_m": float(step.get("length_m", 0.0)),
 		})
 	return result
 
@@ -263,16 +295,16 @@ func _step_vessel(vessel: Dictionary, delta: float) -> bool:
 			_depart_again(vessel)
 			return true
 		return false
-	var route := vessel.get("route_edge_ids", PackedStringArray()) as PackedStringArray
+	var route := vessel.get("route_steps", []) as Array
 	var route_index := int(vessel.get("route_index", 0))
 	if route.is_empty() or route_index >= route.size():
 		_fail_route(vessel, "route exhausted before arrival")
 		return false
-	if str(vessel.get("current_block_id", "")).is_empty():
-		if not _enter_edge(vessel, route_index):
+	if not bool(vessel.get("step_active", false)):
+		if not _enter_step(vessel, route_index):
 			_wait(vessel, delta)
 			return false
-	var edge := network.edge(route[route_index])
+	var edge := _step_record(route[route_index] as Dictionary)
 	var speed := maxf(float(edge.get("speed_limit_ms", 7.2)), 0.5)
 	var length := maxf(float(edge.get("length_m", 0.0)), 0.01)
 	var old_progress := float(vessel.get("edge_progress_m", 0.0))
@@ -283,23 +315,41 @@ func _step_vessel(vessel: Dictionary, delta: float) -> bool:
 	_advance_trailing_blocks(vessel, moved)
 	_update_pose(vessel, edge, progress)
 	if progress < length - 0.001:
-		vessel["state"] = "traveling"
+		vessel["state"] = "traveling_open_water" \
+			if str((route[route_index] as Dictionary).get("kind", "")) == "open_water" \
+			else "traveling"
 		vessel["wait_seconds"] = 0.0
 		return true
 	if route_index + 1 >= route.size():
 		_arrive(vessel)
 		return true
-	if _enter_edge(vessel, route_index + 1):
+	if _enter_step(vessel, route_index + 1):
 		return true
 	_wait(vessel, delta)
 	return false
 
 
-func _enter_edge(vessel: Dictionary, edge_index: int) -> bool:
-	var route := vessel.get("route_edge_ids", PackedStringArray()) as PackedStringArray
+func _enter_step(vessel: Dictionary, edge_index: int) -> bool:
+	var route := vessel.get("route_steps", []) as Array
 	if edge_index < 0 or edge_index >= route.size():
 		return false
-	var edge := network.edge(route[edge_index])
+	var step := route[edge_index] as Dictionary
+	if str(step.get("kind", "")) == "open_water":
+		var previous_open := str(vessel.get("current_block_id", ""))
+		if not previous_open.is_empty():
+			var trailing_open := vessel.get("trailing_blocks", []) as Array
+			trailing_open.append({"block_id": previous_open,
+				"clearance_remaining_m": float(vessel.get("length_m", 40.0))})
+			vessel["trailing_blocks"] = trailing_open
+		vessel["current_block_id"] = ""
+		vessel["route_index"] = edge_index
+		vessel["edge_progress_m"] = 0.0
+		vessel["step_active"] = true
+		vessel["state"] = "traveling_open_water"
+		vessel["wait_seconds"] = 0.0
+		_update_pose(vessel, _step_record(step), 0.0)
+		return true
+	var edge := network.edge(str(step.get("edge_id", "")))
 	var block_ids := edge.get("block_ids", PackedStringArray()) as PackedStringArray
 	if block_ids.is_empty():
 		_fail_route(vessel, "edge has no authority block")
@@ -334,6 +384,7 @@ func _enter_edge(vessel: Dictionary, edge_index: int) -> bool:
 	vessel["current_block_id"] = block_id
 	vessel["route_index"] = edge_index
 	vessel["edge_progress_m"] = 0.0
+	vessel["step_active"] = true
 	vessel["state"] = "traveling"
 	vessel["wait_seconds"] = 0.0
 	_update_pose(vessel, edge, 0.0)
@@ -369,6 +420,7 @@ func _arrive(vessel: Dictionary) -> void:
 		authority.release_block(vessel_id, str((trailing_value as Dictionary).get("block_id", "")))
 	vessel["current_block_id"] = ""
 	vessel["trailing_blocks"] = []
+	vessel["step_active"] = false
 	vessel["state"] = "docked"
 	vessel["dwell_remaining_s"] = DOCK_DWELL_S
 	vessel["wait_seconds"] = 0.0
@@ -405,23 +457,30 @@ func _plan_trip(vessel: Dictionary) -> void:
 		"beam_m": vessel.get("beam_m", 0.0),
 		"draft_m": vessel.get("draft_m", 0.0),
 	}
-	var route := network.route_edge_ids(str(source.get("node_id", "")),
+	var passage := route_planner.plan(str(source.get("node_id", "")),
 		str(destination.get("node_id", "")), vessel_limits)
+	var route := passage.get("steps", []) as Array
 	if route.is_empty():
 		_fail_route(vessel, "no route between selected berths")
 		return
-	vessel["route_edge_ids"] = route
+	vessel["route_steps"] = route
+	vessel["route_edge_ids"] = passage.get("controlled_edge_ids", PackedStringArray())
+	vessel["route_mode"] = str(passage.get("mode", "all_lane"))
+	vessel["open_water_sections"] = int(passage.get("open_water_sections", 0))
 	vessel["route_index"] = 0
 	vessel["edge_progress_m"] = 0.0
 	vessel["current_block_id"] = ""
 	vessel["trailing_blocks"] = []
+	vessel["step_active"] = false
 	vessel["state"] = "departing"
 	vessel["wait_seconds"] = 0.0
 	vessel["trip_started_s"] = simulated_seconds
 	vessel["trip_distance_m"] = 0.0
 	var source_node := network.node(str(source.get("node_id", "")))
 	vessel["position"] = source_node.get("position", Vector2.ZERO)
-	_event(str(vessel.get("id", "")), "departing for %s" % str(destination.get("port_id", "")))
+	_event(str(vessel.get("id", "")), "departing for %s via %s (%d open-water sections)" % [
+		str(destination.get("port_id", "")), str(vessel.get("route_mode", "")),
+		int(vessel.get("open_water_sections", 0))])
 
 
 func _pick_destination(source_token_id: String, vessel_index: int, trip_index: int) -> String:
@@ -477,6 +536,12 @@ func _update_pose(vessel: Dictionary, edge: Dictionary, distance_m: float) -> vo
 	var sample := _sample_polyline(points, distance_m)
 	vessel["position"] = sample.get("position", Vector2.ZERO)
 	vessel["heading"] = sample.get("heading", Vector2(0.0, -1.0))
+
+
+func _step_record(step: Dictionary) -> Dictionary:
+	if str(step.get("kind", "")) == "open_water":
+		return step
+	return network.edge(str(step.get("edge_id", "")))
 
 
 static func _sample_polyline(points: PackedVector2Array, distance_m: float) -> Dictionary:

@@ -101,7 +101,9 @@ data-only simulator for exercising the authority without BoatBody physics.
 - `ShippingLaneNetworkBuilder` converts `WorldLayout.waterway_centerlines` and
   every seeded `PortData.berth_plan` into quay manoeuvre pockets, port gates,
   block-based inbound queues, port connectors, separated directional highways, regular
-  blocks, and Factorio-style chain-signal regions.
+  blocks, and Factorio-style chain-signal regions. Every quay connector ends at
+  two directional port breakoffs on the regional/main lane, outside the harbour
+  approach envelope.
 - `ShippingLaneNetwork` is the immutable authority record. It supports
   vessel-dimension-aware route queries, deterministic checksums, and snapshot
   round-tripping for either a local single-player authority or a future
@@ -110,10 +112,15 @@ data-only simulator for exercising the authority without BoatBody physics.
   FIFO port queues, on-demand opposing-lane passing zones, and compact harbour
   interlocking groups. Its snapshot is the small mutable state that an
   authority replicates; clients do not independently decide traffic outcomes.
+- `HybridShippingRoutePlanner` compares the all-lane route with cached,
+  water-safe A* passages between legal breakoffs. A passage may remain on lanes,
+  leave directly for the destination breakoff, or join/leave at an intermediate
+  port's breakoff. Crossing a lane in open water does not reserve or join it.
 - `ShippingLaneDebugDraw` streams only the F3/freecam region around the current
   camera and remains completely unmaterialized while its gizmo layer is off.
 - `ShippingLaneTrafficSimulator` is a fixed-step test harness. Lightweight ship
-  records travel real graph edges, retain signal blocks until their stern clears,
+  records travel controlled graph edges plus explicit open-water passage sections,
+  retain signal blocks until their stern clears,
   request berth tokens, enter FIFO queues, and emit a copyable authority report.
   It is not the production NPC controller.
 - `shipping_lane_network_showcase.tscn` is the F6 traffic lab. It displays those

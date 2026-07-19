@@ -23,7 +23,7 @@ func _run() -> void:
 		ports.append(PortExpander.expand(definition, FIXED_SEED, layout))
 	var network := ShippingLaneNetworkBuilder.new().build(layout, ports)
 	var first := ShippingLaneTrafficSimulator.new()
-	first.configure(network, 24, FIXED_SEED)
+	first.configure(network, 24, FIXED_SEED, layout)
 	first.advance(SIMULATED_SECONDS)
 	var summary := first.summary()
 	print(first.generate_report())
@@ -32,6 +32,10 @@ func _run() -> void:
 		"fleet completes port-to-port journeys", failures)
 	_check(int(summary.get("route_failures", 0)) == 0,
 		"all data ships have valid routes", failures)
+	_check(int((summary.get("passage_modes", {}) as Dictionary).get("hybrid", 0)) > 0,
+		"scenario exercises lane-to-open-water breakoff passages", failures)
+	_check(first.generate_report().contains("open_water_sections"),
+		"authority report exposes each vessel's passage composition", failures)
 	_check(summary.has("collisions") and summary.has("deadlocks") \
 		and summary.has("starved_vessels"),
 		"safety failures are measured rather than hidden", failures)
@@ -42,7 +46,7 @@ func _run() -> void:
 	_check(first.generate_report().contains("MACHINE DATA"),
 		"copyable report contains machine-readable authority data", failures)
 	var second := ShippingLaneTrafficSimulator.new()
-	second.configure(network, 24, FIXED_SEED)
+	second.configure(network, 24, FIXED_SEED, layout)
 	second.advance(SIMULATED_SECONDS)
 	_check(second.summary() == summary,
 		"fixed-step traffic result is deterministic", failures)
