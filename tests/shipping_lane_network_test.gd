@@ -295,17 +295,21 @@ func _test_berth_queue_authority(network: ShippingLaneNetwork) -> void:
 		_check(not bool(service.try_reserve(second_queued_id,
 			PackedStringArray([queue_block_id])).get("ok", false)),
 			"queued vessel cannot skip the FIFO lane position ahead of it")
-		_check(bool(service.try_reserve(queued_id,
+		_check(not bool(service.try_reserve(queued_id,
 			PackedStringArray([queue_block_id])).get("ok", false)),
-			"queued vessel may occupy its inbound queue")
+			"queued vessel waits upstream instead of parking in the port connector")
 	var second_block_id := str(second_slot.get("block_id", ""))
 	if not second_block_id.is_empty():
-		_check(bool(service.try_reserve(second_queued_id,
+		_check(not bool(service.try_reserve(second_queued_id,
 			PackedStringArray([second_block_id])).get("ok", false)),
-			"second queued vessel may reserve its own FIFO lane position")
+			"later queued vessels also remain on ordinary upstream lane blocks")
 	var promoted := service.release_berth("berth-vessel-0")
 	_check(str(promoted.get("vessel_id", "")) == queued_id, "berth release promotes FIFO head")
 	_check(not service.berth_assignment(queued_id).is_empty(), "promoted vessel owns the berth")
+	if not queue_block_id.is_empty():
+		_check(bool(service.try_reserve(queued_id,
+			PackedStringArray([queue_block_id])).get("ok", false)),
+			"promoted vessel may enter its interlocked connector")
 	_check(int(service.assigned_queue_slot(second_queued_id, 0).get("queue_index", -1)) == 0,
 		"remaining vessel advances to the front queue block")
 	var authority_snapshot := service.snapshot()

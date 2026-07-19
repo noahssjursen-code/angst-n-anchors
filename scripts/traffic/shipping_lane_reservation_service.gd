@@ -347,13 +347,11 @@ func _vessel_may_enter_port_queue(
 		queue_index: int,
 ) -> bool:
 	if str(_queued_port_by_vessel.get(vessel_id, "")) == port_id:
-		var request := _queue_request(port_id, vessel_id)
-		if str(request.get("physical_quay_id", "")) != physical_quay_id:
-			return false
-		var assigned := assigned_queue_slot(vessel_id, direction_index)
-		# The vessel may travel through empty rear blocks to reach its assigned
-		# position, but may never advance ahead of its FIFO rank.
-		return not assigned.is_empty() and queue_index >= int(assigned.get("queue_index", -1))
+		# A connector is an interlocked movement corridor, not a parking queue.
+		# Unassigned arrivals wait on ordinary upstream lane blocks. That creates
+		# a natural Factorio-style tail which can later expose passing lanes,
+		# while always leaving the quay-to-lane corridor free for departures.
+		return false
 	var token_id := str(_berth_by_vessel.get(vessel_id, ""))
 	if token_id.is_empty():
 		return false

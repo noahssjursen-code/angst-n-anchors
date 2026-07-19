@@ -7,7 +7,7 @@ extends RefCounted
 ## through the same directed edges, exclusive blocks, berth tokens, FIFO port
 ## queues, and authority snapshots intended for single-player or a server.
 
-const REPORT_VERSION := 1
+const REPORT_VERSION := 2
 const FIXED_STEP_S := 0.20
 const DOCK_DWELL_S := 12.0
 const DEADLOCK_WINDOW_S := 90.0
@@ -28,6 +28,8 @@ var _deadlock_latched := false
 var _collision_pairs: Dictionary = {}
 var _next_proximity_check_s := 0.0
 var _events: Array[Dictionary] = []
+var _safety_events: Array[Dictionary] = []
+var _next_open_water_start_by_link: Dictionary = {}
 var _metrics := {
 	"trips_completed": 0,
 	"route_failures": 0,
@@ -40,6 +42,7 @@ var _metrics := {
 	"total_distance_m": 0.0,
 	"max_wait_seconds": 0.0,
 	"max_port_queue": 0,
+	"traffic_yields": 0,
 }
 
 
@@ -61,6 +64,8 @@ func configure(value: ShippingLaneNetwork, vessel_count := 24, seed := 77127,
 	_collision_pairs.clear()
 	_next_proximity_check_s = 0.0
 	_events.clear()
+	_safety_events.clear()
+	_next_open_water_start_by_link.clear()
 	_metrics = {
 		"trips_completed": 0,
 		"route_failures": 0,
@@ -73,6 +78,7 @@ func configure(value: ShippingLaneNetwork, vessel_count := 24, seed := 77127,
 		"total_distance_m": 0.0,
 		"max_wait_seconds": 0.0,
 		"max_port_queue": 0,
+		"traffic_yields": 0,
 	}
 	if network == null or _token_ids.size() < 2:
 		return
@@ -98,7 +104,10 @@ func configure(value: ShippingLaneNetwork, vessel_count := 24, seed := 77127,
 			"route_mode": "",
 			"open_water_sections": 0,
 			"route_index": 0,
+			"trip_serial": 0,
 			"step_active": false,
+			"open_water_section_id": "",
+			"open_water_start_s": -1.0,
 			"current_block_id": "",
 			"trailing_blocks": [],
 			"edge_progress_m": 0.0,
@@ -109,10 +118,20 @@ func configure(value: ShippingLaneNetwork, vessel_count := 24, seed := 77127,
 			"trip_started_s": 0.0,
 			"trip_distance_m": 0.0,
 			"dwell_remaining_s": 0.0,
+			"departure_clearance_pending": false,
 			"deliveries": 0,
 		}
 		vessels[vessel_id] = vessel
+		var source_claim := authority.request_berth(vessel_id,
+			str(source.get("port_id", "")), PackedStringArray([source_id]))
+		if str(source_claim.get("status", "")) != "assigned":
+			_fail_route(vessel, "initial berth claim rejected")
+			vessels[vessel_id] = vessel
+			continue
 		_plan_trip(vessel)
+		vessel["departure_clearance_pending"] = true
+		_try_departure_clearance(vessel)
+		vessels[vessel_id] = vessel
 
 
 func advance(seconds: float) -> void:
@@ -209,6 +228,18 @@ func generate_report() -> String:
 			lines.append("%8.1f  %-16s  %s" % [float(event.get("time_s", 0.0)),
 				str(event.get("vessel_id", "system")), str(event.get("message", ""))])
 	lines.append("")
+	lines.append("SAFETY EVENTS")
+	if _safety_events.is_empty():
+		lines.append("(none)")
+	else:
+		for event in _safety_events:
+			var point := event.get("position", Vector2.ZERO) as Vector2
+			lines.append("%8.1f  %-16s  %-16s  (%7.0f,%7.0f)  %s/%s  %s" % [
+				float(event.get("time_s", 0.0)), str(event.get("vessel_id", "")),
+				str(event.get("other_vessel_id", "")), point.x, point.y,
+				str(event.get("state", "")), str(event.get("other_state", "")),
+				str(event.get("kind", ""))])
+	lines.append("")
 	lines.append("VESSEL SNAPSHOT")
 	for vessel in vessel_records():
 		var position := vessel.get("position", Vector2.ZERO) as Vector2
@@ -223,6 +254,7 @@ func generate_report() -> String:
 		"authority": authority.snapshot() if authority != null else {},
 		"vessels": _vessel_wire_snapshot(),
 		"recent_events": _events.duplicate(true),
+		"safety_events": _safety_events.duplicate(true),
 	}, "  "))
 	return "\n".join(lines)
 
@@ -289,11 +321,16 @@ func _step(delta: float) -> void:
 func _step_vessel(vessel: Dictionary, delta: float) -> bool:
 	if str(vessel.get("state", "")) == "route_failed":
 		return false
+	if str(vessel.get("state", "")) == "waiting_departure_clearance":
+		if _try_departure_clearance(vessel):
+			return true
+		_wait(vessel, delta)
+		return false
 	if str(vessel.get("state", "")) == "docked":
 		vessel["dwell_remaining_s"] = float(vessel.get("dwell_remaining_s", 0.0)) - delta
 		if float(vessel["dwell_remaining_s"]) <= 0.0:
 			_depart_again(vessel)
-			return true
+			return str(vessel.get("state", "")) != "waiting_departure_clearance"
 		return false
 	var route := vessel.get("route_steps", []) as Array
 	var route_index := int(vessel.get("route_index", 0))
@@ -309,11 +346,29 @@ func _step_vessel(vessel: Dictionary, delta: float) -> bool:
 	var length := maxf(float(edge.get("length_m", 0.0)), 0.01)
 	var old_progress := float(vessel.get("edge_progress_m", 0.0))
 	var progress := minf(old_progress + speed * delta, length)
+	var held_for_next := false
+	if route_index + 1 < route.size():
+		var stopping_margin := minf(float(vessel.get("length_m", 40.0)) + 12.0,
+			length * 0.8)
+		var hold_progress := maxf(0.0, length - stopping_margin)
+		if progress >= hold_progress and not _pre_reserve_step(vessel, route_index + 1):
+			progress = minf(progress, hold_progress)
+			held_for_next = true
 	var moved := progress - old_progress
 	vessel["edge_progress_m"] = progress
 	vessel["trip_distance_m"] = float(vessel.get("trip_distance_m", 0.0)) + moved
 	_advance_trailing_blocks(vessel, moved)
 	_update_pose(vessel, edge, progress)
+	if held_for_next:
+		var next_step := route[route_index + 1] as Dictionary
+		var next_edge := _step_record(next_step)
+		var next_blocks := next_edge.get("block_ids", PackedStringArray()) as PackedStringArray
+		var next_block := network.block(next_blocks[0]) if not next_blocks.is_empty() else {}
+		vessel["state"] = "waiting_berth" \
+			if not str(next_block.get("queue_port_id", "")).is_empty() \
+			else "waiting_signal"
+		_wait(vessel, delta)
+		return moved > 0.001
 	if progress < length - 0.001:
 		vessel["state"] = "traveling_open_water" \
 			if str((route[route_index] as Dictionary).get("kind", "")) == "open_water" \
@@ -329,12 +384,51 @@ func _step_vessel(vessel: Dictionary, delta: float) -> bool:
 	return false
 
 
+func _pre_reserve_step(vessel: Dictionary, edge_index: int) -> bool:
+	var route := vessel.get("route_steps", []) as Array
+	if edge_index < 0 or edge_index >= route.size():
+		return false
+	var step := route[edge_index] as Dictionary
+	if str(step.get("kind", "")) == "open_water":
+		return true
+	var edge := network.edge(str(step.get("edge_id", "")))
+	var block_ids := edge.get("block_ids", PackedStringArray()) as PackedStringArray
+	if block_ids.is_empty():
+		return false
+	var block_id := block_ids[0]
+	var block := network.block(block_id)
+	if not str(block.get("queue_port_id", "")).is_empty():
+		_ensure_destination_request(vessel)
+		if authority.berth_assignment(str(vessel.get("id", ""))).is_empty():
+			return false
+	var reservation := authority.try_reserve(str(vessel.get("id", "")),
+		PackedStringArray([block_id]))
+	if not bool(reservation.get("ok", false)):
+		_metrics["reservation_denials"] = int(_metrics.get("reservation_denials", 0)) + 1
+		return false
+	return true
+
+
 func _enter_step(vessel: Dictionary, edge_index: int) -> bool:
 	var route := vessel.get("route_steps", []) as Array
 	if edge_index < 0 or edge_index >= route.size():
 		return false
 	var step := route[edge_index] as Dictionary
 	if str(step.get("kind", "")) == "open_water":
+		var section_id := "%d:%d" % [int(vessel.get("trip_serial", 0)), edge_index]
+		if str(vessel.get("open_water_section_id", "")) != section_id:
+			var link_id := "%s>%s" % [str(step.get("from_breakoff_id", "")),
+				str(step.get("to_breakoff_id", ""))]
+			var speed := maxf(float(step.get("speed_limit_ms", 7.2)), 0.5)
+			var start_s := maxf(simulated_seconds,
+				float(_next_open_water_start_by_link.get(link_id, simulated_seconds)))
+			var headway_s := (float(vessel.get("length_m", 40.0)) + 36.0) / speed
+			_next_open_water_start_by_link[link_id] = start_s + headway_s
+			vessel["open_water_section_id"] = section_id
+			vessel["open_water_start_s"] = start_s
+		if simulated_seconds + 0.001 < float(vessel.get("open_water_start_s", simulated_seconds)):
+			vessel["state"] = "waiting_open_water_slot"
+			return false
 		var previous_open := str(vessel.get("current_block_id", ""))
 		if not previous_open.is_empty():
 			var trailing_open := vessel.get("trailing_blocks", []) as Array
@@ -375,6 +469,8 @@ func _enter_step(vessel: Dictionary, edge_index: int) -> bool:
 	if not authority.occupy(str(vessel.get("id", "")), block_id):
 		authority.release_block(str(vessel.get("id", "")), block_id)
 		return false
+	vessel["open_water_section_id"] = ""
+	vessel["open_water_start_s"] = -1.0
 	var previous := str(vessel.get("current_block_id", ""))
 	if not previous.is_empty() and previous != block_id:
 		var trailing := vessel.get("trailing_blocks", []) as Array
@@ -423,6 +519,7 @@ func _arrive(vessel: Dictionary) -> void:
 	vessel["step_active"] = false
 	vessel["state"] = "docked"
 	vessel["dwell_remaining_s"] = DOCK_DWELL_S
+	vessel["departure_clearance_pending"] = false
 	vessel["wait_seconds"] = 0.0
 	vessel["deliveries"] = int(vessel.get("deliveries", 0)) + 1
 	var trip_seconds := simulated_seconds - float(vessel.get("trip_started_s", simulated_seconds))
@@ -435,10 +532,6 @@ func _arrive(vessel: Dictionary) -> void:
 
 func _depart_again(vessel: Dictionary) -> void:
 	var vessel_id := str(vessel.get("id", ""))
-	var promoted := authority.release_berth(vessel_id)
-	if not promoted.is_empty():
-		_metrics["berth_promotions"] = int(_metrics.get("berth_promotions", 0)) + 1
-		_event(str(promoted.get("vessel_id", "")), "promoted to free berth")
 	var source_id := str(vessel.get("destination_token_id", ""))
 	var next_delivery := int(vessel.get("deliveries", 0))
 	vessel["source_token_id"] = source_id
@@ -446,6 +539,64 @@ func _depart_again(vessel: Dictionary) -> void:
 		source_id, int(vessel.get("index", 0)), next_delivery)
 	vessel["destination_requested"] = false
 	_plan_trip(vessel)
+	if str(vessel.get("state", "")) == "route_failed":
+		return
+	vessel["departure_clearance_pending"] = true
+	_try_departure_clearance(vessel)
+
+
+func _try_departure_clearance(vessel: Dictionary) -> bool:
+	if not bool(vessel.get("departure_clearance_pending", false)):
+		return true
+	var vessel_id := str(vessel.get("id", ""))
+	var blocks := _departure_clearance_blocks(vessel)
+	if blocks.is_empty():
+		_fail_route(vessel, "departure route has no controlled harbour corridor")
+		return false
+	var result := authority.try_reserve(vessel_id, blocks)
+	if not bool(result.get("ok", false)):
+		_metrics["reservation_denials"] = int(_metrics.get("reservation_denials", 0)) + 1
+		vessel["state"] = "waiting_departure_clearance"
+		vessel["departure_blocked_by"] = str(result.get("blocked_by", ""))
+		vessel["departure_blocked_at"] = str(result.get("block_id", ""))
+		return false
+	var promoted := authority.release_berth(vessel_id)
+	if not promoted.is_empty():
+		_metrics["berth_promotions"] = int(_metrics.get("berth_promotions", 0)) + 1
+		_event(str(promoted.get("vessel_id", "")), "promoted after outbound corridor cleared")
+	vessel["departure_clearance_pending"] = false
+	vessel["departure_blocked_by"] = ""
+	vessel["departure_blocked_at"] = ""
+	vessel["state"] = "departing"
+	vessel["wait_seconds"] = 0.0
+	return true
+
+
+func _departure_clearance_blocks(vessel: Dictionary) -> PackedStringArray:
+	var result := PackedStringArray()
+	var saw_harbour_edge := false
+	for raw_step in vessel.get("route_steps", []) as Array:
+		var step := raw_step as Dictionary
+		if str(step.get("kind", "")) == "open_water":
+			break
+		var edge := network.edge(str(step.get("edge_id", "")))
+		var edge_kind := str(edge.get("kind", ""))
+		var is_harbour := edge_kind in ["quay_maneuver", "port_approach", "port_connector", "port_merge"]
+		if is_harbour:
+			saw_harbour_edge = true
+		elif saw_harbour_edge:
+			# Own the first highway block too, so the stern can clear the connector
+			# before an inbound vessel is promoted into the opposing movement.
+			for block_id in edge.get("block_ids", PackedStringArray()) as PackedStringArray:
+				if not result.has(block_id):
+					result.append(block_id)
+			break
+		elif not result.is_empty():
+			break
+		for block_id in edge.get("block_ids", PackedStringArray()) as PackedStringArray:
+			if not result.has(block_id):
+				result.append(block_id)
+	return result
 
 
 func _plan_trip(vessel: Dictionary) -> void:
@@ -468,6 +619,7 @@ func _plan_trip(vessel: Dictionary) -> void:
 	vessel["route_mode"] = str(passage.get("mode", "all_lane"))
 	vessel["open_water_sections"] = int(passage.get("open_water_sections", 0))
 	vessel["route_index"] = 0
+	vessel["trip_serial"] = int(vessel.get("trip_serial", 0)) + 1
 	vessel["edge_progress_m"] = 0.0
 	vessel["current_block_id"] = ""
 	vessel["trailing_blocks"] = []
@@ -585,6 +737,20 @@ func _check_proximity_collisions() -> void:
 				continue
 			_collision_pairs[pair_id] = true
 			_metrics["collisions"] = int(_metrics.get("collisions", 0)) + 1
+			_safety_events.append({
+				"kind": "proximity_collision",
+				"time_s": simulated_seconds,
+				"vessel_id": ids[a_index],
+				"other_vessel_id": ids[b_index],
+				"position": a.get("position", Vector2.ZERO),
+				"other_position": b.get("position", Vector2.ZERO),
+				"state": str(a.get("state", "")),
+				"other_state": str(b.get("state", "")),
+				"block_id": str(a.get("current_block_id", "")),
+				"other_block_id": str(b.get("current_block_id", "")),
+				"route_mode": str(a.get("route_mode", "")),
+				"other_route_mode": str(b.get("route_mode", "")),
+			})
 			_event(ids[a_index], "proximity collision with %s at %s / %s" % [
 				ids[b_index], str(a.get("current_block_id", "")),
 				str(b.get("current_block_id", ""))])
