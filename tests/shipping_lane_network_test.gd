@@ -61,6 +61,15 @@ func _test_connectivity(network: ShippingLaneNetwork) -> void:
 		if String(node.get("kind", "")) != "quay":
 			continue
 		quays.append(node_id)
+		var junction_id := "%s:junction" % node_id
+		_check(network.nodes.has(junction_id), "quay %s has its own clear-water junction" % node_id)
+		if network.nodes.has(junction_id):
+			var quay_position := node.get("position", Vector2.ZERO) as Vector2
+			var junction_position := network.node(junction_id).get("position", quay_position) as Vector2
+			_check(
+				quay_position.distance_to(junction_position) >= 130.0,
+				"quay %s completes departure before its first turn" % node_id,
+			)
 		_check(
 			network.can_reach_kind(node_id, PackedStringArray(["main_lane", "regional_lane"])),
 			"quay %s can depart for the shipping highway" % node_id,

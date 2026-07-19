@@ -40,14 +40,17 @@ func _wire_world_gizmos() -> void:
 	var hud := get_node_or_null("/root/DebugHud")
 	if hud == null:
 		return
-	if hud.has_signal("world_gizmos_changed") \
-			and not hud.world_gizmos_changed.is_connected(_on_world_gizmos_changed):
-		hud.world_gizmos_changed.connect(_on_world_gizmos_changed)
-	show_site_gizmos = bool(hud.get("world_gizmos_enabled"))
+	if hud.has_signal("gizmo_layers_changed") \
+			and not hud.gizmo_layers_changed.is_connected(_on_gizmo_layers_changed):
+		hud.gizmo_layers_changed.connect(_on_gizmo_layers_changed)
+	show_site_gizmos = bool(hud.call(
+		"is_gizmo_layer_enabled",
+		WorldGizmos.LAYER_PORT_LAYOUT,
+	)) if hud.has_method("is_gizmo_layer_enabled") else false
 
 
-func _on_world_gizmos_changed(enabled: bool) -> void:
-	show_site_gizmos = enabled
+func _on_gizmo_layers_changed(states: Dictionary) -> void:
+	show_site_gizmos = bool(states.get(WorldGizmos.LAYER_PORT_LAYOUT, false))
 
 
 func configure(data: PortData) -> void:

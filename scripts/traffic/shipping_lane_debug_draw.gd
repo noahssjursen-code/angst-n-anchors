@@ -168,6 +168,8 @@ func _draw_nodes(visible_node_ids: Dictionary, center: Vector3) -> void:
 		var kind := String(record.get("kind", ""))
 		if kind == "port_gate":
 			_add_marker(position, 9.0, COLOR_GATE, "PORT GATE\n%s" % String(record.get("port_id", "")))
+		elif kind == "quay_junction":
+			_add_marker(position, 5.0, COLOR_JUNCTION)
 
 	var regular_vertices := PackedVector3Array()
 	var chain_vertices := PackedVector3Array()
@@ -257,18 +259,17 @@ func _add_block_crossbar(batches: Dictionary, edge: Dictionary) -> void:
 
 
 func _add_marker(position: Vector3, radius: float, color: Color, text := "") -> void:
-	var mesh_instance := MeshInstance3D.new()
-	var sphere := SphereMesh.new()
-	sphere.radius = radius
-	sphere.height = radius * 2.0
-	sphere.radial_segments = 12
-	sphere.rings = 6
-	mesh_instance.mesh = sphere
-	mesh_instance.material_override = _material(color)
-	mesh_instance.position = position
-	_content.add_child(mesh_instance)
+	var vertices := PackedVector3Array()
+	var segments := 16
+	for index in range(segments):
+		var a := TAU * float(index) / float(segments)
+		var b := TAU * float(index + 1) / float(segments)
+		vertices.append(position + Vector3(cos(a) * radius, 0.0, sin(a) * radius))
+		vertices.append(position + Vector3(cos(b) * radius, 0.0, sin(b) * radius))
+	vertices = _append_cross(vertices, position, radius * 0.7)
+	_add_line_mesh(vertices, color)
 	if not text.is_empty():
-		_add_label(position + Vector3(0.0, radius + 3.0, 0.0), text, color)
+		_add_label(position + Vector3(0.0, 4.0, 0.0), text, color)
 
 
 func _add_cross(position: Vector3, radius: float, color: Color) -> void:

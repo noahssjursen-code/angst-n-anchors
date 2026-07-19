@@ -41,7 +41,7 @@ func _ready() -> void:
 		"SHIPPING LANE NETWORK — STATIC INFRASTRUCTURE ONLY\n"
 		+ "Q / E  port region     WASD  pan     mouse wheel  zoom\n"
 		+ "cyan  directional highways   yellow  connectors   green/orange  harbour interlocking\n"
-		+ "blue spheres  chain signals   green dots  regular signals   purple X  holding slots\n"
+		+ "orange rings  port gates   crosses  traffic signals   purple X  holding slots\n"
 		+ "%d ports · %d nodes · %d blocks · %d signals · checksum %s"
 		% [PORT_COUNT, int(summary.nodes), int(summary.blocks), int(summary.signals),
 			str(summary.network_checksum).left(12)]

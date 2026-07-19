@@ -13,8 +13,8 @@ const PORT_GATE_DISTANCE_M := 420.0
 const PORT_HOLDING_COUNT := 4
 const HOLDING_LATERAL_M := 78.0
 const HOLDING_LONGITUDINAL_M := 105.0
-const QUAY_CRAB_CLEARANCE_M := 34.0
-const APPROACH_CLEARANCE_M := 76.0
+const QUAY_CRAB_CLEARANCE_M := 48.0
+const QUAY_JUNCTION_CLEARANCE_M := 145.0
 
 var _layout: WorldLayout
 var _network: ShippingLaneNetwork
@@ -94,6 +94,19 @@ func validate(network: ShippingLaneNetwork, layout: WorldLayout) -> Array[Dictio
 			issues.append(_issue("error", "unreachable_quay",
 				"Quay has no directed route to a shipping lane", node_id,
 				node.get("position", Vector2.ZERO) as Vector2))
+		var junction_id := "%s:junction" % node_id
+		if not network.nodes.has(junction_id):
+			issues.append(_issue("error", "missing_quay_junction",
+				"Quay has no dedicated clear-water junction", node_id,
+				node.get("position", Vector2.ZERO) as Vector2))
+			continue
+		var quay_position := node.get("position", Vector2.ZERO) as Vector2
+		var junction_position := (network.nodes[junction_id] as Dictionary).get(
+			"position", quay_position) as Vector2
+		if quay_position.distance_to(junction_position) < QUAY_JUNCTION_CLEARANCE_M * 0.9:
+			issues.append(_issue("error", "short_quay_junction",
+				"Quay junction is too close for a safe departure turn", node_id,
+				junction_position))
 	for port_id_raw in network.port_gate_nodes.keys():
 		var port_id := str(port_id_raw)
 		var has_holding := false
@@ -260,29 +273,39 @@ func _build_port(data: PortData) -> void:
 	for berth in _port_berths(data):
 		var berth_id := str(berth.get("id", ""))
 		var berth_position := berth.get("position", Vector2.ZERO) as Vector2
-		var water := berth.get("water", seaward) as Vector2
+		var water := (berth.get("water", seaward) as Vector2).normalized()
+		if water.length_squared() < 0.5:
+			water = seaward
 		var quay_node := "port:%s:quay:%s" % [port_id, berth_id]
 		var clearance_node := "%s:clear" % quay_node
+		var junction_node := "%s:junction" % quay_node
 		var clearance_position := berth_position + water.normalized() * QUAY_CRAB_CLEARANCE_M
+		var junction_position := berth_position + water * QUAY_JUNCTION_CLEARANCE_M
 		_network.add_node({"id": quay_node, "kind": "quay", "position": berth_position,
 			"port_id": port_id, "berth_id": berth_id, "direction": "station"})
 		_network.add_node({"id": clearance_node, "kind": "quay_clearance", "position": clearance_position,
 			"port_id": port_id, "berth_id": berth_id, "direction": "maneuver"})
+		_network.add_node({"id": junction_node, "kind": "quay_junction", "position": junction_position,
+			"port_id": port_id, "berth_id": berth_id, "direction": "junction"})
 		var maneuver_path := _add_bidirectional_segmented_path(
 			"port:%s:%s:maneuver" % [port_id, berth_id], quay_node, clearance_node,
 			PackedVector2Array([berth_position, clearance_position]), "quay_maneuver", true)
-		var approach_start := clearance_position + seaward * APPROACH_CLEARANCE_M
-		var approach_points := PackedVector2Array([clearance_position, approach_start, gate_position])
 		var approach_path := _add_bidirectional_segmented_path(
-			"port:%s:%s:approach" % [port_id, berth_id], clearance_node, gate_id,
-			approach_points, "port_approach", true)
+			"port:%s:%s:approach" % [port_id, berth_id], clearance_node, junction_node,
+			PackedVector2Array([clearance_position, junction_position]), "port_approach", true)
+		var merge_path := _add_bidirectional_segmented_path(
+			"port:%s:%s:merge" % [port_id, berth_id], junction_node, gate_id,
+			PackedVector2Array([junction_position, gate_position]), "port_merge", true)
 		var all_berth_blocks := _path_blocks(maneuver_path)
 		all_berth_blocks.append_array(_path_blocks(approach_path))
+		all_berth_blocks.append_array(_path_blocks(merge_path))
 		for block_id in all_berth_blocks:
 			port_blocks.append(block_id)
 		var departure_blocks := maneuver_path.get("forward", PackedStringArray()) as PackedStringArray
 		departure_blocks.append_array(approach_path.get("forward", PackedStringArray()) as PackedStringArray)
-		var arrival_blocks := approach_path.get("reverse", PackedStringArray()) as PackedStringArray
+		departure_blocks.append_array(merge_path.get("forward", PackedStringArray()) as PackedStringArray)
+		var arrival_blocks := merge_path.get("reverse", PackedStringArray()) as PackedStringArray
+		arrival_blocks.append_array(approach_path.get("reverse", PackedStringArray()) as PackedStringArray)
 		arrival_blocks.append_array(maneuver_path.get("reverse", PackedStringArray()) as PackedStringArray)
 		_network.add_signal({
 			"id": "signal:%s:depart" % quay_node,
@@ -290,6 +313,13 @@ func _build_port(data: PortData) -> void:
 			"node_id": quay_node,
 			"port_id": port_id,
 			"protected_blocks": departure_blocks,
+		})
+		_network.add_signal({
+			"id": "signal:%s:merge" % quay_node,
+			"kind": "chain",
+			"node_id": junction_node,
+			"port_id": port_id,
+			"protected_blocks": merge_path.get("forward", PackedStringArray()),
 		})
 		_network.add_signal({
 			"id": "signal:%s:arrive" % quay_node,
@@ -485,8 +515,8 @@ func _add_edge_with_block(
 		chain_region: bool,
 		waterway_width_m: float = 120.0,
 ) -> String:
-	var speed := 4.0 if kind in ["quay_maneuver", "port_approach", "holding_link"] else 7.2
-	var close_quarters := kind in ["quay_maneuver", "port_approach", "holding_link", "port_connector"]
+	var speed := 4.0 if kind in ["quay_maneuver", "port_approach", "port_merge", "holding_link"] else 7.2
+	var close_quarters := kind in ["quay_maneuver", "port_approach", "port_merge", "holding_link", "port_connector"]
 	var width := 34.0 if close_quarters else minf(maxf(waterway_width_m * 0.14, 30.0), 34.0)
 	_network.add_edge({
 		"id": edge_id,
