@@ -30,6 +30,17 @@ func _run() -> void:
 	_check(harbour.request_lane_lock(b, "npc-b", "approach"), "waiting manoeuvre acquires released lane")
 	_check(not harbour.release_berth_reservation(a, "npc-b"), "foreign reservation cannot release")
 	_check(harbour.release_berth_reservation(a, "npc-a"), "reservation owner releases berth")
+	var doomed := BoatBody.new()
+	var occupancy := harbour.get("_ship_at_berth") as Dictionary
+	occupancy[first.berth_id] = doomed
+	doomed.free()
+	_check(harbour.moored_ship(first.berth_id) == null,
+		"freed projected vessel is removed from harbour occupancy without an unsafe cast")
+	var stale_controller := HarbourController.new()
+	stale_controller.setup("stale-port")
+	stale_controller.free()
+	_check(HarbourRegistry._live_controller(stale_controller) == null,
+		"freed streamed harbour is rejected before its typed cast")
 	_finish()
 
 

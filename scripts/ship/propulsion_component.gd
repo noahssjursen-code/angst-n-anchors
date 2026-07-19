@@ -41,6 +41,9 @@ func _physics_process(delta: float) -> void:
 	if Engine.is_editor_hint() or _body == null or is_zero_approx(throttle):
 		delivered_thrust_n = 0.0
 		return
+	var force_scale := _body.get_physics_force_scale_for_tick()
+	if force_scale <= 0.0:
+		return
 
 	# Burn fuel proportional to throttle magnitude. If the tank is dry,
 	# clamp magnitude to zero — engine stalls. Rudder still works because
@@ -49,7 +52,8 @@ func _physics_process(delta: float) -> void:
 	if fuel_pct <= 0.0:
 		return
 
-	var burn := absf(throttle) * fuel_burn_l_per_sec_full * delta
+	# Reduced-quality vessels integrate several skipped ticks at once.
+	var burn := absf(throttle) * fuel_burn_l_per_sec_full * delta * force_scale
 	if burn > 0.0:
 		_body.consume_fuel(burn)
 	var prop_world := _body.to_global(stern_offset)
@@ -73,9 +77,6 @@ func _physics_process(delta: float) -> void:
 	delivered_thrust_n = absf(magnitude)
 	_submit_wake(prop_world, water, magnitude)
 
-	var force_scale := _body.get_physics_force_scale_for_tick()
-	if force_scale <= 0.0:
-		return
 	magnitude *= force_scale
 
 	# Body space: bow at −Z (Godot forward). Negative throttle = ahead; force must push toward −Z.

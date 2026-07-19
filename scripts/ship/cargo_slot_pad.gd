@@ -360,7 +360,7 @@ func iter_container_nodes() -> Array[ContainerNode]:
 	var out: Array[ContainerNode] = []
 	var seen: Dictionary = {}
 	for node in _nodes.values():
-		if node == null or not (node is ContainerNode):
+		if node == null or not is_instance_valid(node) or not (node is ContainerNode):
 			continue
 		var cn := node as ContainerNode
 		if seen.has(cn.get_instance_id()):
@@ -437,9 +437,20 @@ func _spawn_node(origin: int, unit: ContainerUnit) -> void:
 	_container_root.add_child(node)
 	node.position = _cell_center_local(origin, unit.footprint)
 	node.position.y = ContainerNode.floor_offset_y()
-	## Quay yards still skip boat mass, but containers must block walking.
-	node.setup(unit, false)
+	## Authority-projected NPC cargo is visual and mass-accounted by this pad, but
+	## does not need one moving StaticBody per box. Nested moving static bodies are
+	## particularly expensive in Jolt and multiplied badly across a fleet.
+	node.setup(unit, _is_authority_projection())
 	_nodes[origin] = node
+
+
+func _is_authority_projection() -> bool:
+	var cursor: Node = self
+	while cursor != null:
+		if cursor is BoatBody:
+			return bool(cursor.get_meta("authority_projection", false))
+		cursor = cursor.get_parent()
+	return false
 
 
 func _origin_for_node(node: ContainerNode) -> int:
@@ -515,8 +526,11 @@ func _refresh_mass() -> void:
 	_deck_mass_kg = 0.0
 	var i := 0
 	for origin in _nodes.keys():
-		var node := _nodes[origin] as ContainerNode
-		if node == null or not is_instance_valid(node) or node.unit == null:
+		var raw: Variant = _nodes[origin]
+		if raw == null or not is_instance_valid(raw):
+			continue
+		var node := raw as ContainerNode
+		if node == null or node.unit == null:
 			continue
 		var kg := maxf(node.unit.mass_kg, 0.0)
 		_deck_mass_kg += kg

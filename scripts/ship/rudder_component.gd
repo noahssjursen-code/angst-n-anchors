@@ -50,6 +50,11 @@ func _physics_process(_delta: float) -> void:
 	if Engine.is_editor_hint() or _body == null or is_zero_approx(rudder_input):
 		lateral_force_n = 0.0
 		return
+	var force_scale := 1.0
+	if _body.has_method("get_physics_force_scale_for_tick"):
+		force_scale = float(_body.call("get_physics_force_scale_for_tick"))
+	if force_scale <= 0.0:
+		return
 	var force_world_position := _body.to_global(rudder_position)
 	var world_com := _body.to_global(_body.center_of_mass)
 	var point_velocity := (
@@ -87,11 +92,7 @@ func _physics_process(_delta: float) -> void:
 	if is_zero_approx(flow_direction):
 		flow_direction = 1.0
 	var local_force_x := -signf(lift_coeff) * flow_direction * force_magnitude
-	if _body.has_method("get_physics_force_scale_for_tick"):
-		var force_scale := float(_body.call("get_physics_force_scale_for_tick"))
-		if force_scale <= 0.0:
-			return
-		local_force_x *= force_scale
+	local_force_x *= force_scale
 	var force_world := _body.global_transform.basis * Vector3(local_force_x, 0.0, 0.0)
 	_body.apply_force(force_world, force_world_position - _body.global_position)
 	lateral_force_n = absf(local_force_x)

@@ -34,7 +34,11 @@ func _process(delta: float) -> void:
 
 
 func cycle_preset() -> void:
-	_preset = (_preset + 1) % 4
+	set_preset((_preset + 1) % 4)
+
+
+func set_preset(value: Preset) -> void:
+	_preset = clampi(int(value), Preset.OFF, Preset.ALL)
 	_apply_preset()
 	preset_changed.emit(PRESET_NAMES[_preset])
 

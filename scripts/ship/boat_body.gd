@@ -339,14 +339,18 @@ func _ready() -> void:
 	set_physics_quality(physics_quality)
 
 	if not Engine.is_editor_hint():
-		call_deferred("_ensure_walk_deck")
-		var audio: Node = load("res://scripts/ship/boat_audio_system.gd").new()
-		audio.name = "BoatAudio"
-		add_child(audio)
+		var is_projection := bool(get_meta("authority_projection", false))
+		if not is_projection:
+			call_deferred("_ensure_walk_deck")
+			var audio: Node = load("res://scripts/ship/boat_audio_system.gd").new()
+			audio.name = "BoatAudio"
+			add_child(audio)
 
 		var lighting := ShipLighting.new()
 		lighting.name = "ShipLighting"
 		add_child(lighting)
+		if is_projection:
+			lighting.set_preset(ShipLighting.Preset.NAV)
 
 		var traffic_agent := VesselTrafficAgent.new()
 		traffic_agent.name = "VesselTrafficAgent"
@@ -369,6 +373,8 @@ func _notification(what: int) -> void:
 
 func _sync_walk_deck_after_enter() -> void:
 	if not is_inside_tree():
+		return
+	if bool(get_meta("authority_projection", false)):
 		return
 	if _walk_deck != null and is_instance_valid(_walk_deck):
 		_ensure_walk_deck()
@@ -396,7 +402,8 @@ func _physics_process(_delta: float) -> void:
 			_ensure_model()
 		return
 
-	if _walk_deck == null or not is_instance_valid(_walk_deck):
+	if not bool(get_meta("authority_projection", false)) \
+			and (_walk_deck == null or not is_instance_valid(_walk_deck)):
 		_ensure_walk_deck()
 	if automatic_physics_lod:
 		_physics_lod_timer += _delta

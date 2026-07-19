@@ -55,9 +55,14 @@ func _rebuild() -> void:
 	_drawn_handoffs.clear()
 	var live_ids: Dictionary = {}
 	for raw in get_tree().get_nodes_in_group("vessel_traffic_agent"):
+		if raw == null or not is_instance_valid(raw):
+			continue
 		var agent := raw as Node
-		var boat := agent.get_parent() as BoatBody if agent != null else null
-		if boat == null or not is_instance_valid(boat):
+		var parent: Variant = agent.get_parent() if agent != null else null
+		if parent == null or not is_instance_valid(parent):
+			continue
+		var boat := parent as BoatBody
+		if boat == null:
 			continue
 		var canonical_id := HarbourController.ship_id_of(boat)
 		if not canonical_id.is_empty():
@@ -186,7 +191,7 @@ func _draw_dormant_company_routes(live_ids: Dictionary) -> void:
 	if fleet_projection == null or not fleet_projection.has_method("all_projection_records"):
 		return
 	var traffic := get_node_or_null("/root/MaritimeTraffic")
-	var traffic_snapshot: Dictionary = traffic.snapshot() if traffic != null else {}
+	var traffic_snapshot: Dictionary = traffic.local_state_view() if traffic != null else {}
 	for raw in fleet_projection.call("all_projection_records") as Array[Dictionary]:
 		var record := raw as Dictionary
 		var uid := str(record.get("uid", ""))
@@ -318,7 +323,7 @@ func _draw_traffic_authority() -> void:
 	var traffic := get_node_or_null("/root/MaritimeTraffic")
 	if traffic == null:
 		return
-	var snapshot: Dictionary = traffic.snapshot()
+	var snapshot: Dictionary = traffic.local_state_view()
 	var intents := snapshot.get("intents", {}) as Dictionary
 	for raw in (snapshot.get("agreements", {}) as Dictionary).values():
 		var agreement := raw as Dictionary

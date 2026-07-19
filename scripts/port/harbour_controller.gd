@@ -123,8 +123,8 @@ func plug_ship(berth_id: String, ship: BoatBody) -> bool:
 	var arriving_id := ship_id_of(ship)
 	if not reservation.is_empty() and str(reservation.get("vessel_id", "")) != arriving_id:
 		return false
-	var existing: BoatBody = _ship_at_berth.get(bid) as BoatBody
-	if existing != null and is_instance_valid(existing) and existing != ship:
+	var existing := _live_boat(_ship_at_berth.get(bid))
+	if existing != null and existing != ship:
 		return false
 	var prev_berth := ship_berth_id(ship)
 	if not prev_berth.is_empty() and prev_berth != bid:
@@ -144,7 +144,7 @@ func plug_ship(berth_id: String, ship: BoatBody) -> bool:
 
 
 func unplug_ship(ship: BoatBody) -> void:
-	if ship == null:
+	if ship == null or not is_instance_valid(ship):
 		return
 	var bid := ship_berth_id(ship)
 	if bid.is_empty():
@@ -263,18 +263,24 @@ func berth_for_bollard(post: Node) -> QuayBerthSlot:
 func ships() -> Array:
 	var out: Array = []
 	for bid in _ship_at_berth.keys():
-		var ship: BoatBody = _ship_at_berth[bid]
-		if ship != null and is_instance_valid(ship):
+		var ship := _live_boat(_ship_at_berth[bid])
+		if ship != null:
 			out.append(ship)
 	return out
 
 
 func moored_ship(berth_id: String) -> BoatBody:
-	var ship: BoatBody = _ship_at_berth.get(berth_id.strip_edges()) as BoatBody
-	if ship != null and is_instance_valid(ship):
+	var ship := _live_boat(_ship_at_berth.get(berth_id.strip_edges()))
+	if ship != null:
 		return ship
 	_ship_at_berth.erase(berth_id.strip_edges())
 	return null
+
+
+func _live_boat(value: Variant) -> BoatBody:
+	if value == null or not is_instance_valid(value):
+		return null
+	return value as BoatBody
 
 
 func ship_berth(ship: BoatBody) -> QuayBerthSlot:
@@ -444,7 +450,12 @@ func all_equipment() -> Array:
 
 
 func get_equipment(equip_id: String) -> QuayEquipmentJob:
-	return _equipment.get(equip_id.strip_edges()) as QuayEquipmentJob
+	var key := equip_id.strip_edges()
+	var raw: Variant = _equipment.get(key)
+	if raw == null or not is_instance_valid(raw):
+		_equipment.erase(key)
+		return null
+	return raw as QuayEquipmentJob
 
 
 func primary_equipment(berth_id: String) -> QuayEquipmentJob:

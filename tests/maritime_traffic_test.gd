@@ -3,6 +3,7 @@ extends SceneTree
 const TrafficScript := preload("res://scripts/traffic/maritime_traffic_service.gd")
 
 var _failures := PackedStringArray()
+var _publish_count := 0
 
 
 func _initialize() -> void:
@@ -20,6 +21,7 @@ func _initialize() -> void:
 	_test_lane_window(traffic)
 	_test_atomic_lane_window_rollback(traffic)
 	_test_fifty_vessel_spatial_scan(traffic)
+	_test_batched_fleet_publication(traffic)
 	_test_snapshot_round_trip(traffic)
 	traffic.queue_free()
 	_finish()
@@ -227,6 +229,27 @@ func _test_fifty_vessel_spatial_scan(traffic: Node) -> void:
 	print("50-vessel traffic conflict scan: %.3f ms" % elapsed_ms)
 	_check(elapsed_ms < 25.0,
 		"50-vessel authority conflict pass remains below its 25 ms regression budget")
+
+
+func _test_batched_fleet_publication(traffic: Node) -> void:
+	_publish_count = 0
+	traffic.traffic_changed.connect(_on_traffic_published)
+	traffic.begin_batch()
+	for index in range(50):
+		var specs: Array[Dictionary] = [{
+			"block_id": "batch:%d" % index,
+			"direction": 1,
+			"capacity": 1,
+		}]
+		traffic.request_lane_window("batch-vessel:%d" % index, specs)
+	traffic.end_batch()
+	_check(_publish_count == 1,
+		"50-vessel lane renewal publishes one authority snapshot, not one per block")
+	traffic.traffic_changed.disconnect(_on_traffic_published)
+
+
+func _on_traffic_published(_snapshot: Dictionary) -> void:
+	_publish_count += 1
 
 
 func _test_snapshot_round_trip(traffic: Node) -> void:

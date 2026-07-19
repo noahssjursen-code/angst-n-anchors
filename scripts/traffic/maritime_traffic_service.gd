@@ -35,6 +35,8 @@ var _request_sequence := 0
 var _last_conflict_scan_ms := 0.0
 var _last_conflict_pair_count := 0
 var _last_conflict_count := 0
+var _batch_depth := 0
+var _batch_dirty := false
 
 
 func _ready() -> void:
@@ -111,6 +113,32 @@ func snapshot() -> Dictionary:
 		"holding_zones": _holding_zones.duplicate(true),
 		"lane_claims": _lane_claims.duplicate(true),
 	}
+
+
+## Read-only in-process view. Callers must never mutate its dictionaries. This
+## avoids deep-copying the whole authority graph for local simulation ticks;
+## `snapshot()` remains the safe replication/export API.
+func local_state_view() -> Dictionary:
+	return {
+		"revision": _revision,
+		"intents": _intents,
+		"agreements": _agreements,
+		"blocks": _blocks,
+		"port_queues": _port_queues,
+		"holding_zones": _holding_zones,
+		"lane_claims": _lane_claims,
+	}
+
+
+func begin_batch() -> void:
+	_batch_depth += 1
+
+
+func end_batch() -> void:
+	_batch_depth = maxi(_batch_depth - 1, 0)
+	if _batch_depth == 0 and _batch_dirty:
+		_batch_dirty = false
+		_publish()
 
 
 func apply_authority_snapshot(data: Dictionary) -> bool:
@@ -482,6 +510,7 @@ func request_lane_window(vessel_id: String, specs: Array[Dictionary], priority: 
 	var vid := vessel_id.strip_edges()
 	if vid.is_empty():
 		return {}
+	begin_batch()
 	var wanted := PackedStringArray()
 	var acquired := PackedStringArray()
 	var acquired_now := PackedStringArray()
@@ -520,12 +549,14 @@ func request_lane_window(vessel_id: String, specs: Array[Dictionary], priority: 
 		if blocked_by.is_empty() or block_id in previous:
 			retained.append(block_id)
 	_lane_claims[vid] = Array(retained)
-	return {
+	var result := {
 		"granted": blocked_by.is_empty(),
 		"blocked_by": blocked_by,
 		"held_blocks": Array(acquired),
 		"requested_blocks": Array(wanted),
 	}
+	end_batch()
+	return result
 
 
 func release_lane_window(vessel_id: String) -> void:
@@ -950,5 +981,8 @@ func _vector2_value(value: Variant) -> Vector2:
 
 
 func _publish() -> void:
+	if _batch_depth > 0:
+		_batch_dirty = true
+		return
 	_revision += 1
 	traffic_changed.emit(snapshot())

@@ -50,10 +50,15 @@ func _physics_process(_delta: float) -> void:
 		or hull_stations.stations.is_empty()
 	):
 		return
+	var force_scale := 1.0
+	if _body.has_method("get_physics_force_scale_for_tick"):
+		force_scale = float(_body.call("get_physics_force_scale_for_tick"))
+	if force_scale <= 0.0:
+		return
 	var cpu_begin := Time.get_ticks_usec()
 	var samples := _gather_samples()
 	_measure_hydrostatics(samples)
-	_apply_forces(samples)
+	_apply_forces(samples, force_scale)
 	cpu_time_ms = float(Time.get_ticks_usec() - cpu_begin) / 1000.0
 
 
@@ -139,7 +144,7 @@ func _measure_hydrostatics(samples: Array[Dictionary]) -> void:
 		current_draft_m /= waterplane_area_m2
 
 
-func _apply_forces(samples: Array[Dictionary]) -> void:
+func _apply_forces(samples: Array[Dictionary], force_scale: float = 1.0) -> void:
 	total_lift_n = 0.0
 	total_damping_n = 0.0
 	var target_ratio := 0.85
@@ -184,8 +189,8 @@ func _apply_forces(samples: Array[Dictionary]) -> void:
 			damping_n *= 0.5
 		damping_n = clampf(damping_n, -force_limit, force_limit)
 		_body.apply_force(
-			Vector3(0.0, lift_n + damping_n, 0.0),
+			Vector3(0.0, (lift_n + damping_n) * force_scale, 0.0),
 			force_point - _body.global_position
 		)
-		total_lift_n += lift_n
-		total_damping_n += damping_n
+		total_lift_n += lift_n * force_scale
+		total_damping_n += damping_n * force_scale

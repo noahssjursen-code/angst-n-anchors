@@ -5,7 +5,7 @@ extends Node
 ## projection, BoatBody, captain, autopilot, traffic, and port-operation path.
 
 const INTEREST_RADIUS_M := 6500.0
-const UPDATE_INTERVAL_S := 0.1
+const UPDATE_INTERVAL_S := 0.25
 const MAX_PHYSICAL_NPC_VESSELS := 8
 const ABSTRACT_TRAFFIC_INTERVAL_S := 0.5
 
@@ -48,8 +48,10 @@ func get_debug_stats() -> Dictionary:
 	var quality_counts := {"full": 0, "medium": 0, "low": 0, "sleep": 0}
 	var active_captains := 0
 	for ship_raw in _ships.values():
+		if ship_raw == null or not is_instance_valid(ship_raw):
+			continue
 		var ship := ship_raw as BoatBody
-		if ship == null or not is_instance_valid(ship):
+		if ship == null:
 			continue
 		var quality := ship.get_physics_quality_name().to_lower()
 		quality_counts[quality] = int(quality_counts.get(quality, 0)) + 1
@@ -123,7 +125,7 @@ func network_fleet_snapshot() -> Dictionary:
 	for record in all_projection_records():
 		var uid := str(record.get("uid", ""))
 		var wire := VesselAuthoritySnapshot.from_projection_record(
-			record, leg_route_plan(uid), _ships.get(uid) as Node3D, server_time)
+			record, leg_route_plan(uid), _live_ship(uid), server_time)
 		if VesselAuthoritySnapshot.is_valid(wire):
 			vessels.append(wire)
 	var result := {
@@ -146,8 +148,17 @@ func _connect_authority_signals() -> void:
 
 
 func _authority_for(uid: String) -> Node:
-	var authority := _authority_by_uid.get(uid) as Node
-	return authority if authority != null and is_instance_valid(authority) else null
+	var raw: Variant = _authority_by_uid.get(uid)
+	if raw == null or not is_instance_valid(raw):
+		return null
+	return raw as Node
+
+
+func _live_ship(uid: String) -> BoatBody:
+	var raw: Variant = _ships.get(uid)
+	if raw == null or not is_instance_valid(raw):
+		return null
+	return raw as BoatBody
 
 
 func _call_authority(uid: String, method: String, args: Array = []) -> Variant:
@@ -190,7 +201,7 @@ func _refresh() -> void:
 		_authority_by_uid[uid] = authority
 		_last_status[uid] = status
 		var projection := record.get("projection", {}) as Dictionary
-		var existing_ship := _ships.get(uid) as BoatBody
+		var existing_ship := _live_ship(uid)
 		var position := existing_ship.global_position if existing_ship != null \
 				and is_instance_valid(existing_ship) \
 			else projection.get("position", Vector3(INF, INF, INF)) as Vector3
@@ -208,12 +219,12 @@ func _refresh() -> void:
 			if harbour == null or _pick_cargo_berth(harbour, vessel, assignment) == null:
 				# A vessel already visible on its arrival lane waits where it is
 				# instead of blinking out while every compatible quay is occupied.
-				var waiting_ship := _ships.get(uid) as BoatBody
+				var waiting_ship := _live_ship(uid)
 				if waiting_ship != null and is_instance_valid(waiting_ship):
 					wanted[uid] = true
 				continue
 		wanted[uid] = true
-		var ship := _ships.get(uid) as BoatBody
+		var ship := _live_ship(uid)
 		if ship == null or not is_instance_valid(ship):
 			ship = _spawn(vessel, uid)
 		if ship == null:
@@ -259,6 +270,7 @@ func _publish_authority_traffic(records: Array[Dictionary]) -> void:
 	var traffic := get_node_or_null("/root/MaritimeTraffic")
 	if traffic == null or not traffic.is_world_authority():
 		return
+	traffic.begin_batch()
 	var current: Dictionary = {}
 	for record in records:
 		var uid := str(record.get("uid", ""))
@@ -316,6 +328,7 @@ func _publish_authority_traffic(records: Array[Dictionary]) -> void:
 		if not current.has(uid):
 			traffic.withdraw_vessel(uid)
 	_published_authority_ids = current
+	traffic.end_batch()
 
 
 func _spawn(record: Dictionary, uid: String) -> BoatBody:
@@ -326,6 +339,7 @@ func _spawn(record: Dictionary, uid: String) -> BoatBody:
 	ship.set_meta("company_vessel_uid", uid)
 	ship.set_meta("network_ship_id", "company:%s" % uid)
 	ship.set_meta("authority_projection", true)
+	_strip_owner_only_nodes(ship)
 	ship.visible = false
 	ship.freeze = true
 	# These hulls move every authority tick. Kinematic freeze keeps Jolt from
@@ -346,6 +360,22 @@ func _spawn(record: Dictionary, uid: String) -> BoatBody:
 	ship.process_mode = Node.PROCESS_MODE_DISABLED
 	_ships[uid] = ship
 	return ship
+
+
+func _strip_owner_only_nodes(ship: BoatBody) -> void:
+	# These components opt into the same remote-visual contract used by MP.
+	# An authority projection is autonomous, so cameras, local helm input,
+	# boarding prompts and owner audio must never enter the live scene tree.
+	const VehicleGroups = preload("res://scripts/ship/vehicle_groups.gd")
+	var removable: Array[Node] = []
+	for raw in ship.find_children("*", "", true, false):
+		var node := raw as Node
+		if node != null and node.is_in_group(VehicleGroups.SHIP_OWNER_ONLY):
+			removable.append(node)
+	for node in removable:
+		if is_instance_valid(node) and node.get_parent() != null:
+			node.get_parent().remove_child(node)
+			node.free()
 
 
 func _project(
@@ -460,8 +490,10 @@ func _enable_boat_physics(ship: BoatBody) -> void:
 
 func _apply_shared_npc_physics_budget() -> void:
 	for raw in _ships.values():
+		if raw == null or not is_instance_valid(raw):
+			continue
 		var ship := raw as BoatBody
-		if ship == null or not is_instance_valid(ship):
+		if ship == null:
 			continue
 		var captain := ship.get_node_or_null("AutonomousVesselCaptain") as AutonomousVesselCaptain
 		if captain == null:
@@ -488,7 +520,7 @@ func _on_voyage_completed(
 		uid: String,
 		captain: AutonomousVesselCaptain,
 ) -> void:
-	var ship := _ships.get(uid) as BoatBody
+	var ship := _live_ship(uid)
 	var authority := _authority_for(uid)
 	if ship == null or authority == null or captain == null:
 		return
@@ -546,7 +578,9 @@ func _ensure_berthed(
 func _drive_port_operations(ship: BoatBody, uid: String, assignment: Dictionary) -> void:
 	var service := _authority_for(uid)
 	var berth_row := _berths.get(uid, {}) as Dictionary
-	var harbour := berth_row.get("controller") as HarbourController
+	var harbour_raw: Variant = berth_row.get("controller")
+	var harbour := harbour_raw as HarbourController \
+		if harbour_raw != null and is_instance_valid(harbour_raw) else null
 	var berth_id := str(berth_row.get("berth_id", ""))
 	if service == null or harbour == null or berth_id.is_empty():
 		return
@@ -751,7 +785,9 @@ func _release_berth(uid: String, ship: BoatBody) -> void:
 	if not _berths.has(uid):
 		return
 	var row := _berths[uid] as Dictionary
-	var harbour := row.get("controller") as HarbourController
+	var harbour_raw: Variant = row.get("controller")
+	var harbour := harbour_raw as HarbourController \
+		if harbour_raw != null and is_instance_valid(harbour_raw) else null
 	if harbour != null and is_instance_valid(harbour):
 		harbour.unplug_ship(ship)
 	var mooring := ship.find_child("MooringComponent", true, false) as MooringComponent
@@ -761,7 +797,7 @@ func _release_berth(uid: String, ship: BoatBody) -> void:
 
 
 func _despawn(uid: String) -> void:
-	var ship := _ships.get(uid) as BoatBody
+	var ship := _live_ship(uid)
 	if ship != null and is_instance_valid(ship):
 		var status := str(_last_status.get(uid, ""))
 		var contract_id := str(_physical_contracts.get(uid, ""))
@@ -806,8 +842,11 @@ func _observer_position() -> Vector3:
 	if camera != null:
 		return camera.global_position
 	var view := get_node_or_null("/root/LocalPlayerView")
-	var ship: Node3D = view.get_active_ship() as Node3D if view != null else null
-	return ship.global_position if ship is Node3D else Vector3(INF, INF, INF)
+	var raw: Variant = view.get_active_ship() if view != null else null
+	if raw == null or not is_instance_valid(raw):
+		return Vector3(INF, INF, INF)
+	var ship := raw as Node3D
+	return ship.global_position if ship != null else Vector3(INF, INF, INF)
 
 
 func _capture_unit_manifest(ship: BoatBody, contract: Dictionary) -> Dictionary:

@@ -527,7 +527,7 @@ func _apply_live_traffic_delays(delta_s: int) -> void:
 	var traffic := get_node_or_null("/root/MaritimeTraffic")
 	if traffic == null:
 		return
-	var traffic_snapshot: Dictionary = traffic.snapshot()
+	var traffic_snapshot: Dictionary = traffic.local_state_view()
 	var intents := traffic_snapshot.get("intents", {}) as Dictionary
 	var blocks := traffic_snapshot.get("blocks", {}) as Dictionary
 	var fleet := _state.get("fleet", {}) as Dictionary

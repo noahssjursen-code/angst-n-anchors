@@ -72,9 +72,8 @@ func _process(delta: float) -> void:
 		return
 	var step := _abstract_elapsed_s
 	_abstract_elapsed_s = 0.0
-	var changed := false
 	var traffic := get_node_or_null("/root/MaritimeTraffic")
-	var traffic_snapshot: Dictionary = traffic.snapshot() if traffic != null else {}
+	var traffic_snapshot: Dictionary = traffic.local_state_view() if traffic != null else {}
 	for uid_raw in _fleet.keys():
 		var uid := str(uid_raw)
 		if _local_simulation.has(uid):
@@ -94,9 +93,9 @@ func _process(delta: float) -> void:
 		if not is_equal_approx(progress, float(row.get("route_progress_m", 0.0))):
 			row["route_progress_m"] = progress
 			record["assignment"] = row
-			changed = true
-	if changed:
-		company_changed.emit(snapshot())
+	# CompanyFleetProjection polls authority rows. Emitting a full company change
+	# four times per second would cause a second immediate fleet refresh on top of
+	# that poll and scales poorly with stress fleets.
 
 
 func _authority_speed_factor(uid: String, traffic_snapshot: Dictionary) -> float:
@@ -624,7 +623,8 @@ func _prebuilt_record(prebuilt_id: String, uid: String, index: int) -> Dictionar
 
 func _observer_xz() -> Vector2:
 	var view := get_node_or_null("/root/LocalPlayerView")
-	var ship := view.get_active_ship() as Node3D if view != null else null
+	var raw: Variant = view.get_active_ship() if view != null else null
+	var ship := raw as Node3D if raw != null and is_instance_valid(raw) else null
 	if ship != null:
 		return Vector2(ship.global_position.x, ship.global_position.z)
 	var camera := get_viewport().get_camera_3d()
