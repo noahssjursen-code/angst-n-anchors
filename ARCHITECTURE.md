@@ -94,8 +94,9 @@ truth for rendering, weather, ports, charting, and navigation.
 
 ### `scripts/traffic/`
 
-Static, deterministic maritime traffic infrastructure. This layer contains no
-vessel agents and never advances a boat.
+Deterministic maritime traffic infrastructure. Production world presentation
+contains no client-authoritative vessel agents; the F6 lab has a separate
+data-only simulator for exercising the authority without BoatBody physics.
 
 - `ShippingLaneNetworkBuilder` converts `WorldLayout.waterway_centerlines` and
   every seeded `PortData.berth_plan` into quay manoeuvre pockets, port gates,
@@ -111,8 +112,13 @@ vessel agents and never advances a boat.
   authority replicates; clients do not independently decide traffic outcomes.
 - `ShippingLaneDebugDraw` streams only the F3/freecam region around the current
   camera and remains completely unmaterialized while its gizmo layer is off.
-- `shipping_lane_network_showcase.tscn` is the F6 inspection scene. It draws no
-  autonomous vessels.
+- `ShippingLaneTrafficSimulator` is a fixed-step test harness. Lightweight ship
+  records travel real graph edges, retain signal blocks until their stern clears,
+  request berth tokens, enter FIFO queues, and emit a copyable authority report.
+  It is not the production NPC controller.
+- `shipping_lane_network_showcase.tscn` is the F6 traffic lab. It displays those
+  test records, accelerates or pauses time, and copies both human-readable
+  validation and machine-readable authority state with Ctrl+C.
 
 ### `scripts/port/`
 

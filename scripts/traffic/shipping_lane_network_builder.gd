@@ -462,6 +462,7 @@ func _connect_port_gates_to_lane(data: PortData, gates: Dictionary) -> void:
 		var gate_position := gate.get("position", Vector2.ZERO) as Vector2
 		var lane_index := mini(first_index + gate_index, available_count - 1)
 		var targets := PackedStringArray([forward_ids[lane_index], reverse_ids[lane_index]])
+		var connector_branches: Array[Dictionary] = []
 		for direction_index in range(targets.size()):
 			var target_id := targets[direction_index]
 			if target_id.is_empty() or targets.find(target_id) < direction_index:
@@ -474,6 +475,9 @@ func _connect_port_gates_to_lane(data: PortData, gates: Dictionary) -> void:
 			]
 			var connector_path := _add_bidirectional_segmented_path(
 				prefix, gate_id, target_id, points, "port_connector", true, QUEUE_BLOCK_TARGET_M)
+			for existing_branch in connector_branches:
+				_add_connector_cross_conflicts(existing_branch, connector_path)
+			connector_branches.append(connector_path)
 			_register_inbound_queue(data.port_id, gate, direction_index,
 				target_id, connector_path)
 			_network.add_signal({"id": "signal:%s:depart" % prefix,
@@ -484,6 +488,45 @@ func _connect_port_gates_to_lane(data: PortData, gates: Dictionary) -> void:
 				"kind": "chain", "node_id": target_id, "port_id": data.port_id,
 				"protected_blocks": PackedStringArray([inbound[0]]) \
 					if not inbound.is_empty() else PackedStringArray()})
+
+
+func _add_connector_cross_conflicts(a_path: Dictionary, b_path: Dictionary) -> void:
+	# A quay may connect to both directional highway lanes. Those branches fan
+	# through the same manoeuvring water, so geometrically crossing block pairs
+	# must be interlocked even though they belong to different paths.
+	var a_blocks := _path_blocks(a_path)
+	var b_blocks := _path_blocks(b_path)
+	for a_block_id in a_blocks:
+		var a_block := _network.blocks.get(a_block_id, {}) as Dictionary
+		var a_edge := _network.edges.get(str(a_block.get("edge_id", "")), {}) as Dictionary
+		var a_points := a_edge.get("points", PackedVector2Array()) as PackedVector2Array
+		if a_points.size() < 2:
+			continue
+		for b_block_id in b_blocks:
+			var b_block := _network.blocks.get(b_block_id, {}) as Dictionary
+			var b_edge := _network.edges.get(str(b_block.get("edge_id", "")), {}) as Dictionary
+			var b_points := b_edge.get("points", PackedVector2Array()) as PackedVector2Array
+			if b_points.size() < 2:
+				continue
+			if _segment_clearance(a_points[0], a_points[-1], b_points[0], b_points[-1]) <= 20.0:
+				_network.add_block_conflict(a_block_id, b_block_id)
+
+
+static func _segment_clearance(a0: Vector2, a1: Vector2, b0: Vector2, b1: Vector2) -> float:
+	if Geometry2D.segment_intersects_segment(a0, a1, b0, b1) != null:
+		return 0.0
+	return minf(
+		minf(_point_segment_distance(a0, b0, b1), _point_segment_distance(a1, b0, b1)),
+		minf(_point_segment_distance(b0, a0, a1), _point_segment_distance(b1, a0, a1)),
+	)
+
+
+static func _point_segment_distance(point: Vector2, a: Vector2, b: Vector2) -> float:
+	var delta := b - a
+	if delta.length_squared() < 0.0001:
+		return point.distance_to(a)
+	var t := clampf((point - a).dot(delta) / delta.length_squared(), 0.0, 1.0)
+	return point.distance_to(a + delta * t)
 
 
 func _register_inbound_queue(

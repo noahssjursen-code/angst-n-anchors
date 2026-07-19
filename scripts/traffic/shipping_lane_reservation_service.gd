@@ -351,7 +351,9 @@ func _vessel_may_enter_port_queue(
 		if str(request.get("physical_quay_id", "")) != physical_quay_id:
 			return false
 		var assigned := assigned_queue_slot(vessel_id, direction_index)
-		return not assigned.is_empty() and int(assigned.get("queue_index", -1)) == queue_index
+		# The vessel may travel through empty rear blocks to reach its assigned
+		# position, but may never advance ahead of its FIFO rank.
+		return not assigned.is_empty() and queue_index >= int(assigned.get("queue_index", -1))
 	var token_id := str(_berth_by_vessel.get(vessel_id, ""))
 	if token_id.is_empty():
 		return false
