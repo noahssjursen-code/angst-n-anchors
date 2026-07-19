@@ -85,6 +85,26 @@ static func instantiate_from_record(record: Dictionary) -> BoatBody:
 	return boat
 
 
+static func instantiate_projection_from_record(record: Dictionary) -> BoatBody:
+	## Authority projections must carry their role before fit-out is applied.
+	## Setting this after instantiate_from_record() used to construct the complete
+	## player walk deck, per-brick collision, helm and audio only to delete them.
+	var normalized := resolve_deployable_record(record)
+	if normalized.is_empty():
+		push_error("VesselSpawn: refused invalid authority projection record")
+		return null
+	var hull_id := str(normalized.get("hull_id", TRAWLER_SMALL_ID))
+	var boat := _instantiate_hull(hull_id)
+	if boat == null:
+		return null
+	boat.set_meta("authority_projection", true)
+	boat.set_meta("registration_id", str(normalized.get("registration_id", "")))
+	_apply_fitout(boat, brick_layout_of(normalized), str(normalized.get("registration_id", "")))
+	apply_propulsion_override(boat, normalized)
+	apply_identity(boat, normalized)
+	return boat
+
+
 static func scene_path_for(vessel_id: String) -> String:
 	return HullRegistry.scene_path_for(vessel_id)
 

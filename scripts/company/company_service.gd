@@ -98,7 +98,9 @@ func projection_records() -> Array[Dictionary]:
 		out.append({
 			"uid": uid,
 			"vessel": vessel,
-			"assignment": assignment.duplicate(true),
+			# Read-only local projection view. Network/save snapshots perform their
+			# own explicit serialization; this path runs every interest tick.
+			"assignment": assignment,
 			"projection": fleet_projection(uid),
 		})
 	return out

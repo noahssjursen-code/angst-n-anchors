@@ -30,10 +30,36 @@ static func apply(
 	var g := grid
 	if g == null:
 		g = grid_for_boat(boat)
+	if bool(boat.get_meta("authority_projection", false)):
+		return apply_authority_projection(boat, layout, g, registration_id)
 	var primary_items := layout.iter_primary_cells()
 	if primary_items.size() > LARGE_LAYOUT_THRESHOLD:
 		return apply_staged(boat, layout, g, registration_id, primary_items)
 	return apply_sync(boat, layout, g, registration_id, primary_items)
+
+
+static func apply_authority_projection(
+		boat: BoatBody,
+		layout: BrickLayout,
+		grid: DeckGrid,
+		registration_id: String = "",
+) -> Dictionary:
+	## NPC physics needs cargo interfaces and legal capabilities, not a player
+	## walkable scene made of one node/collider per construction brick. The visible
+	## silhouette is supplied by VesselProxyRenderer as one cached mesh.
+	clear(boat)
+	var hull_id := str(layout.hull_id)
+	if hull_id.is_empty() and boat.has_meta("editor_hull_id"):
+		hull_id = str(boat.get_meta("editor_hull_id"))
+	var declared := registration_id.strip_edges()
+	if declared.is_empty() and boat.has_meta("registration_id"):
+		declared = str(boat.get_meta("registration_id"))
+	var outfit := VesselCompliance.validate(layout, hull_id, declared, grid)
+	var root := Node3D.new()
+	root.name = FITOUT_ROOT
+	boat.add_child(root)
+	return finish_fitout(boat, root, layout, grid, outfit, declared,
+		{"brick_i": 0, "ladder_n": 0})
 
 
 static func apply_sync(

@@ -16,6 +16,10 @@ const HOLDING_COLOR := Color(0.72, 0.45, 1.0, 0.90)
 const DEPARTURE_COLOR := Color(1.0, 0.58, 0.16, 0.98)
 const PASSAGE_COLOR := Color(0.12, 0.82, 1.0, 0.98)
 const ARRIVAL_COLOR := Color(0.30, 1.0, 0.48, 0.98)
+const MAX_DORMANT_ROUTES := 24
+const MAX_DORMANT_LABELS := 10
+const DORMANT_ROUTE_RADIUS_M := 7000.0
+const DORMANT_LABEL_RADIUS_M := 2600.0
 
 var _elapsed_s := 0.0
 var _line_batches: Dictionary = {}
@@ -192,6 +196,9 @@ func _draw_dormant_company_routes(live_ids: Dictionary) -> void:
 		return
 	var traffic := get_node_or_null("/root/MaritimeTraffic")
 	var traffic_snapshot: Dictionary = traffic.local_state_view() if traffic != null else {}
+	var camera := get_viewport().get_camera_3d()
+	var observer := camera.global_position if camera != null else Vector3.ZERO
+	var candidates: Array[Dictionary] = []
 	for raw in fleet_projection.call("all_projection_records") as Array[Dictionary]:
 		var record := raw as Dictionary
 		var uid := str(record.get("uid", ""))
@@ -200,14 +207,29 @@ func _draw_dormant_company_routes(live_ids: Dictionary) -> void:
 		var assignment := record.get("assignment", {}) as Dictionary
 		if str(assignment.get("status", "")) != "underway":
 			continue
-		var plan := fleet_projection.call("leg_route_plan", uid) as MarineRoutePlan
 		var projection := record.get("projection", {}) as Dictionary
 		var position := projection.get("position", Vector3.ZERO) as Vector3
+		var distance := position.distance_to(observer)
+		if distance > DORMANT_ROUTE_RADIUS_M:
+			continue
+		record["_debug_position"] = position
+		record["_debug_distance"] = distance
+		candidates.append(record)
+	candidates.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+		return float(a.get("_debug_distance", INF)) < float(b.get("_debug_distance", INF)))
+	var route_count := mini(candidates.size(), MAX_DORMANT_ROUTES)
+	for candidate_index in range(route_count):
+		var record := candidates[candidate_index] as Dictionary
+		var uid := str(record.get("uid", ""))
+		var assignment := record.get("assignment", {}) as Dictionary
+		var projection := record.get("projection", {}) as Dictionary
+		var position := record.get("_debug_position", Vector3.ZERO) as Vector3
 		var progress := float(projection.get("route_progress_m", 0.0))
+		var plan := fleet_projection.call("leg_route_plan", uid) as MarineRoutePlan
 		if plan == null or not plan.is_valid():
 			continue
 		if plan.has_berth_handoffs():
-			_draw_segmented_route(plan, "Dormant_%s" % uid, 0.48)
+			_draw_segmented_route(plan, "Dormant_%s" % uid, 0.48, candidate_index < 3)
 		else:
 			var points := PackedVector3Array([_lift(Vector2(position.x, position.z))])
 			points.append(_lift(plan.point_at_distance(progress)))
@@ -215,11 +237,18 @@ func _draw_dormant_company_routes(live_ids: Dictionary) -> void:
 				if float(plan.cumulative_distance_m[index]) > progress:
 					points.append(_lift(plan.waypoints[index]))
 			_add_polyline(points, Color(NPC_COLOR, 0.48), "DormantRoute_%s" % uid)
+		if candidate_index >= MAX_DORMANT_LABELS \
+				or float(record.get("_debug_distance", INF)) > DORMANT_LABEL_RADIUS_M \
+				or not _label_in_view(position, camera):
+			continue
 		var label := Label3D.new()
 		var vessel := record.get("vessel", {}) as Dictionary
-		label.text = "%s\n%s  |  ABSTRACT" % [
+		var tier := str(fleet_projection.call("presentation_tier", uid)) \
+			if fleet_projection.has_method("presentation_tier") else "ABSTRACT"
+		label.text = "%s\n%s  |  %s" % [
 			str(vessel.get("name", "NPC VESSEL")),
 			_dormant_state_text(uid, assignment, traffic_snapshot),
+			tier,
 		]
 		label.position = position + Vector3(0.0, 10.0, 0.0)
 		label.font_size = 28
@@ -229,6 +258,18 @@ func _draw_dormant_company_routes(live_ids: Dictionary) -> void:
 		label.modulate = Color(NPC_COLOR, 0.62)
 		label.outline_size = 6
 		add_child(label)
+
+
+func _label_in_view(position: Vector3, camera: Camera3D) -> bool:
+	if camera == null:
+		return true
+	var target := position + Vector3.UP * 8.0
+	if camera.is_position_behind(target):
+		return false
+	var screen := camera.unproject_position(target)
+	var size := get_viewport().get_visible_rect().size
+	return screen.x >= -80.0 and screen.y >= -80.0 \
+		and screen.x <= size.x + 80.0 and screen.y <= size.y + 80.0
 
 
 func _dormant_state_text(
@@ -256,7 +297,12 @@ func _dormant_state_text(
 	return "TRAVELING TO %s" % destination
 
 
-func _draw_segmented_route(plan: MarineRoutePlan, vessel_id: String, alpha: float = 1.0) -> void:
+func _draw_segmented_route(
+		plan: MarineRoutePlan,
+		vessel_id: String,
+		alpha: float = 1.0,
+		show_handoffs: bool = true,
+) -> void:
 	var departure := plan.departure_handoff_m
 	var arrival := plan.arrival_handoff_m
 	_add_polyline(_route_section(plan, 0.0, departure), Color(DEPARTURE_COLOR, alpha),
@@ -265,6 +311,8 @@ func _draw_segmented_route(plan: MarineRoutePlan, vessel_id: String, alpha: floa
 		"Passage_%s" % vessel_id)
 	_add_polyline(_route_section(plan, arrival, plan.total_distance_m()), Color(ARRIVAL_COLOR, alpha),
 		"Arrival_%s" % vessel_id)
+	if not show_handoffs:
+		return
 	var handoff_key := "%s:%0.2f" % [plan.route_id, alpha]
 	if not _drawn_handoffs.has(handoff_key):
 		_drawn_handoffs[handoff_key] = true
@@ -325,6 +373,9 @@ func _draw_traffic_authority() -> void:
 		return
 	var snapshot: Dictionary = traffic.local_state_view()
 	var intents := snapshot.get("intents", {}) as Dictionary
+	var camera := get_viewport().get_camera_3d()
+	var observer := camera.global_position if camera != null else Vector3.ZERO
+	var block_labels_left := 8
 	for raw in (snapshot.get("agreements", {}) as Dictionary).values():
 		var agreement := raw as Dictionary
 		var ids := agreement.get("vessel_ids", []) as Array
@@ -372,12 +423,18 @@ func _draw_traffic_authority() -> void:
 			_lift(center + Vector2(-half, half), 0.4),
 			_lift(center + Vector2(-half, -half), 0.4),
 		]), color, "ShippingLaneBlock")
+		var label_position := _lift(center, 8.0)
+		if block_labels_left <= 0 \
+				or label_position.distance_to(observer) > DORMANT_LABEL_RADIUS_M \
+				or not _label_in_view(label_position, camera):
+			continue
+		block_labels_left -= 1
 		var label := Label3D.new()
 		label.text = "LANE SIGNAL  %s\n%d/%d IN BLOCK · %d WAITING" % [
 			"→" if int(block.get("direction", 1)) > 0 else "←",
 			owners.size(), int(block.get("capacity", 1)), queue.size(),
 		]
-		label.position = _lift(center, 8.0)
+		label.position = label_position
 		label.font_size = 22
 		label.pixel_size = 0.012
 		label.billboard = BaseMaterial3D.BILLBOARD_ENABLED

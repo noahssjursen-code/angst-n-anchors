@@ -99,7 +99,7 @@ func _ready() -> void:
 	pm.bounce = 0.0
 	physics_material_override = pm
 	_refresh_mass()
-	if not Engine.is_editor_hint():
+	if not Engine.is_editor_hint() and not bool(get_meta("authority_projection", false)):
 		call_deferred("_ensure_walk_deck")
 		if get_node_or_null("BoatAudio") == null:
 			var audio: Node = load("res://scripts/ship/boat_audio_system.gd").new()

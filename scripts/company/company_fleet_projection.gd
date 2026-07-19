@@ -4,10 +4,18 @@ extends Node
 ## ambient, and eventually server-owned records all enter through the same
 ## projection, BoatBody, captain, autopilot, traffic, and port-operation path.
 
-const INTEREST_RADIUS_M := 6500.0
+const INTEREST_RADIUS_M := 10500.0
 const UPDATE_INTERVAL_S := 0.25
-const MAX_PHYSICAL_NPC_VESSELS := 8
+const MAX_PHYSICAL_NPC_VESSELS := 2
 const ABSTRACT_TRAFFIC_INTERVAL_S := 0.5
+const FULL_INTEREST_RADIUS_M := 520.0
+const FULL_INTEREST_HYSTERESIS_M := 180.0
+const PORT_OPERATION_RADIUS_M := 900.0
+const ALWAYS_PRESENT_RADIUS_M := 220.0
+const VISIBILITY_PROBE_INTERVAL_MS := 900
+const VISIBILITY_SCREEN_MARGIN_PX := 160.0
+const TERRAIN_OCCLUSION_START_M := 700.0
+const TERRAIN_OCCLUSION_SAMPLES := 7
 
 var _ships: Dictionary = {} # vessel uid -> BoatBody
 var _berths: Dictionary = {} # vessel uid -> { controller, berth_id }
@@ -23,6 +31,13 @@ var _published_authority_ids: Dictionary = {}
 var _last_network_snapshot_bytes := 0
 var _last_network_snapshot_ms := 0.0
 var _network_snapshot_revision := 0
+var _proxy_renderer: VesselProxyRenderer
+var _visibility_cache: Dictionary = {}
+var _last_authority_count := 0
+var _last_refresh_ms := 0.0
+var _last_record_build_ms := 0.0
+var _last_visibility_probes := 0
+var _last_occluded_count := 0
 
 
 func _ready() -> void:
@@ -57,11 +72,15 @@ func get_debug_stats() -> Dictionary:
 		quality_counts[quality] = int(quality_counts.get(quality, 0)) + 1
 		if ship.get_node_or_null("AutonomousVesselCaptain") != null:
 			active_captains += 1
-	var authority_count := all_projection_records().size()
-	return {
+	var authority_count := _last_authority_count
+	var stats := {
 		"authority_vessels": authority_count,
 		"physical_vessels": _ships.size(),
-		"abstract_vessels": maxi(authority_count - _ships.size(), 0),
+		"visual_vessels": _proxy_renderer.proxy_count() \
+			if _proxy_renderer != null and is_instance_valid(_proxy_renderer) else 0,
+		"abstract_vessels": maxi(authority_count - _ships.size() - (
+			_proxy_renderer.proxy_count() if _proxy_renderer != null \
+			and is_instance_valid(_proxy_renderer) else 0), 0),
 		"active_captains": active_captains,
 		"physics_full": quality_counts.full,
 		"physics_medium": quality_counts.medium,
@@ -70,7 +89,14 @@ func get_debug_stats() -> Dictionary:
 		"physical_cap": MAX_PHYSICAL_NPC_VESSELS,
 		"snapshot_bytes": _last_network_snapshot_bytes,
 		"snapshot_build_ms": _last_network_snapshot_ms,
+		"interest_refresh_ms": _last_refresh_ms,
+		"record_build_ms": _last_record_build_ms,
+		"visibility_probes": _last_visibility_probes,
+		"terrain_occluded": _last_occluded_count,
 	}
+	if _proxy_renderer != null and is_instance_valid(_proxy_renderer):
+		stats.merge(_proxy_renderer.get_debug_stats(), true)
+	return stats
 
 
 func _process(delta: float) -> void:
@@ -99,7 +125,10 @@ func all_projection_records() -> Array[Dictionary]:
 	var out: Array[Dictionary] = []
 	for authority in authority_sources():
 		for raw in authority.call("projection_records") as Array:
-			var record := (raw as Dictionary).duplicate(true)
+			# The wrapper is local, but the large immutable vessel/layout payload is
+			# deliberately shared. Deep-copying fifty brick layouts four times per
+			# second was a major allocator and main-thread cost.
+			var record := (raw as Dictionary).duplicate(false)
 			record["_authority"] = authority
 			out.append(record)
 	return out
@@ -161,6 +190,15 @@ func _live_ship(uid: String) -> BoatBody:
 	return raw as BoatBody
 
 
+func presentation_tier(uid: String) -> String:
+	if _live_ship(uid) != null:
+		return "PHYSICAL"
+	if _proxy_renderer != null and is_instance_valid(_proxy_renderer) \
+			and _proxy_renderer.has_proxy(uid):
+		return "VISUAL"
+	return "ABSTRACT"
+
+
 func _call_authority(uid: String, method: String, args: Array = []) -> Variant:
 	var authority := _authority_for(uid)
 	if authority == null or not authority.has_method(method):
@@ -172,6 +210,7 @@ func _refresh() -> void:
 	if _refreshing:
 		return
 	_refreshing = true
+	var refresh_started := Time.get_ticks_usec()
 	var view := get_node_or_null("/root/LocalPlayerView")
 	if view == null or _is_main_menu():
 		_clear_all()
@@ -183,12 +222,48 @@ func _refresh() -> void:
 		_refreshing = false
 		return
 	var wanted: Dictionary = {}
+	var proxy_wanted: Dictionary = {}
 	var operation_interest: Dictionary = {}
 	_connect_authority_signals()
+	var records_started := Time.get_ticks_usec()
 	var records := all_projection_records()
-	records.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+	_last_record_build_ms = float(Time.get_ticks_usec() - records_started) / 1000.0
+	_last_authority_count = records.size()
+	_last_visibility_probes = 0
+	_last_occluded_count = 0
+	var ranked_physical: Array[Dictionary] = []
+	var current_ids: Dictionary = {}
+	for raw in records:
+		var record := raw as Dictionary
+		var authority := record.get("_authority") as Node
+		var uid := str(record.get("uid", ""))
+		var assignment := record.get("assignment", {}) as Dictionary
+		var status := str(assignment.get("status", ""))
+		if uid.is_empty() or assignment.is_empty() or status not in ["underway", "preparing", "turnaround", "unpaid", "inactive", "berthed"]:
+			continue
+		current_ids[uid] = true
+		_authority_by_uid[uid] = authority
+		_last_status[uid] = status
+		var projection := record.get("projection", {}) as Dictionary
+		var existing_ship := _live_ship(uid)
+		var position := existing_ship.global_position if existing_ship != null \
+				and is_instance_valid(existing_ship) \
+			else projection.get("position", Vector3(INF, INF, INF)) as Vector3
+		if not position.is_finite():
+			continue
+		var distance := position.distance_to(observer)
+		var visible := _presentation_visible(uid, position, observer, distance)
+		record["_interest_position"] = position
+		record["_interest_distance"] = distance
+		record["_interest_visible"] = visible
+		if _wants_full_physics(uid, status, distance, visible):
+			ranked_physical.append(record)
+	ranked_physical.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
 		return _physical_priority(a, observer) < _physical_priority(b, observer))
-	var physical_count := 0
+	var full_wanted: Dictionary = {}
+	for index in range(mini(ranked_physical.size(), MAX_PHYSICAL_NPC_VESSELS)):
+		full_wanted[str(ranked_physical[index].get("uid", ""))] = true
+
 	for raw in records:
 		var record := raw as Dictionary
 		var authority := record.get("_authority") as Node
@@ -198,18 +273,16 @@ func _refresh() -> void:
 		var status := str(assignment.get("status", ""))
 		if uid.is_empty() or assignment.is_empty() or status not in ["underway", "preparing", "turnaround", "unpaid", "inactive", "berthed"]:
 			continue
-		_authority_by_uid[uid] = authority
-		_last_status[uid] = status
 		var projection := record.get("projection", {}) as Dictionary
-		var existing_ship := _live_ship(uid)
-		var position := existing_ship.global_position if existing_ship != null \
-				and is_instance_valid(existing_ship) \
-			else projection.get("position", Vector3(INF, INF, INF)) as Vector3
-		if not position.is_finite() or position.distance_to(observer) > INTEREST_RADIUS_M:
+		var distance := float(record.get("_interest_distance", INF))
+		var visible := bool(record.get("_interest_visible", false))
+		if not full_wanted.has(uid):
+			if distance <= INTEREST_RADIUS_M and (visible or distance <= ALWAYS_PRESENT_RADIUS_M):
+				proxy_wanted[uid] = true
+				_ensure_proxy_renderer()
+				if _proxy_renderer != null:
+					_proxy_renderer.set_projection(uid, vessel, assignment, projection)
 			continue
-		if physical_count >= MAX_PHYSICAL_NPC_VESSELS:
-			continue
-		physical_count += 1
 		var waiting_at_berth := status != "underway"
 		if status in ["preparing", "turnaround"]:
 			operation_interest[uid] = true
@@ -222,6 +295,11 @@ func _refresh() -> void:
 				var waiting_ship := _live_ship(uid)
 				if waiting_ship != null and is_instance_valid(waiting_ship):
 					wanted[uid] = true
+				else:
+					proxy_wanted[uid] = true
+					_ensure_proxy_renderer()
+					if _proxy_renderer != null:
+						_proxy_renderer.set_projection(uid, vessel, assignment, projection)
 				continue
 		wanted[uid] = true
 		var ship := _live_ship(uid)
@@ -233,7 +311,16 @@ func _refresh() -> void:
 	for uid_raw in _ships.keys():
 		var uid := str(uid_raw)
 		if not wanted.has(uid):
-			_despawn(uid)
+			_demote_physical(uid)
+	if _proxy_renderer != null and is_instance_valid(_proxy_renderer):
+		_proxy_renderer.retain_only(proxy_wanted)
+	for uid_raw in _visibility_cache.keys():
+		if not current_ids.has(str(uid_raw)):
+			_visibility_cache.erase(uid_raw)
+	for uid_raw in _authority_by_uid.keys():
+		if not current_ids.has(str(uid_raw)):
+			_authority_by_uid.erase(uid_raw)
+			_last_status.erase(uid_raw)
 	for uid_raw in _operation_interest.keys():
 		var uid := str(uid_raw)
 		if not operation_interest.has(uid):
@@ -243,27 +330,120 @@ func _refresh() -> void:
 	if _abstract_traffic_elapsed >= ABSTRACT_TRAFFIC_INTERVAL_S:
 		_abstract_traffic_elapsed = 0.0
 		_publish_authority_traffic(records)
+	_last_refresh_ms = float(Time.get_ticks_usec() - refresh_started) / 1000.0
 	_refreshing = false
 
 
 func _physical_priority(record: Dictionary, observer: Vector3) -> float:
 	var uid := str(record.get("uid", ""))
 	var assignment := record.get("assignment", {}) as Dictionary
-	var projection := record.get("projection", {}) as Dictionary
-	var position := projection.get("position", Vector3(INF, INF, INF)) as Vector3
-	var score := position.distance_to(observer) if position.is_finite() else INF
+	var position := record.get("_interest_position", Vector3(INF, INF, INF)) as Vector3
+	var score := float(record.get("_interest_distance",
+		position.distance_to(observer) if position.is_finite() else INF))
 	if _ships.has(uid):
-		score -= 250.0
+		score -= 180.0
 	if str(assignment.get("status", "")) != "underway":
-		score -= 5000.0
-	else:
-		var plan := leg_route_plan(uid)
-		if plan != null and plan.is_valid():
-			var remaining := plan.total_distance_m() - float(
-				projection.get("route_progress_m", assignment.get("route_progress_m", 0.0)))
-			if remaining < 1200.0:
-				score -= 3500.0
+		score -= 240.0
+	if bool(record.get("_interest_visible", false)):
+		score -= 30.0
 	return score
+
+
+func _wants_full_physics(
+		uid: String,
+		status: String,
+		distance: float,
+		visible: bool,
+) -> bool:
+	# Physics exists for local interaction, docking and collision resolution. It
+	# is not the voyage authority, so an off-screen passage vessel gains nothing
+	# from running a full RigidBody and hundreds of fit-out nodes.
+	if distance <= ALWAYS_PRESENT_RADIUS_M:
+		return true
+	var radius := PORT_OPERATION_RADIUS_M if status != "underway" else FULL_INTEREST_RADIUS_M
+	if _ships.has(uid):
+		radius += FULL_INTEREST_HYSTERESIS_M
+	return visible and distance <= radius
+
+
+func _ensure_proxy_renderer() -> void:
+	if _proxy_renderer != null and is_instance_valid(_proxy_renderer):
+		return
+	var scene := get_tree().current_scene
+	if scene == null:
+		return
+	_proxy_renderer = VesselProxyRenderer.new()
+	_proxy_renderer.name = "AuthorityVesselProxyRenderer"
+	scene.add_child(_proxy_renderer)
+
+
+func _presentation_visible(
+		uid: String,
+		position: Vector3,
+		observer: Vector3,
+		distance: float,
+) -> bool:
+	if distance <= ALWAYS_PRESENT_RADIUS_M:
+		return true
+	if distance > INTEREST_RADIUS_M:
+		return false
+	var camera := get_viewport().get_camera_3d()
+	if camera == null:
+		return distance <= FULL_INTEREST_RADIUS_M
+	var now := Time.get_ticks_msec()
+	var cached := _visibility_cache.get(uid, {}) as Dictionary
+	if not cached.is_empty() \
+			and now < int(cached.get("next_probe_msec", 0)) \
+			and (camera.global_position - (cached.get("camera_position", camera.global_position) as Vector3)).length_squared() < 10000.0:
+		if str(cached.get("reason", "")) == "terrain":
+			_last_occluded_count += 1
+		return bool(cached.get("visible", false))
+	_last_visibility_probes += 1
+	var visible := true
+	var reason := "visible"
+	var target := position + Vector3.UP * 5.0
+	if camera.is_position_behind(target):
+		visible = false
+		reason = "behind_camera"
+	else:
+		var screen := camera.unproject_position(target)
+		var size := get_viewport().get_visible_rect().size
+		var margin := VISIBILITY_SCREEN_MARGIN_PX
+		if screen.x < -margin or screen.y < -margin \
+				or screen.x > size.x + margin or screen.y > size.y + margin:
+			visible = false
+			reason = "outside_view"
+	if visible and distance >= TERRAIN_OCCLUSION_START_M \
+			and _terrain_blocks_view(camera.global_position, position):
+		visible = false
+		reason = "terrain"
+		_last_occluded_count += 1
+	_visibility_cache[uid] = {
+		"visible": visible,
+		"reason": reason,
+		"camera_position": camera.global_position,
+		"next_probe_msec": now + VISIBILITY_PROBE_INTERVAL_MS + posmod(uid.hash(), 260),
+	}
+	return visible
+
+
+func _terrain_blocks_view(camera_position: Vector3, vessel_position: Vector3) -> bool:
+	var world := get_tree().get_first_node_in_group("world")
+	if world == null or not world.has_method("get_world_layout"):
+		return false
+	var layout := world.call("get_world_layout") as WorldLayout
+	if layout == null:
+		return false
+	var target_top := vessel_position + Vector3.UP * 12.0
+	for sample_index in range(1, TERRAIN_OCCLUSION_SAMPLES + 1):
+		var t := float(sample_index) / float(TERRAIN_OCCLUSION_SAMPLES + 1)
+		var point := camera_position.lerp(target_top, t)
+		var xz := Vector2(point.x, point.z)
+		if layout.sample_signed_distance(xz) >= 0.0:
+			continue
+		if layout.sample_height(xz) > point.y + 3.0:
+			return true
+	return false
 
 
 func _publish_authority_traffic(records: Array[Dictionary]) -> void:
@@ -332,7 +512,7 @@ func _publish_authority_traffic(records: Array[Dictionary]) -> void:
 
 
 func _spawn(record: Dictionary, uid: String) -> BoatBody:
-	var ship := VesselSpawn.instantiate_from_record(record)
+	var ship := VesselSpawn.instantiate_projection_from_record(record)
 	if ship == null:
 		return null
 	ship.name = "CompanyVessel_%s" % uid.validate_node_name()
@@ -340,6 +520,17 @@ func _spawn(record: Dictionary, uid: String) -> BoatBody:
 	ship.set_meta("network_ship_id", "company:%s" % uid)
 	ship.set_meta("authority_projection", true)
 	_strip_owner_only_nodes(ship)
+	# Replace hundreds of fit-out MeshInstance nodes with the same cached merged
+	# silhouette used by visual proxies. Real cargo components remain mounted so
+	# nearby cranes and manifests still operate against the physical vessel.
+	var hull_visual := ship.get_node_or_null("HullVisual") as Node3D
+	if hull_visual != null:
+		hull_visual.visible = false
+	var merged_visual := MeshInstance3D.new()
+	merged_visual.name = "AuthorityMergedVesselVisual"
+	merged_visual.mesh = VesselProxyRenderer.shared_visual_mesh(record)
+	merged_visual.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
+	ship.add_child(merged_visual)
 	ship.visible = false
 	ship.freeze = true
 	# These hulls move every authority tick. Kinematic freeze keeps Jolt from
@@ -395,7 +586,7 @@ func _project(
 			return
 		# Do not put an awaiting vessel on top of the harbour anchor if every
 		# compatible quay is occupied. It appears when a berth becomes free.
-		_despawn(uid)
+		_demote_physical(uid)
 		return
 	if ship.has_meta("company_physics_started"):
 		return
@@ -828,13 +1019,42 @@ func _despawn(uid: String) -> void:
 	_authority_by_uid.erase(uid)
 
 
+func _demote_physical(uid: String) -> void:
+	## Presentation-tier demotion must never cancel an authoritative contract.
+	## Capture the live route progress, release local-only port machinery, then
+	## let the authority timestamp continue the same vessel as data/proxy state.
+	var ship := _live_ship(uid)
+	if ship != null and is_instance_valid(ship):
+		var status := str(_last_status.get(uid, ""))
+		var authority := _authority_for(uid)
+		if status == "underway" and authority != null:
+			var autopilot := ship.get_node_or_null("VesselAutopilot") as VesselAutopilot
+			if autopilot != null and autopilot.route != null \
+					and authority.has_method("suspend_local_voyage"):
+				authority.call("suspend_local_voyage",
+					uid, autopilot.progress_m, autopilot.route.total_distance_m())
+		_release_berth(uid, ship)
+		ship.queue_free()
+	_call_authority(uid, "set_local_operations_active", [uid, false])
+	_ships.erase(uid)
+	_berths.erase(uid)
+	_physical_contracts.erase(uid)
+	_restored_manifests.erase(uid)
+	_operation_interest.erase(uid)
+
+
 func _clear_all() -> void:
 	for uid in _ships.keys():
-		_despawn(str(uid))
+		_demote_physical(str(uid))
 	for uid in _operation_interest.keys():
 		_call_authority(str(uid), "set_local_operations_active", [str(uid), false])
 	_operation_interest.clear()
 	_authority_by_uid.clear()
+	_last_status.clear()
+	_visibility_cache.clear()
+	_last_authority_count = 0
+	if _proxy_renderer != null and is_instance_valid(_proxy_renderer):
+		_proxy_renderer.clear()
 
 
 func _observer_position() -> Vector3:

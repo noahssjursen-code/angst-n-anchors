@@ -188,8 +188,8 @@ func projection_records() -> Array[Dictionary]:
 		var assignment := record.get("assignment", {}) as Dictionary
 		out.append({
 			"uid": uid,
-			"vessel": (record.get("vessel", {}) as Dictionary).duplicate(true),
-			"assignment": assignment.duplicate(true),
+			"vessel": record.get("vessel", {}) as Dictionary,
+			"assignment": assignment,
 			"projection": _projection(record),
 		})
 	return out
@@ -617,6 +617,7 @@ func _prebuilt_record(prebuilt_id: String, uid: String, index: int) -> Dictionar
 				"name": "Traffic %02d · %s" % [index + 1, entry.get("prebuilt_name", "Freighter")],
 				"shaft_power_kw": entry.get("shaft_power_kw", 1871.0),
 				"registration_id": entry.get("registration_id", "cargo_vessel"),
+				"proxy_visual_id": prebuilt_id,
 				"brick_layout": (entry.get("prebuilt_layout", {}) as Dictionary).duplicate(true)})
 	return {}
 

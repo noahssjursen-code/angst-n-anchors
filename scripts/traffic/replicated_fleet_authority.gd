@@ -90,8 +90,10 @@ func projection_records() -> Array[Dictionary]:
 		var record := _fleet[uid] as Dictionary
 		out.append({
 			"uid": uid,
-			"vessel": (record.get("vessel", {}) as Dictionary).duplicate(true),
-			"assignment": (record.get("assignment", {}) as Dictionary).duplicate(true),
+			# _fleet owns the deserialized snapshot. Projection readers do not mutate
+			# nested authority rows, so copying huge layouts here is unnecessary.
+			"vessel": record.get("vessel", {}) as Dictionary,
+			"assignment": record.get("assignment", {}) as Dictionary,
 			"projection": _projection(record),
 		})
 	return out
