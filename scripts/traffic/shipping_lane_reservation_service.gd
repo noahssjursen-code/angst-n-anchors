@@ -35,10 +35,13 @@ func try_reserve(vessel_id: String, requested: PackedStringArray) -> Dictionary:
 			"queue_physical_quay_id", ""))
 		var queue_direction := int((_network.blocks[block_id] as Dictionary).get(
 			"queue_direction_index", -1))
+		var queue_station := str((_network.blocks[block_id] as Dictionary).get(
+			"queue_station", ""))
 		var queue_index := int((_network.blocks[block_id] as Dictionary).get("queue_index", -1))
 		if not queue_port_id.is_empty() \
 				and not _vessel_may_enter_port_queue(
-					vessel_id, queue_port_id, queue_quay_id, queue_direction, queue_index):
+					vessel_id, queue_port_id, queue_quay_id, queue_direction,
+					queue_station, queue_index):
 			return {"ok": false, "reason": "berth_or_queue_required",
 				"block_id": block_id, "port_id": queue_port_id, "blocked_by": ""}
 		var blocker := _blocking_owner(vessel_id, block_id)
@@ -62,6 +65,7 @@ func occupy(vessel_id: String, block_id: String) -> bool:
 			queue_port_id,
 			str(block.get("queue_physical_quay_id", "")),
 			int(block.get("queue_direction_index", -1)),
+			str(block.get("queue_station", "")),
 			int(block.get("queue_index", -1))):
 		return false
 	if not _blocking_owner(vessel_id, block_id).is_empty():
@@ -193,32 +197,46 @@ func queue_slots_for_vessel(vessel_id: String, direction_index := -1) -> Array[D
 	var result: Array[Dictionary] = []
 	var port_id := str(_queued_port_by_vessel.get(vessel_id, ""))
 	var physical_quay_id := ""
+	var requested_station := ""
+	var requested_direction := direction_index
 	if not port_id.is_empty():
 		for request_value in _berth_queue_by_port.get(port_id, []) as Array:
 			var request := request_value as Dictionary
 			if str(request.get("vessel_id", "")) == vessel_id:
 				physical_quay_id = str(request.get("physical_quay_id", ""))
+				requested_station = str(request.get("queue_station", ""))
+				if requested_direction < 0:
+					requested_direction = int(request.get("queue_direction_index", -1))
 				break
 	else:
 		var token_id := str(_berth_by_vessel.get(vessel_id, ""))
 		var token := _network.berth_tokens.get(token_id, {}) as Dictionary
 		port_id = str(token.get("port_id", ""))
 		physical_quay_id = str(token.get("physical_quay_id", ""))
+	var candidates: Array[Dictionary] = []
 	for slot_id in _network.sorted_port_queue_slot_ids():
 		var slot := _network.port_queue_slots[slot_id] as Dictionary
 		if str(slot.get("port_id", "")) != port_id \
 				or str(slot.get("physical_quay_id", "")) != physical_quay_id:
 			continue
-		if direction_index >= 0 and int(slot.get("direction_index", -1)) != direction_index:
+		if requested_direction >= 0 \
+				and int(slot.get("direction_index", -1)) != requested_direction:
 			continue
-		result.append(slot.duplicate(true))
+		if not requested_station.is_empty() and str(slot.get("station", "")) != requested_station:
+			continue
+		candidates.append(slot)
+	if candidates.is_empty():
+		return result
+	if requested_direction < 0:
+		requested_direction = int((candidates[0] as Dictionary).get("direction_index", 0))
+	if requested_station.is_empty():
+		requested_station = str((candidates[0] as Dictionary).get("station", ""))
+	for slot in candidates:
+		if int(slot.get("direction_index", -1)) == requested_direction \
+				and str(slot.get("station", "")) == requested_station:
+			result.append(slot.duplicate(true))
 	result.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
-		var a_direction := int(a.get("direction_index", 0))
-		var b_direction := int(b.get("direction_index", 0))
-		if a_direction != b_direction:
-			return a_direction < b_direction
-		return int(a.get("queue_index", 0)) < int(b.get("queue_index", 0))
-	)
+		return int(a.get("queue_index", 0)) < int(b.get("queue_index", 0)))
 	return result
 
 
@@ -229,7 +247,16 @@ func assigned_queue_slot(vessel_id: String, direction_index: int) -> Dictionary:
 		# Queue capacity has backed up to the upstream highway signal. The vessel
 		# must remain in its current block until a connector slot becomes free.
 		return {}
-	return slots[rank].duplicate(true)
+	var assigned := slots[rank].duplicate(true)
+	# The first slot query commits the vessel to one physical feeder branch.
+	# Later route/reservation calls must not silently select the alphabetically
+	# first branch of the same quay and strand the vessel between two ramps.
+	var port_id := str(_queued_port_by_vessel.get(vessel_id, ""))
+	var request := _queue_request(port_id, vessel_id)
+	if not request.is_empty() and str(request.get("queue_station", "")).is_empty():
+		request["queue_station"] = str(assigned.get("station", ""))
+		request["queue_direction_index"] = int(assigned.get("direction_index", -1))
+	return assigned
 
 
 func try_reserve_passing(vessel_id: String, zone_id: String, travel_direction: String) -> Dictionary:
@@ -342,16 +369,28 @@ func apply_authority_snapshot(value: Dictionary) -> bool:
 func _vessel_may_enter_port_queue(
 		vessel_id: String,
 		port_id: String,
-		physical_quay_id: String,
-		direction_index: int,
-		queue_index: int,
+	physical_quay_id: String,
+	direction_index: int,
+	station: String,
+	queue_index: int,
 ) -> bool:
 	if str(_queued_port_by_vessel.get(vessel_id, "")) == port_id:
-		# A connector is an interlocked movement corridor, not a parking queue.
-		# Unassigned arrivals wait on ordinary upstream lane blocks. That creates
-		# a natural Factorio-style tail which can later expose passing lanes,
-		# while always leaving the quay-to-lane corridor free for departures.
-		return false
+		var request := _queue_request(port_id, vessel_id)
+		if str(request.get("physical_quay_id", "")) != physical_quay_id:
+			return false
+		var claimed_station := str(request.get("queue_station", ""))
+		var claimed_direction := int(request.get("queue_direction_index", -1))
+		if claimed_station.is_empty():
+			request["queue_station"] = station
+			request["queue_direction_index"] = direction_index
+			claimed_station = station
+			claimed_direction = direction_index
+		if claimed_station != station or claimed_direction != direction_index:
+			return false
+		# The vessel may traverse upstream queue blocks, but it must stop at its
+		# FIFO rank. Port-bound traffic therefore leaves the through and passing
+		# lanes completely clear.
+		return queue_index >= _queue_branch_index(vessel_id)
 	var token_id := str(_berth_by_vessel.get(vessel_id, ""))
 	if token_id.is_empty():
 		return false

@@ -102,8 +102,8 @@ data-only simulator for exercising the authority without BoatBody physics.
   every seeded `PortData.berth_plan` into quay manoeuvre pockets, port gates,
   block-based inbound queues, port connectors, separated directional highways, regular
   blocks, and Factorio-style chain-signal regions. Every quay connector ends at
-  two directional port breakoffs on the regional/main lane, outside the harbour
-  approach envelope.
+  explicit before/after on- and off-ramps in both lane directions, outside the
+  harbour approach envelope and independent of every quay junction.
 - `ShippingLaneNetwork` is the immutable authority record. It supports
   vessel-dimension-aware route queries, deterministic checksums, and snapshot
   round-tripping for either a local single-player authority or a future
@@ -112,10 +112,10 @@ data-only simulator for exercising the authority without BoatBody physics.
   FIFO port queues, on-demand opposing-lane passing zones, and compact harbour
   interlocking groups. Its snapshot is the small mutable state that an
   authority replicates; clients do not independently decide traffic outcomes.
-- `HybridShippingRoutePlanner` compares the all-lane route with cached,
-  water-safe A* passages between legal breakoffs. A passage may remain on lanes,
-  leave directly for the destination breakoff, or join/leave at an intermediate
-  port's breakoff. Crossing a lane in open water does not reserve or join it.
+- `HybridShippingRoutePlanner` performs one deterministic search over controlled
+  lane edges plus cached, water-safe A* passages. Open water can only run from an
+  OFF ramp to an ON ramp, and a passage may alternate between lanes and open
+  water repeatedly. Crossing a lane in open water does not reserve or join it.
 - `ShippingLaneDebugDraw` streams only the F3/freecam region around the current
   camera and remains completely unmaterialized while its gizmo layer is off.
 - `ShippingLaneTrafficSimulator` is a fixed-step test harness. Lightweight ship
@@ -124,15 +124,20 @@ data-only simulator for exercising the authority without BoatBody physics.
   request berth tokens, enter FIFO queues, and emit a copyable authority report.
   It is not the production NPC controller.
 - `ShippingOpenWaterSchedule` is the standalone spatial/time reservation
-  prototype for free-sailing passages. It reduces trajectories to coarse ocean
+  authority for free-sailing passages. It reduces trajectories to coarse ocean
   cells, gives same-direction convoys headway, and keeps crossing/opposing paths
-  exclusive. It remains deliberately outside the live simulator until its
-  breakoff waiting semantics pass the long traffic lab without reducing throughput.
+  exclusive. The simulator atomically books the complete OFF-to-ON passage
+  before a vessel leaves its controlled lane, so no client makes independent
+  collision-avoidance decisions in open water.
 - Traffic presentation is interest-managed independently of authority. Every
   vessel remains a data record; a deterministic policy selects a capped nearby
   set of full official vessel builds, lightweight nearby proxies, and data-only
   distant records. Full builds are frozen presentations and never become a
-  second traffic authority.
+  second traffic authority. The authority keeps a small exact set at its
+  0.5-second cadence and advances distant strategic contacts in staggered
+  10-second AIS-style buckets. Player/server interest promotes records back to
+  exact simulation; the chart still receives every contact. Headless servers
+  never materialize vessel nodes.
 - `shipping_lane_network_showcase.tscn` is the F6 traffic lab. It displays those
   test records with the mixed presentation tiers, accelerates or pauses time,
   and copies both human-readable validation and machine-readable authority state
@@ -140,7 +145,7 @@ data-only simulator for exercising the authority without BoatBody physics.
   plus clocked JSON summary for visual regression inspection.
 - The navigation chart caches a clean traffic layer from the same immutable
   network: highways at world scale, port links when zoomed in, and subtle legal
-  breakoff markers. It never draws F3 block/signal geometry on the player chart.
+  on/off-ramp markers. It never draws F3 block/signal geometry on the player chart.
 
 ### `scripts/port/`
 

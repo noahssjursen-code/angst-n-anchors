@@ -5,7 +5,7 @@ extends RefCounted
 ## truth for a future local single-player authority and dedicated MP authority.
 ## It deliberately contains no BoatBody, autopilot, company, or vessel state.
 
-const FORMAT_VERSION := 3
+const FORMAT_VERSION := 4
 
 var layout_checksum := ""
 var network_checksum := ""
@@ -17,7 +17,7 @@ var port_queue_slots: Dictionary = {} # queue slot id -> inbound connector block
 var berth_tokens: Dictionary = {} # berth token id -> one reservable quay station
 var passing_zones: Dictionary = {} # passing zone id -> deterministic opposing-lane block set
 var port_gate_nodes: Dictionary = {} # port_id -> Array[String] of physical-quay gates
-var port_breakoffs: Dictionary = {} # breakoff id -> legal lane/open-water transition
+var port_ramps: Dictionary = {} # ramp id -> explicit directed lane/open-water transition
 var validation_issues: Array[Dictionary] = []
 var _outgoing_edge_ids: Dictionary = {} # node_id -> PackedStringArray
 
@@ -136,23 +136,26 @@ func add_passing_zone(record: Dictionary) -> bool:
 	return true
 
 
-func add_port_breakoff(record: Dictionary) -> bool:
-	var breakoff_id := str(record.get("id", ""))
+func add_port_ramp(record: Dictionary) -> bool:
+	var ramp_id := str(record.get("id", ""))
 	var lane_node_id := str(record.get("lane_node_id", ""))
-	var gate_node_id := str(record.get("gate_node_id", ""))
-	if breakoff_id.is_empty() or port_breakoffs.has(breakoff_id) \
-			or not nodes.has(lane_node_id) or not nodes.has(gate_node_id):
+	var ramp_node_id := str(record.get("ramp_node_id", ""))
+	var ramp_kind := str(record.get("ramp_kind", ""))
+	if ramp_id.is_empty() or port_ramps.has(ramp_id) \
+			or not nodes.has(lane_node_id) or not nodes.has(ramp_node_id) \
+			or ramp_kind not in ["on_ramp", "off_ramp"]:
 		return false
 	var stored := record.duplicate(true)
-	stored["id"] = breakoff_id
+	stored["id"] = ramp_id
 	stored["lane_node_id"] = lane_node_id
-	stored["gate_node_id"] = gate_node_id
-	stored["position"] = (nodes[lane_node_id] as Dictionary).get("position", Vector2.ZERO)
-	stored["outbound_edge_ids"] = PackedStringArray(
-		stored.get("outbound_edge_ids", PackedStringArray()))
-	stored["inbound_edge_ids"] = PackedStringArray(
-		stored.get("inbound_edge_ids", PackedStringArray()))
-	port_breakoffs[breakoff_id] = stored
+	stored["ramp_node_id"] = ramp_node_id
+	stored["ramp_kind"] = ramp_kind
+	stored["position"] = (nodes[ramp_node_id] as Dictionary).get("position", Vector2.ZERO)
+	stored["transition_edge_ids"] = PackedStringArray(
+		stored.get("transition_edge_ids", PackedStringArray()))
+	stored["port_feeder_edge_ids"] = PackedStringArray(
+		stored.get("port_feeder_edge_ids", PackedStringArray()))
+	port_ramps[ramp_id] = stored
 	return true
 
 
@@ -203,20 +206,33 @@ func sorted_passing_zone_ids() -> Array[String]:
 	return _sorted_ids(passing_zones)
 
 
-func sorted_port_breakoff_ids() -> Array[String]:
-	return _sorted_ids(port_breakoffs)
+func sorted_port_ramp_ids() -> Array[String]:
+	return _sorted_ids(port_ramps)
 
 
-func breakoffs_for_port(port_id: String, physical_quay_id := "") -> Array[Dictionary]:
+func ramps_for_port(port_id: String, ramp_kind := "", station := "") -> Array[Dictionary]:
 	var result: Array[Dictionary] = []
-	for breakoff_id in sorted_port_breakoff_ids():
-		var record := port_breakoffs[breakoff_id] as Dictionary
+	for ramp_id in sorted_port_ramp_ids():
+		var record := port_ramps[ramp_id] as Dictionary
 		if str(record.get("port_id", "")) != port_id:
 			continue
-		if not physical_quay_id.is_empty() \
-				and str(record.get("physical_quay_id", "")) != physical_quay_id:
+		if not ramp_kind.is_empty() and str(record.get("ramp_kind", "")) != ramp_kind:
+			continue
+		if not station.is_empty() and str(record.get("station", "")) != station:
 			continue
 		result.append(record)
+	return result
+
+
+func ramp_ids_for_node(node_id: String, ramp_kind := "") -> PackedStringArray:
+	var result := PackedStringArray()
+	for ramp_id in sorted_port_ramp_ids():
+		var record := port_ramps[ramp_id] as Dictionary
+		if str(record.get("ramp_node_id", "")) != node_id:
+			continue
+		if not ramp_kind.is_empty() and str(record.get("ramp_kind", "")) != ramp_kind:
+			continue
+		result.append(ramp_id)
 	return result
 
 
@@ -355,68 +371,73 @@ static func _heap_entry_less(a: Dictionary, b: Dictionary) -> bool:
 
 
 func rebuild_checksum() -> String:
-	var identity := "%d|%s" % [FORMAT_VERSION, layout_checksum]
+	# Appending to one growing String is quadratic for production-size worlds.
+	# Accumulate immutable fragments and join once so a 35-port authority graph
+	# hashes in linear time without changing its deterministic wire identity.
+	var identity_parts := PackedStringArray(["%d|%s" % [FORMAT_VERSION, layout_checksum]])
 	for node_id in sorted_node_ids():
 		var record := nodes[node_id] as Dictionary
 		var point := record.get("position", Vector2.ZERO) as Vector2
-		identity += "|N:%s:%s:%d,%d:%s:%s:%s" % [
+		identity_parts.append("|N:%s:%s:%d,%d:%s:%s:%s" % [
 			node_id, str(record.get("kind", "")), roundi(point.x), roundi(point.y),
 			record.get("port_id", ""), record.get("berth_id", ""),
-			record.get("waterway_id", "")]
+			record.get("waterway_id", "")])
 	for edge_id in sorted_edge_ids():
 		var record := edges[edge_id] as Dictionary
-		identity += "|E:%s:%s:%s:%s:%.3f:%.3f:%.3f:%.3f:%.3f" % [
+		identity_parts.append("|E:%s:%s:%s:%s:%.3f:%.3f:%.3f:%.3f:%.3f" % [
 			edge_id, record.get("from_node_id", ""), record.get("to_node_id", ""),
 			record.get("kind", ""), float(record.get("lane_width_m", 0.0)),
 			float(record.get("speed_limit_ms", 0.0)), float(record.get("max_draft_m", 0.0)),
-			float(record.get("max_beam_m", 0.0)), float(record.get("max_length_m", 0.0))]
+			float(record.get("max_beam_m", 0.0)), float(record.get("max_length_m", 0.0))])
 		for point in record.get("points", PackedVector2Array()) as PackedVector2Array:
-			identity += ":%d,%d" % [roundi(point.x), roundi(point.y)]
+			identity_parts.append(":%d,%d" % [roundi(point.x), roundi(point.y)])
 	for block_id in sorted_block_ids():
 		var record := blocks[block_id] as Dictionary
-		identity += "|B:%s:%s:%s" % [block_id, record.get("edge_id", ""),
-			record.get("exclusive_group", "")]
+		identity_parts.append("|B:%s:%s:%s" % [block_id, record.get("edge_id", ""),
+			record.get("exclusive_group", "")])
 		for conflict_id in record.get("conflicts", PackedStringArray()) as PackedStringArray:
-			identity += ":%s" % conflict_id
+			identity_parts.append(":%s" % conflict_id)
 	for signal_id in _sorted_ids(signals):
 		var record := signals[signal_id] as Dictionary
-		identity += "|S:%s:%s:%s" % [signal_id, record.get("kind", ""), record.get("node_id", "")]
+		identity_parts.append("|S:%s:%s:%s" % [signal_id, record.get("kind", ""),
+			record.get("node_id", "")])
 		for block_id in record.get("protected_blocks", PackedStringArray()) as PackedStringArray:
-			identity += ":%s" % block_id
+			identity_parts.append(":%s" % block_id)
 	for slot_id in _sorted_ids(port_queue_slots):
 		var record := port_queue_slots[slot_id] as Dictionary
 		var point := record.get("position", Vector2.ZERO) as Vector2
-		identity += "|Q:%s:%s:%s:%d:%d,%d" % [slot_id, record.get("port_id", ""),
+		identity_parts.append("|Q:%s:%s:%s:%d:%d,%d" % [slot_id, record.get("port_id", ""),
 			record.get("block_id", ""), int(record.get("queue_index", -1)),
-			roundi(point.x), roundi(point.y)]
+			roundi(point.x), roundi(point.y)])
 	for token_id in _sorted_ids(berth_tokens):
 		var record := berth_tokens[token_id] as Dictionary
-		identity += "|T:%s:%s:%s:%s" % [token_id, record.get("port_id", ""),
-			record.get("node_id", ""), record.get("physical_quay_id", "")]
+		identity_parts.append("|T:%s:%s:%s:%s" % [token_id, record.get("port_id", ""),
+			record.get("node_id", ""), record.get("physical_quay_id", "")])
 	for zone_id in _sorted_ids(passing_zones):
 		var record := passing_zones[zone_id] as Dictionary
-		identity += "|Z:%s:%s" % [zone_id, record.get("waterway_id", "")]
+		identity_parts.append("|Z:%s:%s" % [zone_id, record.get("waterway_id", "")])
 		for block_id in record.get("forward_blocks", PackedStringArray()) as PackedStringArray:
-			identity += ":F:%s" % block_id
+			identity_parts.append(":F:%s" % block_id)
 		for block_id in record.get("reverse_blocks", PackedStringArray()) as PackedStringArray:
-			identity += ":R:%s" % block_id
+			identity_parts.append(":R:%s" % block_id)
 	for port_id in _sorted_ids(port_gate_nodes):
-		identity += "|P:%s" % port_id
+		identity_parts.append("|P:%s" % port_id)
 		for gate_id in port_gate_nodes[port_id] as Array:
-			identity += ":%s" % str(gate_id)
-	for breakoff_id in sorted_port_breakoff_ids():
-		var record := port_breakoffs[breakoff_id] as Dictionary
+			identity_parts.append(":%s" % str(gate_id))
+	for ramp_id in sorted_port_ramp_ids():
+		var record := port_ramps[ramp_id] as Dictionary
 		var point := record.get("position", Vector2.ZERO) as Vector2
-		identity += "|X:%s:%s:%s:%s:%d,%d" % [breakoff_id,
-			record.get("port_id", ""), record.get("gate_node_id", ""),
-			record.get("lane_node_id", ""), roundi(point.x), roundi(point.y)]
-		for edge_id in record.get("outbound_edge_ids", PackedStringArray()) as PackedStringArray:
-			identity += ":O:%s" % edge_id
-		for edge_id in record.get("inbound_edge_ids", PackedStringArray()) as PackedStringArray:
-			identity += ":I:%s" % edge_id
+		identity_parts.append("|R:%s:%s:%s:%s:%s:%s:%d,%d" % [ramp_id,
+			record.get("port_id", ""), record.get("ramp_kind", ""),
+			record.get("station", ""), record.get("lane_node_id", ""),
+			record.get("ramp_node_id", ""), roundi(point.x), roundi(point.y)])
+		for edge_id in record.get("transition_edge_ids", PackedStringArray()) as PackedStringArray:
+			identity_parts.append(":T:%s" % edge_id)
+		for edge_id in record.get("port_feeder_edge_ids", PackedStringArray()) as PackedStringArray:
+			identity_parts.append(":F:%s" % edge_id)
 	var context := HashingContext.new()
 	context.start(HashingContext.HASH_SHA256)
-	context.update(identity.to_utf8_buffer())
+	context.update("".join(identity_parts).to_utf8_buffer())
 	network_checksum = context.finish().hex_encode()
 	return network_checksum
 
@@ -466,15 +487,15 @@ func to_snapshot() -> Dictionary:
 	var wire_port_gates: Dictionary = {}
 	for port_id in _sorted_ids(port_gate_nodes):
 		wire_port_gates[port_id] = (port_gate_nodes[port_id] as Array).duplicate()
-	var wire_breakoffs: Dictionary = {}
-	for breakoff_id in sorted_port_breakoff_ids():
-		var record := (port_breakoffs[breakoff_id] as Dictionary).duplicate(true)
+	var wire_ramps: Dictionary = {}
+	for ramp_id in sorted_port_ramp_ids():
+		var record := (port_ramps[ramp_id] as Dictionary).duplicate(true)
 		record["position"] = _vector_to_wire(record.get("position", Vector2.ZERO) as Vector2)
-		record["outbound_edge_ids"] = _strings_to_wire(
-			record.get("outbound_edge_ids", PackedStringArray()) as PackedStringArray)
-		record["inbound_edge_ids"] = _strings_to_wire(
-			record.get("inbound_edge_ids", PackedStringArray()) as PackedStringArray)
-		wire_breakoffs[breakoff_id] = record
+		record["transition_edge_ids"] = _strings_to_wire(
+			record.get("transition_edge_ids", PackedStringArray()) as PackedStringArray)
+		record["port_feeder_edge_ids"] = _strings_to_wire(
+			record.get("port_feeder_edge_ids", PackedStringArray()) as PackedStringArray)
+		wire_ramps[ramp_id] = record
 	return {
 		"format_version": FORMAT_VERSION,
 		"layout_checksum": layout_checksum,
@@ -487,7 +508,7 @@ func to_snapshot() -> Dictionary:
 		"berth_tokens": berth_tokens.duplicate(true),
 		"passing_zones": wire_passing_zones,
 		"port_gate_nodes": wire_port_gates,
-		"port_breakoffs": wire_breakoffs,
+		"port_ramps": wire_ramps,
 	}
 
 
@@ -535,13 +556,13 @@ static func from_snapshot(snapshot: Dictionary) -> ShippingLaneNetwork:
 		restored.port_gate_nodes[port_id] = Array(
 			(snapshot.get("port_gate_nodes", {}) as Dictionary)[port_id],
 		).duplicate()
-	for breakoff_id in _sorted_ids(snapshot.get("port_breakoffs", {}) as Dictionary):
-		var record := ((snapshot.get("port_breakoffs", {}) as Dictionary)[breakoff_id] \
+	for ramp_id in _sorted_ids(snapshot.get("port_ramps", {}) as Dictionary):
+		var record := ((snapshot.get("port_ramps", {}) as Dictionary)[ramp_id] \
 			as Dictionary).duplicate(true)
 		record["position"] = _vector_from_wire(record.get("position", []))
-		record["outbound_edge_ids"] = PackedStringArray(record.get("outbound_edge_ids", []))
-		record["inbound_edge_ids"] = PackedStringArray(record.get("inbound_edge_ids", []))
-		restored.add_port_breakoff(record)
+		record["transition_edge_ids"] = PackedStringArray(record.get("transition_edge_ids", []))
+		record["port_feeder_edge_ids"] = PackedStringArray(record.get("port_feeder_edge_ids", []))
+		restored.add_port_ramp(record)
 	var expected := str(snapshot.get("network_checksum", ""))
 	restored.rebuild_checksum()
 	if not expected.is_empty() and expected != restored.network_checksum:
@@ -588,7 +609,7 @@ func summary() -> Dictionary:
 		"port_queue_slots": port_queue_slots.size(),
 		"berth_tokens": berth_tokens.size(),
 		"passing_zones": passing_zones.size(),
-		"port_breakoffs": port_breakoffs.size(),
+		"port_ramps": port_ramps.size(),
 		"ports": port_gate_nodes.size(),
 		"errors": errors,
 		"warnings": warnings,
@@ -614,6 +635,10 @@ static func _edge_supports(record: Dictionary, vessel: Dictionary) -> bool:
 	return draft <= float(record.get("max_draft_m", INF)) \
 		and beam <= float(record.get("max_beam_m", INF)) \
 		and length <= float(record.get("max_length_m", INF))
+
+
+func edge_supports(record: Dictionary, vessel: Dictionary) -> bool:
+	return _edge_supports(record, vessel)
 
 
 static func _sorted_ids(source: Dictionary) -> Array[String]:

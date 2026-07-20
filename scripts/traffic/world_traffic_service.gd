@@ -17,6 +17,10 @@ const VESSEL_SPAWN_PATH := "res://scripts/ship/vessel_spawn.gd"
 
 const AUTHORITY_TICK_S := 0.50
 const INTEREST_REFRESH_S := 0.50
+## Distant contacts intentionally behave like AIS/chart data. Their pure-data
+## authority advances on its own cadence, while copying every fleet record to
+## every client twice per second would make 1,000 remote ships cost local CPU.
+const REMOTE_CONTACT_REFRESH_S := 10.0
 const PHYSICS_RADIUS_M := 240.0
 const FULL_RADIUS_M := 1100.0
 const PROXY_RADIUS_M := 7200.0
@@ -36,9 +40,11 @@ var _records: Dictionary = {}
 var _presentation: Dictionary = {}
 var _metadata: Dictionary = {}
 var _map_contacts_cache: Array[Dictionary] = []
+var _map_contact_index_by_id: Dictionary = {}
 var _prebuilt_entries: Array[Dictionary] = []
 var _authority_elapsed := 0.0
 var _interest_elapsed := 0.0
+var _contact_elapsed := 0.0
 var _presentation_summary: Dictionary = {}
 var _fleet_serial := 0
 var _last_authority_ms := 0.0
@@ -109,9 +115,11 @@ func clear_debug_fleet() -> void:
 	_records.clear()
 	_metadata.clear()
 	_map_contacts_cache.clear()
+	_map_contact_index_by_id.clear()
 	_simulator = null
 	_authority_elapsed = 0.0
 	_interest_elapsed = 0.0
+	_contact_elapsed = 0.0
 	_presentation_summary.clear()
 	set_process(false)
 	set_physics_process(false)
@@ -154,15 +162,31 @@ func map_contacts() -> Array[Dictionary]:
 	return _map_contacts_cache
 
 
+## Multiplayer servers call this with the union of connected-player positions.
+## Single-player refreshes it automatically from the local stream observer.
+func set_authority_interest_centers(points: PackedVector2Array) -> void:
+	if _simulator != null:
+		_simulator.set_interest_centers(points)
+		# A newly interesting region should not wait for the next routine AIS sweep
+		# before its strategic records are promoted and published.
+		_contact_elapsed = REMOTE_CONTACT_REFRESH_S
+
+
 func _process(delta: float) -> void:
 	if _simulator == null:
 		return
 	_authority_elapsed += delta
 	if _authority_elapsed >= AUTHORITY_TICK_S:
 		var authority_started := Time.get_ticks_usec()
-		_simulator.advance(_authority_elapsed)
+		var authority_delta := _authority_elapsed
+		_simulator.advance(authority_delta)
 		_authority_elapsed = 0.0
-		_pull_authority_snapshot()
+		_contact_elapsed += authority_delta
+		if _contact_elapsed >= REMOTE_CONTACT_REFRESH_S:
+			_contact_elapsed = 0.0
+			_pull_authority_snapshot()
+		else:
+			_pull_materialized_snapshot()
 		_last_authority_ms = float(Time.get_ticks_usec() - authority_started) / 1000.0
 		_peak_authority_ms = maxf(_peak_authority_ms, _last_authority_ms)
 	_interest_elapsed += delta
@@ -200,32 +224,74 @@ func _physics_process(_delta: float) -> void:
 func _pull_authority_snapshot() -> void:
 	_records.clear()
 	_map_contacts_cache.clear()
+	_map_contact_index_by_id.clear()
 	for record in _simulator.presentation_records():
 		var vessel_id := str(record.get("id", ""))
 		_records[vessel_id] = record
 		var contact := record.duplicate(false)
 		contact.merge(_metadata.get(vessel_id, {}) as Dictionary, true)
+		_map_contact_index_by_id[vessel_id] = _map_contacts_cache.size()
 		_map_contacts_cache.append(contact)
 	for vessel_id in _presentation.keys():
 		if not _records.has(vessel_id):
 			_remove_presentation(str(vessel_id))
 			continue
-		var record := _records[vessel_id] as Dictionary
-		var point := record.get("position", Vector2.ZERO) as Vector2
-		var state := _presentation[vessel_id] as Dictionary
-		state["target_position"] = Vector3(
-			point.x, float(state.get("presentation_y", 0.0)), point.y)
-		state["target_heading"] = record.get("heading", Vector2(0.0, -1.0))
-		_update_label(state, record)
+		_apply_record_to_presentation(str(vessel_id), _records[vessel_id] as Dictionary)
+
+
+func _pull_materialized_snapshot() -> void:
+	# Near visuals still receive the half-second authority target. Everything
+	# without a node stays as a cheap chart record until the ten-second sweep.
+	for vessel_id_raw in _presentation.keys():
+		var vessel_id := str(vessel_id_raw)
+		var record := _simulator.presentation_record(vessel_id)
+		if record.is_empty():
+			_remove_presentation(vessel_id)
+			continue
+		_records[vessel_id] = record
+		var contact_index := int(_map_contact_index_by_id.get(vessel_id, -1))
+		if contact_index >= 0 and contact_index < _map_contacts_cache.size():
+			var contact := record.duplicate(false)
+			contact.merge(_metadata.get(vessel_id, {}) as Dictionary, true)
+			_map_contacts_cache[contact_index] = contact
+		_apply_record_to_presentation(vessel_id, record)
+
+
+func _apply_record_to_presentation(vessel_id: String, record: Dictionary) -> void:
+	var state := _presentation.get(vessel_id, {}) as Dictionary
+	if state.is_empty():
+		return
+	var point := record.get("position", Vector2.ZERO) as Vector2
+	state["target_position"] = Vector3(
+		point.x, float(state.get("presentation_y", 0.0)), point.y)
+	state["target_heading"] = record.get("heading", Vector2(0.0, -1.0))
+	_update_label(state, record)
 
 
 func _refresh_interest(force: bool) -> void:
 	if _records.is_empty():
 		return
+	# Dedicated and automated headless authorities own records, reservations and
+	# snapshots only. Instantiating hundreds of proxy meshes here defeated the
+	# data/presentation split and made server-side fleet creation scale with GPU
+	# scene work that can never be displayed. A dedicated server's externally
+	# supplied union of player interest centers must also remain intact here.
+	if DisplayServer.get_name() == "headless":
+		_presentation_summary = {
+			"record_count": _records.size(),
+			"materialized": 0,
+			"data_only_count": _records.size(),
+			"full_ids": PackedStringArray(),
+			"physics_ids": PackedStringArray(),
+			"proxy_ids": PackedStringArray(),
+		}
+		return
+	var observer3 := WorldReference.stream_position(get_viewport())
+	_simulator.set_interest_centers(PackedVector2Array([
+		Vector2(observer3.x, observer3.z)]))
 	var records: Array[Dictionary] = []
 	for record in _records.values():
 		records.append(record as Dictionary)
-	var observer3 := WorldReference.stream_position(get_viewport())
 	var selected := PRESENTATION_POLICY.select(
 		records,
 		Vector2(observer3.x, observer3.z),

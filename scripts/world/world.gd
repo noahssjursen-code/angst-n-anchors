@@ -21,6 +21,7 @@ const IMPOSTOR_SERVICE := preload("res://scripts/core/impostor_service.gd")
 const SHIPPING_LANE_NETWORK_BUILDER := preload("res://scripts/traffic/shipping_lane_network_builder.gd")
 const SHIPPING_LANE_DEBUG_DRAW := preload("res://scripts/traffic/shipping_lane_debug_draw.gd")
 const WORLD_TRAFFIC_SERVICE := preload("res://scripts/traffic/world_traffic_service.gd")
+const WORLD_PORT_NAMES := preload("res://scripts/world/world_port_names.gd")
 
 ## Match terrain mid LOD (~4.8 km) so coasts are not empty until the last moment.
 const LOAD_RADIUS           : float = 4800.0
@@ -28,19 +29,6 @@ const EDITOR_PREVIEW_RADIUS : float = 600.0
 const EDITOR_PREVIEW_MAX    : int   = 6
 const WORLD_GENERATION_VERSION := WORLD_LAYOUT_GENERATOR.GENERATION_VERSION
 const WEATHER_GENERATION_VERSION := 3
-
-const PORT_NAMES : Array[String] = [
-	"Holmvik",  "Sandvær",  "Bergnes",  "Kloven",
-	"Strandnes","Kvamsvik", "Bremsund", "Tysneset",
-	"Fjelltun", "Grønnvik", "Harberg",  "Innvær",
-	"Jørvika",  "Kalvøy",   "Lyngnes",  "Molvær",
-	"Nordheim", "Ostervik", "Raudvik",  "Solberg",
-	"Torsberg", "Urvik",    "Vargnes",  "Øyangen",
-	"Bakkevær", "Dalsøy",   "Egersund", "Fossberg",
-	"Grindøy",  "Hammnes",  "Isfjord",  "Kopervær",
-	"Langøy",   "Midtvik",  "Nessund",  "Ålvær",
-	"Ravnheim", "Skarvøy",  "Tjuvnes",  "Ulvvær",
-]
 
 var _ready_complete := false
 var _layout_checksum := ""
@@ -398,7 +386,7 @@ func _generate_definitions() -> Array[PortDefinition]:
 	return COASTAL_PORT_PLACER.place_ports(
 		_world_layout,
 		maxi(port_count, 1),
-		PackedStringArray(PORT_NAMES),
+		PackedStringArray(WORLD_PORT_NAMES.NAMES),
 	)
 
 

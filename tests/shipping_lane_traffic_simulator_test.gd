@@ -34,13 +34,24 @@ func _run() -> void:
 		"authority keeps vessels beyond the available starting berths", failures)
 	_check(int(summary.get("route_failures", 0)) == 0,
 		"all data ships have valid routes", failures)
-	_check(int((summary.get("passage_modes", {}) as Dictionary).get("hybrid", 0)) > 0,
-		"scenario exercises lane-to-open-water breakoff passages", failures)
+	var modes := summary.get("passage_modes", {}) as Dictionary
+	_check(int(modes.get("all_lane", 0)) > 0,
+		"ordinary journeys prefer the authority-controlled lane graph", failures)
+	_check(int(modes.get("hybrid", 0)) > 0,
+		"unreasonable lane detours use a bounded A* lane transfer", failures)
 	_check(first.generate_report().contains("open_water_sections"),
 		"authority report exposes each vessel's passage composition", failures)
 	_check(summary.has("collisions") and summary.has("deadlocks") \
 		and summary.has("starved_vessels"),
 		"safety failures are measured rather than hidden", failures)
+	_check(str(summary.get("status", "FAIL")) == "PASS",
+		"long replay passes every authority safety gate", failures)
+	_check(int(summary.get("collisions", 0)) == 0,
+		"open-water and controlled traffic remain collision-free", failures)
+	_check(int(summary.get("deadlocks", 0)) == 0,
+		"port queues and lane reservations remain globally live", failures)
+	_check(int(summary.get("starved_vessels", 0)) == 0,
+		"every prolonged wait has an explicit scheduled or FIFO cause", failures)
 	_check(int(summary.get("queue_entries", 0)) > 0,
 		"scenario exercises berth queues", failures)
 	_check(int(summary.get("reservation_denials", 0)) > 0,

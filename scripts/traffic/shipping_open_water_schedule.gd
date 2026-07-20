@@ -10,13 +10,16 @@ extends RefCounted
 const CELL_SIZE_M := 120.0
 const SAMPLE_STEP_M := 60.0
 const START_QUANTUM_S := 5.0
-const MAX_START_DELAY_S := 3600.0
+## Persistent fleets may reserve long crossings hours ahead. A one-hour cap
+## turned a valid busy-ocean queue into repeated expensive "saturated" probes;
+## one authority day keeps the allocation deterministic without polling.
+const MAX_START_DELAY_S := 86400.0
 const MIN_CLEARANCE_M := 36.0
 const MAX_RESCHEDULE_PASSES := 128
 
 var _occupancy_by_cell: Dictionary = {} # cell id -> Array[interval]
 var _allocations: Dictionary = {} # vessel|section -> internal record
-var _passage_cache: Dictionary = {} # stable breakoff link -> relative cell passages
+var _passage_cache: Dictionary = {} # stable off-ramp -> on-ramp link -> relative cell passages
 var _next_start_by_route_key: Dictionary = {} # convoy headway for identical direction/path
 var _requests := 0
 var _delayed_requests := 0
@@ -69,6 +72,7 @@ func request(
 		var interval := {
 			"allocation_id": allocation_id,
 			"route_key": route_key,
+			"direction": passage.get("direction", Vector2.ZERO),
 			"start_s": start_s + float(passage.get("entry_s", 0.0)) - clearance_s,
 			"end_s": start_s + float(passage.get("exit_s", 0.0)) + clearance_s,
 		}
@@ -162,6 +166,16 @@ func _first_safe_start(
 			# launch headway is enforced by `_next_start_by_route_key`.
 			if not route_key.is_empty() and str(interval.get("route_key", "")) == route_key:
 				continue
+			# Different off-ramps can merge into the same approach. Co-directional
+			# traffic is a convoy, not an ocean crossing; vessel headway and the
+			# live spatial authority handle it. Reserving the shared tail as an
+			# exclusive crossing otherwise creates multi-hour artificial queues.
+			var proposed_direction := passage.get("direction", Vector2.ZERO) as Vector2
+			var occupied_direction := interval.get("direction", Vector2.ZERO) as Vector2
+			if not proposed_direction.is_zero_approx() \
+					and not occupied_direction.is_zero_approx() \
+					and proposed_direction.dot(occupied_direction) >= 0.75:
+				continue
 			var occupied_start := float(interval.get("start_s", 0.0))
 			var occupied_end := float(interval.get("end_s", 0.0))
 			if proposed_end <= occupied_start or proposed_start >= occupied_end:
@@ -184,18 +198,26 @@ static func _relative_cell_passages(
 		if segment_length <= 0.001:
 			continue
 		var sample_count := maxi(1, ceili(segment_length / SAMPLE_STEP_M))
+		var direction := segment / segment_length
 		for sample_index in range(sample_count + 1):
 			var ratio := float(sample_index) / float(sample_count)
 			_add_relative_passage(by_cell, start.lerp(finish, ratio),
-				(cumulative_distance + segment_length * ratio) / speed_ms)
+				(cumulative_distance + segment_length * ratio) / speed_ms, direction)
 		cumulative_distance += segment_length
 	var result: Array[Dictionary] = []
 	for value in by_cell.values():
-		result.append(value as Dictionary)
+		var passage := value as Dictionary
+		var direction_sum := passage.get("direction_sum", Vector2.ZERO) as Vector2
+		passage["direction"] = direction_sum.normalized() \
+			if not direction_sum.is_zero_approx() else Vector2.ZERO
+		passage.erase("direction_sum")
+		result.append(passage)
 	return result
 
 
-static func _add_relative_passage(by_cell: Dictionary, point: Vector2, time_s: float) -> void:
+static func _add_relative_passage(
+		by_cell: Dictionary, point: Vector2, time_s: float, direction: Vector2,
+) -> void:
 	# Two offset grids catch close trajectories even when one straddles a
 	# spatial cell boundary.
 	for grid_index in range(2):
@@ -204,9 +226,15 @@ static func _add_relative_passage(by_cell: Dictionary, point: Vector2, time_s: f
 		var cell_y := floori((point.y + shift) / CELL_SIZE_M)
 		var cell_id := "%d:%d:%d" % [grid_index, cell_x, cell_y]
 		var passage := by_cell.get(cell_id, {
-			"cell_id": cell_id, "entry_s": time_s, "exit_s": time_s}) as Dictionary
+			"cell_id": cell_id,
+			"entry_s": time_s,
+			"exit_s": time_s,
+			"direction_sum": Vector2.ZERO,
+		}) as Dictionary
 		passage["entry_s"] = minf(float(passage.get("entry_s", time_s)), time_s)
 		passage["exit_s"] = maxf(float(passage.get("exit_s", time_s)), time_s)
+		passage["direction_sum"] = (passage.get("direction_sum", Vector2.ZERO) as Vector2) \
+			+ direction
 		by_cell[cell_id] = passage
 
 

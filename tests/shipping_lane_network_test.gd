@@ -47,6 +47,31 @@ func _test_shape(network: ShippingLaneNetwork, ports: Array[PortData]) -> void:
 	_check(network.port_queue_slots.size() >= ports.size() * 2,
 		"ports have block-based inbound queue capacity")
 	_check(not network.passing_zones.is_empty(), "wide waterways publish passing zones")
+	for block_value in network.blocks.values():
+		var lane_block := block_value as Dictionary
+		var lane_edge := network.edge(str(lane_block.get("edge_id", "")))
+		if str(lane_edge.get("kind", "")) in ["main_lane", "regional_lane"]:
+			_check(not str(lane_block.get("passing_zone_id", "")).is_empty(),
+				"every shipping-lane block has continuous passing coverage")
+	for zone_value in network.passing_zones.values():
+		var zone := zone_value as Dictionary
+		for direction in ["forward", "reverse"]:
+			var bypass_id := str(zone.get("%s_bypass_edge_id" % direction, ""))
+			_check(network.edges.has(bypass_id),
+				"%s publishes a reservable %s overtaking edge" % [str(zone.get("id", "")), direction])
+			if network.edges.has(bypass_id):
+				_check(str(network.edge(bypass_id).get("kind", "")) == "passing_lane",
+					"%s bypass is distinct from ordinary route planning" % bypass_id)
+	var coastal_nodes: Array[Vector2] = []
+	for node_value in network.nodes.values():
+		var coastal_node := node_value as Dictionary
+		if str(coastal_node.get("waterway_id", "")) == "coastal_main_bus":
+			coastal_nodes.append(coastal_node.get("position", Vector2.ZERO) as Vector2)
+	_check(coastal_nodes.size() >= 4, "mainland coast has a north-south shipping trunk")
+	if coastal_nodes.size() >= 2:
+		coastal_nodes.sort_custom(func(a: Vector2, b: Vector2) -> bool: return a.y < b.y)
+		_check(coastal_nodes[-1].y - coastal_nodes[0].y > 1000.0,
+			"coastal shipping trunk spans multiple fjord mouths")
 	for port in ports:
 		_check(network.port_gate_nodes.has(port.port_id), "%s has traffic gates" % port.port_id)
 		var queue_count := 0
@@ -86,17 +111,29 @@ func _test_shape(network: ShippingLaneNetwork, ports: Array[PortData]) -> void:
 			unique_gates.size() == expected_junctions,
 			"%s does not collapse physical quays into a shared gate" % port.port_id,
 		)
-		var port_breakoffs := network.breakoffs_for_port(port.port_id)
-		_check(port_breakoffs.size() >= expected_junctions * 2,
-			"%s publishes directional breakoffs beyond every quay junction" % port.port_id)
-		for breakoff in port_breakoffs:
-			var lane_node := network.node(str(breakoff.get("lane_node_id", "")))
-			var gate_node := network.node(str(breakoff.get("gate_node_id", "")))
+		var port_ramps := network.ramps_for_port(port.port_id)
+		_check(port_ramps.size() == 8,
+			"%s publishes before/after on/off ramps in both directions" % port.port_id)
+		var ramp_shapes: Dictionary = {}
+		for ramp in port_ramps:
+			var lane_node := network.node(str(ramp.get("lane_node_id", "")))
+			var ramp_node := network.node(str(ramp.get("ramp_node_id", "")))
+			var shape := "%s:%s:%d" % [str(ramp.get("station", "")),
+				str(ramp.get("ramp_kind", "")), int(ramp.get("direction_index", -1))]
+			ramp_shapes[shape] = true
 			_check(str(lane_node.get("kind", "")) in ["main_lane", "regional_lane"],
-				"%s breakoff is outside the port approach on a shipping lane" % port.port_id)
-			_check((lane_node.get("position", Vector2.ZERO) as Vector2).distance_to(
-				gate_node.get("position", Vector2.ZERO) as Vector2) >= 180.0,
-				"%s breakoff clears the harbour approach envelope" % port.port_id)
+				"%s ramp attaches to the shipping highway" % port.port_id)
+			_check(str(ramp_node.get("kind", "")) == "shipping_ramp",
+				"%s ramp owns a distinct transition node" % port.port_id)
+			_check(not unique_gates.has(str(ramp.get("ramp_node_id", ""))),
+				"%s ramps are not quay approach junctions" % port.port_id)
+			for gate_id in published_gates:
+				var gate_node := network.node(str(gate_id))
+				_check((ramp.get("position", Vector2.ZERO) as Vector2).distance_to(
+					gate_node.get("position", Vector2.ZERO) as Vector2) >= 400.0,
+					"%s ramps clear the local harbour envelope" % port.port_id)
+		_check(ramp_shapes.size() == 8,
+			"%s has no collapsed or duplicated ramp roles" % port.port_id)
 		var berth_count := 0
 		for token_value in network.berth_tokens.values():
 			if str((token_value as Dictionary).get("port_id", "")) == port.port_id:
@@ -192,15 +229,17 @@ func _test_hybrid_passages(network: ShippingLaneNetwork, layout: WorldLayout) ->
 	var passage := planner.plan(from_id, to_id,
 		{"draft_m": 4.0, "beam_m": 12.0, "length_m": 55.0})
 	_check(not passage.is_empty(), "hybrid planner finds a berth-to-berth passage")
-	_check(int(passage.get("open_water_sections", 0)) > 0,
-		"distant voyage may break off for a shorter open-water passage")
+	_check(str(passage.get("mode", "")) in ["all_lane", "hybrid"],
+		"voyage uses controlled lanes with only a justified A* transfer")
 	for raw_step in passage.get("steps", []) as Array:
 		var step := raw_step as Dictionary
 		if str(step.get("kind", "")) != "open_water":
 			continue
-		_check(network.port_breakoffs.has(str(step.get("from_breakoff_id", ""))) \
-			and network.port_breakoffs.has(str(step.get("to_breakoff_id", ""))),
-			"open-water passage begins and ends only at published breakoffs")
+		var off_ramp := network.port_ramps.get(str(step.get("from_ramp_id", "")), {}) as Dictionary
+		var on_ramp := network.port_ramps.get(str(step.get("to_ramp_id", "")), {}) as Dictionary
+		_check(str(off_ramp.get("ramp_kind", "")) == "off_ramp" \
+			and str(on_ramp.get("ramp_kind", "")) == "on_ramp",
+			"open-water passage travels only from a published off-ramp to an on-ramp")
 
 
 func _test_determinism(first: ShippingLaneNetwork, second: ShippingLaneNetwork) -> void:
@@ -224,8 +263,8 @@ func _test_snapshot(network: ShippingLaneNetwork) -> void:
 		"authority snapshot preserves berth tokens")
 	_check(restored.passing_zones.size() == network.passing_zones.size(),
 		"authority snapshot preserves passing zones")
-	_check(restored.port_breakoffs.size() == network.port_breakoffs.size(),
-		"authority snapshot preserves legal open-water breakoffs")
+	_check(restored.port_ramps.size() == network.port_ramps.size(),
+		"authority snapshot preserves legal on/off ramps")
 
 
 func _test_reservations(network: ShippingLaneNetwork) -> void:
@@ -295,14 +334,15 @@ func _test_berth_queue_authority(network: ShippingLaneNetwork) -> void:
 		_check(not bool(service.try_reserve(second_queued_id,
 			PackedStringArray([queue_block_id])).get("ok", false)),
 			"queued vessel cannot skip the FIFO lane position ahead of it")
-		_check(not bool(service.try_reserve(queued_id,
+		_check(bool(service.try_reserve(queued_id,
 			PackedStringArray([queue_block_id])).get("ok", false)),
-			"queued vessel waits upstream instead of parking in the port connector")
+			"FIFO head may occupy its isolated port-feeder queue slot")
 	var second_block_id := str(second_slot.get("block_id", ""))
 	if not second_block_id.is_empty():
-		_check(not bool(service.try_reserve(second_queued_id,
-			PackedStringArray([second_block_id])).get("ok", false)),
-			"later queued vessels also remain on ordinary upstream lane blocks")
+		var second_reservation := service.try_reserve(second_queued_id,
+			PackedStringArray([second_block_id]))
+		_check(bool(second_reservation.get("ok", false)),
+			"later queued vessel may occupy only its own feeder slot")
 	var promoted := service.release_berth("berth-vessel-0")
 	_check(str(promoted.get("vessel_id", "")) == queued_id, "berth release promotes FIFO head")
 	_check(not service.berth_assignment(queued_id).is_empty(), "promoted vessel owns the berth")
@@ -310,7 +350,8 @@ func _test_berth_queue_authority(network: ShippingLaneNetwork) -> void:
 		_check(bool(service.try_reserve(queued_id,
 			PackedStringArray([queue_block_id])).get("ok", false)),
 			"promoted vessel may enter its interlocked connector")
-	_check(int(service.assigned_queue_slot(second_queued_id, 0).get("queue_index", -1)) == 0,
+	var advanced_slot := service.assigned_queue_slot(second_queued_id, 0)
+	_check(int(advanced_slot.get("queue_index", -1)) == 0,
 		"remaining vessel advances to the front queue block")
 	var authority_snapshot := service.snapshot()
 	var replica := ShippingLaneReservationService.new(network)

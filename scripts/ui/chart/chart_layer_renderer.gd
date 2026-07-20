@@ -35,14 +35,14 @@ var draw_count := 0
 var _route_navigation: MarineRoutePlanner
 var _contract_route_cache: Dictionary = {}
 var _shipping_lane_lines: Array[Dictionary] = []
-var _shipping_breakoffs := PackedVector2Array()
+var _shipping_ramps: Array[Dictionary] = []
 
 
 func set_snapshot(next) -> void:
 	snapshot = next
 	_contract_route_cache.clear()
 	_shipping_lane_lines.clear()
-	_shipping_breakoffs.clear()
+	_shipping_ramps.clear()
 	_route_navigation = null
 	weather.invalidate()
 	fishing.invalidate()
@@ -209,7 +209,8 @@ func _prepare_shipping_lanes() -> void:
 	for edge_id in network.sorted_edge_ids():
 		var edge := network.edges[edge_id] as Dictionary
 		var kind := str(edge.get("kind", ""))
-		if kind not in ["main_lane", "regional_lane", "port_connector", "port_approach", "port_merge"]:
+		if kind not in ["main_lane", "regional_lane", "port_connector", "port_approach",
+				"port_merge", "port_feeder", "shipping_ramp"]:
 			continue
 		var points := edge.get("points", PackedVector2Array()) as PackedVector2Array
 		if points.size() < 2:
@@ -225,11 +226,12 @@ func _prepare_shipping_lanes() -> void:
 			continue
 		seen[signature] = true
 		_shipping_lane_lines.append({"kind": kind, "points": points})
-	for breakoff_id in network.sorted_port_breakoff_ids():
-		var record := network.port_breakoffs[breakoff_id] as Dictionary
+	for ramp_id in network.sorted_port_ramp_ids():
+		var record := network.port_ramps[ramp_id] as Dictionary
 		var point := record.get("position", Vector2(INF, INF)) as Vector2
 		if point.is_finite():
-			_shipping_breakoffs.append(point)
+			_shipping_ramps.append({"position": point,
+				"ramp_kind": str(record.get("ramp_kind", ""))})
 
 
 func _draw_shipping_lanes(canvas: CanvasItem, ctx: Dictionary) -> void:
@@ -253,11 +255,13 @@ func _draw_shipping_lanes(canvas: CanvasItem, ctx: Dictionary) -> void:
 				true,
 			)
 	if span <= 12000.0:
-		for point in _shipping_breakoffs:
+		for ramp in _shipping_ramps:
+			var point := ramp.get("position", Vector2.ZERO) as Vector2
 			if bounds.has_point(point):
 				canvas.draw_circle(
 					_world_to_screen(Vector3(point.x, 0.0, point.y), ctx),
-					2.2, C_TRAFFIC_PORT)
+					2.2, C_TRAFFIC_MAIN if str(ramp.get("ramp_kind", "")) == "on_ramp" \
+						else C_TRAFFIC_PORT)
 
 
 func _draw_traffic_contacts(

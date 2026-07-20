@@ -10,7 +10,10 @@ const PRESENTATION_POLICY := preload(
 	"res://scripts/traffic/traffic_vessel_presentation_policy.gd")
 const PREBUILT_CATALOG := preload("res://scripts/ship/prebuilt_vessel_catalog.gd")
 const VESSEL_SPAWN := preload("res://scripts/ship/vessel_spawn.gd")
-const SEED := 77127
+const WORLD_PORT_NAMES := preload("res://scripts/world/world_port_names.gd")
+const DEFAULT_SEED := 42
+## F6 uses the same world plane and first real ports, but only a representative
+## local subset. The full 35-port/250-vessel fixture belongs to the profiler.
 const PORT_COUNT := 10
 const VESSEL_COUNT := 32
 const FULL_VESSEL_RADIUS_M := 900.0
@@ -18,6 +21,8 @@ const PROXY_VESSEL_RADIUS_M := 3600.0
 const MAXIMUM_FULL_VESSELS := 4
 
 var _layout: WorldLayout
+var _scenario_seed := DEFAULT_SEED
+var _world_size_m := 40000.0
 var _ports: Array[PortData] = []
 var _network: ShippingLaneNetwork
 var _simulator: ShippingLaneTrafficSimulator
@@ -49,33 +54,62 @@ func _ready() -> void:
 			_prebuilt_entries.append(entry)
 	_status.text = "Generating deterministic lane graph..."
 	await get_tree().process_frame
-	_layout = WORLD_LAYOUT_GENERATOR.generate(SEED)
-	var names := PackedStringArray()
-	for index in range(PORT_COUNT):
-		names.append("Traffic Port %02d" % (index + 1))
+	var settings := get_node_or_null("/root/GameSettings")
+	if settings != null:
+		_scenario_seed = int(settings.get("map_generation_seed"))
+		_world_size_m = float(settings.get("map_world_size_m"))
+	print("Shipping lane showcase: building fixture")
+	var fixture := _build_fixture(_scenario_seed, _world_size_m)
+	print("Shipping lane showcase: fixture built")
+	_finish_fixture(fixture)
+
+
+static func _build_fixture(seed: int, world_size_m: float) -> Dictionary:
+	var layout := WORLD_LAYOUT_GENERATOR.generate(seed,
+		WorldConfig.ARCHETYPE_PATH, world_size_m) as WorldLayout
+	var names := PackedStringArray(WORLD_PORT_NAMES.NAMES)
 	var definitions: Array[PortDefinition] = COASTAL_PORT_PLACER.place_ports(
-		_layout, PORT_COUNT, names)
+		layout, PORT_COUNT, names)
+	var ports: Array[PortData] = []
 	for definition in definitions:
-		_ports.append(PortExpander.expand(definition, SEED, _layout))
-	_network = ShippingLaneNetworkBuilder.new().build(_layout, _ports)
+		ports.append(PortExpander.expand(definition, seed, layout))
+	return {
+		"layout": layout,
+		"ports": ports,
+		"network": ShippingLaneNetworkBuilder.new().build(layout, ports),
+	}
+
+
+func _finish_fixture(result: Dictionary) -> void:
+	_layout = result.get("layout") as WorldLayout
+	_ports.assign(result.get("ports", []))
+	_network = result.get("network") as ShippingLaneNetwork
+	if _layout == null or _network == null:
+		_status.text = "TRAFFIC LAB BUILD FAILED"
+		return
 	_draw_coastlines()
+	print("Shipping lane showcase: drawing network")
 	var gizmos := ShippingLaneDebugDraw.new()
 	gizmos.name = "ShippingLaneDebugDraw"
 	gizmos.configure(_network, 7200.0, true)
 	add_child(gizmos)
+	print("Shipping lane showcase: configuring vessels")
 	_reset_simulation()
+	print("Shipping lane showcase: vessels configured")
 	_focus_port(0)
 	var graph := _network.summary()
 	_status.text = (
 		"SHIPPING LANE TRAFFIC LAB\n"
 		+ "Q/E port   WASD pan   wheel zoom   Space pause   +/- speed   R reset   Ctrl+C copy\n"
 		+ "cyan highways   yellow connectors   green/orange interlocking   purple queues\n"
-		+ "mint passing zones   teal breakoffs   pale-green open-water passages\n"
+		+ "mint passing lanes   cyan OFF ramps   green ON ramps   pale-green open-water passages\n"
 		+ "blue ships moving   yellow signal wait   magenta berth wait\n"
-		+ "%d ports | %d nodes | %d blocks | %d signals | checksum %s"
-		% [PORT_COUNT, int(graph.nodes), int(graph.blocks), int(graph.signals),
+		+ "seed %d | %d ports | %d nodes | %d blocks | %d signals | checksum %s"
+		% [_scenario_seed, PORT_COUNT, int(graph.nodes), int(graph.blocks), int(graph.signals),
 			str(graph.network_checksum).left(12)]
 	)
+	print("Shipping lane showcase ready: %d ports, %d vessels, %s" % [
+		PORT_COUNT, VESSEL_COUNT, str(graph.network_checksum).left(12)])
 
 
 func _process(delta: float) -> void:
@@ -93,6 +127,9 @@ func _process(delta: float) -> void:
 		_sea.position.x = _camera.position.x
 		_sea.position.z = _camera.position.z
 	if _simulator != null and not _paused:
+		if _camera != null:
+			_simulator.set_interest_centers(PackedVector2Array([
+				Vector2(_camera.position.x, _camera.position.z)]))
 		_simulator.advance(delta * _simulation_speed)
 		_update_ship_markers()
 	_presentation_elapsed += delta
@@ -103,8 +140,6 @@ func _process(delta: float) -> void:
 	if _ui_elapsed >= 0.25:
 		_ui_elapsed = 0.0
 		_refresh_traffic_ui()
-
-
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventKey and event.pressed and not event.echo:
 		if event.ctrl_pressed and event.keycode == KEY_C:
@@ -118,7 +153,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		elif event.keycode == KEY_R:
 			_reset_simulation()
 		elif event.keycode in [KEY_EQUAL, KEY_KP_ADD]:
-			_simulation_speed = minf(_simulation_speed * 2.0, 960.0)
+			_simulation_speed = minf(_simulation_speed * 2.0, 7680.0)
 		elif event.keycode in [KEY_MINUS, KEY_KP_SUBTRACT]:
 			_simulation_speed = maxf(_simulation_speed * 0.5, 1.0)
 	elif event is InputEventMouseButton and event.pressed:
@@ -216,7 +251,7 @@ func _reset_simulation() -> void:
 		(line_value as Node).queue_free()
 	_passage_lines.clear()
 	_simulator = ShippingLaneTrafficSimulator.new()
-	_simulator.configure(_network, VESSEL_COUNT, SEED, _layout)
+	_simulator.configure(_network, VESSEL_COUNT, _scenario_seed, _layout)
 	_paused = false
 	_build_ship_markers()
 	_update_ship_markers()
