@@ -54,11 +54,9 @@ func _ready() -> void:
 	if DisplayServer.get_name() == "headless":
 		return
 	var catalog := load(PREBUILT_CATALOG_PATH)
-	# Traffic presentation may use official editor drafts. These are visual
-	# templates, not ships being sold or deployed into the player's registry.
-	# The current cargo and bulk prebuilts are intentionally still marked draft,
-	# so filtering to shop-certified entries made the proxy disappear when it
-	# crossed into the full-model radius.
+	# Traffic presentation may use all official editor templates, including
+	# drafts. These are visual sources, not ships being sold or deployed into the
+	# player's registry; shop certification must not make a traffic model vanish.
 	for entry in catalog.call("catalog_entries", true):
 		var id := str(entry.get("prebuilt_id", ""))
 		if id in ["28_10_m", "bulk_small"] and HullRegistry.is_known_hull(
