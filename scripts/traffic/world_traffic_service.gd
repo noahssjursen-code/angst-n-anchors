@@ -54,9 +54,14 @@ func _ready() -> void:
 	if DisplayServer.get_name() == "headless":
 		return
 	var catalog := load(PREBUILT_CATALOG_PATH)
-	for entry in catalog.call("for_sale_entries"):
+	# Traffic presentation may use official editor drafts. These are visual
+	# templates, not ships being sold or deployed into the player's registry.
+	# The current cargo and bulk prebuilts are intentionally still marked draft,
+	# so filtering to shop-certified entries made the proxy disappear when it
+	# crossed into the full-model radius.
+	for entry in catalog.call("catalog_entries", true):
 		var id := str(entry.get("prebuilt_id", ""))
-		if id in ["28_10_m", "bulk_small"] and HullCatalog.has_id(
+		if id in ["28_10_m", "bulk_small"] and HullRegistry.is_known_hull(
 				str(entry.get("hull_id", ""))):
 			_prebuilt_entries.append(entry)
 
@@ -250,13 +255,13 @@ func _ensure_presentation(
 		vessel_id: String, kind: String, physics: bool, force: bool,
 ) -> void:
 	var old := _presentation.get(vessel_id, {}) as Dictionary
-	if not old.is_empty() and str(old.get("kind", "")) != kind:
-		_remove_presentation(vessel_id)
-		old = {}
-	if old.is_empty():
+	var needs_replacement := old.is_empty() or str(old.get("kind", "")) != kind
+	if needs_replacement:
 		var record := _records.get(vessel_id, {}) as Dictionary
 		var node := _make_full_ship(vessel_id) if kind == "full" \
 			else _make_proxy(vessel_id, record)
+		# Never punch a hole in the world while a higher-detail representation
+		# is unavailable. Keep the existing proxy until its replacement exists.
 		if node == null:
 			return
 		add_child(node)
@@ -269,7 +274,7 @@ func _ensure_presentation(
 			node.call("place_at_waterline", WaveSurface.WATER_LEVEL)
 		node.global_rotation.y = atan2(-heading.x, -heading.y)
 		var presentation_y := node.global_position.y
-		old = {
+		var replacement := {
 			"node": node,
 			"kind": kind,
 			"physics": false,
@@ -278,8 +283,12 @@ func _ensure_presentation(
 			"presentation_y": presentation_y,
 			"label": _make_label(node),
 		}
-		_presentation[vessel_id] = old
-		_update_label(old, record)
+		var old_node := old.get("node") as Node
+		_presentation[vessel_id] = replacement
+		old = replacement
+		_update_label(replacement, record)
+		if old_node != null and is_instance_valid(old_node):
+			old_node.queue_free()
 	if kind == "full" and (force or bool(old.get("physics", false)) != physics):
 		_configure_full_physics(old.get("node") as Node3D, physics)
 		old["physics"] = physics

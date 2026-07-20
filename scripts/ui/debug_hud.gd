@@ -194,7 +194,7 @@ func _handle_debug_traffic_key(key: InputEventKey) -> void:
 		service.call("clear_debug_fleet")
 		print("Debug traffic: cleared")
 		return
-	var count := 50 if key.shift_pressed else 5
+	var count := 250 if key.shift_pressed else 5
 	var result := service.call("spawn_debug_fleet", count) as Dictionary
 	if not bool(result.get("ok", false)):
 		push_warning("Debug traffic: %s" % str(result.get("error", "spawn failed")))

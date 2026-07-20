@@ -512,7 +512,7 @@ func _build_debug_tools(e: Array) -> void:
 		BerthApproachLanes.debug_polyline_count(),
 	], C_VALUE)
 	_stub(e, "Toggle", "B lane overlay")
-	_stub(e, "Traffic test", "N = 5 ships / Shift+N = 50 / Ctrl+N = clear")
+	_stub(e, "Traffic test", "N = 5 ships / Shift+N = 250 / Ctrl+N = clear")
 	_sep(e)
 
 
