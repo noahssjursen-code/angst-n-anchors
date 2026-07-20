@@ -17,6 +17,8 @@ const C_SHIP := Color(0.94, 0.28, 0.12, 1.0)
 const C_ROUTE := Color(0.74, 0.22, 0.12, 0.90)
 const C_TRAFFIC_MAIN := Color(0.08, 0.55, 0.72, 0.58)
 const C_TRAFFIC_PORT := Color(0.20, 0.66, 0.62, 0.46)
+const C_TRAFFIC_VESSEL := Color(0.18, 0.76, 0.86, 0.96)
+const C_TRAFFIC_WAITING := Color(0.96, 0.66, 0.18, 0.98)
 ## Pay expand cost a few harbours per frame so world-view open stays smooth.
 const HARBOUR_EXPAND_BUDGET := 4
 const HARBOUR_VIEW_MARGIN_M := 900.0
@@ -86,6 +88,7 @@ func render(
 	_draw_grid(canvas, ctx)
 	if layers.is_visible("traffic"):
 		_draw_shipping_lanes(canvas, ctx)
+		_draw_traffic_contacts(canvas, ctx)
 	if layers.is_visible("routes"):
 		_draw_contract_routes(canvas, ctx, nav)
 	## Lazy harbour silhouettes under port dots (all visible sites).
@@ -119,6 +122,7 @@ func render_minimap(
 	_draw_coastline(canvas, ctx)
 	if layers.is_visible("traffic"):
 		_draw_shipping_lanes(canvas, ctx)
+		_draw_traffic_contacts(canvas, ctx, true)
 	if layers.is_visible("routes"):
 		_draw_contract_routes(canvas, ctx, nav)
 	_draw_visible_harbours(canvas, ctx)
@@ -254,6 +258,69 @@ func _draw_shipping_lanes(canvas: CanvasItem, ctx: Dictionary) -> void:
 				canvas.draw_circle(
 					_world_to_screen(Vector3(point.x, 0.0, point.y), ctx),
 					2.2, C_TRAFFIC_PORT)
+
+
+func _draw_traffic_contacts(
+		canvas: CanvasItem, ctx: Dictionary, minimap := false,
+) -> void:
+	if snapshot == null or snapshot.traffic_source == null \
+			or not is_instance_valid(snapshot.traffic_source) \
+			or not snapshot.traffic_source.has_method("map_contacts"):
+		return
+	var contacts := snapshot.traffic_source.call("map_contacts") as Array[Dictionary]
+	if contacts.is_empty():
+		return
+	var bounds := ctx["world_bounds"] as Rect2
+	var chart := ctx["chart_rect"] as Rect2
+	var span := float(ctx["world_span"])
+	# At world scale, one glyph per 18 px cell keeps a 1,000-vessel AIS view
+	# useful without turning chart panning into 1,000 draw calls per frame.
+	if span > 12000.0 or minimap:
+		var cells: Dictionary = {}
+		for contact in contacts:
+			var point := contact.get("position", Vector2.ZERO) as Vector2
+			if not bounds.has_point(point):
+				continue
+			var screen := _world_to_screen(Vector3(point.x, 0.0, point.y), ctx)
+			if not chart.has_point(screen):
+				continue
+			var cell := Vector2i(floori(screen.x / 18.0), floori(screen.y / 18.0))
+			if not cells.has(cell):
+				cells[cell] = {"screen": screen, "count": 1,
+					"waiting": str(contact.get("state", "")).begins_with("waiting")}
+			else:
+				var cluster := cells[cell] as Dictionary
+				cluster["count"] = int(cluster.get("count", 1)) + 1
+				cluster["waiting"] = bool(cluster.get("waiting", false)) \
+					or str(contact.get("state", "")).begins_with("waiting")
+		for cluster_value in cells.values():
+			var cluster := cluster_value as Dictionary
+			var color := C_TRAFFIC_WAITING if bool(cluster.get("waiting", false)) \
+				else C_TRAFFIC_VESSEL
+			var count := int(cluster.get("count", 1))
+			canvas.draw_circle(cluster.get("screen", Vector2.ZERO) as Vector2,
+				clampf(2.3 + sqrt(float(count)) * 0.45, 2.8, 6.0), color)
+		return
+	for contact in contacts:
+		var point := contact.get("position", Vector2.ZERO) as Vector2
+		if not bounds.has_point(point):
+			continue
+		var screen := _world_to_screen(Vector3(point.x, 0.0, point.y), ctx)
+		if not chart.grow(8.0).has_point(screen):
+			continue
+		var heading := (contact.get("heading", Vector2(0.0, -1.0)) as Vector2).normalized()
+		var side := Vector2(-heading.y, heading.x)
+		var waiting := str(contact.get("state", "")).begins_with("waiting")
+		var color := C_TRAFFIC_WAITING if waiting else C_TRAFFIC_VESSEL
+		canvas.draw_colored_polygon(PackedVector2Array([
+			screen + heading * 6.0,
+			screen - heading * 4.0 + side * 3.0,
+			screen - heading * 4.0 - side * 3.0,
+		]), color)
+		if span <= 2600.0 and not minimap:
+			canvas.draw_string(ThemeDB.fallback_font, screen + Vector2(7.0, -4.0),
+				str(contact.get("name", contact.get("id", ""))),
+				HORIZONTAL_ALIGNMENT_LEFT, -1, 9, Color(0.12, 0.20, 0.22, 0.88))
 
 
 func _draw_coastline(canvas: CanvasItem, ctx: Dictionary) -> void:

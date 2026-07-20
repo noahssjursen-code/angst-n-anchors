@@ -13,11 +13,14 @@ func _initialize() -> void:
 	_checkpoint("start", true)
 	var vessel_count := 24
 	var chunk_count := CHUNK_COUNT
+	var chunk_seconds := CHUNK_SECONDS
 	for argument in OS.get_cmdline_user_args():
 		if argument.begins_with("--vessels="):
 			vessel_count = maxi(1, int(argument.trim_prefix("--vessels=")))
 		elif argument.begins_with("--chunks="):
 			chunk_count = maxi(0, int(argument.trim_prefix("--chunks=")))
+		elif argument.begins_with("--chunk-seconds="):
+			chunk_seconds = maxf(0.5, float(argument.trim_prefix("--chunk-seconds=")))
 	var build_started := Time.get_ticks_usec()
 	var layout := GENERATOR.generate(FIXED_SEED) as WorldLayout
 	_checkpoint("world layout generated")
@@ -43,11 +46,11 @@ func _initialize() -> void:
 	var total_started := Time.get_ticks_usec()
 	for chunk_index in range(chunk_count):
 		var chunk_started := Time.get_ticks_usec()
-		simulator.advance(CHUNK_SECONDS)
+		simulator.advance(chunk_seconds)
 		var chunk_ms := float(Time.get_ticks_usec() - chunk_started) / 1000.0
 		var summary := simulator.summary()
 		print("Traffic profile %5.0fs: %8.2f ms | trips %d | states %s | collisions %d" % [
-			float(chunk_index + 1) * CHUNK_SECONDS, chunk_ms,
+			float(chunk_index + 1) * chunk_seconds, chunk_ms,
 			int(summary.get("trips_completed", 0)), JSON.stringify(summary.get("states", {})),
 			int(summary.get("collisions", 0))])
 	print("Traffic profile total simulation: %.2f ms" % [

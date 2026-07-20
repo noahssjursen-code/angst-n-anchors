@@ -22,6 +22,7 @@ const PORT_NAMES: Array[String] = [
 
 var layout: WorldLayout
 var shipping_lane_network: ShippingLaneNetwork
+var traffic_source: Node
 var ports: Array[Dictionary] = []
 var world_seed := 42
 var generation_version := 0
@@ -40,6 +41,8 @@ static func from_live_tree(tree: SceneTree) -> ChartDataSnapshot:
 		out.layout = world.call("get_world_layout") as WorldLayout
 	if world != null and world.has_method("get_shipping_lane_network"):
 		out.shipping_lane_network = world.call("get_shipping_lane_network") as ShippingLaneNetwork
+	if world != null and world.has_method("get_world_traffic_service"):
+		out.traffic_source = world.call("get_world_traffic_service") as Node
 	if world != null and world.has_method("get_world_context"):
 		var context := world.call("get_world_context") as Dictionary
 		out.world_seed = int(context.get("seed", 42))

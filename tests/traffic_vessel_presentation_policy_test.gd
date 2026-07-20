@@ -21,5 +21,11 @@ func _initialize() -> void:
 		records, Vector2(1800.0, 800.0), 650.0, 1400.0, 4)
 	assert((moved.get("full_ids", PackedStringArray()) as PackedStringArray).size() == 4)
 	assert(moved.get("full_ids", PackedStringArray()) != near.get("full_ids", PackedStringArray()))
-	print("Traffic vessel presentation policy: 50 records, deterministic 4-full budget PASS")
+	var tiered: Dictionary = PRESENTATION_POLICY.select(
+		records, Vector2.ZERO, 650.0, 1400.0, 6, 260.0, 2, 8)
+	assert((tiered.get("physics_ids", PackedStringArray()) as PackedStringArray).size() == 2)
+	assert((tiered.get("full_ids", PackedStringArray()) as PackedStringArray).size() == 6)
+	assert((tiered.get("proxy_ids", PackedStringArray()) as PackedStringArray).size() == 8)
+	assert(int(tiered.get("data_only_count", 0)) == 36)
+	print("Traffic vessel presentation policy: deterministic physics/full/proxy budgets PASS")
 	quit(0)

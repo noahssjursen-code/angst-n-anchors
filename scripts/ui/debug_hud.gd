@@ -177,9 +177,33 @@ func _input(event: InputEvent) -> void:
 		KEY_G:
 			_toggle_gizmo_menu()
 			get_viewport().set_input_as_handled()
+		KEY_N:
+			_handle_debug_traffic_key(ke)
+			get_viewport().set_input_as_handled()
 		KEY_P:
 			_toggle_scale_probe()
 			get_viewport().set_input_as_handled()
+
+
+func _handle_debug_traffic_key(key: InputEventKey) -> void:
+	var service := get_tree().get_first_node_in_group("world_traffic_service")
+	if service == null:
+		push_warning("Debug traffic: world traffic service is not ready")
+		return
+	if key.ctrl_pressed:
+		service.call("clear_debug_fleet")
+		print("Debug traffic: cleared")
+		return
+	var count := 50 if key.shift_pressed else 5
+	var result := service.call("spawn_debug_fleet", count) as Dictionary
+	if not bool(result.get("ok", false)):
+		push_warning("Debug traffic: %s" % str(result.get("error", "spawn failed")))
+		return
+	print("Debug traffic: %d authoritative vessels ready in %.1f ms" % [
+		int(result.get("vessel_count", 0)), float(result.get("configure_ms", 0.0))])
+	# State labels share the navigation gizmo layer, so the test is immediately
+	# inspectable without turning on unrelated port/crane diagnostics.
+	set_gizmo_layer_enabled(WorldGizmos.LAYER_NAVIGATION, true)
 
 
 func _apply_world_gizmos() -> void:

@@ -30,6 +30,8 @@ func _run() -> void:
 	var failures := PackedStringArray()
 	_check(int(summary.get("trips_completed", 0)) > 0,
 		"fleet completes port-to-port journeys", failures)
+	_check(int(summary.get("vessel_count", 0)) == 24,
+		"authority keeps vessels beyond the available starting berths", failures)
 	_check(int(summary.get("route_failures", 0)) == 0,
 		"all data ships have valid routes", failures)
 	_check(int((summary.get("passage_modes", {}) as Dictionary).get("hybrid", 0)) > 0,
