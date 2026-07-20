@@ -166,16 +166,10 @@ func _first_safe_start(
 			# launch headway is enforced by `_next_start_by_route_key`.
 			if not route_key.is_empty() and str(interval.get("route_key", "")) == route_key:
 				continue
-			# Different off-ramps can merge into the same approach. Co-directional
-			# traffic is a convoy, not an ocean crossing; vessel headway and the
-			# live spatial authority handle it. Reserving the shared tail as an
-			# exclusive crossing otherwise creates multi-hour artificial queues.
-			var proposed_direction := passage.get("direction", Vector2.ZERO) as Vector2
-			var occupied_direction := interval.get("direction", Vector2.ZERO) as Vector2
-			if not proposed_direction.is_zero_approx() \
-					and not occupied_direction.is_zero_approx() \
-					and proposed_direction.dot(occupied_direction) >= 0.75:
-				continue
+			# Different links may converge from separate off-ramps. Even when their
+			# final headings match they are not one established convoy, so shared
+			# cells remain authority-controlled. Only an identical route key may
+			# use the explicit convoy-headway rule above.
 			var occupied_start := float(interval.get("start_s", 0.0))
 			var occupied_end := float(interval.get("end_s", 0.0))
 			if proposed_end <= occupied_start or proposed_start >= occupied_end:

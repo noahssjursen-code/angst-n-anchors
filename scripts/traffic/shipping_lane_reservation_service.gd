@@ -265,12 +265,13 @@ func try_reserve_passing(vessel_id: String, zone_id: String, travel_direction: S
 	if travel_direction != "forward" and travel_direction != "reverse":
 		return {"ok": false, "reason": "invalid_travel_direction"}
 	var zone := _network.passing_zones[zone_id] as Dictionary
-	# A forward-moving ship borrows the opposing reverse lane and vice versa.
-	var key := "reverse_blocks" if travel_direction == "forward" else "forward_blocks"
+	# The outside lane is a permanent same-direction access/overtaking lane.
+	# Passing never borrows opposing traffic or depends on client-local avoidance.
+	var key := "%s_access_blocks" % travel_direction
 	var borrowed := zone.get(key, PackedStringArray()) as PackedStringArray
 	var result := try_reserve(vessel_id, borrowed)
 	result["passing_zone_id"] = zone_id
-	result["borrowed_direction"] = "reverse" if travel_direction == "forward" else "forward"
+	result["borrowed_direction"] = travel_direction
 	return result
 
 

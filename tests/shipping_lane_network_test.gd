@@ -56,12 +56,17 @@ func _test_shape(network: ShippingLaneNetwork, ports: Array[PortData]) -> void:
 	for zone_value in network.passing_zones.values():
 		var zone := zone_value as Dictionary
 		for direction in ["forward", "reverse"]:
-			var bypass_id := str(zone.get("%s_bypass_edge_id" % direction, ""))
-			_check(network.edges.has(bypass_id),
-				"%s publishes a reservable %s overtaking edge" % [str(zone.get("id", "")), direction])
-			if network.edges.has(bypass_id):
+			var bypass_ids := zone.get("%s_bypass_edge_ids" % direction,
+				PackedStringArray()) as PackedStringArray
+			_check(not bypass_ids.is_empty(),
+				"%s publishes continuous %s access/overtaking edges" % [
+					str(zone.get("id", "")), direction])
+			for bypass_id in bypass_ids:
 				_check(str(network.edge(bypass_id).get("kind", "")) == "passing_lane",
-					"%s bypass is distinct from ordinary route planning" % bypass_id)
+					"%s is a permanent outside access lane" % bypass_id)
+			_check(network.edges.has(str(zone.get("%s_entry_edge_id" % direction, "")))
+				and network.edges.has(str(zone.get("%s_exit_edge_id" % direction, ""))),
+				"%s has deterministic through/access merge points" % str(zone.get("id", "")))
 	var coastal_nodes: Array[Vector2] = []
 	for node_value in network.nodes.values():
 		var coastal_node := node_value as Dictionary
@@ -113,18 +118,29 @@ func _test_shape(network: ShippingLaneNetwork, ports: Array[PortData]) -> void:
 		)
 		var port_ramps := network.ramps_for_port(port.port_id)
 		_check(port_ramps.size() == 8,
-			"%s publishes before/after on/off ramps in both directions" % port.port_id)
+			"%s publishes service and water-transfer on/off ramps in both directions" % port.port_id)
 		var ramp_shapes: Dictionary = {}
+		var service_count := 0
+		var transfer_count := 0
 		for ramp in port_ramps:
 			var lane_node := network.node(str(ramp.get("lane_node_id", "")))
 			var ramp_node := network.node(str(ramp.get("ramp_node_id", "")))
 			var shape := "%s:%s:%d" % [str(ramp.get("station", "")),
 				str(ramp.get("ramp_kind", "")), int(ramp.get("direction_index", -1))]
 			ramp_shapes[shape] = true
+			var transfer_only := bool(ramp.get("transfer_only", false))
+			if transfer_only:
+				transfer_count += 1
+			else:
+				service_count += 1
 			_check(str(lane_node.get("kind", "")) in ["main_lane", "regional_lane"],
 				"%s ramp attaches to the shipping highway" % port.port_id)
-			_check(str(ramp_node.get("kind", "")) == "shipping_ramp",
-				"%s ramp owns a distinct transition node" % port.port_id)
+			_check(str(lane_node.get("lane_role", "")) == "access",
+				"%s ramp attaches only to the outside access lane" % port.port_id)
+			_check((transfer_only and str(ramp.get("ramp_node_id", "")) \
+					== str(ramp.get("lane_node_id", ""))) \
+					or (not transfer_only and str(ramp_node.get("kind", "")) == "shipping_ramp"),
+				"%s ramp uses the correct transfer/service node" % port.port_id)
 			_check(not unique_gates.has(str(ramp.get("ramp_node_id", ""))),
 				"%s ramps are not quay approach junctions" % port.port_id)
 			for gate_id in published_gates:
@@ -132,7 +148,7 @@ func _test_shape(network: ShippingLaneNetwork, ports: Array[PortData]) -> void:
 				_check((ramp.get("position", Vector2.ZERO) as Vector2).distance_to(
 					gate_node.get("position", Vector2.ZERO) as Vector2) >= 400.0,
 					"%s ramps clear the local harbour envelope" % port.port_id)
-		_check(ramp_shapes.size() == 8,
+		_check(ramp_shapes.size() == 8 and service_count == 4 and transfer_count == 4,
 			"%s has no collapsed or duplicated ramp roles" % port.port_id)
 		var berth_count := 0
 		for token_value in network.berth_tokens.values():
@@ -369,9 +385,9 @@ func _test_passing_authority(network: ShippingLaneNetwork) -> void:
 	_check(str(service.try_reserve_passing("invalid-vessel", zone_id, "sideways").get(
 		"reason", "")) == "invalid_travel_direction", "passing rejects an invalid direction")
 	var first := service.try_reserve_passing("passing-vessel", zone_id, "forward")
-	_check(bool(first.get("ok", false)), "passing vessel may atomically borrow an open opposing lane")
+	_check(bool(first.get("ok", false)), "passing vessel may reserve its outside access lane")
 	var blocked := service.try_reserve_passing("opposing-vessel", zone_id, "forward")
-	_check(not bool(blocked.get("ok", false)), "passing authority excludes conflicting traffic")
+	_check(not bool(blocked.get("ok", false)), "passing authority excludes conflicting same-direction traffic")
 
 
 func _check(condition: bool, label: String) -> void:

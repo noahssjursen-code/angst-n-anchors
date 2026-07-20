@@ -228,6 +228,8 @@ func _prepare_shipping_lanes() -> void:
 		_shipping_lane_lines.append({"kind": kind, "points": points})
 	for ramp_id in network.sorted_port_ramp_ids():
 		var record := network.port_ramps[ramp_id] as Dictionary
+		if not bool(record.get("transfer_only", false)):
+			continue
 		var point := record.get("position", Vector2(INF, INF)) as Vector2
 		if point.is_finite():
 			_shipping_ramps.append({"position": point,

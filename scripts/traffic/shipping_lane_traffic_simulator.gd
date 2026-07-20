@@ -7,7 +7,7 @@ extends RefCounted
 ## through the same directed edges, exclusive blocks, berth tokens, FIFO port
 ## queues, and authority snapshots intended for single-player or a server.
 
-const REPORT_VERSION := 2
+const REPORT_VERSION := 3
 ## Strategic authority does not need a physics tick. Half-second signal updates
 ## remain far below marine stopping distances and scale to persistent fleets.
 const FIXED_STEP_S := 0.50
@@ -40,7 +40,6 @@ var vessels: Dictionary = {} # vessel id -> pure-data runtime record
 
 var _token_ids := PackedStringArray()
 var _hub_token_ids := PackedStringArray()
-var _strategic_lane_node_ids := PackedStringArray()
 var _accumulator := 0.0
 var _last_progress_s := 0.0
 var _deadlock_latched := false
@@ -89,7 +88,6 @@ func configure(value: ShippingLaneNetwork, vessel_count := 24, seed := 77127,
 	_token_ids = PackedStringArray(network.sorted_berth_token_ids()) if network != null \
 		else PackedStringArray()
 	_hub_token_ids = _one_token_per_port()
-	_strategic_lane_node_ids = _collect_strategic_lane_nodes()
 	_accumulator = 0.0
 	_last_progress_s = 0.0
 	_deadlock_latched = false
@@ -135,11 +133,18 @@ func configure(value: ShippingLaneNetwork, vessel_count := 24, seed := 77127,
 		var source := network.berth_tokens[source_id] as Dictionary
 		var vessel := _make_vessel(vessel_id, index, source_id, destination_id)
 		vessels[vessel_id] = vessel
+		_plan_trip(vessel)
+		if str(vessel.get("state", "")) == "route_failed":
+			vessels[vessel_id] = vessel
+			continue
 		if index >= EAGER_ROUTE_PLAN_LIMIT:
-			_stage_strategic_pending(vessel)
+			_stage_strategic_route(vessel)
 			_pending_plan_ids.append(vessel_id)
 		else:
-			_activate_initial_vessel(vessel, index >= spawn_tokens.size())
+			# Debug and restored fleets represent an already-running world. Staging
+			# every exact contact underway avoids an artificial login-time burst in
+			# which one ship per port simultaneously requests departure clearance.
+			_activate_initial_vessel(vessel, true)
 		vessels[vessel_id] = vessel
 	_sorted_vessel_ids = ShippingLaneNetwork._sorted_ids(vessels)
 	_rebuild_runtime_sets()
@@ -166,16 +171,20 @@ func _activate_initial_vessel(vessel: Dictionary, force_underway: bool) -> void:
 	var source_id := str(vessel.get("source_token_id", ""))
 	var vessel_id := str(vessel.get("id", ""))
 	var index := int(vessel.get("index", 0))
-	# A strategic AIS contact already has a published world position. When local
-	# interest promotes it, preserve continuity by anchoring the exact voyage to
-	# the closest legal section instead of choosing a fresh unrelated phase.
+	# A strategic AIS contact already owns a real contract route and published
+	# position. Promotion may add exact block authority, but it must never choose
+	# a new route or snap the contact to an unrelated empty lane.
 	var published_position := Vector2.INF
 	if str(vessel.get("state", "")) == "scheduled_strategic":
 		published_position = vessel.get("position", Vector2.INF) as Vector2
-		var strategic_activation := _activate_strategic_underway(vessel)
-		if strategic_activation in ["activated", "blocked"]:
+		if _place_initial_underway(vessel, published_position, true):
+			_event(vessel_id, "promoted contract contact to exact local authority")
 			return
-	_plan_trip(vessel)
+		# Its present block or open-water slot is busy. Retain the published
+		# strategic record and retry later instead of teleporting it.
+		return
+	if (vessel.get("route_steps", []) as Array).is_empty():
+		_plan_trip(vessel)
 	if str(vessel.get("state", "")) == "route_failed":
 		return
 	if force_underway:
@@ -201,128 +210,71 @@ func _activate_initial_vessel(vessel: Dictionary, force_underway: bool) -> void:
 	_try_departure_clearance(vessel)
 
 
-func _activate_strategic_underway(vessel: Dictionary) -> String:
-	var current_edge := network.edge(str(vessel.get("strategic_edge_id", "")))
-	if current_edge.is_empty() or str(current_edge.get("kind", "")) \
-			not in ["main_lane", "regional_lane", "waterway_junction"]:
-		return "invalid"
-	var destination := network.berth_tokens.get(
-		str(vessel.get("destination_token_id", "")), {}) as Dictionary
-	var destination_node_id := str(destination.get("node_id", ""))
-	if destination_node_id.is_empty():
-		return "invalid"
-	var limits := {
-		"length_m": vessel.get("length_m", 0.0),
-		"beam_m": vessel.get("beam_m", 0.0),
-		"draft_m": vessel.get("draft_m", 0.0),
-	}
-	var passage := route_planner.plan(str(current_edge.get("to_node_id", "")),
-		destination_node_id, limits)
-	var continuation := passage.get("steps", []) as Array
-	if continuation.is_empty():
-		return "invalid"
-	var blocks := current_edge.get("block_ids", PackedStringArray()) as PackedStringArray
-	if blocks.is_empty():
-		return "invalid"
-	var vessel_id := str(vessel.get("id", ""))
-	if not authority.occupy(vessel_id, blocks[0]):
-		return "blocked"
-	_release_open_merge_authority(vessel)
-	_release_open_water_allocation(vessel)
-	var route: Array[Dictionary] = [{
-		"kind": "controlled",
-		"edge_id": str(current_edge.get("id", "")),
-	}]
-	for raw_step in continuation:
-		route.append((raw_step as Dictionary).duplicate(true))
-	var controlled_ids := PackedStringArray([str(current_edge.get("id", ""))])
-	controlled_ids.append_array(
-		passage.get("controlled_edge_ids", PackedStringArray()) as PackedStringArray)
-	var progress := clampf(float(vessel.get("strategic_progress_m", 0.0)), 0.0,
-		maxf(float(current_edge.get("length_m", 0.0)), 0.0))
-	vessel["route_steps"] = route
-	vessel["route_edge_ids"] = controlled_ids
-	vessel["route_mode"] = str(passage.get("mode", "all_lane"))
-	vessel["open_water_sections"] = int(passage.get("open_water_sections", 0))
-	vessel["route_index"] = 0
-	vessel["trip_serial"] = int(vessel.get("trip_serial", 0)) + 1
-	vessel["edge_progress_m"] = progress
-	vessel["current_block_id"] = blocks[0]
-	vessel["trailing_blocks"] = []
-	vessel["step_active"] = true
-	vessel["state"] = "traveling"
-	vessel["wait_seconds"] = 0.0
-	var speed := maxf(float(current_edge.get("speed_limit_ms", 7.2)), 0.5)
-	var historical_age_s := progress / speed
-	vessel["trip_started_s"] = simulated_seconds - historical_age_s
-	vessel["trip_distance_m"] = progress
-	vessel["schedule_age_s"] = historical_age_s
-	_update_pose(vessel, current_edge, progress)
-	_event(vessel_id, "promoted AIS contact onto exact route for %s" %
-		str(destination.get("port_id", "")))
-	return "activated"
-
-
-func _stage_strategic_pending(vessel: Dictionary) -> void:
-	var phase := 0.2 + _deterministic_fraction(int(vessel.get("index", 0)), 43) * 0.6
-	# Thousands of synthetic/debug records must not each perform a full graph
-	# nearest-node scan at startup. Persistent production records arrive with an
-	# authoritative position; this fallback distributes pending contacts over a
-	# pre-indexed set of real lanes until local interest promotes them to an exact
-	# source-to-destination route.
-	if _strategic_lane_node_ids.is_empty():
-		vessel["position"] = Vector2.ZERO
-		vessel["heading"] = Vector2(0.0, -1.0)
-		vessel["strategic_edge_id"] = ""
-		vessel["strategic_progress_m"] = 0.0
-		vessel["strategic_turn_serial"] = 0
-		vessel["state"] = "scheduled_strategic"
-		vessel["route_mode"] = "pending"
-		vessel["schedule_age_s"] = 0.0
+func _stage_strategic_route(vessel: Dictionary) -> void:
+	# Remote contacts are inexpensive, not fictitious. Every one is placed at a
+	# deterministic voyage age on its real berth-to-berth route. This is the same
+	# record a server can publish to clients and eliminates arbitrary western
+	# spawns, wandering contacts and promotion-time route changes.
+	var route := vessel.get("route_steps", []) as Array
+	var candidates: Array[Dictionary] = []
+	var local_candidates: Array[Dictionary] = []
+	var total_travel_s := 0.0
+	var local_travel_s := 0.0
+	for step_index in range(route.size()):
+		var step := route[step_index] as Dictionary
+		var edge := _step_record(step)
+		var step_kind := str(step.get("kind", ""))
+		var edge_kind := str(edge.get("kind", ""))
+		var length := maxf(float(edge.get("length_m", 0.0)), 1.0)
+		var speed := maxf(float(edge.get("speed_limit_ms", 7.2)), 0.5)
+		var travel_s := length / speed
+		# A short contract between neighbouring harbours can legitimately remain
+		# entirely inside their connected coastal access graph. Keep those edges
+		# as a fallback rather than declaring a valid route failed merely because
+		# it never reaches a regional/main lane.
+		if edge_kind != "quay_maneuver":
+			local_candidates.append({"step_index": step_index,
+				"elapsed_before_s": local_travel_s, "travel_s": travel_s})
+			local_travel_s += travel_s
+		if step_kind != "open_water" and edge_kind not in [
+				"main_lane", "regional_lane", "waterway_junction", "passing_lane"]:
+			continue
+		candidates.append({"step_index": step_index, "elapsed_before_s": total_travel_s,
+			"travel_s": travel_s})
+		total_travel_s += travel_s
+	if candidates.is_empty():
+		candidates = local_candidates
+		total_travel_s = local_travel_s
+	if candidates.is_empty():
+		_fail_route(vessel, "contract route has no placeable travel section")
 		return
-	var vessel_index := int(vessel.get("index", 0))
-	var lane_index := posmod(vessel_index * 97 + scenario_seed * 31,
-		_strategic_lane_node_ids.size())
-	var lane_node_id := _strategic_lane_node_ids[lane_index]
-	var lane_node := network.node(lane_node_id)
-	var strategic_edge := _pick_strategic_edge(lane_node_id, vessel)
-	if strategic_edge.is_empty():
-		vessel["position"] = lane_node.get("position", Vector2.ZERO)
-		vessel["heading"] = Vector2(0.0, -1.0)
-		vessel["strategic_edge_id"] = ""
-		vessel["strategic_progress_m"] = 0.0
-	else:
-		var edge_length := maxf(float(strategic_edge.get("length_m", 1.0)), 1.0)
-		var edge_progress := edge_length * phase
-		var sample := _sample_polyline(
-			strategic_edge.get("points", PackedVector2Array()) as PackedVector2Array,
-			edge_progress)
-		vessel["position"] = sample.get("position", lane_node.get("position", Vector2.ZERO))
-		vessel["heading"] = sample.get("heading", Vector2(0.0, -1.0))
-		vessel["strategic_edge_id"] = str(strategic_edge.get("id", ""))
-		vessel["strategic_progress_m"] = edge_progress
-	vessel["strategic_turn_serial"] = 0
+	var phase := 0.04 + _deterministic_fraction(int(vessel.get("index", 0)), 43) * 0.92
+	var desired_time := phase * total_travel_s
+	var selected := candidates.back() as Dictionary
+	for candidate_value in candidates:
+		var candidate := candidate_value as Dictionary
+		if desired_time <= float(candidate.get("elapsed_before_s", 0.0)) \
+				+ float(candidate.get("travel_s", 0.0)):
+			selected = candidate
+			break
+	var step_index := int(selected.get("step_index", 0))
+	var selected_step := route[step_index] as Dictionary
+	var selected_edge := _step_record(selected_step)
+	var speed := maxf(float(selected_edge.get("speed_limit_ms", 7.2)), 0.5)
+	var local_time := maxf(desired_time - float(selected.get("elapsed_before_s", 0.0)), 0.0)
+	var progress := minf(local_time * speed,
+		maxf(float(selected_edge.get("length_m", 0.0)), 0.0))
+	vessel["route_index"] = step_index
+	vessel["edge_progress_m"] = progress
+	vessel["step_active"] = false
+	vessel["current_block_id"] = ""
+	vessel["trailing_blocks"] = []
 	vessel["state"] = "scheduled_strategic"
-	vessel["route_mode"] = "pending"
-	vessel["schedule_age_s"] = phase * maxf(float(strategic_edge.get(
-		"length_m", 0.0)), 0.0) / HybridShippingRoutePlanner.OPEN_WATER_SPEED_MS \
-		if not strategic_edge.is_empty() else 0.0
-
-
-func _collect_strategic_lane_nodes() -> PackedStringArray:
-	var result := PackedStringArray()
-	if network == null:
-		return result
-	for node_id in network.sorted_node_ids():
-		var node := network.node(node_id)
-		if str(node.get("kind", "")) not in ["main_lane", "regional_lane"]:
-			continue
-		# The open-ocean perimeter is a routing backbone, not a believable random
-		# login position for a local-world traffic fixture.
-		if str(node.get("waterway_id", "")) == "open_ocean_bus":
-			continue
-		result.append(node_id)
-	return result
+	vessel["wait_seconds"] = 0.0
+	vessel["schedule_age_s"] = desired_time
+	vessel["trip_started_s"] = simulated_seconds - desired_time
+	vessel["trip_distance_m"] = desired_time * speed
+	_update_pose(vessel, selected_edge, progress)
 
 
 func _process_pending_route_plans(maximum: int) -> void:
@@ -362,60 +314,57 @@ func _nearest_pending_plan_index() -> int:
 	return best_index
 
 
-func _pick_strategic_edge(node_id: String, vessel: Dictionary) -> Dictionary:
-	var candidates: Array[Dictionary] = []
-	for edge_value in network.outgoing_edges(node_id):
-		var edge := edge_value as Dictionary
-		if str(edge.get("kind", "")) in ["main_lane", "regional_lane", "waterway_junction"]:
-			candidates.append(edge)
-	if candidates.is_empty():
-		return {}
-	candidates.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
-		return str(a.get("id", "")) < str(b.get("id", "")))
-	var turn_serial := int(vessel.get("strategic_turn_serial", 0))
-	var choice := posmod(int(vessel.get("index", 0)) * 7 + turn_serial * 11
-		+ scenario_seed, candidates.size())
-	return candidates[choice]
-
-
 func _advance_strategic(vessel: Dictionary, delta: float) -> void:
-	var remaining := maxf(delta, 0.0) * HybridShippingRoutePlanner.OPEN_WATER_SPEED_MS
+	var remaining_s := maxf(delta, 0.0)
 	var guard := 0
-	while remaining > 0.001 and guard < 16:
+	while remaining_s > 0.001 and guard < 64:
 		guard += 1
-		var edge := network.edge(str(vessel.get("strategic_edge_id", "")))
-		if edge.is_empty():
-			var lane_node_id := network.nearest_node(
-				vessel.get("position", Vector2.ZERO) as Vector2,
-				PackedStringArray(["main_lane", "regional_lane"]))
-			edge = _pick_strategic_edge(lane_node_id, vessel)
-			if edge.is_empty():
+		var route := vessel.get("route_steps", []) as Array
+		var route_index := int(vessel.get("route_index", 0))
+		if route.is_empty() or route_index >= route.size():
+			_complete_strategic_trip(vessel)
+			if str(vessel.get("state", "")) == "route_failed":
 				return
-			vessel["strategic_edge_id"] = str(edge.get("id", ""))
-			vessel["strategic_progress_m"] = 0.0
+			continue
+		var edge := _step_record(route[route_index] as Dictionary)
+		if edge.is_empty():
+			_fail_route(vessel, "strategic contract route references a missing edge")
+			return
 		var length := maxf(float(edge.get("length_m", 0.0)), 0.01)
-		var progress := float(vessel.get("strategic_progress_m", 0.0))
+		var speed := maxf(float(edge.get("speed_limit_ms", 7.2)), 0.5)
+		var progress := clampf(float(vessel.get("edge_progress_m", 0.0)), 0.0, length)
 		var available := maxf(length - progress, 0.0)
-		var travelled := minf(remaining, available)
+		var travelled := minf(remaining_s * speed, available)
 		progress += travelled
-		remaining -= travelled
+		remaining_s -= travelled / speed
+		vessel["trip_distance_m"] = float(vessel.get("trip_distance_m", 0.0)) + travelled
+		vessel["edge_progress_m"] = progress
+		_update_pose(vessel, edge, progress)
 		if progress < length - 0.001:
-			vessel["strategic_progress_m"] = progress
-			var sample := _sample_polyline(
-				edge.get("points", PackedVector2Array()) as PackedVector2Array, progress)
-			vessel["position"] = sample.get("position", vessel.get("position", Vector2.ZERO))
-			vessel["heading"] = sample.get("heading", vessel.get("heading", Vector2(0.0, -1.0)))
 			return
-		var endpoint := _sample_polyline(
-			edge.get("points", PackedVector2Array()) as PackedVector2Array, length)
-		vessel["position"] = endpoint.get("position", vessel.get("position", Vector2.ZERO))
-		vessel["heading"] = endpoint.get("heading", vessel.get("heading", Vector2(0.0, -1.0)))
-		vessel["strategic_turn_serial"] = int(vessel.get("strategic_turn_serial", 0)) + 1
-		var next_edge := _pick_strategic_edge(str(edge.get("to_node_id", "")), vessel)
-		if next_edge.is_empty():
-			return
-		vessel["strategic_edge_id"] = str(next_edge.get("id", ""))
-		vessel["strategic_progress_m"] = 0.0
+		vessel["route_index"] = route_index + 1
+		vessel["edge_progress_m"] = 0.0
+
+
+func _complete_strategic_trip(vessel: Dictionary) -> void:
+	var trip_seconds := maxf(simulated_seconds
+		- float(vessel.get("trip_started_s", simulated_seconds)), 0.0)
+	vessel["deliveries"] = int(vessel.get("deliveries", 0)) + 1
+	_metrics["trips_completed"] = int(_metrics.get("trips_completed", 0)) + 1
+	_metrics["total_trip_seconds"] = float(_metrics.get("total_trip_seconds", 0.0)) \
+		+ trip_seconds
+	_metrics["total_distance_m"] = float(_metrics.get("total_distance_m", 0.0)) \
+		+ float(vessel.get("trip_distance_m", 0.0))
+	var source_id := str(vessel.get("destination_token_id", ""))
+	vessel["source_token_id"] = source_id
+	vessel["destination_token_id"] = _pick_destination(source_id,
+		int(vessel.get("index", 0)), int(vessel.get("deliveries", 0)))
+	vessel["destination_requested"] = false
+	_plan_trip(vessel)
+	if str(vessel.get("state", "")) != "route_failed":
+		vessel["state"] = "scheduled_strategic"
+		vessel["step_active"] = false
+		vessel["current_block_id"] = ""
 
 
 func _make_vessel(
@@ -474,6 +423,7 @@ func _make_vessel(
 func _place_initial_underway(
 		vessel: Dictionary,
 		published_position := Vector2.INF,
+		preserve_published_section := false,
 ) -> bool:
 	var route := vessel.get("route_steps", []) as Array
 	var candidates: Array[Dictionary] = []
@@ -489,8 +439,8 @@ func _place_initial_underway(
 		# hybrid voyage may therefore begin on its open-water A* section; forcing
 		# every such record onto the first controlled lane caused route failures
 		# and artificial spawn queues at login. Port approaches remain excluded.
-		if step_kind != "open_water" \
-				and edge_kind not in ["main_lane", "regional_lane", "waterway_junction"]:
+		if step_kind != "open_water" and edge_kind not in [
+				"main_lane", "regional_lane", "waterway_junction", "passing_lane"]:
 			continue
 		if step_kind != "open_water" and waterway_id == "open_ocean_bus":
 			continue
@@ -532,7 +482,9 @@ func _place_initial_underway(
 					+ float(candidate.get("travel_s", 0.0)):
 				preferred_index = index
 				break
-	for offset in range(candidates.size()):
+	var attempts := 1 if preserve_published_section and published_position.is_finite() \
+		else candidates.size()
+	for offset in range(attempts):
 		var candidate_index := posmod(preferred_index + offset, candidates.size())
 		var candidate := candidates[candidate_index] as Dictionary
 		var route_index := int(candidate.get("step_index", 0))
@@ -1112,16 +1064,28 @@ func _wait_has_explicit_authority_cause(vessel: Dictionary, visited: Dictionary)
 	if state in ["waiting_open_water_slot", "waiting_berth", "waiting_port_approach",
 			"waiting_open_merge"]:
 		return true
+	if state in ["traveling", "traveling_open_water", "departing"]:
+		return true
 	if _waiting_for_booked_open_slot(vessel):
 		return true
 	if state == "waiting_traffic_clearance" \
 			and (_current_open_step_targets_destination(vessel) \
 				or bool(vessel.get("open_merge_waiting", false))):
 		return true
+	if state == "waiting_traffic_clearance":
+		var clearance_blocker := vessels.get(
+			str(vessel.get("blocked_by", "")), {}) as Dictionary
+		return not clearance_blocker.is_empty() \
+			and _wait_has_explicit_authority_cause(clearance_blocker, visited)
 	if state == "waiting_signal":
 		var blocker := vessels.get(str(vessel.get("blocked_by", "")), {}) as Dictionary
 		return not blocker.is_empty() \
 			and _wait_has_explicit_authority_cause(blocker, visited)
+	if state == "waiting_departure_clearance":
+		var departure_blocker := vessels.get(
+			str(vessel.get("departure_blocked_by", "")), {}) as Dictionary
+		return not departure_blocker.is_empty() \
+			and _wait_has_explicit_authority_cause(departure_blocker, visited)
 	return false
 
 
@@ -1228,6 +1192,8 @@ func _open_water_clear_to_advance(vessel: Dictionary, proposed: Vector2) -> bool
 			# ON-ramp chain, however, the controlled side is already held at red.
 			# Yielding to that stopped hull as well creates a two-sided deadlock.
 			if not owns_merge:
+				vessel["blocked_by"] = other_id
+				vessel["blocked_reason"] = "open_water_yields_to_controlled"
 				return false
 			continue
 		var movement := proposed - start
@@ -1240,13 +1206,18 @@ func _open_water_clear_to_advance(vessel: Dictionary, proposed: Vector2) -> bool
 			# The leader must not stop because a follower is within the swept
 			# AABB behind its stern.
 			if (other_position - start).dot(movement_direction) > 0.0:
+				vessel["blocked_by"] = other_id
+				vessel["blocked_reason"] = "open_water_convoy_headway"
 				return false
 			continue
 		# Temporal scheduling normally prevents crossing encounters. If one
 		# ship has been delayed beyond its slot, a stable id tie-break gives
 		# exactly one of them right of way instead of making both wait forever.
 		if other_id < vessel_id:
+			vessel["blocked_by"] = other_id
+			vessel["blocked_reason"] = "open_water_crossing_priority"
 			return false
+	_clear_blocker(vessel)
 	return true
 
 
@@ -1366,8 +1337,14 @@ func _try_activate_passing(vessel: Dictionary, edge_index: int, blocked_block_id
 	if blocker_id.is_empty() or not vessels.has(blocker_id):
 		return false
 	var blocker := vessels[blocker_id] as Dictionary
-	# Do not jump a queue of vessels bound for the same destination. Passing is
-	# for through traffic whose route is being obstructed by a different voyage.
+	# The outer lane is an access/overtaking lane, not a second high-speed route
+	# chosen whenever ordinary traffic happens to be one block ahead. Activate it
+	# only around a vessel that has stopped for a port queue; otherwise constant
+	# weaving can gridlock both lanes in dense traffic.
+	if str(blocker.get("state", "")) not in [
+			"waiting_berth", "waiting_port_approach", "waiting_open_merge"]:
+		return false
+	# Do not jump the FIFO for the same destination.
 	if str(blocker.get("destination_token_id", "")) \
 			== str(vessel.get("destination_token_id", "")):
 		return false
@@ -1381,11 +1358,21 @@ func _try_activate_passing(vessel: Dictionary, edge_index: int, blocked_block_id
 	var base_blocks := zone.get("%s_blocks" % direction, PackedStringArray()) as PackedStringArray
 	if not base_blocks.has(blocked_block_id):
 		return false
-	var bypass_edge_id := str(zone.get("%s_bypass_edge_id" % direction, ""))
-	var bypass_edge := network.edge(bypass_edge_id)
-	var bypass_blocks := bypass_edge.get("block_ids", PackedStringArray()) as PackedStringArray
-	if bypass_edge.is_empty() or bypass_blocks.is_empty():
+	var bypass_edge_ids := zone.get("%s_bypass_edge_ids" % direction,
+		PackedStringArray()) as PackedStringArray
+	var entry_edge_id := str(zone.get("%s_entry_edge_id" % direction, ""))
+	var exit_edge_id := str(zone.get("%s_exit_edge_id" % direction, ""))
+	if bypass_edge_ids.is_empty() or entry_edge_id.is_empty() or exit_edge_id.is_empty():
 		return false
+	var bypass_blocks := PackedStringArray()
+	for transition_edge_id in [entry_edge_id]:
+		bypass_blocks.append_array(network.edge(transition_edge_id).get(
+			"block_ids", PackedStringArray()) as PackedStringArray)
+	for bypass_edge_id in bypass_edge_ids:
+		bypass_blocks.append_array(network.edge(bypass_edge_id).get(
+			"block_ids", PackedStringArray()) as PackedStringArray)
+	bypass_blocks.append_array(network.edge(exit_edge_id).get(
+		"block_ids", PackedStringArray()) as PackedStringArray)
 	var bypass_reservation := authority.try_reserve(str(vessel.get("id", "")), bypass_blocks)
 	if not bool(bypass_reservation.get("ok", false)):
 		return false
@@ -1401,11 +1388,17 @@ func _try_activate_passing(vessel: Dictionary, edge_index: int, blocked_block_id
 			break
 		remove_count += 1
 	if remove_count <= 0:
-		authority.release_block(str(vessel.get("id", "")), bypass_blocks[0])
+		for reserved_block_id in bypass_blocks:
+			authority.release_block(str(vessel.get("id", "")), reserved_block_id)
 		return false
 	for unused in range(remove_count):
 		route.remove_at(edge_index)
-	route.insert(edge_index, {"kind": "controlled", "edge_id": bypass_edge_id})
+	var replacement: Array[Dictionary] = [{"kind": "controlled", "edge_id": entry_edge_id}]
+	for bypass_edge_id in bypass_edge_ids:
+		replacement.append({"kind": "controlled", "edge_id": bypass_edge_id})
+	replacement.append({"kind": "controlled", "edge_id": exit_edge_id})
+	for replacement_index in range(replacement.size() - 1, -1, -1):
+		route.insert(edge_index, replacement[replacement_index])
 	vessel["route_steps"] = route
 	_metrics["overtakes"] = int(_metrics.get("overtakes", 0)) + 1
 	_event(str(vessel.get("id", "")), "reserved %s to pass %s" % [zone_id, blocker_id])
@@ -1905,8 +1898,14 @@ func _pick_destination(source_token_id: String, vessel_index: int, trip_index: i
 	var source_port := str(source.get("port_id", ""))
 	var pool := _hub_token_ids if _hub_token_ids.size() >= 2 else _token_ids
 	var source_index := pool.find(source_token_id)
-	var fleet_wave := vessel_index / maxi(pool.size(), 1)
-	var jump := 1 + posmod(fleet_wave * 5 + trip_index * 3, maxi(pool.size() - 1, 1))
+	# Two deterministic service cohorts per source exercise both coastal and
+	# cross-water passages without creating hundreds of unique startup searches.
+	# Each cohort is a cyclic permutation of the port list, so traffic demand is
+	# balanced: no debug run sends half its fleet to one unfortunate berth.
+	var cohort := posmod(vessel_index / maxi(pool.size(), 1), 2)
+	var service_wave := trip_index / 2
+	var jump := 1 + posmod(cohort * 3 + service_wave * 5,
+		maxi(pool.size() - 1, 1))
 	for offset in range(pool.size()):
 		var index := posmod(source_index + jump + offset, pool.size())
 		var candidate := pool[index]

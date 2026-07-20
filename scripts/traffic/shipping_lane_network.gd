@@ -5,7 +5,7 @@ extends RefCounted
 ## truth for a future local single-player authority and dedicated MP authority.
 ## It deliberately contains no BoatBody, autopilot, company, or vessel state.
 
-const FORMAT_VERSION := 4
+const FORMAT_VERSION := 5
 
 var layout_checksum := ""
 var network_checksum := ""
@@ -132,6 +132,14 @@ func add_passing_zone(record: Dictionary) -> bool:
 	stored["id"] = zone_id
 	stored["forward_blocks"] = forward_blocks
 	stored["reverse_blocks"] = reverse_blocks
+	stored["forward_access_blocks"] = PackedStringArray(
+		stored.get("forward_access_blocks", PackedStringArray()))
+	stored["reverse_access_blocks"] = PackedStringArray(
+		stored.get("reverse_access_blocks", PackedStringArray()))
+	stored["forward_bypass_edge_ids"] = PackedStringArray(
+		stored.get("forward_bypass_edge_ids", PackedStringArray()))
+	stored["reverse_bypass_edge_ids"] = PackedStringArray(
+		stored.get("reverse_bypass_edge_ids", PackedStringArray()))
 	passing_zones[zone_id] = stored
 	return true
 
@@ -155,6 +163,8 @@ func add_port_ramp(record: Dictionary) -> bool:
 		stored.get("transition_edge_ids", PackedStringArray()))
 	stored["port_feeder_edge_ids"] = PackedStringArray(
 		stored.get("port_feeder_edge_ids", PackedStringArray()))
+	stored["crossing_block_ids"] = PackedStringArray(
+		stored.get("crossing_block_ids", PackedStringArray()))
 	port_ramps[ramp_id] = stored
 	return true
 
@@ -420,6 +430,10 @@ func rebuild_checksum() -> String:
 			identity_parts.append(":F:%s" % block_id)
 		for block_id in record.get("reverse_blocks", PackedStringArray()) as PackedStringArray:
 			identity_parts.append(":R:%s" % block_id)
+		for block_id in record.get("forward_access_blocks", PackedStringArray()) as PackedStringArray:
+			identity_parts.append(":AF:%s" % block_id)
+		for block_id in record.get("reverse_access_blocks", PackedStringArray()) as PackedStringArray:
+			identity_parts.append(":AR:%s" % block_id)
 	for port_id in _sorted_ids(port_gate_nodes):
 		identity_parts.append("|P:%s" % port_id)
 		for gate_id in port_gate_nodes[port_id] as Array:
@@ -435,6 +449,8 @@ func rebuild_checksum() -> String:
 			identity_parts.append(":T:%s" % edge_id)
 		for edge_id in record.get("port_feeder_edge_ids", PackedStringArray()) as PackedStringArray:
 			identity_parts.append(":F:%s" % edge_id)
+		for block_id in record.get("crossing_block_ids", PackedStringArray()) as PackedStringArray:
+			identity_parts.append(":C:%s" % block_id)
 	var context := HashingContext.new()
 	context.start(HashingContext.HASH_SHA256)
 	context.update("".join(identity_parts).to_utf8_buffer())
@@ -483,6 +499,14 @@ func to_snapshot() -> Dictionary:
 			record.get("forward_blocks", PackedStringArray()) as PackedStringArray)
 		record["reverse_blocks"] = _strings_to_wire(
 			record.get("reverse_blocks", PackedStringArray()) as PackedStringArray)
+		record["forward_access_blocks"] = _strings_to_wire(
+			record.get("forward_access_blocks", PackedStringArray()) as PackedStringArray)
+		record["reverse_access_blocks"] = _strings_to_wire(
+			record.get("reverse_access_blocks", PackedStringArray()) as PackedStringArray)
+		record["forward_bypass_edge_ids"] = _strings_to_wire(
+			record.get("forward_bypass_edge_ids", PackedStringArray()) as PackedStringArray)
+		record["reverse_bypass_edge_ids"] = _strings_to_wire(
+			record.get("reverse_bypass_edge_ids", PackedStringArray()) as PackedStringArray)
 		wire_passing_zones[zone_id] = record
 	var wire_port_gates: Dictionary = {}
 	for port_id in _sorted_ids(port_gate_nodes):
@@ -495,6 +519,8 @@ func to_snapshot() -> Dictionary:
 			record.get("transition_edge_ids", PackedStringArray()) as PackedStringArray)
 		record["port_feeder_edge_ids"] = _strings_to_wire(
 			record.get("port_feeder_edge_ids", PackedStringArray()) as PackedStringArray)
+		record["crossing_block_ids"] = _strings_to_wire(
+			record.get("crossing_block_ids", PackedStringArray()) as PackedStringArray)
 		wire_ramps[ramp_id] = record
 	return {
 		"format_version": FORMAT_VERSION,
@@ -551,6 +577,14 @@ static func from_snapshot(snapshot: Dictionary) -> ShippingLaneNetwork:
 		record["position"] = _vector_from_wire(record.get("position", []))
 		record["forward_blocks"] = PackedStringArray(record.get("forward_blocks", []))
 		record["reverse_blocks"] = PackedStringArray(record.get("reverse_blocks", []))
+		record["forward_access_blocks"] = PackedStringArray(
+			record.get("forward_access_blocks", []))
+		record["reverse_access_blocks"] = PackedStringArray(
+			record.get("reverse_access_blocks", []))
+		record["forward_bypass_edge_ids"] = PackedStringArray(
+			record.get("forward_bypass_edge_ids", []))
+		record["reverse_bypass_edge_ids"] = PackedStringArray(
+			record.get("reverse_bypass_edge_ids", []))
 		restored.add_passing_zone(record)
 	for port_id in _sorted_ids(snapshot.get("port_gate_nodes", {}) as Dictionary):
 		restored.port_gate_nodes[port_id] = Array(
@@ -562,6 +596,7 @@ static func from_snapshot(snapshot: Dictionary) -> ShippingLaneNetwork:
 		record["position"] = _vector_from_wire(record.get("position", []))
 		record["transition_edge_ids"] = PackedStringArray(record.get("transition_edge_ids", []))
 		record["port_feeder_edge_ids"] = PackedStringArray(record.get("port_feeder_edge_ids", []))
+		record["crossing_block_ids"] = PackedStringArray(record.get("crossing_block_ids", []))
 		restored.add_port_ramp(record)
 	var expected := str(snapshot.get("network_checksum", ""))
 	restored.rebuild_checksum()

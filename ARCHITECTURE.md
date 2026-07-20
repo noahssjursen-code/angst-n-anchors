@@ -99,11 +99,14 @@ contains no client-authoritative vessel agents; the F6 lab has a separate
 data-only simulator for exercising the authority without BoatBody physics.
 
 - `ShippingLaneNetworkBuilder` converts `WorldLayout.waterway_centerlines` and
-  every seeded `PortData.berth_plan` into quay manoeuvre pockets, port gates,
-  block-based inbound queues, port connectors, separated directional highways, regular
-  blocks, and Factorio-style chain-signal regions. Every quay connector ends at
-  explicit before/after on- and off-ramps in both lane directions, outside the
-  harbour approach envelope and independent of every quay junction.
+  every seeded `PortData.berth_plan` into quay manoeuvre pockets, per-quay
+  junctions, local collectors, block-based inbound queues, and four-lane
+  highways. The centre pair carries opposing through traffic; the outside pair
+  are same-direction access/overtaking lanes. Each port has separate before/after
+  ON and OFF service ramps in both directions, attached only to the outside lane
+  and kept outside the harbour approach envelope. An OFF ramp that crosses the
+  opposing carriageway owns one atomic interlocking group, so its movement is
+  either completely green or completely red.
 - `ShippingLaneNetwork` is the immutable authority record. It supports
   vessel-dimension-aware route queries, deterministic checksums, and snapshot
   round-tripping for either a local single-player authority or a future
@@ -113,9 +116,13 @@ data-only simulator for exercising the authority without BoatBody physics.
   interlocking groups. Its snapshot is the small mutable state that an
   authority replicates; clients do not independently decide traffic outcomes.
 - `HybridShippingRoutePlanner` performs one deterministic search over controlled
-  lane edges plus cached, water-safe A* passages. Open water can only run from an
-  OFF ramp to an ON ramp, and a passage may alternate between lanes and open
-  water repeatedly. Crossing a lane in open water does not reserve or join it.
+  lane edges plus cached, water-safe A* passages. Physical service ramps never
+  double as ocean waypoints: separate offshore transfer records provide the
+  legal OFF and ON points before/after each port. Open water can only run from a
+  transfer OFF point to a transfer ON point, and is selected only when it removes
+  both a material percentage detour and at least ten minutes of lane travel. A
+  passage may alternate between lanes and open water repeatedly. Crossing a lane
+  in open water does not reserve or join it.
 - `ShippingLaneDebugDraw` streams only the F3/freecam region around the current
   camera and remains completely unmaterialized while its gizmo layer is off.
 - `ShippingLaneTrafficSimulator` is a fixed-step test harness. Lightweight ship

@@ -1,6 +1,6 @@
 extends SceneTree
 
-const FIXED_SEED := 42
+const FIXED_SEED := 77127
 const PORT_COUNT := 35
 const GENERATOR := preload("res://scripts/world/world_layout_generator.gd")
 const PLACER := preload("res://scripts/world/coastal_port_placer.gd")
@@ -35,6 +35,7 @@ func _run() -> void:
 	var staged_on_western_boundary := 0
 	var scheduled_strategic := 0
 	var exact_authority := 0
+	var route_failures := 0
 	var strategic_interest := Vector2.ZERO
 	var strategic_interest_id := ""
 	var has_strategic_interest := false
@@ -54,9 +55,12 @@ func _run() -> void:
 				strategic_interest = contact.get("position", Vector2.ZERO) as Vector2
 				strategic_interest_id = str(contact.get("id", ""))
 				has_strategic_interest = true
-		if str(contact.get("route_mode", "")) != "pending":
+		if str(contact.get("state", "")) != "scheduled_strategic":
 			exact_authority += 1
+		if str(contact.get("state", "")) == "route_failed":
+			route_failures += 1
 	_check(route_pairs.size() >= 20, "debug voyages are distributed", failures)
+	_check(route_failures == 0, "every 250-contact voyage has a valid route", failures)
 	_check(exact_authority == 24, "only the eager authority budget plans initially", failures)
 	_check(staged_on_western_boundary == 0, "exact vessels avoid the empty western bus", failures)
 	# The authority deliberately stages deterministic voyage phases on both lane
@@ -69,7 +73,7 @@ func _run() -> void:
 	var promoted_exact := 0
 	var promoted_position := strategic_interest
 	for contact in service.map_contacts():
-		if str(contact.get("route_mode", "pending")) != "pending":
+		if str(contact.get("state", "")) != "scheduled_strategic":
 			promoted_exact += 1
 		if str(contact.get("id", "")) == strategic_interest_id:
 			promoted_position = contact.get("position", strategic_interest) as Vector2

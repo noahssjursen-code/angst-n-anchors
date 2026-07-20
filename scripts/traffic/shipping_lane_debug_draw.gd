@@ -129,8 +129,8 @@ func _rebuild(center: Vector3) -> void:
 		if points.size() < 2 or not _polyline_near(points, center, draw_radius):
 			continue
 		_visible_edge_count += 1
-		visible_node_ids[String(edge.get("from", ""))] = true
-		visible_node_ids[String(edge.get("to", ""))] = true
+		visible_node_ids[String(edge.get("from_node_id", ""))] = true
+		visible_node_ids[String(edge.get("to_node_id", ""))] = true
 		var color := _edge_color(edge)
 		_add_polyline(batches, color, points, WATER_Y)
 		_add_lane_boundaries(batches, points, float(edge.get("lane_width_m", 70.0)))
@@ -144,7 +144,6 @@ func _rebuild(center: Vector3) -> void:
 
 	_draw_nodes(visible_node_ids, center)
 	_draw_port_queue_slots(center)
-	_draw_passing_zones(center)
 	_draw_port_ramps(center)
 	_draw_validation_issues(center)
 	_rebuild_count += 1
@@ -232,11 +231,17 @@ func _draw_port_ramps(center: Vector3) -> void:
 			continue
 		var is_on_ramp := str(record.get("ramp_kind", "")) == "on_ramp"
 		var color := COLOR_ON_RAMP if is_on_ramp else COLOR_OFF_RAMP
-		_add_marker(position, 4.2, color, "%s  %s\n%s" % [
-			"ON" if is_on_ramp else "OFF",
-			str(record.get("station", "")).to_upper(),
-			str(record.get("port_id", "")),
-		])
+		var transfer_only := bool(record.get("transfer_only", false))
+		if transfer_only:
+			_add_diamond(position, 5.0, color)
+		else:
+			_add_marker(position, 3.2, color)
+		if Vector2(position.x - center.x, position.z - center.z).length_squared() \
+				<= 1800.0 * 1800.0:
+			_add_label(position + Vector3(0.0, 4.0, 0.0), "%s %s" % [
+				"SEA" if transfer_only else "PORT",
+				"ON" if is_on_ramp else "OFF",
+			], color)
 
 
 func _draw_validation_issues(center: Vector3) -> void:
@@ -307,6 +312,20 @@ func _add_marker(position: Vector3, radius: float, color: Color, text := "") -> 
 	_add_line_mesh(vertices, color)
 	if not text.is_empty():
 		_add_label(position + Vector3(0.0, 4.0, 0.0), text, color)
+
+
+func _add_diamond(position: Vector3, radius: float, color: Color) -> void:
+	var vertices := PackedVector3Array([
+		position + Vector3(0.0, 0.0, -radius),
+		position + Vector3(radius, 0.0, 0.0),
+		position + Vector3(radius, 0.0, 0.0),
+		position + Vector3(0.0, 0.0, radius),
+		position + Vector3(0.0, 0.0, radius),
+		position + Vector3(-radius, 0.0, 0.0),
+		position + Vector3(-radius, 0.0, 0.0),
+		position + Vector3(0.0, 0.0, -radius),
+	])
+	_add_line_mesh(vertices, color)
 
 
 func _add_cross(position: Vector3, radius: float, color: Color) -> void:

@@ -11,12 +11,16 @@ const LANE_SEPARATION_M := 34.0
 const LANE_HALF_WIDTH_M := 24.0
 const SHORE_CLEARANCE_M := 10.0
 const PASSING_ZONE_SEGMENTS := 3
+const ACCESS_LANE_OFFSET_M := 51.0
+const PORT_COLLECTOR_CLEARANCE_M := 190.0
+const PORT_COLLECTOR_MIN_SPACING_M := 70.0
 const QUAY_CRAB_CLEARANCE_M := 48.0
 const QUAY_TIP_CLEARANCE_M := 85.0
 const RAMP_STATION_OFFSET_BLOCKS := 3
+const WATER_TRANSFER_OFFSET_BLOCKS := 6
 const RAMP_MIN_PORT_CLEARANCE_M := 420.0
 ## An interchange mouth is a real manoeuvring point, not merely a graph node.
-## Keep the eight directional mouths far enough apart that a 40 m vessel plus
+## Keep the four physical directional mouths far enough apart that a 40 m vessel plus
 ## its authority envelope cannot occupy an ON and OFF transition at once.
 const RAMP_MIN_INTERCHANGE_CLEARANCE_M := 180.0
 const RAMP_LATERAL_OFFSET_M := 72.0
@@ -199,14 +203,20 @@ func validate(network: ShippingLaneNetwork, layout: WorldLayout) -> Array[Dictio
 		var ramp := network.port_ramps[ramp_id] as Dictionary
 		var lane_node := network.node(str(ramp.get("lane_node_id", "")))
 		var ramp_node := network.node(str(ramp.get("ramp_node_id", "")))
+		var transfer_only := bool(ramp.get("transfer_only", false))
 		if str(lane_node.get("kind", "")) not in ["main_lane", "regional_lane"]:
 			issues.append(_issue("error", "ramp_off_highway",
 				"Ramp must attach to a regional or main shipping lane", ramp_id,
 				ramp.get("position", Vector2.ZERO) as Vector2))
-		if str(ramp_node.get("kind", "")) != "shipping_ramp":
+		if not transfer_only and str(ramp_node.get("kind", "")) != "shipping_ramp":
 			issues.append(_issue("error", "invalid_ramp_node",
 				"Ramp transition must own a distinct shipping-ramp node", ramp_id,
 				ramp.get("position", Vector2.ZERO) as Vector2))
+		if str(lane_node.get("lane_role", "")) != "access" \
+				or str(ramp.get("lane_role", "")) != "access":
+			issues.append(_issue("error", "ramp_on_through_lane",
+				"Port ramps must attach only to the outside access/overtaking lane",
+				ramp_id, ramp.get("position", Vector2.ZERO) as Vector2))
 		for gate_id_value in network.port_gate_nodes.get(str(ramp.get("port_id", "")), []) as Array:
 			var gate_node := network.node(str(gate_id_value))
 			if not gate_node.is_empty() and (gate_node.get("position", Vector2.ZERO) as Vector2) \
@@ -222,6 +232,12 @@ func validate(network: ShippingLaneNetwork, layout: WorldLayout) -> Array[Dictio
 		for other_index in range(ramp_index + 1, ramp_ids.size()):
 			var other := network.port_ramps[ramp_ids[other_index]] as Dictionary
 			if str(ramp.get("port_id", "")) != str(other.get("port_id", "")):
+				continue
+			# Water-transfer records are navigational break-off markers placed on
+			# the existing access lane, not physical ramp mouths.  Only the four
+			# harbour-serving ramps need mutually separated transition geometry.
+			if bool(ramp.get("transfer_only", false)) \
+					or bool(other.get("transfer_only", false)):
 				continue
 			if (ramp.get("position", Vector2.ZERO) as Vector2).distance_to(
 					other.get("position", Vector2.ZERO) as Vector2) < 30.0:
@@ -281,16 +297,19 @@ func _build_coastal_main_bus() -> void:
 		var points := waterway.get("points", PackedVector2Array()) as PackedVector2Array
 		if points.size() < 2:
 			continue
-		var gate := points[maxi(1, int(points.size() * 0.65))]
-		for index in range(1, points.size()):
-			if _layout.classify_region(points[index]) == WorldLayout.Region.FJORD:
-				gate = points[maxi(index - 1, 1)]
-				break
+		# The first generated trunk sample is the empty western world boundary.
+		# Region classification changes to FJORD almost immediately, so using the
+		# first region transition built the former north/south bus at x=-16 km.
+		# A stable two-thirds station is the actual mainland-coast interchange: it
+		# is outside the local harbour approaches but well inside the useful world.
+		var gate_index := clampi(roundi(float(points.size() - 1) * 0.66), 1,
+			points.size() - 2)
+		var gate := points[gate_index]
 		# Keep the coastal trunk physically outside the fjord route instead of
 		# laying both corridor centerlines on top of one another at the merge.
 		var coastal_position := gate + Vector2(-260.0, 0.0)
 		if _layout.sample_signed_distance(coastal_position) < SHORE_CLEARANCE_M:
-			coastal_position = gate + (points[maxi(0, points.find(gate) - 1)] - gate).normalized() * 260.0
+			coastal_position = gate + (points[maxi(0, gate_index - 1)] - gate).normalized() * 260.0
 		gates.append({
 			"waterway_id": str(waterway.get("id", "")),
 			"position": coastal_position,
@@ -349,14 +368,31 @@ func _connect_corridors(child_id: String, parent_id: String, near: Vector2, kind
 	var child_reverse_id := _nearest_id(child_reverse, near)
 	var junction_id := "junction:%s:%s" % [child_id, parent_id]
 	var turn_blocks := PackedStringArray()
-	turn_blocks.append(_add_junction_turn(junction_id + ":parent_in_child", parent_forward_id,
-		child_forward_id, kind, junction_id))
-	turn_blocks.append(_add_junction_turn(junction_id + ":parent_out_child", parent_reverse_id,
-		child_forward_id, kind, junction_id))
-	turn_blocks.append(_add_junction_turn(junction_id + ":child_parent_in", child_reverse_id,
-		parent_forward_id, kind, junction_id))
-	turn_blocks.append(_add_junction_turn(junction_id + ":child_parent_out", child_reverse_id,
-		parent_reverse_id, kind, junction_id))
+	# A generated corridor may continue on either side of its junction station.
+	# Connect both directed carriageways in both domains; assuming the child
+	# always lies "after" the merge stranded ports located before that station.
+	for parent_pair in [
+		{"name": "parent_in", "id": parent_forward_id},
+		{"name": "parent_out", "id": parent_reverse_id},
+	]:
+		for child_pair in [
+			{"name": "child_in", "id": child_forward_id},
+			{"name": "child_out", "id": child_reverse_id},
+		]:
+			turn_blocks.append(_add_junction_turn(
+				"%s:%s_%s" % [junction_id, parent_pair.name, child_pair.name],
+				str(parent_pair.id), str(child_pair.id), kind, junction_id))
+	for child_pair in [
+		{"name": "child_in", "id": child_forward_id},
+		{"name": "child_out", "id": child_reverse_id},
+	]:
+		for parent_pair in [
+			{"name": "parent_in", "id": parent_forward_id},
+			{"name": "parent_out", "id": parent_reverse_id},
+		]:
+			turn_blocks.append(_add_junction_turn(
+				"%s:%s_%s" % [junction_id, child_pair.name, parent_pair.name],
+				str(child_pair.id), str(parent_pair.id), kind, junction_id))
 	for index in range(turn_blocks.size()):
 		for other in range(index + 1, turn_blocks.size()):
 			_network.add_block_conflict(turn_blocks[index], turn_blocks[other])
@@ -385,21 +421,44 @@ func _add_directional_corridor(
 		kind: String,
 		waterway_id: String,
 ) -> Dictionary:
-	var forward_points := _offset_path(centerline, 1.0, waterway_width_m)
-	var reverse_points := _offset_path(centerline, -1.0, waterway_width_m)
+	# Four permanent carriageways. The inner pair is protected through traffic;
+	# the outer pair is the continuous access/overtaking pair used by every port
+	# ramp. They are graph lanes, not temporary visual bypasses.
+	var forward_points := _offset_path_distance(centerline, 1.0,
+		LANE_SEPARATION_M * 0.5)
+	var reverse_points := _offset_path_distance(centerline, -1.0,
+		LANE_SEPARATION_M * 0.5)
+	var forward_access_points := _offset_path_distance(centerline, 1.0,
+		ACCESS_LANE_OFFSET_M)
+	var reverse_access_points := _offset_path_distance(centerline, -1.0,
+		ACCESS_LANE_OFFSET_M)
 	var forward_ids := PackedStringArray()
 	var reverse_ids := PackedStringArray()
+	var forward_access_ids := PackedStringArray()
+	var reverse_access_ids := PackedStringArray()
 	var forward_blocks := PackedStringArray()
 	var reverse_blocks := PackedStringArray()
+	var forward_access_blocks := PackedStringArray()
+	var reverse_access_blocks := PackedStringArray()
 	for index in range(centerline.size()):
 		var forward_id := "%s:in:%03d" % [prefix, index]
 		var reverse_id := "%s:out:%03d" % [prefix, index]
+		var forward_access_id := "%s:in_access:%03d" % [prefix, index]
+		var reverse_access_id := "%s:out_access:%03d" % [prefix, index]
 		_network.add_node({"id": forward_id, "kind": kind, "position": forward_points[index],
-			"waterway_id": waterway_id, "direction": "inbound"})
+			"waterway_id": waterway_id, "direction": "inbound", "lane_role": "through"})
 		_network.add_node({"id": reverse_id, "kind": kind, "position": reverse_points[index],
-			"waterway_id": waterway_id, "direction": "outbound"})
+			"waterway_id": waterway_id, "direction": "outbound", "lane_role": "through"})
+		_network.add_node({"id": forward_access_id, "kind": kind,
+			"position": forward_access_points[index], "waterway_id": waterway_id,
+			"direction": "inbound", "lane_role": "access"})
+		_network.add_node({"id": reverse_access_id, "kind": kind,
+			"position": reverse_access_points[index], "waterway_id": waterway_id,
+			"direction": "outbound", "lane_role": "access"})
 		forward_ids.append(forward_id)
 		reverse_ids.append(reverse_id)
+		forward_access_ids.append(forward_access_id)
+		reverse_access_ids.append(reverse_access_id)
 	for index in range(centerline.size() - 1):
 		var forward_edge := "%s:in:%03d" % [prefix, index]
 		var reverse_edge := "%s:out:%03d" % [prefix, index]
@@ -409,23 +468,55 @@ func _add_directional_corridor(
 		var reverse_block := _add_edge_with_block(reverse_edge, reverse_ids[index + 1], reverse_ids[index],
 			PackedVector2Array([reverse_points[index + 1], reverse_points[index]]), kind, false,
 			waterway_width_m)
+		var forward_access_edge := "%s:in_access:%03d" % [prefix, index]
+		var reverse_access_edge := "%s:out_access:%03d" % [prefix, index]
+		var forward_access_block := _add_edge_with_block(forward_access_edge,
+			forward_access_ids[index], forward_access_ids[index + 1],
+			PackedVector2Array([forward_access_points[index], forward_access_points[index + 1]]),
+			"passing_lane", false, waterway_width_m)
+		var reverse_access_block := _add_edge_with_block(reverse_access_edge,
+			reverse_access_ids[index + 1], reverse_access_ids[index],
+			PackedVector2Array([reverse_access_points[index + 1], reverse_access_points[index]]),
+			"passing_lane", false, waterway_width_m)
+		_annotate_lane_edge(forward_edge, "through", "forward", waterway_id, 0.0)
+		_annotate_lane_edge(reverse_edge, "through", "reverse", waterway_id, 0.0)
+		_annotate_lane_edge(forward_access_edge, "access", "forward", waterway_id, 8.0)
+		_annotate_lane_edge(reverse_access_edge, "access", "reverse", waterway_id, 8.0)
 		# Properly separated two-way waterways allow vessels to pass. Only a
 		# genuinely narrow single-track reach shares one exclusive signal block.
 		if waterway_width_m < 90.0:
 			_network.add_block_conflict(forward_block, reverse_block)
 		forward_blocks.append(forward_block)
 		reverse_blocks.append(reverse_block)
-	# Every shipping corridor has a continuous parallel through lane. Port-bound
-	# traffic can queue on the ordinary lane while unrelated traffic passes.
-	_build_passing_zones(waterway_id, centerline, forward_blocks, reverse_blocks)
-	return {"forward": forward_ids, "reverse": reverse_ids}
+		forward_access_blocks.append(forward_access_block)
+		reverse_access_blocks.append(reverse_access_block)
+	_build_passing_zones(waterway_id, centerline,
+		forward_ids, reverse_ids, forward_access_ids, reverse_access_ids,
+		forward_blocks, reverse_blocks, forward_access_blocks, reverse_access_blocks)
+	return {
+		"forward": forward_ids,
+		"reverse": reverse_ids,
+		"forward_access": forward_access_ids,
+		"reverse_access": reverse_access_ids,
+		"forward_blocks": forward_blocks,
+		"reverse_blocks": reverse_blocks,
+		"forward_access_blocks": forward_access_blocks,
+		"reverse_access_blocks": reverse_access_blocks,
+		"centerline": centerline,
+	}
 
 
 func _build_passing_zones(
 		waterway_id: String,
 		centerline: PackedVector2Array,
+		forward_ids: PackedStringArray,
+		reverse_ids: PackedStringArray,
+		forward_access_ids: PackedStringArray,
+		reverse_access_ids: PackedStringArray,
 		forward_blocks: PackedStringArray,
 		reverse_blocks: PackedStringArray,
+		forward_access_blocks: PackedStringArray,
+		reverse_access_blocks: PackedStringArray,
 ) -> void:
 	var segment_count := mini(forward_blocks.size(), reverse_blocks.size())
 	var zone_number := 0
@@ -446,10 +537,27 @@ func _build_passing_zones(
 			var block := _network.blocks[block_id] as Dictionary
 			block["passing_zone_id"] = zone_id
 			_network.blocks[block_id] = block
-		var forward_bypass := _add_passing_bypass(
-			zone_id, "forward", zone_forward, centerline, start, 1.0)
-		var reverse_bypass := _add_passing_bypass(
-			zone_id, "reverse", zone_reverse, centerline, start, 1.0)
+		var zone_forward_access := PackedStringArray()
+		var zone_reverse_access := PackedStringArray()
+		for index in range(start, finish):
+			zone_forward_access.append(forward_access_blocks[index])
+			zone_reverse_access.append(reverse_access_blocks[index])
+			var forward_access_block := _network.block(forward_access_blocks[index])
+			forward_access_block["passing_zone_id"] = zone_id
+			forward_access_block["passing_direction"] = "forward"
+			_network.blocks[forward_access_blocks[index]] = forward_access_block
+			var reverse_access_block := _network.block(reverse_access_blocks[index])
+			reverse_access_block["passing_zone_id"] = zone_id
+			reverse_access_block["passing_direction"] = "reverse"
+			_network.blocks[reverse_access_blocks[index]] = reverse_access_block
+		var forward_entry := _add_lane_change(zone_id, "forward", "entry",
+			forward_ids[start], forward_access_ids[start])
+		var forward_exit := _add_lane_change(zone_id, "forward", "exit",
+			forward_access_ids[finish], forward_ids[finish])
+		var reverse_entry := _add_lane_change(zone_id, "reverse", "entry",
+			reverse_ids[finish], reverse_access_ids[finish])
+		var reverse_exit := _add_lane_change(zone_id, "reverse", "exit",
+			reverse_access_ids[start], reverse_ids[start])
 		var midpoint_index := mini(
 			start + PASSING_ZONE_SEGMENTS / 2, centerline.size() - 1)
 		_network.add_passing_zone({
@@ -458,45 +566,42 @@ func _build_passing_zones(
 			"position": centerline[midpoint_index],
 			"forward_blocks": zone_forward,
 			"reverse_blocks": zone_reverse,
-			"forward_bypass_edge_id": forward_bypass,
-			"reverse_bypass_edge_id": reverse_bypass,
+			"forward_access_blocks": zone_forward_access,
+			"reverse_access_blocks": zone_reverse_access,
+			"forward_bypass_edge_ids": _edge_ids_for_blocks(zone_forward_access),
+			"reverse_bypass_edge_ids": _edge_ids_for_blocks(zone_reverse_access),
+			"forward_entry_edge_id": forward_entry,
+			"forward_exit_edge_id": forward_exit,
+			"reverse_entry_edge_id": reverse_entry,
+			"reverse_exit_edge_id": reverse_exit,
 			"activation": "on_demand",
 		})
 		zone_number += 1
 		start = finish
 
 
-func _add_passing_bypass(zone_id: String, direction: String,
-		base_blocks: PackedStringArray, centerline: PackedVector2Array,
-		start: int, side: float) -> String:
-	if base_blocks.is_empty():
-		return ""
-	var first_edge := _network.edge(str((_network.block(base_blocks[0]) as Dictionary).get("edge_id", "")))
-	var last_edge := _network.edge(str((_network.block(base_blocks[-1]) as Dictionary).get("edge_id", "")))
-	var from_id := str(first_edge.get("from_node_id", ""))
-	var to_id := str(last_edge.get("to_node_id", ""))
-	var source := PackedVector2Array()
-	for index in range(start, mini(start + PASSING_ZONE_SEGMENTS + 1, centerline.size())):
-		source.append(centerline[index])
-	if direction == "reverse":
-		from_id = str(last_edge.get("from_node_id", ""))
-		to_id = str(first_edge.get("to_node_id", ""))
-		source.reverse()
-	var points := _offset_path_distance(source, side, 52.0)
-	var edge_id := "%s:bypass:%s" % [zone_id, direction]
-	var block_id := _add_edge_with_block(edge_id, from_id, to_id,
-		points, "passing_lane", false, 220.0)
+func _add_lane_change(zone_id: String, direction: String, role: String,
+		from_id: String, to_id: String) -> String:
+	var edge_id := "%s:%s:%s" % [zone_id, direction, role]
+	_add_single_edge(edge_id, from_id, to_id, "lane_change", true)
 	var edge := _network.edge(edge_id)
 	edge["passing_zone_id"] = zone_id
 	edge["passing_direction"] = direction
-	edge["bypasses_blocks"] = base_blocks.duplicate()
-	edge["routing_penalty_s"] = 240.0
+	edge["lane_role"] = "lane_change"
+	edge["routing_penalty_s"] = 18.0
 	_network.edges[edge_id] = edge
-	var block := _network.block(block_id)
-	block["passing_zone_id"] = zone_id
-	block["passing_direction"] = direction
-	_network.blocks[block_id] = block
 	return edge_id
+
+
+func _annotate_lane_edge(edge_id: String, lane_role: String, direction: String,
+		waterway_id: String, penalty_s: float) -> void:
+	var edge := _network.edge(edge_id)
+	edge["lane_role"] = lane_role
+	edge["direction"] = "inbound" if direction == "forward" else "outbound"
+	edge["travel_direction"] = direction
+	edge["waterway_id"] = waterway_id
+	edge["routing_penalty_s"] = penalty_s
+	_network.edges[edge_id] = edge
 
 
 func _build_port(data: PortData) -> void:
@@ -605,6 +710,12 @@ func _connect_port_gates_to_lane(data: PortData, gates: Dictionary) -> void:
 	if forward_ids.is_empty() or reverse_ids.is_empty():
 		forward_ids = PackedStringArray([highway_id])
 		reverse_ids = PackedStringArray([highway_id])
+	var forward_access_ids := corridor.get("forward_access", PackedStringArray()) as PackedStringArray
+	var reverse_access_ids := corridor.get("reverse_access", PackedStringArray()) as PackedStringArray
+	if forward_access_ids.is_empty() or reverse_access_ids.is_empty():
+		_network.validation_issues.append(_issue("error", "missing_access_lanes",
+			"Port cannot attach without continuous outside access lanes", data.port_id, centroid))
+		return
 	var ordered_gates := _ordered_quay_gates(gates, forward_ids, centroid)
 	var available_count := mini(forward_ids.size(), reverse_ids.size())
 	if available_count < 2:
@@ -613,137 +724,242 @@ func _connect_port_gates_to_lane(data: PortData, gates: Dictionary) -> void:
 		return
 	var base_index := clampi(_nearest_index(forward_ids, centroid), 0, available_count - 1)
 	var station_indices := {
-		"before": clampi(base_index - RAMP_STATION_OFFSET_BLOCKS, 0, available_count - 1),
-		"after": clampi(base_index + RAMP_STATION_OFFSET_BLOCKS, 0, available_count - 1),
+		"before": clampi(base_index - RAMP_STATION_OFFSET_BLOCKS, 1, available_count - 2),
+		"after": clampi(base_index + RAMP_STATION_OFFSET_BLOCKS, 1, available_count - 2),
 	}
+	# A branch-end harbour may not have six blocks of motorway on both sides of
+	# its projection. Resolve each carriageway independently and fall back to two
+	# clear, distinct ocean stations on the available side instead of pinning a
+	# nominal "before" transfer inside the harbour.
+	var transfer_station_indices := {
+		0: _water_transfer_station_pair(forward_access_ids, base_index, gates),
+		1: _water_transfer_station_pair(reverse_access_ids, base_index, gates),
+	}
+	var collector := _build_port_collector(data, gates, ordered_gates, forward_ids, centroid)
+	var throat_id := str(collector.get("throat_node_id", ""))
+	if throat_id.is_empty():
+		return
+	var throat_position := (_network.node(throat_id).get("position", centroid) as Vector2)
 	var local_paths: Array[Dictionary] = []
 	var used_ramp_positions := PackedVector2Array()
-	for station in ["before", "after"]:
+	var movements: Array[Dictionary] = [
+		{"station": "before", "direction_index": 0, "ramp_kind": "off_ramp"},
+		{"station": "after", "direction_index": 0, "ramp_kind": "on_ramp"},
+		{"station": "after", "direction_index": 1, "ramp_kind": "off_ramp"},
+		{"station": "before", "direction_index": 1, "ramp_kind": "on_ramp"},
+	]
+	for movement in movements:
+		var station := str(movement.station)
 		var station_index := int(station_indices[station])
-		# Use one station axis for both travel directions. Deriving the offset
-		# from each directed lane independently made forward-OFF coincide exactly
-		# with reverse-ON (and vice versa), placing two legal movements on top of
-		# one another even though their graph node ids were different.
+		var direction_index := int(movement.direction_index)
+		var ramp_kind := str(movement.ramp_kind)
+		var direction_name := "forward" if direction_index == 0 else "reverse"
+		var lane_ids := forward_access_ids if direction_index == 0 else reverse_access_ids
+		var lane_node_id := lane_ids[station_index]
+		var lane_position := (_network.node(lane_node_id).get("position", centroid) as Vector2)
 		var station_tangent := _lane_tangent(forward_ids, station_index)
-		var station_anchor := (
-			((_network.nodes[forward_ids[station_index]] as Dictionary).get(
-				"position", centroid) as Vector2)
-			+ ((_network.nodes[reverse_ids[station_index]] as Dictionary).get(
-				"position", centroid) as Vector2)
-		) * 0.5
-		for direction_index in range(2):
-			var lane_ids := forward_ids if direction_index == 0 else reverse_ids
-			var lane_node_id := lane_ids[station_index]
-			var lane_position := (_network.nodes[lane_node_id] as Dictionary).get(
-				"position", centroid) as Vector2
-			for ramp_kind in ["off_ramp", "on_ramp"]:
-				var direction_name := "forward" if direction_index == 0 else "reverse"
-				# Harbour-serving ramps belong on the port side of the trunk. Pure
-				# open-water transfer ramps belong on its ocean side. The old layout
-				# placed every mouth away from the port, forcing every quay feeder to
-				# cross the motorway and creating a physical lock cycle between an
-				# arriving ship and a vessel waiting to leave by A*.
-				var natural_station: String = "before" if (
-					(ramp_kind == "off_ramp" and direction_index == 0) \
-					or (ramp_kind == "on_ramp" and direction_index == 1)) else "after"
-				var serves_port: bool = station == natural_station
-				var ramp_id := "ramp:%s:%s:%s:%s" % [
-					data.port_id, station, direction_name, ramp_kind]
-				var ramp_node_id := "%s:node" % ramp_id
-				var ramp_position := _safe_ramp_position(
-					station_anchor, centroid, station_tangent, direction_index, ramp_kind,
-					serves_port)
-				ramp_position = _clear_ramp_position(
-					ramp_position, gates, centroid, station_tangent, used_ramp_positions)
-				used_ramp_positions.append(ramp_position)
-				_network.add_node({
-					"id": ramp_node_id,
-					"kind": "shipping_ramp",
-					"position": ramp_position,
-					"port_id": data.port_id,
-					"station": station,
-					"ramp_kind": ramp_kind,
-					"direction_index": direction_index,
-					"waterway_id": waterway_id,
-				})
-				# The four ramps at a station remain valid open-water transitions, but
-				# only the motorway-correct pair connects into the harbour: OFF before
-				# and ON after in the forward direction, reversed for reverse traffic.
-				var transition_prefix := "%s:transition" % ramp_id
-				var lane_to_ramp := _safe_connector_points(lane_position, ramp_position)
-				var transition_points := lane_to_ramp if ramp_kind == "off_ramp" \
-					else _reversed_points(lane_to_ramp)
-				var transition_blocks := _add_directed_segmented_path(
-					transition_prefix,
-					lane_node_id if ramp_kind == "off_ramp" else ramp_node_id,
-					ramp_node_id if ramp_kind == "off_ramp" else lane_node_id,
-					transition_points,
-					"shipping_ramp", true, QUEUE_BLOCK_TARGET_M)
-				# The actual OFF ramp into the harbour is the berth boundary. Hybrid
-				# arrivals may still use an ON ramp to join the shipping lane and queue
-				# there, where ordinary passing blocks can carry through traffic. The
-				# geometric chain signal below keeps that queue out of the outbound
-				# feeder crossing itself.
-				if serves_port and ramp_kind == "off_ramp":
-					for transition_block_id in transition_blocks:
-						var transition_block := _network.blocks.get(
-							transition_block_id, {}) as Dictionary
-						transition_block["destination_port_entry"] = data.port_id
-						_network.blocks[transition_block_id] = transition_block
-				var feeder_edge_ids := PackedStringArray()
-				for gate_index in range(ordered_gates.size()):
-					if not serves_port:
-						continue
-					var gate := ordered_gates[gate_index] as Dictionary
-					var gate_id := str(gate.get("id", ""))
-					var gate_position := gate.get("position", Vector2.ZERO) as Vector2
-					var physical_quay_id := str(gate.get("physical_quay_id", gate_index))
-					var feeder_prefix := "%s:feeder:%s" % [ramp_id, physical_quay_id]
-					var route_started := Time.get_ticks_usec()
-					var gate_to_ramp := _safe_port_feeder_points(gate, ramp_position)
-					var feeder_points := _reversed_points(gate_to_ramp) \
-						if ramp_kind == "off_ramp" else gate_to_ramp
-					build_profile["connector_route_ms"] = float(build_profile.get(
-						"connector_route_ms", 0.0)) + _elapsed_ms(route_started)
-					var feeder_blocks := _add_directed_segmented_path(
-						feeder_prefix,
-						ramp_node_id if ramp_kind == "off_ramp" else gate_id,
-						gate_id if ramp_kind == "off_ramp" else ramp_node_id,
-						feeder_points, "port_feeder", true, QUEUE_BLOCK_TARGET_M)
-					feeder_edge_ids.append_array(_edge_ids_for_blocks(feeder_blocks))
-					var feeder_path := {"forward": feeder_blocks, "reverse": PackedStringArray()}
-					var conflict_started := Time.get_ticks_usec()
-					for existing_path in local_paths:
-						_add_connector_cross_conflicts(existing_path, feeder_path)
-					build_profile["connector_conflict_ms"] = float(build_profile.get(
-						"connector_conflict_ms", 0.0)) + _elapsed_ms(conflict_started)
-					local_paths.append(feeder_path)
-					build_profile["feeder_paths"] = int(build_profile.get("feeder_paths", 0)) + 1
-					if ramp_kind == "off_ramp":
-						_register_inbound_queue(data.port_id, gate, direction_index,
-							ramp_node_id, station, feeder_blocks)
-					_network.add_signal({
-						"id": "signal:%s" % feeder_prefix,
-						"kind": "chain",
-						"node_id": ramp_node_id if ramp_kind == "off_ramp" else gate_id,
-						"port_id": data.port_id,
-						"protected_blocks": feeder_blocks,
-					})
-				_network.add_port_ramp({
-					"id": ramp_id,
-					"port_id": data.port_id,
-					"station": station,
-					"ramp_kind": ramp_kind,
-					"direction_index": direction_index,
-					"direction": direction_name,
-					"waterway_id": waterway_id,
-					"position": ramp_position,
-					"lane_node_id": lane_node_id,
-					"ramp_node_id": ramp_node_id,
-					"transition_edge_ids": _edge_ids_for_blocks(transition_blocks),
-					"port_feeder_edge_ids": feeder_edge_ids,
-					"serves_port": serves_port,
-				})
+		var portward := (throat_position - lane_position).normalized()
+		if portward.length_squared() < 0.5:
+			portward = Vector2(-station_tangent.y, station_tangent.x)
+		var longitudinal_slot := -48.0 if ramp_kind == "off_ramp" else 48.0
+		var ramp_position := lane_position + portward * 86.0 \
+			+ station_tangent * longitudinal_slot
+		ramp_position = _clear_ramp_position(ramp_position, gates, centroid,
+			station_tangent, used_ramp_positions)
+		used_ramp_positions.append(ramp_position)
+		var ramp_id := "ramp:%s:%s:%s:%s" % [data.port_id, station,
+			direction_name, ramp_kind]
+		var ramp_node_id := "%s:node" % ramp_id
+		_network.add_node({
+			"id": ramp_node_id, "kind": "shipping_ramp", "position": ramp_position,
+			"port_id": data.port_id, "station": station, "ramp_kind": ramp_kind,
+			"direction_index": direction_index, "waterway_id": waterway_id,
+			"lane_role": "access",
+		})
+		var lane_to_ramp := _safe_connector_points(lane_position, ramp_position)
+		var transition_points := lane_to_ramp if ramp_kind == "off_ramp" \
+			else _reversed_points(lane_to_ramp)
+		var transition_blocks := _add_directed_segmented_path(
+			"%s:transition" % ramp_id,
+			lane_node_id if ramp_kind == "off_ramp" else ramp_node_id,
+			ramp_node_id if ramp_kind == "off_ramp" else lane_node_id,
+			transition_points, "shipping_ramp", true, QUEUE_BLOCK_TARGET_M)
+		var crossing_blocks := _interlock_ramp_crossing(
+			data.port_id, transition_blocks, corridor, station_index)
+		if ramp_kind == "off_ramp":
+			for transition_block_id in transition_blocks:
+				var transition_block := _network.block(transition_block_id)
+				transition_block["destination_port_entry"] = data.port_id
+				_network.blocks[transition_block_id] = transition_block
+		var portward_points := _safe_connector_points(ramp_position, throat_position)
+		var feeder_points := portward_points if ramp_kind == "off_ramp" \
+			else _reversed_points(portward_points)
+		var feeder_blocks := _add_directed_segmented_path(
+			"%s:feeder" % ramp_id,
+			ramp_node_id if ramp_kind == "off_ramp" else throat_id,
+			throat_id if ramp_kind == "off_ramp" else ramp_node_id,
+			feeder_points, "port_feeder", true, QUEUE_BLOCK_TARGET_M)
+		var feeder_path := {"forward": feeder_blocks, "reverse": PackedStringArray()}
+		for existing_path in local_paths:
+			_add_connector_cross_conflicts(existing_path, feeder_path)
+		local_paths.append(feeder_path)
+		build_profile["feeder_paths"] = int(build_profile.get("feeder_paths", 0)) + 1
+		var protected := transition_blocks.duplicate()
+		protected.append_array(crossing_blocks)
+		protected.append_array(feeder_blocks)
+		_network.add_signal({
+			"id": "signal:%s" % ramp_id,
+			"kind": "chain" if not crossing_blocks.is_empty() else "regular",
+			"node_id": lane_node_id if ramp_kind == "off_ramp" else throat_id,
+			"port_id": data.port_id,
+			"protected_blocks": protected,
+		})
+		_network.add_port_ramp({
+			"id": ramp_id, "port_id": data.port_id, "station": station,
+			"ramp_kind": ramp_kind, "direction_index": direction_index,
+			"direction": direction_name, "waterway_id": waterway_id,
+			"position": ramp_position, "lane_node_id": lane_node_id,
+			"ramp_node_id": ramp_node_id, "lane_role": "access",
+			"transition_edge_ids": _edge_ids_for_blocks(transition_blocks),
+			"port_feeder_edge_ids": _edge_ids_for_blocks(feeder_blocks),
+			"crossing_block_ids": crossing_blocks,
+			"serves_port": true,
+		})
+	# A service ramp and an open-water transfer are different movements. The
+	# former leads portward into the collector; the latter breaks away from (or
+	# rejoins) the outside lane without touching the harbour. Supplying the four
+	# complementary transfer points gives each travel direction an ON and OFF on
+	# both sides of the port, so a ship can leave its quay, merge, then immediately
+	# choose a legal A* crossing instead of sailing to the end of the world.
+	var water_transfers: Array[Dictionary] = [
+		{"station": "before", "direction_index": 0, "ramp_kind": "on_ramp"},
+		{"station": "after", "direction_index": 0, "ramp_kind": "off_ramp"},
+		{"station": "after", "direction_index": 1, "ramp_kind": "on_ramp"},
+		{"station": "before", "direction_index": 1, "ramp_kind": "off_ramp"},
+	]
+	for transfer in water_transfers:
+		var station := str(transfer.station)
+		var direction_index := int(transfer.direction_index)
+		var ramp_kind := str(transfer.ramp_kind)
+		var direction_name := "forward" if direction_index == 0 else "reverse"
+		var lane_ids := forward_access_ids if direction_index == 0 else reverse_access_ids
+		var direction_stations := transfer_station_indices[direction_index] as Dictionary
+		var lane_node_id := lane_ids[int(direction_stations[station])]
+		var lane_position := _network.node(lane_node_id).get("position", centroid) as Vector2
+		var ramp_id := "ramp:%s:%s:%s:%s:water_transfer" % [data.port_id,
+			station, direction_name, ramp_kind]
+		_network.add_port_ramp({
+			"id": ramp_id, "port_id": data.port_id, "station": station,
+			"ramp_kind": ramp_kind, "direction_index": direction_index,
+			"direction": direction_name, "waterway_id": waterway_id,
+			"position": lane_position, "lane_node_id": lane_node_id,
+			"ramp_node_id": lane_node_id, "lane_role": "access",
+			"transition_edge_ids": PackedStringArray(),
+			"port_feeder_edge_ids": PackedStringArray(),
+			"crossing_block_ids": PackedStringArray(),
+			"serves_port": false, "transfer_only": true,
+		})
+
+
+func _build_port_collector(data: PortData, gates: Dictionary, ordered_gates: Array,
+		corridor_ids: PackedStringArray, centroid: Vector2) -> Dictionary:
+	if ordered_gates.is_empty() or corridor_ids.is_empty():
+		return {}
+	var nearest_index := _nearest_index(corridor_ids, centroid)
+	var lane_position := (_network.node(corridor_ids[nearest_index]).get(
+		"position", centroid) as Vector2)
+	var portward_axis := (lane_position - centroid).normalized()
+	if portward_axis.length_squared() < 0.5:
+		portward_axis = (ordered_gates[0] as Dictionary).get(
+			"outbound_vector", Vector2(0.0, -1.0)) as Vector2
+	portward_axis = portward_axis.normalized()
+	var tangent := _lane_tangent(corridor_ids, nearest_index)
+	var furthest_projection := 0.0
+	for gate_value in ordered_gates:
+		var gate := gate_value as Dictionary
+		furthest_projection = maxf(furthest_projection,
+			((gate.get("position", centroid) as Vector2) - centroid).dot(portward_axis))
+	var collector_base := centroid + portward_axis * (
+		furthest_projection + PORT_COLLECTOR_CLEARANCE_M)
+	var collector_ids := PackedStringArray()
+	var previous_projection := -INF
+	for gate_index in range(ordered_gates.size()):
+		var gate := ordered_gates[gate_index] as Dictionary
+		var gate_id := str(gate.get("id", ""))
+		var projection := ((gate.get("position", centroid) as Vector2) - centroid).dot(tangent)
+		if previous_projection > -INF:
+			projection = maxf(projection, previous_projection + PORT_COLLECTOR_MIN_SPACING_M)
+		previous_projection = projection
+		var collector_position := collector_base + tangent * projection
+		var collector_id := "port:%s:collector:%02d" % [data.port_id, gate_index]
+		_network.add_node({"id": collector_id, "kind": "port_collector",
+			"position": collector_position, "port_id": data.port_id,
+			"physical_quay_id": str(gate.get("physical_quay_id", "")),
+			"direction": "collector"})
+		collector_ids.append(collector_id)
+		var gate_to_collector := _safe_port_feeder_points(gate, collector_position)
+		var branch := _add_bidirectional_segmented_path(
+			"port:%s:collector_branch:%02d" % [data.port_id, gate_index],
+			gate_id, collector_id, gate_to_collector, "port_feeder", true,
+			QUEUE_BLOCK_TARGET_M)
+		var arrival := branch.get("reverse", PackedStringArray()) as PackedStringArray
+		_register_inbound_queue(data.port_id, gate, 0, collector_id,
+			"collector", arrival)
+		_network.add_signal({"id": "signal:%s:collector_arrive" % gate_id,
+			"kind": "chain", "node_id": collector_id, "port_id": data.port_id,
+			"protected_blocks": arrival})
+	for index in range(collector_ids.size() - 1):
+		var from_id := collector_ids[index]
+		var to_id := collector_ids[index + 1]
+		var from_position := (_network.node(from_id).get("position", centroid) as Vector2)
+		var to_position := (_network.node(to_id).get("position", centroid) as Vector2)
+		_add_bidirectional_segmented_path(
+			"port:%s:collector_spine:%02d" % [data.port_id, index],
+			from_id, to_id, _safe_connector_points(from_position, to_position),
+			"port_collector", true, QUEUE_BLOCK_TARGET_M)
+	var throat_index := collector_ids.size() / 2
+	return {"throat_node_id": collector_ids[throat_index],
+		"collector_node_ids": collector_ids}
+
+
+func _interlock_ramp_crossing(port_id: String, transition_blocks: PackedStringArray,
+		corridor: Dictionary, station_index: int) -> PackedStringArray:
+	var conflict_ids := PackedStringArray()
+	var lane_sets: Array[PackedStringArray] = [
+		corridor.get("forward_blocks", PackedStringArray()) as PackedStringArray,
+		corridor.get("reverse_blocks", PackedStringArray()) as PackedStringArray,
+		corridor.get("forward_access_blocks", PackedStringArray()) as PackedStringArray,
+		corridor.get("reverse_access_blocks", PackedStringArray()) as PackedStringArray,
+	]
+	for transition_block_id in transition_blocks:
+		var transition_edge := _network.edge(str(_network.block(
+			transition_block_id).get("edge_id", "")))
+		var transition_points := transition_edge.get("points", PackedVector2Array()) \
+			as PackedVector2Array
+		if transition_points.size() < 2:
+			continue
+		for lane_blocks in lane_sets:
+			for index in range(maxi(0, station_index - 2),
+					mini(lane_blocks.size(), station_index + 2)):
+				var lane_block_id := lane_blocks[index]
+				var lane_edge := _network.edge(str(_network.block(lane_block_id).get(
+					"edge_id", "")))
+				var lane_points := lane_edge.get("points", PackedVector2Array()) \
+					as PackedVector2Array
+				if lane_points.size() < 2 or _segment_clearance(
+						transition_points[0], transition_points[-1],
+						lane_points[0], lane_points[-1]) > CROSSING_CLEARANCE_M:
+					continue
+				_network.add_block_conflict(transition_block_id, lane_block_id)
+				if not conflict_ids.has(lane_block_id):
+					conflict_ids.append(lane_block_id)
+		var block := _network.block(transition_block_id)
+		if conflict_ids.size() > 1:
+			block["crossing_group"] = "port_crossing:%s" % port_id
+			block["atomic_crossing"] = true
+		_network.blocks[transition_block_id] = block
+	conflict_ids.sort()
+	return conflict_ids
 
 
 func _add_connector_cross_conflicts(a_path: Dictionary, b_path: Dictionary) -> void:
@@ -1011,6 +1227,61 @@ func _nearest_index(ids: PackedStringArray, position: Vector2) -> int:
 	return best_index
 
 
+func _water_transfer_station_pair(lane_ids: PackedStringArray, base_index: int,
+		gates: Dictionary) -> Dictionary:
+	var before := _best_water_transfer_index(lane_ids, base_index, -1, gates, -1)
+	var after := _best_water_transfer_index(lane_ids, base_index, 1, gates, before)
+	if before == after:
+		before = _best_water_transfer_index(lane_ids, base_index, -1, gates, after)
+	return {"before": before, "after": after}
+
+
+func _best_water_transfer_index(lane_ids: PackedStringArray, base_index: int,
+		preferred_sign: int, gates: Dictionary, excluded_index: int) -> int:
+	var first_index := 1
+	var last_index := lane_ids.size() - 2
+	if last_index < first_index:
+		return clampi(base_index, 0, maxi(lane_ids.size() - 1, 0))
+	var target := clampi(base_index + preferred_sign * WATER_TRANSFER_OFFSET_BLOCKS,
+		first_index, last_index)
+	var preferred: Array[Dictionary] = []
+	var fallback: Array[Dictionary] = []
+	var best_index := target
+	var best_clearance := -INF
+	for index in range(first_index, last_index + 1):
+		if index == excluded_index:
+			continue
+		var node_position := _network.node(lane_ids[index]).get(
+			"position", Vector2.ZERO) as Vector2
+		var clearance := INF
+		for gate_value in gates.values():
+			var gate_position := (gate_value as Dictionary).get(
+				"position", Vector2.ZERO) as Vector2
+			clearance = minf(clearance, node_position.distance_to(gate_position))
+		if clearance > best_clearance:
+			best_clearance = clearance
+			best_index = index
+		if clearance < RAMP_MIN_PORT_CLEARANCE_M:
+			continue
+		var candidate := {"index": index, "distance": absi(index - target)}
+		var signed_delta := (index - base_index) * preferred_sign
+		if signed_delta >= WATER_TRANSFER_OFFSET_BLOCKS:
+			preferred.append(candidate)
+		else:
+			fallback.append(candidate)
+	var compare := func(a: Dictionary, b: Dictionary) -> bool:
+		if int(a.distance) != int(b.distance):
+			return int(a.distance) < int(b.distance)
+		return int(a.index) < int(b.index)
+	preferred.sort_custom(compare)
+	fallback.sort_custom(compare)
+	if not preferred.is_empty():
+		return int(preferred[0].index)
+	if not fallback.is_empty():
+		return int(fallback[0].index)
+	return best_index
+
+
 func _lane_tangent(ids: PackedStringArray, index: int) -> Vector2:
 	var before_id := ids[maxi(index - 1, 0)]
 	var after_id := ids[mini(index + 1, ids.size() - 1)]
@@ -1059,7 +1330,8 @@ func _clear_ramp_position(
 ) -> Vector2:
 	# The authored quay junction is not the motorway ramp. Push each mouth into
 	# clear water until it is outside every local manoeuvre envelope, while also
-	# preserving a distinct physical point for all eight directional ramps.
+	# preserving a distinct physical point for all four service ramps. Offshore
+	# transfer records stay on their shipping-lane nodes and do not use this path.
 	var away := (seed - port_centroid).normalized()
 	if away.length_squared() < 0.5:
 		away = Vector2(-tangent.y, tangent.x)
@@ -1598,7 +1870,13 @@ func _offset_path_distance(points: PackedVector2Array, side: float,
 			tangent = Vector2(1.0, 0.0)
 		var normal := Vector2(-tangent.y, tangent.x)
 		var available := maxf(_layout.sample_signed_distance(points[index]) - SHORE_CLEARANCE_M, 0.0)
-		result.append(points[index] + normal * minf(desired_distance_m, available * 0.72) * side)
+		# Keep the four graph lanes distinct at macro-SDF seams. Port terrain is
+		# flattened later and the generated centerline remains authoritative there;
+		# collapsing offsets to zero creates zero-length merge edges and disconnects
+		# the access carriageway exactly at those seams.
+		var offset := minf(desired_distance_m,
+			maxf(desired_distance_m * 0.35, available * 0.72))
+		result.append(points[index] + normal * offset * side)
 	return result
 
 
