@@ -12,6 +12,7 @@ const PRESENTATION_POLICY := preload(
 	"res://scripts/traffic/traffic_vessel_presentation_policy.gd")
 const PROXY_CACHE := preload("res://scripts/traffic/traffic_vessel_proxy_cache.gd")
 const PREBUILT_CATALOG_PATH := "res://scripts/ship/prebuilt_vessel_catalog.gd"
+const HULL_REGISTRY_PATH := "res://scripts/ship/hull_registry.gd"
 const VESSEL_SPAWN_PATH := "res://scripts/ship/vessel_spawn.gd"
 
 const AUTHORITY_TICK_S := 0.50
@@ -54,13 +55,14 @@ func _ready() -> void:
 	if DisplayServer.get_name() == "headless":
 		return
 	var catalog := load(PREBUILT_CATALOG_PATH)
+	var hull_registry := load(HULL_REGISTRY_PATH)
 	# Traffic presentation may use all official editor templates, including
 	# drafts. These are visual sources, not ships being sold or deployed into the
 	# player's registry; shop certification must not make a traffic model vanish.
 	for entry in catalog.call("catalog_entries", true):
 		var id := str(entry.get("prebuilt_id", ""))
-		if id in ["28_10_m", "bulk_small"] and HullRegistry.is_known_hull(
-				str(entry.get("hull_id", ""))):
+		if id in ["28_10_m", "bulk_small"] and bool(hull_registry.call("is_known_hull",
+				str(entry.get("hull_id", "")))):
 			_prebuilt_entries.append(entry)
 
 

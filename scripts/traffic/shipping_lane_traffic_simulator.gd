@@ -176,43 +176,105 @@ func _make_vessel(
 
 func _place_initial_underway(vessel: Dictionary) -> bool:
 	var route := vessel.get("route_steps", []) as Array
-	var candidates: Array[int] = []
+	var candidates: Array[Dictionary] = []
+	var total_travel_s := 0.0
 	for step_index in range(route.size()):
-		if str((route[step_index] as Dictionary).get("kind", "")) == "open_water":
-			candidates.append(step_index)
+		var step := route[step_index] as Dictionary
+		var edge := _step_record(step)
+		var step_kind := str(step.get("kind", ""))
+		var edge_kind := str(edge.get("kind", ""))
+		# Persistent-world initialization may stage ships in open water or on
+		# ordinary traffic lanes, but never inside port approaches/queues.
+		if step_kind != "open_water" \
+				and edge_kind not in ["main_lane", "regional_lane", "waterway_junction"]:
+			continue
+		var length := maxf(float(edge.get("length_m", 0.0)), 1.0)
+		var speed := maxf(float(edge.get("speed_limit_ms", 7.2)), 0.5)
+		var travel_s := length / speed
+		candidates.append({
+			"step_index": step_index,
+			"travel_s": travel_s,
+			"elapsed_before_s": total_travel_s,
+		})
+		total_travel_s += travel_s
 	if candidates.is_empty():
 		return false
-	var candidate_index := int(vessel.get("index", 0)) % candidates.size()
-	var route_index := candidates[candidate_index]
-	var step := route[route_index] as Dictionary
-	var section_key := "%s>%s" % [
-		str(step.get("from_breakoff_id", "")), str(step.get("to_breakoff_id", "")),
-	]
-	var slot := int(_initial_underway_count_by_section.get(section_key, 0))
-	_initial_underway_count_by_section[section_key] = slot + 1
-	var length := maxf(float(step.get("length_m", 0.0)), 1.0)
-	var spacing := maxf(float(vessel.get("length_m", 28.0)) + 32.0, 60.0)
-	var margin := minf(220.0, length * 0.10)
-	var usable := maxf(length - margin * 2.0, spacing)
-	var progress := margin + fposmod(float(slot) * spacing, usable)
-	for attempt in range(mini(256, maxi(1, ceili(usable / spacing)))):
-		var candidate := margin + fposmod(float(slot + attempt * 17) * spacing, usable)
-		var sample := _sample_polyline(step.get("points", PackedVector2Array()) as PackedVector2Array,
-			candidate)
-		if _initial_position_is_clear(str(vessel.get("id", "")),
-				sample.get("position", Vector2.ZERO) as Vector2, spacing):
-			progress = candidate
+	var vessel_index := int(vessel.get("index", 0))
+	var phase := _deterministic_fraction(vessel_index, 17)
+	var desired_time := phase * total_travel_s
+	var preferred_index := 0
+	for index in range(candidates.size()):
+		var candidate := candidates[index] as Dictionary
+		if desired_time <= float(candidate.get("elapsed_before_s", 0.0)) \
+				+ float(candidate.get("travel_s", 0.0)):
+			preferred_index = index
 			break
-	vessel["route_index"] = route_index
-	vessel["edge_progress_m"] = progress
-	vessel["step_active"] = true
-	vessel["open_water_section_id"] = "initial:%s" % section_key
-	vessel["open_water_start_s"] = 0.0
-	vessel["state"] = "traveling_open_water"
-	vessel["trip_started_s"] = -progress / maxf(float(step.get("speed_limit_ms", 7.2)), 0.5)
-	vessel["trip_distance_m"] = progress
-	_update_pose(vessel, _step_record(step), progress)
-	return true
+	for offset in range(candidates.size()):
+		var candidate_index := posmod(preferred_index + offset * 7, candidates.size())
+		var candidate := candidates[candidate_index] as Dictionary
+		var route_index := int(candidate.get("step_index", 0))
+		var step := route[route_index] as Dictionary
+		var edge := _step_record(step)
+		var length := maxf(float(edge.get("length_m", 0.0)), 1.0)
+		var speed := maxf(float(edge.get("speed_limit_ms", 7.2)), 0.5)
+		var margin := minf(maxf(float(vessel.get("length_m", 28.0)), 24.0), length * 0.18)
+		var usable := maxf(length - margin * 2.0, 1.0)
+		var progress_fraction := _deterministic_fraction(vessel_index, 31 + offset)
+		var progress := margin + usable * progress_fraction
+		if str(step.get("kind", "")) == "open_water":
+			var section_key := "%s>%s" % [
+				str(step.get("from_breakoff_id", "")), str(step.get("to_breakoff_id", "")),
+			]
+			var spacing := maxf(float(vessel.get("length_m", 28.0)) + 32.0, 60.0)
+			var found_clear_position := false
+			for probe in range(12):
+				progress_fraction = _deterministic_fraction(
+					vessel_index, 31 + offset * 13 + probe * 97)
+				progress = margin + usable * progress_fraction
+				var sample := _sample_polyline(
+					edge.get("points", PackedVector2Array()) as PackedVector2Array, progress)
+				if _initial_position_is_clear(str(vessel.get("id", "")),
+						sample.get("position", Vector2.ZERO) as Vector2, spacing):
+					found_clear_position = true
+					break
+			if not found_clear_position:
+				continue
+			_initial_underway_count_by_section[section_key] = int(
+				_initial_underway_count_by_section.get(section_key, 0)) + 1
+			vessel["open_water_section_id"] = "initial:%s" % section_key
+			vessel["open_water_start_s"] = 0.0
+			vessel["state"] = "traveling_open_water"
+		else:
+			var blocks := edge.get("block_ids", PackedStringArray()) as PackedStringArray
+			if blocks.is_empty():
+				continue
+			var block_id := blocks[0]
+			if not authority.occupy(str(vessel.get("id", "")), block_id):
+				continue
+			vessel["current_block_id"] = block_id
+			vessel["open_water_section_id"] = ""
+			vessel["open_water_start_s"] = -1.0
+			vessel["state"] = "traveling"
+		vessel["route_index"] = route_index
+		vessel["edge_progress_m"] = progress
+		vessel["step_active"] = true
+		var historical_age_s := float(candidate.get("elapsed_before_s", 0.0)) \
+			+ progress / speed
+		vessel["trip_started_s"] = -historical_age_s
+		vessel["trip_distance_m"] = historical_age_s * speed
+		vessel["schedule_age_s"] = historical_age_s
+		_update_pose(vessel, edge, progress)
+		return true
+	return false
+
+
+func _deterministic_fraction(vessel_index: int, salt: int) -> float:
+	# Integer-only hash: stable across clients and dedicated servers.
+	var value := posmod(
+		(vessel_index + 1) * 1103515245 + scenario_seed * 12345 + salt * 265443576,
+		2147483647,
+	)
+	return float(value) / 2147483647.0
 
 
 func _initial_position_is_clear(vessel_id: String, point: Vector2, clearance_m: float) -> bool:
@@ -765,8 +827,11 @@ func _pick_destination(source_token_id: String, vessel_index: int, trip_index: i
 	var source := network.berth_tokens.get(source_token_id, {}) as Dictionary
 	var source_port := str(source.get("port_id", ""))
 	var pool := _hub_token_ids if _hub_token_ids.size() >= 2 else _token_ids
+	var source_index := pool.find(source_token_id)
+	var fleet_wave := vessel_index / maxi(pool.size(), 1)
+	var jump := 1 + posmod(fleet_wave * 5 + trip_index * 3, maxi(pool.size() - 1, 1))
 	for offset in range(pool.size()):
-		var index := posmod(vessel_index * 3 + trip_index * 5 + offset + 1, pool.size())
+		var index := posmod(source_index + jump + offset, pool.size())
 		var candidate := pool[index]
 		var token := network.berth_tokens[candidate] as Dictionary
 		if candidate != source_token_id and str(token.get("port_id", "")) != source_port:

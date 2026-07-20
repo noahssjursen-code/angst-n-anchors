@@ -28,6 +28,16 @@ func _run() -> void:
 	assert(bool(result.get("ok", false)))
 	assert(int(result.get("vessel_count", 0)) == 250)
 	assert(service.map_contacts().size() == 250)
+	var route_pairs: Dictionary = {}
+	var underway_on_lanes := 0
+	for contact in service.map_contacts():
+		route_pairs["%s>%s" % [str(contact.get("source_token_id", "")),
+			str(contact.get("destination_token_id", ""))]] = true
+		if str(contact.get("state", "")) == "traveling" \
+				and not str(contact.get("current_block_id", "")).is_empty():
+			underway_on_lanes += 1
+	assert(route_pairs.size() >= 20)
+	assert(underway_on_lanes > 0)
 	var summary := service.presentation_summary()
 	assert(int(summary.get("record_count", 0)) == 250)
 	assert(int(summary.get("materialized", 0)) <= 200)
