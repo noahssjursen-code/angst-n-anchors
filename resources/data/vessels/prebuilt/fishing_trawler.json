@@ -1045,7 +1045,7 @@
 	"hull_id": "hull_28x10",
 	"id": "fishing_trawler",
 	"name": "Fishing trawler",
-	"price_marks": 0,
+	"price_marks": 48000,
 	"registration_id": "fishing_vessel",
 	"shaft_power_kw": 2300.0
 }

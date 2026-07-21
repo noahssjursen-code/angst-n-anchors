@@ -393,9 +393,18 @@ func _draw_dashboard(c: Vector2) -> void:
 		var systems: Array[FishingSystem] = _boat.get_fishing_systems()
 		if not systems.is_empty():
 			var fishing: FishingSystem = systems[0]
-			var status_str := "ACTIVE" if fishing.trawling else "READY"
-			var status_col := HudStyle.C_GREEN if fishing.trawling else HudStyle.C_LABEL
+			var status_str := fishing.get_activity_status()
+			var status_col := HudStyle.C_GREEN if status_str == "ACTIVE" else (
+				HudStyle.C_LABEL if status_str == "READY" else HudStyle.C_AMBER
+			)
 			cells.append(["TRAWL", status_str, status_col])
+			var catch_hold := fishing.get_catch_hold()
+			if catch_hold != null:
+				var catch_state := catch_hold.get_state()
+				cells.append(["FISH HOLD", "%.1f / %.1f t" % [
+					catch_state.total_mass_kg() / 1000.0,
+					catch_state.capacity_kg / 1000.0,
+				], HudStyle.C_AMBER if catch_state.fill_ratio() >= 0.9 else HudStyle.C_TEXT])
 
 	if dest_info[1] != "":
 		cells.append([dest_info[0].to_upper(), dest_info[1], HudStyle.C_AMBER])

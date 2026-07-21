@@ -27,6 +27,8 @@ var ports: Array[Dictionary] = []
 var world_seed := 42
 var generation_version := 0
 var layout_checksum := ""
+var world_size_m := 40000.0
+var world_preset := "standard"
 var preview := false
 
 var _port_by_id: Dictionary = {}
@@ -48,6 +50,8 @@ static func from_live_tree(tree: SceneTree) -> ChartDataSnapshot:
 		out.world_seed = int(context.get("seed", 42))
 		out.generation_version = int(context.get("generation_version", 0))
 		out.layout_checksum = str(context.get("layout_checksum", ""))
+		out.world_size_m = float(context.get("world_size_m", 40000.0))
+		out.world_preset = str(context.get("world_preset", "standard"))
 	var registry := tree.root.get_node_or_null("PortCatalog")
 	if registry != null:
 		for id_raw in registry.call("get_port_ids"):
@@ -62,19 +66,32 @@ static func from_live_tree(tree: SceneTree) -> ChartDataSnapshot:
 	return out
 
 
-static func for_preview(seed: int, port_count: int = 35) -> ChartDataSnapshot:
+static func for_preview(
+		seed: int,
+		port_count: int = 35,
+		requested_world_size_m: float = 40000.0,
+		requested_world_preset: String = "standard",
+) -> ChartDataSnapshot:
 	var out := ChartDataSnapshot.new()
 	out.preview = true
 	out.world_seed = seed
 	out.generation_version = int(GENERATOR.GENERATION_VERSION)
-	out.layout = GENERATOR.generate(seed)
+	out.world_size_m = requested_world_size_m
+	out.world_preset = requested_world_preset
+	out.layout = GENERATOR.generate(
+		seed,
+		GENERATOR.DEFAULT_CONFIG_PATH,
+		requested_world_size_m,
+	)
+	if out.layout != null:
+		out.world_size_m = out.layout.world_size_m
 	out.layout_checksum = str(out.layout.layout_checksum) if out.layout != null else ""
 	if out.layout == null:
 		return out
 	var definitions: Array = PLACER.place_ports(
 		out.layout,
 		maxi(port_count, 1),
-		PackedStringArray(PORT_NAMES),
+		PackedStringArray(WorldPortNames.NAMES),
 	)
 	for definition in definitions:
 		## Lightweight trade/size summary — full PortLayoutGenerator is too
@@ -121,6 +138,8 @@ func port_positions() -> Array[Vector3]:
 func world_context() -> Dictionary:
 	return {
 		"seed": world_seed,
+		"world_size_m": world_size_m,
+		"world_preset": world_preset,
 		"generation_version": generation_version,
 		"layout_checksum": layout_checksum,
 	}

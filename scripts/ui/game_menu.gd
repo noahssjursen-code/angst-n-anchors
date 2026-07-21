@@ -9,7 +9,7 @@ const WorldBootstrapScript := preload("res://scripts/world/world_bootstrap.gd")
 ## Layer 5  — WalkingHud (always on during gameplay)
 ## Layer 20 — Pause / Map modal screens
 
-enum Screen { NONE, PAUSE, MAP, SETTINGS }
+enum Screen { NONE, PAUSE, MAP, COMPANY, SETTINGS }
 
 var _screen:          Screen     = Screen.NONE
 var _prev_mouse_mode: int        = Input.MOUSE_MODE_VISIBLE
@@ -24,6 +24,7 @@ var _pause_root:  Control
 var _map:         MapOverlay
 var _minimap
 var _settings:    SettingsPanel
+var _company:     CompanyPanel
 
 
 func _ready() -> void:
@@ -59,6 +60,11 @@ func _ready() -> void:
 	_map.process_mode = Node.PROCESS_MODE_ALWAYS
 	_map.close_requested.connect(func() -> void: _set_screen(Screen.NONE))
 	_menu_layer.add_child(_map)
+
+	_company = CompanyPanel.new()
+	_company.process_mode = Node.PROCESS_MODE_ALWAYS
+	_company.close_requested.connect(func() -> void: _set_screen(Screen.PAUSE))
+	_menu_layer.add_child(_company)
 
 	_minimap = HelmMinimapScript.new()
 	_minimap.name = "HelmMinimap"
@@ -113,7 +119,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		_toggle_helm_cursor()
 		get_viewport().set_input_as_handled()
 	elif event.is_action_pressed("ui_cancel"):
-		if _screen == Screen.SETTINGS:
+		if _screen == Screen.SETTINGS or _screen == Screen.COMPANY:
 			_set_screen(Screen.PAUSE)
 			get_viewport().set_input_as_handled()
 		elif _screen != Screen.NONE:
@@ -148,6 +154,7 @@ func _set_screen(s: Screen) -> void:
 	_bg.visible          = modal
 	_pause_root.visible  = s == Screen.PAUSE
 	_map.visible         = s == Screen.MAP
+	_company.visible     = s == Screen.COMPANY
 	## The sea chart is opaque and simulation stays live, including in MP. Do
 	## not spend a full 3D frame rendering a world the chart completely covers.
 	var viewport := get_viewport()
@@ -166,7 +173,7 @@ func _set_screen(s: Screen) -> void:
 	if config != null:
 		is_mp = bool(config.get("is_multiplayer_mode"))
 		
-	get_tree().paused    = (s == Screen.PAUSE or s == Screen.SETTINGS) and not is_mp
+	get_tree().paused    = (s == Screen.PAUSE or s == Screen.COMPANY or s == Screen.SETTINGS) and not is_mp
 
 
 # ── Pause panel ───────────────────────────────────────────────────────────────
@@ -215,6 +222,10 @@ func _build_pause() -> Control:
 	var map_btn := UiBuilder.button("SEA CHART  [ M ]")
 	map_btn.pressed.connect(func() -> void: _set_screen(Screen.MAP))
 	vbox.add_child(map_btn)
+
+	var company_btn := UiBuilder.button("COMPANY")
+	company_btn.pressed.connect(func() -> void: _set_screen(Screen.COMPANY))
+	vbox.add_child(company_btn)
 
 	var settings_btn := UiBuilder.button("SETTINGS")
 	settings_btn.pressed.connect(func() -> void: _set_screen(Screen.SETTINGS))

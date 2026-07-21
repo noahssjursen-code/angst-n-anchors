@@ -1700,10 +1700,11 @@ func _port_berths(data: PortData) -> Array[Dictionary]:
 		var station := raw as Dictionary
 		var origin := _array_xz(station.get("origin", [0.0, 0.0]))
 		var water := _array_xz(station.get("direction", [0.0, -1.0])).normalized()
-		var depth := float(station.get("depth_m", 36.0))
 		var station_id := str(station.get("id", "asphalt"))
-		var berth_local := origin + water * (depth * 0.5 + 10.0)
-		var tip_local := origin + water * depth
+		## Asphalt station origins are waterfront edges; their physical pads
+		## extend inland and must not push traffic anchors through the apron.
+		var berth_local := origin + water * 10.0
+		var tip_local := origin
 		var junction_local := tip_local + water * QUAY_TIP_CLEARANCE_M
 		result.append({
 			"id": station_id,

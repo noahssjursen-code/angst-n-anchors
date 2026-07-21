@@ -814,6 +814,17 @@ func get_bulk_hold_states() -> Array[Dictionary]:
 	return out
 
 
+func get_catch_holds() -> Array[CatchHoldComponent]:
+	return CatchHoldComponent.get_all_for_ship(self)
+
+
+func get_catch_hold_states() -> Array[Dictionary]:
+	var out: Array[Dictionary] = []
+	for hold in get_catch_holds():
+		out.append(hold.get_state().to_dict())
+	return out
+
+
 func get_moored_berth_id() -> String:
 	return str(get_meta("harbour_berth_id", ""))
 

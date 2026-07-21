@@ -299,7 +299,7 @@ func _stamp_berth_plan(plan: Dictionary) -> void:
 		_ensure_layer(LAYER_QUAY_ROOTS)
 		_ensure_layer(LAYER_QUAY_ARMS)
 		return
-	## Also outline any asphalt berth pads that stick seaward of the dock face.
+	## Also outline asphalt working pads on the inland side of the dock face.
 	for raw in plan.get("asphalt_stations", []) as Array:
 		var station := raw as Dictionary
 		var origin := _xz(station.get("origin", [0.0, 0.0]))
@@ -320,9 +320,9 @@ func _stamp_berth_plan(plan: Dictionary) -> void:
 		pad.name = "%s_pad" % str(station.get("id", "asphalt"))
 		asphalt_layer.add_child(pad)
 		pad.position = Vector3(
-			origin.x + seaward.x * depth * 0.5,
+			origin.x - seaward.x * depth * 0.5,
 			surface_y + 0.1,
-			origin.y + seaward.y * depth * 0.5,
+			origin.y - seaward.y * depth * 0.5,
 		)
 		_align_basis_on_tangent(pad, tangent, seaward)
 

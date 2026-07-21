@@ -1,146 +1,138 @@
-# Angst 'n Anchors
+# Angst 'n Anchors — Game Direction
 
-A maritime trading game built in Godot. The player drives a boat, picks up cargo at one port, and delivers it to another. Ships are assembled at runtime from modular JSON parts so players (and the dev) can build custom vessels without touching the scene editor. The long-term goal is an MMO.
+This document defines the product direction. It describes what the game is trying to become without pretending that every system already exists. Current implementation contracts belong in [ARCHITECTURE.md](ARCHITECTURE.md) and [AGENTS.md](AGENTS.md).
 
----
+## One-sentence pitch
 
-## Pillars
+**Start as a working captain in a cold maritime world, then build a persistent shipping company whose crews, vessels, routes, and coastal businesses continue operating beyond the ship you personally command.**
 
-1. **Driving the boat is the game.** Physics-driven helm — propulsion, rudder, bow thruster, hydrodynamics, buoyancy on a wave surface. Distance and weather matter. Sailing the route yourself is the loop.
-2. **Cargo delivery between ports.** Accept a movement at one port, load, sail, unload, get paid. First Freight currently generates deterministic container offers from compatible port exports/imports; physical crane-ledger integration is the active slice.
-3. **Modular ship design.** A hull is a reusable L×B geometry component. Finished store ships add their own name, price, shaft power, and deck-brick fit-out; many ships with different roles and performance can share one hull.
-4. **MMO is the destination.** State model (berth reservation, harbour master mediation, contract registry) is being designed shared-session-aware from the start, even though the game currently runs single-player.
+## Player fantasy
 
----
+Taking the helm is the beginning, not the entire career.
 
-## Tech Foundation
+The player starts close to the work: one ship, limited money, and direct responsibility for getting cargo safely between ports. Every expansion should grow naturally from that experience. A second vessel creates the need for a hired crew. More crews create the need for planned routes, wages, maintenance, and oversight. Reliable traffic creates the opportunity to own useful land, process goods, sell fuel, and influence a region.
 
-- **Engine:** Godot 4.6, GDScript only (no C#)
-- **Physics:** Jolt
-- **Renderer:** Forward Plus, D3D12 on Windows
-- **Geometry:** primitives composed in code via `MeshBuilder`, plus in-house JSON meshes loaded by `MeshTransformer` / `ModelAssembler`. No GLTF/FBX/OBJ. No imported textures for in-world objects.
-- **Materials:** `StandardMaterial3D` built at runtime — colour, roughness, metallic. Shaders in `resources/shaders/`.
-- **Data-driven:** ports, ships, hulls, commodities, contracts live as JSON/`.tres` under `resources/data/`. Scripts read from data; they don't hardcode game content.
-- **Event-driven state:** `GameState` autoload with `PlayerState`, `ShipState`, `ContractState`, `WorldState`. Systems write, UI subscribes — no polling.
+The result should feel like a maritime life that gradually becomes a maritime enterprise.
 
----
+## Four pillars
 
-## Vessel System (active focus)
+### 1. Tactile seafaring
 
-Reusable hull components own SI geometry and core systems. Official store ships are authored in `ShipyardBrickEditor` by choosing a hull, painting a **1×1×1 m deck brick grid**, and setting product name, price, and `shaft_power_kw`. The shipwright sells those prebuilts. The ledger stores hull, power, and layout; `VesselSpawn` rebuilds the finished ship.
+Ships are real places in the world. The player handles weather, navigation, speed, berthing, cargo, and the character of a custom-built vessel. Travel takes time and the sea should feel large.
 
-```gdscript
-var boat := VesselSpawn.instantiate_from_record(owned_vessel_record)
-get_tree().current_scene.add_child(boat)
-boat.place_at_waterline(water_y)
-```
+The game must preserve reasons to captain a vessel after automation becomes available: difficult passages, urgent work, unusual cargo, new-route discovery, emergencies, inspections, social voyages, or simply the pleasure of sailing.
 
-Owned vessels persist `hull_id`, `shaft_power_kw`, and `brick_layout: { hull_id, cells }`. Role and appearance come from bricks. Do not revive socket kits, `VesselLoadout`, `WheelhouseVisual`, hull JSON bridge slots, or `ShipBuilder`.
+### 2. A company built from physical assets
 
-### Vessel orientation
+Growth is visible in the world. The company owns named ships, employs crews, pays operating costs, holds contracts, and eventually owns coastal land and facilities. A vessel is not merely an upgrade number; it is a designed, registered, persistent asset that can be commanded, assigned, sold, damaged, maintained, and recognized by other players.
 
-**Bow = −Z, Stern = +Z, Port = −X, Starboard = +X.** Grid cells are vessel metres.
+### 3. A living commercial world
 
-### Deck bricks (starter catalog)
+Ports and regions should have material needs and productive strengths. Companies compete for contracts, capacity, infrastructure, timing, and access. Long-term success comes from understanding the network and making commitments that rivals cannot easily displace.
 
-| Brick | Role |
-|---|---|
-| `block` / `block_window` / `block_door` | Cabin walls |
-| `ledge_45` | Roof / sheer break |
-| `railing` | Deck edge |
-| `container_pad` | Deck container slot rectangle (corner A → B) |
-| `crane_base` / `crane` | Ship-mounted crane |
+The primary conflict is economic. Regional dominance should emerge from player and NPC decisions rather than from a scripted conquest screen.
 
-### Available hulls
+### 4. Slow social play with strategic pressure
 
-Generic platforms live in `resources/data/vessels/hulls/catalog.json` with dimension-based ids such as `hull_90x24`. The trawler and catamaran scenes are frozen exceptions; new store stock uses catalog hulls.
+Long voyages provide quiet time for conversation, shared travel, and watching a working world pass by. Ports and shipping lanes are social spaces. Players can cooperate, trade, coordinate, and form alliances.
 
-### Ship components
+Under that calm surface is a competitive company game that rewards planning away from the helm: which route to enter, which ship to build, whom to hire, where to invest, and which agreement to secure before a rival does.
 
-Core on every vessel: `BoatBody`, buoyancy, hydrodynamics, propulsion, rudder, thruster, controller, camera, `MooringComponent`, walk deck, auto cleats/lights. Deck fit-out is a 1×1×1 m brick grid (`BrickCatalog` / `DeckFitout`) — walls, container pads, bulk holds, crane, helm from layout. Shipwright fullscreen editor paints the grid; `BrickRules` keeps builds legal.
+## The progression arc
 
-### Authoring entry points
+### Working captain
 
-- **By hand:** author a vessel scene/script with a deck grid; register it in `HullRegistry`.
-- **In-game:** Shipwright catalog → fullscreen brick editor → commission writes `brick_layout` on the ledger. Harbour Master deploys via `VesselSpawn` + `DeckFitout`.
+- Own or operate one vessel.
+- Take individual jobs and learn ports, cargo, weather, and navigation.
+- Earn enough to survive and improve the ship.
 
----
+### Owner-operator
 
-## Ports & World
+- Name and establish a company.
+- Keep a financial ledger and reputation.
+- Customize or commission vessels for particular work.
+- Choose between personally taking a job and delegating it.
 
-- **`world.tscn`** is the runnable scene. `World` generates port definitions from a seed (default `world_seed=42`, `port_count=35`) and uses `ProximityLoader` (radius 1500) to instantiate ports near the player. The home port loads eagerly.
-- Pipeline: `PortDefinition` (seeded site/size, geography×trade ceiling) → `PortTradeProfile` → `PortLayoutGenerator` (coast foundation + `berth_plan`) → `PortLayoutGraph`.
-- **`PortPlot`** currently stamps foundation, asphalt pads, and dedicated quays from `berth_plan`.
-- Trade berths are planned attributes, not socket-filled harbour modules. Later growth must persist the evolved graph/plan.
-- Ports currently provide Harbour Master, Shipwright, and Cargo Agent services, mooring, and operable quay equipment. Final assets and persistent player-driven harbour growth remain deferred.
-- **Naming:** Norwegian-style names from a fixed pool (`Holmvik`, `Sandvær`, `Bergnes`, …).
+### Fleet manager
 
----
+- Own multiple vessels.
+- Hire non-physical crew records, assign qualifications, and pay wages.
+- Create repeatable services or contract routes.
+- Monitor location, cargo, costs, delays, and incidents.
+- Intervene personally when a route or vessel needs attention.
 
-## Cargo & Contracts
+### Coastal industrialist
 
-- **`PortCatalog`** is the live port directory. **`CommodityCatalog`** owns commodity metadata (containers + bulk/liquid families, berth colours).
-- General cargo is cubed **containers** (`ContainerUnit` / `ContainerNode`) on ship **`CargoSlotPadComponent`** grids. Bulk ore/coal/grain use hold systems separately.
-- `FreightService` owns accepted movements. Cargo Agents only expose offers after the player's active vessel is physically moored at that port, and filter by berth commodity, installed cargo system, free capacity, and existing manifest reservations. Completed handling modes are general cargo, containers, and dry bulk (grain, iron ore, coal). Liquid movements remain filtered until tanker holds and liquid-terminal handling are playable.
+- Acquire coastline land.
+- Build processing, storage, repair, and refuelling facilities.
+- Connect production to the company's shipping network.
+- Negotiate durable trade relationships and create regional advantages.
+- Compete with mature companies for capacity and influence.
 
----
+## One simulation, two modes
 
-## Player
+Single-player and multiplayer should not become separate games.
 
-- `CharacterBody3D` first-person controller (`scripts/entities/player.gd`). WASD + space + shift, mouse look, head bob, water rescue behaviour (player can't walk on water; gets pulled up after a short delay).
-- Boards a ship via `BridgeInteractable` → `CaptainsChair`. Helm activation triggers `GameState.ship.data` population for HUD/UI.
-- Inputs: `interact` (E), `load_ship` (K), `boat_thrust_left`/`right` (Q/R), `boat_docking_thrusters` (T), `open_map` (M).
+### Single-player
 
----
+The local game is authoritative. NPC companies use the same economic opportunities, vessel records, crew costs, route plans, and infrastructure rules available to the player. They should create a believable established market rather than exist only as decorative traffic.
 
-## Autoloads (registered in `project.godot`)
+### Multiplayer
 
-| Autoload | Role |
-|---|---|
-| `WorldWeather` | World-level weather state |
-| `WeatherLighting` | Lighting driven by weather |
-| `WorldClock` | Game time |
-| `PortCatalog` | Live port directory |
-| `PlayerSession` | Persistent player data (`marks`, name) |
-| `GameMenu` | Pause / menu system |
-| `GameState` | Read model: `player`, `ship`, `contract`, `world` sub-states |
-| `DebugHud` | F3 debug overlay |
+The server is authoritative. Player and NPC companies persist while individual players are offline. Clients receive the company and world state they are allowed to know, plus vessel snapshots required for local presentation. A player returning to the world sees the consequences of plans that continued in their absence.
 
----
+### Shared rule
 
-## Multiplayer / MMO Notes
+Ownership changes decision-making, not physics or economics. A player company and an NPC company should be represented by compatible data and judged by the same core rules. This is essential for fairness, deterministic testing, save compatibility, and future server authority.
 
-- Port catalog + seed-derived trade profiles fit a server-authoritative model.
-- Nothing networked is fully wired yet. The architecture is the prep work, not the implementation.
+## Company model direction
 
----
+A company should eventually be expressible as serializable authoritative data:
 
-## Project Layout
+- identity: id, name, owner type, branding, home region
+- finances: cash, income, operating expenses, wages, asset value
+- reputation and commercial relationships
+- vessel ledger: ownership, configuration, condition, assignment, location
+- workforce: crew records, qualifications, wages, availability, assignments
+- commitments: contracts, scheduled services, cargo obligations, deadlines
+- holdings: land, storage, processing, repair, and fuel facilities
+- activity log: deliveries, costs, incidents, changes, and decisions
 
-```
-scenes/
-  vessels/                   # Hand-authored vessel scenes
-  shared/                    # player.tscn, npc_base.tscn
-  systems/                   # port_dock, port_facilities, fuel_station, lighthouse, fog_horn
-  ui/
-  world.tscn                 # main scene
+Presentation must not become the authority. The company screen, world vessels, and map markers are views of these records. This allows the same model to run locally in single-player or on a persistent multiplayer server.
 
-scripts/
-  ship/                      # BoatBody, VesselSpawn, AttachmentMount, attachments/, vessels/
-  port/  npc/  cargo/  player/  state/  ui/  world/  ocean/  weather/  time/  core/
+## Offline operation without becoming an idle game
 
-resources/
-  data/
-    models/buildings/
-    meshes/                  # primitive JSON mesh library by category
-    lights/
-  materials/  shaders/  themes/  audio/
-```
+Offline progress should execute decisions the player already made. It should not produce value without costs, capacity limits, or risk.
 
----
+A crew can continue a funded and valid assignment while the owner is away. The simulation accounts for travel time, wages, fuel, cargo, berth access, and failures. Returning players should receive a readable account of what happened and be able to change the plan.
 
-## Reference Docs
+The strategic game is therefore about setting up robust operations, not pressing a reward button after a timer.
 
-- [AGENTS.md](AGENTS.md) — Guidance for AI agents working in this codebase. Visual rules, autoload conventions, vessel sockets/attachments.
-- [resources/data/README.md](resources/data/README.md) — Data folder conventions.
-- [resources/data/meshes/GUIDE.md](resources/data/meshes/GUIDE.md) — Mesh JSON authoring.
+## Near-term company slice
+
+The first useful company pass should stay small and data-first:
+
+1. Company creation with a required name and stable id.
+2. A ledger for cash, income, expenses, and recent transactions; no debt initially.
+3. A vessel registry showing owned, active, idle, and personally commanded ships.
+4. Non-physical crew records with wage, qualification, and vessel assignment.
+5. A repeatable route or service plan that a qualified crew can operate.
+6. A company activity feed explaining earnings, costs, delays, and stopped operations.
+7. Deterministic persistence that can run under local authority now and server authority later.
+
+NPC competitor strategy, physical crew characters, property, factories, and complex finance should build on this model rather than be bundled into its first implementation.
+
+## Design guardrails
+
+- Do not make the company layer a detached spreadsheet game; decisions must produce visible ships, cargo, workers, and facilities in the world.
+- Do not make automation strictly better than captaining. Delegation trades direct control for wages, constraints, and operational risk.
+- Do not give NPC companies hidden rules that invalidate player strategy. Difficulty should come from goals, resources, knowledge, and decision quality.
+- Do not simulate distant presentation at full fidelity. Authoritative data can be lightweight while nearby vessels receive richer local representation.
+- Do not confuse persistence with constant per-frame simulation. Advance distant operations analytically or at coarse intervals, then materialize them when relevant.
+- Do not promise a completed economy in public documentation until the playable systems support it.
+
+## Current foundation
+
+The present repository focuses on foundations: modular vessels, vessel compliance, sailing physics, deterministic world and port generation, ocean and weather, terrain streaming, cargo data, player persistence, and deterministic maritime traffic-network work.
+
+Company creation, hired crews, commercial route execution, rival companies, land ownership, factories, and the complete player-driven economy remain planned gameplay. The next systems should preserve the authority and serialization boundaries needed for both single-player and persistent multiplayer.

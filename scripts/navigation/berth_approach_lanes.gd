@@ -84,7 +84,7 @@ static func bake_from_port_data(data: PortData) -> int:
 		var local_origin := _array_xz(station.get("origin", [0.0, 0.0]))
 		var local_seaward := _array_xz(station.get("direction", [0.0, -1.0])).normalized()
 		var seaward := PortCoastTracer.port_local_dir_to_world(local_seaward, data.rotation_y)
-		var root_local := local_origin + local_seaward * float(station.get("depth_m", 36.0)) * 0.5
+		var root_local := local_origin - local_seaward * float(station.get("depth_m", 36.0)) * 0.5
 		var root_world := PortCoastTracer.port_local_to_world(root_local, data.world_position, data.rotation_y)
 		var target_id := HarbourController.make_berth_id(data.port_id, str(station.get("id", "asphalt")))
 		baked += _store_planned_lane(port_lanes, port_berths, port_meta, target_id,

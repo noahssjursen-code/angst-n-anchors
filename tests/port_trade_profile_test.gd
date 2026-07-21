@@ -72,11 +72,11 @@ func _run() -> void:
 		)
 		assert(
 			float(station.get("depth_m", 0.0)) >= 20.0,
-			"asphalt berth too short seaward for %s" % cid,
+			"asphalt berth working pad too shallow for %s" % cid,
 		)
 		assert(
-			str(station.get("extends", "")) == "seaward",
-			"asphalt berth must extend outside the apron (%s)" % cid,
+			str(station.get("extends", "")) == "inland",
+			"asphalt working pad must extend into the apron (%s)" % cid,
 		)
 		var dir: Array = station.get("direction", []) as Array
 		assert(dir.size() >= 2, "asphalt berth missing local seaward for %s" % cid)

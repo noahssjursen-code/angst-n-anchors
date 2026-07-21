@@ -11,7 +11,7 @@ func _ready() -> void:
 
 
 func _run_hard_test() -> void:
-	PlayerSaveStore.storage_root_override = TEST_ROOT
+	LocalCaptainStore.root_override = TEST_ROOT
 	_check(PlayerSaveStore.wipe_all_local_data(), "pre-test wipe succeeds")
 
 	# Create captain A and populate every PlayerData persistence category.
@@ -19,6 +19,8 @@ func _run_hard_test() -> void:
 	first.begin_new_captain("Same Captain Name", CharacterAppearance.default_appearance())
 	var captain_a := str(first.data.account_id)
 	_check(not captain_a.is_empty(), "captain A receives UUID")
+	_check(LocalCaptainStore.create_slot(captain_a), "captain A save slot is activated")
+	_check(first.save_now(), "captain A onboarding save succeeds")
 
 	# Commission a boat, then refit the same UUID twice.
 	var vessel_uid := VesselSpawn.new_vessel_uid("hull_28x10")
@@ -46,7 +48,11 @@ func _run_hard_test() -> void:
 
 	# Populate every remaining PlayerData persistence category after gameplay
 	# snapshots, then flush the data model directly.
-	first.data.marks = 4321
+	var balance_delta: int = 4321 - int(first.get_marks())
+	if balance_delta > 0:
+		first.earn_marks(balance_delta)
+	elif balance_delta < 0:
+		_check(first.spend_marks(-balance_delta), "ledger balance adjustment succeeds")
 	first.data.total_marks_earned = 9876
 	first.data.contracts_completed = 7
 	first.data.distance_sailed_m = 12345.5
@@ -77,6 +83,8 @@ func _run_hard_test() -> void:
 
 	# Disconnect/reconnect: construct a completely fresh PlayerSession from disk.
 	var reconnected := _new_session()
+	_check(LocalCaptainStore.activate(captain_a), "captain A save slot reactivates")
+	reconnected._load_from_disk()
 	_check(str(reconnected.data.account_id) == captain_a, "captain UUID survives reconnect")
 	_check(
 		PlayerData.json_equivalent(reconnected.data.to_dict(), expected_full),
@@ -128,9 +136,12 @@ func _run_hard_test() -> void:
 	_free_session(reconnected)
 
 	# Same display name must create an unrelated UUID and empty fleet namespace.
+	LocalCaptainStore.clear_active()
 	var second_captain := _new_session()
 	second_captain.begin_new_captain("Same Captain Name", CharacterAppearance.default_appearance())
 	var captain_b := str(second_captain.data.account_id)
+	_check(LocalCaptainStore.create_slot(captain_b), "captain B save slot is activated")
+	_check(second_captain.save_now(), "captain B onboarding save succeeds")
 	_check(captain_b != captain_a, "same-name captain receives distinct UUID")
 	_check(
 		second_captain.data.find_owned_vessel(vessel_uid).is_empty(),
@@ -185,7 +196,8 @@ func _check(condition: bool, label: String) -> void:
 
 func _finish() -> void:
 	var cleanup_ok := PlayerSaveStore.wipe_all_local_data()
-	PlayerSaveStore.storage_root_override = ""
+	LocalCaptainStore.clear_active()
+	LocalCaptainStore.root_override = ""
 	if not cleanup_ok:
 		_failures.append("post-test wipe succeeds")
 	if _failures.is_empty():

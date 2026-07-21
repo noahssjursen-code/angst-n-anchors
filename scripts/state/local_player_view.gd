@@ -4,6 +4,7 @@ extends Node
 ## that UIs consult to ask "what is *my* player doing?".
 
 signal marks_changed(balance: int)
+signal company_changed(summary: Dictionary)
 signal helm_changed(boat: Node) # null when not helming
 signal contracts_changed(contracts: Array) # kept empty until trade rewrite
 
@@ -24,6 +25,8 @@ func _ready() -> void:
 	if _session != null:
 		if _session.has_signal("marks_changed") and not _session.marks_changed.is_connected(_emit_marks):
 			_session.marks_changed.connect(_emit_marks)
+		if _session.has_signal("company_changed") and not _session.company_changed.is_connected(_emit_company):
+			_session.company_changed.connect(_emit_company)
 	var freight := get_node_or_null("/root/FreightService")
 	if freight != null and not freight.contracts_changed.is_connected(_emit_contracts):
 		freight.contracts_changed.connect(_emit_contracts)
@@ -43,6 +46,12 @@ func get_display_name() -> String:
 	if _session == null:
 		return ""
 	return str(_session.data.display_name)
+
+
+func get_company_summary() -> Dictionary:
+	if _session == null or not _session.has_method("get_company_summary"):
+		return {}
+	return _session.get_company_summary() as Dictionary
 
 
 func is_helming() -> bool:
@@ -135,6 +144,10 @@ func _on_helm_off() -> void:
 
 func _emit_marks(balance: int) -> void:
 	marks_changed.emit(balance)
+
+
+func _emit_company(summary: Dictionary) -> void:
+	company_changed.emit(summary)
 
 
 func _snapshot_into_player_data() -> void:

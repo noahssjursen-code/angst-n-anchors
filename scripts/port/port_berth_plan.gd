@@ -2,11 +2,12 @@ class_name PortBerthPlan
 extends RefCounted
 
 ## Plans docking stations from trade slots.
-## Fish (legacy) may hug the asphalt dock face; general cargo and bulk/liquid
-## get dedicated quay fingers (short T/L arms off the harbour edge).
+## Every current vessel-facing trade receives a generated quay finger. The
+## asphalt mode remains only as a compatibility path for older layout records.
 
 const CoastTracer := preload("res://scripts/port/port_coast_tracer.gd")
 const CoastalPortPlacer := preload("res://scripts/world/coastal_port_placer.gd")
+const FishLandingLayout := preload("res://scripts/port/fish_landing_layout.gd")
 
 const MODE_ASPHALT := "asphalt"
 const MODE_QUAY := "quay"
@@ -15,7 +16,7 @@ const ARM_WATER_TAIL_M := 28.0
 const BASIN_PROBE_MAX_M := 480.0
 
 
-## Commodities that dock against the asphalt snake instead of a dedicated pier.
+## Compatibility hook for older layout records; current commodities return false.
 static func uses_asphalt_dock(commodity_id: String) -> bool:
 	return CommodityCatalog.uses_asphalt_dock(commodity_id)
 
@@ -293,8 +294,9 @@ static func _place_quays(
 	if quay_list.is_empty() or dock_face.size() < 2:
 		return out
 	var count := quay_list.size()
-	## Two trade pads share one pier: dock|crane|cargo|road|cargo|crane|dock.
-	if count == 2:
+	## Two ordinary trade pads may share one pier. A fish landing never does:
+	## its approved pump/tank composition needs a dedicated full-width quay.
+	if count == 2 and not _quay_list_contains_family(quay_list, "fishing"):
 		var twin := _place_twin_quay(
 			quay_list, dock_face, size, site_seed, basin, layout, definition, proj_lo, proj_hi
 		)
@@ -323,6 +325,10 @@ static func _place_quays(
 	if soft_cap:
 		width_size = mini(size, PortSizing.max_size_for_arm_budget_m(max_arm_m))
 	var deck_w := PortSizing.quay_deck_width_m(width_size)
+	if _quay_list_contains_family(quay_list, "fishing"):
+		## Reserve enough comb spacing for the exact 72 m showcase arrangement,
+		## even when neighbouring commodity quays are narrower.
+		deck_w = maxf(deck_w, FishLandingLayout.REFERENCE_QUAY_WIDTH_M)
 	var proj_min := INF
 	var proj_max := -INF
 	for sample in face_samples:
@@ -383,6 +389,8 @@ static func _place_quays(
 		length_m = maxf(length_m, 24.0)
 		## Per-pier width from actual runnable length (not the uncapped size table).
 		var pier_w := PortSizing.quay_deck_width_for_arm_m(length_m, size)
+		if str(family_info.get("family", "")) == "fishing":
+			pier_w = maxf(pier_w, FishLandingLayout.REFERENCE_QUAY_WIDTH_M)
 		var tip := origin + seaward * length_m
 		var yard := PortSizing.cargo_yard_size_m(mini(size, PortSizing.max_size_for_arm_budget_m(length_m)))
 		var commodities: Array = []
@@ -422,6 +430,14 @@ static func _place_quays(
 			"seaward_clear_m": local_clear,
 		})
 	return out
+
+
+static func _quay_list_contains_family(quay_list: Array, family: String) -> bool:
+	for raw in quay_list:
+		var family_info := raw as Dictionary
+		if str(family_info.get("family", "")) == family:
+			return true
+	return false
 
 
 ## One shared pier for exactly two trade pads — outer docks, centre road.
@@ -781,12 +797,13 @@ static func _place_asphalt_on_face(
 			"role": role,
 			"roles": roles,
 			"family": family,
-			## Root on dock face; pad extends seaward outside the apron.
+			## Root is the waterfront edge; the working pad belongs on the
+			## harbour apron while the berth itself remains on the water side.
 			"origin": [origin.x, origin.y],
 			"direction": [local_seaward.x, local_seaward.y],
 			"inland_dir": [inland.x, inland.y],
 			"tangent": [tangent.x, tangent.y],
-			"extends": "seaward",
+			"extends": "inland",
 			"arc_m": cursor,
 			"depth_m": depth_m,
 			"length_m": length_m,

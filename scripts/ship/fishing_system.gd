@@ -18,6 +18,8 @@ extends Node3D
 @export var crate_stagger_seconds: float = 5.0
 ## Crates per successful haul (placed one at a time).
 @export var crates_per_haul: int = 4
+## One staggered catch unit is weighed into the insulated hold.
+@export var catch_unit_mass_kg: float = 250.0
 
 ## How far the net mouth sits below the wave surface when trawling.
 @export var net_mouth_submerge: float = 0.45
@@ -40,6 +42,9 @@ var _rope_mesh: MeshInstance3D
 var _visual_scale: float = 1.0
 var _catch_timer: float = 0.0
 var _zone_catch_mul: float = 1.0
+var _zone_open_water: bool = true
+var _activity_status: String = "READY"
+var _blocked_notice_sent: bool = false
 var _haul_crates_remaining: int = 0
 var _haul_stagger_timer: float = 0.0
 var _haul_zone: Dictionary = {}
@@ -66,6 +71,13 @@ func _ready() -> void:
 
 
 func toggle_trawling() -> void:
+	var hold := _catch_hold()
+	if not trawling and hold == null:
+		_notify_trawl("No insulated catch hold fitted")
+		return
+	if not trawling and hold.state.available_kg() <= CatchLot.MASS_EPS_KG:
+		_notify_trawl("Catch hold full - land your fish first")
+		return
 	## Catch no longer lands as deck cargo this pass — always allow cast.
 	trawling = not trawling
 	if not trawling:
@@ -271,12 +283,19 @@ func _physics_process(delta: float) -> void:
 
 	if not trawling:
 		_catch_timer = 0.0
+		_activity_status = "READY"
+		_blocked_notice_sent = false
 		_cancel_haul(false)
 		return
 
 	if _body != null and _body.freeze:
 		var sim_dt := delta
 		_update_zone_catch_rate(_body.global_position)
+		if not _zone_open_water:
+			_activity_status = "TOO CLOSE TO SHORE"
+			_catch_timer = 0.0
+			return
+		_activity_status = "ACTIVE"
 		_process_haul(sim_dt)
 		if _haul_crates_remaining <= 0:
 			_catch_timer += sim_dt
@@ -294,24 +313,37 @@ func _physics_process(delta: float) -> void:
 			var drag_force := -horiz_vel.normalized() * (speed * drag_coefficient)
 			_body.apply_central_force(drag_force)
 
-		# Periodically catch fish if moving > 0.5 m/s (approx 1 knot)
-		if speed > 0.5:
-			_update_zone_catch_rate(_body.global_position)
-			_process_haul(delta)
-			if _haul_crates_remaining <= 0:
-				_catch_timer += delta
-				var interval := catch_interval_seconds / maxf(_zone_catch_mul, 0.1)
-				if _catch_timer >= interval:
-					_catch_timer = 0.0
-					_try_start_haul()
+		# Periodically catch fish if moving > 0.5 m/s (approx 1 knot).
+		if speed <= 0.5:
+			_activity_status = "TOO SLOW"
+			return
+		_update_zone_catch_rate(_body.global_position)
+		if not _zone_open_water:
+			_activity_status = "TOO CLOSE TO SHORE"
+			_catch_timer = 0.0
+			if not _blocked_notice_sent:
+				_blocked_notice_sent = true
+				_notify_trawl("No trawling here - move at least %d m from shore" % int(FishingField.MIN_WATER_CLEARANCE_M))
+			return
+		_blocked_notice_sent = false
+		_activity_status = "ACTIVE"
+		_process_haul(delta)
+		if _haul_crates_remaining <= 0:
+			_catch_timer += delta
+			var interval := catch_interval_seconds / maxf(_zone_catch_mul, 0.1)
+			if _catch_timer >= interval:
+				_catch_timer = 0.0
+				_try_start_haul()
 
 
 func _update_zone_catch_rate(sample_pos: Vector3) -> void:
 	if not FishingField.is_initialized():
 		_zone_catch_mul = 1.0
+		_zone_open_water = true
 		return
 	var zone := FishingField.sample(sample_pos)
-	_zone_catch_mul = maxf(float(zone.get("catch_mul", 1.0)), 0.1)
+	_zone_open_water = bool(zone.get("open_water", false))
+	_zone_catch_mul = maxf(float(zone.get("catch_mul", 1.0)), 0.0)
 
 
 func _process_haul(delta: float) -> void:
@@ -342,6 +374,13 @@ func _cancel_haul(reset_catch_timer: bool) -> void:
 
 func _try_start_haul() -> void:
 	if _body == null or _haul_crates_remaining > 0:
+		return
+	var hold := _catch_hold()
+	if hold == null:
+		_retract_trawl("No insulated catch hold fitted")
+		return
+	if hold.state.available_kg() <= CatchLot.MASS_EPS_KG:
+		_retract_trawl("Catch hold full - return to a fish landing")
 		return
 
 	var sample_pos := _body.global_position
@@ -374,18 +413,58 @@ func _crates_for_zone(zone: Dictionary) -> int:
 
 
 func _complete_one_haul_crate() -> bool:
-	## Packing/deck cargo purged — haul completes without landing crates on deck.
 	if _body == null:
+		return false
+	var hold := _catch_hold()
+	if hold == null:
+		_notify_trawl("Haul lost - no insulated catch hold")
+		return false
+	var zone := _haul_zone
+	var caught_hours := 0.0
+	var clock := get_node_or_null("/root/WorldClock")
+	if clock != null and clock.has_method("get_game_hours_elapsed"):
+		caught_hours = float(clock.call("get_game_hours_elapsed"))
+	var vessel_id := str(_body.get_meta("vessel_uid", _body.get_meta("server_vessel_id", "")))
+	var lot := CatchLot.create({
+		"lot_id": "%s:%d:%d" % [vessel_id, int(caught_hours * 3600.0), _haul_crates_remaining],
+		"mass_kg": maxf(catch_unit_mass_kg, CatchLot.MASS_EPS_KG),
+		"caught_game_hours": caught_hours,
+		"caught_position": Vector2(_body.global_position.x, _body.global_position.z),
+		"ground_tier": str(zone.get("tier_id", "normal")),
+		"price_multiplier": float(zone.get("price_mul", 1.0)),
+		"vessel_id": vessel_id,
+		"owner_id": str(_body.get_meta("owner_player_id", "")),
+	})
+	var overflow := hold.accept_lot(lot)
+	if not overflow.is_empty():
+		_notify_trawl("Catch hold full - return to a fish landing")
 		return false
 	if not _haul_toast_sent:
 		_haul_toast_sent = true
-		var zone := _haul_zone
 		var tier_label := str(zone.get("tier_label", "")) if not zone.is_empty() else ""
 		if tier_label.is_empty() or tier_label == "Normal":
-			_notify_trawl("Haul complete — fish packing returns later")
+			_notify_trawl("Catch aboard - %.1f / %.1f t" % [
+				hold.state.total_mass_kg() / 1000.0,
+				hold.state.capacity_kg / 1000.0,
+			])
 		else:
-			_notify_trawl("%s grounds — haul complete (packing returns later)" % tier_label)
+			_notify_trawl("%s grounds - catch aboard" % tier_label)
 	return true
+
+
+func get_catch_hold() -> CatchHoldComponent:
+	return _catch_hold()
+
+
+func get_activity_status() -> String:
+	var hold := _catch_hold()
+	if hold != null and hold.state.available_kg() <= CatchLot.MASS_EPS_KG:
+		return "HOLD FULL"
+	return _activity_status
+
+
+func _catch_hold() -> CatchHoldComponent:
+	return CatchHoldComponent.first_for_ship(_body)
 
 
 ## External trawl control (e.g. autonomous NPC sim).

@@ -9,6 +9,7 @@ const PANEL_SCRIPT := preload("res://scripts/port/crane_operator_panel.gd")
 @export var harbour_port_id := ""
 @export var berth_id := ""
 @export var equip_id := ""
+@export var operator_role := "crane operator"
 
 var _harbour: HarbourController
 var _panel: Control
@@ -46,6 +47,7 @@ func _build_panel() -> void:
 	_panel.request_stop.connect(_on_request_stop)
 	_panel.request_close.connect(_on_ui_cancel)
 	_panel_layer.add_child(_panel)
+	_panel.set_title(operator_role)
 
 
 func _on_interact() -> void:
@@ -110,7 +112,7 @@ func _update_prompt() -> void:
 		ship = hc.moored_ship(berth_id)
 		equip = _this_equipment(hc)
 	if ship == null or equip == null:
-		prompt_text = "Talk to crane operator"
+		prompt_text = "Talk to %s" % operator_role
 		return
 	var reach_ok := true
 	if equip.has_method("can_reach_ship"):
@@ -120,11 +122,11 @@ func _update_prompt() -> void:
 		or equip.can_serve(ship, QuayEquipmentJob.MODE_UNLOAD)
 	)
 	if available:
-		prompt_text = "Talk to crane operator (available)"
+		prompt_text = "Talk to %s (available)" % operator_role
 	elif not reach_ok:
-		prompt_text = "Talk to crane operator (out of reach)"
+		prompt_text = "Talk to %s (out of reach)" % operator_role
 	else:
-		prompt_text = "Talk to crane operator"
+		prompt_text = "Talk to %s" % operator_role
 
 
 func _refresh_panel() -> void:

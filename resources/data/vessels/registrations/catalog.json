@@ -76,6 +76,7 @@
       "display": "Fishing vessel",
       "description": "Licensed to operate fishing gear and land a catch.",
       "inherits": "general_vessel",
+      "terminal_families": ["fishing"],
       "budget_caps": {
         "fishing": 1,
         "cargo_cells": 140,
@@ -94,9 +95,9 @@
         {
           "id": "catch_deck",
           "label": "Exposed catch deck",
-          "kind": "cargo_cells",
-          "min": 4,
-          "max": 140
+          "kind": "metric_range",
+          "metric": "exposed_deck_cells",
+          "min": 4
         }
       ]
     },

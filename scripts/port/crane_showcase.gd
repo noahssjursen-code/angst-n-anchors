@@ -11,8 +11,11 @@ const PROVISION_CRANE_AUTO_SCRIPT := preload("res://scripts/port/provision_crane
 const PROVISION_EQUIP_JOB_SCRIPT := preload("res://scripts/port/provision_crane_equipment_job.gd")
 const PROVISION_CRANE_SCRIPT := preload("res://scripts/port/provision_crane.gd")
 const CRANE_OPERATOR_SCRIPT := preload("res://scripts/port/crane_operator_npc.gd")
+const FISH_LANDING_PUMP_SCRIPT := preload("res://scripts/port/fish_landing_pump.gd")
+const FISH_LANDING_LAYOUT := preload("res://scripts/port/fish_landing_layout.gd")
 const DOCKED_PREBUILT_ID := "bulk_small"
 const PROVISION_DOCKED_PREBUILT_ID := "28_10_m"
+const FISHING_DOCKED_PREBUILT_ID := "fishing_trawler"
 const YARD_PAD_WIDTH_M := 8.0
 const YARD_SLOT_ROWS := 16
 const YARD_PAD_LENGTH_M := float(YARD_SLOT_ROWS) * ContainerUnit.DEFAULT_SIZE_M
@@ -44,6 +47,11 @@ const BAYS: Array[Dictionary] = [
 		"name": "Provisions · T crane",
 		"crane": "provision",
 	},
+	{
+		"id": "fish_landing",
+		"name": "Fresh fish · RSW landing pump",
+		"crane": "fish",
+	},
 ]
 
 @export var orbit_yaw_deg := 35.0
@@ -58,6 +66,8 @@ var _bulk_auto: BulkCraneAutoOperator
 var _provision_auto: ProvisionCraneAutoOperator
 var _bulk_harbour: HarbourController
 var _provision_harbour: HarbourController
+var _fish_pump: FishLandingPump
+var _fish_tank_bank: ShoreRswTankBank
 var _bulk_equip_id := ""
 var _provision_equip_id := ""
 var _camera: Camera3D
@@ -234,6 +244,9 @@ func _track_tool_focus() -> void:
 		if talje != null and is_instance_valid(talje):
 			_focus = talje.global_position
 			return
+	if kind == "fish" and _fish_pump != null:
+		_focus = _fish_pump.focus_position()
+		return
 	_focus = _bay_overview_focus() + Vector3(10.0, 0.0, -6.0)
 
 
@@ -327,6 +340,26 @@ func _refresh_hud() -> void:
 			lines.append("")
 		if _provision_crane != null:
 			lines.append_array(_provision_crane.get_status_lines())
+	elif kind == "fish":
+		lines.append("RSW fish landing  ·  docked %s" % _docked_vessel_label())
+		lines.append("L  refill demo hold  ·  O  connect hose + unload  ·  X  stop")
+		lines.append("Catch is pumped ashore; cargo cranes do not handle loose fish.")
+		lines.append("")
+		if _fish_pump != null:
+			lines.append_array(_fish_pump.get_status_lines())
+		var fish_ship := _docked_ship()
+		if fish_ship != null:
+			lines.append("")
+			lines.append("Ship catch holds")
+			for hold in fish_ship.get_catch_holds():
+				var catch_state := hold.get_state()
+				lines.append(
+					"  %s  %.2f / %.2f t" % [
+						catch_state.hold_id,
+						catch_state.total_mass_kg() / 1000.0,
+						catch_state.capacity_kg / 1000.0,
+					]
+				)
 	if not _last_action_hint.is_empty():
 		lines.append("")
 		lines.append(_last_action_hint)
@@ -353,6 +386,8 @@ func _spawn_quay_row() -> void:
 				_spawn_bay_bulk_ore(bay)
 			"provision":
 				_spawn_bay_provisions(bay)
+			"fish":
+				_spawn_bay_fish_landing(bay)
 
 
 func _spawn_bay_bulk_ore(bay: Node3D) -> void:
@@ -380,6 +415,19 @@ func _spawn_bay_provisions(bay: Node3D) -> void:
 	label.outline_size = 8
 	label.billboard = BaseMaterial3D.BILLBOARD_DISABLED
 	bay.add_child(label)
+
+
+func _spawn_bay_fish_landing(bay: Node3D) -> void:
+	_fish_tank_bank = _stamp_fish_receiving_yard(bay)
+	_fish_pump = FISH_LANDING_PUMP_SCRIPT.new() as FishLandingPump
+	_fish_pump.name = "FishLandingPump"
+	_fish_pump.position = FISH_LANDING_LAYOUT.pump_position(QUAY_WIDTH_M)
+	_fish_pump.position.y = QUAY_DECK_TOP_Y
+	_fish_pump.rotation_degrees.y = FISH_LANDING_LAYOUT.pump_yaw_degrees()
+	bay.add_child(_fish_pump)
+	_fish_pump.bind_receiver(_fish_tank_bank)
+	_stamp_fish_shore_transfer_line(bay, _fish_pump, _fish_tank_bank)
+	_spawn_docked_ship(bay, FISHING_DOCKED_PREBUILT_ID, false, "fish")
 
 
 func _spawn_provision_crane(bay: Node3D) -> void:
@@ -618,6 +666,66 @@ func _stamp_crate_yard(parent: Node3D) -> void:
 			break
 
 
+func _stamp_fish_receiving_yard(parent: Node3D) -> ShoreRswTankBank:
+	var yard := Node3D.new()
+	yard.name = "FishReceivingYard"
+	parent.add_child(yard)
+
+	var bank := ShoreRswTankBank.new()
+	bank.name = "ShoreRswTankBank"
+	bank.bank_id = "showcase_fish_rsw"
+	bank.capacity_kg = 120000.0
+	bank.tank_count = 2
+	## Keep the complete installation in the inland storage strip. Its discharge
+	## manifold faces the road, while the tanks and concrete pad stay clear.
+	bank.position = FISH_LANDING_LAYOUT.tank_position(QUAY_WIDTH_M)
+	bank.position.y = QUAY_DECK_TOP_Y
+	bank.scale = Vector3.ONE * FISH_LANDING_LAYOUT.TANK_SCALE
+	yard.add_child(bank)
+	return bank
+
+
+func _stamp_fish_shore_transfer_line(
+	parent: Node3D, pump: FishLandingPump, bank: ShoreRswTankBank
+) -> void:
+	if pump == null or bank == null:
+		return
+	var pipe_root := Node3D.new()
+	pipe_root.name = "PumpToRswTransferLine"
+	parent.add_child(pipe_root)
+	## The pump discharges into an elevated rigid shore line. It stays clear of
+	## the working pavement before dropping into the tank-bank inlet manifold.
+	var inlet := parent.to_local(bank.inlet_world())
+	var points := PackedVector3Array([
+		pump.position + Vector3(-4.75, 1.45, 0.0),
+		Vector3(23.4, 3.10, 9.0),
+		Vector3(7.0, 3.80, 9.0),
+		inlet + Vector3(0.0, 1.5, 0.0),
+		inlet,
+	])
+	for i in range(points.size() - 1):
+		var segment := MeshBuilder.cylinder(
+			0.18, 1.0, Color(0.58, 0.62, 0.63), 0.38, 0.72
+		)
+		pipe_root.add_child(segment)
+		_pose_showcase_pipe(segment, points[i], points[i + 1])
+
+
+func _pose_showcase_pipe(segment: MeshInstance3D, a: Vector3, b: Vector3) -> void:
+	var delta := b - a
+	var length := maxf(delta.length(), 0.001)
+	var direction := delta / length
+	var x_axis := direction.cross(Vector3.FORWARD)
+	if x_axis.length_squared() < 0.001:
+		x_axis = direction.cross(Vector3.RIGHT)
+	x_axis = x_axis.normalized()
+	var z_axis := x_axis.cross(direction).normalized()
+	segment.transform = Transform3D(Basis(x_axis, direction, z_axis), (a + b) * 0.5)
+	var mesh := segment.mesh as CylinderMesh
+	if mesh != null:
+		mesh.height = length * 1.03
+
+
 func _crane_mount_position() -> Vector3:
 	var half_w := QUAY_WIDTH_M * 0.5
 	var storage_x := -(half_w - STORAGE_LANE_W * 0.5)
@@ -664,7 +772,10 @@ func _docked_ship() -> BoatBody:
 
 
 func _active_harbour() -> HarbourController:
-	if str(_active_bay().get("crane", "")) == "provision":
+	var kind := str(_active_bay().get("crane", ""))
+	if kind == "fish":
+		return null
+	if kind == "provision":
 		return _provision_harbour
 	return _bulk_harbour
 
@@ -676,6 +787,9 @@ func _active_berth_id() -> String:
 
 
 func _start_auto_load() -> void:
+	if str(_active_bay().get("crane", "")) == "fish":
+		_refill_demo_catch()
+		return
 	_ensure_ship_plugged()
 	var harbour := _active_harbour()
 	var berth := _active_berth_id()
@@ -700,6 +814,16 @@ func _start_auto_load() -> void:
 
 
 func _start_auto_unload() -> void:
+	if str(_active_bay().get("crane", "")) == "fish":
+		var fish_ship := _docked_ship()
+		if _fish_pump == null or fish_ship == null or not _fish_pump.start_unload(fish_ship):
+			if _fish_tank_bank != null and _fish_tank_bank.available_kg() <= CatchLot.MASS_EPS_KG:
+				_last_action_hint = "Unload refused — shore RSW tanks are full"
+			else:
+				_last_action_hint = "Unload refused — fish hold is empty"
+		else:
+			_last_action_hint = "Suction hose connected; landing catch"
+		return
 	_ensure_ship_plugged()
 	var harbour := _active_harbour()
 	var berth := _active_berth_id()
@@ -716,6 +840,10 @@ func _start_auto_unload() -> void:
 
 
 func _stop_auto() -> void:
+	if str(_active_bay().get("crane", "")) == "fish":
+		if _fish_pump != null:
+			_fish_pump.stop()
+		return
 	var harbour := _active_harbour()
 	if harbour != null:
 		if str(_active_bay().get("crane", "")) == "provision" and not _provision_equip_id.is_empty():
@@ -750,8 +878,11 @@ func _pose_bulk_crane() -> void:
 
 func _docked_vessel_label() -> String:
 	var preset_id := DOCKED_PREBUILT_ID
-	if str(_active_bay().get("crane", "")) == "provision":
+	var kind := str(_active_bay().get("crane", ""))
+	if kind == "provision":
 		preset_id = PROVISION_DOCKED_PREBUILT_ID
+	elif kind == "fish":
+		preset_id = FISHING_DOCKED_PREBUILT_ID
 	var preset := _prebuilt_entry(preset_id)
 	if preset.is_empty():
 		return preset_id
@@ -766,7 +897,9 @@ static func _prebuilt_entry(preset_id: String) -> Dictionary:
 	return {}
 
 
-func _spawn_docked_ship(bay: Node3D, prebuilt_id: String, plug_harbour: bool) -> void:
+func _spawn_docked_ship(
+	bay: Node3D, prebuilt_id: String, plug_harbour: bool, bay_kind: String = "provision"
+) -> void:
 	if bay.get_node_or_null("DockedShip") != null:
 		return
 	var preset := _prebuilt_entry(prebuilt_id)
@@ -791,6 +924,7 @@ func _spawn_docked_ship(bay: Node3D, prebuilt_id: String, plug_harbour: bool) ->
 	})
 	ship.name = "DockedShip"
 	ship.set_meta("showcase_plug_harbour", plug_harbour)
+	ship.set_meta("showcase_bay_kind", bay_kind)
 	ship.freeze = true
 	bay.add_child(ship)
 	ship.position = Vector3(half_w + beam_m * 0.5 + 4.0, 0.0, 6.0)
@@ -805,8 +939,35 @@ func _place_docked_ship(ship: BoatBody) -> void:
 	ship.freeze = true
 	if bool(ship.get_meta("showcase_plug_harbour", false)):
 		_ensure_ship_plugged()
-	elif _provision_harbour != null:
+	elif str(ship.get_meta("showcase_bay_kind", "")) == "provision" and _provision_harbour != null:
 		_provision_harbour.plug_ship(SHOWCASE_PROVISION_BERTH_ID, ship)
+	elif str(ship.get_meta("showcase_bay_kind", "")) == "fish":
+		call_deferred("_refill_demo_catch", ship)
+
+
+func _refill_demo_catch(ship_override: BoatBody = null) -> void:
+	var ship := ship_override if ship_override != null else _docked_ship()
+	if ship == null:
+		return
+	var holds := ship.get_catch_holds()
+	if holds.is_empty():
+		_last_action_hint = "Fishing vessel has no catch hold"
+		return
+	if _fish_pump != null:
+		_fish_pump.stop()
+	for catch_hold in holds:
+		catch_hold.withdraw_oldest(catch_hold.get_state().total_mass_kg())
+	var hold: CatchHoldComponent = holds[0]
+	var demo_mass := minf(hold.get_state().capacity_kg * 0.82, 3600.0)
+	for i in range(4):
+		hold.accept_lot(CatchLot.create({
+			"lot_id": "showcase_catch_%d" % i,
+			"mass_kg": demo_mass / 4.0,
+			"quality": 0.96 - float(i) * 0.035,
+			"caught_game_hours": 12.0 + float(i) * 0.1,
+			"vessel_id": "showcase_fishing_trawler",
+		}))
+	_last_action_hint = "Demo hold refilled with %.2f t mixed groundfish" % (demo_mass / 1000.0)
 
 
 func _ensure_environment() -> void:

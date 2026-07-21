@@ -33,15 +33,27 @@ user://save/
 
 ```json
 {
-  "version": 5,
+  "version": 6,
   "player": {},
   "saved_at_unix": 0
 }
 ```
 
-`player` contains identity, marks/lifetime stats, appearance, owned and active
-vessels, home port id, accepted contracts, ship runtime state, world-clock hours,
-tutorial flags, and starter-vessel state. Vector values inside JSON are arrays.
+`player` contains identity, the company aggregate, the compatibility marks balance,
+lifetime stats, appearance, owned and active vessels, home port id, accepted
+contracts, world-clock hours, tutorial flags, and starter-vessel state. Vector
+values inside JSON are arrays.
+
+## Company aggregate (v6)
+
+`player.company` is the JSON-safe authority record for company identity, branding,
+home port, account ledger, inventory lots, warehouse leases, processed request ids,
+and onboarding state. `player.marks` remains as a compatibility mirror while older
+HUD/gameplay call sites migrate; `company.account.balance_marks` is authoritative.
+
+Company mutations use explicit command/result contracts through `CompanyService`.
+Processed request ids make opening-company and money commands idempotent so the same
+boundary can later be hosted by a multiplayer server.
 
 ## Migration
 
@@ -107,6 +119,9 @@ Multiplayer worlds take `world_seed`, `generation_version`, and
 - v3 added generated-world identity.
 - v4 added vessel registration declarations.
 - v5 added vessel-call and port-yard cargo state (legacy unitized packing removed; containers/pads are layout-driven, not saved as in-flight pallets).
+- v6 added company identity, an immutable money ledger, starter warehouse lease,
+  inventory-lot contracts, onboarding state, and idempotency records. Existing
+  captains migrate their current balance and fleet without receiving a new vessel.
 - Multi-captain folders + `index.json` are additive; legacy single-file saves migrate automatically.
 
 `PlayerData.from_dict()` supplies defaults for missing fields, so old envelopes

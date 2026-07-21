@@ -1892,7 +1892,7 @@
 	"hull_id": "hull_28x10",
 	"id": "28_10_m",
 	"name": "14x5 Cargo",
-	"price_marks": 0,
+	"price_marks": 42000,
 	"registration_id": "cargo_vessel",
 	"shaft_power_kw": 4300.0
 }

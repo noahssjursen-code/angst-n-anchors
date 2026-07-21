@@ -16,11 +16,13 @@ static func format_money(amount: int) -> String:
 	return PlayerData.format_money(amount)
 
 signal marks_changed(new_balance: int)
+signal company_changed(summary: Dictionary)
 signal data_loaded(data: PlayerData)
 signal save_completed(success: bool)
 signal vessels_synced()
 
 var data: PlayerData = PlayerData.new()
+var company_service := CompanyService.new()
 
 ## Test harnesses may opt a manually-created session into isolated persistence.
 ## The autoload remains read/write-disabled in every res://tests/ process.
@@ -44,6 +46,7 @@ func _ready() -> void:
 		# Unit-test scripts must never read or overwrite the developer's live
 		# player profile, even if a failed test process remains alive.
 		data = PlayerData.new()
+		company_service.bind(data)
 		set_process(false)
 		data_loaded.emit(data)
 		return
@@ -54,6 +57,7 @@ func _ready() -> void:
 	# Title screen owns which captain is active; boot with a clean empty ledger.
 	LocalCaptainStore.clear_active()
 	data = PlayerData.new()
+	company_service.bind(data)
 	data_loaded.emit(data)
 	call_deferred("_connect_economy")
 
@@ -82,23 +86,52 @@ func _notification(what: int) -> void:
 
 # ── Economy API ───────────────────────────────────────────────────────────────
 
-func earn_marks(amount: int) -> void:
+func earn_marks(
+	amount: int,
+	category: String = "gameplay_income",
+	description: String = "Gameplay income",
+	related_entity_id: String = "",
+) -> void:
 	if amount <= 0:
 		return
-	data.marks              += amount
-	data.total_marks_earned += amount
+	_ensure_company_authority()
+	var result := company_service.post_transaction({
+		"request_id": PlayerData.new_uuid(),
+		"amount_marks": amount,
+		"category": category,
+		"description": description,
+		"related_entity_id": related_entity_id,
+		"count_as_earned": true,
+	})
+	if not bool(result.get("ok", false)):
+		push_warning("PlayerSession: income transaction rejected: %s" % str(result.get("code", "unknown")))
+		return
 	marks_changed.emit(data.marks)
+	company_changed.emit(company_service.company_summary())
 	_request_save()
 	_request_marks_server_sync()
 
 
-func spend_marks(amount: int) -> bool:
+func spend_marks(
+	amount: int,
+	category: String = "gameplay_expense",
+	description: String = "Gameplay expense",
+	related_entity_id: String = "",
+) -> bool:
 	if amount <= 0:
 		return true
-	if data.marks < amount:
+	_ensure_company_authority()
+	var result := company_service.post_transaction({
+		"request_id": PlayerData.new_uuid(),
+		"amount_marks": -amount,
+		"category": category,
+		"description": description,
+		"related_entity_id": related_entity_id,
+	})
+	if not bool(result.get("ok", false)):
 		return false
-	data.marks -= amount
 	marks_changed.emit(data.marks)
+	company_changed.emit(company_service.company_summary())
 	_request_save()
 	_request_marks_server_sync()
 	return true
@@ -142,6 +175,7 @@ func set_captain_profile(captain_id: String, display_name: String, marks: int, a
 	data.marks = marks
 	if appearance != null:
 		data.appearance = appearance
+	company_service.bind(data)
 	data_loaded.emit(data)
 	_request_save()
 	VesselSync.pull_captain_vessel(self)
@@ -155,6 +189,7 @@ func notify_vessels_synced() -> void:
 ## Autoload consumers (including FreightService) reset from data_loaded.
 func clear_active_captain() -> void:
 	data = PlayerData.new()
+	company_service.bind(data)
 	data_loaded.emit(data)
 
 
@@ -164,12 +199,15 @@ func begin_new_captain(
 	home_port_id: String = "port-home",
 	account_id: String = "",
 	world_seed: int = 0,
+	company_name: String = "",
+	brand_color: Color = Color("2f7f83"),
+	starter_vessel: String = "fishing",
 ) -> void:
 	data = PlayerData.new()
 	var id := account_id.strip_edges()
 	data.account_id = id if not id.is_empty() else PlayerData.new_uuid()
 	data.captain_id = ""
-	data.marks = PlayerData.NEW_CAPTAIN_STARTING_MARKS
+	data.marks = 0
 	data.total_marks_earned = 0
 	data.owned_vessels = []
 	data.active_vessel = {}
@@ -194,12 +232,60 @@ func begin_new_captain(
 			"weather_generation_version": 3,
 			"layout_checksum": "",
 		}
-	# One starter vessel on the registry so harbour deploy works immediately.
-	var starter := VesselSpawn.default_owned_record()
-	data.upsert_owned_vessel(starter)
-	data.set_active_vessel(starter)
+	company_service.bind(data)
+	var resolved_company_name := company_name.strip_edges()
+	if resolved_company_name.is_empty():
+		resolved_company_name = "%s Maritime" % data.display_name
+	var create_result := company_service.create_company({
+		"request_id": "onboarding:%s" % data.account_id,
+		"company_name": resolved_company_name,
+		"brand_color": brand_color.to_html(false),
+		"starter_vessel": starter_vessel,
+	})
+	if not bool(create_result.get("ok", false)):
+		push_error("PlayerSession: company onboarding failed: %s" % str(create_result.get("message", "unknown")))
 	data_loaded.emit(data)
+	company_changed.emit(company_service.company_summary())
 	save_now()
+
+
+func get_company_summary() -> Dictionary:
+	_ensure_company_authority()
+	return company_service.company_summary()
+
+
+func store_company_inventory(command: Dictionary) -> Dictionary:
+	_ensure_company_authority()
+	var result := company_service.store_inventory(command)
+	_company_mutation_completed(result)
+	return result
+
+
+func reserve_company_inventory(command: Dictionary) -> Dictionary:
+	_ensure_company_authority()
+	var result := company_service.reserve_inventory(command)
+	_company_mutation_completed(result)
+	return result
+
+
+func withdraw_company_inventory(command: Dictionary) -> Dictionary:
+	_ensure_company_authority()
+	var result := company_service.withdraw_inventory(command)
+	_company_mutation_completed(result)
+	return result
+
+
+func _company_mutation_completed(result: Dictionary) -> void:
+	if not bool(result.get("ok", false)):
+		return
+	company_changed.emit(company_service.company_summary())
+	_request_save()
+
+
+func _ensure_company_authority() -> void:
+	if company_service == null:
+		company_service = CompanyService.new()
+	company_service.bind(data)
 
 
 ## Singleplayer owns the local ledger. Drop the Postgres captain link so vessel
@@ -327,6 +413,7 @@ func _load_from_disk() -> void:
 ## Hydrate session from a dictionary (local save, dev tools, or future auth).
 func _load_data(raw: Dictionary = {}) -> void:
 	data = PlayerData.from_dict(raw) if not raw.is_empty() else PlayerData.new()
+	company_service.bind(data)
 	_ensure_local_identity()
 	_restore_vessel_archives()
 	data_loaded.emit(data)

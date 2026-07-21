@@ -3,8 +3,26 @@
 Detailed architecture reference. See also:
 - [`AGENTS.md`](AGENTS.md) — quick-start for AI agents
 - [`Angst 'n Anchors.md`](Angst%20'n%20Anchors.md) — game design overview
-- [`SHIP_BUILDING.md`](SHIP_BUILDING.md) — hull slots and ship JSON pipeline
 - [`SAVE_FORMAT.md`](SAVE_FORMAT.md) — player save schema
+
+---
+
+## Product Boundary: Company Simulation
+
+The first company slice is implemented as JSON-safe contracts plus an in-process authority service.
+It currently owns company identity, money ledger, starter-vessel grant, inventory lots, warehouse
+leases, and idempotent command results. Its architecture supports two authority hosts without
+creating two different rule sets:
+
+- single-player: the local process owns player and NPC company simulation
+- multiplayer: the persistent server owns player and NPC company simulation
+
+`CompanyContracts` defines the wire/save shapes. `CompanyService` is the single-player authority;
+`PlayerSession` owns it and mirrors the company balance into legacy `marks` while older call sites
+migrate. UI reads company summaries only through `LocalPlayerView`. A future server can implement the
+same commands and results behind transport. Crews, assignments, dynamic markets, rival companies,
+land, and facilities are not implemented yet. Do not introduce speculative `Economy`,
+`FleetManager`, `CompanyManager`, or parallel state singletons. See the [game direction](Angst%20'n%20Anchors.md).
 
 ---
 

@@ -6,7 +6,8 @@ var _failures := PackedStringArray()
 func _ready() -> void:
 	_test_catalog_and_inheritance()
 	_test_official_fishing_registration()
-	_test_draft_presets_remain_editable()
+	_test_fishing_berth_deployment_filter()
+	_test_official_starter_catalog()
 	_test_stricter_registration_budget()
 	_test_nav_light_placement()
 	_test_seeded_registration_types()
@@ -31,6 +32,11 @@ func _test_catalog_and_inheritance() -> void:
 	_check(
 		(fishing.get("rules", []) as Array).size() > (general.get("rules", []) as Array).size(),
 		"fishing inherits general-vessel legal code",
+	)
+	_check(
+		HarbourDeploy.terminal_families_for_registration("fishing_vessel") \
+				== PackedStringArray(["fishing"]),
+		"fishing vessels deploy only at fishing berths",
 	)
 
 
@@ -70,16 +76,38 @@ func _test_official_fishing_registration() -> void:
 		"railing_mooring is both railing and mooring gear",
 	)
 
-func _test_draft_presets_remain_editable() -> void:
-	var found_draft := false
+
+func _test_fishing_berth_deployment_filter() -> void:
+	var record := _official_trawler()
+	if record.is_empty():
+		return
+	var harbour := HarbourController.new()
+	harbour.setup("test-port")
+	var cargo := QuayBerthSlot.new()
+	cargo.setup("berth:cargo", "cargo", "general", PackedStringArray(["provisions"]), 100.0, 20.0)
+	var fishing := QuayBerthSlot.new()
+	fishing.setup("berth:fishing", "fishing", "fishing", PackedStringArray(["fresh_groundfish"]), 100.0, 20.0)
+	harbour.register_berth(cargo)
+	harbour.register_berth(fishing)
+	var slots := HarbourDeploy.free_slots_for(harbour, record)
+	_check(slots.size() == 1, "trawler has exactly one compatible berth")
+	_check(not slots.is_empty() and slots[0] == fishing, "trawler rejects a general-cargo quay")
+	harbour.unregister_all()
+	cargo.free()
+	fishing.free()
+	harbour.free()
+
+func _test_official_starter_catalog() -> void:
+	var found_starter := false
 	for entry in PrebuiltVesselCatalog.catalog_entries():
 		if str(entry.get("prebuilt_id", "")) != "28_10_m":
 			continue
-		found_draft = true
-		_check(bool(entry.get("is_draft", false)), "incomplete 28×10 m preset loads as a draft")
-		_check(not entry.get("prebuilt_layout", {}).is_empty(), "draft keeps its brick layout for editing")
+		found_starter = true
+		_check(not bool(entry.get("is_draft", true)), "28×10 m cargo starter is certified")
+		_check(bool(entry.get("compliance_ok", false)), "28×10 m cargo starter passes compliance")
+		_check(not entry.get("prebuilt_layout", {}).is_empty(), "starter keeps its brick layout")
 		break
-	_check(found_draft, "non-compliant preset stays in the authoring catalog")
+	_check(found_starter, "28×10 m starter stays in the authoring catalog")
 	for sale in PrebuiltVesselCatalog.for_sale_entries():
 		_check(
 			not bool(sale.get("is_draft", false)),

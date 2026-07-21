@@ -78,34 +78,37 @@ static func resolve_port_data(port_id: String, tree: SceneTree, chart_snapshot) 
 		info = chart_snapshot.port_info(port_id)
 	if info.is_empty():
 		return null
-	var def := PortDefinition.new()
+	var definition_record := info.get("port_definition", {}) as Dictionary
+	var def := PortDefinition.from_dict(definition_record) \
+			if not definition_record.is_empty() else PortDefinition.new()
 	def.port_id = port_id
 	def.display_name = str(info.get("display_name", port_id))
 	def.world_position = info.get("position", Vector3.ZERO) as Vector3
 	## Missing yaw must not pretend to be an explicit north-facing pose.
-	if info.has("rotation_y"):
+	if definition_record.is_empty() and info.has("rotation_y"):
 		def.rotation_y = float(info.get("rotation_y", 0.0))
 		def.has_explicit_rotation = true
-	else:
+	elif definition_record.is_empty():
 		def.has_explicit_rotation = false
-	def.size = int(info.get("size", 1))
-	def.site_seed = int(info.get("layout_seed", 0))
-	def.site_max_size = clampi(
-		int(info.get("site_max_size", PortSizing.MAX_SIZE)),
-		PortSizing.MIN_SIZE,
-		PortSizing.MAX_SIZE,
-	)
-	var region := str(info.get("region", "coastal"))
-	match region:
-		"mainland":
-			def.region_kind = PortDefinition.RegionKind.MAINLAND
-		"fjord":
-			def.region_kind = PortDefinition.RegionKind.FJORD
-		"archipelago":
-			def.region_kind = PortDefinition.RegionKind.ARCHIPELAGO
-		_:
-			def.region_kind = PortDefinition.RegionKind.LEGACY_ISLAND
-	def.ground_mode = PortDefinition.GroundMode.WORLD_TERRAIN
+	if definition_record.is_empty():
+		def.size = int(info.get("size", 1))
+		def.site_seed = int(info.get("layout_seed", 0))
+		def.site_max_size = clampi(
+			int(info.get("site_max_size", PortSizing.MAX_SIZE)),
+			PortSizing.MIN_SIZE,
+			PortSizing.MAX_SIZE,
+		)
+		var region := str(info.get("region", "coastal"))
+		match region:
+			"mainland":
+				def.region_kind = PortDefinition.RegionKind.MAINLAND
+			"fjord":
+				def.region_kind = PortDefinition.RegionKind.FJORD
+			"archipelago":
+				def.region_kind = PortDefinition.RegionKind.ARCHIPELAGO
+			_:
+				def.region_kind = PortDefinition.RegionKind.LEGACY_ISLAND
+		def.ground_mode = PortDefinition.GroundMode.WORLD_TERRAIN
 	return PortExpander.expand(def, int(chart_snapshot.world_seed), chart_snapshot.layout)
 
 
@@ -254,7 +257,7 @@ static func _asphalt_world_poly(
 		tangent = Vector2(-seaward.y, seaward.x)
 	var length_m := maxf(float(station.get("length_m", 40.0)), 8.0)
 	var depth_m := maxf(float(station.get("depth_m", 36.0)), 8.0)
-	var c := o + seaward * (depth_m * 0.5)
+	var c := o - seaward * (depth_m * 0.5)
 	var half_t := tangent * (length_m * 0.5)
 	var half_d := seaward * (depth_m * 0.5)
 	var local := PackedVector2Array([

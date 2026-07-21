@@ -393,7 +393,12 @@ func _complete(index: int) -> void:
 	_active.remove_at(index)
 	var session := get_node_or_null("/root/PlayerSession")
 	if session != null:
-		session.earn_marks(int(contract.get("pay_marks", 0)))
+		session.earn_marks(
+			int(contract.get("pay_marks", 0)),
+			"freight_delivery",
+			"Delivered cargo to %s" % str(contract.get("destination_name", contract.get("destination_port_id", "port"))),
+			str(contract.get("id", "")),
+		)
 		session.data.contracts_completed += 1
 	_publish()
 
