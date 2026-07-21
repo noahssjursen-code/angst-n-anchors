@@ -166,7 +166,20 @@ func layer_state() -> Dictionary:
 static func default_layers(enabled: bool = false) -> Dictionary:
 	var out := {}
 	for layer_id in LAYER_IDS:
-		out[layer_id] = enabled
+		out[layer_id] = false
+	if enabled:
+		# F3's broad Port Layout switch is an operational overview, not the
+		# authoring firehose. Detailed site/trace/asphalt/land layers remain
+		# available to the dedicated port showcase through explicit overrides.
+		for layer_id in [
+			LAYER_SPINE,
+			LAYER_DOCK_FACE,
+			LAYER_GRAPH_ROOT,
+			LAYER_QUAY_ROOTS,
+			LAYER_QUAY_ARMS,
+			LAYER_HARBOUR_BERTHS,
+		]:
+			out[layer_id] = true
 	return out
 
 
@@ -542,7 +555,7 @@ func _stamp_land_zone(plan: Dictionary) -> void:
 	var h_in := float(zone.get("height_inland_m", 110.0))
 	var y_base := 0.4
 	## Inverse trapezoid: narrow at apron, blooms wider + taller into the hills.
-	var volume := _make_rising_land_volume(
+	var volume := _make_rising_land_wireframe(
 		span_sea,
 		span_in,
 		inland_depth,
@@ -589,14 +602,14 @@ func _stamp_land_zone(plan: Dictionary) -> void:
 
 ## Trapezoid footprint (narrow seaward → wide inland); top rises inland.
 ## Local space: X = along-shore, Z = inland (−hd seaward … +hd hills).
-func _make_rising_land_volume(
+func _make_rising_land_wireframe(
 		width_seaward_m: float,
 		width_inland_m: float,
 		depth_m: float,
 		height_seaward_m: float,
 		height_inland_m: float,
 		color: Color,
-) -> MeshInstance3D:
+) -> Node3D:
 	var hw_sea := maxf(width_seaward_m, 4.0) * 0.5
 	var hw_in := maxf(width_inland_m, hw_sea * 2.0) * 0.5
 	var hd := depth_m * 0.5
@@ -616,32 +629,25 @@ func _make_rising_land_volume(
 		Vector3(hw_in, hi, z_in),
 		Vector3(-hw_in, hi, z_in),
 	])
-	var faces := [
-		[0, 1, 2, 3], ## bottom
-		[4, 7, 6, 5], ## top
-		[0, 4, 5, 1], ## seaward
-		[3, 2, 6, 7], ## inland
-		[0, 3, 7, 4], ## −X
-		[1, 5, 6, 2], ## +X
+	var edges := [
+		[0, 1], [1, 2], [2, 3], [3, 0],
+		[4, 5], [5, 6], [6, 7], [7, 4],
+		[0, 4], [1, 5], [2, 6], [3, 7],
 	]
-	var st := SurfaceTool.new()
-	st.begin(Mesh.PRIMITIVE_TRIANGLES)
-	for face in faces:
-		var a: Vector3 = verts[face[0]]
-		var b: Vector3 = verts[face[1]]
-		var c: Vector3 = verts[face[2]]
-		var d: Vector3 = verts[face[3]]
-		st.add_vertex(a)
-		st.add_vertex(b)
-		st.add_vertex(c)
-		st.add_vertex(a)
-		st.add_vertex(c)
-		st.add_vertex(d)
-	st.generate_normals()
-	var mi := MeshInstance3D.new()
-	mi.mesh = st.commit()
-	mi.material_override = MeshBuilder.make_material(color, 0.95, 0.0)
-	return mi
+	var root := Node3D.new()
+	var line_color := color
+	line_color.a = maxf(line_color.a, 0.72)
+	for pair in edges:
+		var a: Vector3 = verts[pair[0]]
+		var b: Vector3 = verts[pair[1]]
+		var span := a.distance_to(b)
+		if span < 0.1:
+			continue
+		var line := MeshBuilder.box(Vector3(0.65, 0.65, span), line_color, 0.8, 0.0)
+		_style_unshaded(line)
+		root.add_child(line)
+		_align_segment(line, a, b)
+	return root
 
 
 func _stamp_land_plan(plan: Dictionary) -> void:
@@ -821,12 +827,16 @@ func _stamp_polyline_dots(
 		radius: float,
 		prefix: String,
 ) -> void:
-	for index in range(points.size()):
+	# Curves used to be rendered as a dense chain of large spheres. A thin line
+	# plus sparse crosses is easier to follow and stays legible from freecam.
+	_stamp_polyline_lines(parent, points, color, 0.55)
+	var marker_stride := maxi(1, ceili(float(points.size()) / 10.0))
+	for index in range(0, points.size(), marker_stride):
 		var raw := points[index] as Array
 		if raw.size() < 2:
 			continue
 		var pos := Vector3(float(raw[0]), 3.0, float(raw[1]))
-		_stamp_dot(parent, pos, color, radius, "%s_%d" % [prefix, index])
+		_stamp_dot(parent, pos, color, minf(radius, 1.25), "%s_%d" % [prefix, index])
 
 
 func _stamp_polyline_lines(
@@ -867,23 +877,34 @@ func _align_segment(node: Node3D, a: Vector3, b: Vector3) -> void:
 
 
 func _stamp_dot(parent: Node3D, position: Vector3, color: Color, radius: float, node_name: String) -> void:
-	var dot := MeshBuilder.sphere(radius, color, 0.7, 0.05)
-	dot.name = node_name
-	dot.position = position
-	parent.add_child(dot)
+	var marker := Node3D.new()
+	marker.name = node_name
+	marker.position = position
+	parent.add_child(marker)
+	var arm_length := clampf(radius * 1.5, 1.2, 5.0)
+	var thickness := clampf(radius * 0.22, 0.18, 0.65)
+	var arm_x := MeshBuilder.box(
+		Vector3(arm_length * 2.0, thickness, thickness), color, 0.7, 0.05,
+	)
+	var arm_z := MeshBuilder.box(
+		Vector3(thickness, thickness, arm_length * 2.0), color, 0.7, 0.05,
+	)
+	for arm in [arm_x, arm_z]:
+		_style_unshaded(arm)
+		marker.add_child(arm)
 
 
 ## Bright unshaded stake — readable on black unlit apron / pad surfaces.
 func _stamp_grid_stake(parent: Node3D, position: Vector3, node_name: String) -> void:
-	var dot := MeshBuilder.sphere(ASPHALT_GRID_DOT_R, ASPHALT_GRID_COLOR, 0.7, 0.0)
-	dot.name = node_name
-	dot.position = position
-	var mat := dot.material_override as StandardMaterial3D
+	_stamp_dot(parent, position, ASPHALT_GRID_COLOR, 0.75, node_name)
+
+
+func _style_unshaded(mesh_instance: MeshInstance3D) -> void:
+	var mat := mesh_instance.material_override as StandardMaterial3D
 	if mat != null:
 		mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 		mat.disable_receive_shadows = true
-	dot.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	parent.add_child(dot)
+	mesh_instance.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 
 
 func _label(parent: Node3D, node_name: String, text: String, position: Vector3, color: Color) -> void:

@@ -392,7 +392,7 @@ func _stamp_ship_berth_pocket(slot: QuayBerthSlot) -> void:
 	pocket.position = centre + Vector3(0.0, water_local_y + 0.15, 0.0)
 	pocket.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	slot.add_child(pocket)
-	WorldGizmos.register(pocket)
+	WorldGizmos.register(pocket, WorldGizmos.LAYER_PORT_LAYOUT)
 
 	## Bright face line — land ends here; ships stay outside.
 	var edge_size := Vector3(
@@ -410,7 +410,7 @@ func _stamp_ship_berth_pocket(slot: QuayBerthSlot) -> void:
 	edge.position = water * (slot.face_offset_m + 0.4) + Vector3(0.0, QUAY_DECK_TOP_LOCAL_Y + 0.15, 0.0)
 	edge.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	slot.add_child(edge)
-	WorldGizmos.register(edge)
+	WorldGizmos.register(edge, WorldGizmos.LAYER_PORT_LAYOUT)
 
 	var label := Label3D.new()
 	label.name = "ShipBerthLabel"
@@ -423,7 +423,7 @@ func _stamp_ship_berth_pocket(slot: QuayBerthSlot) -> void:
 	label.no_depth_test = true
 	label.position = centre + Vector3(0.0, water_local_y + 5.0, 0.0)
 	slot.add_child(label)
-	WorldGizmos.register(label)
+	WorldGizmos.register(label, WorldGizmos.LAYER_PORT_LAYOUT)
 
 
 func _stamp_berth_bollards(
@@ -2402,7 +2402,7 @@ func _label(node_name: String, text: String, position: Vector3, color: Color, pi
 	label.no_depth_test = true
 	label.position = position
 	add_child(label)
-	WorldGizmos.register(label)
+	WorldGizmos.register(label, WorldGizmos.LAYER_PORT_LAYOUT)
 
 
 func _cached_material(color: Color, transparent: bool) -> StandardMaterial3D:

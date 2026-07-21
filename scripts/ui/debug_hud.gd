@@ -1,46 +1,88 @@
 extends Node
 
 ## Autoload — owns the F3 debug overlay. F4 weather presets + E clear/restore toggle.
-## F3 then G toggles world gizmos (ports, berth pockets, crane targets, …).
+## F3 then G opens the selectable world-gizmo layer menu.
 ## Layer 100: always above every other UI element.
 
 signal visibility_changed(visible: bool)
 signal world_gizmos_changed(enabled: bool)
+signal gizmo_layers_changed(states: Dictionary)
 
 const _WEATHER_PANEL := preload("res://scripts/weather/weather_debug_presets.gd")
+const _GIZMO_MENU := preload("res://scripts/ui/gizmo_layer_menu.gd")
 
 var _layer:   CanvasLayer
 var _overlay: DebugDraw
 var _weather_preset_panel: Control
+var _gizmo_menu: GizmoLayerMenu
 var _shown:   bool = false
 var _scale_probe: Node3D = null
 var _weather_before_clear: WeatherState = null
 var _time_before_clear: float = 0.5
 var _weather_blend_was_paused := false
+var _debug_cursor_enabled := false
+var _mouse_mode_before_debug_cursor: int = Input.MOUSE_MODE_CAPTURED
 
 ## Master playtest flag — every `world_gizmo` node + PortPlot site overlays follow this.
 var world_gizmos_enabled := false
+var gizmo_layers: Dictionary = {
+	WorldGizmos.LAYER_GENERAL: false,
+	WorldGizmos.LAYER_PORT_LAYOUT: false,
+	WorldGizmos.LAYER_CRANES: false,
+	WorldGizmos.LAYER_BERTH_LANES: false,
+	WorldGizmos.LAYER_NAVIGATION: false,
+}
 
 
 func is_open() -> bool:
 	return _shown
 
 
+func is_debug_cursor_enabled() -> bool:
+	return Input.mouse_mode == Input.MOUSE_MODE_VISIBLE
+
+
 func set_world_gizmos_enabled(enabled: bool) -> void:
-	if world_gizmos_enabled == enabled:
+	set_all_gizmo_layers(enabled)
+
+
+func is_gizmo_layer_enabled(layer_id: String) -> bool:
+	return bool(gizmo_layers.get(layer_id, false))
+
+
+func set_gizmo_layer_enabled(layer_id: String, enabled: bool) -> void:
+	if not gizmo_layers.has(layer_id) or bool(gizmo_layers[layer_id]) == enabled:
 		return
-	world_gizmos_enabled = enabled
-	_apply_world_gizmos()
+	gizmo_layers[layer_id] = enabled
+	world_gizmos_enabled = _any_gizmo_layer_enabled()
+	_apply_gizmo_layer(layer_id, enabled)
+	gizmo_layers_changed.emit(gizmo_layers.duplicate())
 	world_gizmos_changed.emit(world_gizmos_enabled)
 	var telemetry := get_node_or_null("/root/Telemetry")
 	if telemetry != null and telemetry.has_method("set_context_flag"):
-		telemetry.set_context_flag(&"debug.world_gizmos", enabled, &"debug_hud")
+		telemetry.set_context_flag(&"debug.world_gizmos", world_gizmos_enabled, &"debug_hud")
+		telemetry.set_context_flag(
+			StringName("debug.gizmo.%s" % layer_id), enabled, &"debug_hud")
+	if _gizmo_menu != null:
+		_gizmo_menu.sync_states(gizmo_layers)
 	if _overlay != null:
 		_overlay.queue_redraw()
 
 
 func toggle_world_gizmos() -> void:
-	set_world_gizmos_enabled(not world_gizmos_enabled)
+	set_all_gizmo_layers(not world_gizmos_enabled)
+
+
+func set_all_gizmo_layers(enabled: bool) -> void:
+	for definition in WorldGizmos.LAYERS:
+		set_gizmo_layer_enabled(str(definition.get("id", "")), enabled)
+
+
+func _any_gizmo_layer_enabled() -> bool:
+	for enabled in gizmo_layers.values():
+		if bool(enabled):
+			return true
+	return false
 
 
 func _ready() -> void:
@@ -62,6 +104,14 @@ func _ready() -> void:
 	_weather_preset_panel.visible = false
 	_layer.add_child(_weather_preset_panel)
 
+	_gizmo_menu = _GIZMO_MENU.new()
+	_gizmo_menu.name = "GizmoLayerMenu"
+	_gizmo_menu.visible = false
+	_gizmo_menu.layer_requested.connect(set_gizmo_layer_enabled)
+	_gizmo_menu.all_requested.connect(set_all_gizmo_layers)
+	_layer.add_child(_gizmo_menu)
+	_gizmo_menu.sync_states(gizmo_layers)
+
 
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventKey:
@@ -71,6 +121,8 @@ func _unhandled_input(event: InputEvent) -> void:
 			_overlay.visible = _shown
 			if not _shown:
 				_weather_preset_panel.visible = false
+				_gizmo_menu.visible = false
+				_restore_debug_cursor()
 			visibility_changed.emit(_shown)
 			var telemetry := get_node_or_null("/root/Telemetry")
 			if telemetry != null and telemetry.has_method("set_context_flag"):
@@ -93,6 +145,9 @@ func _input(event: InputEvent) -> void:
 	var ke := event as InputEventKey
 	if not ke.pressed or ke.echo:
 		return
+	if _gizmo_menu.visible and _handle_gizmo_menu_key(ke):
+		get_viewport().set_input_as_handled()
+		return
 	match ke.physical_keycode:
 		KEY_TAB:
 			_overlay.cycle_tab(-1 if ke.shift_pressed else 1)
@@ -104,40 +159,128 @@ func _input(event: InputEvent) -> void:
 			_overlay.toggle_value_mode()
 			get_viewport().set_input_as_handled()
 		KEY_C:
-			_overlay.copy_report()
+			if ke.ctrl_pressed:
+				_overlay.copy_report()
+			else:
+				_toggle_debug_cursor()
 			get_viewport().set_input_as_handled()
 		KEY_R:
 			_overlay.reset_peaks()
 			get_viewport().set_input_as_handled()
 		KEY_B:
-			BerthApproachLanes.toggle_debug()
-			_refresh_lane_debug_draw()
+			set_gizmo_layer_enabled(
+				WorldGizmos.LAYER_BERTH_LANES,
+				not is_gizmo_layer_enabled(WorldGizmos.LAYER_BERTH_LANES),
+			)
 			_overlay.queue_redraw()
 			get_viewport().set_input_as_handled()
 		KEY_G:
-			toggle_world_gizmos()
+			_toggle_gizmo_menu()
+			get_viewport().set_input_as_handled()
+		KEY_N:
+			_handle_debug_traffic_key(ke)
 			get_viewport().set_input_as_handled()
 		KEY_P:
 			_toggle_scale_probe()
 			get_viewport().set_input_as_handled()
 
 
+func _handle_debug_traffic_key(key: InputEventKey) -> void:
+	var service := get_tree().get_first_node_in_group("world_traffic_service")
+	if service == null:
+		push_warning("Debug traffic: world traffic service is not ready")
+		return
+	if key.ctrl_pressed:
+		service.call("clear_debug_fleet")
+		print("Debug traffic: cleared")
+		return
+	var count := 250 if key.shift_pressed else 5
+	var result := service.call("spawn_debug_fleet", count) as Dictionary
+	if not bool(result.get("ok", false)):
+		push_warning("Debug traffic: %s" % str(result.get("error", "spawn failed")))
+		return
+	print("Debug traffic: %d authoritative vessels ready in %.1f ms" % [
+		int(result.get("vessel_count", 0)), float(result.get("configure_ms", 0.0))])
+	# State labels share the navigation gizmo layer, so the test is immediately
+	# inspectable without turning on unrelated port/crane diagnostics.
+	set_gizmo_layer_enabled(WorldGizmos.LAYER_NAVIGATION, true)
+
+
 func _apply_world_gizmos() -> void:
+	for layer_id in gizmo_layers:
+		_apply_gizmo_layer(str(layer_id), bool(gizmo_layers[layer_id]))
+
+
+func _apply_gizmo_layer(layer_id: String, enabled: bool) -> void:
 	var tree := get_tree()
 	if tree == null:
 		return
-	WorldGizmos.apply_all(tree, world_gizmos_enabled)
-	## Port site overlays (spine / quay roots / harbour berths / …).
-	for node in tree.get_nodes_in_group("port_plot"):
-		var plot := node as PortPlot
-		if plot != null:
-			plot.show_site_gizmos = world_gizmos_enabled
-	## Crane auto-aim targets.
-	for node in tree.get_nodes_in_group("bulk_crane_auto"):
-		if node != null and node.has_method("set_show_target_gizmos"):
-			node.call("set_show_target_gizmos", world_gizmos_enabled)
-		elif node != null and "show_target_gizmos" in node:
-			node.set("show_target_gizmos", world_gizmos_enabled)
+	WorldGizmos.apply_layer(tree, layer_id, enabled)
+	if layer_id == WorldGizmos.LAYER_PORT_LAYOUT:
+		for node in tree.get_nodes_in_group("port_plot"):
+			var plot := node as PortPlot
+			if plot != null:
+				plot.show_site_gizmos = enabled
+	if layer_id == WorldGizmos.LAYER_CRANES:
+		for node in tree.get_nodes_in_group("bulk_crane_auto"):
+			if node != null and node.has_method("set_show_target_gizmos"):
+				node.call("set_show_target_gizmos", enabled)
+			elif node != null and "show_target_gizmos" in node:
+				node.set("show_target_gizmos", enabled)
+	if layer_id == WorldGizmos.LAYER_BERTH_LANES:
+		BerthApproachLanes.debug_visible = enabled
+		_refresh_lane_debug_draw()
+
+
+func _toggle_gizmo_menu() -> void:
+	_gizmo_menu.visible = not _gizmo_menu.visible
+	if _gizmo_menu.visible:
+		_gizmo_menu.sync_states(gizmo_layers)
+		_gizmo_menu.focus_selected()
+
+
+func _handle_gizmo_menu_key(key: InputEventKey) -> bool:
+	match key.physical_keycode:
+		KEY_G, KEY_ESCAPE:
+			_gizmo_menu.visible = false
+			return true
+		KEY_UP:
+			_gizmo_menu.move_selection(-1)
+			return true
+		KEY_DOWN:
+			_gizmo_menu.move_selection(1)
+			return true
+		KEY_SPACE, KEY_ENTER:
+			_gizmo_menu.toggle_selected()
+			return true
+		KEY_A:
+			if key.ctrl_pressed:
+				set_all_gizmo_layers(true)
+				return true
+		KEY_X:
+			set_all_gizmo_layers(false)
+			return true
+	return false
+
+
+func _toggle_debug_cursor() -> void:
+	if _debug_cursor_enabled:
+		_restore_debug_cursor()
+	elif Input.mouse_mode == Input.MOUSE_MODE_VISIBLE:
+		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+	else:
+		_mouse_mode_before_debug_cursor = Input.mouse_mode
+		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+		_debug_cursor_enabled = true
+	if _overlay != null:
+		_overlay.queue_redraw()
+
+
+func _restore_debug_cursor() -> void:
+	if not _debug_cursor_enabled:
+		return
+	Input.mouse_mode = _mouse_mode_before_debug_cursor
+	_debug_cursor_enabled = false
 
 
 func is_clear_weather_override_active() -> bool:

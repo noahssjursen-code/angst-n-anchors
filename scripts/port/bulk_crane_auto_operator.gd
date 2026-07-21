@@ -77,7 +77,7 @@ func _ready() -> void:
 	if _crane == null:
 		push_warning("BulkCraneAutoOperator: parent must be BulkCrane")
 	_build_gizmos()
-	show_target_gizmos = WorldGizmos.is_enabled()
+	show_target_gizmos = WorldGizmos.is_layer_enabled(WorldGizmos.LAYER_CRANES)
 	var hud := get_node_or_null("/root/DebugHud")
 	if hud != null and hud.has_signal("world_gizmos_changed"):
 		if not hud.world_gizmos_changed.is_connected(set_show_target_gizmos):
@@ -584,7 +584,8 @@ func _ensure_hold_gizmos() -> void:
 func _update_gizmos() -> void:
 	if _gizmos == null:
 		return
-	_gizmos.visible = show_target_gizmos and WorldGizmos.is_enabled() and _active
+	_gizmos.visible = show_target_gizmos \
+		and WorldGizmos.is_layer_enabled(WorldGizmos.LAYER_CRANES) and _active
 	if not _gizmos.visible or _crane == null:
 		return
 	_ensure_hold_gizmos()

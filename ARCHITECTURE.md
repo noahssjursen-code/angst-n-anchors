@@ -92,6 +92,70 @@ truth for rendering, weather, ports, charting, and navigation.
 - `AtmosphericEffects` — fog, atmospheric post-processing
 - `WaterwayNavigation` (`navigation/`) — deterministic reachability and navigable route distance over generated centerlines
 
+### `scripts/traffic/`
+
+Deterministic maritime traffic infrastructure. Production world presentation
+contains no client-authoritative vessel agents; the F6 lab has a separate
+data-only simulator for exercising the authority without BoatBody physics.
+
+- `ShippingLaneNetworkBuilder` converts `WorldLayout.waterway_centerlines` and
+  every seeded `PortData.berth_plan` into quay manoeuvre pockets, per-quay
+  junctions, local collectors, block-based inbound queues, and four-lane
+  highways. The centre pair carries opposing through traffic; the outside pair
+  are same-direction access/overtaking lanes. Each port has separate before/after
+  ON and OFF service ramps in both directions, attached only to the outside lane
+  and kept outside the harbour approach envelope. An OFF ramp that crosses the
+  opposing carriageway owns one atomic interlocking group, so its movement is
+  either completely green or completely red.
+- `ShippingLaneNetwork` is the immutable authority record. It supports
+  vessel-dimension-aware route queries, deterministic checksums, and snapshot
+  round-tripping for either a local single-player authority or a future
+  persistent server.
+- `ShippingLaneReservationService` atomically reserves blocks, berth tokens,
+  FIFO port queues, on-demand opposing-lane passing zones, and compact harbour
+  interlocking groups. Its snapshot is the small mutable state that an
+  authority replicates; clients do not independently decide traffic outcomes.
+- `HybridShippingRoutePlanner` performs one deterministic search over controlled
+  lane edges plus cached, water-safe A* passages. Physical service ramps never
+  double as ocean waypoints: separate offshore leave/join portals provide the
+  legal A* endpoints before/after each port. Open water can only run from a leave
+  portal to a join portal, and is selected only when it removes a material time
+  and percentage detour. Already-direct voyages stay on marked lanes; circuitous
+  end-of-network reversals may leave sooner. A passage may alternate between
+  lanes and open water repeatedly. Crossing a lane in open water does not
+  reserve or join it.
+- `ShippingLaneDebugDraw` streams only the F3/freecam region around the current
+  camera and remains completely unmaterialized while its gizmo layer is off.
+- `ShippingLaneTrafficSimulator` is a fixed-step test harness. Lightweight ship
+  records travel controlled graph edges plus explicit open-water passage sections,
+  retain signal blocks until their stern clears,
+  request berth tokens, enter FIFO queues, and emit a copyable authority report.
+  Exact and strategic records share the same block reservation service and ship
+  domains; an authority cadence change never makes a distant contact intangible.
+  On open water the shared authority applies deterministic headway, crossing and
+  head-on/starboard rules instead of reserving an entire multi-kilometre corridor.
+  It is not the production NPC helm or BoatBody controller.
+- `ShippingOpenWaterSchedule` remains a standalone stress-tested experimental
+  scheduler. It is not used by the traffic simulator: whole-corridor bookings
+  serialized the sea, created hour-long queues and prevented normal encounters.
+- Traffic presentation is interest-managed independently of authority. Every
+  vessel remains a data record; a deterministic policy selects a capped nearby
+  set of full official vessel builds, lightweight nearby proxies, and data-only
+  distant records. Full builds are frozen presentations and never become a
+  second traffic authority. The authority keeps a small exact set at its
+  0.5-second cadence and advances distant strategic contacts in staggered
+  10-second AIS-style buckets. Player/server interest promotes records back to
+  exact simulation; the chart still receives every contact. Headless servers
+  never materialize vessel nodes.
+- `shipping_lane_network_showcase.tscn` is the F6 traffic lab. It displays those
+  test records with the mixed presentation tiers, accelerates or pauses time,
+  and copies both human-readable validation and machine-readable authority state
+  with Ctrl+C. The headless artifact test also writes an SVG/PNG network snapshot
+  plus clocked JSON summary for visual regression inspection.
+- The navigation chart caches a clean traffic layer from the same immutable
+  network: highways at world scale, port links when zoomed in, and subtle legal
+  on/off-ramp markers. It never draws F3 block/signal geometry on the player chart.
+
 ### `scripts/port/`
 
 Ports are seeded as a coast-traced foundation plus a trade `berth_plan`. The

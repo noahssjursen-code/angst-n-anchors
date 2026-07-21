@@ -126,7 +126,7 @@ func _draw() -> void:
 	draw_string(font, Vector2(ox + PAD_X, ty),
 		"DEBUG  %s" % ("PEAK/WORST" if use_peak_values else "LIVE"),
 		HORIZONTAL_ALIGNMENT_LEFT, -1, 11, C_TITLE)
-	var hint := "Tab switch · H live/peak · C copy · R reset"
+	var hint := "G layers · C cursor · Ctrl+C copy · H live/peak"
 	var hint_w := font.get_string_size(hint, HORIZONTAL_ALIGNMENT_LEFT, -1, 9).x
 	draw_string(font, Vector2(ox + PANEL_W - hint_w - PAD_X, ty),
 		hint, HORIZONTAL_ALIGNMENT_LEFT, -1, 9, C_LABEL)
@@ -230,6 +230,38 @@ func _build_world_generation(e: Array) -> void:
 	], C_VALUE)
 	var checksum := str(stats.get("checksum", ""))
 	_row(e, "Checksum", checksum.left(12) if not checksum.is_empty() else "—", C_LABEL)
+	var lanes := stats.get("shipping_lanes", {}) as Dictionary
+	if not lanes.is_empty():
+		var issue_color := C_WARN if int(lanes.get("errors", 0)) > 0 else C_VALUE
+		_row(e, "Shipping network", "%d blocks · %d signals · %d ports · %.1f ms" % [
+			int(lanes.get("blocks", 0)), int(lanes.get("signals", 0)),
+			int(lanes.get("ports", 0)), float(lanes.get("generation_usec", 0)) / 1000.0,
+		], issue_color)
+		_row(e, "Traffic validation", "%d errors · %d warnings · %s" % [
+			int(lanes.get("errors", 0)), int(lanes.get("warnings", 0)),
+			str(lanes.get("network_checksum", "")).left(12),
+		], issue_color)
+	var lane_draw := get_tree().get_first_node_in_group("shipping_lane_debug")
+	if lane_draw != null and lane_draw.has_method("get_debug_stats"):
+		var draw_stats := lane_draw.call("get_debug_stats") as Dictionary
+		_row(e, "Traffic gizmos", "%s · %d edges · %.2f ms rebuild" % [
+			"visible" if bool(draw_stats.get("layer_visible", false)) else "off",
+			int(draw_stats.get("visible_edges", 0)),
+			float(draw_stats.get("last_rebuild_ms", 0.0)),
+		], C_LABEL)
+	var traffic := get_tree().get_first_node_in_group("world_traffic_service")
+	if traffic != null and traffic.has_method("get_debug_stats"):
+		var traffic_stats := _provider_stats(
+			&"world.traffic", traffic.call("get_debug_stats") as Dictionary)
+		_row(e, "NPC traffic", "%d records Â· %d physics Â· %d full Â· %d proxy" % [
+			int(traffic_stats.get("records", 0)), int(traffic_stats.get("physics", 0)),
+			int(traffic_stats.get("full", 0)), int(traffic_stats.get("proxy", 0)),
+		], C_VALUE)
+		_row(e, "Traffic authority", "%.2f ms now Â· %.2f ms peak Â· %d data-only" % [
+			float(traffic_stats.get("authority_ms", 0.0)),
+			float(traffic_stats.get("authority_peak_ms", 0.0)),
+			int(traffic_stats.get("data_only", 0)),
+		], C_LABEL)
 	var terrain := get_tree().get_first_node_in_group("world_terrain_streamer")
 	if terrain != null and terrain.has_method("get_debug_stats"):
 		var terrain_stats := _provider_stats(&"world.terrain", terrain.call("get_debug_stats") as Dictionary)
@@ -480,6 +512,7 @@ func _build_debug_tools(e: Array) -> void:
 		BerthApproachLanes.debug_polyline_count(),
 	], C_VALUE)
 	_stub(e, "Toggle", "B lane overlay")
+	_stub(e, "Traffic test", "N = 5 ships / Shift+N = 250 / Ctrl+N = clear")
 	_sep(e)
 
 

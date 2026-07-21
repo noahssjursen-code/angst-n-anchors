@@ -22,7 +22,7 @@ var _layers: Dictionary = {
 	"fishing": false,
 	"routes": true,
 	"approaches": false,
-	"traffic": false,
+	"traffic": true,
 	"nav_vectors": true,
 	"annotations": true,
 }
@@ -44,6 +44,7 @@ func apply_preset(next_preset: int) -> void:
 			_layers["fishing"] = true
 		_:
 			_layers["routes"] = true
+			_layers["traffic"] = true
 			_layers["approaches"] = false
 			_layers["annotations"] = true
 	revision += 1
