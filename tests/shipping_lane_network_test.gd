@@ -32,6 +32,7 @@ func _run() -> void:
 	_test_shape(first, ports)
 	_test_connectivity(first)
 	_test_hybrid_passages(first, layout)
+	_test_port_interchange_isolation(first, ports)
 	_test_determinism(first, second)
 	_test_snapshot(first)
 	_test_reservations(first)
@@ -117,30 +118,21 @@ func _test_shape(network: ShippingLaneNetwork, ports: Array[PortData]) -> void:
 			"%s does not collapse physical quays into a shared gate" % port.port_id,
 		)
 		var port_ramps := network.ramps_for_port(port.port_id)
-		_check(port_ramps.size() == 8,
-			"%s publishes service and water-transfer on/off ramps in both directions" % port.port_id)
+		_check(port_ramps.size() == 4,
+			"%s publishes four physical service ramps" % port.port_id)
 		var ramp_shapes: Dictionary = {}
-		var service_count := 0
-		var transfer_count := 0
 		for ramp in port_ramps:
 			var lane_node := network.node(str(ramp.get("lane_node_id", "")))
 			var ramp_node := network.node(str(ramp.get("ramp_node_id", "")))
 			var shape := "%s:%s:%d" % [str(ramp.get("station", "")),
 				str(ramp.get("ramp_kind", "")), int(ramp.get("direction_index", -1))]
 			ramp_shapes[shape] = true
-			var transfer_only := bool(ramp.get("transfer_only", false))
-			if transfer_only:
-				transfer_count += 1
-			else:
-				service_count += 1
 			_check(str(lane_node.get("kind", "")) in ["main_lane", "regional_lane"],
 				"%s ramp attaches to the shipping highway" % port.port_id)
 			_check(str(lane_node.get("lane_role", "")) == "access",
 				"%s ramp attaches only to the outside access lane" % port.port_id)
-			_check((transfer_only and str(ramp.get("ramp_node_id", "")) \
-					== str(ramp.get("lane_node_id", ""))) \
-					or (not transfer_only and str(ramp_node.get("kind", "")) == "shipping_ramp"),
-				"%s ramp uses the correct transfer/service node" % port.port_id)
+			_check(str(ramp_node.get("kind", "")) == "shipping_ramp",
+				"%s service ramp owns a physical ramp node" % port.port_id)
 			_check(not unique_gates.has(str(ramp.get("ramp_node_id", ""))),
 				"%s ramps are not quay approach junctions" % port.port_id)
 			for gate_id in published_gates:
@@ -148,8 +140,26 @@ func _test_shape(network: ShippingLaneNetwork, ports: Array[PortData]) -> void:
 				_check((ramp.get("position", Vector2.ZERO) as Vector2).distance_to(
 					gate_node.get("position", Vector2.ZERO) as Vector2) >= 400.0,
 					"%s ramps clear the local harbour envelope" % port.port_id)
-		_check(ramp_shapes.size() == 8 and service_count == 4 and transfer_count == 4,
-			"%s has no collapsed or duplicated ramp roles" % port.port_id)
+		_check(ramp_shapes.size() == 4,
+			"%s has no collapsed or duplicated service-ramp roles" % port.port_id)
+		var portals := network.portals_for_port(port.port_id)
+		_check(portals.size() == 4,
+			"%s publishes four dedicated open-water join/leave portals" % port.port_id)
+		var portal_shapes: Dictionary = {}
+		for portal in portals:
+			var lane_node := network.node(str(portal.get("lane_node_id", "")))
+			var shape := "%s:%s:%d" % [str(portal.get("station", "")),
+				str(portal.get("portal_kind", "")), int(portal.get("direction_index", -1))]
+			portal_shapes[shape] = true
+			_check(str(lane_node.get("lane_role", "")) == "access",
+				"%s open-water portal attaches to an outside access lane" % port.port_id)
+			for gate_id in published_gates:
+				var gate_node := network.node(str(gate_id))
+				_check((portal.get("position", Vector2.ZERO) as Vector2).distance_to(
+					gate_node.get("position", Vector2.ZERO) as Vector2) >= 400.0,
+					"%s open-water portals clear the harbour envelope" % port.port_id)
+		_check(portal_shapes.size() == 4,
+			"%s has no collapsed or duplicated open-water portal roles" % port.port_id)
 		var berth_count := 0
 		for token_value in network.berth_tokens.values():
 			if str((token_value as Dictionary).get("port_id", "")) == port.port_id:
@@ -251,11 +261,73 @@ func _test_hybrid_passages(network: ShippingLaneNetwork, layout: WorldLayout) ->
 		var step := raw_step as Dictionary
 		if str(step.get("kind", "")) != "open_water":
 			continue
-		var off_ramp := network.port_ramps.get(str(step.get("from_ramp_id", "")), {}) as Dictionary
-		var on_ramp := network.port_ramps.get(str(step.get("to_ramp_id", "")), {}) as Dictionary
-		_check(str(off_ramp.get("ramp_kind", "")) == "off_ramp" \
-			and str(on_ramp.get("ramp_kind", "")) == "on_ramp",
-			"open-water passage travels only from a published off-ramp to an on-ramp")
+		var leave_portal := network.open_water_portals.get(
+			str(step.get("from_portal_id", "")), {}) as Dictionary
+		var join_portal := network.open_water_portals.get(
+			str(step.get("to_portal_id", "")), {}) as Dictionary
+		_check(str(leave_portal.get("portal_kind", "")) == "leave" \
+			and str(join_portal.get("portal_kind", "")) == "join",
+			"open-water passage travels only from a leave portal to a join portal")
+	_test_route_choice_quality(network, planner)
+
+
+func _test_route_choice_quality(
+		network: ShippingLaneNetwork, planner: HybridShippingRoutePlanner,
+) -> void:
+	var token_by_port: Dictionary = {}
+	for token_id in network.sorted_berth_token_ids():
+		var token := network.berth_tokens[token_id] as Dictionary
+		var port_id := str(token.get("port_id", ""))
+		if not token_by_port.has(port_id):
+			token_by_port[port_id] = token
+	var ports := ShippingLaneNetwork._sorted_ids(token_by_port)
+	var lane_routes := 0
+	var hybrid_routes := 0
+	for source_port in ports:
+		for destination_port in ports:
+			if source_port == destination_port:
+				continue
+			var source := token_by_port[source_port] as Dictionary
+			var destination := token_by_port[destination_port] as Dictionary
+			var route := planner.plan(str(source.get("node_id", "")),
+				str(destination.get("node_id", "")),
+				{"draft_m": 3.0, "beam_m": 10.0, "length_m": 28.0})
+			_check(not route.is_empty(), "%s to %s has a voyage" % [
+				source_port, destination_port])
+			if route.is_empty():
+				continue
+			var mode := str(route.get("mode", ""))
+			_check(mode != "open_water",
+				"berth voyage never bypasses controlled port and lane transitions")
+			var steps := route.get("steps", []) as Array
+			_check(not steps.is_empty() \
+				and str((steps.front() as Dictionary).get("kind", "")) == "controlled" \
+				and str((steps.back() as Dictionary).get("kind", "")) == "controlled",
+				"%s to %s starts and ends under controlled harbour authority" % [
+					source_port, destination_port])
+			if mode == "hybrid":
+				hybrid_routes += 1
+				_check(float(route.get("open_water_saving_s", 0.0)) > 0.0,
+					"%s to %s leaves lanes only for a measured saving" % [
+						source_port, destination_port])
+				_check(str(route.get("route_choice_reason", "")) \
+						== "material_network_detour",
+					"%s to %s records why open water was selected" % [
+						source_port, destination_port])
+				for step_index in range(steps.size()):
+					if str((steps[step_index] as Dictionary).get("kind", "")) \
+							!= "open_water":
+						continue
+					_check(step_index > 0 and step_index + 1 < steps.size() \
+							and str((steps[step_index - 1] as Dictionary).get(
+								"kind", "")) == "controlled" \
+							and str((steps[step_index + 1] as Dictionary).get(
+								"kind", "")) == "controlled",
+						"open water exists only between marked-lane portals")
+			else:
+				lane_routes += 1
+	_check(lane_routes > 0, "route sample retains ordinary marked-lane voyages")
+	_check(hybrid_routes > 0, "route sample contains justified open-water transfers")
 
 
 func _test_determinism(first: ShippingLaneNetwork, second: ShippingLaneNetwork) -> void:
@@ -280,7 +352,70 @@ func _test_snapshot(network: ShippingLaneNetwork) -> void:
 	_check(restored.passing_zones.size() == network.passing_zones.size(),
 		"authority snapshot preserves passing zones")
 	_check(restored.port_ramps.size() == network.port_ramps.size(),
-		"authority snapshot preserves legal on/off ramps")
+		"authority snapshot preserves physical service ramps")
+	_check(restored.open_water_portals.size() == network.open_water_portals.size(),
+		"authority snapshot preserves open-water portals")
+
+
+func _test_port_interchange_isolation(network: ShippingLaneNetwork,
+		ports: Array[PortData]) -> void:
+	# A port queue is a siding, not a motorway tailback. Its blocks must stay on
+	# the port feeder while through blocks retain a continuous center-lane route.
+	# OFF ramps that cross other carriageways publish explicit signal conflicts;
+	# ON ramps merge onto the outside lane without reserving unrelated highway.
+	for port in ports:
+		var ramps := network.ramps_for_port(port.port_id)
+		var crossing_off_ramps := 0
+		for ramp in ramps:
+			var ramp_kind := str(ramp.get("ramp_kind", ""))
+			var transition_edges := ramp.get("transition_edge_ids",
+				PackedStringArray()) as PackedStringArray
+			var feeder_edges := ramp.get("port_feeder_edge_ids",
+				PackedStringArray()) as PackedStringArray
+			_check(not transition_edges.is_empty(),
+				"%s %s owns a highway transition" % [port.port_id, ramp_kind])
+			_check(not feeder_edges.is_empty(),
+				"%s %s owns an isolated port feeder" % [port.port_id, ramp_kind])
+			for edge_id in feeder_edges:
+				var edge := network.edge(edge_id)
+				_check(str(edge.get("kind", "")) == "port_feeder",
+					"%s queue remains off the shipping highway" % port.port_id)
+			for edge_id in transition_edges:
+				var edge := network.edge(edge_id)
+				_check(str(edge.get("kind", "")) == "shipping_ramp",
+					"%s transition remains a signal-controlled ramp" % port.port_id)
+			if ramp_kind != "off_ramp":
+				continue
+			var crossing_blocks := ramp.get("crossing_block_ids",
+				PackedStringArray()) as PackedStringArray
+			if not crossing_blocks.is_empty():
+				crossing_off_ramps += 1
+			for crossed_block_id in crossing_blocks:
+				var crossed_edge := network.edge(str(network.block(
+					crossed_block_id).get("edge_id", "")))
+				_check(str(crossed_edge.get("kind", "")) in [
+					"main_lane", "regional_lane", "passing_lane"],
+					"%s OFF-ramp interlock references a real carriageway" % port.port_id)
+				var reciprocal_found := false
+				for transition_edge_id in transition_edges:
+					var transition := network.edge(transition_edge_id)
+					for transition_block_id in transition.get("block_ids",
+							PackedStringArray()) as PackedStringArray:
+						if (network.block(transition_block_id).get("conflicts",
+								PackedStringArray()) as PackedStringArray).has(crossed_block_id):
+							reciprocal_found = true
+				_check(reciprocal_found,
+					"%s crossing light protects its OFF-ramp movement" % port.port_id)
+		_check(crossing_off_ramps >= 1,
+			"%s has a signalled cross-carriageway OFF-ramp" % port.port_id)
+		for slot_value in network.port_queue_slots.values():
+			var slot := slot_value as Dictionary
+			if str(slot.get("port_id", "")) != port.port_id:
+				continue
+			var queue_block := network.block(str(slot.get("block_id", "")))
+			var queue_edge := network.edge(str(queue_block.get("edge_id", "")))
+			_check(str(queue_edge.get("kind", "")) == "port_feeder",
+				"%s berth queue never occupies a through/overtake lane" % port.port_id)
 
 
 func _test_reservations(network: ShippingLaneNetwork) -> void:
@@ -403,7 +538,7 @@ func _finish(network: ShippingLaneNetwork) -> void:
 			errors += 1
 	_check(errors == 0, "network validator reports no structural errors")
 	if _failures.is_empty():
-		print("Shipping lane network tests: all checks passed — %s" % network.summary())
+		print("Shipping lane network tests: all checks passed - %s" % network.summary())
 		quit()
 		return
 	for failure in _failures:

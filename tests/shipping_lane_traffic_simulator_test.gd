@@ -24,10 +24,11 @@ func _run() -> void:
 	var network := ShippingLaneNetworkBuilder.new().build(layout, ports)
 	var first := ShippingLaneTrafficSimulator.new()
 	first.configure(network, 24, FIXED_SEED, layout)
+	var failures := PackedStringArray()
+	_check_initial_staging(first, network, failures)
 	first.advance(SIMULATED_SECONDS)
 	var summary := first.summary()
 	print(first.generate_report())
-	var failures := PackedStringArray()
 	_check(int(summary.get("trips_completed", 0)) > 0,
 		"fleet completes port-to-port journeys", failures)
 	_check(int(summary.get("vessel_count", 0)) == 24,
@@ -70,6 +71,47 @@ func _run() -> void:
 		for failure in failures:
 			push_error("Traffic simulator test failed: %s" % failure)
 		quit(1)
+
+
+func _check_initial_staging(simulator: ShippingLaneTrafficSimulator,
+		network: ShippingLaneNetwork, failures: PackedStringArray) -> void:
+	for vessel in simulator.vessel_records():
+		var route := vessel.get("route_steps", []) as Array
+		var route_index := int(vessel.get("route_index", -1))
+		_check(route_index >= 0 and route_index < route.size(),
+			"%s is staged on its assigned contract route" % str(vessel.get("id", "")),
+			failures)
+		if route_index < 0 or route_index >= route.size():
+			continue
+		var step := route[route_index] as Dictionary
+		var edge := step if str(step.get("kind", "")) == "open_water" \
+			else network.edge(str(step.get("edge_id", "")))
+		var points := edge.get("points", PackedVector2Array()) as PackedVector2Array
+		var distance := _distance_to_polyline(
+			vessel.get("position", Vector2.ZERO) as Vector2, points)
+		_check(distance <= absf(float(vessel.get("navigation_offset_m", 0.0))) + 1.0,
+			"%s initial AIS position lies on its real route" % str(vessel.get("id", "")),
+			failures)
+		_check(str(vessel.get("source_token_id", "")) \
+				!= str(vessel.get("destination_token_id", "")),
+			"%s starts with a meaningful inter-port contract" % str(vessel.get("id", "")),
+			failures)
+
+
+static func _distance_to_polyline(point: Vector2, points: PackedVector2Array) -> float:
+	if points.is_empty():
+		return INF
+	if points.size() == 1:
+		return point.distance_to(points[0])
+	var best := INF
+	for index in range(points.size() - 1):
+		var start := points[index]
+		var finish := points[index + 1]
+		var segment := finish - start
+		var ratio := 0.0 if segment.length_squared() <= 0.0001 else clampf(
+			(point - start).dot(segment) / segment.length_squared(), 0.0, 1.0)
+		best = minf(best, point.distance_to(start + segment * ratio))
+	return best
 
 
 static func _check(condition: bool, label: String, failures: PackedStringArray) -> void:

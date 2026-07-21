@@ -12,6 +12,8 @@ const LANE_HALF_WIDTH_M := 24.0
 const SHORE_CLEARANCE_M := 10.0
 const PASSING_ZONE_SEGMENTS := 3
 const ACCESS_LANE_OFFSET_M := 51.0
+const COASTAL_TRUNK_OFFSHORE_M := 620.0
+const COASTAL_ROUTE_CLEARANCE_M := 72.0
 const PORT_COLLECTOR_CLEARANCE_M := 190.0
 const PORT_COLLECTOR_MIN_SPACING_M := 70.0
 const QUAY_CRAB_CLEARANCE_M := 48.0
@@ -203,12 +205,11 @@ func validate(network: ShippingLaneNetwork, layout: WorldLayout) -> Array[Dictio
 		var ramp := network.port_ramps[ramp_id] as Dictionary
 		var lane_node := network.node(str(ramp.get("lane_node_id", "")))
 		var ramp_node := network.node(str(ramp.get("ramp_node_id", "")))
-		var transfer_only := bool(ramp.get("transfer_only", false))
 		if str(lane_node.get("kind", "")) not in ["main_lane", "regional_lane"]:
 			issues.append(_issue("error", "ramp_off_highway",
 				"Ramp must attach to a regional or main shipping lane", ramp_id,
 				ramp.get("position", Vector2.ZERO) as Vector2))
-		if not transfer_only and str(ramp_node.get("kind", "")) != "shipping_ramp":
+		if str(ramp_node.get("kind", "")) != "shipping_ramp":
 			issues.append(_issue("error", "invalid_ramp_node",
 				"Ramp transition must own a distinct shipping-ramp node", ramp_id,
 				ramp.get("position", Vector2.ZERO) as Vector2))
@@ -226,18 +227,34 @@ func validate(network: ShippingLaneNetwork, layout: WorldLayout) -> Array[Dictio
 					"On/off ramp is still inside the local quay approach envelope", ramp_id,
 					ramp.get("position", Vector2.ZERO) as Vector2))
 				break
+	for portal_id in network.sorted_open_water_portal_ids():
+		var portal := network.open_water_portals[portal_id] as Dictionary
+		var lane_node := network.node(str(portal.get("lane_node_id", "")))
+		if str(lane_node.get("kind", "")) not in ["main_lane", "regional_lane"]:
+			issues.append(_issue("error", "portal_off_highway",
+				"Open-water portal must attach to a regional or main shipping lane",
+				portal_id, portal.get("position", Vector2.ZERO) as Vector2))
+		if str(lane_node.get("lane_role", "")) != "access" \
+				or str(portal.get("lane_role", "")) != "access":
+			issues.append(_issue("error", "portal_on_through_lane",
+				"Open-water portals must attach to the outside access lane",
+				portal_id, portal.get("position", Vector2.ZERO) as Vector2))
+		for gate_id_value in network.port_gate_nodes.get(
+				str(portal.get("port_id", "")), []) as Array:
+			var gate_node := network.node(str(gate_id_value))
+			if not gate_node.is_empty() and (gate_node.get("position", Vector2.ZERO) as Vector2) \
+					.distance_to(portal.get("position", Vector2.ZERO) as Vector2) \
+					< RAMP_MIN_PORT_CLEARANCE_M:
+				issues.append(_issue("error", "portal_too_close",
+					"Open-water portal is inside the local quay approach envelope",
+					portal_id, portal.get("position", Vector2.ZERO) as Vector2))
+				break
 	var ramp_ids := network.sorted_port_ramp_ids()
 	for ramp_index in range(ramp_ids.size()):
 		var ramp := network.port_ramps[ramp_ids[ramp_index]] as Dictionary
 		for other_index in range(ramp_index + 1, ramp_ids.size()):
 			var other := network.port_ramps[ramp_ids[other_index]] as Dictionary
 			if str(ramp.get("port_id", "")) != str(other.get("port_id", "")):
-				continue
-			# Water-transfer records are navigational break-off markers placed on
-			# the existing access lane, not physical ramp mouths.  Only the four
-			# harbour-serving ramps need mutually separated transition geometry.
-			if bool(ramp.get("transfer_only", false)) \
-					or bool(other.get("transfer_only", false)):
 				continue
 			if (ramp.get("position", Vector2.ZERO) as Vector2).distance_to(
 					other.get("position", Vector2.ZERO) as Vector2) < 30.0:
@@ -307,9 +324,10 @@ func _build_coastal_main_bus() -> void:
 		var gate := points[gate_index]
 		# Keep the coastal trunk physically outside the fjord route instead of
 		# laying both corridor centerlines on top of one another at the merge.
-		var coastal_position := gate + Vector2(-260.0, 0.0)
+		var coastal_position := gate + Vector2(-COASTAL_TRUNK_OFFSHORE_M, 0.0)
 		if _layout.sample_signed_distance(coastal_position) < SHORE_CLEARANCE_M:
-			coastal_position = gate + (points[maxi(0, gate_index - 1)] - gate).normalized() * 260.0
+			coastal_position = gate + (points[maxi(0, gate_index - 1)] - gate).normalized() \
+				* COASTAL_TRUNK_OFFSHORE_M
 		gates.append({
 			"waterway_id": str(waterway.get("id", "")),
 			"position": coastal_position,
@@ -322,7 +340,8 @@ func _build_coastal_main_bus() -> void:
 	var centerline := PackedVector2Array([(gates[0] as Dictionary).position as Vector2])
 	for index in range(1, gates.size()):
 		var target := (gates[index] as Dictionary).position as Vector2
-		var segment := _safe_connector_points(centerline[-1], target)
+		var segment := _safe_connector_points(
+			centerline[-1], target, COASTAL_ROUTE_CLEARANCE_M)
 		if segment.size() < 2:
 			segment = PackedVector2Array([centerline[-1], target])
 		for point_index in range(1, segment.size()):
@@ -736,10 +755,10 @@ func _connect_port_gates_to_lane(data: PortData, gates: Dictionary) -> void:
 		1: _water_transfer_station_pair(reverse_access_ids, base_index, gates),
 	}
 	var collector := _build_port_collector(data, gates, ordered_gates, forward_ids, centroid)
-	var throat_id := str(collector.get("throat_node_id", ""))
-	if throat_id.is_empty():
+	var collector_ids := collector.get("collector_node_ids", PackedStringArray()) \
+		as PackedStringArray
+	if collector_ids.is_empty():
 		return
-	var throat_position := (_network.node(throat_id).get("position", centroid) as Vector2)
 	var local_paths: Array[Dictionary] = []
 	var used_ramp_positions := PackedVector2Array()
 	var movements: Array[Dictionary] = [
@@ -758,7 +777,15 @@ func _connect_port_gates_to_lane(data: PortData, gates: Dictionary) -> void:
 		var lane_node_id := lane_ids[station_index]
 		var lane_position := (_network.node(lane_node_id).get("position", centroid) as Vector2)
 		var station_tangent := _lane_tangent(forward_ids, station_index)
-		var portward := (throat_position - lane_position).normalized()
+		# The harbour has one collector/junction per physical quay. Ramps attach
+		# to the appropriate end of that collector spine; they never converge on
+		# a synthetic middle throat. This keeps neighbouring quay manoeuvres
+		# independent until they intentionally merge at an access lane.
+		var entry_node_id := collector_ids[0] if station == "before" \
+			else collector_ids[-1]
+		var entry_position := (_network.node(entry_node_id).get(
+			"position", centroid) as Vector2)
+		var portward := (entry_position - lane_position).normalized()
 		if portward.length_squared() < 0.5:
 			portward = Vector2(-station_tangent.y, station_tangent.x)
 		var longitudinal_slot := -48.0 if ramp_kind == "off_ramp" else 48.0
@@ -791,13 +818,13 @@ func _connect_port_gates_to_lane(data: PortData, gates: Dictionary) -> void:
 				var transition_block := _network.block(transition_block_id)
 				transition_block["destination_port_entry"] = data.port_id
 				_network.blocks[transition_block_id] = transition_block
-		var portward_points := _safe_connector_points(ramp_position, throat_position)
+		var portward_points := _safe_connector_points(ramp_position, entry_position)
 		var feeder_points := portward_points if ramp_kind == "off_ramp" \
 			else _reversed_points(portward_points)
 		var feeder_blocks := _add_directed_segmented_path(
 			"%s:feeder" % ramp_id,
-			ramp_node_id if ramp_kind == "off_ramp" else throat_id,
-			throat_id if ramp_kind == "off_ramp" else ramp_node_id,
+			ramp_node_id if ramp_kind == "off_ramp" else entry_node_id,
+			entry_node_id if ramp_kind == "off_ramp" else ramp_node_id,
 			feeder_points, "port_feeder", true, QUEUE_BLOCK_TARGET_M)
 		var feeder_path := {"forward": feeder_blocks, "reverse": PackedStringArray()}
 		for existing_path in local_paths:
@@ -810,7 +837,7 @@ func _connect_port_gates_to_lane(data: PortData, gates: Dictionary) -> void:
 		_network.add_signal({
 			"id": "signal:%s" % ramp_id,
 			"kind": "chain" if not crossing_blocks.is_empty() else "regular",
-			"node_id": lane_node_id if ramp_kind == "off_ramp" else throat_id,
+			"node_id": lane_node_id if ramp_kind == "off_ramp" else entry_node_id,
 			"port_id": data.port_id,
 			"protected_blocks": protected,
 		})
@@ -820,44 +847,41 @@ func _connect_port_gates_to_lane(data: PortData, gates: Dictionary) -> void:
 			"direction": direction_name, "waterway_id": waterway_id,
 			"position": ramp_position, "lane_node_id": lane_node_id,
 			"ramp_node_id": ramp_node_id, "lane_role": "access",
+			"port_entry_node_id": entry_node_id,
 			"transition_edge_ids": _edge_ids_for_blocks(transition_blocks),
 			"port_feeder_edge_ids": _edge_ids_for_blocks(feeder_blocks),
 			"crossing_block_ids": crossing_blocks,
 			"serves_port": true,
 		})
-	# A service ramp and an open-water transfer are different movements. The
+	# A service ramp and an open-water portal are different concepts. The
 	# former leads portward into the collector; the latter breaks away from (or
 	# rejoins) the outside lane without touching the harbour. Supplying the four
 	# complementary transfer points gives each travel direction an ON and OFF on
 	# both sides of the port, so a ship can leave its quay, merge, then immediately
 	# choose a legal A* crossing instead of sailing to the end of the world.
-	var water_transfers: Array[Dictionary] = [
-		{"station": "before", "direction_index": 0, "ramp_kind": "on_ramp"},
-		{"station": "after", "direction_index": 0, "ramp_kind": "off_ramp"},
-		{"station": "after", "direction_index": 1, "ramp_kind": "on_ramp"},
-		{"station": "before", "direction_index": 1, "ramp_kind": "off_ramp"},
+	var water_portals: Array[Dictionary] = [
+		{"station": "before", "direction_index": 0, "portal_kind": "join"},
+		{"station": "after", "direction_index": 0, "portal_kind": "leave"},
+		{"station": "after", "direction_index": 1, "portal_kind": "join"},
+		{"station": "before", "direction_index": 1, "portal_kind": "leave"},
 	]
-	for transfer in water_transfers:
-		var station := str(transfer.station)
-		var direction_index := int(transfer.direction_index)
-		var ramp_kind := str(transfer.ramp_kind)
+	for portal in water_portals:
+		var station := str(portal.station)
+		var direction_index := int(portal.direction_index)
+		var portal_kind := str(portal.portal_kind)
 		var direction_name := "forward" if direction_index == 0 else "reverse"
 		var lane_ids := forward_access_ids if direction_index == 0 else reverse_access_ids
 		var direction_stations := transfer_station_indices[direction_index] as Dictionary
 		var lane_node_id := lane_ids[int(direction_stations[station])]
 		var lane_position := _network.node(lane_node_id).get("position", centroid) as Vector2
-		var ramp_id := "ramp:%s:%s:%s:%s:water_transfer" % [data.port_id,
-			station, direction_name, ramp_kind]
-		_network.add_port_ramp({
-			"id": ramp_id, "port_id": data.port_id, "station": station,
-			"ramp_kind": ramp_kind, "direction_index": direction_index,
+		var portal_id := "portal:%s:%s:%s:%s" % [data.port_id,
+			station, direction_name, portal_kind]
+		_network.add_open_water_portal({
+			"id": portal_id, "port_id": data.port_id, "station": station,
+			"portal_kind": portal_kind, "direction_index": direction_index,
 			"direction": direction_name, "waterway_id": waterway_id,
 			"position": lane_position, "lane_node_id": lane_node_id,
-			"ramp_node_id": lane_node_id, "lane_role": "access",
-			"transition_edge_ids": PackedStringArray(),
-			"port_feeder_edge_ids": PackedStringArray(),
-			"crossing_block_ids": PackedStringArray(),
-			"serves_port": false, "transfer_only": true,
+			"lane_role": "access",
 		})
 
 
@@ -917,9 +941,7 @@ func _build_port_collector(data: PortData, gates: Dictionary, ordered_gates: Arr
 			"port:%s:collector_spine:%02d" % [data.port_id, index],
 			from_id, to_id, _safe_connector_points(from_position, to_position),
 			"port_collector", true, QUEUE_BLOCK_TARGET_M)
-	var throat_index := collector_ids.size() / 2
-	return {"throat_node_id": collector_ids[throat_index],
-		"collector_node_ids": collector_ids}
+	return {"collector_node_ids": collector_ids}
 
 
 func _interlock_ramp_crossing(port_id: String, transition_blocks: PackedStringArray,
@@ -1396,13 +1418,14 @@ func _clear_ramp_position(
 	return best
 
 
-func _safe_connector_points(from: Vector2, to: Vector2) -> PackedVector2Array:
-	if _connector_has_water_line(from, to):
+func _safe_connector_points(from: Vector2, to: Vector2,
+		clearance_m := LOCAL_ROUTE_CLEARANCE_M) -> PackedVector2Array:
+	if _connector_has_water_line(from, to, clearance_m):
 		return PackedVector2Array([from, to])
 	for padding_m in [LOCAL_ROUTE_PADDING_M, 1200.0, 2800.0, 5600.0]:
-		var routed := _bounded_water_route(from, to, padding_m)
-		routed = _repair_connector_waypoints(routed)
-		if routed.size() >= 2 and _connector_route_is_clear(routed):
+		var routed := _bounded_water_route(from, to, padding_m, clearance_m)
+		routed = _repair_connector_waypoints(routed, clearance_m)
+		if routed.size() >= 2 and _connector_route_is_clear(routed, clearance_m):
 			return routed
 	# Difficult concave fjords can require leaving every reasonable endpoint
 	# bounding box. Pay for the shared whole-world raster only on that rare path;
@@ -1410,8 +1433,8 @@ func _safe_connector_points(from: Vector2, to: Vector2) -> PackedVector2Array:
 	if _fallback_navigation == null:
 		_fallback_navigation = WaterwayNavigation.new(_layout)
 	var global_route := _fallback_navigation.route_points(from, to)
-	global_route = _repair_connector_waypoints(global_route)
-	if global_route.size() >= 2 and _connector_route_is_clear(global_route):
+	global_route = _repair_connector_waypoints(global_route, clearance_m)
+	if global_route.size() >= 2 and _connector_route_is_clear(global_route, clearance_m):
 		return global_route
 	# Keep the graph connected for diagnostics, but validation will report this
 	# explicit last resort. Normal seeded ports must succeed in one of the
@@ -1487,7 +1510,8 @@ static func _reversed_points(points: PackedVector2Array) -> PackedVector2Array:
 ## once per quay made deterministic network construction scale with the number
 ## of berths. This bounded grid has a fixed maximum axis size, so adding ports
 ## cannot turn graph construction into minutes of global A* work.
-func _bounded_water_route(from: Vector2, to: Vector2, padding_m: float) -> PackedVector2Array:
+func _bounded_water_route(from: Vector2, to: Vector2, padding_m: float,
+		clearance_m := LOCAL_ROUTE_CLEARANCE_M) -> PackedVector2Array:
 	var lower := Vector2(minf(from.x, to.x), minf(from.y, to.y)) \
 		- Vector2.ONE * padding_m
 	var upper := Vector2(maxf(from.x, to.x), maxf(from.y, to.y)) \
@@ -1505,7 +1529,7 @@ func _bounded_water_route(from: Vector2, to: Vector2, padding_m: float) -> Packe
 	for row in range(rows):
 		for column in range(columns):
 			var sample := lower + Vector2(float(column), float(row)) * cell_m
-			if _layout.sample_signed_distance(sample) < LOCAL_ROUTE_CLEARANCE_M:
+			if _layout.sample_signed_distance(sample) < clearance_m:
 				grid.set_point_solid(Vector2i(column, row), true)
 	var from_guess := Vector2i(
 		clampi(roundi((from.x - lower.x) / cell_m), 0, columns - 1),
@@ -1527,7 +1551,7 @@ func _bounded_water_route(from: Vector2, to: Vector2, padding_m: float) -> Packe
 			raw.append(point)
 	if raw[-1].distance_squared_to(to) > 1.0:
 		raw.append(to)
-	return _smooth_connector_route(raw)
+	return _smooth_connector_route(raw, clearance_m)
 
 
 func _nearest_open_local_grid_id(grid: AStarGrid2D, origin: Vector2i,
@@ -1546,7 +1570,8 @@ func _nearest_open_local_grid_id(grid: AStarGrid2D, origin: Vector2i,
 	return Vector2i(-1, -1)
 
 
-func _smooth_connector_route(route: PackedVector2Array) -> PackedVector2Array:
+func _smooth_connector_route(route: PackedVector2Array,
+		clearance_m := LOCAL_ROUTE_CLEARANCE_M) -> PackedVector2Array:
 	if route.size() <= 2:
 		return route
 	var result := PackedVector2Array([route[0]])
@@ -1554,7 +1579,7 @@ func _smooth_connector_route(route: PackedVector2Array) -> PackedVector2Array:
 	while current < route.size() - 1:
 		var furthest := -1
 		for candidate in range(route.size() - 1, current, -1):
-			if _connector_has_water_line(route[current], route[candidate]):
+			if _connector_has_water_line(route[current], route[candidate], clearance_m):
 				furthest = candidate
 				break
 		# AStarGrid2D validates cell centres. A coarse cell can still straddle a
@@ -1567,22 +1592,24 @@ func _smooth_connector_route(route: PackedVector2Array) -> PackedVector2Array:
 	return result
 
 
-func _connector_route_is_clear(route: PackedVector2Array) -> bool:
+func _connector_route_is_clear(route: PackedVector2Array,
+		clearance_m := LOCAL_ROUTE_CLEARANCE_M) -> bool:
 	for index in range(1, route.size() - 1):
-		if _layout.sample_signed_distance(route[index]) < LOCAL_ROUTE_CLEARANCE_M:
+		if _layout.sample_signed_distance(route[index]) < clearance_m:
 			return false
 	for index in range(route.size() - 1):
-		if not _connector_has_water_line(route[index], route[index + 1]):
+		if not _connector_has_water_line(route[index], route[index + 1], clearance_m):
 			return false
 	return true
 
 
-func _repair_connector_waypoints(route: PackedVector2Array) -> PackedVector2Array:
+func _repair_connector_waypoints(route: PackedVector2Array,
+		clearance_m := LOCAL_ROUTE_CLEARANCE_M) -> PackedVector2Array:
 	if route.size() < 3:
 		return route
 	var result := route.duplicate()
 	for index in range(1, result.size() - 1):
-		if _layout.sample_signed_distance(result[index]) >= LOCAL_ROUTE_CLEARANCE_M:
+		if _layout.sample_signed_distance(result[index]) >= clearance_m:
 			continue
 		var original := result[index]
 		var replacement := Vector2.INF
@@ -1590,10 +1617,10 @@ func _repair_connector_waypoints(route: PackedVector2Array) -> PackedVector2Arra
 			for angle_index in range(16):
 				var candidate := original + Vector2.RIGHT.rotated(
 					float(angle_index) * TAU / 16.0) * float(radius_m)
-				if _layout.sample_signed_distance(candidate) < LOCAL_ROUTE_CLEARANCE_M:
+				if _layout.sample_signed_distance(candidate) < clearance_m:
 					continue
-				if _connector_has_water_line(result[index - 1], candidate) \
-						and _connector_has_water_line(candidate, result[index + 1]):
+				if _connector_has_water_line(result[index - 1], candidate, clearance_m) \
+						and _connector_has_water_line(candidate, result[index + 1], clearance_m):
 					replacement = candidate
 					break
 			if replacement != Vector2.INF:
@@ -1608,7 +1635,7 @@ func _repair_connector_waypoints(route: PackedVector2Array) -> PackedVector2Arra
 		var changed := false
 		for segment_index in range(result.size() - 1):
 			var unsafe := _first_dense_unsafe_point(
-				result[segment_index], result[segment_index + 1])
+				result[segment_index], result[segment_index + 1], clearance_m)
 			if unsafe == Vector2.INF:
 				continue
 			var delta := result[segment_index + 1] - result[segment_index]
@@ -1617,11 +1644,12 @@ func _repair_connector_waypoints(route: PackedVector2Array) -> PackedVector2Arra
 			for radius_m in range(10, 211, 10):
 				for side in [1.0, -1.0]:
 					var candidate: Vector2 = unsafe + normal * float(side) * float(radius_m)
-					if _layout.sample_signed_distance(candidate) < LOCAL_ROUTE_CLEARANCE_M:
+					if _layout.sample_signed_distance(candidate) < clearance_m:
 						continue
-					if _first_dense_unsafe_point(result[segment_index], candidate) == Vector2.INF \
+					if _first_dense_unsafe_point(result[segment_index], candidate,
+							clearance_m) == Vector2.INF \
 							and _first_dense_unsafe_point(candidate,
-								result[segment_index + 1]) == Vector2.INF:
+								result[segment_index + 1], clearance_m) == Vector2.INF:
 						detour = candidate
 						break
 				if detour != Vector2.INF:
@@ -1636,20 +1664,22 @@ func _repair_connector_waypoints(route: PackedVector2Array) -> PackedVector2Arra
 	return result
 
 
-func _first_dense_unsafe_point(a: Vector2, b: Vector2) -> Vector2:
+func _first_dense_unsafe_point(a: Vector2, b: Vector2,
+		clearance_m := 1.0) -> Vector2:
 	var probes := maxi(2, ceili(a.distance_to(b) / 4.0))
 	for index in range(probes + 1):
 		var point := a.lerp(b, float(index) / float(probes))
-		if _layout.sample_signed_distance(point) < 1.0:
+		if _layout.sample_signed_distance(point) < clearance_m:
 			return point
 	return Vector2.INF
 
 
-func _connector_has_water_line(a: Vector2, b: Vector2) -> bool:
+func _connector_has_water_line(a: Vector2, b: Vector2,
+		clearance_m := LOCAL_ROUTE_CLEARANCE_M) -> bool:
 	var probes := maxi(2, ceili(a.distance_to(b) / 45.0))
 	for index in range(probes + 1):
 		var point := a.lerp(b, float(index) / float(probes))
-		if _layout.sample_signed_distance(point) < LOCAL_ROUTE_CLEARANCE_M:
+		if _layout.sample_signed_distance(point) < clearance_m:
 			return false
 	return true
 

@@ -1,9 +1,9 @@
 class_name HybridShippingRoutePlanner
 extends RefCounted
-
 ## One deterministic route search across two movement domains. Controlled
 ## shipping-lane edges are always available. Open-water A* may only begin at an
-## explicit off-ramp and may only finish at an explicit on-ramp. The search can
+## explicit leave portal and may only finish at an explicit join portal. Port
+## service ramps are deliberately not part of this domain. The search can
 ## alternate between those domains any number of times.
 
 const OPEN_WATER_SPEED_MS := 6.4
@@ -12,15 +12,19 @@ const OPEN_WATER_SPEED_MS := 6.4
 # loops. One minute keeps lanes preferred for comparable journeys while
 # allowing a legal OFF-to-ON water transfer to win when it removes real detour.
 const OPEN_WATER_TRANSITION_PENALTY_S := 60.0
-const MAX_RELEVANT_RAMPS := 24
-const ON_RAMP_CANDIDATES_PER_OFF_RAMP := 7
+const MAX_RELEVANT_RAMPS := 32
+const ON_RAMP_CANDIDATES_PER_OFF_RAMP := 8
 const MIN_OPEN_WATER_LINK_M := 420.0
 ## Marked lanes are the default maritime route. Free-sailing A* is selected
-## only when it avoids both a material distance detour and at least ten minutes
-## of voyage time; this prevents every contract from collapsing into a direct
-## diagonal while still removing the old far-west motorway excursions.
-const OPEN_WATER_MIN_SAVING_S := 600.0
-const OPEN_WATER_MIN_SAVING_RATIO := 0.35
+## only when it removes a material detour. A route that is already reasonably
+## direct stays in the marked system; an obviously circuitous motorway route
+## gets a lower threshold so the ship can legally leave and rejoin instead of
+## sailing to a remote network endpoint merely to reverse direction.
+const OPEN_WATER_MIN_SAVING_S := 300.0
+const OPEN_WATER_MIN_SAVING_RATIO := 0.18
+const CIRCUITOUS_LANE_RATIO := 1.55
+const CIRCUITOUS_MIN_SAVING_S := 75.0
+const CIRCUITOUS_MIN_SAVING_RATIO := 0.04
 
 var network: ShippingLaneNetwork
 var layout: WorldLayout
@@ -42,16 +46,13 @@ func configure(value: ShippingLaneNetwork, world_layout: WorldLayout) -> void:
 	_plan_cache.clear()
 	if network == null:
 		return
-	for ramp_id in network.sorted_port_ramp_ids():
-		var record := network.port_ramps[ramp_id] as Dictionary
-		if not bool(record.get("transfer_only", false)):
-			continue
-		if str(record.get("ramp_kind", "")) == "on_ramp":
+	for ramp_id in network.sorted_open_water_portal_ids():
+		var record := network.open_water_portals[ramp_id] as Dictionary
+		if str(record.get("portal_kind", "")) == "join":
 			_on_ramp_ids.append(ramp_id)
 		else:
-			# Open-water movement breaks away at the outside access lane itself,
-			# before the portward transition. The ramp node belongs to the harbour
-			# feeder and is deliberately not an ocean waypoint.
+			# Open-water movement leaves from an outside access lane. Harbour
+			# ramp mouths are deliberately not ocean waypoints.
 			var node_id := str(record.get("lane_node_id", ""))
 			var ids := _off_ramp_ids_by_node.get(node_id, PackedStringArray()) as PackedStringArray
 			ids.append(ramp_id)
@@ -95,15 +96,26 @@ func plan(source_node_id: String, destination_node_id: String,
 		rejected_water_links[invalid_link_key] = true
 		candidate = {}
 	var lane_candidate := _lane_only_plan(source_node_id, destination_node_id, vessel)
+	var route_choice_reason := "marked_lane_shortest_path"
+	var raw_augmented := candidate.duplicate(true)
+	var direct_distance := maxf(source_point.distance_to(destination_point), 1.0)
 	if not candidate.is_empty() \
 			and int(candidate.get("open_water_sections", 0)) > 0 \
 			and not lane_candidate.is_empty():
 		var lane_seconds := float(lane_candidate.get("estimated_seconds", INF))
 		var water_seconds := float(candidate.get("estimated_seconds", INF))
+		var lane_detour_ratio := float(lane_candidate.get("distance_m", INF)) \
+			/ direct_distance
 		var required_saving := maxf(OPEN_WATER_MIN_SAVING_S,
 			lane_seconds * OPEN_WATER_MIN_SAVING_RATIO)
+		if lane_detour_ratio >= CIRCUITOUS_LANE_RATIO:
+			required_saving = maxf(CIRCUITOUS_MIN_SAVING_S,
+				lane_seconds * CIRCUITOUS_MIN_SAVING_RATIO)
 		if lane_seconds - water_seconds < required_saving:
 			candidate = lane_candidate
+			route_choice_reason = "marked_lane_preferred"
+		else:
+			route_choice_reason = "material_network_detour"
 	if OS.get_environment("AA_PROFILE_ROUTES") == "1":
 		print("ROUTE PROFILE ", source_port_id, ">", destination_port_id,
 			" candidate=", str(candidate.get("mode", "none")), "/",
@@ -116,6 +128,20 @@ func plan(source_node_id: String, destination_node_id: String,
 	# geographic validation pass.
 	if candidate.is_empty():
 		candidate = lane_candidate
+		route_choice_reason = "lane_fallback"
+	if not candidate.is_empty():
+		var lane_seconds := float(lane_candidate.get("estimated_seconds", INF))
+		var augmented_seconds := float(raw_augmented.get("estimated_seconds", INF))
+		candidate["route_choice_reason"] = route_choice_reason
+		candidate["direct_distance_m"] = direct_distance
+		candidate["lane_only_distance_m"] = float(lane_candidate.get("distance_m", INF))
+		candidate["lane_only_seconds"] = lane_seconds
+		candidate["augmented_seconds"] = augmented_seconds
+		candidate["open_water_saving_s"] = lane_seconds - augmented_seconds \
+			if lane_seconds < INF and augmented_seconds < INF else 0.0
+		candidate["open_water_saving_ratio"] = (lane_seconds - augmented_seconds) \
+			/ maxf(lane_seconds, 1.0) if lane_seconds < INF and augmented_seconds < INF \
+			else 0.0
 	_plan_cache[cache_key] = candidate.duplicate(true)
 	return candidate
 
@@ -168,11 +194,11 @@ func _augmented_plan(source_node_id: String, destination_node_id: String,
 				var water_link_key := "%s>%s" % [off_ramp_id, on_ramp_id]
 				if rejected_water_links.has(water_link_key):
 					continue
-				var off_ramp := network.port_ramps[off_ramp_id] as Dictionary
-				var on_ramp := network.port_ramps[on_ramp_id] as Dictionary
+				var off_ramp := network.open_water_portals[off_ramp_id] as Dictionary
+				var on_ramp := network.open_water_portals[on_ramp_id] as Dictionary
 				var next_id := str(on_ramp.get("lane_node_id", ""))
-				var off_point := _ramp_water_position(off_ramp)
-				var on_point := _ramp_water_position(on_ramp)
+				var off_point := _portal_water_position(off_ramp)
+				var on_point := _portal_water_position(on_ramp)
 				var length_m := off_point.distance_to(on_point)
 				if length_m < MIN_OPEN_WATER_LINK_M:
 					continue
@@ -181,8 +207,8 @@ func _augmented_plan(source_node_id: String, destination_node_id: String,
 				_relax(frontier, distance, previous_node, previous_step,
 					current, next_id, current_cost + water_cost, {
 						"kind": "open_water_estimate",
-						"from_ramp_id": off_ramp_id,
-						"to_ramp_id": on_ramp_id,
+						"from_portal_id": off_ramp_id,
+						"to_portal_id": on_ramp_id,
 					})
 	if not distance.has(destination_node_id):
 		return {}
@@ -200,11 +226,11 @@ func _augmented_plan(source_node_id: String, destination_node_id: String,
 		if str(step.get("kind", "")) != "open_water_estimate":
 			steps.append(step)
 			continue
-		var link := _water_link(str(step.get("from_ramp_id", "")),
-			str(step.get("to_ramp_id", "")))
+		var link := _water_link(str(step.get("from_portal_id", "")),
+			str(step.get("to_portal_id", "")))
 		if link.is_empty():
 			return {"invalid_link_key": "%s>%s" % [
-				str(step.get("from_ramp_id", "")), str(step.get("to_ramp_id", ""))]}
+				str(step.get("from_portal_id", "")), str(step.get("to_portal_id", ""))]}
 		steps.append(link)
 	return _build_result(steps)
 
@@ -246,8 +272,8 @@ func _build_result(steps: Array[Dictionary]) -> Dictionary:
 			estimated_seconds += length_m / OPEN_WATER_SPEED_MS \
 				+ OPEN_WATER_TRANSITION_PENALTY_S
 			transitions.append({
-				"from_ramp_id": str(step.get("from_ramp_id", "")),
-				"to_ramp_id": str(step.get("to_ramp_id", "")),
+				"from_portal_id": str(step.get("from_portal_id", "")),
+				"to_portal_id": str(step.get("to_portal_id", "")),
 			})
 		else:
 			controlled_count += 1
@@ -267,7 +293,7 @@ func _build_result(steps: Array[Dictionary]) -> Dictionary:
 		"steps": steps,
 		"controlled_edge_ids": edge_ids,
 		"open_water_sections": open_count,
-		"ramp_transitions": transitions,
+		"portal_transitions": transitions,
 		"estimated_seconds": estimated_seconds,
 		"distance_m": distance_m,
 	}
@@ -277,14 +303,11 @@ func _relevant_ramps(from: Vector2, to: Vector2, source_port_id: String,
 		destination_port_id: String) -> Dictionary:
 	var ranked: Array[Dictionary] = []
 	var direct_distance := maxf(from.distance_to(to), 1.0)
-	for ramp_id in network.sorted_port_ramp_ids():
-		var ramp := network.port_ramps[ramp_id] as Dictionary
-		# Service ramps are physical harbour movements. Only the remote sea
-		# transfer records are legal A* break-off/rejoin points, and excluding
-		# service ramps here prevents them from consuming the relevance budget.
-		if not bool(ramp.get("transfer_only", false)):
-			continue
-		var point := _ramp_water_position(ramp)
+	for ramp_id in network.sorted_open_water_portal_ids():
+		var ramp := network.open_water_portals[ramp_id] as Dictionary
+		# Portals are a separate authority concept, so service ramps cannot
+		# accidentally consume the open-water candidate budget.
+		var point := _portal_water_position(ramp)
 		var port_id := str(ramp.get("port_id", ""))
 		var segment_distance := _point_segment_distance(point, from, to)
 		var projection := clampf((point - from).dot(to - from) / direct_distance / direct_distance,
@@ -300,10 +323,8 @@ func _relevant_ramps(from: Vector2, to: Vector2, source_port_id: String,
 	var result: Dictionary = {}
 	for index in range(mini(MAX_RELEVANT_RAMPS, ranked.size())):
 		result[str((ranked[index] as Dictionary).id)] = true
-	for ramp_id in network.sorted_port_ramp_ids():
-		var ramp := network.port_ramps[ramp_id] as Dictionary
-		if not bool(ramp.get("transfer_only", false)):
-			continue
+	for ramp_id in network.sorted_open_water_portal_ids():
+		var ramp := network.open_water_portals[ramp_id] as Dictionary
 		var port_id := str(ramp.get("port_id", ""))
 		if port_id in [source_port_id, destination_port_id]:
 			result[ramp_id] = true
@@ -312,27 +333,26 @@ func _relevant_ramps(from: Vector2, to: Vector2, source_port_id: String,
 
 func _candidate_on_ramps(off_ramp_id: String, destination_port_id: String,
 		relevant: Dictionary) -> PackedStringArray:
-	var off_ramp := network.port_ramps[off_ramp_id] as Dictionary
-	var off_point := _ramp_water_position(off_ramp)
+	var off_ramp := network.open_water_portals[off_ramp_id] as Dictionary
+	var off_point := _portal_water_position(off_ramp)
 	var destination_ramps: Array[Dictionary] = []
-	for ramp in network.ramps_for_port(destination_port_id, "on_ramp"):
-		if bool(ramp.get("transfer_only", false)):
-			destination_ramps.append(ramp)
+	for ramp in network.portals_for_port(destination_port_id, "join"):
+		destination_ramps.append(ramp)
 	var destination_point := off_point
 	if not destination_ramps.is_empty():
-		destination_point = _ramp_water_position(destination_ramps[0] as Dictionary)
+		destination_point = _portal_water_position(destination_ramps[0] as Dictionary)
 	var ranked: Array[Dictionary] = []
 	for on_ramp_id in _on_ramp_ids:
 		if not bool(relevant.get(on_ramp_id, false)):
 			continue
-		var on_ramp := network.port_ramps[on_ramp_id] as Dictionary
+		var on_ramp := network.open_water_portals[on_ramp_id] as Dictionary
 		if str(on_ramp.get("port_id", "")) == str(off_ramp.get("port_id", "")):
 			continue
 		# At the destination, open water joins the transfer ON ramp upstream
 		# of the port queue. At an intermediate interchange it may also use the
-		# serving ON ramp downstream of the port—this is the through-traffic
-		# merge and cannot be clogged by vessels waiting to enter that port.
-		var point := _ramp_water_position(on_ramp)
+		# serving ON ramp downstream of the port. This through-traffic merge
+		# cannot be clogged by vessels waiting to enter that port.
+		var point := _portal_water_position(on_ramp)
 		var score := off_point.distance_to(point) + point.distance_to(destination_point) * 0.35
 		if str(on_ramp.get("port_id", "")) == destination_port_id:
 			score -= 1000000.0
@@ -351,25 +371,25 @@ func _water_link(from_ramp_id: String, to_ramp_id: String) -> Dictionary:
 	var key := "%s>%s" % [from_ramp_id, to_ramp_id]
 	if _water_link_cache.has(key):
 		return (_water_link_cache[key] as Dictionary).duplicate(true)
-	var from_record := network.port_ramps.get(from_ramp_id, {}) as Dictionary
-	var to_record := network.port_ramps.get(to_ramp_id, {}) as Dictionary
+	var from_record := network.open_water_portals.get(from_ramp_id, {}) as Dictionary
+	var to_record := network.open_water_portals.get(to_ramp_id, {}) as Dictionary
 	if from_record.is_empty() or to_record.is_empty():
 		_water_link_cache[key] = {}
 		return {}
 	var points := navigation.route_points(
-		_ramp_water_position(from_record), _ramp_water_position(to_record))
+		_portal_water_position(from_record), _portal_water_position(to_record))
 	if points.size() < 2:
 		if OS.get_environment("AA_PROFILE_ROUTES") == "1":
 			print("ROUTE LINK FAILED ", key, " from=", from_record.get("position"),
 				" to=", to_record.get("position"), " clearances=",
-				layout.sample_signed_distance(_ramp_water_position(from_record)), "/",
-				layout.sample_signed_distance(_ramp_water_position(to_record)))
+				layout.sample_signed_distance(_portal_water_position(from_record)), "/",
+				layout.sample_signed_distance(_portal_water_position(to_record)))
 		_water_link_cache[key] = {}
 		return {}
 	var link := {
 		"kind": "open_water",
-		"from_ramp_id": from_ramp_id,
-		"to_ramp_id": to_ramp_id,
+		"from_portal_id": from_ramp_id,
+		"to_portal_id": to_ramp_id,
 		"points": points,
 		"length_m": ShippingLaneNetwork._polyline_length(points),
 		"speed_limit_ms": OPEN_WATER_SPEED_MS,
@@ -378,7 +398,7 @@ func _water_link(from_ramp_id: String, to_ramp_id: String) -> Dictionary:
 	return link.duplicate(true)
 
 
-func _ramp_water_position(ramp: Dictionary) -> Vector2:
+func _portal_water_position(ramp: Dictionary) -> Vector2:
 	if network == null:
 		return ramp.get("position", Vector2.ZERO) as Vector2
 	var lane_node := network.node(str(ramp.get("lane_node_id", "")))

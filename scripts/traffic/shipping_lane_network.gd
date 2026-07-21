@@ -5,7 +5,7 @@ extends RefCounted
 ## truth for a future local single-player authority and dedicated MP authority.
 ## It deliberately contains no BoatBody, autopilot, company, or vessel state.
 
-const FORMAT_VERSION := 5
+const FORMAT_VERSION := 6
 
 var layout_checksum := ""
 var network_checksum := ""
@@ -17,7 +17,8 @@ var port_queue_slots: Dictionary = {} # queue slot id -> inbound connector block
 var berth_tokens: Dictionary = {} # berth token id -> one reservable quay station
 var passing_zones: Dictionary = {} # passing zone id -> deterministic opposing-lane block set
 var port_gate_nodes: Dictionary = {} # port_id -> Array[String] of physical-quay gates
-var port_ramps: Dictionary = {} # ramp id -> explicit directed lane/open-water transition
+var port_ramps: Dictionary = {} # ramp id -> physical directed lane/harbour transition
+var open_water_portals: Dictionary = {} # portal id -> lane/open-water leave or join point
 var validation_issues: Array[Dictionary] = []
 var _outgoing_edge_ids: Dictionary = {} # node_id -> PackedStringArray
 
@@ -169,6 +170,22 @@ func add_port_ramp(record: Dictionary) -> bool:
 	return true
 
 
+func add_open_water_portal(record: Dictionary) -> bool:
+	var portal_id := str(record.get("id", ""))
+	var lane_node_id := str(record.get("lane_node_id", ""))
+	var portal_kind := str(record.get("portal_kind", ""))
+	if portal_id.is_empty() or open_water_portals.has(portal_id) \
+			or not nodes.has(lane_node_id) or portal_kind not in ["join", "leave"]:
+		return false
+	var stored := record.duplicate(true)
+	stored["id"] = portal_id
+	stored["lane_node_id"] = lane_node_id
+	stored["portal_kind"] = portal_kind
+	stored["position"] = (nodes[lane_node_id] as Dictionary).get("position", Vector2.ZERO)
+	open_water_portals[portal_id] = stored
+	return true
+
+
 func add_block_conflict(a_id: String, b_id: String) -> void:
 	if a_id == b_id or not blocks.has(a_id) or not blocks.has(b_id):
 		return
@@ -220,6 +237,10 @@ func sorted_port_ramp_ids() -> Array[String]:
 	return _sorted_ids(port_ramps)
 
 
+func sorted_open_water_portal_ids() -> Array[String]:
+	return _sorted_ids(open_water_portals)
+
+
 func ramps_for_port(port_id: String, ramp_kind := "", station := "") -> Array[Dictionary]:
 	var result: Array[Dictionary] = []
 	for ramp_id in sorted_port_ramp_ids():
@@ -243,6 +264,20 @@ func ramp_ids_for_node(node_id: String, ramp_kind := "") -> PackedStringArray:
 		if not ramp_kind.is_empty() and str(record.get("ramp_kind", "")) != ramp_kind:
 			continue
 		result.append(ramp_id)
+	return result
+
+
+func portals_for_port(port_id: String, portal_kind := "", station := "") -> Array[Dictionary]:
+	var result: Array[Dictionary] = []
+	for portal_id in sorted_open_water_portal_ids():
+		var record := open_water_portals[portal_id] as Dictionary
+		if str(record.get("port_id", "")) != port_id:
+			continue
+		if not portal_kind.is_empty() and str(record.get("portal_kind", "")) != portal_kind:
+			continue
+		if not station.is_empty() and str(record.get("station", "")) != station:
+			continue
+		result.append(record)
 	return result
 
 
@@ -451,6 +486,13 @@ func rebuild_checksum() -> String:
 			identity_parts.append(":F:%s" % edge_id)
 		for block_id in record.get("crossing_block_ids", PackedStringArray()) as PackedStringArray:
 			identity_parts.append(":C:%s" % block_id)
+	for portal_id in sorted_open_water_portal_ids():
+		var record := open_water_portals[portal_id] as Dictionary
+		var point := record.get("position", Vector2.ZERO) as Vector2
+		identity_parts.append("|O:%s:%s:%s:%s:%s:%d,%d" % [portal_id,
+			record.get("port_id", ""), record.get("portal_kind", ""),
+			record.get("station", ""), record.get("lane_node_id", ""),
+			roundi(point.x), roundi(point.y)])
 	var context := HashingContext.new()
 	context.start(HashingContext.HASH_SHA256)
 	context.update("".join(identity_parts).to_utf8_buffer())
@@ -522,6 +564,11 @@ func to_snapshot() -> Dictionary:
 		record["crossing_block_ids"] = _strings_to_wire(
 			record.get("crossing_block_ids", PackedStringArray()) as PackedStringArray)
 		wire_ramps[ramp_id] = record
+	var wire_portals: Dictionary = {}
+	for portal_id in sorted_open_water_portal_ids():
+		var record := (open_water_portals[portal_id] as Dictionary).duplicate(true)
+		record["position"] = _vector_to_wire(record.get("position", Vector2.ZERO) as Vector2)
+		wire_portals[portal_id] = record
 	return {
 		"format_version": FORMAT_VERSION,
 		"layout_checksum": layout_checksum,
@@ -535,6 +582,7 @@ func to_snapshot() -> Dictionary:
 		"passing_zones": wire_passing_zones,
 		"port_gate_nodes": wire_port_gates,
 		"port_ramps": wire_ramps,
+		"open_water_portals": wire_portals,
 	}
 
 
@@ -598,6 +646,11 @@ static func from_snapshot(snapshot: Dictionary) -> ShippingLaneNetwork:
 		record["port_feeder_edge_ids"] = PackedStringArray(record.get("port_feeder_edge_ids", []))
 		record["crossing_block_ids"] = PackedStringArray(record.get("crossing_block_ids", []))
 		restored.add_port_ramp(record)
+	for portal_id in _sorted_ids(snapshot.get("open_water_portals", {}) as Dictionary):
+		var record := ((snapshot.get("open_water_portals", {}) as Dictionary)[portal_id] \
+			as Dictionary).duplicate(true)
+		record["position"] = _vector_from_wire(record.get("position", []))
+		restored.add_open_water_portal(record)
 	var expected := str(snapshot.get("network_checksum", ""))
 	restored.rebuild_checksum()
 	if not expected.is_empty() and expected != restored.network_checksum:
@@ -645,6 +698,7 @@ func summary() -> Dictionary:
 		"berth_tokens": berth_tokens.size(),
 		"passing_zones": passing_zones.size(),
 		"port_ramps": port_ramps.size(),
+		"open_water_portals": open_water_portals.size(),
 		"ports": port_gate_nodes.size(),
 		"errors": errors,
 		"warnings": warnings,

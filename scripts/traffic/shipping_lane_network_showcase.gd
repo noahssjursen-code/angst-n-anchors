@@ -102,7 +102,8 @@ func _finish_fixture(result: Dictionary) -> void:
 		"SHIPPING LANE TRAFFIC LAB\n"
 		+ "Q/E port   WASD pan   wheel zoom   Space pause   +/- speed   R reset   Ctrl+C copy\n"
 		+ "cyan highways   yellow connectors   green/orange interlocking   purple queues\n"
-		+ "mint passing lanes   cyan OFF ramps   green ON ramps   pale-green open-water passages\n"
+		+ "mint outside access/overtake lanes   circles PORT ramps   diamonds SEA portals\n"
+		+ "pale-green open-water passages (only when they materially shorten a route)\n"
 		+ "blue ships moving   yellow signal wait   magenta berth wait\n"
 		+ "seed %d | %d ports | %d nodes | %d blocks | %d signals | checksum %s"
 		% [_scenario_seed, PORT_COUNT, int(graph.nodes), int(graph.blocks), int(graph.signals),

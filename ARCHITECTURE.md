@@ -117,25 +117,27 @@ data-only simulator for exercising the authority without BoatBody physics.
   authority replicates; clients do not independently decide traffic outcomes.
 - `HybridShippingRoutePlanner` performs one deterministic search over controlled
   lane edges plus cached, water-safe A* passages. Physical service ramps never
-  double as ocean waypoints: separate offshore transfer records provide the
-  legal OFF and ON points before/after each port. Open water can only run from a
-  transfer OFF point to a transfer ON point, and is selected only when it removes
-  both a material percentage detour and at least ten minutes of lane travel. A
-  passage may alternate between lanes and open water repeatedly. Crossing a lane
-  in open water does not reserve or join it.
+  double as ocean waypoints: separate offshore leave/join portals provide the
+  legal A* endpoints before/after each port. Open water can only run from a leave
+  portal to a join portal, and is selected only when it removes a material time
+  and percentage detour. Already-direct voyages stay on marked lanes; circuitous
+  end-of-network reversals may leave sooner. A passage may alternate between
+  lanes and open water repeatedly. Crossing a lane in open water does not
+  reserve or join it.
 - `ShippingLaneDebugDraw` streams only the F3/freecam region around the current
   camera and remains completely unmaterialized while its gizmo layer is off.
 - `ShippingLaneTrafficSimulator` is a fixed-step test harness. Lightweight ship
   records travel controlled graph edges plus explicit open-water passage sections,
   retain signal blocks until their stern clears,
   request berth tokens, enter FIFO queues, and emit a copyable authority report.
-  It is not the production NPC controller.
-- `ShippingOpenWaterSchedule` is the standalone spatial/time reservation
-  authority for free-sailing passages. It reduces trajectories to coarse ocean
-  cells, gives same-direction convoys headway, and keeps crossing/opposing paths
-  exclusive. The simulator atomically books the complete OFF-to-ON passage
-  before a vessel leaves its controlled lane, so no client makes independent
-  collision-avoidance decisions in open water.
+  Exact and strategic records share the same block reservation service and ship
+  domains; an authority cadence change never makes a distant contact intangible.
+  On open water the shared authority applies deterministic headway, crossing and
+  head-on/starboard rules instead of reserving an entire multi-kilometre corridor.
+  It is not the production NPC helm or BoatBody controller.
+- `ShippingOpenWaterSchedule` remains a standalone stress-tested experimental
+  scheduler. It is not used by the traffic simulator: whole-corridor bookings
+  serialized the sea, created hour-long queues and prevented normal encounters.
 - Traffic presentation is interest-managed independently of authority. Every
   vessel remains a data record; a deterministic policy selects a capped nearby
   set of full official vessel builds, lightweight nearby proxies, and data-only

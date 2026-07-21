@@ -29,7 +29,7 @@ const OPEN_WATER_QUEUE_GAP_M := 18.0
 ## OFF-ramp and feeder movements a clear authority envelope.
 const OPEN_WATER_PORT_STANDOFF_M := 320.0
 const TRAFFIC_CLEARANCE_CELL_M := 128.0
-const OPEN_WATER_SCHEDULE := preload("res://scripts/traffic/shipping_open_water_schedule.gd")
+const SHIP_DOMAIN_MARGIN_M := 18.0
 
 var network: ShippingLaneNetwork
 var authority: ShippingLaneReservationService
@@ -47,7 +47,6 @@ var _collision_pairs: Dictionary = {}
 var _next_proximity_check_s := 0.0
 var _events: Array[Dictionary] = []
 var _safety_events: Array[Dictionary] = []
-var _open_water_schedule: RefCounted
 var _planned_passage_cache: Dictionary = {}
 var _sorted_vessel_ids := PackedStringArray()
 var _exact_vessel_ids := PackedStringArray()
@@ -60,6 +59,7 @@ var _controlled_spatial_buckets: Dictionary = {}
 var _open_water_obstacle_buckets: Dictionary = {}
 var _open_water_arrival_ranks: Dictionary = {}
 var _open_merge_owner_by_port: Dictionary = {} # port id -> vessel id
+var _global_spatial_buckets: Dictionary = {} # every authority tier, never presentation LOD
 var _metrics := {
 	"trips_completed": 0,
 	"route_failures": 0,
@@ -95,7 +95,6 @@ func configure(value: ShippingLaneNetwork, vessel_count := 24, seed := 77127,
 	_next_proximity_check_s = 0.0
 	_events.clear()
 	_safety_events.clear()
-	_open_water_schedule = OPEN_WATER_SCHEDULE.new()
 	_planned_passage_cache.clear()
 	_sorted_vessel_ids = PackedStringArray()
 	_exact_vessel_ids = PackedStringArray()
@@ -108,6 +107,7 @@ func configure(value: ShippingLaneNetwork, vessel_count := 24, seed := 77127,
 	_open_water_obstacle_buckets.clear()
 	_open_water_arrival_ranks.clear()
 	_open_merge_owner_by_port.clear()
+	_global_spatial_buckets.clear()
 	_metrics = {
 		"trips_completed": 0,
 		"route_failures": 0,
@@ -275,6 +275,57 @@ func _stage_strategic_route(vessel: Dictionary) -> void:
 	vessel["trip_started_s"] = simulated_seconds - desired_time
 	vessel["trip_distance_m"] = desired_time * speed
 	_update_pose(vessel, selected_edge, progress)
+	var placed := _strategic_ensure_current_block(vessel) \
+		and _strategic_position_is_clear(vessel)
+	if not placed:
+		var claimed_block := str(vessel.get("current_block_id", ""))
+		if not claimed_block.is_empty():
+			authority.release_block(str(vessel.get("id", "")), claimed_block)
+			vessel["current_block_id"] = ""
+		# Initial fleet records represent different voyage ages, not a mass
+		# departure. If the preferred section is occupied, walk deterministic
+		# alternate sections of this same contract route instead of stacking
+		# contacts or inventing a new destination.
+		for offset in range(1, candidates.size() + 1):
+			var alternate := candidates[posmod(offset + int(vessel.get("index", 0)),
+				candidates.size())] as Dictionary
+			var alternate_index := int(alternate.get("step_index", 0))
+			var alternate_edge := _step_record(route[alternate_index] as Dictionary)
+			var alternate_length := maxf(float(alternate_edge.get("length_m", 0.0)), 1.0)
+			var margin := minf(float(vessel.get("length_m", 28.0)) + 8.0,
+				alternate_length * 0.22)
+			var alternate_progress := lerpf(margin, maxf(alternate_length - margin, margin),
+				_deterministic_fraction(int(vessel.get("index", 0)), 91 + offset))
+			vessel["route_index"] = alternate_index
+			vessel["edge_progress_m"] = alternate_progress
+			_update_pose(vessel, alternate_edge, alternate_progress)
+			if _strategic_ensure_current_block(vessel) \
+					and _strategic_position_is_clear(vessel):
+				placed = true
+				break
+			claimed_block = str(vessel.get("current_block_id", ""))
+			if not claimed_block.is_empty():
+				authority.release_block(str(vessel.get("id", "")), claimed_block)
+				vessel["current_block_id"] = ""
+	if not placed:
+		vessel["strategic_motion_state"] = "waiting_signal"
+
+
+func _strategic_position_is_clear(vessel: Dictionary) -> bool:
+	var vessel_id := str(vessel.get("id", ""))
+	var position := vessel.get("position", Vector2.ZERO) as Vector2
+	for other_id_raw in vessels.keys():
+		var other_id := str(other_id_raw)
+		if other_id == vessel_id:
+			continue
+		var other := vessels[other_id_raw] as Dictionary
+		if str(other.get("state", "")) == "route_failed":
+			continue
+		var clearance := (float(vessel.get("length_m", 28.0)) \
+			+ float(other.get("length_m", 28.0))) * 0.5 + SHIP_DOMAIN_MARGIN_M
+		if position.distance_to(other.get("position", Vector2.ZERO) as Vector2) < clearance:
+			return false
+	return true
 
 
 func _process_pending_route_plans(maximum: int) -> void:
@@ -332,9 +383,34 @@ func _advance_strategic(vessel: Dictionary, delta: float) -> void:
 			return
 		var length := maxf(float(edge.get("length_m", 0.0)), 0.01)
 		var speed := maxf(float(edge.get("speed_limit_ms", 7.2)), 0.5)
+		if not _strategic_ensure_current_block(vessel):
+			vessel["strategic_motion_state"] = "waiting_signal"
+			vessel["wait_seconds"] = float(vessel.get("wait_seconds", 0.0)) + remaining_s
+			return
 		var progress := clampf(float(vessel.get("edge_progress_m", 0.0)), 0.0, length)
 		var available := maxf(length - progress, 0.0)
 		var travelled := minf(remaining_s * speed, available)
+		var reaches_end := travelled >= available - 0.001
+		if reaches_end and route_index + 1 < route.size() \
+				and not _strategic_prepare_next_step(vessel, route_index + 1):
+			var stopping_margin := minf(
+				float(vessel.get("length_m", 28.0)) + 12.0, length * 0.8)
+			travelled = maxf(minf(travelled, available - stopping_margin), 0.0)
+			reaches_end = false
+		var proposed_progress := progress + travelled
+		var proposed_sample := _sample_polyline(
+			edge.get("points", PackedVector2Array()) as PackedVector2Array,
+			proposed_progress)
+		var proposed := _sample_position_with_navigation_offset(vessel, proposed_sample)
+		if not _global_clear_to_advance(vessel, proposed):
+			vessel["strategic_motion_state"] = "waiting_traffic_clearance"
+			vessel["wait_seconds"] = float(vessel.get("wait_seconds", 0.0)) + remaining_s
+			_metrics["max_wait_seconds"] = maxf(
+				float(_metrics.get("max_wait_seconds", 0.0)),
+				float(vessel.get("wait_seconds", 0.0)))
+			return
+		vessel["strategic_motion_state"] = "traveling"
+		vessel["wait_seconds"] = 0.0
 		progress += travelled
 		remaining_s -= travelled / speed
 		vessel["trip_distance_m"] = float(vessel.get("trip_distance_m", 0.0)) + travelled
@@ -342,11 +418,100 @@ func _advance_strategic(vessel: Dictionary, delta: float) -> void:
 		_update_pose(vessel, edge, progress)
 		if progress < length - 0.001:
 			return
+		_strategic_finish_step_transition(vessel, route_index + 1)
 		vessel["route_index"] = route_index + 1
 		vessel["edge_progress_m"] = 0.0
 
 
+func _strategic_ensure_current_block(vessel: Dictionary) -> bool:
+	var route := vessel.get("route_steps", []) as Array
+	var route_index := int(vessel.get("route_index", -1))
+	if route_index < 0 or route_index >= route.size():
+		return true
+	var step := route[route_index] as Dictionary
+	if str(step.get("kind", "")) == "open_water":
+		var old_block_id := str(vessel.get("current_block_id", ""))
+		if not old_block_id.is_empty():
+			authority.release_block(str(vessel.get("id", "")), old_block_id)
+			vessel["current_block_id"] = ""
+		return true
+	var edge := network.edge(str(step.get("edge_id", "")))
+	var blocks := edge.get("block_ids", PackedStringArray()) as PackedStringArray
+	if blocks.is_empty():
+		return false
+	var block_id := blocks[0]
+	var vessel_id := str(vessel.get("id", ""))
+	if authority.owner_of(block_id) == vessel_id:
+		vessel["current_block_id"] = block_id
+		return true
+	var block := network.block(block_id)
+	if not str(block.get("queue_port_id", "")).is_empty():
+		_ensure_destination_request(vessel)
+		if authority.berth_assignment(vessel_id).is_empty():
+			vessel["blocked_reason"] = "strategic_waiting_berth"
+			return false
+	var reservation := authority.try_reserve(vessel_id, PackedStringArray([block_id]))
+	if not bool(reservation.get("ok", false)):
+		_record_blocker(vessel, reservation)
+		_metrics["reservation_denials"] = int(_metrics.get("reservation_denials", 0)) + 1
+		return false
+	if not authority.occupy(vessel_id, block_id):
+		authority.release_block(vessel_id, block_id)
+		return false
+	var old_block_id := str(vessel.get("current_block_id", ""))
+	if not old_block_id.is_empty() and old_block_id != block_id:
+		authority.release_block(vessel_id, old_block_id)
+	vessel["current_block_id"] = block_id
+	_clear_blocker(vessel)
+	return true
+
+
+func _strategic_prepare_next_step(vessel: Dictionary, next_index: int) -> bool:
+	var route := vessel.get("route_steps", []) as Array
+	if next_index < 0 or next_index >= route.size():
+		vessel["strategic_next_block_id"] = ""
+		return true
+	var step := route[next_index] as Dictionary
+	if str(step.get("kind", "")) == "open_water":
+		vessel["strategic_next_block_id"] = ""
+		return true
+	var edge := network.edge(str(step.get("edge_id", "")))
+	var blocks := edge.get("block_ids", PackedStringArray()) as PackedStringArray
+	if blocks.is_empty():
+		return false
+	var block_id := blocks[0]
+	var vessel_id := str(vessel.get("id", ""))
+	var block := network.block(block_id)
+	if not str(block.get("queue_port_id", "")).is_empty():
+		_ensure_destination_request(vessel)
+		if authority.berth_assignment(vessel_id).is_empty():
+			vessel["blocked_reason"] = "strategic_waiting_berth"
+			return false
+	var reservation := authority.try_reserve(vessel_id, PackedStringArray([block_id]))
+	if not bool(reservation.get("ok", false)):
+		_record_blocker(vessel, reservation)
+		_metrics["reservation_denials"] = int(_metrics.get("reservation_denials", 0)) + 1
+		return false
+	vessel["strategic_next_block_id"] = block_id
+	return true
+
+
+func _strategic_finish_step_transition(vessel: Dictionary, next_index: int) -> void:
+	var vessel_id := str(vessel.get("id", ""))
+	var old_block_id := str(vessel.get("current_block_id", ""))
+	var next_block_id := str(vessel.get("strategic_next_block_id", ""))
+	if not next_block_id.is_empty():
+		authority.occupy(vessel_id, next_block_id)
+	if not old_block_id.is_empty() and old_block_id != next_block_id:
+		authority.release_block(vessel_id, old_block_id)
+	vessel["current_block_id"] = next_block_id
+	vessel["strategic_next_block_id"] = ""
+	_clear_blocker(vessel)
+
+
 func _complete_strategic_trip(vessel: Dictionary) -> void:
+	authority.release_vessel(str(vessel.get("id", "")))
+	vessel["current_block_id"] = ""
 	var trip_seconds := maxf(simulated_seconds
 		- float(vessel.get("trip_started_s", simulated_seconds)), 0.0)
 	vessel["deliveries"] = int(vessel.get("deliveries", 0)) + 1
@@ -390,6 +555,10 @@ func _make_vessel(
 		"route_edge_ids": PackedStringArray(),
 		"route_steps": [],
 		"route_mode": "",
+		"route_choice_reason": "",
+		"lane_only_seconds": 0.0,
+		"open_water_saving_s": 0.0,
+		"open_water_saving_ratio": 0.0,
 		"open_water_sections": 0,
 		"route_index": 0,
 		"trip_serial": 0,
@@ -416,6 +585,9 @@ func _make_vessel(
 		"blocked_reason": "",
 		"authority_elapsed_s": 0.0,
 		"authority_phase_tick": posmod(index * 7 + scenario_seed, 20),
+		"strategic_motion_state": "traveling",
+		"strategic_next_block_id": "",
+		"navigation_offset_m": 0.0,
 		"deliveries": 0,
 	}
 
@@ -501,22 +673,12 @@ func _place_initial_underway(
 		if str(step.get("kind", "")) == "open_water":
 			var section_id := "%d:%d" % [
 				int(vessel.get("trip_serial", 0)), route_index]
-			var points := edge.get("points", PackedVector2Array()) as PackedVector2Array
-			var link_id := "%s>%s" % [str(step.get("from_ramp_id", "")),
-				str(step.get("to_ramp_id", ""))]
-			var allocation: Dictionary = _open_water_schedule.request(
-				str(vessel.get("id", "")), section_id, points,
-				-progress / speed, speed, float(vessel.get("length_m", 40.0)), link_id)
-			if not bool(allocation.get("ok", false)):
-				continue
-			var scheduled_progress := -float(allocation.get("start_s", 0.0)) * speed
-			if scheduled_progress < margin or scheduled_progress > length - margin:
-				_open_water_schedule.release(str(vessel.get("id", "")), section_id)
-				continue
-			progress = scheduled_progress
+			# Open sea is not an exclusive railway block. Initial contacts are
+			# distributed along their real A* leg and subsequently governed by the
+			# shared ship-domain/COLREG authority.
 			vessel["current_block_id"] = ""
 			vessel["open_water_section_id"] = section_id
-			vessel["open_water_start_s"] = float(allocation.get("start_s", 0.0))
+			vessel["open_water_start_s"] = simulated_seconds - progress / speed
 			vessel["state"] = "traveling_open_water"
 		else:
 			var blocks := edge.get("block_ids", PackedStringArray()) as PackedStringArray
@@ -628,6 +790,7 @@ static func _presentation_record(vessel: Dictionary) -> Dictionary:
 		"heading": vessel.get("heading", Vector2(0.0, -1.0)),
 		"state": str(vessel.get("state", "unknown")),
 		"route_mode": str(vessel.get("route_mode", "pending")),
+		"route_choice_reason": str(vessel.get("route_choice_reason", "")),
 		"open_water_sections": int(vessel.get("open_water_sections", 0)),
 		"length_m": float(vessel.get("length_m", 40.0)),
 		"beam_m": float(vessel.get("beam_m", 10.0)),
@@ -642,6 +805,7 @@ static func _presentation_record(vessel: Dictionary) -> Dictionary:
 func summary() -> Dictionary:
 	var states: Dictionary = {}
 	var passage_modes: Dictionary = {}
+	var route_choice_reasons: Dictionary = {}
 	var active_queue_count := 0
 	var starved_vessels := 0
 	for vessel_value in vessels.values():
@@ -650,6 +814,8 @@ func summary() -> Dictionary:
 		states[state] = int(states.get(state, 0)) + 1
 		var passage_mode := str(vessel.get("route_mode", "unknown"))
 		passage_modes[passage_mode] = int(passage_modes.get(passage_mode, 0)) + 1
+		var route_reason := str(vessel.get("route_choice_reason", "unknown"))
+		route_choice_reasons[route_reason] = int(route_choice_reasons.get(route_reason, 0)) + 1
 		if state in ["waiting_berth", "waiting_port_approach"]:
 			active_queue_count += 1
 		if _is_unresolved_starvation(vessel):
@@ -664,11 +830,16 @@ func summary() -> Dictionary:
 		"vessel_count": vessels.size(),
 		"states": states,
 		"passage_modes": passage_modes,
+		"route_choice_reasons": route_choice_reasons,
 		"active_port_queue": active_queue_count,
 		"starved_vessels": starved_vessels,
 		"pending_route_plans": _pending_plan_ids.size(),
-		"open_water_schedule": _open_water_schedule.summary() \
-			if _open_water_schedule != null else {},
+		"open_water_authority": {
+			"mode": "shared_encounter_authority",
+			"whole_corridor_booking": false,
+			"update_tiers_s": [FIXED_STEP_S, MID_AUTHORITY_STEP_S,
+				REMOTE_AUTHORITY_STEP_S],
+		},
 		"average_trip_seconds": float(_metrics.get("total_trip_seconds", 0.0)) \
 			/ float(completed) if completed > 0 else 0.0,
 		"average_trip_distance_m": float(_metrics.get("total_distance_m", 0.0)) \
@@ -697,6 +868,7 @@ func generate_report() -> String:
 		"Passages: %s | cached water links %d" % [
 			JSON.stringify(data.get("passage_modes", {})),
 			route_planner.cached_water_link_count() if route_planner != null else 0],
+		"Route choices: %s" % JSON.stringify(data.get("route_choice_reasons", {})),
 		"Queues: active %d | maximum %d | max wait %.1f s" % [
 			int(data.get("active_port_queue", 0)), int(data.get("max_port_queue", 0)),
 			float(data.get("max_wait_seconds", 0.0))],
@@ -707,7 +879,8 @@ func generate_report() -> String:
 		"Authority: reservation denials %d | overtakes %d | queue entries %d | berth promotions %d" % [
 			int(data.get("reservation_denials", 0)), int(data.get("overtakes", 0)),
 			int(data.get("queue_entries", 0)), int(data.get("berth_promotions", 0))],
-		"Open water: %s" % JSON.stringify(data.get("open_water_schedule", {})),
+		"Open-water authority: %s" % JSON.stringify(data.get(
+			"open_water_authority", {})),
 		"Average completed trip: %.1f s / %.0f m" % [
 			float(data.get("average_trip_seconds", 0.0)),
 			float(data.get("average_trip_distance_m", 0.0))],
@@ -767,7 +940,11 @@ func _vessel_wire_snapshot() -> Array[Dictionary]:
 			"destination_token_id": str(vessel.get("destination_token_id", "")),
 			"route_index": int(vessel.get("route_index", 0)),
 			"route_mode": str(vessel.get("route_mode", "")),
+			"route_choice_reason": str(vessel.get("route_choice_reason", "")),
 			"open_water_sections": int(vessel.get("open_water_sections", 0)),
+			"lane_only_seconds": float(vessel.get("lane_only_seconds", 0.0)),
+			"open_water_saving_s": float(vessel.get("open_water_saving_s", 0.0)),
+			"open_water_saving_ratio": float(vessel.get("open_water_saving_ratio", 0.0)),
 			"open_water_links": _open_water_link_snapshot(vessel),
 			"open_water_section_id": str(vessel.get("open_water_section_id", "")),
 			"open_water_start_s": float(vessel.get("open_water_start_s", -1.0)),
@@ -795,8 +972,8 @@ static func _open_water_link_snapshot(vessel: Dictionary) -> Array[Dictionary]:
 		if str(step.get("kind", "")) != "open_water":
 			continue
 		result.append({
-			"from_ramp_id": str(step.get("from_ramp_id", "")),
-			"to_ramp_id": str(step.get("to_ramp_id", "")),
+			"from_portal_id": str(step.get("from_portal_id", "")),
+			"to_portal_id": str(step.get("to_portal_id", "")),
 			"length_m": float(step.get("length_m", 0.0)),
 		})
 	return result
@@ -808,6 +985,7 @@ func _step(delta: float) -> void:
 	if simulated_seconds + 0.001 >= _next_background_plan_s:
 		_process_pending_route_plans(BACKGROUND_ROUTE_PLANS_PER_STEP)
 		_next_background_plan_s = simulated_seconds + BACKGROUND_ROUTE_PLAN_INTERVAL_S
+	_rebuild_global_spatial_buckets()
 	_rebuild_controlled_spatial_buckets()
 	_rebuild_open_water_obstacle_buckets()
 	_rebuild_open_water_arrival_ranks()
@@ -825,6 +1003,10 @@ func _step(delta: float) -> void:
 			_advance_strategic(strategic, maxf(simulated_seconds - last_update, delta))
 			strategic["strategic_last_update_s"] = simulated_seconds
 			vessels[vessel_id] = strategic
+	# Strategic contacts just advanced on their coarse AIS cadence. Refresh the
+	# shared domain before exact/local vessels move so LOD cannot change rights
+	# of way or allow an exact ship to pass through a remote record.
+	_rebuild_global_spatial_buckets()
 	# Signal-controlled movements have right of way at an interchange. Process
 	# them first so an open-water ship reads their same-tick position instead of
 	# stepping into a ramp block that was entered later in id order.
@@ -948,10 +1130,19 @@ func _step_vessel(vessel: Dictionary, delta: float) -> bool:
 			# still stopped until the merge token becomes available.
 			progress = old_progress if old_progress > merge_hold_progress \
 				else minf(progress, merge_hold_progress)
-		var proposed := (_sample_polyline(
+		var proposed_sample := _sample_polyline(
+			edge.get("points", PackedVector2Array()) as PackedVector2Array,
+			progress)
+		var proposed := _sample_position_with_navigation_offset(vessel, proposed_sample)
+		if not _open_water_clear_to_advance(vessel, proposed):
+			vessel["state"] = "waiting_traffic_clearance"
+			_wait(vessel, delta)
+			return false
+	else:
+		var controlled_proposed := (_sample_polyline(
 			edge.get("points", PackedVector2Array()) as PackedVector2Array,
 			progress).get("position", vessel.get("position", Vector2.ZERO)) as Vector2)
-		if not _open_water_clear_to_advance(vessel, proposed):
+		if not _global_clear_to_advance(vessel, controlled_proposed):
 			vessel["state"] = "waiting_traffic_clearance"
 			_wait(vessel, delta)
 			return false
@@ -1033,9 +1224,10 @@ func _open_step_targets_destination(vessel: Dictionary, step: Dictionary) -> boo
 		return false
 	var destination_token := network.berth_tokens.get(
 		str(vessel.get("destination_token_id", "")), {}) as Dictionary
-	var ramp := network.port_ramps.get(str(step.get("to_ramp_id", "")), {}) as Dictionary
-	return not destination_token.is_empty() and not ramp.is_empty() \
-		and str(destination_token.get("port_id", "")) == str(ramp.get("port_id", ""))
+	var portal := network.open_water_portals.get(
+		str(step.get("to_portal_id", "")), {}) as Dictionary
+	return not destination_token.is_empty() and not portal.is_empty() \
+		and str(destination_token.get("port_id", "")) == str(portal.get("port_id", ""))
 
 
 func _current_open_step_targets_destination(vessel: Dictionary) -> bool:
@@ -1103,8 +1295,8 @@ func _rebuild_open_water_arrival_ranks() -> void:
 		var step := route[route_index] as Dictionary
 		if str(step.get("kind", "")) != "open_water":
 			continue
-		var to_ramp_id := str(step.get("to_ramp_id", ""))
-		if to_ramp_id.is_empty():
+		var to_portal_id := str(step.get("to_portal_id", ""))
+		if to_portal_id.is_empty():
 			continue
 		var edge := _step_record(step)
 		var remaining := maxf(float(edge.get("length_m", 0.0))
@@ -1113,23 +1305,14 @@ func _rebuild_open_water_arrival_ranks() -> void:
 			continue
 		# Every ramp mouth at a port shares the same final manoeuvring water.
 		# Rank them as one interchange, not as independent endpoint queues.
-		var ramp := network.port_ramps.get(to_ramp_id, {}) as Dictionary
-		var group_id := "port:%s" % str(ramp.get("port_id", to_ramp_id))
-		var eligible := true
-		if _open_step_targets_destination(vessel, step):
-			# A ship without an assigned berth remains in the lane-side FIFO; it
-			# must not monopolize the open-water merge token while through traffic
-			# has a clear downstream ramp.
-			eligible = not authority.berth_assignment(str(vessel_id)).is_empty()
+		var portal := network.open_water_portals.get(to_portal_id, {}) as Dictionary
+		var group_id := "port:%s" % str(portal.get("port_id", to_portal_id))
 		var group := groups.get(group_id, []) as Array
-		group.append({"id": str(vessel_id), "remaining_m": remaining,
-			"eligible": eligible})
+		group.append({"id": str(vessel_id), "remaining_m": remaining})
 		groups[group_id] = group
 	for group_value in groups.values():
 		var group := group_value as Array
 		group.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
-			if bool(a.get("eligible", true)) != bool(b.get("eligible", true)):
-				return bool(a.get("eligible", true))
 			var a_remaining := float(a.get("remaining_m", 0.0))
 			var b_remaining := float(b.get("remaining_m", 0.0))
 			if not is_equal_approx(a_remaining, b_remaining):
@@ -1148,6 +1331,8 @@ func _open_water_clear_to_advance(vessel: Dictionary, proposed: Vector2) -> bool
 	# per-frame physics body.
 	# It is deterministic, data-only, and runs only for a vessel on its coarse
 	# authority tick (not once per rendered frame).
+	if not _global_clear_to_advance(vessel, proposed):
+		return false
 	var vessel_id := str(vessel.get("id", ""))
 	var owns_merge := _owns_next_controlled_entry(vessel)
 	var start := vessel.get("position", proposed) as Vector2
@@ -1219,6 +1404,114 @@ func _open_water_clear_to_advance(vessel: Dictionary, proposed: Vector2) -> bool
 			return false
 	_clear_blocker(vessel)
 	return true
+
+
+func _rebuild_global_spatial_buckets() -> void:
+	_global_spatial_buckets.clear()
+	for vessel_id in _sorted_vessel_ids:
+		var vessel := vessels.get(vessel_id, {}) as Dictionary
+		if str(vessel.get("state", "")) == "route_failed":
+			continue
+		var point := vessel.get("position", Vector2.ZERO) as Vector2
+		var cell := Vector2i(floori(point.x / TRAFFIC_CLEARANCE_CELL_M),
+			floori(point.y / TRAFFIC_CLEARANCE_CELL_M))
+		var bucket := _global_spatial_buckets.get(cell, PackedStringArray()) \
+			as PackedStringArray
+		bucket.append(vessel_id)
+		_global_spatial_buckets[cell] = bucket
+
+
+func _global_clear_to_advance(vessel: Dictionary, proposed: Vector2) -> bool:
+	# This is the LOD-independent safety seam. Exact local hulls and ten-second
+	# AIS contacts are queried from the same published positions, so lowering a
+	# vessel's simulation cadence can never make it intangible.
+	var vessel_id := str(vessel.get("id", ""))
+	var start := vessel.get("position", proposed) as Vector2
+	var heading := vessel.get("heading", Vector2(0.0, -1.0)) as Vector2
+	var movement := proposed - start
+	var movement_direction := movement.normalized() \
+		if movement.length_squared() > 0.001 else heading.normalized()
+	var padding := maxf(float(vessel.get("length_m", 28.0)) * 0.5 \
+		+ SHIP_DOMAIN_MARGIN_M, 32.0)
+	var lower := Vector2(minf(start.x, proposed.x), minf(start.y, proposed.y)) \
+		- Vector2.ONE * padding
+	var upper := Vector2(maxf(start.x, proposed.x), maxf(start.y, proposed.y)) \
+		+ Vector2.ONE * padding
+	var lower_cell := Vector2i(floori(lower.x / TRAFFIC_CLEARANCE_CELL_M),
+		floori(lower.y / TRAFFIC_CLEARANCE_CELL_M))
+	var upper_cell := Vector2i(floori(upper.x / TRAFFIC_CLEARANCE_CELL_M),
+		floori(upper.y / TRAFFIC_CLEARANCE_CELL_M))
+	var candidates := PackedStringArray()
+	var seen: Dictionary = {}
+	for cell_x in range(lower_cell.x, upper_cell.x + 1):
+		for cell_y in range(lower_cell.y, upper_cell.y + 1):
+			for other_id in _global_spatial_buckets.get(
+					Vector2i(cell_x, cell_y), PackedStringArray()) as PackedStringArray:
+				if other_id != vessel_id and not seen.has(other_id):
+					seen[other_id] = true
+					candidates.append(other_id)
+	for other_id in candidates:
+		var other := vessels.get(other_id, {}) as Dictionary
+		if other.is_empty() or str(other.get("state", "")) == "route_failed":
+			continue
+		var other_position := other.get("position", Vector2.ZERO) as Vector2
+		var clearance := (float(vessel.get("length_m", 28.0)) \
+			+ float(other.get("length_m", 28.0))) * 0.5 + SHIP_DOMAIN_MARGIN_M
+		if _point_segment_distance(other_position, start, proposed) >= clearance:
+			continue
+		var other_heading := other.get("heading", Vector2(0.0, -1.0)) as Vector2
+		var alignment := movement_direction.dot(other_heading.normalized())
+		if alignment >= 0.70:
+			# COLREG overtaking starts as ordinary following distance. A controlled
+			# outside lane may later grant a passing block, but no LOD tier may run
+			# through the leader while waiting for that grant.
+			if (other_position - start).dot(movement_direction) > 0.0:
+				vessel["blocked_by"] = other_id
+				vessel["blocked_reason"] = "shared_authority_headway"
+				return false
+			continue
+		var vessel_open := _current_step_is_open_water(vessel)
+		var other_open := _current_step_is_open_water(other)
+		if vessel_open and other_open:
+			# Open-water encounters are not railway blocks. Head-on vessels both
+			# alter to starboard; in a crossing encounter the vessel which sees the
+			# other on starboard is the give-way vessel. Apply the deterministic
+			# course offset, hold this authority tick, then continue on the offset
+			# track at the vessel's next cadence.
+			var right := Vector2(-movement_direction.y, movement_direction.x)
+			var other_on_starboard := (other_position - start).dot(right) > 0.0
+			if alignment <= -0.55 or other_on_starboard:
+				var desired_offset := maxf(float(vessel.get("beam_m", 10.0)),
+					float(other.get("beam_m", 10.0))) * 1.6 + 12.0
+				if float(vessel.get("navigation_offset_m", 0.0)) < desired_offset - 0.1:
+					vessel["navigation_offset_m"] = desired_offset
+					vessel["blocked_by"] = other_id
+					vessel["blocked_reason"] = "colreg_starboard_alteration"
+					return false
+			continue
+		# Signal-controlled traffic has priority over a free-sailing crossing.
+		# Strategic lane vessels own the same blocks as exact vessels, so two
+		# controlled movements should only reach this fallback while restored at
+		# an old snapshot boundary.
+		if vessel_open and not other_open:
+			vessel["blocked_by"] = other_id
+			vessel["blocked_reason"] = "open_water_yields_to_controlled"
+			return false
+		if not vessel_open and other_open:
+			continue
+		if other_id < vessel_id:
+			vessel["blocked_by"] = other_id
+			vessel["blocked_reason"] = "restored_controlled_priority"
+			return false
+	_clear_blocker(vessel)
+	return true
+
+
+func _current_step_is_open_water(vessel: Dictionary) -> bool:
+	var route := vessel.get("route_steps", []) as Array
+	var route_index := int(vessel.get("route_index", -1))
+	return route_index >= 0 and route_index < route.size() \
+		and str((route[route_index] as Dictionary).get("kind", "")) == "open_water"
 
 
 func _owns_next_controlled_entry(vessel: Dictionary) -> bool:
@@ -1562,10 +1855,6 @@ func _ensure_open_merge_authority(vessel: Dictionary) -> bool:
 	if port_id.is_empty():
 		vessel["open_merge_waiting"] = false
 		return true
-	if _current_open_step_targets_destination(vessel) \
-			and authority.berth_assignment(str(vessel.get("id", ""))).is_empty():
-		vessel["open_merge_waiting"] = true
-		return false
 	var vessel_id := str(vessel.get("id", ""))
 	var owner := str(_open_merge_owner_by_port.get(port_id, ""))
 	if owner == vessel_id:
@@ -1603,7 +1892,7 @@ func _current_open_merge_port_id(vessel: Dictionary) -> String:
 	var step := route[route_index] as Dictionary
 	if str(step.get("kind", "")) != "open_water":
 		return ""
-	return str((network.port_ramps.get(str(step.get("to_ramp_id", "")), {}) \
+	return str((network.open_water_portals.get(str(step.get("to_portal_id", "")), {}) \
 		as Dictionary).get("port_id", ""))
 
 
@@ -1683,40 +1972,13 @@ func _ensure_open_water_allocation(
 ) -> bool:
 	var section_id := "%d:%d" % [int(vessel.get("trip_serial", 0)), edge_index]
 	if str(vessel.get("open_water_section_id", "")) == section_id:
-		var ready := simulated_seconds + maxf(travel_to_slot_s, 0.0) + FIXED_STEP_S \
-			>= float(vessel.get("open_water_start_s", simulated_seconds))
-		if not ready:
-			vessel["state"] = "waiting_open_water_slot"
-		return ready
+		return true
 	var route := vessel.get("route_steps", []) as Array
 	if edge_index < 0 or edge_index >= route.size():
 		return false
-	var step := route[edge_index] as Dictionary
-	var edge := _step_record(step)
-	var points := edge.get("points", PackedVector2Array()) as PackedVector2Array
-	var link_id := "%s>%s" % [str(step.get("from_ramp_id", "")),
-		str(step.get("to_ramp_id", ""))]
-	if simulated_seconds + 0.001 < float(vessel.get("open_water_retry_s", -1.0)):
-		return false
-	var allocation: Dictionary = _open_water_schedule.request(
-		str(vessel.get("id", "")), section_id, points,
-		simulated_seconds + maxf(travel_to_slot_s, 0.0),
-		maxf(float(edge.get("speed_limit_ms", 7.2)), 0.5),
-		float(vessel.get("length_m", 40.0)), link_id)
-	if not bool(allocation.get("ok", false)):
-		vessel["state"] = "waiting_open_water_slot"
-		# A saturated spatial schedule is transient. Retrying its full conflict
-		# search twice per second can dominate a large authority, so the record
-		# remains parked and probes at an AIS-like interval instead.
-		vessel["open_water_retry_s"] = simulated_seconds + REMOTE_AUTHORITY_STEP_S
-		return false
 	vessel["open_water_retry_s"] = -1.0
 	vessel["open_water_section_id"] = section_id
-	vessel["open_water_start_s"] = float(allocation.get("start_s", simulated_seconds))
-	if simulated_seconds + maxf(travel_to_slot_s, 0.0) + FIXED_STEP_S \
-			< float(vessel.get("open_water_start_s", simulated_seconds)):
-		vessel["state"] = "waiting_open_water_slot"
-		return false
+	vessel["open_water_start_s"] = simulated_seconds + maxf(travel_to_slot_s, 0.0)
 	return true
 
 
@@ -1726,9 +1988,6 @@ func _waiting_for_booked_open_slot(vessel: Dictionary) -> bool:
 
 
 func _release_open_water_allocation(vessel: Dictionary) -> void:
-	var section_id := str(vessel.get("open_water_section_id", ""))
-	if not section_id.is_empty() and _open_water_schedule != null:
-		_open_water_schedule.release(str(vessel.get("id", "")), section_id)
 	vessel["open_water_section_id"] = ""
 	vessel["open_water_start_s"] = -1.0
 	vessel["open_water_retry_s"] = -1.0
@@ -1875,6 +2134,10 @@ func _plan_trip(vessel: Dictionary) -> void:
 	vessel["route_steps"] = route
 	vessel["route_edge_ids"] = passage.get("controlled_edge_ids", PackedStringArray())
 	vessel["route_mode"] = str(passage.get("mode", "all_lane"))
+	vessel["route_choice_reason"] = str(passage.get("route_choice_reason", ""))
+	vessel["lane_only_seconds"] = float(passage.get("lane_only_seconds", 0.0))
+	vessel["open_water_saving_s"] = float(passage.get("open_water_saving_s", 0.0))
+	vessel["open_water_saving_ratio"] = float(passage.get("open_water_saving_ratio", 0.0))
 	vessel["open_water_sections"] = int(passage.get("open_water_sections", 0))
 	vessel["route_index"] = 0
 	vessel["trip_serial"] = int(vessel.get("trip_serial", 0)) + 1
@@ -1953,8 +2216,21 @@ func _advance_trailing_blocks(vessel: Dictionary, moved_m: float) -> void:
 func _update_pose(vessel: Dictionary, edge: Dictionary, distance_m: float) -> void:
 	var points := edge.get("points", PackedVector2Array()) as PackedVector2Array
 	var sample := _sample_polyline(points, distance_m)
-	vessel["position"] = sample.get("position", Vector2.ZERO)
+	vessel["position"] = _sample_position_with_navigation_offset(vessel, sample)
 	vessel["heading"] = sample.get("heading", Vector2(0.0, -1.0))
+
+
+func _sample_position_with_navigation_offset(
+		vessel: Dictionary, sample: Dictionary,
+) -> Vector2:
+	var position := sample.get("position", Vector2.ZERO) as Vector2
+	if not _current_step_is_open_water(vessel):
+		return position
+	var heading := sample.get("heading", Vector2(0.0, -1.0)) as Vector2
+	if heading.length_squared() < 0.001:
+		return position
+	var starboard := Vector2(-heading.y, heading.x).normalized()
+	return position + starboard * float(vessel.get("navigation_offset_m", 0.0))
 
 
 func _step_record(step: Dictionary) -> Dictionary:
@@ -1987,12 +2263,12 @@ func _update_queue_peak() -> void:
 
 
 func _check_proximity_collisions() -> void:
-	var ids := _exact_vessel_ids
+	var ids := _sorted_vessel_ids
 	var cell_size := COLLISION_DISTANCE_M
 	var buckets: Dictionary = {}
 	for vessel_id in ids:
 		var vessel := vessels[vessel_id] as Dictionary
-		if str(vessel.get("state", "")) in ["docked", "route_failed", "scheduled_strategic"]:
+		if str(vessel.get("state", "")) in ["docked", "route_failed"]:
 			continue
 		var point := vessel.get("position", Vector2.ZERO) as Vector2
 		var cell := Vector2i(floori(point.x / cell_size), floori(point.y / cell_size))
@@ -2001,7 +2277,7 @@ func _check_proximity_collisions() -> void:
 		buckets[cell] = bucket
 	for vessel_id in ids:
 		var a := vessels[vessel_id] as Dictionary
-		if str(a.get("state", "")) in ["docked", "route_failed", "scheduled_strategic"]:
+		if str(a.get("state", "")) in ["docked", "route_failed"]:
 			continue
 		var a_point := a.get("position", Vector2.ZERO) as Vector2
 		var a_cell := Vector2i(floori(a_point.x / cell_size), floori(a_point.y / cell_size))

@@ -27,7 +27,7 @@ static func render_svg(
 		for edge_id in network.sorted_edge_ids():
 			var edge := network.edges[edge_id] as Dictionary
 			var kind := str(edge.get("kind", ""))
-			if kind not in ["main_lane", "regional_lane", "port_connector", "port_approach", "port_merge"]:
+			if not _renders_edge(kind):
 				continue
 			var points := edge.get("points", PackedVector2Array()) as PackedVector2Array
 			if points.size() < 2:
@@ -38,10 +38,32 @@ static func render_svg(
 			seen[signature] = true
 			lines.append('<polyline points="%s" stroke="%s" stroke-width="%s" opacity="0.72"/>' % [
 				_svg_points(points, bounds, offset, scale),
-				"#21b7db" if kind in ["main_lane", "regional_lane"] else "#4fc8a5",
-				"2.0" if kind == "main_lane" else "1.2",
+				_edge_color(kind),
+				_edge_width(kind),
 			])
 	lines.append("</g>")
+	if network != null:
+		for ramp_id in network.sorted_port_ramp_ids():
+			var ramp := network.port_ramps[ramp_id] as Dictionary
+			var ramp_screen := _screen(
+				ramp.get("position", Vector2.ZERO) as Vector2, bounds, offset, scale)
+			var ramp_color := "#49efa2" if str(ramp.get("ramp_kind", "")) == "on_ramp" \
+				else "#31c6f0"
+			lines.append('<circle cx="%.2f" cy="%.2f" r="3.0" fill="%s" stroke="#eaf6fa" stroke-width="0.8"/>' %
+				[ramp_screen.x, ramp_screen.y, ramp_color])
+		for portal_id in network.sorted_open_water_portal_ids():
+			var portal := network.open_water_portals[portal_id] as Dictionary
+			var portal_screen := _screen(
+				portal.get("position", Vector2.ZERO) as Vector2, bounds, offset, scale)
+			var portal_color := "#82f2ad" if str(portal.get("portal_kind", "")) == "join" \
+				else "#42c9f5"
+			lines.append('<polygon points="%.2f,%.2f %.2f,%.2f %.2f,%.2f %.2f,%.2f" fill="none" stroke="%s" stroke-width="1.2"/>' % [
+				portal_screen.x, portal_screen.y - 4.0,
+				portal_screen.x + 4.0, portal_screen.y,
+				portal_screen.x, portal_screen.y + 4.0,
+				portal_screen.x - 4.0, portal_screen.y,
+				portal_color,
+			])
 	for vessel in vessels:
 		for raw_step in vessel.get("route_steps", []) as Array:
 			var step := raw_step as Dictionary
@@ -60,9 +82,9 @@ static func render_svg(
 		lines.append('<text x="%.2f" y="%.2f" fill="#d7e7ec" font-family="sans-serif" font-size="10">%s</text>' %
 			[screen.x + 7.0, screen.y - 7.0, str(vessel.get("id", ""))])
 	lines.append('<rect x="18" y="18" width="430" height="72" rx="5" fill="#02070b" opacity="0.88"/>')
-	lines.append('<text x="34" y="46" fill="#e7f5f8" font-family="sans-serif" font-size="18">TRAFFIC LAB · %.0f simulated seconds</text>' %
+	lines.append('<text x="34" y="46" fill="#e7f5f8" font-family="sans-serif" font-size="18">TRAFFIC LAB - %.0f simulated seconds</text>' %
 		float(summary.get("simulated_seconds", 0.0)))
-	lines.append('<text x="34" y="72" fill="#9bc6cf" font-family="sans-serif" font-size="14">%d vessels · %d trips · %d collisions · %d starved</text>' % [
+	lines.append('<text x="34" y="72" fill="#9bc6cf" font-family="sans-serif" font-size="14">%d vessels - %d trips - %d collisions - %d starved</text>' % [
 		int(summary.get("vessel_count", 0)), int(summary.get("trips_completed", 0)),
 		int(summary.get("collisions", 0)), int(summary.get("starved_vessels", 0))])
 	lines.append("</svg>")
@@ -105,7 +127,7 @@ static func _content_bounds(
 	if network != null:
 		for edge_id in network.sorted_edge_ids():
 			var edge := network.edges[edge_id] as Dictionary
-			if str(edge.get("kind", "")) in ["main_lane", "regional_lane", "port_connector", "port_approach", "port_merge"]:
+			if _renders_edge(str(edge.get("kind", ""))):
 				points.append_array(edge.get("points", PackedVector2Array()) as PackedVector2Array)
 	for vessel in vessels:
 		points.append(vessel.get("position", Vector2.ZERO) as Vector2)
@@ -147,3 +169,34 @@ static func _state_color(state: String) -> String:
 		"waiting_berth": return "#dc63ec"
 		"docked": return "#45e77f"
 		_: return "#d7e7ec"
+
+
+static func _renders_edge(kind: String) -> bool:
+	return kind in ["main_lane", "regional_lane", "passing_lane",
+		"waterway_junction", "ocean_bus_connector", "coastal_merge",
+		"shipping_ramp", "port_feeder", "port_connector", "port_approach",
+		"port_merge", "quay_maneuver"]
+
+
+static func _edge_color(kind: String) -> String:
+	if kind in ["main_lane", "regional_lane"]:
+		return "#21b7db"
+	if kind == "passing_lane":
+		return "#59d9bd"
+	if kind in ["waterway_junction", "ocean_bus_connector", "coastal_merge"]:
+		return "#f0c65b"
+	if kind in ["shipping_ramp", "port_feeder", "port_connector", "port_merge"]:
+		return "#57e89c"
+	if kind == "port_approach":
+		return "#91efb4"
+	if kind == "quay_maneuver":
+		return "#f08b49"
+	return "#8fc7d1"
+
+
+static func _edge_width(kind: String) -> String:
+	if kind == "main_lane":
+		return "2.0"
+	if kind in ["regional_lane", "passing_lane"]:
+		return "1.5"
+	return "1.1"

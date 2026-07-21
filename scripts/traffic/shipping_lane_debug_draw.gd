@@ -145,6 +145,7 @@ func _rebuild(center: Vector3) -> void:
 	_draw_nodes(visible_node_ids, center)
 	_draw_port_queue_slots(center)
 	_draw_port_ramps(center)
+	_draw_open_water_portals(center)
 	_draw_validation_issues(center)
 	_rebuild_count += 1
 	_last_rebuild_ms = float(Time.get_ticks_usec() - started_usec) / 1000.0
@@ -231,16 +232,29 @@ func _draw_port_ramps(center: Vector3) -> void:
 			continue
 		var is_on_ramp := str(record.get("ramp_kind", "")) == "on_ramp"
 		var color := COLOR_ON_RAMP if is_on_ramp else COLOR_OFF_RAMP
-		var transfer_only := bool(record.get("transfer_only", false))
-		if transfer_only:
-			_add_diamond(position, 5.0, color)
-		else:
-			_add_marker(position, 3.2, color)
+		_add_marker(position, 3.2, color)
 		if Vector2(position.x - center.x, position.z - center.z).length_squared() \
 				<= 1800.0 * 1800.0:
-			_add_label(position + Vector3(0.0, 4.0, 0.0), "%s %s" % [
-				"SEA" if transfer_only else "PORT",
+			_add_label(position + Vector3(0.0, 4.0, 0.0), "PORT %s" % [
 				"ON" if is_on_ramp else "OFF",
+			], color)
+
+
+func _draw_open_water_portals(center: Vector3) -> void:
+	for portal_id in network.sorted_open_water_portal_ids():
+		var record := network.open_water_portals[portal_id] as Dictionary
+		var point := record.get("position", Vector2.ZERO) as Vector2
+		var position := Vector3(point.x, WATER_Y + 0.9, point.y)
+		if Vector2(position.x - center.x, position.z - center.z).length_squared() \
+				> draw_radius * draw_radius:
+			continue
+		var is_join := str(record.get("portal_kind", "")) == "join"
+		var color := COLOR_ON_RAMP if is_join else COLOR_OFF_RAMP
+		_add_diamond(position, 5.0, color)
+		if Vector2(position.x - center.x, position.z - center.z).length_squared() \
+				<= 1800.0 * 1800.0:
+			_add_label(position + Vector3(0.0, 4.0, 0.0), "SEA %s" % [
+				"JOIN" if is_join else "LEAVE",
 			], color)
 
 
