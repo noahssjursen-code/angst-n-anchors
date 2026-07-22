@@ -24,6 +24,36 @@ same commands and results behind transport. Crews, assignments, dynamic markets,
 land, and facilities are not implemented yet. Do not introduce speculative `Economy`,
 `FleetManager`, `CompanyManager`, or parallel state singletons. See the [game direction](Angst%20'n%20Anchors.md).
 
+## Character Appearance
+
+Player captains and NPC workers share the versioned, JSON-safe
+`CharacterAppearance` contract and the JSON-model-backed `CharacterVisual`
+renderer. The character catalog owns cosmetic ids, complete working-look
+presets, company-uniform roles, and future authoritative inventory metadata.
+The onboarding preview and F6 wardrobe showcase instantiate that exact
+renderer; they are not separate menu-only character models.
+
+Equipped ids are presentation state, not proof of ownership. A future server
+validates cosmetic inventory before accepting an appearance update, then
+replicates the accepted appearance record to clients.
+
+### Textured JSON materials
+
+UVs, textures, and recolour masks extend the existing JSON mesh pipeline; they
+do not introduce a second model format. A mesh dictionary may contain one UV
+pair per vertex, while a model part references a reusable `texture_profile`
+from `resources/data/materials/textured_materials.json`. Red and green mask
+channels select two runtime palette colours, so company uniforms do not require
+duplicate texture files.
+
+`MeshBuilder` caches appearance-free `ArrayMesh` geometry, textures, and
+materials separately. `ModelAssembler`, `MeshTransformer`, and
+`CharacterGarment` provide stable asset/part cache ids so repeated models avoid
+rehashing or rebuilding vertex arrays. Texture/profile changes swap a cached
+material without rebuilding geometry. Procedural authors should use `MeshUv`
+for basic planar/cylindrical projections and author seam-safe vertices where a
+purpose-built atlas needs hard UV seams.
+
 ---
 
 ## Organising Principle: One Folder Per System

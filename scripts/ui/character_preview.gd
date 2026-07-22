@@ -22,9 +22,7 @@ func _ready() -> void:
 	add_child(_pivot)
 	_character = CharacterVisual.new()
 	_character.name = "PreviewCharacter"
-	# Body validation is the current gate. The retired wardrobe stays hidden
-	# until the replacement body and complete motion set are approved.
-	_character.decorated = false
+	_character.set_decorated(true)
 	_pivot.add_child(_character)
 	if _pending_appearance != null:
 		apply_appearance(_pending_appearance)

@@ -4,6 +4,7 @@ extends Control
 signal confirmed(company_name: String, brand_color: Color, starter_vessel: String)
 signal cancelled()
 
+const REFERENCE_SIZE := Vector2(1920.0, 1080.0)
 const BRAND_COLORS := [
 	Color("2f7f83"), Color("b55f3d"), Color("c79a42"),
 	Color("4d638c"), Color("657b51"), Color("7a526f"),
@@ -19,7 +20,8 @@ var _starter_buttons: Dictionary = {}
 
 
 func _ready() -> void:
-	set_anchors_preset(Control.PRESET_FULL_RECT)
+	_configure_layout_scale()
+	get_viewport().size_changed.connect(_configure_layout_scale)
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	_build()
 
@@ -65,7 +67,7 @@ func _build() -> void:
 	margin.add_child(root)
 
 	var eyebrow := Label.new()
-	eyebrow.text = "NEW COMPANY  ·  02 / 03"
+	eyebrow.text = "NEW COMPANY  /  02 OF 03"
 	HudStyle.apply_body_font(eyebrow, 12, HudStyle.C_COPPER, true)
 	root.add_child(eyebrow)
 	var title := Label.new()
@@ -73,8 +75,8 @@ func _build() -> void:
 	HudStyle.apply_display_font(title, 44, HudStyle.C_TEXT)
 	root.add_child(title)
 	var intro := Label.new()
-	intro.text = "Your company owns the vessels, money and stored goods. The starter determines your first work—not your permanent career."
 	intro.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	intro.text = "Your company owns its vessels, money and stored goods. Your starter determines the first work available to you, not your permanent career."
 	HudStyle.apply_body_font(intro, 14, HudStyle.C_LABEL)
 	root.add_child(intro)
 
@@ -129,6 +131,8 @@ func _build() -> void:
 		card.custom_minimum_size = Vector2(270, 210)
 		card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		card.alignment = HORIZONTAL_ALIGNMENT_LEFT
+		card.toggle_mode = true
+		card.focus_mode = Control.FOCUS_NONE
 		card.text = "%s\n\n%s\n\n%s" % [
 			str(option.get("career", "")).to_upper(),
 			str(option.get("label", "Vessel")),
@@ -153,7 +157,7 @@ func _build() -> void:
 	back.pressed.connect(func() -> void: cancelled.emit())
 	footer.add_child(back)
 	_confirm = MenuActionButton.new()
-	_confirm.text = "Choose home port  →"
+	_confirm.text = "Choose home port  >"
 	_confirm.pressed.connect(_submit)
 	footer.add_child(_confirm)
 	_refresh_choices()
@@ -172,8 +176,24 @@ func _refresh_choices() -> void:
 		button.add_theme_stylebox_override("hover", style)
 	for id in _starter_buttons:
 		var button := _starter_buttons[id] as Button
-		button.modulate = Color.WHITE if id == _selected_starter else Color(0.62, 0.66, 0.67)
-		button.button_pressed = id == _selected_starter
+		var selected: bool = str(id) == _selected_starter
+		var card_style := StyleBoxFlat.new()
+		card_style.bg_color = Color(0.035, 0.055, 0.064, 0.98) if selected else Color(0.023, 0.035, 0.041, 0.96)
+		card_style.border_color = _selected_color if selected else Color("34444d")
+		card_style.set_border_width_all(2 if selected else 1)
+		card_style.set_corner_radius_all(2)
+		card_style.content_margin_left = 16
+		card_style.content_margin_right = 16
+		card_style.content_margin_top = 16
+		card_style.content_margin_bottom = 16
+		button.add_theme_stylebox_override("normal", card_style)
+		button.add_theme_stylebox_override("hover", card_style)
+		button.add_theme_stylebox_override("pressed", card_style)
+		button.add_theme_stylebox_override("hover_pressed", card_style)
+		button.add_theme_color_override("font_color", HudStyle.C_TEXT if selected else HudStyle.C_LABEL)
+		button.add_theme_color_override("font_pressed_color", HudStyle.C_TEXT)
+		button.modulate = Color.WHITE
+		button.set_pressed_no_signal(selected)
 	_validate()
 
 
@@ -193,3 +213,15 @@ func _submit() -> void:
 	if not _validate():
 		return
 	confirmed.emit(_name_field.text.strip_edges(), _selected_color, _selected_starter)
+
+
+func _configure_layout_scale() -> void:
+	var viewport_size := get_viewport().get_visible_rect().size
+	if viewport_size.x <= 0.0 or viewport_size.y <= 0.0:
+		return
+	var factor := minf(viewport_size.x / REFERENCE_SIZE.x, viewport_size.y / REFERENCE_SIZE.y)
+	factor = maxf(factor, 0.5)
+	set_anchors_and_offsets_preset(Control.PRESET_TOP_LEFT)
+	position = Vector2.ZERO
+	scale = Vector2.ONE * factor
+	size = viewport_size / factor

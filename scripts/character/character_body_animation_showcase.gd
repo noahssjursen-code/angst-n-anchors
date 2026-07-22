@@ -76,6 +76,11 @@ func _build_body() -> void:
 	actor.skin_color = Color("b98260")
 	actor.clothing_color = Color("344653")
 	actor.trousers_color = Color("344653")
+	if "--review-face-surface" in OS.get_cmdline_user_args():
+		var appearance := CharacterAppearance.default_appearance()
+		appearance.skin_color = actor.skin_color
+		appearance.face_texture_profile_id = "face_surface_base"
+		actor.apply_appearance(appearance)
 	pivot.add_child(actor)
 
 
@@ -132,7 +137,8 @@ func _select_motion(index: int) -> void:
 func _capture_review_set() -> void:
 	paused = true
 	paused_label.text = "CAPTURE POSE"
-	var output_dir := ProjectSettings.globalize_path("user://character_body_review")
+	var review_folder := "character_face_surface_review" if "--review-face-surface" in OS.get_cmdline_user_args() else "character_body_review"
+	var output_dir := ProjectSettings.globalize_path("user://%s" % review_folder)
 	DirAccess.make_dir_recursive_absolute(output_dir)
 	var views := {
 		"front": PI,

@@ -311,7 +311,18 @@ func _on_company_confirmed(company_name: String, brand_color: Color, starter_ves
 	_pending_company_name = company_name
 	_pending_brand_color = brand_color
 	_pending_starter_vessel = starter_vessel
+	# Brand colours are part of the shared appearance record so future company
+	# uniforms render identically for the player, hired NPCs and remote clients.
+	if _pending_appearance != null:
+		_pending_appearance.company_primary_color = brand_color
+		_pending_appearance.company_secondary_color = _company_accent_for(brand_color)
 	_show_home_port_picker()
+
+
+static func _company_accent_for(primary: Color) -> Color:
+	# Preserve the game's practical maritime palette while guaranteeing enough
+	# contrast for badges, reflective trim and later vessel/company markings.
+	return Color("d79a35") if primary.get_luminance() < 0.48 else Color("263640")
 
 
 func _show_home_port_picker() -> void:

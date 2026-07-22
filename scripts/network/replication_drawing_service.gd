@@ -647,6 +647,13 @@ func _apply_state_to_node(node: Node3D, type: String, payload: Array, meta: Stri
 		var body := node.get_node_or_null("BodyMesh") as NpcBase
 		if body != null and is_instance_valid(body):
 			var parsed_meta := _parse_meta_map(meta)
+			var encoded_appearance: String = parsed_meta.get("appearance", "")
+			if not encoded_appearance.is_empty() and body.get_meta("wire_appearance", "") != encoded_appearance:
+				var appearance_json := Marshalls.base64_to_raw(encoded_appearance).get_string_from_utf8()
+				var remote_appearance := CharacterAppearance.from_json_string(appearance_json)
+				if remote_appearance != null:
+					body.apply_appearance(remote_appearance)
+					body.set_meta("wire_appearance", encoded_appearance)
 			var skin_hex: String = parsed_meta.get("skin", "")
 			var coat_hex: String = parsed_meta.get("coat", "")
 			var pants_hex: String = parsed_meta.get("pants", "")
@@ -725,7 +732,7 @@ func _parse_meta_map(meta: String) -> Dictionary:
 	var out: Dictionary = {}
 	var parts := meta.split(";")
 	for part in parts:
-		var kv := part.split("=")
+		var kv := part.split("=", true, 1)
 		if kv.size() == 2:
 			out[kv[0]] = kv[1]
 	return out
@@ -735,18 +742,6 @@ func _drive_player_walk_cycle(state: Dictionary, node: Node3D, _delta: float) ->
 	var body := node.get_node_or_null("BodyMesh") as NpcBase
 	if body == null:
 		return
-
-	var anim: Variant = state.get("walk_anim", null)
-	if anim == null or not (anim is WalkAnimator):
-		anim = WalkAnimator.new()
-		(anim as WalkAnimator).attach(body)
-		state["walk_anim"] = anim
-
-	var walker := anim as WalkAnimator
-	if not walker.is_ready():
-		walker.attach(body)
-		if not walker.is_ready():
-			return
 
 	var last_pos: Vector3 = state.get("walk_sample_pos", node.global_position)
 	var delta_h := node.global_position - last_pos
@@ -758,10 +753,9 @@ func _drive_player_walk_cycle(state: Dictionary, node: Node3D, _delta: float) ->
 		var dist: float = float(state.get("walk_distance_m", 0.0))
 		dist += step_m
 		state["walk_distance_m"] = dist
-		walker.update(dist)
+		body.set_walk_distance(dist)
 	else:
-		state["walk_distance_m"] = 0.0
-		walker.reset()
+		body.set_idle()
 
 
 func clear_all(scene_nodes: Dictionary) -> void:

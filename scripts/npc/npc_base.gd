@@ -18,9 +18,9 @@ extends Node3D
 	set(value):
 		trousers_color = value
 		_sync_legacy_colors()
-## Wardrobe is intentionally opt-in while the replacement body and motion
-## contract are under review. Old clothing must not hide rig defects.
-@export var wardrobe_enabled := false
+## Body-only showcases opt out explicitly; gameplay and creator characters use
+## the same fitted wardrobe path by default.
+@export var wardrobe_enabled := true
 
 var appearance: CharacterAppearance = CharacterAppearance.default_appearance()
 var visual: CharacterVisual
@@ -41,6 +41,7 @@ func _build() -> void:
 	visual = CharacterVisual.new()
 	visual.name = "CharacterVisual"
 	visual.appearance = appearance.duplicate()
+	visual.set_decorated(wardrobe_enabled)
 	add_child(visual)
 	assembler = visual.get_base_assembler()
 	animator = CharacterAnimator.new()

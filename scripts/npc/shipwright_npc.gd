@@ -8,6 +8,7 @@ var _dialogue: DialoguePanel
 
 
 func _ready() -> void:
+	appearance = CharacterCatalog.appearance_preset("harbour_mechanic")
 	prompt_text = "Press F — Shipwright"
 	super._ready()
 	if not Engine.is_editor_hint():

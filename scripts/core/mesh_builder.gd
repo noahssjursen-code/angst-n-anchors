@@ -5,10 +5,31 @@ extends RefCounted
 ## No imported meshes. Every in-world object comes from here.
 
 static var _material_cache: Dictionary = {}
+static var _texture_cache: Dictionary = {}
+static var _geometry_cache: Dictionary = {}
+
+const PALETTE_MASK_SHADER := preload("res://resources/shaders/palette_mask_material.gdshader")
 
 
 static func clear_material_cache() -> void:
 	_material_cache.clear()
+	_texture_cache.clear()
+
+
+static func clear_geometry_cache() -> void:
+	_geometry_cache.clear()
+
+
+static func geometry_cache_size() -> int:
+	return _geometry_cache.size()
+
+
+static func material_cache_size() -> int:
+	return _material_cache.size()
+
+
+static func texture_cache_size() -> int:
+	return _texture_cache.size()
 
 
 static func make_material(color: Color, roughness: float = 0.85, metallic: float = 0.0, double_sided: bool = false) -> StandardMaterial3D:
@@ -31,6 +52,109 @@ static func make_material(color: Color, roughness: float = 0.85, metallic: float
 		mat.cull_mode = BaseMaterial3D.CULL_DISABLED
 	_material_cache[key] = mat
 	return mat
+
+
+## Textured companion to make_material(). Every wearer shares the imported
+## Texture2D and cached GPU material; `color` is a multiplicative tint.
+static func make_textured_material(
+		texture_path: String,
+		color: Color = Color.WHITE,
+		roughness: float = 0.85,
+		metallic: float = 0.0,
+		double_sided: bool = false,
+) -> StandardMaterial3D:
+	if texture_path.is_empty():
+		return make_material(color, roughness, metallic, double_sided)
+	var key := "texture:%s|%s" % [
+		texture_path,
+		_material_cache_key(color, roughness, metallic, double_sided),
+	]
+	if _material_cache.has(key):
+		return _material_cache[key] as StandardMaterial3D
+	var texture := _load_texture(texture_path)
+	if texture == null:
+		push_warning("MeshBuilder: could not load texture `%s`" % texture_path)
+		return make_material(color, roughness, metallic, double_sided)
+	var mat := StandardMaterial3D.new()
+	mat.albedo_color = color
+	mat.albedo_texture = texture
+	mat.roughness = roughness
+	mat.metallic = metallic
+	mat.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS_ANISOTROPIC
+	if metallic <= 0.001:
+		mat.metallic_specular = 0.15
+	if color.a < 0.999:
+		mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+		mat.depth_draw_mode = BaseMaterial3D.DEPTH_DRAW_ALWAYS
+	elif double_sided:
+		mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+	_material_cache[key] = mat
+	return mat
+
+
+## Recolourable textured material. The mask's red and green channels select
+## primary and secondary regions while the base texture keeps authored weave,
+## wear, shading, and fine detail. Identical palettes share one material.
+static func make_palette_masked_material(
+		texture_path: String,
+		mask_path: String,
+		primary_color: Color,
+		secondary_color: Color,
+		tint: Color = Color.WHITE,
+		roughness: float = 0.85,
+		metallic: float = 0.0,
+) -> Material:
+	if texture_path.is_empty() or mask_path.is_empty():
+		return make_textured_material(texture_path, tint, roughness, metallic, true)
+	var key := "palette_mask:%s|%s|%s|%s|%s" % [
+		texture_path,
+		mask_path,
+		_material_cache_key(primary_color, roughness, metallic, true),
+		_material_cache_key(secondary_color, roughness, metallic, true),
+		_material_cache_key(tint, roughness, metallic, true),
+	]
+	if _material_cache.has(key):
+		return _material_cache[key] as Material
+	var texture := _load_texture(texture_path)
+	var mask := _load_texture(mask_path)
+	if texture == null or mask == null:
+		push_warning("MeshBuilder: could not load palette texture or mask `%s`, `%s`" % [texture_path, mask_path])
+		return make_textured_material(texture_path, tint, roughness, metallic, true)
+	var mat := ShaderMaterial.new()
+	mat.shader = PALETTE_MASK_SHADER
+	mat.set_shader_parameter("base_texture", texture)
+	mat.set_shader_parameter("palette_mask", mask)
+	mat.set_shader_parameter("primary_color", primary_color)
+	mat.set_shader_parameter("secondary_color", secondary_color)
+	mat.set_shader_parameter("tint", tint)
+	mat.set_shader_parameter("surface_roughness", roughness)
+	mat.set_shader_parameter("surface_metallic", metallic)
+	_material_cache[key] = mat
+	return mat
+
+
+static func _load_texture(texture_path: String) -> Texture2D:
+	if _texture_cache.has(texture_path):
+		return _texture_cache[texture_path] as Texture2D
+	var texture: Texture2D = null
+	## Source-generated texture libraries can be present before Godot has written
+	## their import metadata. ResourceLoader cannot see those files yet, but the
+	## runtime still needs to render them in authoring showcases and first launch.
+	## Prefer the imported resource when available so production builds keep the
+	## normal compressed/mipmapped path; decode the source image only as a safe
+	## fallback for newly generated assets.
+	if ResourceLoader.exists(texture_path, "Texture2D"):
+		texture = ResourceLoader.load(texture_path, "Texture2D") as Texture2D
+	if texture == null:
+		var absolute_path := ProjectSettings.globalize_path(texture_path)
+		if FileAccess.file_exists(absolute_path):
+			var image := Image.load_from_file(absolute_path)
+			if image != null and not image.is_empty():
+				texture = ImageTexture.create_from_image(image)
+	if texture != null:
+		_texture_cache[texture_path] = texture
+	return texture
 
 
 static func _material_cache_key(
@@ -697,33 +821,94 @@ static func static_box(size: Vector3, color: Color, roughness: float = 0.85) -> 
 	return body
 
 
-## Builds a custom mesh from a flat array of vertices and indices.
+## Builds a custom JSON mesh from flat vertex/index arrays. Geometry is cached
+## independently from appearance, so differently coloured or textured instances
+## share one ArrayMesh. UVs are optional and contain one Vector2 per vertex.
 ##
-## JSON meshes use flat normals and a plain StandardMaterial3D. No UVs, no shader,
-## no procedural colour variation — just simple lighting and shadows.
+## `geometry_cache_id` is the fast production path for data-authored assets. It
+## must remain stable for a specific authored mesh. Callers without a stable id
+## fall back to a content hash, which is safe but costs O(vertex count) at spawn.
 static func from_data(
 	vertices: Array,
 	indices: Array,
 	color: Color,
 	roughness: float = 0.55,
 	metallic: float = 0.05,
+	uvs: Array = [],
+	texture_path: String = "",
+	texture_mask_path: String = "",
+	primary_color: Color = Color.WHITE,
+	secondary_color: Color = Color.WHITE,
+	geometry_cache_id: String = "",
+) -> MeshInstance3D:
+	var geometry_key := _geometry_cache_key(vertices, indices, uvs, geometry_cache_id)
+	var mesh := _geometry_cache.get(geometry_key, null) as ArrayMesh
+	if mesh == null:
+		var built := _from_data_uncached(vertices, indices, uvs)
+		mesh = built.mesh as ArrayMesh
+		if mesh != null:
+			_geometry_cache[geometry_key] = mesh
+	var mi := MeshInstance3D.new()
+	mi.mesh = mesh
+	mi.material_override = (
+		make_palette_masked_material(
+			texture_path,
+			texture_mask_path,
+			primary_color,
+			secondary_color,
+			color,
+			roughness,
+			metallic,
+		)
+		if not texture_mask_path.is_empty()
+		else make_textured_material(texture_path, color, roughness, metallic, true)
+		if not texture_path.is_empty()
+		else make_material(color, roughness, metallic, true)
+	)
+	return mi
+
+
+static func _geometry_cache_key(
+		vertices: Array,
+		indices: Array,
+		uvs: Array,
+		geometry_cache_id: String,
+) -> String:
+	if not geometry_cache_id.is_empty():
+		return "asset:" + geometry_cache_id
+	return "%d:%d:%d|%d|%d" % [
+		vertices.size(),
+		indices.size(),
+		uvs.size(),
+		hash(vertices),
+		hash([indices, uvs]),
+	]
+
+
+static func _from_data_uncached(
+	vertices: Array,
+	indices: Array,
+	uvs: Array = [],
 ) -> MeshInstance3D:
 	var st := SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
 
-	var mat := make_material(color, roughness, metallic, true)
-	st.set_material(mat)
-
 	var v3_array: Array[Vector3] = []
 	for i in range(0, vertices.size(), 3):
 		v3_array.append(Vector3(vertices[i], vertices[i+1], vertices[i+2]))
+	var uv_array: Array[Vector2] = []
+	if uvs.size() == v3_array.size() * 2:
+		for i in range(0, uvs.size(), 2):
+			uv_array.append(Vector2(float(uvs[i]), float(uvs[i + 1])))
 
 	# JSON authoring uses CW winding; Godot expects CCW — swap the last two indices.
 	# Each triangle emits 3 unique vertices so generate_normals() gives flat shading.
 	for i in range(0, indices.size(), 3):
-		st.add_vertex(v3_array[indices[i]])
-		st.add_vertex(v3_array[indices[i + 2]])
-		st.add_vertex(v3_array[indices[i + 1]])
+		for raw_index in [indices[i], indices[i + 2], indices[i + 1]]:
+			var vertex_index := int(raw_index)
+			if not uv_array.is_empty():
+				st.set_uv(uv_array[vertex_index])
+			st.add_vertex(v3_array[vertex_index])
 
 	st.generate_normals()
 	var mesh := st.commit()

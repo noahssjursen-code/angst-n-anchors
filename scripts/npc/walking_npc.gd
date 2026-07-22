@@ -18,7 +18,6 @@ extends NpcBase
 ## foundation / apron centre within the port plot.
 @export var anchor_offset: Vector3 = Vector3.ZERO
 
-var _anim: WalkAnimator
 ## Precomputed patrol loop: waypoints, segment lengths, perimeter, walk speed.
 ## Pure function of (port_seed, npc_index, port_radius) — captured once at
 ## ready so the per-frame path is just a segment-walk + lerp.
@@ -31,14 +30,12 @@ func _ready() -> void:
 	# the same on every client.
 	var rng := RandomNumberGenerator.new()
 	rng.seed = port_seed ^ ((npc_index + 1) * 0x12345789) ^ 0xC010C010  # 'COLO'
-	skin_color     = Color.from_hsv(rng.randf_range(0.05, 0.10), 0.45, rng.randf_range(0.55, 0.80))
-	clothing_color = Color.from_hsv(rng.randf(),                 0.45, rng.randf_range(0.30, 0.65))
-	trousers_color = Color.from_hsv(rng.randf(),                 0.30, rng.randf_range(0.18, 0.40))
+	appearance = CharacterCatalog.appearance_preset("dock_worker")
+	appearance.skin_color = Color.from_hsv(rng.randf_range(0.05, 0.10), 0.45, rng.randf_range(0.55, 0.80))
+	appearance.top_color = Color.from_hsv(rng.randf(), 0.35, rng.randf_range(0.30, 0.60))
+	appearance.trousers_color = Color.from_hsv(rng.randf(), 0.22, rng.randf_range(0.18, 0.36))
 	super._ready()
 	_loop_data = AmbientPopulation.build_loop(port_seed, npc_index, port_radius)
-	# NpcBase builds synchronously now → animator can attach in the same frame.
-	_anim = WalkAnimator.new()
-	_anim.attach(self)
 
 
 func _process(_delta: float) -> void:
@@ -49,7 +46,6 @@ func _process(_delta: float) -> void:
 	# Walk cycle: cumulative distance = speed × time. Locks gait visually to
 	# patrol speed without any per-walker state.
 	var dist  : float = float(_loop_data["speed"]) * t
-	if _anim != null and _anim.is_ready():
-		_anim.update(dist)
+	set_walk_distance(dist)
 	xform.origin += anchor_offset
 	transform = xform

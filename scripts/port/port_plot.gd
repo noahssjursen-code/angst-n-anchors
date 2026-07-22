@@ -162,13 +162,10 @@ func _spawn_harbour_staff() -> void:
 	var sw := ShipwrightNpc.new()
 	sw.name = "Shipwright"
 	sw.interact_range = 6.0
-	sw.clothing_color = Color(0.42, 0.28, 0.18)
-	sw.trousers_color = Color(0.18, 0.20, 0.24)
 	sw.position = apron + Vector3(3.5, 0.0, 0.0)
 	sw.rotation.y = facing_seaward
 	add_child(sw)
 	_add_staff_nameplate(sw, "SHIPWRIGHT")
-	sw.call_deferred("add_overlay", "hat", AssetPaths.HAT_FLAT_CAP)
 
 	var agent := CargoAgentNpc.new()
 	agent.name = "CargoAgent"

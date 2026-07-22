@@ -254,11 +254,9 @@ func _spawn_operator() -> void:
 		_add_seat()
 	_operator = NpcBase.new()
 	_operator.name = "Operator"
+	_operator.appearance = CharacterCatalog.appearance_preset("dock_worker")
 	_operator.position = Vector3(0.0, -0.12, 0.28)
 	_operator.rotation_degrees = Vector3(0.0, 0.0, 0.0)
-	_operator.skin_color = Color(0.72, 0.55, 0.40)
-	_operator.clothing_color = Color(0.18, 0.22, 0.28)
-	_operator.trousers_color = Color(0.14, 0.14, 0.16)
 	_cabin.add_child(_operator)
 	call_deferred("_pose_operator_seated")
 

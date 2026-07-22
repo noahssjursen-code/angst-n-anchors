@@ -17,15 +17,12 @@ var _screen: _Screen = _Screen.MAIN
 
 
 func _ready() -> void:
-	clothing_color = Color(0.15, 0.22, 0.45)
-	trousers_color = Color(0.12, 0.16, 0.32)
+	appearance = CharacterCatalog.appearance_preset("harbour_master")
 	prompt_text = "Press F — Harbour Master"
 	super._ready()
 	if not Engine.is_editor_hint():
 		call_deferred("_build_ui")
 		call_deferred("_wire_session")
-	else:
-		call_deferred("_add_hat")
 
 
 func _wire_session() -> void:

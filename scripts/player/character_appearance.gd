@@ -1,22 +1,50 @@
 class_name CharacterAppearance
 extends RefCounted
 
-## Serializable captain look — drives NpcBase tinting and hat overlays.
-## Extend with more slots (coat, boots, …) as mesh parts arrive.
+## Shared, JSON-safe character appearance contract. NPCs and players use the
+## same record so a server only needs to replicate data, never scene nodes.
 
+const SCHEMA_VERSION := 5
+const CHARACTER_CATALOG := preload("res://scripts/character/character_catalog.gd")
 const HAT_NONE := ""
 const HAT_FLAT_CAP := "flat_cap"
 const HAT_PEAKED_CAP := "peaked_cap"
-
 const HAT_PATHS: Dictionary = {
-	HAT_FLAT_CAP:   AssetPaths.HAT_FLAT_CAP,
+	HAT_FLAT_CAP: AssetPaths.HAT_FLAT_CAP,
 	HAT_PEAKED_CAP: AssetPaths.HAT_PEAKED_CAP,
 }
 
-var skin_color: Color = Color(0.72, 0.55, 0.40)
-var clothing_color: Color = Color(0.18, 0.20, 0.30)
-var trousers_color: Color = Color(0.18, 0.18, 0.20)
-var hat_id: String = HAT_NONE
+var skin_color := Color(0.72, 0.55, 0.40)
+var clothing_color := Color(0.18, 0.20, 0.30)
+var top_color := Color(0.30, 0.34, 0.38)
+var trousers_color := Color(0.18, 0.18, 0.20)
+var hair_color := Color(0.12, 0.075, 0.045)
+var headwear_color := Color(0.16, 0.18, 0.20)
+var footwear_color := Color(0.075, 0.065, 0.055)
+var accent_color := Color(0.92, 0.48, 0.08)
+var accessory_color := Color(0.20, 0.23, 0.25)
+var company_primary_color := Color(0.10, 0.22, 0.32)
+var company_secondary_color := Color(0.90, 0.45, 0.10)
+var body_id := "average"
+var hair_id := "cropped"
+var facial_hair_id := "none"
+var top_id := "wool_sweater"
+var outerwear_id := "deck_jacket"
+var trousers_id := "work_trousers"
+var footwear_id := "deck_boots"
+var headwear_id := "none"
+var eyewear_id := "none"
+var face_accessory_id := "none"
+## Reusable texture profile for subtle skin grain, age and freckles. The base
+## profile is intentionally restrained so every new character benefits from
+## surface detail without changing the approved body or face silhouette.
+var face_texture_profile_id := "face_surface_base"
+var neckwear_id := "none"
+var handwear_id := "none"
+var utility_id := "none"
+var uniform_id := "none"
+## Legacy slot retained for save migration and the old NpcBase renderer.
+var hat_id := HAT_NONE
 
 
 static func default_appearance() -> CharacterAppearance:
@@ -25,66 +53,118 @@ static func default_appearance() -> CharacterAppearance:
 
 static func from_dict(d: Dictionary) -> CharacterAppearance:
 	var a := CharacterAppearance.new()
-	a.skin_color      = _color_from_variant(d.get("skin_color", a.skin_color))
-	a.clothing_color  = _color_from_variant(d.get("clothing_color", a.clothing_color))
-	a.trousers_color  = _color_from_variant(d.get("trousers_color", a.trousers_color))
-	a.hat_id          = str(d.get("hat_id", HAT_NONE))
+	a.skin_color = _color_from_variant(d.get("skin_color", a.skin_color), a.skin_color)
+	a.clothing_color = _color_from_variant(d.get("clothing_color", a.clothing_color), a.clothing_color)
+	a.top_color = _color_from_variant(d.get("top_color", d.get("clothing_color", a.top_color)), a.top_color)
+	a.trousers_color = _color_from_variant(d.get("trousers_color", a.trousers_color), a.trousers_color)
+	a.hair_color = _color_from_variant(d.get("hair_color", a.hair_color), a.hair_color)
+	a.headwear_color = _color_from_variant(d.get("headwear_color", d.get("hair_color", a.headwear_color)), a.headwear_color)
+	a.footwear_color = _color_from_variant(d.get("footwear_color", a.footwear_color), a.footwear_color)
+	a.accent_color = _color_from_variant(d.get("accent_color", a.accent_color), a.accent_color)
+	a.accessory_color = _color_from_variant(d.get("accessory_color", a.accessory_color), a.accessory_color)
+	a.company_primary_color = _color_from_variant(d.get("company_primary_color", a.company_primary_color), a.company_primary_color)
+	a.company_secondary_color = _color_from_variant(d.get("company_secondary_color", a.company_secondary_color), a.company_secondary_color)
+	a.body_id = CHARACTER_CATALOG.normalized_id(&"body_presets", str(d.get("body_id", a.body_id)), a.body_id)
+	a.hair_id = CHARACTER_CATALOG.normalized_id(&"hair", str(d.get("hair_id", a.hair_id)), a.hair_id)
+	a.facial_hair_id = CHARACTER_CATALOG.normalized_id(&"facial_hair", str(d.get("facial_hair_id", a.facial_hair_id)), a.facial_hair_id)
+	a.top_id = CHARACTER_CATALOG.normalized_id(&"tops", str(d.get("top_id", a.top_id)), a.top_id)
+	a.outerwear_id = CHARACTER_CATALOG.normalized_id(&"outerwear", str(d.get("outerwear_id", a.outerwear_id)), a.outerwear_id)
+	a.trousers_id = CHARACTER_CATALOG.normalized_id(&"trousers", str(d.get("trousers_id", a.trousers_id)), a.trousers_id)
+	a.footwear_id = CHARACTER_CATALOG.normalized_id(&"footwear", str(d.get("footwear_id", a.footwear_id)), a.footwear_id)
+	var migrated_headwear := str(d.get("headwear_id", d.get("hat_id", "none")))
+	if migrated_headwear.is_empty():
+		migrated_headwear = "none"
+	a.headwear_id = CHARACTER_CATALOG.normalized_id(&"headwear", migrated_headwear, "none")
+	a.eyewear_id = CHARACTER_CATALOG.normalized_id(&"eyewear", str(d.get("eyewear_id", a.eyewear_id)), "none")
+	a.face_accessory_id = CHARACTER_CATALOG.normalized_id(&"face_accessories", str(d.get("face_accessory_id", a.face_accessory_id)), "none")
+	a.face_texture_profile_id = CHARACTER_CATALOG.normalized_id(
+		&"face_surfaces",
+		str(d.get("face_texture_profile_id", a.face_texture_profile_id)).strip_edges(),
+		"face_surface_base"
+	)
+	a.neckwear_id = CHARACTER_CATALOG.normalized_id(&"neckwear", str(d.get("neckwear_id", a.neckwear_id)), "none")
+	a.handwear_id = CHARACTER_CATALOG.normalized_id(&"handwear", str(d.get("handwear_id", a.handwear_id)), "none")
+	a.utility_id = CHARACTER_CATALOG.normalized_id(&"utility_accessories", str(d.get("utility_id", a.utility_id)), "none")
+	a.uniform_id = CHARACTER_CATALOG.normalized_id(&"uniform_templates", str(d.get("uniform_id", a.uniform_id)), "none")
+	a.hat_id = str(d.get("hat_id", HAT_NONE))
 	if not HAT_PATHS.has(a.hat_id) and a.hat_id != HAT_NONE:
 		a.hat_id = HAT_NONE
 	return a
 
 
-static func _color_from_variant(v: Variant) -> Color:
-	if typeof(v) == TYPE_COLOR:
-		return v as Color
-	if typeof(v) == TYPE_ARRAY and (v as Array).size() >= 3:
-		var arr := v as Array
+static func from_json_string(json: String) -> CharacterAppearance:
+	var parsed: Variant = JSON.parse_string(json)
+	return from_dict(parsed as Dictionary) if typeof(parsed) == TYPE_DICTIONARY else null
+
+
+static func _color_from_variant(value: Variant, fallback: Color = Color.WHITE) -> Color:
+	if typeof(value) == TYPE_COLOR:
+		return value as Color
+	if typeof(value) == TYPE_ARRAY and (value as Array).size() >= 3:
+		var arr := value as Array
 		return Color(float(arr[0]), float(arr[1]), float(arr[2]), float(arr[3]) if arr.size() > 3 else 1.0)
-	if typeof(v) == TYPE_STRING:
-		return Color.from_string(v as String, Color.WHITE)
-	return Color.WHITE
+	if typeof(value) == TYPE_STRING:
+		return Color.from_string(value as String, fallback)
+	return fallback
 
 
 func to_dict() -> Dictionary:
 	return {
-		"skin_color":      [skin_color.r, skin_color.g, skin_color.b, skin_color.a],
-		"clothing_color":  [clothing_color.r, clothing_color.g, clothing_color.b, clothing_color.a],
-		"trousers_color":  [trousers_color.r, trousers_color.g, trousers_color.b, trousers_color.a],
-		"hat_id":          hat_id,
+		"schema_version": SCHEMA_VERSION,
+		"body_id": body_id,
+		"hair_id": hair_id,
+		"facial_hair_id": facial_hair_id,
+		"top_id": top_id,
+		"outerwear_id": outerwear_id,
+		"trousers_id": trousers_id,
+		"footwear_id": footwear_id,
+		"headwear_id": headwear_id,
+		"eyewear_id": eyewear_id,
+		"face_accessory_id": face_accessory_id,
+		"face_texture_profile_id": face_texture_profile_id,
+		"neckwear_id": neckwear_id,
+		"handwear_id": handwear_id,
+		"utility_id": utility_id,
+		"uniform_id": uniform_id,
+		"hat_id": hat_id,
+		"skin_color": _color_array(skin_color),
+		"clothing_color": _color_array(clothing_color),
+		"top_color": _color_array(top_color),
+		"trousers_color": _color_array(trousers_color),
+		"hair_color": _color_array(hair_color),
+		"headwear_color": _color_array(headwear_color),
+		"footwear_color": _color_array(footwear_color),
+		"accent_color": _color_array(accent_color),
+		"accessory_color": _color_array(accessory_color),
+		"company_primary_color": _color_array(company_primary_color),
+		"company_secondary_color": _color_array(company_secondary_color),
 	}
 
 
+func to_json_string() -> String:
+	return JSON.stringify(to_dict(), "  ")
+
+
 func to_meta_string(display_name: String = "", captain_id: String = "") -> String:
-	var parts: PackedStringArray = [
-		"skin=%s" % skin_color.to_html(false),
-		"coat=%s" % clothing_color.to_html(false),
-		"pants=%s" % trousers_color.to_html(false),
-		"hat=%s" % hat_id,
-	]
-	if not display_name.is_empty():
-		parts.append("name=%s" % display_name)
-	if not captain_id.is_empty():
-		parts.append("cid=%s" % captain_id)
+	var encoded_appearance := Marshalls.raw_to_base64(to_json_string().to_utf8_buffer())
+	var parts := PackedStringArray([
+		"skin=%s" % skin_color.to_html(false), "coat=%s" % clothing_color.to_html(false),
+		"pants=%s" % trousers_color.to_html(false), "hat=%s" % hat_id,
+		"appearance=%s" % encoded_appearance,
+	])
+	if not display_name.is_empty(): parts.append("name=%s" % display_name)
+	if not captain_id.is_empty(): parts.append("cid=%s" % captain_id)
 	return ";".join(parts)
 
 
 func duplicate() -> CharacterAppearance:
-	var c := CharacterAppearance.new()
-	c.skin_color     = skin_color
-	c.clothing_color = clothing_color
-	c.trousers_color = trousers_color
-	c.hat_id         = hat_id
-	return c
+	return CharacterAppearance.from_dict(to_dict())
 
 
 func apply_to_npc(npc: NpcBase) -> void:
-	if npc == null:
-		return
-	npc.set_colors(skin_color, clothing_color, trousers_color)
-	if hat_id == HAT_NONE:
-		npc.remove_overlay("hat")
-	elif HAT_PATHS.has(hat_id):
-		var hat_path: String = str(HAT_PATHS[hat_id])
-		var existing := npc.get_node_or_null("Overlay_hat") as ModelAssembler
-		if existing == null or existing.model_data_path != hat_path:
-			npc.add_overlay("hat", hat_path)
+	if npc != null:
+		npc.apply_appearance(self)
+
+
+static func _color_array(color: Color) -> Array:
+	return [color.r, color.g, color.b, color.a]

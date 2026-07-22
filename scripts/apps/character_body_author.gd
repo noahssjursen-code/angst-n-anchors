@@ -43,7 +43,12 @@ func _parts() -> Array:
 	parts.append(_part("pelvis", "body_lower", "", Vector3(0.0, 0.90, 0.0), Vector3(0.28, 0.18, 0.19), Vector3.ZERO, Color("344653")))
 	parts.append(_part("chest", "body_upper", "pelvis", Vector3(0.0, 0.06, 0.0), Vector3(0.33, 0.42, 0.20), Vector3(0.0, 0.18, 0.0), Color("344653")))
 	parts.append(_part("neck", "skin_shadow", "chest", Vector3(0.0, 0.39, 0.0), Vector3(0.068, 0.07, 0.074), Vector3(0.0, 0.025, 0.0), Color("a87557"), 0.80))
-	parts.append(_part("head", "skin", "neck", Vector3(0.0, 0.07, 0.0), Vector3(0.195, 0.225, 0.185), Vector3(0.0, 0.108, 0.0), Color("b98260"), 0.80))
+	var head := _part("head", "skin", "neck", Vector3(0.0, 0.07, 0.0), Vector3(0.195, 0.225, 0.185), Vector3(0.0, 0.108, 0.0), Color("b98260"), 0.80)
+	# The head keeps the exact approved cuboid silhouette, but duplicates vertices
+	# at its six seams so each face owns a clean atlas tile. The surface profile
+	# remains opt-in; old captains still render with the original solid material.
+	head["mesh"] = _box_atlas_mesh(Vector3(0.195, 0.225, 0.185), Vector3(0.0, 0.108, 0.0))
+	parts.append(head)
 	parts.append(_part("ear_left", "skin_shadow", "head", Vector3(-0.104, 0.108, 0.0), Vector3(0.022, 0.058, 0.050), Vector3.ZERO, Color("a87557"), 0.82))
 	parts.append(_part("ear_right", "skin_shadow", "head", Vector3(0.104, 0.108, 0.0), Vector3(0.022, 0.058, 0.050), Vector3.ZERO, Color("a87557"), 0.82))
 
@@ -101,6 +106,44 @@ func _box_mesh(size: Vector3, center: Vector3) -> Dictionary:
 	for point in corners:
 		vertices.append_array(_v3(point))
 	return {"vertices": vertices, "indices": BOX_INDICES.duplicate()}
+
+
+func _box_atlas_mesh(size: Vector3, center: Vector3) -> Dictionary:
+	var h := size * 0.5
+	var c := [
+		center + Vector3(-h.x, -h.y, -h.z), center + Vector3(h.x, -h.y, -h.z),
+		center + Vector3(h.x, h.y, -h.z), center + Vector3(-h.x, h.y, -h.z),
+		center + Vector3(-h.x, -h.y, h.z), center + Vector3(h.x, -h.y, h.z),
+		center + Vector3(h.x, h.y, h.z), center + Vector3(-h.x, h.y, h.z),
+	]
+	# 3x2 atlas: front, right, back / left, top, bottom.
+	var faces := [
+		{"corners": [c[0], c[1], c[2], c[3]], "cell": Vector2i(0, 0)},
+		{"corners": [c[1], c[2], c[6], c[5]], "cell": Vector2i(1, 0)},
+		{"corners": [c[4], c[5], c[6], c[7]], "cell": Vector2i(2, 0)},
+		{"corners": [c[3], c[0], c[4], c[7]], "cell": Vector2i(0, 1)},
+		{"corners": [c[2], c[3], c[7], c[6]], "cell": Vector2i(1, 1)},
+		{"corners": [c[0], c[1], c[5], c[4]], "cell": Vector2i(2, 1)},
+	]
+	var vertices: Array = []
+	var indices: Array = []
+	var uvs: Array = []
+	for face in faces:
+		var base := vertices.size() / 3
+		for point in face.corners:
+			vertices.append_array(_v3(point))
+		var cell: Vector2i = face.cell
+		uvs.append_array(_atlas_quad_uv(cell.x, cell.y, 3, 2))
+		indices.append_array([base, base + 1, base + 2, base, base + 2, base + 3])
+	return {"vertices": vertices, "indices": indices, "uvs": uvs}
+
+
+func _atlas_quad_uv(column: int, row: int, columns: int, rows: int) -> Array:
+	var u0 := float(column) / float(columns)
+	var u1 := float(column + 1) / float(columns)
+	var v0 := float(row) / float(rows)
+	var v1 := float(row + 1) / float(rows)
+	return [u0, v1, u1, v1, u1, v0, u0, v0]
 
 
 func _v3(value: Vector3) -> Array:
