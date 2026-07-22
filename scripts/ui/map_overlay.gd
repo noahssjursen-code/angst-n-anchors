@@ -31,6 +31,7 @@ var renderer := Renderer.new()
 var nav := ChartNavSnapshot.new()
 
 var selected_port := ""
+var home_port_required_family := ""
 var hover_screen := Vector2(-1.0, -1.0)
 var dragging := false
 var drag_origin_mouse := Vector2.ZERO
@@ -103,6 +104,11 @@ func enter_home_port_pick_mode(preselect_port_id: String = "") -> void:
 	overlay_debounce = 0.0
 	first_visible_frame = true
 	visible = true
+
+
+func set_home_port_required_family(family: String) -> void:
+	home_port_required_family = family.strip_edges()
+	_refresh_pick_panel()
 
 
 func exit_home_port_pick_mode() -> void:
@@ -474,15 +480,37 @@ func _refresh_pick_panel() -> void:
 			continue
 		feature_bits.append(feature)
 	var features_line := ", ".join(feature_bits) if not feature_bits.is_empty() else "Standard apron"
+	var compatible := _home_port_supports_required_family(info)
+	var compatibility_line := ""
+	if not compatible:
+		compatibility_line = "\n[color=#e27a63]This harbour has no %s berth for your selected starter vessel.[/color]" \
+				% CommodityCatalog.terminal_family_display(home_port_required_family)
 	pick_body.text = "\n".join(PackedStringArray([
 		"[color=#8a9a94]Population[/color]  %s" % _format_population(int(info.get("population", 0))),
 		"[color=#8a9a94]Primary export[/color]  %s" % export_label,
 		"[color=#8a9a94]Imports[/color]  %s" % import_line,
 		"[color=#8a9a94]Max class[/color]  %s" % ship_class,
 		"[color=#8a9a94]Facilities[/color]  %s" % features_line,
-	]))
+	])) + compatibility_line
 	if pick_confirm != null:
-		pick_confirm.disabled = false
+		pick_confirm.disabled = not compatible
+
+
+func _home_port_supports_required_family(info: Dictionary) -> bool:
+	if home_port_required_family.is_empty():
+		return true
+	if home_port_required_family == "fishing":
+		return bool(info.get("has_fish_landing", false)) \
+				and (info.get("features", []) as Array).has("Fish Landing")
+	var commodity_ids: Array = []
+	commodity_ids.append_array(info.get("export_slots", []) as Array)
+	commodity_ids.append_array(info.get("commodity_imports", []) as Array)
+	for raw in commodity_ids:
+		var family := CommodityCatalog.commodity_terminal_family(str(raw))
+		if family == home_port_required_family \
+				or (home_port_required_family == "bulk" and family.begins_with("bulk_")):
+			return true
+	return false
 
 
 static func _format_population(value: int) -> String:

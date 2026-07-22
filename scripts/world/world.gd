@@ -36,6 +36,7 @@ var _world_layout: WorldLayout
 var _layout_generation_usec := 0
 var _requested_generation_version := WORLD_GENERATION_VERSION
 var _requested_weather_generation_version := WEATHER_GENERATION_VERSION
+var _requested_layout_checksum := ""
 var _terrain_streamer: WorldTerrainStreamer
 var _forest_streamer: WorldForestStreamer
 var _shipping_lane_network: ShippingLaneNetwork
@@ -64,6 +65,7 @@ func _ready() -> void:
 			world_seed = int(settings.get("map_generation_seed"))
 			_requested_generation_version = int(settings.get("map_generation_version"))
 			_requested_weather_generation_version = int(settings.get("weather_generation_version"))
+			_requested_layout_checksum = str(settings.get("map_layout_checksum"))
 			if settings.get("map_world_size_m") != null:
 				world_size_m = float(settings.get("map_world_size_m"))
 	_ready_complete = true
@@ -111,6 +113,23 @@ func _rebuild() -> void:
 		WORLD_CONFIG.ARCHETYPE_PATH,
 		world_size_m,
 	)
+	## Captain creation briefly shipped a picker that always rendered the 40 km
+	## layout while saving a different runtime size. Its checksum lets us recover
+	## that exact advertised world for already-created captains.
+	var recovered_legacy_picker_world := false
+	if not _requested_layout_checksum.is_empty() \
+			and _world_layout.layout_checksum != _requested_layout_checksum \
+			and not is_equal_approx(world_size_m, WORLD_CONFIG.REFERENCE_SIZE_M):
+		var picker_layout := WORLD_LAYOUT_GENERATOR.generate(
+			world_seed,
+			WORLD_CONFIG.ARCHETYPE_PATH,
+			WORLD_CONFIG.REFERENCE_SIZE_M,
+		)
+		if picker_layout.layout_checksum == _requested_layout_checksum:
+			_world_layout = picker_layout
+			world_size_m = picker_layout.world_size_m
+			recovered_legacy_picker_world = true
+			push_warning("World: recovered the exact layout shown by the legacy home-port picker")
 	_layout_generation_usec = Time.get_ticks_usec() - layout_started
 	_layout_checksum = _world_layout.layout_checksum
 	if t != null:
@@ -124,6 +143,7 @@ func _rebuild() -> void:
 			_layout_checksum,
 			WEATHER_GENERATION_VERSION,
 			world_size_m,
+			"standard" if recovered_legacy_picker_world else str(settings.get("map_world_preset")),
 		)
 
 	_add_world_renderer()
@@ -391,13 +411,15 @@ func _generate_definitions() -> Array[PortDefinition]:
 
 
 func _spawn_player() -> void:
-	# PortPlot builds its graph visualizer deferred; wait for foundation /
-	# asphalt StaticBody colliders before raycasting spawn.
-	await get_tree().process_frame
-	await get_tree().process_frame
+	var home := get_node_or_null("HomePort") as PortPlot
+	# PortPlot builds its graph visualizer deferred. Do not create the player
+	# until both the port deck and streamed terrain collision exist.
+	if home != null and home.get_node_or_null("PortLayoutGraph") == null:
+		await home.rebuild_completed
+	var spawn_hint := home.get_spawn_position() if home != null else Vector3.ZERO
+	if _terrain_streamer != null:
+		await _await_spawn_terrain(spawn_hint)
 	await get_tree().physics_frame
-
-	var home      := get_node_or_null("HomePort") as PortPlot
 	var spawn_pos := _safe_spawn_position(home)
 
 	var player      := PLAYER_SCENE.instantiate()
@@ -416,11 +438,6 @@ func _spawn_player() -> void:
 	var tut := get_node_or_null("/root/Tutorial")
 	if tut != null:
 		tut.call_deferred("show", "welcome")
-
-	# Hold LoadingGate until the spawn/collision terrain ring is built so land
-	# does not keep popping in after the overlay dismisses.
-	if _terrain_streamer != null:
-		await _await_spawn_terrain(spawn_pos)
 
 	# Bake far-LOD impostors while the gate is still up (buildings + village houses).
 	await _warm_impostors()

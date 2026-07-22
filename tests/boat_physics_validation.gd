@@ -86,7 +86,7 @@ func _test_hydrostatic_profiles() -> void:
 			"submerged half-section centroid"
 		)
 	var cat_entry := HullRegistry.get_by_id(CATAMARAN.VESSEL_ID)
-	_check(int(cat_entry.get("price_marks", -1)) == 0, "catamaran hull costs zero")
+	_check(int(cat_entry.get("price_marks", -1)) == 0, "bare catamaran hull costs zero")
 	for entry in HullRegistry.catalog():
 		var hull_id := str(entry.get("id", ""))
 		var boat := HullRegistry.build_hull(hull_id)

@@ -264,9 +264,12 @@ func _make_omni(color: Color, range_m: float, energy: float, vol_energy: float) 
 	light.omni_range = range_m
 	light.omni_attenuation = 1.5
 	_base_energy = energy
-	_base_vol_energy = vol_energy
+	# The lens/glow handles long-range recognition. Keep only enough volumetric
+	# injection to reveal nearby moisture without turning the complete ship into
+	# a luminous fog ball.
+	_base_vol_energy = minf(vol_energy, 0.6)
 	light.light_energy = energy * _day_scale
-	light.light_volumetric_fog_energy = vol_energy * _vol_scale
+	light.light_volumetric_fog_energy = _base_vol_energy * _vol_scale
 	light.light_specular = 0.7
 	light.light_size = 0.1
 	light.shadow_enabled = false
@@ -302,7 +305,7 @@ func _make_spot(pitch_deg: float, range_m: float, energy: float, angle_deg: floa
 	light.spot_range = range_m
 	light.spot_attenuation = 1.25
 	_base_energy = energy
-	_base_vol_energy = maxf(energy * 0.9, 28.0)
+	_base_vol_energy = clampf(energy * 0.055, 1.5, 3.5)
 	light.light_energy = energy * _day_scale
 	light.light_volumetric_fog_energy = _base_vol_energy * _vol_scale
 	light.spot_angle = angle_deg

@@ -155,6 +155,8 @@ static func touch_index_from_player(player: PlayerData) -> void:
 		"world_seed": int(ctx.get("seed", 0)),
 		"last_played_unix": int(Time.get_unix_time_from_system()),
 		"marks": player.marks,
+		"company_name": str(player.company.get("name", "")),
+		"brand_color": str(player.company.get("brand_color", "2f7f83")),
 	})
 
 
@@ -256,6 +258,8 @@ static func _merge_summary(id: String, summary: Dictionary, base: Dictionary = {
 		"world_seed": int(summary.get("world_seed", base.get("world_seed", 0))),
 		"last_played_unix": int(summary.get("last_played_unix", base.get("last_played_unix", 0))),
 		"marks": int(summary.get("marks", base.get("marks", 0))),
+		"company_name": str(summary.get("company_name", base.get("company_name", ""))),
+		"brand_color": str(summary.get("brand_color", base.get("brand_color", "2f7f83"))),
 	}
 
 

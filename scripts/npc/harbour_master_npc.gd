@@ -10,7 +10,7 @@ const PEAKED_CAP_PATH := AssetPaths.HAT_PEAKED_CAP
 
 var _dialogue: DialoguePanel
 
-enum _Screen { MAIN, REQUEST_BERTH, SHIP_SELECT, VESSEL_INFO, REFUEL, ABANDON_CONFIRM }
+enum _Screen { MAIN, REQUEST_BERTH, SHIP_SELECT, VESSEL_INFO, REFUEL, LAND_CATCH, ABANDON_CONFIRM }
 
 const FUEL_PRICE_PER_LITRE := 0.5
 var _screen: _Screen = _Screen.MAIN
@@ -90,6 +90,8 @@ func _show_main() -> void:
 	_dialogue.add_option("Request a berth / deploy my vessel.", _show_request_berth)
 	if _can_offer_refuel():
 		_dialogue.add_option("Refuel my ship.", _show_refuel)
+	if _can_offer_catch_landing():
+		_dialogue.add_option("Land and sell my catch.", _show_land_catch)
 	_dialogue.add_option("What vessels can dock here?", _show_vessel_info)
 	if LocalPlayerView.has_active_ship():
 		_dialogue.add_option("Abandon my vessel.", _show_abandon_confirm)
@@ -101,6 +103,41 @@ func _can_offer_refuel() -> bool:
 	if data != null and not data.has_fuel_point:
 		return false
 	return LocalPlayerView.has_active_ship()
+
+
+func _can_offer_catch_landing() -> bool:
+	var data := _port_data()
+	## Catch is physically landed at the generated RSW station. Do not offer
+	## the old instant-sale shortcut at ports without that infrastructure.
+	if data == null or not data.has_fish_landing:
+		return false
+	var ship := LocalPlayerView.get_active_ship() as BoatBody
+	if ship == null or ship.get_harbour_port_id() != port_id or ship.get_moored_berth() == null:
+		return false
+	for hold in ship.get_catch_holds():
+		if not hold.state.is_empty():
+			return true
+	return false
+
+
+func _show_land_catch() -> void:
+	_screen = _Screen.LAND_CATCH
+	_dialogue.clear()
+	var ship := LocalPlayerView.get_active_ship() as BoatBody
+	if ship == null:
+		_show_main()
+		return
+	var states: Array[CatchHoldState] = []
+	for hold in ship.get_catch_holds():
+		states.append(hold.get_state())
+	var offer := FishingLandingService.quote(states)
+	_dialogue.add_quote(
+		("The fish market estimates %s for %.1f tonnes of fresh catch.\n"
+		+ "Take the vessel alongside the fishing berth and speak to the fish landing operator. "
+		+ "The RSW pump will weigh and transfer the catch before payment.")
+		% [PlayerSession.format_money(int(offer.get("value_marks", 0))), float(offer.get("mass_kg", 0.0)) / 1000.0]
+	)
+	_dialogue.add_back_button(_show_main)
 
 
 func _show_refuel() -> void:
@@ -133,7 +170,7 @@ func _commit_refuel(litres: float, price: int) -> void:
 	if session == null or ship == null:
 		_show_main()
 		return
-	if not session.spend_marks(price):
+	if not session.spend_marks(price, "fuel", "Bunkered marine fuel", ""):
 		_dialogue.clear()
 		_dialogue.add_quote(
 			"Your balance won't cover that, Captain.\nNeed %s more."

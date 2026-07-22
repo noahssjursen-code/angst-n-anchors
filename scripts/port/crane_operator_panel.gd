@@ -11,6 +11,7 @@ var _status: Label
 var _btn_load: Button
 var _btn_unload: Button
 var _btn_stop: Button
+var _title: Label
 
 
 func _ready() -> void:
@@ -29,10 +30,10 @@ func _ready() -> void:
 	vbox.add_theme_constant_override("separation", 10)
 	panel.add_child(vbox)
 
-	var title := Label.new()
-	title.text = "CRANE OPERATOR"
-	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	vbox.add_child(title)
+	_title = Label.new()
+	_title.text = "CRANE OPERATOR"
+	_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	vbox.add_child(_title)
 
 	_status = Label.new()
 	_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -62,6 +63,11 @@ func _ready() -> void:
 	close_btn.text = "Close"
 	close_btn.pressed.connect(func() -> void: request_close.emit())
 	vbox.add_child(close_btn)
+
+
+func set_title(value: String) -> void:
+	if _title != null:
+		_title.text = value.strip_edges().to_upper()
 
 
 func set_status(

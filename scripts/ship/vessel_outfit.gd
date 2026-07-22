@@ -217,6 +217,7 @@ static func validate(
 	var caps := {
 		"cargo_cells": cargo_used,
 		"cargo_budget": cargo_max,
+		"exposed_deck_cells": int(budget.get("exposed_deck_cells", 0)),
 		"has_cabin": door_n >= 1 or wall_n >= 8,
 		"has_helm": accepted_helm.size() >= 1,
 		"has_crane": accepted_crane.size() >= 1,

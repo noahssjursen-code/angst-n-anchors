@@ -93,6 +93,9 @@ func create_local(
 	appearance: CharacterAppearance,
 	home_port_id: String,
 	world_seed: int,
+	company_name: String = "",
+	brand_color: Color = Color("2f7f83"),
+	starter_vessel: String = "fishing",
 ) -> PlayerData:
 	var tree := Engine.get_main_loop() as SceneTree
 	var session: Node = null
@@ -108,7 +111,10 @@ func create_local(
 		"world_seed": world_seed,
 		"last_played_unix": int(Time.get_unix_time_from_system()),
 	})
-	session.begin_new_captain(display_name, appearance, home_port_id, account_id, world_seed)
+	session.begin_new_captain(
+		display_name, appearance, home_port_id, account_id, world_seed,
+		company_name, brand_color, starter_vessel,
+	)
 	LocalCaptainStore.touch_index_from_player(session.data)
 	selected_id = account_id
 	var entry := {
@@ -117,6 +123,8 @@ func create_local(
 		"home_port_id": session.data.home_port_id,
 		"world_seed": world_seed,
 		"marks": session.data.marks,
+		"company_name": str(session.data.company.get("name", company_name)),
+		"starter_vessel": starter_vessel,
 		"source": "local",
 	}
 	captain_created.emit(entry)

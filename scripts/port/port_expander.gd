@@ -44,6 +44,9 @@ static func chart_summary(definition: PortDefinition, world_seed: int) -> Dictio
 		size = site_max
 		definition.size = size
 		PortTradeProfile.resync_for_size(trade, size)
+	var has_fish_landing := PortFishingService.is_eligible(definition, world_seed)
+	if has_fish_landing:
+		PortFishingService.apply_to_profile(trade)
 	definition.size = def_size
 
 	var has_lighthouse := definition.has_lighthouse or (size >= 1 and rng.randf() < 0.3)
@@ -53,6 +56,8 @@ static func chart_summary(definition: PortDefinition, world_seed: int) -> Dictio
 		features.append("Lighthouse")
 	if has_fog_horn:
 		features.append("Fog Horn")
+	if has_fish_landing:
+		features.append("Fish Landing")
 	for commodity in trade.export_slots:
 		features.append("Export:%s" % commodity)
 
@@ -73,6 +78,9 @@ static func chart_summary(definition: PortDefinition, world_seed: int) -> Dictio
 		"id": definition.port_id,
 		"display_name": definition.display_name,
 		"position": definition.world_position,
+		## Preserve the placed site's exact geometry inputs for the home-port
+		## preview. Reconstructing from a summary loses measured quay clearance.
+		"port_definition": definition.to_dict(),
 		## Chart harbour silhouettes expand from this summary — yaw + site seed
 		## must match the placer or every quay faces world −Z (north-up).
 		"rotation_y": definition.rotation_y,
@@ -90,6 +98,7 @@ static func chart_summary(definition: PortDefinition, world_seed: int) -> Dictio
 		"max_ship_class_name": str(ShipClass.DISPLAY_NAME.get(_ship_class_for_size(size), "Vessel")),
 		"has_lighthouse": has_lighthouse,
 		"has_fog_horn": has_fog_horn,
+		"has_fish_landing": has_fish_landing,
 	}
 
 
@@ -142,6 +151,9 @@ static func expand_uncached(
 		data.size = definition.site_max_size
 		definition.size = data.size
 		PortTradeProfile.resync_for_size(data.trade_profile, data.size)
+	data.has_fish_landing = PortFishingService.is_eligible(definition, world_seed)
+	if data.has_fish_landing:
+		PortFishingService.apply_to_profile(data.trade_profile)
 	data.has_fuel_point = true
 	data.has_lighthouse = definition.has_lighthouse or (data.size >= 1 and rng.randf() < 0.3)
 	data.has_fog_horn = definition.has_fog_horn or (data.size >= 0 and rng.randf() < 0.4)
@@ -149,6 +161,7 @@ static func expand_uncached(
 		"has_fuel_point": data.has_fuel_point,
 		"has_lighthouse": data.has_lighthouse,
 		"has_fog_horn": data.has_fog_horn,
+		"has_fish_landing": data.has_fish_landing,
 		"world_layout": world_layout,
 		"trade_max_size": trade_max,
 	}
@@ -159,6 +172,11 @@ static func expand_uncached(
 		site_seed,
 		layout_attrs,
 	)
+	## Public facility flags describe realized infrastructure, never eligibility.
+	## This prevents the chart/NPC from advertising a fish landing that the berth
+	## plan failed to create.
+	data.has_fish_landing = _has_realized_fish_landing(data.layout_graph)
+	data.layout_graph.initial_attributes["has_fish_landing"] = data.has_fish_landing
 	## Basin may record a water hint; live size stays whatever Expander clamped.
 	data.size = PortSizing.normalized_size(definition.size)
 
@@ -185,9 +203,42 @@ static func expand_uncached(
 		data.features.append("Lighthouse")
 	if data.has_fog_horn:
 		data.features.append("Fog Horn")
+	if data.has_fish_landing:
+		data.features.append("Fish Landing")
 	for commodity in data.trade_profile.export_slots:
 		data.features.append("Export:%s" % commodity)
 	return data
+
+
+static func _has_realized_fish_landing(graph: PortLayoutGraph) -> bool:
+	if graph == null:
+		return false
+	var plan := graph.initial_attributes.get("berth_plan", {}) as Dictionary
+	for raw in plan.get("quay_stations", []) as Array:
+		var station := raw as Dictionary
+		if _quay_station_has_fish_landing(station):
+			return true
+	for raw in plan.get("asphalt_stations", []) as Array:
+		var station := raw as Dictionary
+		if str(station.get("family", "")) == "fishing" \
+				and str(station.get("commodity_id", "")) == PortFishingService.COMMODITY_ID \
+				and str(station.get("equipment_kind", "")) == "equip_fish_derrick":
+			return true
+	return false
+
+
+static func _quay_station_has_fish_landing(station: Dictionary) -> bool:
+	if str(station.get("family", "")) == "fishing" \
+			and (station.get("commodities", []) as Array).has(PortFishingService.COMMODITY_ID) \
+			and str(station.get("equipment_kind", "")) == "equip_fish_derrick":
+		return true
+	for raw_side in station.get("sides", []) as Array:
+		var side := raw_side as Dictionary
+		if str(side.get("family", "")) == "fishing" \
+				and (side.get("commodities", []) as Array).has(PortFishingService.COMMODITY_ID) \
+				and str(side.get("equipment_kind", "")) == "equip_fish_derrick":
+			return true
+	return false
 
 
 static func _population(rng: RandomNumberGenerator, size: int) -> int:

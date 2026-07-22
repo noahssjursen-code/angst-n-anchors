@@ -18,6 +18,7 @@ var max_ship_class: ShipClass.Type = ShipClass.Type.COASTAL_TRADER
 var has_fuel_point: bool = true
 var has_lighthouse: bool = false
 var has_fog_horn: bool = false
+var has_fish_landing: bool = false
 
 var commodity_export: String = ""
 var commodity_imports: Array[String] = []
@@ -61,6 +62,7 @@ func to_chart_dict() -> Dictionary:
 		"max_ship_class_name": str(ShipClass.DISPLAY_NAME.get(max_ship_class, "Vessel")),
 		"has_lighthouse": has_lighthouse,
 		"has_fog_horn": has_fog_horn,
+		"has_fish_landing": has_fish_landing,
 	}
 
 

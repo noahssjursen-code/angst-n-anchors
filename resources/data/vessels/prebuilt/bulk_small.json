@@ -888,7 +888,7 @@
 	"hull_id": "hull_28x10",
 	"id": "bulk_small",
 	"name": "Bulk Small",
-	"price_marks": 0,
+	"price_marks": 46000,
 	"registration_id": "bulk_vessel",
 	"shaft_power_kw": 1871.0
 }

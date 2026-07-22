@@ -136,7 +136,10 @@ func _try_pay_for_commission(entry: Dictionary) -> bool:
 	var price := ShipwrightPricing.commission_price(entry, stations, session.data)
 	if price <= 0:
 		return true
-	if not session.spend_marks(price):
+	if not session.spend_marks(
+		price, "vessel_purchase", "Commissioned %s" % str(entry.get("prebuilt_name", "vessel")),
+		str(entry.get("prebuilt_id", "")),
+	):
 		_dialogue.clear()
 		_dialogue.add_quote(
 			"Your balance won't cover that vessel, Captain.\nNeed %s more in the ledger."

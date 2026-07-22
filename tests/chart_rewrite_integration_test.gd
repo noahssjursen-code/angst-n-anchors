@@ -21,6 +21,25 @@ func _run() -> void:
 	assert(snapshot.layout_checksum == str(snapshot.layout.layout_checksum))
 	if registry != null:
 		assert((registry.call("get_port_ids") as Array) == registry_ids)
+	## Onboarding and runtime must consume the same world identity and placed
+	## port records. A preview may not silently fall back to the 40 km default.
+	assert(is_equal_approx(float(snapshot.world_size_m), float(snapshot.layout.world_size_m)))
+	var live_definitions := CoastalPortPlacer.place_ports(
+		snapshot.layout,
+		20,
+		PackedStringArray(WorldPortNames.NAMES),
+	)
+	for index in range(live_definitions.size()):
+		var preview_record := (snapshot.ports[index] as Dictionary).get(
+			"port_definition", {},
+		) as Dictionary
+		assert(not preview_record.is_empty())
+		assert(preview_record == (live_definitions[index] as PortDefinition).to_dict())
+		assert(PortFishingService.is_eligible(
+			PortDefinition.from_dict(preview_record), 90210,
+		) == bool(
+			(snapshot.ports[index] as Dictionary).get("has_fish_landing", false)
+		))
 
 	var base = BaseClass.new()
 	base.prepare(snapshot.layout)

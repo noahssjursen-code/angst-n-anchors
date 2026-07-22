@@ -54,6 +54,10 @@ var owned_vessels: Array = []
 ## Hull currently deployed in the world (must match one entry in owned_vessels).
 var active_vessel: Dictionary = {}
 
+## Authoritative company/economy aggregate. Kept JSON-safe so the exact same
+## contract can be persisted locally or hydrated from a future server.
+var company: Dictionary = {}
+
 const LEGACY_STARTER_TEMPLATE_PATH := "user://shipwright_orders/starter_cargo_ship.json"
 const LEGACY_STARTER_HULL_ID := "cargo_ship"
 
@@ -370,6 +374,7 @@ func to_dict() -> Dictionary:
 		"distance_sailed_m":        distance_sailed_m,
 		"owned_vessels":            owned_out,
 		"active_vessel":            active_out,
+		"company":                  company.duplicate(true),
 		"appearance":               appearance.to_dict(),
 		# v2 additions
 		"accepted_contracts":       accepted_contracts.duplicate(true),
@@ -399,6 +404,9 @@ static func from_dict(d: Dictionary) -> PlayerData:
 	var active_raw: Variant = d.get("active_vessel", {})
 	if typeof(active_raw) == TYPE_DICTIONARY and not (active_raw as Dictionary).is_empty():
 		pd.active_vessel = VesselSpawn.normalize_record(active_raw as Dictionary)
+	var company_raw: Variant = d.get("company", {})
+	if typeof(company_raw) == TYPE_DICTIONARY:
+		pd.company = (company_raw as Dictionary).duplicate(true)
 	pd.appearance = CharacterAppearance.from_dict(d.get("appearance", {}) as Dictionary)
 	# v2 additions — default to empty / sentinel for v1 saves (forward compat).
 	var contracts_raw: Variant = d.get("accepted_contracts", [])
@@ -418,5 +426,28 @@ static func from_dict(d: Dictionary) -> PlayerData:
 	pd.starter_trawler_claimed = bool(d.get("starter_trawler_claimed", false))
 	var home_port := str(d.get("home_port_id", "port-home")).strip_edges()
 	pd.home_port_id = home_port if not home_port.is_empty() else "port-home"
+	# Save v6 migration: existing captains receive a compatible company wrapper
+	# around their current balance and fleet without receiving another vessel.
+	if pd.company.is_empty() and not pd.account_id.is_empty():
+		pd.company = CompanyContracts.normalize({}, pd.account_id, pd.display_name, pd.home_port_id)
+		var account := pd.company.get("account", {}) as Dictionary
+		account["balance_marks"] = pd.marks
+		if pd.marks != 0:
+			account["ledger"] = [CompanyContracts.transaction(
+				"migration-%s" % pd.account_id,
+				"save-v6-migration",
+				str(pd.company.get("id", "")),
+				pd.marks,
+				"legacy_balance_migration",
+				"Balance carried forward from the legacy captain ledger",
+				pd.account_id,
+				int(Time.get_unix_time_from_system()),
+				pd.marks,
+			)]
+		pd.company["account"] = account
+		pd.company["warehouse_leases"] = [CompanyContracts.opening_warehouse_lease(
+			str(pd.company.get("id", "")), pd.home_port_id, int(Time.get_unix_time_from_system())
+		)]
+		pd.company["onboarding_complete"] = not pd.owned_vessels.is_empty()
 	pd.repair_save_consistency()
 	return pd

@@ -39,6 +39,10 @@ const BULK_EQUIP_JOB_SCRIPT := preload("res://scripts/port/bulk_crane_equipment_
 const PROVISION_CRANE_SCRIPT := preload("res://scripts/port/provision_crane.gd")
 const PROVISION_CRANE_AUTO_SCRIPT := preload("res://scripts/port/provision_crane_auto_operator.gd")
 const PROVISION_EQUIP_JOB_SCRIPT := preload("res://scripts/port/provision_crane_equipment_job.gd")
+const FISH_LANDING_PUMP_SCRIPT := preload("res://scripts/port/fish_landing_pump.gd")
+const SHORE_RSW_BANK_SCRIPT := preload("res://scripts/port/shore_rsw_tank_bank.gd")
+const FISH_LANDING_JOB_SCRIPT := preload("res://scripts/port/fish_landing_equipment_job.gd")
+const FISH_LANDING_LAYOUT := preload("res://scripts/port/fish_landing_layout.gd")
 const CRANE_OPERATOR_SCRIPT := preload("res://scripts/port/crane_operator_npc.gd")
 const MOORING_POST_SCRIPT := preload("res://scripts/port/mooring_post.gd")
 const PORT_STRUCTURE_LOD := preload("res://scripts/core/port_structure_lod.gd")
@@ -537,26 +541,32 @@ func _stamp_berth_quay(
 	road.position = Vector3(road_x, QUAY_DECK_TOP_LOCAL_Y + 0.08, 0.0)
 	terminal.add_child(road)
 
-	_stamp_quay_storage_lane(
-		terminal,
-		station,
-		storage_x,
-		storage_w,
-		usable_len,
-		z0,
-		berth_sign,
-		slot,
-	)
-	_stamp_quay_crane_lane(
-		terminal,
-		station,
-		crane_x,
-		crane_lane_w,
-		usable_len,
-		z0,
-		berth_sign,
-		slot,
-	)
+	if family == "fishing":
+		## Use the exact approved crane-showcase composition. Fishing has a
+		## pump at the berth edge and an RSW bank in the storage strip; it is
+		## not represented by generic cargo stacks or a crane-footprint pad.
+		_stamp_fish_landing_quay(terminal, width_m, berth_sign, slot)
+	else:
+		_stamp_quay_storage_lane(
+			terminal,
+			station,
+			storage_x,
+			storage_w,
+			usable_len,
+			z0,
+			berth_sign,
+			slot,
+		)
+		_stamp_quay_crane_lane(
+			terminal,
+			station,
+			crane_x,
+			crane_lane_w,
+			usable_len,
+			z0,
+			berth_sign,
+			slot,
+		)
 
 	if show_module_labels:
 		var zone_bits: PackedStringArray = []
@@ -972,6 +982,11 @@ func _stamp_quay_crane_lane(
 		var tool: Dictionary = tools[index]
 		var z := float(tool.get("z", 0.0))
 		var tool_family := str(tool.get("family", family))
+		## A fish landing is shore plant plus a pump on the pier, not cargo
+		## machinery in the middle of the quay. Anchor it at the landward root;
+		## the pump model extends seaward and its RSW bank extends onto the apron.
+		if tool_family == "fishing":
+			z = z0
 		var equip_kind := PortBerthPlan.equipment_for_family(tool_family)
 		if equip_kind.is_empty():
 			equip_kind = str(station.get("equipment_kind", "equip_jib_crane"))
@@ -1641,8 +1656,9 @@ func _stamp_berth_asphalt(parent: Node3D, station: Dictionary, surface_y: float)
 	var length := float(station.get("length_m", 40.0))
 	var family := str(station.get("family", "general"))
 	var color := CommodityCatalog.terminal_family_color(family).lightened(0.2)
-	## Berth deck protrudes seaward of the dock face (outside the apron).
-	var pad_center := origin + seaward * (depth * 0.5)
+	## The station origin is the waterfront edge. Keep the working apron inland;
+	## only the vessel and its berth approach belong on the water side.
+	var pad_center := origin - seaward * (depth * 0.5)
 	var station_id := str(station.get("id", "asphalt"))
 	var pad_root := Node3D.new()
 	pad_root.name = station_id
@@ -1667,7 +1683,7 @@ func _stamp_berth_asphalt(parent: Node3D, station: Dictionary, surface_y: float)
 	var pad_center_y := ASPHALT_PAD_TOP_LOCAL_Y - ASPHALT_PAD_H * 0.5
 	var pad := MeshBuilder.box(
 		Vector3(length, ASPHALT_PAD_H, depth),
-		color.darkened(0.25),
+		FOUNDATION_PAVEMENT_COLOR,
 		0.9,
 		0.0,
 	)
@@ -1693,7 +1709,7 @@ func _stamp_berth_asphalt(parent: Node3D, station: Dictionary, surface_y: float)
 	junction.position = Vector3(
 		0.0,
 		ASPHALT_PAD_TOP_LOCAL_Y + junction_h * 0.5,
-		-depth * 0.5 + 0.7,
+		depth * 0.5 - 0.7,
 	)
 	pad_root.add_child(junction)
 	var road_w := clampf(length * 0.18, 6.0, 12.0)
@@ -1713,7 +1729,7 @@ func _stamp_berth_asphalt(parent: Node3D, station: Dictionary, surface_y: float)
 		var gear_root := Node3D.new()
 		gear_root.name = "Equipment"
 		## Keep gear near the apron junction, not the outer tip.
-		gear_root.position = Vector3(length * 0.28, 0.0, -depth * 0.22)
+		gear_root.position = Vector3(length * 0.28, 0.0, depth * 0.22)
 		pad_root.add_child(gear_root)
 		_stamp_equipment_kind(
 			gear_root,
@@ -1734,7 +1750,7 @@ func _stamp_berth_asphalt(parent: Node3D, station: Dictionary, surface_y: float)
 				length,
 				depth,
 			],
-			Vector3(origin.x, surface_y + 10.0, origin.y) + Vector3(seaward.x, 0.0, seaward.y) * (depth * 0.45),
+			Vector3(origin.x, surface_y + 10.0, origin.y) - Vector3(seaward.x, 0.0, seaward.y) * (depth * 0.45),
 			color,
 			0.026,
 		)
@@ -1759,7 +1775,7 @@ func _stamp_equipment_kind(
 		"equip_grain_elevator":
 			_stamp_grain_elevator_at(root, footprint)
 		"equip_fish_derrick":
-			_stamp_fish_derrick_at(root, footprint)
+			_stamp_fish_landing_at(root, footprint, berth_id, tool_index)
 		"equip_loading_arm":
 			_stamp_loading_arm_at(root, footprint)
 		_:
@@ -1986,13 +2002,143 @@ func _stamp_grain_elevator_at(root: Node3D, footprint: Vector3) -> void:
 	root.add_child(silo)
 
 
-func _stamp_fish_derrick_at(root: Node3D, footprint: Vector3) -> void:
-	var accent := Color(0.55, 0.72, 0.92)
+func _stamp_fish_landing_quay(
+		root: Node3D,
+		quay_width_m: float,
+		berth_sign: float,
+		slot: QuayBerthSlot,
+) -> void:
+	var holder := Node3D.new()
+	holder.name = "FishLandingPlant"
+	root.add_child(holder)
+
+	var pump := FISH_LANDING_PUMP_SCRIPT.new() as FishLandingPump
+	pump.name = "FishLandingPump"
+	pump.position = FISH_LANDING_LAYOUT.pump_position(quay_width_m, berth_sign)
+	pump.position.y = QUAY_DECK_TOP_LOCAL_Y
+	pump.rotation_degrees.y = FISH_LANDING_LAYOUT.pump_yaw_degrees(berth_sign)
+	holder.add_child(pump)
+
+	var berth_id := slot.berth_id if slot != null else ""
+	var bank := SHORE_RSW_BANK_SCRIPT.new() as ShoreRswTankBank
+	bank.name = "ShoreRswTankBank"
+	bank.bank_id = "%s/rsw" % berth_id
+	bank.capacity_kg = 120000.0
+	bank.tank_count = 2
+	bank.position = FISH_LANDING_LAYOUT.tank_position(quay_width_m, berth_sign)
+	bank.position.y = QUAY_DECK_TOP_LOCAL_Y
+	bank.scale = Vector3.ONE * FISH_LANDING_LAYOUT.TANK_SCALE
+	holder.add_child(bank)
+	pump.bind_receiver(bank)
+	_stamp_fish_transfer_line(holder, pump, bank)
+
+	if berth_id.is_empty() or _harbour == null:
+		return
+	var equip_id := HarbourController.make_equip_id(
+		berth_id, "equip_fish_landing_pump", 0
+	)
+	var job := FISH_LANDING_JOB_SCRIPT.new() as FishLandingEquipmentJob
+	job.setup(equip_id, "equip_fish_landing_pump", berth_id)
+	job.bind_plant(pump, bank)
+	pump.add_child(job)
+	_harbour.register_equipment(job, berth_id)
+
+	var operator := CRANE_OPERATOR_SCRIPT.new() as CraneOperatorNpc
+	operator.name = "FishLandingOperator"
+	operator.operator_role = "fish landing operator"
+	operator.position = pump.position + Vector3(-berth_sign * 6.0, 0.0, -3.0)
+	operator.configure(_harbour, berth_id, equip_id)
+	holder.add_child(operator)
+
+
+func _stamp_fish_landing_at(
+		root: Node3D,
+		footprint: Vector3,
+		berth_id: String = "",
+		tool_index: int = 0,
+) -> void:
+	## Complete landing station: mobile vacuum pump on the quay, shore RSW
+	## buffer on the apron, and a walk-up operator.
 	_pad(root, footprint, STEEL.darkened(0.15))
-	var mast_h := clampf(12.0 + float(_size_class()) * 2.0, 12.0, 24.0)
-	var mast := MeshBuilder.box(Vector3(1.2, mast_h, 1.2), accent, 0.75, 0.2)
-	mast.position = Vector3(0.0, mast_h * 0.5, 0.0)
-	root.add_child(mast)
+	var holder := Node3D.new()
+	holder.name = "FishLandingPlant"
+	root.add_child(holder)
+
+	var pump := FISH_LANDING_PUMP_SCRIPT.new() as FishLandingPump
+	pump.name = "FishLandingPump"
+	pump.position = Vector3(-footprint.x * 0.22, 0.05, footprint.z * 0.36)
+	pump.rotation_degrees.y = 90.0
+	holder.add_child(pump)
+
+	var bank := SHORE_RSW_BANK_SCRIPT.new() as ShoreRswTankBank
+	bank.name = "ShoreRswTankBank"
+	bank.bank_id = "%s/rsw" % berth_id
+	bank.capacity_kg = 120000.0
+	bank.scale = Vector3.ONE * clampf(1.35 + float(_size_class()) * 0.10, 1.45, 1.85)
+	bank.position = Vector3(footprint.x * 0.42, 0.05, -footprint.z * 0.32)
+	holder.add_child(bank)
+	pump.bind_receiver(bank)
+	_stamp_fish_transfer_line(holder, pump, bank)
+
+	if berth_id.is_empty() or _harbour == null:
+		return
+	var equip_id := HarbourController.make_equip_id(
+		berth_id, "equip_fish_landing_pump", tool_index
+	)
+	var job := FISH_LANDING_JOB_SCRIPT.new() as FishLandingEquipmentJob
+	job.setup(equip_id, "equip_fish_landing_pump", berth_id)
+	job.bind_plant(pump, bank)
+	pump.add_child(job)
+	_harbour.register_equipment(job, berth_id)
+
+	var operator := CRANE_OPERATOR_SCRIPT.new() as CraneOperatorNpc
+	operator.name = "FishLandingOperator"
+	operator.operator_role = "fish landing operator"
+	operator.position = Vector3(-footprint.x * 0.08, 0.05, footprint.z * 0.06)
+	operator.configure(_harbour, berth_id, equip_id)
+	holder.add_child(operator)
+
+
+func _stamp_fish_transfer_line(
+		parent: Node3D,
+		pump: FishLandingPump,
+		bank: ShoreRswTankBank,
+) -> void:
+	var inlet := parent.to_local(bank.inlet_world())
+	var discharge := pump.transform * Vector3(-4.75, 1.45, 0.0)
+	var raised_y := maxf(discharge.y, inlet.y) + 2.2
+	var points := PackedVector3Array([
+		discharge,
+		Vector3(discharge.x, raised_y, discharge.z),
+		Vector3(inlet.x, raised_y, inlet.z),
+		inlet,
+	])
+	for index in range(points.size() - 1):
+		var segment := MeshBuilder.cylinder(
+			0.18, 1.0, Color(0.58, 0.62, 0.63), 0.38, 0.72
+		)
+		segment.name = "RswTransferPipe_%d" % index
+		parent.add_child(segment)
+		_pose_local_cylinder_between(segment, points[index], points[index + 1])
+
+
+func _pose_local_cylinder_between(
+		segment: MeshInstance3D,
+		a: Vector3,
+		b: Vector3,
+) -> void:
+	var delta := b - a
+	var length := maxf(delta.length(), 0.001)
+	var direction := delta / length
+	var x_axis := direction.cross(Vector3.FORWARD)
+	if x_axis.length_squared() < 0.001:
+		x_axis = direction.cross(Vector3.RIGHT)
+	x_axis = x_axis.normalized()
+	var z_axis := x_axis.cross(direction).normalized()
+	segment.transform = Transform3D(Basis(x_axis, direction, z_axis), (a + b) * 0.5)
+	var mesh := segment.mesh as CylinderMesh
+	if mesh != null:
+		mesh.height = length * 1.03
 
 
 func _stamp_loading_arm_at(root: Node3D, footprint: Vector3) -> void:

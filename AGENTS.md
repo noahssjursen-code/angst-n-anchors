@@ -8,9 +8,17 @@ Full architecture: [`ARCHITECTURE.md`](ARCHITECTURE.md)
 
 ## What This Game Is
 
-A maritime trading game built in Godot 4.6 (GDScript, Jolt, Forward Plus). The player drives a boat,
-picks up cargo at one port, and delivers it to another. Ships are assembled at runtime from modular
-JSON templates so players can build custom vessels without touching the scene editor. Long-term goal: MMO.
+A maritime company sandbox built in Godot 4.6 (GDScript, Jolt, Forward Plus). The player begins as
+a working captain, then grows into an owner of custom vessels, hired crews, commercial routes, and
+eventually coastal industry. Ships are assembled at runtime from modular JSON templates so players
+can build custom vessels without touching the scene editor.
+
+The long-term game supports the same company rules in two authority modes: local authority with NPC
+competitor companies in single-player, and server authority with persistent player companies in
+multiplayer. `CompanyContracts` and `CompanyService` now provide the first local-authority slice:
+identity, account ledger, starter vessel, inventory lots, warehouse leases, and idempotent commands.
+Crews, markets, rival companies, land, and facilities remain product direction. Extend the existing
+contracts deliberately; do not invent parallel economy or fleet-manager singletons.
 
 ---
 
@@ -30,6 +38,7 @@ scripts/
   port/         # PortCatalog, trade profiles, berth_plan + land_plan, PortPlot presentation
   npc/          # NpcBase, ShipwrightNpc (parked; port NPCs rebuilt later)
   cargo/        # CommodityCatalog, ContainerUnit/Node/Factory, bulk hold lots/rules
+  company/      # Company/economy contracts + local authority service (future server seam)
   apps/         # Engine authoring apps (BuildingBrickEditor, PortSlotEditor, ShipyardBrickEditor)
   ui/           # HUDs, menus, overlays, GameMenu + DebugHud autoloads
   state/        # GameState autoload (cross-system read model), sub-states: PlayerState, ShipState, ContractState, WorldState
@@ -355,7 +364,7 @@ Port definitions, ship templates, commodities live in `resources/data/`. Scripts
 
 ## Save Format
 
-Persistence flows through `PlayerSession.save_now()` → `_snapshot_into_player_data()` (via `LocalPlayerView`) → `PlayerSaveStore.save_player()`. The save envelope is `{version, player, saved_at_unix}`; format version is currently **5**. See [`SAVE_FORMAT.md`](SAVE_FORMAT.md) for the field schema and upgrade behaviour.
+Persistence flows through `PlayerSession.save_now()` → `_snapshot_into_player_data()` (via `LocalPlayerView`) → `PlayerSaveStore.save_player()`. The save envelope is `{version, player, saved_at_unix}`; format version is currently **6**. See [`SAVE_FORMAT.md`](SAVE_FORMAT.md) for the field schema and upgrade behaviour.
 
 Saved per-captain state covers: marks, lifetime stats, appearance, active vessel ledger record, accepted contracts (with delivered counts; in-flight cargo is forfeited on load), ship runtime state (position, yaw, throttle, fuel fraction), world identity, world-clock hours, and tutorial-hint-seen flags. Autosave heartbeats every 60 s of wall-clock; `_notification(NOTIFICATION_WM_CLOSE_REQUEST)` and window focus loss both force a flush.
 

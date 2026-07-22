@@ -9,8 +9,19 @@ const SnapshotClass := preload("res://scripts/ui/chart/chart_data_snapshot.gd")
 var snapshot
 
 
-func activate(_host: Node, world_seed: int, port_count: int = 35):
-	snapshot = SnapshotClass.for_preview(world_seed, port_count)
+func activate(
+		_host: Node,
+		world_seed: int,
+		port_count: int = 35,
+		world_size_m: float = 40000.0,
+		world_preset: String = "standard",
+):
+	snapshot = SnapshotClass.for_preview(
+		world_seed,
+		port_count,
+		world_size_m,
+		world_preset,
+	)
 	return snapshot
 
 

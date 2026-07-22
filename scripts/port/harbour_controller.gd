@@ -89,7 +89,7 @@ func register_equipment(equip: QuayEquipmentJob, berth_id: String = "") -> void:
 	if not _berths.has(bid):
 		push_warning("HarbourController: register_equipment unknown berth %s" % bid)
 	_equipment[equip.equipment_id()] = equip
-	var freight := get_node_or_null("/root/FreightService")
+	var freight := _freight_service()
 	if freight != null and freight.has_method("stage_berth"):
 		freight.call_deferred("stage_berth", _port_id, bid)
 
@@ -105,7 +105,7 @@ func register_yard(yard: Node, berth_id: String) -> void:
 	var slot := berth(bid)
 	if slot != null:
 		slot.add_yard(yard)
-	var freight := get_node_or_null("/root/FreightService")
+	var freight := _freight_service()
 	if freight != null and freight.has_method("stage_berth"):
 		freight.call_deferred("stage_berth", _port_id, bid)
 
@@ -137,7 +137,7 @@ func plug_ship(berth_id: String, ship: BoatBody) -> bool:
 	if not reservation.is_empty():
 		_berth_reservations.erase(bid)
 	traffic_changed.emit()
-	var freight := get_node_or_null("/root/FreightService")
+	var freight := _freight_service()
 	if freight != null and freight.has_method("stage_berth"):
 		freight.call_deferred("stage_berth", _port_id, bid)
 	return true
@@ -149,7 +149,7 @@ func unplug_ship(ship: BoatBody) -> void:
 	var bid := ship_berth_id(ship)
 	if bid.is_empty():
 		return
-	var freight := get_node_or_null("/root/FreightService")
+	var freight := _freight_service()
 	if freight != null and freight.has_method("unstage_berth"):
 		freight.call("unstage_berth", _port_id, bid, ship)
 	for equip_id in equipment_ids_on_berth(bid):
@@ -229,6 +229,16 @@ func _request_job(berth_id: String, mode: String, commodity_id: String) -> bool:
 	if equip == null:
 		return false
 	return plug_equipment(equip.equipment_id(), ship, mode, commodity_id)
+
+
+func _freight_service() -> Node:
+	## This controller can outlive its harbour node briefly while a vessel is
+	## leaving the scene tree. Resolve autoloads from the active SceneTree root
+	## instead of using an absolute NodePath on a detached controller.
+	var tree := Engine.get_main_loop() as SceneTree
+	if tree == null or tree.root == null:
+		return null
+	return tree.root.get_node_or_null("FreightService")
 
 
 ## --- Queries ----------------------------------------------------------------

@@ -11,6 +11,9 @@ uniform float grain_size     : hint_range(0.5, 4.0)  = 1.5;
 uniform float vignette_strength : hint_range(0.0, 0.3) = 0.07;
 uniform float weather_desaturation : hint_range(0.0, 0.3) = 0.0;
 uniform float rain_cool_shift : hint_range(0.0, 0.1) = 0.0;
+uniform float shadow_coolness : hint_range(0.0, 0.12) = 0.035;
+uniform float highlight_warmth : hint_range(0.0, 0.12) = 0.025;
+uniform float weather_contrast : hint_range(0.0, 0.08) = 0.018;
 
 // Camera rays are supplied by WorldRenderer. Classifying each ray against the
 // local wave tangent plane gives a correctly tilted waterline while the camera
@@ -95,6 +98,16 @@ void fragment() {
 	float grey = luma(color.rgb);
 	color.rgb = mix(color.rgb, vec3(grey), weather_desaturation);
 	color.rgb *= vec3(1.0 - rain_cool_shift, 1.0, 1.0 + rain_cool_shift);
+
+	// Maritime grade: cool low values give the water and shadowed steel depth;
+	// a trace of warmth in highlights keeps lamps, crane paint and white hulls
+	// distinct. This is arithmetic-only and adds no screen texture samples.
+	float shadow_weight = 1.0 - smoothstep(0.08, 0.52, grey);
+	float highlight_weight = smoothstep(0.42, 0.92, grey);
+	color.rgb *= mix(vec3(1.0), vec3(0.92, 0.98, 1.08), shadow_weight * shadow_coolness);
+	color.rgb *= mix(vec3(1.0), vec3(1.06, 1.015, 0.94), highlight_weight * highlight_warmth);
+	color.rgb = (color.rgb - vec3(0.5)) * (1.0 + weather_contrast) + vec3(0.5);
+	color.rgb = max(color.rgb, vec3(0.0));
 
 	// Underwater grade: dark green absorption. Real low-range visibility is
 	// supplied by depth-aware Environment fog while fully submerged.

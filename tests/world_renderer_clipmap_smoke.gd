@@ -43,7 +43,7 @@ func _run() -> void:
 		await process_frame
 		lighting = renderer.get_lighting_debug_state()
 		assert(not bool(lighting["volumetric_fog_enabled"]))
-		weather.set("visibility", 0.80)
+		weather.set("visibility", 0.50)
 		await process_frame
 		lighting = renderer.get_lighting_debug_state()
 		assert(bool(lighting["volumetric_fog_enabled"]))

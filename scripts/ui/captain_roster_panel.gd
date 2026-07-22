@@ -122,6 +122,9 @@ func _add_row(entry: Dictionary) -> void:
 		meta_bits.append("seed %d" % int(entry.get("world_seed", 0)))
 	if not str(entry.get("home_port_id", "")).is_empty():
 		meta_bits.append(str(entry.get("home_port_id", "")))
+	var company_name := str(entry.get("company_name", "")).strip_edges()
+	if not company_name.is_empty():
+		meta_bits.append(company_name)
 	meta_bits.append(PlayerSession.format_money(int(entry.get("marks", 0))))
 	var meta := Label.new()
 	meta.text = " · ".join(meta_bits)

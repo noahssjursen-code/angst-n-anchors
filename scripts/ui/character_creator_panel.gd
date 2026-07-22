@@ -69,14 +69,26 @@ func open_with_existing(data: PlayerData) -> void:
 func _build_ui() -> void:
 	set_anchors_preset(Control.PRESET_FULL_RECT)
 	theme = HudStyle.make_theme()
+	var shade := ColorRect.new()
+	shade.set_anchors_preset(Control.PRESET_FULL_RECT)
+	shade.color = Color(0.012, 0.022, 0.028, 0.94)
+	add_child(shade)
+
+	var center := CenterContainer.new()
+	center.set_anchors_preset(Control.PRESET_FULL_RECT)
+	add_child(center)
+
+	var panel := PanelContainer.new()
+	panel.custom_minimum_size = Vector2(1120, 680)
+	panel.add_theme_stylebox_override("panel", HudStyle.make_title_panel_style())
+	center.add_child(panel)
 
 	var margin := MarginContainer.new()
-	margin.set_anchors_preset(Control.PRESET_FULL_RECT)
-	margin.add_theme_constant_override("margin_left", 28)
-	margin.add_theme_constant_override("margin_right", 28)
-	margin.add_theme_constant_override("margin_top", 24)
-	margin.add_theme_constant_override("margin_bottom", 24)
-	add_child(margin)
+	margin.add_theme_constant_override("margin_left", 38)
+	margin.add_theme_constant_override("margin_right", 38)
+	margin.add_theme_constant_override("margin_top", 30)
+	margin.add_theme_constant_override("margin_bottom", 30)
+	panel.add_child(margin)
 
 	var root := HBoxContainer.new()
 	root.add_theme_constant_override("separation", 24)
@@ -89,10 +101,9 @@ func _build_ui() -> void:
 	root.add_child(preview_col)
 
 	var preview_title := Label.new()
-	preview_title.text = "CAPTAIN"
+	preview_title.text = "YOUR CAPTAIN"
 	preview_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	preview_title.add_theme_font_size_override("font_size", 22)
-	preview_title.add_theme_color_override("font_color", HudStyle.C_AMBER)
+	HudStyle.apply_body_font(preview_title, 12, HudStyle.C_COPPER, true)
 	preview_col.add_child(preview_title)
 
 	var viewport_frame := Panel.new()
@@ -158,20 +169,20 @@ func _build_ui() -> void:
 	root.add_child(opts)
 
 	var hdr := Label.new()
-	hdr.text = "CREATE YOUR CAPTAIN"
-	hdr.add_theme_font_size_override("font_size", 20)
-	hdr.add_theme_color_override("font_color", HudStyle.C_AMBER)
+	hdr.text = "Who is taking the helm?"
+	HudStyle.apply_display_font(hdr, 38, HudStyle.C_TEXT)
 	opts.add_child(hdr)
 
 	var steps := Label.new()
 	steps.text = "1  Identity    ·    2  Look    ·    3  Confirm"
-	steps.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	steps.add_theme_font_size_override("font_size", 12)
-	steps.add_theme_color_override("font_color", HudStyle.C_AMBER)
+	steps.text = "NEW CAPTAIN  ·  01 / 03"
+	steps.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	HudStyle.apply_body_font(steps, 12, HudStyle.C_COPPER, true)
 	opts.add_child(steps)
+	opts.move_child(steps, 0)
 
 	var sub := Label.new()
-	sub.text = "Choose a name and kit. Singleplayer then picks a home port on a fresh chart."
+	sub.text = "This is you aboard ship. Company identity, first vessel and home waters come next."
 	sub.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	sub.add_theme_font_size_override("font_size", 12)
 	sub.add_theme_color_override("font_color", HudStyle.C_LABEL)

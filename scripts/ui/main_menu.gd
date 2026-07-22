@@ -8,12 +8,15 @@ const ChartPreviewBootstrapScript := preload("res://scripts/ui/chart/chart_previ
 const CaptainServiceScript := preload("res://scripts/player/captain_service.gd")
 const WorldBootstrapScript := preload("res://scripts/world/world_bootstrap.gd")
 
-enum Page { MODE_SELECT, SINGLEPLAYER, MULTIPLAYER, CREATOR, HOME_PORT }
+enum Page { MODE_SELECT, SINGLEPLAYER, MULTIPLAYER, CREATOR, COMPANY_SETUP, HOME_PORT }
 
 var _page: Page = Page.MODE_SELECT
 var _creating_new := false
 var _pending_name := ""
 var _pending_appearance: CharacterAppearance = null
+var _pending_company_name := ""
+var _pending_brand_color := Color("2f7f83")
+var _pending_starter_vessel := "general_cargo"
 var _pending_seed := 0
 
 var _captains = CaptainServiceScript.new()
@@ -24,6 +27,7 @@ var _mp_root: MarginContainer
 var _sp_roster
 var _mp_roster
 var _creator: CharacterCreatorPanel
+var _company_setup: CompanySetupPanel
 var _home_port_layer: CanvasLayer
 var _home_port_chart: MapOverlay
 var _chart_bootstrap = ChartPreviewBootstrapScript.new()
@@ -48,6 +52,7 @@ func _ready() -> void:
 	_build_singleplayer_page()
 	_build_multiplayer_page()
 	_build_creator()
+	_build_company_setup()
 	_build_home_port()
 
 	_captains.roster_changed.connect(_on_roster_changed)
@@ -107,7 +112,7 @@ func _build_mode_page() -> void:
 	brand.add_child(rule_pad)
 
 	var tag := Label.new()
-	tag.text = "Cold-coast cargo on Norwegian waters"
+	tag.text = "Build a company on cold northern waters"
 	HudStyle.apply_body_font(tag, 15, HudStyle.C_LABEL)
 	brand.add_child(tag)
 
@@ -196,6 +201,15 @@ func _build_creator() -> void:
 	add_child(_creator)
 
 
+func _build_company_setup() -> void:
+	_company_setup = CompanySetupPanel.new()
+	_company_setup.name = "CompanySetup"
+	_company_setup.visible = false
+	_company_setup.confirmed.connect(_on_company_confirmed)
+	_company_setup.cancelled.connect(func() -> void: _show_page(Page.CREATOR))
+	add_child(_company_setup)
+
+
 func _build_home_port() -> void:
 	_home_port_layer = CanvasLayer.new()
 	_home_port_layer.layer = 25
@@ -215,6 +229,7 @@ func _show_page(page: Page) -> void:
 	_sp_root.visible = page == Page.SINGLEPLAYER
 	_mp_root.visible = page == Page.MULTIPLAYER
 	_creator.visible = page == Page.CREATOR
+	_company_setup.visible = page == Page.COMPANY_SETUP
 	_home_port_layer.visible = page == Page.HOME_PORT
 	if page != Page.HOME_PORT:
 		_teardown_home_port_chart()
@@ -231,6 +246,8 @@ func _show_page(page: Page) -> void:
 			_backdrop.set_cinematic("multiplayer")
 			_refresh_servers()
 		Page.CREATOR:
+			_backdrop.set_cinematic("creator")
+		Page.COMPANY_SETUP:
 			_backdrop.set_cinematic("creator")
 		_:
 			_backdrop.set_cinematic("mode")
@@ -275,7 +292,8 @@ func _on_creator_confirmed(display_name: String, appearance: CharacterAppearance
 		_show_page(Page.MULTIPLAYER)
 		return
 	if _creating_new:
-		_show_home_port_picker()
+		_company_setup.open_for_captain(_pending_name)
+		_show_page(Page.COMPANY_SETUP)
 	else:
 		_show_page(Page.SINGLEPLAYER)
 
@@ -289,29 +307,63 @@ func _on_creator_cancelled() -> void:
 		_show_page(Page.SINGLEPLAYER)
 
 
+func _on_company_confirmed(company_name: String, brand_color: Color, starter_vessel: String) -> void:
+	_pending_company_name = company_name
+	_pending_brand_color = brand_color
+	_pending_starter_vessel = starter_vessel
+	_show_home_port_picker()
+
+
 func _show_home_port_picker() -> void:
 	if _pending_seed <= 0:
 		_pending_seed = WorldBootstrapScript.roll_seed()
 	WorldBootstrapScript.apply_seed(_pending_seed)
-	var snapshot = _chart_bootstrap.activate(self, _pending_seed)
+	var settings := get_node_or_null("/root/GameSettings")
+	var world_size_m := float(settings.get("map_world_size_m")) if settings != null else 40000.0
+	var world_preset := str(settings.get("map_world_preset")) if settings != null else "standard"
+	var snapshot = _chart_bootstrap.activate(
+		self,
+		_pending_seed,
+		35,
+		world_size_m,
+		world_preset,
+	)
 	_home_port_chart.set_data_snapshot(snapshot)
+	_home_port_chart.set_home_port_required_family(_starter_terminal_family(_pending_starter_vessel))
 	_home_port_chart.enter_home_port_pick_mode()
 	_home_port_chart.visible = true
 	_show_page(Page.HOME_PORT)
 
 
+static func _starter_terminal_family(starter_vessel: String) -> String:
+	match starter_vessel:
+		"fishing":
+			return "fishing"
+		"bulk":
+			return "bulk"
+		"general_cargo":
+			return "general"
+	return ""
+
+
 func _on_home_port_confirmed(port_id: String) -> void:
 	var preview_checksum := ""
-	if _chart_bootstrap != null and _chart_bootstrap.snapshot != null:
-		preview_checksum = str(_chart_bootstrap.snapshot.layout_checksum)
+	var preview_snapshot = _chart_bootstrap.snapshot if _chart_bootstrap != null else null
+	if preview_snapshot != null:
+		preview_checksum = str(preview_snapshot.layout_checksum)
 	_teardown_home_port_chart()
 	# Keep the exact seed shown on the picker — do not re-roll after create.
 	var settings := get_node_or_null("/root/GameSettings")
 	var gen_version := int(settings.get("map_generation_version")) if settings != null else 8
-	var world_size_m := float(settings.get("map_world_size_m")) if settings != null else 40000.0
-	var world_preset := str(settings.get("map_world_preset")) if settings != null else "standard"
+	var world_size_m := float(preview_snapshot.world_size_m) \
+			if preview_snapshot != null else 40000.0
+	var world_preset := str(preview_snapshot.world_preset) \
+			if preview_snapshot != null else "standard"
 	WorldBootstrapScript.apply_seed(_pending_seed, gen_version, preview_checksum, 3, world_size_m, world_preset)
-	_captains.create_local(_pending_name, _pending_appearance, port_id, _pending_seed)
+	_captains.create_local(
+		_pending_name, _pending_appearance, port_id, _pending_seed,
+		_pending_company_name, _pending_brand_color, _pending_starter_vessel,
+	)
 	var session := get_node_or_null("/root/PlayerSession")
 	if session != null and session.data != null:
 		session.data.world_context = {

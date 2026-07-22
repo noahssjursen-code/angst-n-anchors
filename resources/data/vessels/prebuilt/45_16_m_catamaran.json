@@ -98,7 +98,7 @@
 	"hull_id": "hull_45x16_cat",
 	"id": "45_16_m_catamaran",
 	"name": "22.5 × 8 m · catamaran",
-	"price_marks": 0,
+	"price_marks": 110000,
 	"registration_id": "cargo_vessel",
 	"shaft_power_kw": 650000.0
 }

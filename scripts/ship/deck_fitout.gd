@@ -203,7 +203,7 @@ static func mount_item_gameplay(
 		(BrickCatalog.has_tag(brick_id, "trommel") or BrickCatalog.has_tag(brick_id, "fishing"))
 		and accepted_fishing.has(cell)
 	):
-		_mount_fishing(visual)
+		_mount_fishing(root, visual, boat_local)
 	if BrickCatalog.has_tag(brick_id, "mooring"):
 		_mount_mooring(visual, brick_id)
 	var light_id := str(item.get("light_id", ""))
@@ -371,7 +371,11 @@ static func _mount_ladder(visual: Node3D) -> void:
 	visual.add_child(board)
 
 
-static func _mount_fishing(visual: Node3D) -> void:
+static func _mount_fishing(
+	root: Node3D,
+	visual: Node3D,
+	gear_local: Vector3,
+) -> void:
 	## Drop catalog preview meshes — FishingSystem owns the live trommel + net.
 	for child in visual.get_children():
 		visual.remove_child(child)
@@ -380,6 +384,20 @@ static func _mount_fishing(visual: Node3D) -> void:
 	fishing.name = "FishingSystem"
 	fishing.anchored_to_brick = true
 	visual.add_child(fishing)
+	## The refrigerated volume is below deck. Its visible hatch belongs in
+	## vessel space so the winch brick's yaw cannot throw it over the side.
+	var hold := CatchHoldComponent.new()
+	hold.name = "CatchHold"
+	var inward_z := -1.0 if gear_local.z >= 0.0 else 1.0
+	hold.position = gear_local + Vector3(0.0, 0.08, inward_z * 6.1)
+	## Vessel construction cells are displayed at half-scale. The raw hold mesh
+	## is authored in displayed metres, so expand its deck footprint into grid
+	## space while keeping its depth unchanged.
+	## Keep generous walking clearance along both rails. Most of the enlarged
+	## footprint runs fore-aft, where this hull actually has working-deck room.
+	hold.scale = Vector3(1.10, 1.0, 2.10)
+	hold.configure("primary_catch_hold", 4000.0)
+	root.add_child(hold)
 
 
 static func _add_brick_door(

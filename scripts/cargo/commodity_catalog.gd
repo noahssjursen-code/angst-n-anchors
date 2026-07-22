@@ -14,6 +14,15 @@ extends RefCounted
 
 const COMMODITIES := [
 	{
+		"id": "fresh_groundfish",
+		"display": "Fresh Groundfish",
+		"handling_mode": "catch",
+		"terminal_family": "fishing",
+		"mass_kg": 1000.0,
+		"value": 24,
+		"color": [0.58, 0.74, 0.78],
+	},
+	{
 		"id": "provisions",
 		"display": "General Cargo",
 		"handling_mode": "general",
@@ -94,6 +103,7 @@ const PLAYABLE_TRADE := [
 ]
 
 const TERMINAL_FAMILY_DISPLAY := {
+	"fishing": "Fish landing",
 	"general": "General cargo",
 	"container": "Container",
 	"bulk_ore": "Bulk ore / coal",
@@ -146,10 +156,10 @@ static func family_allows_shared_quay(_family: String) -> bool:
 	return false
 
 
-## Legacy dock-face asphalt berths (fish landings). General cargo uses short
-## finger quays instead — the asphalt path buried yards in the apron slab.
-static func uses_asphalt_dock(commodity_id: String) -> bool:
-	return str(commodity_id) == "fish"
+## No current trade operates from a synthetic asphalt berth. Fishing, like the
+## other vessel-facing services, receives a proper generated quay.
+static func uses_asphalt_dock(_commodity_id: String) -> bool:
+	return false
 
 
 static func is_exclusive_berth_commodity(_commodity_id: String) -> bool:

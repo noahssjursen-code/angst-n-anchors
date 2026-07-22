@@ -7,11 +7,8 @@ extends RefCounted
 static var world_seed: int = 0
 
 const FEATURE_SCALE_M := 5500.0
-## Stay off beaches / quay edges, but island waters remain fishable.
+## Stay off beaches and quay edges. Open fjord and coastal water is fishable.
 const MIN_WATER_CLEARANCE_M := 80.0
-## Mainland coast sits near +6500 m. Keep trawl grounds west of this so spawn
-## fjords stay empty while the outer archipelago (island belt ≤ ~1800 m) works.
-const MAX_MAINLAND_APPROACH_X_M := 3000.0
 
 const TIERS: Array[Dictionary] = [
 	{"id": "barren", "label": "Barren", "min_noise": -1.0, "price_mul": 0.75, "catch_mul": 0.65,
@@ -40,19 +37,12 @@ static func is_initialized() -> bool:
 	return _initialized
 
 
-## Shared gameplay + chart gate: no mainland/fjord approaches, island waters OK.
+## Shared gameplay + chart gate. Geographic region labels do not ban fishing.
 static func allows_trawling(world_pos: Vector3) -> bool:
 	if not LandField.is_initialized():
-		return world_pos.x <= MAX_MAINLAND_APPROACH_X_M
+		return true
 	if LandField.distance_to_land(world_pos) < MIN_WATER_CLEARANCE_M:
 		return false
-	if world_pos.x > MAX_MAINLAND_APPROACH_X_M:
-		return false
-	var layout := LandField.get_layout()
-	if layout != null:
-		var region := layout.classify_region(Vector2(world_pos.x, world_pos.z))
-		if region == WorldLayout.Region.MAINLAND or region == WorldLayout.Region.FJORD:
-			return false
 	return true
 
 
@@ -75,17 +65,14 @@ static func sample(world_pos: Vector3) -> Dictionary:
 	}
 
 
-## Fast chart path — noise + water clearance + mainland X cut.
-## Skips region classification (extra layout work on every texel).
+## The chart uses the exact same eligibility rule as live fishing.
 static func sample_chart(world_pos: Vector3) -> Dictionary:
 	_ensure_noise()
 	var noise_val := _ground_noise.get_noise_2d(
 		world_pos.x / FEATURE_SCALE_M,
 		world_pos.z / FEATURE_SCALE_M,
 	)
-	var open_water := world_pos.x <= MAX_MAINLAND_APPROACH_X_M
-	if open_water and LandField.is_initialized():
-		open_water = LandField.distance_to_land(world_pos) >= MIN_WATER_CLEARANCE_M
+	var open_water := allows_trawling(world_pos)
 	var tier := TIERS[0] if not open_water else _tier_for_noise(noise_val)
 	var availability := 1.0 if open_water else 0.0
 	return {
