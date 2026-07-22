@@ -2,74 +2,67 @@
 class_name NpcBase
 extends Node3D
 
-## Base visual NPC — articulated rig + colour tinting + overlay slots + hand
-## anchors for tool attachment. Pure Node3D, no collision body. Subclasses
-## that need to be raycast-hit by player interaction (NpcInteractable) add
-## their own StaticBody3D collider; ambient walkers (WalkingNpc) inherit
-## directly and skip the physics cost entirely.
-##
-## Build is synchronous in _ready — no `call_deferred` chain. Subclasses can
-## set colours / call add_overlay() / attach a WalkAnimator immediately after
-## super._ready() without waiting an extra frame.
-
-const MODEL_PATH := AssetPaths.NPC_BASE_MESH
+## Compatibility-facing character actor. Gameplay NPC subclasses still inherit
+## NpcBase, but their visual is now the same JSON-backed CharacterVisual used by
+## captain creation and replicated players.
 
 @export var skin_color: Color = Color(0.72, 0.55, 0.40):
-	set(v): skin_color = v; if not _color_apply_blocked: _apply_colors()
-
+	set(value):
+		skin_color = value
+		_sync_legacy_colors()
 @export var clothing_color: Color = Color(0.18, 0.20, 0.30):
-	set(v): clothing_color = v; if not _color_apply_blocked: _apply_colors()
-
+	set(value):
+		clothing_color = value
+		_sync_legacy_colors()
 @export var trousers_color: Color = Color(0.18, 0.18, 0.20):
-	set(v): trousers_color = v; if not _color_apply_blocked: _apply_colors()
+	set(value):
+		trousers_color = value
+		_sync_legacy_colors()
+## Wardrobe is intentionally opt-in while the replacement body and motion
+## contract are under review. Old clothing must not hide rig defects.
+@export var wardrobe_enabled := false
 
+var appearance: CharacterAppearance = CharacterAppearance.default_appearance()
+var visual: CharacterVisual
+var animator: CharacterAnimator
+## Kept temporarily for crane/showcase code that asks for articulated parts.
 var assembler: ModelAssembler
-var _overlays: Dictionary = {}
-var _tools:    Dictionary = {}   ## hand_side ("left"/"right") → Node3D
-var _color_apply_blocked: bool = false
+var _tools: Dictionary = {}
+var _color_apply_blocked := false
 
 
 func _ready() -> void:
 	_build()
 
 
-# ── Build ─────────────────────────────────────────────────────────────────────
-
 func _build() -> void:
-	# Wipe any prior generated nodes (in case of hot-reload / rebuild).
-	for child in get_children():
-		if child is ModelAssembler:
-			if Engine.is_editor_hint():
-				child.free()
-			else:
-				child.queue_free()
-
-	assembler                      = ModelAssembler.new()
-	assembler.name                 = "NpcModel"
-	assembler.model_data_path      = MODEL_PATH
-	assembler.build_part_colliders = false
-	add_child(assembler)
-
+	if visual != null and is_instance_valid(visual):
+		visual.free()
+	visual = CharacterVisual.new()
+	visual.name = "CharacterVisual"
+	visual.appearance = appearance.duplicate()
+	add_child(visual)
+	assembler = visual.get_base_assembler()
+	animator = CharacterAnimator.new()
+	animator.name = "CharacterAnimator"
+	add_child(animator)
+	animator.bind(self)
 	if Engine.is_editor_hint():
-		_own_subtree(assembler)
-
-	_apply_colors()
+		_own_subtree(visual)
 
 
-# ── Colours ───────────────────────────────────────────────────────────────────
-
-func _apply_colors() -> void:
-	if assembler == null or not is_instance_valid(assembler):
-		return
-	_tint("head",        skin_color)
-	_tint("hand_left",   skin_color)
-	_tint("hand_right",  skin_color)
-	_tint("face_nose",   skin_color)
-	_tint("torso",       clothing_color)
-	_tint("arm_left",    clothing_color)
-	_tint("arm_right",   clothing_color)
-	_tint("leg_left",    trousers_color)
-	_tint("leg_right",   trousers_color)
+func apply_appearance(value: CharacterAppearance) -> void:
+	appearance = value.duplicate() if value != null else CharacterAppearance.default_appearance()
+	_color_apply_blocked = true
+	skin_color = appearance.skin_color
+	clothing_color = appearance.clothing_color
+	trousers_color = appearance.trousers_color
+	_color_apply_blocked = false
+	if visual != null:
+		visual.apply_appearance(appearance)
+		assembler = visual.get_base_assembler()
+		if animator != null:
+			animator.refresh_rig()
 
 
 func set_colors(skin: Color, clothing: Color, trousers: Color) -> void:
@@ -78,75 +71,67 @@ func set_colors(skin: Color, clothing: Color, trousers: Color) -> void:
 	clothing_color = clothing
 	trousers_color = trousers
 	_color_apply_blocked = false
-	_apply_colors()
+	appearance.skin_color = skin
+	appearance.clothing_color = clothing
+	appearance.top_color = clothing
+	appearance.trousers_color = trousers
+	if visual != null:
+		visual.apply_appearance(appearance)
+		assembler = visual.get_base_assembler()
+		if animator != null:
+			animator.refresh_rig()
 
 
-func _tint(part_name: String, color: Color) -> void:
-	var t := assembler.get_part(part_name)
-	if t != null:
-		t.mesh_color = color
+func _sync_legacy_colors() -> void:
+	if _color_apply_blocked:
+		return
+	set_colors(skin_color, clothing_color, trousers_color)
 
 
-# ── Overlays (hats, capes, badges) ────────────────────────────────────────────
-
+## Legacy overlay calls are intentionally ignored by the body-only checkpoint.
+## They remain as API seams so specialised NPC scripts keep running while the
+## replacement equipment-slot contract is reviewed.
 func add_overlay(overlay_id: String, json_path: String) -> ModelAssembler:
-	if _overlays.has(overlay_id):
-		var old := _overlays[overlay_id] as ModelAssembler
-		if old != null:
-			if Engine.is_editor_hint():
-				old.free()
-			else:
-				old.queue_free()
-	var ma                     := ModelAssembler.new()
-	ma.name                    = "Overlay_%s" % overlay_id
-	ma.model_data_path         = json_path
-	ma.build_part_colliders    = false
-	add_child(ma)
-	if Engine.is_editor_hint():
-		_own_subtree(ma)
-	_overlays[overlay_id] = ma
-	return ma
+	return null
 
 
 func remove_overlay(overlay_id: String) -> void:
-	if not _overlays.has(overlay_id):
-		return
-	var old := _overlays[overlay_id] as ModelAssembler
-	if old != null and is_instance_valid(old):
-		if Engine.is_editor_hint():
-			old.free()
-		else:
-			old.queue_free()
-	_overlays.erase(overlay_id)
+	pass
 
 
-# ── Hand anchors (for tools) ──────────────────────────────────────────────────
+func get_part(part_name: String) -> Node3D:
+	return visual.get_part(part_name) if visual != null else null
 
-## Returns the `hand_left` or `hand_right` MeshTransformer — these are
-## children of the corresponding arm in the articulated rig, so anything
-## attached as a child of the returned node will follow the arm swing
-## naturally. `side` is "left" or "right".
+
 func get_hand_anchor(side: String) -> Node3D:
-	if assembler == null:
-		return null
-	var part_name := "hand_left" if side == "left" else "hand_right"
-	return assembler.get_part(part_name)
+	return visual.get_hand_anchor(side) if visual != null else null
 
 
-## Attach a Node3D (a tool model, a clipboard, a lantern) to the named hand.
-## Replaces any existing tool in that hand. Pass null to clear the slot.
-## Local offset / rotation are applied on top of the hand transform — useful
-## for "tool tip points forward" adjustments without modifying the tool scene.
-func attach_tool(side: String, tool: Node3D, local_offset: Vector3 = Vector3.ZERO,
-				 local_rotation_deg: Vector3 = Vector3.ZERO) -> void:
+func set_motion_speed(speed_m_s: float, delta: float) -> void:
+	if animator != null:
+		animator.set_locomotion(speed_m_s, delta)
+
+
+func set_walk_distance(distance_m: float) -> void:
+	if animator != null:
+		animator.set_walk_distance(distance_m)
+
+
+func set_idle() -> void:
+	if animator != null:
+		animator.set_idle()
+
+
+func attach_tool(side: String, tool: Node3D, local_offset := Vector3.ZERO,
+		local_rotation_deg := Vector3.ZERO) -> void:
 	var hand := get_hand_anchor(side)
 	if hand == null:
 		return
 	clear_tool(side)
 	if tool == null:
 		return
-	tool.position          = local_offset
-	tool.rotation_degrees  = local_rotation_deg
+	tool.position = local_offset
+	tool.rotation_degrees = local_rotation_deg
 	hand.add_child(tool)
 	_tools[side] = tool
 
@@ -158,8 +143,6 @@ func clear_tool(side: String) -> void:
 	_tools.erase(side)
 
 
-# ── Helpers ───────────────────────────────────────────────────────────────────
-
 func _nearest_player_in(range_m: float) -> CharacterBody3D:
 	for node in get_tree().get_nodes_in_group("player"):
 		var body := node as CharacterBody3D
@@ -169,11 +152,8 @@ func _nearest_player_in(range_m: float) -> CharacterBody3D:
 
 
 func _own_subtree(node: Node) -> void:
-	if get_tree() == null:
+	if get_tree() == null or get_tree().edited_scene_root == null:
 		return
-	var esc := get_tree().edited_scene_root
-	if esc == null:
-		return
-	node.owner = esc
+	node.owner = get_tree().edited_scene_root
 	for child in node.get_children():
 		_own_subtree(child)
