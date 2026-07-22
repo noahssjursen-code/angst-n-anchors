@@ -43,6 +43,9 @@ const HORIZON_DISCARD_HALF : float = MID_OCEAN_SIZE * 0.5 - 15.0
 @export var use_legacy_ocean := false
 ## F6 showcases run with Engine.is_editor_hint() true — set before add_child.
 @export var force_runtime_build := false
+## Lighting-only showcases/tests can skip FFT allocation and ocean geometry.
+## Runtime worlds leave this enabled.
+@export var enable_ocean_system := true
 ## Expensive presentation features remain independently switchable for GPU
 ## profiling and future quality presets.
 @export var enable_ssao := true
@@ -93,16 +96,16 @@ func _ready() -> void:
 		set_process(false)
 		return
 
-	_fft_system = FFT_WATER_SYSTEM_SCRIPT.new()
-	_fft_system.name = "FFTWaterSystem"
-	add_child(_fft_system)
-	WaveSurface.fft_system = _fft_system
-	_wake_field = OCEAN_WAKE_FIELD_SCRIPT.new() as OceanWakeField
-	_wake_field.name = "OceanWakeField"
-	add_child(_wake_field)
-
 	_build_sky()
-	_build_ocean()
+	if enable_ocean_system:
+		_fft_system = FFT_WATER_SYSTEM_SCRIPT.new()
+		_fft_system.name = "FFTWaterSystem"
+		add_child(_fft_system)
+		WaveSurface.fft_system = _fft_system
+		_wake_field = OCEAN_WAKE_FIELD_SCRIPT.new() as OceanWakeField
+		_wake_field.name = "OceanWakeField"
+		add_child(_wake_field)
+		_build_ocean()
 	_build_screen_effects()
 	_connect_weather_lighting()
 	_apply_weather_lighting()
@@ -138,7 +141,11 @@ func get_lighting_debug_state() -> Dictionary:
 		"tonemap_white": _environment.tonemap_white,
 		"ssao_enabled": _environment.ssao_enabled,
 		"glow_enabled": _environment.glow_enabled,
+		"glow_intensity": _environment.glow_intensity,
+		"adjustment_contrast": _environment.adjustment_contrast,
+		"adjustment_saturation": _environment.adjustment_saturation,
 		"fog_density": _environment.fog_density,
+		"fog_color": _environment.fog_light_color,
 		"volumetric_fog_enabled": _environment.volumetric_fog_enabled,
 		"volumetric_fog_density": _environment.volumetric_fog_density,
 		"sun_energy": _sun.light_energy if _sun != null else 0.0,
@@ -394,39 +401,40 @@ func _build_sky() -> void:
 
 	environ.tonemap_mode     = Environment.TONE_MAPPER_ACES
 	environ.tonemap_exposure = 1.0
-	environ.tonemap_white    = 2.8
+	environ.tonemap_white    = 3.0
 
 	environ.ssao_enabled = enable_ssao
-	environ.ssao_radius = 1.4
-	environ.ssao_intensity = 1.25
-	environ.ssao_power = 1.15
-	environ.ssao_detail = 0.35
+	environ.ssao_radius = 1.2
+	environ.ssao_intensity = 0.92
+	environ.ssao_power = 1.0
+	environ.ssao_detail = 0.28
 	environ.glow_enabled = enable_glow
-	environ.glow_intensity = 0.85
-	environ.glow_strength = 0.75
-	environ.glow_bloom = 0.08
-	environ.glow_hdr_threshold = 1.25
-	environ.glow_hdr_scale = 1.6
+	# Glow should describe a hot lamp lens, never turn fog into a white veil.
+	environ.glow_intensity = 0.34
+	environ.glow_strength = 0.58
+	environ.glow_bloom = 0.025
+	environ.glow_hdr_threshold = 1.75
+	environ.glow_hdr_scale = 1.15
 	environ.ssr_enabled  = false
 
 	environ.adjustment_enabled    = true
-	environ.adjustment_brightness = 1.02
-	environ.adjustment_contrast   = 1.05
-	environ.adjustment_saturation = 0.93
+	environ.adjustment_brightness = 1.0
+	environ.adjustment_contrast   = 1.09
+	environ.adjustment_saturation = 1.025
 
 	environ.fog_enabled            = true
-	environ.fog_light_color        = Color(0.58, 0.66, 0.78)
-	environ.fog_density            = 0.005
-	environ.fog_aerial_perspective = 0.12
-	environ.fog_sky_affect         = 0.6
+	environ.fog_light_color        = Color(0.28, 0.34, 0.42)
+	environ.fog_density            = 0.0
+	environ.fog_aerial_perspective = 0.0
+	environ.fog_sky_affect         = 0.0
 	
 	# Enable Volumetric Fog for true physical depth and light scattering
-	environ.volumetric_fog_enabled = true
-	environ.volumetric_fog_density = 0.005
-	environ.volumetric_fog_albedo  = Color(0.58, 0.66, 0.78)
-	environ.volumetric_fog_emission = Color(0.02, 0.02, 0.02)
-	environ.volumetric_fog_emission_energy = 0.1
-	environ.volumetric_fog_length = 320.0
+	environ.volumetric_fog_enabled = false
+	environ.volumetric_fog_density = 0.0
+	environ.volumetric_fog_albedo  = Color(0.28, 0.34, 0.42)
+	environ.volumetric_fog_emission = Color.BLACK
+	environ.volumetric_fog_emission_energy = 0.0
+	environ.volumetric_fog_length = 420.0
 	environ.volumetric_fog_detail_spread = 2.0
 
 	var world_env := WorldEnvironment.new()
@@ -651,7 +659,9 @@ func _apply_weather_lighting() -> void:
 func _apply_sun(solar: Dictionary, daylight: float, direct_light: float, cloud: float, storm: float) -> void:
 	var sun_dir: Vector3 = solar["sun_direction"]
 	var moon_dir: Vector3 = solar["moon_direction"]
-	var sun_energy := 1.45 * direct_light * lerpf(1.0, 0.18, cloud)
+	# Overcast removes hard sunlight, but retaining a broad key keeps hulls,
+	# terrain and cranes three-dimensional instead of uniformly grey.
+	var sun_energy := 1.62 * direct_light * lerpf(1.0, 0.42, cloud)
 	if _sun != null:
 		# Sunrise +X (east), noon +Z (south), sunset −X (west).
 		# Matches NavigationAxes / chart (+X east, −Z north).
@@ -663,15 +673,15 @@ func _apply_sun(solar: Dictionary, daylight: float, direct_light: float, cloud: 
 			.lerp(Color(0.48, 0.55, 0.68), storm)
 		)
 	if _fill_light != null:
-		_fill_light.light_energy = lerpf(0.025, 0.16, daylight) * lerpf(1.0, 0.55, cloud)
+		_fill_light.light_energy = lerpf(0.035, 0.135, daylight) * lerpf(1.0, 0.72, cloud)
 	if _moon_light != null:
 		_moon_light.basis = Basis.looking_at(-moon_dir, Vector3.UP)
 		_moon_light.light_energy = (
-			0.12 * float(solar["moonlight"]) * lerpf(1.0, 0.28, cloud)
+			0.16 * float(solar["moonlight"]) * lerpf(1.0, 0.38, cloud)
 		)
 	if _environment != null:
 		_environment.ambient_light_energy = (
-			lerpf(0.085, 0.24, daylight * daylight) * lerpf(1.0, 0.62, cloud)
+			lerpf(0.105, 0.275, daylight * daylight) * lerpf(1.0, 0.80, cloud)
 		)
 
 
@@ -680,9 +690,11 @@ func _apply_exposure(daylight: float, cloud: float, storm: float, fog_t: float) 
 		return
 	## Deterministic adaptation avoids auto-exposure pumping between reflective
 	## ocean, white superstructures, and dark interiors.
-	var night_lift := lerpf(1.38, 1.0, daylight)
-	var weather_lift := cloud * 0.08 + storm * 0.06 + fog_t * 0.04
-	_environment.tonemap_exposure = clampf(night_lift + weather_lift, 0.9, 1.46)
+	# Preserve a stable black point. Fog and cloud already alter scene luminance;
+	# compensating for them here produced the former washed-out grey frame.
+	var night_lift := lerpf(1.13, 0.98, daylight)
+	var storm_lift := storm * 0.015
+	_environment.tonemap_exposure = clampf(night_lift + storm_lift, 0.96, 1.15)
 
 
 func _apply_fog(fog_t: float, daylight: float, storm: float) -> void:
@@ -690,17 +702,18 @@ func _apply_fog(fog_t: float, daylight: float, storm: float) -> void:
 		return
 		
 	var base_fog_col = (
-		Color(0.06, 0.07, 0.09)
-		.lerp(Color(0.58, 0.66, 0.78), daylight)
-		.lerp(Color(0.28, 0.30, 0.33), storm * 0.5)
+		Color(0.025, 0.035, 0.055)
+		.lerp(Color(0.34, 0.41, 0.50), daylight)
+		.lerp(Color(0.16, 0.18, 0.22), storm * 0.55)
 	)
 	
 	# Traditional Screen-Space Fog (Handles skybox blending and distant occlusion)
 	# Keep the response soft: haze should read as atmosphere, not a white wall.
 	_environment.fog_light_color = base_fog_col
-	_environment.fog_density            = lerpf(0.0, 0.014, fog_t * fog_t)
-	_environment.fog_aerial_perspective = lerpf(0.0, 0.38, fog_t)
-	_environment.fog_sky_affect = lerpf(0.0, 0.48, fog_t * fog_t)
+	var distance_haze := pow(fog_t, 2.15)
+	_environment.fog_density            = 0.009 * distance_haze
+	_environment.fog_aerial_perspective = 0.24 * fog_t
+	_environment.fog_sky_affect = 0.30 * distance_haze
 
 	# Volumetric Fog (Physical 3D depth, light shafts, and realistic thickness).
 	# Godot runs the full 64³ froxel compute every frame as long as
@@ -708,16 +721,18 @@ func _apply_fog(fog_t: float, daylight: float, storm: float) -> void:
 	# contribution, not the compute cost. In clear weather we'd be paying ~2-4 ms
 	# for fog with zero visible effect, so we gate the whole pass on a small
 	# density threshold. Mid fog should stay translucent; only dense bands crush.
-	const VOLUMETRIC_FOG_START := 0.16
-	var vol_amount := smoothstep(VOLUMETRIC_FOG_START, 0.78, fog_t)
-	var vol_density := 0.048 * vol_amount
+	const VOLUMETRIC_FOG_START := 0.44
+	var vol_amount := smoothstep(VOLUMETRIC_FOG_START, 0.94, fog_t)
+	var vol_density := 0.018 * vol_amount
 	var want_volumetric := enable_volumetric_fog and fog_t > VOLUMETRIC_FOG_START
 	_environment.volumetric_fog_enabled = want_volumetric
 	if want_volumetric:
 		_environment.volumetric_fog_albedo  = base_fog_col
 		_environment.volumetric_fog_density = vol_density
+		_environment.volumetric_fog_emission = Color.BLACK
+		_environment.volumetric_fog_emission_energy = 0.0
 		# Keep fog farther out so near-field ships/ports stay readable.
-		_environment.volumetric_fog_length  = lerpf(520.0, 200.0, fog_t)
+		_environment.volumetric_fog_length  = lerpf(560.0, 260.0, fog_t)
 
 
 func _apply_sky_shader(daylight: float, cloud: float, storm: float) -> void:
@@ -725,13 +740,13 @@ func _apply_sky_shader(daylight: float, cloud: float, storm: float) -> void:
 		return
 	var top_col := (
 		Color(0.006, 0.009, 0.028)
-		.lerp(Color(0.07, 0.28, 0.62), daylight)
-		.lerp(Color(0.09, 0.10, 0.13), cloud)
+		.lerp(Color(0.055, 0.20, 0.48), daylight)
+		.lerp(Color(0.075, 0.095, 0.13), cloud)
 	)
 	var horiz := (
 		Color(0.018, 0.016, 0.028)
-		.lerp(Color(0.34, 0.54, 0.78), daylight)
-		.lerp(Color(0.22, 0.24, 0.28), cloud)
+		.lerp(Color(0.28, 0.43, 0.62), daylight)
+		.lerp(Color(0.20, 0.24, 0.29), cloud)
 	)
 	var zenith_deep := (
 		Color(0.001, 0.004, 0.022)
@@ -739,9 +754,9 @@ func _apply_sky_shader(daylight: float, cloud: float, storm: float) -> void:
 		.lerp(Color(0.05, 0.065, 0.09), storm)
 	)
 	var ground_c := (
-		Color(0.04, 0.04, 0.05)
-		.lerp(Color(0.15, 0.13, 0.11), daylight)
-		.lerp(Color(0.06, 0.06, 0.07), cloud)
+		Color(0.025, 0.028, 0.04)
+		.lerp(Color(0.12, 0.115, 0.105), daylight)
+		.lerp(Color(0.055, 0.06, 0.075), cloud)
 	)
 	var sun_col := Color(1.0, 0.62, 0.30).lerp(Color(1.0, 0.96, 0.88), daylight)
 
@@ -771,9 +786,12 @@ func _apply_screen_effects(daylight: float, cloud: float, rain: float, storm: fl
 	var active := 1.0 if enable_weather_post_fx else 0.0
 	_screen_material.set_shader_parameter("outline_strength", lerpf(0.025, 0.04, daylight) * active)
 	_screen_material.set_shader_parameter("grain_strength", lerpf(0.012, 0.024, 1.0 - daylight) * active)
-	_screen_material.set_shader_parameter("vignette_strength", lerpf(0.06, 0.13, storm) * active)
-	_screen_material.set_shader_parameter("weather_desaturation", clampf(cloud * 0.04 + storm * 0.13 + fog_t * 0.08, 0.0, 0.2) * active)
-	_screen_material.set_shader_parameter("rain_cool_shift", rain * 0.035 * active)
+	_screen_material.set_shader_parameter("vignette_strength", lerpf(0.045, 0.085, storm) * active)
+	_screen_material.set_shader_parameter("weather_desaturation", clampf(cloud * 0.015 + storm * 0.055 + fog_t * 0.025, 0.0, 0.085) * active)
+	_screen_material.set_shader_parameter("rain_cool_shift", rain * 0.018 * active)
+	_screen_material.set_shader_parameter("shadow_coolness", lerpf(0.035, 0.065, cloud) * active)
+	_screen_material.set_shader_parameter("highlight_warmth", lerpf(0.035, 0.012, cloud) * active)
+	_screen_material.set_shader_parameter("weather_contrast", (0.018 + storm * 0.012) * active)
 
 
 ## Binds LandField's baked shelter texture to the ocean shader. The texture is

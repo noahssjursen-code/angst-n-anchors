@@ -180,7 +180,7 @@ func artificial_light_scale() -> float:
 ## wash from fixtures; dense fog still allows a little daytime scatter.
 func artificial_volumetric_scale() -> float:
 	var fog_keep := smoothstep(0.25, 0.55, fog_density)
-	return lerpf(1.0, fog_keep * 0.25, daylight_factor())
+	return lerpf(1.0, fog_keep * 0.15, daylight_factor())
 
 
 func _sync_wave_intensity() -> void:

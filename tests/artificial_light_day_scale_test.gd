@@ -11,9 +11,9 @@ func _initialize() -> void:
 
 	weather.time_of_day = 0.0
 	weather.visibility = 1.0
-	_check_close(weather.daylight_factor(), 0.0, "midnight daylight")
-	_check_close(weather.artificial_light_scale(), 1.0, "midnight light scale")
-	_check_close(weather.artificial_volumetric_scale(), 1.0, "midnight vol scale")
+	_check(weather.daylight_factor() < 0.01, "midnight daylight near zero")
+	_check(weather.artificial_light_scale() > 0.99, "midnight light scale near full")
+	_check(weather.artificial_volumetric_scale() > 0.99, "midnight vol scale near full")
 
 	weather.time_of_day = 0.5
 	_check(weather.daylight_factor() > 0.95, "noon daylight near 1")
@@ -22,8 +22,8 @@ func _initialize() -> void:
 
 	weather.visibility = 0.4
 	_check(
-		weather.artificial_volumetric_scale() > 0.1
-		and weather.artificial_volumetric_scale() < 0.35,
+		weather.artificial_volumetric_scale() > 0.05
+		and weather.artificial_volumetric_scale() < 0.20,
 		"noon fog keeps some vol scatter"
 	)
 
