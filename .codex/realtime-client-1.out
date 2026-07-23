@@ -1,0 +1,7 @@
+Godot Engine v4.7.stable.official.5b4e0cb0f - https://godotengine.org
+
+[WorldGateway] Opening authority session actor=3edfb345-5529-4cc5-a0d2-57201652096c server=http://142.93.43.16:8080
+[WorldGateway] Authority session accepted actor=3edfb345-5529-4cc5-a0d2-57201652096c session=session-6af710fef2a6e42a88a68033 remote=true
+[NetworkManager] Starting UDP replication actor=3edfb345-5529-4cc5-a0d2-57201652096c endpoint=142.93.43.16:7777
+[NetworkManager] Gracefully declaring logout to server for: 3edfb345-5529-4cc5-a0d2-57201652096c
+Remote realtime smoke test passed: actor=3edfb345-5529-4cc5-a0d2-57201652096c datagrams=2 accepted=2 snapshots=2 entities=1

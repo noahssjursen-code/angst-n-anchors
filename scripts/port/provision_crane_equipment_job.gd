@@ -17,17 +17,11 @@ func bind_crane(crane: ProvisionCrane) -> void:
 
 
 func _on_auto_job_finished(_operation: Variant = null, _cycles: int = 0) -> void:
-	_clear_job_state()
+	notify_job_completed({"cycles": _cycles})
 
 
 func _on_auto_job_stopped() -> void:
-	_clear_job_state()
-
-
-func _clear_job_state() -> void:
-	_served_ship = null
-	_job_mode = ""
-	_commodity_id = ""
+	notify_job_stopped()
 
 
 func is_job_active() -> bool:

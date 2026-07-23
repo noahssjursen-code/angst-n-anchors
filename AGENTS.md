@@ -98,6 +98,7 @@ Each autoload lives in its system folder and is registered in `project.godot`.
 | `DebugHud` | `ui/` | F3 debug overlay |
 | `Telemetry` | `state/` | Central debug/performance service: hardware samples, published metrics, peaks, context flags, events, and copyable reports |
 | `LocalPlayerView` | `state/` | **The MP seam.** Per-client view of the local player's world. UI reads through here, not direct autoloads |
+| `WorldGateway` | `network/` | Command/event/projection authority seam shared by local and remote backends |
 | `Tutorial` | `state/` | First-time hint chain (fires once per captain, persisted) |
 
 The autoloads listed above are the **actual** registered singletons. Do not reference `Economy`, `ContractBoard`, `FleetManager`, `ContractRegistry`, `PortOperations`, or `World` — those don't exist (or were purged).

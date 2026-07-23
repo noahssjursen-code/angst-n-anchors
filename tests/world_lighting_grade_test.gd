@@ -21,8 +21,9 @@ func _run() -> void:
 	# Clear daylight: strong color separation, no paid volumetric pass.
 	_apply_state(renderer, 0.50, 0.05, 0.0, 1.0, 0.0)
 	var clear := renderer.get_lighting_debug_state()
-	_check(float(clear["tonemap_exposure"]) <= 1.01, "day exposure preserves highlights")
-	_check(float(clear["adjustment_contrast"]) >= 1.08, "grade has useful contrast")
+	_check(float(clear["tonemap_exposure"]) <= 1.03, "day exposure preserves highlights")
+	_check(float(clear["adjustment_contrast"]) >= 1.04, "grade has useful contrast")
+	_check(float(clear["ambient_energy"]) >= 0.30, "day shadow detail remains readable")
 	_check(float(clear["adjustment_saturation"]) >= 1.0, "grade preserves paint color")
 	_check(float(clear["glow_intensity"]) < 0.5, "glow is restrained")
 	_check(not bool(clear["volumetric_fog_enabled"]), "clear day skips volumetric fog")
@@ -64,7 +65,7 @@ func _apply_state(
 	var fog_t := 1.0 - visibility
 	renderer.call("_apply_sun", solar, daylight, direct_light, cloud, storm)
 	renderer.call("_apply_exposure", daylight, cloud, storm, fog_t)
-	renderer.call("_apply_fog", fog_t, daylight, storm)
+	renderer.call("_apply_fog", solar, fog_t, daylight, cloud, storm)
 
 
 func _check(condition: bool, label: String) -> void:

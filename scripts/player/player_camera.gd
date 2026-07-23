@@ -40,6 +40,7 @@ var _orbit_pitch: float = deg_to_rad(18.0)
 var _fp_pitch: float = 0.0
 var _bob_time: float = 0.0
 var _camera_y_offset: float = 0.0
+var _vehicle_occupied: bool = false
 
 
 func bind(player: CharacterBody3D, camera: Camera3D, body_mesh: NpcBase = null) -> void:
@@ -61,6 +62,11 @@ func get_mode() -> CameraMode:
 
 func is_third_person() -> bool:
 	return _mode == CameraMode.THIRD_PERSON
+
+
+func set_vehicle_occupied(occupied: bool) -> void:
+	_vehicle_occupied = occupied
+	_update_body_visibility()
 
 
 ## Yaw replicated to other clients — third-person sends visible mesh heading,
@@ -230,8 +236,7 @@ func _toggle_mode() -> void:
 
 
 func _apply_mode() -> void:
-	if _body_mesh != null:
-		_body_mesh.visible = _mode == CameraMode.THIRD_PERSON
+	_update_body_visibility()
 	if _camera == null:
 		return
 	if _mode == CameraMode.FIRST_PERSON:
@@ -239,6 +244,11 @@ func _apply_mode() -> void:
 		_camera.position = Vector3(0.0, fp_height, 0.0)
 	else:
 		_update_third_person()
+
+
+func _update_body_visibility() -> void:
+	if _body_mesh != null:
+		_body_mesh.visible = not _vehicle_occupied and _mode == CameraMode.THIRD_PERSON
 
 
 func _settings_sens_multiplier() -> float:

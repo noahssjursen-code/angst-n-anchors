@@ -4,14 +4,33 @@ extends Node3D
 ## and destruction of visual remote entities in the world scene.
 ## Pure visual and tree management; no socket I/O or packet routing.
 
+signal remote_ship_available(server_vessel_id: String, ship: BoatBody)
+
 const VehicleGroups = preload("res://scripts/ship/vehicle_groups.gd")
 const LARGE_SHIP_FULL_DETAIL_DISTANCE_M := 50.0
 const SHIP_DETAIL_REFRESH_S := 0.5
+const MAX_PROFILE_REQUESTS := 4
+const PROFILE_RETRY_MS := 10000
 
 # Tracks active visual remote representations: id -> { "node": Node3D, "type": String, "target_pos": Vector3, "target_payload": Array, "interpolated_payload": Array, "meta": String, "last_seen_ms": int }
 var _visible_entities: Dictionary = {}
 var _wake_field: OceanWakeField
 var _ship_detail_elapsed := 0.0
+var _profile_client: RemoteCaptainClient
+var _captain_profiles: Dictionary = {}
+var _profile_queue: Array[Dictionary] = []
+var _profile_queued: Dictionary = {}
+var _profile_inflight: Dictionary = {}
+var _profile_retry_after_ms: Dictionary = {}
+
+
+func _ready() -> void:
+	_profile_client = RemoteCaptainClient.new()
+	var config := get_node_or_null("/root/ServerConfig")
+	if config != null:
+		_profile_client.setup(self, str(config.call("get_http_base_url")))
+	_profile_client.captain_fetched.connect(_on_captain_profile_fetched)
+	_profile_client.captain_fetch_failed.connect(_on_captain_profile_failed)
 
 
 func _live_node(state: Dictionary) -> Node3D:
@@ -63,6 +82,20 @@ func get_visible_entities() -> Dictionary:
 	return _visible_entities
 
 
+func find_remote_ship_by_vessel_id(server_vessel_id: String) -> BoatBody:
+	var wanted := server_vessel_id.strip_edges()
+	if wanted.is_empty():
+		return null
+	for state_variant in _visible_entities.values():
+		var state := state_variant as Dictionary
+		if str(state.get("server_vessel_id", "")).strip_edges() != wanted:
+			continue
+		var ship := _live_node(state) as BoatBody
+		if ship != null:
+			return ship
+	return null
+
+
 ## Drop cached remote state for an entity we own locally again (sold/released).
 func clear_entity_remote_state(id: String) -> void:
 	if not _visible_entities.has(id):
@@ -92,7 +125,6 @@ const TYPE_SCENE_MAP := {
 func apply_entities(entities_list: Array, local_id: String, scene_nodes: Dictionary, local_sender_ids: Array, now_ms: int, timeout_ms: int) -> void:
 	_prune_stale_entries()
 	var active_snapshot_ids: Dictionary = {}
-	var active_pilot_ids: Dictionary = {}
 	var current_frame_calls: Dictionary = {}
 	
 	for ent: Dictionary in entities_list:
@@ -115,8 +147,6 @@ func apply_entities(entities_list: Array, local_id: String, scene_nodes: Diction
 			_despawn_remote_entity(id, scene_nodes)
 			continue
 
-		_parse_pilot_meta(meta, active_pilot_ids)
-		
 		# 2. Check if we already have this entity drawn
 		var state: Dictionary = _visible_entities.get(id, {})
 		var node := _live_node(state)
@@ -145,11 +175,34 @@ func apply_entities(entities_list: Array, local_id: String, scene_nodes: Diction
 				state["walk_sample_pos"] = ent["pos"]
 		
 		if node != null:
-			state["target_pos"] = ent["pos"]
-			state["target_payload"] = ent["payload"]
+			var sample_pos: Vector3 = ent["pos"]
+			var previous_target: Vector3 = state.get("target_pos", sample_pos)
+			var previous_received_ms := int(state.get("received_at_ms", now_ms))
+			var sample_seconds := float(now_ms - previous_received_ms) / 1000.0
+			var estimated_velocity := Vector3.ZERO
+			if sample_seconds > 0.001 and sample_seconds < 5.0:
+				estimated_velocity = (sample_pos - previous_target) / sample_seconds
+				if estimated_velocity.length() > 45.0:
+					estimated_velocity = estimated_velocity.normalized() * 45.0
+			var network_payload: Array = ent["payload"].duplicate()
+			var reference_payload: Array = state.get(
+				"interpolated_payload",
+				network_payload,
+			)
+			_unwrap_rotation_payload(
+				network_payload,
+				reference_payload,
+				str(ent["type"]),
+			)
+			state["target_pos"] = sample_pos
+			state["target_payload"] = network_payload
+			state["estimated_velocity"] = estimated_velocity
+			state["received_at_ms"] = now_ms
 			state["meta"] = ent["meta"]
 			state["last_seen_ms"] = now_ms
 			_visible_entities[id] = state
+			if str(ent["type"]) == "player":
+				_sync_remote_player_profile(id, node, meta, state)
 			
 			_parse_call_meta(id, ent["type"], meta, current_frame_calls)
 			
@@ -159,9 +212,6 @@ func apply_entities(entities_list: Array, local_id: String, scene_nodes: Diction
 			if str(ent["type"]).begins_with("ship_"):
 				_sync_remote_ship_layout(id, node as BoatBody, meta, state)
 		
-	# Update remote players avatar visibility (hide those driving ships/cranes)
-	_update_avatar_visibilities(active_pilot_ids)
-	
 	# Reconcile shared-quay call occupancy changes.
 	_reconcile_call_locks(current_frame_calls)
 			
@@ -187,6 +237,11 @@ func apply_entities(entities_list: Array, local_id: String, scene_nodes: Diction
 						node.set("_remotely_operated_by", "")
 			_visible_entities.erase(id)
 
+	# Ship/player updates are delta-compressed. Derive occupancy from all retained
+	# entity states rather than only this packet, otherwise avatars flicker back
+	# into view whenever their piloted ship is omitted from a frame.
+	_update_avatar_visibilities(_collect_active_pilot_ids())
+
 
 ## Interpolates active visual entities towards their goals.
 func interpolate_entities(delta: float, position_smoothness: float, payload_smoothness: float) -> void:
@@ -207,13 +262,25 @@ func interpolate_entities(delta: float, position_smoothness: float, payload_smoo
 		var target_pos: Vector3 = state["target_pos"]
 		var target_payload: Array = state["target_payload"]
 		var current_payload: Array = state["interpolated_payload"]
+		var desired_pos := target_pos
+		var type := str(state["type"])
+		if type == "player" or type.begins_with("ship_"):
+			var packet_age_s := minf(
+				float(Time.get_ticks_msec() - int(state.get("received_at_ms", 0))) / 1000.0,
+				0.25,
+			)
+			var estimated_velocity: Vector3 = state.get("estimated_velocity", Vector3.ZERO)
+			desired_pos += estimated_velocity * packet_age_s
 		
 		# 1. Smoothly interpolate 3D Pivot Position (skip if parented to avoid override conflicts)
 		if node.get_parent() == self:
-			node.global_position = node.global_position.lerp(target_pos, pos_alpha)
+			if node.global_position.distance_to(desired_pos) > 100.0:
+				node.global_position = desired_pos
+			else:
+				node.global_position = node.global_position.lerp(desired_pos, pos_alpha)
 		else:
 			# If parented, we Lerp local position towards relative offsets instead
-			node.position = node.position.lerp(target_pos, pos_alpha)
+			node.position = node.position.lerp(desired_pos, pos_alpha)
 		
 		# 2. Smoothly interpolate Payload Floats
 		if current_payload.size() != target_payload.size():
@@ -285,6 +352,34 @@ func _parse_pilot_meta(meta: String, active_pilot_ids: Dictionary) -> void:
 	var op_id: String = parsed.get("op", "")
 	if not op_id.is_empty():
 		active_pilot_ids[op_id] = true
+
+
+func _collect_active_pilot_ids() -> Dictionary:
+	var active: Dictionary = {}
+	for state_variant in _visible_entities.values():
+		var state := state_variant as Dictionary
+		_parse_pilot_meta(str(state.get("meta", "")), active)
+	return active
+
+
+func _unwrap_rotation_payload(
+	payload: Array,
+	reference: Array,
+	_type: String,
+) -> void:
+	if payload.size() != reference.size():
+		return
+	var rotation_start := -1
+	if payload.size() == 4:
+		rotation_start = 3
+	elif payload.size() >= 6:
+		rotation_start = 3
+	if rotation_start < 0:
+		return
+	for index in range(rotation_start, payload.size()):
+		var previous := float(reference[index])
+		var incoming := float(payload[index])
+		payload[index] = previous + wrapf(incoming - previous, -PI, PI)
 
 
 ## Updates avatar visibilities based on current piloting set.
@@ -410,7 +505,7 @@ func _spawn_dynamic_entity_node(id: String, type: String, meta: String = "") -> 
 		
 		var label := Label3D.new()
 		label.name = "PlayerNameLabel"
-		label.text = id.split("_")[0]
+		label.text = "Captain"
 		label.font_size = 48
 		label.pixel_size = 0.01
 		label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
@@ -465,6 +560,12 @@ func _sync_remote_ship_layout(entity_id: String, ship: BoatBody, meta: String, s
 	var lh := str(parsed.get("lh", ""))
 	if vid.is_empty():
 		return
+	ship.set_meta("server_vessel_id", vid)
+	state["server_vessel_id"] = vid
+	if not bool(state.get("server_vessel_announced", false)):
+		state["server_vessel_announced"] = true
+		_visible_entities[entity_id] = state
+		remote_ship_available.emit(vid, ship)
 
 	var applied_vid := str(state.get("layout_vid", ""))
 	var applied_hash := str(state.get("layout_hash", ""))
@@ -592,6 +693,11 @@ func _despawn_remote_entity(id: String, scene_nodes: Dictionary) -> void:
 
 
 func _disable_physics_in_subtree(n: Node) -> void:
+	## MooringComponent's physics callback only redraws locally derived ropes;
+	## keeping it alive does not enable remote hull physics.
+	if n is MooringComponent:
+		n.set_physics_process(true)
+		return
 	n.set_physics_process(false)
 	if n.is_in_group(VehicleGroups.SHIP_OWNER_ONLY):
 		n.queue_free()
@@ -604,22 +710,6 @@ func _disable_physics_in_subtree(n: Node) -> void:
 func _apply_state_to_node(node: Node3D, type: String, payload: Array, meta: String) -> void:
 	var format := payload.size()
 	
-	# Extract standard spatial variables based on selected format vector size
-	var pos := Vector3.ZERO
-	var rot := Vector3.ZERO
-	
-	if format == 2:
-		# Vector2 (XY): X=f[0], Z=f[1], flat height Y=global height
-		node.global_position.x = payload[0]
-		node.global_position.z = payload[1]
-	elif format >= 3:
-		# Vector3/4/6 (XYZ): coordinates are f[0], f[1], f[2]
-		# Apply locally if reparented under ship deck/hook, globally otherwise
-		if node.get_parent() == self:
-			node.global_position = Vector3(payload[0], payload[1], payload[2])
-		else:
-			node.position = Vector3(payload[0], payload[1], payload[2])
-		
 	# Format-specific rotation extraction
 	if format == 4:
 		if type.begins_with("ship_"):
@@ -634,7 +724,7 @@ func _apply_state_to_node(node: Node3D, type: String, payload: Array, meta: Stri
 		if type.begins_with("ship_"):
 			node.global_rotation = Vector3(payload[3], payload[4], payload[5])
 		# Cranes use Format 6 payload for joint values, not body rotation — handled below.
-		elif not (type == "crane" or type.begins_with("crane")):
+		else:
 			node.rotation.x = payload[3]
 			node.rotation.y = payload[4]
 			node.rotation.z = payload[5]
@@ -643,61 +733,6 @@ func _apply_state_to_node(node: Node3D, type: String, payload: Array, meta: Stri
 	if type == "player":
 		if node.has_method("_sync_walk_deck_transform"):
 			node.call("_sync_walk_deck_transform")
-			
-		var body := node.get_node_or_null("BodyMesh") as NpcBase
-		if body != null and is_instance_valid(body):
-			var parsed_meta := _parse_meta_map(meta)
-			var encoded_appearance: String = parsed_meta.get("appearance", "")
-			if not encoded_appearance.is_empty() and body.get_meta("wire_appearance", "") != encoded_appearance:
-				var appearance_json := Marshalls.base64_to_raw(encoded_appearance).get_string_from_utf8()
-				var remote_appearance := CharacterAppearance.from_json_string(appearance_json)
-				if remote_appearance != null:
-					body.apply_appearance(remote_appearance)
-					body.set_meta("wire_appearance", encoded_appearance)
-			var skin_hex: String = parsed_meta.get("skin", "")
-			var coat_hex: String = parsed_meta.get("coat", "")
-			var pants_hex: String = parsed_meta.get("pants", "")
-			var hat: String = parsed_meta.get("hat", "")
-			var display_name: String = parsed_meta.get("name", "")
-
-			var next_skin := body.skin_color
-			var next_coat := body.clothing_color
-			var next_pants := body.trousers_color
-			var colors_changed := false
-
-			if not skin_hex.is_empty():
-				var new_color := Color.from_string(skin_hex, next_skin)
-				if not next_skin.is_equal_approx(new_color):
-					next_skin = new_color
-					colors_changed = true
-			if not coat_hex.is_empty():
-				var new_color := Color.from_string(coat_hex, next_coat)
-				if not next_coat.is_equal_approx(new_color):
-					next_coat = new_color
-					colors_changed = true
-			if not pants_hex.is_empty():
-				var new_color := Color.from_string(pants_hex, next_pants)
-				if not next_pants.is_equal_approx(new_color):
-					next_pants = new_color
-					colors_changed = true
-
-			if colors_changed:
-				body.set_colors(next_skin, next_coat, next_pants)
-
-			if not display_name.is_empty():
-				var label := node.get_node_or_null("PlayerNameLabel") as Label3D
-				if label != null:
-					label.text = display_name
-					
-			var current_hat_node = body.get_node_or_null("Overlay_hat") as ModelAssembler
-			if hat.is_empty():
-				if current_hat_node != null:
-					body.remove_overlay("hat")
-			else:
-				var target_hat_path: String = CharacterAppearance.HAT_PATHS.get(hat, "")
-				if not target_hat_path.is_empty():
-					if current_hat_node == null or current_hat_node.model_data_path != target_hat_path:
-						body.add_overlay("hat", target_hat_path)
 
 	elif type.begins_with("ship_"):
 		if node.has_method("_sync_walk_deck_transform"):
@@ -708,26 +743,6 @@ func _apply_state_to_node(node: Node3D, type: String, payload: Array, meta: Stri
 				var ship_meta := _parse_meta_map(meta)
 				systems[0].trawling = ship_meta.get("trawl", "0") == "1"
 
-	elif type == "crane" or type.begins_with("crane"):
-		# Cranes use Format 6 payload: [base_x, base_y, base_z, gantry_x, trolley_z, hoist_drop]
-		# plus metadata string carrying crane joint states
-		if format >= 6:
-			# Joint values are custom mapped:
-			node.set("_gantry_x_offset", payload[3])
-			node.set("_trolley_z", payload[4])
-			node.set("_hoist_drop", payload[5])
-			
-			# Extract Operator and Crane Hook Yaw from metadata
-			var parsed_meta := _parse_meta_map(meta)
-			var op_id: String = parsed_meta.get("op", "")
-			node.set("_remotely_operated_by", op_id)
-			
-			var hook_yaw_str: String = parsed_meta.get("hy", "0.0")
-			var hook_node := node.get("_hook") as Node3D
-			if hook_node != null and is_instance_valid(hook_node):
-				hook_node.rotation.y = float(hook_yaw_str)
-
-
 func _parse_meta_map(meta: String) -> Dictionary:
 	var out: Dictionary = {}
 	var parts := meta.split(";")
@@ -736,6 +751,87 @@ func _parse_meta_map(meta: String) -> Dictionary:
 		if kv.size() == 2:
 			out[kv[0]] = kv[1]
 	return out
+
+
+func _sync_remote_player_profile(
+	entity_id: String,
+	node: Node3D,
+	meta: String,
+	state: Dictionary,
+) -> void:
+	var parsed := _parse_meta_map(meta)
+	var captain_id := str(parsed.get("cid", entity_id)).strip_edges()
+	var profile_hash := str(parsed.get("app", "")).strip_edges()
+	state["captain_id"] = captain_id
+	state["profile_hash"] = profile_hash
+	_visible_entities[entity_id] = state
+	var cached: Dictionary = _captain_profiles.get(captain_id, {})
+	if not cached.is_empty() and (profile_hash.is_empty() or str(cached.get("hash", "")) == profile_hash):
+		_apply_captain_profile(node, cached)
+		return
+	_enqueue_captain_profile(captain_id, profile_hash)
+
+
+func _enqueue_captain_profile(captain_id: String, profile_hash: String) -> void:
+	if captain_id.is_empty() or _profile_client == null:
+		return
+	if _profile_inflight.has(captain_id) or _profile_queued.has(captain_id):
+		return
+	if Time.get_ticks_msec() < int(_profile_retry_after_ms.get(captain_id, 0)):
+		return
+	_profile_queue.append({"captain_id": captain_id, "hash": profile_hash})
+	_profile_queued[captain_id] = true
+	_pump_profile_queue()
+
+
+func _pump_profile_queue() -> void:
+	while _profile_inflight.size() < MAX_PROFILE_REQUESTS and not _profile_queue.is_empty():
+		var request: Dictionary = _profile_queue.pop_front()
+		var captain_id := str(request.get("captain_id", ""))
+		_profile_queued.erase(captain_id)
+		_profile_inflight[captain_id] = str(request.get("hash", ""))
+		_profile_client.fetch_captain(captain_id)
+
+
+func _on_captain_profile_fetched(captain: Dictionary) -> void:
+	var captain_id := str(captain.get("id", "")).strip_edges()
+	if captain_id.is_empty():
+		return
+	var requested_hash := str(_profile_inflight.get(captain_id, ""))
+	_profile_inflight.erase(captain_id)
+	_profile_retry_after_ms.erase(captain_id)
+	var profile := {
+		"hash": requested_hash,
+		"display_name": str(captain.get("display_name", "Captain")),
+		"appearance": _profile_client.parse_appearance(captain.get("appearance_json", "")),
+	}
+	_captain_profiles[captain_id] = profile
+	for state_variant in _visible_entities.values():
+		var state := state_variant as Dictionary
+		if str(state.get("captain_id", "")) != captain_id:
+			continue
+		if not requested_hash.is_empty() and str(state.get("profile_hash", "")) != requested_hash:
+			continue
+		var node := _live_node(state)
+		if node != null:
+			_apply_captain_profile(node, profile)
+	_pump_profile_queue()
+
+
+func _on_captain_profile_failed(captain_id: String) -> void:
+	_profile_inflight.erase(captain_id)
+	_profile_retry_after_ms[captain_id] = Time.get_ticks_msec() + PROFILE_RETRY_MS
+	_pump_profile_queue()
+
+
+func _apply_captain_profile(node: Node3D, profile: Dictionary) -> void:
+	var appearance := profile.get("appearance", null) as CharacterAppearance
+	var body := node.get_node_or_null("BodyMesh") as NpcBase
+	if body != null and appearance != null:
+		body.apply_appearance(appearance)
+	var label := node.get_node_or_null("PlayerNameLabel") as Label3D
+	if label != null:
+		label.text = str(profile.get("display_name", "Captain"))
 
 
 func _drive_player_walk_cycle(state: Dictionary, node: Node3D, _delta: float) -> void:
@@ -765,3 +861,6 @@ func clear_all(scene_nodes: Dictionary) -> void:
 		if node != null and not scene_nodes.has(id):
 			node.queue_free()
 	_visible_entities.clear()
+	_profile_queue.clear()
+	_profile_queued.clear()
+	_profile_inflight.clear()

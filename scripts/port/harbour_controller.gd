@@ -17,6 +17,7 @@ var _ship_at_berth: Dictionary = {} ## berth_id -> BoatBody
 var _berth_of_ship: Dictionary = {} ## ship instance_id -> berth_id
 var _berth_reservations: Dictionary = {} ## berth_id -> authority lease
 var _lane_lock: Dictionary = {} ## one harbour manoeuvre at a time in v1
+var _authority_bridge: HarbourAuthorityBridge = null
 
 const DEFAULT_RESERVATION_LEASE_S := 180.0
 
@@ -37,15 +38,25 @@ func port_id() -> String:
 
 func activate() -> void:
 	HarbourRegistry.register(self)
+	if _authority_bridge == null or not is_instance_valid(_authority_bridge):
+		_authority_bridge = HarbourAuthorityBridge.new()
+		add_child(_authority_bridge)
+		_authority_bridge.setup(self)
+	_authority_bridge.activate()
 
 
 func deactivate() -> void:
+	if _authority_bridge != null and is_instance_valid(_authority_bridge):
+		_authority_bridge.deactivate()
 	HarbourRegistry.unregister_controller(self)
 
 
 func unregister_all() -> void:
 	for equip_id in _equipment.keys():
-		unplug_equipment(str(equip_id))
+		if _authority_bridge != null and is_instance_valid(_authority_bridge):
+			_authority_bridge.abort_equipment(str(equip_id), "harbour_unloaded")
+		else:
+			unplug_equipment(str(equip_id))
 	_berths.clear()
 	_equipment.clear()
 	_yards.clear()
@@ -89,6 +100,8 @@ func register_equipment(equip: QuayEquipmentJob, berth_id: String = "") -> void:
 	if not _berths.has(bid):
 		push_warning("HarbourController: register_equipment unknown berth %s" % bid)
 	_equipment[equip.equipment_id()] = equip
+	if _authority_bridge != null and is_instance_valid(_authority_bridge):
+		_authority_bridge.topology_changed()
 	var freight := _freight_service()
 	if freight != null and freight.has_method("stage_berth"):
 		freight.call_deferred("stage_berth", _port_id, bid)
@@ -155,7 +168,10 @@ func unplug_ship(ship: BoatBody) -> void:
 	for equip_id in equipment_ids_on_berth(bid):
 		var equip := get_equipment(equip_id)
 		if equip != null and equip.served_ship() == ship:
-			unplug_equipment(equip_id)
+			if _authority_bridge != null and is_instance_valid(_authority_bridge):
+				_authority_bridge.abort_equipment(equip_id, "ship_unmoored")
+			else:
+				unplug_equipment(equip_id)
 	_ship_at_berth.erase(bid)
 	_berth_of_ship.erase(ship.get_instance_id())
 	if is_instance_valid(ship):
@@ -177,6 +193,7 @@ func plug_equipment(
 		ship: BoatBody,
 		mode: String,
 		commodity_id: String = "",
+		context: Dictionary = {},
 ) -> bool:
 	var equip := get_equipment(equip_id)
 	if equip == null or ship == null:
@@ -189,7 +206,7 @@ func plug_equipment(
 		return false
 	if not equip.can_serve(ship, mode):
 		return false
-	if not equip.start_job(ship, mode, commodity_id):
+	if not equip.start_job(ship, mode, commodity_id, context):
 		return false
 	equipment_plugged.emit(equip.equipment_id(), ship, mode.strip_edges().to_lower())
 	return true
@@ -213,15 +230,19 @@ func request_unload(berth_id: String, commodity_id: String = "") -> bool:
 
 
 func stop_equipment(equip_id: String) -> void:
+	if _authority_bridge != null and _authority_bridge.request_stop(equip_id):
+		return
 	unplug_equipment(equip_id)
 
 
 func stop_berth_equipment(berth_id: String) -> void:
 	for equip_id in equipment_ids_on_berth(berth_id):
-		unplug_equipment(equip_id)
+		stop_equipment(equip_id)
 
 
 func _request_job(berth_id: String, mode: String, commodity_id: String) -> bool:
+	if _authority_bridge != null and is_instance_valid(_authority_bridge):
+		return _authority_bridge.request_job(berth_id, mode, commodity_id)
 	var ship := moored_ship(berth_id)
 	if ship == null:
 		return false
@@ -651,6 +672,17 @@ func ship_berth_meta(ship: BoatBody) -> String:
 static func ship_id_of(ship: BoatBody) -> String:
 	if ship == null or not is_instance_valid(ship):
 		return ""
+	## Durable gameplay identity wins. network_ship_id is only the lossy UDP
+	## presentation identity and must never authorize cargo or port operations.
+	var server_id := str(ship.get_meta("server_vessel_id", "")).strip_edges()
+	if not server_id.is_empty():
+		return server_id
+	var named := str(ship.get_meta("network_ship_id", "")).strip_edges()
+	if not named.is_empty():
+		return named
+	var uid := str(ship.get_meta("vessel_uid", "")).strip_edges()
+	if not uid.is_empty():
+		return uid
 	var display := str(ship.get_meta("vessel_display_name", "")).strip_edges()
 	if not display.is_empty():
 		return display
@@ -659,12 +691,6 @@ static func ship_id_of(ship: BoatBody) -> String:
 		var ship_name := ctrl.ship_name.strip_edges()
 		if not ship_name.is_empty() and ship_name != "Unnamed Vessel":
 			return ship_name
-	var named := str(ship.get_meta("network_ship_id", "")).strip_edges()
-	if not named.is_empty():
-		return named
-	var uid := str(ship.get_meta("vessel_uid", "")).strip_edges()
-	if not uid.is_empty():
-		return uid
 	if not ship.name.is_empty() and ship.name != "PlayerShip":
 		return ship.name
 	return "ship_%d" % ship.get_instance_id()

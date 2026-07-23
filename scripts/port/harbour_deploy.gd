@@ -42,6 +42,22 @@ static func free_slots_for(
 		record: Dictionary,
 		max_ship_class: ShipClass.Type = ShipClass.Type.DEEP_SEA_FREIGHTER,
 ) -> Array:
+	var compatible := compatible_slots_for(harbour, record, max_ship_class)
+	var out: Array = []
+	for slot in compatible:
+		var s := slot as QuayBerthSlot
+		if s != null and harbour.moored_ship(s.berth_id) == null:
+			out.append(s)
+	return out
+
+
+## Physical compatibility only. Multiplayer callers send this ordered list to
+## world authority, which atomically chooses the first unoccupied berth.
+static func compatible_slots_for(
+		harbour: HarbourController,
+		record: Dictionary,
+		max_ship_class: ShipClass.Type = ShipClass.Type.DEEP_SEA_FREIGHTER,
+) -> Array:
 	if harbour == null:
 		return []
 	var req := ship_requirements(record)
@@ -51,7 +67,7 @@ static func free_slots_for(
 	var loa_world := float(req["loa_world_m"])
 	var families: PackedStringArray = req["terminal_families"]
 	var out: Array = []
-	for slot in harbour.free_berths():
+	for slot in harbour.berths():
 		var s := slot as QuayBerthSlot
 		if s == null:
 			continue
@@ -100,14 +116,21 @@ static func pick_slot(
 		max_ship_class: ShipClass.Type = ShipClass.Type.DEEP_SEA_FREIGHTER,
 		preferred_berth_id: String = "",
 ) -> QuayBerthSlot:
-	var slots := free_slots_for(harbour, record, max_ship_class)
+	var preferred := preferred_berth_id.strip_edges()
+	var slots := (
+		compatible_slots_for(harbour, record, max_ship_class)
+		if not preferred.is_empty()
+		else free_slots_for(harbour, record, max_ship_class)
+	)
 	if slots.is_empty():
 		return null
-	var preferred := preferred_berth_id.strip_edges()
 	if not preferred.is_empty():
 		for slot in slots:
 			var s := slot as QuayBerthSlot
-			if s != null and s.berth_id == preferred:
+			if s == null or s.berth_id != preferred:
+				continue
+			var occupant := harbour.moored_ship(preferred)
+			if occupant == null or HarbourController.ship_id_of(occupant) == authority_vessel_id(record):
 				return s
 		return null
 	## When registration names terminal families, require a matching free berth.
@@ -119,6 +142,13 @@ static func pick_slot(
 				return s
 		return null
 	return slots[0] as QuayBerthSlot
+
+
+static func authority_vessel_id(record: Dictionary) -> String:
+	var server_id := str(record.get("server_vessel_id", "")).strip_edges()
+	if not server_id.is_empty():
+		return server_id
+	return str(record.get("uid", "")).strip_edges()
 
 
 static func deploy(

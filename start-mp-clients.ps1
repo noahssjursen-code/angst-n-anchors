@@ -70,10 +70,12 @@ for ($i = 0; $i -lt $Count; $i++) {
         "--display/window/size/mode=0",
         "--display/window/size/viewport_width=$width",
         "--display/window/size/viewport_height=$height",
-        "--position", "${posX},${yOffset}"
+        "--position", "${posX},${yOffset}",
+        "--",
+        "--mp-client-slot=client-$($i + 1)"
     )
     
-    Write-Host "Starting instance $($i + 1) at position ($posX, $yOffset)..." -ForegroundColor DarkCyan
+    Write-Host "Starting instance $($i + 1) at position ($posX, $yOffset) with isolated account storage..." -ForegroundColor DarkCyan
     
     # Launch in background without blocking PowerShell
     Start-Process -FilePath $godotExe -ArgumentList $args -NoNewWindow

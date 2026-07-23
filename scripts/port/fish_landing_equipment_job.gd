@@ -68,18 +68,25 @@ func status_lines() -> PackedStringArray:
 
 
 func _on_transfer_completed(report: Dictionary) -> void:
-	var tree := Engine.get_main_loop() as SceneTree
-	var session := tree.root.get_node_or_null("PlayerSession") if tree != null else null
-	var landing_port_id := ""
-	if _served_ship != null and is_instance_valid(_served_ship):
-		landing_port_id = _served_ship.get_harbour_port_id()
-	var result := FishingLandingService.settle_transfer(report, session, landing_port_id)
-	if not bool(result.get("ok", false)):
-		push_warning("Fish landing settlement failed: %s" % str(result.get("code", "unknown")))
+	## Every interested client presents the same pump operation, but only the
+	## operation owner may touch the transitional local captain ledger. The
+	## economy itself moves to server projections in the next domain migration.
+	var context := authority_context()
+	var owns_settlement := (
+		not WorldGateway.is_remote()
+		or str(context.get("owner_actor_id", "")) == WorldGateway.actor_id()
+	)
+	if owns_settlement:
+		var tree := Engine.get_main_loop() as SceneTree
+		var session := tree.root.get_node_or_null("PlayerSession") if tree != null else null
+		var landing_port_id := ""
+		if _served_ship != null and is_instance_valid(_served_ship):
+			landing_port_id = _served_ship.get_harbour_port_id()
+		var result := FishingLandingService.settle_transfer(report, session, landing_port_id)
+		if not bool(result.get("ok", false)):
+			push_warning("Fish landing settlement failed: %s" % str(result.get("code", "unknown")))
 	## The bank is a receiving buffer. Once weighed and sold, the landed batch
 	## moves into the port's processing inventory so the next vessel can land.
 	if _bank != null and is_instance_valid(_bank):
 		_bank.withdraw_oldest(float(report.get("mass_kg", 0.0)))
-	_served_ship = null
-	_job_mode = ""
-	_commodity_id = ""
+	notify_job_completed(report)

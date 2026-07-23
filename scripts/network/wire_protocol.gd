@@ -1,15 +1,17 @@
 extends RefCounted
 
-## Stateless binary encoder and decoder for the v4 generic state-replication protocol.
+## Stateless binary encoder and decoder for the v5 authenticated transform protocol.
 ## All functions are pure and have zero side-effects.
 
-const UDP_PROTOCOL_VERSION := 4
+const UDP_PROTOCOL_VERSION := 5
 
 const UDP_MSG_TYPE_CLIENT_UPDATE := 1
 const UDP_MSG_TYPE_SNAPSHOT := 2
 const UDP_MSG_TYPE_LOGOUT := 3
 
 const MAX_STRING_LEN := 64
+const MAX_ENTITIES_PER_UPDATE := 16
+const MAX_PACKET_BYTES := 1200
 
 
 # ── Outbound Encoder (Client -> Server) ──────────────────────────────────────
@@ -21,7 +23,13 @@ const MAX_STRING_LEN := 64
 ##   - "format": int (2, 3, 4, or 6)
 ##   - "payload": Array of floats (representing the vector)
 ##   - "meta": String
-static func encode_client_update(seq: int, player_id: String, observer_pos: Vector3, entities: Array) -> PackedByteArray:
+static func encode_client_update(
+	seq: int,
+	player_id: String,
+	session_token: String,
+	observer_pos: Vector3,
+	entities: Array,
+) -> PackedByteArray:
 	var packet := PackedByteArray()
 	
 	# Header: version (1B), type (1B), seq (4B), player_id_len (1B) = 7B
@@ -37,17 +45,23 @@ static func encode_client_update(seq: int, player_id: String, observer_pos: Vect
 		id_bytes = id_bytes.slice(0, MAX_STRING_LEN)
 	packet.encode_u8(6, id_len)
 	packet.append_array(id_bytes)
+
+	var token_bytes := session_token.to_utf8_buffer()
+	var token_len := mini(token_bytes.size(), MAX_STRING_LEN)
+	packet.append(token_len)
+	if token_len > 0:
+		packet.append_array(token_bytes.slice(0, token_len))
 	
 	# Observer pos (3 floats = 12 bytes)
 	var obs_bytes := PackedByteArray()
 	obs_bytes.resize(12)
-	obs_bytes.encode_float(0, observer_pos.x)
-	obs_bytes.encode_float(4, observer_pos.y)
-	obs_bytes.encode_float(8, observer_pos.z)
+	obs_bytes.encode_float(0, observer_pos.x if is_finite(observer_pos.x) else 0.0)
+	obs_bytes.encode_float(4, observer_pos.y if is_finite(observer_pos.y) else 0.0)
+	obs_bytes.encode_float(8, observer_pos.z if is_finite(observer_pos.z) else 0.0)
 	packet.append_array(obs_bytes)
 	
 	# Entity count
-	var ent_count := clampi(entities.size(), 0, 255)
+	var ent_count := clampi(entities.size(), 0, MAX_ENTITIES_PER_UPDATE)
 	packet.append(ent_count)
 	
 	# For each entity
@@ -69,7 +83,9 @@ static func encode_client_update(seq: int, player_id: String, observer_pos: Vect
 			packet.append_array(type_bytes.slice(0, type_len))
 		
 		# Format (Payload float count: 2, 3, 4, 6)
-		var format: int = clampi(int(ent.get("format", 0)), 2, 6)
+		var format: int = int(ent.get("format", 4))
+		if format not in [2, 3, 4, 6]:
+			format = 4
 		packet.append(format)
 		
 		# Payload (format floats)
@@ -80,6 +96,8 @@ static func encode_client_update(seq: int, player_id: String, observer_pos: Vect
 			var val: float = 0.0
 			if j < payload.size():
 				val = float(payload[j])
+			if not is_finite(val):
+				val = 0.0
 			pay_bytes.encode_float(j * 4, val)
 		packet.append_array(pay_bytes)
 		
@@ -94,7 +112,7 @@ static func encode_client_update(seq: int, player_id: String, observer_pos: Vect
 
 
 ## Encodes an explicit logout/disconnect packet containing the local player_id.
-static func encode_logout(player_id: String) -> PackedByteArray:
+static func encode_logout(player_id: String, session_token: String) -> PackedByteArray:
 	var packet := PackedByteArray()
 	packet.resize(3)
 	packet.encode_u8(0, UDP_PROTOCOL_VERSION)
@@ -107,6 +125,11 @@ static func encode_logout(player_id: String) -> PackedByteArray:
 		id_bytes = id_bytes.slice(0, MAX_STRING_LEN)
 	packet.encode_u8(2, id_len)
 	packet.append_array(id_bytes)
+	var token_bytes := session_token.to_utf8_buffer()
+	var token_len := mini(token_bytes.size(), MAX_STRING_LEN)
+	packet.append(token_len)
+	if token_len > 0:
+		packet.append_array(token_bytes.slice(0, token_len))
 	return packet
 
 
@@ -117,7 +140,7 @@ static func encode_logout(player_id: String) -> PackedByteArray:
 ## Returns an empty dictionary if parsing fails due to version mismatch or packet truncation.
 static func decode_snapshot(packet: PackedByteArray) -> Dictionary:
 	# Snapshot Header: version (1B), type (1B), next_update_ms (4B), nearest_dist (4B), entity_count (1B) = 11B
-	if packet.size() < 11:
+	if packet.size() < 11 or packet.size() > MAX_PACKET_BYTES:
 		return {}
 	if packet.decode_u8(0) != UDP_PROTOCOL_VERSION:
 		return {}
@@ -126,6 +149,8 @@ static func decode_snapshot(packet: PackedByteArray) -> Dictionary:
 	
 	var next_update_ms := packet.decode_u32(2)
 	var nearest_dist := packet.decode_float(6)
+	if not is_finite(nearest_dist):
+		return {}
 	var entity_count := packet.decode_u8(10)
 	
 	var off := 11
@@ -137,7 +162,7 @@ static func decode_snapshot(packet: PackedByteArray) -> Dictionary:
 			return {}
 		var id_len := packet.decode_u8(off)
 		off += 1
-		if off + id_len > packet.size():
+		if id_len <= 0 or id_len > MAX_STRING_LEN or off + id_len > packet.size():
 			return {}
 		var entity_id := packet.slice(off, off + id_len).get_string_from_utf8()
 		off += id_len
@@ -147,7 +172,7 @@ static func decode_snapshot(packet: PackedByteArray) -> Dictionary:
 			return {}
 		var type_len := packet.decode_u8(off)
 		off += 1
-		if off + type_len > packet.size():
+		if type_len <= 0 or type_len > MAX_STRING_LEN or off + type_len > packet.size():
 			return {}
 		var entity_type := packet.slice(off, off + type_len).get_string_from_utf8()
 		off += type_len
@@ -157,7 +182,7 @@ static func decode_snapshot(packet: PackedByteArray) -> Dictionary:
 			return {}
 		var owner_len := packet.decode_u8(off)
 		off += 1
-		if off + owner_len > packet.size():
+		if owner_len <= 0 or owner_len > MAX_STRING_LEN or off + owner_len > packet.size():
 			return {}
 		var owner_id := packet.slice(off, off + owner_len).get_string_from_utf8()
 		off += owner_len
@@ -167,12 +192,17 @@ static func decode_snapshot(packet: PackedByteArray) -> Dictionary:
 			return {}
 		var format := packet.decode_u8(off)
 		off += 1
+		if format not in [2, 3, 4, 6]:
+			return {}
 		
 		if off + (format * 4) > packet.size():
 			return {}
 		var payload: Array[float] = []
 		for j in format:
-			payload.append(packet.decode_float(off))
+			var value := packet.decode_float(off)
+			if not is_finite(value):
+				return {}
+			payload.append(value)
 			off += 4
 			
 		# 5. Decode Metadata string
@@ -203,6 +233,9 @@ static func decode_snapshot(packet: PackedByteArray) -> Dictionary:
 			"meta": meta
 		})
 		
+	if off != packet.size():
+		return {}
+
 	return {
 		"next_update_ms": next_update_ms,
 		"nearest_distance": nearest_dist,

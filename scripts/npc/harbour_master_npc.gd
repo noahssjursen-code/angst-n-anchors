@@ -14,6 +14,7 @@ enum _Screen { MAIN, REQUEST_BERTH, SHIP_SELECT, VESSEL_INFO, REFUEL, LAND_CATCH
 
 const FUEL_PRICE_PER_LITRE := 0.5
 var _screen: _Screen = _Screen.MAIN
+var _pending_berth_claims: Dictionary = {} ## request id -> deployment context
 
 
 func _ready() -> void:
@@ -27,10 +28,10 @@ func _ready() -> void:
 
 func _wire_session() -> void:
 	var session := get_node_or_null("/root/PlayerSession")
-	if session == null or not session.has_signal("vessels_synced"):
-		return
-	if not session.vessels_synced.is_connected(_on_vessels_synced):
+	if session != null and session.has_signal("vessels_synced") and not session.vessels_synced.is_connected(_on_vessels_synced):
 		session.vessels_synced.connect(_on_vessels_synced)
+	if not WorldGateway.command_completed.is_connected(_on_world_command_completed):
+		WorldGateway.command_completed.connect(_on_world_command_completed)
 
 
 func _on_vessels_synced() -> void:
@@ -199,18 +200,9 @@ func _show_request_berth() -> void:
 		_dialogue.add_back_button(_show_main)
 		return
 
-	var free_count := harbour.free_berths().size()
-	if free_count == 0:
-		_dialogue.add_quote("I'm sorry, Captain — we have no berths free at present.")
-		_dialogue.add_back_button(_show_main)
-		return
-
 	_dialogue.add_quote(
-		(
-			"We have %d free berth%s. I'll match your hull to the right quay family — "
-			+ "bulk carriers go to bulk, deck cargo to the apron."
-		)
-		% [free_count, "s" if free_count != 1 else ""]
+		"I'll match your hull to the right quay family and ask harbour control "
+		+ "for a live berth assignment. Bulk carriers go to bulk, deck cargo to the apron."
 	)
 	_dialogue.add_option("Assign me a berth for my vessel.", _show_ship_select)
 	_dialogue.add_back_button(_show_main)
@@ -248,7 +240,7 @@ func _show_ship_select() -> void:
 		var class_name_str := str(req.get("ship_class_name", "Vessel"))
 		var loa := float(req.get("loa_display_m", ShipClass.display_metres(float(req.get("loa_m", 0.0)))))
 		var fits_port := ShipClass.fits(req["ship_class"] as ShipClass.Type, max_class)
-		var slots := HarbourDeploy.free_slots_for(harbour, record, max_class) if harbour != null \
+		var slots := HarbourDeploy.compatible_slots_for(harbour, record, max_class) if harbour != null \
 				else []
 		var families: PackedStringArray = req["terminal_families"]
 		var family_note := ""
@@ -256,7 +248,7 @@ func _show_ship_select() -> void:
 			family_note = " · %s" % CommodityCatalog.terminal_family_display(families[0])
 		if not fits_port or slots.is_empty():
 			_dialogue.add_disabled_option(
-				"%s — %.0f m %s%s (no free matching berth)" % [
+				"%s — %.0f m %s%s (no compatible berth)" % [
 					vessel_name, loa, class_name_str, family_note,
 				]
 			)
@@ -277,11 +269,6 @@ func _show_ship_select() -> void:
 
 
 func _deploy_fleet_vessel(record: Dictionary) -> void:
-	var session := get_node_or_null("/root/PlayerSession")
-	if session != null and session.data != null:
-		session.data.set_active_vessel(record)
-		if session.has_method("save_now"):
-			session.call("save_now")
 	var resolved := VesselSpawn.resolve_deployable_record(record)
 	if resolved.is_empty():
 		_dialogue.clear()
@@ -290,18 +277,102 @@ func _deploy_fleet_vessel(record: Dictionary) -> void:
 		)
 		_dialogue.add_back_button(_show_main)
 		return
-	_spawn_chosen_ship(resolved)
+	var harbour := _harbour()
+	var candidates := HarbourDeploy.compatible_slots_for(harbour, resolved, _max_ship_class())
+	if candidates.is_empty():
+		_dialogue.clear()
+		_dialogue.add_quote("That vessel has no physically compatible quay at this port.")
+		_dialogue.add_back_button(_show_main)
+		return
+	var vessel_id := HarbourDeploy.authority_vessel_id(resolved)
+	if vessel_id.is_empty():
+		_dialogue.clear()
+		_dialogue.add_quote("Harbour control cannot identify that vessel. Refresh your registry and try again.")
+		_dialogue.add_back_button(_show_main)
+		return
+	if not WorldGateway.is_ready():
+		_dialogue.clear()
+		_dialogue.add_quote("Harbour control is still connecting. Please try again in a moment.")
+		_dialogue.add_back_button(_show_main)
+		return
+	var berth_ids: Array = []
+	for slot_variant in candidates:
+		var slot := slot_variant as QuayBerthSlot
+		if slot != null:
+			berth_ids.append(slot.berth_id)
+	var request_id := WorldGateway.next_request_id("vessel-berth-claim")
+	var old_record := LocalPlayerView.get_active_vessel_record()
+	var old_vessel_id := HarbourDeploy.authority_vessel_id(old_record)
+	_pending_berth_claims[request_id] = {
+		"record": resolved.duplicate(true),
+		"vessel_id": vessel_id,
+		"old_record": old_record,
+	}
+	_dialogue.clear()
+	_dialogue.add_quote("Harbour control is assigning a compatible berth…")
+	WorldGateway.send_command(
+		WorldContracts.COMMAND_VESSEL_BERTH_CLAIM,
+		WorldContracts.vessel_berth_claim_body(
+			vessel_id,
+			port_id,
+			berth_ids,
+			old_vessel_id,
+		),
+		request_id,
+	)
 
 
-func _spawn_chosen_ship(resolved: Dictionary) -> void:
+func _on_world_command_completed(request_id: String, result: Dictionary) -> void:
+	if not _pending_berth_claims.has(request_id):
+		return
+	var context := _pending_berth_claims[request_id] as Dictionary
+	_pending_berth_claims.erase(request_id)
+	if not bool(result.get("ok", false)):
+		_dialogue.clear()
+		_dialogue.add_quote(
+			"Harbour control could not assign a berth: %s"
+			% str(result.get("message", "all compatible berths are occupied"))
+		)
+		_dialogue.add_back_button(_show_main)
+		return
+	var data := result.get("data", {}) as Dictionary
+	var assignment := data.get("assignment", {}) as Dictionary
+	var berth_id := str(assignment.get("berth_id", "")).strip_edges()
+	var resolved := context.get("record", {}) as Dictionary
+	if berth_id.is_empty() or resolved.is_empty():
+		_dialogue.clear()
+		_dialogue.add_quote("Harbour control returned an incomplete berth assignment.")
+		_dialogue.add_back_button(_show_main)
+		return
+	var old_record := context.get("old_record", {}) as Dictionary
+	var old_vessel_id := HarbourDeploy.authority_vessel_id(old_record)
+	var new_vessel_id := str(context.get("vessel_id", ""))
+	if not old_vessel_id.is_empty() and old_vessel_id != new_vessel_id:
+		_network_unregister_record(old_record)
+	var session := get_node_or_null("/root/PlayerSession")
+	if session != null and session.data != null:
+		session.data.set_active_vessel(resolved)
+		if session.has_method("save_now"):
+			session.call("save_now")
+	_spawn_chosen_ship(resolved, berth_id)
+
+
+func _spawn_chosen_ship(resolved: Dictionary, preferred_berth_id: String) -> void:
 	var plot := _plot()
 	if plot == null:
 		_dialogue.clear()
 		_dialogue.add_quote("Harbour plot missing — cannot deploy.")
 		_dialogue.add_back_button(_show_main)
 		return
-	var ship := HarbourDeploy.deploy(plot, resolved)
+	var ship := HarbourDeploy.deploy(plot, resolved, preferred_berth_id)
 	if ship == null:
+		WorldGateway.send_command(
+			WorldContracts.COMMAND_VESSEL_BERTH_RELEASE,
+			{
+				"vessel_id": HarbourDeploy.authority_vessel_id(resolved),
+				"reason": "local_spawn_failed",
+			},
+		)
 		_dialogue.clear()
 		_dialogue.add_quote(
 			"Couldn't ready that vessel alongside. No free berth matches her class and quay type.\n"
@@ -345,6 +416,14 @@ func _show_abandon_confirm() -> void:
 
 
 func _commit_abandon() -> void:
+	var active_record: Dictionary = LocalPlayerView.get_active_vessel_record()
+	var vessel_id := HarbourDeploy.authority_vessel_id(active_record)
+	if not vessel_id.is_empty() and WorldGateway.is_ready():
+		WorldGateway.send_command(
+			WorldContracts.COMMAND_VESSEL_BERTH_RELEASE,
+			{"vessel_id": vessel_id, "reason": "vessel_abandoned"},
+		)
+	_network_unregister_record(active_record)
 	PlayerVessel.despawn_all_ships(get_tree())
 	var session := get_node_or_null("/root/PlayerSession")
 	if session != null and session.data != null:
@@ -355,6 +434,17 @@ func _commit_abandon() -> void:
 	_dialogue.clear()
 	_dialogue.add_quote("She's gone, Captain. Come back when you'd like her alongside again.")
 	_dialogue.add_option("Thank you.", _close)
+
+
+func _network_unregister_record(record: Dictionary) -> void:
+	if record.is_empty():
+		return
+	var manager := get_node_or_null("/root/NetworkManager")
+	if manager == null or not manager.has_method("unregister_ship"):
+		return
+	var uid := str(record.get("uid", "")).strip_edges()
+	if not uid.is_empty():
+		manager.call("unregister_ship", uid)
 
 
 func _teleport_player_to_home() -> void:

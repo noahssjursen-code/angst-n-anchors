@@ -4,6 +4,7 @@ Detailed architecture reference. See also:
 - [`AGENTS.md`](AGENTS.md) — quick-start for AI agents
 - [`Angst 'n Anchors.md`](Angst%20'n%20Anchors.md) — game design overview
 - [`SAVE_FORMAT.md`](SAVE_FORMAT.md) — player save schema
+- [`MULTIPLAYER_ARCHITECTURE.md`](MULTIPLAYER_ARCHITECTURE.md) — client/server authority contract
 
 ---
 
@@ -305,7 +306,21 @@ and copy `Telemetry.generate_report()` to the clipboard.
 
 ### `LocalPlayerView` — the MP seam
 
-`LocalPlayerView` is a per-client view of the local player's projection of the world. UI consults it instead of touching `PlayerSession` / `PortCatalog` directly; gameplay-mutating code continues to use the autoloads. When multiplayer lands, every UI that reads through `LocalPlayerView` keeps working with no further changes — only the autoload's internals switch from "delegate to local autoloads" to "consume the server projection."
+`LocalPlayerView` is a per-client view of the local player's projection of the world. UI consults it instead of touching `PlayerSession` / `PortCatalog` directly. Multiplayer gameplay intent goes through `WorldGateway`; accepted events and projections update the client-facing view without making UI nodes transport-aware. Single-player uses the matching in-process backend. See [`MULTIPLAYER_ARCHITECTURE.md`](MULTIPLAYER_ARCHITECTURE.md).
+
+### `WorldGateway` — the authority seam
+
+`WorldGateway` separates gameplay intent from the authority host. Its local and
+remote backends share versioned command, event, and projection contracts.
+`WorldStateBinding` handles low-frequency shared entity state, while
+`NetworkTransformBinding` handles loss-tolerant spatial replication. Port work is
+requested once and presented locally from accepted authority facts; clients do
+not manually replicate crane joints or declare timed work complete.
+
+The old multiplayer marks upload is disabled. Economy features remain local-only
+until each receives a named, validated server domain command and transactional
+ledger/inventory implementation. A generic state setter must never be used for
+money, cargo, contracts, purchases, or ownership.
 
 ---
 

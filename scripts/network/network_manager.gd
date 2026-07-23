@@ -1,9 +1,13 @@
 extends Node
 
-## Rebuilt, modular, and 100% generic Multiplayer Client Replication Service (v4).
+## Loss-tolerant transform replication. Identity comes from WorldGateway's
+## authenticated reliable session; gameplay facts never travel here.
 ## Coordinates the NetworkClient backend, stateless WireProtocol, local registered senders,
 ## and delegates visual rendering / interpolation to the ReplicationDrawingService.
 ## Autoloaded as NetworkManager.
+
+signal realtime_session_started
+signal realtime_session_failed(code: String, message: String)
 
 const NetworkClientClass = preload("res://scripts/network/network_client.gd")
 const WireProtocolClass = preload("res://scripts/network/wire_protocol.gd")
@@ -21,6 +25,7 @@ var _scene_nodes: Dictionary = {}
 
 # Local ship boarding tracker: ship_id -> bool
 var _local_ships_board_states: Dictionary = {}
+var _local_ship_entity_ids: Dictionary = {}
 
 # Sequence counter for outbound packets
 var _outbound_seq: int = 0
@@ -30,17 +35,32 @@ var _outbound_seq: int = 0
 var send_clock: float = 0.0
 @export var force_move_threshold_m: float = 0.15
 @export var force_yaw_threshold_rad: float = 0.05
-@export var entity_timeout_ms: int = 3000
+@export var entity_heartbeat_ms: int = 4000
+@export var session_heartbeat_ms: int = 4000
+@export var entity_timeout_ms: int = 15000
 
 # Interpolation speeds passed to drawing service
 @export var position_smoothness: float = 14.0
 @export var payload_smoothness: float = 12.0
 
 var _session_active: bool = false
+var _session_pending: bool = false
+var _last_session_send_ms: int = 0
+var _local_view: Node = null
+var _gateway: Node = null
 
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
+	_local_view = get_node_or_null("/root/LocalPlayerView")
+	_gateway = get_node_or_null("/root/WorldGateway")
+	if _gateway != null:
+		if not _gateway.session_ready.is_connected(_on_authority_session_ready):
+			_gateway.session_ready.connect(_on_authority_session_ready)
+		if not _gateway.authority_error.is_connected(_on_authority_error):
+			_gateway.authority_error.connect(_on_authority_error)
+		if not _gateway.session_closed.is_connected(_on_authority_session_closed):
+			_gateway.session_closed.connect(_on_authority_session_closed)
 	
 	# Instantiate raw socket network backend
 	client = NetworkClientClass.new()
@@ -104,20 +124,28 @@ func _tick_outbound(delta: float) -> void:
 	send_clock += delta
 	if send_clock < send_interval_s:
 		return
+	send_clock = 0.0
 	
 	var local_id := get_local_player_id()
+	var token := _session_token()
 	if local_id.is_empty():
+		_fail_realtime_session(
+			"captain_identity_lost",
+			"Multiplayer replication lost the selected captain identity.",
+		)
+		return
+	if token.is_empty():
+		_fail_realtime_session(
+			"authority_session_lost",
+			"Multiplayer replication lost its authority session.",
+		)
 		return
 
 	_ensure_local_ship_registered()
 		
 	# Resolve our main observer camera position
-	var observer_pos := Vector3.ZERO
 	var vp := get_viewport()
-	if vp != null:
-		var cam := vp.get_camera_3d()
-		if cam != null:
-			observer_pos = cam.global_position
+	var observer_pos := WorldReference.stream_position(vp)
 
 	# Auto-register local player avatar as Vector4 (XYZ + Yaw)
 	var lp := get_tree().get_first_node_in_group("player") as CharacterBody3D
@@ -134,13 +162,7 @@ func _tick_outbound(delta: float) -> void:
 					yaw = float(cam_ctrl.call("get_replication_yaw"))
 				return [lp.global_position.x, lp.global_position.y, lp.global_position.z, yaw],
 			func():
-				var session := get_node_or_null("/root/PlayerSession")
-				if session != null and session.data != null and session.data.appearance != null:
-					return session.data.appearance.to_meta_string(
-						str(session.data.display_name),
-						str(session.data.captain_id)
-					)
-				return ""
+				return _build_player_meta()
 		)
 
 	# Collect states from all active registered senders with delta compression / standstill filtering
@@ -165,17 +187,10 @@ func _tick_outbound(delta: float) -> void:
 		var last_time: int = sender["last_sent_time_ms"]
 		
 		var pos_changed := pos.distance_to(last_pos) >= force_move_threshold_m
-		var pay_changed := false
-		if payload.size() != last_pay.size():
-			pay_changed = true
-		else:
-			for k in payload.size():
-				if absf(payload[k] - last_pay[k]) >= force_yaw_threshold_rad:
-					pay_changed = true
-					break
+		var pay_changed := _payload_changed(payload, last_pay, str(sender["type"]))
 					
 		var meta_changed := (meta != last_meta)
-		var heartbeat_elapsed := (now_ms - last_time) >= 3000 # 3-second heartbeat to prevent server pruning
+		var heartbeat_elapsed := (now_ms - last_time) >= entity_heartbeat_ms
 		
 		# Send if there is an active change, or as a slow heartbeat
 		if pos_changed or pay_changed or meta_changed or heartbeat_elapsed:
@@ -192,12 +207,71 @@ func _tick_outbound(delta: float) -> void:
 			sender["last_sent_meta"] = meta
 			sender["last_sent_time_ms"] = now_ms
 
-	# Blast the consolidated update packet to the server if we have any entity updates
-	if entities_payload.size() > 0 or send_clock >= send_interval_s:
+	# Observer-only heartbeats keep the session alive without blasting empty
+	# packets at the 20 Hz entity sampling rate.
+	var session_heartbeat_elapsed := (now_ms - _last_session_send_ms) >= session_heartbeat_ms
+	if not entities_payload.is_empty() or session_heartbeat_elapsed:
+		_send_update_batches(local_id, token, observer_pos, entities_payload)
+		_last_session_send_ms = now_ms
+
+
+func _send_update_batches(local_id: String, token: String, observer_pos: Vector3, entities: Array) -> void:
+	if entities.is_empty():
 		_outbound_seq += 1
-		var pkt := WireProtocolClass.encode_client_update(_outbound_seq, local_id, observer_pos, entities_payload)
-		client.call("send_packet", pkt)
-		send_clock = 0.0
+		client.call("send_packet", WireProtocolClass.encode_client_update(
+			_outbound_seq, local_id, token, observer_pos, []
+		))
+		return
+
+	var batch: Array = []
+	for entity_variant in entities:
+		var next_batch := batch.duplicate()
+		next_batch.append(entity_variant)
+		var probe := WireProtocolClass.encode_client_update(
+			_outbound_seq + 1, local_id, token, observer_pos, next_batch
+		)
+		if (
+			batch.size() >= WireProtocolClass.MAX_ENTITIES_PER_UPDATE
+			or (probe.size() > WireProtocolClass.MAX_PACKET_BYTES and not batch.is_empty())
+		):
+			_send_update_batch(local_id, token, observer_pos, batch)
+			batch = [entity_variant]
+		else:
+			batch = next_batch
+	if not batch.is_empty():
+		_send_update_batch(local_id, token, observer_pos, batch)
+
+
+func _send_update_batch(local_id: String, token: String, observer_pos: Vector3, batch: Array) -> void:
+	_outbound_seq += 1
+	var packet := WireProtocolClass.encode_client_update(_outbound_seq, local_id, token, observer_pos, batch)
+	if packet.size() > WireProtocolClass.MAX_PACKET_BYTES:
+		push_warning("NetworkManager: skipped an oversized local entity update (%d bytes)." % packet.size())
+		return
+	client.call("send_packet", packet)
+
+
+func _payload_changed(payload: Array, last_payload: Array, _entity_type: String) -> bool:
+	if payload.size() != last_payload.size():
+		return true
+	# XYZ is already covered by the positional threshold. Comparing it again
+	# made moving entities send on nearly every 20 Hz sample.
+	var first_state_index := 3 if payload.size() >= 3 else 0
+	for k in range(first_state_index, payload.size()):
+		if absf(float(payload[k]) - float(last_payload[k])) >= force_yaw_threshold_rad:
+			return true
+	return false
+
+
+func _build_player_meta() -> String:
+	if _local_view == null:
+		return ""
+	var captain_id := str(_local_view.call("get_captain_id"))
+	var appearance := _local_view.call("get_appearance") as CharacterAppearance
+	var appearance_hash := ""
+	if appearance != null:
+		appearance_hash = appearance.to_json_string().sha256_text().substr(0, 12)
+	return "cid=%s;app=%s" % [captain_id, appearance_hash]
 
 
 # ── Snapshot Packet Router ───────────────────────────────────────────────────
@@ -223,77 +297,6 @@ func _on_packet_received(msg_type: int, payload: PackedByteArray) -> void:
 
 # ── Backwards Compatible Gameplay Hooks ─────────────────────────────────────
 
-func register_crane(crane_id: String, crane_node: Node) -> void:
-	register_scene_node(crane_id, crane_node)
-
-
-func notify_crane_operated(crane_id: String, boarded: bool) -> void:
-	if boarded:
-		var crane_node: Node = _scene_nodes.get(crane_id, null)
-		if crane_node != null and is_instance_valid(crane_node):
-			register_sender(
-				crane_node,
-				crane_id,
-				"crane",
-				6, # Vector6: [base_x, base_y, base_z, gantry_x, trolley_z, hoist_drop]
-				func():
-					var crane3d := crane_node as Node3D
-					var base_pos := crane3d.global_position
-					var gantry_x_val := float(crane_node.get("_gantry_x_offset"))
-					var trolley_z_val := float(crane_node.get("_trolley_z"))
-					var hoist_drop_val := float(crane_node.get("_hoist_drop"))
-					return [base_pos.x, base_pos.y, base_pos.z, gantry_x_val, trolley_z_val, hoist_drop_val],
-				func():
-					var hook_node := crane_node.get("_hook") as Node3D
-					var hook_yaw := 0.0
-					if hook_node != null and is_instance_valid(hook_node):
-						hook_yaw = hook_node.rotation.y
-					return "op=%s;hy=%.3f" % [get_local_player_id(), hook_yaw]
-			)
-	else:
-		_flush_crane_vacated(crane_id)
-		unregister_sender(crane_id)
-		if drawing_service != null and drawing_service.has_method("clear_scene_node_remote_state"):
-			drawing_service.call("clear_scene_node_remote_state", crane_id)
-
-
-func _flush_crane_vacated(crane_id: String) -> void:
-	var sender: Variant = _local_senders.get(crane_id, null)
-	if sender == null or client == null:
-		return
-	var crane_node: Node = sender["node"]
-	if crane_node == null or not is_instance_valid(crane_node):
-		return
-	var payload: Array = sender["state_callable"].call()
-	var hook_node := crane_node.get("_hook") as Node3D
-	var hook_yaw := 0.0
-	if hook_node != null and is_instance_valid(hook_node):
-		hook_yaw = hook_node.rotation.y
-	var local_id := get_local_player_id()
-	if local_id.is_empty():
-		return
-	var observer_pos := Vector3.ZERO
-	var vp := get_viewport()
-	if vp != null:
-		var cam := vp.get_camera_3d()
-		if cam != null:
-			observer_pos = cam.global_position
-	_outbound_seq += 1
-	var pkt := WireProtocolClass.encode_client_update(
-		_outbound_seq,
-		local_id,
-		observer_pos,
-		[{
-			"id": crane_id,
-			"type": "crane",
-			"format": 6,
-			"payload": payload,
-			"meta": "op=;hy=%.3f" % hook_yaw,
-		}]
-	)
-	client.call("send_packet", pkt)
-
-
 func entity_id_for_node(target: Node) -> String:
 	if target == null:
 		return ""
@@ -311,11 +314,8 @@ func register_ship_spawn(ship_id: String, hull_id: String, ship_node: Node3D) ->
 	if ship_id.is_empty() or ship_node == null or not is_instance_valid(ship_node):
 		return
 		
-	# Ensure the ship ID is globally unique across the network to prevent collisions
-	var unique_ship_id := ship_id
-	var local_player_id := get_local_player_id()
-	if not ship_id.begins_with(local_player_id + "_"):
-		unique_ship_id = local_player_id + "_" + ship_id
+	var unique_ship_id := _network_ship_id(ship_id)
+	_local_ship_entity_ids[ship_id] = unique_ship_id
 
 	var resolved_hull_id := HullRegistry.resolve_network_hull_id(hull_id)
 		
@@ -335,6 +335,12 @@ func _force_sender_sync(sender_id: String) -> void:
 	sender["last_sent_time_ms"] = 0
 
 
+## Forces the next lossy snapshot to contain a registered entity. Components
+## use this after teleports, attachment changes, or ownership handoffs.
+func force_sender_sync(sender_id: String) -> void:
+	_force_sender_sync(sender_id)
+
+
 func _ensure_local_ship_registered() -> void:
 	var tree := get_tree()
 	if tree == null:
@@ -352,9 +358,8 @@ func _ensure_local_ship_registered() -> void:
 
 	var hull_id := ""
 	var ship_id := "player_ship"
-	var session := get_node_or_null("/root/PlayerSession")
-	if session != null and session.get("data") != null:
-		var record: Dictionary = session.data.get_active_vessel_record()
+	if _local_view != null:
+		var record: Dictionary = _local_view.call("get_active_vessel_record") as Dictionary
 		if not record.is_empty():
 			hull_id = str(record.get("hull_id", ""))
 			ship_id = String(record.get("uid", "player_ship"))
@@ -367,8 +372,17 @@ func _ensure_local_ship_registered() -> void:
 
 
 func unregister_ship(ship_id: String) -> void:
-	_local_ships_board_states.erase(ship_id)
-	unregister_sender(ship_id)
+	var entity_id := str(_local_ship_entity_ids.get(ship_id, ship_id))
+	_local_ship_entity_ids.erase(ship_id)
+	_local_ships_board_states.erase(entity_id)
+	unregister_sender(entity_id)
+
+
+func _network_ship_id(ship_id: String) -> String:
+	if ship_id.begins_with("ship:") and ship_id.length() <= WireProtocolClass.MAX_STRING_LEN:
+		return ship_id
+	var local_id := get_local_player_id()
+	return "ship:" + (local_id + "|" + ship_id).sha256_text().substr(0, 32)
 
 
 func _register_ship_sender(ship_id: String, hull_id: String, ship_node: Node3D, boarded: bool) -> void:
@@ -391,15 +405,24 @@ func _register_ship_sender(ship_id: String, hull_id: String, ship_node: Node3D, 
 				if not systems.is_empty() and systems[0].trawling:
 					parts.append("trawl=1")
 			## Deck fit-out identity — remotes fetch layout via HTTP using vid + lh.
-			var session := get_node_or_null("/root/PlayerSession")
-			if session != null and session.get("data") != null:
-				var record: Dictionary = session.data.get_active_vessel_record()
+			if _local_view != null:
+				var record: Dictionary = _local_view.call("get_active_vessel_record") as Dictionary
 				var vid := str(record.get("server_vessel_id", ""))
 				var lh := str(record.get("layout_hash", ""))
 				if not vid.is_empty():
 					parts.append("vid=" + vid)
 				if not lh.is_empty():
 					parts.append("lh=" + lh)
+			var port_id := str(ship_node.get_meta("harbour_port_id", "")).strip_edges()
+			var berth_id := str(ship_node.get_meta("harbour_berth_id", "")).strip_edges()
+			if not port_id.is_empty():
+				parts.append("port=" + port_id)
+			if not berth_id.is_empty():
+				parts.append("berth=" + berth_id)
+			var mooring := _find_mooring_component(ship_node)
+			if mooring != null:
+				parts.append("bow=%d" % int(mooring.bow_line_tied))
+				parts.append("stern=%d" % int(mooring.stern_line_tied))
 			return ";".join(parts)
 	)
 
@@ -414,17 +437,46 @@ func force_local_ship_meta_resync() -> void:
 
 
 func _wire_board_signals_recursive(ship_id: String, n: Node) -> void:
+	if n is MooringComponent:
+		var mooring_callback := Callable(
+			self,
+			"_on_local_ship_mooring_changed",
+		).bind(ship_id)
+		if not (n as MooringComponent).mooring_state_changed.is_connected(mooring_callback):
+			(n as MooringComponent).mooring_state_changed.connect(mooring_callback)
 	if (
 		n.is_in_group(VehicleGroups.BOARDING_HIDES_OCCUPANT)
 		and n.has_signal("player_boarded")
 		and n.has_signal("player_exited")
 	):
-		if not n.is_connected("player_boarded", _on_local_ship_boarded):
-			n.connect("player_boarded", _on_local_ship_boarded.bind(ship_id))
-		if not n.is_connected("player_exited", _on_local_ship_exited):
-			n.connect("player_exited", _on_local_ship_exited.bind(ship_id))
+		var boarded_callback := Callable(self, "_on_local_ship_boarded").bind(ship_id)
+		var exited_callback := Callable(self, "_on_local_ship_exited").bind(ship_id)
+		if not n.is_connected("player_boarded", boarded_callback):
+			n.connect("player_boarded", boarded_callback)
+		if not n.is_connected("player_exited", exited_callback):
+			n.connect("player_exited", exited_callback)
 	for c in n.get_children():
 		_wire_board_signals_recursive(ship_id, c)
+
+
+func _find_mooring_component(root: Node) -> MooringComponent:
+	if root is MooringComponent:
+		return root as MooringComponent
+	for child in root.get_children():
+		var found := _find_mooring_component(child)
+		if found != null:
+			return found
+	return null
+
+
+func _on_local_ship_mooring_changed(
+		_port_id: String,
+		_berth_id: String,
+		_bow_line: bool,
+		_stern_line: bool,
+		ship_id: String,
+) -> void:
+	_force_sender_sync(ship_id)
 
 
 func _on_local_ship_boarded(ship_id: String) -> void:
@@ -491,14 +543,18 @@ func find_any_ship_near(global_pos: Vector3, max_dist: float = 25.0) -> Node3D:
 # ── Connection & Bootstrap Helpers ───────────────────────────────────────────
 
 func get_local_player_id() -> String:
-	var session := get_node_or_null("/root/PlayerSession")
-	if session == null or session.get("data") == null:
+	if _local_view == null:
+		_local_view = get_node_or_null("/root/LocalPlayerView")
+	if _local_view == null:
 		return ""
-	var pdata = session.get("data")
-	if pdata != null:
-		var pid := OS.get_process_id()
-		return "%s_%d" % [pdata.display_name, pid]
-	return ""
+	return str(_local_view.call("get_network_player_id")).strip_edges()
+
+
+func _session_token() -> String:
+	var gateway := get_node_or_null("/root/WorldGateway")
+	if gateway == null or not gateway.has_method("session_token"):
+		return ""
+	return str(gateway.call("session_token"))
 
 
 func is_connected_to_host() -> bool:
@@ -509,19 +565,81 @@ func is_session_active() -> bool:
 	return _session_active
 
 
+func is_session_pending() -> bool:
+	return _session_pending
+
+
 func begin_multiplayer_session() -> void:
-	if _session_active:
+	if _session_active or _session_pending:
 		return
+	if _gateway == null:
+		_gateway = get_node_or_null("/root/WorldGateway")
+	if _gateway == null:
+		_fail_realtime_session("authority_unavailable", "World authority is unavailable.")
+		return
+	if not bool(_gateway.call("is_ready")):
+		_session_pending = true
+		print("[NetworkManager] Waiting for the authority session before opening UDP replication.")
+		return
+	_activate_multiplayer_transport()
+
+
+func _activate_multiplayer_transport() -> void:
+	var local_id := get_local_player_id()
+	var token := _session_token()
+	if local_id.is_empty() or token.is_empty():
+		_fail_realtime_session(
+			"authority_session_invalid",
+			"Authority accepted the join without a usable captain identity or session token.",
+		)
+		return
+	_session_pending = false
 	_session_active = true
+	_last_session_send_ms = 0
 	if drawing_service != null:
 		drawing_service.visible = true
+	print(
+		"[NetworkManager] Starting UDP replication actor=%s endpoint=%s:%d"
+		% [local_id, str(ServerConfig.udp_host), int(ServerConfig.udp_port)]
+	)
 	client.call("request_connect")
+	realtime_session_started.emit()
+
+
+func _on_authority_session_ready(remote: bool, _session: Dictionary) -> void:
+	if not remote or not _session_pending:
+		return
+	_activate_multiplayer_transport()
+
+
+func _on_authority_error(code: String, message: String) -> void:
+	if _session_pending or (_session_active and _session_token().is_empty()):
+		_fail_realtime_session(code, message)
+
+
+func _on_authority_session_closed() -> void:
+	if not _session_active and not _session_pending:
+		return
+	_fail_realtime_session("authority_session_closed", "The server closed the multiplayer session.")
+
+
+func _fail_realtime_session(code: String, message: String) -> void:
+	var was_running := _session_active or _session_pending
+	_session_active = false
+	_session_pending = false
+	if drawing_service != null:
+		drawing_service.visible = false
+	close_connection()
+	push_error("[NetworkManager] Realtime session failed (%s): %s" % [code, message])
+	if was_running:
+		realtime_session_failed.emit(code, message)
 
 
 func end_multiplayer_session(silent: bool = false) -> void:
 	if _session_active and not silent:
 		_send_logout_packet()
 	_session_active = false
+	_session_pending = false
 	if drawing_service != null:
 		drawing_service.visible = false
 	close_connection()
@@ -536,7 +654,10 @@ func _send_logout_packet() -> void:
 	if local_id.is_empty():
 		return
 	print("[NetworkManager] Gracefully declaring logout to server for: ", local_id)
-	var pkt := WireProtocolClass.encode_logout(local_id)
+	var token := _session_token()
+	if token.is_empty():
+		return
+	var pkt := WireProtocolClass.encode_logout(local_id, token)
 	client.call("send_packet", pkt)
 
 
@@ -553,6 +674,8 @@ func close_connection() -> void:
 	client.call("close_connection")
 	_local_senders.clear()
 	_local_ships_board_states.clear()
+	_local_ship_entity_ids.clear()
+	_last_session_send_ms = 0
 	if drawing_service != null:
 		drawing_service.clear_all(_scene_nodes)
 	_scene_nodes.clear()

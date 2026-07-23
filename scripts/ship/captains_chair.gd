@@ -296,6 +296,8 @@ func _board() -> void:
 	_player.set_physics_process(false)
 	_player.set_process_unhandled_input(false)
 	_player.velocity = Vector3.ZERO
+	if _player.has_method("set_vehicle_occupied"):
+		_player.call("set_vehicle_occupied", true)
 
 	if _boat_cam != null:
 		_boat_cam.current = true
@@ -311,6 +313,8 @@ func _exit() -> void:
 
 	if _player != null:
 		_place_player_on_deck(_player)
+		if _player.has_method("set_vehicle_occupied"):
+			_player.call("set_vehicle_occupied", false)
 		_player.set_physics_process(true)
 		_player.set_process_unhandled_input(true)
 
@@ -347,4 +351,3 @@ func _place_player_on_deck(body: CharacterBody3D) -> void:
 
 func is_occupied() -> bool:
 	return _occupied
-

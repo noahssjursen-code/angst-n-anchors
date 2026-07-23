@@ -15,6 +15,7 @@ const PRESETS := {
 		"label": "Local server",
 		"udp_host": "127.0.0.1",
 		"udp_port": 7777,
+		"http_scheme": "http",
 		"http_host": "127.0.0.1",
 		"http_port": 8080,
 	},
@@ -22,6 +23,7 @@ const PRESETS := {
 		"label": "Digital Ocean",
 		"udp_host": "142.93.43.16",
 		"udp_port": 7777,
+		"http_scheme": "http",
 		"http_host": "142.93.43.16",
 		"http_port": 8080,
 	}
@@ -32,6 +34,7 @@ const CONFIG_PATH := "user://server_config.cfg"
 var preset: String = PRESET_LOCAL
 var udp_host: String = "127.0.0.1"
 var udp_port: int = 7777
+var http_scheme: String = "http"
 var http_host: String = "127.0.0.1"
 var http_port: int = 8080
 
@@ -49,16 +52,18 @@ func use_preset(preset_name: String) -> void:
 		var data: Dictionary = PRESETS[preset_name]
 		udp_host = String(data["udp_host"])
 		udp_port = int(data["udp_port"])
+		http_scheme = _validated_http_scheme(String(data.get("http_scheme", "http")))
 		http_host = String(data["http_host"])
 		http_port = int(data["http_port"])
 		save_to_disk()
 		changed.emit()
 
 
-func use_custom(u_host: String, u_port: int, h_host: String, h_port: int) -> void:
+func use_custom(u_host: String, u_port: int, h_host: String, h_port: int, h_scheme: String = "http") -> void:
 	preset = PRESET_CUSTOM
 	udp_host = u_host
 	udp_port = u_port
+	http_scheme = _validated_http_scheme(h_scheme)
 	http_host = h_host
 	http_port = h_port
 	save_to_disk()
@@ -70,6 +75,7 @@ func save_to_disk() -> void:
 	cfg.set_value("server", "preset", preset)
 	cfg.set_value("server", "udp_host", udp_host)
 	cfg.set_value("server", "udp_port", udp_port)
+	cfg.set_value("server", "http_scheme", http_scheme)
 	cfg.set_value("server", "http_host", http_host)
 	cfg.set_value("server", "http_port", http_port)
 	var err := cfg.save(CONFIG_PATH)
@@ -87,10 +93,15 @@ func load_from_disk() -> void:
 	preset = String(cfg.get_value("server", "preset", PRESET_LOCAL))
 	udp_host = String(cfg.get_value("server", "udp_host", "127.0.0.1"))
 	udp_port = int(cfg.get_value("server", "udp_port", 7777))
+	http_scheme = _validated_http_scheme(String(cfg.get_value("server", "http_scheme", "http")))
 	http_host = String(cfg.get_value("server", "http_host", "127.0.0.1"))
 	http_port = int(cfg.get_value("server", "http_port", 8080))
 	changed.emit()
 
 
 func get_http_base_url() -> String:
-	return "http://%s:%d" % [http_host, http_port]
+	return "%s://%s:%d" % [http_scheme, http_host, http_port]
+
+
+func _validated_http_scheme(value: String) -> String:
+	return "https" if value.strip_edges().to_lower() == "https" else "http"

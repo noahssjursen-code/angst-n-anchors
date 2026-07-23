@@ -54,6 +54,7 @@ var _current_speed:    float   = 0.0
 var _was_on_floor:     bool    = true
 var _last_safe_position: Vector3 = Vector3.ZERO
 var _water_submerge_time: float = 0.0
+var _vehicle_occupied: bool = false
 
 
 func _ready() -> void:
@@ -238,6 +239,19 @@ func _process(delta: float) -> void:
 		return
 	var inputs_active := Input.mouse_mode == Input.MOUSE_MODE_CAPTURED
 	_player_camera.update(delta, velocity, _smoothed_input, is_on_floor(), inputs_active)
+
+
+func set_vehicle_occupied(occupied: bool) -> void:
+	_vehicle_occupied = occupied
+	set_meta("vehicle_occupied", occupied)
+	if _player_camera != null:
+		_player_camera.set_vehicle_occupied(occupied)
+	elif _body_npc != null:
+		_body_npc.visible = not occupied
+
+
+func is_vehicle_occupied() -> bool:
+	return _vehicle_occupied
 
 
 # ── Step climb (ghost-cast probe) ─────────────────────────────────────────────
