@@ -32,6 +32,8 @@ var _prompt_label: Label
 var _yaw_deg: float = 0.0
 var _boat_local: Vector3 = Vector3.ZERO
 var _leaf_size: Vector3 = Vector3(1.8, 2.8, 0.1)
+var _binding: WorldStateBinding
+var _pending_remote_open := -1 ## -1 none, 0 close, 1 open — remote state deferred past an animation
 
 
 func configure(
@@ -61,10 +63,16 @@ func _ready() -> void:
 	_ensure_interact_area()
 	_ensure_collider()
 	_apply_open_state(false, true)
+	_ensure_network_binding()
 
 
 func _process(_delta: float) -> void:
 	_update_prompt()
+	if not _animating and _pending_remote_open >= 0:
+		var want_open := _pending_remote_open == 1
+		_pending_remote_open = -1
+		if want_open != _open:
+			set_open(want_open)
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -79,6 +87,15 @@ func _unhandled_input(event: InputEvent) -> void:
 
 
 func toggle() -> void:
+	## Networked doors route intent through the shared state service so every
+	## client (and the late joiner) sees the same leaf. Presentation follows
+	## the authoritative echo. Without an identity or session, the door stays
+	## a plain local door (single-player fallback, shipyard previews).
+	if _binding == null:
+		_ensure_network_binding()
+	if _binding != null and WorldGateway.is_ready():
+		_binding.request("close" if _open else "open", {"open": not _open})
+		return
 	set_open(not _open)
 
 
@@ -93,6 +110,46 @@ func set_open(want_open: bool) -> void:
 
 func is_open() -> bool:
 	return _open
+
+
+## Deterministic shared identity — identical on every client that builds this
+## brick. Ship doors: durable server vessel id + brick cell. Land doors:
+## quantized world position (stable through deterministic generation).
+func _door_entity_id() -> String:
+	var cell := "%d_%d_%d" % [roundi(_boat_local.x * 2.0), roundi(_boat_local.y * 2.0), roundi(_boat_local.z * 2.0)]
+	if _boat != null and is_instance_valid(_boat):
+		var vid := str(_boat.get_meta("server_vessel_id", "")).strip_edges()
+		if vid.is_empty():
+			return "" ## unregistered vessel — stays local-only
+		return "door:%s:%s" % [vid, cell]
+	if not is_inside_tree():
+		return ""
+	var origin := global_position
+	return "door:land:%d_%d_%d" % [roundi(origin.x), roundi(origin.y), roundi(origin.z)]
+
+
+func _ensure_network_binding() -> void:
+	if _binding != null:
+		return
+	var entity_id := _door_entity_id()
+	if entity_id.is_empty():
+		return
+	_binding = WorldStateBinding.new()
+	_binding.name = "DoorStateBinding"
+	_binding.entity_id = entity_id
+	_binding.entity_kind = "door"
+	add_child(_binding)
+	_binding.authoritative_state_changed.connect(_on_authoritative_door_state)
+
+
+func _on_authoritative_door_state(state: Dictionary, _action: String, _event: Dictionary) -> void:
+	var want_open := bool(state.get("open", false))
+	if want_open == _open:
+		return
+	if _animating:
+		_pending_remote_open = 1 if want_open else 0
+		return
+	set_open(want_open)
 
 
 func _can_interact() -> bool:

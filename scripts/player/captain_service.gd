@@ -10,12 +10,15 @@ signal roster_changed(entries: Array)
 signal captain_selected(entry: Dictionary)
 signal captain_created(entry: Dictionary)
 signal captain_deleted(captain_id: String)
+signal account_changed(account: Dictionary)
+signal authentication_required
 signal error_message(message: String)
 
 var mode: Mode = Mode.LOCAL
 var remote := RemoteCaptainClient.new()
 var selected_id: String = ""
 var _entries: Array = []
+var _pending_remote_onboarding: Dictionary = {}
 
 
 func configure_local() -> void:
@@ -27,6 +30,9 @@ func configure_local() -> void:
 func configure_remote(host: Node, base_url: String) -> void:
 	mode = Mode.REMOTE
 	selected_id = ""
+	_entries = []
+	roster_changed.emit([])
+	_clear_player_session()
 	remote.setup(host, base_url)
 	if not remote.captains_listed.is_connected(_on_remote_listed):
 		remote.captains_listed.connect(_on_remote_listed)
@@ -38,7 +44,16 @@ func configure_remote(host: Node, base_url: String) -> void:
 		remote.captain_updated.connect(_on_remote_updated)
 	if not remote.request_failed.is_connected(_on_remote_failed):
 		remote.request_failed.connect(_on_remote_failed)
-	refresh()
+	if not remote.account_changed.is_connected(_on_remote_account_changed):
+		remote.account_changed.connect(_on_remote_account_changed)
+	if not remote.auth_required.is_connected(_on_remote_auth_required):
+		remote.auth_required.connect(_on_remote_auth_required)
+	if remote.has_account_session():
+		remote.validate_session()
+	else:
+		_entries = []
+		roster_changed.emit([])
+		authentication_required.emit()
 
 
 func refresh() -> void:
@@ -46,7 +61,42 @@ func refresh() -> void:
 		_entries = _local_entries()
 		roster_changed.emit(_entries)
 	else:
-		remote.list_captains()
+		if remote.has_account_session():
+			remote.list_captains()
+		else:
+			_entries = []
+			roster_changed.emit([])
+			authentication_required.emit()
+
+
+func register_remote_account(email: String, password: String) -> void:
+	if mode != Mode.REMOTE:
+		return
+	remote.register_account(email, password)
+
+
+func login_remote_account(email: String, password: String) -> void:
+	if mode != Mode.REMOTE:
+		return
+	remote.login(email, password)
+
+
+func logout_remote_account() -> void:
+	if mode != Mode.REMOTE:
+		return
+	selected_id = ""
+	_entries = []
+	roster_changed.emit([])
+	_clear_player_session()
+	remote.logout()
+
+
+func has_remote_account() -> bool:
+	return mode == Mode.REMOTE and remote.has_account_session()
+
+
+func remote_account() -> Dictionary:
+	return remote.current_account() if mode == Mode.REMOTE else {}
 
 
 func entries() -> Array:
@@ -133,6 +183,26 @@ func create_local(
 
 
 func create_remote(display_name: String, appearance: CharacterAppearance) -> void:
+	_pending_remote_onboarding = {}
+	remote.create_captain(display_name, appearance)
+
+
+func create_remote_onboarded(
+	display_name: String,
+	appearance: CharacterAppearance,
+	home_port_id: String,
+	world_seed: int,
+	company_name: String,
+	brand_color: Color,
+	starter_vessel: String,
+) -> void:
+	_pending_remote_onboarding = {
+		"home_port_id": home_port_id,
+		"world_seed": world_seed,
+		"company_name": company_name,
+		"brand_color": brand_color,
+		"starter_vessel": starter_vessel,
+	}
 	remote.create_captain(display_name, appearance)
 
 
@@ -143,11 +213,12 @@ func load_local_into_session(captain_id: String) -> bool:
 		session = tree.root.get_node_or_null("PlayerSession")
 	if session == null:
 		return false
+	if session.has_method("begin_offline_voyage"):
+		session.call("begin_offline_voyage")
 	if not LocalCaptainStore.activate(captain_id):
 		return false
 	var player := PlayerSaveStore.load_player()
 	session._load_data(player.to_dict())
-	session.begin_offline_voyage()
 	LocalCaptainStore.touch_index_from_player(session.data)
 	selected_id = captain_id
 	return true
@@ -161,13 +232,9 @@ func apply_remote_selection(entry: Dictionary) -> void:
 	if session == null:
 		return
 	var id := str(entry.get("id", ""))
-	var appearance := remote.parse_appearance(entry.get("appearance_json", entry.get("appearance", {})))
-	session.set_captain_profile(
-		id,
-		str(entry.get("display_name", "Captain")),
-		int(entry.get("marks", PlayerData.NEW_CAPTAIN_STARTING_MARKS)),
-		appearance,
-	)
+	if id.is_empty() or not session.load_remote_captain(entry):
+		error_message.emit("That captain could not be loaded from this account.")
+		return
 	selected_id = id
 	captain_selected.emit(entry)
 
@@ -208,7 +275,27 @@ func _on_remote_created(captain: Dictionary) -> void:
 		"source": "remote",
 	}
 	selected_id = str(entry.get("id", ""))
-	apply_remote_selection(entry)
+	if _pending_remote_onboarding.is_empty():
+		apply_remote_selection(entry)
+	else:
+		var tree := Engine.get_main_loop() as SceneTree
+		var session := tree.root.get_node_or_null("PlayerSession") if tree != null and tree.root != null else null
+		if session != null:
+			session.begin_remote_voyage(selected_id, true)
+			var appearance := remote.parse_appearance(entry.get("appearance_json", {}))
+			var account_id := str(remote.current_account().get("id", ""))
+			session.begin_new_captain(
+				str(entry.get("display_name", "Captain")), appearance,
+				str(_pending_remote_onboarding.get("home_port_id", "port-home")),
+				account_id, int(_pending_remote_onboarding.get("world_seed", 0)),
+				str(_pending_remote_onboarding.get("company_name", "")),
+				_pending_remote_onboarding.get("brand_color", Color("2f7f83")) as Color,
+				str(_pending_remote_onboarding.get("starter_vessel", "general_cargo")),
+				selected_id,
+			)
+			var starter: Dictionary = session.data.active_vessel.duplicate(true)
+			VesselSync.ensure_vessel_registered(session, starter)
+		_pending_remote_onboarding = {}
 	captain_created.emit(entry)
 	refresh()
 
@@ -239,3 +326,20 @@ func _on_remote_updated(_captain: Dictionary) -> void:
 
 func _on_remote_failed(_action: String, message: String) -> void:
 	error_message.emit(message)
+
+
+func _on_remote_account_changed(account: Dictionary) -> void:
+	if account.is_empty():
+		selected_id = ""
+		_entries = []
+		roster_changed.emit([])
+		_clear_player_session()
+	account_changed.emit(account.duplicate(true))
+
+
+func _on_remote_auth_required() -> void:
+	selected_id = ""
+	_entries = []
+	roster_changed.emit([])
+	_clear_player_session()
+	authentication_required.emit()

@@ -4,6 +4,7 @@ Detailed architecture reference. See also:
 - [`AGENTS.md`](AGENTS.md) — quick-start for AI agents
 - [`Angst 'n Anchors.md`](Angst%20'n%20Anchors.md) — game design overview
 - [`SAVE_FORMAT.md`](SAVE_FORMAT.md) — player save schema
+- [`MULTIPLAYER_ARCHITECTURE.md`](MULTIPLAYER_ARCHITECTURE.md) — client/server authority contract
 
 ---
 
@@ -23,6 +24,36 @@ migrate. UI reads company summaries only through `LocalPlayerView`. A future ser
 same commands and results behind transport. Crews, assignments, dynamic markets, rival companies,
 land, and facilities are not implemented yet. Do not introduce speculative `Economy`,
 `FleetManager`, `CompanyManager`, or parallel state singletons. See the [game direction](Angst%20'n%20Anchors.md).
+
+## Character Appearance
+
+Player captains and NPC workers share the versioned, JSON-safe
+`CharacterAppearance` contract and the JSON-model-backed `CharacterVisual`
+renderer. The character catalog owns cosmetic ids, complete working-look
+presets, company-uniform roles, and future authoritative inventory metadata.
+The onboarding preview and F6 wardrobe showcase instantiate that exact
+renderer; they are not separate menu-only character models.
+
+Equipped ids are presentation state, not proof of ownership. A future server
+validates cosmetic inventory before accepting an appearance update, then
+replicates the accepted appearance record to clients.
+
+### Textured JSON materials
+
+UVs, textures, and recolour masks extend the existing JSON mesh pipeline; they
+do not introduce a second model format. A mesh dictionary may contain one UV
+pair per vertex, while a model part references a reusable `texture_profile`
+from `resources/data/materials/textured_materials.json`. Red and green mask
+channels select two runtime palette colours, so company uniforms do not require
+duplicate texture files.
+
+`MeshBuilder` caches appearance-free `ArrayMesh` geometry, textures, and
+materials separately. `ModelAssembler`, `MeshTransformer`, and
+`CharacterGarment` provide stable asset/part cache ids so repeated models avoid
+rehashing or rebuilding vertex arrays. Texture/profile changes swap a cached
+material without rebuilding geometry. Procedural authors should use `MeshUv`
+for basic planar/cylindrical projections and author seam-safe vertices where a
+purpose-built atlas needs hard UV seams.
 
 ---
 
@@ -275,7 +306,21 @@ and copy `Telemetry.generate_report()` to the clipboard.
 
 ### `LocalPlayerView` — the MP seam
 
-`LocalPlayerView` is a per-client view of the local player's projection of the world. UI consults it instead of touching `PlayerSession` / `PortCatalog` directly; gameplay-mutating code continues to use the autoloads. When multiplayer lands, every UI that reads through `LocalPlayerView` keeps working with no further changes — only the autoload's internals switch from "delegate to local autoloads" to "consume the server projection."
+`LocalPlayerView` is a per-client view of the local player's projection of the world. UI consults it instead of touching `PlayerSession` / `PortCatalog` directly. Multiplayer gameplay intent goes through `WorldGateway`; accepted events and projections update the client-facing view without making UI nodes transport-aware. Single-player uses the matching in-process backend. See [`MULTIPLAYER_ARCHITECTURE.md`](MULTIPLAYER_ARCHITECTURE.md).
+
+### `WorldGateway` — the authority seam
+
+`WorldGateway` separates gameplay intent from the authority host. Its local and
+remote backends share versioned command, event, and projection contracts.
+`WorldStateBinding` handles low-frequency shared entity state, while
+`NetworkTransformBinding` handles loss-tolerant spatial replication. Port work is
+requested once and presented locally from accepted authority facts; clients do
+not manually replicate crane joints or declare timed work complete.
+
+The old multiplayer marks upload is disabled. Economy features remain local-only
+until each receives a named, validated server domain command and transactional
+ledger/inventory implementation. A generic state setter must never be used for
+money, cargo, contracts, purchases, or ownership.
 
 ---
 

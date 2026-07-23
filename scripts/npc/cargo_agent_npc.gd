@@ -10,8 +10,7 @@ var _dialogue: DialoguePanel
 
 
 func _ready() -> void:
-	clothing_color = Color(0.25, 0.38, 0.32)
-	trousers_color = Color(0.14, 0.18, 0.20)
+	appearance = CharacterCatalog.appearance_preset("shipping_manager")
 	prompt_text = "Press F — Cargo Agent"
 	super._ready()
 	if Engine.is_editor_hint():

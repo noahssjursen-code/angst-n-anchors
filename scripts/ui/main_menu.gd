@@ -18,6 +18,9 @@ var _pending_company_name := ""
 var _pending_brand_color := Color("2f7f83")
 var _pending_starter_vessel := "general_cargo"
 var _pending_seed := 0
+var _multiplayer_flow := false
+var _waiting_to_create_mp := false
+var _mp_world_options: Dictionary = {}
 
 var _captains = CaptainServiceScript.new()
 var _backdrop
@@ -35,6 +38,16 @@ var _chart_bootstrap = ChartPreviewBootstrapScript.new()
 var _server_list: VBoxContainer
 var _active_pings: Dictionary = {}
 var _mp_status: Label
+var _account_panel: VBoxContainer
+var _account_status: Label
+var _account_email: LineEdit
+var _account_password: LineEdit
+var _account_login: Button
+var _account_register: Button
+var _account_logout: Button
+var _mp_sail_requested := false
+var _authority_join_pending := false
+var _authority_join_generation := 0
 
 
 func _ready() -> void:
@@ -58,12 +71,21 @@ func _ready() -> void:
 	_captains.roster_changed.connect(_on_roster_changed)
 	_captains.captain_selected.connect(_on_captain_selected)
 	_captains.error_message.connect(_on_captain_error)
+	_captains.account_changed.connect(_on_remote_account_changed)
+	_captains.authentication_required.connect(_on_remote_authentication_required)
+	var session := get_node_or_null("/root/PlayerSession")
+	if session != null:
+		session.remote_load_completed.connect(_on_remote_load_completed)
+		session.remote_save_conflict.connect(_on_remote_save_conflict)
+	var gateway := get_node_or_null("/root/WorldGateway")
+	if gateway != null:
+		gateway.session_ready.connect(_on_authority_session_ready)
+		gateway.authority_error.connect(_on_authority_session_error)
 	_captains.remote.world_options_ready.connect(_on_world_options)
 	_captains.remote.request_failed.connect(func(action: String, message: String) -> void:
 		if action == "world_options":
+			_waiting_to_create_mp = false
 			_mp_status.text = message
-			WorldBootstrapScript.apply_seed(42)
-			WorldBootstrapScript.enter_world(get_tree(), true)
 		else:
 			_on_captain_error(message)
 	)
@@ -174,9 +196,47 @@ func _build_multiplayer_page() -> void:
 	var rule := HSeparator.new()
 	vbox.add_child(rule)
 
+	_account_panel = VBoxContainer.new()
+	_account_panel.add_theme_constant_override("separation", 7)
+	vbox.add_child(_account_panel)
+	var account_heading := Label.new()
+	account_heading.text = "SERVER ACCOUNT"
+	HudStyle.apply_body_font(account_heading, 11, HudStyle.C_COPPER, true)
+	_account_panel.add_child(account_heading)
+	_account_status = Label.new()
+	_account_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	HudStyle.apply_body_font(_account_status, 12, HudStyle.C_LABEL)
+	_account_panel.add_child(_account_status)
+	_account_email = LineEdit.new()
+	_account_email.placeholder_text = "Email"
+	_account_email.custom_minimum_size.y = 34
+	_account_panel.add_child(_account_email)
+	_account_password = LineEdit.new()
+	_account_password.placeholder_text = "Password (10 characters minimum)"
+	_account_password.secret = true
+	_account_password.custom_minimum_size.y = 34
+	_account_password.text_submitted.connect(func(_value: String) -> void: _login_remote_account())
+	_account_panel.add_child(_account_password)
+	var account_actions := HBoxContainer.new()
+	account_actions.add_theme_constant_override("separation", 8)
+	_account_panel.add_child(account_actions)
+	_account_login = Button.new()
+	_account_login.text = "Log in"
+	_account_login.pressed.connect(_login_remote_account)
+	account_actions.add_child(_account_login)
+	_account_register = Button.new()
+	_account_register.text = "Create account"
+	_account_register.pressed.connect(_register_remote_account)
+	account_actions.add_child(_account_register)
+	_account_logout = Button.new()
+	_account_logout.text = "Sign out"
+	_account_logout.visible = false
+	_account_logout.pressed.connect(_logout_remote_account)
+	account_actions.add_child(_account_logout)
+
 	_mp_roster = RosterPanelScript.new()
 	_mp_roster.configure(false, OS.is_debug_build(), func(entry: Dictionary) -> void:
-		_captains.remote.update_marks(str(entry.get("id", "")), int(entry.get("marks", 0)) + 1_000_000)
+		push_warning("Debug balance writes are disabled in multiplayer; economy mutations are server-authoritative.")
 	)
 	_mp_roster.sail_pressed.connect(_on_mp_sail)
 	_mp_roster.delete_pressed.connect(func(id: String) -> void: _captains.delete_selected_or(id))
@@ -186,8 +246,11 @@ func _build_multiplayer_page() -> void:
 	vbox.add_child(_mp_roster)
 
 	_mp_status = Label.new()
+	_mp_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	HudStyle.apply_body_font(_mp_status, 12, HudStyle.C_LABEL)
 	vbox.add_child(_mp_status)
+	_mp_roster.visible = false
+	_account_status.text = "Select a server, then log in to see your captains."
 
 	_add_action(vbox, "Back", func() -> void: _show_page(Page.MODE_SELECT))
 
@@ -234,15 +297,15 @@ func _show_page(page: Page) -> void:
 	if page != Page.HOME_PORT:
 		_teardown_home_port_chart()
 
-	var config := get_node_or_null("/root/ServerConfig")
-	if config != null:
-		config.set("is_multiplayer_mode", page == Page.MULTIPLAYER)
-
 	match page:
 		Page.SINGLEPLAYER:
+			_multiplayer_flow = false
+			_set_multiplayer_mode(false)
 			_backdrop.set_cinematic("singleplayer")
 			_captains.configure_local()
 		Page.MULTIPLAYER:
+			_multiplayer_flow = true
+			_set_multiplayer_mode(true)
 			_backdrop.set_cinematic("multiplayer")
 			_refresh_servers()
 		Page.CREATOR:
@@ -250,6 +313,8 @@ func _show_page(page: Page) -> void:
 		Page.COMPANY_SETUP:
 			_backdrop.set_cinematic("creator")
 		_:
+			if page == Page.MODE_SELECT:
+				_multiplayer_flow = false
 			_backdrop.set_cinematic("mode")
 			_ensure_menu_offline()
 
@@ -270,14 +335,30 @@ func _on_captain_selected(_entry: Dictionary) -> void:
 
 func _on_captain_error(message: String) -> void:
 	if _page == Page.MULTIPLAYER and _mp_roster != null:
-		_mp_roster.set_message(message)
+		if not _captains.has_remote_account() and _account_status != null:
+			_set_account_form_busy(false)
+			_account_status.text = message
+		else:
+			_mp_roster.set_message(message)
 	elif _page == Page.SINGLEPLAYER and _sp_roster != null:
 		_sp_roster.set_message(message)
 
 
 func _on_new_captain() -> void:
+	if _page == Page.MULTIPLAYER and not _captains.has_remote_account():
+		_account_status.text = "Log in before creating a captain on this server."
+		return
 	_creating_new = true
-	_pending_seed = WorldBootstrapScript.roll_seed() if _page == Page.SINGLEPLAYER else 0
+	_multiplayer_flow = _page == Page.MULTIPLAYER
+	if _multiplayer_flow:
+		_pending_seed = int(_mp_world_options.get("world_seed", 0))
+		if _pending_seed <= 0:
+			_waiting_to_create_mp = true
+			_mp_status.text = "Loading authoritative world settings…"
+			_captains.remote.fetch_world_options()
+			return
+	else:
+		_pending_seed = WorldBootstrapScript.roll_seed()
 	_creator.open_with_existing(null)
 	_show_page(Page.CREATOR)
 
@@ -285,12 +366,6 @@ func _on_new_captain() -> void:
 func _on_creator_confirmed(display_name: String, appearance: CharacterAppearance) -> void:
 	_pending_name = display_name
 	_pending_appearance = appearance
-	var config := get_node_or_null("/root/ServerConfig")
-	var is_mp := config != null and bool(config.get("is_multiplayer_mode"))
-	if is_mp:
-		_captains.create_remote(display_name, appearance)
-		_show_page(Page.MULTIPLAYER)
-		return
 	if _creating_new:
 		_company_setup.open_for_captain(_pending_name)
 		_show_page(Page.COMPANY_SETUP)
@@ -300,8 +375,7 @@ func _on_creator_confirmed(display_name: String, appearance: CharacterAppearance
 
 func _on_creator_cancelled() -> void:
 	_creating_new = false
-	var config := get_node_or_null("/root/ServerConfig")
-	if config != null and bool(config.get("is_multiplayer_mode")):
+	if _multiplayer_flow:
 		_show_page(Page.MULTIPLAYER)
 	else:
 		_show_page(Page.SINGLEPLAYER)
@@ -311,11 +385,26 @@ func _on_company_confirmed(company_name: String, brand_color: Color, starter_ves
 	_pending_company_name = company_name
 	_pending_brand_color = brand_color
 	_pending_starter_vessel = starter_vessel
+	# Brand colours are part of the shared appearance record so future company
+	# uniforms render identically for the player, hired NPCs and remote clients.
+	if _pending_appearance != null:
+		_pending_appearance.company_primary_color = brand_color
+		_pending_appearance.company_secondary_color = _company_accent_for(brand_color)
 	_show_home_port_picker()
+
+
+static func _company_accent_for(primary: Color) -> Color:
+	# Preserve the game's practical maritime palette while guaranteeing enough
+	# contrast for badges, reflective trim and later vessel/company markings.
+	return Color("d79a35") if primary.get_luminance() < 0.48 else Color("263640")
 
 
 func _show_home_port_picker() -> void:
 	if _pending_seed <= 0:
+		if _multiplayer_flow:
+			_mp_status.text = "Server world settings are not ready."
+			_show_page(Page.MULTIPLAYER)
+			return
 		_pending_seed = WorldBootstrapScript.roll_seed()
 	WorldBootstrapScript.apply_seed(_pending_seed)
 	var settings := get_node_or_null("/root/GameSettings")
@@ -360,6 +449,14 @@ func _on_home_port_confirmed(port_id: String) -> void:
 	var world_preset := str(preview_snapshot.world_preset) \
 			if preview_snapshot != null else "standard"
 	WorldBootstrapScript.apply_seed(_pending_seed, gen_version, preview_checksum, 3, world_size_m, world_preset)
+	if _multiplayer_flow:
+		_captains.create_remote_onboarded(
+			_pending_name, _pending_appearance, port_id, _pending_seed,
+			_pending_company_name, _pending_brand_color, _pending_starter_vessel,
+		)
+		_creating_new = false
+		_show_page(Page.MULTIPLAYER)
+		return
 	_captains.create_local(
 		_pending_name, _pending_appearance, port_id, _pending_seed,
 		_pending_company_name, _pending_brand_color, _pending_starter_vessel,
@@ -404,26 +501,190 @@ func _on_sp_sail(captain_id: String) -> void:
 
 
 func _on_mp_select(captain_id: String) -> void:
+	if not _captains.has_remote_account():
+		_account_status.text = "Log in before selecting a captain."
+		return
 	for entry_raw in _captains.entries():
 		if typeof(entry_raw) != TYPE_DICTIONARY:
 			continue
 		var entry := entry_raw as Dictionary
 		if str(entry.get("id", "")) == captain_id:
+			_mp_status.text = "Loading captain progress…"
 			_captains.apply_remote_selection(entry)
 			return
 
 
-func _on_mp_sail(_captain_id: String) -> void:
+func _on_mp_sail(captain_id: String) -> void:
+	if not _captains.has_remote_account():
+		_account_status.text = "Log in before joining shared waters."
+		return
 	if _captains.selected_id.is_empty():
+		return
+	_mp_sail_requested = true
+	var session := get_node_or_null("/root/PlayerSession")
+	if session == null or not session.is_remote_captain_ready(captain_id):
+		_mp_status.text = "Loading captain progress…"
+		_on_mp_select(captain_id)
 		return
 	_mp_status.text = "Loading world settings…"
 	_captains.remote.fetch_world_options()
 
 
 func _on_world_options(options: Dictionary) -> void:
+	var seed := WorldBootstrapScript.apply_mp_world_options(options)
+	if seed <= 0:
+		_waiting_to_create_mp = false
+		_mp_status.text = "Server returned invalid world settings."
+		return
+	_mp_world_options = options.duplicate(true)
+	_pending_seed = seed
 	_mp_status.text = ""
-	WorldBootstrapScript.apply_mp_world_options(options)
-	WorldBootstrapScript.enter_world(get_tree(), true)
+	if _waiting_to_create_mp:
+		_waiting_to_create_mp = false
+		_creator.open_with_existing(null)
+		_show_page(Page.CREATOR)
+		return
+	var session := get_node_or_null("/root/PlayerSession")
+	if not _captains.selected_id.is_empty() and (
+			session == null or not session.is_remote_captain_ready(_captains.selected_id)
+	):
+		_mp_status.text = "Captain progress is still loading."
+		return
+	_begin_authority_join()
+
+
+func _begin_authority_join() -> void:
+	if _authority_join_pending:
+		return
+	var gateway := get_node_or_null("/root/WorldGateway")
+	if gateway == null:
+		_mp_sail_requested = false
+		_mp_status.text = "World authority is unavailable."
+		return
+	_authority_join_pending = true
+	_authority_join_generation += 1
+	var generation := _authority_join_generation
+	_mp_status.text = "Joining server…"
+	gateway.call("begin_session", true)
+	get_tree().create_timer(10.0, true).timeout.connect(func() -> void:
+		if not _authority_join_pending or generation != _authority_join_generation:
+			return
+		_cancel_authority_join()
+		_mp_status.text = "The server did not accept the world session in time."
+	)
+
+
+func _on_authority_session_ready(remote: bool, authority_session: Dictionary) -> void:
+	if not _authority_join_pending:
+		return
+	var token := str(authority_session.get("session_token", "")).strip_edges()
+	if not remote or token.is_empty():
+		_cancel_authority_join()
+		_mp_status.text = "Server accepted an invalid multiplayer session."
+		return
+	_authority_join_pending = false
+	_authority_join_generation += 1
+	_mp_sail_requested = false
+	_mp_status.text = "Joined. Preparing voyage…"
+	WorldBootstrapScript.enter_world(get_tree(), true, true)
+
+
+func _on_authority_session_error(code: String, message: String) -> void:
+	if not _authority_join_pending:
+		return
+	_cancel_authority_join()
+	_mp_status.text = "%s (%s)" % [message, code]
+
+
+func _cancel_authority_join() -> void:
+	_authority_join_pending = false
+	_authority_join_generation += 1
+	_mp_sail_requested = false
+	var gateway := get_node_or_null("/root/WorldGateway")
+	if gateway != null and gateway.has_method("stop_session"):
+		gateway.call("stop_session")
+
+
+func _login_remote_account() -> void:
+	var email := _account_email.text.strip_edges()
+	var password := _account_password.text
+	if email.is_empty() or password.is_empty():
+		_account_status.text = "Enter your email and password."
+		return
+	_set_account_form_busy(true)
+	_account_status.text = "Signing in…"
+	_captains.login_remote_account(email, password)
+	_account_password.clear()
+
+
+func _register_remote_account() -> void:
+	var email := _account_email.text.strip_edges()
+	var password := _account_password.text
+	if email.is_empty() or password.length() < 10:
+		_account_status.text = "Use a valid email and a password of at least 10 characters."
+		return
+	_set_account_form_busy(true)
+	_account_status.text = "Creating account…"
+	_captains.register_remote_account(email, password)
+	_account_password.clear()
+
+
+func _logout_remote_account() -> void:
+	_mp_sail_requested = false
+	_captains.logout_remote_account()
+	_account_status.text = "Signing out…"
+
+
+func _on_remote_account_changed(account: Dictionary) -> void:
+	_set_account_form_busy(false)
+	var signed_in := not account.is_empty()
+	_account_email.visible = not signed_in
+	_account_password.visible = not signed_in
+	_account_login.visible = not signed_in
+	_account_register.visible = not signed_in
+	_account_logout.visible = signed_in
+	_mp_roster.visible = signed_in
+	if signed_in:
+		_account_status.text = "Signed in as %s" % str(account.get("email", "account"))
+	else:
+		_account_status.text = "Log in to see the captains owned by your account on this server."
+		_mp_status.text = ""
+
+
+func _on_remote_authentication_required() -> void:
+	_on_remote_account_changed({})
+
+
+func _set_account_form_busy(busy: bool) -> void:
+	if _account_email == null:
+		return
+	_account_email.editable = not busy
+	_account_password.editable = not busy
+	_account_login.disabled = busy
+	_account_register.disabled = busy
+
+
+func _on_remote_load_completed(captain_id: String, success: bool, message: String) -> void:
+	if captain_id != _captains.selected_id:
+		return
+	if not success:
+		_mp_sail_requested = false
+		_mp_status.text = message
+		return
+	_mp_status.text = "Captain ready."
+	if _mp_sail_requested:
+		_mp_status.text = "Loading world settings…"
+		_captains.remote.fetch_world_options()
+
+
+func _on_remote_save_conflict(_captain_id: String, _current_revision: int) -> void:
+	_mp_status.text = "This captain changed on another device. Return to the menu and reload before continuing."
+
+
+func _set_multiplayer_mode(enabled: bool) -> void:
+	var config := get_node_or_null("/root/ServerConfig")
+	if config != null:
+		config.set("is_multiplayer_mode", enabled)
 
 
 func _refresh_servers() -> void:
@@ -438,9 +699,9 @@ func _refresh_servers() -> void:
 	if config == null:
 		return
 	var servers: Array = [
-		{"id": "local", "label": "Localhost", "is_preset": true, "host": "127.0.0.1", "http_host": "127.0.0.1", "http_port": 8080},
-		{"id": "digital_ocean", "label": "Ocean server", "is_preset": true, "host": "142.93.43.16", "http_host": "142.93.43.16", "http_port": 8080},
-		{"id": "custom", "label": "Custom", "is_preset": false, "host": str(config.get("udp_host")), "http_host": str(config.get("http_host")), "http_port": int(config.get("http_port"))},
+		{"id": "local", "label": "Localhost", "is_preset": true, "host": "127.0.0.1", "http_scheme": "http", "http_host": "127.0.0.1", "http_port": 8080},
+		{"id": "digital_ocean", "label": "Ocean server", "is_preset": true, "host": "142.93.43.16", "http_scheme": "http", "http_host": "142.93.43.16", "http_port": 8080},
+		{"id": "custom", "label": "Custom", "is_preset": false, "host": str(config.get("udp_host")), "http_scheme": str(config.get("http_scheme")), "http_host": str(config.get("http_host")), "http_port": int(config.get("http_port"))},
 	]
 	for s in servers:
 		_add_server_row(s, config)
@@ -476,14 +737,21 @@ func _add_server_row(s: Dictionary, config: Node) -> void:
 		name_lbl.add_theme_color_override("font_color", HudStyle.C_AMBER)
 	else:
 		select_btn.pressed.connect(func() -> void:
+			# World identity belongs to the selected server. Never reuse options
+			# fetched from a previously selected host.
+			_mp_world_options.clear()
+			_pending_seed = 0
+			_waiting_to_create_mp = false
 			if bool(s["is_preset"]):
 				config.call("use_preset", str(s["id"]))
 			else:
-				config.call("use_custom", str(s["host"]), int(config.get("udp_port")), str(s["http_host"]), int(s["http_port"]))
+				config.call("use_custom", str(s["host"]), int(config.get("udp_port")), str(s["http_host"]), int(s["http_port"]), str(s["http_scheme"]))
 			_refresh_servers()
 		)
 
-	var http_url := "http://%s:%d/v1/entities" % [s["http_host"], s["http_port"]]
+	## The server browser uses the public health summary. Live entity inspection
+	## is a private opt-in debug route and must not be required for joining.
+	var http_url := "%s://%s:%d/healthz" % [s["http_scheme"], s["http_host"], s["http_port"]]
 	var start_time := Time.get_ticks_msec()
 	var http_req := HTTPRequest.new()
 	add_child(http_req)
@@ -502,10 +770,11 @@ func _add_server_row(s: Dictionary, config: Node) -> void:
 			var count := 0
 			var parsed: Variant = JSON.parse_string(body.get_string_from_utf8())
 			if typeof(parsed) == TYPE_DICTIONARY:
-				count = int((parsed as Dictionary).get("count", 0))
+				count = int((parsed as Dictionary).get("active_sessions", 0))
 			players_lbl.text = "%d active" % count
 			if is_active:
-				_captains.configure_remote(self, "http://%s:%d" % [s["http_host"], s["http_port"]])
+				_captains.configure_remote(self, "%s://%s:%d" % [s["http_scheme"], s["http_host"], s["http_port"]])
+				_on_remote_account_changed(_captains.remote_account())
 		else:
 			status_dot.add_theme_color_override("font_color", Color.RED)
 			ping_lbl.text = "Offline"
@@ -521,12 +790,17 @@ func _add_server_row(s: Dictionary, config: Node) -> void:
 
 
 func _ensure_menu_offline() -> void:
+	if _authority_join_pending:
+		_cancel_authority_join()
 	var config := get_node_or_null("/root/ServerConfig")
 	if config != null:
 		config.set("is_multiplayer_mode", false)
 	var network := get_node_or_null("/root/NetworkManager")
 	if network != null and network.has_method("end_multiplayer_session"):
 		network.call("end_multiplayer_session", true)
+	var gateway := get_node_or_null("/root/WorldGateway")
+	if gateway != null and gateway.has_method("stop_session"):
+		gateway.call("stop_session")
 
 
 func _on_quit() -> void:

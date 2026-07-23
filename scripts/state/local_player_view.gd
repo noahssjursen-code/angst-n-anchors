@@ -48,6 +48,46 @@ func get_display_name() -> String:
 	return str(_session.data.display_name)
 
 
+func get_captain_id() -> String:
+	if _session == null or _session.data == null:
+		return ""
+	return str(_session.data.captain_id)
+
+
+func get_account_id() -> String:
+	if _session == null or _session.data == null:
+		return ""
+	return str(_session.data.account_id)
+
+
+## Stable identity used by transient multiplayer replication. A multiplayer
+## session must have a server-issued captain id before UDP replication begins.
+func get_network_player_id() -> String:
+	var captain_id := get_captain_id().strip_edges()
+	if not captain_id.is_empty():
+		return captain_id
+	return get_account_id().strip_edges()
+
+
+func get_appearance() -> CharacterAppearance:
+	if _session == null or _session.data == null:
+		return CharacterAppearance.default_appearance()
+	var appearance := _session.data.appearance as CharacterAppearance
+	return appearance if appearance != null else CharacterAppearance.default_appearance()
+
+
+func get_active_vessel_record() -> Dictionary:
+	if _session == null or _session.data == null:
+		return {}
+	return _session.data.get_active_vessel_record()
+
+
+func get_world_context() -> Dictionary:
+	if _session == null or _session.data == null:
+		return {}
+	return (_session.data.world_context as Dictionary).duplicate(true)
+
+
 func get_company_summary() -> Dictionary:
 	if _session == null or not _session.has_method("get_company_summary"):
 		return {}

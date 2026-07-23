@@ -2,6 +2,8 @@
 class_name ModelAssembler
 extends Node3D
 
+const TEXTURE_MATERIAL_CATALOG := preload("res://scripts/core/texture_material_catalog.gd")
+
 ## Generic multi-part JSON model loader.
 ##
 ## This is intentionally not ship-specific. A model assembly is just a list of
@@ -28,6 +30,11 @@ extends Node3D
 ##       "color": [0.1, 0.1, 0.1],
 ##       "roughness": 0.9,
 ##       "metallic": 0.0,
+##       "texture_profile": "painted_company_panel", // optional shared profile
+##       "texture": "res://...png",                  // optional direct override
+##       "texture_mask": "res://..._mask.png",       // red/green palette mask
+##       "primary_color": [0.1, 0.2, 0.3, 1.0],
+##       "secondary_color": [0.8, 0.8, 0.7, 1.0],
 ##       "invert_collision_face_winding": false,
 ##       "collision_double_sided": true, // concave only: default true (thin walls solid both sides)
 ##       "collision": "convex"      // optional: "none" | "convex" | "concave"
@@ -175,9 +182,12 @@ func _build_part(part: Dictionary) -> void:
 
 	node.rebuild_suspended = true
 	if typeof(mesh_value) == TYPE_DICTIONARY:
+		node.mesh_geometry_cache_id = "%s::part:%s" % [model_data_path, part_name]
 		node.mesh_data = mesh_value
 	else:
-		node.mesh_data_path = _resolve_mesh_path(str(mesh_value))
+		var resolved_mesh_path := _resolve_mesh_path(str(mesh_value))
+		node.mesh_geometry_cache_id = resolved_mesh_path
+		node.mesh_data_path = resolved_mesh_path
 	node.absolute_scale = absolute_scale * float(part.get("scale", 1.0))
 	var part_rot := _vector3_from_array(part.get("rotation_degrees", []), Vector3.ZERO)
 	## Parent-chain parts need Node3D rotation so children inherit it.
@@ -189,9 +199,14 @@ func _build_part(part: Dictionary) -> void:
 		node.rotation_degrees = Vector3.ZERO
 		node.mesh_rotation_degrees = part_rot
 	node.center_mesh = bool(part.get("center_mesh", false))
-	node.mesh_color = _color_from_array(part.get("color", [0.5, 0.5, 0.5]), Color(0.5, 0.5, 0.5))
-	node.mesh_roughness = float(part.get("roughness", 0.85))
-	node.mesh_metallic = float(part.get("metallic", 0.0))
+	var appearance := _texture_appearance(part)
+	node.mesh_color = TEXTURE_MATERIAL_CATALOG.color_value(appearance.get("color", [0.5, 0.5, 0.5]), Color(0.5, 0.5, 0.5))
+	node.mesh_roughness = float(appearance.get("roughness", 0.85))
+	node.mesh_metallic = float(appearance.get("metallic", 0.0))
+	node.mesh_texture_path = _resolve_texture_path(str(appearance.get("texture", "")))
+	node.mesh_texture_mask_path = _resolve_texture_path(str(appearance.get("texture_mask", "")))
+	node.mesh_primary_color = TEXTURE_MATERIAL_CATALOG.color_value(appearance.get("primary_color", Color.WHITE))
+	node.mesh_secondary_color = TEXTURE_MATERIAL_CATALOG.color_value(appearance.get("secondary_color", Color.WHITE))
 	node.mesh_material_tag = str(part.get("material", ""))
 	node.material_exposed_to_weather = bool(part.get("weather_exposed", true))
 	node.invert_collision_face_winding = bool(part.get("invert_collision_face_winding", false))
@@ -213,6 +228,14 @@ func _build_part(part: Dictionary) -> void:
 		if not _part_nodes_by_role.has(role):
 			_part_nodes_by_role[role] = []
 		_part_nodes_by_role[role].append(node)
+
+
+func _texture_appearance(part: Dictionary) -> Dictionary:
+	var result: Dictionary = TEXTURE_MATERIAL_CATALOG.resolve(str(part.get("texture_profile", "")))
+	for key in ["texture", "texture_mask", "primary_color", "secondary_color", "color", "roughness", "metallic"]:
+		if part.has(key):
+			result[key] = part[key]
+	return result
 
 
 func _build_nested_model(part_name: String, part: Dictionary) -> void:
@@ -342,6 +365,14 @@ func _resolve_mesh_path(mesh_path: String) -> String:
 		return mesh_data_path
 
 	return local_path
+
+
+func _resolve_texture_path(texture_path: String) -> String:
+	if texture_path.is_empty():
+		return ""
+	if texture_path.begins_with("res://") or texture_path.begins_with("user://"):
+		return texture_path
+	return model_data_path.get_base_dir().path_join(texture_path)
 
 
 func _resolve_model_path(model_path: String) -> String:

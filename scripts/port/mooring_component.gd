@@ -5,6 +5,14 @@ extends Node3D
 ## different berths). HUDs subscribe via the `LocalPlayerView.helmed_boat`
 ## reference to surface a brief toast to the player.
 signal mooring_rejected(reason: String)
+## Semantic mooring fact for reliable world authority. Rope geometry remains a
+## local presentation derived from the berth's bollards and the vessel's cleats.
+signal mooring_state_changed(
+	port_id: String,
+	berth_id: String,
+	bow_line: bool,
+	stern_line: bool,
+)
 
 ## Ship cleats: any `Node3D` in group `SHIP_MOORING_CLEAT_GROUP` under this vessel's
 ## `RigidBody3D` root. Distance is from cleat anchor to **this dock post's** anchor.
@@ -88,6 +96,10 @@ var _bow_rope_holder: Node3D
 var _stern_rope_holder: Node3D
 ## Set when a tie is rejected (e.g. lines on different berths); cleared on success.
 var last_mooring_reject: String = ""
+var _suppress_state_signal := false
+var _last_emitted_state := ""
+var _known_port_id := ""
+var _known_berth_id := ""
 
 
 func _ready() -> void:
@@ -464,9 +476,12 @@ func moor_to_posts(front_post: Node, rear_post: Node) -> void:
 	is_moored = true
 	_capture_rest_distances()
 	_sync_berth_with_dock()
+	_remember_authority_identity()
+	_emit_mooring_state()
 
 
 func release_mooring() -> void:
+	_remember_authority_identity()
 	is_moored = false
 	bow_line_tied = false
 	stern_line_tied = false
@@ -479,6 +494,7 @@ func release_mooring() -> void:
 	_bow_point = null
 	_stern_point = null
 	_hide_all_rope_segments()
+	_emit_mooring_state()
 
 
 func is_mooring_line_tied_from_post(post: Node) -> bool:
@@ -544,6 +560,7 @@ func toggle_line_from_post(post: Node) -> bool:
 
 
 func set_line_tied(forward_slot: bool, tied: bool) -> void:
+	_remember_authority_identity()
 	if forward_slot:
 		bow_line_tied = tied
 	else:
@@ -560,6 +577,98 @@ func set_line_tied(forward_slot: bool, tied: bool) -> void:
 	else:
 		_capture_rest_distances()
 	_sync_berth_with_dock()
+	_emit_mooring_state()
+
+
+## Rebuild the local rope presentation from an authoritative berth assignment.
+## This is deliberately semantic replication: no rope vertices or transforms
+## cross the network.
+func apply_authoritative_state(
+		slot: QuayBerthSlot,
+		bow_line: bool,
+		stern_line: bool,
+) -> bool:
+	if slot == null or not is_instance_valid(slot):
+		return false
+	_known_berth_id = slot.berth_id
+	var harbour := slot.get_parent()
+	while harbour != null and not (harbour is PortPlot):
+		harbour = harbour.get_parent()
+	if harbour is PortPlot:
+		_known_port_id = (harbour as PortPlot).port_id
+
+	_suppress_state_signal = true
+	if not bow_line and not stern_line:
+		release_mooring()
+		_suppress_state_signal = false
+		_last_emitted_state = _state_signature()
+		return true
+
+	var posts := slot.bollards()
+	if posts.size() < 2:
+		_suppress_state_signal = false
+		return false
+	moor_to_nearest_of(posts)
+	bow_line_tied = bow_line
+	stern_line_tied = stern_line
+	is_moored = bow_line or stern_line
+	if is_moored:
+		_capture_rest_distances()
+		_update_rope_visuals()
+	else:
+		_hide_all_rope_segments()
+	_sync_berth_with_dock()
+	_suppress_state_signal = false
+	_last_emitted_state = _state_signature()
+	return true
+
+
+func _remember_authority_identity() -> void:
+	var ship := _resolve_boat_body()
+	var harbour := _resolve_harbour_controller()
+	if harbour != null:
+		_known_port_id = harbour.port_id()
+		var berth_id := harbour.ship_berth_id(ship)
+		if berth_id.is_empty():
+			var slot := _resolve_berth_slot(harbour)
+			if slot != null:
+				berth_id = slot.berth_id
+		if not berth_id.is_empty():
+			_known_berth_id = berth_id
+	if ship != null:
+		var port_meta := str(ship.get_meta("harbour_port_id", "")).strip_edges()
+		var berth_meta := str(ship.get_meta("harbour_berth_id", "")).strip_edges()
+		if not port_meta.is_empty():
+			_known_port_id = port_meta
+		if not berth_meta.is_empty():
+			_known_berth_id = berth_meta
+
+
+func _state_signature() -> String:
+	return "%s|%s|%d|%d" % [
+		_known_port_id,
+		_known_berth_id,
+		int(bow_line_tied),
+		int(stern_line_tied),
+	]
+
+
+func _emit_mooring_state() -> void:
+	if _suppress_state_signal:
+		return
+	_remember_authority_identity()
+	if _known_port_id.is_empty() or _known_berth_id.is_empty():
+		return
+	var signature := _state_signature()
+	if signature == _last_emitted_state:
+		return
+	_last_emitted_state = signature
+	mooring_state_changed.emit(
+		_known_port_id,
+		_known_berth_id,
+		bow_line_tied,
+		stern_line_tied,
+	)
 
 
 func is_slot_tied(forward_slot: bool) -> bool:

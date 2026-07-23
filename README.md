@@ -48,6 +48,7 @@ The repository currently contains the technical and playable foundations rather 
 - data-driven cargo foundations
 - authoritative, deterministic maritime traffic-network foundations
 - player persistence and multiplayer-facing state seams
+- authenticated multiplayer authority with reliable commands/events/projections and AOI transform replication
 - single-player company onboarding with three certified starter careers
 - company identity, ledger-backed money, owned inventory, and warehouse-lease foundations
 
@@ -66,6 +67,7 @@ For deeper context, see:
 
 - [Game direction](Angst%20'n%20Anchors.md)
 - [Architecture](ARCHITECTURE.md)
+- [Multiplayer client architecture](MULTIPLAYER_ARCHITECTURE.md)
 - [Contributor and agent guidance](AGENTS.md)
 - [Save format](SAVE_FORMAT.md)
 

@@ -1,0 +1,40 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/character/character_customization_showcase.gd" id="1"]
+
+[sub_resource type="Environment" id="Environment_character"]
+background_mode = 1
+background_color = Color(0.018, 0.027, 0.035, 1)
+ambient_light_source = 3
+ambient_light_color = Color(0.42, 0.53, 0.61, 1)
+ambient_light_energy = 0.48
+tonemap_mode = 2
+
+[node name="CharacterCustomizationShowcase" type="Node3D"]
+script = ExtResource("1")
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
+environment = SubResource("Environment_character")
+
+[node name="KeyLight" type="DirectionalLight3D" parent="."]
+rotation_degrees = Vector3(-42, -28, 0)
+light_color = Color(0.91, 0.94, 1, 1)
+light_energy = 1.35
+shadow_enabled = true
+
+[node name="RimLight" type="OmniLight3D" parent="."]
+position = Vector3(-1.6, 1.55, 0.35)
+light_color = Color(1, 0.47, 0.20, 1)
+light_energy = 1.65
+omni_range = 4.0
+
+[node name="FillLight" type="OmniLight3D" parent="."]
+position = Vector3(1.65, 1.25, 1.65)
+light_color = Color(0.53, 0.72, 0.90, 1)
+light_energy = 1.2
+omni_range = 4.5
+
+[node name="Camera3D" type="Camera3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 0.986394, 0.164399, 0, -0.164399, 0.986394, -0.75, 1.35, 4.15)
+fov = 35.0
+current = true

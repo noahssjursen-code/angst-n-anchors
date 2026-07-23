@@ -106,9 +106,10 @@ static func apply_player_world_context(player: PlayerData) -> void:
 
 
 static func apply_mp_world_options(options: Dictionary) -> int:
-	var seed_val := int(options.get("world_seed", 42))
+	var seed_val := int(options.get("world_seed", 0))
 	if seed_val <= 0:
-		seed_val = 42
+		push_error("WorldBootstrap: multiplayer server returned no valid world seed")
+		return 0
 	var preset_id := str(options.get("world_preset", options.get("map_world_preset", "")))
 	var world_size_m := float(options.get("world_size_m", -1.0))
 	if not preset_id.strip_edges().is_empty() and world_size_m <= 0.0:
@@ -125,10 +126,17 @@ static func apply_mp_world_options(options: Dictionary) -> int:
 	return seed_val
 
 
-static func enter_world(tree: SceneTree, multiplayer: bool = false) -> void:
+static func enter_world(
+		tree: SceneTree,
+		multiplayer: bool = false,
+		authority_prepared: bool = false,
+) -> void:
 	var config := tree.root.get_node_or_null("ServerConfig")
 	if config != null:
 		config.set("is_multiplayer_mode", multiplayer)
+	var gateway := tree.root.get_node_or_null("WorldGateway")
+	if gateway != null and gateway.has_method("begin_session") and not authority_prepared:
+		gateway.call("begin_session", multiplayer)
 	var network := tree.root.get_node_or_null("NetworkManager")
 	if network != null:
 		if multiplayer and network.has_method("begin_multiplayer_session"):
@@ -151,6 +159,9 @@ static func return_to_title(tree: SceneTree) -> void:
 	var network := tree.root.get_node_or_null("NetworkManager")
 	if network != null and network.has_method("end_multiplayer_session"):
 		network.call("end_multiplayer_session", true)
+	var gateway := tree.root.get_node_or_null("WorldGateway")
+	if gateway != null and gateway.has_method("stop_session"):
+		gateway.call("stop_session")
 	var config := tree.root.get_node_or_null("ServerConfig")
 	if config != null:
 		config.set("is_multiplayer_mode", false)

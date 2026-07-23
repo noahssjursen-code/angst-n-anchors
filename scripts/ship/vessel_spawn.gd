@@ -157,6 +157,15 @@ static func apply_identity(boat: BoatBody, record: Dictionary) -> void:
 	boat.set_meta("vessel_display_name", vessel_name)
 	boat.set_meta("registration_id", str(record.get("registration_id", "")))
 	boat.set_meta("vessel_uid", str(record.get("uid", "")))
+	## Multiplayer world commands must name the durable server vessel, not the
+	## transient scene/network instance. The latter is presentation identity and
+	## can change whenever a client streams the vessel back in.
+	var server_vessel_id := str(record.get("server_vessel_id", "")).strip_edges()
+	if not server_vessel_id.is_empty():
+		boat.set_meta("server_vessel_id", server_vessel_id)
+	var layout_hash := str(record.get("layout_hash", "")).strip_edges()
+	if not layout_hash.is_empty():
+		boat.set_meta("layout_hash", layout_hash)
 
 
 ## Power belongs to the finished store ship, not the reusable hull component.

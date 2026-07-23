@@ -397,15 +397,15 @@ func _build_sky() -> void:
 	environ.sky                  = sky
 	environ.background_mode      = Environment.BG_SKY
 	environ.ambient_light_source = Environment.AMBIENT_SOURCE_SKY
-	environ.ambient_light_energy = 0.18
+	environ.ambient_light_energy = 0.24
 
 	environ.tonemap_mode     = Environment.TONE_MAPPER_ACES
-	environ.tonemap_exposure = 1.0
+	environ.tonemap_exposure = 1.02
 	environ.tonemap_white    = 3.0
 
 	environ.ssao_enabled = enable_ssao
-	environ.ssao_radius = 1.2
-	environ.ssao_intensity = 0.92
+	environ.ssao_radius = 1.35
+	environ.ssao_intensity = 0.72
 	environ.ssao_power = 1.0
 	environ.ssao_detail = 0.28
 	environ.glow_enabled = enable_glow
@@ -419,8 +419,8 @@ func _build_sky() -> void:
 
 	environ.adjustment_enabled    = true
 	environ.adjustment_brightness = 1.0
-	environ.adjustment_contrast   = 1.09
-	environ.adjustment_saturation = 1.025
+	environ.adjustment_contrast   = 1.045
+	environ.adjustment_saturation = 1.04
 
 	environ.fog_enabled            = true
 	environ.fog_light_color        = Color(0.28, 0.34, 0.42)
@@ -641,9 +641,9 @@ func _apply_weather_lighting() -> void:
 
 	_apply_sun(solar, daylight, direct_light, cloud, storm)
 	_apply_exposure(daylight, cloud, storm, fog_t)
-	_apply_fog(fog_t, daylight, storm)
-	_apply_sky_shader(daylight, cloud, storm)
-	_apply_ocean_shader(daylight, cloud, rain, sea, air_wind, storm, fog_t)
+	_apply_fog(solar, fog_t, daylight, cloud, storm)
+	_apply_sky_shader(solar, daylight, cloud, storm)
+	_apply_ocean_shader(solar, daylight, cloud, rain, sea, air_wind, storm, fog_t)
 	_apply_screen_effects(daylight, cloud, rain, storm, fog_t)
 	Palette.set_wetness(smoothstep(0.08, 0.72, rain))
 
@@ -659,21 +659,34 @@ func _apply_weather_lighting() -> void:
 func _apply_sun(solar: Dictionary, daylight: float, direct_light: float, cloud: float, storm: float) -> void:
 	var sun_dir: Vector3 = solar["sun_direction"]
 	var moon_dir: Vector3 = solar["moon_direction"]
+	var low_sun := _low_sun_factor(solar)
 	# Overcast removes hard sunlight, but retaining a broad key keeps hulls,
 	# terrain and cranes three-dimensional instead of uniformly grey.
-	var sun_energy := 1.62 * direct_light * lerpf(1.0, 0.42, cloud)
+	var sun_energy := (
+		1.70 * direct_light
+		* lerpf(1.0, 0.50, cloud)
+		* lerpf(1.0, 0.78, storm)
+	)
 	if _sun != null:
 		# Sunrise +X (east), noon +Z (south), sunset −X (west).
 		# Matches NavigationAxes / chart (+X east, −Z north).
 		_sun.basis = Basis.looking_at(-sun_dir, Vector3.UP)
 		_sun.light_energy     = sun_energy
-		_sun.light_color      = (
-			Color(1.0, 0.68, 0.42)
-			.lerp(Color(1.0, 0.95, 0.82), daylight)
-			.lerp(Color(0.48, 0.55, 0.68), storm)
-		)
+		var clear_sun := Color(1.0, 0.95, 0.84).lerp(Color(1.0, 0.56, 0.28), low_sun)
+		_sun.light_color = clear_sun.lerp(Color(0.72, 0.79, 0.90), storm * 0.48)
 	if _fill_light != null:
-		_fill_light.light_energy = lerpf(0.035, 0.135, daylight) * lerpf(1.0, 0.72, cloud)
+		# Cloud cover replaces a hard key with broad sky fill. Reducing this under
+		# overcast made every north-facing hull and quay collapse to black.
+		_fill_light.light_energy = (
+			lerpf(0.06, 0.23, daylight)
+			* lerpf(0.92, 1.18, cloud)
+			* lerpf(1.0, 0.94, storm)
+		)
+		_fill_light.light_color = (
+			Color(0.46, 0.58, 0.86)
+			.lerp(Color(0.66, 0.76, 0.94), daylight)
+			.lerp(Color(0.82, 0.70, 0.62), low_sun * 0.18)
+		)
 	if _moon_light != null:
 		_moon_light.basis = Basis.looking_at(-moon_dir, Vector3.UP)
 		_moon_light.light_energy = (
@@ -681,7 +694,14 @@ func _apply_sun(solar: Dictionary, daylight: float, direct_light: float, cloud: 
 		)
 	if _environment != null:
 		_environment.ambient_light_energy = (
-			lerpf(0.105, 0.275, daylight * daylight) * lerpf(1.0, 0.80, cloud)
+			lerpf(0.115, 0.36, daylight * daylight)
+			* lerpf(1.0, 0.94, cloud)
+			* lerpf(1.0, 0.92, storm)
+		)
+		_environment.ambient_light_color = (
+			Color(0.78, 0.86, 1.0)
+			.lerp(Color(0.95, 0.97, 1.0), daylight)
+			.lerp(Color(1.0, 0.86, 0.74), low_sun * 0.12)
 		)
 
 
@@ -692,18 +712,20 @@ func _apply_exposure(daylight: float, cloud: float, storm: float, fog_t: float) 
 	## ocean, white superstructures, and dark interiors.
 	# Preserve a stable black point. Fog and cloud already alter scene luminance;
 	# compensating for them here produced the former washed-out grey frame.
-	var night_lift := lerpf(1.13, 0.98, daylight)
-	var storm_lift := storm * 0.015
-	_environment.tonemap_exposure = clampf(night_lift + storm_lift, 0.96, 1.15)
+	var night_lift := lerpf(1.12, 1.02, daylight)
+	var weather_lift := cloud * 0.012 + storm * 0.012
+	_environment.tonemap_exposure = clampf(night_lift + weather_lift, 1.0, 1.14)
 
 
-func _apply_fog(fog_t: float, daylight: float, storm: float) -> void:
+func _apply_fog(solar: Dictionary, fog_t: float, daylight: float, cloud: float, storm: float) -> void:
 	if _environment == null:
 		return
 		
-	var base_fog_col = (
+	var low_sun := _low_sun_factor(solar)
+	var base_fog_col := (
 		Color(0.025, 0.035, 0.055)
 		.lerp(Color(0.34, 0.41, 0.50), daylight)
+		.lerp(Color(0.58, 0.34, 0.25), low_sun * lerpf(0.82, 0.26, cloud))
 		.lerp(Color(0.16, 0.18, 0.22), storm * 0.55)
 	)
 	
@@ -735,9 +757,10 @@ func _apply_fog(fog_t: float, daylight: float, storm: float) -> void:
 		_environment.volumetric_fog_length  = lerpf(560.0, 260.0, fog_t)
 
 
-func _apply_sky_shader(daylight: float, cloud: float, storm: float) -> void:
+func _apply_sky_shader(solar: Dictionary, daylight: float, cloud: float, storm: float) -> void:
 	if _sky_shader_material == null:
 		return
+	var low_sun := _low_sun_factor(solar)
 	var top_col := (
 		Color(0.006, 0.009, 0.028)
 		.lerp(Color(0.055, 0.20, 0.48), daylight)
@@ -747,6 +770,7 @@ func _apply_sky_shader(daylight: float, cloud: float, storm: float) -> void:
 		Color(0.018, 0.016, 0.028)
 		.lerp(Color(0.28, 0.43, 0.62), daylight)
 		.lerp(Color(0.20, 0.24, 0.29), cloud)
+		.lerp(Color(0.72, 0.31, 0.16), low_sun * lerpf(0.90, 0.28, cloud))
 	)
 	var zenith_deep := (
 		Color(0.001, 0.004, 0.022)
@@ -758,7 +782,13 @@ func _apply_sky_shader(daylight: float, cloud: float, storm: float) -> void:
 		.lerp(Color(0.12, 0.115, 0.105), daylight)
 		.lerp(Color(0.055, 0.06, 0.075), cloud)
 	)
-	var sun_col := Color(1.0, 0.62, 0.30).lerp(Color(1.0, 0.96, 0.88), daylight)
+	var sun_col := Color(1.0, 0.96, 0.88).lerp(Color(1.0, 0.50, 0.20), low_sun)
+	var cloud_lit := (
+		Color(0.12, 0.15, 0.22)
+		.lerp(Color(0.72, 0.76, 0.81), daylight)
+		.lerp(Color(0.78, 0.45, 0.30), low_sun * 0.30)
+	)
+	var cloud_dark := Color(0.045, 0.055, 0.075).lerp(Color(0.31, 0.34, 0.39), daylight)
 
 	# Inverse of scripted daylight curve — brightest stars at full night; clouds/storm occlude Milky-Way fantasies cheaply.
 	var star_vis := pow(clampf(1.0 - daylight, 0.0, 1.0), 0.78)
@@ -772,6 +802,8 @@ func _apply_sky_shader(daylight: float, cloud: float, storm: float) -> void:
 	var zen_mix := lerpf(0.16, 0.48, daylight) * lerpf(1.0, 0.45, cloud) * lerpf(1.0, 0.55, storm)
 	_sky_shader_material.set_shader_parameter("sky_zenith_mix",    zen_mix)
 	_sky_shader_material.set_shader_parameter("cloud_coverage",    cloud)
+	_sky_shader_material.set_shader_parameter("cloud_light",       Vector3(cloud_lit.r, cloud_lit.g, cloud_lit.b))
+	_sky_shader_material.set_shader_parameter("cloud_dark",        Vector3(cloud_dark.r, cloud_dark.g, cloud_dark.b))
 	_sky_shader_material.set_shader_parameter("storm_intensity",   storm)
 	_sky_shader_material.set_shader_parameter("sun_color",         Vector3(sun_col.r,  sun_col.g,  sun_col.b))
 	_sky_shader_material.set_shader_parameter("star_visibility",   clampf(star_vis, 0.0, 1.0))
@@ -825,6 +857,7 @@ func _sync_land_shelter() -> void:
 
 
 func _apply_ocean_shader(
+		solar: Dictionary,
 		daylight: float,
 		cloud: float,
 		rain: float,
@@ -856,6 +889,7 @@ func _apply_ocean_shader(
 	var chop_val := lerpf(0.10, 0.22, clampf(air_wind * 0.85 + sea_state * 0.28 + rain * 0.18, 0.0, 1.0))
 	chop_val *= lerpf(1.0, 0.72, fog_w)
 
+	var low_sun := _low_sun_factor(solar)
 	var top_col := (
 		Color(0.006, 0.009, 0.028)
 		.lerp(Color(0.07, 0.28, 0.62), daylight)
@@ -865,12 +899,13 @@ func _apply_ocean_shader(
 		Color(0.018, 0.016, 0.028)
 		.lerp(Color(0.34, 0.54, 0.78), daylight)
 		.lerp(Color(0.22, 0.24, 0.28), cloud)
+		.lerp(Color(0.62, 0.28, 0.14), low_sun * lerpf(0.66, 0.18, cloud))
 	)
 
 	var sun_dir := _celestial_dir(0.0)
 	## Chromaticity only. Direct-light energy belongs to the DirectionalLight3D;
 	## multiplying it into the ocean glint a second time blew out noon highlights.
-	var sun_col := Color(1.0, 0.62, 0.30).lerp(Color(1.0, 0.96, 0.88), daylight)
+	var sun_col := Color(1.0, 0.96, 0.88).lerp(Color(1.0, 0.50, 0.20), low_sun)
 
 	_ocean_shader_material.set_shader_parameter("shallow_albedo",     Vector3(shallow_w.r, shallow_w.g, shallow_w.b))
 	_ocean_shader_material.set_shader_parameter("deep_albedo",        Vector3(deep.r, deep.g, deep.b))
@@ -928,6 +963,12 @@ func _apply_ocean_shader(
 		_ocean_horizon_material.set_shader_parameter("fresnel_sky_mix",   fres_blend)
 		_ocean_horizon_material.set_shader_parameter("near_color_lift",   near_lift)
 		_ocean_horizon_material.set_shader_parameter("glint_strength",    glint * 0.32)
+
+
+func _low_sun_factor(solar: Dictionary) -> float:
+	var altitude := float(solar.get("altitude_degrees", 45.0))
+	var direct := float(solar.get("direct_light", 0.0))
+	return (1.0 - smoothstep(6.0, 32.0, altitude)) * smoothstep(0.02, 0.55, direct)
 
 
 func _celestial_dir(tod_offset: float) -> Vector3:

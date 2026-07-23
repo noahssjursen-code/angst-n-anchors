@@ -9,6 +9,7 @@ static var _in_flight_registrations: Dictionary = {}
 static var _failed_registrations: Dictionary = {}
 static var _in_flight_pull: bool = false
 static var _pending_pull_callbacks: Array = []
+static var _starter_repairs: Dictionary = {}
 
 
 static func publish_commission(
@@ -111,7 +112,7 @@ static func push_brick_layout(session: Node, record: Dictionary, on_complete: Ca
 		if on_complete.is_valid():
 			on_complete.call(updated)
 	)
-	req.request(url, PackedStringArray(["Content-Type: application/json"]), HTTPClient.METHOD_PUT, body)
+	req.request(url, _captain_headers(session, true), HTTPClient.METHOD_PUT, body)
 
 
 static func fetch_vessel_layout(session: Node, server_vessel_id: String, on_complete: Callable) -> void:
@@ -248,7 +249,7 @@ static func ensure_vessel_registered(
 
 	_in_flight_registrations[uid] = true
 	var layout := VesselSpawn.brick_layout_of(record)
-	_post_vessel(session, captain_id, hull_id, display, template_path, uid, layout, func(updated: Dictionary) -> void:
+	var registration_finished := func(updated: Dictionary) -> void:
 		_in_flight_registrations.erase(uid)
 		if updated.is_empty() or str(updated.get("server_vessel_id", "")).is_empty():
 			_failed_registrations[uid] = true
@@ -257,6 +258,11 @@ static func ensure_vessel_registered(
 			_failed_registrations.erase(uid)
 		if on_complete.is_valid():
 			on_complete.call(updated)
+	_post_vessel(
+		session, captain_id, hull_id, display, template_path, uid,
+		str(record.get("registration_id", "review_required")),
+		float(record.get("shaft_power_kw", 1.0)), layout,
+		registration_finished,
 	)
 
 
@@ -319,6 +325,16 @@ static func _captain_id(session: Node) -> String:
 	return str(session.data.captain_id)
 
 
+static func _captain_headers(session: Node, include_json: bool = false) -> PackedStringArray:
+	var headers := PackedStringArray()
+	if include_json:
+		headers.append("Content-Type: application/json")
+	var token := RemoteAccountCredentialStore.token_for(_http_base(session))
+	if not token.is_empty():
+		headers.append("Authorization: Account %s" % token)
+	return headers
+
+
 static func _post_vessel(
 	session: Node,
 	captain_id: String,
@@ -326,6 +342,8 @@ static func _post_vessel(
 	display: String,
 	template_path: String,
 	uid: String,
+	registration_id: String,
+	shaft_power_kw: float,
 	brick_layout: Dictionary = {},
 	on_complete: Callable = Callable(),
 ) -> void:
@@ -333,7 +351,10 @@ static func _post_vessel(
 	session.add_child(req)
 	var body := JSON.stringify({
 		"captain_id": captain_id,
+		"client_uid": uid,
 		"hull_id": hull_id,
+		"registration_id": registration_id,
+		"shaft_power_kw": shaft_power_kw,
 		"display_name": display,
 		"template_path": template_path,
 		"brick_layout": brick_layout if not brick_layout.is_empty() else {"hull_id": hull_id, "cells": {}},
@@ -382,7 +403,7 @@ static func _post_vessel(
 		if on_complete.is_valid():
 			on_complete.call(record)
 	)
-	req.request(url, PackedStringArray(["Content-Type: application/json"]), HTTPClient.METHOD_POST, body)
+	req.request(url, _captain_headers(session, true), HTTPClient.METHOD_POST, body)
 
 
 static func _fetch_vessels(session: Node, captain_id: String, on_complete: Callable = Callable()) -> void:
@@ -402,7 +423,7 @@ static func _fetch_vessels(session: Node, captain_id: String, on_complete: Calla
 			return
 		_apply_server_vessels(session, parsed as Array, on_complete)
 	)
-	req.request(url)
+	req.request(url, _captain_headers(session))
 
 
 static func _apply_server_vessels(session: Node, rows: Array, on_complete: Callable = Callable()) -> void:
@@ -455,6 +476,26 @@ static func _apply_server_vessels(session: Node, rows: Array, on_complete: Calla
 	var active_uid := str(data.active_vessel.get("uid", ""))
 	var active_server_id := str(data.active_vessel.get("server_vessel_id", ""))
 	data.owned_vessels = merged
+	# Captains created by the old multiplayer flow have a valid server identity
+	# but no company/starter grant. Repair that state once, using the exact same
+	# certified prebuilt contract as normal onboarding. The deterministic UID and
+	# server uniqueness constraint make this safe if two clients select the same
+	# captain at nearly the same time.
+	if rows.is_empty() and merged.is_empty():
+		var captain_id := _captain_id(session)
+		if not captain_id.is_empty() and not _starter_repairs.has(captain_id):
+			_starter_repairs[captain_id] = true
+			var starter := CompanyService.build_starter_vessel_record(
+				"general_cargo", "starter-%s" % captain_id,
+			)
+			if not starter.is_empty():
+				data.upsert_owned_vessel(starter)
+				data.set_active_vessel(starter)
+				merged.append(starter)
+				data.owned_vessels = merged
+				ensure_vessel_registered(session, starter, func(_updated: Dictionary) -> void:
+					_starter_repairs.erase(captain_id)
+				)
 
 	var still_active := false
 	for entry_raw in merged:
@@ -538,6 +579,8 @@ static func _merge_server_row(data: PlayerData, row: Dictionary) -> Dictionary:
 	var server_id := str(row.get("id", ""))
 	var hull_id := str(row.get("hull_id", ""))
 	var display := str(row.get("display_name", "Vessel"))
+	var registration_id := str(row.get("registration_id", "review_required"))
+	var shaft_power_kw := float(row.get("shaft_power_kw", 1.0))
 	if hull_id.is_empty():
 		return {}
 
@@ -552,6 +595,8 @@ static func _merge_server_row(data: PlayerData, row: Dictionary) -> Dictionary:
 			"name": display,
 			"display": hull_display,
 			"hull_id": hull_id,
+			"registration_id": registration_id,
+			"shaft_power_kw": shaft_power_kw,
 		})
 		existing = PlayerData.merge_vessel_record(existing, fleet_patch)
 		existing = PlayerData.merge_vessel_record(existing, layout_patch)
@@ -565,7 +610,8 @@ static func _merge_server_row(data: PlayerData, row: Dictionary) -> Dictionary:
 			existing["scene_path"] = rebuilt.get("scene_path", rebuilt["template_path"])
 		return existing
 
-	var local := _ensure_local_template(hull_id, hull_display, server_id)
+	var client_uid := str(row.get("client_uid", ""))
+	var local := _ensure_local_template(hull_id, hull_display, client_uid if not client_uid.is_empty() else server_id)
 	if local.is_empty():
 		return {}
 	var record := {
@@ -573,6 +619,8 @@ static func _merge_server_row(data: PlayerData, row: Dictionary) -> Dictionary:
 		"hull_id":          hull_id,
 		"name":             display,
 		"display":          hull_display,
+		"registration_id": registration_id,
+		"shaft_power_kw":   shaft_power_kw,
 		"template_path":    local["template_path"],
 		"server_vessel_id": server_id,
 	}

@@ -343,14 +343,15 @@ void sky() {
 		float shadow = clamp(cast_shadow + structural_shadow * 0.8, 0.0, 1.0);
 		
 		// 2. Base Color (Thicker/shadowed = darker bellies)
-		// Dynamic color scaling:
-		// Clear = bright (but dimmer) tops, Overcast = very moody heavy grey, Storm = nearly black thunder-grey
-		vec3 base_lit = mix(vec3(0.65, 0.68, 0.72), vec3(0.12, 0.14, 0.16), cloud_coverage);
-		vec3 base_dark = mix(vec3(0.35, 0.38, 0.42), vec3(0.05, 0.06, 0.07), cloud_coverage);
+		// The presentation layer supplies time-aware cloud colours. Coverage
+		// thickens the layer without turning the whole vault into black cardboard.
+		vec3 base_lit = mix(cloud_light, cloud_dark, cloud_coverage * 0.48);
+		vec3 base_dark = mix(cloud_dark, cloud_dark * 0.34, cloud_coverage);
 		
-		// In storms, turn thunder gray and heavily bruise the darks
-		base_lit = mix(base_lit, vec3(0.04, 0.05, 0.06), storm_intensity);
-		base_dark = mix(base_dark, vec3(0.01, 0.01, 0.015), storm_intensity);
+		// Storm bellies remain heavy, while their lit crowns retain enough value
+		// separation to show cloud volume against a dark harbour.
+		base_lit = mix(base_lit, vec3(0.11, 0.13, 0.16), storm_intensity * 0.72);
+		base_dark = mix(base_dark, vec3(0.028, 0.034, 0.045), storm_intensity * 0.82);
 		
 		vec3 ambient = mix(base_lit, base_dark, shadow);
 		

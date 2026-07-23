@@ -291,18 +291,35 @@ func company_summary() -> Dictionary:
 func _grant_starter_vessel(starter_id: String, request_id: String) -> Dictionary:
 	if not _player.owned_vessels.is_empty():
 		return CompanyContracts.result_error("starter_already_granted", "A starter vessel has already been granted.")
+	var vessel := build_starter_vessel_record(starter_id)
+	if vessel.is_empty():
+		return CompanyContracts.result_error("starter_unavailable", "The selected starter vessel is not available.")
+	_player.upsert_owned_vessel(vessel)
+	_player.set_active_vessel(vessel)
+	_player.company["starter_vessel_id"] = str(vessel.get("uid", ""))
+	_player.starter_trawler_claimed = starter_id == "fishing"
+	return CompanyContracts.result_ok({"vessel": vessel, "request_id": request_id})
+
+
+## Builds the same certified starter record for local onboarding and the
+## multiplayer recovery/onboarding path. There is one source of truth for the
+## hull, registration, power and complete deck fit-out.
+static func build_starter_vessel_record(starter_id: String, uid_override: String = "") -> Dictionary:
+	if not CompanyContracts.STARTER_VESSELS.has(starter_id):
+		return {}
 	var def := CompanyContracts.STARTER_VESSELS[starter_id] as Dictionary
 	var prebuilt_id := str(def.get("prebuilt_id", ""))
 	for entry in PrebuiltVesselCatalog.catalog_entries():
 		if str(entry.get("prebuilt_id", "")) != prebuilt_id:
 			continue
 		if bool(entry.get("is_draft", true)) or not bool(entry.get("compliance_ok", false)):
-			return CompanyContracts.result_error(
-				"starter_not_certified", "The selected starter vessel has not passed registration.",
-			)
+			return {}
 		var vessel_name := str(entry.get("prebuilt_name", entry.get("display", "Starter vessel")))
-		var vessel := VesselSpawn.normalize_record({
-			"uid": VesselSpawn.new_vessel_uid(str(entry.get("hull_id", "hull_28x10"))),
+		var uid := uid_override.strip_edges()
+		if uid.is_empty():
+			uid = VesselSpawn.new_vessel_uid(str(entry.get("hull_id", "hull_28x10")))
+		return VesselSpawn.normalize_record({
+			"uid": uid,
 			"hull_id": str(entry.get("hull_id", "hull_28x10")),
 			"registration_id": str(entry.get("registration_id", "review_required")),
 			"name": vessel_name,
@@ -310,12 +327,7 @@ func _grant_starter_vessel(starter_id: String, request_id: String) -> Dictionary
 			"shaft_power_kw": float(entry.get("shaft_power_kw", 1.0)),
 			"brick_layout": (entry.get("prebuilt_layout", {}) as Dictionary).duplicate(true),
 		})
-		_player.upsert_owned_vessel(vessel)
-		_player.set_active_vessel(vessel)
-		_player.company["starter_vessel_id"] = str(vessel.get("uid", ""))
-		_player.starter_trawler_claimed = starter_id == "fishing"
-		return CompanyContracts.result_ok({"vessel": vessel, "request_id": request_id})
-	return CompanyContracts.result_error("starter_unavailable", "The selected starter vessel is not available.")
+	return {}
 
 
 func _restore_onboarding_snapshot(

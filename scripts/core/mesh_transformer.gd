@@ -19,6 +19,17 @@ var mesh_data: Dictionary = {}:
 		if is_node_ready():
 			rebuild()
 
+## Stable source identity used by MeshBuilder's geometry cache. ModelAssembler
+## and garment loaders populate this for inline JSON meshes. Standalone mesh
+## files derive it from `mesh_data_path`; ad-hoc dictionaries use a content hash.
+var mesh_geometry_cache_id: String = "":
+	set(v):
+		if mesh_geometry_cache_id == v:
+			return
+		mesh_geometry_cache_id = v
+		if is_node_ready():
+			rebuild()
+
 @export var mesh_color: Color = Color(0.5, 0.5, 0.5):
 	set(v):
 		if mesh_color == v:
@@ -40,6 +51,38 @@ var mesh_data: Dictionary = {}:
 		if is_equal_approx(mesh_metallic, v):
 			return
 		mesh_metallic = v
+		if is_node_ready():
+			_refresh_appearance_or_rebuild()
+
+@export_file("*.png", "*.jpg", "*.webp") var mesh_texture_path: String = "":
+	set(v):
+		if mesh_texture_path == v:
+			return
+		mesh_texture_path = v
+		if is_node_ready():
+			_refresh_appearance_or_rebuild()
+
+@export_file("*.png", "*.jpg", "*.webp") var mesh_texture_mask_path: String = "":
+	set(v):
+		if mesh_texture_mask_path == v:
+			return
+		mesh_texture_mask_path = v
+		if is_node_ready():
+			_refresh_appearance_or_rebuild()
+
+@export var mesh_primary_color: Color = Color.WHITE:
+	set(v):
+		if mesh_primary_color == v:
+			return
+		mesh_primary_color = v
+		if is_node_ready():
+			_refresh_appearance_or_rebuild()
+
+@export var mesh_secondary_color: Color = Color.WHITE:
+	set(v):
+		if mesh_secondary_color == v:
+			return
+		mesh_secondary_color = v
 		if is_node_ready():
 			_refresh_appearance_or_rebuild()
 
@@ -166,14 +209,32 @@ func _apply_appearance() -> bool:
 			material_exposed_to_weather,
 		)
 		return true
-	var mat := mi.material_override as StandardMaterial3D
-	if mat == null:
-		mi.material_override = MeshBuilder.make_material(mesh_color, mesh_roughness, mesh_metallic)
+	if not mesh_texture_path.is_empty():
+		mi.material_override = (
+			MeshBuilder.make_palette_masked_material(
+				mesh_texture_path,
+				mesh_texture_mask_path,
+				mesh_primary_color,
+				mesh_secondary_color,
+				mesh_color,
+				mesh_roughness,
+				mesh_metallic,
+			)
+			if not mesh_texture_mask_path.is_empty()
+			else MeshBuilder.make_textured_material(
+				mesh_texture_path,
+				mesh_color,
+				mesh_roughness,
+				mesh_metallic,
+				true,
+			)
+		)
 		return true
-	## Mutate in place so we don't allocate a new GPU material per tint.
-	mat.albedo_color = mesh_color
-	mat.roughness = mesh_roughness
-	mat.metallic = mesh_metallic
+	## Always select the cache entry keyed by the requested appearance. Mutating
+	## the current material would recolour every other mesh sharing that cached
+	## material (especially visible when many NPCs wear different uniforms).
+	## The factory also selects the correct transparent pipeline for glass.
+	mi.material_override = MeshBuilder.make_material(mesh_color, mesh_roughness, mesh_metallic)
 	return true
 
 
@@ -369,7 +430,13 @@ func _build_mesh(params: Dictionary) -> void:
 		_current_data["indices"], 
 		mesh_color, 
 		mesh_roughness, 
-		mesh_metallic
+		mesh_metallic,
+		_current_data.get("uvs", []),
+		mesh_texture_path,
+		mesh_texture_mask_path,
+		mesh_primary_color,
+		mesh_secondary_color,
+		_geometry_cache_id(),
 	)
 	if not mesh_material_tag.is_empty():
 		var fallback := {
@@ -390,6 +457,15 @@ func _build_mesh(params: Dictionary) -> void:
 	add_child(mi)
 	if Engine.is_editor_hint() and is_inside_tree():
 		mi.owner = get_tree().edited_scene_root
+
+
+func _geometry_cache_id() -> String:
+	var source_id := mesh_geometry_cache_id
+	if source_id.is_empty() and not mesh_data_path.is_empty():
+		source_id = mesh_data_path
+	if source_id.is_empty():
+		return ""
+	return "%s|center:%s" % [source_id, center_mesh]
 
 
 func _collision_col_child() -> CollisionShape3D:

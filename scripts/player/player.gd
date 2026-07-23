@@ -46,8 +46,6 @@ const LAYER_BOAT_WALK := 4
 var _player_camera: PlayerCamera = null
 var _free_cam: PlayerFreeCam = null
 var _body_npc: NpcBase = null
-var _walk_anim: WalkAnimator = null
-var _walk_distance_m: float = 0.0
 
 const WALK_ANIM_MIN_SPEED := 0.15
 
@@ -56,6 +54,7 @@ var _current_speed:    float   = 0.0
 var _was_on_floor:     bool    = true
 var _last_safe_position: Vector3 = Vector3.ZERO
 var _water_submerge_time: float = 0.0
+var _vehicle_occupied: bool = false
 
 
 func _ready() -> void:
@@ -146,7 +145,10 @@ func _physics_process(delta: float) -> void:
 	var has_input := wish.length_squared() > 0.0004
 
 	if has_input and _player_camera != null and _player_camera.is_third_person():
-		var face_yaw := atan2(wish.x, wish.z)
+		# CharacterVisual faces local -Z. Convert the desired world direction to
+		# the yaw that points -Z along it (the previous formula was 180 degrees
+		# reversed and only appeared correct while the legacy body was flipped).
+		var face_yaw := atan2(-wish.x, -wish.z)
 		var turn_rate := 1.0 - exp(-14.0 * delta)
 		rotation.y = lerp_angle(rotation.y, face_yaw, turn_rate)
 
@@ -239,6 +241,19 @@ func _process(delta: float) -> void:
 	_player_camera.update(delta, velocity, _smoothed_input, is_on_floor(), inputs_active)
 
 
+func set_vehicle_occupied(occupied: bool) -> void:
+	_vehicle_occupied = occupied
+	set_meta("vehicle_occupied", occupied)
+	if _player_camera != null:
+		_player_camera.set_vehicle_occupied(occupied)
+	elif _body_npc != null:
+		_body_npc.visible = not occupied
+
+
+func is_vehicle_occupied() -> bool:
+	return _vehicle_occupied
+
+
 # ── Step climb (ghost-cast probe) ─────────────────────────────────────────────
 
 ## Probe whether the player can mount a low obstacle by moving up by
@@ -301,10 +316,9 @@ func _build_body_mesh() -> void:
 	_body_npc = NpcBase.new()
 	_body_npc.name = "BodyMesh"
 	_body_npc.visible = false
-	_body_npc.rotation.y = PI  # mesh authored facing +Z; body forward is -Z
+	# CharacterVisual and gameplay both use local -Z as forward.
+	_body_npc.rotation.y = 0.0
 	add_child(_body_npc)
-	_walk_anim = WalkAnimator.new()
-	_walk_anim.attach(_body_npc)
 	_apply_appearance_from_session()
 
 	var session := get_node_or_null("/root/PlayerSession")
@@ -323,24 +337,17 @@ func _apply_appearance_from_session() -> void:
 	if session == null or session.data == null or session.data.appearance == null:
 		return
 	session.data.appearance.apply_to_npc(_body_npc)
-	if _walk_anim != null and not _walk_anim.is_ready():
-		_walk_anim.attach(_body_npc)
 
 
 func _update_walk_animation(delta: float) -> void:
-	if _body_npc == null or _walk_anim == null:
+	if _body_npc == null:
 		return
-	if not _walk_anim.is_ready():
-		_walk_anim.attach(_body_npc)
-		if not _walk_anim.is_ready():
-			return
 
 	var flat_speed := Vector3(velocity.x, 0.0, velocity.z).length()
 	if is_on_floor() and flat_speed > WALK_ANIM_MIN_SPEED:
-		_walk_distance_m += flat_speed * delta
-		_walk_anim.update(_walk_distance_m)
+		_body_npc.set_motion_speed(flat_speed, delta)
 	else:
-		_walk_anim.reset()
+		_body_npc.set_idle()
 
 
 func _movement_basis() -> Basis:

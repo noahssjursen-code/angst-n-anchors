@@ -8,6 +8,8 @@ extends RefCounted
 # ── Character meshes ─────────────────────────────────────────────────────────
 const CHARACTER_BASE_DIR := "res://resources/data/meshes/characters/"
 const NPC_BASE_MESH      := CHARACTER_BASE_DIR + "npc_base.json"
+const NPC_CHARACTER_STUDY_MODEL := "res://resources/data/models/characters/npc_character_study.json"
+const ICELANDER_SWEATER_PROOF_MODEL := "res://resources/data/models/characters/prototypes/icelander_sweater.json"
 
 # ── Hats (referenced by NPC subclasses and the character creator) ────────────
 const HAT_FLAT_CAP   := CHARACTER_BASE_DIR + "hat_flat_cap.json"
