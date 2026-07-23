@@ -140,6 +140,10 @@ func plug_ship(berth_id: String, ship: BoatBody) -> bool:
 	if existing != null and is_instance_valid(existing) and existing != ship:
 		return false
 	var prev_berth := ship_berth_id(ship)
+	## Idempotent re-plug: authoritative projections replay on every query, so
+	## an unchanged occupancy must not re-emit ship_plugged (reconcile loop).
+	if existing == ship and prev_berth == bid:
+		return true
 	if not prev_berth.is_empty() and prev_berth != bid:
 		unplug_ship(ship)
 	_ship_at_berth[bid] = ship

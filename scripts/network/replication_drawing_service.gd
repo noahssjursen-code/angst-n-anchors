@@ -265,12 +265,16 @@ func interpolate_entities(delta: float, position_smoothness: float, payload_smoo
 		var desired_pos := target_pos
 		var type := str(state["type"])
 		if type == "player" or type.begins_with("ship_"):
-			var packet_age_s := minf(
-				float(Time.get_ticks_msec() - int(state.get("received_at_ms", 0))) / 1000.0,
-				0.25,
-			)
+			## Dead reckoning: far-band entities update as rarely as once per
+			## second, so extrapolate along the last observed velocity across
+			## the whole gap. Confidence decays with age — a contact that went
+			## quiet (standstill throttling) eases to a stop instead of
+			## overshooting until its next heartbeat corrects it.
+			var packet_age_s := float(Time.get_ticks_msec() - int(state.get("received_at_ms", 0))) / 1000.0
+			var extrapolation_s := minf(packet_age_s, 1.25)
+			var confidence := clampf(1.0 - (packet_age_s - 0.75) / 1.5, 0.25, 1.0)
 			var estimated_velocity: Vector3 = state.get("estimated_velocity", Vector3.ZERO)
-			desired_pos += estimated_velocity * packet_age_s
+			desired_pos += estimated_velocity * extrapolation_s * confidence
 		
 		# 1. Smoothly interpolate 3D Pivot Position (skip if parented to avoid override conflicts)
 		if node.get_parent() == self:

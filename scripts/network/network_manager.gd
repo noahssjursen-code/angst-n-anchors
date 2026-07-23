@@ -27,6 +27,12 @@ var _scene_nodes: Dictionary = {}
 var _local_ships_board_states: Dictionary = {}
 var _local_ship_entity_ids: Dictionary = {}
 
+## Outbound despawn signals: entity_id -> {"type","format","payload","sends_left"}.
+## The server removes an entity the moment it receives `state=despawned` meta;
+## repeated a few sends because UDP is lossy. Without this, replaced or freed
+## ships linger on remote clients until the ~12 s server TTL.
+var _pending_tombstones: Dictionary = {}
+
 # Sequence counter for outbound packets
 var _outbound_seq: int = 0
 
@@ -112,6 +118,28 @@ func unregister_sender(id: String) -> void:
 	_local_senders.erase(id)
 
 
+## Queues the server removal signal for an entity this client owns. Must be
+## called BEFORE the sender is erased so the entity's wire shape can be reused.
+func _queue_tombstone(entity_id: String) -> void:
+	var sender: Dictionary = _local_senders.get(entity_id, {})
+	if sender.is_empty():
+		return
+	var format := int(sender.get("format", 4))
+	var payload: Array = (sender.get("last_sent_payload", []) as Array).duplicate()
+	var node: Variant = sender.get("node")
+	if payload.is_empty() and node is Node3D and is_instance_valid(node):
+		var pos: Vector3 = (node as Node3D).global_position
+		payload = [pos.x, pos.y, pos.z]
+	while payload.size() < format:
+		payload.append(0.0)
+	_pending_tombstones[entity_id] = {
+		"type": str(sender.get("type", "player")),
+		"format": format,
+		"payload": payload,
+		"sends_left": 4,
+	}
+
+
 ## Registers a static/pre-placed scene node by its ID (e.g. static cranes).
 func register_scene_node(id: String, node: Node) -> void:
 	if not id.is_empty() and node != null:
@@ -173,6 +201,9 @@ func _tick_outbound(delta: float) -> void:
 		var sender: Dictionary = _local_senders[id]
 		var node = sender["node"]
 		if not is_instance_valid(node):
+			## Node freed without an explicit unregister (scene change, sale,
+			## despawn) — tell the server instead of leaving a ghost replica.
+			_queue_tombstone(str(id))
 			_local_senders.erase(id)
 			continue
 			
@@ -206,6 +237,20 @@ func _tick_outbound(delta: float) -> void:
 			sender["last_sent_payload"] = payload.duplicate()
 			sender["last_sent_meta"] = meta
 			sender["last_sent_time_ms"] = now_ms
+
+	# Flush queued despawn tombstones alongside regular updates.
+	for entity_id in _pending_tombstones.keys().duplicate():
+		var tombstone: Dictionary = _pending_tombstones[entity_id]
+		entities_payload.append({
+			"id": entity_id,
+			"type": tombstone["type"],
+			"format": tombstone["format"],
+			"payload": tombstone["payload"],
+			"meta": "state=despawned",
+		})
+		tombstone["sends_left"] = int(tombstone["sends_left"]) - 1
+		if int(tombstone["sends_left"]) <= 0:
+			_pending_tombstones.erase(entity_id)
 
 	# Observer-only heartbeats keep the session alive without blasting empty
 	# packets at the 20 Hz entity sampling rate.
@@ -375,6 +420,7 @@ func unregister_ship(ship_id: String) -> void:
 	var entity_id := str(_local_ship_entity_ids.get(ship_id, ship_id))
 	_local_ship_entity_ids.erase(ship_id)
 	_local_ships_board_states.erase(entity_id)
+	_queue_tombstone(entity_id)
 	unregister_sender(entity_id)
 
 
@@ -386,6 +432,23 @@ func _network_ship_id(ship_id: String) -> String:
 
 
 func _register_ship_sender(ship_id: String, hull_id: String, ship_node: Node3D, boarded: bool) -> void:
+	## Durable identity is captured ONCE at registration, from the ship node
+	## itself. Reading the globally active vessel record per send let an
+	## outgoing ship advertise its replacement's vessel id and layout while
+	## both briefly coexisted during deployment.
+	var bound_vid := str(ship_node.get_meta("server_vessel_id", "")).strip_edges()
+	var bound_lh := str(ship_node.get_meta("layout_hash", "")).strip_edges()
+	if bound_vid.is_empty() and _local_view != null:
+		var record: Dictionary = _local_view.call("get_active_vessel_record") as Dictionary
+		bound_vid = str(record.get("server_vessel_id", "")).strip_edges()
+		if bound_lh.is_empty():
+			bound_lh = str(record.get("layout_hash", "")).strip_edges()
+		## Stamp the node so boarding/unboarding re-registrations keep the
+		## same identity even after the active record moves on.
+		if not bound_vid.is_empty():
+			ship_node.set_meta("server_vessel_id", bound_vid)
+		if not bound_lh.is_empty():
+			ship_node.set_meta("layout_hash", bound_lh)
 	register_sender(
 		ship_node,
 		ship_id,
@@ -405,14 +468,14 @@ func _register_ship_sender(ship_id: String, hull_id: String, ship_node: Node3D, 
 				if not systems.is_empty() and systems[0].trawling:
 					parts.append("trawl=1")
 			## Deck fit-out identity — remotes fetch layout via HTTP using vid + lh.
-			if _local_view != null:
-				var record: Dictionary = _local_view.call("get_active_vessel_record") as Dictionary
-				var vid := str(record.get("server_vessel_id", ""))
-				var lh := str(record.get("layout_hash", ""))
-				if not vid.is_empty():
-					parts.append("vid=" + vid)
-				if not lh.is_empty():
-					parts.append("lh=" + lh)
+			## Refresh the hash from node meta so refits update it, but the vessel
+			## id stays the one bound at registration.
+			var vid := bound_vid
+			var lh := str(ship_node.get_meta("layout_hash", bound_lh)).strip_edges()
+			if not vid.is_empty():
+				parts.append("vid=" + vid)
+			if not lh.is_empty():
+				parts.append("lh=" + lh)
 			var port_id := str(ship_node.get_meta("harbour_port_id", "")).strip_edges()
 			var berth_id := str(ship_node.get_meta("harbour_berth_id", "")).strip_edges()
 			if not port_id.is_empty():

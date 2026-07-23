@@ -14,6 +14,10 @@ var _generation := 0
 var _desired_interests := PackedStringArray(["global"])
 var _interest_request_in_flight := false
 var _interest_dirty := false
+## Bumped every time the server confirms an interest change. Event polls issued
+## under an older epoch must not fast-forward the cursor past events the server
+## filtered out under the stale scopes — see _on_event_page.
+var _interest_epoch := 0
 
 
 func configure(url: String) -> void:
@@ -45,6 +49,13 @@ func stop_session() -> void:
 
 func session_token() -> String:
 	return str(_session.get("session_token", ""))
+
+
+## Interest scopes the server has confirmed for this session. Updated after
+## every accepted interest sync, so callers can await scope activation before
+## triggering actions whose events they must not miss.
+func session_interests() -> Array:
+	return (_session.get("interests", []) as Array).duplicate()
 
 
 func is_ready() -> bool:
@@ -121,6 +132,7 @@ func _on_interest_response(response: Dictionary) -> void:
 		var payload := response.get("payload", {}) as Dictionary
 		if not payload.is_empty():
 			_session["interests"] = (payload.get("interests", []) as Array).duplicate()
+		_interest_epoch += 1
 		## A newly loaded scope may already contain durable state that predates
 		## this session. Rehydrate it once after the server accepts the interest.
 		query_projections()
@@ -153,21 +165,32 @@ func _poll_events(generation: int) -> void:
 	if generation != _generation or not _poll_active or _poll_in_flight or not is_ready():
 		return
 	_poll_in_flight = true
+	if OS.has_environment("MP_BACKEND_DEBUG"):
+		print("[backend %s] poll after=%d epoch=%d" % [get_parent().name if get_parent() != null else "?", _event_cursor, _interest_epoch])
+	var epoch := _interest_epoch
 	var path := "/v2/events?after=%d&limit=128&wait_ms=1500" % _event_cursor
 	_request_json(
 		HTTPClient.METHOD_GET,
 		path,
 		{},
 		true,
-		func(response: Dictionary): _on_event_page(response, generation),
+		func(response: Dictionary): _on_event_page(response, generation, epoch),
 		4.0,
 	)
 
 
-func _on_event_page(response: Dictionary, generation: int) -> void:
+func _on_event_page(response: Dictionary, generation: int, epoch: int = -1) -> void:
 	_poll_in_flight = false
 	if generation != _generation or not _poll_active:
 		return
+	if OS.has_environment("MP_BACKEND_DEBUG"):
+		print("[backend %s] page ok=%s status=%d events=%d next=%s stale_epoch=%s" % [
+			get_parent().name if get_parent() != null else "?",
+			response.get("transport_ok"), int(response.get("status", 0)),
+			((response.get("payload", {}) as Dictionary).get("events", []) as Array).size(),
+			str((response.get("payload", {}) as Dictionary).get("next_cursor", "?")),
+			epoch != _interest_epoch,
+		])
 	if bool(response.get("transport_ok", false)):
 		var payload := response.get("payload", {}) as Dictionary
 		for event_variant in payload.get("events", []) as Array:
@@ -177,7 +200,13 @@ func _on_event_page(response: Dictionary, generation: int) -> void:
 				continue
 			_event_cursor = cursor
 			event_received.emit(event.duplicate(true))
-		_event_cursor = maxi(_event_cursor, int(payload.get("next_cursor", _event_cursor)))
+		## A poll issued before the latest confirmed interest change scanned the
+		## log under stale scopes: events it filtered out may be visible under
+		## the new scopes. Advancing only past *delivered* events (above) and
+		## skipping the fast-forward makes the next poll rescan that window —
+		## events are cursor-replayable, so nothing is lost and nothing repeats.
+		if epoch == _interest_epoch:
+			_event_cursor = maxi(_event_cursor, int(payload.get("next_cursor", _event_cursor)))
 		_poll_events_deferred(generation)
 		return
 	if int(response.get("status", 0)) == 401:

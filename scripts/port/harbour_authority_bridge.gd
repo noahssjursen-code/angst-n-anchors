@@ -12,6 +12,7 @@ var _pending: Dictionary = {} ## request id -> command context
 var _pending_mooring_by_vessel: Dictionary = {}
 var _finishing_operations: Dictionary = {}
 var _retained_scope := ""
+var _reconcile_queued := false
 
 
 func setup(controller: HarbourController) -> void:
@@ -126,8 +127,14 @@ func abort_equipment(equipment_id: String, reason: String) -> void:
 
 
 func topology_changed() -> void:
-	if _active:
-		call_deferred("_reconcile_all")
+	## Topology changes caused by applying authoritative state must not trigger
+	## another reconcile — that loop re-queries projections every frame and
+	## exhausts client sockets. Reconciles are also coalesced: many topology
+	## changes in one frame produce a single deferred pass.
+	if not _active or _applying_event or _reconcile_queued:
+		return
+	_reconcile_queued = true
+	call_deferred("_reconcile_all")
 
 
 func _on_harbour_topology_changed(_berth_id: String, ship: BoatBody) -> void:
@@ -140,6 +147,7 @@ func _on_session_ready(_remote: bool, _session: Dictionary) -> void:
 
 
 func _reconcile_all() -> void:
+	_reconcile_queued = false
 	if not _valid_controller():
 		return
 	for projection_variant in WorldGateway.projections("vessel_berth"):

@@ -17,6 +17,12 @@ const RemoteBackendClass = preload("res://scripts/network/remote_world_backend.g
 
 var _backend: WorldBackend = null
 var _remote := false
+## Optional connection override for gateway instances that are not the process
+## autoload — test harness virtual clients and future dedicated workers. When
+## set, remote sessions use these instead of ServerConfig and the process-global
+## credential store, letting several fully independent gateways coexist.
+var _override_base_url := ""
+var _override_account_token := ""
 var _store := WorldProjectionStore.new()
 var _subscriptions: Dictionary = {} ## event type -> [{owner, callback}]
 var _request_counter := 0
@@ -66,13 +72,16 @@ func begin_session_with_identity(
 	_backend.event_received.connect(_on_world_event)
 	_backend.projections_received.connect(_on_projections_received)
 	_backend.transport_failed.connect(_on_transport_failed)
+	var base_url := _override_base_url if not _override_base_url.is_empty() else ServerConfig.get_http_base_url()
 	if multiplayer:
-		(_backend as RemoteWorldBackend).configure(ServerConfig.get_http_base_url())
+		(_backend as RemoteWorldBackend).configure(base_url)
 	var account_token := ""
 	if multiplayer:
-		account_token = RemoteAccountCredentialStore.token_for(ServerConfig.get_http_base_url())
+		account_token = _override_account_token
 		if account_token.is_empty():
-			push_error("[WorldGateway] No account credential is available for %s." % ServerConfig.get_http_base_url())
+			account_token = RemoteAccountCredentialStore.token_for(base_url)
+		if account_token.is_empty():
+			push_error("[WorldGateway] No account credential is available for %s." % base_url)
 			authority_error.emit("account_session_missing", "Sign in to this server before joining shared waters.")
 			_backend.queue_free()
 			_backend = null
@@ -80,7 +89,7 @@ func begin_session_with_identity(
 			return
 		print(
 			"[WorldGateway] Opening authority session actor=%s server=%s"
-			% [normalized_actor, ServerConfig.get_http_base_url()]
+			% [normalized_actor, base_url]
 		)
 	_backend.start_session(normalized_actor, display_name.strip_edges(), world_checksum.strip_edges(), account_token)
 
@@ -95,8 +104,28 @@ func stop_session() -> void:
 	_remote = false
 
 
+## Points this gateway instance at a specific server and account credential.
+## Call before begin_session_with_identity. The process autoload never needs
+## this; it exists so tests and workers can run isolated gateway instances.
+func set_connection_override(base_url: String, account_token: String) -> void:
+	_override_base_url = base_url.strip_edges().trim_suffix("/")
+	_override_account_token = account_token.strip_edges()
+
+
 func is_ready() -> bool:
 	return _backend != null and is_instance_valid(_backend) and _backend.is_ready()
+
+
+## Interest scopes the server has confirmed for the current session. Callers
+## that must not miss scoped events should await their scope appearing here
+## before acting (the backend replays missed windows losslessly, but state
+## derived from projections is only guaranteed after confirmation).
+func confirmed_interests() -> Array:
+	if not is_ready():
+		return []
+	if _backend is RemoteWorldBackend:
+		return (_backend as RemoteWorldBackend).session_interests()
+	return Array(active_interests())
 
 
 func is_remote() -> bool:
