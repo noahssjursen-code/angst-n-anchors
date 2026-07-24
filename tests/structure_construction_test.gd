@@ -15,6 +15,7 @@ func _ready() -> void:
 	_test_baker_bake_produces_meshes()
 	_test_demo_workboat_loads()
 	_test_demo_harbour_shed_loads()
+	_test_two_sided_free_wall()
 	_test_studio_math()
 	if _failures.is_empty():
 		print("StructureConstruction: plan, baker, materials, and item hooks passed")
@@ -180,6 +181,20 @@ func _test_demo_harbour_shed_loads() -> void:
 	_check(str((plan.rooms[0] as Dictionary).get("material_out")) == "brick", "shed uses brick outside")
 	var root := StructureBaker.bake(plan)
 	_check(root.get_child_count() > 0, "harbour shed bakes")
+	root.free()
+
+
+func _test_two_sided_free_wall() -> void:
+	var plan := StructurePlan.new()
+	var wall := plan.add_wall(Vector3(0, 0, 0), "x", 6.0, 3.0)
+	wall["material_out"] = "painted"
+	wall["color_out"] = [0.9, 0.9, 0.9]
+	wall["material_in"] = "wood"
+	wall["color_in"] = [0.7, 0.55, 0.4]
+	## Free walls only go two-sided when inside identity is present — baker
+	## still needs outward_sign for room walls; free walls use default +1.
+	var root := StructureBaker.bake(plan)
+	_check(root.get_child_count() >= 2, "two-sided free wall produces multiple material buckets")
 	root.free()
 
 
