@@ -28,6 +28,10 @@ const FRAME_WIDTH := 0.1
 ## internal face is buried inside neighbouring geometry instead of sharing a
 ## plane with it. All room-generated geometry is z-fight-free by construction.
 const SKIN_EPS := 0.01
+## Stairs aim for this riser height; the run divides evenly so the top tread
+## always lands flush on start.y + height.
+const STEP_RISE_TARGET := 0.22
+const MAX_STEPS := 64
 
 ## Material library: name -> surface response. Extend freely; unknown names
 ## fall back to "painted".
@@ -39,12 +43,13 @@ const MATERIALS := {
 }
 
 
-## Expands rooms into walls + plates and merges with the plan's own walls and
-## decks. Every element carries `source_id` so editors can map geometry back
-## to the plan entity that owns it.
+## Expands rooms into walls + plates and merges with the plan's own walls,
+## decks and stairs. Every element carries `source_id` so editors can map
+## geometry back to the plan entity that owns it.
 static func expand(plan: StructurePlan) -> Dictionary:
 	var walls: Array = []
 	var decks: Array = []
+	var stairs: Array = []
 	for wall_variant in plan.walls:
 		var wall := (wall_variant as Dictionary).duplicate(true)
 		wall["source_id"] = int(wall.get("id", -1))
@@ -53,11 +58,15 @@ static func expand(plan: StructurePlan) -> Dictionary:
 		var deck := (deck_variant as Dictionary).duplicate(true)
 		deck["source_id"] = int(deck.get("id", -1))
 		decks.append(deck)
+	for stair_variant in plan.stairs:
+		var stair := (stair_variant as Dictionary).duplicate(true)
+		stair["source_id"] = int(stair.get("id", -1))
+		stairs.append(stair)
 	for room_variant in plan.rooms:
 		var expanded := expand_room(room_variant as Dictionary)
 		walls.append_array(expanded.get("walls", []))
 		decks.append_array(expanded.get("decks", []))
-	return {"walls": walls, "decks": decks}
+	return {"walls": walls, "decks": decks, "stairs": stairs}
 
 
 static func expand_room(room: Dictionary) -> Dictionary:
@@ -73,13 +82,19 @@ static func expand_room(room: Dictionary) -> Dictionary:
 	var color_in: Variant = room.get("color_in", null)
 	var material_out := str(room.get("material_out", room.get("material", "painted")))
 	var material_in := str(room.get("material_in", "wood"))
+	## Faces listed in open_faces get NO wall — corridor ends, lean-tos, open
+	## garage fronts. The floor/ceiling plates are unaffected.
+	var open_faces: Array = room.get("open_faces", [])
 	## X-axis walls extend past both ends to fill corners; the extra SKIN_EPS
 	## pushes their end faces past the perpendicular wall's skin plane so the
-	## corner has no coincident surfaces.
+	## corner has no coincident surfaces. An extension only happens where the
+	## perpendicular wall actually exists — an open end stays flush.
 	var ext := thickness * 0.5 + SKIN_EPS
+	var ext_w := 0.0 if open_faces.has("w") else ext
+	var ext_e := 0.0 if open_faces.has("e") else ext
 	var wall_specs := {
-		"n": {"start": origin + Vector3(-ext, 0, 0), "axis": "x", "length": w + 2.0 * ext, "shift": ext, "outward": -1},
-		"s": {"start": origin + Vector3(-ext, 0, l), "axis": "x", "length": w + 2.0 * ext, "shift": ext, "outward": 1},
+		"n": {"start": origin + Vector3(-ext_w, 0, 0), "axis": "x", "length": w + ext_w + ext_e, "shift": ext_w, "outward": -1},
+		"s": {"start": origin + Vector3(-ext_w, 0, l), "axis": "x", "length": w + ext_w + ext_e, "shift": ext_w, "outward": 1},
 		"w": {"start": origin, "axis": "z", "length": l, "shift": 0.0, "outward": -1},
 		"e": {"start": origin + Vector3(w, 0, 0), "axis": "z", "length": l, "shift": 0.0, "outward": 1},
 	}
@@ -91,6 +106,8 @@ static func expand_room(room: Dictionary) -> Dictionary:
 		if face_openings.has(face):
 			(face_openings[face] as Array).append(opening)
 	for face in wall_specs.keys():
+		if open_faces.has(face):
+			continue
 		var spec := wall_specs[face] as Dictionary
 		var wall := {
 			"start": [spec["start"].x, spec["start"].y, spec["start"].z],
@@ -123,11 +140,17 @@ static func expand_room(room: Dictionary) -> Dictionary:
 			continue
 		## Inset just under half a wall thickness: walls own the perimeter ring
 		## and the plate edge tucks INSIDE the interior wall skin, so neither
-		## plate faces nor plate edges share a plane with anything.
+		## plate faces nor plate edges share a plane with anything. Open faces
+		## have no wall to tuck under — the plate runs flush to the footprint
+		## edge there (corridor floors reach their ends).
 		var inset := minf(thickness * 0.5 - SKIN_EPS, minf(w, l) * 0.25)
+		var in_n := 0.0 if open_faces.has("n") else inset
+		var in_s := 0.0 if open_faces.has("s") else inset
+		var in_w := 0.0 if open_faces.has("w") else inset
+		var in_e := 0.0 if open_faces.has("e") else inset
 		var plate := {
-			"origin": [origin.x + inset, origin.y + (h if level == "ceiling" else 0.0), origin.z + inset],
-			"size": [maxf(w - inset * 2.0, 0.5), maxf(l - inset * 2.0, 0.5)],
+			"origin": [origin.x + in_w, origin.y + (h if level == "ceiling" else 0.0), origin.z + in_n],
+			"size": [maxf(w - in_w - in_e, 0.5), maxf(l - in_n - in_s, 0.5)],
 			"thickness": StructurePlan.DEFAULT_PLATE_THICKNESS,
 			"openings": [],
 			"source_id": source_id,
@@ -144,7 +167,7 @@ static func expand_room(room: Dictionary) -> Dictionary:
 			opening.erase("face")
 			## Compensate hole coordinates for the plate inset.
 			var off: Array = opening.get("offset", [0.0, 0.0])
-			opening["offset"] = [float(off[0]) - inset, (float(off[1]) if off.size() > 1 else 0.0) - inset]
+			opening["offset"] = [float(off[0]) - in_w, (float(off[1]) if off.size() > 1 else 0.0) - in_n]
 			(plate["openings"] as Array).append(opening)
 		decks.append(plate)
 	return {"walls": walls, "decks": decks}
@@ -292,6 +315,68 @@ static func deck_boxes(deck: Dictionary) -> Array:
 			"size": Vector3(x_len, span.y - span.x, z_len),
 		})
 	return boxes
+
+
+# ── Stairs ───────────────────────────────────────────────────────────────────
+
+## Number of risers for a stair run: divide the climb into equal risers as
+## close to STEP_RISE_TARGET as possible, so the top tread lands EXACTLY on
+## start.y + height.
+static func stair_step_count(stair: Dictionary) -> int:
+	var height := float(stair.get("height", StructurePlan.DEFAULT_ROOM_HEIGHT))
+	return clampi(int(ceilf(height / STEP_RISE_TARGET)), 2, MAX_STEPS)
+
+
+## Solid stepped run as boxes {center, size} in plan space — the SAME boxes
+## drive visuals and collision, so the stair is walkable exactly as rendered
+## (axis-aligned steps suit character step-up; no rotated colliders needed).
+## Anti-coplanarity: every step is extended SKIN_EPS into the NEXT (uphill)
+## step so riser planes are buried, and all bottoms sink SKIN_EPS below the
+## base level so they bury into the deck plate the stair stands on.
+static func stair_boxes(stair: Dictionary) -> Array:
+	var start := StructurePlan.vec3_of(stair.get("start"))
+	var dir := str(stair.get("dir", "+x"))
+	var length := maxf(float(stair.get("length", 3.0)), 0.5)
+	var width := maxf(float(stair.get("width", 1.0)), 0.5)
+	var height := float(stair.get("height", StructurePlan.DEFAULT_ROOM_HEIGHT))
+	var steps := stair_step_count(stair)
+	var tread := length / float(steps)
+	var rise := height / float(steps)
+	var along_x := dir in ["+x", "-x"]
+	var ascending := dir in ["+x", "+z"]
+	var boxes: Array = []
+	for index in steps:
+		## u = distance from the LOW end of the run, along the climb axis.
+		var u0 := tread * float(index)
+		var u1 := tread * float(index + 1) + (SKIN_EPS if index < steps - 1 else 0.0)
+		var top := start.y + rise * float(index + 1)
+		var bottom := start.y - SKIN_EPS
+		## Low end sits at the footprint edge the climb starts from.
+		var a0 := u0 if ascending else length - u1
+		var a1 := u1 if ascending else length - u0
+		var center: Vector3
+		var size: Vector3
+		if along_x:
+			center = Vector3(start.x + (a0 + a1) * 0.5, (bottom + top) * 0.5, start.z + width * 0.5)
+			size = Vector3(a1 - a0, top - bottom, width)
+		else:
+			center = Vector3(start.x + width * 0.5, (bottom + top) * 0.5, start.z + (a0 + a1) * 0.5)
+			size = Vector3(width, top - bottom, a1 - a0)
+		boxes.append({"center": center, "size": size})
+	return boxes
+
+
+static func _stair_layers(stair: Dictionary, fallback: Color) -> Array:
+	var color := _color_of(stair.get("color", null), fallback)
+	var material := str(stair.get("material", "painted"))
+	var layers: Array = []
+	for box_variant in stair_boxes(stair):
+		var box := box_variant as Dictionary
+		layers.append({
+			"center": box["center"], "size": box["size"],
+			"color": color, "material": material,
+		})
+	return layers
 
 
 # ── Surface layers (color + material per side) ───────────────────────────────
@@ -449,6 +534,10 @@ static func collect_colliders(plan: StructurePlan, offset := Vector3.ZERO) -> Ar
 		for box_variant in deck_boxes(deck_variant as Dictionary):
 			var box := box_variant as Dictionary
 			out.append({"center": (box["center"] as Vector3) + offset, "size": box["size"]})
+	for stair_variant in expanded["stairs"] as Array:
+		for box_variant in stair_boxes(stair_variant as Dictionary):
+			var box := box_variant as Dictionary
+			out.append({"center": (box["center"] as Vector3) + offset, "size": box["size"]})
 	return out
 
 
@@ -466,6 +555,9 @@ static func bake(plan: StructurePlan, offset := Vector3.ZERO, ghost := false) ->
 			_bucket_layer(buckets, layer_variant as Dictionary, offset)
 	for deck_variant in expanded["decks"] as Array:
 		for layer_variant in _plate_layers(deck_variant as Dictionary, wall_default, deck_default):
+			_bucket_layer(buckets, layer_variant as Dictionary, offset)
+	for stair_variant in expanded["stairs"] as Array:
+		for layer_variant in _stair_layers(stair_variant as Dictionary, deck_default):
 			_bucket_layer(buckets, layer_variant as Dictionary, offset)
 	for key in buckets.keys():
 		var bucket := buckets[key] as Dictionary

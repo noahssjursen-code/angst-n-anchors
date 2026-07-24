@@ -221,9 +221,13 @@ scenes for store stock; the trawler and catamaran scenes are frozen exceptions.
 
 Structure is DRAWN, not stacked. `StructurePlan` (`scripts/construction/`) is the
 shared document for vessels AND land buildings: wall runs, deck plates, rooms,
-and openings — each one part regardless of size. `StructureBaker` turns a plan
-into merged visuals and collision boxes from the same panel decomposition
-(door/stairwell openings are genuinely passable). `DeckFitout.apply_any`
+stairs, and openings — each one part regardless of size. `StructureBaker` turns
+a plan into merged visuals and collision boxes from the same panel decomposition
+(door/stairwell openings are genuinely passable). Stairs are solid stepped runs
+whose step boxes ARE the collision — walkable exactly as rendered, top tread
+flush on `start.y + height`. Rooms take `open_faces` (faces with no wall):
+a corridor is a room with both end faces open, and the studio's Corridor tool
+draws exactly that. `DeckFitout.apply_any`
 routes vessel records: `structure_plan_v1` dicts take the parametric path,
 legacy `cells` dicts still take the voxel path. Author plans in
 **Structure Studio** (`scenes/apps/structure_studio.tscn` — the single unified
