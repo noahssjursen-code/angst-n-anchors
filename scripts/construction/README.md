@@ -39,5 +39,6 @@ Demos:
 ## Studio UX notes
 
 Dirty title asterisk, overwrite/load/new confirms, 45s named autosave,
-material category filters, building plot sizes, deferred rebake for
-gizmo/spin edits, Esc cancel for staged moves.
+material category filters + search, building plot sizes, deferred rebake
+for gizmo/spin edits, Esc cancel for staged moves, mirror (X / Shift+X),
+eyedropper (E), entity list picker, raise-to-level, opening type cycle.

@@ -151,6 +151,27 @@ func _shutdown_for_probe() -> void:
 	if _hull_visual != null and is_instance_valid(_hull_visual):
 		_hull_visual.free()
 		_hull_visual = null
+	if _ghost != null and is_instance_valid(_ghost):
+		_ghost.free()
+		_ghost = null
+	if _selection_box != null and is_instance_valid(_selection_box):
+		_selection_box.free()
+		_selection_box = null
+	if _opening_ghost != null and is_instance_valid(_opening_ghost):
+		_opening_ghost.free()
+		_opening_ghost = null
+	if _hover_box != null and is_instance_valid(_hover_box):
+		_hover_box.free()
+		_hover_box = null
+	if _start_marker != null and is_instance_valid(_start_marker):
+		_start_marker.free()
+		_start_marker = null
+	if _gizmo_root != null and is_instance_valid(_gizmo_root):
+		_gizmo_root.free()
+		_gizmo_root = null
+	if _handle_root != null and is_instance_valid(_handle_root):
+		_handle_root.free()
+		_handle_root = null
 	StructureMaterialLibrary.clear_runtime_caches()
 
 
@@ -600,9 +621,11 @@ func _rebake() -> void:
 				(room_variant as Dictionary)["roof"] = false
 	_bake_root = StructureBaker.bake(solid_plan, _plan_offset)
 	add_child(_bake_root)
+	_bake_mesh_count = _bake_root.get_child_count()
 	if any_ghost:
 		_ghost_root = StructureBaker.bake(ghost_plan, _plan_offset, true)
 		add_child(_ghost_root)
+		_bake_mesh_count += _ghost_root.get_child_count()
 	_recompute_bounds()
 	_update_selection_visual()
 
@@ -734,6 +757,8 @@ func _handle_key(key: InputEventKey) -> void:
 				_mirror_selected("x")
 		KEY_E:
 			_eyedrop_selection_to_library()
+		KEY_TAB:
+			_cycle_selection(not key.shift_pressed)
 		KEY_T:
 			_show_roofs = not _show_roofs
 			_request_rebake(true)
@@ -856,15 +881,13 @@ func _mirror_selected(axis: String) -> void:
 	var key := "start" if entity.has("start") else "origin"
 	var origin := StructurePlan.vec3_of(entity.get(key))
 	var dims := _entity_dims(entity, kind)
-	var mid_x := float(_grid_width) * 0.5
-	var mid_z := float(_grid_length) * 0.5
 	if axis == "x":
 		var width := 0.0
 		if kind == "wall" and str(entity.get("axis", "x")) == "x":
 			width = float(entity.get("length", 1.0))
 		elif kind != "wall":
 			width = dims.x
-		origin.x = mid_x - (origin.x + width - mid_x)
+		origin.x = StructureStudioMath.mirror_origin_on_axis(origin.x, width, float(_grid_width))
 		if kind == "wall" and str(entity.get("axis", "x")) == "x":
 			_flip_wall_opening_offsets(entity)
 		elif kind == "room":
@@ -878,7 +901,7 @@ func _mirror_selected(axis: String) -> void:
 			depth = float(entity.get("length", 1.0))
 		elif kind != "wall":
 			depth = dims.z
-		origin.z = mid_z - (origin.z + depth - mid_z)
+		origin.z = StructureStudioMath.mirror_origin_on_axis(origin.z, depth, float(_grid_length))
 		if kind == "wall" and str(entity.get("axis", "x")) == "z":
 			_flip_wall_opening_offsets(entity)
 		elif kind == "room":
@@ -911,7 +934,7 @@ func _flip_wall_opening_offsets(entity: Dictionary) -> void:
 		var opening := opening_variant as Dictionary
 		var off := float(opening.get("offset", 0.0))
 		var width := float(opening.get("width", 1.0))
-		opening["offset"] = maxf(length - off - width, 0.0)
+		opening["offset"] = StructureStudioMath.mirror_opening_offset(off, width, length)
 
 
 func _flip_plate_opening_axis(entity: Dictionary, axis: String, extent: float) -> void:
@@ -933,6 +956,80 @@ func _flip_plate_opening_axis(entity: Dictionary, axis: String, extent: float) -
 				off.append(0.0)
 			off[1] = maxf(extent - float(off[1]) - hole.y, 0.0)
 		opening["offset"] = off
+
+
+func _cycle_selection(forward := true) -> void:
+	var ids: Array[int] = []
+	for collection in [_plan.rooms, _plan.walls, _plan.decks]:
+		for entity_variant in collection:
+			ids.append(int((entity_variant as Dictionary).get("id", -1)))
+	ids.sort()
+	if ids.is_empty():
+		return
+	var index := ids.find(_selected_id)
+	if index < 0:
+		index = 0 if forward else ids.size() - 1
+	else:
+		index = (index + (1 if forward else -1) + ids.size()) % ids.size()
+	_selected_id = ids[index]
+	_tool = Tool.SELECT
+	if _entity_bounds.has(_selected_id):
+		_cam_focus = (_entity_bounds[_selected_id] as AABB).get_center()
+	_update_selection_visual()
+	_refresh_panel()
+	_set_status("selected #%d" % _selected_id)
+
+
+func _raise_selected_to_level() -> void:
+	if _selected_id < 0:
+		_set_status("nothing selected", false)
+		return
+	var entity := _plan.entity_by_id(_selected_id)
+	if entity.is_empty() or entity.has("item_id"):
+		return
+	var key := "start" if entity.has("start") else "origin"
+	var origin := StructurePlan.vec3_of(entity.get(key))
+	if is_equal_approx(origin.y, _active_base):
+		_set_status("already at %.0f m" % _active_base)
+		return
+	_snapshot()
+	origin.y = _active_base
+	entity[key] = [origin.x, origin.y, origin.z]
+	_request_rebake(true)
+	_refresh_panel()
+	_set_status("moved #%d to level %.0f m" % [_selected_id, _active_base])
+
+
+func _refresh_entity_list() -> void:
+	if _entity_list == null:
+		return
+	for child in _entity_list.get_children():
+		child.queue_free()
+	var entries: Array = []
+	for collection in [_plan.rooms, _plan.walls, _plan.decks]:
+		for entity_variant in collection:
+			var entity := entity_variant as Dictionary
+			entries.append(entity)
+	entries.sort_custom(func(a, b): return int(a.get("id", 0)) < int(b.get("id", 0)))
+	for entity_variant in entries:
+		var entity: Dictionary = entity_variant
+		var id := int(entity.get("id", -1))
+		var kind := StructurePlan.kind_of_entity(entity)
+		var btn := Button.new()
+		btn.focus_mode = Control.FOCUS_NONE
+		btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		btn.text = "#%d  %s" % [id, kind]
+		if id == _selected_id:
+			btn.add_theme_color_override("font_color", HudStyle.C_AMBER)
+		btn.pressed.connect(func() -> void:
+			_selected_id = id
+			_tool = Tool.SELECT
+			if _entity_bounds.has(id):
+				_cam_focus = (_entity_bounds[id] as AABB).get_center()
+			_update_selection_visual()
+			_refresh_panel()
+		)
+		_entity_list.add_child(btn)
 
 
 func _eyedrop_selection_to_library() -> void:
@@ -2042,6 +2139,8 @@ var _name_edit: LineEdit
 var _hull_option: OptionButton
 var _hull_row: VBoxContainer
 var _entities_label: Label
+var _entity_list: VBoxContainer
+var _bake_mesh_count := 0
 var _toast_timer: Timer
 
 const TOOL_HINTS := {
@@ -2319,6 +2418,15 @@ func _build_tool_palette() -> void:
 	_entities_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	HudStyle.apply_body_font(_entities_label, 12, HudStyle.C_LABEL)
 	box.add_child(_entities_label)
+	var entity_scroll := ScrollContainer.new()
+	entity_scroll.custom_minimum_size = Vector2(0, 120)
+	entity_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	entity_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	box.add_child(entity_scroll)
+	_entity_list = VBoxContainer.new()
+	_entity_list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_entity_list.add_theme_constant_override("separation", 2)
+	entity_scroll.add_child(_entity_list)
 	var hints := Label.new()
 	hints.text = "RMB orbit · MMB pan · wheel zoom\nPgUp/PgDn level · F focus · E sample\nX mirror · DEL delete · Ctrl+D dup\nCtrl+Z/Y undo · Ctrl+S save · H help"
 	hints.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -2493,10 +2601,11 @@ func _refresh_panel() -> void:
 		_storey_step_button.set_pressed_no_signal(not is_equal_approx(_level_step, 1.0))
 	for slot in _slot_buttons.keys():
 		(_slot_buttons[slot] as Button).set_pressed_no_signal(slot == _armed_slot)
-	_entities_label.text = "Structure: %d   Items: %d\nUndo: %d   Level: %.0f m%s" % [
-		_plan.structure_count(), _plan.items.size(), _undo_stack.size(), _active_base,
+	_entities_label.text = "Structure: %d   Bake: %d\nUndo: %d   Level: %.0f m%s" % [
+		_plan.structure_count(), _bake_mesh_count, _undo_stack.size(), _active_base,
 		"  · dirty" if _dirty else "",
 	]
+	_refresh_entity_list()
 	_hull_option.visible = _context == "vessel"
 	if _building_option != null:
 		_building_option.visible = _context == "building"
@@ -2779,6 +2888,18 @@ func _refresh_inspector() -> void:
 				))
 			_inspector_box.add_child(opening_box)
 	_inspector_box.add_child(UiBuilder.separator())
+	var util_row := HBoxContainer.new()
+	util_row.add_theme_constant_override("separation", 6)
+	var sample_btn := UiBuilder.compact_button("Sample  [E]", 0.0)
+	sample_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	sample_btn.pressed.connect(func() -> void: _eyedrop_selection_to_library())
+	util_row.add_child(sample_btn)
+	var raise_btn := UiBuilder.compact_button("To level", 0.0)
+	raise_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	raise_btn.tooltip_text = "Move selection base to the current build level"
+	raise_btn.pressed.connect(func() -> void: _raise_selected_to_level())
+	util_row.add_child(raise_btn)
+	_inspector_box.add_child(util_row)
 	var action_row := HBoxContainer.new()
 	action_row.add_theme_constant_override("separation", 6)
 	var dup_btn := UiBuilder.compact_button("Duplicate", 0.0)

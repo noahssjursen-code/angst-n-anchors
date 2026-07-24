@@ -48,3 +48,14 @@ static func clamp_origin(origin: Vector3, kind: String, dims: Vector3, grid_widt
 			clamped.x = clampf(clamped.x, 0.0, max_x)
 			clamped.z = clampf(clamped.z, 0.0, max_z)
 	return clamped
+
+
+## Mirror an axis-aligned footprint across the plot midplane.
+## `extent` is the size along the mirror axis (0 for a point-like wall normal).
+static func mirror_origin_on_axis(origin: float, extent: float, grid_size: float) -> float:
+	var mid := grid_size * 0.5
+	return mid - (origin + extent - mid)
+
+
+static func mirror_opening_offset(offset: float, width: float, run: float) -> float:
+	return maxf(run - offset - width, 0.0)

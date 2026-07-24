@@ -24,6 +24,7 @@ Edit
   Ctrl+D       Duplicate
   X / Shift+X  Mirror on mid X / Z
   E            Sample selection into armed material slot
+  Tab / Shift+Tab  Cycle selection
   Esc          Cancel drag / clear selection
 
 View

@@ -221,6 +221,8 @@ func _test_studio_math() -> void:
 	_check(float(wall.get("length")) == 5.0, "wall length snaps")
 	var clipped: Dictionary = StructureStudioMath.wall_from_drag(Vector3(8, 0, 0), Vector3(20, 0, 0), 0.0, 10, 28)
 	_check(float(clipped.get("length")) <= 2.0, "wall drag clamps to grid width")
+	_check(is_equal_approx(StructureStudioMath.mirror_origin_on_axis(2.0, 4.0, 10.0), 4.0), "mirror origin across mid")
+	_check(is_equal_approx(StructureStudioMath.mirror_opening_offset(1.0, 2.0, 10.0), 7.0), "mirror opening offset")
 	var rect: Dictionary = StructureStudioMath.rect_from_drag(Vector3(1, 0, 1), Vector3(4, 0, 5), 0.0, 2.0)
 	_check(float(rect.get("width")) == 3.0, "rect width")
 	_check(float(rect.get("length")) == 4.0, "rect length")
