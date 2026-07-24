@@ -239,8 +239,10 @@ Engine authoring apps (run via `scenes/apps/*.tscn`, not in-game UI).
 Parametric structure engine shared by Studio and vessel fitout.
 - `StructurePlan` — `structure_plan_v1` document (walls/rooms/decks/items)
 - `StructureBaker` — merged visuals + matching collision boxes
-- `StructureMaterialLibrary` — global construction surfaces + textures
+- `StructureMaterialLibrary` — global construction surfaces + categories + textures
 - `StructureItemCatalog` — equipment/decor registry (empty until assets land)
+- Studio helpers — `StructureStudioMath` / `Openings` / `Document` / `Help`
+- Demos under `resources/data/structures/demo_*.json` (vessel + building)
 
 Player-owned port persistence/networking is deferred, but the data boundary is
 already explicit: immutable geography and the initial graph/berth plan are

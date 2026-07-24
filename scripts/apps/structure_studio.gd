@@ -1119,10 +1119,6 @@ func _rotate_selected(degrees: int) -> void:
 func _rotate_room_faces(entity: Dictionary, degrees: int) -> void:
 	if not entity.has("openings"):
 		return
-	## +90°: n→e→s→w→n ; −90° reverse.
-	var map_pos := {"n": "e", "e": "s", "s": "w", "w": "n"}
-	var map_neg := {"n": "w", "w": "s", "s": "e", "e": "n"}
-	var face_map: Dictionary = map_pos if degrees > 0 else map_neg
 	var size := StructurePlan.vec3_of(entity.get("size"), Vector3(4, 3, 4))
 	for opening_variant in entity["openings"] as Array:
 		var opening := opening_variant as Dictionary
@@ -1130,8 +1126,7 @@ func _rotate_room_faces(entity: Dictionary, degrees: int) -> void:
 		if face in ["floor", "ceiling"]:
 			_rotate_plate_opening_dict(opening, degrees, size.x, size.z)
 			continue
-		if face_map.has(face):
-			opening["face"] = face_map[face]
+		opening["face"] = StructureStudioMath.rotate_cardinal_face(face, degrees)
 
 
 func _rotate_plate_openings(entity: Dictionary, degrees: int) -> void:
@@ -1143,14 +1138,11 @@ func _rotate_plate_openings(entity: Dictionary, degrees: int) -> void:
 func _rotate_plate_opening_dict(opening: Dictionary, degrees: int, width: float, length: float) -> void:
 	var off := StructurePlan.vec2_of(opening.get("offset"), Vector2.ZERO)
 	var hole := StructurePlan.vec2_of(opening.get("size"), Vector2(1, 1))
-	if degrees > 0:
-		## (x,z) -> (L - z - hz, x)
-		opening["offset"] = [maxf(length - off.y - hole.y, 0.0), off.x]
-		opening["size"] = [hole.y, hole.x]
-	else:
-		## (x,z) -> (z, W - x - hx)
-		opening["offset"] = [off.y, maxf(width - off.x - hole.x, 0.0)]
-		opening["size"] = [hole.y, hole.x]
+	var rotated: Dictionary = StructureStudioMath.rotate_plate_opening(off, hole, width, length, degrees)
+	var next_off: Vector2 = rotated["offset"]
+	var next_hole: Vector2 = rotated["size"]
+	opening["offset"] = [next_off.x, next_off.y]
+	opening["size"] = [next_hole.x, next_hole.y]
 
 
 func _stack_selected_above() -> void:
@@ -2314,6 +2306,7 @@ var _entities_label: Label
 var _entity_list: VBoxContainer
 var _entity_list_filter := "all" ## all|room|wall|deck
 var _bake_mesh_count := 0
+var _check_report_label: Label
 var _toast_timer: Timer
 
 const TOOL_HINTS := {
@@ -2661,6 +2654,10 @@ func _build_drawer() -> void:
 	validate_btn.pressed.connect(func() -> void: _validate_current_plan())
 	file_row.add_child(validate_btn)
 	box.add_child(file_row)
+	_check_report_label = Label.new()
+	_check_report_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	HudStyle.apply_body_font(_check_report_label, 11, HudStyle.C_LABEL)
+	box.add_child(_check_report_label)
 	_load_option = OptionButton.new()
 	_load_option.focus_mode = Control.FOCUS_NONE
 	_load_option.custom_minimum_size = Vector2(0, 34)
@@ -2821,6 +2818,7 @@ func _validate_current_plan() -> void:
 	var report := _plan.validate(_grid_width, _grid_length)
 	var errors: PackedStringArray = report.get("errors", PackedStringArray())
 	var warns: PackedStringArray = report.get("warnings", PackedStringArray())
+	_update_check_report(errors, warns)
 	if not errors.is_empty():
 		_set_status("check failed (%d): %s" % [errors.size(), errors[0]], false)
 	elif not warns.is_empty():
@@ -2829,6 +2827,28 @@ func _validate_current_plan() -> void:
 		], false)
 	else:
 		_set_status("check ok — %d entities" % _plan.entity_count())
+
+
+func _update_check_report(errors: PackedStringArray, warns: PackedStringArray) -> void:
+	if _check_report_label == null:
+		return
+	if errors.is_empty() and warns.is_empty():
+		_check_report_label.text = "Check: clean"
+		_check_report_label.add_theme_color_override("font_color", HudStyle.C_GREEN)
+		return
+	var lines: PackedStringArray = []
+	for error in errors:
+		lines.append("ERR  %s" % error)
+	for warn in warns:
+		lines.append("WARN %s" % warn)
+		if lines.size() >= 6:
+			break
+	if errors.size() + warns.size() > lines.size():
+		lines.append("… +%d more" % (errors.size() + warns.size() - lines.size()))
+	_check_report_label.text = "\n".join(lines)
+	_check_report_label.add_theme_color_override(
+		"font_color", HudStyle.C_RED if not errors.is_empty() else HudStyle.C_AMBER
+	)
 
 
 func _refresh_panel() -> void:
@@ -2872,6 +2892,12 @@ func _refresh_panel() -> void:
 	_refresh_load_list()
 	_refresh_inspector()
 	_update_selection_visual()
+	## Soft check strip stays current without a toast on every edit.
+	var report := _plan.validate(_grid_width, _grid_length)
+	_update_check_report(
+		report.get("errors", PackedStringArray()),
+		report.get("warnings", PackedStringArray()),
+	)
 
 
 func _refresh_load_list() -> void:

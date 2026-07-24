@@ -59,3 +59,23 @@ static func mirror_origin_on_axis(origin: float, extent: float, grid_size: float
 
 static func mirror_opening_offset(offset: float, width: float, run: float) -> float:
 	return maxf(run - offset - width, 0.0)
+
+
+## Rotate a plate cut 90° inside a W×L footprint. Returns {offset, size}.
+static func rotate_plate_opening(offset: Vector2, hole: Vector2, width: float, length: float, degrees: int) -> Dictionary:
+	if degrees > 0:
+		return {
+			"offset": Vector2(maxf(length - offset.y - hole.y, 0.0), offset.x),
+			"size": Vector2(hole.y, hole.x),
+		}
+	return {
+		"offset": Vector2(offset.y, maxf(width - offset.x - hole.x, 0.0)),
+		"size": Vector2(hole.y, hole.x),
+	}
+
+
+static func rotate_cardinal_face(face: String, degrees: int) -> String:
+	var map_pos := {"n": "e", "e": "s", "s": "w", "w": "n"}
+	var map_neg := {"n": "w", "w": "s", "s": "e", "e": "n"}
+	var face_map: Dictionary = map_pos if degrees > 0 else map_neg
+	return str(face_map.get(face, face))
