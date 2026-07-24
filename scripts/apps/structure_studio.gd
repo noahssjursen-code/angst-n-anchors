@@ -1064,6 +1064,40 @@ func _raise_selected_to_level() -> void:
 	_set_status("moved #%d to level %.0f m" % [_selected_id, _active_base])
 
 
+func _center_selected_on_plot() -> void:
+	if _selected_id < 0:
+		_set_status("nothing selected", false)
+		return
+	var entity := _plan.entity_by_id(_selected_id)
+	if entity.is_empty() or entity.has("item_id"):
+		return
+	var kind := StructurePlan.kind_of_entity(entity)
+	var key := "start" if entity.has("start") else "origin"
+	var origin := StructurePlan.vec3_of(entity.get(key))
+	var dims := _entity_dims(entity, kind)
+	var width := dims.x
+	var depth := dims.z
+	if kind == "wall":
+		if str(entity.get("axis", "x")) == "x":
+			width = float(entity.get("length", 1.0))
+			depth = 0.0
+		else:
+			width = 0.0
+			depth = float(entity.get("length", 1.0))
+	var next := origin
+	next.x = roundf((float(_grid_width) - width) * 0.5)
+	next.z = roundf((float(_grid_length) - depth) * 0.5)
+	next = _clamp_origin_to_grid(next, kind, dims)
+	if next.is_equal_approx(origin):
+		_set_status("already centered")
+		return
+	_snapshot()
+	entity[key] = [next.x, next.y, next.z]
+	_request_rebake(true)
+	_refresh_panel()
+	_set_status("centered #%d" % _selected_id)
+
+
 func _snap_selected_to_grid() -> void:
 	if _selected_id < 0:
 		_set_status("nothing selected", false)
@@ -2926,6 +2960,23 @@ func _update_check_report(errors: PackedStringArray, warns: PackedStringArray) -
 	)
 
 
+func _copy_check_report() -> void:
+	var report := _plan.validate(_grid_width, _grid_length)
+	var errors: PackedStringArray = report.get("errors", PackedStringArray())
+	var warns: PackedStringArray = report.get("warnings", PackedStringArray())
+	var lines: PackedStringArray = [
+		"Structure Studio check — %s — %d entities" % [_context, _plan.entity_count()],
+	]
+	if errors.is_empty() and warns.is_empty():
+		lines.append("OK")
+	for error in errors:
+		lines.append("ERR  %s" % error)
+	for warn in warns:
+		lines.append("WARN %s" % warn)
+	DisplayServer.clipboard_set("\n".join(lines))
+	_set_status("check report copied")
+
+
 func _refresh_panel() -> void:
 	if _status_label == null:
 		return
@@ -3278,12 +3329,25 @@ func _refresh_inspector() -> void:
 	snap_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	snap_btn.pressed.connect(func() -> void: _snap_selected_to_grid())
 	util_row2.add_child(snap_btn)
+	var center_btn := UiBuilder.compact_button("Center", 0.0)
+	center_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	center_btn.tooltip_text = "Center selection on the plot"
+	center_btn.pressed.connect(func() -> void: _center_selected_on_plot())
+	util_row2.add_child(center_btn)
+	_inspector_box.add_child(util_row2)
+	var util_row3 := HBoxContainer.new()
+	util_row3.add_theme_constant_override("separation", 6)
 	var stack_btn := UiBuilder.compact_button("Stack ↑", 0.0)
 	stack_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	stack_btn.tooltip_text = "Duplicate selection one storey above"
 	stack_btn.pressed.connect(func() -> void: _stack_selected_above())
-	util_row2.add_child(stack_btn)
-	_inspector_box.add_child(util_row2)
+	util_row3.add_child(stack_btn)
+	var copy_check := UiBuilder.compact_button("Copy check", 0.0)
+	copy_check.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	copy_check.tooltip_text = "Copy validation report to clipboard"
+	copy_check.pressed.connect(func() -> void: _copy_check_report())
+	util_row3.add_child(copy_check)
+	_inspector_box.add_child(util_row3)
 	var rot_row := HBoxContainer.new()
 	rot_row.add_theme_constant_override("separation", 6)
 	var rot_left := UiBuilder.compact_button("⟲  [,]", 0.0)
