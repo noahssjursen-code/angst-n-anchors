@@ -124,6 +124,21 @@ func _run_studio_probe() -> void:
 	_place_stair(Vector3(1, 0, 24), Vector3(1, 0, 27))
 	expect.call("five entities placed", _plan.entity_count() == 5)
 	expect.call("one stair in the plan", _plan.stairs.size() == 1)
+	## Upper deck first, then a stair beneath it: placement must auto-cut a
+	## stairwell through the landing (and the build level must follow).
+	_set_build_level(3.0)
+	_place_rect_entity(Vector3(6, 3, 14), Vector3(9, 3, 18), false)
+	_set_build_level(0.0)
+	_place_stair(Vector3(7, 0, 14), Vector3(7, 0, 18))
+	var upper_deck := _plan.decks[1] as Dictionary
+	expect.call("upper deck placed at the raised build level", StructurePlan.vec3_of(upper_deck.get("origin")).y == 3.0)
+	var auto_holes := upper_deck.get("openings", []) as Array
+	expect.call("stair auto-cuts a stairwell in the deck above", auto_holes.size() == 1)
+	if auto_holes.size() == 1:
+		expect.call(
+			"auto stairwell is a stairwell cut",
+			str((auto_holes[0] as Dictionary).get("type")) == StructurePlan.OPENING_STAIRWELL
+		)
 	for collection in [_plan.walls, _plan.decks, _plan.rooms, _plan.stairs]:
 		for entity_variant in collection:
 			var id := int((entity_variant as Dictionary).get("id", -1))
@@ -150,8 +165,8 @@ func _run_studio_probe() -> void:
 	_set_context("vessel") ## wipes the plan
 	expect.call("context switch clears the plan", _plan.is_empty())
 	_load_plan(probe_path)
-	expect.call("save/load restores all entities", _plan.entity_count() == 5)
-	expect.call("save/load keeps the stair", _plan.stairs.size() == 1)
+	expect.call("save/load restores all entities", _plan.entity_count() == 7)
+	expect.call("save/load keeps the stairs", _plan.stairs.size() == 2)
 	expect.call(
 		"save/load keeps corridor open faces",
 		not ((_plan.rooms[1] as Dictionary).get("open_faces", []) as Array).is_empty()
@@ -712,9 +727,67 @@ func _place_stair(a: Vector3, b: Vector3) -> void:
 	_snapshot()
 	var stair := _plan.add_stair(min_pt, dir, length, width, DEFAULT_WALL_HEIGHT)
 	_stamp_library_style(stair, false)
+	var cut_deck := _auto_stairwell(stair)
 	_status = "stairs %s ×%.0f m ↑%.0f m" % [dir, length, DEFAULT_WALL_HEIGHT]
+	if cut_deck >= 0:
+		_status += " — stairwell cut in deck #%d" % cut_deck
 	_rebake()
 	_refresh_panel()
+
+
+## After placing a stair, punch a matching stairwell through the first plan
+## deck plate lying at the stair's landing height, so the climb is passable
+## without a manual Opening pass (same undo step as the stair itself). The
+## cut covers the top of the run far enough back for ~2.1 m of head
+## clearance. Returns the cut deck's id, or -1 when nothing needed cutting.
+func _auto_stairwell(stair: Dictionary) -> int:
+	var start := StructurePlan.vec3_of(stair.get("start"))
+	var length := float(stair.get("length", 3.0))
+	var width := float(stair.get("width", 1.0))
+	var height := float(stair.get("height", 3.0))
+	var dir := str(stair.get("dir", "+x"))
+	var top_y := start.y + height
+	var hole_len := clampf(2.1 * length / maxf(height, 0.5), 1.0, length)
+	## The cut rect in plan space, hugging the TOP end of the run.
+	## Rect2 carries (x, z) in (position.x, position.y).
+	var rect: Rect2
+	match dir:
+		"+x":
+			rect = Rect2(start.x + length - hole_len, start.z, hole_len, width)
+		"-x":
+			rect = Rect2(start.x, start.z, hole_len, width)
+		"+z":
+			rect = Rect2(start.x, start.z + length - hole_len, width, hole_len)
+		_:
+			rect = Rect2(start.x, start.z, width, hole_len)
+	for deck_variant in _plan.decks:
+		var deck := deck_variant as Dictionary
+		var origin := StructurePlan.vec3_of(deck.get("origin"))
+		if absf(origin.y - top_y) > 0.5:
+			continue
+		var size_list: Array = deck.get("size", [1.0, 1.0])
+		var extent := Vector2(float(size_list[0]), float(size_list[1]) if size_list.size() > 1 else 1.0)
+		var local := Rect2(rect.position - Vector2(origin.x, origin.z), rect.size)
+		var clipped := local.intersection(Rect2(Vector2.ZERO, extent))
+		if clipped.size.x < 0.5 or clipped.size.y < 0.5:
+			continue
+		for opening_variant in deck.get("openings", []) as Array:
+			var opening := opening_variant as Dictionary
+			var off: Array = opening.get("offset", [0.0, 0.0])
+			var hole_size: Array = opening.get("size", [1.0, 1.0])
+			var existing := Rect2(
+				float(off[0]), float(off[1]) if off.size() > 1 else 0.0,
+				float(hole_size[0]), float(hole_size[1]) if hole_size.size() > 1 else 1.0,
+			)
+			if existing.intersects(clipped):
+				return -1 ## the landing already has a hole — nothing to cut
+		(deck["openings"] as Array).append({
+			"type": StructurePlan.OPENING_STAIRWELL,
+			"offset": [clipped.position.x, clipped.position.y],
+			"size": [clipped.size.x, clipped.size.y],
+		})
+		return int(deck.get("id", -1))
+	return -1
 
 
 # ── Openings: one context shared by hover, drag and commit ───────────────────
