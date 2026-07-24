@@ -190,6 +190,40 @@ func structure_count() -> int:
 	return walls.size() + decks.size() + rooms.size()
 
 
+## Axis-aligned footprint of all structure parts in plan space.
+func bounds() -> AABB:
+	var has_any := false
+	var union := AABB()
+	for collection in [walls, decks, rooms]:
+		for entity_variant in collection:
+			var entity := entity_variant as Dictionary
+			var origin := vec3_of(entity.get("start", entity.get("origin")))
+			var size := Vector3(1, 1, 1)
+			var kind := kind_of_entity(entity)
+			match kind:
+				"wall":
+					var length := float(entity.get("length", 1.0))
+					var height := float(entity.get("height", DEFAULT_ROOM_HEIGHT))
+					if str(entity.get("axis", "x")) == "z":
+						size = Vector3(0.2, height, length)
+					else:
+						size = Vector3(length, height, 0.2)
+				"deck":
+					var plate := vec2_of(entity.get("size"), Vector2(1, 1))
+					size = Vector3(plate.x, float(entity.get("thickness", DEFAULT_PLATE_THICKNESS)), plate.y)
+				"room":
+					size = vec3_of(entity.get("size"), Vector3(2, DEFAULT_ROOM_HEIGHT, 2))
+			var aabb := AABB(origin, size)
+			if not has_any:
+				union = aabb
+				has_any = true
+			else:
+				union = union.merge(aabb)
+	if not has_any:
+		return AABB(Vector3.ZERO, Vector3.ZERO)
+	return union
+
+
 func clear() -> void:
 	walls.clear()
 	decks.clear()

@@ -166,34 +166,8 @@ func _paint_all(
 
 
 func _plan_bounds() -> AABB:
-	var has_any := false
-	var bounds := AABB()
-	for collection in [_plan.walls, _plan.decks, _plan.rooms]:
-		for entity_variant in collection:
-			var entity := entity_variant as Dictionary
-			var origin := StructurePlan.vec3_of(entity.get("start", entity.get("origin")))
-			var size := Vector3(1, 3, 1)
-			if entity.has("length"):
-				var length := float(entity.get("length", 1.0))
-				var height := float(entity.get("height", 3.0))
-				if str(entity.get("axis", "x")) == "z":
-					size = Vector3(0.2, height, length)
-				else:
-					size = Vector3(length, height, 0.2)
-			elif entity.has("size"):
-				var raw: Variant = entity.get("size")
-				if raw is Array and (raw as Array).size() >= 3:
-					size = StructurePlan.vec3_of(raw)
-				else:
-					var plate := StructurePlan.vec2_of(raw, Vector2(1, 1))
-					size = Vector3(plate.x, 0.2, plate.y)
-			var aabb := AABB(origin, size)
-			if not has_any:
-				bounds = aabb
-				has_any = true
-			else:
-				bounds = bounds.merge(aabb)
-	if not has_any:
+	var bounds := _plan.bounds()
+	if bounds.size.length() <= 0.01:
 		return AABB(Vector3(-8, 0, -8), Vector3(16, 4, 16))
 	return bounds
 

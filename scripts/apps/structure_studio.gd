@@ -915,18 +915,10 @@ func _focus_camera() -> void:
 		_cam_focus = aabb.get_center()
 		_cam_distance = clampf(aabb.size.length() * 1.8 + 6.0, 10.0, 80.0)
 		return
-	var has_any := false
-	var union := AABB()
-	for id in _entity_bounds.keys():
-		var piece := _entity_bounds[id] as AABB
-		if not has_any:
-			union = piece
-			has_any = true
-		else:
-			union = union.merge(piece)
-	if has_any:
-		_cam_focus = union.get_center()
-		_cam_distance = clampf(union.size.length() * 1.4 + 8.0, 14.0, 90.0)
+	var plan_bounds := _plan.bounds()
+	if plan_bounds.size.length() > 0.01:
+		_cam_focus = plan_bounds.get_center() + _plan_offset
+		_cam_distance = clampf(plan_bounds.size.length() * 1.4 + 8.0, 14.0, 90.0)
 	else:
 		_cam_focus = Vector3.ZERO
 		_cam_distance = 34.0

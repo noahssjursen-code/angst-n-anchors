@@ -11,6 +11,7 @@ func _ready() -> void:
 	_test_material_categories()
 	_test_item_catalog_empty()
 	_test_plan_round_trip()
+	_test_plan_bounds()
 	_test_plan_validate_and_duplicate()
 	_test_baker_room_expand_and_openings()
 	_test_baker_bake_produces_meshes()
@@ -99,6 +100,16 @@ func _test_plan_round_trip() -> void:
 	var restored_room := restored.rooms[0] as Dictionary
 	_check(str(restored_room.get("material_in")) == "wood", "room interior material preserved")
 	_check((restored_room.get("openings") as Array).size() == 1, "room openings preserved")
+
+
+func _test_plan_bounds() -> void:
+	var plan := StructurePlan.new()
+	plan.add_room(Vector3(2, 0, 2), Vector3(4, 3, 6))
+	plan.add_wall(Vector3(0, 0, 0), "x", 8.0, 2.0)
+	var bounds := plan.bounds()
+	_check(bounds.size.x >= 8.0, "plan bounds covers wall length")
+	_check(bounds.size.z >= 6.0, "plan bounds covers room depth")
+	_check(bounds.position.x <= 0.01, "plan bounds includes origin wall")
 
 
 func _test_plan_validate_and_duplicate() -> void:
