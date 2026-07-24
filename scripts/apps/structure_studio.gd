@@ -549,6 +549,10 @@ func _handle_key(key: InputEventKey) -> void:
 				_opening_ctx = {}
 				_opening_ghost.visible = false
 				_hide_ghost()
+			elif _selected_id >= 0:
+				_selected_id = -1
+				_update_selection_visual()
+				_refresh_panel()
 			else:
 				_set_tool(Tool.SELECT)
 		KEY_Q:
@@ -578,11 +582,23 @@ func _handle_key(key: InputEventKey) -> void:
 		KEY_PAGEDOWN:
 			_set_build_level(_active_base - 1.0)
 		KEY_1:
-			_set_tool(Tool.SELECT)
+			if _tool == Tool.OPENING:
+				_opening_type = StructurePlan.OPENING_DOOR
+				_refresh_panel()
+			else:
+				_set_tool(Tool.SELECT)
 		KEY_2:
-			_set_tool(Tool.WALL)
+			if _tool == Tool.OPENING:
+				_opening_type = StructurePlan.OPENING_WINDOW
+				_refresh_panel()
+			else:
+				_set_tool(Tool.WALL)
 		KEY_3:
-			_set_tool(Tool.ROOM)
+			if _tool == Tool.OPENING:
+				_opening_type = StructurePlan.OPENING_HOLE
+				_refresh_panel()
+			else:
+				_set_tool(Tool.ROOM)
 		KEY_4:
 			_set_tool(Tool.DECK)
 		KEY_5:
@@ -1791,8 +1807,14 @@ func _build_tool_palette() -> void:
 	_opening_section = VBoxContainer.new()
 	_opening_section.add_theme_constant_override("separation", 4)
 	_opening_section.add_child(UiBuilder.section_header("OPENING TYPE"))
-	for opening_type in [StructurePlan.OPENING_DOOR, StructurePlan.OPENING_WINDOW, StructurePlan.OPENING_HOLE]:
-		var btn := UiBuilder.tool_button(opening_type.capitalize(), 0.0)
+	var opening_defs := [
+		[StructurePlan.OPENING_DOOR, "Door  [1]"],
+		[StructurePlan.OPENING_WINDOW, "Window  [2]"],
+		[StructurePlan.OPENING_HOLE, "Hole  [3]"],
+	]
+	for opening_def in opening_defs:
+		var opening_type := str(opening_def[0])
+		var btn := UiBuilder.tool_button(str(opening_def[1]), 0.0)
 		btn.toggle_mode = true
 		btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		btn.pressed.connect(func() -> void:
