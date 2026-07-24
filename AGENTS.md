@@ -74,6 +74,7 @@ Conventions:
 Current demos:
 - `scenes/showcases/port_showcase.tscn` — terrain-traced port pipeline at real seeded coastal terrain sites
 - `scenes/showcases/ship_showcase.tscn` / `player_showcase.tscn`
+- `scenes/showcases/vessel_skin_showcase.tscn` — legacy per-brick vs `VesselSkinBaker` merged-skin rendering, side by side on real prebuilts with live mesh/node counts
 - `scenes/showcases/crane_showcase.tscn` — bulk grab + provision T-crane (containers)
 - `scenes/showcases/marine_autopilot_showcase.tscn` — deterministic sea route + replicated progress viewer
 - `tests/staged_vessel_visual_demo.tscn` — staged deck fitout construction
@@ -216,7 +217,32 @@ dimension-based ids such as `hull_90x24`. Do not name hulls after cargo, tanker,
 fishing, passenger, or other ship roles. Do not add new hand-authored vessel
 scenes for store stock; the trawler and catamaran scenes are frozen exceptions.
 
-`BrickCatalog` is the shared construction kit for vessel decks and land buildings. Marine-only pieces carry the `ship_only` tag and are filtered out of the building editor palette.
+### Parametric construction (the current era)
+
+Structure is DRAWN, not stacked. `StructurePlan` (`scripts/construction/`) is the
+shared document for vessels AND land buildings: wall runs, deck plates, rooms,
+and openings — each one part regardless of size. `StructureBaker` turns a plan
+into merged visuals and collision boxes from the same panel decomposition
+(door/stairwell openings are genuinely passable). `DeckFitout.apply_any`
+routes vessel records: `structure_plan_v1` dicts take the parametric path,
+legacy `cells` dicts still take the voxel path. Author plans in
+**Structure Studio** (`scenes/apps/structure_studio.tscn` — the single unified
+builder; the old shipyard/building brick editor scenes are retired) or write
+JSON directly in `resources/data/structures/`
+(see `demo_workboat.json`). Legacy compliance/budgets do not yet apply to
+plans — that rework lands with the new vocabulary.
+
+`BrickCatalog` is the legacy voxel construction kit (vessel decks + land
+buildings). Its definitions are currently WIPED pending the rebuild; the
+tag-driven mounting machinery stays and revives per definition added.
+
+Static bricks render through `VesselSkinBaker` (`DeckFitout.skin_enabled`, default on):
+full-cell cuboids become culled voxel faces with baked corner AO plus applied
+edge trim (deck/roof strips, base skirts, corner posts); every other static
+brick is exact-merged into per-material surfaces. Interactive bricks (doors,
+helm, lights, fishing gear, ladders, moorings, signs) stay live nodes. The
+baker is a pure function of (layout, grid) with no gameplay dependencies —
+reusable by headless services (e.g. future build moderation renders).
 
 ### Vessel orientation
 

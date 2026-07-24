@@ -157,8 +157,7 @@ func _apply_pending_or_default_fitout() -> void:
 
 
 func _apply_layout_dict(layout_dict: Dictionary) -> void:
-	var layout := BrickLayout.from_dict(layout_dict)
-	DeckFitout.apply(self, layout, make_grid(_hull_id))
+	DeckFitout.apply_any(self, layout_dict, make_grid(_hull_id))
 	set_meta("fitout_applied", true)
 
 

@@ -586,6 +586,22 @@ func _refresh_mass() -> void:
 	_refresh_center_of_mass()
 
 
+var _mass_batch_depth := 0
+
+
+## Batches many set_mass_entry calls into one mass refresh. Fit-out registers
+## hundreds of brick masses; refreshing per entry is O(n²) over the fleet-out.
+func begin_mass_batch() -> void:
+	_mass_batch_depth += 1
+
+
+func end_mass_batch() -> void:
+	_mass_batch_depth = maxi(0, _mass_batch_depth - 1)
+	if _mass_batch_depth == 0:
+		cargo_mass = _entry_category_mass("cargo")
+		_refresh_mass()
+
+
 func set_mass_entry(
 	entry_id: String,
 	entry_mass_kg: float,
@@ -603,6 +619,8 @@ func set_mass_entry(
 			"position": local_position,
 			"category": category,
 		}
+	if _mass_batch_depth > 0:
+		return
 	if category == "cargo":
 		cargo_mass = _entry_category_mass("cargo")
 	else:

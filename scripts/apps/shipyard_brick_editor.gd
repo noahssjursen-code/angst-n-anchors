@@ -39,7 +39,7 @@ var _layout: BrickLayout = BrickLayout.new()
 var _grid: DeckGrid
 var _layer_y: int = 0
 var _yaw: int = 0
-var _brick_id: String = "block"
+var _brick_id: String = "" ## empty until the rebuilt catalog has entries
 var _tool: int = Tool.PLACE
 var _painting := false
 var _last_paint_cell: Vector3i = Vector3i(-999, -999, -999)
@@ -381,7 +381,7 @@ func open_for_hull(
 		_layout = BrickLayout.from_dict(existing_layout)
 	_layer_y = 0
 	_yaw = 0
-	_brick_id = "block"
+	_brick_id = BrickCatalog.BRICKS.keys()[0] if not BrickCatalog.BRICKS.is_empty() else ""
 	_tool = Tool.PLACE
 	_clear_mark()
 	_clear_mark_preview()
@@ -925,7 +925,7 @@ func _on_registration_selected(index: int) -> void:
 		var denied := VesselCompliance.brick_placement_denied_reason(
 			_registration_id, _layout.hull_id if _layout != null else "", _brick_id
 		)
-		_brick_id = "block"
+		_brick_id = BrickCatalog.BRICKS.keys()[0] if not BrickCatalog.BRICKS.is_empty() else ""
 		_show_toast(denied)
 	_refresh_palette_selection()
 

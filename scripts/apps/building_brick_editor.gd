@@ -29,7 +29,7 @@ var _layout := BuildingLayout.new()
 var _grid: BuildingGrid
 var _layer_y: int = 0
 var _yaw: int = 0
-var _brick_id: String = "block"
+var _brick_id: String = "" ## empty until the rebuilt catalog has entries
 var _tool: int = Tool.PLACE
 var _painting := false
 var _last_paint_cell: Vector3i = Vector3i(-999, -999, -999)
@@ -145,7 +145,7 @@ func _row_thumb_rect(row: PanelContainer) -> TextureRect:
 func _open_editor() -> void:
 	_layer_y = 0
 	_yaw = 0
-	_brick_id = "block"
+	_brick_id = BrickCatalog.BRICKS.keys()[0] if not BrickCatalog.BRICKS.is_empty() else ""
 	_tool = Tool.PLACE
 	_clear_mark()
 	if _name_edit != null:

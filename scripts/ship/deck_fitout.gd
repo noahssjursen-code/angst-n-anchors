@@ -10,10 +10,70 @@ const FITOUT_JOB := "DeckFitoutJob"
 const FITOUT_JOB_SCRIPT := "res://scripts/ship/deck_fitout_job.gd"
 const AUTO_UTILS := "AutoUtilities"
 const LARGE_LAYOUT_THRESHOLD := 1000
+
+## When enabled, static bricks render as a merged VesselSkinBaker skin (culled
+## faces + baked AO + edge trim) instead of one scene node per brick.
+## Interactive bricks always stay live nodes. Toggle exists for the
+## side-by-side showcase and as an escape hatch.
+static var skin_enabled := true
 const READINESS_HULL := 0
 const READINESS_EXTERIOR := 1
 const READINESS_FULL_VISUAL := 2
 const READINESS_INTERACTIVE := 3
+
+
+## Routes a layout dictionary to the right construction system: parametric
+## StructurePlan documents (walls/rooms/decks/openings) or legacy voxel bricks.
+static func apply_any(
+	boat: BoatBody,
+	layout_dict: Dictionary,
+	grid: DeckGrid = null,
+	registration_id: String = "",
+) -> Dictionary:
+	if StructurePlan.is_plan(layout_dict):
+		return apply_plan(boat, StructurePlan.from_dict(layout_dict), grid)
+	return apply(boat, BrickLayout.from_dict(layout_dict), grid, registration_id)
+
+
+## Parametric construction path: merged bake + colliders from the same panel
+## decomposition. Legacy compliance/budgets do not apply to plans yet — the
+## rules rework follows once the new vocabulary stabilizes.
+static func apply_plan(boat: BoatBody, plan: StructurePlan, grid: DeckGrid = null) -> Dictionary:
+	if boat == null or plan == null:
+		return {}
+	clear(boat)
+	var g := grid if grid != null else grid_for_boat(boat)
+	var root := Node3D.new()
+	root.name = FITOUT_ROOT
+	boat.add_child(root)
+	boat.ensure_walk_deck()
+	boat.clear_walk_brick_colliders()
+	## Plan coordinates are grid-corner space; shift into boat-local.
+	var offset := Vector3(-g.half_beam, g.deck_y, -g.half_loa)
+	root.add_child(StructureBaker.bake(plan, offset))
+	var total_mass := 0.0
+	var weighted := Vector3.ZERO
+	var index := 0
+	for box_variant in StructureBaker.collect_colliders(plan, offset):
+		var box := box_variant as Dictionary
+		var size: Vector3 = box["size"]
+		boat.add_walk_brick_collider("plan_%d" % index, box["center"] as Vector3, size, 0.0)
+		## Coarse structural mass: panel volume at light-plate density.
+		var box_mass := size.x * size.y * size.z * 220.0
+		total_mass += box_mass
+		weighted += (box["center"] as Vector3) * box_mass
+		index += 1
+	if total_mass > 0.0:
+		boat.set_mass_entry("structure_plan", total_mass, weighted / total_mass, "brick")
+	var caps := {
+		"outfit_ok": true,
+		"structure_plan": true,
+		"plan_entities": plan.entity_count(),
+	}
+	boat.set_meta("brick_capabilities", caps)
+	boat.set_meta("brick_layout", plan.to_dict())
+	boat.set_meta("fitout_readiness", READINESS_INTERACTIVE)
+	return caps
 
 
 static func apply(
@@ -66,20 +126,30 @@ static func apply_sync(
 	boat.ensure_walk_deck()
 	boat.clear_walk_brick_colliders()
 	var visual_by_key := {}
+	var baked_items: Array = []
 	for item_raw in items:
 		var item := item_raw as Dictionary
+		if skin_enabled and VesselSkinBaker.is_baked_brick(str(item.get("brick_id", ""))):
+			## Static brick: geometry goes into the merged skin; only mounted
+			## sign/light fixtures on the cell still need individual nodes.
+			baked_items.append(item)
+			_create_cell_mounts(root, g, item)
+			continue
 		var visual := create_item_visual(root, g, item)
 		if visual != null:
 			visual_by_key[BrickLayout.cell_key(item["cell"] as Vector3i)] = visual
+	if not baked_items.is_empty():
+		root.add_child(VesselSkinBaker.bake_items(g, baked_items))
 	var state := {"brick_i": 0, "ladder_n": 0}
+	boat.begin_mass_batch()
 	for item_raw in items:
 		var item := item_raw as Dictionary
 		var key := BrickLayout.cell_key(item["cell"] as Vector3i)
 		var visual := visual_by_key.get(key, null) as Node3D
-		if visual != null:
-			mount_item_gameplay(
-				boat, root, g, item, visual, accepted_fishing, accepted_helm, state
-			)
+		mount_item_gameplay(
+			boat, root, g, item, visual, accepted_fishing, accepted_helm, state
+		)
+	boat.end_mass_batch()
 	return finish_fitout(boat, root, layout, g, outfit, declared, state)
 
 
@@ -135,7 +205,15 @@ static func create_item_visual(
 	visual.position = footprint_center_local(grid, cell, brick_id, yaw)
 	visual.rotation_degrees = Vector3(0.0, float(yaw), 0.0)
 	root.add_child(visual)
+	_create_cell_mounts(root, grid, item)
+	return visual
 
+
+## Sign plaques and light fixtures mounted ON a cell need their own nodes even
+## when the base brick's geometry lives in the merged skin bake.
+static func _create_cell_mounts(root: Node3D, grid: DeckGrid, item: Dictionary) -> void:
+	var cell: Vector3i = item.get("cell", Vector3i(-1, -1, -1))
+	var yaw := int(item.get("yaw", 0))
 	var sign_id := str(item.get("sign_id", ""))
 	if BrickCatalog.has(sign_id) and BrickCatalog.has_tag(sign_id, "text"):
 		var sign_yaw := int(item.get("sign_yaw", yaw))
@@ -144,12 +222,10 @@ static func create_item_visual(
 		sign.position = grid.cell_center_local(cell)
 		sign.rotation_degrees = Vector3(0.0, float(sign_yaw), 0.0)
 		root.add_child(sign)
-
 	var light_id := str(item.get("light_id", ""))
 	if BrickCatalog.has(light_id) and BrickCatalog.has_tag(light_id, "light"):
 		var light_yaw := int(item.get("light_yaw", yaw))
 		_add_mounted_light_visual(root, grid, cell, light_id, light_yaw)
-	return visual
 
 
 static func mount_item_gameplay(
@@ -162,7 +238,10 @@ static func mount_item_gameplay(
 	accepted_helm: Dictionary,
 	state: Dictionary,
 ) -> void:
-	if boat == null or root == null or grid == null or visual == null:
+	## `visual` is null for skin-baked bricks — mass, colliders, and mounted
+	## fixtures still apply; visual-dependent mounts only occur on live bricks,
+	## which always carry an individual visual.
+	if boat == null or root == null or grid == null:
 		return
 	var cell: Vector3i = item.get("cell", Vector3i(-1, -1, -1))
 	var brick_id := str(item.get("brick_id", ""))
@@ -616,6 +695,49 @@ static func _collider_spec(brick_id: String) -> Dictionary:
 			}
 		"deck_text", "wall_text_sm", "wall_text", "wall_text_lg":
 			return {"size": Vector3.ZERO, "offset": Vector3.ZERO}
+		"block_half", "block_45_half":
+			return {
+				"size": Vector3(sz.x, sz.y * 0.5, sz.z),
+				"offset": Vector3(0.0, -sz.y * 0.25, 0.0),
+			}
+		"block_quarter", "block_45_quarter":
+			return {
+				"size": Vector3(sz.x, sz.y * 0.25, sz.z),
+				"offset": Vector3(0.0, -sz.y * 0.375, 0.0),
+			}
+		"wall_panel":
+			return {
+				"size": Vector3(sz.x, sz.y, 0.18),
+				"offset": Vector3(0.0, 0.0, -sz.z * 0.5 + 0.09),
+			}
+		"wall_panel_half":
+			return {
+				"size": Vector3(sz.x, sz.y * 0.5, 0.18),
+				"offset": Vector3(0.0, -sz.y * 0.25, -sz.z * 0.5 + 0.09),
+			}
+		"wall_panel_quarter":
+			return {
+				"size": Vector3(sz.x, sz.y * 0.25, 0.18),
+				"offset": Vector3(0.0, -sz.y * 0.375, -sz.z * 0.5 + 0.09),
+			}
+		"wall_panel_45":
+			return {
+				"size": Vector3(sqrt(2.0) * sz.x, sz.y, 0.18),
+				"offset": Vector3.ZERO,
+				"yaw_offset": -45.0,
+			}
+		"wall_panel_45_half":
+			return {
+				"size": Vector3(sqrt(2.0) * sz.x, sz.y * 0.5, 0.18),
+				"offset": Vector3(0.0, -sz.y * 0.25, 0.0),
+				"yaw_offset": -45.0,
+			}
+		"wall_panel_45_quarter":
+			return {
+				"size": Vector3(sqrt(2.0) * sz.x, sz.y * 0.25, 0.18),
+				"offset": Vector3(0.0, -sz.y * 0.375, 0.0),
+				"yaw_offset": -45.0,
+			}
 		_:
 			return {"size": sz, "offset": Vector3.ZERO}
 
@@ -638,6 +760,17 @@ static func _add_brick_collider(
 	var offset: Vector3 = spec["offset"]
 	var basis := Basis.from_euler(Vector3(0.0, deg_to_rad(float(yaw)), 0.0))
 	var boat_point := boat_local + basis * offset
+	## Bricks whose visual is rotated within the cell (diagonal panels) carry
+	## the extra rotation in their collider spec.
+	var spec_yaw := float(spec.get("yaw_offset", 0.0))
+	if absf(spec_yaw) > 0.01:
+		boat.add_walk_brick_collider(
+			"%s_%d" % [brick_id, index],
+			boat_point,
+			size,
+			float(yaw) + spec_yaw,
+		)
+		return
 	if BrickCatalog.has_tag(brick_id, "diagonal_railing"):
 		boat.add_walk_brick_collider(
 			"%s_%d" % [brick_id, index],
