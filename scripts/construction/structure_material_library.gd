@@ -185,9 +185,16 @@ static func make_material(material_id: String, tint: Color, ghost := false) -> S
 
 
 ## Convenience for Studio UI — ordered ids suitable for button rows.
+## Grouped roughly: finishes → timber → metals → marine → masonry → ground → misc.
 static func studio_material_ids() -> Array[String]:
 	var preferred: Array[String] = [
-		"painted", "wood", "metal", "steel", "concrete", "asphalt", "brick", "corrugated",
+		"painted", "whitewash", "plaster", "tile", "plastic", "glass",
+		"wood", "teak", "plywood", "clapboard",
+		"metal", "steel", "galvanized", "aluminum", "corrugated", "rust",
+		"brass", "bronze", "copper",
+		"fiberglass", "antislip", "rubber", "rope", "netting", "canvas",
+		"concrete", "brick", "stone", "roof_tile", "shingle",
+		"asphalt", "tar", "cobble", "gravel", "sand", "dirt",
 	]
 	var out: Array[String] = []
 	for id in preferred:

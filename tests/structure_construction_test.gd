@@ -34,16 +34,24 @@ func _check(condition: bool, message: String) -> void:
 func _test_material_library() -> void:
 	StructureMaterialLibrary.reload()
 	var ids := StructureMaterialLibrary.ids()
-	_check(ids.size() >= 8, "material library has at least 8 construction materials")
+	_check(ids.size() >= 20, "material library has at least 20 construction materials")
 	_check(StructureMaterialLibrary.has_id("painted"), "painted material exists")
 	_check(StructureMaterialLibrary.has_id("wood"), "wood material exists")
+	_check(StructureMaterialLibrary.has_id("fiberglass"), "fiberglass material exists")
+	_check(StructureMaterialLibrary.has_id("rust"), "rust material exists")
+	_check(StructureMaterialLibrary.has_id("teak"), "teak material exists")
 	_check(StructureMaterialLibrary.normalize_id("nope") == "painted", "unknown material falls back to painted")
-	_check(StructureMaterialLibrary.swatches().size() >= 8, "colour swatches present")
+	_check(StructureMaterialLibrary.swatches().size() >= 12, "colour swatches present")
 	var mat := StructureMaterialLibrary.make_material("wood", Color(0.8, 0.7, 0.5))
 	_check(mat != null, "make_material returns StandardMaterial3D")
 	_check(mat.roughness > 0.5, "wood is rough")
 	var albedo := StructureMaterialLibrary.load_albedo("painted")
 	_check(albedo != null, "painted albedo texture loads")
+	var missing_textures := 0
+	for material_id in ids:
+		if StructureMaterialLibrary.load_albedo(material_id) == null:
+			missing_textures += 1
+	_check(missing_textures == 0, "every material has a loadable albedo texture")
 
 
 func _test_item_catalog_empty() -> void:

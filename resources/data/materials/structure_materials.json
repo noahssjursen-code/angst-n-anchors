@@ -1,6 +1,6 @@
 {
 	"schema_version": 1,
-	"description": "Global construction surface library for Structure Studio / StructureBaker. Plans store material ids; runtime resolves textures + PBR response here.",
+	"description": "Global construction surface library for Structure Studio / StructureBaker / world props. Plans store material ids; runtime resolves textures + PBR response here.",
 	"materials": {
 		"painted": {
 			"label": "Painted",
@@ -12,9 +12,29 @@
 			"tintable": true,
 			"default_color": [0.82, 0.84, 0.86]
 		},
+		"whitewash": {
+			"label": "Whitewash",
+			"category": "finish",
+			"roughness": 0.92,
+			"metallic": 0.00,
+			"uv_metres": 2.8,
+			"texture": "res://resources/textures/materials/structure/whitewash_albedo.png",
+			"tintable": true,
+			"default_color": [0.94, 0.93, 0.88]
+		},
+		"plaster": {
+			"label": "Plaster",
+			"category": "finish",
+			"roughness": 0.88,
+			"metallic": 0.00,
+			"uv_metres": 2.6,
+			"texture": "res://resources/textures/materials/structure/plaster_albedo.png",
+			"tintable": true,
+			"default_color": [0.90, 0.88, 0.82]
+		},
 		"wood": {
 			"label": "Wood",
-			"category": "finish",
+			"category": "timber",
 			"roughness": 0.90,
 			"metallic": 0.00,
 			"uv_metres": 1.8,
@@ -22,9 +42,39 @@
 			"tintable": true,
 			"default_color": [0.78, 0.70, 0.58]
 		},
+		"teak": {
+			"label": "Teak",
+			"category": "timber",
+			"roughness": 0.85,
+			"metallic": 0.00,
+			"uv_metres": 1.5,
+			"texture": "res://resources/textures/materials/structure/teak_albedo.png",
+			"tintable": true,
+			"default_color": [0.62, 0.42, 0.24]
+		},
+		"plywood": {
+			"label": "Plywood",
+			"category": "timber",
+			"roughness": 0.88,
+			"metallic": 0.00,
+			"uv_metres": 1.6,
+			"texture": "res://resources/textures/materials/structure/plywood_albedo.png",
+			"tintable": true,
+			"default_color": [0.72, 0.58, 0.38]
+		},
+		"clapboard": {
+			"label": "Clapboard",
+			"category": "cladding",
+			"roughness": 0.86,
+			"metallic": 0.00,
+			"uv_metres": 2.0,
+			"texture": "res://resources/textures/materials/structure/clapboard_albedo.png",
+			"tintable": true,
+			"default_color": [0.88, 0.86, 0.80]
+		},
 		"metal": {
 			"label": "Metal",
-			"category": "finish",
+			"category": "metal",
 			"roughness": 0.45,
 			"metallic": 0.60,
 			"uv_metres": 2.0,
@@ -34,13 +84,103 @@
 		},
 		"steel": {
 			"label": "Steel",
-			"category": "finish",
+			"category": "metal",
 			"roughness": 0.55,
 			"metallic": 0.35,
 			"uv_metres": 2.2,
 			"texture": "res://resources/textures/materials/structure/steel_albedo.png",
 			"tintable": true,
 			"default_color": [0.55, 0.58, 0.62]
+		},
+		"rust": {
+			"label": "Rust",
+			"category": "metal",
+			"roughness": 0.82,
+			"metallic": 0.15,
+			"uv_metres": 2.0,
+			"texture": "res://resources/textures/materials/structure/rust_albedo.png",
+			"tintable": true,
+			"default_color": [0.55, 0.28, 0.14]
+		},
+		"galvanized": {
+			"label": "Galvanized",
+			"category": "metal",
+			"roughness": 0.48,
+			"metallic": 0.55,
+			"uv_metres": 1.8,
+			"texture": "res://resources/textures/materials/structure/galvanized_albedo.png",
+			"tintable": true,
+			"default_color": [0.70, 0.74, 0.68]
+		},
+		"aluminum": {
+			"label": "Aluminum",
+			"category": "metal",
+			"roughness": 0.35,
+			"metallic": 0.75,
+			"uv_metres": 2.0,
+			"texture": "res://resources/textures/materials/structure/aluminum_albedo.png",
+			"tintable": true,
+			"default_color": [0.78, 0.80, 0.82]
+		},
+		"corrugated": {
+			"label": "Corrugated",
+			"category": "cladding",
+			"roughness": 0.50,
+			"metallic": 0.45,
+			"uv_metres": 1.4,
+			"texture": "res://resources/textures/materials/structure/corrugated_albedo.png",
+			"tintable": true,
+			"default_color": [0.58, 0.60, 0.63]
+		},
+		"brass": {
+			"label": "Brass",
+			"category": "metal",
+			"roughness": 0.40,
+			"metallic": 0.70,
+			"uv_metres": 1.2,
+			"texture": "res://resources/textures/materials/structure/brass_albedo.png",
+			"tintable": true,
+			"default_color": [0.78, 0.62, 0.22]
+		},
+		"bronze": {
+			"label": "Bronze",
+			"category": "metal",
+			"roughness": 0.50,
+			"metallic": 0.65,
+			"uv_metres": 1.2,
+			"texture": "res://resources/textures/materials/structure/bronze_albedo.png",
+			"tintable": true,
+			"default_color": [0.55, 0.38, 0.18]
+		},
+		"copper": {
+			"label": "Copper",
+			"category": "metal",
+			"roughness": 0.45,
+			"metallic": 0.70,
+			"uv_metres": 1.3,
+			"texture": "res://resources/textures/materials/structure/copper_albedo.png",
+			"tintable": true,
+			"default_color": [0.62, 0.38, 0.24]
+		},
+		"fiberglass": {
+			"label": "Fiberglass",
+			"category": "marine",
+			"roughness": 0.55,
+			"metallic": 0.05,
+			"uv_metres": 2.2,
+			"texture": "res://resources/textures/materials/structure/fiberglass_albedo.png",
+			"tintable": true,
+			"default_color": [0.88, 0.90, 0.92]
+		},
+		"antislip": {
+			"label": "Anti-slip",
+			"category": "marine",
+			"roughness": 0.95,
+			"metallic": 0.00,
+			"uv_metres": 1.6,
+			"texture": "res://resources/textures/materials/structure/antislip_albedo.png",
+			"tintable": true,
+			"default_color": [0.32, 0.34, 0.36]
 		},
 		"concrete": {
 			"label": "Concrete",
@@ -54,13 +194,23 @@
 		},
 		"asphalt": {
 			"label": "Asphalt",
-			"category": "deck",
+			"category": "ground",
 			"roughness": 0.95,
 			"metallic": 0.00,
 			"uv_metres": 2.4,
 			"texture": "res://resources/textures/materials/structure/asphalt_albedo.png",
 			"tintable": true,
 			"default_color": [0.28, 0.28, 0.27]
+		},
+		"tar": {
+			"label": "Tar",
+			"category": "ground",
+			"roughness": 0.70,
+			"metallic": 0.00,
+			"uv_metres": 2.0,
+			"texture": "res://resources/textures/materials/structure/tar_albedo.png",
+			"tintable": true,
+			"default_color": [0.12, 0.11, 0.10]
 		},
 		"brick": {
 			"label": "Brick",
@@ -72,15 +222,145 @@
 			"tintable": true,
 			"default_color": [0.78, 0.52, 0.42]
 		},
-		"corrugated": {
-			"label": "Corrugated",
-			"category": "cladding",
-			"roughness": 0.50,
-			"metallic": 0.45,
-			"uv_metres": 1.4,
-			"texture": "res://resources/textures/materials/structure/corrugated_albedo.png",
+		"stone": {
+			"label": "Stone",
+			"category": "structure",
+			"roughness": 0.90,
+			"metallic": 0.00,
+			"uv_metres": 2.2,
+			"texture": "res://resources/textures/materials/structure/stone_albedo.png",
 			"tintable": true,
-			"default_color": [0.58, 0.60, 0.63]
+			"default_color": [0.62, 0.60, 0.55]
+		},
+		"cobble": {
+			"label": "Cobble",
+			"category": "ground",
+			"roughness": 0.92,
+			"metallic": 0.00,
+			"uv_metres": 1.8,
+			"texture": "res://resources/textures/materials/structure/cobble_albedo.png",
+			"tintable": true,
+			"default_color": [0.48, 0.46, 0.42]
+		},
+		"gravel": {
+			"label": "Gravel",
+			"category": "ground",
+			"roughness": 0.98,
+			"metallic": 0.00,
+			"uv_metres": 1.5,
+			"texture": "res://resources/textures/materials/structure/gravel_albedo.png",
+			"tintable": true,
+			"default_color": [0.45, 0.43, 0.38]
+		},
+		"sand": {
+			"label": "Sand",
+			"category": "ground",
+			"roughness": 0.95,
+			"metallic": 0.00,
+			"uv_metres": 2.0,
+			"texture": "res://resources/textures/materials/structure/sand_albedo.png",
+			"tintable": true,
+			"default_color": [0.82, 0.72, 0.50]
+		},
+		"dirt": {
+			"label": "Dirt",
+			"category": "ground",
+			"roughness": 0.96,
+			"metallic": 0.00,
+			"uv_metres": 2.2,
+			"texture": "res://resources/textures/materials/structure/dirt_albedo.png",
+			"tintable": true,
+			"default_color": [0.42, 0.30, 0.18]
+		},
+		"tile": {
+			"label": "Tile",
+			"category": "finish",
+			"roughness": 0.35,
+			"metallic": 0.00,
+			"uv_metres": 1.2,
+			"texture": "res://resources/textures/materials/structure/tile_albedo.png",
+			"tintable": true,
+			"default_color": [0.88, 0.86, 0.80]
+		},
+		"roof_tile": {
+			"label": "Roof tile",
+			"category": "cladding",
+			"roughness": 0.80,
+			"metallic": 0.00,
+			"uv_metres": 1.4,
+			"texture": "res://resources/textures/materials/structure/roof_tile_albedo.png",
+			"tintable": true,
+			"default_color": [0.62, 0.28, 0.18]
+		},
+		"shingle": {
+			"label": "Shingle",
+			"category": "cladding",
+			"roughness": 0.92,
+			"metallic": 0.00,
+			"uv_metres": 1.5,
+			"texture": "res://resources/textures/materials/structure/shingle_albedo.png",
+			"tintable": true,
+			"default_color": [0.28, 0.27, 0.25]
+		},
+		"canvas": {
+			"label": "Canvas",
+			"category": "fabric",
+			"roughness": 0.90,
+			"metallic": 0.00,
+			"uv_metres": 1.4,
+			"texture": "res://resources/textures/materials/structure/canvas_albedo.png",
+			"tintable": true,
+			"default_color": [0.78, 0.72, 0.55]
+		},
+		"rubber": {
+			"label": "Rubber",
+			"category": "marine",
+			"roughness": 0.85,
+			"metallic": 0.00,
+			"uv_metres": 1.2,
+			"texture": "res://resources/textures/materials/structure/rubber_albedo.png",
+			"tintable": true,
+			"default_color": [0.14, 0.14, 0.15]
+		},
+		"plastic": {
+			"label": "Plastic",
+			"category": "finish",
+			"roughness": 0.45,
+			"metallic": 0.00,
+			"uv_metres": 1.8,
+			"texture": "res://resources/textures/materials/structure/plastic_albedo.png",
+			"tintable": true,
+			"default_color": [0.75, 0.78, 0.80]
+		},
+		"glass": {
+			"label": "Glass",
+			"category": "finish",
+			"roughness": 0.12,
+			"metallic": 0.00,
+			"uv_metres": 2.5,
+			"texture": "res://resources/textures/materials/structure/glass_albedo.png",
+			"tintable": true,
+			"default_color": [0.72, 0.80, 0.86]
+		},
+		"rope": {
+			"label": "Rope",
+			"category": "marine",
+			"roughness": 0.95,
+			"metallic": 0.00,
+			"uv_metres": 0.8,
+			"texture": "res://resources/textures/materials/structure/rope_albedo.png",
+			"tintable": true,
+			"default_color": [0.62, 0.50, 0.30]
+		},
+		"netting": {
+			"label": "Netting",
+			"category": "marine",
+			"roughness": 0.80,
+			"metallic": 0.05,
+			"uv_metres": 1.0,
+			"texture": "res://resources/textures/materials/structure/netting_albedo.png",
+			"tintable": true,
+			"default_color": [0.22, 0.28, 0.32]
 		}
 	},
 	"swatches": [
@@ -88,13 +368,21 @@
 		{"id": "white", "label": "White", "color": [0.92, 0.93, 0.94]},
 		{"id": "cream", "label": "Cream", "color": [0.90, 0.86, 0.76]},
 		{"id": "timber", "label": "Timber", "color": [0.62, 0.50, 0.38]},
+		{"id": "teak", "label": "Teak", "color": [0.55, 0.36, 0.20]},
 		{"id": "charcoal", "label": "Charcoal", "color": [0.24, 0.26, 0.28]},
 		{"id": "slate", "label": "Slate", "color": [0.42, 0.48, 0.52]},
 		{"id": "hull_red", "label": "Hull red", "color": [0.55, 0.20, 0.16]},
+		{"id": "rust", "label": "Rust", "color": [0.55, 0.28, 0.14]},
 		{"id": "harbour", "label": "Harbour", "color": [0.28, 0.44, 0.52]},
 		{"id": "yellow", "label": "Yellow", "color": [0.86, 0.68, 0.20]},
+		{"id": "safety_orange", "label": "Safety", "color": [0.92, 0.45, 0.12]},
 		{"id": "forest", "label": "Forest", "color": [0.30, 0.42, 0.28]},
 		{"id": "navy", "label": "Navy", "color": [0.18, 0.28, 0.42]},
-		{"id": "sand", "label": "Sand", "color": [0.78, 0.70, 0.52]}
+		{"id": "sand", "label": "Sand", "color": [0.78, 0.70, 0.52]},
+		{"id": "brass", "label": "Brass", "color": [0.78, 0.62, 0.22]},
+		{"id": "copper", "label": "Copper", "color": [0.62, 0.38, 0.24]},
+		{"id": "concrete", "label": "Concrete", "color": [0.72, 0.72, 0.70]},
+		{"id": "brick", "label": "Brick", "color": [0.72, 0.40, 0.30]},
+		{"id": "black", "label": "Black", "color": [0.10, 0.10, 0.11]}
 	]
 }
