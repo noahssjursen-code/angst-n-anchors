@@ -22,13 +22,15 @@ Edit
   Axis arrows  Move
   Del          Delete
   Ctrl+D       Duplicate
+  X / Shift+X  Mirror on mid X / Z
+  E            Sample selection into armed material slot
   Esc          Cancel drag / clear selection
 
 View
   T  Toggle roofs
   G  Ghost upper decks
-  F  Focus selection
-  PgUp/PgDn        Level ±1 m
+  F  Focus selection (or whole structure)
+  PgUp/PgDn        Level ± step
   Shift+PgUp/PgDn  Level ± storey (3 m)
   RMB orbit · MMB pan · wheel zoom
 

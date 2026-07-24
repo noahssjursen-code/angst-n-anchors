@@ -1,0 +1,69 @@
+{
+	"format": "structure_plan_v1",
+	"context": "vessel",
+	"hull_id": "hull_28x10",
+	"palette": {
+		"wall": [0.72, 0.74, 0.76],
+		"deck": [0.28, 0.30, 0.32]
+	},
+	"walls": [
+		{
+			"id": 1,
+			"start": [0, 0, 6],
+			"axis": "z",
+			"length": 18,
+			"height": 1.0,
+			"thickness": 0.1667,
+			"color": [0.42, 0.48, 0.52],
+			"material": "steel",
+			"color_out": [0.42, 0.48, 0.52],
+			"material_out": "steel",
+			"openings": []
+		},
+		{
+			"id": 2,
+			"start": [10, 0, 6],
+			"axis": "z",
+			"length": 18,
+			"height": 1.0,
+			"thickness": 0.1667,
+			"color": [0.42, 0.48, 0.52],
+			"material": "steel",
+			"color_out": [0.42, 0.48, 0.52],
+			"material_out": "steel",
+			"openings": []
+		}
+	],
+	"decks": [
+		{
+			"id": 3,
+			"origin": [1, 0, 6],
+			"size": [8, 16],
+			"thickness": 0.15,
+			"color": [0.28, 0.30, 0.32],
+			"material": "antislip",
+			"openings": [
+				{"type": "stairwell", "offset": [3.0, 1.0], "size": [2.0, 3.0]}
+			]
+		}
+	],
+	"rooms": [
+		{
+			"id": 4,
+			"origin": [1, 0, 10],
+			"size": [8, 2.5, 10],
+			"wall_thickness": 0.1667,
+			"roof": false,
+			"floor": true,
+			"color_out": [0.72, 0.74, 0.76],
+			"material_out": "fiberglass",
+			"color_in": [0.55, 0.58, 0.62],
+			"material_in": "steel",
+			"openings": [
+				{"face": "s", "type": "door", "offset": 3.0, "width": 2.0, "height": 2.2},
+				{"face": "n", "type": "hole", "offset": 2.0, "width": 4.0, "sill": 0.0, "height": 2.5}
+			]
+		}
+	],
+	"items": []
+}

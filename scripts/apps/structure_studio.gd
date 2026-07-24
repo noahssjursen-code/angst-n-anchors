@@ -726,11 +726,14 @@ func _handle_key(key: InputEventKey) -> void:
 		KEY_DELETE, KEY_BACKSPACE:
 			_delete_selected()
 		KEY_F:
-			if _selected_id >= 0 and _entity_bounds.has(_selected_id):
-				_cam_focus = (_entity_bounds[_selected_id] as AABB).get_center()
+			_focus_camera()
+		KEY_X:
+			if key.shift_pressed:
+				_mirror_selected("z")
 			else:
-				_cam_focus = Vector3.ZERO
-				_cam_distance = 34.0
+				_mirror_selected("x")
+		KEY_E:
+			_eyedrop_selection_to_library()
 		KEY_T:
 			_show_roofs = not _show_roofs
 			_request_rebake(true)
@@ -796,19 +799,173 @@ func _nudge_selected(delta: Vector3) -> void:
 	var kind := StructurePlan.kind_of_entity(entity)
 	var key := "start" if entity.has("start") else "origin"
 	var origin := StructurePlan.vec3_of(entity.get(key))
-	var dims := Vector3.ONE
-	if kind == "room":
-		dims = StructurePlan.vec3_of(entity.get("size"), Vector3(2, 3, 2))
-	elif kind == "deck":
-		var plate: Array = entity.get("size", [1.0, 1.0])
-		dims = Vector3(float(plate[0]), 0.0, float(plate[1]) if plate.size() > 1 else 1.0)
-	elif kind == "wall":
-		dims = Vector3(float(entity.get("length", 1.0)), 0.0, 0.0)
+	var dims := _entity_dims(entity, kind)
 	var next := _clamp_origin_to_grid(origin + delta, kind, dims)
 	entity[key] = [next.x, next.y, next.z]
 	_request_rebake(true)
 	_refresh_panel()
 	_set_status("nudged #%d" % _selected_id)
+
+
+func _entity_dims(entity: Dictionary, kind: String) -> Vector3:
+	match kind:
+		"room":
+			return StructurePlan.vec3_of(entity.get("size"), Vector3(2, 3, 2))
+		"deck":
+			var plate: Array = entity.get("size", [1.0, 1.0])
+			return Vector3(float(plate[0]), 0.0, float(plate[1]) if plate.size() > 1 else 1.0)
+		"wall":
+			return Vector3(float(entity.get("length", 1.0)), 0.0, 0.0)
+		_:
+			return Vector3.ONE
+
+
+func _focus_camera() -> void:
+	if _selected_id >= 0 and _entity_bounds.has(_selected_id):
+		var aabb := _entity_bounds[_selected_id] as AABB
+		_cam_focus = aabb.get_center()
+		_cam_distance = clampf(aabb.size.length() * 1.8 + 6.0, 10.0, 80.0)
+		return
+	var has_any := false
+	var union := AABB()
+	for id in _entity_bounds.keys():
+		var piece := _entity_bounds[id] as AABB
+		if not has_any:
+			union = piece
+			has_any = true
+		else:
+			union = union.merge(piece)
+	if has_any:
+		_cam_focus = union.get_center()
+		_cam_distance = clampf(union.size.length() * 1.4 + 8.0, 14.0, 90.0)
+	else:
+		_cam_focus = Vector3.ZERO
+		_cam_distance = 34.0
+
+
+## Mirror selection across the plot mid-plane on X or Z (Shift+X = Z).
+func _mirror_selected(axis: String) -> void:
+	if _selected_id < 0:
+		_set_status("nothing selected to mirror", false)
+		return
+	var entity := _plan.entity_by_id(_selected_id)
+	if entity.is_empty() or entity.has("item_id"):
+		return
+	var kind := StructurePlan.kind_of_entity(entity)
+	_snapshot()
+	var key := "start" if entity.has("start") else "origin"
+	var origin := StructurePlan.vec3_of(entity.get(key))
+	var dims := _entity_dims(entity, kind)
+	var mid_x := float(_grid_width) * 0.5
+	var mid_z := float(_grid_length) * 0.5
+	if axis == "x":
+		var width := 0.0
+		if kind == "wall" and str(entity.get("axis", "x")) == "x":
+			width = float(entity.get("length", 1.0))
+		elif kind != "wall":
+			width = dims.x
+		origin.x = mid_x - (origin.x + width - mid_x)
+		if kind == "wall" and str(entity.get("axis", "x")) == "x":
+			_flip_wall_opening_offsets(entity)
+		elif kind == "room":
+			_swap_room_faces(entity, "e", "w")
+			_flip_plate_opening_axis(entity, "x", dims.x)
+		elif kind == "deck":
+			_flip_plate_opening_axis(entity, "x", dims.x)
+	else:
+		var depth := 0.0
+		if kind == "wall" and str(entity.get("axis", "x")) == "z":
+			depth = float(entity.get("length", 1.0))
+		elif kind != "wall":
+			depth = dims.z
+		origin.z = mid_z - (origin.z + depth - mid_z)
+		if kind == "wall" and str(entity.get("axis", "x")) == "z":
+			_flip_wall_opening_offsets(entity)
+		elif kind == "room":
+			_swap_room_faces(entity, "n", "s")
+			_flip_plate_opening_axis(entity, "z", dims.z)
+		elif kind == "deck":
+			_flip_plate_opening_axis(entity, "z", dims.z)
+	origin = _clamp_origin_to_grid(origin, kind, dims)
+	entity[key] = [origin.x, origin.y, origin.z]
+	_request_rebake(true)
+	_refresh_panel()
+	_set_status("mirrored #%d on %s" % [_selected_id, axis.to_upper()])
+
+
+func _swap_room_faces(entity: Dictionary, a: String, b: String) -> void:
+	if not entity.has("openings"):
+		return
+	for opening_variant in entity["openings"] as Array:
+		var opening := opening_variant as Dictionary
+		var face := str(opening.get("face", ""))
+		if face == a:
+			opening["face"] = b
+		elif face == b:
+			opening["face"] = a
+
+
+func _flip_wall_opening_offsets(entity: Dictionary) -> void:
+	var length := float(entity.get("length", 1.0))
+	for opening_variant in entity.get("openings", []) as Array:
+		var opening := opening_variant as Dictionary
+		var off := float(opening.get("offset", 0.0))
+		var width := float(opening.get("width", 1.0))
+		opening["offset"] = maxf(length - off - width, 0.0)
+
+
+func _flip_plate_opening_axis(entity: Dictionary, axis: String, extent: float) -> void:
+	for opening_variant in entity.get("openings", []) as Array:
+		var opening := opening_variant as Dictionary
+		var face := str(opening.get("face", ""))
+		## Room wall openings use scalar offset; only plate cuts use [x,z].
+		if entity.has("size") and (entity.get("size") as Array).size() == 3 and face not in ["floor", "ceiling", ""]:
+			continue
+		var off_raw: Variant = opening.get("offset", [0.0, 0.0])
+		if off_raw is not Array:
+			continue
+		var off: Array = (off_raw as Array).duplicate()
+		var hole := StructurePlan.vec2_of(opening.get("size"), Vector2(1, 1))
+		if axis == "x" and off.size() > 0:
+			off[0] = maxf(extent - float(off[0]) - hole.x, 0.0)
+		elif axis == "z":
+			if off.size() < 2:
+				off.append(0.0)
+			off[1] = maxf(extent - float(off[1]) - hole.y, 0.0)
+		opening["offset"] = off
+
+
+func _eyedrop_selection_to_library() -> void:
+	var entity := _plan.entity_by_id(_selected_id)
+	if entity.is_empty() or entity.has("item_id"):
+		_set_status("select a surface to sample", false)
+		return
+	var kind := StructurePlan.kind_of_entity(entity)
+	var mat_id := "painted"
+	var color_raw: Variant = null
+	if kind == "room" or (kind == "wall" and (entity.has("material_in") or entity.has("color_in"))):
+		if _armed_slot == "in":
+			mat_id = str(entity.get("material_in", "wood"))
+			color_raw = entity.get("color_in", entity.get("color", null))
+		else:
+			mat_id = str(entity.get("material_out", entity.get("material", "painted")))
+			color_raw = entity.get("color_out", entity.get("color", null))
+	else:
+		mat_id = str(entity.get("material", entity.get("material_out", "painted")))
+		color_raw = entity.get("color", entity.get("color_out", null))
+	mat_id = StructureMaterialLibrary.normalize_id(mat_id)
+	(_lib[_armed_slot] as Dictionary)["material"] = mat_id
+	if color_raw is Array and (color_raw as Array).size() >= 3:
+		(_lib[_armed_slot] as Dictionary)["color"] = (color_raw as Array).duplicate()
+	else:
+		var sample := StructureMaterialLibrary.default_color(mat_id)
+		(_lib[_armed_slot] as Dictionary)["color"] = [sample.r, sample.g, sample.b]
+	_sync_plan_palette_from_library()
+	_set_status("sampled %s → %s" % [
+		StructureMaterialLibrary.label_of(mat_id),
+		"outside" if _armed_slot == "out" else "inside",
+	])
+	_refresh_panel()
 
 
 func _handle_mouse_button(button: InputEventMouseButton) -> void:
@@ -2163,7 +2320,7 @@ func _build_tool_palette() -> void:
 	HudStyle.apply_body_font(_entities_label, 12, HudStyle.C_LABEL)
 	box.add_child(_entities_label)
 	var hints := Label.new()
-	hints.text = "RMB orbit · MMB pan · wheel zoom\nPgUp/PgDn level · F focus\nDEL delete · Ctrl+D duplicate\nCtrl+Z/Y undo · Ctrl+S save"
+	hints.text = "RMB orbit · MMB pan · wheel zoom\nPgUp/PgDn level · F focus · E sample\nX mirror · DEL delete · Ctrl+D dup\nCtrl+Z/Y undo · Ctrl+S save · H help"
 	hints.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	HudStyle.apply_body_font(hints, 11, HudStyle.C_LABEL)
 	box.add_child(hints)
@@ -2225,6 +2382,7 @@ func _build_drawer() -> void:
 	for demo_def in [
 		["demo_workboat.json", "Demo workboat"],
 		["demo_bridge_cabin.json", "Demo bridge cabin"],
+		["demo_fish_hold.json", "Demo fish hold"],
 		["demo_harbour_shed.json", "Demo harbour shed"],
 		["demo_quay_office.json", "Demo quay office"],
 	]:

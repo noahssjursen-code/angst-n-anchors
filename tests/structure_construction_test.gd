@@ -18,6 +18,7 @@ func _ready() -> void:
 	_test_demo_harbour_shed_loads()
 	_test_demo_bridge_cabin_loads()
 	_test_demo_quay_office_loads()
+	_test_demo_fish_hold_loads()
 	_test_two_sided_free_wall()
 	_test_studio_math()
 	_test_studio_openings()
@@ -358,4 +359,24 @@ func _test_demo_quay_office_loads() -> void:
 	_check(plan.rooms.size() >= 2, "quay office is two-storey")
 	var root := StructureBaker.bake(plan)
 	_check(root.get_child_count() > 0, "quay office bakes")
+	root.free()
+
+
+func _test_demo_fish_hold_loads() -> void:
+	var path := "res://resources/data/structures/demo_fish_hold.json"
+	_check(FileAccess.file_exists(path), "demo_fish_hold.json exists")
+	var file := FileAccess.open(path, FileAccess.READ)
+	if file == null:
+		_failures.append("demo_fish_hold opens")
+		return
+	var parsed: Variant = JSON.parse_string(file.get_as_text())
+	file.close()
+	var plan := StructurePlan.from_dict(parsed as Dictionary)
+	_check(plan.context == "vessel", "fish hold is vessel")
+	var room := plan.rooms[0] as Dictionary
+	_check(bool(room.get("roof", true)) == false, "fish hold is open-top")
+	var expanded := StructureBaker.expand(plan)
+	_check((expanded["decks"] as Array).size() >= 1, "open hold still has floor/deck plates")
+	var root := StructureBaker.bake(plan)
+	_check(root.get_child_count() > 0, "fish hold bakes")
 	root.free()
