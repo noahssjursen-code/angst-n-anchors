@@ -19,6 +19,7 @@ func _ready() -> void:
 	_test_demo_bridge_cabin_loads()
 	_test_demo_quay_office_loads()
 	_test_demo_fish_hold_loads()
+	_test_demo_canopy_loads()
 	_test_two_sided_free_wall()
 	_test_studio_math()
 	_test_studio_openings()
@@ -336,7 +337,7 @@ func _test_studio_document() -> void:
 	_check(StructureStudioDocument.path_for_name("demo").ends_with("/demo.json"), "path_for_name")
 	_check(StructureStudioDocument.path_for_name("  ").is_empty(), "empty name has no path")
 	var paths := StructureStudioDocument.list_plan_paths()
-	_check(paths.size() >= 5, "lists demo plans")
+	_check(paths.size() >= 6, "lists demo plans")
 	_check(StructureStudioDocument.is_demo_path("res://resources/data/structures/demo_workboat.json"), "demo path detect")
 	for path in paths:
 		_check(not path.ends_with("item_catalog.json"), "item catalog excluded from plan list")
@@ -373,6 +374,24 @@ func _test_demo_quay_office_loads() -> void:
 	_check(plan.rooms.size() >= 2, "quay office is two-storey")
 	var root := StructureBaker.bake(plan)
 	_check(root.get_child_count() > 0, "quay office bakes")
+	root.free()
+
+
+func _test_demo_canopy_loads() -> void:
+	var path := "res://resources/data/structures/demo_canopy.json"
+	_check(FileAccess.file_exists(path), "demo_canopy.json exists")
+	var file := FileAccess.open(path, FileAccess.READ)
+	if file == null:
+		_failures.append("demo_canopy opens")
+		return
+	var parsed: Variant = JSON.parse_string(file.get_as_text())
+	file.close()
+	var plan := StructurePlan.from_dict(parsed as Dictionary)
+	_check(plan.context == "building", "canopy is building")
+	_check(plan.rooms.is_empty(), "canopy is free walls + decks")
+	_check(plan.decks.size() >= 2, "canopy has apron + roof plate")
+	var root := StructureBaker.bake(plan)
+	_check(root.get_child_count() > 0, "canopy bakes")
 	root.free()
 
 

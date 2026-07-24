@@ -26,6 +26,7 @@ Edit
   X / Shift+X  Mirror on mid X / Z
   E            Sample selection into armed material slot
   Tab / Shift+Tab  Cycle selection
+  Inspector also: To level · Snap grid · Stack ↑
   Esc          Cancel drag / clear selection
 
 View

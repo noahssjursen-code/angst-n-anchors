@@ -1,0 +1,74 @@
+{
+	"format": "structure_plan_v1",
+	"context": "building",
+	"hull_id": "",
+	"palette": {
+		"wall": [0.58, 0.60, 0.63],
+		"deck": [0.45, 0.45, 0.42]
+	},
+	"walls": [
+		{
+			"id": 1,
+			"start": [4, 0, 4],
+			"axis": "z",
+			"length": 12,
+			"height": 3.0,
+			"thickness": 0.2,
+			"color": [0.42, 0.36, 0.28],
+			"material": "wood",
+			"color_out": [0.42, 0.36, 0.28],
+			"material_out": "wood",
+			"openings": []
+		},
+		{
+			"id": 2,
+			"start": [16, 0, 4],
+			"axis": "z",
+			"length": 12,
+			"height": 3.0,
+			"thickness": 0.2,
+			"color": [0.42, 0.36, 0.28],
+			"material": "wood",
+			"color_out": [0.42, 0.36, 0.28],
+			"material_out": "wood",
+			"openings": []
+		},
+		{
+			"id": 3,
+			"start": [4, 0, 4],
+			"axis": "x",
+			"length": 12,
+			"height": 3.0,
+			"thickness": 0.2,
+			"color": [0.42, 0.36, 0.28],
+			"material": "wood",
+			"color_out": [0.42, 0.36, 0.28],
+			"material_out": "wood",
+			"openings": [
+				{"type": "hole", "offset": 3.0, "width": 6.0, "sill": 0.0, "height": 3.0}
+			]
+		}
+	],
+	"decks": [
+		{
+			"id": 4,
+			"origin": [4, 0, 4],
+			"size": [12, 12],
+			"thickness": 0.15,
+			"color": [0.45, 0.45, 0.42],
+			"material": "asphalt",
+			"openings": []
+		},
+		{
+			"id": 5,
+			"origin": [3.5, 3, 3.5],
+			"size": [13, 13],
+			"thickness": 0.12,
+			"color": [0.55, 0.58, 0.60],
+			"material": "corrugated",
+			"openings": []
+		}
+	],
+	"rooms": [],
+	"items": []
+}

@@ -607,9 +607,20 @@ func _rebake() -> void:
 	if _ghost_root != null and is_instance_valid(_ghost_root):
 		_ghost_root.free()
 		_ghost_root = null
-	## Ghost threshold tracks the storey height so custom room heights stay
-	## readable when "ghost upper decks" is on.
-	var storey := maxf(DEFAULT_WALL_HEIGHT - 0.01, 0.5)
+	## Ghost threshold tracks the tallest storey starting at the active base
+	## so custom room heights stay readable when "ghost upper decks" is on.
+	var storey := DEFAULT_WALL_HEIGHT
+	for room_variant in _plan.rooms:
+		var room := room_variant as Dictionary
+		var origin := StructurePlan.vec3_of(room.get("origin"))
+		if absf(origin.y - _active_base) < 0.05:
+			storey = maxf(storey, float(StructurePlan.vec3_of(room.get("size"), Vector3(4, 3, 4)).y))
+	for wall_variant in _plan.walls:
+		var wall := wall_variant as Dictionary
+		var origin := StructurePlan.vec3_of(wall.get("start"))
+		if absf(origin.y - _active_base) < 0.05:
+			storey = maxf(storey, float(wall.get("height", DEFAULT_WALL_HEIGHT)))
+	storey = maxf(storey - 0.01, 0.5)
 	var threshold := _active_base + storey if _ghost_levels else INF
 	_ghost_threshold = threshold
 	var solid_plan := _filtered_plan_copy(true, threshold)
@@ -1010,6 +1021,54 @@ func _raise_selected_to_level() -> void:
 	_set_status("moved #%d to level %.0f m" % [_selected_id, _active_base])
 
 
+func _snap_selected_to_grid() -> void:
+	if _selected_id < 0:
+		_set_status("nothing selected", false)
+		return
+	var entity := _plan.entity_by_id(_selected_id)
+	if entity.is_empty() or entity.has("item_id"):
+		return
+	var kind := StructurePlan.kind_of_entity(entity)
+	var key := "start" if entity.has("start") else "origin"
+	var origin := StructurePlan.vec3_of(entity.get(key))
+	var snapped := Vector3(roundf(origin.x), roundf(origin.y * 2.0) / 2.0, roundf(origin.z))
+	snapped = _clamp_origin_to_grid(snapped, kind, _entity_dims(entity, kind))
+	if snapped.is_equal_approx(origin):
+		_set_status("already on grid")
+		return
+	_snapshot()
+	entity[key] = [snapped.x, snapped.y, snapped.z]
+	_request_rebake(true)
+	_refresh_panel()
+	_set_status("snapped #%d" % _selected_id)
+
+
+func _stack_selected_above() -> void:
+	if _selected_id < 0:
+		_set_status("nothing selected", false)
+		return
+	var entity := _plan.entity_by_id(_selected_id)
+	if entity.is_empty() or entity.has("item_id"):
+		return
+	var kind := StructurePlan.kind_of_entity(entity)
+	var lift := DEFAULT_WALL_HEIGHT
+	if kind == "room":
+		lift = float(StructurePlan.vec3_of(entity.get("size"), Vector3(4, 3, 4)).y)
+	elif kind == "wall":
+		lift = float(entity.get("height", DEFAULT_WALL_HEIGHT))
+	_snapshot()
+	var copy := _plan.duplicate_entity(_selected_id, Vector3(0, lift, 0))
+	if copy.is_empty():
+		_set_status("stack failed", false)
+		return
+	_selected_id = int(copy.get("id", -1))
+	_active_base = StructurePlan.vec3_of(copy.get("start", copy.get("origin"))).y
+	_build_grid_lines()
+	_request_rebake(true)
+	_refresh_panel()
+	_set_status("stacked → #%d at %.0f m" % [_selected_id, _active_base])
+
+
 func _refresh_entity_list() -> void:
 	if _entity_list == null:
 		return
@@ -1019,6 +1078,9 @@ func _refresh_entity_list() -> void:
 	for collection in [_plan.rooms, _plan.walls, _plan.decks]:
 		for entity_variant in collection:
 			var entity := entity_variant as Dictionary
+			var kind := StructurePlan.kind_of_entity(entity)
+			if _entity_list_filter != "all" and kind != _entity_list_filter:
+				continue
 			entries.append(entity)
 	entries.sort_custom(func(a, b): return int(a.get("id", 0)) < int(b.get("id", 0)))
 	for entity_variant in entries:
@@ -2140,6 +2202,7 @@ var _hull_option: OptionButton
 var _hull_row: VBoxContainer
 var _entities_label: Label
 var _entity_list: VBoxContainer
+var _entity_list_filter := "all" ## all|room|wall|deck
 var _bake_mesh_count := 0
 var _toast_timer: Timer
 
@@ -2419,6 +2482,18 @@ func _build_tool_palette() -> void:
 	_entities_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	HudStyle.apply_body_font(_entities_label, 12, HudStyle.C_LABEL)
 	box.add_child(_entities_label)
+	var filter_row := HBoxContainer.new()
+	filter_row.add_theme_constant_override("separation", 4)
+	for filter_def in [["all", "All"], ["room", "Rm"], ["wall", "Wl"], ["deck", "Dk"]]:
+		var filter_key := str(filter_def[0])
+		var filter_btn := UiBuilder.compact_button(str(filter_def[1]), 0.0)
+		filter_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		filter_btn.pressed.connect(func() -> void:
+			_entity_list_filter = filter_key
+			_refresh_entity_list()
+		)
+		filter_row.add_child(filter_btn)
+	box.add_child(filter_row)
 	var entity_scroll := ScrollContainer.new()
 	entity_scroll.custom_minimum_size = Vector2(0, 120)
 	entity_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
@@ -2494,6 +2569,7 @@ func _build_drawer() -> void:
 		["demo_fish_hold.json", "Demo fish hold"],
 		["demo_harbour_shed.json", "Demo harbour shed"],
 		["demo_quay_office.json", "Demo quay office"],
+		["demo_canopy.json", "Demo canopy"],
 	]:
 		var demo_file := str(demo_def[0])
 		var demo_btn := UiBuilder.compact_button(str(demo_def[1]), 0.0)
@@ -2966,6 +3042,18 @@ func _refresh_inspector() -> void:
 	raise_btn.pressed.connect(func() -> void: _raise_selected_to_level())
 	util_row.add_child(raise_btn)
 	_inspector_box.add_child(util_row)
+	var util_row2 := HBoxContainer.new()
+	util_row2.add_theme_constant_override("separation", 6)
+	var snap_btn := UiBuilder.compact_button("Snap grid", 0.0)
+	snap_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	snap_btn.pressed.connect(func() -> void: _snap_selected_to_grid())
+	util_row2.add_child(snap_btn)
+	var stack_btn := UiBuilder.compact_button("Stack ↑", 0.0)
+	stack_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	stack_btn.tooltip_text = "Duplicate selection one storey above"
+	stack_btn.pressed.connect(func() -> void: _stack_selected_above())
+	util_row2.add_child(stack_btn)
+	_inspector_box.add_child(util_row2)
 	var action_row := HBoxContainer.new()
 	action_row.add_theme_constant_override("separation", 6)
 	var dup_btn := UiBuilder.compact_button("Duplicate", 0.0)

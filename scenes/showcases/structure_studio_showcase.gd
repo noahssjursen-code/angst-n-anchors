@@ -10,6 +10,7 @@ const DEMO_PATHS := [
 	"res://resources/data/structures/demo_fish_hold.json",
 	"res://resources/data/structures/demo_harbour_shed.json",
 	"res://resources/data/structures/demo_quay_office.json",
+	"res://resources/data/structures/demo_canopy.json",
 ]
 
 var _camera: Camera3D
