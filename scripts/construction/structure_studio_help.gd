@@ -36,6 +36,7 @@ View
   G  Ghost upper decks
   F  Focus selection (or whole structure)
   Home  Top-down ortho toggle
+  C  Toggle bake collider boxes
   PgUp/PgDn        Level ± step
   Shift+PgUp/PgDn  Level ± storey (3 m)
   RMB orbit · MMB pan · wheel zoom

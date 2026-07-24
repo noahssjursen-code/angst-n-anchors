@@ -28,6 +28,8 @@ var _clipboard_entity: Dictionary = {}
 var _probe_mode := false
 var _ortho_top := false
 var _recent_paths: Array[String] = []
+var _show_colliders := false
+var _collider_root: Node3D
 
 enum Tool { SELECT, WALL, ROOM, DECK, OPENING, ITEMS }
 
@@ -180,6 +182,9 @@ func _shutdown_for_probe() -> void:
 	if _handle_root != null and is_instance_valid(_handle_root):
 		_handle_root.free()
 		_handle_root = null
+	if _collider_root != null and is_instance_valid(_collider_root):
+		_collider_root.free()
+		_collider_root = null
 	_camera = null
 	StructureMaterialLibrary.clear_runtime_caches()
 
@@ -659,6 +664,7 @@ func _rebake() -> void:
 		_bake_mesh_count += _ghost_root.get_child_count()
 	_recompute_bounds()
 	_update_selection_visual()
+	_rebuild_collider_debug()
 
 
 func _filtered_plan_copy(keep_below: bool, threshold: float) -> StructurePlan:
@@ -806,6 +812,9 @@ func _handle_key(key: InputEventKey) -> void:
 			_rotate_selected(90)
 		KEY_HOME:
 			_toggle_ortho_top()
+		KEY_C:
+			if not key.ctrl_pressed:
+				_toggle_colliders()
 		KEY_T:
 			_show_roofs = not _show_roofs
 			_request_rebake(true)
@@ -890,6 +899,37 @@ func _entity_dims(entity: Dictionary, kind: String) -> Vector3:
 			return Vector3(float(entity.get("length", 1.0)), 0.0, 0.0)
 		_:
 			return Vector3.ONE
+
+
+func _toggle_colliders() -> void:
+	_show_colliders = not _show_colliders
+	_rebuild_collider_debug()
+	_set_status("colliders %s" % ("on" if _show_colliders else "off"))
+
+
+func _rebuild_collider_debug() -> void:
+	if _collider_root != null and is_instance_valid(_collider_root):
+		_collider_root.free()
+		_collider_root = null
+	if not _show_colliders:
+		return
+	_collider_root = Node3D.new()
+	_collider_root.name = "ColliderDebug"
+	add_child(_collider_root)
+	var mat := StandardMaterial3D.new()
+	mat.albedo_color = Color(HudStyle.C_AMBER, 0.25)
+	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+	for box_variant in StructureBaker.collect_colliders(_plan, _plan_offset):
+		var box := box_variant as Dictionary
+		var mi := MeshInstance3D.new()
+		var mesh := BoxMesh.new()
+		mesh.size = box["size"] as Vector3
+		mi.mesh = mesh
+		mi.material_override = mat
+		mi.position = box["center"] as Vector3
+		_collider_root.add_child(mi)
 
 
 func _toggle_ortho_top() -> void:
@@ -2565,6 +2605,10 @@ func _build_top_bar() -> void:
 	ortho_btn.tooltip_text = "Toggle top-down ortho  [Home]"
 	ortho_btn.pressed.connect(func() -> void: _toggle_ortho_top())
 	row.add_child(ortho_btn)
+	var col_btn := UiBuilder.compact_button("Col", 48.0)
+	col_btn.tooltip_text = "Toggle collider debug  [C]"
+	col_btn.pressed.connect(func() -> void: _toggle_colliders())
+	row.add_child(col_btn)
 
 
 func _build_tool_palette() -> void:
