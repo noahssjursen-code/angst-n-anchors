@@ -120,6 +120,7 @@ func _ready() -> void:
 	_build_scene()
 	_build_ui()
 	_setup_autosave()
+	_load_recent_paths()
 	for arg in OS.get_cmdline_user_args():
 		if str(arg) == "--studio-probe":
 			_probe_mode = true
@@ -2181,6 +2182,36 @@ func _remember_recent_path(path: String) -> void:
 		if next.size() >= 5:
 			break
 	_recent_paths = next
+	_persist_recent_paths()
+
+
+func _persist_recent_paths() -> void:
+	var file := FileAccess.open("user://structure_studio_recent.json", FileAccess.WRITE)
+	if file == null:
+		return
+	file.store_string(JSON.stringify({"paths": _recent_paths}))
+	file.close()
+
+
+func _load_recent_paths() -> void:
+	var path := "user://structure_studio_recent.json"
+	if not FileAccess.file_exists(path):
+		return
+	var file := FileAccess.open(path, FileAccess.READ)
+	if file == null:
+		return
+	var parsed: Variant = JSON.parse_string(file.get_as_text())
+	file.close()
+	if parsed is not Dictionary:
+		return
+	var paths: Array = (parsed as Dictionary).get("paths", [])
+	_recent_paths.clear()
+	for entry in paths:
+		var p := str(entry)
+		if not p.is_empty() and FileAccess.file_exists(p):
+			_recent_paths.append(p)
+		if _recent_paths.size() >= 5:
+			break
 
 
 # ── Scene / camera / UI ──────────────────────────────────────────────────────
@@ -2648,6 +2679,7 @@ func _build_tool_palette() -> void:
 		[StructurePlan.OPENING_DOOR, "Door  [1]"],
 		[StructurePlan.OPENING_WINDOW, "Window  [2]"],
 		[StructurePlan.OPENING_HOLE, "Hole  [3]"],
+		[StructurePlan.OPENING_STAIRWELL, "Stairwell"],
 	]
 	for opening_def in opening_defs:
 		var opening_type := str(opening_def[0])
@@ -3116,6 +3148,25 @@ func _refresh_inspector() -> void:
 	var kind := StructurePlan.kind_of_entity(entity)
 	_drawer_info.text = ""
 	_inspector_box.add_child(StructureStudioInspector.header(kind, _selected_id))
+	var dims := _entity_dims(entity, kind)
+	var dim_label := Label.new()
+	match kind:
+		"wall":
+			dim_label.text = "axis %s · L %.1f · H %.1f · T %.2f" % [
+				str(entity.get("axis", "x")),
+				float(entity.get("length", 1.0)),
+				float(entity.get("height", 3.0)),
+				float(entity.get("thickness", StructurePlan.DEFAULT_WALL_THICKNESS)),
+			]
+		"deck":
+			dim_label.text = "%.1f × %.1f m plate" % [dims.x, dims.z]
+		"room":
+			dim_label.text = "%.1f × %.1f × %.1f m" % [dims.x, dims.y, dims.z]
+		_:
+			dim_label.text = ""
+	if not dim_label.text.is_empty():
+		HudStyle.apply_body_font(dim_label, 11, HudStyle.C_LABEL)
+		_inspector_box.add_child(dim_label)
 	match kind:
 		"wall":
 			for field in [["length", 1.0, 60.0, 1.0], ["height", 0.5, 12.0, 0.5], ["thickness", 0.05, 0.5, 0.05]]:
