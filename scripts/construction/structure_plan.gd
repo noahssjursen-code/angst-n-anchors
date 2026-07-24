@@ -212,16 +212,22 @@ func validate(grid_width := 0, grid_length := 0) -> Dictionary:
 		var wall := wall_variant as Dictionary
 		if float(wall.get("length", 0.0)) < 1.0:
 			errors.append("wall #%d length < 1" % int(wall.get("id", -1)))
-		_validate_bounds(wall.get("start"), wall, grid_width, grid_length, warnings)
+		_validate_extents(wall, "wall", grid_width, grid_length, warnings)
+		_validate_materials(wall, warnings)
+		_validate_wall_openings(wall, warnings)
 	for deck_variant in decks:
 		var deck := deck_variant as Dictionary
-		_validate_bounds(deck.get("origin"), deck, grid_width, grid_length, warnings)
+		_validate_extents(deck, "deck", grid_width, grid_length, warnings)
+		_validate_materials(deck, warnings)
+		_validate_plate_openings(deck, warnings)
 	for room_variant in rooms:
 		var room := room_variant as Dictionary
 		var size := vec3_of(room.get("size"), Vector3(2, 3, 2))
 		if size.x < 2.0 or size.z < 2.0:
 			warnings.append("room #%d footprint under 2×2" % int(room.get("id", -1)))
-		_validate_bounds(room.get("origin"), room, grid_width, grid_length, warnings)
+		_validate_extents(room, "room", grid_width, grid_length, warnings)
+		_validate_materials(room, warnings)
+		_validate_room_openings(room, warnings)
 	for item_variant in items:
 		var item := item_variant as Dictionary
 		var item_id := str(item.get("item_id", "")).strip_edges()
@@ -239,12 +245,98 @@ func validate(grid_width := 0, grid_length := 0) -> Dictionary:
 	}
 
 
-func _validate_bounds(origin_raw: Variant, entity: Dictionary, grid_width: int, grid_length: int, warnings: PackedStringArray) -> void:
+func _validate_extents(entity: Dictionary, kind: String, grid_width: int, grid_length: int, warnings: PackedStringArray) -> void:
 	if grid_width <= 0 or grid_length <= 0:
 		return
-	var origin := vec3_of(origin_raw)
-	if origin.x < -0.01 or origin.z < -0.01 or origin.x > float(grid_width) + 0.01 or origin.z > float(grid_length) + 0.01:
-		warnings.append("entity #%d origin outside grid" % int(entity.get("id", -1)))
+	var origin := vec3_of(entity.get("start", entity.get("origin")))
+	var end := origin
+	match kind:
+		"wall":
+			var length := float(entity.get("length", 1.0))
+			if str(entity.get("axis", "x")) == "z":
+				end = origin + Vector3(0.0, 0.0, length)
+			else:
+				end = origin + Vector3(length, 0.0, 0.0)
+		"deck":
+			var plate := vec2_of(entity.get("size"), Vector2(1, 1))
+			end = origin + Vector3(plate.x, 0.0, plate.y)
+		"room":
+			var size := vec3_of(entity.get("size"), Vector3(2, 3, 2))
+			end = origin + Vector3(size.x, 0.0, size.z)
+	var id := int(entity.get("id", -1))
+	if origin.x < -0.01 or origin.z < -0.01:
+		warnings.append("entity #%d origin outside grid" % id)
+	if end.x > float(grid_width) + 0.01 or end.z > float(grid_length) + 0.01:
+		warnings.append("entity #%d extends outside grid" % id)
+
+
+func _validate_materials(entity: Dictionary, warnings: PackedStringArray) -> void:
+	var id := int(entity.get("id", -1))
+	for key in ["material", "material_out", "material_in"]:
+		if not entity.has(key):
+			continue
+		var mat_id := str(entity.get(key, "")).strip_edges()
+		if mat_id.is_empty():
+			continue
+		if not StructureMaterialLibrary.has_id(mat_id):
+			warnings.append("entity #%d unknown %s '%s'" % [id, key, mat_id])
+
+
+func _validate_wall_openings(wall: Dictionary, warnings: PackedStringArray) -> void:
+	var id := int(wall.get("id", -1))
+	var length := float(wall.get("length", 1.0))
+	var height := float(wall.get("height", 3.0))
+	var spans: Array = []
+	for opening_variant in wall.get("openings", []) as Array:
+		var opening := opening_variant as Dictionary
+		var off := float(opening.get("offset", 0.0))
+		var width := float(opening.get("width", 1.0))
+		var sill := float(opening.get("sill", 0.0))
+		var oh := float(opening.get("height", 2.0))
+		if off < -0.01 or off + width > length + 0.01:
+			warnings.append("wall #%d opening past length" % id)
+		if sill < -0.01 or sill + oh > height + 0.01:
+			warnings.append("wall #%d opening past height" % id)
+		for span_variant in spans:
+			var span: Vector2 = span_variant
+			if off < span.y - 0.01 and off + width > span.x + 0.01:
+				warnings.append("wall #%d overlapping openings" % id)
+				break
+		spans.append(Vector2(off, off + width))
+
+
+func _validate_plate_openings(deck: Dictionary, warnings: PackedStringArray) -> void:
+	var id := int(deck.get("id", -1))
+	var plate := vec2_of(deck.get("size"), Vector2(1, 1))
+	for opening_variant in deck.get("openings", []) as Array:
+		var opening := opening_variant as Dictionary
+		var off := vec2_of(opening.get("offset"), Vector2.ZERO)
+		var hole := vec2_of(opening.get("size"), Vector2(1, 1))
+		if off.x < -0.01 or off.y < -0.01 or off.x + hole.x > plate.x + 0.01 or off.y + hole.y > plate.y + 0.01:
+			warnings.append("deck #%d hole outside plate" % id)
+
+
+func _validate_room_openings(room: Dictionary, warnings: PackedStringArray) -> void:
+	var id := int(room.get("id", -1))
+	var size := vec3_of(room.get("size"), Vector3(2, 3, 2))
+	for opening_variant in room.get("openings", []) as Array:
+		var opening := opening_variant as Dictionary
+		var face := str(opening.get("face", ""))
+		if face in ["floor", "ceiling"]:
+			var off := vec2_of(opening.get("offset"), Vector2.ZERO)
+			var hole := vec2_of(opening.get("size"), Vector2(1, 1))
+			if off.x + hole.x > size.x + 0.01 or off.y + hole.y > size.z + 0.01:
+				warnings.append("room #%d plate opening outside footprint" % id)
+			continue
+		var run := size.x if face in ["n", "s"] else size.z
+		var off_u := float(opening.get("offset", 0.0))
+		var width := float(opening.get("width", 1.0))
+		var sill := float(opening.get("sill", 0.0))
+		var oh := float(opening.get("height", 2.0))
+		if off_u + width > run + 0.01:
+			warnings.append("room #%d opening past %s face" % [id, face])
+		if sill + oh > size.y + 0.01:
+			warnings.append("room #%d opening past room height" % id)
 
 
 func to_dict() -> Dictionary:

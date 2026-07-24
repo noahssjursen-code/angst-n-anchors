@@ -945,12 +945,15 @@ func _set_tool(tool: Tool) -> void:
 
 
 func _place_wall(a: Vector3, b: Vector3) -> void:
-	var spec := StructureStudioMath.wall_from_drag(a, b, _active_base)
+	var spec := StructureStudioMath.wall_from_drag(a, b, _active_base, _grid_width, _grid_length)
 	var start: Vector3 = spec["start"]
 	var axis := str(spec["axis"])
 	var length := float(spec["length"])
 	if not _is_buildable_corner(start) and _context == "vessel":
 		_set_status("wall start outside buildable deck", false)
+		return
+	if length < 1.0:
+		_set_status("wall clipped to empty by grid edge", false)
 		return
 	_snapshot()
 	var wall := _plan.add_wall(start, axis, length, DEFAULT_WALL_HEIGHT)
@@ -1634,13 +1637,21 @@ func _load_plan_now(path: String) -> void:
 
 
 func _saved_plan_paths() -> PackedStringArray:
-	var out := PackedStringArray()
+	var names: Array[String] = []
 	var dir := DirAccess.open(STRUCTURES_DIR)
 	if dir == null:
-		return out
+		return PackedStringArray()
 	for file_name in dir.get_files():
-		if file_name.ends_with(".json"):
-			out.append("%s/%s" % [STRUCTURES_DIR, file_name])
+		if not file_name.ends_with(".json"):
+			continue
+		## Item catalog lives beside plans but is not a structure_plan_v1.
+		if file_name == "item_catalog.json":
+			continue
+		names.append(file_name)
+	names.sort()
+	var out := PackedStringArray()
+	for file_name in names:
+		out.append("%s/%s" % [STRUCTURES_DIR, file_name])
 	return out
 
 
@@ -1854,6 +1865,8 @@ var _opening_section: VBoxContainer
 var _level_label: Label
 var _ghost_button: Button
 var _roofs_button: Button
+var _storey_step_button: Button
+var _material_search: LineEdit
 ## Modal surface library: arm a slot (Outside/Inside), then every swatch or
 ## material click paints that slot of the selection — and defines the style
 ## every NEWLY drawn room/wall/deck is born with.
@@ -2058,17 +2071,16 @@ func _build_tool_palette() -> void:
 		[Tool.ROOM, "Room  [R]"],
 		[Tool.DECK, "Deck plate  [D]"],
 		[Tool.OPENING, "Opening  [O]"],
-		[Tool.ITEMS, "Items  (later)"],
 	]
+	## Items tool stays hidden while the equipment catalog is empty.
+	if not StructureItemCatalog.is_empty():
+		tool_defs.append([Tool.ITEMS, "Items  [I]"])
 	for tool_def in tool_defs:
 		var tool: Tool = tool_def[0]
 		var btn := UiBuilder.tool_button(str(tool_def[1]), 0.0)
 		btn.toggle_mode = true
 		btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		btn.custom_minimum_size = Vector2(0, 36)
-		if tool == Tool.ITEMS:
-			btn.disabled = true
-			btn.tooltip_text = "Equipment & decor mount here once the item catalog is authored."
 		btn.pressed.connect(func() -> void: _set_tool(tool))
 		box.add_child(btn)
 		_tool_buttons[tool] = btn
@@ -2097,7 +2109,11 @@ func _build_tool_palette() -> void:
 	var level_row := HBoxContainer.new()
 	level_row.add_theme_constant_override("separation", 6)
 	var level_down := UiBuilder.compact_button("−", 34.0)
-	level_down.pressed.connect(func() -> void: _set_build_level(_active_base - 1.0))
+	level_down.tooltip_text = "Down 1 m (Shift+click = storey)"
+	level_down.pressed.connect(func() -> void:
+		var step := DEFAULT_WALL_HEIGHT if Input.is_key_pressed(KEY_SHIFT) else _level_step
+		_set_build_level(_active_base - step)
+	)
 	level_row.add_child(level_down)
 	_level_label = Label.new()
 	_level_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -2106,9 +2122,21 @@ func _build_tool_palette() -> void:
 	HudStyle.apply_body_font(_level_label, 12, HudStyle.C_TEXT, true)
 	level_row.add_child(_level_label)
 	var level_up := UiBuilder.compact_button("+", 34.0)
-	level_up.pressed.connect(func() -> void: _set_build_level(_active_base + 1.0))
+	level_up.tooltip_text = "Up 1 m (Shift+click = storey)"
+	level_up.pressed.connect(func() -> void:
+		var step := DEFAULT_WALL_HEIGHT if Input.is_key_pressed(KEY_SHIFT) else _level_step
+		_set_build_level(_active_base + step)
+	)
 	level_row.add_child(level_up)
 	box.add_child(level_row)
+	_storey_step_button = UiBuilder.tool_button("Step by storey (3 m)", 0.0)
+	_storey_step_button.toggle_mode = true
+	_storey_step_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_storey_step_button.pressed.connect(func() -> void:
+		_level_step = DEFAULT_WALL_HEIGHT if is_equal_approx(_level_step, 1.0) else 1.0
+		_refresh_panel()
+	)
+	box.add_child(_storey_step_button)
 	var ghost_btn := UiBuilder.tool_button("Ghost upper decks", 0.0)
 	ghost_btn.toggle_mode = true
 	ghost_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -2276,9 +2304,11 @@ func _validate_current_plan() -> void:
 	var errors: PackedStringArray = report.get("errors", PackedStringArray())
 	var warns: PackedStringArray = report.get("warnings", PackedStringArray())
 	if not errors.is_empty():
-		_set_status("check failed: %s" % errors[0], false)
+		_set_status("check failed (%d): %s" % [errors.size(), errors[0]], false)
 	elif not warns.is_empty():
-		_set_status("check: %s" % warns[0], false)
+		_set_status("check: %d warning%s — %s" % [
+			warns.size(), "s" if warns.size() != 1 else "", warns[0],
+		], false)
 	else:
 		_set_status("check ok — %d entities" % _plan.entity_count())
 
@@ -2297,9 +2327,12 @@ func _refresh_panel() -> void:
 	_opening_section.visible = _tool == Tool.OPENING
 	for opening_type in _opening_buttons.keys():
 		(_opening_buttons[opening_type] as Button).set_pressed_no_signal(opening_type == _opening_type)
-	_level_label.text = "%.0f m" % _active_base
+	var step_label := "storey" if not is_equal_approx(_level_step, 1.0) else "1 m"
+	_level_label.text = "%.0f m  [%s]" % [_active_base, step_label]
 	_ghost_button.set_pressed_no_signal(_ghost_levels)
 	_roofs_button.set_pressed_no_signal(_show_roofs)
+	if _storey_step_button != null:
+		_storey_step_button.set_pressed_no_signal(not is_equal_approx(_level_step, 1.0))
 	for slot in _slot_buttons.keys():
 		(_slot_buttons[slot] as Button).set_pressed_no_signal(slot == _armed_slot)
 	_entities_label.text = "Structure: %d   Items: %d\nUndo: %d   Level: %.0f m%s" % [
@@ -2485,6 +2518,18 @@ func _refresh_inspector() -> void:
 			HudStyle.apply_body_font(label, 11, HudStyle.C_TEXT)
 			row.add_child(label)
 			var captured_index := opening_index
+			var type_btn := UiBuilder.compact_button("type", 44.0)
+			type_btn.tooltip_text = "Cycle opening type"
+			type_btn.pressed.connect(func() -> void:
+				_snapshot()
+				if captured_index < 0 or captured_index >= openings.size():
+					return
+				var current := openings[captured_index] as Dictionary
+				current["type"] = _cycle_opening_type(str(current.get("type", "door")), kind)
+				_request_rebake(true)
+				_refresh_panel()
+			)
+			row.add_child(type_btn)
 			var remove_btn := UiBuilder.compact_button("×", 28.0)
 			remove_btn.pressed.connect(func() -> void:
 				_snapshot()
@@ -2599,6 +2644,23 @@ func _spin_commit() -> void:
 	_spin_undo_armed = true
 
 
+func _cycle_opening_type(current: String, host_kind: String) -> String:
+	var wall_cycle := [
+		StructurePlan.OPENING_DOOR,
+		StructurePlan.OPENING_WINDOW,
+		StructurePlan.OPENING_HOLE,
+	]
+	var plate_cycle := [
+		StructurePlan.OPENING_STAIRWELL,
+		StructurePlan.OPENING_HOLE,
+	]
+	var cycle: Array = plate_cycle if host_kind == "deck" else wall_cycle
+	var index := cycle.find(current)
+	if index < 0:
+		return str(cycle[0])
+	return str(cycle[(index + 1) % cycle.size()])
+
+
 ## The standing right-hand surface library. Modal: arm Outside or Inside, then
 ## clicks on materials/swatches paint that slot of the current selection AND
 ## become the default style for everything drawn next.
@@ -2625,6 +2687,11 @@ func _build_library_section(box: VBoxContainer) -> void:
 	HudStyle.apply_body_font(armed_hint, 11, HudStyle.C_LABEL)
 	armed_hint.text = "Armed slot paints selection + next draws."
 	box.add_child(armed_hint)
+	_material_search = LineEdit.new()
+	_material_search.placeholder_text = "filter materials…"
+	_material_search.clear_button_enabled = true
+	_material_search.text_changed.connect(func(_text: String) -> void: _rebuild_material_buttons())
+	box.add_child(_material_search)
 	var category_flow := HFlowContainer.new()
 	category_flow.add_theme_constant_override("h_separation", 4)
 	category_flow.add_theme_constant_override("v_separation", 4)
@@ -2675,17 +2742,25 @@ func _rebuild_material_buttons() -> void:
 	for child in _material_flow.get_children():
 		child.queue_free()
 	_lib_material_buttons.clear()
+	var query := ""
+	if _material_search != null:
+		query = _material_search.text.strip_edges().to_lower()
 	for material_name in StructureMaterialLibrary.ids_in_category(_material_category):
+		var label := StructureMaterialLibrary.label_of(material_name)
+		if not query.is_empty():
+			var hay := ("%s %s %s" % [label, material_name, StructureMaterialLibrary.category_of(material_name)]).to_lower()
+			if not hay.contains(query):
+				continue
 		var btn := Button.new()
 		btn.toggle_mode = true
 		btn.focus_mode = Control.FOCUS_NONE
 		btn.custom_minimum_size = Vector2(70, 34)
 		btn.tooltip_text = "%s · %s (%s)" % [
-			StructureMaterialLibrary.label_of(material_name),
+			label,
 			StructureMaterialLibrary.category_of(material_name),
 			material_name,
 		]
-		btn.text = StructureMaterialLibrary.label_of(material_name)
+		btn.text = label
 		var sample := StructureMaterialLibrary.default_color(material_name)
 		var chip := StyleBoxFlat.new()
 		chip.bg_color = sample

@@ -188,7 +188,38 @@ static func _parsed_openings(wall: Dictionary) -> Array:
 		if width > MIN_PANEL:
 			openings.append({"off": off, "w": width, "sill": sill, "h": opening_height})
 	openings.sort_custom(func(a, b): return float(a["off"]) < float(b["off"]))
-	return openings
+	## Merge horizontally overlapping openings so the scanline never walks
+	## backward or double-cuts the same span.
+	return _merge_overlapping_openings(openings)
+
+
+static func _merge_overlapping_openings(openings: Array) -> Array:
+	if openings.size() <= 1:
+		return openings
+	var merged: Array = []
+	var current: Dictionary = (openings[0] as Dictionary).duplicate()
+	for index in range(1, openings.size()):
+		var next := openings[index] as Dictionary
+		var cur_end := float(current["off"]) + float(current["w"])
+		var next_off := float(next["off"])
+		var next_end := next_off + float(next["w"])
+		if next_off <= cur_end + MIN_PANEL:
+			## Union along U; keep the more open V span (lower sill, higher top).
+			var new_off := float(current["off"])
+			var new_end := maxf(cur_end, next_end)
+			var cur_sill := float(current["sill"])
+			var next_sill := float(next["sill"])
+			var cur_top := cur_sill + float(current["h"])
+			var next_top := next_sill + float(next["h"])
+			current["off"] = new_off
+			current["w"] = new_end - new_off
+			current["sill"] = minf(cur_sill, next_sill)
+			current["h"] = maxf(cur_top, next_top) - float(current["sill"])
+		else:
+			merged.append(current)
+			current = next.duplicate()
+	merged.append(current)
+	return merged
 
 
 ## Boxes {center: Vector3, size: Vector3} for one wall in plan space.

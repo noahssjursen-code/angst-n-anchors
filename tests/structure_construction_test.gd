@@ -22,6 +22,9 @@ func _ready() -> void:
 	_test_studio_math()
 	_test_studio_openings()
 	_test_studio_help()
+	_test_overlapping_openings_and_holes()
+	_test_ghost_bake_and_open_room()
+	_test_validate_extent_and_materials()
 	if _failures.is_empty():
 		print("StructureConstruction: plan, baker, materials, and item hooks passed")
 		get_tree().quit(0)
@@ -215,12 +218,68 @@ func _test_studio_math() -> void:
 	var wall: Dictionary = StructureStudioMath.wall_from_drag(Vector3(0, 0, 0), Vector3(5, 0, 1), 0.0)
 	_check(str(wall.get("axis")) == "x", "wall drag prefers longer axis")
 	_check(float(wall.get("length")) == 5.0, "wall length snaps")
+	var clipped: Dictionary = StructureStudioMath.wall_from_drag(Vector3(8, 0, 0), Vector3(20, 0, 0), 0.0, 10, 28)
+	_check(float(clipped.get("length")) <= 2.0, "wall drag clamps to grid width")
 	var rect: Dictionary = StructureStudioMath.rect_from_drag(Vector3(1, 0, 1), Vector3(4, 0, 5), 0.0, 2.0)
 	_check(float(rect.get("width")) == 3.0, "rect width")
 	_check(float(rect.get("length")) == 4.0, "rect length")
 	var clamped: Vector3 = StructureStudioMath.clamp_origin(Vector3(-2, -1, 50), "room", Vector3(4, 3, 4), 24, 24)
 	_check(is_equal_approx(clamped.x, 0.0) and is_equal_approx(clamped.y, 0.0), "clamp origin floors at zero")
 	_check(is_equal_approx(clamped.z, 20.0), "clamp origin respects footprint against grid length")
+
+
+func _test_overlapping_openings_and_holes() -> void:
+	var plan := StructurePlan.new()
+	var wall := plan.add_wall(Vector3(0, 0, 0), "x", 10.0, 3.0)
+	(wall["openings"] as Array).append({"type": "door", "offset": 1.0, "width": 2.0, "height": 2.2})
+	(wall["openings"] as Array).append({"type": "window", "offset": 2.5, "width": 2.0, "sill": 1.0, "height": 1.2})
+	var panels := StructureBaker.wall_panels(wall)
+	_check(panels.size() >= 2, "overlapping openings still produce panels")
+	var root := StructureBaker.bake(plan)
+	_check(root.get_child_count() > 0, "overlapping openings bake")
+	root.free()
+	var deck := plan.add_deck(Vector3(0, 0, 0), Vector2(6, 6))
+	(deck["openings"] as Array).append({"type": "stairwell", "offset": [2.0, 2.0], "size": [2.0, 2.0]})
+	var strips := StructureBaker.deck_strips(deck)
+	_check(strips.size() >= 2, "deck hole produces multiple strips")
+	var colliders := StructureBaker.collect_colliders(plan)
+	_check(colliders.size() > 0, "colliders present with openings")
+
+
+func _test_ghost_bake_and_open_room() -> void:
+	var plan := StructurePlan.new()
+	var room := plan.add_room(Vector3(0, 0, 0), Vector3(5, 3, 5))
+	room["roof"] = false
+	room["floor"] = false
+	room["material_out"] = "painted"
+	room["material_in"] = "wood"
+	var expanded := StructureBaker.expand(plan)
+	_check((expanded["decks"] as Array).is_empty(), "open room expands to no plates")
+	_check((expanded["walls"] as Array).size() == 4, "open room still has four walls")
+	var ghost := StructureBaker.bake(plan, Vector3.ZERO, true)
+	_check(ghost.get_child_count() > 0, "ghost bake produces meshes")
+	var translucent := 0
+	for child in ghost.get_children():
+		if child is MeshInstance3D:
+			var mat := (child as MeshInstance3D).mesh.surface_get_material(0)
+			if mat is StandardMaterial3D and (mat as StandardMaterial3D).transparency != BaseMaterial3D.TRANSPARENCY_DISABLED:
+				translucent += 1
+	_check(translucent > 0, "ghost materials are translucent")
+	ghost.free()
+
+
+func _test_validate_extent_and_materials() -> void:
+	var plan := StructurePlan.new()
+	plan.context = "building"
+	var wall := plan.add_wall(Vector3(0, 0, 0), "x", 30.0, 3.0)
+	wall["material"] = "not_a_real_material"
+	(wall["openings"] as Array).append({"type": "door", "offset": 28.0, "width": 4.0, "height": 2.2})
+	var report := plan.validate(10, 10)
+	var warns: PackedStringArray = report.get("warnings", PackedStringArray())
+	_check(warns.size() >= 2, "validate warns on extent and unknown material")
+	var joined := " ".join(warns)
+	_check(joined.contains("outside") or joined.contains("extends"), "extent warning present")
+	_check(joined.contains("unknown"), "unknown material warning present")
 
 
 func _test_material_categories() -> void:

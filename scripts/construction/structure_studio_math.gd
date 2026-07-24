@@ -5,7 +5,7 @@ extends RefCounted
 ## Kept free of Node/UI dependencies so headless tests can exercise them.
 
 
-static func wall_from_drag(a: Vector3, b: Vector3, base_y: float) -> Dictionary:
+static func wall_from_drag(a: Vector3, b: Vector3, base_y: float, grid_width := 0, grid_length := 0) -> Dictionary:
 	var dx := absf(b.x - a.x)
 	var dz := absf(b.z - a.z)
 	var axis := "x" if dx >= dz else "z"
@@ -17,6 +17,11 @@ static func wall_from_drag(a: Vector3, b: Vector3, base_y: float) -> Dictionary:
 	)
 	start.x = roundf(start.x)
 	start.z = roundf(start.z)
+	if grid_width > 0 and grid_length > 0:
+		if axis == "x":
+			length = minf(length, maxf(float(grid_width) - start.x, 1.0))
+		else:
+			length = minf(length, maxf(float(grid_length) - start.z, 1.0))
 	return {"axis": axis, "length": length, "start": start}
 
 
