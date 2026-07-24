@@ -1097,6 +1097,28 @@ func _raise_selected_to_level() -> void:
 	_set_status("moved #%d to level %.0f m" % [_selected_id, _active_base])
 
 
+func _set_selected_storey_height() -> void:
+	if _selected_id < 0:
+		return
+	var entity := _plan.entity_by_id(_selected_id)
+	if entity.is_empty():
+		return
+	var kind := StructurePlan.kind_of_entity(entity)
+	_snapshot()
+	if kind == "wall":
+		entity["height"] = DEFAULT_WALL_HEIGHT
+	elif kind == "room":
+		var size: Array = (entity.get("size", [4, 3, 4]) as Array).duplicate()
+		size[1] = DEFAULT_WALL_HEIGHT
+		entity["size"] = size
+	else:
+		_set_status("height only for walls/rooms", false)
+		return
+	_request_rebake(true)
+	_refresh_panel()
+	_set_status("height → %.0f m" % DEFAULT_WALL_HEIGHT)
+
+
 func _center_selected_on_plot() -> void:
 	if _selected_id < 0:
 		_set_status("nothing selected", false)
@@ -3447,6 +3469,23 @@ func _refresh_inspector() -> void:
 	copy_check.pressed.connect(func() -> void: _copy_check_report())
 	util_row3.add_child(copy_check)
 	_inspector_box.add_child(util_row3)
+	if kind in ["wall", "room"] and not (entity.get("openings", []) as Array).is_empty():
+		var clear_open := UiBuilder.compact_button("Clear openings", 0.0)
+		clear_open.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		clear_open.pressed.connect(func() -> void:
+			_snapshot()
+			entity["openings"] = []
+			_request_rebake(true)
+			_refresh_panel()
+			_set_status("cleared openings on #%d" % _selected_id)
+		)
+		_inspector_box.add_child(clear_open)
+	if kind == "wall" or kind == "room":
+		var storey_h := UiBuilder.compact_button("Height → 3 m", 0.0)
+		storey_h.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		storey_h.tooltip_text = "Set wall/room height to one storey"
+		storey_h.pressed.connect(func() -> void: _set_selected_storey_height())
+		_inspector_box.add_child(storey_h)
 	var rot_row := HBoxContainer.new()
 	rot_row.add_theme_constant_override("separation", 6)
 	var rot_left := UiBuilder.compact_button("⟲  [,]", 0.0)

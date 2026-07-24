@@ -196,9 +196,9 @@ func _rebuild() -> void:
 			boat.process_mode = Node.PROCESS_MODE_DISABLED
 			_hull.add_child(boat)
 			offset = Vector3(-grid.half_beam, 0.0, -grid.half_loa)
-			_bake_root = StructureBaker.bake(_plan, offset)
+			_bake_root = StructureBaker.mount(_plan, self, offset)
 		else:
-			_bake_root = StructureBaker.bake(_plan)
+			_bake_root = StructureBaker.mount(_plan, self)
 	else:
 		var plot := maxf(maxf(bounds.size.x, bounds.size.z) + 8.0, 16.0)
 		var slab := MeshInstance3D.new()
@@ -211,8 +211,7 @@ func _rebuild() -> void:
 		slab.material_override = mat
 		_hull.add_child(slab)
 		offset = Vector3(-bounds.get_center().x, 0.0, -bounds.get_center().z)
-		_bake_root = StructureBaker.bake(_plan, offset)
-	add_child(_bake_root)
+		_bake_root = StructureBaker.mount(_plan, self, offset)
 	_fit_camera(bounds, offset)
 	if _show_colliders:
 		_build_collider_debug(offset)

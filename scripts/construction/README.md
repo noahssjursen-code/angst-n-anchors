@@ -39,10 +39,12 @@ Demos:
 - `demo_harbour_shed.json` — brick shed on concrete apron
 - `demo_quay_office.json` — two-storey quay office
 - `demo_canopy.json` — free-wall canopy + corrugated roof
+- `demo_pier_shack.json` — small plywood pier shed
 
 ## Studio UX notes
 
 Dirty title asterisk, overwrite/load/new confirms, 45s named autosave,
 material category filters + search, building plot sizes, deferred rebake
 for gizmo/spin edits, Esc cancel for staged moves, mirror (X / Shift+X),
-eyedropper (E), entity list picker, raise-to-level, opening type cycle.
+eyedropper (E), entity list picker, raise-to-level / snap / center / stack /
+rotate, opening type cycle, collider debug, top-down ortho, recent files.
