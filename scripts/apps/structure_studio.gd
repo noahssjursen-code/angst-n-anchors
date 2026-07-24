@@ -25,6 +25,7 @@ const STRUCTURES_DIR := StructureStudioDocument.STRUCTURES_DIR
 const GRID_SNAP := 1.0
 const DEFAULT_WALL_HEIGHT := 3.0
 var _clipboard_entity: Dictionary = {}
+var _probe_mode := false
 
 enum Tool { SELECT, WALL, ROOM, DECK, OPENING, ITEMS }
 
@@ -115,13 +116,15 @@ func _ready() -> void:
 	_build_scene()
 	_build_ui()
 	_setup_autosave()
-	_set_context("vessel", true)
 	for arg in OS.get_cmdline_user_args():
 		if str(arg) == "--studio-probe":
-			var report := _probe_report()
-			print(report)
-			_shutdown_for_probe()
-			get_tree().quit(0 if report.contains("ok") else 1)
+			_probe_mode = true
+	_set_context("vessel", true)
+	if _probe_mode:
+		var report := _probe_report()
+		print(report)
+		_shutdown_for_probe()
+		get_tree().quit(0 if report.contains("ok") else 1)
 
 
 func _probe_report() -> String:
@@ -337,8 +340,9 @@ func _rebuild_host_visual() -> void:
 	_hull_visual = Node3D.new()
 	_hull_visual.name = "Host"
 	add_child(_hull_visual)
-	if _context == "vessel":
+	if _context == "vessel" and not _probe_mode:
 		## The REAL hull under the build: deck plane aligned to the grid plane.
+		## Headless probes skip VesselSpawn — ship audio streams otherwise leak.
 		var boat := VesselSpawn.instantiate(_hull_id, {}, "")
 		if boat != null:
 			_hull_visual.add_child(boat)
@@ -346,6 +350,16 @@ func _rebuild_host_visual() -> void:
 			boat.freeze = true
 			boat.sleeping = true
 			boat.process_mode = Node.PROCESS_MODE_DISABLED
+	elif _context == "vessel" and _probe_mode:
+		var proxy := MeshInstance3D.new()
+		var proxy_mesh := BoxMesh.new()
+		proxy_mesh.size = Vector3(float(_grid_width) + 2.0, 0.4, float(_grid_length) + 2.0)
+		proxy.mesh = proxy_mesh
+		var proxy_mat := StandardMaterial3D.new()
+		proxy_mat.albedo_color = Color(0.18, 0.22, 0.26)
+		proxy.material_override = proxy_mat
+		proxy.position = Vector3(0, -0.2, 0)
+		_hull_visual.add_child(proxy)
 	else:
 		var slab := MeshInstance3D.new()
 		var slab_mesh := BoxMesh.new()

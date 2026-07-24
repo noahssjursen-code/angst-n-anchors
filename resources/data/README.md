@@ -84,6 +84,10 @@ Parametric `structure_plan_v1` documents authored by **Structure Studio**.
 `item_catalog.json` in this folder is the equipment/decor registry for
 `items[]`. It ships empty until assets are authored.
 
+Demo plans (F6 showcase + Studio load buttons):
+`demo_workboat`, `demo_bridge_cabin`, `demo_fish_hold`, `demo_harbour_shed`,
+`demo_quay_office`, `demo_canopy`.
+
 ## `materials/`
 
 | File | Purpose |
