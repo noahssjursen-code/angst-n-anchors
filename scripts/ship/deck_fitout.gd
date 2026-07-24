@@ -54,7 +54,7 @@ static func apply_plan(boat: BoatBody, plan: StructurePlan, grid: DeckGrid = nul
 	boat.clear_walk_brick_colliders()
 	## Plan coordinates are grid-corner space; shift into boat-local.
 	var offset := Vector3(-g.half_beam, g.deck_y, -g.half_loa)
-	root.add_child(StructureBaker.bake(plan, offset))
+	StructureBaker.mount(plan, root, offset)
 	var items_root := Node3D.new()
 	items_root.name = "PlanItems"
 	root.add_child(items_root)

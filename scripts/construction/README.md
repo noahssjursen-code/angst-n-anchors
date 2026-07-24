@@ -34,8 +34,10 @@ walk colliders + `PlanItems` mounts). Compliance/budgets still skip plans.
 Demos:
 - `demo_workboat.json` — vessel shell + cargo deck
 - `demo_bridge_cabin.json` — compact wheelhouse cabin
+- `demo_fish_hold.json` — open-top hold
 - `demo_harbour_shed.json` — brick shed on concrete apron
 - `demo_quay_office.json` — two-storey quay office
+- `demo_canopy.json` — free-wall canopy + corrugated roof
 
 ## Studio UX notes
 

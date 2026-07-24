@@ -166,6 +166,11 @@ func _test_baker_bake_produces_meshes() -> void:
 				textured += 1
 	_check(textured > 0, "at least one bake bucket carries an albedo texture")
 	root.free()
+	var host := Node3D.new()
+	var mounted := StructureBaker.mount(plan, host, Vector3.ZERO)
+	_check(mounted.get_parent() == host, "mount parents bake under host")
+	_check(mounted.get_child_count() > 0, "mounted bake has meshes")
+	host.free()
 
 
 func _test_demo_workboat_loads() -> void:

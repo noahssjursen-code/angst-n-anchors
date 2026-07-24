@@ -3441,6 +3441,11 @@ func _apply_library_material(material_name: String) -> void:
 	var id := StructureMaterialLibrary.normalize_id(material_name)
 	(_lib[_armed_slot] as Dictionary)["material"] = id
 	_sync_plan_palette_from_library()
+	## Shift+click paints every entity of the selection's kind (or all structure
+	## if nothing is selected).
+	if Input.is_key_pressed(KEY_SHIFT):
+		_paint_material_bulk(id)
+		return
 	var keys := _library_keys_for_selection()
 	if not keys.is_empty():
 		_snapshot()
@@ -3451,6 +3456,42 @@ func _apply_library_material(material_name: String) -> void:
 		StructureMaterialLibrary.label_of(id),
 	])
 	_refresh_panel()
+
+
+func _paint_material_bulk(material_id: String) -> void:
+	var target_kind := ""
+	var selected := _plan.entity_by_id(_selected_id)
+	if not selected.is_empty() and not selected.has("item_id"):
+		target_kind = StructurePlan.kind_of_entity(selected)
+	_snapshot()
+	var painted := 0
+	for collection in [_plan.rooms, _plan.walls, _plan.decks]:
+		for entity_variant in collection:
+			var entity := entity_variant as Dictionary
+			var kind := StructurePlan.kind_of_entity(entity)
+			if not target_kind.is_empty() and kind != target_kind:
+				continue
+			if kind == "room":
+				entity["material_out" if _armed_slot == "out" else "material_in"] = material_id
+			elif kind == "wall":
+				if _armed_slot == "in":
+					_ensure_wall_two_sided(entity)
+					entity["material_in"] = material_id
+				elif entity.has("material_in") or entity.has("color_in"):
+					entity["material_out"] = material_id
+				else:
+					entity["material"] = material_id
+					entity["material_out"] = material_id
+			else:
+				entity["material"] = material_id
+			painted += 1
+	_request_rebake(true)
+	_refresh_panel()
+	_set_status("painted %d %s → %s" % [
+		painted,
+		target_kind if not target_kind.is_empty() else "parts",
+		StructureMaterialLibrary.label_of(material_id),
+	])
 
 
 func _sync_plan_palette_from_library() -> void:

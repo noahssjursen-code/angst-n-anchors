@@ -493,6 +493,14 @@ static func collect_colliders(plan: StructurePlan, offset := Vector3.ZERO) -> Ar
 	return out
 
 
+## Convenience: bake and parent under `host`. Returns the bake root.
+static func mount(plan: StructurePlan, host: Node, offset := Vector3.ZERO, ghost := false) -> Node3D:
+	var root := bake(plan, offset, ghost)
+	if host != null:
+		host.add_child(root)
+	return root
+
+
 ## Merged visual bake: one MeshInstance3D per (material, color) bucket.
 ## `ghost` renders the whole bake as translucent shadowless x-ray.
 static func bake(plan: StructurePlan, offset := Vector3.ZERO, ghost := false) -> Node3D:

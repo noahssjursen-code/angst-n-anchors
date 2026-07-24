@@ -47,6 +47,7 @@ File
 
 Surfaces
   Arm Outside or Inside, then click a material or colour.
+  Shift+click a material to paint all of that kind (or all parts).
   Filter materials by category (finish / timber / metal / …).
   Rooms are two-sided; walls become two-sided when Inside is painted.
 
