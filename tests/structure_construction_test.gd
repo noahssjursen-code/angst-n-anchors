@@ -246,6 +246,12 @@ func _test_studio_math() -> void:
 	_check(StructureStudioMath.rotate_cardinal_face("n", -90) == "w", "rotate face -90")
 	var rotated: Dictionary = StructureStudioMath.rotate_plate_opening(Vector2(1, 2), Vector2(2, 3), 8.0, 10.0, 90)
 	_check(is_equal_approx((rotated["offset"] as Vector2).x, 5.0), "rotate plate opening offset")
+	var wall_a := {"start": [0, 0, 0], "axis": "x", "length": 4.0, "height": 3.0, "thickness": 0.16, "openings": []}
+	var wall_b := {"start": [4, 0, 0], "axis": "x", "length": 3.0, "height": 3.0, "thickness": 0.16, "openings": [{"offset": 1.0, "width": 1.0}]}
+	_check(StructureStudioMath.walls_can_merge(wall_a, wall_b), "abutting walls can merge")
+	_check(StructureStudioMath.merge_wall_into(wall_a, wall_b), "merge wall succeeds")
+	_check(is_equal_approx(float(wall_a.get("length")), 7.0), "merged wall length")
+	_check((wall_a.get("openings") as Array).size() == 1, "merged wall keeps openings")
 	var rect: Dictionary = StructureStudioMath.rect_from_drag(Vector3(1, 0, 1), Vector3(4, 0, 5), 0.0, 2.0)
 	_check(float(rect.get("width")) == 3.0, "rect width")
 	_check(float(rect.get("length")) == 4.0, "rect length")

@@ -1097,6 +1097,39 @@ func _raise_selected_to_level() -> void:
 	_set_status("moved #%d to level %.0f m" % [_selected_id, _active_base])
 
 
+func _merge_abutting_walls() -> void:
+	if _selected_id < 0:
+		return
+	var wall := _plan.entity_by_id(_selected_id)
+	if wall.is_empty() or StructurePlan.kind_of_entity(wall) != "wall":
+		_set_status("select a wall to merge", false)
+		return
+	_snapshot()
+	var merged := 0
+	var keep_going := true
+	while keep_going:
+		keep_going = false
+		for index in range(_plan.walls.size() - 1, -1, -1):
+			var other := _plan.walls[index] as Dictionary
+			var other_id := int(other.get("id", -1))
+			if other_id == _selected_id:
+				continue
+			if StructureStudioMath.merge_wall_into(wall, other):
+				_plan.walls.remove_at(index)
+				merged += 1
+				keep_going = true
+				break
+	if merged == 0:
+		## Undo empty snapshot noise.
+		if not _undo_stack.is_empty():
+			_undo_stack.pop_back()
+		_set_status("no abutting walls to merge", false)
+		return
+	_request_rebake(true)
+	_refresh_panel()
+	_set_status("merged %d abutting wall%s" % [merged, "s" if merged != 1 else ""])
+
+
 func _explode_selected_room() -> void:
 	if _selected_id < 0:
 		return
@@ -3587,6 +3620,12 @@ func _refresh_inspector() -> void:
 		storey_h.tooltip_text = "Set wall/room height to one storey"
 		storey_h.pressed.connect(func() -> void: _set_selected_storey_height())
 		_inspector_box.add_child(storey_h)
+	if kind == "wall":
+		var merge_btn := UiBuilder.compact_button("Merge abutting", 0.0)
+		merge_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		merge_btn.tooltip_text = "Merge collinear abutting free walls into this one"
+		merge_btn.pressed.connect(func() -> void: _merge_abutting_walls())
+		_inspector_box.add_child(merge_btn)
 	if kind == "room":
 		var explode_btn := UiBuilder.compact_button("Explode to parts", 0.0)
 		explode_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
