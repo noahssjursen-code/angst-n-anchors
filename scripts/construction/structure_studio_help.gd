@@ -26,7 +26,9 @@ Edit
   X / Shift+X  Mirror on mid X / Z
   E            Sample selection into armed material slot
   Tab / Shift+Tab  Cycle selection
-  Inspector also: To level · Snap grid · Stack ↑
+  Inspector also: To level · Snap grid · Stack ↑ · Rotate
+  [ ]          Cycle material on armed slot of selection
+  , .          Rotate selection −90° / +90°
   Esc          Cancel drag / clear selection
 
 View

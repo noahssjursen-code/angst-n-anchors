@@ -780,6 +780,14 @@ func _handle_key(key: InputEventKey) -> void:
 			_eyedrop_selection_to_library()
 		KEY_TAB:
 			_cycle_selection(not key.shift_pressed)
+		KEY_BRACKETLEFT:
+			_cycle_selection_material(-1)
+		KEY_BRACKETRIGHT:
+			_cycle_selection_material(1)
+		KEY_COMMA:
+			_rotate_selected(-90)
+		KEY_PERIOD:
+			_rotate_selected(90)
 		KEY_T:
 			_show_roofs = not _show_roofs
 			_request_rebake(true)
@@ -1041,6 +1049,108 @@ func _snap_selected_to_grid() -> void:
 	_request_rebake(true)
 	_refresh_panel()
 	_set_status("snapped #%d" % _selected_id)
+
+
+func _cycle_selection_material(direction: int) -> void:
+	var entity := _plan.entity_by_id(_selected_id)
+	if entity.is_empty() or entity.has("item_id"):
+		_set_status("select a surface to recolour", false)
+		return
+	var ids := StructureMaterialLibrary.studio_material_ids()
+	if ids.is_empty():
+		return
+	var keys := _library_keys_for_selection()
+	if keys.is_empty():
+		return
+	var current := StructureMaterialLibrary.normalize_id(str((keys["entity"] as Dictionary).get(str(keys["material"]), "painted")))
+	var index := ids.find(current)
+	if index < 0:
+		index = 0
+	else:
+		index = (index + direction + ids.size()) % ids.size()
+	var next_id := ids[index]
+	_snapshot()
+	(keys["entity"] as Dictionary)[str(keys["material"])] = next_id
+	(_lib[_armed_slot] as Dictionary)["material"] = next_id
+	_sync_plan_palette_from_library()
+	_request_rebake(true)
+	_refresh_panel()
+	_set_status("material → %s" % StructureMaterialLibrary.label_of(next_id))
+
+
+## Rotate room/deck footprint 90° about its origin (walls get axis swap).
+func _rotate_selected(degrees: int) -> void:
+	if _selected_id < 0:
+		_set_status("nothing selected", false)
+		return
+	var entity := _plan.entity_by_id(_selected_id)
+	if entity.is_empty() or entity.has("item_id"):
+		return
+	var kind := StructurePlan.kind_of_entity(entity)
+	_snapshot()
+	match kind:
+		"wall":
+			var axis := str(entity.get("axis", "x"))
+			entity["axis"] = "z" if axis == "x" else "x"
+		"deck":
+			var plate: Array = (entity.get("size", [1.0, 1.0]) as Array).duplicate()
+			if plate.size() < 2:
+				plate.append(1.0)
+			var tmp_w: float = float(plate[0])
+			plate[0] = float(plate[1])
+			plate[1] = tmp_w
+			entity["size"] = plate
+			_rotate_plate_openings(entity, degrees)
+		"room":
+			var size: Array = (entity.get("size", [4, 3, 4]) as Array).duplicate()
+			var tmp_w: float = float(size[0])
+			size[0] = float(size[2])
+			size[2] = tmp_w
+			entity["size"] = size
+			_rotate_room_faces(entity, degrees)
+		_:
+			_set_status("cannot rotate this entity", false)
+			return
+	_request_rebake(true)
+	_refresh_panel()
+	_set_status("rotated #%d %d°" % [_selected_id, degrees])
+
+
+func _rotate_room_faces(entity: Dictionary, degrees: int) -> void:
+	if not entity.has("openings"):
+		return
+	## +90°: n→e→s→w→n ; −90° reverse.
+	var map_pos := {"n": "e", "e": "s", "s": "w", "w": "n"}
+	var map_neg := {"n": "w", "w": "s", "s": "e", "e": "n"}
+	var face_map: Dictionary = map_pos if degrees > 0 else map_neg
+	var size := StructurePlan.vec3_of(entity.get("size"), Vector3(4, 3, 4))
+	for opening_variant in entity["openings"] as Array:
+		var opening := opening_variant as Dictionary
+		var face := str(opening.get("face", ""))
+		if face in ["floor", "ceiling"]:
+			_rotate_plate_opening_dict(opening, degrees, size.x, size.z)
+			continue
+		if face_map.has(face):
+			opening["face"] = face_map[face]
+
+
+func _rotate_plate_openings(entity: Dictionary, degrees: int) -> void:
+	var plate := StructurePlan.vec2_of(entity.get("size"), Vector2(1, 1))
+	for opening_variant in entity.get("openings", []) as Array:
+		_rotate_plate_opening_dict(opening_variant as Dictionary, degrees, plate.x, plate.y)
+
+
+func _rotate_plate_opening_dict(opening: Dictionary, degrees: int, width: float, length: float) -> void:
+	var off := StructurePlan.vec2_of(opening.get("offset"), Vector2.ZERO)
+	var hole := StructurePlan.vec2_of(opening.get("size"), Vector2(1, 1))
+	if degrees > 0:
+		## (x,z) -> (L - z - hz, x)
+		opening["offset"] = [maxf(length - off.y - hole.y, 0.0), off.x]
+		opening["size"] = [hole.y, hole.x]
+	else:
+		## (x,z) -> (z, W - x - hx)
+		opening["offset"] = [off.y, maxf(width - off.x - hole.x, 0.0)]
+		opening["size"] = [hole.y, hole.x]
 
 
 func _stack_selected_above() -> void:
@@ -3054,6 +3164,17 @@ func _refresh_inspector() -> void:
 	stack_btn.pressed.connect(func() -> void: _stack_selected_above())
 	util_row2.add_child(stack_btn)
 	_inspector_box.add_child(util_row2)
+	var rot_row := HBoxContainer.new()
+	rot_row.add_theme_constant_override("separation", 6)
+	var rot_left := UiBuilder.compact_button("⟲  [,]", 0.0)
+	rot_left.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	rot_left.pressed.connect(func() -> void: _rotate_selected(-90))
+	rot_row.add_child(rot_left)
+	var rot_right := UiBuilder.compact_button("⟳  [.] ", 0.0)
+	rot_right.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	rot_right.pressed.connect(func() -> void: _rotate_selected(90))
+	rot_row.add_child(rot_right)
+	_inspector_box.add_child(rot_row)
 	var action_row := HBoxContainer.new()
 	action_row.add_theme_constant_override("separation", 6)
 	var dup_btn := UiBuilder.compact_button("Duplicate", 0.0)
