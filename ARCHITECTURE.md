@@ -230,8 +230,17 @@ graph record (not a finished mesh) is what later growth must persist.
 ### `scripts/apps/`
 
 Engine authoring apps (run via `scenes/apps/*.tscn`, not in-game UI).
-- `BuildingBrickEditor` — voxel buildings → `resources/data/buildings/`
-- `ShipyardBrickEditor` — official vessel prebuilts → `resources/data/vessels/prebuilt/`
+- `Structure Studio` — **current** unified parametric builder → `resources/data/structures/`
+- `VesselRegistrationAudit` — registration law + prebuilt paperwork audit
+- `BuildingBrickEditor` / `ShipyardBrickEditor` — legacy voxel painters (retired; catalog wiped)
+
+### `scripts/construction/`
+
+Parametric structure engine shared by Studio and vessel fitout.
+- `StructurePlan` — `structure_plan_v1` document (walls/rooms/decks/items)
+- `StructureBaker` — merged visuals + matching collision boxes
+- `StructureMaterialLibrary` — global construction surfaces + textures
+- `StructureItemCatalog` — equipment/decor registry (empty until assets land)
 
 Player-owned port persistence/networking is deferred, but the data boundary is
 already explicit: immutable geography and the initial graph/berth plan are
@@ -348,13 +357,15 @@ Hull components and store ships are separate data:
 ```
 resources/data/vessels/hulls/catalog.json
           ↓ reusable L×B hull component
-registration catalog + ShipyardBrickEditor
-          ↓ {id, name, hull_id, registration_id, price_marks, shaft_power_kw, brick_layout}
+Structure Studio → resources/data/structures/*.json  (structure_plan_v1)
+          ↓  (publish / compliance wiring still pending)
+registration catalog + official vessel record
+          ↓ {id, name, hull_id, registration_id, price_marks, shaft_power_kw, brick_layout|plan}
 resources/data/vessels/prebuilt/<store_ship>.json
           ↓
 Shipwright → owned ledger → VesselSpawn
           ↓
-VesselCompliance → hull geometry + DeckFitout + per-ship propulsion override
+DeckFitout.apply_any → StructureBaker (plans) or BrickLayout path (legacy)
 ```
 
 Vessel orientation: **Bow = −Z, Stern = +Z, Port = −X, Starboard = +X.**

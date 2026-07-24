@@ -1,0 +1,44 @@
+{
+	"format": "structure_plan_v1",
+	"context": "building",
+	"hull_id": "",
+	"palette": {
+		"wall": [0.78, 0.52, 0.42],
+		"deck": [0.72, 0.72, 0.70]
+	},
+	"walls": [],
+	"decks": [
+		{
+			"id": 1,
+			"origin": [4, 0, 4],
+			"size": [16, 12],
+			"thickness": 0.15,
+			"color": [0.72, 0.72, 0.70],
+			"material": "concrete",
+			"openings": []
+		}
+	],
+	"rooms": [
+		{
+			"id": 2,
+			"origin": [6, 0, 6],
+			"size": [12, 4, 8],
+			"wall_thickness": 0.1667,
+			"roof": true,
+			"floor": false,
+			"color_out": [0.78, 0.52, 0.42],
+			"material_out": "brick",
+			"color_in": [0.90, 0.86, 0.76],
+			"material_in": "painted",
+			"openings": [
+				{"face": "s", "type": "door", "offset": 4.5, "width": 3.0, "height": 3.2},
+				{"face": "n", "type": "window", "offset": 2.0, "width": 2.0, "sill": 1.4, "height": 1.4},
+				{"face": "n", "type": "window", "offset": 5.0, "width": 2.0, "sill": 1.4, "height": 1.4},
+				{"face": "n", "type": "window", "offset": 8.0, "width": 2.0, "sill": 1.4, "height": 1.4},
+				{"face": "e", "type": "window", "offset": 2.5, "width": 3.0, "sill": 1.2, "height": 1.6},
+				{"face": "w", "type": "window", "offset": 2.5, "width": 3.0, "sill": 1.2, "height": 1.6}
+			]
+		}
+	],
+	"items": []
+}

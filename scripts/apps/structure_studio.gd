@@ -623,7 +623,9 @@ func _on_left_press(screen_pos: Vector2) -> void:
 			return
 		if _selected_id >= 0 and _try_grab_gizmo(screen_pos):
 			return
-		_selected_id = _pick_entity(screen_pos)
+		var picked := _pick_entity(screen_pos)
+		## Empty click clears selection so the inspector returns to guidance.
+		_selected_id = picked
 		_update_selection_visual()
 		_refresh_panel()
 		return
@@ -724,17 +726,10 @@ func _set_tool(tool: Tool) -> void:
 
 
 func _place_wall(a: Vector3, b: Vector3) -> void:
-	var dx := absf(b.x - a.x)
-	var dz := absf(b.z - a.z)
-	var axis := "x" if dx >= dz else "z"
-	var length := roundf(maxf(dx if axis == "x" else dz, 1.0))
-	var start := Vector3(
-		minf(a.x, b.x) if axis == "x" else roundf(a.x),
-		_active_base,
-		minf(a.z, b.z) if axis == "z" else roundf(a.z),
-	)
-	start.x = roundf(start.x)
-	start.z = roundf(start.z)
+	var spec := StructureStudioMath.wall_from_drag(a, b, _active_base)
+	var start: Vector3 = spec["start"]
+	var axis := str(spec["axis"])
+	var length := float(spec["length"])
 	if not _is_buildable_corner(start) and _context == "vessel":
 		_set_status("wall start outside buildable deck", false)
 		return
@@ -748,13 +743,12 @@ func _place_wall(a: Vector3, b: Vector3) -> void:
 
 
 func _place_rect_entity(a: Vector3, b: Vector3, as_room: bool) -> void:
-	var min_pt := Vector3(roundf(minf(a.x, b.x)), _active_base, roundf(minf(a.z, b.z)))
-	var w := roundf(maxf(absf(b.x - a.x), 2.0 if as_room else 1.0))
-	var l := roundf(maxf(absf(b.z - a.z), 2.0 if as_room else 1.0))
-	## Keep footprint inside the grid.
-	w = minf(w, float(_grid_width) - min_pt.x)
-	l = minf(l, float(_grid_length) - min_pt.z)
-	if w < (2.0 if as_room else 1.0) or l < (2.0 if as_room else 1.0):
+	var min_size := 2.0 if as_room else 1.0
+	var spec := StructureStudioMath.rect_from_drag(a, b, _active_base, min_size)
+	var min_pt: Vector3 = spec["origin"]
+	var w: float = minf(float(spec["width"]), float(_grid_width) - min_pt.x)
+	var l: float = minf(float(spec["length"]), float(_grid_length) - min_pt.z)
+	if w < min_size or l < min_size:
 		_set_status("footprint too small for this grid", false)
 		return
 	_snapshot()
@@ -794,21 +788,7 @@ func _is_buildable_corner(plan_point: Vector3) -> bool:
 
 
 func _clamp_origin_to_grid(origin: Vector3, kind: String, dims: Vector3) -> Vector3:
-	var clamped := origin
-	clamped.y = maxf(clamped.y, 0.0)
-	var max_x := float(_grid_width)
-	var max_z := float(_grid_length)
-	match kind:
-		"wall":
-			clamped.x = clampf(clamped.x, 0.0, max_x)
-			clamped.z = clampf(clamped.z, 0.0, max_z)
-		"room", "deck":
-			clamped.x = clampf(clamped.x, 0.0, maxf(max_x - dims.x, 0.0))
-			clamped.z = clampf(clamped.z, 0.0, maxf(max_z - dims.z, 0.0))
-		_:
-			clamped.x = clampf(clamped.x, 0.0, max_x)
-			clamped.z = clampf(clamped.z, 0.0, max_z)
-	return clamped
+	return StructureStudioMath.clamp_origin(origin, kind, dims, _grid_width, _grid_length)
 
 
 # ── Openings: one context shared by hover, drag and commit ───────────────────
@@ -1071,7 +1051,36 @@ func _mouse_to_grid(screen_pos: Vector2) -> Vector3:
 	plan_point.x = clampf(roundf(plan_point.x), 0.0, float(_grid_width))
 	plan_point.z = clampf(roundf(plan_point.z), 0.0, float(_grid_length))
 	plan_point.y = _active_base
+	if _context == "vessel" and _deck_grid != null and not _is_buildable_corner(plan_point):
+		plan_point = _nearest_buildable_corner(plan_point)
 	return plan_point
+
+
+func _nearest_buildable_corner(plan_point: Vector3) -> Vector3:
+	## Search expanding rings for a valid deck corner; keep Y at build level.
+	if _is_buildable_corner(plan_point):
+		return plan_point
+	var best := Vector3.INF
+	var best_dist := INF
+	for radius in range(1, maxi(_grid_width, _grid_length) + 1):
+		for dx in range(-radius, radius + 1):
+			for dz in range(-radius, radius + 1):
+				if maxi(absi(dx), absi(dz)) != radius:
+					continue
+				var candidate := Vector3(
+					clampf(plan_point.x + float(dx), 0.0, float(_grid_width)),
+					_active_base,
+					clampf(plan_point.z + float(dz), 0.0, float(_grid_length)),
+				)
+				if not _is_buildable_corner(candidate):
+					continue
+				var dist := candidate.distance_squared_to(plan_point)
+				if dist < best_dist:
+					best_dist = dist
+					best = candidate
+		if best != Vector3.INF:
+			return best
+	return Vector3.INF
 
 
 func _pick_entity(screen_pos: Vector2) -> int:
@@ -1901,6 +1910,12 @@ func _build_drawer() -> void:
 		_load_plan("%s/demo_workboat.json" % STRUCTURES_DIR)
 	)
 	box.add_child(load_demo)
+	var load_shed := UiBuilder.compact_button("Load demo harbour shed", 0.0)
+	load_shed.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	load_shed.pressed.connect(func() -> void:
+		_load_plan("%s/demo_harbour_shed.json" % STRUCTURES_DIR)
+	)
+	box.add_child(load_shed)
 
 
 func _build_context_strip() -> void:
@@ -2185,9 +2200,32 @@ func _build_library_section(box: VBoxContainer) -> void:
 	material_flow.add_theme_constant_override("h_separation", 4)
 	material_flow.add_theme_constant_override("v_separation", 4)
 	for material_name in StructureMaterialLibrary.studio_material_ids():
-		var btn := UiBuilder.tool_button(StructureMaterialLibrary.label_of(material_name), 70.0)
+		var btn := Button.new()
 		btn.toggle_mode = true
-		btn.tooltip_text = material_name
+		btn.focus_mode = Control.FOCUS_NONE
+		btn.custom_minimum_size = Vector2(70, 34)
+		btn.tooltip_text = "%s (%s)" % [
+			StructureMaterialLibrary.label_of(material_name), material_name,
+		]
+		btn.text = StructureMaterialLibrary.label_of(material_name)
+		var sample := StructureMaterialLibrary.default_color(material_name)
+		var chip := StyleBoxFlat.new()
+		chip.bg_color = sample
+		chip.set_corner_radius_all(3)
+		chip.content_margin_left = 10.0
+		chip.content_margin_right = 8.0
+		chip.content_margin_top = 6.0
+		chip.content_margin_bottom = 6.0
+		chip.border_color = HudStyle.C_BRASS
+		chip.set_border_width_all(1)
+		btn.add_theme_stylebox_override("normal", chip)
+		var chip_hover := chip.duplicate() as StyleBoxFlat
+		chip_hover.border_color = HudStyle.C_AMBER
+		btn.add_theme_stylebox_override("hover", chip_hover)
+		btn.add_theme_stylebox_override("pressed", chip_hover)
+		var luminance := sample.r * 0.3 + sample.g * 0.59 + sample.b * 0.11
+		var ink := Color(0.08, 0.09, 0.1) if luminance > 0.55 else Color(0.95, 0.95, 0.92)
+		HudStyle.apply_body_font(btn, 11, ink)
 		btn.pressed.connect(func() -> void: _apply_library_material(material_name))
 		material_flow.add_child(btn)
 		_lib_material_buttons[material_name] = btn

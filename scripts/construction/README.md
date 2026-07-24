@@ -26,3 +26,9 @@ walk colliders + `PlanItems` mounts). Compliance/budgets still skip plans.
 ## Inspect
 
 `scenes/showcases/structure_studio_showcase.tscn` — F6 bake/material inspect.
+Demos: `demo_workboat.json` (vessel), `demo_harbour_shed.json` (building).
+
+## Helpers
+
+`structure_studio_math.gd` — pure drag/clamp math used by Structure Studio
+(and covered by `tests/structure_construction_test.tscn`).

@@ -14,6 +14,8 @@ func _ready() -> void:
 	_test_baker_room_expand_and_openings()
 	_test_baker_bake_produces_meshes()
 	_test_demo_workboat_loads()
+	_test_demo_harbour_shed_loads()
+	_test_studio_math()
 	if _failures.is_empty():
 		print("StructureConstruction: plan, baker, materials, and item hooks passed")
 		get_tree().quit(0)
@@ -162,3 +164,32 @@ func _test_demo_workboat_loads() -> void:
 	var root := StructureBaker.bake(plan)
 	_check(root.get_child_count() > 0, "demo bakes")
 	root.free()
+
+
+func _test_demo_harbour_shed_loads() -> void:
+	var path := "res://resources/data/structures/demo_harbour_shed.json"
+	_check(FileAccess.file_exists(path), "demo_harbour_shed.json exists")
+	var file := FileAccess.open(path, FileAccess.READ)
+	if file == null:
+		_failures.append("demo_harbour_shed opens")
+		return
+	var parsed: Variant = JSON.parse_string(file.get_as_text())
+	file.close()
+	var plan := StructurePlan.from_dict(parsed as Dictionary)
+	_check(plan.context == "building", "harbour shed is building context")
+	_check(str((plan.rooms[0] as Dictionary).get("material_out")) == "brick", "shed uses brick outside")
+	var root := StructureBaker.bake(plan)
+	_check(root.get_child_count() > 0, "harbour shed bakes")
+	root.free()
+
+
+func _test_studio_math() -> void:
+	var wall: Dictionary = StructureStudioMath.wall_from_drag(Vector3(0, 0, 0), Vector3(5, 0, 1), 0.0)
+	_check(str(wall.get("axis")) == "x", "wall drag prefers longer axis")
+	_check(float(wall.get("length")) == 5.0, "wall length snaps")
+	var rect: Dictionary = StructureStudioMath.rect_from_drag(Vector3(1, 0, 1), Vector3(4, 0, 5), 0.0, 2.0)
+	_check(float(rect.get("width")) == 3.0, "rect width")
+	_check(float(rect.get("length")) == 4.0, "rect length")
+	var clamped: Vector3 = StructureStudioMath.clamp_origin(Vector3(-2, -1, 50), "room", Vector3(4, 3, 4), 24, 24)
+	_check(is_equal_approx(clamped.x, 0.0) and is_equal_approx(clamped.y, 0.0), "clamp origin floors at zero")
+	_check(is_equal_approx(clamped.z, 20.0), "clamp origin respects footprint against grid length")
