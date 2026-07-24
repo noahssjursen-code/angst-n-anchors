@@ -22,6 +22,7 @@ Edit
   Axis arrows  Move
   Del          Delete
   Ctrl+D       Duplicate
+  Ctrl+C / V   Copy / paste selection
   X / Shift+X  Mirror on mid X / Z
   E            Sample selection into armed material slot
   Tab / Shift+Tab  Cycle selection

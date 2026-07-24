@@ -230,8 +230,9 @@ legacy `cells` dicts still take the voxel path. Author plans in
 **Structure Studio** (`scenes/apps/structure_studio.tscn` — the single unified
 builder; the old shipyard/building brick editor scenes are retired) or write
 JSON directly in `resources/data/structures/`
-(see `demo_workboat.json`). Legacy compliance/budgets do not yet apply to
-plans — that rework lands with the new vocabulary.
+(demos: `demo_workboat`, `demo_bridge_cabin`, `demo_fish_hold`,
+`demo_harbour_shed`, `demo_quay_office`). Legacy compliance/budgets do not
+yet apply to plans — that rework lands with the new vocabulary.
 
 Construction surfaces resolve through `StructureMaterialLibrary`
 (`resources/data/materials/structure_materials.json` + albedo textures under

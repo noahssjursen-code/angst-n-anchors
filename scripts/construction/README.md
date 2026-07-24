@@ -9,9 +9,10 @@ not stacked.
 | `structure_baker.gd` | Plan → merged meshes + matching collision boxes |
 | `structure_material_library.gd` | Global construction surfaces (textures + PBR + categories) |
 | `structure_item_catalog.gd` | Equipment/decor registry (**empty this pass**) |
-| `structure_studio_math.gd` | Pure drag/clamp helpers |
+| `structure_studio_math.gd` | Pure drag/clamp / mirror helpers |
 | `structure_studio_openings.gd` | Pure opening defaults / snap / ghost geom |
 | `structure_studio_help.gd` | Help overlay copy |
+| `structure_studio_document.gd` | Plan path / naming helpers |
 
 ## Authoring
 

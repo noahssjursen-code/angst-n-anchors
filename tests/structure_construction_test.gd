@@ -23,6 +23,7 @@ func _ready() -> void:
 	_test_studio_math()
 	_test_studio_openings()
 	_test_studio_help()
+	_test_studio_document()
 	_test_overlapping_openings_and_holes()
 	_test_ghost_bake_and_open_room()
 	_test_validate_extent_and_materials()
@@ -328,6 +329,17 @@ func _test_studio_help() -> void:
 	_check(text.contains("STRUCTURE STUDIO"), "help has title")
 	_check(text.contains("Ctrl+S"), "help mentions save")
 	_check(text.contains("Ghost"), "help mentions ghost decks")
+
+
+func _test_studio_document() -> void:
+	_check(StructureStudioDocument.sanitize_name(" My Shed ") == "my_shed", "sanitize plan name")
+	_check(StructureStudioDocument.path_for_name("demo").ends_with("/demo.json"), "path_for_name")
+	_check(StructureStudioDocument.path_for_name("  ").is_empty(), "empty name has no path")
+	var paths := StructureStudioDocument.list_plan_paths()
+	_check(paths.size() >= 5, "lists demo plans")
+	_check(StructureStudioDocument.is_demo_path("res://resources/data/structures/demo_workboat.json"), "demo path detect")
+	for path in paths:
+		_check(not path.ends_with("item_catalog.json"), "item catalog excluded from plan list")
 
 
 func _test_demo_bridge_cabin_loads() -> void:

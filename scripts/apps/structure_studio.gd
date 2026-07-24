@@ -21,9 +21,10 @@ extends Node3D
 ## Context switch (top bar): Ship (build on a hull) or Building (ground slab).
 ## Save/Load: JSON plans in res://resources/data/structures/.
 
-const STRUCTURES_DIR := "res://resources/data/structures"
+const STRUCTURES_DIR := StructureStudioDocument.STRUCTURES_DIR
 const GRID_SNAP := 1.0
 const DEFAULT_WALL_HEIGHT := 3.0
+var _clipboard_entity: Dictionary = {}
 
 enum Tool { SELECT, WALL, ROOM, DECK, OPENING, ITEMS }
 
@@ -141,6 +142,8 @@ func _probe_report() -> String:
 
 
 func _shutdown_for_probe() -> void:
+	## Stop per-frame camera/hover work before freeing preview nodes.
+	set_process(false)
 	## Drop host/bake trees so headless quit does not leak VesselSpawn bodies.
 	if _bake_root != null and is_instance_valid(_bake_root):
 		_bake_root.free()
@@ -172,6 +175,7 @@ func _shutdown_for_probe() -> void:
 	if _handle_root != null and is_instance_valid(_handle_root):
 		_handle_root.free()
 		_handle_root = null
+	_camera = null
 	StructureMaterialLibrary.clear_runtime_caches()
 
 
@@ -704,6 +708,12 @@ func _handle_key(key: InputEventKey) -> void:
 		return
 	if key.ctrl_pressed and key.keycode == KEY_D:
 		_duplicate_selected()
+		return
+	if key.ctrl_pressed and key.keycode == KEY_C:
+		_copy_selected()
+		return
+	if key.ctrl_pressed and key.keycode == KEY_V:
+		_paste_clipboard()
 		return
 	if key.ctrl_pressed and key.keycode == KEY_N:
 		_new_plan()
@@ -1809,12 +1819,11 @@ func _update_selection_visual() -> void:
 # ── Persistence ──────────────────────────────────────────────────────────────
 
 func _save_plan(plan_name: String) -> void:
-	var trimmed := plan_name.strip_edges().to_snake_case()
-	if trimmed.is_empty():
+	var path := StructureStudioDocument.path_for_name(plan_name)
+	if path.is_empty():
 		_set_status("name the structure first", false)
 		return
 	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(STRUCTURES_DIR))
-	var path := "%s/%s.json" % [STRUCTURES_DIR, trimmed]
 	if FileAccess.file_exists(path):
 		_ask_confirm(
 			"Overwrite existing file %s?" % path.get_file(),
@@ -1891,27 +1900,14 @@ func _load_plan_now(path: String) -> void:
 
 
 func _saved_plan_paths() -> PackedStringArray:
-	var names: Array[String] = []
-	var dir := DirAccess.open(STRUCTURES_DIR)
-	if dir == null:
-		return PackedStringArray()
-	for file_name in dir.get_files():
-		if not file_name.ends_with(".json"):
-			continue
-		## Item catalog lives beside plans but is not a structure_plan_v1.
-		if file_name == "item_catalog.json":
-			continue
-		names.append(file_name)
-	names.sort()
-	var out := PackedStringArray()
-	for file_name in names:
-		out.append("%s/%s" % [STRUCTURES_DIR, file_name])
-	return out
+	return StructureStudioDocument.list_plan_paths(STRUCTURES_DIR)
 
 
 # ── Scene / camera / UI ──────────────────────────────────────────────────────
 
 func _process(_delta: float) -> void:
+	if _camera == null or not is_instance_valid(_camera):
+		return
 	var offset := Vector3(
 		cos(_cam_pitch) * sin(_cam_yaw), sin(_cam_pitch), cos(_cam_pitch) * cos(_cam_yaw)
 	) * _cam_distance
@@ -1919,9 +1915,9 @@ func _process(_delta: float) -> void:
 	_camera.look_at(_cam_focus, Vector3.UP)
 	## Manipulators keep a usable on-screen size at any zoom.
 	var manipulator_scale := clampf(_cam_distance / 30.0, 0.7, 4.0)
-	if _gizmo_root != null:
+	if _gizmo_root != null and is_instance_valid(_gizmo_root):
 		_gizmo_root.scale = Vector3.ONE * manipulator_scale
-	if _handle_root != null:
+	if _handle_root != null and is_instance_valid(_handle_root):
 		for pad in _handle_root.get_children():
 			(pad as Node3D).scale = Vector3.ONE * manipulator_scale
 	_update_hover_feedback()
@@ -1932,7 +1928,11 @@ func _process(_delta: float) -> void:
 ## point, Select shows what a click would pick. Same snapping code as the
 ## actual placement, so the preview can never lie.
 func _update_hover_feedback() -> void:
-	if _camera == null:
+	if _camera == null or not is_instance_valid(_camera):
+		return
+	if _opening_ghost == null or _hover_box == null or _start_marker == null:
+		return
+	if not is_instance_valid(_opening_ghost) or not is_instance_valid(_hover_box) or not is_instance_valid(_start_marker):
 		return
 	var busy := _orbiting or _panning or _gizmo_axis >= 0 or _dragging or _opening_drag
 	var over_ui := get_viewport().gui_get_hovered_control() != null
@@ -2168,11 +2168,12 @@ func _autosave_if_named() -> void:
 	if name_text.is_empty():
 		_set_status("autosave skipped — name the structure", false)
 		return
-	var trimmed := name_text.to_snake_case()
+	var path := StructureStudioDocument.path_for_name(name_text)
+	if path.is_empty():
+		return
 	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(STRUCTURES_DIR))
-	var path := "%s/%s.json" % [STRUCTURES_DIR, trimmed]
 	_save_plan_now(path)
-	_set_status("autosaved %s" % trimmed)
+	_set_status("autosaved %s" % StructureStudioDocument.sanitize_name(name_text))
 
 
 func _toggle_help(show_help: bool) -> void:
@@ -2561,6 +2562,71 @@ func _duplicate_selected() -> void:
 		return
 	_selected_id = int(copy.get("id", -1))
 	_set_status("duplicated → #%d" % _selected_id)
+	_request_rebake(true)
+	_refresh_panel()
+
+
+func _copy_selected() -> void:
+	var entity := _plan.entity_by_id(_selected_id)
+	if entity.is_empty() or entity.has("item_id"):
+		_set_status("nothing to copy", false)
+		return
+	_clipboard_entity = entity.duplicate(true)
+	_set_status("copied #%d" % _selected_id)
+
+
+func _paste_clipboard() -> void:
+	if _clipboard_entity.is_empty():
+		_set_status("clipboard empty", false)
+		return
+	_snapshot()
+	## Create a fresh entity of the same kind, then copy surface/opening fields.
+	var kind := StructurePlan.kind_of_entity(_clipboard_entity)
+	var pasted: Dictionary = {}
+	match kind:
+		"wall":
+			var start := StructurePlan.vec3_of(_clipboard_entity.get("start")) + Vector3(1, 0, 1)
+			pasted = _plan.add_wall(
+				start,
+				str(_clipboard_entity.get("axis", "x")),
+				float(_clipboard_entity.get("length", 1.0)),
+				float(_clipboard_entity.get("height", DEFAULT_WALL_HEIGHT)),
+				float(_clipboard_entity.get("thickness", StructurePlan.DEFAULT_WALL_THICKNESS)),
+			)
+		"deck":
+			var origin := StructurePlan.vec3_of(_clipboard_entity.get("origin")) + Vector3(1, 0, 1)
+			var plate := StructurePlan.vec2_of(_clipboard_entity.get("size"), Vector2(1, 1))
+			pasted = _plan.add_deck(
+				origin, plate,
+				float(_clipboard_entity.get("thickness", StructurePlan.DEFAULT_PLATE_THICKNESS)),
+			)
+		"room":
+			var origin := StructurePlan.vec3_of(_clipboard_entity.get("origin")) + Vector3(1, 0, 1)
+			var size := StructurePlan.vec3_of(_clipboard_entity.get("size"), Vector3(4, 3, 4))
+			pasted = _plan.add_room(origin, size)
+		_:
+			_set_status("cannot paste this entity", false)
+			return
+	var new_id := int(pasted.get("id", -1))
+	var keep_origin: Variant = pasted.get("start", pasted.get("origin"))
+	for key in _clipboard_entity.keys():
+		if key == "id":
+			continue
+		var value: Variant = _clipboard_entity[key]
+		if value is Array:
+			pasted[key] = (value as Array).duplicate(true)
+		elif value is Dictionary:
+			pasted[key] = (value as Dictionary).duplicate(true)
+		else:
+			pasted[key] = value
+	## Keep the offset paste position, not the clipboard origin.
+	if pasted.has("start"):
+		pasted["start"] = keep_origin
+	if pasted.has("origin"):
+		pasted["origin"] = keep_origin
+	pasted["id"] = new_id
+	_selected_id = new_id
+	_set_status("pasted → #%d" % _selected_id)
 	_request_rebake(true)
 	_refresh_panel()
 
