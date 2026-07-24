@@ -38,6 +38,10 @@ static func apply_any(
 ## Parametric construction path: merged bake + colliders from the same panel
 ## decomposition. Legacy compliance/budgets do not apply to plans yet — the
 ## rules rework follows once the new vocabulary stabilizes.
+##
+## Items are mounted under PlanItems when StructureItemCatalog knows them.
+## The catalog ships empty this pass; unknown item_ids are counted as skipped
+## so equipment can land without changing this seam.
 static func apply_plan(boat: BoatBody, plan: StructurePlan, grid: DeckGrid = null) -> Dictionary:
 	if boat == null or plan == null:
 		return {}
@@ -51,6 +55,32 @@ static func apply_plan(boat: BoatBody, plan: StructurePlan, grid: DeckGrid = nul
 	## Plan coordinates are grid-corner space; shift into boat-local.
 	var offset := Vector3(-g.half_beam, g.deck_y, -g.half_loa)
 	root.add_child(StructureBaker.bake(plan, offset))
+	var items_root := Node3D.new()
+	items_root.name = "PlanItems"
+	root.add_child(items_root)
+	var mounted_items := 0
+	var skipped_items := 0
+	for item_variant in plan.items:
+		var item := item_variant as Dictionary
+		var item_id := str(item.get("item_id", "")).strip_edges()
+		if item_id.is_empty():
+			skipped_items += 1
+			continue
+		var visual := StructureItemCatalog.try_instantiate(item_id)
+		if visual == null:
+			skipped_items += 1
+			continue
+		var cell_raw: Array = item.get("cell", [0, 0, 0])
+		var cell := Vector3(
+			float(cell_raw[0]) if cell_raw.size() > 0 else 0.0,
+			float(cell_raw[1]) if cell_raw.size() > 1 else 0.0,
+			float(cell_raw[2]) if cell_raw.size() > 2 else 0.0,
+		)
+		visual.name = "Item_%d_%s" % [int(item.get("id", mounted_items)), item_id]
+		visual.position = offset + Vector3(cell.x + 0.5, cell.y, cell.z + 0.5)
+		visual.rotation_degrees.y = float(item.get("yaw", 0))
+		items_root.add_child(visual)
+		mounted_items += 1
 	var total_mass := 0.0
 	var weighted := Vector3.ZERO
 	var index := 0
@@ -69,6 +99,8 @@ static func apply_plan(boat: BoatBody, plan: StructurePlan, grid: DeckGrid = nul
 		"outfit_ok": true,
 		"structure_plan": true,
 		"plan_entities": plan.entity_count(),
+		"plan_items_mounted": mounted_items,
+		"plan_items_skipped": skipped_items,
 	}
 	boat.set_meta("brick_capabilities", caps)
 	boat.set_meta("brick_layout", plan.to_dict())

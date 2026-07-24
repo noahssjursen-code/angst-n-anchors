@@ -74,6 +74,7 @@ Conventions:
 Current demos:
 - `scenes/showcases/port_showcase.tscn` — terrain-traced port pipeline at real seeded coastal terrain sites
 - `scenes/showcases/ship_showcase.tscn` / `player_showcase.tscn`
+- `scenes/showcases/structure_studio_showcase.tscn` — parametric structure bake inspect + material presets
 - `scenes/showcases/vessel_skin_showcase.tscn` — legacy per-brick vs `VesselSkinBaker` merged-skin rendering, side by side on real prebuilts with live mesh/node counts
 - `scenes/showcases/crane_showcase.tscn` — bulk grab + provision T-crane (containers)
 - `scenes/showcases/marine_autopilot_showcase.tscn` — deterministic sea route + replicated progress viewer
@@ -231,6 +232,17 @@ builder; the old shipyard/building brick editor scenes are retired) or write
 JSON directly in `resources/data/structures/`
 (see `demo_workboat.json`). Legacy compliance/budgets do not yet apply to
 plans — that rework lands with the new vocabulary.
+
+Construction surfaces resolve through `StructureMaterialLibrary`
+(`resources/data/materials/structure_materials.json` + albedo textures under
+`resources/textures/materials/structure/`). Rooms support distinct outside /
+inside material+colour; free walls can be promoted to two-sided. Point
+equipment lives in `StructurePlan.items` and `StructureItemCatalog`
+(`resources/data/structures/item_catalog.json`) — the catalog ships **empty**
+until decorative/functional assets are authored; `DeckFitout.apply_plan`
+already mounts known items under `PlanItems`.
+
+Inspect bake output via `scenes/showcases/structure_studio_showcase.tscn`.
 
 `BrickCatalog` is the legacy voxel construction kit (vessel decks + land
 buildings). Its definitions are currently WIPED pending the rebuild; the

@@ -58,11 +58,40 @@ Authoring apps (run the scene directly in Godot — under `scenes/apps/`):
 
 | Scene | Purpose |
 |-------|---------|
-| `res://scenes/apps/building_brick_editor.tscn` | Paint bricks, Save / Save As into this folder |
-| `res://scenes/apps/shipyard_brick_editor.tscn` | Paint decks on official hulls; Save official prebuilt JSON |
+| `res://scenes/apps/structure_studio.tscn` | **Current** unified parametric builder (vessels + land) |
 | `res://scenes/apps/vessel_registration_audit.tscn` | Edit vessel law and audit official registration paperwork |
+| `res://scenes/apps/shipyard_brick_editor.tscn` | Legacy voxel shipyard (retired; catalog wiped) |
+| `res://scenes/apps/building_brick_editor.tscn` | Legacy voxel building painter (retired) |
 
-Inspect-only fixtures live under `scenes/showcases/` (port / player / cargo / ship).
+Inspect-only fixtures live under `scenes/showcases/` (port / player / cargo / ship / structure).
+
+## `structures/`
+
+Parametric `structure_plan_v1` documents authored by **Structure Studio**.
+
+```json
+{
+  "format": "structure_plan_v1",
+  "context": "vessel",
+  "hull_id": "hull_28x10",
+  "walls": [],
+  "decks": [],
+  "rooms": [],
+  "items": []
+}
+```
+
+`item_catalog.json` in this folder is the equipment/decor registry for
+`items[]`. It ships empty until assets are authored.
+
+## `materials/`
+
+| File | Purpose |
+|------|---------|
+| `structure_materials.json` | Global construction surface library (Structure Studio / StructureBaker) |
+| `textured_materials.json` | Character / garment palette-mask profiles (`TextureMaterialCatalog`) |
+
+Structure albedo textures live under `resources/textures/materials/structure/`.
 
 The catalog starts empty. Building blueprints use the same
 `BrickCatalog` kit as vessel decks; marine-only bricks are filtered via
@@ -129,11 +158,13 @@ scenes in `scenes/apps/`.
 
 | Scene | Script | Writes |
 |-------|--------|--------|
-| `building_brick_editor.tscn` | `BuildingBrickEditor` | `resources/data/buildings/*.json` |
-| `shipyard_brick_editor.tscn` | `ShipyardBrickEditor` | `resources/data/vessels/prebuilt/*.json` |
+| `structure_studio.tscn` | Structure Studio | `resources/data/structures/*.json` |
 | `vessel_registration_audit.tscn` | `VesselRegistrationAudit` | registration catalog; audits prebuilts |
+| `shipyard_brick_editor.tscn` | `ShipyardBrickEditor` (legacy) | `resources/data/vessels/prebuilt/*.json` |
+| `building_brick_editor.tscn` | Building brick editor (legacy) | `resources/data/buildings/*.json` |
 
 ## Showcases
 
-Inspect-only fixtures under `scenes/showcases/` (port / player / cargo / ship).
-They do not write game data.
+Inspect-only fixtures under `scenes/showcases/` (port / player / cargo / ship /
+structure). They do not write game data. Structure bake inspect:
+`structure_studio_showcase.tscn`.

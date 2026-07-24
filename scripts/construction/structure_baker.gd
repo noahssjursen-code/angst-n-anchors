@@ -29,14 +29,8 @@ const FRAME_WIDTH := 0.1
 ## plane with it. All room-generated geometry is z-fight-free by construction.
 const SKIN_EPS := 0.01
 
-## Material library: name -> surface response. Extend freely; unknown names
-## fall back to "painted".
-const MATERIALS := {
-	"painted": {"roughness": 0.80, "metallic": 0.00},
-	"metal": {"roughness": 0.45, "metallic": 0.60},
-	"wood": {"roughness": 0.90, "metallic": 0.00},
-	"steel": {"roughness": 0.55, "metallic": 0.35},
-}
+## Surface ids resolve through StructureMaterialLibrary (global construction
+## catalog with albedo textures). Unknown names fall back to "painted".
 
 
 ## Expands rooms into walls + plates and merges with the plan's own walls and
@@ -71,8 +65,12 @@ static func expand_room(room: Dictionary) -> Dictionary:
 	## Inside / outside surface identity. Legacy `color` acts as the outside.
 	var color_out: Variant = room.get("color_out", room.get("color", null))
 	var color_in: Variant = room.get("color_in", null)
-	var material_out := str(room.get("material_out", room.get("material", "painted")))
-	var material_in := str(room.get("material_in", "wood"))
+	var material_out := StructureMaterialLibrary.normalize_id(
+		str(room.get("material_out", room.get("material", "painted")))
+	)
+	var material_in := StructureMaterialLibrary.normalize_id(
+		str(room.get("material_in", "wood"))
+	)
 	## X-axis walls extend past both ends to fill corners; the extra SKIN_EPS
 	## pushes their end faces past the perpendicular wall's skin plane so the
 	## corner has no coincident surfaces.
@@ -297,10 +295,7 @@ static func deck_boxes(deck: Dictionary) -> Array:
 # ── Surface layers (color + material per side) ───────────────────────────────
 
 static func _color_of(value: Variant, fallback: Color) -> Color:
-	if value is Array and (value as Array).size() >= 3:
-		var list := value as Array
-		return Color(float(list[0]), float(list[1]), float(list[2]))
-	return fallback
+	return StructureMaterialLibrary.color_of(value, fallback)
 
 
 ## Renderable layers for one wall: either a single skin, or inner + outer
@@ -308,11 +303,22 @@ static func _color_of(value: Variant, fallback: Color) -> Color:
 ## frames ride along in a darkened tone.
 static func _wall_layers(wall: Dictionary, fallback: Color) -> Array:
 	var base := _color_of(wall.get("color", wall.get("color_out", null)), fallback)
-	var two_sided := wall.has("color_in") or wall.has("material_in")
+	var two_sided := (
+		wall.has("color_in") or wall.has("material_in")
+		or wall.has("color_out") or wall.has("material_out")
+	)
 	var color_out := _color_of(wall.get("color_out", wall.get("color", null)), fallback)
 	var color_in := _color_of(wall.get("color_in", null), DEFAULT_INTERIOR_COLOR)
-	var material_out := str(wall.get("material_out", wall.get("material", "painted")))
-	var material_in := str(wall.get("material_in", "wood"))
+	var material_out := StructureMaterialLibrary.normalize_id(
+		str(wall.get("material_out", wall.get("material", "painted")))
+	)
+	var material_in := StructureMaterialLibrary.normalize_id(
+		str(wall.get("material_in", "wood"))
+	)
+	## Free walls painted with only a single surface stay one-sided unless
+	## an inside identity was explicitly set.
+	if not (wall.has("color_in") or wall.has("material_in")) and not wall.has("outward_sign"):
+		two_sided = false
 	var outward := float(wall.get("outward_sign", 1.0))
 	var axis_z := str(wall.get("axis", "x")) == "z"
 	var layers: Array = []
@@ -408,8 +414,12 @@ static func _plate_layers(deck: Dictionary, wall_fallback: Color, deck_fallback:
 	var base := _color_of(deck.get("color", deck.get("color_out", null)), slot_default)
 	var color_out := _color_of(deck.get("color_out", deck.get("color", null)), slot_default)
 	var color_in := _color_of(deck.get("color_in", null), DEFAULT_INTERIOR_COLOR)
-	var material_out := str(deck.get("material_out", deck.get("material", "painted")))
-	var material_in := str(deck.get("material_in", "wood"))
+	var material_out := StructureMaterialLibrary.normalize_id(
+		str(deck.get("material_out", deck.get("material", "painted")))
+	)
+	var material_in := StructureMaterialLibrary.normalize_id(
+		str(deck.get("material_in", "wood"))
+	)
 	var layers: Array = []
 	for box_variant in deck_boxes(deck):
 		var box := box_variant as Dictionary
@@ -470,15 +480,9 @@ static func bake(plan: StructurePlan, offset := Vector3.ZERO, ghost := false) ->
 	for key in buckets.keys():
 		var bucket := buckets[key] as Dictionary
 		var st := bucket["st"] as SurfaceTool
-		var material := StandardMaterial3D.new()
-		material.albedo_color = bucket["color"] as Color
-		var response: Dictionary = MATERIALS.get(str(bucket["material"]), MATERIALS["painted"])
-		material.roughness = float(response["roughness"])
-		material.metallic = float(response["metallic"])
-		if ghost:
-			material.albedo_color = Color(material.albedo_color, 0.13)
-			material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-			material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		var material_id := str(bucket["material"])
+		var tint := bucket["color"] as Color
+		var material := StructureMaterialLibrary.make_material(material_id, tint, ghost)
 		st.set_material(material)
 		var mesh := st.commit()
 		if mesh != null and mesh.get_surface_count() > 0:
@@ -498,23 +502,29 @@ static func _palette_color(plan: StructurePlan, slot: String, fallback: Color) -
 
 static func _bucket_layer(buckets: Dictionary, layer: Dictionary, offset: Vector3) -> void:
 	var color := layer["color"] as Color
-	var material := str(layer["material"])
+	var material := StructureMaterialLibrary.normalize_id(str(layer["material"]))
 	var key := "%s_%02x%02x%02x" % [material, int(color.r * 255.0), int(color.g * 255.0), int(color.b * 255.0)]
 	if not buckets.has(key):
 		var st := SurfaceTool.new()
 		st.begin(Mesh.PRIMITIVE_TRIANGLES)
-		buckets[key] = {"color": color, "material": material, "st": st}
+		buckets[key] = {
+			"color": color,
+			"material": material,
+			"st": st,
+			"uv_metres": StructureMaterialLibrary.uv_metres_of(material),
+		}
 	_append_box(
 		(buckets[key] as Dictionary)["st"] as SurfaceTool,
 		(layer["center"] as Vector3) + offset,
 		layer["size"] as Vector3,
+		float((buckets[key] as Dictionary)["uv_metres"]),
 	)
 
 
 ## Axis-aligned box, 12 triangles, clockwise-front winding (Godot convention:
 ## right-hand cross of vertex order = MINUS the outward normal — verified in
-## tests/winding_probe.gd).
-static func _append_box(st: SurfaceTool, center: Vector3, size: Vector3) -> void:
+## tests/winding_probe.gd). UVs scale by metres so textures stay world-sized.
+static func _append_box(st: SurfaceTool, center: Vector3, size: Vector3, uv_metres := 2.0) -> void:
 	var h := size * 0.5
 	var corners := [
 		center + Vector3(-h.x, -h.y, -h.z), center + Vector3(h.x, -h.y, -h.z),
@@ -523,17 +533,27 @@ static func _append_box(st: SurfaceTool, center: Vector3, size: Vector3) -> void
 		center + Vector3(h.x, h.y, h.z), center + Vector3(-h.x, h.y, h.z),
 	]
 	var faces := [
-		[[0, 1, 5, 4], Vector3(0, 0, -1)],
-		[[2, 3, 7, 6], Vector3(0, 0, 1)],
-		[[1, 2, 6, 5], Vector3(1, 0, 0)],
-		[[3, 0, 4, 7], Vector3(-1, 0, 0)],
-		[[4, 5, 6, 7], Vector3(0, 1, 0)],
-		[[3, 2, 1, 0], Vector3(0, -1, 0)],
+		[[0, 1, 5, 4], Vector3(0, 0, -1), size.x, size.y],
+		[[2, 3, 7, 6], Vector3(0, 0, 1), size.x, size.y],
+		[[1, 2, 6, 5], Vector3(1, 0, 0), size.z, size.y],
+		[[3, 0, 4, 7], Vector3(-1, 0, 0), size.z, size.y],
+		[[4, 5, 6, 7], Vector3(0, 1, 0), size.x, size.z],
+		[[3, 2, 1, 0], Vector3(0, -1, 0), size.x, size.z],
 	]
+	var scale := 1.0 / maxf(uv_metres, 0.25)
 	for face in faces:
 		var idx: Array = face[0]
 		var normal: Vector3 = face[1]
+		var u_span := float(face[2]) * scale
+		var v_span := float(face[3]) * scale
+		## Quad UV corners matching the winding of idx[0..3].
+		var uvs := [
+			Vector2(0.0, v_span), Vector2(u_span, v_span),
+			Vector2(u_span, 0.0), Vector2(0.0, 0.0),
+		]
 		for tri in [[0, 1, 2], [0, 2, 3]]:
 			for k in tri:
 				st.set_normal(normal)
+				st.set_uv(uvs[k])
 				st.add_vertex(corners[idx[k]])
+

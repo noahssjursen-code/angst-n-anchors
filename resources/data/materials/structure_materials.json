@@ -1,0 +1,100 @@
+{
+	"schema_version": 1,
+	"description": "Global construction surface library for Structure Studio / StructureBaker. Plans store material ids; runtime resolves textures + PBR response here.",
+	"materials": {
+		"painted": {
+			"label": "Painted",
+			"category": "finish",
+			"roughness": 0.80,
+			"metallic": 0.00,
+			"uv_metres": 2.5,
+			"texture": "res://resources/textures/materials/structure/painted_albedo.png",
+			"tintable": true,
+			"default_color": [0.82, 0.84, 0.86]
+		},
+		"wood": {
+			"label": "Wood",
+			"category": "finish",
+			"roughness": 0.90,
+			"metallic": 0.00,
+			"uv_metres": 1.8,
+			"texture": "res://resources/textures/materials/structure/wood_albedo.png",
+			"tintable": true,
+			"default_color": [0.78, 0.70, 0.58]
+		},
+		"metal": {
+			"label": "Metal",
+			"category": "finish",
+			"roughness": 0.45,
+			"metallic": 0.60,
+			"uv_metres": 2.0,
+			"texture": "res://resources/textures/materials/structure/metal_albedo.png",
+			"tintable": true,
+			"default_color": [0.62, 0.65, 0.68]
+		},
+		"steel": {
+			"label": "Steel",
+			"category": "finish",
+			"roughness": 0.55,
+			"metallic": 0.35,
+			"uv_metres": 2.2,
+			"texture": "res://resources/textures/materials/structure/steel_albedo.png",
+			"tintable": true,
+			"default_color": [0.55, 0.58, 0.62]
+		},
+		"concrete": {
+			"label": "Concrete",
+			"category": "structure",
+			"roughness": 0.92,
+			"metallic": 0.00,
+			"uv_metres": 3.0,
+			"texture": "res://resources/textures/materials/structure/concrete_albedo.png",
+			"tintable": true,
+			"default_color": [0.72, 0.72, 0.70]
+		},
+		"asphalt": {
+			"label": "Asphalt",
+			"category": "deck",
+			"roughness": 0.95,
+			"metallic": 0.00,
+			"uv_metres": 2.4,
+			"texture": "res://resources/textures/materials/structure/asphalt_albedo.png",
+			"tintable": true,
+			"default_color": [0.28, 0.28, 0.27]
+		},
+		"brick": {
+			"label": "Brick",
+			"category": "structure",
+			"roughness": 0.88,
+			"metallic": 0.00,
+			"uv_metres": 1.6,
+			"texture": "res://resources/textures/materials/structure/brick_albedo.png",
+			"tintable": true,
+			"default_color": [0.78, 0.52, 0.42]
+		},
+		"corrugated": {
+			"label": "Corrugated",
+			"category": "cladding",
+			"roughness": 0.50,
+			"metallic": 0.45,
+			"uv_metres": 1.4,
+			"texture": "res://resources/textures/materials/structure/corrugated_albedo.png",
+			"tintable": true,
+			"default_color": [0.58, 0.60, 0.63]
+		}
+	},
+	"swatches": [
+		{"id": "steel_grey", "label": "Steel", "color": [0.62, 0.65, 0.68]},
+		{"id": "white", "label": "White", "color": [0.92, 0.93, 0.94]},
+		{"id": "cream", "label": "Cream", "color": [0.90, 0.86, 0.76]},
+		{"id": "timber", "label": "Timber", "color": [0.62, 0.50, 0.38]},
+		{"id": "charcoal", "label": "Charcoal", "color": [0.24, 0.26, 0.28]},
+		{"id": "slate", "label": "Slate", "color": [0.42, 0.48, 0.52]},
+		{"id": "hull_red", "label": "Hull red", "color": [0.55, 0.20, 0.16]},
+		{"id": "harbour", "label": "Harbour", "color": [0.28, 0.44, 0.52]},
+		{"id": "yellow", "label": "Yellow", "color": [0.86, 0.68, 0.20]},
+		{"id": "forest", "label": "Forest", "color": [0.30, 0.42, 0.28]},
+		{"id": "navy", "label": "Navy", "color": [0.18, 0.28, 0.42]},
+		{"id": "sand", "label": "Sand", "color": [0.78, 0.70, 0.52]}
+	]
+}

@@ -1,0 +1,5 @@
+{
+	"schema_version": 1,
+	"description": "Point equipment and decorative assets for StructurePlan.items. Empty by design — vocabulary lands later. Engine reads this catalog; unknown item_ids are ignored at mount time.",
+	"items": {}
+}

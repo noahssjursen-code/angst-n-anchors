@@ -6,18 +6,24 @@ extends RefCounted
 ## Structure is DRAWN, not stacked: four primitives, each one part regardless
 ## of size, replace fields of voxel bricks:
 ##   walls  — {id, start:[x,y,z], axis:"x"|"z", length, height, thickness,
-##             color?, openings:[{type, offset, width, height, sill}]}
-##   decks  — {id, origin:[x,y,z], size:[w,l], thickness, color?,
+##             color?/color_out?/color_in?, material?/material_out?/material_in?,
+##             openings:[{type, offset, width, height, sill}]}
+##   decks  — {id, origin:[x,y,z], size:[w,l], thickness, color?, material?,
 ##             openings:[{type, offset:[dx,dz], size:[w,l]}]}
-##   rooms  — {id, origin:[x,y,z], size:[w,h,l], wall_thickness, color?,
+##   rooms  — {id, origin:[x,y,z], size:[w,h,l], wall_thickness,
+##             color_out/in, material_out/in, roof?, floor?,
 ##             openings:[{face:"n"|"s"|"e"|"w"|"floor"|"ceiling", type,
 ##                        offset, width, height, sill}]}
-##   items  — {id, item_id, cell:[x,y,z], yaw}  (point equipment, later slice)
+##   items  — {id, item_id, cell:[x,y,z], yaw}  (point equipment — catalog
+##             ready via StructureItemCatalog; definitions land later)
 ##
 ## Coordinates are grid-corner points in whole metres. For vessels x/z match
 ## DeckGrid cell corners (0..width, 0..length) and y is metres above the deck
 ## plane. Rooms expand into walls + floor + ceiling plates at bake time —
 ## see StructureBaker.expand_room().
+##
+## Surface ids resolve through StructureMaterialLibrary (global construction
+## materials). Unknown ids fall back to "painted" at bake time.
 
 const FORMAT := "structure_plan_v1"
 const DEFAULT_WALL_THICKNESS := 1.0 / 6.0
@@ -28,6 +34,8 @@ const OPENING_DOOR := "door"
 const OPENING_WINDOW := "window"
 const OPENING_HOLE := "hole"
 const OPENING_STAIRWELL := "stairwell"
+
+const CONTEXTS := ["vessel", "building"]
 
 var context := "vessel" ## "vessel" | "building"
 var hull_id := ""
@@ -81,6 +89,8 @@ func add_room(origin: Vector3, size: Vector3) -> Dictionary:
 		"origin": [origin.x, origin.y, origin.z],
 		"size": [maxf(size.x, 2.0), maxf(size.y, 2.0), maxf(size.z, 2.0)],
 		"wall_thickness": DEFAULT_WALL_THICKNESS,
+		"roof": true,
+		"floor": true,
 		"openings": [],
 	}
 	rooms.append(room)
@@ -90,9 +100,9 @@ func add_room(origin: Vector3, size: Vector3) -> Dictionary:
 func add_item(item_id: String, cell: Vector3i, yaw := 0) -> Dictionary:
 	var item := {
 		"id": allocate_id(),
-		"item_id": item_id,
+		"item_id": item_id.strip_edges(),
 		"cell": [cell.x, cell.y, cell.z],
-		"yaw": yaw,
+		"yaw": int(yaw),
 	}
 	items.append(item)
 	return item
@@ -106,6 +116,25 @@ func entity_by_id(id: int) -> Dictionary:
 	return {}
 
 
+func entity_kind(id: int) -> String:
+	var entity := entity_by_id(id)
+	if entity.is_empty():
+		return ""
+	return kind_of_entity(entity)
+
+
+static func kind_of_entity(entity: Dictionary) -> String:
+	if entity.has("item_id"):
+		return "item"
+	if entity.has("axis"):
+		return "wall"
+	if entity.has("size") and (entity.get("size") as Array).size() == 3:
+		return "room"
+	if entity.has("size"):
+		return "deck"
+	return "unknown"
+
+
 func remove_entity(id: int) -> bool:
 	for collection in [walls, decks, rooms, items]:
 		for index in (collection as Array).size():
@@ -115,12 +144,107 @@ func remove_entity(id: int) -> bool:
 	return false
 
 
+## Deep-copies an entity to a new id, offset by delta metres / cells.
+func duplicate_entity(id: int, delta := Vector3(1, 0, 1)) -> Dictionary:
+	var source := entity_by_id(id)
+	if source.is_empty():
+		return {}
+	var copy := source.duplicate(true)
+	copy["id"] = allocate_id()
+	var kind := kind_of_entity(source)
+	match kind:
+		"wall":
+			var start := vec3_of(copy.get("start"))
+			copy["start"] = [start.x + delta.x, start.y + delta.y, start.z + delta.z]
+			walls.append(copy)
+		"deck":
+			var origin := vec3_of(copy.get("origin"))
+			copy["origin"] = [origin.x + delta.x, origin.y + delta.y, origin.z + delta.z]
+			decks.append(copy)
+		"room":
+			var origin := vec3_of(copy.get("origin"))
+			copy["origin"] = [origin.x + delta.x, origin.y + delta.y, origin.z + delta.z]
+			rooms.append(copy)
+		"item":
+			var cell := copy.get("cell", [0, 0, 0]) as Array
+			copy["cell"] = [
+				int(cell[0]) + int(delta.x),
+				int(cell[1]) + int(delta.y),
+				int(cell[2]) + int(delta.z),
+			]
+			items.append(copy)
+		_:
+			return {}
+	return copy
+
+
 func is_empty() -> bool:
 	return walls.is_empty() and decks.is_empty() and rooms.is_empty() and items.is_empty()
 
 
 func entity_count() -> int:
 	return walls.size() + decks.size() + rooms.size() + items.size()
+
+
+func structure_count() -> int:
+	return walls.size() + decks.size() + rooms.size()
+
+
+func clear() -> void:
+	walls.clear()
+	decks.clear()
+	rooms.clear()
+	items.clear()
+	palette.clear()
+	_next_id = 1
+
+
+## Soft validation for Studio / publish later. Never mutates the plan.
+## Returns {ok: bool, errors: PackedStringArray, warnings: PackedStringArray}.
+func validate(grid_width := 0, grid_length := 0) -> Dictionary:
+	var errors: PackedStringArray = []
+	var warnings: PackedStringArray = []
+	if context not in CONTEXTS:
+		errors.append("context must be vessel or building")
+	if context == "vessel" and hull_id.strip_edges().is_empty():
+		warnings.append("vessel plan has no hull_id")
+	for wall_variant in walls:
+		var wall := wall_variant as Dictionary
+		if float(wall.get("length", 0.0)) < 1.0:
+			errors.append("wall #%d length < 1" % int(wall.get("id", -1)))
+		_validate_bounds(wall.get("start"), wall, grid_width, grid_length, warnings)
+	for deck_variant in decks:
+		var deck := deck_variant as Dictionary
+		_validate_bounds(deck.get("origin"), deck, grid_width, grid_length, warnings)
+	for room_variant in rooms:
+		var room := room_variant as Dictionary
+		var size := vec3_of(room.get("size"), Vector3(2, 3, 2))
+		if size.x < 2.0 or size.z < 2.0:
+			warnings.append("room #%d footprint under 2×2" % int(room.get("id", -1)))
+		_validate_bounds(room.get("origin"), room, grid_width, grid_length, warnings)
+	for item_variant in items:
+		var item := item_variant as Dictionary
+		var item_id := str(item.get("item_id", "")).strip_edges()
+		if item_id.is_empty():
+			errors.append("item #%d missing item_id" % int(item.get("id", -1)))
+		elif not StructureItemCatalog.has_id(item_id):
+			## Catalog is empty this pass — warn, do not hard-fail.
+			warnings.append("item #%d references unknown item_id '%s'" % [
+				int(item.get("id", -1)), item_id,
+			])
+	return {
+		"ok": errors.is_empty(),
+		"errors": errors,
+		"warnings": warnings,
+	}
+
+
+func _validate_bounds(origin_raw: Variant, entity: Dictionary, grid_width: int, grid_length: int, warnings: PackedStringArray) -> void:
+	if grid_width <= 0 or grid_length <= 0:
+		return
+	var origin := vec3_of(origin_raw)
+	if origin.x < -0.01 or origin.z < -0.01 or origin.x > float(grid_width) + 0.01 or origin.z > float(grid_length) + 0.01:
+		warnings.append("entity #%d origin outside grid" % int(entity.get("id", -1)))
 
 
 func to_dict() -> Dictionary:
@@ -139,6 +263,8 @@ func to_dict() -> Dictionary:
 static func from_dict(data: Dictionary) -> StructurePlan:
 	var plan := StructurePlan.new()
 	plan.context = str(data.get("context", "vessel"))
+	if plan.context not in CONTEXTS:
+		plan.context = "vessel"
 	plan.hull_id = str(data.get("hull_id", ""))
 	plan.palette = (data.get("palette", {}) as Dictionary).duplicate(true)
 	plan.walls = (data.get("walls", []) as Array).duplicate(true)
@@ -149,6 +275,10 @@ static func from_dict(data: Dictionary) -> StructurePlan:
 	for collection in [plan.walls, plan.decks, plan.rooms, plan.items]:
 		for entity in collection:
 			highest = maxi(highest, int((entity as Dictionary).get("id", 0)))
+			## Guarantee openings arrays exist so Studio can append safely.
+			var dict := entity as Dictionary
+			if not dict.has("openings") and not dict.has("item_id"):
+				dict["openings"] = []
 	plan._next_id = highest + 1
 	return plan
 
@@ -157,4 +287,11 @@ static func vec3_of(value: Variant, fallback := Vector3.ZERO) -> Vector3:
 	if value is Array and (value as Array).size() >= 3:
 		var list := value as Array
 		return Vector3(float(list[0]), float(list[1]), float(list[2]))
+	return fallback
+
+
+static func vec2_of(value: Variant, fallback := Vector2.ZERO) -> Vector2:
+	if value is Array and (value as Array).size() >= 2:
+		var list := value as Array
+		return Vector2(float(list[0]), float(list[1]))
 	return fallback

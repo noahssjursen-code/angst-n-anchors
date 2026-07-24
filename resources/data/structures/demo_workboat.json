@@ -7,27 +7,95 @@
 		"deck": [0.33, 0.31, 0.29]
 	},
 	"walls": [
-		{"id": 1, "start": [0, 0, 6], "axis": "z", "length": 21, "height": 1.0, "thickness": 0.1667, "openings": []},
-		{"id": 2, "start": [10, 0, 6], "axis": "z", "length": 21, "height": 1.0, "thickness": 0.1667, "openings": []},
-		{"id": 3, "start": [0, 0, 27], "axis": "x", "length": 10, "height": 1.0, "thickness": 0.1667, "openings": []},
-		{"id": 4, "start": [2, 0, 16], "axis": "x", "length": 6, "height": 2.0, "thickness": 0.1667, "openings": [
-			{"type": "window", "offset": 2.0, "width": 2.0, "sill": 0.9, "height": 0.9}
-		]}
+		{
+			"id": 1,
+			"start": [0, 0, 6],
+			"axis": "z",
+			"length": 21,
+			"height": 1.0,
+			"thickness": 0.1667,
+			"color": [0.42, 0.48, 0.52],
+			"material": "steel",
+			"color_out": [0.42, 0.48, 0.52],
+			"material_out": "steel",
+			"openings": []
+		},
+		{
+			"id": 2,
+			"start": [10, 0, 6],
+			"axis": "z",
+			"length": 21,
+			"height": 1.0,
+			"thickness": 0.1667,
+			"color": [0.42, 0.48, 0.52],
+			"material": "steel",
+			"color_out": [0.42, 0.48, 0.52],
+			"material_out": "steel",
+			"openings": []
+		},
+		{
+			"id": 3,
+			"start": [0, 0, 27],
+			"axis": "x",
+			"length": 10,
+			"height": 1.0,
+			"thickness": 0.1667,
+			"color": [0.42, 0.48, 0.52],
+			"material": "steel",
+			"color_out": [0.42, 0.48, 0.52],
+			"material_out": "steel",
+			"openings": []
+		},
+		{
+			"id": 4,
+			"start": [2, 0, 16],
+			"axis": "x",
+			"length": 6,
+			"height": 2.0,
+			"thickness": 0.1667,
+			"color": [0.90, 0.86, 0.76],
+			"material": "painted",
+			"color_out": [0.90, 0.86, 0.76],
+			"material_out": "painted",
+			"openings": [
+				{"type": "window", "offset": 2.0, "width": 2.0, "sill": 0.9, "height": 0.9}
+			]
+		}
 	],
 	"decks": [
-		{"id": 5, "origin": [1, 0, 6], "size": [8, 8], "thickness": 0.15, "openings": [
-			{"type": "stairwell", "offset": [3.0, 2.0], "size": [1.5, 3.0]}
-		]}
+		{
+			"id": 5,
+			"origin": [1, 0, 6],
+			"size": [8, 8],
+			"thickness": 0.15,
+			"color": [0.28, 0.28, 0.27],
+			"material": "asphalt",
+			"openings": [
+				{"type": "stairwell", "offset": [3.0, 2.0], "size": [1.5, 3.0]}
+			]
+		}
 	],
 	"rooms": [
-		{"id": 6, "origin": [2, 0, 18], "size": [6, 3, 6], "wall_thickness": 0.1667, "openings": [
-			{"face": "n", "type": "window", "offset": 0.6, "width": 1.4, "sill": 1.2, "height": 1.2},
-			{"face": "n", "type": "window", "offset": 2.3, "width": 1.4, "sill": 1.2, "height": 1.2},
-			{"face": "n", "type": "window", "offset": 4.0, "width": 1.4, "sill": 1.2, "height": 1.2},
-			{"face": "s", "type": "door", "offset": 2.2, "width": 1.6, "height": 2.2},
-			{"face": "w", "type": "window", "offset": 2.0, "width": 2.0, "sill": 1.2, "height": 1.1},
-			{"face": "e", "type": "window", "offset": 2.0, "width": 2.0, "sill": 1.2, "height": 1.1}
-		]}
+		{
+			"id": 6,
+			"origin": [2, 0, 18],
+			"size": [6, 3, 6],
+			"wall_thickness": 0.1667,
+			"roof": true,
+			"floor": true,
+			"color_out": [0.92, 0.93, 0.94],
+			"material_out": "painted",
+			"color_in": [0.78, 0.70, 0.58],
+			"material_in": "wood",
+			"openings": [
+				{"face": "n", "type": "window", "offset": 0.6, "width": 1.4, "sill": 1.2, "height": 1.2},
+				{"face": "n", "type": "window", "offset": 2.3, "width": 1.4, "sill": 1.2, "height": 1.2},
+				{"face": "n", "type": "window", "offset": 4.0, "width": 1.4, "sill": 1.2, "height": 1.2},
+				{"face": "s", "type": "door", "offset": 2.2, "width": 1.6, "height": 2.2},
+				{"face": "w", "type": "window", "offset": 2.0, "width": 2.0, "sill": 1.2, "height": 1.1},
+				{"face": "e", "type": "window", "offset": 2.0, "width": 2.0, "sill": 1.2, "height": 1.1}
+			]
+		}
 	],
 	"items": []
 }
