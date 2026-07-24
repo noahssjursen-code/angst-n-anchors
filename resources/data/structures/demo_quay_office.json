@@ -1,0 +1,58 @@
+{
+	"format": "structure_plan_v1",
+	"context": "building",
+	"hull_id": "",
+	"palette": {
+		"wall": [0.86, 0.84, 0.78],
+		"deck": [0.55, 0.55, 0.52]
+	},
+	"walls": [],
+	"decks": [
+		{
+			"id": 1,
+			"origin": [6, 0, 6],
+			"size": [12, 10],
+			"thickness": 0.15,
+			"color": [0.55, 0.55, 0.52],
+			"material": "asphalt",
+			"openings": []
+		}
+	],
+	"rooms": [
+		{
+			"id": 2,
+			"origin": [8, 0, 8],
+			"size": [8, 3, 6],
+			"wall_thickness": 0.2,
+			"roof": true,
+			"floor": true,
+			"color_out": [0.86, 0.84, 0.78],
+			"material_out": "clapboard",
+			"color_in": [0.92, 0.90, 0.84],
+			"material_in": "plaster",
+			"openings": [
+				{"face": "s", "type": "door", "offset": 3.0, "width": 1.8, "height": 2.2},
+				{"face": "e", "type": "window", "offset": 1.5, "width": 2.0, "sill": 1.1, "height": 1.3},
+				{"face": "w", "type": "window", "offset": 1.5, "width": 2.0, "sill": 1.1, "height": 1.3},
+				{"face": "n", "type": "window", "offset": 2.0, "width": 2.5, "sill": 1.0, "height": 1.4}
+			]
+		},
+		{
+			"id": 3,
+			"origin": [10, 3, 9],
+			"size": [4, 2.5, 4],
+			"wall_thickness": 0.1667,
+			"roof": true,
+			"floor": true,
+			"color_out": [0.45, 0.48, 0.52],
+			"material_out": "corrugated",
+			"color_in": [0.90, 0.88, 0.82],
+			"material_in": "painted",
+			"openings": [
+				{"face": "s", "type": "door", "offset": 1.2, "width": 1.4, "height": 2.0},
+				{"face": "n", "type": "window", "offset": 1.0, "width": 1.5, "sill": 0.9, "height": 1.0}
+			]
+		}
+	],
+	"items": []
+}

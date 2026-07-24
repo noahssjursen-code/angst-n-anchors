@@ -84,6 +84,28 @@ var _hover_box: MeshInstance3D ## copper pre-selection outline under the cursor
 var _start_marker: MeshInstance3D ## snapped grid point a draw-drag would start from
 
 var _status := ""
+var _dirty := false
+var _rebake_queued := false
+var _load_list_dirty := true
+var _help_visible := false
+var _help_panel: PanelContainer
+var _material_category := "all"
+var _category_buttons: Dictionary = {}
+var _level_step := 1.0 ## 1.0 m or storey (DEFAULT_WALL_HEIGHT)
+var _building_size := 24
+var _autosave_timer: Timer
+var _spin_undo_armed := false
+var _title_label: Label
+var _building_option: OptionButton
+var _material_flow: HFlowContainer
+var _confirm_dialog: ConfirmationDialog
+var _pending_confirm_action: Callable = Callable()
+var _hover_last_screen := Vector2(-9999, -9999)
+var _suppress_building_signal := false
+const BUILDING_SIZES := [16, 24, 32, 48]
+const MATERIAL_CATEGORY_FILTERS := [
+	"all", "finish", "timber", "cladding", "metal", "marine", "structure", "ground", "fabric",
+]
 
 
 func _ready() -> void:
@@ -91,6 +113,7 @@ func _ready() -> void:
 	StructureItemCatalog.reload()
 	_build_scene()
 	_build_ui()
+	_setup_autosave()
 	_set_context("vessel", true)
 	for arg in OS.get_cmdline_user_args():
 		if str(arg) == "--studio-probe":
@@ -140,6 +163,18 @@ var _suppress_hull_signal := false
 ## Switch vessel ↔ building. `reset_plan` clears the document (used on true
 ## context changes). Hull-only changes call `_set_hull` instead so work is kept.
 func _set_context(context: String, reset_plan := true) -> void:
+	var next := context if context in StructurePlan.CONTEXTS else "vessel"
+	var context_changed := next != _context
+	if context_changed and reset_plan and _dirty:
+		_confirm_if_dirty(
+			"Switch context and discard unsaved changes?",
+			func() -> void: _set_context_now(next, true),
+		)
+		return
+	_set_context_now(next, reset_plan)
+
+
+func _set_context_now(context: String, reset_plan := true) -> void:
 	var context_changed := context != _context
 	_context = context if context in StructurePlan.CONTEXTS else "vessel"
 	if reset_plan or context_changed:
@@ -151,14 +186,16 @@ func _set_context(context: String, reset_plan := true) -> void:
 		_redo_stack.clear()
 		_selected_id = -1
 		_active_base = 0.0
+		_clear_dirty()
 		if context_changed and not reset_plan:
 			_set_status("switched to %s — new plan" % _context)
 	_plan.context = _context
 	_apply_host_metrics()
 	_sync_hull_option()
+	_sync_building_option()
 	_cam_focus = Vector3.ZERO
 	_rebuild_host_visual()
-	_rebake()
+	_request_rebake(true)
 	_refresh_panel()
 
 
@@ -180,7 +217,7 @@ func _set_hull(hull_id: String, keep_plan := true) -> void:
 		_redo_stack.clear()
 		_selected_id = -1
 	_rebuild_host_visual()
-	_rebake()
+	_request_rebake(true)
 	_refresh_panel()
 	if keep_plan:
 		var report := _plan.validate(_grid_width, _grid_length)
@@ -200,8 +237,8 @@ func _apply_host_metrics() -> void:
 		_plan_offset = Vector3(-_deck_grid.half_beam, 0.0, -_deck_grid.half_loa)
 	else:
 		_deck_grid = null
-		_grid_width = 24
-		_grid_length = 24
+		_grid_width = _building_size
+		_grid_length = _building_size
 		_plan.hull_id = ""
 		_plan_offset = Vector3(-_grid_width * 0.5, 0.0, -_grid_length * 0.5)
 
@@ -218,16 +255,53 @@ func _sync_hull_option() -> void:
 	_suppress_hull_signal = false
 
 
+func _sync_building_option() -> void:
+	if _building_option == null:
+		return
+	_suppress_building_signal = true
+	var select_index := 1
+	for index in BUILDING_SIZES.size():
+		if int(BUILDING_SIZES[index]) == _building_size:
+			select_index = index
+			break
+	_building_option.select(select_index)
+	_suppress_building_signal = false
+
+
+func _set_building_size(size_m: int) -> void:
+	var next := clampi(size_m, 12, 64)
+	if next == _building_size and _context == "building":
+		return
+	_building_size = next
+	if _context != "building":
+		_sync_building_option()
+		return
+	_apply_host_metrics()
+	_rebuild_host_visual()
+	_request_rebake(true)
+	_refresh_panel()
+	_set_status("plot %d×%d m" % [_building_size, _building_size])
+
+
 func _new_plan() -> void:
-	_snapshot()
+	_confirm_if_dirty(
+		"Discard unsaved changes and start a new plan?",
+		func() -> void: _new_plan_now(),
+	)
+
+
+func _new_plan_now() -> void:
+	if not _plan.is_empty():
+		_snapshot()
 	_plan = StructurePlan.new()
 	_plan.context = _context
 	if _context == "vessel":
 		_plan.hull_id = _hull_id
 	_selected_id = -1
 	_active_base = 0.0
+	_clear_dirty()
 	_build_grid_lines()
-	_rebake()
+	_request_rebake(true)
 	_refresh_panel()
 	_set_status("new plan")
 
@@ -321,24 +395,28 @@ func _build_grid_lines() -> void:
 
 
 func _build_orientation_markers() -> void:
-	if _context != "vessel":
-		return
-	## Painted flat on the deck plane just outside the grid — stencilled harbour
-	## markings, not floating billboards that block the camera. Family palette:
-	## amber bow, muted stern, nav red/green for port/starboard.
-	var markers := [
-		["BOW", Vector3(_grid_width * 0.5, 0.06, -1.4), 0.0, HudStyle.C_AMBER],
-		["STERN", Vector3(_grid_width * 0.5, 0.06, _grid_length + 1.4), 180.0, HudStyle.C_LABEL],
-		["PORT", Vector3(-1.6, 0.06, _grid_length * 0.5), 90.0, HudStyle.C_RED],
-		["STARBOARD", Vector3(_grid_width + 1.6, 0.06, _grid_length * 0.5), 270.0, HudStyle.C_GREEN],
-	]
+	## Painted flat on the deck/ground plane just outside the grid.
+	var markers: Array = []
+	if _context == "vessel":
+		markers = [
+			["BOW", Vector3(_grid_width * 0.5, 0.06, -1.4), 0.0, HudStyle.C_AMBER],
+			["STERN", Vector3(_grid_width * 0.5, 0.06, _grid_length + 1.4), 180.0, HudStyle.C_LABEL],
+			["PORT", Vector3(-1.6, 0.06, _grid_length * 0.5), 90.0, HudStyle.C_RED],
+			["STARBOARD", Vector3(_grid_width + 1.6, 0.06, _grid_length * 0.5), 270.0, HudStyle.C_GREEN],
+		]
+	else:
+		markers = [
+			["N", Vector3(_grid_width * 0.5, 0.06, -1.4), 0.0, HudStyle.C_AMBER],
+			["S", Vector3(_grid_width * 0.5, 0.06, _grid_length + 1.4), 180.0, HudStyle.C_LABEL],
+			["W", Vector3(-1.6, 0.06, _grid_length * 0.5), 90.0, HudStyle.C_RED],
+			["E", Vector3(_grid_width + 1.6, 0.06, _grid_length * 0.5), 270.0, HudStyle.C_GREEN],
+		]
 	for marker in markers:
 		var label := Label3D.new()
 		label.text = str(marker[0])
 		label.font_size = 132
 		label.modulate = Color(marker[3] as Color, 0.85)
 		label.position = _plan_offset + (marker[1] as Vector3)
-		## Lay the text onto the deck plane, reading outward from the hull.
 		label.rotation_degrees = Vector3(-90.0, float(marker[2]), 0.0)
 		label.no_depth_test = false
 		_hull_visual.add_child(label)
@@ -389,6 +467,7 @@ func _snapshot() -> void:
 	if _undo_stack.size() > 100:
 		_undo_stack.pop_front()
 	_redo_stack.clear()
+	_mark_dirty()
 
 
 ## Drags stage their snapshot at grab time but only commit it to the undo
@@ -406,6 +485,52 @@ func _commit_staged_snapshot() -> void:
 		_undo_stack.pop_front()
 	_redo_stack.clear()
 	_pending_snapshot = {}
+	_mark_dirty()
+
+
+func _cancel_staged_edit() -> void:
+	## Restore plan to the pre-drag snapshot (Esc during gizmo/resize).
+	if _pending_snapshot.is_empty():
+		return
+	_plan = StructurePlan.from_dict(_pending_snapshot)
+	_pending_snapshot = {}
+	_gizmo_last_applied = Vector3.INF
+	_request_rebake(true)
+
+
+func _mark_dirty() -> void:
+	_dirty = true
+	if _autosave_timer != null:
+		_autosave_timer.start()
+	_refresh_title()
+
+
+func _clear_dirty() -> void:
+	_dirty = false
+	if _autosave_timer != null:
+		_autosave_timer.stop()
+	_refresh_title()
+
+
+func _refresh_title() -> void:
+	if _title_label == null:
+		return
+	_title_label.text = "STRUCTURE STUDIO *" if _dirty else "STRUCTURE STUDIO"
+
+
+## Run `action` immediately when the document is clean; otherwise ask first.
+func _confirm_if_dirty(message: String, action: Callable) -> void:
+	if not _dirty:
+		action.call()
+		return
+	_ask_confirm(message, action)
+
+
+func _on_confirm_accepted() -> void:
+	var action := _pending_confirm_action
+	_pending_confirm_action = Callable()
+	if action.is_valid():
+		action.call()
 
 
 func _undo() -> void:
@@ -414,7 +539,8 @@ func _undo() -> void:
 	_redo_stack.append(_plan.to_dict())
 	_plan = StructurePlan.from_dict(_undo_stack.pop_back())
 	_selected_id = -1
-	_rebake()
+	_mark_dirty()
+	_request_rebake(true)
 	_refresh_panel()
 
 
@@ -424,41 +550,50 @@ func _redo() -> void:
 	_undo_stack.append(_plan.to_dict())
 	_plan = StructurePlan.from_dict(_redo_stack.pop_back())
 	_selected_id = -1
-	_rebake()
+	_mark_dirty()
+	_request_rebake(true)
 	_refresh_panel()
 
 
+## Queue a rebake. `immediate` flushes this frame (placement/commit); otherwise
+## coalesce rapid gizmo/spin updates into one deferred bake.
+func _request_rebake(immediate := false) -> void:
+	if immediate:
+		_rebake_queued = false
+		_rebake()
+		return
+	if _rebake_queued:
+		return
+	_rebake_queued = true
+	call_deferred("_flush_rebake")
+
+
+func _flush_rebake() -> void:
+	if not _rebake_queued:
+		return
+	_rebake_queued = false
+	_rebake()
+
+
 func _rebake() -> void:
-	if _bake_root != null:
-		_bake_root.queue_free()
-	if _ghost_root != null:
-		_ghost_root.queue_free()
+	if _bake_root != null and is_instance_valid(_bake_root):
+		_bake_root.free()
+		_bake_root = null
+	if _ghost_root != null and is_instance_valid(_ghost_root):
+		_ghost_root.free()
 		_ghost_root = null
-	## Everything above the working level renders as ghost x-ray, so the deck
-	## being edited stays fully readable without losing the shape above it.
-	## Ghosted geometry is also excluded from picking (see _pick_entity_hit).
-	var threshold := _active_base + 2.99 if _ghost_levels else INF
+	## Ghost threshold tracks the storey height so custom room heights stay
+	## readable when "ghost upper decks" is on.
+	var storey := maxf(DEFAULT_WALL_HEIGHT - 0.01, 0.5)
+	var threshold := _active_base + storey if _ghost_levels else INF
 	_ghost_threshold = threshold
-	var solid_plan := StructurePlan.from_dict(_plan.to_dict())
-	var ghost_plan := StructurePlan.from_dict(_plan.to_dict())
-	var any_ghost := false
-	for plans in [[solid_plan, true], [ghost_plan, false]]:
-		var target := plans[0] as StructurePlan
-		var keep_below := bool(plans[1])
-		for collection in [target.walls, target.decks, target.rooms]:
-			var kept: Array = []
-			for entity in collection:
-				var origin := StructurePlan.vec3_of(
-					(entity as Dictionary).get("start", (entity as Dictionary).get("origin"))
-				)
-				var below := origin.y < threshold
-				if below == keep_below:
-					kept.append(entity)
-					if not keep_below:
-						any_ghost = true
-			(collection as Array).assign(kept)
-	## View-only roof hiding: strips ceilings from the render copies while the
-	## plan data (and the saved ship) keeps its roofs.
+	var solid_plan := _filtered_plan_copy(true, threshold)
+	var ghost_plan := _filtered_plan_copy(false, threshold)
+	var any_ghost := (
+		not ghost_plan.walls.is_empty()
+		or not ghost_plan.decks.is_empty()
+		or not ghost_plan.rooms.is_empty()
+	)
 	if not _show_roofs:
 		for plan_copy in [solid_plan, ghost_plan]:
 			for room_variant in (plan_copy as StructurePlan).rooms:
@@ -470,6 +605,21 @@ func _rebake() -> void:
 		add_child(_ghost_root)
 	_recompute_bounds()
 	_update_selection_visual()
+
+
+func _filtered_plan_copy(keep_below: bool, threshold: float) -> StructurePlan:
+	var copy := StructurePlan.from_dict(_plan.to_dict())
+	for collection in [copy.walls, copy.decks, copy.rooms]:
+		var kept: Array = []
+		for entity in collection:
+			var origin := StructurePlan.vec3_of(
+				(entity as Dictionary).get("start", (entity as Dictionary).get("origin"))
+			)
+			var below := origin.y < threshold
+			if below == keep_below:
+				kept.append(entity)
+		(collection as Array).assign(kept)
+	return copy
 
 
 func _recompute_bounds() -> void:
@@ -521,7 +671,10 @@ func _handle_key(key: InputEventKey) -> void:
 	if focus is LineEdit or focus is TextEdit:
 		return
 	if key.ctrl_pressed and key.keycode == KEY_Z:
-		_undo()
+		if key.shift_pressed:
+			_redo()
+		else:
+			_undo()
 		return
 	if key.ctrl_pressed and key.keycode == KEY_Y:
 		_redo()
@@ -540,15 +693,20 @@ func _handle_key(key: InputEventKey) -> void:
 		return
 	match key.keycode:
 		KEY_ESCAPE:
-			if _dragging or _gizmo_axis >= 0 or _opening_drag:
-				## Cancel the in-flight interaction, keep the current tool.
-				_dragging = false
+			if _gizmo_axis >= 0:
+				_cancel_staged_edit()
 				_gizmo_axis = -1
 				_resize_mode = false
+				_set_status("edit cancelled")
+				_refresh_panel()
+			elif _dragging or _opening_drag:
+				_dragging = false
 				_opening_drag = false
 				_opening_ctx = {}
 				_opening_ghost.visible = false
 				_hide_ghost()
+			elif _help_visible:
+				_toggle_help(false)
 			elif _selected_id >= 0:
 				_selected_id = -1
 				_update_selection_visual()
@@ -575,12 +733,28 @@ func _handle_key(key: InputEventKey) -> void:
 				_cam_distance = 34.0
 		KEY_T:
 			_show_roofs = not _show_roofs
-			_rebake()
+			_request_rebake(true)
 			_refresh_panel()
+		KEY_G:
+			_ghost_levels = not _ghost_levels
+			_request_rebake(true)
+			_refresh_panel()
+		KEY_H, KEY_SLASH:
+			_toggle_help(not _help_visible)
 		KEY_PAGEUP:
-			_set_build_level(_active_base + 1.0)
+			var step_up := DEFAULT_WALL_HEIGHT if key.shift_pressed else _level_step
+			_set_build_level(_active_base + step_up)
 		KEY_PAGEDOWN:
-			_set_build_level(_active_base - 1.0)
+			var step_down := DEFAULT_WALL_HEIGHT if key.shift_pressed else _level_step
+			_set_build_level(_active_base - step_down)
+		KEY_LEFT:
+			_nudge_selected(Vector3(-1, 0, 0))
+		KEY_RIGHT:
+			_nudge_selected(Vector3(1, 0, 0))
+		KEY_UP:
+			_nudge_selected(Vector3(0, 0, -1) if not key.shift_pressed else Vector3(0, 1, 0))
+		KEY_DOWN:
+			_nudge_selected(Vector3(0, 0, 1) if not key.shift_pressed else Vector3(0, -1, 0))
 		KEY_1:
 			if _tool == Tool.OPENING:
 				_opening_type = StructurePlan.OPENING_DOOR
@@ -608,8 +782,33 @@ func _handle_key(key: InputEventKey) -> void:
 func _set_build_level(level: float) -> void:
 	_active_base = maxf(level, 0.0)
 	_build_grid_lines()
-	_rebake()
+	_request_rebake(true)
 	_refresh_panel()
+
+
+func _nudge_selected(delta: Vector3) -> void:
+	if _selected_id < 0 or _tool != Tool.SELECT:
+		return
+	var entity := _plan.entity_by_id(_selected_id)
+	if entity.is_empty() or entity.has("item_id"):
+		return
+	_snapshot()
+	var kind := StructurePlan.kind_of_entity(entity)
+	var key := "start" if entity.has("start") else "origin"
+	var origin := StructurePlan.vec3_of(entity.get(key))
+	var dims := Vector3.ONE
+	if kind == "room":
+		dims = StructurePlan.vec3_of(entity.get("size"), Vector3(2, 3, 2))
+	elif kind == "deck":
+		var plate: Array = entity.get("size", [1.0, 1.0])
+		dims = Vector3(float(plate[0]), 0.0, float(plate[1]) if plate.size() > 1 else 1.0)
+	elif kind == "wall":
+		dims = Vector3(float(entity.get("length", 1.0)), 0.0, 0.0)
+	var next := _clamp_origin_to_grid(origin + delta, kind, dims)
+	entity[key] = [next.x, next.y, next.z]
+	_request_rebake(true)
+	_refresh_panel()
+	_set_status("nudged #%d" % _selected_id)
 
 
 func _handle_mouse_button(button: InputEventMouseButton) -> void:
@@ -661,10 +860,13 @@ func _on_left_release(screen_pos: Vector2) -> void:
 		return
 	if _gizmo_axis >= 0:
 		_gizmo_axis = -1
+		_flush_rebake()
 		if _resize_mode:
 			_resize_mode = false
 			_set_status("resize committed")
 			_refresh_panel()
+		else:
+			_set_status("move committed")
 		return
 	if not _dragging:
 		return
@@ -737,6 +939,7 @@ func _set_tool(tool: Tool) -> void:
 		return
 	_tool = tool
 	_dragging = false
+	_hover_last_screen = Vector2(-9999, -9999)
 	_hide_ghost()
 	_refresh_panel()
 
@@ -754,7 +957,7 @@ func _place_wall(a: Vector3, b: Vector3) -> void:
 	_stamp_library_style(wall, false)
 	_selected_id = int(wall.get("id", -1))
 	_set_status("wall %s ×%.0f m" % [axis, length])
-	_rebake()
+	_request_rebake(true)
 	_refresh_panel()
 
 
@@ -778,7 +981,7 @@ func _place_rect_entity(a: Vector3, b: Vector3, as_room: bool) -> void:
 		_stamp_library_style(deck, false)
 		_selected_id = int(deck.get("id", -1))
 		_set_status("deck plate %.0f×%.0f" % [w, l])
-	_rebake()
+	_request_rebake(true)
 	_refresh_panel()
 
 
@@ -815,14 +1018,7 @@ var _opening_anchor := Vector2.ZERO ## walls: (along, 0) · plates: (u, v)
 
 
 func _opening_defaults() -> Dictionary:
-	## Whole-metre widths so default cuts land flush on grid lines.
-	match _opening_type:
-		StructurePlan.OPENING_WINDOW:
-			return {"type": "window", "width": 2.0, "sill": 1.2, "height": 1.2}
-		StructurePlan.OPENING_HOLE:
-			return {"type": "hole", "width": 2.0, "sill": 0.0, "height": 2.4}
-		_:
-			return {"type": "door", "width": 2.0, "sill": 0.0, "height": 2.2}
+	return StructureStudioOpenings.defaults_for(_opening_type)
 
 
 ## Resolves what an opening interaction at this cursor position would cut:
@@ -905,77 +1101,33 @@ func _ctx_uv(ctx: Dictionary, p: Vector3) -> Vector2:
 	return Vector2(p.x - origin.x, p.z - origin.z)
 
 
-## Wall opening span (offset, width). Click: default width centered, edges on
-## whole metres. Drag: both edges snap to the half-metre grid, min 1 m, never
-## past the host ends.
 func _wall_span(ctx: Dictionary, a: float, b: float, dragged: bool) -> Vector2:
-	var length := float(ctx["length"])
-	if not dragged:
-		var width: float = minf(float(_opening_defaults()["width"]), length)
-		var off := clampf(roundf(a - width * 0.5), 0.0, maxf(length - width, 0.0))
-		return Vector2(off, width)
-	var e0 := roundf(minf(a, b) * 2.0) / 2.0
-	var e1 := roundf(maxf(a, b) * 2.0) / 2.0
-	e0 = clampf(e0, 0.0, maxf(length - 1.0, 0.0))
-	e1 = clampf(maxf(e1, e0 + 1.0), e0 + 1.0, length)
-	return Vector2(e0, e1 - e0)
+	return StructureStudioOpenings.wall_span(
+		float(ctx["length"]), a, b, dragged, float(_opening_defaults()["width"])
+	)
 
 
-## Plate hole rect. Click: 1×3 stairwell footprint on whole metres. Drag: the
-## rectangle you sweep, whole-metre edges, min 1×1, clamped inside the plate.
 func _plate_rect(ctx: Dictionary, a: Vector2, b: Vector2, dragged: bool) -> Rect2:
-	var extent := ctx["extent"] as Vector2
-	if not dragged:
-		var w := minf(1.0, extent.x)
-		var l := minf(3.0, extent.y)
-		return Rect2(
-			clampf(roundf(a.x - w * 0.5), 0.0, maxf(extent.x - w, 0.0)),
-			clampf(roundf(a.y - l * 0.5), 0.0, maxf(extent.y - l, 0.0)),
-			w, l,
-		)
-	var mn := Vector2(roundf(minf(a.x, b.x)), roundf(minf(a.y, b.y)))
-	var mx := Vector2(roundf(maxf(a.x, b.x)), roundf(maxf(a.y, b.y)))
-	mn = mn.clamp(Vector2.ZERO, Vector2(maxf(extent.x - 1.0, 0.0), maxf(extent.y - 1.0, 0.0)))
-	mx = mx.clamp(mn + Vector2.ONE, extent)
-	return Rect2(mn, mx - mn)
+	return StructureStudioOpenings.plate_rect(ctx["extent"] as Vector2, a, b, dragged)
 
 
-## Ghost geometry for a wall span or plate rect, in plan space.
 func _opening_geom(ctx: Dictionary, span: Vector2, rect: Rect2) -> Dictionary:
 	var defaults := _opening_defaults()
+	var sill := float(defaults["sill"])
+	var height := float(defaults["height"])
 	match str(ctx.get("kind")):
 		"wall":
-			var start := ctx["start"] as Vector3
-			var u := span.x + span.y * 0.5
-			var v: float = start.y + float(defaults["sill"]) + float(defaults["height"]) * 0.5
-			var t := float(ctx["thickness"]) + 0.14
-			if bool(ctx["axis_z"]):
-				return {"center": Vector3(start.x, v, start.z + u), "size": Vector3(t, float(defaults["height"]), span.y)}
-			return {"center": Vector3(start.x + u, v, start.z), "size": Vector3(span.y, float(defaults["height"]), t)}
+			return StructureStudioOpenings.wall_geom(
+				ctx["start"] as Vector3, bool(ctx["axis_z"]), float(ctx["thickness"]), span, sill, height
+			)
 		"room_wall":
-			var origin := ctx["origin"] as Vector3
-			var size := ctx["size"] as Vector3
-			var u := span.x + span.y * 0.5
-			var v: float = origin.y + float(defaults["sill"]) + float(defaults["height"]) * 0.5
-			match str(ctx["face"]):
-				"n":
-					return {"center": Vector3(origin.x + u, v, origin.z), "size": Vector3(span.y, float(defaults["height"]), 0.34)}
-				"s":
-					return {"center": Vector3(origin.x + u, v, origin.z + size.z), "size": Vector3(span.y, float(defaults["height"]), 0.34)}
-				"w":
-					return {"center": Vector3(origin.x, v, origin.z + u), "size": Vector3(0.34, float(defaults["height"]), span.y)}
-				_:
-					return {"center": Vector3(origin.x + size.x, v, origin.z + u), "size": Vector3(0.34, float(defaults["height"]), span.y)}
+			return StructureStudioOpenings.room_wall_geom(
+				ctx["origin"] as Vector3, ctx["size"] as Vector3, str(ctx["face"]), span, sill, height
+			)
 		"room_plate", "plate":
-			var origin := ctx["origin"] as Vector3
-			return {
-				"center": Vector3(
-					origin.x + rect.position.x + rect.size.x * 0.5,
-					float(ctx["plane_y"]),
-					origin.z + rect.position.y + rect.size.y * 0.5,
-				),
-				"size": Vector3(rect.size.x, 0.4, rect.size.y),
-			}
+			return StructureStudioOpenings.plate_geom(
+				ctx["origin"] as Vector3, float(ctx["plane_y"]), rect
+			)
 	return {}
 
 
@@ -1033,16 +1185,18 @@ func _commit_opening(screen_pos: Vector2) -> void:
 		var uv := _ctx_uv(ctx, p)
 		var dragged := uv.distance_to(_opening_anchor) > 0.3
 		var rect := _plate_rect(ctx, _opening_anchor, uv, dragged)
+		var face := str(ctx.get("face", "floor"))
+		var hole_type := StructureStudioOpenings.plate_opening_type(_opening_type, face)
 		var hole := {
-			"type": StructurePlan.OPENING_STAIRWELL,
+			"type": hole_type,
 			"offset": [rect.position.x, rect.position.y],
 			"size": [rect.size.x, rect.size.y],
 		}
 		if str(ctx["kind"]) == "room_plate":
-			hole["face"] = str(ctx["face"])
+			hole["face"] = face
 		(entity["openings"] as Array).append(hole)
-		_set_status("hole  %.0f × %.0f m" % [rect.size.x, rect.size.y])
-	_rebake()
+		_set_status("%s  %.0f × %.0f m" % [hole_type, rect.size.x, rect.size.y])
+	_request_rebake(true)
 	_refresh_panel()
 
 
@@ -1265,7 +1419,7 @@ func _drag_gizmo(screen_pos: Vector2) -> void:
 	_gizmo_last_applied = new_origin
 	var key := "start" if entity.has("start") else "origin"
 	entity[key] = [new_origin.x, new_origin.y, new_origin.z]
-	_rebake()
+	_request_rebake(false)
 	_update_selection_visual()
 
 
@@ -1330,7 +1484,7 @@ func _apply_face_resize(entity: Dictionary, snapped_delta: float) -> void:
 			dims = Vector3(float(entity.get("length", 1.0)), 0.0, 0.0)
 		var clamped := _clamp_origin_to_grid(origin_now, kind, dims)
 		entity[key] = [clamped.x, clamped.y, clamped.z]
-	_rebake()
+	_request_rebake(false)
 	_update_selection_visual()
 
 
@@ -1400,22 +1554,49 @@ func _update_selection_visual() -> void:
 func _save_plan(plan_name: String) -> void:
 	var trimmed := plan_name.strip_edges().to_snake_case()
 	if trimmed.is_empty():
-		_status = "name the structure first"
-		_refresh_panel()
+		_set_status("name the structure first", false)
 		return
 	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(STRUCTURES_DIR))
 	var path := "%s/%s.json" % [STRUCTURES_DIR, trimmed]
+	if FileAccess.file_exists(path):
+		_ask_confirm(
+			"Overwrite existing file %s?" % path.get_file(),
+			func() -> void: _save_plan_now(path),
+		)
+		return
+	_save_plan_now(path)
+
+
+func _ask_confirm(message: String, action: Callable) -> void:
+	_pending_confirm_action = action
+	if _confirm_dialog == null:
+		action.call()
+		return
+	_confirm_dialog.dialog_text = message
+	_confirm_dialog.popup_centered()
+
+
+func _save_plan_now(path: String) -> void:
 	var file := FileAccess.open(path, FileAccess.WRITE)
 	if file == null:
-		_status = "save failed: %s" % path
-	else:
-		file.store_string(JSON.stringify(_plan.to_dict(), "\t"))
-		file.close()
-		_status = "saved %s" % path
+		_set_status("save failed: %s" % path, false)
+		return
+	file.store_string(JSON.stringify(_plan.to_dict(), "\t"))
+	file.close()
+	_clear_dirty()
+	_load_list_dirty = true
+	_set_status("saved %s" % path.get_file())
 	_refresh_panel()
 
 
 func _load_plan(path: String) -> void:
+	_confirm_if_dirty(
+		"Load %s and discard unsaved changes?" % path.get_file(),
+		func() -> void: _load_plan_now(path),
+	)
+
+
+func _load_plan_now(path: String) -> void:
 	var file := FileAccess.open(path, FileAccess.READ)
 	if file == null:
 		_set_status("load failed: %s" % path, false)
@@ -1425,7 +1606,8 @@ func _load_plan(path: String) -> void:
 	if parsed is not Dictionary or not StructurePlan.is_plan(parsed as Dictionary):
 		_set_status("not a structure plan: %s" % path.get_file(), false)
 		return
-	_snapshot()
+	if not _plan.is_empty():
+		_snapshot()
 	_plan = StructurePlan.from_dict(parsed as Dictionary)
 	_context = _plan.context if _plan.context in StructurePlan.CONTEXTS else "vessel"
 	if _context == "vessel":
@@ -1437,9 +1619,11 @@ func _load_plan(path: String) -> void:
 	_active_base = 0.0
 	_apply_host_metrics()
 	_sync_hull_option()
+	_sync_building_option()
 	_name_edit.text = path.get_file().get_basename()
+	_clear_dirty()
 	_rebuild_host_visual()
-	_rebake()
+	_request_rebake(true)
 	_refresh_panel()
 	var report := _plan.validate(_grid_width, _grid_length)
 	var warns: PackedStringArray = report.get("warnings", PackedStringArray())
@@ -1491,8 +1675,13 @@ func _update_hover_feedback() -> void:
 		_opening_ghost.visible = false
 		_hover_box.visible = false
 		_start_marker.visible = false
+		_hover_last_screen = Vector2(-9999, -9999)
 		return
 	var mouse := get_viewport().get_mouse_position()
+	## Skip redundant pick work when the cursor barely moved.
+	if mouse.distance_to(_hover_last_screen) < 1.5:
+		return
+	_hover_last_screen = mouse
 	_opening_ghost.visible = false
 	_hover_box.visible = false
 	_start_marker.visible = false
@@ -1695,6 +1884,34 @@ const TOOL_HINTS := {
 }
 
 
+func _setup_autosave() -> void:
+	_autosave_timer = Timer.new()
+	_autosave_timer.one_shot = true
+	_autosave_timer.wait_time = 45.0
+	_autosave_timer.timeout.connect(_autosave_if_named)
+	add_child(_autosave_timer)
+
+
+func _autosave_if_named() -> void:
+	if not _dirty:
+		return
+	var name_text := _name_edit.text.strip_edges() if _name_edit != null else ""
+	if name_text.is_empty():
+		_set_status("autosave skipped — name the structure", false)
+		return
+	var trimmed := name_text.to_snake_case()
+	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(STRUCTURES_DIR))
+	var path := "%s/%s.json" % [STRUCTURES_DIR, trimmed]
+	_save_plan_now(path)
+	_set_status("autosaved %s" % trimmed)
+
+
+func _toggle_help(show_help: bool) -> void:
+	_help_visible = show_help
+	if _help_panel != null:
+		_help_panel.visible = show_help
+
+
 func _build_ui() -> void:
 	var layer := CanvasLayer.new()
 	layer.layer = 14
@@ -1708,10 +1925,46 @@ func _build_ui() -> void:
 	_toast_timer.one_shot = true
 	_toast_timer.timeout.connect(func() -> void: _status_label.text = "")
 	add_child(_toast_timer)
+	_confirm_dialog = ConfirmationDialog.new()
+	_confirm_dialog.title = "Structure Studio"
+	_confirm_dialog.ok_button_text = "Continue"
+	_confirm_dialog.cancel_button_text = "Cancel"
+	_confirm_dialog.confirmed.connect(_on_confirm_accepted)
+	_confirm_dialog.canceled.connect(func() -> void: _pending_confirm_action = Callable())
+	add_child(_confirm_dialog)
 	_build_top_bar()
 	_build_tool_palette()
 	_build_drawer()
 	_build_context_strip()
+	_build_help_overlay()
+
+
+func _build_help_overlay() -> void:
+	_help_panel = UiBuilder.panel(Vector2(520, 0))
+	_help_panel.name = "HelpOverlay"
+	_help_panel.visible = false
+	_help_panel.set_anchors_preset(Control.PRESET_CENTER)
+	_help_panel.offset_left = -260
+	_help_panel.offset_right = 260
+	_help_panel.offset_top = -280
+	_help_panel.offset_bottom = 280
+	_ui_root.add_child(_help_panel)
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", 8)
+	_help_panel.add_child(box)
+	var header := Label.new()
+	header.text = "HELP  [H]"
+	HudStyle.apply_display_font(header, 20, HudStyle.C_AMBER)
+	box.add_child(header)
+	var body := Label.new()
+	body.text = StructureStudioHelp.text()
+	body.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	HudStyle.apply_body_font(body, 12, HudStyle.C_TEXT)
+	box.add_child(body)
+	var close := UiBuilder.compact_button("Close", 0.0)
+	close.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	close.pressed.connect(func() -> void: _toggle_help(false))
+	box.add_child(close)
 
 
 func _build_top_bar() -> void:
@@ -1723,10 +1976,10 @@ func _build_top_bar() -> void:
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 8)
 	bar.add_child(row)
-	var title := Label.new()
-	title.text = "STRUCTURE STUDIO"
-	HudStyle.apply_display_font(title, 24, HudStyle.C_AMBER)
-	row.add_child(title)
+	_title_label = Label.new()
+	_title_label.text = "STRUCTURE STUDIO"
+	HudStyle.apply_display_font(_title_label, 24, HudStyle.C_AMBER)
+	row.add_child(_title_label)
 	var divider := VSeparator.new()
 	divider.custom_minimum_size = Vector2(1, 0)
 	row.add_child(divider)
@@ -1761,6 +2014,21 @@ func _build_top_bar() -> void:
 		_set_hull(next_hull, true)
 	)
 	row.add_child(_hull_option)
+	_building_option = OptionButton.new()
+	_building_option.focus_mode = Control.FOCUS_NONE
+	_building_option.custom_minimum_size = Vector2(120, 34)
+	_building_option.tooltip_text = "Building plot size (metres)"
+	for index in BUILDING_SIZES.size():
+		var size_m: int = BUILDING_SIZES[index]
+		_building_option.add_item("%d×%d m" % [size_m, size_m], index)
+		if size_m == _building_size:
+			_building_option.select(index)
+	_building_option.item_selected.connect(func(index: int) -> void:
+		if _suppress_building_signal:
+			return
+		_set_building_size(int(BUILDING_SIZES[index]))
+	)
+	row.add_child(_building_option)
 	row.add_child(VSeparator.new())
 	var new_btn := UiBuilder.compact_button("New", 56.0)
 	new_btn.pressed.connect(func() -> void: _new_plan())
@@ -1846,7 +2114,7 @@ func _build_tool_palette() -> void:
 	ghost_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	ghost_btn.pressed.connect(func() -> void:
 		_ghost_levels = not _ghost_levels
-		_rebake()
+		_request_rebake(true)
 		_refresh_panel()
 	)
 	box.add_child(ghost_btn)
@@ -1856,7 +2124,7 @@ func _build_tool_palette() -> void:
 	roofs_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	roofs_btn.pressed.connect(func() -> void:
 		_show_roofs = not _show_roofs
-		_rebake()
+		_request_rebake(true)
 		_refresh_panel()
 	)
 	box.add_child(roofs_btn)
@@ -1926,18 +2194,19 @@ func _build_drawer() -> void:
 			_load_plan(str(_load_option.get_item_metadata(index)))
 	)
 	box.add_child(load_btn)
-	var load_demo := UiBuilder.compact_button("Load demo workboat", 0.0)
-	load_demo.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	load_demo.pressed.connect(func() -> void:
-		_load_plan("%s/demo_workboat.json" % STRUCTURES_DIR)
-	)
-	box.add_child(load_demo)
-	var load_shed := UiBuilder.compact_button("Load demo harbour shed", 0.0)
-	load_shed.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	load_shed.pressed.connect(func() -> void:
-		_load_plan("%s/demo_harbour_shed.json" % STRUCTURES_DIR)
-	)
-	box.add_child(load_shed)
+	for demo_def in [
+		["demo_workboat.json", "Demo workboat"],
+		["demo_bridge_cabin.json", "Demo bridge cabin"],
+		["demo_harbour_shed.json", "Demo harbour shed"],
+		["demo_quay_office.json", "Demo quay office"],
+	]:
+		var demo_file := str(demo_def[0])
+		var demo_btn := UiBuilder.compact_button(str(demo_def[1]), 0.0)
+		demo_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		demo_btn.pressed.connect(func() -> void:
+			_load_plan("%s/%s" % [STRUCTURES_DIR, demo_file])
+		)
+		box.add_child(demo_btn)
 
 
 func _build_context_strip() -> void:
@@ -1983,7 +2252,7 @@ func _delete_selected() -> void:
 	else:
 		_set_status("delete failed for #%d" % _selected_id, false)
 	_selected_id = -1
-	_rebake()
+	_request_rebake(true)
 	_refresh_panel()
 
 
@@ -1998,7 +2267,7 @@ func _duplicate_selected() -> void:
 		return
 	_selected_id = int(copy.get("id", -1))
 	_set_status("duplicated → #%d" % _selected_id)
-	_rebake()
+	_request_rebake(true)
 	_refresh_panel()
 
 
@@ -2033,38 +2302,51 @@ func _refresh_panel() -> void:
 	_roofs_button.set_pressed_no_signal(_show_roofs)
 	for slot in _slot_buttons.keys():
 		(_slot_buttons[slot] as Button).set_pressed_no_signal(slot == _armed_slot)
-	var armed_material := str((_lib[_armed_slot] as Dictionary)["material"])
-	for material_name in _lib_material_buttons.keys():
-		(_lib_material_buttons[material_name] as Button).set_pressed_no_signal(material_name == armed_material)
-	_entities_label.text = "Structure: %d   Items: %d\nUndo: %d   Level: %.0f m" % [
+	_entities_label.text = "Structure: %d   Items: %d\nUndo: %d   Level: %.0f m%s" % [
 		_plan.structure_count(), _plan.items.size(), _undo_stack.size(), _active_base,
+		"  · dirty" if _dirty else "",
 	]
 	_hull_option.visible = _context == "vessel"
+	if _building_option != null:
+		_building_option.visible = _context == "building"
 	_context_label.text = (
 		"Vessel — %s  (%d×%d m)" % [_hull_id, _grid_width, _grid_length]
 		if _context == "vessel"
 		else "Land building  (%d×%d m)" % [_grid_width, _grid_length]
 	)
 	_hint_label.text = str(TOOL_HINTS.get(_tool, ""))
+	_refresh_title()
+	_refresh_material_category_buttons()
 	_refresh_load_list()
 	_refresh_inspector()
 	_update_selection_visual()
 
 
 func _refresh_load_list() -> void:
-	var previous := _load_option.selected
+	if _load_option == null:
+		return
+	if not _load_list_dirty and _load_option.item_count > 0:
+		return
+	var previous_path := ""
+	if _load_option.selected >= 0:
+		previous_path = str(_load_option.get_item_metadata(_load_option.selected))
 	_load_option.clear()
 	var paths := _saved_plan_paths()
+	var select_index := 0
 	for index in paths.size():
 		_load_option.add_item(paths[index].get_file(), index)
 		_load_option.set_item_metadata(index, paths[index])
-	if previous >= 0 and previous < _load_option.item_count:
-		_load_option.select(previous)
+		if paths[index] == previous_path:
+			select_index = index
+	if _load_option.item_count > 0:
+		_load_option.select(select_index)
+	_load_list_dirty = false
 
 
 func _refresh_inspector() -> void:
 	for child in _inspector_box.get_children():
 		child.queue_free()
+	_spin_undo_armed = false
 	var entity := _plan.entity_by_id(_selected_id)
 	if _selected_id < 0 or entity.is_empty():
 		_drawer_info.text = "Nothing selected.\n\nDraw with Wall / Room / Deck, or switch to Select and click a piece.\n\nArm Outside/Inside above, then paint materials onto the selection."
@@ -2075,54 +2357,89 @@ func _refresh_inspector() -> void:
 	header.text = "%s  #%d" % [kind.to_upper(), _selected_id]
 	HudStyle.apply_body_font(header, 13, HudStyle.C_AMBER, true)
 	_inspector_box.add_child(header)
-	var fields: Array = []
 	match kind:
 		"wall":
-			fields = [["length", 1.0, 60.0, 1.0], ["height", 0.5, 12.0, 0.5], ["thickness", 0.05, 0.5, 0.05]]
+			for field in [["length", 1.0, 60.0, 1.0], ["height", 0.5, 12.0, 0.5], ["thickness", 0.05, 0.5, 0.05]]:
+				var field_name := str(field[0])
+				_inspector_box.add_child(_spin_row(
+					field_name, float(entity.get(field_name, 1.0)),
+					float(field[1]), float(field[2]), float(field[3]),
+					func(value: float) -> void:
+						_spin_commit()
+						entity[field_name] = value
+						_request_rebake(false)
+						_update_selection_visual()
+				))
 		"deck":
-			fields = [["thickness", 0.05, 0.5, 0.05]]
-	for field in fields:
-		var field_name := str(field[0])
-		_inspector_box.add_child(_spin_row(
-			field_name, float(entity.get(field_name, 1.0)),
-			float(field[1]), float(field[2]), float(field[3]),
-			func(value: float) -> void:
-				_snapshot()
-				entity[field_name] = value
-				_rebake()
-				_update_selection_visual()
-		))
-	if kind == "room":
-		var size_list: Array = entity.get("size", [4, 3, 4])
-		var axis_names := ["width", "height", "length"]
-		var mins := [2.0, 1.5, 2.0]
-		for axis_index in 3:
-			var captured := axis_index
+			var deck_size: Array = entity.get("size", [1.0, 1.0])
 			_inspector_box.add_child(_spin_row(
-				axis_names[axis_index], float(size_list[axis_index]), float(mins[axis_index]), 60.0, 0.5,
+				"width", float(deck_size[0]), 1.0, 60.0, 1.0,
 				func(value: float) -> void:
-					_snapshot()
-					(entity["size"] as Array)[captured] = value
-					_rebake()
+					_spin_commit()
+					(entity["size"] as Array)[0] = value
+					_request_rebake(false)
 					_update_selection_visual()
 			))
-		## Open-top holds / floorless shelters: toggle either plate.
-		var plate_row := HBoxContainer.new()
-		plate_row.add_theme_constant_override("separation", 6)
-		for plate_def in [["roof", "Roof"], ["floor", "Floor"]]:
-			var plate_key := str(plate_def[0])
-			var plate_btn := UiBuilder.tool_button(str(plate_def[1]), 0.0)
-			plate_btn.toggle_mode = true
-			plate_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-			plate_btn.set_pressed_no_signal(bool(entity.get(plate_key, true)))
-			plate_btn.pressed.connect(func() -> void:
-				_snapshot()
-				entity[plate_key] = not bool(entity.get(plate_key, true))
-				_rebake()
-				_refresh_panel()
-			)
-			plate_row.add_child(plate_btn)
-		_inspector_box.add_child(plate_row)
+			_inspector_box.add_child(_spin_row(
+				"length", float(deck_size[1]) if deck_size.size() > 1 else 1.0, 1.0, 60.0, 1.0,
+				func(value: float) -> void:
+					_spin_commit()
+					var sizes: Array = entity["size"] as Array
+					if sizes.size() < 2:
+						sizes.append(value)
+					else:
+						sizes[1] = value
+					_request_rebake(false)
+					_update_selection_visual()
+			))
+			_inspector_box.add_child(_spin_row(
+				"thickness", float(entity.get("thickness", 0.15)), 0.05, 0.5, 0.05,
+				func(value: float) -> void:
+					_spin_commit()
+					entity["thickness"] = value
+					_request_rebake(false)
+					_update_selection_visual()
+			))
+		"room":
+			var size_list: Array = entity.get("size", [4, 3, 4])
+			var axis_names := ["width", "height", "length"]
+			var mins := [2.0, 1.5, 2.0]
+			for axis_index in 3:
+				var captured := axis_index
+				_inspector_box.add_child(_spin_row(
+					axis_names[axis_index], float(size_list[axis_index]), float(mins[axis_index]), 60.0, 0.5,
+					func(value: float) -> void:
+						_spin_commit()
+						(entity["size"] as Array)[captured] = value
+						_request_rebake(false)
+						_update_selection_visual()
+				))
+			_inspector_box.add_child(_spin_row(
+				"wall_thickness", float(entity.get("wall_thickness", StructurePlan.DEFAULT_WALL_THICKNESS)),
+				0.05, 0.5, 0.05,
+				func(value: float) -> void:
+					_spin_commit()
+					entity["wall_thickness"] = value
+					_request_rebake(false)
+					_update_selection_visual()
+			))
+			## Open-top holds / floorless shelters: toggle either plate.
+			var plate_row := HBoxContainer.new()
+			plate_row.add_theme_constant_override("separation", 6)
+			for plate_def in [["roof", "Roof"], ["floor", "Floor"]]:
+				var plate_key := str(plate_def[0])
+				var plate_btn := UiBuilder.tool_button(str(plate_def[1]), 0.0)
+				plate_btn.toggle_mode = true
+				plate_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+				plate_btn.set_pressed_no_signal(bool(entity.get(plate_key, true)))
+				plate_btn.pressed.connect(func() -> void:
+					_snapshot()
+					entity[plate_key] = not bool(entity.get(plate_key, true))
+					_request_rebake(true)
+					_refresh_panel()
+				)
+				plate_row.add_child(plate_btn)
+			_inspector_box.add_child(plate_row)
 	## Surface readout — painting happens through the armed MATERIAL LIBRARY.
 	if kind == "room" or (kind == "wall" and (entity.has("material_in") or entity.has("color_in"))):
 		_inspector_box.add_child(UiBuilder.key_value_row(
@@ -2153,6 +2470,8 @@ func _refresh_inspector() -> void:
 		_inspector_box.add_child(UiBuilder.section_header("OPENINGS (%d)" % openings.size()))
 		for opening_index in openings.size():
 			var opening := openings[opening_index] as Dictionary
+			var opening_box := VBoxContainer.new()
+			opening_box.add_theme_constant_override("separation", 4)
 			var row := HBoxContainer.new()
 			row.add_theme_constant_override("separation", 6)
 			var label := Label.new()
@@ -2171,11 +2490,91 @@ func _refresh_inspector() -> void:
 				_snapshot()
 				if captured_index >= 0 and captured_index < openings.size():
 					openings.remove_at(captured_index)
-				_rebake()
+				_request_rebake(true)
 				_refresh_panel()
 			)
 			row.add_child(remove_btn)
-			_inspector_box.add_child(row)
+			opening_box.add_child(row)
+			var captured_opening := opening
+			var offset_raw: Variant = opening.get("offset", 0.0)
+			if offset_raw is Array:
+				var off: Array = offset_raw as Array
+				opening_box.add_child(_spin_row(
+					"off_x", float(off[0]) if off.size() > 0 else 0.0, 0.0, 60.0, 0.5,
+					func(value: float) -> void:
+						_spin_commit()
+						var list: Array = captured_opening.get("offset", [0.0, 0.0]) as Array
+						if list.is_empty():
+							list = [0.0, 0.0]
+						list[0] = value
+						captured_opening["offset"] = list
+						_request_rebake(false)
+				))
+				opening_box.add_child(_spin_row(
+					"off_z", float(off[1]) if off.size() > 1 else 0.0, 0.0, 60.0, 0.5,
+					func(value: float) -> void:
+						_spin_commit()
+						var list: Array = captured_opening.get("offset", [0.0, 0.0]) as Array
+						if list.size() < 2:
+							list.append(value)
+						else:
+							list[1] = value
+						captured_opening["offset"] = list
+						_request_rebake(false)
+				))
+				var hole_size: Array = opening.get("size", [1.0, 1.0])
+				opening_box.add_child(_spin_row(
+					"hole_w", float(hole_size[0]), 0.5, 20.0, 0.5,
+					func(value: float) -> void:
+						_spin_commit()
+						var list: Array = captured_opening.get("size", [1.0, 1.0]) as Array
+						list[0] = value
+						captured_opening["size"] = list
+						_request_rebake(false)
+				))
+				opening_box.add_child(_spin_row(
+					"hole_l", float(hole_size[1]) if hole_size.size() > 1 else 1.0, 0.5, 20.0, 0.5,
+					func(value: float) -> void:
+						_spin_commit()
+						var list: Array = captured_opening.get("size", [1.0, 1.0]) as Array
+						if list.size() < 2:
+							list.append(value)
+						else:
+							list[1] = value
+						captured_opening["size"] = list
+						_request_rebake(false)
+				))
+			else:
+				opening_box.add_child(_spin_row(
+					"offset", float(offset_raw), 0.0, 60.0, 0.5,
+					func(value: float) -> void:
+						_spin_commit()
+						captured_opening["offset"] = value
+						_request_rebake(false)
+				))
+				opening_box.add_child(_spin_row(
+					"width", float(opening.get("width", 1.0)), 0.5, 20.0, 0.5,
+					func(value: float) -> void:
+						_spin_commit()
+						captured_opening["width"] = value
+						_request_rebake(false)
+				))
+				if str(opening.get("type", "")) != StructurePlan.OPENING_DOOR:
+					opening_box.add_child(_spin_row(
+						"sill", float(opening.get("sill", 0.0)), 0.0, 8.0, 0.1,
+						func(value: float) -> void:
+							_spin_commit()
+							captured_opening["sill"] = value
+							_request_rebake(false)
+					))
+				opening_box.add_child(_spin_row(
+					"height", float(opening.get("height", 2.0)), 0.5, 8.0, 0.1,
+					func(value: float) -> void:
+						_spin_commit()
+						captured_opening["height"] = value
+						_request_rebake(false)
+				))
+			_inspector_box.add_child(opening_box)
 	_inspector_box.add_child(UiBuilder.separator())
 	var action_row := HBoxContainer.new()
 	action_row.add_theme_constant_override("separation", 6)
@@ -2190,6 +2589,14 @@ func _refresh_inspector() -> void:
 	delete_btn.pressed.connect(func() -> void: _delete_selected())
 	action_row.add_child(delete_btn)
 	_inspector_box.add_child(action_row)
+
+
+func _spin_commit() -> void:
+	## One undo step per continuous SpinBox edit session; rebuild clears the arm.
+	if _spin_undo_armed:
+		return
+	_snapshot()
+	_spin_undo_armed = true
 
 
 ## The standing right-hand surface library. Modal: arm Outside or Inside, then
@@ -2218,40 +2625,25 @@ func _build_library_section(box: VBoxContainer) -> void:
 	HudStyle.apply_body_font(armed_hint, 11, HudStyle.C_LABEL)
 	armed_hint.text = "Armed slot paints selection + next draws."
 	box.add_child(armed_hint)
-	var material_flow := HFlowContainer.new()
-	material_flow.add_theme_constant_override("h_separation", 4)
-	material_flow.add_theme_constant_override("v_separation", 4)
-	for material_name in StructureMaterialLibrary.studio_material_ids():
-		var btn := Button.new()
-		btn.toggle_mode = true
-		btn.focus_mode = Control.FOCUS_NONE
-		btn.custom_minimum_size = Vector2(70, 34)
-		btn.tooltip_text = "%s (%s)" % [
-			StructureMaterialLibrary.label_of(material_name), material_name,
-		]
-		btn.text = StructureMaterialLibrary.label_of(material_name)
-		var sample := StructureMaterialLibrary.default_color(material_name)
-		var chip := StyleBoxFlat.new()
-		chip.bg_color = sample
-		chip.set_corner_radius_all(3)
-		chip.content_margin_left = 10.0
-		chip.content_margin_right = 8.0
-		chip.content_margin_top = 6.0
-		chip.content_margin_bottom = 6.0
-		chip.border_color = HudStyle.C_BRASS
-		chip.set_border_width_all(1)
-		btn.add_theme_stylebox_override("normal", chip)
-		var chip_hover := chip.duplicate() as StyleBoxFlat
-		chip_hover.border_color = HudStyle.C_AMBER
-		btn.add_theme_stylebox_override("hover", chip_hover)
-		btn.add_theme_stylebox_override("pressed", chip_hover)
-		var luminance := sample.r * 0.3 + sample.g * 0.59 + sample.b * 0.11
-		var ink := Color(0.08, 0.09, 0.1) if luminance > 0.55 else Color(0.95, 0.95, 0.92)
-		HudStyle.apply_body_font(btn, 11, ink)
-		btn.pressed.connect(func() -> void: _apply_library_material(material_name))
-		material_flow.add_child(btn)
-		_lib_material_buttons[material_name] = btn
-	box.add_child(material_flow)
+	var category_flow := HFlowContainer.new()
+	category_flow.add_theme_constant_override("h_separation", 4)
+	category_flow.add_theme_constant_override("v_separation", 4)
+	for category in MATERIAL_CATEGORY_FILTERS:
+		var cat_btn := UiBuilder.compact_button(category.capitalize() if category != "all" else "All", 0.0)
+		cat_btn.toggle_mode = true
+		cat_btn.pressed.connect(func() -> void:
+			_material_category = category
+			_rebuild_material_buttons()
+			_refresh_panel()
+		)
+		category_flow.add_child(cat_btn)
+		_category_buttons[category] = cat_btn
+	box.add_child(category_flow)
+	_material_flow = HFlowContainer.new()
+	_material_flow.add_theme_constant_override("h_separation", 4)
+	_material_flow.add_theme_constant_override("v_separation", 4)
+	box.add_child(_material_flow)
+	_rebuild_material_buttons()
 	var swatches := HFlowContainer.new()
 	swatches.add_theme_constant_override("h_separation", 4)
 	swatches.add_theme_constant_override("v_separation", 4)
@@ -2275,6 +2667,54 @@ func _build_library_section(box: VBoxContainer) -> void:
 		)
 		swatches.add_child(button)
 	box.add_child(swatches)
+
+
+func _rebuild_material_buttons() -> void:
+	if _material_flow == null:
+		return
+	for child in _material_flow.get_children():
+		child.queue_free()
+	_lib_material_buttons.clear()
+	for material_name in StructureMaterialLibrary.ids_in_category(_material_category):
+		var btn := Button.new()
+		btn.toggle_mode = true
+		btn.focus_mode = Control.FOCUS_NONE
+		btn.custom_minimum_size = Vector2(70, 34)
+		btn.tooltip_text = "%s · %s (%s)" % [
+			StructureMaterialLibrary.label_of(material_name),
+			StructureMaterialLibrary.category_of(material_name),
+			material_name,
+		]
+		btn.text = StructureMaterialLibrary.label_of(material_name)
+		var sample := StructureMaterialLibrary.default_color(material_name)
+		var chip := StyleBoxFlat.new()
+		chip.bg_color = sample
+		chip.set_corner_radius_all(3)
+		chip.content_margin_left = 10.0
+		chip.content_margin_right = 8.0
+		chip.content_margin_top = 6.0
+		chip.content_margin_bottom = 6.0
+		chip.border_color = HudStyle.C_BRASS
+		chip.set_border_width_all(1)
+		btn.add_theme_stylebox_override("normal", chip)
+		var chip_hover := chip.duplicate() as StyleBoxFlat
+		chip_hover.border_color = HudStyle.C_AMBER
+		btn.add_theme_stylebox_override("hover", chip_hover)
+		btn.add_theme_stylebox_override("pressed", chip_hover)
+		var luminance := sample.r * 0.3 + sample.g * 0.59 + sample.b * 0.11
+		var ink := Color(0.08, 0.09, 0.1) if luminance > 0.55 else Color(0.95, 0.95, 0.92)
+		HudStyle.apply_body_font(btn, 11, ink)
+		btn.pressed.connect(func() -> void: _apply_library_material(material_name))
+		_material_flow.add_child(btn)
+		_lib_material_buttons[material_name] = btn
+
+
+func _refresh_material_category_buttons() -> void:
+	for category in _category_buttons.keys():
+		(_category_buttons[category] as Button).set_pressed_no_signal(category == _material_category)
+	var armed_material := str((_lib[_armed_slot] as Dictionary)["material"])
+	for material_name in _lib_material_buttons.keys():
+		(_lib_material_buttons[material_name] as Button).set_pressed_no_signal(material_name == armed_material)
 
 
 func _library_keys_for_selection() -> Dictionary:
@@ -2323,7 +2763,7 @@ func _apply_library_color(rgb: Array) -> void:
 	if not keys.is_empty():
 		_snapshot()
 		(keys["entity"] as Dictionary)[str(keys["color"])] = rgb.duplicate()
-		_rebake()
+		_request_rebake(true)
 	_set_status("%s colour set" % ("outside" if _armed_slot == "out" else "inside"))
 	_refresh_panel()
 
@@ -2336,7 +2776,7 @@ func _apply_library_material(material_name: String) -> void:
 	if not keys.is_empty():
 		_snapshot()
 		(keys["entity"] as Dictionary)[str(keys["material"])] = id
-		_rebake()
+		_request_rebake(true)
 	_set_status("%s material: %s" % [
 		"outside" if _armed_slot == "out" else "inside",
 		StructureMaterialLibrary.label_of(id),

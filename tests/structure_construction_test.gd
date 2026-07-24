@@ -8,6 +8,7 @@ var _failures := PackedStringArray()
 
 func _ready() -> void:
 	_test_material_library()
+	_test_material_categories()
 	_test_item_catalog_empty()
 	_test_plan_round_trip()
 	_test_plan_validate_and_duplicate()
@@ -15,8 +16,12 @@ func _ready() -> void:
 	_test_baker_bake_produces_meshes()
 	_test_demo_workboat_loads()
 	_test_demo_harbour_shed_loads()
+	_test_demo_bridge_cabin_loads()
+	_test_demo_quay_office_loads()
 	_test_two_sided_free_wall()
 	_test_studio_math()
+	_test_studio_openings()
+	_test_studio_help()
 	if _failures.is_empty():
 		print("StructureConstruction: plan, baker, materials, and item hooks passed")
 		get_tree().quit(0)
@@ -216,3 +221,82 @@ func _test_studio_math() -> void:
 	var clamped: Vector3 = StructureStudioMath.clamp_origin(Vector3(-2, -1, 50), "room", Vector3(4, 3, 4), 24, 24)
 	_check(is_equal_approx(clamped.x, 0.0) and is_equal_approx(clamped.y, 0.0), "clamp origin floors at zero")
 	_check(is_equal_approx(clamped.z, 20.0), "clamp origin respects footprint against grid length")
+
+
+func _test_material_categories() -> void:
+	StructureMaterialLibrary.reload()
+	var cats := StructureMaterialLibrary.categories()
+	_check(cats.size() >= 6, "material categories present")
+	_check(StructureMaterialLibrary.category_of("wood") == "timber", "wood is timber")
+	_check(StructureMaterialLibrary.category_of("brick") == "structure", "brick is structure")
+	var timber := StructureMaterialLibrary.ids_in_category("timber")
+	_check(timber.has("wood") and timber.has("teak"), "timber filter includes wood/teak")
+	_check(not timber.has("steel"), "timber filter excludes steel")
+	var all_ids := StructureMaterialLibrary.ids_in_category("all")
+	_check(all_ids.size() == StructureMaterialLibrary.studio_material_ids().size(), "all category matches studio list")
+
+
+func _test_studio_openings() -> void:
+	var door := StructureStudioOpenings.defaults_for(StructurePlan.OPENING_DOOR)
+	_check(str(door.get("type")) == "door", "door defaults")
+	_check(float(door.get("width")) >= 1.0, "door width")
+	var span := StructureStudioOpenings.wall_span(8.0, 3.0, 3.0, false, 2.0)
+	_check(is_equal_approx(span.y, 2.0), "click opening uses default width")
+	_check(span.x >= 0.0 and span.x + span.y <= 8.0, "click opening stays on wall")
+	var drag_span := StructureStudioOpenings.wall_span(8.0, 1.0, 5.0, true, 2.0)
+	_check(drag_span.y >= 1.0, "drag opening has length")
+	var plate := StructureStudioOpenings.plate_rect(Vector2(6, 6), Vector2(2, 2), Vector2(2, 2), false)
+	_check(plate.size.x > 0.0 and plate.size.y > 0.0, "plate click rect")
+	_check(
+		StructureStudioOpenings.plate_opening_type(StructurePlan.OPENING_HOLE, "ceiling")
+		== StructurePlan.OPENING_HOLE,
+		"ceiling hole stays hole",
+	)
+	_check(
+		StructureStudioOpenings.plate_opening_type(StructurePlan.OPENING_HOLE, "floor")
+		== StructurePlan.OPENING_STAIRWELL,
+		"floor hole becomes stairwell",
+	)
+	var geom := StructureStudioOpenings.wall_geom(Vector3.ZERO, true, 0.2, Vector2(1, 2), 0.0, 2.2)
+	_check((geom["size"] as Vector3).y > 2.0, "wall opening geom height")
+
+
+func _test_studio_help() -> void:
+	var text := StructureStudioHelp.text()
+	_check(text.contains("STRUCTURE STUDIO"), "help has title")
+	_check(text.contains("Ctrl+S"), "help mentions save")
+	_check(text.contains("Ghost"), "help mentions ghost decks")
+
+
+func _test_demo_bridge_cabin_loads() -> void:
+	var path := "res://resources/data/structures/demo_bridge_cabin.json"
+	_check(FileAccess.file_exists(path), "demo_bridge_cabin.json exists")
+	var file := FileAccess.open(path, FileAccess.READ)
+	if file == null:
+		_failures.append("demo_bridge_cabin opens")
+		return
+	var parsed: Variant = JSON.parse_string(file.get_as_text())
+	file.close()
+	var plan := StructurePlan.from_dict(parsed as Dictionary)
+	_check(plan.context == "vessel", "bridge cabin is vessel")
+	_check(plan.rooms.size() >= 1, "bridge cabin has a room")
+	var root := StructureBaker.bake(plan)
+	_check(root.get_child_count() > 0, "bridge cabin bakes")
+	root.free()
+
+
+func _test_demo_quay_office_loads() -> void:
+	var path := "res://resources/data/structures/demo_quay_office.json"
+	_check(FileAccess.file_exists(path), "demo_quay_office.json exists")
+	var file := FileAccess.open(path, FileAccess.READ)
+	if file == null:
+		_failures.append("demo_quay_office opens")
+		return
+	var parsed: Variant = JSON.parse_string(file.get_as_text())
+	file.close()
+	var plan := StructurePlan.from_dict(parsed as Dictionary)
+	_check(plan.context == "building", "quay office is building")
+	_check(plan.rooms.size() >= 2, "quay office is two-storey")
+	var root := StructureBaker.bake(plan)
+	_check(root.get_child_count() > 0, "quay office bakes")
+	root.free()

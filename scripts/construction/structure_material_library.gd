@@ -96,6 +96,34 @@ static func label_of(material_id: String) -> String:
 	return str(def.get("label", normalize_id(material_id).capitalize()))
 
 
+static func category_of(material_id: String) -> String:
+	return str(definition(material_id).get("category", "misc"))
+
+
+## Distinct category ids present in the catalog, sorted.
+static func categories() -> Array[String]:
+	_ensure_loaded()
+	var seen: Dictionary = {}
+	for material_id in ids():
+		seen[category_of(material_id)] = true
+	var out: Array[String] = []
+	for key in seen.keys():
+		out.append(str(key))
+	out.sort()
+	return out
+
+
+static func ids_in_category(category: String) -> Array[String]:
+	var wanted := category.strip_edges().to_lower()
+	if wanted.is_empty() or wanted == "all":
+		return studio_material_ids()
+	var out: Array[String] = []
+	for material_id in studio_material_ids():
+		if category_of(material_id) == wanted:
+			out.append(material_id)
+	return out
+
+
 static func roughness_of(material_id: String) -> float:
 	return float(definition(material_id).get("roughness", 0.8))
 

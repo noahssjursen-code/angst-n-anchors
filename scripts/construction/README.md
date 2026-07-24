@@ -7,8 +7,11 @@ not stacked.
 |--------|------|
 | `structure_plan.gd` | `structure_plan_v1` document model |
 | `structure_baker.gd` | Plan → merged meshes + matching collision boxes |
-| `structure_material_library.gd` | Global construction surfaces (textures + PBR) |
+| `structure_material_library.gd` | Global construction surfaces (textures + PBR + categories) |
 | `structure_item_catalog.gd` | Equipment/decor registry (**empty this pass**) |
+| `structure_studio_math.gd` | Pure drag/clamp helpers |
+| `structure_studio_openings.gd` | Pure opening defaults / snap / ghost geom |
+| `structure_studio_help.gd` | Help overlay copy |
 
 ## Authoring
 
@@ -26,9 +29,15 @@ walk colliders + `PlanItems` mounts). Compliance/budgets still skip plans.
 ## Inspect
 
 `scenes/showcases/structure_studio_showcase.tscn` — F6 bake/material inspect.
-Demos: `demo_workboat.json` (vessel), `demo_harbour_shed.json` (building).
 
-## Helpers
+Demos:
+- `demo_workboat.json` — vessel shell + cargo deck
+- `demo_bridge_cabin.json` — compact wheelhouse cabin
+- `demo_harbour_shed.json` — brick shed on concrete apron
+- `demo_quay_office.json` — two-storey quay office
 
-`structure_studio_math.gd` — pure drag/clamp math used by Structure Studio
-(and covered by `tests/structure_construction_test.tscn`).
+## Studio UX notes
+
+Dirty title asterisk, overwrite/load/new confirms, 45s named autosave,
+material category filters, building plot sizes, deferred rebake for
+gizmo/spin edits, Esc cancel for staged moves.

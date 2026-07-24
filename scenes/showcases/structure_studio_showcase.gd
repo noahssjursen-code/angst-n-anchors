@@ -6,7 +6,9 @@ extends Node3D
 
 const DEMO_PATHS := [
 	"res://resources/data/structures/demo_workboat.json",
+	"res://resources/data/structures/demo_bridge_cabin.json",
 	"res://resources/data/structures/demo_harbour_shed.json",
+	"res://resources/data/structures/demo_quay_office.json",
 ]
 
 var _camera: Camera3D
