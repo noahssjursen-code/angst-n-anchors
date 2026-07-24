@@ -2118,7 +2118,18 @@ func _save_plan_now(path: String) -> void:
 	_clear_dirty()
 	_load_list_dirty = true
 	_remember_recent_path(path)
-	_set_status("saved %s" % path.get_file())
+	var report := _plan.validate(_grid_width, _grid_length)
+	var errors: PackedStringArray = report.get("errors", PackedStringArray())
+	var warns: PackedStringArray = report.get("warnings", PackedStringArray())
+	_update_check_report(errors, warns)
+	if not errors.is_empty():
+		_set_status("saved %s — check failed: %s" % [path.get_file(), errors[0]], false)
+	elif not warns.is_empty():
+		_set_status("saved %s — %d warning%s" % [
+			path.get_file(), warns.size(), "s" if warns.size() != 1 else "",
+		], false)
+	else:
+		_set_status("saved %s" % path.get_file())
 	_refresh_panel()
 
 
@@ -2854,6 +2865,7 @@ func _build_drawer() -> void:
 		["demo_harbour_shed.json", "Demo harbour shed"],
 		["demo_quay_office.json", "Demo quay office"],
 		["demo_canopy.json", "Demo canopy"],
+		["demo_pier_shack.json", "Demo pier shack"],
 	]:
 		var demo_file := str(demo_def[0])
 		var demo_btn := UiBuilder.compact_button(str(demo_def[1]), 0.0)

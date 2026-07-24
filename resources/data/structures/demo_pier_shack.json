@@ -1,0 +1,41 @@
+{
+	"format": "structure_plan_v1",
+	"context": "building",
+	"hull_id": "",
+	"palette": {
+		"wall": [0.72, 0.58, 0.38],
+		"deck": [0.40, 0.36, 0.30]
+	},
+	"walls": [],
+	"decks": [
+		{
+			"id": 1,
+			"origin": [8, 0, 8],
+			"size": [8, 6],
+			"thickness": 0.15,
+			"color": [0.40, 0.36, 0.30],
+			"material": "wood",
+			"openings": []
+		}
+	],
+	"rooms": [
+		{
+			"id": 2,
+			"origin": [9, 0, 9],
+			"size": [6, 2.5, 4],
+			"wall_thickness": 0.1667,
+			"roof": true,
+			"floor": false,
+			"color_out": [0.72, 0.58, 0.38],
+			"material_out": "plywood",
+			"color_in": [0.90, 0.86, 0.76],
+			"material_in": "painted",
+			"openings": [
+				{"face": "s", "type": "door", "offset": 2.0, "width": 1.6, "height": 2.1},
+				{"face": "e", "type": "window", "offset": 1.0, "width": 1.5, "sill": 1.0, "height": 1.0},
+				{"face": "w", "type": "window", "offset": 1.0, "width": 1.5, "sill": 1.0, "height": 1.0}
+			]
+		}
+	],
+	"items": []
+}

@@ -21,6 +21,7 @@ func _ready() -> void:
 	_test_demo_quay_office_loads()
 	_test_demo_fish_hold_loads()
 	_test_demo_canopy_loads()
+	_test_demo_pier_shack_loads()
 	_test_two_sided_free_wall()
 	_test_studio_math()
 	_test_studio_openings()
@@ -357,7 +358,7 @@ func _test_studio_document() -> void:
 	_check(StructureStudioDocument.path_for_name("demo").ends_with("/demo.json"), "path_for_name")
 	_check(StructureStudioDocument.path_for_name("  ").is_empty(), "empty name has no path")
 	var paths := StructureStudioDocument.list_plan_paths()
-	_check(paths.size() >= 6, "lists demo plans")
+	_check(paths.size() >= 7, "lists demo plans")
 	_check(StructureStudioDocument.is_demo_path("res://resources/data/structures/demo_workboat.json"), "demo path detect")
 	for path in paths:
 		_check(not path.ends_with("item_catalog.json"), "item catalog excluded from plan list")
@@ -394,6 +395,23 @@ func _test_demo_quay_office_loads() -> void:
 	_check(plan.rooms.size() >= 2, "quay office is two-storey")
 	var root := StructureBaker.bake(plan)
 	_check(root.get_child_count() > 0, "quay office bakes")
+	root.free()
+
+
+func _test_demo_pier_shack_loads() -> void:
+	var path := "res://resources/data/structures/demo_pier_shack.json"
+	_check(FileAccess.file_exists(path), "demo_pier_shack.json exists")
+	var file := FileAccess.open(path, FileAccess.READ)
+	if file == null:
+		_failures.append("demo_pier_shack opens")
+		return
+	var parsed: Variant = JSON.parse_string(file.get_as_text())
+	file.close()
+	var plan := StructurePlan.from_dict(parsed as Dictionary)
+	_check(plan.context == "building", "pier shack is building")
+	_check(str((plan.rooms[0] as Dictionary).get("material_out")) == "plywood", "pier shack plywood shell")
+	var root := StructureBaker.bake(plan)
+	_check(root.get_child_count() > 0, "pier shack bakes")
 	root.free()
 
 

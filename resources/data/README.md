@@ -86,7 +86,7 @@ Parametric `structure_plan_v1` documents authored by **Structure Studio**.
 
 Demo plans (F6 showcase + Studio load buttons):
 `demo_workboat`, `demo_bridge_cabin`, `demo_fish_hold`, `demo_harbour_shed`,
-`demo_quay_office`, `demo_canopy`.
+`demo_quay_office`, `demo_canopy`, `demo_pier_shack`.
 
 ## `materials/`
 
