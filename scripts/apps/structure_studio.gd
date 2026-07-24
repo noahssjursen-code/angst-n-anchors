@@ -2106,9 +2106,8 @@ func _saved_plan_paths() -> PackedStringArray:
 
 func _remember_recent_path(path: String) -> void:
 	var cleaned := path.strip_edges()
-	if cleaned.is_empty() or StructureStudioDocument.is_demo_path(cleaned):
-		## Still useful to recall demos recently opened.
-		pass
+	if cleaned.is_empty():
+		return
 	var next: Array[String] = [cleaned]
 	for existing in _recent_paths:
 		if existing != cleaned:
@@ -2116,7 +2115,6 @@ func _remember_recent_path(path: String) -> void:
 		if next.size() >= 5:
 			break
 	_recent_paths = next
-	_load_list_dirty = true
 
 
 # ── Scene / camera / UI ──────────────────────────────────────────────────────
