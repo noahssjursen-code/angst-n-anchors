@@ -1097,6 +1097,48 @@ func _raise_selected_to_level() -> void:
 	_set_status("moved #%d to level %.0f m" % [_selected_id, _active_base])
 
 
+func _explode_selected_room() -> void:
+	if _selected_id < 0:
+		return
+	var room := _plan.entity_by_id(_selected_id)
+	if room.is_empty() or StructurePlan.kind_of_entity(room) != "room":
+		_set_status("select a room to explode", false)
+		return
+	_snapshot()
+	var expanded: Dictionary = StructureBaker.expand_room(room)
+	var new_ids: Array[int] = []
+	for wall_variant in expanded.get("walls", []) as Array:
+		var src := wall_variant as Dictionary
+		var start := StructurePlan.vec3_of(src.get("start"))
+		var wall := _plan.add_wall(
+			start,
+			str(src.get("axis", "x")),
+			float(src.get("length", 1.0)),
+			float(src.get("height", DEFAULT_WALL_HEIGHT)),
+			float(src.get("thickness", StructurePlan.DEFAULT_WALL_THICKNESS)),
+		)
+		for key in ["material_out", "material_in", "color_out", "color_in", "openings"]:
+			if src.has(key):
+				var value: Variant = src[key]
+				wall[key] = (value as Array).duplicate(true) if value is Array else value
+		new_ids.append(int(wall.get("id", -1)))
+	for deck_variant in expanded.get("decks", []) as Array:
+		var src := deck_variant as Dictionary
+		var origin := StructurePlan.vec3_of(src.get("origin"))
+		var plate := StructurePlan.vec2_of(src.get("size"), Vector2(1, 1))
+		var deck := _plan.add_deck(origin, plate, float(src.get("thickness", StructurePlan.DEFAULT_PLATE_THICKNESS)))
+		for key in ["material", "material_out", "material_in", "color", "color_out", "color_in", "openings", "mount"]:
+			if src.has(key):
+				var value: Variant = src[key]
+				deck[key] = (value as Array).duplicate(true) if value is Array else value
+		new_ids.append(int(deck.get("id", -1)))
+	_plan.remove_entity(_selected_id)
+	_selected_id = new_ids[0] if not new_ids.is_empty() else -1
+	_request_rebake(true)
+	_refresh_panel()
+	_set_status("exploded room → %d parts" % new_ids.size())
+
+
 func _set_selected_storey_height() -> void:
 	if _selected_id < 0:
 		return
@@ -1305,7 +1347,11 @@ func _refresh_entity_list() -> void:
 		for entity_variant in collection:
 			var entity := entity_variant as Dictionary
 			var kind := StructurePlan.kind_of_entity(entity)
-			if _entity_list_filter != "all" and kind != _entity_list_filter:
+			if _entity_list_filter == "level":
+				var origin := StructurePlan.vec3_of(entity.get("start", entity.get("origin")))
+				if absf(origin.y - _active_base) > 0.05:
+					continue
+			elif _entity_list_filter != "all" and kind != _entity_list_filter:
 				continue
 			entries.append(entity)
 	entries.sort_custom(func(a, b): return int(a.get("id", 0)) < int(b.get("id", 0)))
@@ -1313,10 +1359,19 @@ func _refresh_entity_list() -> void:
 		var entity: Dictionary = entity_variant
 		var id := int(entity.get("id", -1))
 		var kind := StructurePlan.kind_of_entity(entity)
+		var dims := _entity_dims(entity, kind)
 		var btn := Button.new()
 		btn.focus_mode = Control.FOCUS_NONE
 		btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		btn.text = "#%d  %s" % [id, kind]
+		match kind:
+			"wall":
+				btn.text = "#%d wall  %.0fm" % [id, float(entity.get("length", 1.0))]
+			"deck":
+				btn.text = "#%d deck  %.0f×%.0f" % [id, dims.x, dims.z]
+			"room":
+				btn.text = "#%d room  %.0f×%.0f×%.0f" % [id, dims.x, dims.y, dims.z]
+			_:
+				btn.text = "#%d  %s" % [id, kind]
 		if id == _selected_id:
 			btn.add_theme_color_override("font_color", HudStyle.C_AMBER)
 		btn.pressed.connect(func() -> void:
@@ -1497,7 +1552,11 @@ func _set_tool(tool: Tool) -> void:
 
 
 func _place_wall(a: Vector3, b: Vector3) -> void:
-	var spec := StructureStudioMath.wall_from_drag(a, b, _active_base, _grid_width, _grid_length)
+	var drag_a := a
+	## Shift continues from the previous wall endpoint when chaining runs.
+	if Input.is_key_pressed(KEY_SHIFT) and _wall_continue_end != Vector3.INF:
+		drag_a = _wall_continue_end
+	var spec := StructureStudioMath.wall_from_drag(drag_a, b, _active_base, _grid_width, _grid_length)
 	var start: Vector3 = spec["start"]
 	var axis := str(spec["axis"])
 	var length := float(spec["length"])
@@ -1511,7 +1570,11 @@ func _place_wall(a: Vector3, b: Vector3) -> void:
 	var wall := _plan.add_wall(start, axis, length, DEFAULT_WALL_HEIGHT)
 	_stamp_library_style(wall, false)
 	_selected_id = int(wall.get("id", -1))
-	_set_status("wall %s ×%.0f m" % [axis, length])
+	if axis == "x":
+		_wall_continue_end = start + Vector3(length, 0.0, 0.0)
+	else:
+		_wall_continue_end = start + Vector3(0.0, 0.0, length)
+	_set_status("wall %s ×%.0f m  (Shift+drag continues)" % [axis, length])
 	_request_rebake(true)
 	_refresh_panel()
 
@@ -2491,10 +2554,11 @@ var _hull_option: OptionButton
 var _hull_row: VBoxContainer
 var _entities_label: Label
 var _entity_list: VBoxContainer
-var _entity_list_filter := "all" ## all|room|wall|deck
+var _entity_list_filter := "all" ## all|room|wall|deck|level
 var _bake_mesh_count := 0
 var _check_report_label: Label
 var _toast_timer: Timer
+var _wall_continue_end := Vector3.INF
 
 const TOOL_HINTS := {
 	Tool.SELECT: "Select: click to pick — arrows move, face pads resize, DEL removes, Ctrl+D duplicates.",
@@ -2786,7 +2850,7 @@ func _build_tool_palette() -> void:
 	box.add_child(_entities_label)
 	var filter_row := HBoxContainer.new()
 	filter_row.add_theme_constant_override("separation", 4)
-	for filter_def in [["all", "All"], ["room", "Rm"], ["wall", "Wl"], ["deck", "Dk"]]:
+	for filter_def in [["all", "All"], ["room", "Rm"], ["wall", "Wl"], ["deck", "Dk"], ["level", "Lvl"]]:
 		var filter_key := str(filter_def[0])
 		var filter_btn := UiBuilder.compact_button(str(filter_def[1]), 0.0)
 		filter_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -3043,23 +3107,59 @@ func _validate_current_plan() -> void:
 func _update_check_report(errors: PackedStringArray, warns: PackedStringArray) -> void:
 	if _check_report_label == null:
 		return
+	## Rebuild as buttons so "entity #N" lines jump to the offender.
+	var parent := _check_report_label.get_parent()
+	if parent == null:
+		return
+	for child in parent.get_children():
+		if child != _check_report_label and str(child.name).begins_with("CheckLine"):
+			child.queue_free()
 	if errors.is_empty() and warns.is_empty():
 		_check_report_label.text = "Check: clean"
 		_check_report_label.add_theme_color_override("font_color", HudStyle.C_GREEN)
 		return
-	var lines: PackedStringArray = []
-	for error in errors:
-		lines.append("ERR  %s" % error)
-	for warn in warns:
-		lines.append("WARN %s" % warn)
-		if lines.size() >= 6:
-			break
-	if errors.size() + warns.size() > lines.size():
-		lines.append("… +%d more" % (errors.size() + warns.size() - lines.size()))
-	_check_report_label.text = "\n".join(lines)
+	_check_report_label.text = "Check issues (click to select):"
 	_check_report_label.add_theme_color_override(
 		"font_color", HudStyle.C_RED if not errors.is_empty() else HudStyle.C_AMBER
 	)
+	var lines: Array = []
+	for error in errors:
+		lines.append({"text": "ERR  %s" % error, "ok": false})
+	for warn in warns:
+		lines.append({"text": "WARN %s" % warn, "ok": true})
+		if lines.size() >= 6:
+			break
+	var insert_at := _check_report_label.get_index() + 1
+	for line_index in lines.size():
+		var line: Dictionary = lines[line_index]
+		var btn := Button.new()
+		btn.name = "CheckLine%d" % line_index
+		btn.text = str(line["text"])
+		btn.focus_mode = Control.FOCUS_NONE
+		btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		btn.alignment = HORIZONTAL_ALIGNMENT_LEFT
+		HudStyle.apply_body_font(btn, 11, HudStyle.C_RED if not bool(line["ok"]) else HudStyle.C_AMBER)
+		var entity_id := _entity_id_from_check_text(str(line["text"]))
+		btn.pressed.connect(func() -> void:
+			if entity_id >= 0:
+				_selected_id = entity_id
+				_tool = Tool.SELECT
+				if _entity_bounds.has(entity_id):
+					_cam_focus = (_entity_bounds[entity_id] as AABB).get_center()
+				_update_selection_visual()
+				_refresh_panel()
+		)
+		parent.add_child(btn)
+		parent.move_child(btn, insert_at + line_index)
+
+
+func _entity_id_from_check_text(text: String) -> int:
+	var regex := RegEx.new()
+	regex.compile("#(\\d+)")
+	var matched := regex.search(text)
+	if matched == null:
+		return -1
+	return int(matched.get_string(1))
 
 
 func _copy_check_report() -> void:
@@ -3336,7 +3436,8 @@ func _refresh_inspector() -> void:
 				if captured_index < 0 or captured_index >= openings.size():
 					return
 				var current := openings[captured_index] as Dictionary
-				current["type"] = _cycle_opening_type(str(current.get("type", "door")), kind)
+				var next_type := _cycle_opening_type(str(current.get("type", "door")), kind)
+				_apply_opening_type_defaults(current, next_type)
 				_request_rebake(true)
 				_refresh_panel()
 			)
@@ -3486,6 +3587,12 @@ func _refresh_inspector() -> void:
 		storey_h.tooltip_text = "Set wall/room height to one storey"
 		storey_h.pressed.connect(func() -> void: _set_selected_storey_height())
 		_inspector_box.add_child(storey_h)
+	if kind == "room":
+		var explode_btn := UiBuilder.compact_button("Explode to parts", 0.0)
+		explode_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		explode_btn.tooltip_text = "Replace this room with free walls + plates"
+		explode_btn.pressed.connect(func() -> void: _explode_selected_room())
+		_inspector_box.add_child(explode_btn)
 	var rot_row := HBoxContainer.new()
 	rot_row.add_theme_constant_override("separation", 6)
 	var rot_left := UiBuilder.compact_button("⟲  [,]", 0.0)
@@ -3535,6 +3642,19 @@ func _cycle_opening_type(current: String, host_kind: String) -> String:
 	if index < 0:
 		return str(cycle[0])
 	return str(cycle[(index + 1) % cycle.size()])
+
+
+func _apply_opening_type_defaults(opening: Dictionary, next_type: String) -> void:
+	## Keep placement (offset/width/size/face); refresh sill/height from type defaults.
+	var defaults: Dictionary = StructureStudioOpenings.defaults_for(next_type)
+	opening["type"] = next_type
+	if opening.get("offset") is Array:
+		## Plate cuts keep size; type is mostly a label for stairwell vs hole.
+		return
+	if defaults.has("sill"):
+		opening["sill"] = float(defaults["sill"])
+	if defaults.has("height"):
+		opening["height"] = float(defaults["height"])
 
 
 ## The standing right-hand surface library. Modal: arm Outside or Inside, then
@@ -3689,8 +3809,27 @@ func _library_keys_for_selection() -> Dictionary:
 		if entity.has("material_in") or entity.has("color_in"):
 			return {"entity": entity, "color": "color_out", "material": "material_out"}
 		return {"entity": entity, "color": "color", "material": "material"}
-	## Deck plates stay single-surface for now.
+	if kind == "deck":
+		if _armed_slot == "in":
+			_ensure_deck_two_sided(entity)
+			return {"entity": entity, "color": "color_in", "material": "material_in"}
+		if entity.has("material_in") or entity.has("color_in"):
+			return {"entity": entity, "color": "color_out", "material": "material_out"}
+		return {"entity": entity, "color": "color", "material": "material"}
 	return {"entity": entity, "color": "color", "material": "material"}
+
+
+func _ensure_deck_two_sided(entity: Dictionary) -> void:
+	if entity.has("material_out") or entity.has("color_out"):
+		return
+	if entity.has("color"):
+		entity["color_out"] = (entity["color"] as Array).duplicate()
+	if entity.has("material"):
+		entity["material_out"] = str(entity["material"])
+	if not entity.has("material_out"):
+		entity["material_out"] = str((_lib["out"] as Dictionary)["material"])
+	if not entity.has("color_out"):
+		entity["color_out"] = ((_lib["out"] as Dictionary)["color"] as Array).duplicate()
 
 
 func _ensure_wall_two_sided(entity: Dictionary) -> void:
@@ -3764,6 +3903,14 @@ func _paint_material_bulk(material_id: String) -> void:
 				else:
 					entity["material"] = material_id
 					entity["material_out"] = material_id
+			elif kind == "deck":
+				if _armed_slot == "in":
+					_ensure_deck_two_sided(entity)
+					entity["material_in"] = material_id
+				elif entity.has("material_in") or entity.has("color_in"):
+					entity["material_out"] = material_id
+				else:
+					entity["material"] = material_id
 			else:
 				entity["material"] = material_id
 			painted += 1
