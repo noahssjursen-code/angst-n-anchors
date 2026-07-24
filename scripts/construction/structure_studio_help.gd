@@ -9,7 +9,7 @@ static func text() -> String:
 
 Tools
   Q  Select / move / resize
-  W  Wall run
+  W  Wall run (Shift continues from last end)
   R  Room
   D  Deck plate
   O  Opening
@@ -51,7 +51,8 @@ Surfaces
   Arm Outside or Inside, then click a material or colour.
   Shift+click a material to paint all of that kind (or all parts).
   Filter materials by category (finish / timber / metal / …).
-  Rooms are two-sided; walls become two-sided when Inside is painted.
+  Rooms are two-sided; walls/decks become two-sided when Inside is painted.
+  Rooms can Explode to free walls + plates for per-face edits.
 
 Building plots
   Top-bar size picker: 16 / 24 / 32 / 48 m square.
