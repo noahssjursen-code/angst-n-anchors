@@ -26,6 +26,8 @@ const GRID_SNAP := 1.0
 const DEFAULT_WALL_HEIGHT := 3.0
 var _clipboard_entity: Dictionary = {}
 var _probe_mode := false
+var _ortho_top := false
+var _recent_paths: Array[String] = []
 
 enum Tool { SELECT, WALL, ROOM, DECK, OPENING, ITEMS }
 
@@ -802,6 +804,8 @@ func _handle_key(key: InputEventKey) -> void:
 			_rotate_selected(-90)
 		KEY_PERIOD:
 			_rotate_selected(90)
+		KEY_HOME:
+			_toggle_ortho_top()
 		KEY_T:
 			_show_roofs = not _show_roofs
 			_request_rebake(true)
@@ -886,6 +890,23 @@ func _entity_dims(entity: Dictionary, kind: String) -> Vector3:
 			return Vector3(float(entity.get("length", 1.0)), 0.0, 0.0)
 		_:
 			return Vector3.ONE
+
+
+func _toggle_ortho_top() -> void:
+	_ortho_top = not _ortho_top
+	if _camera == null:
+		return
+	if _ortho_top:
+		_cam_pitch = 1.45
+		_cam_yaw = 0.0
+		_camera.projection = Camera3D.PROJECTION_ORTHOGONAL
+		_camera.size = clampf(_cam_distance * 0.55, 12.0, 80.0)
+		_set_status("top-down ortho")
+	else:
+		_camera.projection = Camera3D.PROJECTION_PERSPECTIVE
+		_cam_pitch = 0.9
+		_cam_yaw = 0.7
+		_set_status("perspective")
 
 
 func _focus_camera() -> void:
@@ -2029,6 +2050,7 @@ func _save_plan_now(path: String) -> void:
 	file.close()
 	_clear_dirty()
 	_load_list_dirty = true
+	_remember_recent_path(path)
 	_set_status("saved %s" % path.get_file())
 	_refresh_panel()
 
@@ -2066,6 +2088,7 @@ func _load_plan_now(path: String) -> void:
 	_sync_building_option()
 	_name_edit.text = path.get_file().get_basename()
 	_clear_dirty()
+	_remember_recent_path(path)
 	_rebuild_host_visual()
 	_request_rebake(true)
 	_refresh_panel()
@@ -2081,16 +2104,38 @@ func _saved_plan_paths() -> PackedStringArray:
 	return StructureStudioDocument.list_plan_paths(STRUCTURES_DIR)
 
 
+func _remember_recent_path(path: String) -> void:
+	var cleaned := path.strip_edges()
+	if cleaned.is_empty() or StructureStudioDocument.is_demo_path(cleaned):
+		## Still useful to recall demos recently opened.
+		pass
+	var next: Array[String] = [cleaned]
+	for existing in _recent_paths:
+		if existing != cleaned:
+			next.append(existing)
+		if next.size() >= 5:
+			break
+	_recent_paths = next
+	_load_list_dirty = true
+
+
 # ── Scene / camera / UI ──────────────────────────────────────────────────────
 
 func _process(_delta: float) -> void:
 	if _camera == null or not is_instance_valid(_camera):
 		return
-	var offset := Vector3(
-		cos(_cam_pitch) * sin(_cam_yaw), sin(_cam_pitch), cos(_cam_pitch) * cos(_cam_yaw)
-	) * _cam_distance
-	_camera.position = _cam_focus + offset
-	_camera.look_at(_cam_focus, Vector3.UP)
+	if _ortho_top:
+		_camera.projection = Camera3D.PROJECTION_ORTHOGONAL
+		_camera.size = clampf(_cam_distance * 0.55, 12.0, 80.0)
+		_camera.position = _cam_focus + Vector3(0.0, maxf(_cam_distance, 20.0), 0.01)
+		_camera.look_at(_cam_focus, Vector3.FORWARD)
+	else:
+		_camera.projection = Camera3D.PROJECTION_PERSPECTIVE
+		var offset := Vector3(
+			cos(_cam_pitch) * sin(_cam_yaw), sin(_cam_pitch), cos(_cam_pitch) * cos(_cam_yaw)
+		) * _cam_distance
+		_camera.position = _cam_focus + offset
+		_camera.look_at(_cam_focus, Vector3.UP)
 	## Manipulators keep a usable on-screen size at any zoom.
 	var manipulator_scale := clampf(_cam_distance / 30.0, 0.7, 4.0)
 	if _gizmo_root != null and is_instance_valid(_gizmo_root):
@@ -2489,6 +2534,13 @@ func _build_top_bar() -> void:
 	var redo_btn := UiBuilder.compact_button("Redo", 64.0)
 	redo_btn.pressed.connect(func() -> void: _redo())
 	row.add_child(redo_btn)
+	var focus_btn := UiBuilder.compact_button("Focus", 64.0)
+	focus_btn.pressed.connect(func() -> void: _focus_camera())
+	row.add_child(focus_btn)
+	var ortho_btn := UiBuilder.compact_button("Top", 52.0)
+	ortho_btn.tooltip_text = "Toggle top-down ortho  [Home]"
+	ortho_btn.pressed.connect(func() -> void: _toggle_ortho_top())
+	row.add_child(ortho_btn)
 
 
 func _build_tool_palette() -> void:
@@ -2684,6 +2736,17 @@ func _build_drawer() -> void:
 			_load_plan(str(_load_option.get_item_metadata(index)))
 	)
 	box.add_child(load_btn)
+	box.add_child(UiBuilder.section_header("RECENT"))
+	var recent_box := VBoxContainer.new()
+	recent_box.name = "RecentList"
+	recent_box.add_theme_constant_override("separation", 4)
+	box.add_child(recent_box)
+	## Placeholder; filled on refresh.
+	var recent_hint := Label.new()
+	recent_hint.name = "RecentHint"
+	recent_hint.text = "No recent files yet."
+	HudStyle.apply_body_font(recent_hint, 11, HudStyle.C_LABEL)
+	recent_box.add_child(recent_hint)
 	for demo_def in [
 		["demo_workboat.json", "Demo workboat"],
 		["demo_bridge_cabin.json", "Demo bridge cabin"],
@@ -2904,6 +2967,7 @@ func _refresh_panel() -> void:
 	_refresh_title()
 	_refresh_material_category_buttons()
 	_refresh_load_list()
+	_refresh_recent_list()
 	_refresh_inspector()
 	_update_selection_visual()
 	## Soft check strip stays current without a toast on every edit.
@@ -2912,6 +2976,27 @@ func _refresh_panel() -> void:
 		report.get("errors", PackedStringArray()),
 		report.get("warnings", PackedStringArray()),
 	)
+
+
+func _refresh_recent_list() -> void:
+	if _drawer == null:
+		return
+	var recent_box := _drawer.find_child("RecentList", true, false) as VBoxContainer
+	if recent_box == null:
+		return
+	for child in recent_box.get_children():
+		child.queue_free()
+	if _recent_paths.is_empty():
+		var hint := Label.new()
+		hint.text = "No recent files yet."
+		HudStyle.apply_body_font(hint, 11, HudStyle.C_LABEL)
+		recent_box.add_child(hint)
+		return
+	for path in _recent_paths:
+		var btn := UiBuilder.compact_button(path.get_file(), 0.0)
+		btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		btn.pressed.connect(func() -> void: _load_plan(path))
+		recent_box.add_child(btn)
 
 
 func _refresh_load_list() -> void:

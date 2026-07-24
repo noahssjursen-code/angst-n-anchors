@@ -35,6 +35,7 @@ View
   T  Toggle roofs
   G  Ghost upper decks
   F  Focus selection (or whole structure)
+  Home  Top-down ortho toggle
   PgUp/PgDn        Level ± step
   Shift+PgUp/PgDn  Level ± storey (3 m)
   RMB orbit · MMB pan · wheel zoom
