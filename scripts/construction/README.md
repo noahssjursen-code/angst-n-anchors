@@ -13,6 +13,7 @@ not stacked.
 | `structure_studio_openings.gd` | Pure opening defaults / snap / ghost geom |
 | `structure_studio_help.gd` | Help overlay copy |
 | `structure_studio_document.gd` | Plan path / naming helpers |
+| `structure_studio_inspector.gd` | Inspector row factories |
 
 ## Authoring
 

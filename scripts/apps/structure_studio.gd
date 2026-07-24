@@ -3024,14 +3024,11 @@ func _refresh_inspector() -> void:
 	_spin_undo_armed = false
 	var entity := _plan.entity_by_id(_selected_id)
 	if _selected_id < 0 or entity.is_empty():
-		_drawer_info.text = "Nothing selected.\n\nDraw with Wall / Room / Deck, or switch to Select and click a piece.\n\nArm Outside/Inside above, then paint materials onto the selection."
+		_drawer_info.text = StructureStudioInspector.empty_guidance()
 		return
 	var kind := StructurePlan.kind_of_entity(entity)
 	_drawer_info.text = ""
-	var header := Label.new()
-	header.text = "%s  #%d" % [kind.to_upper(), _selected_id]
-	HudStyle.apply_body_font(header, 13, HudStyle.C_AMBER, true)
-	_inspector_box.add_child(header)
+	_inspector_box.add_child(StructureStudioInspector.header(kind, _selected_id))
 	match kind:
 		"wall":
 			for field in [["length", 1.0, 60.0, 1.0], ["height", 0.5, 12.0, 0.5], ["thickness", 0.05, 0.5, 0.05]]:
@@ -3605,19 +3602,4 @@ func _stamp_library_style(entity: Dictionary, is_room: bool) -> void:
 
 
 func _spin_row(label_text: String, value: float, min_value: float, max_value: float, step: float, on_change: Callable) -> HBoxContainer:
-	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 8)
-	var label := Label.new()
-	label.text = label_text.capitalize()
-	label.custom_minimum_size = Vector2(84, 0)
-	HudStyle.apply_body_font(label, 12, HudStyle.C_LABEL)
-	row.add_child(label)
-	var spin := SpinBox.new()
-	spin.min_value = min_value
-	spin.max_value = max_value
-	spin.step = step
-	spin.value = value
-	spin.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	spin.value_changed.connect(on_change)
-	row.add_child(spin)
-	return row
+	return StructureStudioInspector.spin_row(label_text, value, min_value, max_value, step, on_change)
