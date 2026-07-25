@@ -3,15 +3,22 @@ extends RefCounted
 
 ## Parametric construction document shared by vessels and land buildings.
 ##
-## Structure is DRAWN, not stacked: four primitives, each one part regardless
+## Structure is DRAWN, not stacked: five primitives, each one part regardless
 ## of size, replace fields of voxel bricks:
 ##   walls  — {id, start:[x,y,z], axis:"x"|"z", length, height, thickness,
 ##             color?, openings:[{type, offset, width, height, sill}]}
 ##   decks  — {id, origin:[x,y,z], size:[w,l], thickness, color?,
 ##             openings:[{type, offset:[dx,dz], size:[w,l]}]}
 ##   rooms  — {id, origin:[x,y,z], size:[w,h,l], wall_thickness, color?,
+##             open_faces?:["n"|"s"|"e"|"w"], — faces with NO wall (corridor
+##                        ends, lean-tos); a corridor is a room with both
+##                        ends open.
 ##             openings:[{face:"n"|"s"|"e"|"w"|"floor"|"ceiling", type,
 ##                        offset, width, height, sill}]}
+##   stairs — {id, start:[x,y,z], dir:"+x"|"-x"|"+z"|"-z", length, width,
+##             height, color?}  start = footprint min corner at the LOW end's
+##             base level; dir = climb direction; solid stepped run whose top
+##             tread lands flush on start.y + height.
 ##   items  — {id, item_id, cell:[x,y,z], yaw}  (point equipment, later slice)
 ##
 ## Coordinates are grid-corner points in whole metres. For vessels x/z match
@@ -34,6 +41,7 @@ var hull_id := ""
 var walls: Array = []
 var decks: Array = []
 var rooms: Array = []
+var stairs: Array = []
 var items: Array = []
 var palette: Dictionary = {}
 var _next_id := 1
@@ -87,6 +95,19 @@ func add_room(origin: Vector3, size: Vector3) -> Dictionary:
 	return room
 
 
+func add_stair(start: Vector3, dir: String, length: float, width := 1.0, height := DEFAULT_ROOM_HEIGHT) -> Dictionary:
+	var stair := {
+		"id": allocate_id(),
+		"start": [start.x, start.y, start.z],
+		"dir": dir if dir in ["+x", "-x", "+z", "-z"] else "+x",
+		"length": maxf(length, 1.0),
+		"width": maxf(width, 0.5),
+		"height": clampf(height, 0.5, 12.0),
+	}
+	stairs.append(stair)
+	return stair
+
+
 func add_item(item_id: String, cell: Vector3i, yaw := 0) -> Dictionary:
 	var item := {
 		"id": allocate_id(),
@@ -99,7 +120,7 @@ func add_item(item_id: String, cell: Vector3i, yaw := 0) -> Dictionary:
 
 
 func entity_by_id(id: int) -> Dictionary:
-	for collection in [walls, decks, rooms, items]:
+	for collection in [walls, decks, rooms, stairs, items]:
 		for entity in collection:
 			if int((entity as Dictionary).get("id", -1)) == id:
 				return entity
@@ -107,7 +128,7 @@ func entity_by_id(id: int) -> Dictionary:
 
 
 func remove_entity(id: int) -> bool:
-	for collection in [walls, decks, rooms, items]:
+	for collection in [walls, decks, rooms, stairs, items]:
 		for index in (collection as Array).size():
 			if int(((collection as Array)[index] as Dictionary).get("id", -1)) == id:
 				(collection as Array).remove_at(index)
@@ -116,11 +137,11 @@ func remove_entity(id: int) -> bool:
 
 
 func is_empty() -> bool:
-	return walls.is_empty() and decks.is_empty() and rooms.is_empty() and items.is_empty()
+	return walls.is_empty() and decks.is_empty() and rooms.is_empty() and stairs.is_empty() and items.is_empty()
 
 
 func entity_count() -> int:
-	return walls.size() + decks.size() + rooms.size() + items.size()
+	return walls.size() + decks.size() + rooms.size() + stairs.size() + items.size()
 
 
 func to_dict() -> Dictionary:
@@ -132,6 +153,7 @@ func to_dict() -> Dictionary:
 		"walls": walls.duplicate(true),
 		"decks": decks.duplicate(true),
 		"rooms": rooms.duplicate(true),
+		"stairs": stairs.duplicate(true),
 		"items": items.duplicate(true),
 	}
 
@@ -144,9 +166,10 @@ static func from_dict(data: Dictionary) -> StructurePlan:
 	plan.walls = (data.get("walls", []) as Array).duplicate(true)
 	plan.decks = (data.get("decks", []) as Array).duplicate(true)
 	plan.rooms = (data.get("rooms", []) as Array).duplicate(true)
+	plan.stairs = (data.get("stairs", []) as Array).duplicate(true)
 	plan.items = (data.get("items", []) as Array).duplicate(true)
 	var highest := 0
-	for collection in [plan.walls, plan.decks, plan.rooms, plan.items]:
+	for collection in [plan.walls, plan.decks, plan.rooms, plan.stairs, plan.items]:
 		for entity in collection:
 			highest = maxi(highest, int((entity as Dictionary).get("id", 0)))
 	plan._next_id = highest + 1
