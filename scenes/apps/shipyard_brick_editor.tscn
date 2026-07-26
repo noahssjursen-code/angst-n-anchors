@@ -1,7 +1,7 @@
-[gd_scene load_steps=2 format=3]
+[gd_scene format=3 uid="uid://wt1i5rhlgema"]
 
-[ext_resource type="Script" path="res://scripts/apps/shipyard_brick_editor.gd" id="1_editor"]
+[ext_resource type="Script" uid="uid://b6qkya33bkvh4" path="res://scripts/apps/shipyard_brick_editor.gd" id="1_editor"]
 
-[node name="ShipyardBrickEditor" type="CanvasLayer"]
+[node name="ShipyardBrickEditor" type="CanvasLayer" unique_id=445859329]
 script = ExtResource("1_editor")
 standalone_tool = true

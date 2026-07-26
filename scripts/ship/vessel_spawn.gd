@@ -256,8 +256,7 @@ static func _apply_fitout(
 	if boat.has_method("apply_brick_layout"):
 		boat.call("apply_brick_layout", layout)
 	else:
-		var bl := BrickLayout.from_dict(layout)
-		DeckFitout.apply(boat, bl)
+		DeckFitout.apply_any(boat, layout, null, registration_id)
 
 
 static func _instantiate_hull(hull_id: String) -> BoatBody:
