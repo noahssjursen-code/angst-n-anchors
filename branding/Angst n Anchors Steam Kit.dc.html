@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Saira+Condensed:wght@600;700&family=Saira:wght@400;500;600&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+<script src="./image-slot.js"></script>
+<style>
+  body { margin: 0; background: #10151a; }
+  a { color: #d99a1f; text-decoration: none; }
+  a:hover { color: #f2b233; }
+</style>
+</helmet>
+
+<section style="display:flex; flex-direction:column; gap:44px; padding:56px; background:#10151a; font-family:Saira, sans-serif;">
+
+  <div style="display:flex; flex-direction:column; gap:10px; max-width:900px;">
+    <div style="font-family:'JetBrains Mono',monospace; font-size:12px; letter-spacing:0.18em; text-transform:uppercase; color:#d99a1f;">Angst 'n Anchors — store &amp; marketing kit</div>
+    <div style="font-size:36px; color:#ece5d3; font-family:'Saira Condensed',sans-serif; font-weight:700; line-height:1;">COMING SOON / WISHLIST</div>
+    <div style="font-size:15px; line-height:1.55; color:#8b98a3; text-wrap:pretty;">Every frame below is a real Steam or social size, built from the styleguide. Grey drop-zones are for your own captures — drag a screenshot onto any of them and it sticks, so contest entries can be dropped straight into a template. Shapes are the brand set: ruled panels, prow banners, pennant tags. No chamfers. Social and YouTube templates are in the separate Socials Kit page.</div>
+  </div>
+
+  <div id="1a" style="display:flex; flex-direction:column; gap:14px;">
+    <div style="font-family:'JetBrains Mono',monospace; font-size:11px; letter-spacing:0.16em; color:#7a8b94;">01 · CAPSULES — required Steam sizes, shown at 1:1</div>
+
+    <div style="display:flex; flex-wrap:wrap; gap:18px; align-items:flex-start;">
+
+      <div style="display:flex; flex-direction:column; gap:7px;">
+        <div style="width:616px; height:353px; position:relative; overflow:hidden; background:#163440;">
+          <div style="position:absolute; inset:0;"><image-slot id="cap-main" shape="rect" fit="cover" src="uploads/Screenshot 2026-07-17 153837.png" placeholder="MAIN ART"></image-slot></div>
+          <div style="position:absolute; left:0; right:0; bottom:0; height:132px; background:linear-gradient(to top, rgba(22,52,64,0.97) 0%, rgba(22,52,64,0.9) 58%, rgba(22,52,64,0) 100%); pointer-events:none;"></div>
+          <div style="position:absolute; left:30px; bottom:26px; display:flex; align-items:flex-end; gap:16px; pointer-events:none;">
+            <svg width="62" height="62" viewBox="0 0 100 100"><circle cx="50" cy="22" r="7.25" fill="none" stroke="#ece5d3" stroke-width="5.5"></circle><path d="M50 27.5 L78 66 L93 52 L86 76 L50 97 L14 76 L7 52 L22 66 Z M50 52 L65 76 L35 76 Z" fill-rule="evenodd" fill="#ece5d3"></path><polygon points="18,44 82,44 78,52 22,52" fill="#ece5d3"></polygon></svg>
+            <div style="display:flex; flex-direction:column; gap:5px;">
+              <div style="font-family:'Saira Condensed',sans-serif; font-weight:700; font-size:44px; color:#ece5d3; line-height:0.9; letter-spacing:0.01em;">ANGST<span style="color:#d99a1f;">'N</span><br>ANCHORS</div>
+              <div style="font-family:'JetBrains Mono',monospace; font-size:10px; letter-spacing:0.16em; color:#9fc0cd; white-space:nowrap;">A LOW-POLY SHIPPING MMO</div>
+            </div>
+          </div>
+          <div style="position:absolute; top:0; left:0; width:186px; height:30px; background:#d99a1f; clip-path:polygon(0 0, 100% 0, 82% 100%, 0 100%); display:flex; align-items:center; padding-left:14px; font-family:'JetBrains Mono',monospace; font-size:10px; color:#1b242c; letter-spacing:0.14em; pointer-events:none;">WISHLIST NOW</div>
+        </div>
+        <div style="font-family:'JetBrains Mono',monospace; font-size:10px; color:#7a8b94;">MAIN CAPSULE · 616×353 — store front, sales, home</div>
+      </div>
+
+      <div style="display:flex; flex-direction:column; gap:18px;">
+        <div style="display:flex; flex-direction:column; gap:7px;">
+          <div style="width:460px; height:215px; position:relative; overflow:hidden; background:#163440;">
+            <div style="position:absolute; inset:0;"><image-slot id="cap-header" shape="rect" fit="cover" src="uploads/Screenshot 2026-07-17 233616.png" placeholder="ART"></image-slot></div>
+            <div style="position:absolute; left:0; right:0; bottom:0; height:96px; background:linear-gradient(to top, rgba(22,52,64,0.97) 0%, rgba(22,52,64,0.88) 60%, rgba(22,52,64,0) 100%); pointer-events:none;"></div>
+            <div style="position:absolute; left:22px; bottom:20px; display:flex; align-items:flex-end; gap:12px; pointer-events:none;">
+              <svg width="44" height="44" viewBox="0 0 100 100"><circle cx="50" cy="22" r="7.25" fill="none" stroke="#ece5d3" stroke-width="5.5"></circle><path d="M50 27.5 L78 66 L93 52 L86 76 L50 97 L14 76 L7 52 L22 66 Z M50 52 L65 76 L35 76 Z" fill-rule="evenodd" fill="#ece5d3"></path><polygon points="18,44 82,44 78,52 22,52" fill="#ece5d3"></polygon></svg>
+              <div style="display:flex; flex-direction:column; gap:4px;">
+                <div style="font-family:'Saira Condensed',sans-serif; font-weight:700; font-size:32px; color:#ece5d3; line-height:0.9; white-space:nowrap;">ANGST<span style="color:#d99a1f;">'N</span> ANCHORS</div>
+                <div style="font-family:'JetBrains Mono',monospace; font-size:8px; letter-spacing:0.15em; color:#9fc0cd; white-space:nowrap;">A LOW-POLY SHIPPING MMO</div>
+              </div>
+            </div>
+          </div>
+          <div style="font-family:'JetBrains Mono',monospace; font-size:10px; color:#7a8b94;">HEADER CAPSULE · 460×215 — top of store page, search</div>
+        </div>
+
+        <div style="display:flex; gap:18px; align-items:flex-start;">
+          <div style="display:flex; flex-direction:column; gap:7px;">
+            <div style="width:231px; height:87px; position:relative; overflow:hidden; background:#163440; display:flex; align-items:center; gap:10px; padding:0 14px;">
+              <svg width="34" height="34" viewBox="0 0 100 100" style="flex-shrink:0;"><circle cx="50" cy="22" r="7.25" fill="none" stroke="#d99a1f" stroke-width="5.5"></circle><path d="M50 27.5 L78 66 L93 52 L86 76 L50 97 L14 76 L7 52 L22 66 Z M50 52 L65 76 L35 76 Z" fill-rule="evenodd" fill="#d99a1f"></path><polygon points="18,44 82,44 78,52 22,52" fill="#d99a1f"></polygon></svg>
+              <div style="font-family:'Saira Condensed',sans-serif; font-weight:700; font-size:21px; color:#ece5d3; line-height:0.92;">ANGST<span style="color:#d99a1f;">'N</span><br>ANCHORS</div>
+            </div>
+            <div style="font-family:'JetBrains Mono',monospace; font-size:10px; color:#7a8b94; max-width:231px; line-height:1.4;">SMALL CAPSULE · 231×87<br>no photo — mark + wordmark only</div>
+          </div>
+
+          <div style="display:flex; flex-direction:column; gap:7px;">
+            <div style="width:190px; height:228px; position:relative; overflow:hidden; background:#163440;">
+              <div style="position:absolute; inset:0;"><image-slot id="cap-vert" shape="rect" fit="cover" src="uploads/Screenshot 2026-07-22 022009.png" placeholder="ART"></image-slot></div>
+              <div style="position:absolute; left:0; right:0; bottom:0; height:110px; background:linear-gradient(to top, rgba(22,52,64,0.97) 0%, rgba(22,52,64,0.85) 55%, rgba(22,52,64,0) 100%); pointer-events:none;"></div>
+              <div style="position:absolute; left:14px; bottom:16px; display:flex; flex-direction:column; gap:8px; pointer-events:none;">
+                <svg width="34" height="34" viewBox="0 0 100 100"><circle cx="50" cy="22" r="7.25" fill="none" stroke="#ece5d3" stroke-width="5.5"></circle><path d="M50 27.5 L78 66 L93 52 L86 76 L50 97 L14 76 L7 52 L22 66 Z M50 52 L65 76 L35 76 Z" fill-rule="evenodd" fill="#ece5d3"></path><polygon points="18,44 82,44 78,52 22,52" fill="#ece5d3"></polygon></svg>
+                <div style="font-family:'Saira Condensed',sans-serif; font-weight:700; font-size:23px; color:#ece5d3; line-height:0.9;">ANGST<span style="color:#d99a1f;">'N</span><br>ANCHORS</div>
+              </div>
+            </div>
+            <div style="font-family:'JetBrains Mono',monospace; font-size:10px; color:#7a8b94; max-width:190px; line-height:1.4;">VERTICAL CAPSULE · 374×448<br>shown at 51%</div>
+          </div>
+        </div>
+      </div>
+
+      <div style="display:flex; flex-direction:column; gap:7px;">
+        <div style="width:300px; height:450px; position:relative; overflow:hidden; background:#163440;">
+          <div style="position:absolute; inset:0;"><image-slot id="cap-library" shape="rect" fit="cover" src="uploads/Screenshot 2026-07-17 153837.png" placeholder="ART"></image-slot></div>
+          <div style="position:absolute; left:0; right:0; bottom:0; height:190px; background:linear-gradient(to top, rgba(22,52,64,0.98) 0%, rgba(22,52,64,0.9) 55%, rgba(22,52,64,0) 100%); pointer-events:none;"></div>
+          <div style="position:absolute; left:22px; bottom:28px; display:flex; flex-direction:column; gap:12px; pointer-events:none;">
+            <svg width="54" height="54" viewBox="0 0 100 100"><circle cx="50" cy="22" r="7.25" fill="none" stroke="#ece5d3" stroke-width="5.5"></circle><path d="M50 27.5 L78 66 L93 52 L86 76 L50 97 L14 76 L7 52 L22 66 Z M50 52 L65 76 L35 76 Z" fill-rule="evenodd" fill="#ece5d3"></path><polygon points="18,44 82,44 78,52 22,52" fill="#ece5d3"></polygon></svg>
+            <div style="font-family:'Saira Condensed',sans-serif; font-weight:700; font-size:38px; color:#ece5d3; line-height:0.88;">ANGST<span style="color:#d99a1f;">'N</span><br>ANCHORS</div>
+            <div style="font-family:'JetBrains Mono',monospace; font-size:9px; letter-spacing:0.13em; color:#9fc0cd; white-space:nowrap;">A LOW-POLY SHIPPING MMO</div>
+          </div>
+        </div>
+        <div style="font-family:'JetBrains Mono',monospace; font-size:10px; color:#7a8b94; max-width:300px; line-height:1.4;">LIBRARY CAPSULE · 600×900 — shown at 50%</div>
+      </div>
+
+      <div style="display:flex; flex-direction:column; gap:7px;">
+        <div style="width:900px; height:291px; position:relative; overflow:hidden; background:#163440;">
+          <div style="position:absolute; inset:0;"><image-slot id="cap-hero" shape="rect" fit="cover" src="uploads/Screenshot 2026-07-22 022009.png" placeholder="ART"></image-slot></div>
+          <div style="position:absolute; inset:0; background:linear-gradient(to right, rgba(22,52,64,0.92) 0%, rgba(22,52,64,0.5) 34%, rgba(22,52,64,0) 60%); pointer-events:none;"></div>
+          <div style="position:absolute; left:34px; top:50%; transform:translateY(-50%); display:flex; align-items:center; gap:18px; pointer-events:none;">
+            <svg width="70" height="70" viewBox="0 0 100 100"><circle cx="50" cy="22" r="7.25" fill="none" stroke="#ece5d3" stroke-width="5.5"></circle><path d="M50 27.5 L78 66 L93 52 L86 76 L50 97 L14 76 L7 52 L22 66 Z M50 52 L65 76 L35 76 Z" fill-rule="evenodd" fill="#ece5d3"></path><polygon points="18,44 82,44 78,52 22,52" fill="#ece5d3"></polygon></svg>
+            <div style="display:flex; flex-direction:column; gap:6px;">
+              <div style="font-family:'Saira Condensed',sans-serif; font-weight:700; font-size:46px; color:#ece5d3; line-height:0.9;">ANGST<span style="color:#d99a1f;">'N</span> ANCHORS</div>
+              <div style="font-family:'JetBrains Mono',monospace; font-size:10px; letter-spacing:0.16em; color:#9fc0cd; white-space:nowrap;">A LOW-POLY SHIPPING MMO</div>
+            </div>
+          </div>
+        </div>
+        <div style="font-family:'JetBrains Mono',monospace; font-size:10px; color:#7a8b94;">LIBRARY HERO · 3840×1240 — shown at 23%. Logo locks left, subject right of centre.</div>
+      </div>
+
+    </div>
+
+    <div style="max-width:900px; padding:16px 20px; background:#161d24; border-left:3px solid #d99a1f; font-size:13px; line-height:1.6; color:#a7b2bb;">
+      Capsule rules: the marine scrim is always the same gradient (sea at 97% → transparent), logo bottom-left except on the hero, wordmark never smaller than the mark's height, and the brass prow tag is used only on the main capsule. Small capsule carries no photo — at 231 px a screenshot turns to mud.
+    </div>
+  </div>
+
+  <div id="1b" style="display:flex; flex-direction:column; gap:14px;">
+    <div style="font-family:'JetBrains Mono',monospace; font-size:11px; letter-spacing:0.16em; color:#7a8b94;">02 · SCREENSHOT ORDER — first five carry the page</div>
+    <div style="display:flex; flex-wrap:wrap; gap:14px;">
+      <sc-for list="{{ shots }}" as="s" hint-placeholder-count="6">
+        <div style="width:288px; display:flex; flex-direction:column; gap:8px;">
+          <div style="width:288px; height:162px; position:relative; background:#1b242c; border-top:4px solid #d99a1f;">
+            <div style="position:absolute; left:0; right:0; top:0; bottom:0;"><image-slot id="{{ s.id }}" shape="rect" fit="cover" src="{{ s.src }}" placeholder="{{ s.slot }}"></image-slot></div>
+            <div style="position:absolute; top:8px; left:8px; background:#1b242c; padding:3px 8px; font-family:'JetBrains Mono',monospace; font-size:10px; color:#d99a1f; pointer-events:none;">{{ s.n }}</div>
+          </div>
+          <div style="display:flex; flex-direction:column; gap:4px;">
+            <div style="font-family:'Saira Condensed',sans-serif; font-weight:700; font-size:16px; color:#ece5d3; letter-spacing:0.03em;">{{ s.title }}</div>
+            <div style="font-size:12.5px; line-height:1.5; color:#8b98a3;">{{ s.note }}</div>
+          </div>
+        </div>
+      </sc-for>
+    </div>
+    <div style="max-width:900px; padding:16px 20px; background:#161d24; border-left:3px solid #d99a1f; font-size:13px; line-height:1.6; color:#a7b2bb;">
+      Shoot at 1920×1080, HUD on, no debug overlays, time of day varied across the set. Weather in at least two. No captions burned into Steam screenshots — Steam crops them; put text only in the social versions below.
+    </div>
+  </div>
+
+  <div id="1c" style="display:flex; flex-direction:column; gap:14px;">
+    <div style="font-family:'JetBrains Mono',monospace; font-size:11px; letter-spacing:0.16em; color:#7a8b94;">03 · STORE COPY — coming soon</div>
+    <div style="display:flex; flex-wrap:wrap; gap:18px; align-items:flex-start;">
+      <div style="width:440px; background:#ece5d3; border-top:5px solid #d99a1f; padding:22px; display:flex; flex-direction:column; gap:10px;">
+        <div style="font-family:'JetBrains Mono',monospace; font-size:9.5px; letter-spacing:0.14em; color:#a8701c;">SHORT DESCRIPTION · 300 CHAR MAX</div>
+        <div style="font-size:15px; line-height:1.55; color:#1b242c;">Run cargo, fish and passengers along a cold, low-poly coast. Buy vessels or build your own, keep harbour towns supplied, and share the water with other captains. Persistent economy, real charts, no hurry.</div>
+        <div style="font-family:'JetBrains Mono',monospace; font-size:9.5px; color:#7a7052;">204 CHARACTERS</div>
+      </div>
+      <div style="width:440px; background:#ece5d3; border-top:5px solid #d99a1f; padding:22px; display:flex; flex-direction:column; gap:14px;">
+        <div style="font-family:'JetBrains Mono',monospace; font-size:9.5px; letter-spacing:0.14em; color:#a8701c;">ABOUT THIS GAME · BLOCK ORDER</div>
+        <div style="display:flex; flex-direction:column; gap:11px;">
+          <div><div style="font-family:'Saira Condensed',sans-serif; font-weight:700; font-size:17px; color:#1b242c; letter-spacing:0.03em;">A COAST THAT NEEDS THINGS MOVED</div><div style="font-size:13.5px; line-height:1.5; color:#3d4650;">Ports have populations, imports and exports. Serve them or watch someone else do it.</div></div>
+          <div><div style="font-family:'Saira Condensed',sans-serif; font-weight:700; font-size:17px; color:#1b242c; letter-spacing:0.03em;">BUILD THE BOAT</div><div style="font-size:13.5px; line-height:1.5; color:#3d4650;">Structure Studio: gridded, layered voxel building. Decks, walls, trawl gear, galley, work lights — then float-test it.</div></div>
+          <div><div style="font-family:'Saira Condensed',sans-serif; font-weight:700; font-size:17px; color:#1b242c; letter-spacing:0.03em;">NAVIGATE PROPERLY</div><div style="font-size:13.5px; line-height:1.5; color:#3d4650;">Live charts, AIS traffic, tides and weather. Heading, speed and fuel are your problem, not a loading screen's.</div></div>
+          <div><div style="font-family:'Saira Condensed',sans-serif; font-weight:700; font-size:17px; color:#1b242c; letter-spacing:0.03em;">ONE COAST, EVERYONE ON IT</div><div style="font-size:13.5px; line-height:1.5; color:#3d4650;">Persistent servers with live AIS traffic and cargo on the move. Run a fleet with friends, or compete for the same contracts and berths.</div></div>
+        </div>
+        <div style="border-top:1px solid #c9bfa8; padding-top:12px; display:flex; align-items:center; gap:12px;">
+          <div style="background:#163440; color:#ece5d3; padding:9px 18px; font-family:'Saira Condensed',sans-serif; font-weight:600; font-size:15px; letter-spacing:0.06em; white-space:nowrap; flex-shrink:0;">ADD TO WISHLIST</div>
+          <div style="font-family:'JetBrains Mono',monospace; font-size:10px; color:#7a7052; line-height:1.4;">COMING SOON · NO DATE PROMISED<br>DEMO WHEN IT'S HONEST</div>
+        </div>
+      </div>
+      <div style="width:280px; background:#161d24; padding:20px; display:flex; flex-direction:column; gap:12px;">
+        <div style="font-family:'JetBrains Mono',monospace; font-size:9.5px; letter-spacing:0.14em; color:#d99a1f;">TAGS · IN ORDER</div>
+        <div style="display:flex; flex-wrap:wrap; gap:6px;">
+          <sc-for list="{{ tags }}" as="t" hint-placeholder-count="10">
+            <div style="font-family:'JetBrains Mono',monospace; font-size:10px; padding:5px 10px; background:#1b242c; color:#c8d6dc;">{{ t }}</div>
+          </sc-for>
+        </div>
+        <div style="font-size:12.5px; line-height:1.5; color:#8b98a3; border-top:1px solid #232b33; padding-top:12px;">Sailing then Massively Multiplayer: the combination is the whole pitch and almost nothing else on Steam sits in both. Keep "Relaxing" and "Realistic" adjacent so the pacing is understood before the sim tags scare anyone off.</div>
+      </div>
+    </div>
+  </div>
+
+  <div style="max-width:900px; padding:18px 22px; background:#161d24; border-left:3px solid #d99a1f; font-size:13.5px; line-height:1.6; color:#a7b2bb; text-wrap:pretty;">
+    <strong style="color:#ece5d3;">Screenshot contest:</strong> every capsule frame is a live drop-zone, so contest entries can be dropped straight in as they arrive — the brand furniture (scrim, logo lock, brass tag) stays fixed and only the photo changes. Send entrants these sizes plus the "keep the centre clear" rule and their shots will fit first try. YouTube, vertical and post templates live in <strong style="color:#ece5d3;">Angst n Anchors Socials Kit</strong>.
+  </div>
+
+</section>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    return {
+      shots: [
+        { id: "shot-1", n: "01", src: "uploads/Screenshot 2026-07-17 153837.png", slot: "HARBOUR", title: "THE COAST", note: "Wide harbour from the water, cranes and town visible. Sells place before mechanics." },
+        { id: "shot-2", n: "02", src: "uploads/Screenshot 2026-07-17 233616.png", slot: "UNDERWAY", title: "UNDERWAY", note: "Your ship third-person in open water, HUD readable. Weather doing something." },
+        { id: "shot-3", n: "03", src: "", slot: "STUDIO", title: "BUILD IT", note: "Structure Studio mid-build, toolbox open, part selected. The UGC hook." },
+        { id: "shot-4", n: "04", src: "", slot: "CHART", title: "THE CHART", note: "Chart open with AIS traffic and a plotted course. Proves the sim depth." },
+        { id: "shot-5", n: "05", src: "uploads/Screenshot 2026-07-22 190821.png", slot: "NPC", title: "PEOPLE", note: "Dialogue with the harbour master, moored ship behind. Shows the world has staff." },
+        { id: "shot-6", n: "06", src: "uploads/Screenshot 2026-07-22 022009.png", slot: "STORM", title: "BAD WEATHER", note: "Night or heavy rain, work lights on. The atmosphere shot people share." }
+      ],
+      tags: ["Sailing", "Massively Multiplayer", "Sandbox", "MMO", "Open World", "Building", "Economy", "Relaxing", "Realistic", "Fishing", "Simulation", "Low-Poly", "Co-op", "PvE"]
+    };
+  }
+}
+</script>
+</body>
+</html>

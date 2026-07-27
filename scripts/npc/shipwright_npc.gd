@@ -74,10 +74,10 @@ func _build_ui() -> void:
 	_dialogue = DialoguePanel.new("SHIPWRIGHT", Vector2(520.0, 360.0))
 	add_child(_dialogue)
 
-	var session := get_node_or_null("/root/PlayerSession")
-	if session != null and session.has_signal("marks_changed"):
-		if not session.marks_changed.is_connected(_on_marks_changed):
-			session.marks_changed.connect(_on_marks_changed)
+	var view := get_node_or_null("/root/LocalPlayerView")
+	if view != null and view.has_signal("marks_changed"):
+		if not view.marks_changed.is_connected(_on_marks_changed):
+			view.marks_changed.connect(_on_marks_changed)
 
 
 func _on_catalog_closed() -> void:
@@ -144,7 +144,7 @@ func _try_pay_for_commission(entry: Dictionary) -> bool:
 		_dialogue.clear()
 		_dialogue.add_quote(
 			"Your balance won't cover that vessel, Captain.\nNeed %s more in the ledger."
-			% PlayerSession.format_money(price - session.get_marks())
+			% BrandFormat.money_text(price - session.get_marks())
 		)
 		_dialogue.add_option("Back to yard.", _show_yard_menu)
 		_dialogue.show_panel()

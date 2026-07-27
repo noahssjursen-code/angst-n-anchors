@@ -4,10 +4,13 @@ extends Control
 signal confirmed(company_name: String, brand_color: Color, starter_vessel: String)
 signal cancelled()
 
-const REFERENCE_SIZE := Vector2(1920.0, 1080.0)
-const BRAND_COLORS := [
-	Color("2f7f83"), Color("b55f3d"), Color("c79a42"),
-	Color("4d638c"), Color("657b51"), Color("7a526f"),
+static var BRAND_COLORS: Array[Color] = [
+	BrandTokens.color(&"HULL_TEAL"),
+	BrandTokens.color(&"HULL_RED"),
+	BrandTokens.color(&"HULL_YELLOW"),
+	BrandTokens.color(&"HULL_BLUE"),
+	BrandTokens.color(&"HULL_GREEN"),
+	BrandTokens.color(&"HULL_NAVY"),
 ]
 
 var _name_field: LineEdit
@@ -20,10 +23,24 @@ var _starter_buttons: Dictionary = {}
 
 
 func _ready() -> void:
-	_configure_layout_scale()
-	get_viewport().size_changed.connect(_configure_layout_scale)
+	_fit_viewport()
+	theme = BrandTheme.shared()
 	process_mode = Node.PROCESS_MODE_ALWAYS
+	var viewport := get_viewport()
+	if viewport != null and not viewport.size_changed.is_connected(_fit_viewport):
+		viewport.size_changed.connect(_fit_viewport)
 	_build()
+
+
+func _fit_viewport() -> void:
+	if get_parent() is Control:
+		set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+		return
+	set_anchors_preset(Control.PRESET_TOP_LEFT)
+	position = Vector2.ZERO
+	var viewport := get_viewport()
+	if viewport != null:
+		size = viewport.get_visible_rect().size
 
 
 func open_for_captain(captain_name: String) -> void:
@@ -42,17 +59,15 @@ func open_for_captain(captain_name: String) -> void:
 func _build() -> void:
 	var shade := ColorRect.new()
 	shade.set_anchors_preset(Control.PRESET_FULL_RECT)
-	shade.color = Color(0.015, 0.025, 0.03, 0.93)
+	shade.color = BrandTokens.alpha(BrandTokens.SCRIM, 0.90)
 	add_child(shade)
 
 	var center := CenterContainer.new()
 	center.set_anchors_preset(Control.PRESET_FULL_RECT)
 	add_child(center)
 
-	var panel := PanelContainer.new()
+	var panel := BrandPanel.new(BrandPanel.Variant.RULED)
 	panel.custom_minimum_size = Vector2(940, 620)
-	panel.theme = HudStyle.make_theme()
-	panel.add_theme_stylebox_override("panel", HudStyle.make_title_panel_style())
 	center.add_child(panel)
 
 	var margin := MarginContainer.new()
@@ -68,16 +83,16 @@ func _build() -> void:
 
 	var eyebrow := Label.new()
 	eyebrow.text = "NEW COMPANY  /  02 OF 03"
-	HudStyle.apply_body_font(eyebrow, 12, HudStyle.C_COPPER, true)
+	BrandTheme.apply_body_font(eyebrow, BrandTokens.LABEL_MONO, BrandTokens.INK_MUTED, true)
 	root.add_child(eyebrow)
 	var title := Label.new()
 	title.text = "Put your name on the water"
-	HudStyle.apply_display_font(title, 44, HudStyle.C_TEXT)
+	BrandTheme.apply_display_font(title, BrandTokens.DISPLAY_L, BrandTokens.INK)
 	root.add_child(title)
 	var intro := Label.new()
 	intro.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	intro.text = "Your company owns its vessels, money and stored goods. Your starter determines the first work available to you, not your permanent career."
-	HudStyle.apply_body_font(intro, 14, HudStyle.C_LABEL)
+	BrandTheme.apply_body_font(intro, BrandTokens.BODY, BrandTokens.INK_BODY)
 	root.add_child(intro)
 
 	var identity := HBoxContainer.new()
@@ -88,7 +103,7 @@ func _build() -> void:
 	identity.add_child(name_col)
 	var name_label := Label.new()
 	name_label.text = "COMPANY NAME"
-	HudStyle.apply_body_font(name_label, 11, HudStyle.C_COPPER, true)
+	BrandTheme.apply_body_font(name_label, BrandTokens.LABEL_MONO, BrandTokens.INK_MUTED, true)
 	name_col.add_child(name_label)
 	_name_field = LineEdit.new()
 	_name_field.placeholder_text = "North Coast Shipping"
@@ -101,14 +116,14 @@ func _build() -> void:
 	identity.add_child(color_col)
 	var color_label := Label.new()
 	color_label.text = "HOUSE COLOUR"
-	HudStyle.apply_body_font(color_label, 11, HudStyle.C_COPPER, true)
+	BrandTheme.apply_body_font(color_label, BrandTokens.LABEL_MONO, BrandTokens.INK_MUTED, true)
 	color_col.add_child(color_label)
 	var swatches := HBoxContainer.new()
 	swatches.add_theme_constant_override("separation", 7)
 	color_col.add_child(swatches)
 	for color in BRAND_COLORS:
-		var swatch := Button.new()
-		swatch.custom_minimum_size = Vector2(42, 34)
+		var swatch := BrandButton.new("", BrandButton.Variant.QUIET)
+		swatch.custom_minimum_size = Vector2(BrandTokens.MIN_HIT_TARGET, BrandTokens.MIN_HIT_TARGET)
 		swatch.tooltip_text = color.to_html(false)
 		swatch.pressed.connect(func() -> void:
 			_selected_color = color
@@ -119,7 +134,7 @@ func _build() -> void:
 
 	var vessel_label := Label.new()
 	vessel_label.text = "CHOOSE YOUR FIRST VESSEL"
-	HudStyle.apply_body_font(vessel_label, 11, HudStyle.C_COPPER, true)
+	BrandTheme.apply_body_font(vessel_label, BrandTokens.LABEL_MONO, BrandTokens.INK_MUTED, true)
 	root.add_child(vessel_label)
 	var cards := HBoxContainer.new()
 	cards.add_theme_constant_override("separation", 12)
@@ -127,12 +142,12 @@ func _build() -> void:
 	root.add_child(cards)
 	for option in CompanyContracts.starter_options():
 		var starter_id := str(option.get("id", ""))
-		var card := Button.new()
+		var card := BrandButton.new("", BrandButton.Variant.SECONDARY)
 		card.custom_minimum_size = Vector2(270, 210)
 		card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		card.alignment = HORIZONTAL_ALIGNMENT_LEFT
 		card.toggle_mode = true
-		card.focus_mode = Control.FOCUS_NONE
+		card.focus_mode = Control.FOCUS_ALL
 		card.text = "%s\n\n%s\n\n%s" % [
 			str(option.get("career", "")).to_upper(),
 			str(option.get("label", "Vessel")),
@@ -150,13 +165,12 @@ func _build() -> void:
 	root.add_child(footer)
 	_status = Label.new()
 	_status.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	HudStyle.apply_body_font(_status, 12, HudStyle.C_AMBER)
+	BrandTheme.apply_body_font(_status, BrandTokens.LABEL_MONO, BrandTokens.ALERT)
 	footer.add_child(_status)
-	var back := Button.new()
-	back.text = "Back"
+	var back := BrandButton.new("BACK", BrandButton.Variant.QUIET)
 	back.pressed.connect(func() -> void: cancelled.emit())
 	footer.add_child(back)
-	_confirm = MenuActionButton.new()
+	_confirm = BrandButton.new("", BrandButton.Variant.LOUD)
 	_confirm.text = "Choose home port  >"
 	_confirm.pressed.connect(_submit)
 	footer.add_child(_confirm)
@@ -169,30 +183,15 @@ func _refresh_choices() -> void:
 		var color: Color = BRAND_COLORS[index]
 		var style := StyleBoxFlat.new()
 		style.bg_color = color
-		style.border_color = HudStyle.C_TEXT if color == _selected_color else color.darkened(0.35)
+		style.border_color = BrandTokens.BRASS if color == _selected_color else BrandTokens.INK
 		style.set_border_width_all(3 if color == _selected_color else 1)
-		style.set_corner_radius_all(3)
+		style.set_content_margin_all(0)
 		button.add_theme_stylebox_override("normal", style)
 		button.add_theme_stylebox_override("hover", style)
 	for id in _starter_buttons:
-		var button := _starter_buttons[id] as Button
+		var button := _starter_buttons[id] as BrandButton
 		var selected: bool = str(id) == _selected_starter
-		var card_style := StyleBoxFlat.new()
-		card_style.bg_color = Color(0.035, 0.055, 0.064, 0.98) if selected else Color(0.023, 0.035, 0.041, 0.96)
-		card_style.border_color = _selected_color if selected else Color("34444d")
-		card_style.set_border_width_all(2 if selected else 1)
-		card_style.set_corner_radius_all(2)
-		card_style.content_margin_left = 16
-		card_style.content_margin_right = 16
-		card_style.content_margin_top = 16
-		card_style.content_margin_bottom = 16
-		button.add_theme_stylebox_override("normal", card_style)
-		button.add_theme_stylebox_override("hover", card_style)
-		button.add_theme_stylebox_override("pressed", card_style)
-		button.add_theme_stylebox_override("hover_pressed", card_style)
-		button.add_theme_color_override("font_color", HudStyle.C_TEXT if selected else HudStyle.C_LABEL)
-		button.add_theme_color_override("font_pressed_color", HudStyle.C_TEXT)
-		button.modulate = Color.WHITE
+		button.variant = BrandButton.Variant.PRIMARY if selected else BrandButton.Variant.SECONDARY
 		button.set_pressed_no_signal(selected)
 	_validate()
 
@@ -213,15 +212,3 @@ func _submit() -> void:
 	if not _validate():
 		return
 	confirmed.emit(_name_field.text.strip_edges(), _selected_color, _selected_starter)
-
-
-func _configure_layout_scale() -> void:
-	var viewport_size := get_viewport().get_visible_rect().size
-	if viewport_size.x <= 0.0 or viewport_size.y <= 0.0:
-		return
-	var factor := minf(viewport_size.x / REFERENCE_SIZE.x, viewport_size.y / REFERENCE_SIZE.y)
-	factor = maxf(factor, 0.5)
-	set_anchors_and_offsets_preset(Control.PRESET_TOP_LEFT)
-	position = Vector2.ZERO
-	scale = Vector2.ONE * factor
-	size = viewport_size / factor

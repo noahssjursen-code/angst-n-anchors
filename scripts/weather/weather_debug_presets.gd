@@ -1,53 +1,30 @@
 class_name WeatherDebugPresetsPanel
-extends PanelContainer
+extends BrandPanel
 
-## Premade WeatherState presets for debug — parent toggles visibility (F4 while DebugHud open).
-
-const _BODY := Color(0.05, 0.075, 0.12, 0.94)
-const _BTN_BG := Color(0.14, 0.2, 0.32, 0.92)
-const _TITLE := Color(0.93, 0.88, 0.52, 0.95)
+## Premade WeatherState presets for debug; parent toggles visibility with F4.
 
 
 func _ready() -> void:
+	variant = BrandPanel.Variant.DARK_RULED
+	theme = BrandTheme.shared()
 	set_anchors_preset(Control.PRESET_TOP_LEFT)
-	position = Vector2(14, 56)
+	position = Vector2(BrandTokens.SPACE_MD, 56)
 	mouse_filter = Control.MOUSE_FILTER_STOP
 	_build_ui()
 
 
 func _build_ui() -> void:
-	custom_minimum_size = Vector2(264, 0)
-
-	var flat := StyleBoxFlat.new()
-	flat.bg_color = _BODY
-	flat.border_color = Color(0.36, 0.48, 0.72, 0.45)
-	flat.set_border_width_all(1)
-	flat.corner_radius_top_left = 5
-	flat.corner_radius_top_right = 5
-	flat.corner_radius_bottom_left = 5
-	flat.corner_radius_bottom_right = 5
-	flat.content_margin_top = 8
-	flat.content_margin_bottom = 8
-	flat.content_margin_left = 10
-	flat.content_margin_right = 10
-	add_theme_stylebox_override("panel", flat)
-
-	var root := MarginContainer.new()
-	root.add_theme_constant_override("margin_left", 2)
-	root.add_theme_constant_override("margin_right", 2)
-	root.add_theme_constant_override("margin_top", 2)
-	root.add_theme_constant_override("margin_bottom", 2)
-	add_child(root)
+	custom_minimum_size = Vector2(304, 0)
 
 	var vbox := VBoxContainer.new()
-	vbox.add_theme_constant_override("separation", 6)
-	root.add_child(vbox)
+	vbox.add_theme_constant_override(&"separation", BrandTokens.SPACE_SM)
+	add_child(vbox)
 
-	var title := Label.new()
-	title.text = "Weather presets — F4 to hide"
-	title.add_theme_color_override("font_color", _TITLE)
-	title.add_theme_font_size_override("font_size", 12)
+	var title := BrandLabel.new("WEATHER PRESETS", BrandLabel.Role.INVERSE_DATA)
 	vbox.add_child(title)
+	var hint := BrandLabel.new("F4 TO HIDE", BrandLabel.Role.MICRO_DATA)
+	hint.add_theme_color_override(&"font_color", BrandTokens.INK_INVERSE_DIM)
+	vbox.add_child(hint)
 
 	var scroll := ScrollContainer.new()
 	scroll.custom_minimum_size = Vector2(0, 420)
@@ -55,49 +32,33 @@ func _build_ui() -> void:
 
 	var col := VBoxContainer.new()
 	col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	col.add_theme_constant_override("separation", 4)
+	col.add_theme_constant_override(&"separation", BrandTokens.SPACE_XS)
 	scroll.add_child(col)
 
-	var authored := Label.new()
-	authored.text = "── Authored component moods"
-	authored.add_theme_color_override("font_color", Color(0.55, 0.68, 0.88, 0.70))
+	var authored := BrandLabel.new("AUTHORED COMPONENT MOODS", BrandLabel.Role.SECTION)
+	authored.add_theme_color_override(&"font_color", BrandTokens.BRASS)
 	col.add_child(authored)
 	for raw_mood in WeatherProfileCatalog.moods():
 		var mood := raw_mood as Dictionary
-		var mood_button := Button.new()
-		mood_button.text = str(mood.get("label", mood.get("id", "Weather")))
+		var mood_button := BrandButton.new(
+			str(mood.get("label", mood.get("id", "Weather"))),
+			BrandButton.Variant.SECONDARY
+		)
 		var mood_id := str(mood.get("id", ""))
 		mood_button.pressed.connect(func() -> void: _apply_mood(mood_id))
 		col.add_child(mood_button)
 	_add_component_picker(col)
 
-	var legacy := Label.new()
-	legacy.text = "── Legacy quick moods"
-	legacy.add_theme_color_override("font_color", Color(0.55, 0.68, 0.88, 0.70))
+	var legacy := BrandLabel.new("QUICK MOODS", BrandLabel.Role.SECTION)
+	legacy.add_theme_color_override(&"font_color", BrandTokens.BRASS)
 	col.add_child(legacy)
 	for entry in _preset_entries():
 		if entry.has("sep"):
-			var sep := Label.new()
-			sep.text = entry.sep
-			sep.add_theme_color_override("font_color", Color(0.55, 0.68, 0.88, 0.70))
-			sep.add_theme_font_size_override("font_size", 10)
-			sep.add_theme_constant_override("margin_top", 4)
+			var sep := BrandLabel.new(str(entry.sep).to_upper(), BrandLabel.Role.MICRO_DATA)
+			sep.add_theme_color_override(&"font_color", BrandTokens.INK_INVERSE_DIM)
 			col.add_child(sep)
 			continue
-		var b := Button.new()
-		b.text = entry.label
-		b.custom_minimum_size = Vector2(0, 26)
-		b.add_theme_font_size_override("font_size", 11)
-		var bs := StyleBoxFlat.new()
-		bs.bg_color = _BTN_BG
-		bs.corner_radius_top_left = 4
-		bs.corner_radius_top_right = 4
-		bs.corner_radius_bottom_left = 4
-		bs.corner_radius_bottom_right = 4
-		b.add_theme_stylebox_override("normal", bs)
-		b.add_theme_stylebox_override("hover", _hover_style(bs))
-		b.add_theme_stylebox_override("pressed", _pressed_style(bs))
-		b.add_theme_color_override("font_color", Color(0.9, 0.92, 0.96, 1.0))
+		var b := BrandButton.new(str(entry.label), BrandButton.Variant.SECONDARY)
 		var p: float = entry.precip
 		var w: float = entry.wind
 		var v: float = entry.vis
@@ -110,8 +71,9 @@ func _add_component_picker(parent: VBoxContainer) -> void:
 	var selectors := {}
 	for dimension in ["sky", "precipitation", "fog", "wind", "sea", "convection"]:
 		var row := HBoxContainer.new()
-		var label := Label.new()
-		label.text = dimension.capitalize()
+		row.add_theme_constant_override(&"separation", BrandTokens.SPACE_SM)
+		var label := BrandLabel.new(dimension.to_upper(), BrandLabel.Role.MICRO_DATA)
+		label.add_theme_color_override(&"font_color", BrandTokens.INK_INVERSE_DIM)
 		label.custom_minimum_size.x = 82.0
 		row.add_child(label)
 		var choices := OptionButton.new()
@@ -123,30 +85,9 @@ func _add_component_picker(parent: VBoxContainer) -> void:
 		row.add_child(choices)
 		parent.add_child(row)
 		selectors[dimension] = choices
-	var apply_button := Button.new()
-	apply_button.text = "Apply component mix"
+	var apply_button := BrandButton.new("APPLY COMPONENT MIX", BrandButton.Variant.PRIMARY)
 	apply_button.pressed.connect(func() -> void: _apply_components(selectors))
 	parent.add_child(apply_button)
-
-
-func _hover_style(from: StyleBoxFlat) -> StyleBoxFlat:
-	var h := StyleBoxFlat.new()
-	h.bg_color = from.bg_color.lightened(0.12)
-	h.corner_radius_top_left = from.corner_radius_top_left
-	h.corner_radius_top_right = from.corner_radius_top_right
-	h.corner_radius_bottom_left = from.corner_radius_bottom_left
-	h.corner_radius_bottom_right = from.corner_radius_bottom_right
-	return h
-
-
-func _pressed_style(from: StyleBoxFlat) -> StyleBoxFlat:
-	var h := StyleBoxFlat.new()
-	h.bg_color = from.bg_color.darkened(0.08)
-	h.corner_radius_top_left = from.corner_radius_top_left
-	h.corner_radius_top_right = from.corner_radius_top_right
-	h.corner_radius_bottom_left = from.corner_radius_bottom_left
-	h.corner_radius_bottom_right = from.corner_radius_bottom_right
-	return h
 
 
 func _preset_entries() -> Array[Dictionary]:

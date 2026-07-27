@@ -1,0 +1,754 @@
+{
+  "name": "Angst 'n Anchors",
+  "version": "1.0.0",
+  "updated": "2026-07-27",
+  "note": "Single source of truth for colour, type, spacing, motion and shape. Reference tokens by name; never hardcode hex.",
+  "colors": {
+    "PAPER": {
+      "use": "backgrounds, panels, chart land",
+      "tokens": {
+        "PAPER": {
+          "hex": "#ECE5D3",
+          "role": "screen background, chart land"
+        },
+        "PAPER_HIGH": {
+          "hex": "#F3EEE1",
+          "role": "raised cards, fields"
+        },
+        "PAPER_LOW": {
+          "hex": "#E4DCC7",
+          "role": "recessed wells, tracks"
+        },
+        "SURFACE": {
+          "hex": "#DFD6C0",
+          "role": "panels, inactive tabs"
+        },
+        "SURFACE_EDGE": {
+          "hex": "#B5AB92",
+          "role": "borders, dividers"
+        },
+        "SURFACE_LINE": {
+          "hex": "#C9BFA8",
+          "role": "hairlines, table rules"
+        }
+      }
+    },
+    "INK": {
+      "use": "text and icons on paper",
+      "tokens": {
+        "INK": {
+          "hex": "#1B242C",
+          "role": "primary text, icons"
+        },
+        "INK_BODY": {
+          "hex": "#3D4650",
+          "role": "body copy, secondary"
+        },
+        "INK_MUTED": {
+          "hex": "#7A7052",
+          "role": "labels, units, hints"
+        },
+        "INK_FAINT": {
+          "hex": "#988D70",
+          "role": "disabled, placeholders"
+        },
+        "INK_INVERSE": {
+          "hex": "#ECE5D3",
+          "role": "text on sea and ink"
+        },
+        "INK_INVERSE_DIM": {
+          "hex": "#9FB3BD",
+          "role": "secondary text on dark"
+        }
+      }
+    },
+    "SEA": {
+      "use": "interactive, dark panels",
+      "tokens": {
+        "SEA_DEEP": {
+          "hex": "#0F2530",
+          "role": "pressed states"
+        },
+        "SEA": {
+          "hex": "#163440",
+          "role": "buttons, dark panels"
+        },
+        "SEA_RAISED": {
+          "hex": "#1E4657",
+          "role": "hover on dark"
+        },
+        "SEA_LIGHT": {
+          "hex": "#3F6377",
+          "role": "dark panel highlight"
+        },
+        "SEA_TINT": {
+          "hex": "#9FC0CD",
+          "role": "text/icons on sea"
+        },
+        "SEA_LINE": {
+          "hex": "#2C3A46",
+          "role": "borders on dark"
+        },
+        "SCRIM": {
+          "hex": "#10151A",
+          "role": "modal scrim, capsule fade"
+        },
+        "SHADOW": {
+          "hex": "#0A0E12",
+          "role": "drop shadow, night base"
+        }
+      }
+    },
+    "BRASS": {
+      "use": "accent, selection, one loud action",
+      "tokens": {
+        "BRASS": {
+          "hex": "#D99A1F",
+          "role": "selection, rules, loud action"
+        },
+        "BRASS_LIGHT": {
+          "hex": "#EFBB55",
+          "role": "brass hover, glow"
+        },
+        "BRASS_DEEP": {
+          "hex": "#A8701C",
+          "role": "brass text on paper"
+        },
+        "BRASS_SHADE": {
+          "hex": "#7A5214",
+          "role": "brass pressed, engraved"
+        },
+        "BRASS_TINT": {
+          "hex": "#F7E3BC",
+          "role": "text on brass fills"
+        },
+        "AMBER": {
+          "hex": "#F2B233",
+          "role": "marketing only - not in build"
+        }
+      }
+    },
+    "STATUS": {
+      "use": "state, never decoration",
+      "tokens": {
+        "ALERT": {
+          "hex": "#B23A2A",
+          "role": "collision, debt, failure"
+        },
+        "ALERT_DEEP": {
+          "hex": "#8A2A1D",
+          "role": "alert pressed, hull damage"
+        },
+        "ALERT_TINT": {
+          "hex": "#F2D2CC",
+          "role": "text on alert fills"
+        },
+        "WARN": {
+          "hex": "#C9791C",
+          "role": "caution, low fuel, overdue"
+        },
+        "WARN_TINT": {
+          "hex": "#F7DCB4",
+          "role": "text on warn fills"
+        },
+        "OK": {
+          "hex": "#4F7D5E",
+          "role": "stable, moored, paid"
+        },
+        "OK_LIGHT": {
+          "hex": "#7FC48E",
+          "role": "zones, OK text on dark"
+        },
+        "OK_TINT": {
+          "hex": "#D6EEDB",
+          "role": "text on OK fills"
+        },
+        "INFO": {
+          "hex": "#3E6E86",
+          "role": "neutral notice, tooltips"
+        },
+        "IDLE": {
+          "hex": "#6F7B84",
+          "role": "offline, unknown, no signal"
+        }
+      }
+    },
+    "WATER": {
+      "use": "sea surface and depth",
+      "tokens": {
+        "WATER_ABYSS": {
+          "hex": "#0B1E27",
+          "role": "deepest water"
+        },
+        "WATER_DEEP": {
+          "hex": "#123240",
+          "role": "open sea"
+        },
+        "WATER_MID": {
+          "hex": "#1B4A5C",
+          "role": "coastal water"
+        },
+        "WATER_SHALLOW": {
+          "hex": "#2E6E7E",
+          "role": "shallows, harbour basin"
+        },
+        "WATER_SHOAL": {
+          "hex": "#4C93A0",
+          "role": "sandbanks, hazard shallows"
+        },
+        "WATER_FOAM": {
+          "hex": "#D7E6E9",
+          "role": "wake, whitecaps, spray"
+        },
+        "WATER_WAKE": {
+          "hex": "#8FB6BE",
+          "role": "wake trails, ripples"
+        },
+        "WATER_SUBSURFACE": {
+          "hex": "#1F5866",
+          "role": "underwater fog, hull below"
+        }
+      }
+    },
+    "TERRAIN": {
+      "use": "ground and rock",
+      "tokens": {
+        "GRASS_LIGHT": {
+          "hex": "#A3B48F",
+          "role": "sunlit meadow, cliff top"
+        },
+        "GRASS": {
+          "hex": "#8BA08C",
+          "role": "default ground cover"
+        },
+        "GRASS_DARK": {
+          "hex": "#6A8272",
+          "role": "shaded slopes"
+        },
+        "HEATH": {
+          "hex": "#7C7A5C",
+          "role": "scrub, moorland"
+        },
+        "ROCK_LIGHT": {
+          "hex": "#9A9A94",
+          "role": "exposed granite"
+        },
+        "ROCK": {
+          "hex": "#7A7C7C",
+          "role": "cliffs, boulders"
+        },
+        "ROCK_DARK": {
+          "hex": "#565A5C",
+          "role": "wet rock, crevices"
+        },
+        "SAND": {
+          "hex": "#CBBE9C",
+          "role": "beaches, dunes"
+        },
+        "SHINGLE": {
+          "hex": "#A9A392",
+          "role": "gravel shore, ballast"
+        },
+        "MUD": {
+          "hex": "#6B5D48",
+          "role": "tidal flats, tracks"
+        },
+        "SNOW": {
+          "hex": "#E8EDEF",
+          "role": "peaks, winter cover"
+        },
+        "SNOW_SHADE": {
+          "hex": "#BFCBD1",
+          "role": "snow in shadow"
+        }
+      }
+    },
+    "FOLIAGE": {
+      "use": "trees and growth",
+      "tokens": {
+        "CONIFER_DARK": {
+          "hex": "#24352B",
+          "role": "spruce, dense forest"
+        },
+        "CONIFER": {
+          "hex": "#33503C",
+          "role": "pine canopy"
+        },
+        "CONIFER_LIGHT": {
+          "hex": "#456A4C",
+          "role": "sunlit canopy"
+        },
+        "BIRCH": {
+          "hex": "#7E9A63",
+          "role": "deciduous, summer"
+        },
+        "BIRCH_AUTUMN": {
+          "hex": "#B08A3C",
+          "role": "deciduous, autumn"
+        },
+        "SHRUB": {
+          "hex": "#5C6B4A",
+          "role": "bushes, hedges"
+        },
+        "KELP": {
+          "hex": "#2F4A3C",
+          "role": "seaweed, wet growth"
+        },
+        "LICHEN": {
+          "hex": "#9AA88A",
+          "role": "rock growth, old timber"
+        },
+        "TIMBER_RAW": {
+          "hex": "#6E5638",
+          "role": "logs, cut wood"
+        },
+        "TIMBER_DEAD": {
+          "hex": "#8A7F6A",
+          "role": "driftwood, dead trees"
+        }
+      }
+    },
+    "SKY": {
+      "use": "atmosphere and weather",
+      "tokens": {
+        "SKY_ZENITH": {
+          "hex": "#5E8FB0",
+          "role": "clear sky, overhead"
+        },
+        "SKY_HORIZON": {
+          "hex": "#AEBFC4",
+          "role": "clear sky, at horizon"
+        },
+        "SKY_OVERCAST": {
+          "hex": "#9FA9AC",
+          "role": "grey day, upper"
+        },
+        "SKY_OVERCAST_LOW": {
+          "hex": "#C0C6C6",
+          "role": "grey day, horizon"
+        },
+        "SKY_DAWN": {
+          "hex": "#D9A78A",
+          "role": "sunrise band"
+        },
+        "SKY_DUSK": {
+          "hex": "#B8735C",
+          "role": "sunset band"
+        },
+        "SKY_NIGHT": {
+          "hex": "#16202C",
+          "role": "night sky"
+        },
+        "SKY_NIGHT_HORIZON": {
+          "hex": "#2A3A48",
+          "role": "night horizon glow"
+        },
+        "CLOUD_LIGHT": {
+          "hex": "#EDF1F2",
+          "role": "cumulus lit face"
+        },
+        "CLOUD": {
+          "hex": "#C4CCCE",
+          "role": "cloud body"
+        },
+        "CLOUD_DARK": {
+          "hex": "#8D979B",
+          "role": "storm cloud, rain base"
+        },
+        "FOG": {
+          "hex": "#C8D2D4",
+          "role": "fog, haze, distance fade"
+        },
+        "RAIN": {
+          "hex": "#DCE6E8",
+          "role": "rain streaks, sleet"
+        },
+        "STAR": {
+          "hex": "#F2F5EE",
+          "role": "stars, aurora highlight"
+        }
+      }
+    },
+    "BUILT": {
+      "use": "harbour structures and materials",
+      "tokens": {
+        "QUAY": {
+          "hex": "#262B31",
+          "role": "asphalt, quay surface"
+        },
+        "QUAY_EDGE": {
+          "hex": "#171B1F",
+          "role": "quay lip, expansion joints"
+        },
+        "CONCRETE_LIGHT": {
+          "hex": "#C3C2BB",
+          "role": "new concrete, bollard base"
+        },
+        "CONCRETE": {
+          "hex": "#9C9B94",
+          "role": "walls, piers, ramps"
+        },
+        "CONCRETE_STAINED": {
+          "hex": "#7B7A72",
+          "role": "weathered concrete"
+        },
+        "DECK_TIMBER": {
+          "hex": "#7A5F3E",
+          "role": "wooden decks, jetties"
+        },
+        "DECK_TIMBER_WORN": {
+          "hex": "#5E4A31",
+          "role": "worn planking, pilings"
+        },
+        "STEEL_LIGHT": {
+          "hex": "#B7BEC2",
+          "role": "galvanised rail, ladders"
+        },
+        "STEEL": {
+          "hex": "#8A8F96",
+          "role": "cranes, machinery, gantry"
+        },
+        "STEEL_DARK": {
+          "hex": "#5B6167",
+          "role": "structure shadow, engine"
+        },
+        "RUST": {
+          "hex": "#8C5230",
+          "role": "corrosion, old fittings"
+        },
+        "RUST_DEEP": {
+          "hex": "#5E3520",
+          "role": "heavy rust, bilge"
+        },
+        "CRANE_YELLOW": {
+          "hex": "#CFA235",
+          "role": "cranes, plant, hi-vis kit"
+        },
+        "ROOF_TILE": {
+          "hex": "#8E4B39",
+          "role": "town roofs"
+        },
+        "WALL_WHITE": {
+          "hex": "#E2E0D6",
+          "role": "harbour buildings"
+        },
+        "WALL_RED": {
+          "hex": "#A34F3A",
+          "role": "boathouses, sheds"
+        }
+      }
+    },
+    "HULL": {
+      "use": "player-chosen paint - never in UI",
+      "tokens": {
+        "HULL_WHITE": {
+          "hex": "#E8E6DD",
+          "role": "superstructure white"
+        },
+        "HULL_GREY": {
+          "hex": "#98A0A6",
+          "role": "working grey"
+        },
+        "HULL_BLACK": {
+          "hex": "#22262A",
+          "role": "classic black hull"
+        },
+        "HULL_NAVY": {
+          "hex": "#1F3550",
+          "role": "navy blue"
+        },
+        "HULL_TEAL": {
+          "hex": "#1D5A5E",
+          "role": "teal"
+        },
+        "HULL_GREEN": {
+          "hex": "#2C5138",
+          "role": "bottle green"
+        },
+        "HULL_RED": {
+          "hex": "#9E3628",
+          "role": "signal red"
+        },
+        "HULL_ORANGE": {
+          "hex": "#C9601F",
+          "role": "rescue orange"
+        },
+        "HULL_YELLOW": {
+          "hex": "#D2A62C",
+          "role": "workboat yellow"
+        },
+        "HULL_BLUE": {
+          "hex": "#2C6595",
+          "role": "mid blue"
+        },
+        "HULL_CREAM": {
+          "hex": "#D8CDAE",
+          "role": "cream, older vessels"
+        },
+        "ANTIFOUL": {
+          "hex": "#7A2B24",
+          "role": "below waterline, boot top"
+        }
+      }
+    },
+    "CARGO": {
+      "use": "containers, goods, hold",
+      "tokens": {
+        "CARGO_BLUE": {
+          "hex": "#2B5F8C",
+          "role": "containers, general"
+        },
+        "CARGO_RED": {
+          "hex": "#993B2E",
+          "role": "containers"
+        },
+        "CARGO_GREEN": {
+          "hex": "#356248",
+          "role": "containers"
+        },
+        "CARGO_GREY": {
+          "hex": "#7E858A",
+          "role": "containers, refrigerated"
+        },
+        "CARGO_ORANGE": {
+          "hex": "#C0651F",
+          "role": "hazardous, priority"
+        },
+        "CRATE": {
+          "hex": "#9A7A4E",
+          "role": "timber crates, pallets"
+        },
+        "SACK": {
+          "hex": "#C0B48C",
+          "role": "sacks, grain, bulk bags"
+        },
+        "BARREL": {
+          "hex": "#4E5A47",
+          "role": "drums, fuel barrels"
+        },
+        "FISH": {
+          "hex": "#A8B6BA",
+          "role": "catch, ice, trays"
+        },
+        "NET": {
+          "hex": "#3C5A4E",
+          "role": "nets, trawl gear, rope"
+        }
+      }
+    },
+    "LIGHTS": {
+      "use": "emissive - nav, work, signals",
+      "tokens": {
+        "NAV_PORT": {
+          "hex": "#E23B2E",
+          "role": "port sidelight (red)"
+        },
+        "NAV_STARBOARD": {
+          "hex": "#31C25C",
+          "role": "starboard sidelight (green)"
+        },
+        "NAV_STERN": {
+          "hex": "#FBF3E2",
+          "role": "stern and masthead white"
+        },
+        "WORK_LIGHT": {
+          "hex": "#FFE9B0",
+          "role": "deck floods, work lamps"
+        },
+        "WORK_LIGHT_COOL": {
+          "hex": "#DDEAF5",
+          "role": "LED floods, modern plant"
+        },
+        "LANTERN": {
+          "hex": "#F2B95C",
+          "role": "lanterns, warm cabin light"
+        },
+        "CABIN_GLOW": {
+          "hex": "#C98F3E",
+          "role": "windows seen from outside"
+        },
+        "BEACON": {
+          "hex": "#F2CE3A",
+          "role": "flashing plant beacon"
+        },
+        "STROBE": {
+          "hex": "#FFFFFF",
+          "role": "strobes, camera flash"
+        },
+        "BUOY_RED": {
+          "hex": "#C6382C",
+          "role": "port-hand mark"
+        },
+        "BUOY_GREEN": {
+          "hex": "#2E9B4E",
+          "role": "starboard-hand mark"
+        },
+        "BUOY_YELLOW": {
+          "hex": "#D9B429",
+          "role": "special mark, cardinal"
+        },
+        "LIGHTHOUSE": {
+          "hex": "#FFF6DC",
+          "role": "lighthouse sector light"
+        },
+        "SIGNAL_BLUE": {
+          "hex": "#3F8FD6",
+          "role": "emergency, pilot vessel"
+        }
+      }
+    },
+    "CHART": {
+      "use": "AIS and navigation overlay",
+      "tokens": {
+        "CHART_LAND": {
+          "hex": "#ECE5D3",
+          "role": "land fill (= PAPER)"
+        },
+        "CHART_SEA": {
+          "hex": "#163440",
+          "role": "water fill (= SEA)"
+        },
+        "CHART_DEPTH_1": {
+          "hex": "#2A4F61",
+          "role": "shallow depth band"
+        },
+        "CHART_DEPTH_2": {
+          "hex": "#1E4152",
+          "role": "mid depth band"
+        },
+        "CHART_DEPTH_3": {
+          "hex": "#132C38",
+          "role": "deep band"
+        },
+        "CHART_CONTOUR": {
+          "hex": "#7FA8B8",
+          "role": "depth contour lines"
+        },
+        "CHART_GRID": {
+          "hex": "#3E5A66",
+          "role": "graticule, scale bar"
+        },
+        "CHART_ROUTE": {
+          "hex": "#D99A1F",
+          "role": "own course, waypoints"
+        },
+        "CHART_TRAFFIC": {
+          "hex": "#ECE5D3",
+          "role": "other vessels"
+        },
+        "CHART_TRAFFIC_SELF": {
+          "hex": "#D99A1F",
+          "role": "own vessel wedge"
+        },
+        "CHART_ZONE_FISH": {
+          "hex": "#7FC48E",
+          "role": "fishing ground overlay"
+        },
+        "CHART_ZONE_WEATHER": {
+          "hex": "#8AA9C4",
+          "role": "weather cell overlay"
+        },
+        "CHART_ZONE_RESTRICT": {
+          "hex": "#B23A2A",
+          "role": "restricted, hazard area"
+        },
+        "CHART_PORT_MARK": {
+          "hex": "#1B242C",
+          "role": "harbour glyphs, labels"
+        }
+      }
+    }
+  },
+  "spacing": {
+    "base_unit_px": 4,
+    "scale": {
+      "xs": 4,
+      "sm": 8,
+      "md": 12,
+      "lg": 16,
+      "xl": 24,
+      "xxl": 32,
+      "xxxl": 48,
+      "huge": 64
+    },
+    "rules": {
+      "panel_padding": 24,
+      "card_padding": 18,
+      "group_gap": 12,
+      "section_gap": 32,
+      "hairline": 1,
+      "brass_rule": 5,
+      "min_hit_target": 44,
+      "min_icon_box": 20,
+      "grid_column": 8
+    }
+  },
+  "type": {
+    "families": {
+      "display": "Saira Condensed",
+      "ui": "Saira",
+      "data": "JetBrains Mono",
+      "cyrillic_display": "PT Sans Narrow",
+      "cyrillic_ui": "PT Sans"
+    },
+    "sizes_at_1080p": {
+      "display_l": 44,
+      "display_m": 32,
+      "display_s": 24,
+      "body": 18,
+      "button": 16,
+      "label_mono": 14,
+      "data_mono": 17,
+      "micro_mono": 12
+    },
+    "weights": {
+      "display": 700,
+      "ui_regular": 400,
+      "ui_medium": 500,
+      "ui_semibold": 600,
+      "data": 400,
+      "data_bold": 700
+    },
+    "rules": [
+      "data always mono, never bold",
+      "display is uppercase, tracked 0.01-0.06em",
+      "never below 24px for display, 18px for body",
+      "micro_mono 12px only for dense chart labels"
+    ]
+  },
+  "motion": {
+    "durations_ms": {
+      "micro": 90,
+      "control": 160,
+      "panel": 240,
+      "screen": 320,
+      "chart_pan": 320
+    },
+    "easing": {
+      "enter": "cubic-bezier(0.2, 0, 0, 1)",
+      "exit": "cubic-bezier(0.4, 0, 1, 1)",
+      "data_tick": "linear"
+    },
+    "rules": [
+      "no bounce, no overshoot, no spring",
+      "entering elements translate max 8px, never scale",
+      "numbers tick linearly, never ease",
+      "one animation per interaction",
+      "reduced-motion setting = instant, no fades"
+    ]
+  },
+  "shapes": {
+    "ruled_panel": "square + border-top 5px BRASS",
+    "prow": "polygon(0 0, 76% 0, 100% 50%, 76% 100%, 0 100%)",
+    "batter": "polygon(0 0, 100% 0, 88% 100%, 0 100%)",
+    "pennant": "polygon(0 0, 100% 0, 82% 50%, 100% 100%, 0 100%)",
+    "sounding_zone": "irregular dashed polygon, 6-8 points",
+    "wedge": "triangle, heading marks only",
+    "rules": [
+      "no chamfered corners",
+      "no rounded corners",
+      "one shape per component",
+      "circles only for dials, logo ring, buoys"
+    ]
+  }
+}

@@ -16,11 +16,12 @@ const LAYER_WORLD := 1
 @export var prompt_text: String = "Press F":
 	set(v):
 		prompt_text = v
-		if _prompt != null:
-			_prompt.text = v
+		if _prompt_label != null:
+			_prompt_label.text = v
 
 var _open:         bool         = false
-var _prompt:       Label
+var _prompt:       BrandPanel
+var _prompt_label: BrandLabel
 var _prompt_layer: CanvasLayer
 var _body:         StaticBody3D
 
@@ -57,21 +58,17 @@ func _build_prompt() -> void:
 	_prompt_layer.name = "PromptLayer"
 	add_child(_prompt_layer)
 
-	_prompt                      = Label.new()
-	_prompt.text                 = prompt_text
-	_prompt.visible              = false
-	_prompt.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_prompt.add_theme_font_size_override("font_size", 18)
+	_prompt = BrandPanel.new(BrandPanel.Variant.DARK_RULED)
+	_prompt.visible = false
 	_prompt.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
-	_prompt.offset_left   = -220.0
-	_prompt.offset_right  =  220.0
+	_prompt.offset_left   = -260.0
+	_prompt.offset_right  =  260.0
 	_prompt.offset_top    = -148.0
-	_prompt.offset_bottom = -108.0
-	_prompt.add_theme_color_override("font_color", HudStyle.C_AMBER)
-	_prompt.add_theme_color_override("font_shadow_color", Color(0.0, 0.0, 0.0, 0.85))
-	_prompt.add_theme_constant_override("shadow_offset_x", 1)
-	_prompt.add_theme_constant_override("shadow_offset_y", 1)
-	_prompt.add_theme_constant_override("shadow_as_outline", 1)
+	_prompt.offset_bottom = -92.0
+	_prompt_label = BrandLabel.new(prompt_text, BrandLabel.Role.INVERSE_DATA)
+	_prompt_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_prompt_label.add_theme_color_override(&"font_color", BrandTokens.BRASS_LIGHT)
+	_prompt.add_child(_prompt_label)
 	_prompt_layer.add_child(_prompt)
 
 

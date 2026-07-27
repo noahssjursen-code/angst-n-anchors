@@ -9,16 +9,16 @@ const RasterLayer := preload("res://scripts/ui/chart/chart_raster_layer.gd")
 const CoastlineIndex := preload("res://scripts/ui/chart/chart_coastline_index.gd")
 const MarineRoutePlanner := preload("res://scripts/navigation/marine_route_planner.gd")
 
-const C_GRID := Color(0.12, 0.18, 0.22, 0.26)
-const C_GRID_TEXT := Color(0.25, 0.31, 0.32, 0.74)
-const C_PORT := Color(0.10, 0.24, 0.28, 1.0)
-const C_PORT_SELECTED := Color(0.95, 0.55, 0.10, 1.0)
-const C_SHIP := Color(0.94, 0.28, 0.12, 1.0)
-const C_ROUTE := Color(0.74, 0.22, 0.12, 0.90)
-const C_TRAFFIC_MAIN := Color(0.08, 0.55, 0.72, 0.58)
-const C_TRAFFIC_PORT := Color(0.20, 0.66, 0.62, 0.46)
-const C_TRAFFIC_VESSEL := Color(0.18, 0.76, 0.86, 0.96)
-const C_TRAFFIC_WAITING := Color(0.96, 0.66, 0.18, 0.98)
+static var C_GRID := BrandTokens.alpha(BrandTokens.CHART_GRID, 0.42)
+static var C_GRID_TEXT := BrandTokens.alpha(BrandTokens.INK_MUTED, 0.78)
+static var C_PORT := BrandTokens.CHART_PORT_MARK
+static var C_PORT_SELECTED := BrandTokens.BRASS
+static var C_SHIP := BrandTokens.ALERT
+static var C_ROUTE := BrandTokens.CHART_ROUTE
+static var C_TRAFFIC_MAIN := BrandTokens.alpha(BrandTokens.CHART_TRAFFIC, 0.58)
+static var C_TRAFFIC_PORT := BrandTokens.alpha(BrandTokens.SEA_LIGHT, 0.48)
+static var C_TRAFFIC_VESSEL := BrandTokens.CHART_TRAFFIC_SELF
+static var C_TRAFFIC_WAITING := BrandTokens.WARN
 ## Pay expand cost a few harbours per frame so world-view open stays smooth.
 const HARBOUR_EXPAND_BUDGET := 4
 const HARBOUR_VIEW_MARGIN_M := 900.0
@@ -324,9 +324,9 @@ func _draw_traffic_contacts(
 			screen - heading * 4.0 - side * 3.0,
 		]), color)
 		if span <= 2600.0 and not minimap:
-			canvas.draw_string(ThemeDB.fallback_font, screen + Vector2(7.0, -4.0),
+			canvas.draw_string(BrandTheme.font_data(), screen + Vector2(7.0, -4.0),
 				str(contact.get("name", contact.get("id", ""))),
-				HORIZONTAL_ALIGNMENT_LEFT, -1, 9, Color(0.12, 0.20, 0.22, 0.88))
+				HORIZONTAL_ALIGNMENT_LEFT, -1, 9, BrandTokens.INK_BODY)
 
 
 func _draw_coastline(canvas: CanvasItem, ctx: Dictionary) -> void:
@@ -335,7 +335,7 @@ func _draw_coastline(canvas: CanvasItem, ctx: Dictionary) -> void:
 		canvas.draw_line(
 			_world_to_screen(Vector3(segment[0].x, 0.0, segment[0].y), ctx),
 			_world_to_screen(Vector3(segment[1].x, 0.0, segment[1].y), ctx),
-			Color(0.08, 0.14, 0.14, 0.96),
+			BrandTokens.CHART_CONTOUR,
 			1.35,
 			true,
 		)
@@ -354,7 +354,7 @@ func _draw_grid(canvas: CanvasItem, ctx: Dictionary) -> void:
 			C_GRID,
 		)
 		canvas.draw_string(
-			ThemeDB.fallback_font,
+			BrandTheme.font_data(),
 			Vector2(screen_x + 3.0, chart.end.y - 5.0),
 			_format_grid(x),
 			HORIZONTAL_ALIGNMENT_LEFT, -1, 9, C_GRID_TEXT,
@@ -369,7 +369,7 @@ func _draw_grid(canvas: CanvasItem, ctx: Dictionary) -> void:
 			C_GRID,
 		)
 		canvas.draw_string(
-			ThemeDB.fallback_font,
+			BrandTheme.font_data(),
 			Vector2(chart.position.x + 3.0, screen_y - 3.0),
 			_format_grid(z),
 			HORIZONTAL_ALIGNMENT_LEFT, -1, 9, C_GRID_TEXT,
@@ -396,15 +396,15 @@ func _draw_ports(
 		var id := str(port.get("id", ""))
 		var selected := id == selected_port
 		var color := C_PORT_SELECTED if selected else C_PORT
-		canvas.draw_circle(screen, 7.0 if selected else 5.0, Color(0.96, 0.94, 0.82, 0.98))
+		canvas.draw_circle(screen, 7.0 if selected else 5.0, BrandTokens.PAPER)
 		canvas.draw_circle(screen, 4.5 if selected else 3.0, color)
 		if show_labels or selected:
 			canvas.draw_string(
-				ThemeDB.fallback_font,
+				BrandTheme.font_data(),
 				screen + Vector2(8.0, -5.0),
 				str(port.get("display_name", id)),
 				HORIZONTAL_ALIGNMENT_LEFT, -1, 11,
-				Color(0.08, 0.13, 0.14, 0.96),
+				BrandTokens.INK,
 			)
 
 
@@ -422,7 +422,7 @@ func _draw_ship(canvas: CanvasItem, ctx: Dictionary, nav: ChartNavSnapshot) -> v
 	canvas.draw_line(screen, screen + forward * 46.0, C_SHIP, 1.8, true)
 	if nav.has_course():
 		var course := nav.velocity_horizontal.normalized()
-		_draw_dashed(canvas, screen, screen + course * 60.0, Color(0.08, 0.50, 0.62), 1.5)
+		_draw_dashed(canvas, screen, screen + course * 60.0, BrandTokens.CHART_TRAFFIC, 1.5)
 
 
 func _draw_contract_routes(canvas: CanvasItem, ctx: Dictionary, nav: ChartNavSnapshot) -> void:
@@ -494,17 +494,23 @@ func _contract_route(
 func _draw_fronts(canvas: CanvasItem, ctx: Dictionary) -> void:
 	var bounds: Rect2 = ctx["world_bounds"]
 	var chart: Rect2 = ctx["chart_rect"]
-	for front in WeatherFrontField.fronts_in_bounds(bounds, WeatherField.current_game_time()):
+	var fronts: Array = []
+	var tree := Engine.get_main_loop() as SceneTree
+	if tree != null:
+		var world_weather := tree.root.get_node_or_null("WorldWeather")
+		if world_weather != null and world_weather.has_method("active_fronts"):
+			fronts = world_weather.call("active_fronts", bounds)
+	for front in fronts:
 		var center_xz := front.get("center", Vector2.ZERO) as Vector2
 		var center := _world_to_screen(Vector3(center_xz.x, 0.0, center_xz.y), ctx)
 		var radius := float(front.get("radius_m", 0.0)) / bounds.size.x * chart.size.x
-		var color := Color(0.75, 0.12, 0.12, 0.68)
+		var color := BrandTokens.alpha(BrandTokens.ALERT, 0.68)
 		if int(front.get("kind", 0)) == WeatherFront.Kind.COLD_FRONT:
-			color = Color(0.12, 0.34, 0.78, 0.72)
+			color = BrandTokens.alpha(BrandTokens.INFO, 0.72)
 		canvas.draw_arc(center, radius, 0.0, TAU, 48, color, 1.8, true)
 		if chart.size.x > 80.0 and chart.size.y > 80.0 and chart.grow(-40.0).has_point(center):
 			canvas.draw_string(
-				ThemeDB.fallback_font,
+				BrandTheme.font_data(),
 				center + Vector2(6.0, -6.0),
 				str(front.get("label", "Front")),
 				HORIZONTAL_ALIGNMENT_LEFT, -1, 10, color,
@@ -585,12 +591,12 @@ func _draw_harbour_occupancy(canvas: CanvasItem, ctx: Dictionary, port_id: Strin
 			badge = "%s · %s" % [badge, job]
 		if badge.length() > 36:
 			badge = badge.substr(0, 35) + "…"
-		var col := Color(0.35, 0.9, 0.55, 0.95) if free else Color(0.95, 0.55, 0.25, 0.98)
+		var col := BrandTokens.OK_LIGHT if free else BrandTokens.WARN
 		## Below pad centre — station commodity labels sit above.
 		var badge_at := label_at + Vector2(0.0, 10.0)
 		canvas.draw_circle(badge_at, 3.5, col)
 		canvas.draw_string(
-			ThemeDB.fallback_font,
+			BrandTheme.font_data(),
 			badge_at + Vector2(6.0, 4.0),
 			badge,
 			HORIZONTAL_ALIGNMENT_LEFT, -1, 10, col,
@@ -636,9 +642,9 @@ func _draw_port_card(
 		return
 	var chart: Rect2 = ctx["chart_rect"]
 	## Navigation mode only — home-port pick uses the Control dossier panel.
-	var panel := Rect2(chart.end.x - 268.0, chart.end.y - 132.0, 256.0, 118.0)
-	canvas.draw_rect(panel, Color(0.92, 0.91, 0.82, 0.97))
-	canvas.draw_rect(panel, Color(0.12, 0.20, 0.20, 0.88), false, 1.0)
+	var panel := Rect2(chart.end.x - 392.0, chart.position.y + 92.0, 380.0, 214.0)
+	canvas.draw_rect(panel, BrandTokens.PAPER)
+	canvas.draw_rect(panel, BrandTokens.SURFACE_EDGE, false, 1.0)
 	var range := "—"
 	var position := info.get("position", Vector3.ZERO) as Vector3
 	if nav != null and nav.has_ship():
@@ -651,27 +657,38 @@ func _draw_port_card(
 	for raw in imports:
 		import_bits.append(CommodityCatalog.commodity_display(str(raw)))
 	var import_line := ", ".join(import_bits) if not import_bits.is_empty() else "—"
-	var rows: Array[String] = [
+	var title_bar := Rect2(panel.position, Vector2(panel.size.x, 48.0))
+	canvas.draw_rect(title_bar, BrandTokens.SEA)
+	canvas.draw_string(
+		BrandTheme.font_display_semibold(),
+		title_bar.position + Vector2(16.0, 31.0),
 		str(info.get("display_name", port_id)).to_upper(),
-		"%s  ·  size %d  ·  %d berths" % [
-			str(info.get("region", "coastal")).capitalize(),
+		HORIZONTAL_ALIGNMENT_LEFT, -1, 22, BrandTokens.INK_INVERSE,
+	)
+	canvas.draw_string(
+		BrandTheme.font_data(),
+		title_bar.position + Vector2(panel.size.x - 92.0, 29.0),
+		range.to_upper(),
+		HORIZONTAL_ALIGNMENT_LEFT, -1, 12, BrandTokens.SEA_TINT,
+	)
+	var rows: Array[String] = [
+		"REGION        %s" % str(info.get("region", "coastal")).to_upper(),
+		"SIZE / BERTHS %d / %d" % [
 			int(info.get("size", 0)),
 			int(info.get("berth_count", 1)),
 		],
-		"Export %s   Pop %d" % [export_label, int(info.get("population", 0))],
-		"Imports %s" % import_line,
-		"Class %s   Range %s" % [
-			str(info.get("max_ship_class_name", "Vessel")),
-			range,
-		],
+		"POPULATION    %d" % int(info.get("population", 0)),
+		"EXPORTS       %s" % export_label.to_upper(),
+		"IMPORTS       %s" % import_line.to_upper(),
+		"MAX CLASS     %s" % str(info.get("max_ship_class_name", "Vessel")).to_upper(),
 	]
 	for index in range(rows.size()):
 		canvas.draw_string(
-			ThemeDB.fallback_font,
-			panel.position + Vector2(10.0, 19.0 + index * 24.0),
+			BrandTheme.font_data(),
+			panel.position + Vector2(16.0, 72.0 + index * 23.0),
 			rows[index],
-			HORIZONTAL_ALIGNMENT_LEFT, -1, 11,
-			Color(0.08, 0.14, 0.14),
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 12,
+			BrandTokens.INK_BODY,
 		)
 
 

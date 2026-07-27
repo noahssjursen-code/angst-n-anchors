@@ -1,0 +1,2 @@
+# Branding source files are standalone deliverables, not game scripts or resources.
+# Keep Godot from registering their generated Palette class in the game project.

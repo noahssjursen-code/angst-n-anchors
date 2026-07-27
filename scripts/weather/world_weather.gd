@@ -58,6 +58,10 @@ func is_initialized() -> bool:
 	return _initialized
 
 
+func current_game_hours() -> float:
+	return WeatherField.current_game_time()
+
+
 func get_state_at(world_pos: Vector3) -> WeatherState:
 	return sample_at(world_pos).to_weather_state()
 

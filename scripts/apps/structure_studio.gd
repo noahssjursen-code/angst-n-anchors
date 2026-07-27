@@ -305,10 +305,10 @@ func _build_orientation_markers() -> void:
 	## markings, not floating billboards that block the camera. Family palette:
 	## amber bow, muted stern, nav red/green for port/starboard.
 	var markers := [
-		["BOW", Vector3(_grid_width * 0.5, 0.06, -1.4), 0.0, HudStyle.C_AMBER],
-		["STERN", Vector3(_grid_width * 0.5, 0.06, _grid_length + 1.4), 180.0, HudStyle.C_LABEL],
-		["PORT", Vector3(-1.6, 0.06, _grid_length * 0.5), 90.0, HudStyle.C_RED],
-		["STARBOARD", Vector3(_grid_width + 1.6, 0.06, _grid_length * 0.5), 270.0, HudStyle.C_GREEN],
+		["BOW", Vector3(_grid_width * 0.5, 0.06, -1.4), 0.0, BrandTokens.BRASS],
+		["STERN", Vector3(_grid_width * 0.5, 0.06, _grid_length + 1.4), 180.0, BrandTokens.INK_INVERSE_DIM],
+		["PORT", Vector3(-1.6, 0.06, _grid_length * 0.5), 90.0, BrandTokens.ALERT],
+		["STARBOARD", Vector3(_grid_width + 1.6, 0.06, _grid_length * 0.5), 270.0, BrandTokens.OK_LIGHT],
 	]
 	for marker in markers:
 		var label := Label3D.new()
@@ -674,7 +674,7 @@ func _place_wall(a: Vector3, b: Vector3) -> void:
 	_snapshot()
 	var wall := _plan.add_wall(start, axis, length, DEFAULT_WALL_HEIGHT)
 	_stamp_library_style(wall, false)
-	_status = "wall %s ×%.0f m" % [axis, length]
+	_set_status("WALL %s / %.0f M" % [axis.to_upper(), length])
 	_rebake()
 	_refresh_panel()
 
@@ -687,11 +687,11 @@ func _place_rect_entity(a: Vector3, b: Vector3, as_room: bool) -> void:
 	if as_room:
 		var room := _plan.add_room(min_pt, Vector3(w, DEFAULT_WALL_HEIGHT, l))
 		_stamp_library_style(room, true)
-		_status = "room %.0f×%.0f×%.0f" % [w, DEFAULT_WALL_HEIGHT, l]
+		_set_status("ROOM %.0f × %.0f × %.0f M" % [w, DEFAULT_WALL_HEIGHT, l])
 	else:
 		var deck := _plan.add_deck(min_pt, Vector2(w, l))
 		_stamp_library_style(deck, false)
-		_status = "deck plate %.0f×%.0f" % [w, l]
+		_set_status("DECK PLATE %.0f × %.0f M" % [w, l])
 	_rebake()
 	_refresh_panel()
 
@@ -708,7 +708,7 @@ func _place_corridor(a: Vector3, b: Vector3) -> void:
 	var room := _plan.add_room(min_pt, Vector3(w, DEFAULT_WALL_HEIGHT, l))
 	room["open_faces"] = ["w", "e"] if along_x else ["n", "s"]
 	_stamp_library_style(room, true)
-	_status = "corridor %.0f×%.0f" % [w, l]
+	_set_status("CORRIDOR %.0f × %.0f M" % [w, l])
 	_rebake()
 	_refresh_panel()
 
@@ -728,9 +728,10 @@ func _place_stair(a: Vector3, b: Vector3) -> void:
 	var stair := _plan.add_stair(min_pt, dir, length, width, DEFAULT_WALL_HEIGHT)
 	_stamp_library_style(stair, false)
 	var cut_deck := _auto_stairwell(stair)
-	_status = "stairs %s ×%.0f m ↑%.0f m" % [dir, length, DEFAULT_WALL_HEIGHT]
+	var result := "STAIRS %s / %.0f M / RISE %.0f M" % [dir.to_upper(), length, DEFAULT_WALL_HEIGHT]
 	if cut_deck >= 0:
-		_status += " — stairwell cut in deck #%d" % cut_deck
+		result += " / STAIRWELL CUT IN DECK %03d" % cut_deck
+	_set_status(result)
 	_rebake()
 	_refresh_panel()
 
@@ -1357,18 +1358,18 @@ func _update_selection_visual() -> void:
 func _save_plan(plan_name: String) -> void:
 	var trimmed := plan_name.strip_edges().to_snake_case()
 	if trimmed.is_empty():
-		_status = "name the structure first"
+		_set_status("NAME THE STRUCTURE FIRST", false)
 		_refresh_panel()
 		return
 	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(STRUCTURES_DIR))
 	var path := "%s/%s.json" % [STRUCTURES_DIR, trimmed]
 	var file := FileAccess.open(path, FileAccess.WRITE)
 	if file == null:
-		_status = "save failed: %s" % path
+		_set_status("SAVE FAILED / %s" % path, false)
 	else:
 		file.store_string(JSON.stringify(_plan.to_dict(), "\t"))
 		file.close()
-		_status = "saved %s" % path
+		_set_status("SAVED / %s" % path)
 	_refresh_panel()
 
 
@@ -1379,7 +1380,7 @@ func _load_plan(path: String) -> void:
 	var parsed: Variant = JSON.parse_string(file.get_as_text())
 	file.close()
 	if parsed is not Dictionary or not StructurePlan.is_plan(parsed as Dictionary):
-		_status = "not a structure plan: %s" % path
+		_set_status("NOT A STRUCTURE PLAN / %s" % path, false)
 		_refresh_panel()
 		return
 	_snapshot()
@@ -1388,7 +1389,7 @@ func _load_plan(path: String) -> void:
 	if _context == "vessel" and not _plan.hull_id.is_empty():
 		_hull_id = _plan.hull_id
 	_selected_id = -1
-	_status = "loaded %s" % path.get_file()
+	_set_status("LOADED / %s" % path.get_file())
 	_rebuild_host_visual()
 	_rebake()
 	_refresh_panel()
@@ -1504,11 +1505,11 @@ func _build_scene() -> void:
 	_camera = Camera3D.new()
 	_camera.far = 2000.0
 	add_child(_camera)
-	## Ghost preview in family copper, selection in buoy amber (HudStyle accents).
+	## Ghost preview and selection share the branded brass interaction accent.
 	_ghost = MeshInstance3D.new()
 	_ghost.mesh = BoxMesh.new()
 	var ghost_mat := StandardMaterial3D.new()
-	ghost_mat.albedo_color = Color(HudStyle.C_COPPER, 0.35)
+	ghost_mat.albedo_color = Color(BrandTokens.BRASS_DEEP, 0.35)
 	ghost_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	ghost_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	_ghost.material_override = ghost_mat
@@ -1517,7 +1518,7 @@ func _build_scene() -> void:
 	_selection_box = MeshInstance3D.new()
 	_selection_box.mesh = BoxMesh.new()
 	var select_mat := StandardMaterial3D.new()
-	select_mat.albedo_color = Color(HudStyle.C_AMBER, 0.20)
+	select_mat.albedo_color = Color(BrandTokens.BRASS, 0.20)
 	select_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	select_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	select_mat.cull_mode = BaseMaterial3D.CULL_DISABLED
@@ -1529,7 +1530,7 @@ func _build_scene() -> void:
 	_opening_ghost = MeshInstance3D.new()
 	_opening_ghost.mesh = BoxMesh.new()
 	var opening_mat := StandardMaterial3D.new()
-	opening_mat.albedo_color = Color(HudStyle.C_AMBER, 0.45)
+	opening_mat.albedo_color = Color(BrandTokens.BRASS, 0.45)
 	opening_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	opening_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	opening_mat.cull_mode = BaseMaterial3D.CULL_DISABLED
@@ -1540,7 +1541,7 @@ func _build_scene() -> void:
 	_hover_box = MeshInstance3D.new()
 	_hover_box.mesh = BoxMesh.new()
 	var hover_mat := StandardMaterial3D.new()
-	hover_mat.albedo_color = Color(HudStyle.C_COPPER, 0.14)
+	hover_mat.albedo_color = Color(BrandTokens.BRASS_DEEP, 0.14)
 	hover_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	hover_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	hover_mat.cull_mode = BaseMaterial3D.CULL_DISABLED
@@ -1553,7 +1554,7 @@ func _build_scene() -> void:
 	marker_mesh.size = Vector3(0.35, 0.35, 0.35)
 	_start_marker.mesh = marker_mesh
 	var marker_mat := StandardMaterial3D.new()
-	marker_mat.albedo_color = Color(HudStyle.C_AMBER, 0.85)
+	marker_mat.albedo_color = Color(BrandTokens.BRASS, 0.85)
 	marker_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	marker_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	_start_marker.material_override = marker_mat
@@ -1589,7 +1590,7 @@ func _build_scene() -> void:
 		pad_mesh.size = Vector3(0.5, 0.5, 0.5)
 		pad.mesh = pad_mesh
 		var pad_mat := StandardMaterial3D.new()
-		pad_mat.albedo_color = Color(HudStyle.C_COPPER, 0.95)
+		pad_mat.albedo_color = Color(BrandTokens.BRASS_DEEP, 0.95)
 		pad_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 		pad_mat.no_depth_test = true
 		pad_mat.render_priority = 19
@@ -1597,10 +1598,11 @@ func _build_scene() -> void:
 		_handle_root.add_child(pad)
 
 
-# ── UI (native maritime chrome: HudStyle + UiBuilder family) ─────────────────
+# ── UI (drawing-office composition from the shared brand system) ─────────────
 
 var _ui_root: Control
 var _status_label: Label ## toast, right side of the context strip
+var _metrics_label: Label
 var _hint_label: Label
 var _context_label: Label
 var _tool_buttons: Dictionary = {}
@@ -1648,7 +1650,7 @@ func _build_ui() -> void:
 	_ui_root = Control.new()
 	_ui_root.set_anchors_preset(Control.PRESET_FULL_RECT)
 	_ui_root.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_ui_root.theme = HudStyle.make_theme()
+	_ui_root.theme = BrandTheme.shared()
 	layer.add_child(_ui_root)
 	_toast_timer = Timer.new()
 	_toast_timer.one_shot = true
@@ -1661,34 +1663,92 @@ func _build_ui() -> void:
 
 
 func _build_top_bar() -> void:
-	var bar := UiBuilder.inner_panel()
+	var bar := BrandComponents.toolbar_panel()
 	bar.name = "TopBar"
 	bar.set_anchors_preset(Control.PRESET_TOP_WIDE)
-	bar.custom_minimum_size = Vector2(0, 54)
+	bar.custom_minimum_size = Vector2(0, 60)
 	_ui_root.add_child(bar)
 	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 8)
+	row.add_theme_constant_override(&"separation", BrandTokens.SPACE_SM)
 	bar.add_child(row)
-	var title := Label.new()
-	title.text = "STRUCTURE STUDIO"
-	HudStyle.apply_display_font(title, 24, HudStyle.C_AMBER)
+
+	var mark := TextureRect.new()
+	mark.texture = load("res://resources/ui/brand/anchor-mark-ink.svg")
+	mark.custom_minimum_size = Vector2(28, 28)
+	mark.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	mark.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	row.add_child(mark)
+
+	var title := BrandLabel.new("STRUCTURE STUDIO", BrandLabel.Role.DISPLAY_SMALL)
+	title.custom_minimum_size.x = 178
+	title.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	row.add_child(title)
+
 	var divider := VSeparator.new()
 	divider.custom_minimum_size = Vector2(1, 0)
 	row.add_child(divider)
-	_context_label = Label.new()
-	_context_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_context_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	HudStyle.apply_body_font(_context_label, 13, HudStyle.C_LABEL)
-	row.add_child(_context_label)
+
+	var tool_defs := [
+		[Tool.SELECT, "SELECT"],
+		[Tool.WALL, "WALL"],
+		[Tool.ROOM, "ROOM"],
+		[Tool.CORRIDOR, "CORRIDOR"],
+		[Tool.DECK, "DECK"],
+		[Tool.STAIR, "STAIR"],
+		[Tool.OPENING, "OPENING"],
+	]
+	for tool_def in tool_defs:
+		var tool: Tool = tool_def[0]
+		var button := BrandComponents.tool_button(str(tool_def[1]), 78.0)
+		button.pressed.connect(func() -> void: _set_tool(tool))
+		row.add_child(button)
+		_tool_buttons[tool] = button
+
+	var spacer := Control.new()
+	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row.add_child(spacer)
+
+	var undo_btn := BrandComponents.compact_button("UNDO", 72.0)
+	undo_btn.pressed.connect(func() -> void: _undo())
+	row.add_child(undo_btn)
+	var redo_btn := BrandComponents.compact_button("REDO", 72.0)
+	redo_btn.pressed.connect(func() -> void: _redo())
+	row.add_child(redo_btn)
+
+	var save_btn := BrandButton.new("SAVE PLAN", BrandButton.Variant.LOUD)
+	save_btn.custom_minimum_size.x = 124
+	save_btn.pressed.connect(func() -> void: _save_plan(_name_edit.text))
+	row.add_child(save_btn)
+
+
+func _build_tool_palette() -> void:
+	var palette := BrandComponents.panel(Vector2(276, 0), BrandPanel.Variant.PAPER)
+	palette.name = "ToolPalette"
+	palette.set_anchors_preset(Control.PRESET_LEFT_WIDE)
+	palette.offset_top = 60.0
+	palette.offset_bottom = -36.0
+	_ui_root.add_child(palette)
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override(&"separation", BrandTokens.SPACE_MD)
+	palette.add_child(box)
+
+	box.add_child(BrandComponents.section_header("BUILD CONTEXT"))
+	var context_row := HBoxContainer.new()
+	context_row.add_theme_constant_override(&"separation", BrandTokens.SPACE_XS)
+	box.add_child(context_row)
 	for context in ["vessel", "building"]:
-		var btn := UiBuilder.tool_button(context.capitalize(), 88.0)
-		btn.pressed.connect(func() -> void: _set_context(context))
-		row.add_child(btn)
-		_context_buttons[context] = btn
+		var button := BrandComponents.tool_button(context.to_upper(), 0.0)
+		button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		button.pressed.connect(func() -> void: _set_context(context))
+		context_row.add_child(button)
+		_context_buttons[context] = button
+
+	_context_label = BrandLabel.new("", BrandLabel.Role.DATA)
+	box.add_child(_context_label)
+
 	_hull_option = OptionButton.new()
-	_hull_option.focus_mode = Control.FOCUS_NONE
-	_hull_option.custom_minimum_size = Vector2(130, 34)
+	_hull_option.focus_mode = Control.FOCUS_ALL
+	_hull_option.custom_minimum_size = Vector2(0, BrandTokens.MIN_HIT_TARGET)
 	var hulls := HullRegistry.catalog()
 	for index in hulls.size():
 		_hull_option.add_item(str((hulls[index] as Dictionary).get("id", "?")), index)
@@ -1698,75 +1758,26 @@ func _build_top_bar() -> void:
 		_hull_id = str((hulls[index] as Dictionary).get("id", _hull_id))
 		_set_context("vessel")
 	)
-	row.add_child(_hull_option)
-	row.add_child(VSeparator.new())
-	var undo_btn := UiBuilder.compact_button("Undo", 64.0)
-	undo_btn.pressed.connect(func() -> void: _undo())
-	row.add_child(undo_btn)
-	var redo_btn := UiBuilder.compact_button("Redo", 64.0)
-	redo_btn.pressed.connect(func() -> void: _redo())
-	row.add_child(redo_btn)
+	box.add_child(_hull_option)
 
-
-func _build_tool_palette() -> void:
-	var palette := UiBuilder.panel(Vector2(238, 0))
-	palette.name = "ToolPalette"
-	palette.set_anchors_preset(Control.PRESET_LEFT_WIDE)
-	palette.offset_top = 60.0
-	palette.offset_bottom = -50.0
-	_ui_root.add_child(palette)
-	var box := VBoxContainer.new()
-	box.add_theme_constant_override("separation", 8)
-	palette.add_child(box)
-	box.add_child(UiBuilder.section_header("TOOLS"))
-	var tool_defs := [
-		[Tool.SELECT, "Select / Move"],
-		[Tool.WALL, "Wall run"],
-		[Tool.ROOM, "Room"],
-		[Tool.CORRIDOR, "Corridor"],
-		[Tool.DECK, "Deck plate"],
-		[Tool.STAIR, "Stairs"],
-		[Tool.OPENING, "Opening"],
-	]
-	for tool_def in tool_defs:
-		var tool: Tool = tool_def[0]
-		var btn := UiBuilder.tool_button(str(tool_def[1]), 0.0)
-		btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		btn.custom_minimum_size = Vector2(0, 38)
-		btn.pressed.connect(func() -> void: _set_tool(tool))
-		box.add_child(btn)
-		_tool_buttons[tool] = btn
-	_opening_section = VBoxContainer.new()
-	_opening_section.add_theme_constant_override("separation", 4)
-	_opening_section.add_child(UiBuilder.section_header("OPENING TYPE"))
-	for opening_type in [StructurePlan.OPENING_DOOR, StructurePlan.OPENING_WINDOW, StructurePlan.OPENING_HOLE]:
-		var btn := UiBuilder.tool_button(opening_type.capitalize(), 0.0)
-		btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		btn.pressed.connect(func() -> void:
-			_opening_type = opening_type
-			_refresh_panel()
-		)
-		_opening_section.add_child(btn)
-		_opening_buttons[opening_type] = btn
-	box.add_child(_opening_section)
-	box.add_child(UiBuilder.separator())
-	box.add_child(UiBuilder.section_header("BUILD LEVEL"))
+	box.add_child(BrandComponents.separator())
+	box.add_child(BrandComponents.section_header("ACTIVE LEVEL"))
 	var level_row := HBoxContainer.new()
-	level_row.add_theme_constant_override("separation", 6)
-	var level_down := UiBuilder.compact_button("−", 34.0)
+	level_row.add_theme_constant_override(&"separation", BrandTokens.SPACE_XS)
+	var level_down := BrandComponents.compact_button("−", BrandTokens.MIN_HIT_TARGET)
 	level_down.pressed.connect(func() -> void: _set_build_level(_active_base - 1.0))
 	level_row.add_child(level_down)
-	_level_label = Label.new()
+	_level_label = BrandLabel.new("", BrandLabel.Role.DATA)
 	_level_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_level_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_level_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	HudStyle.apply_body_font(_level_label, 12, HudStyle.C_TEXT, true)
 	level_row.add_child(_level_label)
-	var level_up := UiBuilder.compact_button("+", 34.0)
+	var level_up := BrandComponents.compact_button("+", BrandTokens.MIN_HIT_TARGET)
 	level_up.pressed.connect(func() -> void: _set_build_level(_active_base + 1.0))
 	level_row.add_child(level_up)
 	box.add_child(level_row)
-	var ghost_btn := UiBuilder.tool_button("Ghost upper decks", 0.0)
+
+	var ghost_btn := BrandComponents.tool_button("GHOST ABOVE  [G]", 0.0)
 	ghost_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	ghost_btn.pressed.connect(func() -> void:
 		_ghost_levels = not _ghost_levels
@@ -1775,7 +1786,8 @@ func _build_tool_palette() -> void:
 	)
 	box.add_child(ghost_btn)
 	_ghost_button = ghost_btn
-	var roofs_btn := UiBuilder.tool_button("Show roofs  [T]", 0.0)
+
+	var roofs_btn := BrandComponents.tool_button("SHOW ROOFS  [T]", 0.0)
 	roofs_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	roofs_btn.pressed.connect(func() -> void:
 		_show_roofs = not _show_roofs
@@ -1784,84 +1796,126 @@ func _build_tool_palette() -> void:
 	)
 	box.add_child(roofs_btn)
 	_roofs_button = roofs_btn
-	box.add_child(UiBuilder.separator())
-	_entities_label = Label.new()
+
+	box.add_child(BrandComponents.separator())
+	_opening_section = VBoxContainer.new()
+	_opening_section.add_theme_constant_override(&"separation", BrandTokens.SPACE_XS)
+	_opening_section.add_child(BrandComponents.section_header("OPENING TYPE"))
+	var opening_row := HBoxContainer.new()
+	opening_row.add_theme_constant_override(&"separation", BrandTokens.SPACE_XS)
+	_opening_section.add_child(opening_row)
+	for opening_type in [StructurePlan.OPENING_DOOR, StructurePlan.OPENING_WINDOW, StructurePlan.OPENING_HOLE]:
+		var btn := BrandComponents.tool_button(opening_type.capitalize(), 0.0)
+		btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		btn.pressed.connect(func() -> void:
+			_opening_type = opening_type
+			_refresh_panel()
+		)
+		opening_row.add_child(btn)
+		_opening_buttons[opening_type] = btn
+	box.add_child(_opening_section)
+
+	var filler := Control.new()
+	filler.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	box.add_child(filler)
+	box.add_child(BrandComponents.separator())
+	_entities_label = BrandLabel.new("", BrandLabel.Role.DATA_MUTED)
 	_entities_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	HudStyle.apply_body_font(_entities_label, 12, HudStyle.C_LABEL)
 	box.add_child(_entities_label)
-	var hints := Label.new()
-	hints.text = "RMB orbit · MMB pan · wheel zoom\nPgUp/PgDn build level · F focus\nDEL delete · Ctrl+Z / Ctrl+Y"
+	var hints := BrandLabel.new(
+		"RMB ORBIT · MMB PAN · WHEEL ZOOM\nPGUP/PGDN LEVEL · F FOCUS\nDEL DELETE · CTRL+Z / CTRL+Y",
+		BrandLabel.Role.MICRO_DATA
+	)
 	hints.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	HudStyle.apply_body_font(hints, 11, HudStyle.C_LABEL)
 	box.add_child(hints)
 
 
 func _build_drawer() -> void:
-	_drawer = UiBuilder.panel(Vector2(272, 0))
+	_drawer = BrandComponents.panel(Vector2(320, 0), BrandPanel.Variant.PAPER)
 	_drawer.name = "PropertiesDrawer"
 	_drawer.set_anchors_preset(Control.PRESET_RIGHT_WIDE)
 	_drawer.offset_top = 60.0
-	_drawer.offset_bottom = -50.0
+	_drawer.offset_bottom = -36.0
 	_ui_root.add_child(_drawer)
+
+	var root_box := VBoxContainer.new()
+	root_box.add_theme_constant_override(&"separation", BrandTokens.SPACE_MD)
+	_drawer.add_child(root_box)
+
+	var scroll := ScrollContainer.new()
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	root_box.add_child(scroll)
+
 	var box := VBoxContainer.new()
-	box.add_theme_constant_override("separation", 10)
-	_drawer.add_child(box)
+	box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	box.add_theme_constant_override(&"separation", BrandTokens.SPACE_MD)
+	scroll.add_child(box)
+
+	box.add_child(BrandComponents.section_header("SURFACE LIBRARY"))
 	_build_library_section(box)
-	box.add_child(UiBuilder.separator())
-	box.add_child(UiBuilder.section_header("PROPERTIES"))
-	_drawer_info = Label.new()
+	box.add_child(BrandComponents.separator())
+	box.add_child(BrandComponents.section_header("PROPERTIES"))
+	_drawer_info = BrandLabel.new("", BrandLabel.Role.BODY_MUTED)
 	_drawer_info.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	HudStyle.apply_body_font(_drawer_info, 12, HudStyle.C_LABEL)
 	box.add_child(_drawer_info)
 	_inspector_box = VBoxContainer.new()
-	_inspector_box.add_theme_constant_override("separation", 8)
+	_inspector_box.add_theme_constant_override(&"separation", BrandTokens.SPACE_SM)
 	box.add_child(_inspector_box)
-	var filler := Control.new()
-	filler.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	box.add_child(filler)
-	box.add_child(UiBuilder.separator())
-	box.add_child(UiBuilder.section_header("STRUCTURE FILE"))
+
+	root_box.add_child(BrandComponents.separator())
+	root_box.add_child(BrandComponents.section_header("STRUCTURE FILE"))
 	_name_edit = LineEdit.new()
-	_name_edit.placeholder_text = "structure name…"
+	_name_edit.placeholder_text = "Structure name"
 	_name_edit.max_length = 32
-	box.add_child(_name_edit)
-	var save_btn := UiBuilder.compact_button("Save JSON", 0.0)
+	root_box.add_child(_name_edit)
+	var save_btn := BrandComponents.primary_button("SAVE JSON", Vector2(0, BrandTokens.MIN_HIT_TARGET))
 	save_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	save_btn.pressed.connect(func() -> void: _save_plan(_name_edit.text))
-	box.add_child(save_btn)
+	root_box.add_child(save_btn)
 	_load_option = OptionButton.new()
-	_load_option.focus_mode = Control.FOCUS_NONE
-	_load_option.custom_minimum_size = Vector2(0, 34)
-	box.add_child(_load_option)
-	var load_btn := UiBuilder.compact_button("Load selected", 0.0)
+	_load_option.focus_mode = Control.FOCUS_ALL
+	_load_option.custom_minimum_size = Vector2(0, BrandTokens.MIN_HIT_TARGET)
+	root_box.add_child(_load_option)
+	var load_btn := BrandComponents.compact_button("LOAD SELECTED", 0.0)
 	load_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	load_btn.pressed.connect(func() -> void:
 		var index := _load_option.selected
 		if index >= 0:
 			_load_plan(str(_load_option.get_item_metadata(index)))
 	)
-	box.add_child(load_btn)
+	root_box.add_child(load_btn)
 
 
 func _build_context_strip() -> void:
-	var strip := UiBuilder.inner_panel()
+	var strip := BrandComponents.panel(Vector2.ZERO, BrandPanel.Variant.BAND)
 	strip.name = "ContextStrip"
 	strip.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
-	strip.custom_minimum_size = Vector2(0, 44)
+	strip.custom_minimum_size = Vector2(0, 36)
 	_ui_root.add_child(strip)
 	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 8)
+	row.add_theme_constant_override(&"separation", BrandTokens.SPACE_LG)
 	strip.add_child(row)
-	_hint_label = Label.new()
+
+	_metrics_label = BrandLabel.new("", BrandLabel.Role.INVERSE_DATA)
+	_metrics_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	row.add_child(_metrics_label)
+
+	var divider := VSeparator.new()
+	divider.custom_minimum_size.x = 1
+	row.add_child(divider)
+
+	_hint_label = BrandLabel.new("", BrandLabel.Role.MICRO_DATA)
 	_hint_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_hint_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	_hint_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	HudStyle.apply_body_font(_hint_label, 12, HudStyle.C_LABEL)
+	_hint_label.add_theme_color_override(&"font_color", BrandTokens.INK_INVERSE_DIM)
 	row.add_child(_hint_label)
-	_status_label = Label.new()
+
+	_status_label = BrandLabel.new("", BrandLabel.Role.STATUS_OK)
 	_status_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	_status_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	HudStyle.apply_body_font(_status_label, 12, HudStyle.C_GREEN, true)
+	_status_label.add_theme_color_override(&"font_color", BrandTokens.OK_LIGHT)
 	row.add_child(_status_label)
 
 
@@ -1871,7 +1925,7 @@ func _set_status(text: String, ok := true) -> void:
 		return
 	_status_label.text = text
 	_status_label.add_theme_color_override(
-		"font_color", HudStyle.C_GREEN if ok else HudStyle.C_RED
+		"font_color", BrandTokens.OK_LIGHT if ok else BrandTokens.ALERT
 	)
 	_toast_timer.start(3.2)
 
@@ -1900,7 +1954,7 @@ func _refresh_panel() -> void:
 	_opening_section.visible = _tool == Tool.OPENING
 	for opening_type in _opening_buttons.keys():
 		(_opening_buttons[opening_type] as Button).set_pressed_no_signal(opening_type == _opening_type)
-	_level_label.text = "%.0f m" % _active_base
+	_level_label.text = "LEVEL %.0f M" % _active_base
 	_ghost_button.set_pressed_no_signal(_ghost_levels)
 	_roofs_button.set_pressed_no_signal(_show_roofs)
 	for slot in _slot_buttons.keys():
@@ -1908,14 +1962,42 @@ func _refresh_panel() -> void:
 	var armed_material := str((_lib[_armed_slot] as Dictionary)["material"])
 	for material_name in _lib_material_buttons.keys():
 		(_lib_material_buttons[material_name] as Button).set_pressed_no_signal(material_name == armed_material)
-	_entities_label.text = "Entities: %d\nUndo steps: %d" % [_plan.entity_count(), _undo_stack.size()]
+	_entities_label.text = "STRUCTURE\n%d PARTS\n%d UNDO STEPS" % [
+		_plan.entity_count(), _undo_stack.size()
+	]
 	_hull_option.visible = _context == "vessel"
 	_context_label.text = (
-		"Vessel — %s" % _hull_id if _context == "vessel" else "Land building"
+		"VESSEL / %s" % _hull_id.to_upper() if _context == "vessel" else "LAND BUILDING"
 	)
-	_hint_label.text = str(TOOL_HINTS.get(_tool, ""))
+	_metrics_label.text = _studio_metrics_text()
+	_hint_label.text = str(TOOL_HINTS.get(_tool, "")).to_upper()
 	_refresh_load_list()
 	_refresh_inspector()
+
+
+func _studio_metrics_text() -> String:
+	var wall_metres := 0.0
+	for wall_raw in _plan.walls:
+		wall_metres += float((wall_raw as Dictionary).get("length", 0.0))
+	var deck_area := 0.0
+	for deck_raw in _plan.decks:
+		var deck_size := (deck_raw as Dictionary).get("size", [0.0, 0.0]) as Array
+		if deck_size.size() >= 2:
+			deck_area += float(deck_size[0]) * float(deck_size[1])
+	var room_volume := 0.0
+	for room_raw in _plan.rooms:
+		var room_size := (room_raw as Dictionary).get("size", [0.0, 0.0, 0.0]) as Array
+		if room_size.size() >= 3:
+			room_volume += (
+				float(room_size[0]) * float(room_size[1]) * float(room_size[2])
+			)
+	return "GRID 1 M   LEVEL %.0f M   PARTS %d   WALL %.0f M   DECK %.0f M²   ROOMS %.0f M³" % [
+		_active_base,
+		_plan.entity_count(),
+		wall_metres,
+		deck_area,
+		room_volume,
+	]
 
 
 func _refresh_load_list() -> void:
@@ -1946,9 +2028,11 @@ func _refresh_inspector() -> void:
 	else:
 		kind = "deck"
 	_drawer_info.text = ""
-	var header := Label.new()
-	header.text = "%s  #%d" % [kind.to_upper(), _selected_id]
-	HudStyle.apply_body_font(header, 13, HudStyle.C_AMBER, true)
+	var header := BrandLabel.new(
+		"%s / PART %03d" % [kind.to_upper(), _selected_id],
+		BrandLabel.Role.DATA
+	)
+	header.add_theme_color_override(&"font_color", BrandTokens.BRASS_DEEP)
 	_inspector_box.add_child(header)
 	var fields: Array = []
 	match kind:
@@ -1985,7 +2069,7 @@ func _refresh_inspector() -> void:
 		plate_row.add_theme_constant_override("separation", 6)
 		for plate_def in [["roof", "Roof"], ["floor", "Floor"]]:
 			var plate_key := str(plate_def[0])
-			var plate_btn := UiBuilder.tool_button(str(plate_def[1]), 0.0)
+			var plate_btn := BrandComponents.tool_button(str(plate_def[1]), 0.0)
 			plate_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 			plate_btn.set_pressed_no_signal(bool(entity.get(plate_key, true)))
 			plate_btn.pressed.connect(func() -> void:
@@ -2002,7 +2086,7 @@ func _refresh_inspector() -> void:
 		face_row.add_theme_constant_override("separation", 6)
 		for face_def in [["n", "N"], ["e", "E"], ["s", "S"], ["w", "W"]]:
 			var face_key := str(face_def[0])
-			var face_btn := UiBuilder.tool_button(str(face_def[1]), 0.0)
+			var face_btn := BrandComponents.tool_button(str(face_def[1]), 0.0)
 			face_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 			face_btn.tooltip_text = "Wall on the %s face" % str(face_def[1])
 			var face_open := (entity.get("open_faces", []) as Array).has(face_key)
@@ -2022,10 +2106,10 @@ func _refresh_inspector() -> void:
 		_inspector_box.add_child(face_row)
 	if kind == "stair":
 		var steps := StructureBaker.stair_step_count(entity)
-		_inspector_box.add_child(UiBuilder.key_value_row(
+		_inspector_box.add_child(BrandComponents.key_value_row(
 			"Steps", "%d × %.0f cm rise" % [steps, float(entity.get("height", 3.0)) / float(steps) * 100.0]
 		))
-		var rotate_btn := UiBuilder.compact_button("Rotate climb  ⟳", 0.0)
+		var rotate_btn := BrandComponents.compact_button("Rotate climb  ⟳", 0.0)
 		rotate_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		rotate_btn.pressed.connect(func() -> void:
 			_snapshot()
@@ -2040,23 +2124,24 @@ func _refresh_inspector() -> void:
 		_inspector_box.add_child(rotate_btn)
 	## Surface readout — painting happens through the armed MATERIAL LIBRARY.
 	if kind in ["room", "corridor"]:
-		_inspector_box.add_child(UiBuilder.key_value_row(
+		_inspector_box.add_child(BrandComponents.key_value_row(
 			"Outside", str(entity.get("material_out", "painted")).capitalize()
 		))
-		_inspector_box.add_child(UiBuilder.key_value_row(
+		_inspector_box.add_child(BrandComponents.key_value_row(
 			"Inside", str(entity.get("material_in", "wood")).capitalize()
 		))
 	else:
-		_inspector_box.add_child(UiBuilder.key_value_row(
+		_inspector_box.add_child(BrandComponents.key_value_row(
 			"Surface", str(entity.get("material", "painted")).capitalize()
 		))
 	var openings: Array = entity.get("openings", [])
 	if not openings.is_empty():
-		var opening_info := Label.new()
-		opening_info.text = "Openings: %d" % openings.size()
-		HudStyle.apply_body_font(opening_info, 12, HudStyle.C_TEXT)
+		var opening_info := BrandLabel.new(
+			"OPENINGS  %d" % openings.size(),
+			BrandLabel.Role.DATA
+		)
 		_inspector_box.add_child(opening_info)
-		var pop_btn := UiBuilder.compact_button("Remove last opening", 0.0)
+		var pop_btn := BrandComponents.compact_button("REMOVE LAST OPENING", 0.0)
 		pop_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		pop_btn.pressed.connect(func() -> void:
 			_snapshot()
@@ -2065,11 +2150,9 @@ func _refresh_inspector() -> void:
 			_refresh_panel()
 		)
 		_inspector_box.add_child(pop_btn)
-	_inspector_box.add_child(UiBuilder.separator())
-	var delete_btn := UiBuilder.compact_button("Delete entity  [DEL]", 0.0)
+	_inspector_box.add_child(BrandComponents.separator())
+	var delete_btn := BrandButton.new("DELETE PART  [DEL]", BrandButton.Variant.DANGER)
 	delete_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	delete_btn.add_theme_color_override("font_color", HudStyle.C_RED)
-	delete_btn.add_theme_color_override("font_hover_color", HudStyle.C_RED)
 	delete_btn.pressed.connect(func() -> void: _delete_selected())
 	_inspector_box.add_child(delete_btn)
 
@@ -2078,12 +2161,11 @@ func _refresh_inspector() -> void:
 ## clicks on materials/swatches paint that slot of the current selection AND
 ## become the default style for everything drawn next.
 func _build_library_section(box: VBoxContainer) -> void:
-	box.add_child(UiBuilder.section_header("MATERIAL LIBRARY"))
 	var slot_row := HBoxContainer.new()
-	slot_row.add_theme_constant_override("separation", 6)
+	slot_row.add_theme_constant_override(&"separation", BrandTokens.SPACE_XS)
 	for slot_def in [["out", "Outside"], ["in", "Inside"]]:
 		var slot := str(slot_def[0])
-		var btn := UiBuilder.tool_button(str(slot_def[1]), 0.0)
+		var btn := BrandComponents.tool_button(str(slot_def[1]).to_upper(), 0.0)
 		btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		btn.pressed.connect(func() -> void:
 			_armed_slot = slot
@@ -2093,28 +2175,28 @@ func _build_library_section(box: VBoxContainer) -> void:
 		_slot_buttons[slot] = btn
 	box.add_child(slot_row)
 	var material_flow := HFlowContainer.new()
-	material_flow.add_theme_constant_override("h_separation", 4)
-	material_flow.add_theme_constant_override("v_separation", 4)
+	material_flow.add_theme_constant_override(&"h_separation", BrandTokens.SPACE_XS)
+	material_flow.add_theme_constant_override(&"v_separation", BrandTokens.SPACE_XS)
 	for material_name in MATERIAL_LIBRARY:
-		var btn := UiBuilder.tool_button(material_name.capitalize(), 62.0)
+		var btn := BrandComponents.tool_button(material_name.to_upper(), 62.0)
 		btn.pressed.connect(func() -> void: _apply_library_material(material_name))
 		material_flow.add_child(btn)
 		_lib_material_buttons[material_name] = btn
 	box.add_child(material_flow)
 	var swatches := HFlowContainer.new()
-	swatches.add_theme_constant_override("h_separation", 4)
-	swatches.add_theme_constant_override("v_separation", 4)
+	swatches.add_theme_constant_override(&"h_separation", BrandTokens.SPACE_XS)
+	swatches.add_theme_constant_override(&"v_separation", BrandTokens.SPACE_XS)
 	for swatch_variant in COLOR_LIBRARY:
 		var swatch_color := swatch_variant[1] as Color
 		var swatch := Button.new()
 		swatch.focus_mode = Control.FOCUS_NONE
-		swatch.custom_minimum_size = Vector2(26, 26)
+		swatch.custom_minimum_size = Vector2(32, 32)
 		swatch.tooltip_text = str(swatch_variant[0])
 		var sb := StyleBoxFlat.new()
 		sb.bg_color = swatch_color
-		sb.border_color = HudStyle.C_BRASS
+		sb.border_color = BrandTokens.SEA_LINE
 		sb.set_border_width_all(1)
-		sb.set_corner_radius_all(2)
+		sb.set_corner_radius_all(0)
 		swatch.add_theme_stylebox_override("normal", sb)
 		swatch.add_theme_stylebox_override("hover", sb)
 		swatch.add_theme_stylebox_override("pressed", sb)
@@ -2178,11 +2260,9 @@ func _stamp_library_style(entity: Dictionary, is_room: bool) -> void:
 
 func _spin_row(label_text: String, value: float, min_value: float, max_value: float, step: float, on_change: Callable) -> HBoxContainer:
 	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 8)
-	var label := Label.new()
-	label.text = label_text.capitalize()
+	row.add_theme_constant_override(&"separation", BrandTokens.SPACE_SM)
+	var label := BrandLabel.new(label_text.to_upper(), BrandLabel.Role.SECTION)
 	label.custom_minimum_size = Vector2(84, 0)
-	HudStyle.apply_body_font(label, 12, HudStyle.C_LABEL)
 	row.add_child(label)
 	var spin := SpinBox.new()
 	spin.min_value = min_value

@@ -13,6 +13,7 @@ var _ledger: VBoxContainer
 
 func _ready() -> void:
 	set_anchors_preset(Control.PRESET_FULL_RECT)
+	theme = BrandTheme.shared()
 	_build()
 	var view := get_node_or_null("/root/LocalPlayerView")
 	if view != null and view.has_signal("company_changed"):
@@ -28,7 +29,7 @@ func refresh() -> void:
 	var summary: Dictionary = view.get_company_summary() if view != null and view.has_method("get_company_summary") else {}
 	_title.text = str(summary.get("name", "UNREGISTERED COMPANY")).to_upper()
 	_subtitle.text = "%s  ·  HOME %s" % [
-		PlayerSession.format_money(int(summary.get("balance_marks", 0))),
+		BrandFormat.money_text(int(summary.get("balance_marks", 0))),
 		str(summary.get("home_port_id", "—")).to_upper(),
 	]
 	_clear(_overview)
@@ -44,7 +45,7 @@ func refresh() -> void:
 func _build() -> void:
 	var shade := ColorRect.new()
 	shade.set_anchors_preset(Control.PRESET_FULL_RECT)
-	shade.color = Color(0.012, 0.022, 0.028, 0.97)
+	shade.color = BrandTokens.alpha(BrandTokens.SCRIM, 0.92)
 	add_child(shade)
 	var outer := MarginContainer.new()
 	outer.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -53,9 +54,7 @@ func _build() -> void:
 	outer.add_theme_constant_override("margin_top", 38)
 	outer.add_theme_constant_override("margin_bottom", 38)
 	add_child(outer)
-	var panel := PanelContainer.new()
-	panel.theme = HudStyle.make_theme()
-	panel.add_theme_stylebox_override("panel", HudStyle.make_title_panel_style())
+	var panel := BrandPanel.new(BrandPanel.Variant.RULED)
 	outer.add_child(panel)
 	var margin := MarginContainer.new()
 	margin.add_theme_constant_override("margin_left", 30)
@@ -72,13 +71,12 @@ func _build() -> void:
 	names.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	heading.add_child(names)
 	_title = Label.new()
-	HudStyle.apply_display_font(_title, 38, HudStyle.C_TEXT)
+	BrandTheme.apply_display_font(_title, BrandTokens.DISPLAY_M, BrandTokens.INK)
 	names.add_child(_title)
 	_subtitle = Label.new()
-	HudStyle.apply_body_font(_subtitle, 13, HudStyle.C_AMBER, true)
+	BrandTheme.apply_body_font(_subtitle, BrandTokens.LABEL_MONO, BrandTokens.BRASS_DEEP, true)
 	names.add_child(_subtitle)
-	var close := Button.new()
-	close.text = "Close  [ Esc ]"
+	var close := BrandButton.new("CLOSE · ESC", BrandButton.Variant.QUIET)
 	close.pressed.connect(func() -> void: close_requested.emit())
 	heading.add_child(close)
 
@@ -110,7 +108,7 @@ func _tab_column(tabs: TabContainer, title: String) -> VBoxContainer:
 
 func _build_overview(summary: Dictionary) -> void:
 	_section(_overview, "COMPANY STATUS")
-	_row(_overview, "Available funds", PlayerSession.format_money(int(summary.get("balance_marks", 0))))
+	_row(_overview, "Available funds", BrandFormat.money_text(int(summary.get("balance_marks", 0))))
 	_row(_overview, "Owned vessels", str((summary.get("vessels", []) as Array).size()))
 	_row(_overview, "Stored lots", str((summary.get("inventory_lots", []) as Array).size()))
 	var leases := summary.get("warehouse_leases", []) as Array
@@ -123,7 +121,7 @@ func _build_overview(summary: Dictionary) -> void:
 		_row(_overview, "Port", str(lease.get("port_id", "—")).to_upper())
 		_row(_overview, "Capacity", "%d units" % int(lease.get("capacity_units", 0)))
 		_row(_overview, "Used", "%d units" % int(lease.get("used_units", 0)))
-		_row(_overview, "Rent", "%s / day" % PlayerSession.format_money(int(lease.get("rent_marks_per_day", 0))))
+		_row(_overview, "Rent", "%s / day" % BrandFormat.money_text(int(lease.get("rent_marks_per_day", 0))))
 
 
 func _build_vessels(summary: Array) -> void:
@@ -169,7 +167,7 @@ func _build_ledger(entries: Array) -> void:
 		var entry := raw as Dictionary
 		var amount := int(entry.get("amount_marks", 0))
 		_row(_ledger, str(entry.get("description", "Transaction")), "%s%s" % [
-			"+" if amount > 0 else "", PlayerSession.format_money(amount),
+			"+" if amount > 0 else "", BrandFormat.money_text(amount),
 		])
 
 
@@ -177,19 +175,19 @@ func _section(parent: VBoxContainer, text: String) -> void:
 	var label := Label.new()
 	label.text = text
 	label.add_theme_constant_override("outline_size", 1)
-	HudStyle.apply_body_font(label, 11, HudStyle.C_COPPER, true)
+	BrandTheme.apply_body_font(label, BrandTokens.LABEL_MONO, BrandTokens.INK_MUTED, true)
 	parent.add_child(label)
 
 
 func _row(parent: VBoxContainer, key: String, value: String) -> void:
-	parent.add_child(UiBuilder.key_value_row(key, value, HudStyle.C_AMBER))
+	parent.add_child(BrandComponents.key_value_row(key, value, BrandTokens.INK))
 
 
 func _note(parent: VBoxContainer, text: String) -> void:
 	var label := Label.new()
 	label.text = text
 	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	HudStyle.apply_body_font(label, 13, HudStyle.C_LABEL)
+	BrandTheme.apply_body_font(label, BrandTokens.BODY, BrandTokens.INK_BODY)
 	parent.add_child(label)
 
 

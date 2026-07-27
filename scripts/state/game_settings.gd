@@ -29,9 +29,15 @@ var max_fps:        int        = 120
 var mouse_sensitivity: float = 1.0           # multiplier applied to player.gd's base sensitivity
 var invert_mouse_y:    bool  = false
 
+# ── Interface / accessibility ────────────────────────────────────────────────
+var ui_scale: float = 1.0
+var reduced_motion: bool = false
+var interface_locale: String = "en"
+
 # ── Chart / helm minimap ──────────────────────────────────────────────────────
 var chart_weather_enabled: bool = true
 var chart_fishing_enabled: bool = true
+var chart_traffic_enabled: bool = true
 var chart_profile: int = 0
 var minimap_collapsed: bool = false
 
@@ -95,8 +101,12 @@ func load_settings(path: String = CFG_PATH) -> void:
 		max_fps = saved_max_fps
 	mouse_sensitivity = float(cfg.get_value("input",   "mouse_sens",    mouse_sensitivity))
 	invert_mouse_y    = bool(cfg.get_value("input",    "invert_mouse_y", invert_mouse_y))
+	ui_scale = clampf(float(cfg.get_value("interface", "ui_scale", ui_scale)), 0.8, 1.4)
+	reduced_motion = bool(cfg.get_value("interface", "reduced_motion", reduced_motion))
+	interface_locale = str(cfg.get_value("interface", "locale", interface_locale))
 	chart_weather_enabled = bool(cfg.get_value("chart", "weather", chart_weather_enabled))
 	chart_fishing_enabled = bool(cfg.get_value("chart", "fishing", chart_fishing_enabled))
+	chart_traffic_enabled = bool(cfg.get_value("chart", "traffic", chart_traffic_enabled))
 	chart_profile = int(cfg.get_value("chart", "profile", chart_profile))
 	minimap_collapsed = bool(cfg.get_value("chart", "minimap_collapsed", minimap_collapsed))
 
@@ -121,8 +131,12 @@ func save_settings(path: String = CFG_PATH) -> void:
 	cfg.set_value("graphics", "fps_cap_user_selected", true)
 	cfg.set_value("input",    "mouse_sens",     mouse_sensitivity)
 	cfg.set_value("input",    "invert_mouse_y", invert_mouse_y)
+	cfg.set_value("interface", "ui_scale", ui_scale)
+	cfg.set_value("interface", "reduced_motion", reduced_motion)
+	cfg.set_value("interface", "locale", interface_locale)
 	cfg.set_value("chart",    "weather",        chart_weather_enabled)
 	cfg.set_value("chart",    "fishing",        chart_fishing_enabled)
+	cfg.set_value("chart",    "traffic",        chart_traffic_enabled)
 	cfg.set_value("chart",    "profile",        chart_profile)
 	cfg.set_value("chart",    "minimap_collapsed", minimap_collapsed)
 	cfg.save(path)
@@ -133,6 +147,7 @@ func save_settings(path: String = CFG_PATH) -> void:
 func apply_all() -> void:
 	_apply_audio()
 	_apply_graphics()
+	_apply_interface()
 	settings_changed.emit()
 
 
@@ -167,3 +182,11 @@ func _apply_graphics() -> void:
 		DisplayServer.VSYNC_ENABLED if vsync_enabled else DisplayServer.VSYNC_DISABLED
 	)
 	Engine.max_fps = maxi(max_fps, 0)
+
+
+func _apply_interface() -> void:
+	ui_scale = clampf(ui_scale, 0.8, 1.4)
+	if not interface_locale.strip_edges().is_empty():
+		TranslationServer.set_locale(interface_locale)
+	if BrandTheme.shared() != null:
+		BrandTheme.shared().default_base_scale = ui_scale

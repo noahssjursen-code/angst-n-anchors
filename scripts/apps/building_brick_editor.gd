@@ -174,7 +174,7 @@ func _build_chrome() -> void:
 	_root.name = "EditorRoot"
 	_root.visible = false
 	_root.set_anchors_preset(Control.PRESET_FULL_RECT)
-	_root.theme = HudStyle.make_theme()
+	_root.theme = BrandTheme.shared()
 	add_child(_root)
 
 	var bg := ColorRect.new()
@@ -227,7 +227,7 @@ func _build_chrome() -> void:
 
 
 func _build_top_bar(parent: VBoxContainer) -> void:
-	var panel := UiBuilder.inner_panel()
+	var panel := BrandComponents.inner_panel()
 	panel.name = "TopBar"
 	panel.custom_minimum_size.y = 54.0
 	parent.add_child(panel)
@@ -239,7 +239,7 @@ func _build_top_bar(parent: VBoxContainer) -> void:
 	var title := Label.new()
 	title.name = "TitleLabel"
 	title.text = "BUILDING"
-	HudStyle.apply_display_font(title, 24, HudStyle.C_AMBER)
+	BrandTheme.apply_display_font(title, 24, BrandTokens.BRASS)
 	bar.add_child(title)
 
 	var rule := VSeparator.new()
@@ -250,21 +250,21 @@ func _build_top_bar(parent: VBoxContainer) -> void:
 	_summary_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_summary_lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	_summary_lbl.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
-	HudStyle.apply_body_font(_summary_lbl, 13, HudStyle.C_LABEL)
+	BrandTheme.apply_body_font(_summary_lbl, 13, BrandTokens.INK_INVERSE_DIM)
 	bar.add_child(_summary_lbl)
 
-	var building_btn := UiBuilder.compact_button("Building", 90)
+	var building_btn := BrandComponents.compact_button("Building", 90)
 	building_btn.tooltip_text = "Name, role, pad template, load / save"
 	building_btn.pressed.connect(_toggle_building_dialog)
 	bar.add_child(building_btn)
 
-	_confirm_btn = UiBuilder.compact_button("Save", 90)
+	_confirm_btn = BrandComponents.compact_button("Save", 90)
 	_confirm_btn.pressed.connect(_save_json)
 	bar.add_child(_confirm_btn)
 
 
 func _build_palette(parent: HBoxContainer) -> void:
-	var side := UiBuilder.panel(Vector2(292, 0))
+	var side := BrandComponents.panel(Vector2(292, 0))
 	side.name = "PartsPalette"
 	side.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	parent.add_child(side)
@@ -275,12 +275,12 @@ func _build_palette(parent: HBoxContainer) -> void:
 
 	var heading := HBoxContainer.new()
 	col.add_child(heading)
-	var title := UiBuilder.section_header("PARTS")
+	var title := BrandComponents.section_header("PARTS")
 	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	heading.add_child(title)
 	var count := Label.new()
 	count.text = str(BrickCatalog.ids_for_buildings().size())
-	count.add_theme_color_override("font_color", HudStyle.C_LABEL)
+	count.add_theme_color_override("font_color", BrandTokens.INK_INVERSE_DIM)
 	heading.add_child(count)
 
 	var brick_scroll := ScrollContainer.new()
@@ -352,7 +352,7 @@ func _build_viewport(parent: VBoxContainer) -> void:
 
 
 func _build_viewport_chrome(parent: VBoxContainer) -> void:
-	var strip := UiBuilder.inner_panel()
+	var strip := BrandComponents.inner_panel()
 	strip.name = "ContextStrip"
 	strip.custom_minimum_size.y = 48.0
 	parent.add_child(strip)
@@ -361,18 +361,18 @@ func _build_viewport_chrome(parent: VBoxContainer) -> void:
 	row.add_theme_constant_override("separation", 6)
 	strip.add_child(row)
 
-	_place_btn = UiBuilder.tool_button("Place")
+	_place_btn = BrandComponents.tool_button("Place")
 	_place_btn.pressed.connect(func() -> void: _set_tool(Tool.PLACE))
 	row.add_child(_place_btn)
-	_erase_btn = UiBuilder.tool_button("Erase")
+	_erase_btn = BrandComponents.tool_button("Erase")
 	_erase_btn.pressed.connect(func() -> void: _set_tool(Tool.ERASE))
 	row.add_child(_erase_btn)
-	_mark_btn = UiBuilder.tool_button("Mark")
+	_mark_btn = BrandComponents.tool_button("Mark")
 	_mark_btn.tooltip_text = "Click two opposite corners to select a region (M). Press again or Esc to clear."
 	_mark_btn.pressed.connect(_toggle_mark_tool)
 	row.add_child(_mark_btn)
 
-	var rotate := UiBuilder.compact_button("Rotate  R", 86)
+	var rotate := BrandComponents.compact_button("Rotate  R", 86)
 	rotate.pressed.connect(func() -> void:
 		_rotate_yaw()
 		_refresh_rules()
@@ -380,12 +380,12 @@ func _build_viewport_chrome(parent: VBoxContainer) -> void:
 	)
 	row.add_child(rotate)
 
-	var clear_btn := UiBuilder.compact_button("Clear", 70)
+	var clear_btn := BrandComponents.compact_button("Clear", 70)
 	clear_btn.tooltip_text = "Clear all bricks on this pad"
 	clear_btn.pressed.connect(_clear_layout)
 	row.add_child(clear_btn)
 
-	var layer_down := UiBuilder.compact_button("−", 34)
+	var layer_down := BrandComponents.compact_button("−", 34)
 	layer_down.tooltip_text = "Previous layer ([)"
 	layer_down.pressed.connect(func() -> void: _set_layer_y(_layer_y - 1))
 	row.add_child(layer_down)
@@ -394,10 +394,10 @@ func _build_viewport_chrome(parent: VBoxContainer) -> void:
 	_layer_lbl.custom_minimum_size.x = 92.0
 	_layer_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_layer_lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	HudStyle.apply_body_font(_layer_lbl, 12, HudStyle.C_TEXT, true)
+	BrandTheme.apply_body_font(_layer_lbl, 12, BrandTokens.INK_INVERSE, true)
 	row.add_child(_layer_lbl)
 
-	var layer_up := UiBuilder.compact_button("+", 34)
+	var layer_up := BrandComponents.compact_button("+", 34)
 	layer_up.tooltip_text = "Next layer (])"
 	layer_up.pressed.connect(func() -> void: _set_layer_y(_layer_y + 1))
 	row.add_child(layer_up)
@@ -406,19 +406,19 @@ func _build_viewport_chrome(parent: VBoxContainer) -> void:
 	_hint_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_hint_lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	_hint_lbl.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
-	HudStyle.apply_body_font(_hint_lbl, 12, HudStyle.C_LABEL)
+	BrandTheme.apply_body_font(_hint_lbl, 12, BrandTokens.INK_INVERSE_DIM)
 	row.add_child(_hint_lbl)
 
 	_toast_lbl = Label.new()
 	_toast_lbl.visible = false
 	_toast_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	_toast_lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	HudStyle.apply_body_font(_toast_lbl, 12, HudStyle.C_GREEN, true)
+	BrandTheme.apply_body_font(_toast_lbl, 12, BrandTokens.OK_LIGHT, true)
 	row.add_child(_toast_lbl)
 
 
 func _build_context_drawer(parent: HBoxContainer) -> void:
-	_context_drawer = UiBuilder.panel(Vector2(272, 0))
+	_context_drawer = BrandComponents.panel(Vector2(272, 0))
 	_context_drawer.name = "PropertiesDrawer"
 	_context_drawer.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	parent.add_child(_context_drawer)
@@ -427,16 +427,16 @@ func _build_context_drawer(parent: HBoxContainer) -> void:
 	col.add_theme_constant_override("separation", 10)
 	_context_drawer.add_child(col)
 
-	_context_title = UiBuilder.section_header("PROPERTIES")
+	_context_title = BrandComponents.section_header("PROPERTIES")
 	col.add_child(_context_title)
 	_context_info = Label.new()
 	_context_info.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	HudStyle.apply_body_font(_context_info, 12, HudStyle.C_LABEL)
+	BrandTheme.apply_body_font(_context_info, 12, BrandTokens.INK_INVERSE_DIM)
 	col.add_child(_context_info)
 
 	_color_section = VBoxContainer.new()
 	_color_section.add_theme_constant_override("separation", 6)
-	_color_section.add_child(UiBuilder.section_header("COLOUR"))
+	_color_section.add_child(BrandComponents.section_header("COLOUR"))
 	var color_row := HBoxContainer.new()
 	color_row.add_theme_constant_override("separation", 6)
 	_color_section.add_child(color_row)
@@ -446,7 +446,7 @@ func _build_context_drawer(parent: HBoxContainer) -> void:
 	_color_picker.color = _paint_color
 	_color_picker.color_changed.connect(_on_paint_color_changed)
 	color_row.add_child(_color_picker)
-	var default_btn := UiBuilder.compact_button("Default")
+	var default_btn := BrandComponents.compact_button("Default")
 	default_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	default_btn.pressed.connect(_use_brick_catalog_color)
 	color_row.add_child(default_btn)
@@ -462,7 +462,7 @@ func _build_context_drawer(parent: HBoxContainer) -> void:
 		swatch.tooltip_text = str(preset.get("name", "Colour"))
 		var sb := StyleBoxFlat.new()
 		sb.set_border_width_all(1)
-		sb.border_color = HudStyle.C_BRASS
+		sb.border_color = BrandTokens.SEA_LINE
 		sb.set_corner_radius_all(2)
 		if bool(preset.get("custom", true)) == false:
 			sb.bg_color = Color(0.2, 0.2, 0.22)
@@ -480,7 +480,7 @@ func _build_context_drawer(parent: HBoxContainer) -> void:
 
 	_sign_section = VBoxContainer.new()
 	_sign_section.add_theme_constant_override("separation", 6)
-	_sign_section.add_child(UiBuilder.section_header("SIGN TEXT"))
+	_sign_section.add_child(BrandComponents.section_header("SIGN TEXT"))
 	_sign_text_edit = LineEdit.new()
 	_sign_text_edit.placeholder_text = "Building name / label…"
 	_sign_text_edit.max_length = 32
@@ -491,18 +491,18 @@ func _build_context_drawer(parent: HBoxContainer) -> void:
 
 	_clipboard_section = VBoxContainer.new()
 	_clipboard_section.add_theme_constant_override("separation", 6)
-	_clipboard_section.add_child(UiBuilder.section_header("SELECTION"))
-	_copy_btn = UiBuilder.compact_button("Copy selection  Ctrl+C")
+	_clipboard_section.add_child(BrandComponents.section_header("SELECTION"))
+	_copy_btn = BrandComponents.compact_button("Copy selection  Ctrl+C")
 	_copy_btn.pressed.connect(_copy_marked_region)
 	_clipboard_section.add_child(_copy_btn)
-	_paste_btn = UiBuilder.compact_button("Paste at cursor  Ctrl+V")
+	_paste_btn = BrandComponents.compact_button("Paste at cursor  Ctrl+V")
 	_paste_btn.pressed.connect(_paste_clipboard_at_cursor)
 	_clipboard_section.add_child(_paste_btn)
-	_paste_layer_btn = UiBuilder.compact_button("Paste on this layer")
+	_paste_layer_btn = BrandComponents.compact_button("Paste on this layer")
 	_paste_layer_btn.tooltip_text = "Same XZ as the copy, on the current layer — Layer+ between presses"
 	_paste_layer_btn.pressed.connect(_paste_clipboard_on_layer)
 	_clipboard_section.add_child(_paste_layer_btn)
-	_paste_up_btn = UiBuilder.compact_button("Paste one storey ↑")
+	_paste_up_btn = BrandComponents.compact_button("Paste one storey ↑")
 	_paste_up_btn.tooltip_text = "Stack another copy above the last paste (keeps going each press)"
 	_paste_up_btn.pressed.connect(_paste_clipboard_one_up)
 	_clipboard_section.add_child(_paste_up_btn)
@@ -510,7 +510,7 @@ func _build_context_drawer(parent: HBoxContainer) -> void:
 
 
 func _build_building_dialog() -> void:
-	_building_dialog = UiBuilder.panel(Vector2(410, 0))
+	_building_dialog = BrandComponents.panel(Vector2(410, 0))
 	_building_dialog.name = "BuildingDialog"
 	_building_dialog.visible = false
 	_building_dialog.set_anchors_preset(Control.PRESET_CENTER_RIGHT)
@@ -532,15 +532,15 @@ func _build_building_dialog() -> void:
 
 	var heading := HBoxContainer.new()
 	col.add_child(heading)
-	var title := UiBuilder.title_label("BUILDING", 20)
+	var title := BrandComponents.title_label("BUILDING", 20)
 	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	heading.add_child(title)
-	var close := UiBuilder.compact_button("×", 34)
+	var close := BrandComponents.compact_button("×", 34)
 	close.pressed.connect(func() -> void: _building_dialog.visible = false)
 	heading.add_child(close)
 
-	var help := UiBuilder.subtitle_label(
+	var help := BrandComponents.subtitle_label(
 		"LMB paint · RMB orbit · MMB pan · Scroll zoom · [ ] layer · R rotate · X erase\n"
 		+ "M mark A→B · Ctrl+C copy · Ctrl+V paste",
 		11,
@@ -548,13 +548,13 @@ func _build_building_dialog() -> void:
 	help.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	col.add_child(help)
 
-	col.add_child(UiBuilder.section_header("FILE"))
+	col.add_child(BrandComponents.section_header("FILE"))
 	_file_lbl = Label.new()
 	_file_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	HudStyle.apply_body_font(_file_lbl, 12, HudStyle.C_TEXT)
+	BrandTheme.apply_body_font(_file_lbl, 12, BrandTokens.INK_INVERSE)
 	col.add_child(_file_lbl)
 
-	col.add_child(UiBuilder.section_header("DISPLAY NAME"))
+	col.add_child(BrandComponents.section_header("DISPLAY NAME"))
 	_name_edit = LineEdit.new()
 	_name_edit.placeholder_text = "Untitled Building"
 	_name_edit.text_changed.connect(func(_t: String) -> void:
@@ -564,38 +564,38 @@ func _build_building_dialog() -> void:
 	)
 	col.add_child(_name_edit)
 
-	col.add_child(UiBuilder.section_header("SERVICE ROLE"))
+	col.add_child(BrandComponents.section_header("SERVICE ROLE"))
 	_role_option = OptionButton.new()
 	_populate_role_options()
 	_role_option.item_selected.connect(_on_role_selected)
 	col.add_child(_role_option)
 
-	col.add_child(UiBuilder.section_header("APRON PAD"))
+	col.add_child(BrandComponents.section_header("APRON PAD"))
 	_pad_template_option = OptionButton.new()
 	_populate_pad_template_options()
 	_pad_template_option.item_selected.connect(_on_pad_template_selected)
 	col.add_child(_pad_template_option)
-	var pad_hint := UiBuilder.subtitle_label("Locks volume to N×22 × M×22 m for port pads", 11)
+	var pad_hint := BrandComponents.subtitle_label("Locks volume to N×22 × M×22 m for port pads", 11)
 	pad_hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	col.add_child(pad_hint)
 
-	col.add_child(UiBuilder.separator())
+	col.add_child(BrandComponents.separator())
 	_rules_lbl = Label.new()
 	_rules_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	HudStyle.apply_body_font(_rules_lbl, 12, HudStyle.C_TEXT)
+	BrandTheme.apply_body_font(_rules_lbl, 12, BrandTokens.INK_INVERSE)
 	col.add_child(_rules_lbl)
 
-	col.add_child(UiBuilder.section_header("EXISTING"))
+	col.add_child(BrandComponents.section_header("EXISTING"))
 	_load_option = OptionButton.new()
 	col.add_child(_load_option)
 	var load_row := HBoxContainer.new()
 	load_row.add_theme_constant_override("separation", 6)
 	col.add_child(load_row)
-	var load_selected := UiBuilder.compact_button("Load")
+	var load_selected := BrandComponents.compact_button("Load")
 	load_selected.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	load_selected.pressed.connect(_load_selected_json)
 	load_row.add_child(load_selected)
-	var browse_btn := UiBuilder.compact_button("Browse…")
+	var browse_btn := BrandComponents.compact_button("Browse…")
 	browse_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	browse_btn.pressed.connect(_show_open_dialog)
 	load_row.add_child(browse_btn)
@@ -603,11 +603,11 @@ func _build_building_dialog() -> void:
 	var save_row := HBoxContainer.new()
 	save_row.add_theme_constant_override("separation", 6)
 	col.add_child(save_row)
-	var save_btn := UiBuilder.compact_button("Save")
+	var save_btn := BrandComponents.compact_button("Save")
 	save_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	save_btn.pressed.connect(_save_json)
 	save_row.add_child(save_btn)
-	var save_as_btn := UiBuilder.compact_button("Save As…")
+	var save_as_btn := BrandComponents.compact_button("Save As…")
 	save_as_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	save_as_btn.pressed.connect(_show_save_dialog)
 	save_row.add_child(save_as_btn)
@@ -615,18 +615,18 @@ func _build_building_dialog() -> void:
 	var util_row := HBoxContainer.new()
 	util_row.add_theme_constant_override("separation", 6)
 	col.add_child(util_row)
-	var new_btn := UiBuilder.compact_button("New blank")
+	var new_btn := BrandComponents.compact_button("New blank")
 	new_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	new_btn.pressed.connect(_new_blank)
 	util_row.add_child(new_btn)
-	var clear_btn := UiBuilder.compact_button("Clear pad")
+	var clear_btn := BrandComponents.compact_button("Clear pad")
 	clear_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	clear_btn.pressed.connect(_clear_layout)
 	util_row.add_child(clear_btn)
 
 	_export_lbl = Label.new()
 	_export_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	HudStyle.apply_body_font(_export_lbl, 11, HudStyle.C_LABEL)
+	BrandTheme.apply_body_font(_export_lbl, 11, BrandTokens.INK_INVERSE_DIM)
 	col.add_child(_export_lbl)
 
 
@@ -667,7 +667,7 @@ func _unhandled_input(event: InputEvent) -> void:
 	if event.is_action_pressed("ui_cancel"):
 		if _mark_anchor_set or _tool == Tool.MARK:
 			_set_tool(Tool.PLACE)
-			_set_hint("Mark cancelled.", HudStyle.C_LABEL)
+			_set_hint("Mark cancelled.", BrandTokens.INK_INVERSE_DIM)
 			get_viewport().set_input_as_handled()
 			return
 	if event is InputEventKey and event.pressed and not event.echo:
@@ -1115,8 +1115,8 @@ func _make_item_row(brick_id: String) -> PanelContainer:
 				_select_brick(brick_id)
 	)
 	var sb := StyleBoxFlat.new()
-	sb.bg_color = HudStyle.C_BG_INNER
-	sb.border_color = HudStyle.C_BRASS
+	sb.bg_color = BrandTokens.SCRIM
+	sb.border_color = BrandTokens.SEA_LINE
 	sb.set_border_width_all(1)
 	sb.set_corner_radius_all(3)
 	sb.set_content_margin_all(5)
@@ -1124,7 +1124,7 @@ func _make_item_row(brick_id: String) -> PanelContainer:
 	row.set_meta("style", sb)
 	row.mouse_entered.connect(func() -> void:
 		if not (_tool == Tool.PLACE and _brick_id == brick_id):
-			sb.border_color = HudStyle.C_COPPER
+			sb.border_color = BrandTokens.BRASS_DEEP
 	)
 	row.mouse_exited.connect(func() -> void: _refresh_palette_selection())
 
@@ -1159,7 +1159,7 @@ func _make_item_row(brick_id: String) -> PanelContainer:
 	name_lbl.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	name_lbl.custom_minimum_size.x = 112
 	name_lbl.add_theme_font_size_override("font_size", 11)
-	name_lbl.add_theme_color_override("font_color", HudStyle.C_TEXT)
+	name_lbl.add_theme_color_override("font_color", BrandTokens.INK_INVERSE)
 	col.add_child(name_lbl)
 	return row
 
@@ -1285,9 +1285,9 @@ func _refresh_palette_selection() -> void:
 		var selected := _tool == Tool.PLACE and str(id) == _brick_id
 		var sb: StyleBoxFlat = row.get_meta("style") as StyleBoxFlat
 		if sb != null:
-			sb.border_color = HudStyle.C_AMBER if selected else HudStyle.C_BRASS
+			sb.border_color = BrandTokens.BRASS if selected else BrandTokens.SEA_LINE
 			sb.set_border_width_all(2 if selected else 1)
-			sb.bg_color = Color(0.16, 0.14, 0.10) if selected else HudStyle.C_BG_INNER
+			sb.bg_color = Color(0.16, 0.14, 0.10) if selected else BrandTokens.SCRIM
 	if _layer_lbl != null:
 		_layer_lbl.text = "Layer %d" % _layer_y
 	_refresh_tool_buttons()
@@ -1317,7 +1317,7 @@ func _style_tool_button(btn: Button, active: bool) -> void:
 	btn.modulate = Color(1.15, 1.05, 0.75) if active else Color(1, 1, 1)
 
 
-func _set_hint(text: String, color: Color = HudStyle.C_AMBER) -> void:
+func _set_hint(text: String, color: Color = BrandTokens.BRASS) -> void:
 	if _hint_lbl == null:
 		return
 	_hint_lbl.text = text
@@ -1340,13 +1340,13 @@ func _refresh_hint() -> void:
 		var n := int(_clipboard.get("cell_count", 0))
 		_set_hint(
 			"Clipboard: %d bricks. Layer+ then “Paste this layer”, or hover + Ctrl+V." % n,
-			HudStyle.C_GREEN,
+			BrandTokens.OK_LIGHT,
 		)
 		return
 	if _tool == Tool.ERASE:
-		_set_hint("ERASE: click or drag to remove bricks.", HudStyle.C_LABEL)
+		_set_hint("ERASE: click or drag to remove bricks.", BrandTokens.INK_INVERSE_DIM)
 		return
-	_set_hint("PLACE: paint bricks. Mark a region when you want to copy a floor.", HudStyle.C_LABEL)
+	_set_hint("PLACE: paint bricks. Mark a region when you want to copy a floor.", BrandTokens.INK_INVERSE_DIM)
 
 
 func _set_tool(tool: int) -> void:
@@ -1365,7 +1365,7 @@ func _set_tool(tool: int) -> void:
 func _toggle_mark_tool() -> void:
 	if _tool == Tool.MARK:
 		_set_tool(Tool.PLACE)
-		_set_hint("Mark cleared.", HudStyle.C_LABEL)
+		_set_hint("Mark cleared.", BrandTokens.INK_INVERSE_DIM)
 	else:
 		_set_tool(Tool.MARK)
 
@@ -1436,7 +1436,7 @@ func _handle_mark_click(cell: Vector3i) -> void:
 		_mark_max = bounds["max"]
 		_mark_complete = true
 		var sz := _mark_max - _mark_min + Vector3i.ONE
-		_set_hint("Marked %d×%d×%d — press Copy (Ctrl+C)." % [sz.x, sz.y, sz.z], HudStyle.C_GREEN)
+		_set_hint("Marked %d×%d×%d — press Copy (Ctrl+C)." % [sz.x, sz.y, sz.z], BrandTokens.OK_LIGHT)
 	_refresh_palette_selection()
 	_update_mark_preview()
 
@@ -1532,7 +1532,7 @@ func _make_volume_box(min_c: Vector3i, max_c: Vector3i, col: Color) -> Node3D:
 
 func _copy_marked_region() -> void:
 	if not _mark_complete:
-		_set_hint("Nothing marked yet — press Mark, then click two corners.", HudStyle.C_RED)
+		_set_hint("Nothing marked yet — press Mark, then click two corners.", BrandTokens.ALERT)
 		return
 	_clipboard = BrickRegionClipboard.extract_region(_layout.cells, _mark_min, _mark_max)
 	_clipboard_src_min = _mark_min
@@ -1540,14 +1540,14 @@ func _copy_marked_region() -> void:
 	var n := int(_clipboard.get("cell_count", 0))
 	if n <= 0:
 		_clipboard.clear()
-		_set_hint("Marked region is empty — nothing to copy.", HudStyle.C_RED)
+		_set_hint("Marked region is empty — nothing to copy.", BrandTokens.ALERT)
 		_refresh_palette_selection()
 		return
 	## Leave mark mode so the next action is paste, not another mark click.
 	_set_tool(Tool.PLACE)
 	_set_hint(
 		"Copied %d bricks. Layer+ → Paste on this layer, or Paste ↑ to stack floors." % n,
-		HudStyle.C_GREEN,
+		BrandTokens.OK_LIGHT,
 	)
 	_refresh_palette_selection()
 	_update_paste_preview()
@@ -1572,21 +1572,21 @@ func _can_paste_at(dest: Vector3i) -> bool:
 
 func _paste_at(dest: Vector3i) -> bool:
 	if _clipboard.is_empty():
-		_set_hint("Clipboard empty — Mark a region and Copy first.", HudStyle.C_RED)
+		_set_hint("Clipboard empty — Mark a region and Copy first.", BrandTokens.ALERT)
 		return false
 	if not _can_paste_at(dest):
-		_set_hint("Can't paste there — clear blocking bricks first.", HudStyle.C_RED)
+		_set_hint("Can't paste there — clear blocking bricks first.", BrandTokens.ALERT)
 		_update_paste_preview()
 		return false
 	var needed := BrickRegionClipboard.iter_dest_cells(_clipboard, dest)
 	if needed.is_empty():
-		_set_hint("Clipboard empty.", HudStyle.C_RED)
+		_set_hint("Clipboard empty.", BrandTokens.ALERT)
 		return false
 	var before_size := _layout.grid_size
 	if _pad_volume_locked():
 		for cell in needed:
 			if not _grid.in_bounds(cell):
-				_set_hint("Paste stays inside the locked pad.", HudStyle.C_RED)
+				_set_hint("Paste stays inside the locked pad.", BrandTokens.ALERT)
 				return false
 	else:
 		var shift := _layout.ensure_fit_cells(needed)
@@ -1594,7 +1594,7 @@ func _paste_at(dest: Vector3i) -> bool:
 		_clipboard_src_min += shift
 	## Re-check after any remap from pad growth.
 	if not _can_paste_at(dest):
-		_set_hint("Can't paste there — clear blocking bricks first.", HudStyle.C_RED)
+		_set_hint("Can't paste there — clear blocking bricks first.", BrandTokens.ALERT)
 		return false
 	_layout.cells = BrickRegionClipboard.paste_region(_clipboard, dest, _layout.cells)
 	_last_paste_anchor = dest
@@ -1608,7 +1608,7 @@ func _paste_at(dest: Vector3i) -> bool:
 		"Pasted %d bricks at %d,%d,%d." % [
 			int(_clipboard.get("cell_count", 0)), dest.x, dest.y, dest.z,
 		],
-		HudStyle.C_GREEN,
+		BrandTokens.OK_LIGHT,
 	)
 	_update_paste_preview()
 	return true
@@ -1619,14 +1619,14 @@ func _paste_clipboard_at_cursor() -> void:
 	if dest.y < 0 and _vp_host != null:
 		dest = _pick_cell(_vp_host.get_local_mouse_position())
 	if dest.y < 0:
-		_set_hint("Aim at the pad, then Paste (Ctrl+V).", HudStyle.C_RED)
+		_set_hint("Aim at the pad, then Paste (Ctrl+V).", BrandTokens.ALERT)
 		return
 	_paste_at(dest)
 
 
 func _paste_clipboard_on_layer() -> void:
 	if _clipboard.is_empty():
-		_set_hint("Clipboard empty — Mark + Copy first.", HudStyle.C_RED)
+		_set_hint("Clipboard empty — Mark + Copy first.", BrandTokens.ALERT)
 		return
 	## Stamp at the current layer (same XZ as the copy). Change layer between presses.
 	var dest := Vector3i(_clipboard_src_min.x, _layer_y, _clipboard_src_min.z)
@@ -1635,7 +1635,7 @@ func _paste_clipboard_on_layer() -> void:
 
 func _paste_clipboard_one_up() -> void:
 	if _clipboard.is_empty():
-		_set_hint("Clipboard empty — Mark + Copy first.", HudStyle.C_RED)
+		_set_hint("Clipboard empty — Mark + Copy first.", BrandTokens.ALERT)
 		return
 	var sz := BrickRegionClipboard.size_cells(_clipboard)
 	var step := maxi(sz.y, 1)

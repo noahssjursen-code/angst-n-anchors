@@ -61,27 +61,27 @@ func _rebuild() -> void:
 
 func _show_active_card(contract: Dictionary) -> void:
 	var destination := LocalPlayerView.get_port_display_name(str(contract.get("destination_port_id", "")))
-	var card := UiBuilder.inner_panel(Vector2(0.0, 76.0))
+	var card := BrandComponents.inner_panel(Vector2(0.0, 76.0))
 	var column := VBoxContainer.new()
 	card.add_child(column)
-	column.add_child(UiBuilder.key_value_row(destination.to_upper(), PlayerData.format_money(int(contract.get("pay_marks", 0))), HudStyle.C_AMBER))
+	column.add_child(BrandComponents.key_value_row(destination.to_upper(), PlayerData.format_money(int(contract.get("pay_marks", 0))), BrandTokens.BRASS))
 	var commodity := CommodityCatalog.commodity_display(str(contract.get("commodity_id", "")))
-	column.add_child(UiBuilder.key_value_row(commodity, _progress_text(contract)))
+	column.add_child(BrandComponents.key_value_row(commodity, _progress_text(contract)))
 	_dialogue.add_custom(card)
 
 
 func _offer_card(offer: Dictionary) -> Control:
-	var card := UiBuilder.inner_panel(Vector2(0.0, 112.0))
+	var card := BrandComponents.inner_panel(Vector2(0.0, 112.0))
 	var column := VBoxContainer.new()
 	column.add_theme_constant_override("separation", 5)
 	card.add_child(column)
 	var destination := LocalPlayerView.get_port_display_name(str(offer.get("destination_port_id", "")))
-	column.add_child(UiBuilder.key_value_row(destination.to_upper(), PlayerData.format_money(int(offer.get("pay_marks", 0))), HudStyle.C_AMBER))
-	column.add_child(UiBuilder.key_value_row(
+	column.add_child(BrandComponents.key_value_row(destination.to_upper(), PlayerData.format_money(int(offer.get("pay_marks", 0))), BrandTokens.BRASS))
+	column.add_child(BrandComponents.key_value_row(
 		CommodityCatalog.commodity_display(str(offer.get("commodity_id", ""))),
 		"%s  ·  %.1f km" % [_quantity_text(offer), float(offer.get("distance_m", 0.0)) / 1000.0],
 	))
-	var accept := UiBuilder.compact_button("Accept movement", 180.0)
+	var accept := BrandComponents.compact_button("Accept movement", 180.0)
 	accept.pressed.connect(_accept.bind(offer))
 	accept.disabled = not FreightService.can_accept(offer)
 	if accept.disabled:

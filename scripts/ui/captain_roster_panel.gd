@@ -18,12 +18,12 @@ var _on_debug_marks: Callable = Callable()
 
 
 func _ready() -> void:
-	theme = HudStyle.make_theme()
+	theme = BrandTheme.shared()
 	add_theme_constant_override("separation", 12)
 
 	var title := Label.new()
 	title.text = "CAPTAINS"
-	HudStyle.apply_body_font(title, 11, HudStyle.C_COPPER, true)
+	BrandTheme.apply_body_font(title, BrandTokens.LABEL_MONO, BrandTokens.INK_MUTED, true)
 	add_child(title)
 
 	var scroll := ScrollContainer.new()
@@ -37,14 +37,14 @@ func _ready() -> void:
 	scroll.add_child(_list)
 
 	_hint = Label.new()
-	HudStyle.apply_body_font(_hint, 12, HudStyle.C_LABEL)
+	BrandTheme.apply_body_font(_hint, BrandTokens.BUTTON, BrandTokens.INK_MUTED)
 	add_child(_hint)
 
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 10)
 	add_child(row)
 
-	_sail_btn = MenuActionButton.new()
+	_sail_btn = BrandButton.new("", BrandButton.Variant.LOUD)
 	_sail_btn.text = "Sail voyage"
 	_sail_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_sail_btn.disabled = true
@@ -54,7 +54,7 @@ func _ready() -> void:
 	)
 	row.add_child(_sail_btn)
 
-	var create_btn := MenuActionButton.new()
+	var create_btn := BrandButton.new("", BrandButton.Variant.SECONDARY)
 	create_btn.text = "New captain"
 	create_btn.pressed.connect(func() -> void: create_pressed.emit())
 	row.add_child(create_btn)
@@ -88,17 +88,10 @@ func set_message(text: String) -> void:
 
 func _add_row(entry: Dictionary) -> void:
 	var id := str(entry.get("id", ""))
-	var row := PanelContainer.new()
-	var sb := StyleBoxFlat.new()
 	var active := id == selected_id
-	sb.bg_color = Color(0.08, 0.12, 0.13, 0.55) if active else Color(0.05, 0.07, 0.08, 0.35)
-	sb.border_color = HudStyle.C_AMBER if active else HudStyle.C_BRASS
-	sb.set_border_width_all(1)
-	sb.content_margin_left = 12
-	sb.content_margin_right = 10
-	sb.content_margin_top = 10
-	sb.content_margin_bottom = 10
-	row.add_theme_stylebox_override("panel", sb)
+	var row := BrandPanel.new(
+		BrandPanel.Variant.RULED if active else BrandPanel.Variant.RAISED
+	)
 	_list.add_child(row)
 
 	var inner := HBoxContainer.new()
@@ -110,11 +103,12 @@ func _add_row(entry: Dictionary) -> void:
 	text_col.add_theme_constant_override("separation", 2)
 	inner.add_child(text_col)
 
-	var pick := Button.new()
-	pick.flat = true
+	var pick := BrandButton.new("", BrandButton.Variant.QUIET)
 	pick.alignment = HORIZONTAL_ALIGNMENT_LEFT
 	pick.text = str(entry.get("display_name", "Captain"))
-	HudStyle.apply_body_font(pick, 16, HudStyle.C_AMBER if active else HudStyle.C_TEXT, true)
+	BrandTheme.apply_body_font(
+		pick, BrandTokens.BUTTON, BrandTokens.BRASS_DEEP if active else BrandTokens.INK, true
+	)
 	text_col.add_child(pick)
 
 	var meta_bits: PackedStringArray = []
@@ -125,23 +119,19 @@ func _add_row(entry: Dictionary) -> void:
 	var company_name := str(entry.get("company_name", "")).strip_edges()
 	if not company_name.is_empty():
 		meta_bits.append(company_name)
-	meta_bits.append(PlayerSession.format_money(int(entry.get("marks", 0))))
+	meta_bits.append(BrandFormat.money_text(int(entry.get("marks", 0))))
 	var meta := Label.new()
 	meta.text = " · ".join(meta_bits)
-	HudStyle.apply_body_font(meta, 11, HudStyle.C_LABEL)
+	BrandTheme.apply_body_font(meta, BrandTokens.LABEL_MONO, BrandTokens.INK_MUTED)
 	text_col.add_child(meta)
 
 	if _allow_debug_marks and _on_debug_marks.is_valid():
-		var cheat := Button.new()
-		cheat.text = "+1M"
-		cheat.flat = true
+		var cheat := BrandButton.new("+1M", BrandButton.Variant.QUIET)
 		cheat.pressed.connect(func() -> void: _on_debug_marks.call(entry))
 		inner.add_child(cheat)
 
-	var del := Button.new()
-	del.text = "Delete"
-	del.flat = true
-	HudStyle.apply_body_font(del, 12, HudStyle.C_LABEL)
+	var del := BrandButton.new("DELETE", BrandButton.Variant.QUIET)
+	BrandTheme.apply_body_font(del, BrandTokens.LABEL_MONO, BrandTokens.ALERT)
 	del.pressed.connect(func() -> void: delete_pressed.emit(id))
 	inner.add_child(del)
 

@@ -7,6 +7,7 @@ const MenuBackdropScript := preload("res://scripts/ui/menu_backdrop.gd")
 const ChartPreviewBootstrapScript := preload("res://scripts/ui/chart/chart_preview_bootstrap.gd")
 const CaptainServiceScript := preload("res://scripts/player/captain_service.gd")
 const WorldBootstrapScript := preload("res://scripts/world/world_bootstrap.gd")
+const BRAND_MARK := preload("res://resources/ui/brand/anchor-mark-paper.svg")
 
 enum Page { MODE_SELECT, SINGLEPLAYER, MULTIPLAYER, CREATOR, COMPANY_SETUP, HOME_PORT }
 
@@ -52,6 +53,7 @@ var _authority_join_generation := 0
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
+	theme = BrandTheme.shared()
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 	_ensure_menu_offline()
 	LocalCaptainStore.ensure_migrated()
@@ -97,7 +99,7 @@ func _build_vignette() -> void:
 	# Light overall wash only — ocean stays the stage.
 	var wash := ColorRect.new()
 	wash.set_anchors_preset(Control.PRESET_FULL_RECT)
-	wash.color = Color(0.02, 0.04, 0.05, 0.16)
+	wash.color = BrandTokens.alpha(BrandTokens.SCRIM, 0.44)
 	wash.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(wash)
 
@@ -107,25 +109,33 @@ func _build_mode_page() -> void:
 	var stack := _mode_root.get_node("Align/Stack") as VBoxContainer
 
 	var brand := VBoxContainer.new()
-	brand.add_theme_constant_override("separation", 0)
+	brand.add_theme_constant_override("separation", BrandTokens.SPACE_XS)
 	stack.add_child(brand)
+
+	var mark := TextureRect.new()
+	mark.texture = BRAND_MARK
+	mark.custom_minimum_size = Vector2(72.0, 72.0)
+	mark.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	mark.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	mark.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+	brand.add_child(mark)
 
 	var angst := Label.new()
 	angst.text = "ANGST"
 	angst.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
-	HudStyle.apply_display_font(angst, 92, HudStyle.C_TEXT)
+	BrandTheme.apply_display_font(angst, 92, BrandTokens.INK_INVERSE)
 	brand.add_child(angst)
 
 	var anchors := Label.new()
 	anchors.text = "'N ANCHORS"
 	anchors.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
-	HudStyle.apply_display_font(anchors, 56, HudStyle.C_AMBER)
+	BrandTheme.apply_display_font(anchors, 56, BrandTokens.BRASS)
 	brand.add_child(anchors)
 
 	var rule := ColorRect.new()
-	rule.custom_minimum_size = Vector2(148, 2)
+	rule.custom_minimum_size = Vector2(148, BrandTokens.RULE_WIDTH)
 	rule.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
-	rule.color = HudStyle.C_COPPER
+	rule.color = BrandTokens.BRASS
 	rule.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var rule_pad := MarginContainer.new()
 	rule_pad.add_theme_constant_override("margin_top", 8)
@@ -135,7 +145,7 @@ func _build_mode_page() -> void:
 
 	var tag := Label.new()
 	tag.text = "Build a company on cold northern waters"
-	HudStyle.apply_body_font(tag, 15, HudStyle.C_LABEL)
+	BrandTheme.apply_body_font(tag, 15, BrandTokens.INK_INVERSE_DIM)
 	brand.add_child(tag)
 
 	var actions := VBoxContainer.new()
@@ -151,9 +161,9 @@ func _build_mode_page() -> void:
 	var quit_pad := MarginContainer.new()
 	quit_pad.add_theme_constant_override("margin_top", 20)
 	stack.add_child(quit_pad)
-	var quit := MenuActionButton.new()
+	var quit := BrandMenuButton.new()
 	quit.text = "Quit"
-	HudStyle.apply_body_font(quit, 14, HudStyle.C_LABEL, false)
+	BrandTheme.apply_body_font(quit, 14, BrandTokens.INK_INVERSE_DIM, false)
 	quit.pressed.connect(_on_quit)
 	quit_pad.add_child(quit)
 
@@ -182,7 +192,7 @@ func _build_multiplayer_page() -> void:
 
 	var servers_lbl := Label.new()
 	servers_lbl.text = "SERVERS"
-	HudStyle.apply_body_font(servers_lbl, 11, HudStyle.C_COPPER, true)
+	BrandTheme.apply_body_font(servers_lbl, 11, BrandTokens.BRASS_DEEP, true)
 	vbox.add_child(servers_lbl)
 
 	var scroll := ScrollContainer.new()
@@ -201,11 +211,11 @@ func _build_multiplayer_page() -> void:
 	vbox.add_child(_account_panel)
 	var account_heading := Label.new()
 	account_heading.text = "SERVER ACCOUNT"
-	HudStyle.apply_body_font(account_heading, 11, HudStyle.C_COPPER, true)
+	BrandTheme.apply_body_font(account_heading, 11, BrandTokens.BRASS_DEEP, true)
 	_account_panel.add_child(account_heading)
 	_account_status = Label.new()
 	_account_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	HudStyle.apply_body_font(_account_status, 12, HudStyle.C_LABEL)
+	BrandTheme.apply_body_font(_account_status, 12, BrandTokens.INK_INVERSE_DIM)
 	_account_panel.add_child(_account_status)
 	_account_email = LineEdit.new()
 	_account_email.placeholder_text = "Email"
@@ -247,7 +257,7 @@ func _build_multiplayer_page() -> void:
 
 	_mp_status = Label.new()
 	_mp_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	HudStyle.apply_body_font(_mp_status, 12, HudStyle.C_LABEL)
+	BrandTheme.apply_body_font(_mp_status, 12, BrandTokens.INK_INVERSE_DIM)
 	vbox.add_child(_mp_status)
 	_mp_roster.visible = false
 	_account_status.text = "Select a server, then log in to see your captains."
@@ -709,10 +719,12 @@ func _refresh_servers() -> void:
 
 func _add_server_row(s: Dictionary, config: Node) -> void:
 	var row := HBoxContainer.new()
+	row.custom_minimum_size.y = BrandTokens.MIN_HIT_TARGET
+	row.add_theme_constant_override(&"separation", BrandTokens.SPACE_SM)
 	_server_list.add_child(row)
 	var status_dot := Label.new()
 	status_dot.text = "●"
-	status_dot.add_theme_color_override("font_color", Color.GRAY)
+	status_dot.add_theme_color_override("font_color", BrandTokens.IDLE)
 	row.add_child(status_dot)
 	var name_lbl := Label.new()
 	name_lbl.text = str(s["label"])
@@ -726,7 +738,7 @@ func _add_server_row(s: Dictionary, config: Node) -> void:
 	players_lbl.text = ""
 	players_lbl.custom_minimum_size.x = 80
 	row.add_child(players_lbl)
-	var select_btn := Button.new()
+	var select_btn := BrandButton.new("Select", BrandButton.Variant.SECONDARY)
 	select_btn.text = "Select"
 	row.add_child(select_btn)
 
@@ -734,7 +746,7 @@ func _add_server_row(s: Dictionary, config: Node) -> void:
 	if is_active:
 		select_btn.text = "Active"
 		select_btn.disabled = true
-		name_lbl.add_theme_color_override("font_color", HudStyle.C_AMBER)
+		name_lbl.add_theme_color_override("font_color", BrandTokens.BRASS)
 	else:
 		select_btn.pressed.connect(func() -> void:
 			# World identity belongs to the selected server. Never reuse options
@@ -765,7 +777,7 @@ func _add_server_row(s: Dictionary, config: Node) -> void:
 			return
 		var duration_ms := Time.get_ticks_msec() - start_time
 		if result == HTTPRequest.RESULT_SUCCESS and response_code == 200:
-			status_dot.add_theme_color_override("font_color", Color.GREEN)
+			status_dot.add_theme_color_override("font_color", BrandTokens.OK)
 			ping_lbl.text = "%d ms" % duration_ms
 			var count := 0
 			var parsed: Variant = JSON.parse_string(body.get_string_from_utf8())
@@ -776,14 +788,14 @@ func _add_server_row(s: Dictionary, config: Node) -> void:
 				_captains.configure_remote(self, "%s://%s:%d" % [s["http_scheme"], s["http_host"], s["http_port"]])
 				_on_remote_account_changed(_captains.remote_account())
 		else:
-			status_dot.add_theme_color_override("font_color", Color.RED)
+			status_dot.add_theme_color_override("font_color", BrandTokens.ALERT)
 			ping_lbl.text = "Offline"
 			players_lbl.text = "Offline"
 			if is_active:
 				_mp_roster.set_message("Server is offline.")
 	)
 	if http_req.request(http_url) != OK:
-		status_dot.add_theme_color_override("font_color", Color.RED)
+		status_dot.add_theme_color_override("font_color", BrandTokens.ALERT)
 		ping_lbl.text = "Error"
 		http_req.queue_free()
 		_active_pings.erase(http_url)
@@ -845,10 +857,8 @@ func _make_side_page_root(page_name: String) -> MarginContainer:
 	root.add_theme_constant_override("margin_bottom", 48)
 	add_child(root)
 
-	var panel := Panel.new()
+	var panel := BrandPanel.new(BrandPanel.Variant.RULED)
 	panel.name = "Panel"
-	panel.theme = HudStyle.make_theme()
-	panel.add_theme_stylebox_override("panel", HudStyle.make_title_panel_style())
 	panel.custom_minimum_size = Vector2(520, 520)
 	panel.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
 	panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
@@ -872,69 +882,23 @@ func _make_side_page_root(page_name: String) -> MarginContainer:
 func _add_page_heading(parent: Node, title_text: String, subtitle: String) -> void:
 	var title := Label.new()
 	title.text = title_text
-	HudStyle.apply_display_font(title, 42, HudStyle.C_TEXT)
+	BrandTheme.apply_display_font(title, BrandTokens.DISPLAY_L, BrandTokens.INK)
 	parent.add_child(title)
 	var sub := Label.new()
 	sub.text = subtitle
-	HudStyle.apply_body_font(sub, 13, HudStyle.C_LABEL)
+	BrandTheme.apply_body_font(sub, BrandTokens.BUTTON, BrandTokens.INK_MUTED)
 	parent.add_child(sub)
 	var rule := ColorRect.new()
-	rule.custom_minimum_size = Vector2(120, 2)
+	rule.custom_minimum_size = Vector2(120, BrandTokens.RULE_WIDTH)
 	rule.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
-	rule.color = HudStyle.C_COPPER
+	rule.color = BrandTokens.BRASS
 	rule.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	parent.add_child(rule)
 
 
-func _add_action(parent: Node, text: String, on_press: Callable) -> MenuActionButton:
-	var button := MenuActionButton.new()
+func _add_action(parent: Node, text: String, on_press: Callable) -> BrandMenuButton:
+	var button := BrandMenuButton.new()
 	button.text = text
 	button.pressed.connect(on_press)
 	parent.add_child(button)
 	return button
-
-
-## Legacy helpers kept for any remaining call sites.
-func _make_page_root(page_name: String) -> CenterContainer:
-	var root := CenterContainer.new()
-	root.name = page_name
-	root.set_anchors_preset(Control.PRESET_FULL_RECT)
-	add_child(root)
-	return root
-
-
-func _make_panel(root: CenterContainer, min_size: Vector2) -> VBoxContainer:
-	var panel := Panel.new()
-	panel.theme = HudStyle.make_theme()
-	panel.add_theme_stylebox_override("panel", HudStyle.make_title_panel_style())
-	panel.custom_minimum_size = min_size
-	root.add_child(panel)
-	var margin := MarginContainer.new()
-	margin.add_theme_constant_override("margin_left", 28)
-	margin.add_theme_constant_override("margin_right", 28)
-	margin.add_theme_constant_override("margin_top", 28)
-	margin.add_theme_constant_override("margin_bottom", 28)
-	panel.add_child(margin)
-	var vbox := VBoxContainer.new()
-	vbox.add_theme_constant_override("separation", 12)
-	margin.add_child(vbox)
-	return vbox
-
-
-func _add_title(parent: Node, text: String, size: int) -> void:
-	var title := Label.new()
-	title.text = text
-	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
-	HudStyle.apply_display_font(title, size, HudStyle.C_TEXT)
-	parent.add_child(title)
-
-
-func _add_tag(parent: Node, text: String) -> void:
-	var tag := Label.new()
-	tag.text = text
-	HudStyle.apply_body_font(tag, 13, HudStyle.C_LABEL)
-	parent.add_child(tag)
-
-
-func _add_button(parent: Node, text: String, on_press: Callable) -> Button:
-	return _add_action(parent, text, on_press)

@@ -5,6 +5,7 @@ extends CanvasLayer
 ## (layout, ports, player spawn) or a non-world destination settles.
 
 const WORLD_SCENE := "res://scenes/world.tscn"
+const BRAND_MARK := preload("res://resources/ui/brand/anchor-mark-paper.svg")
 const MIN_DISPLAY_S := 0.4
 const WORLD_FALLBACK_S := 90.0
 const TITLE_FALLBACK_S := 2.5
@@ -181,11 +182,12 @@ func _build_ui() -> void:
 	_root = Control.new()
 	_root.set_anchors_preset(Control.PRESET_FULL_RECT)
 	_root.mouse_filter = Control.MOUSE_FILTER_STOP
+	_root.theme = BrandTheme.shared()
 	add_child(_root)
 
 	var bg := ColorRect.new()
 	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
-	bg.color = Color(0.02, 0.04, 0.05, 0.96)
+	bg.color = BrandTokens.SEA_DEEP
 	_root.add_child(bg)
 
 	var center := CenterContainer.new()
@@ -194,28 +196,35 @@ func _build_ui() -> void:
 
 	var vbox := VBoxContainer.new()
 	vbox.add_theme_constant_override("separation", 10)
-	vbox.custom_minimum_size = Vector2(460, 0)
+	vbox.custom_minimum_size = Vector2(520, 0)
 	center.add_child(vbox)
 
-	var title := Label.new()
+	var mark := TextureRect.new()
+	mark.texture = BRAND_MARK
+	mark.custom_minimum_size = Vector2(84.0, 84.0)
+	mark.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	mark.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	vbox.add_child(mark)
+
+	var title := BrandLabel.new("ANGST 'N ANCHORS", BrandLabel.Role.DISPLAY_LARGE)
 	title.text = "ANGST 'N ANCHORS"
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	HudStyle.apply_display_font(title, 48, HudStyle.C_TEXT)
+	title.add_theme_color_override(&"font_color", BrandTokens.INK_INVERSE)
 	vbox.add_child(title)
 
 	var rule := ColorRect.new()
-	rule.custom_minimum_size = Vector2(140, 2)
-	rule.color = HudStyle.C_COPPER
+	rule.custom_minimum_size = Vector2(180, BrandTokens.RULE_WIDTH)
+	rule.color = BrandTokens.BRASS
 	rule.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	rule.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	vbox.add_child(rule)
 
-	_status = Label.new()
+	_status = BrandLabel.new("", BrandLabel.Role.INVERSE_DATA)
 	_status.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	HudStyle.apply_body_font(_status, 16, HudStyle.C_AMBER, true)
+	_status.add_theme_color_override(&"font_color", BrandTokens.BRASS)
 	vbox.add_child(_status)
 
-	_detail = Label.new()
+	_detail = BrandLabel.new("", BrandLabel.Role.INVERSE_BODY)
 	_detail.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	HudStyle.apply_body_font(_detail, 13, HudStyle.C_LABEL)
+	_detail.add_theme_color_override(&"font_color", BrandTokens.INK_INVERSE_DIM)
 	vbox.add_child(_detail)

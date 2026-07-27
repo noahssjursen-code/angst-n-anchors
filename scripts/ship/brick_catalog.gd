@@ -431,7 +431,7 @@ static func _add_deck_text_visual(
 		var label := Label3D.new()
 		label.name = "WallText"
 		label.text = label_text.to_upper()
-		label.font = HudStyle.font_display()
+		label.font = BrandTheme.font_display()
 		label.font_size = font_size
 		label.pixel_size = pixel_size
 		## Upright, facing out (−Z) so letters read horizontally on the wall.
@@ -463,7 +463,7 @@ static func _add_deck_text_visual(
 	var floor_label := Label3D.new()
 	floor_label.name = "FloorText"
 	floor_label.text = label_text
-	floor_label.font = HudStyle.font_display()
+	floor_label.font = BrandTheme.font_display()
 	floor_label.font_size = 96
 	floor_label.pixel_size = 0.008
 	floor_label.rotation_degrees = Vector3(-90.0, 0.0, 0.0)

@@ -8,7 +8,6 @@ signal confirmed(display_name: String, appearance: CharacterAppearance)
 signal cancelled
 
 const CHARACTER_CATALOG := preload("res://scripts/character/character_catalog.gd")
-const REFERENCE_SIZE := Vector2(1920.0, 1080.0)
 const COMPLEXIONS: Array[Color] = [
 	Color("e0b997"), Color("d4a37f"), Color("b98262"),
 	Color("9e684c"), Color("7c513d"), Color("5d3c2e"),
@@ -43,12 +42,25 @@ var _swatch_rows: Dictionary = {}
 
 
 func _ready() -> void:
-	_configure_layout_scale()
-	get_viewport().size_changed.connect(_configure_layout_scale)
+	_fit_viewport()
 	process_mode = Node.PROCESS_MODE_ALWAYS
-	theme = HudStyle.make_theme()
+	theme = BrandTheme.shared()
+	var viewport := get_viewport()
+	if viewport != null and not viewport.size_changed.is_connected(_fit_viewport):
+		viewport.size_changed.connect(_fit_viewport)
 	_build_ui()
 	_refresh_all()
+
+
+func _fit_viewport() -> void:
+	if get_parent() is Control:
+		set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+		return
+	set_anchors_preset(Control.PRESET_TOP_LEFT)
+	position = Vector2.ZERO
+	var viewport := get_viewport()
+	if viewport != null:
+		size = viewport.get_visible_rect().size
 
 
 func open_with_existing(data: PlayerData) -> void:
@@ -70,7 +82,7 @@ func open_with_existing(data: PlayerData) -> void:
 func _build_ui() -> void:
 	var shade := ColorRect.new()
 	shade.set_anchors_preset(Control.PRESET_FULL_RECT)
-	shade.color = Color(0.008, 0.016, 0.021, 0.95)
+	shade.color = BrandTokens.SEA_DEEP
 	add_child(shade)
 
 	var outer := MarginContainer.new()
@@ -81,19 +93,12 @@ func _build_ui() -> void:
 	outer.add_theme_constant_override("margin_bottom", 28)
 	add_child(outer)
 
-	var panel := PanelContainer.new()
-	panel.add_theme_stylebox_override("panel", HudStyle.make_title_panel_style())
+	var panel := BrandPanel.new(BrandPanel.Variant.RULED)
 	outer.add_child(panel)
-	var margin := MarginContainer.new()
-	margin.add_theme_constant_override("margin_left", 30)
-	margin.add_theme_constant_override("margin_right", 30)
-	margin.add_theme_constant_override("margin_top", 24)
-	margin.add_theme_constant_override("margin_bottom", 24)
-	panel.add_child(margin)
 
 	var root := HBoxContainer.new()
 	root.add_theme_constant_override("separation", 32)
-	margin.add_child(root)
+	panel.add_child(root)
 	_build_preview_column(root)
 	_build_options_column(root)
 
@@ -106,19 +111,12 @@ func _build_preview_column(root: HBoxContainer) -> void:
 	column.add_theme_constant_override("separation", 8)
 	root.add_child(column)
 
-	var label := Label.new()
-	label.text = "CAPTAIN PREVIEW"
-	HudStyle.apply_body_font(label, 11, HudStyle.C_COPPER, true)
+	var label := BrandLabel.new(tr("CAPTAIN PREVIEW"), BrandLabel.Role.SECTION)
 	column.add_child(label)
 
-	var frame := PanelContainer.new()
+	var frame := BrandPanel.new(BrandPanel.Variant.DARK)
 	frame.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	frame.custom_minimum_size = Vector2(420, 540)
-	var frame_style := StyleBoxFlat.new()
-	frame_style.bg_color = Color("071017")
-	frame_style.border_color = Color("34444d")
-	frame_style.set_border_width_all(1)
-	frame.add_theme_stylebox_override("panel", frame_style)
 	column.add_child(frame)
 
 	var viewport_container := SubViewportContainer.new()
@@ -182,10 +180,11 @@ func _build_preview_column(root: HBoxContainer) -> void:
 	floor.material_override = floor_material
 	viewport.add_child(floor)
 
-	var note := Label.new()
-	note.text = "The same appearance record is used for your player and every NPC."
+	var note := BrandLabel.new(
+		tr("This is the captain other crews and companies will recognize."),
+		BrandLabel.Role.BODY_MUTED
+	)
 	note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	HudStyle.apply_body_font(note, 11, HudStyle.C_LABEL)
 	column.add_child(note)
 
 
@@ -196,18 +195,15 @@ func _build_options_column(root: HBoxContainer) -> void:
 	column.add_theme_constant_override("separation", 10)
 	root.add_child(column)
 
-	var eyebrow := Label.new()
-	eyebrow.text = "NEW CAPTAIN  /  01 OF 03"
-	HudStyle.apply_body_font(eyebrow, 11, HudStyle.C_COPPER, true)
+	var eyebrow := BrandLabel.new(tr("NEW CAPTAIN  /  01 OF 03"), BrandLabel.Role.SECTION)
 	column.add_child(eyebrow)
-	var title := Label.new()
-	title.text = "Who is taking the helm?"
-	HudStyle.apply_display_font(title, 42, HudStyle.C_TEXT)
+	var title := BrandLabel.new(tr("WHO IS TAKING THE HELM?"), BrandLabel.Role.DISPLAY_LARGE)
 	column.add_child(title)
-	var intro := Label.new()
-	intro.text = "Build a recognizable captain now. Company identity, first vessel and home waters come next."
+	var intro := BrandLabel.new(
+		tr("Build a recognizable captain now. Company identity, first vessel and home waters come next."),
+		BrandLabel.Role.BODY_MUTED
+	)
 	intro.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	HudStyle.apply_body_font(intro, 13, HudStyle.C_LABEL)
 	column.add_child(intro)
 
 	_name_field = LineEdit.new()
@@ -231,8 +227,7 @@ func _build_options_column(root: HBoxContainer) -> void:
 			_refresh_all()
 	)
 	preset_row.add_child(_preset_selector)
-	var random_button := Button.new()
-	random_button.text = "Randomize"
+	var random_button := BrandButton.new(tr("RANDOMIZE"), BrandButton.Variant.QUIET)
 	random_button.pressed.connect(_randomize)
 	preset_row.add_child(random_button)
 	column.add_child(_labeled_control("WORKING LOOK", preset_row))
@@ -248,16 +243,13 @@ func _build_options_column(root: HBoxContainer) -> void:
 	var footer := HBoxContainer.new()
 	footer.add_theme_constant_override("separation", 12)
 	column.add_child(footer)
-	_status = Label.new()
+	_status = BrandLabel.new("", BrandLabel.Role.DATA_MUTED)
 	_status.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	HudStyle.apply_body_font(_status, 11, HudStyle.C_AMBER)
 	footer.add_child(_status)
-	var back := Button.new()
-	back.text = "Back"
+	var back := BrandButton.new(tr("BACK"), BrandButton.Variant.QUIET)
 	back.pressed.connect(func() -> void: cancelled.emit())
 	footer.add_child(back)
-	_confirm = MenuActionButton.new()
-	_confirm.text = "Build company  >"
+	_confirm = BrandButton.new(tr("BUILD COMPANY  →"), BrandButton.Variant.LOUD)
 	_confirm.pressed.connect(_submit)
 	footer.add_child(_confirm)
 
@@ -341,8 +333,8 @@ func _add_swatches(parent: VBoxContainer, label_text: String, property: String, 
 	row.add_theme_constant_override("separation", 6)
 	var buttons: Array[Button] = []
 	for color in colors:
-		var button := Button.new()
-		button.custom_minimum_size = Vector2(34, 28)
+		var button := BrandButton.new("", BrandButton.Variant.QUIET)
+		button.custom_minimum_size = Vector2(BrandTokens.MIN_HIT_TARGET, BrandTokens.MIN_HIT_TARGET)
 		button.tooltip_text = "#%s" % color.to_html(false)
 		button.set_meta("swatch_color", color)
 		button.pressed.connect(func() -> void:
@@ -357,9 +349,7 @@ func _add_swatches(parent: VBoxContainer, label_text: String, property: String, 
 func _labeled_control(label_text: String, control: Control) -> VBoxContainer:
 	var box := VBoxContainer.new()
 	box.add_theme_constant_override("separation", 3)
-	var label := Label.new()
-	label.text = label_text
-	HudStyle.apply_body_font(label, 10, HudStyle.C_COPPER, true)
+	var label := BrandLabel.new(label_text, BrandLabel.Role.DATA_MUTED)
 	box.add_child(label)
 	box.add_child(control)
 	return box
@@ -440,9 +430,8 @@ func _refresh_all() -> void:
 func _style_swatch(button: Button, color: Color, selected: bool) -> void:
 	var style := StyleBoxFlat.new()
 	style.bg_color = color
-	style.border_color = HudStyle.C_TEXT if selected else color.darkened(0.35)
+	style.border_color = BrandTokens.INK_INVERSE if selected else color.darkened(0.35)
 	style.set_border_width_all(3 if selected else 1)
-	style.set_corner_radius_all(3)
 	button.add_theme_stylebox_override("normal", style)
 	button.add_theme_stylebox_override("hover", style)
 	button.add_theme_stylebox_override("pressed", style)
@@ -478,15 +467,3 @@ func select_working_look(id: String) -> void:
 func select_editor_section(index: int) -> void:
 	if _tabs != null:
 		_tabs.current_tab = clampi(index, 0, _tabs.get_tab_count() - 1)
-
-
-func _configure_layout_scale() -> void:
-	var viewport_size := get_viewport().get_visible_rect().size
-	if viewport_size.x <= 0.0 or viewport_size.y <= 0.0:
-		return
-	var factor := minf(viewport_size.x / REFERENCE_SIZE.x, viewport_size.y / REFERENCE_SIZE.y)
-	factor = maxf(factor, 0.5)
-	set_anchors_and_offsets_preset(Control.PRESET_TOP_LEFT)
-	position = Vector2.ZERO
-	scale = Vector2.ONE * factor
-	size = viewport_size / factor

@@ -4,9 +4,9 @@ extends RefCounted
 ## One overview raster per immutable layout, plus optional zoom tiles for the
 ## visible region. Camera movement never loads terrain meshes.
 
-const SEA := Color(0.035, 0.075, 0.12, 1.0)
-const LAND := Color(0.73, 0.70, 0.55, 1.0)
-const COAST := Color(0.12, 0.16, 0.15, 1.0)
+static var SEA := BrandTokens.CHART_SEA
+static var LAND := BrandTokens.CHART_LAND
+static var COAST := BrandTokens.CHART_CONTOUR
 const MIN_RESOLUTION := 256
 const MAX_RESOLUTION := 512
 const DETAIL_RESOLUTION := 256

@@ -1,5 +1,5 @@
 class_name GizmoLayerMenu
-extends PanelContainer
+extends BrandPanel
 
 signal layer_requested(layer_id: String, enabled: bool)
 signal all_requested(enabled: bool)
@@ -12,29 +12,24 @@ var _syncing := false
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
+	variant = BrandPanel.Variant.RULED
 	custom_minimum_size = Vector2(470.0, 0.0)
 	offset_left = 18.0
 	offset_top = 76.0
-	theme = HudStyle.make_theme()
+	theme = BrandTheme.shared()
 	_build()
 
 
 func _build() -> void:
-	var margin := MarginContainer.new()
-	margin.add_theme_constant_override("margin_left", 14)
-	margin.add_theme_constant_override("margin_right", 14)
-	margin.add_theme_constant_override("margin_top", 12)
-	margin.add_theme_constant_override("margin_bottom", 12)
-	add_child(margin)
 	var box := VBoxContainer.new()
-	box.add_theme_constant_override("separation", 7)
-	margin.add_child(box)
-	box.add_child(UiBuilder.title_label("WORLD GIZMO LAYERS", 20))
-	var intro := UiBuilder.body_label(
+	box.add_theme_constant_override(&"separation", BrandTokens.SPACE_SM)
+	add_child(box)
+	box.add_child(BrandComponents.title_label("WORLD GIZMO LAYERS", 20))
+	var intro := BrandComponents.body_label(
 		"Select only the infrastructure you need. Choices remain active when this menu closes.", 12)
 	intro.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	box.add_child(intro)
-	box.add_child(UiBuilder.separator())
+	box.add_child(BrandComponents.separator())
 	for definition in WorldGizmos.LAYERS:
 		var layer_id := str(definition.get("id", ""))
 		var button := CheckButton.new()
@@ -43,21 +38,21 @@ func _build() -> void:
 		button.focus_mode = Control.FOCUS_ALL
 		button.toggled.connect(_on_button_toggled.bind(layer_id))
 		box.add_child(button)
-		var hint := UiBuilder.subtitle_label(str(definition.get("hint", "")), 10)
+		var hint := BrandComponents.subtitle_label(str(definition.get("hint", "")), 10)
 		hint.add_theme_constant_override("outline_size", 2)
 		box.add_child(hint)
 		_buttons.append(button)
 		_ids.append(layer_id)
-	box.add_child(UiBuilder.separator())
+	box.add_child(BrandComponents.separator())
 	var actions := HBoxContainer.new()
-	var all_on := UiBuilder.compact_button("ENABLE ALL  [CTRL+A]", 165)
+	var all_on := BrandButton.new("ENABLE ALL  [CTRL+A]", BrandButton.Variant.PRIMARY)
 	all_on.pressed.connect(func() -> void: all_requested.emit(true))
 	actions.add_child(all_on)
-	var all_off := UiBuilder.compact_button("CLEAR ALL  [X]", 145)
+	var all_off := BrandButton.new("CLEAR ALL  [X]", BrandButton.Variant.QUIET)
 	all_off.pressed.connect(func() -> void: all_requested.emit(false))
 	actions.add_child(all_off)
 	box.add_child(actions)
-	box.add_child(UiBuilder.subtitle_label("↑↓ select  ·  Space toggle  ·  G close", 10))
+	box.add_child(BrandComponents.subtitle_label("↑↓ select  ·  Space toggle  ·  G close", 10))
 
 
 func sync_states(states: Dictionary) -> void:

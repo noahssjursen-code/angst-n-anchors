@@ -405,7 +405,7 @@ func _spawn_bay_provisions(bay: Node3D) -> void:
 	var label := Label3D.new()
 	label.name = "BayLabel"
 	label.text = "GENERAL CARGO"
-	label.font = HudStyle.font_display()
+	label.font = BrandTheme.font_display()
 	label.font_size = 96
 	label.pixel_size = 0.012
 	label.position = Vector3(-20.0, QUAY_DECK_TOP_Y + 3.5, -50.0)

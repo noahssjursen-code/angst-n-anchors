@@ -103,7 +103,7 @@ func _build_visual() -> void:
 		_sight_fills.append(fill)
 		var tank_label := Label3D.new()
 		tank_label.text = "RSW %d" % (i + 1)
-		tank_label.font = HudStyle.font_display()
+		tank_label.font = BrandTheme.font_display()
 		tank_label.font_size = 42
 		tank_label.pixel_size = 0.006
 		tank_label.position = Vector3(1.07, 3.75, z)
@@ -155,7 +155,7 @@ func _build_visual() -> void:
 		add_child(fin)
 	var gauge := Label3D.new()
 	gauge.text = "−0.8 °C"
-	gauge.font = HudStyle.font_display()
+	gauge.font = BrandTheme.font_display()
 	gauge.font_size = 44
 	gauge.pixel_size = 0.007
 	gauge.position = Vector3(4.30, 2.28, 1.15)

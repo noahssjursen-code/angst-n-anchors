@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 260 200" width="260" height="200">
+
+<g transform="translate(90,4) scale(0.8)"><circle cx="50" cy="22" r="7.25" fill="none" stroke="#163440" stroke-width="5.5"></circle><path d="M50 27.5 L78 66 L93 52 L86 76 L50 97 L14 76 L7 52 L22 66 Z M50 52 L65 76 L35 76 Z" fill-rule="evenodd" fill="#163440"></path><polygon points="18,44 82,44 78,52 22,52" fill="#163440"></polygon></g>
+<text x="130" y="128" text-anchor="middle" font-family="Saira Condensed, Saira, sans-serif" font-weight="700" font-size="42" fill="#1B242C">ANGST<tspan fill="#B23A2A">&#39;N</tspan></text>
+<text x="130" y="164" text-anchor="middle" font-family="Saira Condensed, Saira, sans-serif" font-weight="700" font-size="42" fill="#1B242C">ANCHORS</text>
+<text x="130" y="186" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="10" letter-spacing="2.4" fill="#7A7052">A LOW-POLY SHIPPING MMO</text>
+</svg>

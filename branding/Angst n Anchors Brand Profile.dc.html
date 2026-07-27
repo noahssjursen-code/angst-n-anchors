@@ -1,0 +1,628 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Saira+Condensed:wght@600;700&family=Saira:wght@400;500;600&family=JetBrains+Mono:wght@400;700&family=PT+Sans+Narrow:wght@400;700&family=PT+Sans:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  body { margin: 0; background: #ece5d3; }
+  a { color: #a8701c; text-decoration: none; }
+  a:hover { color: #d99a1f; }
+</style>
+</helmet>
+
+<section style="display:flex; flex-direction:column; gap:48px; padding:56px; background:#ece5d3; font-family:Saira, sans-serif;">
+
+  <div style="display:flex; flex-direction:column; gap:10px; max-width:860px;">
+    <div style="font-family:'JetBrains Mono',monospace; font-size:12px; letter-spacing:0.18em; text-transform:uppercase; color:#a8701c;">Angst 'n Anchors</div>
+    <div style="font-size:44px; color:#1b242c; font-family:'Saira Condensed',sans-serif; font-weight:700; line-height:1; letter-spacing:0.01em;">BRAND STYLEGUIDE</div>
+    <div style="font-size:16px; line-height:1.55; color:#5c5541; text-wrap:pretty;">Identity and interface standards for all product surfaces: GUI, in-game menus, NPC dialogue, AIS charts, shop, the vessel dashboard, and the world itself. This document is set in its own standards.</div>
+  </div>
+
+  <div id="1a" style="display:flex; flex-direction:column; gap:16px;">
+    <div style="font-family:'JetBrains Mono',monospace; font-size:11px; letter-spacing:0.16em; text-transform:uppercase; color:#7a7052;">01 · Logo</div>
+    <div style="display:flex; flex-wrap:wrap; gap:14px; align-items:stretch;">
+      <div style="width:300px; height:300px; background:#f2b233; display:flex; align-items:center; justify-content:center;">
+        <svg width="210" height="210" viewBox="0 0 100 100"><circle cx="50" cy="22" r="7.25" fill="none" stroke="#163440" stroke-width="5.5"></circle><path d="M50 27.5 L78 66 L93 52 L86 76 L50 97 L14 76 L7 52 L22 66 Z M50 52 L65 76 L35 76 Z" fill-rule="evenodd" fill="#163440"></path><polygon points="18,44 82,44 78,52 22,52" fill="#163440"></polygon></svg>
+      </div>
+      <div style="flex:1; min-width:300px; max-width:420px; background:#f3eee1; border:1px solid #c9bfa8; padding:22px; display:flex; flex-direction:column; gap:14px; font-size:13.5px; line-height:1.55; color:#3d4650;">
+        <div>Anchor, fjord, and bow-on vessel in one silhouette; ring sunk into the prow. Primary treatment: marine on amber #F2B233. Single-colour applications:</div>
+        <div style="display:flex; align-items:flex-end; gap:22px;">
+          <svg width="64" height="64" viewBox="0 0 100 100"><circle cx="50" cy="22" r="7.25" fill="none" stroke="#163440" stroke-width="5.5"></circle><path d="M50 27.5 L78 66 L93 52 L86 76 L50 97 L14 76 L7 52 L22 66 Z M50 52 L65 76 L35 76 Z" fill-rule="evenodd" fill="#163440"></path><polygon points="18,44 82,44 78,52 22,52" fill="#163440"></polygon></svg>
+          <svg width="32" height="32" viewBox="0 0 100 100"><circle cx="50" cy="22" r="7.25" fill="none" stroke="#163440" stroke-width="5.5"></circle><path d="M50 27.5 L78 66 L93 52 L86 76 L50 97 L14 76 L7 52 L22 66 Z M50 52 L65 76 L35 76 Z" fill-rule="evenodd" fill="#163440"></path><polygon points="18,44 82,44 78,52 22,52" fill="#163440"></polygon></svg>
+          <svg width="16" height="16" viewBox="0 0 100 100"><circle cx="50" cy="22" r="7.25" fill="none" stroke="#163440" stroke-width="5.5"></circle><path d="M50 27.5 L78 66 L93 52 L86 76 L50 97 L14 76 L7 52 L22 66 Z M50 52 L65 76 L35 76 Z" fill-rule="evenodd" fill="#163440"></path><polygon points="18,44 82,44 78,52 22,52" fill="#163440"></polygon></svg>
+          <div style="font-family:'JetBrains Mono',monospace; font-size:10px; color:#7a7052; padding-bottom:2px;">64 / 32 / 16</div>
+        </div>
+        <div style="display:flex; gap:10px; align-items:center;">
+          <div style="width:54px; height:54px; background:#1b242c; display:flex; align-items:center; justify-content:center;"><svg width="36" height="36" viewBox="0 0 100 100"><circle cx="50" cy="22" r="7.25" fill="none" stroke="#ece5d3" stroke-width="5.5"></circle><path d="M50 27.5 L78 66 L93 52 L86 76 L50 97 L14 76 L7 52 L22 66 Z M50 52 L65 76 L35 76 Z" fill-rule="evenodd" fill="#ece5d3"></path><polygon points="18,44 82,44 78,52 22,52" fill="#ece5d3"></polygon></svg></div>
+          <div style="width:54px; height:54px; background:#163440; display:flex; align-items:center; justify-content:center;"><svg width="36" height="36" viewBox="0 0 100 100"><circle cx="50" cy="22" r="7.25" fill="none" stroke="#d99a1f" stroke-width="5.5"></circle><path d="M50 27.5 L78 66 L93 52 L86 76 L50 97 L14 76 L7 52 L22 66 Z M50 52 L65 76 L35 76 Z" fill-rule="evenodd" fill="#d99a1f"></path><polygon points="18,44 82,44 78,52 22,52" fill="#d99a1f"></polygon></svg></div>
+          <div style="display:flex; align-items:center; gap:12px; margin-left:8px;">
+            <svg width="40" height="40" viewBox="0 0 100 100"><circle cx="50" cy="22" r="7.25" fill="none" stroke="#163440" stroke-width="5.5"></circle><path d="M50 27.5 L78 66 L93 52 L86 76 L50 97 L14 76 L7 52 L22 66 Z M50 52 L65 76 L35 76 Z" fill-rule="evenodd" fill="#163440"></path><polygon points="18,44 82,44 78,52 22,52" fill="#163440"></polygon></svg>
+            <div style="font-family:'Saira Condensed',sans-serif; font-weight:700; font-size:22px; color:#1b242c; line-height:0.95;">ANGST<span style="color:#b23a2a;">'N</span><br>ANCHORS</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="1b" style="display:flex; flex-direction:column; gap:16px;">
+    <div style="font-family:'JetBrains Mono',monospace; font-size:11px; letter-spacing:0.16em; text-transform:uppercase; color:#7a7052;">02 · Brand palette — the six roots</div>
+    <div style="display:grid; grid-template-columns:repeat(6, 1fr); max-width:860px; border:1px solid #c9bfa8;">
+      <div style="height:76px; background:#ece5d3; display:flex; align-items:flex-end; padding:10px; font-family:'JetBrains Mono',monospace; font-size:9.5px; color:#7a7052;">PAPER · #ECE5D3<br>background</div>
+      <div style="height:76px; background:#dfd6c0; display:flex; align-items:flex-end; padding:10px; font-family:'JetBrains Mono',monospace; font-size:9.5px; color:#7a7052;">SURFACE · #DFD6C0<br>cards, panels</div>
+      <div style="height:76px; background:#163440; display:flex; align-items:flex-end; padding:10px; font-family:'JetBrains Mono',monospace; font-size:9.5px; color:#9fc0cd;">SEA · #163440<br>interactive, water</div>
+      <div style="height:76px; background:#d99a1f; display:flex; align-items:flex-end; padding:10px; font-family:'JetBrains Mono',monospace; font-size:9.5px; color:#402c04;">BRASS · #D99A1F<br>accent, selection</div>
+      <div style="height:76px; background:#1b242c; display:flex; align-items:flex-end; padding:10px; font-family:'JetBrains Mono',monospace; font-size:9.5px; color:#8fa0ac;">INK · #1B242C<br>text</div>
+      <div style="height:76px; background:#b23a2a; display:flex; align-items:flex-end; padding:10px; font-family:'JetBrains Mono',monospace; font-size:9.5px; color:#f2d2cc;">ALERT · #B23A2A<br>collision, debt</div>
+    </div>
+    <div style="max-width:860px; font-size:13.5px; line-height:1.55; color:#3d4650;">These six define the brand. Everything in the colour map below is derived from them or lives in a family they govern — the map is what the engine binds to, the six are what people remember.</div>
+  </div>
+
+  <div id="1c" style="display:flex; flex-direction:column; gap:16px;">
+    <div style="font-family:'JetBrains Mono',monospace; font-size:11px; letter-spacing:0.16em; text-transform:uppercase; color:#7a7052;">03 · Bound colour map — the only legal colours</div>
+    <div style="max-width:1180px; background:#f3eee1; border:1px solid #c9bfa8; padding:24px; display:flex; flex-direction:column; gap:22px;">
+      <div style="display:flex; flex-direction:column; gap:6px;">
+        <div style="font-size:13.5px; line-height:1.55; color:#3d4650; max-width:700px;">Every colour drawn in game — UI, terrain, hulls, lights, chart overlays — comes from this table by token name. No literals in scenes, no eyedropped values, no per-asset tweaking. Bind it once as a palette resource and the whole product recolours from one file.</div>
+        <div style="font-family:'JetBrains Mono',monospace; font-size:10px; color:#a8701c; letter-spacing:0.1em;">{{ tokenCount }} TOKENS · {{ familyCount }} FAMILIES</div>
+      </div>
+
+      <div style="display:flex; flex-direction:column; gap:20px;">
+        <sc-for list="{{ ramps }}" as="r" hint-placeholder-count="8">
+          <div style="display:flex; flex-direction:column; gap:7px;">
+            <div style="display:flex; align-items:baseline; gap:10px; border-bottom:1px solid #dfd6c0; padding-bottom:5px;">
+              <div style="font-family:'Saira Condensed',sans-serif; font-weight:700; font-size:17px; color:#1b242c; letter-spacing:0.04em; white-space:nowrap;">{{ r.name }}</div>
+              <div style="font-size:12px; color:#7a7052;">{{ r.use }}</div>
+            </div>
+            <div style="display:flex; gap:5px; flex-wrap:wrap;">
+              <sc-for list="{{ r.steps }}" as="c" hint-placeholder-count="6">
+                <div style="width:132px; border:1px solid #c9bfa8; display:flex; flex-direction:column;">
+                  <div style="height:30px; background:{{ c.hex }};"></div>
+                  <div style="padding:5px 7px; display:flex; flex-direction:column; gap:1px; background:#f8f3e6;">
+                    <div style="font-family:'JetBrains Mono',monospace; font-size:8.5px; color:#1b242c; font-weight:700;">{{ c.token }}</div>
+                    <div style="font-family:'JetBrains Mono',monospace; font-size:8px; color:#7a7052;">{{ c.hex }}</div>
+                    <div style="font-size:9.5px; color:#5c5541; line-height:1.3;">{{ c.role }}</div>
+                  </div>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+        </sc-for>
+      </div>
+
+      <div style="border-top:1px solid #c9bfa8; padding-top:14px; display:flex; flex-direction:column; gap:8px; font-size:12.5px; line-height:1.5; color:#3d4650;">
+        <div><strong style="color:#1b242c;">Binding.</strong> One palette resource holds every token; UI themes, shaders and materials reference tokens, never hex. A colour that isn't in this table is a bug, not a choice.</div>
+        <div><strong style="color:#1b242c;">Lighting, not repainting.</strong> Night, storm and dusk come from post-processing and light temperature over these same tokens — never from darker duplicate colours.</div>
+        <div><strong style="color:#1b242c;">Liveries are player property.</strong> The HULL family is the paint players choose from; it is the only family allowed on player-authored surfaces, and none of it appears in UI.</div>
+        <div><strong style="color:#1b242c;">AMBER is marketing-only</strong> — capsules, thumbnails, the logo tile. It must not appear in a running build.</div>
+        <div><strong style="color:#1b242c;">Adding a colour</strong> means adding a token here first, in the family it belongs to, with a stated role. If no family fits, the colour is probably wrong.</div>
+      </div>
+    </div>
+  </div>
+
+  <div id="1d" style="display:flex; flex-direction:column; gap:16px;">
+    <div style="font-family:'JetBrains Mono',monospace; font-size:11px; letter-spacing:0.16em; text-transform:uppercase; color:#7a7052;">04 · Typography · Google Fonts, SIL OFL</div>
+    <div style="max-width:860px; background:#f3eee1; border:1px solid #c9bfa8; padding:26px; display:flex; flex-direction:column; gap:18px;">
+      <div style="display:flex; flex-direction:column; gap:4px;">
+        <div style="font-family:'JetBrains Mono',monospace; font-size:9.5px; color:#a8701c; letter-spacing:0.14em;">DISPLAY · SAIRA CONDENSED 700 · titles, section heads, big numbers</div>
+        <div style="font-family:'Saira Condensed',sans-serif; font-weight:700; font-size:40px; color:#1b242c; line-height:1;">ÖSTERVIK — BERTH 2 CLEARED</div>
+      </div>
+      <div style="display:flex; flex-direction:column; gap:4px;">
+        <div style="font-family:'JetBrains Mono',monospace; font-size:9.5px; color:#a8701c; letter-spacing:0.14em;">UI / DIALOGUE · SAIRA 400–600 · body, buttons, NPC speech</div>
+        <div style="font-size:17px; color:#3d4650; line-height:1.55; max-width:640px;">The cranes sit idle until the rain passes. The harbour master is not in a hurry. Neither is the rain.</div>
+      </div>
+      <div style="display:flex; flex-direction:column; gap:4px;">
+        <div style="font-family:'JetBrains Mono',monospace; font-size:9.5px; color:#a8701c; letter-spacing:0.14em;">DATA · JETBRAINS MONO · AIS, gauges, prices, coordinates</div>
+        <div style="font-family:'JetBrains Mono',monospace; font-size:15px; color:#1b242c;">AIS · MMSI 257043210 · 10.4 KN · HDG 074° · 59°02'N 005°27'E</div>
+      </div>
+      <div style="border-top:1px solid #c9bfa8; padding-top:12px; font-size:12.5px; color:#7a7052; line-height:1.5;">One superfamily + one mono. Condensed for hierarchy, regular for reading, mono for anything a sailor would trust with their life. Weights shipped in Godot: Condensed 600/700, Saira 400/500/600, Mono 400/700.</div>
+    </div>
+
+    <div style="max-width:860px; background:#f3eee1; border:1px solid #c9bfa8; padding:24px; display:flex; flex-direction:column; gap:16px;">
+      <div style="display:flex; flex-direction:column; gap:6px;">
+        <div style="font-family:'JetBrains Mono',monospace; font-size:9.5px; letter-spacing:0.14em; color:#a8701c;">LOCALISATION HEADROOM</div>
+        <div style="font-size:13.5px; line-height:1.55; color:#3d4650; max-width:660px;">Design every label for the longest language, not English. German and Russian run 30–40% longer; Finnish worse. Panels sized to English copy break the first time the game is translated.</div>
+      </div>
+      <div style="display:flex; flex-wrap:wrap; gap:10px;">
+        <div style="display:flex; flex-direction:column; gap:5px;">
+          <div style="font-family:'JetBrains Mono',monospace; font-size:9px; color:#7a7052; letter-spacing:0.1em;">EN · SAIRA CONDENSED</div>
+          <div style="background:#163440; color:#ece5d3; padding:8px 16px; font-family:'Saira Condensed',sans-serif; font-weight:600; font-size:14px; letter-spacing:0.06em; white-space:nowrap;">REQUEST BERTH</div>
+        </div>
+        <div style="display:flex; flex-direction:column; gap:5px;">
+          <div style="font-family:'JetBrains Mono',monospace; font-size:9px; color:#7a7052; letter-spacing:0.1em;">DE · SAIRA CONDENSED · ≈ +40%</div>
+          <div style="background:#163440; color:#ece5d3; padding:8px 16px; font-family:'Saira Condensed',sans-serif; font-weight:600; font-size:14px; letter-spacing:0.06em; white-space:nowrap;">LIEGEPLATZ ANFORDERN</div>
+        </div>
+        <div style="display:flex; flex-direction:column; gap:5px;">
+          <div style="font-family:'JetBrains Mono',monospace; font-size:9px; color:#a8701c; letter-spacing:0.1em;">RU · PT SANS NARROW (SUBSTITUTE)</div>
+          <div style="background:#163440; color:#ece5d3; padding:8px 16px; font-family:'PT Sans Narrow',sans-serif; font-weight:700; font-size:15px; letter-spacing:0.04em; white-space:nowrap;">ЗАПРОСИТЬ СТОЯНКУ</div>
+        </div>
+      </div>
+      <div style="display:flex; flex-direction:column; gap:8px; font-size:12.5px; line-height:1.55; color:#3d4650; border-top:1px solid #c9bfa8; padding-top:12px;">
+        <div><strong style="color:#1b242c;">+40% rule.</strong> Every button, tab and label is laid out with 40% spare width, or is free to grow. Fixed-width text containers are forbidden.</div>
+        <div><strong style="color:#1b242c;">Data never translates.</strong> Mono readouts — KN, HDG, coordinates, ℳ amounts, MMSI — stay in source form in every locale. Only the label beside them translates.</div>
+        <div><strong style="color:#1b242c;">No text baked into art.</strong> Signage, port names and UI labels are live text nodes, so a locale swap never needs a new texture.</div>
+        <div><strong style="color:#1b242c;">Glyph coverage — Saira has no Cyrillic.</strong> Saira and Saira Condensed cover Latin, Latin Extended and Vietnamese only. JetBrains Mono does carry Cyrillic, so data readouts are safe in any locale, but display and UI text need a substitute face: <strong style="color:#1b242c;">PT Sans Narrow 700</strong> for display and <strong style="color:#1b242c;">PT Sans</strong> for UI — both Google Fonts, OFL, designed for Cyrillic, and close enough in proportion to hold the layout. Greek needs the same treatment; CJK needs a separate face and a rebuilt line-height scale. Decide per locale before promising it.</div>
+        <div><strong style="color:#1b242c;">Locale font table.</strong> Ship it as data, not per-scene overrides: <span style="font-family:'JetBrains Mono',monospace; font-size:11.5px;">en/de/fr/es/it/pl → Saira · ru/uk → PT Sans · data → JetBrains Mono (all locales)</span>.</div>
+        <div><strong style="color:#1b242c;">Condensed has a floor.</strong> Never solve overflow by shrinking type below 24 px at 1080p — wrap to two lines or shorten the source string.</div>
+      </div>
+    </div>
+  </div>
+
+  <div style="display:flex; flex-direction:column; gap:16px; max-width:860px;">
+    <div style="font-family:'JetBrains Mono',monospace; font-size:11px; letter-spacing:0.16em; text-transform:uppercase; color:#7a7052;">05 · Layout rules</div>
+    <div style="display:flex; flex-direction:column; gap:8px; font-size:14px; line-height:1.6; color:#3d4650;">
+      <div><span style="color:#a8701c; font-family:'JetBrains Mono',monospace; font-size:11px;">RULE 1</span> — the centre of the screen belongs to the sea. Instruments live on edges and corners.</div>
+      <div><span style="color:#a8701c; font-family:'JetBrains Mono',monospace; font-size:11px;">RULE 2</span> — one horizontal "waterline" datum per screen; bars, bands and scrubbers sit on it.</div>
+      <div><span style="color:#a8701c; font-family:'JetBrains Mono',monospace; font-size:11px;">RULE 3</span> — data is mono, feelings are the UI face. NPCs never speak in the data font.</div>
+    </div>
+  </div>
+
+  <div style="display:flex; flex-direction:column; gap:16px;">
+    <div style="font-family:'JetBrains Mono',monospace; font-size:11px; letter-spacing:0.16em; text-transform:uppercase; color:#7a7052;">06 · Spacing + sizing</div>
+    <div style="max-width:860px; background:#f3eee1; border:1px solid #c9bfa8; padding:24px; display:flex; flex-direction:column; gap:18px;">
+      <div style="font-size:13.5px; line-height:1.55; color:#3d4650; max-width:660px;">Base unit <strong style="color:#1b242c;">4 px at 1080p</strong>. Every gap, pad and offset is a step on this scale — no arbitrary values, so screens built by different hands still line up.</div>
+      <div style="display:flex; align-items:flex-end; gap:10px; flex-wrap:wrap;">
+        <sc-for list="{{ spaceSteps }}" as="s" hint-placeholder-count="8">
+          <div style="display:flex; flex-direction:column; align-items:center; gap:6px;">
+            <div style="width:{{ s.px }}px; height:24px; background:#163440;"></div>
+            <div style="font-family:'JetBrains Mono',monospace; font-size:9px; color:#1b242c;">{{ s.name }}</div>
+            <div style="font-family:'JetBrains Mono',monospace; font-size:8.5px; color:#7a7052;">{{ s.px }}</div>
+          </div>
+        </sc-for>
+      </div>
+      <div style="display:flex; flex-direction:column; gap:5px; border-top:1px solid #c9bfa8; padding-top:12px; font-family:'JetBrains Mono',monospace; font-size:11px; color:#3d4650; line-height:1.7;">
+        <div>PANEL PADDING      24    ·  CARD PADDING       18</div>
+        <div>GROUP GAP          12    ·  SECTION GAP        32</div>
+        <div>HAIRLINE            1    ·  BRASS RULE          5</div>
+        <div>MIN HIT TARGET     44    ·  MIN ICON BOX       20</div>
+      </div>
+      <div style="display:flex; flex-direction:column; gap:6px; font-size:12.5px; line-height:1.5; color:#3d4650;">
+        <div><strong style="color:#1b242c;">44 px is a floor, not a target.</strong> Anything clickable while the boat is moving gets 44 px minimum, gamepad or mouse.</div>
+        <div><strong style="color:#1b242c;">Type sizes at 1080p:</strong> display 44 / 32 / 24, body 18, button 16, data mono 17, label mono 14. Micro mono 12 is permitted only for dense chart labels.</div>
+        <div><strong style="color:#1b242c;">Scale with resolution, don't reflow.</strong> The HUD keeps its proportions at 1440p and 4K; panels grow, layout stays put.</div>
+      </div>
+    </div>
+  </div>
+
+  <div style="display:flex; flex-direction:column; gap:16px;">
+    <div style="font-family:'JetBrains Mono',monospace; font-size:11px; letter-spacing:0.16em; text-transform:uppercase; color:#7a7052;">07 · Motion</div>
+    <div style="max-width:860px; background:#f3eee1; border:1px solid #c9bfa8; padding:24px; display:flex; flex-direction:column; gap:16px;">
+      <div style="font-size:13.5px; line-height:1.55; color:#3d4650; max-width:660px;">The game is slow; the interface is not. Motion exists to show where a thing came from, never to entertain.</div>
+      <div style="display:flex; flex-direction:column; gap:5px; font-family:'JetBrains Mono',monospace; font-size:11px; color:#3d4650; line-height:1.7;">
+        <div>MICRO      90 MS   hover, chip select, toggle</div>
+        <div>CONTROL   160 MS   buttons, tooltips, field focus</div>
+        <div>PANEL     240 MS   cards, dialogue band, side panels</div>
+        <div>SCREEN    320 MS   menu transitions, chart open/close</div>
+        <div>ENTER     cubic-bezier(0.2, 0, 0, 1)   decelerating</div>
+        <div>EXIT      cubic-bezier(0.4, 0, 1, 1)   accelerating</div>
+        <div>DATA      linear — numbers never ease</div>
+      </div>
+      <div style="display:flex; flex-direction:column; gap:6px; font-size:12.5px; line-height:1.5; color:#3d4650; border-top:1px solid #c9bfa8; padding-top:12px;">
+        <div><strong style="color:#1b242c;">No bounce, no overshoot, no spring.</strong> Nothing in a harbour is springy.</div>
+        <div><strong style="color:#1b242c;">Entering elements translate 8 px maximum</strong> and never scale. Panels slide from the edge they belong to.</div>
+        <div><strong style="color:#1b242c;">Gauges and readouts tick linearly.</strong> An eased number is a lying number.</div>
+        <div><strong style="color:#1b242c;">One animation per interaction</strong> — if two things move, the player doesn't know which one answered them.</div>
+        <div><strong style="color:#1b242c;">Reduced motion is instant.</strong> Setting off = no transitions at all, no fade substitutes.</div>
+      </div>
+    </div>
+  </div>
+
+  <div style="display:flex; flex-direction:column; gap:16px; max-width:860px;">
+    <div style="font-family:'JetBrains Mono',monospace; font-size:11px; letter-spacing:0.16em; text-transform:uppercase; color:#7a7052;">08 · Voice</div>
+    <div style="display:flex; flex-direction:column; gap:8px; font-size:14px; line-height:1.6; color:#3d4650;">
+      <div>— Deadpan, maritime, specific. "Storm in 3 hours" beats "Danger approaching!"</div>
+      <div>— The game never congratulates you. The harbour master might nod.</div>
+      <div>— Numbers are honest and mono. No fake precision, no exclamation marks in system text.</div>
+    </div>
+  </div>
+
+  <div style="display:flex; flex-direction:column; gap:16px; max-width:860px;">
+    <div style="font-family:'JetBrains Mono',monospace; font-size:11px; letter-spacing:0.16em; text-transform:uppercase; color:#7a7052;">09 · Logo usage</div>
+    <div style="display:flex; flex-direction:column; gap:8px; font-size:14px; line-height:1.6; color:#3d4650;">
+      <div>— Minimum size 16 px. Clear space on all sides: the width of the ring.</div>
+      <div>— Amber #F2B233 backgrounds are reserved for the logo tile and marketing; in-game accent is brass #D99A1F.</div>
+      <div>— The mark is recoloured, never redrawn: single colour only, from the palette above.</div>
+      <div>— Tagline, when used: A LOW-POLY SHIPPING MMO — mono, tracked, never larger than the wordmark's x-height.</div>
+    </div>
+  </div>
+
+  <div style="display:flex; flex-direction:column; gap:16px;">
+    <div style="font-family:'JetBrains Mono',monospace; font-size:11px; letter-spacing:0.16em; text-transform:uppercase; color:#7a7052;">10 · Component states</div>
+    <div style="max-width:860px; background:#f3eee1; border:1px solid #c9bfa8; padding:24px; display:flex; flex-direction:column; gap:20px;">
+      <div style="display:flex; flex-wrap:wrap; gap:34px;">
+        <div style="display:flex; flex-direction:column; gap:8px;">
+          <div style="font-family:'JetBrains Mono',monospace; font-size:9px; color:#a8701c; letter-spacing:0.12em;">BUTTON · PRIMARY (SEA)</div>
+          <div style="display:flex; gap:8px; align-items:center;">
+            <div style="background:#163440; color:#ece5d3; padding:8px 18px; font-family:'Saira Condensed',sans-serif; font-weight:600; font-size:14px; letter-spacing:0.06em; white-space:nowrap;">REQUEST BERTH</div>
+            <div style="background:#0f2530; color:#ece5d3; padding:8px 18px; font-family:'Saira Condensed',sans-serif; font-weight:600; font-size:14px; letter-spacing:0.06em;">HOVER</div>
+            <div style="background:#dfd6c0; color:#988d70; padding:8px 18px; font-family:'Saira Condensed',sans-serif; font-weight:600; font-size:14px; letter-spacing:0.06em;">DISABLED</div>
+          </div>
+        </div>
+        <div style="display:flex; flex-direction:column; gap:8px;">
+          <div style="font-family:'JetBrains Mono',monospace; font-size:9px; color:#a8701c; letter-spacing:0.12em;">BUTTON · SECONDARY / LOUD (BRASS, MAX ONE PER SCREEN)</div>
+          <div style="display:flex; gap:8px; align-items:center;">
+            <div style="border:1px solid #b5ab92; color:#3d4650; padding:8px 18px; font-family:'Saira Condensed',sans-serif; font-weight:600; font-size:14px; letter-spacing:0.06em; white-space:nowrap;">SET COURSE</div>
+            <div style="border:1px solid #d99a1f; color:#1b242c; padding:8px 18px; font-family:'Saira Condensed',sans-serif; font-weight:600; font-size:14px; letter-spacing:0.06em;">HOVER</div>
+            <div style="background:#d99a1f; color:#1b242c; padding:8px 18px; font-family:'Saira Condensed',sans-serif; font-weight:600; font-size:14px; letter-spacing:0.06em; white-space:nowrap;">FLOAT TEST</div>
+          </div>
+        </div>
+      </div>
+      <div style="display:flex; flex-wrap:wrap; gap:34px;">
+        <div style="display:flex; flex-direction:column; gap:8px;">
+          <div style="font-family:'JetBrains Mono',monospace; font-size:9px; color:#a8701c; letter-spacing:0.12em;">CHIPS (TABS, FILTERS, TOOLS)</div>
+          <div style="display:flex; gap:5px; align-items:center; flex-wrap:nowrap;">
+            <div style="font-family:'JetBrains Mono',monospace; font-size:10px; padding:5px 11px; color:#5c5541; border:1px solid #b5ab92; white-space:nowrap;">WEATHER</div>
+            <div style="font-family:'JetBrains Mono',monospace; font-size:10px; padding:5px 11px; background:#163440; color:#ece5d3; white-space:nowrap;">FISHING</div>
+            <div style="font-family:'JetBrains Mono',monospace; font-size:10px; padding:5px 11px; color:#8a3325; border:1px solid #c98b7e; white-space:nowrap;">CLOSE · M</div>
+          </div>
+        </div>
+        <div style="display:flex; flex-direction:column; gap:8px;">
+          <div style="font-family:'JetBrains Mono',monospace; font-size:9px; color:#a8701c; letter-spacing:0.12em;">TEXT FIELD</div>
+          <div style="display:flex; gap:8px; align-items:center;">
+            <div style="background:#f8f3e6; border:1px solid #b5ab92; padding:7px 12px; font-family:'JetBrains Mono',monospace; font-size:11px; color:#988d70; width:150px;">⌕ SEARCH PROPS…</div>
+            <div style="background:#f8f3e6; border:1px solid #163440; padding:7px 12px; font-family:'JetBrains Mono',monospace; font-size:11px; color:#1b242c; width:150px;">TROMMEL<span style="color:#d99a1f;">▎</span></div>
+          </div>
+        </div>
+        <div style="display:flex; flex-direction:column; gap:8px;">
+          <div style="font-family:'JetBrains Mono',monospace; font-size:9px; color:#a8701c; letter-spacing:0.12em;">TOGGLE</div>
+          <div style="display:flex; gap:12px; align-items:center;">
+            <div style="display:flex; align-items:center; gap:8px;"><div style="width:34px; height:18px; background:#163440; position:relative;"><div style="position:absolute; right:2px; top:2px; width:14px; height:14px; background:#ece5d3;"></div></div><span style="font-family:'JetBrains Mono',monospace; font-size:10px; color:#1b242c;">ON</span></div>
+            <div style="display:flex; align-items:center; gap:8px;"><div style="width:34px; height:18px; border:1px solid #b5ab92; position:relative;"><div style="position:absolute; left:2px; top:2px; width:14px; height:14px; background:#b5ab92;"></div></div><span style="font-family:'JetBrains Mono',monospace; font-size:10px; color:#7a7052;">OFF</span></div>
+          </div>
+        </div>
+      </div>
+      <div style="border-top:1px solid #c9bfa8; padding-top:12px; font-size:12.5px; color:#7a7052; line-height:1.5;">No rounded corners, no shadows, no gradients. Hover darkens one step; active/selected fills sea; disabled drops to surface + faded ink. Brass is for the single loudest action on a screen and for selection highlights — never both meanings side by side.</div>
+    </div>
+  </div>
+
+  <div style="display:flex; flex-direction:column; gap:16px;">
+    <div style="font-family:'JetBrains Mono',monospace; font-size:11px; letter-spacing:0.16em; text-transform:uppercase; color:#7a7052;">11 · Iconography</div>
+    <div style="max-width:860px; background:#f3eee1; border:1px solid #c9bfa8; padding:24px; display:flex; flex-direction:column; gap:16px;">
+      <div style="display:flex; align-items:flex-end; gap:26px;">
+        <svg width="20" height="20" viewBox="0 0 20 20"><rect x="6" y="4" width="8" height="13" rx="2" fill="none" stroke="#1b242c" stroke-width="1.6"></rect><line x1="6" y1="9" x2="14" y2="9" stroke="#1b242c" stroke-width="1.2"></line></svg>
+        <svg width="20" height="20" viewBox="0 0 20 20"><line x1="3" y1="10" x2="17" y2="10" stroke="#1b242c" stroke-width="1.8"></line><line x1="10" y1="6" x2="10" y2="14" stroke="#1b242c" stroke-width="1.8"></line></svg>
+        <svg width="20" height="20" viewBox="0 0 20 20"><circle cx="10" cy="8" r="5" fill="none" stroke="#1b242c" stroke-width="1.6"></circle><line x1="10" y1="13" x2="10" y2="17" stroke="#1b242c" stroke-width="1.6"></line></svg>
+        <svg width="20" height="20" viewBox="0 0 20 20"><circle cx="10" cy="10" r="6" fill="none" stroke="#1b242c" stroke-width="1.8"></circle><circle cx="10" cy="10" r="2.5" fill="none" stroke="#1b242c" stroke-width="1.2"></circle></svg>
+        <svg width="40" height="40" viewBox="0 0 20 20"><circle cx="10" cy="7" r="3" fill="none" stroke="#1b242c" stroke-width="1.6"></circle><line x1="10" y1="10" x2="10" y2="17" stroke="#1b242c" stroke-width="1.6"></line><line x1="7" y1="17" x2="13" y2="17" stroke="#1b242c" stroke-width="1.6"></line></svg>
+        <svg width="40" height="40" viewBox="0 0 20 20"><line x1="4" y1="6" x2="16" y2="6" stroke="#1b242c" stroke-width="1.6"></line><line x1="4" y1="11" x2="16" y2="11" stroke="#1b242c" stroke-width="1.6"></line><line x1="4" y1="16" x2="16" y2="16" stroke="#1b242c" stroke-width="1.6"></line></svg>
+        <div style="font-family:'JetBrains Mono',monospace; font-size:10px; color:#7a7052; padding-bottom:2px;">20 / 40 PX</div>
+      </div>
+      <div style="border-top:1px solid #c9bfa8; padding-top:12px; font-size:12.5px; color:#7a7052; line-height:1.5;">20 px grid · 1.6 px ink stroke (1.8 for single-stroke icons) · square caps and joins · outlines only, fills reserved for tiny dots · one object per icon, drawn side-on or top-down like a chart symbol. Icons recolour like the logo: ink on paper, paper on sea, never multicolour.</div>
+    </div>
+  </div>
+
+  <div style="display:flex; flex-direction:column; gap:16px;">
+    <div style="font-family:'JetBrains Mono',monospace; font-size:11px; letter-spacing:0.16em; text-transform:uppercase; color:#7a7052;">12 · Standard shapes</div>
+    <div style="max-width:860px; background:#f3eee1; border:1px solid #c9bfa8; padding:24px; display:flex; flex-direction:column; gap:18px;">
+      <div style="font-size:13.5px; line-height:1.55; color:#3d4650; max-width:640px;">Six shapes replace rounded rectangles and circles across the product — the vocabulary of a hull plate and a chart symbol, not a web card. <strong style="color:#1b242c;">No chamfers, no rounded corners.</strong> Panels stay square and earn their character from a brass rule; only shapes that mean something — direction, a hull, a flag, a zone — break the rectangle, and they break it along a whole edge.</div>
+      <div style="display:flex; flex-wrap:wrap; gap:16px;">
+
+        <div style="display:flex; flex-direction:column; gap:7px; width:186px;">
+          <div style="height:96px; background:#163440; display:flex; align-items:flex-end; padding:10px; font-family:'JetBrains Mono',monospace; font-size:9px; color:#9fc0cd; border-top:5px solid #d99a1f;">PANEL</div>
+          <div style="font-family:'JetBrains Mono',monospace; font-size:9.5px; color:#1b242c; font-weight:700;">RULED PANEL</div>
+          <div style="font-size:11.5px; color:#7a7052; line-height:1.45;">Default panel: square, with one brass rule on the leading edge. Cards, port info, dialogue.</div>
+        </div>
+
+        <div style="display:flex; flex-direction:column; gap:7px; width:186px;">
+          <div style="height:96px; background:#163440; clip-path:polygon(0 0, 76% 0, 100% 50%, 76% 100%, 0 100%); display:flex; align-items:flex-end; padding:10px; font-family:'JetBrains Mono',monospace; font-size:9px; color:#9fc0cd;">PROW</div>
+          <div style="font-family:'JetBrains Mono',monospace; font-size:9.5px; color:#1b242c; font-weight:700;">PROW</div>
+          <div style="font-size:11.5px; color:#7a7052; line-height:1.45;">Points at what it means. Build plates, direction banners, headers.</div>
+        </div>
+
+        <div style="display:flex; flex-direction:column; gap:7px; width:186px;">
+          <div style="height:96px; background:#163440; clip-path:polygon(0 0, 100% 0, 88% 100%, 0 100%); display:flex; align-items:flex-end; padding:10px; font-family:'JetBrains Mono',monospace; font-size:9px; color:#9fc0cd;">BATTER</div>
+          <div style="font-family:'JetBrains Mono',monospace; font-size:9.5px; color:#1b242c; font-weight:700;">BATTER</div>
+          <div style="font-size:11.5px; color:#7a7052; line-height:1.45;">One full-height slant, like a hull section. Modals, item slots, capsule crops.</div>
+        </div>
+
+        <div style="display:flex; flex-direction:column; gap:7px; width:186px;">
+          <div style="height:96px; background:#b23a2a; clip-path:polygon(0 0, 100% 0, 82% 50%, 100% 100%, 0 100%); display:flex; align-items:center; padding:10px; font-family:'JetBrains Mono',monospace; font-size:9px; color:#f2d2cc;">PENNANT</div>
+          <div style="font-family:'JetBrains Mono',monospace; font-size:9.5px; color:#1b242c; font-weight:700;">PENNANT</div>
+          <div style="font-size:11.5px; color:#7a7052; line-height:1.45;">Swallowtail. Labels, alerts, quest tags, price flags.</div>
+        </div>
+
+        <div style="display:flex; flex-direction:column; gap:7px; width:186px;">
+          <div style="height:96px; background:#f8f3e6; border:1px dashed #6a8f77; display:flex; align-items:center; justify-content:center;">
+            <svg width="150" height="80" viewBox="0 0 150 80"><polygon points="14,52 46,18 96,12 138,34 120,70 52,74" fill="#7fc48e" fill-opacity="0.2" stroke="#4f7d5e" stroke-width="1.4" stroke-dasharray="6 4"></polygon></svg>
+          </div>
+          <div style="font-family:'JetBrains Mono',monospace; font-size:9.5px; color:#1b242c; font-weight:700;">SOUNDING ZONE</div>
+          <div style="font-size:11.5px; color:#7a7052; line-height:1.45;">Irregular dashed polygon, 6–8 points. Fishing grounds, weather, territory.</div>
+        </div>
+
+        <div style="display:flex; flex-direction:column; gap:7px; width:186px;">
+          <div style="height:96px; background:#f8f3e6; border:1px solid #e0d8c4; display:flex; align-items:center; justify-content:center; gap:16px;">
+            <svg width="34" height="46" viewBox="0 0 34 46"><polygon points="17,2 32,44 2,44" fill="#1b242c"></polygon></svg>
+            <svg width="34" height="46" viewBox="0 0 34 46"><polygon points="17,4 30,23 17,42 4,23" fill="none" stroke="#1b242c" stroke-width="2.4"></polygon></svg>
+          </div>
+          <div style="font-family:'JetBrains Mono',monospace; font-size:9.5px; color:#1b242c; font-weight:700;">WEDGE + ROSE</div>
+          <div style="font-size:11.5px; color:#7a7052; line-height:1.45;">Vessel heading and map pins. The only pointed marks on a chart.</div>
+        </div>
+
+      </div>
+      <div style="border-top:1px solid #c9bfa8; padding-top:12px; display:flex; flex-direction:column; gap:4px; font-family:'JetBrains Mono',monospace; font-size:10.5px; color:#5c5541; line-height:1.6;">
+        <div>RULED PANEL    square + border-top: 5px solid brass</div>
+        <div>PROW           polygon(0 0, 76% 0, 100% 50%, 76% 100%, 0 100%)</div>
+        <div>BATTER         polygon(0 0, 100% 0, 88% 100%, 0 100%)</div>
+        <div>PENNANT        polygon(0 0, 100% 0, 82% 50%, 100% 100%, 0 100%)</div>
+      </div>
+      <div style="font-size:12.5px; color:#7a7052; line-height:1.5;">One shape per component, never two cuts on the same element. No chamfered corners, no rounded corners — a corner is square or the whole edge moves. Circles survive only as instrument dials, the logo's ring, and buoy markers.</div>
+    </div>
+  </div>
+
+  <div style="display:flex; flex-direction:column; gap:16px;">
+    <div style="font-family:'JetBrains Mono',monospace; font-size:11px; letter-spacing:0.16em; text-transform:uppercase; color:#7a7052;">13 · Currency + formats</div>
+    <div style="max-width:860px; background:#f3eee1; border:1px solid #c9bfa8; padding:24px; display:flex; flex-direction:column; gap:10px;">
+      <div style="display:flex; gap:24px; align-items:center;">
+        <div style="display:flex; align-items:center; gap:8px; white-space:nowrap; flex-shrink:0;">
+          <svg width="26" height="22" viewBox="0 0 26 22"><path d="M3 19 L3 4 L9 14 L15 4 L15 19" fill="none" stroke="#1b242c" stroke-width="2.2" stroke-linecap="square"></path><line x1="1" y1="11" x2="17" y2="11" stroke="#1b242c" stroke-width="1.6"></line><line x1="19" y1="14" x2="25" y2="14" stroke="#1b242c" stroke-width="1.6"></line></svg>
+          <div style="font-family:'JetBrains Mono',monospace; font-size:22px; color:#1b242c; white-space:nowrap;">8 800</div>
+        </div>
+        <div style="font-size:12.5px; color:#7a7052;">Marks. Custom M glyph (ships as a font/texture asset, not a Unicode character), space before amount, thin-space thousands, no decimals — the economy deals in whole marks.</div>
+      </div>
+      <div style="display:flex; flex-direction:column; gap:6px; font-family:'JetBrains Mono',monospace; font-size:13px; color:#1b242c; border-top:1px solid #c9bfa8; padding-top:12px;">
+        <div>TIME 14:42 <span style="color:#7a7052; font-family:Saira,sans-serif; font-size:12px;">— 24-hour, no seconds unless it's a race</span></div>
+        <div>TUE 26 JUL <span style="color:#7a7052; font-family:Saira,sans-serif; font-size:12px;">— day + date, no year in HUD</span></div>
+        <div>59°02'N 005°27'E <span style="color:#7a7052; font-family:Saira,sans-serif; font-size:12px;">— degrees + minutes, no decimals</span></div>
+        <div>10.4 KN · HDG 074° <span style="color:#7a7052; font-family:Saira,sans-serif; font-size:12px;">— one decimal for speed, three digits for headings</span></div>
+        <div>18.4 T · 1.2 M <span style="color:#7a7052; font-family:Saira,sans-serif; font-size:12px;">— metric, one decimal, unit after a space</span></div>
+      </div>
+      <div style="font-size:12.5px; color:#7a7052; line-height:1.5;">All of the above always in JetBrains Mono, never bold. On dark strips the value is brass and the label paper; on paper both are ink.</div>
+    </div>
+  </div>
+
+  <div style="display:flex; flex-direction:column; gap:16px;">
+    <div style="font-family:'JetBrains Mono',monospace; font-size:11px; letter-spacing:0.16em; text-transform:uppercase; color:#7a7052;">14 · Export pack — files in the repo</div>
+    <div style="max-width:860px; background:#f3eee1; border:1px solid #c9bfa8; padding:24px; display:flex; flex-direction:column; gap:6px; font-size:13px; color:#3d4650;">
+      <div style="font-size:13.5px; line-height:1.55; color:#3d4650;">Generated and sitting in <span style="font-family:'JetBrains Mono',monospace; font-size:12px; color:#1b242c;">brand/</span> — commit the folder as-is. Agents read <span style="font-family:'JetBrains Mono',monospace; font-size:12px; color:#1b242c;">brand/README.md</span> first, then the tokens file.</div>
+      <div style="display:flex; flex-direction:column; gap:0; font-family:'JetBrains Mono',monospace; font-size:11px; color:#3d4650; line-height:1.85; border-top:1px solid #c9bfa8; padding-top:12px;">
+        <div style="color:#1b242c; font-weight:700;">brand/</div>
+        <div>  README.md<span style="color:#7a7052;">                       rules, file map, locale font table</span></div>
+        <div>  tokens/design-tokens.json<span style="color:#7a7052;">       colour + spacing + type + motion + shapes</span></div>
+        <div>  tokens/palette.json<span style="color:#7a7052;">             flat TOKEN → hex lookup</span></div>
+        <div>  tokens/palette.gd<span style="color:#7a7052;">               Godot: class_name Palette, 146 consts + ALL</span></div>
+        <div>  tokens/palette.css<span style="color:#7a7052;">              CSS custom properties for web/marketing</span></div>
+        <div>  logo/anchor-mark.svg<span style="color:#7a7052;">            master, marine</span></div>
+        <div>  logo/anchor-mark-{ink,paper,brass}.svg</div>
+        <div>  logo/anchor-mark-amber-tile.svg<span style="color:#7a7052;"> primary treatment</span></div>
+        <div>  logo/lockup-{horizontal,stacked}.svg</div>
+        <div>  logo/png/anchor-mark-{variant}-{16..1024}.png<span style="color:#7a7052;">   20 files</span></div>
+        <div>  currency/mark-glyph.svg<span style="color:#7a7052;">         the Marks glyph</span></div>
+      </div>
+      <div style="display:flex; flex-direction:column; gap:6px; font-size:12.5px; color:#3d4650; line-height:1.5; border-top:1px solid #c9bfa8; padding-top:12px;">
+        <div><strong style="color:#1b242c;">Token files are generated, not authored.</strong> Change a colour in this styleguide, regenerate — never hand-edit the JSON or the .gd.</div>
+        <div><strong style="color:#1b242c;">Lockup SVGs use live text</strong> in Saira Condensed 700. Convert text to paths before sending them outside your own projects.</div>
+        <div><strong style="color:#1b242c;">Fonts to bundle:</strong> Saira Condensed 600/700, Saira 400/500/600, JetBrains Mono 400/700, PT Sans Narrow 700, PT Sans 400/700 — all OFL.</div>
+      </div>
+    </div>
+  </div>
+
+  <div style="display:flex; flex-direction:column; gap:16px;">
+    <div style="font-family:'JetBrains Mono',monospace; font-size:11px; letter-spacing:0.16em; text-transform:uppercase; color:#7a7052;">15 · World reference</div>
+    <div style="font-size:14px; line-height:1.6; color:#3d4650; max-width:860px; text-wrap:pretty;">The product this guide serves: low-poly fjords, working harbours, and the people in them. Any interface visible in these captures is legacy and is fully superseded by this document.</div>
+    <div style="display:flex; flex-wrap:wrap; gap:14px; max-width:1000px;">
+      <div style="display:flex; flex-direction:column; gap:6px;">
+        <img src="uploads/Screenshot 2026-07-17 153837.png" style="width:486px; height:264px; object-fit:cover; border:1px solid #c9bfa8; display:block;">
+        <div style="font-family:'JetBrains Mono',monospace; font-size:10px; color:#7a7052; letter-spacing:0.06em;">PORT DISTRICT · TOWER CRANES, LAYDOWN QUAYS</div>
+      </div>
+      <div style="display:flex; flex-direction:column; gap:6px;">
+        <img src="uploads/Screenshot 2026-07-22 022009.png" style="width:486px; height:264px; object-fit:cover; border:1px solid #c9bfa8; display:block;">
+        <div style="font-family:'JetBrains Mono',monospace; font-size:10px; color:#7a7052; letter-spacing:0.06em;">ÖSTERVIK IN RAIN · CARGO QUAY, FUEL TANKS</div>
+      </div>
+      <div style="display:flex; flex-direction:column; gap:6px;">
+        <img src="uploads/Screenshot 2026-07-17 233616.png" style="width:486px; height:264px; object-fit:cover; border:1px solid #c9bfa8; display:block;">
+        <div style="font-family:'JetBrains Mono',monospace; font-size:10px; color:#7a7052; letter-spacing:0.06em;">GENERAL CARGO VESSEL UNDERWAY</div>
+      </div>
+      <div style="display:flex; gap:14px;">
+        <div style="display:flex; flex-direction:column; gap:6px;">
+          <img src="uploads/Screenshot 2026-07-22 190821.png" style="width:170px; height:264px; object-fit:cover; object-position:top; border:1px solid #c9bfa8; display:block;">
+          <div style="font-family:'JetBrains Mono',monospace; font-size:10px; color:#7a7052; letter-spacing:0.06em;">HARBOUR MASTER</div>
+        </div>
+        <div style="display:flex; flex-direction:column; gap:6px;">
+          <img src="uploads/Screenshot 2026-07-22 190447-ceded94f.png" style="width:170px; height:264px; object-fit:cover; object-position:top; border:1px solid #c9bfa8; display:block;">
+          <div style="font-family:'JetBrains Mono',monospace; font-size:10px; color:#7a7052; letter-spacing:0.06em;">DECKHAND</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</section>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const ramps = [
+      { name: "PAPER", use: "backgrounds, panels, chart land", steps: [
+        { token: "PAPER", hex: "#ECE5D3", role: "screen background, chart land" },
+        { token: "PAPER_HIGH", hex: "#F3EEE1", role: "raised cards, fields" },
+        { token: "PAPER_LOW", hex: "#E4DCC7", role: "recessed wells, tracks" },
+        { token: "SURFACE", hex: "#DFD6C0", role: "panels, inactive tabs" },
+        { token: "SURFACE_EDGE", hex: "#B5AB92", role: "borders, dividers" },
+        { token: "SURFACE_LINE", hex: "#C9BFA8", role: "hairlines, table rules" }
+      ]},
+      { name: "INK", use: "text and icons on paper", steps: [
+        { token: "INK", hex: "#1B242C", role: "primary text, icons" },
+        { token: "INK_BODY", hex: "#3D4650", role: "body copy, secondary" },
+        { token: "INK_MUTED", hex: "#7A7052", role: "labels, units, hints" },
+        { token: "INK_FAINT", hex: "#988D70", role: "disabled, placeholders" },
+        { token: "INK_INVERSE", hex: "#ECE5D3", role: "text on sea and ink" },
+        { token: "INK_INVERSE_DIM", hex: "#9FB3BD", role: "secondary text on dark" }
+      ]},
+      { name: "SEA / UI DARK", use: "interactive, dark panels", steps: [
+        { token: "SEA_DEEP", hex: "#0F2530", role: "pressed states" },
+        { token: "SEA", hex: "#163440", role: "buttons, dark panels" },
+        { token: "SEA_RAISED", hex: "#1E4657", role: "hover on dark" },
+        { token: "SEA_LIGHT", hex: "#3F6377", role: "dark panel highlight" },
+        { token: "SEA_TINT", hex: "#9FC0CD", role: "text/icons on sea" },
+        { token: "SEA_LINE", hex: "#2C3A46", role: "borders on dark" },
+        { token: "SCRIM", hex: "#10151A", role: "modal scrim, capsule fade" },
+        { token: "SHADOW", hex: "#0A0E12", role: "drop shadow, night base" }
+      ]},
+      { name: "BRASS", use: "accent, selection, one loud action", steps: [
+        { token: "BRASS", hex: "#D99A1F", role: "selection, rules, loud action" },
+        { token: "BRASS_LIGHT", hex: "#EFBB55", role: "brass hover, glow" },
+        { token: "BRASS_DEEP", hex: "#A8701C", role: "brass text on paper" },
+        { token: "BRASS_SHADE", hex: "#7A5214", role: "brass pressed, engraved" },
+        { token: "BRASS_TINT", hex: "#F7E3BC", role: "text on brass fills" },
+        { token: "AMBER", hex: "#F2B233", role: "marketing only — not in build" }
+      ]},
+      { name: "STATUS", use: "state, never decoration", steps: [
+        { token: "ALERT", hex: "#B23A2A", role: "collision, debt, failure" },
+        { token: "ALERT_DEEP", hex: "#8A2A1D", role: "alert pressed, hull damage" },
+        { token: "ALERT_TINT", hex: "#F2D2CC", role: "text on alert fills" },
+        { token: "WARN", hex: "#C9791C", role: "caution, low fuel, overdue" },
+        { token: "WARN_TINT", hex: "#F7DCB4", role: "text on warn fills" },
+        { token: "OK", hex: "#4F7D5E", role: "stable, moored, paid" },
+        { token: "OK_LIGHT", hex: "#7FC48E", role: "zones, OK text on dark" },
+        { token: "OK_TINT", hex: "#D6EEDB", role: "text on OK fills" },
+        { token: "INFO", hex: "#3E6E86", role: "neutral notice, tooltips" },
+        { token: "IDLE", hex: "#6F7B84", role: "offline, unknown, no signal" }
+      ]},
+      { name: "WATER", use: "sea surface and depth", steps: [
+        { token: "WATER_ABYSS", hex: "#0B1E27", role: "deepest water" },
+        { token: "WATER_DEEP", hex: "#123240", role: "open sea" },
+        { token: "WATER_MID", hex: "#1B4A5C", role: "coastal water" },
+        { token: "WATER_SHALLOW", hex: "#2E6E7E", role: "shallows, harbour basin" },
+        { token: "WATER_SHOAL", hex: "#4C93A0", role: "sandbanks, hazard shallows" },
+        { token: "WATER_FOAM", hex: "#D7E6E9", role: "wake, whitecaps, spray" },
+        { token: "WATER_WAKE", hex: "#8FB6BE", role: "wake trails, ripples" },
+        { token: "WATER_SUBSURFACE", hex: "#1F5866", role: "underwater fog, hull below" }
+      ]},
+      { name: "TERRAIN", use: "ground and rock", steps: [
+        { token: "GRASS_LIGHT", hex: "#A3B48F", role: "sunlit meadow, cliff top" },
+        { token: "GRASS", hex: "#8BA08C", role: "default ground cover" },
+        { token: "GRASS_DARK", hex: "#6A8272", role: "shaded slopes" },
+        { token: "HEATH", hex: "#7C7A5C", role: "scrub, moorland" },
+        { token: "ROCK_LIGHT", hex: "#9A9A94", role: "exposed granite" },
+        { token: "ROCK", hex: "#7A7C7C", role: "cliffs, boulders" },
+        { token: "ROCK_DARK", hex: "#565A5C", role: "wet rock, crevices" },
+        { token: "SAND", hex: "#CBBE9C", role: "beaches, dunes" },
+        { token: "SHINGLE", hex: "#A9A392", role: "gravel shore, ballast" },
+        { token: "MUD", hex: "#6B5D48", role: "tidal flats, tracks" },
+        { token: "SNOW", hex: "#E8EDEF", role: "peaks, winter cover" },
+        { token: "SNOW_SHADE", hex: "#BFCBD1", role: "snow in shadow" }
+      ]},
+      { name: "FOLIAGE", use: "trees and growth", steps: [
+        { token: "CONIFER_DARK", hex: "#24352B", role: "spruce, dense forest" },
+        { token: "CONIFER", hex: "#33503C", role: "pine canopy" },
+        { token: "CONIFER_LIGHT", hex: "#456A4C", role: "sunlit canopy" },
+        { token: "BIRCH", hex: "#7E9A63", role: "deciduous, summer" },
+        { token: "BIRCH_AUTUMN", hex: "#B08A3C", role: "deciduous, autumn" },
+        { token: "SHRUB", hex: "#5C6B4A", role: "bushes, hedges" },
+        { token: "KELP", hex: "#2F4A3C", role: "seaweed, wet growth" },
+        { token: "LICHEN", hex: "#9AA88A", role: "rock growth, old timber" },
+        { token: "TIMBER_RAW", hex: "#6E5638", role: "logs, cut wood" },
+        { token: "TIMBER_DEAD", hex: "#8A7F6A", role: "driftwood, dead trees" }
+      ]},
+      { name: "SKY", use: "atmosphere and weather", steps: [
+        { token: "SKY_ZENITH", hex: "#5E8FB0", role: "clear sky, overhead" },
+        { token: "SKY_HORIZON", hex: "#AEBFC4", role: "clear sky, at horizon" },
+        { token: "SKY_OVERCAST", hex: "#9FA9AC", role: "grey day, upper" },
+        { token: "SKY_OVERCAST_LOW", hex: "#C0C6C6", role: "grey day, horizon" },
+        { token: "SKY_DAWN", hex: "#D9A78A", role: "sunrise band" },
+        { token: "SKY_DUSK", hex: "#B8735C", role: "sunset band" },
+        { token: "SKY_NIGHT", hex: "#16202C", role: "night sky" },
+        { token: "SKY_NIGHT_HORIZON", hex: "#2A3A48", role: "night horizon glow" },
+        { token: "CLOUD_LIGHT", hex: "#EDF1F2", role: "cumulus lit face" },
+        { token: "CLOUD", hex: "#C4CCCE", role: "cloud body" },
+        { token: "CLOUD_DARK", hex: "#8D979B", role: "storm cloud, rain base" },
+        { token: "FOG", hex: "#C8D2D4", role: "fog, haze, distance fade" },
+        { token: "RAIN", hex: "#DCE6E8", role: "rain streaks, sleet" },
+        { token: "STAR", hex: "#F2F5EE", role: "stars, aurora highlight" }
+      ]},
+      { name: "BUILT", use: "harbour structures and materials", steps: [
+        { token: "QUAY", hex: "#262B31", role: "asphalt, quay surface" },
+        { token: "QUAY_EDGE", hex: "#171B1F", role: "quay lip, expansion joints" },
+        { token: "CONCRETE_LIGHT", hex: "#C3C2BB", role: "new concrete, bollard base" },
+        { token: "CONCRETE", hex: "#9C9B94", role: "walls, piers, ramps" },
+        { token: "CONCRETE_STAINED", hex: "#7B7A72", role: "weathered concrete" },
+        { token: "DECK_TIMBER", hex: "#7A5F3E", role: "wooden decks, jetties" },
+        { token: "DECK_TIMBER_WORN", hex: "#5E4A31", role: "worn planking, pilings" },
+        { token: "STEEL_LIGHT", hex: "#B7BEC2", role: "galvanised rail, ladders" },
+        { token: "STEEL", hex: "#8A8F96", role: "cranes, machinery, gantry" },
+        { token: "STEEL_DARK", hex: "#5B6167", role: "structure shadow, engine" },
+        { token: "RUST", hex: "#8C5230", role: "corrosion, old fittings" },
+        { token: "RUST_DEEP", hex: "#5E3520", role: "heavy rust, bilge" },
+        { token: "CRANE_YELLOW", hex: "#CFA235", role: "cranes, plant, hi-vis kit" },
+        { token: "ROOF_TILE", hex: "#8E4B39", role: "town roofs" },
+        { token: "WALL_WHITE", hex: "#E2E0D6", role: "harbour buildings" },
+        { token: "WALL_RED", hex: "#A34F3A", role: "boathouses, sheds" }
+      ]},
+      { name: "HULL / LIVERIES", use: "player-chosen paint — never in UI", steps: [
+        { token: "HULL_WHITE", hex: "#E8E6DD", role: "superstructure white" },
+        { token: "HULL_GREY", hex: "#98A0A6", role: "working grey" },
+        { token: "HULL_BLACK", hex: "#22262A", role: "classic black hull" },
+        { token: "HULL_NAVY", hex: "#1F3550", role: "navy blue" },
+        { token: "HULL_TEAL", hex: "#1D5A5E", role: "teal" },
+        { token: "HULL_GREEN", hex: "#2C5138", role: "bottle green" },
+        { token: "HULL_RED", hex: "#9E3628", role: "signal red" },
+        { token: "HULL_ORANGE", hex: "#C9601F", role: "rescue orange" },
+        { token: "HULL_YELLOW", hex: "#D2A62C", role: "workboat yellow" },
+        { token: "HULL_BLUE", hex: "#2C6595", role: "mid blue" },
+        { token: "HULL_CREAM", hex: "#D8CDAE", role: "cream, older vessels" },
+        { token: "ANTIFOUL", hex: "#7A2B24", role: "below waterline, boot top" }
+      ]},
+      { name: "CARGO", use: "containers, goods, hold", steps: [
+        { token: "CARGO_BLUE", hex: "#2B5F8C", role: "containers, general" },
+        { token: "CARGO_RED", hex: "#993B2E", role: "containers" },
+        { token: "CARGO_GREEN", hex: "#356248", role: "containers" },
+        { token: "CARGO_GREY", hex: "#7E858A", role: "containers, refrigerated" },
+        { token: "CARGO_ORANGE", hex: "#C0651F", role: "hazardous, priority" },
+        { token: "CRATE", hex: "#9A7A4E", role: "timber crates, pallets" },
+        { token: "SACK", hex: "#C0B48C", role: "sacks, grain, bulk bags" },
+        { token: "BARREL", hex: "#4E5A47", role: "drums, fuel barrels" },
+        { token: "FISH", hex: "#A8B6BA", role: "catch, ice, trays" },
+        { token: "NET", hex: "#3C5A4E", role: "nets, trawl gear, rope" }
+      ]},
+      { name: "LIGHTS", use: "emissive — nav, work, signals", steps: [
+        { token: "NAV_PORT", hex: "#E23B2E", role: "port sidelight (red)" },
+        { token: "NAV_STARBOARD", hex: "#31C25C", role: "starboard sidelight (green)" },
+        { token: "NAV_STERN", hex: "#FBF3E2", role: "stern and masthead white" },
+        { token: "WORK_LIGHT", hex: "#FFE9B0", role: "deck floods, work lamps" },
+        { token: "WORK_LIGHT_COOL", hex: "#DDEAF5", role: "LED floods, modern plant" },
+        { token: "LANTERN", hex: "#F2B95C", role: "lanterns, warm cabin light" },
+        { token: "CABIN_GLOW", hex: "#C98F3E", role: "windows seen from outside" },
+        { token: "BEACON", hex: "#F2CE3A", role: "flashing plant beacon" },
+        { token: "STROBE", hex: "#FFFFFF", role: "strobes, camera flash" },
+        { token: "BUOY_RED", hex: "#C6382C", role: "port-hand mark" },
+        { token: "BUOY_GREEN", hex: "#2E9B4E", role: "starboard-hand mark" },
+        { token: "BUOY_YELLOW", hex: "#D9B429", role: "special mark, cardinal" },
+        { token: "LIGHTHOUSE", hex: "#FFF6DC", role: "lighthouse sector light" },
+        { token: "SIGNAL_BLUE", hex: "#3F8FD6", role: "emergency, pilot vessel" }
+      ]},
+      { name: "CHART", use: "AIS and navigation overlay", steps: [
+        { token: "CHART_LAND", hex: "#ECE5D3", role: "land fill (= PAPER)" },
+        { token: "CHART_SEA", hex: "#163440", role: "water fill (= SEA)" },
+        { token: "CHART_DEPTH_1", hex: "#2A4F61", role: "shallow depth band" },
+        { token: "CHART_DEPTH_2", hex: "#1E4152", role: "mid depth band" },
+        { token: "CHART_DEPTH_3", hex: "#132C38", role: "deep band" },
+        { token: "CHART_CONTOUR", hex: "#7FA8B8", role: "depth contour lines" },
+        { token: "CHART_GRID", hex: "#3E5A66", role: "graticule, scale bar" },
+        { token: "CHART_ROUTE", hex: "#D99A1F", role: "own course, waypoints" },
+        { token: "CHART_TRAFFIC", hex: "#ECE5D3", role: "other vessels" },
+        { token: "CHART_TRAFFIC_SELF", hex: "#D99A1F", role: "own vessel wedge" },
+        { token: "CHART_ZONE_FISH", hex: "#7FC48E", role: "fishing ground overlay" },
+        { token: "CHART_ZONE_WEATHER", hex: "#8AA9C4", role: "weather cell overlay" },
+        { token: "CHART_ZONE_RESTRICT", hex: "#B23A2A", role: "restricted, hazard area" },
+        { token: "CHART_PORT_MARK", hex: "#1B242C", role: "harbour glyphs, labels" }
+      ]}
+    ];
+    let n = 0;
+    for (const r of ramps) n += r.steps.length;
+    const spaceSteps = [
+      { name: "XS", px: 4 }, { name: "SM", px: 8 }, { name: "MD", px: 12 }, { name: "LG", px: 16 },
+      { name: "XL", px: 24 }, { name: "2XL", px: 32 }, { name: "3XL", px: 48 }, { name: "HUGE", px: 64 }
+    ];
+    return { ramps, tokenCount: n, familyCount: ramps.length, spaceSteps };
+  }
+}
+</script>
+</body>
+</html>

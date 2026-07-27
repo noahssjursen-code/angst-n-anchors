@@ -2,7 +2,7 @@ class_name DebugDraw
 extends Control
 
 ## F3 debug panel — system telemetry + gameplay readouts.
-## Visual style follows HudStyle (warm hull-black + brass + amber).
+## Visual style follows the shared branded instrument language.
 ##
 ## Redraws are signal-driven: gameplay sections refresh on the relevant
 ## state_changed signals; system stats refresh on Telemetry.sampled
@@ -19,19 +19,19 @@ const TAB_H := 22.0
 const HEADER_H := 58.0
 const TABS := ["PERF", "WORLD", "VESSEL", "EVENTS", "CONTEXT"]
 
-# Maritime palette (HudStyle) plus a couple of debug-only accent colours.
-const C_BG      := HudStyle.C_BG
-const C_BORDER  := HudStyle.C_BRASS
-const C_TITLE   := HudStyle.C_AMBER
-const C_SECTION := HudStyle.C_AMBER
-const C_LABEL   := HudStyle.C_LABEL
-const C_VALUE   := HudStyle.C_TEXT
-const C_STUB    := Color(HudStyle.C_LABEL.r, HudStyle.C_LABEL.g, HudStyle.C_LABEL.b, 0.55)
-const C_GOLD    := HudStyle.C_AMBER
-const C_SEP     := HudStyle.C_SEP
-const C_GOOD    := HudStyle.C_GREEN
-const C_WARN    := Color(0.92, 0.66, 0.28, 0.95)
-const C_BAD     := HudStyle.C_RED
+# Branded instrument palette.
+static var C_BG      := BrandTokens.SEA_DEEP
+static var C_BORDER  := BrandTokens.SEA_LINE
+static var C_TITLE   := BrandTokens.BRASS
+static var C_SECTION := BrandTokens.BRASS
+static var C_LABEL   := BrandTokens.INK_INVERSE_DIM
+static var C_VALUE   := BrandTokens.INK_INVERSE
+static var C_STUB    := BrandTokens.alpha(BrandTokens.INK_INVERSE_DIM, 0.55)
+static var C_GOLD    := BrandTokens.BRASS
+static var C_SEP     := BrandTokens.SEA_LINE
+static var C_GOOD    := BrandTokens.OK_LIGHT
+static var C_WARN    := BrandTokens.WARN
+static var C_BAD     := BrandTokens.ALERT
 
 var active_tab := 0
 var use_peak_values := false
@@ -110,7 +110,7 @@ func _notification(what: int) -> void:
 
 func _draw() -> void:
 	var vp   := get_viewport_rect().size
-	var font := ThemeDB.fallback_font
+	var font := BrandTheme.font_data()
 	var entries: Array = _build()
 
 	var ph := HEADER_H + _content_h(entries) + PAD_Y
@@ -134,7 +134,7 @@ func _draw() -> void:
 	var tab_w := (PANEL_W - PAD_X * 2.0) / float(TABS.size())
 	for i in range(TABS.size()):
 		var rect := Rect2(ox + PAD_X + tab_w * i, tab_y, tab_w - 2.0, TAB_H)
-		var fill := Color(C_BORDER.r, C_BORDER.g, C_BORDER.b, 0.24) if i == active_tab else C_BG
+		var fill := BrandTokens.alpha(C_BORDER, 0.24) if i == active_tab else C_BG
 		draw_rect(rect, fill)
 		draw_rect(rect, C_BORDER if i == active_tab else C_SEP, false, 1.0)
 		draw_string(font, Vector2(rect.position.x, rect.position.y + 15.0), TABS[i], HORIZONTAL_ALIGNMENT_CENTER, rect.size.x, 9, C_TITLE if i == active_tab else C_LABEL)
@@ -253,11 +253,11 @@ func _build_world_generation(e: Array) -> void:
 	if traffic != null and traffic.has_method("get_debug_stats"):
 		var traffic_stats := _provider_stats(
 			&"world.traffic", traffic.call("get_debug_stats") as Dictionary)
-		_row(e, "NPC traffic", "%d records Â· %d physics Â· %d full Â· %d proxy" % [
+		_row(e, "NPC traffic", "%d records · %d physics · %d full · %d proxy" % [
 			int(traffic_stats.get("records", 0)), int(traffic_stats.get("physics", 0)),
 			int(traffic_stats.get("full", 0)), int(traffic_stats.get("proxy", 0)),
 		], C_VALUE)
-		_row(e, "Traffic authority", "%.2f ms now Â· %.2f ms peak Â· %d data-only" % [
+		_row(e, "Traffic authority", "%.2f ms now · %.2f ms peak · %d data-only" % [
 			float(traffic_stats.get("authority_ms", 0.0)),
 			float(traffic_stats.get("authority_peak_ms", 0.0)),
 			int(traffic_stats.get("data_only", 0)),
@@ -633,7 +633,7 @@ func _build_gameplay(e: Array) -> void:
 
 	# ── Player ────────────────────────────────────────────────────────────────
 	_sec(e, "PLAYER")
-	_row(e, "Marks", PlayerSession.format_money(gs.player.marks), C_GOLD)
+	_row(e, "Marks", BrandFormat.money(gs.player.marks), C_GOLD)
 	_row(e, "Name",  gs.player.display_name,     C_VALUE)
 
 	var players := get_tree().get_nodes_in_group("player")

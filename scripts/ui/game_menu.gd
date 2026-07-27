@@ -25,6 +25,7 @@ var _map:         MapOverlay
 var _minimap
 var _settings:    SettingsPanel
 var _company:     CompanyPanel
+var _marks_currency: BrandCurrency
 
 
 func _ready() -> void:
@@ -47,7 +48,7 @@ func _ready() -> void:
 	add_child(_menu_layer)
 
 	_bg              = ColorRect.new()
-	_bg.color        = Color(0.02, 0.03, 0.08, 0.86)
+	_bg.color        = BrandTokens.alpha(BrandTokens.SCRIM, 0.86)
 	_bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_bg.set_anchors_preset(Control.PRESET_FULL_RECT)
 	_menu_layer.add_child(_bg)
@@ -179,72 +180,82 @@ func _set_screen(s: Screen) -> void:
 # ── Pause panel ───────────────────────────────────────────────────────────────
 
 func _build_pause() -> Control:
-	var root      := Control.new()
+	var root := Control.new()
 	root.set_anchors_preset(Control.PRESET_FULL_RECT)
 	root.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	root.theme = BrandTheme.shared()
 
-	var panel := UiBuilder.panel()
-	panel.set_anchors_preset(Control.PRESET_CENTER)
-	panel.offset_left   = -170.0
-	panel.offset_right  =  170.0
-	panel.offset_top    = -190.0
-	panel.offset_bottom =  190.0
-	root.add_child(panel)
+	var safe_margin := MarginContainer.new()
+	safe_margin.set_anchors_preset(Control.PRESET_FULL_RECT)
+	safe_margin.add_theme_constant_override(&"margin_left", BrandTokens.SPACE_XXXL)
+	safe_margin.add_theme_constant_override(&"margin_top", BrandTokens.SPACE_XXXL)
+	safe_margin.add_theme_constant_override(&"margin_bottom", BrandTokens.SPACE_XXXL)
+	root.add_child(safe_margin)
+
+	var panel := BrandPanel.new(BrandPanel.Variant.DARK_RULED)
+	panel.custom_minimum_size.x = 424.0
+	panel.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+	safe_margin.add_child(panel)
 
 	var vbox := VBoxContainer.new()
-	vbox.add_theme_constant_override("separation", 14)
+	vbox.add_theme_constant_override(&"separation", BrandTokens.SPACE_MD)
 	panel.add_child(vbox)
 
-	vbox.add_child(UiBuilder.title_label("ANGST 'N ANCHORS"))
-	vbox.add_child(UiBuilder.subtitle_label("— PAUSED —"))
-	vbox.add_child(UiBuilder.separator())
+	var eyebrow := BrandLabel.new(tr("SHIP'S OFFICE"), BrandLabel.Role.INVERSE_DATA)
+	eyebrow.add_theme_color_override(&"font_color", BrandTokens.BRASS)
+	vbox.add_child(eyebrow)
+	var title := BrandLabel.new(tr("PAUSED"), BrandLabel.Role.DISPLAY_LARGE)
+	title.add_theme_color_override(&"font_color", BrandTokens.INK_INVERSE)
+	vbox.add_child(title)
+	var subtitle := BrandLabel.new(
+		tr("Company business and navigation"),
+		BrandLabel.Role.INVERSE_BODY
+	)
+	subtitle.add_theme_color_override(&"font_color", BrandTokens.INK_INVERSE_DIM)
+	vbox.add_child(subtitle)
+	vbox.add_child(HSeparator.new())
 
-	# Marks display.
-	var marks_label := Label.new()
-	marks_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	marks_label.add_theme_font_size_override("font_size", 15)
-	marks_label.add_theme_color_override("font_color", HudStyle.C_AMBER)
-	marks_label.name = "MarksLabel"
-	vbox.add_child(marks_label)
-	_update_marks_label(marks_label)
-	var session := get_node_or_null("/root/PlayerSession")
-	if session != null:
-		session.marks_changed.connect(func(bal: int) -> void:
-			marks_label.text = PlayerSession.format_money(bal)
-		)
+	var view := get_node_or_null("/root/LocalPlayerView")
+	_marks_currency = BrandCurrency.new(view.get_marks() if view != null else 0, true)
+	_marks_currency.name = "Marks"
+	vbox.add_child(_marks_currency)
+	if view != null and view.has_signal("marks_changed"):
+		view.marks_changed.connect(_on_marks_changed)
 
-	vbox.add_child(UiBuilder.separator())
+	var spacer := Control.new()
+	spacer.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	vbox.add_child(spacer)
 
-	var resume := UiBuilder.button("RESUME  [ ESC ]")
+	var resume := BrandMenuButton.new(tr("RESUME") + "     [ ESC ]")
 	resume.pressed.connect(func() -> void: _set_screen(Screen.NONE))
 	vbox.add_child(resume)
 
-	var map_btn := UiBuilder.button("SEA CHART  [ M ]")
+	var map_btn := BrandMenuButton.new(tr("SEA CHART") + "     [ M ]")
 	map_btn.pressed.connect(func() -> void: _set_screen(Screen.MAP))
 	vbox.add_child(map_btn)
 
-	var company_btn := UiBuilder.button("COMPANY")
+	var company_btn := BrandMenuButton.new(tr("COMPANY"))
 	company_btn.pressed.connect(func() -> void: _set_screen(Screen.COMPANY))
 	vbox.add_child(company_btn)
 
-	var settings_btn := UiBuilder.button("SETTINGS")
+	var settings_btn := BrandMenuButton.new(tr("SETTINGS"))
 	settings_btn.pressed.connect(func() -> void: _set_screen(Screen.SETTINGS))
 	vbox.add_child(settings_btn)
 
-	var quit := UiBuilder.button("QUIT TO DESKTOP")
-	quit.pressed.connect(_quit_to_desktop)
-	vbox.add_child(quit)
-
-	var title_btn := UiBuilder.button("RETURN TO TITLE")
+	vbox.add_child(HSeparator.new())
+	var title_btn := BrandButton.new(tr("RETURN TO TITLE"), BrandButton.Variant.QUIET)
 	title_btn.pressed.connect(_return_to_title)
 	vbox.add_child(title_btn)
+	var quit := BrandButton.new(tr("QUIT TO DESKTOP"), BrandButton.Variant.DANGER)
+	quit.pressed.connect(_quit_to_desktop)
+	vbox.add_child(quit)
 
 	return root
 
 
-func _update_marks_label(lbl: Label) -> void:
-	var session := get_node_or_null("/root/PlayerSession")
-	lbl.text = PlayerSession.format_money(session.get_marks() if session != null else 0)
+func _on_marks_changed(balance: int) -> void:
+	if _marks_currency != null:
+		_marks_currency.set_amount(balance)
 
 
 # ── Boat controller wiring ────────────────────────────────────────────────────
@@ -289,9 +300,9 @@ func _toggle_helm_cursor() -> void:
 
 
 func _quit_to_desktop() -> void:
-	var session := get_node_or_null("/root/PlayerSession")
-	if session != null and session.has_method("save_now"):
-		session.call("save_now")
+	var view := get_node_or_null("/root/LocalPlayerView")
+	if view != null and view.has_method("save_player_state"):
+		view.call("save_player_state")
 	get_tree().quit()
 
 

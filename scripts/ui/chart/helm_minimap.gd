@@ -9,7 +9,7 @@ const SPAN_M := 5000.0
 const REFRESH_S := 0.20
 const MARGIN := 14.0
 const EXPANDED_SIZE := Vector2(300.0, 238.0)
-const COLLAPSED_SIZE := Vector2(42.0, 38.0)
+const COLLAPSED_SIZE := Vector2(44.0, 44.0)
 
 var source: MapOverlay
 var camera := ChartCamera.new()
@@ -24,7 +24,7 @@ func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-	theme = HudStyle.make_theme()
+	theme = BrandTheme.shared()
 	set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
 	_load_preference()
 	_build_button()
@@ -86,14 +86,14 @@ func _draw() -> void:
 	if collapsed:
 		return
 	var panel := Rect2(Vector2.ZERO, size)
-	draw_rect(panel, Color(0.015, 0.025, 0.03, 0.94))
-	draw_rect(panel, Color(0.58, 0.60, 0.52, 0.92), false, 1.0)
+	draw_rect(panel, BrandTokens.alpha(BrandTokens.SCRIM, 0.94))
+	draw_rect(panel, BrandTokens.SURFACE_EDGE, false, 1.0)
 	draw_string(
-		ThemeDB.fallback_font,
+		BrandTheme.font_data(),
 		Vector2(9.0, 19.0),
 		"LOCAL CHART   2.7 nm",
 		HORIZONTAL_ALIGNMENT_LEFT, -1, 11,
-		Color(0.86, 0.84, 0.67),
+		BrandTokens.BRASS_LIGHT,
 	)
 	var chart := _chart_rect()
 	var bounds := camera.world_bounds(chart.size)
@@ -103,25 +103,25 @@ func _draw() -> void:
 		"world_span": camera.span,
 	}
 	source.renderer.render_minimap(self, context, source.layers, source.nav)
-	draw_rect(chart, Color(0.12, 0.18, 0.18, 0.90), false, 1.0)
+	draw_rect(chart, BrandTokens.alpha(BrandTokens.CHART_CONTOUR, 0.90), false, 1.0)
 	draw_string(
-		ThemeDB.fallback_font,
+		BrandTheme.font_data(),
 		Vector2(9.0, size.y - 7.0),
 		"K  collapse    C  cursor",
 		HORIZONTAL_ALIGNMENT_LEFT, -1, 9,
-		Color(0.62, 0.70, 0.67),
+		BrandTokens.INK_INVERSE_DIM,
 	)
 
 
 func _build_button() -> void:
-	collapse_button = Button.new()
+	collapse_button = BrandButton.new("", BrandButton.Variant.CHIP)
 	collapse_button.name = "MinimapCollapse"
 	collapse_button.mouse_filter = Control.MOUSE_FILTER_STOP
 	collapse_button.set_anchors_preset(Control.PRESET_TOP_RIGHT)
-	collapse_button.offset_left = -34.0
-	collapse_button.offset_right = -4.0
-	collapse_button.offset_top = 4.0
-	collapse_button.offset_bottom = 30.0
+	collapse_button.offset_left = -44.0
+	collapse_button.offset_right = 0.0
+	collapse_button.offset_top = 0.0
+	collapse_button.offset_bottom = 44.0
 	collapse_button.pressed.connect(_toggle_collapsed)
 	add_child(collapse_button)
 	_refresh_button()
@@ -149,10 +149,10 @@ func _apply_geometry() -> void:
 			collapse_button.offset_bottom = 0.0
 		else:
 			collapse_button.set_anchors_preset(Control.PRESET_TOP_RIGHT)
-			collapse_button.offset_left = -34.0
-			collapse_button.offset_right = -4.0
-			collapse_button.offset_top = 4.0
-			collapse_button.offset_bottom = 30.0
+			collapse_button.offset_left = -44.0
+			collapse_button.offset_right = 0.0
+			collapse_button.offset_top = 0.0
+			collapse_button.offset_bottom = 44.0
 	_refresh_button()
 
 

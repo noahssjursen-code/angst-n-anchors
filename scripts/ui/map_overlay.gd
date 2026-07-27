@@ -16,8 +16,8 @@ const LayerManager := preload("res://scripts/ui/chart/chart_layer_manager.gd")
 const Renderer := preload("res://scripts/ui/chart/chart_layer_renderer.gd")
 const Snapshot := preload("res://scripts/ui/chart/chart_data_snapshot.gd")
 
-const FRAME := 26.0
-const TOP_H := 58.0
+const FRAME := 14.0
+const TOP_H := 72.0
 const BOTTOM_H := 48.0
 const NAV_REFRESH_S := 0.35
 const OVERLAY_DEBOUNCE_S := 0.28
@@ -49,12 +49,14 @@ var hover_layer_revision := -1
 
 var title_label: Label
 var hint_label: Label
+var hint_panel: BrandPanel
 var weather_button: Button
 var fishing_button: Button
+var traffic_button: Button
 var center_button: Button
 var close_button: Button
 
-var pick_panel: PanelContainer
+var pick_panel: BrandPanel
 var pick_title: Label
 var pick_meta: Label
 var pick_body: RichTextLabel
@@ -68,7 +70,7 @@ func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_STOP
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-	theme = HudStyle.make_theme()
+	theme = BrandTheme.shared()
 	_build_toolbar()
 	_build_pick_panel()
 	_load_layer_preferences()
@@ -172,7 +174,7 @@ func refresh_shared_nav() -> bool:
 
 
 func prepare_shared_overlays(bounds: Rect2) -> void:
-	renderer.prepare_overlays(bounds, layers, WeatherField.current_game_time())
+	renderer.prepare_overlays(bounds, layers, _weather_game_hours())
 
 
 func _process(delta: float) -> void:
@@ -206,7 +208,7 @@ func _process(delta: float) -> void:
 			renderer.prepare_overlays(
 				_camera_bounds(),
 				layers,
-				WeatherField.current_game_time(),
+				_weather_game_hours(),
 			)
 			overlays_dirty = false
 			queue_redraw()
@@ -299,9 +301,9 @@ func _input(event: InputEvent) -> void:
 
 func _draw() -> void:
 	var viewport := get_viewport_rect().size
-	draw_rect(Rect2(Vector2.ZERO, viewport), Color(0.015, 0.025, 0.03, 0.98))
+	draw_rect(Rect2(Vector2.ZERO, viewport), BrandTokens.SCRIM)
 	var chart := _chart_rect()
-	draw_rect(chart.grow(1.0), Color(0.55, 0.56, 0.49, 1.0), false, 1.0)
+	draw_rect(chart.grow(1.0), BrandTokens.SURFACE_EDGE, false, 1.0)
 	var bounds := camera.world_bounds(chart.size)
 	last_ctx = {
 		"chart_rect": chart,
@@ -323,26 +325,19 @@ func _draw() -> void:
 
 
 func _build_pick_panel() -> void:
-	pick_panel = PanelContainer.new()
+	pick_panel = BrandPanel.new(BrandPanel.Variant.RULED)
 	pick_panel.name = "HomePortPickPanel"
 	pick_panel.visible = false
 	pick_panel.mouse_filter = Control.MOUSE_FILTER_STOP
-	## Left dock — coastal harbours sit on the east; keep that chart clear.
-	pick_panel.set_anchors_and_offsets_preset(Control.PRESET_TOP_LEFT)
-	pick_panel.anchor_left = 0.0
+	pick_panel.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT)
+	pick_panel.anchor_left = 1.0
 	pick_panel.anchor_top = 0.0
-	pick_panel.anchor_right = 0.0
-	pick_panel.anchor_bottom = 1.0
-	pick_panel.offset_left = FRAME
-	pick_panel.offset_top = TOP_H + 6.0
-	pick_panel.offset_right = FRAME + 320.0
-	pick_panel.offset_bottom = -(BOTTOM_H + 10.0)
-	var panel_sb := StyleBoxFlat.new()
-	panel_sb.bg_color = Color(HudStyle.C_BG.r, HudStyle.C_BG.g, HudStyle.C_BG.b, 0.94)
-	panel_sb.border_color = HudStyle.C_BRASS
-	panel_sb.set_border_width_all(1)
-	panel_sb.set_content_margin_all(16)
-	pick_panel.add_theme_stylebox_override("panel", panel_sb)
+	pick_panel.anchor_right = 1.0
+	pick_panel.anchor_bottom = 0.0
+	pick_panel.offset_left = -(FRAME + 380.0)
+	pick_panel.offset_top = TOP_H + BrandTokens.SPACE_LG
+	pick_panel.offset_right = -FRAME
+	pick_panel.offset_bottom = TOP_H + 470.0
 	add_child(pick_panel)
 
 	var vbox := VBoxContainer.new()
@@ -351,28 +346,15 @@ func _build_pick_panel() -> void:
 	vbox.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	pick_panel.add_child(vbox)
 
-	var eyebrow := Label.new()
-	eyebrow.text = "HOME HARBOUR"
-	eyebrow.add_theme_font_size_override("font_size", 12)
-	eyebrow.add_theme_color_override("font_color", HudStyle.C_LABEL)
-	if HudStyle.font_medium() != null:
-		eyebrow.add_theme_font_override("font", HudStyle.font_medium())
+	var eyebrow := BrandLabel.new(tr("HOME HARBOUR"), BrandLabel.Role.SECTION)
 	vbox.add_child(eyebrow)
 
-	pick_title = Label.new()
-	pick_title.text = "Select a harbour"
+	pick_title = BrandLabel.new(tr("SELECT A HARBOUR"), BrandLabel.Role.DISPLAY_MEDIUM)
 	pick_title.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	pick_title.add_theme_font_size_override("font_size", 28)
-	pick_title.add_theme_color_override("font_color", HudStyle.C_TEXT)
-	if HudStyle.font_display() != null:
-		pick_title.add_theme_font_override("font", HudStyle.font_display())
 	vbox.add_child(pick_title)
 
-	pick_meta = Label.new()
-	pick_meta.text = "Click a marker on the chart"
+	pick_meta = BrandLabel.new(tr("Click a marker on the chart"), BrandLabel.Role.DATA_MUTED)
 	pick_meta.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	pick_meta.add_theme_font_size_override("font_size", 13)
-	pick_meta.add_theme_color_override("font_color", HudStyle.C_COPPER)
 	vbox.add_child(pick_meta)
 
 	pick_body = RichTextLabel.new()
@@ -380,8 +362,8 @@ func _build_pick_panel() -> void:
 	pick_body.fit_content = true
 	pick_body.scroll_active = false
 	pick_body.custom_minimum_size = Vector2(0, 120)
-	pick_body.add_theme_font_size_override("normal_font_size", 14)
-	pick_body.add_theme_color_override("default_color", HudStyle.C_TEXT)
+	pick_body.add_theme_font_size_override("normal_font_size", BrandTokens.BODY)
+	pick_body.add_theme_color_override("default_color", BrandTokens.INK_BODY)
 	vbox.add_child(pick_body)
 
 	## Push actions to the bottom of the dock.
@@ -395,33 +377,15 @@ func _build_pick_panel() -> void:
 	row.size_flags_vertical = Control.SIZE_SHRINK_END
 	vbox.add_child(row)
 
-	pick_back = Button.new()
-	pick_back.text = "Back"
+	pick_back = BrandButton.new(tr("BACK"), BrandButton.Variant.QUIET)
 	pick_back.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	pick_back.pressed.connect(func() -> void: home_port_cancelled.emit())
 	row.add_child(pick_back)
 
-	pick_confirm = Button.new()
-	pick_confirm.text = "Sail from here"
+	pick_confirm = BrandButton.new(tr("SAIL FROM HERE"), BrandButton.Variant.LOUD)
 	pick_confirm.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	pick_confirm.disabled = true
 	pick_confirm.pressed.connect(_confirm_home_port)
-	var confirm_normal := StyleBoxFlat.new()
-	confirm_normal.bg_color = Color(0.22, 0.42, 0.36, 1.0)
-	confirm_normal.border_color = HudStyle.C_COPPER
-	confirm_normal.set_border_width_all(1)
-	confirm_normal.set_content_margin_all(10)
-	var confirm_hover := confirm_normal.duplicate()
-	confirm_hover.bg_color = Color(0.28, 0.52, 0.44, 1.0)
-	var confirm_disabled := confirm_normal.duplicate()
-	confirm_disabled.bg_color = Color(0.16, 0.20, 0.19, 1.0)
-	confirm_disabled.border_color = Color(0.30, 0.34, 0.32, 0.6)
-	pick_confirm.add_theme_stylebox_override("normal", confirm_normal)
-	pick_confirm.add_theme_stylebox_override("hover", confirm_hover)
-	pick_confirm.add_theme_stylebox_override("pressed", confirm_hover)
-	pick_confirm.add_theme_stylebox_override("disabled", confirm_disabled)
-	pick_confirm.add_theme_color_override("font_color", HudStyle.C_TEXT)
-	pick_confirm.add_theme_color_override("font_disabled_color", Color(0.45, 0.50, 0.48))
 	row.add_child(pick_confirm)
 
 
@@ -483,14 +447,15 @@ func _refresh_pick_panel() -> void:
 	var compatible := _home_port_supports_required_family(info)
 	var compatibility_line := ""
 	if not compatible:
-		compatibility_line = "\n[color=#e27a63]This harbour has no %s berth for your selected starter vessel.[/color]" \
-				% CommodityCatalog.terminal_family_display(home_port_required_family)
+		compatibility_line = "\n\n%s" % tr(
+			"This harbour has no %s berth for your selected starter vessel."
+		) % CommodityCatalog.terminal_family_display(home_port_required_family)
 	pick_body.text = "\n".join(PackedStringArray([
-		"[color=#8a9a94]Population[/color]  %s" % _format_population(int(info.get("population", 0))),
-		"[color=#8a9a94]Primary export[/color]  %s" % export_label,
-		"[color=#8a9a94]Imports[/color]  %s" % import_line,
-		"[color=#8a9a94]Max class[/color]  %s" % ship_class,
-		"[color=#8a9a94]Facilities[/color]  %s" % features_line,
+		"POPULATION  %s" % _format_population(int(info.get("population", 0))),
+		"PRIMARY EXPORT  %s" % export_label,
+		"IMPORTS  %s" % import_line,
+		"MAX CLASS  %s" % ship_class,
+		"FACILITIES  %s" % features_line,
 	])) + compatibility_line
 	if pick_confirm != null:
 		pick_confirm.disabled = not compatible
@@ -527,45 +492,55 @@ func _build_toolbar() -> void:
 	bar.set_anchors_preset(Control.PRESET_TOP_WIDE)
 	bar.offset_left = FRAME
 	bar.offset_right = -FRAME
-	bar.offset_top = 13.0
-	bar.offset_bottom = 48.0
+	bar.offset_top = 8.0
+	bar.offset_bottom = 68.0
 	bar.add_theme_constant_override("separation", 8)
 	add_child(bar)
 
-	title_label = Label.new()
-	title_label.text = "NAVIGATION CHART"
-	title_label.custom_minimum_size.x = 190.0
-	title_label.add_theme_font_size_override("font_size", 18)
-	title_label.add_theme_color_override("font_color", Color(0.92, 0.86, 0.62))
-	bar.add_child(title_label)
+	var title_panel := BrandPanel.new(BrandPanel.Variant.TOOLBAR)
+	title_panel.custom_minimum_size.x = 230.0
+	bar.add_child(title_panel)
+	title_label = BrandLabel.new(tr("NAVIGATION CHART"), BrandLabel.Role.DISPLAY_SMALL)
+	title_panel.add_child(title_label)
 
-	hint_label = Label.new()
-	hint_label.visible = false
-	hint_label.text = "Click a harbour for details, then confirm"
-	hint_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	hint_label.add_theme_font_size_override("font_size", 15)
-	hint_label.add_theme_color_override("font_color", Color(0.90, 0.92, 0.82))
-	bar.add_child(hint_label)
+	hint_label = BrandLabel.new("", BrandLabel.Role.BODY_MUTED)
+	hint_label.text = tr("Click a harbour for details, then confirm")
+	hint_panel = BrandPanel.new(BrandPanel.Variant.TOOLBAR)
+	hint_panel.custom_minimum_size.x = 380
+	hint_panel.visible = false
+	hint_panel.add_child(hint_label)
+	bar.add_child(hint_panel)
 
-	weather_button = Button.new()
-	weather_button.text = "Weather"
+	var spacer := Control.new()
+	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	bar.add_child(spacer)
+
+	var tools := BrandPanel.new(BrandPanel.Variant.TOOLBAR)
+	var tool_row := HBoxContainer.new()
+	tool_row.add_theme_constant_override(&"separation", BrandTokens.SPACE_XS)
+	tools.add_child(tool_row)
+	bar.add_child(tools)
+
+	weather_button = BrandButton.new(tr("WEATHER"), BrandButton.Variant.CHIP)
 	weather_button.toggle_mode = true
 	weather_button.pressed.connect(_toggle_overlay.bind("weather"))
-	bar.add_child(weather_button)
+	tool_row.add_child(weather_button)
 
-	fishing_button = Button.new()
-	fishing_button.text = "Fishing"
+	fishing_button = BrandButton.new(tr("FISHING"), BrandButton.Variant.CHIP)
 	fishing_button.toggle_mode = true
 	fishing_button.pressed.connect(_toggle_overlay.bind("fishing"))
-	bar.add_child(fishing_button)
+	tool_row.add_child(fishing_button)
 
-	center_button = Button.new()
-	center_button.text = "Center"
+	traffic_button = BrandButton.new(tr("TRAFFIC"), BrandButton.Variant.CHIP)
+	traffic_button.toggle_mode = true
+	traffic_button.pressed.connect(_toggle_overlay.bind("traffic"))
+	tool_row.add_child(traffic_button)
+
+	center_button = BrandButton.new(tr("CENTRE"), BrandButton.Variant.CHIP)
 	center_button.pressed.connect(_home)
-	bar.add_child(center_button)
+	tool_row.add_child(center_button)
 
-	close_button = Button.new()
-	close_button.text = "Close"
+	close_button = BrandButton.new(tr("CLOSE · M"), BrandButton.Variant.QUIET)
 	close_button.pressed.connect(func() -> void: close_requested.emit())
 	bar.add_child(close_button)
 	_refresh_mode_buttons()
@@ -576,14 +551,17 @@ func _apply_mode_ui() -> void:
 	if title_label != null:
 		title_label.text = "CHOOSE YOUR HOME PORT" if picking else "NAVIGATION CHART"
 	if hint_label != null:
-		hint_label.visible = picking
 		if picking:
 			hint_label.text = "Click a harbour for details, then confirm"
+	if hint_panel != null:
+		hint_panel.visible = picking
 	if weather_button != null:
 		weather_button.visible = not picking
 	if fishing_button != null:
 		## Available during home-port pick so fishing grounds stay inspectable.
 		fishing_button.visible = true
+	if traffic_button != null:
+		traffic_button.visible = not picking
 	if center_button != null:
 		center_button.visible = not picking
 	if close_button != null:
@@ -599,6 +577,8 @@ func _refresh_mode_buttons() -> void:
 		weather_button.set_pressed_no_signal(layers.is_visible("weather"))
 	if fishing_button != null:
 		fishing_button.set_pressed_no_signal(layers.is_visible("fishing"))
+	if traffic_button != null:
+		traffic_button.set_pressed_no_signal(layers.is_visible("traffic"))
 
 
 func _toggle_overlay(layer_name: String) -> void:
@@ -623,6 +603,7 @@ func _load_layer_preferences() -> void:
 		bool(settings.get("chart_weather_enabled")),
 		bool(settings.get("chart_fishing_enabled")),
 	)
+	layers.set_visible("traffic", bool(settings.get("chart_traffic_enabled")))
 	_refresh_mode_buttons()
 
 
@@ -632,6 +613,7 @@ func _persist_chart_settings() -> void:
 		return
 	settings.set("chart_weather_enabled", layers.is_visible("weather"))
 	settings.set("chart_fishing_enabled", layers.is_visible("fishing"))
+	settings.set("chart_traffic_enabled", layers.is_visible("traffic"))
 	settings.set("chart_profile", layers.preset)
 	if settings.has_method("save_settings"):
 		settings.call("save_settings")
@@ -740,20 +722,20 @@ func _refresh_hover_readout(force: bool = false) -> void:
 	hover_rows = renderer.overlay_readout(
 		_screen_to_world(hover_screen),
 		layers,
-		WeatherField.current_game_time(),
+		_weather_game_hours(),
 	)
 
 
 func _draw_compass(chart: Rect2) -> void:
 	var center := chart.position + Vector2(34.0, 35.0)
-	draw_circle(center, 22.0, Color(0.94, 0.93, 0.84, 0.90))
-	draw_arc(center, 22.0, 0.0, TAU, 32, Color(0.10, 0.18, 0.20), 1.0)
-	draw_line(center, center + Vector2(0.0, -17.0), Color(0.78, 0.12, 0.10), 2.0)
+	draw_circle(center, 22.0, BrandTokens.PAPER)
+	draw_arc(center, 22.0, 0.0, TAU, 32, BrandTokens.SURFACE_EDGE, 1.0)
+	draw_line(center, center + Vector2(0.0, -17.0), BrandTokens.ALERT, 2.0)
 	draw_string(
-		ThemeDB.fallback_font,
+		BrandTheme.font_data(),
 		center + Vector2(-4.0, -4.0),
 		"N",
-		HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color(0.08, 0.14, 0.15),
+		HORIZONTAL_ALIGNMENT_LEFT, -1, 10, BrandTokens.INK,
 	)
 
 
@@ -763,14 +745,14 @@ func _draw_scale(chart: Rect2, bounds: Rect2) -> void:
 	var nice := _nice_distance(target_m)
 	var width := nice / metres_per_px
 	var origin := chart.position + Vector2(18.0, chart.size.y - 22.0)
-	draw_line(origin, origin + Vector2(width, 0.0), Color(0.08, 0.14, 0.15), 2.0)
-	draw_line(origin, origin + Vector2(0.0, -5.0), Color(0.08, 0.14, 0.15), 2.0)
-	draw_line(origin + Vector2(width, 0.0), origin + Vector2(width, -5.0), Color(0.08, 0.14, 0.15), 2.0)
+	draw_line(origin, origin + Vector2(width, 0.0), BrandTokens.INK, 2.0)
+	draw_line(origin, origin + Vector2(0.0, -5.0), BrandTokens.INK, 2.0)
+	draw_line(origin + Vector2(width, 0.0), origin + Vector2(width, -5.0), BrandTokens.INK, 2.0)
 	draw_string(
-		ThemeDB.fallback_font,
+		BrandTheme.font_data(),
 		origin + Vector2(0.0, -7.0),
 		_format_distance(nice),
-		HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color(0.08, 0.14, 0.15),
+		HORIZONTAL_ALIGNMENT_LEFT, -1, 10, BrandTokens.INK,
 	)
 
 
@@ -794,17 +776,17 @@ func _draw_status(chart: Rect2) -> void:
 			nav.time_label,
 		]
 	draw_string(
-		ThemeDB.fallback_font,
+		BrandTheme.font_data(),
 		Vector2(chart.position.x, chart.end.y + 17.0),
 		text,
-		HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color(0.76, 0.82, 0.78),
+		HORIZONTAL_ALIGNMENT_LEFT, -1, 13, BrandTokens.INK_INVERSE,
 	)
 	if not hover_rows.is_empty():
 		draw_string(
-			ThemeDB.fallback_font,
+			BrandTheme.font_data(),
 			Vector2(chart.position.x, chart.end.y + 35.0),
 			"   ·   ".join(hover_rows),
-			HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color(0.66, 0.74, 0.70),
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 11, BrandTokens.INK_INVERSE_DIM,
 		)
 
 
@@ -825,3 +807,10 @@ static func _format_distance(metres: float) -> String:
 
 static func _format_degrees(value: float) -> String:
 	return "%03d°" % roundi(value) if is_finite(value) else "—"
+
+
+func _weather_game_hours() -> float:
+	var world_weather := get_node_or_null("/root/WorldWeather")
+	if world_weather != null and world_weather.has_method("current_game_hours"):
+		return float(world_weather.call("current_game_hours"))
+	return 0.0

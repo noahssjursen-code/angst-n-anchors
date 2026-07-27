@@ -1,97 +1,137 @@
 class_name WalkingHud
 extends Control
 
-## Persistent on-foot HUD — marks balance and active contracts, top-left corner.
-## Shown when the player is on foot; hidden by GameMenu when helming a ship.
-##
-## Reads through LocalPlayerView so the same code works in single-player
-## (today) and multiplayer (future). Redraws only on state changes —
-## per-frame redraw was wasted CPU when nothing actually changed.
+## On-foot edge HUD. It exposes balance, active passage, and manifest state
+## without occupying the centre of the world view.
 
-var _font: Font
-var _autopilot_refresh_s := 0.0
+var _view: Node
+var _currency: BrandCurrency
+var _passage_panel: BrandPanel
+var _passage_label: BrandLabel
+var _manifest_panel: BrandPanel
+var _manifest_label: BrandLabel
+var _refresh_elapsed := 0.0
 
 
 func _ready() -> void:
 	set_anchors_preset(Control.PRESET_FULL_RECT)
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_font        = ThemeDB.fallback_font
-
-	# Subscribe to the local player view's signals — single subscription
-	# point covers marks, contracts, and helm changes.
-	var view := get_node_or_null("/root/LocalPlayerView")
-	if view != null:
-		if not view.marks_changed.is_connected(_refresh_arg):
-			view.marks_changed.connect(_refresh_arg)
-		if not view.contracts_changed.is_connected(_refresh_arg):
-			view.contracts_changed.connect(_refresh_arg)
-		if not view.helm_changed.is_connected(_refresh_arg):
-			view.helm_changed.connect(_refresh_arg)
-
-	# One redraw at start so the panel doesn't appear blank on first frame.
-	queue_redraw()
+	theme = BrandTheme.shared()
+	_build()
+	_view = get_node_or_null("/root/LocalPlayerView")
+	if _view != null:
+		if not _view.marks_changed.is_connected(_on_marks_changed):
+			_view.marks_changed.connect(_on_marks_changed)
+		if not _view.contracts_changed.is_connected(_on_contracts_changed):
+			_view.contracts_changed.connect(_on_contracts_changed)
+		if not _view.helm_changed.is_connected(_on_helm_changed):
+			_view.helm_changed.connect(_on_helm_changed)
+		_currency.set_amount(_view.get_marks())
+	_refresh()
 
 
-func _refresh_arg(_arg: Variant = null) -> void:
-	queue_redraw()
+func _build() -> void:
+	var stack := VBoxContainer.new()
+	stack.set_anchors_preset(Control.PRESET_TOP_LEFT)
+	stack.offset_left = BrandTokens.SPACE_LG
+	stack.offset_top = BrandTokens.SPACE_LG
+	stack.offset_right = 420.0
+	stack.add_theme_constant_override(&"separation", BrandTokens.SPACE_SM)
+	add_child(stack)
+
+	var account := BrandPanel.new(BrandPanel.Variant.DARK_RULED)
+	stack.add_child(account)
+	_currency = BrandCurrency.new(0, true)
+	account.add_child(_currency)
+
+	_passage_panel = BrandPanel.new(BrandPanel.Variant.DARK)
+	_passage_panel.visible = false
+	stack.add_child(_passage_panel)
+	_passage_label = BrandLabel.new("", BrandLabel.Role.INVERSE_DATA)
+	_passage_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_passage_panel.add_child(_passage_label)
+
+	_manifest_panel = BrandPanel.new(BrandPanel.Variant.DARK)
+	_manifest_panel.visible = false
+	stack.add_child(_manifest_panel)
+	_manifest_label = BrandLabel.new("", BrandLabel.Role.INVERSE_DATA)
+	_manifest_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_manifest_panel.add_child(_manifest_label)
 
 
 func _process(delta: float) -> void:
 	if not visible:
 		return
-	_autopilot_refresh_s += delta
-	if _autopilot_refresh_s < 0.5:
-		return
-	_autopilot_refresh_s = 0.0
-	var view := get_node_or_null("/root/LocalPlayerView")
-	if view != null:
-		var snapshot: Dictionary = view.get_autopilot_snapshot()
-		if bool(snapshot.get("active", false)):
-			queue_redraw()
+	_refresh_elapsed += delta
+	if _refresh_elapsed >= 0.5:
+		_refresh_elapsed = 0.0
+		_refresh_passage()
 
 
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_VISIBILITY_CHANGED and visible:
-		queue_redraw()
+		_refresh()
 
 
-func _draw() -> void:
-	var view := get_node_or_null("/root/LocalPlayerView")
-	if view == null:
+func _on_marks_changed(balance: int) -> void:
+	_currency.set_amount(balance)
+
+
+func _on_contracts_changed(_contracts: Array) -> void:
+	_refresh_manifest()
+
+
+func _on_helm_changed(_boat: Node) -> void:
+	_refresh()
+
+
+func _refresh() -> void:
+	if _view == null:
 		return
+	_currency.set_amount(_view.get_marks())
+	_refresh_passage()
+	_refresh_manifest()
 
-	var marks_str := PlayerSession.format_money(view.get_marks())
-	var fs        := 17
-	var tw        := _font.get_string_size(marks_str, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
-	var pad_h     := 14.0
-	var pad_v     := 10.0
-	var pw        := tw + pad_h * 2.0
-	var ph        := float(fs) + pad_v * 2.0
-	var ox        := 14.0
-	var oy        := 14.0
 
-	draw_rect(Rect2(ox, oy, pw, ph), HudStyle.C_BG)
-	draw_rect(Rect2(ox, oy, pw, ph), HudStyle.C_BRASS, false, 1.2)
-	draw_string(_font, Vector2(ox + pad_h, oy + pad_v + fs - 2),
-				marks_str, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, HudStyle.C_AMBER)
+func _refresh_passage() -> void:
+	if _view == null:
+		return
+	var autopilot := _view.get_autopilot_snapshot() as Dictionary
+	var active := bool(autopilot.get("active", false))
+	_passage_panel.visible = active
+	if not active:
+		return
+	var watch := autopilot.get("bridge_watch", {}) as Dictionary
+	if bool(watch.get("alarm_active", false)):
+		_passage_label.text = tr("BRIDGE WATCH ALARM · RETURN TO BRIDGE")
+		_passage_label.add_theme_color_override(&"font_color", BrandTokens.ALERT_TINT)
+		_passage_panel.variant = BrandPanel.Variant.DARK_RULED
+		return
+	_passage_panel.variant = BrandPanel.Variant.DARK
+	var destination_id := str(autopilot.get("destination_port_id", ""))
+	var destination := str(_view.get_port_display_name(destination_id)).to_upper()
+	var remaining := float(autopilot.get("remaining_distance_m", 0.0))
+	_passage_label.text = "%s · %s · %s" % [
+		tr("AUTOPILOT"),
+		destination,
+		BrandFormat.distance_metres(remaining),
+	]
+	_passage_label.add_theme_color_override(&"font_color", BrandTokens.OK_LIGHT)
 
-	var autopilot: Dictionary = view.get_autopilot_snapshot()
-	if bool(autopilot.get("active", false)):
-		var destination_id := str(autopilot.get("destination_port_id", ""))
-		var destination: String = str(view.get_port_display_name(destination_id)).to_upper()
-		var remaining_nm := float(autopilot.get("remaining_distance_m", 0.0)) / 1852.0
-		var ap_text := "AUTOPILOT · %s · %.1f nm" % [destination, remaining_nm]
-		var watch := autopilot.get("bridge_watch", {}) as Dictionary
-		if bool(watch.get("alarm_active", false)):
-			ap_text = "BRIDGE WATCH ALARM · RETURN TO BRIDGE"
-		var ap_w := maxf(_font.get_string_size(ap_text, HORIZONTAL_ALIGNMENT_LEFT, -1, 13).x + 20.0, pw)
-		var ap_rect := Rect2(ox, oy + ph + 5.0, ap_w, 30.0)
-		draw_rect(ap_rect, HudStyle.C_BG)
-		var ap_color := HudStyle.C_RED if bool(watch.get("alarm_active", false)) else HudStyle.C_GREEN
-		draw_rect(ap_rect, ap_color, false, 1.0)
-		draw_string(_font, ap_rect.position + Vector2(10.0, 20.0), ap_text,
-			HORIZONTAL_ALIGNMENT_LEFT, -1, 13, ap_color)
 
-	var contracts: Array = view.get_active_contracts()
+func _refresh_manifest() -> void:
+	if _view == null:
+		return
+	var contracts := _view.get_active_contracts() as Array
+	_manifest_panel.visible = not contracts.is_empty()
 	if contracts.is_empty():
 		return
+	var first := contracts[0] as Dictionary
+	var destination := str(
+		_view.get_port_display_name(str(first.get("destination_port_id", "")))
+	).to_upper()
+	_manifest_label.text = "%s · %d · %s" % [
+		tr("ACTIVE MANIFEST"),
+		contracts.size(),
+		destination,
+	]

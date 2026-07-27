@@ -6,6 +6,8 @@ extends Node
 signal marks_changed(balance: int)
 signal company_changed(summary: Dictionary)
 signal helm_changed(boat: Node) # null when not helming
+signal helm_instruments_changed(snapshot: Dictionary)
+signal ship_notice_requested(message: String, duration_seconds: float)
 signal contracts_changed(contracts: Array) # kept empty until trade rewrite
 
 
@@ -21,6 +23,12 @@ func _ready() -> void:
 	_session = get_node_or_null("/root/PlayerSession")
 	_catalog = get_node_or_null("/root/PortCatalog")
 	_state = get_node_or_null("/root/GameState")
+	if _state != null and _state.get("ship") != null:
+		var ship_state := _state.ship as ShipState
+		if not ship_state.instruments_changed.is_connected(_emit_helm_instruments):
+			ship_state.instruments_changed.connect(_emit_helm_instruments)
+		if not ship_state.notice_requested.is_connected(_emit_ship_notice):
+			ship_state.notice_requested.connect(_emit_ship_notice)
 
 	if _session != null:
 		if _session.has_signal("marks_changed") and not _session.marks_changed.is_connected(_emit_marks):
@@ -141,6 +149,56 @@ func get_autopilot_snapshot() -> Dictionary:
 	return snapshot
 
 
+func get_helm_instruments() -> Dictionary:
+	if _state == null or _state.get("ship") == null:
+		return {}
+	return (_state.ship as ShipState).instruments.duplicate(true)
+
+
+func get_navigation_snapshot() -> Dictionary:
+	var ship := get_active_ship()
+	var result := get_helm_instruments()
+	if result.is_empty() and ship != null:
+		var velocity := (ship as RigidBody3D).linear_velocity if ship is RigidBody3D else Vector3.ZERO
+		var bow := NavigationAxes.vessel_bow_horizontal(ship)
+		result = {
+			"position": (ship as Node3D).global_position,
+			"bow": bow,
+			"velocity": velocity,
+			"heading_deg": NavigationAxes.heading_deg_horizontal(bow),
+			"speed_knots": velocity.length() * 1.943844,
+			"fuel_fraction": (
+				clampf(float(ship.call("get_fuel_fraction")), 0.0, 1.0)
+				if ship.has_method("get_fuel_fraction")
+				else NAN
+			),
+		}
+	var contracts := get_active_contracts()
+	var waypoint := Vector3(INF, INF, INF)
+	for contract in contracts:
+		var destination_id := str((contract as Dictionary).get("destination_port_id", ""))
+		var position := get_port_position(destination_id)
+		if position.is_finite():
+			waypoint = position
+			break
+	var berth := get_active_ship_berth_context()
+	result["contracts"] = contracts
+	result["waypoint"] = waypoint
+	result["moored_port_id"] = str(berth.get("port_id", ""))
+	result["moored_berth_id"] = str(berth.get("berth_id", ""))
+	if not result.has("wind_direction") or not result.has("wind_speed_ms"):
+		var weather := get_node_or_null("/root/WorldWeather")
+		if weather != null:
+			var presentation := weather.get("local_presentation") as WeatherState
+			if presentation != null:
+				result["wind_direction"] = presentation.wind_direction
+				result["wind_speed_ms"] = presentation.wind_speed_ms
+	if not result.has("time_hours"):
+		var clock := get_node_or_null("/root/WorldClock")
+		result["time_hours"] = float(clock.get_time_of_day()) * 24.0 if clock != null else 0.0
+	return result
+
+
 func get_active_contracts() -> Array:
 	var freight := get_node_or_null("/root/FreightService")
 	return freight.active_contracts() if freight != null else []
@@ -188,6 +246,14 @@ func _emit_marks(balance: int) -> void:
 
 func _emit_company(summary: Dictionary) -> void:
 	company_changed.emit(summary)
+
+
+func _emit_helm_instruments(snapshot: Dictionary) -> void:
+	helm_instruments_changed.emit(snapshot.duplicate(true))
+
+
+func _emit_ship_notice(message: String, duration_seconds: float) -> void:
+	ship_notice_requested.emit(message, duration_seconds)
 
 
 func _snapshot_into_player_data() -> void:

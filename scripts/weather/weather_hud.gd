@@ -1,20 +1,19 @@
 class_name WeatherHUD
 extends CanvasLayer
 
-## Debug overlay showing the 2D weather compass (precipitation × wind) and fog slider.
-## Toggle with Tab. Only active at runtime (not in editor).
+## Compact presentation debugger for the local weather projection.
+## Toggle with Tab. This is intentionally an instrument, not a game HUD.
 
-const _GRID_SIZE  := 120.0
-const _GRID_PAD   := 14.0
-const _FOG_W      := 120.0
-const _FOG_H      := 14.0
-const _CORNER_PAD := 14.0
+const _GRID_SIZE := 156.0
+const _GRID_PAD := 16.0
+const _FOG_H := 18.0
+const _CORNER_PAD := 16.0
 
 var _visible_hud := false
-var _panel : Panel
-var _label : Label
-var _compass_rect : Control
-var _fog_bar : Control
+var _panel: BrandPanel
+var _label: BrandLabel
+var _compass_rect: Control
+var _fog_bar: Control
 
 
 func _ready() -> void:
@@ -23,72 +22,63 @@ func _ready() -> void:
 	layer = 10
 	_build_hud()
 	_refresh()
-	var w := _weather_lighting()
-	if w != null:
-		w.connect("state_changed", Callable(self, "_refresh"))
+	var weather := _weather_lighting()
+	if weather != null:
+		weather.connect("state_changed", Callable(self, "_refresh"))
 
 
 func _unhandled_input(event: InputEvent) -> void:
 	if Engine.is_editor_hint():
 		return
 	if event is InputEventKey:
-		var ke := event as InputEventKey
-		if ke.pressed and not ke.echo and ke.physical_keycode == KEY_TAB:
+		var key_event := event as InputEventKey
+		if key_event.pressed and not key_event.echo and key_event.physical_keycode == KEY_TAB:
 			_visible_hud = not _visible_hud
 			_panel.visible = _visible_hud
+			if _visible_hud:
+				BrandMotion.panel_in(_panel)
 			get_viewport().set_input_as_handled()
 
 
 func _build_hud() -> void:
-	var margin_x := _CORNER_PAD
-	var margin_y := _CORNER_PAD
-	var total_w  := _GRID_SIZE + _GRID_PAD * 2.0 + 4.0
-	var label_h  := 80.0
-	var total_h  := _GRID_SIZE + _GRID_PAD * 2.0 + _FOG_H + _GRID_PAD + label_h + 10.0
+	var total_w := _GRID_SIZE + _GRID_PAD * 2.0
+	var label_h := 108.0
+	var total_h := _GRID_SIZE + _GRID_PAD * 2.0 + _FOG_H + BrandTokens.SPACE_MD + label_h
 
-	_panel = Panel.new()
+	_panel = BrandPanel.new(BrandPanel.Variant.DARK_RULED)
 	_panel.visible = false
 	_panel.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_LEFT)
-	_panel.offset_left   = margin_x
-	_panel.offset_bottom = -margin_y
-	_panel.offset_right  = margin_x + total_w
-	_panel.offset_top    = -margin_y - total_h
+	_panel.offset_left = _CORNER_PAD
+	_panel.offset_bottom = -_CORNER_PAD
+	_panel.offset_right = _CORNER_PAD + total_w
+	_panel.offset_top = -_CORNER_PAD - total_h
 	add_child(_panel)
 
-	var style := StyleBoxFlat.new()
-	style.bg_color         = Color(0.06, 0.06, 0.08, 0.82)
-	style.corner_radius_top_left     = 6
-	style.corner_radius_top_right    = 6
-	style.corner_radius_bottom_left  = 6
-	style.corner_radius_bottom_right = 6
-	_panel.add_theme_stylebox_override("panel", style)
+	var root := VBoxContainer.new()
+	root.add_theme_constant_override(&"separation", BrandTokens.SPACE_MD)
+	_panel.add_child(root)
 
-	# Compass draw area
+	var heading := BrandLabel.new("WEATHER PRESENTATION", BrandLabel.Role.INVERSE_DATA)
+	root.add_child(heading)
+
 	_compass_rect = Control.new()
-	_compass_rect.position = Vector2(_GRID_PAD, _GRID_PAD)
-	_compass_rect.size     = Vector2(_GRID_SIZE, _GRID_SIZE)
-	_compass_rect.connect("draw", Callable(self, "_draw_compass"))
-	_panel.add_child(_compass_rect)
+	_compass_rect.custom_minimum_size = Vector2(_GRID_SIZE, _GRID_SIZE)
+	_compass_rect.draw.connect(_draw_compass)
+	root.add_child(_compass_rect)
 
-	# Fog bar draw area
 	_fog_bar = Control.new()
-	_fog_bar.position = Vector2(_GRID_PAD, _GRID_PAD * 2 + _GRID_SIZE)
-	_fog_bar.size     = Vector2(_FOG_W, _FOG_H)
-	_fog_bar.connect("draw", Callable(self, "_draw_fog_bar"))
-	_panel.add_child(_fog_bar)
+	_fog_bar.custom_minimum_size = Vector2(_GRID_SIZE, _FOG_H)
+	_fog_bar.draw.connect(_draw_fog_bar)
+	root.add_child(_fog_bar)
 
-	# Text label
-	_label = Label.new()
-	_label.position = Vector2(_GRID_PAD, _GRID_PAD * 3 + _GRID_SIZE + _FOG_H)
-	_label.size     = Vector2(total_w - _GRID_PAD * 2, label_h)
-	_label.add_theme_font_size_override("font_size", 11)
-	_label.add_theme_color_override("font_color", Color(0.78, 0.82, 0.88))
+	_label = BrandLabel.new("", BrandLabel.Role.INVERSE_DATA)
+	_label.custom_minimum_size.y = label_h
 	_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	_panel.add_child(_label)
+	root.add_child(_label)
 
 
 func _refresh() -> void:
-	if not _panel:
+	if _panel == null:
 		return
 	_compass_rect.queue_redraw()
 	_fog_bar.queue_redraw()
@@ -96,105 +86,115 @@ func _refresh() -> void:
 
 
 func _draw_compass() -> void:
-	var w := _weather_lighting()
-	var wind_speed_norm := 0.0  # 0..1 across compass
-	var wind   := 0.0
-	if w != null:
-		var ws := float(w.get("wind_speed_ms"))
-		var ws_max := 30.0
-		if "WIND_SPEED_MAX" in w:
-			ws_max = float(w.get("WIND_SPEED_MAX"))
-		wind_speed_norm = clampf(ws / maxf(ws_max, 0.001), 0.0, 1.0)
-		wind = float(w.get("sea_state"))
+	var weather := _weather_lighting()
+	var wind_speed_norm := 0.0
+	var sea_state := 0.0
+	if weather != null:
+		var wind_speed := float(weather.get("wind_speed_ms"))
+		var maximum := 30.0
+		if "WIND_SPEED_MAX" in weather:
+			maximum = float(weather.get("WIND_SPEED_MAX"))
+		wind_speed_norm = clampf(wind_speed / maxf(maximum, 0.001), 0.0, 1.0)
+		sea_state = float(weather.get("sea_state"))
 
-	var sz := _compass_rect.size
+	var size := _compass_rect.size
+	var midpoint := size * 0.5
+	_compass_rect.draw_rect(Rect2(Vector2.ZERO, size), BrandTokens.INK)
+	_compass_rect.draw_rect(
+		Rect2(Vector2.ZERO, midpoint),
+		BrandTokens.alpha(BrandTokens.WATER_SHALLOW, 0.18)
+	)
+	_compass_rect.draw_rect(
+		Rect2(Vector2(midpoint.x, 0), midpoint),
+		BrandTokens.alpha(BrandTokens.OK, 0.12)
+	)
+	_compass_rect.draw_rect(
+		Rect2(Vector2(0, midpoint.y), midpoint),
+		BrandTokens.alpha(BrandTokens.SEA_LIGHT, 0.16)
+	)
+	_compass_rect.draw_rect(
+		Rect2(midpoint, midpoint),
+		BrandTokens.alpha(BrandTokens.ALERT, 0.16)
+	)
+	_compass_rect.draw_line(
+		Vector2(midpoint.x, 0), Vector2(midpoint.x, size.y), BrandTokens.SEA_LINE, 1.0
+	)
+	_compass_rect.draw_line(
+		Vector2(0, midpoint.y), Vector2(size.x, midpoint.y), BrandTokens.SEA_LINE, 1.0
+	)
+	_compass_rect.draw_rect(Rect2(Vector2.ZERO, size), BrandTokens.SEA_LINE, false, 1.0)
 
-	# Background grid
-	_compass_rect.draw_rect(Rect2(Vector2.ZERO, sz), Color(0.12, 0.12, 0.16, 1.0))
+	var font := BrandTheme.font_data()
+	var labels := BrandTokens.INK_INVERSE_DIM
+	_compass_rect.draw_string(font, Vector2(4, 14), "DEAD CALM", HORIZONTAL_ALIGNMENT_LEFT, -1, 10, labels)
+	_compass_rect.draw_string(font, Vector2(4, size.y - 6), "OLD SWELL", HORIZONTAL_ALIGNMENT_LEFT, -1, 10, labels)
+	_compass_rect.draw_string(font, Vector2(midpoint.x + 4, 14), "FRESH BREEZE", HORIZONTAL_ALIGNMENT_LEFT, -1, 10, labels)
+	_compass_rect.draw_string(font, Vector2(midpoint.x + 4, size.y - 6), "FULL GALE", HORIZONTAL_ALIGNMENT_LEFT, -1, 10, labels)
 
-	# Quadrant shading — TOP = calm sea, BOTTOM = built-up sea, LEFT = no wind, RIGHT = strong wind
-	var mid := sz * 0.5
-	_compass_rect.draw_rect(Rect2(Vector2.ZERO,              mid), Color(0.18, 0.38, 0.55, 0.18))  # top-left:  dead calm
-	_compass_rect.draw_rect(Rect2(Vector2(mid.x, 0),         mid), Color(0.30, 0.36, 0.30, 0.18))  # top-right: fresh breeze
-	_compass_rect.draw_rect(Rect2(Vector2(0, mid.y),         mid), Color(0.28, 0.24, 0.38, 0.18))  # bot-left:  old swell
-	_compass_rect.draw_rect(Rect2(mid,                       mid), Color(0.30, 0.18, 0.18, 0.18))  # bot-right: full gale
-
-	# Grid lines
-	var line_col := Color(0.30, 0.30, 0.34, 0.6)
-	_compass_rect.draw_line(Vector2(mid.x, 0), Vector2(mid.x, sz.y), line_col, 1.0)
-	_compass_rect.draw_line(Vector2(0, mid.y), Vector2(sz.x, mid.y), line_col, 1.0)
-	_compass_rect.draw_rect(Rect2(Vector2.ZERO, sz), Color(0.30, 0.30, 0.34, 0.6), false, 1.0)
-
-	# Corner labels
-	var lc := Color(0.55, 0.58, 0.65, 0.9)
-	var fs := 9
-	_compass_rect.draw_string(ThemeDB.fallback_font, Vector2(3, 12),               "DEAD CALM",    HORIZONTAL_ALIGNMENT_LEFT, -1, fs, lc)
-	_compass_rect.draw_string(ThemeDB.fallback_font, Vector2(3, sz.y - 4),         "OLD SWELL",    HORIZONTAL_ALIGNMENT_LEFT, -1, fs, lc)
-	_compass_rect.draw_string(ThemeDB.fallback_font, Vector2(mid.x + 3, 12),       "FRESH BREEZE", HORIZONTAL_ALIGNMENT_LEFT, -1, fs, lc)
-	_compass_rect.draw_string(ThemeDB.fallback_font, Vector2(mid.x + 3, sz.y - 4), "FULL GALE",    HORIZONTAL_ALIGNMENT_LEFT, -1, fs, lc)
-
-	# Axis arrows
-	var ax_col := Color(0.70, 0.72, 0.78, 0.8)
-	_compass_rect.draw_string(ThemeDB.fallback_font, Vector2(sz.x / 2 - 32, sz.y - 2), "← WIND m/s →", HORIZONTAL_ALIGNMENT_LEFT, -1, 9, ax_col)
-	_compass_rect.draw_string(ThemeDB.fallback_font, Vector2(2, mid.y - 2),             "↑ CALM",       HORIZONTAL_ALIGNMENT_LEFT, -1, 9, ax_col)
-
-	# Current position dot — wind_force=0 (calm sea) at top, wind_speed=0 at left
-	var dot := Vector2(wind_speed_norm * sz.x, wind * sz.y)
-	_compass_rect.draw_circle(dot, 7.0, Color(1.0, 0.90, 0.30, 0.95))
-	_compass_rect.draw_arc(dot, 7.0, 0.0, TAU, 24, Color(0.0, 0.0, 0.0, 0.6), 1.5)
+	var dot := Vector2(wind_speed_norm * size.x, sea_state * size.y)
+	_compass_rect.draw_circle(dot, 7.0, BrandTokens.BRASS)
+	_compass_rect.draw_arc(dot, 7.0, 0.0, TAU, 24, BrandTokens.INK, 2.0)
 
 
 func _draw_fog_bar() -> void:
-	var w := _weather_lighting()
-	var vis := 1.0
-	if w != null:
-		vis = float(w.get("visibility"))
+	var weather := _weather_lighting()
+	var visibility := 1.0
+	if weather != null:
+		visibility = float(weather.get("visibility"))
 
-	var sz := _fog_bar.size
+	var size := _fog_bar.size
+	var fill_x := visibility * size.x
+	_fog_bar.draw_rect(Rect2(Vector2.ZERO, size), BrandTokens.INK)
+	_fog_bar.draw_rect(
+		Rect2(Vector2.ZERO, Vector2(fill_x, size.y)),
+		BrandTokens.WATER_SHALLOW
+	)
+	_fog_bar.draw_rect(
+		Rect2(Vector2(fill_x, 0), Vector2(size.x - fill_x, size.y)),
+		BrandTokens.FOG
+	)
+	_fog_bar.draw_rect(Rect2(Vector2.ZERO, size), BrandTokens.SEA_LINE, false, 1.0)
 
-	# Track
-	_fog_bar.draw_rect(Rect2(Vector2.ZERO, sz), Color(0.12, 0.12, 0.16))
-
-	# Fill — visibility fills left, fog fills right
-	var fill_x := vis * sz.x
-	_fog_bar.draw_rect(Rect2(Vector2.ZERO, Vector2(fill_x, sz.y)), Color(0.50, 0.65, 0.80, 0.7))
-	_fog_bar.draw_rect(Rect2(Vector2(fill_x, 0), Vector2(sz.x - fill_x, sz.y)), Color(0.55, 0.58, 0.62, 0.4))
-
-	# Border
-	_fog_bar.draw_rect(Rect2(Vector2.ZERO, sz), Color(0.30, 0.30, 0.34, 0.7), false, 1.0)
-
-	# Labels
-	var lc := Color(0.78, 0.82, 0.88, 0.9)
-	_fog_bar.draw_string(ThemeDB.fallback_font, Vector2(2, sz.y - 2), "CLEAR", HORIZONTAL_ALIGNMENT_LEFT, -1, 9, lc)
-	_fog_bar.draw_string(ThemeDB.fallback_font, Vector2(sz.x - 30, sz.y - 2), "FOG", HORIZONTAL_ALIGNMENT_LEFT, -1, 9, lc)
+	var font := BrandTheme.font_data()
+	_fog_bar.draw_string(
+		font, Vector2(4, size.y - 4), "CLEAR", HORIZONTAL_ALIGNMENT_LEFT, -1, 10, BrandTokens.INK
+	)
+	_fog_bar.draw_string(
+		font, Vector2(size.x - 30, size.y - 4), "FOG", HORIZONTAL_ALIGNMENT_LEFT, -1, 10, BrandTokens.INK
+	)
 
 
 func _update_label() -> void:
 	if _label == null:
 		return
-	var w := _weather_lighting()
-	if w == null:
-		_label.text = "(no WeatherLighting autoload)"
+	var weather := _weather_lighting()
+	if weather == null:
+		_label.text = "WEATHER LIGHTING OFFLINE"
 		return
-	var precip := float(w.get("precipitation"))
-	var sea    := float(w.get("sea_state"))
-	var wind_speed_ms := float(w.get("wind_speed_ms"))
-	var vis    := float(w.get("visibility"))
-	var tod    := float(w.get("time_of_day"))
-	var cloud_dial := float(w.get("cloud_cover"))
-	var cloud_sky := float(w.get("cloud_coverage"))
-	var wave_height := float(w.get("significant_wave_height_m"))
-	var zone := str(w.get("zone_label"))
+	var precipitation := float(weather.get("precipitation"))
+	var sea_state := float(weather.get("sea_state"))
+	var wind_speed := float(weather.get("wind_speed_ms"))
+	var visibility := float(weather.get("visibility"))
+	var time_of_day := float(weather.get("time_of_day"))
+	var cloud_dial := float(weather.get("cloud_cover"))
+	var cloud_sky := float(weather.get("cloud_coverage"))
+	var wave_height := float(weather.get("significant_wave_height_m"))
+	var zone := str(weather.get("zone_label")).to_upper()
 	_label.text = (
-		"%s  ·  Wind %.1f m/s (%.0f kn)  ·  Sea %.1f m Hs (%d%%)\nRain %d%%  Clouds %d%% (dial %d%%)  Fog %d%%  Time %.2f"
-		% [
-			zone,
-			wind_speed_ms, wind_speed_ms * 1.94384,
-			wave_height, int(sea * 100), int(precip * 100),
-			int(cloud_sky * 100), int(cloud_dial * 100),
-			int((1.0 - vis) * 100), tod,
-		]
-	)
+		"%s\nWIND  %.1f m/s / %.0f kn   SEA  %.1f m HS / %d%%\n"
+		+ "RAIN  %d%%   CLOUD  %d%% / %d%%   FOG  %d%%   TIME  %.2f"
+	) % [
+		zone,
+		wind_speed,
+		wind_speed * 1.94384,
+		wave_height,
+		int(sea_state * 100),
+		int(precipitation * 100),
+		int(cloud_sky * 100),
+		int(cloud_dial * 100),
+		int((1.0 - visibility) * 100),
+		time_of_day,
+	]
 
 
 func _weather_lighting() -> Node:

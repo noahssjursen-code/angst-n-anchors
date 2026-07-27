@@ -318,7 +318,7 @@ func _build_visual() -> void:
 	]), 0.25, steel)
 	var title := Label3D.new()
 	title.text = "RSW LANDING"
-	title.font = HudStyle.font_display()
+	title.font = BrandTheme.font_display()
 	title.font_size = 48
 	title.pixel_size = 0.006
 	title.position = Vector3(-0.15, 3.38, -1.08)

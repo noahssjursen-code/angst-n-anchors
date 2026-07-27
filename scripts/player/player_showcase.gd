@@ -131,7 +131,7 @@ func _rebuild() -> void:
 			var category_lbl := Label3D.new()
 			category_lbl.text = "=== " + row_label.to_upper() + " ==="
 			category_lbl.font_size = 32
-			category_lbl.modulate = HudStyle.C_AMBER
+			category_lbl.modulate = BrandTokens.BRASS
 			category_lbl.outline_size = 12
 			category_lbl.position = Vector3(-2.0, 1.2, z_pos)
 			category_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT

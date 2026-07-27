@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Saira+Condensed:wght@600;700&family=Saira:wght@400;500;600&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  body { margin: 0; background: #10151a; }
+  a { color: #d99a1f; text-decoration: none; }
+  a:hover { color: #f2b233; }
+</style>
+</helmet>
+
+<section style="display:flex; flex-direction:column; gap:28px; padding:56px; background:#10151a; font-family:Saira, sans-serif;">
+
+  <div style="display:flex; flex-direction:column; gap:8px; max-width:860px;">
+    <div style="font-family:'JetBrains Mono',monospace; font-size:12px; letter-spacing:0.18em; text-transform:uppercase; color:#d99a1f;">Angst 'n Anchors — screen designs · 01</div>
+    <div style="font-size:34px; color:#ece5d3; font-family:'Saira Condensed',sans-serif; font-weight:700; line-height:1;">NAVIGATION CHART + NPC DIALOGUE</div>
+    <div style="font-size:15px; line-height:1.55; color:#8b98a3; text-wrap:pretty;">Both surfaces rebuilt to the styleguide from your current builds (kept the same features and dialogue structure). Mocks are 1200 px wide = 62% of a 1080p frame; all sizes noted at full scale.</div>
+  </div>
+
+  <div id="1a" style="display:flex; flex-direction:column; gap:10px;">
+    <div style="font-family:'JetBrains Mono',monospace; font-size:11px; letter-spacing:0.16em; color:#7a8b94;">1A · NAVIGATION CHART — fishing layer active, port selected</div>
+    <div style="width:1200px; height:620px; position:relative; overflow:hidden; border:1px solid #2c3a46; background:#163440;">
+      <svg width="1200" height="620" viewBox="0 0 1200 620" style="position:absolute; left:0; top:0; display:block;">
+        <g stroke="#ece5d3" stroke-opacity="0.05" stroke-width="1"><line x1="150" y1="0" x2="150" y2="620"></line><line x1="300" y1="0" x2="300" y2="620"></line><line x1="450" y1="0" x2="450" y2="620"></line><line x1="600" y1="0" x2="600" y2="620"></line><line x1="750" y1="0" x2="750" y2="620"></line><line x1="900" y1="0" x2="900" y2="620"></line><line x1="1050" y1="0" x2="1050" y2="620"></line><line x1="0" y1="155" x2="1200" y2="155"></line><line x1="0" y1="310" x2="1200" y2="310"></line><line x1="0" y1="465" x2="1200" y2="465"></line></g>
+        <g fill="none"><polygon points="0,0 1200,0 1200,150 1140,160 1080,140 1000,170 940,150 870,190 780,160 700,200 620,170 560,210 480,180 400,220 320,190 240,230 160,200 80,240 0,210" stroke="#3f6377" stroke-width="34" stroke-opacity="0.35"></polygon><polygon points="0,0 1200,0 1200,150 1140,160 1080,140 1000,170 940,150 870,190 780,160 700,200 620,170 560,210 480,180 400,220 320,190 240,230 160,200 80,240 0,210" stroke="#2a4f61" stroke-width="16" stroke-opacity="0.6"></polygon><polygon points="0,620 1200,620 1200,480 1130,470 1040,500 960,470 900,510 820,480 760,530 660,500 580,540 470,510 380,560 300,530 200,570 100,540 0,580" stroke="#3f6377" stroke-width="34" stroke-opacity="0.35"></polygon><polygon points="0,620 1200,620 1200,480 1130,470 1040,500 960,470 900,510 820,480 760,530 660,500 580,540 470,510 380,560 300,530 200,570 100,540 0,580" stroke="#2a4f61" stroke-width="16" stroke-opacity="0.6"></polygon><polygon points="300,350 360,320 430,335 470,370 430,400 350,405 305,385" stroke="#3f6377" stroke-width="24" stroke-opacity="0.4"></polygon><polygon points="540,180 610,175 600,270 565,315 535,260" stroke="#3f6377" stroke-width="20" stroke-opacity="0.4"></polygon></g>
+        <polygon points="0,0 1200,0 1200,150 1140,160 1080,140 1000,170 940,150 870,190 780,160 700,200 620,170 560,210 480,180 400,220 320,190 240,230 160,200 80,240 0,210" fill="#ece5d3" stroke="#b5ab92" stroke-width="1.5"></polygon>
+        <polygon points="540,180 610,175 600,270 565,315 535,260" fill="#ece5d3" stroke="#b5ab92" stroke-width="1.5"></polygon>
+        <polygon points="0,620 1200,620 1200,480 1130,470 1040,500 960,470 900,510 820,480 760,530 660,500 580,540 470,510 380,560 300,530 200,570 100,540 0,580" fill="#ece5d3" stroke="#b5ab92" stroke-width="1.5"></polygon>
+        <polygon points="300,350 360,320 430,335 470,370 430,400 350,405 305,385" fill="#ece5d3" stroke="#b5ab92" stroke-width="1.5"></polygon>
+        <polygon points="690,370 720,360 745,380 720,398" fill="#ece5d3" stroke="#b5ab92" stroke-width="1.5"></polygon>
+        <polygon points="620,300 760,280 860,330 780,395 650,380" fill="#7fc48e" fill-opacity="0.14" stroke="#7fc48e" stroke-opacity="0.55" stroke-width="1.2" stroke-dasharray="5 4"></polygon>
+        <text x="640" y="294" font-family="JetBrains Mono" font-size="9.5" fill="#9fd3ac">HERRING · MODERATE</text>
+        <g stroke="#7fa8b8" stroke-opacity="0.4" stroke-width="1.2" fill="none"><polyline points="0,330 180,318 380,308 520,318 640,342 780,352 940,330 1100,300 1200,290"></polyline><polyline points="0,300 200,296 400,290 560,300 700,330 900,345 1080,330 1200,318"></polyline><polyline points="120,620 200,560 280,500 360,440 470,400 560,368 640,348"></polyline><polyline points="1200,255 1050,270 900,300 760,330"></polyline></g>
+        <polyline points="620,345 700,330 800,300 640,260 590,290 565,308" fill="none" stroke="#d99a1f" stroke-width="1.6" stroke-dasharray="7 5"></polyline>
+        <g transform="translate(620,345) rotate(74)"><line x1="0" y1="-8" x2="0" y2="-34" stroke="#d99a1f" stroke-width="1.4"></line><polygon points="0,-8 6,6 -6,6" fill="#d99a1f" stroke="#1b242c" stroke-width="1"></polygon></g>
+        <g transform="translate(880,338)"><polygon points="0,-5 5,5 -5,5" fill="#ece5d3" fill-opacity="0.9" transform="rotate(255)"></polygon><text x="9" y="4" font-family="JetBrains Mono" font-size="9" fill="#c8d6dc">KARI V · 8.1</text></g>
+        <g transform="translate(300,306)"><polygon points="0,-5 5,5 -5,5" fill="#ece5d3" fill-opacity="0.9" transform="rotate(96)"></polygon><text x="9" y="4" font-family="JetBrains Mono" font-size="9" fill="#c8d6dc">BRIS · 11.0</text></g>
+        <g transform="translate(1060,302)"><polygon points="0,-5 5,5 -5,5" fill="#ece5d3" fill-opacity="0.9" transform="rotate(281)"></polygon></g>
+        <g><circle cx="250" cy="212" r="2.5" fill="#1b242c"></circle><rect x="240" y="214" width="22" height="3" fill="#1b242c"></rect><rect x="242" y="217" width="3.5" height="8" fill="#dfd6c0" stroke="#1b242c" stroke-width="0.6"></rect><rect x="249" y="217" width="3.5" height="8" fill="#dfd6c0" stroke="#1b242c" stroke-width="0.6"></rect><rect x="256" y="217" width="3.5" height="8" fill="#dfd6c0" stroke="#1b242c" stroke-width="0.6"></rect><text x="238" y="206" font-family="JetBrains Mono" font-size="9.5" fill="#1b242c">HOLMVIK</text></g>
+        <g><circle cx="700" cy="192" r="2.5" fill="#1b242c"></circle><rect x="690" y="194" width="22" height="3" fill="#1b242c"></rect><rect x="692" y="197" width="3.5" height="8" fill="#dfd6c0" stroke="#1b242c" stroke-width="0.6"></rect><rect x="699" y="197" width="3.5" height="8" fill="#dfd6c0" stroke="#1b242c" stroke-width="0.6"></rect><rect x="706" y="197" width="3.5" height="8" fill="#dfd6c0" stroke="#1b242c" stroke-width="0.6"></rect><text x="688" y="186" font-family="JetBrains Mono" font-size="9.5" fill="#1b242c">TORSBERG</text></g>
+        <g><circle cx="1000" cy="162" r="2.5" fill="#1b242c"></circle><rect x="990" y="164" width="22" height="3" fill="#1b242c"></rect><rect x="992" y="167" width="3.5" height="8" fill="#dfd6c0" stroke="#1b242c" stroke-width="0.6"></rect><rect x="999" y="167" width="3.5" height="8" fill="#dfd6c0" stroke="#1b242c" stroke-width="0.6"></rect><rect x="1006" y="167" width="3.5" height="8" fill="#dfd6c0" stroke="#1b242c" stroke-width="0.6"></rect><text x="988" y="156" font-family="JetBrains Mono" font-size="9.5" fill="#1b242c">LYNGNES</text></g>
+        <g><circle cx="380" cy="358" r="2.5" fill="#1b242c"></circle><rect x="370" y="360" width="22" height="3" fill="#1b242c"></rect><rect x="372" y="363" width="3.5" height="8" fill="#dfd6c0" stroke="#1b242c" stroke-width="0.6"></rect><rect x="379" y="363" width="3.5" height="8" fill="#dfd6c0" stroke="#1b242c" stroke-width="0.6"></rect><rect x="386" y="363" width="3.5" height="8" fill="#dfd6c0" stroke="#1b242c" stroke-width="0.6"></rect><text x="368" y="352" font-family="JetBrains Mono" font-size="9.5" fill="#1b242c">MIDTVIK</text></g>
+        <g><circle cx="900" cy="503" r="2.5" fill="#1b242c"></circle><rect x="890" y="493" width="22" height="3" fill="#1b242c"></rect><rect x="892" y="485" width="3.5" height="8" fill="#dfd6c0" stroke="#1b242c" stroke-width="0.6"></rect><rect x="899" y="485" width="3.5" height="8" fill="#dfd6c0" stroke="#1b242c" stroke-width="0.6"></rect><rect x="906" y="485" width="3.5" height="8" fill="#dfd6c0" stroke="#1b242c" stroke-width="0.6"></rect><text x="888" y="516" font-family="JetBrains Mono" font-size="9.5" fill="#1b242c">BREMSUND</text></g>
+        <g><circle cx="565" cy="308" r="10" fill="none" stroke="#d99a1f" stroke-width="2"></circle><circle cx="565" cy="308" r="2.5" fill="#1b242c"></circle><rect x="555" y="292" width="22" height="3" fill="#1b242c"></rect><rect x="557" y="284" width="3.5" height="8" fill="#dfd6c0" stroke="#1b242c" stroke-width="0.6"></rect><rect x="564" y="284" width="3.5" height="8" fill="#dfd6c0" stroke="#1b242c" stroke-width="0.6"></rect><rect x="571" y="284" width="3.5" height="8" fill="#dfd6c0" stroke="#1b242c" stroke-width="0.6"></rect><text x="584" y="304" font-family="JetBrains Mono" font-size="10" font-weight="700" fill="#1b242c">ØYANGEN</text></g>
+        <text x="140" y="600" font-family="JetBrains Mono" font-size="8.5" fill="#7fa8b8" fill-opacity="0.7">+8 KM</text>
+        <text x="590" y="600" font-family="JetBrains Mono" font-size="8.5" fill="#ece5d3" fill-opacity="0.35">+10 KM</text>
+        <text x="1040" y="600" font-family="JetBrains Mono" font-size="8.5" fill="#7fa8b8" fill-opacity="0.7">+12 KM</text>
+        <g transform="translate(30,560)"><line x1="0" y1="0" x2="80" y2="0" stroke="#ece5d3" stroke-width="2"></line><line x1="0" y1="-4" x2="0" y2="4" stroke="#ece5d3" stroke-width="2"></line><line x1="80" y1="-4" x2="80" y2="4" stroke="#ece5d3" stroke-width="2"></line><text x="30" y="-8" font-family="JetBrains Mono" font-size="9" fill="#ece5d3">500 M</text></g>
+      </svg>
+      <div style="position:absolute; top:14px; left:14px; display:flex; align-items:stretch; gap:8px;">
+        <div style="background:#ece5d3; border:1px solid #b5ab92; padding:8px 16px; display:flex; align-items:center;"><div style="font-family:'Saira Condensed',sans-serif; font-weight:700; font-size:19px; color:#1b242c; letter-spacing:0.03em;">NAVIGATION CHART</div></div>
+        <div style="display:flex; gap:4px; background:#ece5d3; border:1px solid #b5ab92; padding:5px;">
+          <div style="font-family:'JetBrains Mono',monospace; font-size:10px; padding:6px 12px; color:#5c5541;">WEATHER</div>
+          <div style="font-family:'JetBrains Mono',monospace; font-size:10px; padding:6px 12px; background:#163440; color:#ece5d3;">FISHING</div>
+          <div style="font-family:'JetBrains Mono',monospace; font-size:10px; padding:6px 12px; color:#5c5541;">TRAFFIC</div>
+          <div style="font-family:'JetBrains Mono',monospace; font-size:10px; padding:6px 12px; color:#5c5541; border-left:1px solid #c9bfa8;">CENTRE</div>
+        </div>
+        <div style="background:#ece5d3; border:1px solid #b5ab92; padding:5px; display:flex;"><div style="font-family:'JetBrains Mono',monospace; font-size:10px; padding:6px 12px; color:#8a3325;">CLOSE · M</div></div>
+      </div>
+      <div style="position:absolute; top:14px; right:14px; display:flex; flex-direction:column; align-items:flex-end; gap:8px;">
+        <svg width="56" height="56" viewBox="0 0 56 56"><circle cx="28" cy="28" r="26" fill="#ece5d3" stroke="#b5ab92"></circle><polygon points="28,8 33,28 28,24 23,28" fill="#b23a2a"></polygon><polygon points="28,48 33,28 28,32 23,28" fill="#1b242c"></polygon><text x="24.5" y="20" font-family="JetBrains Mono" font-size="8" fill="#1b242c">N</text></svg>
+        <div style="background:#ece5d3; border:1px solid #b5ab92; padding:6px 10px; font-family:'JetBrains Mono',monospace; font-size:10px; color:#1b242c;">WIND 295° · 27 KT</div>
+      </div>
+      <div style="position:absolute; right:14px; top:150px; width:240px; background:#ece5d3; border:1px solid #b5ab92; display:flex; flex-direction:column;">
+        <div style="background:#163440; padding:10px 14px; display:flex; align-items:baseline; gap:8px;"><div style="font-family:'Saira Condensed',sans-serif; font-weight:700; font-size:20px; color:#ece5d3;">ØYANGEN</div><div style="font-family:'JetBrains Mono',monospace; font-size:9px; color:#9fc0cd; margin-left:auto;">4.2 NM</div></div>
+        <div style="padding:12px 14px; display:flex; flex-direction:column; gap:7px;">
+          <div style="display:flex; justify-content:space-between; font-size:13px; color:#3d4650;"><span>Class</span><span style="font-family:'JetBrains Mono',monospace; font-size:11px; color:#1b242c;">COASTAL</span></div>
+          <div style="display:flex; justify-content:space-between; font-size:13px; color:#3d4650;"><span>Berths</span><span style="font-family:'JetBrains Mono',monospace; font-size:11px; color:#1b242c;">1 · FREE</span></div>
+          <div style="display:flex; justify-content:space-between; font-size:13px; color:#3d4650;"><span>Population</span><span style="font-family:'JetBrains Mono',monospace; font-size:11px; color:#1b242c;">234</span></div>
+          <div style="display:flex; justify-content:space-between; font-size:13px; color:#3d4650;"><span>Exports</span><span style="font-family:'JetBrains Mono',monospace; font-size:11px; color:#1b242c;">GENERAL CARGO</span></div>
+          <div style="display:flex; justify-content:space-between; font-size:13px; color:#3d4650;"><span>Imports</span><span style="font-family:'JetBrains Mono',monospace; font-size:11px; color:#1b242c;">GENERAL CARGO</span></div>
+        </div>
+        <div style="padding:0 14px 14px; display:flex; flex-direction:column; gap:8px;">
+          <div style="background:#163440; color:#ece5d3; text-align:center; padding:9px 0; font-family:'Saira Condensed',sans-serif; font-weight:600; font-size:15px; letter-spacing:0.06em; cursor:pointer;" style-hover="background:#1e4657;">REQUEST BERTH</div>
+          <div style="border:1px solid #b5ab92; color:#3d4650; text-align:center; padding:8px 0; font-family:'Saira Condensed',sans-serif; font-weight:600; font-size:14px; letter-spacing:0.06em; cursor:pointer;" style-hover="border-color:#d99a1f; color:#1b242c;">SET COURSE</div>
+        </div>
+      </div>
+      <div style="position:absolute; left:0; right:0; bottom:0; height:36px; background:#1b242c; display:flex; align-items:center; padding:0 16px; gap:22px; font-family:'JetBrains Mono',monospace; font-size:11px; color:#ece5d3; white-space:nowrap;">
+        <span>HDG <span style="color:#d99a1f;">074°</span></span>
+        <span>COG <span style="color:#d99a1f;">071°</span></span>
+        <span>SOG <span style="color:#d99a1f;">10.4 KN</span></span>
+        <span>WIND <span style="color:#d99a1f;">295°/27</span></span>
+        <span>FUEL <span style="color:#d99a1f;">62%</span></span>
+        <span>TIME <span style="color:#d99a1f;">14:42</span></span>
+        <span style="margin-left:auto; color:#7a8b94;">X 14233 · Z -14971</span>
+      </div>
+    </div>
+    <div style="font-size:13px; line-height:1.6; color:#8b98a3; max-width:860px;">Land is paper, sea is marine — the chart <em>is</em> the palette. Depth reads as lighter bands along shores; fishing grounds are dashed overlays, not heat blocks. Ports keep your pier glyph, drawn once in ink + surface. The bottom instrument strip is the waterline datum. At 1080p: status text 18 px, port card 380 px wide, place names 15 px.</div>
+  </div>
+
+  <div id="1b" style="display:flex; flex-direction:column; gap:10px;">
+    <div style="font-family:'JetBrains Mono',monospace; font-size:11px; letter-spacing:0.16em; color:#7a8b94;">1B · NPC DIALOGUE — harbour master at the quay</div>
+    <div style="width:1200px; height:620px; position:relative; overflow:hidden; border:1px solid #2c3a46; background:#aebfc4;">
+      <svg width="1200" height="620" viewBox="0 0 1200 620" style="position:absolute; left:0; top:0; display:block;">
+        <rect x="0" y="0" width="1200" height="310" fill="#aebfc4"></rect>
+        <polygon points="0,310 0,250 140,268 300,232 470,262 620,238 780,266 930,240 1080,262 1200,246 1200,310" fill="#8ba08c"></polygon>
+        <g fill="#24352b"><polygon points="180,258 188,238 196,258"></polygon><polygon points="200,254 208,232 216,254"></polygon><polygon points="850,254 858,234 866,254"></polygon><polygon points="872,258 880,240 888,258"></polygon><polygon points="1010,252 1018,232 1026,252"></polygon></g>
+        <g><rect x="920" y="272" width="26" height="14" fill="#a34f3a"></rect><polygon points="916,272 933,262 950,272" fill="#7e3a2a"></polygon></g>
+        <rect x="0" y="310" width="1200" height="130" fill="#3f6377"></rect>
+        <rect x="0" y="310" width="1200" height="10" fill="#5f8296"></rect>
+        <rect x="0" y="440" width="1200" height="180" fill="#262b31"></rect>
+        <rect x="0" y="440" width="1200" height="6" fill="#171b1f"></rect>
+        <g><rect x="150" y="150" width="10" height="290" fill="#cfa235"></rect><rect x="100" y="150" width="200" height="8" fill="#cfa235"></rect><line x1="270" y1="158" x2="270" y2="240" stroke="#1b242c" stroke-width="2"></line><rect x="260" y="240" width="20" height="14" fill="#8a8f96"></rect></g>
+        <g><rect x="640" y="314" width="100" height="150" fill="#2e4356"></rect><rect x="655" y="464" width="28" height="94" fill="#31383f"></rect><rect x="697" y="464" width="28" height="94" fill="#31383f"></rect><rect x="660" y="250" width="60" height="66" fill="#e5c6a5"></rect><rect x="654" y="238" width="72" height="22" fill="#1b242c"></rect><rect x="652" y="258" width="34" height="7" fill="#1b242c"></rect><rect x="672" y="290" width="36" height="8" fill="#4a3526"></rect><rect x="622" y="322" width="20" height="86" fill="#2e4356"></rect><rect x="738" y="322" width="20" height="86" fill="#2e4356"></rect></g>
+      </svg>
+      <div style="position:absolute; top:16px; left:16px; background:#1b242c; padding:7px 14px; font-family:'JetBrains Mono',monospace; font-size:12px; color:#ece5d3;">ℳ <span style="color:#d99a1f;">8 800</span></div>
+      <div style="position:absolute; right:24px; bottom:172px; display:flex; flex-direction:column; gap:6px; align-items:flex-end;">
+        <div style="display:flex; align-items:center; gap:0; cursor:pointer;" style-hover="transform:translateX(-4px);"><div style="background:#163440; color:#ece5d3; font-family:'JetBrains Mono',monospace; font-size:11px; padding:10px 12px;">1</div><div style="background:#ece5d3; border:1px solid #b5ab92; border-left:none; padding:9px 16px; font-size:15px; font-weight:500; color:#1b242c; min-width:260px;">Request a berth</div></div>
+        <div style="display:flex; align-items:center; gap:0; cursor:pointer;"><div style="background:#163440; color:#ece5d3; font-family:'JetBrains Mono',monospace; font-size:11px; padding:10px 12px;">2</div><div style="background:#ece5d3; border:1px solid #b5ab92; border-left:none; padding:9px 16px; font-size:15px; font-weight:500; color:#1b242c; min-width:260px;">What vessels can dock here?</div></div>
+        <div style="display:flex; align-items:center; gap:0; cursor:pointer;"><div style="background:#163440; color:#ece5d3; font-family:'JetBrains Mono',monospace; font-size:11px; padding:10px 12px;">3</div><div style="background:#ece5d3; border:1px solid #b5ab92; border-left:none; padding:9px 16px; font-size:15px; font-weight:500; color:#1b242c; min-width:260px;">Nothing, thank you.</div></div>
+      </div>
+      <div style="position:absolute; left:0; right:0; bottom:0; height:156px; background:#ece5d3; border-top:3px solid #d99a1f; display:flex;">
+        <div style="width:156px; height:100%; background:#163440; display:flex; align-items:center; justify-content:center; flex-shrink:0;">
+          <svg width="96" height="96" viewBox="0 0 100 100"><rect x="30" y="62" width="40" height="38" fill="#2e4356"></rect><rect x="34" y="26" width="32" height="38" fill="#e5c6a5"></rect><rect x="30" y="18" width="40" height="14" fill="#1b242c"></rect><rect x="29" y="30" width="20" height="5" fill="#1b242c"></rect><rect x="40" y="48" width="20" height="5" fill="#4a3526"></rect><rect x="38" y="38" width="8" height="5" fill="#1b242c"></rect><rect x="54" y="38" width="8" height="5" fill="#1b242c"></rect></svg>
+        </div>
+        <div style="flex:1; padding:18px 26px; display:flex; flex-direction:column; gap:8px;">
+          <div style="display:flex; align-items:baseline; gap:14px;">
+            <div style="font-family:'Saira Condensed',sans-serif; font-weight:700; font-size:22px; color:#1b242c; letter-spacing:0.03em; white-space:nowrap;">HARBOUR MASTER</div>
+            <div style="font-family:'JetBrains Mono',monospace; font-size:10px; color:#7a7052; letter-spacing:0.1em;">ØYANGEN · QUAY OFFICE</div>
+          </div>
+          <div style="font-size:17px; line-height:1.5; color:#1b242c; max-width:640px;">Good day, Captain. Berth two is clear until the ferry turns up. It usually turns up.</div>
+          <div style="margin-top:auto; display:flex; align-items:center; gap:16px;">
+            <div style="font-family:'JetBrains Mono',monospace; font-size:10px; color:#7a7052;">HARBOUR BOARD · CHART › M</div>
+            <svg width="12" height="10" viewBox="0 0 12 10" style="margin-left:auto;"><polygon points="0,0 12,0 6,10" fill="#d99a1f"></polygon></svg>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div style="font-size:13px; line-height:1.6; color:#8b98a3; max-width:860px;">Dialogue band sits on the waterline; the world (and the person you're talking to) stays visible above it. Portrait is a flat in-brand illustration on sea marine, not a 3D render. Choices stack above the band, numbered for keyboard — number chips in sea, text in Saira. NPC speech is Saira (27 px at 1080p); only the meta line ("quay office", key hints) is mono.</div>
+  </div>
+
+</section>
+
+</x-dc>
+</body>
+</html>

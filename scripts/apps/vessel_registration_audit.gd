@@ -33,26 +33,38 @@ func _build_ui() -> void:
 	_root = Control.new()
 	_root.name = "RegistrationAuditRoot"
 	_root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	_root.theme = HudStyle.make_theme()
+	_root.theme = BrandTheme.shared()
 	add_child(_root)
 
 	var background := ColorRect.new()
-	background.color = Color(0.025, 0.032, 0.04)
+	background.color = BrandTokens.SEA_DEEP
 	background.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	_root.add_child(background)
 
-	var margin := MarginContainer.new()
+	var margin := BrandComponents.screen_margin()
 	margin.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	for side in ["margin_left", "margin_top", "margin_right", "margin_bottom"]:
-		margin.add_theme_constant_override(side, 18)
 	_root.add_child(margin)
 	var outer := VBoxContainer.new()
-	outer.add_theme_constant_override("separation", 10)
+	outer.add_theme_constant_override(&"separation", BrandTokens.SPACE_SM)
 	margin.add_child(outer)
-	outer.add_child(UiBuilder.title_label("VESSEL REGISTRATION OFFICE", 24))
-	var subtitle := UiBuilder.body_label(
-		"Source-controlled legal code and official-vessel paperwork", 12
+
+	var eyebrow := BrandLabel.new(
+		"MARITIME AUTHORITY / INTERNAL RECORDS",
+		BrandLabel.Role.INVERSE_DATA
 	)
+	eyebrow.add_theme_color_override(&"font_color", BrandTokens.BRASS)
+	outer.add_child(eyebrow)
+	var title := BrandLabel.new(
+		"VESSEL REGISTRATION OFFICE",
+		BrandLabel.Role.DISPLAY_MEDIUM
+	)
+	title.add_theme_color_override(&"font_color", BrandTokens.INK_INVERSE)
+	outer.add_child(title)
+	var subtitle := BrandLabel.new(
+		"Source-controlled legal code and official-vessel paperwork",
+		BrandLabel.Role.INVERSE_BODY
+	)
+	subtitle.add_theme_color_override(&"font_color", BrandTokens.INK_INVERSE_DIM)
 	outer.add_child(subtitle)
 
 	_tabs = TabContainer.new()
@@ -65,13 +77,13 @@ func _build_ui() -> void:
 func _build_legal_tab() -> void:
 	var tab := HBoxContainer.new()
 	tab.name = "Legal code"
-	tab.add_theme_constant_override("separation", 12)
+	tab.add_theme_constant_override(&"separation", BrandTokens.SPACE_LG)
 	_tabs.add_child(tab)
 
 	var left := VBoxContainer.new()
 	left.custom_minimum_size.x = 270
 	tab.add_child(left)
-	left.add_child(UiBuilder.section_header("REGISTRATIONS"))
+	left.add_child(BrandComponents.section_header("REGISTRATIONS"))
 	_legal_list = ItemList.new()
 	_legal_list.name = "RegistrationList"
 	_legal_list.size_flags_vertical = Control.SIZE_EXPAND_FILL
@@ -80,7 +92,7 @@ func _build_legal_tab() -> void:
 	var right := VBoxContainer.new()
 	right.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	tab.add_child(right)
-	right.add_child(UiBuilder.section_header("CATALOG JSON"))
+	right.add_child(BrandComponents.section_header("CATALOG JSON"))
 	_legal_json = TextEdit.new()
 	_legal_json.name = "LegalCodeEditor"
 	_legal_json.size_flags_vertical = Control.SIZE_EXPAND_FILL
@@ -88,17 +100,18 @@ func _build_legal_tab() -> void:
 	_legal_json.custom_minimum_size.y = 460
 	right.add_child(_legal_json)
 	var buttons := HBoxContainer.new()
-	var reload_btn := UiBuilder.compact_button("Reload")
+	buttons.add_theme_constant_override(&"separation", BrandTokens.SPACE_SM)
+	var reload_btn := BrandComponents.compact_button("RELOAD")
 	reload_btn.pressed.connect(_reload_legal_code)
 	buttons.add_child(reload_btn)
-	var validate_btn := UiBuilder.compact_button("Validate")
+	var validate_btn := BrandButton.new("VALIDATE", BrandButton.Variant.PRIMARY)
 	validate_btn.pressed.connect(_validate_legal_code)
 	buttons.add_child(validate_btn)
-	var save_btn := UiBuilder.compact_button("Validate + save")
+	var save_btn := BrandButton.new("VALIDATE + SAVE", BrandButton.Variant.LOUD)
 	save_btn.pressed.connect(_save_legal_code)
 	buttons.add_child(save_btn)
 	right.add_child(buttons)
-	_legal_status = Label.new()
+	_legal_status = BrandLabel.new("", BrandLabel.Role.DATA_MUTED)
 	_legal_status.name = "LegalStatus"
 	_legal_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	right.add_child(_legal_status)
@@ -107,20 +120,20 @@ func _build_legal_tab() -> void:
 func _build_audit_tab() -> void:
 	var tab := HBoxContainer.new()
 	tab.name = "Vessel paperwork"
-	tab.add_theme_constant_override("separation", 12)
+	tab.add_theme_constant_override(&"separation", BrandTokens.SPACE_LG)
 	_tabs.add_child(tab)
 
 	var left := VBoxContainer.new()
 	left.custom_minimum_size.x = 360
 	tab.add_child(left)
-	var audit_btn := UiBuilder.button("Audit all official vessels")
+	var audit_btn := BrandComponents.primary_button("AUDIT ALL OFFICIAL VESSELS")
 	audit_btn.name = "AuditAllButton"
 	audit_btn.pressed.connect(_audit_all)
 	left.add_child(audit_btn)
-	_audit_status = Label.new()
+	_audit_status = BrandLabel.new("", BrandLabel.Role.DATA)
 	_audit_status.name = "AuditStatus"
 	left.add_child(_audit_status)
-	left.add_child(UiBuilder.section_header("ASSIGN REGISTRATION"))
+	left.add_child(BrandComponents.section_header("ASSIGN REGISTRATION"))
 	_audit_registration = OptionButton.new()
 	_audit_registration.name = "AuditRegistrationOption"
 	for entry in VesselRegistrationCatalog.registrations():
@@ -129,7 +142,7 @@ func _build_audit_tab() -> void:
 			_audit_registration.item_count - 1, str(entry.get("id", ""))
 		)
 	left.add_child(_audit_registration)
-	var assign_btn := UiBuilder.compact_button("Assign to selected prebuilt")
+	var assign_btn := BrandComponents.compact_button("ASSIGN TO SELECTED PREBUILT")
 	assign_btn.name = "AssignRegistrationButton"
 	assign_btn.pressed.connect(_assign_selected_registration)
 	left.add_child(assign_btn)
@@ -139,10 +152,10 @@ func _build_audit_tab() -> void:
 	_audit_list.item_selected.connect(_show_audit)
 	left.add_child(_audit_list)
 
-	var detail_panel := UiBuilder.inner_panel()
+	var detail_panel := BrandComponents.panel(Vector2.ZERO, BrandPanel.Variant.RAISED)
 	detail_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	tab.add_child(detail_panel)
-	_audit_detail = Label.new()
+	_audit_detail = BrandLabel.new("", BrandLabel.Role.DATA)
 	_audit_detail.name = "AuditDetail"
 	_audit_detail.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_audit_detail.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -161,7 +174,7 @@ func _reload_legal_code() -> void:
 			str(entry.get("display", "")),
 		])
 	_legal_status.text = "Loaded legal code v%d" % VesselRegistrationCatalog.catalog_version()
-	_legal_status.add_theme_color_override("font_color", HudStyle.C_LABEL)
+	_legal_status.add_theme_color_override(&"font_color", BrandTokens.INK_MUTED)
 
 
 func _parse_legal_editor() -> Dictionary:
@@ -198,7 +211,7 @@ func _save_legal_code() -> void:
 func _set_legal_status(message: String, failed: bool) -> void:
 	_legal_status.text = message
 	_legal_status.add_theme_color_override(
-		"font_color", HudStyle.C_RED if failed else HudStyle.C_GREEN
+		&"font_color", BrandTokens.ALERT if failed else BrandTokens.OK
 	)
 
 
@@ -216,7 +229,7 @@ func _audit_all() -> void:
 		_audit_list.add_item("%s  %s" % ["PASS" if ok else "FAIL", str(audit.get("name", path))])
 		_audit_list.set_item_custom_fg_color(
 			_audit_list.item_count - 1,
-			HudStyle.C_GREEN if ok else HudStyle.C_RED,
+			BrandTokens.OK if ok else BrandTokens.ALERT,
 		)
 	_audit_status.text = "Legal code v%d · %d/%d official vessels certified" % [
 		VesselRegistrationCatalog.catalog_version(), passed, files.size(),

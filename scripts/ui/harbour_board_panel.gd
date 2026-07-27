@@ -18,7 +18,7 @@ var _row_rects: Dictionary = {} ## berth_id -> Rect2
 func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_STOP
 	custom_minimum_size = Vector2(320, 220)
-	theme = HudStyle.make_theme()
+	theme = BrandTheme.shared()
 
 
 func bind_port(port_id: String, plot: PortPlot = null, read_only: bool = true) -> void:
@@ -121,8 +121,8 @@ func _harbour() -> HarbourController:
 func _draw() -> void:
 	_row_rects.clear()
 	var rect := Rect2(Vector2.ZERO, size)
-	draw_rect(rect, HudStyle.C_BG)
-	draw_rect(rect, HudStyle.C_BRASS, false, 1.0)
+	draw_rect(rect, BrandTokens.SEA_DEEP)
+	draw_rect(rect, BrandTokens.SEA_LINE, false, 1.0)
 
 	var data := _plot.port_data() if _plot != null else null
 	var harbour := _harbour()
@@ -149,10 +149,10 @@ func _draw() -> void:
 					imports = info.get("commodity_imports", []) as Array
 
 	draw_string(
-		ThemeDB.fallback_font,
+		BrandTheme.font_data(),
 		Vector2(PAD, 20.0),
 		"HARBOUR OPS — %s" % port_name.to_upper(),
-		HORIZONTAL_ALIGNMENT_LEFT, -1, 12, HudStyle.C_TEXT,
+		HORIZONTAL_ALIGNMENT_LEFT, -1, 12, BrandTokens.INK_INVERSE,
 	)
 	var export_label := CommodityCatalog.commodity_display(export_id) if not export_id.is_empty() \
 			else "—"
@@ -168,25 +168,25 @@ func _draw() -> void:
 		else:
 			taken_n += 1
 	draw_string(
-		ThemeDB.fallback_font,
+		BrandTheme.font_data(),
 		Vector2(PAD, 38.0),
 		"Export %s · Imports %s" % [export_label, import_line],
-		HORIZONTAL_ALIGNMENT_LEFT, -1, 10, HudStyle.C_COPPER,
+		HORIZONTAL_ALIGNMENT_LEFT, -1, 10, BrandTokens.BRASS_DEEP,
 	)
 	draw_string(
-		ThemeDB.fallback_font,
+		BrandTheme.font_data(),
 		Vector2(PAD, 54.0),
 		"%d free / %d taken · %d jobs" % [free_n, taken_n, jobs.size()],
-		HORIZONTAL_ALIGNMENT_LEFT, -1, 10, HudStyle.C_LABEL,
+		HORIZONTAL_ALIGNMENT_LEFT, -1, 10, BrandTokens.INK_INVERSE_DIM,
 	)
 
 	var y := 72.0
 	if berths.is_empty():
 		draw_string(
-			ThemeDB.fallback_font,
+			BrandTheme.font_data(),
 			Vector2(PAD, y + 16.0),
 			"No live berth board — sail closer for occupancy",
-			HORIZONTAL_ALIGNMENT_LEFT, -1, 11, HudStyle.C_LABEL,
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 11, BrandTokens.INK_INVERSE_DIM,
 		)
 	else:
 		for raw in berths:
@@ -204,16 +204,16 @@ func _draw() -> void:
 			var fill := CommodityCatalog.terminal_family_color(family)
 			fill.a = 0.22 if free else 0.4
 			if berth_id == _selected_berth:
-				fill = HudStyle.C_AMBER
+				fill = BrandTokens.BRASS
 				fill.a = 0.35
 			draw_rect(row_rect, fill)
-			draw_rect(row_rect, Color(0.2, 0.22, 0.2, 0.8), false, 1.0)
+			draw_rect(row_rect, BrandTokens.alpha(BrandTokens.SEA_LINE, 0.8), false, 1.0)
 			var status := "FREE" if free else "TAKEN"
 			draw_string(
-				ThemeDB.fallback_font,
+				BrandTheme.font_data(),
 				Vector2(PAD + 6.0, y + 12.0),
 				"%s  %s" % [status, station],
-				HORIZONTAL_ALIGNMENT_LEFT, -1, 10, HudStyle.C_TEXT,
+				HORIZONTAL_ALIGNMENT_LEFT, -1, 10, BrandTokens.INK_INVERSE,
 			)
 			var detail := CommodityCatalog.terminal_family_display(family)
 			if equip_n > 0:
@@ -221,18 +221,18 @@ func _draw() -> void:
 			if not free and not ship_id.is_empty():
 				detail += " · %s" % ship_id
 			draw_string(
-				ThemeDB.fallback_font,
+				BrandTheme.font_data(),
 				Vector2(PAD + 6.0, y + 26.0),
 				detail,
-				HORIZONTAL_ALIGNMENT_LEFT, -1, 9, HudStyle.C_LABEL,
+				HORIZONTAL_ALIGNMENT_LEFT, -1, 9, BrandTokens.INK_INVERSE_DIM,
 			)
 			y += 40.0
 			if y > size.y - 28.0:
 				break
 
 	draw_string(
-		ThemeDB.fallback_font,
+		BrandTheme.font_data(),
 		Vector2(PAD, size.y - 10.0),
 		"Plan outline is on the chart · this panel is occupancy only",
-		HORIZONTAL_ALIGNMENT_LEFT, -1, 9, HudStyle.C_LABEL,
+		HORIZONTAL_ALIGNMENT_LEFT, -1, 9, BrandTokens.INK_INVERSE_DIM,
 	)

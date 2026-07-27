@@ -5,12 +5,12 @@ extends RefCounted
 ## Built from PortLayoutGraph (foundation / berth_plan / land_plan), not berth AABBs.
 ## Lazy-cached per port_id — expand cost is paid once when a harbour enters view.
 
-const C_FOUNDATION := Color(0.14, 0.15, 0.16, 0.92)
-const C_FOUNDATION_EDGE := Color(0.55, 0.56, 0.52, 0.95)
-const C_ASPHALT := Color(0.18, 0.19, 0.20, 0.88)
-const C_QUAY := Color(0.28, 0.29, 0.30, 0.94)
-const C_SHORE := Color(0.72, 0.62, 0.38, 0.90)
-const C_DOCK_FACE := Color(0.85, 0.82, 0.70, 0.95)
+static var C_FOUNDATION := BrandTokens.alpha(BrandTokens.QUAY, 0.92)
+static var C_FOUNDATION_EDGE := BrandTokens.alpha(BrandTokens.CONCRETE, 0.95)
+static var C_ASPHALT := BrandTokens.alpha(BrandTokens.QUAY_EDGE, 0.88)
+static var C_QUAY := BrandTokens.alpha(BrandTokens.CONCRETE_STAINED, 0.94)
+static var C_SHORE := BrandTokens.alpha(BrandTokens.SAND, 0.90)
+static var C_DOCK_FACE := BrandTokens.alpha(BrandTokens.CONCRETE_LIGHT, 0.95)
 
 var port_id := ""
 var world_origin := Vector3.ZERO
@@ -180,14 +180,14 @@ func draw(canvas: CanvasItem, ctx: Dictionary, show_labels: bool = true) -> void
 		var fill := C_ASPHALT.lerp(tint, 0.35)
 		fill.a = 0.88
 		_fill_poly(canvas, ctx, asphalt_polys[i], fill)
-		_stroke_poly(canvas, ctx, asphalt_polys[i], Color(0.7, 0.7, 0.65, 0.85), 1.2)
+		_stroke_poly(canvas, ctx, asphalt_polys[i], BrandTokens.alpha(BrandTokens.SURFACE_EDGE, 0.85), 1.2)
 	for i in range(quay_polys.size()):
 		var family2 := str(quay_meta[i].get("family", "general")) if i < quay_meta.size() else "general"
 		var tint2 := CommodityCatalog.terminal_family_color(family2)
 		var fill2 := C_QUAY.lerp(tint2, 0.4)
 		fill2.a = 0.94
 		_fill_poly(canvas, ctx, quay_polys[i], fill2)
-		_stroke_poly(canvas, ctx, quay_polys[i], Color(0.92, 0.9, 0.82, 0.95), 1.6)
+		_stroke_poly(canvas, ctx, quay_polys[i], BrandTokens.alpha(BrandTokens.PAPER, 0.95), 1.6)
 	_stroke_open(canvas, ctx, shore_poly, C_SHORE, 2.0)
 	_stroke_open(canvas, ctx, dock_face_poly, C_DOCK_FACE, 2.2)
 	if not show_labels:
@@ -446,9 +446,9 @@ static func _label_poly(
 	var screen := ChartLayerRenderer._world_to_screen(Vector3(acc.x, 0.0, acc.y), ctx)
 	## Sit above pad centre so FREE/TAKEN (drawn below) does not collide.
 	canvas.draw_string(
-		ThemeDB.fallback_font,
+		BrandTheme.font_data(),
 		screen + Vector2(-18.0, -8.0),
 		text,
 		HORIZONTAL_ALIGNMENT_LEFT, -1, 10,
-		Color(0.96, 0.94, 0.86, 0.95),
+		BrandTokens.alpha(BrandTokens.INK_INVERSE, 0.95),
 	)

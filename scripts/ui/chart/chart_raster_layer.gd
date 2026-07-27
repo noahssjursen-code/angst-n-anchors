@@ -115,7 +115,7 @@ func draw_wind(canvas: CanvasItem, chart_rect: Rect2, visible_world: Rect2) -> v
 					0.0,
 					TAU,
 					12,
-					Color(0.34, 0.78, 0.94, 0.25 + sea * 0.35),
+					BrandTokens.alpha(BrandTokens.CHART_ZONE_WEATHER, 0.25 + sea * 0.35),
 					1.0,
 					true,
 				)
@@ -125,7 +125,7 @@ func draw_wind(canvas: CanvasItem, chart_rect: Rect2, visible_world: Rect2) -> v
 			var length := 11.0 + minf(wind.length(), 1.0) * 9.0
 			var tail := center - direction * length * 0.5
 			var head := center + direction * length * 0.5
-			var color := Color(0.95, 0.98, 1.0, 0.78)
+			var color := BrandTokens.alpha(BrandTokens.INK_INVERSE, 0.78)
 			canvas.draw_line(tail, head, color, 1.3, true)
 			var side := Vector2(-direction.y, direction.x)
 			canvas.draw_line(head, head - direction * 4.0 + side * 2.5, color, 1.3, true)
@@ -188,6 +188,8 @@ func _build(snapshot, game_hours: float) -> void:
 				_sea[idx] = sample.sea_state
 				sample_count += 1
 	else:
+		var fishing_zones: Array[Dictionary] = []
+		fishing_zones.resize(_raster_cols * _raster_rows)
 		for y2 in range(_raster_rows):
 			for x2 in range(_raster_cols):
 				var world2 := Vector2(
@@ -196,10 +198,39 @@ func _build(snapshot, game_hours: float) -> void:
 				)
 				var idx2 := y2 * _raster_cols + x2
 				var zone := FishingField.sample_chart(Vector3(world2.x, 0.0, world2.y))
-				_write_rgba(bytes, idx2, _fishing_color(zone))
+				fishing_zones[idx2] = zone
 				_wind[idx2] = Vector2.ZERO
 				_sea[idx2] = 0.0
 				sample_count += 1
+		for y3 in range(_raster_rows):
+			for x3 in range(_raster_cols):
+				var idx3 := y3 * _raster_cols + x3
+				var zone3 := fishing_zones[idx3] as Dictionary
+				var open := bool(zone3.get("open_water", false))
+				var tier := str(zone3.get("tier_id", "normal"))
+				var edge := false
+				if open:
+					for offset_raw in [Vector2i.LEFT, Vector2i.RIGHT, Vector2i.UP, Vector2i.DOWN]:
+						var offset := offset_raw as Vector2i
+						var nx: int = x3 + offset.x
+						var ny: int = y3 + offset.y
+						if nx < 0 or ny < 0 or nx >= _raster_cols or ny >= _raster_rows:
+							edge = true
+							continue
+						var neighbour := fishing_zones[ny * _raster_cols + nx] as Dictionary
+						if (
+							not bool(neighbour.get("open_water", false))
+							or str(neighbour.get("tier_id", "normal")) != tier
+						):
+							edge = true
+				var color := Color.TRANSPARENT
+				if edge and (x3 + y3) % 5 != 4:
+					var strong := tier == "rich" or tier == "prolific"
+					color = BrandTokens.alpha(
+						BrandTokens.CHART_ZONE_FISH,
+						0.58 if strong else 0.34
+					)
+				_write_rgba(bytes, idx3, color)
 	var image := Image.create_from_data(
 		_raster_cols, _raster_rows, false, Image.FORMAT_RGBA8, bytes
 	)
@@ -239,26 +270,28 @@ func _snap_bounds(bounds: Rect2, cols: int, rows: int) -> Rect2:
 
 
 static func _weather_color(sample: WeatherSample) -> Color:
-	var clear := Color(0.18, 0.62, 0.92, 0.22)
-	var overcast := Color(0.42, 0.45, 0.50, 0.48)
-	var rain := Color(0.16, 0.34, 0.28, 0.62)
-	var storm := Color(0.52, 0.18, 0.22, 0.72)
-	var fog := Color(0.86, 0.88, 0.90, 0.58)
+	var clear := BrandTokens.alpha(BrandTokens.CHART_ZONE_WEATHER, 0.22)
+	var overcast := BrandTokens.alpha(BrandTokens.CLOUD_DARK, 0.48)
+	var rain := BrandTokens.alpha(BrandTokens.RAIN, 0.62)
+	var storm := BrandTokens.alpha(BrandTokens.ALERT, 0.72)
+	var fog := BrandTokens.alpha(BrandTokens.FOG, 0.58)
 	var color := clear.lerp(overcast, sample.cloud_cover)
 	color = color.lerp(rain, smoothstep(0.12, 0.75, sample.precipitation))
 	color = color.lerp(storm, smoothstep(0.35, 0.9, sample.convection_index))
 	color = color.lerp(fog, smoothstep(0.12, 0.7, sample.fog_density))
-	color = color.lerp(Color(0.05, 0.28, 0.42, 0.70), smoothstep(0.25, 0.85, sample.sea_state) * 0.55)
+	color = color.lerp(
+		BrandTokens.alpha(BrandTokens.WATER_MID, 0.70),
+		smoothstep(0.25, 0.85, sample.sea_state) * 0.55
+	)
 	color.a = clampf(color.a, 0.18, 0.78)
 	return color
 
 
 static func _fishing_color(zone: Dictionary) -> Color:
 	if not bool(zone.get("open_water", false)):
-		return Color(0.0, 0.0, 0.0, 0.0)
-	var color := FishingField.tier_color(str(zone.get("tier_id", "normal")))
-	color.a = minf(color.a, 0.58)
-	return color
+		return Color.TRANSPARENT
+	var strong := str(zone.get("tier_id", "normal")) in ["rich", "prolific"]
+	return BrandTokens.alpha(BrandTokens.CHART_ZONE_FISH, 0.16 if strong else 0.08)
 
 
 static func _world_rect_to_screen(

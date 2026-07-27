@@ -9,7 +9,7 @@ signal commission_requested(entry: Dictionary)
 const PANEL_FRAC := Vector2(0.90, 0.86)
 const PREVIEW_MIN_SIZE := Vector2(520, 320)
 
-var _panel: Panel
+var _panel: BrandPanel
 var _preview: ShipwrightPreview
 var _viewport: SubViewport
 var _camera: Camera3D
@@ -99,10 +99,10 @@ func _close() -> void:
 
 
 func _build_chrome() -> void:
-	_panel = Panel.new()
+	_panel = BrandPanel.new(BrandPanel.Variant.RULED)
 	_panel.name = "CatalogPanel"
 	_panel.visible = false
-	_panel.theme = HudStyle.make_theme()
+	_panel.theme = BrandTheme.shared()
 	_panel.set_anchors_preset(Control.PRESET_CENTER)
 	add_child(_panel)
 
@@ -118,19 +118,16 @@ func _build_chrome() -> void:
 	root_v.add_theme_constant_override("separation", 10)
 	margin.add_child(root_v)
 
-	var title := Label.new()
-	title.text = "VESSELS FOR SALE"
+	var title := BrandLabel.new(tr("VESSELS FOR SALE"), BrandLabel.Role.DISPLAY_MEDIUM)
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	title.add_theme_font_size_override("font_size", 20)
-	title.add_theme_color_override("font_color", HudStyle.C_AMBER)
 	root_v.add_child(title)
 
-	var tagline := Label.new()
-	tagline.text = "Official ready-built vessels — purchase and berth at the Harbour Master."
+	var tagline := BrandLabel.new(
+		tr("Official ready-built vessels — purchase and berth at the Harbour Master."),
+		BrandLabel.Role.BODY_MUTED
+	)
 	tagline.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	tagline.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	tagline.add_theme_font_size_override("font_size", 13)
-	tagline.add_theme_color_override("font_color", HudStyle.C_LABEL)
 	root_v.add_child(tagline)
 
 	var body := HBoxContainer.new()
@@ -139,15 +136,10 @@ func _build_chrome() -> void:
 	root_v.add_child(body)
 
 	# ── 3D preview (left) ─────────────────────────────────────────────────────
-	var preview_panel := PanelContainer.new()
+	var preview_panel := BrandPanel.new(BrandPanel.Variant.DARK)
 	preview_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	preview_panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	preview_panel.custom_minimum_size = PREVIEW_MIN_SIZE
-	var preview_sb := StyleBoxFlat.new()
-	preview_sb.bg_color = HudStyle.C_BG_INNER
-	preview_sb.border_color = HudStyle.C_BRASS
-	preview_sb.set_border_width_all(1)
-	preview_panel.add_theme_stylebox_override("panel", preview_sb)
 	body.add_child(preview_panel)
 
 	var preview_v := VBoxContainer.new()
@@ -207,18 +199,16 @@ func _build_chrome() -> void:
 	_nav_row.add_theme_constant_override("separation", 12)
 	preview_v.add_child(_nav_row)
 
-	_prev_btn = UiBuilder.button("◀  Previous")
+	_prev_btn = BrandButton.new(tr("◀  PREVIOUS"), BrandButton.Variant.QUIET)
 	_prev_btn.pressed.connect(func() -> void: _step(-1))
 	_nav_row.add_child(_prev_btn)
 
-	_index_lbl = Label.new()
+	_index_lbl = BrandLabel.new("", BrandLabel.Role.INVERSE_DATA)
 	_index_lbl.custom_minimum_size = Vector2(100, 0)
 	_index_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_index_lbl.add_theme_font_size_override("font_size", 14)
-	_index_lbl.add_theme_color_override("font_color", HudStyle.C_TEXT)
 	_nav_row.add_child(_index_lbl)
 
-	_next_btn = UiBuilder.button("Next  ▶")
+	_next_btn = BrandButton.new(tr("NEXT  ▶"), BrandButton.Variant.QUIET)
 	_next_btn.pressed.connect(func() -> void: _step(1))
 	_nav_row.add_child(_next_btn)
 
@@ -229,32 +219,32 @@ func _build_chrome() -> void:
 	sheet.add_theme_constant_override("separation", 8)
 	body.add_child(sheet)
 
-	_name_lbl = _make_sheet_label(22, HudStyle.C_AMBER)
+	_name_lbl = _make_sheet_label(BrandTokens.DISPLAY_S, BrandTokens.INK)
 	sheet.add_child(_name_lbl)
 
-	_class_lbl = _make_sheet_label(14, HudStyle.C_LABEL)
+	_class_lbl = _make_sheet_label(BrandTokens.LABEL_MONO, BrandTokens.INK_MUTED)
 	sheet.add_child(_class_lbl)
 
 	sheet.add_child(HSeparator.new())
 
-	_specs_lbl = _make_sheet_label(14, HudStyle.C_TEXT)
+	_specs_lbl = _make_sheet_label(BrandTokens.BODY, BrandTokens.INK_BODY)
 	_specs_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	sheet.add_child(_specs_lbl)
 
 	sheet.add_child(HSeparator.new())
 
-	_price_lbl = _make_sheet_label(18, HudStyle.C_AMBER)
+	_price_lbl = _make_sheet_label(BrandTokens.DATA_MONO, BrandTokens.BRASS_DEEP)
 	sheet.add_child(_price_lbl)
 
 	var spacer := Control.new()
 	spacer.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	sheet.add_child(spacer)
 
-	_commission_btn = UiBuilder.button("Purchase ready-built")
+	_commission_btn = BrandButton.new(tr("PURCHASE READY-BUILT"), BrandButton.Variant.LOUD)
 	_commission_btn.pressed.connect(_on_commission_pressed)
 	sheet.add_child(_commission_btn)
 
-	var back_btn := UiBuilder.button("Leave catalog")
+	var back_btn := BrandButton.new(tr("LEAVE CATALOG"), BrandButton.Variant.QUIET)
 	back_btn.pressed.connect(_close)
 	sheet.add_child(back_btn)
 
@@ -333,22 +323,17 @@ func _refresh_entry() -> void:
 		_next_btn.visible = multi
 	_index_lbl.text = "%d / %d" % [_index + 1, _catalog.size()] if multi else "Available now"
 
-	var session := get_node_or_null("/root/PlayerSession")
-	var balance := 0
-	var player_data: PlayerData = null
-	if session != null:
-		balance = session.get_marks()
-		player_data = session.data
+	var view := get_node_or_null("/root/LocalPlayerView")
+	var balance: int = int(view.get_marks()) if view != null else 0
+	var price := ShipwrightPricing.commission_price(entry, _stations, null)
+	_price_lbl.text = BrandFormat.money_text(price)
 
-	var price := ShipwrightPricing.commission_price(entry, _stations, player_data)
-	_price_lbl.text = ShipwrightPricing.price_label(price)
-
-	var can_afford := balance >= price
+	var can_afford: bool = balance >= price
 	_commission_btn.disabled = not can_afford
 	if can_afford:
-		_commission_btn.text = "Purchase ready-built — %s" % PlayerSession.format_money(price)
+		_commission_btn.text = tr("PURCHASE READY-BUILT — %s") % BrandFormat.money_text(price)
 	else:
-		_commission_btn.text = "Need %s" % PlayerSession.format_money(price - balance)
+		_commission_btn.text = tr("NEED %s MORE") % BrandFormat.money_text(price - balance)
 
 
 func _on_commission_pressed() -> void:

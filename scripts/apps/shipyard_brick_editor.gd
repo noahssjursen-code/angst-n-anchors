@@ -186,13 +186,13 @@ func _boot_standalone_tool() -> void:
 	var hull_hint := Label.new()
 	hull_hint.text = "Hull (blank)"
 	hull_hint.add_theme_font_size_override("font_size", 11)
-	hull_hint.add_theme_color_override("font_color", HudStyle.C_LABEL)
+	hull_hint.add_theme_color_override("font_color", BrandTokens.INK_INVERSE_DIM)
 	_hull_option.get_parent().add_child(hull_hint)
 	_hull_option.get_parent().move_child(hull_hint, _hull_option.get_index())
 	var pre_hint := Label.new()
 	pre_hint.text = "Load existing prebuilt"
 	pre_hint.add_theme_font_size_override("font_size", 11)
-	pre_hint.add_theme_color_override("font_color", HudStyle.C_LABEL)
+	pre_hint.add_theme_color_override("font_color", BrandTokens.INK_INVERSE_DIM)
 	_prebuilt_option.get_parent().add_child(pre_hint)
 	_prebuilt_option.get_parent().move_child(pre_hint, _prebuilt_option.get_index())
 	_populate_hull_option()
@@ -326,7 +326,7 @@ func _load_prebuilt_entry(entry: Dictionary) -> void:
 		]
 		_dev_save_lbl.add_theme_color_override(
 			"font_color",
-			HudStyle.C_AMBER if bool(entry.get("is_draft", false)) else HudStyle.C_LABEL,
+			BrandTokens.BRASS if bool(entry.get("is_draft", false)) else BrandTokens.INK_INVERSE_DIM,
 		)
 	_show_toast("Loaded %s" % vessel_name)
 
@@ -448,7 +448,7 @@ func _build_chrome() -> void:
 	_root.name = "EditorRoot"
 	_root.visible = false
 	_root.set_anchors_preset(Control.PRESET_FULL_RECT)
-	_root.theme = HudStyle.make_theme()
+	_root.theme = BrandTheme.shared()
 	add_child(_root)
 
 	var bg := ColorRect.new()
@@ -489,7 +489,7 @@ func _build_chrome() -> void:
 
 
 func _build_top_bar(parent: VBoxContainer) -> void:
-	var panel := UiBuilder.inner_panel()
+	var panel := BrandComponents.inner_panel()
 	panel.name = "TopBar"
 	panel.custom_minimum_size.y = 54.0
 	parent.add_child(panel)
@@ -501,7 +501,7 @@ func _build_top_bar(parent: VBoxContainer) -> void:
 	var title := Label.new()
 	title.name = "TitleLabel"
 	title.text = "VESSEL BUILDER"
-	HudStyle.apply_display_font(title, 24, HudStyle.C_AMBER)
+	BrandTheme.apply_display_font(title, 24, BrandTokens.BRASS)
 	bar.add_child(title)
 
 	var rule := VSeparator.new()
@@ -511,30 +511,30 @@ func _build_top_bar(parent: VBoxContainer) -> void:
 	_hull_lbl = Label.new()
 	_hull_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_hull_lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	HudStyle.apply_body_font(_hull_lbl, 13, HudStyle.C_LABEL)
+	BrandTheme.apply_body_font(_hull_lbl, 13, BrandTokens.INK_INVERSE_DIM)
 	bar.add_child(_hull_lbl)
 
-	var ship_btn := UiBuilder.compact_button("Ship", 70)
+	var ship_btn := BrandComponents.compact_button("Ship", 70)
 	ship_btn.tooltip_text = "Vessel metadata, validation and authoring options"
 	ship_btn.pressed.connect(_toggle_ship_dialog)
 	bar.add_child(ship_btn)
 
-	var help_btn := UiBuilder.compact_button("?", 36)
+	var help_btn := BrandComponents.compact_button("?", 36)
 	help_btn.tooltip_text = "Controls and shortcuts"
 	help_btn.pressed.connect(_toggle_help_overlay)
 	bar.add_child(help_btn)
 
-	_confirm_btn = UiBuilder.compact_button("Confirm", 112)
+	_confirm_btn = BrandComponents.compact_button("Confirm", 112)
 	_confirm_btn.pressed.connect(_on_confirm)
 	bar.add_child(_confirm_btn)
 
-	_back_btn = UiBuilder.compact_button("Back", 70)
+	_back_btn = BrandComponents.compact_button("Back", 70)
 	_back_btn.pressed.connect(_close)
 	bar.add_child(_back_btn)
 
 
 func _build_palette(parent: HBoxContainer) -> void:
-	var side := UiBuilder.panel(Vector2(292, 0))
+	var side := BrandComponents.panel(Vector2(292, 0))
 	side.name = "PartsPalette"
 	side.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	parent.add_child(side)
@@ -545,13 +545,13 @@ func _build_palette(parent: HBoxContainer) -> void:
 
 	var heading := HBoxContainer.new()
 	col.add_child(heading)
-	var title := UiBuilder.section_header("PARTS")
+	var title := BrandComponents.section_header("PARTS")
 	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	heading.add_child(title)
 	var count := Label.new()
 	count.name = "PaletteCount"
 	count.text = str(BrickCatalog.ids().size())
-	count.add_theme_color_override("font_color", HudStyle.C_LABEL)
+	count.add_theme_color_override("font_color", BrandTokens.INK_INVERSE_DIM)
 	heading.add_child(count)
 
 	_palette_search = LineEdit.new()
@@ -588,7 +588,7 @@ func _build_palette(parent: HBoxContainer) -> void:
 		grid.add_child(row)
 		_brick_rows[id] = row
 
-	_palette_empty_lbl = UiBuilder.subtitle_label("No matching parts", 12)
+	_palette_empty_lbl = BrandComponents.subtitle_label("No matching parts", 12)
 	_palette_empty_lbl.visible = false
 	col.add_child(_palette_empty_lbl)
 
@@ -641,7 +641,7 @@ func _build_viewport(parent: VBoxContainer) -> void:
 
 
 func _build_viewport_chrome(parent: VBoxContainer) -> void:
-	var strip := UiBuilder.inner_panel()
+	var strip := BrandComponents.inner_panel()
 	strip.name = "ContextStrip"
 	strip.custom_minimum_size.y = 48.0
 	parent.add_child(strip)
@@ -650,17 +650,17 @@ func _build_viewport_chrome(parent: VBoxContainer) -> void:
 	row.add_theme_constant_override("separation", 6)
 	strip.add_child(row)
 
-	_tool_place_btn = UiBuilder.tool_button("Place")
+	_tool_place_btn = BrandComponents.tool_button("Place")
 	_tool_place_btn.pressed.connect(func() -> void: _set_tool(Tool.PLACE))
 	row.add_child(_tool_place_btn)
-	_tool_erase_btn = UiBuilder.tool_button("Erase")
+	_tool_erase_btn = BrandComponents.tool_button("Erase")
 	_tool_erase_btn.pressed.connect(func() -> void: _set_tool(Tool.ERASE))
 	row.add_child(_tool_erase_btn)
-	_tool_mark_btn = UiBuilder.tool_button("Select")
+	_tool_mark_btn = BrandComponents.tool_button("Select")
 	_tool_mark_btn.pressed.connect(func() -> void: _set_tool(Tool.MARK))
 	row.add_child(_tool_mark_btn)
 
-	var rotate := UiBuilder.compact_button("Rotate  R", 86)
+	var rotate := BrandComponents.compact_button("Rotate  R", 86)
 	rotate.pressed.connect(func() -> void:
 		_rotate_yaw()
 		_refresh_rules()
@@ -668,7 +668,7 @@ func _build_viewport_chrome(parent: VBoxContainer) -> void:
 	)
 	row.add_child(rotate)
 
-	var layer_down := UiBuilder.compact_button("−", 34)
+	var layer_down := BrandComponents.compact_button("−", 34)
 	layer_down.tooltip_text = "Previous layer ([)"
 	layer_down.pressed.connect(func() -> void: _set_layer_y(_layer_y - 1))
 	row.add_child(layer_down)
@@ -677,10 +677,10 @@ func _build_viewport_chrome(parent: VBoxContainer) -> void:
 	_layer_lbl.custom_minimum_size.x = 92.0
 	_layer_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_layer_lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	HudStyle.apply_body_font(_layer_lbl, 12, HudStyle.C_TEXT, true)
+	BrandTheme.apply_body_font(_layer_lbl, 12, BrandTokens.INK_INVERSE, true)
 	row.add_child(_layer_lbl)
 
-	var layer_up := UiBuilder.compact_button("+", 34)
+	var layer_up := BrandComponents.compact_button("+", 34)
 	layer_up.tooltip_text = "Next layer (])"
 	layer_up.pressed.connect(func() -> void: _set_layer_y(_layer_y + 1))
 	row.add_child(layer_up)
@@ -689,19 +689,19 @@ func _build_viewport_chrome(parent: VBoxContainer) -> void:
 	_hint_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_hint_lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	_hint_lbl.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
-	HudStyle.apply_body_font(_hint_lbl, 12, HudStyle.C_LABEL)
+	BrandTheme.apply_body_font(_hint_lbl, 12, BrandTokens.INK_INVERSE_DIM)
 	row.add_child(_hint_lbl)
 
 	_toast_lbl = Label.new()
 	_toast_lbl.visible = false
 	_toast_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	_toast_lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	HudStyle.apply_body_font(_toast_lbl, 12, HudStyle.C_GREEN, true)
+	BrandTheme.apply_body_font(_toast_lbl, 12, BrandTokens.OK_LIGHT, true)
 	row.add_child(_toast_lbl)
 
 
 func _build_context_drawer(parent: HBoxContainer) -> void:
-	_context_drawer = UiBuilder.panel(Vector2(272, 0))
+	_context_drawer = BrandComponents.panel(Vector2(272, 0))
 	_context_drawer.name = "PropertiesDrawer"
 	_context_drawer.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	parent.add_child(_context_drawer)
@@ -709,15 +709,15 @@ func _build_context_drawer(parent: HBoxContainer) -> void:
 	var col := VBoxContainer.new()
 	col.add_theme_constant_override("separation", 10)
 	_context_drawer.add_child(col)
-	_context_title = UiBuilder.section_header("PROPERTIES")
+	_context_title = BrandComponents.section_header("PROPERTIES")
 	col.add_child(_context_title)
 	_context_info = Label.new()
 	_context_info.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	HudStyle.apply_body_font(_context_info, 12, HudStyle.C_LABEL)
+	BrandTheme.apply_body_font(_context_info, 12, BrandTokens.INK_INVERSE_DIM)
 	col.add_child(_context_info)
 
 	_color_section = VBoxContainer.new()
-	_color_section.add_child(UiBuilder.section_header("COLOUR"))
+	_color_section.add_child(BrandComponents.section_header("COLOUR"))
 	var color_row := HBoxContainer.new()
 	color_row.add_theme_constant_override("separation", 6)
 	_color_section.add_child(color_row)
@@ -727,7 +727,7 @@ func _build_context_drawer(parent: HBoxContainer) -> void:
 	_color_picker.color = _paint_color
 	_color_picker.color_changed.connect(_on_paint_color_changed)
 	color_row.add_child(_color_picker)
-	var default_btn := UiBuilder.compact_button("Default")
+	var default_btn := BrandComponents.compact_button("Default")
 	default_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	default_btn.pressed.connect(_use_brick_catalog_color)
 	color_row.add_child(default_btn)
@@ -745,7 +745,7 @@ func _build_context_drawer(parent: HBoxContainer) -> void:
 		swatch.tooltip_text = str(preset.get("name", "Colour"))
 		var sb := StyleBoxFlat.new()
 		sb.bg_color = preset["color"] as Color
-		sb.border_color = HudStyle.C_BRASS
+		sb.border_color = BrandTokens.SEA_LINE
 		sb.set_border_width_all(1)
 		sb.set_corner_radius_all(2)
 		swatch.add_theme_stylebox_override("normal", sb)
@@ -757,7 +757,7 @@ func _build_context_drawer(parent: HBoxContainer) -> void:
 	col.add_child(_color_section)
 
 	_sign_section = VBoxContainer.new()
-	_sign_section.add_child(UiBuilder.section_header("SIGN TEXT"))
+	_sign_section.add_child(BrandComponents.section_header("SIGN TEXT"))
 	_sign_text_edit = LineEdit.new()
 	_sign_text_edit.placeholder_text = "Vessel name / custom text…"
 	_sign_text_edit.max_length = 32
@@ -766,28 +766,28 @@ func _build_context_drawer(parent: HBoxContainer) -> void:
 	col.add_child(_sign_section)
 
 	_light_section = VBoxContainer.new()
-	_light_section.add_child(UiBuilder.section_header("LIGHT"))
-	_cone_btn = UiBuilder.compact_button("Aim preview: on")
+	_light_section.add_child(BrandComponents.section_header("LIGHT"))
+	_cone_btn = BrandComponents.compact_button("Aim preview: on")
 	_cone_btn.pressed.connect(_toggle_light_cones)
 	_light_section.add_child(_cone_btn)
 	col.add_child(_light_section)
 
 	_clipboard_section = VBoxContainer.new()
-	_clipboard_section.add_child(UiBuilder.section_header("SELECTION"))
-	var copy := UiBuilder.compact_button("Copy selection  Ctrl+C")
+	_clipboard_section.add_child(BrandComponents.section_header("SELECTION"))
+	var copy := BrandComponents.compact_button("Copy selection  Ctrl+C")
 	copy.pressed.connect(_copy_marked_region)
 	_clipboard_section.add_child(copy)
-	var paste := UiBuilder.compact_button("Paste at cursor  Ctrl+V")
+	var paste := BrandComponents.compact_button("Paste at cursor  Ctrl+V")
 	paste.pressed.connect(_paste_clipboard_at_cursor)
 	_clipboard_section.add_child(paste)
-	var paste_layer := UiBuilder.compact_button("Paste on this layer")
+	var paste_layer := BrandComponents.compact_button("Paste on this layer")
 	paste_layer.pressed.connect(_paste_clipboard_on_layer)
 	_clipboard_section.add_child(paste_layer)
 	col.add_child(_clipboard_section)
 
 
 func _build_ship_dialog() -> void:
-	_ship_dialog = UiBuilder.panel(Vector2(410, 0))
+	_ship_dialog = BrandComponents.panel(Vector2(410, 0))
 	_ship_dialog.name = "ShipDialog"
 	_ship_dialog.visible = false
 	_ship_dialog.set_anchors_preset(Control.PRESET_CENTER_RIGHT)
@@ -802,15 +802,15 @@ func _build_ship_dialog() -> void:
 	_ship_dialog.add_child(col)
 	var heading := HBoxContainer.new()
 	col.add_child(heading)
-	var title := UiBuilder.title_label("SHIP", 20)
+	var title := BrandComponents.title_label("SHIP", 20)
 	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	heading.add_child(title)
-	var close := UiBuilder.compact_button("×", 34)
+	var close := BrandComponents.compact_button("×", 34)
 	close.pressed.connect(func() -> void: _ship_dialog.visible = false)
 	heading.add_child(close)
 
-	_status_lbl = UiBuilder.subtitle_label("", 11)
+	_status_lbl = BrandComponents.subtitle_label("", 11)
 	_status_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	col.add_child(_status_lbl)
 
@@ -820,21 +820,21 @@ func _build_ship_dialog() -> void:
 	col.add_child(_authoring_section)
 	_hull_option = OptionButton.new()
 	_hull_option.tooltip_text = "Hull class for a blank new deck"
-	_authoring_section.add_child(UiBuilder.section_header("HULL"))
+	_authoring_section.add_child(BrandComponents.section_header("HULL"))
 	_authoring_section.add_child(_hull_option)
 	_prebuilt_option = OptionButton.new()
 	_prebuilt_option.tooltip_text = "Load an existing official prebuilt JSON"
-	_authoring_section.add_child(UiBuilder.section_header("PREBUILT"))
+	_authoring_section.add_child(BrandComponents.section_header("PREBUILT"))
 	_authoring_section.add_child(_prebuilt_option)
 
-	col.add_child(UiBuilder.section_header("VESSEL NAME"))
+	col.add_child(BrandComponents.section_header("VESSEL NAME"))
 	_name_edit = LineEdit.new()
 	_name_edit.placeholder_text = "Name your vessel"
 	_name_edit.max_length = MAX_VESSEL_NAME_LEN
 	_name_edit.text_changed.connect(func(_text: String) -> void: _refresh_ship_summary())
 	col.add_child(_name_edit)
 	_add_registration_picker(col)
-	var price_header := UiBuilder.section_header("PRICE (MARKS)")
+	var price_header := BrandComponents.section_header("PRICE (MARKS)")
 	price_header.name = "PriceHeader"
 	price_header.visible = false
 	col.add_child(price_header)
@@ -843,7 +843,7 @@ func _build_ship_dialog() -> void:
 	_price_edit.placeholder_text = "0"
 	_price_edit.tooltip_text = "Authoring catalog price. 0 = free."
 	col.add_child(_price_edit)
-	var power_header := UiBuilder.section_header("SHAFT POWER (kW)")
+	var power_header := BrandComponents.section_header("SHAFT POWER (kW)")
 	power_header.name = "PowerHeader"
 	power_header.visible = false
 	col.add_child(power_header)
@@ -854,28 +854,28 @@ func _build_ship_dialog() -> void:
 	_power_edit.text_changed.connect(func(_text: String) -> void: _refresh_ship_summary())
 	col.add_child(_power_edit)
 
-	col.add_child(UiBuilder.separator())
+	col.add_child(BrandComponents.separator())
 	_rules_lbl = Label.new()
 	_rules_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	HudStyle.apply_body_font(_rules_lbl, 12, HudStyle.C_TEXT)
+	BrandTheme.apply_body_font(_rules_lbl, 12, BrandTokens.INK_INVERSE)
 	col.add_child(_rules_lbl)
 	_caps_lbl = Label.new()
 	_caps_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	HudStyle.apply_body_font(_caps_lbl, 12, HudStyle.C_LABEL)
+	BrandTheme.apply_body_font(_caps_lbl, 12, BrandTokens.INK_INVERSE_DIM)
 	col.add_child(_caps_lbl)
 
 	_dev_save_lbl = Label.new()
 	_dev_save_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	HudStyle.apply_body_font(_dev_save_lbl, 11, HudStyle.C_LABEL)
+	BrandTheme.apply_body_font(_dev_save_lbl, 11, BrandTokens.INK_INVERSE_DIM)
 	col.add_child(_dev_save_lbl)
 
-	var clear := UiBuilder.compact_button("Clear deck…")
+	var clear := BrandComponents.compact_button("Clear deck…")
 	clear.pressed.connect(_request_clear_layout)
 	col.add_child(clear)
 
 
 func _add_registration_picker(col: VBoxContainer) -> void:
-	var header := UiBuilder.section_header("LEGAL REGISTRATION")
+	var header := BrandComponents.section_header("LEGAL REGISTRATION")
 	header.name = "RegistrationHeader"
 	col.add_child(header)
 	_registration_option = OptionButton.new()
@@ -931,7 +931,7 @@ func _on_registration_selected(index: int) -> void:
 
 
 func _build_help_overlay() -> void:
-	_help_overlay = UiBuilder.panel(Vector2(460, 0))
+	_help_overlay = BrandComponents.panel(Vector2(460, 0))
 	_help_overlay.name = "HelpOverlay"
 	_help_overlay.visible = false
 	_help_overlay.set_anchors_preset(Control.PRESET_CENTER)
@@ -943,8 +943,8 @@ func _build_help_overlay() -> void:
 	var col := VBoxContainer.new()
 	col.add_theme_constant_override("separation", 9)
 	_help_overlay.add_child(col)
-	col.add_child(UiBuilder.title_label("BUILDER CONTROLS", 22))
-	var help := UiBuilder.body_label(
+	col.add_child(BrandComponents.title_label("BUILDER CONTROLS", 22))
+	var help := BrandComponents.body_label(
 		"Place: left-click or drag\n"
 		+ "Erase: X, then click or drag\n"
 		+ "Select: M, click two opposite corners\n"
@@ -957,13 +957,13 @@ func _build_help_overlay() -> void:
 	)
 	help.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	col.add_child(help)
-	var close := UiBuilder.compact_button("Close")
+	var close := BrandComponents.compact_button("Close")
 	close.pressed.connect(func() -> void: _help_overlay.visible = false)
 	col.add_child(close)
 
 
 func _build_clear_confirmation() -> void:
-	_clear_confirm = UiBuilder.panel(Vector2(380, 0))
+	_clear_confirm = BrandComponents.panel(Vector2(380, 0))
 	_clear_confirm.name = "ClearConfirmation"
 	_clear_confirm.visible = false
 	_clear_confirm.set_anchors_preset(Control.PRESET_CENTER)
@@ -975,18 +975,18 @@ func _build_clear_confirmation() -> void:
 	var col := VBoxContainer.new()
 	col.add_theme_constant_override("separation", 12)
 	_clear_confirm.add_child(col)
-	col.add_child(UiBuilder.title_label("CLEAR DECK?", 20))
-	var warning := UiBuilder.body_label("This removes every placed brick and cargo zone.", 13)
+	col.add_child(BrandComponents.title_label("CLEAR DECK?", 20))
+	var warning := BrandComponents.body_label("This removes every placed brick and cargo zone.", 13)
 	warning.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	col.add_child(warning)
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 8)
 	col.add_child(row)
-	var cancel := UiBuilder.compact_button("Cancel")
+	var cancel := BrandComponents.compact_button("Cancel")
 	cancel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	cancel.pressed.connect(func() -> void: _clear_confirm.visible = false)
 	row.add_child(cancel)
-	var clear := UiBuilder.compact_button("Clear deck")
+	var clear := BrandComponents.compact_button("Clear deck")
 	clear.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	clear.pressed.connect(_confirm_clear_layout)
 	row.add_child(clear)
@@ -997,7 +997,7 @@ func _build_legacy_chrome() -> void:
 	_root.name = "EditorRoot"
 	_root.visible = false
 	_root.set_anchors_preset(Control.PRESET_FULL_RECT)
-	_root.theme = HudStyle.make_theme()
+	_root.theme = BrandTheme.shared()
 	add_child(_root)
 
 	var bg := ColorRect.new()
@@ -1015,8 +1015,8 @@ func _build_legacy_chrome() -> void:
 	side.custom_minimum_size = Vector2(360, 0)
 	side.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	var side_sb := StyleBoxFlat.new()
-	side_sb.bg_color = HudStyle.C_BG
-	side_sb.border_color = HudStyle.C_BRASS
+	side_sb.bg_color = BrandTokens.SEA_DEEP
+	side_sb.border_color = BrandTokens.SEA_LINE
 	side_sb.set_border_width_all(1)
 	side.add_theme_stylebox_override("panel", side_sb)
 	main.add_child(side)
@@ -1037,14 +1037,14 @@ func _build_legacy_chrome() -> void:
 	title.text = "BUILD"
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	title.add_theme_font_size_override("font_size", 20)
-	title.add_theme_color_override("font_color", HudStyle.C_AMBER)
+	title.add_theme_color_override("font_color", BrandTokens.BRASS)
 	col.add_child(title)
 
 	_hull_lbl = Label.new()
 	_hull_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_hull_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_hull_lbl.add_theme_font_size_override("font_size", 13)
-	_hull_lbl.add_theme_color_override("font_color", HudStyle.C_TEXT)
+	_hull_lbl.add_theme_color_override("font_color", BrandTokens.INK_INVERSE)
 	col.add_child(_hull_lbl)
 
 	_hull_option = OptionButton.new()
@@ -1062,7 +1062,7 @@ func _build_legacy_chrome() -> void:
 	_status_lbl = Label.new()
 	_status_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_status_lbl.add_theme_font_size_override("font_size", 12)
-	_status_lbl.add_theme_color_override("font_color", HudStyle.C_LABEL)
+	_status_lbl.add_theme_color_override("font_color", BrandTokens.INK_INVERSE_DIM)
 	_status_lbl.text = (
 		"Empty deck — place items yourself.\n"
 		+ "LMB place · RMB orbit · MMB pan · Scroll zoom\n"
@@ -1077,7 +1077,7 @@ func _build_legacy_chrome() -> void:
 
 	var items_hdr := Label.new()
 	items_hdr.text = "ITEMS"
-	items_hdr.add_theme_color_override("font_color", HudStyle.C_AMBER)
+	items_hdr.add_theme_color_override("font_color", BrandTokens.BRASS)
 	col.add_child(items_hdr)
 
 	var brick_scroll := ScrollContainer.new()
@@ -1099,11 +1099,11 @@ func _build_legacy_chrome() -> void:
 	var tool_row := HBoxContainer.new()
 	tool_row.add_theme_constant_override("separation", 6)
 	col.add_child(tool_row)
-	var place_btn := UiBuilder.button("Place")
+	var place_btn := BrandComponents.button("Place")
 	place_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	place_btn.pressed.connect(func() -> void: _tool = Tool.PLACE; _clear_mark(); _refresh_palette_selection(); _refresh_ghost_from_mouse())
 	tool_row.add_child(place_btn)
-	var erase_btn := UiBuilder.button("Erase")
+	var erase_btn := BrandComponents.button("Erase")
 	erase_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	erase_btn.pressed.connect(func() -> void: _tool = Tool.ERASE; _clear_mark(); _refresh_palette_selection(); _clear_ghost())
 	tool_row.add_child(erase_btn)
@@ -1111,23 +1111,23 @@ func _build_legacy_chrome() -> void:
 	var tool_row2 := HBoxContainer.new()
 	tool_row2.add_theme_constant_override("separation", 6)
 	col.add_child(tool_row2)
-	var rot_btn := UiBuilder.button("Rotate")
+	var rot_btn := BrandComponents.button("Rotate")
 	rot_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	rot_btn.pressed.connect(func() -> void: _rotate_yaw(); _refresh_rules(); _refresh_ghost_from_mouse())
 	tool_row2.add_child(rot_btn)
-	var clear_btn := UiBuilder.button("Clear deck")
+	var clear_btn := BrandComponents.button("Clear deck")
 	clear_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	clear_btn.pressed.connect(_clear_layout)
 	tool_row2.add_child(clear_btn)
 
-	_cone_btn = UiBuilder.button("Light cones: ON")
+	_cone_btn = BrandComponents.button("Light cones: ON")
 	_cone_btn.pressed.connect(_toggle_light_cones)
 	col.add_child(_cone_btn)
 
 	col.add_child(HSeparator.new())
 	var color_hdr := Label.new()
 	color_hdr.text = "COLOUR"
-	color_hdr.add_theme_color_override("font_color", HudStyle.C_AMBER)
+	color_hdr.add_theme_color_override("font_color", BrandTokens.BRASS)
 	col.add_child(color_hdr)
 
 	var color_row := HBoxContainer.new()
@@ -1139,7 +1139,7 @@ func _build_legacy_chrome() -> void:
 	_color_picker.color = _paint_color
 	_color_picker.color_changed.connect(_on_paint_color_changed)
 	color_row.add_child(_color_picker)
-	var catalog_btn := UiBuilder.button("Catalog default")
+	var catalog_btn := BrandComponents.button("Catalog default")
 	catalog_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	catalog_btn.pressed.connect(_use_brick_catalog_color)
 	color_row.add_child(catalog_btn)
@@ -1156,7 +1156,7 @@ func _build_legacy_chrome() -> void:
 		swatch.tooltip_text = str(preset.get("name", "Colour"))
 		var sb := StyleBoxFlat.new()
 		sb.set_border_width_all(1)
-		sb.border_color = HudStyle.C_BRASS
+		sb.border_color = BrandTokens.SEA_LINE
 		sb.set_corner_radius_all(2)
 		if bool(preset.get("custom", true)) == false:
 			sb.bg_color = Color(0.2, 0.2, 0.22)
@@ -1172,17 +1172,17 @@ func _build_legacy_chrome() -> void:
 		_color_preset_btns.append(swatch)
 
 	_layer_lbl = Label.new()
-	_layer_lbl.add_theme_color_override("font_color", HudStyle.C_TEXT)
+	_layer_lbl.add_theme_color_override("font_color", BrandTokens.INK_INVERSE)
 	col.add_child(_layer_lbl)
 
 	var layer_row := HBoxContainer.new()
 	layer_row.add_theme_constant_override("separation", 6)
 	col.add_child(layer_row)
-	var down := UiBuilder.button("Layer −")
+	var down := BrandComponents.button("Layer −")
 	down.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	down.pressed.connect(func() -> void: _set_layer_y(_layer_y - 1))
 	layer_row.add_child(down)
-	var up := UiBuilder.button("Layer +")
+	var up := BrandComponents.button("Layer +")
 	up.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	up.pressed.connect(func() -> void: _set_layer_y(_layer_y + 1))
 	layer_row.add_child(up)
@@ -1190,12 +1190,12 @@ func _build_legacy_chrome() -> void:
 	var clip_row := HBoxContainer.new()
 	clip_row.add_theme_constant_override("separation", 6)
 	col.add_child(clip_row)
-	var mark_btn := UiBuilder.button("Mark")
+	var mark_btn := BrandComponents.button("Mark")
 	mark_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	mark_btn.tooltip_text = "Click two corners to select (M)"
 	mark_btn.pressed.connect(_toggle_mark_tool)
 	clip_row.add_child(mark_btn)
-	var copy_btn := UiBuilder.button("Copy")
+	var copy_btn := BrandComponents.button("Copy")
 	copy_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	copy_btn.tooltip_text = "Copy marked region (Ctrl+C)"
 	copy_btn.pressed.connect(_copy_marked_region)
@@ -1204,12 +1204,12 @@ func _build_legacy_chrome() -> void:
 	var clip_row2 := HBoxContainer.new()
 	clip_row2.add_theme_constant_override("separation", 6)
 	col.add_child(clip_row2)
-	var paste_btn := UiBuilder.button("Paste at cursor")
+	var paste_btn := BrandComponents.button("Paste at cursor")
 	paste_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	paste_btn.tooltip_text = "Stamp at mouse (Ctrl+V)"
 	paste_btn.pressed.connect(_paste_clipboard_at_cursor)
 	clip_row2.add_child(paste_btn)
-	var paste_layer_btn := UiBuilder.button("Paste this layer")
+	var paste_layer_btn := BrandComponents.button("Paste this layer")
 	paste_layer_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	paste_layer_btn.tooltip_text = "Same XZ as the copy, on the current layer"
 	paste_layer_btn.pressed.connect(_paste_clipboard_on_layer)
@@ -1217,7 +1217,7 @@ func _build_legacy_chrome() -> void:
 
 	var sign_lbl := Label.new()
 	sign_lbl.text = "Sign text (floor / wall)"
-	sign_lbl.add_theme_color_override("font_color", HudStyle.C_AMBER)
+	sign_lbl.add_theme_color_override("font_color", BrandTokens.BRASS)
 	sign_lbl.add_theme_font_size_override("font_size", 12)
 	col.add_child(sign_lbl)
 	_sign_text_edit = LineEdit.new()
@@ -1232,13 +1232,13 @@ func _build_legacy_chrome() -> void:
 	_rules_lbl = Label.new()
 	_rules_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_rules_lbl.add_theme_font_size_override("font_size", 12)
-	_rules_lbl.add_theme_color_override("font_color", HudStyle.C_TEXT)
+	_rules_lbl.add_theme_color_override("font_color", BrandTokens.INK_INVERSE)
 	col.add_child(_rules_lbl)
 
 	_caps_lbl = Label.new()
 	_caps_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_caps_lbl.add_theme_font_size_override("font_size", 12)
-	_caps_lbl.add_theme_color_override("font_color", HudStyle.C_LABEL)
+	_caps_lbl.add_theme_color_override("font_color", BrandTokens.INK_INVERSE_DIM)
 	col.add_child(_caps_lbl)
 
 	col.add_child(HSeparator.new())
@@ -1246,7 +1246,7 @@ func _build_legacy_chrome() -> void:
 	var name_lbl := Label.new()
 	name_lbl.text = "Vessel name"
 	name_lbl.add_theme_font_size_override("font_size", 12)
-	name_lbl.add_theme_color_override("font_color", HudStyle.C_LABEL)
+	name_lbl.add_theme_color_override("font_color", BrandTokens.INK_INVERSE_DIM)
 	col.add_child(name_lbl)
 
 	_name_edit = LineEdit.new()
@@ -1258,7 +1258,7 @@ func _build_legacy_chrome() -> void:
 	var price_lbl := Label.new()
 	price_lbl.text = "Shipwright price (marks) — 0 = free"
 	price_lbl.add_theme_font_size_override("font_size", 12)
-	price_lbl.add_theme_color_override("font_color", HudStyle.C_LABEL)
+	price_lbl.add_theme_color_override("font_color", BrandTokens.INK_INVERSE_DIM)
 	col.add_child(price_lbl)
 
 	_price_edit = LineEdit.new()
@@ -1267,17 +1267,17 @@ func _build_legacy_chrome() -> void:
 	_price_edit.tooltip_text = "Sale price in the shipwright catalog. 0 = free."
 	col.add_child(_price_edit)
 
-	_confirm_btn = UiBuilder.button("Confirm build")
+	_confirm_btn = BrandComponents.button("Confirm build")
 	_confirm_btn.pressed.connect(_on_confirm)
 	col.add_child(_confirm_btn)
 
 	_dev_save_lbl = Label.new()
 	_dev_save_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_dev_save_lbl.add_theme_font_size_override("font_size", 10)
-	_dev_save_lbl.add_theme_color_override("font_color", HudStyle.C_LABEL)
+	_dev_save_lbl.add_theme_color_override("font_color", BrandTokens.INK_INVERSE_DIM)
 	col.add_child(_dev_save_lbl)
 
-	_back_btn = UiBuilder.button("Back to hulls")
+	_back_btn = BrandComponents.button("Back to hulls")
 	_back_btn.pressed.connect(_close)
 	col.add_child(_back_btn)
 
@@ -1368,7 +1368,7 @@ func _show_toast(message: String, failed: bool = false, persistent: bool = false
 	_toast_lbl.visible = true
 	_toast_lbl.add_theme_color_override(
 		"font_color",
-		HudStyle.C_RED if failed else HudStyle.C_GREEN,
+		BrandTokens.ALERT if failed else BrandTokens.OK_LIGHT,
 	)
 	_toast_until_msec = 0 if persistent else Time.get_ticks_msec() + 3200
 
@@ -2147,8 +2147,8 @@ func _make_item_row(brick_id: String) -> PanelContainer:
 				_select_brick(brick_id)
 	)
 	var sb := StyleBoxFlat.new()
-	sb.bg_color = HudStyle.C_BG_INNER
-	sb.border_color = HudStyle.C_BRASS
+	sb.bg_color = BrandTokens.SCRIM
+	sb.border_color = BrandTokens.SEA_LINE
 	sb.set_border_width_all(1)
 	sb.set_corner_radius_all(3)
 	sb.set_content_margin_all(5)
@@ -2156,7 +2156,7 @@ func _make_item_row(brick_id: String) -> PanelContainer:
 	row.set_meta("style", sb)
 	row.mouse_entered.connect(func() -> void:
 		if not (_tool == Tool.PLACE and _brick_id == brick_id):
-			sb.border_color = HudStyle.C_COPPER
+			sb.border_color = BrandTokens.BRASS_DEEP
 	)
 	row.mouse_exited.connect(func() -> void: _refresh_palette_selection())
 
@@ -2191,7 +2191,7 @@ func _make_item_row(brick_id: String) -> PanelContainer:
 	name_lbl.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	name_lbl.custom_minimum_size.x = 112
 	name_lbl.add_theme_font_size_override("font_size", 11)
-	name_lbl.add_theme_color_override("font_color", HudStyle.C_TEXT)
+	name_lbl.add_theme_color_override("font_color", BrandTokens.INK_INVERSE)
 	col.add_child(name_lbl)
 	return row
 
@@ -2353,9 +2353,9 @@ func _refresh_palette_selection() -> void:
 		row.tooltip_text = _brick_tooltip(str(id))
 		var sb: StyleBoxFlat = row.get_meta("style") as StyleBoxFlat
 		if sb != null:
-			sb.border_color = HudStyle.C_AMBER if selected else HudStyle.C_BRASS
+			sb.border_color = BrandTokens.BRASS if selected else BrandTokens.SEA_LINE
 			sb.set_border_width_all(2 if selected else 1)
-			sb.bg_color = Color(0.16, 0.14, 0.10) if selected else HudStyle.C_BG_INNER
+			sb.bg_color = Color(0.16, 0.14, 0.10) if selected else BrandTokens.SCRIM
 	if _layer_lbl != null:
 		_layer_lbl.text = "Layer %d · %d°" % [_layer_y, _yaw]
 	if _tool_place_btn != null:
@@ -3276,6 +3276,6 @@ func _show_dev_save_result(message: String, failed: bool) -> void:
 		_dev_save_lbl.text = message
 		_dev_save_lbl.add_theme_color_override(
 			"font_color",
-			HudStyle.C_RED if failed else HudStyle.C_GREEN,
+			BrandTokens.ALERT if failed else BrandTokens.OK_LIGHT,
 		)
 	_show_toast(message, failed, failed)
