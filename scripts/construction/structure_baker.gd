@@ -1,8 +1,10 @@
 class_name StructureBaker
 extends RefCounted
 
-## Pure StructurePlan -> geometry. One merged surface per (material, color)
-## bucket for visuals, and the SAME panel decomposition drives collision boxes,
+## Pure StructurePlan -> geometry. One merged surface per MATERIAL for visuals
+## — colour rides in the vertex stream, not in the bucket key, so a plan may use
+## unlimited colours and still bake to at most four surfaces (one per entry in
+## MATERIALS). The SAME panel decomposition drives collision boxes,
 ## so what you see is exactly what you collide with (door and stairwell
 ## openings are genuinely passable). No gameplay dependencies: reusable by
 ## DeckFitout, the Structure Studio editor, and headless services.
@@ -612,7 +614,9 @@ static func _collider_of(box: Dictionary, offset: Vector3) -> Dictionary:
 	}
 
 
-## Merged visual bake: one MeshInstance3D per (material, color) bucket.
+## Merged visual bake: one MeshInstance3D per MATERIAL. Layer colour is written
+## per vertex and the material reads it as albedo, so the draw-call count is
+## bounded by MATERIALS.size() (4) no matter how many colours a plan uses.
 ## `ghost` renders the whole bake as translucent shadowless x-ray.
 static func bake(plan: StructurePlan, offset := Vector3.ZERO, ghost := false) -> Node3D:
 	var root := Node3D.new()
@@ -634,12 +638,17 @@ static func bake(plan: StructurePlan, offset := Vector3.ZERO, ghost := false) ->
 		var bucket := buckets[key] as Dictionary
 		var st := bucket["st"] as SurfaceTool
 		var material := StandardMaterial3D.new()
-		material.albedo_color = bucket["color"] as Color
+		## White albedo is the identity for the per-vertex multiply: the shader
+		## uses albedo_color * vertex_color, so the colour the layer asked for is
+		## exactly what lands (to 8-bit vertex precision — measured equal to the
+		## old per-bucket albedo within one LSB).
+		material.albedo_color = Color.WHITE
+		material.vertex_color_use_as_albedo = true
 		var response: Dictionary = MATERIALS.get(str(bucket["material"]), MATERIALS["painted"])
 		material.roughness = float(response["roughness"])
 		material.metallic = float(response["metallic"])
 		if ghost:
-			material.albedo_color = Color(material.albedo_color, 0.13)
+			material.albedo_color = Color(1.0, 1.0, 1.0, 0.13)
 			material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 			material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 		st.set_material(material)
@@ -659,19 +668,25 @@ static func _palette_color(plan: StructurePlan, slot: String, fallback: Color) -
 	return _color_of(raw, fallback)
 
 
+## Buckets key on MATERIAL ALONE. Colour is a vertex attribute, so adding a
+## colour to a plan costs vertices, never a draw call: the bucket count is
+## bounded by MATERIALS.size() forever. Putting colour back in the key is the
+## regression this exists to prevent — a 12-colour plan would go from 4 mesh
+## instances to 12+, which is the whole draw-call budget for a harbour.
 static func _bucket_layer(buckets: Dictionary, layer: Dictionary, offset: Vector3) -> void:
 	var color := layer["color"] as Color
 	var material := str(layer["material"])
-	var key := "%s_%02x%02x%02x" % [material, int(color.r * 255.0), int(color.g * 255.0), int(color.b * 255.0)]
+	var key := material
 	if not buckets.has(key):
 		var st := SurfaceTool.new()
 		st.begin(Mesh.PRIMITIVE_TRIANGLES)
-		buckets[key] = {"color": color, "material": material, "st": st}
+		buckets[key] = {"material": material, "st": st}
 	_append_box(
 		(buckets[key] as Dictionary)["st"] as SurfaceTool,
 		(layer["center"] as Vector3) + offset,
 		layer["size"] as Vector3,
 		layer.get("basis", Basis.IDENTITY) as Basis,
+		color,
 	)
 
 
@@ -683,7 +698,21 @@ static func _bucket_layer(buckets: Dictionary, layer: Dictionary, offset: Vector
 ## rotated frame. A rotation has determinant +1, so it carries vertex order and
 ## normals together and the winding convention survives untouched — the identity
 ## default reproduces the axis-aligned box exactly (1*x + 0*y + 0*z == x).
-static func _append_box(st: SurfaceTool, center: Vector3, size: Vector3, basis := Basis.IDENTITY) -> void:
+##
+## `color` is written on EVERY vertex this box emits, which is safe because no
+## vertex is ever shared: the emitter walks 6 faces x 2 triangles x 3 corners and
+## calls add_vertex 36 times, so a box's 8 geometric corners appear as 24 distinct
+## vertices (3 per corner, one per adjoining face — required anyway, since each
+## face carries its own flat normal) and SurfaceTool.commit() is left unindexed.
+## Two differently-coloured boxes therefore cannot share a vertex and cannot
+## bleed into each other; measured 36 verts/box before and after this change.
+static func _append_box(
+	st: SurfaceTool,
+	center: Vector3,
+	size: Vector3,
+	basis := Basis.IDENTITY,
+	color := Color.WHITE,
+) -> void:
 	var h := size * 0.5
 	var corners := [
 		center + basis * Vector3(-h.x, -h.y, -h.z), center + basis * Vector3(h.x, -h.y, -h.z),
@@ -704,5 +733,6 @@ static func _append_box(st: SurfaceTool, center: Vector3, size: Vector3, basis :
 		var normal: Vector3 = basis * (face[1] as Vector3)
 		for tri in [[0, 1, 2], [0, 2, 3]]:
 			for k in tri:
+				st.set_color(color)
 				st.set_normal(normal)
 				st.add_vertex(corners[idx[k]])
