@@ -27,6 +27,7 @@ const SETTLE_FRAMES := 6
 ## diffable.
 const FIXTURES: Array[String] = [
 	"res://resources/data/structures/demo_workboat.json",
+	"res://resources/data/structures/probe_trawler_bulwark.json",
 ]
 
 ## A long lens rather than a wide one: 35° keeps the perspective flat enough

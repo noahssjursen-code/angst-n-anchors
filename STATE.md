@@ -548,6 +548,44 @@ independently re-run the converted files to confirm the reports match reality.
   pairing sweep runs 652 checks and would otherwise print 650 PASS lines per gate run.
   Failures still print, push_error, and set the exit code.
 
+## M2 iteration 1 — `probe_trawler_bulwark` (2026-08-09)
+
+First turn of the reference loop. Fixture:
+`resources/data/structures/probe_trawler_bulwark.json`, captures under
+`screenshots/studio/probe_trawler_bulwark__*.png`.
+
+**Claim under test:** a bulwark, cap rail, hatch coaming with segmented covers, wheelhouse
+and mast are expressible with **today's** primitives and no new code, at no draw-call cost.
+
+**Result: confirmed, on both halves.** All of that structure bakes to **4 mesh instances** —
+identical to the bare `demo_workboat`. Reusing the two colours already in the palette costs
+zero draw calls, exactly as the cost model predicted. Geometry is cheap; *colour* is the
+budget. Techniques used, all existing: bulwark = `wall` at the deck edge, height 1.1 · cap
+rail = thin `deck` strip on top · hatch coaming = `room` with `roof:false, floor:false` ·
+hatch covers = three `deck` plates side by side · mast = a `wall` of length 0.3 × thickness
+0.3 written straight into JSON (`from_dict` does not clamp; only `add_wall` does).
+
+**It reads dramatically better.** The three-band silhouette the research called for is there:
+waterline red, black topsides, white bulwark. The skyline is no longer monotone.
+
+**And it fails in exactly the predicted places.**
+
+1. **The bulwark stops dead at the bow shoulder**, leaving bare deck forward and a blunt
+   vertical end face. `wall.axis` is `"x"` or `"z"` only, so nothing can follow the 45°
+   stem. This is the single most visible defect and the **45° diagonal wall** fixes it on
+   every hull in the catalogue, since every bow is exactly 45°.
+2. **No sheer.** The bulwark cap is dead level, so the profile is a straight line where a
+   small working boat should curve up forward. Belongs in the hull loft, not the plan.
+3. **The mast is a flat slab, not a spar** — a 0.3 m box reads as a plate from abeam. The
+   crosstree is worse: a horizontal member built as a thin wall renders as a sliver. Confirms
+   the **spar** primitive is not optional.
+
+Also noted: the bulwark stops short at the stern too, and deck plate is visible outboard of
+it, so the deck-edge alignment needs a rule rather than hand-placed coordinates.
+
+**Order confirmed by evidence rather than argument:** 45° diagonal wall → spar → item catalog
+with float positions → railing run.
+
 ## Next actions
 
 1. **M0.1a** — convert the remaining **15** files (group E): `terrain_surface_maps_test`,
