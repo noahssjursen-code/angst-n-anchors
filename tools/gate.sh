@@ -365,8 +365,19 @@ declare -A SELFCHECK_ARGS=()   # scene path -> args after the scene, verbatim
 declare -A SELFCHECK_GD=()     # scene path -> the script that declared it
 ALL_BAD_SELFCHECK=()           # "<gd>\t<reason>\t<declaration>" — does not hold up
 
+SKIPPED_SCRATCH=()
+
 while IFS= read -r gd; do
-  [ -n "$gd" ] && ALL_UNITS+=("A|$gd")
+  [ -n "$gd" ] || continue
+  # A leading underscore marks a scratch probe, not a test. Agents write these
+  # while investigating and leave them behind; twice now the gate has discovered
+  # one and run it as a unit, which either reds the tree for nothing or — worse —
+  # adds a passing "test" nobody wrote on purpose. They are reported, not
+  # silently dropped, so a real test accidentally named `_foo.gd` is visible.
+  case "$(basename "$gd")" in
+    _*) SKIPPED_SCRATCH+=("$gd"); continue ;;
+  esac
+  ALL_UNITS+=("A|$gd")
 done < <(grep -l '^extends SceneTree' tests/*.gd 2>/dev/null | sort)
 
 for tscn in tests/*.tscn; do
@@ -567,6 +578,9 @@ if [ "${#SKIPPED_CAP[@]}" -gt 0 ] && [ "$AUDIT" = "0" ]; then
 fi
 for s in "${SKIPPED_STALE[@]:-}"; do
   [ -n "$s" ] && echo "gate: skipping STALE scene $s (sibling script is 'extends SceneTree'; a Node cannot take it)"
+done
+for s in "${SKIPPED_SCRATCH[@]:-}"; do
+  [ -n "$s" ] && echo "gate: skipping SCRATCH probe $s (leading underscore; rename it to make it a test)"
 done
 
 # ---- run -------------------------------------------------------------------
