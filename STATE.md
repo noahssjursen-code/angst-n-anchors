@@ -548,6 +548,71 @@ independently re-run the converted files to confirm the reports match reality.
   pairing sweep runs 652 checks and would otherwise print 650 PASS lines per gate run.
   Failures still print, push_error, and set the exit code.
 
+## Audit results (2026-08-09) — the critics earned their keep
+
+Three adversarial auditors ran against the completed conversion. **Two of the three found
+real defects, and one of those defects was in the gate I had just shipped.**
+
+| Lens | Verdict |
+|---|---|
+| no-weakening (did a converter cheat?) | **CLEAN** — 0 assertions weakened across all 38 files. Re-ran its analysis after 15 more files landed mid-audit and hand-read those diffs too. Conversion is complete: zero bare `assert(` anywhere under `tests/`. |
+| did-it-actually-run | **SUSPECT** — caught the gate misreporting (below) |
+| other-false-greens | **COMPROMISED** — 5 checks that cannot fail |
+
+### The gate was lying again, in a new way — fixed
+
+`tools/gate.sh` treated `Failed to load script "res://<test>"` as proof the unit never ran.
+Godot emits that banner during the transient compile cascade the `--script` lane provokes,
+then loads and runs the script anyway. Both directions were wrong:
+`building_blueprint_test` reported `17/20 FAILED` and exited 1 → gate said NOTRUN;
+`chart_layer_manager`, `helm_minimap`, `lod_profiles`, `onboarding_store` and
+`ship_display_units` executed every check and exited 0 → gate said NOTRUN.
+
+A verdict now outranks a banner. **Consequence: the "7 NOTRUN" in both recorded baselines
+was mostly my own measurement defect, not a lane problem.** Five of those tests were green
+all along. Baselines above are stale until the `true-baseline` run replaces them.
+
+### Five checks that cannot fail (found, not yet fixed)
+
+1. `terrain_surface_maps_test:18` — `... .a > 0.0 or true`. A literal tautology; the label
+   even admits it. A fully transparent, black, or 1×1 image passes.
+2. `world_terrain_background_test:27-30` — `pending >= 0` on an int that is
+   `_jobs.size() + …` (`world_terrain_streamer.gd:250`). Provably always true. This file
+   executes **2** checks and one of them is free.
+3. `world_layout_debug_capture:14-25` — `captures_written` increments unconditionally inside
+   the loop whose length it is compared against. Cannot diverge.
+4. `coastal_port_placer_test:35` — `port.size >= 0` on an int defaulting to 1
+   (`port_definition.gd:14`). **35 of this file's checks cost nothing** and pad the
+   appearance of coverage.
+5. `building_blueprint_test:75-78` — a *negative* assertion against an empty universe
+   (`resources/data/buildings/` holds only `.gitkeep`), and the loop at `:80-84` over
+   `BuildingBlueprintCatalog.ids()` contributes exactly 0 checks for the same reason.
+
+### Corrections to claims made earlier in this file
+
+- **The two surviving TIMEOUTs were not "genuinely slow", and both are converted.**
+  `ocean_wake_gpu_smoke` fails honestly in ~6 s: `RenderingServer.get_rendering_device()`
+  returns null under opengl3 (`ocean_wake_field.gd:53`), and with no Vulkan ICD a
+  `RenderingDevice` **cannot exist in this container**. It is an environment-exclusion
+  candidate, not a gate candidate — it will never pass here regardless of code quality.
+- `ocean_wake_visual_capture` — **two agents measured it and disagree.** One reports it
+  CPU-bound at ~300 % for 900 s, never reaching `save_png`; the other reports it dying on a
+  script error after ~4 s and then idling. Both also found a real API drift:
+  `ocean_wake_visual_capture.gd:28` calls `_apply_ocean_shader` with 6 arguments where
+  `WorldRenderer` expects 8. **Unresolved — re-measure on a quiet box before deciding.**
+  Either way it does not belong in the gate.
+
+### Suspicions the auditors could not sustain (recorded so nobody re-litigates)
+
+`coastal_port_placer_test`'s early returns, the seven tests consuming the empty
+`PrebuiltVesselCatalog` (`hull_form_geometry_test`, `catch_hold_test`,
+`vessel_persistence_test`, `vessel_outfit_test` and others), `port_perf_cache_test`'s
+missing-blueprint guard, and `shipping_open_water_schedule_test`'s hand-rolled failure
+accumulator are all **honest** — each records a failure before returning.
+`vessel_registration_test` remains the sole outlier of that shape.
+`remote_realtime_join_smoke` is a false RED, not a false green: an opt-in production smoke
+that legitimately fails without a live server.
+
 ## M2 iteration 1 — `probe_trawler_bulwark` (2026-08-09)
 
 First turn of the reference loop. Fixture:
