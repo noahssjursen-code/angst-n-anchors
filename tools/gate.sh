@@ -193,20 +193,33 @@ run_one() {
   local code=$?
   local elapsed=$(( $(date +%s) - start ))
 
-  # A unit whose own script or scene failed to load never ran, whatever the
-  # exit code — and an unloadable scene exits 1, which is indistinguishable
-  # from an honest failure by exit code alone.
-  if grep -qF "Failed to load script \"res://$gd\"" "$log" \
-     || grep -qF "Failed loading scene: res://$path" "$log" \
-     || grep -qF "Script inherits from native type 'SceneTree'" "$log"; then
-    code=90
+  # Did the unit declare an outcome in its own words? This is authoritative and
+  # must be decided BEFORE anything else reclassifies the run.
+  local spoke=1
+  grep -qE "$VERDICT_RE" "$log" || spoke=0
+
+  # A unit whose own script or scene failed to load never ran, whatever the exit
+  # code — an unloadable scene exits 1, indistinguishable from an honest failure.
+  #
+  # But ONLY when it never spoke. Godot emits `Failed to load script "res://..."`
+  # during the transient compile cascade that the --script lane provokes (an
+  # autoload named as a bare identifier, three files deep), then loads and runs
+  # the script anyway. Treating that banner as authoritative reported
+  # `building_blueprint_test: 17/20 FAILED` as NOTRUN, and reported five tests
+  # that passed every check as never having run. A verdict outranks a banner.
+  if [ "$spoke" -eq 0 ]; then
+    if grep -qF "Failed to load script \"res://$gd\"" "$log" \
+       || grep -qF "Failed loading scene: res://$path" "$log" \
+       || grep -qF "Script inherits from native type 'SceneTree'" "$log"; then
+      code=90
+    fi
   fi
 
   # Lane B only: exited clean but never declared an outcome. Lane A is left
   # alone here — several of its oldest members (probes, captures, smokes) pass
   # without printing anything a regex can recognise, and demoting those to
   # NOTRUN would be a fabricated red.
-  if [ "$code" -eq 0 ] && [ "$lane" = "B" ] && ! grep -qE "$VERDICT_RE" "$log"; then
+  if [ "$code" -eq 0 ] && [ "$lane" = "B" ] && [ "$spoke" -eq 0 ]; then
     code=90
   fi
 
