@@ -21,3 +21,4 @@ scripts/ui/main_menu.gd.uid
 # Gate + probe run artifacts (never committed)
 .gate/
 .probe/
+tests/_probe/

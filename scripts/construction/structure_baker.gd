@@ -42,6 +42,36 @@ const SKIN_EPS := 0.01
 const STEP_RISE_TARGET := 0.22
 const MAX_STEPS := 64
 
+## ── Swept-tube primitives (spar, wire) ───────────────────────────────────────
+const SPAR_DEFAULT_SIDES := 8
+const SPAR_MIN_SIDES := 3
+const SPAR_MAX_SIDES := 32
+const SPAR_DEFAULT_RADIUS := 0.06
+const SPAR_MIN_RADIUS := 0.0005
+const DEFAULT_SPAR_COLOR := Color(0.72, 0.73, 0.75)
+const WIRE_DEFAULT_SIDES := 4
+const WIRE_DEFAULT_RADIUS := 0.02
+const WIRE_DEFAULT_SPAN_STEPS := 10
+const WIRE_MAX_SPAN_STEPS := 64
+const DEFAULT_WIRE_COLOR := Color(0.22, 0.23, 0.25)
+## A bend sharper than this (cos of the turn's bisector against the incoming run)
+## gets a butt ring instead of a mitred one: the mitre's 1/cos blows up as the
+## run folds back on itself, and a 20 m spike is a worse artefact than the small
+## crease a butt joint leaves inside a 160-degree fold.
+const SPAR_MITRE_MIN_DOT := 0.25
+## Two runs closer than this are one run — a duplicated polyline node has no
+## direction and would divide by zero.
+const PATH_EPS := 1e-6
+## A run whose direction is within this of straight up (or of level) is treated
+## as exactly vertical (or exactly horizontal) by the collider emitter.
+const AXIS_TOL := 0.001
+## Sloped spar runs are approximated by a staircase of axis-aligned boxes no
+## longer than this. See collect_colliders().
+const SPAR_COLLIDER_STEP := 0.25
+## Thinner than this and a spar emits no collider at all: a 40 mm obstruction the
+## player cannot see stopping them dead reads as a bug, not as a fitting.
+const SPAR_COLLIDER_MIN_RADIUS := 0.02
+
 ## Material library: name -> surface response. Extend freely; unknown names
 ## fall back to "painted".
 const MATERIALS := {

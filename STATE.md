@@ -4,8 +4,53 @@ Position file for the orchestration loop. Read `CONVENTIONS.md` first.
 Rewritten at every checkpoint. If it disagrees with the tree, the tree wins.
 
 - **Branch:** `claude/branding-gui-orchestration-hhjb52` (both repos)
-- **Last updated:** 2026-08-09 · reframed after owner direction
-- **Milestone:** M0 — Honest instrument · open
+- **Last updated:** 2026-08-09 · after the items mechanism landed
+- **Milestone:** M2 — parts vocabulary. The five primitives are being built now.
+
+---
+
+## WHERE WE ARE — read this first, the rest of the file is the record
+
+**The loop works.** A `structure_plan_v1` JSON goes in; `tools/capture.sh` bakes it onto its
+hull and returns four canonical-angle PNGs plus assertions. No display, no clicking. Five
+fixtures live in `resources/data/structures/`; captures under `screenshots/studio/` with stable
+names, so `git diff` on an image shows what a change did to the silhouette.
+
+**What is built and verified**
+
+| | |
+|---|---|
+| Gate | Three lanes — A `--script`, B scene, C app self-check. Capability skips are self-policing: a skipped unit that passes when forced turns the gate red. Scratch probes (`_`-prefixed) are skipped and reported. |
+| Tests | Zero bare `assert()` anywhere (38 files converted). `TestReport` fails a run that executed zero checks. |
+| Colour | **Free.** The bucket key is material alone, colour rides in vertex data. A 20-colour plan bakes to 4 draw calls, measured on the renderer's own counter. |
+| Collision | Diagonal walls collide as drawn, asserted against `PhysicsServer3D` on a real body — not against the baker's dictionaries. |
+| Items | Float metres, free yaw + optional pitch/roll, props bag, **host-relative placement** so a fitting follows its host. Part catalog + plan-side compliance measurement exist. |
+| Scale | Settled: 1 unit = 1 m, player 1.8 m, deck cells 0.5 m as a *build resolution*. `hull_28x10` is a 28 × 10 m vessel. |
+
+**What is missing, in the order it matters**
+
+1. **The five primitives** — spar, railing run, wire, sloped plate, sheer band. *In flight.*
+   Without them a hull is a shed on a barge; `references/COMPONENTS.md` maps 344 components onto
+   them.
+2. **Geometry for `items[]`** — the mechanism exists, nothing draws the parts yet.
+3. **`DeckFitout.apply_plan` still returns a hardcoded `outfit_ok: true`** and never calls the
+   validator, so a Structure Studio ship cannot be saved, spawned, crewed or sold. `plan_outfit.gd`
+   is the measurement pass that fixes it; it is not wired in.
+4. **No starter vessel for any new player** — `resources/data/vessels/prebuilt/` holds only
+   `.gitkeep`, so onboarding rolls back. Same root as (2): nothing can be built worth shipping
+   until parts exist.
+5. **No small hulls.** Every hull is ≥ 28 m. Two of the three references are ~22 m and the third
+   ~15 m — a player cannot start from a hull that fits them.
+
+**Known-red, all pre-existing and diagnosed** — `building_blueprint_test` (23 failures, single
+root cause: `BrickCatalog.BRICKS` is `{}`), `land_field_geography_test` (needs an owner call on
+world constants), `vessel_outfit_test` / `vessel_registration_test` / `hull_form_geometry_test` /
+`vessel_registration_audit_ui_test` (all consume the empty prebuilt catalogue),
+`remote_realtime_join_smoke` (opt-in, needs a live server).
+
+**Open for the owner** — the three rules-data gaps found in `COMPONENTS.md`: `budget_caps.crane`
+is `0` on *every* registration so fitting any crane fails compliance everywhere; there is no
+lifesaving requirement of any kind; and `fishing_vessel` requires gear but not fishing lights.
 
 ---
 
@@ -255,7 +300,7 @@ respect that or every comparison is wrong.
 
 ## Milestones
 
-### M0 — Honest instrument · OPEN
+### M0 — Honest instrument · DONE except what M2 unblocks
 The loop must be able to fail before it can hone anything.
 1. Convert all 38 bare-`assert()` files to `tests/support/test_report.gd`; fix the breakage
    it exposes (`company_service_test` first).
@@ -404,7 +449,7 @@ weaker judge than an eye, and the difference should not be silently absorbed.
 | BULK | Coastal mini-bulker — 2–3 hatches in a rhythm, tall coamings, narrow side decks | 75 × 16 m | 150 × 32 | `hull_150x32` | Shortest honest bulker available, still ~35 % beamy |
 | PASSENGER | Boreal **Oslofjord II** — 350 pax electric commuter ferry, two decks | 35.0 × 8.0 m | 70 × 16 | `hull_70x18` | Best match; but she is double-ended and every catalog hull is pointed at −Z only. Build single-ended. |
 
-### M2 — Ship parts vocabulary · THE MILESTONE
+### M2 — Ship parts vocabulary · IN FLIGHT, the critical path
 The reference-matching loop:
 1. Pick reference working boats per category and the honest matching hull (remember 2×).
 2. Author the reference as `structure_plan_v1`, render from canonical angles.
