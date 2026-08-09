@@ -141,7 +141,12 @@ var _stamp := PackedInt32Array()
 var _query_id := 0
 var _cand_memo := {} ## snapped Vector3 -> PackedInt32Array
 var _ao_memo := {} ## snapped Vector3 -> Dictionary(Vector3 normal -> float)
-var _dirs := {} ## Vector3 normal -> PackedVector3Array of 2*KERNEL offsets
+var _dirs := {} ## Vector3 normal -> [PackedFloat32Array x, y, z] of probe offsets
+var _weights := PackedFloat32Array()
+var _probes := 0 ## KERNEL.size() * 2 — near and far shell per direction
+var _px := PackedFloat32Array()
+var _py := PackedFloat32Array()
+var _pz := PackedFloat32Array()
 var _queries := 0
 var _solved := 0
 
@@ -176,8 +181,15 @@ func _build(boxes: Array, radius: float) -> void:
 	_near = _radius * NEAR_SHELL
 	_far = _radius * FAR_SHELL
 	_kernel_weight = 0.0
-	for entry in KERNEL:
-		_kernel_weight += float((entry as Array)[3])
+	_weights.resize(KERNEL.size())
+	for k in KERNEL.size():
+		var weight := float((KERNEL[k] as Array)[3])
+		_weights[k] = weight
+		_kernel_weight += weight
+	_probes = KERNEL.size() * 2
+	_px.resize(_probes)
+	_py.resize(_probes)
+	_pz.resize(_probes)
 	_count = boxes.size()
 	_cen.resize(_count)
 	_half.resize(_count)

@@ -617,7 +617,18 @@ static func _collider_of(box: Dictionary, offset: Vector3) -> Dictionary:
 ## Merged visual bake: one MeshInstance3D per MATERIAL. Layer colour is written
 ## per vertex and the material reads it as albedo, so the draw-call count is
 ## bounded by MATERIALS.size() (4) no matter how many colours a plan uses.
-## `ghost` renders the whole bake as translucent shadowless x-ray.
+##
+## `ghost` renders the whole bake as translucent shadowless x-ray, and is the
+## ONE case that still keeps colour in the bucket key. Alpha blending is
+## order-dependent, and Godot depth-sorts transparent geometry per OBJECT, never
+## within one: merging two colours into a single translucent surface composites
+## them in submission order instead of by depth. Measured on demo_workboat, that
+## moved 15 070 pixels by up to 47/255 in the studio's x-ray — while reversing
+## the legacy draw order (either across objects or within a bucket) moved zero,
+## because a one-colour bucket blends the same in any order. The ghost is one
+## editor overlay, not a harbour full of vessels, so it pays the extra draw calls
+## and keeps its picture; the solid bake — everything that ships in the world —
+## merges on material alone.
 static func bake(plan: StructurePlan, offset := Vector3.ZERO, ghost := false) -> Node3D:
 	var root := Node3D.new()
 	root.name = "StructureBake"
@@ -627,13 +638,13 @@ static func bake(plan: StructurePlan, offset := Vector3.ZERO, ghost := false) ->
 	var deck_default := _palette_color(plan, "deck", DEFAULT_DECK_COLOR)
 	for wall_variant in expanded["walls"] as Array:
 		for layer_variant in _wall_layers(wall_variant as Dictionary, wall_default):
-			_bucket_layer(buckets, layer_variant as Dictionary, offset)
+			_bucket_layer(buckets, layer_variant as Dictionary, offset, ghost)
 	for deck_variant in expanded["decks"] as Array:
 		for layer_variant in _plate_layers(deck_variant as Dictionary, wall_default, deck_default):
-			_bucket_layer(buckets, layer_variant as Dictionary, offset)
+			_bucket_layer(buckets, layer_variant as Dictionary, offset, ghost)
 	for stair_variant in expanded["stairs"] as Array:
 		for layer_variant in _stair_layers(stair_variant as Dictionary, deck_default):
-			_bucket_layer(buckets, layer_variant as Dictionary, offset)
+			_bucket_layer(buckets, layer_variant as Dictionary, offset, ghost)
 	for key in buckets.keys():
 		var bucket := buckets[key] as Dictionary
 		var st := bucket["st"] as SurfaceTool
@@ -648,7 +659,10 @@ static func bake(plan: StructurePlan, offset := Vector3.ZERO, ghost := false) ->
 		material.roughness = float(response["roughness"])
 		material.metallic = float(response["metallic"])
 		if ghost:
-			material.albedo_color = Color(1.0, 1.0, 1.0, 0.13)
+			## One colour per translucent surface: read it off the material and
+			## ignore the (still present, still correct) vertex colours.
+			material.albedo_color = Color(bucket["color"] as Color, 0.13)
+			material.vertex_color_use_as_albedo = false
 			material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 			material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 		st.set_material(material)
@@ -673,14 +687,20 @@ static func _palette_color(plan: StructurePlan, slot: String, fallback: Color) -
 ## bounded by MATERIALS.size() forever. Putting colour back in the key is the
 ## regression this exists to prevent — a 12-colour plan would go from 4 mesh
 ## instances to 12+, which is the whole draw-call budget for a harbour.
-static func _bucket_layer(buckets: Dictionary, layer: Dictionary, offset: Vector3) -> void:
+##
+## `keyed_by_color` is the translucent-ghost exception documented on bake(): a
+## blended surface may only carry one colour, or the composite depends on
+## submission order.
+static func _bucket_layer(buckets: Dictionary, layer: Dictionary, offset: Vector3, keyed_by_color := false) -> void:
 	var color := layer["color"] as Color
 	var material := str(layer["material"])
 	var key := material
+	if keyed_by_color:
+		key = "%s_%02x%02x%02x" % [material, int(color.r * 255.0), int(color.g * 255.0), int(color.b * 255.0)]
 	if not buckets.has(key):
 		var st := SurfaceTool.new()
 		st.begin(Mesh.PRIMITIVE_TRIANGLES)
-		buckets[key] = {"material": material, "st": st}
+		buckets[key] = {"color": color, "material": material, "st": st}
 	_append_box(
 		(buckets[key] as Dictionary)["st"] as SurfaceTool,
 		(layer["center"] as Vector3) + offset,

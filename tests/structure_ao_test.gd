@@ -233,8 +233,10 @@ func _test_rig_fixture() -> void:
 	var ao := StructureAO.for_plan(plan)
 	## The free-standing post: an upper corner of its +X face, in clear air.
 	var post_corner := ao.occlusion_at(Vector3(13.5, 2.3, 12.1), Vector3(1, 0, 0))
-	## The inside of the L, on wall 11's +X skin right where wall 10 tees in.
-	var tee := ao.occlusion_at(Vector3(3.125, 0.6, 3.5), Vector3(1, 0, 0))
+	## The inside of the L: on wall 11's +X skin, just clear of wall 10's own
+	## footprint and close to the sole, so it is a genuine three-way corner
+	## (wall + wall + deck) and not merely "near a wall".
+	var tee := ao.occlusion_at(Vector3(3.125, 0.15, 3.2), Vector3(1, 0, 0))
 	## The overhang underside, out where only the sky term reaches it.
 	var overhang := ao.occlusion_at(Vector3(11.0, 3.0, 5.0), Vector3(0, -1, 0))
 	print("  rig: open post corner=%.4f  L-junction=%.4f  overhang underside=%.4f"
