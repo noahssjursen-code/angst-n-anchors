@@ -621,10 +621,14 @@ static func _plate_layers(deck: Dictionary, wall_fallback: Color, deck_fallback:
 ## part were special-cased its triangle count would stop matching.
 
 
-## Points of a polyline. Accepts `[[x,y,z], …]` (what survives JSON) and
-## `[Vector3, …]` (what a caller already holding vectors has).
+## Points of a polyline. Accepts `[[x,y,z], …]` (what survives JSON), `[Vector3,
+## …]` (what a caller already holding vectors has) and PackedVector3Array (what
+## one of these functions hands to the next — a Packed array is NOT an `Array`,
+## and forgetting that silently drew every wire as nothing at all).
 static func polyline_of(value: Variant) -> PackedVector3Array:
 	var out := PackedVector3Array()
+	if value is PackedVector3Array:
+		return value as PackedVector3Array
 	if not (value is Array):
 		return out
 	for entry in value as Array:

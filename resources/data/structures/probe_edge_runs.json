@@ -1,0 +1,134 @@
+{
+  "format": "structure_edge_runs_v1",
+  "_note": "Edge-primitive fixture. Every run below is either a RAILING (polyline, height, post pitch, rail count) or a SWEEP (a cross-section extruded along an arbitrary 3D polyline). Nothing here names a vessel: a path plus a profile name is the whole vocabulary, and the same two emitters draw a passenger-ferry guardrail, a bulwark cap, a rubbing strake, a waterline stripe and a hydraulic pipe run. Paths are ship-local metres, bow is -Z, one unit is one metre and a player is 1.8. A 'path_source' resolves to a polyline derived from HullStations at load time instead of being written out by hand - that is how the sheer curve, which HullStations has derived per hull all along and nothing has ever drawn, enters the world.",
+
+  "hulls": {
+    "trawler_ref": {
+      "_note": "Proportions of a small working hull. The catalog's own hull_28x10 numbers, resolved through HullFormProfile so the sheer rise is DERIVED (freeboard 2.8 m x fine_entry bow_keel_rise 0.32 = 0.896 m forward) and not written down here as a magic number.",
+      "loa_m": 28.0,
+      "beam_m": 10.0,
+      "depth_m": 5.6,
+      "draft_m": 2.8,
+      "displacement_t": 256.0,
+      "form": "fine_entry",
+      "bow_taper_fraction": 0.22,
+      "station_count": 13
+    }
+  },
+
+  "runs": [
+    {
+      "id": "open_upper_deck_rail",
+      "_note": "The gap this fixture exists to close: an open upper deck a person walks off. Path is the deck edge inset 0.15 m, three sides of a 12.5 x 16.85 m open deck = 46.2 m of run. Height 1.1 m against a 1.8 m figure; three courses over the clear height put every opening at 0.333 m, inside the 0.38 m limit; a 0.1 m toe board stops a dropped tool going over the side.",
+      "primitive": "railing",
+      "path": [
+        [14.25, 6.0, 16.0],
+        [14.25, 6.0, 32.85],
+        [1.75, 6.0, 32.85],
+        [1.75, 6.0, 16.0]
+      ],
+      "height": 1.1,
+      "post_pitch": 1.6,
+      "rails": 3,
+      "toe_height": 0.1,
+      "material": "metal",
+      "color": "#d9dee2"
+    },
+
+    {
+      "id": "perimeter_rail_closed",
+      "_note": "Same primitive, closed loop, no toe board, four courses - a walkway rail round a machinery casing. Present to prove the closed-loop path and the rail-count parameter carry no special cases.",
+      "primitive": "railing",
+      "closed": true,
+      "path": [
+        [4.6, 8.56, 11.0],
+        [11.4, 8.56, 11.0],
+        [11.4, 8.56, 18.5],
+        [4.6, 8.56, 18.5]
+      ],
+      "height": 1.05,
+      "post_pitch": 1.4,
+      "rails": 4,
+      "material": "metal",
+      "color": "#c8ced4"
+    },
+
+    {
+      "id": "bulwark_cap",
+      "_note": "THE SHEER LINE. A 0.22 x 0.06 m cap band swept along the hull's own deck-edge loop, with Y taken from HullStations.sheer_cap_y_at plus a 0.95 m bulwark. On a real boat the sheer line IS the bulwark cap, and this is the first thing in the project to draw it. The 0.95 m offset is the bulwark's own height: sheer_cap_y_at is deck_y + rise, and rise is ZERO amidships, so a cap swept straight along it would lie in the deck plate (which fills deck_y..deck_y+0.1) and under the build plane at deck_y+0.12. The curve is HullStations'; the bulwark height is the caller's, which is exactly the split STATE.md describes.",
+      "primitive": "sheer_band",
+      "profile": "cap_rail",
+      "path_source": {
+        "kind": "sheer_loop",
+        "hull": "trawler_ref",
+        "samples": 15,
+        "inset_m": 0.03,
+        "y_offset": 0.95
+      },
+      "material": "wood",
+      "color": "#e6d49a"
+    },
+
+    {
+      "id": "rubbing_strake",
+      "_note": "Same emitter, different rect: a proud half-round on the topsides 0.2 m below the deck edge, parallel to the sheer. The half-beam is read at the strake's own height, so it hugs the narrower section it actually sits on instead of standing off a flared topside.",
+      "primitive": "sheer_band",
+      "profile": "rubbing_strake",
+      "path_source": {
+        "kind": "sheer_loop",
+        "hull": "trawler_ref",
+        "samples": 15,
+        "inset_m": -0.02,
+        "y_offset": -0.2
+      },
+      "material": "wood",
+      "color": "#2c2f33"
+    },
+
+    {
+      "id": "boot_top",
+      "_note": "Paint, not moulding, and the reason follow_sheer exists: a boot top is parallel to the WATERLINE. Held at a constant Y (deck_y - 2.75) while the cap above it curves. 12 mm proud so it never planes against the shell.",
+      "primitive": "sheer_band",
+      "profile": "boot_top",
+      "path_source": {
+        "kind": "sheer_loop",
+        "hull": "trawler_ref",
+        "samples": 15,
+        "inset_m": -0.006,
+        "y_offset": -2.75,
+        "follow_sheer": false
+      },
+      "material": "painted",
+      "color": "#7a1f1f"
+    },
+
+    {
+      "id": "hydraulic_pipe_run",
+      "_note": "An ARBITRARY 3D polyline - it turns in plan AND climbs in elevation, which a deck-edge height curve could not express. Octagonal section from two rolled rects. This is the generalisation earning its keep: the pipe run is the sheer band with a different cross-section and no code in common beyond the emitter.",
+      "primitive": "sheer_band",
+      "profile": "pipe_run",
+      "path": [
+        [11.4, 6.2, 32.4],
+        [11.4, 6.2, 24.0],
+        [11.4, 8.1, 20.4],
+        [7.9, 8.1, 20.4],
+        [7.9, 10.4, 17.2]
+      ],
+      "material": "steel",
+      "color": "#6f7478"
+    },
+
+    {
+      "id": "d_fender_string",
+      "_note": "Three rolled rects make a D-section lobe. Hung on a straight run along a quay face or a workboat's rail - no hull needed, which is the point of a primitive that takes a bare polyline.",
+      "primitive": "sheer_band",
+      "profile": "d_fender",
+      "path": [
+        [15.35, 4.2, 8.0],
+        [15.35, 4.2, 30.0]
+      ],
+      "material": "painted",
+      "color": "#141414"
+    }
+  ]
+}

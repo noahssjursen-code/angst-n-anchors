@@ -1,0 +1,192 @@
+{
+	"format": "structure_plan_v1",
+	"context": "vessel",
+	"hull_id": "hull_28x10",
+	"palette": {
+		"wall": [0.85, 0.86, 0.88],
+		"deck": [0.33, 0.31, 0.29]
+	},
+	"walls": [
+		{"id": 1, "start": [0, 0, 4], "axis": "z", "length": 22, "height": 1.0, "thickness": 0.18, "material": "metal", "color": [0.28, 0.34, 0.44], "openings": []},
+		{"id": 2, "start": [10, 0, 4], "axis": "z", "length": 22, "height": 1.0, "thickness": 0.18, "material": "metal", "color": [0.28, 0.34, 0.44], "openings": []},
+		{"id": 3, "start": [0, 0, 26], "axis": "x", "length": 10, "height": 1.0, "thickness": 0.18, "material": "steel", "color": [0.30, 0.31, 0.33], "openings": []},
+		{"id": 4, "start": [0, 0, 4], "axis": "x", "length": 10, "height": 1.0, "thickness": 0.18, "material": "painted", "color": [0.90, 0.90, 0.88], "openings": []},
+		{"id": 5, "start": [2, 0, 16], "axis": "x", "length": 6, "height": 0.3, "thickness": 0.18, "material": "wood", "color": [0.55, 0.42, 0.28], "openings": []}
+	],
+	"decks": [],
+	"rooms": [],
+	"stairs": [],
+	"items": [
+		{
+			"id": 20, "item_id": "spar", "at": [5.0, 0.0, 14.0], "yaw": 0.0,
+			"props": {
+				"__is": "mast — vertical, tapered, 9 m",
+				"points": [[0, 0, 0], [0, 9.0, 0]],
+				"radius": 0.11, "taper": 0.55, "sides": 8,
+				"material": "metal", "color": [0.86, 0.86, 0.84]
+			}
+		},
+		{
+			"id": 21, "item_id": "spar", "at": [5.0, 2.2, 14.4], "yaw": 0.0,
+			"props": {
+				"__is": "boom — level, at head height, swung 25 degrees off the centreline",
+				"points": [[0, 0, 0], [2.6, 0, 5.4]],
+				"radius": 0.09, "taper": 0.8, "sides": 8,
+				"material": "metal", "color": [0.86, 0.86, 0.84]
+			}
+		},
+		{
+			"id": 22, "item_id": "spar", "at": [5.0, 1.1, 13.6], "yaw": 0.0,
+			"props": {
+				"__is": "derrick — raked; the sloped case the yaw-only collider cannot spell",
+				"points": [[0, 0, 0], [-1.8, 4.6, -3.4]],
+				"radius": 0.10, "sides": 8,
+				"material": "metal", "color": [0.86, 0.86, 0.84]
+			}
+		},
+		{
+			"id": 23, "item_id": "spar", "at": [1.2, 0.0, 22.0], "yaw": 0.0,
+			"props": {
+				"__is": "gallows leg, port",
+				"points": [[0, 0, 0], [0, 3.6, 0]],
+				"radius": 0.09, "sides": 8,
+				"material": "steel", "color": [0.74, 0.30, 0.22]
+			}
+		},
+		{
+			"id": 24, "item_id": "spar", "at": [8.8, 0.0, 22.0], "yaw": 0.0,
+			"props": {
+				"__is": "gallows leg, starboard — same definition, mirrored position",
+				"points": [[0, 0, 0], [0, 3.6, 0]],
+				"radius": 0.09, "sides": 8,
+				"material": "steel", "color": [0.74, 0.30, 0.22]
+			}
+		},
+		{
+			"id": 25, "item_id": "spar", "at": [0.5, 0.0, 11.0], "yaw": 0.0,
+			"props": {
+				"__is": "davit — a single curved tube; the classic case two endpoints cannot draw",
+				"points": [[0, 0, 0], [0, 1.0, 0], [-0.15, 1.55, 0], [-0.55, 1.85, 0], [-1.05, 1.9, 0]],
+				"radius": 0.055, "sides": 6,
+				"material": "steel", "color": [0.90, 0.86, 0.30]
+			}
+		},
+		{
+			"id": 26, "item_id": "spar", "at": [3.4, 0.0, 18.5], "yaw": 0.0,
+			"props": {
+				"__is": "exhaust stack — a fat, barely-tapered 12-sided spar",
+				"points": [[0, 0, 0], [0, 3.2, 0]],
+				"radius": 0.28, "taper": 0.86, "sides": 12,
+				"material": "painted", "color": [0.78, 0.16, 0.14]
+			}
+		},
+		{
+			"id": 27, "item_id": "spar", "at": [8.6, 0.0, 19.5], "yaw": 0.0,
+			"props": {
+				"__is": "goose-neck vent — a pipe folded 180 degrees at the top",
+				"points": [[0, 0, 0], [0, 1.2, 0], [0, 1.55, 0.12], [0, 1.7, 0.35], [0, 1.55, 0.58], [0, 1.2, 0.7]],
+				"radius": 0.05, "sides": 6,
+				"material": "metal", "color": [0.80, 0.81, 0.82]
+			}
+		},
+		{
+			"id": 28, "item_id": "spar", "at": [0.25, 1.0, 8.0], "yaw": 0.0,
+			"props": {
+				"__is": "stanchion — sub-cell, 1.0 m, just thick enough to be an obstruction",
+				"points": [[0, 0, 0], [0, 1.0, 0]],
+				"radius": 0.022, "sides": 6,
+				"material": "steel", "color": [0.88, 0.88, 0.86]
+			}
+		},
+		{
+			"id": 29, "item_id": "spar", "at": [5.0, 1.0, 4.4], "yaw": 0.0,
+			"props": {
+				"__is": "jackstaff",
+				"points": [[0, 0, 0], [0, 1.6, 0]],
+				"radius": 0.03, "taper": 0.4, "sides": 6,
+				"material": "painted", "color": [0.92, 0.92, 0.90]
+			}
+		},
+		{
+			"id": 30, "item_id": "spar", "at": [5.0, 9.0, 14.0], "yaw": 0.0,
+			"props": {
+				"__is": "antenna whip — under the collider radius floor on purpose",
+				"points": [[0, 0, 0], [0, 2.4, 0]],
+				"radius": 0.008, "taper": 0.3, "sides": 4,
+				"material": "steel", "color": [0.15, 0.15, 0.16]
+			}
+		},
+		{
+			"id": 31, "item_id": "spar", "at": [7.2, 0.0, 9.5], "yaw": 0.0,
+			"props": {
+				"__is": "crane pedestal — same primitive, 0.45 m radius and 12 sides",
+				"points": [[0, 0, 0], [0, 1.4, 0]],
+				"radius": 0.45, "taper": 0.93, "sides": 12,
+				"material": "painted", "color": [0.20, 0.42, 0.60]
+			}
+		},
+		{
+			"id": 32, "item_id": "spar", "at": [9.3, 0.35, 7.0], "yaw": 0.0,
+			"props": {
+				"__is": "pipe run with three bends — decorative, so it opts out of collision",
+				"points": [[0, 0, 0], [0, 0, 4.0], [-1.2, 0, 4.0], [-1.2, 0.8, 4.0], [-1.2, 0.8, 7.0]],
+				"radius": 0.04, "sides": 6, "solid": false,
+				"material": "metal", "color": [0.55, 0.58, 0.60]
+			}
+		},
+		{
+			"id": 33, "item_id": "spar", "at": [3.0, 1.05, 5.0], "yaw": 0.0,
+			"props": {
+				"__is": "handrail wrapped round a deckhouse corner",
+				"points": [[0, 0, 0], [2.5, 0, 0], [2.5, 0, 2.0], [0, 0, 2.0]],
+				"radius": 0.021, "sides": 6,
+				"material": "steel", "color": [0.88, 0.88, 0.86]
+			}
+		},
+		{
+			"id": 40, "item_id": "wire", "at": [5.0, 8.6, 14.0], "yaw": 0.0,
+			"props": {
+				"__is": "forestay — STANDING rigging, sag exactly zero, dead straight",
+				"points": [[0, 0, 0], [0, -7.6, -8.0]],
+				"radius": 0.018, "sag": 0.0, "sides": 4,
+				"material": "steel", "color": [0.20, 0.21, 0.22]
+			}
+		},
+		{
+			"id": 41, "item_id": "wire", "at": [5.0, 8.6, 14.0], "yaw": 0.0,
+			"props": {
+				"__is": "port shroud — also exactly zero",
+				"points": [[0, 0, 0], [-4.2, -7.6, 2.0]],
+				"radius": 0.018, "sag": 0.0, "sides": 4,
+				"material": "steel", "color": [0.20, 0.21, 0.22]
+			}
+		},
+		{
+			"id": 42, "item_id": "wire", "at": [5.0, 8.6, 14.0], "yaw": 0.0,
+			"props": {
+				"__is": "starboard shroud",
+				"points": [[0, 0, 0], [4.2, -7.6, 2.0]],
+				"radius": 0.018, "sag": 0.0, "sides": 4,
+				"material": "steel", "color": [0.20, 0.21, 0.22]
+			}
+		},
+		{
+			"id": 43, "item_id": "wire", "at": [5.0, 7.4, 14.0], "yaw": 0.0,
+			"props": {
+				"__is": "topping lift — RUNNING rigging under load, barely slack",
+				"points": [[0, 0, 0], [2.6, -5.2, 5.8]],
+				"radius": 0.014, "sag": 0.09, "span_steps": 6, "sides": 4,
+				"material": "steel", "color": [0.26, 0.26, 0.27]
+			}
+		},
+		{
+			"id": 44, "item_id": "wire", "at": [0.4, 1.9, 21.0], "yaw": 0.0,
+			"props": {
+				"__is": "mooring line, stowed slack — the same object as the shroud, one number apart",
+				"points": [[0, 0, 0], [0, -0.4, -6.0]],
+				"radius": 0.024, "sag": 1.1, "span_steps": 10, "sides": 4,
+				"material": "wood", "color": [0.62, 0.55, 0.40]
+			}
+		}
+	]
+}

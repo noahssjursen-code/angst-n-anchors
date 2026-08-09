@@ -30,6 +30,7 @@ const FIXTURES: Array[String] = [
 	"res://resources/data/structures/probe_trawler_bulwark.json",
 	"res://resources/data/structures/probe_trawler_bow_bulwark.json",
 	"res://resources/data/structures/probe_ferry_catamaran.json",
+	"res://resources/data/structures/probe_spar_kit.json",
 	"res://resources/data/structures/probe_ferry_catamaran_trim.json",
 ]
 
