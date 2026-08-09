@@ -1,25 +1,80 @@
-# STATE.md — Branding & GUI milestone
+# STATE.md — Ship construction vocabulary & Structure Studio
 
 Position file for the orchestration loop. Read `CONVENTIONS.md` first.
-This file is rewritten at every checkpoint. If it disagrees with the tree, the tree wins —
-re-verify and correct it.
+Rewritten at every checkpoint. If it disagrees with the tree, the tree wins.
 
 - **Branch:** `claude/branding-gui-orchestration-hhjb52` (both repos)
-- **Last updated:** 2026-08-09 · setup wave
-- **Milestone:** M0 — Foundations (make the loop runnable and the claims checkable)
+- **Last updated:** 2026-08-09 · reframed after owner direction
+- **Milestone:** M0 — Honest instrument · open
 
 ---
 
-## Where we are
+## The actual goal
 
-The repo arrived with a branded design system already built (commit `9338897`,
-179 files, +11 217 lines) and a brand kit under `branding/`. The work now is not
-"add branding" — it is **make the branded system real, verified, and extended to the
-internal apps, with Structure Studio as the centre of gravity.**
+Not a rebrand. **A ship building system whose output reads as a real boat and can be
+certified, hired out, and sold between players.**
 
-M0 exists because none of that can be trusted until the tooling can prove it. As of
-this writing the gate had never been run in this container, `--headless` silently
-mis-reports, and a sample test was found printing `PASS` while its assertions failed.
+Owner's release-day shape (2026-08-09):
+
+- Players pick a starting **category** — bulk, cargo, passengers, fishing.
+- They pick a **starting vessel** (author-made). One or two larger ships come from the
+  in-game shipwright.
+- Everything after that is a **hull purchase**. The player builds the vessel on it.
+- Finished UGC ships get **hired out to NPC workers** or **listed for sale** to other
+  players.
+- Therefore **every category needs a requirements list** — helm, port/starboard/white
+  navigation lights, mooring points, and so on — and a build that fails it is not a ship.
+
+A later server-side visual moderator will review final ship images. Out of scope; the
+parts vocabulary should not make it harder.
+
+### Why the old system was dropped
+
+A voxel/lego-brick library stacked layer by layer. It came out **too blocky and rough**.
+`StructurePlan` (drawn, not stacked) replaced it. Do not walk back toward stacking.
+
+### The governing constraint
+
+**Detail versus render cost.** Harbours are full of these ships. Every part must bake
+into merged surfaces the way `StructureBaker` and `VesselSkinBaker` already do. "Add more
+geometry" is not an available answer — that is how the voxel version got rough.
+
+---
+
+## The discovery that shapes M2
+
+The certification system the owner described **already exists**, wired to the dead vocabulary.
+
+`resources/data/vessels/registrations/catalog.json` defines `general_vessel` (inherited
+base) plus `fishing_vessel`, `cargo_vessel`, `bulk_vessel`, `passenger_vessel` — the
+owner's categories exactly. `scripts/ship/vessel_compliance.gd` (11 KB) implements the
+rule engine: `slot_count`, `brick_count`, `brick_side`, `tag_count`, `metric_range`,
+`cargo_cells`, `capability`, `capacity`, `equipment_rating_max`, and the bespoke
+`white_above_sidelights`.
+
+Already-written rules include: one helm · port light **on the port side** · starboard
+light **on the starboard side** · white masthead light(s) **above the sidelights** · ≥4
+mooring points · ≥1 bulk hold · exposed catch deck ≥4 cells · ≥4 passenger seats ·
+enclosed cabin · ≥1 marked door · per-category `cargo_cells` and `budget_caps`.
+
+**Every rule addresses brick ids and brick tags** (`light_nav_port`, `tag: mooring`) — the
+vocabulary that was wiped. `AGENTS.md`: *"Legacy compliance/budgets do not yet apply to
+plans — that rework lands with the new vocabulary."*
+
+So: **the parts vocabulary is the reconnection.** Each part must satisfy three masters —
+it reads as real, it is a gameplay attach point (`get_bridge_stations()`,
+`get_cargo_pads()`, `get_fishing_systems()`), and `VesselCompliance` can count, locate and
+rule on it. A part that cannot be validated cannot be in a ship one player sells another.
+
+### Open design fork — resolved, cheap to reverse
+
+`AGENTS.md` lists nav lights and mooring cleats under *"Always on BoatBody (core)"* —
+auto-provided. The registration rules require the player to fit them, correctly placed.
+Both cannot be true: if automatic, certification is theatre.
+
+**Taken:** nav lights and mooring points become **placeable, positioned, validated parts**.
+Auto-fit survives only as a convenience default on author-made starter vessels. Flagged to
+the owner; reverse on request.
 
 ---
 
@@ -27,120 +82,163 @@ mis-reports, and a sample test was found printing `PASS` while its assertions fa
 
 | | |
 |---|---|
-| Godot | 4.6-stable installed; `--headless --import` clean, **0 errors** |
-| Cores | 4 → workflow agent concurrency caps at **2** |
+| Godot | 4.6-stable; `--headless --import` clean, **0 errors** |
+| Cores | 4 → workflow agent concurrency caps at **2**. Keep waves small. |
 | Renderer | xvfb + `opengl3` → Mesa llvmpipe, GL 4.5. **No Vulkan ICD → Forward+ cannot run here** |
-| Capture | **Works.** Probe produced a 1280×720 PNG with real pixels under xvfb+opengl3 |
-| `--headless` | **Unusable as the gate.** No autoloads; `frame_post_draw` never fires → render tests hang to timeout |
-| `--script` | **Never registers autoloads**, any driver. Autoload-touching tests must run as a scene |
-| Test files | 81 under `tests/` — **58** `extends SceneTree`, **23** `extends Node`/`Node3D` (need a `.tscn`) |
-| Test scenes | 24 `.tscn` under `tests/` |
+| `--headless` | **Unusable as the gate.** No autoloads; `frame_post_draw` never fires → render tests hang |
+| `--script` | **Never registers autoloads**, any driver. Autoload-touching tests need the scene lane |
+| Tests | 81 files — **58** `extends SceneTree`, **23** `extends Node`/`Node3D`; 24 `.tscn` |
 
-### The false-green defect
+### Proven end to end
 
-`tests/company_service_test.gd` prints `company_service_test: PASS` and exits **0**
-while three of its assertions fail. Cause: Godot's `assert()` does not abort and does
-not set an exit code; the test's own bookkeeping never consults it.
+`godot --rendering-driver opengl3 res://scenes/apps/structure_studio.tscn -- --studio-probe`
+under xvfb exits **0** (`probe ok — context=vessel entities=7`).
 
-**38 of 81 test files use bare `assert()`.** Until that is fixed, a green gate is not
-evidence for those files. This is the single biggest threat to every claim this
-milestone will make.
+A probe that instantiated the studio, loaded `demo_workboat.json`, and saved the viewport
+produced a **real 1280×720 PNG of the studio with the plan built in it**. Data object in,
+image out, no display, no clicking. **The instrument works** — that is the whole agentic
+loop, and it is what M2's reference-matching cycle runs on.
 
-### Suspected shipping defect (unverified — needs an actual export)
+### Gate baseline (partial — 27/58 at time of writing)
 
-`branding/.gdignore` tells Godot to skip the whole `branding/` tree, but
-`BrandTokens.PALETTE_PATH` is `res://branding/brand/tokens/palette.json`
-(`scripts/ui/design_system/brand_tokens.gd:10`) and it is the **only** loader of the
-palette. If the exporter honours `.gdignore`, an exported build has no palette and
-every token resolves to `Color.MAGENTA` (`brand_tokens.gd:120`). `export_presets.cfg`
-has `include_filter="resources/*,*.json,*.glsl"`, which *may* rescue it. **Verify by
-exporting a build and inspecting the PCK — do not reason about it further.**
+13 not passing, in three distinct kinds:
+
+- **6 TIMEOUT**, all render-dependent: `building_blueprint_test`, `chart_rewrite_integration_test`,
+  `chart_weather_cache_test`, `lighting_material_test`, `ocean_wake_gpu_smoke`,
+  `ocean_wake_visual_capture`. Under contention at 300 s; re-measure on a quiet box before
+  calling any of them hung.
+- **5 NOTRUN** — autoload compile errors in the `--script` lane: `chart_layer_manager_test`,
+  `harbour_traffic_test`, `helm_minimap_test`, `lod_profiles_test`, `onboarding_store_test`,
+  `port_layout_visual_capture`. These need lane B.
+- **1 FAIL** — `land_field_geography_test`. A real assertion failure.
+
+### The false greens
+
+`tests/company_service_test.gd` prints `PASS` and exits **0** with three assertions failing.
+Godot's `assert()` does not abort, does not set an exit code, and is compiled out of release
+builds. **38 of 81 test files use it.** `tests/support/test_report.gd` is the replacement;
+nothing is converted yet.
+
+### Suspected shipping defect (unverified)
+
+`branding/.gdignore` excludes the branding tree, but `BrandTokens` loads
+`res://branding/brand/tokens/palette.json` (`brand_tokens.gd:10`) and is its only loader.
+If the exporter honours `.gdignore`, a shipped build resolves every token to
+`Color.MAGENTA` (`brand_tokens.gd:120`). Verifying needs export templates (~1 GB, not
+installed) and a Linux preset (only "Windows Desktop" exists).
 
 ---
 
-## Assets and specs on hand
+## Brand-rule audit (measured)
 
-- `branding/brand/tokens/` — `design-tokens.json`, `palette.json`, `palette.gd`, `palette.css`
-- `branding/brand/logo/` — 5 SVG marks, 2 lockups, 20 PNGs; `currency/mark-glyph.svg`
-- `resources/fonts/brand/` — Saira, Saira Condensed, JetBrains Mono, PT Sans (+ OFL licences)
-- `resources/ui/brand/` — marks + currency glyphs imported for runtime
-- Five `.dc.html` design specs: Brand Profile · Screens (chart + dialogue) · **Structure Studio** · Socials Kit · Steam Kit
-- `scripts/ui/design_system/` — `BrandTheme`, `BrandTokens`, `BrandComponents`, `BrandFormat`,
-  `BrandMotion` + 8 components
-- `tests/ui_system_contract_test.gd` — the only branding guard; passes
+| Rule | Verdict |
+|---|---|
+| 1 · no hex literals in UI code | **Violated.** 342 raw `Color()` literals across `scripts/ui`, `apps`, `npc`, `port`, `weather`. Worst: `port_layout_graph_visualizer` 65, `shipyard_brick_editor` 38, `building_brick_editor` 31, `structure_studio` 13 |
+| 2 · AMBER is marketing-only | **Clean.** 0 occurrences in runtime code |
+| 5 · no rounded corners | **Violated in the legacy apps only.** `port_showcase` 6 px, `building_brick_editor` 2–3 px, `shipyard_brick_editor` 2–3 px, `character_customization_showcase` 4 px. Design system and Structure Studio correctly use 0 |
+| — | 53 files use the design system |
 
-### Structure Studio, as found
+---
 
-`scripts/apps/structure_studio.gd` (86 KB) builds its scene and UI entirely in code
-from a one-node `.tscn`. Tools: SELECT / WALL / ROOM / CORRIDOR / DECK / STAIR / OPENING,
-undo/redo, build levels, ghosting, gizmo move, face resize, JSON save/load.
+## Owner decisions
 
-It already ships `_run_studio_probe()` (`structure_studio.gd:115`) — a self-checking
-workout run via `godot scenes/apps/structure_studio.tscn -- --studio-probe` that drives
-real placement paths and quits non-zero on a broken invariant. **This is the seam to
-build the agentic harness on.** Its current limits: hardcoded coordinates rather than
-data objects, calls private methods, captures no screenshots, and is not in the gate.
+| Question | Decision |
+|---|---|
+| Internal apps in scope | **Structure Studio** (rebuild) and **`vessel_registration_audit`** (rebrand — it is the moderation console for the UGC economy). Legacy brick editors **deleted**. |
+| Out of scope | Character/wardrobe authors; mp-server admin web UI. Defects recorded, unworked. |
+| Capture fidelity | **Accept GL/llvmpipe captures** as layout/colour/type evidence. No lavapipe. Every capture pairs with a machine-checkable assertion. |
+| False greens | **Fix the helper and fix the breakage.** No quarantine list. |
 
-`structure_plan_v1` (`resources/data/structures/demo_workboat.json`) is the data-object
-contract: `walls[] · decks[] · rooms[] · stairs[] · items[]` plus `format`, `context`,
-`hull_id`, `palette`. `items` is empty everywhere — the spec's prop toolbox
-(BARREL/BUNK/CHAIR/CLEAT/…) has no data behind it yet.
+---
+
+## Structure Studio — as found
+
+`scripts/apps/structure_studio.gd` (86 KB) builds scene and UI in code from a one-node
+`.tscn`. Tools: SELECT / WALL / ROOM / CORRIDOR / DECK / STAIR / OPENING, undo/redo, build
+levels, ghosting, gizmo move, face resize, JSON save/load. `_run_studio_probe()`
+(`structure_studio.gd:115`) is the existing headless seam — hardcoded coordinates, private
+method calls, no capture.
+
+`structure_plan_v1` (`resources/data/structures/demo_workboat.json`) is the data contract:
+`walls[] · decks[] · rooms[] · stairs[] · items[]` plus `format`, `context`, `hull_id`,
+`palette`. **`items[]` is empty in every plan in the repo** — there is no parts vocabulary yet.
+
+Against `branding/Angst n Anchors Structure Studio.dc.html` (which specifies the *screen*,
+not the parts), the shipped studio is missing: the whole right column (EXPLORER /
+PROPERTIES / SURFACE LIBRARY), the bottom consequence strip (PARTS / DRY WEIGHT / EST.
+DRAFT / STABILITY / FLOAT TEST), and the left prop TOOLBOX — the left panel is build-level
+controls instead. There is also a stray brass bar clipping under the header. The spec's
+toolbox lists furniture (barrel, bunk, chair, cleat, crate, helm, lantern, life ring,
+locker, shelf, stove, table) — **it does not answer the ship-parts question.**
+
+Hulls are dimension-keyed in `resources/data/vessels/hulls/catalog.json`. **In-world metres
+are 2× real**, so `hull_28x10` is a ~14 × 5 m real working boat. Reference matching must
+respect that or every comparison is wrong.
 
 ---
 
 ## Known documentation drift
 
-- `ARCHITECTURE.md` §`scripts/apps/` still lists only `BuildingBrickEditor` and
-  `ShipyardBrickEditor`. Structure Studio — which `AGENTS.md` calls the single unified
-  builder — is absent.
-- `AGENTS.md` says the old brick-editor scenes are "retired", yet
-  `scenes/apps/shipyard_brick_editor.tscn` exists and `tests/shipyard_editor_ui_test.tscn`
-  references that family. Retirement is claimed, not executed.
+- `ARCHITECTURE.md` §`scripts/apps/` lists only the two brick editors. Structure Studio absent.
+- `AGENTS.md` calls the brick editors "retired" while their scenes and tests still ship.
+- `AGENTS.md` "always on BoatBody" vs the registration rules — see the design fork above.
+- mp-server `CONTEXT_HANDOFF.md` describes an in-memory position map several rewrites stale.
+- mp-server: the SvelteKit admin source is **not in the repo** — 1 816 `node_modules` files and
+  `.svelte-kit` build output are committed, but no `package.json`, no routes, one real source
+  file. Unbuildable from a clean clone. Out of scope; recorded.
 
 ---
 
-## In flight
+## Milestones
 
-- **Recon wave** (8 areas + 3 adversarial critics): Structure Studio anatomy · design-system
-  fidelity · UI surface inventory · apps inventory · headless capture · agentic test seam ·
-  brand spec corpus · mp-server. Results fold into this file when they land.
-- **Full gate baseline:** started, then **stopped** — it and the recon wave starved each
-  other on 4 cores. Re-run clean once recon completes. Partial run: 6 PASS, 1 NOTRUN
-  (`chart_layer_manager_test`, autoload compile errors), 2 TIMEOUT under load.
+### M0 — Honest instrument · OPEN
+The loop must be able to fail before it can hone anything.
+1. Convert all 38 bare-`assert()` files to `tests/support/test_report.gd`; fix the breakage
+   it exposes (`company_service_test` first).
+2. Add **gate lane B** — the 23 scene-based tests run as scenes, so autoload-dependent code
+   is covered; migrate the 5–6 NOTRUN `--script` tests into it.
+3. Re-measure the 6 TIMEOUTs on a quiet box; fix or split whatever is genuinely hung.
+4. Fix `land_field_geography_test`.
+5. Clean full-gate baseline recorded here.
+
+**Exit:** `tools/gate.sh` green, both lanes, no bare `assert()`, numbers recorded.
+
+### M1 — Studio harness · NEXT
+Data object → bake → assertions + canonical-angle PNGs, on `_run_studio_probe`'s seam.
+Fixtures beside `demo_workboat.json`. Wired into the gate. Stable capture names under
+`screenshots/studio/`. This is the rig M2 runs on.
+
+### M2 — Ship parts vocabulary · THE MILESTONE
+The reference-matching loop:
+1. Pick reference working boats per category and the honest matching hull (remember 2×).
+2. Author the reference as `structure_plan_v1`, render from canonical angles.
+3. State plainly what reads wrong — not "could be improved".
+4. Diagnose each fault as a **missing part or missing primitive**. Build it so it bakes
+   into merged surfaces.
+5. Rebuild the same reference. Compare. Loop until it matches.
+6. Every part lands with its compliance identity: tag, slot, or metric that
+   `VesselCompliance` can count and locate.
+
+**Exit:** each of the four categories has a reference build that reads correctly and passes
+its registration, with captures and gate tests to prove both.
+
+### M3 — Compliance on plans
+Reconnect `VesselCompliance` to `structure_plan_v1`. Retire the brick-id rule kinds in
+favour of the new vocabulary. `vessel_registration_audit` rebuilt as the moderation console.
+
+### M4 — Studio GUI to spec
+The `.dc.html` screen: toolbox, explorer, properties, surface library, consequence strip,
+FLOAT TEST. Delete the legacy brick editors. Fix the 342 hex literals and the rounded corners.
 
 ---
-
-## Owner decisions (2026-08-09)
-
-Settled. Do not relitigate; if one turns out to be wrong, raise it explicitly.
-
-| Question | Decision |
-|---|---|
-| Which internal apps are in scope | **Structure Studio** (rebuild to `branding/Angst n Anchors Structure Studio.dc.html`) and **`vessel_registration_audit`** (rebrand). The two legacy brick editors are **deleted** — scripts, scenes, and their tests — executing the retirement `AGENTS.md` already claims. |
-| Out of scope for now | Character/wardrobe authors (`character_body_author`, `character_wardrobe_author`, `character_fitted_wardrobe_author`, `icelander_sweater_author`) and the mp-server admin web UI. Their defects stay recorded here, unworked. |
-| Capture fidelity | **Accept GL/llvmpipe captures.** PNGs are evidence for layout, spacing, colour and typography — not shader accuracy. No lavapipe install. Every capture pairs with a machine-checkable assertion. |
-| False greens | **Fix the helper and fix the breakage.** Convert all 38 bare-`assert()` files, then fix whatever genuinely fails until the gate is honestly green. No quarantine list. |
 
 ## Next actions
 
-1. **Re-run `tools/gate.sh` clean** with nothing else on the box. Record the real
-   pass/fail/NOTRUN split here. This number is the baseline every later claim is measured against.
-2. **Kill the false greens.** Replace bare `assert()` in the 38 offending test files with a
-   shared helper that records a failure and forces a non-zero exit. Fix whatever real
-   breakage this exposes (`company_service_test` first). Nothing else in this milestone
-   is trustworthy until this lands.
-3. **Add gate lane B** — run the 23 scene-based tests as scenes so autoload-dependent code
-   is covered at all, and migrate the NOTRUN `--script` tests into it.
-4. **Verify the export/palette risk** by producing an actual export and inspecting the PCK.
-5. **Build the Structure Studio headless harness**: data-object in → bake → assertions +
-   canonical-angle PNGs out, on top of `_run_studio_probe`'s seam. Wire it into the gate.
-6. **Then, and only then**, start the GUI work itself against the `.dc.html` specs, Structure
-   Studio first.
-
----
+1. **M0.1** — convert the 38 bare-`assert()` files. Partition by file, one agent per group.
+2. **M0.2** — gate lane B for scene tests.
+3. Re-run the full gate on a quiet box and record the honest baseline here.
+4. Then M1.
 
 ## Milestone log
 
-- **M0 — Foundations** · open · 2026-08-09. Exit criteria: gate is honest (no bare-`assert`
-  false greens), covers both lanes, runs clean end-to-end; Structure Studio drivable from a
-  data object headlessly with a captured PNG; all of it committed and pushed.
+- **M0 — Honest instrument** · open · 2026-08-09
