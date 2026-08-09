@@ -29,6 +29,7 @@ const FIXTURES: Array[String] = [
 	"res://resources/data/structures/demo_workboat.json",
 	"res://resources/data/structures/probe_trawler_bulwark.json",
 	"res://resources/data/structures/probe_trawler_bow_bulwark.json",
+	"res://resources/data/structures/probe_ferry_catamaran.json",
 ]
 
 ## A long lens rather than a wide one: 35° keeps the perspective flat enough

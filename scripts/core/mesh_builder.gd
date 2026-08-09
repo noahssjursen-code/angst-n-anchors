@@ -344,6 +344,13 @@ static func pointed_bow_collision_points(
 ## Low-poly shell lofted through HullStations. The station lattice is shared
 ## with buoyancy, so the rendered bilges, waterline, flare, and end taper agree
 ## with the physical hull.
+##
+## The shell's ceiling is `hull_stations.deck_y` and it must stay there. Everything
+## the deck carries — `pointed_deck_plate` at [deck_y, deck_y + 0.1], the DeckGrid
+## build plane at deck_y + 0.12, the plan's box colliders, BoatBody's walk slab —
+## starts at that Y and goes up, and the player's mask has nothing above it. Plating
+## that stands proud of a flat deck is a bulwark; it has to be drawn by whoever can
+## also collide it. See the sheer note in `scripts/ship/hull_stations.gd`.
 static func lofted_hull_shell(
 	hull_stations: HullStations,
 	color: Color = Color(0.12, 0.14, 0.16),

@@ -63,13 +63,46 @@
 #   you would type. Everything after it is handed to the app verbatim.
 #
 # The second such app joins by adding one line to its own script. An app scene
-# with no declaration is simply not a lane C unit — it is never booted, so an
-# editor with no self-check cannot be mis-run as if it had one.
+# with no declaration and no self-check is simply not a lane C unit — it is
+# never booted, so an editor with no self-check cannot be mis-run as if it had
+# one.
 #
 # A declaration that does not hold up is a hard FAIL, never a silent drop —
 # same rule as an undeclarable `## gate-requires:` token. Missing scene file,
 # missing `--`, no flag after it: `FAIL(selfcheck)`, named in the report. You
 # cannot make a unit disappear by mangling its marker.
+#
+# ...NOR BY DELETING IT. That was the hole, and it was the wrong way round: a
+# mangled marker failed the gate while a *deleted* one removed the unit
+# entirely, with no report and exit 0. Deleting a line is easier than mangling
+# one, and it is what someone under pressure to go green would reach for.
+#
+# The marker still lives in the app's own script — a category a maintainer has
+# to be told about is a category that gets forgotten, exactly as with
+# `## gate-requires:`. But a declaration that can vanish needs something that
+# notices its absence, and that something cannot be a list of app names here.
+# So the gate does not take the marker's word for whether an app has a
+# self-check. It looks for the SELF-CHECK ITSELF, and requires the two to agree:
+#
+#   implementation + declaration → a lane C unit, booted and scored.
+#   implementation, no declaration → FAIL(selfcheck). THIS is the deleted line.
+#   declaration, no implementation → FAIL(selfcheck). This is the marker moved
+#                                    somewhere it can rot, or pointing at an app
+#                                    that no longer checks anything.
+#   neither                        → not lane C. Nothing to report. An app that
+#                                    genuinely has no self-check stays green.
+#
+# What counts as "implements a self-check" is exactly what lane C scores one by:
+# the script speaks the suite's verdict language — `<name>: PASS (N checks)`,
+# `<name>: N/M FAILED`, `<name>: NO CHECKS RAN` — either printing those lines
+# itself or through `tests/support/test_report.gd`, which is where those words
+# are defined. A script that reports an outcome in the gate's own vocabulary is
+# reporting it TO the gate, and must say so. Comment lines do not count: this
+# very block talks about verdicts, and prose is not an implementation.
+#
+# The remaining way out is to delete the marker *and* gut the verdict the app
+# prints. That is a real code deletion in the diff, not a comment tweak — and
+# an app that no longer reports an outcome no longer has a self-check to lose.
 #
 # Lane C is scored like lane B: booting clean and saying nothing is NOTRUN, not
 # PASS. A self-check that does not declare an outcome has not passed. So the
@@ -307,6 +340,23 @@ unit_selfcheck() {
     | head -1
 }
 
+# The other half of the pairing — see the lane C block in the header. Does this
+# script IMPLEMENT a self-check, whatever it declares? It does if it speaks the
+# verdict language lane C scores by, which is the whole contract: an app that
+# says `x: PASS (7 checks)` is reporting an outcome to this gate.
+#
+# Full-line comments are stripped first. The marker's own documentation quotes
+# the verdict forms, and prose is not an implementation.
+SELFCHECK_IMPL_RE='NO CHECKS RAN|PASS \(%d checks\)|%d/%d FAILED|tests/support/test_report\.gd'
+script_implements_selfcheck() {
+  # Not a pipeline into `grep -q`: under `set -o pipefail` the quiet grep exits
+  # on the first match, the upstream grep dies of SIGPIPE, and the pipeline
+  # reports 141 — i.e. every implementation would read as "no implementation".
+  local body
+  body="$(grep -v '^[[:space:]]*#' "$1" 2>/dev/null)"
+  grep -qE "$SELFCHECK_IMPL_RE" <<<"$body"
+}
+
 # ---- collect ---------------------------------------------------------------
 # Each unit is "<lane>|<path>": lane A paths are .gd, lanes B and C are .tscn.
 ALL_UNITS=()
@@ -332,16 +382,35 @@ for tscn in tests/*.tscn; do
   ALL_UNITS+=("B|$tscn")
 done
 
-# Lane C: every script anywhere in the project that declares a self-check. The
-# search is over the tree, not over a directory this script names, so a new app
-# in a new folder is found without editing anything here.
+# Lane C: every script anywhere in the project that declares a self-check OR
+# implements one. Both searches are over the tree, not over a directory this
+# script names, so a new app in a new folder is found without editing anything
+# here — and so an app whose declaration was deleted is still found, by the
+# self-check it still has.
+#
+# The implementation search skips tests/: that tree is lanes A and B, where
+# speaking the verdict language is what a unit is supposed to do and every one
+# of them is already collected above. Lane C is for apps, which live elsewhere.
+# Declarations are still honoured wherever they are written.
 while IFS= read -r gd; do
   [ -n "$gd" ] || continue
   gd="${gd#./}"
   decl="$(unit_selfcheck "$gd")"
-  [ -n "$decl" ] || continue          # matched outside the header window
-  read -ra parts <<<"$decl"   # split on whitespace, no globbing
   bad() { ALL_BAD_SELFCHECK+=("$gd"$'\t'"$1"$'\t'"$decl"); }
+
+  # No usable declaration in the header. Whether that is a self-check that just
+  # went quiet or a script with nothing to do with lane C is not the marker's
+  # word to give — it is decided by the other half of the pairing.
+  if [ -z "$decl" ]; then
+    if grep -q 'gate-selfcheck:' "$gd"; then
+      bad "a \`gate-selfcheck:\` marker is present but not as \`## gate-selfcheck: <scene> -- <flags>\` in the first 40 lines"
+    elif script_implements_selfcheck "$gd"; then
+      bad "implements a self-check verdict but no \`## gate-selfcheck:\` line declares it — a self-check does not leave the gate by having its marker deleted"
+    fi
+    continue
+  fi
+
+  read -ra parts <<<"$decl"   # split on whitespace, no globbing
   scene="${parts[0]:-}"
   case "$scene" in
     res://*.tscn) ;;
@@ -357,15 +426,28 @@ while IFS= read -r gd; do
   if [ "${#parts[@]}" -lt 3 ]; then
     bad "no self-check flag after \`--\` — nothing would run"; continue
   fi
+  if ! script_implements_selfcheck "$gd"; then
+    bad "declares a self-check but prints no verdict — the marker belongs in the script that reports the outcome, so that deleting one is not a way to lose the other"
+    continue
+  fi
   if [ -n "${SELFCHECK_ARGS[$rel]+set}" ]; then
     bad "$scene is already declared by ${SELFCHECK_GD[$rel]}"; continue
   fi
   SELFCHECK_ARGS["$rel"]="${parts[*]:1}"
   SELFCHECK_GD["$rel"]="$gd"
   ALL_UNITS+=("C|$rel")
-done < <(grep -rIl --include='*.gd' \
-           --exclude-dir=.godot --exclude-dir=.gate --exclude-dir=.probe --exclude-dir=.git \
-           '^##[[:space:]]*gate-selfcheck:' . 2>/dev/null | sort)
+done < <({
+           # declares one (loosely matched, so a marker moved out of the header
+           # or otherwise mangled is still seen and still reported)
+           grep -rIl --include='*.gd' \
+             --exclude-dir=.godot --exclude-dir=.gate --exclude-dir=.probe --exclude-dir=.git \
+             'gate-selfcheck:' . 2>/dev/null
+           # ...or implements one, declaration or no declaration
+           grep -rIlE --include='*.gd' \
+             --exclude-dir=.godot --exclude-dir=.gate --exclude-dir=.probe --exclude-dir=.git \
+             --exclude-dir=tests \
+             "$SELFCHECK_IMPL_RE" . 2>/dev/null
+         } | sed 's|^\./||' | sort -u)
 
 # The script that declares a unit, whatever lane it is in.
 unit_script() {
@@ -753,8 +835,11 @@ if [ "$failed" -gt 0 ]; then
       continue
     elif [ "$status" = "FAIL(selfcheck)" ]; then
       echo "      $log"
-      echo "      fix the '## gate-selfcheck:' line — format is:"
+      echo "      the app's self-check and its declaration must agree. Put this line in"
+      echo "      the header of the script that prints the verdict:"
       echo "        ## gate-selfcheck: res://scenes/apps/<app>.tscn -- --<flag>"
+      echo "      If the app is meant to have no self-check any more, remove the verdict"
+      echo "      it prints too — a line of comment is not how a unit leaves the gate."
       continue
     elif [ "$status" = "FAIL(false-skip)" ]; then
       echo "      it skipped, then passed when re-run — see the FALSE SKIP block above"

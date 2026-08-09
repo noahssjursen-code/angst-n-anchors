@@ -1,0 +1,75 @@
+{
+	"format": "structure_plan_v1",
+	"context": "vessel",
+	"hull_id": "hull_45x16_cat",
+	"_note": "Two-deck passenger fast ferry on the catamaran hull. Built to answer 'how would we do this' with today's primitives only: rooms, deck plates, walls, stairs and openings. Bow is -Z so z=0 is the bow. Sized against the 1.8 m figure, NOT against the catalog's '22.5 x 8.0 m' display name — the hull is drawn 45 units long and a player is 1.8, so this reads as a 45 m vessel. Saloon soles are 2.8 and 2.6 m clear, which is a head-height a person fits under. Every colour is one of the two already in the palette, so the whole ferry costs zero extra draw calls. WHAT IS MISSING is the point of the fixture: no seats (passenger_capacity is an item attribute and items[] has no reader), no railings on the open upper deck (no primitive), no nav lights, no mooring points, no helm station. It is a two-storey shell, not yet a certifiable passenger vessel.",
+	"palette": {
+		"wall": [0.88, 0.89, 0.91],
+		"deck": [0.30, 0.33, 0.35]
+	},
+	"walls": [
+		{"id": 1, "start": [0.6, 0, 4], "axis": "z", "length": 37, "height": 1.1, "thickness": 0.25, "openings": []},
+		{"id": 2, "start": [15.15, 0, 4], "axis": "z", "length": 37, "height": 1.1, "thickness": 0.25, "openings": []},
+		{"id": 3, "start": [0.6, 0, 40.75], "axis": "x", "length": 14.55, "height": 1.1, "thickness": 0.25, "openings": []},
+
+		{"id": 10, "start": [7.6, 8.4, 14], "axis": "z", "length": 0.4, "height": 3.2, "thickness": 0.4, "openings": []},
+		{"id": 11, "start": [6.2, 10.6, 14.1], "axis": "x", "length": 3.2, "height": 0.16, "thickness": 0.16, "openings": []}
+	],
+	"decks": [
+		{"id": 20, "origin": [0.5, 1.1, 4], "size": [0.6, 37], "thickness": 0.1, "openings": []},
+		{"id": 21, "origin": [15.05, 1.1, 4], "size": [0.6, 37], "thickness": 0.1, "openings": []},
+
+		{"id": 30, "origin": [1.2, 3.0, 7], "size": [13.6, 30], "thickness": 0.18, "openings": [
+			{"type": "stairwell", "offset": [10.6, 25.0], "size": [1.8, 4.4]}
+		]},
+
+		{"id": 31, "origin": [1.6, 6.0, 9], "size": [12.8, 24], "thickness": 0.18, "openings": []},
+
+		{"id": 32, "origin": [4.6, 8.4, 11], "size": [6.8, 7.5], "thickness": 0.16, "openings": []}
+	],
+	"rooms": [
+		{"id": 40, "origin": [1.4, 0, 7.2], "size": [13.2, 2.8, 29.6], "wall_thickness": 0.2, "roof": false, "openings": [
+			{"face": "w", "type": "window", "offset": 3.0, "width": 3.2, "sill": 1.0, "height": 1.35},
+			{"face": "w", "type": "window", "offset": 7.0, "width": 3.2, "sill": 1.0, "height": 1.35},
+			{"face": "w", "type": "window", "offset": 11.0, "width": 3.2, "sill": 1.0, "height": 1.35},
+			{"face": "w", "type": "window", "offset": 15.0, "width": 3.2, "sill": 1.0, "height": 1.35},
+			{"face": "w", "type": "window", "offset": 19.0, "width": 3.2, "sill": 1.0, "height": 1.35},
+			{"face": "e", "type": "window", "offset": 3.0, "width": 3.2, "sill": 1.0, "height": 1.35},
+			{"face": "e", "type": "window", "offset": 7.0, "width": 3.2, "sill": 1.0, "height": 1.35},
+			{"face": "e", "type": "window", "offset": 11.0, "width": 3.2, "sill": 1.0, "height": 1.35},
+			{"face": "e", "type": "window", "offset": 15.0, "width": 3.2, "sill": 1.0, "height": 1.35},
+			{"face": "e", "type": "window", "offset": 19.0, "width": 3.2, "sill": 1.0, "height": 1.35},
+			{"face": "n", "type": "window", "offset": 2.4, "width": 3.4, "sill": 1.1, "height": 1.2},
+			{"face": "n", "type": "window", "offset": 7.4, "width": 3.4, "sill": 1.1, "height": 1.2},
+			{"face": "s", "type": "door", "offset": 2.6, "width": 1.8, "height": 2.2},
+			{"face": "s", "type": "door", "offset": 8.8, "width": 1.8, "height": 2.2}
+		]},
+
+		{"id": 41, "origin": [1.8, 3.0, 9.2], "size": [12.4, 2.6, 21.6], "wall_thickness": 0.18, "roof": false, "openings": [
+			{"face": "w", "type": "window", "offset": 2.6, "width": 3.4, "sill": 0.95, "height": 1.25},
+			{"face": "w", "type": "window", "offset": 7.0, "width": 3.4, "sill": 0.95, "height": 1.25},
+			{"face": "w", "type": "window", "offset": 11.4, "width": 3.4, "sill": 0.95, "height": 1.25},
+			{"face": "w", "type": "window", "offset": 15.8, "width": 3.4, "sill": 0.95, "height": 1.25},
+			{"face": "e", "type": "window", "offset": 2.6, "width": 3.4, "sill": 0.95, "height": 1.25},
+			{"face": "e", "type": "window", "offset": 7.0, "width": 3.4, "sill": 0.95, "height": 1.25},
+			{"face": "e", "type": "window", "offset": 11.4, "width": 3.4, "sill": 0.95, "height": 1.25},
+			{"face": "e", "type": "window", "offset": 15.8, "width": 3.4, "sill": 0.95, "height": 1.25},
+			{"face": "n", "type": "window", "offset": 2.2, "width": 3.6, "sill": 1.0, "height": 1.2},
+			{"face": "n", "type": "window", "offset": 6.6, "width": 3.6, "sill": 1.0, "height": 1.2},
+			{"face": "s", "type": "door", "offset": 5.4, "width": 1.8, "height": 2.1}
+		]},
+
+		{"id": 42, "origin": [4.8, 6.0, 11.2], "size": [6.4, 2.4, 7.1], "wall_thickness": 0.16, "openings": [
+			{"face": "n", "type": "window", "offset": 0.5, "width": 1.7, "sill": 1.05, "height": 1.1},
+			{"face": "n", "type": "window", "offset": 2.35, "width": 1.7, "sill": 1.05, "height": 1.1},
+			{"face": "n", "type": "window", "offset": 4.2, "width": 1.7, "sill": 1.05, "height": 1.1},
+			{"face": "w", "type": "window", "offset": 2.4, "width": 2.4, "sill": 1.05, "height": 1.05},
+			{"face": "e", "type": "window", "offset": 2.4, "width": 2.4, "sill": 1.05, "height": 1.05},
+			{"face": "s", "type": "door", "offset": 2.4, "width": 1.6, "height": 2.05}
+		]}
+	],
+	"stairs": [
+		{"id": 50, "start": [11.4, 0, 32.6], "dir": "-z", "length": 4.4, "width": 1.8, "height": 3.0}
+	],
+	"items": []
+}
