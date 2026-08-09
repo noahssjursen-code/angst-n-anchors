@@ -57,7 +57,15 @@ static func apply_plan(boat: BoatBody, plan: StructurePlan, grid: DeckGrid = nul
 	for box_variant in StructureBaker.collect_colliders(plan, offset):
 		var box := box_variant as Dictionary
 		var size: Vector3 = box["size"]
-		boat.add_walk_brick_collider("plan_%d" % index, box["center"] as Vector3, size, 0.0)
+		## `size` is read in the box's OWN frame, so the yaw the baker drew it
+		## with has to travel with it — a diagonal bulwark collided flat is a
+		## wall you walk through, the same bug class as a stair you fall into.
+		boat.add_walk_brick_collider(
+			"plan_%d" % index,
+			box["center"] as Vector3,
+			size,
+			float(box.get("yaw_deg", 0.0)),
+		)
 		## Coarse structural mass: panel volume at light-plate density.
 		var box_mass := size.x * size.y * size.z * 220.0
 		total_mass += box_mass

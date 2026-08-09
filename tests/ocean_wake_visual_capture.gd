@@ -1,11 +1,26 @@
 extends SceneTree
 
-## gate-requires: rendering_device
+## No `## gate-requires:` marker: this file runs everywhere the gate runs.
 ##
-## WorldRenderer brings up the FFT water system and OceanWakeField, both of which
-## are compute pipelines. Without a RenderingDevice the FFT bind fails outright
-## and `_update_wake` dereferences a null `rd`, so the captured PNG would show an
-## ocean with no wake in it — evidence of nothing.
+## It carried `## gate-requires: rendering_device` and was skipped for it. That
+## was wrong, and measurably so — with the skip lifted it passes here in ~31 s
+## under xvfb + opengl3, on a box whose `RenderingServer.get_rendering_device()`
+## is null. The marker was excluding a working test. (tools/gate.sh now re-runs
+## whatever it skips and fails the gate on any skip that passes, so this cannot
+## be reintroduced quietly — see "THE SKIP AUDIT" there.)
+##
+## The reasoning behind the old marker was half right and is kept, because it
+## still describes what happens: WorldRenderer brings up the FFT water system
+## and OceanWakeField, both compute pipelines, and without a RenderingDevice the
+## FFT bind fails and `_update_wake` dereferences a null `rd`. So on a box like
+## this one the PNG shows an ocean with no wake in it.
+##
+## That degrades the CAPTURE, not the CHECKS. Every claim asserted below — the
+## OceanWakeField node exists, `_apply_ocean_shader` still takes the arguments
+## this call passes, the frame is capturable and writable — holds with or
+## without a RenderingDevice, and each has caught a real regression. A degraded
+## capture is a reason to label the PNG, which `_run` now does; it is not a
+## reason to delete three live assertions from the gate.
 
 const TestReport := preload("res://tests/support/test_report.gd")
 const WORLD_RENDERER := preload("res://scripts/world/world_renderer.gd")
@@ -73,9 +88,17 @@ func _run() -> void:
 	var gpu_frame_ms := RenderingServer.viewport_get_measured_render_time_gpu(
 		root.get_viewport().get_viewport_rid()
 	)
+	# Say which kind of PNG this is. Without a RenderingDevice the wake compute
+	# never runs, and a reader who does not know that will read a wakeless ocean
+	# as a wake regression.
+	var wake_live := field.rd != null
 	print(
-		"Ocean wake visual capture: %s (%.2f ms total GPU frame)"
-		% [output_path, gpu_frame_ms]
+		"Ocean wake visual capture: %s (%.2f ms total GPU frame) — wake compute %s"
+		% [
+			output_path,
+			gpu_frame_ms,
+			"live" if wake_live else "INERT (no RenderingDevice: ocean rendered without wake)",
+		]
 	)
 	renderer.queue_free()
 	camera.queue_free()

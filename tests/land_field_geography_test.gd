@@ -21,10 +21,12 @@ func _initialize() -> void:
 
 func _test_land_and_open_ocean(layout: WorldLayout) -> void:
 	var inside := Vector3(15000.0, 0.0, 14500.0)
-	## The archipelago belt seeds island centres out to belt_x_min_m = -12 000 and
-	## erodes them another kilometre west, so x = -15 000 is under 4 km from the
-	## outermost skerries — never the 5 km of clearance this check is about.
-	var open := Vector3(-18000.0, 0.0, 14500.0)
+	## Restored to the original sample. It already classifies as OPEN_WATER, so
+	## moving it west to -18 000 did not correct a mis-sited sample — it only
+	## escaped the 5 km bound, which the macro map fails here by 1.2 km. The
+	## further-offshore point is kept below as extra coverage, not as a stand-in.
+	var open := Vector3(-15000.0, 0.0, 14500.0)
+	var far_open := Vector3(-18000.0, 0.0, 14500.0)
 	_check(LAND_FIELD.get_layout() == layout, "layout is exposed read-only")
 	_check(LAND_FIELD.distance_to_land(inside) < 0.0, "inside-land distance is negative")
 	_check(is_zero_approx(LAND_FIELD.wave_shelter(inside)), "inside land has no waves")
@@ -36,6 +38,15 @@ func _test_land_and_open_ocean(layout: WorldLayout) -> void:
 	_check(LAND_FIELD.distance_to_land(open) > 5000.0, "open-ocean point is far from land")
 	_check(LAND_FIELD.wave_shelter(open) > 0.999, "open ocean has full local waves")
 	_check(LAND_FIELD.coastal_exposure(open) > 0.92, "open ocean has high exposure")
+	## Three kilometres further west. The same claims must hold a fortiori, so a
+	## regression that only reaches the inner belt still gets caught here.
+	_check(
+		layout.classify_region(Vector2(far_open.x, far_open.z)) == WorldLayout.Region.OPEN_WATER,
+		"the deep-offshore sample is open water too"
+	)
+	_check(LAND_FIELD.distance_to_land(far_open) > 5000.0, "deep offshore is far from land")
+	_check(LAND_FIELD.wave_shelter(far_open) > 0.999, "deep offshore has full local waves")
+	_check(LAND_FIELD.coastal_exposure(far_open) > 0.92, "deep offshore has high exposure")
 
 
 func _test_coast_and_split(layout: WorldLayout) -> void:
@@ -51,6 +62,11 @@ func _test_coast_and_split(layout: WorldLayout) -> void:
 		_check(LAND_FIELD.coastal_exposure(p) < 0.12, "immediate coast has low exposure")
 	if coastal != Vector2.INF:
 		var p := Vector3(coastal.x, 0.0, coastal.y)
+		## Restored at their original bounds. The aggregate band below is a better
+		## formulation and stays, but it does not get to stand in for these: the
+		## first kilometre-scale sample is a claim in its own right.
+		_check(LAND_FIELD.wave_shelter(p) > 0.99, "local waves recover within hundreds of metres")
+		_check(LAND_FIELD.coastal_exposure(p) < 0.80, "coastal exposure remains kilometre-scale")
 		_check(
 			LAND_FIELD.shore_shelter(p) == LAND_FIELD.wave_shelter(p),
 			"shore_shelter aliases wave_shelter"

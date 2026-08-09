@@ -91,6 +91,10 @@ var _selection_box: MeshInstance3D
 var _gizmo_root: Node3D
 var _handle_root: Node3D ## six face-resize pads around the selection
 var _entity_bounds: Dictionary = {} ## id -> AABB (world space)
+## id -> the ROTATED boxes it renders, world space, only for entities that have
+## any (diagonal walls). Their AABB is a loose square, so the cursor is retested
+## against these; everything else is its own bound and never lands here.
+var _entity_yawed_boxes: Dictionary = {}
 ## Always-on cursor feedback: what THIS click will do, exactly where.
 var _opening_ghost: MeshInstance3D ## the actual door/window/hole, snapped, on its host
 var _hover_box: MeshInstance3D ## copper pre-selection outline under the cursor
@@ -150,6 +154,7 @@ func _run_studio_probe() -> void:
 		_update_selection_visual()
 		_refresh_panel()
 	_selected_id = -1
+	_probe_diagonal_wall(expect)
 	## Cut a door into the room and confirm the wall panels split around it.
 	var room := _plan.rooms[0] as Dictionary
 	(room["openings"] as Array).append({"face": "s", "type": "door", "offset": 1.0, "width": 1.6, "height": 2.2})
@@ -165,20 +170,181 @@ func _run_studio_probe() -> void:
 	_set_context("vessel") ## wipes the plan
 	expect.call("context switch clears the plan", _plan.is_empty())
 	_load_plan(probe_path)
-	expect.call("save/load restores all entities", _plan.entity_count() == 7)
+	expect.call("save/load restores all entities", _plan.entity_count() == 8)
 	expect.call("save/load keeps the stairs", _plan.stairs.size() == 2)
 	expect.call(
 		"save/load keeps corridor open faces",
 		not ((_plan.rooms[1] as Dictionary).get("open_faces", []) as Array).is_empty()
 	)
+	var reloaded_diagonal: Dictionary = {}
+	for wall_variant in _plan.walls:
+		if StructurePlan.is_diagonal_axis(str((wall_variant as Dictionary).get("axis", ""))):
+			reloaded_diagonal = wall_variant as Dictionary
+	expect.call("save/load keeps the diagonal axis", str(reloaded_diagonal.get("axis", "")) == "+x-z")
+	expect.call(
+		"save/load keeps the cut made in the diagonal",
+		(reloaded_diagonal.get("openings", []) as Array).size() == 1
+	)
+	expect.call(
+		"reloaded diagonal is still bounded in world space",
+		_probe_bounds_hold(reloaded_diagonal)
+	)
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(probe_path))
+	var built_count := _plan.entity_count()
+	## The shipped fixture this work was measured against: four 45° walls read
+	## off disk, every one of them bounded in world space rather than in its
+	## own frame.
+	_load_plan("%s/probe_trawler_bow_bulwark.json" % STRUCTURES_DIR)
+	var diagonals := 0
+	var bounded := 0
+	for wall_variant in _plan.walls:
+		var fixture_wall := wall_variant as Dictionary
+		if not StructurePlan.is_diagonal_axis(str(fixture_wall.get("axis", ""))):
+			continue
+		diagonals += 1
+		if _probe_bounds_hold(fixture_wall):
+			bounded += 1
+	expect.call("bow bulwark fixture loads its four diagonals", diagonals == 4)
+	expect.call("every fixture diagonal is bounded in world space", bounded == diagonals)
 	if failed.is_empty():
-		print("[structure-studio] probe ok — context=%s entities=%d" % [_context, _plan.entity_count()])
+		print("[structure-studio] probe ok — context=%s entities=%d" % [_context, built_count])
 		get_tree().quit(0)
 	else:
 		for label in failed:
 			print("[structure-studio] probe FAIL — %s" % label)
 		get_tree().quit(1)
+
+
+## Diagonal-wall leg of the probe. A 45° wall is the case every "is this an
+## x-wall or a z-wall?" shortcut gets wrong: what bounds it, what a click
+## picks, what F focuses on, and where an opening lands.
+func _probe_diagonal_wall(expect: Callable) -> void:
+	var start := Vector3(1, 0, 5)
+	var length := 6.0
+	var wall := _plan.add_wall(start, "+x-z", length, DEFAULT_WALL_HEIGHT)
+	_rebake()
+	var id := int(wall.get("id", -1))
+	expect.call("diagonal wall is pickable (has bounds)", _entity_bounds.has(id))
+	expect.call("diagonal bounds contain the geometry the baker draws", _probe_bounds_hold(wall))
+	if not _entity_bounds.has(id):
+		return
+	var bounds := _entity_bounds[id] as AABB
+	## A 6 m wall at 45° covers ~4.24 m on BOTH world axes. Measured in the
+	## box's own frame it reports 6 × 0.2 and selection aims at empty space.
+	expect.call(
+		"diagonal bound spans both world axes",
+		bounds.size.x > 4.0 and bounds.size.z > 4.0
+	)
+	var run := StructurePlan.wall_run("+x-z")
+	var mid := (
+		start + run * (length * 0.5)
+		+ Vector3(0.0, DEFAULT_WALL_HEIGHT * 0.5, 0.0) + _plan_offset
+	)
+	## Where the gizmo sits and what F flies the camera to.
+	expect.call("diagonal bound centres on its mid-run", bounds.get_center().distance_to(mid) < 0.05)
+	_selected_id = id
+	_update_selection_visual()
+	_refresh_panel()
+	expect.call(
+		"selecting the diagonal wraps it",
+		_selection_box.visible and _selection_box.position.distance_to(mid) < 0.05
+	)
+	## The bound is a 4.3 m square with the wall on its diagonal, so most of it
+	## is empty air. The cursor must not pick the wall out there.
+	var corner := Vector3(
+		bounds.position.x + bounds.size.x - 0.4,
+		bounds.position.y + bounds.size.y + 5.0,
+		bounds.position.z + bounds.size.z - 0.4,
+	)
+	expect.call(
+		"a ray down an empty corner of the bound misses the diagonal",
+		_entity_ray_hit(id, corner, Vector3.DOWN) == null
+	)
+	expect.call(
+		"a ray down onto the wall itself still hits it",
+		_entity_ray_hit(id, Vector3(mid.x, corner.y, mid.z), Vector3.DOWN) != null
+	)
+	## Now a REAL cursor ray, square to the wall and aimed 2 m along the run,
+	## driven through pick -> context -> commit exactly as a click would be.
+	var across := Vector3(-run.z, 0.0, run.x)
+	var aim := start + run * 2.0 + Vector3(0.0, 1.2, 0.0) + _plan_offset
+	_camera.position = aim - across * 14.0 + Vector3(0.0, 5.0, 0.0)
+	_camera.look_at(aim, Vector3.UP)
+	var screen := _camera.unproject_position(aim)
+	var ctx := _opening_context_at(screen)
+	expect.call(
+		"cursor ray picks the diagonal",
+		int((ctx.get("entity", {}) as Dictionary).get("id", -1)) == id
+	)
+	if str(ctx.get("kind", "")) == "wall":
+		expect.call(
+			"the run reads 2 m along where 2 m along was aimed at",
+			absf(_ctx_along(ctx, ctx["point"] as Vector3) - 2.0) < 0.05
+		)
+	_set_tool(Tool.OPENING)
+	_begin_opening_drag(screen)
+	_commit_opening(screen)
+	var openings := wall.get("openings", []) as Array
+	expect.call("opening punched into the diagonal", openings.size() == 1)
+	if openings.size() == 1:
+		## Default door is 2 m wide, centred on the aim: 1 m from the start.
+		expect.call(
+			"the cut lands where it was aimed",
+			absf(float((openings[0] as Dictionary).get("offset", -1.0)) - 1.0) < 0.01
+		)
+	expect.call(
+		"diagonal panels split around the cut",
+		StructureBaker.wall_panels(wall).size() >= 3
+	)
+	expect.call("bounds still hold with the cut in place", _probe_bounds_hold(wall))
+	## Same wall, cursor coming in 45° off square at 4 m along the run. The
+	## reading has to stay on the surface it aimed at — measuring where the ray
+	## enters the BOUND instead puts this ~2 m down the wall.
+	var oblique_aim := start + run * 4.0 + Vector3(0.0, 1.2, 0.0) + _plan_offset
+	_camera.position = oblique_aim - Vector3.RIGHT * 16.0 + Vector3(0.0, 5.0, 0.0)
+	_camera.look_at(oblique_aim, Vector3.UP)
+	var oblique := _opening_context_at(_camera.unproject_position(oblique_aim))
+	expect.call(
+		"an oblique cursor still reads 4 m along the run",
+		str(oblique.get("kind", "")) == "wall"
+		and absf(_ctx_along(oblique, oblique["point"] as Vector3) - 4.0) < 0.3
+	)
+	_selected_id = -1
+	_set_tool(Tool.WALL)
+	_update_selection_visual()
+
+
+## Every vertex StructureBaker actually draws for this wall, in world space:
+## own-frame corners turned by the wall's basis. Anything that bounds, picks
+## or focuses the wall has to agree with THESE points.
+func _probe_wall_vertices(wall: Dictionary) -> PackedVector3Array:
+	var wall_basis := StructureBaker.wall_basis(wall)
+	var points := PackedVector3Array()
+	for box_variant in StructureBaker.wall_boxes(wall):
+		var box := box_variant as Dictionary
+		var half := (box["size"] as Vector3) * 0.5
+		for corner in 8:
+			var local := Vector3(
+				half.x if (corner & 1) != 0 else -half.x,
+				half.y if (corner & 2) != 0 else -half.y,
+				half.z if (corner & 4) != 0 else -half.z,
+			)
+			points.append((box["center"] as Vector3) + wall_basis * local + _plan_offset)
+	return points
+
+
+## True when the studio's bound for a wall contains everything that wall
+## renders. A diagonal fails this the instant its bound is read axis-aligned
+## in the box's own frame.
+func _probe_bounds_hold(wall: Dictionary) -> bool:
+	var id := int(wall.get("id", -1))
+	if not _entity_bounds.has(id):
+		return false
+	var bounds := (_entity_bounds[id] as AABB).grow(0.001)
+	for point in _probe_wall_vertices(wall):
+		if not bounds.has_point(point):
+			return false
+	return true
 
 
 # ── Context / plan lifecycle ─────────────────────────────────────────────────
@@ -453,6 +619,7 @@ func _rebake() -> void:
 func _recompute_bounds() -> void:
 	_entity_bounds.clear()
 	_entity_base_y.clear()
+	_entity_yawed_boxes.clear()
 	for collection in [_plan.walls, _plan.decks, _plan.rooms, _plan.stairs]:
 		for entity_variant in collection:
 			var entity := entity_variant as Dictionary
@@ -474,12 +641,29 @@ func _recompute_bounds() -> void:
 			_grow_bounds(int(stair.get("source_id", -1)), box_variant as Dictionary)
 
 
+## Grows an entity's world bound by one baked box. `size` is stated in the
+## BOX's own frame, so a yawed box (any diagonal wall) has to have its corners
+## turned into plan space first — reading the size axis-aligned bounded the
+## diagonal in a frame nothing else uses, and selection, picking and focus all
+## landed off the wall.
 func _grow_bounds(source_id: int, box: Dictionary) -> void:
 	if source_id < 0:
 		return
 	var center := (box["center"] as Vector3) + _plan_offset
 	var size := box["size"] as Vector3
-	var aabb := AABB(center - size * 0.5, size)
+	var yaw := float(box.get("yaw_deg", 0.0))
+	var basis := Basis(Vector3.UP, deg_to_rad(yaw))
+	var half := size * 0.5
+	## Half-extent of the rotated box on each world axis: the corner that
+	## maximises every component is the sum of the |column| contributions.
+	var extent := basis.x.abs() * half.x + basis.y.abs() * half.y + basis.z.abs() * half.z
+	var aabb := AABB(center - extent, extent * 2.0)
+	if not is_zero_approx(yaw):
+		## A yawed box's bound is much bigger than the box. Keep the box itself
+		## so the cursor can be tested against what is actually there.
+		var yawed: Array = _entity_yawed_boxes.get(source_id, [])
+		yawed.append({"center": center, "size": size, "yaw_deg": yaw})
+		_entity_yawed_boxes[source_id] = yawed
 	if _entity_bounds.has(source_id):
 		_entity_bounds[source_id] = (_entity_bounds[source_id] as AABB).merge(aabb)
 	else:
@@ -809,6 +993,20 @@ func _opening_defaults() -> Dictionary:
 			return {"type": "door", "width": 2.0, "sill": 0.0, "height": 2.2}
 
 
+## The one place a wall's direction is derived. `run` is the unit vector the
+## wall runs along (all six axes, diagonals included), `across` the horizontal
+## unit normal its thickness is measured on, `yaw_deg` the rotation the baker
+## draws its boxes with. Everything downstream projects onto these instead of
+## asking "x wall or z wall?" — that question has four wrong answers.
+func _wall_frame(entity: Dictionary) -> Dictionary:
+	var run := StructurePlan.wall_run(str(entity.get("axis", "x")))
+	return {
+		"run": run,
+		"across": Vector3(-run.z, 0.0, run.x),
+		"yaw_deg": StructureBaker.wall_yaw_deg(entity),
+	}
+
+
 ## Resolves what an opening interaction at this cursor position would cut:
 ## a plan wall, a room wall face, a room roof/floor, or a deck plate.
 func _opening_context_at(screen_pos: Vector2) -> Dictionary:
@@ -820,9 +1018,11 @@ func _opening_context_at(screen_pos: Vector2) -> Dictionary:
 		return {}
 	var p: Vector3 = (hit["point"] as Vector3) - _plan_offset
 	if entity.has("axis"):
+		var frame := _wall_frame(entity)
 		return {
 			"kind": "wall", "entity": entity,
-			"axis_z": str(entity.get("axis")) == "z",
+			"axis": str(entity.get("axis", "x")),
+			"run": frame["run"], "across": frame["across"], "yaw_deg": frame["yaw_deg"],
 			"start": StructurePlan.vec3_of(entity.get("start")),
 			"length": float(entity.get("length", 1.0)),
 			"thickness": float(entity.get("thickness", StructurePlan.DEFAULT_WALL_THICKNESS)),
@@ -880,8 +1080,10 @@ func _opening_context_at(screen_pos: Vector2) -> Dictionary:
 func _ctx_along(ctx: Dictionary, p: Vector3) -> float:
 	match str(ctx.get("kind")):
 		"wall":
-			var start := ctx["start"] as Vector3
-			return (p.z - start.z) if bool(ctx["axis_z"]) else (p.x - start.x)
+			## Distance from the start ALONG the run — for "x" and "z" this is
+			## still exactly p.x - start.x / p.z - start.z, and it is the only
+			## form that means anything on a diagonal.
+			return (p - (ctx["start"] as Vector3)).dot(ctx["run"] as Vector3)
 		"room_wall":
 			var origin := ctx["origin"] as Vector3
 			return (p.x - origin.x) if str(ctx["face"]) in ["n", "s"] else (p.z - origin.z)
@@ -938,9 +1140,18 @@ func _opening_geom(ctx: Dictionary, span: Vector2, rect: Rect2) -> Dictionary:
 			var u := span.x + span.y * 0.5
 			var v: float = start.y + float(defaults["sill"]) + float(defaults["height"]) * 0.5
 			var t := float(ctx["thickness"]) + 0.14
-			if bool(ctx["axis_z"]):
-				return {"center": Vector3(start.x, v, start.z + u), "size": Vector3(t, float(defaults["height"]), span.y)}
-			return {"center": Vector3(start.x + u, v, start.z), "size": Vector3(span.y, float(defaults["height"]), t)}
+			## Centre rides the run; size is stated in the wall's OWN frame and
+			## carries the baker's yaw, exactly like StructureBaker.wall_boxes.
+			var center := start + (ctx["run"] as Vector3) * u
+			center.y = v
+			return {
+				"center": center,
+				"size": (
+					Vector3(t, float(defaults["height"]), span.y) if str(ctx["axis"]) == "z"
+					else Vector3(span.y, float(defaults["height"]), t)
+				),
+				"yaw_deg": ctx["yaw_deg"],
+			}
 		"room_wall":
 			var origin := ctx["origin"] as Vector3
 			var size := ctx["size"] as Vector3
@@ -992,9 +1203,16 @@ func _update_opening_drag(screen_pos: Vector2) -> void:
 	else:
 		geom = _opening_geom(_opening_ctx, Vector2.ZERO, _plate_rect(_opening_ctx, _opening_anchor, _ctx_uv(_opening_ctx, p), true))
 	if not geom.is_empty():
-		(_opening_ghost.mesh as BoxMesh).size = geom["size"] as Vector3
-		_opening_ghost.position = (geom["center"] as Vector3) + _plan_offset
-		_opening_ghost.visible = true
+		_show_opening_ghost(geom)
+
+
+## Puts the preview cut on its host: plan space -> world, plus the host's yaw
+## so a diagonal wall's opening sits IN the wall instead of across it.
+func _show_opening_ghost(geom: Dictionary) -> void:
+	(_opening_ghost.mesh as BoxMesh).size = geom["size"] as Vector3
+	_opening_ghost.position = (geom["center"] as Vector3) + _plan_offset
+	_opening_ghost.rotation = Vector3(0.0, deg_to_rad(float(geom.get("yaw_deg", 0.0))), 0.0)
+	_opening_ghost.visible = true
 
 
 func _commit_opening(screen_pos: Vector2) -> void:
@@ -1070,21 +1288,53 @@ func _pick_entity_hit(screen_pos: Vector2) -> Dictionary:
 	var direction := ray[1] as Vector3
 	var best_t := INF
 	var best_id := -1
+	var best_point := Vector3.ZERO
 	for id in _entity_bounds.keys():
 		## Ghosted upper-level geometry is view-only: the cursor passes
 		## straight through it to the deck being edited.
 		if float(_entity_base_y.get(id, 0.0)) >= _ghost_threshold:
 			continue
-		var aabb := _entity_bounds[id] as AABB
-		var hit_variant: Variant = aabb.grow(0.05).intersects_ray(origin, direction)
+		var hit_variant: Variant = _entity_ray_hit(int(id), origin, direction)
 		if hit_variant != null:
 			var t := (hit_variant as Vector3).distance_to(origin)
 			if t < best_t:
 				best_t = t
 				best_id = int(id)
+				best_point = hit_variant as Vector3
 	if best_id < 0:
 		return {}
-	return {"id": best_id, "point": origin + direction * best_t}
+	return {"id": best_id, "point": best_point}
+
+
+## Where the cursor ray meets one entity, world space, or null. The bound is
+## the whole answer for anything axis-aligned. A diagonal wall's bound is a
+## loose square around it, so the ray is retested against the rotated boxes the
+## wall renders — otherwise a click in an empty corner of the bound selects the
+## wall and reports a point metres off the surface, which is then what the
+## opening tool measures its offset from.
+func _entity_ray_hit(id: int, origin: Vector3, direction: Vector3) -> Variant:
+	var coarse: Variant = (_entity_bounds[id] as AABB).grow(0.05).intersects_ray(origin, direction)
+	if coarse == null or not _entity_yawed_boxes.has(id):
+		return coarse
+	var best: Variant = null
+	var best_t := INF
+	for box_variant in _entity_yawed_boxes[id] as Array:
+		var box := box_variant as Dictionary
+		var box_basis := Basis(Vector3.UP, deg_to_rad(float(box["yaw_deg"])))
+		var into_box := box_basis.transposed() ## orthonormal: transpose == inverse
+		var box_center := box["center"] as Vector3
+		var size := box["size"] as Vector3
+		var local: Variant = AABB(-size * 0.5, size).grow(0.05).intersects_ray(
+			into_box * (origin - box_center), into_box * direction
+		)
+		if local == null:
+			continue
+		var world := box_center + box_basis * (local as Vector3)
+		var t := world.distance_to(origin)
+		if t < best_t:
+			best_t = t
+			best = world
+	return best
 
 
 func _try_grab_gizmo(screen_pos: Vector2) -> bool:
@@ -1238,17 +1488,34 @@ func _apply_face_resize(entity: Dictionary, snapped_delta: float) -> void:
 	_gizmo_last_applied = marker
 	var origin := _resize_start_primary
 	if entity.has("axis"):
-		var wall_axis := 0 if str(entity.get("axis")) == "x" else 2
-		if _gizmo_axis == wall_axis:
-			var new_length := maxf(_resize_start_dims.x + face_move, 1.0)
-			entity["length"] = new_length
-			if _resize_sign < 0:
-				origin[wall_axis] = _resize_start_primary[wall_axis] - (new_length - _resize_start_dims.x)
-				entity["start"] = [origin.x, origin.y, origin.z]
-		elif _gizmo_axis == 1:
+		if _gizmo_axis == 1:
 			entity["height"] = clampf(_resize_start_dims.y + face_move, 0.5, 12.0)
 		else:
-			entity["thickness"] = clampf(_resize_start_dims.z + face_move, 0.05, 0.5)
+			## Which dimension a horizontal pad edits is decided by projecting the
+			## pad's OUTWARD normal onto the wall's own frame, not by naming a
+			## world axis: "x wall or z wall?" has four wrong answers. For "x" and
+			## "z" the projections are 1 and 0, so this is the old behaviour
+			## exactly; on a diagonal every horizontal pad sits on an END of the
+			## run (its thickness faces never reach the bound's sides), so they
+			## all edit length — thickness stays an inspector field there.
+			var axis_vector := Vector3.RIGHT if _gizmo_axis == 0 else Vector3.BACK
+			var normal := axis_vector * float(_resize_sign)
+			var frame := _wall_frame(entity)
+			var along := normal.dot(frame["run"] as Vector3)
+			var across := normal.dot(frame["across"] as Vector3)
+			if absf(along) >= absf(across):
+				## The grabbed face tracks the cursor on ITS world axis, so the
+				## run grows by the drag divided by the run's share of that axis.
+				var new_length := maxf(_resize_start_dims.x + face_move / absf(along), 1.0)
+				entity["length"] = new_length
+				if along < 0.0:
+					## Start end grabbed: the start slides back so the far end stays.
+					origin = _resize_start_primary - (frame["run"] as Vector3) * (new_length - _resize_start_dims.x)
+					entity["start"] = [origin.x, origin.y, origin.z]
+			else:
+				entity["thickness"] = clampf(
+					_resize_start_dims.z + face_move / absf(across), 0.05, 0.5
+				)
 	elif entity.has("size") and (entity.get("size") as Array).size() == 3:
 		var size_list: Array = entity.get("size")
 		var dims := [_resize_start_dims.x, _resize_start_dims.y, _resize_start_dims.z]
@@ -1457,9 +1724,7 @@ func _update_hover_feedback() -> void:
 				geom = _opening_geom(ctx, Vector2.ZERO, _plate_rect(ctx, uv, uv, false))
 			if geom.is_empty():
 				return
-			(_opening_ghost.mesh as BoxMesh).size = geom["size"] as Vector3
-			_opening_ghost.position = (geom["center"] as Vector3) + _plan_offset
-			_opening_ghost.visible = true
+			_show_opening_ghost(geom)
 		Tool.WALL, Tool.ROOM, Tool.DECK:
 			var grid_point := _mouse_to_grid(mouse)
 			if grid_point == Vector3.INF:

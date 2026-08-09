@@ -10,6 +10,8 @@
 #   GATE_TIMEOUT=240 tools/gate.sh # per-test timeout seconds
 #   GATE_LANE=A tools/gate.sh      # restrict to one lane (A|B, default both)
 #   GATE_DRIVER=headless tools/gate.sh   # force the degraded driver (see below)
+#   GATE_NO_SKIP=1 tools/gate.sh   # ignore every `## gate-requires:` and just run
+#   GATE_AUDIT_SKIPS=0 tools/gate.sh     # do not re-run skipped units (see below)
 #
 # ---------------------------------------------------------------------------
 # THE TWO LANES
@@ -92,6 +94,39 @@
 #   7. `GATE_NO_SKIP=1 tools/gate.sh` runs every skipped unit anyway. The claim
 #      "cannot run here" is falsifiable on demand by anyone who doubts it, and
 #      the summary advertises the switch.
+#
+#   8. THE SKIP AUDIT — the claim polices itself, every run.
+#
+#      Points 1-7 make the marker visible and probe-backed, but a critic found
+#      the hole and it is a real one: nothing correlates the token a test
+#      *declares* with anything the test *does*. `## gate-requires:` is a
+#      comment. A test can name a capability it does not need, the probe
+#      truthfully answers NO for the box, and one comment line has lifted a
+#      working test out of the gate forever. That is exactly what happened to
+#      `ocean_wake_visual_capture`, which passes here in ~31 s.
+#
+#      A declaration cannot be verified statically. It can be verified by
+#      experiment, so the gate runs the experiment: every unit it skipped is
+#      RE-RUN anyway, with the skip lifted, and the result is scored against
+#      the claim.
+#
+#        re-run FAILs / TIMEOUTs / NOTRUNs  → the claim holds. The skip stands
+#                                             and the gate does not go red for it.
+#        re-run PASSES                      → the claim is FALSE. Hard gate
+#                                             FAILURE, naming the unit and the
+#                                             bogus capability.
+#
+#      The bar for "false" is exactly the bar the gate uses for green: if the
+#      unit would have counted as PASS in a normal run, it can run here, and
+#      the marker was excluding a working test.
+#
+#      This is on by default, because the cost has to land on the person making
+#      the claim rather than on the person doubting it. A false skip now costs a
+#      red gate; a true skip costs one re-run of a test that was already failing.
+#      `GATE_AUDIT_SKIPS=0` turns the audit off for a run — and both the headline
+#      and the verdict line then say, loudly, that the skips went unverified.
+#      Audit re-runs get their own `<name>.audit.log` and their own `audit.tsv`;
+#      they never touch the real run's logs or results.
 # ---------------------------------------------------------------------------
 
 set -uo pipefail
@@ -104,6 +139,10 @@ TIMEOUT="${GATE_TIMEOUT:-240}"
 DRIVER="${GATE_DRIVER:-xvfb}"
 LANE_FILTER="${GATE_LANE:-AB}"
 NO_SKIP="${GATE_NO_SKIP:-0}"
+AUDIT="${GATE_AUDIT_SKIPS:-1}"
+# A skipped unit is one the box supposedly cannot run, so its audit re-run is
+# expected to fail or hang. Give it the normal budget unless told otherwise.
+AUDIT_TIMEOUT="${GATE_AUDIT_TIMEOUT:-$TIMEOUT}"
 
 CORES="$(nproc 2>/dev/null || echo 4)"
 DEFAULT_JOBS=$(( CORES / 2 )); [ "$DEFAULT_JOBS" -lt 2 ] && DEFAULT_JOBS=2
@@ -297,6 +336,9 @@ B_COUNT="$(count_lane B)"
 
 echo "gate: run $RUN_ID · driver=$DRIVER · ${#RUN_UNITS[@]} tests (A:$A_COUNT script · B:$B_COUNT scene) · jobs=$JOBS · timeout=${TIMEOUT}s"
 [ "$NO_SKIP" = "1" ] && echo "gate: GATE_NO_SKIP=1 — capability skips disabled, every matched unit runs"
+if [ "${#SKIPPED_CAP[@]}" -gt 0 ] && [ "$AUDIT" = "0" ]; then
+  echo "gate: GATE_AUDIT_SKIPS=0 — ${#SKIPPED_CAP[@]} 'cannot run here' claim(s) will NOT be checked this run"
+fi
 for s in "${SKIPPED_STALE[@]:-}"; do
   [ -n "$s" ] && echo "gate: skipping STALE scene $s (sibling script is 'extends SceneTree'; a Node cannot take it)"
 done
@@ -311,14 +353,26 @@ VERDICT_RE='(: PASS \([0-9]+ checks\)$)|(: [0-9]+/[0-9]+ FAILED$)|(: NO CHECKS R
 
 run_one() {
   local unit="$1"
+  # $2 = tag. Empty for the real run. "audit" for a skip-audit re-run, which
+  # gets its own log and its own results file so it can neither clobber nor be
+  # mistaken for the real thing. Everything else about the run is identical —
+  # the audit has to be scored by the same rules or it proves nothing.
+  local tag="${2:-}"
   local lane="${unit%%|*}"
   local path="${unit#*|}"
   local name; name="$(basename "$path")"; name="${name%.*}"
   local gd="$path"; [ "$lane" = "B" ] && gd="${path%.tscn}.gd"
   local log="$OUT_DIR/logs/$name.log"
+  local results="$OUT_DIR/results.tsv"
+  local budget="$TIMEOUT"
+  if [ -n "$tag" ]; then
+    log="$OUT_DIR/logs/$name.$tag.log"
+    results="$OUT_DIR/$tag.tsv"
+    budget="$AUDIT_TIMEOUT"
+  fi
   local start; start=$(date +%s)
 
-  timeout "$TIMEOUT" bash -c "$(declare -f godot_run); GODOT='$GODOT' DRIVER='$DRIVER' godot_run '$lane' 'res://$path'" \
+  timeout "$budget" bash -c "$(declare -f godot_run); GODOT='$GODOT' DRIVER='$DRIVER' godot_run '$lane' 'res://$path'" \
     >"$log" 2>&1
   local code=$?
   local elapsed=$(( $(date +%s) - start ))
@@ -366,9 +420,10 @@ run_one() {
   # grep -c prints 0 and exits 1 when there is no match; swallow the status only.
   local noise; noise=$(grep -c 'SCRIPT ERROR' "$log" 2>/dev/null || true); noise=${noise:-0}
 
-  printf '%s\t%s\t%s\t%s\t%s\t%s\n' "$status" "$lane" "$name" "${elapsed}s" "$noise" "$log" >>"$OUT_DIR/results.tsv"
+  printf '%s\t%s\t%s\t%s\t%s\t%s\n' "$status" "$lane" "$name" "${elapsed}s" "$noise" "$log" >>"$results"
   local flag=""; [ "$noise" -gt 0 ] && flag=" (${noise} script errors)"
-  printf '  %-11s %s  %-44s %4ss%s\n' "$status" "$lane" "$name" "$elapsed" "$flag"
+  local mark="  "; [ -n "$tag" ] && mark="  $tag "
+  printf '%s%-11s %s  %-44s %4ss%s\n' "$mark" "$status" "$lane" "$name" "$elapsed" "$flag"
 }
 export -f godot_run
 
@@ -384,14 +439,6 @@ for entry in "${BAD_REQUIRE[@]:-}"; do
   printf '  %-11s %s  %-44s %4ss  (unknown gate-requires: %s)\n' "FAIL(cap)" "$lane" "$name" 0 "$token"
 done
 
-for entry in "${SKIPPED_CAP[@]:-}"; do
-  [ -n "$entry" ] || continue
-  lane="${entry%%|*}"; rest="${entry#*|}"
-  path="${rest%|*}"; token="${rest##*|}"
-  name="$(basename "$path")"; name="${name%.*}"
-  printf 'SKIP\t%s\t%s\t0s\t0\t%s\n' "$lane" "$name" "$OUT_DIR/probes/$token.log" >>"$OUT_DIR/results.tsv"
-done
-
 for u in "${RUN_UNITS[@]:-}"; do
   [ -n "$u" ] || continue
   run_one "$u" &
@@ -399,10 +446,73 @@ for u in "${RUN_UNITS[@]:-}"; do
 done
 wait
 
+# ---- skip audit ------------------------------------------------------------
+# See point 8 in the header. A "cannot run here" is a claim about the box, and
+# an unfalsifiable claim is worth nothing — the token a test declares is a
+# comment, correlated with nothing the test does. So the gate falsifies it by
+# experiment: re-run every unit it skipped, and if one PASSES, the marker was
+# excluding a working test and the whole run is RED.
+#
+# Runs after the real units, not alongside them, so the audit never competes
+# with the run whose numbers actually matter.
+FALSE_SKIP=()   # "<lane>|<path>|<token>" — skipped, then passed anyway
+: >"$OUT_DIR/audit.tsv"
+
+audit_row() {
+  # $1 = unit name, $2 = column (1 status, 4 elapsed). Empty if not audited.
+  awk -F'\t' -v n="$1" -v c="$2" '$3 == n { print $c; exit }' "$OUT_DIR/audit.tsv"
+}
+
+if [ "${#SKIPPED_CAP[@]}" -gt 0 ] && [ "$AUDIT" != "0" ]; then
+  echo
+  echo "gate: SKIP AUDIT — re-running ${#SKIPPED_CAP[@]} skipped unit(s) with the skip lifted."
+  echo "gate:   a skipped unit that PASSES here is a false claim and fails the gate."
+  for entry in "${SKIPPED_CAP[@]}"; do
+    [ -n "$entry" ] || continue
+    lane="${entry%%|*}"; rest="${entry#*|}"
+    path="${rest%|*}"
+    run_one "$lane|$path" audit &
+    while [ "$(jobs -rp | wc -l)" -ge "$JOBS" ]; do wait -n 2>/dev/null || true; done
+  done
+  wait
+  for entry in "${SKIPPED_CAP[@]}"; do
+    [ -n "$entry" ] || continue
+    rest="${entry#*|}"; path="${rest%|*}"
+    name="$(basename "$path")"; name="${name%.*}"
+    [ "$(audit_row "$name" 1)" = "PASS" ] && FALSE_SKIP+=("$entry")
+  done
+fi
+
+is_false_skip() {
+  for e in "${FALSE_SKIP[@]:-}"; do [ "$e" = "$1" ] && return 0; done
+  return 1
+}
+
+# Skip rows are written only now: whether a skip is an honest SKIP or a
+# FAIL(false-skip) is not known until the audit has answered.
+for entry in "${SKIPPED_CAP[@]:-}"; do
+  [ -n "$entry" ] || continue
+  lane="${entry%%|*}"; rest="${entry#*|}"
+  path="${rest%|*}"; token="${rest##*|}"
+  name="$(basename "$path")"; name="${name%.*}"
+  if is_false_skip "$entry"; then
+    # Elapsed and script-error noise are the audit run's — that run is the only
+    # evidence there is about this unit, so the row must point at it.
+    printf 'FAIL(false-skip)\t%s\t%s\t%s\t%s\t%s\n' \
+      "$lane" "$name" "$(audit_row "$name" 4)" "$(audit_row "$name" 5)" \
+      "$OUT_DIR/logs/$name.audit.log" >>"$OUT_DIR/results.tsv"
+  else
+    printf 'SKIP\t%s\t%s\t0s\t0\t%s\n' "$lane" "$name" "$OUT_DIR/probes/$token.log" >>"$OUT_DIR/results.tsv"
+  fi
+done
+
 # ---- report ----------------------------------------------------------------
 sort -k2,2 -k3,3 -o "$OUT_DIR/results.tsv" "$OUT_DIR/results.tsv"
-skipped=${#SKIPPED_CAP[@]}
-total=$(( ${#RUN_UNITS[@]} + ${#BAD_REQUIRE[@]} ))
+# A false skip is not a skip. It is a unit the gate proved it can run, so it
+# counts as a unit that ran — and failed.
+false_skips=${#FALSE_SKIP[@]}
+skipped=$(( ${#SKIPPED_CAP[@]} - false_skips ))
+total=$(( ${#RUN_UNITS[@]} + ${#BAD_REQUIRE[@]} + false_skips ))
 passed=$(grep -c $'^PASS\t' "$OUT_DIR/results.tsv" || true)
 noisy=$(awk -F'\t' '$5 > 0' "$OUT_DIR/results.tsv" | wc -l)
 failed=$(( total - passed ))
@@ -419,22 +529,49 @@ lane_line() {
 echo
 skip_note=""
 [ "$skipped" -gt 0 ] && skip_note=" · $skipped SKIPPED (cannot run here)"
+[ "$false_skips" -gt 0 ] && skip_note="$skip_note · $false_skips FALSE SKIP"
 echo "gate: $passed/$total passed$skip_note · $noisy with script-error noise · results in $OUT_DIR"
 lane_line A "--script"
 lane_line B "scene"
 
 # Skips are never silent: every one names the unit, the capability it declared,
-# and the probe expression that answered NO on this box.
+# the probe expression that answered NO on this box, and what happened when the
+# gate re-ran it anyway.
 if [ "$skipped" -gt 0 ]; then
   echo "gate: SKIPPED — declared a capability this box does not have"
   for entry in "${SKIPPED_CAP[@]}"; do
+    is_false_skip "$entry" && continue
     lane="${entry%%|*}"; rest="${entry#*|}"
     path="${rest%|*}"; token="${rest##*|}"
     name="$(basename "$path")"; name="${name%.*}"
     echo "  [$lane] $name — gate-requires: $token"
     echo "        probe: $(capability_expr "$token") → NO   ($OUT_DIR/probes/$token.log)"
+    if [ "$AUDIT" = "0" ]; then
+      echo "        audit: NOT RUN (GATE_AUDIT_SKIPS=0) — nothing checked this claim this run"
+    else
+      echo "        audit: re-ran it anyway → $(audit_row "$name" 1) in $(audit_row "$name" 4) — claim holds   ($OUT_DIR/logs/$name.audit.log)"
+    fi
   done
   echo "  These units did not run and did not pass. Re-run with GATE_NO_SKIP=1 to make them run anyway."
+fi
+
+# A skip that passes when forced is the failure mode this whole mechanism was
+# built to prevent, so it gets the loudest block in the report and its own
+# instructions. There is no honest reading of it: the box can run the test.
+if [ "$false_skips" -gt 0 ]; then
+  echo "gate: FALSE SKIP — declared 'cannot run here', then PASSED when the gate re-ran it"
+  for entry in "${FALSE_SKIP[@]}"; do
+    lane="${entry%%|*}"; rest="${entry#*|}"
+    path="${rest%|*}"; token="${rest##*|}"
+    gd="$path"; [ "$lane" = "B" ] && gd="${path%.tscn}.gd"
+    name="$(basename "$path")"; name="${name%.*}"
+    echo "  [$lane] $name — gate-requires: $token"
+    echo "        audit: PASS in $(audit_row "$name" 4)   ($OUT_DIR/logs/$name.audit.log)"
+    echo "        The marker is excluding a working test. Delete the"
+    echo "        '## gate-requires: $token' line from $gd — or, if the test really"
+    echo "        does need something this box lacks, name the capability it actually"
+    echo "        needs and add its probe to capability_expr() in tools/gate.sh."
+  done
 fi
 
 if [ "$failed" -gt 0 ]; then
@@ -448,6 +585,9 @@ if [ "$failed" -gt 0 ]; then
     elif [ "$status" = "FAIL(cap)" ]; then
       echo "      $log — add a probe to capability_expr() in tools/gate.sh, or drop the marker"
       continue
+    elif [ "$status" = "FAIL(false-skip)" ]; then
+      echo "      it skipped, then passed when re-run — see the FALSE SKIP block above"
+      continue
     fi
     grep -E 'SCRIPT ERROR|Parse Error|ERROR|FAIL|assert' "$log" 2>/dev/null | head -5 | sed 's/^/      /'
   done
@@ -456,8 +596,11 @@ if [ "$failed" -gt 0 ]; then
   exit 1
 fi
 
-if [ "$skipped" -gt 0 ]; then
-  echo "gate: GREEN · $skipped unit(s) could not run here — see SKIPPED above"
+if [ "$skipped" -gt 0 ] && [ "$AUDIT" = "0" ]; then
+  echo "gate: GREEN · $skipped unit(s) claimed they cannot run here and NOTHING CHECKED THAT CLAIM"
+  echo "gate:         (GATE_AUDIT_SKIPS=0). This run does not prove the skips are honest."
+elif [ "$skipped" -gt 0 ]; then
+  echo "gate: GREEN · $skipped unit(s) could not run here — audited, claim holds, see SKIPPED above"
 else
   echo "gate: GREEN"
 fi

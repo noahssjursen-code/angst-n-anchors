@@ -2,18 +2,23 @@ extends SceneTree
 
 const TestReport := preload("res://tests/support/test_report.gd")
 
-## The voxel brick vocabulary was wiped on 2026-07-24 with the Structure Studio
-## rework: `BrickCatalog.BRICKS` is `{}`, the two authored blueprints went with it,
-## and the building brick editor scene was retired. Nothing that names a brick id
-## can be placed, validated or baked until the rebuild lands — `set_brick()`,
-## `place_footprint()` and `BuildingRules.validate()` all gate on
-## `BrickCatalog.has()`. So this file covers the brick-independent half of the
-## blueprint pipeline plus the gates that keep dead vocabulary out of the catalog.
+## RESTORED 2026-08-09. The vocabulary, placement and bake claims in
+## `_check_vocabulary` and `_check_placement_and_bake` were inverted on feeb2a8
+## into assertions that the feature is ABSENT — "brick vocabulary is still
+## wiped", "no building brick survives", "only lighting and collision are
+## built". A test that the catalogue is empty cements the wipe as the correct
+## behaviour and goes red the day someone fixes it. They are back at the claims
+## they made before the wipe and are expected to FAIL while
+## `BrickCatalog.BRICKS` is `{}` (scripts/ship/brick_catalog.gd:17). They go
+## green when the vocabulary returns, not when the bounds are loosened.
 ##
-## The two tripwires in `_check_vocabulary_still_wiped` go red the moment the
-## vocabulary or a blueprint returns. That is the cue to restore the placement,
-## footprint and bake coverage this file carried before the wipe — see
-## `git show aabdf198` for what it used to assert.
+## The brick-independent coverage added alongside the inversion is kept — it is
+## real coverage. Its "refuses an uncatalogued id" checks now name
+## `UNKNOWN_BRICK`, which is not a brick under any vocabulary, so they exercise
+## the catalog gate rather than the wipe and survive the rebuild.
+
+## An id no vocabulary will ever define. Anything that must be refused names this.
+const UNKNOWN_BRICK := "not_a_brick_in_any_vocabulary"
 
 
 func _initialize() -> void:
@@ -23,7 +28,8 @@ func _initialize() -> void:
 
 
 func _run(t: TestReport) -> void:
-	_check_vocabulary_still_wiped(t)
+	_check_vocabulary(t)
+	_check_placement_and_bake(t)
 	_check_catalog_gate(t)
 	_check_grid_math(t)
 	_check_layout_bookkeeping(t)
@@ -32,40 +38,114 @@ func _run(t: TestReport) -> void:
 	_check_fitout(t)
 
 
-func _check_vocabulary_still_wiped(t: TestReport) -> void:
+## The building half of the shared brick vocabulary. Every check here reads
+## `BrickCatalog.BRICKS`, which is `{}` today.
+func _check_vocabulary(t: TestReport) -> void:
+	var door_fp := BrickCatalog.footprint_of("block_door")
+	t.check("door footprint must be 2×3×1", door_fp == Vector3i(2, 3, 1))
+	t.check("block is not ship-only", not BrickCatalog.has_tag("block", "ship_only"))
+	t.check("helm is ship-only", BrickCatalog.has_tag("helm", "ship_only"))
+	t.check("foundation is catalogued", BrickCatalog.has("foundation"))
+	t.check("roof_flat is catalogued", BrickCatalog.has("roof_flat"))
+	t.check("roof_slope_inv is catalogued", BrickCatalog.has("roof_slope_inv"))
+	t.check("building bricks include block", BrickCatalog.ids_for_buildings().has("block"))
+	t.check("building bricks exclude helm", not BrickCatalog.ids_for_buildings().has("helm"))
 	t.check(
-		"brick vocabulary is still wiped — when it returns, restore placement coverage here",
-		BrickCatalog.ids().is_empty(),
+		"building bricks exclude trommel_small",
+		not BrickCatalog.ids_for_buildings().has("trommel_small"),
 	)
-	t.check("no building brick survives the wipe either", BrickCatalog.ids_for_buildings().is_empty())
-	t.check(
-		"no blueprint is authored yet — when the first lands, assert it loads and validates",
-		BuildingBlueprintCatalog.ids().is_empty(),
-	)
-	t.check("the catalog therefore yields no layouts", BuildingBlueprintCatalog.all().is_empty())
 
 
-## Everything downstream of the catalog refuses ids it cannot resolve. These are
-## the checks that make the empty vocabulary a hard stop rather than silent rot.
+## Author a house out of real bricks, round-trip it, and bake it. The pre-wipe
+## end-to-end path — every `place_footprint` here needs a catalogued brick.
+func _check_placement_and_bake(t: TestReport) -> void:
+	var layout := BuildingLayout.new()
+	layout.blueprint_id = "roundtrip_house"
+	layout.display_name = "Roundtrip House"
+	layout.role = "decorative"
+	layout.grid_size = Vector3i(8, 6, 8)
+	var grid := layout.grid()
+	t.check("foundation places at (1,0,1)", layout.place_footprint(Vector3i(1, 0, 1), "foundation", 0, grid))
+	t.check("block places yawed at (1,1,1)", layout.place_footprint(Vector3i(1, 1, 1), "block", 90, grid))
+	t.check("door places at (3,0,1)", layout.place_footprint(Vector3i(3, 0, 1), "block_door", 0, grid))
+	t.check("door occupies six cells at 2×3×1", layout.count() == 1 + 1 + 6)
+	t.check(
+		"painted block places at (0,0,3)",
+		layout.place_footprint(Vector3i(0, 0, 3), "block", 0, null, Color(0.7, 0.2, 0.15)),
+	)
+	var painted := layout.get_brick(Vector3i(0, 0, 3))
+	t.check("painted brick stores colour", painted.has("color"))
+	t.check(
+		"painted brick keeps the requested colour",
+		BuildingLayout.color_from_entry(painted, "block").is_equal_approx(Color(0.7, 0.2, 0.15)),
+	)
+	t.check("floor places at (0,0,4)", layout.place_footprint(Vector3i(0, 0, 4), "floor", 0))
+	t.check("block stacks over the floor at (0,0,4)", layout.place_footprint(Vector3i(0, 0, 4), "block", 0))
+	var stacked := layout.get_brick(Vector3i(0, 0, 4))
+	t.check("the stacked cell reports block as its content", str(stacked.get("brick_id", "")) == "block")
+	## The pre-wipe file guarded the two surface claims with an early return, so
+	## an empty catalogue silently skipped the bake path below. Read the surface
+	## defensively instead — a missing surface is a red check, not a vanished one.
+	var surface: Dictionary = stacked.get("surface", {}) as Dictionary
+	t.check("floor remains under content in the same cell", stacked.has("surface"))
+	t.check("the retained surface is the floor", str(surface.get("brick_id", "")) == "floor")
+	t.check("erasing the stacked cell reports a removal", layout.erase_footprint_at(Vector3i(0, 0, 4)))
+	var floor_left := layout.get_brick(Vector3i(0, 0, 4))
+	t.check("erase strips content first, keeps floor", BuildingLayout.entry_is_surface_only(floor_left))
+	t.check(
+		"placement outside the grid is rejected",
+		not layout.place_footprint(Vector3i(9, 0, 0), "block", 0, grid),
+	)
+	var restored := BuildingLayout.from_dict(layout.to_dict())
+	t.check("the placed layout round-trips its primary cells", restored.iter_primary_cells().size() == 5)
+	t.check(
+		"placed yaw survives the dict round-trip",
+		int(restored.get_brick(Vector3i(1, 1, 1)).get("yaw", 0)) == 90,
+	)
+	t.check("the restored layout validates", bool(BuildingRules.validate(restored).get("ok", false)))
+
+	var fitout := BuildingFitout.build(restored)
+	t.check(
+		"the baked fitout carries the blueprint id",
+		str(fitout.get_meta("building_blueprint_id", "")) == "roundtrip_house",
+	)
+	## foundation, wall block, door, painted block, floor-only leftover, + collision
+	t.check("primary visuals plus collision root", fitout.get_child_count() == 5 + 1)
+	fitout.free()
+
+	t.check(
+		"harbourmaster_house is not a catalogued blueprint",
+		BuildingBlueprintCatalog.by_id("harbourmaster_house") == null,
+	)
+	# Filename stem is the public id.
+	for blueprint_id in BuildingBlueprintCatalog.ids():
+		var loaded := BuildingBlueprintCatalog.by_id(blueprint_id)
+		if not t.check("blueprint %s loads" % blueprint_id, loaded != null):
+			continue
+		t.check("blueprint %s reports its own id" % blueprint_id, loaded.blueprint_id == blueprint_id)
+
+
+## Everything downstream of the catalog refuses ids it cannot resolve. These
+## name UNKNOWN_BRICK, so they stay honest once the vocabulary is back.
 func _check_catalog_gate(t: TestReport) -> void:
 	var layout := BuildingLayout.new()
 	layout.grid_size = Vector3i(8, 6, 8)
-	t.check("set_brick refuses an uncatalogued id", not layout.set_brick(Vector3i(1, 0, 1), "block"))
+	t.check("set_brick refuses an uncatalogued id", not layout.set_brick(Vector3i(1, 0, 1), UNKNOWN_BRICK))
 	t.check(
 		"place_footprint refuses an uncatalogued id",
-		not layout.place_footprint(Vector3i(1, 0, 1), "block", 0),
+		not layout.place_footprint(Vector3i(1, 0, 1), UNKNOWN_BRICK, 0),
 	)
 	t.check("a refused placement stores nothing", layout.count() == 0)
 
 	## A blueprint carrying dead vocabulary must be rejected, not half-loaded.
 	var stale := BuildingLayout.new()
 	stale.grid_size = Vector3i(8, 6, 8)
-	stale.cells = {"1,0,1": {"brick_id": "block", "yaw": 0}}
+	stale.cells = {"1,0,1": {"brick_id": UNKNOWN_BRICK, "yaw": 0}}
 	var stale_report := BuildingRules.validate(stale)
 	t.check("a layout naming a dead brick fails validation", not bool(stale_report.get("ok", true)))
 	t.check(
 		"the error names the unknown brick",
-		_contains(stale_report.get("errors", PackedStringArray()), "Unknown brick 'block'"),
+		_contains(stale_report.get("errors", PackedStringArray()), "Unknown brick '%s'" % UNKNOWN_BRICK),
 	)
 
 	var blank_report := BuildingRules.validate(BuildingLayout.new())
@@ -101,7 +181,7 @@ func _check_grid_math(t: TestReport) -> void:
 	t.check("one cell past the width is out of bounds", not grid.in_bounds(Vector3i(8, 0, 0)))
 	t.check("a negative index is out of bounds", not grid.in_bounds(Vector3i(-1, 0, 0)))
 
-	## The 2×3×1 door footprint the pre-wipe test asserted, stated in grid terms.
+	## The 2×3×1 door footprint, stated in grid terms rather than catalog terms.
 	var upright := grid.footprint_cells(Vector3i(3, 0, 1), Vector3i(2, 3, 1), 0)
 	t.check("a 2×3×1 footprint occupies six cells", upright.size() == 6)
 	t.check("it spans two cells on X", upright.has(Vector3i(4, 0, 1)))
@@ -144,7 +224,7 @@ func _check_layout_bookkeeping(t: TestReport) -> void:
 	)
 	t.check(
 		"an unpainted uncatalogued brick falls back to neutral grey",
-		BuildingLayout.color_from_entry({"brick_id": "block"}, "block").is_equal_approx(
+		BuildingLayout.color_from_entry({"brick_id": UNKNOWN_BRICK}, UNKNOWN_BRICK).is_equal_approx(
 			Color(0.7, 0.7, 0.7)
 		),
 	)
@@ -264,11 +344,14 @@ func _check_serialisation(t: TestReport) -> void:
 	t.check("and it is now in bounds", oversize.grid().in_bounds(Vector3i(0, 0, 9)))
 
 
+## The fitout's structural scaffolding, exercised with a brick nothing can
+## resolve — so it claims "an unresolvable brick draws nothing", not "the
+## vocabulary is empty". The real bake claim lives in _check_placement_and_bake.
 func _check_fitout(t: TestReport) -> void:
 	var layout := BuildingLayout.new()
 	layout.blueprint_id = "roundtrip_house"
 	layout.grid_size = Vector3i(8, 6, 8)
-	layout.cells = {"1,0,1": {"brick_id": "block", "yaw": 0}}
+	layout.cells = {"1,0,1": {"brick_id": UNKNOWN_BRICK, "yaw": 0}}
 
 	var fitout := BuildingFitout.build(layout)
 	t.check("the fitout root uses the shared name", fitout.name == BuildingFitout.ROOT_NAME)
@@ -278,9 +361,7 @@ func _check_fitout(t: TestReport) -> void:
 	)
 	t.check("lighting is attached", fitout.get_node_or_null("BuildingLighting") != null)
 	t.check("a collision root is attached", fitout.get_node_or_null("Collision") != null)
-	## No brick in the layout is catalogued, so nothing is drawn — a stale blueprint
-	## bakes to an empty building rather than to placeholder boxes.
-	t.check("only lighting and collision are built", fitout.get_child_count() == 2)
+	t.check("an unresolvable brick draws nothing", fitout.get_child_count() == 2)
 	fitout.free()
 
 	var bare := BuildingFitout.build(layout, false)
@@ -297,7 +378,7 @@ func _check_fitout(t: TestReport) -> void:
 	var grid := layout.grid()
 	t.check(
 		"an unknown brick centres on its own cell",
-		BuildingFitout.footprint_center_local(grid, Vector3i(1, 0, 1), "block", 0).is_equal_approx(
+		BuildingFitout.footprint_center_local(grid, Vector3i(1, 0, 1), UNKNOWN_BRICK, 0).is_equal_approx(
 			grid.cell_center_local(Vector3i(1, 0, 1))
 		),
 	)

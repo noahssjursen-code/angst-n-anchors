@@ -568,10 +568,15 @@ static func _plate_layers(deck: Dictionary, wall_fallback: Color, deck_fallback:
 
 ## All collision boxes for the plan, offset into host-local space, as
 ## {center, size, yaw_deg}. Decks, stairs and axis-aligned walls report
-## yaw_deg 0.0; a diagonal wall reports the yaw its geometry was drawn with, and
-## a caller that drops it builds a collider the player walks straight through —
-## the same bug class as a stair you fall into. Every consumer must pass yaw_deg
-## on to its box shape.
+## yaw_deg 0.0; a diagonal wall reports the yaw its geometry was drawn with.
+## `size` is measured in the box's own frame, so a caller that builds a shape
+## from center + size alone has NOT built the box that was drawn — it has built
+## the axis-aligned one, which on a 45 degree bulwark leaves a wall the player
+## walks straight through and a phantom solid out over the open deck.
+##
+## DeckFitout.apply_plan (the production consumer) passes yaw_deg through to
+## BoatBody.add_walk_brick_collider, which applies it as the shape's Y rotation.
+## Anything else reading this list owes the same.
 static func collect_colliders(plan: StructurePlan, offset := Vector3.ZERO) -> Array:
 	var expanded := expand(plan)
 	var out: Array = []
