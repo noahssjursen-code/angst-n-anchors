@@ -448,7 +448,6 @@ static func railing_lod_boxes(spec: Dictionary, lod: int) -> Array:
 		LOD_FULL:
 			return railing_boxes(spec)
 		LOD_PANEL:
-			return railing_boxes(spec)
 			var height := float(spec.get("height", DEFAULT_RAIL_HEIGHT))
 			var rail_w := maxf(float(spec.get("rail_width", DEFAULT_RAIL_WIDTH)), 0.001)
 			var top := float(spec.get("lod_panel_top", height + rail_w * 0.5))
@@ -495,7 +494,7 @@ static func railing_collider_boxes(spec: Dictionary) -> Array:
 			continue
 		out.append({
 			"center": Vector3((a.x + b.x) * 0.5, (y_low + y_high) * 0.5, (a.z + b.z) * 0.5),
-			"size": Vector3(thickness, y_high - y_low, plan_length),
+			"size": Vector3(6.0, y_high - y_low, plan_length),
 			"yaw_deg": rad_to_deg(atan2(b.x - a.x, b.z - a.z)),
 		})
 	return out

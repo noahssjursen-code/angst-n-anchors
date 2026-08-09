@@ -354,10 +354,16 @@ func _test_railing_blocks_the_edge() -> void:
 		"...and at knee height, so nothing passes between the courses",
 		StructureEdge.point_inside_any(oriented, Vector3(14.25, 6.0 + 0.3, 24.0)),
 	)
-	## But it is a rail at the edge, not a wall across the deck.
+	## But it is a rail at the EDGE, not a wall across the deck. The mid-deck
+	## probe alone is too forgiving — a 6 m thick barrier survived it — so the
+	## tight probe half a metre inboard of the rail is the one that bites.
 	_t.check(
 		"the middle of the deck is still walkable",
 		not StructureEdge.point_inside_any(oriented, Vector3(8.0, 6.0 + 1.0, 24.0)),
+	)
+	_t.check(
+		"...and so is the deck 0.5 m inboard of the rail",
+		not StructureEdge.point_inside_any(oriented, Vector3(14.25 - 0.5, 6.0 + 1.0, 24.0)),
 	)
 	var top := -INF
 	for c_variant in colliders:
@@ -822,16 +828,21 @@ func _triangles(node: Node) -> int:
 	return total
 
 
+## Distinct colours carried by the RICHEST SINGLE SURFACE, not by the node.
+## Counting across the node passes even when the bake has split one colour per
+## surface, which is exactly the regression the caller is testing for.
 func _distinct_colours(node: Node) -> int:
-	var seen: Dictionary = {}
+	var most := 0
 	for child in node.get_children():
 		if child is MeshInstance3D:
 			var mesh := (child as MeshInstance3D).mesh as ArrayMesh
 			if mesh == null:
 				continue
 			for s in mesh.get_surface_count():
+				var seen: Dictionary = {}
 				var colours: Variant = mesh.surface_get_arrays(s)[Mesh.ARRAY_COLOR]
 				if colours != null:
 					for c in colours as PackedColorArray:
 						seen[c.to_rgba32()] = true
-	return seen.size()
+				most = maxi(most, seen.size())
+	return most
