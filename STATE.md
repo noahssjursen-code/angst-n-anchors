@@ -110,6 +110,17 @@ contract: `walls[] · decks[] · rooms[] · stairs[] · items[]` plus `format`, 
 
 ---
 
+## Owner decisions (2026-08-09)
+
+Settled. Do not relitigate; if one turns out to be wrong, raise it explicitly.
+
+| Question | Decision |
+|---|---|
+| Which internal apps are in scope | **Structure Studio** (rebuild to `branding/Angst n Anchors Structure Studio.dc.html`) and **`vessel_registration_audit`** (rebrand). The two legacy brick editors are **deleted** — scripts, scenes, and their tests — executing the retirement `AGENTS.md` already claims. |
+| Out of scope for now | Character/wardrobe authors (`character_body_author`, `character_wardrobe_author`, `character_fitted_wardrobe_author`, `icelander_sweater_author`) and the mp-server admin web UI. Their defects stay recorded here, unworked. |
+| Capture fidelity | **Accept GL/llvmpipe captures.** PNGs are evidence for layout, spacing, colour and typography — not shader accuracy. No lavapipe install. Every capture pairs with a machine-checkable assertion. |
+| False greens | **Fix the helper and fix the breakage.** Convert all 38 bare-`assert()` files, then fix whatever genuinely fails until the gate is honestly green. No quarantine list. |
+
 ## Next actions
 
 1. **Re-run `tools/gate.sh` clean** with nothing else on the box. Record the real

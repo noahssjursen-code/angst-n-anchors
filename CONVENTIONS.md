@@ -37,6 +37,16 @@ symlinked to the newest. This is deliberate: several agents and the orchestrator
 be running the gate at once, and an earlier version of this script wiped a live run
 with `rm -rf`. Do not reintroduce a shared output path.
 
+Two consequences, both learned the hard way:
+
+- **`.gate/latest` is not yours.** Any concurrent run repoints it. To follow your own
+  run, capture the id from the runner's first line (or set `GATE_RUN_ID`) and read
+  `.gate/<that-id>/results.tsv`. Watching `latest` will silently show you someone
+  else's numbers.
+- **Do not tell a recon/analysis agent that the gate exists** unless you want it run.
+  Agents helpfully run it, and on 4 cores that turns one 15-minute baseline into
+  three 40-minute ones. Name the gate in a wave prompt only when running it is the job.
+
 ### What the gate covers, and what it does not
 
 - **Covers:** the `extends SceneTree` tests under `tests/` — the ones runnable from a
