@@ -1,0 +1,565 @@
+{
+  "version": 1,
+  "notes": [
+    "The kit. Loaded by scripts/construction/part_catalog.gd.",
+    "Nothing here may name or assume a vessel: a part earns its entry by being useful across unrelated ship types.",
+    "Every entry is composed from the five primitives — spar, railing, wire, plate, sheer_band. Composites are data, not code: a player assembling an A-frame from two spars and a wire is doing exactly what gallows_a_frame does.",
+    "Dimensions are world units sized against the 1.8-unit human figure (CONVENTIONS 3a), never against a hull's display metres.",
+    "Local frame: +Y up, the run of a part along +X, outboard/forward along -Z. Placement yaw is applied by the caller.",
+    "compliance.tags drive registration counting and live-vs-baked; live is derived from VesselSkinBaker.LIVE_TAGS and may not be declared against."
+  ],
+
+  "parts": [
+    {
+      "id": "spar",
+      "display": "Spar",
+      "description": "One round member. Mast, post, boom, derrick, gallows leg, davit, stanchion, exhaust pipe, jackstaff, antenna, crane pedestal.",
+      "material": "steel",
+      "color": "#9aa3ab",
+      "mass_kg": 140.0,
+      "yaw_step": 15,
+      "params": {
+        "length": {"default": 6.0, "min": 0.3, "max": 30.0},
+        "radius": {"default": 0.09, "min": 0.02, "max": 1.5},
+        "taper": {"default": 0.75, "min": 0.05, "max": 3.0},
+        "sides": {"default": 8, "min": 3, "max": 32}
+      },
+      "build": [
+        {
+          "primitive": "spar",
+          "from": [0, 0, 0],
+          "to": [0, "$length", 0],
+          "radius": "$radius",
+          "sides": "$sides",
+          "taper": "$taper"
+        }
+      ]
+    },
+
+    {
+      "id": "railing_run",
+      "display": "Railing run",
+      "description": "Straight tube guardrail. Deck edge, walkway, upper deck, ladder cage.",
+      "material": "metal",
+      "color": "#c8ccd0",
+      "mass_kg": 45.0,
+      "yaw_step": 15,
+      "params": {
+        "length": {"default": 10.0, "min": 1.0, "max": 60.0},
+        "height": {"default": 1.1, "min": 0.6, "max": 1.6},
+        "post_pitch": {"default": 1.6, "min": 0.6, "max": 3.5}
+      },
+      "build": [
+        {
+          "primitive": "railing",
+          "path": [[0, 0, 0], ["$length", 0, 0]],
+          "height": "$height",
+          "post_pitch": "$post_pitch",
+          "rails": 3
+        }
+      ]
+    },
+
+    {
+      "id": "wire",
+      "display": "Wire",
+      "description": "One tensioned line with sag. Standing rigging, running rigging, stays, lifelines, aerials.",
+      "material": "metal",
+      "color": "#6f7378",
+      "mass_kg": 8.0,
+      "yaw_step": 15,
+      "params": {
+        "run": {"default": 8.0, "min": 0.5, "max": 60.0},
+        "rise": {"default": 4.0, "min": -30.0, "max": 30.0},
+        "sag": {"default": 0.15, "min": 0.0, "max": 4.0},
+        "radius": {"default": 0.025, "min": 0.005, "max": 0.15}
+      },
+      "build": [
+        {
+          "primitive": "wire",
+          "from": [0, 0, 0],
+          "to": ["$run", "$rise", 0],
+          "sag": "$sag",
+          "radius": "$radius"
+        }
+      ]
+    },
+
+    {
+      "id": "plate_raked",
+      "display": "Raked plate",
+      "description": "One flat quad leaning out of vertical. Raked windscreen, chine facet, knuckle, transom rake, funnel taper panel.",
+      "material": "painted",
+      "color": "#d5d8dc",
+      "mass_kg": 90.0,
+      "yaw_step": 15,
+      "params": {
+        "width": {"default": 3.0, "min": 0.5, "max": 20.0},
+        "height": {"default": 1.6, "min": 0.3, "max": 8.0},
+        "rake": {"default": 0.6, "min": -6.0, "max": 6.0},
+        "thickness": {"default": 0.08, "min": 0.02, "max": 0.4}
+      },
+      "build": [
+        {
+          "primitive": "plate",
+          "corners": [
+            [0, 0, 0],
+            ["$width", 0, 0],
+            ["$width", "$height", "$rake"],
+            [0, "$height", "$rake"]
+          ],
+          "thickness": "$thickness"
+        }
+      ]
+    },
+
+    {
+      "id": "sheer_band_run",
+      "display": "Sheer band",
+      "description": "Deck-edge band with per-station height — carries the sheer curve a hull loft cannot. Bulwark cap, rubbing strake, cove line.",
+      "material": "painted",
+      "color": "#e8e2d2",
+      "mass_kg": 60.0,
+      "yaw_step": 15,
+      "params": {
+        "length": {"default": 12.0, "min": 2.0, "max": 80.0},
+        "rise": {"default": 1.2, "min": 0.0, "max": 6.0},
+        "width": {"default": 0.22, "min": 0.05, "max": 1.0},
+        "thickness": {"default": 0.12, "min": 0.03, "max": 0.6}
+      },
+      "build": [
+        {
+          "primitive": "sheer_band",
+          "path": [
+            [0, "$rise", 0],
+            ["$length*0.35", "$rise*0.3", 0],
+            ["$length", 0, 0]
+          ],
+          "width": "$width",
+          "thickness": "$thickness"
+        }
+      ]
+    },
+
+    {
+      "id": "gallows_a_frame",
+      "display": "A-frame gallows",
+      "description": "Two spars meeting at a head with a cross wire. Trawl gallows, lifting frame, aerial frame, gantry.",
+      "material": "steel",
+      "color": "#8d9298",
+      "mass_kg": 480.0,
+      "yaw_step": 15,
+      "params": {
+        "height": {"default": 5.0, "min": 2.0, "max": 14.0},
+        "spread": {"default": 3.2, "min": 1.0, "max": 10.0},
+        "radius": {"default": 0.11, "min": 0.04, "max": 0.4}
+      },
+      "build": [
+        {
+          "primitive": "spar",
+          "from": ["$spread*-0.5", 0, 0],
+          "to": [0, "$height", 0],
+          "radius": "$radius",
+          "sides": 8
+        },
+        {
+          "primitive": "spar",
+          "from": ["$spread*0.5", 0, 0],
+          "to": [0, "$height", 0],
+          "radius": "$radius",
+          "sides": 8
+        },
+        {
+          "primitive": "wire",
+          "from": ["$spread*-0.35", "$height*0.5", 0],
+          "to": ["$spread*0.35", "$height*0.5", 0],
+          "sag": 0.06,
+          "radius": 0.03
+        }
+      ]
+    },
+
+    {
+      "id": "mast_with_platform",
+      "display": "Mast with platform",
+      "description": "Tapered spar, railed platform and two stays. Radar mast, signal mast, lookout post, aerial mast.",
+      "material": "steel",
+      "color": "#a8adb2",
+      "mass_kg": 640.0,
+      "yaw_step": 15,
+      "params": {
+        "height": {"default": 9.0, "min": 3.0, "max": 26.0},
+        "platform_at": {"default": 5.5, "min": 1.0, "max": 20.0},
+        "platform_size": {"default": 1.6, "min": 0.8, "max": 4.0},
+        "radius": {"default": 0.14, "min": 0.05, "max": 0.6},
+        "stay_run": {"default": 3.5, "min": 1.0, "max": 20.0}
+      },
+      "build": [
+        {
+          "primitive": "spar",
+          "from": [0, 0, 0],
+          "to": [0, "$height", 0],
+          "radius": "$radius",
+          "sides": 10,
+          "taper": 0.6
+        },
+        {
+          "primitive": "railing",
+          "path": [
+            ["$platform_size*-0.5", "$platform_at", "$platform_size*-0.5"],
+            ["$platform_size*0.5", "$platform_at", "$platform_size*-0.5"],
+            ["$platform_size*0.5", "$platform_at", "$platform_size*0.5"],
+            ["$platform_size*-0.5", "$platform_at", "$platform_size*0.5"],
+            ["$platform_size*-0.5", "$platform_at", "$platform_size*-0.5"]
+          ],
+          "height": 0.9,
+          "post_pitch": 0.8,
+          "rails": 2
+        },
+        {
+          "primitive": "wire",
+          "from": [0, "$height*0.92", 0],
+          "to": [0, 0, "$stay_run"],
+          "sag": 0.05
+        },
+        {
+          "primitive": "wire",
+          "from": [0, "$height*0.92", 0],
+          "to": [0, 0, "$stay_run*-1"],
+          "sag": 0.05
+        }
+      ]
+    },
+
+    {
+      "id": "funnel_tapered",
+      "display": "Tapered funnel",
+      "description": "Tapered body with a proud cap ring. Exhaust stack, vent trunk, chimney.",
+      "material": "painted",
+      "color": "#d8d5d0",
+      "mass_kg": 280.0,
+      "yaw_step": 15,
+      "params": {
+        "height": {"default": 3.2, "min": 1.0, "max": 10.0},
+        "radius": {"default": 0.85, "min": 0.2, "max": 3.0},
+        "taper": {"default": 0.78, "min": 0.2, "max": 1.5}
+      },
+      "build": [
+        {
+          "primitive": "spar",
+          "from": [0, 0, 0],
+          "to": [0, "$height", 0],
+          "radius": "$radius",
+          "sides": 16,
+          "taper": "$taper"
+        },
+        {
+          "primitive": "spar",
+          "from": [0, "$height-0.05", 0],
+          "to": [0, "$height+0.18", 0],
+          "radius": "$radius*0.9",
+          "sides": 16,
+          "taper": 1.12
+        }
+      ]
+    },
+
+    {
+      "id": "bulwark_capped",
+      "display": "Capped bulwark",
+      "description": "Plating that rises toward one end under a sheer band cap. Deck-edge bulwark, breakwater, screen.",
+      "material": "painted",
+      "color": "#e6e1d3",
+      "mass_kg": 420.0,
+      "yaw_step": 15,
+      "params": {
+        "length": {"default": 12.0, "min": 2.0, "max": 80.0},
+        "height_aft": {"default": 1.2, "min": 0.4, "max": 3.0},
+        "height_fwd": {"default": 2.1, "min": 0.4, "max": 4.0},
+        "cap_width": {"default": 0.24, "min": 0.08, "max": 0.8},
+        "thickness": {"default": 0.1, "min": 0.03, "max": 0.5}
+      },
+      "build": [
+        {
+          "primitive": "plate",
+          "corners": [
+            [0, 0, 0],
+            ["$length", 0, 0],
+            ["$length", "$height_aft", 0],
+            [0, "$height_fwd", 0]
+          ],
+          "thickness": "$thickness"
+        },
+        {
+          "primitive": "sheer_band",
+          "path": [
+            [0, "$height_fwd", 0],
+            ["$length*0.4", "$height_aft+0.35", 0],
+            ["$length", "$height_aft", 0]
+          ],
+          "width": "$cap_width",
+          "thickness": 0.09
+        }
+      ]
+    },
+
+    {
+      "id": "bench_seat",
+      "display": "Bench seat",
+      "description": "Seat and back on legs. Passenger seating on any deck, saloon or shelter.",
+      "material": "wood",
+      "color": "#a5794a",
+      "mass_kg": 60.0,
+      "yaw_step": 15,
+      "compliance": {"passenger_capacity": 3},
+      "params": {
+        "length": {"default": 1.8, "min": 0.8, "max": 6.0},
+        "height": {"default": 0.85, "min": 0.4, "max": 1.2},
+        "depth": {"default": 0.5, "min": 0.3, "max": 1.0}
+      },
+      "build": [
+        {
+          "primitive": "plate",
+          "corners": [
+            [0, "$height*0.55", 0],
+            ["$length", "$height*0.55", 0],
+            ["$length", "$height*0.55", "$depth"],
+            [0, "$height*0.55", "$depth"]
+          ],
+          "thickness": 0.06
+        },
+        {
+          "primitive": "plate",
+          "corners": [
+            [0, "$height*0.55", 0],
+            ["$length", "$height*0.55", 0],
+            ["$length", "$height", 0],
+            [0, "$height", 0]
+          ],
+          "thickness": 0.05
+        },
+        {
+          "primitive": "spar",
+          "from": [0.12, 0, "$depth*0.5"],
+          "to": [0.12, "$height*0.55", "$depth*0.5"],
+          "radius": 0.04,
+          "taper": 1.0
+        },
+        {
+          "primitive": "spar",
+          "from": ["$length-0.12", 0, "$depth*0.5"],
+          "to": ["$length-0.12", "$height*0.55", "$depth*0.5"],
+          "radius": 0.04,
+          "taper": 1.0
+        }
+      ]
+    },
+
+    {
+      "id": "bollard_pair",
+      "display": "Bollard pair",
+      "description": "Two flared posts on a common base. Mooring point on any deck edge or quay.",
+      "material": "steel",
+      "color": "#4d5257",
+      "mass_kg": 95.0,
+      "yaw_step": 15,
+      "compliance": {"tags": ["mooring"]},
+      "params": {
+        "spacing": {"default": 1.2, "min": 0.4, "max": 4.0},
+        "height": {"default": 0.55, "min": 0.25, "max": 1.2},
+        "radius": {"default": 0.11, "min": 0.05, "max": 0.3}
+      },
+      "build": [
+        {
+          "primitive": "spar",
+          "from": ["$spacing*-0.5", 0, 0],
+          "to": ["$spacing*-0.5", "$height", 0],
+          "radius": "$radius",
+          "sides": 12,
+          "taper": 1.35
+        },
+        {
+          "primitive": "spar",
+          "from": ["$spacing*0.5", 0, 0],
+          "to": ["$spacing*0.5", "$height", 0],
+          "radius": "$radius",
+          "sides": 12,
+          "taper": 1.35
+        }
+      ]
+    },
+
+    {
+      "id": "lantern_all_round",
+      "display": "All-round lantern",
+      "description": "Short post carrying an all-round white lens. Masthead light, anchor light, riding light.",
+      "material": "metal",
+      "color": "#f2efe4",
+      "mass_kg": 7.0,
+      "yaw_step": 15,
+      "compliance": {"tags": ["light", "nav_white"]},
+      "params": {
+        "height": {"default": 0.9, "min": 0.2, "max": 3.0}
+      },
+      "build": [
+        {
+          "primitive": "spar",
+          "from": [0, 0, 0],
+          "to": [0, "$height", 0],
+          "radius": 0.035,
+          "sides": 8,
+          "taper": 1.0
+        },
+        {
+          "primitive": "spar",
+          "from": [0, "$height", 0],
+          "to": [0, "$height+0.18", 0],
+          "radius": 0.09,
+          "sides": 12,
+          "taper": 1.0
+        }
+      ]
+    },
+
+    {
+      "id": "helm_console",
+      "display": "Helm console",
+      "description": "Raked instrument face between two grab rails. The steering position of any wheelhouse or open bridge.",
+      "material": "painted",
+      "color": "#3b4045",
+      "mass_kg": 130.0,
+      "yaw_step": 15,
+      "compliance": {"tags": ["helm"], "equipment_rating": 1},
+      "params": {
+        "width": {"default": 1.1, "min": 0.6, "max": 2.4},
+        "height": {"default": 1.0, "min": 0.6, "max": 1.6},
+        "depth": {"default": 0.55, "min": 0.3, "max": 1.2}
+      },
+      "build": [
+        {
+          "primitive": "plate",
+          "corners": [
+            ["$width*-0.5", 0, "$depth*0.5"],
+            ["$width*0.5", 0, "$depth*0.5"],
+            ["$width*0.5", "$height", "$depth*-0.2"],
+            ["$width*-0.5", "$height", "$depth*-0.2"]
+          ],
+          "thickness": 0.12
+        },
+        {
+          "primitive": "spar",
+          "from": ["$width*-0.5", "$height*0.5", "$depth*0.55"],
+          "to": ["$width*-0.5", "$height", "$depth*0.55"],
+          "radius": 0.025,
+          "taper": 1.0
+        },
+        {
+          "primitive": "spar",
+          "from": ["$width*0.5", "$height*0.5", "$depth*0.55"],
+          "to": ["$width*0.5", "$height", "$depth*0.55"],
+          "radius": 0.025,
+          "taper": 1.0
+        }
+      ]
+    },
+
+    {
+      "id": "net_drum",
+      "display": "Net drum",
+      "description": "Powered drum between two bearing legs. Net drum, warp winch, hose reel, cable reel.",
+      "material": "steel",
+      "color": "#7a5c3a",
+      "mass_kg": 900.0,
+      "yaw_step": 15,
+      "compliance": {"tags": ["fishing"], "equipment_rating": 2},
+      "params": {
+        "width": {"default": 2.4, "min": 1.0, "max": 6.0},
+        "radius": {"default": 0.55, "min": 0.2, "max": 1.4},
+        "height": {"default": 0.75, "min": 0.2, "max": 2.0}
+      },
+      "build": [
+        {
+          "primitive": "spar",
+          "from": ["$width*-0.5", "$height", 0],
+          "to": ["$width*0.5", "$height", 0],
+          "radius": "$radius",
+          "sides": 14,
+          "taper": 1.0
+        },
+        {
+          "primitive": "spar",
+          "from": ["$width*-0.45", 0, 0],
+          "to": ["$width*-0.45", "$height", 0],
+          "radius": 0.07,
+          "taper": 1.0
+        },
+        {
+          "primitive": "spar",
+          "from": ["$width*0.45", 0, 0],
+          "to": ["$width*0.45", "$height", 0],
+          "radius": 0.07,
+          "taper": 1.0
+        }
+      ]
+    },
+
+    {
+      "id": "hold_coaming",
+      "display": "Hold coaming",
+      "description": "Raised rim around a deck opening — declares the hold below it. Cargo hatch, fish hold, tank top.",
+      "material": "steel",
+      "color": "#5c6167",
+      "mass_kg": 1400.0,
+      "yaw_step": 15,
+      "compliance": {"tags": ["bulk_hold"], "hold_depth_m": 2.5},
+      "params": {
+        "length": {"default": 12.0, "min": 2.0, "max": 60.0},
+        "width": {"default": 6.0, "min": 1.0, "max": 30.0},
+        "height": {"default": 0.6, "min": 0.2, "max": 2.0},
+        "thickness": {"default": 0.12, "min": 0.04, "max": 0.5}
+      },
+      "build": [
+        {
+          "primitive": "plate",
+          "corners": [
+            ["$width*-0.5", 0, "$length*-0.5"],
+            ["$width*-0.5", 0, "$length*0.5"],
+            ["$width*-0.5", "$height", "$length*0.5"],
+            ["$width*-0.5", "$height", "$length*-0.5"]
+          ],
+          "thickness": "$thickness"
+        },
+        {
+          "primitive": "plate",
+          "corners": [
+            ["$width*0.5", 0, "$length*-0.5"],
+            ["$width*0.5", 0, "$length*0.5"],
+            ["$width*0.5", "$height", "$length*0.5"],
+            ["$width*0.5", "$height", "$length*-0.5"]
+          ],
+          "thickness": "$thickness"
+        },
+        {
+          "primitive": "plate",
+          "corners": [
+            ["$width*-0.5", 0, "$length*-0.5"],
+            ["$width*0.5", 0, "$length*-0.5"],
+            ["$width*0.5", "$height", "$length*-0.5"],
+            ["$width*-0.5", "$height", "$length*-0.5"]
+          ],
+          "thickness": "$thickness"
+        },
+        {
+          "primitive": "plate",
+          "corners": [
+            ["$width*-0.5", 0, "$length*0.5"],
+            ["$width*0.5", 0, "$length*0.5"],
+            ["$width*0.5", "$height", "$length*0.5"],
+            ["$width*-0.5", "$height", "$length*0.5"]
+          ],
+          "thickness": "$thickness"
+        }
+      ]
+    }
+  ]
+}

@@ -1,10 +1,10 @@
 {
   "version": 2,
-  "notes": "Reusable hull components only. Dimensions are in-world metres (2× real). Store ships add name, price, brick layout, and shaft power separately.",
+  "notes": "Reusable hull components only. loa_m/beam_m/depth_m are REAL METRES and one world unit is one metre \u2014 the player is 1.8. Deck-grid cells are 0.5 m, so a 28 m hull is 56 cells long; cell counts are a build resolution, not a size. Store ships add name, price, brick layout, and shaft power separately.",
   "hulls": [
     {
       "id": "hull_90x24",
-      "display": "90 × 24 m",
+      "display": "90 \u00d7 24 m",
       "shape": "pointed",
       "form": "full_bodied",
       "ship_class": "handysize_feeder",
@@ -17,7 +17,7 @@
     },
     {
       "id": "hull_120x28",
-      "display": "120 × 28 m",
+      "display": "120 \u00d7 28 m",
       "shape": "pointed",
       "form": "full_bodied",
       "ship_class": "handysize_feeder",
@@ -30,7 +30,7 @@
     },
     {
       "id": "hull_150x32",
-      "display": "150 × 32 m",
+      "display": "150 \u00d7 32 m",
       "shape": "pointed",
       "form": "full_bodied",
       "ship_class": "deep_sea_freighter",
@@ -43,7 +43,7 @@
     },
     {
       "id": "hull_70x18",
-      "display": "70 × 18 m",
+      "display": "70 \u00d7 18 m",
       "shape": "pointed",
       "form": "rounded_full",
       "ship_class": "handysize_feeder",
@@ -56,7 +56,7 @@
     },
     {
       "id": "hull_100x24",
-      "display": "100 × 24 m",
+      "display": "100 \u00d7 24 m",
       "shape": "pointed",
       "form": "rounded_full",
       "ship_class": "handysize_feeder",
@@ -69,7 +69,7 @@
     },
     {
       "id": "hull_130x28",
-      "display": "130 × 28 m",
+      "display": "130 \u00d7 28 m",
       "shape": "pointed",
       "form": "high_volume",
       "ship_class": "deep_sea_freighter",

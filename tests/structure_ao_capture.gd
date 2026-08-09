@@ -51,7 +51,10 @@ func _run() -> void:
 	var ao := StructureAO.for_plan(plan)
 	var baked := _bake_with_ao(plan, ao)
 	_check("the flat bake produced surfaces", _surfaces(flat) > 0)
-	_check("AO costs no extra surfaces", _surfaces(baked) == _surfaces(flat))
+	_check("AO costs no extra surfaces (flat %d, AO %d)" % [_surfaces(flat), _surfaces(baked)],
+		_surfaces(baked) == _surfaces(flat))
+	print("  flat names: %s" % [_names(flat)])
+	print("  AO names:   %s" % [_names(baked)])
 	_check("the AO bake carries a vertex colour channel", _has_colors(baked))
 
 	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(OUT_DIR))
@@ -129,14 +132,15 @@ func _bake_with_ao(plan: StructurePlan, ao: StructureAO) -> Node3D:
 		var bucket := buckets[key] as Dictionary
 		var st := bucket["st"] as SurfaceTool
 		var material := StandardMaterial3D.new()
-		material.albedo_color = bucket["color"] as Color
+		## Exactly what StructureBaker.bake() builds today: white albedo, colour
+		## carried per vertex. AO changes the vertex colour, not the material.
+		material.albedo_color = Color.WHITE
+		material.vertex_color_use_as_albedo = true
 		var response: Dictionary = StructureBaker.MATERIALS.get(
 			str(bucket["material"]), StructureBaker.MATERIALS["painted"]
 		)
 		material.roughness = float(response["roughness"])
 		material.metallic = float(response["metallic"])
-		## Step 3 of the recipe. Without this line the colours ride along unused.
-		material.vertex_color_use_as_albedo = true
 		st.set_material(material)
 		var mesh := st.commit()
 		if mesh != null and mesh.get_surface_count() > 0:
@@ -150,9 +154,9 @@ func _bake_with_ao(plan: StructurePlan, ao: StructureAO) -> Node3D:
 func _bucket(buckets: Dictionary, layer: Dictionary, ao: StructureAO) -> void:
 	var color := layer["color"] as Color
 	var material := str(layer["material"])
-	var key := "%s_%02x%02x%02x" % [
-		material, int(color.r * 255.0), int(color.g * 255.0), int(color.b * 255.0)
-	]
+	## Same bucket key the baker uses now: material only. Colour rides on the
+	## vertices, so two colours in one material still cost one draw call.
+	var key := material
 	if not buckets.has(key):
 		var st := SurfaceTool.new()
 		st.begin(Mesh.PRIMITIVE_TRIANGLES)
@@ -162,6 +166,7 @@ func _bucket(buckets: Dictionary, layer: Dictionary, ao: StructureAO) -> void:
 		layer["center"] as Vector3,
 		layer["size"] as Vector3,
 		layer.get("basis", Basis.IDENTITY) as Basis,
+		color,
 	)
 
 
@@ -174,6 +179,14 @@ func _load_plan() -> StructurePlan:
 	if not (parsed is Dictionary) or not StructurePlan.is_plan(parsed as Dictionary):
 		return null
 	return StructurePlan.from_dict(parsed as Dictionary)
+
+
+func _names(root: Node3D) -> Array:
+	var out: Array = []
+	for child in root.get_children():
+		if child is MeshInstance3D:
+			out.append(child.name)
+	return out
 
 
 func _surfaces(root: Node3D) -> int:

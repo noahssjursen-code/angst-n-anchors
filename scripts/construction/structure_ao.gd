@@ -1,10 +1,11 @@
 class_name StructureAO
 extends RefCounted
 
-## Bake-time ambient occlusion for StructurePlan geometry, written into vertex
-## COLOUR. No texture, no extra material, no extra surface, no extra draw call:
-## the occlusion rides in the vertex stream of the surfaces the baker already
-## emits, so a plan that bakes to 4 MeshInstance3D still bakes to 4.
+## Bake-time ambient occlusion for StructurePlan geometry, multiplied into the
+## vertex COLOUR the baker already writes. No texture, no extra material, no
+## extra surface, no extra draw call: the occlusion rides in the vertex stream
+## of the surfaces the bake emits anyway, so a plan that bakes to N
+## MeshInstance3D still bakes to N.
 ##
 ## WHY THIS EXISTS. Every face of every box is uniformly lit, which is the main
 ## reason these vessels read as stacked cardboard. Corners, wall/deck junctions,
@@ -61,27 +62,33 @@ extends RefCounted
 ## count, material count and draw calls do not.
 ##
 ## HOW THE BAKER CALLS THIS (later wave — structure_baker.gd is not touched by
-## this file). Three edits, in `StructureBaker`:
+## this file). As of the vertex-colour bucketing landed alongside this module,
+## `StructureBaker._append_box(st, center, size, basis, color)` already writes
+## the layer colour on every vertex and the bucket material already carries
+## `albedo_color = WHITE` + `vertex_color_use_as_albedo = true`. So AO is TWO
+## edits, and the emitter signature is deliberately identical to the one that is
+## there now:
 ##
 ##   1. In `bake()`, once, before the bucket walk:
 ##          var ao := StructureAO.for_plan(plan, offset)
 ##      (or `StructureAO.from_boxes(StructureBaker.collect_colliders(plan, offset))`
-##      if the collider list is already in hand.)
+##      if the collider list is already in hand.) Skip it when `ghost` is set —
+##      an unshaded x-ray does not want baked shadows.
 ##
-##   2. Thread it through `_bucket_layer(buckets, layer, offset, ao)` and swap
-##      the geometry emitter — `_append_box` becomes:
-##          ao.append_box(st, center + offset, size, basis)
-##      `append_box` reproduces `_append_box`'s clockwise-front winding and flat
-##      per-face normals exactly; it adds a vertex colour and, for faces larger
-##      than TESSEL, more triangles. It must REPLACE `_append_box` rather than
-##      run beside it: SurfaceTool fixes the vertex format from the first
-##      vertex, so a surface fed by both emitters loses the colour channel.
+##   2. Thread `ao` through `_bucket_layer` and swap the emitter call:
+##          _append_box(st, center + offset, size, basis, color)
+##      becomes
+##          ao.append_box(st, center + offset, size, basis, color)
+##      Same argument order, same clockwise-front winding, same flat per-face
+##      normals, same positions for any box under TESSEL. What changes: the
+##      colour written is `color * occlusion` instead of `color`, and a face
+##      longer than TESSEL is subdivided so the occlusion has vertices to live
+##      on. It must REPLACE `_append_box` in that bucket rather than run beside
+##      it — SurfaceTool fixes the vertex format from the first vertex.
 ##
-##   3. In the bucket commit loop, the material must consume the colour:
-##          material.vertex_color_use_as_albedo = true
-##      Without it the vertex colours are carried and ignored, and the bake
-##      looks exactly as flat as before. (Leave it OFF for `ghost` — an unshaded
-##      x-ray does not want baked shadows.)
+## Nothing else changes: the bucket key stays keyed by material, the material
+## stays white-albedo, and the draw-call count is untouched. If AO is ever wanted
+## as an on/off switch, keep `_append_box` and branch on `ao == null`.
 ##
 ## `for_plan` is the only entry point that knows about StructurePlan; the solver
 ## itself takes a plain Array of box dictionaries, so DeckFitout, a headless
@@ -472,7 +479,13 @@ func _candidates(point: Vector3) -> PackedInt32Array:
 ## vertex colour and subdivides faces longer than TESSEL so the occlusion has
 ## somewhere to live. Same clockwise-front winding, same flat per-face normals,
 ## same `basis`-about-own-centre convention. Returns the triangle count emitted.
-func append_box(st: SurfaceTool, center: Vector3, size: Vector3, basis := Basis.IDENTITY) -> int:
+func append_box(
+	st: SurfaceTool,
+	center: Vector3,
+	size: Vector3,
+	basis := Basis.IDENTITY,
+	tint := Color.WHITE,
+) -> int:
 	var h := size * 0.5
 	var corners := [
 		center + basis * Vector3(-h.x, -h.y, -h.z), center + basis * Vector3(h.x, -h.y, -h.z),
@@ -499,6 +512,7 @@ func append_box(st: SurfaceTool, center: Vector3, size: Vector3, basis := Basis.
 			corners[idx[1]] as Vector3,
 			corners[idx[3]] as Vector3,
 			normal,
+			tint,
 		)
 	return triangles
 
@@ -506,7 +520,7 @@ func append_box(st: SurfaceTool, center: Vector3, size: Vector3, basis := Basis.
 ## One rectangular face given its origin corner `a`, the corner reached along
 ## the first edge `b`, and the corner reached along the second edge `d`. The
 ## quad a->b->c->d is wound exactly as _append_box wound [i0,i1,i2,i3].
-func _emit_face(st: SurfaceTool, a: Vector3, b: Vector3, d: Vector3, normal: Vector3) -> int:
+func _emit_face(st: SurfaceTool, a: Vector3, b: Vector3, d: Vector3, normal: Vector3, tint: Color) -> int:
 	var edge_u := b - a
 	var edge_v := d - a
 	var nu := clampi(int(ceilf(edge_u.length() / TESSEL)), 1, MAX_SPLIT)
@@ -532,18 +546,22 @@ func _emit_face(st: SurfaceTool, a: Vector3, b: Vector3, d: Vector3, normal: Vec
 			var i10 := (iu + 1) * stride + iv
 			var i11 := i10 + 1
 			var i01 := i00 + 1
-			_vertex(st, normal, lattice[i00], shade[i00])
-			_vertex(st, normal, lattice[i10], shade[i10])
-			_vertex(st, normal, lattice[i11], shade[i11])
-			_vertex(st, normal, lattice[i00], shade[i00])
-			_vertex(st, normal, lattice[i11], shade[i11])
-			_vertex(st, normal, lattice[i01], shade[i01])
+			_vertex(st, normal, lattice[i00], shade[i00], tint)
+			_vertex(st, normal, lattice[i10], shade[i10], tint)
+			_vertex(st, normal, lattice[i11], shade[i11], tint)
+			_vertex(st, normal, lattice[i00], shade[i00], tint)
+			_vertex(st, normal, lattice[i11], shade[i11], tint)
+			_vertex(st, normal, lattice[i01], shade[i01], tint)
 	return nu * nv * 2
 
 
-func _vertex(st: SurfaceTool, normal: Vector3, point: Vector3, shade: float) -> void:
+## Vertex colour is albedo TIMES occlusion. StructureBaker already carries the
+## layer colour per vertex (albedo_color is white and vertex_color_use_as_albedo
+## is on), so AO cannot be written as a bare greyscale — that would repaint every
+## surface grey. It multiplies. Alpha is carried through untouched.
+func _vertex(st: SurfaceTool, normal: Vector3, point: Vector3, shade: float, tint: Color) -> void:
+	st.set_color(Color(tint.r * shade, tint.g * shade, tint.b * shade, tint.a))
 	st.set_normal(normal)
-	st.set_color(Color(shade, shade, shade))
 	st.add_vertex(point)
 
 

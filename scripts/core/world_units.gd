@@ -11,4 +11,4 @@ const PLAYER_HEIGHT_M := 1.8
 
 ## Default shipyard brick / deck grid cell edge (metres).
 ## A 30×24 m deck stays a 30×24 grid at the 1 m cell scale.
-const DECK_CELL_M := 1.0
+const DECK_CELL_M := 0.5

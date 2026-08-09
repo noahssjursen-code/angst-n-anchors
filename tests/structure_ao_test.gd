@@ -156,12 +156,17 @@ func _test_range_and_determinism() -> void:
 	_check("every AO factor lands in [MIN_AO, 1]", in_range)
 
 
+const TINT := Color(0.8, 0.5, 0.2)
+
+
 func _test_emitter_is_drop_in() -> void:
-	## Empty occluder set: AO is 1 everywhere, so only geometry is compared.
+	## Empty occluder set: the geometric term is 0 everywhere, so the only AO
+	## left is the sky term on the downward face — which makes this a clean test
+	## of BOTH the drop-in geometry and the colour = tint * occlusion rule.
 	var ao := StructureAO.from_boxes([])
 	var mine := SurfaceTool.new()
 	mine.begin(Mesh.PRIMITIVE_TRIANGLES)
-	var triangles := ao.append_box(mine, Vector3(1, 2, 3), Vector3(0.3, 0.4, 0.5))
+	var triangles := ao.append_box(mine, Vector3(1, 2, 3), Vector3(0.3, 0.4, 0.5), Basis.IDENTITY, TINT)
 	_check("a sub-TESSEL box still costs 12 triangles", triangles == 12)
 	var mesh := mine.commit()
 	var arrays: Array = mesh.surface_get_arrays(0)
@@ -185,6 +190,42 @@ func _test_emitter_is_drop_in() -> void:
 		if rh.dot(norms[tri * 3]) > -0.99:
 			winding_ok = false
 	_check("clockwise-front winding is preserved on every triangle", winding_ok)
+	## The colour rule: AO MULTIPLIES the layer colour the baker already writes
+	## per vertex. It never replaces it — a bare greyscale would repaint the
+	## whole vessel grey. Top face is unoccluded, underside carries the sky term.
+	var top_ao := ao.vertex_ao(Vector3(1, 2.2, 3), Vector3(0, 1, 0))
+	var bottom_ao := ao.vertex_ao(Vector3(1, 1.8, 3), Vector3(0, -1, 0))
+	var top_ok := true
+	var bottom_ok := true
+	var tinted := false
+	for i in verts.size():
+		if colors.size() != verts.size():
+			break
+		var expect := top_ao if norms[i].y > 0.5 else (bottom_ao if norms[i].y < -0.5 else 0.0)
+		if expect == 0.0:
+			continue
+		var want := Color(TINT.r * expect, TINT.g * expect, TINT.b * expect, TINT.a)
+		## SurfaceTool commits vertex colours as RGBA8, so one LSB is 1/255 =
+		## 0.0039. The tolerance is a hair over that — still two orders of
+		## magnitude tighter than the 0.093 error an emitter that dropped the
+		## occlusion multiply would produce.
+		var near := absf(colors[i].r - want.r) < 0.006 and absf(colors[i].g - want.g) < 0.006 \
+			and absf(colors[i].b - want.b) < 0.006
+		if norms[i].y > 0.5:
+			top_ok = top_ok and near
+		else:
+			bottom_ok = bottom_ok and near
+			tinted = true
+	var sample := Color.BLACK
+	for i in mini(colors.size(), verts.size()):
+		if norms[i].y < -0.5:
+			sample = colors[i]
+			break
+	print("  drop-in: top ao %.4f, underside ao %.4f, tint %s, underside vertex colour %s (want %s)"
+		% [top_ao, bottom_ao, TINT, sample,
+			Color(TINT.r * bottom_ao, TINT.g * bottom_ao, TINT.b * bottom_ao, TINT.a)])
+	_check("an unoccluded face keeps the layer colour exactly", top_ok and bottom_ao < top_ao)
+	_check("vertex colour is the layer colour times occlusion", bottom_ok and tinted)
 	## Exact equivalence with the baker's own emitter, when it is reachable.
 	if _baker_has("_append_box"):
 		var theirs := SurfaceTool.new()
@@ -325,18 +366,24 @@ func _shade_plan(plan: StructurePlan, ao: StructureAO) -> Dictionary:
 				boxes += 1
 				triangles += ao.append_box(
 					st, layer["center"] as Vector3, layer["size"] as Vector3,
-					layer.get("basis", Basis.IDENTITY) as Basis,
+					layer.get("basis", Basis.IDENTITY) as Basis, layer["color"] as Color,
 				)
 		for deck_variant in expanded["decks"] as Array:
 			for layer_variant in StructureBaker._plate_layers(deck_variant as Dictionary, wall_default, deck_default):
 				var layer := layer_variant as Dictionary
 				boxes += 1
-				triangles += ao.append_box(st, layer["center"] as Vector3, layer["size"] as Vector3)
+				triangles += ao.append_box(
+					st, layer["center"] as Vector3, layer["size"] as Vector3,
+					Basis.IDENTITY, layer["color"] as Color,
+				)
 		for stair_variant in expanded["stairs"] as Array:
 			for layer_variant in StructureBaker._stair_layers(stair_variant as Dictionary, deck_default):
 				var layer := layer_variant as Dictionary
 				boxes += 1
-				triangles += ao.append_box(st, layer["center"] as Vector3, layer["size"] as Vector3)
+				triangles += ao.append_box(
+					st, layer["center"] as Vector3, layer["size"] as Vector3,
+					Basis.IDENTITY, layer["color"] as Color,
+				)
 	else:
 		for box_variant in StructureBaker.collect_colliders(plan):
 			var box := box_variant as Dictionary

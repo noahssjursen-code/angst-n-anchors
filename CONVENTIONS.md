@@ -119,47 +119,47 @@ region, or a baked structure ships with a capture.
 
 ## 3a. Scale — read this before authoring any plan
 
-### The intended model (owner, 2026-08-09)
+### Settled, 2026-08-09. One world unit is one metre. Nothing is double-scale.
 
-**One deck-grid cell is 0.5 m. Two cells per metre.** A hull whose grid is 28 × 10 cells is a
-**14 × 5 m vessel**. The catalog's display strings are the true physical size; the numbers in a
-hull id are **cell counts, not metres**. The reason is detail: a 1 m grid is too coarse to build
-anything finer than a shed on.
+**The player is 1.8 m** (`scenes/shared/player.tscn`, capsule 1.8, eye 1.6, step 0.45, jump 0.9
+— all 1× human). **Hull `loa_m` / `beam_m` / `depth_m` are real metres.** `hull_28x10` is a
+**28 × 10 m vessel**. Size everything against the figure.
 
-**The player is 1.8 m** — `scenes/shared/player.tscn`, capsule 1.8, eye 1.6 — which is **3.6
-cells**. Size every human-scale thing against the figure: a door ~2.0 m (4 cells), a bulwark
-~1.0–1.2 m (2–2.4 cells), a handrail ~1.1 m (2.2 cells), a bollard ~0.6 m (1.2 cells).
+**Deck-grid cells are 0.5 m — two cells per metre.** That is a *build resolution*, not a size:
+a 28 m hull is 56 cells long. A 1 m grid was too coarse to build detail on, which is the only
+reason this constant exists.
+
+`half_beam` and `half_loa` derive from metres (`width × CELL_M × 0.5`), so the factors cancel
+and **changing `DECK_CELL_M` moves no geometry**. Verified: all fixtures re-rendered
+**byte-identical** (same MD5) after halving it, and the change caused **zero** new gate failures
+against a 1.0 control.
 
 **Anything under 0.5 m cannot sit on the grid at any resolution** — cleats, fairleads, chocks,
 blocks, sheaves, light fixtures, stanchions. Those are free-positioned items with float
 coordinates, which is why the item placement model does not snap.
 
-### The code does not agree yet — this is a known, tracked bug
+### How this was misread, twice, and how it was settled
 
-`WorldUnits.DECK_CELL_M` is **`1.0`**, so today the world is drawn at **2× physical scale while
-the player is drawn at 1×**. A hull labelled "14.0 × 5.0 m" spans 28 world units and reads as a
-28 m vessel beside the figure.
+The catalog carried a note reading "Dimensions are in-world metres (2× real)" and displayed
+`hull_28x10` as "14.0 × 5.0 m". Both were wrong — leftovers from a scaling decision that never
+landed — and between them they convinced two readers in a row that the world was double-scale.
+I then copied the mistake into this file, where every agent reads it.
 
-That is what made `probe_trawler_bow_bulwark`'s wheelhouse look wrong. The wheelhouse was not
-undersized — **the boat was twice too big**. Sizing the superstructure up to match would have
-buried the real defect under a second one.
+Five independent fields say 28 m and only a label and a comment said 14 m:
 
-**Author to the intended model, not to the current constant**, and expect fixtures to need
-re-authoring when the constant changes.
-
-### The conflict inside the hull data — unresolved, do not paper over it
-
-The hull catalog's dimensions were authored for the half-scale reading and its **physics for the
-full-scale one**:
-
-| | `hull_28x10` says | 14 m vessel would be | 28 m vessel would be |
+| Field | `hull_28x10` | a 14 × 5 m boat | a 28 × 10 m boat |
 |---|---|---|---|
-| `displacement_t` | 256 | ~30–60 t | ~250 t |
-| `default_shaft_power_kw` | 1871 | ~300–500 kW | ~1500–1900 kW |
+| `depth_m` | 5.6 | ~2.5–3 | ~5.5 |
+| `displacement_t` | 256 | 41–50 | 325–398 |
+| `default_shaft_power_kw` | 1871 | ~300–500 | ~1500–1900 |
 
-Displacement scales with the **cube**, so halving linear dimensions is an 8× volume change.
-Buoyancy, draft and every hydrostatics test read these numbers. Changing `DECK_CELL_M` without
-re-deriving them leaves every vessel eight times too heavy for its size.
+`tests/vessel_registration_test.gd` had been calling it the *"28×10 m starter"* the whole time.
+Labels and comments were corrected to match the data; no physics was touched.
+
+**The lesson, since it will recur: a display string and a comment are the two softest artefacts
+in a codebase.** When they disagree with five numeric fields and a test's own wording, they are
+what is wrong. Check the load-bearing data before believing the label — and before writing the
+label into a conventions file that every agent treats as ground truth.
 
 ### The rule that survives regardless
 

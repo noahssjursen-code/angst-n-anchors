@@ -247,19 +247,23 @@ func _test_legacy_migration() -> void:
 	}
 	var plan := StructurePlan.from_dict(legacy)
 	var first := plan.items[0] as Dictionary
+	## Expectations are restated in terms of the cell size rather than baked at
+	## 1 m: a concurrent wave moved DECK_CELL_M to 0.5 and a test that hardcodes
+	## metres goes red for the wrong reason.
+	var m := WorldUnits.DECK_CELL_M
 	_check("legacy plan still loads", plan.items.size() == 2)
 	_check("cell key is gone", not first.has("cell"))
 	_check("float position replaces it", first.has("at"))
 	## Cell (3,0,7) was a brick standing ON the deck in the middle of its cell.
 	_check(
 		"cell migrates to its base centre",
-		_near_v3(StructurePlan.item_at(first), Vector3(3.5, 0.0, 7.5))
+		_near_v3(StructurePlan.item_at(first), Vector3(3.5 * m, 0.0 * m, 7.5 * m))
 	)
 	_check("legacy yaw carries over unchanged", _near(float(first["yaw"]), 90.0))
 	var second := plan.items[1] as Dictionary
 	_check(
 		"stacked cell y becomes metres",
-		_near_v3(StructurePlan.item_at(second), Vector3(5.5, 2.0, 14.5))
+		_near_v3(StructurePlan.item_at(second), Vector3(5.5 * m, 2.0 * m, 14.5 * m))
 	)
 	_check("migrated items keep their ids", int(first["id"]) == 1 and int(second["id"]) == 2)
 	_check("next id continues past migrated items", plan.allocate_id() == 3)
@@ -267,7 +271,7 @@ func _test_legacy_migration() -> void:
 	var twice := StructurePlan.from_dict(plan.to_dict())
 	_check(
 		"migration is idempotent",
-		_near_v3(StructurePlan.item_at(twice.items[0] as Dictionary), Vector3(3.5, 0.0, 7.5))
+		_near_v3(StructurePlan.item_at(twice.items[0] as Dictionary), Vector3(3.5 * m, 0.0 * m, 7.5 * m))
 	)
 	_check(
 		"migrated plan is byte-stable afterwards",
@@ -295,9 +299,10 @@ func _test_migration_matches_deck_grid() -> void:
 	_check("cell_center_plan agrees with DeckGrid.cell_center_local", centre_ok)
 	var plan := StructurePlan.new()
 	var by_cell := plan.add_item_at_cell("mast", Vector3i(3, 0, 7), 90.0)
+	var m := WorldUnits.DECK_CELL_M
 	_check(
 		"add_item_at_cell lands where the migration lands",
-		_near_v3(StructurePlan.item_at(by_cell), Vector3(3.5, 0.0, 7.5))
+		_near_v3(StructurePlan.item_at(by_cell), Vector3(3.5 * m, 0.0 * m, 7.5 * m))
 	)
 
 
@@ -456,7 +461,11 @@ func _test_host_chain_and_cycle() -> void:
 
 func _test_frame_conversion() -> void:
 	var grid := DeckGrid.from_hull(28.0, 10.0, 2.0, 5.0)
-	_check("grid is the expected shape", grid.width == 10 and grid.length == 28)
+	var cell_m := WorldUnits.DECK_CELL_M
+	_check(
+		"grid is the expected shape",
+		grid.width == int(floor(10.0 / cell_m)) and grid.length == int(floor(28.0 / cell_m))
+	)
 	_check(
 		"plan y=0 is the deck plane, not cell 0's centre",
 		_near(StructurePlan.plan_to_local(Vector3.ZERO, grid).y, grid.deck_y)
@@ -465,7 +474,6 @@ func _test_frame_conversion() -> void:
 		"plan x=0 is the port edge corner, not a cell centre",
 		_near(StructurePlan.plan_to_local(Vector3.ZERO, grid).x, -grid.half_beam)
 	)
-	var cell_m := WorldUnits.DECK_CELL_M
 	var cell_ok := true
 	var trip_ok := true
 	for point in [
@@ -502,7 +510,13 @@ func _test_frame_conversion() -> void:
 	var plan := StructurePlan.new()
 	var light := plan.add_item("light_nav_port", Vector3(3.6, 1.05, 7.4))
 	var cell := StructurePlan.plan_to_cell(plan.item_transform(light).origin, grid)
-	_check("an item resolves into a countable grid cell", cell == Vector3i(3, 1, 7))
+	_check(
+		"an item resolves into a countable grid cell",
+		cell
+		== Vector3i(
+			int(floor(3.6 / cell_m)), int(floor(1.05 / cell_m)), int(floor(7.4 / cell_m))
+		)
+	)
 	_check(
 		"and that cell is on the port side by the rule's own test",
 		grid.cell_center_local(cell).x < 0.0

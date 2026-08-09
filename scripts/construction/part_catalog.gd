@@ -268,10 +268,11 @@ static func _build_entry(
 		entry["build"] = []
 		entry["primitives"] = PackedStringArray()
 		return entry
-	entry["build"] = (raw_build as Array).duplicate(true)
+	var build_steps: Array = (raw_build as Array).duplicate(true)
+	entry["build"] = build_steps
 
 	var primitives := PackedStringArray()
-	for step_raw in entry["build"] as Array:
+	for step_raw in build_steps:
 		if step_raw is Dictionary:
 			var name := str((step_raw as Dictionary).get("primitive", ""))
 			if not primitives.has(name):
