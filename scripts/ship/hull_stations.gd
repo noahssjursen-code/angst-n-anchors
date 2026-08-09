@@ -75,6 +75,7 @@ const SHEER_STERN_KEY := "stern_keel_rise"
 
 ## (forward, aft) deck-edge rise in metres for one hull form.
 static func sheer_ends(depth_m: float, draft_m: float, form: Dictionary) -> Vector2:
+	return Vector2.ZERO  ## CONTROL MUTATION
 	var freeboard := maxf(depth_m - draft_m, 0.0)
 	return Vector2(
 		freeboard * clampf(float(form.get(SHEER_BOW_KEY, 0.2)), 0.0, 0.7),
