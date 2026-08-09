@@ -91,7 +91,11 @@ const AABB_INFLATE_XZ := {"radius": 1.0, "thickness": 0.5, "width": 0.5}
 ## Scalars that raise the top of the box above its points.
 const AABB_EXTEND_UP: Array[String] = ["height"]
 
-const CELL_EPS := 1.0e-6
+## The kit is preloaded rather than named: `part_catalog.gd` declares
+## `class_name PartCatalog` but is newer than the project's global class cache,
+## and a script that names an unregistered global fails to COMPILE. Preloading
+## binds to the file and is correct either way.
+const Parts := preload("res://scripts/construction/part_catalog.gd")
 
 
 # ── VesselOutfit-shaped validation ──────────────────────────────────────────
@@ -125,7 +129,7 @@ static func validate(
 		var item := raw as Dictionary
 		var part_id := str(item.get("item_id", ""))
 		var item_id := int(item.get("id", -1))
-		if not PartCatalog.has(part_id):
+		if not Parts.has(part_id):
 			## Never silent: an unknown fitting is measured as nothing, and the
 			## builder is told which one and why.
 			warnings.append(
@@ -133,18 +137,18 @@ static func validate(
 				% [item_id, part_id]
 			)
 			continue
-		var slot := PartCatalog.outfit_slot_of(part_id)
+		var slot := Parts.outfit_slot_of(part_id)
 		if slot_items.has(slot):
 			(slot_items[slot] as Array).append(item_id)
 			if not _is_over_deck(plan, item, g):
 				warnings.append(
 					"Plan item %d (%s) is not over the vessel's deck."
-					% [item_id, PartCatalog.display_name(part_id)]
+					% [item_id, Parts.display_name(part_id)]
 				)
-		if PartCatalog.has_tag(part_id, "door"):
+		if Parts.has_tag(part_id, "door"):
 			door_items += 1
 		for tag in CARGO_TAGS:
-			if PartCatalog.has_tag(part_id, tag):
+			if Parts.has_tag(part_id, tag):
 				cargo_items.append(item)
 				break
 
@@ -246,16 +250,16 @@ static func measure(plan: StructurePlan, grid: DeckGrid, outfit: Dictionary) -> 
 				continue
 			var item := raw as Dictionary
 			var part_id := str(item.get("item_id", ""))
-			if not PartCatalog.has(part_id):
+			if not Parts.has(part_id):
 				continue
 			var cell := item_cell(plan, item, grid)
 			brick_counts[part_id] = int(brick_counts.get(part_id, 0)) + 1
 			if not positions.has(part_id):
 				positions[part_id] = []
 			(positions[part_id] as Array).append(cell)
-			var compliance_data := PartCatalog.compliance_of(part_id)
+			var compliance_data := Parts.compliance_of(part_id)
 			var rating := int(compliance_data.get("equipment_rating", 0))
-			for tag in PartCatalog.tags_of(part_id):
+			for tag in Parts.tags_of(part_id):
 				var key := str(tag)
 				tag_counts[key] = int(tag_counts.get(key, 0)) + 1
 				max_ratings[key] = maxi(int(max_ratings.get(key, 0)), rating)
@@ -396,6 +400,12 @@ static func item_cell(plan: StructurePlan, item: Dictionary, grid: DeckGrid) -> 
 
 ## Deck cells (y = 0) the item's own geometry covers, in plan space. Empty when
 ## the part is unknown or expands to nothing.
+##
+## A cell counts when its CENTRE lies under the part. Cover-any-overlap was the
+## first cut and it charged a 4 × 8 m hold for 45 m² of deck, because a 0.12 m
+## coaming skin reached across two more cell boundaries. Nobody should pay a
+## cell for a skin, and centre-in-box is the same rule a rasteriser uses for
+## area.
 static func item_footprint_cells(
 	plan: StructurePlan, item: Dictionary, grid: DeckGrid
 ) -> Array[Vector3i]:
@@ -419,11 +429,16 @@ static func item_footprint_cells(
 		lo = lo.min(corner)
 		hi = hi.max(corner)
 	var cell_lo := StructurePlan.plan_to_cell(Vector3(lo.x, 0.0, lo.z), grid)
-	var cell_hi := StructurePlan.plan_to_cell(
-		Vector3(hi.x - CELL_EPS, 0.0, hi.z - CELL_EPS), grid
-	)
+	var cell_hi := StructurePlan.plan_to_cell(Vector3(hi.x, 0.0, hi.z), grid)
+	var m := WorldUnits.DECK_CELL_M
 	for ix in range(cell_lo.x, cell_hi.x + 1):
+		var center_x := (float(ix) + 0.5) * m
+		if center_x < lo.x or center_x > hi.x:
+			continue
 		for iz in range(cell_lo.z, cell_hi.z + 1):
+			var center_z := (float(iz) + 0.5) * m
+			if center_z < lo.z or center_z > hi.z:
+				continue
 			out.append(Vector3i(ix, 0, iz))
 	return out
 
@@ -433,14 +448,14 @@ static func item_footprint_cells(
 ## that grows with a `$length` parameter grows here too — the footprint cannot
 ## be inflated by a prop the geometry does not honour.
 static func part_local_aabb(part_id: String, props: Dictionary = {}) -> Dictionary:
-	var result := PartCatalog.expand_checked(part_id, param_overrides(part_id, props))
+	var result := Parts.expand_checked(part_id, param_overrides(part_id, props))
 	var specs: Array = result.get("specs", [])
 	var lo := Vector3.INF
 	var hi := -Vector3.INF
 	var any := false
 	for spec_raw in specs:
 		var spec := spec_raw as Dictionary
-		var def: Dictionary = PartCatalog.PRIMITIVES.get(str(spec.get("primitive", "")), {})
+		var def: Dictionary = Parts.PRIMITIVES.get(str(spec.get("primitive", "")), {})
 		var fields: Dictionary = def.get("fields", {})
 		var points: Array[Vector3] = []
 		var inflate := 0.0
@@ -477,7 +492,7 @@ static func part_local_aabb(part_id: String, props: Dictionary = {}) -> Dictiona
 ## bag (colour region, label, whatever a later feature adds) is not a parameter
 ## and must not make `expand_checked` fail.
 static func param_overrides(part_id: String, props: Dictionary) -> Dictionary:
-	var declared: Dictionary = PartCatalog.get_entry(part_id).get("params", {})
+	var declared: Dictionary = Parts.get_entry(part_id).get("params", {})
 	var out := {}
 	for key in props.keys():
 		var name := str(key)

@@ -494,35 +494,39 @@ func _build_grid_lines() -> void:
 			var shape := DeckGrid.CellShape.FULL
 			if _deck_grid != null:
 				shape = _deck_grid.cell_shape(ix, iz)
-			var p := _plan_offset + Vector3(float(ix), y, float(iz))
+			## Cell index -> metres. DeckGrid.CELL_M is 0.5, so a cell index is NOT a
+			## metre offset; treating it as one drew the grid at twice the hull's size
+			## the moment the cell was halved for build detail.
+			var c := DeckGrid.CELL_M
+			var p := _plan_offset + Vector3(float(ix) * c, y, float(iz) * c)
 			match shape:
 				DeckGrid.CellShape.NONE:
 					continue
 				DeckGrid.CellShape.BOW_PORT_HALF:
 					## Solid corner is (+X, +Z); hypotenuse from (0,1) to (1,0)… draw
 					## diagonal plus the two kept edges.
-					im.surface_add_vertex(p + Vector3(1, 0, 0))
-					im.surface_add_vertex(p + Vector3(0, 0, 1))
-					im.surface_add_vertex(p + Vector3(1, 0, 0))
-					im.surface_add_vertex(p + Vector3(1, 0, 1))
-					im.surface_add_vertex(p + Vector3(0, 0, 1))
-					im.surface_add_vertex(p + Vector3(1, 0, 1))
+					im.surface_add_vertex(p + Vector3(c, 0, 0))
+					im.surface_add_vertex(p + Vector3(0, 0, c))
+					im.surface_add_vertex(p + Vector3(c, 0, 0))
+					im.surface_add_vertex(p + Vector3(c, 0, c))
+					im.surface_add_vertex(p + Vector3(0, 0, c))
+					im.surface_add_vertex(p + Vector3(c, 0, c))
 				DeckGrid.CellShape.BOW_STARBOARD_HALF:
 					im.surface_add_vertex(p + Vector3(0, 0, 0))
-					im.surface_add_vertex(p + Vector3(1, 0, 1))
+					im.surface_add_vertex(p + Vector3(c, 0, c))
 					im.surface_add_vertex(p + Vector3(0, 0, 0))
-					im.surface_add_vertex(p + Vector3(0, 0, 1))
-					im.surface_add_vertex(p + Vector3(0, 0, 1))
-					im.surface_add_vertex(p + Vector3(1, 0, 1))
+					im.surface_add_vertex(p + Vector3(0, 0, c))
+					im.surface_add_vertex(p + Vector3(0, 0, c))
+					im.surface_add_vertex(p + Vector3(c, 0, c))
 				_:
 					im.surface_add_vertex(p)
-					im.surface_add_vertex(p + Vector3(1, 0, 0))
+					im.surface_add_vertex(p + Vector3(c, 0, 0))
 					im.surface_add_vertex(p)
-					im.surface_add_vertex(p + Vector3(0, 0, 1))
-					im.surface_add_vertex(p + Vector3(1, 0, 0))
-					im.surface_add_vertex(p + Vector3(1, 0, 1))
-					im.surface_add_vertex(p + Vector3(0, 0, 1))
-					im.surface_add_vertex(p + Vector3(1, 0, 1))
+					im.surface_add_vertex(p + Vector3(0, 0, c))
+					im.surface_add_vertex(p + Vector3(c, 0, 0))
+					im.surface_add_vertex(p + Vector3(c, 0, c))
+					im.surface_add_vertex(p + Vector3(0, 0, c))
+					im.surface_add_vertex(p + Vector3(c, 0, c))
 	im.surface_end()
 	grid.mesh = im
 	var line_mat := StandardMaterial3D.new()
