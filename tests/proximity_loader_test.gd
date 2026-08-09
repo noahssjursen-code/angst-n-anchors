@@ -1,5 +1,6 @@
 extends SceneTree
 
+const TestReport := preload("res://tests/support/test_report.gd")
 const LOADER := preload("res://scripts/world/proximity_loader.gd")
 
 
@@ -12,6 +13,7 @@ func _initialize() -> void:
 
 
 func _run() -> void:
+	var t := TestReport.new("proximity_loader_test")
 	var loader := LOADER.new()
 	root.add_child(loader)
 	var created: Array[Node3D] = []
@@ -31,18 +33,17 @@ func _run() -> void:
 	second["debug_name"] = "second"
 	loader._queue_operation(first, "load")
 	loader._queue_operation(second, "load")
-	assert(loader._pending_operations.size() == 2)
+	t.check("both loads are queued", loader._pending_operations.size() == 2)
 	loader._process_one_operation()
-	assert(created.size() == 1)
-	assert(loader._pending_operations.size() == 1)
+	t.check("first operation built one port", created.size() == 1)
+	t.check("one operation left pending", loader._pending_operations.size() == 1)
 	loader._process_one_operation()
-	assert(created.size() == 2)
-	assert(loader._pending_operations.is_empty())
+	t.check("second operation built the other port", created.size() == 2)
+	t.check("queue drains", loader._pending_operations.is_empty())
 	for port in created:
 		port.rebuild_completed.emit(4.0)
 	loader.free()
 	for port in created:
 		if is_instance_valid(port):
 			port.free()
-	print("proximity_loader_test: PASS")
-	quit(0)
+	t.finish(self)

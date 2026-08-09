@@ -1,5 +1,6 @@
 extends SceneTree
 
+const TestReport := preload("res://tests/support/test_report.gd")
 const WORLD_RENDERER := preload("res://scripts/world/world_renderer.gd")
 
 
@@ -8,6 +9,7 @@ func _initialize() -> void:
 
 
 func _run() -> void:
+	var t := TestReport.new("ocean_wake_visual_capture")
 	var camera := Camera3D.new()
 	root.add_child(camera)
 	camera.current = true
@@ -23,16 +25,18 @@ func _run() -> void:
 	for _i in range(20):
 		await process_frame
 	var field := renderer.get_node("OceanWakeField") as OceanWakeField
-	assert(field != null)
+	if not t.check("renderer exposes an OceanWakeField", field != null):
+		t.finish(self)
+		return
 	if renderer.has_method("_apply_ocean_shader"):
 		renderer.call("_apply_ocean_shader", 1.0, 0.0, 0.0, 0.2, 0.0, 0.0)
 	field.set_process(false)
 	field.set_focus(Vector2.ZERO)
 	for i in range(24):
-		var t := float(i) / 23.0
+		var phase := float(i) / 23.0
 		var position := Vector2(
-			sin(t * PI) * 5.5,
-			lerpf(12.0, -34.0, t)
+			sin(phase * PI) * 5.5,
+			lerpf(12.0, -34.0, phase)
 		)
 		field.submit_emitter(
 			"visual-test", position, Vector2(0.0, 1.0),
@@ -43,7 +47,7 @@ func _run() -> void:
 		await process_frame
 	var image := root.get_viewport().get_texture().get_image()
 	var output_path := OS.get_user_data_dir().path_join("ocean_wake_visual.png")
-	assert(image.save_png(output_path) == OK)
+	t.check("wake capture written", image.save_png(output_path) == OK)
 	field.set_process(true)
 	for i in range(45):
 		field.submit_emitter(
@@ -63,4 +67,4 @@ func _run() -> void:
 	renderer.queue_free()
 	camera.queue_free()
 	await process_frame
-	quit()
+	t.finish(self)

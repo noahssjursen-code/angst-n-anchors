@@ -1,5 +1,6 @@
 extends SceneTree
 
+const TestReport := preload("res://tests/support/test_report.gd")
 const CLIPMAP := preload("res://scripts/ocean/ocean_clipmap.gd")
 const NEAR_SHADER := preload("res://resources/shaders/ocean_waves.gdshader")
 const MID_SHADER := preload("res://resources/shaders/ocean_waves_mid.gdshader")
@@ -12,6 +13,7 @@ func _initialize() -> void:
 
 
 func _run() -> void:
+	var t := TestReport.new("ocean_clipmap_smoke")
 	var clipmap := CLIPMAP.new()
 	root.add_child(clipmap)
 	var materials: Array[ShaderMaterial] = []
@@ -22,33 +24,35 @@ func _run() -> void:
 	clipmap.build(materials)
 
 	var stats: Dictionary = clipmap.get_debug_stats()
-	assert(int(stats["active_rings"]) == 9)
-	assert(int(stats["vertices"]) >= 90000)
-	assert(int(stats["vertices"]) <= 120000)
-	assert(int(stats["triangles"]) >= 170000)
-	assert(clipmap.get_child_count() == 9)
+	t.check("9 active rings", int(stats["active_rings"]) == 9)
+	t.check("at least 90000 vertices", int(stats["vertices"]) >= 90000)
+	t.check("at most 120000 vertices", int(stats["vertices"]) <= 120000)
+	t.check("at least 170000 triangles", int(stats["triangles"]) >= 170000)
+	if not t.check("9 ring children", clipmap.get_child_count() == 9):
+		t.finish(self)
+		return
 	for child in clipmap.get_children():
-		_assert_clockwise_surface(child)
+		_check_clockwise_surface(t, child)
 	for level in range(7):
 		var boundary_extent := 48.0 * pow(2.0, level)
 		var inner_edge := _boundary_points(clipmap.get_child(level), boundary_extent)
 		var outer_edge := _boundary_points(clipmap.get_child(level + 1), boundary_extent)
-		assert(inner_edge == outer_edge, "LOD %d/%d boundary is not watertight" % [level, level + 1])
+		t.check("LOD %d/%d boundary is not watertight" % [level, level + 1], inner_edge == outer_edge)
 	print("OceanClipmap smoke: %d vertices, %d triangles" % [
 		int(stats["vertices"]),
 		int(stats["triangles"]),
 	])
-	quit()
+	t.finish(self)
 
 
-func _assert_clockwise_surface(instance: MeshInstance3D) -> void:
+func _check_clockwise_surface(t: TestReport, instance: MeshInstance3D) -> void:
 	var arrays := instance.mesh.surface_get_arrays(0)
 	var vertices: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
 	var indices: PackedInt32Array = arrays[Mesh.ARRAY_INDEX]
 	var a := vertices[indices[0]]
 	var b := vertices[indices[1]]
 	var c := vertices[indices[2]]
-	assert((b - a).cross(c - a).y < 0.0, "%s is back-face culled from above" % instance.name)
+	t.check("%s is back-face culled from above" % instance.name, (b - a).cross(c - a).y < 0.0)
 
 
 func _boundary_points(instance: MeshInstance3D, extent: float) -> Dictionary:

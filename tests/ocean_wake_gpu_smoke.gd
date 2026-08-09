@@ -1,15 +1,20 @@
 extends SceneTree
 
+const TestReport := preload("res://tests/support/test_report.gd")
+
 
 func _initialize() -> void:
 	call_deferred("_run")
 
 
 func _run() -> void:
+	var t := TestReport.new("ocean_wake_gpu_smoke")
 	var field := OceanWakeField.new()
 	root.add_child(field)
 	await process_frame
-	assert(field.rd != null, "Wake GPU smoke requires RenderingDevice")
+	if not t.check("Wake GPU smoke requires RenderingDevice", field.rd != null):
+		t.finish(self)
+		return
 	field.set_process(false)
 	field.set_focus(Vector2.ZERO)
 	for i in range(8):
@@ -45,7 +50,7 @@ func _run() -> void:
 		for x in range(center - 6, center + 7):
 			var pixel := image.get_pixel(x, y)
 			strongest = maxf(strongest, maxf(pixel.r, pixel.g))
-	assert(strongest > 0.08, "GPU emitter injection did not reach wake field")
+	t.check("GPU emitter injection did not reach wake field", strongest > 0.08)
 
 	var stats := field.get_debug_stats()
 	print(
@@ -57,4 +62,4 @@ func _run() -> void:
 	)
 	field.queue_free()
 	await process_frame
-	quit()
+	t.finish(self)

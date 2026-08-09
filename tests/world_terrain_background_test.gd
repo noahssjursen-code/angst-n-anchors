@@ -1,5 +1,6 @@
 extends SceneTree
 
+const TestReport := preload("res://tests/support/test_report.gd")
 const GENERATOR := preload("res://scripts/world/world_layout_generator.gd")
 const STREAMER := preload("res://scripts/world/world_terrain_streamer.gd")
 
@@ -9,6 +10,7 @@ func _initialize() -> void:
 
 
 func _run() -> void:
+	var t := TestReport.new("world_terrain_background_test")
 	var layout: WorldLayout = GENERATOR.generate(90210)
 	var streamer := STREAMER.new()
 	streamer.visual_radius_m = 1200.0
@@ -21,8 +23,10 @@ func _run() -> void:
 			and Time.get_ticks_msec() < deadline:
 		await process_frame
 	var stats := streamer.get_debug_stats()
-	assert(int(stats.get("loaded", 0)) > 0)
-	assert(bool(stats.get("build_in_flight", false)) or int(stats.get("pending", 0)) >= 0)
+	t.check("streamer loaded a tile", int(stats.get("loaded", 0)) > 0)
+	t.check(
+		"build is in flight or the pending count is sane",
+		bool(stats.get("build_in_flight", false)) or int(stats.get("pending", 0)) >= 0,
+	)
 	streamer.free()
-	print("world_terrain_background_test: PASS")
-	quit(0)
+	t.finish(self)

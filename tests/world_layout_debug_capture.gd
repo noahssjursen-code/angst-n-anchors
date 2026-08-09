@@ -1,5 +1,6 @@
 extends SceneTree
 
+const TestReport := preload("res://tests/support/test_report.gd")
 const GENERATOR := preload("res://scripts/world/world_layout_generator.gd")
 const PORT_PLACER := preload("res://scripts/world/coastal_port_placer.gd")
 const IMAGE_SIZE := 256
@@ -7,6 +8,7 @@ const REPRESENTATIVE_SEEDS := [42, 90210, 8675309]
 
 
 func _initialize() -> void:
+	var t := TestReport.new("world_layout_debug_capture")
 	var output_dir := OS.get_user_data_dir().path_join("world_layout_debug")
 	DirAccess.make_dir_recursive_absolute(output_dir)
 	var captures_written := 0
@@ -17,12 +19,12 @@ func _initialize() -> void:
 		var ports: Array[PortDefinition] = PORT_PLACER.place_ports(layout, 35)
 		var image := _render(layout, ports)
 		var path := output_dir.path_join("norway_coast_%d.png" % seed)
-		assert(image.save_png(path) == OK)
+		t.check("seed %d capture written" % seed, image.save_png(path) == OK)
 		print("WorldLayout debug capture: %s checksum=%s" % [path, layout.layout_checksum])
 		captures_written += 1
-	assert(captures_written == capture_seeds.size())
+	t.equal("captures written", captures_written, capture_seeds.size())
 	print("WorldLayout debug captures: wrote %d representative seeds" % captures_written)
-	quit()
+	t.finish(self)
 
 
 func _requested_seeds() -> Array[int]:

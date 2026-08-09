@@ -1,7 +1,9 @@
 extends SceneTree
 
+const TestReport := preload("res://tests/support/test_report.gd")
 const WORLD_RENDERER := preload("res://scripts/world/world_renderer.gd")
 var _gpu_capture_available := false
+var _t: RefCounted
 
 
 func _initialize() -> void:
@@ -9,6 +11,7 @@ func _initialize() -> void:
 
 
 func _run() -> void:
+	_t = TestReport.new("weather_visual_capture")
 	WeatherField.world_seed = 7241
 	WeatherFrontField.initialize(7241)
 	LandField.initialize([{
@@ -49,6 +52,9 @@ func _run() -> void:
 	)
 
 	var severe := _strongest_front_sample()
+	if severe.is_empty():
+		_t.finish(self)
+		return
 	await _capture(output_dir, "04_approaching_front.png", severe["edge"], 0.47)
 	await _capture(output_dir, "05_gale_core.png", severe["core"], 0.43)
 	var fog_state := _state_for_mood("foggy_calm")
@@ -78,7 +84,7 @@ func _run() -> void:
 	if camera != null:
 		camera.queue_free()
 	await process_frame
-	quit()
+	_t.finish(self)
 
 
 func _state_for_mood(mood_id: String) -> WeatherState:
@@ -157,7 +163,8 @@ func _strongest_front_sample() -> Dictionary:
 				best = activity
 				best_front = front
 				best_time = float(hour)
-	assert(best_front != null)
+	if not _t.check("a front is active in the first 96 hours", best_front != null):
+		return {}
 	var center := best_front.center_at(best_time, WeatherFrontField.WORLD_HALF_EXTENT_M)
 	var direction := best_front.velocity_m_per_game_hour.normalized()
 	var edge := center - direction * best_front.radius_m * 0.78
@@ -174,7 +181,11 @@ func _capture(output_dir: String, filename: String, sample: WeatherSample, time_
 func _capture_state(output_dir: String, filename: String, state: WeatherState, time_of_day: float) -> void:
 	var clock := root.get_node_or_null("WorldClock")
 	var lighting := root.get_node_or_null("WeatherLighting")
-	assert(clock != null and lighting != null)
+	if not _t.check(
+		"%s: WorldClock and WeatherLighting are present" % filename,
+		clock != null and lighting != null,
+	):
+		return
 	clock.call("snap_time_of_day", time_of_day)
 	lighting.call("apply_weather_state", state)
 	for _i in range(8):
@@ -190,7 +201,7 @@ func _capture_state(output_dir: String, filename: String, state: WeatherState, t
 			await process_frame
 	if image == null or image.is_empty():
 		image = _diagnostic_image(state, time_of_day)
-	assert(image.save_png(output_dir.path_join(filename)) == OK)
+	_t.check("%s written" % filename, image.save_png(output_dir.path_join(filename)) == OK)
 
 
 func _diagnostic_image(state: WeatherState, time_of_day: float) -> Image:

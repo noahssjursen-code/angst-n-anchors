@@ -1,5 +1,6 @@
 extends SceneTree
 
+const TestReport := preload("res://tests/support/test_report.gd")
 const SEED := 77127
 const GENERATOR := preload("res://scripts/world/world_layout_generator.gd")
 const PLACER := preload("res://scripts/world/coastal_port_placer.gd")
@@ -11,6 +12,7 @@ func _initialize() -> void:
 
 
 func _run() -> void:
+	var t := TestReport.new("shipping_traffic_artifact_test")
 	var layout := GENERATOR.generate(SEED) as WorldLayout
 	var names := PackedStringArray()
 	for index in range(8):
@@ -28,6 +30,6 @@ func _run() -> void:
 	summary["wall_clock_simulation_ms"] = float(Time.get_ticks_usec() - started) / 1000.0
 	var artifact: Dictionary = RENDERER.save_artifacts(
 		"user://traffic_lab_artifacts", network, simulator.vessel_records(), summary)
-	assert(bool(artifact.get("ok", false)))
-	print("Traffic artifact PASS: %s" % JSON.stringify(artifact))
-	quit(0)
+	t.check("artifacts saved", bool(artifact.get("ok", false)))
+	print("Traffic artifact: %s" % JSON.stringify(artifact))
+	t.finish(self)
