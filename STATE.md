@@ -66,15 +66,72 @@ it reads as real, it is a gameplay attach point (`get_bridge_stations()`,
 `get_cargo_pads()`, `get_fishing_systems()`), and `VesselCompliance` can count, locate and
 rule on it. A part that cannot be validated cannot be in a ship one player sells another.
 
-### Open design fork — resolved, cheap to reverse
+### The design fork was moot — measured, not argued
 
-`AGENTS.md` lists nav lights and mooring cleats under *"Always on BoatBody (core)"* —
-auto-provided. The registration rules require the player to fit them, correctly placed.
-Both cannot be true: if automatic, certification is theatre.
+`AGENTS.md` lists nav lights and mooring cleats under *"Always on BoatBody (core)"*, which
+looked like it contradicted the registration rules. It does not, because **the auto-fit path
+is dead code**: `DeckFitout.ensure_auto_utilities()` (`deck_fitout.gd:990-1033`) builds
+exactly the four cleats and four nav lights the doc promises and **has zero callers**. The
+only trace left is `"AutoUtilities"` in three hull scripts' teardown lists
+(`catalog_hull_vessel.gd:224`, `fishing_trawler_small.gd:190`, `passenger_catamaran.gd:209`)
+— they clear a node nothing creates. Neither hand-authored vessel scene contains a
+`MooringPoint` or `ShipLight` either.
 
-**Taken:** nav lights and mooring points become **placeable, positioned, validated parts**.
-Auto-fit survives only as a convenience default on author-made starter vessels. Flagged to
-the owner; reverse on request.
+So player-placed is not a decision, it is the only remaining source. `AGENTS.md` is drifted
+and should be corrected. `MooringComponent` already warns when it finds no cleats
+(`mooring_component.gd:899`); `ShipLighting` silently drives an empty list
+(`ship_lighting.gd:55`).
+
+### Three findings that reshape the work
+
+**1. No vessel can pass `general_vessel` today — certification is 100 % failing.**
+`BrickCatalog.BRICKS` is literally `{}` (`brick_catalog.gd:17`). Every rule kind routing
+through `BrickCatalog.has()` / `has_tag()` / `get_entry()` measures zero, and `brick_side`
+explicitly fails at zero (`vessel_compliance.gd:224`). Of `general_vessel`'s 8 checklist
+items, none can pass. The rule engine is live and correct; its input vocabulary is empty.
+
+**2. A Structure Studio ship cannot be saved or deployed.** `DeckFitout.apply_plan` returns a
+hardcoded `{"outfit_ok": true}` (`deck_fitout.gd:68-72`) and never calls `VesselCompliance`.
+Meanwhile `PlayerSession.persist_vessel_configuration` (`player_session.gd:408`) and
+`VesselSpawn.resolve_deployable_record` (`vessel_spawn.gd:238`) both run
+`BrickLayout.from_dict(plan_dict)` — a plan has no `cells` key → empty layout → `helm` fails
+→ **refuses to save, refuses to spawn**. This is a hard blocker on the entire premise of
+hiring ships out or selling them, and it is a data-shape blocker, not only a rules one.
+
+**3. `items[]` is inert.** `StructurePlan` declares, builds, serialises, rehydrates and counts
+it (`structure_plan.gd:45,111,157,170`) — and **nothing reads it**. `StructureBaker.bake` and
+`collect_colliders` iterate only walls/decks/stairs. Structure Studio has no ITEM tool
+(`structure_studio.gd:39`). There is also no item catalog: `item_id` resolves to nothing.
+`add_item` takes a `Vector3i` cell, so items would snap to metre cubes — the exact blockiness
+the voxel era was dropped for. Sub-cell position plus a host/face reference is the minimum.
+
+### Rule-engine defects worth fixing when the vocabulary lands
+
+- **`catch_deck` is satisfied by owning a hull.** `exposed_deck_cells` is computed purely from
+  hull geometry (`vessel_outfit.gd:246-254`), not from build content. Every hull has hundreds.
+  If it should mean "unobstructed working deck", that measurement does not exist.
+- **`has_cabin` is `door_n >= 1 or wall_n >= 8`** (`vessel_outfit.gd:221`) — eight walls, no
+  roof, no door passes. Plans already draw real enclosure via `rooms[]` + `open_faces`.
+- **The white-light rules disagree.** `white_light` counts the *tag* `nav_white`;
+  `white_above_sidelights` reads the *brick ids* `light_nav_white` / `light_mast_white`
+  (`vessel_compliance.gd:270-271`). A light with the tag but neither id passes one and fails
+  the other.
+- **`brick_side` tests x against exactly `0.0`** (`vessel_compliance.gd:252-264`). On an
+  odd-width grid a centreline cell counts as neither side. Latent — all catalog hulls have
+  even beam.
+- **Plan and grid coordinate frames differ.** Plan coords are corner-based whole metres with
+  y in metres (`structure_plan.gd:24-26`); `DeckGrid` is cell-index based with centre
+  conversion and y in cell units (`deck_grid.gd:92-97`). Off by half a cell in x/z and by
+  `CELL_M` in y. Pick one before writing plan-side measurement.
+
+### A second family of false greens
+
+`tests/vessel_registration_test.gd` is **hollow**: five of its eight sub-tests open with
+`var entry := _official_trawler(); if entry.is_empty(): return` (`:50`, `:81`, `:148`, `:170`,
+`:201`). `resources/data/vessels/prebuilt/` contains only `.gitkeep`, so they all return
+immediately and the test reports success while asserting nothing. The `assert()` conversion
+will not catch this shape — it is early-return-on-missing-fixture, not a broken assertion.
+Audit the suite for it separately.
 
 ---
 
@@ -245,9 +302,34 @@ The reference-matching loop:
 **Exit:** each of the four categories has a reference build that reads correctly and passes
 its registration, with captures and gate tests to prove both.
 
-### M3 — Compliance on plans
-Reconnect `VesselCompliance` to `structure_plan_v1`. Retire the brick-id rule kinds in
-favour of the new vocabulary. `vessel_registration_audit` rebuilt as the moderation console.
+### M3 — Compliance on plans · LOAD-BEARING, NOT OPTIONAL
+Reconnect `VesselCompliance` to `structure_plan_v1`. Until this lands, a Structure Studio
+ship cannot be saved, spawned, crewed or sold — the milestone's whole premise. The rule
+evaluator itself needs **no change**: the ten kinds in `_evaluate_rule` work as-is if a
+plan-side measurement pass populates the same five dictionaries (`brick_counts`, `tag_counts`,
+`positions`, `capacity`, `max_ratings`). The work is:
+1. A plan-side `_measure` sibling walking `plan.items` + room/wall openings.
+2. A plan-side `VesselOutfit` producing real `accepted_slots` / `usage` / `capabilities`
+   instead of the three-key stub at `deck_fitout.gd:68-72`.
+3. Mount gameplay components from plan items — `_mount_helm`, `_mount_light`, `_mount_mooring`,
+   `_mount_fishing`, `_mount_container_pad`, `_mount_bulk_hold` already take plain geometric
+   arguments and need only signature changes.
+4. Thread `registration_id` into `apply_plan` — `apply_any:34` currently drops it.
+5. Teach persistence and deployment to validate a plan.
+6. Decide `ensure_auto_utilities`: delete it, or call it only from an author-made starter path
+   *and* make its output visible to compliance. Uncalled, it is a certification bypass in waiting.
+7. Add `BoatBody.get_mooring_points()` / `get_nav_lights()` so those two stop being group scans
+   and join the same discovery contract as fishing/cargo/bridge.
+
+`vessel_registration_audit` rebuilt as the moderation console for this.
+
+#### Pin the current state first (cheap, do before M2 changes anything)
+Three gate assertions that make the fix visible when it lands:
+- `VesselCompliance.validate(BrickLayout.new(), "hull_28x10", "general_vessel", grid)` →
+  `registration_ok == false` with 8 failing checklist items.
+- `DeckFitout.apply_any(boat, demo_workboat_dict)` → `get_bridge_stations()`, `get_cargo_pads()`,
+  `get_fishing_systems()`, `get_bulk_holds()` all empty; `brick_capabilities` is the stub.
+- `VesselSpawn.resolve_deployable_record(<plan record>)` → `{}`.
 
 ### M4 — Studio GUI to spec
 The `.dc.html` screen: toolbox, explorer, properties, surface library, consequence strip,
