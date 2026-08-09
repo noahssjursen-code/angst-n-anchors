@@ -2,12 +2,15 @@ extends SceneTree
 
 ## Determinism: same seed + definition → identical trade profile + layout.
 
+const TestReport := preload("res://tests/support/test_report.gd")
+
 
 func _initialize() -> void:
 	call_deferred("_run")
 
 
 func _run() -> void:
+	var t := TestReport.new("port_trade_profile_test")
 	var definition := PortDefinition.new()
 	definition.port_id = "port-home"
 	definition.display_name = "Haugsvik"
@@ -18,17 +21,24 @@ func _run() -> void:
 
 	var a := PortExpander.expand(definition, 424242)
 	var b := PortExpander.expand(definition, 424242)
-	assert(a.trade_profile != null and b.trade_profile != null)
-	assert(a.trade_profile.export_slots == b.trade_profile.export_slots)
-	assert(a.trade_profile.import_slots == b.trade_profile.import_slots)
-	assert(a.layout_graph != null and b.layout_graph != null)
-	assert(JSON.stringify(a.layout_graph.to_dict()) == JSON.stringify(b.layout_graph.to_dict()))
-	assert(not a.trade_profile.export_slots.is_empty())
-	assert(a.trade_profile.export_slots.has("provisions"), "every port exports general cargo")
-	assert(a.trade_profile.import_slots.has("provisions"), "every port imports general cargo")
-	assert(not str(a.trade_profile.theme_id).is_empty())
+	if not t.check("both expansions produce a trade profile", a.trade_profile != null and b.trade_profile != null):
+		t.finish(self)
+		return
+	t.check("export slots are deterministic", a.trade_profile.export_slots == b.trade_profile.export_slots)
+	t.check("import slots are deterministic", a.trade_profile.import_slots == b.trade_profile.import_slots)
+	if not t.check("both expansions produce a layout graph", a.layout_graph != null and b.layout_graph != null):
+		t.finish(self)
+		return
+	t.check(
+		"layout graph is deterministic",
+		JSON.stringify(a.layout_graph.to_dict()) == JSON.stringify(b.layout_graph.to_dict()),
+	)
+	t.check("port exports something", not a.trade_profile.export_slots.is_empty())
+	t.check("every port exports general cargo", a.trade_profile.export_slots.has("provisions"))
+	t.check("every port imports general cargo", a.trade_profile.import_slots.has("provisions"))
+	t.check("trade profile has a theme", not str(a.trade_profile.theme_id).is_empty())
 	## Size 2 always gets at least one import from themes.
-	assert(not a.trade_profile.import_slots.is_empty())
+	t.check("size 2 port imports something", not a.trade_profile.import_slots.is_empty())
 	## Quay commodities in the profile must appear in the berth plan.
 	var plan: Dictionary = a.layout_graph.initial_attributes.get("berth_plan", {}) as Dictionary
 	var planned: Dictionary = {}
@@ -46,43 +56,44 @@ func _run() -> void:
 	for raw in plan.get("asphalt_stations", []) as Array:
 		planned[str((raw as Dictionary).get("commodity_id", ""))] = true
 	for id in a.trade_profile.all_slots():
-		assert(planned.has(str(id)), "berth plan missing trade commodity %s" % id)
+		t.check("berth plan missing trade commodity %s" % id, planned.has(str(id)))
 	## Different products never share a pad side (twin pier keeps one commodity per side).
 	for raw in plan.get("quay_stations", []) as Array:
 		var station: Dictionary = raw
 		if str(station.get("layout", "")) == "twin_joined":
-			assert(int(station.get("berth_faces", 0)) == 2, "twin quay must expose two berth faces")
-			assert((station.get("sides", []) as Array).size() == 2, "twin quay needs two sides")
+			t.check("twin quay must expose two berth faces", int(station.get("berth_faces", 0)) == 2)
+			t.check("twin quay needs two sides", (station.get("sides", []) as Array).size() == 2)
 			for side in station.get("sides", []) as Array:
 				var side_commodities: Array = (side as Dictionary).get("commodities", []) as Array
-				assert(side_commodities.size() <= 1, "twin side shares commodities: %s" % str(side_commodities))
+				t.check("twin side shares commodities: %s" % str(side_commodities), side_commodities.size() <= 1)
 		else:
 			var commodities: Array = station.get("commodities", []) as Array
-			assert(commodities.size() <= 1, "pad shares multiple commodities: %s" % str(commodities))
+			t.check("pad shares multiple commodities: %s" % str(commodities), commodities.size() <= 1)
 	## Apron berths hug the dock face with local orientation and stay clear of quay loading roots.
 	var asphalt_seen: Dictionary = {}
 	for raw in plan.get("asphalt_stations", []) as Array:
 		var station: Dictionary = raw
 		var cid := str(station.get("commodity_id", ""))
-		assert(not asphalt_seen.has(cid), "duplicate asphalt berth for %s" % cid)
+		t.check("duplicate asphalt berth for %s" % cid, not asphalt_seen.has(cid))
 		asphalt_seen[cid] = true
-		assert(
-			float(station.get("length_m", 0.0)) >= PortSizing.design_hull_loa_m(a.size) * 0.7,
+		t.check(
 			"asphalt berth too short for %s" % cid,
+			float(station.get("length_m", 0.0)) >= PortSizing.design_hull_loa_m(a.size) * 0.7,
 		)
-		assert(
-			float(station.get("depth_m", 0.0)) >= 20.0,
+		t.check(
 			"asphalt berth working pad too shallow for %s" % cid,
+			float(station.get("depth_m", 0.0)) >= 20.0,
 		)
-		assert(
-			str(station.get("extends", "")) == "inland",
+		t.check(
 			"asphalt working pad must extend into the apron (%s)" % cid,
+			str(station.get("extends", "")) == "inland",
 		)
 		var dir: Array = station.get("direction", []) as Array
-		assert(dir.size() >= 2, "asphalt berth missing local seaward for %s" % cid)
-		assert(
-			Vector2(float(dir[0]), float(dir[1])).length_squared() > 0.25,
+		if not t.check("asphalt berth missing local seaward for %s" % cid, dir.size() >= 2):
+			continue
+		t.check(
 			"asphalt berth seaward degenerate for %s" % cid,
+			Vector2(float(dir[0]), float(dir[1])).length_squared() > 0.25,
 		)
 	if not plan.get("asphalt_stations", []).is_empty() and not plan.get("quay_stations", []).is_empty():
 		var dock_face := PackedVector2Array()
@@ -100,58 +111,64 @@ func _run() -> void:
 				for block in blocked:
 					var lo := float((block as Dictionary).get("lo", 0.0))
 					var hi := float((block as Dictionary).get("hi", 0.0))
-					assert(
-						arc < lo - 0.5 or arc > hi + 0.5,
+					t.check(
 						"apron berth arc %.1f inside quay loading exclusion [%.1f, %.1f]" % [arc, lo, hi],
+						arc < lo - 0.5 or arc > hi + 0.5,
 					)
-	assert(a.layout_graph.local_footprints().size() >= 1)
-	assert(a.layout_seed == b.layout_seed)
+	t.check("layout graph has a local footprint", a.layout_graph.local_footprints().size() >= 1)
+	t.check("layout seed is deterministic", a.layout_seed == b.layout_seed)
 
 	## Land plan defines the inland buildable zone (apron + hinterland).
 	var land: Dictionary = a.layout_graph.initial_attributes.get("land_plan", {}) as Dictionary
-	assert(not land.is_empty(), "land_plan missing")
+	t.check("land_plan missing", not land.is_empty())
 	var zone: Dictionary = land.get("buildable_zone", {}) as Dictionary
-	assert(not zone.is_empty(), "buildable_zone missing")
-	assert((zone.get("seaward_edge", []) as Array).size() >= 2, "zone needs seaward edge")
-	assert((zone.get("inland_edge", []) as Array).size() >= 2, "zone needs inland edge")
-	assert(float(zone.get("inland_depth_m", 0.0)) >= 400.0, "buildable zone too shallow inland")
-	assert(float(zone.get("along_span_m", 0.0)) >= 20.0, "buildable zone too narrow")
-	assert(
-		float(zone.get("along_span_inland_m", 0.0)) > float(zone.get("along_span_seaward_m", 0.0)),
+	t.check("buildable_zone missing", not zone.is_empty())
+	t.check("zone needs seaward edge", (zone.get("seaward_edge", []) as Array).size() >= 2)
+	t.check("zone needs inland edge", (zone.get("inland_edge", []) as Array).size() >= 2)
+	t.check("buildable zone too shallow inland", float(zone.get("inland_depth_m", 0.0)) >= 400.0)
+	t.check("buildable zone too narrow", float(zone.get("along_span_m", 0.0)) >= 20.0)
+	t.check(
 		"zone must bloom wider inland",
+		float(zone.get("along_span_inland_m", 0.0)) > float(zone.get("along_span_seaward_m", 0.0)),
 	)
-	assert(float(zone.get("height_inland_m", 0.0)) > float(zone.get("height_seaward_m", 0.0)), "zone must rise inland")
+	t.check(
+		"zone must rise inland",
+		float(zone.get("height_inland_m", 0.0)) > float(zone.get("height_seaward_m", 0.0)),
+	)
 	var grid: Dictionary = land.get("terrain_grid", {}) as Dictionary
-	assert(not grid.is_empty(), "terrain_grid missing")
-	assert(int(grid.get("u_count", 0)) >= 2 and int(grid.get("v_count", 0)) >= 2, "terrain grid too small")
-	assert((grid.get("points", []) as Array).size() >= 4, "terrain grid needs stake points")
+	t.check("terrain_grid missing", not grid.is_empty())
+	t.check("terrain grid too small", int(grid.get("u_count", 0)) >= 2 and int(grid.get("v_count", 0)) >= 2)
+	t.check("terrain grid needs stake points", (grid.get("points", []) as Array).size() >= 4)
 	var house_n := 0
 	var trade_n := 0
 	for raw in grid.get("points", []) as Array:
 		var kind := str((raw as Dictionary).get("kind", ""))
 		if kind == PortLandPlan.KIND_TRADE:
 			trade_n += 1
-			assert(not str((raw as Dictionary).get("commodity_id", "")).is_empty(), "trade stake needs commodity")
-			assert(float((raw as Dictionary).get("radius_m", 0.0)) > PortLandPlan.HOUSE_RADIUS_M, "trade sphere should be larger")
+			t.check("trade stake needs commodity", not str((raw as Dictionary).get("commodity_id", "")).is_empty())
+			t.check(
+				"trade sphere should be larger",
+				float((raw as Dictionary).get("radius_m", 0.0)) > PortLandPlan.HOUSE_RADIUS_M,
+			)
 		elif kind == PortLandPlan.KIND_HOUSE:
 			house_n += 1
-	assert(house_n >= 1, "need house stakes")
+	t.check("need house stakes", house_n >= 1)
 	if not a.trade_profile.all_slots().is_empty():
-		assert(trade_n >= 1, "trade profile should sprinkle trade decorations")
+		t.check("trade profile should sprinkle trade decorations", trade_n >= 1)
 	var apron: Dictionary = land.get("apron_decor", {}) as Dictionary
-	assert(int(apron.get("point_count", 0)) >= 3, "apron should sprinkle service props")
+	t.check("apron should sprinkle service props", int(apron.get("point_count", 0)) >= 3)
 	for raw in apron.get("points", []) as Array:
 		var entry: Dictionary = raw
 		var local_arr: Array = entry.get("local", []) as Array
-		assert(local_arr.size() >= 2, "apron prop needs local XZ")
-		assert(not str(entry.get("kind", "")).is_empty(), "apron prop needs kind")
+		t.check("apron prop needs local XZ", local_arr.size() >= 2)
+		t.check("apron prop needs kind", not str(entry.get("kind", "")).is_empty())
 	var apron_pads: Dictionary = land.get("apron_pads", {}) as Dictionary
-	assert(int(apron_pads.get("pad_count", 0)) >= PortApronPadCatalog.UNIVERSAL_REQUIRED_V1.size(),
-			"apron should seed every required brick pad")
-	assert(is_equal_approx(float(apron_pads.get("cell_m", 0.0)), PortApronPadCatalog.CELL_M), "pad cell size")
-	assert(int(apron_pads.get("host_count", 0)) >= 1, "uniform clipped grid needs host cells")
+	t.check("apron should seed every required brick pad",
+			int(apron_pads.get("pad_count", 0)) >= PortApronPadCatalog.UNIVERSAL_REQUIRED_V1.size())
+	t.check("pad cell size", is_equal_approx(float(apron_pads.get("cell_m", 0.0)), PortApronPadCatalog.CELL_M))
+	t.check("uniform clipped grid needs host cells", int(apron_pads.get("host_count", 0)) >= 1)
 	var grid_summary: Dictionary = apron_pads.get("grid", {}) as Dictionary
-	assert(int(grid_summary.get("host_count", 0)) >= 1, "apron_pads.grid should summarize host lattice")
+	t.check("apron_pads.grid should summarize host lattice", int(grid_summary.get("host_count", 0)) >= 1)
 	var host := PortApronPadCatalog.build_host_grid(
 		a.layout_graph.initial_attributes.get("foundation", {}) as Dictionary,
 		a.layout_graph.initial_attributes.get("berth_plan", {}) as Dictionary,
@@ -165,30 +182,32 @@ func _run() -> void:
 	var pad_roles: Dictionary = {}
 	for raw in apron_pads.get("pads", []) as Array:
 		var pad: Dictionary = raw
-		assert(not str(pad.get("role", "")).is_empty(), "pad needs role")
-		assert(not str(pad.get("pad_template_id", "")).is_empty(), "pad needs template")
-		assert((pad.get("origin", []) as Array).size() >= 2, "pad needs origin")
-		assert((pad.get("cells", []) as Array).size() >= 2, "pad needs cell footprint")
+		t.check("pad needs role", not str(pad.get("role", "")).is_empty())
+		t.check("pad needs template", not str(pad.get("pad_template_id", "")).is_empty())
+		var origin_ok := t.check("pad needs origin", (pad.get("origin", []) as Array).size() >= 2)
+		var cells_ok := t.check("pad needs cell footprint", (pad.get("cells", []) as Array).size() >= 2)
 		var ij: Array = pad.get("grid_ij", []) as Array
-		assert(ij.size() >= 2, "pad needs grid_ij")
-		var footprint: Array = pad.get("cells", []) as Array
-		var w := int(footprint[0])
-		var h := int(footprint[1])
-		var i0 := int(ij[0])
-		var j0 := int(ij[1])
-		for jj in range(j0, j0 + h):
-			for ii in range(i0, i0 + w):
-				assert(host_mask.has("%d,%d" % [ii, jj]),
-						"pad %s footprint leaves host grid at %d,%d" % [str(pad.get("role", "")), ii, jj])
-		var origin_arr: Array = pad.get("origin", []) as Array
-		var origin := Vector2(float(origin_arr[0]), float(origin_arr[1]))
-		assert(Geometry2D.is_point_in_polygon(origin, host_poly),
-				"pad %s origin outside apron polygon" % str(pad.get("role", "")))
+		var ij_ok := t.check("pad needs grid_ij", ij.size() >= 2)
+		if cells_ok and ij_ok:
+			var footprint: Array = pad.get("cells", []) as Array
+			var w := int(footprint[0])
+			var h := int(footprint[1])
+			var i0 := int(ij[0])
+			var j0 := int(ij[1])
+			for jj in range(j0, j0 + h):
+				for ii in range(i0, i0 + w):
+					t.check("pad %s footprint leaves host grid at %d,%d" % [str(pad.get("role", "")), ii, jj],
+							host_mask.has("%d,%d" % [ii, jj]))
+		if origin_ok:
+			var origin_arr: Array = pad.get("origin", []) as Array
+			var origin := Vector2(float(origin_arr[0]), float(origin_arr[1]))
+			t.check("pad %s origin outside apron polygon" % str(pad.get("role", "")),
+					Geometry2D.is_point_in_polygon(origin, host_poly))
 		pad_roles[str(pad.get("role", ""))] = true
 	## Harbour office is mandatory on every port.
 	for role_id in PortApronPadCatalog.UNIVERSAL_REQUIRED_V1:
-		assert(pad_roles.has(role_id), "missing required apron pad role %s" % role_id)
-	assert(not pad_roles.has("parking_apron"), "parking apron should not auto-place")
+		t.check("missing required apron pad role %s" % role_id, pad_roles.has(role_id))
+	t.check("parking apron should not auto-place", not pad_roles.has("parking_apron"))
 	## Unlocked asphalt trades must get waterside handling pads.
 	for commodity_id in a.trade_profile.all_slots():
 		var cid := str(commodity_id)
@@ -199,11 +218,11 @@ func _run() -> void:
 			var pad: Dictionary = raw
 			if str(pad.get("commodity_id", "")) != cid:
 				continue
-			assert(str(pad.get("zone", "")) == PortApronPadCatalog.ZONE_WATERSIDE,
-					"trade pad %s should be waterside" % str(pad.get("role", "")))
+			t.check("trade pad %s should be waterside" % str(pad.get("role", "")),
+					str(pad.get("zone", "")) == PortApronPadCatalog.ZONE_WATERSIDE)
 			found_trade = true
 			break
-		assert(found_trade, "missing waterside trade pad for asphalt commodity %s" % cid)
+		t.check("missing waterside trade pad for asphalt commodity %s" % cid, found_trade)
 	## Trade stakes follow the live recipe roles — never invent the opposite direction.
 	for raw in grid.get("points", []) as Array:
 		var entry: Dictionary = raw
@@ -213,21 +232,21 @@ func _run() -> void:
 		var role := str(entry.get("role", ""))
 		match role:
 			"export":
-				assert(a.trade_profile.export_slots.has(cid), "export stake for unoffered %s" % cid)
-				assert(not a.trade_profile.import_slots.has(cid) or PortTradeProfile.is_bidirectional_trade(cid),
-						"one-way export stake must not also be an import-only commodity")
+				t.check("export stake for unoffered %s" % cid, a.trade_profile.export_slots.has(cid))
+				t.check("one-way export stake must not also be an import-only commodity",
+						not a.trade_profile.import_slots.has(cid) or PortTradeProfile.is_bidirectional_trade(cid))
 			"import":
-				assert(a.trade_profile.import_slots.has(cid), "import stake for unoffered %s" % cid)
-				assert(not a.trade_profile.export_slots.has(cid),
-						"import stake must not invent export for %s" % cid)
+				t.check("import stake for unoffered %s" % cid, a.trade_profile.import_slots.has(cid))
+				t.check("import stake must not invent export for %s" % cid,
+						not a.trade_profile.export_slots.has(cid))
 			"bidirectional":
-				assert(PortTradeProfile.is_bidirectional_trade(cid), "bidirectional only for containers")
-				assert(
-					a.trade_profile.export_slots.has(cid) or a.trade_profile.import_slots.has(cid),
+				t.check("bidirectional only for containers", PortTradeProfile.is_bidirectional_trade(cid))
+				t.check(
 					"bidirectional stake not in recipe",
+					a.trade_profile.export_slots.has(cid) or a.trade_profile.import_slots.has(cid),
 				)
 			_:
-				assert(false, "unknown trade role %s" % role)
+				t.fail("unknown trade role %s" % role)
 
 	## Growing size unlocks destiny — never re-rolls theme or mature lists.
 	var def_small := PortDefinition.new()
@@ -246,13 +265,19 @@ func _run() -> void:
 	def_big.site_seed = definition.site_seed
 	var grown_small := PortTradeProfile.derive(def_small, 424242)
 	var grown_big := PortTradeProfile.derive(def_big, 424242)
-	assert(grown_small.theme_id == grown_big.theme_id)
-	assert(grown_small.destiny_export_slots == grown_big.destiny_export_slots)
-	assert(grown_small.destiny_import_slots == grown_big.destiny_import_slots)
+	t.check("growing never re-rolls the theme", grown_small.theme_id == grown_big.theme_id)
+	t.check("growing never re-rolls destiny exports", grown_small.destiny_export_slots == grown_big.destiny_export_slots)
+	t.check("growing never re-rolls destiny imports", grown_small.destiny_import_slots == grown_big.destiny_import_slots)
 	## Unlocked exports are a prefix of destiny.
 	for index in range(grown_small.export_slots.size()):
-		assert(grown_small.export_slots[index] == grown_small.destiny_export_slots[index])
-	assert(grown_big.export_slots.size() >= grown_small.export_slots.size())
+		if index >= grown_small.destiny_export_slots.size():
+			t.fail("unlocked export %d has no destiny slot" % index)
+			break
+		t.check(
+			"unlocked export %d matches destiny" % index,
+			grown_small.export_slots[index] == grown_small.destiny_export_slots[index],
+		)
+	t.check("bigger port unlocks at least as many exports", grown_big.export_slots.size() >= grown_small.export_slots.size())
 	## Unlock is monotonic — growing never re-locks a destiny commodity.
 	var prev_exports: Array[String] = []
 	var prev_imports: Array[String] = []
@@ -266,9 +291,9 @@ func _run() -> void:
 		def_g.site_seed = definition.site_seed
 		var grown := PortTradeProfile.derive(def_g, 424242)
 		for id in prev_exports:
-			assert(grown.export_slots.has(id), "size %d dropped export %s" % [grow_size, id])
+			t.check("size %d dropped export %s" % [grow_size, id], grown.export_slots.has(id))
 		for id in prev_imports:
-			assert(grown.import_slots.has(id), "size %d dropped import %s" % [grow_size, id])
+			t.check("size %d dropped import %s" % [grow_size, id], grown.import_slots.has(id))
 		prev_exports = grown.export_slots.duplicate()
 		prev_imports = grown.import_slots.duplicate()
 	## By TRADE_COMPLETE_SIZE the full destiny is unlocked.
@@ -280,19 +305,27 @@ func _run() -> void:
 	def_complete.port_generation_version = definition.port_generation_version
 	def_complete.site_seed = definition.site_seed
 	var complete := PortTradeProfile.derive(def_complete, 424242)
-	assert(complete.export_slots == complete.destiny_export_slots)
-	assert(complete.import_slots == complete.destiny_import_slots)
+	t.check("complete port unlocks every destiny export", complete.export_slots == complete.destiny_export_slots)
+	t.check("complete port unlocks every destiny import", complete.import_slots == complete.destiny_import_slots)
 
 	## Sparse destinies cannot grow into mega hubs.
-	assert(PortSizing.max_size_for_trade_products(2) <= 3)
-	assert(PortSizing.max_size_for_trade_products(4) <= PortSizing.TRADE_COMPLETE_SIZE)
-	assert(PortTradeProfile.max_size_for_profile(complete) \
-			<= PortSizing.max_size_for_trade_products(
-				PortTradeProfile.destiny_product_count(complete)
-			))
+	t.check("two trade products cap size at 3", PortSizing.max_size_for_trade_products(2) <= 3)
+	t.check(
+		"four trade products cap size at the trade-complete size",
+		PortSizing.max_size_for_trade_products(4) <= PortSizing.TRADE_COMPLETE_SIZE,
+	)
+	t.check(
+		"profile max size respects its destiny product count",
+		PortTradeProfile.max_size_for_profile(complete) \
+				<= PortSizing.max_size_for_trade_products(
+					PortTradeProfile.destiny_product_count(complete)
+				),
+	)
 	var sparse := PortTradeProfile.derive(def_small, 424242)
 	var sparse_max := PortTradeProfile.max_size_for_profile(sparse)
-	assert(sparse_max < PortSizing.MAX_SIZE or PortTradeProfile.destiny_product_count(sparse) >= 7)
+	t.check(
+		"sparse destiny cannot reach max size",
+		sparse_max < PortSizing.MAX_SIZE or PortTradeProfile.destiny_product_count(sparse) >= 7,
+	)
 
-	print("Port trade profile tests: all checks passed")
-	quit()
+	t.finish(self)

@@ -288,6 +288,122 @@ side (real boats leave a side deck to walk), rubbing strake, fenders, deck gear.
 a shed on a barge, exactly as predicted, and the captures in `screenshots/studio/` are the
 evidence.
 
+### The render-cost model — corrected, and it changes what is expensive
+
+The constraint is **not part count**. `StructureBaker._bucket_layer` keys surfaces by
+`"<material>_<rrggbb>"`; one bucket is one `MeshInstance3D` is one draw call.
+`demo_workboat` bakes to 4. Therefore:
+
+- Parts that reuse an existing (material, colour) pair cost **triangles and bake CPU, not
+  draw calls**. A bulwark, a mast, forty bollards and a hatch coaming in colours the plan
+  already declares add **zero** draw calls.
+- **Every new colour costs +1 draw call on every vessel in the harbour.**
+
+So the expensive trap is not geometry — it is **per-vessel free-choice colour**. Thirty UGC
+ships each picking arbitrary RGB is thirty × N unshared surfaces with no batching.
+**Quantise the player palette to a fixed named swatch set before any parts work lands**, or
+the harbour budget is spent by the third player-built ship.
+
+### Why it reads as a shed on a barge — three absences
+
+1. **No bulwark.** The hull builds exactly two things: `lofted_hull_shell()` and
+   `pointed_deck_plate()`. There is *no geometry between the shell and whatever the player
+   draws*. Every reference vessel in all four categories has a raised deck edge. At harbour
+   distance a boat reads as three horizontal bands — waterline, deck edge, superstructure.
+   Without a bulwark there are two bands and a table top with a box on it. The old voxel
+   system had this (`vessel_skin_showcase.gd:87` — "half-block bulwarks along both rails and
+   the stern", "45° half wedges close the bulwark run toward the bow"); it was deleted with
+   the brick library and never re-added.
+2. **No sheer.** `pointed_deck_plate` takes a single scalar `deck_y` — the deck line is dead
+   level, and any bulwark drawn on it is level too. Sheer is what makes a profile a curve
+   rather than a line, and it is most pronounced on exactly the small working craft this game
+   is set among. **This belongs in the hull loft, not the plan.** `HullStations` already lofts
+   per-station; a per-station deck rise is contained. Putting sheer in `StructurePlan` would
+   force every wall panel, plate strip and collider to become a sloped prism and would destroy
+   the baker's z-fight-free-by-construction property.
+3. **Nothing tall and thin.** No primitive produces a slender vertical member. Every reference
+   vessel has several — and `general_vessel` *requires* a white light above the sidelights,
+   which physically means a mast. A silhouette made only of stacked cuboid rooms has a low,
+   monotone, blocky skyline: the voxel complaint arriving by a different route.
+
+### The 45° fact
+
+**Every hull's plan bow is exactly 45°** — `bow_taper_m == beam_m × 0.5` in all six catalog
+entries, and `CatalogHullVessel.make_grid()` hardcodes the same rule. `wall.axis` is `"x"` or
+`"z"` only, so nothing can follow the bow: a bulwark either stops at the shoulder or
+staircases. **One 45° diagonal wall variant — a single rotated box emitter in
+`StructureBaker` — makes the bulwark follow the bow exactly on every hull in the catalog.**
+Cheapest high-impact change available.
+
+### Expressible today, missing only from the editor
+
+These need **no new primitives** — Structure Studio simply has no tool for them:
+
+| Part | How |
+|---|---|
+| Hatch coaming | `room` with `roof:false, floor:false` — a four-wall ring |
+| Hatch covers | `deck` plate on the coaming; several side by side reads as segmented |
+| Bulwark (straight sides + transom) | `wall` at the deck edge, height ~1.0 |
+| Cap rail / gunwale | thin `deck` strip on the bulwark top |
+| Wheelhouse roof overhang / window eyebrow | oversized `deck` plate; opening frames already give windows depth (`FRAME_PROUD 0.09`) |
+| Bridge wings | wider top `room` overhanging the block |
+| Mast / post (square) | raw-JSON `wall` of `length 0.2, thickness 0.2, height N` — `from_dict` does not clamp, only `add_wall` does |
+
+The hatch coaming is the highest payoff-to-effort item in the whole analysis: zero new code,
+and it turns a cargo hull from "hull with a shed" into "a ship with a hold".
+
+### New primitives worth building, in order
+
+1. **45° diagonal wall** (see above)
+2. **Spar** — two endpoints, radius, side count. Unlocks mast, crosstrees, king post, derrick,
+   davit, crane pedestal and jib, gallows, bollard, bitt, stanchion, vent head, exhaust,
+   fender. An 8-sided mast is ~32 triangles; a whole rig is under 500, merged into one surface.
+3. **Item catalog + stamping.** `items[]` must move from `{item_id, cell:Vector3i, yaw:int}` to
+   float position and free yaw. **Keeping integer cells and quarter-turn yaw reproduces the
+   voxel look one fitting at a time** — the old system's signature in a new field name.
+4. **Railing run** — polyline, height, post pitch. ~1300 triangles over a 45 m perimeter, one
+   merged surface, one draw call. Needs a distance LOD collapsing to a solid low panel.
+   Non-optional for PASSENGER.
+5. Sloped/raked plate; horizontal-axis cylinder (net drum, winch); vertical ladder.
+
+Composites — crane, derrick, gallows, davit, liferaft cradle — are **catalog items built from
+spars**, not new primitives.
+
+### Two problems for the owner
+
+**Hull proportions.** Every large hull is 25–40 % beamier than any real vessel of its length:
+`hull_120x28` is L/B 4.29 against ~6.5 for a real coaster; `hull_150x32` is 4.69 against ~6.4
+for a mini-bulker. *A parts vocabulary cannot make a hull of the wrong proportion read
+correctly.* One slender addition — e.g. `hull_150x24` (75 × 12 m real, L/B 6.25) — would do
+more for the CARGO and BULK silhouettes than several parts. `hull_28x10` (fishing) and
+`hull_70x18` (passenger) are honest and need nothing.
+
+**The deck crane is illegal on every registration.** `general_vessel.budget_caps.crane: 0`,
+and both `cargo_vessel` and `bulk_vessel` carry `crane_rating` with `max_rating: 0`. Yet a
+deck crane or king post is the number-one cargo/bulk read cue. Resolution: split
+**crane-as-structure** (visual, tagged, `equipment_rating: 0`) from **crane-as-slot**
+(functional, still capped until the crane system exists). Otherwise a compliant cargo ship can
+never look like a cargo ship.
+
+### Method limit — no reference images
+
+**General web egress is blocked by this environment's network policy.** `WebSearch` works
+(descriptions, specs, URLs); `WebFetch` returns `EGRESS_BLOCKED` for every domain including
+Wikimedia. **No agent here can look at a reference photograph.** The loop is therefore
+"render versus written anatomy checklist", not "render versus photo". To get the real loop,
+either the owner drops reference images into the repo (e.g. `branding/references/`) or the
+environment's egress policy is widened. Recorded rather than worked around — a checklist is a
+weaker judge than an eye, and the difference should not be silently absorbed.
+
+### Reference vessels, mapped at correct scale (in-world = 2× real)
+
+| Category | Reference | Real | In-world | Hull | Honesty |
+|---|---|---|---|---|---|
+| FISHING | Norwegian **sjark** under 15 m — wheelhouse forward, open working deck aft (Selfa Arctic type) | 14.0 × 5.0 m | 28 × 10 | `hull_28x10` | **Exact** — the hull already declares "14.0 × 5.0 m" |
+| CARGO | Short-sea coaster, Wilson AS 1500–2500 dwt — aft superstructure, box holds, raised coamings | 60 × 14 m | 120 × 28 | `hull_120x28` | Length honest, beam ~25 % wide |
+| BULK | Coastal mini-bulker — 2–3 hatches in a rhythm, tall coamings, narrow side decks | 75 × 16 m | 150 × 32 | `hull_150x32` | Shortest honest bulker available, still ~35 % beamy |
+| PASSENGER | Boreal **Oslofjord II** — 350 pax electric commuter ferry, two decks | 35.0 × 8.0 m | 70 × 16 | `hull_70x18` | Best match; but she is double-ended and every catalog hull is pointed at −Z only. Build single-ended. |
+
 ### M2 — Ship parts vocabulary · THE MILESTONE
 The reference-matching loop:
 1. Pick reference working boats per category and the honest matching hull (remember 2×).
@@ -301,6 +417,18 @@ The reference-matching loop:
 
 **Exit:** each of the four categories has a reference build that reads correctly and passes
 its registration, with captures and gate tests to prove both.
+
+**Order of work, from the research:**
+0. Quantise the player palette to a fixed swatch set — before any parts land.
+1. **Sheer in the hull loft** (`pointed_deck_plate` + `lofted_hull_shell` take a per-station
+   deck rise). No plan change. Biggest visual return per line of code in the whole analysis.
+2. **45° diagonal wall** in `StructureBaker`.
+3. **Bulwark, cap rail, hatch coaming, hatch cover, roof overhang as Structure Studio tools** —
+   all expressible today; missing from the *editor*, not the *format*.
+4. **Spar primitive.**
+5. **Item catalog**, float positions, free yaw, plus the compliance-identity wiring.
+6. **Railing run** with LOD.
+7. Composites — crane, derrick, gallows, davit, net drum, liferaft cradle — from spars.
 
 ### M3 — Compliance on plans · LOAD-BEARING, NOT OPTIONAL
 Reconnect `VesselCompliance` to `structure_plan_v1`. Until this lands, a Structure Studio
