@@ -742,6 +742,65 @@ immediately, because nothing correlated the declared token with what the test do
 was not enough. The fix in flight makes it **self-policing: a skipped unit that passes when forced
 turns the gate red.**
 
+## The corrections held (2026-08-09) — verified, not asserted
+
+Both re-critics returned **CLEAN**, and both earned it by trying to break the work.
+
+- Restored bounds are **byte-identical to the pre-cheat blobs**; check counts *rose* in all
+  three files (`building_blueprint_test`: 32 → 91 while cheated → 119 restored). No assertion
+  was deleted anywhere.
+- The skip audit was proven to fire by **building a synthetic Godot project with a lying
+  `## gate-requires:` marker** — it produced the FALSE SKIP block and exited 1.
+- The collision fix was proven by a volume probe using the **baked triangle soup** as ground
+  truth rather than `wall_boxes` (which would have been circular), with a **positive control**:
+  forcing yaw to 0 leaves 987.93 m of rendered material uncollided, deepest 2.46 m. Fixed, the
+  deepest uncovered material is 0.0098 m — exactly `SKIN_EPS`. On the production path
+  (`VesselSpawn → apply_plan → PhysicsServer3D`): 43/43 shapes match size and yaw; 6000/6000
+  points inside the drawn diagonal panels report solid; **2106/2106 points inside those panels'
+  axis-aligned bounding boxes but outside the drawn panel report empty**, so the shapes are
+  genuinely rotated rather than fattened; 242 player-capsule marches across both stems, none
+  get through.
+- The stem gap: **160 008 stations, 0 bare**. A 5 mm flood fill of the walking plane shows the
+  open deck never reaches past either stem line.
+- The studio probe was **mutation-tested**: reverting each diagonal fix in a copy produced 6, 4
+  and 2 probe failures respectively. It is not theatre.
+
+A third cheat nobody had named was also found and undone: the open-ocean sample point had been
+moved 3 km west to escape a failing bound, justified by a `classify_region` check that is a
+pure x-threshold and can never fail west of it.
+
+### Method notes worth keeping
+
+- `cast_motion()` returns a clean 1.0 for a shape that *starts* overlapping something, which
+  reads as "walked straight through" when the truth is "began inside a wall". It produced two
+  false failures before the critic replaced it with an explicit 1 cm march plus
+  `intersect_shape`. **Do not use `cast_motion` for walk-through tests.**
+- Opening casing has no collision anywhere — `FRAME_PROUD` stands 0.045 m proud of each face.
+  Measured identically on axis-aligned walls (0.0604 m) and diagonals (0.0507 m), and it drops
+  to `SKIN_EPS` with openings removed. **Pre-existing, not introduced by the diagonal work.**
+
+### Now-known gaps, in priority order
+
+1. **The collision fix has zero gate coverage.** Nothing under `tests/` constructs a diagonal
+   wall, so the cheat that was just undone can be reintroduced without reddening anything.
+2. **The studio probe is not in the gate** — `tools/gate.sh` discovers `extends SceneTree`
+   scripts and `.tscn` files, and the probe is neither. Every diagonal claim on the studio side
+   rests on something nothing runs automatically.
+3. **`structure_circulation_test` is a second `collect_colliders` consumer that ignores yaw**
+   (`_test_passability`). Harmless today because its plans contain only rooms and stairs, but it
+   is exactly the trap the baker's docstring warns about.
+4. The skip audit's bar is "would this have counted as PASS", which a test could defeat forever
+   by making its first check assert the capability itself. Known limit; no fix proposed yet.
+
+### M0 cannot close before M2 delivers
+
+The two honestly-red tests both trace to product decisions, not test bugs:
+`building_blueprint_test`'s 23 failures have a **single root cause** — `BrickCatalog.BRICKS` is
+`{}` — and `land_field_geography_test`'s two failures need an owner decision about world
+constants (either push `belt_x_min_m`/`open_water_x_m` apart so labelled open water really is
+5 km clear, or accept 3.8 km and change the claim). **The gate cannot go green until the parts
+vocabulary exists.** That makes M2 the critical path for M0 as well as for the game.
+
 ## Next actions
 
 1. **M0.1a** — convert the remaining **15** files (group E): `terrain_surface_maps_test`,
