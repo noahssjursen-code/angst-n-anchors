@@ -139,10 +139,18 @@ var _grid := {} ## Vector3i -> PackedInt32Array of box indices
 
 var _stamp := PackedInt32Array()
 var _query_id := 0
-var _cand_memo := {} ## Vector3 -> PackedInt32Array
-var _ao_memo := {} ## Vector3 -> Dictionary(Vector3 normal -> float)
+var _cand_memo := {} ## snapped Vector3 -> PackedInt32Array
+var _ao_memo := {} ## snapped Vector3 -> Dictionary(Vector3 normal -> float)
+var _dirs := {} ## Vector3 normal -> PackedVector3Array of 2*KERNEL offsets
 var _queries := 0
 var _solved := 0
+
+## Memo keys are snapped to a tenth of a millimetre so the corner a box shares
+## with two other faces is one key, not three: the same corner reached by
+## interpolating a face lattice and by `center + basis * half` differs in the
+## last float bit. Snapping is only ever applied to the KEY — emitted vertex
+## positions stay exactly where the baker put them.
+const MEMO_SNAP := Vector3(0.0001, 0.0001, 0.0001)
 
 
 # ── Construction ─────────────────────────────────────────────────────────────
@@ -210,6 +218,11 @@ func _build(boxes: Array, radius: float) -> void:
 
 func _build_grid() -> void:
 	_grid.clear()
+	## Accumulate into Arrays, not PackedInt32Arrays: a Packed*Array is a VALUE
+	## type, so `(_grid[key] as PackedInt32Array).append(i)` appends to a copy
+	## and throws it away — which silently leaves one box per cell and turns the
+	## whole solver into "nothing occludes anything".
+	var scratch := {}
 	for index in _count:
 		var lo := _bmin[index]
 		var hi := _bmax[index]
@@ -223,10 +236,12 @@ func _build_grid() -> void:
 			for cy in range(y0, y1 + 1):
 				for cz in range(z0, z1 + 1):
 					var key := Vector3i(cx, cy, cz)
-					if _grid.has(key):
-						(_grid[key] as PackedInt32Array).append(index)
+					if scratch.has(key):
+						(scratch[key] as Array).append(index)
 					else:
-						_grid[key] = PackedInt32Array([index])
+						scratch[key] = [index]
+	for key in scratch.keys():
+		_grid[key] = PackedInt32Array(scratch[key] as Array)
 
 
 # ── Queries ──────────────────────────────────────────────────────────────────
@@ -234,16 +249,18 @@ func _build_grid() -> void:
 ## Raw occlusion in [0,1] at a surface point: 0 = fully open, 1 = fully buried.
 ## This is the number to assert on — `vertex_ao` is just its remap.
 func occlusion_at(point: Vector3, normal: Vector3) -> float:
-	var by_normal: Dictionary = _ao_memo.get(point, {})
-	if by_normal.has(normal):
-		_queries += 1
-		return float(by_normal[normal])
-	var value := _solve(point, normal)
-	if by_normal.is_empty():
-		_ao_memo[point] = {normal: value}
-	else:
-		by_normal[normal] = value
 	_queries += 1
+	var key := point.snapped(MEMO_SNAP)
+	var by_normal: Variant = _ao_memo.get(key, null)
+	if by_normal == null:
+		var first := _solve(point, normal)
+		_ao_memo[key] = {normal: first}
+		return first
+	var cached := by_normal as Dictionary
+	if cached.has(normal):
+		return float(cached[normal])
+	var value := _solve(point, normal)
+	cached[normal] = value
 	return value
 
 
@@ -260,20 +277,13 @@ func _solve(point: Vector3, normal: Vector3) -> float:
 	var candidates := _candidates(point)
 	var occ := 0.0
 	if candidates.size() > 0:
-		## Deterministic tangent frame. The kernel is symmetric in +/-t1 and
-		## +/-t2, so which way the frame lands only ever rotates the sample set
-		## within the plane — it never changes an axis-aligned result.
-		var helper := Vector3.UP if absf(n.y) < 0.9 else Vector3.FORWARD
-		var t1 := n.cross(helper).normalized()
-		var t2 := n.cross(t1).normalized()
+		var offsets := _offsets_for(n)
 		var hit := 0.0
-		for entry_variant in KERNEL:
-			var entry := entry_variant as Array
-			var dir := (n * float(entry[0]) + t1 * float(entry[1]) + t2 * float(entry[2])).normalized()
-			var weight := float(entry[3])
-			if _inside_any(point + dir * _near, candidates):
+		for k in KERNEL.size():
+			var weight := float((KERNEL[k] as Array)[3])
+			if _inside_any(point + offsets[k * 2], candidates):
 				hit += weight * NEAR_HIT
-			elif _inside_any(point + dir * _far, candidates):
+			elif _inside_any(point + offsets[k * 2 + 1], candidates):
 				hit += weight * FAR_HIT
 		occ = hit / _kernel_weight
 	## Sky term: ambient arrives from above, so a downward face is dark even in
@@ -281,6 +291,30 @@ func _solve(point: Vector3, normal: Vector3) -> float:
 	## term, only add to it.
 	occ += DOWNFACE_BIAS * maxf(-n.y, 0.0)
 	return clampf(occ, 0.0, 1.0)
+
+
+## Probe offsets (near, far) per kernel entry for one normal, built once. A
+## plan's faces are axis-aligned apart from the diagonal walls, so this caches
+## down to a handful of entries and takes the trig out of the inner loop.
+func _offsets_for(n: Vector3) -> PackedVector3Array:
+	var cached: Variant = _dirs.get(n, null)
+	if cached != null:
+		return cached as PackedVector3Array
+	## Deterministic tangent frame. The kernel is symmetric in +/-t1 and +/-t2,
+	## so which way the frame lands only ever rotates the sample set within the
+	## plane — it never changes an axis-aligned result.
+	var helper := Vector3.UP if absf(n.y) < 0.9 else Vector3.FORWARD
+	var t1 := n.cross(helper).normalized()
+	var t2 := n.cross(t1).normalized()
+	var offsets := PackedVector3Array()
+	offsets.resize(KERNEL.size() * 2)
+	for k in KERNEL.size():
+		var entry := KERNEL[k] as Array
+		var dir := (n * float(entry[0]) + t1 * float(entry[1]) + t2 * float(entry[2])).normalized()
+		offsets[k * 2] = dir * _near
+		offsets[k * 2 + 1] = dir * _far
+	_dirs[n] = offsets
+	return offsets
 
 
 func _inside_any(p: Vector3, candidates: PackedInt32Array) -> bool:
@@ -311,7 +345,8 @@ func _inside_any(p: Vector3, candidates: PackedInt32Array) -> bool:
 ## Box indices whose AABB could reach within RADIUS of `point`. Memoised: a box
 ## corner is shared by three faces and a tessellation vertex by four quads.
 func _candidates(point: Vector3) -> PackedInt32Array:
-	var cached: Variant = _cand_memo.get(point, null)
+	var memo_key := point.snapped(MEMO_SNAP)
+	var cached: Variant = _cand_memo.get(memo_key, null)
 	if cached != null:
 		return cached as PackedInt32Array
 	_query_id += 1
@@ -341,7 +376,7 @@ func _candidates(point: Vector3) -> PackedInt32Array:
 					if bh.x < lo.x or bh.y < lo.y or bh.z < lo.z:
 						continue
 					out.append(index)
-	_cand_memo[point] = out
+	_cand_memo[memo_key] = out
 	return out
 
 
@@ -390,34 +425,33 @@ func _emit_face(st: SurfaceTool, a: Vector3, b: Vector3, d: Vector3, normal: Vec
 	var edge_v := d - a
 	var nu := clampi(int(ceilf(edge_u.length() / TESSEL)), 1, MAX_SPLIT)
 	var nv := clampi(int(ceilf(edge_v.length() / TESSEL)), 1, MAX_SPLIT)
-	## Shade the lattice once — interior vertices are shared by four quads.
+	## Build the lattice once, shade it once: an interior vertex is shared by
+	## four quads and every quad must reuse the same position AND the same
+	## shade, or the surface cracks and the shading stipples.
+	var stride := nv + 1
+	var lattice := PackedVector3Array()
 	var shade := PackedFloat32Array()
-	shade.resize((nu + 1) * (nv + 1))
+	lattice.resize((nu + 1) * stride)
+	shade.resize((nu + 1) * stride)
 	for iu in nu + 1:
 		var su := float(iu) / float(nu)
-		for iv in nv + 1:
-			var sv := float(iv) / float(nv)
-			shade[iu * (nv + 1) + iv] = vertex_ao(a + edge_u * su + edge_v * sv, normal)
+		var along_u := a + edge_u * su
+		for iv in stride:
+			var point := along_u + edge_v * (float(iv) / float(nv))
+			lattice[iu * stride + iv] = point
+			shade[iu * stride + iv] = vertex_ao(point, normal)
 	for iu in nu:
-		var su0 := float(iu) / float(nu)
-		var su1 := float(iu + 1) / float(nu)
 		for iv in nv:
-			var sv0 := float(iv) / float(nv)
-			var sv1 := float(iv + 1) / float(nv)
-			var p00 := a + edge_u * su0 + edge_v * sv0
-			var p10 := a + edge_u * su1 + edge_v * sv0
-			var p11 := a + edge_u * su1 + edge_v * sv1
-			var p01 := a + edge_u * su0 + edge_v * sv1
-			var f00 := shade[iu * (nv + 1) + iv]
-			var f10 := shade[(iu + 1) * (nv + 1) + iv]
-			var f11 := shade[(iu + 1) * (nv + 1) + iv + 1]
-			var f01 := shade[iu * (nv + 1) + iv + 1]
-			_vertex(st, normal, p00, f00)
-			_vertex(st, normal, p10, f10)
-			_vertex(st, normal, p11, f11)
-			_vertex(st, normal, p00, f00)
-			_vertex(st, normal, p11, f11)
-			_vertex(st, normal, p01, f01)
+			var i00 := iu * stride + iv
+			var i10 := (iu + 1) * stride + iv
+			var i11 := i10 + 1
+			var i01 := i00 + 1
+			_vertex(st, normal, lattice[i00], shade[i00])
+			_vertex(st, normal, lattice[i10], shade[i10])
+			_vertex(st, normal, lattice[i11], shade[i11])
+			_vertex(st, normal, lattice[i00], shade[i00])
+			_vertex(st, normal, lattice[i11], shade[i11])
+			_vertex(st, normal, lattice[i01], shade[i01])
 	return nu * nv * 2
 
 

@@ -1,0 +1,26 @@
+{
+	"format": "structure_plan_v1",
+	"context": "building",
+	"_note": "AO probe rig. Not a vessel — a bench of the four occlusion cases in one plan, sized against the 1.8 m figure (one world unit is one metre, CONVENTIONS.md 3a): (1) the free-standing 1.0 x 2.4 x 1.0 post at x=12.5,z=12.5 is an OPEN corner — every one of its top corners has clear air within the AO radius, so it is the light control; (2) walls 10 and 11 meet at [3,3] in an L whose inside corner is the TIGHT INTERIOR JUNCTION, and both stand on the deck plate so the corner is a three-way (wall + wall + sole); (3) deck 2 rides on wall 12 and juts 5 m to +x, so its UNDERSIDE at y=3.0 is an overhang — dark near the wall from geometry, dark along its whole span from the sky term; (4) walls 20 and 21 are a 1.1 m BULWARK on two deck edges, whose inboard faces darken toward the sole. The doorway in wall 10 exists so the AO can be checked not to smear across a cut. Two colours only, so this still bakes to the same handful of surfaces.",
+	"palette": {
+		"wall": [0.86, 0.87, 0.89],
+		"deck": [0.33, 0.35, 0.37]
+	},
+	"walls": [
+		{"id": 10, "start": [3, 0, 3], "axis": "x", "length": 6, "height": 2.6, "thickness": 0.25, "openings": [
+			{"type": "door", "offset": 2.4, "width": 1.1, "height": 2.1}
+		]},
+		{"id": 11, "start": [3, 0, 3], "axis": "z", "length": 6, "height": 2.6, "thickness": 0.25, "openings": []},
+		{"id": 12, "start": [7.0, 0, 2.0], "axis": "z", "length": 6.0, "height": 3.2, "thickness": 0.3, "openings": []},
+		{"id": 20, "start": [0.15, 0, 0.15], "axis": "x", "length": 15.7, "height": 1.1, "thickness": 0.3, "openings": []},
+		{"id": 21, "start": [0.15, 0, 0.15], "axis": "z", "length": 15.7, "height": 1.1, "thickness": 0.3, "openings": []},
+		{"id": 30, "start": [12.5, 0, 12.5], "axis": "x", "length": 1.0, "height": 2.4, "thickness": 1.0, "openings": []}
+	],
+	"decks": [
+		{"id": 1, "origin": [0, 0, 0], "size": [16, 16], "thickness": 0.2, "openings": []},
+		{"id": 2, "origin": [7.0, 3.2, 2.0], "size": [5.0, 6.0], "thickness": 0.22, "openings": []}
+	],
+	"rooms": [],
+	"stairs": [],
+	"items": []
+}
