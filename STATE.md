@@ -465,6 +465,33 @@ FLOAT TEST. Delete the legacy brick editors. Fix the 342 hex literals and the ro
 
 ---
 
+## Honest baseline — 2026-08-09, run `post-convert-1` (23 of 38 files converted)
+
+**40/58 PASS — the same headline as before, and a completely different picture underneath.**
+
+| | before | after |
+|---|---|---|
+| PASS | 40 | 40 |
+| real FAIL | 3 | **9** |
+| NOTRUN (lane) | 7 | 7 |
+| TIMEOUT | 8 | **2** |
+
+Six "timeouts" were failing assertions all along, and they now fail in 5–19 s instead of
+burning 300 s each. The two survivors — `ocean_wake_gpu_smoke`, `ocean_wake_visual_capture` —
+are still unconverted *and* do GPU wake work on a software rasteriser, so they are the two
+where "genuinely slow" is still a live hypothesis. Everything else that looked like a hang
+was a lie.
+
+Failing honestly now: `building_blueprint_test`, `chart_rewrite_integration_test`,
+`chart_weather_cache_test`, `land_field_geography_test`, `lighting_material_test`,
+`port_perf_cache_test`, `port_trade_profile_test`, `remote_realtime_join_smoke`,
+`world_generation_seed_validation`.
+
+**The flagship failure is not in this list, and that is the point.** `company_service_test`
+is `extends Node` + a `.tscn`, so `tools/gate.sh` never runs it. The single worst bug found
+today — no starter vessel for any new player — sits in a test the gate does not execute.
+Lane B is not tidying; it is the difference between a gate and a decoration.
+
 ## Conversion wave results (2026-08-09, partial)
 
 23 of 38 files converted. **Groups E (15 files) and both adversarial auditors never ran —
