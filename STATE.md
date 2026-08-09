@@ -483,6 +483,16 @@ independently re-run the converted files to confirm the reports match reality.
   **No new player can be granted a starter vessel.** Given the release-day plan opens with
   "pick your category, get your starter vessel", this is a release blocker sitting behind a
   test that printed PASS.
+
+  Precise cause, checked rather than assumed: the immediate blocker is simply that the
+  directory is **empty**, not that certification rejects anything.
+  `PrebuiltVesselCatalog._load_entry` *recomputes* `compliance_ok` from `outfit.ok` rather
+  than trusting a stored flag (`prebuilt_vessel_catalog.gd:73`, `:75`), and
+  `VesselOutfit.validate` returns `ok = true` for an empty layout — so a prebuilt would
+  certify vacuously today. Authoring one JSON would technically unblock onboarding. It would
+  hand the player a bare hull with no helm, no lights and no gear, because
+  `BrickCatalog.BRICKS` is `{}`. **A starter vessel worth shipping needs the parts
+  vocabulary**, which is M2. The release-day flow and the parts work are the same problem.
 - **`port_trade_profile_test` — a real port bug.** `_apron_blocked_arcs()`
   (`port_land_plan.gd:1149`) widens each quay station by
   `PortSizing.asphalt_quay_loading_clearance_m()` — a berth-spacing figure — and reuses it as a
