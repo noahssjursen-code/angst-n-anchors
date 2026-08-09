@@ -1,5 +1,12 @@
 extends SceneTree
 
+## gate-requires: rendering_device
+##
+## WorldRenderer brings up the FFT water system and OceanWakeField, both of which
+## are compute pipelines. Without a RenderingDevice the FFT bind fails outright
+## and `_update_wake` dereferences a null `rd`, so the captured PNG would show an
+## ocean with no wake in it — evidence of nothing.
+
 const TestReport := preload("res://tests/support/test_report.gd")
 const WORLD_RENDERER := preload("res://scripts/world/world_renderer.gd")
 
@@ -28,8 +35,14 @@ func _run() -> void:
 	if not t.check("renderer exposes an OceanWakeField", field != null):
 		t.finish(self)
 		return
-	if renderer.has_method("_apply_ocean_shader"):
-		renderer.call("_apply_ocean_shader", 1.0, 0.0, 0.0, 0.2, 0.0, 0.0)
+	# solar, daylight, cloud, rain, sea_state, air_wind, storm, fog_t — noon, clear.
+	# Recorded as a check rather than an `if`: the previous silent guard let the
+	# call drift to six arguments against an eight-argument signature.
+	if t.check("renderer exposes _apply_ocean_shader", renderer.has_method("_apply_ocean_shader")):
+		renderer.call(
+			"_apply_ocean_shader",
+			SolarCycle.sample(0.5), 1.0, 0.0, 0.0, 0.2, 0.0, 0.0, 0.0
+		)
 	field.set_process(false)
 	field.set_focus(Vector2.ZERO)
 	for i in range(24):

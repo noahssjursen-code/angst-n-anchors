@@ -44,6 +44,10 @@ func _validate_seed(seed: int, layout: WorldLayout, ports: Array[PortDefinition]
 	var regions := PackedInt32Array()
 	regions.resize(4)
 	var flatten_zones := TERRAIN.make_flatten_zones(ports)
+	_check(
+		flatten_zones.size() >= ports.size(),
+		"seed %d every port contributes terrain zone records" % seed,
+	)
 	for i in range(ports.size()):
 		var port := ports[i]
 		var point := Vector2(port.world_position.x, port.world_position.z)
@@ -52,9 +56,24 @@ func _validate_seed(seed: int, layout: WorldLayout, ports: Array[PortDefinition]
 			navigation.is_open_ocean_reachable(point, PORT_PLACER.MAX_WATERWAY_REACH_M),
 			"seed %d %s reaches open ocean" % [seed, port.port_id],
 		)
+		_check(layout.is_land(point), "seed %d %s datum is on land" % [seed, port.port_id])
+		## Ports stopped stamping a sea-level terrain pad when harbour foundations
+		## became traced, extruded meshes: flatten_zone_records emits no site
+		## envelope once a foundation spine exists, and natural ground is left
+		## alone. The working surface every port must still get is the extruded
+		## foundation deck, so assert that instead of a flattened pad.
+		var foundation := PortExpander.expand(port, port.site_seed) \
+			.layout_graph.initial_attributes.get("foundation", {}) as Dictionary
 		_check(
-			is_zero_approx(TERRAIN.sample_terrain_height(layout, point, flatten_zones)),
-			"seed %d %s pad is sea-level flat" % [seed, port.port_id],
+			not (foundation.get("spine", []) as Array).is_empty(),
+			"seed %d %s has a traced harbour foundation" % [seed, port.port_id],
+		)
+		_check(
+			is_equal_approx(
+				float(foundation.get("surface_y_m", -1.0)),
+				PortCoastTracer.FOUNDATION_SURFACE_Y_M,
+			),
+			"seed %d %s harbour deck sits at the harbour datum" % [seed, port.port_id],
 		)
 	_check(regions[PortDefinition.RegionKind.MAINLAND] > 0, "seed %d has mainland ports" % seed)
 	_check(regions[PortDefinition.RegionKind.FJORD] > 0, "seed %d has fjord ports" % seed)

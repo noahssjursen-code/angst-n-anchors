@@ -15,6 +15,13 @@ extends RefCounted
 ##  - Walls with inside/outside colors split into two half-thickness skins.
 ##  - Every wall opening gets a proud frame (jambs + lintel + sill) in a
 ##    darkened tone — cuts read as depth from any angle and any lighting.
+##
+## Diagonal walls are the same box emitter under a yaw. Everything that
+## decomposes a wall already works in run-space (u along the run, v vertical),
+## so a 45° wall needs no new decomposition — only a rotated frame to emit into:
+## panels, openings, opening frames and two-sided skins all follow for free.
+## Axis-aligned walls keep the identity basis and their existing extent order,
+## so no geometry, collider or bound that exists today moves by a float.
 
 const DEFAULT_WALL_COLOR := Color(0.82, 0.84, 0.86)
 const DEFAULT_DECK_COLOR := Color(0.36, 0.34, 0.31)
@@ -216,11 +223,36 @@ static func _parsed_openings(wall: Dictionary) -> Array:
 	return openings
 
 
-## Boxes {center: Vector3, size: Vector3} for one wall in plan space.
+## Yaw in DEGREES about +Y that turns a wall box onto its run. Zero for "x" and
+## "z" — those keep their historical extent order (x-walls carry the run in
+## size.x, z-walls in size.z) instead of rotating, so every existing box is
+## bit-for-bit what it was. Only the four diagonals are rotated, and for those
+## the run is always size.x and the thickness always size.z.
+static func wall_yaw_deg(wall: Dictionary) -> float:
+	var axis := str(wall.get("axis", "x"))
+	if not StructurePlan.is_diagonal_axis(axis):
+		return 0.0
+	var run := StructurePlan.wall_run(axis)
+	## A +Y rotation of θ takes +X to (cos θ, 0, -sin θ).
+	return rad_to_deg(atan2(-run.z, run.x))
+
+
+static func wall_basis(wall: Dictionary) -> Basis:
+	var yaw := wall_yaw_deg(wall)
+	if is_zero_approx(yaw):
+		return Basis.IDENTITY
+	return Basis(Vector3.UP, deg_to_rad(yaw))
+
+
+## Boxes {center: Vector3, size: Vector3, yaw_deg: float} for one wall in plan
+## space. `size` is in the box's OWN frame: a non-zero `yaw_deg` must be applied
+## about its centre or the box is not the box that was drawn.
 static func wall_boxes(wall: Dictionary) -> Array:
 	var start := StructurePlan.vec3_of(wall.get("start"))
 	var axis := str(wall.get("axis", "x"))
 	var thickness := float(wall.get("thickness", StructurePlan.DEFAULT_WALL_THICKNESS))
+	var run := StructurePlan.wall_run(axis)
+	var yaw := wall_yaw_deg(wall)
 	var boxes: Array = []
 	for panel_variant in wall_panels(wall):
 		var panel := panel_variant as Dictionary
@@ -228,16 +260,14 @@ static func wall_boxes(wall: Dictionary) -> Array:
 		var u_len := float(panel["u1"]) - float(panel["u0"])
 		var v_mid := (float(panel["v0"]) + float(panel["v1"])) * 0.5
 		var v_len := float(panel["v1"]) - float(panel["v0"])
-		if axis == "z":
-			boxes.append({
-				"center": start + Vector3(0.0, v_mid, u_mid),
-				"size": Vector3(thickness, v_len, u_len),
-			})
-		else:
-			boxes.append({
-				"center": start + Vector3(u_mid, v_mid, 0.0),
-				"size": Vector3(u_len, v_len, thickness),
-			})
+		boxes.append({
+			"center": start + run * u_mid + Vector3(0.0, v_mid, 0.0),
+			"size": (
+				Vector3(thickness, v_len, u_len) if axis == "z"
+				else Vector3(u_len, v_len, thickness)
+			),
+			"yaw_deg": yaw,
+		})
 	return boxes
 
 
@@ -400,34 +430,42 @@ static func _wall_layers(wall: Dictionary, fallback: Color) -> Array:
 	var material_in := str(wall.get("material_in", "wood"))
 	var outward := float(wall.get("outward_sign", 1.0))
 	var axis_z := str(wall.get("axis", "x")) == "z"
+	## The thickness direction is local +X for a z-wall and local +Z otherwise;
+	## the basis turns that into plan space and is the identity unless diagonal.
+	var basis := wall_basis(wall)
 	var layers: Array = []
 	for box_variant in wall_boxes(wall):
 		var box := box_variant as Dictionary
 		var center := box["center"] as Vector3
 		var size := box["size"] as Vector3
 		if not two_sided:
-			layers.append({"center": center, "size": size, "color": base, "material": material_out})
+			layers.append({
+				"center": center, "size": size, "basis": basis,
+				"color": base, "material": material_out,
+			})
 			continue
 		var t := size.x if axis_z else size.z
 		var quarter := t * 0.25
-		var normal := Vector3(1, 0, 0) if axis_z else Vector3(0, 0, 1)
+		var normal := basis * (Vector3(1, 0, 0) if axis_z else Vector3(0, 0, 1))
 		## Skins are slightly over half thickness so they interpenetrate at
 		## the centerline — their meeting faces are buried, never coplanar.
 		var skin := t * 0.5 + SKIN_EPS * 2.0
 		var half_size := Vector3(skin, size.y, size.z) if axis_z else Vector3(size.x, size.y, skin)
 		layers.append({
 			"center": center + normal * quarter * outward,
-			"size": half_size, "color": color_out, "material": material_out,
+			"size": half_size, "basis": basis,
+			"color": color_out, "material": material_out,
 		})
 		layers.append({
 			"center": center - normal * quarter * outward,
-			"size": half_size, "color": color_in, "material": material_in,
+			"size": half_size, "basis": basis,
+			"color": color_in, "material": material_in,
 		})
 	var frame_color := base.darkened(0.45)
 	for frame_variant in _opening_frames(wall):
 		var frame := frame_variant as Dictionary
 		layers.append({
-			"center": frame["center"], "size": frame["size"],
+			"center": frame["center"], "size": frame["size"], "basis": basis,
 			"color": frame_color, "material": "steel",
 		})
 	return layers
@@ -440,9 +478,14 @@ static func _wall_layers(wall: Dictionary, fallback: Color) -> Array:
 ##  - Lintel (and window sill) runs the FULL width across the jamb ends —
 ##    closed corners like real casing.
 ##  - Members interpenetrate by SKIN_EPS so no coplanar contact survives.
+##
+## Members come back in the wall's own frame — a diagonal wall's frames need the
+## same basis its panels get.
 static func _opening_frames(wall: Dictionary) -> Array:
 	var start := StructurePlan.vec3_of(wall.get("start"))
-	var axis_z := str(wall.get("axis", "x")) == "z"
+	var axis := str(wall.get("axis", "x"))
+	var axis_z := axis == "z"
+	var run := StructurePlan.wall_run(axis)
 	var thickness := float(wall.get("thickness", StructurePlan.DEFAULT_WALL_THICKNESS))
 	var frames: Array = []
 	var depth := thickness + FRAME_PROUD
@@ -470,14 +513,15 @@ static func _opening_frames(wall: Dictionary) -> Array:
 		for member in members:
 			var u := float(member["u"])
 			var v := float(member["v"])
+			var center := start + run * u + Vector3(0.0, v, 0.0)
 			if axis_z:
 				frames.append({
-					"center": start + Vector3(0.0, v, u),
+					"center": center,
 					"size": Vector3(depth, float(member["vl"]), float(member["ul"])),
 				})
 			else:
 				frames.append({
-					"center": start + Vector3(u, v, 0.0),
+					"center": center,
 					"size": Vector3(float(member["ul"]), float(member["vl"]), depth),
 				})
 	return frames
@@ -522,23 +566,33 @@ static func _plate_layers(deck: Dictionary, wall_fallback: Color, deck_fallback:
 
 # ── Bake outputs ─────────────────────────────────────────────────────────────
 
-## All collision boxes for the plan, offset into host-local space.
+## All collision boxes for the plan, offset into host-local space, as
+## {center, size, yaw_deg}. Decks, stairs and axis-aligned walls report
+## yaw_deg 0.0; a diagonal wall reports the yaw its geometry was drawn with, and
+## a caller that drops it builds a collider the player walks straight through —
+## the same bug class as a stair you fall into. Every consumer must pass yaw_deg
+## on to its box shape.
 static func collect_colliders(plan: StructurePlan, offset := Vector3.ZERO) -> Array:
 	var expanded := expand(plan)
 	var out: Array = []
 	for wall_variant in expanded["walls"] as Array:
 		for box_variant in wall_boxes(wall_variant as Dictionary):
-			var box := box_variant as Dictionary
-			out.append({"center": (box["center"] as Vector3) + offset, "size": box["size"]})
+			out.append(_collider_of(box_variant as Dictionary, offset))
 	for deck_variant in expanded["decks"] as Array:
 		for box_variant in deck_boxes(deck_variant as Dictionary):
-			var box := box_variant as Dictionary
-			out.append({"center": (box["center"] as Vector3) + offset, "size": box["size"]})
+			out.append(_collider_of(box_variant as Dictionary, offset))
 	for stair_variant in expanded["stairs"] as Array:
 		for box_variant in stair_boxes(stair_variant as Dictionary):
-			var box := box_variant as Dictionary
-			out.append({"center": (box["center"] as Vector3) + offset, "size": box["size"]})
+			out.append(_collider_of(box_variant as Dictionary, offset))
 	return out
+
+
+static func _collider_of(box: Dictionary, offset: Vector3) -> Dictionary:
+	return {
+		"center": (box["center"] as Vector3) + offset,
+		"size": box["size"],
+		"yaw_deg": float(box.get("yaw_deg", 0.0)),
+	}
 
 
 ## Merged visual bake: one MeshInstance3D per (material, color) bucket.
@@ -600,19 +654,25 @@ static func _bucket_layer(buckets: Dictionary, layer: Dictionary, offset: Vector
 		(buckets[key] as Dictionary)["st"] as SurfaceTool,
 		(layer["center"] as Vector3) + offset,
 		layer["size"] as Vector3,
+		layer.get("basis", Basis.IDENTITY) as Basis,
 	)
 
 
-## Axis-aligned box, 12 triangles, clockwise-front winding (Godot convention:
-## right-hand cross of vertex order = MINUS the outward normal — verified in
-## tests/winding_probe.gd).
-static func _append_box(st: SurfaceTool, center: Vector3, size: Vector3) -> void:
+## Box of `size` centred on `center`, 12 triangles, clockwise-front winding
+## (Godot convention: right-hand cross of vertex order = MINUS the outward
+## normal — verified in tests/winding_probe.gd).
+##
+## `basis` rotates the box about its own centre; `size` is then read in that
+## rotated frame. A rotation has determinant +1, so it carries vertex order and
+## normals together and the winding convention survives untouched — the identity
+## default reproduces the axis-aligned box exactly (1*x + 0*y + 0*z == x).
+static func _append_box(st: SurfaceTool, center: Vector3, size: Vector3, basis := Basis.IDENTITY) -> void:
 	var h := size * 0.5
 	var corners := [
-		center + Vector3(-h.x, -h.y, -h.z), center + Vector3(h.x, -h.y, -h.z),
-		center + Vector3(h.x, -h.y, h.z), center + Vector3(-h.x, -h.y, h.z),
-		center + Vector3(-h.x, h.y, -h.z), center + Vector3(h.x, h.y, -h.z),
-		center + Vector3(h.x, h.y, h.z), center + Vector3(-h.x, h.y, h.z),
+		center + basis * Vector3(-h.x, -h.y, -h.z), center + basis * Vector3(h.x, -h.y, -h.z),
+		center + basis * Vector3(h.x, -h.y, h.z), center + basis * Vector3(-h.x, -h.y, h.z),
+		center + basis * Vector3(-h.x, h.y, -h.z), center + basis * Vector3(h.x, h.y, -h.z),
+		center + basis * Vector3(h.x, h.y, h.z), center + basis * Vector3(-h.x, h.y, h.z),
 	]
 	var faces := [
 		[[0, 1, 5, 4], Vector3(0, 0, -1)],
@@ -624,7 +684,7 @@ static func _append_box(st: SurfaceTool, center: Vector3, size: Vector3) -> void
 	]
 	for face in faces:
 		var idx: Array = face[0]
-		var normal: Vector3 = face[1]
+		var normal: Vector3 = basis * (face[1] as Vector3)
 		for tri in [[0, 1, 2], [0, 2, 3]]:
 			for k in tri:
 				st.set_normal(normal)

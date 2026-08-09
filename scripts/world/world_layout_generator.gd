@@ -8,7 +8,7 @@ const DEFAULT_CONFIG_PATH := "res://resources/data/world/norway_coast.json"
 const LAYOUT_SCRIPT := preload("res://scripts/world/world_layout.gd")
 const WORLD_CONFIG := preload("res://scripts/world/world_config.gd")
 ## Increment whenever deterministic generation logic changes incompatibly.
-const GENERATION_VERSION := 8
+const GENERATION_VERSION := 9
 const CACHE_LIMIT := 4
 
 static var _layout_cache: Dictionary = {}
@@ -355,7 +355,13 @@ static func _bake_field(
 			var signed_distance := maxf(land_distance, -water_cut_distance)
 			var index := z_idx * resolution + x_idx
 			distances[index] = signed_distance
-			if nearest_waterway <= fjord_influence and x > open_water_x:
+			## Trunk centerlines start at the western map edge so navigation can
+			## reach open ocean, but that offshore approach leg is not fjord
+			## geography — a fjord begins at its mouth on the macro coast. Without
+			## this the influence tube swept the whole archipelago belt and
+			## labelled open skerry water FJORD.
+			var fjord_mouth_x := coast - fjord_influence
+			if nearest_waterway <= fjord_influence and x >= fjord_mouth_x and x > open_water_x:
 				regions[index] = WorldLayout.Region.FJORD
 			elif x >= coast - 900.0 * scale:
 				regions[index] = WorldLayout.Region.MAINLAND

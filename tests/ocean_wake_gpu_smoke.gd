@@ -1,5 +1,13 @@
 extends SceneTree
 
+## gate-requires: rendering_device
+##
+## OceanWakeField is a compute-shader atlas: with no RenderingDevice there is no
+## pipeline, no texture to read back, and nothing this file asserts can be
+## evaluated. Boxes without a Vulkan ICD cannot satisfy it. The check below is
+## kept, not softened — where a RenderingDevice exists the gate runs this file
+## normally and the check is the one that matters.
+
 const TestReport := preload("res://tests/support/test_report.gd")
 
 

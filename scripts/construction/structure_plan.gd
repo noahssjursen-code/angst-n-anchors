@@ -5,7 +5,8 @@ extends RefCounted
 ##
 ## Structure is DRAWN, not stacked: five primitives, each one part regardless
 ## of size, replace fields of voxel bricks:
-##   walls  — {id, start:[x,y,z], axis:"x"|"z", length, height, thickness,
+##   walls  — {id, start:[x,y,z], axis:"x"|"z"|"+x+z"|"+x-z"|"-x+z"|"-x-z",
+##             length, height, thickness,
 ##             color?, openings:[{type, offset, width, height, sill}]}
 ##   decks  — {id, origin:[x,y,z], size:[w,l], thickness, color?,
 ##             openings:[{type, offset:[dx,dz], size:[w,l]}]}
@@ -25,11 +26,28 @@ extends RefCounted
 ## DeckGrid cell corners (0..width, 0..length) and y is metres above the deck
 ## plane. Rooms expand into walls + floor + ceiling plates at bake time —
 ## see StructureBaker.expand_room().
+##
+## A wall `axis` names the DIRECTION of the run away from `start`, never a line:
+## "x" and "z" run along +X and +Z, and each diagonal spells its signed step, so
+## "+x-z" leaves `start` heading toward +X and -Z at 45°. `length` is measured
+## ALONG the run in every case, so a diagonal covers length / sqrt(2) metres on
+## each axis; `thickness` stays perpendicular to the run (centred on it) and
+## `height` stays vertical. All four diagonals exist — two would cover the same
+## two lines — so a perimeter can be traced run after run without back-solving a
+## start corner for the ones that head toward -X or -Z.
+##
+## On a vessel the bow is -Z and port is -X. Every hull in the catalogue tapers
+## at exactly 45° (bow_taper_m == beam_m * 0.5, and CatalogHullVessel.make_grid()
+## hardcodes the same rule), so from the bow shoulder "+x-z" follows the port
+## stem and "-x-z" the starboard stem, on every hull.
 
 const FORMAT := "structure_plan_v1"
 const DEFAULT_WALL_THICKNESS := 1.0 / 6.0
 const DEFAULT_PLATE_THICKNESS := 0.15
 const DEFAULT_ROOM_HEIGHT := 3.0
+
+const WALL_AXES := ["x", "z"]
+const WALL_DIAGONAL_AXES := ["+x+z", "+x-z", "-x+z", "-x-z"]
 
 const OPENING_DOOR := "door"
 const OPENING_WINDOW := "window"
@@ -57,11 +75,39 @@ func allocate_id() -> int:
 	return id
 
 
+## Unit run direction for a wall axis. Unknown names are a mis-authored plan and
+## say so — silently baking them along +X is how a bulwark ends up somewhere
+## nobody drew it.
+static func wall_run(axis: String) -> Vector3:
+	match axis:
+		"x":
+			return Vector3(1, 0, 0)
+		"z":
+			return Vector3(0, 0, 1)
+		"+x+z":
+			return Vector3(1, 0, 1).normalized()
+		"+x-z":
+			return Vector3(1, 0, -1).normalized()
+		"-x+z":
+			return Vector3(-1, 0, 1).normalized()
+		"-x-z":
+			return Vector3(-1, 0, -1).normalized()
+	push_error(
+		"StructurePlan: unknown wall axis \"%s\" — expected one of %s"
+		% [axis, WALL_AXES + WALL_DIAGONAL_AXES]
+	)
+	return Vector3(1, 0, 0)
+
+
+static func is_diagonal_axis(axis: String) -> bool:
+	return WALL_DIAGONAL_AXES.has(axis)
+
+
 func add_wall(start: Vector3, axis: String, length: float, height := DEFAULT_ROOM_HEIGHT, thickness := DEFAULT_WALL_THICKNESS) -> Dictionary:
 	var wall := {
 		"id": allocate_id(),
 		"start": [start.x, start.y, start.z],
-		"axis": "z" if axis == "z" else "x",
+		"axis": axis if (axis == "z" or is_diagonal_axis(axis)) else "x",
 		"length": maxf(length, 1.0),
 		"height": maxf(height, 0.5),
 		"thickness": clampf(thickness, 0.05, 1.0),

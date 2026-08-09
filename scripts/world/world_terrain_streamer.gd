@@ -26,7 +26,8 @@ const LOD_HYSTERESIS_M := 350.0
 const REQUEST_MOVE_THRESHOLD_M := 50.0
 const COLLISION_MOVE_THRESHOLD_M := 25.0
 ## Terrain datum sits below sea level so the rock shelf continues underwater.
-## Port flatten zones still target y=0 and are therefore unchanged.
+## Ports no longer stamp a sea-level pad over it — a traced foundation spine
+## suppresses the site envelope, and the extruded harbour mesh carries the deck.
 const TERRAIN_SINK_M := 2.5
 const SUBMERGED_SHELF_EXTENT_M := 28.0
 ## Submerged terrain is visual bathymetry only. Physical beaching/grounding will

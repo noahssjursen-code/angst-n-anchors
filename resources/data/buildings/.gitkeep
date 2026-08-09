@@ -1,3 +1,18 @@
-# Source-controlled voxel-building blueprints live here.
-# Author them with res://scenes/building_brick_editor.tscn.
-# Filename stem = blueprint id. Do not invent placeholder buildings by hand.
+# Source-controlled voxel-building blueprints live here. Filename stem = blueprint id
+# (BuildingBlueprintCatalog.load_path overwrites whatever the JSON claims).
+#
+# EMPTY SINCE 2026-07-24 (commit aabdf198), and it cannot be refilled yet.
+# That commit wiped BrickCatalog.BRICKS to {} and retired the building brick
+# editor scene, taking harbouroffice.json and warehouse.json with it. Every write
+# path gates on BrickCatalog.has(): BuildingLayout.set_brick / place_footprint
+# return false, and BuildingRules.validate reports "Unknown brick", so load_path
+# push_errors and returns null. The only JSON that would load today is one with
+# zero cells — a placeholder that asserts nothing.
+#
+# Do not invent placeholder buildings by hand. The blocker is the vocabulary, not
+# the directory: the first real blueprint can only be authored once BRICKS has
+# definitions again. Structure Studio does not fill this directory — it authors
+# structure_plan_v1 into resources/data/structures/.
+#
+# tests/building_blueprint_test.gd covers the brick-independent half of the
+# pipeline and trips when either the vocabulary or the first blueprint returns.

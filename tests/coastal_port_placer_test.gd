@@ -31,8 +31,16 @@ func _test_count_and_metadata(ports: Array[PortDefinition]) -> void:
 	_check(ports[0].display_name == "Haugsvik", "home port name is first")
 	var represented_sizes := {}
 	for port in ports:
-		represented_sizes[port.size] = true
-		_check(port.size >= 0, "%s has a size class" % port.port_id)
+		represented_sizes[port.size] = int(represented_sizes.get(port.size, 0)) + 1
+		_check(
+			port.size >= PortSizing.MIN_SIZE and port.size <= PortSizing.MAX_SIZE,
+			"%s size %d is inside the documented 0..8 range" % [port.port_id, port.size]
+		)
+		_check(
+			port.size <= port.site_max_size,
+			"%s size %d respects its geography ceiling %d"
+			% [port.port_id, port.size, port.site_max_size]
+		)
 		_check(not port.site_id.is_empty(), "%s has stable site identity" % port.port_id)
 		_check(port.site_seed != 0, "%s has deterministic site seed" % port.port_id)
 		_check(port.has_explicit_rotation, "%s owns explicit yaw" % port.port_id)
@@ -44,7 +52,19 @@ func _test_count_and_metadata(ports: Array[PortDefinition]) -> void:
 			port.region_kind != PortDefinition.RegionKind.LEGACY_ISLAND,
 			"%s has coastal region kind" % port.port_id
 		)
-	_check(represented_sizes.size() >= 2, "coast supports multiple terminal archetypes")
+	# Seed 90210 spreads 35 ports over six classes, the largest holding 12. A coast
+	# that collapses to one or two archetypes is the regression this guards.
+	_check(
+		represented_sizes.size() >= 3,
+		"coast supports multiple terminal archetypes (%d classes)" % represented_sizes.size()
+	)
+	var largest_bucket := 0
+	for count in represented_sizes.values():
+		largest_bucket = maxi(largest_bucket, int(count))
+	_check(
+		largest_bucket * 2 <= ports.size(),
+		"no single size class dominates the coast (%d of %d)" % [largest_bucket, ports.size()]
+	)
 
 
 func _test_determinism(first: Array[PortDefinition], second: Array[PortDefinition]) -> void:

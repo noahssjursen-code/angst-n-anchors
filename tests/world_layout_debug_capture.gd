@@ -13,18 +13,52 @@ func _initialize() -> void:
 	DirAccess.make_dir_recursive_absolute(output_dir)
 	var captures_written := 0
 	var capture_seeds := _requested_seeds()
+	var checksums := {}
+	var renders := {}
 	for seed_index in range(capture_seeds.size()):
 		var seed: int = capture_seeds[seed_index]
 		var layout: WorldLayout = GENERATOR.generate(seed)
 		var ports: Array[PortDefinition] = PORT_PLACER.place_ports(layout, 35)
 		var image := _render(layout, ports)
 		var path := output_dir.path_join("norway_coast_%d.png" % seed)
-		t.check("seed %d capture written" % seed, image.save_png(path) == OK)
+		var saved: bool = t.check("seed %d capture written" % seed, image.save_png(path) == OK)
+		# save_png returning OK is not evidence the bytes are on disk and legible,
+		# and a capture nobody can open is worth nothing as review evidence.
+		var reloaded: Image = Image.load_from_file(path) if saved else null
+		var legible: bool = t.check(
+			"seed %d capture reloads at %dx%d" % [seed, IMAGE_SIZE, IMAGE_SIZE],
+			reloaded != null
+			and not reloaded.is_empty()
+			and reloaded.get_width() == IMAGE_SIZE
+			and reloaded.get_height() == IMAGE_SIZE,
+		)
+		var colors := _distinct_colors(reloaded) if legible else 0
+		var readable: bool = t.check(
+			"seed %d capture is not blank paint (%d colours)" % [seed, colors],
+			colors >= 8,
+		)
+		checksums[layout.layout_checksum] = true
+		if legible:
+			renders[FileAccess.get_md5(path)] = true
 		print("WorldLayout debug capture: %s checksum=%s" % [path, layout.layout_checksum])
-		captures_written += 1
+		if saved and legible and readable:
+			captures_written += 1
 	t.equal("captures written", captures_written, capture_seeds.size())
+	if capture_seeds.size() > 1:
+		# A generator that ignored its seed would satisfy every per-seed check
+		# above and still emit the same coast three times.
+		t.equal("each seed yields a distinct layout", checksums.size(), capture_seeds.size())
+		t.equal("each seed yields a distinct render", renders.size(), capture_seeds.size())
 	print("WorldLayout debug captures: wrote %d representative seeds" % captures_written)
 	t.finish(self)
+
+
+func _distinct_colors(image: Image) -> int:
+	var seen := {}
+	for py in range(0, IMAGE_SIZE, 4):
+		for px in range(0, IMAGE_SIZE, 4):
+			seen[image.get_pixel(px, py)] = true
+	return seen.size()
 
 
 func _requested_seeds() -> Array[int]:
