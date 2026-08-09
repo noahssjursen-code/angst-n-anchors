@@ -119,21 +119,58 @@ region, or a baked structure ships with a capture.
 
 ## 3a. Scale — read this before authoring any plan
 
-**The player is 1.8 world units tall.** `scenes/shared/player.tscn` is a `CapsuleShape3D` of
-height 1.8 with the camera at 1.6. Structure Studio's own `_build_scale_mannequin` matches it
-and labels it "1.8 m". So for a human, **one world unit is one metre.**
+### The intended model (owner, 2026-08-09)
 
-**Hull geometry is not on that scale.** `resources/data/vessels/hulls/catalog.json` says
-"Dimensions are in-world metres (2× real)" and displays `hull_28x10` as "14.0 × 5.0 m" — but it
-draws it **28 units long**. Stand a 1.8 m player on it and it reads as a **28 m vessel**, not a
-14 m one.
+**One deck-grid cell is 0.5 m. Two cells per metre.** A hull whose grid is 28 × 10 cells is a
+**14 × 5 m vessel**. The catalog's display strings are the true physical size; the numbers in a
+hull id are **cell counts, not metres**. The reason is detail: a 1 m grid is too coarse to build
+anything finer than a shed on.
 
-**Therefore: size everything against the figure, never against the catalog's display name.**
-A superstructure proportioned for the "14 m" label sits on a hull that reads as 28 m and comes
-out half the size it should be. That happened — `probe_trawler_bow_bulwark`'s wheelhouse is
-~10% of LOA where a real trawler's is nearly double that — and it was invisible in every number
-the gate records. It took a human looking at a picture and saying "the wheelhouse looks shorter
-than the player".
+**The player is 1.8 m** — `scenes/shared/player.tscn`, capsule 1.8, eye 1.6 — which is **3.6
+cells**. Size every human-scale thing against the figure: a door ~2.0 m (4 cells), a bulwark
+~1.0–1.2 m (2–2.4 cells), a handrail ~1.1 m (2.2 cells), a bollard ~0.6 m (1.2 cells).
+
+**Anything under 0.5 m cannot sit on the grid at any resolution** — cleats, fairleads, chocks,
+blocks, sheaves, light fixtures, stanchions. Those are free-positioned items with float
+coordinates, which is why the item placement model does not snap.
+
+### The code does not agree yet — this is a known, tracked bug
+
+`WorldUnits.DECK_CELL_M` is **`1.0`**, so today the world is drawn at **2× physical scale while
+the player is drawn at 1×**. A hull labelled "14.0 × 5.0 m" spans 28 world units and reads as a
+28 m vessel beside the figure.
+
+That is what made `probe_trawler_bow_bulwark`'s wheelhouse look wrong. The wheelhouse was not
+undersized — **the boat was twice too big**. Sizing the superstructure up to match would have
+buried the real defect under a second one.
+
+**Author to the intended model, not to the current constant**, and expect fixtures to need
+re-authoring when the constant changes.
+
+### The conflict inside the hull data — unresolved, do not paper over it
+
+The hull catalog's dimensions were authored for the half-scale reading and its **physics for the
+full-scale one**:
+
+| | `hull_28x10` says | 14 m vessel would be | 28 m vessel would be |
+|---|---|---|---|
+| `displacement_t` | 256 | ~30–60 t | ~250 t |
+| `default_shaft_power_kw` | 1871 | ~300–500 kW | ~1500–1900 kW |
+
+Displacement scales with the **cube**, so halving linear dimensions is an 8× volume change.
+Buoyancy, draft and every hydrostatics test read these numbers. Changing `DECK_CELL_M` without
+re-deriving them leaves every vessel eight times too heavy for its size.
+
+### The rule that survives regardless
+
+**Every vessel capture carries a 1.8 m figure on deck** (`tests/vessel_render_capture.gd`).
+A capture without one has no absolute scale, and a wrongly-proportioned build looks entirely
+plausible. Check the figure is actually *visible* — the first placement put it inside the
+wheelhouse, where it rendered perfectly and appeared in no frame.
+
+**When a proportion looks wrong to a person, believe them and go measure.** Every number the
+gate records agreed with every other, and they were all wrong together. It took a human looking
+at a picture.
 
 Consequences:
 

@@ -101,7 +101,10 @@ func _test_overhang_underside() -> void:
 	var under := ao.occlusion_at(Vector3(0, 0, 0), Vector3(0, -1, 0))
 	var over := ao.occlusion_at(Vector3(0, 2, 0), Vector3(0, 1, 0))
 	print("  lone box: underside=%.4f topside=%.4f" % [under, over])
-	_check("an underside is dark with nothing under it", under >= StructureAO.DOWNFACE_BIAS - 0.001)
+	## Absolute threshold, not `>= DOWNFACE_BIAS`: comparing against the constant
+	## the value is computed from is vacuous — it survives the constant being
+	## zeroed, which is exactly the regression it is supposed to catch.
+	_check("an underside is dark with nothing under it", under > 0.25)
 	_check("a top face in open air is untouched", over < 0.001)
 	_check("underside is darker than topside", under - over > 0.2)
 
@@ -164,7 +167,11 @@ func _test_emitter_is_drop_in() -> void:
 	var arrays: Array = mesh.surface_get_arrays(0)
 	var verts: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
 	var norms: PackedVector3Array = arrays[Mesh.ARRAY_NORMAL]
-	var colors: PackedColorArray = arrays[Mesh.ARRAY_COLOR]
+	## Read the colour channel defensively: a surface with no colours at all has
+	## null here, and a typed assignment would abort this function instead of
+	## reporting a failure — which reads as a silently missing check, not a red
+	## one. That is the exact regression this check exists to catch.
+	var colors := _colors_of(arrays, verts.size())
 	_check("the emitter carries a vertex colour channel", colors.size() == verts.size())
 	## Intrinsic winding check, independent of the baker: Godot front faces wind
 	## CLOCKWISE, so the right-hand cross of the vertex order is MINUS the
@@ -211,10 +218,10 @@ func _test_tessellation() -> void:
 	_check("a plate face wider than TESSEL is subdivided", triangles > 12)
 	var arrays: Array = st.commit().surface_get_arrays(0)
 	var verts: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
-	var colors: PackedColorArray = arrays[Mesh.ARRAY_COLOR]
+	var colors := _colors_of(arrays, verts.size())
 	var top_min := 1.0
 	var top_max := 0.0
-	for i in verts.size():
+	for i in colors.size():
 		if absf(verts[i].y - 0.0) > 1e-4:
 			continue
 		top_min = minf(top_min, colors[i].r)
@@ -276,6 +283,19 @@ func _load_plan(path: String) -> StructurePlan:
 	if not (parsed is Dictionary) or not StructurePlan.is_plan(parsed as Dictionary):
 		return null
 	return StructurePlan.from_dict(parsed as Dictionary)
+
+
+## ARRAY_COLOR is null on a surface that never saw set_color; hand back an empty
+## array (and a sentinel value that cannot pass a gradient test) instead of
+## throwing, so the caller can report a failure rather than vanish.
+func _colors_of(arrays: Array, expected: int) -> PackedColorArray:
+	var raw: Variant = arrays[Mesh.ARRAY_COLOR]
+	if raw == null:
+		return PackedColorArray()
+	var colors := raw as PackedColorArray
+	if colors.size() != expected:
+		return PackedColorArray()
+	return colors
 
 
 func _baker_has(method: String) -> bool:

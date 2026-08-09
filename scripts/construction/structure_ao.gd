@@ -47,10 +47,12 @@ extends RefCounted
 ##    dark even with nothing under it. It is what makes an overhang read as an
 ##    overhang from below and a box read as a solid instead of a cutout.
 ##
-## COST. Broad phase is a uniform hash grid of cell = 2 * radius, so a query
-## touches at most 8 cells and tests a handful of boxes. Candidate lists and AO
+## COST. Broad phase is a uniform hash grid of CELL_FACTOR * radius, so a query
+## touches at most 8 cells. Each candidate is then rejected against the probe
+## cloud's own bounding box before any point test runs. Candidate lists and AO
 ## values are memoised per point, so a corner shared by three faces is solved
-## once. Bake-time only; the studio re-bakes on every edit, so see stats().
+## once. Bake-time only; the studio re-bakes on every edit, so see stats() and
+## the measured ferry figure in tests/structure_ao_test.gd.
 ##
 ## TESSELLATION. Vertex AO on an untessellated box is a lie at plan scale: a
 ## 30 m deck plate has four vertices per face, so a shadow at one corner ramps
@@ -99,6 +101,9 @@ const DOWNFACE_BIAS := 0.30
 const TESSEL := 1.0
 ## Hard cap on splits per face axis — bounds the triangle count of a 40 m plate.
 const MAX_SPLIT := 12
+## Broad-phase cell size as a multiple of RADIUS. Measured on the ferry: 2.0
+## costs 476 ms, 3.0 costs 455 ms, and the values are bit-identical either way.
+const CELL_FACTOR := 3.0
 ## Probe shells as a fraction of RADIUS, and what a hit at each is worth.
 const NEAR_SHELL := 0.36
 const FAR_SHELL := 0.85
@@ -122,7 +127,7 @@ const KERNEL := [
 ]
 
 var _radius := RADIUS
-var _cell := RADIUS * 2.0
+var _cell := RADIUS * CELL_FACTOR
 var _near := RADIUS * NEAR_SHELL
 var _far := RADIUS * FAR_SHELL
 var _kernel_weight := 1.0
@@ -177,7 +182,7 @@ static func for_plan(plan: StructurePlan, offset := Vector3.ZERO, radius := RADI
 
 func _build(boxes: Array, radius: float) -> void:
 	_radius = maxf(radius, 0.01)
-	_cell = _radius * 2.0
+	_cell = _radius * CELL_FACTOR
 	_near = _radius * NEAR_SHELL
 	_far = _radius * FAR_SHELL
 	_kernel_weight = 0.0
@@ -288,15 +293,86 @@ func _solve(point: Vector3, normal: Vector3) -> float:
 		n = Vector3.UP
 	var candidates := _candidates(point)
 	var occ := 0.0
-	if candidates.size() > 0:
-		var offsets := _offsets_for(n)
+	var count := candidates.size()
+	if count > 0:
+		## Hot loop, and it is the whole cost of a bake: candidates OUTER, probe
+		## points INNER, box test inlined, one bit per probe. Written this way it
+		## makes zero function calls per solve — the earlier one-call-per-probe
+		## shape spent more than half its time in GDScript call overhead.
+		var offsets := _offsets_for(n) as Array
+		var ox := offsets[0] as PackedFloat32Array
+		var oy := offsets[1] as PackedFloat32Array
+		var oz := offsets[2] as PackedFloat32Array
+		for j in _probes:
+			_px[j] = point.x + ox[j]
+			_py[j] = point.y + oy[j]
+			_pz[j] = point.z + oz[j]
+		var rmin := point + (offsets[3] as Vector3)
+		var rmax := point + (offsets[4] as Vector3)
+		var mask := 0
+		var full := (1 << _probes) - 1
+		for ci in count:
+			if mask == full:
+				break
+			var index := candidates[ci]
+			var box_lo := _bmin[index]
+			var box_hi := _bmax[index]
+			if box_lo.x > rmax.x or box_hi.x < rmin.x:
+				continue
+			if box_lo.y > rmax.y or box_hi.y < rmin.y:
+				continue
+			if box_lo.z > rmax.z or box_hi.z < rmin.z:
+				continue
+			if _rot[index] == 0:
+				var lo := box_lo
+				var hi := box_hi
+				var lox := lo.x
+				var loy := lo.y
+				var loz := lo.z
+				var hix := hi.x
+				var hiy := hi.y
+				var hiz := hi.z
+				var bit := 1
+				for j in _probes:
+					if mask & bit == 0:
+						var vy := _py[j]
+						if vy >= loy and vy <= hiy:
+							var vx := _px[j]
+							if vx >= lox and vx <= hix:
+								var vz := _pz[j]
+								if vz >= loz and vz <= hiz:
+									mask |= bit
+					bit <<= 1
+			else:
+				var cen := _cen[index]
+				var half := _half[index]
+				var cs := _cos[index]
+				var sn := _sin[index]
+				var cx := cen.x
+				var cy := cen.y
+				var cz := cen.z
+				var hx := half.x
+				var hy := half.y
+				var hz := half.z
+				var rbit := 1
+				for j in _probes:
+					if mask & rbit == 0:
+						var dy := _py[j] - cy
+						if absf(dy) <= hy:
+							var dx := _px[j] - cx
+							var dz := _pz[j] - cz
+							if absf(cs * dx - sn * dz) <= hx and absf(sn * dx + cs * dz) <= hz:
+								mask |= rbit
+					rbit <<= 1
+		## Bit 2k is the near shell of direction k, bit 2k+1 the far shell.
 		var hit := 0.0
-		for k in KERNEL.size():
-			var weight := float((KERNEL[k] as Array)[3])
-			if _inside_any(point + offsets[k * 2], candidates):
-				hit += weight * NEAR_HIT
-			elif _inside_any(point + offsets[k * 2 + 1], candidates):
-				hit += weight * FAR_HIT
+		var kbit := 1
+		for k in _weights.size():
+			if mask & kbit != 0:
+				hit += _weights[k] * NEAR_HIT
+			elif mask & (kbit << 1) != 0:
+				hit += _weights[k] * FAR_HIT
+			kbit <<= 2
 		occ = hit / _kernel_weight
 	## Sky term: ambient arrives from above, so a downward face is dark even in
 	## open air. Purely a function of the normal — it cannot mask the geometric
@@ -308,50 +384,48 @@ func _solve(point: Vector3, normal: Vector3) -> float:
 ## Probe offsets (near, far) per kernel entry for one normal, built once. A
 ## plan's faces are axis-aligned apart from the diagonal walls, so this caches
 ## down to a handful of entries and takes the trig out of the inner loop.
-func _offsets_for(n: Vector3) -> PackedVector3Array:
+func _offsets_for(n: Vector3) -> Array:
 	var cached: Variant = _dirs.get(n, null)
 	if cached != null:
-		return cached as PackedVector3Array
+		return cached as Array
 	## Deterministic tangent frame. The kernel is symmetric in +/-t1 and +/-t2,
 	## so which way the frame lands only ever rotates the sample set within the
 	## plane — it never changes an axis-aligned result.
 	var helper := Vector3.UP if absf(n.y) < 0.9 else Vector3.FORWARD
 	var t1 := n.cross(helper).normalized()
 	var t2 := n.cross(t1).normalized()
-	var offsets := PackedVector3Array()
-	offsets.resize(KERNEL.size() * 2)
+	var ox := PackedFloat32Array()
+	var oy := PackedFloat32Array()
+	var oz := PackedFloat32Array()
+	ox.resize(_probes)
+	oy.resize(_probes)
+	oz.resize(_probes)
 	for k in KERNEL.size():
 		var entry := KERNEL[k] as Array
 		var dir := (n * float(entry[0]) + t1 * float(entry[1]) + t2 * float(entry[2])).normalized()
-		offsets[k * 2] = dir * _near
-		offsets[k * 2 + 1] = dir * _far
+		var near := dir * _near
+		var far := dir * _far
+		ox[k * 2] = near.x
+		oy[k * 2] = near.y
+		oz[k * 2] = near.z
+		ox[k * 2 + 1] = far.x
+		oy[k * 2 + 1] = far.y
+		oz[k * 2 + 1] = far.z
+	## Bounding box of the probe cloud itself. Every kernel direction has a
+	## positive n component, so this box starts strictly OUTSIDE the surface —
+	## which is what lets _solve reject the point's own box (and every flush
+	## neighbour) in six comparisons instead of eighteen point tests. The point's
+	## own box is a candidate of every single query, so this is not a micro-
+	## optimisation: it is most of the work.
+	var omin := Vector3(ox[0], oy[0], oz[0])
+	var omax := omin
+	for j in _probes:
+		var o := Vector3(ox[j], oy[j], oz[j])
+		omin = omin.min(o)
+		omax = omax.max(o)
+	var offsets: Array = [ox, oy, oz, omin, omax]
 	_dirs[n] = offsets
 	return offsets
-
-
-func _inside_any(p: Vector3, candidates: PackedInt32Array) -> bool:
-	for index in candidates:
-		if _rot[index] == 0:
-			var lo := _bmin[index]
-			if p.x < lo.x or p.y < lo.y or p.z < lo.z:
-				continue
-			var hi := _bmax[index]
-			if p.x > hi.x or p.y > hi.y or p.z > hi.z:
-				continue
-			return true
-		else:
-			var d := p - _cen[index]
-			var h := _half[index]
-			if absf(d.y) > h.y:
-				continue
-			var cs := _cos[index]
-			var sn := _sin[index]
-			if absf(cs * d.x - sn * d.z) > h.x:
-				continue
-			if absf(sn * d.x + cs * d.z) > h.z:
-				continue
-			return true
-	return false
 
 
 ## Box indices whose AABB could reach within RADIUS of `point`. Memoised: a box
