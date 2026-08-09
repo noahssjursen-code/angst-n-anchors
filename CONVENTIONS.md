@@ -46,6 +46,26 @@ Two consequences, both learned the hard way:
 - **Do not tell a recon/analysis agent that the gate exists** unless you want it run.
   Agents helpfully run it, and on 4 cores that turns one 15-minute baseline into
   three 40-minute ones. Name the gate in a wave prompt only when running it is the job.
+- **Never background a gate run with a bare `&`.** The shell that launched it exits
+  when the tool call returns and takes the run with it — a 25-minute run died at 57 of
+  82 units that way, with no summary line to show it had been truncated. Use the Bash
+  tool's own `run_in_background`, which survives the call and reports completion.
+
+### Reading the results
+
+`results.tsv` columns are `status · lane · name · elapsed · script-error-count · log`.
+
+- `PASS` / `FAIL(n)` — the unit ran and declared an outcome.
+- `TIMEOUT` — killed at `GATE_TIMEOUT`. **Do not read this as "slow" without checking.**
+  A failing `assert()` used to idle the process here; that shape is gone now that the
+  suite is off bare `assert()`, but any future code that stalls before `quit()` recreates it.
+- `NOTRUN` — the unit never declared an outcome. A *verdict outranks a load-failure
+  banner*: Godot prints `Failed to load script "res://…"` during the transient compile
+  cascade the `--script` lane provokes and then runs the script anyway, so that banner
+  alone never means NOTRUN. Getting this wrong reported a `17/20 FAILED` as "never ran"
+  and five passing tests as un-run.
+- The script-error column is **noise, not failure** — it is how autoload and driver
+  regressions announce themselves. A test can be green with 27 script errors in its log.
 
 ### What the gate covers, and what it does not
 

@@ -548,6 +548,24 @@ independently re-run the converted files to confirm the reports match reality.
   pairing sweep runs 652 checks and would otherwise print 650 PASS lines per gate run.
   Failures still print, push_error, and set the exit code.
 
+## Two-lane baseline — 2026-08-09, run `true-baseline` (INCOMPLETE: 57 of 82)
+
+The run was backgrounded with a bare `&` and died when its parent shell exited. No summary
+line, so the truncation is only visible by counting rows. **Numbers below are partial and
+must be retaken.** (`CONVENTIONS.md` §1 now warns about this.)
+
+Lane split: **A: 58 `--script` · B: 24 scene**, minus one stale `.tscn` skipped by detection.
+
+Red at truncation — **12 in lane A, 1 in lane B**:
+`building_blueprint_test` · `chart_weather_cache_test` · `chart_rewrite_integration_test` ·
+`lighting_material_test` · `land_field_geography_test` · `ocean_wake_gpu_smoke` ·
+`port_trade_profile_test` · `port_perf_cache_test` · `remote_realtime_join_smoke` ·
+`world_generation_seed_validation` · `port_layout_visual_capture` (NOTRUN) ·
+`ocean_wake_visual_capture` (TIMEOUT) · and in lane B, `boat_physics_validation`.
+
+`boat_physics_validation` is new information: lane B is already earning its place beyond
+`company_service_test`.
+
 ## Audit results (2026-08-09) — the critics earned their keep
 
 Three adversarial auditors ran against the completed conversion. **Two of the three found
