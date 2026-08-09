@@ -596,6 +596,372 @@ static func _plate_layers(deck: Dictionary, wall_fallback: Color, deck_fallback:
 	return layers
 
 
+# ── Spar and wire: one swept tube on a polyline ──────────────────────────────
+##
+## SPAR is a tube swept along a POLYLINE with a radius that may taper along the
+## run. WIRE is the same tube with catenary sag applied to the path first. They
+## are ONE emitter with two front doors, and neither one knows what it is being
+## used for: mast, post, boom, derrick, gallows leg, davit, stanchion, exhaust
+## stack, vent, jackstaff, antenna, crane pedestal, pipe run and wrapped handrail
+## are all `spar` with different numbers in `props`. If a change here needs an
+## `if part_id == …` it is the wrong change.
+##
+## Two endpoints was the earlier spelling and it cannot draw a pipe run with
+## three bends, a goose-neck vent (a pipe folded 180 degrees at the top), a cowl,
+## a curved davit arm, a ladder stringer stepped around an obstruction, or a
+## handrail that follows a deckhouse round a corner. Each of those becomes 3-10
+## separate fittings under a two-endpoint spar, for no gain. `from`/`to` is still
+## accepted and is exactly the two-node polyline, so nothing regresses.
+##
+## COST. A tube of `sides` sides over `rings` polyline nodes is
+##   sides quads per gap   -> 2 * sides * (rings - 1) triangles
+##   one fan cap per end   ->     sides * 2           triangles
+##   = 2 * sides * rings triangles, exactly, for every spar ever emitted.
+## An 8-sided two-node mast is 32. That one formula is the breadth claim: if any
+## part were special-cased its triangle count would stop matching.
+
+
+## Points of a polyline. Accepts `[[x,y,z], …]` (what survives JSON) and
+## `[Vector3, …]` (what a caller already holding vectors has).
+static func polyline_of(value: Variant) -> PackedVector3Array:
+	var out := PackedVector3Array()
+	if not (value is Array):
+		return out
+	for entry in value as Array:
+		if entry is Vector3:
+			out.append(entry as Vector3)
+		elif entry is Array and (entry as Array).size() >= 3:
+			var list := entry as Array
+			out.append(Vector3(float(list[0]), float(list[1]), float(list[2])))
+	return out
+
+
+static func _point_of(value: Variant) -> Vector3:
+	if value is Vector3:
+		return value as Vector3
+	return StructurePlan.vec3_of(value)
+
+
+## Drops repeated nodes. A zero-length run has no direction, and one duplicated
+## point in an authored polyline would otherwise divide by zero in the frame.
+static func _dedup_path(path: PackedVector3Array) -> PackedVector3Array:
+	var out := PackedVector3Array()
+	for point in path:
+		if out.is_empty() or out[out.size() - 1].distance_to(point) > PATH_EPS:
+			out.append(point)
+	return out
+
+
+## The spar's path, in whatever frame the spec was written in. `points` (or its
+## alias `path`) is the contract; `from`/`to` is the two-node degenerate case, so
+## a caller holding only two endpoints needs no different call.
+static func spar_path(spec: Dictionary) -> PackedVector3Array:
+	var raw := polyline_of(spec.get("points", spec.get("path", null)))
+	if raw.size() < 2 and spec.has("from") and spec.has("to"):
+		raw = PackedVector3Array([_point_of(spec["from"]), _point_of(spec["to"])])
+	return _dedup_path(raw)
+
+
+## Radius at every node. `radii` (one per node) wins outright — that is the
+## per-node taper. Otherwise `radius` tapers to `radius * taper` distributed by
+## ARC LENGTH, so a run whose nodes bunch up around a bend still tapers evenly in
+## metres instead of evenly per node.
+static func spar_radii(spec: Dictionary, path: PackedVector3Array, fallback := SPAR_DEFAULT_RADIUS) -> PackedFloat32Array:
+	var count := path.size()
+	var out := PackedFloat32Array()
+	var explicit: Variant = spec.get("radii", null)
+	if explicit is Array and (explicit as Array).size() == count:
+		for value in explicit as Array:
+			out.append(maxf(float(value), SPAR_MIN_RADIUS))
+		return out
+	var base := maxf(float(spec.get("radius", fallback)), SPAR_MIN_RADIUS)
+	var taper := maxf(float(spec.get("taper", 1.0)), 0.0)
+	var travelled := PackedFloat32Array([0.0])
+	var total := 0.0
+	for index in range(1, count):
+		total += path[index].distance_to(path[index - 1])
+		travelled.append(total)
+	for index in count:
+		var t := 0.0 if total <= 0.0 else travelled[index] / total
+		out.append(maxf(lerpf(base, base * taper, t), SPAR_MIN_RADIUS))
+	return out
+
+
+static func spar_sides(spec: Dictionary, fallback := SPAR_DEFAULT_SIDES) -> int:
+	return clampi(int(spec.get("sides", fallback)), SPAR_MIN_SIDES, SPAR_MAX_SIDES)
+
+
+## Some unit vector perpendicular to `dir`, chosen off the world axis `dir` is
+## least aligned with so the cross is never degenerate.
+static func _perp_to(dir: Vector3) -> Vector3:
+	var axis := Vector3.UP
+	if absf(dir.dot(Vector3.UP)) > 0.9:
+		axis = Vector3.RIGHT
+	return dir.cross(axis).normalized()
+
+
+## The minimal rotation carrying `from` onto `to`, applied to `v`. This is the
+## parallel transport that keeps a bent tube from twisting about its own run — a
+## fixed world reference vector would spin the cross-section as the run turns,
+## and on a goose-neck it shears the pipe visibly.
+static func _transport(v: Vector3, from: Vector3, to: Vector3) -> Vector3:
+	var axis := from.cross(to)
+	if axis.length() < 1e-9:
+		return v if from.dot(to) > 0.0 else -v
+	return v.rotated(axis.normalized(), from.angle_to(to))
+
+
+## One ring of `sides` points per polyline node, in order. Interior nodes are
+## MITRED onto the bisector plane of the two runs meeting there, so the tube is
+## continuous through a bend — the two runs share one ring, which is what makes a
+## bent spar watertight instead of two butted stubs with a wedge missing.
+static func tube_rings(path: PackedVector3Array, radii: PackedFloat32Array, sides: int) -> Array:
+	var count := path.size()
+	if count < 2 or radii.size() != count or sides < SPAR_MIN_SIDES:
+		return []
+	var runs: Array[Vector3] = []
+	for index in range(count - 1):
+		runs.append((path[index + 1] - path[index]).normalized())
+	var rings: Array = []
+	var u := _perp_to(runs[0])
+	for index in count:
+		## `u` is perpendicular to the run ARRIVING at this node, by construction.
+		var arriving := runs[maxi(index - 1, 0)]
+		var normal := arriving
+		if index > 0 and index < count - 1:
+			var leaving := runs[index]
+			var bisector := arriving + leaving
+			if bisector.length() > 1e-6:
+				normal = bisector.normalized()
+		rings.append(_ring(path[index], arriving, u, normal, radii[index], sides))
+		if index < count - 1 and index > 0:
+			u = _transport(u, arriving, runs[index])
+	return rings
+
+
+static func _ring(
+	center: Vector3, run: Vector3, u: Vector3, normal: Vector3, radius: float, sides: int
+) -> PackedVector3Array:
+	## (u, v, run) is right-handed: run x u = v, u x v = run.
+	var v := run.cross(u).normalized()
+	var denom := normal.dot(run)
+	var mitre := denom > SPAR_MITRE_MIN_DOT
+	var points := PackedVector3Array()
+	for k in sides:
+		var angle := TAU * float(k) / float(sides)
+		var offset := (u * cos(angle) + v * sin(angle)) * radius
+		if mitre:
+			## Slide along the run until the point lands on the bisector plane:
+			## (offset + s*run) . normal == 0.
+			offset += run * (-offset.dot(normal) / denom)
+		points.append(center + offset)
+	return points
+
+
+## ── Wire: the same tube, with the path sagged first ─────────────────────────
+##
+## `sag` is the maximum droop below the chord, in metres, applied per polyline
+## span. IT REACHES EXACTLY ZERO and that is a hard requirement, not a nicety: a
+## shroud or a stay drawn with mooring-line droop reads as broken rigging, which
+## is worse than no rigging at all. At sag 0 this function returns the authored
+## points UNTOUCHED — not resampled, not re-lerped, not rounded — so a standing
+## stay is bit-for-bit the straight line the builder drew.
+##
+## CHAIN IS NOT WIRE, and is not solved here. Anchor cable, lashing chain and
+## gripes read as chain because of the LINKS. This emitter gets chain's shape
+## right and its material wrong, so a chain drawn with it looks like a thick
+## smooth rope. That needs either a segmented variant or a shading treatment;
+## COMPONENTS.md flags it as unsolved and nothing below pretends otherwise.
+##
+## Sag is applied in the frame the path is already in, and the baker transforms a
+## wire's points to PLAN space BEFORE sagging — a line hangs down under gravity
+## no matter which way its fitting is yawed, pitched or rolled.
+
+
+## Solves the catenary shape parameter for a span. With u = span / (2a), the
+## ratio sag/span is (cosh u - 1) / (2u), which is strictly increasing on u > 0,
+## so a bisection is exact to float precision and needs no derivative and no
+## initial guess. Returns u; a is span / (2u).
+static func catenary_u(span: float, sag: float) -> float:
+	if span <= 0.0 or sag <= 0.0:
+		return 0.0
+	var target := sag / span
+	var low := 1e-6
+	var high := 30.0 ## cosh(30)/60 ~ 8.9e10: a sag 10^10 times the span
+	if (cosh(high) - 1.0) / (2.0 * high) < target:
+		return high
+	for _i in 80:
+		var mid := (low + high) * 0.5
+		if (cosh(mid) - 1.0) / (2.0 * mid) < target:
+			low = mid
+		else:
+			high = mid
+	return (low + high) * 0.5
+
+
+## Droop below the chord at parameter `t` in [0,1] across a span whose horizontal
+## extent is `span` and whose midspan droop is `sag`. Zero at both ends, `sag` at
+## t = 0.5, and identically zero for sag <= 0.
+static func wire_droop(t: float, span: float, sag: float) -> float:
+	if sag <= 0.0 or span <= 0.0:
+		return 0.0
+	var u := catenary_u(span, sag)
+	if u <= 0.0:
+		return 0.0
+	var a := span / (2.0 * u)
+	return a * (cosh(u) - cosh(u * (2.0 * t - 1.0)))
+
+
+## The wire's drawn path: the authored polyline with catenary droop added to
+## every span. Straight-through at sag 0 — see the note above.
+static func wire_path(spec: Dictionary) -> PackedVector3Array:
+	var path := spar_path(spec)
+	var sag := float(spec.get("sag", 0.0))
+	if path.size() < 2 or sag <= 0.0:
+		return path
+	var steps := clampi(int(spec.get("span_steps", WIRE_DEFAULT_SPAN_STEPS)), 2, WIRE_MAX_SPAN_STEPS)
+	var out := PackedVector3Array([path[0]])
+	for index in range(path.size() - 1):
+		var a := path[index]
+		var b := path[index + 1]
+		## Horizontal extent: a line hanging between two points on the same
+		## vertical has no catenary to draw, it is simply straight down.
+		var span := Vector2(b.x - a.x, b.z - a.z).length()
+		for step in range(1, steps + 1):
+			var t := float(step) / float(steps)
+			out.append(a.lerp(b, t) - Vector3.UP * wire_droop(t, span, sag))
+	return out
+
+
+## ── Item reading: where a plan's fittings become geometry ───────────────────
+##
+## `items[]` was declared, serialised and counted by StructurePlan and read by
+## nothing. These are its first two readers. An item is a spar or a wire when its
+## `props.primitive` says so, or failing that when its `item_id` does — so a
+## catalog part may keep its own name and still resolve to a primitive.
+
+
+static func item_primitive(item: Dictionary) -> String:
+	var props := StructurePlan.item_props(item)
+	return str(props.get("primitive", item.get("item_id", "")))
+
+
+## Renderable layers for one item. Empty for anything this baker cannot draw yet
+## — an unknown fitting costs nothing and is not silently turned into a box.
+static func _item_layers(plan: StructurePlan, item: Dictionary) -> Array:
+	var primitive := item_primitive(item)
+	if primitive != "spar" and primitive != "wire":
+		return []
+	var props := StructurePlan.item_props(item)
+	var xform := plan.item_transform(item)
+	var wire := primitive == "wire"
+	var path := PackedVector3Array()
+	if wire:
+		## Transform FIRST, sag SECOND: gravity is not in the fitting's frame.
+		path = wire_path(_respec(props, _transformed(spar_path(props), xform)))
+	else:
+		path = _transformed(spar_path(props), xform)
+	if path.size() < 2:
+		return []
+	var sides := spar_sides(props, WIRE_DEFAULT_SIDES if wire else SPAR_DEFAULT_SIDES)
+	var radii := spar_radii(props, path, WIRE_DEFAULT_RADIUS if wire else SPAR_DEFAULT_RADIUS)
+	return [{
+		"kind": "tube",
+		"points": path,
+		"radii": radii,
+		"sides": sides,
+		"capped": bool(props.get("capped", true)),
+		"color": _color_of(props.get("color", null), DEFAULT_WIRE_COLOR if wire else DEFAULT_SPAR_COLOR),
+		"material": str(props.get("material", "steel" if wire else "metal")),
+		"source_id": int(item.get("id", -1)),
+	}]
+
+
+static func _transformed(path: PackedVector3Array, xform: Transform3D) -> PackedVector3Array:
+	var out := PackedVector3Array()
+	for point in path:
+		out.append(xform * point)
+	return out
+
+
+## A copy of `props` whose path is `path` — used to hand an already-transformed
+## polyline back into wire_path() without mutating the plan's own dictionary.
+static func _respec(props: Dictionary, path: PackedVector3Array) -> Dictionary:
+	var spec := props.duplicate()
+	spec.erase("from")
+	spec.erase("to")
+	spec.erase("path")
+	spec["points"] = path
+	return spec
+
+
+## Colliders for one item, in plan space. See collect_colliders() for the whole
+## argument; the short version is that a spar is an obstruction and a wire is
+## not, and that a sloped run cannot be spelled in a yaw-only collider.
+static func _item_colliders(plan: StructurePlan, item: Dictionary, offset: Vector3) -> Array:
+	if item_primitive(item) != "spar":
+		return []
+	var props := StructurePlan.item_props(item)
+	if not bool(props.get("solid", true)):
+		return []
+	var path := _transformed(spar_path(props), plan.item_transform(item))
+	if path.size() < 2:
+		return []
+	var radii := spar_radii(props, path, SPAR_DEFAULT_RADIUS)
+	var out: Array = []
+	for index in range(path.size() - 1):
+		var a := path[index]
+		var b := path[index + 1]
+		var radius := maxf(radii[index], radii[index + 1])
+		if radius < SPAR_COLLIDER_MIN_RADIUS:
+			continue
+		out.append_array(_run_colliders(a, b, radius, offset))
+	return out
+
+
+static func _run_colliders(a: Vector3, b: Vector3, radius: float, offset: Vector3) -> Array:
+	var delta := b - a
+	var length := delta.length()
+	if length < PATH_EPS:
+		return []
+	var dir := delta / length
+	var girth := radius * 2.0
+	var mid := (a + b) * 0.5 + offset
+	if absf(dir.y) >= 1.0 - AXIS_TOL:
+		## Vertical: exact, one box, and the yaw of a circle does not matter.
+		return [{"center": mid, "size": Vector3(girth, length, girth), "yaw_deg": 0.0}]
+	if absf(dir.y) <= AXIS_TOL:
+		## Level: exact at ANY heading, because the collider contract carries a
+		## yaw. Same convention as wall_yaw_deg — a +Y rotation of theta takes +X
+		## to (cos theta, 0, -sin theta).
+		return [{
+			"center": mid,
+			"size": Vector3(length, girth, girth),
+			"yaw_deg": rad_to_deg(atan2(-dir.z, dir.x)),
+		}]
+	## Sloped. The collider contract is yaw-only (see collect_colliders), so a
+	## raked mast or a curved davit arm cannot be one rotated box: an unrotated
+	## box round it would be a phantom slab standing out over the open deck, and
+	## a pitched box would be silently flattened by every consumer. Step it
+	## instead — a staircase of axis-aligned boxes, each the sub-run's own
+	## bounding box grown by the tube radius, which OVER-approximates by at most
+	## about half a step and never under-approximates. Over is the safe side: the
+	## player is stopped a few centimetres early rather than walking through a
+	## boom.
+	var steps := maxi(1, int(ceil(length / SPAR_COLLIDER_STEP)))
+	var out: Array = []
+	for index in steps:
+		var p0 := a.lerp(b, float(index) / float(steps))
+		var p1 := a.lerp(b, float(index + 1) / float(steps))
+		var span := (p1 - p0).abs()
+		out.append({
+			"center": (p0 + p1) * 0.5 + offset,
+			"size": Vector3(span.x + girth, span.y + girth, span.z + girth),
+			"yaw_deg": 0.0,
+		})
+	return out
+
+
 # ── Bake outputs ─────────────────────────────────────────────────────────────
 
 ## All collision boxes for the plan, offset into host-local space, as
@@ -621,6 +987,34 @@ static func _plate_layers(deck: Dictionary, wall_fallback: Color, deck_fallback:
 ##   verdicts the moment the yaw is dropped.
 ##
 ## So: apply yaw_deg about the box's own centre, or do not use this list.
+##
+## ── What a spar and a wire emit, and why ────────────────────────────────────
+##
+## A SPAR IS SOLID. Not because you can stand on it — you cannot stand on a mast
+## — but because a spar is the one fitting a walking player runs into: a boom or
+## a derrick at head height is an obstruction, a gallows leg is a thing you walk
+## around, a stanchion is a thing you bruise a shin on. A box per run, tight to
+## the tube, does exactly that and nothing more: the box spans the spar's girth
+## only, so a player whose head clears a boom still walks under it. `solid: false`
+## opts a purely decorative spar out, and a run thinner than
+## SPAR_COLLIDER_MIN_RADIUS emits nothing regardless — being stopped by a 40 mm
+## whip antenna the eye cannot resolve reads as a bug, not as a fitting.
+##
+## A WIRE IS NEVER SOLID, and there is no opt-in. Standing and running rigging
+## crosses a working deck everywhere; a shroud that stops a player is an
+## invisible wall at head height in the middle of the deck. You duck under a stay
+## and you step over a mooring line. A sagged wire would also need dozens of tiny
+## boxes to follow its own curve, which is a lot of physics to buy a defect.
+##
+## The sloped case is the interesting one. This list carries a YAW ONLY. A level
+## run is exact at any heading (that is what yaw is for) and a vertical run is
+## exact trivially, but a raked mast, a sloped boom or a curved davit arm is
+## neither, and there is no field to put its pitch in. Emitting one unrotated box
+## around it would put a phantom slab out over the open deck — the exact defect
+## `plan_collision_physics_test` exists to catch on diagonal bulwarks. So a
+## sloped run is STEPPED into a staircase of short axis-aligned boxes instead,
+## each the sub-run's bounding box grown by the tube radius. That over-covers by
+## roughly half a step and never under-covers.
 static func collect_colliders(plan: StructurePlan, offset := Vector3.ZERO) -> Array:
 	var expanded := expand(plan)
 	var out: Array = []
@@ -633,6 +1027,8 @@ static func collect_colliders(plan: StructurePlan, offset := Vector3.ZERO) -> Ar
 	for stair_variant in expanded["stairs"] as Array:
 		for box_variant in stair_boxes(stair_variant as Dictionary):
 			out.append(_collider_of(box_variant as Dictionary, offset))
+	for item_variant in plan.items:
+		out.append_array(_item_colliders(plan, item_variant as Dictionary, offset))
 	return out
 
 
@@ -674,6 +1070,12 @@ static func bake(plan: StructurePlan, offset := Vector3.ZERO, ghost := false) ->
 			_bucket_layer(buckets, layer_variant as Dictionary, offset, ghost)
 	for stair_variant in expanded["stairs"] as Array:
 		for layer_variant in _stair_layers(stair_variant as Dictionary, deck_default):
+			_bucket_layer(buckets, layer_variant as Dictionary, offset, ghost)
+	## Spars and wires bucket by the SAME key as every box, so a whole rig — mast,
+	## boom, stack, davits, stays, mooring lines — merges into the surfaces the
+	## hull already draws and buys ZERO extra draw calls.
+	for item_variant in plan.items:
+		for layer_variant in _item_layers(plan, item_variant as Dictionary):
 			_bucket_layer(buckets, layer_variant as Dictionary, offset, ghost)
 	for key in buckets.keys():
 		var bucket := buckets[key] as Dictionary
@@ -731,13 +1133,35 @@ static func _bucket_layer(buckets: Dictionary, layer: Dictionary, offset: Vector
 		var st := SurfaceTool.new()
 		st.begin(Mesh.PRIMITIVE_TRIANGLES)
 		buckets[key] = {"color": color, "material": material, "st": st}
+	var tool := (buckets[key] as Dictionary)["st"] as SurfaceTool
+	## A tube goes into the same SurfaceTool as a box. It is a different emitter,
+	## not a different surface — that is the whole reason a rig is free.
+	if str(layer.get("kind", "box")) == "tube":
+		_append_tube(
+			tool,
+			_offset_path(layer["points"] as PackedVector3Array, offset),
+			layer["radii"] as PackedFloat32Array,
+			int(layer["sides"]),
+			bool(layer.get("capped", true)),
+			color,
+		)
+		return
 	_append_box(
-		(buckets[key] as Dictionary)["st"] as SurfaceTool,
+		tool,
 		(layer["center"] as Vector3) + offset,
 		layer["size"] as Vector3,
 		layer.get("basis", Basis.IDENTITY) as Basis,
 		color,
 	)
+
+
+static func _offset_path(path: PackedVector3Array, offset: Vector3) -> PackedVector3Array:
+	if offset == Vector3.ZERO:
+		return path
+	var out := PackedVector3Array()
+	for point in path:
+		out.append(point + offset)
+	return out
 
 
 ## Box of `size` centred on `center`, 12 triangles, clockwise-front winding
@@ -786,3 +1210,73 @@ static func _append_box(
 				st.set_color(color)
 				st.set_normal(normal)
 				st.add_vertex(corners[idx[k]])
+
+
+## Tube of `sides` sides swept along `path`, radius `radii[i]` at node i.
+##
+## Winding matches _append_box exactly — Godot's clockwise-front convention, so
+## the right-hand cross of the vertex order is MINUS the outward normal. Derived,
+## not guessed: for the side quads the cross of the two edge vectors works out to
+## -e (the outward radial) times a positive scalar, and each fan cap is ordered
+## to give -(+/-run). Getting this backwards renders the spar inside-out, which
+## under backface culling looks like a hole rather than like a mistake.
+##
+## Normals are RADIAL per vertex around the circumference, so an 8-sided mast
+## shades as a round mast rather than as an octagonal prism, and FLAT on the two
+## caps. Colour is written on every vertex; as with boxes no vertex is shared, so
+## two differently-coloured spars in one surface cannot bleed into each other.
+##
+## Triangle count is exactly 2 * sides * rings when capped (2 * sides *
+## (rings - 1) when not) — see the header of the spar section.
+static func _append_tube(
+	st: SurfaceTool,
+	path: PackedVector3Array,
+	radii: PackedFloat32Array,
+	sides: int,
+	capped: bool,
+	color: Color,
+) -> void:
+	var rings := tube_rings(path, radii, sides)
+	if rings.size() < 2:
+		return
+	for index in rings.size() - 1:
+		var a := rings[index] as PackedVector3Array
+		var b := rings[index + 1] as PackedVector3Array
+		var centre_a := path[index]
+		var centre_b := path[index + 1]
+		for k in sides:
+			var k2 := (k + 1) % sides
+			var na := (a[k] - centre_a).normalized()
+			var na2 := (a[k2] - centre_a).normalized()
+			var nb := (b[k] - centre_b).normalized()
+			var nb2 := (b[k2] - centre_b).normalized()
+			_tri(st, color, a[k], na, b[k], nb, b[k2], nb2)
+			_tri(st, color, a[k], na, b[k2], nb2, a[k2], na2)
+	if not capped:
+		return
+	var first := rings[0] as PackedVector3Array
+	var start_normal := (path[0] - path[1]).normalized()
+	for k in sides:
+		var k2 := (k + 1) % sides
+		_tri(st, color, path[0], start_normal, first[k], start_normal, first[k2], start_normal)
+	var last := rings[rings.size() - 1] as PackedVector3Array
+	var end_centre := path[path.size() - 1]
+	var end_normal := (end_centre - path[path.size() - 2]).normalized()
+	for k in sides:
+		var k2 := (k + 1) % sides
+		_tri(st, color, end_centre, end_normal, last[k2], end_normal, last[k], end_normal)
+
+
+static func _tri(
+	st: SurfaceTool, color: Color,
+	p0: Vector3, n0: Vector3, p1: Vector3, n1: Vector3, p2: Vector3, n2: Vector3,
+) -> void:
+	st.set_color(color)
+	st.set_normal(n0)
+	st.add_vertex(p0)
+	st.set_color(color)
+	st.set_normal(n1)
+	st.add_vertex(p1)
+	st.set_color(color)
+	st.set_normal(n2)
+	st.add_vertex(p2)
