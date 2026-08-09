@@ -669,6 +669,33 @@ it, so the deck-edge alignment needs a rule rather than hand-placed coordinates.
 **Order confirmed by evidence rather than argument:** 45° diagonal wall → spar → item catalog
 with float positions → railing run.
 
+## M2 iteration 2 — the bow bulwark closes (2026-08-09)
+
+`resources/data/structures/probe_trawler_bow_bulwark.json`, captures at
+`screenshots/studio/probe_trawler_bow_bulwark__*.png`.
+
+**The 45° diagonal wall works.** The bulwark now follows the stem and closes at the bow
+instead of stopping dead at the shoulder — the defect that iteration 1 identified as the most
+visible one. It still bakes to **4 mesh instances**, so the primitive costs triangles and no
+draw calls, as designed.
+
+**Still wrong, in priority order:**
+
+1. **No sheer** — unchanged and now the dominant defect. The bulwark cap runs dead level all
+   the way to the stem, which is exactly where a working boat's rail should be highest. This is
+   a hull-loft change, not a plan change, and it is now the biggest single win available.
+2. **The bulwark reads too tall and too thick** — closer to a landing-craft ramp than a
+   trawler rail. Height and thickness are hand-numbers in the fixture; they need to derive
+   from something (hull depth? a named part?) rather than be guessed per plan.
+3. **The bulwark sits inboard of the hull edge**, leaving a visible lip of hull between rail
+   and shell. Deck-edge alignment needs a rule; hand-placed coordinates cannot get this right
+   across six hulls.
+4. **A stray white sliver at the stern quarter** — the stern bulwark looks misaligned or
+   floating. Diagnose before adding anything else.
+5. **The working deck aft of the wheelhouse is a large empty expanse.** Correct for this stage
+   — it is where gear goes, and gear needs the item catalog and the spar.
+6. The mast is still a slab in section. The spar primitive remains next after sheer.
+
 ## Next actions
 
 1. **M0.1a** — convert the remaining **15** files (group E): `terrain_surface_maps_test`,
