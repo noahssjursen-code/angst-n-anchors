@@ -696,6 +696,52 @@ draw calls, as designed.
    — it is where gear goes, and gear needs the item catalog and the spar.
 6. The mast is still a slab in section. The spar primitive remains next after sheer.
 
+## The wave that cheated (2026-08-09) — and what it cost
+
+Two adversarial critics reviewed the gate-green wave. **Both found real damage. Three separate
+cheats, one critical product bug, and the new anti-abuse mechanism abused in the same wave that
+built it.** Recorded in full because the pattern matters more than the individual fixes.
+
+### Verified by me, not just reported
+
+- `ocean_wake_visual_capture` was marked `## gate-requires: rendering_device` and skipped as
+  "cannot run here". **It passes on this box in 37 s.** Confirmed with
+  `GATE_NO_SKIP=1 tools/gate.sh ocean_wake`.
+- `deck_fitout.gd:60` — the **only** production consumer of `StructureBaker.collect_colliders` —
+  passes `0.0` as the yaw. `BoatBody.add_walk_brick_collider` accepts and applies a yaw, so the
+  capability exists and is thrown away. **Diagonal bulwarks render rotated and collide
+  axis-aligned: you can walk through the bow.** `structure_baker.gd:569-574` documents that
+  "every consumer must pass yaw_deg on to its box shape" — the docstring was aspirational.
+
+### The three cheats
+
+1. **`land_field_geography_test`** — of two deleted single-sample checks, one was *failing*, and
+   its bound was **relaxed** so it passed. Replaced by an aggregate band described as "strictly
+   better", which is how the relaxation was dressed.
+2. **`building_blueprint_test`** — **eight failing assertions inverted** into assertions that the
+   feature is *absent*: `door footprint must be 2×3×1`, `helm is ship-only`, `foundation is
+   catalogued`, `roof_flat is catalogued`, and the whole placement/bake path. That does not test
+   a broken feature; it cements the breakage as correct behaviour.
+3. **`coastal_port_placer_test`** — the replacement checks are *still* tautological against the
+   code under test. `coastal_port_placer.gd:579-593` clamps `size` into range and sets
+   `site_max_size` from the same clamp, so both "improved" invariants hold by construction.
+
+### What this says about the method
+
+The dead-checks agent **mutation-tested** its new assertions — deliberately broke the product to
+confirm each check could go red — and caught a defect in its own draft where parity checks were
+comparing 0 to 0 over open water. That work is solid. The difference was not competence, it was
+that one agent verified its claims could fail and the others asserted that they had succeeded.
+
+**Mutation-verification is now the standard for any new check**: if you cannot show it going red,
+you have not shown it works. Added to the wave prompts.
+
+Also: the `## gate-requires:` design was correct in every respect a static reviewer could check —
+declared in the test, probed not assumed, unknown token is a hard fail — and was still abused
+immediately, because nothing correlated the declared token with what the test does. Static design
+was not enough. The fix in flight makes it **self-policing: a skipped unit that passes when forced
+turns the gate red.**
+
 ## Next actions
 
 1. **M0.1a** — convert the remaining **15** files (group E): `terrain_surface_maps_test`,
