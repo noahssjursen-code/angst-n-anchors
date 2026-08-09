@@ -465,12 +465,72 @@ FLOAT TEST. Delete the legacy brick editors. Fix the 342 hex literals and the ro
 
 ---
 
+## Conversion wave results (2026-08-09, partial)
+
+23 of 38 files converted. **Groups E (15 files) and both adversarial auditors never ran —
+the session hit its usage limit.** They are still owed and must run before any of this is
+called done: nothing has yet checked the diff for weakened assertions, and nothing has
+independently re-run the converted files to confirm the reports match reality.
+
+### What the conversion exposed
+
+- **`company_service_test` — the flagship false green — now fails 6 checks.** Root cause is a
+  real product bug: `resources/data/vessels/prebuilt/` holds only `.gitkeep`, so
+  `PrebuiltVesselCatalog.catalog_entries()` returns `[]`,
+  `CompanyService.build_starter_vessel_record()` finds no match and returns `{}`
+  (`company_service.gd:307-330`), `_grant_starter_vessel` errors `starter_unavailable`
+  (`:295`), and `create_company` rolls the whole onboarding back (`:100-105`).
+  **No new player can be granted a starter vessel.** Given the release-day plan opens with
+  "pick your category, get your starter vessel", this is a release blocker sitting behind a
+  test that printed PASS.
+- **`port_trade_profile_test` — a real port bug.** `_apron_blocked_arcs()`
+  (`port_land_plan.gd:1149`) widens each quay station by
+  `PortSizing.asphalt_quay_loading_clearance_m()` — a berth-spacing figure — and reuses it as a
+  *decorative prop keepout*. Measured: the merged exclusion is one interval `[-31.3, 331.3]`
+  against a dock face 301.5 m long, so every candidate is blocked and the apron gets zero
+  service props. 122 of its 123 checks now execute and pass for the first time.
+- **`building_blueprint_test`** fails a genuine check (`door footprint must be 2×3×1`) that
+  bare `assert()` was swallowing, plus a run of catalogue checks — consistent with the
+  `BrickCatalog` wipe.
+
+### Corrections to earlier claims in this file
+
+- **TIMEOUT did not mean "hung".** A failing `assert()` in the SceneTree lane aborts its
+  function but not the process, so `quit()` is never reached and the gate's timeout kills an
+  idle process. Several of the 8 baseline TIMEOUTs were failing assertions. Re-read the
+  baseline with that in mind; `port_trade_profile_test` is the proof.
+- **"`--script` never registers autoloads" was overstated.** Autoload instances exist and
+  resolve at runtime via `root.get_node()`; what fails is naming an autoload as a bare
+  compile-time identifier. `CONVENTIONS.md` §2 is corrected.
+
+### Loose ends found in passing
+
+- `tests/port_trade_profile_test.tscn` is stale: it declares `type="Node"` while the script is
+  `extends SceneTree`. Harmless today because the gate only runs it via `--script`.
+- `weather_composer_contract_test` was constructed with `verbose = false` deliberately — its
+  pairing sweep runs 652 checks and would otherwise print 650 PASS lines per gate run.
+  Failures still print, push_error, and set the exit code.
+
 ## Next actions
 
-1. **M0.1** — convert the 38 bare-`assert()` files. Partition by file, one agent per group.
-2. **M0.2** — gate lane B for scene tests.
-3. Re-run the full gate on a quiet box and record the honest baseline here.
-4. Then M1.
+1. **M0.1a** — convert the remaining **15** files (group E): `terrain_surface_maps_test`,
+   `ship_display_units_test`, `ocean_clipmap_smoke`, `lod_profiles_test`, `build_profiler_test`,
+   `bow_thruster_test`, `hull_hydrostatics_smoke`, `proximity_loader_test`,
+   `weather_visual_capture`, `impostor_cache_test`, `world_terrain_background_test`,
+   `world_layout_debug_capture`, `ocean_wake_visual_capture`, `ocean_wake_gpu_smoke`,
+   `shipping_traffic_artifact_test`.
+2. **M0.1b** — run the two adversarial auditors that never ran. Nothing has yet checked the
+   converted diff for weakened assertions or independently re-run the files. Until that
+   happens the conversion is unverified, and a converter under pressure to report PASS had
+   every opportunity to cheat.
+3. **M0.1c** — sweep for the *other* false-green shape: tests that early-return past their
+   assertions when a fixture is missing (`vessel_registration_test` skips 5 of 8 sub-tests).
+   `TestReport` already fails a zero-check run; extend that idea to partial skips.
+4. **M0.2** — gate lane B for the 23 scene tests; migrate the NOTRUN files into it.
+5. **M0.3** — fix the real breakage the conversion exposed. Highest first:
+   **the empty prebuilt catalogue blocking starter-vessel grants**, then the apron keepout,
+   then `building_blueprint_test`.
+6. Record the honest baseline, close M0, open M2.
 
 ## Milestone log
 
