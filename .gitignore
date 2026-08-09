@@ -17,3 +17,7 @@ scripts/ui/main_menu.gd.uid
 *.pck
 *.zip
 *.cfg
+
+# Gate + probe run artifacts (never committed)
+.gate/
+.probe/
