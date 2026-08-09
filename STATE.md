@@ -99,18 +99,25 @@ produced a **real 1280×720 PNG of the studio with the plan built in it**. Data 
 image out, no display, no clicking. **The instrument works** — that is the whole agentic
 loop, and it is what M2's reference-matching cycle runs on.
 
-### Gate baseline (partial — 27/58 at time of writing)
+### Gate baseline — 2026-08-09, run `20260809-133513-23960`
 
-13 not passing, in three distinct kinds:
+**40/58 PASS.** 18 not passing, in three distinct kinds. Measured under load (research
+agents were running); the TIMEOUTs in particular need re-measuring on a quiet box.
 
-- **6 TIMEOUT**, all render-dependent: `building_blueprint_test`, `chart_rewrite_integration_test`,
+- **8 TIMEOUT** at 300 s — `building_blueprint_test`, `chart_rewrite_integration_test`,
   `chart_weather_cache_test`, `lighting_material_test`, `ocean_wake_gpu_smoke`,
-  `ocean_wake_visual_capture`. Under contention at 300 s; re-measure on a quiet box before
-  calling any of them hung.
-- **5 NOTRUN** — autoload compile errors in the `--script` lane: `chart_layer_manager_test`,
-  `harbour_traffic_test`, `helm_minimap_test`, `lod_profiles_test`, `onboarding_store_test`,
-  `port_layout_visual_capture`. These need lane B.
-- **1 FAIL** — `land_field_geography_test`. A real assertion failure.
+  `ocean_wake_visual_capture`, `port_perf_cache_test`, `port_trade_profile_test`.
+  Mostly render-dependent. Some are probably contention, not hangs — re-measure before
+  calling any of them broken.
+- **7 NOTRUN** — the test's own script failed to compile, from autoload identifiers missing
+  in the `--script` lane: `chart_layer_manager_test`, `harbour_traffic_test`,
+  `helm_minimap_test`, `lod_profiles_test`, `onboarding_store_test`,
+  `port_layout_visual_capture`, `ship_display_units_test`. These need lane B.
+- **3 FAIL** — real assertion failures: `land_field_geography_test`,
+  `remote_realtime_join_smoke`, `world_generation_seed_validation`.
+
+This number is *before* the false greens are exposed. 38 files could not fail at all when it
+was taken, so the honest baseline will be worse. That is the point of taking it now.
 
 ### The false greens
 
@@ -203,10 +210,26 @@ The loop must be able to fail before it can hone anything.
 
 **Exit:** `tools/gate.sh` green, both lanes, no bare `assert()`, numbers recorded.
 
-### M1 — Studio harness · NEXT
-Data object → bake → assertions + canonical-angle PNGs, on `_run_studio_probe`'s seam.
-Fixtures beside `demo_workboat.json`. Wired into the gate. Stable capture names under
-`screenshots/studio/`. This is the rig M2 runs on.
+### M1 — Vessel render harness · LARGELY DONE
+`tests/vessel_render_capture.{gd,tscn}` + `tools/capture.sh`. A `structure_plan_v1` goes in;
+four canonical-angle PNGs and 15 machine-checkable claims come out. Runs in the scene lane
+(the first worked example of lane B — `VesselSpawn` reaches autoload-naming code).
+
+Views: `profile_port`, `bow_quarter`, `stern_quarter`, `plan`. Camera fits the projected
+bounding box against a 35° lens on both axes. Autoload HUD is hidden before shooting.
+Asserts the bake stays merged — the demo workboat bakes to **4 mesh instances**, which is the
+draw-cost headroom the parts work gets to spend.
+
+Remaining: fold it into `tools/gate.sh` as lane B, and add per-view visual-regression
+comparison against a committed baseline.
+
+#### First reading of `demo_workboat` (the M2 starting point)
+The hull is genuinely good — sheer, bow rake and flare, boot-top, transom all read correctly.
+Everything above the deck is flat grey slabs. Absent: bulwarks, guardrails/stanchions, mast,
+funnel or exhaust, a wheelhouse window band, any set-back of the deckhouse from the ship's
+side (real boats leave a side deck to walk), rubbing strake, fenders, deck gear. It reads as
+a shed on a barge, exactly as predicted, and the captures in `screenshots/studio/` are the
+evidence.
 
 ### M2 — Ship parts vocabulary · THE MILESTONE
 The reference-matching loop:
