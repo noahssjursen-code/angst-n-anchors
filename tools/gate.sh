@@ -1,20 +1,21 @@
 #!/usr/bin/env bash
 # Angst 'n Anchors — the gate.
 #
-# Runs every headless test under tests/, in two lanes, and reports pass/fail.
+# Runs every headless test under tests/ plus every app that declares a
+# self-check, in three lanes, and reports pass/fail.
 # The tree is green only when this exits 0.
 #
-#   tools/gate.sh                  # everything, both lanes
+#   tools/gate.sh                  # everything, all three lanes
 #   tools/gate.sh ui structure     # only tests whose filename matches a filter
 #   GATE_JOBS=4 tools/gate.sh      # parallelism (default: half the cores, min 2)
 #   GATE_TIMEOUT=240 tools/gate.sh # per-test timeout seconds
-#   GATE_LANE=A tools/gate.sh      # restrict to one lane (A|B, default both)
+#   GATE_LANE=A tools/gate.sh      # restrict to lanes (A|B|C, default all three)
 #   GATE_DRIVER=headless tools/gate.sh   # force the degraded driver (see below)
 #   GATE_NO_SKIP=1 tools/gate.sh   # ignore every `## gate-requires:` and just run
 #   GATE_AUDIT_SKIPS=0 tools/gate.sh     # do not re-run skipped units (see below)
 #
 # ---------------------------------------------------------------------------
-# THE TWO LANES
+# THE THREE LANES
 #
 # Lane A — `extends SceneTree`, run with `--script res://tests/x.gd`.
 #   Cheap and the historical default. Its limitation is compile-time: under
@@ -29,10 +30,51 @@
 #   not run by the gate at all until 2026-08-09; `company_service_test` — which
 #   holds the "no starter vessel for any new player" bug — lives in it.
 #
-# The two lanes are disjoint by construction: lane A is exactly the
-# `extends SceneTree` scripts, lane B is exactly the `.tscn` files whose
-# sibling script is *not* `extends SceneTree`. No name can appear in both, so
-# per-name log files never collide.
+# Lane C — APP SCENES WITH A SELF-CHECK FLAG. See the block below.
+#
+# The three lanes are disjoint by construction: lane A is exactly the
+# `extends SceneTree` scripts under tests/, lane B is exactly the tests/ `.tscn`
+# files whose sibling script is *not* `extends SceneTree`, lane C is exactly the
+# scenes named by a `## gate-selfcheck:` declaration and those live under
+# scenes/, not tests/. Construction is not trusted on its own: the collected
+# units are checked for a duplicate NAME before anything runs, and a duplicate
+# aborts the run, because two units sharing a name share a log file and would
+# silently overwrite each other's evidence.
+#
+# ---------------------------------------------------------------------------
+# LANE C — "APP SCENES WITH A SELF-CHECK FLAG"  (`## gate-selfcheck:`)
+#
+# Some workouts are neither an `extends SceneTree` script nor a test scene: they
+# are a real app, booted normally, told by a command-line flag to drive itself
+# and quit with a verdict. Structure Studio's `--studio-probe` is the first —
+# every diagonal claim on the studio side (bounds, picking, along-run offset,
+# the opening ghost's yaw, save/load of the diagonal axis and its cut) is
+# asserted there and nowhere else.
+#
+# There is no list of app names in this script, for the same reason there is no
+# list of test names in the `## gate-requires:` mechanism: a category that a
+# maintainer has to be told about is a category that gets forgotten. The app
+# DECLARES ITSELF, in its own script's header:
+#
+#   ## gate-selfcheck: res://scenes/apps/structure_studio.tscn -- --studio-probe
+#
+#   <scene> is the scene to boot. `--` is required and literal: it is Godot's
+#   separator, and writing it here means the declaration is exactly the command
+#   you would type. Everything after it is handed to the app verbatim.
+#
+# The second such app joins by adding one line to its own script. An app scene
+# with no declaration is simply not a lane C unit — it is never booted, so an
+# editor with no self-check cannot be mis-run as if it had one.
+#
+# A declaration that does not hold up is a hard FAIL, never a silent drop —
+# same rule as an undeclarable `## gate-requires:` token. Missing scene file,
+# missing `--`, no flag after it: `FAIL(selfcheck)`, named in the report. You
+# cannot make a unit disappear by mangling its marker.
+#
+# Lane C is scored like lane B: booting clean and saying nothing is NOTRUN, not
+# PASS. A self-check that does not declare an outcome has not passed. So the
+# app must print a verdict line — `<name>: PASS (N checks)`, `<name>: N/M
+# FAILED`, `<name>: NO CHECKS RAN` — the same words the rest of the suite uses.
 #
 # A `.tscn` whose sibling script *is* `extends SceneTree` is STALE — Godot
 # refuses to assign a SceneTree script to a Node ("Script inherits from native
@@ -137,7 +179,7 @@ cd "$PROJECT_DIR"
 GODOT="${GODOT:-godot}"
 TIMEOUT="${GATE_TIMEOUT:-240}"
 DRIVER="${GATE_DRIVER:-xvfb}"
-LANE_FILTER="${GATE_LANE:-AB}"
+LANE_FILTER="${GATE_LANE:-ABC}"
 NO_SKIP="${GATE_NO_SKIP:-0}"
 AUDIT="${GATE_AUDIT_SKIPS:-1}"
 # A skipped unit is one the box supposedly cannot run, so its audit re-run is
@@ -176,13 +218,16 @@ case "$DRIVER" in
 esac
 
 godot_run() {
-  # $1 = lane (A|B), $2 = res:// path.
-  # Lane A boots the script directly; lane B boots the .tscn as the main scene.
-  local lane="$1"
-  local target="$2"
+  # $1 = lane (A|B|C), $2 = res:// path, $3.. = extra args (lane C only).
+  # Lane A boots the script directly; lanes B and C boot a .tscn as the main
+  # scene. Lane C additionally passes the app's declared self-check arguments
+  # through verbatim — including the `--` that hands them to the project.
+  local lane="$1"; shift
+  local target="$1"; shift
   local args=()
   [ "$lane" = "A" ] && args+=(--script)
   args+=("$target")
+  [ "$#" -gt 0 ] && args+=("$@")
 
   if [ "$DRIVER" = "xvfb" ]; then
     xvfb-run -a --server-args="-screen 0 1280x720x24" \
@@ -253,10 +298,22 @@ EOF
   echo "$verdict"
 }
 
+# Self-check declaration from a script's header, same 40-line window and the
+# same "a marker buried at the bottom would not be seen by a reviewer either"
+# rule as unit_requirements(). Prints the raw argument list, or nothing.
+unit_selfcheck() {
+  sed -n '1,40p' "$1" 2>/dev/null \
+    | sed -n 's|^##[[:space:]]*gate-selfcheck:[[:space:]]*\(.*[^[:space:]]\)[[:space:]]*$|\1|p' \
+    | head -1
+}
+
 # ---- collect ---------------------------------------------------------------
-# Each unit is "<lane>|<path>": lane A paths are .gd, lane B paths are .tscn.
+# Each unit is "<lane>|<path>": lane A paths are .gd, lanes B and C are .tscn.
 ALL_UNITS=()
 SKIPPED_STALE=()
+declare -A SELFCHECK_ARGS=()   # scene path -> args after the scene, verbatim
+declare -A SELFCHECK_GD=()     # scene path -> the script that declared it
+ALL_BAD_SELFCHECK=()           # "<gd>\t<reason>\t<declaration>" — does not hold up
 
 while IFS= read -r gd; do
   [ -n "$gd" ] && ALL_UNITS+=("A|$gd")
@@ -275,6 +332,66 @@ for tscn in tests/*.tscn; do
   ALL_UNITS+=("B|$tscn")
 done
 
+# Lane C: every script anywhere in the project that declares a self-check. The
+# search is over the tree, not over a directory this script names, so a new app
+# in a new folder is found without editing anything here.
+while IFS= read -r gd; do
+  [ -n "$gd" ] || continue
+  gd="${gd#./}"
+  decl="$(unit_selfcheck "$gd")"
+  [ -n "$decl" ] || continue          # matched outside the header window
+  read -ra parts <<<"$decl"   # split on whitespace, no globbing
+  bad() { ALL_BAD_SELFCHECK+=("$gd"$'\t'"$1"$'\t'"$decl"); }
+  scene="${parts[0]:-}"
+  case "$scene" in
+    res://*.tscn) ;;
+    *) bad "scene must be a res:// .tscn path, got \"$scene\""; continue ;;
+  esac
+  rel="${scene#res://}"
+  if [ ! -f "$rel" ]; then
+    bad "declared scene does not exist: $scene"; continue
+  fi
+  if [ "${parts[1]:-}" != "--" ]; then
+    bad "missing the literal \`--\` separator after the scene"; continue
+  fi
+  if [ "${#parts[@]}" -lt 3 ]; then
+    bad "no self-check flag after \`--\` — nothing would run"; continue
+  fi
+  if [ -n "${SELFCHECK_ARGS[$rel]+set}" ]; then
+    bad "$scene is already declared by ${SELFCHECK_GD[$rel]}"; continue
+  fi
+  SELFCHECK_ARGS["$rel"]="${parts[*]:1}"
+  SELFCHECK_GD["$rel"]="$gd"
+  ALL_UNITS+=("C|$rel")
+done < <(grep -rIl --include='*.gd' \
+           --exclude-dir=.godot --exclude-dir=.gate --exclude-dir=.probe --exclude-dir=.git \
+           '^##[[:space:]]*gate-selfcheck:' . 2>/dev/null | sort)
+
+# The script that declares a unit, whatever lane it is in.
+unit_script() {
+  # $1 = lane, $2 = path
+  case "$1" in
+    B) echo "${2%.tscn}.gd" ;;
+    C) echo "${SELFCHECK_GD[$2]}" ;;
+    *) echo "$2" ;;
+  esac
+}
+
+# Disjointness, checked rather than assumed. Two units with the same basename
+# share $OUT_DIR/logs/<name>.log and would overwrite each other's evidence —
+# and a results row would name a unit ambiguously. That is a gate defect, so it
+# stops the run instead of producing numbers nobody can trace.
+DUP="$(for u in "${ALL_UNITS[@]:-}"; do
+         [ -n "$u" ] || continue
+         n="$(basename "${u#*|}")"; echo "${n%.*}"
+       done | sort | uniq -d)"
+if [ -n "$DUP" ]; then
+  echo "gate: NAME COLLISION — these unit names appear in more than one lane:" >&2
+  echo "$DUP" | sed 's/^/  /' >&2
+  echo "gate: they would share a log file. Rename one before running." >&2
+  exit 2
+fi
+
 UNITS=()
 for u in "${ALL_UNITS[@]}"; do
   lane="${u%%|*}"
@@ -292,7 +409,28 @@ for u in "${ALL_UNITS[@]}"; do
   fi
 done
 
-if [ "${#UNITS[@]}" -eq 0 ]; then
+# Broken lane C declarations obey the same filters as everything else — a run
+# narrowed to one test must not report a failure that run was never asked about.
+# A malformed marker has no valid scene path, so it is matched on the declaring
+# script and on the text of the declaration itself.
+BAD_SELFCHECK=()
+case "$LANE_FILTER" in
+  *C*)
+    for entry in "${ALL_BAD_SELFCHECK[@]:-}"; do
+      [ -n "$entry" ] || continue
+      hay="${entry%%$'\t'*} ${entry##*$'\t'}"
+      if [ "$#" -eq 0 ]; then
+        BAD_SELFCHECK+=("$entry")
+      else
+        for filter in "$@"; do
+          if [[ "$hay" == *"$filter"* ]]; then BAD_SELFCHECK+=("$entry"); break; fi
+        done
+      fi
+    done
+    ;;
+esac
+
+if [ "${#UNITS[@]}" -eq 0 ] && [ "${#BAD_SELFCHECK[@]}" -eq 0 ]; then
   echo "gate: no tests matched: $*" >&2
   exit 1
 fi
@@ -307,7 +445,7 @@ BAD_REQUIRE=()   # "<lane>|<path>|<token>"
 for u in "${UNITS[@]}"; do
   lane="${u%%|*}"
   path="${u#*|}"
-  gd="$path"; [ "$lane" = "B" ] && gd="${path%.tscn}.gd"
+  gd="$(unit_script "$lane" "$path")"
   decision="run"
   while IFS= read -r token; do
     [ -n "$token" ] || continue
@@ -333,8 +471,14 @@ count_lane() {
 }
 A_COUNT="$(count_lane A)"
 B_COUNT="$(count_lane B)"
+C_COUNT="$(count_lane C)"
 
-echo "gate: run $RUN_ID · driver=$DRIVER · ${#RUN_UNITS[@]} tests (A:$A_COUNT script · B:$B_COUNT scene) · jobs=$JOBS · timeout=${TIMEOUT}s"
+echo "gate: run $RUN_ID · driver=$DRIVER · ${#RUN_UNITS[@]} tests (A:$A_COUNT script · B:$B_COUNT scene · C:$C_COUNT app) · jobs=$JOBS · timeout=${TIMEOUT}s"
+for entry in "${BAD_SELFCHECK[@]:-}"; do
+  [ -n "$entry" ] || continue
+  rest="${entry#*$'\t'}"
+  echo "gate: BAD gate-selfcheck in ${entry%%$'\t'*} — ${rest%%$'\t'*}"
+done
 [ "$NO_SKIP" = "1" ] && echo "gate: GATE_NO_SKIP=1 — capability skips disabled, every matched unit runs"
 if [ "${#SKIPPED_CAP[@]}" -gt 0 ] && [ "$AUDIT" = "0" ]; then
   echo "gate: GATE_AUDIT_SKIPS=0 — ${#SKIPPED_CAP[@]} 'cannot run here' claim(s) will NOT be checked this run"
@@ -361,7 +505,16 @@ run_one() {
   local lane="${unit%%|*}"
   local path="${unit#*|}"
   local name; name="$(basename "$path")"; name="${name%.*}"
-  local gd="$path"; [ "$lane" = "B" ] && gd="${path%.tscn}.gd"
+  local gd; gd="$(unit_script "$lane" "$path")"
+  # Lane C carries the app's declared arguments. They are whitespace-separated
+  # tokens by definition of the marker format; %q keeps the inner `bash -c`
+  # from re-splitting or globbing them.
+  local extra=""
+  if [ "$lane" = "C" ]; then
+    local a declared=()
+    read -ra declared <<<"${SELFCHECK_ARGS[$path]}"
+    for a in "${declared[@]}"; do extra+=" $(printf '%q' "$a")"; done
+  fi
   local log="$OUT_DIR/logs/$name.log"
   local results="$OUT_DIR/results.tsv"
   local budget="$TIMEOUT"
@@ -372,7 +525,7 @@ run_one() {
   fi
   local start; start=$(date +%s)
 
-  timeout "$budget" bash -c "$(declare -f godot_run); GODOT='$GODOT' DRIVER='$DRIVER' godot_run '$lane' 'res://$path'" \
+  timeout "$budget" bash -c "$(declare -f godot_run); GODOT='$GODOT' DRIVER='$DRIVER' godot_run '$lane' 'res://$path'$extra" \
     >"$log" 2>&1
   local code=$?
   local elapsed=$(( $(date +%s) - start ))
@@ -399,11 +552,13 @@ run_one() {
     fi
   fi
 
-  # Lane B only: exited clean but never declared an outcome. Lane A is left
-  # alone here — several of its oldest members (probes, captures, smokes) pass
-  # without printing anything a regex can recognise, and demoting those to
-  # NOTRUN would be a fabricated red.
-  if [ "$code" -eq 0 ] && [ "$lane" = "B" ] && [ "$spoke" -eq 0 ]; then
+  # Lanes B and C only: exited clean but never declared an outcome. Lane A is
+  # left alone here — several of its oldest members (probes, captures, smokes)
+  # pass without printing anything a regex can recognise, and demoting those to
+  # NOTRUN would be a fabricated red. Lane C has no such history: a self-check
+  # whose entire purpose is to report has not passed by staying silent, and a
+  # flag that never reached the app looks exactly like that.
+  if [ "$code" -eq 0 ] && [ "$lane" != "A" ] && [ "$spoke" -eq 0 ]; then
     code=90
   fi
 
@@ -430,6 +585,16 @@ export -f godot_run
 : >"$OUT_DIR/results.tsv"
 
 # A unit whose declared requirement has no probe never runs and never passes.
+# A self-check declaration that does not hold up never runs and never passes.
+# Mangling the marker must not be a way to make a unit vanish.
+for entry in "${BAD_SELFCHECK[@]:-}"; do
+  [ -n "$entry" ] || continue
+  gd="${entry%%$'\t'*}"; rest="${entry#*$'\t'}"; reason="${rest%%$'\t'*}"
+  name="$(basename "$gd")"; name="${name%.*}"
+  printf 'FAIL(selfcheck)\t%s\t%s\t0s\t0\t%s\n' "C" "$name" "$gd: $reason" >>"$OUT_DIR/results.tsv"
+  printf '  %-11s %s  %-44s %4ss  (bad gate-selfcheck: %s)\n' "FAIL(selfck)" "C" "$name" 0 "$reason"
+done
+
 for entry in "${BAD_REQUIRE[@]:-}"; do
   [ -n "$entry" ] || continue
   lane="${entry%%|*}"; rest="${entry#*|}"
@@ -512,7 +677,7 @@ sort -k2,2 -k3,3 -o "$OUT_DIR/results.tsv" "$OUT_DIR/results.tsv"
 # counts as a unit that ran — and failed.
 false_skips=${#FALSE_SKIP[@]}
 skipped=$(( ${#SKIPPED_CAP[@]} - false_skips ))
-total=$(( ${#RUN_UNITS[@]} + ${#BAD_REQUIRE[@]} + false_skips ))
+total=$(( ${#RUN_UNITS[@]} + ${#BAD_REQUIRE[@]} + ${#BAD_SELFCHECK[@]} + false_skips ))
 passed=$(grep -c $'^PASS\t' "$OUT_DIR/results.tsv" || true)
 noisy=$(awk -F'\t' '$5 > 0' "$OUT_DIR/results.tsv" | wc -l)
 failed=$(( total - passed ))
@@ -533,6 +698,7 @@ skip_note=""
 echo "gate: $passed/$total passed$skip_note · $noisy with script-error noise · results in $OUT_DIR"
 lane_line A "--script"
 lane_line B "scene"
+lane_line C "app self-check"
 
 # Skips are never silent: every one names the unit, the capability it declared,
 # the probe expression that answered NO on this box, and what happened when the
@@ -563,7 +729,7 @@ if [ "$false_skips" -gt 0 ]; then
   for entry in "${FALSE_SKIP[@]}"; do
     lane="${entry%%|*}"; rest="${entry#*|}"
     path="${rest%|*}"; token="${rest##*|}"
-    gd="$path"; [ "$lane" = "B" ] && gd="${path%.tscn}.gd"
+    gd="$(unit_script "$lane" "$path")"
     name="$(basename "$path")"; name="${name%.*}"
     echo "  [$lane] $name — gate-requires: $token"
     echo "        audit: PASS in $(audit_row "$name" 4)   ($OUT_DIR/logs/$name.audit.log)"
@@ -584,6 +750,11 @@ if [ "$failed" -gt 0 ]; then
       echo "      no verdict: the unit never reported an outcome (load failure, or exited silently)"
     elif [ "$status" = "FAIL(cap)" ]; then
       echo "      $log — add a probe to capability_expr() in tools/gate.sh, or drop the marker"
+      continue
+    elif [ "$status" = "FAIL(selfcheck)" ]; then
+      echo "      $log"
+      echo "      fix the '## gate-selfcheck:' line — format is:"
+      echo "        ## gate-selfcheck: res://scenes/apps/<app>.tscn -- --<flag>"
       continue
     elif [ "$status" = "FAIL(false-skip)" ]; then
       echo "      it skipped, then passed when re-run — see the FALSE SKIP block above"

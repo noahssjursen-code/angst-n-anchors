@@ -1,0 +1,2 @@
+# Capture artifacts, not game resources. Keeps Godot from importing every
+# screenshot as a texture and littering .import files into the diff.

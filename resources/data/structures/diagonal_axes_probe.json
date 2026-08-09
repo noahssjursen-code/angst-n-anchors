@@ -1,0 +1,23 @@
+{
+	"format": "structure_plan_v1",
+	"context": "vessel",
+	"hull_id": "",
+	"palette": {
+		"wall": [0.85, 0.86, 0.88],
+		"deck": [0.33, 0.31, 0.29]
+	},
+	"_note": "Gate fixture for tests/plan_collision_test.gd. One plain wall per wall axis, each on its own 20 m station so a perpendicular ray family crosses exactly one of them. No openings and no two-sided skins on purpose: opening casing stands FRAME_PROUD of the panel with no collider behind it, and that pre-existing gap would muddy a threshold measured in millimetres.",
+	"_note2": "Two-sided on purpose: the half-thickness skins stand SKIN_EPS proud of the collider, which is the ~0.0098 m the correct bake legitimately leaves uncovered and what the test's depth threshold is calibrated against.",
+	"walls": [
+		{"id": 1, "start": [0, 0, 0], "axis": "+x+z", "length": 6, "height": 1.2, "thickness": 0.3, "color_out": [0.85, 0.86, 0.88], "color_in": [0.78, 0.70, 0.58], "openings": []},
+		{"id": 2, "start": [20, 0, 0], "axis": "+x-z", "length": 6, "height": 1.2, "thickness": 0.3, "color_out": [0.85, 0.86, 0.88], "color_in": [0.78, 0.70, 0.58], "openings": []},
+		{"id": 3, "start": [40, 0, 0], "axis": "-x+z", "length": 6, "height": 1.2, "thickness": 0.3, "color_out": [0.85, 0.86, 0.88], "color_in": [0.78, 0.70, 0.58], "openings": []},
+		{"id": 4, "start": [60, 0, 0], "axis": "-x-z", "length": 6, "height": 1.2, "thickness": 0.3, "color_out": [0.85, 0.86, 0.88], "color_in": [0.78, 0.70, 0.58], "openings": []},
+		{"id": 5, "start": [80, 0, 0], "axis": "x", "length": 6, "height": 1.2, "thickness": 0.3, "color_out": [0.85, 0.86, 0.88], "color_in": [0.78, 0.70, 0.58], "openings": []},
+		{"id": 6, "start": [100, 0, 0], "axis": "z", "length": 6, "height": 1.2, "thickness": 0.3, "color_out": [0.85, 0.86, 0.88], "color_in": [0.78, 0.70, 0.58], "openings": []}
+	],
+	"decks": [],
+	"rooms": [],
+	"stairs": [],
+	"items": []
+}

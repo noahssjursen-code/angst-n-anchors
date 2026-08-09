@@ -21,6 +21,7 @@ func _initialize() -> void:
 	_test_colliders_include_stairs()
 	_test_roundtrip()
 	_test_passability()
+	_test_diagonal_passability()
 	print("---")
 	print("structure_circulation_test: %s" % ("ALL PASS" if _failures == 0 else "%d FAILURES" % _failures))
 	quit(0 if _failures == 0 else 1)
@@ -131,6 +132,23 @@ func _test_roundtrip() -> void:
 	_check("ids stay unique after load", restored.allocate_id() > int(stair.get("id", 0)))
 
 
+## Does `box`, read the way `StructureBaker.collect_colliders` says it must be
+## read, contain `probe`? The reported `size` is measured in the box's OWN
+## frame, so the probe is rotated back by the box's yaw before it meets the
+## half extents. Comparing world coordinates straight against `size` tests an
+## axis-aligned box nobody drew: on a 45 degree wall that phantom is a solid
+## slab out over the open deck AND a clear lane straight along the material.
+## Every collider a room or a stair produces reports yaw 0 and is unaffected.
+func _contains(box: Dictionary, probe: Vector3) -> bool:
+	var half := (box["size"] as Vector3) * 0.5
+	var local := probe - (box["center"] as Vector3)
+	var yaw := float(box.get("yaw_deg", 0.0))
+	if not is_zero_approx(yaw):
+		## Pure rotation: transpose == inverse.
+		local = Basis(Vector3.UP, deg_to_rad(yaw)).transposed() * local
+	return absf(local.x) < half.x and absf(local.y) < half.y and absf(local.z) < half.z
+
+
 func _test_passability() -> void:
 	## A corridor with a door in one side wall: no collider may block the
 	## door's clear span (walking through must be possible), and the open end
@@ -143,18 +161,51 @@ func _test_passability() -> void:
 	var blocked_end := false
 	for box_variant in StructureBaker.collect_colliders(plan):
 		var box := box_variant as Dictionary
-		var center := box["center"] as Vector3
-		var half := (box["size"] as Vector3) * 0.5
 		## Sample the middle of the door span at chest height, just inside the
 		## west wall plane (x = 0).
-		var door_probe := Vector3(0.0, 1.2, 4.8)
-		if (absf(door_probe.x - center.x) < half.x and absf(door_probe.y - center.y) < half.y
-				and absf(door_probe.z - center.z) < half.z):
+		if _contains(box, Vector3(0.0, 1.2, 4.8)):
 			blocked_door = true
 		## Sample the open north end at chest height, mid-corridor.
-		var end_probe := Vector3(1.5, 1.2, 0.0)
-		if (absf(end_probe.x - center.x) < half.x and absf(end_probe.y - center.y) < half.y
-				and absf(end_probe.z - center.z) < half.z):
+		if _contains(box, Vector3(1.5, 1.2, 0.0)):
 			blocked_end = true
 	_check("door span stays passable", not blocked_door)
 	_check("open corridor end stays passable", not blocked_end)
+
+
+func _test_diagonal_passability() -> void:
+	## The same containment question asked of a wall that is not axis-aligned,
+	## so that the yaw-honouring maths above is itself covered.
+	##
+	## A "+x+z" wall 8 m long and 0.4 m thick comes back as ONE 8 x 3 x 0.4 box
+	## carrying yaw -45. Both probes below sit 3.2 m from that box's centre —
+	## one along the box's own +X (the run), one along world +X. Honouring the
+	## yaw, the first is deep inside the drawn panel and the second is 2.26 m
+	## clear of it. Ignoring the yaw swaps them exactly: the phantom box is only
+	## 0.2 m half-thick in world z, so the on-run probe falls out of it and the
+	## beside probe falls into it. Either check going the wrong way says the
+	## containment maths dropped the yaw.
+	var plan := StructurePlan.new()
+	plan.add_wall(Vector3.ZERO, "+x+z", 8.0, 3.0, 0.4)
+	var colliders := StructureBaker.collect_colliders(plan)
+	_check("the diagonal wall reports one collider", colliders.size() == 1)
+	if colliders.size() != 1:
+		return
+	var box := colliders[0] as Dictionary
+	_check("the diagonal collider carries its drawn yaw",
+			absf(float(box.get("yaw_deg", 0.0)) - -45.0) < 0.001)
+	var center := box["center"] as Vector3
+	var run := StructurePlan.wall_run("+x+z")
+	var on_run := center + run * 3.2
+	on_run.y = 1.2
+	var beside := center + Vector3(3.2, 0.0, 0.0)
+	beside.y = 1.2
+	var blocked_run := false
+	var blocked_beside := false
+	for box_variant in colliders:
+		var collider := box_variant as Dictionary
+		if _contains(collider, on_run):
+			blocked_run = true
+		if _contains(collider, beside):
+			blocked_beside = true
+	_check("diagonal wall is solid along its own run", blocked_run)
+	_check("open deck beside the diagonal wall stays passable", not blocked_beside)

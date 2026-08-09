@@ -23,12 +23,83 @@ const BODY_FRAME_Y_ROT := deg_to_rad(-90.0)
 @export var beam_m: float = 0.0             ## widest full beam in the hull
 @export var height_m: float = 0.0           ## keel-bottom to deck-top
 @export var keel_y: float = 0.0             ## lowest Y in the hull (ship-local)
-@export var deck_y: float = 0.0             ## highest Y in the hull (ship-local)
+## The FLAT BUILD PLANE, not the highest point of the hull. Sheer lifts the lofted deck
+## edge above this line toward the ends (see `sheer_forward_m`); `deck_y` deliberately
+## stays level so DeckGrid cells, StructurePlan offsets and colliders keep one Y.
+@export var deck_y: float = 0.0
 @export var displacement_volume_m3: float = 0.0  ## fully-submerged hull volume at scale 1
 @export var design_draft_m: float = 0.0
 @export var design_displacement_m3: float = 0.0
 @export var section_fullness_exponent: float = 1.0
 @export var form_id: String = ""
+## Sheer: how far the lofted deck edge stands above `deck_y` at the stem / at the transom.
+## Zero amidships. Set by `from_form`; see `sheer_ends()` for the derivation.
+@export var sheer_forward_m: float = 0.0
+@export var sheer_aft_m: float = 0.0
+
+
+## ── Sheer ────────────────────────────────────────────────────────────────────────
+## A working boat's deck edge is a curve, not a line: it rises toward the bow so the
+## stem stays dry, and rises less toward the transom. Without it a hull reads as a barge.
+##
+## Sheer lives HERE, in the loft, and nowhere else:
+##   • the build plane must stay flat — DeckGrid cells, StructurePlan wall/plate strips
+##     and their box colliders all key off one `deck_y`, and a grid that undulates is
+##     unusable to a builder and would turn every panel into a sloped prism;
+##   • the loft already runs per station, so a per-station deck rise is contained to
+##     this file and costs no extra surface — the shell is still one mesh, two
+##     materials, and the ONLY thing that moves is the Y of section levels that were
+##     already there. No new vertices, no new draw call.
+## So: sheer is hull geometry, the build plane is flat, and anything that wants to
+## follow the curve (bulwark cap, rail, sheer strake) asks `deck_edge_y_at(z)`.
+##
+## The rule, derived per hull from fields the catalog already carries — never a magic
+## number per hull:
+##
+##     freeboard  = depth_m − draft_m
+##     rise_fwd   = freeboard × form.bow_keel_rise
+##     rise_aft   = freeboard × form.stern_keel_rise
+##     rise(z)    = rise_end × (|z| / (L/2))²        parabolic, zero amidships
+##
+## Why those two: freeboard is what sheer exists to add, so it sets the scale; and
+## `bow_keel_rise` / `stern_keel_rise` are already this codebase's statement of how much
+## a form lifts its ends — the forefoot rise and the deck-edge rise are the same design
+## axis seen from below and from above. A fine-entry trawler (0.32 / 0.10) gets a marked
+## curve; a full-bodied box freighter (0.18 / 0.05) stays nearly flat, which is what those
+## ships actually look like. Retuning a keel rise therefore also retunes sheer, on purpose.
+## The parabola with its vertex amidships and a bow-dominant fore:aft ratio is the Load
+## Line Convention's standard sheer profile.
+const SHEER_BOW_KEY := "bow_keel_rise"
+const SHEER_STERN_KEY := "stern_keel_rise"
+
+
+## (forward, aft) deck-edge rise in metres for one hull form.
+static func sheer_ends(depth_m: float, draft_m: float, form: Dictionary) -> Vector2:
+	var freeboard := maxf(depth_m - draft_m, 0.0)
+	return Vector2(
+		freeboard * clampf(float(form.get(SHEER_BOW_KEY, 0.2)), 0.0, 0.7),
+		freeboard * clampf(float(form.get(SHEER_STERN_KEY, 0.05)), 0.0, 0.5)
+	)
+
+
+## Deck-edge rise above `deck_y` at ship-local Z. Bow is −Z.
+func sheer_rise_at(z: float) -> float:
+	var half_length := maxf(length_m * 0.5, 0.001)
+	var u := clampf(absf(z) / half_length, 0.0, 1.0)
+	return (sheer_forward_m if z < 0.0 else sheer_aft_m) * u * u
+
+
+## Y of the lofted deck edge (top of the hull shell) at ship-local Z. This is the line a
+## bulwark cap or rail should follow; `deck_y` is the flat plane bricks are placed on.
+func deck_edge_y_at(z: float) -> float:
+	return deck_y + sheer_rise_at(z)
+
+
+## Vertical share of the sheer rise carried by a section level at height `y`. The design
+## waterline and everything under it never moves, so the displacement solve is untouched;
+## the topsides sweep up with the deck edge, which takes the full rise.
+static func _sheer_level_share(y: float, draft: float, depth: float) -> float:
+	return clampf((y - draft) / maxf(depth - draft, 0.001), 0.0, 1.0)
 
 
 ## Submerged half-section area at one station, given a waterline Y in ship-local space.
@@ -400,6 +471,10 @@ static func _assign_form_sections(
 	var bow_rise := depth * clampf(float(form.get("bow_keel_rise", 0.2)), 0.0, 0.7)
 	var stern_rise := depth * clampf(float(form.get("stern_keel_rise", 0.05)), 0.0, 0.5)
 	var stern_width := clampf(float(form.get("stern_underwater_width", 0.72)), 0.1, 1.0)
+	var sheer := sheer_ends(depth, draft, form)
+	result.sheer_forward_m = sheer.x
+	result.sheer_aft_m = sheer.y
+	var half_length := maxf(length * 0.5, 0.001)
 
 	for i in range(station_count):
 		var t := float(i) / float(station_count - 1)
@@ -437,6 +512,18 @@ static func _assign_form_sections(
 				y,
 				half_beam * float(base_widths[j]) * longitudinal
 			))
+		## Sheer, applied AFTER the widths are solved so the plan shape is untouched:
+		## only the Y of levels above the design waterline moves, so the loft gains a
+		## curved deck edge without gaining a vertex, a surface or a draw call.
+		var u := clampf(absf(z) / half_length, 0.0, 1.0)
+		var rise := (sheer.x if z < 0.0 else sheer.y) * u * u
+		if rise > 0.0:
+			for j in range(section.size()):
+				var level: Vector2 = section[j]
+				section[j] = Vector2(
+					level.x + rise * _sheer_level_share(level.x, draft, depth),
+					level.y
+				)
 		result.stations.append({"z": z, "section": section})
 
 

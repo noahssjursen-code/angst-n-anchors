@@ -21,10 +21,21 @@ extends Node3D
 ##
 ## Context switch (top bar): Ship (build on a hull) or Building (ground slab).
 ## Save/Load: JSON plans in res://resources/data/structures/.
+##
+## This app carries its own self-check and DECLARES it to the gate below. The
+## gate discovers lane C by this marker alone — there is no list of app names in
+## tools/gate.sh, so a second such app joins by adding one line to its own
+## script, exactly like `## gate-requires:`.
+##
+## gate-selfcheck: res://scenes/apps/structure_studio.tscn -- --studio-probe
 
 const STRUCTURES_DIR := "res://resources/data/structures"
 const GRID_SNAP := 1.0
 const DEFAULT_WALL_HEIGHT := 3.0
+## The opening ghost stands this far proud of each face of its host, so the
+## preview is visible against the wall it is about to cut instead of z-fighting
+## with it.
+const OPENING_GHOST_PROUD := 0.07
 
 ## Shared colour + material library (maritime palette, StructureBaker materials).
 const COLOR_LIBRARY: Array = [
@@ -118,7 +129,11 @@ func _ready() -> void:
 ## Run: godot --headless scenes/apps/structure_studio.tscn -- --studio-probe
 func _run_studio_probe() -> void:
 	var failed: Array[String] = []
+	## Counted, so the verdict line can state how many claims were made. A run
+	## that asserts nothing must not be able to read as a pass.
+	var tally := {"checks": 0}
 	var expect := func(label: String, ok: bool) -> void:
+		tally["checks"] = int(tally["checks"]) + 1
 		if not ok:
 			failed.append(label)
 	_place_wall(Vector3(0, 0, 6), Vector3(6, 0, 6))
@@ -206,12 +221,21 @@ func _run_studio_probe() -> void:
 			bounded += 1
 	expect.call("bow bulwark fixture loads its four diagonals", diagonals == 4)
 	expect.call("every fixture diagonal is bounded in world space", bounded == diagonals)
-	if failed.is_empty():
+	## Speak the suite's verdict language so the gate can tell "ran and passed"
+	## from "booted, said nothing, exited 0". A self-check that declares no
+	## outcome has not passed — see lane C in tools/gate.sh.
+	var checks := int(tally["checks"])
+	if checks == 0:
+		print("studio_probe: NO CHECKS RAN")
+		get_tree().quit(1)
+	elif failed.is_empty():
 		print("[structure-studio] probe ok — context=%s entities=%d" % [_context, built_count])
+		print("studio_probe: PASS (%d checks)" % checks)
 		get_tree().quit(0)
 	else:
 		for label in failed:
 			print("[structure-studio] probe FAIL — %s" % label)
+		print("studio_probe: %d/%d FAILED" % [failed.size(), checks])
 		get_tree().quit(1)
 
 
@@ -283,6 +307,30 @@ func _probe_diagonal_wall(expect: Callable) -> void:
 		)
 	_set_tool(Tool.OPENING)
 	_begin_opening_drag(screen)
+	## The ghost is the ONLY preview of where the cut will land, and its yaw was
+	## unasserted: a regression drawing the preview lying ACROSS a diagonal
+	## instead of in it would ship silently, because the committed opening would
+	## still be correct and every other check would stay green.
+	_update_opening_drag(screen)
+	expect.call("opening ghost is shown while dragging on the diagonal", _opening_ghost.visible)
+	expect.call(
+		"opening ghost carries the wall's yaw",
+		absf(wrapf(
+			_opening_ghost.rotation.y - deg_to_rad(StructureBaker.wall_yaw_deg(wall)), -PI, PI
+		)) < 0.001
+	)
+	## Geometric form of the same claim, and the one that also catches a yaw that
+	## is merely non-zero. Turned into the wall the ghost reaches only its own
+	## half thickness (0.153 m) across the run; left axis-aligned on this 45°
+	## wall its corners reach ~0.46 m, well outside the wall it is previewing.
+	var ghost_limit := (
+		float(wall.get("thickness", StructurePlan.DEFAULT_WALL_THICKNESS)) * 0.5
+		+ OPENING_GHOST_PROUD + 0.001
+	)
+	expect.call(
+		"opening ghost lies IN the diagonal, not across it",
+		_probe_ghost_across_reach(wall) <= ghost_limit
+	)
 	_commit_opening(screen)
 	var openings := wall.get("openings", []) as Array
 	expect.call("opening punched into the diagonal", openings.size() == 1)
@@ -312,6 +360,27 @@ func _probe_diagonal_wall(expect: Callable) -> void:
 	_selected_id = -1
 	_set_tool(Tool.WALL)
 	_update_selection_visual()
+
+
+## How far the opening ghost reaches ACROSS the wall it previews, worst corner,
+## measured from the wall's own centre plane. A ghost turned onto its host
+## reaches exactly its own half thickness; one left axis-aligned on a diagonal
+## reaches most of its length, which is a preview of a cut somewhere else.
+func _probe_ghost_across_reach(wall: Dictionary) -> float:
+	var run := StructurePlan.wall_run(str(wall.get("axis", "x")))
+	var across := Vector3(-run.z, 0.0, run.x)
+	var start := StructurePlan.vec3_of(wall.get("start")) + _plan_offset
+	var half := ((_opening_ghost.mesh as BoxMesh).size) * 0.5
+	var ghost := _opening_ghost.transform
+	var worst := 0.0
+	for corner in 8:
+		var local := Vector3(
+			half.x if (corner & 1) != 0 else -half.x,
+			half.y if (corner & 2) != 0 else -half.y,
+			half.z if (corner & 4) != 0 else -half.z,
+		)
+		worst = maxf(worst, absf(((ghost * local) - start).dot(across)))
+	return worst
 
 
 ## Every vertex StructureBaker actually draws for this wall, in world space:
@@ -1139,7 +1208,7 @@ func _opening_geom(ctx: Dictionary, span: Vector2, rect: Rect2) -> Dictionary:
 			var start := ctx["start"] as Vector3
 			var u := span.x + span.y * 0.5
 			var v: float = start.y + float(defaults["sill"]) + float(defaults["height"]) * 0.5
-			var t := float(ctx["thickness"]) + 0.14
+			var t := float(ctx["thickness"]) + OPENING_GHOST_PROUD * 2.0
 			## Centre rides the run; size is stated in the wall's OWN frame and
 			## carries the baker's yaw, exactly like StructureBaker.wall_boxes.
 			var center := start + (ctx["run"] as Vector3) * u

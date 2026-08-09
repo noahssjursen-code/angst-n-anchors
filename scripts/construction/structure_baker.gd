@@ -574,9 +574,21 @@ static func _plate_layers(deck: Dictionary, wall_fallback: Color, deck_fallback:
 ## the axis-aligned one, which on a 45 degree bulwark leaves a wall the player
 ## walks straight through and a phantom solid out over the open deck.
 ##
-## DeckFitout.apply_plan (the production consumer) passes yaw_deg through to
-## BoatBody.add_walk_brick_collider, which applies it as the shape's Y rotation.
-## Anything else reading this list owes the same.
+## Every in-tree consumer honours the yaw today — this is a roster, not a wish,
+## and a new consumer joins it rather than being the first to keep it:
+##
+## - `DeckFitout.apply_plan` (scripts/ship/deck_fitout.gd) — the only production
+##   consumer. Passes yaw_deg to `BoatBody.add_walk_brick_collider`, which
+##   applies it as the shape's Y rotation on the PhysicsServer3D body.
+## - `plan_collision_test` (tests/) — rebuilds each box's frame with
+##   `Basis(Vector3.UP, deg_to_rad(yaw)).transposed()` for its ray intervals and
+##   its signed-distance union, and asserts the yaw equals the one the PLAN's
+##   run direction demands (derived independently of `wall_yaw_deg`).
+## - `structure_circulation_test` (tests/) — same inverse-yaw transform in its
+##   `_contains` probe, covered by a diagonal case whose two probes swap
+##   verdicts the moment the yaw is dropped.
+##
+## So: apply yaw_deg about the box's own centre, or do not use this list.
 static func collect_colliders(plan: StructurePlan, offset := Vector3.ZERO) -> Array:
 	var expanded := expand(plan)
 	var out: Array = []
