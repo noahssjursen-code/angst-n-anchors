@@ -117,6 +117,35 @@ region, or a baked structure ships with a capture.
 
 ---
 
+## 3a. Scale — read this before authoring any plan
+
+**The player is 1.8 world units tall.** `scenes/shared/player.tscn` is a `CapsuleShape3D` of
+height 1.8 with the camera at 1.6. Structure Studio's own `_build_scale_mannequin` matches it
+and labels it "1.8 m". So for a human, **one world unit is one metre.**
+
+**Hull geometry is not on that scale.** `resources/data/vessels/hulls/catalog.json` says
+"Dimensions are in-world metres (2× real)" and displays `hull_28x10` as "14.0 × 5.0 m" — but it
+draws it **28 units long**. Stand a 1.8 m player on it and it reads as a **28 m vessel**, not a
+14 m one.
+
+**Therefore: size everything against the figure, never against the catalog's display name.**
+A superstructure proportioned for the "14 m" label sits on a hull that reads as 28 m and comes
+out half the size it should be. That happened — `probe_trawler_bow_bulwark`'s wheelhouse is
+~10% of LOA where a real trawler's is nearly double that — and it was invisible in every number
+the gate records. It took a human looking at a picture and saying "the wheelhouse looks shorter
+than the player".
+
+Consequences:
+
+- **Every vessel capture carries a 1.8 m figure on deck.** `tests/vessel_render_capture.gd`
+  adds one; a capture without it has no absolute scale and a wrongly-proportioned build looks
+  entirely plausible.
+- Check the figure is actually *visible*. The first placement put it inside the wheelhouse — it
+  rendered perfectly and appeared in no frame, which is the one failure mode a scale reference
+  must not have.
+- When a proportion looks wrong to a person, believe them and go measure. The numbers agreed
+  with each other and were all wrong together.
+
 ## 4. Data objects are the interface
 
 The user-facing requirement for Structure Studio is that **an agent authors a

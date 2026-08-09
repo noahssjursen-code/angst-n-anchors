@@ -39,7 +39,11 @@ const FRAME_MARGIN := 1.12
 
 ## azimuth (deg, 0 = dead astern looking forward), elevation (deg).
 const VIEWS: Array[Dictionary] = [
-	{"name": "profile_port", "azimuth": 90.0, "elevation": 3.0},
+	# Port is -X, so a port profile needs the camera at -X: azimuth 270, not 90.
+	# At 90 this shot was labelled "port" while showing the starboard side — a
+	# reference photograph that lies about which side you are looking at is worse
+	# than no photograph.
+	{"name": "profile_port", "azimuth": 270.0, "elevation": 3.0},
 	{"name": "bow_quarter", "azimuth": 145.0, "elevation": 16.0},
 	{"name": "stern_quarter", "azimuth": 35.0, "elevation": 16.0},
 	{"name": "plan", "azimuth": 90.0, "elevation": 88.0},
@@ -142,6 +146,8 @@ func _capture_plan(path: String, stem: String) -> void:
 					(boat as PhysicsBody3D).freeze = true
 				boat.process_mode = Node.PROCESS_MODE_DISABLED
 
+	_add_scale_figure(offset)
+
 	var built: Node3D = StructureBaker.bake(plan, offset)
 	if not _t.check("%s: plan bakes to a node" % stem, built != null):
 		return
@@ -164,6 +170,59 @@ func _capture_plan(path: String, stem: String) -> void:
 	_stage.queue_free()
 	_stage = null
 	await get_tree().process_frame
+
+
+## A 1.8 m figure on deck, in every frame.
+##
+## Without one, a capture has no absolute scale and a superstructure can be
+## proportioned entirely wrong while looking plausible — which is exactly what
+## happened. `scenes/shared/player.tscn` is a 1.8-tall capsule with its eye at
+## 1.6, so world units are real metres FOR A HUMAN. Hull geometry is not on that
+## scale: the catalog calls `hull_28x10` "14.0 × 5.0 m" but draws it 28 units
+## long, so next to a 1.8 m player it reads as a 28 m vessel. Anything built on a
+## hull must be sized against the figure, not against the catalog's display name.
+##
+## Matches the studio's own `_build_scale_mannequin` so a plan looks the same
+## height in a capture as it does while you are drawing it.
+func _add_scale_figure(offset: Vector3) -> void:
+	var figure := Node3D.new()
+	figure.name = "ScaleFigure"
+
+	var body := MeshInstance3D.new()
+	var capsule := CapsuleMesh.new()
+	capsule.radius = 0.22
+	capsule.height = 1.5
+	body.mesh = capsule
+	body.position = Vector3(0.0, 0.75, 0.0)
+	var suit := StandardMaterial3D.new()
+	suit.albedo_color = Color(0.95, 0.55, 0.1)
+	body.material_override = suit
+	figure.add_child(body)
+
+	var head := MeshInstance3D.new()
+	var head_mesh := SphereMesh.new()
+	head_mesh.radius = 0.14
+	head_mesh.height = 0.28
+	head.mesh = head_mesh
+	head.position = Vector3(0.0, 1.66, 0.0)
+	var skin := StandardMaterial3D.new()
+	skin.albedo_color = Color(0.85, 0.70, 0.55)
+	head.material_override = skin
+	figure.add_child(head)
+
+	# Stand it on the open forward working deck. The first attempt put it at
+	# z = 18, which is inside the wheelhouse on the trawler fixtures — the figure
+	# rendered and was invisible in every frame, which is the one failure mode a
+	# scale reference must not have. This spot is clear of the bow bulwark run,
+	# the hatch coaming and the deckhouse on all three fixtures; a plan that
+	# builds over it will need the figure placed from the plan rather than fixed.
+	#
+	# The deck plane is y = 0 in stage space: this rig bakes the plan at the
+	# origin and lowers the HULL by deck_y to meet it, rather than raising the
+	# plan the way `DeckFitout.apply_plan` does. Adding deck_y here left the
+	# figure hanging in the air above the mast.
+	figure.position = offset + Vector3(2.5, 0.0, 7.0)
+	_stage.add_child(figure)
 
 
 func _light_the_stage() -> void:
