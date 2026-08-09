@@ -8,6 +8,7 @@ const LAND_FIELD := preload("res://scripts/weather/land_field.gd")
 const WEATHER_FRONT := preload("res://scripts/weather/weather_front.gd")
 const FRONT_FIELD := preload("res://scripts/weather/weather_front_field.gd")
 const COMPOSER := preload("res://scripts/weather/weather_composer.gd")
+const TestReport := preload("res://tests/support/test_report.gd")
 
 
 func _initialize() -> void:
@@ -15,28 +16,28 @@ func _initialize() -> void:
 
 
 func _run() -> void:
-	_test_determinism()
-	_test_coastal_exposure()
-	_test_front_continuity()
-	_test_offshore_gale_access()
+	var t := TestReport.new("weather_system_smoke")
+	_test_determinism(t)
+	_test_coastal_exposure(t)
+	_test_front_continuity(t)
+	_test_offshore_gale_access(t)
 	_profile_sampling()
-	print("Weather system smoke: all assertions passed")
-	quit()
+	t.finish(self)
 
 
-func _test_determinism() -> void:
+func _test_determinism(t: TestReport) -> void:
 	WEATHER_FIELD.world_seed = 8162
 	FRONT_FIELD.initialize(8162)
 	var p := Vector3(4321.0, 0.0, -2345.0)
 	var a: WeatherSample = COMPOSER.sample(p, 412.75)
 	var b: WeatherSample = COMPOSER.sample(p, 412.75)
-	assert(is_equal_approx(a.pressure, b.pressure))
-	assert(a.wind_velocity_ms.is_equal_approx(b.wind_velocity_ms))
-	assert(is_equal_approx(a.front_intensity, b.front_intensity))
-	assert(a.zone_label == b.zone_label)
+	t.check("pressure resamples identically", is_equal_approx(a.pressure, b.pressure))
+	t.check("wind velocity resamples identically", a.wind_velocity_ms.is_equal_approx(b.wind_velocity_ms))
+	t.check("front intensity resamples identically", is_equal_approx(a.front_intensity, b.front_intensity))
+	t.equal("zone label resamples identically", a.zone_label, b.zone_label)
 
 
-func _test_coastal_exposure() -> void:
+func _test_coastal_exposure(t: TestReport) -> void:
 	LAND_FIELD.initialize([{
 		"center": Vector3.ZERO,
 		"half_x": 250.0,
@@ -46,26 +47,29 @@ func _test_coastal_exposure() -> void:
 	var shore := LAND_FIELD.shore_shelter(Vector3(260.0, 0.0, 0.0))
 	var coastal := LAND_FIELD.shore_shelter(Vector3(1250.0, 0.0, 0.0))
 	var offshore := LAND_FIELD.shore_shelter(Vector3(3800.0, 0.0, 0.0))
-	assert(shore < 0.01)
-	assert(coastal > shore and coastal < 0.5)
-	assert(offshore > 0.99)
+	t.check("shore is fully sheltered", shore < 0.01)
+	t.check("coastal water is partly sheltered", coastal > shore and coastal < 0.5)
+	t.check("offshore water is unsheltered", offshore > 0.99)
 	var calm := COMPOSER.sample(Vector3(260.0, 0.0, 0.0), 123.0)
-	assert(calm.exposure < 0.02)
-	assert(calm.significant_wave_height_m < 1.0)
+	t.check("sheltered sample has near-zero exposure", calm.exposure < 0.02)
+	t.check("sheltered sample stays under a metre of swell", calm.significant_wave_height_m < 1.0)
 
 
-func _test_front_continuity() -> void:
+func _test_front_continuity(t: TestReport) -> void:
 	var front := WEATHER_FRONT.new()
 	front.origin_xz = Vector2(1000.0, -2000.0)
 	front.velocity_m_per_game_hour = Vector2(70.0, 25.0)
 	front.phase_offset = 0.2
 	var before := front.center_at(31.999, FRONT_FIELD.WORLD_HALF_EXTENT_M)
 	var after := front.center_at(32.001, FRONT_FIELD.WORLD_HALF_EXTENT_M)
-	assert(before.distance_to(after) < 1.0)
-	assert(absf(front.activity_at(31.999) - front.activity_at(32.001)) < 0.01)
+	t.check("front centre is continuous across the hour boundary", before.distance_to(after) < 1.0)
+	t.check(
+		"front activity is continuous across the hour boundary",
+		absf(front.activity_at(31.999) - front.activity_at(32.001)) < 0.01,
+	)
 
 
-func _test_offshore_gale_access() -> void:
+func _test_offshore_gale_access(t: TestReport) -> void:
 	WEATHER_FIELD.world_seed = 991
 	FRONT_FIELD.initialize(991)
 	var best_front: WeatherFront
@@ -78,12 +82,13 @@ func _test_offshore_gale_access() -> void:
 				best_activity = activity
 				best_front = front
 				best_time = float(hour)
-	assert(best_front != null and best_activity > 0.45)
+	if not t.check("a strong front is reachable within four days", best_front != null and best_activity > 0.45):
+		return
 	var center := best_front.center_at(best_time, FRONT_FIELD.WORLD_HALF_EXTENT_M)
 	var gale := COMPOSER.sample(Vector3(center.x, 0.0, center.y), best_time)
-	assert(gale.front_intensity > 0.4)
-	assert(gale.wind_speed_ms > 10.0)
-	assert(gale.significant_wave_height_m > 2.0)
+	t.check("gale sample carries front intensity", gale.front_intensity > 0.4)
+	t.check("gale sample blows over 10 m/s", gale.wind_speed_ms > 10.0)
+	t.check("gale sample raises over 2 m of swell", gale.significant_wave_height_m > 2.0)
 
 
 func _profile_sampling() -> void:

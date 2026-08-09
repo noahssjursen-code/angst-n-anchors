@@ -1,19 +1,22 @@
 extends SceneTree
 
+const TestReport := preload("res://tests/support/test_report.gd")
+
 
 func _initialize() -> void:
+	var t := TestReport.new("solar_cycle_test")
 	var dawn := SolarCycle.sample(SolarCycle.SUNRISE_HOUR / 24.0)
 	var noon := SolarCycle.sample(SolarCycle.SOLAR_NOON_HOUR / 24.0)
 	var evening := SolarCycle.sample(18.0 / 24.0)
 	var sunset := SolarCycle.sample(SolarCycle.SUNSET_HOUR / 24.0)
 
-	assert(absf(float(dawn["altitude_degrees"])) < 0.05)
-	assert((dawn["sun_direction"] as Vector3).x > 0.0, "Sunrise must be east")
-	assert(float(noon["altitude_degrees"]) > 51.0)
-	assert((noon["sun_direction"] as Vector3).z > 0.6, "Solar noon must be south")
-	assert(float(evening["daylight"]) > 0.95, "18:00 must not be night")
-	assert(absf(float(sunset["altitude_degrees"])) < 0.05)
-	assert((sunset["sun_direction"] as Vector3).x < 0.0, "Sunset must be west")
+	t.check("Sunrise sits on the horizon", absf(float(dawn["altitude_degrees"])) < 0.05)
+	t.check("Sunrise must be east", (dawn["sun_direction"] as Vector3).x > 0.0)
+	t.check("Solar noon clears 51 degrees altitude", float(noon["altitude_degrees"]) > 51.0)
+	t.check("Solar noon must be south", (noon["sun_direction"] as Vector3).z > 0.6)
+	t.check("18:00 must not be night", float(evening["daylight"]) > 0.95)
+	t.check("Sunset sits on the horizon", absf(float(sunset["altitude_degrees"])) < 0.05)
+	t.check("Sunset must be west", (sunset["sun_direction"] as Vector3).x < 0.0)
 
 	var previous := SolarCycle.sample(0.0)
 	for minute in range(10, 1441, 10):
@@ -22,9 +25,8 @@ func _initialize() -> void:
 		var direction_delta := (current["sun_direction"] as Vector3).angle_to(
 			previous["sun_direction"] as Vector3
 		)
-		assert(light_delta < 0.08, "Daylight discontinuity at minute %d" % minute)
-		assert(direction_delta < 0.08, "Sun-direction discontinuity at minute %d" % minute)
+		t.check("Daylight discontinuity at minute %d" % minute, light_delta < 0.08)
+		t.check("Sun-direction discontinuity at minute %d" % minute, direction_delta < 0.08)
 		previous = current
 
-	print("SolarCycle tests: horizon, direction, long evening, and continuity passed")
-	quit()
+	t.finish(self)

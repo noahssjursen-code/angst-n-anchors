@@ -1,5 +1,6 @@
 extends SceneTree
 
+const TestReport := preload("res://tests/support/test_report.gd")
 const FishLandingLayout := preload("res://scripts/port/fish_landing_layout.gd")
 
 
@@ -8,6 +9,7 @@ func _initialize() -> void:
 
 
 func _run() -> void:
+	var t := TestReport.new("port_fishing_service_test")
 	PortDataCache.clear()
 	var island := PortDefinition.new()
 	island.port_id = "fish-island"
@@ -18,21 +20,27 @@ func _run() -> void:
 	island.region_kind = PortDefinition.RegionKind.ARCHIPELAGO
 	island.has_explicit_rotation = true
 	island.rotation_y = 0.0
-	assert(PortFishingService.is_eligible(island, 77127), "archipelago ports must receive fish landing")
+	t.check(
+		"archipelago ports must receive fish landing",
+		PortFishingService.is_eligible(island, 77127),
+	)
 	var summary := PortExpander.chart_summary(island, 77127)
-	assert(bool(summary.get("has_fish_landing", false)), "chart data must advertise fish landing")
-	assert((summary.get("features", []) as Array).has("Fish Landing"), "chart feature must be present")
+	t.check("chart data must advertise fish landing", bool(summary.get("has_fish_landing", false)))
+	t.check(
+		"chart feature must be present",
+		(summary.get("features", []) as Array).has("Fish Landing"),
+	)
 	var advertised_definition := summary.get("port_definition", {}) as Dictionary
-	assert(advertised_definition == island.to_dict(), "chart must preserve the exact placed port")
-	assert(is_equal_approx(
+	t.check("chart must preserve the exact placed port", advertised_definition == island.to_dict())
+	t.check("chart quay clearance must survive the preview round trip", is_equal_approx(
 		PortDefinition.from_dict(advertised_definition).site_quay_half_m,
 		island.site_quay_half_m,
-	), "chart quay clearance must survive the preview round trip")
+	))
 	var profile := PortTradeProfile.derive(island, 77127)
 	PortFishingService.apply_to_profile(profile)
-	assert(
-		profile.import_slots.has(PortFishingService.COMMODITY_ID),
+	t.check(
 		"fish landing must be represented in port trade data",
+		profile.import_slots.has(PortFishingService.COMMODITY_ID),
 	)
 	var foundation := {
 		"dock_face_polyline": [[-100.0, 0.0], [100.0, 0.0]],
@@ -43,19 +51,20 @@ func _run() -> void:
 	for raw in plan.get("quay_stations", []) as Array:
 		var station := raw as Dictionary
 		if PortExpander._quay_station_has_fish_landing(station):
-			assert(
-				str(station.get("layout", "")) == "single",
+			t.equal(
 				"fish landing must never be packed into a shared twin quay",
+				str(station.get("layout", "")),
+				"single",
 			)
-			assert(
-				float(station.get("width_m", 0.0)) >= FishLandingLayout.REFERENCE_QUAY_WIDTH_M,
+			t.check(
 				"fish landing must preserve the approved showcase quay width",
+				float(station.get("width_m", 0.0)) >= FishLandingLayout.REFERENCE_QUAY_WIDTH_M,
 			)
 			found = true
 			break
-	assert(found, "fish landing must receive a proper generated quay")
+	t.check("fish landing must receive a proper generated quay", found)
 	var expanded := PortExpander.expand(island, 77127)
-	assert(expanded.has_fish_landing, "expanded port must report its realized fish landing")
+	t.check("expanded port must report its realized fish landing", expanded.has_fish_landing)
 	var expanded_plan := expanded.layout_graph.initial_attributes.get("berth_plan", {}) as Dictionary
 	var realized := false
 	for raw in expanded_plan.get("quay_stations", []) as Array:
@@ -63,7 +72,6 @@ func _run() -> void:
 		if PortExpander._quay_station_has_fish_landing(station):
 			realized = true
 			break
-	assert(realized, "layout generation must not trim the advertised fish berth")
-	print("PortFishingService: eligibility, port data, and berth generation passed")
+	t.check("layout generation must not trim the advertised fish berth", realized)
 	PortDataCache.clear()
-	quit()
+	t.finish(self)
