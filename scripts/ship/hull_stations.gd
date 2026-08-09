@@ -474,7 +474,6 @@ static func _assign_form_sections(
 	var sheer := sheer_ends(depth, draft, form)
 	result.sheer_forward_m = sheer.x
 	result.sheer_aft_m = sheer.y
-	var half_length := maxf(length * 0.5, 0.001)
 
 	for i in range(station_count):
 		var t := float(i) / float(station_count - 1)
@@ -515,8 +514,9 @@ static func _assign_form_sections(
 		## Sheer, applied AFTER the widths are solved so the plan shape is untouched:
 		## only the Y of levels above the design waterline moves, so the loft gains a
 		## curved deck edge without gaining a vertex, a surface or a draw call.
-		var u := clampf(absf(z) / half_length, 0.0, 1.0)
-		var rise := (sheer.x if z < 0.0 else sheer.y) * u * u
+		## The curve comes from `sheer_rise_at` so the geometry and the line that
+		## consumers follow are one piece of code and cannot drift apart.
+		var rise := result.sheer_rise_at(z)
 		if rise > 0.0:
 			for j in range(section.size()):
 				var level: Vector2 = section[j]
