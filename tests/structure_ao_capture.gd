@@ -14,7 +14,9 @@ extends Node
 ## A picture is not a test result (CONVENTIONS.md 3): the machine-checkable
 ## claims are that both bakes exist, that AO costs no extra surfaces, that the
 ## AO mesh actually carries a colour channel, that neither frame is blank, and
-## that the AO frame is measurably darker in mean luminance than the flat one.
+## that the darkening is SELECTIVE — the dark tail of the luminance histogram
+## moves several times as far as the bright end, which a global ambient cut
+## could not reproduce.
 ## The assertions that pin the SOLVER live in tests/structure_ao_test.gd.
 
 const RIG := "res://resources/data/structures/probe_ao_junction.json"
@@ -83,19 +85,44 @@ func _run() -> void:
 			for _frame in 3:
 				await get_tree().process_frame
 			var image := _viewport.get_texture().get_image()
-			var luma := _mean_luminance(image)
+			var measured := _subject_stats(image)
 			var path := "%s/structure_ao__%s_%s.png" % [OUT_DIR, view, variant]
 			var error := image.save_png(path)
-			_check("wrote %s (mean luma %.4f)" % [path.get_file(), luma], error == OK and luma > 0.01)
-			_luma[view + "_" + variant] = luma
+			_check(
+				"wrote %s (subject luma %.4f, spread %.4f, p10 %.4f, over %.1f%% of frame)"
+					% [path.get_file(), measured["mean"], measured["spread"], measured["p10"],
+						float(measured["coverage"]) * 100.0],
+				error == OK and float(measured["mean"]) > 0.01 and float(measured["coverage"]) > 0.05,
+			)
+			_luma[view + "_" + variant] = measured
 		world.remove_child(subject)
 
+	## The claim to make about an AO picture is NOT "it is darker" — AO darkens
+	## junctions and leaves open faces alone, so on a rig that is mostly open
+	## face the mean barely moves (measured: 1.7% on the wide shot). The claim is
+	## that the picture gained CONTRAST that tracks geometry: the dark tail
+	## deepens and the spread widens while the frame does not simply dim.
 	for view in VIEWS.keys():
-		var lit := float(_luma.get(view + "_flat", 0.0))
-		var shaded := float(_luma.get(view + "_ao", 0.0))
-		print("  %s: flat luma %.4f -> AO luma %.4f (%.1f%% darker)"
-			% [view, lit, shaded, (1.0 - shaded / maxf(lit, 1e-6)) * 100.0])
-		_check("%s: the AO frame is visibly darker than the flat one" % view, shaded < lit * 0.97)
+		var lit := _luma.get(view + "_flat", {}) as Dictionary
+		var shaded := _luma.get(view + "_ao", {}) as Dictionary
+		var tail := 1.0 - float(shaded["p10"]) / maxf(float(lit["p10"]), 1e-6)
+		var top := 1.0 - float(shaded["p90"]) / maxf(float(lit["p90"]), 1e-6)
+		print("  %s: mean %.4f -> %.4f | p10 %.4f -> %.4f (%.1f%%) | p90 %.4f -> %.4f (%.1f%%)"
+			% [view, lit["mean"], shaded["mean"], lit["p10"], shaded["p10"], tail * 100.0,
+				lit["p90"], shaded["p90"], top * 100.0])
+		_check("%s: AO darkens the frame overall" % view,
+			float(shaded["mean"]) < float(lit["mean"]) * 0.99)
+		_check("%s: AO deepens the dark tail" % view,
+			float(shaded["p10"]) < float(lit["p10"]) * 0.98)
+		## The claim that separates baked AO from "turn the ambient down": the
+		## darkening is SELECTIVE. p10 (junctions, undersides, inside corners)
+		## moves several times as far as p90 (open, sky-facing faces), which in
+		## two of the three views does not move at all. A global dim would move
+		## both by the same fraction and fail here.
+		_check("%s: the darkening tracks geometry, it is not a global dim" % view,
+			tail - top > 0.02)
+		_check("%s: AO does not simply dim the frame" % view,
+			float(shaded["mean"]) > float(lit["mean"]) * 0.85)
 	flat.free()
 	baked.free()
 	_finish()
@@ -243,13 +270,42 @@ func _mannequin(at: Vector3) -> Node3D:
 	return node
 
 
-func _mean_luminance(image: Image) -> float:
-	var total := 0.0
+## Mean luminance over the pixels that actually show geometry, plus what
+## fraction of the frame that is. Averaging the WHOLE frame buries the effect in
+## background: the wide shot is mostly empty sky, so a 12% darkening of the
+## structure reads as 0.6% of the frame and no threshold can tell it from noise.
+const BACKGROUND := Color(0.10, 0.13, 0.16)
+
+
+func _subject_stats(image: Image) -> Dictionary:
+	var lumas := PackedFloat32Array()
 	var samples := 0
-	var step := 4
+	var step := 2
 	for y in range(0, image.get_height(), step):
 		for x in range(0, image.get_width(), step):
-			var c := image.get_pixel(x, y)
-			total += c.r * 0.2126 + c.g * 0.7152 + c.b * 0.0722
 			samples += 1
-	return total / float(maxi(samples, 1))
+			var c := image.get_pixel(x, y)
+			if (absf(c.r - BACKGROUND.r) < 0.02
+				and absf(c.g - BACKGROUND.g) < 0.02
+				and absf(c.b - BACKGROUND.b) < 0.02):
+				continue
+			lumas.append(c.r * 0.2126 + c.g * 0.7152 + c.b * 0.0722)
+	if lumas.is_empty():
+		return {"mean": 0.0, "spread": 0.0, "p10": 0.0, "coverage": 0.0}
+	var total := 0.0
+	for value in lumas:
+		total += value
+	var mean := total / float(lumas.size())
+	var variance := 0.0
+	for value in lumas:
+		variance += (value - mean) * (value - mean)
+	variance /= float(lumas.size())
+	var sorted := lumas.duplicate()
+	sorted.sort()
+	return {
+		"mean": mean,
+		"spread": sqrt(variance),
+		"p10": sorted[int(float(sorted.size()) * 0.10)],
+		"p90": sorted[int(float(sorted.size()) * 0.90)],
+		"coverage": float(lumas.size()) / float(maxi(samples, 1)),
+	}

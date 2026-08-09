@@ -299,6 +299,23 @@ func _test_ferry_budget() -> void:
 	if plan == null:
 		_check("ferry fixture loads", false)
 		return
+	## Baseline: what the bake costs today, with no AO at all. Reported so the
+	## AO figure is a comparison and not a number floating on its own.
+	var flat_start := Time.get_ticks_usec()
+	var flat := StructureBaker.bake(plan)
+	var flat_ms := float(Time.get_ticks_usec() - flat_start) / 1000.0
+	var flat_tris := 0
+	var flat_surfaces := 0
+	for child in flat.get_children():
+		var instance := child as MeshInstance3D
+		if instance == null or instance.mesh == null:
+			continue
+		flat_surfaces += 1
+		var verts: PackedVector3Array = (instance.mesh as ArrayMesh).surface_get_arrays(0)[Mesh.ARRAY_VERTEX]
+		flat_tris += verts.size() / 3
+	flat.free()
+	print("  ferry: flat bake (no AO) %.1f ms, %d surfaces, %d triangles"
+		% [flat_ms, flat_surfaces, flat_tris])
 	var start := Time.get_ticks_usec()
 	var ao := StructureAO.for_plan(plan)
 	var built := Time.get_ticks_usec()

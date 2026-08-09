@@ -12,9 +12,15 @@ extends RefCounted
 ## the catalog may name a vessel; a part earns its entry by being useful across
 ## unrelated ship types.
 ##
-## SCALE (CONVENTIONS §3a): every dimension is in world units, sized against the
-## 1.8-unit human figure — a guardrail is 1.1 because a person is 1.8. Never
-## against a hull's "display metres", which are half its drawn length.
+## SCALE (CONVENTIONS §3a, settled 2026-08-09): one world unit is one metre and
+## nothing is double-scale. Every dimension here is real metres sized against the
+## 1.8 m figure — a guardrail is 1.1 because a person is 1.8.
+##
+## Deck-grid cells are 0.5 m, but that is a build resolution, not a part size:
+## most fittings in this kit (a 0.22 m cap band, a 0.11 m bollard, a 0.035 m
+## lantern post) are smaller than one cell. So parts resolve to float-coordinate
+## primitive specs in a part-local frame and are never snapped to cells; the
+## caller places the frame.
 ##
 ## ── The five primitives ─────────────────────────────────────────────────────
 ##   spar        from, to, radius, [sides], [taper]     mast/post/boom/leg/stack

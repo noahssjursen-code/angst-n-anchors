@@ -12,7 +12,7 @@ const EPS := 0.0005
 ## so a broken StructurePlan reports "ALL PASS" having asserted nothing. That
 ## happened while writing this file. Pin the count: fewer checks than this and
 ## the run is a failure regardless of what the ones that ran said.
-const EXPECTED_CHECKS := 99
+const EXPECTED_CHECKS := 103
 
 var _failures := 0
 var _checks := 0
@@ -225,6 +225,21 @@ func _test_normalize_idempotent() -> void:
 	_check(
 		"canonical key order",
 		once.keys() == ["id", "item_id", "at", "yaw", "roll", "host", "props"]
+	)
+	## An editor edits the live dictionary, not a copy. to_dict must re-canonicalise
+	## or one poked field breaks the round-trip's fixed point.
+	var plan := StructurePlan.new()
+	var item := plan.add_item("cleat", Vector3(1.5, 0.0, 2.5))
+	item["pitch"] = 0.0
+	item["yaw"] = 90
+	item["junk"] = "poked in by an editor"
+	var emitted := (plan.to_dict()["items"] as Array)[0] as Dictionary
+	_check("to_dict re-canonicalises a poked item", not emitted.has("junk") and not emitted.has("pitch"))
+	_check("to_dict re-types a poked value", typeof(emitted["yaw"]) == TYPE_FLOAT)
+	_check(
+		"a poked plan is still byte-stable",
+		JSON.stringify(plan.to_dict())
+		== JSON.stringify(StructurePlan.from_dict(plan.to_dict()).to_dict())
 	)
 
 
@@ -448,6 +463,11 @@ func _test_host_chain_and_cycle() -> void:
 	mast["host"] = {"id": int(lamp["id"])}
 	var cycled := plan.item_transform(lamp).origin
 	_check("a host cycle terminates", is_finite(cycled.x) and is_finite(cycled.y) and is_finite(cycled.z))
+	## Termination alone is also what the depth limit would give, so pin the
+	## distinctive behaviour: the cycle is cut at the FIRST repeated host, which
+	## is one bounce, not ITEM_HOST_MAX_DEPTH of them. Without this the `seen`
+	## guard is untested and could be deleted with the suite still green.
+	_check("a host cycle is cut at the first repeat, not at the depth limit", _near_v3(cycled, Vector3(3, 8, 2)))
 	print("(expect one 'host ... not found' error below — that is this check working)")
 	var orphan := plan.add_hosted_item("lamp", 4242, Vector3(1.0, 1.0, 1.0))
 	_check(

@@ -4,7 +4,7 @@
     "The kit. Loaded by scripts/construction/part_catalog.gd.",
     "Nothing here may name or assume a vessel: a part earns its entry by being useful across unrelated ship types.",
     "Every entry is composed from the five primitives — spar, railing, wire, plate, sheer_band. Composites are data, not code: a player assembling an A-frame from two spars and a wire is doing exactly what gallows_a_frame does.",
-    "Dimensions are world units sized against the 1.8-unit human figure (CONVENTIONS 3a), never against a hull's display metres.",
+    "Dimensions are real metres sized against the 1.8 m figure (CONVENTIONS 3a: one world unit is one metre). Most fittings here are smaller than a 0.5 m deck cell, so parts carry float coordinates and are never snapped to the grid.",
     "Local frame: +Y up, the run of a part along +X, outboard/forward along -Z. Placement yaw is applied by the caller.",
     "compliance.tags drive registration counting and live-vs-baked; live is derived from VesselSkinBaker.LIVE_TAGS and may not be declared against."
   ],
