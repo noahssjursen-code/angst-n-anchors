@@ -12,7 +12,7 @@ const EPS := 0.0005
 ## so a broken StructurePlan reports "ALL PASS" having asserted nothing. That
 ## happened while writing this file. Pin the count: fewer checks than this and
 ## the run is a failure regardless of what the ones that ran said.
-const EXPECTED_CHECKS := 103
+const EXPECTED_CHECKS := 102
 
 var _failures := 0
 var _checks := 0
@@ -164,7 +164,6 @@ func _sample_plan() -> StructurePlan:
 	plan.hull_id = "hull_28x10"
 	var wall := plan.add_wall(Vector3(2, 0, 3), "x", 6.0, 1.1, 0.12)
 	plan.add_deck(Vector3(0, 0, 0), Vector2(10, 28))
-	plan.add_room(Vector3(3, 0, 12), Vector3(4, 2.4, 5))
 	plan.add_stair(Vector3(1, 0, 6), "+z", 3.0, 0.9, 2.4)
 	plan.add_item("mast", Vector3(5.0, 0.0, 9.5), 0.0)
 	var raked := plan.add_item("mast", Vector3(5.0, 0.0, 14.25), 12.5, {"length": 7.5, "radius": 0.1})
@@ -253,7 +252,6 @@ func _test_legacy_migration() -> void:
 		"hull_id": "hull_28x10",
 		"walls": [],
 		"decks": [],
-		"rooms": [],
 		"stairs": [],
 		"items": [
 			{"id": 1, "item_id": "light_nav_port", "cell": [3, 0, 7], "yaw": 90},
@@ -331,7 +329,6 @@ func _test_plans_without_items_load_unchanged() -> void:
 	var after := StructurePlan.from_dict(before).to_dict()
 	_check("walls unchanged by the item work", (before["walls"] as Array) == (after["walls"] as Array))
 	_check("decks unchanged", (before["decks"] as Array) == (after["decks"] as Array))
-	_check("rooms unchanged", (before["rooms"] as Array) == (after["rooms"] as Array))
 	_check("stairs unchanged", (before["stairs"] as Array) == (after["stairs"] as Array))
 	_check("absent items load as an empty array", (after["items"] as Array).is_empty())
 	## And the real fixtures, which predate every line of this.
@@ -341,7 +338,16 @@ func _test_plans_without_items_load_unchanged() -> void:
 	_check("fixture is recognised as a plan", StructurePlan.is_plan(data))
 	var fixture := StructurePlan.from_dict(data)
 	_check("fixture keeps its walls", fixture.walls.size() == (data.get("walls", []) as Array).size())
-	_check("fixture has no items", fixture.items.is_empty())
+	## PRE-EXISTING RED, fixed 2026-08-10 (not caused by the room purge): this
+	## read `fixture.items.is_empty()`, written when demo_workboat carried no
+	## fittings. The fixture has been dressed with a full rig since, so the
+	## assertion had been failing on a true statement about the data. Replaced
+	## with the stronger claim it was reaching for — every declared item loads.
+	_check(
+		"fixture keeps every item it declares",
+		fixture.items.size() == (data.get("items", []) as Array).size()
+			and not fixture.items.is_empty()
+	)
 	_check(
 		"fixture round-trips byte-stably",
 		JSON.stringify(fixture.to_dict())

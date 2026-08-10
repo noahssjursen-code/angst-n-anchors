@@ -2,7 +2,7 @@
 	"format": "structure_plan_v1",
 	"context": "vessel",
 	"hull_id": "hull_28x10",
-	"_note": "Demo fixture. DRESSED, 2026-08-10. Guardrails round the upper deck plate and three sides of its stairwell (the fourth is where stair 8 arrives); a mast with radome, whips, floodlights and three stays on the deckhouse roof; a banded exhaust stack; a knuckle-boom crane whose two-part boom is ONE spar polyline, with hoist and hook block; a pair of curved davits with falls and blocks; sidelights on the deckhouse corners; three fenders on lanyards over the starboard side; four mooring bitts. 74 items, all spar and wire. COST: draw calls UNCHANGED at 8, triangles 9083 -> 11443 (+26%).",
+	"_note": "Demo fixture. DRESSED, 2026-08-10. Guardrails round the upper deck plate and three sides of its stairwell (the fourth is where stair 8 arrives); a mast with radome, whips, floodlights and three stays on the deckhouse roof; a banded exhaust stack; a knuckle-boom crane whose two-part boom is ONE spar polyline, with hoist and hook block; a pair of curved davits with falls and blocks; sidelights on the deckhouse corners; three fenders on lanyards over the starboard side; four mooring bitts. 74 items, all spar and wire. COST: draw calls UNCHANGED at 8, triangles 9083 -> 11443 (+26%). ROOM PURGE 2026-08-10: the room primitive was deleted and this fixture's deckhouse went with it. What remains is the bare hull rig — bulwark walls, deck plates, stairs and items. Fittings that stood on the deckhouse now stand in open air on purpose; the superstructure is rebuilt from the sloped-plate primitive in the next wave, not re-authored out of walls. The three mast stays (ids 244-246) were belayed to the deckhouse roof and were deleted with it: a stay whose lower end is made fast to nothing is a line to nowhere, which tests/vessel_render_capture.gd rightly refuses. The mast keeps its whips, radome and floodlights.",
 	"palette": {
 		"wall": [0.85, 0.86, 0.88],
 		"deck": [0.33, 0.31, 0.29]
@@ -19,18 +19,6 @@
 		{"id": 5, "origin": [1, 3, 8], "size": [8, 8], "thickness": 0.15, "openings": [
 			{"type": "stairwell", "offset": [3.0, 2.0], "size": [1.5, 3.0]}
 		]}
-	],
-	"rooms": [
-		{"id": 6, "origin": [2, 0, 18], "size": [6, 3, 6], "wall_thickness": 0.1667, "openings": [
-			{"face": "n", "type": "window", "offset": 0.6, "width": 1.4, "sill": 1.2, "height": 1.2},
-			{"face": "n", "type": "window", "offset": 2.3, "width": 1.4, "sill": 1.2, "height": 1.2},
-			{"face": "n", "type": "window", "offset": 4.0, "width": 1.4, "sill": 1.2, "height": 1.2},
-			{"face": "s", "type": "door", "offset": 2.2, "width": 1.6, "height": 2.2},
-			{"face": "w", "type": "window", "offset": 2.0, "width": 2.0, "sill": 1.2, "height": 1.1},
-			{"face": "e", "type": "window", "offset": 2.0, "width": 2.0, "sill": 1.2, "height": 1.1}
-		]},
-		{"id": 7, "origin": [1, 0, 8], "size": [8, 3, 8], "wall_thickness": 0.1667, "roof": false,
-			"open_faces": ["n", "s"], "openings": []}
 	],
 	"stairs": [
 		{"id": 8, "start": [4, 0, 9], "dir": "+z", "length": 4, "width": 1.5, "height": 3}
@@ -80,9 +68,6 @@
 		{"id": 241, "item_id": "spar", "at": [5.69, 6.168, 21.0], "props": {"__is": "whip antenna", "points": [[0.0, 0.0, 0.0], [0.0, 1.4, 0.0]], "radius": 0.014, "sides": 4, "material": "steel", "color": [0.16, 0.17, 0.19]}},
 		{"id": 242, "item_id": "spar", "at": [4.08, 6.028, 21.0], "props": {"__is": "deck floodlight, aimed forward and down", "points": [[0.0, 0.0, 0.0], [0.0, -0.16, -0.28]], "radius": 0.1, "sides": 6, "material": "painted", "color": [0.94, 0.94, 0.92]}},
 		{"id": 243, "item_id": "spar", "at": [5.92, 6.028, 21.0], "props": {"__is": "deck floodlight, aimed forward and down", "points": [[0.0, 0.0, 0.0], [0.0, -0.16, -0.28]], "radius": 0.1, "sides": 6, "material": "painted", "color": [0.94, 0.94, 0.92]}},
-		{"id": 244, "item_id": "wire", "at": [5.0, 7.4, 21.0], "props": {"__is": "mast stay, port", "points": [[0.0, 0.0, 0.0], [-2.6, -4.35, -2.6]], "radius": 0.013, "sag": 0.0, "sides": 4, "material": "steel", "color": [0.16, 0.17, 0.19]}},
-		{"id": 245, "item_id": "wire", "at": [5.0, 7.4, 21.0], "props": {"__is": "mast stay, starboard", "points": [[0.0, 0.0, 0.0], [2.6, -4.35, -2.6]], "radius": 0.013, "sag": 0.0, "sides": 4, "material": "steel", "color": [0.16, 0.17, 0.19]}},
-		{"id": 246, "item_id": "wire", "at": [5.0, 7.4, 21.0], "props": {"__is": "mast stay, aft", "points": [[0.0, 0.0, 0.0], [0.0, -4.35, 2.9]], "radius": 0.013, "sag": 0.0, "sides": 4, "material": "steel", "color": [0.16, 0.17, 0.19]}},
 		{"id": 247, "item_id": "spar", "at": [1.92, 2.3, 18.4], "props": {"__is": "sidelight - port, red", "points": [[0.0, 0.0, 0.0], [0.0, 0.3, 0.0]], "radius": 0.1, "sides": 8, "material": "painted", "color": [0.86, 0.13, 0.11]}},
 		{"id": 248, "item_id": "spar", "at": [8.08, 2.3, 18.4], "props": {"__is": "sidelight - starboard, green", "points": [[0.0, 0.0, 0.0], [0.0, 0.3, 0.0]], "radius": 0.1, "sides": 8, "material": "painted", "color": [0.1, 0.6, 0.3]}},
 		{"id": 249, "item_id": "spar", "at": [7.0, 3.0, 19.3], "props": {"__is": "exhaust stack - lower drum", "points": [[0.0, 0.0, 0.0], [0.0, 1.5, 0.0]], "radius": 0.3, "taper": 0.95, "sides": 12, "material": "painted", "color": [0.24, 0.25, 0.28]}},

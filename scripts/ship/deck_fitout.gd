@@ -29,7 +29,7 @@ const READINESS_INTERACTIVE := 3
 
 
 ## Routes a layout dictionary to the right construction system: parametric
-## StructurePlan documents (walls/rooms/decks/openings) or legacy voxel bricks.
+## StructurePlan documents (walls/decks/stairs/items/openings) or legacy voxel bricks.
 static func apply_any(
 	boat: BoatBody,
 	layout_dict: Dictionary,

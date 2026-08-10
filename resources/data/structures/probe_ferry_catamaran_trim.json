@@ -2,7 +2,7 @@
 	"format": "structure_plan_v1",
 	"context": "vessel",
 	"hull_id": "hull_45x16_cat",
-	"_note": "probe_ferry_catamaran with EDGE TRIM added by hand, and nothing else changed. Every entity with id < 100 is byte-identical to probe_ferry_catamaran.json; every entity with id >= 100 is trim. The question this fixture answers is whether the retired voxel skin baker's 'deck/roof strips, base skirts, corner posts' actually buy anything on top of today's butt-joined boxes, and what they cost. Four families: (a) CAP RAILS 100-102, a 0.16 band brought 0.08 proud of every bulwark top including the transom, which the original leaves bare; (b) FASCIA BANDS 103-105, a 0.28 ring hung on the edge of each deck plate that serves as a deckhouse roof, bracketing the plate so the roof edge reads as a member rather than a cut; (c) BASE SKIRTS 106-121, a coaming band where each deckhouse foot meets the deck it stands on, SPLIT AROUND EVERY DOOR so no threshold gains a 0.2 m step — this split is the reason hand-authoring does not scale, it needs the openings of the s-face wall of each room back-solved from expand_room's own extension rule; (d) CORNER POSTS 140-151, a square post centred on each deckhouse corner, buried 0.02 into the skirt below and the fascia above so no face is ever coplanar with what it lands on. (e) RUBBING STRAKE 130-133, a band around the whole 16 x 45 bridge-deck edge at the hull-deck junction. Costs nothing in draw calls: every trim entity is material 'painted' and reuses a palette colour, and the baker buckets on material alone. TWO DEFECTS FOUND IN THE ORIGINAL while measuring for this and NOT fixed here, because fixing them would confound the comparison: room 41 spans y 3.0-5.6 while its roof plate 31 spans 5.82-6.00, so the upper saloon has a 0.22 m open gap between wall top and roof; and the bulwark cap plates 20/21 are not mirrored (20 lies inboard of wall 1's centreline, 21 outboard of wall 2's). DRESSED, 2026-08-10: crude box mast (walls 10/11) removed. Guardrails on the promenade (deck 30), the sun deck (deck 31), round the stairwell, and across the bow and stern bridging decks that walls 1-3 never reached — drawn as four CROSSING runs per plate rather than one inset closed loop, because an inset loop leaves the last ~0.2 m of every edge with no rail along its own inboard normal (measured: 16 of demo_workboat's 402 stations, 4 of this fixture's 2922 at the extreme bow and stern corners). Plus a raked radar mast with radome, whips, floodlights and two backstays; sidelights on the wheelhouse corners; two red funnels with white bands, each three stacked spars because colour is per-item and free; four liferaft canisters in cradles; four mooring bitts. 192 items. The deck-30 STAIRWELL OPENING was realigned onto stair 50 (offset [10.6,25.0] size [1.8,4.4] -> offset [10.2,25.6] size [1.8,4.0]): as authored the hole ran 0.4 m past the stair's starboard side and opened 0.6 m forward of the top tread, a 3 m drop where a passenger steps off the stair. COST: draw calls UNCHANGED at 10; triangles 12318 -> 17422 (+41%). Trim ids 100-151 are unchanged; the shared fittings live at id >= 200 and are byte-identical to probe_ferry_catamaran, so that fixture pair still differs by trim alone.",
+	"_note": "probe_ferry_catamaran with EDGE TRIM added by hand, and nothing else changed. Every entity with id < 100 is byte-identical to probe_ferry_catamaran.json; every entity with id >= 100 is trim. The question this fixture answers is whether the retired voxel skin baker's 'deck/roof strips, base skirts, corner posts' actually buy anything on top of today's butt-joined boxes, and what they cost. Four families: (a) CAP RAILS 100-102, a 0.16 band brought 0.08 proud of every bulwark top including the transom, which the original leaves bare; (b) FASCIA BANDS 103-105, a 0.28 ring hung on the edge of each deck plate that serves as a deckhouse roof, bracketing the plate so the roof edge reads as a member rather than a cut; (c) BASE SKIRTS 106-121, a coaming band where each deckhouse foot meets the deck it stands on, SPLIT AROUND EVERY DOOR so no threshold gains a 0.2 m step — this split is the reason hand-authoring does not scale, it needs every door opening in the deckhouse front back-solved by hand; (d) CORNER POSTS 140-151, a square post centred on each deckhouse corner, buried 0.02 into the skirt below and the fascia above so no face is ever coplanar with what it lands on. (e) RUBBING STRAKE 130-133, a band around the whole 16 x 45 bridge-deck edge at the hull-deck junction. Costs nothing in draw calls: every trim entity is material 'painted' and reuses a palette colour, and the baker buckets on material alone. A DEFECT FOUND IN THE ORIGINAL while measuring for this and NOT fixed here, because fixing it would confound the comparison: the bulwark cap plates 20/21 are not mirrored (20 lies inboard of wall 1's centreline, 21 outboard of wall 2's). DRESSED, 2026-08-10: crude box mast (walls 10/11) removed. Guardrails on the promenade (deck 30), the sun deck (deck 31), round the stairwell, and across the bow and stern bridging decks that walls 1-3 never reached — drawn as four CROSSING runs per plate rather than one inset closed loop, because an inset loop leaves the last ~0.2 m of every edge with no rail along its own inboard normal (measured: 16 of demo_workboat's 402 stations, 4 of this fixture's 2922 at the extreme bow and stern corners). Plus a raked radar mast with radome, whips, floodlights and two backstays; sidelights on the wheelhouse corners; two red funnels with white bands, each three stacked spars because colour is per-item and free; four liferaft canisters in cradles; four mooring bitts. 192 items. The deck-30 STAIRWELL OPENING was realigned onto stair 50 (offset [10.6,25.0] size [1.8,4.4] -> offset [10.2,25.6] size [1.8,4.0]): as authored the hole ran 0.4 m past the stair's starboard side and opened 0.6 m forward of the top tread, a 3 m drop where a passenger steps off the stair. COST: draw calls UNCHANGED at 10; triangles 12318 -> 17422 (+41%). Trim ids 100-151 are unchanged; the shared fittings live at id >= 200 and are byte-identical to probe_ferry_catamaran, so that fixture pair still differs by trim alone. ROOM PURGE 2026-08-10: the room primitive was deleted and this fixture's deckhouse went with it. What remains is the bare hull rig — bulwark walls, deck plates, stairs and items. Fittings that stood on the deckhouse now stand in open air on purpose; the superstructure is rebuilt from the sloped-plate primitive in the next wave, not re-authored out of walls.",
 	"palette": {
 		"wall": [0.88, 0.89, 0.91],
 		"deck": [0.30, 0.33, 0.35]
@@ -77,47 +77,6 @@
 		{"id": 119, "origin": [4.63, 6.20, 11.03], "size": [6.74, 0.18], "thickness": 0.24, "color": [0.30, 0.33, 0.35], "openings": []},
 		{"id": 120, "origin": [4.63, 6.20, 18.29], "size": [2.38, 0.18], "thickness": 0.24, "color": [0.30, 0.33, 0.35], "openings": []},
 		{"id": 121, "origin": [8.81, 6.20, 18.29], "size": [2.56, 0.18], "thickness": 0.24, "color": [0.30, 0.33, 0.35], "openings": []}
-	],
-	"rooms": [
-		{"id": 40, "origin": [1.4, 0, 7.2], "size": [13.2, 2.8, 29.6], "wall_thickness": 0.2, "roof": false, "openings": [
-			{"face": "w", "type": "window", "offset": 3.0, "width": 3.2, "sill": 1.0, "height": 1.35},
-			{"face": "w", "type": "window", "offset": 7.0, "width": 3.2, "sill": 1.0, "height": 1.35},
-			{"face": "w", "type": "window", "offset": 11.0, "width": 3.2, "sill": 1.0, "height": 1.35},
-			{"face": "w", "type": "window", "offset": 15.0, "width": 3.2, "sill": 1.0, "height": 1.35},
-			{"face": "w", "type": "window", "offset": 19.0, "width": 3.2, "sill": 1.0, "height": 1.35},
-			{"face": "e", "type": "window", "offset": 3.0, "width": 3.2, "sill": 1.0, "height": 1.35},
-			{"face": "e", "type": "window", "offset": 7.0, "width": 3.2, "sill": 1.0, "height": 1.35},
-			{"face": "e", "type": "window", "offset": 11.0, "width": 3.2, "sill": 1.0, "height": 1.35},
-			{"face": "e", "type": "window", "offset": 15.0, "width": 3.2, "sill": 1.0, "height": 1.35},
-			{"face": "e", "type": "window", "offset": 19.0, "width": 3.2, "sill": 1.0, "height": 1.35},
-			{"face": "n", "type": "window", "offset": 2.4, "width": 3.4, "sill": 1.1, "height": 1.2},
-			{"face": "n", "type": "window", "offset": 7.4, "width": 3.4, "sill": 1.1, "height": 1.2},
-			{"face": "s", "type": "door", "offset": 2.6, "width": 1.8, "height": 2.2},
-			{"face": "s", "type": "door", "offset": 8.8, "width": 1.8, "height": 2.2}
-		]},
-
-		{"id": 41, "origin": [1.8, 3.0, 9.2], "size": [12.4, 2.6, 21.6], "wall_thickness": 0.18, "roof": false, "openings": [
-			{"face": "w", "type": "window", "offset": 2.6, "width": 3.4, "sill": 0.95, "height": 1.25},
-			{"face": "w", "type": "window", "offset": 7.0, "width": 3.4, "sill": 0.95, "height": 1.25},
-			{"face": "w", "type": "window", "offset": 11.4, "width": 3.4, "sill": 0.95, "height": 1.25},
-			{"face": "w", "type": "window", "offset": 15.8, "width": 3.4, "sill": 0.95, "height": 1.25},
-			{"face": "e", "type": "window", "offset": 2.6, "width": 3.4, "sill": 0.95, "height": 1.25},
-			{"face": "e", "type": "window", "offset": 7.0, "width": 3.4, "sill": 0.95, "height": 1.25},
-			{"face": "e", "type": "window", "offset": 11.4, "width": 3.4, "sill": 0.95, "height": 1.25},
-			{"face": "e", "type": "window", "offset": 15.8, "width": 3.4, "sill": 0.95, "height": 1.25},
-			{"face": "n", "type": "window", "offset": 2.2, "width": 3.6, "sill": 1.0, "height": 1.2},
-			{"face": "n", "type": "window", "offset": 6.6, "width": 3.6, "sill": 1.0, "height": 1.2},
-			{"face": "s", "type": "door", "offset": 5.4, "width": 1.8, "height": 2.1}
-		]},
-
-		{"id": 42, "origin": [4.8, 6.0, 11.2], "size": [6.4, 2.4, 7.1], "wall_thickness": 0.16, "openings": [
-			{"face": "n", "type": "window", "offset": 0.5, "width": 1.7, "sill": 1.05, "height": 1.1},
-			{"face": "n", "type": "window", "offset": 2.35, "width": 1.7, "sill": 1.05, "height": 1.1},
-			{"face": "n", "type": "window", "offset": 4.2, "width": 1.7, "sill": 1.05, "height": 1.1},
-			{"face": "w", "type": "window", "offset": 2.4, "width": 2.4, "sill": 1.05, "height": 1.05},
-			{"face": "e", "type": "window", "offset": 2.4, "width": 2.4, "sill": 1.05, "height": 1.05},
-			{"face": "s", "type": "door", "offset": 2.4, "width": 1.6, "height": 2.05}
-		]}
 	],
 	"stairs": [
 		{"id": 50, "start": [11.4, 0, 32.6], "dir": "-z", "length": 4.4, "width": 1.8, "height": 3.0}

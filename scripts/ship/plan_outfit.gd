@@ -17,7 +17,7 @@ extends RefCounted
 ## `VesselCompliance._evaluate_rule` read five dictionaries — `brick_counts`,
 ## `tag_counts`, `positions`, `capacity`, `max_ratings` — plus the
 ## VesselOutfit-shaped `accepted_slots` / `usage` / `capabilities`. This file
-## populates exactly those, from `plan.items` and the plan's rooms/walls/decks.
+## populates exactly those, from `plan.items` and the plan's walls/decks/stairs.
 ##
 ## ── The seam a later wave closes ────────────────────────────────────────────
 ##
@@ -56,12 +56,22 @@ extends RefCounted
 ##
 ## ── What is measured from GEOMETRY, with no items at all ────────────────────
 ##
-## `has_cabin` and `doors` are enclosure facts, and a plan draws enclosure. The
-## brick-era `has_cabin` was `door_n >= 1 or wall_n >= 8`, which passes on eight
-## roofless walls — a fence sold as accommodation. Here a cabin is a ROOM
-## (see `cabin_rooms`), because a room is the plan's declaration of enclosure:
-## it expands to walls + floor + ceiling, and `open_faces` names the sides that
-## are missing. Loose walls carry no roof and never make a cabin on their own.
+## `doors` is an enclosure fact and a plan draws it: a door is an opening of
+## type "door" cut into a wall or a deck, counted off the drawing.
+##
+## `has_cabin` is NOT measurable right now and is reported false for every plan.
+## It used to mean "the plan contains a room", because the room primitive was
+## the plan's own declaration of enclosure — it expanded to walls + floor +
+## ceiling and `open_faces` named the sides that were missing. The room
+## primitive was deleted (2026-08-10): it could only draw a box, so every
+## deckhouse built from one came out a shed. Nothing that survives it declares
+## enclosure, and the one thing this function must never do is go back to
+## inferring a cabin from loose walls. The brick-era rule was
+## `door_n >= 1 or wall_n >= 8`, which passes on eight roofless walls — a fence
+## sold as accommodation, and the regression `plan_compliance_test` still pins.
+## The wave that lands the sloped-plate primitive re-derives enclosure from it;
+## until then a licence that requires a cabin cannot be met by a plan, and that
+## refusal is honest rather than a wrong yes.
 ##
 ## ── Scale (CONVENTIONS §3a) ─────────────────────────────────────────────────
 ##
@@ -69,16 +79,6 @@ extends RefCounted
 ## `WorldUnits.DECK_CELL_M` (0.5 m) and exist only because the cell-counting
 ## rules (`brick_side`, `white_above_sidelights`, cargo area) are written in
 ## cells. `StructurePlan.plan_to_cell` is the only converter used.
-
-## A cabin is a space a 1.8 m person can stand in — the same figure every
-## capture carries.
-const CABIN_MIN_HEADROOM_M := 1.8
-## Two square metres: enough floor for one person to be inside rather than under.
-const CABIN_MIN_FLOOR_M2 := 2.0
-## A corridor is a room with both ends open (StructurePlan). Through-passage is
-## circulation, not accommodation, so a cabin needs three of its four sides.
-const CABIN_MIN_CLOSED_FACES := 3
-const ROOM_FACES: Array[String] = ["n", "s", "e", "w"]
 
 ## Compliance tags that make an item's deck footprint count against the cargo
 ## budget. Both are catalog tags, so a new hold part needs no code here.
@@ -211,12 +211,11 @@ static func validate(
 		"tow": (slot_items["tow"] as Array).size(),
 		"accepted_cargo_cells": accepted_cells.size(),
 	}
-	var cabins := cabin_rooms(plan).size()
 	var capabilities := {
 		"cargo_cells": accepted_cells.size(),
 		"cargo_budget": cargo_max,
 		"exposed_deck_cells": int(budget.get("exposed_deck_cells", 0)),
-		"has_cabin": cabins > 0,
+		"has_cabin": has_cabin(plan),
 		"has_helm": (accepted_slots["helm"] as Array).size() >= 1,
 		"has_crane": (accepted_slots["crane"] as Array).size() >= 1,
 		"has_fishing": (accepted_slots["fishing"] as Array).size() >= 1,
@@ -230,7 +229,7 @@ static func validate(
 		"max_stack_y": max_stack_cells(plan, g),
 		## Plan-native extras. Nothing in the catalog reads them yet; they cost
 		## nothing and a `metric_range` rule can name them the day it wants to.
-		"cabins": cabins,
+		"cabins": 0,
 		"items": plan.items.size(),
 		"plan_entities": plan.entity_count(),
 		"structure_plan": true,
@@ -335,47 +334,19 @@ static func compliance(
 
 # ── Enclosure, read off geometry ────────────────────────────────────────────
 
-## Rooms that actually enclose someone: standing headroom, real floor area, and
-## at most one open face. `open_faces` is the plan's own record of the sides a
-## room does NOT have, so this is a reading of the drawing, not a guess.
-static func cabin_rooms(plan: StructurePlan) -> Array[Dictionary]:
-	var out: Array[Dictionary] = []
-	if plan == null:
-		return out
-	for raw in plan.rooms:
-		if not (raw is Dictionary):
-			continue
-		var room := raw as Dictionary
-		var size := StructurePlan.vec3_of(room.get("size"), Vector3.ZERO)
-		if size.y < CABIN_MIN_HEADROOM_M:
-			continue
-		if size.x * size.z < CABIN_MIN_FLOOR_M2:
-			continue
-		if closed_faces(room) < CABIN_MIN_CLOSED_FACES:
-			continue
-		out.append(room)
-	return out
+## No plan primitive declares enclosure since the room primitive was deleted, so
+## this is false for every plan — deliberately, and see the header. Do NOT make
+## it true by counting walls: a fence with a gate in it is not accommodation.
+static func has_cabin(_plan: StructurePlan) -> bool:
+	return false
 
 
-## How many of a room's four sides carry a wall. Unknown face names in
-## `open_faces` are ignored rather than trusted — a typo must not open a wall.
-static func closed_faces(room: Dictionary) -> int:
-	var open := {}
-	var raw: Variant = room.get("open_faces", [])
-	if raw is Array:
-		for entry in raw as Array:
-			var face := str(entry).strip_edges().to_lower()
-			if ROOM_FACES.has(face):
-				open[face] = true
-	return ROOM_FACES.size() - open.size()
-
-
-## Every opening of `type` on a wall, a room face or a deck.
+## Every opening of `type` on a wall or a deck.
 static func opening_count(plan: StructurePlan, type: String) -> int:
 	if plan == null:
 		return 0
 	var n := 0
-	for collection in [plan.walls, plan.rooms, plan.decks]:
+	for collection in [plan.walls, plan.decks]:
 		for raw in collection as Array:
 			if not (raw is Dictionary):
 				continue
@@ -595,13 +566,6 @@ static func max_stack_cells(plan: StructurePlan, grid: DeckGrid) -> int:
 	for raw in plan.walls:
 		var wall := raw as Dictionary
 		top = maxf(top, StructurePlan.vec3_of(wall.get("start")).y + float(wall.get("height", 0.0)))
-	for raw in plan.rooms:
-		var room := raw as Dictionary
-		top = maxf(
-			top,
-			StructurePlan.vec3_of(room.get("origin")).y
-				+ StructurePlan.vec3_of(room.get("size"), Vector3.ZERO).y
-		)
 	for raw in plan.decks:
 		top = maxf(top, StructurePlan.vec3_of((raw as Dictionary).get("origin")).y)
 	for raw in plan.stairs:

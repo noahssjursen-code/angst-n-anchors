@@ -220,14 +220,25 @@ scenes for store stock; the trawler and catamaran scenes are frozen exceptions.
 ### Parametric construction (the current era)
 
 Structure is DRAWN, not stacked. `StructurePlan` (`scripts/construction/`) is the
-shared document for vessels AND land buildings: wall runs, deck plates, rooms,
-stairs, and openings — each one part regardless of size. `StructureBaker` turns
+shared document for vessels AND land buildings: wall runs, deck plates, stairs,
+items and openings — each one part regardless of size. `StructureBaker` turns
 a plan into merged visuals and collision boxes from the same panel decomposition
 (door/stairwell openings are genuinely passable). Stairs are solid stepped runs
 whose step boxes ARE the collision — walkable exactly as rendered, top tread
-flush on `start.y + height`. Rooms take `open_faces` (faces with no wall):
-a corridor is a room with both end faces open, and the studio's Corridor tool
-draws exactly that. `DeckFitout.apply_any`
+flush on `start.y + height`.
+
+**There is no room/box primitive, and reintroducing one is a defect.** It was
+deleted on 2026-08-10 with its Room and Corridor studio tools, its `open_faces`,
+`expand_room` and every fixture that used one. A room was an axis-aligned box
+that expanded to four walls, a floor and a ceiling, so every deckhouse built
+from one was a shed — a rectangle sitting on a rectangle — and its existence is
+why the sloped-plate primitive that real superstructure needs (raked, tapered,
+stepped, set back) was specified and never delivered. The fixtures are
+deliberately bare hulls plus their item rigs until that primitive lands; do not
+re-author superstructure out of wall runs in the meantime. One consequence
+lives in `PlanOutfit`: nothing declares enclosure any more, so `has_cabin` is
+false for every plan and a licence demanding a cabin cannot be met by one.
+`DeckFitout.apply_any`
 routes vessel records: `structure_plan_v1` dicts take the parametric path,
 legacy `cells` dicts still take the voxel path. Author plans in
 **Structure Studio** (`scenes/apps/structure_studio.tscn` — the single unified

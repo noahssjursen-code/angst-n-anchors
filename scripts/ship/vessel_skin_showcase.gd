@@ -28,8 +28,8 @@ func _ready() -> void:
 
 func _spawn_all() -> void:
 	## Parametric construction era: the primary demo is a ship written by hand
-	## in JSON (walls, deck plate with stairwell hole, wheelhouse room with
-	## window bands and a door) rendered through the StructurePlan path.
+	## in JSON (bulwark walls with window and door cuts, a deck plate with a
+	## stairwell hole) rendered through the StructurePlan path.
 	var demos: Array[Dictionary] = [_demo_plan_ship(), _demo_bare_hull()]
 	for index in demos.size():
 		var record := demos[index]

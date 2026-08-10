@@ -40,7 +40,9 @@ extends Node
 ##
 ## That leaves the deploy/save path with nothing to prove itself on, so §5
 ## injects a test-only registration into `VesselRegistrationCatalog._cache`
-## whose four requirements a plan CAN meet. It names no vessel type — it is a
+## whose three requirements a plan CAN meet. (It carried a fourth, an enclosed-
+## accommodation rule, until deleting the room primitive took the only thing a
+## plan had to declare enclosure with.) It names no vessel type — it is a
 ## minimum-equipment licence, the same shape as the real rows — and the cache is
 ## restored afterwards. Everything downstream of it (`apply_plan`,
 ## `resolve_deployable_record`, `persist_vessel_configuration`) is production
@@ -96,14 +98,17 @@ func _grid() -> DeckGrid:
 	return HullRegistry.make_grid(HULL)
 
 
-## A small kit-built vessel drawn as a plan: a wheelhouse with a door, a helm,
-## four mooring points and an all-round white light. Parts, not a boat model.
+## A small kit-built vessel drawn as a plan: a wall with a door cut into it, a
+## helm, four mooring points and an all-round white light. Parts, not a boat
+## model. The wheelhouse this used to carry was a ROOM and went with the room
+## primitive (2026-08-10); the wall the door was cut into is what survives, and
+## the door is what the egress rule actually measures.
 func _outfitted_plan() -> StructurePlan:
 	var plan := StructurePlan.new()
 	plan.hull_id = HULL
-	var room := plan.add_room(Vector3(3.0, 0.0, 22.0), Vector3(4.0, 2.6, 4.0))
-	(room["openings"] as Array).append({
-		"face": "s", "type": "door", "offset": 1.2, "width": 0.9, "height": 2.0, "sill": 0.0,
+	var front := plan.add_wall(Vector3(3.0, 0.0, 26.0), "x", 4.0, 2.6)
+	(front["openings"] as Array).append({
+		"type": "door", "offset": 1.2, "width": 0.9, "height": 2.0, "sill": 0.0,
 	})
 	plan.add_item("helm_console", Vector3(4.6, 0.0, 24.0))
 	for i in 4:
@@ -256,10 +261,13 @@ func _test_apply_plan_reports_a_real_verdict() -> void:
 		return
 	var built_caps := DeckFitout.apply_plan(built, _outfitted_plan(), _grid(), "general_vessel")
 	_t.check("an outfitted plan reports its helm", bool(built_caps.get("has_helm", false)))
-	_t.check("an outfitted plan reports its cabin", bool(built_caps.get("has_cabin", false)))
+	## No plan can report a cabin since the room primitive was deleted: nothing
+	## that survives it declares enclosure, and inferring one from loose walls is
+	## the "fence sold as accommodation" bug plan_compliance_test still pins.
+	_t.check("no plan reports a cabin any more", not bool(built_caps.get("has_cabin", true)))
 	_t.equal("an outfitted plan reports its door", int(built_caps.get("doors", -1)), 1)
 	_t.check(
-		"seven entities: a room, a helm, four bollards and a lantern",
+		"seven entities: a wall, a helm, four bollards and a lantern",
 		int(built_caps.get("plan_entities", -1)) == 7
 	)
 
@@ -453,8 +461,6 @@ func _install_harness_registration() -> void:
 				"kind": "slot_count", "slot": "helm", "min": 1, "max": 1},
 			{"id": "mooring_points", "label": "At least four mooring points",
 				"kind": "tag_count", "tag": "mooring", "min": 4},
-			{"id": "cabin", "label": "Enclosed accommodation",
-				"kind": "capability", "capability": "has_cabin", "required": true},
 			{"id": "egress", "label": "At least one marked door",
 				"kind": "metric_range", "metric": "doors", "min": 1},
 		],

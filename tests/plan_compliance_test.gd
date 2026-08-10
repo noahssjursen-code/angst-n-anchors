@@ -29,7 +29,7 @@ extends SceneTree
 const PO := preload("res://scripts/ship/plan_outfit.gd")
 const Parts := preload("res://scripts/construction/part_catalog.gd")
 const HULL := "hull_28x10"
-const EXPECTED_CHECKS := 110
+const EXPECTED_CHECKS := 106
 
 var _failures := 0
 var _checks := 0
@@ -45,7 +45,7 @@ func _check(label: String, ok: bool) -> void:
 func _initialize() -> void:
 	_test_empty_plan_fails_general_vessel()
 	_test_empty_plan_measures_nothing()
-	_test_enclosure_is_read_from_rooms()
+	_test_a_fence_is_not_a_cabin()
 	_test_doors_come_from_openings()
 	_test_rule_kinds_are_satisfiable()
 	_test_white_above_sidelights_is_blocked_on_the_catalog()
@@ -80,9 +80,12 @@ func _grid() -> DeckGrid:
 func _outfitted_plan(with_fishing: bool, helms: int = 1) -> StructurePlan:
 	var plan := StructurePlan.new()
 	plan.hull_id = HULL
-	var room := plan.add_room(Vector3(3.0, 0.0, 22.0), Vector3(4.0, 2.6, 4.0))
-	(room["openings"] as Array).append({
-		"face": "s", "type": "door", "offset": 1.2, "width": 0.9, "height": 2.0, "sill": 0.0,
+	## The wheelhouse this plan used to carry was a room and went with the room
+	## primitive. What is left is the wall the door was cut into — the door is
+	## what `egress` measures, and a door is a wall opening.
+	var front := plan.add_wall(Vector3(3.0, 0.0, 26.0), "x", 4.0, 2.6)
+	(front["openings"] as Array).append({
+		"type": "door", "offset": 1.2, "width": 0.9, "height": 2.0, "sill": 0.0,
 	})
 	for i in helms:
 		plan.add_item("helm_console", Vector3(4.6 + float(i) * 0.8, 0.0, 24.0))
@@ -95,18 +98,6 @@ func _outfitted_plan(with_fishing: bool, helms: int = 1) -> StructurePlan:
 	plan.add_item("hold_coaming", Vector3(5.0, 0.0, 14.0), 0.0, {"length": 8.0, "width": 4.0})
 	if with_fishing:
 		plan.add_item("net_drum", Vector3(5.0, 0.0, 18.0))
-	return plan
-
-
-func _room_plan(size: Vector3, open_faces: Array) -> StructurePlan:
-	var plan := StructurePlan.new()
-	plan.hull_id = HULL
-	var room := plan.add_room(Vector3(2.0, 0.0, 10.0), size)
-	## add_room clamps to its minimum sizes; write the authored size back so a
-	## deliberately tiny or low room stays tiny or low.
-	room["size"] = [size.x, size.y, size.z]
-	if not open_faces.is_empty():
-		room["open_faces"] = open_faces
 	return plan
 
 
@@ -189,7 +180,7 @@ func _test_empty_plan_measures_nothing() -> void:
 		_check("%s is empty for an empty plan" % key, (metrics[key] as Dictionary).is_empty())
 	_check("metrics carry the grid the cell rules need", metrics.get("grid", null) is DeckGrid)
 	var caps: Dictionary = metrics["capabilities"]
-	_check("no cabin without a room", not bool(caps.get("has_cabin", true)))
+	_check("an empty plan has no cabin", not bool(caps.get("has_cabin", true)))
 	_check("no doors without openings", int(caps.get("doors", -1)) == 0)
 	_check(
 		"the hull's exposed deck is still measured",
@@ -200,41 +191,18 @@ func _test_empty_plan_measures_nothing() -> void:
 
 # ── 2. Enclosure from geometry, no items at all ─────────────────────────────
 
-func _test_enclosure_is_read_from_rooms() -> void:
-	_check(
-		"a closed room with standing headroom is a cabin",
-		PO.validate(_room_plan(Vector3(4.0, 2.6, 3.0), []), HULL)["capabilities"]["has_cabin"]
-	)
-	_check(
-		"a lean-to (one open face) is still a cabin",
-		PO.validate(_room_plan(Vector3(4.0, 2.6, 3.0), ["n"]), HULL)["capabilities"]["has_cabin"]
-	)
-	_check(
-		"a corridor (both ends open) is circulation, not accommodation",
-		not PO.validate(
-			_room_plan(Vector3(4.0, 2.6, 3.0), ["n", "s"]), HULL
-		)["capabilities"]["has_cabin"]
-	)
-	_check(
-		"a room you cannot stand up in is not a cabin",
-		not PO.validate(
-			_room_plan(Vector3(4.0, 1.5, 3.0), []), HULL
-		)["capabilities"]["has_cabin"]
-	)
-	_check(
-		"a locker with no floor area is not a cabin",
-		not PO.validate(
-			_room_plan(Vector3(0.6, 2.6, 0.6), []), HULL
-		)["capabilities"]["has_cabin"]
-	)
-	_check(
-		"a typo in open_faces does not open a wall",
-		PO.validate(
-			_room_plan(Vector3(4.0, 2.6, 3.0), ["north", "south"]), HULL
-		)["capabilities"]["has_cabin"]
-	)
-
-	## THE REGRESSION THIS REPLACES: the brick-era rule was
+## Enclosure used to be read off the room primitive: a room WAS the plan's
+## declaration of a cabin. The room primitive was deleted, nothing that survives
+## it declares enclosure, and `has_cabin` is false for every plan until the
+## sloped-plate primitive lands (see PlanOutfit's header). The room legs of this
+## test went with it.
+##
+## What must NOT go with it is the regression below. It is the reason the room
+## reading existed at all, and it is the exact shape a future wave will be
+## tempted to reintroduce when a licence needs a cabin and no primitive declares
+## one. It stays, and it stays as an assertion about walls.
+func _test_a_fence_is_not_a_cabin() -> void:
+	## THE REGRESSION: the brick-era rule was
 	## `door_n >= 1 or wall_n >= 8`, so eight roofless walls — and a fence with a
 	## gate in it — reported an enclosed cabin.
 	var fence := StructurePlan.new()
@@ -246,6 +214,7 @@ func _test_enclosure_is_read_from_rooms() -> void:
 	})
 	var fence_caps: Dictionary = PO.validate(fence, HULL)["capabilities"]
 	_check("eight roofless walls are not a cabin", not bool(fence_caps["has_cabin"]))
+	_check("and no plan claims a cabin count", int(fence_caps["cabins"]) == 0)
 	_check("a gate in a fence is still a door", int(fence_caps["doors"]) == 1)
 	_check("the fence is still counted as structure", int(fence_caps["brick_count"]) == 8)
 
@@ -257,14 +226,14 @@ func _test_doors_come_from_openings() -> void:
 	(wall["openings"] as Array).append({"type": "door", "offset": 1.0, "width": 0.9, "height": 2.0})
 	(wall["openings"] as Array).append({"type": "window", "offset": 3.0, "width": 1.2, "height": 0.8})
 	(wall["openings"] as Array).append({"type": "hole", "offset": 4.5, "width": 0.4, "height": 0.4})
-	var room := plan.add_room(Vector3(3.0, 0.0, 10.0), Vector3(4.0, 2.6, 4.0))
-	(room["openings"] as Array).append({"face": "e", "type": "door", "offset": 1.0, "width": 0.9, "height": 2.0})
-	(room["openings"] as Array).append({"face": "w", "type": "window", "offset": 1.0, "width": 1.0, "height": 0.9})
+	var second := plan.add_wall(Vector3(3.0, 0.0, 10.0), "z", 4.0, 2.6)
+	(second["openings"] as Array).append({"type": "door", "offset": 1.0, "width": 0.9, "height": 2.0})
+	(second["openings"] as Array).append({"type": "window", "offset": 2.2, "width": 1.0, "height": 0.9})
 	var deck := plan.add_deck(Vector3(2.0, 3.0, 10.0), Vector2(4.0, 4.0))
 	(deck["openings"] as Array).append({"type": "stairwell", "offset": [1.0, 1.0], "size": [1.0, 2.0]})
 
 	var caps: Dictionary = PO.validate(plan, HULL)["capabilities"]
-	_check("doors count on walls and on room faces", int(caps["doors"]) == 2)
+	_check("doors count on every wall that carries one", int(caps["doors"]) == 2)
 	_check("windows are counted separately", int(caps["windows"]) == 2)
 	_check("a stairwell is not a door", int(caps["doors"]) != 3)
 
@@ -328,8 +297,14 @@ func _test_rule_kinds_are_satisfiable() -> void:
 	)
 	_check("capacity: two benches seat six", bool(seats["ok"]) and int(seats["current"]) == 6)
 
-	## capability — a boolean, here one drawn entirely from geometry.
-	_check("capability: enclosed accommodation", bool(_evaluate(
+	## capability — a boolean. The satisfiable case used to be has_cabin; that
+	## capability died with the room primitive and is now false for every plan,
+	## so the rule KIND is proved on one a plan can still meet, and the licence
+	## that demands a cabin is pinned as unmeetable rather than quietly dropped.
+	_check("capability: a required capability the plan has", bool(_evaluate(
+		{"kind": "capability", "capability": "has_helm", "required": true}, metrics, outfit
+	)["ok"]))
+	_check("capability: no plan can meet a required cabin", not bool(_evaluate(
 		{"kind": "capability", "capability": "has_cabin", "required": true}, metrics, outfit
 	)["ok"]))
 	_check("capability: a forbidden capability is absent", bool(_evaluate(

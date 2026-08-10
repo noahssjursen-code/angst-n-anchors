@@ -2,7 +2,7 @@
 	"format": "structure_plan_v1",
 	"context": "vessel",
 	"hull_id": "hull_28x10",
-	"_note": "Probe fixture. Tests the claim that a bulwark, a cap rail, a hatch coaming and a mast are expressible with TODAY's primitives and no new code. Uses only the two colours already in the palette, so it must not add a draw call. Bow is -Z, so plan z=0 is the bow; the 45 degree taper occupies z=0..5 on this hull, which is why the bulwark starts at z=5 and staircases at the shoulder instead of following the stem. DRESSED, 2026-08-10: the crude box mast (walls 10/11) is gone and the vessel now carries a rig built only from spar and wire \u2014 9 m tapered main mast with spreader, radome, masthead light and whips; a raked derrick boom with topping lift, fall and hook block; two pairs of trawl gallows drawn as inverted-L polylines with blocks and warps running back to a trawl winch; a short aft mast; exhaust pipe and cap; shrouds, forestay, triatic and backstay all at sag EXACTLY zero; a samson post at the stemhead for the forestay to be made fast to; sidelights on the wheelhouse corners with the white masthead light above them; three cylindrical fenders on lanyards over the port side; four mooring bitts. 52 items. COST, measured on RenderingServer's own counter over the four canonical views: draw calls UNCHANGED at 8, because every fitting is painted / steel / wood \u2014 the three material buckets this plan already had \u2014 and the baker keys buckets on material alone. Triangles 8903 -> 10847 (+22%%). Geometry is what a rig costs; draw calls are not.",
+	"_note": "Probe fixture. Tests the claim that a bulwark, a cap rail, a hatch coaming and a mast are expressible with TODAY's primitives and no new code. Uses only the two colours already in the palette, so it must not add a draw call. Bow is -Z, so plan z=0 is the bow; the 45 degree taper occupies z=0..5 on this hull, which is why the bulwark starts at z=5 and staircases at the shoulder instead of following the stem. DRESSED, 2026-08-10: the crude box mast (walls 10/11) is gone and the vessel now carries a rig built only from spar and wire \u2014 9 m tapered main mast with spreader, radome, masthead light and whips; a raked derrick boom with topping lift, fall and hook block; two pairs of trawl gallows drawn as inverted-L polylines with blocks and warps running back to a trawl winch; a short aft mast; exhaust pipe and cap; shrouds, forestay, triatic and backstay all at sag EXACTLY zero; a samson post at the stemhead for the forestay to be made fast to; sidelights on the wheelhouse corners with the white masthead light above them; three cylindrical fenders on lanyards over the port side; four mooring bitts. 52 items. COST, measured on RenderingServer's own counter over the four canonical views: draw calls UNCHANGED at 8, because every fitting is painted / steel / wood \u2014 the three material buckets this plan already had \u2014 and the baker keys buckets on material alone. Triangles 8903 -> 10847 (+22%%). Geometry is what a rig costs; draw calls are not. ROOM PURGE 2026-08-10: the room primitive was deleted and this fixture's deckhouse went with it. What remains is the bare hull rig — bulwark walls, deck plates, stairs and items. Fittings that stood on the deckhouse now stand in open air on purpose; the superstructure is rebuilt from the sloped-plate primitive in the next wave, not re-authored out of walls.",
 	"palette": {
 		"wall": [0.85, 0.86, 0.88],
 		"deck": [0.33, 0.31, 0.29]
@@ -22,19 +22,6 @@
 		{"id": 32, "origin": [6.0, 0.65, 9.1], "size": [1.9, 6.8], "thickness": 0.12, "openings": []},
 
 		{"id": 40, "origin": [2.2, 2.7, 16.6], "size": [5.6, 6.8], "thickness": 0.12, "openings": []}
-	],
-	"rooms": [
-		{"id": 50, "origin": [2.0, 0, 9.0], "size": [6.0, 0.65, 7.0], "wall_thickness": 0.18,
-			"roof": false, "floor": false, "openings": []},
-
-		{"id": 60, "origin": [2.5, 0, 17.0], "size": [5.0, 2.7, 6.0], "wall_thickness": 0.16, "openings": [
-			{"face": "n", "type": "window", "offset": 0.5, "width": 1.3, "sill": 1.25, "height": 1.1},
-			{"face": "n", "type": "window", "offset": 1.95, "width": 1.3, "sill": 1.25, "height": 1.1},
-			{"face": "n", "type": "window", "offset": 3.4, "width": 1.3, "sill": 1.25, "height": 1.1},
-			{"face": "w", "type": "window", "offset": 1.4, "width": 1.6, "sill": 1.25, "height": 1.05},
-			{"face": "e", "type": "window", "offset": 1.4, "width": 1.6, "sill": 1.25, "height": 1.05},
-			{"face": "s", "type": "door", "offset": 1.7, "width": 1.6, "height": 2.1}
-		]}
 	],
 	"stairs": [],
 	"items": [

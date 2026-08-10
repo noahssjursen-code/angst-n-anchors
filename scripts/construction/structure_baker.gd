@@ -10,10 +10,6 @@ extends RefCounted
 ## DeckFitout, the Structure Studio editor, and headless services.
 ##
 ## Geometry conventions (chosen to kill z-fighting by construction):
-##  - Room ceiling/floor plates are INSET by half a wall thickness, so plate
-##    faces never share a plane with wall tops/bottoms — walls own the ring.
-##  - Elevated room floors are lifted 15 mm above their nominal level, so a
-##    stacked room's floor never planes against the room-below's ceiling.
 ##  - Walls with inside/outside colors split into two half-thickness skins.
 ##  - Every wall opening gets a proud frame (jambs + lintel + sill) in a
 ##    darkened tone — cuts read as depth from any angle and any lighting.
@@ -30,12 +26,11 @@ const DEFAULT_DECK_COLOR := Color(0.36, 0.34, 0.31)
 const DEFAULT_INTERIOR_COLOR := Color(0.78, 0.70, 0.58) ## warm timber
 const MIN_PANEL := 0.02
 const RAISED_SOLE := 0.02 ## plates at y<=0 sit just proud of the host deck
-const FLOOR_LIFT := 0.015 ## elevated floors float this far above their level
 const FRAME_PROUD := 0.09 ## opening frames overhang the wall skin
 const FRAME_WIDTH := 0.1
 ## Anti-coplanarity margin: abutting solids overlap by this much so every
 ## internal face is buried inside neighbouring geometry instead of sharing a
-## plane with it. All room-generated geometry is z-fight-free by construction.
+## plane with it.
 const SKIN_EPS := 0.01
 ## Stairs aim for this riser height; the run divides evenly so the top tread
 ## always lands flush on start.y + height.
@@ -82,9 +77,8 @@ const MATERIALS := {
 }
 
 
-## Expands rooms into walls + plates and merges with the plan's own walls,
-## decks and stairs. Every element carries `source_id` so editors can map
-## geometry back to the plan entity that owns it.
+## Collects the plan's walls, decks and stairs for baking. Every element carries
+## `source_id` so editors can map geometry back to the plan entity that owns it.
 static func expand(plan: StructurePlan) -> Dictionary:
 	var walls: Array = []
 	var decks: Array = []
@@ -101,115 +95,8 @@ static func expand(plan: StructurePlan) -> Dictionary:
 		var stair := (stair_variant as Dictionary).duplicate(true)
 		stair["source_id"] = int(stair.get("id", -1))
 		stairs.append(stair)
-	for room_variant in plan.rooms:
-		var expanded := expand_room(room_variant as Dictionary)
-		walls.append_array(expanded.get("walls", []))
-		decks.append_array(expanded.get("decks", []))
 	return {"walls": walls, "decks": decks, "stairs": stairs}
 
-
-static func expand_room(room: Dictionary) -> Dictionary:
-	var origin := StructurePlan.vec3_of(room.get("origin"))
-	var size := StructurePlan.vec3_of(room.get("size"), Vector3(4, 3, 4))
-	var thickness := float(room.get("wall_thickness", StructurePlan.DEFAULT_WALL_THICKNESS))
-	var source_id := int(room.get("id", -1))
-	var w := size.x
-	var h := size.y
-	var l := size.z
-	## Inside / outside surface identity. Legacy `color` acts as the outside.
-	var color_out: Variant = room.get("color_out", room.get("color", null))
-	var color_in: Variant = room.get("color_in", null)
-	var material_out := str(room.get("material_out", room.get("material", "painted")))
-	var material_in := str(room.get("material_in", "wood"))
-	## Faces listed in open_faces get NO wall — corridor ends, lean-tos, open
-	## garage fronts. The floor/ceiling plates are unaffected.
-	var open_faces: Array = room.get("open_faces", [])
-	## X-axis walls extend past both ends to fill corners; the extra SKIN_EPS
-	## pushes their end faces past the perpendicular wall's skin plane so the
-	## corner has no coincident surfaces. An extension only happens where the
-	## perpendicular wall actually exists — an open end stays flush.
-	var ext := thickness * 0.5 + SKIN_EPS
-	var ext_w := 0.0 if open_faces.has("w") else ext
-	var ext_e := 0.0 if open_faces.has("e") else ext
-	var wall_specs := {
-		"n": {"start": origin + Vector3(-ext_w, 0, 0), "axis": "x", "length": w + ext_w + ext_e, "shift": ext_w, "outward": -1},
-		"s": {"start": origin + Vector3(-ext_w, 0, l), "axis": "x", "length": w + ext_w + ext_e, "shift": ext_w, "outward": 1},
-		"w": {"start": origin, "axis": "z", "length": l, "shift": 0.0, "outward": -1},
-		"e": {"start": origin + Vector3(w, 0, 0), "axis": "z", "length": l, "shift": 0.0, "outward": 1},
-	}
-	var walls: Array = []
-	var face_openings: Dictionary = {"n": [], "s": [], "w": [], "e": [], "floor": [], "ceiling": []}
-	for opening_variant in room.get("openings", []) as Array:
-		var opening := opening_variant as Dictionary
-		var face := str(opening.get("face", "n"))
-		if face_openings.has(face):
-			(face_openings[face] as Array).append(opening)
-	for face in wall_specs.keys():
-		if open_faces.has(face):
-			continue
-		var spec := wall_specs[face] as Dictionary
-		var wall := {
-			"start": [spec["start"].x, spec["start"].y, spec["start"].z],
-			"axis": spec["axis"],
-			"length": spec["length"],
-			"height": h,
-			"thickness": thickness,
-			"openings": [],
-			"source_id": source_id,
-			"outward_sign": spec["outward"],
-			"material_out": material_out,
-			"material_in": material_in,
-		}
-		if color_out != null:
-			wall["color_out"] = color_out
-		if color_in != null:
-			wall["color_in"] = color_in
-		var shift := float(spec.get("shift", 0.0))
-		for opening_variant in face_openings[face] as Array:
-			var opening := (opening_variant as Dictionary).duplicate(true)
-			opening.erase("face")
-			opening["offset"] = float(opening.get("offset", 0.0)) + shift
-			(wall["openings"] as Array).append(opening)
-		walls.append(wall)
-	var decks: Array = []
-	for level in ["floor", "ceiling"]:
-		if level == "ceiling" and not bool(room.get("roof", true)):
-			continue
-		if level == "floor" and not bool(room.get("floor", true)):
-			continue
-		## Inset just under half a wall thickness: walls own the perimeter ring
-		## and the plate edge tucks INSIDE the interior wall skin, so neither
-		## plate faces nor plate edges share a plane with anything. Open faces
-		## have no wall to tuck under — the plate runs flush to the footprint
-		## edge there (corridor floors reach their ends).
-		var inset := minf(thickness * 0.5 - SKIN_EPS, minf(w, l) * 0.25)
-		var in_n := 0.0 if open_faces.has("n") else inset
-		var in_s := 0.0 if open_faces.has("s") else inset
-		var in_w := 0.0 if open_faces.has("w") else inset
-		var in_e := 0.0 if open_faces.has("e") else inset
-		var plate := {
-			"origin": [origin.x + in_w, origin.y + (h if level == "ceiling" else 0.0), origin.z + in_n],
-			"size": [maxf(w - in_w - in_e, 0.5), maxf(l - in_n - in_s, 0.5)],
-			"thickness": StructurePlan.DEFAULT_PLATE_THICKNESS,
-			"openings": [],
-			"source_id": source_id,
-			"mount": level,
-			"material_out": material_out,
-			"material_in": material_in,
-		}
-		if color_out != null:
-			plate["color_out"] = color_out
-		if color_in != null:
-			plate["color_in"] = color_in
-		for opening_variant in face_openings[level] as Array:
-			var opening := (opening_variant as Dictionary).duplicate(true)
-			opening.erase("face")
-			## Compensate hole coordinates for the plate inset.
-			var off: Array = opening.get("offset", [0.0, 0.0])
-			opening["offset"] = [float(off[0]) - in_w, (float(off[1]) if off.size() > 1 else 0.0) - in_n]
-			(plate["openings"] as Array).append(opening)
-		decks.append(plate)
-	return {"walls": walls, "decks": decks}
 
 
 # ── Panel decomposition ──────────────────────────────────────────────────────
@@ -346,20 +233,13 @@ static func deck_strips(deck: Dictionary) -> Array:
 	return strips
 
 
-## Vertical span [bottom, top] of a plate, honouring its mount convention.
+## Vertical span [bottom, top] of a plate. A plate at deck level is lifted just
+## proud of its host deck so the two never share a plane.
 static func _plate_span(deck: Dictionary) -> Vector2:
 	var origin := StructurePlan.vec3_of(deck.get("origin"))
 	var thickness := float(deck.get("thickness", StructurePlan.DEFAULT_PLATE_THICKNESS))
-	match str(deck.get("mount", "")):
-		"ceiling":
-			return Vector2(origin.y - thickness, origin.y)
-		"floor":
-			if origin.y > 0.05:
-				return Vector2(origin.y + FLOOR_LIFT, origin.y + FLOOR_LIFT + thickness)
-			return Vector2(RAISED_SOLE - thickness, RAISED_SOLE)
-		_:
-			var top_y := origin.y if origin.y > 0.001 else RAISED_SOLE
-			return Vector2(top_y - thickness, top_y)
+	var top_y := origin.y if origin.y > 0.001 else RAISED_SOLE
+	return Vector2(top_y - thickness, top_y)
 
 
 static func deck_boxes(deck: Dictionary) -> Array:
@@ -385,7 +265,7 @@ static func deck_boxes(deck: Dictionary) -> Array:
 ## close to STEP_RISE_TARGET as possible, so the top tread lands EXACTLY on
 ## start.y + height.
 static func stair_step_count(stair: Dictionary) -> int:
-	var height := float(stair.get("height", StructurePlan.DEFAULT_ROOM_HEIGHT))
+	var height := float(stair.get("height", StructurePlan.DEFAULT_WALL_HEIGHT))
 	return clampi(int(ceilf(height / STEP_RISE_TARGET)), 2, MAX_STEPS)
 
 
@@ -400,7 +280,7 @@ static func stair_boxes(stair: Dictionary) -> Array:
 	var dir := str(stair.get("dir", "+x"))
 	var length := maxf(float(stair.get("length", 3.0)), 0.5)
 	var width := maxf(float(stair.get("width", 1.0)), 0.5)
-	var height := float(stair.get("height", StructurePlan.DEFAULT_ROOM_HEIGHT))
+	var height := float(stair.get("height", StructurePlan.DEFAULT_WALL_HEIGHT))
 	var steps := stair_step_count(stair)
 	var tread := length / float(steps)
 	var rise := height / float(steps)
@@ -460,7 +340,6 @@ static func _wall_layers(wall: Dictionary, fallback: Color) -> Array:
 	var color_in := _color_of(wall.get("color_in", null), DEFAULT_INTERIOR_COLOR)
 	var material_out := str(wall.get("material_out", wall.get("material", "painted")))
 	var material_in := str(wall.get("material_in", "wood"))
-	var outward := float(wall.get("outward_sign", 1.0))
 	var axis_z := str(wall.get("axis", "x")) == "z"
 	## The thickness direction is local +X for a z-wall and local +Z otherwise;
 	## the basis turns that into plan space and is the identity unless diagonal.
@@ -484,12 +363,12 @@ static func _wall_layers(wall: Dictionary, fallback: Color) -> Array:
 		var skin := t * 0.5 + SKIN_EPS * 2.0
 		var half_size := Vector3(skin, size.y, size.z) if axis_z else Vector3(size.x, size.y, skin)
 		layers.append({
-			"center": center + normal * quarter * outward,
+			"center": center + normal * quarter,
 			"size": half_size, "basis": basis,
 			"color": color_out, "material": material_out,
 		})
 		layers.append({
-			"center": center - normal * quarter * outward,
+			"center": center - normal * quarter,
 			"size": half_size, "basis": basis,
 			"color": color_in, "material": material_in,
 		})
@@ -559,39 +438,20 @@ static func _opening_frames(wall: Dictionary) -> Array:
 	return frames
 
 
-## Renderable layers for a plate: two-sided plates split into top/bottom
-## halves (ceiling: top = outside/roof, bottom = inside; floor: top = inside
-## sole, bottom = outside underside).
+## Renderable layers for a plate: one skin, coloured from the plate's own
+## colour or from the palette slot it names.
 static func _plate_layers(deck: Dictionary, wall_fallback: Color, deck_fallback: Color) -> Array:
 	var slot_default := wall_fallback if str(deck.get("palette_slot", "")) == "wall" else deck_fallback
-	var two_sided := deck.has("color_in") or deck.has("material_in")
-	var mount := str(deck.get("mount", ""))
 	var base := _color_of(deck.get("color", deck.get("color_out", null)), slot_default)
-	var color_out := _color_of(deck.get("color_out", deck.get("color", null)), slot_default)
-	var color_in := _color_of(deck.get("color_in", null), DEFAULT_INTERIOR_COLOR)
-	var material_out := str(deck.get("material_out", deck.get("material", "painted")))
-	var material_in := str(deck.get("material_in", "wood"))
+	var material := str(deck.get("material_out", deck.get("material", "painted")))
 	var layers: Array = []
 	for box_variant in deck_boxes(deck):
 		var box := box_variant as Dictionary
-		var center := box["center"] as Vector3
-		var size := box["size"] as Vector3
-		if not two_sided or mount.is_empty():
-			layers.append({"center": center, "size": size, "color": base, "material": material_out})
-			continue
-		var half := size.y * 0.5
-		var top_color := color_out if mount == "ceiling" else color_in
-		var top_material := material_out if mount == "ceiling" else material_in
-		var bottom_color := color_in if mount == "ceiling" else color_out
-		var bottom_material := material_in if mount == "ceiling" else material_out
-		var half_size := Vector3(size.x, half, size.z)
 		layers.append({
-			"center": center + Vector3(0, half * 0.5, 0),
-			"size": half_size, "color": top_color, "material": top_material,
-		})
-		layers.append({
-			"center": center - Vector3(0, half * 0.5, 0),
-			"size": half_size, "color": bottom_color, "material": bottom_material,
+			"center": box["center"] as Vector3,
+			"size": box["size"] as Vector3,
+			"color": base,
+			"material": material,
 		})
 	return layers
 

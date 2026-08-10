@@ -140,7 +140,6 @@ func _base_matches(plain: StructurePlan, trimmed: StructurePlan) -> bool:
 	for pair in [
 		["walls", plain.walls, trimmed.walls],
 		["decks", plain.decks, trimmed.decks],
-		["rooms", plain.rooms, trimmed.rooms],
 		["stairs", plain.stairs, trimmed.stairs],
 	]:
 		var label := str(pair[0])

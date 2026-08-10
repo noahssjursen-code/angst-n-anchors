@@ -5,9 +5,6 @@ extends Node3D
 ##
 ## Structure is drawn, not stacked:
 ##   W  wall tool    — click-drag along the grid, release to place a wall run
-##   R  room tool    — click-drag a rectangle, a full room (walls+floor+ceiling)
-##   C  corridor     — click-drag along its length: side walls + floor +
-##                     ceiling, both ends open (a room with open end faces)
 ##   D  deck tool    — click-drag a rectangle deck plate
 ##   S  stairs       — click-drag along the climb direction: a solid stepped
 ##                     run rising one level, walkable as rendered
@@ -47,7 +44,7 @@ const COLOR_LIBRARY: Array = [
 ]
 const MATERIAL_LIBRARY: Array[String] = ["painted", "metal", "wood", "steel"]
 
-enum Tool { SELECT, WALL, ROOM, CORRIDOR, DECK, STAIR, OPENING }
+enum Tool { SELECT, WALL, DECK, STAIR, OPENING }
 
 const DEFAULT_STAIR_WIDTH := 1.0
 
@@ -61,7 +58,6 @@ var _plan_offset := Vector3.ZERO ## grid-corner space -> world
 var _tool: Tool = Tool.WALL
 var _active_base := 0.0 ## y level being drawn on
 var _ghost_levels := true ## structure above the build level renders as x-ray
-var _show_roofs := false ## VIEW-ONLY: room ceilings hidden while editing (T)
 var _ghost_root: Node3D
 var _ghost_threshold := INF ## entities at/above this base y are ghosted
 var _entity_base_y: Dictionary = {} ## id -> base level (for pick filtering)
@@ -137,16 +133,15 @@ func _run_studio_probe() -> void:
 		if not ok:
 			failed.append(label)
 	_place_wall(Vector3(0, 0, 6), Vector3(6, 0, 6))
-	_place_rect_entity(Vector3(1, 0, 8), Vector3(5, 0, 12), true)
-	_place_corridor(Vector3(1, 0, 12), Vector3(3, 0, 20))
-	_place_rect_entity(Vector3(0, 0, 20), Vector3(6, 0, 24), false)
+	_place_wall(Vector3(1, 0, 8), Vector3(1, 0, 12))
+	_place_deck(Vector3(0, 0, 20), Vector3(6, 0, 24))
 	_place_stair(Vector3(1, 0, 24), Vector3(1, 0, 27))
-	expect.call("five entities placed", _plan.entity_count() == 5)
+	expect.call("four entities placed", _plan.entity_count() == 4)
 	expect.call("one stair in the plan", _plan.stairs.size() == 1)
 	## Upper deck first, then a stair beneath it: placement must auto-cut a
 	## stairwell through the landing (and the build level must follow).
 	_set_build_level(3.0)
-	_place_rect_entity(Vector3(6, 3, 14), Vector3(9, 3, 18), false)
+	_place_deck(Vector3(6, 3, 14), Vector3(9, 3, 18))
 	_set_build_level(0.0)
 	_place_stair(Vector3(7, 0, 14), Vector3(7, 0, 18))
 	var upper_deck := _plan.decks[1] as Dictionary
@@ -158,21 +153,20 @@ func _run_studio_probe() -> void:
 			"auto stairwell is a stairwell cut",
 			str((auto_holes[0] as Dictionary).get("type")) == StructurePlan.OPENING_STAIRWELL
 		)
-	for collection in [_plan.walls, _plan.decks, _plan.rooms, _plan.stairs]:
+	for collection in [_plan.walls, _plan.decks, _plan.stairs]:
 		for entity_variant in collection:
 			var id := int((entity_variant as Dictionary).get("id", -1))
 			expect.call("entity #%d pickable (has bounds)" % id, _entity_bounds.has(id))
-	## Inspector must build for every kind, including the stair fields and the
-	## room face toggles.
-	for collection in [_plan.walls, _plan.rooms, _plan.stairs]:
+	## Inspector must build for every kind, including the stair fields.
+	for collection in [_plan.walls, _plan.decks, _plan.stairs]:
 		_selected_id = int((collection[0] as Dictionary).get("id", -1))
 		_update_selection_visual()
 		_refresh_panel()
 	_selected_id = -1
 	_probe_diagonal_wall(expect)
-	## Cut a door into the room and confirm the wall panels split around it.
-	var room := _plan.rooms[0] as Dictionary
-	(room["openings"] as Array).append({"face": "s", "type": "door", "offset": 1.0, "width": 1.6, "height": 2.2})
+	## Cut a door into a wall and confirm the wall panels split around it.
+	var door_wall := _plan.walls[0] as Dictionary
+	(door_wall["openings"] as Array).append({"type": "door", "offset": 1.0, "width": 1.6, "height": 2.2})
 	_rebake()
 	var undo_before := _plan.entity_count()
 	_undo()
@@ -185,11 +179,11 @@ func _run_studio_probe() -> void:
 	_set_context("vessel") ## wipes the plan
 	expect.call("context switch clears the plan", _plan.is_empty())
 	_load_plan(probe_path)
-	expect.call("save/load restores all entities", _plan.entity_count() == 8)
+	expect.call("save/load restores all entities", _plan.entity_count() == 7)
 	expect.call("save/load keeps the stairs", _plan.stairs.size() == 2)
 	expect.call(
-		"save/load keeps corridor open faces",
-		not ((_plan.rooms[1] as Dictionary).get("open_faces", []) as Array).is_empty()
+		"save/load keeps the cut made in a plain wall",
+		((_plan.walls[0] as Dictionary).get("openings", []) as Array).size() == 1
 	)
 	var reloaded_diagonal: Dictionary = {}
 	for wall_variant in _plan.walls:
@@ -662,7 +656,7 @@ func _rebake() -> void:
 	for plans in [[solid_plan, true], [ghost_plan, false]]:
 		var target := plans[0] as StructurePlan
 		var keep_below := bool(plans[1])
-		for collection in [target.walls, target.decks, target.rooms, target.stairs]:
+		for collection in [target.walls, target.decks, target.stairs]:
 			var kept: Array = []
 			for entity in collection:
 				var origin := StructurePlan.vec3_of(
@@ -674,12 +668,6 @@ func _rebake() -> void:
 					if not keep_below:
 						any_ghost = true
 			(collection as Array).assign(kept)
-	## View-only roof hiding: strips ceilings from the render copies while the
-	## plan data (and the saved ship) keeps its roofs.
-	if not _show_roofs:
-		for plan_copy in [solid_plan, ghost_plan]:
-			for room_variant in (plan_copy as StructurePlan).rooms:
-				(room_variant as Dictionary)["roof"] = false
 	_bake_root = StructureBaker.bake(solid_plan, _plan_offset)
 	add_child(_bake_root)
 	if any_ghost:
@@ -693,7 +681,7 @@ func _recompute_bounds() -> void:
 	_entity_bounds.clear()
 	_entity_base_y.clear()
 	_entity_yawed_boxes.clear()
-	for collection in [_plan.walls, _plan.decks, _plan.rooms, _plan.stairs]:
+	for collection in [_plan.walls, _plan.decks, _plan.stairs]:
 		for entity_variant in collection:
 			var entity := entity_variant as Dictionary
 			_entity_base_y[int(entity.get("id", -1))] = StructurePlan.vec3_of(
@@ -782,10 +770,6 @@ func _handle_key(key: InputEventKey) -> void:
 			_set_tool(Tool.SELECT)
 		KEY_W:
 			_set_tool(Tool.WALL)
-		KEY_R:
-			_set_tool(Tool.ROOM)
-		KEY_C:
-			_set_tool(Tool.CORRIDOR)
 		KEY_D:
 			_set_tool(Tool.DECK)
 		KEY_S:
@@ -797,10 +781,6 @@ func _handle_key(key: InputEventKey) -> void:
 		KEY_F:
 			if _selected_id >= 0 and _entity_bounds.has(_selected_id):
 				_cam_focus = (_entity_bounds[_selected_id] as AABB).get_center()
-		KEY_T:
-			_show_roofs = not _show_roofs
-			_rebake()
-			_refresh_panel()
 		KEY_PAGEUP:
 			_set_build_level(_active_base + 1.0)
 		KEY_PAGEDOWN:
@@ -878,12 +858,8 @@ func _on_left_release(screen_pos: Vector2) -> void:
 	match _tool:
 		Tool.WALL:
 			_place_wall(a, b)
-		Tool.ROOM:
-			_place_rect_entity(a, b, true)
-		Tool.CORRIDOR:
-			_place_corridor(a, b)
 		Tool.DECK:
-			_place_rect_entity(a, b, false)
+			_place_deck(a, b)
 		Tool.STAIR:
 			_place_stair(a, b)
 
@@ -930,42 +906,20 @@ func _place_wall(a: Vector3, b: Vector3) -> void:
 	start.z = roundf(start.z)
 	_snapshot()
 	var wall := _plan.add_wall(start, axis, length, DEFAULT_WALL_HEIGHT)
-	_stamp_library_style(wall, false)
+	_stamp_library_style(wall)
 	_set_status("WALL %s / %.0f M" % [axis.to_upper(), length])
 	_rebake()
 	_refresh_panel()
 
 
-func _place_rect_entity(a: Vector3, b: Vector3, as_room: bool) -> void:
+func _place_deck(a: Vector3, b: Vector3) -> void:
 	var min_pt := Vector3(roundf(minf(a.x, b.x)), _active_base, roundf(minf(a.z, b.z)))
-	var w := roundf(maxf(absf(b.x - a.x), 2.0 if as_room else 1.0))
-	var l := roundf(maxf(absf(b.z - a.z), 2.0 if as_room else 1.0))
+	var w := roundf(maxf(absf(b.x - a.x), 1.0))
+	var l := roundf(maxf(absf(b.z - a.z), 1.0))
 	_snapshot()
-	if as_room:
-		var room := _plan.add_room(min_pt, Vector3(w, DEFAULT_WALL_HEIGHT, l))
-		_stamp_library_style(room, true)
-		_set_status("ROOM %.0f × %.0f × %.0f M" % [w, DEFAULT_WALL_HEIGHT, l])
-	else:
-		var deck := _plan.add_deck(min_pt, Vector2(w, l))
-		_stamp_library_style(deck, false)
-		_set_status("DECK PLATE %.0f × %.0f M" % [w, l])
-	_rebake()
-	_refresh_panel()
-
-
-## A corridor is a room whose two end faces (along the drag's dominant axis)
-## are open — side walls, floor and ceiling only. Everything a room can do
-## (openings, materials, per-face toggles) works on it afterwards.
-func _place_corridor(a: Vector3, b: Vector3) -> void:
-	var along_x := absf(b.x - a.x) >= absf(b.z - a.z)
-	var min_pt := Vector3(roundf(minf(a.x, b.x)), _active_base, roundf(minf(a.z, b.z)))
-	var w := roundf(maxf(absf(b.x - a.x), 3.0 if along_x else 2.0))
-	var l := roundf(maxf(absf(b.z - a.z), 2.0 if along_x else 3.0))
-	_snapshot()
-	var room := _plan.add_room(min_pt, Vector3(w, DEFAULT_WALL_HEIGHT, l))
-	room["open_faces"] = ["w", "e"] if along_x else ["n", "s"]
-	_stamp_library_style(room, true)
-	_set_status("CORRIDOR %.0f × %.0f M" % [w, l])
+	var deck := _plan.add_deck(min_pt, Vector2(w, l))
+	_stamp_library_style(deck)
+	_set_status("DECK PLATE %.0f × %.0f M" % [w, l])
 	_rebake()
 	_refresh_panel()
 
@@ -983,7 +937,7 @@ func _place_stair(a: Vector3, b: Vector3) -> void:
 	var min_pt := Vector3(roundf(minf(a.x, b.x)), _active_base, roundf(minf(a.z, b.z)))
 	_snapshot()
 	var stair := _plan.add_stair(min_pt, dir, length, width, DEFAULT_WALL_HEIGHT)
-	_stamp_library_style(stair, false)
+	_stamp_library_style(stair)
 	var cut_deck := _auto_stairwell(stair)
 	var result := "STAIRS %s / %.0f M / RISE %.0f M" % [dir.to_upper(), length, DEFAULT_WALL_HEIGHT]
 	if cut_deck >= 0:
@@ -1081,7 +1035,7 @@ func _wall_frame(entity: Dictionary) -> Dictionary:
 
 
 ## Resolves what an opening interaction at this cursor position would cut:
-## a plan wall, a room wall face, a room roof/floor, or a deck plate.
+## a wall run or a deck plate.
 func _opening_context_at(screen_pos: Vector2) -> Dictionary:
 	var hit := _pick_entity_hit(screen_pos)
 	if hit.is_empty():
@@ -1099,44 +1053,6 @@ func _opening_context_at(screen_pos: Vector2) -> Dictionary:
 			"start": StructurePlan.vec3_of(entity.get("start")),
 			"length": float(entity.get("length", 1.0)),
 			"thickness": float(entity.get("thickness", StructurePlan.DEFAULT_WALL_THICKNESS)),
-			"point": p,
-		}
-	if entity.has("size") and (entity.get("size") as Array).size() == 3:
-		var origin := StructurePlan.vec3_of(entity.get("origin"))
-		var size := StructurePlan.vec3_of(entity.get("size"))
-		var top := origin.y + size.y
-		if absf(p.y - top) < 0.35 or absf(p.y - origin.y) < 0.35:
-			var face := "ceiling" if absf(p.y - top) < 0.35 else "floor"
-			## No visible roof (view toggle or open-top room): a click from
-			## above punches the floor instead of an invisible ceiling.
-			if face == "ceiling" and (not _show_roofs or not bool(entity.get("roof", true))):
-				face = "floor"
-			return {
-				"kind": "room_plate", "entity": entity,
-				"face": face,
-				"origin": origin, "extent": Vector2(size.x, size.z),
-				"plane_y": top if face == "ceiling" else origin.y,
-				"point": p,
-			}
-		var candidates := {
-			"n": absf(p.z - origin.z), "s": absf(p.z - (origin.z + size.z)),
-			"w": absf(p.x - origin.x), "e": absf(p.x - (origin.x + size.x)),
-		}
-		## Open faces have no wall to cut — never offer them as targets.
-		for open_face in entity.get("open_faces", []) as Array:
-			candidates.erase(str(open_face))
-		if candidates.is_empty():
-			return {}
-		var face := "n"
-		var best := INF
-		for key in candidates.keys():
-			if float(candidates[key]) < best:
-				best = float(candidates[key])
-				face = str(key)
-		return {
-			"kind": "room_wall", "entity": entity, "face": face,
-			"origin": origin, "size": size,
-			"length": size.x if face in ["n", "s"] else size.z,
 			"point": p,
 		}
 	if entity.has("size"):
@@ -1157,9 +1073,6 @@ func _ctx_along(ctx: Dictionary, p: Vector3) -> float:
 			## still exactly p.x - start.x / p.z - start.z, and it is the only
 			## form that means anything on a diagonal.
 			return (p - (ctx["start"] as Vector3)).dot(ctx["run"] as Vector3)
-		"room_wall":
-			var origin := ctx["origin"] as Vector3
-			return (p.x - origin.x) if str(ctx["face"]) in ["n", "s"] else (p.z - origin.z)
 		_:
 			return 0.0
 
@@ -1225,21 +1138,7 @@ func _opening_geom(ctx: Dictionary, span: Vector2, rect: Rect2) -> Dictionary:
 				),
 				"yaw_deg": ctx["yaw_deg"],
 			}
-		"room_wall":
-			var origin := ctx["origin"] as Vector3
-			var size := ctx["size"] as Vector3
-			var u := span.x + span.y * 0.5
-			var v: float = origin.y + float(defaults["sill"]) + float(defaults["height"]) * 0.5
-			match str(ctx["face"]):
-				"n":
-					return {"center": Vector3(origin.x + u, v, origin.z), "size": Vector3(span.y, float(defaults["height"]), 0.34)}
-				"s":
-					return {"center": Vector3(origin.x + u, v, origin.z + size.z), "size": Vector3(span.y, float(defaults["height"]), 0.34)}
-				"w":
-					return {"center": Vector3(origin.x, v, origin.z + u), "size": Vector3(0.34, float(defaults["height"]), span.y)}
-				_:
-					return {"center": Vector3(origin.x + size.x, v, origin.z + u), "size": Vector3(0.34, float(defaults["height"]), span.y)}
-		"room_plate", "plate":
+		"plate":
 			var origin := ctx["origin"] as Vector3
 			return {
 				"center": Vector3(
@@ -1255,10 +1154,10 @@ func _opening_geom(ctx: Dictionary, span: Vector2, rect: Rect2) -> Dictionary:
 func _begin_opening_drag(screen_pos: Vector2) -> void:
 	_opening_ctx = _opening_context_at(screen_pos)
 	if _opening_ctx.is_empty():
-		_set_status("opening: aim at a wall, deck or room", false)
+		_set_status("opening: aim at a wall or a deck plate", false)
 		return
 	var p := _opening_ctx["point"] as Vector3
-	if str(_opening_ctx["kind"]) in ["wall", "room_wall"]:
+	if str(_opening_ctx["kind"]) == "wall":
 		_opening_anchor = Vector2(_ctx_along(_opening_ctx, p), 0.0)
 	else:
 		_opening_anchor = _ctx_uv(_opening_ctx, p)
@@ -1271,7 +1170,7 @@ func _update_opening_drag(screen_pos: Vector2) -> void:
 	var hit := _pick_entity_hit(screen_pos)
 	var p: Vector3 = ((hit["point"] as Vector3) - _plan_offset) if not hit.is_empty() else (_opening_ctx["point"] as Vector3)
 	var geom: Dictionary
-	if str(_opening_ctx["kind"]) in ["wall", "room_wall"]:
+	if str(_opening_ctx["kind"]) == "wall":
 		geom = _opening_geom(_opening_ctx, _wall_span(_opening_ctx, _opening_anchor.x, _ctx_along(_opening_ctx, p), true), Rect2())
 	else:
 		geom = _opening_geom(_opening_ctx, Vector2.ZERO, _plate_rect(_opening_ctx, _opening_anchor, _ctx_uv(_opening_ctx, p), true))
@@ -1298,15 +1197,13 @@ func _commit_opening(screen_pos: Vector2) -> void:
 	var p: Vector3 = ((hit["point"] as Vector3) - _plan_offset) if not hit.is_empty() else (ctx["point"] as Vector3)
 	var entity := ctx["entity"] as Dictionary
 	_snapshot()
-	if str(ctx["kind"]) in ["wall", "room_wall"]:
+	if str(ctx["kind"]) == "wall":
 		var current := _ctx_along(ctx, p)
 		var dragged := absf(current - _opening_anchor.x) > 0.3
 		var span := _wall_span(ctx, _opening_anchor.x, current, dragged)
 		var spec := _opening_defaults()
 		spec["offset"] = span.x
 		spec["width"] = span.y
-		if str(ctx["kind"]) == "room_wall":
-			spec["face"] = str(ctx["face"])
 		(entity["openings"] as Array).append(spec)
 		_set_status("%s  %.1f m" % [str(spec["type"]), span.y])
 	else:
@@ -1318,8 +1215,6 @@ func _commit_opening(screen_pos: Vector2) -> void:
 			"offset": [rect.position.x, rect.position.y],
 			"size": [rect.size.x, rect.size.y],
 		}
-		if str(ctx["kind"]) == "room_plate":
-			hole["face"] = str(ctx["face"])
 		(entity["openings"] as Array).append(hole)
 		_set_status("hole  %.0f × %.0f m" % [rect.size.x, rect.size.y])
 	_rebake()
@@ -1470,9 +1365,6 @@ func _begin_face_resize(axis: int, sign: int, line_origin: Vector3, screen_pos: 
 			float(entity.get("height", 3.0)),
 			float(entity.get("thickness", StructurePlan.DEFAULT_WALL_THICKNESS)),
 		)
-	elif entity.has("size") and (entity.get("size") as Array).size() == 3:
-		var size_list: Array = entity.get("size")
-		_resize_start_dims = Vector3(float(size_list[0]), float(size_list[1]), float(size_list[2]))
 	elif entity.has("dir"):
 		_resize_start_dims = Vector3(
 			float(entity.get("length", 3.0)),
@@ -1589,15 +1481,6 @@ func _apply_face_resize(entity: Dictionary, snapped_delta: float) -> void:
 				entity["thickness"] = clampf(
 					_resize_start_dims.z + face_move / absf(across), 0.05, 0.5
 				)
-	elif entity.has("size") and (entity.get("size") as Array).size() == 3:
-		var size_list: Array = entity.get("size")
-		var dims := [_resize_start_dims.x, _resize_start_dims.y, _resize_start_dims.z]
-		var minimums := [2.0, 1.5, 2.0]
-		var new_dim := maxf(float(dims[_gizmo_axis]) + face_move, float(minimums[_gizmo_axis]))
-		size_list[_gizmo_axis] = new_dim
-		if _resize_sign < 0 and _gizmo_axis != 1:
-			origin[_gizmo_axis] = _resize_start_primary[_gizmo_axis] - (new_dim - float(dims[_gizmo_axis]))
-			entity["origin"] = [origin.x, origin.y, origin.z]
 	elif entity.has("dir"):
 		## Stairs: the climb axis edits length, vertical edits total rise,
 		## the cross axis edits width. (dims: x=length, y=height, z=width)
@@ -1648,8 +1531,6 @@ func _update_ghost(screen_pos: Vector2) -> void:
 		else:
 			size = Vector3(0.2, DEFAULT_WALL_HEIGHT, maxf(absf(b.z - a.z), 0.5))
 			min_pt.x = roundf(a.x) - 0.1
-	elif _tool == Tool.ROOM or _tool == Tool.CORRIDOR:
-		size.y = DEFAULT_WALL_HEIGHT
 	elif _tool == Tool.STAIR:
 		## Footprint plus a half-height block: reads as "mass rising" without
 		## pretending to know the final step layout mid-drag.
@@ -1789,7 +1670,7 @@ func _update_hover_feedback() -> void:
 				return
 			var p := ctx["point"] as Vector3
 			var geom: Dictionary
-			if str(ctx["kind"]) in ["wall", "room_wall"]:
+			if str(ctx["kind"]) == "wall":
 				var along := _ctx_along(ctx, p)
 				geom = _opening_geom(ctx, _wall_span(ctx, along, along, false), Rect2())
 			else:
@@ -1798,7 +1679,7 @@ func _update_hover_feedback() -> void:
 			if geom.is_empty():
 				return
 			_show_opening_ghost(geom)
-		Tool.WALL, Tool.ROOM, Tool.DECK:
+		Tool.WALL, Tool.DECK:
 			var grid_point := _mouse_to_grid(mouse)
 			if grid_point == Vector3.INF:
 				return
@@ -1949,10 +1830,9 @@ var _opening_buttons: Dictionary = {}
 var _opening_section: VBoxContainer
 var _level_label: Label
 var _ghost_button: Button
-var _roofs_button: Button
 ## Modal surface library: arm a slot (Outside/Inside), then every swatch or
 ## material click paints that slot of the selection — and defines the style
-## every NEWLY drawn room/wall/deck is born with.
+## every NEWLY drawn wall/deck/stair is born with.
 var _armed_slot := "out"
 var _lib: Dictionary = {
 	"out": {"color": [0.82, 0.84, 0.86], "material": "painted"},
@@ -1973,8 +1853,6 @@ var _toast_timer: Timer
 const TOOL_HINTS := {
 	Tool.SELECT: "Select: click to pick — arrows move it, drag a face pad to resize, DEL removes.",
 	Tool.WALL: "Wall: click-drag along the grid, release to raise one wall run.",
-	Tool.ROOM: "Room: drag a footprint — walls, floor and ceiling come up as one piece.",
-	Tool.CORRIDOR: "Corridor: drag along its length — side walls, floor and ceiling, both ends open.",
 	Tool.DECK: "Deck: drag a footprint to lay a deck plate.",
 	Tool.STAIR: "Stairs: drag along the climb direction — a walkable run up one level. Cut a stairwell in the deck above to pass through.",
 	Tool.OPENING: "Opening: click for a standard cut, or click-drag along the surface to size it yourself.",
@@ -2029,8 +1907,6 @@ func _build_top_bar() -> void:
 	var tool_defs := [
 		[Tool.SELECT, "SELECT"],
 		[Tool.WALL, "WALL"],
-		[Tool.ROOM, "ROOM"],
-		[Tool.CORRIDOR, "CORRIDOR"],
 		[Tool.DECK, "DECK"],
 		[Tool.STAIR, "STAIR"],
 		[Tool.OPENING, "OPENING"],
@@ -2124,16 +2000,6 @@ func _build_tool_palette() -> void:
 	)
 	box.add_child(ghost_btn)
 	_ghost_button = ghost_btn
-
-	var roofs_btn := BrandComponents.tool_button("SHOW ROOFS  [T]", 0.0)
-	roofs_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	roofs_btn.pressed.connect(func() -> void:
-		_show_roofs = not _show_roofs
-		_rebake()
-		_refresh_panel()
-	)
-	box.add_child(roofs_btn)
-	_roofs_button = roofs_btn
 
 	box.add_child(BrandComponents.separator())
 	_opening_section = VBoxContainer.new()
@@ -2294,7 +2160,6 @@ func _refresh_panel() -> void:
 		(_opening_buttons[opening_type] as Button).set_pressed_no_signal(opening_type == _opening_type)
 	_level_label.text = "LEVEL %.0f M" % _active_base
 	_ghost_button.set_pressed_no_signal(_ghost_levels)
-	_roofs_button.set_pressed_no_signal(_show_roofs)
 	for slot in _slot_buttons.keys():
 		(_slot_buttons[slot] as Button).set_pressed_no_signal(slot == _armed_slot)
 	var armed_material := str((_lib[_armed_slot] as Dictionary)["material"])
@@ -2322,19 +2187,11 @@ func _studio_metrics_text() -> String:
 		var deck_size := (deck_raw as Dictionary).get("size", [0.0, 0.0]) as Array
 		if deck_size.size() >= 2:
 			deck_area += float(deck_size[0]) * float(deck_size[1])
-	var room_volume := 0.0
-	for room_raw in _plan.rooms:
-		var room_size := (room_raw as Dictionary).get("size", [0.0, 0.0, 0.0]) as Array
-		if room_size.size() >= 3:
-			room_volume += (
-				float(room_size[0]) * float(room_size[1]) * float(room_size[2])
-			)
-	return "GRID 1 M   LEVEL %.0f M   PARTS %d   WALL %.0f M   DECK %.0f M²   ROOMS %.0f M³" % [
+	return "GRID 1 M   LEVEL %.0f M   PARTS %d   WALL %.0f M   DECK %.0f M²" % [
 		_active_base,
 		_plan.entity_count(),
 		wall_metres,
 		deck_area,
-		room_volume,
 	]
 
 
@@ -2354,15 +2211,13 @@ func _refresh_inspector() -> void:
 		child.queue_free()
 	var entity := _plan.entity_by_id(_selected_id)
 	if _selected_id < 0 or entity.is_empty():
-		_drawer_info.text = "Nothing selected. Use Select / Move and click a wall, room, corridor, deck plate or stair."
+		_drawer_info.text = "Nothing selected. Use Select / Move and click a wall, deck plate or stair."
 		return
 	var kind := "wall"
 	if entity.has("axis"):
 		kind = "wall"
 	elif entity.has("dir"):
 		kind = "stair"
-	elif entity.has("size") and (entity.get("size") as Array).size() == 3:
-		kind = "room" if (entity.get("open_faces", []) as Array).is_empty() else "corridor"
 	else:
 		kind = "deck"
 	_drawer_info.text = ""
@@ -2390,58 +2245,6 @@ func _refresh_inspector() -> void:
 				entity[field_name] = value
 				_rebake()
 		))
-	if kind in ["room", "corridor"]:
-		var size_list: Array = entity.get("size", [4, 3, 4])
-		var axis_names := ["width", "height", "length"]
-		for axis_index in 3:
-			var captured := axis_index
-			_inspector_box.add_child(_spin_row(
-				axis_names[axis_index], float(size_list[axis_index]), 1.0, 60.0, 0.5,
-				func(value: float) -> void:
-					_snapshot()
-					(entity["size"] as Array)[captured] = value
-					_rebake()
-			))
-		## Open-top holds / floorless shelters: toggle either plate.
-		var plate_row := HBoxContainer.new()
-		plate_row.add_theme_constant_override("separation", 6)
-		for plate_def in [["roof", "Roof"], ["floor", "Floor"]]:
-			var plate_key := str(plate_def[0])
-			var plate_btn := BrandComponents.tool_button(str(plate_def[1]), 0.0)
-			plate_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-			plate_btn.set_pressed_no_signal(bool(entity.get(plate_key, true)))
-			plate_btn.pressed.connect(func() -> void:
-				_snapshot()
-				entity[plate_key] = not bool(entity.get(plate_key, true))
-				_rebake()
-				_refresh_panel()
-			)
-			plate_row.add_child(plate_btn)
-		_inspector_box.add_child(plate_row)
-		## Per-face wall toggles: pressed = wall present. Opening both ends of
-		## a room IS the corridor; one open face makes a lean-to or garage.
-		var face_row := HBoxContainer.new()
-		face_row.add_theme_constant_override("separation", 6)
-		for face_def in [["n", "N"], ["e", "E"], ["s", "S"], ["w", "W"]]:
-			var face_key := str(face_def[0])
-			var face_btn := BrandComponents.tool_button(str(face_def[1]), 0.0)
-			face_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-			face_btn.tooltip_text = "Wall on the %s face" % str(face_def[1])
-			var face_open := (entity.get("open_faces", []) as Array).has(face_key)
-			face_btn.set_pressed_no_signal(not face_open)
-			face_btn.pressed.connect(func() -> void:
-				_snapshot()
-				var open_faces: Array = entity.get("open_faces", [])
-				if open_faces.has(face_key):
-					open_faces.erase(face_key)
-				else:
-					open_faces.append(face_key)
-				entity["open_faces"] = open_faces
-				_rebake()
-				_refresh_panel()
-			)
-			face_row.add_child(face_btn)
-		_inspector_box.add_child(face_row)
 	if kind == "stair":
 		var steps := StructureBaker.stair_step_count(entity)
 		_inspector_box.add_child(BrandComponents.key_value_row(
@@ -2461,17 +2264,9 @@ func _refresh_inspector() -> void:
 		)
 		_inspector_box.add_child(rotate_btn)
 	## Surface readout — painting happens through the armed MATERIAL LIBRARY.
-	if kind in ["room", "corridor"]:
-		_inspector_box.add_child(BrandComponents.key_value_row(
-			"Outside", str(entity.get("material_out", "painted")).capitalize()
-		))
-		_inspector_box.add_child(BrandComponents.key_value_row(
-			"Inside", str(entity.get("material_in", "wood")).capitalize()
-		))
-	else:
-		_inspector_box.add_child(BrandComponents.key_value_row(
-			"Surface", str(entity.get("material", "painted")).capitalize()
-		))
+	_inspector_box.add_child(BrandComponents.key_value_row(
+		"Surface", str(entity.get("material", "painted")).capitalize()
+	))
 	var openings: Array = entity.get("openings", [])
 	if not openings.is_empty():
 		var opening_info := BrandLabel.new(
@@ -2549,14 +2344,7 @@ func _library_keys_for_selection() -> Dictionary:
 	var entity := _plan.entity_by_id(_selected_id)
 	if entity.is_empty():
 		return {}
-	var is_room := entity.has("size") and (entity.get("size") as Array).size() == 3
-	if is_room:
-		return {
-			"entity": entity,
-			"color": "color_out" if _armed_slot == "out" else "color_in",
-			"material": "material_out" if _armed_slot == "out" else "material_in",
-		}
-	## Walls and plates carry a single surface — both slots address it.
+	## Walls, plates and stairs carry a single surface — both slots address it.
 	return {"entity": entity, "color": "color", "material": "material"}
 
 
@@ -2583,17 +2371,10 @@ func _apply_library_material(material_name: String) -> void:
 
 
 ## Style every new entity with the armed library so drawing is paint-first.
-func _stamp_library_style(entity: Dictionary, is_room: bool) -> void:
+func _stamp_library_style(entity: Dictionary) -> void:
 	var out := _lib["out"] as Dictionary
-	if is_room:
-		var interior := _lib["in"] as Dictionary
-		entity["color_out"] = (out["color"] as Array).duplicate()
-		entity["material_out"] = str(out["material"])
-		entity["color_in"] = (interior["color"] as Array).duplicate()
-		entity["material_in"] = str(interior["material"])
-	else:
-		entity["color"] = (out["color"] as Array).duplicate()
-		entity["material"] = str(out["material"])
+	entity["color"] = (out["color"] as Array).duplicate()
+	entity["material"] = str(out["material"])
 
 
 func _spin_row(label_text: String, value: float, min_value: float, max_value: float, step: float, on_change: Callable) -> HBoxContainer:

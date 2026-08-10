@@ -3,19 +3,13 @@ extends RefCounted
 
 ## Parametric construction document shared by vessels and land buildings.
 ##
-## Structure is DRAWN, not stacked: five primitives, each one part regardless
+## Structure is DRAWN, not stacked: four primitives, each one part regardless
 ## of size, replace fields of voxel bricks:
 ##   walls  — {id, start:[x,y,z], axis:"x"|"z"|"+x+z"|"+x-z"|"-x+z"|"-x-z",
 ##             length, height, thickness,
 ##             color?, openings:[{type, offset, width, height, sill}]}
 ##   decks  — {id, origin:[x,y,z], size:[w,l], thickness, color?,
 ##             openings:[{type, offset:[dx,dz], size:[w,l]}]}
-##   rooms  — {id, origin:[x,y,z], size:[w,h,l], wall_thickness, color?,
-##             open_faces?:["n"|"s"|"e"|"w"], — faces with NO wall (corridor
-##                        ends, lean-tos); a corridor is a room with both
-##                        ends open.
-##             openings:[{face:"n"|"s"|"e"|"w"|"floor"|"ceiling", type,
-##                        offset, width, height, sill}]}
 ##   stairs — {id, start:[x,y,z], dir:"+x"|"-x"|"+z"|"-z", length, width,
 ##             height, color?}  start = footprint min corner at the LOW end's
 ##             base level; dir = climb direction; solid stepped run whose top
@@ -23,10 +17,15 @@ extends RefCounted
 ##   items  — {id, item_id, at:[x,y,z], yaw, pitch?, roll?,
 ##             host?:{id, face?, anchor?}, props?:{...}}  (point fittings)
 ##
+## There is deliberately NO box/room primitive. An axis-aligned box that expands
+## to four walls, a floor and a ceiling can only ever draw a shed, and every
+## deckhouse built out of one came out as a rectangle on a rectangle. Real
+## superstructure is raked, tapered, stepped and set back, so the primitive that
+## draws it is a sloped plate — not a box. Do not reintroduce the box.
+##
 ## Coordinates are grid-corner points in metres. For vessels x/z match
 ## DeckGrid cell corners (0..width, 0..length) and y is metres above the deck
-## plane. Rooms expand into walls + floor + ceiling plates at bake time —
-## see StructureBaker.expand_room().
+## plane.
 ##
 ## ── The item placement model ─────────────────────────────────────────────────
 ##
@@ -60,18 +59,17 @@ extends RefCounted
 ##
 ## ── Attach frames ────────────────────────────────────────────────────────────
 ##
-## `host.id` names any wall / deck / room / stair / item in the same plan.
+## `host.id` names any wall / deck / stair / item in the same plan.
 ## `host.face` picks a surface, `host.anchor` picks where along it the origin
 ## sits ("start" | "center" | "end"). Every frame is right-handed with:
 ##   +x  along the host's run / width, from the anchor
-##   +y  out of the face when the face is horizontal (deck top, room floor),
-##       otherwise up
+##   +y  out of the face when the face is horizontal (a deck top), otherwise up
 ##   +z  the remaining axis — which on a VERTICAL face is the outward normal,
 ##       so `at.z` reads as "how far off the surface"; negative is inboard,
 ##       e.g. a cleat 0.4 m inboard of a bulwark is at.z = -0.4
-## Faces: wall "front"|"back"; deck "top"|"bottom"; room "n"|"s"|"e"|"w"|
-## "floor"|"ceiling"; stair "run"; item — none, the frame IS the host item's
-## resolved transform, so fittings compose (a lamp on a mast on a wheelhouse).
+## Faces: wall "front"|"back"; deck "top"|"bottom"; stair "run"; item — none,
+## the frame IS the host item's resolved transform, so fittings compose (a lamp
+## on a mast on a wheelhouse).
 ##
 ## `item_transform(item)` resolves the whole chain to plan space. Host cycles
 ## and chains deeper than ITEM_HOST_MAX_DEPTH are reported and fall back to the
@@ -125,7 +123,8 @@ extends RefCounted
 const FORMAT := "structure_plan_v1"
 const DEFAULT_WALL_THICKNESS := 1.0 / 6.0
 const DEFAULT_PLATE_THICKNESS := 0.15
-const DEFAULT_ROOM_HEIGHT := 3.0
+## One storey: the default height of a drawn wall and the default rise of a stair.
+const DEFAULT_WALL_HEIGHT := 3.0
 
 const WALL_AXES := ["x", "z"]
 const WALL_DIAGONAL_AXES := ["+x+z", "+x-z", "-x+z", "-x-z"]
@@ -145,7 +144,6 @@ const ITEM_ANCHORS := [ITEM_ANCHOR_START, ITEM_ANCHOR_CENTER, ITEM_ANCHOR_END]
 const ITEM_FACES := {
 	"wall": ["front", "back"],
 	"deck": ["top", "bottom"],
-	"room": ["n", "s", "e", "w", "floor", "ceiling"],
 	"stair": ["run"],
 	"item": [""],
 }
@@ -154,7 +152,6 @@ var context := "vessel" ## "vessel" | "building"
 var hull_id := ""
 var walls: Array = []
 var decks: Array = []
-var rooms: Array = []
 var stairs: Array = []
 var items: Array = []
 var palette: Dictionary = {}
@@ -199,7 +196,7 @@ static func is_diagonal_axis(axis: String) -> bool:
 	return WALL_DIAGONAL_AXES.has(axis)
 
 
-func add_wall(start: Vector3, axis: String, length: float, height := DEFAULT_ROOM_HEIGHT, thickness := DEFAULT_WALL_THICKNESS) -> Dictionary:
+func add_wall(start: Vector3, axis: String, length: float, height := DEFAULT_WALL_HEIGHT, thickness := DEFAULT_WALL_THICKNESS) -> Dictionary:
 	var wall := {
 		"id": allocate_id(),
 		"start": [start.x, start.y, start.z],
@@ -225,19 +222,7 @@ func add_deck(origin: Vector3, size: Vector2, thickness := DEFAULT_PLATE_THICKNE
 	return deck
 
 
-func add_room(origin: Vector3, size: Vector3) -> Dictionary:
-	var room := {
-		"id": allocate_id(),
-		"origin": [origin.x, origin.y, origin.z],
-		"size": [maxf(size.x, 2.0), maxf(size.y, 2.0), maxf(size.z, 2.0)],
-		"wall_thickness": DEFAULT_WALL_THICKNESS,
-		"openings": [],
-	}
-	rooms.append(room)
-	return room
-
-
-func add_stair(start: Vector3, dir: String, length: float, width := 1.0, height := DEFAULT_ROOM_HEIGHT) -> Dictionary:
+func add_stair(start: Vector3, dir: String, length: float, width := 1.0, height := DEFAULT_WALL_HEIGHT) -> Dictionary:
 	var stair := {
 		"id": allocate_id(),
 		"start": [start.x, start.y, start.z],
@@ -441,8 +426,6 @@ func _face_frame(kind: String, entity: Dictionary, face: String) -> Dictionary:
 				"origin": origin,
 				"span": w,
 			}
-		"room":
-			return _room_face_frame(entity, picked)
 		"stair":
 			var start_s := vec3_of(entity.get("start"))
 			var dir := stair_run(str(entity.get("dir", "+x")))
@@ -453,53 +436,6 @@ func _face_frame(kind: String, entity: Dictionary, face: String) -> Dictionary:
 				"span": length_s,
 			}
 	return {"basis": Basis.IDENTITY, "origin": Vector3.ZERO, "span": 0.0}
-
-
-func _room_face_frame(room: Dictionary, face: String) -> Dictionary:
-	var origin := vec3_of(room.get("origin"))
-	var size := vec3_of(room.get("size"), Vector3(2, 2, 2))
-	var w := size.x
-	var h := size.y
-	var l := size.z
-	## Outward normal per face; local +x = up.cross(normal) keeps it right-handed
-	## and sweeps the face from its own origin corner.
-	match face:
-		"n": ## -Z face
-			return {
-				"basis": _frame_basis(Vector3.LEFT, Vector3.UP, Vector3.FORWARD),
-				"origin": origin + Vector3(w, 0.0, 0.0),
-				"span": w,
-			}
-		"s": ## +Z face
-			return {
-				"basis": _frame_basis(Vector3.RIGHT, Vector3.UP, Vector3.BACK),
-				"origin": origin + Vector3(0.0, 0.0, l),
-				"span": w,
-			}
-		"w": ## -X face
-			return {
-				"basis": _frame_basis(Vector3.BACK, Vector3.UP, Vector3.LEFT),
-				"origin": origin,
-				"span": l,
-			}
-		"e": ## +X face
-			return {
-				"basis": _frame_basis(Vector3.FORWARD, Vector3.UP, Vector3.RIGHT),
-				"origin": origin + Vector3(w, 0.0, l),
-				"span": l,
-			}
-		"ceiling":
-			return {
-				"basis": _frame_basis(Vector3.RIGHT, Vector3.DOWN, Vector3.FORWARD),
-				"origin": origin + Vector3(0.0, h, 0.0),
-				"span": w,
-			}
-	## "floor"
-	return {
-		"basis": _frame_basis(Vector3.RIGHT, Vector3.UP, Vector3.BACK),
-		"origin": origin,
-		"span": w,
-	}
 
 
 static func _frame_basis(x_axis: Vector3, y_axis: Vector3, z_axis: Vector3) -> Basis:
@@ -675,8 +611,8 @@ static func cell_center_plan(cell: Vector3i) -> Vector3:
 
 
 func entity_kind_by_id(id: int) -> String:
-	var kinds := ["wall", "deck", "room", "stair", "item"]
-	var collections := [walls, decks, rooms, stairs, items]
+	var kinds := ["wall", "deck", "stair", "item"]
+	var collections := [walls, decks, stairs, items]
 	for index in collections.size():
 		for entity in (collections[index] as Array):
 			if int((entity as Dictionary).get("id", -1)) == id:
@@ -685,7 +621,7 @@ func entity_kind_by_id(id: int) -> String:
 
 
 func entity_by_id(id: int) -> Dictionary:
-	for collection in [walls, decks, rooms, stairs, items]:
+	for collection in [walls, decks, stairs, items]:
 		for entity in collection:
 			if int((entity as Dictionary).get("id", -1)) == id:
 				return entity
@@ -693,7 +629,7 @@ func entity_by_id(id: int) -> Dictionary:
 
 
 func remove_entity(id: int) -> bool:
-	for collection in [walls, decks, rooms, stairs, items]:
+	for collection in [walls, decks, stairs, items]:
 		for index in (collection as Array).size():
 			if int(((collection as Array)[index] as Dictionary).get("id", -1)) == id:
 				(collection as Array).remove_at(index)
@@ -702,11 +638,11 @@ func remove_entity(id: int) -> bool:
 
 
 func is_empty() -> bool:
-	return walls.is_empty() and decks.is_empty() and rooms.is_empty() and stairs.is_empty() and items.is_empty()
+	return walls.is_empty() and decks.is_empty() and stairs.is_empty() and items.is_empty()
 
 
 func entity_count() -> int:
-	return walls.size() + decks.size() + rooms.size() + stairs.size() + items.size()
+	return walls.size() + decks.size() + stairs.size() + items.size()
 
 
 func to_dict() -> Dictionary:
@@ -717,7 +653,6 @@ func to_dict() -> Dictionary:
 		"palette": palette.duplicate(true),
 		"walls": walls.duplicate(true),
 		"decks": decks.duplicate(true),
-		"rooms": rooms.duplicate(true),
 		"stairs": stairs.duplicate(true),
 		## Items are re-normalised on the way out so an editor that pokes a raw
 		## dictionary cannot break the round-trip's fixed point.
@@ -732,12 +667,11 @@ static func from_dict(data: Dictionary) -> StructurePlan:
 	plan.palette = (data.get("palette", {}) as Dictionary).duplicate(true)
 	plan.walls = (data.get("walls", []) as Array).duplicate(true)
 	plan.decks = (data.get("decks", []) as Array).duplicate(true)
-	plan.rooms = (data.get("rooms", []) as Array).duplicate(true)
 	plan.stairs = (data.get("stairs", []) as Array).duplicate(true)
 	## Migrates the legacy cell form and pins the canonical shape.
 	plan.items = normalize_items(data.get("items", []) as Array)
 	var highest := 0
-	for collection in [plan.walls, plan.decks, plan.rooms, plan.stairs, plan.items]:
+	for collection in [plan.walls, plan.decks, plan.stairs, plan.items]:
 		for entity in collection:
 			var entity_dict := entity as Dictionary
 			var id := int(entity_dict.get("id", 0))
