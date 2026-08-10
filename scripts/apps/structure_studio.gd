@@ -286,6 +286,17 @@ func _run_studio_probe() -> void:
 			bounded += 1
 	expect.call("bow bulwark fixture loads its four diagonals", diagonals == 4)
 	expect.call("every fixture diagonal is bounded in world space", bounded == diagonals)
+	## ── The piece tool ──────────────────────────────────────────────────────
+	_probe_piece_controls(expect)
+	_probe_piece_mouse(expect)
+	_probe_piece_selection(expect)
+	_probe_piece_persistence(expect)
+	_probe_piece_fixture(expect, "%s/probe_piece_trawler.json" % STRUCTURES_DIR, "trawler")
+	_probe_piece_fixture(expect, "%s/probe_piece_tug.json" % STRUCTURES_DIR, "tug")
+	_probe_piece_tug_recipe(expect)
+	for arg in OS.get_cmdline_user_args():
+		if str(arg) == "--studio-write-fixtures":
+			_write_tug_fixture()
 	## Speak the suite's verdict language so the gate can tell "ran and passed"
 	## from "booted, said nothing, exited 0". A self-check that declares no
 	## outcome has not passed — see lane C in tools/gate.sh.
