@@ -32,6 +32,12 @@ const FIXTURES: Array[String] = [
 	"res://resources/data/structures/probe_ferry_catamaran.json",
 	"res://resources/data/structures/probe_spar_kit.json",
 	"res://resources/data/structures/probe_ferry_catamaran_trim.json",
+	## The largest hull in the catalog, 150 x 32 m, and the first thing built on
+	## it: a geared container feeder. It is here because the kit had never been
+	## exercised at five times the trawler's length — a 21 m accommodation block,
+	## a stow of 16 m containers and a cell-guide rack are all things that only
+	## exist at this size.
+	"res://resources/data/structures/probe_container_feeder.json",
 	## The sheer pair, and they are meant to be looked at SIDE BY SIDE:
 	## probe_sheer_bulwark__profile_port.png against
 	## probe_sheer_bulwark_flat__profile_port.png. One boolean apart — the control
@@ -74,6 +80,12 @@ const VIEWS: Array[Dictionary] = [
 const FIGURE_SPOT := {
 	"probe_ferry_catamaran": Vector3(12.0, 0.0, 39.0),
 	"probe_ferry_catamaran_trim": Vector3(12.0, 0.0, 39.0),
+	## The default spot (2.5, 0, 7.0) is not on this ship at all: at z = 7 the
+	## 150 m hull's deck edge runs x 8.34 .. 23.66, so the figure would stand in
+	## open air off the port bow. It goes on the FORECASTLE, sky behind it and
+	## the whole 150 m of ship running away aft — which is the one place a 1.8 m
+	## figure still resolves against a vessel this size.
+	"probe_container_feeder": Vector3(11.0, 3.46, 10.0),
 }
 const FIGURE_SPOT_DEFAULT := Vector3(2.5, 0.0, 7.0)
 
@@ -320,6 +332,8 @@ const COST_BUDGET := {
 	"probe_ferry_catamaran": {"draw_calls": 10, "triangles": 19000},
 	"probe_spar_kit": {"draw_calls": 9, "triangles": 9400},
 	"probe_ferry_catamaran_trim": {"draw_calls": 10, "triangles": 19600},
+	## MEASURED, then given ~8% headroom — see the note below the table.
+	"probe_container_feeder": {"draw_calls": 0, "triangles": 0},
 	## The sheer pair carries ONE material and therefore one bucket, over a bare
 	## hull. 6 is what the hull plus a whole 76 m bulwark loop drew, measured —
 	## not a round number left loose. Put the cap in a second material and this

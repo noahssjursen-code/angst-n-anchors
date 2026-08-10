@@ -472,21 +472,134 @@ def _normal(ring):
     return [v / m for v in n]
 
 
-## A window MULLION: a slice of the glass band's own quad, stood 60 mm proud of it
-## along the band's outward normal. Derived from the band rather than authored
-## beside it, so a mullion cannot drift off a wheelhouse face that gets re-raked.
-def mullions(pid, ring, count, half_w=0.05):
+# ── THE WINDOW TREATMENT, one rule for every tier ───────────────────────────
+##
+## The wheelhouse used to be the only tier with glass in it: a dark band between
+## a coaming and a header. The lower tier had punched holes and nothing behind
+## them, so at every range they read as pale rectangles the value of the plating
+## — as holes, which is exactly what they were. Both tiers now get the same part:
+##
+##   * the window run is ONE band, not a row of separate punches;
+##   * a dark GLASS pane sits REVEAL inboard of the shell plane and LAPS past the
+##     opening on every side, so the reveal is real depth and no daylight leaks
+##     round the pane where it meets the plating;
+##   * cream MULLIONS stand IN the reveal, at the shell plane — proud of the
+##     glass, shy of the coaming, which is where a mullion is;
+##   * a three-plate wheelhouse face also gets a CORNER PILLAR at each end. Two
+##     recessed panes meeting at a corner leave a REVEAL-square notch, and the
+##     pillars are what close it.
+##
+## A DOOR keeps its punched opening and gets no glass: a door is a hole you walk
+## through, and tests/plan_interior_test.gd marches a player capsule through one.
+REVEAL = 0.10      # how far the glass sits behind the shell plane
+GLASS_T = 0.03     # the pane
+GLASS_LAP = 0.12   # how far the pane runs on past the opening, hidden behind it
+MULL_HW = 0.05     # half-width of a mullion
+POST_HW = 0.065    # half-width of a corner pillar
+## A post BRIDGES the reveal: its outer face stands POST_PROUD off the shell
+## plane (a hair proud of the 0.09 coaming, so nothing is coplanar) and its
+## inner face lands on the glass. A post that only straddled the shell plane
+## left a gap either side of it, and at a grazing angle — the port beam onto a
+## forward-raked screen — the eye looked THROUGH those gaps and the whole band
+## broke into fine dark hatching. Measured on the first render of this change.
+POST_PROUD = 0.05
+POST_T = POST_PROUD + REVEAL
+POST_MID = (REVEAL - POST_PROUD) * 0.5   # how far inboard the post's mid-plane sits
+
+## Sized against the 1.8 m figure: a 0.72 m light with its sill at 1.30 m puts a
+## standing person's eye (1.60 m) in the middle of the glass. Same two numbers on
+## every tier of every vessel.
+SILL, LIGHT_H = 1.30, 0.72
+
+
+def _ppoint(c, u, v):
+    """StructureBaker.plate_point — the bilinear patch at (u, v)."""
+    return _sub(_sub(c[0], c[1], u), _sub(c[3], c[2], u), v)
+
+
+def _subquad(c, u0, u1, v0, v1):
+    """StructureBaker.plate_subquad."""
+    return [_ppoint(c, u0, v0), _ppoint(c, u1, v0),
+            _ppoint(c, u1, v1), _ppoint(c, u0, v1)]
+
+
+def _refs(c):
+    """StructureBaker.plate_ref_lengths — mean u edge, mean v edge, in metres."""
+    return ((math.dist(c[0], c[1]) + math.dist(c[3], c[2])) * 0.5,
+            (math.dist(c[0], c[3]) + math.dist(c[1], c[2])) * 0.5)
+
+
+def _outward(ring, inside):
+    """The plate normal pointing AWAY from a point known to be inside the tier."""
     n = _normal(ring)
-    b0, b1, t1, t0 = ring[0], ring[1], ring[2], ring[3]
-    span = math.dist(b0, b1)
+    mid = _ppoint(ring, 0.5, 0.5)
+    away = sum(n[i] * (mid[i] - inside[i]) for i in range(3))
+    return n if away > 0.0 else [-v for v in n]
+
+
+def _offset_ring(ring, n, d):
+    return [tuple(p[i] + n[i] * d for i in range(3)) for p in ring]
+
+
+def _centroid(rings):
+    pts = [p for r in rings for p in r]
+    return [sum(p[i] for p in pts) / len(pts) for i in range(3)]
+
+
+def band_glass(pid, shell, inside, opening, what):
+    """The recessed pane behind a PUNCHED band in a shell plate."""
+    ul, vl = _refs(shell)
+    off, w = opening["offset"], opening["width"]
+    sill, h = opening["sill"], opening["height"]
+    ring = _subquad(shell,
+                    max((off - GLASS_LAP) / ul, 0.0), min((off + w + GLASS_LAP) / ul, 1.0),
+                    max((sill - GLASS_LAP) / vl, 0.0), min((sill + h + GLASS_LAP) / vl, 1.0))
+    return plate(pid, what, _offset_ring(ring, _outward(shell, inside), -REVEAL), GLASS_T, GLASS)
+
+
+def band_mullions(pid, shell, inside, opening, count):
+    """Posts standing in the reveal of a punched band, bridging it."""
+    ul, vl = _refs(shell)
+    n = _outward(shell, inside)
+    off, w = opening["offset"], opening["width"]
+    v0, v1 = opening["sill"] / vl, (opening["sill"] + opening["height"]) / vl
+    out = []
+    for k in range(1, count + 1):
+        um = (off + w * k / (count + 1.0)) / ul
+        d = MULL_HW / ul
+        ring = _offset_ring(_subquad(shell, um - d, um + d, v0, v1), n, -POST_MID)
+        out.append(plate(pid + k - 1, "window mullion, standing in the reveal",
+                         ring, POST_T, CREAM, solid=False))
+    return out
+
+
+def face_glass(pid, band, inside, what):
+    """The pane for a three-plate face: the coaming and the header keep the shell
+    plane, the glass drops REVEAL behind them and grows GLASS_LAP past the band
+    top and bottom so it is hidden behind them instead of leaving a slot."""
+    _, vl = _refs(band)
+    ring = _subquad(band, 0.0, 1.0, -GLASS_LAP / vl, 1.0 + GLASS_LAP / vl)
+    return plate(pid, what, _offset_ring(ring, _outward(band, inside), -REVEAL), GLASS_T, GLASS)
+
+
+## Mullions across a three-plate face's band, plus a corner pillar at each end.
+## Derived from the BAND, not authored beside it, so a post cannot drift off a
+## wheelhouse face that gets re-raked.
+def face_posts(pid, band, inside, count):
+    ul, _ = _refs(band)
+    n = _outward(band, inside)
     out = []
     for k in range(1, count + 1):
         f = k / (count + 1.0)
-        d = half_w / span
-        quad = [_sub(b0, b1, f - d), _sub(b0, b1, f + d),
-                _sub(t0, t1, f + d), _sub(t0, t1, f - d)]
-        quad = [tuple(q[i] + n[i] * 0.06 for i in range(3)) for q in quad]
-        out.append(plate(pid + k - 1, "window mullion", quad, 0.05, CREAM, solid=False))
+        d = MULL_HW / ul
+        ring = _offset_ring(_subquad(band, f - d, f + d, 0.0, 1.0), n, -POST_MID)
+        out.append(plate(pid + len(out), "window mullion, standing in the reveal",
+                         ring, POST_T, CREAM, solid=False))
+    d = 2.0 * POST_HW / ul
+    for u0, u1 in ((0.0, d), (1.0 - d, 1.0)):
+        ring = _offset_ring(_subquad(band, u0, u1, 0.0, 1.0), n, -POST_MID)
+        out.append(plate(pid + len(out), "wheelhouse corner pillar",
+                         ring, POST_T, CREAM, solid=False))
     return out
 
 
@@ -525,27 +638,46 @@ ap, as_ = (2.50, WTA, 23.70), (7.50, WTA, 23.70)  # aft bulkhead reverse-raked
 BAND = (0.0, 0.34, 0.76, 1.0)               # coaming / glass / header
 
 
+## Each lower-tier face: its ring, its openings, and how many mullions stand in
+## its window band. The three punched lights a side are ONE band now — a
+## continuous dark run reads as glazing at the range these vessels are seen at,
+## where three separate holes read as three holes.
+LOWER_FACES = [
+    (100, "lower tier, raked front — the top overhangs 0.55 m forward", [LSf, LPf, lpf, lsf],
+     [{"type": "window", "offset": 1.55, "width": 2.35, "sill": SILL, "height": LIGHT_H}], 1),
+    (101, "lower tier, port side — tapered in plan and tumbled home", [LPf, LPa, lpa, lpf],
+     [{"type": "window", "offset": 1.25, "width": 3.55, "sill": SILL, "height": LIGHT_H},
+      {"type": "door", "offset": 5.95, "width": 0.85, "sill": 0.0, "height": 1.95}], 2),
+    (102, "lower tier, starboard side", [LSa, LSf, lsf, lsa],
+     [{"type": "door", "offset": 0.95, "width": 0.85, "sill": 0.0, "height": 1.95},
+      {"type": "window", "offset": 2.85, "width": 3.55, "sill": SILL, "height": LIGHT_H}], 2),
+    ## The aft bulkhead faces the working deck and carries the door and nothing
+    ## else. That is not an oversight and it is not a punched-hole holdout: a
+    ## trawler's after casing bulkhead is where the gear comes aboard, and a
+    ## light there is a light waiting to be broken by a full cod end.
+    (103, "lower tier, aft bulkhead — the working deck door", [LPa, LSa, lsa, lpa],
+     [{"type": "door", "offset": 2.45, "width": 1.15, "sill": 0.0, "height": 2.0}], 0),
+]
+GLASS_ID = 400      # lower-tier panes and their mullions
+POST_ID = 420       # wheelhouse mullions and corner pillars
+
+
 def deckhouse():
     out = []
-    out.append(plate(100, "lower tier, raked front — the top overhangs 0.55 m forward",
-                     [LSf, LPf, lpf, lsf], 0.10, CREAM,
-                     [{"type": "window", "offset": 1.55, "width": 0.85, "sill": 1.45, "height": 0.62},
-                      {"type": "window", "offset": 3.05, "width": 0.85, "sill": 1.45, "height": 0.62}]))
-    out.append(plate(101, "lower tier, port side — tapered in plan and tumbled home",
-                     [LPf, LPa, lpa, lpf], 0.10, CREAM,
-                     [{"type": "window", "offset": 1.25, "width": 0.75, "sill": 1.35, "height": 0.65},
-                      {"type": "window", "offset": 2.65, "width": 0.75, "sill": 1.35, "height": 0.65},
-                      {"type": "window", "offset": 4.05, "width": 0.75, "sill": 1.35, "height": 0.65},
-                      {"type": "door", "offset": 5.95, "width": 0.85, "sill": 0.0, "height": 1.95}]))
-    out.append(plate(102, "lower tier, starboard side",
-                     [LSa, LSf, lsf, lsa], 0.10, CREAM,
-                     [{"type": "door", "offset": 0.95, "width": 0.85, "sill": 0.0, "height": 1.95},
-                      {"type": "window", "offset": 2.85, "width": 0.75, "sill": 1.35, "height": 0.65},
-                      {"type": "window", "offset": 4.25, "width": 0.75, "sill": 1.35, "height": 0.65},
-                      {"type": "window", "offset": 5.65, "width": 0.75, "sill": 1.35, "height": 0.65}]))
-    out.append(plate(103, "lower tier, aft bulkhead — the working deck door",
-                     [LPa, LSa, lsa, lpa], 0.10, CREAM,
-                     [{"type": "door", "offset": 2.45, "width": 1.15, "sill": 0.0, "height": 2.0}]))
+    inside = _centroid([ring for _, _, ring, _, _ in LOWER_FACES])
+    gid = GLASS_ID
+    for pid, what, ring, openings, mullion_count in LOWER_FACES:
+        out.append(plate(pid, what, ring, 0.10, CREAM, openings))
+        for opening in openings:
+            if opening["type"] != "window":
+                continue
+            out.append(band_glass(gid, ring, inside, opening,
+                                  "%s — GLASS, recessed %.2f m in the reveal"
+                                  % (what.split(" — ")[0], REVEAL)))
+            gid += 1
+            if mullion_count:
+                out.extend(band_mullions(gid, ring, inside, opening, mullion_count))
+                gid += mullion_count
     out.append(plate(104, "boat deck — the lower tier's roof, sloping 0.24 m aft",
                      [(2.06, bd(16.91), 16.91), (1.78, bd(25.29), 25.29),
                       (8.22, bd(25.29), 25.29), (7.94, bd(16.91), 16.91)], 0.13, ROOFG))
@@ -568,13 +700,25 @@ def deckhouse():
     names = ["coaming", "GLASS BAND", "header"]
     colors = [CREAM, GLASS, CREAM]
     thicks = [0.09, 0.07, 0.09]
-    posts = {"screen": (123, 3), "port": (126, 3), "stbd": (129, 3), "aft": (132, 2)}
+    posts = {"screen": 3, "port": 3, "stbd": 3, "aft": 2}
+    house_inside = _centroid([f[3](1) for f in faces])
+    pid = POST_ID
     for key, base, what, ring in faces:
         for i in range(3):
+            ## The middle band is the GLASS and it no longer sits in the shell
+            ## plane: face_glass drops it REVEAL behind the coaming and the
+            ## header and laps it under both, so the band is a hole with glass
+            ## at the bottom of it rather than a dark stripe painted on.
+            if i == 1:
+                out.append(face_glass(base + i, ring(1), house_inside,
+                                      "%s, GLASS BAND, recessed %.2f m in the reveal"
+                                      % (what, REVEAL)))
+                continue
             out.append(plate(base + i, "%s, %s" % (what, names[i]),
                              ring(i), thicks[i], colors[i]))
-        pid, count = posts[key]
-        out.extend(mullions(pid, ring(1), count))
+        made = face_posts(pid, ring(1), house_inside, posts[key])
+        out.extend(made)
+        pid += len(made)
     out.append(plate(117, "wheelhouse roof — sloped 0.30 m down aft, eaves all round",
                      [(2.46, WT, 17.99), (2.34, WTA, 23.86),
                       (7.66, WTA, 23.86), (7.54, WT, 17.99)], 0.12, ROOFW))

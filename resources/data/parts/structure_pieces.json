@@ -1,0 +1,259 @@
+{
+  "version": 1,
+  "cell_m": 0.5,
+  "_what_this_is": [
+    "THE STRUCTURAL PIECE KIT. Six pieces. A player places these on the deck grid and a",
+    "deckhouse emerges from the placements; nobody ever types a corner coordinate and nobody",
+    "ever describes a room and has it materialise at a custom size.",
+    "",
+    "THE SPLIT. `plate`, `spar`, `wire`, `sheer_band` are the BAKING layer - general geometry,",
+    "already proven, unchanged by this file. This is the AUTHORING layer: a piece is a named",
+    "thing with a footprint in CELLS that RESOLVES into those primitives. StructureBaker never",
+    "learns a new word.",
+    "",
+    "THE RULE THAT MAKES THIS MINECRAFT AND NOT CAD, and every entry below obeys it:",
+    "  EVERY PARAMETER TAKES ITS VALUE FROM A DECLARED FINITE SET, AND EVERY GEOMETRIC",
+    "  PARAMETER IS COUNTED IN GRID UNITS.",
+    "Lengths and heights are whole CELLS (0.5 m). Rakes are whole QUARTER-CELLS (0.25 m).",
+    "Openings, gauges and profiles are named choices. No float is ever typed by a player, so",
+    "two pieces placed side by side meet exactly - which is the property a kit lives or dies on.",
+    "",
+    "WHY RAKE IS A PARAMETER AND NOT A SET OF FIXED VARIANTS. Covering this repo's existing",
+    "vessels with fixed rakes needs 0, 3, 7, 11, 12, 17, 20 degrees - seven variants of every",
+    "wall piece, which is seven times the thing a player has to learn for one axis of variation.",
+    "Quantising the rake to a quarter-cell of top-edge offset gives the same guarantee a fixed",
+    "set was bought for (neighbours match, no slot of daylight opens between them) at the cost",
+    "of one number picked off a nine-entry list.",
+    "",
+    "WHY THE CORNER IS ITS OWN PIECE, and this is the piece that beats blockiness. Two raked",
+    "walls meeting at 90 degrees do NOT meet: each top edge has moved outboard along its own",
+    "normal, so a wedge opens at the corner exactly as wide as the rake. `corner_45` is the",
+    "adapter. Its two vertical edges belong to its two neighbours and its single plate is",
+    "BILINEAR, so it absorbs any difference between the two rakes - including a raked front",
+    "meeting a plumb side, which is the trawler's whole forward end. The by-product is that a",
+    "raked house is chamfered at every corner by construction, and a chamfered corner is the",
+    "one thing a stack of square panels can never look like.",
+    "",
+    "PLACEMENT. A piece is placed at a grid NODE (a corner between cells), not in a cell:",
+    "walls stand on cell edges. `cell` is [x, y, z] in whole cells; the piece-local frame has",
+    "+X along the run, +Y up and the OUTWARD face toward -Z; `facing` is 0/90/180/270 degrees",
+    "of yaw. Fittings - chairs, cleats, lanterns, seats - are NOT pieces and never snap: they",
+    "are `items[]` with float coordinates and PartCatalog owns them. Over half the 344 rows in",
+    "COMPONENTS.md are smaller than one cell.",
+    "",
+    "WHAT THE KIT DELIBERATELY REFUSES. A sheer-following bulwark is a swept curve and belongs",
+    "to `edges[]`/sheer_band. Quantising it to the grid would step the one curve the whole fleet",
+    "was rebuilt to draw, so no piece here tries."
+  ],
+
+  "pieces": [
+    {
+      "id": "wall_panel",
+      "display": "Wall panel",
+      "description": "One plate of a deckhouse side, plumb or raked, optionally with a door, a window or a scuttle punched through it. The workhorse: everything that is not a corner, a window band, a deck or a trim run is this.",
+      "footprint": {"run": "span", "depth": 0, "rise": "height"},
+      "material": "painted",
+      "color": "#e3e0d4",
+      "params": {
+        "span":   {"unit": "cells", "values": [1, 2, 3, 4, 6, 8], "default": 4,
+                   "_is": "length of the run. Six standard widths, the way a merchant sells plate."},
+        "height": {"unit": "cells", "values": [2, 3, 4, 5, 6], "default": 5,
+                   "_is": "1.0 m to 3.0 m. 5 cells = 2.5 m is a tier; 2 cells = 1.0 m is a bulwark or a coaming course."},
+        "rake":   {"unit": "quarter_cells", "values": [-4, -3, -2, -1, 0, 1, 2, 3, 4], "default": 0,
+                   "_is": "how far the TOP edge stands outboard of the foot, in 0.25 m steps. Positive rakes out (a trawler's front), negative tumbles home (a side). At the 2.5 m tier height this spans -21.8 to +21.8 degrees, which covers every rake in the fleet."},
+        "opening": {"unit": "choice", "values": ["none", "door", "window", "scuttle"], "default": "none",
+                    "_is": "a real hole with its proud casing, centred on the panel. A door is 0.85 x 1.95 m against a 1.8 m figure; a window 0.80 x 0.70 at 1.20 m sill; a scuttle 0.40 x 0.40. The opening is the piece, not a set of four numbers - which is why span is fixed by what fits, not by the hole."}
+      },
+      "build": [
+        {
+          "primitive": "plate",
+          "thickness": 0.10,
+          "corners": [
+            ["span*0.5", 0, 0],
+            [0, 0, 0],
+            [0, "height*0.5", "rake*-0.25"],
+            ["span*0.5", "height*0.5", "rake*-0.25"]
+          ],
+          "openings": {
+            "$choice": "opening",
+            "none": [],
+            "door":    [{"type": "door",   "offset": "span*0.25-0.425", "width": 0.85, "sill": 0.00, "height": 1.95}],
+            "window":  [{"type": "window", "offset": "span*0.25-0.40",  "width": 0.80, "sill": 1.20, "height": 0.70}],
+            "scuttle": [{"type": "window", "offset": "span*0.25-0.20",  "width": 0.40, "sill": 1.30, "height": 0.40}]
+          }
+        }
+      ]
+    },
+
+    {
+      "id": "wall_glazed",
+      "display": "Glazed wall panel",
+      "description": "A wheelhouse or saloon wall carrying a RIBBON WINDOW: a coaming course, a dark glass plate set 90 mm into the reveal, a header above it and mullions standing in the reveal. One piece, four to seven plates. A ribbon is not a row of holes - the ferry proved that the hard way - so it is a different piece from a punched window, not a parameter of one.",
+      "footprint": {"run": "span", "depth": 0, "rise": "height"},
+      "material": "painted",
+      "color": "#e3e0d4",
+      "params": {
+        "span":   {"unit": "cells", "values": [1, 2, 3, 4, 6, 8], "default": 4},
+        "height": {"unit": "cells", "values": [3, 4, 5, 6], "default": 5},
+        "rake":   {"unit": "quarter_cells", "values": [-4, -3, -2, -1, 0, 1, 2, 3, 4], "default": 0,
+                   "_is": "the whole wall rakes, and the coaming, glass, header and mullions all lean with it - the band follows the wall rather than sitting on it."},
+        "sill":   {"unit": "cells", "values": [1, 2, 3], "default": 2, "_is": "coaming height under the glass. 2 cells = 1.0 m, which is the fall-barrier dimension the 1.8 m figure sets."},
+        "band":   {"unit": "cells", "values": [1, 2, 3], "default": 2, "_is": "height of the glass itself."},
+        "lights": {"unit": "count", "values": [1, 2, 3, 4, 5, 6], "default": 3, "_is": "panes across the run. lights-1 mullions, evenly spaced, 0.10 m wide IN METRES - authored as a fraction of the plate they came out 3 m wide on a ferry and the band read as portholes."}
+      },
+      "build": [
+        {
+          "primitive": "plate", "thickness": 0.10, "_is": "coaming",
+          "corners": [
+            ["span*0.5", 0, 0],
+            [0, 0, 0],
+            [0, "sill*0.5", "rake*-0.25*sill/height"],
+            ["span*0.5", "sill*0.5", "rake*-0.25*sill/height"]
+          ]
+        },
+        {
+          "primitive": "plate", "thickness": 0.07, "color": "#171c23", "_is": "glass, set into the reveal",
+          "corners": [
+            ["span*0.5", "sill*0.5", "rake*-0.25*sill/height+0.09"],
+            [0, "sill*0.5", "rake*-0.25*sill/height+0.09"],
+            [0, "sill*0.5+band*0.5", "rake*-0.25*sill/height+rake*-0.25*band/height+0.09"],
+            ["span*0.5", "sill*0.5+band*0.5", "rake*-0.25*sill/height+rake*-0.25*band/height+0.09"]
+          ]
+        },
+        {
+          "primitive": "plate", "thickness": 0.10, "_is": "header",
+          "corners": [
+            ["span*0.5", "sill*0.5+band*0.5", "rake*-0.25*sill/height+rake*-0.25*band/height"],
+            [0, "sill*0.5+band*0.5", "rake*-0.25*sill/height+rake*-0.25*band/height"],
+            [0, "height*0.5", "rake*-0.25"],
+            ["span*0.5", "height*0.5", "rake*-0.25"]
+          ]
+        },
+        {
+          "primitive": "plate", "thickness": 0.05, "_is": "mullion", "repeat": "lights-1",
+          "corners": [
+            ["span*0.5*i/lights+span*0.5/lights+0.05", "sill*0.5", "rake*-0.25*sill/height+0.045"],
+            ["span*0.5*i/lights+span*0.5/lights-0.05", "sill*0.5", "rake*-0.25*sill/height+0.045"],
+            ["span*0.5*i/lights+span*0.5/lights-0.05", "sill*0.5+band*0.5", "rake*-0.25*sill/height+rake*-0.25*band/height+0.045"],
+            ["span*0.5*i/lights+span*0.5/lights+0.05", "sill*0.5+band*0.5", "rake*-0.25*sill/height+rake*-0.25*band/height+0.045"]
+          ]
+        }
+      ]
+    },
+
+    {
+      "id": "corner_45",
+      "display": "Corner facet",
+      "description": "THE PIECE THAT BEATS BLOCKINESS. A 45-degree chord across a corner of `span` cells, carrying the transition between the two walls that meet there. Its two vertical edges are those walls' end edges, so it closes the wedge that opens when a raked wall meets a wall raked differently - the plate is bilinear and a twisted quad is exactly what it is for. At span 1 it is a 0.71 m knuckle on a deckhouse corner; at span 3 it is a fast ferry's bow facet. Placed 180 degrees round it fills a concave corner instead, so there is no second inside-corner piece.",
+      "footprint": {"run": "span", "depth": "span", "rise": "height"},
+      "material": "painted",
+      "color": "#e3e0d4",
+      "params": {
+        "span":   {"unit": "cells", "values": [1, 2, 3, 4], "default": 1},
+        "height": {"unit": "cells", "values": [2, 3, 4, 5, 6], "default": 5},
+        "rake_a": {"unit": "quarter_cells", "values": [-4, -3, -2, -1, 0, 1, 2, 3, 4], "default": 0,
+                   "_is": "the rake of the wall meeting this facet on the -Z side. Must equal that wall's own rake or a slot opens."},
+        "rake_b": {"unit": "quarter_cells", "values": [-4, -3, -2, -1, 0, 1, 2, 3, 4], "default": 0,
+                   "_is": "the rake of the wall meeting this facet on the -X side."}
+      },
+      "build": [
+        {
+          "primitive": "plate",
+          "thickness": 0.10,
+          "corners": [
+            ["span*0.5", 0, 0],
+            [0, 0, "span*0.5"],
+            ["rake_b*-0.25", "height*0.5", "span*0.5"],
+            ["span*0.5", "height*0.5", "rake_a*-0.25"]
+          ]
+        }
+      ]
+    },
+
+    {
+      "id": "deck_tile",
+      "display": "Deck panel",
+      "description": "A flat horizontal plate - a deck, a tier roof, a boat deck, a funnel cap. Placed on the grid at its own level and NOT derived from the walls underneath it: deriving it is what a room was, and a room made every deckhouse a shed. Because the raked walls of a tier land off-grid at the top, the deck laid over them is normally one cell larger all round, and the overhang that results is the EAVE.",
+      "footprint": {"run": "span", "depth": "depth", "rise": 0},
+      "material": "painted",
+      "color": "#4d5257",
+      "params": {
+        "span":  {"unit": "cells", "values": [1, 2, 3, 4, 6, 8, 12, 16], "default": 4},
+        "depth": {"unit": "cells", "values": [1, 2, 3, 4, 6, 8, 12, 16], "default": 4},
+        "gauge": {"unit": "choice", "values": ["light", "deck", "heavy"], "default": "deck",
+                  "_is": "0.08 / 0.13 / 0.30 m. A light gauge is a visor or a hood, deck is what you walk on, heavy is a funnel cap or a bulwark capping."}
+      },
+      "build": [
+        {
+          "primitive": "plate",
+          "thickness": {"$choice": "gauge", "light": 0.08, "deck": 0.13, "heavy": 0.30},
+          "corners": [
+            [0, 0, "depth*0.5"],
+            ["span*0.5", 0, "depth*0.5"],
+            ["span*0.5", 0, 0],
+            [0, 0, 0]
+          ]
+        }
+      ]
+    },
+
+    {
+      "id": "roof_slope",
+      "display": "Sloped roof panel",
+      "description": "A roof or casing top that climbs `rise` cells over its `depth`. Chains with itself: put the next one `rise` cells higher and the two are one continuous slope. This is a whaleback, a machinery-casing top, a wheelhouse visor, a companionway hood. It is NOT a wall_panel lying down - a wall's extent is vertical and a slope's is horizontal, and conflating them makes both harder to place.",
+      "footprint": {"run": "span", "depth": "depth", "rise": "rise"},
+      "material": "painted",
+      "color": "#4d5257",
+      "params": {
+        "span":  {"unit": "cells", "values": [1, 2, 3, 4, 6, 8, 12, 16], "default": 4},
+        "depth": {"unit": "cells", "values": [1, 2, 3, 4, 6, 8], "default": 4},
+        "rise":  {"unit": "cells", "values": [1, 2, 3, 4], "default": 1},
+        "gauge": {"unit": "choice", "values": ["light", "deck", "heavy"], "default": "deck"}
+      },
+      "build": [
+        {
+          "primitive": "plate",
+          "thickness": {"$choice": "gauge", "light": 0.08, "deck": 0.13, "heavy": 0.30},
+          "corners": [
+            ["span*0.5", 0, 0],
+            [0, 0, 0],
+            [0, "rise*0.5", "depth*0.5"],
+            ["span*0.5", "rise*0.5", "depth*0.5"]
+          ]
+        }
+      ]
+    },
+
+    {
+      "id": "trim_band",
+      "display": "Trim run",
+      "description": "The thin proud stuff, and it earns its place because without it every joint in the kit is a bare intersection of two planes, which is half of what 'blocky' means. Four profiles off one run: an eave under a deck edge, a cap over a bulwark, a coaming lip standing on a deck, a rubbing strake on a wall. Trim is where a build stops looking printed.",
+      "footprint": {"run": "span", "depth": 1, "rise": 0},
+      "material": "painted",
+      "color": "#b07a2a",
+      "params": {
+        "span":    {"unit": "cells", "values": [1, 2, 3, 4, 6, 8, 12, 16], "default": 4},
+        "profile": {"unit": "choice", "values": ["eave", "cap", "coaming", "strake"], "default": "cap"}
+      },
+      "build": {
+        "$choice": "profile",
+        "eave": [
+          {"primitive": "plate", "thickness": 0.08, "_is": "a flat lip standing 0.30 m outboard under a deck edge",
+           "corners": [[0, 0, 0.06], ["span*0.5", 0, 0.06], ["span*0.5", 0, -0.30], [0, 0, -0.30]]}
+        ],
+        "cap": [
+          {"primitive": "plate", "thickness": 0.10, "_is": "a 0.36 m cap rail lying over a bulwark or a coaming",
+           "corners": [[0, 0, 0.10], ["span*0.5", 0, 0.10], ["span*0.5", 0, -0.26], [0, 0, -0.26]]}
+        ],
+        "coaming": [
+          {"primitive": "plate", "thickness": 0.12, "_is": "a 0.25 m lip standing up off a deck edge",
+           "corners": [["span*0.5", 0, 0], [0, 0, 0], [0, 0.25, 0], ["span*0.5", 0.25, 0]]}
+        ],
+        "strake": [
+          {"primitive": "plate", "thickness": 0.09, "_is": "a 0.22 m band proud of a wall face",
+           "corners": [["span*0.5", 0, -0.05], [0, 0, -0.05], [0, 0.22, -0.05], ["span*0.5", 0.22, -0.05]]}
+        ]
+      }
+    }
+  ]
+}

@@ -2,7 +2,7 @@
  "format": "structure_plan_v1",
  "context": "vessel",
  "hull_id": "hull_28x10",
- "_note": "REBUILT 2026-08-10 after the room purge took the deckhouse, then given its BOW, its BELTING and its GALLOWS STEELWORK the same day. Six things carry this hull:\n\n1. THE BULWARK IS ONE `edges[]` SHEER BAND, not three walls plus three cap-rail decks. The cap carries the curve, which is where sheer has to live: the loft may not draw it (deck_y is the floor of the deck plate, the DeckGrid, the walk slab and the buoyancy lever - see hull_stations.gd). The PLAN line is the hull's own deck edge, measured off StructureEdge.deck_half_beam_at: half-beam 1.12*z to z=4, 4.48+0.13*(z-4) to z=8, 5.0 aft of that, at every height above the deck.\n\n2. THE SHEER IS AUTHORED, AND THAT IS DELIBERATE. `sheer_bulwark_spec` derives it from the hull - freeboard x fine_entry's bow_keel_rise - and that gives 0.896 m forward, 0.28 m aft, with the low point exactly AMIDSHIPS because sheer_rise_at is symmetric in |z|. On a 28 m hull that reads as polite. A working boat's sheer is asymmetric: the low point sits about two thirds aft and the stem lifts several times what the transom does. This path puts the low point at z=19.5 (70% aft) with 1.85 m of rise forward and 0.52 m aft. The bulwark is 1.00 m at the low point, which is the fall-barrier dimension the 1.8 m figure sets and is NOT authored down. `sheer_bulwark_spec` has no knob that scales the derived curve, so an authored path is the only way to say this from data.\n\n   THE SAMPLING IS SOLVED, NOT PICKED, and `check_sheer_sampling()` in the generator REFUSES to write a fixture that breaks it. A `to_base` band takes its height at the segment's HIGHER end, so it over-runs the true curve at the low end by exactly that segment's rise; keep the rise under the cap's headroom (CAP_H - OVERLAP = 0.080 m) and the step hides inside the cap, let it past and a slot of daylight opens between the plating and the cap. Worst segment on this path: 0.0784 m at z=8. Coarsening the flat part of the run from 0.7 m stations to 1.05 m is where the triangles for the belting and the bow came from - 16 stations off the open path, 24 off the loop.\n\n3. THE BOW RAKES AND FLARES, AS FAR AS A PLAN CAN CARRY IT. The hull's STEM - everything below the deck edge - is lofted by HullStations from fine_entry's bow taper and is near plumb; NOTHING in a structure plan can rake it, and that is the honest limit here. What a plan owns is everything above the deck, and on a working boat that is most of what a raked stem looks like. Forward of z=5.6 the bulwark is therefore RAKED PLATE and not the swept band, because a `to_base` rect is PLUMB IN WORLD SPACE by construction and can never lean: three quads a side carrying flare 0.06 m -> 0.50 m and rake 0 -> 1.10 m, so the cap leads its own foot by more than a metre - 21 degrees over 2.95 m of bulwark - and a stem face shuts the loop across the head. Each quad wears four skins, plating, the pale inboard face, the ochre sheer stripe and the bone cap, so neither the paint boundary nor the trough stops at a seam amidships.\n\n4. THE HULL SIDE HAS RELIEF. A third `edges[]` run is the RUBBING STRAKE, which COMPONENTS.md lists as one of the ten parts the sweep primitive absorbs: 115 mm proud x 200 mm tall with a light top chamfer. Its plan line is the shell AT THE STRAKE'S OWN HEIGHT, measured rather than taken from the deck, because the topsides flare 0.188 m per metre of depth over the parallel body and 0.668 m/m at z=4 and a band hung on the deck's half-beam would float up to 120 mm off the plating. It CANNOT follow the sheer - deck_y is flat, which is the whole reason the cap carries the curve - so it rises as the shell allows instead, 0.62 m under the deck aft and 0.30 m at the stem. It is LIGHTER than the topsides, not darker: drawn black, as a real trawler's belting is, it photographed as nothing at all against 0.11-value navy.\n\n5. THE GALLOWS ARE TIED INTO THE DECK. Four red poles is what they were. A trawl gallows takes the whole pull of a warp on a rolling boat, so each leg now stands on a DOUBLER that spreads its load into the plating, with a heel casting, a fore-and-aft HEEL FIN, a KNEE back to the bulwark, a fore-and-aft STRUT off the head onto the swept cap, and a HEAD TIE joining its pair. The strut is the piece that matters from outside the boat: everything else lives below 1.5 m and the bulwark at z=8.6 is 1.54 m, so from every canonical camera but the plan the heelwork is behind it.\n\n6. COLOUR DOES VALUE WORK, FOR FREE. The bucket key is material alone, so every colour here rides in the vertex stream: dark navy plating that merges into the hull's own topsides, an ochre sheer stripe standing 24 mm proud as the deliberate paint boundary, a bone cap rail so the curve itself is the lightest line on the hull, a grey belting breaking the topsides, a cream deckhouse against a dark grey boat deck, and near-black glass bands. Squinted, that is five values instead of one.\n\nTHE DECKHOUSE IS RAKED PLATES, NEVER A BOX. A lower tier tapered in plan, tumbled home, with a front that overhangs 0.55 m forward; a wheelhouse SET BACK on all four sides with a 0.85 m forward-raked windscreen, a reverse-raked aft bulkhead and a roof sloping 0.30 m down aft; four tapering funnel plates raked aft under a black cap. The wheelhouse's windows are BANDS - a dark plate between a coaming and a header - because at capture distance a dark value reads as glass and a punched hole reads as a hole; the lower tier gets real openings and their proud casing instead, so both routes are exercised.\n\nTHE RIG IS RE-BELAYED. The aft signal mast and the sidelights stand on the wheelhouse roof and its wings; the exhaust comes out of the funnel top; the derrick heels to the mast at boat-deck height; the shrouds and the three fender lanyards land on the SWEPT cap, so their ends move with the curve; the samson post is 1.90 m because the bow bulwark it stands in is taller than the old one, and the forestay is made fast to its head. Both masts RAKE AFT and everything carried on one is solved from the rake rather than restated. A line to nowhere is the one thing a rig may not have.\n\nTHE BREAKWATER is four 45 degree walls, and it is the one piece of this fixture with a second, uncomfortable reason to exist: scripts/apps/structure_studio.gd's self-check reads FOUR DIAGONALS off this file to prove it bounds a raked wall in world space. It is a real fitting - a V across an open working deck throws a boarding sea outboard before it reaches the winch - so it is here as one, not as a stub, and it was NOT re-raked into plate for the same reason: tests/plan_collision_physics_test.gd sweeps the surplus of those four bounding boxes for phantom solids, and new geometry in that volume is exactly what that sweep is looking for. The coupling is still wrong the other way round and should be fixed there: an app self-check must not go red because a fixture was redesigned.\n\nCOST, on RenderingServer's own counters over the four canonical views: DRAW CALLS UNCHANGED at 8 undressed / 16 with the shadow pass, because three swept runs, sixty plates and a dozen colours all bucket on MATERIAL alone. Triangles: see tests/trawler_render_capture.gd's budget, which both fixtures are inside - the coarser sheer sampling paid for the bow, the belting and the gallows steelwork.\n\nGENERATED by tools/gen_trawler_fixtures.py, which is where the sheer curve's constants, the bow's flare and rake laws and the sampling guard live and where they should be retuned. The JSON is the interface; the generator is the provenance.\n\nBOW CLOSED: this fixture's SWEPT BAND runs the whole LOOP, stem included, so under the raked bow plate there is a plumb bulwark round the stem as well. tests/plan_collision_physics_test.gd marches a player capsule out through both stems of THIS file, and that is why the swept loop is kept here rather than left to the plate alone.",
+ "_note": "PIECE-BUILT. The deckhouse on this vessel contains ZERO hand-authored plate corners: it is\n48 placements of six standard pieces on the 0.5 m deck grid, resolved by scripts/construction/piece_kit.gd\ninto exactly the `plate` primitives StructureBaker already bakes. Everything else in this file - the\nsheer-band bulwark, the bow bulwark plating, the gallows steelwork, the 62-piece spar and wire rig -\nis probe_trawler_bulwark.json verbatim, so a side-by-side capture isolates the deckhouse.\n\nWHAT REPLACED WHAT. probe_trawler_bulwark's items 100-133 were 34 quads whose corners an agent solved\nby hand: a raked front, two sides tapered in plan AND tumbled home, a boat deck, a three-band\nwheelhouse with its mullions positioned individually, a tapered funnel. All 34 are gone. In their\nplace: 23 wall panels, 4 glazed panels, 12 corner facets, 5 deck tiles and\n4 trim runs, none of which knows this vessel exists.\n\nTHE CORNERS ARE THE WHOLE ARGUMENT. In the hand-authored version the raked front's 0.55 m overhang was\nsmeared into the side plates as a twist that decayed over their whole 7.3 m length - a bespoke move, and\nthe reason the side plates could not have been standard pieces. Here the front rakes 2 quarter-cells, the\nsides tumble home 1, and a `corner_45` knuckle at each of the four corners carries the difference. Its\nplate is bilinear, so a twisted quad is exactly what it is for. The by-product is that every corner on\nthis deckhouse is chamfered, which is the one shape a stack of square panels cannot make.\n\nWHAT THIS FIXTURE STILL CANNOT SAY, and it is not hidden: the hand-authored version's roof fell 0.24 m\nover 8.4 m and its side walls tapered 0.30 m in plan over 7.3 m. Both are under a quarter-cell of the\ngrid and neither survives. See the verdict in the wave report.\n",
  "palette": {
   "wall": [
    0.85,
@@ -160,2182 +160,858 @@
   }
  ],
  "stairs": [],
+ "pieces": [
+  {
+   "id": 200,
+   "piece": "corner_45",
+   "cell": [
+    5,
+    0,
+    35
+   ],
+   "facing": 0,
+   "params": {
+    "span": 1,
+    "height": 5,
+    "rake_a": 2,
+    "rake_b": -1
+   },
+   "color": "#e3e0d4",
+   "_is": "lower tier, forward port knuckle"
+  },
+  {
+   "id": 201,
+   "piece": "corner_45",
+   "cell": [
+    15,
+    0,
+    35
+   ],
+   "facing": 270,
+   "params": {
+    "span": 1,
+    "height": 5,
+    "rake_a": -1,
+    "rake_b": 2
+   },
+   "color": "#e3e0d4",
+   "_is": "lower tier, forward starboard knuckle"
+  },
+  {
+   "id": 202,
+   "piece": "corner_45",
+   "cell": [
+    5,
+    0,
+    50
+   ],
+   "facing": 90,
+   "params": {
+    "span": 1,
+    "height": 5,
+    "rake_a": -1,
+    "rake_b": 1
+   },
+   "color": "#e3e0d4",
+   "_is": "lower tier, after port knuckle"
+  },
+  {
+   "id": 203,
+   "piece": "corner_45",
+   "cell": [
+    15,
+    0,
+    50
+   ],
+   "facing": 180,
+   "params": {
+    "span": 1,
+    "height": 5,
+    "rake_a": 1,
+    "rake_b": -1
+   },
+   "color": "#e3e0d4",
+   "_is": "lower tier, after starboard knuckle"
+  },
+  {
+   "id": 204,
+   "piece": "wall_panel",
+   "cell": [
+    6,
+    0,
+    35
+   ],
+   "facing": 0,
+   "params": {
+    "height": 5,
+    "rake": 2,
+    "span": 2
+   },
+   "color": "#e3e0d4",
+   "_is": "lower tier, raked front"
+  },
+  {
+   "id": 205,
+   "piece": "wall_panel",
+   "cell": [
+    8,
+    0,
+    35
+   ],
+   "facing": 0,
+   "params": {
+    "height": 5,
+    "rake": 2,
+    "span": 2,
+    "opening": "window"
+   },
+   "color": "#e3e0d4",
+   "_is": "lower tier, raked front"
+  },
+  {
+   "id": 206,
+   "piece": "wall_panel",
+   "cell": [
+    10,
+    0,
+    35
+   ],
+   "facing": 0,
+   "params": {
+    "height": 5,
+    "rake": 2,
+    "span": 2,
+    "opening": "window"
+   },
+   "color": "#e3e0d4",
+   "_is": "lower tier, raked front"
+  },
+  {
+   "id": 207,
+   "piece": "wall_panel",
+   "cell": [
+    12,
+    0,
+    35
+   ],
+   "facing": 0,
+   "params": {
+    "height": 5,
+    "rake": 2,
+    "span": 2
+   },
+   "color": "#e3e0d4",
+   "_is": "lower tier, raked front"
+  },
+  {
+   "id": 208,
+   "piece": "wall_panel",
+   "cell": [
+    5,
+    0,
+    49
+   ],
+   "facing": 90,
+   "params": {
+    "height": 5,
+    "rake": -1,
+    "span": 2,
+    "opening": "door"
+   },
+   "color": "#e3e0d4",
+   "_is": "lower tier, port side"
+  },
+  {
+   "id": 209,
+   "piece": "wall_panel",
+   "cell": [
+    5,
+    0,
+    47
+   ],
+   "facing": 90,
+   "params": {
+    "height": 5,
+    "rake": -1,
+    "span": 2,
+    "opening": "window"
+   },
+   "color": "#e3e0d4",
+   "_is": "lower tier, port side"
+  },
+  {
+   "id": 210,
+   "piece": "wall_panel",
+   "cell": [
+    5,
+    0,
+    45
+   ],
+   "facing": 90,
+   "params": {
+    "height": 5,
+    "rake": -1,
+    "span": 2,
+    "opening": "window"
+   },
+   "color": "#e3e0d4",
+   "_is": "lower tier, port side"
+  },
+  {
+   "id": 211,
+   "piece": "wall_panel",
+   "cell": [
+    5,
+    0,
+    43
+   ],
+   "facing": 90,
+   "params": {
+    "height": 5,
+    "rake": -1,
+    "span": 2,
+    "opening": "window"
+   },
+   "color": "#e3e0d4",
+   "_is": "lower tier, port side"
+  },
+  {
+   "id": 212,
+   "piece": "wall_panel",
+   "cell": [
+    5,
+    0,
+    41
+   ],
+   "facing": 90,
+   "params": {
+    "height": 5,
+    "rake": -1,
+    "span": 2,
+    "opening": "window"
+   },
+   "color": "#e3e0d4",
+   "_is": "lower tier, port side"
+  },
+  {
+   "id": 213,
+   "piece": "wall_panel",
+   "cell": [
+    5,
+    0,
+    39
+   ],
+   "facing": 90,
+   "params": {
+    "height": 5,
+    "rake": -1,
+    "span": 3
+   },
+   "color": "#e3e0d4",
+   "_is": "lower tier, port side"
+  },
+  {
+   "id": 214,
+   "piece": "wall_panel",
+   "cell": [
+    15,
+    0,
+    36
+   ],
+   "facing": 270,
+   "params": {
+    "height": 5,
+    "rake": -1,
+    "span": 3
+   },
+   "color": "#e3e0d4",
+   "_is": "lower tier, starboard side"
+  },
+  {
+   "id": 215,
+   "piece": "wall_panel",
+   "cell": [
+    15,
+    0,
+    39
+   ],
+   "facing": 270,
+   "params": {
+    "height": 5,
+    "rake": -1,
+    "span": 2,
+    "opening": "window"
+   },
+   "color": "#e3e0d4",
+   "_is": "lower tier, starboard side"
+  },
+  {
+   "id": 216,
+   "piece": "wall_panel",
+   "cell": [
+    15,
+    0,
+    41
+   ],
+   "facing": 270,
+   "params": {
+    "height": 5,
+    "rake": -1,
+    "span": 2,
+    "opening": "window"
+   },
+   "color": "#e3e0d4",
+   "_is": "lower tier, starboard side"
+  },
+  {
+   "id": 217,
+   "piece": "wall_panel",
+   "cell": [
+    15,
+    0,
+    43
+   ],
+   "facing": 270,
+   "params": {
+    "height": 5,
+    "rake": -1,
+    "span": 2,
+    "opening": "window"
+   },
+   "color": "#e3e0d4",
+   "_is": "lower tier, starboard side"
+  },
+  {
+   "id": 218,
+   "piece": "wall_panel",
+   "cell": [
+    15,
+    0,
+    45
+   ],
+   "facing": 270,
+   "params": {
+    "height": 5,
+    "rake": -1,
+    "span": 2,
+    "opening": "window"
+   },
+   "color": "#e3e0d4",
+   "_is": "lower tier, starboard side"
+  },
+  {
+   "id": 219,
+   "piece": "wall_panel",
+   "cell": [
+    15,
+    0,
+    47
+   ],
+   "facing": 270,
+   "params": {
+    "height": 5,
+    "rake": -1,
+    "span": 2,
+    "opening": "door"
+   },
+   "color": "#e3e0d4",
+   "_is": "lower tier, starboard side"
+  },
+  {
+   "id": 220,
+   "piece": "wall_panel",
+   "cell": [
+    14,
+    0,
+    50
+   ],
+   "facing": 180,
+   "params": {
+    "height": 5,
+    "rake": 1,
+    "span": 3
+   },
+   "color": "#e3e0d4",
+   "_is": "lower tier, aft bulkhead"
+  },
+  {
+   "id": 221,
+   "piece": "wall_panel",
+   "cell": [
+    11,
+    0,
+    50
+   ],
+   "facing": 180,
+   "params": {
+    "height": 5,
+    "rake": 1,
+    "span": 2,
+    "opening": "door"
+   },
+   "color": "#e3e0d4",
+   "_is": "lower tier, aft bulkhead"
+  },
+  {
+   "id": 222,
+   "piece": "wall_panel",
+   "cell": [
+    9,
+    0,
+    50
+   ],
+   "facing": 180,
+   "params": {
+    "height": 5,
+    "rake": 1,
+    "span": 3
+   },
+   "color": "#e3e0d4",
+   "_is": "lower tier, aft bulkhead"
+  },
+  {
+   "id": 223,
+   "piece": "deck_tile",
+   "cell": [
+    4,
+    5,
+    34
+   ],
+   "facing": 0,
+   "params": {
+    "span": 12,
+    "depth": 16,
+    "gauge": "deck"
+   },
+   "color": "#4d5257",
+   "_is": "boat deck"
+  },
+  {
+   "id": 224,
+   "piece": "deck_tile",
+   "cell": [
+    4,
+    5,
+    50
+   ],
+   "facing": 0,
+   "params": {
+    "span": 12,
+    "depth": 1,
+    "gauge": "deck"
+   },
+   "color": "#4d5257",
+   "_is": "boat deck, after strip"
+  },
+  {
+   "id": 225,
+   "piece": "trim_band",
+   "cell": [
+    4,
+    5,
+    51
+   ],
+   "facing": 90,
+   "params": {
+    "profile": "coaming",
+    "span": 16
+   },
+   "color": "#e3e0d4",
+   "_is": "boat deck coaming, port"
+  },
+  {
+   "id": 226,
+   "piece": "trim_band",
+   "cell": [
+    4,
+    5,
+    35
+   ],
+   "facing": 90,
+   "params": {
+    "profile": "coaming",
+    "span": 1
+   },
+   "color": "#e3e0d4",
+   "_is": "boat deck coaming, port"
+  },
+  {
+   "id": 227,
+   "piece": "trim_band",
+   "cell": [
+    16,
+    5,
+    34
+   ],
+   "facing": 270,
+   "params": {
+    "profile": "coaming",
+    "span": 16
+   },
+   "color": "#e3e0d4",
+   "_is": "boat deck coaming, starboard"
+  },
+  {
+   "id": 228,
+   "piece": "trim_band",
+   "cell": [
+    16,
+    5,
+    50
+   ],
+   "facing": 270,
+   "params": {
+    "profile": "coaming",
+    "span": 1
+   },
+   "color": "#e3e0d4",
+   "_is": "boat deck coaming, starboard"
+  },
+  {
+   "id": 229,
+   "piece": "corner_45",
+   "cell": [
+    6,
+    5,
+    38
+   ],
+   "facing": 0,
+   "params": {
+    "span": 1,
+    "height": 5,
+    "rake_a": 4,
+    "rake_b": -1
+   },
+   "color": "#e3e0d4",
+   "_is": "wheelhouse, forward port knuckle"
+  },
+  {
+   "id": 230,
+   "piece": "corner_45",
+   "cell": [
+    14,
+    5,
+    38
+   ],
+   "facing": 270,
+   "params": {
+    "span": 1,
+    "height": 5,
+    "rake_a": -1,
+    "rake_b": 4
+   },
+   "color": "#e3e0d4",
+   "_is": "wheelhouse, forward starboard knuckle"
+  },
+  {
+   "id": 231,
+   "piece": "corner_45",
+   "cell": [
+    6,
+    5,
+    46
+   ],
+   "facing": 90,
+   "params": {
+    "span": 1,
+    "height": 5,
+    "rake_a": -1,
+    "rake_b": 1
+   },
+   "color": "#e3e0d4",
+   "_is": "wheelhouse, after port knuckle"
+  },
+  {
+   "id": 232,
+   "piece": "corner_45",
+   "cell": [
+    14,
+    5,
+    46
+   ],
+   "facing": 180,
+   "params": {
+    "span": 1,
+    "height": 5,
+    "rake_a": 1,
+    "rake_b": -1
+   },
+   "color": "#e3e0d4",
+   "_is": "wheelhouse, after starboard knuckle"
+  },
+  {
+   "id": 233,
+   "piece": "wall_glazed",
+   "cell": [
+    7,
+    5,
+    38
+   ],
+   "facing": 0,
+   "params": {
+    "span": 6,
+    "height": 5,
+    "rake": 4,
+    "sill": 2,
+    "band": 2,
+    "lights": 4
+   },
+   "color": "#e3e0d4",
+   "_is": "wheelhouse, raked windscreen"
+  },
+  {
+   "id": 234,
+   "piece": "wall_glazed",
+   "cell": [
+    6,
+    5,
+    45
+   ],
+   "facing": 90,
+   "params": {
+    "span": 6,
+    "height": 5,
+    "rake": -1,
+    "sill": 2,
+    "band": 2,
+    "lights": 4
+   },
+   "color": "#e3e0d4",
+   "_is": "wheelhouse, port side lights"
+  },
+  {
+   "id": 235,
+   "piece": "wall_glazed",
+   "cell": [
+    14,
+    5,
+    39
+   ],
+   "facing": 270,
+   "params": {
+    "span": 6,
+    "height": 5,
+    "rake": -1,
+    "sill": 2,
+    "band": 2,
+    "lights": 4
+   },
+   "color": "#e3e0d4",
+   "_is": "wheelhouse, starboard side lights"
+  },
+  {
+   "id": 236,
+   "piece": "wall_glazed",
+   "cell": [
+    13,
+    5,
+    46
+   ],
+   "facing": 180,
+   "params": {
+    "span": 6,
+    "height": 5,
+    "rake": 1,
+    "sill": 2,
+    "band": 2,
+    "lights": 3
+   },
+   "color": "#e3e0d4",
+   "_is": "wheelhouse, aft bulkhead"
+  },
+  {
+   "id": 237,
+   "piece": "deck_tile",
+   "cell": [
+    5,
+    10,
+    37
+   ],
+   "facing": 0,
+   "params": {
+    "span": 8,
+    "depth": 10,
+    "gauge": "deck"
+   },
+   "color": "#858a8f",
+   "_is": "wheelhouse roof"
+  },
+  {
+   "id": 238,
+   "piece": "deck_tile",
+   "cell": [
+    13,
+    10,
+    37
+   ],
+   "facing": 0,
+   "params": {
+    "span": 2,
+    "depth": 10,
+    "gauge": "deck"
+   },
+   "color": "#858a8f",
+   "_is": "wheelhouse roof, starboard strip"
+  },
+  {
+   "id": 239,
+   "piece": "corner_45",
+   "cell": [
+    8,
+    5,
+    47
+   ],
+   "facing": 0,
+   "params": {
+    "span": 1,
+    "height": 6,
+    "rake_a": -1,
+    "rake_b": -1
+   },
+   "color": "#9e5c1c",
+   "_is": "funnel, forward port knuckle"
+  },
+  {
+   "id": 240,
+   "piece": "corner_45",
+   "cell": [
+    12,
+    5,
+    47
+   ],
+   "facing": 270,
+   "params": {
+    "span": 1,
+    "height": 6,
+    "rake_a": -1,
+    "rake_b": -1
+   },
+   "color": "#9e5c1c",
+   "_is": "funnel, forward starboard knuckle"
+  },
+  {
+   "id": 241,
+   "piece": "corner_45",
+   "cell": [
+    8,
+    5,
+    50
+   ],
+   "facing": 90,
+   "params": {
+    "span": 1,
+    "height": 6,
+    "rake_a": -1,
+    "rake_b": -1
+   },
+   "color": "#9e5c1c",
+   "_is": "funnel, after port knuckle"
+  },
+  {
+   "id": 242,
+   "piece": "corner_45",
+   "cell": [
+    12,
+    5,
+    50
+   ],
+   "facing": 180,
+   "params": {
+    "span": 1,
+    "height": 6,
+    "rake_a": -1,
+    "rake_b": -1
+   },
+   "color": "#9e5c1c",
+   "_is": "funnel, after starboard knuckle"
+  },
+  {
+   "id": 243,
+   "piece": "wall_panel",
+   "cell": [
+    9,
+    5,
+    47
+   ],
+   "facing": 0,
+   "params": {
+    "height": 6,
+    "rake": -1,
+    "span": 2
+   },
+   "color": "#9e5c1c",
+   "_is": "funnel, forward face"
+  },
+  {
+   "id": 244,
+   "piece": "wall_panel",
+   "cell": [
+    11,
+    5,
+    50
+   ],
+   "facing": 180,
+   "params": {
+    "height": 6,
+    "rake": -1,
+    "span": 2
+   },
+   "color": "#9e5c1c",
+   "_is": "funnel, aft face"
+  },
+  {
+   "id": 245,
+   "piece": "wall_panel",
+   "cell": [
+    8,
+    5,
+    49
+   ],
+   "facing": 90,
+   "params": {
+    "height": 6,
+    "rake": -1,
+    "span": 1
+   },
+   "color": "#9e5c1c",
+   "_is": "funnel, port face"
+  },
+  {
+   "id": 246,
+   "piece": "wall_panel",
+   "cell": [
+    12,
+    5,
+    48
+   ],
+   "facing": 270,
+   "params": {
+    "height": 6,
+    "rake": -1,
+    "span": 1
+   },
+   "color": "#9e5c1c",
+   "_is": "funnel, starboard face"
+  },
+  {
+   "id": 247,
+   "piece": "deck_tile",
+   "cell": [
+    8,
+    11,
+    47
+   ],
+   "facing": 0,
+   "params": {
+    "span": 4,
+    "depth": 3,
+    "gauge": "heavy"
+   },
+   "color": "#1c1c1f",
+   "_is": "funnel cap"
+  }
+ ],
  "items": [
-  {
-   "id": 100,
-   "item_id": "plate",
-   "at": [
-    0.0,
-    0.0,
-    0.0
-   ],
-   "props": {
-    "__is": "lower tier, raked front \u2014 the top overhangs 0.55 m forward",
-    "primitive": "plate",
-    "corners": [
-     [
-      7.65,
-      0.0,
-      17.6
-     ],
-     [
-      2.35,
-      0.0,
-      17.6
-     ],
-     [
-      2.2,
-      2.74,
-      17.05
-     ],
-     [
-      7.8,
-      2.74,
-      17.05
-     ]
-    ],
-    "thickness": 0.1,
-    "color": [
-     0.89,
-     0.88,
-     0.83
-    ],
-    "material": "painted",
-    "openings": [
-     {
-      "type": "window",
-      "offset": 1.55,
-      "width": 2.35,
-      "sill": 1.3,
-      "height": 0.72
-     }
-    ]
-   }
-  },
-  {
-   "id": 400,
-   "item_id": "plate",
-   "at": [
-    0.0,
-    0.0,
-    0.0
-   ],
-   "props": {
-    "__is": "lower tier, raked front \u2014 GLASS, recessed 0.10 m in the reveal",
-    "primitive": "plate",
-    "corners": [
-     [
-      6.2894,
-      1.1749,
-      17.4661
-     ],
-     [
-      3.7106,
-      1.1749,
-      17.4661
-     ],
-     [
-      3.6861,
-      2.1148,
-      17.2775
-     ],
-     [
-      6.3139,
-      2.1148,
-      17.2775
-     ]
-    ],
-    "thickness": 0.03,
-    "color": [
-     0.09,
-     0.11,
-     0.14
-    ],
-    "material": "painted"
-   }
-  },
-  {
-   "id": 401,
-   "item_id": "plate",
-   "at": [
-    0.0,
-    0.0,
-    0.0
-   ],
-   "props": {
-    "__is": "window mullion, standing in the reveal",
-    "primitive": "plate",
-    "corners": [
-     [
-      5.0499,
-      1.2777,
-      17.369
-     ],
-     [
-      4.9501,
-      1.2777,
-      17.369
-     ],
-     [
-      4.9494,
-      1.9826,
-      17.2275
-     ],
-     [
-      5.0506,
-      1.9826,
-      17.2275
-     ]
-    ],
-    "thickness": 0.15000000000000002,
-    "color": [
-     0.89,
-     0.88,
-     0.83
-    ],
-    "material": "painted",
-    "solid": false
-   }
-  },
-  {
-   "id": 101,
-   "item_id": "plate",
-   "at": [
-    0.0,
-    0.0,
-    0.0
-   ],
-   "props": {
-    "__is": "lower tier, port side \u2014 tapered in plan and tumbled home",
-    "primitive": "plate",
-    "corners": [
-     [
-      2.35,
-      0.0,
-      17.6
-     ],
-     [
-      2.05,
-      0.0,
-      24.9
-     ],
-     [
-      1.92,
-      2.5,
-      25.15
-     ],
-     [
-      2.2,
-      2.74,
-      17.05
-     ]
-    ],
-    "thickness": 0.1,
-    "color": [
-     0.89,
-     0.88,
-     0.83
-    ],
-    "material": "painted",
-    "openings": [
-     {
-      "type": "window",
-      "offset": 1.25,
-      "width": 3.55,
-      "sill": 1.3,
-      "height": 0.72
-     },
-     {
-      "type": "door",
-      "offset": 5.95,
-      "width": 0.85,
-      "sill": 0.0,
-      "height": 1.95
-     }
-    ]
-   }
-  },
-  {
-   "id": 402,
-   "item_id": "plate",
-   "at": [
-    0.0,
-    0.0,
-    0.0
-   ],
-   "props": {
-    "__is": "lower tier, port side \u2014 GLASS, recessed 0.10 m in the reveal",
-    "primitive": "plate",
-    "corners": [
-     [
-      2.3405,
-      1.2067,
-      18.482
-     ],
-     [
-      2.1973,
-      1.1543,
-      22.2464
-     ],
-     [
-      2.1477,
-      2.0888,
-      22.2322
-     ],
-     [
-      2.2873,
-      2.1839,
-      18.3257
-     ]
-    ],
-    "thickness": 0.03,
-    "color": [
-     0.09,
-     0.11,
-     0.14
-    ],
-    "material": "painted"
-   }
-  },
-  {
-   "id": 403,
-   "item_id": "plate",
-   "at": [
-    0.0,
-    0.0,
-    0.0
-   ],
-   "props": {
-    "__is": "window mullion, standing in the reveal",
-    "primitive": "plate",
-    "corners": [
-     [
-      2.2118,
-      1.3056,
-      19.7103
-     ],
-     [
-      2.208,
-      1.304,
-      19.8101
-     ],
-     [
-      2.1692,
-      2.0255,
-      19.7309
-     ],
-     [
-      2.1728,
-      2.0279,
-      19.6283
-     ]
-    ],
-    "thickness": 0.15000000000000002,
-    "color": [
-     0.89,
-     0.88,
-     0.83
-    ],
-    "material": "painted",
-    "solid": false
-   }
-  },
-  {
-   "id": 404,
-   "item_id": "plate",
-   "at": [
-    0.0,
-    0.0,
-    0.0
-   ],
-   "props": {
-    "__is": "window mullion, standing in the reveal",
-    "primitive": "plate",
-    "corners": [
-     [
-      2.1673,
-      1.2875,
-      20.8912
-     ],
-     [
-      2.1635,
-      1.286,
-      20.991
-     ],
-     [
-      2.1254,
-      1.9975,
-      20.9451
-     ],
-     [
-      2.1291,
-      1.9999,
-      20.8425
-     ]
-    ],
-    "thickness": 0.15000000000000002,
-    "color": [
-     0.89,
-     0.88,
-     0.83
-    ],
-    "material": "painted",
-    "solid": false
-   }
-  },
-  {
-   "id": 102,
-   "item_id": "plate",
-   "at": [
-    0.0,
-    0.0,
-    0.0
-   ],
-   "props": {
-    "__is": "lower tier, starboard side",
-    "primitive": "plate",
-    "corners": [
-     [
-      7.95,
-      0.0,
-      24.9
-     ],
-     [
-      7.65,
-      0.0,
-      17.6
-     ],
-     [
-      7.8,
-      2.74,
-      17.05
-     ],
-     [
-      8.08,
-      2.5,
-      25.15
-     ]
-    ],
-    "thickness": 0.1,
-    "color": [
-     0.89,
-     0.88,
-     0.83
-    ],
-    "material": "painted",
-    "openings": [
-     {
-      "type": "door",
-      "offset": 0.95,
-      "width": 0.85,
-      "sill": 0.0,
-      "height": 1.95
-     },
-     {
-      "type": "window",
-      "offset": 2.85,
-      "width": 3.55,
-      "sill": 1.3,
-      "height": 0.72
-     }
-    ]
-   }
-  },
-  {
-   "id": 405,
-   "item_id": "plate",
-   "at": [
-    0.0,
-    0.0,
-    0.0
-   ],
-   "props": {
-    "__is": "lower tier, starboard side \u2014 GLASS, recessed 0.10 m in the reveal",
-    "primitive": "plate",
-    "corners": [
-     [
-      7.8048,
-      1.1535,
-      22.3033
-     ],
-     [
-      7.6617,
-      1.2059,
-      18.5389
-     ],
-     [
-      7.7148,
-      2.1824,
-      18.3847
-     ],
-     [
-      7.8544,
-      2.0874,
-      22.2912
-     ]
-    ],
-    "thickness": 0.03,
-    "color": [
-     0.09,
-     0.11,
-     0.14
-    ],
-    "material": "painted"
-   }
-  },
-  {
-   "id": 406,
-   "item_id": "plate",
-   "at": [
-    0.0,
-    0.0,
-    0.0
-   ],
-   "props": {
-    "__is": "window mullion, standing in the reveal",
-    "primitive": "plate",
-    "corners": [
-     [
-      7.8387,
-      1.2851,
-      21.0481
-     ],
-     [
-      7.8349,
-      1.2867,
-      20.9484
-     ],
-     [
-      7.873,
-      1.9985,
-      20.9013
-     ],
-     [
-      7.8767,
-      1.9961,
-      21.0039
-     ]
-    ],
-    "thickness": 0.15000000000000002,
-    "color": [
-     0.89,
-     0.88,
-     0.83
-    ],
-    "material": "painted",
-    "solid": false
-   }
-  },
-  {
-   "id": 407,
-   "item_id": "plate",
-   "at": [
-    0.0,
-    0.0,
-    0.0
-   ],
-   "props": {
-    "__is": "window mullion, standing in the reveal",
-    "primitive": "plate",
-    "corners": [
-     [
-      7.7941,
-      1.3032,
-      19.8673
-     ],
-     [
-      7.7903,
-      1.3047,
-      19.7675
-     ],
-     [
-      7.8293,
-      2.0265,
-      19.6871
-     ],
-     [
-      7.833,
-      2.0241,
-      19.7897
-     ]
-    ],
-    "thickness": 0.15000000000000002,
-    "color": [
-     0.89,
-     0.88,
-     0.83
-    ],
-    "material": "painted",
-    "solid": false
-   }
-  },
-  {
-   "id": 103,
-   "item_id": "plate",
-   "at": [
-    0.0,
-    0.0,
-    0.0
-   ],
-   "props": {
-    "__is": "lower tier, aft bulkhead \u2014 the working deck door",
-    "primitive": "plate",
-    "corners": [
-     [
-      2.05,
-      0.0,
-      24.9
-     ],
-     [
-      7.95,
-      0.0,
-      24.9
-     ],
-     [
-      8.08,
-      2.5,
-      25.15
-     ],
-     [
-      1.92,
-      2.5,
-      25.15
-     ]
-    ],
-    "thickness": 0.1,
-    "color": [
-     0.89,
-     0.88,
-     0.83
-    ],
-    "material": "painted",
-    "openings": [
-     {
-      "type": "door",
-      "offset": 2.45,
-      "width": 1.15,
-      "sill": 0.0,
-      "height": 2.0
-     }
-    ]
-   }
-  },
-  {
-   "id": 104,
-   "item_id": "plate",
-   "at": [
-    0.0,
-    0.0,
-    0.0
-   ],
-   "props": {
-    "__is": "boat deck \u2014 the lower tier's roof, sloping 0.24 m aft",
-    "primitive": "plate",
-    "corners": [
-     [
-      2.06,
-      2.7441,
-      16.91
-     ],
-     [
-      1.78,
-      2.4959,
-      25.29
-     ],
-     [
-      8.22,
-      2.4959,
-      25.29
-     ],
-     [
-      7.94,
-      2.7441,
-      16.91
-     ]
-    ],
-    "thickness": 0.13,
-    "color": [
-     0.3,
-     0.32,
-     0.34
-    ],
-    "material": "painted"
-   }
-  },
-  {
-   "id": 105,
-   "item_id": "plate",
-   "at": [
-    0.0,
-    0.0,
-    0.0
-   ],
-   "props": {
-    "__is": "wheelhouse, forward \u2014 RAKED WINDSCREEN, top 0.85 m forward of its foot, coaming",
-    "primitive": "plate",
-    "corners": [
-     [
-      7.25,
-      2.6822,
-      19.0
-     ],
-     [
-      2.75,
-      2.6822,
-      19.0
-     ],
-     [
-      2.7058,
-      3.4873,
-      18.711
-     ],
-     [
-      7.2942,
-      3.4873,
-      18.711
-     ]
-    ],
-    "thickness": 0.09,
-    "color": [
-     0.89,
-     0.88,
-     0.83
-    ],
-    "material": "painted"
-   }
-  },
-  {
-   "id": 106,
-   "item_id": "plate",
-   "at": [
-    0.0,
-    0.0,
-    0.0
-   ],
-   "props": {
-    "__is": "wheelhouse, forward \u2014 RAKED WINDSCREEN, top 0.85 m forward of its foot, GLASS BAND, recessed 0.10 m in the reveal",
-    "primitive": "plate",
-    "corners": [
-     [
-      7.288,
-      3.4083,
-      18.8456
-     ],
-     [
-      2.712,
-      3.4083,
-      18.8456
-     ],
-     [
-      2.645,
-      4.6283,
-      18.4076
-     ],
-     [
-      7.355,
-      4.6283,
-      18.4076
-     ]
-    ],
-    "thickness": 0.03,
-    "color": [
-     0.09,
-     0.11,
-     0.14
-    ],
-    "material": "painted"
-   }
-  },
-  {
-   "id": 107,
-   "item_id": "plate",
-   "at": [
-    0.0,
-    0.0,
-    0.0
-   ],
-   "props": {
-    "__is": "wheelhouse, forward \u2014 RAKED WINDSCREEN, top 0.85 m forward of its foot, header",
-    "primitive": "plate",
-    "corners": [
-     [
-      7.3488,
-      4.4817,
-      18.354
-     ],
-     [
-      2.6512,
-      4.4817,
-      18.354
-     ],
-     [
-      2.62,
-      5.05,
-      18.15
-     ],
-     [
-      7.38,
-      5.05,
-      18.15
-     ]
-    ],
-    "thickness": 0.09,
-    "color": [
-     0.89,
-     0.88,
-     0.83
-    ],
-    "material": "painted"
-   }
-  },
-  {
-   "id": 420,
-   "item_id": "plate",
-   "at": [
-    0.0,
-    0.0,
-    0.0
-   ],
-   "props": {
-    "__is": "window mullion, standing in the reveal",
-    "primitive": "plate",
-    "corners": [
-     [
-      6.1965,
-      3.4957,
-      18.7345
-     ],
-     [
-      6.0977,
-      3.4957,
-      18.7345
-     ],
-     [
-      6.1238,
-      4.4901,
-      18.3775
-     ],
-     [
-      6.225,
-      4.4901,
-      18.3775
-     ]
-    ],
-    "thickness": 0.15000000000000002,
-    "color": [
-     0.89,
-     0.88,
-     0.83
-    ],
-    "material": "painted",
-    "solid": false
-   }
-  },
-  {
-   "id": 421,
-   "item_id": "plate",
-   "at": [
-    0.0,
-    0.0,
-    0.0
-   ],
-   "props": {
-    "__is": "window mullion, standing in the reveal",
-    "primitive": "plate",
-    "corners": [
-     [
-      5.0494,
-      3.4957,
-      18.7345
-     ],
-     [
-      4.9506,
-      3.4957,
-      18.7345
-     ],
-     [
-      4.9494,
-      4.4901,
-      18.3775
-     ],
-     [
-      5.0506,
-      4.4901,
-      18.3775
-     ]
-    ],
-    "thickness": 0.15000000000000002,
-    "color": [
-     0.89,
-     0.88,
-     0.83
-    ],
-    "material": "painted",
-    "solid": false
-   }
-  },
-  {
-   "id": 422,
-   "item_id": "plate",
-   "at": [
-    0.0,
-    0.0,
-    0.0
-   ],
-   "props": {
-    "__is": "window mullion, standing in the reveal",
-    "primitive": "plate",
-    "corners": [
-     [
-      3.9023,
-      3.4957,
-      18.7345
-     ],
-     [
-      3.8035,
-      3.4957,
-      18.7345
-     ],
-     [
-      3.775,
-      4.4901,
-      18.3775
-     ],
-     [
-      3.8762,
-      4.4901,
-      18.3775
-     ]
-    ],
-    "thickness": 0.15000000000000002,
-    "color": [
-     0.89,
-     0.88,
-     0.83
-    ],
-    "material": "painted",
-    "solid": false
-   }
-  },
-  {
-   "id": 423,
-   "item_id": "plate",
-   "at": [
-    0.0,
-    0.0,
-    0.0
-   ],
-   "props": {
-    "__is": "wheelhouse corner pillar",
-    "primitive": "plate",
-    "corners": [
-     [
-      7.2942,
-      3.4957,
-      18.7345
-     ],
-     [
-      7.1657,
-      3.4957,
-      18.7345
-     ],
-     [
-      7.2173,
-      4.4901,
-      18.3775
-     ],
-     [
-      7.3488,
-      4.4901,
-      18.3775
-     ]
-    ],
-    "thickness": 0.15000000000000002,
-    "color": [
-     0.89,
-     0.88,
-     0.83
-    ],
-    "material": "painted",
-    "solid": false
-   }
-  },
-  {
-   "id": 424,
-   "item_id": "plate",
-   "at": [
-    0.0,
-    0.0,
-    0.0
-   ],
-   "props": {
-    "__is": "wheelhouse corner pillar",
-    "primitive": "plate",
-    "corners": [
-     [
-      2.8343,
-      3.4957,
-      18.7345
-     ],
-     [
-      2.7058,
-      3.4957,
-      18.7345
-     ],
-     [
-      2.6512,
-      4.4901,
-      18.3775
-     ],
-     [
-      2.7827,
-      4.4901,
-      18.3775
-     ]
-    ],
-    "thickness": 0.15000000000000002,
-    "color": [
-     0.89,
-     0.88,
-     0.83
-    ],
-    "material": "painted",
-    "solid": false
-   }
-  },
-  {
-   "id": 108,
-   "item_id": "plate",
-   "at": [
-    0.0,
-    0.0,
-    0.0
-   ],
-   "props": {
-    "__is": "wheelhouse, port side, coaming",
-    "primitive": "plate",
-    "corners": [
-     [
-      2.75,
-      2.6822,
-      19.0
-     ],
-     [
-      2.6,
-      2.5519,
-      23.4
-     ],
-     [
-      2.566,
-      3.2993,
-      23.502
-     ],
-     [
-      2.7058,
-      3.4873,
-      18.711
-     ]
-    ],
-    "thickness": 0.09,
-    "color": [
-     0.89,
-     0.88,
-     0.83
-    ],
-    "material": "painted"
-   }
-  },
-  {
-   "id": 109,
-   "item_id": "plate",
-   "at": [
-    0.0,
-    0.0,
-    0.0
-   ],
-   "props": {
-    "__is": "wheelhouse, port side, GLASS BAND, recessed 0.10 m in the reveal",
-    "primitive": "plate",
-    "corners": [
-     [
-      2.8122,
-      3.3728,
-      18.7569
-     ],
-     [
-      2.6709,
-      3.1934,
-      23.4897
-     ],
-     [
-      2.6188,
-      4.3392,
-      23.6461
-     ],
-     [
-      2.7444,
-      4.607,
-      18.3138
-     ]
-    ],
-    "thickness": 0.03,
-    "color": [
-     0.09,
-     0.11,
-     0.14
-    ],
-    "material": "painted"
-   }
-  },
-  {
-   "id": 110,
-   "item_id": "plate",
-   "at": [
-    0.0,
-    0.0,
-    0.0
-   ],
-   "props": {
-    "__is": "wheelhouse, port side, header",
-    "primitive": "plate",
-    "corners": [
-     [
-      2.6512,
-      4.4817,
-      18.354
-     ],
-     [
-      2.524,
-      4.2225,
-      23.628
-     ],
-     [
-      2.5,
-      4.75,
-      23.7
-     ],
-     [
-      2.62,
-      5.05,
-      18.15
-     ]
-    ],
-    "thickness": 0.09,
-    "color": [
-     0.89,
-     0.88,
-     0.83
-    ],
-    "material": "painted"
-   }
-  },
-  {
-   "id": 425,
-   "item_id": "plate",
-   "at": [
-    0.0,
-    0.0,
-    0.0
-   ],
-   "props": {
-    "__is": "window mullion, standing in the reveal",
-    "primitive": "plate",
-    "corners": [
-     [
-      2.6972,
-      3.4435,
-      19.8619
-     ],
-     [
-      2.6944,
-      3.4398,
-      19.957
-     ],
-     [
-      2.6431,
-      4.4157,
-      19.7256
-     ],
-     [
-      2.6456,
-      4.4208,
-      19.6209
-     ]
-    ],
-    "thickness": 0.15000000000000002,
-    "color": [
-     0.89,
-     0.88,
-     0.83
-    ],
-    "material": "painted",
-    "solid": false
-   }
-  },
-  {
-   "id": 426,
-   "item_id": "plate",
-   "at": [
-    0.0,
-    0.0,
-    0.0
-   ],
-   "props": {
-    "__is": "window mullion, standing in the reveal",
-    "primitive": "plate",
-    "corners": [
-     [
-      2.6622,
-      3.3965,
-      21.0597
-     ],
-     [
-      2.6595,
-      3.3928,
-      21.1548
-     ],
-     [
-      2.6113,
-      4.3509,
-      21.0441
-     ],
-     [
-      2.6138,
-      4.356,
-      20.9394
-     ]
-    ],
-    "thickness": 0.15000000000000002,
-    "color": [
-     0.89,
-     0.88,
-     0.83
-    ],
-    "material": "painted",
-    "solid": false
-   }
-  },
-  {
-   "id": 427,
-   "item_id": "plate",
-   "at": [
-    0.0,
-    0.0,
-    0.0
-   ],
-   "props": {
-    "__is": "window mullion, standing in the reveal",
-    "primitive": "plate",
-    "corners": [
-     [
-      2.6273,
-      3.3495,
-      22.2574
-     ],
-     [
-      2.6245,
-      3.3458,
-      22.3525
-     ],
-     [
-      2.5795,
-      4.2861,
-      22.3626
-     ],
-     [
-      2.582,
-      4.2912,
-      22.2579
-     ]
-    ],
-    "thickness": 0.15000000000000002,
-    "color": [
-     0.89,
-     0.88,
-     0.83
-    ],
-    "material": "painted",
-    "solid": false
-   }
-  },
-  {
-   "id": 428,
-   "item_id": "plate",
-   "at": [
-    0.0,
-    0.0,
-    0.0
-   ],
-   "props": {
-    "__is": "wheelhouse corner pillar",
-    "primitive": "plate",
-    "corners": [
-     [
-      2.7308,
-      3.4886,
-      18.7117
-     ],
-     [
-      2.7271,
-      3.4838,
-      18.8353
-     ],
-     [
-      2.6729,
-      4.4764,
-      18.4908
-     ],
-     [
-      2.6762,
-      4.483,
-      18.3547
-     ]
-    ],
-    "thickness": 0.15000000000000002,
-    "color": [
-     0.89,
-     0.88,
-     0.83
-    ],
-    "material": "painted",
-    "solid": false
-   }
-  },
-  {
-   "id": 429,
-   "item_id": "plate",
-   "at": [
-    0.0,
-    0.0,
-    0.0
-   ],
-   "props": {
-    "__is": "wheelhouse corner pillar",
-    "primitive": "plate",
-    "corners": [
-     [
-      2.5946,
-      3.3055,
-      23.3791
-     ],
-     [
-      2.591,
-      3.3006,
-      23.5027
-     ],
-     [
-      2.549,
-      4.2238,
-      23.6287
-     ],
-     [
-      2.5522,
-      4.2305,
-      23.4927
-     ]
-    ],
-    "thickness": 0.15000000000000002,
-    "color": [
-     0.89,
-     0.88,
-     0.83
-    ],
-    "material": "painted",
-    "solid": false
-   }
-  },
-  {
-   "id": 111,
-   "item_id": "plate",
-   "at": [
-    0.0,
-    0.0,
-    0.0
-   ],
-   "props": {
-    "__is": "wheelhouse, starboard side, coaming",
-    "primitive": "plate",
-    "corners": [
-     [
-      7.4,
-      2.5519,
-      23.4
-     ],
-     [
-      7.25,
-      2.6822,
-      19.0
-     ],
-     [
-      7.2942,
-      3.4873,
-      18.711
-     ],
-     [
-      7.434,
-      3.2993,
-      23.502
-     ]
-    ],
-    "thickness": 0.09,
-    "color": [
-     0.89,
-     0.88,
-     0.83
-    ],
-    "material": "painted"
-   }
-  },
-  {
-   "id": 112,
-   "item_id": "plate",
-   "at": [
-    0.0,
-    0.0,
-    0.0
-   ],
-   "props": {
-    "__is": "wheelhouse, starboard side, GLASS BAND, recessed 0.10 m in the reveal",
-    "primitive": "plate",
-    "corners": [
-     [
-      7.3291,
-      3.1934,
-      23.4897
-     ],
-     [
-      7.1878,
-      3.3728,
-      18.7569
-     ],
-     [
-      7.2556,
-      4.607,
-      18.3138
-     ],
-     [
-      7.3812,
-      4.3392,
-      23.6461
-     ]
-    ],
-    "thickness": 0.03,
-    "color": [
-     0.09,
-     0.11,
-     0.14
-    ],
-    "material": "painted"
-   }
-  },
-  {
-   "id": 113,
-   "item_id": "plate",
-   "at": [
-    0.0,
-    0.0,
-    0.0
-   ],
-   "props": {
-    "__is": "wheelhouse, starboard side, header",
-    "primitive": "plate",
-    "corners": [
-     [
-      7.476,
-      4.2225,
-      23.628
-     ],
-     [
-      7.3488,
-      4.4817,
-      18.354
-     ],
-     [
-      7.38,
-      5.05,
-      18.15
-     ],
-     [
-      7.5,
-      4.75,
-      23.7
-     ]
-    ],
-    "thickness": 0.09,
-    "color": [
-     0.89,
-     0.88,
-     0.83
-    ],
-    "material": "painted"
-   }
-  },
-  {
-   "id": 430,
-   "item_id": "plate",
-   "at": [
-    0.0,
-    0.0,
-    0.0
-   ],
-   "props": {
-    "__is": "window mullion, standing in the reveal",
-    "primitive": "plate",
-    "corners": [
-     [
-      7.3755,
-      3.3458,
-      22.3525
-     ],
-     [
-      7.3727,
-      3.3495,
-      22.2574
-     ],
-     [
-      7.418,
-      4.2912,
-      22.2579
-     ],
-     [
-      7.4205,
-      4.2861,
-      22.3626
-     ]
-    ],
-    "thickness": 0.15000000000000002,
-    "color": [
-     0.89,
-     0.88,
-     0.83
-    ],
-    "material": "painted",
-    "solid": false
-   }
-  },
-  {
-   "id": 431,
-   "item_id": "plate",
-   "at": [
-    0.0,
-    0.0,
-    0.0
-   ],
-   "props": {
-    "__is": "window mullion, standing in the reveal",
-    "primitive": "plate",
-    "corners": [
-     [
-      7.3405,
-      3.3928,
-      21.1548
-     ],
-     [
-      7.3378,
-      3.3965,
-      21.0597
-     ],
-     [
-      7.3862,
-      4.356,
-      20.9394
-     ],
-     [
-      7.3887,
-      4.3509,
-      21.0441
-     ]
-    ],
-    "thickness": 0.15000000000000002,
-    "color": [
-     0.89,
-     0.88,
-     0.83
-    ],
-    "material": "painted",
-    "solid": false
-   }
-  },
-  {
-   "id": 432,
-   "item_id": "plate",
-   "at": [
-    0.0,
-    0.0,
-    0.0
-   ],
-   "props": {
-    "__is": "window mullion, standing in the reveal",
-    "primitive": "plate",
-    "corners": [
-     [
-      7.3056,
-      3.4398,
-      19.957
-     ],
-     [
-      7.3028,
-      3.4435,
-      19.8619
-     ],
-     [
-      7.3544,
-      4.4208,
-      19.6209
-     ],
-     [
-      7.3569,
-      4.4157,
-      19.7256
-     ]
-    ],
-    "thickness": 0.15000000000000002,
-    "color": [
-     0.89,
-     0.88,
-     0.83
-    ],
-    "material": "painted",
-    "solid": false
-   }
-  },
-  {
-   "id": 433,
-   "item_id": "plate",
-   "at": [
-    0.0,
-    0.0,
-    0.0
-   ],
-   "props": {
-    "__is": "wheelhouse corner pillar",
-    "primitive": "plate",
-    "corners": [
-     [
-      7.409,
-      3.3006,
-      23.5027
-     ],
-     [
-      7.4054,
-      3.3055,
-      23.3791
-     ],
-     [
-      7.4478,
-      4.2305,
-      23.4927
-     ],
-     [
-      7.451,
-      4.2238,
-      23.6287
-     ]
-    ],
-    "thickness": 0.15000000000000002,
-    "color": [
-     0.89,
-     0.88,
-     0.83
-    ],
-    "material": "painted",
-    "solid": false
-   }
-  },
-  {
-   "id": 434,
-   "item_id": "plate",
-   "at": [
-    0.0,
-    0.0,
-    0.0
-   ],
-   "props": {
-    "__is": "wheelhouse corner pillar",
-    "primitive": "plate",
-    "corners": [
-     [
-      7.2729,
-      3.4838,
-      18.8353
-     ],
-     [
-      7.2692,
-      3.4886,
-      18.7117
-     ],
-     [
-      7.3238,
-      4.483,
-      18.3547
-     ],
-     [
-      7.3271,
-      4.4764,
-      18.4908
-     ]
-    ],
-    "thickness": 0.15000000000000002,
-    "color": [
-     0.89,
-     0.88,
-     0.83
-    ],
-    "material": "painted",
-    "solid": false
-   }
-  },
-  {
-   "id": 114,
-   "item_id": "plate",
-   "at": [
-    0.0,
-    0.0,
-    0.0
-   ],
-   "props": {
-    "__is": "wheelhouse, aft bulkhead \u2014 reverse rake, coaming",
-    "primitive": "plate",
-    "corners": [
-     [
-      2.6,
-      2.5519,
-      23.4
-     ],
-     [
-      7.4,
-      2.5519,
-      23.4
-     ],
-     [
-      7.434,
-      3.2993,
-      23.502
-     ],
-     [
-      2.566,
-      3.2993,
-      23.502
-     ]
-    ],
-    "thickness": 0.09,
-    "color": [
-     0.89,
-     0.88,
-     0.83
-    ],
-    "material": "painted"
-   }
-  },
-  {
-   "id": 115,
-   "item_id": "plate",
-   "at": [
-    0.0,
-    0.0,
-    0.0
-   ],
-   "props": {
-    "__is": "wheelhouse, aft bulkhead \u2014 reverse rake, GLASS BAND, recessed 0.10 m in the reveal",
-    "primitive": "plate",
-    "corners": [
-     [
-      2.5714,
-      3.194,
-      23.3867
-     ],
-     [
-      7.4286,
-      3.194,
-      23.3867
-     ],
-     [
-      7.4814,
-      4.3548,
-      23.5451
-     ],
-     [
-      2.5186,
-      4.3548,
-      23.5451
-     ]
-    ],
-    "thickness": 0.03,
-    "color": [
-     0.09,
-     0.11,
-     0.14
-    ],
-    "material": "painted"
-   }
-  },
-  {
-   "id": 116,
-   "item_id": "plate",
-   "at": [
-    0.0,
-    0.0,
-    0.0
-   ],
-   "props": {
-    "__is": "wheelhouse, aft bulkhead \u2014 reverse rake, header",
-    "primitive": "plate",
-    "corners": [
-     [
-      2.524,
-      4.2225,
-      23.628
-     ],
-     [
-      7.476,
-      4.2225,
-      23.628
-     ],
-     [
-      7.5,
-      4.75,
-      23.7
-     ],
-     [
-      2.5,
-      4.75,
-      23.7
-     ]
-    ],
-    "thickness": 0.09,
-    "color": [
-     0.89,
-     0.88,
-     0.83
-    ],
-    "material": "painted"
-   }
-  },
-  {
-   "id": 435,
-   "item_id": "plate",
-   "at": [
-    0.0,
-    0.0,
-    0.0
-   ],
-   "props": {
-    "__is": "window mullion, standing in the reveal",
-    "primitive": "plate",
-    "corners": [
-     [
-      4.1391,
-      3.3027,
-      23.4772
-     ],
-     [
-      4.2382,
-      3.3027,
-      23.4772
-     ],
-     [
-      4.2251,
-      4.2259,
-      23.6032
-     ],
-     [
-      4.1242,
-      4.2259,
-      23.6032
-     ]
-    ],
-    "thickness": 0.15000000000000002,
-    "color": [
-     0.89,
-     0.88,
-     0.83
-    ],
-    "material": "painted",
-    "solid": false
-   }
-  },
-  {
-   "id": 436,
-   "item_id": "plate",
-   "at": [
-    0.0,
-    0.0,
-    0.0
-   ],
-   "props": {
-    "__is": "window mullion, standing in the reveal",
-    "primitive": "plate",
-    "corners": [
-     [
-      5.7618,
-      3.3027,
-      23.4772
-     ],
-     [
-      5.8609,
-      3.3027,
-      23.4772
-     ],
-     [
-      5.8758,
-      4.2259,
-      23.6032
-     ],
-     [
-      5.7749,
-      4.2259,
-      23.6032
-     ]
-    ],
-    "thickness": 0.15000000000000002,
-    "color": [
-     0.89,
-     0.88,
-     0.83
-    ],
-    "material": "painted",
-    "solid": false
-   }
-  },
-  {
-   "id": 437,
-   "item_id": "plate",
-   "at": [
-    0.0,
-    0.0,
-    0.0
-   ],
-   "props": {
-    "__is": "wheelhouse corner pillar",
-    "primitive": "plate",
-    "corners": [
-     [
-      2.566,
-      3.3027,
-      23.4772
-     ],
-     [
-      2.6949,
-      3.3027,
-      23.4772
-     ],
-     [
-      2.6551,
-      4.2259,
-      23.6032
-     ],
-     [
-      2.524,
-      4.2259,
-      23.6032
-     ]
-    ],
-    "thickness": 0.15000000000000002,
-    "color": [
-     0.89,
-     0.88,
-     0.83
-    ],
-    "material": "painted",
-    "solid": false
-   }
-  },
-  {
-   "id": 438,
-   "item_id": "plate",
-   "at": [
-    0.0,
-    0.0,
-    0.0
-   ],
-   "props": {
-    "__is": "wheelhouse corner pillar",
-    "primitive": "plate",
-    "corners": [
-     [
-      7.3051,
-      3.3027,
-      23.4772
-     ],
-     [
-      7.434,
-      3.3027,
-      23.4772
-     ],
-     [
-      7.476,
-      4.2259,
-      23.6032
-     ],
-     [
-      7.3449,
-      4.2259,
-      23.6032
-     ]
-    ],
-    "thickness": 0.15000000000000002,
-    "color": [
-     0.89,
-     0.88,
-     0.83
-    ],
-    "material": "painted",
-    "solid": false
-   }
-  },
-  {
-   "id": 117,
-   "item_id": "plate",
-   "at": [
-    0.0,
-    0.0,
-    0.0
-   ],
-   "props": {
-    "__is": "wheelhouse roof \u2014 sloped 0.30 m down aft, eaves all round",
-    "primitive": "plate",
-    "corners": [
-     [
-      2.46,
-      5.05,
-      17.99
-     ],
-     [
-      2.34,
-      4.75,
-      23.86
-     ],
-     [
-      7.66,
-      4.75,
-      23.86
-     ],
-     [
-      7.54,
-      5.05,
-      17.99
-     ]
-    ],
-    "thickness": 0.12,
-    "color": [
-     0.52,
-     0.54,
-     0.56
-    ],
-    "material": "painted"
-   }
-  },
-  {
-   "id": 118,
-   "item_id": "plate",
-   "at": [
-    0.0,
-    0.0,
-    0.0
-   ],
-   "props": {
-    "__is": "funnel, forward face \u2014 tapered and raked aft",
-    "primitive": "plate",
-    "corners": [
-     [
-      5.9,
-      2.4823,
-      23.7
-     ],
-     [
-      4.1,
-      2.4823,
-      23.7
-     ],
-     [
-      4.4,
-      5.35,
-      24.1
-     ],
-     [
-      5.6,
-      5.35,
-      24.1
-     ]
-    ],
-    "thickness": 0.07,
-    "color": [
-     0.62,
-     0.36,
-     0.11
-    ],
-    "material": "painted"
-   }
-  },
-  {
-   "id": 119,
-   "item_id": "plate",
-   "at": [
-    0.0,
-    0.0,
-    0.0
-   ],
-   "props": {
-    "__is": "funnel, port face",
-    "primitive": "plate",
-    "corners": [
-     [
-      4.1,
-      2.4823,
-      23.7
-     ],
-     [
-      4.1,
-      2.4823,
-      25.1
-     ],
-     [
-      4.4,
-      5.35,
-      25.3
-     ],
-     [
-      4.4,
-      5.35,
-      24.1
-     ]
-    ],
-    "thickness": 0.07,
-    "color": [
-     0.62,
-     0.36,
-     0.11
-    ],
-    "material": "painted"
-   }
-  },
-  {
-   "id": 120,
-   "item_id": "plate",
-   "at": [
-    0.0,
-    0.0,
-    0.0
-   ],
-   "props": {
-    "__is": "funnel, starboard face",
-    "primitive": "plate",
-    "corners": [
-     [
-      5.9,
-      2.4823,
-      25.1
-     ],
-     [
-      5.9,
-      2.4823,
-      23.7
-     ],
-     [
-      5.6,
-      5.35,
-      24.1
-     ],
-     [
-      5.6,
-      5.35,
-      25.3
-     ]
-    ],
-    "thickness": 0.07,
-    "color": [
-     0.62,
-     0.36,
-     0.11
-    ],
-    "material": "painted"
-   }
-  },
-  {
-   "id": 121,
-   "item_id": "plate",
-   "at": [
-    0.0,
-    0.0,
-    0.0
-   ],
-   "props": {
-    "__is": "funnel, aft face",
-    "primitive": "plate",
-    "corners": [
-     [
-      4.1,
-      2.4823,
-      25.1
-     ],
-     [
-      5.9,
-      2.4823,
-      25.1
-     ],
-     [
-      5.6,
-      5.35,
-      25.3
-     ],
-     [
-      4.4,
-      5.35,
-      25.3
-     ]
-    ],
-    "thickness": 0.07,
-    "color": [
-     0.62,
-     0.36,
-     0.11
-    ],
-    "material": "painted"
-   }
-  },
-  {
-   "id": 122,
-   "item_id": "plate",
-   "at": [
-    0.0,
-    0.0,
-    0.0
-   ],
-   "props": {
-    "__is": "funnel cap",
-    "primitive": "plate",
-    "corners": [
-     [
-      4.34,
-      5.35,
-      24.04
-     ],
-     [
-      4.34,
-      5.35,
-      25.36
-     ],
-     [
-      5.66,
-      5.35,
-      25.36
-     ],
-     [
-      5.66,
-      5.35,
-      24.04
-     ]
-    ],
-    "thickness": 0.32,
-    "color": [
-     0.11,
-     0.11,
-     0.12
-    ],
-    "material": "painted",
-    "solid": false
-   }
-  },
   {
    "id": 140,
    "item_id": "plate",
@@ -6015,96 +4691,6 @@
    "_is": "the deck edge of the vessel: plating, a proud sheer stripe and a cap, swept along a hand-authored sheer. The PLAN line is the hull's own deck edge; only the Y curve is authored, because sheer_bulwark_spec exposes no way to exaggerate the derived one and the derived one is too polite.",
    "path": [
     [
-     5.0,
-     2.85,
-     0.0
-    ],
-    [
-     5.155,
-     2.7856,
-     0.1875
-    ],
-    [
-     5.365,
-     2.7237,
-     0.375
-    ],
-    [
-     5.575,
-     2.6641,
-     0.5625
-    ],
-    [
-     5.785,
-     2.607,
-     0.75
-    ],
-    [
-     5.995,
-     2.5521,
-     0.9375
-    ],
-    [
-     6.205,
-     2.4995,
-     1.125
-    ],
-    [
-     6.415,
-     2.4492,
-     1.3125
-    ],
-    [
-     6.625,
-     2.401,
-     1.5
-    ],
-    [
-     6.975,
-     2.3255,
-     1.8125
-    ],
-    [
-     7.325,
-     2.2556,
-     2.125
-    ],
-    [
-     7.675,
-     2.1913,
-     2.4375
-    ],
-    [
-     8.025,
-     2.1322,
-     2.75
-    ],
-    [
-     8.375,
-     2.078,
-     3.0625
-    ],
-    [
-     8.725,
-     2.0286,
-     3.375
-    ],
-    [
-     9.075,
-     1.9836,
-     3.6875
-    ],
-    [
-     9.425,
-     1.9426,
-     4.0
-    ],
-    [
-     9.5117,
-     1.8674,
-     4.6667
-    ],
-    [
      9.5983,
      1.8051,
      5.3333
@@ -6393,99 +4979,9 @@
      0.4017,
      1.8051,
      5.3333
-    ],
-    [
-     0.4883,
-     1.8674,
-     4.6667
-    ],
-    [
-     0.575,
-     1.9426,
-     4.0
-    ],
-    [
-     0.925,
-     1.9836,
-     3.6875
-    ],
-    [
-     1.275,
-     2.0286,
-     3.375
-    ],
-    [
-     1.625,
-     2.078,
-     3.0625
-    ],
-    [
-     1.975,
-     2.1322,
-     2.75
-    ],
-    [
-     2.325,
-     2.1913,
-     2.4375
-    ],
-    [
-     2.675,
-     2.2556,
-     2.125
-    ],
-    [
-     3.025,
-     2.3255,
-     1.8125
-    ],
-    [
-     3.375,
-     2.401,
-     1.5
-    ],
-    [
-     3.585,
-     2.4492,
-     1.3125
-    ],
-    [
-     3.795,
-     2.4995,
-     1.125
-    ],
-    [
-     4.005,
-     2.5521,
-     0.9375
-    ],
-    [
-     4.215,
-     2.607,
-     0.75
-    ],
-    [
-     4.425,
-     2.6641,
-     0.5625
-    ],
-    [
-     4.635,
-     2.7237,
-     0.375
-    ],
-    [
-     4.845,
-     2.7856,
-     0.1875
-    ],
-    [
-     5.0,
-     2.85,
-     0.0
     ]
    ],
-   "closed": true,
+   "closed": false,
    "base_y": -0.12,
    "material": "painted",
    "solid": true,
