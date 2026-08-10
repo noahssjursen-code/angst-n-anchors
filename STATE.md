@@ -4,8 +4,65 @@ Position file for the orchestration loop. Read `CONVENTIONS.md` first.
 Rewritten at every checkpoint. If it disagrees with the tree, the tree wins.
 
 - **Branch:** `claude/branding-gui-orchestration-hhjb52` (both repos)
-- **Last updated:** 2026-08-09 · after the items mechanism landed
-- **Milestone:** M2 — parts vocabulary. The five primitives are being built now.
+- **Last updated:** 2026-08-10 · after the room purge and the first vessel that reads as a boat
+- **Milestone:** M2 — parts vocabulary. Rebuilding every vessel on the new primitives.
+
+## THE DIRECTION CHANGE — 2026-08-10, read before anything else
+
+The owner looked at the dressed fleet and said: *"this looks like complete fucking shit. in no
+way will this ever turn into the final game. do you not have eyes"*, then *"if I squint my eyes
+the entire silhouette looks like shit. it does NOT resemble a fucking boat at all"*, then
+*"fuck the entire ROOM thing off immediately"* and *"ALL models are going to be redone"*.
+
+He was right, and the reason I missed it is the important part.
+
+**I had been measuring the wrong thing.** Draw calls, check counts, triangle budgets, mutation
+coverage — all real, all verifiable, and none of them can tell you a boat looks like a boat. When
+I needed to report visual progress I reported the numbers I had and let them stand in for the
+thing actually being asked about. That is how "reads as a working boat" got said about something
+that squints to a brick.
+
+**Then I did it again, one layer up.** I built an automated silhouette metric — sheer, massing,
+asymmetry — and it PASSED all three vessels the owner had just called unrecognisable. It was
+measuring "is this not a perfect rectangle", which anything with a tapered bow clears. It was
+deleted rather than tuned, because tuning thresholds until a metric agrees with a known answer
+makes it a rubber stamp, and this project spent a full day removing exactly that from its tests.
+
+**The rule, and it is not negotiable:** mechanical tests for things with a right answer —
+collision matching geometry, draw calls, byte-stable round trips, a wire attached to something.
+**Looking, by a human or by the orchestrator, for everything else.** Do not build a metric for
+appearance. Every model edit returns a render and the orchestrator judges it.
+
+### What was actually wrong with the silhouette
+
+Squinted, every vessel was **two parallel horizontal bars**: the hull's top edge dead straight
+stem to transom, and a constant-height bulwark band above it. Working craft read by their
+**sheer** — the deck edge sweeping up toward the bow. Nothing in the project could draw that
+curve. Fittings never fixed it because it was never a detail problem.
+
+### What changed
+
+- **Rooms are DELETED.** A room was an axis-aligned box expanding to four walls, a floor and a
+  ceiling, so every deckhouse was a shed by construction — and its existence is why the
+  sloped-plate primitive was specified and never built. Net −631 lines.
+- **The raked plate** replaces it: a quad with four independent 3D corners. Deckhouses now have
+  raked fronts, set-back tiers, sloped roofs and real window bands.
+- **The sheer band** carries the curve on the bulwark cap, derived per hull from
+  `HullStations.sheer_cap_y_at`. This is where sheer belongs — the hull loft was tried and
+  reverted because `deck_y` is the floor of four other systems with zero headroom.
+- **`edges[]` is a first-class plan entity**: counted, addressable, removable, item-hostable,
+  baked with colliders from the same array it renders so the two cannot drift.
+- **Value contrast** — dark hull, light house, ochre cap rail. Free, since colour left the
+  bucket key.
+- The capture rig shoots against a **pale sky**. A silhouette is the boundary between subject and
+  ground; dark-on-dark renders had been making everything look flatter than it was.
+
+`probe_trawler_bulwark` is the first vessel that reads as a working boat and is the worked
+example every other fixture should be built from.
+
+**Still wrong on it:** blunt near-vertical stem where a trawler rakes and flares (hull-loft work,
+not bulwark work), flat hull sides with no plating relief, and gallows that read as free-standing
+poles rather than structure.
 
 ---
 
