@@ -127,6 +127,62 @@ static func edge_collider_boxes(plan: StructurePlan, edge: Dictionary) -> Array:
 
 ## Collects the plan's walls, decks and stairs for baking. Every element carries
 ## `source_id` so editors can map geometry back to the plan entity that owns it.
+## A plan with its piece-kit placements turned into the `items[]` this file
+## already bakes. Returns the plan UNCHANGED when it carries no `pieces[]`, so
+## the common path allocates nothing.
+##
+## ── Why this exists, and why it is at the baker and not at each caller ──────
+## `pieces[]` is the AUTHORING layer: a placement is a named piece on a grid
+## node, and `PieceKit.resolve_document` turns it into plates. Everything that
+## draws or collides a plan has to go through that resolution, and for a while
+## nothing did.
+##
+## Measured on `probe_piece_house.json` — 57 placements, 0 items, 0 walls, 0
+## decks — by baking it as shipped and again with every placement deleted:
+##
+##     AS SHIPPED          57 pieces  0 items | 3432 triangles  38 colliders
+##     PLACEMENTS DELETED   0 pieces  0 items | 3432 triangles  38 colliders
+##
+## Identical. The placements contributed **zero** geometry and **zero**
+## collision. A player would have built a deckhouse, seen nothing, and walked
+## through where it should have been. All 3432 triangles were the four
+## `edges[]` sheer-band runs.
+##
+## Every green render of a piece-built vessel came from `tests/piece_kit_capture.gd`,
+## which resolves placements into a `user://` copy BEFORE building the plan —
+## a path that existed only in the test rig. That is REALITY.md §3, the layer
+## trap: the fixtures were correct, the resolver was correct, the captures were
+## honest, and the game had none of it.
+##
+## Putting it at the two PUBLIC entries rather than in each caller is the §3b
+## rule — one derivation. `bake` and `collect_colliders` each open with
+## `resolved(plan)`, so what is drawn and what is collided come from one
+## resolution and cannot drift.
+##
+## `expand()` deliberately does NOT resolve. It is called by `bake` and
+## `collect_colliders` on the already-resolved plan, and resolving again there
+## would do the work twice on every bake. A caller reaching past those two
+## entries into `expand` directly gets walls, decks and stairs only — which is
+## all `expand` has ever returned, since placements resolve to `items[]`.
+## Measured after wiring, on `probe_piece_house.json`:
+##
+##     AS SHIPPED          57 pieces | 4692 triangles  241 colliders
+##     PLACEMENTS DELETED   0 pieces | 3432 triangles   38 colliders
+##
+## i.e. the placements now contribute 1260 triangles and 203 colliders where
+## they contributed nothing.
+static func resolved(plan: StructurePlan) -> StructurePlan:
+	if plan == null or plan.pieces.is_empty():
+		return plan
+	var result := PieceKit.resolve_document(plan.to_dict())
+	for error in result["errors"] as PackedStringArray:
+		## A placement that refuses to resolve contributes no geometry, which is
+		## correct — but silently is not. It is the difference between "the kit
+		## refused this" and "the superstructure vanished".
+		push_error("StructureBaker: %s" % error)
+	return StructurePlan.from_dict(result["doc"] as Dictionary)
+
+
 static func expand(plan: StructurePlan) -> Dictionary:
 	var walls: Array = []
 	var decks: Array = []
@@ -1414,7 +1470,8 @@ static func _run_colliders(a: Vector3, b: Vector3, radius: float, offset: Vector
 ## sloped run is STEPPED into a staircase of short axis-aligned boxes instead,
 ## each the sub-run's bounding box grown by the tube radius. That over-covers by
 ## roughly half a step and never under-covers.
-static func collect_colliders(plan: StructurePlan, offset := Vector3.ZERO) -> Array:
+static func collect_colliders(plan_in: StructurePlan, offset := Vector3.ZERO) -> Array:
+	var plan := resolved(plan_in)
 	var expanded := expand(plan)
 	var out: Array = []
 	for wall_variant in expanded["walls"] as Array:
@@ -1460,7 +1517,8 @@ static func _collider_of(box: Dictionary, offset: Vector3) -> Dictionary:
 ## editor overlay, not a harbour full of vessels, so it pays the extra draw calls
 ## and keeps its picture; the solid bake — everything that ships in the world —
 ## merges on material alone.
-static func bake(plan: StructurePlan, offset := Vector3.ZERO, ghost := false) -> Node3D:
+static func bake(plan_in: StructurePlan, offset := Vector3.ZERO, ghost := false) -> Node3D:
+	var plan := resolved(plan_in)
 	var root := Node3D.new()
 	root.name = "StructureBake"
 	var buckets: Dictionary = {}

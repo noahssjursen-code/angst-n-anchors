@@ -433,13 +433,18 @@ def build():
         "hull's own sheer-band bulwark, which is a SWEPT CURVE and is deliberately not a grid piece - "
         "quantising a sheer to 0.5 m would step the one curve the fleet was rebuilt to draw.\n\n"
         "It carries the trawler's deckhouse unchanged plus the parts of the kit that vessel never asks "
-        "for, so nothing in the kit ships unproven: a `roof_slope` foredeck breakwater rising two cells "
-        "over two, its after face and its eave, the `cap` and `strake` profiles of `trim_band` - the "
-        "strakes set out two eighth-cells with `offset`, because a trim run has no height and cannot "
-        "carry a rake, so on a raked wall it has to be pushed out to meet it - and a DIAGONAL WALL RUN: "
-        "three 4-cell `corner_45` facets chained nose to tail across the foredeck, which is the piece "
-        "doing the job version 1 said the kit had no piece for."
-    ).format(n=len(P) + 9)
+        "for, so nothing in the kit ships unproven: a `roof_slope` VISOR over the windscreen and its eave, "
+        "the `cap` and `strake` profiles of `trim_band` - the strakes set out two eighth-cells with "
+        "`offset`, because a trim run has no height and cannot carry a rake, so on a raked wall it has "
+        "to be pushed out to meet it - and a DIAGONAL WALL RUN: three 4-cell `corner_45` facets in "
+        "`chain: run`, raked one step and chained nose to tail across the foredeck, which is the piece "
+        "doing the job version 1 said the kit had no piece for.\n\n"
+        "TWO THINGS A CRITIC BROKE HERE AND THIS FILE NOW CARRIES THE FIX FOR. The diagonal run shipped "
+        "in the default `chain: corner`, which opened both its joints by 0.1768 m at the head - "
+        "daylight, in the fixture that was the evidence for the feature. And the `roof_slope` shipped "
+        "as a breakwater PRISM whose two triangular ends nothing in the kit can close; it is a "
+        "cantilevered visor now, which has no ends."
+    ).format(n=len(P) + 8)
     house["palette"] = src["palette"]
     house["hull"] = src["hull"]
     house["walls"] = []
@@ -459,15 +464,17 @@ def build():
         nid[0] += 1
         strict.append(e)
 
-    # A breakwater on the foredeck - a spray deflector sloping up as it runs aft.
-    # This is `roof_slope` doing the job it exists for, and the trawler itself
-    # never asks for it, so it ships here rather than shipping unproven.
-    add("roof_slope", (6, 0, 20), 0, {"span": 6, "depth": 2, "rise": 2, "gauge": "light"},
-        ROOFGREY, "foredeck breakwater - two cells of rise over two of run")
-    add("wall_panel", (12, 0, 22), 180, {"span": 6, "height": 2, "rake": 0}, WALL,
-        "breakwater, after face")
-    add("trim_band", (12, 2, 22), 180, {"span": 6, "profile": "eave"}, WALL,
-        "eave along the breakwater's after edge")
+    # `roof_slope` as a VISOR over the wheelhouse windscreen, which is one of the
+    # four jobs its own description names.  It was a breakwater PRISM - a slope
+    # plus an after face - until a critic measured the two open triangular ends:
+    # 0.5 x 1.0 m of daylight each, because the kit has no gusset and a prism
+    # cannot be closed with the six pieces that exist.  A visor is a cantilevered
+    # plate; it has no ends to close, and it is the honest use of the piece.
+    add("roof_slope", (7, 9, 36), 0, {"span": 6, "depth": 2, "rise": 1, "gauge": "light",
+                                      "lift": -3},
+        ROOFGREY, "wheelhouse visor over the windscreen - one cell of rise over two of run")
+    add("trim_band", (7, 9, 36), 0, {"span": 6, "profile": "eave", "lift": -3}, WALL,
+        "eave along the visor's forward edge")
     # The three trim profiles the trawler does not ask for, each on a wall whose
     # rake it has to be set out to meet: `offset` is what makes that possible.
     # The cap rail sits on the boat deck's forward edge, which is 0.25 m off the
@@ -484,10 +491,17 @@ def build():
     # so they make one straight 45-degree wall 8.49 m long across the foredeck.
     # Nothing is placed at 45 degrees - every facing here is 0 - and no seventh
     # piece was added.
+    #
+    # `chain: "run"` IS LOAD-BEARING AND THIS FIXTURE SHIPPED WITHOUT IT.  In the
+    # default `corner` mode each top corner moves along an AXIS wall's normal, so
+    # a RAKED chain opens at the head by 0.125*sqrt(rake_a^2 + rake_b^2) - the
+    # 0.1768 m of daylight a critic measured in exactly these three placements.
+    # In `run` mode both corners move along the FACET's normal and the joints
+    # close to the bit at any rake.
     for step in range(3):
         add("corner_45", (12 - 4 * step, 0, 24 + 4 * step), 0,
-            {"span": 4, "height": 3, "rake_a": -1, "rake_b": -1}, WALL,
-            "diagonal wall run, facet %d of 3 — a 5.66 m chord, chained" % (step + 1))
+            {"span": 4, "height": 3, "chain": "run", "rake_a": -1, "rake_b": -1}, WALL,
+            "diagonal wall run, facet %d of 3 — a 5.66 m chord, raked and chained" % (step + 1))
 
     house["pieces"] = strict
     house["items"] = []

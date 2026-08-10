@@ -64,6 +64,36 @@ that is convenient. For anything with a production path, go through it: `VesselS
 `apply_plan` → `PhysicsServer3D`, not the dictionary in the middle. And when you write a test
 from someone else's probe, check you have not landed a layer below the bug.
 
+### The worst instance: the piece kit was never wired into the game
+
+Three waves built the piece kit — the data file, the resolver, the fixtures, an editor tool, an
+adversarial critique, hundreds of green checks. Then a strip test: bake `probe_piece_house.json`
+as shipped, bake it again with every placement deleted, compare.
+
+```
+AS SHIPPED          57 pieces  0 items | 3432 triangles  38 colliders
+PLACEMENTS DELETED   0 pieces  0 items | 3432 triangles  38 colliders
+```
+
+**Identical.** The 57 placements contributed zero geometry and zero collision. Every triangle was
+the four `edges[]` sheer-band runs. A player would have built a deckhouse, seen nothing, and
+walked through where it should have been.
+
+`StructureBaker` had no reference to `pieces` anywhere. `PieceKit` was reachable from the plan
+object, the studio and the tests — and from nothing the game runs. Every green render came from
+`tests/piece_kit_capture.gd`, which resolves placements into a `user://` copy **before** building
+the plan: a path that existed only in the test rig.
+
+Nothing was wrong with the fixtures, the resolver, the captures or the checks. They were all
+honest about a layer the game did not reach. The agent that built the editor suspected it and
+said so in its own `still_wrong` — *"I believe it is broken; I ran out of wave to confirm it"* —
+which is why it was found at all.
+
+**Rule.** A subsystem is not delivered when its tests pass. It is delivered when something the
+GAME runs calls it. Before reporting a layer complete, grep for its entry point outside `tests/`;
+if the only callers are test rigs, it does not exist yet. And the strip test — delete the input,
+re-measure, compare — is the cheapest possible check that a feature does anything at all.
+
 ## 4. The vacuous-pass trap — checks that cannot fail
 
 Every one of these was live in this repo:
@@ -236,6 +266,8 @@ no visible scale figure has no absolute scale — check the figure is *visible*,
 3b. **One derivation.** Geometry and collision computed separately will drift. Delete the second.
 3c. **Find the check for every guarantee a header makes.** If there isn't one, that is the next
     test. Run it over every fixture, not the one you are working on.
+3d. **Grep for your subsystem's callers outside `tests/`.** If the only ones are test rigs, it is
+    not delivered. Strip the input, re-measure, compare — if nothing changes, nothing works.
 4. **Could a player do this with a mouse?** If not, it is a format, not a feature.
 5. **Say what you did not verify.**
 6. **Red with a diagnosis beats green with a lie**, every time.

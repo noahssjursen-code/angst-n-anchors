@@ -332,6 +332,7 @@ func _run_studio_probe() -> void:
 	expect.call("every fixture diagonal is bounded in world space", bounded == diagonals)
 	## ── The piece tool ──────────────────────────────────────────────────────
 	_probe_piece_controls(expect)
+	_probe_piece_levels(expect)
 	_probe_piece_mouse(expect)
 	_probe_piece_selection(expect)
 	_probe_piece_persistence(expect)
@@ -513,6 +514,55 @@ func _piece_defaults(piece_id: String) -> Dictionary:
 	for key in declared.keys():
 		out[str(key)] = (declared[key] as Dictionary)["default"]
 	return out
+
+
+## EVERY LEVEL THE FLEET USES IS REACHABLE FROM THE LEVEL CONTROL.
+##
+## The one check here that came from a bug rather than from a design: the level
+## buttons stepped 1.00 m, so cell y = 5 — the shipped trawler's boat deck, at
+## 2.50 m — could not be reached by clicking. The probe did not notice because it
+## placed pieces by CELL. This drives the control the way a player does, `+` at a
+## time, and asks whether the cursor's node y ever equals each level the fixtures
+## actually build on.
+func _probe_piece_levels(expect: Callable) -> void:
+	_set_context("vessel")
+	_set_tool(Tool.PIECE)
+	var wanted: Dictionary = {}
+	for path in ["probe_piece_trawler", "probe_piece_house", "probe_piece_tug"]:
+		var raw: Variant = JSON.parse_string(
+			FileAccess.get_file_as_string("%s/%s.json" % [STRUCTURES_DIR, path])
+		)
+		if not (raw is Dictionary):
+			continue
+		for placement_variant in (raw as Dictionary).get("pieces", []) as Array:
+			wanted[StructurePlan.piece_cell(placement_variant as Dictionary).y] = true
+	expect.call("the fleet's piece fixtures use %d distinct levels" % wanted.size(), wanted.size() > 1)
+	## Walk the "+" button up from zero and collect the cell each press lands on.
+	_set_build_level(0.0)
+	var reached: Dictionary = {}
+	for _press in 64:
+		reached[roundi(_active_base / NODE_SNAP)] = true
+		_set_build_level(_active_base + NODE_SNAP)
+	var missing := PackedStringArray()
+	for level in wanted.keys():
+		if not reached.has(int(level)):
+			missing.append("cell y=%d (%.2f m)" % [int(level), float(level) * NODE_SNAP])
+	expect.call(
+		"every one of them is reachable by pressing the level control (%d missing%s)"
+		% [missing.size(), "" if missing.is_empty() else ": " + ", ".join(missing)],
+		missing.is_empty()
+	)
+	## And the cursor agrees with the control: the node it reports is the level the
+	## control is on, not a rounding of it.
+	_set_build_level(2.5)
+	var aim := _plan_offset + StructurePlan.piece_node_plan(Vector3i(8, 5, 24))
+	_camera.position = aim + Vector3(0.0, 14.0, 14.0)
+	_camera.look_at(aim, Vector3.UP)
+	expect.call(
+		"at level 2.50 m the cursor reads cell y = 5",
+		_mouse_to_node(_camera.unproject_position(aim)).y == 5
+	)
+	_set_build_level(0.0)
 
 
 ## THE CURSOR. A grid node under the mouse, a ghost standing on it, and a click
@@ -1291,6 +1341,10 @@ func _set_context(context: String) -> void:
 	_undo_stack.clear()
 	_redo_stack.clear()
 	_selected_id = -1
+	## The ghost is baked at the CURRENT `_plan_offset`, so a hull change leaves a
+	## preview standing where the old hull was. Its cache key is the placement, not
+	## the offset, so it would not have rebuilt itself.
+	_hide_piece_ghost()
 	if context == "vessel":
 		_deck_grid = HullRegistry.make_grid(_hull_id)
 		_grid_width = _deck_grid.width
@@ -1722,13 +1776,22 @@ func _handle_key(key: InputEventKey) -> void:
 			if _selected_id >= 0 and _entity_bounds.has(_selected_id):
 				_cam_focus = (_entity_bounds[_selected_id] as AABB).get_center()
 		KEY_PAGEUP:
-			_set_build_level(_active_base + 1.0)
+			_set_build_level(_active_base + NODE_SNAP)
 		KEY_PAGEDOWN:
-			_set_build_level(_active_base - 1.0)
+			_set_build_level(_active_base - NODE_SNAP)
 
 
+## The build level moves a CELL at a time, not a metre.
+##
+## It stepped 1.0 m, and that quietly made half the kit unreachable with a mouse:
+## a placement's level is a whole cell, and the shipped trawler's boat deck is at
+## cell y = 5, which is 2.50 m. From 0.00 in whole metres you can reach 2.00 and
+## 3.00 and never 2.50, so a player could not stand a piece on that tier at all —
+## while the probe, which called `_place_piece_at` with a cell, passed. That is
+## exactly the shape of REALITY.md §5 and it is why `_probe_piece_levels` now
+## drives this control rather than setting `_active_base`.
 func _set_build_level(level: float) -> void:
-	_active_base = maxf(level, 0.0)
+	_active_base = maxf(roundf(level / NODE_SNAP) * NODE_SNAP, 0.0)
 	_build_grid_lines()
 	_rebake()
 	_refresh_panel()
@@ -2923,6 +2986,7 @@ func _load_plan(path: String) -> void:
 	if _context == "vessel" and not _plan.hull_id.is_empty():
 		_hull_id = _plan.hull_id
 	_selected_id = -1
+	_hide_piece_ghost() ## same reason as `_set_context`: the offset may have moved
 	_set_status("LOADED / %s" % path.get_file())
 	_rebuild_host_visual()
 	_rebake()
@@ -3313,7 +3377,7 @@ func _build_tool_palette() -> void:
 	var level_row := HBoxContainer.new()
 	level_row.add_theme_constant_override(&"separation", BrandTokens.SPACE_XS)
 	var level_down := BrandComponents.compact_button("−", BrandTokens.MIN_HIT_TARGET)
-	level_down.pressed.connect(func() -> void: _set_build_level(_active_base - 1.0))
+	level_down.pressed.connect(func() -> void: _set_build_level(_active_base - NODE_SNAP))
 	level_row.add_child(level_down)
 	_level_label = BrandLabel.new("", BrandLabel.Role.DATA)
 	_level_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -3321,7 +3385,7 @@ func _build_tool_palette() -> void:
 	_level_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	level_row.add_child(_level_label)
 	var level_up := BrandComponents.compact_button("+", BrandTokens.MIN_HIT_TARGET)
-	level_up.pressed.connect(func() -> void: _set_build_level(_active_base + 1.0))
+	level_up.pressed.connect(func() -> void: _set_build_level(_active_base + NODE_SNAP))
 	level_row.add_child(level_up)
 	box.add_child(level_row)
 
@@ -3684,7 +3748,7 @@ func _refresh_panel() -> void:
 	_refresh_piece_section()
 	for opening_type in _opening_buttons.keys():
 		(_opening_buttons[opening_type] as Button).set_pressed_no_signal(opening_type == _opening_type)
-	_level_label.text = "LEVEL %.0f M" % _active_base
+	_level_label.text = "%.2f M · CELL %d" % [_active_base, roundi(_active_base / NODE_SNAP)]
 	_ghost_button.set_pressed_no_signal(_ghost_levels)
 	for slot in _slot_buttons.keys():
 		(_slot_buttons[slot] as Button).set_pressed_no_signal(slot == _armed_slot)

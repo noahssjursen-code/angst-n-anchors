@@ -118,8 +118,11 @@ const FIXTURES: Array[Dictionary] = [
 		## foredeck where the crane pedestal and the bulwark are, and a sweep that
 		## has to skip the stations it cannot start cleanly is a sweep that can
 		## hide a failure. It carries no door, so it costs the door claim nothing.
-		"walls": [301, 302, 303],
-		"tier": [300, 301, 302, 303],
+		"walls": [
+			"lower tier, front", "lower tier, port side",
+			"lower tier, starboard side", "lower tier, aft bulkhead",
+		],
+		"tier": ["lower tier,", "boat deck"],
 		## Clear of the companionway (x 4.0-5.5, z 9.0-13.0) and of the walls.
 		"inside": [[6.5, 11.0], [7.5, 14.0], [2.5, 14.5], [6.0, 15.0]],
 	},
@@ -127,8 +130,16 @@ const FIXTURES: Array[Dictionary] = [
 		"path": "res://resources/data/structures/probe_trawler_bulwark.json",
 		"hull": "hull_28x10",
 		"registration": "fishing_vessel",
-		"walls": [101, 102, 103],
-		"tier": [100, 101, 102, 103],
+		## Named, not numbered — see `_plates_named`. The GLASS plates are excluded
+		## from `walls` on purpose: a recessed pane is not the shell, and the sweep
+		## has to be stopped by the plate around it, which is the whole claim.
+		"walls": [
+			"lower tier, raked front —",
+			"lower tier, port side",
+			"lower tier, starboard side",
+			"lower tier, aft bulkhead",
+		],
+		"tier": ["lower tier,", "boat deck"],
 		"inside": [[5.0, 19.5], [3.5, 22.0], [6.5, 22.0], [5.0, 23.8]],
 	},
 ]
@@ -386,7 +397,7 @@ func _check_floor(_plan: StructurePlan, fixture: Dictionary, stem: String) -> fl
 # ── 1, 3 and 4. Doors pass, everything else stops ────────────────────────────
 
 func _check_walls(plan: StructurePlan, fixture: Dictionary, stem: String, floor_y: float) -> void:
-	var tier := _tier_plates(plan, fixture["tier"] as Array)
+	var tier := _plates_named(plan, fixture["tier"] as Array)
 	if not _t.check("%s: the fixture supplies a deckhouse tier (%d plates)" % [stem, tier.size()],
 			tier.size() >= 3):
 		return
@@ -411,13 +422,10 @@ func _check_walls(plan: StructurePlan, fixture: Dictionary, stem: String, floor_
 			"windows": 0, "window_through": [], "stoppers": {},
 		}
 
-	for wall_id_variant in fixture["walls"] as Array:
-		var wall_id := int(wall_id_variant)
-		var spec := _plate_props(plan, wall_id)
-		if spec.is_empty():
-			_t.check("%s: wall %d is in the plan" % [stem, wall_id], false)
-			continue
-		var corners := StructureBaker.plate_corners(spec)
+	for wall_spec_variant in _named_plate_specs(plan, fixture["walls"] as Array):
+		var named := wall_spec_variant as Dictionary
+		var wall_id := str(named["name"])
+		var corners := named["corners"] as PackedVector3Array
 		var ref := StructureBaker.plate_ref_lengths(corners)
 		var normal := _outward(corners, inside)
 		var openings := StructureBaker.plate_openings(spec, ref)
@@ -431,14 +439,14 @@ func _check_walls(plan: StructurePlan, fixture: Dictionary, stem: String, floor_
 			var head := _door_head_y(corners, ref, opening)
 			var need := floor_y + CAPSULE_H + HEAD_MARGIN
 			if head < need:
-				doors_low.append("%d@%.2f head at plan y %.3f, a 1.8 m figure needs %.3f"
+				doors_low.append("%s@%.2f head at plan y %.3f, a 1.8 m figure needs %.3f"
 					% [wall_id, float(opening["off"]), head, need])
 			var column := _door_column(corners, ref, opening, floor_y)
 			var width := float(column["width"])
-			print("  [door] %d@%.2f nominal %.2f m · walkable column %.3f m of play · head %.3f m"
+			print("  [door] %s@%.2f nominal %.2f m · walkable column %.3f m of play · head %.3f m"
 				% [wall_id, float(opening["off"]), float(opening["w"]), width, head - floor_y])
 			if width < DOOR_PLAY_MIN:
-				doors_narrow.append("%d@%.2f only %.3f m of play"
+				doors_narrow.append("%s@%.2f only %.3f m of play"
 					% [wall_id, float(opening["off"]), width])
 				continue
 			for i in DOOR_STATIONS:
@@ -450,7 +458,7 @@ func _check_walls(plan: StructurePlan, fixture: Dictionary, stem: String, floor_
 						corners, u / ref.x, floor_y + float(figure["lift"]))
 					var march := _march(at + normal * START_OUT + _offset,
 						-normal * MARCH_LEN, figure["query"])
-					var where := "%s %d@%.2f" % [figure["name"], wall_id, u]
+					var where := "%s %s@%.2f" % [figure["name"], wall_id, u]
 					if bool(march["started_inside"]):
 						stuck.append("%s in %s" % [where, march["hit"]])
 						continue
@@ -474,7 +482,7 @@ func _check_walls(plan: StructurePlan, fixture: Dictionary, stem: String, floor_
 				var at := _wall_point_at_height(corners, u / ref.x, floor_y + float(figure["lift"]))
 				var march := _march(at + normal * START_OUT + _offset,
 					-normal * MARCH_LEN, figure["query"])
-				var where := "%s %d@%.2f" % [figure["name"], wall_id, u]
+				var where := "%s %s@%.2f" % [figure["name"], wall_id, u]
 				if bool(march["started_inside"]):
 					stuck.append("%s in %s" % [where, march["hit"]])
 					continue
@@ -699,12 +707,59 @@ func _wall_point_at_height(corners: PackedVector3Array, u: float, y: float) -> V
 	return StructureBaker.plate_point(corners, u, _v_at_height(corners, u, y))
 
 
-func _tier_plates(plan: StructurePlan, ids: Array) -> Array:
+## Plates whose `__is` note starts with any of `prefixes`.
+##
+## This used to take a list of item IDS, and it broke the hour the fixtures were
+## renumbered to give their entities unique ids: `[100, 101, 102, 103]` selected
+## nothing and the fixture reported "supplies a deckhouse tier (0 plates)". An id
+## is an ADDRESS, not a description, and an address is allowed to move — the same
+## defect, in the same hour, also silently made `gen_piece_fixtures.py` pick the
+## wrong 50 items out of this very fixture. REALITY.md §4b's corollary.
+##
+## Selecting on what a plate SAYS IT IS survives renumbering, and it reads as the
+## thing the test means: "the walls of the lower tier", not "items 100 to 103".
+## Same selection as `_plates_named`, but keeping each plate's note so a failure
+## names the wall a reader can find ("lower tier, port side") rather than an id
+## that may since have moved.
+func _named_plate_specs(plan: StructurePlan, prefixes: Array) -> Array:
 	var out: Array = []
-	for id_variant in ids:
-		var spec := _plate_props(plan, int(id_variant))
-		if not spec.is_empty():
-			out.append(StructureBaker.plate_corners(spec))
+	for item_variant in plan.items:
+		var item := item_variant as Dictionary
+		if StructureBaker.item_primitive(item) != "plate":
+			continue
+		var props := item.get("props", {}) as Dictionary
+		var note := str(props.get("__is", ""))
+		## The recessed pane shares its wall's prefix — "lower tier, port side"
+		## names both the plate and the GLASS in it. The id list this replaced
+		## separated them by accident, because they happened to be numbered
+		## apart; here it is stated. A pane is not the shell, and the claim under
+		## test is that the sweep is stopped by the plate AROUND the window: a
+		## standing capsule spans the whole band, so a glass plate in `walls`
+		## would pass the sweep whether or not the shell collides at all.
+		if note.contains("GLASS"):
+			continue
+		for prefix_variant in prefixes:
+			if note.begins_with(str(prefix_variant)):
+				out.append({
+					"name": note.substr(0, 44),
+					"corners": StructureBaker.plate_corners(props),
+					"props": props,
+				})
+				break
+	return out
+
+
+func _plates_named(plan: StructurePlan, prefixes: Array) -> Array:
+	var out: Array = []
+	for item_variant in plan.items:
+		var item := item_variant as Dictionary
+		if StructureBaker.item_primitive(item) != "plate":
+			continue
+		var note := str((item.get("props", {}) as Dictionary).get("__is", ""))
+		for prefix_variant in prefixes:
+			if note.begins_with(str(prefix_variant)):
+				out.append(StructureBaker.plate_corners(item["props"] as Dictionary))
+				break
 	return out
 
 

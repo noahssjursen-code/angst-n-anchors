@@ -68,14 +68,25 @@
     "BILINEAR, so it absorbs any difference between the two rakes - including a raked front",
     "meeting a plumb side, which is the trawler's whole forward end. The by-product is that a",
     "raked house is chamfered at every corner by construction, and a chamfered corner is the",
-    "one thing a stack of square panels can never look like.",
+    "one thing a stack of square panels can never look like. CONVEX only: at a CONCAVE corner a",
+    "facet's two edges face into the reflex angle, and the transition it can carry there is zero -",
+    "feet close, heads open by exactly the neighbours' rake difference. And the version-1",
+    "instruction `placed 180 degrees round it fills a concave corner` was simply wrong by 1.74 m.",
+    "An adversarial critic's exhaustive search of 11,664 legal placements reports the working one",
+    "as the vertex plus (d_out - d_in) cells at facing(d_in) - a different cell AND a different",
+    "facing. THAT SEARCH IS NOT RE-DERIVED HERE and no test in this repo holds it, so it is",
+    "recorded as the critic's measurement and not as this file's claim; the wrong instruction is",
+    "removed either way. There is still no piece that carries a rake round an inside corner.",
     "",
     "AND IT IS ALSO THE DIAGONAL WALL. `corner_45` spans `span` cells in X and `span` in Z, so",
     "its chord IS a 45-degree wall segment - up to 8 cells, a 5.66 m chord, and its OUT edge is",
     "the next facet's IN edge, so facets CHAIN into a diagonal run of any length. That is why",
     "there is no seventh `wall_diag` piece: it would duplicate `wall_panel`'s whole parameter",
-    "surface for a wall that differs only in its plan direction. What was actually missing was",
-    "the cap (it was 4) and this sentence.",
+    "surface for a wall that differs only in its plan direction. What was missing was the cap",
+    "(it was 4), the `chain` parameter and this sentence. A chained run MUST be `chain: run`:",
+    "in `chain: corner` each top corner moves along an AXIS wall's normal, and a chain of those",
+    "opens at the head by 0.125*sqrt(rake_a^2+rake_b^2) - 0.177 m at one step of rake. That",
+    "shipped, in this repo, in the fixture that was the evidence for the feature.",
     "",
     "PLACEMENT. A piece is placed at a grid NODE (a corner between cells), not in a cell:",
     "walls stand on cell edges. `cell` is [x, y, z] in whole cells; the piece-local frame has",
@@ -93,7 +104,16 @@
     "    departs from it by up to 0.05 m on the trawler. Making it exact needs a 1/64 m lift",
     "    step - 33 entries to distribute one number - and that is CAD wearing a stepper.",
     "  - A wall's FOOT is level. A deckhouse standing on a falling deck sits on the mean of the",
-    "    deck under it, inside the deck plate's own 0.13 m."
+    "    deck under it, inside the deck plate's own 0.13 m.",
+    "  - NO PIECE CUTS A DECK. `deck_tile` and `roof_slope` are rectangles, so a roof laid over a",
+    "    chamfered casing overhangs the chamfer by span*0.354 m - 0.35 m at span 1, 2.83 m at",
+    "    span 8. In PLAN a chamfered casing therefore reads as a perfect rectangle, and in profile",
+    "    a chamfer is invisible because it is a plan feature. `corner_45` only reads from a low",
+    "    three-quarter angle. A chamfered deck piece is the honest fix and it does not exist.",
+    "  - A concave corner carries NO rake transition, and no piece does (see corner_45).",
+    "  - A `roof_slope` prism has open triangular ends. There is no gusset in the kit, so a",
+    "    breakwater built as slope + after face is two triangles of daylight; `roof_slope` is a",
+    "    VISOR here, which is a cantilevered plate and has no ends to close."
   ],
 
   "pieces": [
@@ -114,7 +134,7 @@
         "rake":   {"unit": "eighth_cells", "values": [-8, -7, -6, -5, -4, -3, -2, -1, 0, 1, 2, 3, 4, 5, 6, 7, 8], "default": 0,
                    "_is": "how far the TOP edge stands outboard of the foot, in 0.125 m steps. Positive rakes out (a trawler's front), negative tumbles home (a side). At the 2.5 m tier height this spans -21.8 to +21.8 degrees, which covers every rake in the fleet, and the step is half what version 1 could say."},
         "fall":   {"unit": "eighth_cells", "values": [-4, -3, -2, -1, 0, 1, 2, 3, 4], "default": 0,
-                   "_is": "how far the top edge DROPS from the start of the run to its end, in 0.125 m steps. The foot stays level. This is the wall under a falling deck; a positive fall drops the far end, a negative one raises it. Chained panels meet exactly because the drop is a whole step of the same unit `head` counts in."},
+                   "_is": "how far the top edge DROPS from the start of the run to its end, in 0.125 m steps. The foot stays level. This is the wall under a falling deck; a positive fall drops the far end, a negative one raises it. HOW A FALLING RUN CHAINS, exactly: the next panel takes the drop out of its `head`, which counts the same unit, and then head AND foot both close. Taking it out of `lift` instead closes the head and opens the FOOT by the same 0.125*fall, because lift moves the whole piece. Two panels at the same `fall` and the same `head` do not form one plane either - they make a sawtooth. `fall` is a drop over ONE piece, not a slope."},
         "lift":   {"unit": "eighth_cells", "values": [-4, -3, -2, -1, 0, 1, 2, 3, 4], "default": 0,
                    "_is": "moves the whole piece up off its grid node in 0.125 m steps, +-0.5 m. What lets a wall stand on a deck that is not on a whole cell."},
         "opening": {"unit": "choice", "values": ["none", "door", "window", "scuttle"], "default": "none",
@@ -211,13 +231,15 @@
     {
       "id": "corner_45",
       "display": "Corner facet",
-      "description": "THE PIECE THAT BEATS BLOCKINESS, AND THE ONLY DIAGONAL WALL. A 45-degree chord across a corner of `span` cells, carrying the transition between the two walls that meet there. Its two vertical edges are those walls' end edges, so it closes the wedge that opens when a raked wall meets a wall raked differently - the plate is bilinear and a twisted quad is exactly what it is for. At span 1 it is a 0.71 m knuckle on a deckhouse corner; at span 8 it is a 5.66 m bow facet; and because its OUT edge is the next facet's IN edge, facets CHAIN into a diagonal wall run of any length. Placed 180 degrees round it fills a concave corner instead, so there is no second inside-corner piece.",
+      "description": "THE PIECE THAT BEATS BLOCKINESS, AND THE ONLY DIAGONAL WALL. A 45-degree chord across a corner of `span` cells. In `chain: corner` its two vertical edges belong to the two AXIS walls that meet there, so it closes the wedge that opens when a raked wall meets a wall raked differently - the plate is bilinear and a twisted quad is exactly what it is for. In `chain: run` both edges belong to 45-degree NEIGHBOURS instead, which is what makes a raked diagonal wall run close. At span 1 it is a 0.71 m knuckle on a deckhouse corner; at span 8 it is a 5.66 m bow facet.",
       "footprint": {"run": "span", "depth": "span", "rise": "height+head*0.25"},
       "material": "painted",
       "color": "#e3e0d4",
       "params": {
         "span":   {"unit": "cells", "values": [1, 2, 3, 4, 6, 8], "default": 1,
                    "_is": "cells in X and in Z. The chord is span*0.707 m, so 8 cells is a 5.66 m facet - a ferry's bow, not a knuckle. The cap was 4 for no reason anyone wrote down."},
+        "chain":  {"unit": "choice", "values": ["corner", "run"], "default": "corner",
+                   "_is": "WHICH TWO WALLS THIS FACET'S EDGES BELONG TO, and getting it wrong is a slot of daylight. `corner` (the default, and byte-identical to version 1) hands each top corner to an AXIS wall, so it moves along that wall's own outboard normal - one along -X, one along -Z. `run` hands both to 45-degree NEIGHBOURS, so both move along the FACET's normal, 0.125*rake/sqrt2 in each of X and Z. A chain of `corner` facets closes only when every rake is 0: the gap at the head is 0.125*sqrt(rake_a^2+rake_b^2), which is 0.177 m at one step and 1.414 m at eight, and a raked bow facet longer than one piece was plumb in the middle with a vertical crease every 5.66 m. A chain of `run` facets at one rake closes to the bit."},
         "height": {"unit": "cells", "values": [2, 3, 4, 5, 6], "default": 5},
         "head":   {"unit": "eighth_cells", "values": [0, 1, 2, 3, 4, 5, 6, 7], "default": 0,
                    "_is": "0.125 m of extra height, matching the walls it joins. A facet at a different head from its neighbours opens a slot exactly that wide."},
@@ -229,18 +251,40 @@
                    "_is": "drops the -Z end of the top edge, the same way a wall panel's fall does, so a facet in a falling run hands the next piece the height it ended at."},
         "lift":   {"unit": "eighth_cells", "values": [-4, -3, -2, -1, 0, 1, 2, 3, 4], "default": 0}
       },
-      "build": [
-        {
-          "primitive": "plate",
-          "thickness": 0.10,
-          "corners": [
-            ["span*0.5", "lift*0.125", 0],
-            [0, "lift*0.125", "span*0.5"],
-            ["rake_b*-0.125", "lift*0.125+height*0.5+head*0.125", "span*0.5"],
-            ["span*0.5", "lift*0.125+height*0.5+head*0.125-fall*0.125", "rake_a*-0.125"]
-          ]
-        }
-      ]
+      "constraints": [
+        {"expr": "span*0.5+rake_a*0.125", "min": 0.125,
+         "_is": "the -Z top corner has to stay outboard of the foot corner it is diagonally across from. Past that it crosses it and the quad ties itself in a bow - 109 settings of the full (span, height, rake_a, rake_b, fall) cross product did exactly that and NOTHING named them; the baker refused them as `self-crossing quad` and the piece said nothing. A refusal in the piece's own words is the difference between `you cannot do that` and a hole."},
+        {"expr": "span*0.5+rake_b*0.125", "min": 0.125,
+         "_is": "the same for the -X top corner."}
+      ],
+      "build": {
+        "$choice": "chain",
+        "corner": [
+          {
+            "primitive": "plate",
+            "thickness": 0.10,
+            "corners": [
+              ["span*0.5", "lift*0.125", 0],
+              [0, "lift*0.125", "span*0.5"],
+              ["rake_b*-0.125", "lift*0.125+height*0.5+head*0.125", "span*0.5"],
+              ["span*0.5", "lift*0.125+height*0.5+head*0.125-fall*0.125", "rake_a*-0.125"]
+            ]
+          }
+        ],
+        "run": [
+          {
+            "primitive": "plate",
+            "thickness": 0.10,
+            "_is": "0.08838834764831845 is 0.125/sqrt(2): the rake is still a whole eighth-cell MEASURED PERPENDICULAR TO THE WALL, and on a 45-degree wall that lands as equal parts in X and in Z. The player's number is a grid count; the irrational is the same irrational the chord already carries.",
+            "corners": [
+              ["span*0.5", "lift*0.125", 0],
+              [0, "lift*0.125", "span*0.5"],
+              ["rake_b*-0.08838834764831845", "lift*0.125+height*0.5+head*0.125", "span*0.5+rake_b*-0.08838834764831845"],
+              ["span*0.5+rake_a*-0.08838834764831845", "lift*0.125+height*0.5+head*0.125-fall*0.125", "rake_a*-0.08838834764831845"]
+            ]
+          }
+        ]
+      }
     },
 
     {
@@ -313,8 +357,8 @@
       "params": {
         "span":    {"unit": "cells", "values": [1, 2, 3, 4, 6, 8, 12, 16], "default": 4},
         "profile": {"unit": "choice", "values": ["eave", "cap", "coaming", "strake"], "default": "cap"},
-        "offset":  {"unit": "eighth_cells", "values": [0, 1, 2, 3, 4, 5, 6, 7, 8], "default": 0,
-                    "_is": "pushes the run outboard in 0.125 m steps. A trim run has no height and therefore cannot carry a rake, so a strake crossing a RAKED wall is set out to meet the wall at the height it is placed - the same eighth-cell arithmetic the rake itself uses. Without this, every band on a raked wall buries itself inside the plating."},
+        "offset":  {"unit": "eighth_cells", "values": [-8, -7, -6, -5, -4, -3, -2, -1, 0, 1, 2, 3, 4, 5, 6, 7, 8], "default": 0,
+                    "_is": "moves the run outboard (positive) or INBOARD (negative) in 0.125 m steps. A trim run has no height and therefore cannot carry a rake, so a strake crossing a RAKED wall is set out to meet the wall at the height it is placed - the same eighth-cell arithmetic the rake itself uses. It was 0..8 until a critic measured the other half: a wall that TUMBLES HOME leans inboard, and at rake -8 the daylight between a strake at offset 0 and the plating is 0.055 m at half a metre up, 0.155 at a metre and 0.355 at two. No shipped fixture carried a strake on a tumblehome wall, which is the only reason a one-directional parameter survived with an `_is` claiming it solved both."},
         "lift":    {"unit": "eighth_cells", "values": [-4, -3, -2, -1, 0, 1, 2, 3, 4], "default": 0,
                     "_is": "0.125 m steps off the grid node, so a cap rail lands on a deck that is off the lattice."}
       },

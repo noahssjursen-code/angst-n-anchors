@@ -2,7 +2,7 @@
  "format": "structure_plan_v1",
  "context": "vessel",
  "hull_id": "hull_28x10",
- "_note": "THE STRICT ONE. Zero hand-authored plate corners in this file, full stop, and zero `items[]` of any kind: the whole superstructure is 58 piece placements, and the only other entity is the hull's own sheer-band bulwark, which is a SWEPT CURVE and is deliberately not a grid piece - quantising a sheer to 0.5 m would step the one curve the fleet was rebuilt to draw.\n\nIt carries the trawler's deckhouse unchanged plus the parts of the kit that vessel never asks for, so nothing in the kit ships unproven: a `roof_slope` foredeck breakwater rising two cells over two, its after face and its eave, the `cap` and `strake` profiles of `trim_band` - the strakes set out two eighth-cells with `offset`, because a trim run has no height and cannot carry a rake, so on a raked wall it has to be pushed out to meet it - and a DIAGONAL WALL RUN: three 4-cell `corner_45` facets chained nose to tail across the foredeck, which is the piece doing the job version 1 said the kit had no piece for.",
+ "_note": "THE STRICT ONE. Zero hand-authored plate corners in this file, full stop, and zero `items[]` of any kind: the whole superstructure is 57 piece placements, and the only other entity is the hull's own sheer-band bulwark, which is a SWEPT CURVE and is deliberately not a grid piece - quantising a sheer to 0.5 m would step the one curve the fleet was rebuilt to draw.\n\nIt carries the trawler's deckhouse unchanged plus the parts of the kit that vessel never asks for, so nothing in the kit ships unproven: a `roof_slope` VISOR over the windscreen and its eave, the `cap` and `strake` profiles of `trim_band` - the strakes set out two eighth-cells with `offset`, because a trim run has no height and cannot carry a rake, so on a raked wall it has to be pushed out to meet it - and a DIAGONAL WALL RUN: three 4-cell `corner_45` facets in `chain: run`, raked one step and chained nose to tail across the foredeck, which is the piece doing the job version 1 said the kit had no piece for.\n\nTWO THINGS A CRITIC BROKE HERE AND THIS FILE NOW CARRIES THE FIX FOR. The diagonal run shipped in the default `chain: corner`, which opened both its joints by 0.1768 m at the head - daylight, in the fixture that was the evidence for the feature. And the `roof_slope` shipped as a breakwater PRISM whose two triangular ends nothing in the kit can close; it is a cantilevered visor now, which has no ends.",
  "palette": {
   "wall": [
    0.85,
@@ -964,55 +964,40 @@
    "id": 54,
    "piece": "roof_slope",
    "cell": [
-    6,
-    0,
-    20
+    7,
+    9,
+    36
    ],
    "facing": 0,
    "params": {
     "span": 6,
     "depth": 2,
-    "rise": 2,
-    "gauge": "light"
+    "rise": 1,
+    "gauge": "light",
+    "lift": -3
    },
    "color": "#858a8f",
-   "_is": "foredeck breakwater - two cells of rise over two of run"
+   "_is": "wheelhouse visor over the windscreen - one cell of rise over two of run"
   },
   {
    "id": 55,
-   "piece": "wall_panel",
+   "piece": "trim_band",
    "cell": [
-    12,
-    0,
-    22
+    7,
+    9,
+    36
    ],
-   "facing": 180,
+   "facing": 0,
    "params": {
     "span": 6,
-    "height": 2,
-    "rake": 0
+    "profile": "eave",
+    "lift": -3
    },
    "color": "#e3e0d4",
-   "_is": "breakwater, after face"
+   "_is": "eave along the visor's forward edge"
   },
   {
    "id": 56,
-   "piece": "trim_band",
-   "cell": [
-    12,
-    2,
-    22
-   ],
-   "facing": 180,
-   "params": {
-    "span": 6,
-    "profile": "eave"
-   },
-   "color": "#e3e0d4",
-   "_is": "eave along the breakwater's after edge"
-  },
-  {
-   "id": 57,
    "piece": "trim_band",
    "cell": [
     4,
@@ -1029,7 +1014,7 @@
    "_is": "cap rail across the forward edge of the boat deck"
   },
   {
-   "id": 58,
+   "id": 57,
    "piece": "trim_band",
    "cell": [
     6,
@@ -1046,7 +1031,7 @@
    "_is": "rubbing strake across the raked deckhouse front, set out two eighth-cells to meet it"
   },
   {
-   "id": 59,
+   "id": 58,
    "piece": "trim_band",
    "cell": [
     14,
@@ -1063,7 +1048,7 @@
    "_is": "rubbing strake across the raked aft bulkhead"
   },
   {
-   "id": 60,
+   "id": 59,
    "piece": "corner_45",
    "cell": [
     12,
@@ -1074,14 +1059,15 @@
    "params": {
     "span": 4,
     "height": 3,
+    "chain": "run",
     "rake_a": -1,
     "rake_b": -1
    },
    "color": "#e3e0d4",
-   "_is": "diagonal wall run, facet 1 of 3 \u2014 a 5.66 m chord, chained"
+   "_is": "diagonal wall run, facet 1 of 3 \u2014 a 5.66 m chord, raked and chained"
   },
   {
-   "id": 61,
+   "id": 60,
    "piece": "corner_45",
    "cell": [
     8,
@@ -1092,14 +1078,15 @@
    "params": {
     "span": 4,
     "height": 3,
+    "chain": "run",
     "rake_a": -1,
     "rake_b": -1
    },
    "color": "#e3e0d4",
-   "_is": "diagonal wall run, facet 2 of 3 \u2014 a 5.66 m chord, chained"
+   "_is": "diagonal wall run, facet 2 of 3 \u2014 a 5.66 m chord, raked and chained"
   },
   {
-   "id": 62,
+   "id": 61,
    "piece": "corner_45",
    "cell": [
     4,
@@ -1110,11 +1097,12 @@
    "params": {
     "span": 4,
     "height": 3,
+    "chain": "run",
     "rake_a": -1,
     "rake_b": -1
    },
    "color": "#e3e0d4",
-   "_is": "diagonal wall run, facet 3 of 3 \u2014 a 5.66 m chord, chained"
+   "_is": "diagonal wall run, facet 3 of 3 \u2014 a 5.66 m chord, raked and chained"
   }
  ],
  "items": [],

@@ -61,7 +61,9 @@ func _initialize() -> void:
 	_check_tiling()
 	_check_trim_lattice()
 	_check_diagonal_run()
+	_check_cross_products()
 	_check_shell_closes()
+	_check_every_shell()
 	_check_deck_lands_on_walls()
 	_check_six_tier_block()
 	_check_fixtures()
@@ -497,6 +499,62 @@ func _check_trim_lattice() -> void:
 		PieceKit.placed_corners(flat)[3].distance_to(cb[2]), 0.125, 1e-9
 	)
 
+	## THE WRONG WAY TO CHAIN A FALL, and the kit now says so in `fall`'s own words
+	## because a critic read the old wording as a promise that it chained by itself.
+	## Taking the drop out of `lift` moves the WHOLE piece: the head closes and the
+	## FOOT opens by the same 0.125*fall. There is no setting that does neither.
+	## `matched` is panel B still carrying A's STARTING head — the natural mistake,
+	## and on its own it leaves the joint 0.125 m open.
+	var matched := next.duplicate(true)
+	(matched["params"] as Dictionary)["head"] = 1
+	_t.near(
+		"a neighbour that keeps the falling panel's STARTING head is 0.125 m out",
+		ca[3].distance_to(PieceKit.placed_corners(matched)[2]), 0.125, 1e-9
+	)
+	var by_lift := matched.duplicate(true)
+	(by_lift["params"] as Dictionary)["lift"] = -1
+	var cl := PieceKit.placed_corners(by_lift)
+	_t.near("taking a fall out of `lift` closes the head", ca[3].distance_to(cl[2]), 0.0, 1e-9)
+	_t.near(
+		"and opens the FOOT by exactly the same 0.125 m — head or foot, never neither",
+		ca[0].distance_to(cl[1]), 0.125, 1e-9
+	)
+	var same_fall := matched.duplicate(true)
+	(same_fall["params"] as Dictionary)["fall"] = 1
+	_t.near(
+		"and two panels at the SAME fall are a sawtooth, not a plane: 0.125 m at the joint",
+		ca[3].distance_to(PieceKit.placed_corners(same_fall)[2]), 0.125, 1e-9
+	)
+
+	## A STRAKE ON A WALL THAT TUMBLES HOME. `offset` was 0..8 and only pushed
+	## OUTBOARD, while its own `_is` claimed it solved a raked wall — half true. A
+	## wall at rake -8 leans 1.00 m INBOARD over 2.50 m, so at 2.00 m up the plating
+	## is 0.80 m inboard of the foot line and no positive offset reaches it. The
+	## claim here is the one that matters: the strake TOUCHES THE PLATING.
+	var wall_in := PieceKit.resolve("wall_panel", {"span": 4, "height": 5, "rake": -8})
+	var wc := ((wall_in["specs"] as Array)[0] as Dictionary)["corners"] as PackedVector3Array
+	## Plating z at 2.00 m up, interpolated between foot (z 0) and head (z +1.00).
+	var plating_z := wc[1].z + (wc[2].z - wc[1].z) * (2.00 / wc[2].y)
+	var best := INF
+	var best_offset := 0
+	for value in PieceKit.params_of("trim_band")["offset"]["values"] as Array:
+		var strake := PieceKit.resolve("trim_band", {"span": 4, "profile": "strake", "offset": int(value)})
+		var sc := ((strake["specs"] as Array)[0] as Dictionary)["corners"] as PackedVector3Array
+		## The strake's own face sits 0.05 m proud; the gap is what is left.
+		var gap := absf((sc[0].z + 0.05) - plating_z)
+		if gap < best:
+			best = gap
+			best_offset = int(value)
+	_t.check(
+		"a strake reaches a wall that TUMBLES HOME: offset %d leaves %.4f m (the old set's "
+		% [best_offset, best] + "best was 0.355 m and it could only push outboard)",
+		best < 0.07 and best_offset < 0
+	)
+	_t.check(
+		"and the set really does reach inboard",
+		(PieceKit.params_of("trim_band")["offset"]["values"] as Array).has(-8)
+	)
+
 	## A DECK THAT FALLS, and the CAMBER two of them make.
 	var tile := PieceKit.resolve("deck_tile", {"span": 4, "depth": 16, "fall": 2})
 	var dt := ((tile["specs"] as Array)[0] as Dictionary)["corners"] as PackedVector3Array
@@ -776,15 +834,20 @@ func _check_diagonal_run() -> void:
 	var cc := ((chord["specs"] as Array)[0] as Dictionary)["corners"] as PackedVector3Array
 	_t.near("and at span 8 its chord is 5.66 m, a bow facet", cc[0].distance_to(cc[1]), 5.6569, 1e-3)
 
-	## Three facets chained nose to tail, each one placed span cells back in X and
-	## span forward in Z, all at facing 0.
-	var facets: Array = []
+	## THE CHAIN IS BUILT RAKED, and that is not a detail. The first version of this
+	## check built it at the default rake 0 — the ONE value at which both chain modes
+	## agree — so it could not see the 0.1768 m of daylight the shipped fixture had,
+	## and its negative control slid a facet one cell sideways: a POSITIONAL mutation
+	## on a check whose real failure mode is a PARAMETER. REALITY §4 and standing
+	## order 8. The rake below is the ferry-bow case the piece's own text names.
 	var span := 8
+	var rake := -2
+	var facets: Array = []
 	for i in 3:
 		facets.append({
 			"id": "facet %d" % i, "piece": "corner_45",
 			"cell": [24 - span * i, 0, span * i], "facing": 0,
-			"params": {"span": span, "height": 5},
+			"params": {"span": span, "height": 5, "chain": "run", "rake_a": rake, "rake_b": rake},
 		})
 	var open := 0
 	var worst := 0.0
@@ -802,8 +865,34 @@ func _check_diagonal_run() -> void:
 			open += 1
 		worst = maxf(worst, maxf(here[1].distance_to(next[0]), here[2].distance_to(next[3])))
 	_t.equal(
-		"three chained facets share every joint BIT-IDENTICALLY (worst %.9f m)" % worst, open, 0
+		"three RAKED facets chained in `chain: run` share every joint BIT-IDENTICALLY "
+		% [] + "(rake %d, worst %.9f m)" % [rake, worst], open, 0
 	)
+
+	## THE RAKE IS STILL A RAKE. Closing the joints is cheap — any consistent wrong
+	## number closes them, because every facet carries the same one. What pins the
+	## geometry is the PROPERTY: the top edge stands 0.125*rake m outboard of the
+	## foot edge measured PERPENDICULAR TO THE WALL, exactly as it does on a
+	## wall_panel. Splitting 0.125 into each axis instead of 0.125/sqrt2 closes every
+	## joint and silently makes the wall 41% more raked than the player asked for.
+	var wrong := 0
+	var measured := 0.0
+	for facet in facets:
+		var c := PieceKit.placed_corners(facet as Dictionary)
+		if c.size() != 4:
+			wrong += 1
+			continue
+		var along := (c[1] - c[0]).normalized()
+		var normal := Vector3(along.z, 0.0, -along.x).normalized()
+		var offset := ((c[2] + c[3]) * 0.5 - (c[0] + c[1]) * 0.5).dot(normal)
+		measured = offset
+		if absf(absf(offset) - absf(float(rake)) * 0.125) > 1e-6:
+			wrong += 1
+	_t.equal(
+		"and every facet's top stands %.4f m off its foot perpendicular to the wall, "
+		% absf(measured) + "which is |rake| eighth-cells and nothing else", wrong, 0
+	)
+
 	## And the chain is STRAIGHT — a diagonal wall, not a staircase of facets. Every
 	## foot corner of every facet lies on one line, and that line runs at 45 degrees.
 	var ends := PieceKit.placed_corners(facets[0] as Dictionary)
@@ -822,19 +911,375 @@ func _check_diagonal_run() -> void:
 	_t.near("at 45 degrees in plan", absf(axis.x), absf(axis.z), 1e-9)
 	_t.near("and 8.49 m long — three 5.66 m chords", axis.length(), 3.0 * 8.0 * 0.5 * sqrt(2.0), 1e-6)
 
-	## MUTATION. Slide the middle facet one cell off the diagonal and the joints
-	## must open. A chain check that cannot fail is a chain of nothing.
+	## MUTATION A — THE PARAMETER. The same three facets in the default
+	## `chain: corner`, which is what the strict fixture shipped with. Each top
+	## corner then moves along an AXIS wall's normal instead of the facet's, and the
+	## joint opens by 0.125*sqrt(rake_a^2 + rake_b^2) — 0.3536 m at rake -2.
+	var axis_mode: Array = facets.duplicate(true)
+	var axis_open := 0
+	var axis_gap := 0.0
+	for facet in axis_mode:
+		((facet as Dictionary)["params"] as Dictionary)["chain"] = "corner"
+	for i in 2:
+		var here := PieceKit.placed_corners(axis_mode[i] as Dictionary)
+		var next := PieceKit.placed_corners(axis_mode[i + 1] as Dictionary)
+		if here[2] != next[3]:
+			axis_open += 1
+		axis_gap = maxf(axis_gap, here[2].distance_to(next[3]))
+	_t.check(
+		"MUTATION: the same chain in `chain: corner` opens %d of 2 joints (was 0)" % axis_open,
+		axis_open == 2
+	)
+	_t.near(
+		"MUTATION: and by exactly 0.125*sqrt(rake_a^2+rake_b^2)",
+		axis_gap, 0.125 * sqrt(float(rake * rake + rake * rake)), 1e-6
+	)
+	_t.check(
+		"MUTATION: while its FEET stay closed, which is why it looked fine",
+		PieceKit.placed_corners(axis_mode[0] as Dictionary)[1]
+			== PieceKit.placed_corners(axis_mode[1] as Dictionary)[0]
+	)
+
+	## MUTATION B — THE POSITION. Kept, because a chain can break two ways.
 	var bent: Array = facets.duplicate(true)
 	(bent[1] as Dictionary)["cell"] = [24 - span + 1, 0, span]
 	var bent_open := 0
 	for i in 2:
 		var here := PieceKit.placed_corners(bent[i] as Dictionary)
 		var next := PieceKit.placed_corners(bent[i + 1] as Dictionary)
-		if here[1] != next[0] or here[2] != next[3]:
+		if here.size() != 4 or next.size() != 4 or here[1] != next[0] or here[2] != next[3]:
 			bent_open += 1
 	_t.check(
 		"MUTATION: one cell of offset on the middle facet opens %d of 2 joints (was 0)"
 		% bent_open, bent_open > 0
+	)
+
+
+# ── Every shell, in every fixture, decomposed into RINGS ────────────────────
+#
+# `_seam_report` counts unmatched edges and a critic broke it three ways:
+#
+#   • it was only ever pointed at the trawler, so `probe_piece_house` — the
+#     STRICT fixture, the evidence for the whole design — shipped with 0.1768 m
+#     of daylight in the diagonal run its own note advertises, and two open
+#     triangular ends on a `roof_slope` prism. Nothing was asking. (REALITY §4b.)
+#   • "three closed rings" lived in a LABEL. The assertion was a piece COUNT, and
+#     a count cannot tell one ring from three. Two wall panels facing each other
+#     on ONE LINE have every OUT matched, `open == 0`, and enclose 0.000 m².
+#   • the matcher was greedy first-fit, so two pieces presenting identical IN
+#     edges could consume an edge a later OUT needed.
+#
+# So: match only where the mate is UNIQUE BOTH WAYS, follow the links into rings,
+# and require every closed ring to enclose real plan area. Every fixture in the
+# repo that carries `pieces[]` is walked, and one that is not declared here is a
+# failure rather than a silence.
+
+const STRUCTURES_DIR := "res://resources/data/structures"
+
+const FIXTURE_SHELLS := {
+	## Lower tier, wheelhouse, funnel. Nothing open.
+	"probe_piece_trawler": {"rings": 3, "runs": 0, "run_pieces": 0},
+	## The same three rings, plus the diagonal wall run — three chained facets
+	## with two free ends, which is what a wall run IS.
+	"probe_piece_house": {"rings": 3, "runs": 1, "run_pieces": 3},
+	## Built through the studio's piece tool: casing ring, wheelhouse ring,
+	## exhaust casing ring. Owned by `structure_studio.gd`; walked here because a
+	## structural check that is pointed at one fixture is pointed at none.
+	"probe_piece_tug": {"rings": 3, "runs": 0, "run_pieces": 0},
+}
+
+## Plan area a closed ring has to enclose to be a room and not a fence. The
+## smallest ring the kit can build is a 1-cell square of four facets, 0.25 m².
+const RING_MIN_AREA := 0.20
+
+
+func _check_every_shell() -> void:
+	var seen: Array = []
+	var dir := DirAccess.open(STRUCTURES_DIR)
+	if dir == null:
+		_t.fail("cannot list %s" % STRUCTURES_DIR)
+		return
+	for file in dir.get_files():
+		if not file.ends_with(".json"):
+			continue
+		var doc := _load("%s/%s" % [STRUCTURES_DIR, file])
+		var pieces: Variant = doc.get("pieces", null)
+		if not (pieces is Array) or (pieces as Array).is_empty():
+			continue
+		var stem := file.get_basename()
+		seen.append(stem)
+		var report := _shell_report(doc)
+		if not FIXTURE_SHELLS.has(stem):
+			## Not one of the kit's own fixtures — another agent's probe. Its ring
+			## COUNT is its author's intent and this file has no business asserting
+			## it, but the invariants below hold for any shell whatever it is for,
+			## and they are asserted. The shape is printed so it is not a silence.
+			print("  [shell] %s (undeclared): rings=%s runs=%d areas=%s open=%d"
+				% [stem, str(report["rings"]), int(report["runs"]), str(report["areas"]),
+					int(report["open"])])
+			_t.check(
+				"%s: undeclared fixture, but it is NOT a probe_piece_* one" % stem,
+				not stem.begins_with("probe_piece_")
+			)
+			_t.equal(
+				"%s: no ambiguous edge match (%s)" % [stem, str(report["ambiguous"])],
+				(report["ambiguous"] as PackedStringArray).size(), 0
+			)
+			continue
+		var want := FIXTURE_SHELLS[stem] as Dictionary
+		_t.equal(
+			"%s: no ambiguous edge match (%s)" % [stem, str(report["ambiguous"])],
+			(report["ambiguous"] as PackedStringArray).size(), 0
+		)
+		_t.equal(
+			"%s: %d closed rings" % [stem, int(report["rings"])], int(report["rings"]),
+			int(want["rings"])
+		)
+		_t.equal(
+			"%s: %d open runs, ends %s" % [stem, int(report["runs"]), str(report["open_ends"])],
+			int(report["runs"]), int(want["runs"])
+		)
+		_t.equal(
+			"%s: %d pieces in open runs" % [stem, int(report["run_pieces"])],
+			int(report["run_pieces"]), int(want["run_pieces"])
+		)
+		var small := 0
+		for area in report["areas"] as Array:
+			if float(area) < RING_MIN_AREA:
+				small += 1
+		_t.equal(
+			"%s: every ring encloses real plan area (%s m2)" % [stem, str(report["areas"])],
+			small, 0
+		)
+	_t.check("walked every piece-built fixture in the repo (%s)" % str(seen), seen.size() >= 3)
+
+	## MUTATION 1, and it is a PARAMETER mutation because the failure this check
+	## missed was a parameter. Put the house's diagonal run back in the default
+	## `chain: corner` — the mode it shipped in — and the two interior joints open
+	## by 0.1768 m, so one run of three becomes three runs of one.
+	var house := _load(HOUSE)
+	var corner_mode := house.duplicate(true)
+	var touched := 0
+	for placement_variant in corner_mode["pieces"] as Array:
+		var placement := placement_variant as Dictionary
+		if not str(placement.get("_is", "")).begins_with("diagonal wall run"):
+			continue
+		(placement["params"] as Dictionary)["chain"] = "corner"
+		touched += 1
+	var broken := _shell_report(corner_mode)
+	_t.check(
+		"MUTATION: the %d diagonal facets back in chain \"corner\" break into %d runs (was 1)"
+		% [touched, int(broken["runs"])],
+		int(broken["runs"]) > 1
+	)
+	## And the gap is the derived one, not some other failure.
+	var facets: Array = []
+	for placement_variant in corner_mode["pieces"] as Array:
+		var placement := placement_variant as Dictionary
+		if str(placement.get("_is", "")).begins_with("diagonal wall run"):
+			facets.append(placement)
+	if facets.size() >= 2:
+		var a_in := _lateral_edges(facets[0] as Dictionary)["in"] as PackedVector3Array
+		var b_out := _lateral_edges(facets[1] as Dictionary)["out"] as PackedVector3Array
+		_t.near(
+			"MUTATION: and the head gap is 0.125*sqrt(rake_a^2+rake_b^2) = 0.1768 m",
+			a_in[1].distance_to(b_out[1]), 0.125 * sqrt(2.0), 1e-5
+		)
+		_t.near("with the feet still closed", a_in[0].distance_to(b_out[0]), 0.0, 1e-5)
+
+	## MUTATION 2 — THE FLAT FENCE. Two wall panels on ONE LINE facing each other.
+	## Every OUT has a mate and `open == 0`, which is what the old check asked; the
+	## ring encloses 0.000 m², which is what this one asks.
+	var fence: Array = [
+		{"id": "f0", "piece": "wall_panel", "cell": [0, 0, 0], "facing": 0,
+			"params": {"span": 4, "height": 5}},
+		{"id": "f1", "piece": "wall_panel", "cell": [4, 0, 0], "facing": 180,
+			"params": {"span": 4, "height": 5}},
+	]
+	var fence_report := _shell_report({"pieces": fence})
+	_t.equal(
+		"MUTATION: a flat fence has no open edge at all (%d)" % int(fence_report["open"]),
+		int(fence_report["open"]), 0
+	)
+	var fence_area := 0.0
+	for area in fence_report["areas"] as Array:
+		fence_area = maxf(fence_area, float(area))
+	_t.check(
+		"MUTATION: and it encloses %.4f m2, which the ring check refuses" % fence_area,
+		int(fence_report["rings"]) > 0 and fence_area < RING_MIN_AREA
+	)
+
+
+## Shell decomposition. Returns {"rings","runs","run_pieces","areas","open",
+## "open_ends","ambiguous"}.
+##
+## A link is only made where piece A's OUT edge matches piece B's IN edge AND no
+## other piece's IN edge matches that OUT and no other OUT matches that IN. An
+## ambiguous pair is reported, never guessed at — the greedy matcher this replaces
+## could consume an edge a later piece needed and report a false open seam.
+func _shell_report(doc: Dictionary) -> Dictionary:
+	var pieces: Array = []
+	for placement_variant in doc.get("pieces", []) as Array:
+		var placement := placement_variant as Dictionary
+		if not SHELL_PIECES.has(str(placement.get("piece", ""))):
+			continue
+		var edges := _lateral_edges(placement)
+		if edges.is_empty():
+			continue
+		pieces.append({
+			"label": _label(placement),
+			"out": edges["out"], "in": edges["in"],
+		})
+	var count := pieces.size()
+	var next_of: Dictionary = {}
+	var prev_of: Dictionary = {}
+	var ambiguous := PackedStringArray()
+	for i in count:
+		var out_edge := (pieces[i] as Dictionary)["out"] as PackedVector3Array
+		var hits: Array = []
+		for j in count:
+			if _edges_meet(out_edge, (pieces[j] as Dictionary)["in"] as PackedVector3Array):
+				hits.append(j)
+		if hits.size() > 1 and ambiguous.size() < 4:
+			ambiguous.append("%s has %d mates" % [str((pieces[i] as Dictionary)["label"]), hits.size()])
+		if hits.size() == 1:
+			next_of[i] = int(hits[0])
+	for i in next_of.keys():
+		var j := int(next_of[i])
+		if prev_of.has(j):
+			if ambiguous.size() < 4:
+				ambiguous.append("%s is claimed twice" % str((pieces[j] as Dictionary)["label"]))
+			continue
+		prev_of[j] = int(i)
+	var open := 0
+	var open_ends := PackedStringArray()
+	for i in count:
+		if not next_of.has(i):
+			open += 1
+			if open_ends.size() < 6:
+				open_ends.append(str((pieces[i] as Dictionary)["label"]))
+	var visited: Dictionary = {}
+	var rings := 0
+	var runs := 0
+	var run_pieces := 0
+	var areas: Array = []
+	## Open runs first: start at every piece with no predecessor and walk forward.
+	for i in count:
+		if prev_of.has(i) or visited.has(i):
+			continue
+		var walked := 0
+		var cursor := i
+		while not visited.has(cursor):
+			visited[cursor] = true
+			walked += 1
+			if not next_of.has(cursor):
+				break
+			cursor = int(next_of[cursor])
+		runs += 1
+		run_pieces += walked
+	## What is left is cycles.
+	for i in count:
+		if visited.has(i):
+			continue
+		var ring: Array = []
+		var cursor := i
+		while not visited.has(cursor):
+			visited[cursor] = true
+			ring.append(cursor)
+			if not next_of.has(cursor):
+				break
+			cursor = int(next_of[cursor])
+		rings += 1
+		## Shoelace over the ring's OUT feet, in the order the links give them.
+		var area := 0.0
+		for k in ring.size():
+			var a := ((pieces[int(ring[k])] as Dictionary)["out"] as PackedVector3Array)[0]
+			var b := ((pieces[int(ring[(k + 1) % ring.size()])] as Dictionary)["out"] as PackedVector3Array)[0]
+			area += a.x * b.z - b.x * a.z
+		areas.append(snappedf(absf(area) * 0.5, 0.0001))
+	return {
+		"rings": rings, "runs": runs, "run_pieces": run_pieces, "areas": areas,
+		"open": open, "open_ends": open_ends, "ambiguous": ambiguous,
+	}
+
+
+# ── The full cross product, for the pieces whose parameters INTERACT ────────
+#
+# `_extremes` moves one numeric parameter off its default at a time. Its own
+# comment admits it, and a critic used that to find 109 settings of `corner_45`
+# that the BAKER refuses as self-crossing quads and that no constraint named — a
+# player picking them got silence and no plate. The interaction is between `span`
+# and the two rakes, which one-at-a-time can never reach.
+#
+# The claim is NOT "everything draws". It is: NOTHING IS REFUSED IN SILENCE. A
+# setting that the piece turns away in its own words is a good outcome.
+
+func _check_cross_products() -> void:
+	var silent := PackedStringArray()
+	var named := 0
+	var drawn := 0
+	var p := PieceKit.params_of("corner_45")
+	for chain in ["corner", "run"]:
+		for span in p["span"]["values"]:
+			for rake_a in p["rake_a"]["values"]:
+				for rake_b in p["rake_b"]["values"]:
+					for fall in [0, 4]:
+						var setting := {
+							"chain": chain, "span": span, "height": 2,
+							"rake_a": rake_a, "rake_b": rake_b, "fall": fall,
+						}
+						var result := PieceKit.resolve("corner_45", setting)
+						if not (result["specs"] as Array).is_empty():
+							drawn += 1
+							continue
+						if _says(result["errors"] as PackedStringArray, "which is under"):
+							named += 1
+						elif silent.size() < 4:
+							silent.append("%s: %s" % [str(setting), ", ".join(result["errors"] as PackedStringArray)])
+	_t.equal(
+		"corner_45's full (chain x span x rake_a x rake_b x fall) cross draws %d and refuses %d "
+		% [drawn, named] + "IN ITS OWN WORDS — %d refused in silence (%s)"
+		% [silent.size(), "none" if silent.is_empty() else silent[0]],
+		silent.size(), 0
+	)
+	## And the constraint is not just refusing everything: the settings the fleet
+	## actually uses have to survive it.
+	for probe in [
+		{"span": 1, "rake_a": 4, "rake_b": -1}, {"span": 1, "rake_a": 7, "rake_b": -1},
+		{"span": 4, "chain": "run", "rake_a": -1, "rake_b": -1}, {"span": 8, "rake_a": -8, "rake_b": 8},
+	]:
+		_t.check(
+			"and %s still draws" % str(probe),
+			not (PieceKit.resolve("corner_45", probe)["specs"] as Array).is_empty()
+		)
+
+	## `wall_glazed`'s (height, sill, band, head, fall) space is half illegal —
+	## measured, and every one of those is the header constraint speaking.
+	var g_silent := PackedStringArray()
+	var g_named := 0
+	var g_drawn := 0
+	var g := PieceKit.params_of("wall_glazed")
+	for height in g["height"]["values"]:
+		for sill in g["sill"]["values"]:
+			for band in g["band"]["values"]:
+				for head in g["head"]["values"]:
+					for fall in g["fall"]["values"]:
+						var setting := {
+							"height": height, "sill": sill, "band": band,
+							"head": head, "fall": fall,
+						}
+						var result := PieceKit.resolve("wall_glazed", setting)
+						if not (result["specs"] as Array).is_empty():
+							g_drawn += 1
+						elif _says(result["errors"] as PackedStringArray, "which is under"):
+							g_named += 1
+						elif g_silent.size() < 4:
+							g_silent.append("%s: %s" % [str(setting), ", ".join(result["errors"] as PackedStringArray)])
+	_t.equal(
+		"wall_glazed's full (height x sill x band x head x fall) cross: %d draw, %d are refused "
+		% [g_drawn, g_named] + "in words, %d in silence (%s)"
+		% [g_silent.size(), "none" if g_silent.is_empty() else g_silent[0]],
+		g_silent.size(), 0
 	)
 
 
