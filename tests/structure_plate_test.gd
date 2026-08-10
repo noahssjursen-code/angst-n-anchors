@@ -322,42 +322,83 @@ func _check_geometry() -> void:
 	_t.check("every plate in the deckhouse is closed (%d leaky: %s)"
 		% [leaky.size(), "none" if leaky.is_empty() else str(leaky[0])], leaky.is_empty())
 
-	## B4. Openings are HOLES, not decals. Nothing is drawn strictly inside an
-	## opening rectangle, and something is drawn just outside it.
-	var inside := 0
+	## B4. Openings are HOLES, not decals — and the probe is a RAY through the
+	## surface, not a search for nearby vertices. A vertex search passes on a
+	## plate that ignores openings entirely: at one segment a panel carries
+	## vertices only at its own corners, so a full-plate panel has none inside the
+	## window it failed to cut. Measured — that mutant left this check green.
+	##
+	## Each probe is a 0.24 m segment along the plate normal through a point on
+	## the mid-surface. Inside a clear opening it must hit NOTHING; a jamb-width
+	## plus a margin to the side of it, it must hit the plate.
+	var filled := 0
+	var missing := 0
 	var checked := 0
+	var probes := 0
 	for id in [ID_FRONT, ID_PORT, ID_AFT, ID_SCREEN]:
 		var spec := _props(id)
 		var corners := _corners(id)
 		var ref := StructureBaker.plate_ref_lengths(StructureBaker.plate_corners(spec))
-		var bake_root := StructureBaker.bake(_solo(_item(id)))
-		var mesh_verts := _vertices(bake_root)
-		bake_root.free()
-		for opening in StructureBaker.plate_openings(spec, ref):
+		var face := (corners[2] - corners[0]).cross(corners[3] - corners[1]).normalized()
+		var tris := _triangle_list(StructurePlan.item_props(_item(id)))
+		var openings := StructureBaker.plate_openings(spec, ref)
+		for opening in openings:
 			checked += 1
-			## The clear opening, held 4 cm inside every edge so the jamb frames —
-			## which are supposed to be there — are never counted.
-			var u0 := (float(opening["off"]) + 0.04) / ref.x
-			var u1 := (float(opening["off"]) + float(opening["w"]) - 0.04) / ref.x
-			var v0 := (float(opening["sill"]) + 0.04) / ref.y
-			var v1 := (float(opening["sill"]) + float(opening["h"]) - 0.04) / ref.y
-			var hole: Array[Vector3] = []
+			## Held clear of the jamb frames, which straddle the cut edge by half
+			## of PLATE_FRAME_WIDTH and are supposed to be there.
+			var inset := StructureBaker.PLATE_FRAME_WIDTH * 0.5 + 0.05
+			var u0 := (float(opening["off"]) + inset) / ref.x
+			var u1 := (float(opening["off"]) + float(opening["w"]) - inset) / ref.x
+			var v0 := (float(opening["sill"]) + inset) / ref.y
+			var v1 := (float(opening["sill"]) + float(opening["h"]) - inset) / ref.y
 			for iu in 5:
 				for iv in 5:
-					hole.append(StructureBaker.plate_point(
-						corners, lerpf(u0, u1, iu / 4.0), lerpf(v0, v1, iv / 4.0)))
-			for vertex in mesh_verts:
-				for point in hole:
-					## Only geometry ON the surface counts as filling the hole; the
-					## proud frame stands off it and is excluded by the 4 cm inset
-					## in u/v, not by distance.
-					if vertex.distance_to(point) < 0.03:
-						inside += 1
-						break
-	print("[plate] %d openings checked, %d baked vertices land inside a clear opening"
-		% [checked, inside])
+					probes += 1
+					var point := StructureBaker.plate_point(
+						corners, lerpf(u0, u1, iu / 4.0), lerpf(v0, v1, iv / 4.0))
+					if _surface_at(tris, point, face):
+						filled += 1
+			## The paired half, so "no surface here" cannot be passing because
+			## the plate was never drawn at all.
+			var side_u := float(opening["off"]) + float(opening["w"]) + inset + 0.12
+			if side_u > ref.x - 0.05 or _in_an_opening(openings, side_u):
+				side_u = float(opening["off"]) - inset - 0.12
+			if side_u < 0.05 or _in_an_opening(openings, side_u):
+				continue
+			var v_mid := float(opening["sill"]) + float(opening["h"]) * 0.5
+			if not _surface_at(tris, StructureBaker.plate_point(
+					corners, side_u / ref.x, v_mid / ref.y), face):
+				missing += 1
+	print("[plate] %d openings, %d rays through their clear area hit geometry %d times; %d sides bare"
+		% [checked, probes, filled, missing])
 	_t.check("the fixture supplied openings to check (%d)" % checked, checked >= 10)
-	_t.equal("nothing is drawn inside a clear opening — they are holes", inside, 0)
+	_t.equal("nothing is drawn inside a clear opening — they are holes", filled, 0)
+	_t.equal("...and the plate beside each opening IS drawn, so the probe can see plating",
+		missing, 0)
+
+
+## Every triangle of one plate spec's bake, as [a, b, c] triples.
+func _triangle_list(spec: Dictionary) -> Array:
+	var root := _bake_spec(spec)
+	var verts := _vertices(root)
+	root.free()
+	var out: Array = []
+	for tri in verts.size() / 3:
+		out.append([verts[tri * 3], verts[tri * 3 + 1], verts[tri * 3 + 2]])
+	return out
+
+
+## Is any drawn triangle within 0.12 m of `point` along `normal`? A segment probe
+## rather than a vertex search — see B4.
+func _surface_at(tris: Array, point: Vector3, normal: Vector3) -> bool:
+	var from := point - normal * 0.12
+	var to := point + normal * 0.12
+	for tri_variant in tris:
+		var tri := tri_variant as Array
+		if Geometry3D.segment_intersects_triangle(
+				from, to, tri[0] as Vector3, tri[1] as Vector3, tri[2] as Vector3) != null:
+			return true
+	return false
 
 
 ## Edges used an odd number of times over one plate spec's whole bake.
@@ -540,6 +581,15 @@ func _check_collision() -> void:
 	var roof_boxes := StructureBaker.collect_colliders(_solo(_item(ID_ROOF)))
 	print("[collide] windscreen -> %d boxes, sloped roof -> %d boxes, upright control -> 1"
 		% [screen_boxes.size(), roof_boxes.size()])
+	## The step count is tied to the rake and to PLATE_COLLIDER_STEP, stated on a
+	## plate with NO openings so the number cannot be coming from the panel
+	## decomposition: 0.9 m of rake over a 0.15 m step is six boxes.
+	var bare_rake := {
+		"corners": [[0, 0, 0], [4, 0, 0], [4, 2.4, -0.9], [0, 2.4, -0.9]], "thickness": 0.09,
+	}
+	var bare_boxes := StructureBaker.collect_colliders(_solo(_plate_item(bare_rake)))
+	_t.equal("0.9 m of rake at a %.2f m step is exactly %d boxes"
+		% [StructureBaker.PLATE_COLLIDER_STEP, 6], bare_boxes.size(), 6)
 	_t.check("the raked windscreen is stepped, not one unrotated box (%d)" % screen_boxes.size(),
 		screen_boxes.size() >= 10)
 	_t.check("the sloped roof is stepped too (%d)" % roof_boxes.size(), roof_boxes.size() >= 2)
