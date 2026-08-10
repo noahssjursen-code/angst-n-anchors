@@ -428,7 +428,7 @@ func _check_walls(plan: StructurePlan, fixture: Dictionary, stem: String, floor_
 		var corners := named["corners"] as PackedVector3Array
 		var ref := StructureBaker.plate_ref_lengths(corners)
 		var normal := _outward(corners, inside)
-		var openings := StructureBaker.plate_openings(spec, ref)
+		var openings := StructureBaker.plate_openings(named["props"] as Dictionary, ref)
 
 		## ── the doors, one at a time ────────────────────────────────────────
 		for opening_variant in openings:

@@ -62,6 +62,7 @@ func _initialize() -> void:
 	_check_trim_lattice()
 	_check_diagonal_run()
 	_check_cross_products()
+	_check_production_path()
 	_check_shell_closes()
 	_check_every_shell()
 	_check_deck_lands_on_walls()
@@ -953,6 +954,168 @@ func _check_diagonal_run() -> void:
 		"MUTATION: one cell of offset on the middle facet opens %d of 2 joints (was 0)"
 		% bent_open, bent_open > 0
 	)
+
+
+# ── THE PRODUCTION PATH, which is where every other check in this file is not ─
+#
+# Everything above resolves a placement with `PieceKit.resolve_*` and measures
+# the corners that come back. That is the RESOLVER. For most of this wave the
+# game did not call it: `StructureBaker` had no reference to `pieces[]`, and a
+# plan handed to `bake()` drew its hull and its sheer band and NOTHING of the
+# superstructure. Measured on `probe_piece_trawler` before the seam was wired:
+# 6224 triangles and 596 colliders as authored against 7388 and 788 resolved —
+# 1164 triangles and 192 collider boxes that existed only inside the test rig,
+# because `piece_kit_capture.gd` resolves into a `user://` copy BEFORE baking.
+# REALITY §3, the layer trap, exactly: correct fixtures, correct resolver,
+# honest captures, and a path the game does not take.
+#
+# `StructureBaker.resolved()` now opens both public entries. These checks hold it
+# there. They assert the PROPERTY — a plan carrying placements bakes and collides
+# identically to the same plan with those placements already resolved — so they
+# survive any change to how the resolution is reached, and they go red the moment
+# either entry stops resolving.
+#
+# `collect_colliders` is used for the per-fixture sweep because it is the cheap
+# entry; the mesh identity is asserted on a synthetic plan that carries one of
+# every piece, including the two that resolve to more than one plate.
+
+func _check_production_path() -> void:
+	## One of every piece, and deliberately including `wall_glazed` (five plates
+	## from one placement) and an `opening` (which changes both triangle count and
+	## collider count). A one-plate-per-placement approximation passes a wall_panel
+	## and fails here.
+	var placements: Array = [
+		{"id": 1, "piece": "wall_panel", "cell": [0, 0, 0], "facing": 0,
+			"params": {"span": 4, "height": 5, "opening": "door"}},
+		{"id": 2, "piece": "wall_glazed", "cell": [4, 0, 0], "facing": 0,
+			"params": {"span": 4, "height": 5, "sill": 2, "band": 2, "lights": 3}},
+		{"id": 3, "piece": "corner_45", "cell": [8, 0, 0], "facing": 0,
+			"params": {"span": 2, "height": 5, "rake_a": 3, "rake_b": -1}},
+		{"id": 4, "piece": "deck_tile", "cell": [0, 5, 0], "facing": 0,
+			"params": {"span": 8, "depth": 4, "fall": 2, "lift": 1}},
+		{"id": 5, "piece": "roof_slope", "cell": [0, 5, 4], "facing": 0,
+			"params": {"span": 8, "depth": 2, "rise": 1}},
+		{"id": 6, "piece": "trim_band", "cell": [0, 5, 0], "facing": 0,
+			"params": {"span": 8, "profile": "eave", "offset": -2}},
+	]
+	var doc := {"format": "structure_plan_v1", "hull_id": "hull_28x10", "pieces": placements}
+	var authored := StructurePlan.from_dict(doc)
+	var resolved := StructurePlan.from_dict(
+		PieceKit.resolve_document(doc.duplicate(true))["doc"] as Dictionary
+	)
+	_t.check(
+		"the authored plan really does carry placements and no items (%d/%d)"
+		% [authored.pieces.size(), authored.items.size()],
+		authored.pieces.size() == 6 and authored.items.size() == 0
+	)
+	_t.check(
+		"and its resolved twin carries %d items and no placements — the two are not the "
+		% resolved.items.size() + "same object dressed twice",
+		resolved.items.size() > authored.pieces.size() and resolved.pieces.is_empty()
+	)
+
+	var a_tris := _bake_triangles(authored)
+	var r_tris := _bake_triangles(resolved)
+	_t.equal(
+		"StructureBaker.bake() draws a plan's PLACEMENTS: %d triangles as authored, "
+		% a_tris + "%d with them pre-resolved" % r_tris, a_tris, r_tris
+	)
+	var a_cols := StructureBaker.collect_colliders(authored).size()
+	var r_cols := StructureBaker.collect_colliders(resolved).size()
+	_t.equal(
+		"StructureBaker.collect_colliders() collides them too: %d against %d"
+		% [a_cols, r_cols], a_cols, r_cols
+	)
+	## ONE DERIVATION (REALITY §3b): what is DRAWN and what is COLLIDED have to come
+	## from the same resolution, and the sharpest thing to point at is the door —
+	## `wall_panel`'s `opening` is a hole with a casing, so it changes the mesh AND
+	## splits the plate's collider (10 plates give %d boxes, not 10). An entry that
+	## resolved placements for drawing and not for collision passes the two identity
+	## checks above on its own; it cannot pass this.
+	var no_door := doc.duplicate(true)
+	((no_door["pieces"] as Array)[0] as Dictionary)["params"] = {
+		"span": 4, "height": 5, "opening": "none",
+	}
+	var plain := StructurePlan.from_dict(no_door)
+	var plain_tris := _bake_triangles(plain)
+	var plain_cols := StructureBaker.collect_colliders(plain).size()
+	_t.check(
+		"the door in a PLACEMENT reaches the mesh (%d triangles with it, %d without) "
+		% [a_tris, plain_tris] + "and the collider (%d boxes against %d)" % [a_cols, plain_cols],
+		plain_tris != a_tris and plain_cols != a_cols
+	)
+	_t.equal(
+		"and that plan too bakes identically authored or pre-resolved",
+		plain_tris,
+		_bake_triangles(StructurePlan.from_dict(
+			PieceKit.resolve_document(no_door.duplicate(true))["doc"] as Dictionary
+		))
+	)
+
+	## NEGATIVE CONTROL, and it is the one the coordinator's measurement turned on:
+	## delete the placements and the counts must FALL. Without this the identity
+	## above is satisfied by a baker that draws nothing from either plan.
+	var stripped_doc := doc.duplicate(true)
+	stripped_doc["pieces"] = []
+	var stripped := StructurePlan.from_dict(stripped_doc)
+	var s_tris := _bake_triangles(stripped)
+	var s_cols := StructureBaker.collect_colliders(stripped).size()
+	_t.check(
+		"MUTATION: deleting the placements drops the bake from %d triangles to %d and "
+		% [a_tris, s_tris] + "%d colliders to %d — they were contributing, not decorating"
+		% [a_cols, s_cols],
+		s_tris < a_tris and s_cols < a_cols
+	)
+
+	## AND OVER EVERY PIECE-BUILT FIXTURE IN THE REPO, not the one being worked on
+	## (REALITY §3c). `collect_colliders` is the cheap entry; a full bake of the
+	## trawler is about a minute under llvmpipe and this is a lane-A test.
+	var swept := 0
+	for stem in FIXTURE_SHELLS.keys():
+		var fixture := _load("%s/%s.json" % [STRUCTURES_DIR, str(stem)])
+		if fixture.is_empty():
+			_t.fail("%s did not load" % stem)
+			continue
+		swept += 1
+		var as_authored := StructurePlan.from_dict(fixture)
+		var as_resolved := StructurePlan.from_dict(
+			PieceKit.resolve_document(fixture.duplicate(true))["doc"] as Dictionary
+		)
+		var bare := fixture.duplicate(true)
+		bare["pieces"] = []
+		var without := StructurePlan.from_dict(bare)
+		var authored_boxes := StructureBaker.collect_colliders(as_authored).size()
+		var resolved_boxes := StructureBaker.collect_colliders(as_resolved).size()
+		var bare_boxes := StructureBaker.collect_colliders(without).size()
+		_t.equal(
+			"%s: %d collider boxes as authored, %d pre-resolved — a player walks into "
+			% [stem, authored_boxes, resolved_boxes] + "the same deckhouse either way",
+			authored_boxes, resolved_boxes
+		)
+		_t.check(
+			"%s: and %d of them are the %d placements' (bare plan has %d)"
+			% [stem, authored_boxes - bare_boxes, (fixture["pieces"] as Array).size(), bare_boxes],
+			authored_boxes > bare_boxes
+		)
+	_t.equal("swept every declared piece-built fixture", swept, FIXTURE_SHELLS.size())
+
+
+func _bake_triangles(plan: StructurePlan) -> int:
+	var node := StructureBaker.bake(plan)
+	var tris := 0
+	for child in node.find_children("*", "MeshInstance3D", true, false):
+		var mesh := (child as MeshInstance3D).mesh
+		if mesh == null:
+			continue
+		for surface in mesh.get_surface_count():
+			var arrays := mesh.surface_get_arrays(surface)
+			var index: Variant = arrays[Mesh.ARRAY_INDEX]
+			if index is PackedInt32Array:
+				tris += (index as PackedInt32Array).size() / 3
+			else:
+				tris += (arrays[Mesh.ARRAY_VERTEX] as PackedVector3Array).size() / 3
+	node.queue_free()
+	return tris
 
 
 # ── Every shell, in every fixture, decomposed into RINGS ────────────────────
