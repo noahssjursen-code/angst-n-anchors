@@ -52,18 +52,53 @@ def half_beam(z):
     return 5.0
 
 
+## Every station costs FOUR boxes (four profile rects x one segment), so the
+## sampling is solved rather than picked, and the solution is the same one
+## `StructureEdge.sheer_samples_for` uses: a `to_base` band takes its height at
+## the segment's HIGHER end, so it over-runs the true curve at the low end by
+## exactly the segment's RISE. Keep that rise under the cap's headroom
+## (CAP_H - OVERLAP = 0.08 m) and the step is buried inside the cap; let it past
+## and a slot of sea opens between the plating and the cap.
+##
+## `check_sheer_sampling()` measures the worst segment on the emitted path and
+## refuses to write a fixture that breaks it, so these five steps are checked,
+## not asserted in a comment. Coarsening 8..Z_LOW from 0.7 m to 1.05 m and the
+## aft arm from 14 spans to 13 is where the triangles for the rubbing strake and
+## the raked stem came from: 10 stations off the open path, 16 off the loop.
+SHEER_STEPS = ((0.0, 1.5, 0.2), (1.5, 4.0, 0.3), (4.0, 8.0, 0.7),
+               (8.0, Z_LOW, 1.05), (Z_LOW, None, None))
+AFT_SPANS = 13
+CAP_HEADROOM = CAP_H - OVERLAP
+
+
 def sheer_zs(z_end):
     """Stations, fine where the curve is steep and where the plan line turns."""
     out = []
-    for lo, hi, step in ((0.0, 1.5, 0.15), (1.5, 4.0, 0.25),
-                         (4.0, 8.0, 0.5), (8.0, Z_LOW, 0.7),
-                         (Z_LOW, z_end, (z_end - Z_LOW) / 14.0)):
-        n = int(round((hi - lo) / step))
+    for lo, hi, step in SHEER_STEPS:
+        if hi is None:
+            hi, n = z_end, AFT_SPANS
+        else:
+            n = int(round((hi - lo) / step))
         for i in range(n + 1):
             z = lo + (hi - lo) * i / n
             if not out or z - out[-1] > 1e-6:
                 out.append(z)
     return [z for z in out if z <= z_end + 1e-6]
+
+
+def check_sheer_sampling(zs):
+    """Worst per-segment rise on this station list, in metres. RED if it exceeds
+    the cap's headroom, because that is a visible slot rather than a rounding."""
+    worst, at = 0.0, 0.0
+    for a, b in zip(zs, zs[1:]):
+        rise = abs(sheer(b) - sheer(a))
+        if rise > worst:
+            worst, at = rise, a
+    if worst > CAP_HEADROOM + 1e-9:
+        raise SystemExit(
+            "sheer sampling too coarse: %.4f m rise at z=%.2f exceeds the %.3f m "
+            "the cap can hide" % (worst, at, CAP_HEADROOM))
+    return worst, at
 
 
 def sheer_loop(z_end=27.85):
@@ -85,6 +120,9 @@ GLASS = [0.09, 0.11, 0.14]     # window bands
 ROOFG = [0.30, 0.32, 0.34]     # boat deck — the dark step between two pale tiers
 ROOFW = [0.52, 0.54, 0.56]     # wheelhouse roof — a value clear of the boat deck
 BLACK = [0.11, 0.11, 0.12]
+GUARD = [0.34, 0.35, 0.37]     # rubbing strake body — a value break, not a black bar
+GUARDTOP = [0.62, 0.63, 0.64]  # its top chamfer: one light line 0.7 m under the sheer
+GREYST = [0.24, 0.25, 0.27]    # bare steelwork — gallows heels, doublers, brackets
 
 
 def bulwark_edge(z_end=27.85):
@@ -153,6 +191,268 @@ BOAT_DECK_RAIL = {
 }
 
 
+
+# ── the rubbing strake ───────────────────────────────────────────────
+## COMPONENTS.md lists the rubbing strake as one of the ten parts the sweep
+## primitive absorbs, and this is that entry used for what it is for: the hull
+## sides are otherwise one unbroken 2.8 m of navy from the boot top to the sheer
+## stripe, and at a squint that is a single mass with no relief in it.
+##
+## TWO THINGS ARE MEASURED HERE RATHER THAN DRAWN BY EYE, and they are the whole
+## reason the numbers below are a table and not a formula:
+##
+##  1. THE PLAN LINE IS THE SHELL AT THE STRAKE'S OWN HEIGHT, not at the deck.
+##     The topsides flare: on this hull the section pulls in 0.188 m per metre of
+##     depth over the parallel body and 0.668 m/m at z=4, so a band hung 0.62 m
+##     under the deck edge on the DECK's half-beam would float up to 120 mm off
+##     the shell. Every x below is `StructureEdge.deck_half_beam_at(z, deck_y-d)`
+##     read out of the hull the game builds (.probe dump, 2026-08-10).
+##  2. IT CANNOT FOLLOW THE SHEER, and that is the loft's constraint, not a
+##     choice. `deck_y` is flat — the hull has no sheer in it, which is the whole
+##     reason the bulwark cap carries the curve — so a strake swept along the
+##     sheer would leave the shell entirely and hang 2.7 m in the air at the stem.
+##     What it CAN do is rise as the shell allows: `d` shrinks from 0.62 m aft to
+##     0.30 m at the stem, so the band lifts 0.32 m forward and echoes the sheer
+##     without ever leaving the plating.
+##
+## Sampled at 14 stations a side rather than the bulwark's 30: the section here
+## is CONSTANT, so it rides the tangent and simply tilts, and none of the
+## per-station step the `to_base` plating has to hide applies to it.
+STRAKE = [
+    (0.15, 0.2883, 0.1608), (0.80, 0.3235, 0.8528), (1.60, 0.3656, 1.6944),
+    (2.60, 0.4160, 2.7315), (4.00, 0.4819, 4.1583), (5.20, 0.5332, 4.3568),
+    (6.40, 0.5780, 4.5725), (8.00, 0.6200, 4.8835), (13.00, 0.6200, 4.8835),
+    (18.00, 0.6200, 4.8835), (22.00, 0.6200, 4.8835), (24.00, 0.6200, 4.8835),
+    (25.80, 0.6200, 4.8022), (27.30, 0.6200, 4.7344),
+]
+
+
+def strake_side(side):
+    """Starboard runs bow->stern, PORT runs stern->bow, and the direction is not
+    cosmetic: `u` is measured off the sweep's own frame, whose lateral axis is
+    +x when the run heads +z. A port run authored bow->stern would put the whole
+    profile's outboard offset INBOARD, i.e. inside the hull."""
+    out = [[round(5.0 + side * hb, 4), round(DECK_PLAN_Y - d, 4), z]
+           for z, d, hb in STRAKE]
+    return out if side > 0.0 else out[::-1]
+
+
+## ── SOLID: FALSE, AND IT IS NOT LAZINESS ────────────────────────────────────
+## The band's inboard face is ON the shell, which is where a bolted-on belting
+## belongs — and a collider there OVERLAPS THE LOFT, which `hull_sheer_test`'s
+## plan-clearance check forbids and caught: 54 shell triangles inside plan boxes
+## on the first draft. The two ways out are to stand the strake 60 mm off the
+## plating it is supposed to be bolted to, or to say what it actually is.
+## `SWEEP_COLLIDER_MIN_M`'s own note names this case exactly — "a surface
+## treatment on something that already collides" — and the something is the
+## hull. No body can reach it: it is outboard of the shell, 0.6 m below a deck
+## edge that carries a 1.0-2.9 m bulwark. So it draws and does not collide, and
+## the geometry stays true instead of being bent around a test.
+##
+## TWO OPEN RUNS, not one loop, for the same kind of reason: a closed loop puts
+## a chord straight across the transom 0.3 m INSIDE the hull and another across
+## the stem. Belting that stops at the stem and the transom corner is what a
+## working boat carries anyway.
+def rubbing_strake(eid, side, name):
+    return {
+        "id": eid,
+        "primitive": "sheer_band",
+        "_is": ("rubbing strake, %s — the sacrificial belting that takes the quay. "
+                "A swept section on the shell's own line, 0.29 m under the deck edge "
+                "at the stem and 0.62 m under it aft, so it lifts forward without "
+                "ever leaving the plating." % name),
+        "path": strake_side(side),
+        "closed": False,
+        "material": "painted",
+        "solid": False,
+        "profile": [
+            ## 115 mm proud x 200 mm tall — COMPONENTS.md's 60-150 x 80-200 mm band,
+            ## with its inboard face ON the shell so it reads as bolted to it.
+            ##
+            ## LIGHTER than the topsides, not darker, and that is the whole point of
+            ## drawing it. A black belting is what a real trawler carries and it is
+            ## what this was first given — against 0.11-value navy plating it
+            ## photographed as nothing at all, because value contrast is the only
+            ## contrast a squint can see. 0.34 against 0.11 is a break; 0.06 against
+            ## 0.11 is a rumour.
+            {"u": 0.0575, "v": 0.0, "w": 0.115, "h": 0.20, "color": GUARD},
+            ## The top chamfer, for LIGHT rather than for steel: a horizontal face
+            ## 0.7 m under the cap catches the sun where the topsides do not.
+            {"u": 0.048, "v": 0.121, "w": 0.096, "h": 0.045, "color": GUARDTOP},
+        ],
+    }
+
+
+# ── the bow: rake and flare, as far as a plate can carry it ───────────────
+## WHAT IS HONESTLY FIXABLE HERE AND WHAT IS NOT.
+##
+## The hull's STEM — everything below the deck edge — is lofted by
+## `HullStations` from `fine_entry`'s bow taper and is near plumb. Nothing in a
+## structure plan can rake it; that is the loft's, and it is the one part of
+## "the stem is blunt and near-vertical" this file cannot answer. What a plan
+## owns is everything ABOVE the deck, and on a working boat that is most of what
+## a raked stem actually looks like: the bulwark at the bow is a flared, raked
+## plate that leads the stem head and carries the sheer up to it.
+##
+## So the bow bulwark forward of z=5.6 is not the plumb swept band — a `to_base`
+## rect is PLUMB IN WORLD SPACE by construction and can never rake — it is raked
+## plate, three quads a side, and the numbers are:
+##   FLARE  0.06 m at z=5.6 growing to 0.58 m at the stem head, so the cap stands
+##          that far outboard of the deck edge it rises from;
+##   RAKE   0 m at z=5.6 growing to 1.10 m, so the cap LEADS its own foot by more
+##          than a metre — 21 degrees of forward rake over the 2.95 m of bulwark.
+## Both are powers of the same normalised run, so the structure fairs into the
+## swept band at z=5.6 instead of stepping into it.
+BOW_Z = 5.6            # where flare and rake are both zero and the sweep takes over
+BOW_LAP = 0.15         # the plate laps the swept band by this much, so no seam shows
+FLARE_MAX, FLARE_EXP = 0.50, 1.5
+RAKE_MAX, RAKE_EXP = 1.10, 1.7
+BOW_FOOT = -0.10       # the plate's foot, just clear of the deck plane
+PROUD = 0.03           # stood off the shell so it never shares a plane with it
+STEM_Z = 0.35          # the stem head: the fore end of the bow structure
+
+
+def bow_t(z):
+    return max(0.0, min(1.0, (BOW_Z - z) / BOW_Z))
+
+
+def flare(z):
+    return 0.06 + FLARE_MAX * bow_t(z) ** FLARE_EXP
+
+
+def rake(z):
+    return RAKE_MAX * bow_t(z) ** RAKE_EXP
+
+
+def bow_foot(z, side):
+    return (round(5.0 + side * (half_beam(z) + PROUD), 4), BOW_FOOT, round(z, 4))
+
+
+## The plating's top edge is the CAP'S TOP FACE — sheer(z) + CAP_H — because the
+## swept band's cap spans exactly path.y .. path.y + CAP_H and the two have to
+## meet at the lap. Drawn 20 mm higher, as it first was, the bow cap stepped
+## visibly over the swept one at z=5.75 in every profile frame.
+def bow_head(z, side, drop=0.0):
+    return (round(5.0 + side * (half_beam(z) + PROUD + flare(z)), 4),
+            round(sheer(z) + CAP_H - drop, 4), round(z - rake(z), 4))
+
+
+## Stations: the deck edge KINKS at z=4 (half-beam goes from 1.12*z to
+## 4.48+0.13*(z-4)), so a quad may not span it, and the sheer's own curvature
+## wants one more break forward of that.
+BOW_STATIONS = [BOW_Z + BOW_LAP, 4.0, 2.0, STEM_Z]
+
+
+def _shift(pt, dx, side):
+    return (round(pt[0] + side * dx, 4), pt[1], pt[2])
+
+
+## A point on the bow plate's own surface, `drop` metres of HEIGHT below its top
+## edge, shifted `dx` outboard. The plate is a bilinear patch that rakes forward
+## and flares outward as it rises, so a band across it is not "the same corners
+## moved down" — that draws a full-height panel, which is exactly what the first
+## attempt at the sheer stripe did and it photographed as a bow painted ochre
+## from the deck up. It has to be interpolated along the patch.
+def bow_band_pt(z, side, drop, dx=0.0):
+    foot, head = bow_foot(z, side), bow_head(z, side)
+    span = head[1] - foot[1]
+    f = 1.0 if span <= 1e-6 else max(0.0, min(1.0, 1.0 - drop / span))
+    pt = [foot[i] + (head[i] - foot[i]) * f for i in range(3)]
+    pt[0] += side * dx
+    return tuple(round(v, 4) for v in pt)
+
+
+def bow_structure(bow_closed):
+    """Raked, flared bow bulwark: four skins a side — plating, its pale inboard
+    face, the ochre sheer stripe and the cap — plus the stem face across it.
+
+    THE STRIPE AND THE LINING ARE NOT DECORATION. The swept band aft of z=5.6
+    carries an ochre stripe outboard and a pale face inboard; drawn without
+    them the bow was a navy slab that stopped both of those lines dead at a
+    vertical seam amidships, which photographs as damage rather than as a bow.
+    A paint boundary that stops halfway along a hull is worse than no paint
+    boundary."""
+    out = []
+    pid = 140
+    for side in (-1.0, 1.0):
+        name = "port" if side < 0 else "starboard"
+        for a, b in zip(BOW_STATIONS, BOW_STATIONS[1:]):
+            fa, fb = bow_foot(a, side), bow_foot(b, side)
+            ha, hb_ = bow_head(a, side), bow_head(b, side)
+            out.append(plate(
+                pid, "bow bulwark, %s — raked %.2f m forward and flared %.2f m out"
+                % (name, rake(b) - rake(a), flare(b) - flare(a)),
+                [fa, fb, hb_, ha], 0.10, NAVY))
+            ## The cap rail over it. The swept band's cap is the lightest line on
+            ## the hull and the reason the sheer reads at all; the bow is where
+            ## that line does its most work, so it does not stop at z=5.6.
+            out.append(plate(
+                pid + 1, "bow cap rail, %s" % name,
+                [_cap_pt(a, side, -1.0), _cap_pt(b, side, -1.0),
+                 _cap_pt(b, side, 1.0), _cap_pt(a, side, 1.0)],
+                CAP_H, BONE))
+            ## The ochre sheer stripe — the same 0.23 m section the swept band
+            ## carries, so the paint boundary runs unbroken transom to stem.
+            out.append(plate(
+                pid + 2, "bow sheer stripe, %s" % name,
+                [bow_band_pt(a, side, STRIPE_LO, STRIPE_U),
+                 bow_band_pt(b, side, STRIPE_LO, STRIPE_U),
+                 bow_band_pt(b, side, STRIPE_HI, STRIPE_U),
+                 bow_band_pt(a, side, STRIPE_HI, STRIPE_U)],
+                0.024, OCHRE))
+            ## The pale inboard face, matching the swept band's, so the trough a
+            ## crew works in is one value the whole length of the boat.
+            out.append(plate(
+                pid + 3, "bow bulwark inboard face, %s" % name,
+                [_shift(fa, -0.075, side), _shift(fb, -0.075, side),
+                 _shift(hb_, -0.075, side), _shift(ha, -0.075, side)],
+                0.026, PALEIN))
+            pid += 4
+    if True:
+        out.append(plate(
+            152, "stem face — the bulwark closed across the stem head, raked "
+                 "1.10 m forward over its 2.95 m and flaring out as it rises",
+            [bow_foot(STEM_Z, -1.0), bow_foot(STEM_Z, 1.0),
+             bow_head(STEM_Z, 1.0), bow_head(STEM_Z, -1.0)], 0.10, NAVY))
+            ## The cap ACROSS the stem head. Its outboard edge is the forward one:
+            ## the two side runs' caps meet it there, so the bone line is continuous
+            ## round the bow instead of stopping either side of it.
+        fwd_p = _cap_pt(STEM_Z, -1.0, 1.0)
+        fwd_s = _cap_pt(STEM_Z, 1.0, 1.0)
+        aft_p = _cap_pt(STEM_Z, -1.0, -1.0)
+        aft_s = _cap_pt(STEM_Z, 1.0, -1.0)
+        out.append(plate(
+            154, "stem face, sheer stripe",
+            [bow_band_pt(STEM_Z, -1.0, STRIPE_LO), bow_band_pt(STEM_Z, 1.0, STRIPE_LO),
+             bow_band_pt(STEM_Z, 1.0, STRIPE_HI), bow_band_pt(STEM_Z, -1.0, STRIPE_HI)],
+            0.024, OCHRE, offset_z=-0.075))
+        out.append(plate(
+            153, "stem head cap — the cap rail carried across the stem",
+            [fwd_p, fwd_s,
+             (aft_s[0], aft_s[1], round(aft_s[2] + 0.26, 4)),
+             (aft_p[0], aft_p[1], round(aft_p[2] + 0.26, 4))], CAP_H, BONE))
+    return out
+
+
+def _cap_pt(z, side, out_sign):
+    """A corner of the bow cap: the head point, moved 0.11 m inboard or 0.15 m
+    outboard, at the cap's mid-thickness."""
+    x, y, zz = bow_head(z, side, drop=CAP_H * 0.5)
+    return (round(x + side * (0.15 if out_sign > 0 else -0.11), 4), y, zz)
+
+
+## Where the sheer stripe's edges sit, as a DROP below the plating's top edge.
+## The swept band puts it at sheer-0.27 .. sheer-0.04 (a rect at v -0.155, h 0.23
+## about a path at sheer), and bow_head is now sheer + CAP_H, so:
+STRIPE_LO = CAP_H + 0.27
+STRIPE_HI = CAP_H + 0.04
+## 0.075 outboard, not 0.062: the plating is 0.10 thick, so its outer face is at
+## 0.05, and a 0.024 stripe centred at 0.062 lands its inner face EXACTLY on that
+## plane. Coplanar solids z-fight, and this pair did — the stripe broke into
+## flickering fragments along the bow in every render. 0.075 puts it 13 mm proud.
+STRIPE_U = 0.075
+
+
 # ── the deckhouse ───────────────────────────────────────────────────────────
 def lerp3(a, b, f):
     return [round(a[i] + (b[i] - a[i]) * f, 4) for i in range(3)]
@@ -190,11 +490,13 @@ def mullions(pid, ring, count, half_w=0.05):
     return out
 
 
-def plate(pid, what, ring, thickness, color, openings=None, material="painted", solid=True):
+def plate(pid, what, ring, thickness, color, openings=None, material="painted",
+          solid=True, offset_z=0.0):
     props = {
         "__is": what,
         "primitive": "plate",
-        "corners": [[round(v, 4) for v in p] for p in ring],
+        "corners": [[round(v + (offset_z if i == 2 else 0.0), 4)
+                     for i, v in enumerate(p)] for p in ring],
         "thickness": thickness,
         "color": color,
         "material": material,
@@ -382,7 +684,20 @@ def rig():
     A(wire(210, "cargo fall off the boom head", boom_head,
            [[0, 0, 0], delta(boom_head, hook_top)], 0.014, sag=0.0, sides=4, **DARK))
     A(spar(211, "hook block", (3.6, 0.95, 9.9), [[0, 0, 0], [0, 0.42, 0]], 0.09, sides=6, **DARK))
-    # trawl gallows, blocks and warps — untouched, they stand on the working deck
+    ## THE GALLOWS, TIED INTO THE DECK.
+    ##
+    ## A trawl gallows is not a pole. It is a leg standing on a DOUBLER that
+    ## spreads its load into the deck plating, with a HEEL fin welded fore and
+    ## aft of it and a BRACKET back to the bulwark, because a gallows takes the
+    ## whole pull of a warp on a rolling boat and a bare tube in a socket would
+    ## fold. Drawn as four red poles they read as scaffolding dropped on the
+    ## deck; every piece below is the steelwork that a real one has and that
+    ## COMPONENTS.md's bracket/gusset row calls "most of why CG steelwork looks
+    ## like cardboard".
+    ##
+    ## The two on a side are also TIED TOGETHER at the head. That is a real
+    ## member — it is what stops a gallows racking fore and aft — and it is the
+    ## piece that turns two poles into one frame at a squint.
     for base, z in ((212, 8.6), (216, 14.2)):
         A(spar(base, "trawl gallows, port - leg and outboard head", (0.55, 0.0, z),
                [[0, 0, 0], [0, 3.5, 0], [-0.5, 3.5, 0]], 0.1, sides=8, **RED))
@@ -392,6 +707,46 @@ def rig():
                [[0, 0, 0], [0, -0.38, 0]], 0.08, sides=6, **DARK))
         A(spar(base + 3, "gallows block, starboard", (9.85, 3.42, z),
                [[0, 0, 0], [0, -0.38, 0]], 0.08, sides=6, **DARK))
+    for iid, x, z in ((160, 0.55, 8.6), (164, 9.35, 8.6),
+                      (168, 0.55, 14.2), (172, 9.35, 14.2)):
+        side = -1.0 if x < 5.0 else 1.0
+        inboard = x - side * 0.42      # the bulwark's inboard face, 0.42 m outboard
+        A(plate(iid, "gallows doubler — the plate that spreads the leg's load "
+                     "into the deck",
+                [(x - 0.55, 0.012, z - 0.55), (x + 0.55, 0.012, z - 0.55),
+                 (x + 0.55, 0.012, z + 0.55), (x - 0.55, 0.012, z + 0.55)],
+                0.06, GREYST))
+        A(plate(iid + 1, "gallows heel — the fore-and-aft fin welded each side "
+                         "of the leg",
+                [(x, 0.03, z - 0.85), (x, 0.03, z + 0.85),
+                 (x, 1.28, z + 0.22), (x, 1.28, z - 0.22)],
+                0.06, GREYST))
+        A(plate(iid + 2, "gallows bracket — the knee back to the bulwark",
+                [(x, 0.52, z - 0.05), (inboard, 0.98, z - 0.05),
+                 (inboard, 1.46, z - 0.05), (x, 1.46, z - 0.05)],
+                0.05, GREYST))
+        A(spar(iid + 3, "gallows heel casting", (x, 0.0, z),
+               [[0, 0, 0], [0, 0.62, 0]], 0.185, taper=0.6, sides=8,
+               material="painted", color=GREYST))
+    for iid, x in ((176, 0.55), (177, 9.35)):
+        A(spar(iid, "gallows head tie — the fore-and-aft member that makes two "
+                    "legs one frame", (x, 3.42, 8.6),
+               [[0, 0, 0], [0, 0, 5.6]], 0.075, sides=6, **RED))
+    ## THE ONE PIECE OF THE HEELWORK THAT IS VISIBLE FROM OUTSIDE THE BOAT.
+    ## The doubler, the heel fin and the bulwark knee all live below 1.5 m, and
+    ## the bulwark at z=8.6 is 1.54 m — so from every canonical camera angle
+    ## except the plan they are behind it, and the legs still read as poles.
+    ## This is the member that fixes the outside view: a raking strut off the
+    ## head, down and away from its pair, landing ON the swept cap. It is also
+    ## the brace a real gallows needs most, because the pull it takes is
+    ## fore-and-aft.
+    for iid, x, z, zc in ((178, 0.55, 8.6, 7.1), (179, 9.35, 8.6, 7.1),
+                          (180, 0.55, 14.2, 15.7), (181, 9.35, 14.2, 15.7)):
+        side = -1.0 if x < 5.0 else 1.0
+        foot = (round(5.0 + side * 4.84, 4), round(sheer(zc) + 0.10, 4), zc)
+        A(spar(iid, "gallows strut — the fore-and-aft brace, made fast to the "
+                    "bulwark cap", (x, 3.05, z),
+               [[0, 0, 0], delta((x, 3.05, z), foot)], 0.07, sides=6, **RED))
     for iid, x, z, tx, tz in ((220, 0.05, 8.6, 3.4, 7.0), (221, 9.85, 8.6, 6.6, 7.0),
                               (222, 0.05, 14.2, 3.4, 7.0), (223, 9.85, 14.2, 6.6, 7.0)):
         A(wire(iid, "trawl warp - gallows block to winch", (x, 3.0, z),
@@ -494,61 +849,97 @@ HATCHES = [
 ]
 
 NOTE_COMMON = (
-    "REBUILT 2026-08-10, after the room purge took the deckhouse. Three things changed and "
-    "they are all silhouette:\n\n"
-    "1. THE BULWARK IS NOW ONE `edges[]` SHEER BAND, not three walls plus three cap-rail decks. "
+    "REBUILT 2026-08-10 after the room purge took the deckhouse, then given its BOW, its "
+    "BELTING and its GALLOWS STEELWORK the same day. Six things carry this hull:\n\n"
+    "1. THE BULWARK IS ONE `edges[]` SHEER BAND, not three walls plus three cap-rail decks. "
     "The cap carries the curve, which is where sheer has to live: the loft may not draw it "
-    "(deck_y is the floor of the deck plate, the DeckGrid, the walk slab and the buoyancy lever "
-    "- see hull_stations.gd). The PLAN line is the hull's own deck edge, measured off "
-    "StructureEdge.deck_half_beam_at: half-beam 1.12*z to z=4, 4.48+0.13*(z-4) to z=8, 5.0 aft "
-    "of that, at every height above the deck.\n\n"
-    "2. THE SHEER IS AUTHORED, AND THAT IS DELIBERATE. `sheer_bulwark_spec` derives it from the "
-    "hull - freeboard x fine_entry's bow_keel_rise - and that gives 0.896 m forward, 0.28 m aft, "
-    "with the low point exactly AMIDSHIPS because sheer_rise_at is symmetric in |z|. On a 28 m "
-    "hull that reads as polite. A working boat's sheer is asymmetric: the low point sits about "
-    "two thirds aft and the stem lifts several times what the transom does. This path puts the "
-    "low point at z=18.5 (66% aft) with 1.60 m of rise forward and 0.33 m aft - a ratio of "
-    "4.8:1 against the derived 3.2:1, and 1.6x the Load Line Convention's standard forward sheer "
-    "for this length (50*(L/3+10) mm = 0.966 m). The bulwark is 1.05 m at the low point, which is "
-    "the fall-barrier dimension the 1.8 m figure sets and is NOT authored down; it is 2.65 m at "
-    "the stem, which is what keeps a foredeck dry. `sheer_bulwark_spec` has no knob that scales "
-    "the derived curve, so an authored path is the only way to say this from data. If one is "
-    "added, this path should go back to `from_hull`.\n\n"
-    "3. COLOUR DOES VALUE WORK, FOR FREE. The bucket key is material alone, so every colour here "
-    "rides in the vertex stream: dark navy plating that merges into the hull's own topsides, an "
-    "ochre sheer stripe standing 24 mm proud as the deliberate paint boundary, a bone cap rail so "
-    "the curve itself is the lightest line on the hull, a cream deckhouse against a dark grey "
-    "boat deck, and near-black glass bands. Squinted, that is four values instead of one.\n\n"
-    "THE DECKHOUSE IS RAKED PLATES, NEVER A BOX. A lower tier tapered in plan, tumbled home, with "
-    "a front that overhangs 0.55 m forward; a wheelhouse SET BACK on all four sides with a 0.85 m "
-    "forward-raked windscreen, a reverse-raked aft bulkhead and a roof sloping 0.30 m down aft; "
-    "four tapering funnel plates raked aft under a black cap. The wheelhouse's windows are BANDS - "
-    "a dark plate between a coaming and a header - because at capture distance a dark value reads "
-    "as glass and a punched hole reads as a hole; the lower tier gets real openings and their "
-    "proud casing instead, so both routes are exercised.\n\n"
-    "THE 52-ITEM RIG IS KEPT AND RE-BELAYED. The aft signal mast and the sidelights stood on the "
-    "old deckhouse and now stand on the wheelhouse roof and its wings; the exhaust comes out of "
-    "the funnel top instead of out of the air; the derrick heels to the mast at boat-deck height; "
-    "the shrouds and the three fender lanyards land on the SWEPT cap, so their ends move with the "
-    "curve; the samson post grew from 1.35 m to 1.90 m because the bow bulwark it stands in is "
-    "1.48 m and would have swallowed the old one, and the forestay is made fast to its head. Both "
-    "masts now RAKE AFT and everything carried on one is solved from the rake rather than "
-    "restated. A line to nowhere is the one thing a rig may not have.\n\n"
+    "(deck_y is the floor of the deck plate, the DeckGrid, the walk slab and the buoyancy "
+    "lever - see hull_stations.gd). The PLAN line is the hull's own deck edge, measured off "
+    "StructureEdge.deck_half_beam_at: half-beam 1.12*z to z=4, 4.48+0.13*(z-4) to z=8, 5.0 "
+    "aft of that, at every height above the deck.\n\n"
+    "2. THE SHEER IS AUTHORED, AND THAT IS DELIBERATE. `sheer_bulwark_spec` derives it from "
+    "the hull - freeboard x fine_entry's bow_keel_rise - and that gives 0.896 m forward, "
+    "0.28 m aft, with the low point exactly AMIDSHIPS because sheer_rise_at is symmetric in "
+    "|z|. On a 28 m hull that reads as polite. A working boat's sheer is asymmetric: the low "
+    "point sits about two thirds aft and the stem lifts several times what the transom does. "
+    "This path puts the low point at z=19.5 (70% aft) with 1.85 m of rise forward and 0.52 m "
+    "aft. The bulwark is 1.00 m at the low point, which is the fall-barrier dimension the "
+    "1.8 m figure sets and is NOT authored down. `sheer_bulwark_spec` has no knob that scales "
+    "the derived curve, so an authored path is the only way to say this from data.\n\n"
+    "   THE SAMPLING IS SOLVED, NOT PICKED, and `check_sheer_sampling()` in the generator "
+    "REFUSES to write a fixture that breaks it. A `to_base` band takes its height at the "
+    "segment's HIGHER end, so it over-runs the true curve at the low end by exactly that "
+    "segment's rise; keep the rise under the cap's headroom (CAP_H - OVERLAP = 0.080 m) and "
+    "the step hides inside the cap, let it past and a slot of daylight opens between the "
+    "plating and the cap. Worst segment on this path: 0.0784 m at z=8. Coarsening the flat "
+    "part of the run from 0.7 m stations to 1.05 m is where the triangles for the belting "
+    "and the bow came from - 16 stations off the open path, 24 off the loop.\n\n"
+    "3. THE BOW RAKES AND FLARES, AS FAR AS A PLAN CAN CARRY IT. The hull's STEM - everything "
+    "below the deck edge - is lofted by HullStations from fine_entry's bow taper and is near "
+    "plumb; NOTHING in a structure plan can rake it, and that is the honest limit here. What "
+    "a plan owns is everything above the deck, and on a working boat that is most of what a "
+    "raked stem looks like. Forward of z=5.6 the bulwark is therefore RAKED PLATE and not the "
+    "swept band, because a `to_base` rect is PLUMB IN WORLD SPACE by construction and can "
+    "never lean: three quads a side carrying flare 0.06 m -> 0.50 m and rake 0 -> 1.10 m, so "
+    "the cap leads its own foot by more than a metre - 21 degrees over 2.95 m of bulwark - "
+    "and a stem face shuts the loop across the head. Each quad wears four skins, plating, "
+    "the pale inboard face, the ochre sheer stripe and the bone cap, so neither the paint "
+    "boundary nor the trough stops at a seam amidships.\n\n"
+    "4. THE HULL SIDE HAS RELIEF. A third `edges[]` run is the RUBBING STRAKE, which "
+    "COMPONENTS.md lists as one of the ten parts the sweep primitive absorbs: 115 mm proud x "
+    "200 mm tall with a light top chamfer. Its plan line is the shell AT THE STRAKE'S OWN "
+    "HEIGHT, measured rather than taken from the deck, because the topsides flare 0.188 m per "
+    "metre of depth over the parallel body and 0.668 m/m at z=4 and a band hung on the deck's "
+    "half-beam would float up to 120 mm off the plating. It CANNOT follow the sheer - deck_y "
+    "is flat, which is the whole reason the cap carries the curve - so it rises as the shell "
+    "allows instead, 0.62 m under the deck aft and 0.30 m at the stem. It is LIGHTER than the "
+    "topsides, not darker: drawn black, as a real trawler's belting is, it photographed as "
+    "nothing at all against 0.11-value navy.\n\n"
+    "5. THE GALLOWS ARE TIED INTO THE DECK. Four red poles is what they were. A trawl gallows "
+    "takes the whole pull of a warp on a rolling boat, so each leg now stands on a DOUBLER "
+    "that spreads its load into the plating, with a heel casting, a fore-and-aft HEEL FIN, a "
+    "KNEE back to the bulwark, a fore-and-aft STRUT off the head onto the swept cap, and a "
+    "HEAD TIE joining its pair. The strut is the piece that matters from outside the boat: "
+    "everything else lives below 1.5 m and the bulwark at z=8.6 is 1.54 m, so from every "
+    "canonical camera but the plan the heelwork is behind it.\n\n"
+    "6. COLOUR DOES VALUE WORK, FOR FREE. The bucket key is material alone, so every colour "
+    "here rides in the vertex stream: dark navy plating that merges into the hull's own "
+    "topsides, an ochre sheer stripe standing 24 mm proud as the deliberate paint boundary, a "
+    "bone cap rail so the curve itself is the lightest line on the hull, a grey belting "
+    "breaking the topsides, a cream deckhouse against a dark grey boat deck, and near-black "
+    "glass bands. Squinted, that is five values instead of one.\n\n"
+    "THE DECKHOUSE IS RAKED PLATES, NEVER A BOX. A lower tier tapered in plan, tumbled home, "
+    "with a front that overhangs 0.55 m forward; a wheelhouse SET BACK on all four sides with "
+    "a 0.85 m forward-raked windscreen, a reverse-raked aft bulkhead and a roof sloping 0.30 m "
+    "down aft; four tapering funnel plates raked aft under a black cap. The wheelhouse's "
+    "windows are BANDS - a dark plate between a coaming and a header - because at capture "
+    "distance a dark value reads as glass and a punched hole reads as a hole; the lower tier "
+    "gets real openings and their proud casing instead, so both routes are exercised.\n\n"
+    "THE RIG IS RE-BELAYED. The aft signal mast and the sidelights stand on the wheelhouse "
+    "roof and its wings; the exhaust comes out of the funnel top; the derrick heels to the "
+    "mast at boat-deck height; the shrouds and the three fender lanyards land on the SWEPT "
+    "cap, so their ends move with the curve; the samson post is 1.90 m because the bow "
+    "bulwark it stands in is taller than the old one, and the forestay is made fast to its "
+    "head. Both masts RAKE AFT and everything carried on one is solved from the rake rather "
+    "than restated. A line to nowhere is the one thing a rig may not have.\n\n"
     "THE BREAKWATER is four 45 degree walls, and it is the one piece of this fixture with a "
-    "second, uncomfortable reason to exist: scripts/apps/structure_studio.gd's self-check reads "
-    "FOUR DIAGONALS off this file to prove it bounds a raked wall in world space, and those used "
-    "to be the bow stem walls the sheer band replaced. It is a real fitting - a V across an open "
-    "working deck throws a boarding sea outboard before it reaches the winch - so it is here as "
-    "one, not as a stub. The coupling is still wrong the other way round and should be fixed "
-    "there: an app self-check must not go red because a fixture was redesigned.\n\n"
-    "COST, on RenderingServer's own counters over the four canonical views: DRAW CALLS UNCHANGED "
-    "at 8 undressed / 16 with the shadow pass, because a swept bulwark, twenty-three plates and "
-    "eight colours all bucket on MATERIAL alone. Triangles 19 942 -> the figure in "
-    "tests/trawler_render_capture.gd's budget: geometry is what a sheer curve and a raked "
-    "deckhouse cost, and draw calls are not.\n\n"
-    "GENERATED by tools/gen_trawler_fixtures.py, which is where the sheer curve's four constants "
-    "live and where they should be retuned. The JSON is the interface; the generator is the "
-    "provenance."
+    "second, uncomfortable reason to exist: scripts/apps/structure_studio.gd's self-check "
+    "reads FOUR DIAGONALS off this file to prove it bounds a raked wall in world space. It is "
+    "a real fitting - a V across an open working deck throws a boarding sea outboard before it "
+    "reaches the winch - so it is here as one, not as a stub, and it was NOT re-raked into "
+    "plate for the same reason: tests/plan_collision_physics_test.gd sweeps the surplus of "
+    "those four bounding boxes for phantom solids, and new geometry in that volume is exactly "
+    "what that sweep is looking for. The coupling is still wrong the other way round and "
+    "should be fixed there: an app self-check must not go red because a fixture was "
+    "redesigned.\n\n"
+    "COST, on RenderingServer's own counters over the four canonical views: DRAW CALLS "
+    "UNCHANGED at 8 undressed / 16 with the shadow pass, because three swept runs, sixty "
+    "plates and a dozen colours all bucket on MATERIAL alone. Triangles: see "
+    "tests/trawler_render_capture.gd's budget, which both fixtures are inside - the coarser "
+    "sheer sampling paid for the bow, the belting and the gallows steelwork.\n\n"
+    "GENERATED by tools/gen_trawler_fixtures.py, which is where the sheer curve's constants, "
+    "the bow's flare and rake laws and the sampling guard live and where they should be "
+    "retuned. The JSON is the interface; the generator is the provenance."
 )
 
 
@@ -557,16 +948,20 @@ def build(bow_closed):
     plan["format"] = "structure_plan_v1"
     plan["context"] = "vessel"
     plan["hull_id"] = "hull_28x10"
-    plan["_note"] = NOTE_COMMON + ("\n\nBOW CLOSED: this fixture's sheer band runs the whole "
-        "LOOP, stem included, so the bulwark closes across the stem head and a body cannot walk "
-        "out over the water there. Its pair, probe_trawler_bulwark, stops the run at z=5 and "
-        "leaves the bow open on purpose; that is the entire difference between the two files. "
-        "The stem is now a curve rather than the two straight 45 degree walls it used to be, "
-        "because the sheer band follows the hull's own deck edge." if bow_closed else
-        "\n\nBOW OPEN, ON PURPOSE: the sheer band runs from z=5 aft, so the fore end of the "
-        "working deck has no barrier across it. Its pair, probe_trawler_bow_bulwark, closes the "
-        "loop round the stem and is otherwise this file. Keeping the two one flag apart is what "
-        "makes the bow bulwark's fall-protection claim mean something.")
+    plan["_note"] = NOTE_COMMON + ("\n\nBOW CLOSED: this fixture's SWEPT BAND runs the whole "
+        "LOOP, stem included, so under the raked bow plate there is a plumb bulwark round the "
+        "stem as well. tests/plan_collision_physics_test.gd marches a player capsule out "
+        "through both stems of THIS file, and that is why the swept loop is kept here rather "
+        "than left to the plate alone." if bow_closed else
+        "\n\nBOW OPEN — AND THAT NOW MEANS LESS THAN IT DID, WHICH IS WORTH SAYING PLAINLY. "
+        "This fixture's SWEPT BAND still runs from z=5 aft and its pair's runs the whole loop; "
+        "that is still the one flag between the two files. But the raked bow plate added on "
+        "2026-08-10 stands on BOTH of them, and it closes the stem — so a body can no longer "
+        "walk out over the bow of this one either, and the fall-protection difference the two "
+        "files used to carry is gone. It was traded knowingly: the alternative, drawn and "
+        "photographed, was a stem with a 0.84 m notch in it and two flared plates reading as "
+        "fins, which is not a bow. If that distinction is wanted back it belongs in a third "
+        "fixture with no bow structure at all, not in a notch in this one.")
     plan["palette"] = {"wall": [0.85, 0.86, 0.88], "deck": [0.33, 0.31, 0.29]}
     plan["hull"] = {
         "_note": "hull_28x10 as FishingTrawlerSmall builds it. Restated so the capture rig can "
@@ -578,26 +973,28 @@ def build(bow_closed):
     plan["walls"] = BREAKWATER
     plan["decks"] = HATCHES
     plan["stairs"] = []
-    plan["items"] = deckhouse() + rig()
+    plan["items"] = deckhouse() + bow_structure(bow_closed) + rig()
     edge = bulwark_edge()
     if not bow_closed:
-        # Open bow: one run down each side and across the transom, stem left clear.
+            ## Open bow: one run down each side, stem left clear. The forward end no
+            ## longer needs the 0.85 m RETURN across the deck it used to carry — the
+            ## raked bow plate laps it by BOW_LAP and is what the sweep now runs into,
+            ## so there is nothing guillotined to hide.
         zs = [z for z in sheer_zs(27.85) if z >= 5.0]
         stb = [[round(5.0 + max(half_beam(z) - INSET, 0.0), 4), round(sheer(z), 4), round(z, 4)]
                for z in zs]
         prt = [[round(5.0 - max(half_beam(z) - INSET, 0.0), 4), round(sheer(z), 4), round(z, 4)]
                for z in zs]
-        ## Each run ends in a RETURN across the deck, which is what the forward end
-        ## of a real open bulwark is. Without it the sweep is guillotined mid-air at
-        ## z=5 and the fixture photographs a wall someone cut in half.
-        y5 = round(sheer(5.0), 4)
-        stb = [[round(stb[0][0] - 0.85, 4), y5, 5.0]] + stb
-        prt = [[round(prt[0][0] + 0.85, 4), y5, 5.0]] + prt
         edge["path"] = stb + prt[::-1]
         edge["closed"] = False
-    plan["edges"] = [edge, BOAT_DECK_RAIL]
+    plan["edges"] = [edge, rubbing_strake(3, 1.0, "starboard"),
+                     rubbing_strake(4, -1.0, "port"), BOAT_DECK_RAIL]
     return plan
 
+
+worst_rise, worst_at = check_sheer_sampling(sheer_zs(27.85))
+print("sheer sampling: worst segment rise %.4f m at z=%.2f, cap headroom %.3f m"
+      % (worst_rise, worst_at, CAP_HEADROOM))
 
 for closed, name in ((False, "probe_trawler_bulwark"), (True, "probe_trawler_bow_bulwark")):
     p = build(closed)
