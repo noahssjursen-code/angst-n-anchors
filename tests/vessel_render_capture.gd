@@ -332,8 +332,13 @@ const COST_BUDGET := {
 	"probe_ferry_catamaran": {"draw_calls": 10, "triangles": 19000},
 	"probe_spar_kit": {"draw_calls": 9, "triangles": 9400},
 	"probe_ferry_catamaran_trim": {"draw_calls": 10, "triangles": 19600},
-	## MEASURED, then given ~8% headroom — see the note below the table.
-	"probe_container_feeder": {"draw_calls": 0, "triangles": 0},
+	## The 150 m ship, MEASURED on the same counters. 7 undressed draw calls / 14
+	## with the shadow pass, and it is drawing 14 — so this line has NO slack in
+	## it, which is the assertion: 603 fittings, 253 containers, 779 edge boxes
+	## and ten container liveries all bucket on MATERIAL alone, and introducing a
+	## fifth material anywhere on this vessel turns it red by exactly one.
+	## Triangles are the measurement plus ~8%, as for every other row.
+	"probe_container_feeder": {"draw_calls": 7, "triangles": 29700},
 	## The sheer pair carries ONE material and therefore one bucket, over a bare
 	## hull. 6 is what the hull plus a whole 76 m bulwark loop drew, measured —
 	## not a round number left loose. Put the cap in a second material and this

@@ -79,6 +79,12 @@ extends RefCounted
 ## plus `"repeat": "<expr>"` on a step, which emits it N times with `i` bound to
 ## 0..N-1. That is what draws N-1 mullions across a window band without the kit
 ## needing a mullion piece.
+##
+## A piece may also declare `constraints`: relationships BETWEEN its parameters
+## that a per-parameter value set cannot say. Two legal values can still make an
+## illegal piece — a glazed panel whose coaming and glass together fill its whole
+## height has no header left and resolves to a zero-height quad. That is refused
+## in the piece's own words rather than drawn as a degenerate plate.
 
 const KIT_PATH := "res://resources/data/parts/structure_pieces.json"
 const BAKER_PATH := "res://scripts/construction/structure_baker.gd"
@@ -238,6 +244,7 @@ static func _build_piece(
 
 	piece["params"] = _parse_params(id, src.get("params", {}), errors)
 	piece["footprint"] = _parse_footprint(id, src.get("footprint", {}), piece["params"], errors)
+	piece["constraints"] = _parse_constraints(id, src.get("constraints", []), piece["params"], errors)
 
 	var build: Variant = src.get("build", null)
 	if build == null:
@@ -360,6 +367,50 @@ static func _parse_footprint(
 		## default happens to be. Evaluated here only to reject a bad expression.
 		var _probe := _eval(value, numeric, "piece \"%s\" footprint.%s" % [id, key], errors)
 		out[key] = value
+	return out
+
+
+## Relationships BETWEEN a piece's parameters, which a per-parameter value set
+## cannot express: a glazed panel whose coaming and glass band together fill its
+## whole height has no header left, and that is a legal pick of two legal values.
+## Each entry is {expr, min, _is}; a setting whose expression falls under `min`
+## is refused with the piece's own words.
+static func _parse_constraints(
+	id: String, raw: Variant, params: Dictionary, errors: PackedStringArray
+) -> Array:
+	var out: Array = []
+	if raw == null:
+		return out
+	if not (raw is Array):
+		errors.append("piece \"%s\": \"constraints\" must be an array" % id)
+		return out
+	var numeric := _numeric_defaults(params)
+	var index := -1
+	for entry_raw in raw as Array:
+		index += 1
+		if not (entry_raw is Dictionary):
+			errors.append("piece \"%s\": constraints[%d] must be an object" % [id, index])
+			continue
+		var entry := entry_raw as Dictionary
+		if not entry.has("expr"):
+			errors.append("piece \"%s\": constraints[%d] needs an \"expr\"" % [id, index])
+			continue
+		var probe_errors := PackedStringArray()
+		var _probe := _eval(
+			entry["expr"], numeric, "piece \"%s\" constraints[%d].expr" % [id, index], probe_errors
+		)
+		for message in probe_errors:
+			errors.append(message)
+		if _probe < float(entry.get("min", 0.0)) - 1e-6:
+			errors.append(
+				"piece \"%s\": constraints[%d] is already violated by the piece's own defaults"
+				% [id, index]
+			)
+		out.append({
+			"expr": entry["expr"],
+			"min": float(entry.get("min", 0.0)),
+			"why": str(entry.get("_is", "")),
+		})
 	return out
 
 
@@ -502,6 +553,23 @@ static func resolve_params(piece_id: String, given: Dictionary) -> Dictionary:
 			)
 			continue
 		out[name] = value
+	if errors.is_empty():
+		var numeric: Dictionary = {}
+		for key in out.keys():
+			var value: Variant = out[key]
+			if value is int or value is float:
+				numeric[str(key)] = float(value)
+		for constraint_variant in piece.get("constraints", []) as Array:
+			var constraint := constraint_variant as Dictionary
+			var value := _eval(constraint["expr"], numeric, "piece \"%s\" constraint" % piece_id, errors)
+			if value < float(constraint["min"]) - 1e-6:
+				errors.append(
+					"piece \"%s\": %s = %s, which is under %s — %s"
+					% [
+						piece_id, str(constraint["expr"]), str(value), str(constraint["min"]),
+						str(constraint["why"]),
+					]
+				)
 	return {"params": out, "errors": errors}
 
 
@@ -903,7 +971,11 @@ static func resolve_placement(placement: Dictionary, next_id: int) -> Dictionary
 	var errors := PackedStringArray()
 	var items: Array = []
 	var piece_id := str(placement.get("piece", "")).strip_edges()
-	var label := str(placement.get("id", piece_id))
+	var raw_label: Variant = placement.get("id", piece_id)
+	var label := (
+		"%d" % roundi(float(raw_label)) if (raw_label is int or raw_label is float)
+		else str(raw_label)
+	)
 	if not has(piece_id):
 		errors.append("placement %s: no piece \"%s\" in the kit" % [label, piece_id])
 		return {"items": items, "errors": errors, "next_id": next_id}

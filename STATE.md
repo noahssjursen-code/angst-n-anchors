@@ -80,15 +80,42 @@ names, so `git diff` on an image shows what a change did to the silhouette.
 | Gate | Three lanes — A `--script`, B scene, C app self-check. Capability skips are self-policing: a skipped unit that passes when forced turns the gate red. Scratch probes (`_`-prefixed) are skipped and reported. |
 | Tests | Zero bare `assert()` anywhere (38 files converted). `TestReport` fails a run that executed zero checks. |
 | Colour | **Free.** The bucket key is material alone, colour rides in vertex data. A 20-colour plan bakes to 4 draw calls, measured on the renderer's own counter. |
-| Collision | Diagonal walls collide as drawn, asserted against `PhysicsServer3D` on a real body — not against the baker's dictionaries. |
+| Collision | Diagonal walls collide as drawn, asserted against `PhysicsServer3D` on a real body — not against the baker's dictionaries. Every edge run's barrier is the yaw-frame BOUND of the boxes it draws, not a second formula — 0 loose corners across all nine capture fixtures. |
 | Items | Float metres, free yaw + optional pitch/roll, props bag, **host-relative placement** so a fitting follows its host. Part catalog + plan-side compliance measurement exist. |
 | Scale | Settled: 1 unit = 1 m, player 1.8 m, deck cells 0.5 m as a *build resolution*. `hull_28x10` is a 28 × 10 m vessel. |
 
+**The authoring layer, which is now the whole story**
+
+The five primitives landed and the fleet was rebuilt on them, and that exposed the error one layer
+up: **`plate` is four free 3D corners, so agents authored deckhouses by typing coordinates.** A
+player cannot do that. `REALITY.md` §5 is the write-up. Nothing in the gate could have caught it —
+the geometry was correct, the tests honest, the renders good.
+
+The answer is the **piece kit** (`resources/data/parts/structure_pieces.json`,
+`scripts/construction/piece_kit.gd`): six pieces — `wall_panel`, `wall_glazed`, `corner_45`,
+`deck_tile`, `roof_slope`, `trim_band` — placed at grid NODES on the 0.5 m cell grid, facing in
+90° steps. **Every parameter takes its value from a declared finite set and every geometric
+parameter is counted in grid units** (lengths in whole cells, rakes in whole quarter-cells). No
+float is ever typed, which is the property that makes two pieces meet exactly. Pieces resolve into
+the `plate` primitives `StructureBaker` already bakes — the baker learns no new word.
+
+`corner_45` is the piece that beats blockiness: two raked walls meeting at 90° do NOT meet, a
+wedge opens as wide as the rake, and its bilinear plate absorbs the difference. The by-product is
+that a raked house is chamfered at every corner by construction.
+
+Proven on `probe_piece_trawler.json`: **50 hand-solved quads replaced by 43 piece placements**,
+zero hand-authored corners in the deckhouse. Stated limits, not hidden: a 0.24 m boat-deck camber
+and a 0.30 m plan taper do not survive the grid, and the house is 2.50 m to the boat deck where
+the hand-authored one was 2.74. A sheer-following bulwark stays in `edges[]`/`sheer_band` — the
+kit deliberately refuses to quantise the one curve the fleet was rebuilt to draw.
+
 **What is missing, in the order it matters**
 
-1. **The five primitives** — spar, railing run, wire, sloped plate, sheer band. *In flight.*
-   Without them a hull is a shed on a barge; `references/COMPONENTS.md` maps 344 components onto
-   them.
+1. **The tool.** `structure_studio.gd` is still `enum Tool { SELECT, WALL, DECK, STAIR, OPENING }`
+   — it cannot author superstructure at all. The ROOM tool was deleted for making boxes and
+   nothing replaced it. Until a player can place a piece with a mouse, the kit is a better format,
+   **not a feature**. This is the critical path; a wave is on it. Note `GRID_SNAP := 1.0` in the
+   studio against `cell_m: 0.5` in the kit — they disagree.
 2. **Geometry for `items[]`** — the mechanism exists, nothing draws the parts yet.
 3. **`DeckFitout.apply_plan` still returns a hardcoded `outfit_ok: true`** and never calls the
    validator, so a Structure Studio ship cannot be saved, spawned, crewed or sold. `plan_outfit.gd`
@@ -506,7 +533,13 @@ weaker judge than an eye, and the difference should not be silently absorbed.
 | BULK | Coastal mini-bulker — 2–3 hatches in a rhythm, tall coamings, narrow side decks | 75 × 16 m | 150 × 32 | `hull_150x32` | Shortest honest bulker available, still ~35 % beamy |
 | PASSENGER | Boreal **Oslofjord II** — 350 pax electric commuter ferry, two decks | 35.0 × 8.0 m | 70 × 16 | `hull_70x18` | Best match; but she is double-ended and every catalog hull is pointed at −Z only. Build single-ended. |
 
-### M2 — Ship parts vocabulary · IN FLIGHT, the critical path
+### M2 — Ship parts vocabulary · PRIMITIVES DONE, AUTHORING LAYER IS THE REMAINDER
+
+The five primitives are built, tested and shipping on the fleet, and the container feeder proved
+they scale to a 150 m hull (603 items, 251 containers, 14 draw calls, 54,942 triangles, 2 mesh
+surfaces). What M2 did NOT deliver, and what M4 now inherits, is the layer above them: pieces
+exist, the tool to place them does not. See "The authoring layer" at the top of this file.
+
 The reference-matching loop:
 1. Pick reference working boats per category and the honest matching hull (remember 2×).
 2. Author the reference as `structure_plan_v1`, render from canonical angles.

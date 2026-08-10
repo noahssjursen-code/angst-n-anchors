@@ -101,6 +101,10 @@
         "band":   {"unit": "cells", "values": [1, 2, 3], "default": 2, "_is": "height of the glass itself."},
         "lights": {"unit": "count", "values": [1, 2, 3, 4, 5, 6], "default": 3, "_is": "panes across the run. lights-1 mullions, evenly spaced, 0.10 m wide IN METRES - authored as a fraction of the plate they came out 3 m wide on a ferry and the band read as portholes."}
       },
+      "constraints": [
+        {"expr": "height-sill-band", "min": 1,
+         "_is": "sill 3 and band 3 in a 4-cell wall are two legal picks that leave no header, and a zero-height header is a degenerate quad. At least one cell of wall must stand above the glass."}
+      ],
       "build": [
         {
           "primitive": "plate", "thickness": 0.10, "_is": "coaming",
@@ -233,25 +237,27 @@
       "color": "#b07a2a",
       "params": {
         "span":    {"unit": "cells", "values": [1, 2, 3, 4, 6, 8, 12, 16], "default": 4},
-        "profile": {"unit": "choice", "values": ["eave", "cap", "coaming", "strake"], "default": "cap"}
+        "profile": {"unit": "choice", "values": ["eave", "cap", "coaming", "strake"], "default": "cap"},
+        "offset":  {"unit": "quarter_cells", "values": [0, 1, 2, 3, 4], "default": 0,
+                    "_is": "pushes the run outboard in 0.25 m steps. A trim run has no height and therefore cannot carry a rake, so a strake crossing a RAKED wall is set out to meet the wall at the height it is placed - the same quarter-cell arithmetic the rake itself uses. Without this, every band on a raked wall buries itself inside the plating."}
       },
       "build": {
         "$choice": "profile",
         "eave": [
           {"primitive": "plate", "thickness": 0.08, "_is": "a flat lip standing 0.30 m outboard under a deck edge",
-           "corners": [[0, 0, 0.06], ["span*0.5", 0, 0.06], ["span*0.5", 0, -0.30], [0, 0, -0.30]]}
+           "corners": [[0, 0, "0.06-offset*0.25"], ["span*0.5", 0, "0.06-offset*0.25"], ["span*0.5", 0, "-0.30-offset*0.25"], [0, 0, "-0.30-offset*0.25"]]}
         ],
         "cap": [
           {"primitive": "plate", "thickness": 0.10, "_is": "a 0.36 m cap rail lying over a bulwark or a coaming",
-           "corners": [[0, 0, 0.10], ["span*0.5", 0, 0.10], ["span*0.5", 0, -0.26], [0, 0, -0.26]]}
+           "corners": [[0, 0, "0.10-offset*0.25"], ["span*0.5", 0, "0.10-offset*0.25"], ["span*0.5", 0, "-0.26-offset*0.25"], [0, 0, "-0.26-offset*0.25"]]}
         ],
         "coaming": [
           {"primitive": "plate", "thickness": 0.12, "_is": "a 0.25 m lip standing up off a deck edge",
-           "corners": [["span*0.5", 0, 0], [0, 0, 0], [0, 0.25, 0], ["span*0.5", 0.25, 0]]}
+           "corners": [["span*0.5", 0, "offset*-0.25"], [0, 0, "offset*-0.25"], [0, 0.25, "offset*-0.25"], ["span*0.5", 0.25, "offset*-0.25"]]}
         ],
         "strake": [
           {"primitive": "plate", "thickness": 0.09, "_is": "a 0.22 m band proud of a wall face",
-           "corners": [["span*0.5", 0, -0.05], [0, 0, -0.05], [0, 0.22, -0.05], ["span*0.5", 0.22, -0.05]]}
+           "corners": [["span*0.5", 0, "-0.05-offset*0.25"], [0, 0, "-0.05-offset*0.25"], [0, 0.22, "-0.05-offset*0.25"], ["span*0.5", 0.22, "-0.05-offset*0.25"]]}
         ]
       }
     }

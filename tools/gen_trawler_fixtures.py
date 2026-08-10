@@ -511,6 +511,23 @@ POST_MID = (REVEAL - POST_PROUD) * 0.5   # how far inboard the post's mid-plane 
 ## every tier of every vessel.
 SILL, LIGHT_H = 1.30, 0.72
 
+## DOORS, sized against the same figure BY MEASUREMENT — tests/plan_interior_test.gd
+## marches a player capsule (0.70 m across, 1.8 m tall, standing on a walk deck
+## 0.09 m above the plan's deck plane) through every one of them.
+##
+## A doorway in a RAKED plate is a LEANING SLOT. Its jambs are rectangles in the
+## plate's own (u, v) parameters, and this casing's sides run 7.31 m at the foot
+## and 8.11 m at the top, so a jamb travels along the wall between a player's
+## feet and their head. What a player can use is the INTERSECTION of the opening
+## over their own height, and the 0.85 m side doors measured a walkable column of
+## 0.000 m — a 1.8 m figure could not get through either of them at any lateral
+## position. Their heads were worse: 1.95 m of opening measured along a tumbled-
+## home plate put the lintel at 1.78 m, under the 1.89 m a standing figure needs.
+## Nothing about the vessel looked wrong; the aft door, in a plate with almost no
+## lean, worked, so the fixture had one usable door and read as if it had three.
+DOOR_W, DOOR_H = 1.30, 2.25
+AFT_DOOR_W, AFT_DOOR_H = 1.20, 2.15
+
 
 def _ppoint(c, u, v):
     """StructureBaker.plate_point — the bilinear patch at (u, v)."""
@@ -647,16 +664,16 @@ LOWER_FACES = [
      [{"type": "window", "offset": 1.55, "width": 2.35, "sill": SILL, "height": LIGHT_H}], 1),
     (101, "lower tier, port side — tapered in plan and tumbled home", [LPf, LPa, lpa, lpf],
      [{"type": "window", "offset": 1.25, "width": 3.55, "sill": SILL, "height": LIGHT_H},
-      {"type": "door", "offset": 5.95, "width": 0.85, "sill": 0.0, "height": 1.95}], 2),
+      {"type": "door", "offset": 5.95, "width": DOOR_W, "sill": 0.0, "height": DOOR_H}], 2),
     (102, "lower tier, starboard side", [LSa, LSf, lsf, lsa],
-     [{"type": "door", "offset": 0.95, "width": 0.85, "sill": 0.0, "height": 1.95},
+     [{"type": "door", "offset": 0.95, "width": DOOR_W, "sill": 0.0, "height": DOOR_H},
       {"type": "window", "offset": 2.85, "width": 3.55, "sill": SILL, "height": LIGHT_H}], 2),
     ## The aft bulkhead faces the working deck and carries the door and nothing
     ## else. That is not an oversight and it is not a punched-hole holdout: a
     ## trawler's after casing bulkhead is where the gear comes aboard, and a
     ## light there is a light waiting to be broken by a full cod end.
     (103, "lower tier, aft bulkhead — the working deck door", [LPa, LSa, lsa, lpa],
-     [{"type": "door", "offset": 2.45, "width": 1.15, "sill": 0.0, "height": 2.0}], 0),
+     [{"type": "door", "offset": 2.45, "width": AFT_DOOR_W, "sill": 0.0, "height": AFT_DOOR_H}], 0),
 ]
 GLASS_ID = 400      # lower-tier panes and their mullions
 POST_ID = 420       # wheelhouse mullions and corner pillars
@@ -1055,10 +1072,28 @@ NOTE_COMMON = (
     "THE DECKHOUSE IS RAKED PLATES, NEVER A BOX. A lower tier tapered in plan, tumbled home, "
     "with a front that overhangs 0.55 m forward; a wheelhouse SET BACK on all four sides with "
     "a 0.85 m forward-raked windscreen, a reverse-raked aft bulkhead and a roof sloping 0.30 m "
-    "down aft; four tapering funnel plates raked aft under a black cap. The wheelhouse's "
-    "windows are BANDS - a dark plate between a coaming and a header - because at capture "
-    "distance a dark value reads as glass and a punched hole reads as a hole; the lower tier "
-    "gets real openings and their proud casing instead, so both routes are exercised.\n\n"
+    "down aft; four tapering funnel plates raked aft under a black cap.\n\n"
+    "WINDOWS ARE THE SAME PART ON EVERY TIER, 2026-08-10. They were not: the wheelhouse had a "
+    "dark band and the lower tier had punched holes with nothing behind them, which at every "
+    "range read as pale rectangles the value of the plating - as holes, not as glass. One rule "
+    "now, on both tiers: the run is ONE band, not three separate punches; a dark GLASS pane "
+    "sits 0.10 m inboard of the shell plane and laps 0.12 m past the opening all round so the "
+    "reveal is real depth and no daylight leaks round the pane; cream MULLIONS stand IN the "
+    "reveal, bridging it from the shell face to the glass - a post that only straddled the "
+    "shell plane left a gap either side of itself and the whole band broke into fine dark "
+    "hatching when a grazing camera looked along it; and each wheelhouse face gets a CORNER "
+    "PILLAR at either end, which is what closes the notch two recessed panes leave where they "
+    "meet at a corner. The aft casing bulkhead keeps its door and no light at all: that is "
+    "where the gear comes aboard.\n\n"
+    "DOORS ARE 1.30 x 2.25 m ON THE SIDES AND 1.20 x 2.15 m AFT, and that is a measurement, "
+    "not a taste. A doorway in a raked plate is a LEANING SLOT - its jambs are rectangles in "
+    "the plate's own (u, v) parameters, and this casing's sides run 7.31 m at the foot and "
+    "8.11 m at the top - so what a player can use is the INTERSECTION of the opening over "
+    "their own height. tests/plan_interior_test.gd measured the 0.85 x 1.95 m side doors that "
+    "were here at a walkable column of 0.000 m and a lintel at 1.78 m, against the 1.89 m a "
+    "1.8 m figure standing on the walk deck needs: neither of them could be walked through, at "
+    "any lateral position. The aft door, in a plate with almost no lean, worked - so the "
+    "vessel had one usable door and read as if it had three.\n\n"
     "THE RIG IS RE-BELAYED. The aft signal mast and the sidelights stand on the wheelhouse "
     "roof and its wings; the exhaust comes out of the funnel top; the derrick heels to the "
     "mast at boat-deck height; the shrouds and the three fender lanyards land on the SWEPT "

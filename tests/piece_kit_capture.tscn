@@ -1,0 +1,6 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://tests/piece_kit_capture.gd" id="1_piece_capture"]
+
+[node name="PieceKitCapture" type="Node"]
+script = ExtResource("1_piece_capture")

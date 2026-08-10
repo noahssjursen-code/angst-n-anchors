@@ -618,6 +618,12 @@ static func _post_boxes(spec: Dictionary) -> Array:
 				"basis": yaw_basis,
 				"color": color,
 				"material": material,
+				## Same tag `sweep_boxes` puts on its output, and for the same
+				## consumer: `railing_collider_boxes` groups the drawn boxes by
+				## segment and bounds each group, so a stanchion has to say
+				## which segment it stands on or it would be drawn outside
+				## every barrier.
+				"segment": i,
 			})
 	return out
 
@@ -701,26 +707,82 @@ static func railing_lod_boxes(spec: Dictionary, lod: int) -> Array:
 ## spans the full height of the railing over the segment, and on a sloping run
 ## it spans from the lower end's foot to the higher end's top — conservative in
 ## Y, which is the correct direction to err for a fall barrier.
+##
+## ── Why this bounds the drawn boxes instead of re-deriving the run ──────────
+## It used to compute the barrier straight from the spec: `post_width` thick,
+## spanning the segment's endpoints, `height` tall. Every one of those three
+## terms was subtly wrong, and each was wrong for its own reason:
+##
+##   • `height` is the CLEAR height — the CENTRELINE of the top course, not its
+##     top face. `railing_profile` draws that course as a `rail_width` square
+##     straddling the centreline, so the rail reaches `height + rail_width/2`
+##     and the top 20 mm of every railing in the project was un-collided.
+##   • `post_width` is the widest section only because of the DEFAULTS. A spec
+##     asking for 60 mm tube on 50 mm stanchions draws outside its own barrier.
+##   • The segment endpoints are the PATH, but a mitred joint deliberately
+##     overshoots the vertex to fill the wedge, by up to `MAX_MITRE_FACTOR`
+##     times the section's reach. Every corner of every closed run leaked there.
+##
+## The first was found by the capture rig's corner-containment check on the
+## container feeder (92 loose corners, drift exactly rail_width/2) and had been
+## held in place by a unit test asserting the collider top EQUALLED `height`
+## while the test twenty lines above it asserted the drawn top equalled
+## `height + rail_width/2`. Fixing only that one exposed the third: 148 loose
+## corners at the mitres, which no amount of care with the spec would have
+## found, because the overshoot is not in the spec.
+##
+## That is the shape of the whole class, so the derivation is gone. This groups
+## the boxes the run ACTUALLY DRAWS by their `segment` tag and takes the
+## yaw-frame bounding box of each group — the identical mechanism, and now the
+## identical code path, as `sweep_collider_boxes`. There is no second formula
+## to keep in step, which is the mechanism behind both walk-through bugs this
+## project has already fixed. Change what a railing looks like and the barrier
+## changes with it.
+##
+## What stays deliberate is the GROUPING: one box per segment, spanning from
+## the toe board's underside to the top rail's top face in one solid piece,
+## rather than one collider per course. A body must not pass BETWEEN the
+## courses, and 3 barriers are cheaper than 43 boxes.
 static func railing_collider_boxes(spec: Dictionary) -> Array:
-	var path := _points_of(spec.get("path", []))
-	var offset := _vec3_of(spec.get("offset", Vector3.ZERO))
-	var closed := bool(spec.get("closed", false))
-	var height := float(spec.get("height", DEFAULT_RAIL_HEIGHT))
-	var thickness := maxf(float(spec.get("post_width", DEFAULT_POST_WIDTH)), 0.001)
+	if not bool(spec.get("solid", true)):
+		return []
+	var boxes := railing_boxes(spec)
+	if boxes.is_empty():
+		return []
+
+	var groups: Dictionary = {}
+	for box_variant in boxes:
+		var box := box_variant as Dictionary
+		var index := int(box.get("segment", 0))
+		if not groups.has(index):
+			groups[index] = []
+		(groups[index] as Array).append(box)
+	var order: Array = groups.keys()
+	order.sort()
+
 	var out: Array = []
-	for seg_variant in _segments_of(path, closed):
-		var seg := seg_variant as Dictionary
-		var a := (seg["a"] as Vector3) + offset
-		var b := (seg["b"] as Vector3) + offset
-		var y_low := minf(a.y, b.y)
-		var y_high := maxf(a.y, b.y) + height
-		var plan_length := Vector2(b.x - a.x, b.z - a.z).length()
-		if plan_length < MIN_SEGMENT_M:
-			continue
+	for index in order:
+		var group := groups[index] as Array
+		var yaw := _yaw_of((group[0] as Dictionary).get("basis", Basis.IDENTITY) as Basis)
+		var frame := Basis(Vector3.UP, yaw)
+		var inverse := frame.transposed()
+		var low := Vector3.ZERO
+		var high := Vector3.ZERO
+		var first := true
+		for box_variant in group:
+			for corner in _corners(box_variant as Dictionary):
+				var local: Vector3 = inverse * corner
+				if first:
+					low = local
+					high = local
+					first = false
+				else:
+					low = low.min(local)
+					high = high.max(local)
 		out.append({
-			"center": Vector3((a.x + b.x) * 0.5, (y_low + y_high) * 0.5, (a.z + b.z) * 0.5),
-			"size": Vector3(thickness, y_high - y_low, plan_length),
-			"yaw_deg": rad_to_deg(atan2(b.x - a.x, b.z - a.z)),
+			"center": frame * ((low + high) * 0.5),
+			"size": high - low,
+			"yaw_deg": rad_to_deg(yaw),
 		})
 	return out
 

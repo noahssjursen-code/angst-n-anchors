@@ -10,6 +10,12 @@ extends Node
 ## PhysicsServer3D, on the real WalkDeck body, by marching a PLAYER-SIZED capsule
 ## (scenes/shared/player.tscn: radius 0.35, height 1.8) through it.
 ##
+## THE ANSWER, so it is not buried below: yes, once the doors were made big
+## enough. The shell collides as drawn, the WalkDeck slab is a floor 0.09 m above
+## the plan's deck plane, and the doorways are holes a capsule walks through. The
+## doors on both vessels were NOT big enough before this test measured them — see
+## JAMB_MARGIN and `_door_column` for what a doorway in a raked plate is worth.
+##
 ## Four claims, and the last two exist so the first two cannot be satisfied by a
 ## vessel that emits no colliders at all:
 ##
@@ -25,7 +31,10 @@ extends Node
 ##      the glass band added on 2026-08-10 must not have opened a hole a player
 ##      can step through.
 ##
-## Three traps, all of which have produced false green on this project before:
+## Claims 1, 3 and 4 are run TWICE, by a standing figure and a kneeling one, and
+## the second is the one that has teeth — see `_ready`.
+##
+## Four traps, all of which produced a false green in this file's own history:
 ##
 ##  - `cast_motion()` returns a clean 1.0 for a shape that STARTS overlapping
 ##    something, which reads as "walked straight through" when the truth is
@@ -42,12 +51,19 @@ extends Node
 ##    sweep meaningless — so the standing height is DERIVED by marching down onto
 ##    the floor first, and every horizontal march then starts one capsule-height
 ##    above the surface it found. If that surface were not there, or were above
-##    the deck, (2) fails and says so.
+##    the deck, (2) fails and says so. Measured: WalkDeckCollider tops out at
+##    plan y 0.090 and WalkHullCollider at −0.960, so the hull box is not in the
+##    way of anything at deck level.
 ##
 ##  - A wall whose plate is RAKED does not stand over its own foot. Every station
 ##    is solved for the v parameter at which the plate's own surface reaches the
-##    capsule's centre height, so a forward-raked wheelhouse front is met where
-##    it actually is rather than where its foot is.
+##    figure's centre height, so a forward-raked wheelhouse front is met where it
+##    actually is rather than where its foot is.
+##
+##  - A `PackedStringArray` held in a Dictionary is a VALUE: reading it back
+##    hands you a copy, and appending to it appends to a temporary. This test
+##    reported "0 walked through" on a vessel with its whole starboard side
+##    deliberately hollowed out until the tallies were moved to `Array`.
 ##
 ## The vessels are the two the owner looked at. Both were rebuilt on the same day
 ## the window treatment landed, and both carry doors on three sides.
@@ -60,6 +76,8 @@ const CAPSULE_H := 1.8
 ## Clearance between the capsule's feet and the floor it stands on. Touching is
 ## not overlapping, but a query at exactly zero separation is a coin toss.
 const STAND_EPS := 0.03
+## The same player, crouched — the figure that fits UNDER a window band.
+const KNEE_H := 0.8
 
 const MARCH_STEP := 0.02   ## << the 0.10 m plate thickness; cannot tunnel a wall
 const STATION_STEP := 0.10 ## along a wall
@@ -68,11 +86,28 @@ const MARCH_LEN := 1.30    ## far enough to end a capsule-radius clear inside
 const DROP_FROM := 0.50    ## how far above the deck the floor march begins
 const DROP_LEN := 1.00
 
-## A station only counts as "in the clear part of a door" when the whole capsule
-## fits between the jambs, with this much to spare.
-const JAMB_MARGIN := 0.06
-## How many stations to plant across the clear part of each doorway.
+## How far clear of a DRAWN jamb the capsule has to be before the physics can be
+## expected to agree with the drawing. It is not a fudge factor: a raked plate's
+## collider is a STAIRCASE — `StructureBaker._plate_panel_colliders` cuts each
+## panel into cells and gives each cell the bounding box of its own corners, so
+## the box stands up to one PLATE_COLLIDER_STEP (0.15 m) proud of the leaning
+## surface it wraps. Every opening in a raked plate is therefore that much
+## narrower in collision than it is in the picture, and a doorway measured
+## against the drawing alone reads wider than it walks. Measured on demo_workboat:
+## with a 0.06 m margin the column came out 0.315 m and four of its own stations
+## were then stopped by the staircase.
+const JAMB_MARGIN := 0.16
+## How many stations to plant across the walkable column of each doorway.
 const DOOR_STATIONS := 9
+## Heights at which a doorway's jambs are checked against the standing figure.
+const COLUMN_SAMPLES := 9
+const COLUMN_STEP := 0.01
+## A doorway has to leave the figure this much lateral play, or it is a doorway
+## in name only: a player who has to be within a centimetre of one line to get
+## through a door will report the door as broken, and be right.
+const DOOR_PLAY_MIN := 0.12
+## And this much air over its head.
+const HEAD_MARGIN := 0.05
 
 const FIXTURES: Array[Dictionary] = [
 	{
@@ -101,22 +136,36 @@ const FIXTURES: Array[Dictionary] = [
 var _t: RefCounted
 var _walk: CollisionObject3D
 var _space: PhysicsDirectSpaceState3D
-var _capsule: CapsuleShape3D
-var _query: PhysicsShapeQueryParameters3D
+var _figures: Array[Dictionary] = []
 var _offset := Vector3.ZERO
 var _boxes: Array = []
 
 
 func _ready() -> void:
 	_t = TestReport.new("plan_interior_test")
-	_capsule = CapsuleShape3D.new()
-	_capsule.radius = CAPSULE_R
-	_capsule.height = CAPSULE_H
-	_query = PhysicsShapeQueryParameters3D.new()
-	_query.shape = _capsule
-	_query.collide_with_bodies = true
-	_query.collide_with_areas = false
-	_query.collision_mask = 0xFFFFFFFF
+	## Two figures, and the second is not decoration. A STANDING capsule spans the
+	## whole window band, so at a window station it is stopped by the recessed
+	## glass pane whether or not the SHELL PLATE around it collides at all —
+	## measured: hollowing demo_workboat's whole starboard plate (`solid: false`,
+	## 312 collider boxes down to 290) left this sweep entirely green, because the
+	## pane and the two corner walls between them covered every station the
+	## standing figure could reach. A KNEELING capsule passes under the pane and
+	## has nothing but the plating below the sill to stop it, so it is the one
+	## that can tell a solid wall from a hole with a window hung in front of it.
+	for figure in [
+		{"name": "standing", "height": CAPSULE_H, "lift": STAND_EPS + CAPSULE_H * 0.5},
+		{"name": "kneeling", "height": KNEE_H, "lift": STAND_EPS + KNEE_H * 0.5},
+	]:
+		var shape := CapsuleShape3D.new()
+		shape.radius = CAPSULE_R
+		shape.height = float(figure["height"])
+		var query := PhysicsShapeQueryParameters3D.new()
+		query.shape = shape
+		query.collide_with_bodies = true
+		query.collide_with_areas = false
+		query.collision_mask = 0xFFFFFFFF
+		figure["query"] = query
+		_figures.append(figure)
 	for fixture in FIXTURES:
 		await _run_fixture(fixture)
 	_t.finish(get_tree())
@@ -246,9 +295,9 @@ func _report_body(stem: String) -> void:
 ## carried through the march because "blocked at 0.32 m" is not a diagnosis and
 ## "blocked by BrickCol_plan_412" is: it names the collider, which names the
 ## baked box, which names the plate.
-func _hit(centre: Vector3) -> String:
-	_query.transform = Transform3D(Basis.IDENTITY, centre)
-	for hit_variant in _space.intersect_shape(_query, 4):
+func _hit(centre: Vector3, query: PhysicsShapeQueryParameters3D) -> String:
+	query.transform = Transform3D(Basis.IDENTITY, centre)
+	for hit_variant in _space.intersect_shape(query, 4):
 		var hit := hit_variant as Dictionary
 		var body := hit.get("collider") as CollisionObject3D
 		if body == null:
@@ -264,13 +313,13 @@ func _hit(centre: Vector3) -> String:
 
 ## Steps a player capsule from `from` along `motion`, asking the physics server
 ## at every station. Returns {started_inside, blocked, stop_m, hit}.
-func _march(from: Vector3, motion: Vector3) -> Dictionary:
+func _march(from: Vector3, motion: Vector3, query: PhysicsShapeQueryParameters3D) -> Dictionary:
 	var length := motion.length()
 	var steps := maxi(2, int(ceil(length / MARCH_STEP)))
 	var out := {"started_inside": false, "blocked": false, "stop_m": length, "hit": ""}
 	for i in steps + 1:
 		var f := float(i) / float(steps)
-		var name := _hit(from + motion * f)
+		var name := _hit(from + motion * f, query)
 		if name.is_empty():
 			continue
 		if i == 0:
@@ -301,7 +350,7 @@ func _check_floor(_plan: StructurePlan, fixture: Dictionary, stem: String) -> fl
 		## Feet DROP_FROM above the plan's deck plane, so the capsule centre is a
 		## capsule-half higher again.
 		var from := here + Vector3(0.0, DROP_FROM + CAPSULE_H * 0.5, 0.0) + _offset
-		var drop := _march(from, Vector3.DOWN * DROP_LEN)
+		var drop := _march(from, Vector3.DOWN * DROP_LEN, _figures[0]["query"])
 		if bool(drop["started_inside"]):
 			stuck += 1
 			continue
@@ -337,21 +386,30 @@ func _check_floor(_plan: StructurePlan, fixture: Dictionary, stem: String) -> fl
 # ── 1, 3 and 4. Doors pass, everything else stops ────────────────────────────
 
 func _check_walls(plan: StructurePlan, fixture: Dictionary, stem: String, floor_y: float) -> void:
-	var centre_y := floor_y + STAND_EPS + CAPSULE_H * 0.5
 	var tier := _tier_plates(plan, fixture["tier"] as Array)
 	if not _t.check("%s: the fixture supplies a deckhouse tier (%d plates)" % [stem, tier.size()],
 			tier.size() >= 3):
 		return
 	var inside := _tier_centre(tier)
-	var doors_free := 0
-	var doors_stations := 0
-	var doors_blocked := PackedStringArray()
-	var solid_stations := 0
-	var solid_through := PackedStringArray()
-	var window_stations := 0
-	var window_through := PackedStringArray()
+	var doors := 0
+	var doors_narrow := PackedStringArray()
+	var doors_low := PackedStringArray()
 	var stuck := PackedStringArray()
 	var ambiguous := 0
+	## Per figure: {free, stations, blocked[], solid, through[], windows, window_through[], stoppers}
+	var tally: Dictionary = {}
+	for figure in _figures:
+		## Array, NOT PackedStringArray. A Packed* array is a VALUE type: reading
+		## one back out of a Dictionary hands you a COPY, so `row["through"].append(x)`
+		## appends to a temporary and throws it away. That is not a hypothetical —
+		## it is what this test did on its first two-figure run, and it reported
+		## "0 walked through" for a vessel whose whole starboard side had been
+		## deliberately hollowed out. Arrays are reference types and append in place.
+		tally[figure["name"]] = {
+			"free": 0, "stations": 0, "blocked": [],
+			"solid": 0, "through": [],
+			"windows": 0, "window_through": [], "stoppers": {},
+		}
 
 	for wall_id_variant in fixture["walls"] as Array:
 		var wall_id := int(wall_id_variant)
@@ -363,41 +421,91 @@ func _check_walls(plan: StructurePlan, fixture: Dictionary, stem: String, floor_
 		var ref := StructureBaker.plate_ref_lengths(corners)
 		var normal := _outward(corners, inside)
 		var openings := StructureBaker.plate_openings(spec, ref)
-		for u_variant in _stations(openings, ref.x):
-			var u := float(u_variant)
-			var kind := _station_kind(openings, u)
-			if kind == "jamb":
-				ambiguous += 1
+
+		## ── the doors, one at a time ────────────────────────────────────────
+		for opening_variant in openings:
+			var opening := opening_variant as Dictionary
+			if float(opening["sill"]) > 0.05:
 				continue
-			var on_wall := _wall_point_at_height(corners, u / ref.x, centre_y)
-			var from := on_wall + normal * START_OUT + _offset
-			var march := _march(from, -normal * MARCH_LEN)
-			var where := "%d@%.2f" % [wall_id, u]
-			if bool(march["started_inside"]):
-				stuck.append("%s in %s" % [where, march["hit"]])
+			doors += 1
+			var head := _door_head_y(corners, ref, opening)
+			var need := floor_y + CAPSULE_H + HEAD_MARGIN
+			if head < need:
+				doors_low.append("%d@%.2f head at plan y %.3f, a 1.8 m figure needs %.3f"
+					% [wall_id, float(opening["off"]), head, need])
+			var column := _door_column(corners, ref, opening, floor_y)
+			var width := float(column["width"])
+			print("  [door] %d@%.2f nominal %.2f m · walkable column %.3f m of play · head %.3f m"
+				% [wall_id, float(opening["off"]), float(opening["w"]), width, head - floor_y])
+			if width < DOOR_PLAY_MIN:
+				doors_narrow.append("%d@%.2f only %.3f m of play"
+					% [wall_id, float(opening["off"]), width])
 				continue
-			match kind:
-				"door":
-					doors_stations += 1
+			for i in DOOR_STATIONS:
+				var u := lerpf(float(column["lo"]), float(column["hi"]),
+					float(i) / float(DOOR_STATIONS - 1))
+				for figure in _figures:
+					var row: Dictionary = tally[figure["name"]]
+					var at := _wall_point_at_height(
+						corners, u / ref.x, floor_y + float(figure["lift"]))
+					var march := _march(at + normal * START_OUT + _offset,
+						-normal * MARCH_LEN, figure["query"])
+					var where := "%s %d@%.2f" % [figure["name"], wall_id, u]
+					if bool(march["started_inside"]):
+						stuck.append("%s in %s" % [where, march["hit"]])
+						continue
+					row["stations"] = int(row["stations"]) + 1
 					if bool(march["blocked"]):
-						doors_blocked.append("%s stopped at %.2f m by %s"
+						(row["blocked"] as Array).append(
+							"%s stopped at %.2f m by %s"
 							% [where, march["stop_m"], _describe(str(march["hit"]))])
 					else:
-						doors_free += 1
-				"window":
-					window_stations += 1
-					solid_stations += 1
-					if not bool(march["blocked"]):
-						window_through.append(where)
-						solid_through.append(where)
-				_:
-					solid_stations += 1
-					if not bool(march["blocked"]):
-						solid_through.append(where)
+						row["free"] = int(row["free"]) + 1
 
-	print("  [walk] doors %d/%d free · shell %d stations, %d walked through · windows %d · jambs %d skipped"
-		% [doors_free, doors_stations, solid_stations, solid_through.size(),
-		   window_stations, ambiguous])
+		## ── and the rest of the wall ────────────────────────────────────────
+		for u_variant in _stations(ref.x):
+			var u := float(u_variant)
+			var kind := _station_kind(openings, u)
+			if kind == "door" or kind == "jamb":
+				ambiguous += 1
+				continue
+			for figure in _figures:
+				var row: Dictionary = tally[figure["name"]]
+				var at := _wall_point_at_height(corners, u / ref.x, floor_y + float(figure["lift"]))
+				var march := _march(at + normal * START_OUT + _offset,
+					-normal * MARCH_LEN, figure["query"])
+				var where := "%s %d@%.2f" % [figure["name"], wall_id, u]
+				if bool(march["started_inside"]):
+					stuck.append("%s in %s" % [where, march["hit"]])
+					continue
+				row["solid"] = int(row["solid"]) + 1
+				if kind == "window":
+					row["windows"] = int(row["windows"]) + 1
+				if not bool(march["blocked"]):
+					(row["through"] as Array).append(where)
+					if kind == "window":
+						(row["window_through"] as Array).append(where)
+				else:
+					var stoppers: Dictionary = row["stoppers"]
+					var name := str(march["hit"])
+					stoppers[name] = int(stoppers.get(name, 0)) + 1
+
+	for figure in _figures:
+		var row: Dictionary = tally[figure["name"]]
+		var fig := str(figure["name"])
+		print("  [walk] %s: doors %d/%d free · shell %d stations, %d through · windows %d"
+			% [fig, int(row["free"]), int(row["stations"]), int(row["solid"]),
+			   (row["through"] as Array).size(), int(row["windows"])])
+		## Which colliders are doing the stopping. A sweep that comes back green
+		## because ONE unexpected shape covers the whole side of the vessel proves
+		## nothing about the shell, and this line is how you see that happening.
+		var stoppers: Dictionary = row["stoppers"]
+		var names := stoppers.keys()
+		names.sort_custom(func(a, b): return int(stoppers[a]) > int(stoppers[b]))
+		var top := PackedStringArray()
+		for i in mini(6, names.size()):
+			top.append("%s x%d" % [_describe(str(names[i])), int(stoppers[names[i]])])
+		print("  [walk] %s: stopped by %s" % [fig, ", ".join(top)])
 	if not stuck.is_empty():
 		print("  [walk] began inside a collider: %s" % ", ".join(stuck))
 
@@ -405,48 +513,150 @@ func _check_walls(plan: StructurePlan, fixture: Dictionary, stem: String, floor_
 	## below into a tautology, so it is the first thing asserted.
 	_t.equal("%s: no wall march begins inside a collider (%d)" % [stem, stuck.size()],
 		stuck.size(), 0)
-	_t.check("%s: the sweep found door stations to walk through (%d)" % [stem, doors_stations],
-		doors_stations >= 6)
-	_t.check("%s: a player on the open deck walks through a door into the deckhouse (%d/%d, %s)"
-		% [stem, doors_free, doors_stations,
-		   "none blocked" if doors_blocked.is_empty() else ", ".join(doors_blocked)],
-		doors_free == doors_stations)
-	_t.check("%s: the sweep covered the shell densely (%d stations)" % [stem, solid_stations],
-		solid_stations >= 100)
-	_t.check("%s: the shell is solid everywhere a door is not (%d/%d through, e.g. %s)"
-		% [stem, solid_through.size(), solid_stations,
-		   "none" if solid_through.is_empty() else solid_through[0]],
-		solid_through.is_empty())
-	_t.check("%s: the sweep crossed the window bands (%d stations)" % [stem, window_stations],
-		window_stations >= 20)
-	_t.check("%s: a window band is not a doorway (%d/%d walked through, e.g. %s)"
-		% [stem, window_through.size(), window_stations,
-		   "none" if window_through.is_empty() else window_through[0]],
-		window_through.is_empty())
+	## The two GEOMETRIC halves of "the door admits a player", stated against the
+	## 1.8 m figure and separately from the physics. A door can fail either way and
+	## the two failures need different fixes, so they are two checks.
+	_t.check("%s: every doorway is tall enough for the 1.8 m figure (%d of %d too low: %s)"
+		% [stem, doors_low.size(), doors, "none" if doors_low.is_empty() else ", ".join(doors_low)],
+		doors_low.is_empty())
+	_t.check("%s: every doorway leaves a walkable column for the figure (%d of %d too narrow: %s)"
+		% [stem, doors_narrow.size(), doors,
+		   "none" if doors_narrow.is_empty() else ", ".join(doors_narrow)],
+		doors_narrow.is_empty())
+
+	for figure in _figures:
+		var fig := str(figure["name"])
+		var row: Dictionary = tally[fig]
+		var blocked: Array = row["blocked"]
+		var through: Array = row["through"]
+		var window_through: Array = row["window_through"]
+		_t.check("%s: the %s sweep found door stations to walk through (%d)"
+			% [stem, fig, int(row["stations"])], int(row["stations"]) >= doors * DOOR_STATIONS)
+		_t.check("%s: a %s player on the open deck walks through a door into the deckhouse (%d/%d, %s)"
+			% [stem, fig, int(row["free"]), int(row["stations"]),
+			   "none blocked" if blocked.is_empty() else ", ".join(PackedStringArray(blocked))],
+			int(row["free"]) == int(row["stations"]))
+		_t.check("%s: the %s sweep covered the shell densely (%d stations)"
+			% [stem, fig, int(row["solid"])], int(row["solid"]) >= 100)
+		_t.check("%s: the shell stops a %s player everywhere a door is not (%d/%d through, e.g. %s)"
+			% [stem, fig, through.size(), int(row["solid"]),
+			   "none" if through.is_empty() else str(through[0])],
+			through.is_empty())
+		_t.check("%s: the %s sweep crossed the window bands (%d stations)"
+			% [stem, fig, int(row["windows"])], int(row["windows"]) >= 20)
+		_t.check("%s: a window band is not a doorway for a %s player (%d/%d through, e.g. %s)"
+			% [stem, fig, window_through.size(), int(row["windows"]),
+			   "none" if window_through.is_empty() else str(window_through[0])],
+			window_through.is_empty())
 
 
-## Where the sweep stands. A uniform run along the whole wall, PLUS a dense run
-## across the clear part of every door — because that clear part is small by
-## construction (a 0.85 m door minus a 0.70 m player leaves 0.15 m of lateral
-## play) and a uniform sweep coarse enough to be affordable lands one station in
-## it, or none. One station is not a sweep.
-func _stations(openings: Array, length: float) -> PackedFloat32Array:
+## Where the shell sweep stands: a uniform run along the whole wall. Doors are
+## walked separately, against the column measured below, and their stations are
+## excluded here.
+func _stations(length: float) -> PackedFloat32Array:
 	var out := PackedFloat32Array()
 	var u := STATION_STEP
 	while u < length - STATION_STEP:
 		out.append(u)
 		u += STATION_STEP
-	for opening_variant in openings:
-		var opening := opening_variant as Dictionary
-		if float(opening["sill"]) > 0.05:
-			continue
-		var lo := float(opening["off"]) + CAPSULE_R + JAMB_MARGIN
-		var hi := float(opening["off"]) + float(opening["w"]) - CAPSULE_R - JAMB_MARGIN
-		if hi <= lo:
-			continue
-		for i in DOOR_STATIONS:
-			out.append(lerpf(lo, hi, float(i) / float(DOOR_STATIONS - 1)))
 	return out
+
+
+## ── What a doorway in a RAKED wall is actually worth ────────────────────────
+##
+## A deckhouse side is not a rectangle standing on the deck. It rakes, it flares
+## and it tapers in plan, so a "0.90 m door" is a slot that LEANS: its jambs are
+## in one place at the player's feet and up to a quarter of a metre along the
+## wall at their head. A player is a vertical capsule and has to clear the jambs
+## at EVERY height at once, so what the door is worth is the intersection of its
+## own width over the figure's height — and on the workboat's flared side that
+## turned 0.90 m of nominal opening into 0.67 m of column, which a 0.70 m player
+## does not fit through. That was measured here, on the first run of this test,
+## and it is why the fixtures' doors were widened rather than the check relaxed.
+##
+## Returns {lo, hi, width}: the interval of wall parameter (in the plate's own
+## metres) where the capsule's CENTRE may stand, and how wide that interval is.
+## `width` is the lateral play the player has; it is zero for a door they cannot
+## get through at all.
+func _door_column(corners: PackedVector3Array, ref: Vector2, opening: Dictionary,
+		floor_y: float) -> Dictionary:
+	var off := float(opening["off"])
+	var width := float(opening["w"])
+	var run := _wall_run(corners)
+	## Heights the capsule occupies, as plate parameters.
+	var vs := PackedFloat32Array()
+	for i in COLUMN_SAMPLES:
+		var y := floor_y + STAND_EPS + CAPSULE_H * float(i) / float(COLUMN_SAMPLES - 1)
+		vs.append(_v_at_height(corners, (off + width * 0.5) / ref.x, y))
+	var lo := INF
+	var hi := -INF
+	var u := off
+	while u <= off + width:
+		if _clears_jambs(corners, ref, off, width, u, vs, run):
+			lo = minf(lo, u)
+			hi = maxf(hi, u)
+		u += COLUMN_STEP
+	if lo > hi:
+		return {"lo": off + width * 0.5, "hi": off + width * 0.5, "width": 0.0}
+	## Report the play in METRES on the wall, not in the plate's parameter.
+	var a := StructureBaker.plate_point(corners, lo / ref.x, vs[0])
+	var b := StructureBaker.plate_point(corners, hi / ref.x, vs[0])
+	return {"lo": lo, "hi": hi, "width": absf((b - a).dot(run))}
+
+
+## True when a capsule centred on the wall at parameter `u` clears BOTH jambs, by
+## CAPSULE_R plus a margin, at every height it occupies. Distances are measured
+## along the wall's horizontal run: a jamb that moves along the NORMAL as it
+## rises (rake) does not narrow the doorway, only one that moves along the run
+## (taper, flare in plan) does.
+func _clears_jambs(corners: PackedVector3Array, ref: Vector2, off: float, width: float,
+		u: float, vs: PackedFloat32Array, run: Vector3) -> bool:
+	var here := StructureBaker.plate_point(corners, u / ref.x, vs[0])
+	for v in vs:
+		var jamb_a := StructureBaker.plate_point(corners, off / ref.x, v)
+		var jamb_b := StructureBaker.plate_point(corners, (off + width) / ref.x, v)
+		var da := (here - jamb_a).dot(run)
+		var db := (jamb_b - here).dot(run)
+		if minf(da, db) < CAPSULE_R + JAMB_MARGIN:
+			return false
+	return true
+
+
+## Horizontal unit vector along the wall's u run.
+func _wall_run(corners: PackedVector3Array) -> Vector3:
+	var d := StructureBaker.plate_point(corners, 1.0, 0.0) - StructureBaker.plate_point(corners, 0.0, 0.0)
+	var flat := Vector3(d.x, 0.0, d.z)
+	return Vector3.RIGHT if flat.length() < 0.001 else flat.normalized()
+
+
+## The LOWEST point of a doorway's head, in plan y — the height a player has to
+## duck under. Sampled across the door because a raked head is not level.
+func _door_head_y(corners: PackedVector3Array, ref: Vector2, opening: Dictionary) -> float:
+	var off := float(opening["off"])
+	var width := float(opening["w"])
+	var v := (float(opening["sill"]) + float(opening["h"])) / ref.y
+	var lowest := INF
+	for i in 9:
+		var u := lerpf(off, off + width, float(i) / 8.0)
+		lowest = minf(lowest, StructureBaker.plate_point(corners, u / ref.x, v).y)
+	return lowest
+
+
+## The plate parameter v at which the plate's own surface reaches height `y`,
+## at parameter `u`.
+func _v_at_height(corners: PackedVector3Array, u: float, y: float) -> float:
+	var lo := 0.0
+	var hi := 1.0
+	if StructureBaker.plate_point(corners, u, 0.0).y > StructureBaker.plate_point(corners, u, 1.0).y:
+		lo = 1.0
+		hi = 0.0
+	for _i in 24:
+		var mid := (lo + hi) * 0.5
+		if StructureBaker.plate_point(corners, u, mid).y < y:
+			lo = mid
+		else:
+			hi = mid
+	return (lo + hi) * 0.5
 
 
 ## Which of {door, jamb, window, blank} a station at `u` metres along the wall
@@ -483,21 +693,10 @@ func _station_kind(openings: Array, u: float) -> String:
 
 
 ## The point on the plate's own surface, at parameter `u`, whose height is `y`.
-## A raked wall does not stand over its foot; bisecting on the plate's bilinear
-## patch meets it where it actually is.
+## A raked wall does not stand over its foot; solving for v on the plate's own
+## bilinear patch meets it where it actually is.
 func _wall_point_at_height(corners: PackedVector3Array, u: float, y: float) -> Vector3:
-	var lo := 0.0
-	var hi := 1.0
-	if StructureBaker.plate_point(corners, u, 0.0).y > StructureBaker.plate_point(corners, u, 1.0).y:
-		lo = 1.0
-		hi = 0.0
-	for _i in 24:
-		var mid := (lo + hi) * 0.5
-		if StructureBaker.plate_point(corners, u, mid).y < y:
-			lo = mid
-		else:
-			hi = mid
-	return StructureBaker.plate_point(corners, u, (lo + hi) * 0.5)
+	return StructureBaker.plate_point(corners, u, _v_at_height(corners, u, y))
 
 
 func _tier_plates(plan: StructurePlan, ids: Array) -> Array:
@@ -548,7 +747,8 @@ func _outward(corners: PackedVector3Array, inside: Vector3) -> Vector3:
 func _check_controls(stem: String, floor_y: float) -> void:
 	## Open air well above the rig. Nothing may stop this, or "blocked" anywhere
 	## else means nothing.
-	var air := _march(Vector3(5.0, 22.0, 14.0) + _offset, Vector3.RIGHT * 3.0)
+	var air := _march(Vector3(5.0, 22.0, 14.0) + _offset, Vector3.RIGHT * 3.0,
+		_figures[0]["query"])
 	_t.check("%s: an open-air march is reported free" % stem,
 		not bool(air["blocked"]) and not bool(air["started_inside"]))
 	if is_nan(floor_y):
@@ -557,6 +757,6 @@ func _check_controls(stem: String, floor_y: float) -> void:
 	## must be STOPPED, so "the floor held" is not a verdict this rig hands out
 	## for free.
 	var over := Vector3(5.0, floor_y + DROP_FROM + CAPSULE_H * 0.5, 3.0) + _offset
-	var drop := _march(over, Vector3.DOWN * DROP_LEN)
+	var drop := _march(over, Vector3.DOWN * DROP_LEN, _figures[0]["query"])
 	_t.check("%s: the open deck also stops a falling capsule (control)" % stem,
 		bool(drop["blocked"]) and not bool(drop["started_inside"]))

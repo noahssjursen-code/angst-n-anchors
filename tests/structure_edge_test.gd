@@ -373,11 +373,107 @@ func _test_railing_blocks_the_edge() -> void:
 		"...and so is the deck 0.5 m inboard of the rail",
 		not StructureEdge.point_inside_any(oriented, Vector3(14.25 - 0.5, 6.0 + 1.0, 24.0)),
 	)
+	## ── The barrier must cover what the run DRAWS, not what its spec says ────
+	## This used to assert `top == deck + height`, which is the CLEAR height —
+	## the centreline of the top course, not its top face. `railing_profile`
+	## draws that course as a rail_width square straddling the centreline, so
+	## the drawn rail stood rail_width/2 = 20 mm proud of its own collider on
+	## every railing in the project, and this assertion held the defect in
+	## place while _test_railing_geometry twenty lines up asserted the drawn top
+	## was `height + rail_width/2`. Two tests, contradicting each other, both
+	## green.
+	##
+	## The replacement states the property directly instead of restating a
+	## number: no corner of any box the run draws may be outside the barrier.
+	## It is the same check `vessel_render_capture` runs over whole vessels,
+	## applied here where a mutation can be aimed at one term.
+	var rail_w := float(spec.get("rail_width", StructureEdge.DEFAULT_RAIL_WIDTH))
 	var top := -INF
 	for c_variant in colliders:
 		var c := c_variant as Dictionary
 		top = maxf(top, (c["center"] as Vector3).y + (c["size"] as Vector3).y * 0.5)
-	_t.near("barrier top matches the railing height", top, 6.0 + float(spec["height"]), 1e-6)
+	_t.near(
+		"the barrier top reaches the drawn top rail, not the clear height",
+		top,
+		6.0 + float(spec["height"]) + rail_w * 0.5,
+		1e-6,
+	)
+
+	var boxes := _boxes_for("open_upper_deck_rail")
+	var loose := 0
+	var first := Vector3.ZERO
+	for box_variant in boxes:
+		for corner in _box_corners(box_variant as Dictionary):
+			## 10 µm of slack, and it is a float-precision bound rather than a
+			## fudge factor. The barrier is the yaw-frame BOUND of these very
+			## boxes, so a stanchion's outermost corner lands exactly ON the
+			## barrier face by construction — and arrives there through a
+			## rotate-and-unrotate round trip in 32-bit `real_t` at ~30 m from
+			## the origin, which is worth about 4 µm. Measured worst case over
+			## both railing fixtures is 1 µm, on the run axis, on posts only;
+			## every swept course is exact to the bit.
+			##
+			## It cannot hide what this check exists to find: the top-rail gap
+			## was 20 mm and the mitre gap 6 mm, three to four orders of
+			## magnitude above this, and the mutation below walks the check
+			## back to RED to prove it.
+			if StructureEdge.point_inside_any(oriented, corner, 1e-5):
+				continue
+			if loose == 0:
+				first = corner
+			loose += 1
+	_t.equal(
+		"every corner of every box the railing draws is inside the barrier (first loose %v)"
+		% first,
+		loose,
+		0,
+	)
+
+	## …and the check above is not vacuous only because the boxes exist: a
+	## railing that drew nothing would pass it with zero corners.
+	_t.check("...over a non-empty set of drawn boxes (%d)" % boxes.size(), boxes.size() > 0)
+
+	## The same property on the CLOSED run, because the mitre gap only exists
+	## where segments meet and a closed loop is nothing but joints.
+	var closed_spec := _run("perimeter_rail_closed")
+	var closed_loose := _loose_corners(
+		_boxes_for("perimeter_rail_closed"),
+		StructureEdge.railing_collider_boxes(closed_spec),
+	)
+	_t.equal("...and on a closed loop, where every end is a mitred joint", closed_loose, 0)
+
+	## ── MUTATION ────────────────────────────────────────────────────────────
+	## The check above passes. On its own that is worth nothing, so here is the
+	## barrier this fix REPLACED, rebuilt inline: post_width thick, spanning the
+	## path vertices, `height` tall. It is not a strawman — it is what shipped,
+	## it is what every railing on every vessel in this repo collided with, and
+	## the containment check has to see through it or it is decoration.
+	##
+	## Rebuilding it here rather than trusting a comment is the point: if
+	## someone re-derives `railing_collider_boxes` from the spec again, this
+	## mutation stops going red and the test says so.
+	var mutant: Array = []
+	var path := StructureEdge._points_of(closed_spec.get("path", []))
+	for seg_variant in StructureEdge._segments_of(path, true):
+		var seg := seg_variant as Dictionary
+		var a := seg["a"] as Vector3
+		var b := seg["b"] as Vector3
+		var y_low := minf(a.y, b.y)
+		var y_high := maxf(a.y, b.y) + float(closed_spec["height"])
+		mutant.append({
+			"center": Vector3((a.x + b.x) * 0.5, (y_low + y_high) * 0.5, (a.z + b.z) * 0.5),
+			"size": Vector3(
+				StructureEdge.DEFAULT_POST_WIDTH,
+				y_high - y_low,
+				Vector2(b.x - a.x, b.z - a.z).length(),
+			),
+			"yaw_deg": rad_to_deg(atan2(b.x - a.x, b.z - a.z)),
+		})
+	var mutant_loose := _loose_corners(_boxes_for("perimeter_rail_closed"), mutant)
+	_t.check(
+		"MUTATION: the barrier this replaced leaves %d corners outside it" % mutant_loose,
+		mutant_loose > 0,
+	)
 
 
 # ── 6. The sheer curve, consumed ────────────────────────────────────────────
@@ -813,6 +909,41 @@ func _boxes_for(id: String) -> Array:
 		"sheer_band":
 			return StructureEdge.sheer_band_boxes(spec)
 	return []
+
+
+## How many corners of `drawn` fall outside every one of `colliders`, with the
+## colliders re-oriented from their yaw exactly as StructureBaker's contract
+## says a consumer must. Shared by the live check and its mutation so the two
+## cannot differ in anything but the barrier they are handed.
+func _loose_corners(drawn: Array, colliders: Array) -> int:
+	var oriented: Array = []
+	for c_variant in colliders:
+		var c := c_variant as Dictionary
+		oriented.append({
+			"center": c["center"], "size": c["size"],
+			"basis": Basis(Vector3.UP, deg_to_rad(float(c["yaw_deg"]))),
+		})
+	var loose := 0
+	for box_variant in drawn:
+		for corner in _box_corners(box_variant as Dictionary):
+			if not StructureEdge.point_inside_any(oriented, corner, 1e-5):
+				loose += 1
+	return loose
+
+
+## The eight world-space corners of one drawn box, honouring its basis. Same
+## derivation as vessel_render_capture's, kept here so a containment failure
+## can be aimed at a single run instead of a whole vessel.
+func _box_corners(box: Dictionary) -> Array:
+	var centre := box["center"] as Vector3
+	var half := (box["size"] as Vector3) * 0.5
+	var basis := box.get("basis", Basis.IDENTITY) as Basis
+	var out: Array = []
+	for sx in [-1.0, 1.0]:
+		for sy in [-1.0, 1.0]:
+			for sz in [-1.0, 1.0]:
+				out.append(centre + basis * Vector3(half.x * sx, half.y * sy, half.z * sz))
+	return out
 
 
 func _with(base: Dictionary, overrides: Dictionary) -> Dictionary:

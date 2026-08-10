@@ -90,6 +90,42 @@ because the fixture's curve happened to be planar; a de-yawed boom escaped a swe
 one height. Both blind by construction. Both fixed by making the check state the property
 directly.
 
+## 4a. The restated-number trap — a test that repeats the spec instead of stating the property
+
+Distinct from §4, and sneakier, because these checks CAN fail and are not tautologies. They were
+simply pointed at the wrong sentence.
+
+`structure_edge_test` asserted, twenty lines apart:
+
+- *"railing top reaches the declared clear height"* — drawn top `== deck + height + rail_width/2`
+- *"barrier top matches the railing height"* — collider top `== deck + height`
+
+Both passed. Both were honest about what they measured. **They contradict each other**, and the
+contradiction was the bug: the top 20 mm of every railing in the project rendered as a barrier and
+collided as nothing. The second assertion did not merely fail to catch it — it held it in place,
+because anyone fixing the collider would have turned a green test red and been tempted to conclude
+they were wrong.
+
+It took a fixture that had never existed before (the container feeder, first in the rig to use
+`railing`) to find it, from the other direction, as 92 loose corners.
+
+Then fixing that one term exposed a second leak four times the size — **148 corners at the
+mitres**, where a joint deliberately overshoots its path vertex to fill the corner wedge. The spec
+does not contain the overshoot; no amount of care re-deriving the barrier from `height`,
+`post_width` and the path could have found it. So the derivation was deleted: the barrier is now
+the yaw-frame bound of the boxes the run ACTUALLY DRAWS, which is the mechanism `sweep_collider_boxes`
+had been using correctly all along.
+
+**Rule.** Assert the PROPERTY, not the number. "the collider top equals `height`" restates the
+input; "no corner of any box this draws is outside the barrier" states the thing you care about,
+and it is the one that survives a change to the geometry. When two tests both pass and disagree
+about the same edge, the disagreement is the finding — go and look, do not average them.
+
+**Corollary — one derivation.** Where geometry and collision are computed separately, they drift;
+this project has now fixed that same bug three times (`DeckFitout` yaw, the bulwark cap, the
+railing). The fix that holds is not a more careful second formula. It is deleting the second
+formula.
+
 ## 5. The self-shaped-tool trap — building for the agent, not the player
 
 The newest and possibly worst. The `plate` primitive is four free 3D corners. Agents authored
@@ -164,6 +200,8 @@ no visible scale figure has no absolute scale — check the figure is *visible*,
 1. **Mutation-verify every check.** Show it red. Report both numbers.
 2. **Never build a metric for appearance.** Look, or ask someone to look.
 3. **Assert against the path that breaks**, not the artefact you can reach.
+3a. **Assert the property, not the number.** Two green tests that disagree are a finding.
+3b. **One derivation.** Geometry and collision computed separately will drift. Delete the second.
 4. **Could a player do this with a mouse?** If not, it is a format, not a feature.
 5. **Say what you did not verify.**
 6. **Red with a diagnosis beats green with a lie**, every time.
@@ -181,8 +219,14 @@ no visible scale figure has no absolute scale — check the figure is *visible*,
   `DeckGrid`, the walk colliders and the buoyancy sample, with zero headroom. It belongs in the
   bulwark cap, which is where it is on a real boat.
 - **The silhouette metric.** Deleted the hour it was written.
-- **Hand-authored plate deckhouses.** Correct geometry, wrong authoring layer. Being rebuilt from
-  a piece kit.
+- **Hand-authored plate deckhouses.** Correct geometry, wrong authoring layer. The trawler's 50
+  hand-solved quads are gone, replaced by 43 placements of six standard pieces on the 0.5 m grid,
+  every parameter from a finite set and counted in cells. The kit states what it cannot do rather
+  than papering over it: a 0.24 m boat-deck camber and a 0.30 m plan taper do not survive
+  quantisation, and the house lost 0.24 m of height. **The tool to place them does not exist yet**
+  — until it does, this is a better format, not yet a feature (§5).
+- **The analytic railing barrier.** `post_width` thick, spanning the path vertices, `height` tall.
+  Every one of those three terms was wrong, each for its own reason (§4a).
 
 Each of these was working, tested and green when it was torn out. **Green is not evidence that a
 thing is right — only that it does what it says.** Whether it should exist at all is a question
