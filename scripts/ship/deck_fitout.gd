@@ -11,6 +11,12 @@ const FITOUT_JOB_SCRIPT := "res://scripts/ship/deck_fitout_job.gd"
 const AUTO_UTILS := "AutoUtilities"
 const LARGE_LAYOUT_THRESHOLD := 1000
 
+## Preloaded rather than named. `plan_outfit.gd` declares `class_name PlanOutfit`,
+## but a script that names a global the class cache has not caught up with fails
+## to COMPILE — and this file is on the boot path of every vessel. Binding to the
+## file is correct either way. Same reasoning as PlanOutfit's own `Parts`.
+const PlanOutfitScript := preload("res://scripts/ship/plan_outfit.gd")
+
 ## When enabled, static bricks render as a merged VesselSkinBaker skin (culled
 ## faces + baked AO + edge trim) instead of one scene node per brick.
 ## Interactive bricks always stay live nodes. Toggle exists for the
@@ -31,14 +37,47 @@ static func apply_any(
 	registration_id: String = "",
 ) -> Dictionary:
 	if StructurePlan.is_plan(layout_dict):
-		return apply_plan(boat, StructurePlan.from_dict(layout_dict), grid)
+		## The declared registration is what the plan is judged against. Dropping
+		## it here was how a plan reached the compliance pass with no licence and
+		## came back "choose a registration before building".
+		return apply_plan(boat, StructurePlan.from_dict(layout_dict), grid, registration_id)
 	return apply(boat, BrickLayout.from_dict(layout_dict), grid, registration_id)
 
 
+## Compliance for a layout DICTIONARY of either shape, so a caller holding a
+## saved record does not have to know which construction system drew it. A
+## `structure_plan_v1` document is measured by `PlanOutfit`; anything else is a
+## brick layout and goes to `VesselCompliance`. Both return the same report.
+##
+## This exists because persistence and deployment used to run `BrickLayout.from_dict`
+## on whatever they held: handed a plan, that yields an EMPTY layout, which fails
+## the helm rule, so every plan-built vessel was refused a save and a spawn. The
+## defect was in how the record's shape was detected, not in what was called —
+## which is why the fix is one shape test, in one place, shared by both sites.
+static func compliance_for_layout(
+	layout_dict: Dictionary,
+	hull_id: String,
+	registration_id: String,
+	grid: DeckGrid = null,
+) -> Dictionary:
+	if StructurePlan.is_plan(layout_dict):
+		return PlanOutfitScript.compliance(
+			StructurePlan.from_dict(layout_dict), hull_id, registration_id, grid
+		)
+	return VesselCompliance.validate(
+		BrickLayout.from_dict(layout_dict), hull_id, registration_id, grid
+	)
+
+
 ## Parametric construction path: merged bake + colliders from the same panel
-## decomposition. Legacy compliance/budgets do not apply to plans yet — the
-## rules rework follows once the new vocabulary stabilizes.
-static func apply_plan(boat: BoatBody, plan: StructurePlan, grid: DeckGrid = null) -> Dictionary:
+## decomposition, then the SAME registration verdict the brick path gets — via
+## `PlanOutfit`, which feeds `VesselCompliance`'s own rule evaluator.
+static func apply_plan(
+	boat: BoatBody,
+	plan: StructurePlan,
+	grid: DeckGrid = null,
+	registration_id: String = "",
+) -> Dictionary:
 	if boat == null or plan == null:
 		return {}
 	clear(boat)
@@ -73,13 +112,38 @@ static func apply_plan(boat: BoatBody, plan: StructurePlan, grid: DeckGrid = nul
 		index += 1
 	if total_mass > 0.0:
 		boat.set_mass_entry("structure_plan", total_mass, weighted / total_mass, "brick")
-	var caps := {
-		"outfit_ok": true,
-		"structure_plan": true,
-		"plan_entities": plan.entity_count(),
-	}
+
+	## Same resolution order as apply_sync: the caller's declaration wins, the
+	## boat's meta is the fallback the vessel scripts' `apply_brick_layout`
+	## relies on (it calls apply_any without a registration).
+	var hull_id := plan.hull_id
+	if hull_id.is_empty() and boat.has_meta("editor_hull_id"):
+		hull_id = str(boat.get_meta("editor_hull_id"))
+	var declared := registration_id.strip_edges()
+	if declared.is_empty() and boat.has_meta("registration_id"):
+		declared = str(boat.get_meta("registration_id"))
+	var report := PlanOutfitScript.compliance(plan, hull_id, declared, g)
+	var caps: Dictionary = (report.get("capabilities", {}) as Dictionary).duplicate(true)
+	## `outfit_ok` mirrors finish_fitout: it is the FULL verdict (physical outfit
+	## AND declared registration), not the budget half of it.
+	caps["outfit_ok"] = bool(report.get("ok", false))
+	caps["structure_plan"] = true
+	caps["plan_entities"] = plan.entity_count()
+	if not bool(report.get("ok", false)):
+		var errors: PackedStringArray = report.get("errors", PackedStringArray())
+		push_warning(
+			"DeckFitout: illegal outfit on %s — surplus gear not mounted. %s"
+			% [boat.name, " · ".join(errors)]
+		)
 	boat.set_meta("brick_capabilities", caps)
 	boat.set_meta("brick_layout", plan.to_dict())
+	boat.set_meta("vessel_outfit", {
+		"ok": report.get("ok", false),
+		"budget": report.get("budget", {}),
+		"usage": report.get("usage", {}),
+		"registration_id": declared,
+		"registration_ok": report.get("registration_ok", false),
+	})
 	boat.set_meta("fitout_readiness", READINESS_INTERACTIVE)
 	return caps
 

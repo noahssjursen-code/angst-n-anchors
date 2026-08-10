@@ -405,8 +405,11 @@ func persist_vessel_configuration(record: Dictionary, make_active: bool = false)
 		return false
 	var hull_id := str(safe.get("hull_id", ""))
 	var registration_id := str(safe.get("registration_id", ""))
-	var compliance := VesselCompliance.validate(
-		BrickLayout.from_dict(layout_raw as Dictionary),
+	## Either construction system may have drawn this record. Reading a
+	## structure_plan_v1 document as a BrickLayout yields an EMPTY layout, which
+	## fails the helm rule, which refused every Structure Studio ship a save.
+	var compliance := DeckFitout.compliance_for_layout(
+		layout_raw as Dictionary,
 		hull_id,
 		registration_id,
 		HullRegistry.make_grid(hull_id),

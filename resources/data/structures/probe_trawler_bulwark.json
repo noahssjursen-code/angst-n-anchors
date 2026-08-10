@@ -2,7 +2,7 @@
 	"format": "structure_plan_v1",
 	"context": "vessel",
 	"hull_id": "hull_28x10",
-	"_note": "Probe fixture. Tests the claim that a bulwark, a cap rail, a hatch coaming and a mast are expressible with TODAY's primitives and no new code. Uses only the two colours already in the palette, so it must not add a draw call. Bow is -Z, so plan z=0 is the bow; the 45 degree taper occupies z=0..5 on this hull, which is why the bulwark starts at z=5 and staircases at the shoulder instead of following the stem.",
+	"_note": "Probe fixture. Tests the claim that a bulwark, a cap rail, a hatch coaming and a mast are expressible with TODAY's primitives and no new code. Uses only the two colours already in the palette, so it must not add a draw call. Bow is -Z, so plan z=0 is the bow; the 45 degree taper occupies z=0..5 on this hull, which is why the bulwark starts at z=5 and staircases at the shoulder instead of following the stem. DRESSED, 2026-08-10: the crude box mast (walls 10/11) is gone and the vessel now carries a rig built only from spar and wire \u2014 9 m tapered main mast with spreader, radome, masthead light and whips; a raked derrick boom with topping lift, fall and hook block; two pairs of trawl gallows drawn as inverted-L polylines with blocks and warps running back to a trawl winch; a short aft mast; exhaust pipe and cap; shrouds, forestay, triatic and backstay all at sag EXACTLY zero; a samson post at the stemhead for the forestay to be made fast to; sidelights on the wheelhouse corners with the white masthead light above them; three cylindrical fenders on lanyards over the port side; four mooring bitts. 52 items. COST, measured on RenderingServer's own counter over the four canonical views: draw calls UNCHANGED at 8, because every fitting is painted / steel / wood \u2014 the three material buckets this plan already had \u2014 and the baker keys buckets on material alone. Triangles 8903 -> 10847 (+22%%). Geometry is what a rig costs; draw calls are not.",
 	"palette": {
 		"wall": [0.85, 0.86, 0.88],
 		"deck": [0.33, 0.31, 0.29]
@@ -10,10 +10,7 @@
 	"walls": [
 		{"id": 1, "start": [0.2, 0, 5], "axis": "z", "length": 21, "height": 1.1, "thickness": 0.2, "openings": []},
 		{"id": 2, "start": [9.6, 0, 5], "axis": "z", "length": 21, "height": 1.1, "thickness": 0.2, "openings": []},
-		{"id": 3, "start": [0.2, 0, 25.8], "axis": "x", "length": 9.6, "height": 1.1, "thickness": 0.2, "openings": []},
-
-		{"id": 10, "start": [4.8, 2.7, 16.2], "axis": "z", "length": 0.3, "height": 4.6, "thickness": 0.3, "openings": []},
-		{"id": 11, "start": [3.5, 5.6, 16.3], "axis": "x", "length": 3.0, "height": 0.18, "thickness": 0.18, "openings": []}
+		{"id": 3, "start": [0.2, 0, 25.8], "axis": "x", "length": 9.6, "height": 1.1, "thickness": 0.2, "openings": []}
 	],
 	"decks": [
 		{"id": 20, "origin": [0.1, 1.1, 5], "size": [0.5, 21], "thickness": 0.09, "openings": []},
@@ -40,5 +37,58 @@
 		]}
 	],
 	"stairs": [],
-	"items": []
+	"items": [
+		{"id": 200, "item_id": "spar", "at": [5.0, 0.0, 16.4], "props": {"__is": "mast - tapered, 9.0 m above its foot", "points": [[0.0, 0.0, 0.0], [0.0, 9.0, 0.0]], "radius": 0.14, "taper": 0.5, "sides": 8, "material": "steel", "color": [0.84, 0.85, 0.87]}},
+		{"id": 201, "item_id": "spar", "at": [5.0, 6.48, 16.4], "props": {"__is": "mast spreader - carries the sidelights and the floodlights", "points": [[-1.7, 0.0, 0.0], [1.7, 0.0, 0.0]], "radius": 0.063, "sides": 6, "material": "steel", "color": [0.84, 0.85, 0.87]}},
+		{"id": 202, "item_id": "spar", "at": [5.0, 7.74, 16.4], "props": {"__is": "radome", "points": [[0.0, 0.0, 0.0], [0.0, 0.345, 0.0]], "radius": 0.3, "sides": 12, "material": "painted", "color": [0.94, 0.94, 0.92]}},
+		{"id": 203, "item_id": "spar", "at": [5.0, 9.0, 16.4], "props": {"__is": "masthead light - white, above the sidelights", "points": [[0.0, 0.0, 0.0], [0.0, 0.26, 0.0]], "radius": 0.098, "sides": 8, "material": "painted", "color": [0.94, 0.94, 0.92]}},
+		{"id": 204, "item_id": "spar", "at": [3.98, 6.48, 16.4], "props": {"__is": "whip antenna", "points": [[0.0, 0.0, 0.0], [0.0, 1.9, 0.0]], "radius": 0.014, "sides": 4, "material": "steel", "color": [0.16, 0.17, 0.19]}},
+		{"id": 205, "item_id": "spar", "at": [6.02, 6.48, 16.4], "props": {"__is": "whip antenna", "points": [[0.0, 0.0, 0.0], [0.0, 1.9, 0.0]], "radius": 0.014, "sides": 4, "material": "steel", "color": [0.16, 0.17, 0.19]}},
+		{"id": 206, "item_id": "spar", "at": [3.64, 6.34, 16.4], "props": {"__is": "deck floodlight, aimed forward and down", "points": [[0.0, 0.0, 0.0], [0.0, -0.16, -0.28]], "radius": 0.1, "sides": 6, "material": "painted", "color": [0.94, 0.94, 0.92]}},
+		{"id": 207, "item_id": "spar", "at": [6.36, 6.34, 16.4], "props": {"__is": "deck floodlight, aimed forward and down", "points": [[0.0, 0.0, 0.0], [0.0, -0.16, -0.28]], "radius": 0.1, "sides": 6, "material": "painted", "color": [0.94, 0.94, 0.92]}},
+		{"id": 208, "item_id": "spar", "at": [5.0, 2.6, 16.2], "props": {"__is": "derrick boom - raked forward over the working deck", "points": [[0.0, 0.0, 0.0], [-1.4, 2.0, -6.8]], "radius": 0.1, "taper": 0.7, "sides": 8, "material": "steel", "color": [0.84, 0.85, 0.87]}},
+		{"id": 209, "item_id": "wire", "at": [5.0, 8.3, 16.4], "props": {"__is": "topping lift - running rigging under load, barely slack", "points": [[0.0, 0.0, 0.0], [-1.4, -3.7, -7.0]], "radius": 0.016, "sag": 0.06, "span_steps": 6, "sides": 4, "material": "steel", "color": [0.16, 0.17, 0.19]}},
+		{"id": 210, "item_id": "wire", "at": [3.6, 4.55, 9.4], "props": {"__is": "cargo fall off the boom head", "points": [[0.0, 0.0, 0.0], [0.0, -4.0, 0.3]], "radius": 0.014, "sag": 0.0, "sides": 4, "material": "steel", "color": [0.16, 0.17, 0.19]}},
+		{"id": 211, "item_id": "spar", "at": [3.6, 0.45, 9.7], "props": {"__is": "hook block", "points": [[0.0, 0.0, 0.0], [0.0, 0.42, 0.0]], "radius": 0.09, "sides": 6, "material": "steel", "color": [0.16, 0.17, 0.19]}},
+		{"id": 212, "item_id": "spar", "at": [0.55, 0.0, 8.6], "props": {"__is": "trawl gallows, port - leg and outboard head", "points": [[0.0, 0.0, 0.0], [0.0, 3.5, 0.0], [-0.5, 3.5, 0.0]], "radius": 0.1, "sides": 8, "material": "painted", "color": [0.72, 0.31, 0.23]}},
+		{"id": 213, "item_id": "spar", "at": [9.35, 0.0, 8.6], "props": {"__is": "trawl gallows, starboard", "points": [[0.0, 0.0, 0.0], [0.0, 3.5, 0.0], [0.5, 3.5, 0.0]], "radius": 0.1, "sides": 8, "material": "painted", "color": [0.72, 0.31, 0.23]}},
+		{"id": 214, "item_id": "spar", "at": [0.05, 3.42, 8.6], "props": {"__is": "gallows block, port", "points": [[0.0, 0.0, 0.0], [0.0, -0.38, 0.0]], "radius": 0.08, "sides": 6, "material": "steel", "color": [0.16, 0.17, 0.19]}},
+		{"id": 215, "item_id": "spar", "at": [9.85, 3.42, 8.6], "props": {"__is": "gallows block, starboard", "points": [[0.0, 0.0, 0.0], [0.0, -0.38, 0.0]], "radius": 0.08, "sides": 6, "material": "steel", "color": [0.16, 0.17, 0.19]}},
+		{"id": 216, "item_id": "spar", "at": [0.55, 0.0, 14.2], "props": {"__is": "trawl gallows, port - leg and outboard head", "points": [[0.0, 0.0, 0.0], [0.0, 3.5, 0.0], [-0.5, 3.5, 0.0]], "radius": 0.1, "sides": 8, "material": "painted", "color": [0.72, 0.31, 0.23]}},
+		{"id": 217, "item_id": "spar", "at": [9.35, 0.0, 14.2], "props": {"__is": "trawl gallows, starboard", "points": [[0.0, 0.0, 0.0], [0.0, 3.5, 0.0], [0.5, 3.5, 0.0]], "radius": 0.1, "sides": 8, "material": "painted", "color": [0.72, 0.31, 0.23]}},
+		{"id": 218, "item_id": "spar", "at": [0.05, 3.42, 14.2], "props": {"__is": "gallows block, port", "points": [[0.0, 0.0, 0.0], [0.0, -0.38, 0.0]], "radius": 0.08, "sides": 6, "material": "steel", "color": [0.16, 0.17, 0.19]}},
+		{"id": 219, "item_id": "spar", "at": [9.85, 3.42, 14.2], "props": {"__is": "gallows block, starboard", "points": [[0.0, 0.0, 0.0], [0.0, -0.38, 0.0]], "radius": 0.08, "sides": 6, "material": "steel", "color": [0.16, 0.17, 0.19]}},
+		{"id": 220, "item_id": "wire", "at": [0.05, 3.0, 8.6], "props": {"__is": "trawl warp, port - block to winch", "points": [[0.0, 0.0, 0.0], [3.35, -2.35, -1.6]], "radius": 0.015, "sag": 0.14, "span_steps": 8, "sides": 4, "material": "steel", "color": [0.16, 0.17, 0.19]}},
+		{"id": 221, "item_id": "wire", "at": [9.85, 3.0, 8.6], "props": {"__is": "trawl warp, starboard - block to winch", "points": [[0.0, 0.0, 0.0], [-3.25, -2.35, -1.6]], "radius": 0.015, "sag": 0.14, "span_steps": 8, "sides": 4, "material": "steel", "color": [0.16, 0.17, 0.19]}},
+		{"id": 222, "item_id": "wire", "at": [0.05, 3.0, 14.2], "props": {"__is": "trawl warp, port - block to winch", "points": [[0.0, 0.0, 0.0], [3.35, -2.35, -7.2]], "radius": 0.015, "sag": 0.14, "span_steps": 8, "sides": 4, "material": "steel", "color": [0.16, 0.17, 0.19]}},
+		{"id": 223, "item_id": "wire", "at": [9.85, 3.0, 14.2], "props": {"__is": "trawl warp, starboard - block to winch", "points": [[0.0, 0.0, 0.0], [-3.25, -2.35, -7.2]], "radius": 0.015, "sag": 0.14, "span_steps": 8, "sides": 4, "material": "steel", "color": [0.16, 0.17, 0.19]}},
+		{"id": 224, "item_id": "spar", "at": [5.0, 0.62, 7.0], "props": {"__is": "trawl winch drum", "points": [[-1.5, 0.0, 0.0], [1.5, 0.0, 0.0]], "radius": 0.42, "sides": 12, "material": "steel", "color": [0.72, 0.31, 0.23]}},
+		{"id": 225, "item_id": "spar", "at": [3.4, 0.62, 7.0], "props": {"__is": "winch end flange", "points": [[-0.13, 0.0, 0.0], [0.13, 0.0, 0.0]], "radius": 0.6, "sides": 12, "material": "steel", "color": [0.16, 0.17, 0.19]}},
+		{"id": 226, "item_id": "spar", "at": [3.4, 0.0, 7.0], "props": {"__is": "winch pedestal", "points": [[0.0, 0.0, 0.0], [0.0, 0.62, 0.0]], "radius": 0.22, "sides": 8, "material": "painted", "color": [0.84, 0.85, 0.87]}},
+		{"id": 227, "item_id": "spar", "at": [6.6, 0.62, 7.0], "props": {"__is": "winch end flange", "points": [[-0.13, 0.0, 0.0], [0.13, 0.0, 0.0]], "radius": 0.6, "sides": 12, "material": "steel", "color": [0.16, 0.17, 0.19]}},
+		{"id": 228, "item_id": "spar", "at": [6.6, 0.0, 7.0], "props": {"__is": "winch pedestal", "points": [[0.0, 0.0, 0.0], [0.0, 0.62, 0.0]], "radius": 0.22, "sides": 8, "material": "painted", "color": [0.84, 0.85, 0.87]}},
+		{"id": 229, "item_id": "spar", "at": [7.05, 2.7, 18.6], "props": {"__is": "exhaust pipe", "points": [[0.0, 0.0, 0.0], [0.0, 2.6, 0.0]], "radius": 0.12, "sides": 8, "material": "painted", "color": [0.24, 0.24, 0.26]}},
+		{"id": 230, "item_id": "spar", "at": [7.05, 5.24, 18.6], "props": {"__is": "exhaust rain cap", "points": [[0.0, 0.0, 0.0], [0.0, 0.14, 0.0]], "radius": 0.2, "sides": 8, "material": "painted", "color": [0.12, 0.12, 0.13]}},
+		{"id": 231, "item_id": "spar", "at": [5.0, 2.7, 22.6], "props": {"__is": "aft mast", "points": [[0.0, 0.0, 0.0], [0.0, 4.6, 0.0]], "radius": 0.09, "taper": 0.6, "sides": 8, "material": "steel", "color": [0.84, 0.85, 0.87]}},
+		{"id": 232, "item_id": "spar", "at": [5.0, 5.6, 22.6], "props": {"__is": "aft mast crosstree", "points": [[-1.1, 0.0, 0.0], [1.1, 0.0, 0.0]], "radius": 0.045, "sides": 6, "material": "steel", "color": [0.84, 0.85, 0.87]}},
+		{"id": 233, "item_id": "spar", "at": [5.0, 7.3, 22.6], "props": {"__is": "all-round white light on the aft mast", "points": [[0.0, 0.0, 0.0], [0.0, 0.24, 0.0]], "radius": 0.08, "sides": 8, "material": "painted", "color": [0.94, 0.94, 0.92]}},
+		{"id": 234, "item_id": "spar", "at": [2.42, 2.3, 17.4], "props": {"__is": "sidelight - port, red", "points": [[0.0, 0.0, 0.0], [0.0, 0.3, 0.0]], "radius": 0.1, "sides": 8, "material": "painted", "color": [0.86, 0.13, 0.11]}},
+		{"id": 235, "item_id": "spar", "at": [7.58, 2.3, 17.4], "props": {"__is": "sidelight - starboard, green", "points": [[0.0, 0.0, 0.0], [0.0, 0.3, 0.0]], "radius": 0.1, "sides": 8, "material": "painted", "color": [0.1, 0.6, 0.3]}},
+		{"id": 236, "item_id": "wire", "at": [5.0, 8.4, 16.4], "props": {"__is": "port shroud", "points": [[0.0, 0.0, 0.0], [-4.55, -7.3, -2.6]], "radius": 0.016, "sag": 0.0, "sides": 4, "material": "steel", "color": [0.16, 0.17, 0.19]}},
+		{"id": 237, "item_id": "wire", "at": [5.0, 8.4, 16.4], "props": {"__is": "starboard shroud", "points": [[0.0, 0.0, 0.0], [4.65, -7.3, -2.6]], "radius": 0.016, "sag": 0.0, "sides": 4, "material": "steel", "color": [0.16, 0.17, 0.19]}},
+		{"id": 238, "item_id": "spar", "at": [5.0, 0.0, 5.6], "props": {"__is": "samson post at the stemhead", "points": [[0.0, 0.0, 0.0], [0.0, 1.35, 0.0]], "radius": 0.15, "sides": 8, "material": "painted", "color": [0.94, 0.94, 0.92]}},
+		{"id": 239, "item_id": "wire", "at": [5.0, 8.4, 16.4], "props": {"__is": "forestay", "points": [[0.0, 0.0, 0.0], [0.0, -7.15, -10.8]], "radius": 0.016, "sag": 0.0, "sides": 4, "material": "steel", "color": [0.16, 0.17, 0.19]}},
+		{"id": 240, "item_id": "wire", "at": [5.0, 8.4, 16.4], "props": {"__is": "triatic stay - main masthead to aft masthead", "points": [[0.0, 0.0, 0.0], [0.0, -1.1, 6.2]], "radius": 0.014, "sag": 0.0, "sides": 4, "material": "steel", "color": [0.16, 0.17, 0.19]}},
+		{"id": 241, "item_id": "wire", "at": [5.0, 7.3, 22.6], "props": {"__is": "backstay - aft masthead to the transom cap", "points": [[0.0, 0.0, 0.0], [0.0, -6.24, 3.15]], "radius": 0.014, "sag": 0.0, "sides": 4, "material": "steel", "color": [0.16, 0.17, 0.19]}},
+		{"id": 242, "item_id": "spar", "at": [-0.28, -0.3, 10.4], "props": {"__is": "fender - cylindrical, hung vertically outboard", "points": [[0.0, -0.5, 0.0], [0.0, 0.5, 0.0]], "radius": 0.24, "sides": 10, "solid": false, "material": "wood", "color": [0.14, 0.14, 0.15]}},
+		{"id": 243, "item_id": "wire", "at": [0.35, 1.15, 10.4], "props": {"__is": "fender lanyard", "points": [[0.0, 0.0, 0.0], [-0.63, -0.95, 0.0]], "radius": 0.013, "sag": 0.02, "sides": 4, "material": "wood", "color": [0.6, 0.53, 0.38]}},
+		{"id": 244, "item_id": "spar", "at": [-0.28, -0.3, 13.2], "props": {"__is": "fender - cylindrical, hung vertically outboard", "points": [[0.0, -0.5, 0.0], [0.0, 0.5, 0.0]], "radius": 0.24, "sides": 10, "solid": false, "material": "wood", "color": [0.14, 0.14, 0.15]}},
+		{"id": 245, "item_id": "wire", "at": [0.35, 1.15, 13.2], "props": {"__is": "fender lanyard", "points": [[0.0, 0.0, 0.0], [-0.63, -0.95, 0.0]], "radius": 0.013, "sag": 0.02, "sides": 4, "material": "wood", "color": [0.6, 0.53, 0.38]}},
+		{"id": 246, "item_id": "spar", "at": [-0.28, -0.3, 16.0], "props": {"__is": "fender - cylindrical, hung vertically outboard", "points": [[0.0, -0.5, 0.0], [0.0, 0.5, 0.0]], "radius": 0.24, "sides": 10, "solid": false, "material": "wood", "color": [0.14, 0.14, 0.15]}},
+		{"id": 247, "item_id": "wire", "at": [0.35, 1.15, 16.0], "props": {"__is": "fender lanyard", "points": [[0.0, 0.0, 0.0], [-0.63, -0.95, 0.0]], "radius": 0.013, "sag": 0.02, "sides": 4, "material": "wood", "color": [0.6, 0.53, 0.38]}},
+		{"id": 248, "item_id": "spar", "at": [1.0, 0.0, 6.4], "props": {"__is": "mooring bitt", "points": [[0.0, 0.0, 0.0], [0.0, 0.6, 0.0]], "radius": 0.11, "sides": 8, "material": "painted", "color": [0.94, 0.94, 0.92]}},
+		{"id": 249, "item_id": "spar", "at": [9.0, 0.0, 6.4], "props": {"__is": "mooring bitt", "points": [[0.0, 0.0, 0.0], [0.0, 0.6, 0.0]], "radius": 0.11, "sides": 8, "material": "painted", "color": [0.94, 0.94, 0.92]}},
+		{"id": 250, "item_id": "spar", "at": [1.0, 0.0, 24.9], "props": {"__is": "mooring bitt", "points": [[0.0, 0.0, 0.0], [0.0, 0.6, 0.0]], "radius": 0.11, "sides": 8, "material": "painted", "color": [0.94, 0.94, 0.92]}},
+		{"id": 251, "item_id": "spar", "at": [9.0, 0.0, 24.9], "props": {"__is": "mooring bitt", "points": [[0.0, 0.0, 0.0], [0.0, 0.6, 0.0]], "radius": 0.11, "sides": 8, "material": "painted", "color": [0.94, 0.94, 0.92]}}
+	]
 }

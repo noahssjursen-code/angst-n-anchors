@@ -234,9 +234,11 @@ static func resolve_deployable_record(record: Dictionary) -> Dictionary:
 	var registration_id := str(out.get("registration_id", ""))
 	if not VesselRegistrationCatalog.has(registration_id):
 		return {}
-	var layout := BrickLayout.from_dict(brick_layout_of(out))
-	var compliance := VesselCompliance.validate(
-		layout, hull_id, registration_id, HullRegistry.make_grid(hull_id)
+	## Either construction system may have drawn this record. Reading a
+	## structure_plan_v1 document as a BrickLayout yields an EMPTY layout, which
+	## fails the helm rule, which refused every Structure Studio ship a spawn.
+	var compliance := DeckFitout.compliance_for_layout(
+		brick_layout_of(out), hull_id, registration_id, HullRegistry.make_grid(hull_id)
 	)
 	if not bool(compliance.get("ok", false)):
 		return {}
