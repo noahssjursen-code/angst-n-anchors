@@ -126,11 +126,36 @@ kit deliberately refuses to quantise the one curve the fleet was rebuilt to draw
 5. **No small hulls.** Every hull is ≥ 28 m. Two of the three references are ~22 m and the third
    ~15 m — a player cannot start from a hull that fits them.
 
-**Known-red, all pre-existing and diagnosed** — `building_blueprint_test` (23 failures, single
-root cause: `BrickCatalog.BRICKS` is `{}`), `land_field_geography_test` (needs an owner call on
-world constants), `vessel_outfit_test` / `vessel_registration_test` / `hull_form_geometry_test` /
-`vessel_registration_audit_ui_test` (all consume the empty prebuilt catalogue),
-`remote_realtime_join_smoke` (opt-in, needs a live server).
+**Known-red — gate RED: 81 PASS, 19 FAIL, 2 TIMEOUT, 2 NOTRUN, 1 SKIP of 105 units, measured on
+run `20260810-081647-26225`.** The list
+below replaces a seven-item one written on 2026-08-09 that had gone stale by fourteen. **A stale
+known-red list is worse than none**: it reads as "these are the only ones", so a genuinely new
+failure hides inside "the usual reds". Regenerate it from `results.tsv`, do not maintain it by hand.
+
+*Empty-catalogue family* — one root cause, `BrickCatalog.BRICKS` is `{}` and
+`resources/data/vessels/prebuilt/` holds only `.gitkeep`: `building_blueprint_test`,
+`shipyard_editor_ui_test`, `company_service_test`, `vessel_outfit_test`,
+`vessel_registration_test`, `vessel_registration_audit_ui_test`, `hull_form_geometry_test`,
+`vessel_persistence_test`, `captain_vessel_hard_persistence_test` (TIMEOUT), `catch_hold_test`.
+
+*Not yet diagnosed, and NOT on the old list* — `chart_rewrite_integration_test`,
+`chart_weather_cache_test` (weather cache fills 432 of 768 cells), `lighting_material_test`
+(interior and weather-exposed variants do not differ; wetness changes neither albedo nor
+roughness), `port_trade_profile_test`, `port_perf_cache_test`, `ship_display_units_test`
+(**compilation failure**, not an assertion), `boat_physics_validation`,
+`deck_fitout_staging_test`. None of these touch the construction path — checked by grep for
+`StructureEdge`, `railing_collider`, and the renumbered fixtures, not assumed.
+
+*Environmental / never quits* — `land_field_geography_test` (needs an owner call on world
+constants), `remote_realtime_join_smoke` (opt-in, live server), `port_layout_visual_capture` /
+`hull_visual_capture` (NOTRUN — no verdict at all, so they are not passing either),
+`staged_vessel_visual_demo` (TIMEOUT at 240 s — never calls `quit()`).
+
+**Method warning on that run.** It executed for ~40 minutes while the orchestrator and a subagent
+were both editing the tree, so late tests read files that early tests did not. Verdicts touching
+`structure_plan.gd`, `structure_studio.gd` and the piece fixtures are a snapshot of a moving
+target. A gate run is only trustworthy over a quiet tree; when a wave is in flight, re-run the
+specific tests rather than trusting the sweep.
 
 **Open for the owner** — the three rules-data gaps found in `COMPONENTS.md`: `budget_caps.crane`
 is `0` on *every* registration so fitting any crane fails compliance everywhere; there is no

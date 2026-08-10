@@ -14,6 +14,13 @@ extends RefCounted
 ##             height, color?}  start = footprint min corner at the LOW end's
 ##             base level; dir = climb direction; solid stepped run whose top
 ##             tread lands flush on start.y + height.
+##   pieces — {id, piece:"<kit id>", cell:[cx,cy,cz], facing:0|90|180|270,
+##             params:{<name>:<int|string off the declared set>}, color?:"#rrggbb"}
+##             A PLACEMENT FROM THE STRUCTURAL PIECE KIT. Not geometry: a named
+##             piece standing on a grid NODE, whose every parameter comes off a
+##             finite declared set in `resources/data/parts/structure_pieces.json`.
+##             `PieceKit.resolve_document` turns these into ordinary `items[]`
+##             plates at bake time, so the baker never learns a new word.
 ##   items  — {id, item_id, at:[x,y,z], yaw, pitch?, roll?,
 ##             host?:{id, face?, anchor?}, props?:{...}}  (point fittings)
 ##   edges  — {id, primitive:"sheer_band"|"railing", path:[[x,y,z],…] | from_hull,
@@ -197,7 +204,16 @@ const ITEM_FACES := {
 	"stair": ["run"],
 	"edge": ["cap", "side"],
 	"item": [""],
+	## A piece has one frame and it is the grid node it stands on, turned by its
+	## facing. It is listed so that hosting a fitting on a piece resolves rather
+	## than indexing an empty face list — see `_face_frame`.
+	"piece": [""],
 }
+
+## Facings a placement may carry. Restated from `PieceKit.FACINGS` so the
+## document object can normalise a placement without loading the kit; the two
+## are held together by `piece_plan_roundtrip_test`.
+const PIECE_FACINGS := [0, 90, 180, 270]
 
 ## Edge primitives, by the name `PartCatalog.PRIMITIVES` already gives them.
 const EDGE_SHEER_BAND := "sheer_band"
@@ -239,6 +255,8 @@ var decks: Array = []
 var stairs: Array = []
 var items: Array = []
 var edges: Array = []
+## Piece-kit placements. See the header and `add_piece`.
+var pieces: Array = []
 var palette: Dictionary = {}
 var _next_id := 1
 ## Derived per hull id, memoised per plan. Both are pure functions of the hull's
@@ -323,6 +341,112 @@ func add_stair(start: Vector3, dir: String, length: float, width := 1.0, height 
 	}
 	stairs.append(stair)
 	return stair
+
+
+## A placement from the structural piece kit, on a grid NODE.
+##
+## Nothing here validates the piece id or the parameter values: that is
+## `PieceKit.resolve_placement`'s job and it is where the refusal messages live.
+## This is the DOCUMENT's job — allocate an id, pin the canonical shape, keep the
+## placement addressable by every other seam (`entity_by_id`, `remove_entity`,
+## `entity_count`) exactly as a wall is. A placement whose parameters are wrong
+## is a placement that refuses to resolve, and it still saves and loads.
+func add_piece(
+	piece_id: String, cell: Vector3i, facing := 0, params: Dictionary = {}, color := ""
+) -> Dictionary:
+	var placement := normalize_piece({
+		"id": allocate_id(),
+		"piece": piece_id,
+		"cell": [cell.x, cell.y, cell.z],
+		"facing": facing,
+		"params": params,
+		"color": color,
+	})
+	pieces.append(placement)
+	return placement
+
+
+## Canonical placement dictionary, and the fixed point of the JSON round-trip.
+##
+## Three things a raw JSON read gets wrong and this pins:
+##   • integers come back as floats, so a cell reads [5.0, 0.0, 35.0] and
+##     re-serialises with the ".0" — the same defect `from_dict` already fixes for
+##     entity ids, one level deeper;
+##   • numeric parameters are GRID COUNTS, never floats. A `span` of 4.0 is the
+##     same defect and it is what a stepper would write back after one save;
+##   • parameter key order is the author's, so two documents describing the same
+##     placement compare unequal. Sorted here, which is canonical without this
+##     file having to know what any parameter MEANS.
+## `color` and `_is` are carried only when they say something, so the shape stays
+## a pure function of the values.
+static func normalize_piece(raw: Dictionary) -> Dictionary:
+	var cell := raw.get("cell", []) as Array if raw.get("cell") is Array else []
+	var facing := int(round(float(raw.get("facing", 0))))
+	var out := {
+		"id": int(raw.get("id", 0)),
+		"piece": str(raw.get("piece", "")),
+		"cell": [
+			int(round(float(cell[0]))) if cell.size() > 0 else 0,
+			int(round(float(cell[1]))) if cell.size() > 1 else 0,
+			int(round(float(cell[2]))) if cell.size() > 2 else 0,
+		],
+		"facing": facing,
+	}
+	var params := raw.get("params", {}) as Dictionary if raw.get("params") is Dictionary else {}
+	var keys := PackedStringArray()
+	for key in params.keys():
+		keys.append(str(key))
+	keys.sort()
+	var canonical: Dictionary = {}
+	for key in keys:
+		var value: Variant = params[key]
+		if value is bool:
+			## Not a unit the kit has. Dropped loudly rather than silently coerced.
+			push_error("StructurePlan: piece parameter \"%s\" is a bool — dropped" % key)
+			continue
+		if value is int or value is float:
+			canonical[key] = int(round(float(value)))
+		else:
+			canonical[key] = str(value)
+	out["params"] = canonical
+	var color := str(raw.get("color", "")).strip_edges()
+	if not color.is_empty():
+		out["color"] = color
+	var note := str(raw.get("_is", "")).strip_edges()
+	if not note.is_empty():
+		out["_is"] = note
+	return out
+
+
+static func normalize_pieces(raw_pieces: Array) -> Array:
+	var out: Array = []
+	for raw in raw_pieces:
+		if raw is Dictionary:
+			out.append(normalize_piece(raw as Dictionary))
+	return out
+
+
+## Plan-space metres of the grid NODE a placement stands on.
+##
+## Deliberately NOT `cell_base_plan`, which returns a cell CENTRE: cells are
+## volumes and pieces stand on the LINES between them, so a centre would put
+## every wall panel half a cell out. It is the same arithmetic as
+## `PieceKit.node_plan` and it is restated here — rather than called — so this
+## file keeps no dependency on the kit, and `piece_plan_roundtrip_test` holds the
+## two against each other on every node a fixture uses.
+static func piece_node_plan(cell: Vector3i) -> Vector3:
+	var m := WorldUnits.DECK_CELL_M
+	return Vector3(float(cell.x) * m, float(cell.y) * m, float(cell.z) * m)
+
+
+static func piece_cell(placement: Dictionary) -> Vector3i:
+	var raw: Variant = placement.get("cell", null)
+	if not (raw is Array) or (raw as Array).size() != 3:
+		return Vector3i.ZERO
+	var list := raw as Array
+	return Vector3i(
+		int(round(float(list[0]))), int(round(float(list[1]))), int(round(float(list[2])))
+	)
 
 
 ## A swept run along an explicit polyline, in PLAN metres. `spec` is passed
@@ -688,6 +812,17 @@ func _face_frame(kind: String, entity: Dictionary, face: String) -> Dictionary:
 				"origin": start_s,
 				"span": length_s,
 			}
+		"piece":
+			## The piece-local frame, verbatim: +x along the run, +y up, the outward
+			## face toward -z, turned by `facing`. `span` is 0 because the run length
+			## is a KIT parameter and this file holds no kit knowledge, so every
+			## anchor lands on the node — honest rather than approximately right.
+			var yaw := deg_to_rad(float(int(round(float(entity.get("facing", 0))))))
+			return {
+				"basis": Basis(Vector3.UP, yaw),
+				"origin": piece_node_plan(piece_cell(entity)),
+				"span": 0.0,
+			}
 	return {"basis": Basis.IDENTITY, "origin": Vector3.ZERO, "span": 0.0}
 
 
@@ -974,10 +1109,10 @@ static func cell_center_plan(cell: Vector3i) -> Vector3:
 ## could not be found by id, or could be found but not removed, is exactly the
 ## sort of gap that only shows up in an editor a wave later.
 func _collections() -> Array:
-	return [walls, decks, stairs, edges, items]
+	return [walls, decks, stairs, edges, items, pieces]
 
 
-const ENTITY_KINDS := ["wall", "deck", "stair", "edge", "item"]
+const ENTITY_KINDS := ["wall", "deck", "stair", "edge", "item", "piece"]
 
 
 func entity_kind_by_id(id: int) -> String:
@@ -1031,6 +1166,11 @@ func to_dict() -> Dictionary:
 		"decks": decks.duplicate(true),
 		"stairs": stairs.duplicate(true),
 		"edges": edges.duplicate(true),
+		## Placements are re-normalised for the same reason items are, and they go
+		## out BEFORE items because that is the order the shipped piece fixtures
+		## are written in — a key order that moves makes two saves of one plan
+		## diff for no reason.
+		"pieces": normalize_pieces(pieces),
 		## Items are re-normalised on the way out so an editor that pokes a raw
 		## dictionary cannot break the round-trip's fixed point.
 		"items": normalize_items(items),
@@ -1049,8 +1189,9 @@ static func from_dict(data: Dictionary) -> StructurePlan:
 	plan.edges = (data.get("edges", []) as Array).duplicate(true)
 	## Migrates the legacy cell form and pins the canonical shape.
 	plan.items = normalize_items(data.get("items", []) as Array)
+	plan.pieces = normalize_pieces(data.get("pieces", []) as Array)
 	var highest := 0
-	for collection in [plan.walls, plan.decks, plan.stairs, plan.edges, plan.items]:
+	for collection in [plan.walls, plan.decks, plan.stairs, plan.edges, plan.items, plan.pieces]:
 		for entity in collection:
 			var entity_dict := entity as Dictionary
 			var id := int(entity_dict.get("id", 0))

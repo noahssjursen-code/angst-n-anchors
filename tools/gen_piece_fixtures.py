@@ -12,6 +12,7 @@ Every entry is a PLACEMENT: a piece id, a whole-cell grid node, a facing off
 coordinate; the coordinates come out of piece_kit.gd.
 """
 import json, collections
+import plan_ids
 
 CELL = 0.5
 WALL = "#e3e0d4"
@@ -206,11 +207,28 @@ survives the grid. The house is 2.50 m to the boat deck where the original was 2
 def build():
     src = json.load(open("resources/data/structures/probe_trawler_bulwark.json"))
     # The deckhouse as probe_trawler_bulwark authors it: the lower tier, the boat
-    # deck, the wheelhouse and the funnel (100-122), plus the glass, mullions and
-    # corner pillars a later pass added (400-438).  Everything else on that
-    # vessel is bow bulwark, gallows steelwork and rigging and is kept verbatim.
-    deckhouse = set(range(100, 123)) | set(range(400, 439))
-    kept = [i for i in src["items"] if i["id"] not in deckhouse]
+    # deck, the wheelhouse, the funnel, and the glass, mullions and corner
+    # pillars a later pass added.  Everything else on that vessel is bow bulwark,
+    # gallows steelwork and rigging, and is kept verbatim.
+    #
+    # Selected by what each item SAYS IT IS, not by an id range.  It was two id
+    # ranges (100-122 and 400-438) until the source fixture was renumbered to
+    # give its entities unique ids, at which point this silently selected the
+    # wrong 50 items and the plate count caught it.  An id is an address, not a
+    # description, and it is allowed to move.
+    DECKHOUSE_PREFIXES = (
+        "lower tier", "boat deck", "wheelhouse", "wheelhouse roof",
+        "wheelhouse corner pillar", "window mullion", "funnel", "funnel cap",
+    )
+
+    def is_deckhouse(item):
+        return str(item.get("props", {}).get("__is", "")).startswith(DECKHOUSE_PREFIXES)
+
+    deckhouse_items = [i for i in src["items"] if is_deckhouse(i)]
+    assert len(deckhouse_items) == 50, (
+        "expected 50 deckhouse items, got %d — the source fixture's descriptions moved"
+        % len(deckhouse_items))
+    kept = [i for i in src["items"] if not is_deckhouse(i)]
     left = sum(1 for i in kept if i.get("props", {}).get("primitive") == "plate")
     assert left == 39, "expected 39 non-deckhouse plates, got %d" % left
     counts = collections.Counter(p["piece"] for p in P)
@@ -218,8 +236,8 @@ def build():
     out["format"] = src["format"]
     out["context"] = src["context"]
     out["hull_id"] = src["hull_id"]
-    removed = sum(1 for i in src["items"]
-                  if i["id"] in deckhouse and i.get("props", {}).get("primitive") == "plate")
+    removed = sum(1 for i in deckhouse_items
+                  if i.get("props", {}).get("primitive") == "plate")
     out["_note"] = NOTE.format(
         n=len(P), removed=removed, kept=left,
         walls=counts["wall_panel"], glazed=counts["wall_glazed"],
@@ -232,6 +250,11 @@ def build():
     out["pieces"] = P
     out["items"] = kept
     out["edges"] = src["edges"]
+    ## The piece placements were numbered from 200 and the source fixture's
+    ## items already used 200+, so all 43 placements collided and none of them
+    ## was addressable by id. Renumbered across every collection.
+    plan_ids.renumber(out)
+    assert not plan_ids.duplicate_ids(out), plan_ids.duplicate_ids(out)
     with open("resources/data/structures/probe_piece_trawler.json", "w") as f:
         json.dump(out, f, indent=1)
         f.write("\n")
@@ -295,6 +318,8 @@ def build():
     house["pieces"] = strict
     house["items"] = []
     house["edges"] = src["edges"]
+    plan_ids.renumber(house)
+    assert not plan_ids.duplicate_ids(house), plan_ids.duplicate_ids(house)
     with open("resources/data/structures/probe_piece_house.json", "w") as f:
         json.dump(house, f, indent=1)
         f.write("\n")

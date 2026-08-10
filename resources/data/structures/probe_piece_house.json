@@ -31,7 +31,7 @@
  "stairs": [],
  "pieces": [
   {
-   "id": 200,
+   "id": 5,
    "piece": "corner_45",
    "cell": [
     5,
@@ -49,7 +49,7 @@
    "_is": "lower tier, forward port knuckle"
   },
   {
-   "id": 201,
+   "id": 6,
    "piece": "corner_45",
    "cell": [
     15,
@@ -67,7 +67,7 @@
    "_is": "lower tier, forward starboard knuckle"
   },
   {
-   "id": 202,
+   "id": 7,
    "piece": "corner_45",
    "cell": [
     5,
@@ -85,7 +85,7 @@
    "_is": "lower tier, after port knuckle"
   },
   {
-   "id": 203,
+   "id": 8,
    "piece": "corner_45",
    "cell": [
     15,
@@ -103,7 +103,7 @@
    "_is": "lower tier, after starboard knuckle"
   },
   {
-   "id": 204,
+   "id": 9,
    "piece": "wall_panel",
    "cell": [
     6,
@@ -120,7 +120,7 @@
    "_is": "lower tier, raked front, port cheek"
   },
   {
-   "id": 205,
+   "id": 10,
    "piece": "wall_glazed",
    "cell": [
     7,
@@ -140,7 +140,7 @@
    "_is": "lower tier, raked front, mess lights"
   },
   {
-   "id": 206,
+   "id": 11,
    "piece": "wall_panel",
    "cell": [
     13,
@@ -157,7 +157,7 @@
    "_is": "lower tier, raked front, starboard cheek"
   },
   {
-   "id": 207,
+   "id": 12,
    "piece": "wall_panel",
    "cell": [
     5,
@@ -175,7 +175,7 @@
    "_is": "lower tier, port side, accommodation door"
   },
   {
-   "id": 208,
+   "id": 13,
    "piece": "wall_glazed",
    "cell": [
     5,
@@ -195,7 +195,7 @@
    "_is": "lower tier, port side, mess lights"
   },
   {
-   "id": 209,
+   "id": 14,
    "piece": "wall_panel",
    "cell": [
     5,
@@ -212,7 +212,7 @@
    "_is": "lower tier, port side, forward"
   },
   {
-   "id": 210,
+   "id": 15,
    "piece": "wall_panel",
    "cell": [
     15,
@@ -229,7 +229,7 @@
    "_is": "lower tier, starboard side, forward"
   },
   {
-   "id": 211,
+   "id": 16,
    "piece": "wall_glazed",
    "cell": [
     15,
@@ -249,7 +249,7 @@
    "_is": "lower tier, starboard side, mess lights"
   },
   {
-   "id": 212,
+   "id": 17,
    "piece": "wall_panel",
    "cell": [
     15,
@@ -267,7 +267,7 @@
    "_is": "lower tier, starboard side, accommodation door"
   },
   {
-   "id": 213,
+   "id": 18,
    "piece": "wall_panel",
    "cell": [
     14,
@@ -284,7 +284,7 @@
    "_is": "lower tier, aft bulkhead"
   },
   {
-   "id": 214,
+   "id": 19,
    "piece": "wall_panel",
    "cell": [
     11,
@@ -302,7 +302,7 @@
    "_is": "lower tier, aft bulkhead"
   },
   {
-   "id": 215,
+   "id": 20,
    "piece": "wall_panel",
    "cell": [
     9,
@@ -319,7 +319,7 @@
    "_is": "lower tier, aft bulkhead"
   },
   {
-   "id": 216,
+   "id": 21,
    "piece": "deck_tile",
    "cell": [
     4,
@@ -336,7 +336,7 @@
    "_is": "boat deck"
   },
   {
-   "id": 217,
+   "id": 22,
    "piece": "deck_tile",
    "cell": [
     4,
@@ -353,7 +353,7 @@
    "_is": "boat deck, after strip"
   },
   {
-   "id": 218,
+   "id": 23,
    "piece": "trim_band",
    "cell": [
     4,
@@ -369,7 +369,7 @@
    "_is": "boat deck coaming, port"
   },
   {
-   "id": 219,
+   "id": 24,
    "piece": "trim_band",
    "cell": [
     4,
@@ -385,7 +385,7 @@
    "_is": "boat deck coaming, port"
   },
   {
-   "id": 220,
+   "id": 25,
    "piece": "trim_band",
    "cell": [
     16,
@@ -401,7 +401,7 @@
    "_is": "boat deck coaming, starboard"
   },
   {
-   "id": 221,
+   "id": 26,
    "piece": "trim_band",
    "cell": [
     16,
@@ -417,7 +417,7 @@
    "_is": "boat deck coaming, starboard"
   },
   {
-   "id": 222,
+   "id": 27,
    "piece": "corner_45",
    "cell": [
     6,
@@ -435,7 +435,7 @@
    "_is": "wheelhouse, forward port knuckle"
   },
   {
-   "id": 223,
+   "id": 28,
    "piece": "corner_45",
    "cell": [
     14,
@@ -453,7 +453,7 @@
    "_is": "wheelhouse, forward starboard knuckle"
   },
   {
-   "id": 224,
+   "id": 29,
    "piece": "corner_45",
    "cell": [
     6,
@@ -471,7 +471,7 @@
    "_is": "wheelhouse, after port knuckle"
   },
   {
-   "id": 225,
+   "id": 30,
    "piece": "corner_45",
    "cell": [
     14,
@@ -489,7 +489,7 @@
    "_is": "wheelhouse, after starboard knuckle"
   },
   {
-   "id": 226,
+   "id": 31,
    "piece": "wall_glazed",
    "cell": [
     7,
@@ -509,7 +509,7 @@
    "_is": "wheelhouse, raked windscreen"
   },
   {
-   "id": 227,
+   "id": 32,
    "piece": "wall_glazed",
    "cell": [
     6,
@@ -529,7 +529,7 @@
    "_is": "wheelhouse, port side lights"
   },
   {
-   "id": 228,
+   "id": 33,
    "piece": "wall_glazed",
    "cell": [
     14,
@@ -549,7 +549,7 @@
    "_is": "wheelhouse, starboard side lights"
   },
   {
-   "id": 229,
+   "id": 34,
    "piece": "wall_glazed",
    "cell": [
     13,
@@ -569,7 +569,7 @@
    "_is": "wheelhouse, aft bulkhead"
   },
   {
-   "id": 230,
+   "id": 35,
    "piece": "deck_tile",
    "cell": [
     5,
@@ -586,7 +586,7 @@
    "_is": "wheelhouse roof"
   },
   {
-   "id": 231,
+   "id": 36,
    "piece": "deck_tile",
    "cell": [
     13,
@@ -603,7 +603,7 @@
    "_is": "wheelhouse roof, starboard strip"
   },
   {
-   "id": 232,
+   "id": 37,
    "piece": "deck_tile",
    "cell": [
     5,
@@ -620,7 +620,7 @@
    "_is": "wheelhouse roof, after strip"
   },
   {
-   "id": 233,
+   "id": 38,
    "piece": "deck_tile",
    "cell": [
     13,
@@ -637,7 +637,7 @@
    "_is": "wheelhouse roof, after quarter"
   },
   {
-   "id": 234,
+   "id": 39,
    "piece": "corner_45",
    "cell": [
     8,
@@ -655,7 +655,7 @@
    "_is": "funnel, forward port knuckle"
   },
   {
-   "id": 235,
+   "id": 40,
    "piece": "corner_45",
    "cell": [
     12,
@@ -673,7 +673,7 @@
    "_is": "funnel, forward starboard knuckle"
   },
   {
-   "id": 236,
+   "id": 41,
    "piece": "corner_45",
    "cell": [
     8,
@@ -691,7 +691,7 @@
    "_is": "funnel, after port knuckle"
   },
   {
-   "id": 237,
+   "id": 42,
    "piece": "corner_45",
    "cell": [
     12,
@@ -709,7 +709,7 @@
    "_is": "funnel, after starboard knuckle"
   },
   {
-   "id": 238,
+   "id": 43,
    "piece": "wall_panel",
    "cell": [
     9,
@@ -726,7 +726,7 @@
    "_is": "funnel, forward face"
   },
   {
-   "id": 239,
+   "id": 44,
    "piece": "wall_panel",
    "cell": [
     11,
@@ -743,7 +743,7 @@
    "_is": "funnel, aft face"
   },
   {
-   "id": 240,
+   "id": 45,
    "piece": "wall_panel",
    "cell": [
     8,
@@ -760,7 +760,7 @@
    "_is": "funnel, port face"
   },
   {
-   "id": 241,
+   "id": 46,
    "piece": "wall_panel",
    "cell": [
     12,
@@ -777,7 +777,7 @@
    "_is": "funnel, starboard face"
   },
   {
-   "id": 242,
+   "id": 47,
    "piece": "deck_tile",
    "cell": [
     8,
@@ -794,7 +794,7 @@
    "_is": "funnel cap"
   },
   {
-   "id": 243,
+   "id": 48,
    "piece": "roof_slope",
    "cell": [
     6,
@@ -812,7 +812,7 @@
    "_is": "foredeck breakwater - two cells of rise over two of run"
   },
   {
-   "id": 244,
+   "id": 49,
    "piece": "wall_panel",
    "cell": [
     12,
@@ -829,7 +829,7 @@
    "_is": "breakwater, after face"
   },
   {
-   "id": 245,
+   "id": 50,
    "piece": "trim_band",
    "cell": [
     12,
@@ -845,7 +845,7 @@
    "_is": "eave along the breakwater's after edge"
   },
   {
-   "id": 246,
+   "id": 51,
    "piece": "trim_band",
    "cell": [
     4,
@@ -861,7 +861,7 @@
    "_is": "cap rail across the forward edge of the boat deck"
   },
   {
-   "id": 247,
+   "id": 52,
    "piece": "trim_band",
    "cell": [
     6,
@@ -878,7 +878,7 @@
    "_is": "rubbing strake across the raked deckhouse front, set out one quarter-cell to meet it"
   },
   {
-   "id": 248,
+   "id": 53,
    "piece": "trim_band",
    "cell": [
     14,
@@ -1245,7 +1245,7 @@
    ]
   },
   {
-   "id": 3,
+   "id": 2,
    "primitive": "sheer_band",
    "_is": "rubbing strake, starboard \u2014 the sacrificial belting that takes the quay. A swept section on the shell's own line, 0.29 m under the deck edge at the stem and 0.62 m under it aft, so it lifts forward without ever leaving the plating.",
    "path": [
@@ -1349,7 +1349,7 @@
    ]
   },
   {
-   "id": 4,
+   "id": 3,
    "primitive": "sheer_band",
    "_is": "rubbing strake, port \u2014 the sacrificial belting that takes the quay. A swept section on the shell's own line, 0.29 m under the deck edge at the stem and 0.62 m under it aft, so it lifts forward without ever leaving the plating.",
    "path": [
@@ -1453,7 +1453,7 @@
    ]
   },
   {
-   "id": 2,
+   "id": 4,
    "primitive": "sheer_band",
    "_is": "bridge-front bulwark round the open forward end of the boat deck",
    "path": [

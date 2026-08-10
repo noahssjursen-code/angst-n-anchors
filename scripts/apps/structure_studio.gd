@@ -4,6 +4,11 @@ extends Node3D
 ## buildings. Replaces the separate shipyard/building brick editors.
 ##
 ## Structure is drawn, not stacked:
+##   P  piece tool   — pick a piece off the KIT palette, R turns it, click a grid
+##                     NODE to stand it there. Every parameter is a stepper or a
+##                     dropdown over the piece's own declared set: there is no
+##                     field in this tool a number can be typed into, which is the
+##                     whole difference between a kit and CAD.
 ##   W  wall tool    — click-drag along the grid, release to place a wall run
 ##   D  deck tool    — click-drag a rectangle deck plate
 ##   S  stairs       — click-drag along the climb direction: a solid stepped
@@ -27,7 +32,27 @@ extends Node3D
 ## gate-selfcheck: res://scenes/apps/structure_studio.tscn -- --studio-probe
 
 const STRUCTURES_DIR := "res://resources/data/structures"
+
+## ── The two snaps, and why there are two ────────────────────────────────────
+##
+## `GRID_SNAP` is 1 m and always was. It is the snap of the DRAW tools (wall,
+## deck, stair) and of the move gizmo, and it is not merely a preference: those
+## tools re-round in metres anyway — `_place_wall` calls `roundf` on the start and
+## the length, `_place_deck` on the origin and both extents — so a half-metre
+## cursor would be thrown away one line later. Changing it is a change to those
+## three tools, not to this one, and it is left alone here on purpose.
+##
+## `NODE_SNAP` is the deck cell, 0.5 m, and it is the PIECE tool's snap. It is
+## not a new number: `WorldUnits.DECK_CELL_M` is the cell the whole kit counts in
+## (`structure_pieces.json` declares `cell_m: 0.5` and `PieceKit` refuses to load
+## if the two disagree), and it is ALREADY the spacing this studio draws its grid
+## lines at — `_build_grid_lines` steps by `DeckGrid.CELL_M`. So before this tool
+## existed the studio drew a 0.5 m grid and snapped to every OTHER line of it,
+## and the bottom strip called that "GRID 1 M". The piece tool snaps to the lines
+## you can actually see, which is the reconciliation: one of the two numbers was
+## describing the drawing and the other was describing the cursor.
 const GRID_SNAP := 1.0
+const NODE_SNAP := WorldUnits.DECK_CELL_M
 const DEFAULT_WALL_HEIGHT := 3.0
 ## The opening ghost stands this far proud of each face of its host, so the
 ## preview is visible against the wall it is about to cut instead of z-fighting
@@ -44,7 +69,28 @@ const COLOR_LIBRARY: Array = [
 ]
 const MATERIAL_LIBRARY: Array[String] = ["painted", "metal", "wood", "steel"]
 
-enum Tool { SELECT, WALL, DECK, STAIR, OPENING }
+## Tints a PLACEMENT may be painted, as exact `#rrggbb` strings.
+##
+## Hex, not `Color`, and that is deliberate: a placement stores its colour as
+## html text, and a swatch defined as floats would go out through
+## `Color.to_html` and could land a digit off the tint a fixture was authored
+## with. These are the strings themselves, so a swatch and a fixture compare
+## equal by construction.
+##
+## The list carries the maritime tints the fleet's piece-built vessels actually
+## use. Every piece's OWN declared colour is offered too, read out of
+## `structure_pieces.json` at runtime by `_piece_tints()` — this studio holds no
+## piece names and no parameter sets.
+const PIECE_TINT_LIBRARY: Array = [
+	["Mist grey", "#858a8f"],
+	["Funnel ochre", "#9e5c1c"],
+	["Near black", "#1c1c1f"],
+	["Hull red", "#8c3328"],
+	["Harbour blue", "#2f4d5c"],
+	["Signal yellow", "#d8a52a"],
+]
+
+enum Tool { SELECT, WALL, DECK, STAIR, OPENING, PIECE }
 
 const DEFAULT_STAIR_WIDTH := 1.0
 
@@ -108,6 +154,31 @@ var _hover_box: MeshInstance3D ## copper pre-selection outline under the cursor
 var _start_marker: MeshInstance3D ## snapped grid point a draw-drag would start from
 
 var _status := ""
+
+## ── Piece tool state ────────────────────────────────────────────────────────
+##
+## Nothing here names a piece or a parameter. `_piece_id` is whatever
+## `PieceKit.ids()` handed the palette, `_piece_params` is keyed by whatever the
+## kit declares, and `_piece_settings` remembers a player's settings per piece so
+## picking up the corner facet and coming back to the wall panel does not reset
+## it. When the kit widens a value set — the rake to eighth-cells, a camber list
+## — every stepper in this file follows it with no edit here.
+var _piece_id := ""
+var _piece_facing := 0
+var _piece_color := "" ## "" means "the piece's own declared colour"
+var _piece_settings: Dictionary = {} ## piece id -> {param: value}
+var _piece_ghost: Node3D
+var _piece_ghost_key := ""
+## The placement the ghost is currently drawing, or {} when nothing is previewed.
+## The commit path places THIS dictionary, which is what makes "it lands where
+## the ghost showed it" a property rather than a hope.
+var _piece_ghost_placement: Dictionary = {}
+var _piece_buttons: Dictionary = {}
+var _piece_section: VBoxContainer
+var _piece_param_box: VBoxContainer
+var _piece_tint_box: HFlowContainer
+var _piece_facing_label: Label
+var _piece_param_key := ""
 
 
 func _ready() -> void:
@@ -668,10 +739,24 @@ func _rebake() -> void:
 					if not keep_below:
 						any_ghost = true
 			(collection as Array).assign(kept)
-	_bake_root = StructureBaker.bake(solid_plan, _plan_offset)
+		## A placement's level is its grid NODE, which is counted in cells, not
+		## metres — reading `start`/`origin` off it (there is neither) put every
+		## piece at y = 0 and ghosted an entire wheelhouse that was in front of you.
+		var kept_pieces: Array = []
+		for placement_variant in target.pieces:
+			var placement := placement_variant as Dictionary
+			var node_y := StructurePlan.piece_node_plan(
+				StructurePlan.piece_cell(placement)
+			).y
+			if (node_y < threshold) == keep_below:
+				kept_pieces.append(placement)
+				if not keep_below:
+					any_ghost = true
+		target.pieces.assign(kept_pieces)
+	_bake_root = StructureBaker.bake(_resolved_for_bake(solid_plan), _plan_offset)
 	add_child(_bake_root)
 	if any_ghost:
-		_ghost_root = StructureBaker.bake(ghost_plan, _plan_offset, true)
+		_ghost_root = StructureBaker.bake(_resolved_for_bake(ghost_plan), _plan_offset, true)
 		add_child(_ghost_root)
 	_recompute_bounds()
 	_update_selection_visual()
@@ -700,6 +785,21 @@ func _recompute_bounds() -> void:
 		var stair := stair_variant as Dictionary
 		for box_variant in StructureBaker.stair_boxes(stair):
 			_grow_bounds(int(stair.get("source_id", -1)), box_variant as Dictionary)
+	## A placement's bound is its own resolved plates, taken to plan space by the
+	## kit's own `placed_corners` — the same transform the baker applies. Bounding
+	## it any other way is a second implementation of the placement, and the
+	## diagonal-wall bug in this same file is what that costs: a bound read in a
+	## frame nothing else uses puts selection, picking and F on empty air.
+	for placement_variant in _plan.pieces:
+		var placement := placement_variant as Dictionary
+		var id := int(placement.get("id", -1))
+		_entity_base_y[id] = StructurePlan.piece_node_plan(
+			StructurePlan.piece_cell(placement)
+		).y
+		var resolved := PieceKit.resolve_placement(placement, 1)
+		for step in (resolved["items"] as Array).size():
+			for corner in PieceKit.placed_corners(placement, step):
+				_grow_point_bounds(id, corner + _plan_offset)
 
 
 ## Grows an entity's world bound by one baked box. `size` is stated in the
@@ -707,6 +807,17 @@ func _recompute_bounds() -> void:
 ## turned into plan space first — reading the size axis-aligned bounded the
 ## diagonal in a frame nothing else uses, and selection, picking and focus all
 ## landed off the wall.
+## Grows an entity's world bound by one POINT. A plate is four free corners and
+## has no box to read a size off, so the corners themselves are the bound.
+func _grow_point_bounds(source_id: int, point: Vector3) -> void:
+	if source_id < 0:
+		return
+	if _entity_bounds.has(source_id):
+		_entity_bounds[source_id] = (_entity_bounds[source_id] as AABB).expand(point)
+	else:
+		_entity_bounds[source_id] = AABB(point, Vector3.ZERO)
+
+
 func _grow_bounds(source_id: int, box: Dictionary) -> void:
 	if source_id < 0:
 		return
@@ -776,6 +887,13 @@ func _handle_key(key: InputEventKey) -> void:
 			_set_tool(Tool.STAIR)
 		KEY_O:
 			_set_tool(Tool.OPENING)
+		KEY_P:
+			_set_tool(Tool.PIECE)
+		KEY_R:
+			## Turns whichever piece is in hand: the selected one if there is one,
+			## otherwise the one about to be placed.
+			if not _rotate_selected_piece():
+				_rotate_piece()
 		KEY_DELETE, KEY_BACKSPACE:
 			_delete_selected()
 		KEY_F:
@@ -827,6 +945,13 @@ func _on_left_press(screen_pos: Vector2) -> void:
 		return
 	if _tool == Tool.OPENING:
 		_begin_opening_drag(screen_pos)
+		return
+	if _tool == Tool.PIECE:
+		## One click, one piece, at the node the ghost is standing on. No drag: a
+		## piece's size is a parameter off a declared set, not something swept out
+		## with the mouse — that is the difference between this and the ROOM tool
+		## that was deleted for making custom-sized boxes.
+		_place_piece_at(_mouse_to_node(screen_pos))
 		return
 	var grid_point := _mouse_to_grid(screen_pos)
 	if grid_point == Vector3.INF:
@@ -889,6 +1014,14 @@ func _set_tool(tool: Tool) -> void:
 	_tool = tool
 	_dragging = false
 	_hide_ghost()
+	if tool != Tool.PIECE:
+		_hide_piece_ghost()
+	elif _piece_id.is_empty():
+		## Arm the first piece the kit declares, so the tool is usable the moment
+		## it is picked up. Which piece that is comes out of the data file.
+		var ids := _kit_ids()
+		if ids.size() > 0:
+			_select_piece_type(str(ids[0]))
 	_refresh_panel()
 
 
@@ -1000,6 +1133,352 @@ func _auto_stairwell(stair: Dictionary) -> int:
 		})
 		return int(deck.get("id", -1))
 	return -1
+
+
+# ── The piece tool ───────────────────────────────────────────────────────────
+#
+# THE TOOL, NOT THE PRIMITIVE. The ROOM tool was deleted for making boxes and
+# nothing replaced it, so this editor could not author superstructure at all
+# while `structure_pieces.json` and `PieceKit` got steadily more capable. A
+# format is not a feature; this is the feature.
+#
+# Everything below is driven ENTIRELY by the data file. There is no piece name in
+# this script, no `if id == …`, and no parameter value list: the palette is
+# `PieceKit.ids()`, every stepper's range is the piece's own declared `values`
+# array, and every dropdown's entries are its declared choice set. When the kit
+# widens the rake to eighth-cells or adds a camber list, this file does not
+# change and the new values appear in the controls.
+#
+# And there is nothing here a number can be typed into. Numeric parameters step
+# through their declared set by index; choice parameters are an OptionButton.
+# `SpinBox` — which the wall/deck/stair inspector uses and which accepts typed
+# text — appears nowhere in this section on purpose.
+
+const NO_NODE := Vector3i(-2147483648, -2147483648, -2147483648)
+
+## Metres per unit, for the units the kit declares today. A unit that is not in
+## here simply gets no metre readout — the stepper still works, because the value
+## set it steps through came out of the data file. A kit that adds `eighth_cells`
+## therefore degrades to "no hint", never to a wrong hint.
+const PIECE_UNIT_METRES := {
+	"cells": WorldUnits.DECK_CELL_M,
+	"quarter_cells": WorldUnits.DECK_CELL_M * 0.5,
+}
+
+
+## The kit's piece ids, in the kit's own order. Empty when the data file failed
+## to load, which is a state the palette shows rather than crashes on.
+func _kit_ids() -> PackedStringArray:
+	return PieceKit.ids()
+
+
+## Swatches a placement may be painted: every colour the KIT itself declares for
+## a piece (read out of the data file, deduplicated, kit order first) followed by
+## the studio's own maritime tints. So the six pieces' default liveries are one
+## click away and never restated here.
+func _piece_tints() -> Array:
+	var out: Array = []
+	var seen: Dictionary = {}
+	for id_variant in _kit_ids():
+		var id := str(id_variant)
+		var hex := _kit_color_hex(id)
+		if hex.is_empty() or seen.has(hex):
+			continue
+		seen[hex] = true
+		out.append([PieceKit.display_name(id), hex])
+	for entry_variant in PIECE_TINT_LIBRARY:
+		var entry := entry_variant as Array
+		var hex := str(entry[1])
+		if seen.has(hex):
+			continue
+		seen[hex] = true
+		out.append([str(entry[0]), hex])
+	return out
+
+
+## A piece's own declared colour as `#rrggbb`. The kit parses its colour into a
+## `Color`, so this is the one place the studio converts back — and
+## `_probe_piece_tool` asserts the conversion is exact for every piece in the
+## kit, because a tint that drifts by one digit is a placement that no longer
+## compares equal to the fixture it was copied from.
+func _kit_color_hex(piece_id: String) -> String:
+	var piece := PieceKit.get_piece(piece_id)
+	if not piece.has("color"):
+		return ""
+	return "#%s" % (piece["color"] as Color).to_html(false)
+
+
+## Picking a piece off the palette. Restores that piece's remembered settings, or
+## the kit's declared defaults the first time it is picked up.
+func _select_piece_type(piece_id: String) -> void:
+	if not PieceKit.has(piece_id):
+		_set_status("no piece \"%s\" in the kit" % piece_id, false)
+		return
+	_piece_id = piece_id
+	if not _piece_settings.has(piece_id):
+		var defaults: Dictionary = {}
+		var declared := PieceKit.params_of(piece_id)
+		for key in declared.keys():
+			defaults[str(key)] = (declared[key] as Dictionary)["default"]
+		_piece_settings[piece_id] = defaults
+	## A newly picked piece is painted its own livery unless the player has armed
+	## a tint. Written out explicitly rather than left blank so a saved placement
+	## says what colour it is.
+	_piece_color = _kit_color_hex(piece_id)
+	_piece_ghost_key = ""
+	_set_status("%s selected" % PieceKit.display_name(piece_id))
+	_refresh_panel()
+
+
+func _piece_params_for(piece_id: String) -> Dictionary:
+	if not _piece_settings.has(piece_id):
+		_select_piece_type(piece_id)
+	return _piece_settings.get(piece_id, {}) as Dictionary
+
+
+## Sets one parameter of the piece about to be placed, REFUSING anything the kit
+## refuses. Two legal values can still make an illegal piece — a glazed panel
+## whose coaming and glass fill its whole height has no header left — and the
+## kit says so in the piece's own words. A stepper that walked into that setting
+## and left the player holding a piece that will not place would be worse than
+## one that stops. Returns true when the value was taken.
+func _set_piece_param(name: String, value: Variant) -> bool:
+	if _piece_id.is_empty():
+		return false
+	var params := (_piece_params_for(_piece_id) as Dictionary).duplicate()
+	params[name] = value
+	var probe := PieceKit.resolve_params(_piece_id, params)
+	var errors := probe["errors"] as PackedStringArray
+	if errors.size() > 0:
+		_set_status(errors[0], false)
+		return false
+	_piece_settings[_piece_id] = params
+	_piece_ghost_key = ""
+	_refresh_panel()
+	return true
+
+
+## One step along a numeric parameter's DECLARED value list, by index. Not by
+## arithmetic: the sets are not evenly spaced (span is 1, 2, 3, 4, 6, 8) and
+## adding one to a 4 would ask for a 5, which the kit refuses. Clamped at the
+## ends rather than wrapping, so holding a stepper cannot silently take a wall
+## from 8 cells back to 1.
+func _step_piece_param(name: String, delta: int) -> bool:
+	if _piece_id.is_empty():
+		return false
+	var declared := PieceKit.params_of(_piece_id)
+	if not declared.has(name):
+		return false
+	var spec := declared[name] as Dictionary
+	var values := spec["values"] as Array
+	var current: Variant = (_piece_params_for(_piece_id) as Dictionary).get(name, spec["default"])
+	var index := values.find(current)
+	if index < 0:
+		index = values.find(spec["default"])
+	var next := clampi(index + delta, 0, values.size() - 1)
+	if next == index:
+		return false
+	return _set_piece_param(name, values[next])
+
+
+## The four facings, in order, on a key. Nothing is ever placed at 45 degrees —
+## `corner_45` carries its own chord — so this steps a list rather than adding
+## degrees, and the list is the kit's.
+func _rotate_piece(steps := 1) -> void:
+	var facings := PieceKit.FACINGS
+	var index := facings.find(_piece_facing)
+	if index < 0:
+		index = 0
+	_piece_facing = int(facings[posmod(index + steps, facings.size())])
+	_piece_ghost_key = ""
+	_set_status("facing %d°" % _piece_facing)
+	_refresh_panel()
+
+
+## Arms a tint for the next placement, and repaints the selected one if there is
+## one — the same modal behaviour the surface library already has for walls.
+func _set_piece_color(hex: String) -> void:
+	_piece_color = hex
+	var selected := _selected_piece()
+	if not selected.is_empty():
+		_snapshot()
+		selected["color"] = hex
+		_rebake()
+	_piece_ghost_key = ""
+	_set_status("tint %s" % hex)
+	_refresh_panel()
+
+
+## The grid NODE under the cursor, in whole cells. Cells are 0.5 m volumes and a
+## piece stands on the LINE between them, so this rounds to `NODE_SNAP` and
+## reports a CELL INDEX — not the metre position `_mouse_to_grid` returns, which
+## would put every wall panel half a cell out at best.
+func _mouse_to_node(screen_pos: Vector2) -> Vector3i:
+	var ray := _mouse_ray(screen_pos)
+	var origin := ray[0] as Vector3
+	var direction := ray[1] as Vector3
+	if absf(direction.y) < 0.0001:
+		return NO_NODE
+	var t := (_active_base - origin.y) / direction.y
+	if t < 0.0:
+		return NO_NODE
+	var plan_point := (origin + direction * t) - _plan_offset
+	return Vector3i(
+		clampi(roundi(plan_point.x / NODE_SNAP), 0, _grid_width),
+		roundi(_active_base / NODE_SNAP),
+		clampi(roundi(plan_point.z / NODE_SNAP), 0, _grid_length),
+	)
+
+
+## The placement the tool would commit at this node, with no id yet. ONE
+## function, used by the ghost and by the commit, which is what makes "it lands
+## where the ghost showed it" a property of the code rather than a hope.
+func _piece_placement_at(cell: Vector3i) -> Dictionary:
+	return StructurePlan.normalize_piece({
+		"piece": _piece_id,
+		"cell": [cell.x, cell.y, cell.z],
+		"facing": _piece_facing,
+		"params": _piece_params_for(_piece_id),
+		"color": _piece_color,
+	})
+
+
+## The ghost is the REAL BAKE of the placement about to be committed, drawn
+## through `PieceKit` and `StructureBaker` exactly as the committed piece will
+## be. A ghost drawn any other way is a second implementation of the placement
+## and would eventually disagree with the first.
+func _update_piece_ghost(cell: Vector3i) -> void:
+	if _piece_id.is_empty() or cell == NO_NODE:
+		_hide_piece_ghost()
+		return
+	var placement := _piece_placement_at(cell)
+	var key := JSON.stringify(placement)
+	if key == _piece_ghost_key and _piece_ghost != null and is_instance_valid(_piece_ghost):
+		_piece_ghost.visible = true
+		return
+	_hide_piece_ghost()
+	var probe := StructurePlan.new()
+	probe.context = _context
+	probe.hull_id = _hull_id
+	probe.pieces = [placement]
+	var resolved := PieceKit.resolve_document(probe.to_dict())
+	if (resolved["errors"] as PackedStringArray).size() > 0:
+		_piece_ghost_placement = {}
+		return
+	_piece_ghost = StructureBaker.bake(
+		StructurePlan.from_dict(resolved["doc"] as Dictionary), _plan_offset, true
+	)
+	add_child(_piece_ghost)
+	_piece_ghost_key = key
+	_piece_ghost_placement = placement
+
+
+func _hide_piece_ghost() -> void:
+	if _piece_ghost != null and is_instance_valid(_piece_ghost):
+		_piece_ghost.queue_free()
+	_piece_ghost = null
+	_piece_ghost_key = ""
+	_piece_ghost_placement = {}
+
+
+## Stands the armed piece on a grid node. Returns the placement, or {} when the
+## kit refused it — refused, never clamped, because a kit whose pieces quietly
+## change size is worse than one that says no.
+func _place_piece_at(cell: Vector3i) -> Dictionary:
+	if _piece_id.is_empty():
+		_set_status("pick a piece first", false)
+		return {}
+	if cell == NO_NODE:
+		return {}
+	var placement := _piece_placement_at(cell)
+	var probe := PieceKit.resolve_placement(placement, 1)
+	var errors := probe["errors"] as PackedStringArray
+	if errors.size() > 0:
+		_set_status(errors[0], false)
+		return {}
+	_snapshot()
+	var placed := _plan.add_piece(
+		str(placement["piece"]), cell, int(placement["facing"]),
+		placement["params"] as Dictionary, str(placement.get("color", ""))
+	)
+	_set_status("%s at cell %d,%d,%d facing %d°" % [
+		PieceKit.display_name(_piece_id), cell.x, cell.y, cell.z, _piece_facing,
+	])
+	_rebake()
+	_refresh_panel()
+	return placed
+
+
+## The selected entity, if it is a placement. A placement is the only plan entity
+## with a `piece` key, which is how the inspector tells the four kinds apart.
+func _selected_piece() -> Dictionary:
+	var entity := _plan.entity_by_id(_selected_id)
+	if entity.is_empty() or not entity.has("piece"):
+		return {}
+	return entity
+
+
+## Editing a PLACED piece, through the same refusal path a new one goes through.
+func _set_selected_piece_param(name: String, value: Variant) -> bool:
+	var placement := _selected_piece()
+	if placement.is_empty():
+		return false
+	var params := (placement.get("params", {}) as Dictionary).duplicate()
+	params[name] = value
+	var probe := PieceKit.resolve_params(str(placement["piece"]), params)
+	var errors := probe["errors"] as PackedStringArray
+	if errors.size() > 0:
+		_set_status(errors[0], false)
+		return false
+	_snapshot()
+	placement["params"] = params
+	_rebake()
+	_refresh_panel()
+	return true
+
+
+func _step_selected_piece_param(name: String, delta: int) -> bool:
+	var placement := _selected_piece()
+	if placement.is_empty():
+		return false
+	var declared := PieceKit.params_of(str(placement["piece"]))
+	if not declared.has(name):
+		return false
+	var spec := declared[name] as Dictionary
+	var values := spec["values"] as Array
+	var index := values.find((placement.get("params", {}) as Dictionary).get(name, spec["default"]))
+	if index < 0:
+		index = values.find(spec["default"])
+	var next := clampi(index + delta, 0, values.size() - 1)
+	if next == index:
+		return false
+	return _set_selected_piece_param(name, values[next])
+
+
+func _rotate_selected_piece(steps := 1) -> bool:
+	var placement := _selected_piece()
+	if placement.is_empty():
+		return false
+	var facings := PieceKit.FACINGS
+	var index := facings.find(int(placement.get("facing", 0)))
+	if index < 0:
+		index = 0
+	_snapshot()
+	placement["facing"] = int(facings[posmod(index + steps, facings.size())])
+	_rebake()
+	_refresh_panel()
+	return true
+
+
+## A plan whose placements have become the plates `StructureBaker` already bakes.
+## The kit's contract verbatim: pieces in, `items[]` out, and what comes back is
+## an ordinary plan — so the baker never learns a new word and a capture rig
+## reaches the same geometry with no studio in the room.
+func _resolved_for_bake(plan: StructurePlan) -> StructurePlan:
+	if plan.pieces.is_empty():
+		return plan
+	var result := PieceKit.resolve_document(plan.to_dict())
+	return StructurePlan.from_dict(result["doc"] as Dictionary)
 
 
 # ── Openings: one context shared by hover, drag and commit ───────────────────
@@ -1239,8 +1718,13 @@ func _mouse_to_grid(screen_pos: Vector2) -> Vector3:
 		return Vector3.INF
 	var world := origin + direction * t
 	var plan_point := world - _plan_offset
-	plan_point.x = clampf(roundf(plan_point.x), 0.0, float(_grid_width))
-	plan_point.z = clampf(roundf(plan_point.z), 0.0, float(_grid_length))
+	## `_grid_width` / `_grid_length` are CELL COUNTS, and plan space is METRES —
+	## the same units mistake `_build_grid_lines` carries a note about. Clamping
+	## metres against a cell count let the draw tools run 10 m off the starboard
+	## side of a 10 m hull and 28 m astern of a 28 m one.
+	var extent := Vector2(float(_grid_width), float(_grid_length)) * DeckGrid.CELL_M
+	plan_point.x = clampf(roundf(plan_point.x), 0.0, extent.x)
+	plan_point.z = clampf(roundf(plan_point.z), 0.0, extent.y)
 	plan_point.y = _active_base
 	return plan_point
 
@@ -1658,12 +2142,22 @@ func _update_hover_feedback() -> void:
 		_opening_ghost.visible = false
 		_hover_box.visible = false
 		_start_marker.visible = false
+		if _piece_ghost != null and is_instance_valid(_piece_ghost):
+			_piece_ghost.visible = false
 		return
 	var mouse := get_viewport().get_mouse_position()
 	_opening_ghost.visible = false
 	_hover_box.visible = false
 	_start_marker.visible = false
+	if _tool != Tool.PIECE and _piece_ghost != null and is_instance_valid(_piece_ghost):
+		_piece_ghost.visible = false
 	match _tool:
+		Tool.PIECE:
+			var node := _mouse_to_node(mouse)
+			_update_piece_ghost(node)
+			if node != NO_NODE:
+				_start_marker.position = _plan_offset + StructurePlan.piece_node_plan(node)
+				_start_marker.visible = true
 		Tool.OPENING:
 			var ctx := _opening_context_at(mouse)
 			if ctx.is_empty():
@@ -1851,6 +2345,7 @@ var _entities_label: Label
 var _toast_timer: Timer
 
 const TOOL_HINTS := {
+	Tool.PIECE: "Piece: pick one off the kit palette, R turns it, click a grid node to stand it there. Every setting is a stepper over the piece's own list — nothing is typed.",
 	Tool.SELECT: "Select: click to pick — arrows move it, drag a face pad to resize, DEL removes.",
 	Tool.WALL: "Wall: click-drag along the grid, release to raise one wall run.",
 	Tool.DECK: "Deck: drag a footprint to lay a deck plate.",
@@ -1906,6 +2401,7 @@ func _build_top_bar() -> void:
 
 	var tool_defs := [
 		[Tool.SELECT, "SELECT"],
+		[Tool.PIECE, "PIECE"],
 		[Tool.WALL, "WALL"],
 		[Tool.DECK, "DECK"],
 		[Tool.STAIR, "STAIR"],
@@ -2018,6 +2514,7 @@ func _build_tool_palette() -> void:
 		opening_row.add_child(btn)
 		_opening_buttons[opening_type] = btn
 	box.add_child(_opening_section)
+	_build_piece_section(box)
 
 	var filler := Control.new()
 	filler.size_flags_vertical = Control.SIZE_EXPAND_FILL
@@ -2032,6 +2529,196 @@ func _build_tool_palette() -> void:
 	)
 	hints.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	box.add_child(hints)
+
+
+## THE PALETTE. Six buttons, or however many `structure_pieces.json` declares —
+## this function does not know and must not. A seventh piece appears here by
+## being added to the data file.
+func _build_piece_section(box: VBoxContainer) -> void:
+	_piece_section = VBoxContainer.new()
+	_piece_section.add_theme_constant_override(&"separation", BrandTokens.SPACE_XS)
+	_piece_section.add_child(BrandComponents.section_header("PIECE KIT"))
+
+	var kit_errors := PieceKit.load_errors()
+	if kit_errors.size() > 0:
+		## A kit that failed to load is a palette with nothing on it, and a blank
+		## panel is indistinguishable from a tool that has not been picked up yet.
+		var broken := BrandLabel.new(
+			"KIT FAILED TO LOAD\n%s" % "\n".join(kit_errors), BrandLabel.Role.MICRO_DATA
+		)
+		broken.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		broken.add_theme_color_override(&"font_color", BrandTokens.ALERT)
+		_piece_section.add_child(broken)
+
+	var flow := VBoxContainer.new()
+	flow.add_theme_constant_override(&"separation", BrandTokens.SPACE_XS)
+	for id_variant in _kit_ids():
+		var id := str(id_variant)
+		var button := BrandComponents.tool_button(PieceKit.display_name(id).to_upper(), 0.0)
+		button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		button.tooltip_text = str(PieceKit.get_piece(id).get("description", ""))
+		button.pressed.connect(func() -> void: _select_piece_type(id))
+		flow.add_child(button)
+		_piece_buttons[id] = button
+	_piece_section.add_child(flow)
+
+	var facing_row := HBoxContainer.new()
+	facing_row.add_theme_constant_override(&"separation", BrandTokens.SPACE_XS)
+	var turn_back := BrandComponents.compact_button("⟲", BrandTokens.MIN_HIT_TARGET)
+	turn_back.pressed.connect(func() -> void:
+		if not _rotate_selected_piece(-1):
+			_rotate_piece(-1)
+	)
+	facing_row.add_child(turn_back)
+	_piece_facing_label = BrandLabel.new("", BrandLabel.Role.DATA)
+	_piece_facing_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_piece_facing_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_piece_facing_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	facing_row.add_child(_piece_facing_label)
+	var turn_on := BrandComponents.compact_button("⟳", BrandTokens.MIN_HIT_TARGET)
+	turn_on.pressed.connect(func() -> void:
+		if not _rotate_selected_piece(1):
+			_rotate_piece(1)
+	)
+	facing_row.add_child(turn_on)
+	_piece_section.add_child(facing_row)
+
+	_piece_param_box = VBoxContainer.new()
+	_piece_param_box.add_theme_constant_override(&"separation", BrandTokens.SPACE_XS)
+	_piece_section.add_child(_piece_param_box)
+
+	_piece_tint_box = HFlowContainer.new()
+	_piece_tint_box.add_theme_constant_override(&"h_separation", BrandTokens.SPACE_XS)
+	_piece_tint_box.add_theme_constant_override(&"v_separation", BrandTokens.SPACE_XS)
+	for tint_variant in _piece_tints():
+		var tint := tint_variant as Array
+		var hex := str(tint[1])
+		var swatch := Button.new()
+		swatch.focus_mode = Control.FOCUS_NONE
+		swatch.custom_minimum_size = Vector2(30, 30)
+		swatch.tooltip_text = "%s  %s" % [str(tint[0]), hex]
+		var style := StyleBoxFlat.new()
+		style.bg_color = Color(hex)
+		style.border_color = BrandTokens.SEA_LINE
+		style.set_border_width_all(1)
+		style.set_corner_radius_all(0)
+		swatch.add_theme_stylebox_override("normal", style)
+		swatch.add_theme_stylebox_override("hover", style)
+		swatch.add_theme_stylebox_override("pressed", style)
+		swatch.pressed.connect(func() -> void: _set_piece_color(hex))
+		_piece_tint_box.add_child(swatch)
+	_piece_section.add_child(_piece_tint_box)
+	box.add_child(_piece_section)
+
+
+## Rebuilt whenever the armed piece, its settings or its facing change. Cheap —
+## six rows — and rebuilding beats keeping a parallel copy of the values in the
+## widgets, which is how a control ends up disagreeing with the thing it edits.
+func _refresh_piece_section() -> void:
+	if _piece_section == null:
+		return
+	_piece_section.visible = _tool == Tool.PIECE
+	for id in _piece_buttons.keys():
+		(_piece_buttons[id] as Button).set_pressed_no_signal(str(id) == _piece_id)
+	_piece_facing_label.text = "FACING %d°" % _piece_facing
+	if not _piece_section.visible or _piece_id.is_empty():
+		return
+	var key := "%s|%d|%s" % [
+		_piece_id, _piece_facing, JSON.stringify(_piece_params_for(_piece_id))
+	]
+	if key == _piece_param_key:
+		return
+	_piece_param_key = key
+	for child in _piece_param_box.get_children():
+		_piece_param_box.remove_child(child)
+		child.queue_free()
+	_build_piece_param_rows(
+		_piece_param_box, _piece_id, _piece_params_for(_piece_id),
+		func(name: String, delta: int) -> void: _step_piece_param(name, delta),
+		func(name: String, value: Variant) -> void: _set_piece_param(name, value),
+	)
+
+
+## ONE ROW PER DECLARED PARAMETER, and the row's KIND comes from the data file:
+## `numeric` gets a stepper over its own `values` list, anything else gets a
+## dropdown of its declared choices. Nothing here can produce a value the kit did
+## not declare, and nothing here accepts typed input.
+func _build_piece_param_rows(
+	into: VBoxContainer, piece_id: String, values: Dictionary,
+	on_step: Callable, on_choose: Callable,
+) -> void:
+	var declared := PieceKit.params_of(piece_id)
+	for key in declared.keys():
+		var name := str(key)
+		var spec := declared[key] as Dictionary
+		var current: Variant = values.get(name, spec["default"])
+		if bool(spec.get("numeric", false)):
+			into.add_child(_piece_stepper_row(name, spec, current, on_step))
+		else:
+			into.add_child(_piece_choice_row(name, spec, current, on_choose))
+
+
+func _piece_stepper_row(
+	name: String, spec: Dictionary, current: Variant, on_step: Callable
+) -> HBoxContainer:
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override(&"separation", BrandTokens.SPACE_XS)
+	var label := BrandLabel.new(name.to_upper(), BrandLabel.Role.SECTION)
+	label.custom_minimum_size = Vector2(74, 0)
+	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	row.add_child(label)
+	var down := BrandComponents.compact_button("◀", BrandTokens.MIN_HIT_TARGET)
+	down.tooltip_text = "%s: %s" % [name, str(spec["values"])]
+	down.pressed.connect(func() -> void: on_step.call(name, -1))
+	row.add_child(down)
+	var value := BrandLabel.new(_piece_value_text(spec, current), BrandLabel.Role.DATA)
+	value.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	value.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	value.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	row.add_child(value)
+	var up := BrandComponents.compact_button("▶", BrandTokens.MIN_HIT_TARGET)
+	up.tooltip_text = down.tooltip_text
+	up.pressed.connect(func() -> void: on_step.call(name, 1))
+	row.add_child(up)
+	return row
+
+
+func _piece_choice_row(
+	name: String, spec: Dictionary, current: Variant, on_choose: Callable
+) -> HBoxContainer:
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override(&"separation", BrandTokens.SPACE_XS)
+	var label := BrandLabel.new(name.to_upper(), BrandLabel.Role.SECTION)
+	label.custom_minimum_size = Vector2(74, 0)
+	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	row.add_child(label)
+	var option := OptionButton.new()
+	option.focus_mode = Control.FOCUS_ALL
+	option.custom_minimum_size = Vector2(0, BrandTokens.MIN_HIT_TARGET)
+	option.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	var choices := spec["values"] as Array
+	for index in choices.size():
+		option.add_item(str(choices[index]).capitalize(), index)
+		if str(choices[index]) == str(current):
+			option.select(index)
+	option.item_selected.connect(func(index: int) -> void:
+		on_choose.call(name, str(choices[index]))
+	)
+	row.add_child(option)
+	return row
+
+
+## A parameter value as a player reads it: the grid count it IS, plus the metres
+## it means when the unit is one the studio knows how to convert. An unknown unit
+## prints the count and the unit's own name — never a converted number, because a
+## wrong metre reading is worse than none.
+func _piece_value_text(spec: Dictionary, value: Variant) -> String:
+	var unit := str(spec.get("unit", ""))
+	if not (value is int or value is float):
+		return str(value)
+	if PIECE_UNIT_METRES.has(unit):
+		return "%d   %.2f m" % [int(value), float(value) * float(PIECE_UNIT_METRES[unit])]
+	return "%d   %s" % [int(value), unit.replace("_", " ")]
 
 
 func _build_drawer() -> void:
@@ -2156,6 +2843,7 @@ func _refresh_panel() -> void:
 	for context in _context_buttons.keys():
 		(_context_buttons[context] as Button).set_pressed_no_signal(context == _context)
 	_opening_section.visible = _tool == Tool.OPENING
+	_refresh_piece_section()
 	for opening_type in _opening_buttons.keys():
 		(_opening_buttons[opening_type] as Button).set_pressed_no_signal(opening_type == _opening_type)
 	_level_label.text = "LEVEL %.0f M" % _active_base
@@ -2165,8 +2853,8 @@ func _refresh_panel() -> void:
 	var armed_material := str((_lib[_armed_slot] as Dictionary)["material"])
 	for material_name in _lib_material_buttons.keys():
 		(_lib_material_buttons[material_name] as Button).set_pressed_no_signal(material_name == armed_material)
-	_entities_label.text = "STRUCTURE\n%d PARTS\n%d UNDO STEPS" % [
-		_plan.entity_count(), _undo_stack.size()
+	_entities_label.text = "STRUCTURE\n%d PARTS\n%d KIT PIECES\n%d UNDO STEPS" % [
+		_plan.entity_count(), _plan.pieces.size(), _undo_stack.size()
 	]
 	_hull_option.visible = _context == "vessel"
 	_context_label.text = (
@@ -2187,9 +2875,15 @@ func _studio_metrics_text() -> String:
 		var deck_size := (deck_raw as Dictionary).get("size", [0.0, 0.0]) as Array
 		if deck_size.size() >= 2:
 			deck_area += float(deck_size[0]) * float(deck_size[1])
-	return "GRID 1 M   LEVEL %.0f M   PARTS %d   WALL %.0f M   DECK %.0f M²" % [
+	## "GRID 1 M" was a lie for as long as it has been on screen: the grid this
+	## studio DRAWS is `DeckGrid.CELL_M`, half a metre, and only the draw tools'
+	## cursor was ever on whole metres. Both numbers, named for what they are.
+	return "CELL %.2f M   DRAW SNAP %.0f M   LEVEL %.0f M   PARTS %d   PIECES %d   WALL %.0f M   DECK %.0f M²" % [
+		NODE_SNAP,
+		GRID_SNAP,
 		_active_base,
 		_plan.entity_count(),
+		_plan.pieces.size(),
 		wall_metres,
 		deck_area,
 	]
@@ -2214,12 +2908,20 @@ func _refresh_inspector() -> void:
 		_drawer_info.text = "Nothing selected. Use Select / Move and click a wall, deck plate or stair."
 		return
 	var kind := "wall"
-	if entity.has("axis"):
+	## A placement is tested for FIRST: it has no `axis`, no `dir` and no `size`,
+	## so the wall/stair/deck ladder below would have called every piece a deck
+	## plate and offered it a thickness field it does not have.
+	if entity.has("piece"):
+		kind = "piece"
+	elif entity.has("axis"):
 		kind = "wall"
 	elif entity.has("dir"):
 		kind = "stair"
 	else:
 		kind = "deck"
+	if kind == "piece":
+		_refresh_piece_inspector(entity)
+		return
 	_drawer_info.text = ""
 	var header := BrandLabel.new(
 		"%s / PART %03d" % [kind.to_upper(), _selected_id],
@@ -2290,6 +2992,54 @@ func _refresh_inspector() -> void:
 	_inspector_box.add_child(delete_btn)
 
 
+## Inspector for a PLACED piece. Same controls as the palette's — steppers over
+## declared sets and dropdowns over declared choices — because "see and edit its
+## params" and "set them before placing" are the same act on the same data, and
+## two different UIs for it would drift.
+func _refresh_piece_inspector(placement: Dictionary) -> void:
+	var piece_id := str(placement.get("piece", ""))
+	var cell := StructurePlan.piece_cell(placement)
+	_drawer_info.text = str(PieceKit.get_piece(piece_id).get("description", ""))
+	var header := BrandLabel.new(
+		"%s / PART %03d" % [PieceKit.display_name(piece_id).to_upper(), _selected_id],
+		BrandLabel.Role.DATA
+	)
+	header.add_theme_color_override(&"font_color", BrandTokens.BRASS_DEEP)
+	_inspector_box.add_child(header)
+	_inspector_box.add_child(BrandComponents.key_value_row(
+		"Node", "cell %d, %d, %d" % [cell.x, cell.y, cell.z]
+	))
+	var facing_row := HBoxContainer.new()
+	facing_row.add_theme_constant_override(&"separation", BrandTokens.SPACE_XS)
+	var back := BrandComponents.compact_button("⟲", BrandTokens.MIN_HIT_TARGET)
+	back.pressed.connect(func() -> void: _rotate_selected_piece(-1))
+	facing_row.add_child(back)
+	var facing := BrandLabel.new(
+		"FACING %d°" % int(placement.get("facing", 0)), BrandLabel.Role.DATA
+	)
+	facing.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	facing.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	facing.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	facing_row.add_child(facing)
+	var forward := BrandComponents.compact_button("⟳  [R]", BrandTokens.MIN_HIT_TARGET)
+	forward.pressed.connect(func() -> void: _rotate_selected_piece(1))
+	facing_row.add_child(forward)
+	_inspector_box.add_child(facing_row)
+	_build_piece_param_rows(
+		_inspector_box, piece_id, placement.get("params", {}) as Dictionary,
+		func(name: String, delta: int) -> void: _step_selected_piece_param(name, delta),
+		func(name: String, value: Variant) -> void: _set_selected_piece_param(name, value),
+	)
+	_inspector_box.add_child(BrandComponents.key_value_row(
+		"Tint", str(placement.get("color", _kit_color_hex(piece_id)))
+	))
+	_inspector_box.add_child(BrandComponents.separator())
+	var delete_btn := BrandButton.new("DELETE PIECE  [DEL]", BrandButton.Variant.DANGER)
+	delete_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	delete_btn.pressed.connect(func() -> void: _delete_selected())
+	_inspector_box.add_child(delete_btn)
+
+
 ## The standing right-hand surface library. Modal: arm Outside or Inside, then
 ## clicks on materials/swatches paint that slot of the current selection AND
 ## become the default style for everything drawn next.
@@ -2343,6 +3093,12 @@ func _build_library_section(box: VBoxContainer) -> void:
 func _library_keys_for_selection() -> Dictionary:
 	var entity := _plan.entity_by_id(_selected_id)
 	if entity.is_empty():
+		return {}
+	## A placement's colour is an `#rrggbb` string and its material belongs to the
+	## piece, not to the placement. Writing this library's `[r, g, b]` array into
+	## it would produce a placement no reader accepts — the PIECE TINT swatches
+	## are the control for that, and they write hex.
+	if entity.has("piece"):
 		return {}
 	## Walls, plates and stairs carry a single surface — both slots address it.
 	return {"entity": entity, "color": "color", "material": "material"}

@@ -22,3 +22,6 @@ scripts/ui/main_menu.gd.uid
 .gate/
 .probe/
 tests/_probe/
+
+# Python bytecode from tools/
+__pycache__/

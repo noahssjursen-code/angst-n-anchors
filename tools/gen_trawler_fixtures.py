@@ -9,6 +9,7 @@ polite. The PLAN curve is still the hull's own deck edge, measured off
 height above the deck.
 """
 import json, math, collections
+import plan_ids
 
 # ── the hull, measured ──────────────────────────────────────────────────────
 LOA, BEAM = 28.0, 10.0
@@ -1177,6 +1178,12 @@ print("sheer sampling: worst segment rise %.4f m at z=%.2f, cap headroom %.3f m"
 
 for closed, name in ((False, "probe_trawler_bulwark"), (True, "probe_trawler_bow_bulwark")):
     p = build(closed)
+    ## Ids are hand-assigned above from ranges chosen per section, and the ranges
+    ## overlapped: eight ids were used twice, so entity_by_id resolved them to
+    ## whichever collection came first. Renumbered here rather than by hand,
+    ## because the next section added will collide again. See tools/plan_ids.py.
+    plan_ids.renumber(p)
+    assert not plan_ids.duplicate_ids(p), plan_ids.duplicate_ids(p)
     path = "resources/data/structures/%s.json" % name
     with open(path, "w") as fh:
         json.dump(p, fh, indent=1)

@@ -126,6 +126,38 @@ this project has now fixed that same bug three times (`DeckFitout` yaw, the bulw
 railing). The fix that holds is not a more careful second formula. It is deleting the second
 formula.
 
+## 4b. The unasked-question trap — a whole property with no check pointed at it
+
+Not a bad check. **No check at all**, in a place nobody thought to look.
+
+`StructurePlan` keeps six collections and ONE id space. `entity_by_id`, `entity_kind_by_id` and
+`remove_entity` each walk the collections in order and return the FIRST match — so a duplicate id
+does not error, it silently resolves to the wrong entity. The header says these seams exist so an
+editor can find and delete things.
+
+Measured on the shipped fixtures: **`probe_piece_trawler` carried 51 duplicate ids and 0 of its 43
+piece placements were addressable.** Both trawler bulwark fixtures carried 8. Every generator had
+hand-assigned ids from a range it picked for itself, and the ranges overlapped.
+
+It survived because every check those fixtures had was about GEOMETRY — corners, colliders, draw
+calls, silhouettes. All green, all true, all pointed at the same face of the object. Nobody had
+asked "does this plan's id space hold together", so nobody got the answer. It would have surfaced
+as "clicking a piece in the editor selects the wrong thing and deleting it deletes an item" — a
+week later, in a tool, with the fixtures blamed last.
+
+Found only because a hook forced a look at an uncommitted file, and verifying somebody else's
+claim before committing it meant running a probe instead of reading the diff.
+
+**Rule.** When a subsystem's header states a guarantee — "addressable by id", "round-trips
+byte-stably", "the collider is what you see" — go and find the check that holds it to that. If
+there isn't one, that is the next test, whatever you were doing. And when you build a check like
+this, run it over EVERY fixture, not the one you are working on: the two that were already broken
+were not the one being worked on.
+
+**Corollary.** An id is an address, not a description. Selecting entities by id RANGE
+(`set(range(100, 123))`) breaks silently the moment ids are reassigned — it did, in the same hour,
+and only a plate count caught it. Select on what a thing says it is.
+
 ## 5. The self-shaped-tool trap — building for the agent, not the player
 
 The newest and possibly worst. The `plate` primitive is four free 3D corners. Agents authored
@@ -202,6 +234,8 @@ no visible scale figure has no absolute scale — check the figure is *visible*,
 3. **Assert against the path that breaks**, not the artefact you can reach.
 3a. **Assert the property, not the number.** Two green tests that disagree are a finding.
 3b. **One derivation.** Geometry and collision computed separately will drift. Delete the second.
+3c. **Find the check for every guarantee a header makes.** If there isn't one, that is the next
+    test. Run it over every fixture, not the one you are working on.
 4. **Could a player do this with a mouse?** If not, it is a format, not a feature.
 5. **Say what you did not verify.**
 6. **Red with a diagnosis beats green with a lie**, every time.
