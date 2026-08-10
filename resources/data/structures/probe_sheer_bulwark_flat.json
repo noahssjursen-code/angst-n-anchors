@@ -1,0 +1,59 @@
+{
+	"format": "structure_plan_v1",
+	"context": "vessel",
+	"hull_id": "hull_28x10",
+	"_note": "THE CONTROL for probe_sheer_bulwark.json, and the whole reason it exists is that \"it looks better\" is not a measurement anyone can check. This is the same hull, the same bulwark, the same section, the same colours and the same emitter with follow_sheer FALSE: the cap is held at a constant deck_y + height instead of following the hull's own sheer curve. Squint at the two captures side by side. This one is two parallel horizontal bars \u2014 the shape the owner described, and the shape every vessel in screenshots/studio has today. The only difference in the input is one boolean.",
+	"palette": {
+		"wall": [
+			0.85,
+			0.86,
+			0.88
+		],
+		"deck": [
+			0.33,
+			0.31,
+			0.29
+		]
+	},
+	"hull": {
+		"_note": "hull_28x10, as FishingTrawlerSmall.make_physics_profile() builds it: 14 x 5 x 2.8 m at WORLD_FEEL_SCALE 2, i.e. a 28 x 10 m vessel with 5.6 m depth and 2.8 m draft. Freeboard 2.8 m x fine_entry bow_keel_rise 0.32 = 0.896 m of sheer forward, 2.8 x 0.10 = 0.28 m aft. Derived, not written down.",
+		"loa_m": 28.0,
+		"beam_m": 10.0,
+		"depth_m": 5.6,
+		"draft_m": 2.8,
+		"displacement_t": 256.0,
+		"form": "fine_entry",
+		"bow_taper_fraction": 0.17857142857142858,
+		"station_count": 8
+	},
+	"walls": [],
+	"decks": [],
+	"stairs": [],
+	"items": [],
+	"edges": [
+		{
+			"id": 1,
+			"primitive": "sheer_band",
+			"from_hull": "hull_28x10",
+			"_is": "bulwark with NO sheer \u2014 the constant-height band that reads as a bar",
+			"side": "loop",
+			"follow_sheer": false,
+			"height": 1.1,
+			"plate_m": 0.1,
+			"cap_w": 0.22,
+			"cap_h": 0.06,
+			"material": "painted",
+			"plate_color": [
+				0.11,
+				0.13,
+				0.16
+			],
+			"cap_color": [
+				0.86,
+				0.87,
+				0.88
+			],
+			"solid": true
+		}
+	]
+}

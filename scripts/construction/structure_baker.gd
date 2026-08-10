@@ -103,9 +103,17 @@ static func expand(plan: StructurePlan) -> Dictionary:
 
 ## Rectangles {u0,u1,v0,v1} covering the wall span minus its openings.
 static func wall_panels(wall: Dictionary) -> Array:
-	var length := float(wall.get("length", 1.0))
-	var height := float(wall.get("height", 3.0))
-	var openings := _parsed_openings(wall)
+	return _panels_between(
+		float(wall.get("length", 1.0)), float(wall.get("height", 3.0)), _parsed_openings(wall)
+	)
+
+
+## The opening subtraction, in run-space (u along the run, v vertical). Shared
+## by walls and by sloped plates: a plate does the same subtraction in the METRE
+## lengths of its own edges and then normalises, so MIN_PANEL keeps meaning
+## "two centimetres" on both primitives instead of meaning "2% of the plate".
+## `openings` entries are {off, w, sill, h}, already clamped and sorted.
+static func _panels_between(length: float, height: float, openings: Array) -> Array:
 	var panels: Array = []
 	var cursor := 0.0
 	for opening in openings:
@@ -697,6 +705,452 @@ static func wire_path(spec: Dictionary) -> PackedVector3Array:
 	return out
 
 
+## ── The sloped plate: four free corners and a thickness ─────────────────────
+##
+## THIS IS THE PRIMITIVE THAT REPLACES THE ROOM. A room was an axis-aligned box
+## that expanded to four walls, a floor and a ceiling, so every deckhouse it drew
+## was a shed. Nothing on a working vessel is a shed. A plate is FOUR ARBITRARY
+## 3D CORNERS plus a thickness, which is the smallest thing that can draw what a
+## room could not: a raked deckhouse front, tapered sides, a sloped roof, a
+## set-back upper tier, a raked windscreen, a chine facet, a knuckle, a transom
+## rake, a funnel taper. Every one of those is `plate` with different numbers in
+## `props`; if a change here needs an `if part_id == …` it is the wrong change.
+##
+## FRAME. Corners are a RING — c0, c1, c2, c3 — and the surface between them is
+## the BILINEAR patch
+##     P(u,v) = (1-v)·[(1-u)·c0 + u·c1] + v·[(1-u)·c3 + u·c2]
+## so u runs c0→c1 along the "bottom" edge and v runs c0→c3 "up". Bilinear, not
+## two triangles, because the four corners need not be coplanar — a topside panel
+## with a twist in it is one plate, and a patch is closed under restriction to a
+## sub-rectangle, which is what lets openings, subdivision and colliders all cut
+## the same surface without any of them re-deriving it.
+##
+## The corners are ordered COUNTER-CLOCKWISE SEEN FROM OUTSIDE. That single
+## convention fixes the outward normal (`plate_normal`), which fixes which way
+## the thickness is split, which side an opening frame stands proud of, and the
+## triangle winding. Reverse the ring and you get the same plate facing the other
+## way, which is a legitimate thing to author and not an error.
+##
+## OPENINGS are authored in METRES on the plate's own surface — offset/width
+## along u, sill/height along v — and normalised against the mean length of the
+## two opposing edges. On a tapered plate that is what a builder means: a window
+## 1.2 m wide half way along stays half way along, and the cut follows the taper
+## instead of ignoring it.
+##
+## COST. A panel emits front and back grids plus four skirts:
+##     4·su·sv + 4·(su + sv) triangles
+## which is 12 for the default single segment — exactly a box, because a box is
+## what a flat plate degenerates to. Openings add one panel per rectangle and one
+## frame member per jamb/lintel/sill, each 12. That one formula is the breadth
+## claim: a part that had been special-cased would stop matching it.
+##
+## MATERIAL. A plate goes into the SAME material buckets as everything else and
+## introduces none of its own, so a whole deckhouse costs zero draw calls.
+
+const PLATE_DEFAULT_THICKNESS := 0.09
+const DEFAULT_PLATE_COLOR := Color(0.85, 0.86, 0.88)
+## Below this the quad has no surface to draw and every derived direction is
+## noise. 1 cm² — smaller than any plate anyone means.
+const PLATE_MIN_AREA := 1e-4
+## Two corners closer than this are one corner: the ring is then a triangle or a
+## line, the bilinear patch collapses, and the opening decomposition divides by a
+## zero edge length. Authored as a defect, reported as one.
+const PLATE_MIN_EDGE := 1e-4
+const PLATE_FRAME_WIDTH := 0.09
+const PLATE_FRAME_PROUD := 0.05
+const PLATE_MAX_SEGMENTS := 16
+## Collider staircase resolution — see plate_colliders(). A cell whose off-axis
+## excursion exceeds this is split, so this IS the worst-case phantom: the
+## distance a player can be stopped short of a raked wall they can see. At 0.25 m
+## (the spar's step) a wheelhouse front feels padded — measured, a quarter of a
+## metre of solid air stood in front of a 0.45 m rake. 0.15 m is under the
+## thickness of the bulkhead it fronts, and costs the fixture 161 -> 269 boxes.
+const PLATE_COLLIDER_STEP := 0.15
+const PLATE_MAX_COLLIDER_STEPS := 32
+
+
+static func plate_corners(spec: Dictionary) -> PackedVector3Array:
+	return polyline_of(spec.get("corners", spec.get("quad", null)))
+
+
+static func plate_thickness(spec: Dictionary) -> float:
+	return float(spec.get("thickness", PLATE_DEFAULT_THICKNESS))
+
+
+static func plate_segments(spec: Dictionary) -> int:
+	return clampi(int(spec.get("segments", 1)), 1, PLATE_MAX_SEGMENTS)
+
+
+## The quad's area vector: half the cross of its diagonals, which for a planar
+## quad is exactly area × outward normal. Robust for a non-planar ring too — it
+## is Newell's normal for four points, up to the factor.
+static func plate_area_vector(c: PackedVector3Array) -> Vector3:
+	if c.size() != 4:
+		return Vector3.ZERO
+	return (c[2] - c[0]).cross(c[3] - c[1]) * 0.5
+
+
+static func plate_normal(c: PackedVector3Array) -> Vector3:
+	var area := plate_area_vector(c)
+	return Vector3.UP if area.length() < 1e-12 else area.normalized()
+
+
+## A point on the plate's mid-surface at parameter (u, v) in [0,1]².
+static func plate_point(c: PackedVector3Array, u: float, v: float) -> Vector3:
+	if c.size() != 4:
+		return Vector3.ZERO
+	return c[0].lerp(c[1], u).lerp(c[3].lerp(c[2], u), v)
+
+
+## The four corners of the sub-patch [u0,u1]×[v0,v1], in ring order. A bilinear
+## patch restricted to a sub-rectangle is the bilinear patch on these four
+## points, so panels, segments and collider cells all cut the SAME surface.
+static func plate_subquad(c: PackedVector3Array, u0: float, u1: float, v0: float, v1: float) -> PackedVector3Array:
+	return PackedVector3Array([
+		plate_point(c, u0, v0), plate_point(c, u1, v0),
+		plate_point(c, u1, v1), plate_point(c, u0, v1),
+	])
+
+
+## Mean length of the two u-edges and of the two v-edges, in metres. Openings are
+## authored against these, so a window keeps its metre width on a tapered plate.
+static func plate_ref_lengths(c: PackedVector3Array) -> Vector2:
+	if c.size() != 4:
+		return Vector2.ZERO
+	return Vector2(
+		(c[0].distance_to(c[1]) + c[3].distance_to(c[2])) * 0.5,
+		(c[0].distance_to(c[3]) + c[1].distance_to(c[2])) * 0.5,
+	)
+
+
+## "" when the spec draws a plate, otherwise WHY IT DOES NOT. Degenerate input
+## has to fail loudly: a zero-area quad emits a surface with no normal, a
+## self-crossing ring emits a bow tie whose two halves face opposite ways and
+## whose collider covers a region the eye never sees, and both of those look like
+## a rendering bug rather than like a mis-authored plan. Callers push_error and
+## draw nothing.
+##
+## COPLANAR corners are NOT degenerate — they are the normal case, and almost
+## every plate anyone authors is flat. The degenerate cousin is COLLINEAR, which
+## is what "zero area" below means.
+##
+## Order matters. The bow tie is checked BEFORE the area, because the commonest
+## bow tie of all — a rectangle's last two corners swapped — has diagonals that
+## are exactly PARALLEL, so its area vector vanishes and an area-first test
+## reports "collinear" about four corners that are nothing of the sort.
+static func plate_problem(spec: Dictionary) -> String:
+	var c := plate_corners(spec)
+	if c.size() != 4:
+		return "needs exactly 4 corners, got %d" % c.size()
+	for index in 4:
+		var p := c[index]
+		if not (is_finite(p.x) and is_finite(p.y) and is_finite(p.z)):
+			return "corner %d is not finite (%s)" % [index, str(p)]
+	for a in 4:
+		for b in range(a + 1, 4):
+			if c[a].distance_to(c[b]) < PLATE_MIN_EDGE:
+				return "corners %d and %d coincide (%.6f m apart)" % [a, b, c[a].distance_to(c[b])]
+	if _plate_self_crosses(c):
+		return "self-crossing quad — the corners are not in ring order"
+	var area := plate_area_vector(c).length()
+	if area < PLATE_MIN_AREA:
+		return "zero area (%.9f m2) — the four corners are collinear" % area
+	if plate_thickness(spec) <= 0.0:
+		return "thickness must be positive, got %.4f" % plate_thickness(spec)
+	return ""
+
+
+## A ring is simple exactly when neither pair of NON-ADJACENT edges meets. Tested
+## in the plane the quad is most nearly parallel to. The dropped axis is the one
+## the area vector is largest along — that projection keeps at least 1/sqrt(3) of
+## the area — falling back to the axis the CORNERS are least spread along when
+## the area vector is degenerate, which is exactly the swapped-corner bow tie
+## this check exists for.
+static func _plate_self_crosses(c: PackedVector3Array) -> bool:
+	var normal := plate_area_vector(c).abs()
+	if normal.length() < PLATE_MIN_AREA:
+		var lo := c[0]
+		var hi := c[0]
+		for point in c:
+			lo = Vector3(minf(lo.x, point.x), minf(lo.y, point.y), minf(lo.z, point.z))
+			hi = Vector3(maxf(hi.x, point.x), maxf(hi.y, point.y), maxf(hi.z, point.z))
+		## Least spread == the axis the ring is flattest along, so 1/x is the
+		## dominance the code below is looking for.
+		var spread := hi - lo
+		normal = Vector3(
+			1.0 / maxf(spread.x, 1e-9), 1.0 / maxf(spread.y, 1e-9), 1.0 / maxf(spread.z, 1e-9)
+		)
+	var axis := 0
+	if normal.y >= normal.x and normal.y >= normal.z:
+		axis = 1
+	elif normal.z >= normal.x and normal.z >= normal.y:
+		axis = 2
+	var flat: Array[Vector2] = []
+	for point in c:
+		flat.append(_drop_axis(point, axis))
+	var crossed: Variant = Geometry2D.segment_intersects_segment(flat[0], flat[1], flat[2], flat[3])
+	if crossed != null:
+		return true
+	return Geometry2D.segment_intersects_segment(flat[1], flat[2], flat[3], flat[0]) != null
+
+
+static func _drop_axis(v: Vector3, axis: int) -> Vector2:
+	match axis:
+		0:
+			return Vector2(v.y, v.z)
+		1:
+			return Vector2(v.z, v.x)
+	return Vector2(v.x, v.y)
+
+
+## Openings in METRES on the plate surface: {off, w, sill, h} along the mean u
+## and v edge lengths. Same shape and same defaults as a wall's, so a door is a
+## door on either primitive.
+static func plate_openings(spec: Dictionary, ref: Vector2) -> Array:
+	var openings: Array = []
+	for opening_variant in spec.get("openings", []) as Array:
+		var opening := opening_variant as Dictionary
+		var off := clampf(float(opening.get("offset", 0.0)), 0.0, ref.x)
+		var width := clampf(float(opening.get("width", 1.0)), 0.0, ref.x - off)
+		var type := str(opening.get("type", StructurePlan.OPENING_DOOR))
+		var sill := clampf(
+			float(opening.get("sill", 1.0 if type == StructurePlan.OPENING_WINDOW else 0.0)),
+			0.0, ref.y
+		)
+		var height := clampf(
+			float(opening.get("height", 2.2 if type == StructurePlan.OPENING_DOOR else 1.2)),
+			0.1, ref.y - sill
+		)
+		if width > MIN_PANEL:
+			openings.append({"off": off, "w": width, "sill": sill, "h": height})
+	openings.sort_custom(func(a, b): return float(a["off"]) < float(b["off"]))
+	return openings
+
+
+## Panels {u0,u1,v0,v1} in NORMALISED parameter space, covering the plate minus
+## its openings. The subtraction runs in metres — the same routine walls use, so
+## MIN_PANEL means two centimetres here too — and is normalised on the way out.
+static func plate_panels(spec: Dictionary) -> Array:
+	var c := plate_corners(spec)
+	if c.size() != 4:
+		return []
+	var ref := plate_ref_lengths(c)
+	if ref.x <= 0.0 or ref.y <= 0.0:
+		return []
+	var out: Array = []
+	for panel_variant in _panels_between(ref.x, ref.y, plate_openings(spec, ref)):
+		var panel := panel_variant as Dictionary
+		out.append({
+			"u0": float(panel["u0"]) / ref.x, "u1": float(panel["u1"]) / ref.x,
+			"v0": float(panel["v0"]) / ref.y, "v1": float(panel["v1"]) / ref.y,
+		})
+	return out
+
+
+## Casing round every opening: jambs straddling the cut edges, a lintel across
+## their heads, a sill under a window — the same joinery a wall opening gets, in
+## the plate's own parameter space and proud of BOTH faces. A deckhouse side with
+## flush-cut holes reads as a cardboard cut-out; the proud frame is what makes a
+## window read as a window from any angle.
+static func plate_frames(spec: Dictionary) -> Array:
+	var c := plate_corners(spec)
+	if c.size() != 4:
+		return []
+	var ref := plate_ref_lengths(c)
+	if ref.x <= 0.0 or ref.y <= 0.0:
+		return []
+	var half_w := PLATE_FRAME_WIDTH * 0.5
+	var out: Array = []
+	for opening in plate_openings(spec, ref):
+		var off := float(opening["off"])
+		var width := float(opening["w"])
+		var sill := float(opening["sill"])
+		var head := sill + float(opening["h"])
+		var has_sill := sill > 0.05
+		var jamb_lo := (sill + half_w - SKIN_EPS) if has_sill else 0.0
+		var jamb_hi := head - half_w + SKIN_EPS
+		var jamb_len := maxf(jamb_hi - jamb_lo, 0.1)
+		var jamb_mid := (jamb_hi + jamb_lo) * 0.5
+		var span := width + PLATE_FRAME_WIDTH * 2.0
+		var members := [
+			{"u": off, "v": jamb_mid, "ul": PLATE_FRAME_WIDTH, "vl": jamb_len},
+			{"u": off + width, "v": jamb_mid, "ul": PLATE_FRAME_WIDTH, "vl": jamb_len},
+			{"u": off + width * 0.5, "v": head, "ul": span, "vl": PLATE_FRAME_WIDTH},
+		]
+		if has_sill:
+			members.append({"u": off + width * 0.5, "v": sill, "ul": span, "vl": PLATE_FRAME_WIDTH})
+		for member in members:
+			var u := float(member["u"])
+			var v := float(member["v"])
+			var ul := float(member["ul"]) * 0.5
+			var vl := float(member["vl"]) * 0.5
+			out.append({
+				"u0": clampf((u - ul) / ref.x, 0.0, 1.0), "u1": clampf((u + ul) / ref.x, 0.0, 1.0),
+				"v0": clampf((v - vl) / ref.y, 0.0, 1.0), "v1": clampf((v + vl) / ref.y, 0.0, 1.0),
+			})
+	return out
+
+
+## Renderable layers for one plate spec whose corners are ALREADY in plan space.
+static func plate_layers(spec: Dictionary, corners: PackedVector3Array, source_id := -1) -> Array:
+	var thickness := plate_thickness(spec)
+	var segments := plate_segments(spec)
+	var color := _color_of(spec.get("color", null), DEFAULT_PLATE_COLOR)
+	var material := str(spec.get("material", "painted"))
+	var out: Array = []
+	for panel_variant in plate_panels(spec):
+		var panel := panel_variant as Dictionary
+		out.append({
+			"kind": "slab",
+			"quad": plate_subquad(
+				corners, float(panel["u0"]), float(panel["u1"]),
+				float(panel["v0"]), float(panel["v1"])
+			),
+			"thickness": thickness,
+			"segments": segments,
+			"color": color,
+			"material": material,
+			"source_id": source_id,
+		})
+	var frame_color := _color_of(spec.get("frame_color", null), color.darkened(0.45))
+	for frame_variant in plate_frames(spec):
+		var frame := frame_variant as Dictionary
+		out.append({
+			"kind": "slab",
+			"quad": plate_subquad(
+				corners, float(frame["u0"]), float(frame["u1"]),
+				float(frame["v0"]), float(frame["v1"])
+			),
+			## Proud of BOTH faces, so the casing reads as depth from inside and
+			## out — same trick, same reason, as a wall's opening frame.
+			"thickness": thickness + PLATE_FRAME_PROUD * 2.0,
+			"segments": 1,
+			"color": frame_color,
+			"material": str(spec.get("frame_material", "steel")),
+			"source_id": source_id,
+		})
+	return out
+
+
+## ── What a raked plate emits into the physics world ─────────────────────────
+##
+## The collider contract carries a YAW ONLY (see collect_colliders). An upright
+## plate at any heading is exactly one yawed box and that is what it emits. A
+## RAKED one — a wheelhouse front leaning 0.8 m forward over its 2.4 m, a sloped
+## roof, a chine facet — is not spellable as one yawed box, and the two wrong
+## answers are both worse than the geometry deserves:
+##
+##  - one unrotated box round the whole plate puts a PHANTOM WEDGE out over the
+##    open deck: the front of a forward-raked wheelhouse overhangs, so the box
+##    fills the triangle of air under the overhang and a player is stopped a
+##    metre short of a wall they can see they have not reached. That is the exact
+##    defect plan_collision_physics_test exists to catch on diagonal bulwarks;
+##  - a pitched box cannot be expressed at all — every consumer reads yaw_deg and
+##    would silently flatten it.
+##
+## So a raked plate is STEPPED, the same answer a sloped spar gets. Each panel is
+## cut into cells and each cell emits the exact bounding box of its eight slab
+## corners IN THE PANEL'S OWN YAW FRAME. Two properties make that honest:
+##
+##  1. It never under-covers. A bilinear patch lies inside the convex hull of its
+##     four corners, so the cell's drawn surface — and its two offset skins — lie
+##     inside the hull of the eight points the box is fitted to.
+##  2. It costs nothing when there is nothing to step. The step count per
+##     direction is driven by the cell's OFF-AXIS EXCURSION: of the three spans a
+##     parametric direction covers in the yaw frame, the box's own dimensions
+##     already account for the largest, so the error is the sum of the other two.
+##     For an upright rectangular plate that sum is 0 and the answer is ONE box,
+##     bit-exact. For the 0.85 m rake above it is 0.85 m, which is six steps.
+##
+## Openings come through plate_panels(), so a door is a genuine hole in collision
+## exactly as it is in the geometry — the two read the same decomposition.
+static func plate_colliders(spec: Dictionary, corners: PackedVector3Array, offset: Vector3) -> Array:
+	if corners.size() != 4 or not bool(spec.get("solid", true)):
+		return []
+	var thickness := plate_thickness(spec)
+	var out: Array = []
+	for panel_variant in plate_panels(spec):
+		var panel := panel_variant as Dictionary
+		out.append_array(_plate_panel_colliders(
+			corners, thickness, offset,
+			float(panel["u0"]), float(panel["u1"]), float(panel["v0"]), float(panel["v1"])
+		))
+	return out
+
+
+static func _plate_panel_colliders(
+	corners: PackedVector3Array, thickness: float, offset: Vector3,
+	u0: float, u1: float, v0: float, v1: float,
+) -> Array:
+	var quad := plate_subquad(corners, u0, u1, v0, v1)
+	var normal := plate_normal(quad)
+	var yaw := _plate_yaw(quad)
+	var basis := Basis(Vector3.UP, deg_to_rad(yaw))
+	var inv := basis.transposed()
+	var local: Array[Vector3] = []
+	for point in quad:
+		local.append(inv * point)
+	var span_u := _max_abs(local[1] - local[0], local[2] - local[3])
+	var span_v := _max_abs(local[3] - local[0], local[2] - local[1])
+	var nu := _plate_steps(span_u)
+	var nv := _plate_steps(span_v)
+	var half := normal * (thickness * 0.5)
+	var out: Array = []
+	for i in nu:
+		for j in nv:
+			var cell := plate_subquad(
+				corners,
+				lerpf(u0, u1, float(i) / float(nu)), lerpf(u0, u1, float(i + 1) / float(nu)),
+				lerpf(v0, v1, float(j) / float(nv)), lerpf(v0, v1, float(j + 1) / float(nv)),
+			)
+			var lo := Vector3.INF
+			var hi := -Vector3.INF
+			for point in cell:
+				for sign in [1.0, -1.0]:
+					var p := inv * (point + half * float(sign))
+					lo = Vector3(minf(lo.x, p.x), minf(lo.y, p.y), minf(lo.z, p.z))
+					hi = Vector3(maxf(hi.x, p.x), maxf(hi.y, p.y), maxf(hi.z, p.z))
+			out.append({
+				"center": basis * ((lo + hi) * 0.5) + offset,
+				"size": hi - lo,
+				"yaw_deg": yaw,
+			})
+	return out
+
+
+## Heading of the panel's u run, as a yaw. Falls back to the v run for a plate
+## whose u direction is vertical (a chine facet authored bottom-up), and to zero
+## for one that is horizontal in neither — where the yaw of a level slab does not
+## matter anyway.
+static func _plate_yaw(quad: PackedVector3Array) -> float:
+	for run in [
+		(quad[1] + quad[2]) - (quad[0] + quad[3]),
+		(quad[3] + quad[2]) - (quad[0] + quad[1]),
+	]:
+		var flat := Vector3((run as Vector3).x, 0.0, (run as Vector3).z)
+		if flat.length() > AXIS_TOL:
+			return rad_to_deg(atan2(-flat.z, flat.x))
+	return 0.0
+
+
+static func _max_abs(a: Vector3, b: Vector3) -> Vector3:
+	return Vector3(
+		maxf(absf(a.x), absf(b.x)), maxf(absf(a.y), absf(b.y)), maxf(absf(a.z), absf(b.z))
+	)
+
+
+## Steps needed along a parametric direction that covers `span` in the yaw frame.
+## The box already spends one of its three dimensions on the LARGEST component,
+## so the error a single box would make is the sum of the other two — and that is
+## what gets divided down. Zero for an axis-aligned plate; 0.8 m of rake over a
+## 0.25 m step is four.
+static func _plate_steps(span: Vector3) -> int:
+	var sorted := [absf(span.x), absf(span.y), absf(span.z)]
+	sorted.sort()
+	var off_axis := float(sorted[0]) + float(sorted[1])
+	return clampi(int(ceil(off_axis / PLATE_COLLIDER_STEP)), 1, PLATE_MAX_COLLIDER_STEPS)
+
+
 ## ── Item reading: where a plan's fittings become geometry ───────────────────
 ##
 ## `items[]` was declared, serialised and counted by StructurePlan and read by
@@ -714,6 +1168,20 @@ static func item_primitive(item: Dictionary) -> String:
 ## — an unknown fitting costs nothing and is not silently turned into a box.
 static func _item_layers(plan: StructurePlan, item: Dictionary) -> Array:
 	var primitive := item_primitive(item)
+	if primitive == "plate":
+		var spec := StructurePlan.item_props(item)
+		var problem := plate_problem(spec)
+		if not problem.is_empty():
+			push_error(
+				"StructureBaker: item %d is a degenerate plate — %s. Nothing drawn."
+				% [int(item.get("id", -1)), problem]
+			)
+			return []
+		return plate_layers(
+			spec,
+			_transformed(plate_corners(spec), plan.item_transform(item)),
+			int(item.get("id", -1)),
+		)
 	if primitive != "spar" and primitive != "wire":
 		return []
 	var props := StructurePlan.item_props(item)
@@ -763,7 +1231,17 @@ static func _respec(props: Dictionary, path: PackedVector3Array) -> Dictionary:
 ## argument; the short version is that a spar is an obstruction and a wire is
 ## not, and that a sloped run cannot be spelled in a yaw-only collider.
 static func _item_colliders(plan: StructurePlan, item: Dictionary, offset: Vector3) -> Array:
-	if item_primitive(item) != "spar":
+	var primitive := item_primitive(item)
+	if primitive == "plate":
+		var spec := StructurePlan.item_props(item)
+		## A plate that was refused for the eye is refused for the body too: a
+		## collider with no geometry behind it is an invisible wall.
+		if not plate_problem(spec).is_empty():
+			return []
+		return plate_colliders(
+			spec, _transformed(plate_corners(spec), plan.item_transform(item)), offset
+		)
+	if primitive != "spar":
 		return []
 	var props := StructurePlan.item_props(item)
 	if not bool(props.get("solid", true)):
@@ -1000,6 +1478,15 @@ static func _bucket_layer(buckets: Dictionary, layer: Dictionary, offset: Vector
 	var tool := (buckets[key] as Dictionary)["st"] as SurfaceTool
 	## A tube goes into the same SurfaceTool as a box. It is a different emitter,
 	## not a different surface — that is the whole reason a rig is free.
+	if str(layer.get("kind", "box")) == "slab":
+		_append_slab(
+			tool,
+			_offset_path(layer["quad"] as PackedVector3Array, offset),
+			float(layer["thickness"]),
+			int(layer.get("segments", 1)),
+			color,
+		)
+		return
 	if str(layer.get("kind", "box")) == "tube":
 		_append_tube(
 			tool,
@@ -1074,6 +1561,78 @@ static func _append_box(
 				st.set_color(color)
 				st.set_normal(normal)
 				st.add_vertex(corners[idx[k]])
+
+
+## Closed slab over the bilinear patch on `quad`, `thickness` thick, split into
+## `segments`² cells so a twisted plate shades as a twisted plate rather than as
+## two flat triangles.
+##
+## Winding matches _append_box and _append_tube exactly — Godot's clockwise-front
+## convention, so the right-hand cross of the vertex order is MINUS the outward
+## normal. Derived rather than guessed, from the one convention the corner ring
+## fixes: with corners counter-clockwise seen from outside, the front cell
+## (a,b,c,d) is counter-clockwise about +n, so it emits as (a,d,c) + (a,c,b); the
+## back cell faces -n and emits in its own order; and walking the boundary in the
+## same counter-clockwise sense puts the exterior on the RIGHT, so a skirt quad
+## (front p, front q, back q, back p) has cross = -(edge × n) = -outward for
+## free. Getting this backwards renders the plate inside-out, which under
+## backface culling looks like a hole rather than like a mistake.
+##
+## Normals are FLAT per face — +n on the front grid, -n on the back, and the
+## edge's own outward for each skirt — which is what a plate is: a folded sheet,
+## not a smooth surface. Colour is written on every vertex; as with boxes and
+## tubes no vertex is shared, so two differently-coloured plates in one surface
+## cannot bleed into each other.
+##
+## Triangle count is exactly 4·su·sv + 4·(su + sv) — 12 for one segment, which
+## is a box, which is what a flat plate is.
+static func _append_slab(
+	st: SurfaceTool,
+	quad: PackedVector3Array,
+	thickness: float,
+	segments: int,
+	color: Color,
+) -> void:
+	if quad.size() != 4:
+		return
+	var normal := plate_normal(quad)
+	var half := normal * (thickness * 0.5)
+	var n := maxi(segments, 1)
+	## (n+1)² mid-surface samples; front is +half off each, back is -half.
+	var mid: Array[Vector3] = []
+	for j in n + 1:
+		for i in n + 1:
+			mid.append(plate_point(quad, float(i) / float(n), float(j) / float(n)))
+	for j in n:
+		for i in n:
+			var a := mid[j * (n + 1) + i]
+			var b := mid[j * (n + 1) + i + 1]
+			var c := mid[(j + 1) * (n + 1) + i + 1]
+			var d := mid[(j + 1) * (n + 1) + i]
+			_tri(st, color, a + half, normal, d + half, normal, c + half, normal)
+			_tri(st, color, a + half, normal, c + half, normal, b + half, normal)
+			_tri(st, color, a - half, -normal, b - half, -normal, c - half, -normal)
+			_tri(st, color, a - half, -normal, c - half, -normal, d - half, -normal)
+	## The boundary, counter-clockwise about +n: v=0 rising in u, u=1 rising in v,
+	## v=1 falling in u, u=0 falling in v.
+	var ring: Array[Vector3] = []
+	for i in n:
+		ring.append(mid[i])
+	for j in n:
+		ring.append(mid[j * (n + 1) + n])
+	for i in n:
+		ring.append(mid[n * (n + 1) + (n - i)])
+	for j in n:
+		ring.append(mid[(n - j) * (n + 1)])
+	for index in ring.size():
+		var p := ring[index]
+		var q := ring[(index + 1) % ring.size()]
+		var edge := q - p
+		if edge.length() < PATH_EPS:
+			continue
+		var outward := edge.cross(normal).normalized()
+		_tri(st, color, p + half, outward, q + half, outward, q - half, outward)
+		_tri(st, color, p + half, outward, q - half, outward, p - half, outward)
 
 
 ## Tube of `sides` sides swept along `path`, radius `radii[i]` at node i.

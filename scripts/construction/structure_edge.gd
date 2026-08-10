@@ -84,6 +84,19 @@ const MIN_SEGMENT_M := 0.001
 
 ## Guardrail defaults, sized against the 1.8 m figure.
 const DEFAULT_RAIL_HEIGHT := 1.1      ## SOLAS minimum is 1.0 m; 1.1 is typical.
+## A bulwark's cap AMIDSHIPS, above the deck. Same number as the rail height and
+## for the same reason: it is a fall barrier, and a fall barrier is sized against
+## a person, not against the ship. It is the ONLY authored length in a bulwark —
+## everything that makes one hull's bulwark differ from another's is the sheer,
+## and the sheer is derived (see `sheer_bulwark_spec`).
+const DEFAULT_BULWARK_HEIGHT := 1.1
+## Bulwark plating: 100 mm reads as steel plate with its stiffeners behind it.
+const DEFAULT_BULWARK_PLATE_M := 0.10
+## The capping rail over it. Wider than the plating on purpose — a cap rail
+## overhangs both faces, and the outboard overhang is what throws the shadow
+## line that makes the sheer legible on the topsides at a distance.
+const DEFAULT_CAP_WIDTH_M := 0.22
+const DEFAULT_CAP_THICKNESS_M := 0.06
 const DEFAULT_POST_PITCH := 1.6       ## stanchion spacing; 1.5 m is the usual max.
 const DEFAULT_RAIL_COUNT := 3
 const DEFAULT_POST_WIDTH := 0.05      ## 50 mm stanchion — one tenth of a deck cell.
@@ -94,6 +107,28 @@ const DEFAULT_TOE_THICKNESS := 0.012
 ## property of the emitted geometry rather than a comment.
 const MAX_RAIL_GAP_M := 0.38
 
+## Collision. A swept run thinner than this LATERALLY is a surface treatment on
+## something that already collides — paint, plating, a strap — and emits no
+## collider. 50 mm is not picked: it is DEFAULT_POST_WIDTH, the thinnest section
+## in this file a person can walk into, and it sorts PROFILE_LIBRARY exactly
+## along the line a shipwright would draw. Solid: cap rail (220 mm), bulwark
+## plate (100), rubbing strake (90), pipe run (90), D-fender, spray rail,
+## stringer. Not solid: boot top (12 mm of paint), sheer strake (20 mm of
+## plating flush with the shell), chainplate (14), toe board (12, and the
+## railing's own barrier already covers it).
+const SWEEP_COLLIDER_MIN_M := 0.05
+## Consecutive collider boxes on the same heading merge while the merge
+## over-covers by no more than this. It buys ~4x fewer static shapes on a
+## finely-sampled sheer run, and it over-covers UPWARD at hip height by at most
+## 60 mm, which is a seventh of the player's 0.45 m step height and below
+## anything a body can report. Set it to 0 for one collider per drawn segment.
+const COLLIDER_MERGE_M := 0.06
+## Floor on sheer sampling. A hull whose sheer is dead flat still has a curved
+## deck edge in PLAN, and a two-point path would draw its bow taper as a
+## straight line from stem to transom. One sample per metre keeps the plan error
+## inside a 0.5 m deck cell on every hull in the catalog.
+const PLAN_SAMPLE_M := 1.0
+
 ## LOD. A harbour full of stanchions is the case the draw-call budget exists
 ## for, so the switch distance is DERIVED from when a stanchion stops resolving
 ## rather than picked: see `lod_switch_distance_m`.
@@ -103,12 +138,38 @@ const LOD_CULLED := 2
 const LOD_REFERENCE_FOV := 70.0
 const LOD_REFERENCE_PX := 1280.0
 
-## Ten cross-sections, each a list of rects in the sweep's local (u, v) frame:
+## Ten constant cross-sections, each a list of rects in the sweep's local
+## (u, v) frame:
 ##   u  lateral offset from the path, outboard positive
 ##   v  vertical offset from the path
 ##   w  lateral size,  h  vertical size
 ##   roll  degrees about the tangent, for sections that are not axis-aligned
+##   to_base  bool — THE PATH CARRIES THIS RECT'S HEIGHT. See below.
 ##
+## ── `to_base`: the per-station height that makes a bulwark a bulwark ────────
+## A rect without it has a fixed `h` and rides the tangent: swept along a rising
+## path it stays the same size and simply tilts. That is right for a cap rail, a
+## rubbing strake, a pipe — everything whose section is genuinely constant.
+##
+## It is WRONG for plating, and plating is the load-bearing case. A bulwark is
+## not a constant-height band that happens to be lifted at the bow; it is a
+## sheet of steel standing on the deck whose TOP EDGE is the sheer and whose
+## bottom edge is the flat deck. Its height is 1.1 m amidships and 2.0 m at the
+## stem of the same run. There is no cross-section to sweep, because the section
+## is different at every station.
+##
+## `to_base` says so: the rect spans from the spec's `base_y` plane up to the
+## path, and the path's Y is the height. That is the whole generalisation
+## COMPONENTS.md asked for — "a cross-section extruded along a path, with the
+## path carrying per-station height" — and it is one key.
+##
+## Such a rect is also PLUMB: it stands vertical in world space and takes only
+## the run's yaw, exactly as a stanchion does, because plating stands up from a
+## deck rather than normal to the rail above it. Its `h` and `roll` are ignored;
+## its height per segment is taken at the segment's HIGHER end, so the band can
+## over-run into the cap above it but can never leave a slot under it.
+##
+
 ## Every one of these is a part COMPONENTS.md lists separately. They share one
 ## emitter and one test. Adding the eleventh is data.
 const PROFILE_LIBRARY: Dictionary = {
@@ -148,6 +209,30 @@ const PROFILE_LIBRARY: Dictionary = {
 	"toe_board": [{"u": 0.0, "v": 0.05, "w": 0.012, "h": 0.10}],
 }
 
+## The bulwark — the section the silhouette turns on — is deliberately NOT in
+## the library above, and the reason is the whole point of `to_base`: every
+## entry up there is a CONSTANT cross-section, and a bulwark does not have one.
+## Its plating is 1.1 m tall amidships and 2.0 m at the stem of the same run.
+## What is constant is its recipe, so the recipe is a function.
+##
+## The plate's top sits `overlap` above the path and the cap's underside sits ON
+## the path, so the plating always runs into the cap: two abutting solids may
+## not share a plane (JOINT_EPS, SKIN_EPS) and, more importantly, the plating's
+## per-segment step then has somewhere to hide. `sheer_samples_for` sizes the
+## sampling against the remaining headroom so the step never breaks back out
+## through the cap's top face.
+static func bulwark_profile(
+	plate_m: float = DEFAULT_BULWARK_PLATE_M,
+	cap_w: float = DEFAULT_CAP_WIDTH_M,
+	cap_h: float = DEFAULT_CAP_THICKNESS_M,
+	overlap: float = NAN,
+) -> Array:
+	var into_cap := (cap_h / 3.0) if is_nan(overlap) else overlap
+	return [
+		{"u": 0.0, "v": into_cap, "w": maxf(plate_m, 0.001), "to_base": true},
+		{"u": 0.0, "v": cap_h * 0.5, "w": maxf(cap_w, plate_m), "h": maxf(cap_h, 0.001)},
+	]
+
 
 # ── The primitive: a cross-section swept along a 3D polyline ─────────────────
 
@@ -163,9 +248,16 @@ const PROFILE_LIBRARY: Dictionary = {
 ##   color        Color for every rect that does not override it
 ##   material     StructureBaker.MATERIALS key, likewise
 ##   mitre        bool, default true — extend segments into their joints
+##   base_y       world Y of the plane a `to_base` rect stands on. REQUIRED as
+##                soon as any rect in the profile sets `to_base`; without it a
+##                bulwark would be built from the wrong deck.
+##   solid        bool, default true — read by `sweep_collider_boxes` only
 ##
-## Returns boxes {center, size, basis, color, material}. `size` is read in the
-## box's OWN frame, exactly as StructureBaker.wall_boxes documents.
+## Returns boxes {center, size, basis, color, material, segment}. `size` is read
+## in the box's OWN frame, exactly as StructureBaker.wall_boxes documents.
+## `segment` is the index of the path segment the box was emitted for; it is
+## what lets `sweep_collider_boxes` collide EXACTLY the geometry this drew
+## rather than a second, separately-derived approximation of it.
 static func sweep_boxes(spec: Dictionary) -> Array:
 	var path := _points_of(spec.get("path", []))
 	var offset := _vec3_of(spec.get("offset", Vector3.ZERO))
@@ -188,15 +280,29 @@ static func sweep_boxes(spec: Dictionary) -> Array:
 	var base_color := _color_of(spec.get("color", Color.WHITE))
 	var base_material := str(spec.get("material", "painted"))
 
+	var plan_segments: Array = []
 	var boxes: Array = []
 	for rect_variant in profile:
 		var rect := rect_variant as Dictionary
 		var w := float(rect.get("w", 0.0))
 		var h := float(rect.get("h", 0.0))
-		if w <= 0.0 or h <= 0.0:
-			continue
 		var color := _color_of(rect.get("color", base_color))
 		var material := str(rect.get("material", base_material))
+		if bool(rect.get("to_base", false)):
+			if not spec.has("base_y"):
+				push_error(
+					"StructureEdge: a `to_base` rect takes its height from the path "
+					+ "down to `base_y`, and this spec has no base_y"
+				)
+				continue
+			if plan_segments.is_empty():
+				plan_segments = _plan_segments(segments)
+			boxes.append_array(_plumb_boxes(
+				rect, segments, plan_segments, float(spec["base_y"]), mitre, color, material
+			))
+			continue
+		if w <= 0.0 or h <= 0.0:
+			continue
 		var roll := float(rect.get("roll", 0.0))
 		var u := float(rect.get("u", 0.0))
 		var v := float(rect.get("v", 0.0))
@@ -220,8 +326,70 @@ static func sweep_boxes(spec: Dictionary) -> Array:
 				"basis": Basis(right, up, tangent),
 				"color": color,
 				"material": material,
+				"segment": i,
 			})
 	return boxes
+
+
+## One plumb, per-station-height band — the `to_base` case, and the reason a
+## bulwark is not a bar. Vertical in WORLD space and carrying only the run's
+## yaw, so it maps 1:1 onto the yaw-only collider contract with nothing
+## approximated: what is drawn here IS what `sweep_collider_boxes` hands the
+## physics server.
+##
+## Height per segment is taken at the segment's HIGHER end. The other two
+## choices are both wrong and it is worth naming why, because the cheap one
+## looks right in a triangle count: the lower end leaves a slot of exactly the
+## segment's rise between the plating and the cap — a bulwark you can see the
+## sea through — and the midpoint leaves half of one. Over-running into the cap
+## is invisible; a slot is not.
+static func _plumb_boxes(
+	rect: Dictionary,
+	segments: Array,
+	plan_segments: Array,
+	base_y: float,
+	mitre: bool,
+	color: Color,
+	material: String,
+) -> Array:
+	var w := float(rect.get("w", 0.0))
+	if w <= 0.0:
+		return []
+	var u := float(rect.get("u", 0.0))
+	var v := float(rect.get("v", 0.0))
+	var out: Array = []
+	for i in segments.size():
+		var plan := plan_segments[i] as Dictionary
+		## A purely vertical segment has no plan run to stand a plate along.
+		if not plan.has("tangent"):
+			continue
+		var seg := segments[i] as Dictionary
+		var top := maxf((seg["a"] as Vector3).y, (seg["b"] as Vector3).y) + v
+		var height := top - base_y
+		if height <= 0.0:
+			continue
+		var tangent := plan["tangent"] as Vector3
+		var length := float(plan["length"])
+		var right := _frame(tangent, Vector3.UP)[0] as Vector3
+		var ext_start := 0.0
+		var ext_end := 0.0
+		if mitre:
+			## The turn is in the horizontal plane, so the section's reach into
+			## the joint is its lateral half-width and its height contributes
+			## nothing — pass 0 for `h` rather than let a 2 m tall plate mitre
+			## itself a metre past the corner.
+			ext_start = _mitre_extension(plan_segments, i, -1, w, 0.0, right, Vector3.UP, length)
+			ext_end = _mitre_extension(plan_segments, i, 1, w, 0.0, right, Vector3.UP, length)
+		var mid := (plan["a"] as Vector3) + tangent * (length * 0.5 + (ext_end - ext_start) * 0.5)
+		out.append({
+			"center": Vector3(mid.x, base_y + height * 0.5, mid.z) + right * u,
+			"size": Vector3(w, height, length + ext_start + ext_end),
+			"basis": _yaw_basis(tangent),
+			"color": color,
+			"material": material,
+			"segment": i,
+		})
+	return out
 
 
 ## The name PartCatalog.PRIMITIVES["sheer_band"].emitter resolves to. Identical
@@ -498,6 +666,178 @@ static func railing_collider_boxes(spec: Dictionary) -> Array:
 	return out
 
 
+## Colliders for ANY swept run, in the {center, size, yaw_deg} shape
+## `StructureBaker.collect_colliders` already returns.
+##
+## ── Why this cannot drift from what is drawn ────────────────────────────────
+## It calls `sweep_boxes` and colides the boxes that come back. There is no
+## second derivation of the geometry to keep in step, which is the mechanism
+## behind both of the walk-through bugs this project has already fixed: the
+## drawing and the collision were computed separately and one of them was
+## edited. Here, changing what a bulwark looks like changes what it feels like,
+## because they are the same array.
+##
+## ── What a sloping cap emits, and why that is honest ────────────────────────
+## The collider contract carries a YAW AND NO PITCH. A bulwark has two kinds of
+## box in it and they land differently:
+##
+##   • the plating is PLUMB and yaw-only already, so its collider is EXACT — the
+##     box handed to the physics server is the box that was drawn, to the last
+##     millimetre. That is the part a body actually walks into.
+##   • the cap rail rides the tangent and is therefore PITCHED by the sheer
+##     angle (7.3° at the stem of hull_28x10, and under 1° over most of the
+##     run). It has no field to put that pitch in.
+##
+## So each segment's collider is the YAW-FRAME BOUNDING BOX of every box drawn
+## on that segment. For the plating that is an identity. For the pitched cap it
+## grows the box by the pitch bulge — half the segment's rise, 16 mm at the
+## worst segment on the trawler — and it grows it OUTWARD in every axis. The
+## approximation is therefore strictly conservative: a point inside anything
+## drawn is inside the collider, and the test asserts exactly that over every
+## corner of every emitted box rather than trusting this paragraph.
+##
+## Emitting one un-rotated box around a pitched run is the alternative and it is
+## the defect `plan_collision_physics_test` exists to catch: it puts a phantom
+## slab out over the open deck. Bounding the pitch is the version that
+## over-covers by millimetres instead of by metres.
+##
+## `solid: false` opts a run out entirely, and a section thinner than
+## SWEEP_COLLIDER_MIN_M laterally opts itself out — see that constant for the
+## line it draws through PROFILE_LIBRARY.
+static func sweep_collider_boxes(spec: Dictionary) -> Array:
+	if not bool(spec.get("solid", true)):
+		return []
+	var boxes := sweep_boxes(spec)
+	if boxes.is_empty():
+		return []
+
+	var groups: Dictionary = {}
+	for box_variant in boxes:
+		var box := box_variant as Dictionary
+		var index := int(box.get("segment", 0))
+		if not groups.has(index):
+			groups[index] = []
+		(groups[index] as Array).append(box)
+	var order: Array = groups.keys()
+	order.sort()
+
+	var raw: Array = []
+	var widest := 0.0
+	for index in order:
+		var group := groups[index] as Array
+		var yaw := _yaw_of((group[0] as Dictionary).get("basis", Basis.IDENTITY) as Basis)
+		var frame := Basis(Vector3.UP, yaw)
+		var inverse := frame.transposed()
+		var low := Vector3.ZERO
+		var high := Vector3.ZERO
+		var first := true
+		for box_variant in group:
+			for corner in _corners(box_variant as Dictionary):
+				var local: Vector3 = inverse * corner
+				if first:
+					low = local
+					high = local
+					first = false
+				else:
+					low = low.min(local)
+					high = high.max(local)
+		var size := high - low
+		widest = maxf(widest, size.x)
+		raw.append({
+			"center": frame * ((low + high) * 0.5),
+			"size": size,
+			"yaw_deg": rad_to_deg(yaw),
+		})
+	if widest < SWEEP_COLLIDER_MIN_M:
+		return []
+	return _merge_colliders(raw, float(spec.get("collider_merge_m", COLLIDER_MERGE_M)))
+
+
+## Fold consecutive same-heading colliders together while the fold over-covers
+## by no more than `tolerance` in Y. A 90-segment sheer run down one side of a
+## hull is one heading for most of its length and its rise over that length is
+## tiny, so this is where the static-shape count comes back down; at the bow,
+## where every segment turns, nothing merges and nothing needs to.
+##
+## The bound is on the WHOLE accumulated run, not on the last pair. Comparing
+## pairwise lets a run of 0.03 m steps drift arbitrarily far from the geometry
+## it is supposed to hug, one acceptable step at a time.
+static func _merge_colliders(raw: Array, tolerance: float) -> Array:
+	if tolerance <= 0.0 or raw.size() < 2:
+		return raw
+	var out: Array = []
+	var tight_low := 0.0
+	var tight_high := 0.0
+	for box_variant in raw:
+		var box := box_variant as Dictionary
+		var centre := box["center"] as Vector3
+		var size := box["size"] as Vector3
+		var low := centre.y - size.y * 0.5
+		var high := centre.y + size.y * 0.5
+		if not out.is_empty():
+			var last := out[out.size() - 1] as Dictionary
+			if absf(float(last["yaw_deg"]) - float(box["yaw_deg"])) < 1e-4:
+				var merged := _union_in_yaw(last, box)
+				var merged_centre := merged["center"] as Vector3
+				var merged_size := merged["size"] as Vector3
+				var slack := (
+					(maxf(tight_low, low) - (merged_centre.y - merged_size.y * 0.5))
+					+ ((merged_centre.y + merged_size.y * 0.5) - minf(tight_high, high))
+				)
+				if slack <= tolerance:
+					out[out.size() - 1] = merged
+					tight_low = maxf(tight_low, low)
+					tight_high = minf(tight_high, high)
+					continue
+		out.append(box)
+		tight_low = low
+		tight_high = high
+	return out
+
+
+## Bounding box of two same-yaw colliders, expressed in their shared frame.
+static func _union_in_yaw(a: Dictionary, b: Dictionary) -> Dictionary:
+	var yaw := deg_to_rad(float(a["yaw_deg"]))
+	var frame := Basis(Vector3.UP, yaw)
+	var inverse := frame.transposed()
+	var low := Vector3.INF
+	var high := -Vector3.INF
+	for box in [a, b]:
+		var centre: Vector3 = inverse * ((box as Dictionary)["center"] as Vector3)
+		var half: Vector3 = ((box as Dictionary)["size"] as Vector3) * 0.5
+		low = low.min(centre - half)
+		high = high.max(centre + half)
+	return {
+		"center": frame * ((low + high) * 0.5),
+		"size": high - low,
+		"yaw_deg": float(a["yaw_deg"]),
+	}
+
+
+## The eight world-space corners of one emitted box.
+static func _corners(box: Dictionary) -> Array:
+	var centre := box["center"] as Vector3
+	var half := (box["size"] as Vector3) * 0.5
+	var basis := box.get("basis", Basis.IDENTITY) as Basis
+	var out: Array = []
+	for sx in [-1.0, 1.0]:
+		for sy in [-1.0, 1.0]:
+			for sz in [-1.0, 1.0]:
+				out.append(centre + basis * Vector3(half.x * sx, half.y * sy, half.z * sz))
+	return out
+
+
+## Plan heading of a box's own frame. Both emitters put the run's tangent on the
+## basis's Z, so this reads the same heading off a plumb band and off a pitched
+## cap swept over the same segment — which is what lets the two share one
+## collider.
+static func _yaw_of(basis: Basis) -> float:
+	var forward := basis.z
+	if Vector2(forward.x, forward.z).length_squared() < 1e-12:
+		return 0.0
+	return atan2(forward.x, forward.z)
+
+
 # ── Consuming HullStations: the sheer curve, applied at last ────────────────
 
 ## Deck-edge half-beam at ship-local `z`, linearly interpolated between the two
@@ -590,6 +930,118 @@ static func sheer_loop(
 	for i in range(port.size() - 1, -1, -1):
 		out.append(port[i])
 	return _dedupe(out)
+
+
+# ── The bulwark: the sheer curve, drawn and collided ────────────────────────
+
+## How finely a hull's sheer must be sampled for a plumb band to hide its own
+## steps under a cap `cap_headroom_m` thick.
+##
+## DERIVED, and this is the point. `sheer_rise_at` is rise·(|z|/(L/2))², so
+##     |d(rise)/dz| = 2·rise_end·|z| / (L/2)²    which peaks at 2·rise_end/(L/2)
+## at the very ends of the hull. A segment of length `dz` therefore rises by at
+## most `slope·dz`, and the plumb band's step — the amount it over-runs the true
+## curve at the low end of its own segment — is exactly that. Keep it under the
+## cap's headroom and the step is buried inside the cap on every hull, at every
+## size, with nobody choosing a sample count.
+##
+## Floored at PLAN_SAMPLE_M so a flat-sheer hull still resolves its bow taper.
+static func sheer_samples_for(stations: HullStations, cap_headroom_m: float) -> int:
+	if stations == null or stations.length_m <= 0.0:
+		return 2
+	var plan_floor := int(ceil(stations.length_m / PLAN_SAMPLE_M)) + 1
+	var rise := maxf(stations.sheer_forward_m, stations.sheer_aft_m)
+	var headroom := maxf(cap_headroom_m, 1e-4)
+	if rise <= 0.0:
+		return maxi(plan_floor, 2)
+	var slope := 2.0 * rise / maxf(stations.length_m * 0.5, 0.001)
+	var step := headroom / slope
+	return maxi(maxi(int(ceil(stations.length_m / step)) + 1, plan_floor), 2)
+
+
+## The whole bulwark for one hull, as a `sweep_boxes` spec. Feed it to
+## `sheer_band_boxes` to draw and to `sweep_collider_boxes` to collide.
+##
+## ── What is authored and what is derived ────────────────────────────────────
+## Authored: `height`, the cap height amidships, which is a fall-barrier
+## dimension set by the 1.8 m figure and is the same on a 28 m trawler and a
+## 150 m freighter. Plus the section — plate 100 mm, cap 220 x 60 — which is
+## what steel plate and a capping rail measure.
+##
+## Derived per hull, from catalog fields, with no per-hull number anywhere:
+##   • the sheer curve itself — `HullStations.sheer_cap_y_at`, which is
+##     freeboard × the form's own bow/stern keel rise. Retune `fine_entry` and
+##     every fine-entry hull's sheer moves with it. A full-bodied freighter
+##     (0.18/0.05) stays nearly flat and a trawler (0.32/0.10) gets a marked
+##     curve, which is what those ships look like.
+##   • the deck-edge plan line — `deck_half_beam_at`, read at the BAND's own
+##     height so a flared hull's bulwark follows the section it stands on.
+##   • the sampling — `sheer_samples_for`, from the hull's own sheer slope.
+##   • the plating's inset — half its thickness, so its outboard face is flush
+##     with the shell and hull and bulwark read as one body. The cap then
+##     overhangs both faces by 60 mm, as a capping rail does.
+##
+## `opts` keys, all optional: height, plate_m, cap_w, cap_h, side
+## ("loop" | "port" | "starboard"), material, plate_color, cap_color, base_y,
+## follow_sheer, solid, samples.
+##
+## `follow_sheer: false` is the CONTROL, not a style: it holds the cap at a
+## constant height and produces exactly the bar the silhouette reads as today.
+## It exists so the difference can be photographed side by side rather than
+## argued about.
+static func sheer_bulwark_spec(stations: HullStations, opts: Dictionary = {}) -> Dictionary:
+	if stations == null or stations.stations.is_empty():
+		push_error("StructureEdge.sheer_bulwark_spec: no stations")
+		return {}
+	var height := float(opts.get("height", DEFAULT_BULWARK_HEIGHT))
+	var plate := maxf(float(opts.get("plate_m", DEFAULT_BULWARK_PLATE_M)), 0.001)
+	var cap_w := maxf(float(opts.get("cap_w", DEFAULT_CAP_WIDTH_M)), plate)
+	var cap_h := maxf(float(opts.get("cap_h", DEFAULT_CAP_THICKNESS_M)), 0.001)
+	var follow := bool(opts.get("follow_sheer", true))
+	var base_y := float(opts.get("base_y", stations.deck_y))
+	var material := str(opts.get("material", "painted"))
+
+	## The plating runs a third of the cap's thickness into it, leaving two
+	## thirds as the headroom the sampling is then solved against.
+	var overlap := cap_h / 3.0
+	var samples := int(opts.get("samples", sheer_samples_for(stations, cap_h - overlap)))
+
+	var profile := bulwark_profile(plate, cap_w, cap_h, overlap)
+	## Colour is FREE — it rides in the vertex stream and the bake buckets on
+	## material alone. Spend it here: plating in the topsides colour and the cap
+	## in a contrasting one means the eye reads hull and bulwark as ONE body
+	## whose top edge is the sheer, instead of as a hull with a pale bar sitting
+	## on it. That is a colour decision doing silhouette work, and it costs
+	## nothing but two vertex attributes.
+	(profile[0] as Dictionary)["color"] = _color_of(
+		opts.get("plate_color", Color(0.13, 0.15, 0.18))
+	)
+	(profile[1] as Dictionary)["color"] = _color_of(
+		opts.get("cap_color", Color(0.86, 0.87, 0.88))
+	)
+
+	var side := str(opts.get("side", "loop"))
+	var inset := plate * 0.5
+	var path: PackedVector3Array
+	var closed := false
+	match side:
+		"port":
+			path = sheer_path(stations, -1.0, samples, inset, height, follow)
+		"starboard":
+			path = sheer_path(stations, 1.0, samples, inset, height, follow)
+		_:
+			path = sheer_loop(stations, samples, inset, height, follow)
+			closed = true
+
+	return {
+		"path": path,
+		"closed": closed,
+		"profile": profile,
+		"base_y": base_y,
+		"material": material,
+		"solid": bool(opts.get("solid", true)),
+		"samples": samples,
+	}
 
 
 # ── Measurement ─────────────────────────────────────────────────────────────
@@ -708,6 +1160,32 @@ static func _segments_of(path: PackedVector3Array, closed: bool) -> Array:
 	return out
 
 
+## The same segments flattened onto the deck plane — the frame a plumb band
+## stands in. Index-parallel to `_segments_of`'s output so a caller can walk
+## both together; a segment with no plan run (a vertical riser) becomes an EMPTY
+## dictionary rather than disappearing, which would silently shift every index
+## after it and mis-mitre the rest of the run.
+static func _plan_segments(segments: Array) -> Array:
+	var out: Array = []
+	for seg_variant in segments:
+		var seg := seg_variant as Dictionary
+		var a := seg["a"] as Vector3
+		var b := seg["b"] as Vector3
+		var flat_a := Vector3(a.x, 0.0, a.z)
+		var delta := Vector3(b.x - a.x, 0.0, b.z - a.z)
+		var length := delta.length()
+		if length < MIN_SEGMENT_M:
+			out.append({})
+			continue
+		out.append({
+			"a": flat_a,
+			"b": Vector3(b.x, 0.0, b.z),
+			"tangent": delta / length,
+			"length": length,
+		})
+	return out
+
+
 ## Mitre extension at one end of segment `i`. `direction` is -1 for the start
 ## end, +1 for the finish end.
 ##
@@ -740,6 +1218,13 @@ static func _mitre_extension(
 	if neighbour < 0 or neighbour >= count:
 		## An open run's outer ends are butt ends: nothing to mitre into.
 		return 0.0
+	## Plan-projected runs (see `_plan_segments`) can carry an empty entry where
+	## a segment is purely vertical. There is no direction to mitre against, so
+	## the joint gets the overlap floor and nothing more.
+	if not (segments[i] as Dictionary).has("tangent"):
+		return 0.0
+	if not (segments[neighbour] as Dictionary).has("tangent"):
+		return JOINT_EPS
 	var here := (segments[i] as Dictionary)["tangent"] as Vector3
 	var there := (segments[neighbour] as Dictionary)["tangent"] as Vector3
 	var deviation := acos(clampf(here.dot(there), -1.0, 1.0))

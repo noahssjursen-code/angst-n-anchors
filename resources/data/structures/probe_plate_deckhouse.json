@@ -1,0 +1,1008 @@
+{
+	"format": "structure_plan_v1",
+	"context": "vessel",
+	"hull_id": "hull_28x10",
+	"_note": "THE SLOPED PLATE, the primitive that replaced the room. Rooms were deleted because an axis-aligned box that expands to four walls, a floor and a ceiling can only draw a shed. Everything above the deck here is ONE primitive - a quad with four independent 3D corners and a thickness - differing only in numbers: a lower tier tapered in plan and tumbled home with a front that overhangs 0.45 m; a wheelhouse SET BACK on all four sides with a 0.85 m forward-raked windscreen, a reverse-raked aft bulkhead and a roof sloping 0.25 m down aft; a funnel of four tapering plates raked aft under a black cap; a bulwark knuckle flaring 0.30 m outboard; and a raked transom. 18 plates, 24 openings, no boxes. The bulwarks and cap rails below are the existing wall/deck primitives, unchanged, so the deckhouse is the only thing under test. Bow is -Z, so plan z=0 is the stem and the 45 degree taper occupies z=0..5.",
+	"palette": {
+		"wall": [
+			0.85,
+			0.86,
+			0.88
+		],
+		"deck": [
+			0.33,
+			0.31,
+			0.29
+		]
+	},
+	"walls": [
+		{
+			"id": 1,
+			"start": [
+				0.3,
+				0,
+				5
+			],
+			"axis": "z",
+			"length": 21.5,
+			"height": 0.95,
+			"thickness": 0.2,
+			"openings": []
+		},
+		{
+			"id": 2,
+			"start": [
+				9.7,
+				0,
+				5
+			],
+			"axis": "z",
+			"length": 21.5,
+			"height": 0.95,
+			"thickness": 0.2,
+			"openings": []
+		}
+	],
+	"decks": [],
+	"stairs": [],
+	"items": [
+		{
+			"id": 100,
+			"item_id": "plate",
+			"at": [
+				5.0,
+				0.0,
+				0.0
+			],
+			"yaw": 0.0,
+			"props": {
+				"__is": "lower tier, raked front - top overhangs 0.45 m forward of its foot",
+				"primitive": "plate",
+				"corners": [
+					[
+						2.6,
+						0.0,
+						15.0
+					],
+					[
+						-2.6,
+						0.0,
+						15.0
+					],
+					[
+						-2.45,
+						2.4,
+						14.55
+					],
+					[
+						2.45,
+						2.4,
+						14.55
+					]
+				],
+				"thickness": 0.09,
+				"color": [
+					0.9,
+					0.9,
+					0.88
+				],
+				"material": "painted",
+				"openings": [
+					{
+						"type": "window",
+						"offset": 1.35,
+						"width": 0.75,
+						"sill": 1.3,
+						"height": 0.6
+					},
+					{
+						"type": "window",
+						"offset": 3.05,
+						"width": 0.75,
+						"sill": 1.3,
+						"height": 0.6
+					}
+				]
+			}
+		},
+		{
+			"id": 101,
+			"item_id": "plate",
+			"at": [
+				5.0,
+				0.0,
+				0.0
+			],
+			"yaw": 0.0,
+			"props": {
+				"__is": "lower tier, port side - tapered in plan and tumbled home",
+				"primitive": "plate",
+				"corners": [
+					[
+						-2.6,
+						0.0,
+						15.0
+					],
+					[
+						-2.9,
+						0.0,
+						24.4
+					],
+					[
+						-2.7,
+						2.4,
+						24.25
+					],
+					[
+						-2.45,
+						2.4,
+						14.55
+					]
+				],
+				"thickness": 0.09,
+				"color": [
+					0.9,
+					0.9,
+					0.88
+				],
+				"material": "painted",
+				"openings": [
+					{
+						"type": "window",
+						"offset": 1.6,
+						"width": 0.7,
+						"sill": 1.15,
+						"height": 0.7
+					},
+					{
+						"type": "window",
+						"offset": 3.2,
+						"width": 0.7,
+						"sill": 1.15,
+						"height": 0.7
+					},
+					{
+						"type": "window",
+						"offset": 4.8,
+						"width": 0.7,
+						"sill": 1.15,
+						"height": 0.7
+					},
+					{
+						"type": "door",
+						"offset": 6.6,
+						"width": 0.85,
+						"sill": 0.0,
+						"height": 1.95
+					}
+				]
+			}
+		},
+		{
+			"id": 102,
+			"item_id": "plate",
+			"at": [
+				5.0,
+				0.0,
+				0.0
+			],
+			"yaw": 0.0,
+			"props": {
+				"__is": "lower tier, starboard side",
+				"primitive": "plate",
+				"corners": [
+					[
+						2.9,
+						0.0,
+						24.4
+					],
+					[
+						2.6,
+						0.0,
+						15.0
+					],
+					[
+						2.45,
+						2.4,
+						14.55
+					],
+					[
+						2.7,
+						2.4,
+						24.25
+					]
+				],
+				"thickness": 0.09,
+				"color": [
+					0.9,
+					0.9,
+					0.88
+				],
+				"material": "painted",
+				"openings": [
+					{
+						"type": "window",
+						"offset": 2.1,
+						"width": 0.7,
+						"sill": 1.15,
+						"height": 0.7
+					},
+					{
+						"type": "window",
+						"offset": 3.7,
+						"width": 0.7,
+						"sill": 1.15,
+						"height": 0.7
+					},
+					{
+						"type": "window",
+						"offset": 5.3,
+						"width": 0.7,
+						"sill": 1.15,
+						"height": 0.7
+					},
+					{
+						"type": "door",
+						"offset": 7.05,
+						"width": 0.85,
+						"sill": 0.0,
+						"height": 1.95
+					}
+				]
+			}
+		},
+		{
+			"id": 103,
+			"item_id": "plate",
+			"at": [
+				5.0,
+				0.0,
+				0.0
+			],
+			"yaw": 0.0,
+			"props": {
+				"__is": "lower tier, aft bulkhead with the deck door",
+				"primitive": "plate",
+				"corners": [
+					[
+						-2.9,
+						0.0,
+						24.4
+					],
+					[
+						2.9,
+						0.0,
+						24.4
+					],
+					[
+						2.7,
+						2.4,
+						24.25
+					],
+					[
+						-2.7,
+						2.4,
+						24.25
+					]
+				],
+				"thickness": 0.09,
+				"color": [
+					0.9,
+					0.9,
+					0.88
+				],
+				"material": "painted",
+				"openings": [
+					{
+						"type": "door",
+						"offset": 2.4,
+						"width": 1.1,
+						"sill": 0.0,
+						"height": 1.95
+					}
+				]
+			}
+		},
+		{
+			"id": 104,
+			"item_id": "plate",
+			"at": [
+				5.0,
+				0.0,
+				0.0
+			],
+			"yaw": 0.0,
+			"props": {
+				"__is": "boat deck - the lower tier's roof and the wheelhouse's floor",
+				"primitive": "plate",
+				"corners": [
+					[
+						-2.59,
+						2.4,
+						14.41
+					],
+					[
+						-2.84,
+						2.4,
+						24.39
+					],
+					[
+						2.84,
+						2.4,
+						24.39
+					],
+					[
+						2.59,
+						2.4,
+						14.41
+					]
+				],
+				"thickness": 0.12,
+				"color": [
+					0.36,
+					0.38,
+					0.4
+				],
+				"material": "painted"
+			}
+		},
+		{
+			"id": 105,
+			"item_id": "plate",
+			"at": [
+				5.0,
+				0.0,
+				0.0
+			],
+			"yaw": 0.0,
+			"props": {
+				"__is": "wheelhouse, RAKED WINDSCREEN - wraparound glass, top 0.85 m forward of its foot",
+				"primitive": "plate",
+				"corners": [
+					[
+						2.15,
+						2.4,
+						17.4
+					],
+					[
+						-2.15,
+						2.4,
+						17.4
+					],
+					[
+						-2.0,
+						4.8,
+						16.55
+					],
+					[
+						2.0,
+						4.8,
+						16.55
+					]
+				],
+				"thickness": 0.09,
+				"color": [
+					0.9,
+					0.9,
+					0.88
+				],
+				"material": "painted",
+				"openings": [
+					{
+						"type": "window",
+						"offset": 0.35,
+						"width": 1.1,
+						"sill": 0.95,
+						"height": 1.05
+					},
+					{
+						"type": "window",
+						"offset": 1.55,
+						"width": 1.05,
+						"sill": 0.95,
+						"height": 1.05
+					},
+					{
+						"type": "window",
+						"offset": 2.7,
+						"width": 1.1,
+						"sill": 0.95,
+						"height": 1.05
+					}
+				]
+			}
+		},
+		{
+			"id": 106,
+			"item_id": "plate",
+			"at": [
+				5.0,
+				0.0,
+				0.0
+			],
+			"yaw": 0.0,
+			"props": {
+				"__is": "wheelhouse, port side - bridge wing door aft, side glass forward",
+				"primitive": "plate",
+				"corners": [
+					[
+						-2.15,
+						2.4,
+						17.4
+					],
+					[
+						-2.3,
+						2.4,
+						22.2
+					],
+					[
+						-2.15,
+						4.55,
+						22.5
+					],
+					[
+						-2.0,
+						4.8,
+						16.55
+					]
+				],
+				"thickness": 0.09,
+				"color": [
+					0.9,
+					0.9,
+					0.88
+				],
+				"material": "painted",
+				"openings": [
+					{
+						"type": "window",
+						"offset": 0.5,
+						"width": 1.15,
+						"sill": 0.95,
+						"height": 1.05
+					},
+					{
+						"type": "window",
+						"offset": 1.85,
+						"width": 1.15,
+						"sill": 0.95,
+						"height": 1.05
+					},
+					{
+						"type": "window",
+						"offset": 3.2,
+						"width": 0.85,
+						"sill": 0.95,
+						"height": 1.05
+					},
+					{
+						"type": "door",
+						"offset": 4.35,
+						"width": 0.8,
+						"sill": 0.0,
+						"height": 1.95
+					}
+				]
+			}
+		},
+		{
+			"id": 107,
+			"item_id": "plate",
+			"at": [
+				5.0,
+				0.0,
+				0.0
+			],
+			"yaw": 0.0,
+			"props": {
+				"__is": "wheelhouse, starboard side",
+				"primitive": "plate",
+				"corners": [
+					[
+						2.3,
+						2.4,
+						22.2
+					],
+					[
+						2.15,
+						2.4,
+						17.4
+					],
+					[
+						2.0,
+						4.8,
+						16.55
+					],
+					[
+						2.15,
+						4.55,
+						22.5
+					]
+				],
+				"thickness": 0.09,
+				"color": [
+					0.9,
+					0.9,
+					0.88
+				],
+				"material": "painted",
+				"openings": [
+					{
+						"type": "window",
+						"offset": 0.6,
+						"width": 0.85,
+						"sill": 0.95,
+						"height": 1.05
+					},
+					{
+						"type": "window",
+						"offset": 1.75,
+						"width": 1.15,
+						"sill": 0.95,
+						"height": 1.05
+					},
+					{
+						"type": "window",
+						"offset": 3.1,
+						"width": 1.15,
+						"sill": 0.95,
+						"height": 1.05
+					},
+					{
+						"type": "door",
+						"offset": 4.4,
+						"width": 0.8,
+						"sill": 0.0,
+						"height": 1.95
+					}
+				]
+			}
+		},
+		{
+			"id": 108,
+			"item_id": "plate",
+			"at": [
+				5.0,
+				0.0,
+				0.0
+			],
+			"yaw": 0.0,
+			"props": {
+				"__is": "wheelhouse, aft bulkhead - reverse rake",
+				"primitive": "plate",
+				"corners": [
+					[
+						-2.3,
+						2.4,
+						22.2
+					],
+					[
+						2.3,
+						2.4,
+						22.2
+					],
+					[
+						2.15,
+						4.55,
+						22.5
+					],
+					[
+						-2.15,
+						4.55,
+						22.5
+					]
+				],
+				"thickness": 0.09,
+				"color": [
+					0.9,
+					0.9,
+					0.88
+				],
+				"material": "painted",
+				"openings": [
+					{
+						"type": "window",
+						"offset": 1.2,
+						"width": 1.0,
+						"sill": 0.95,
+						"height": 1.05
+					},
+					{
+						"type": "window",
+						"offset": 2.75,
+						"width": 1.0,
+						"sill": 0.95,
+						"height": 1.05
+					}
+				]
+			}
+		},
+		{
+			"id": 109,
+			"item_id": "plate",
+			"at": [
+				5.0,
+				0.0,
+				0.0
+			],
+			"yaw": 0.0,
+			"props": {
+				"__is": "wheelhouse roof - SLOPED, 0.25 m down from stem to aft, eaves all round",
+				"primitive": "plate",
+				"corners": [
+					[
+						-2.16,
+						4.8,
+						16.39
+					],
+					[
+						-2.31,
+						4.55,
+						22.66
+					],
+					[
+						2.31,
+						4.55,
+						22.66
+					],
+					[
+						2.16,
+						4.8,
+						16.39
+					]
+				],
+				"thickness": 0.1,
+				"color": [
+					0.29,
+					0.31,
+					0.33
+				],
+				"material": "painted"
+			}
+		},
+		{
+			"id": 110,
+			"item_id": "plate",
+			"at": [
+				5.0,
+				0.0,
+				0.0
+			],
+			"yaw": 0.0,
+			"props": {
+				"__is": "funnel, forward face - tapered and raked aft",
+				"primitive": "plate",
+				"corners": [
+					[
+						0.64,
+						2.4,
+						22.9
+					],
+					[
+						-0.64,
+						2.4,
+						22.9
+					],
+					[
+						-0.5,
+						5.0,
+						23.35
+					],
+					[
+						0.5,
+						5.0,
+						23.35
+					]
+				],
+				"thickness": 0.06,
+				"color": [
+					0.7,
+					0.24,
+					0.2
+				],
+				"material": "painted"
+			}
+		},
+		{
+			"id": 111,
+			"item_id": "plate",
+			"at": [
+				5.0,
+				0.0,
+				0.0
+			],
+			"yaw": 0.0,
+			"props": {
+				"__is": "funnel, port face",
+				"primitive": "plate",
+				"corners": [
+					[
+						-0.64,
+						2.4,
+						22.9
+					],
+					[
+						-0.64,
+						2.4,
+						23.85
+					],
+					[
+						-0.5,
+						5.0,
+						24.3
+					],
+					[
+						-0.5,
+						5.0,
+						23.35
+					]
+				],
+				"thickness": 0.06,
+				"color": [
+					0.7,
+					0.24,
+					0.2
+				],
+				"material": "painted"
+			}
+		},
+		{
+			"id": 112,
+			"item_id": "plate",
+			"at": [
+				5.0,
+				0.0,
+				0.0
+			],
+			"yaw": 0.0,
+			"props": {
+				"__is": "funnel, starboard face",
+				"primitive": "plate",
+				"corners": [
+					[
+						0.64,
+						2.4,
+						23.85
+					],
+					[
+						0.64,
+						2.4,
+						22.9
+					],
+					[
+						0.5,
+						5.0,
+						23.35
+					],
+					[
+						0.5,
+						5.0,
+						24.3
+					]
+				],
+				"thickness": 0.06,
+				"color": [
+					0.7,
+					0.24,
+					0.2
+				],
+				"material": "painted"
+			}
+		},
+		{
+			"id": 113,
+			"item_id": "plate",
+			"at": [
+				5.0,
+				0.0,
+				0.0
+			],
+			"yaw": 0.0,
+			"props": {
+				"__is": "funnel, aft face",
+				"primitive": "plate",
+				"corners": [
+					[
+						-0.64,
+						2.4,
+						23.85
+					],
+					[
+						0.64,
+						2.4,
+						23.85
+					],
+					[
+						0.5,
+						5.0,
+						24.3
+					],
+					[
+						-0.5,
+						5.0,
+						24.3
+					]
+				],
+				"thickness": 0.06,
+				"color": [
+					0.7,
+					0.24,
+					0.2
+				],
+				"material": "painted"
+			}
+		},
+		{
+			"id": 114,
+			"item_id": "plate",
+			"at": [
+				5.0,
+				0.0,
+				0.0
+			],
+			"yaw": 0.0,
+			"props": {
+				"__is": "funnel cap - a black top, because colour is free",
+				"primitive": "plate",
+				"corners": [
+					[
+						-0.56,
+						5.0,
+						23.29
+					],
+					[
+						-0.56,
+						5.0,
+						24.36
+					],
+					[
+						0.56,
+						5.0,
+						24.36
+					],
+					[
+						0.56,
+						5.0,
+						23.29
+					]
+				],
+				"thickness": 0.08,
+				"color": [
+					0.13,
+					0.13,
+					0.14
+				],
+				"material": "painted"
+			}
+		},
+		{
+			"id": 115,
+			"item_id": "plate",
+			"at": [
+				5.0,
+				0.0,
+				0.0
+			],
+			"yaw": 0.0,
+			"props": {
+				"__is": "port bulwark KNUCKLE - the cap flares 0.40 m outboard over its last 0.45 m of rise. A wall cannot lean, which is why this is a plate",
+				"primitive": "plate",
+				"corners": [
+					[
+						-4.55,
+						0.9,
+						5.0
+					],
+					[
+						-4.55,
+						0.9,
+						26.5
+					],
+					[
+						-4.95,
+						1.35,
+						26.5
+					],
+					[
+						-4.95,
+						1.35,
+						5.0
+					]
+				],
+				"thickness": 0.07,
+				"color": [
+					0.55,
+					0.57,
+					0.59
+				],
+				"material": "painted"
+			}
+		},
+		{
+			"id": 116,
+			"item_id": "plate",
+			"at": [
+				5.0,
+				0.0,
+				0.0
+			],
+			"yaw": 0.0,
+			"props": {
+				"__is": "starboard bulwark knuckle",
+				"primitive": "plate",
+				"corners": [
+					[
+						4.55,
+						0.9,
+						26.5
+					],
+					[
+						4.55,
+						0.9,
+						5.0
+					],
+					[
+						4.95,
+						1.35,
+						5.0
+					],
+					[
+						4.95,
+						1.35,
+						26.5
+					]
+				],
+				"thickness": 0.07,
+				"color": [
+					0.55,
+					0.57,
+					0.59
+				],
+				"material": "painted"
+			}
+		},
+		{
+			"id": 117,
+			"item_id": "plate",
+			"at": [
+				5.0,
+				0.0,
+				0.0
+			],
+			"yaw": 0.0,
+			"props": {
+				"__is": "TRANSOM RAKE - the stern leans 0.80 m aft over its 1.35 m of height",
+				"primitive": "plate",
+				"corners": [
+					[
+						-4.55,
+						0.0,
+						26.5
+					],
+					[
+						4.55,
+						0.0,
+						26.5
+					],
+					[
+						4.95,
+						1.35,
+						27.3
+					],
+					[
+						-4.95,
+						1.35,
+						27.3
+					]
+				],
+				"thickness": 0.1,
+				"color": [
+					0.55,
+					0.57,
+					0.59
+				],
+				"material": "painted"
+			}
+		}
+	]
+}
