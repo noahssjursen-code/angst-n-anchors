@@ -2,7 +2,7 @@
  "format": "structure_plan_v1",
  "context": "vessel",
  "hull_id": "hull_28x10",
- "_note": "REBUILT 2026-08-10, after the room purge took the deckhouse. Three things changed and they are all silhouette:\n\n1. THE BULWARK IS NOW ONE `edges[]` SHEER BAND, not three walls plus three cap-rail decks. The cap carries the curve, which is where sheer has to live: the loft may not draw it (deck_y is the floor of the deck plate, the DeckGrid, the walk slab and the buoyancy lever - see hull_stations.gd). The PLAN line is the hull's own deck edge, measured off StructureEdge.deck_half_beam_at: half-beam 1.12*z to z=4, 4.48+0.13*(z-4) to z=8, 5.0 aft of that, at every height above the deck.\n\n2. THE SHEER IS AUTHORED, AND THAT IS DELIBERATE. `sheer_bulwark_spec` derives it from the hull - freeboard x fine_entry's bow_keel_rise - and that gives 0.896 m forward, 0.28 m aft, with the low point exactly AMIDSHIPS because sheer_rise_at is symmetric in |z|. On a 28 m hull that reads as polite. A working boat's sheer is asymmetric: the low point sits about two thirds aft and the stem lifts several times what the transom does. This path puts the low point at z=18.5 (66% aft) with 1.60 m of rise forward and 0.33 m aft - a ratio of 4.8:1 against the derived 3.2:1, and 1.6x the Load Line Convention's standard forward sheer for this length (50*(L/3+10) mm = 0.966 m). The bulwark is 1.05 m at the low point, which is the fall-barrier dimension the 1.8 m figure sets and is NOT authored down; it is 2.65 m at the stem, which is what keeps a foredeck dry. `sheer_bulwark_spec` has no knob that scales the derived curve, so an authored path is the only way to say this from data. If one is added, this path should go back to `from_hull`.\n\n3. COLOUR DOES VALUE WORK, FOR FREE. The bucket key is material alone, so every colour here rides in the vertex stream: dark navy plating that merges into the hull's own topsides, an ochre sheer stripe standing 24 mm proud as the deliberate paint boundary, a bone cap rail so the curve itself is the lightest line on the hull, a cream deckhouse against a dark grey boat deck, and near-black glass bands. Squinted, that is four values instead of one.\n\nTHE DECKHOUSE IS RAKED PLATES, NEVER A BOX. A lower tier tapered in plan, tumbled home, with a front that overhangs 0.55 m forward; a wheelhouse SET BACK on all four sides with a 0.85 m forward-raked windscreen, a reverse-raked aft bulkhead and a roof sloping 0.30 m down aft; four tapering funnel plates raked aft under a black cap. The wheelhouse's windows are BANDS - a dark plate between a coaming and a header - because at capture distance a dark value reads as glass and a punched hole reads as a hole; the lower tier gets real openings and their proud casing instead, so both routes are exercised.\n\nTHE 52-ITEM RIG IS KEPT AND RE-BELAYED. The aft signal mast and the sidelights stood on the old deckhouse and now stand on the wheelhouse roof and its wings; the exhaust comes out of the funnel top instead of out of the air; the derrick heels to the mast at boat-deck height; the shrouds and the three fender lanyards land on the SWEPT cap, so their ends move with the curve; the forestay runs to the stemhead cap rather than to a samson post the 2.65 m bow bulwark would have hidden. A line to nowhere is the one thing a rig may not have.\n\nBOW CLOSED: this fixture's sheer band runs the whole LOOP, stem included, so the bulwark closes across the stem head and a body cannot walk out over the water there. Its pair, probe_trawler_bulwark, stops the run at z=5 and leaves the bow open on purpose; that is the entire difference between the two files. The stem is now a curve rather than the two straight 45 degree walls it used to be, because the sheer band follows the hull's own deck edge.",
+ "_note": "REBUILT 2026-08-10, after the room purge took the deckhouse. Three things changed and they are all silhouette:\n\n1. THE BULWARK IS NOW ONE `edges[]` SHEER BAND, not three walls plus three cap-rail decks. The cap carries the curve, which is where sheer has to live: the loft may not draw it (deck_y is the floor of the deck plate, the DeckGrid, the walk slab and the buoyancy lever - see hull_stations.gd). The PLAN line is the hull's own deck edge, measured off StructureEdge.deck_half_beam_at: half-beam 1.12*z to z=4, 4.48+0.13*(z-4) to z=8, 5.0 aft of that, at every height above the deck.\n\n2. THE SHEER IS AUTHORED, AND THAT IS DELIBERATE. `sheer_bulwark_spec` derives it from the hull - freeboard x fine_entry's bow_keel_rise - and that gives 0.896 m forward, 0.28 m aft, with the low point exactly AMIDSHIPS because sheer_rise_at is symmetric in |z|. On a 28 m hull that reads as polite. A working boat's sheer is asymmetric: the low point sits about two thirds aft and the stem lifts several times what the transom does. This path puts the low point at z=18.5 (66% aft) with 1.60 m of rise forward and 0.33 m aft - a ratio of 4.8:1 against the derived 3.2:1, and 1.6x the Load Line Convention's standard forward sheer for this length (50*(L/3+10) mm = 0.966 m). The bulwark is 1.05 m at the low point, which is the fall-barrier dimension the 1.8 m figure sets and is NOT authored down; it is 2.65 m at the stem, which is what keeps a foredeck dry. `sheer_bulwark_spec` has no knob that scales the derived curve, so an authored path is the only way to say this from data. If one is added, this path should go back to `from_hull`.\n\n3. COLOUR DOES VALUE WORK, FOR FREE. The bucket key is material alone, so every colour here rides in the vertex stream: dark navy plating that merges into the hull's own topsides, an ochre sheer stripe standing 24 mm proud as the deliberate paint boundary, a bone cap rail so the curve itself is the lightest line on the hull, a cream deckhouse against a dark grey boat deck, and near-black glass bands. Squinted, that is four values instead of one.\n\nTHE DECKHOUSE IS RAKED PLATES, NEVER A BOX. A lower tier tapered in plan, tumbled home, with a front that overhangs 0.55 m forward; a wheelhouse SET BACK on all four sides with a 0.85 m forward-raked windscreen, a reverse-raked aft bulkhead and a roof sloping 0.30 m down aft; four tapering funnel plates raked aft under a black cap. The wheelhouse's windows are BANDS - a dark plate between a coaming and a header - because at capture distance a dark value reads as glass and a punched hole reads as a hole; the lower tier gets real openings and their proud casing instead, so both routes are exercised.\n\nTHE 52-ITEM RIG IS KEPT AND RE-BELAYED. The aft signal mast and the sidelights stood on the old deckhouse and now stand on the wheelhouse roof and its wings; the exhaust comes out of the funnel top instead of out of the air; the derrick heels to the mast at boat-deck height; the shrouds and the three fender lanyards land on the SWEPT cap, so their ends move with the curve; the samson post grew from 1.35 m to 1.90 m because the bow bulwark it stands in is 1.48 m and would have swallowed the old one, and the forestay is made fast to its head. Both masts now RAKE AFT and everything carried on one is solved from the rake rather than restated. A line to nowhere is the one thing a rig may not have.\n\nTHE BREAKWATER is four 45 degree walls, and it is the one piece of this fixture with a second, uncomfortable reason to exist: scripts/apps/structure_studio.gd's self-check reads FOUR DIAGONALS off this file to prove it bounds a raked wall in world space, and those used to be the bow stem walls the sheer band replaced. It is a real fitting - a V across an open working deck throws a boarding sea outboard before it reaches the winch - so it is here as one, not as a stub. The coupling is still wrong the other way round and should be fixed there: an app self-check must not go red because a fixture was redesigned.\n\nCOST, on RenderingServer's own counters over the four canonical views: DRAW CALLS UNCHANGED at 8 undressed / 16 with the shadow pass, because a swept bulwark, twenty-three plates and eight colours all bucket on MATERIAL alone. Triangles 19 942 -> the figure in tests/trawler_render_capture.gd's budget: geometry is what a sheer curve and a raked deckhouse cost, and draw calls are not.\n\nGENERATED by tools/gen_trawler_fixtures.py, which is where the sheer curve's four constants live and where they should be retuned. The JSON is the interface; the generator is the provenance.\n\nBOW CLOSED: this fixture's sheer band runs the whole LOOP, stem included, so the bulwark closes across the stem head and a body cannot walk out over the water there. Its pair, probe_trawler_bulwark, stops the run at z=5 and leaves the bow open on purpose; that is the entire difference between the two files. The stem is now a curve rather than the two straight 45 degree walls it used to be, because the sheer band follows the hull's own deck edge.",
  "palette": {
   "wall": [
    0.85,
@@ -26,7 +26,80 @@
   "bow_taper_fraction": 0.17857142857142858,
   "station_count": 8
  },
- "walls": [],
+ "walls": [
+  {
+   "id": 4,
+   "start": [
+    1.0,
+    0,
+    8.4
+   ],
+   "axis": "+x-z",
+   "length": 5.65685,
+   "height": 1.0,
+   "thickness": 0.18,
+   "color": [
+    0.19,
+    0.22,
+    0.26
+   ],
+   "openings": []
+  },
+  {
+   "id": 5,
+   "start": [
+    9.0,
+    0,
+    8.4
+   ],
+   "axis": "-x-z",
+   "length": 5.65685,
+   "height": 1.0,
+   "thickness": 0.18,
+   "color": [
+    0.19,
+    0.22,
+    0.26
+   ],
+   "openings": []
+  },
+  {
+   "id": 6,
+   "start": [
+    1.0,
+    1.0,
+    8.4
+   ],
+   "axis": "+x-z",
+   "length": 5.65685,
+   "height": 0.09,
+   "thickness": 0.42,
+   "color": [
+    0.91,
+    0.9,
+    0.85
+   ],
+   "openings": []
+  },
+  {
+   "id": 7,
+   "start": [
+    9.0,
+    1.0,
+    8.4
+   ],
+   "axis": "-x-z",
+   "length": 5.65685,
+   "height": 0.09,
+   "thickness": 0.42,
+   "color": [
+    0.91,
+    0.9,
+    0.85
+   ],
+   "openings": []
+  }
+ ],
  "decks": [
   {
    "id": 30,
@@ -112,12 +185,12 @@
      ],
      [
       2.2,
-      2.6,
+      2.74,
       17.05
      ],
      [
       7.8,
-      2.6,
+      2.74,
       17.05
      ]
     ],
@@ -170,12 +243,12 @@
      ],
      [
       1.92,
-      2.6,
+      2.5,
       25.15
      ],
      [
       2.2,
-      2.6,
+      2.74,
       17.05
      ]
     ],
@@ -242,12 +315,12 @@
      ],
      [
       7.8,
-      2.6,
+      2.74,
       17.05
      ],
      [
       8.08,
-      2.6,
+      2.5,
       25.15
      ]
     ],
@@ -314,12 +387,12 @@
      ],
      [
       8.08,
-      2.6,
+      2.5,
       25.15
      ],
      [
       1.92,
-      2.6,
+      2.5,
       25.15
      ]
     ],
@@ -350,35 +423,35 @@
     0.0
    ],
    "props": {
-    "__is": "boat deck \u2014 the lower tier's roof and the wheelhouse's floor",
+    "__is": "boat deck \u2014 the lower tier's roof, sloping 0.24 m aft",
     "primitive": "plate",
     "corners": [
      [
       2.06,
-      2.6,
+      2.7441,
       16.91
      ],
      [
       1.78,
-      2.6,
+      2.4959,
       25.29
      ],
      [
       8.22,
-      2.6,
+      2.4959,
       25.29
      ],
      [
       7.94,
-      2.6,
+      2.7441,
       16.91
      ]
     ],
     "thickness": 0.13,
     "color": [
-     0.33,
-     0.35,
-     0.37
+     0.3,
+     0.32,
+     0.34
     ],
     "material": "painted"
    }
@@ -397,22 +470,22 @@
     "corners": [
      [
       7.25,
-      2.6,
+      2.6822,
       19.0
      ],
      [
       2.75,
-      2.6,
+      2.6822,
       19.0
      ],
      [
       2.7058,
-      3.433,
+      3.4873,
       18.711
      ],
      [
       7.2942,
-      3.433,
+      3.4873,
       18.711
      ]
     ],
@@ -439,22 +512,22 @@
     "corners": [
      [
       7.2942,
-      3.433,
+      3.4873,
       18.711
      ],
      [
       2.7058,
-      3.433,
+      3.4873,
       18.711
      ],
      [
       2.6512,
-      4.462,
+      4.4817,
       18.354
      ],
      [
       7.3488,
-      4.462,
+      4.4817,
       18.354
      ]
     ],
@@ -481,12 +554,12 @@
     "corners": [
      [
       7.3488,
-      4.462,
+      4.4817,
       18.354
      ],
      [
       2.6512,
-      4.462,
+      4.4817,
       18.354
      ],
      [
@@ -510,6 +583,135 @@
    }
   },
   {
+   "id": 123,
+   "item_id": "plate",
+   "at": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "props": {
+    "__is": "window mullion",
+    "primitive": "plate",
+    "corners": [
+     [
+      6.1971,
+      3.467,
+      18.6545
+     ],
+     [
+      6.0971,
+      3.467,
+      18.6545
+     ],
+     [
+      6.1232,
+      4.4614,
+      18.2975
+     ],
+     [
+      6.2256,
+      4.4614,
+      18.2975
+     ]
+    ],
+    "thickness": 0.05,
+    "color": [
+     0.89,
+     0.88,
+     0.83
+    ],
+    "material": "painted",
+    "solid": false
+   }
+  },
+  {
+   "id": 124,
+   "item_id": "plate",
+   "at": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "props": {
+    "__is": "window mullion",
+    "primitive": "plate",
+    "corners": [
+     [
+      5.05,
+      3.467,
+      18.6545
+     ],
+     [
+      4.95,
+      3.467,
+      18.6545
+     ],
+     [
+      4.9488,
+      4.4614,
+      18.2975
+     ],
+     [
+      5.0512,
+      4.4614,
+      18.2975
+     ]
+    ],
+    "thickness": 0.05,
+    "color": [
+     0.89,
+     0.88,
+     0.83
+    ],
+    "material": "painted",
+    "solid": false
+   }
+  },
+  {
+   "id": 125,
+   "item_id": "plate",
+   "at": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "props": {
+    "__is": "window mullion",
+    "primitive": "plate",
+    "corners": [
+     [
+      3.9029,
+      3.467,
+      18.6545
+     ],
+     [
+      3.8029,
+      3.467,
+      18.6545
+     ],
+     [
+      3.7744,
+      4.4614,
+      18.2975
+     ],
+     [
+      3.8768,
+      4.4614,
+      18.2975
+     ]
+    ],
+    "thickness": 0.05,
+    "color": [
+     0.89,
+     0.88,
+     0.83
+    ],
+    "material": "painted",
+    "solid": false
+   }
+  },
+  {
    "id": 108,
    "item_id": "plate",
    "at": [
@@ -523,22 +725,22 @@
     "corners": [
      [
       2.75,
-      2.6,
+      2.6822,
       19.0
      ],
      [
       2.6,
-      2.6,
+      2.5519,
       23.4
      ],
      [
       2.566,
-      3.331,
+      3.2993,
       23.502
      ],
      [
       2.7058,
-      3.433,
+      3.4873,
       18.711
      ]
     ],
@@ -565,22 +767,22 @@
     "corners": [
      [
       2.7058,
-      3.433,
+      3.4873,
       18.711
      ],
      [
       2.566,
-      3.331,
+      3.2993,
       23.502
      ],
      [
       2.524,
-      4.234,
+      4.2225,
       23.628
      ],
      [
       2.6512,
-      4.462,
+      4.4817,
       18.354
      ]
     ],
@@ -607,12 +809,12 @@
     "corners": [
      [
       2.6512,
-      4.462,
+      4.4817,
       18.354
      ],
      [
       2.524,
-      4.234,
+      4.2225,
       23.628
      ],
      [
@@ -636,6 +838,135 @@
    }
   },
   {
+   "id": 126,
+   "item_id": "plate",
+   "at": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "props": {
+    "__is": "window mullion",
+    "primitive": "plate",
+    "corners": [
+     [
+      2.6124,
+      3.439,
+      19.8571
+     ],
+     [
+      2.6095,
+      3.4351,
+      19.957
+     ],
+     [
+      2.5582,
+      4.411,
+      19.7257
+     ],
+     [
+      2.5608,
+      4.4164,
+      19.6158
+     ]
+    ],
+    "thickness": 0.05,
+    "color": [
+     0.89,
+     0.88,
+     0.83
+    ],
+    "material": "painted",
+    "solid": false
+   }
+  },
+  {
+   "id": 127,
+   "item_id": "plate",
+   "at": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "props": {
+    "__is": "window mullion",
+    "primitive": "plate",
+    "corners": [
+     [
+      2.5775,
+      3.392,
+      21.0548
+     ],
+     [
+      2.5746,
+      3.3881,
+      21.1547
+     ],
+     [
+      2.5264,
+      4.3462,
+      21.0442
+     ],
+     [
+      2.529,
+      4.3516,
+      20.9343
+     ]
+    ],
+    "thickness": 0.05,
+    "color": [
+     0.89,
+     0.88,
+     0.83
+    ],
+    "material": "painted",
+    "solid": false
+   }
+  },
+  {
+   "id": 128,
+   "item_id": "plate",
+   "at": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "props": {
+    "__is": "window mullion",
+    "primitive": "plate",
+    "corners": [
+     [
+      2.5425,
+      3.345,
+      22.2526
+     ],
+     [
+      2.5396,
+      3.3411,
+      22.3525
+     ],
+     [
+      2.4946,
+      4.2814,
+      22.3627
+     ],
+     [
+      2.4972,
+      4.2868,
+      22.2528
+     ]
+    ],
+    "thickness": 0.05,
+    "color": [
+     0.89,
+     0.88,
+     0.83
+    ],
+    "material": "painted",
+    "solid": false
+   }
+  },
+  {
    "id": 111,
    "item_id": "plate",
    "at": [
@@ -649,22 +980,22 @@
     "corners": [
      [
       7.4,
-      2.6,
+      2.5519,
       23.4
      ],
      [
       7.25,
-      2.6,
+      2.6822,
       19.0
      ],
      [
       7.2942,
-      3.433,
+      3.4873,
       18.711
      ],
      [
       7.434,
-      3.331,
+      3.2993,
       23.502
      ]
     ],
@@ -691,22 +1022,22 @@
     "corners": [
      [
       7.434,
-      3.331,
+      3.2993,
       23.502
      ],
      [
       7.2942,
-      3.433,
+      3.4873,
       18.711
      ],
      [
       7.3488,
-      4.462,
+      4.4817,
       18.354
      ],
      [
       7.476,
-      4.234,
+      4.2225,
       23.628
      ]
     ],
@@ -733,12 +1064,12 @@
     "corners": [
      [
       7.476,
-      4.234,
+      4.2225,
       23.628
      ],
      [
       7.3488,
-      4.462,
+      4.4817,
       18.354
      ],
      [
@@ -762,6 +1093,135 @@
    }
   },
   {
+   "id": 129,
+   "item_id": "plate",
+   "at": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "props": {
+    "__is": "window mullion",
+    "primitive": "plate",
+    "corners": [
+     [
+      7.4604,
+      3.3411,
+      22.3525
+     ],
+     [
+      7.4575,
+      3.345,
+      22.2526
+     ],
+     [
+      7.5028,
+      4.2868,
+      22.2528
+     ],
+     [
+      7.5054,
+      4.2814,
+      22.3627
+     ]
+    ],
+    "thickness": 0.05,
+    "color": [
+     0.89,
+     0.88,
+     0.83
+    ],
+    "material": "painted",
+    "solid": false
+   }
+  },
+  {
+   "id": 130,
+   "item_id": "plate",
+   "at": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "props": {
+    "__is": "window mullion",
+    "primitive": "plate",
+    "corners": [
+     [
+      7.4254,
+      3.3881,
+      21.1547
+     ],
+     [
+      7.4225,
+      3.392,
+      21.0548
+     ],
+     [
+      7.471,
+      4.3516,
+      20.9343
+     ],
+     [
+      7.4736,
+      4.3462,
+      21.0442
+     ]
+    ],
+    "thickness": 0.05,
+    "color": [
+     0.89,
+     0.88,
+     0.83
+    ],
+    "material": "painted",
+    "solid": false
+   }
+  },
+  {
+   "id": 131,
+   "item_id": "plate",
+   "at": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "props": {
+    "__is": "window mullion",
+    "primitive": "plate",
+    "corners": [
+     [
+      7.3905,
+      3.4351,
+      19.957
+     ],
+     [
+      7.3876,
+      3.439,
+      19.8571
+     ],
+     [
+      7.4392,
+      4.4164,
+      19.6158
+     ],
+     [
+      7.4418,
+      4.411,
+      19.7257
+     ]
+    ],
+    "thickness": 0.05,
+    "color": [
+     0.89,
+     0.88,
+     0.83
+    ],
+    "material": "painted",
+    "solid": false
+   }
+  },
+  {
    "id": 114,
    "item_id": "plate",
    "at": [
@@ -775,22 +1235,22 @@
     "corners": [
      [
       2.6,
-      2.6,
+      2.5519,
       23.4
      ],
      [
       7.4,
-      2.6,
+      2.5519,
       23.4
      ],
      [
       7.434,
-      3.331,
+      3.2993,
       23.502
      ],
      [
       2.566,
-      3.331,
+      3.2993,
       23.502
      ]
     ],
@@ -817,22 +1277,22 @@
     "corners": [
      [
       2.566,
-      3.331,
+      3.2993,
       23.502
      ],
      [
       7.434,
-      3.331,
+      3.2993,
       23.502
      ],
      [
       7.476,
-      4.234,
+      4.2225,
       23.628
      ],
      [
       2.524,
-      4.234,
+      4.2225,
       23.628
      ]
     ],
@@ -859,12 +1319,12 @@
     "corners": [
      [
       2.524,
-      4.234,
+      4.2225,
       23.628
      ],
      [
       7.476,
-      4.234,
+      4.2225,
       23.628
      ],
      [
@@ -885,6 +1345,92 @@
      0.83
     ],
     "material": "painted"
+   }
+  },
+  {
+   "id": 132,
+   "item_id": "plate",
+   "at": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "props": {
+    "__is": "window mullion",
+    "primitive": "plate",
+    "corners": [
+     [
+      4.1387,
+      3.2912,
+      23.5614
+     ],
+     [
+      4.2387,
+      3.2912,
+      23.5614
+     ],
+     [
+      4.2255,
+      4.2144,
+      23.6874
+     ],
+     [
+      4.1238,
+      4.2144,
+      23.6874
+     ]
+    ],
+    "thickness": 0.05,
+    "color": [
+     0.89,
+     0.88,
+     0.83
+    ],
+    "material": "painted",
+    "solid": false
+   }
+  },
+  {
+   "id": 133,
+   "item_id": "plate",
+   "at": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "props": {
+    "__is": "window mullion",
+    "primitive": "plate",
+    "corners": [
+     [
+      5.7613,
+      3.2912,
+      23.5614
+     ],
+     [
+      5.8613,
+      3.2912,
+      23.5614
+     ],
+     [
+      5.8762,
+      4.2144,
+      23.6874
+     ],
+     [
+      5.7745,
+      4.2144,
+      23.6874
+     ]
+    ],
+    "thickness": 0.05,
+    "color": [
+     0.89,
+     0.88,
+     0.83
+    ],
+    "material": "painted",
+    "solid": false
    }
   },
   {
@@ -922,9 +1468,9 @@
     ],
     "thickness": 0.12,
     "color": [
-     0.33,
-     0.35,
-     0.37
+     0.52,
+     0.54,
+     0.56
     ],
     "material": "painted"
    }
@@ -942,31 +1488,31 @@
     "primitive": "plate",
     "corners": [
      [
-      5.85,
-      2.6,
+      5.9,
+      2.4823,
       23.7
      ],
      [
-      4.15,
-      2.6,
+      4.1,
+      2.4823,
       23.7
      ],
      [
-      4.45,
-      5.0,
-      24.25
+      4.4,
+      5.35,
+      24.1
      ],
      [
-      5.55,
-      5.0,
-      24.25
+      5.6,
+      5.35,
+      24.1
      ]
     ],
     "thickness": 0.07,
     "color": [
-     0.72,
-     0.46,
-     0.13
+     0.62,
+     0.36,
+     0.11
     ],
     "material": "painted"
    }
@@ -984,31 +1530,31 @@
     "primitive": "plate",
     "corners": [
      [
-      4.15,
-      2.6,
+      4.1,
+      2.4823,
       23.7
      ],
      [
-      4.15,
-      2.6,
-      24.95
+      4.1,
+      2.4823,
+      25.1
      ],
      [
-      4.45,
-      5.0,
-      25.2
+      4.4,
+      5.35,
+      25.3
      ],
      [
-      4.45,
-      5.0,
-      24.25
+      4.4,
+      5.35,
+      24.1
      ]
     ],
     "thickness": 0.07,
     "color": [
-     0.72,
-     0.46,
-     0.13
+     0.62,
+     0.36,
+     0.11
     ],
     "material": "painted"
    }
@@ -1026,31 +1572,31 @@
     "primitive": "plate",
     "corners": [
      [
-      5.85,
-      2.6,
-      24.95
+      5.9,
+      2.4823,
+      25.1
      ],
      [
-      5.85,
-      2.6,
+      5.9,
+      2.4823,
       23.7
      ],
      [
-      5.55,
-      5.0,
-      24.25
+      5.6,
+      5.35,
+      24.1
      ],
      [
-      5.55,
-      5.0,
-      25.2
+      5.6,
+      5.35,
+      25.3
      ]
     ],
     "thickness": 0.07,
     "color": [
-     0.72,
-     0.46,
-     0.13
+     0.62,
+     0.36,
+     0.11
     ],
     "material": "painted"
    }
@@ -1068,31 +1614,31 @@
     "primitive": "plate",
     "corners": [
      [
-      4.15,
-      2.6,
-      24.95
+      4.1,
+      2.4823,
+      25.1
      ],
      [
-      5.85,
-      2.6,
-      24.95
+      5.9,
+      2.4823,
+      25.1
      ],
      [
-      5.55,
-      5.0,
-      25.2
+      5.6,
+      5.35,
+      25.3
      ],
      [
-      4.45,
-      5.0,
-      25.2
+      4.4,
+      5.35,
+      25.3
      ]
     ],
     "thickness": 0.07,
     "color": [
-     0.72,
-     0.46,
-     0.13
+     0.62,
+     0.36,
+     0.11
     ],
     "material": "painted"
    }
@@ -1110,27 +1656,27 @@
     "primitive": "plate",
     "corners": [
      [
-      4.39,
-      5.0,
-      24.19
+      4.34,
+      5.35,
+      24.04
      ],
      [
-      4.39,
-      5.0,
-      25.26
+      4.34,
+      5.35,
+      25.36
      ],
      [
-      5.61,
-      5.0,
-      25.26
+      5.66,
+      5.35,
+      25.36
      ],
      [
-      5.61,
-      5.0,
-      24.19
+      5.66,
+      5.35,
+      24.04
      ]
     ],
-    "thickness": 0.09,
+    "thickness": 0.32,
     "color": [
      0.11,
      0.11,
@@ -1149,7 +1695,7 @@
     16.4
    ],
    "props": {
-    "__is": "mast - tapered, 9.0 m above its foot",
+    "__is": "mast - tapered, 9.0 m above its foot, raked 6 degrees aft",
     "points": [
      [
       0,
@@ -1159,7 +1705,7 @@
      [
       0,
       9.0,
-      0
+      0.95
      ]
     ],
     "radius": 0.14,
@@ -1179,7 +1725,7 @@
    "at": [
     5.0,
     6.48,
-    16.4
+    17.084
    ],
    "props": {
     "__is": "mast spreader - carries the floodlights",
@@ -1211,7 +1757,7 @@
    "at": [
     5.0,
     7.74,
-    16.4
+    17.217
    ],
    "props": {
     "__is": "radome",
@@ -1243,7 +1789,7 @@
    "at": [
     5.0,
     9.0,
-    16.4
+    17.35
    ],
    "props": {
     "__is": "masthead light - white, above the sidelights",
@@ -1275,7 +1821,7 @@
    "at": [
     3.98,
     6.48,
-    16.4
+    17.084
    ],
    "props": {
     "__is": "whip antenna",
@@ -1307,7 +1853,7 @@
    "at": [
     6.02,
     6.48,
-    16.4
+    17.084
    ],
    "props": {
     "__is": "whip antenna",
@@ -1339,7 +1885,7 @@
    "at": [
     3.64,
     6.34,
-    16.4
+    17.0692
    ],
    "props": {
     "__is": "deck floodlight, aimed forward and down",
@@ -1371,7 +1917,7 @@
    "at": [
     6.36,
     6.34,
-    16.4
+    17.0692
    ],
    "props": {
     "__is": "deck floodlight, aimed forward and down",
@@ -1402,8 +1948,8 @@
    "item_id": "spar",
    "at": [
     5.0,
-    2.6,
-    16.4
+    2.72,
+    16.6871
    ],
    "props": {
     "__is": "derrick boom - raked forward over the working deck",
@@ -1415,8 +1961,8 @@
      ],
      [
       -1.4,
-      2.0,
-      -6.8
+      1.88,
+      -7.0871
      ]
     ],
     "radius": 0.1,
@@ -1436,7 +1982,7 @@
    "at": [
     5.0,
     8.3,
-    16.4
+    17.2761
    ],
    "props": {
     "__is": "topping lift - running rigging under load, barely slack",
@@ -1449,7 +1995,7 @@
      [
       -1.4,
       -3.7,
-      -6.8
+      -7.6761
      ]
     ],
     "radius": 0.016,
@@ -2106,7 +2652,7 @@
    "item_id": "spar",
    "at": [
     5.0,
-    5.0,
+    5.35,
     24.7
    ],
    "props": {
@@ -2138,7 +2684,7 @@
    "item_id": "spar",
    "at": [
     5.0,
-    5.62,
+    5.97,
     24.7
    ],
    "props": {
@@ -2184,7 +2730,7 @@
      [
       0,
       3.0,
-      0
+      0.35
      ]
     ],
     "radius": 0.09,
@@ -2204,7 +2750,7 @@
    "at": [
     5.0,
     6.68,
-    22.95
+    23.1717
    ],
    "props": {
     "__is": "aft mast crosstree",
@@ -2236,7 +2782,7 @@
    "at": [
     5.0,
     7.78,
-    22.95
+    23.3
    ],
    "props": {
     "__is": "all-round white light on the aft mast",
@@ -2266,9 +2812,9 @@
    "id": 234,
    "item_id": "spar",
    "at": [
-    2.6,
-    3.55,
-    18.65
+    2.61,
+    3.5,
+    18.69
    ],
    "props": {
     "__is": "sidelight - port, red",
@@ -2298,9 +2844,9 @@
    "id": 235,
    "item_id": "spar",
    "at": [
-    7.4,
-    3.55,
-    18.65
+    7.39,
+    3.5,
+    18.69
    ],
    "props": {
     "__is": "sidelight - starboard, green",
@@ -2332,7 +2878,7 @@
    "at": [
     5.0,
     8.4,
-    16.4
+    17.2867
    ],
    "props": {
     "__is": "port shroud - made fast to the bulwark cap",
@@ -2345,7 +2891,7 @@
      [
       -4.9,
       -7.1446,
-      -2.6
+      -3.4867
      ]
     ],
     "radius": 0.016,
@@ -2365,7 +2911,7 @@
    "at": [
     5.0,
     8.4,
-    16.4
+    17.2867
    ],
    "props": {
     "__is": "starboard shroud - made fast to the bulwark cap",
@@ -2378,7 +2924,7 @@
      [
       4.9,
       -7.1446,
-      -2.6
+      -3.4867
      ]
     ],
     "radius": 0.016,
@@ -2430,7 +2976,7 @@
    "at": [
     5.0,
     8.4,
-    16.4
+    17.2867
    ],
    "props": {
     "__is": "forestay - masthead to the samson post head",
@@ -2443,7 +2989,7 @@
      [
       0.0,
       -6.55,
-      -9.8
+      -10.6867
      ]
     ],
     "radius": 0.016,
@@ -2463,7 +3009,7 @@
    "at": [
     5.0,
     8.4,
-    16.4
+    17.2867
    ],
    "props": {
     "__is": "triatic stay - main masthead to aft masthead",
@@ -2476,7 +3022,7 @@
      [
       0.0,
       -0.62,
-      6.55
+      6.0133
      ]
     ],
     "radius": 0.014,
@@ -2496,7 +3042,7 @@
    "at": [
     5.0,
     7.78,
-    22.95
+    23.3
    ],
    "props": {
     "__is": "backstay - aft masthead to the transom cap",
@@ -2508,8 +3054,8 @@
      ],
      [
       0.0,
-      -6.3009,
-      4.85
+      -6.2342,
+      4.5
      ]
     ],
     "radius": 0.014,
@@ -2550,9 +3096,9 @@
     "solid": false,
     "material": "wood",
     "color": [
-     0.14,
-     0.14,
-     0.15
+     0.4,
+     0.39,
+     0.35
     ]
    }
   },
@@ -2616,9 +3162,9 @@
     "solid": false,
     "material": "wood",
     "color": [
-     0.14,
-     0.14,
-     0.15
+     0.4,
+     0.39,
+     0.35
     ]
    }
   },
@@ -2682,9 +3228,9 @@
     "solid": false,
     "material": "wood",
     "color": [
-     0.14,
-     0.14,
-     0.15
+     0.4,
+     0.39,
+     0.35
     ]
    }
   },
@@ -3083,142 +3629,142 @@
     ],
     [
      9.945,
-     1.0022,
+     1.0026,
      20.0964
     ],
     [
      9.945,
-     1.0089,
+     1.0102,
      20.6929
     ],
     [
      9.945,
-     1.0199,
+     1.023,
      21.2893
     ],
     [
      9.945,
-     1.0354,
+     1.041,
      21.8857
     ],
     [
      9.945,
-     1.0554,
+     1.064,
      22.4821
     ],
     [
      9.945,
-     1.0798,
+     1.0922,
      23.0786
     ],
     [
      9.945,
-     1.1086,
+     1.1255,
      23.675
     ],
     [
      9.945,
-     1.1418,
+     1.1639,
      24.2714
     ],
     [
      9.945,
-     1.1795,
+     1.2074,
      24.8679
     ],
     [
      9.945,
-     1.2216,
+     1.256,
      25.4643
     ],
     [
      9.945,
-     1.2681,
+     1.3098,
      26.0607
     ],
     [
      9.945,
-     1.319,
+     1.3687,
      26.6571
     ],
     [
      9.945,
-     1.3744,
+     1.4327,
      27.2536
     ],
     [
      9.945,
-     1.4343,
+     1.5018,
      27.85
     ],
     [
      0.055,
-     1.4343,
+     1.5018,
      27.85
     ],
     [
      0.055,
-     1.3744,
+     1.4327,
      27.2536
     ],
     [
      0.055,
-     1.319,
+     1.3687,
      26.6571
     ],
     [
      0.055,
-     1.2681,
+     1.3098,
      26.0607
     ],
     [
      0.055,
-     1.2216,
+     1.256,
      25.4643
     ],
     [
      0.055,
-     1.1795,
+     1.2074,
      24.8679
     ],
     [
      0.055,
-     1.1418,
+     1.1639,
      24.2714
     ],
     [
      0.055,
-     1.1086,
+     1.1255,
      23.675
     ],
     [
      0.055,
-     1.0798,
+     1.0922,
      23.0786
     ],
     [
      0.055,
-     1.0554,
+     1.064,
      22.4821
     ],
     [
      0.055,
-     1.0354,
+     1.041,
      21.8857
     ],
     [
      0.055,
-     1.0199,
+     1.023,
      21.2893
     ],
     [
      0.055,
-     1.0089,
+     1.0102,
      20.6929
     ],
     [
      0.055,
-     1.0022,
+     1.0026,
      20.0964
     ],
     [
@@ -3469,9 +4015,9 @@
      "w": 0.026,
      "to_base": true,
      "color": [
-      0.71,
-      0.7,
-      0.65
+      0.63,
+      0.62,
+      0.57
      ]
     },
     {
@@ -3480,9 +4026,9 @@
      "w": 0.024,
      "h": 0.23,
      "color": [
-      0.72,
-      0.46,
-      0.13
+      0.62,
+      0.36,
+      0.11
      ]
     },
     {
@@ -3505,27 +4051,27 @@
    "path": [
     [
      2.12,
-     3.615,
+     3.6487,
      18.95
     ],
     [
      2.12,
-     3.615,
+     3.7065,
      17.0
     ],
     [
      7.88,
-     3.615,
+     3.7065,
      17.0
     ],
     [
      7.88,
-     3.615,
+     3.6487,
      18.95
     ]
    ],
    "closed": false,
-   "base_y": 2.665,
+   "base_y": 2.66,
    "material": "painted",
    "solid": true,
    "profile": [

@@ -44,8 +44,8 @@ const FIXTURES_HERE: Array[String] = [
 ## shadowed. Draw calls are the load-bearing half: put one fitting in a fifth
 ## material and this goes red by exactly one.
 const REBUILT_BUDGET := {
-	"probe_trawler_bulwark": {"draw_calls": 8, "triangles": 16800},
-	"probe_trawler_bow_bulwark": {"draw_calls": 8, "triangles": 17200},
+	"probe_trawler_bulwark": {"draw_calls": 8, "triangles": 16000},
+	"probe_trawler_bow_bulwark": {"draw_calls": 8, "triangles": 18200},
 }
 
 

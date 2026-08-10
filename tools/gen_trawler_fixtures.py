@@ -31,7 +31,7 @@ R_FWD = 1.30          # the swept arm forward of the low point
 EXP_FWD = 1.5
 R_STEM = 0.55         # extra lift over the last 5.5 m, where a stem earns it
 Z_STEM = 5.5
-R_AFT = 0.45          # the transom rises too, by a quarter of what the stem does
+R_AFT = 0.52          # the transom rises too, by a quarter of what the stem does
 
 
 def sheer(z):
@@ -77,12 +77,13 @@ def sheer_loop(z_end=27.85):
 
 
 NAVY = [0.10, 0.12, 0.16]      # bulwark plating — the hull's own topsides value
-PALEIN = [0.71, 0.70, 0.65]    # the bulwark's INBOARD face — a deck reads as a deck
-OCHRE = [0.72, 0.46, 0.13]     # the paint boundary, repeated on the funnel
+PALEIN = [0.63, 0.62, 0.57]    # the bulwark's INBOARD face — a deck reads as a deck
+OCHRE = [0.62, 0.36, 0.11]     # the paint boundary, repeated on the funnel
 BONE = [0.91, 0.90, 0.85]      # cap rail — the sheer line itself
 CREAM = [0.89, 0.88, 0.83]     # deckhouse
 GLASS = [0.09, 0.11, 0.14]     # window bands
-ROOFG = [0.33, 0.35, 0.37]     # boat deck / wheelhouse roof
+ROOFG = [0.30, 0.32, 0.34]     # boat deck — the dark step between two pale tiers
+ROOFW = [0.52, 0.54, 0.56]     # wheelhouse roof — a value clear of the boat deck
 BLACK = [0.11, 0.11, 0.12]
 
 
@@ -112,22 +113,37 @@ def bulwark_edge(z_end=27.85):
     }
 
 
-BOAT_DECK_TOP = 2.665   # boat-deck plate mid-surface 2.60 + half its 0.13 thickness
+## THE BOAT DECK SLOPES AFT, 0.24 m over its 8.1 m, and that is a silhouette
+## decision as much as a drainage one: seen in profile the lower tier's side is
+## the one face of the deckhouse whose rake is edge-on, so without a sloping top
+## edge it is a rectangle - which is exactly the read the room primitive was
+## deleted for. Every level above it is solved from `bd()` rather than restated.
+BD_F, BD_A = 2.74, 2.50
+BD_ZF, BD_ZA = 17.05, 25.15
+
+
+def bd(z):
+    return round(BD_F + (BD_A - BD_F) * (z - BD_ZF) / (BD_ZA - BD_ZF), 4)
+
+
+def deck_top(z):
+    return round(bd(z) + 0.065, 4)   # plate mid-surface plus half its 0.13 thickness
+
 
 ## The bridge-front bulwark round the open forward end of the boat deck. Second
-## `edges[]` run, same primitive, hand path: 0.95 m of plating and a cap, which is
+## `edges[]` run, same primitive, hand path: 0.9 m of plating and a cap, which is
 ## the fall barrier that platform needs and the horizontal that ties the
 ## deckhouse into the hull's own sheer band.
 BOAT_DECK_RAIL = {
     "id": 2,
     "primitive": "sheer_band",
     "_is": "bridge-front bulwark round the open forward end of the boat deck",
-    "path": [[2.12, BOAT_DECK_TOP + 0.95, 18.95],
-             [2.12, BOAT_DECK_TOP + 0.95, 17.00],
-             [7.88, BOAT_DECK_TOP + 0.95, 17.00],
-             [7.88, BOAT_DECK_TOP + 0.95, 18.95]],
+    "path": [[2.12, deck_top(18.95) + 0.90, 18.95],
+             [2.12, deck_top(17.00) + 0.90, 17.00],
+             [7.88, deck_top(17.00) + 0.90, 17.00],
+             [7.88, deck_top(18.95) + 0.90, 18.95]],
     "closed": False,
-    "base_y": BOAT_DECK_TOP,
+    "base_y": 2.66,
     "material": "painted",
     "solid": True,
     "profile": [
@@ -140,6 +156,38 @@ BOAT_DECK_RAIL = {
 # ── the deckhouse ───────────────────────────────────────────────────────────
 def lerp3(a, b, f):
     return [round(a[i] + (b[i] - a[i]) * f, 4) for i in range(3)]
+
+
+def _sub(a, b, f):
+    return tuple(a[i] + (b[i] - a[i]) * f for i in range(3))
+
+
+def _normal(ring):
+    d1 = [ring[2][i] - ring[0][i] for i in range(3)]
+    d2 = [ring[3][i] - ring[1][i] for i in range(3)]
+    n = (d1[1] * d2[2] - d1[2] * d2[1],
+         d1[2] * d2[0] - d1[0] * d2[2],
+         d1[0] * d2[1] - d1[1] * d2[0])
+    m = math.sqrt(sum(v * v for v in n)) or 1.0
+    return [v / m for v in n]
+
+
+## A window MULLION: a slice of the glass band's own quad, stood 60 mm proud of it
+## along the band's outward normal. Derived from the band rather than authored
+## beside it, so a mullion cannot drift off a wheelhouse face that gets re-raked.
+def mullions(pid, ring, count, half_w=0.05):
+    n = _normal(ring)
+    b0, b1, t1, t0 = ring[0], ring[1], ring[2], ring[3]
+    span = math.dist(b0, b1)
+    out = []
+    for k in range(1, count + 1):
+        f = k / (count + 1.0)
+        d = half_w / span
+        quad = [_sub(b0, b1, f - d), _sub(b0, b1, f + d),
+                _sub(t0, t1, f + d), _sub(t0, t1, f - d)]
+        quad = [tuple(q[i] + n[i] * 0.06 for i in range(3)) for q in quad]
+        out.append(plate(pid + k - 1, "window mullion", quad, 0.05, CREAM, solid=False))
+    return out
 
 
 def plate(pid, what, ring, thickness, color, openings=None, material="painted", solid=True):
@@ -158,17 +206,17 @@ def plate(pid, what, ring, thickness, color, openings=None, material="painted", 
     return {"id": pid, "item_id": "plate", "at": [0.0, 0.0, 0.0], "props": props}
 
 
-# lower tier (the casing): tapered in plan, tumbled home, raked front
-BD = 2.60                                   # boat deck — the lower tier's roof
+# lower tier (the casing): tapered in plan, tumbled home, raked front, top edge
+# falling aft with the boat deck
 LPf, LSf = (2.35, 0.0, 17.60), (7.65, 0.0, 17.60)
 LPa, LSa = (2.05, 0.0, 24.90), (7.95, 0.0, 24.90)
-lpf, lsf = (2.20, BD, 17.05), (7.80, BD, 17.05)   # front overhangs 0.55 m forward
-lpa, lsa = (1.92, BD, 25.15), (8.08, BD, 25.15)
+lpf, lsf = (2.20, BD_F, 17.05), (7.80, BD_F, 17.05)   # front overhangs 0.55 m forward
+lpa, lsa = (1.92, BD_A, 25.15), (8.08, BD_A, 25.15)
 
 # wheelhouse: set back on all four sides, forward-raked screen, reverse-raked aft
 WT, WTA = 5.05, 4.75                        # roof forward / aft — 0.30 m of slope
-FP, FS = (2.75, BD, 19.00), (7.25, BD, 19.00)
-AP, AS = (2.60, BD, 23.40), (7.40, BD, 23.40)
+FP, FS = (2.75, bd(19.00), 19.00), (7.25, bd(19.00), 19.00)
+AP, AS = (2.60, bd(23.40), 23.40), (7.40, bd(23.40), 23.40)
 fp, fs = (2.62, WT, 18.15), (7.38, WT, 18.15)     # screen rakes 0.85 m forward
 ap, as_ = (2.50, WTA, 23.70), (7.50, WTA, 23.70)  # aft bulkhead reverse-raked
 
@@ -196,9 +244,9 @@ def deckhouse():
     out.append(plate(103, "lower tier, aft bulkhead — the working deck door",
                      [LPa, LSa, lsa, lpa], 0.10, CREAM,
                      [{"type": "door", "offset": 2.45, "width": 1.15, "sill": 0.0, "height": 2.0}]))
-    out.append(plate(104, "boat deck — the lower tier's roof and the wheelhouse's floor",
-                     [(2.06, BD, 16.91), (1.78, BD, 25.29), (8.22, BD, 25.29), (7.94, BD, 16.91)],
-                     0.13, ROOFG))
+    out.append(plate(104, "boat deck — the lower tier's roof, sloping 0.24 m aft",
+                     [(2.06, bd(16.91), 16.91), (1.78, bd(25.29), 25.29),
+                      (8.22, bd(25.29), 25.29), (7.94, bd(16.91), 16.91)], 0.13, ROOFG))
 
     # wheelhouse, three horizontal bands per face: coaming, glass, header. The band
     # IS the window — a dark value reads as glass at a distance where a punched
@@ -218,36 +266,58 @@ def deckhouse():
     names = ["coaming", "GLASS BAND", "header"]
     colors = [CREAM, GLASS, CREAM]
     thicks = [0.09, 0.07, 0.09]
-    for _key, base, what, ring in faces:
+    posts = {"screen": (123, 3), "port": (126, 3), "stbd": (129, 3), "aft": (132, 2)}
+    for key, base, what, ring in faces:
         for i in range(3):
             out.append(plate(base + i, "%s, %s" % (what, names[i]),
                              ring(i), thicks[i], colors[i]))
+        pid, count = posts[key]
+        out.extend(mullions(pid, ring(1), count))
     out.append(plate(117, "wheelhouse roof — sloped 0.30 m down aft, eaves all round",
                      [(2.46, WT, 17.99), (2.34, WTA, 23.86),
-                      (7.66, WTA, 23.86), (7.54, WT, 17.99)], 0.12, ROOFG))
+                      (7.66, WTA, 23.86), (7.54, WT, 17.99)], 0.12, ROOFW))
 
     # funnel: four tapering plates raked aft under a black cap
-    fb, ft = 23.70, 24.25
-    ab, at_ = 24.95, 25.20
-    FTOP = 5.00
+    fb, ft = 23.70, 24.10
+    ab, at_ = 25.10, 25.30
+    FTOP = 5.35
+    BD = round((bd(fb) + bd(ab)) * 0.5 - 0.04, 4)   # sits on the sloping boat deck
     out.append(plate(118, "funnel, forward face — tapered and raked aft",
-                     [(5.85, BD, fb), (4.15, BD, fb), (4.45, FTOP, ft), (5.55, FTOP, ft)], 0.07, OCHRE))
+                     [(5.90, BD, fb), (4.10, BD, fb), (4.40, FTOP, ft), (5.60, FTOP, ft)], 0.07, OCHRE))
     out.append(plate(119, "funnel, port face",
-                     [(4.15, BD, fb), (4.15, BD, ab), (4.45, FTOP, at_), (4.45, FTOP, ft)], 0.07, OCHRE))
+                     [(4.10, BD, fb), (4.10, BD, ab), (4.40, FTOP, at_), (4.40, FTOP, ft)], 0.07, OCHRE))
     out.append(plate(120, "funnel, starboard face",
-                     [(5.85, BD, ab), (5.85, BD, fb), (5.55, FTOP, ft), (5.55, FTOP, at_)], 0.07, OCHRE))
+                     [(5.90, BD, ab), (5.90, BD, fb), (5.60, FTOP, ft), (5.60, FTOP, at_)], 0.07, OCHRE))
     out.append(plate(121, "funnel, aft face",
-                     [(4.15, BD, ab), (5.85, BD, ab), (5.55, FTOP, at_), (4.45, FTOP, at_)], 0.07, OCHRE))
+                     [(4.10, BD, ab), (5.90, BD, ab), (5.60, FTOP, at_), (4.40, FTOP, at_)], 0.07, OCHRE))
     out.append(plate(122, "funnel cap",
-                     [(4.39, FTOP, 24.19), (4.39, FTOP, 25.26),
-                      (5.61, FTOP, 25.26), (5.61, FTOP, 24.19)], 0.09, BLACK, solid=False))
+                     [(4.34, FTOP, 24.04), (4.34, FTOP, 25.36),
+                      (5.66, FTOP, 25.36), (5.66, FTOP, 24.04)], 0.32, BLACK, solid=False))
     return out
 
 
 # ── the rig, re-belayed ─────────────────────────────────────────────────────
-MASTHEAD = (5.0, 8.4, 16.4)
-AFT_MAST_FOOT = (5.0, 4.78, 22.95)
-AFT_MASTHEAD = (5.0, 7.78, 22.95)
+## Both masts RAKE AFT. Everything carried on one is solved from `mast_at`, not
+## restated: a raked mast with a level spreader is the tell that a rig was
+## authored by moving numbers rather than by stepping a spar.
+MAST_FOOT = (5.0, 0.0, 16.4)
+MAST_LEN = 9.0
+MAST_RAKE = 0.95 / MAST_LEN            # ~6 degrees aft
+AFT_FOOT = (5.0, 4.78, 22.95)
+AFT_LEN = 3.0
+AFT_RAKE = 0.35 / AFT_LEN
+
+
+def mast_at(h):
+    return (MAST_FOOT[0], round(h, 4), round(MAST_FOOT[2] + h * MAST_RAKE, 4))
+
+
+def aft_at(h):
+    return (AFT_FOOT[0], round(AFT_FOOT[1] + h, 4), round(AFT_FOOT[2] + h * AFT_RAKE, 4))
+
+
+MASTHEAD = mast_at(8.4)
+AFT_MASTHEAD = aft_at(AFT_LEN)
 
 
 def spar(iid, what, at, points, radius, **kw):
@@ -281,27 +351,32 @@ def rig():
     items = []
     A = items.append
     # main mast, forward of the wheelhouse and standing on the working deck
-    A(spar(200, "mast - tapered, 9.0 m above its foot", (5.0, 0.0, 16.4),
-           [[0, 0, 0], [0, 9.0, 0]], 0.14, taper=0.5, sides=8, **STEEL))
-    A(spar(201, "mast spreader - carries the floodlights", (5.0, 6.48, 16.4),
+    A(spar(200, "mast - tapered, 9.0 m above its foot, raked 6 degrees aft", MAST_FOOT,
+           [[0, 0, 0], [0, MAST_LEN, round(MAST_LEN * MAST_RAKE, 4)]], 0.14,
+           taper=0.5, sides=8, **STEEL))
+    A(spar(201, "mast spreader - carries the floodlights", mast_at(6.48),
            [[-1.7, 0, 0], [1.7, 0, 0]], 0.063, sides=6, **STEEL))
-    A(spar(202, "radome", (5.0, 7.74, 16.4), [[0, 0, 0], [0, 0.345, 0]], 0.3, sides=12,
+    A(spar(202, "radome", mast_at(7.74), [[0, 0, 0], [0, 0.345, 0]], 0.3, sides=12,
            material="painted", color=[0.94, 0.94, 0.92]))
-    A(spar(203, "masthead light - white, above the sidelights", (5.0, 9.0, 16.4),
+    A(spar(203, "masthead light - white, above the sidelights", mast_at(9.0),
            [[0, 0, 0], [0, 0.26, 0]], 0.098, sides=8, **WHITE))
-    A(spar(204, "whip antenna", (3.98, 6.48, 16.4), [[0, 0, 0], [0, 1.9, 0]], 0.014, sides=4, **DARK))
-    A(spar(205, "whip antenna", (6.02, 6.48, 16.4), [[0, 0, 0], [0, 1.9, 0]], 0.014, sides=4, **DARK))
-    A(spar(206, "deck floodlight, aimed forward and down", (3.64, 6.34, 16.4),
-           [[0, 0, 0], [0, -0.16, -0.28]], 0.1, sides=6, **WHITE))
-    A(spar(207, "deck floodlight, aimed forward and down", (6.36, 6.34, 16.4),
-           [[0, 0, 0], [0, -0.16, -0.28]], 0.1, sides=6, **WHITE))
+    for iid, dx in ((204, -1.02), (205, 1.02)):
+        m = mast_at(6.48)
+        A(spar(iid, "whip antenna", (round(m[0] + dx, 4), m[1], m[2]),
+               [[0, 0, 0], [0, 1.9, 0]], 0.014, sides=4, **DARK))
+    for iid, dx in ((206, -1.36), (207, 1.36)):
+        m = mast_at(6.34)
+        A(spar(iid, "deck floodlight, aimed forward and down",
+               (round(m[0] + dx, 4), m[1], m[2]),
+               [[0, 0, 0], [0, -0.16, -0.28]], 0.1, sides=6, **WHITE))
     # derrick: heeled to the mast at boat-deck height, raked out over the hatches
-    boom_heel = (5.0, 2.60, 16.4)
+    boom_heel = mast_at(2.72)
     boom_head = (3.6, 4.60, 9.6)
     A(spar(208, "derrick boom - raked forward over the working deck", boom_heel,
            [[0, 0, 0], delta(boom_heel, boom_head)], 0.1, taper=0.7, sides=8, **STEEL))
-    A(wire(209, "topping lift - running rigging under load, barely slack", (5.0, 8.3, 16.4),
-           [[0, 0, 0], delta((5.0, 8.3, 16.4), boom_head)], 0.016, sag=0.06,
+    lift_foot = mast_at(8.3)
+    A(wire(209, "topping lift - running rigging under load, barely slack", lift_foot,
+           [[0, 0, 0], delta(lift_foot, boom_head)], 0.016, sag=0.06,
            span_steps=6, sides=4, **DARK))
     hook_top = (3.6, 1.10, 9.9)
     A(wire(210, "cargo fall off the boom head", boom_head,
@@ -333,21 +408,22 @@ def rig():
     A(spar(228, "winch pedestal", (6.6, 0.0, 7.0), [[0, 0, 0], [0, 0.62, 0]], 0.22, sides=8,
            material="painted", color=[0.84, 0.85, 0.87]))
     # exhaust, now emerging from the funnel it always should have had
-    A(spar(229, "exhaust pipe, out of the funnel top", (5.0, 5.0, 24.7),
+    A(spar(229, "exhaust pipe, out of the funnel top", (5.0, 5.35, 24.7),
            [[0, 0, 0], [0, 0.62, 0]], 0.12, sides=8, material="painted", color=[0.2, 0.2, 0.22]))
-    A(spar(230, "exhaust rain cap", (5.0, 5.62, 24.7), [[0, 0, 0], [0, 0.14, 0]], 0.2, sides=8,
+    A(spar(230, "exhaust rain cap", (5.0, 5.97, 24.7), [[0, 0, 0], [0, 0.14, 0]], 0.2, sides=8,
            material="painted", color=[0.12, 0.12, 0.13]))
     # aft signal mast — re-belayed onto the WHEELHOUSE ROOF, which is what it stood on
-    A(spar(231, "aft signal mast, stepped on the wheelhouse roof", AFT_MAST_FOOT,
-           [[0, 0, 0], [0, 3.0, 0]], 0.09, taper=0.6, sides=8, **STEEL))
-    A(spar(232, "aft mast crosstree", (5.0, 6.68, 22.95), [[-1.1, 0, 0], [1.1, 0, 0]], 0.045,
+    A(spar(231, "aft signal mast, stepped on the wheelhouse roof", AFT_FOOT,
+           [[0, 0, 0], [0, AFT_LEN, round(AFT_LEN * AFT_RAKE, 4)]], 0.09,
+           taper=0.6, sides=8, **STEEL))
+    A(spar(232, "aft mast crosstree", aft_at(1.9), [[-1.1, 0, 0], [1.1, 0, 0]], 0.045,
            sides=6, **STEEL))
     A(spar(233, "all-round white light on the aft mast", AFT_MASTHEAD,
            [[0, 0, 0], [0, 0.24, 0]], 0.08, sides=8, **WHITE))
     # sidelights, re-belayed onto the wheelhouse wings
-    A(spar(234, "sidelight - port, red", (2.60, 3.55, 18.65), [[0, 0, 0], [0, 0.3, 0]], 0.1,
+    A(spar(234, "sidelight - port, red", (2.61, 3.50, 18.69), [[0, 0, 0], [0, 0.3, 0]], 0.1,
            sides=8, material="painted", color=[0.86, 0.13, 0.11]))
-    A(spar(235, "sidelight - starboard, green", (7.40, 3.55, 18.65), [[0, 0, 0], [0, 0.3, 0]], 0.1,
+    A(spar(235, "sidelight - starboard, green", (7.39, 3.50, 18.69), [[0, 0, 0], [0, 0.3, 0]], 0.1,
            sides=8, material="painted", color=[0.1, 0.6, 0.3]))
     # standing rigging: shrouds to the bulwark cap, forestay to the stemhead
     for iid, x, what in ((236, 0.10, "port shroud"), (237, 9.90, "starboard shroud")):
@@ -369,7 +445,7 @@ def rig():
     for iid, z in ((242, 10.4), (244, 13.2), (246, 16.0)):
         A(spar(iid, "fender - cylindrical, hung vertically outboard", (-0.28, -0.3, z),
                [[0, -0.5, 0], [0, 0.5, 0]], 0.24, sides=10, solid=False,
-               material="wood", color=[0.14, 0.14, 0.15]))
+               material="wood", color=[0.40, 0.39, 0.35]))
         start = (0.10, cap_mid(z), z)
         A(wire(iid + 1, "fender lanyard", start,
                [[0, 0, 0], delta(start, (-0.28, 0.2, z))], 0.013, sag=0.02, sides=4,
@@ -378,6 +454,35 @@ def rig():
         A(spar(iid, "mooring bitt", (x, 0.0, z), [[0, 0, 0], [0, 0.6, 0]], 0.11, sides=8, **WHITE))
     return items
 
+
+## THE BREAKWATER, and the honest reason it is four diagonal walls.
+##
+## A forward-pointing V across the foredeck is a real fitting: it throws a
+## boarding sea outboard before it reaches the winch and the hatches, which is
+## exactly what an open working deck under a 2.9 m bow bulwark needs, and it is
+## the only thing standing on the long empty foredeck.
+##
+## It is ALSO the four 45-degree walls `scripts/apps/structure_studio.gd`'s own
+## self-check reads off this file to prove it bounds a diagonal in WORLD space
+## rather than in the wall's own frame. Those used to be the bow stem walls, and
+## the sheer band replaced them. Rather than drop that coverage silently or leave
+## the studio probe red, the fixture keeps four diagonals — as a fitting the boat
+## wants, not as a stub. The coupling is still wrong the other way round: an app
+## self-check should not be able to break because a fixture was redesigned, and
+## it should build or own its own diagonals.
+##
+## Geometry: apex (5, 4.4), wings out to (1, 8.4) and (9, 8.4) — a true 45 degree
+## run, length 4*sqrt(2), stopping 0.9 m short of the bulwark so the deck drains.
+BREAKWATER = [
+    {"id": 4, "start": [1.0, 0, 8.4], "axis": "+x-z", "length": 5.65685,
+     "height": 1.0, "thickness": 0.18, "color": [0.19, 0.22, 0.26], "openings": []},
+    {"id": 5, "start": [9.0, 0, 8.4], "axis": "-x-z", "length": 5.65685,
+     "height": 1.0, "thickness": 0.18, "color": [0.19, 0.22, 0.26], "openings": []},
+    {"id": 6, "start": [1.0, 1.0, 8.4], "axis": "+x-z", "length": 5.65685,
+     "height": 0.09, "thickness": 0.42, "color": [0.91, 0.90, 0.85], "openings": []},
+    {"id": 7, "start": [9.0, 1.0, 8.4], "axis": "-x-z", "length": 5.65685,
+     "height": 0.09, "thickness": 0.42, "color": [0.91, 0.90, 0.85], "openings": []},
+]
 
 HATCHES = [
     {"id": 30, "origin": [2.1, 0.65, 9.1], "size": [1.9, 6.8], "thickness": 0.12,
@@ -425,8 +530,25 @@ NOTE_COMMON = (
     "old deckhouse and now stand on the wheelhouse roof and its wings; the exhaust comes out of "
     "the funnel top instead of out of the air; the derrick heels to the mast at boat-deck height; "
     "the shrouds and the three fender lanyards land on the SWEPT cap, so their ends move with the "
-    "curve; the forestay runs to the stemhead cap rather than to a samson post the 2.65 m bow "
-    "bulwark would have hidden. A line to nowhere is the one thing a rig may not have."
+    "curve; the samson post grew from 1.35 m to 1.90 m because the bow bulwark it stands in is "
+    "1.48 m and would have swallowed the old one, and the forestay is made fast to its head. Both "
+    "masts now RAKE AFT and everything carried on one is solved from the rake rather than "
+    "restated. A line to nowhere is the one thing a rig may not have.\n\n"
+    "THE BREAKWATER is four 45 degree walls, and it is the one piece of this fixture with a "
+    "second, uncomfortable reason to exist: scripts/apps/structure_studio.gd's self-check reads "
+    "FOUR DIAGONALS off this file to prove it bounds a raked wall in world space, and those used "
+    "to be the bow stem walls the sheer band replaced. It is a real fitting - a V across an open "
+    "working deck throws a boarding sea outboard before it reaches the winch - so it is here as "
+    "one, not as a stub. The coupling is still wrong the other way round and should be fixed "
+    "there: an app self-check must not go red because a fixture was redesigned.\n\n"
+    "COST, on RenderingServer's own counters over the four canonical views: DRAW CALLS UNCHANGED "
+    "at 8 undressed / 16 with the shadow pass, because a swept bulwark, twenty-three plates and "
+    "eight colours all bucket on MATERIAL alone. Triangles 19 942 -> the figure in "
+    "tests/trawler_render_capture.gd's budget: geometry is what a sheer curve and a raked "
+    "deckhouse cost, and draw calls are not.\n\n"
+    "GENERATED by tools/gen_trawler_fixtures.py, which is where the sheer curve's four constants "
+    "live and where they should be retuned. The JSON is the interface; the generator is the "
+    "provenance."
 )
 
 
@@ -453,7 +575,7 @@ def build(bow_closed):
         "displacement_t": 256.0, "form": "fine_entry",
         "bow_taper_fraction": 0.17857142857142858, "station_count": 8,
     }
-    plan["walls"] = []
+    plan["walls"] = BREAKWATER
     plan["decks"] = HATCHES
     plan["stairs"] = []
     plan["items"] = deckhouse() + rig()
