@@ -43,15 +43,49 @@ extends RefCounted
 ## they land: baker_supports() re-reads the baker's method list, so a wave that
 ## ships spars alone flips exactly the spar-only parts to buildable.
 ##
-## That call site, in full:
+## ── THE ITEM HAND-OFF, verbatim and compiling ───────────────────────────────
 ##
-##     for spec in PartCatalog.expand("gallows_a_frame", {"height": 5.0}):
-##         var emitter := PartCatalog.emitter_method_for(spec["primitive"])
-##         boxes.append_array(StructureBaker.call(emitter, spec))
+## `structure_plan.gd`'s header used to spell this as `ItemCatalog.parts(id,
+## props)`. There is no ItemCatalog and there is no parts(); pasted into the
+## baker that paragraph does not parse. The real call, compiled and run by
+## `tests/plan_item_handoff_test.gd` (which also compiles the broken one and
+## requires it to fail), is:
 ##
-## (`Script.call("static_name", …)` on the baker is verified working in
-## part_catalog_test.gd against the existing `wall_boxes`, so the seam is real
-## rather than hoped-for.)
+##     for item_variant in plan.items:
+##         var item := item_variant as Dictionary
+##         var xform := plan.item_transform(item)               # WHERE, plan space
+##         var resolved := PartCatalog.expand_props(            # WHAT, part-local m
+##             str(item.get("item_id", "")), StructurePlan.item_props(item)
+##         )
+##         for message in resolved["errors"] as PackedStringArray:
+##             push_error("StructureBaker: item %d: %s" % [int(item["id"]), message])
+##         for message in resolved["warnings"] as PackedStringArray:
+##             push_warning("StructureBaker: item %d: %s" % [int(item["id"]), message])
+##         for spec_variant in resolved["specs"] as Array:
+##             var spec := spec_variant as Dictionary
+##             for box_variant in PartCatalog.emit_boxes(spec):
+##                 var box := box_variant as Dictionary
+##                 box["center"] = xform * (box["center"] as Vector3)
+##                 box["basis"] = xform.basis * (box["basis"] as Basis)
+##                 _bucket_layer(buckets, box, offset, ghost)
+##
+## i.e. the baker asks the plan WHERE (one Transform3D) and the catalog WHAT
+## (boxes in part-local metres), and multiplies. No other placement logic.
+##
+## Two things that paragraph is careful about, both measured rather than
+## guessed:
+##
+##  - `expand_props` is the whole props seam. It takes the plan's free-form bag
+##    directly, so the baker never filters props itself and no mis-typed prop is
+##    swallowed on the way through. Use `expand()` / `expand_checked()` when you
+##    already hold parameter values rather than a props bag.
+##  - `emit_boxes` is the whole dispatch seam. Do NOT write
+##    `StructureBaker.call(emitter, spec)`: a global class name is a
+##    compile-time class reference, not a Script value, and that line is a PARSE
+##    ERROR — "cannot call non-static function call() on the class ...
+##    directly". `(StructureBaker as Script).call(...)` and
+##    `load(BAKER_PATH).call(...)` both compile; `emit_boxes` does it once, here,
+##    and returns [] for a primitive the baker cannot draw yet.
 
 const CATALOG_PATH := "res://resources/data/parts/catalog.json"
 const BAKER_PATH := "res://scripts/construction/structure_baker.gd"
@@ -137,6 +171,7 @@ static var _warnings: PackedStringArray = PackedStringArray()
 static var _ready := false
 static var _baker_methods: PackedStringArray = PackedStringArray()
 static var _baker_materials: PackedStringArray = PackedStringArray()
+static var _baker_script: Script = null
 static var _baker_probed := false
 
 
@@ -149,6 +184,7 @@ static func reload() -> void:
 	_warnings = PackedStringArray()
 	_ready = false
 	_baker_probed = false
+	_baker_script = null
 	ensure_loaded()
 
 
@@ -517,6 +553,60 @@ static func expand_checked(part_id: String, overrides: Dictionary = {}) -> Dicti
 	return {"specs": specs, "errors": errors}
 
 
+## The item hand-off: a part id and the plan's per-instance props bag in,
+## resolved primitive specs out. Returns {"specs", "errors", "warnings"} —
+## `warnings` names every props key that could not become a parameter, so a
+## typo is reported rather than silently defaulted. See params_from_props().
+static func expand_props(part_id: String, props: Dictionary = {}) -> Dictionary:
+	var converted := params_from_props(part_id, props)
+	var result := expand_checked(part_id, converted["params"] as Dictionary)
+	result["warnings"] = converted["warnings"]
+	return result
+
+
+## Per-instance props -> declared parameter values, naming what it rejected.
+## Returns {"params", "warnings"}.
+##
+## The props bag is deliberately free-form — a colour region, a label, whatever
+## a later feature adds all live in it — so a NON-numeric value under a key the
+## part does not declare is data, not a parameter, and passes without comment.
+##
+## A NUMBER under an undeclared key is a different thing: it is somebody typing
+## a parameter name and getting it slightly wrong. Filtering it out silently
+## also swallows `expand_checked`'s own "no parameter X" error, because the key
+## never reaches it — so `{"lenght": 12}` would resolve to the default length
+## with nothing said at all. That case is reported here, in the same words
+## `_resolve_params` uses, and so is a declared parameter handed a non-number.
+static func params_from_props(part_id: String, props: Dictionary) -> Dictionary:
+	var warnings := PackedStringArray()
+	var out: Dictionary = {}
+	var entry := get_entry(part_id)
+	if entry.is_empty():
+		if not props.is_empty():
+			warnings.append("no part \"%s\" in the catalog — props not applied" % part_id)
+		return {"params": out, "warnings": warnings}
+	var declared: Dictionary = entry.get("params", {})
+	var declared_list := ", ".join(PackedStringArray(declared.keys()))
+	for key in props.keys():
+		var name := str(key)
+		var value: Variant = props[key]
+		var numeric := value is float or value is int
+		if declared.has(name):
+			if numeric:
+				out[name] = float(value)
+			else:
+				warnings.append(
+					"part \"%s\": parameter \"%s\" needs a number, got %s — using the default"
+					% [part_id, name, type_string(typeof(value))]
+				)
+		elif numeric:
+			warnings.append(
+				"part \"%s\": no parameter \"%s\" (it declares %s) — value ignored"
+				% [part_id, name, declared_list]
+			)
+	return {"params": out, "warnings": warnings}
+
+
 static func _expand_entry(
 	entry: Dictionary, overrides: Dictionary, errors: PackedStringArray
 ) -> Array:
@@ -771,6 +861,27 @@ static func unbuildable_report() -> Array[Dictionary]:
 	return out
 
 
+## Boxes for one resolved spec, or [] when the baker cannot draw that primitive
+## yet. This is where the dynamic dispatch lives, and it lives here for a reason
+## a probe measured: `StructureBaker.call("spar_boxes", spec)` — the spelling the
+## hand-off used to document — is a PARSE ERROR ("cannot call non-static
+## function call() on the class ... directly"), because a global class name is a
+## compile-time class reference and not a Script value. `(StructureBaker as
+## Script).call(...)` compiles, and so does `load(path).call(...)`, but neither
+## is something a consumer should have to get right. Call this instead.
+static func emit_boxes(spec: Dictionary) -> Array:
+	var primitive := str(spec.get("primitive", ""))
+	var emitter := emitter_method_for(primitive)
+	if emitter.is_empty():
+		push_error("PartCatalog: no such primitive \"%s\"" % primitive)
+		return []
+	_probe_baker()
+	if _baker_script == null or not _baker_methods.has(emitter):
+		return []
+	var boxes: Variant = _baker_script.call(emitter, spec)
+	return boxes as Array if boxes is Array else []
+
+
 static func _probe_baker() -> void:
 	if _baker_probed:
 		return
@@ -778,6 +889,7 @@ static func _probe_baker() -> void:
 	_baker_methods = PackedStringArray()
 	_baker_materials = PackedStringArray(FALLBACK_MATERIALS)
 	var script := load(BAKER_PATH) as Script
+	_baker_script = script
 	if script == null:
 		push_error("PartCatalog: cannot load %s — buildability is unknown" % BAKER_PATH)
 		return

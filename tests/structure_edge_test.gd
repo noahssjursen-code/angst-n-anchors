@@ -197,6 +197,14 @@ func _test_profile_library_absorbs_nine_parts() -> void:
 	_t.equal("pipe_run is 2 rects x 2 segments", int(emitted_by.get("pipe_run", -1)), 4)
 	_t.equal("cap_rail is 1 rect x 2 segments", int(emitted_by.get("cap_rail", -1)), 2)
 
+	## A typo'd profile name is a REJECTED part, never a silently empty sweep —
+	## the same discipline PartCatalog applies to its fields. (The push_error
+	## this provokes lands in the gate's script-error column, which is noise.)
+	_t.check(
+		"an unknown profile name emits nothing and says so",
+		StructureEdge.sheer_band_boxes({"path": path, "profile": "cap_rale"}).is_empty(),
+	)
+
 	## A rolled rect must actually roll — a `roll` that is read and dropped
 	## produces the same axis-aligned box and nobody notices.
 	var flat := StructureEdge.sweep_boxes({

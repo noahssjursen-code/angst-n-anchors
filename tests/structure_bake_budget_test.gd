@@ -11,6 +11,13 @@ extends SceneTree
 ## Run: xvfb-run -a godot --rendering-driver opengl3 --audio-driver Dummy \
 ##        --script res://tests/structure_bake_budget_test.gd
 
+## A script error aborts the enclosing function and lets _initialize carry on,
+## so a broken baker can report "ALL PASS" having asserted nothing — this file
+## had no guard against that while its siblings (plan_compliance_test,
+## structure_item_schema_test) both pin their count. Pin it: fewer checks than
+## this and the run is a failure regardless of what the ones that ran said.
+const EXPECTED_CHECKS := 10
+
 const COLOURS := [
 	[0.90, 0.10, 0.10], [0.10, 0.90, 0.10], [0.10, 0.10, 0.90],
 	[0.90, 0.90, 0.10], [0.90, 0.10, 0.90], [0.10, 0.90, 0.90],
@@ -20,9 +27,11 @@ const COLOURS := [
 ]
 
 var _failures := 0
+var _checks := 0
 
 
 func _check(label: String, ok: bool) -> void:
+	_checks += 1
 	print("%s %s" % ["PASS" if ok else "FAIL", label])
 	if not ok:
 		_failures += 1
@@ -35,7 +44,16 @@ func _initialize() -> void:
 	_test_fixture_stays_within_budget()
 	_test_ghost_keeps_one_colour_per_surface()
 	print("---")
-	print("structure_bake_budget_test: %s" % ("ALL PASS" if _failures == 0 else "%d FAILURES" % _failures))
+	if _checks != EXPECTED_CHECKS:
+		print(
+			"FAIL ran %d checks, expected %d — a check aborted before asserting"
+			% [_checks, EXPECTED_CHECKS]
+		)
+		_failures += 1
+	print(
+		"structure_bake_budget_test: %d checks, %s"
+		% [_checks, "ALL PASS" if _failures == 0 else "%d FAILURES" % _failures]
+	)
 	quit(0 if _failures == 0 else 1)
 
 

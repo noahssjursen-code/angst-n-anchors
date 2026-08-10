@@ -90,6 +90,10 @@ const CARGO_TAGS: Array[String] = ["cargo", "bulk_hold"]
 const AABB_INFLATE_XZ := {"radius": 1.0, "thickness": 0.5, "width": 0.5}
 ## Scalars that raise the top of the box above its points.
 const AABB_EXTEND_UP: Array[String] = ["height"]
+## Tolerance for the deck-shadow polygon, in the cross-product units of metres².
+## A cell centre this close to an edge is inside it — the AABB reading it
+## replaces was inclusive on its bounds and staying inclusive keeps yaw 0 exact.
+const SHADOW_EPS := 1e-9
 
 ## The kit is preloaded rather than named: `part_catalog.gd` declares
 ## `class_name PartCatalog` but is newer than the project's global class cache,
@@ -137,6 +141,11 @@ static func validate(
 				% [item_id, part_id]
 			)
 			continue
+		## A prop the part has no parameter for is a typo, and a typo that
+		## resolves to a default in silence is how a builder ends up with a
+		## 12 m hold they asked to be 8 m. Named here, item and prop both.
+		for message in prop_warnings(part_id, StructurePlan.item_props(item)):
+			warnings.append("Plan item %d: %s" % [item_id, message])
 		var slot := Parts.outfit_slot_of(part_id)
 		if slot_items.has(slot):
 			(slot_items[slot] as Array).append(item_id)
@@ -406,6 +415,15 @@ static func item_cell(plan: StructurePlan, item: Dictionary, grid: DeckGrid) -> 
 ## coaming skin reached across two more cell boundaries. Nobody should pay a
 ## cell for a skin, and centre-in-box is the same rule a rasteriser uses for
 ## area.
+##
+## "Under the part" means under the part's own SHADOW — the XZ projection of the
+## rotated box, a convex polygon — never the world-axis-aligned box around it.
+## The AABB reading re-quantised the free rotation the item schema exists to
+## allow: measured against this same 8 × 4 m hold, it charged 128 cells at yaw 0,
+## 216 at 15° (the catalog's own default yaw_step), and 324 at 45° — 2.53× the
+## deck it covers, for turning it. A rule that fines a builder for an angle hands
+## the quantisation straight back, so the shadow is what is measured. Yaw 0 and
+## 90 are unchanged by construction: there the shadow IS the AABB.
 static func item_footprint_cells(
 	plan: StructurePlan, item: Dictionary, grid: DeckGrid
 ) -> Array[Vector3i]:
@@ -418,37 +436,98 @@ static func item_footprint_cells(
 	var xform := plan.item_transform(item)
 	var mn: Vector3 = box["min"]
 	var mx: Vector3 = box["max"]
-	var lo := Vector3.INF
-	var hi := -Vector3.INF
+	var corners := PackedVector2Array()
 	for corner_i in 8:
 		var corner := xform * Vector3(
 			mx.x if (corner_i & 1) != 0 else mn.x,
 			mx.y if (corner_i & 2) != 0 else mn.y,
 			mx.z if (corner_i & 4) != 0 else mn.z,
 		)
-		lo = lo.min(corner)
-		hi = hi.max(corner)
-	var cell_lo := StructurePlan.plan_to_cell(Vector3(lo.x, 0.0, lo.z), grid)
-	var cell_hi := StructurePlan.plan_to_cell(Vector3(hi.x, 0.0, hi.z), grid)
+		corners.append(Vector2(corner.x, corner.z))
+	var shadow := _shadow_hull(corners)
+	var lo := Vector2.INF
+	var hi := -Vector2.INF
+	for point in shadow:
+		lo = lo.min(point)
+		hi = hi.max(point)
+	var cell_lo := StructurePlan.plan_to_cell(Vector3(lo.x, 0.0, lo.y), grid)
+	var cell_hi := StructurePlan.plan_to_cell(Vector3(hi.x, 0.0, hi.y), grid)
 	var m := WorldUnits.DECK_CELL_M
 	for ix in range(cell_lo.x, cell_hi.x + 1):
-		var center_x := (float(ix) + 0.5) * m
-		if center_x < lo.x or center_x > hi.x:
-			continue
 		for iz in range(cell_lo.z, cell_hi.z + 1):
-			var center_z := (float(iz) + 0.5) * m
-			if center_z < lo.z or center_z > hi.z:
-				continue
-			out.append(Vector3i(ix, 0, iz))
+			var center := Vector2((float(ix) + 0.5) * m, (float(iz) + 0.5) * m)
+			if _shadow_covers(shadow, center):
+				out.append(Vector3i(ix, 0, iz))
 	return out
 
 
+## Convex hull of the projected corners (Andrew's monotone chain), in the XZ
+## plane — Vector2(x, z). Collinear points are dropped, so a shadow with no area
+## degenerates honestly to two points or one rather than pretending to be a
+## polygon.
+static func _shadow_hull(points: PackedVector2Array) -> PackedVector2Array:
+	var sorted: Array[Vector2] = []
+	for point in points:
+		sorted.append(point)
+	sorted.sort_custom(
+		func(a: Vector2, b: Vector2) -> bool:
+			return a.x < b.x or (a.x == b.x and a.y < b.y)
+	)
+	var hull := PackedVector2Array()
+	for half in 2:
+		var start := hull.size()
+		var order := range(sorted.size()) if half == 0 else range(sorted.size() - 1, -1, -1)
+		for i in order:
+			var point: Vector2 = sorted[i]
+			while (
+				hull.size() - start >= 2
+				and _cross(hull[hull.size() - 2], hull[hull.size() - 1], point) <= SHADOW_EPS
+			):
+				hull.remove_at(hull.size() - 1)
+			hull.append(point)
+		hull.remove_at(hull.size() - 1)
+	if hull.size() == 2 and hull[0].is_equal_approx(hull[1]):
+		hull.remove_at(1)
+	return hull
+
+
+## Does the shadow cover this point? Boundary counts, matching the inclusive
+## bounds the AABB reading used. A degenerate shadow (a line, a point) has no
+## area and covers a cell centre only when the centre lies exactly on it.
+static func _shadow_covers(hull: PackedVector2Array, point: Vector2) -> bool:
+	var n := hull.size()
+	if n == 0:
+		return false
+	if n == 1:
+		return hull[0].distance_squared_to(point) <= SHADOW_EPS
+	if n == 2:
+		if absf(_cross(hull[0], hull[1], point)) > SHADOW_EPS:
+			return false
+		var along := (point - hull[0]).dot(hull[1] - hull[0])
+		return along >= -SHADOW_EPS and along <= hull[0].distance_squared_to(hull[1]) + SHADOW_EPS
+	## Orientation-agnostic: inside means every edge turns the same way.
+	var lo := INF
+	var hi := -INF
+	for i in n:
+		var side := _cross(hull[i], hull[(i + 1) % n], point)
+		lo = minf(lo, side)
+		hi = maxf(hi, side)
+	return lo >= -SHADOW_EPS or hi <= SHADOW_EPS
+
+
+static func _cross(o: Vector2, a: Vector2, b: Vector2) -> float:
+	return (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x)
+
+
 ## Conservative box around a part's own expanded geometry, in part-local metres.
-## Returns { ok, min, max }. It reads the resolved primitive specs, so a part
-## that grows with a `$length` parameter grows here too — the footprint cannot
-## be inflated by a prop the geometry does not honour.
+## Returns { ok, min, max, errors, warnings }. It reads the resolved primitive
+## specs, so a part that grows with a `$length` parameter grows here too — the
+## footprint cannot be inflated by a prop the geometry does not honour, and a
+## prop that names no parameter comes back in `warnings` instead of vanishing.
 static func part_local_aabb(part_id: String, props: Dictionary = {}) -> Dictionary:
-	var result := Parts.expand_checked(part_id, param_overrides(part_id, props))
+	var result := Parts.expand_props(part_id, props)
+	var errors: PackedStringArray = result.get("errors", PackedStringArray())
+	var warnings: PackedStringArray = result.get("warnings", PackedStringArray())
 	var specs: Array = result.get("specs", [])
 	var lo := Vector3.INF
 	var hi := -Vector3.INF
@@ -484,21 +563,28 @@ static func part_local_aabb(part_id: String, props: Dictionary = {}) -> Dictiona
 			lo = lo.min(point - Vector3(inflate, 0.0, inflate))
 			hi = hi.max(point + Vector3(inflate, rise, inflate))
 	if not any:
-		return {"ok": false, "min": Vector3.ZERO, "max": Vector3.ZERO}
-	return {"ok": true, "min": lo, "max": hi}
+		return {
+			"ok": false, "min": Vector3.ZERO, "max": Vector3.ZERO,
+			"errors": errors, "warnings": warnings,
+		}
+	return {"ok": true, "min": lo, "max": hi, "errors": errors, "warnings": warnings}
 
 
 ## Props keys that name a declared parameter of the part. Anything else in the
 ## bag (colour region, label, whatever a later feature adds) is not a parameter
-## and must not make `expand_checked` fail.
+## and must not make `expand_checked` fail — but it must not be swallowed
+## either, which is why the catalog does the filtering and reports what it
+## dropped. Use `prop_warnings()` for the report; this returns the values only.
 static func param_overrides(part_id: String, props: Dictionary) -> Dictionary:
-	var declared: Dictionary = Parts.get_entry(part_id).get("params", {})
-	var out := {}
-	for key in props.keys():
-		var name := str(key)
-		if declared.has(name) and (props[key] is float or props[key] is int):
-			out[name] = float(props[key])
-	return out
+	return Parts.params_from_props(part_id, props)["params"] as Dictionary
+
+
+## What `param_overrides` had to reject, in the builder's words. A numeric prop
+## naming no parameter is a typo — it used to resolve to the default in total
+## silence, because filtering the key also swallowed `expand_checked`'s own
+## "no parameter X" error.
+static func prop_warnings(part_id: String, props: Dictionary) -> PackedStringArray:
+	return Parts.params_from_props(part_id, props)["warnings"] as PackedStringArray
 
 
 ## Highest point the plan reaches, in deck-grid cells above the deck plane.

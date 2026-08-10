@@ -369,7 +369,6 @@ static func _post_boxes(spec: Dictionary) -> Array:
 	var segments := _segments_of(path, closed)
 	var offset := _vec3_of(spec.get("offset", Vector3.ZERO))
 	var out: Array = []
-	var index := 0
 	for i in segments.size():
 		var seg := segments[i] as Dictionary
 		var count := maxi(
@@ -393,7 +392,6 @@ static func _post_boxes(spec: Dictionary) -> Array:
 				"color": color,
 				"material": material,
 			})
-			index += 1
 	return out
 
 
@@ -494,7 +492,7 @@ static func railing_collider_boxes(spec: Dictionary) -> Array:
 			continue
 		out.append({
 			"center": Vector3((a.x + b.x) * 0.5, (y_low + y_high) * 0.5, (a.z + b.z) * 0.5),
-			"size": Vector3(6.0, y_high - y_low, plan_length),
+			"size": Vector3(thickness, y_high - y_low, plan_length),
 			"yaw_deg": rad_to_deg(atan2(b.x - a.x, b.z - a.z)),
 		})
 	return out
@@ -600,10 +598,6 @@ static func sheer_loop(
 ## unindexed, 36 verts. Reported so a plan's cost is knowable before it bakes.
 static func triangle_count(boxes: Array) -> int:
 	return boxes.size() * 12
-
-
-static func vertex_count(boxes: Array) -> int:
-	return boxes.size() * 36
 
 
 ## Total swept length of a path, in metres. Reported alongside triangle counts
