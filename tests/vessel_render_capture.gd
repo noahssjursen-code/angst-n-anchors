@@ -234,7 +234,10 @@ func _check_cost(stem: String, meshes: int) -> void:
 	if not COST_BUDGET.has(stem):
 		return
 	var budget := COST_BUDGET[stem] as Dictionary
-	var calls := int(budget["draw_calls"])
+	## x2 for the same reason as triangles: the shadow pass issues its own draw
+	## calls over the same surfaces. The vessel did not get more expensive when
+	## the sun learned to cast.
+	var calls := int(budget["draw_calls"]) * 2
 	_t.check(
 		"%s: %d draw calls against the %d it drew undressed" % [stem, _draw_calls, calls],
 		_draw_calls <= calls
