@@ -239,7 +239,11 @@ func _check_cost(stem: String, meshes: int) -> void:
 		"%s: %d draw calls against the %d it drew undressed" % [stem, _draw_calls, calls],
 		_draw_calls <= calls
 	)
-	var tris := int(budget["triangles"])
+	## Budgets are x2 because the sun now casts shadows, and a shadow map is a
+	## second pass over the same geometry — RENDERING_INFO_TOTAL_PRIMITIVES_IN_FRAME
+	## counts a triangle once per pass, not once per mesh. The scene did not get
+	## heavier; the counter started telling the truth about what is drawn.
+	var tris := int(budget["triangles"]) * 2
 	_t.check("%s: %d triangles, budget %d" % [stem, _primitives, tris], _primitives <= tris)
 	## A `meshes <= 4` check was written here and deleted after it survived its
 	## own mutant. Retinting a mast into a fourth material bucket took this
@@ -560,11 +564,24 @@ func _add_scale_figure(offset: Vector3, stem: String) -> void:
 
 
 func _light_the_stage() -> void:
+	# DirectionalLight3D defaults shadow_enabled to FALSE. Every capture before
+	# 2026-08-10 shipped with no shadows at all — no mast on the deck, no
+	# deckhouse on the hull, nothing self-shadowing — which is most of why the
+	# vessels read as flat grey blocks pasted onto a hull. Shadow is not a
+	# finishing touch on a low-poly model; it is the only thing separating two
+	# untextured surfaces that meet at an angle.
 	var sun := DirectionalLight3D.new()
 	sun.rotation_degrees = Vector3(-42.0, 38.0, 0.0)
 	sun.light_energy = 1.15
+	sun.shadow_enabled = true
+	sun.directional_shadow_mode = DirectionalLight3D.SHADOW_ORTHOGONAL
+	sun.directional_shadow_max_distance = 220.0
+	sun.shadow_bias = 0.03
+	sun.shadow_normal_bias = 1.4
 	_stage.add_child(sun)
 
+	# The fill deliberately casts nothing: two shadow sets from opposing angles
+	# read as dirt, not as light.
 	var fill := DirectionalLight3D.new()
 	fill.rotation_degrees = Vector3(-18.0, -125.0, 0.0)
 	fill.light_energy = 0.35
