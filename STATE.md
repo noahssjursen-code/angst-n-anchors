@@ -963,24 +963,51 @@ vocabulary exists.** That makes M2 the critical path for M0 as well as for the g
 
 ## Next actions
 
-1. **M0.1a** — convert the remaining **15** files (group E): `terrain_surface_maps_test`,
-   `ship_display_units_test`, `ocean_clipmap_smoke`, `lod_profiles_test`, `build_profiler_test`,
-   `bow_thruster_test`, `hull_hydrostatics_smoke`, `proximity_loader_test`,
-   `weather_visual_capture`, `impostor_cache_test`, `world_terrain_background_test`,
-   `world_layout_debug_capture`, `ocean_wake_visual_capture`, `ocean_wake_gpu_smoke`,
-   `shipping_traffic_artifact_test`.
-2. **M0.1b** — run the two adversarial auditors that never ran. Nothing has yet checked the
-   converted diff for weakened assertions or independently re-run the files. Until that
-   happens the conversion is unverified, and a converter under pressure to report PASS had
-   every opportunity to cheat.
-3. **M0.1c** — sweep for the *other* false-green shape: tests that early-return past their
-   assertions when a fixture is missing (`vessel_registration_test` skips 5 of 8 sub-tests).
-   `TestReport` already fails a zero-check run; extend that idea to partial skips.
-4. **M0.2** — gate lane B for the 23 scene tests; migrate the NOTRUN files into it.
-5. **M0.3** — fix the real breakage the conversion exposed. Highest first:
-   **the empty prebuilt catalogue blocking starter-vessel grants**, then the apron keepout,
-   then `building_blueprint_test`.
-6. Record the honest baseline, close M0, open M2.
+Rewritten 2026-08-10. The list this replaces was written on 2026-08-09 and had gone stale in the
+same way the known-red list had — it named the bare-`assert()` conversion and lane B as pending
+when both had long landed. **A stale next-actions list sends the next wave at work that is already
+done.** Regenerate this from the tree, not from the last copy of itself.
+
+### In flight — three waves, with their file ownership, because they overlap
+
+| Wave | Owns | Must not touch |
+|---|---|---|
+| **Studio piece tool** — the critical path | `scripts/apps/structure_studio.gd`, `scripts/construction/structure_plan.gd` | the kit data + resolver |
+| **Kit set-widening** — camber, rake step, tier height, diagonal cap | `structure_pieces.json`, `piece_kit.gd`, `gen_piece_fixtures.py`, `piece_kit_test/capture` | the studio, the plan |
+| **Kit critic** — adversarial, briefed to BREAK the seam and mouse claims | `critic_*`, `piece_kit_critic_*` only | everything else |
+
+Concurrent waves have already clobbered each other once in this repo, which is why ownership is
+written down rather than assumed.
+
+### Then, in order
+
+1. **Judge the studio tool against the mouse test.** Not "does it compile" — can a player place a
+   piece, turn it, edit its parameters and delete it without typing a number? If the palette or the
+   parameter controls are hardcoded rather than read from `structure_pieces.json`, that is a
+   rejection: the set-widening wave changes those values.
+2. **Act on the critic's impossibilities.** Its findings are the spec for the kit's next pieces.
+   Expect the diagonal cap and the seam constraints to be where it bites.
+3. **Re-run the full gate over a QUIET tree** and re-measure the known-red list. The current
+   measurement (`20260810-081647-26225`) ran while two writers were editing and is a snapshot of a
+   moving target; treat it as indicative, not authoritative.
+4. **`staged_vessel_visual_demo` never calls `quit()`** — 240 s timeout every run. Either it gets a
+   verdict or it leaves the gate. A unit that cannot report an outcome is not a test.
+5. **`ship_display_units_test` fails to COMPILE**, which is a different and worse thing than
+   failing an assertion. Diagnose before the next sweep.
+6. **The empty-catalogue family is ten of the nineteen reds** — `BrickCatalog.BRICKS` is `{}` and
+   `resources/data/vessels/prebuilt/` holds only `.gitkeep`. One root cause, ten tests, and it is
+   also STATE.md's missing-item 4: no starter vessel for any new player. This is the largest single
+   lever left on the red count and it is blocked on the parts vocabulary, which has now landed.
+7. **Owner decisions still outstanding** — `budget_caps.crane` is 0 on every registration so any
+   crane fails compliance; no lifesaving requirement of any kind exists; `fishing_vessel` requires
+   gear but not fishing lights; no hull is under 28 m though two of the three reference vessels are
+   ~22 m and the third ~15 m.
+
+### Standing, not a task
+
+Every model edit returns a render and the orchestrator looks at it. No metric for appearance —
+that was tried, it passed three vessels the owner had just rejected, and it was deleted the hour it
+was written. See `REALITY.md` §2.
 
 ## Milestone log
 
