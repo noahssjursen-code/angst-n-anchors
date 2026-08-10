@@ -308,9 +308,15 @@ func _check_hull_restatement(plan: StructurePlan, stem: String, boat: Node3D) ->
 ## actually costs, and the number is here so the cost is visible in the diff
 ## rather than discovered in a harbour.
 const COST_BUDGET := {
-	"demo_workboat": {"draw_calls": 8, "triangles": 12600},
-	"probe_trawler_bulwark": {"draw_calls": 8, "triangles": 12100},
-	"probe_trawler_bow_bulwark": {"draw_calls": 8, "triangles": 12200},
+	## Refreshed after the room purge and the rebuild on sheer band + raked plate.
+	## Draw calls did NOT move on any of the three — a deckhouse in plates and a
+	## rubbing strake reuse the material buckets the vessel already had. Triangles
+	## roughly tripled, which is what superstructure and a swept hull strake cost
+	## and is the trade this project made deliberately: geometry is cheap, a new
+	## material bucket is not. Values are measured, then given ~8% headroom.
+	"demo_workboat": {"draw_calls": 8, "triangles": 34000},
+	"probe_trawler_bulwark": {"draw_calls": 8, "triangles": 33200},
+	"probe_trawler_bow_bulwark": {"draw_calls": 8, "triangles": 36900},
 	"probe_ferry_catamaran": {"draw_calls": 10, "triangles": 19000},
 	"probe_spar_kit": {"draw_calls": 9, "triangles": 9400},
 	"probe_ferry_catamaran_trim": {"draw_calls": 10, "triangles": 19600},
@@ -366,13 +372,26 @@ func _check_fittings(plan: StructurePlan, stem: String) -> void:
 	for item_variant in plan.items:
 		var item := item_variant as Dictionary
 		var primitive := StructureBaker.item_primitive(item)
-		if primitive != "spar" and primitive != "wire":
-			mute += 1
-			continue
-		if StructureBaker.spar_path(StructurePlan.item_props(item)).size() >= 2:
-			drawable += 1
-		else:
-			mute += 1
+		match primitive:
+			"spar", "wire":
+				# A swept tube needs at least two path nodes or it emits nothing.
+				if StructureBaker.spar_path(StructurePlan.item_props(item)).size() >= 2:
+					drawable += 1
+				else:
+					mute += 1
+			"plate":
+				# Four free corners, so a plate's silent-nothing case is a
+				# degenerate quad rather than a short path. The rooms that used to
+				# build superstructure are gone; every deckhouse is plates now, and
+				# this check called all 104 of the ferry's MUTE until it learned
+				# the primitive — a rig that does not know a primitive reports the
+				# vessel using it as broken.
+				if StructureBaker.plate_corners(StructurePlan.item_props(item)).size() == 4:
+					drawable += 1
+				else:
+					mute += 1
+			_:
+				mute += 1
 	if plan.items.is_empty():
 		return
 	_t.check(
