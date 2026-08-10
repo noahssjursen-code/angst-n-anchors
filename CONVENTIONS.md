@@ -1,6 +1,8 @@
 # CONVENTIONS.md — how work gets done here
 
 `AGENTS.md` is the law for **what the code may look like**.
+`REALITY.md` is the record of **how this project lies to itself** — read it before you
+claim anything, and treat its standing orders as binding.
 This file is the law for **how work moves**: the gate, the orchestration loop, the
 commit discipline, and the container facts that cost real time to discover.
 
