@@ -151,6 +151,29 @@ input; "no corner of any box this draws is outside the barrier" states the thing
 and it is the one that survives a change to the geometry. When two tests both pass and disagree
 about the same edge, the disagreement is the finding — go and look, do not average them.
 
+**The sharpest example, because the assertion demanded the bug it was named to prevent.**
+`ship_display_units_test` carried:
+
+```gdscript
+t.check("display conversion must not shrink deck length", grid.length == 28)
+```
+
+The deck grid is counted in CELLS, and a cell is 0.5 m. Measured across the fleet — 28 m hull →
+56 cells, 70 m → 140, 120 m → 240, 150 m → 300. So `grid.length == 28` on a 28 m hull is the
+HALVED value: the assertion asked for exactly the shrinkage its own label forbids. Mutating the
+producer to halve the grid makes it return 28 cells, which is what the old check demanded — **it
+would have gone green on the bug**.
+
+And it never fired either way, because the file was in lane A and did not COMPILE
+(`Identifier not found: WorldGateway`; `--script` registers no autoloads). Two defects hiding
+each other: a test that could not run, and an assertion that would have passed the thing it
+existed to catch. A compile failure reads as `FAIL(1)` in a results table, indistinguishable from
+a genuine assertion failure, which is how it sat unexamined in the known-red list next to nine
+real ones.
+
+**Corollary.** A test that has never run has never been checked, whatever its assertions say.
+When a unit fails to compile, fix the compile before you trust one word of what it asserts.
+
 **Corollary — one derivation.** Where geometry and collision are computed separately, they drift;
 this project has now fixed that same bug three times (`DeckFitout` yaw, the bulwark cap, the
 railing). The fix that holds is not a more careful second formula. It is deleting the second

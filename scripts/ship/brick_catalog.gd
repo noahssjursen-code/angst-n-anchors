@@ -10,11 +10,581 @@ const WIN_POST := 0.08
 const WIN_PANE_T := 0.04
 const WIN_FRAME := Color(0.72, 0.74, 0.78)
 
-## ASSET LIBRARY WIPED (2026-07-24) — the block vocabulary is being rebuilt
-## from zero. All placement/mounting machinery below is tag-driven and stays
-## dormant until new brick definitions land here (moving to JSON data is the
-## plan once the vocabulary stabilizes).
-const BRICKS: Dictionary = {}
+## RESTORED 2026-08-10 — the dictionary below is the pre-wipe vocabulary,
+## recovered verbatim from `bbaefef:scripts/ship/brick_catalog.gd`. It was
+## emptied on 2026-07-24 ("ASSET LIBRARY WIPED — the block vocabulary is being
+## rebuilt from zero"), and nothing ever landed in its place, so for six weeks
+## `BrickCatalog.BRICKS` was `{}` and every consumer measured zero: no vessel
+## could be certified, no starter vessel could exist, and ten gate units failed
+## on that one fact.
+##
+## READ THIS BEFORE ASSUMING THE REBUILD ALREADY HAPPENED. The five structure
+## primitives (plate / spar / wire / sheer_band / railing) and the piece kit are
+## a DIFFERENT vocabulary, consumed by `StructureBaker` from a
+## `structure_plan_v1` document. Nothing in this file reads them and nothing
+## reads this file from there. The two systems meet only at
+## `DeckFitout.compliance_for_layout`, which routes a saved layout dict to
+## `PlanOutfit` or to `VesselCompliance` by shape. So the parts vocabulary
+## landing did NOT unblock the brick vocabulary — it built the other half.
+##
+## The eventual single vocabulary is M3's: `resources/data/parts/catalog.json`
+## carries the same compliance identities (`helm`, `mooring`, `fishing`,
+## `bulk_hold`, `nav_white`, `passenger_capacity`) and `PlanOutfit` already
+## measures them. What it cannot yet express is `general_vessel`'s SIDELIGHT
+## rules — `brick_count light_nav_port` / `light_nav_stbd` and the two
+## `brick_side` rules address brick IDS, and the part catalog has no
+## port/starboard lantern at all. Until it does, a plan-drawn ship cannot pass
+## `general_vessel` and the brick path is the only certifiable one.
+const BRICKS: Dictionary = {
+	"block": {
+		"display": "Block",
+		"footprint": [1, 1, 1],
+		"tags": ["wall", "solid"],
+		"mass_kg": 80.0,
+		"color": Color(0.78, 0.80, 0.84),
+	},
+	"block_45": {
+		"display": "45° angled block",
+		## Vertical triangular prism for diagonal walls and pointed hull edges.
+		## Missing plan corner is local (+X,+Z).
+		"footprint": [1, 1, 1],
+		"tags": ["wall", "solid", "diagonal_plan"],
+		"mass_kg": 40.0,
+		"color": Color(0.78, 0.80, 0.84),
+	},
+	"block_window": {
+		"display": "Window",
+		## 1×1×1 — glass flush on local −Z face.
+		"footprint": [1, 1, 1],
+		"tags": ["window"],
+		"mass_kg": 35.0,
+		"color": Color(0.55, 0.72, 0.88, 0.22),
+	},
+	"block_window_45": {
+		"display": "45° angled window",
+		## Triangular plan piece; glazing follows the diagonal cut face.
+		"footprint": [1, 1, 1],
+		"tags": ["window", "diagonal_plan"],
+		"mass_kg": 28.0,
+		"color": Color(0.55, 0.72, 0.88, 0.22),
+	},
+	"block_windshield": {
+		"display": "Panoramic windshield",
+		## One uninterrupted 3 m pane with only a perimeter frame.
+		"footprint": [3, 1, 1],
+		"tags": ["window", "ship_only", "windshield"],
+		"mass_kg": 90.0,
+		"color": Color(0.48, 0.68, 0.84, 0.20),
+	},
+	"block_window_corner": {
+		"display": "Window corner",
+		## 1×1×1 outer L — glass on −Z and −X; seams with straight windows.
+		"footprint": [1, 1, 1],
+		"tags": ["window", "corner"],
+		"mass_kg": 40.0,
+		"color": Color(0.55, 0.72, 0.88, 0.22),
+	},
+	"block_door": {
+		"display": "Door",
+		## 2 m wide × 3 m tall × 1 m deep — spans three layers (player ~1.8 m).
+		"footprint": [2, 3, 1],
+		"tags": ["door"],
+		"mass_kg": 90.0,
+		"color": Color(0.48, 0.32, 0.20),
+	},
+	"block_door_double": {
+		"display": "Double door",
+		## 4 m wide × 3 m tall × 1 m deep — paired leaves, yaw aims the passage along ±Z.
+		"footprint": [4, 3, 1],
+		"tags": ["door", "double_door"],
+		"mass_kg": 200.0,
+		"color": Color(0.48, 0.32, 0.20),
+	},
+	"block_door_fixed": {
+		"display": "Door (fixed)",
+		## Same look as Door — sealed / non-interactable prop (no BrickDoor).
+		"footprint": [2, 3, 1],
+		"tags": ["solid", "door_fixed"],
+		"mass_kg": 90.0,
+		"color": Color(0.48, 0.32, 0.20),
+	},
+	"block_door_double_fixed": {
+		"display": "Double door (fixed)",
+		## Same look as Double door — sealed / non-interactable prop (no BrickDoor).
+		"footprint": [4, 3, 1],
+		"tags": ["solid", "door_fixed"],
+		"mass_kg": 200.0,
+		"color": Color(0.48, 0.32, 0.20),
+	},
+	"foundation": {
+		"display": "Foundation",
+		"footprint": [1, 1, 1],
+		"tags": ["solid", "foundation"],
+		"mass_kg": 110.0,
+		"color": Color(0.34, 0.35, 0.36),
+	},
+	"floor": {
+		"display": "Floor",
+		## Thin surface underlay — shares a cell with walls/props placed on top.
+		"footprint": [1, 1, 1],
+		"tags": ["floor", "surface"],
+		"mass_kg": 35.0,
+		"color": Color(0.48, 0.38, 0.27),
+	},
+	"roof_flat": {
+		"display": "Flat roof",
+		"footprint": [1, 1, 1],
+		"tags": ["solid", "roof"],
+		"mass_kg": 45.0,
+		"color": Color(0.22, 0.24, 0.25),
+	},
+	"roof_flat_2x2": {
+		"display": "Flat roof 2×2",
+		"footprint": [2, 1, 2],
+		"tags": ["solid", "roof"],
+		"mass_kg": 160.0,
+		"color": Color(0.22, 0.24, 0.25),
+	},
+	"roof_flat_4x4": {
+		"display": "Flat roof 4×4",
+		"footprint": [4, 1, 4],
+		"tags": ["solid", "roof"],
+		"mass_kg": 600.0,
+		"color": Color(0.22, 0.24, 0.25),
+	},
+	"roof_slope": {
+		"display": "Sloped roof",
+		"footprint": [1, 1, 1],
+		"tags": ["solid", "roof", "slope"],
+		"mass_kg": 40.0,
+		"color": Color(0.25, 0.27, 0.28),
+	},
+	"roof_slope_2x2x4": {
+		"display": "Sloped roof 2×2×4",
+		## 2 m wide × 2 m rise × 4 m run — high edge at −Z, slopes toward +Z.
+		"footprint": [2, 2, 4],
+		"tags": ["solid", "roof", "slope"],
+		"mass_kg": 280.0,
+		"color": Color(0.25, 0.27, 0.28),
+	},
+	"roof_slope_1x2x4": {
+		"display": "Sloped roof 1×2×4",
+		## 1 m wide × 2 m rise × 4 m run — high edge at −Z, slopes toward +Z.
+		"footprint": [1, 2, 4],
+		"tags": ["solid", "roof", "slope"],
+		"mass_kg": 140.0,
+		"color": Color(0.25, 0.27, 0.28),
+	},
+	"roof_slope_inv": {
+		"display": "Inverted sloped roof",
+		"footprint": [1, 1, 1],
+		"tags": ["solid", "roof", "slope"],
+		"mass_kg": 40.0,
+		"color": Color(0.25, 0.27, 0.28),
+	},
+	"roof_slope_inv_2x2x4": {
+		"display": "Inverted sloped roof 2×2×4",
+		## 2 m wide × 2 m rise × 4 m run — high edge at −Z, underside slopes toward +Z.
+		"footprint": [2, 2, 4],
+		"tags": ["solid", "roof", "slope"],
+		"mass_kg": 280.0,
+		"color": Color(0.25, 0.27, 0.28),
+	},
+	"roof_corner": {
+		"display": "Corner roof",
+		## Hip / outer corner — peak at local (−X, −Z); yaw to seat against two slopes.
+		"footprint": [1, 1, 1],
+		"tags": ["solid", "roof", "slope", "corner"],
+		"mass_kg": 35.0,
+		"color": Color(0.25, 0.27, 0.28),
+	},
+	"roof_corner_4x2x4": {
+		"display": "Corner roof 4×2×4",
+		## Large hip / outer corner — peak at local (−X, −Z).
+		"footprint": [4, 2, 4],
+		"tags": ["solid", "roof", "slope", "corner"],
+		"mass_kg": 560.0,
+		"color": Color(0.25, 0.27, 0.28),
+	},
+	"roof_corner_inv": {
+		"display": "Inverted corner roof",
+		"footprint": [1, 1, 1],
+		"tags": ["solid", "roof", "slope", "corner"],
+		"mass_kg": 35.0,
+		"color": Color(0.25, 0.27, 0.28),
+	},
+	"roof_corner_inner": {
+		"display": "Inner corner roof",
+		## Valley / inside corner — high L along (−X, −Z); yaw to seat between two slopes.
+		"footprint": [1, 1, 1],
+		"tags": ["solid", "roof", "slope", "corner"],
+		"mass_kg": 40.0,
+		"color": Color(0.25, 0.27, 0.28),
+	},
+	"roof_corner_inner_4x2x4": {
+		"display": "Inner corner roof 4×2×4",
+		## Large valley / inside corner — high L along (−X, −Z).
+		"footprint": [4, 2, 4],
+		"tags": ["solid", "roof", "slope", "corner"],
+		"mass_kg": 560.0,
+		"color": Color(0.25, 0.27, 0.28),
+	},
+	"roof_corner_inner_inv": {
+		"display": "Inverted inner corner roof",
+		"footprint": [1, 1, 1],
+		"tags": ["solid", "roof", "slope", "corner"],
+		"mass_kg": 40.0,
+		"color": Color(0.25, 0.27, 0.28),
+	},
+	"beam": {
+		"display": "Beam",
+		"footprint": [1, 1, 1],
+		"tags": ["solid", "structure"],
+		"mass_kg": 30.0,
+		"color": Color(0.30, 0.22, 0.15),
+	},
+	"ledge_45": {
+		"display": "45° wedge",
+		## Full cell cut on the diagonal — triangle brick / ramp.
+		"footprint": [1, 1, 1],
+		"tags": ["slope", "solid"],
+		"mass_kg": 40.0,
+		"color": Color(0.78, 0.80, 0.84),
+	},
+	"ledge_45_corner": {
+		"display": "45° corner wedge",
+		## Peak at local (−X, −Z) — ship-coloured hip / corner piece.
+		"footprint": [1, 1, 1],
+		"tags": ["slope", "solid", "corner"],
+		"mass_kg": 35.0,
+		"color": Color(0.78, 0.80, 0.84),
+	},
+	"ledge_45_corner_inv": {
+		"display": "Inverted 45° corner wedge",
+		"footprint": [1, 1, 1],
+		"tags": ["slope", "solid", "corner"],
+		"mass_kg": 35.0,
+		"color": Color(0.78, 0.80, 0.84),
+	},
+	"ledge_45_inner": {
+		"display": "45° inner corner wedge",
+		## High L along (−X, −Z), low tip at (+X, +Z) — valley piece.
+		"footprint": [1, 1, 1],
+		"tags": ["slope", "solid", "corner"],
+		"mass_kg": 40.0,
+		"color": Color(0.78, 0.80, 0.84),
+	},
+	"ledge_45_inner_inv": {
+		"display": "Inverted 45° inner corner wedge",
+		"footprint": [1, 1, 1],
+		"tags": ["slope", "solid", "corner"],
+		"mass_kg": 40.0,
+		"color": Color(0.78, 0.80, 0.84),
+	},
+	"stairs": {
+		"display": "Companionway",
+		## Tight 1×1×1 hatch stair — steep; prefer staircase for deck-to-deck.
+		"footprint": [1, 1, 1],
+		"tags": ["stairs", "slope"],
+		"mass_kg": 55.0,
+		"color": Color(0.58, 0.48, 0.36),
+		"stair_steps": 4,
+	},
+	"staircase": {
+		"display": "Staircase",
+		## 2 m wide × 4 m tall × 2 m run — spans four layers.
+		"footprint": [2, 4, 2],
+		"tags": ["stairs", "slope"],
+		"mass_kg": 320.0,
+		"color": Color(0.55, 0.46, 0.34),
+		## 4 m rise / 10 ≈ 0.4 m risers (under player max_step_height).
+		"stair_steps": 10,
+	},
+	"helm": {
+		"display": "Helm console",
+		## Bridge console — place in the bridge; F only when looking at this brick.
+		"footprint": [1, 1, 1],
+		"tags": ["helm", "ship_only"],
+		"mass_kg": 55.0,
+		"color": Color(0.32, 0.34, 0.38),
+	},
+	"passenger_seat": {
+		"display": "Passenger seat",
+		## One certified passenger place. Capacity is derived from these bricks.
+		"footprint": [1, 1, 1],
+		"tags": ["passenger", "seat", "ship_only"],
+		"passenger_capacity": 1,
+		"equipment_rating": 1,
+		"mass_kg": 24.0,
+		"color": Color(0.20, 0.32, 0.46),
+	},
+	"light_deck": {
+		"display": "Deck flood",
+		## Sits on a block roof / deck; yaw aims across deck; housing ~25° down.
+		"footprint": [1, 1, 1],
+		"tags": ["light", "work", "top_mount", "ship_only"],
+		"light_type": 4, ## ShipLight.LightType.WORK
+		"housing_pitch_deg": -25.0,
+		"spot_pitch_deg": 0.0, ## Beam parented under FloodHead.
+		"spot_range_m": 22.0,
+		"spot_energy": 95.0,
+		"spot_angle_deg": 48.0,
+		"yaw_step": 45,
+		"mass_kg": 18.0,
+		"color": Color(0.72, 0.70, 0.62),
+	},
+	"light_external": {
+		"display": "External flood",
+		## Roof / deck pedestal flood for quay / sea — yaw aims out; nearly level throw.
+		"footprint": [1, 1, 1],
+		"tags": ["light", "work", "external", "top_mount", "ship_only"],
+		"light_type": 4,
+		"housing_pitch_deg": 5.0,
+		"spot_pitch_deg": 0.0,
+		"spot_range_m": 42.0,
+		"spot_energy": 120.0,
+		"spot_angle_deg": 40.0,
+		"yaw_step": 45,
+		"mass_kg": 22.0,
+		"color": Color(0.78, 0.76, 0.68),
+	},
+	"light_cabin": {
+		"display": "Cabin light",
+		## Bulkhead / overhead dome — warm omni.
+		"footprint": [1, 1, 1],
+		"tags": ["light", "cabin_light", "attach"],
+		"light_type": 5, ## ShipLight.LightType.WINDOW (warm omni)
+		"yaw_step": 45,
+		"mass_kg": 8.0,
+		"color": Color(0.85, 0.78, 0.55),
+	},
+	"light_ceiling": {
+		"display": "Ceiling light",
+		## Flush ceiling pan + frosted disc — hang from the cell soffit.
+		"footprint": [1, 1, 1],
+		"tags": ["light", "cabin_light", "ceiling", "attach"],
+		"light_type": 5, ## ShipLight.LightType.WINDOW (warm omni)
+		"omni_range_m": 7.0,
+		"omni_energy": 3.2,
+		"yaw_step": 90,
+		"mass_kg": 10.0,
+		"color": Color(0.88, 0.86, 0.78),
+	},
+	"light_nav_port": {
+		"display": "Nav light (port)",
+		## Mounts on a block; yaw aims the lens (−Z) in 45° steps.
+		"footprint": [1, 1, 1],
+		"tags": ["light", "nav", "attach", "ship_only"],
+		"light_type": 0,
+		"yaw_step": 45,
+		"mass_kg": 10.0,
+		"color": Color(0.75, 0.12, 0.10),
+	},
+	"light_nav_stbd": {
+		"display": "Nav light (stbd)",
+		"footprint": [1, 1, 1],
+		"tags": ["light", "nav", "attach", "ship_only"],
+		"light_type": 1,
+		"yaw_step": 45,
+		"mass_kg": 10.0,
+		"color": Color(0.10, 0.65, 0.18),
+	},
+	"light_nav_white": {
+		"display": "Nav light (white)",
+		## All-round white point light — visible from every bearing.
+		"footprint": [1, 1, 1],
+		"tags": ["light", "nav", "nav_white", "attach", "ship_only"],
+		"light_type": 2,
+		"yaw_step": 90,
+		"mass_kg": 12.0,
+		"color": Color(0.92, 0.92, 0.88),
+	},
+	"light_mast_white": {
+		"display": "Mast light (white)",
+		## 2×2 all-round masthead lantern — centres on the mast column.
+		"footprint": [2, 1, 2],
+		"tags": ["light", "nav", "nav_white", "mast", "ship_only"],
+		"light_type": 2,
+		"yaw_step": 90,
+		"mass_kg": 35.0,
+		"color": Color(0.92, 0.92, 0.88),
+	},
+	"railing": {
+		"display": "Railing",
+		## Sits on local −Z face (yaw so −Z points outboard), matching windows.
+		"footprint": [1, 1, 1],
+		"tags": ["railing", "edge"],
+		"mass_kg": 15.0,
+		"color": Color(0.35, 0.38, 0.42),
+	},
+	"railing_mooring": {
+		"display": "Railing + mooring",
+		## Edge railing with a cell-centred mooring bit — rail hugs −Z, bit sits mid-cell.
+		"footprint": [1, 1, 1],
+		"tags": ["railing", "edge", "mooring", "cleat", "ship_only"],
+		"mass_kg": 35.0,
+		"color": Color(0.35, 0.38, 0.42),
+	},
+	"railing_45": {
+		"display": "45° angled railing",
+		## Same diagonal as block_45: missing (+X,+Z). Posts land on cell corners
+		## so edge-aligned straight railings meet the run without a gap.
+		"footprint": [1, 1, 1],
+		"tags": ["railing", "edge", "diagonal_plan", "diagonal_railing"],
+		"mass_kg": 20.0,
+		"color": Color(0.35, 0.38, 0.42),
+	},
+	"bollard": {
+		"display": "Bollard",
+		## Vertical mooring post for open deck / bulwark tops.
+		"footprint": [1, 1, 1],
+		"tags": ["mooring", "cleat", "ship_only"],
+		"mass_kg": 55.0,
+		"color": Color(0.42, 0.40, 0.36),
+	},
+	"mast_base": {
+		"display": "Mast base",
+		## 2×2 m deck tabernacle — centred on four cells; stack mast_pole above.
+		"footprint": [2, 1, 2],
+		"tags": ["mast", "mast_base", "prop", "ship_only"],
+		"mass_kg": 120.0,
+		"color": Color(0.38, 0.36, 0.32),
+	},
+	"mast_pole": {
+		"display": "Mast pole",
+		## 1 m spar segment on the same 2×2 column — stack layers for mast height.
+		"footprint": [2, 1, 2],
+		"tags": ["mast", "mast_pole", "prop", "ship_only"],
+		"mass_kg": 45.0,
+		"color": Color(0.40, 0.38, 0.34),
+	},
+	"chimney_2x3x2": {
+		"display": "Chimney 2×3×2",
+		## Compact funnel / stack — 2 m × 3 m tall × 2 m.
+		"footprint": [2, 3, 2],
+		"tags": ["chimney", "prop"],
+		"mass_kg": 220.0,
+		"color": Color(0.22, 0.23, 0.24),
+	},
+	"chimney_4x5x4": {
+		"display": "Chimney 4×5×4",
+		## Large funnel / stack — 4 m × 5 m tall × 4 m.
+		"footprint": [4, 5, 4],
+		"tags": ["chimney", "prop"],
+		"mass_kg": 980.0,
+		"color": Color(0.20, 0.21, 0.22),
+	},
+	"container_pad": {
+		"display": "Container pad",
+		"footprint": [2, 1, 2],
+		"tags": ["container_pad", "cargo", "floor", "zone", "ship_only"],
+		"place_mode": "rect",
+		"deck_only": true,
+		"mass_kg": 80.0,
+		"color": Color(0.16, 0.22, 0.32),
+	},
+	"bulk_hold_6x12": {
+		"display": "Bulk hold 6×12",
+		"footprint": [6, 1, 12],
+		"tags": ["bulk_hold", "cargo", "floor", "zone", "ship_only"],
+		"place_mode": "fixed_rect",
+		"deck_only": true,
+		"mass_kg": 540.0,
+		"color": Color(0.04, 0.04, 0.05),
+		"hold_depth_m": 2.5,
+	},
+	"crane_base": {
+		"display": "Crane base",
+		## 2×2 m pad.
+		"footprint": [2, 1, 2],
+		"tags": ["crane_base", "ship_only"],
+		"mass_kg": 400.0,
+		"color": Color(0.55, 0.45, 0.22),
+	},
+	"crane": {
+		"display": "Crane arm",
+		"footprint": [1, 2, 1],
+		"tags": ["crane", "ship_only"],
+		"mass_kg": 600.0,
+		"color": Color(0.62, 0.52, 0.24),
+	},
+	"hull_ladder": {
+		"display": "Hull ladder",
+		## 2×2 m pad on the deck edge; rungs hang outboard so you climb aboard from the quay.
+		"footprint": [2, 1, 2],
+		"tags": ["ladder", "edge", "ship_only"],
+		"mass_kg": 45.0,
+		"color": Color(0.42, 0.44, 0.48),
+		"deck_only": true,
+		"edge_only": true,
+	},
+	"trommel_small": {
+		"display": "Trommel (small)",
+		## 2×4 m deck winch — mounts FishingSystem for trawl cast/haul.
+		"footprint": [2, 1, 4],
+		"tags": ["fishing", "trommel", "ship_only"],
+		"mass_kg": 1800.0,
+		"color": Color(0.22, 0.24, 0.26),
+		"deck_only": true,
+	},
+	"deck_text": {
+		"display": "Floor text",
+		## Flat Label3D on the deck — vessel name, draft marks, etc.
+		"footprint": [6, 1, 1],
+		"tags": ["text", "sign", "floor", "ship_only"],
+		"mass_kg": 5.0,
+		"color": Color(0.92, 0.86, 0.55),
+		"deck_only": true,
+		"default_text": "NAME",
+		"text_mount": "floor",
+	},
+	"wall_text_sm": {
+		"display": "Wall text (small)",
+		## Painted letters on the bulkhead — no plaque. Yaw aims the face (−Z).
+		"footprint": [2, 1, 1],
+		"tags": ["text", "sign", "wall"],
+		"mass_kg": 4.0,
+		"color": Color(0.92, 0.86, 0.55),
+		"default_text": "NAME",
+		"text_mount": "wall",
+	},
+	"wall_text": {
+		"display": "Wall text",
+		## Painted letters on the bulkhead — no plaque. Yaw aims the face (−Z).
+		"footprint": [3, 2, 1],
+		"tags": ["text", "sign", "wall"],
+		"mass_kg": 8.0,
+		"color": Color(0.92, 0.86, 0.55),
+		"default_text": "NAME",
+		"text_mount": "wall",
+	},
+	"wall_text_lg": {
+		"display": "Wall text (large)",
+		## Painted letters on the bulkhead — no plaque. Yaw aims the face (−Z).
+		"footprint": [6, 3, 1],
+		"tags": ["text", "sign", "wall"],
+		"mass_kg": 14.0,
+		"color": Color(0.92, 0.86, 0.55),
+		"default_text": "NAME",
+		"text_mount": "wall",
+	},
+	"bench": {
+		"display": "Bench",
+		## 2×2×2 m — yaw aims the sit face (+Z). Backrest on −Z.
+		"footprint": [2, 2, 2],
+		"tags": ["prop", "furniture"],
+		"mass_kg": 55.0,
+		"color": Color(0.42, 0.30, 0.20),
+	},
+	"table": {
+		"display": "Table",
+		## 2×1×2 m mess table.
+		"footprint": [2, 1, 2],
+		"tags": ["prop", "furniture"],
+		"mass_kg": 55.0,
+		"color": Color(0.48, 0.34, 0.22),
+	},
+}
 
 
 static func ids() -> Array[String]:
