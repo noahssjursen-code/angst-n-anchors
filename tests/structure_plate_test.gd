@@ -91,6 +91,7 @@ func _run() -> void:
 		return
 	_plan = StructurePlan.from_dict(_layout)
 
+	_check_wall_panels_did_not_move()
 	_check_breadth()
 	_check_geometry()
 	_check_degenerate()
@@ -181,6 +182,61 @@ func _plate_item(spec: Dictionary, id := 1) -> Dictionary:
 
 func _bake_spec(spec: Dictionary) -> Node3D:
 	return StructureBaker.bake(_solo(_plate_item(spec)))
+
+
+# ── 0. The refactor this primitive needed, pinned ──────────────────────────
+#
+# Plates reuse the WALL opening subtraction rather than growing a second one:
+# `wall_panels` became a thin wrapper over `_panels_between`, and `plate_panels`
+# calls the same routine in the metre lengths of its own edges. That is a change
+# to load-bearing code every wall in the game runs through, so its output is
+# pinned here against rectangles worked out by hand — not against the function
+# itself. Every in-tree consumer (plan_collision_test, plan_collision_physics_
+# test, structure_circulation_test, structure_bake_budget_test) also stayed green
+# across it; this is the assertion that says WHY.
+
+func _check_wall_panels_did_not_move() -> void:
+	## A 6 m x 3 m wall with a door (offset 1, width 0.9, sill 0, height 2.2) and
+	## a window (offset 3.5, width 1.2, sill 1, height 1.2). By hand: the run
+	## splits at 0..1, the door column contributes only its header 2.2..3, the gap
+	## 1.9..3.5, the window contributes 0..1 under it and 2.2..3 over it, and the
+	## tail runs 4.7..6.
+	var wall := {
+		"start": [0, 0, 0], "axis": "x", "length": 6.0, "height": 3.0, "thickness": 0.2,
+		"openings": [
+			{"type": "door", "offset": 1.0, "width": 0.9, "sill": 0.0, "height": 2.2},
+			{"type": "window", "offset": 3.5, "width": 1.2, "sill": 1.0, "height": 1.2},
+		],
+	}
+	var expected := [
+		{"u0": 0.0, "u1": 1.0, "v0": 0.0, "v1": 3.0},
+		{"u0": 1.0, "u1": 1.9, "v0": 2.2, "v1": 3.0},
+		{"u0": 1.9, "u1": 3.5, "v0": 0.0, "v1": 3.0},
+		{"u0": 3.5, "u1": 4.7, "v0": 0.0, "v1": 1.0},
+		{"u0": 3.5, "u1": 4.7, "v0": 2.2, "v1": 3.0},
+		{"u0": 4.7, "u1": 6.0, "v0": 0.0, "v1": 3.0},
+	]
+	var got := StructureBaker.wall_panels(wall)
+	_t.equal("wall_panels still returns the same six rectangles", got.size(), expected.size())
+	var worst := 0.0
+	for index in mini(got.size(), expected.size()):
+		for key in ["u0", "u1", "v0", "v1"]:
+			worst = maxf(worst, absf(
+				float((got[index] as Dictionary)[key]) - float((expected[index] as Dictionary)[key])))
+	_t.check("...at the same coordinates, worked out by hand (worst %.9f)" % worst, worst < 1e-9)
+	## And the plate does the SAME subtraction, normalised — a window half way
+	## along a 6 m plate comes back at u 0.5, not at u 3.
+	var plate := {
+		"corners": [[0, 0, 0], [6, 0, 0], [6, 3, 0], [0, 3, 0]], "thickness": 0.2,
+		"openings": [{"type": "window", "offset": 2.4, "width": 1.2, "sill": 1.0, "height": 1.2}],
+	}
+	var panels := StructureBaker.plate_panels(plate)
+	_t.equal("a plate with one window decomposes into four panels", panels.size(), 4)
+	if panels.size() == 4:
+		_t.near("...whose first ends at the window, in NORMALISED u",
+			float((panels[0] as Dictionary)["u1"]), 0.4, 1e-9)
+		_t.near("...and whose under-sill panel tops out at the sill, normalised",
+			float((panels[1] as Dictionary)["v1"]), 1.0 / 3.0, 1e-9)
 
 
 # ── A. Breadth: eighteen unrelated things, one formula ──────────────────────
@@ -340,7 +396,12 @@ func _check_geometry() -> void:
 		var corners := _corners(id)
 		var ref := StructureBaker.plate_ref_lengths(StructureBaker.plate_corners(spec))
 		var face := (corners[2] - corners[0]).cross(corners[3] - corners[1]).normalized()
-		var tris := _triangle_list(StructurePlan.item_props(_item(id)))
+		## Baked through the ITEM, so the triangles are in plan space like the
+		## probe points. Baking the bare spec puts them in the item's own frame,
+		## 5 m off the centreline — which silently made every probe miss, and the
+		## "nothing inside an opening" half read green because of it. That is why
+		## the "beside it IS drawn" half below exists.
+		var tris := _triangle_list_of(_item(id))
 		var openings := StructureBaker.plate_openings(spec, ref)
 		for opening in openings:
 			checked += 1
@@ -377,9 +438,9 @@ func _check_geometry() -> void:
 		missing, 0)
 
 
-## Every triangle of one plate spec's bake, as [a, b, c] triples.
-func _triangle_list(spec: Dictionary) -> Array:
-	var root := _bake_spec(spec)
+## Every triangle of one plate item's bake, in PLAN space, as [a, b, c] triples.
+func _triangle_list_of(item: Dictionary) -> Array:
+	var root := StructureBaker.bake(_solo(item))
 	var verts := _vertices(root)
 	root.free()
 	var out: Array = []
@@ -574,6 +635,30 @@ func _check_collision() -> void:
 		_t.check("...carrying the run's yaw (%.2f deg)"
 			% float((yawed_boxes[0] as Dictionary)["yaw_deg"]),
 			absf(float((yawed_boxes[0] as Dictionary)["yaw_deg"]) + 36.87) < 0.05)
+	## A 45 degree plate — a bow bulwark — is the case the yaw exists for, and the
+	## cost of losing it is stated as a NUMBER rather than as a phantom: every box
+	## here is the exact bounding box in ITS OWN frame, so a de-yawed emitter still
+	## contains the geometry. What it does instead is shred one exact box into
+	## thirty-two padded ones. Measured: dropping the yaw takes this from 1 to 32.
+	var diagonal := {
+		"corners": [[0, 0, 0], [6, 0, 6], [6, 2.5, 6], [0, 2.5, 0]], "thickness": 0.2,
+	}
+	var diagonal_boxes := StructureBaker.collect_colliders(_solo(_plate_item(diagonal)))
+	_t.equal("a 45 degree plate is ONE box, not a staircase", diagonal_boxes.size(), 1)
+	if diagonal_boxes.size() == 1:
+		var diag := diagonal_boxes[0] as Dictionary
+		_t.near("...carrying -45 deg of yaw", float(diag["yaw_deg"]), -45.0, 0.01)
+		_t.check("...and sized as the drawn slab, not as its bounding box (%s)"
+			% str(diag["size"]),
+			(diag["size"] as Vector3).is_equal_approx(Vector3(sqrt(72.0), 2.5, 0.2)))
+
+	## Cost. Colliders are shapes on a real physics body, so the staircase has to
+	## stay affordable for a whole deckhouse, not only for one plate.
+	var plan_boxes := StructureBaker.collect_colliders(_plan).size()
+	print("[collide] the whole deckhouse is %d collider boxes for %d plates"
+		% [plan_boxes, _plan.items.size()])
+	_t.check("the whole deckhouse stays under 400 collider boxes (%d)" % plan_boxes,
+		plan_boxes < 400)
 
 	## E2. A raked plate is STEPPED, and the step count tracks the rake rather
 	## than the size. Both bounds measured, not asserted from the constant.
@@ -663,12 +748,47 @@ func _check_collision() -> void:
 	_t.check("an open-air march is reported free",
 		not bool(air["blocked"]) and not bool(air["started_inside"]))
 
+	_check_open_deck_is_open()
 	_check_rake_is_where_it_is_drawn()
 	_check_no_phantom_under_the_overhang()
 	_check_slope_is_followed()
 	_check_openings_are_holes()
 
 	_body.queue_free()
+
+
+## E3b. Nothing the deckhouse emits may reach the open working deck. This is the
+## general form of the phantom check and it is what catches a collider that lost
+## its YAW: the bulwark knuckle is a 21.5 m plate running fore-and-aft, so
+## de-yawing its box turns it into a 21.5 m slab lying ACROSS the hull at
+## knee-to-chest height over the whole working deck. Measured: dropping the yaw
+## fills 3 465 of the samples below, and leaves every other check in this file
+## green except the one-box count.
+func _check_open_deck_is_open() -> void:
+	var solid := 0
+	var sampled := 0
+	var first := Vector3.INF
+	for ix in 21:
+		for iy in 15:
+			for iz in 21:
+				## Forward working deck: clear of the house (z >= 14.5), of both
+				## bulwarks and their knuckles (x <= 0.5 and x >= 9.5), and of the
+				## transom. Nothing in this plan may be solid here.
+				var point := Vector3(
+					lerpf(1.5, 8.5, ix / 20.0),
+					lerpf(0.3, 2.0, iy / 14.0),
+					lerpf(6.0, 13.5, iz / 20.0),
+				)
+				sampled += 1
+				if not _solid(point):
+					continue
+				solid += 1
+				if first == Vector3.INF:
+					first = point
+	print("[deck] %d/%d open-deck samples are wrongly solid (first %s)"
+		% [solid, sampled, "none" if first == Vector3.INF else str(first)])
+	_t.check("the open-deck sweep sampled real space (%d points)" % sampled, sampled > 5000)
+	_t.equal("no part of the deckhouse reaches the open working deck", solid, 0)
 
 
 ## E4. THE RAKE. The lower tier's front leans 0.45 m forward over its 2.4 m, so a

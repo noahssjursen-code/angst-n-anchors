@@ -13,6 +13,27 @@ extends RefCounted
 ## `sweep_boxes()` extrudes a rectangle list along an arbitrary 3D polyline, and
 ## everything else in the file is a caller of it.
 ##
+## ── THE SHEER BAND, and why it is the primitive that matters ────────────────
+## Squinted, this project's vessels read as two parallel horizontal bars: the
+## hull's top edge dead straight from stem to transom, and above it a bulwark of
+## constant height the full length. A working boat reads by its SHEER — the deck
+## edge sweeping up toward the bow — and that single curve is most of what says
+## "boat" at a distance.
+##
+## The curve has existed, derived per hull, since `HullStations.sheer_ends` was
+## written, and nothing has ever drawn it. It cannot come from the loft (the
+## shell has zero headroom above `deck_y`, which is the floor of the deck plate,
+## the DeckGrid, the walk colliders and the buoyancy sample — see the long note
+## in `hull_stations.gd`). On a real boat the sheer line IS the bulwark cap, and
+## a bulwark is drawn and collided by this layer. So it is drawn here.
+##
+## Drawing it needed one generalisation, and only one: a swept profile's rects
+## had a FIXED cross-section, and a bulwark does not have one. Its plating is
+## 1.1 m tall amidships and 2.0 m at the stem of the same run. The `to_base` rect
+## key is that generalisation — THE PATH CARRIES THE HEIGHT — and everything
+## else in the bulwark (`bulwark_profile`, `sheer_samples_for`,
+## `sheer_bulwark_spec`, `sweep_collider_boxes`) is assembly around it.
+##
 ## COMPONENTS.md's "honest summary" ranks the sheer band first of four
 ## under-generalisations, and says the fix is one change: stop describing it as
 ## a "deck-edge height curve" and describe it as a swept profile. That change is
@@ -43,14 +64,51 @@ extends RefCounted
 ##     static func sheer_band_boxes(spec: Dictionary) -> Array:
 ##         return StructureEdge.sheer_band_boxes(spec)
 ##
-## and inside `StructureBaker.bake()`, immediately after the `stairs` loop and
+## and inside `StructureBaker.bake()`, immediately after the `items` loop and
 ## before `for key in buckets.keys()`:
 ##
-##     for spec_variant in expanded.get("edges", []) as Array:
-##         var spec := spec_variant as Dictionary
-##         var emitter := PartCatalog.emitter_method_for(str(spec["primitive"]))
-##         for box_variant in StructureBaker.call(emitter, spec):
+##     for edge_variant in plan.edges:
+##         for box_variant in StructureEdge.sheer_band_boxes(
+##             edge_spec(plan, edge_variant as Dictionary)
+##         ):
 ##             _bucket_layer(buckets, box_variant as Dictionary, offset, ghost)
+##
+## and the matching three lines in `StructureBaker.collect_colliders()`, after
+## the `plan.items` loop — `sweep_collider_boxes` already returns exactly the
+## {center, size, yaw_deg} dictionary `_collider_of` consumes, so it is the same
+## one-liner every other entity gets:
+##
+##     for edge_variant in plan.edges:
+##         for box_variant in StructureEdge.sweep_collider_boxes(
+##             edge_spec(plan, edge_variant as Dictionary)
+##         ):
+##             out.append(_collider_of(box_variant as Dictionary, offset))
+##
+## with one shared resolver, because an `edges[]` entry may name the HULL as the
+## source of its path rather than writing the polyline out by hand — which is
+## the whole point of the sheer band, and is what
+## `resources/data/structures/probe_sheer_bulwark.json` does:
+##
+##     static func edge_spec(plan: StructurePlan, edge: Dictionary) -> Dictionary:
+##         if not edge.has("from_hull"):
+##             return edge
+##         return StructureEdge.sheer_bulwark_spec(
+##             HullRegistry.make_stations(plan.hull_id), edge
+##         )
+##
+## Two things this needs that are NOT in this file and are named here so they do
+## not get lost:
+##   • `StructurePlan` has no `edges` field yet. It needs one in `from_dict`,
+##     `to_dict` and `entity_count`, in the same three-line shape as `stairs`.
+##   • `HullRegistry` has no `make_stations(hull_id)`. Today the only route to a
+##     hull's HullStations is through a BoatBody — `HullPhysicsProfile.make_stations()`
+##     off `CatalogHullVessel.make_physics_profile()` or
+##     `FishingTrawlerSmall.make_physics_profile()` — which drags the autoload
+##     identifiers a `--script` test cannot compile. A static registry lookup
+##     alongside `make_grid()` is the missing seam, and it is why both fixtures
+##     here restate their hull's numbers and why
+##     `tests/structure_sheer_capture.gd` asserts the restatement against the
+##     hull the game actually builds.
 ##
 ## The box dictionary is exactly what `_bucket_layer` already consumes —
 ## {center, size, basis, color, material} — so no bucketing rule changes and the
@@ -298,7 +356,7 @@ static func sweep_boxes(spec: Dictionary) -> Array:
 			if plan_segments.is_empty():
 				plan_segments = _plan_segments(segments)
 			boxes.append_array(_plumb_boxes(
-				rect, segments, plan_segments, float(spec["base_y"]), mitre, color, material
+				rect, segments, plan_segments, float(spec["base_y"]), mitre, closed, color, material
 			))
 			continue
 		if w <= 0.0 or h <= 0.0:
@@ -317,8 +375,8 @@ static func sweep_boxes(spec: Dictionary) -> Array:
 			var ext_start := 0.0
 			var ext_end := 0.0
 			if mitre:
-				ext_start = _mitre_extension(segments, i, -1, w, h, right, up, length)
-				ext_end = _mitre_extension(segments, i, 1, w, h, right, up, length)
+				ext_start = _mitre_extension(segments, i, -1, w, h, right, up, length, closed)
+				ext_end = _mitre_extension(segments, i, 1, w, h, right, up, length, closed)
 			var centre_line := a + tangent * (length * 0.5 + (ext_end - ext_start) * 0.5)
 			boxes.append({
 				"center": centre_line + right * u + up * v,
@@ -349,6 +407,7 @@ static func _plumb_boxes(
 	plan_segments: Array,
 	base_y: float,
 	mitre: bool,
+	closed: bool,
 	color: Color,
 	material: String,
 ) -> Array:
@@ -378,8 +437,8 @@ static func _plumb_boxes(
 			## the joint is its lateral half-width and its height contributes
 			## nothing — pass 0 for `h` rather than let a 2 m tall plate mitre
 			## itself a metre past the corner.
-			ext_start = _mitre_extension(plan_segments, i, -1, w, 0.0, right, Vector3.UP, length)
-			ext_end = _mitre_extension(plan_segments, i, 1, w, 0.0, right, Vector3.UP, length)
+			ext_start = _mitre_extension(plan_segments, i, -1, w, 0.0, right, Vector3.UP, length, closed)
+			ext_end = _mitre_extension(plan_segments, i, 1, w, 0.0, right, Vector3.UP, length, closed)
 		var mid := (plan["a"] as Vector3) + tangent * (length * 0.5 + (ext_end - ext_start) * 0.5)
 		out.append({
 			"center": Vector3(mid.x, base_y + height * 0.5, mid.z) + right * u,
@@ -1210,11 +1269,19 @@ static func _mitre_extension(
 	right: Vector3,
 	up: Vector3,
 	length: float,
+	closed: bool = false,
 ) -> float:
 	var count := segments.size()
 	if count < 2:
 		return 0.0
 	var neighbour := i - 1 if direction < 0 else i + 1
+	if closed:
+		## A closed run has no outer ends, so its SEAM is a corner like any
+		## other and must be mitred like one. Leaving it butted left a notch at
+		## the stem head of every bulwark loop — the point where the starboard
+		## run and the port run meet — which the column probe found as two empty
+		## samples of 146 216, at the apex, right under the cap.
+		neighbour = wrapi(neighbour, 0, count)
 	if neighbour < 0 or neighbour >= count:
 		## An open run's outer ends are butt ends: nothing to mitre into.
 		return 0.0

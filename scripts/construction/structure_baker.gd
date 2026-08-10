@@ -1036,17 +1036,26 @@ static func plate_layers(spec: Dictionary, corners: PackedVector3Array, source_i
 ##
 ## The collider contract carries a YAW ONLY (see collect_colliders). An upright
 ## plate at any heading is exactly one yawed box and that is what it emits. A
-## RAKED one — a wheelhouse front leaning 0.8 m forward over its 2.4 m, a sloped
+## RAKED one — a wheelhouse front leaning 0.85 m forward over its 2.4 m, a sloped
 ## roof, a chine facet — is not spellable as one yawed box, and the two wrong
 ## answers are both worse than the geometry deserves:
 ##
-##  - one unrotated box round the whole plate puts a PHANTOM WEDGE out over the
-##    open deck: the front of a forward-raked wheelhouse overhangs, so the box
-##    fills the triangle of air under the overhang and a player is stopped a
-##    metre short of a wall they can see they have not reached. That is the exact
-##    defect plan_collision_physics_test exists to catch on diagonal bulwarks;
+##  - one box round the whole plate puts a PHANTOM WEDGE out over the open deck:
+##    the front of a forward-raked wheelhouse overhangs, so the box fills the
+##    triangle of air under the overhang and a player is stopped a quarter-metre
+##    short of a wall they can see they have not reached. Not a hypothetical —
+##    forcing the step count to 1 fills 2 465 of `structure_plate_test`'s phantom
+##    samples and makes the sloped roof solid where it is open air;
 ##  - a pitched box cannot be expressed at all — every consumer reads yaw_deg and
 ##    would silently flatten it.
+##
+## What the YAW itself buys here is TIGHTNESS AND COUNT, not containment, and it
+## is worth being exact about that because the wall and spar emitters are
+## different: those place a box of known size and would leave a phantom without
+## the yaw, whereas every box below is the exact bounding box in whatever frame
+## it is given, so a de-yawed emitter still contains its geometry. It simply
+## shreds it. Measured on a 45 degree plate — a bow bulwark — one exact box
+## becomes thirty-two padded ones.
 ##
 ## So a raked plate is STEPPED, the same answer a sloped spar gets. Each panel is
 ## cut into cells and each cell emits the exact bounding box of its eight slab

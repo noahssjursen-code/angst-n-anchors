@@ -451,12 +451,22 @@ func _test_sheer_comes_from_hull_stations() -> void:
 	)
 	## And it must actually CARRY the curve: the band's own vertical span is the
 	## derived sheer rise plus its section, not a flat ribbon.
+	##
+	## Tolerance widened from 0.01 to 0.025 on 2026-08-10, and the reason is a
+	## fix rather than a drift: a CLOSED run's seam used to be left as two butt
+	## ends, because `_mitre_extension` only wrapped its neighbour lookup for
+	## interior joints. On a `sheer_loop` that seam is the STEM HEAD, where the
+	## starboard run and the port run meet — and the unmitred notch there was
+	## measured, two empty samples of 146 216, by `structure_sheer_test`'s column
+	## probe. Mitring it fills the notch and, because the segments at the stem
+	## are pitched by the sheer, lifts the AABB's top corner by 16 mm. That is
+	## the whole of the movement: 0.896 -> 0.912.
 	var drawn_rise := cap_aabb.size.y - 0.06
 	_t.near(
 		"the cap's vertical span is the derived forward sheer (%.3f m drawn)" % drawn_rise,
 		drawn_rise,
 		stations.sheer_forward_m,
-		0.01,
+		0.025,
 	)
 
 	## follow_sheer false is the boot top: parallel to the waterline while the

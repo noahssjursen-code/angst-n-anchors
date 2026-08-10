@@ -399,32 +399,56 @@ func _test_the_control_is_the_bar() -> void:
 ## LOWER end of each segment leaves a gap of exactly that segment's rise between
 ## the plating and the cap it is supposed to meet.
 ##
-## Marched as a solid column rather than sampled at a few points: every 10 mm
-## from just above the deck to just under the cap's top face, at 120 stations
-## along the run, must be inside something this primitive emitted.
+## Marched as a solid column: every 10 mm from just above the deck to just under
+## the cap's top face, at six stations INSIDE EVERY SEGMENT of the run.
+##
+## The six-per-segment part is not thoroughness for its own sake, it is the
+## whole check. A first version sampled 120 stations at segment MIDPOINTS and
+## the lower-end mutant sailed straight through it, because a band that takes
+## its height at the segment's lower end is still 20 mm proud of the path at the
+## midpoint — the slot it opens is at the segment's HIGH END and nowhere else.
+## Measured: midpoints only, 0 holes of 15 124; ends included, 1 209 holes.
 func _test_no_slot_and_no_breakout() -> void:
 	var base := float(_spec["base_y"])
+	var cap_h := float(_edge_of(_fixture).get("cap_h", StructureEdge.DEFAULT_CAP_THICKNESS_M))
 	var path := _spec["path"] as PackedVector3Array
+	## Boxes indexed by the segment that emitted them, so the column probe tests
+	## six boxes rather than 362. Without it this is 20 million box tests.
+	var by_segment: Dictionary = {}
+	for box_variant in _boxes:
+		var index := int((box_variant as Dictionary).get("segment", -1))
+		if not by_segment.has(index):
+			by_segment[index] = []
+		(by_segment[index] as Array).append(box_variant)
+
 	var holes := 0
 	var probed := 0
 	var first_hole := Vector3.INF
-	for i in 120:
-		var t := lerpf(0.02, 0.98, float(i) / 119.0)
-		var index := int(t * float(path.size() - 1))
+	for index in by_segment.keys():
 		var here := path[index]
-		var next := path[mini(index + 1, path.size() - 1)]
-		var mid := here.lerp(next, 0.5)
-		var y := base + 0.01
-		while y < mid.y - 0.01:
-			probed += 1
-			if not StructureEdge.point_inside_any(_boxes, Vector3(mid.x, y, mid.z), 0.0):
-				holes += 1
-				if first_hole == Vector3.INF:
-					first_hole = Vector3(mid.x, y, mid.z)
-			y += 0.01
-	_t.check("the column probe sampled the whole band (%d points)" % probed, probed > 8000)
+		var next := path[(index + 1) % path.size()]
+		var near: Array = []
+		for neighbour in [index - 1, index, index + 1]:
+			if by_segment.has(neighbour):
+				near.append_array(by_segment[neighbour] as Array)
+		for step in 6:
+			var point := here.lerp(next, lerpf(0.01, 0.99, float(step) / 5.0))
+			var y := base + 0.01
+			var ceiling := point.y + cap_h - 0.005
+			while y < ceiling:
+				probed += 1
+				if not StructureEdge.point_inside_any(near, Vector3(point.x, y, point.z), 0.0):
+					holes += 1
+					if first_hole == Vector3.INF:
+						first_hole = Vector3(point.x, y, point.z)
+				y += 0.01
 	_t.check(
-		"no gap anywhere between the deck and the cap (%d/%d empty, first %s)"
+		"the column probe sampled every segment, ends included (%d points over %d segments)"
+		% [probed, by_segment.size()],
+		probed > 100000 and by_segment.size() >= path.size() - 1,
+	)
+	_t.check(
+		"no gap anywhere between the deck and the top of the cap (%d/%d empty, first %s)"
 		% [holes, probed, "none" if first_hole == Vector3.INF else str(first_hole)],
 		holes == 0,
 	)
@@ -461,13 +485,27 @@ func _test_no_slot_and_no_breakout() -> void:
 		"the sampling keeps the plating's step inside the cap (%d segments break out)" % breakouts,
 		breakouts == 0,
 	)
-	_t.check(
-		"...with the derived sample count, not a chosen one (%d samples over %.0f m)"
-		% [int(_spec["samples"]), _stations.length_m],
-		int(_spec["samples"]) == StructureEdge.sheer_samples_for(
-			_stations,
-			float(_edge_of(_fixture).get("cap_h", StructureEdge.DEFAULT_CAP_THICKNESS_M)) * 2.0 / 3.0
-		),
+	## The sample count is re-derived HERE, from the parabola, rather than read
+	## back out of `sheer_samples_for`. Calling the function under test to
+	## produce its own expected value is a tautology: the coarse-sampling mutant
+	## walked through exactly that version of this check, because it broke the
+	## function and the check obligingly broke with it.
+	##
+	##     rise(z) = rise_end (|z| / (L/2))^2   =>   max |d rise / dz| = 2 rise_end / (L/2)
+	##
+	## and a segment may rise by no more than the cap's remaining headroom.
+	var cap := float(_edge_of(_fixture).get("cap_h", StructureEdge.DEFAULT_CAP_THICKNESS_M))
+	var headroom := cap * 2.0 / 3.0
+	var slope := 2.0 * maxf(_stations.sheer_forward_m, _stations.sheer_aft_m) / (_stations.length_m * 0.5)
+	var expected := maxi(
+		int(ceil(_stations.length_m / (headroom / slope))) + 1,
+		int(ceil(_stations.length_m / StructureEdge.PLAN_SAMPLE_M)) + 1,
+	)
+	_t.equal(
+		"the sample count is solved from the hull's own sheer slope (%.4f m/m, %.3f m headroom)"
+		% [slope, headroom],
+		int(_spec["samples"]),
+		expected,
 	)
 
 
@@ -579,7 +617,11 @@ func _test_colliders_are_the_drawing() -> void:
 	print("[collide] %d colliders for %d boxes (%.1fx fewer shapes than segments)" % [
 		_colliders.size(), _boxes.size(), float(_boxes.size()) / maxf(float(_colliders.size()), 1.0),
 	])
-	_t.check("the over-cover probe sampled the colliders (%d points)" % sampled, sampled > 1000)
+	## A gate on the probe itself, not a claim about the geometry: the merge
+	## legitimately changes the collider count, and an earlier 1 000-point
+	## threshold turned that into a spurious second failure on three
+	## unrelated mutants. The claim below is the one that measures anything.
+	_t.check("the over-cover probe sampled the colliders (%d points)" % sampled, sampled > 300)
 	_t.check(
 		"no collider volume sits more than %.3f m from something drawn (%d/%d, first %s)"
 		% [tolerance, phantom, sampled, "none" if phantom_at == Vector3.INF else str(phantom_at)],
