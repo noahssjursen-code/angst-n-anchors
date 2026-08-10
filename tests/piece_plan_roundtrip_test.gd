@@ -65,8 +65,13 @@ func _check_plan_carries_pieces() -> void:
 	var doc := _load(TRAWLER)
 	if not _t.check("%s loads" % TRAWLER, not doc.is_empty()):
 		return
+	## The COUNT is not the claim and must not be written down here: the piece
+	## fixtures are another wave's files and this one grew from 43 placements to
+	## 49 while this test was being written. What is asserted is that whatever the
+	## file carries survives the document — a hardcoded 43 would have gone red for
+	## a reason that has nothing to do with what this test is for.
 	var authored := (doc.get("pieces", []) as Array).size()
-	_t.equal("the fixture on disk carries 43 placements", authored, 43)
+	_t.check("the fixture on disk carries %d placements" % authored, authored > 0)
 	var plan := StructurePlan.from_dict(doc)
 	_t.equal(
 		"StructurePlan.from_dict keeps all %d of them" % authored, plan.pieces.size(), authored

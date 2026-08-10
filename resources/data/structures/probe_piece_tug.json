@@ -1,0 +1,705 @@
+{
+	"_note": "BUILT THROUGH THE STUDIO'S PIECE TOOL. Every one of the 33 placements below was made by\npicking a piece off the kit palette, turning it with R, setting its parameters on steppers and\ndropdowns over the piece's own declared value sets, picking a tint off a swatch, and clicking a\ngrid node. Not one number in this file was typed; there is no control in that tool a number CAN\nbe typed into.\n\nThat claim is checked rather than asserted. `structure_studio.gd`'s `--studio-probe` self-check\ncarries the same 33 actions as data and requires that replaying them through the controls\nreproduces this file placement for placement and plate corner for plate corner — so changing one\nstep of the recipe, or breaking the rotate key, or letting a stepper walk off its declared set,\nturns the gate red.\n\nWHAT IT IS. A harbour tug's pilot house: a plated casing with a raked front and windows in its\nsides, a tall all-round-glazed wheelhouse standing on it, chamfered at every corner by a\n`corner_45` facet, a sloped VISOR over the windscreen — `roof_slope`, which no vessel in this\nrepo had used — and an exhaust casing standing clear above the wheelhouse roof.\n\nWHAT IS NOT PIECE-AUTHORED, and it is the kit's own stated boundary rather than a gap: the\nsheer-following bulwark. That is a swept curve, and quantising it to the 0.5 m grid would step\nthe one curve the fleet was rebuilt to draw, so it is an `edges[]` entry as it is on every other\nvessel. The studio has no tool for it either — see the wave report.\n\nRakes are in EIGHTH-CELLS (0.125 m a step), the kit's unit as of this file's writing.",
+	"context": "vessel",
+	"decks": [],
+	"edges": [
+		{
+			"_is": "bulwark, both sides and the transom, capped — the deck edge of the vessel. NOT piece-authored: a sheer-following bulwark is a swept curve and the kit refuses to quantise it, which is a stated boundary rather than a gap.",
+			"cap_color": [
+				0.86,
+				0.87,
+				0.88
+			],
+			"cap_h": 0.06,
+			"cap_w": 0.22,
+			"follow_sheer": true,
+			"from_hull": "hull_28x10",
+			"height": 1.1,
+			"id": 34.0,
+			"material": "painted",
+			"plate_color": [
+				0.11,
+				0.13,
+				0.16
+			],
+			"plate_m": 0.1,
+			"primitive": "sheer_band",
+			"side": "loop",
+			"solid": true
+		}
+	],
+	"format": "structure_plan_v1",
+	"hull": {
+		"_note": "hull_28x10 as FishingTrawlerSmall builds it, restated so the capture rig can hold the derived stations against the hull the game spawns.",
+		"beam_m": 10.0,
+		"bow_taper_fraction": 0.178571428571429,
+		"depth_m": 5.6,
+		"displacement_t": 256.0,
+		"draft_m": 2.8,
+		"form": "fine_entry",
+		"loa_m": 28.0,
+		"station_count": 8.0
+	},
+	"hull_id": "hull_28x10",
+	"items": [],
+	"palette": {
+		"deck": [
+			0.33,
+			0.31,
+			0.29
+		],
+		"wall": [
+			0.85,
+			0.86,
+			0.88
+		]
+	},
+	"pieces": [
+		{
+			"cell": [
+				5.0,
+				0.0,
+				18.0
+			],
+			"color": "#e3e0d4",
+			"facing": 0.0,
+			"id": 1.0,
+			"params": {
+				"fall": 0.0,
+				"head": 0.0,
+				"height": 4.0,
+				"lift": 0.0,
+				"rake_a": 6.0,
+				"rake_b": 0.0,
+				"span": 1.0
+			},
+			"piece": "corner_45"
+		},
+		{
+			"cell": [
+				6.0,
+				0.0,
+				18.0
+			],
+			"color": "#e3e0d4",
+			"facing": 0.0,
+			"id": 2.0,
+			"params": {
+				"fall": 0.0,
+				"head": 0.0,
+				"height": 4.0,
+				"lift": 0.0,
+				"opening": "none",
+				"rake": 6.0,
+				"span": 8.0
+			},
+			"piece": "wall_panel"
+		},
+		{
+			"cell": [
+				15.0,
+				0.0,
+				18.0
+			],
+			"color": "#e3e0d4",
+			"facing": 270.0,
+			"id": 3.0,
+			"params": {
+				"fall": 0.0,
+				"head": 0.0,
+				"height": 4.0,
+				"lift": 0.0,
+				"rake_a": 0.0,
+				"rake_b": 6.0,
+				"span": 1.0
+			},
+			"piece": "corner_45"
+		},
+		{
+			"cell": [
+				15.0,
+				0.0,
+				19.0
+			],
+			"color": "#e3e0d4",
+			"facing": 270.0,
+			"id": 4.0,
+			"params": {
+				"fall": 0.0,
+				"head": 0.0,
+				"height": 4.0,
+				"lift": 0.0,
+				"opening": "window",
+				"rake": 0.0,
+				"span": 8.0
+			},
+			"piece": "wall_panel"
+		},
+		{
+			"cell": [
+				15.0,
+				0.0,
+				27.0
+			],
+			"color": "#e3e0d4",
+			"facing": 270.0,
+			"id": 5.0,
+			"params": {
+				"fall": 0.0,
+				"head": 0.0,
+				"height": 4.0,
+				"lift": 0.0,
+				"opening": "window",
+				"rake": 0.0,
+				"span": 4.0
+			},
+			"piece": "wall_panel"
+		},
+		{
+			"cell": [
+				15.0,
+				0.0,
+				32.0
+			],
+			"color": "#e3e0d4",
+			"facing": 180.0,
+			"id": 6.0,
+			"params": {
+				"fall": 0.0,
+				"head": 0.0,
+				"height": 4.0,
+				"lift": 0.0,
+				"rake_a": 0.0,
+				"rake_b": 0.0,
+				"span": 1.0
+			},
+			"piece": "corner_45"
+		},
+		{
+			"cell": [
+				14.0,
+				0.0,
+				32.0
+			],
+			"color": "#e3e0d4",
+			"facing": 180.0,
+			"id": 7.0,
+			"params": {
+				"fall": 0.0,
+				"head": 0.0,
+				"height": 4.0,
+				"lift": 0.0,
+				"opening": "scuttle",
+				"rake": 0.0,
+				"span": 3.0
+			},
+			"piece": "wall_panel"
+		},
+		{
+			"cell": [
+				11.0,
+				0.0,
+				32.0
+			],
+			"color": "#e3e0d4",
+			"facing": 180.0,
+			"id": 8.0,
+			"params": {
+				"fall": 0.0,
+				"head": 0.0,
+				"height": 4.0,
+				"lift": 0.0,
+				"opening": "door",
+				"rake": 0.0,
+				"span": 2.0
+			},
+			"piece": "wall_panel"
+		},
+		{
+			"cell": [
+				9.0,
+				0.0,
+				32.0
+			],
+			"color": "#e3e0d4",
+			"facing": 180.0,
+			"id": 9.0,
+			"params": {
+				"fall": 0.0,
+				"head": 0.0,
+				"height": 4.0,
+				"lift": 0.0,
+				"opening": "scuttle",
+				"rake": 0.0,
+				"span": 3.0
+			},
+			"piece": "wall_panel"
+		},
+		{
+			"cell": [
+				5.0,
+				0.0,
+				32.0
+			],
+			"color": "#e3e0d4",
+			"facing": 90.0,
+			"id": 10.0,
+			"params": {
+				"fall": 0.0,
+				"head": 0.0,
+				"height": 4.0,
+				"lift": 0.0,
+				"rake_a": 0.0,
+				"rake_b": 0.0,
+				"span": 1.0
+			},
+			"piece": "corner_45"
+		},
+		{
+			"cell": [
+				5.0,
+				0.0,
+				31.0
+			],
+			"color": "#e3e0d4",
+			"facing": 90.0,
+			"id": 11.0,
+			"params": {
+				"fall": 0.0,
+				"head": 0.0,
+				"height": 4.0,
+				"lift": 0.0,
+				"opening": "window",
+				"rake": 0.0,
+				"span": 8.0
+			},
+			"piece": "wall_panel"
+		},
+		{
+			"cell": [
+				5.0,
+				0.0,
+				23.0
+			],
+			"color": "#e3e0d4",
+			"facing": 90.0,
+			"id": 12.0,
+			"params": {
+				"fall": 0.0,
+				"head": 0.0,
+				"height": 4.0,
+				"lift": 0.0,
+				"opening": "window",
+				"rake": 0.0,
+				"span": 4.0
+			},
+			"piece": "wall_panel"
+		},
+		{
+			"cell": [
+				4.0,
+				4.0,
+				17.0
+			],
+			"color": "#4d5257",
+			"facing": 0.0,
+			"id": 13.0,
+			"params": {
+				"depth": 16.0,
+				"fall": 0.0,
+				"gauge": "deck",
+				"lift": 0.0,
+				"span": 12.0
+			},
+			"piece": "deck_tile"
+		},
+		{
+			"cell": [
+				4.0,
+				4.0,
+				17.0
+			],
+			"color": "#e3e0d4",
+			"facing": 0.0,
+			"id": 14.0,
+			"params": {
+				"lift": 0.0,
+				"offset": 0.0,
+				"profile": "eave",
+				"span": 12.0
+			},
+			"piece": "trim_band"
+		},
+		{
+			"cell": [
+				16.0,
+				4.0,
+				17.0
+			],
+			"color": "#e3e0d4",
+			"facing": 270.0,
+			"id": 15.0,
+			"params": {
+				"lift": 0.0,
+				"offset": 0.0,
+				"profile": "eave",
+				"span": 16.0
+			},
+			"piece": "trim_band"
+		},
+		{
+			"cell": [
+				16.0,
+				4.0,
+				33.0
+			],
+			"color": "#e3e0d4",
+			"facing": 180.0,
+			"id": 16.0,
+			"params": {
+				"lift": 0.0,
+				"offset": 0.0,
+				"profile": "eave",
+				"span": 12.0
+			},
+			"piece": "trim_band"
+		},
+		{
+			"cell": [
+				4.0,
+				4.0,
+				33.0
+			],
+			"color": "#e3e0d4",
+			"facing": 90.0,
+			"id": 17.0,
+			"params": {
+				"lift": 0.0,
+				"offset": 0.0,
+				"profile": "eave",
+				"span": 16.0
+			},
+			"piece": "trim_band"
+		},
+		{
+			"cell": [
+				7.0,
+				4.0,
+				20.0
+			],
+			"color": "#e3e0d4",
+			"facing": 0.0,
+			"id": 18.0,
+			"params": {
+				"fall": 0.0,
+				"head": 0.0,
+				"height": 5.0,
+				"lift": 0.0,
+				"rake_a": 8.0,
+				"rake_b": -2.0,
+				"span": 1.0
+			},
+			"piece": "corner_45"
+		},
+		{
+			"cell": [
+				8.0,
+				4.0,
+				20.0
+			],
+			"color": "#e3e0d4",
+			"facing": 0.0,
+			"id": 19.0,
+			"params": {
+				"band": 2.0,
+				"fall": 0.0,
+				"head": 0.0,
+				"height": 5.0,
+				"lift": 0.0,
+				"lights": 3.0,
+				"rake": 8.0,
+				"sill": 2.0,
+				"span": 4.0
+			},
+			"piece": "wall_glazed"
+		},
+		{
+			"cell": [
+				13.0,
+				4.0,
+				20.0
+			],
+			"color": "#e3e0d4",
+			"facing": 270.0,
+			"id": 20.0,
+			"params": {
+				"fall": 0.0,
+				"head": 0.0,
+				"height": 5.0,
+				"lift": 0.0,
+				"rake_a": -2.0,
+				"rake_b": 8.0,
+				"span": 1.0
+			},
+			"piece": "corner_45"
+		},
+		{
+			"cell": [
+				13.0,
+				4.0,
+				21.0
+			],
+			"color": "#e3e0d4",
+			"facing": 270.0,
+			"id": 21.0,
+			"params": {
+				"band": 2.0,
+				"fall": 0.0,
+				"head": 0.0,
+				"height": 5.0,
+				"lift": 0.0,
+				"lights": 4.0,
+				"rake": -2.0,
+				"sill": 2.0,
+				"span": 6.0
+			},
+			"piece": "wall_glazed"
+		},
+		{
+			"cell": [
+				13.0,
+				4.0,
+				28.0
+			],
+			"color": "#e3e0d4",
+			"facing": 180.0,
+			"id": 22.0,
+			"params": {
+				"fall": 0.0,
+				"head": 0.0,
+				"height": 5.0,
+				"lift": 0.0,
+				"rake_a": 2.0,
+				"rake_b": -2.0,
+				"span": 1.0
+			},
+			"piece": "corner_45"
+		},
+		{
+			"cell": [
+				12.0,
+				4.0,
+				28.0
+			],
+			"color": "#e3e0d4",
+			"facing": 180.0,
+			"id": 23.0,
+			"params": {
+				"fall": 0.0,
+				"head": 0.0,
+				"height": 5.0,
+				"lift": 0.0,
+				"opening": "door",
+				"rake": 2.0,
+				"span": 4.0
+			},
+			"piece": "wall_panel"
+		},
+		{
+			"cell": [
+				7.0,
+				4.0,
+				28.0
+			],
+			"color": "#e3e0d4",
+			"facing": 90.0,
+			"id": 24.0,
+			"params": {
+				"fall": 0.0,
+				"head": 0.0,
+				"height": 5.0,
+				"lift": 0.0,
+				"rake_a": -2.0,
+				"rake_b": 2.0,
+				"span": 1.0
+			},
+			"piece": "corner_45"
+		},
+		{
+			"cell": [
+				7.0,
+				4.0,
+				27.0
+			],
+			"color": "#e3e0d4",
+			"facing": 90.0,
+			"id": 25.0,
+			"params": {
+				"band": 2.0,
+				"fall": 0.0,
+				"head": 0.0,
+				"height": 5.0,
+				"lift": 0.0,
+				"lights": 4.0,
+				"rake": -2.0,
+				"sill": 2.0,
+				"span": 6.0
+			},
+			"piece": "wall_glazed"
+		},
+		{
+			"cell": [
+				6.0,
+				9.0,
+				19.0
+			],
+			"color": "#858a8f",
+			"facing": 0.0,
+			"id": 26.0,
+			"params": {
+				"depth": 8.0,
+				"fall": 0.0,
+				"gauge": "deck",
+				"lift": 0.0,
+				"span": 8.0
+			},
+			"piece": "deck_tile"
+		},
+		{
+			"cell": [
+				6.0,
+				9.0,
+				27.0
+			],
+			"color": "#858a8f",
+			"facing": 0.0,
+			"id": 27.0,
+			"params": {
+				"depth": 2.0,
+				"fall": 0.0,
+				"gauge": "deck",
+				"lift": 0.0,
+				"span": 8.0
+			},
+			"piece": "deck_tile"
+		},
+		{
+			"cell": [
+				6.0,
+				8.0,
+				17.0
+			],
+			"color": "#4d5257",
+			"facing": 0.0,
+			"id": 28.0,
+			"params": {
+				"depth": 2.0,
+				"gauge": "light",
+				"lift": 0.0,
+				"rise": 1.0,
+				"span": 8.0
+			},
+			"piece": "roof_slope"
+		},
+		{
+			"cell": [
+				9.0,
+				4.0,
+				30.0
+			],
+			"color": "#9e5c1c",
+			"facing": 0.0,
+			"id": 29.0,
+			"params": {
+				"fall": 0.0,
+				"head": 0.0,
+				"height": 6.0,
+				"lift": 0.0,
+				"opening": "none",
+				"rake": 0.0,
+				"span": 2.0
+			},
+			"piece": "wall_panel"
+		},
+		{
+			"cell": [
+				11.0,
+				4.0,
+				30.0
+			],
+			"color": "#9e5c1c",
+			"facing": 270.0,
+			"id": 30.0,
+			"params": {
+				"fall": 0.0,
+				"head": 0.0,
+				"height": 6.0,
+				"lift": 0.0,
+				"opening": "none",
+				"rake": 0.0,
+				"span": 3.0
+			},
+			"piece": "wall_panel"
+		},
+		{
+			"cell": [
+				11.0,
+				4.0,
+				33.0
+			],
+			"color": "#9e5c1c",
+			"facing": 180.0,
+			"id": 31.0,
+			"params": {
+				"fall": 0.0,
+				"head": 0.0,
+				"height": 6.0,
+				"lift": 0.0,
+				"opening": "none",
+				"rake": 0.0,
+				"span": 2.0
+			},
+			"piece": "wall_panel"
+		},
+		{
+			"cell": [
+				9.0,
+				4.0,
+				33.0
+			],
+			"color": "#9e5c1c",
+			"facing": 90.0,
+			"id": 32.0,
+			"params": {
+				"fall": 0.0,
+				"head": 0.0,
+				"height": 6.0,
+				"lift": 0.0,
+				"opening": "none",
+				"rake": 0.0,
+				"span": 3.0
+			},
+			"piece": "wall_panel"
+		},
+		{
+			"cell": [
+				9.0,
+				10.0,
+				30.0
+			],
+			"color": "#1c1c1f",
+			"facing": 0.0,
+			"id": 33.0,
+			"params": {
+				"depth": 3.0,
+				"fall": 0.0,
+				"gauge": "heavy",
+				"lift": 0.0,
+				"span": 2.0
+			},
+			"piece": "deck_tile"
+		}
+	],
+	"stairs": [],
+	"walls": []
+}

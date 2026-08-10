@@ -1,0 +1,658 @@
+{
+  "format": "structure_plan_v1",
+  "context": "vessel",
+  "hull_id": "hull_28x10",
+  "_note": "CRITIC FIXTURE. A motor yacht: a LOW coachroof (2 cells, the kit's minimum wall), topsides that TUMBLE HOME at rake -2 with a rubbing strake across them, and a windscreen curved in plan. trim_band.offset only takes values 0..4 and only pushes a run OUTBOARD, so a strake on a wall that leans IN has no legal setting that reaches it - this fixture places it at offset 0, the best the kit allows, so the shortfall can be measured. Not for shipping; written by an adversarial critic.",
+  "palette": {
+    "wall": [
+      0.85,
+      0.86,
+      0.88
+    ],
+    "deck": [
+      0.33,
+      0.31,
+      0.29
+    ]
+  },
+  "hull": {
+    "loa_m": 28.0,
+    "beam_m": 10.0,
+    "depth_m": 5.6,
+    "draft_m": 2.8,
+    "displacement_t": 256.0,
+    "form": "fine_entry",
+    "bow_taper_fraction": 0.17857142857142858,
+    "station_count": 8
+  },
+  "walls": [],
+  "decks": [],
+  "stairs": [],
+  "items": [],
+  "edges": [],
+  "pieces": [
+    {
+      "id": 1,
+      "piece": "wall_panel",
+      "cell": [
+        4,
+        0,
+        12
+      ],
+      "facing": 270,
+      "params": {
+        "span": 8,
+        "height": 2,
+        "rake": -4
+      },
+      "color": "#f2f0ea",
+      "_is": "port bulwark, tumblehome"
+    },
+    {
+      "id": 2,
+      "piece": "wall_panel",
+      "cell": [
+        4,
+        0,
+        20
+      ],
+      "facing": 270,
+      "params": {
+        "span": 8,
+        "height": 2,
+        "rake": -4
+      },
+      "color": "#f2f0ea",
+      "_is": "port bulwark, tumblehome"
+    },
+    {
+      "id": 3,
+      "piece": "wall_panel",
+      "cell": [
+        4,
+        0,
+        28
+      ],
+      "facing": 270,
+      "params": {
+        "span": 8,
+        "height": 2,
+        "rake": -4
+      },
+      "color": "#f2f0ea",
+      "_is": "port bulwark, tumblehome"
+    },
+    {
+      "id": 4,
+      "piece": "wall_panel",
+      "cell": [
+        4,
+        0,
+        36
+      ],
+      "facing": 270,
+      "params": {
+        "span": 8,
+        "height": 2,
+        "rake": -4
+      },
+      "color": "#f2f0ea",
+      "_is": "port bulwark, tumblehome"
+    },
+    {
+      "id": 5,
+      "piece": "wall_panel",
+      "cell": [
+        16,
+        0,
+        44
+      ],
+      "facing": 90,
+      "params": {
+        "span": 8,
+        "height": 2,
+        "rake": -4
+      },
+      "color": "#f2f0ea",
+      "_is": "stbd bulwark, tumblehome"
+    },
+    {
+      "id": 6,
+      "piece": "wall_panel",
+      "cell": [
+        16,
+        0,
+        36
+      ],
+      "facing": 90,
+      "params": {
+        "span": 8,
+        "height": 2,
+        "rake": -4
+      },
+      "color": "#f2f0ea",
+      "_is": "stbd bulwark, tumblehome"
+    },
+    {
+      "id": 7,
+      "piece": "wall_panel",
+      "cell": [
+        16,
+        0,
+        28
+      ],
+      "facing": 90,
+      "params": {
+        "span": 8,
+        "height": 2,
+        "rake": -4
+      },
+      "color": "#f2f0ea",
+      "_is": "stbd bulwark, tumblehome"
+    },
+    {
+      "id": 8,
+      "piece": "wall_panel",
+      "cell": [
+        16,
+        0,
+        20
+      ],
+      "facing": 90,
+      "params": {
+        "span": 8,
+        "height": 2,
+        "rake": -4
+      },
+      "color": "#f2f0ea",
+      "_is": "stbd bulwark, tumblehome"
+    },
+    {
+      "id": 9,
+      "piece": "trim_band",
+      "cell": [
+        4,
+        1,
+        12
+      ],
+      "facing": 90,
+      "params": {
+        "span": 16,
+        "profile": "strake",
+        "offset": 0
+      },
+      "color": "#8a6a3a",
+      "_is": "rubbing strake on the tumblehome, offset at its best legal value"
+    },
+    {
+      "id": 10,
+      "piece": "trim_band",
+      "cell": [
+        4,
+        1,
+        28
+      ],
+      "facing": 90,
+      "params": {
+        "span": 16,
+        "profile": "strake",
+        "offset": 0
+      },
+      "color": "#8a6a3a",
+      "_is": "rubbing strake on the tumblehome"
+    },
+    {
+      "id": 11,
+      "piece": "corner_45",
+      "cell": [
+        14,
+        0,
+        34
+      ],
+      "facing": 180,
+      "params": {
+        "span": 1,
+        "height": 4,
+        "rake_a": 2,
+        "rake_b": -2
+      },
+      "color": "#f2f0ea",
+      "_is": "coachroof knuckle 3"
+    },
+    {
+      "id": 12,
+      "piece": "corner_45",
+      "cell": [
+        6,
+        0,
+        34
+      ],
+      "facing": 90,
+      "params": {
+        "span": 1,
+        "height": 4,
+        "rake_a": -2,
+        "rake_b": 2
+      },
+      "color": "#f2f0ea",
+      "_is": "coachroof knuckle 4"
+    },
+    {
+      "id": 13,
+      "piece": "wall_glazed",
+      "cell": [
+        8,
+        0,
+        16
+      ],
+      "facing": 0,
+      "params": {
+        "span": 4,
+        "height": 4,
+        "rake": -8,
+        "sill": 1,
+        "band": 2,
+        "lights": 4
+      },
+      "color": "#f2f0ea",
+      "_is": "coachroof side 0"
+    },
+    {
+      "id": 14,
+      "piece": "corner_45",
+      "cell": [
+        14,
+        0,
+        16
+      ],
+      "facing": 270,
+      "params": {
+        "span": 2,
+        "height": 4,
+        "rake_a": -2,
+        "rake_b": -8
+      },
+      "color": "#f2f0ea",
+      "_is": "coachroof 1 facet 1/1"
+    },
+    {
+      "id": 15,
+      "piece": "wall_glazed",
+      "cell": [
+        14,
+        0,
+        18
+      ],
+      "facing": 270,
+      "params": {
+        "span": 8,
+        "height": 4,
+        "rake": -2,
+        "sill": 1,
+        "band": 2,
+        "lights": 6
+      },
+      "color": "#f2f0ea",
+      "_is": "coachroof side 2"
+    },
+    {
+      "id": 16,
+      "piece": "wall_glazed",
+      "cell": [
+        14,
+        0,
+        26
+      ],
+      "facing": 270,
+      "params": {
+        "span": 6,
+        "height": 4,
+        "rake": -2,
+        "sill": 1,
+        "band": 2,
+        "lights": 6
+      },
+      "color": "#f2f0ea",
+      "_is": "coachroof side 2"
+    },
+    {
+      "id": 17,
+      "piece": "wall_glazed",
+      "cell": [
+        14,
+        0,
+        32
+      ],
+      "facing": 270,
+      "params": {
+        "span": 1,
+        "height": 4,
+        "rake": -2,
+        "sill": 1,
+        "band": 2,
+        "lights": 6
+      },
+      "color": "#f2f0ea",
+      "_is": "coachroof side 2"
+    },
+    {
+      "id": 18,
+      "piece": "wall_panel",
+      "cell": [
+        13,
+        0,
+        34
+      ],
+      "facing": 180,
+      "params": {
+        "span": 6,
+        "height": 4,
+        "rake": 2
+      },
+      "color": "#f2f0ea",
+      "_is": "coachroof side 3"
+    },
+    {
+      "id": 19,
+      "piece": "wall_glazed",
+      "cell": [
+        6,
+        0,
+        33
+      ],
+      "facing": 90,
+      "params": {
+        "span": 8,
+        "height": 4,
+        "rake": -2,
+        "sill": 1,
+        "band": 2,
+        "lights": 6
+      },
+      "color": "#f2f0ea",
+      "_is": "coachroof side 4"
+    },
+    {
+      "id": 20,
+      "piece": "wall_glazed",
+      "cell": [
+        6,
+        0,
+        25
+      ],
+      "facing": 90,
+      "params": {
+        "span": 6,
+        "height": 4,
+        "rake": -2,
+        "sill": 1,
+        "band": 2,
+        "lights": 6
+      },
+      "color": "#f2f0ea",
+      "_is": "coachroof side 4"
+    },
+    {
+      "id": 21,
+      "piece": "wall_glazed",
+      "cell": [
+        6,
+        0,
+        19
+      ],
+      "facing": 90,
+      "params": {
+        "span": 1,
+        "height": 4,
+        "rake": -2,
+        "sill": 1,
+        "band": 2,
+        "lights": 6
+      },
+      "color": "#f2f0ea",
+      "_is": "coachroof side 4"
+    },
+    {
+      "id": 22,
+      "piece": "corner_45",
+      "cell": [
+        6,
+        0,
+        16
+      ],
+      "facing": 0,
+      "params": {
+        "span": 2,
+        "height": 4,
+        "rake_a": -8,
+        "rake_b": -2
+      },
+      "color": "#f2f0ea",
+      "_is": "coachroof 5 facet 1/1"
+    },
+    {
+      "id": 23,
+      "piece": "deck_tile",
+      "cell": [
+        5,
+        4,
+        15
+      ],
+      "facing": 0,
+      "params": {
+        "span": 8,
+        "depth": 16,
+        "gauge": "light"
+      },
+      "color": "#f2f0ea",
+      "_is": "coachroof top"
+    },
+    {
+      "id": 24,
+      "piece": "deck_tile",
+      "cell": [
+        5,
+        4,
+        31
+      ],
+      "facing": 0,
+      "params": {
+        "span": 8,
+        "depth": 4,
+        "gauge": "light"
+      },
+      "color": "#f2f0ea",
+      "_is": "coachroof top"
+    },
+    {
+      "id": 25,
+      "piece": "deck_tile",
+      "cell": [
+        13,
+        4,
+        15
+      ],
+      "facing": 0,
+      "params": {
+        "span": 2,
+        "depth": 16,
+        "gauge": "light"
+      },
+      "color": "#f2f0ea",
+      "_is": "coachroof top"
+    },
+    {
+      "id": 26,
+      "piece": "deck_tile",
+      "cell": [
+        13,
+        4,
+        31
+      ],
+      "facing": 0,
+      "params": {
+        "span": 2,
+        "depth": 4,
+        "gauge": "light"
+      },
+      "color": "#f2f0ea",
+      "_is": "coachroof top"
+    },
+    {
+      "id": 27,
+      "piece": "trim_band",
+      "cell": [
+        5,
+        4,
+        15
+      ],
+      "facing": 0,
+      "params": {
+        "span": 8,
+        "profile": "eave"
+      },
+      "color": "#8a6a3a",
+      "_is": "coachroof eave"
+    },
+    {
+      "id": 28,
+      "piece": "corner_45",
+      "cell": [
+        7,
+        4,
+        20
+      ],
+      "facing": 0,
+      "params": {
+        "span": 1,
+        "height": 2,
+        "rake_a": -4,
+        "rake_b": -2
+      },
+      "color": "#f2f0ea",
+      "_is": "flybridge screen knuckle 0"
+    },
+    {
+      "id": 29,
+      "piece": "corner_45",
+      "cell": [
+        13,
+        4,
+        20
+      ],
+      "facing": 270,
+      "params": {
+        "span": 1,
+        "height": 2,
+        "rake_a": -2,
+        "rake_b": -4
+      },
+      "color": "#f2f0ea",
+      "_is": "flybridge screen knuckle 1"
+    },
+    {
+      "id": 30,
+      "piece": "corner_45",
+      "cell": [
+        13,
+        4,
+        28
+      ],
+      "facing": 180,
+      "params": {
+        "span": 1,
+        "height": 2,
+        "rake_a": 2,
+        "rake_b": -2
+      },
+      "color": "#f2f0ea",
+      "_is": "flybridge screen knuckle 2"
+    },
+    {
+      "id": 31,
+      "piece": "corner_45",
+      "cell": [
+        7,
+        4,
+        28
+      ],
+      "facing": 90,
+      "params": {
+        "span": 1,
+        "height": 2,
+        "rake_a": -2,
+        "rake_b": 2
+      },
+      "color": "#f2f0ea",
+      "_is": "flybridge screen knuckle 3"
+    },
+    {
+      "id": 32,
+      "piece": "wall_panel",
+      "cell": [
+        8,
+        4,
+        20
+      ],
+      "facing": 0,
+      "params": {
+        "span": 4,
+        "height": 2,
+        "rake": -4
+      },
+      "color": "#f2f0ea",
+      "_is": "flybridge screen side 0"
+    },
+    {
+      "id": 33,
+      "piece": "wall_panel",
+      "cell": [
+        13,
+        4,
+        21
+      ],
+      "facing": 270,
+      "params": {
+        "span": 6,
+        "height": 2,
+        "rake": -2
+      },
+      "color": "#f2f0ea",
+      "_is": "flybridge screen side 1"
+    },
+    {
+      "id": 34,
+      "piece": "wall_panel",
+      "cell": [
+        12,
+        4,
+        28
+      ],
+      "facing": 180,
+      "params": {
+        "span": 4,
+        "height": 2,
+        "rake": 2
+      },
+      "color": "#f2f0ea",
+      "_is": "flybridge screen side 2"
+    },
+    {
+      "id": 35,
+      "piece": "wall_panel",
+      "cell": [
+        7,
+        4,
+        27
+      ],
+      "facing": 90,
+      "params": {
+        "span": 6,
+        "height": 2,
+        "rake": -2
+      },
+      "color": "#f2f0ea",
+      "_is": "flybridge screen side 3"
+    }
+  ]
+}

@@ -25,8 +25,15 @@ extends RefCounted
 ##   EVERY PARAMETER TAKES ITS VALUE FROM A DECLARED FINITE SET, AND EVERY
 ##   GEOMETRIC PARAMETER IS COUNTED IN GRID UNITS.
 ##
-## Lengths and heights are whole CELLS (0.5 m). Rakes are whole QUARTER-CELLS
-## (0.25 m). Everything else is a named choice. A value off the declared set is
+## Extents — span, depth, height, sill, band — are whole CELLS (0.5 m). The five
+## parameters that TRIM a piece off that lattice — `rake`, `head`, `fall`,
+## `lift`, `offset` — are whole EIGHTH-CELLS (0.125 m), which is where the fleet's
+## worst wall-rake quantisation error (0.062 m) first falls under the kit's own
+## 0.10 m plating; see the kit file's `_what_this_is` for the measurement and for
+## why the next halving is not taken. Everything else is a named choice. NOTE the
+## inherited naming defect: `quarter_cells` counted 0.25 m, which is HALF a cell —
+## the ordinals count fractions of a METRE, and `eighth_cells` keeps the series.
+## A value off the declared set is
 ## REJECTED, not clamped: clamping a 7 to a 6 silently builds something the
 ## player did not ask for, and a kit whose pieces quietly change size is worse
 ## than one that refuses.
@@ -119,10 +126,11 @@ const OPENING_FIELDS: Dictionary = {
 }
 const OPENING_TYPES: Array[String] = ["door", "window", "hatch"]
 
-## Parameter units. `cells` and `quarter_cells` are the grid; `count` is a plain
-## integer; `choice` is a named string. There is no "float" unit and there will
-## not be one — see the header.
-const PARAM_UNITS: Array[String] = ["cells", "quarter_cells", "count", "choice"]
+## Parameter units. `cells` (0.5 m), `quarter_cells` (0.25 m, version 1's misnamed
+## half-cell, kept so an old document still reads) and `eighth_cells` (0.125 m)
+## are the grid; `count` is a plain integer; `choice` is a named string. There is
+## no "float" unit and there will not be one — see the header.
+const PARAM_UNITS: Array[String] = ["cells", "quarter_cells", "eighth_cells", "count", "choice"]
 
 static var _pieces: Dictionary = {}
 static var _order: PackedStringArray = PackedStringArray()
@@ -815,7 +823,13 @@ static func _choose(
 # expr  := term (('+' | '-') term)*
 # term  := unary (('*' | '/') unary)*
 # unary := '-'* primary
-# prim  := NUMBER | NAME
+# prim  := NUMBER | NAME | '(' expr ')'
+#
+# Parentheses exist for exactly one reason and it is worth naming: a rake has to
+# be distributed over a wall's TOTAL height, and once `head` trims that height in
+# eighth-cells the total is a SUM — `height*0.5+head*0.125`. Without grouping,
+# `rake*-0.125*sill*0.5/height*0.5+head*0.125` divides by `height` and then
+# multiplies by 0.5, which is a different number that looks right.
 #
 # Deliberately NOT Godot's `Expression`: a kit is data, and data must not be able
 # to call into the engine. Names resolve only against this piece's own numeric
@@ -853,7 +867,7 @@ static func _tokenise(text: String, where: String, errors: PackedStringArray) ->
 		if chr == " " or chr == "\t":
 			i += 1
 			continue
-		if chr in ["+", "-", "*", "/"]:
+		if chr in ["+", "-", "*", "/", "(", ")"]:
 			tokens.append({"kind": "op", "text": chr})
 			i += 1
 			continue
@@ -930,6 +944,18 @@ static func _parse_unary(
 	if str(token["kind"]) == "op" and str(token["text"]) == "+":
 		cursor[0] = int(cursor[0]) + 1
 		return _parse_unary(tokens, cursor, params, where, errors)
+	if str(token["kind"]) == "op" and str(token["text"]) == "(":
+		cursor[0] = int(cursor[0]) + 1
+		var inner := _parse_expr(tokens, cursor, params, where, errors)
+		if int(cursor[0]) >= tokens.size():
+			errors.append("%s: unclosed \"(\"" % where)
+			return inner
+		var closer := tokens[int(cursor[0])] as Dictionary
+		if str(closer["kind"]) != "op" or str(closer["text"]) != ")":
+			errors.append("%s: expected \")\", got \"%s\"" % [where, str(closer["text"])])
+			return inner
+		cursor[0] = int(cursor[0]) + 1
+		return inner
 	cursor[0] = int(cursor[0]) + 1
 	if str(token["kind"]) == "num":
 		return float(token["value"])

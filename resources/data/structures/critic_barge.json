@@ -1,0 +1,747 @@
+{
+  "format": "structure_plan_v1",
+  "context": "vessel",
+  "hull_id": "hull_28x10",
+  "_note": "CRITIC FIXTURE. A dumb hopper barge, authored to break the kit rather than to flatter it. Three things the trawler never asks for: an L-PLAN casing with one CONCAVE vertex (structure_pieces.json claims corner_45 turned 180 fills an inside corner - this is the check), an OCTAGONAL crane pedestal stacked two tiers to 6 m, and hopper coamings that have no corner piece to turn with. Not for shipping; written by an adversarial critic.",
+  "palette": {
+    "wall": [
+      0.85,
+      0.86,
+      0.88
+    ],
+    "deck": [
+      0.33,
+      0.31,
+      0.29
+    ]
+  },
+  "hull": {
+    "loa_m": 28.0,
+    "beam_m": 10.0,
+    "depth_m": 5.6,
+    "draft_m": 2.8,
+    "displacement_t": 256.0,
+    "form": "fine_entry",
+    "bow_taper_fraction": 0.17857142857142858,
+    "station_count": 8
+  },
+  "walls": [],
+  "decks": [],
+  "stairs": [],
+  "items": [],
+  "edges": [],
+  "pieces": [
+    {
+      "id": 1,
+      "piece": "trim_band",
+      "cell": [
+        4,
+        0,
+        8
+      ],
+      "facing": 90,
+      "params": {
+        "span": 16,
+        "profile": "coaming"
+      },
+      "color": "#8a6a3a",
+      "_is": "hopper coaming port"
+    },
+    {
+      "id": 2,
+      "piece": "trim_band",
+      "cell": [
+        4,
+        0,
+        24
+      ],
+      "facing": 90,
+      "params": {
+        "span": 12,
+        "profile": "coaming"
+      },
+      "color": "#8a6a3a",
+      "_is": "hopper coaming port"
+    },
+    {
+      "id": 3,
+      "piece": "trim_band",
+      "cell": [
+        16,
+        0,
+        8
+      ],
+      "facing": 270,
+      "params": {
+        "span": 16,
+        "profile": "coaming"
+      },
+      "color": "#8a6a3a",
+      "_is": "hopper coaming stbd"
+    },
+    {
+      "id": 4,
+      "piece": "trim_band",
+      "cell": [
+        16,
+        0,
+        24
+      ],
+      "facing": 270,
+      "params": {
+        "span": 12,
+        "profile": "coaming"
+      },
+      "color": "#8a6a3a",
+      "_is": "hopper coaming stbd"
+    },
+    {
+      "id": 5,
+      "piece": "roof_slope",
+      "cell": [
+        4,
+        0,
+        8
+      ],
+      "facing": 0,
+      "params": {
+        "span": 4,
+        "depth": 4,
+        "rise": 2,
+        "gauge": "heavy"
+      },
+      "color": "#4d5257",
+      "_is": "hopper slope, port forward"
+    },
+    {
+      "id": 6,
+      "piece": "roof_slope",
+      "cell": [
+        12,
+        0,
+        8
+      ],
+      "facing": 0,
+      "params": {
+        "span": 4,
+        "depth": 4,
+        "rise": 2,
+        "gauge": "heavy"
+      },
+      "color": "#4d5257",
+      "_is": "hopper slope, stbd forward"
+    },
+    {
+      "id": 7,
+      "piece": "corner_45",
+      "cell": [
+        4,
+        0,
+        40
+      ],
+      "facing": 0,
+      "params": {
+        "span": 1,
+        "height": 5,
+        "rake_a": 4,
+        "rake_b": -2
+      },
+      "color": "#d9d5c8",
+      "_is": "casing knuckle 0"
+    },
+    {
+      "id": 8,
+      "piece": "corner_45",
+      "cell": [
+        12,
+        0,
+        40
+      ],
+      "facing": 270,
+      "params": {
+        "span": 1,
+        "height": 5,
+        "rake_a": -2,
+        "rake_b": 4
+      },
+      "color": "#d9d5c8",
+      "_is": "casing knuckle 1"
+    },
+    {
+      "id": 9,
+      "piece": "corner_45",
+      "cell": [
+        13,
+        0,
+        45
+      ],
+      "facing": 270,
+      "params": {
+        "span": 1,
+        "height": 5,
+        "rake_a": 4,
+        "rake_b": -2
+      },
+      "color": "#d9d5c8",
+      "_is": "casing knuckle 2 CONCAVE"
+    },
+    {
+      "id": 10,
+      "piece": "corner_45",
+      "cell": [
+        16,
+        0,
+        46
+      ],
+      "facing": 270,
+      "params": {
+        "span": 1,
+        "height": 5,
+        "rake_a": -2,
+        "rake_b": 4
+      },
+      "color": "#d9d5c8",
+      "_is": "casing knuckle 3"
+    },
+    {
+      "id": 11,
+      "piece": "corner_45",
+      "cell": [
+        16,
+        0,
+        52
+      ],
+      "facing": 180,
+      "params": {
+        "span": 1,
+        "height": 5,
+        "rake_a": 2,
+        "rake_b": -2
+      },
+      "color": "#d9d5c8",
+      "_is": "casing knuckle 4"
+    },
+    {
+      "id": 12,
+      "piece": "corner_45",
+      "cell": [
+        4,
+        0,
+        52
+      ],
+      "facing": 90,
+      "params": {
+        "span": 1,
+        "height": 5,
+        "rake_a": -2,
+        "rake_b": 2
+      },
+      "color": "#d9d5c8",
+      "_is": "casing knuckle 5"
+    },
+    {
+      "id": 13,
+      "piece": "wall_glazed",
+      "cell": [
+        5,
+        0,
+        40
+      ],
+      "facing": 0,
+      "params": {
+        "span": 6,
+        "height": 5,
+        "rake": 4,
+        "sill": 2,
+        "band": 2,
+        "lights": 3
+      },
+      "color": "#d9d5c8",
+      "_is": "casing side 0"
+    },
+    {
+      "id": 14,
+      "piece": "wall_panel",
+      "cell": [
+        12,
+        0,
+        41
+      ],
+      "facing": 270,
+      "params": {
+        "span": 4,
+        "height": 5,
+        "rake": -2
+      },
+      "color": "#d9d5c8",
+      "_is": "casing side 1"
+    },
+    {
+      "id": 15,
+      "piece": "wall_panel",
+      "cell": [
+        13,
+        0,
+        46
+      ],
+      "facing": 0,
+      "params": {
+        "span": 2,
+        "height": 5,
+        "rake": 4
+      },
+      "color": "#d9d5c8",
+      "_is": "casing side 2"
+    },
+    {
+      "id": 16,
+      "piece": "wall_panel",
+      "cell": [
+        16,
+        0,
+        47
+      ],
+      "facing": 270,
+      "params": {
+        "span": 4,
+        "height": 5,
+        "rake": -2
+      },
+      "color": "#d9d5c8",
+      "_is": "casing side 3"
+    },
+    {
+      "id": 17,
+      "piece": "wall_panel",
+      "cell": [
+        15,
+        0,
+        52
+      ],
+      "facing": 180,
+      "params": {
+        "span": 8,
+        "height": 5,
+        "rake": 2
+      },
+      "color": "#d9d5c8",
+      "_is": "casing side 4"
+    },
+    {
+      "id": 18,
+      "piece": "wall_panel",
+      "cell": [
+        7,
+        0,
+        52
+      ],
+      "facing": 180,
+      "params": {
+        "span": 2,
+        "height": 5,
+        "rake": 2
+      },
+      "color": "#d9d5c8",
+      "_is": "casing side 4"
+    },
+    {
+      "id": 19,
+      "piece": "wall_panel",
+      "cell": [
+        4,
+        0,
+        51
+      ],
+      "facing": 90,
+      "params": {
+        "span": 8,
+        "height": 5,
+        "rake": -2
+      },
+      "color": "#d9d5c8",
+      "_is": "casing side 5"
+    },
+    {
+      "id": 20,
+      "piece": "wall_panel",
+      "cell": [
+        4,
+        0,
+        43
+      ],
+      "facing": 90,
+      "params": {
+        "span": 2,
+        "height": 5,
+        "rake": -2
+      },
+      "color": "#d9d5c8",
+      "_is": "casing side 5"
+    },
+    {
+      "id": 21,
+      "piece": "deck_tile",
+      "cell": [
+        3,
+        5,
+        39
+      ],
+      "facing": 0,
+      "params": {
+        "span": 8,
+        "depth": 6,
+        "gauge": "deck"
+      },
+      "color": "#4d5257",
+      "_is": "casing roof, forward leg"
+    },
+    {
+      "id": 22,
+      "piece": "deck_tile",
+      "cell": [
+        11,
+        5,
+        39
+      ],
+      "facing": 0,
+      "params": {
+        "span": 2,
+        "depth": 6,
+        "gauge": "deck"
+      },
+      "color": "#4d5257",
+      "_is": "casing roof, forward leg"
+    },
+    {
+      "id": 23,
+      "piece": "deck_tile",
+      "cell": [
+        3,
+        5,
+        45
+      ],
+      "facing": 0,
+      "params": {
+        "span": 12,
+        "depth": 8,
+        "gauge": "deck"
+      },
+      "color": "#4d5257",
+      "_is": "casing roof, main"
+    },
+    {
+      "id": 24,
+      "piece": "deck_tile",
+      "cell": [
+        15,
+        5,
+        45
+      ],
+      "facing": 0,
+      "params": {
+        "span": 2,
+        "depth": 8,
+        "gauge": "deck"
+      },
+      "color": "#4d5257",
+      "_is": "casing roof, main"
+    },
+    {
+      "id": 25,
+      "piece": "corner_45",
+      "cell": [
+        8,
+        0,
+        22
+      ],
+      "facing": 0,
+      "params": {
+        "span": 1,
+        "height": 6,
+        "rake_a": 0,
+        "rake_b": 0
+      },
+      "color": "#8a6a3a",
+      "_is": "pedestal t0 knuckle 0"
+    },
+    {
+      "id": 26,
+      "piece": "corner_45",
+      "cell": [
+        12,
+        0,
+        22
+      ],
+      "facing": 270,
+      "params": {
+        "span": 1,
+        "height": 6,
+        "rake_a": 0,
+        "rake_b": 0
+      },
+      "color": "#8a6a3a",
+      "_is": "pedestal t0 knuckle 1"
+    },
+    {
+      "id": 27,
+      "piece": "corner_45",
+      "cell": [
+        12,
+        0,
+        26
+      ],
+      "facing": 180,
+      "params": {
+        "span": 1,
+        "height": 6,
+        "rake_a": 0,
+        "rake_b": 0
+      },
+      "color": "#8a6a3a",
+      "_is": "pedestal t0 knuckle 2"
+    },
+    {
+      "id": 28,
+      "piece": "corner_45",
+      "cell": [
+        8,
+        0,
+        26
+      ],
+      "facing": 90,
+      "params": {
+        "span": 1,
+        "height": 6,
+        "rake_a": 0,
+        "rake_b": 0
+      },
+      "color": "#8a6a3a",
+      "_is": "pedestal t0 knuckle 3"
+    },
+    {
+      "id": 29,
+      "piece": "wall_panel",
+      "cell": [
+        9,
+        0,
+        22
+      ],
+      "facing": 0,
+      "params": {
+        "span": 2,
+        "height": 6,
+        "rake": 0
+      },
+      "color": "#8a6a3a",
+      "_is": "pedestal t0 side 0"
+    },
+    {
+      "id": 30,
+      "piece": "wall_panel",
+      "cell": [
+        12,
+        0,
+        23
+      ],
+      "facing": 270,
+      "params": {
+        "span": 2,
+        "height": 6,
+        "rake": 0
+      },
+      "color": "#8a6a3a",
+      "_is": "pedestal t0 side 1"
+    },
+    {
+      "id": 31,
+      "piece": "wall_panel",
+      "cell": [
+        11,
+        0,
+        26
+      ],
+      "facing": 180,
+      "params": {
+        "span": 2,
+        "height": 6,
+        "rake": 0
+      },
+      "color": "#8a6a3a",
+      "_is": "pedestal t0 side 2"
+    },
+    {
+      "id": 32,
+      "piece": "wall_panel",
+      "cell": [
+        8,
+        0,
+        25
+      ],
+      "facing": 90,
+      "params": {
+        "span": 2,
+        "height": 6,
+        "rake": 0
+      },
+      "color": "#8a6a3a",
+      "_is": "pedestal t0 side 3"
+    },
+    {
+      "id": 33,
+      "piece": "corner_45",
+      "cell": [
+        8,
+        6,
+        22
+      ],
+      "facing": 0,
+      "params": {
+        "span": 1,
+        "height": 6,
+        "rake_a": 0,
+        "rake_b": 0
+      },
+      "color": "#8a6a3a",
+      "_is": "pedestal t1 knuckle 0"
+    },
+    {
+      "id": 34,
+      "piece": "corner_45",
+      "cell": [
+        12,
+        6,
+        22
+      ],
+      "facing": 270,
+      "params": {
+        "span": 1,
+        "height": 6,
+        "rake_a": 0,
+        "rake_b": 0
+      },
+      "color": "#8a6a3a",
+      "_is": "pedestal t1 knuckle 1"
+    },
+    {
+      "id": 35,
+      "piece": "corner_45",
+      "cell": [
+        12,
+        6,
+        26
+      ],
+      "facing": 180,
+      "params": {
+        "span": 1,
+        "height": 6,
+        "rake_a": 0,
+        "rake_b": 0
+      },
+      "color": "#8a6a3a",
+      "_is": "pedestal t1 knuckle 2"
+    },
+    {
+      "id": 36,
+      "piece": "corner_45",
+      "cell": [
+        8,
+        6,
+        26
+      ],
+      "facing": 90,
+      "params": {
+        "span": 1,
+        "height": 6,
+        "rake_a": 0,
+        "rake_b": 0
+      },
+      "color": "#8a6a3a",
+      "_is": "pedestal t1 knuckle 3"
+    },
+    {
+      "id": 37,
+      "piece": "wall_panel",
+      "cell": [
+        9,
+        6,
+        22
+      ],
+      "facing": 0,
+      "params": {
+        "span": 2,
+        "height": 6,
+        "rake": 0
+      },
+      "color": "#8a6a3a",
+      "_is": "pedestal t1 side 0"
+    },
+    {
+      "id": 38,
+      "piece": "wall_panel",
+      "cell": [
+        12,
+        6,
+        23
+      ],
+      "facing": 270,
+      "params": {
+        "span": 2,
+        "height": 6,
+        "rake": 0
+      },
+      "color": "#8a6a3a",
+      "_is": "pedestal t1 side 1"
+    },
+    {
+      "id": 39,
+      "piece": "wall_panel",
+      "cell": [
+        11,
+        6,
+        26
+      ],
+      "facing": 180,
+      "params": {
+        "span": 2,
+        "height": 6,
+        "rake": 0
+      },
+      "color": "#8a6a3a",
+      "_is": "pedestal t1 side 2"
+    },
+    {
+      "id": 40,
+      "piece": "wall_panel",
+      "cell": [
+        8,
+        6,
+        25
+      ],
+      "facing": 90,
+      "params": {
+        "span": 2,
+        "height": 6,
+        "rake": 0
+      },
+      "color": "#8a6a3a",
+      "_is": "pedestal t1 side 3"
+    },
+    {
+      "id": 41,
+      "piece": "deck_tile",
+      "cell": [
+        8,
+        12,
+        22
+      ],
+      "facing": 0,
+      "params": {
+        "span": 4,
+        "depth": 4,
+        "gauge": "heavy"
+      },
+      "color": "#1c1c1f",
+      "_is": "crane pedestal cap"
+    }
+  ]
+}

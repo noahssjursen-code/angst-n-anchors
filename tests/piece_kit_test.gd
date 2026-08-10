@@ -59,7 +59,10 @@ func _initialize() -> void:
 	_check_grid_units()
 	_check_expressions()
 	_check_tiling()
+	_check_trim_lattice()
+	_check_diagonal_run()
 	_check_shell_closes()
+	_check_deck_lands_on_walls()
 	_check_six_tier_block()
 	_check_fixtures()
 
@@ -232,16 +235,38 @@ func _check_grid_units() -> void:
 	var quarter := WorldUnits.DECK_CELL_M * 0.5
 	_t.near("a quarter-cell is 0.25 m", quarter, 0.25)
 
-	var wide := PieceKit.resolve("wall_panel", {"span": 8, "height": 6, "rake": 3})
+	var eighth := WorldUnits.DECK_CELL_M * 0.25
+	_t.near("an eighth-cell is 0.125 m", eighth, 0.125)
+
+	var wide := PieceKit.resolve("wall_panel", {"span": 8, "height": 6, "rake": 6})
 	var corners := ((wide["specs"] as Array)[0] as Dictionary)["corners"] as PackedVector3Array
 	_t.near("span 8 is 4.00 m of run", corners[0].x, 4.0)
 	_t.near("height 6 is 3.00 m", corners[2].y, 3.0)
-	_t.near("rake 3 stands the top 0.75 m outboard", corners[2].z, -0.75)
+	_t.near("rake 6 stands the top 0.75 m outboard", corners[2].z, -0.75)
 	## Outward is -Z in the piece frame, so a positive rake must be negative z.
 	_t.check("a positive rake leans OUT, not in", corners[2].z < 0.0)
-	var tumbled := PieceKit.resolve("wall_panel", {"rake": -2})
+	var tumbled := PieceKit.resolve("wall_panel", {"rake": -4})
 	var t_corners := ((tumbled["specs"] as Array)[0] as Dictionary)["corners"] as PackedVector3Array
-	_t.near("rake -2 tumbles home 0.50 m", t_corners[2].z, 0.50)
+	_t.near("rake -4 tumbles home 0.50 m", t_corners[2].z, 0.50)
+
+	## THE COMPATIBILITY CLAIM, and it is the one that makes halving the step
+	## safe: the eighth-cell lattice CONTAINS the quarter-cell one. Every offset
+	## version 1 could say, version 2 says with the same bits — so a panel authored
+	## at the old step and a panel authored at the new one stand on the same plane
+	## and their shared edge is identical, which is checked below in `_check_tiling`.
+	var off_lattice := 0
+	var exact := 0
+	for old_rake in range(-4, 5):
+		var probe := PieceKit.resolve("wall_panel", {"rake": old_rake * 2})
+		var pc := ((probe["specs"] as Array)[0] as Dictionary)["corners"] as PackedVector3Array
+		if pc[2].z == float(old_rake) * -0.25:
+			exact += 1
+		else:
+			off_lattice += 1
+	_t.equal(
+		"all 9 of version 1's quarter-cell rakes are still EXACTLY expressible (%d exact, %d moved)"
+		% [exact, off_lattice], off_lattice, 0
+	)
 
 	_t.equal("wall_panel footprint at span 8 is 8 cells of run",
 		PieceKit.footprint_cells("wall_panel", {"span": 8}), Vector3i(8, 5, 0))
@@ -275,13 +300,44 @@ func _check_expressions() -> void:
 	_t.equal("a 1-light band has no mullions", (one_light["specs"] as Array).size(), 3)
 
 	## The rake distributes with height: the glass leans by its share, not the
-	## whole wall's. sill 2 of height 5 at rake 4 -> 1.00 m x 2/5 = 0.40 m out.
-	var raked := PieceKit.resolve("wall_glazed", {"span": 4, "height": 5, "rake": 4, "sill": 2, "band": 2})
+	## whole wall's. sill 2 of height 5 at rake 8 -> 1.00 m x 2/5 = 0.40 m out.
+	var raked := PieceKit.resolve("wall_glazed", {"span": 4, "height": 5, "rake": 8, "sill": 2, "band": 2})
 	var coaming := ((raked["specs"] as Array)[0] as Dictionary)["corners"] as PackedVector3Array
 	_t.near("the coaming top leans out 0.40 m, its share of a 1.00 m rake", coaming[2].z, -0.40)
 	var header := ((raked["specs"] as Array)[2] as Dictionary)["corners"] as PackedVector3Array
 	_t.near("the header top carries the full 1.00 m", header[2].z, -1.00)
 	_t.near("and its foot carries 0.80 m, the coaming plus the band", header[0].z, -0.80)
+
+	## And the DENOMINATOR is the total height, `head` included — which is what the
+	## parenthesised division in the kit is for. head 2 makes a height-5 wall 2.75 m,
+	## so the coaming's 1.00 m share of a 1.00 m rake becomes 1.00/2.75 = 0.3636.
+	## Without grouping, `.../height*0.5+head*0.125` divides by height and then
+	## MULTIPLIES by 0.5, which is 0.20 and looks entirely plausible.
+	var headed := PieceKit.resolve(
+		"wall_glazed", {"span": 4, "height": 5, "head": 2, "rake": 8, "sill": 2, "band": 2}
+	)
+	var h_coam := ((headed["specs"] as Array)[0] as Dictionary)["corners"] as PackedVector3Array
+	var h_head := ((headed["specs"] as Array)[2] as Dictionary)["corners"] as PackedVector3Array
+	_t.near("head 2 makes the wall 2.75 m tall", h_head[2].y, 2.75)
+	_t.near(
+		"and the coaming's share of the rake is 1.00/2.75, not 1.00/5*0.5",
+		h_coam[2].z, -1.00 / 2.75, 1e-6
+	)
+
+	## Parentheses, direct. The evaluator is the only thing between a data file and
+	## the geometry, and a precedence bug there is silent everywhere.
+	var paren_errors := PackedStringArray()
+	_t.near("2/(1+1) is 1, not 1.0 by way of 2/1+1",
+		PieceKit._eval("2/(1+1)", {}, "probe", paren_errors), 1.0)
+	_t.near("-(2+1)*2 is -6",
+		PieceKit._eval("-(2+1)*2", {}, "probe", paren_errors), -6.0)
+	_t.check("and those parsed with no complaint", paren_errors.is_empty())
+	var unclosed := PackedStringArray()
+	var _v := PieceKit._eval("2*(1+1", {}, "probe", unclosed)
+	_t.check(
+		"an unclosed bracket is an ERROR, not a silently closed one: %s" % ", ".join(unclosed),
+		_says(unclosed, "unclosed")
+	)
 
 
 func _check_tiling() -> void:
@@ -308,8 +364,185 @@ func _check_tiling() -> void:
 	(c["params"] as Dictionary)["rake"] = 1
 	var cc := PieceKit.placed_corners(c)
 	_t.near(
-		"one step of rake difference opens the head by exactly 0.25 m",
-		ca[3].distance_to(cc[2]), 0.25, 1e-6
+		"one step of rake difference opens the head by exactly 0.125 m",
+		ca[3].distance_to(cc[2]), 0.125, 1e-6
+	)
+
+	## THE HALVED STEP STILL MEETS, over the WHOLE set rather than one sample.
+	## Every one of the 17 rakes, butted against itself, shares its edge to the bit;
+	## and every one butted against its NEIGHBOUR opens by exactly one step and no
+	## other amount. The first half is the guarantee; the second is what makes the
+	## first non-vacuous, because a resolver that ignored `rake` would pass the
+	## first and fail the second.
+	var same_open := 0
+	var wrong_gap := 0
+	var worst_gap := 0.0
+	for spec in PieceKit.params_of("wall_panel")["rake"]["values"] as Array:
+		var r := int(spec)
+		var left := {"id": "L", "piece": "wall_panel", "cell": [0, 0, 0], "facing": 0,
+			"params": {"span": 4, "height": 5, "rake": r}}
+		var right := {"id": "R", "piece": "wall_panel", "cell": [4, 0, 0], "facing": 0,
+			"params": {"span": 2, "height": 5, "rake": r}}
+		var cl := PieceKit.placed_corners(left)
+		var cr := PieceKit.placed_corners(right)
+		if cl[0] != cr[1] or cl[3] != cr[2]:
+			same_open += 1
+		if r < 8:
+			var stepped := right.duplicate(true)
+			(stepped["params"] as Dictionary)["rake"] = r + 1
+			var cs := PieceKit.placed_corners(stepped)
+			var gap := cl[3].distance_to(cs[2])
+			worst_gap = maxf(worst_gap, absf(gap - 0.125))
+			if absf(gap - 0.125) > 1e-6:
+				wrong_gap += 1
+	_t.equal(
+		"all 17 rakes butt BIT-IDENTICALLY against themselves (%d that did not)" % same_open,
+		same_open, 0
+	)
+	_t.equal(
+		"and every adjacent pair opens by exactly one 0.125 m step (worst error %.9f m)"
+		% worst_gap, wrong_gap, 0
+	)
+
+	## And a panel on the OLD lattice meets a panel on the new one: rake -2 is
+	## version 1's rake -1, to the bit, so a saved deckhouse and a new one butt.
+	var old_style := {"id": "old", "piece": "wall_panel", "cell": [0, 0, 0], "facing": 0,
+		"params": {"span": 4, "height": 5, "rake": -2}}
+	var new_style := {"id": "new", "piece": "wall_panel", "cell": [4, 0, 0], "facing": 0,
+		"params": {"span": 2, "height": 5, "rake": -2}}
+	var co := PieceKit.placed_corners(old_style)
+	var cn := PieceKit.placed_corners(new_style)
+	_t.check(
+		"a 0.25 m tumblehome reached through the halved step still lands on 0.25 m",
+		co[2].z == 0.25 and co[3] == cn[2]
+	)
+
+
+# ── The trim lattice: head, fall and lift ───────────────────────────────────
+#
+# The three parameters version 2 added, and they are all the same idea: the
+# placement grid is whole cells and a deckhouse is not. Each one is checked for
+# the PROPERTY it has to have — it moves what it says it moves, it moves nothing
+# else, and two pieces carrying the same value meet exactly — rather than for the
+# number it was written with.
+
+func _check_trim_lattice() -> void:
+	var base := PieceKit.resolve("wall_panel", {"span": 4, "height": 5})
+	var b := ((base["specs"] as Array)[0] as Dictionary)["corners"] as PackedVector3Array
+
+	## HEAD. Adds to the top and to nothing else.
+	var moved_foot := 0
+	var wrong_top := 0
+	for h in range(0, 8):
+		var probe := PieceKit.resolve("wall_panel", {"span": 4, "height": 5, "head": h})
+		var p := ((probe["specs"] as Array)[0] as Dictionary)["corners"] as PackedVector3Array
+		if p[0] != b[0] or p[1] != b[1]:
+			moved_foot += 1
+		if p[2].y != b[2].y + float(h) * 0.125 or p[3].y != b[3].y + float(h) * 0.125:
+			wrong_top += 1
+		if p[2].z != b[2].z:
+			wrong_top += 1
+	_t.equal("head moves the head and only the head (%d feet moved)" % moved_foot, moved_foot, 0)
+	_t.equal("head h raises the top by exactly h eighth-cells", wrong_top, 0)
+	_t.near(
+		"a 2.75 m tier is height 5 + head 2, which version 1 could not say",
+		((PieceKit.resolve("wall_panel", {"height": 5, "head": 2})["specs"] as Array)[0]
+			as Dictionary)["corners"][2].y, 2.75
+	)
+
+	## LIFT. Moves the whole piece and changes no shape.
+	var lifted := PieceKit.resolve("wall_panel", {"span": 4, "height": 5, "lift": 3})
+	var l := ((lifted["specs"] as Array)[0] as Dictionary)["corners"] as PackedVector3Array
+	var rigid := true
+	for i in 4:
+		if l[i] != b[i] + Vector3(0.0, 0.375, 0.0):
+			rigid = false
+	_t.check("lift 3 translates every corner by exactly 0.375 m and deforms nothing", rigid)
+	_t.check(
+		"a negative lift lowers it the same way",
+		((PieceKit.resolve("wall_panel", {"lift": -4})["specs"] as Array)[0]
+			as Dictionary)["corners"][1].y == -0.5
+	)
+
+	## FALL. Drops the OUT head, leaves the IN head and both feet where they were.
+	var wrong_fall := 0
+	for f in range(-4, 5):
+		var probe := PieceKit.resolve("wall_panel", {"span": 8, "height": 5, "fall": f})
+		var p := ((probe["specs"] as Array)[0] as Dictionary)["corners"] as PackedVector3Array
+		if p[0].y != 0.0 or p[1].y != 0.0 or p[2].y != 2.5:
+			wrong_fall += 1
+		if p[3].y != 2.5 - float(f) * 0.125:
+			wrong_fall += 1
+	_t.equal("fall f drops the far head by exactly f eighth-cells and moves nothing else",
+		wrong_fall, 0)
+
+	## THE CHAIN. A falling run is several panels, and the whole point is that the
+	## next one starts where the last one ended. Panel A (head 1, fall 1) ends its
+	## top 0.125 m lower than it started; panel B (head 0) starts there.
+	var a := {"id": "a", "piece": "wall_panel", "cell": [0, 0, 0], "facing": 0,
+		"params": {"span": 4, "height": 5, "head": 1, "fall": 1}}
+	var next := {"id": "b", "piece": "wall_panel", "cell": [4, 0, 0], "facing": 0,
+		"params": {"span": 4, "height": 5, "head": 0, "fall": 0}}
+	var ca := PieceKit.placed_corners(a)
+	var cb := PieceKit.placed_corners(next)
+	_t.check("a falling panel hands the next one its exact head", ca[3] == cb[2])
+	_t.check("and its exact foot", ca[0] == cb[1])
+	## Negative control: the same two panels with the fall left off. This is the
+	## mistake the parameter exists to make impossible to have silently, and it must
+	## show up as a gap of exactly one step.
+	var flat := a.duplicate(true)
+	(flat["params"] as Dictionary)["fall"] = 0
+	_t.near(
+		"MUTATION: dropping the fall opens that seam by exactly 0.125 m",
+		PieceKit.placed_corners(flat)[3].distance_to(cb[2]), 0.125, 1e-9
+	)
+
+	## A DECK THAT FALLS, and the CAMBER two of them make.
+	var tile := PieceKit.resolve("deck_tile", {"span": 4, "depth": 16, "fall": 2})
+	var dt := ((tile["specs"] as Array)[0] as Dictionary)["corners"] as PackedVector3Array
+	_t.check("a deck tile's near edge stays on its node", dt[2].y == 0.0 and dt[3].y == 0.0)
+	_t.near("and fall 2 drops its far edge exactly 0.25 m over 8.00 m", dt[0].y, -0.25, 0.0)
+	_t.check("which is a plane, not a fold — both far corners drop together", dt[0].y == dt[1].y)
+	_t.check(
+		"version 1's deck is still there at fall 0",
+		((PieceKit.resolve("deck_tile", {"span": 4, "depth": 16})["specs"] as Array)[0]
+			as Dictionary)["corners"][0].y == 0.0
+	)
+
+	## Chaining a fall down the slope: the next tile carries the lift its neighbour
+	## ended at, and because fall and lift count the same unit the edge is identical.
+	var up := {"id": "up", "piece": "deck_tile", "cell": [0, 5, 0], "facing": 0,
+		"params": {"span": 4, "depth": 8, "fall": 2, "lift": 2}}
+	var down := {"id": "down", "piece": "deck_tile", "cell": [0, 5, 8], "facing": 0,
+		"params": {"span": 4, "depth": 8, "fall": 2, "lift": 0}}
+	var cu := PieceKit.placed_corners(up)
+	var cd := PieceKit.placed_corners(down)
+	_t.check("a chained deck's far edge IS the next tile's near edge", cu[0] == cd[3] and cu[1] == cd[2])
+	_t.check("and the chain keeps falling", cd[0].y < cd[3].y)
+
+	## CAMBER. Two tiles at the same fall, back to back off a centreline: they meet
+	## exactly along the crown and both fall away from it. This is the answer to
+	## "camber is not in the vocabulary" — it is not a piece, it is two placements.
+	var port := {"id": "p", "piece": "deck_tile", "cell": [0, 5, 0], "facing": 0,
+		"params": {"span": 4, "depth": 4, "fall": 1}}
+	var stbd := {"id": "s", "piece": "deck_tile", "cell": [4, 5, 0], "facing": 180,
+		"params": {"span": 4, "depth": 4, "fall": 1}}
+	var cp := PieceKit.placed_corners(port)
+	var cs := PieceKit.placed_corners(stbd)
+	## Compared to 1e-6 rather than to the bit, and the slack is the ENGINE's, not
+	## the kit's: `Basis` is real_t, which is float32 in this build, so
+	## sin(deg_to_rad(180)) is -8.7e-8 rather than 0 and a 2 m lever turns that into
+	## 1.7e-7 m of z. Measured, not assumed. Every comparison in this file that does
+	## NOT cross a rotation is `==`, and they all hold. 1e-6 is still a hundred times
+	## tighter than the 1e-4 seam bound.
+	_t.check(
+		"a camber's two halves share the crown line exactly (%.9f m apart, float32 basis)"
+		% maxf(cp[2].distance_to(cs[3]), cp[3].distance_to(cs[2])),
+		cp[2].distance_to(cs[3]) < 1e-6 and cp[3].distance_to(cs[2]) < 1e-6
+	)
+	_t.check(
+		"and both fall away from it, which is what makes it a crown and not a slope",
+		cp[0].y < cp[3].y and cs[0].y < cs[3].y and cp[0].z != cs[0].z
 	)
 
 
@@ -522,6 +755,268 @@ func _wall_run(cx: int, cy: int, cz: int, facing: int, rake: int) -> Array:
 		})
 		at += step * int(span)
 	return out
+
+
+# ── The diagonal wall run ───────────────────────────────────────────────────
+#
+# Version 1 wrote "DIAGONAL WALL RUNS DO NOT EXIST … corner_45 carries the only
+# 45-degree chord, capped at 4 cells". The cap is now 8 and the chaining is the
+# answer to the rest of it: a facet's OUT edge is the next facet's IN edge, so
+# any number of them make one straight 45-degree wall. No seventh piece, and
+# nothing is placed at 45 degrees — every facing below is 0.
+
+func _check_diagonal_run() -> void:
+	var spans := PieceKit.params_of("corner_45")["span"]["values"] as Array
+	_t.check("corner_45 reaches 8 cells (%s)" % str(spans), spans.has(8))
+	_t.check(
+		"a span off the set is still refused — the cap moved, it did not open",
+		(PieceKit.resolve("corner_45", {"span": 5})["specs"] as Array).is_empty()
+	)
+	var chord := PieceKit.resolve("corner_45", {"span": 8, "height": 5})
+	var cc := ((chord["specs"] as Array)[0] as Dictionary)["corners"] as PackedVector3Array
+	_t.near("and at span 8 its chord is 5.66 m, a bow facet", cc[0].distance_to(cc[1]), 5.6569, 1e-3)
+
+	## Three facets chained nose to tail, each one placed span cells back in X and
+	## span forward in Z, all at facing 0.
+	var facets: Array = []
+	var span := 8
+	for i in 3:
+		facets.append({
+			"id": "facet %d" % i, "piece": "corner_45",
+			"cell": [24 - span * i, 0, span * i], "facing": 0,
+			"params": {"span": span, "height": 5},
+		})
+	var open := 0
+	var worst := 0.0
+	for i in 2:
+		var here := PieceKit.placed_corners(facets[i] as Dictionary)
+		var next := PieceKit.placed_corners(facets[i + 1] as Dictionary)
+		## A facet that refuses to resolve is an OPEN joint, not a skipped check —
+		## otherwise capping the span back at 4 would delete this claim instead of
+		## breaking it, which is the vacuous-pass trap (REALITY §4).
+		if here.size() != 4 or next.size() != 4:
+			open += 1
+			continue
+		## facet i's IN edge (1,2) is facet i+1's OUT edge (0,3).
+		if here[1] != next[0] or here[2] != next[3]:
+			open += 1
+		worst = maxf(worst, maxf(here[1].distance_to(next[0]), here[2].distance_to(next[3])))
+	_t.equal(
+		"three chained facets share every joint BIT-IDENTICALLY (worst %.9f m)" % worst, open, 0
+	)
+	## And the chain is STRAIGHT — a diagonal wall, not a staircase of facets. Every
+	## foot corner of every facet lies on one line, and that line runs at 45 degrees.
+	var ends := PieceKit.placed_corners(facets[0] as Dictionary)
+	var tails := PieceKit.placed_corners(facets[2] as Dictionary)
+	if not _t.check("the chain resolves at all", ends.size() == 4 and tails.size() == 4):
+		return
+	var head := ends[0]
+	var tail := tails[1]
+	var axis := (tail - head)
+	var off_line := 0.0
+	for facet in facets:
+		for point in [PieceKit.placed_corners(facet as Dictionary)[0], PieceKit.placed_corners(facet as Dictionary)[1]]:
+			var t: float = (point - head).dot(axis) / axis.length_squared()
+			off_line = maxf(off_line, (point - (head + axis * t)).length())
+	_t.check("and the run is one straight line (worst departure %.9f m)" % off_line, off_line < 1e-6)
+	_t.near("at 45 degrees in plan", absf(axis.x), absf(axis.z), 1e-9)
+	_t.near("and 8.49 m long — three 5.66 m chords", axis.length(), 3.0 * 8.0 * 0.5 * sqrt(2.0), 1e-6)
+
+	## MUTATION. Slide the middle facet one cell off the diagonal and the joints
+	## must open. A chain check that cannot fail is a chain of nothing.
+	var bent: Array = facets.duplicate(true)
+	(bent[1] as Dictionary)["cell"] = [24 - span + 1, 0, span]
+	var bent_open := 0
+	for i in 2:
+		var here := PieceKit.placed_corners(bent[i] as Dictionary)
+		var next := PieceKit.placed_corners(bent[i + 1] as Dictionary)
+		if here[1] != next[0] or here[2] != next[3]:
+			bent_open += 1
+	_t.check(
+		"MUTATION: one cell of offset on the middle facet opens %d of 2 joints (was 0)"
+		% bent_open, bent_open > 0
+	)
+
+
+# ── The falling deck actually lands on the walls ────────────────────────────
+#
+# The one claim that is about the VESSEL rather than about a piece, and the one
+# the four widened sets exist for. `probe_piece_trawler`'s boat deck is no longer
+# level; the tier under it is a two-step chord of that plane. So the property to
+# hold is not "the fall is 0.25" — that restates the input — it is: EVERY HEAD
+# CORNER OF THE TIER LIES INSIDE THE DECK PLATE THAT COVERS IT. A wall whose head
+# is above the deck pokes through the roof; one below it opens a slot of daylight,
+# and that is the failure a stepped approximation actually risks.
+
+const DECK_GAUGE_M := 0.13
+
+
+func _check_deck_lands_on_walls() -> void:
+	var doc := _load(TRAWLER)
+	if doc.is_empty():
+		_t.fail("%s did not load" % TRAWLER)
+		return
+	var report := _deck_report(doc)
+	_t.check(
+		"the boat deck is not level: it falls %.4f m over its length" % float(report["fall"]),
+		float(report["fall"]) > 0.2
+	)
+	_t.equal(
+		"every one of the %d tier head corners lands inside the deck plate covering it "
+		% int(report["sampled"]) + "(worst departure %.4f m, half-gauge %.4f)"
+		% [float(report["worst"]), DECK_GAUGE_M * 0.5],
+		int(report["outside"]), 0
+	)
+	_t.check("and the check actually sampled the tier", int(report["sampled"]) >= 20)
+
+	## MUTATION 1 — flatten the deck. The tier still steps down 0.25 m aft, so its
+	## after end drops clear of a level deck.
+	var flat := doc.duplicate(true)
+	for placement_variant in flat["pieces"] as Array:
+		var placement := placement_variant as Dictionary
+		if not str(placement.get("_is", "")).begins_with("boat deck"):
+			continue
+		(placement["params"] as Dictionary)["fall"] = 0
+	var flat_report := _deck_report(flat)
+	_t.check(
+		"MUTATION: a level boat deck leaves %d head corners outside it (worst %.4f m, was 0)"
+		% [int(flat_report["outside"]), float(flat_report["worst"])],
+		int(flat_report["outside"]) > 0
+	)
+
+	## MUTATION 2 — take the tier's extra head off. 2.75 m becomes 2.50 and the
+	## forward end of the deck is left standing 0.25 m above nothing.
+	var short := doc.duplicate(true)
+	for placement_variant in short["pieces"] as Array:
+		var placement := placement_variant as Dictionary
+		if not str(placement.get("_is", "")).begins_with("lower tier"):
+			continue
+		var params := placement.get("params", {}) as Dictionary
+		if int(params.get("head", 0)) > 0:
+			params["head"] = 0
+	var short_report := _deck_report(short)
+	_t.check(
+		"MUTATION: dropping the tier's head leaves %d corners outside (worst %.4f m, was 0)"
+		% [int(short_report["outside"]), float(short_report["worst"])],
+		int(short_report["outside"]) > 0
+	)
+
+	## THE OTHER HALF OF THE SAME CLAIM, and it is a boundary the kit STATES: a
+	## wall's foot is level, so the wheelhouse standing on the falling boat deck
+	## cannot follow it — it sits on the mean and wanders. The kit says that wander
+	## stays inside the deck plate. Nothing was checking that it does.
+	var feet := _deck_report(doc, "wheelhouse", false)
+	_t.equal(
+		"the wheelhouse's %d level feet stay inside the falling deck they stand on "
+		% int(feet["sampled"]) + "(worst %.4f m, half-gauge %.4f)"
+		% [float(feet["worst"]), DECK_GAUGE_M * 0.5],
+		int(feet["outside"]), 0
+	)
+	## MUTATION: put the wheelhouse back on the whole-cell lattice. Its foot then
+	## sits 0.125 m under the forward end of the deck it is supposed to stand on.
+	var unlifted := doc.duplicate(true)
+	for placement_variant in unlifted["pieces"] as Array:
+		var placement := placement_variant as Dictionary
+		if not str(placement.get("_is", "")).begins_with("wheelhouse"):
+			continue
+		var params := placement.get("params", {}) as Dictionary
+		if params.has("lift"):
+			params["lift"] = 0
+	var unlifted_feet := _deck_report(unlifted, "wheelhouse", false)
+	_t.check(
+		"MUTATION: dropping the wheelhouse's lift puts %d feet outside the deck (worst %.4f m, was 0)"
+		% [int(unlifted_feet["outside"]), float(unlifted_feet["worst"])],
+		int(unlifted_feet["outside"]) > 0
+	)
+
+
+## Head corners of every `lower tier` shell piece, measured against the plane of
+## whichever `boat deck` tile covers them in plan. Returns
+## {"sampled","outside","worst","fall"}.
+func _deck_report(doc: Dictionary, prefix := "lower tier", heads_not_feet := true) -> Dictionary:
+	var tiles: Array = []
+	var low := INF
+	var high := -INF
+	for placement_variant in doc.get("pieces", []) as Array:
+		var placement := placement_variant as Dictionary
+		if str(placement.get("piece", "")) != "deck_tile":
+			continue
+		if not str(placement.get("_is", "")).begins_with("boat deck"):
+			continue
+		var corners := PieceKit.placed_corners(placement)
+		if corners.size() != 4:
+			continue
+		var lo := corners[0]
+		var hi := corners[0]
+		for point in corners:
+			lo = Vector3(minf(lo.x, point.x), minf(lo.y, point.y), minf(lo.z, point.z))
+			hi = Vector3(maxf(hi.x, point.x), maxf(hi.y, point.y), maxf(hi.z, point.z))
+			low = minf(low, point.y)
+			high = maxf(high, point.y)
+		## y = a*x + b*z + c through three of the tile's corners. The tile is a
+		## plane by construction (`fall` drops both far corners together), which
+		## `_check_trim_lattice` asserts separately.
+		var p0 := corners[0]
+		var p1 := corners[1]
+		var p2 := corners[2]
+		var u := p1 - p0
+		var v := p2 - p0
+		var n := u.cross(v)
+		if absf(n.y) < 1e-9:
+			continue
+		tiles.append({"lo": lo, "hi": hi, "n": n, "p": p0})
+	var sampled := 0
+	var outside := 0
+	var worst := 0.0
+	for placement_variant in doc.get("pieces", []) as Array:
+		var placement := placement_variant as Dictionary
+		if not SHELL_PIECES.has(str(placement.get("piece", ""))):
+			continue
+		if not str(placement.get("_is", "")).begins_with(prefix):
+			continue
+		var result := PieceKit.resolve_placement(placement, 1)
+		## The piece's own head, which for a glazed panel is the HEADER and not the
+		## coaming under it — the same "highest of the plates it draws" rule
+		## `_lateral_edges` uses. Sampling every plate would measure the window sill
+		## against the roof and report a metre and a quarter of nothing.
+		var heads := PackedVector3Array()
+		for step in (result["items"] as Array).size():
+			var corners := PieceKit.placed_corners(placement, step)
+			if corners.size() != 4:
+				continue
+			if not heads_not_feet:
+				## Feet: every plate of a piece shares them, so the first is the piece's.
+				heads = PackedVector3Array([corners[1], corners[0]])
+				break
+			if heads.is_empty():
+				heads = PackedVector3Array([corners[2], corners[3]])
+				continue
+			if corners[2].y > heads[0].y:
+				heads[0] = corners[2]
+			if corners[3].y > heads[1].y:
+				heads[1] = corners[3]
+		if not heads.is_empty():
+			for point in heads:
+				var best := INF
+				for tile_variant in tiles:
+					var tile := tile_variant as Dictionary
+					var lo := tile["lo"] as Vector3
+					var hi := tile["hi"] as Vector3
+					if point.x < lo.x - 1e-6 or point.x > hi.x + 1e-6:
+						continue
+					if point.z < lo.z - 1e-6 or point.z > hi.z + 1e-6:
+						continue
+					var n := tile["n"] as Vector3
+					var p := tile["p"] as Vector3
+					var y := p.y - (n.x * (point.x - p.x) + n.z * (point.z - p.z)) / n.y
+					best = minf(best, absf(point.y - y))
+				if best == INF:
+					continue
+				sampled += 1
+				worst = maxf(worst, best)
+				if best > DECK_GAUGE_M * 0.5 + 1e-9:
+					outside += 1
+	return {"sampled": sampled, "outside": outside, "worst": worst, "fall": high - low}
 
 
 # ── 4. The fixtures ─────────────────────────────────────────────────────────

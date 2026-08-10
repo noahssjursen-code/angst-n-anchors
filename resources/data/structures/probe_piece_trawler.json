@@ -2,7 +2,7 @@
  "format": "structure_plan_v1",
  "context": "vessel",
  "hull_id": "hull_28x10",
- "_note": "PIECE-BUILT. The deckhouse on this vessel contains ZERO hand-authored plate corners: it is\n43 placements of standard pieces on the 0.5 m deck grid, resolved by scripts/construction/piece_kit.gd\ninto exactly the `plate` primitives StructureBaker already bakes. Everything else in this file - the\nsheer-band bulwark, the bow bulwark plating, the gallows steelwork and the spar and wire rig - is\nprobe_trawler_bulwark.json verbatim, so a side-by-side capture isolates the deckhouse and nothing else.\n\nWHAT REPLACED WHAT. 50 of that fixture's plate items were the deckhouse: the lower tier, its glass\nand mullions, the boat deck, a three-band wheelhouse with every mullion and corner pillar positioned\nindividually, and a tapered funnel. Every one of them was a quad an agent solved by hand. All 50\nare gone. In their place: 13 wall panels, 7 glazed panels, 12 corner facets,\n7 deck tiles and 4 trim runs, not one of which knows this vessel exists.\n\nThe 39 authored plates that REMAIN are bow bulwark plating and gallows steelwork, and they remain on\npurpose. A bulwark follows the sheer, which is a swept curve; quantising it to 0.5 m would step the one\ncurve the whole fleet was rebuilt to draw. That is a boundary of the kit, stated rather than papered over.\n\nTHE CORNERS ARE THE WHOLE ARGUMENT. In the hand-authored version the raked front's 0.55 m overhang was\nsmeared into the side plates as a twist running their whole 7.3 m length - a bespoke move, and the reason\nthose side plates could not have been standard pieces. Here the front rakes 2 quarter-cells, the sides\ntumble home 1, and a `corner_45` knuckle at each of the four corners carries the difference. Its plate is\nbilinear, so a twisted quad is exactly what it is for. The by-product is that every corner on this\ndeckhouse is chamfered, which is the one shape a stack of square panels cannot make.\n\nWHAT THIS FIXTURE CANNOT SAY, and it is not hidden: the hand-authored version's boat deck fell 0.24 m\nover 8.4 m and its sides tapered 0.30 m in plan over 7.3 m. Both are under a quarter-cell and neither\nsurvives the grid. The house is 2.50 m to the boat deck where the original was 2.74.\n",
+ "_note": "PIECE-BUILT, KIT VERSION 2. The deckhouse on this vessel contains ZERO hand-authored plate corners:\nit is 49 placements of standard pieces on the 0.5 m deck grid, resolved by scripts/construction/piece_kit.gd\ninto exactly the `plate` primitives StructureBaker already bakes. Everything else in this file - the\nsheer-band bulwark, the bow bulwark plating, the gallows steelwork and the spar and wire rig - is\nprobe_trawler_bulwark.json verbatim, so a side-by-side capture isolates the deckhouse and nothing else.\n\nWHAT REPLACED WHAT. 50 of that fixture's plate items were the deckhouse: the lower tier, its glass\nand mullions, the boat deck, a three-band wheelhouse with every mullion and corner pillar positioned\nindividually, and a tapered funnel. Every one of them was a quad an agent solved by hand. All 50\nare gone. In their place: 13 wall panels, 7 glazed panels, 12 corner facets,\n7 deck tiles and 10 trim runs, not one of which knows this vessel exists.\n\nThe 39 authored plates that REMAIN are bow bulwark plating and gallows steelwork, and they remain on\npurpose. A bulwark follows the sheer, which is a swept curve; quantising it to 0.5 m would step the one\ncurve the whole fleet was rebuilt to draw. That is a boundary of the kit, stated rather than papered over.\n\nTHE CORNERS ARE THE WHOLE ARGUMENT. In the hand-authored version the raked front's 0.55 m overhang was\nsmeared into the side plates as a twist running their whole 7.3 m length - a bespoke move, and the reason\nthose side plates could not have been standard pieces. Here the front rakes 4 eighth-cells, the sides\ntumble home 1, and a `corner_45` knuckle at each of the four corners carries the difference. Its plate is\nbilinear, so a twisted quad is exactly what it is for. The by-product is that every corner on this\ndeckhouse is chamfered, which is the one shape a stack of square panels cannot make.\n\nWHAT VERSION 2 SAYS THAT VERSION 1 COULD NOT. The three numbers version 1 wrote down as beyond it:\n\n  the 2.74 m tier   ->  height 5 + head 2 = 2.75 m       residual 0.010 m (was 0.240)\n  the 0.15 m tumblehome -> rake -1 = 0.125 m             residual 0.025 m (was 0.100)\n  the 0.248 m boat-deck fall -> fall 2 = 0.250 m         residual 0.002 m (was 0.248)\n\nand, not on that list but the same defect, the windscreen's 0.85 m rake is now 0.875 (residual 0.025,\nwas 0.150) and the funnel's three different tapers are three different numbers instead of one.\n\nWHAT THIS FIXTURE STILL CANNOT SAY. A wall's foot is LEVEL, so the wheelhouse standing on the falling\nboat deck sits on the mean of the deck under it and its foot wanders 0.0625 m inside the deck plate's own\n0.13 m. And a continuous fall shared between several panels is dealt out in whole 0.125 m lumps, so the\ntier's side wall is a two-step chord of the deck plane rather than the plane itself; its worst departure\nis 0.047 m, against 0.240 m when the whole thing was flat.\n",
  "palette": {
   "wall": [
    0.85,
@@ -173,7 +173,8 @@
    "params": {
     "span": 1,
     "height": 5,
-    "rake_a": 2,
+    "head": 2,
+    "rake_a": 4,
     "rake_b": -1
    },
    "color": "#e3e0d4",
@@ -191,8 +192,9 @@
    "params": {
     "span": 1,
     "height": 5,
+    "head": 2,
     "rake_a": -1,
-    "rake_b": 2
+    "rake_b": 4
    },
    "color": "#e3e0d4",
    "_is": "lower tier, forward starboard knuckle"
@@ -209,8 +211,9 @@
    "params": {
     "span": 1,
     "height": 5,
+    "head": 0,
     "rake_a": -1,
-    "rake_b": 1
+    "rake_b": 2
    },
    "color": "#e3e0d4",
    "_is": "lower tier, after port knuckle"
@@ -227,7 +230,8 @@
    "params": {
     "span": 1,
     "height": 5,
-    "rake_a": 1,
+    "head": 0,
+    "rake_a": 2,
     "rake_b": -1
    },
    "color": "#e3e0d4",
@@ -245,7 +249,8 @@
    "params": {
     "span": 1,
     "height": 5,
-    "rake": 2
+    "head": 2,
+    "rake": 4
    },
    "color": "#e3e0d4",
    "_is": "lower tier, raked front, port cheek"
@@ -262,7 +267,8 @@
    "params": {
     "span": 6,
     "height": 5,
-    "rake": 2,
+    "head": 2,
+    "rake": 4,
     "sill": 3,
     "band": 1,
     "lights": 3
@@ -282,7 +288,8 @@
    "params": {
     "span": 1,
     "height": 5,
-    "rake": 2
+    "head": 2,
+    "rake": 4
    },
    "color": "#e3e0d4",
    "_is": "lower tier, raked front, starboard cheek"
@@ -299,6 +306,8 @@
    "params": {
     "span": 2,
     "height": 5,
+    "head": 0,
+    "fall": 0,
     "rake": -1,
     "opening": "door"
    },
@@ -320,10 +329,12 @@
     "sill": 3,
     "band": 1,
     "span": 8,
-    "lights": 4
+    "lights": 4,
+    "head": 0,
+    "fall": -1
    },
    "color": "#e3e0d4",
-   "_is": "lower tier, port side, mess lights"
+   "_is": "lower tier, port side, mess lights \u2014 the top climbs a step forward"
   },
   {
    "id": 122,
@@ -337,6 +348,8 @@
    "params": {
     "span": 3,
     "height": 5,
+    "head": 1,
+    "fall": -1,
     "rake": -1
    },
    "color": "#e3e0d4",
@@ -354,6 +367,8 @@
    "params": {
     "span": 3,
     "height": 5,
+    "head": 2,
+    "fall": 1,
     "rake": -1
    },
    "color": "#e3e0d4",
@@ -374,10 +389,12 @@
     "sill": 3,
     "band": 1,
     "span": 8,
-    "lights": 4
+    "lights": 4,
+    "head": 1,
+    "fall": 1
    },
    "color": "#e3e0d4",
-   "_is": "lower tier, starboard side, mess lights"
+   "_is": "lower tier, starboard side, mess lights \u2014 the top falls a step aft"
   },
   {
    "id": 125,
@@ -391,6 +408,8 @@
    "params": {
     "span": 2,
     "height": 5,
+    "head": 0,
+    "fall": 0,
     "rake": -1,
     "opening": "door"
    },
@@ -408,7 +427,8 @@
    "facing": 180,
    "params": {
     "height": 5,
-    "rake": 1,
+    "head": 0,
+    "rake": 2,
     "span": 3
    },
    "color": "#e3e0d4",
@@ -425,7 +445,8 @@
    "facing": 180,
    "params": {
     "height": 5,
-    "rake": 1,
+    "head": 0,
+    "rake": 2,
     "span": 2,
     "opening": "door"
    },
@@ -443,7 +464,8 @@
    "facing": 180,
    "params": {
     "height": 5,
-    "rake": 1,
+    "head": 0,
+    "rake": 2,
     "span": 3
    },
    "color": "#e3e0d4",
@@ -461,10 +483,12 @@
    "params": {
     "span": 12,
     "depth": 16,
-    "gauge": "deck"
+    "gauge": "deck",
+    "fall": 2,
+    "lift": 2
    },
    "color": "#4d5257",
-   "_is": "boat deck"
+   "_is": "boat deck \u2014 falls 0.25 m aft over 8.00 m"
   },
   {
    "id": 130,
@@ -478,10 +502,12 @@
    "params": {
     "span": 12,
     "depth": 1,
-    "gauge": "deck"
+    "gauge": "deck",
+    "fall": 0,
+    "lift": 0
    },
    "color": "#4d5257",
-   "_is": "boat deck, after strip"
+   "_is": "boat deck, after strip \u2014 carries the fall's end level"
   },
   {
    "id": 131,
@@ -494,7 +520,8 @@
    "facing": 90,
    "params": {
     "profile": "coaming",
-    "span": 16
+    "span": 1,
+    "lift": 0
    },
    "color": "#e3e0d4",
    "_is": "boat deck coaming, port"
@@ -505,18 +532,70 @@
    "cell": [
     4,
     5,
-    35
+    50
    ],
    "facing": 90,
    "params": {
     "profile": "coaming",
-    "span": 1
+    "span": 4,
+    "lift": 0
    },
    "color": "#e3e0d4",
    "_is": "boat deck coaming, port"
   },
   {
    "id": 133,
+   "piece": "trim_band",
+   "cell": [
+    4,
+    5,
+    46
+   ],
+   "facing": 90,
+   "params": {
+    "profile": "coaming",
+    "span": 4,
+    "lift": 1
+   },
+   "color": "#e3e0d4",
+   "_is": "boat deck coaming, port"
+  },
+  {
+   "id": 134,
+   "piece": "trim_band",
+   "cell": [
+    4,
+    5,
+    42
+   ],
+   "facing": 90,
+   "params": {
+    "profile": "coaming",
+    "span": 4,
+    "lift": 1
+   },
+   "color": "#e3e0d4",
+   "_is": "boat deck coaming, port"
+  },
+  {
+   "id": 135,
+   "piece": "trim_band",
+   "cell": [
+    4,
+    5,
+    38
+   ],
+   "facing": 90,
+   "params": {
+    "profile": "coaming",
+    "span": 4,
+    "lift": 2
+   },
+   "color": "#e3e0d4",
+   "_is": "boat deck coaming, port"
+  },
+  {
+   "id": 136,
    "piece": "trim_band",
    "cell": [
     16,
@@ -526,13 +605,65 @@
    "facing": 270,
    "params": {
     "profile": "coaming",
-    "span": 16
+    "span": 4,
+    "lift": 2
    },
    "color": "#e3e0d4",
    "_is": "boat deck coaming, starboard"
   },
   {
-   "id": 134,
+   "id": 137,
+   "piece": "trim_band",
+   "cell": [
+    16,
+    5,
+    38
+   ],
+   "facing": 270,
+   "params": {
+    "profile": "coaming",
+    "span": 4,
+    "lift": 1
+   },
+   "color": "#e3e0d4",
+   "_is": "boat deck coaming, starboard"
+  },
+  {
+   "id": 138,
+   "piece": "trim_band",
+   "cell": [
+    16,
+    5,
+    42
+   ],
+   "facing": 270,
+   "params": {
+    "profile": "coaming",
+    "span": 4,
+    "lift": 1
+   },
+   "color": "#e3e0d4",
+   "_is": "boat deck coaming, starboard"
+  },
+  {
+   "id": 139,
+   "piece": "trim_band",
+   "cell": [
+    16,
+    5,
+    46
+   ],
+   "facing": 270,
+   "params": {
+    "profile": "coaming",
+    "span": 4,
+    "lift": 0
+   },
+   "color": "#e3e0d4",
+   "_is": "boat deck coaming, starboard"
+  },
+  {
+   "id": 140,
    "piece": "trim_band",
    "cell": [
     16,
@@ -542,13 +673,14 @@
    "facing": 270,
    "params": {
     "profile": "coaming",
-    "span": 1
+    "span": 1,
+    "lift": 0
    },
    "color": "#e3e0d4",
    "_is": "boat deck coaming, starboard"
   },
   {
-   "id": 135,
+   "id": 141,
    "piece": "corner_45",
    "cell": [
     6,
@@ -558,15 +690,17 @@
    "facing": 0,
    "params": {
     "span": 1,
-    "height": 5,
-    "rake_a": 4,
+    "height": 4,
+    "head": 3,
+    "lift": 1,
+    "rake_a": 7,
     "rake_b": -1
    },
    "color": "#e3e0d4",
    "_is": "wheelhouse, forward port knuckle"
   },
   {
-   "id": 136,
+   "id": 142,
    "piece": "corner_45",
    "cell": [
     14,
@@ -576,15 +710,17 @@
    "facing": 270,
    "params": {
     "span": 1,
-    "height": 5,
+    "height": 4,
+    "head": 3,
+    "lift": 1,
     "rake_a": -1,
-    "rake_b": 4
+    "rake_b": 7
    },
    "color": "#e3e0d4",
    "_is": "wheelhouse, forward starboard knuckle"
   },
   {
-   "id": 137,
+   "id": 143,
    "piece": "corner_45",
    "cell": [
     6,
@@ -594,15 +730,17 @@
    "facing": 90,
    "params": {
     "span": 1,
-    "height": 5,
+    "height": 4,
+    "head": 1,
+    "lift": 1,
     "rake_a": -1,
-    "rake_b": 1
+    "rake_b": 2
    },
    "color": "#e3e0d4",
    "_is": "wheelhouse, after port knuckle"
   },
   {
-   "id": 138,
+   "id": 144,
    "piece": "corner_45",
    "cell": [
     14,
@@ -612,15 +750,17 @@
    "facing": 180,
    "params": {
     "span": 1,
-    "height": 5,
-    "rake_a": 1,
+    "height": 4,
+    "head": 1,
+    "lift": 1,
+    "rake_a": 2,
     "rake_b": -1
    },
    "color": "#e3e0d4",
    "_is": "wheelhouse, after starboard knuckle"
   },
   {
-   "id": 139,
+   "id": 145,
    "piece": "wall_glazed",
    "cell": [
     7,
@@ -629,18 +769,20 @@
    ],
    "facing": 0,
    "params": {
-    "span": 6,
-    "height": 5,
-    "rake": 4,
-    "sill": 2,
+    "height": 4,
+    "lift": 1,
+    "sill": 1,
     "band": 2,
+    "span": 6,
+    "head": 3,
+    "rake": 7,
     "lights": 4
    },
    "color": "#e3e0d4",
    "_is": "wheelhouse, raked windscreen"
   },
   {
-   "id": 140,
+   "id": 146,
    "piece": "wall_glazed",
    "cell": [
     6,
@@ -649,18 +791,21 @@
    ],
    "facing": 90,
    "params": {
-    "span": 6,
-    "height": 5,
-    "rake": -1,
-    "sill": 2,
+    "height": 4,
+    "lift": 1,
+    "sill": 1,
     "band": 2,
+    "span": 6,
+    "head": 1,
+    "fall": -2,
+    "rake": -1,
     "lights": 4
    },
    "color": "#e3e0d4",
-   "_is": "wheelhouse, port side lights"
+   "_is": "wheelhouse, port side lights \u2014 the roofline climbs forward"
   },
   {
-   "id": 141,
+   "id": 147,
    "piece": "wall_glazed",
    "cell": [
     14,
@@ -669,18 +814,21 @@
    ],
    "facing": 270,
    "params": {
-    "span": 6,
-    "height": 5,
-    "rake": -1,
-    "sill": 2,
+    "height": 4,
+    "lift": 1,
+    "sill": 1,
     "band": 2,
+    "span": 6,
+    "head": 3,
+    "fall": 2,
+    "rake": -1,
     "lights": 4
    },
    "color": "#e3e0d4",
-   "_is": "wheelhouse, starboard side lights"
+   "_is": "wheelhouse, starboard side lights \u2014 the roofline falls aft"
   },
   {
-   "id": 142,
+   "id": 148,
    "piece": "wall_glazed",
    "cell": [
     13,
@@ -689,18 +837,20 @@
    ],
    "facing": 180,
    "params": {
-    "span": 6,
-    "height": 5,
-    "rake": 1,
-    "sill": 2,
+    "height": 4,
+    "lift": 1,
+    "sill": 1,
     "band": 2,
+    "span": 6,
+    "head": 1,
+    "rake": 2,
     "lights": 3
    },
    "color": "#e3e0d4",
    "_is": "wheelhouse, aft bulkhead"
   },
   {
-   "id": 143,
+   "id": 149,
    "piece": "deck_tile",
    "cell": [
     5,
@@ -711,13 +861,15 @@
    "params": {
     "span": 8,
     "depth": 8,
-    "gauge": "deck"
+    "gauge": "deck",
+    "fall": 2,
+    "lift": 0
    },
    "color": "#858a8f",
-   "_is": "wheelhouse roof"
+   "_is": "wheelhouse roof \u2014 falls 0.25 m aft"
   },
   {
-   "id": 144,
+   "id": 150,
    "piece": "deck_tile",
    "cell": [
     13,
@@ -728,13 +880,15 @@
    "params": {
     "span": 2,
     "depth": 8,
-    "gauge": "deck"
+    "gauge": "deck",
+    "fall": 2,
+    "lift": 0
    },
    "color": "#858a8f",
    "_is": "wheelhouse roof, starboard strip"
   },
   {
-   "id": 145,
+   "id": 151,
    "piece": "deck_tile",
    "cell": [
     5,
@@ -745,13 +899,15 @@
    "params": {
     "span": 8,
     "depth": 2,
-    "gauge": "deck"
+    "gauge": "deck",
+    "fall": 0,
+    "lift": -2
    },
    "color": "#858a8f",
    "_is": "wheelhouse roof, after strip"
   },
   {
-   "id": 146,
+   "id": 152,
    "piece": "deck_tile",
    "cell": [
     13,
@@ -762,13 +918,15 @@
    "params": {
     "span": 2,
     "depth": 2,
-    "gauge": "deck"
+    "gauge": "deck",
+    "fall": 0,
+    "lift": -2
    },
    "color": "#858a8f",
    "_is": "wheelhouse roof, after quarter"
   },
   {
-   "id": 147,
+   "id": 153,
    "piece": "corner_45",
    "cell": [
     8,
@@ -778,15 +936,16 @@
    "facing": 0,
    "params": {
     "span": 1,
-    "height": 6,
-    "rake_a": -1,
-    "rake_b": -1
+    "height": 5,
+    "head": 3,
+    "rake_a": -3,
+    "rake_b": -2
    },
    "color": "#9e5c1c",
    "_is": "funnel, forward port knuckle"
   },
   {
-   "id": 148,
+   "id": 154,
    "piece": "corner_45",
    "cell": [
     12,
@@ -796,15 +955,16 @@
    "facing": 270,
    "params": {
     "span": 1,
-    "height": 6,
-    "rake_a": -1,
-    "rake_b": -1
+    "height": 5,
+    "head": 3,
+    "rake_a": -2,
+    "rake_b": -3
    },
    "color": "#9e5c1c",
    "_is": "funnel, forward starboard knuckle"
   },
   {
-   "id": 149,
+   "id": 155,
    "piece": "corner_45",
    "cell": [
     8,
@@ -814,15 +974,16 @@
    "facing": 90,
    "params": {
     "span": 1,
-    "height": 6,
-    "rake_a": -1,
-    "rake_b": -1
+    "height": 5,
+    "head": 3,
+    "rake_a": -2,
+    "rake_b": 2
    },
    "color": "#9e5c1c",
    "_is": "funnel, after port knuckle"
   },
   {
-   "id": 150,
+   "id": 156,
    "piece": "corner_45",
    "cell": [
     12,
@@ -832,15 +993,16 @@
    "facing": 180,
    "params": {
     "span": 1,
-    "height": 6,
-    "rake_a": -1,
-    "rake_b": -1
+    "height": 5,
+    "head": 3,
+    "rake_a": 2,
+    "rake_b": -2
    },
    "color": "#9e5c1c",
    "_is": "funnel, after starboard knuckle"
   },
   {
-   "id": 151,
+   "id": 157,
    "piece": "wall_panel",
    "cell": [
     9,
@@ -849,15 +1011,16 @@
    ],
    "facing": 0,
    "params": {
-    "height": 6,
-    "rake": -1,
-    "span": 2
+    "height": 5,
+    "head": 3,
+    "span": 2,
+    "rake": -3
    },
    "color": "#9e5c1c",
    "_is": "funnel, forward face"
   },
   {
-   "id": 152,
+   "id": 158,
    "piece": "wall_panel",
    "cell": [
     11,
@@ -866,15 +1029,16 @@
    ],
    "facing": 180,
    "params": {
-    "height": 6,
-    "rake": -1,
-    "span": 2
+    "height": 5,
+    "head": 3,
+    "span": 2,
+    "rake": 2
    },
    "color": "#9e5c1c",
    "_is": "funnel, aft face"
   },
   {
-   "id": 153,
+   "id": 159,
    "piece": "wall_panel",
    "cell": [
     8,
@@ -883,15 +1047,16 @@
    ],
    "facing": 90,
    "params": {
-    "height": 6,
-    "rake": -1,
-    "span": 1
+    "height": 5,
+    "head": 3,
+    "span": 1,
+    "rake": -2
    },
    "color": "#9e5c1c",
    "_is": "funnel, port face"
   },
   {
-   "id": 154,
+   "id": 160,
    "piece": "wall_panel",
    "cell": [
     12,
@@ -900,15 +1065,16 @@
    ],
    "facing": 270,
    "params": {
-    "height": 6,
-    "rake": -1,
-    "span": 1
+    "height": 5,
+    "head": 3,
+    "span": 1,
+    "rake": -2
    },
    "color": "#9e5c1c",
    "_is": "funnel, starboard face"
   },
   {
-   "id": 155,
+   "id": 161,
    "piece": "deck_tile",
    "cell": [
     8,
@@ -919,7 +1085,8 @@
    "params": {
     "span": 4,
     "depth": 3,
-    "gauge": "heavy"
+    "gauge": "heavy",
+    "lift": -1
    },
    "color": "#1c1c1f",
    "_is": "funnel cap"

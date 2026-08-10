@@ -188,6 +188,50 @@ func _ready() -> void:
 	for arg in OS.get_cmdline_user_args():
 		if str(arg) == "--studio-probe":
 			_run_studio_probe()
+		elif str(arg) == "--studio-shot":
+			_shoot_piece_tool()
+
+
+## A photograph of the piece tool in use, because a UI surface is not reviewable
+## from a diff (CONVENTIONS §3). Loads the tug the tool built, arms the palette,
+## stands a ghost on a grid node and writes one stable-named PNG.
+##
+##   xvfb-run -a --server-args="-screen 0 1600x900x24" godot \
+##     --rendering-driver opengl3 --audio-driver Dummy \
+##     res://scenes/apps/structure_studio.tscn -- --studio-shot
+func _shoot_piece_tool() -> void:
+	_load_plan("%s/probe_piece_tug.json" % STRUCTURES_DIR)
+	_set_tool(Tool.PIECE)
+	var ids := _kit_ids()
+	if ids.size() > 0:
+		## Whichever piece the kit lists as "wall_glazed" is not named here: the
+		## shot picks the one whose display name is longest, which is a stand-in
+		## for "the most interesting", and it keeps this file free of piece names.
+		var pick := str(ids[0])
+		for id_variant in ids:
+			if PieceKit.display_name(str(id_variant)).length() > PieceKit.display_name(pick).length():
+				pick = str(id_variant)
+		_select_piece_type(pick)
+	_set_build_level(2.0)
+	var node := Vector3i(8, 4, 34)
+	_update_piece_ghost(node)
+	_start_marker.position = _plan_offset + StructurePlan.piece_node_plan(node)
+	_start_marker.visible = true
+	_cam_focus = _plan_offset + Vector3(4.5, 2.6, 15.0)
+	_cam_yaw = 3.75
+	_cam_pitch = 0.30
+	_cam_distance = 13.0
+	_set_status("piece tool — ghost standing on cell 9, 4, 22")
+	for _i in 12:
+		await get_tree().process_frame
+	await RenderingServer.frame_post_draw
+	var out := "res://screenshots/studio/structure_studio__piece_tool.png"
+	DirAccess.make_dir_recursive_absolute(
+		ProjectSettings.globalize_path("res://screenshots/studio")
+	)
+	var error := get_viewport().get_texture().get_image().save_png(out)
+	print("[structure-studio] piece tool shot -> %s (%d)" % [out, error])
+	get_tree().quit(0 if error == OK else 1)
 
 
 ## Headless CI workout: drives every tool through its real placement path,
@@ -313,6 +357,749 @@ func _run_studio_probe() -> void:
 			print("[structure-studio] probe FAIL — %s" % label)
 		print("studio_probe: %d/%d FAILED" % [failed.size(), checks])
 		get_tree().quit(1)
+
+
+## ── Piece-tool probe ────────────────────────────────────────────────────────
+##
+## Everything below drives the PLAYER'S PATH: the palette button's callback, the
+## stepper's callback, the rotate key's callback, the cursor ray, the click. Not
+## `_plan.add_piece`. The question this file has to answer is REALITY.md's — could
+## a player do this with a mouse, without typing a number — and a probe that
+## reaches past the controls into the plan cannot answer it.
+
+
+## The controls themselves: palette, steppers, dropdowns, rotate, tints.
+func _probe_piece_controls(expect: Callable) -> void:
+	_set_context("vessel")
+	var ids := PieceKit.ids()
+	expect.call("the kit loads for the palette (%d pieces)" % ids.size(), ids.size() > 0)
+	expect.call(
+		"the kit loads clean (%s)" % ", ".join(PieceKit.load_errors()),
+		PieceKit.load_errors().is_empty()
+	)
+	_set_tool(Tool.PIECE)
+	expect.call("picking up the PIECE tool arms a piece", not _piece_id.is_empty())
+
+	## Every piece in the palette can be picked, arrives at its declared defaults,
+	## and its tint survives the Color -> #rrggbb conversion the swatches make. A
+	## tint that drifts by one digit is a placement that no longer compares equal
+	## to the fixture it was copied from, and nothing else would notice.
+	var pickable := 0
+	var defaulted := 0
+	var exact_tint := 0
+	for id_variant in ids:
+		var id := str(id_variant)
+		_select_piece_type(id)
+		if _piece_id != id:
+			continue
+		pickable += 1
+		var declared := PieceKit.params_of(id)
+		var armed := _piece_params_for(id)
+		var matches := true
+		for key in declared.keys():
+			if armed.get(str(key)) != (declared[key] as Dictionary)["default"]:
+				matches = false
+		if matches:
+			defaulted += 1
+		var declared_color := PieceKit.get_piece(id)["color"] as Color
+		var hex := _kit_color_hex(id)
+		if Color.html_is_valid(hex) and Color(hex) == declared_color:
+			exact_tint += 1
+	expect.call("every one of the %d palette pieces is pickable" % ids.size(), pickable == ids.size())
+	expect.call("and each arrives at its own declared defaults", defaulted == ids.size())
+	expect.call("every piece's tint round-trips Color <-> #rrggbb exactly", exact_tint == ids.size())
+
+	## A stepper walks the DECLARED list by index, both ways, and stops at the
+	## ends. Which piece and which parameter are read out of the data file — this
+	## probe names neither, so widening a value set cannot invalidate it.
+	var stepped := 0
+	var refused_off_set := 0
+	var clamped_at_ends := 0
+	for id_variant in ids:
+		var id := str(id_variant)
+		_select_piece_type(id)
+		for key in PieceKit.params_of(id).keys():
+			var name := str(key)
+			var spec := PieceKit.params_of(id)[key] as Dictionary
+			if not bool(spec["numeric"]):
+				continue
+			var values := spec["values"] as Array
+			## Walk to the bottom of the list, then one more: it must not move.
+			for _i in values.size() + 2:
+				_step_piece_param(name, -1)
+			if _piece_params_for(id).get(name) == values[0]:
+				clamped_at_ends += 1
+			## One step up must land on the NEXT DECLARED VALUE, not value+1 — the
+			## sets are not evenly spaced (span is 1, 2, 3, 4, 6, 8) and arithmetic
+			## would ask the kit for a 5.
+			if values.size() > 1 and _step_piece_param(name, 1) \
+					and _piece_params_for(id).get(name) == values[1]:
+				stepped += 1
+			## And a value off the set is refused outright, never clamped.
+			if not _set_piece_param(name, 99999):
+				refused_off_set += 1
+	expect.call("a stepper lands on the next DECLARED value (%d parameters)" % stepped, stepped > 0)
+	expect.call("a stepper stops at the bottom of its list", clamped_at_ends > 0)
+	expect.call("a value off the declared set is refused (%d)" % refused_off_set, refused_off_set > 0)
+
+	## The rotate key walks the kit's four facings and comes back where it started.
+	_select_piece_type(str(ids[0]))
+	var seen: Dictionary = {}
+	var start := _piece_facing
+	for _turn in 4:
+		_rotate_piece()
+		seen[_piece_facing] = true
+	expect.call("R reaches all four facings", seen.size() == PieceKit.FACINGS.size())
+	expect.call("and four turns come back to where it started", _piece_facing == start)
+	_rotate_piece(-1)
+	expect.call("and it turns the other way too", _piece_facing != start)
+	_rotate_piece(1)
+
+	## Every tint a placement can be painted is a swatch, and every swatch is a
+	## colour the kit will accept.
+	var tints := _piece_tints()
+	var valid := 0
+	for tint_variant in tints:
+		if Color.html_is_valid(str((tint_variant as Array)[1])):
+			valid += 1
+	expect.call("all %d piece tints are valid #rrggbb" % tints.size(), valid == tints.size())
+
+	## The refusal a player can actually walk into: two legal values that make an
+	## illegal piece. It has to stop them, and it has to leave the piece as it was.
+	var glazed := _probe_piece_with_constraint()
+	if glazed.is_empty():
+		expect.call("a piece declares a cross-parameter constraint", false)
+	else:
+		_select_piece_type(str(glazed["id"]))
+		var before: Dictionary = (_piece_params_for(str(glazed["id"])) as Dictionary).duplicate()
+		var took := _set_piece_param(str(glazed["param"]), glazed["value"])
+		expect.call(
+			"a setting that violates \"%s\" is refused" % str(glazed["expr"]), not took
+		)
+		expect.call(
+			"and the refused setting leaves the piece untouched",
+			_piece_params_for(str(glazed["id"])) == before
+		)
+
+
+## The first piece in the kit that declares a constraint, and a value that breaks
+## it — found by SEARCH, so this probe names no piece and no parameter.
+func _probe_piece_with_constraint() -> Dictionary:
+	for id_variant in PieceKit.ids():
+		var id := str(id_variant)
+		var piece := PieceKit.get_piece(id)
+		var constraints := piece.get("constraints", []) as Array
+		if constraints.is_empty():
+			continue
+		var declared := piece["params"] as Dictionary
+		for key in declared.keys():
+			var spec := declared[key] as Dictionary
+			if not bool(spec.get("numeric", false)):
+				continue
+			for value in spec["values"] as Array:
+				var probe := _piece_defaults(id)
+				probe[str(key)] = value
+				if (PieceKit.resolve_params(id, probe)["errors"] as PackedStringArray).size() > 0:
+					return {
+						"id": id, "param": str(key), "value": value,
+						"expr": str((constraints[0] as Dictionary).get("expr", "")),
+					}
+	return {}
+
+
+func _piece_defaults(piece_id: String) -> Dictionary:
+	var out: Dictionary = {}
+	var declared := PieceKit.params_of(piece_id)
+	for key in declared.keys():
+		out[str(key)] = (declared[key] as Dictionary)["default"]
+	return out
+
+
+## THE CURSOR. A grid node under the mouse, a ghost standing on it, and a click
+## that puts the piece exactly where the ghost was.
+func _probe_piece_mouse(expect: Callable) -> void:
+	_set_context("vessel")
+	_set_tool(Tool.PIECE)
+	var ids := PieceKit.ids()
+	_select_piece_type(str(ids[0]))
+	_set_build_level(0.0)
+
+	## Aim at a node the way a player does: point the camera at it and read the
+	## cursor. Cell (8, 0, 24) is plan (4.0, 0, 12.0) on the 0.5 m grid.
+	var want := Vector3i(8, 0, 24)
+	var aim := _plan_offset + StructurePlan.piece_node_plan(want)
+	_camera.position = aim + Vector3(0.0, 14.0, 14.0)
+	_camera.look_at(aim, Vector3.UP)
+	var screen := _camera.unproject_position(aim)
+	var node := _mouse_to_node(screen)
+	expect.call(
+		"the cursor reads grid node (%d, %d, %d) where (%d, %d, %d) was aimed at"
+		% [node.x, node.y, node.z, want.x, want.y, want.z],
+		node == want
+	)
+	## Half a cell is the RESOLUTION of the snap, and the claim that separates it
+	## from the 1 m draw snap: a cursor half a metre along must read the next node,
+	## not the same one. At GRID_SNAP it would round to the same whole metre.
+	var neighbour := _plan_offset + StructurePlan.piece_node_plan(want + Vector3i(1, 0, 0))
+	expect.call(
+		"and a node 0.5 m away reads as the NEXT node",
+		_mouse_to_node(_camera.unproject_position(neighbour)) == want + Vector3i(1, 0, 0)
+	)
+
+	## The ghost, then the click. The ghost is the real bake of the placement the
+	## click will commit, so the two cannot disagree — and this asserts they do not.
+	_update_piece_ghost(node)
+	expect.call("a ghost is drawn at the node", _piece_ghost != null)
+	var ghost_placement := _piece_ghost_placement.duplicate(true)
+	var ghost_bounds := _probe_node_bounds(_piece_ghost)
+	expect.call("the ghost has a real extent", ghost_bounds.size.length() > 0.1)
+	var placed := _place_piece_at(node)
+	expect.call("the click places a piece", not placed.is_empty())
+	if placed.is_empty():
+		return
+	var committed := placed.duplicate(true)
+	var previewed := ghost_placement.duplicate(true)
+	committed.erase("id")
+	previewed.erase("id")
+	expect.call(
+		"THE PIECE COMMITTED IS THE PIECE THE GHOST DREW (%s vs %s)"
+		% [JSON.stringify(previewed), JSON.stringify(committed)],
+		committed == previewed
+	)
+	var id := int(placed["id"])
+	expect.call("the placed piece is pickable (has bounds)", _entity_bounds.has(id))
+	if _entity_bounds.has(id):
+		expect.call(
+			"and it lands inside the volume the ghost showed",
+			ghost_bounds.grow(0.02).encloses((_entity_bounds[id] as AABB))
+		)
+	## The node is where the piece stands, not half a cell off it. Stated on the
+	## PLACEMENT TRANSFORM rather than on a corner: `corner_45`'s plate is a chord
+	## ACROSS the node and legitimately has no corner on it, so a corner test would
+	## have been a claim about one piece rather than about the grid. Every resolved
+	## item's origin is the node, for every piece, or the whole kit is half a cell
+	## out — which is exactly what using a cell CENTRE would do.
+	var expected_at := StructurePlan.piece_node_plan(node)
+	var off_node := 0
+	for item_variant in PieceKit.resolve_placement(placed, 1)["items"] as Array:
+		if StructurePlan.vec3_of((item_variant as Dictionary).get("at")) != expected_at:
+			off_node += 1
+	expect.call("every plate of the placed piece is anchored on the node", off_node == 0)
+	if _entity_bounds.has(id):
+		expect.call(
+			"and the node is inside the piece's own bound",
+			(_entity_bounds[id] as AABB).grow(1e-4).has_point(expected_at + _plan_offset)
+		)
+
+
+func _probe_node_bounds(node: Node) -> AABB:
+	var out := AABB()
+	var first := true
+	for child in _probe_geometry(node):
+		var gi := child as GeometryInstance3D
+		var box := gi.global_transform * gi.get_aabb()
+		out = box if first else out.merge(box)
+		first = false
+	return out
+
+
+func _probe_geometry(node: Node) -> Array:
+	var out: Array = []
+	if node == null:
+		return out
+	if node is GeometryInstance3D:
+		out.append(node)
+	for child in node.get_children():
+		out.append_array(_probe_geometry(child))
+	return out
+
+
+## Click a placed piece, read its parameters, change one, turn it, delete it.
+func _probe_piece_selection(expect: Callable) -> void:
+	_set_context("vessel")
+	_set_tool(Tool.PIECE)
+	var ids := PieceKit.ids()
+	_select_piece_type(str(ids[0]))
+	var placed := _place_piece_at(Vector3i(8, 0, 24))
+	if placed.is_empty():
+		expect.call("a piece places for the selection leg", false)
+		return
+	var id := int(placed["id"])
+	var bounds := _entity_bounds[id] as AABB
+	var centre := bounds.get_center()
+	_camera.position = centre + Vector3(6.0, 6.0, 6.0)
+	_camera.look_at(centre, Vector3.UP)
+	_set_tool(Tool.SELECT)
+	expect.call(
+		"a cursor ray on the piece picks it",
+		_pick_entity(_camera.unproject_position(centre)) == id
+	)
+	_selected_id = id
+	_update_selection_visual()
+	_refresh_panel()
+	expect.call("selecting it wraps it", _selection_box.visible)
+	expect.call("the inspector knows it is a piece", not _selected_piece().is_empty())
+	expect.call(
+		"the inspector built controls for it", _inspector_box.get_child_count() > 0
+	)
+	## THE BRIEF'S HARD LINE: no control anywhere in a piece's inspector may take
+	## typed input. A SpinBox does, and the wall/deck/stair inspector is full of
+	## them, so this is a claim about THIS inspector and it is worth making.
+	expect.call(
+		"and not one of them is a typed field",
+		_probe_count_typed_fields(_inspector_box) == 0
+	)
+	## ...and the same claim about the palette's own parameter controls.
+	_set_tool(Tool.PIECE)
+	_refresh_panel()
+	expect.call(
+		"nor is any control in the kit palette",
+		_probe_count_typed_fields(_piece_section) == 0
+	)
+	## The negative control for that claim: the wall inspector, which SHOULD have
+	## typed fields. If `_probe_count_typed_fields` were blind, this would be 0 too.
+	_set_tool(Tool.SELECT)
+	var wall := _plan.add_wall(Vector3(0, 0, 4), "x", 4.0)
+	_rebake()
+	_selected_id = int(wall["id"])
+	_refresh_panel()
+	expect.call(
+		"CONTROL: the wall inspector DOES have typed fields (%d), so the count is not blind"
+		% _probe_count_typed_fields(_inspector_box),
+		_probe_count_typed_fields(_inspector_box) > 0
+	)
+	_plan.remove_entity(int(wall["id"]))
+
+	_selected_id = id
+	_refresh_panel()
+	var before_facing := int(placed.get("facing", 0))
+	expect.call("R turns the SELECTED piece", _rotate_selected_piece())
+	expect.call(
+		"and the placement's facing moved", int(placed.get("facing", -1)) != before_facing
+	)
+	var param := _probe_first_numeric_param(str(placed["piece"]))
+	if param.is_empty():
+		expect.call("the piece declares a numeric parameter to edit", false)
+	else:
+		var was: Variant = (placed["params"] as Dictionary).get(param)
+		var moved := _step_selected_piece_param(param, 1) or _step_selected_piece_param(param, -1)
+		expect.call("a stepper edits the SELECTED piece's \"%s\"" % param, moved)
+		expect.call(
+			"and the placement carries the new value",
+			(placed["params"] as Dictionary).get(param) != was
+		)
+	var before_count := _plan.pieces.size()
+	_delete_selected()
+	expect.call("DEL removes the placement", _plan.pieces.size() == before_count - 1)
+	_undo()
+	expect.call("and undo brings it back", _plan.pieces.size() == before_count)
+
+
+## Controls a value can be TYPED into, anywhere under a node. `SpinBox` contains
+## its own `LineEdit`, so both are counted and the search is recursive.
+func _probe_count_typed_fields(root: Node) -> int:
+	if root == null:
+		return 0
+	var count := 0
+	if root is SpinBox or root is LineEdit or root is TextEdit:
+		count += 1
+	for child in root.get_children():
+		count += _probe_count_typed_fields(child)
+	return count
+
+
+func _probe_first_numeric_param(piece_id: String) -> String:
+	var declared := PieceKit.params_of(piece_id)
+	for key in declared.keys():
+		if bool((declared[key] as Dictionary).get("numeric", false)):
+			return str(key)
+	return ""
+
+
+## Place -> save -> load -> bake. Not "the plan has the same number of pieces":
+## the same PLATE CORNERS, exactly, and undo/redo through the same path.
+func _probe_piece_persistence(expect: Callable) -> void:
+	_set_context("vessel")
+	_set_tool(Tool.PIECE)
+	var ids := PieceKit.ids()
+	var placed := 0
+	var cell := Vector3i(6, 0, 20)
+	for id_variant in ids:
+		_select_piece_type(str(id_variant))
+		_rotate_piece()
+		if not _place_piece_at(cell).is_empty():
+			placed += 1
+		cell += Vector3i(0, 0, 8)
+	expect.call("one of every kit piece places (%d)" % placed, placed == ids.size())
+
+	var before := _probe_plate_corners(_plan)
+	expect.call("they resolve to %d plate corners" % before.size(), before.size() > 0)
+
+	var undo_target := _plan.pieces.size()
+	_undo()
+	_undo()
+	expect.call("undo removes placements", _plan.pieces.size() == undo_target - 2)
+	_redo()
+	_redo()
+	expect.call("redo restores them", _plan.pieces.size() == undo_target)
+	expect.call(
+		"and the geometry is the same after undo/redo", _probe_plate_corners(_plan) == before
+	)
+
+	_save_plan("studio_piece_probe_tmp")
+	var path := "%s/studio_piece_probe_tmp.json" % STRUCTURES_DIR
+	_set_context("vessel")
+	expect.call("context switch clears the placements", _plan.pieces.is_empty())
+	_load_plan(path)
+	expect.call("save/load restores all %d placements" % undo_target, _plan.pieces.size() == undo_target)
+	var after := _probe_plate_corners(_plan)
+	expect.call(
+		"AND EVERY PLATE CORNER IS BIT-IDENTICAL after save/load (%d vs %d corners)"
+		% [before.size(), after.size()],
+		after == before
+	)
+	## Byte stability through the studio's own writer, not just through the plan.
+	var reserialised := JSON.stringify(_plan.to_dict(), "\t")
+	var on_disk := FileAccess.get_file_as_string(path)
+	expect.call("what the studio wrote is what it would write again", reserialised == on_disk)
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
+
+
+## Every plate corner a plan's placements resolve to, in plan metres. Through
+## `PieceKit` — the path a capture rig and a spawned vessel take.
+func _probe_plate_corners(plan: StructurePlan) -> PackedVector3Array:
+	var out := PackedVector3Array()
+	for placement_variant in plan.pieces:
+		var placement := placement_variant as Dictionary
+		var resolved := PieceKit.resolve_placement(placement, 1)
+		for step in (resolved["items"] as Array).size():
+			out.append_array(PieceKit.placed_corners(placement, step))
+	return out
+
+
+## ── Rebuilding a shipped fixture THROUGH THE TOOL ───────────────────────────
+##
+## The claim: every placement in a piece-built fixture is reachable by a player
+## with a mouse — palette button, rotate key, steppers, tint swatch, click. The
+## result is compared placement for placement against the file on disk, and
+## anything unreachable is NAMED rather than quietly hand-written.
+func _probe_piece_fixture(expect: Callable, path: String, label: String) -> void:
+	var raw: Variant = JSON.parse_string(FileAccess.get_file_as_string(path))
+	if not (raw is Dictionary):
+		expect.call("%s fixture loads (%s)" % [label, path], false)
+		return
+	var wanted := (raw as Dictionary).get("pieces", []) as Array
+	expect.call("%s fixture carries placements (%d)" % [label, wanted.size()], wanted.size() > 0)
+	if wanted.is_empty():
+		return
+	var report := _probe_build_through_tool(wanted)
+	var built := report["built"] as Array
+	var unreachable := report["unreachable"] as PackedStringArray
+	expect.call(
+		"%s: all %d placements are reachable through the tool (%d unreachable%s)"
+		% [
+			label, wanted.size(), unreachable.size(),
+			"" if unreachable.is_empty() else ": " + unreachable[0],
+		],
+		unreachable.is_empty()
+	)
+	var mismatched := PackedStringArray()
+	for index in mini(built.size(), wanted.size()):
+		var want := _probe_placement_signature(wanted[index] as Dictionary)
+		var got := _probe_placement_signature(built[index] as Dictionary)
+		if want != got:
+			if mismatched.size() < 3:
+				mismatched.append("#%d want %s got %s" % [index, JSON.stringify(want), JSON.stringify(got)])
+	expect.call(
+		"%s: the tool reproduces the fixture placement for placement (%d differ%s)"
+		% [
+			label, mismatched.size(),
+			"" if mismatched.is_empty() else " — " + mismatched[0],
+		],
+		mismatched.is_empty() and built.size() == wanted.size()
+	)
+	## Geometry, not just bookkeeping: the plan the tool built and the file on disk
+	## must resolve to the SAME plate corners, exactly.
+	var from_tool := _probe_plate_corners(_plan)
+	var from_file := _probe_plate_corners(StructurePlan.from_dict(raw as Dictionary))
+	expect.call(
+		"%s: and to the same %d plate corners, to the bit" % [label, from_file.size()],
+		from_tool == from_file and from_file.size() > 0
+	)
+
+
+## What two placements are compared on.
+##
+## Not the raw dictionary: a fixture writes only the parameters that DIFFER from
+## the piece's defaults, and the tool writes every declared one, so
+## `{"span": 1, "height": 5, "rake": 2}` and the same plus `"opening": "none"`
+## are the same placement written two ways. Both sides are put through
+## `PieceKit.resolve_params`, which fills the defaults in the kit's own words, so
+## what is compared is the SETTING — piece, node, facing, tint and the full
+## resolved parameter bag. The id and the author's note are dropped: the plan
+## hands out the first and the tool has no control for the second.
+func _probe_placement_signature(placement: Dictionary) -> Dictionary:
+	var out := StructurePlan.normalize_piece(placement).duplicate(true)
+	out.erase("id")
+	out.erase("_is")
+	var resolved := PieceKit.resolve_params(
+		str(out.get("piece", "")), out.get("params", {}) as Dictionary
+	)
+	if (resolved["errors"] as PackedStringArray).is_empty():
+		out["params"] = resolved["params"]
+	return out
+
+
+## Drives palette -> rotate -> steppers/dropdowns -> tint -> click for each
+## wanted placement, on a fresh plan. Returns {"built", "unreachable"}.
+func _probe_build_through_tool(wanted: Array) -> Dictionary:
+	_set_context("vessel")
+	_set_tool(Tool.PIECE)
+	var unreachable := PackedStringArray()
+	for entry_variant in wanted:
+		var want := StructurePlan.normalize_piece(entry_variant as Dictionary)
+		var piece_id := str(want["piece"])
+		var where := "%s at %s" % [piece_id, str(want["cell"])]
+		_select_piece_type(piece_id)
+		if _piece_id != piece_id:
+			unreachable.append("%s: not on the palette" % where)
+			continue
+		var turns := 0
+		while _piece_facing != int(want["facing"]) and turns < PieceKit.FACINGS.size():
+			_rotate_piece()
+			turns += 1
+		if _piece_facing != int(want["facing"]):
+			unreachable.append("%s: facing %d not reachable" % [where, int(want["facing"])])
+			continue
+		## EVERY DECLARED PARAMETER, not just the ones the fixture wrote down. A
+		## fixture omits what is at its default; the controls do not reset
+		## themselves between placements, so a player who has just put a door in one
+		## panel has to put the dropdown back to "none" for the next one. Reaching
+		## only the written keys silently inherited that door — which is what this
+		## check caught the first time it ran.
+		var params := PieceKit.resolve_params(
+			piece_id, want["params"] as Dictionary
+		)["params"] as Dictionary
+		## Two passes over them. One is not enough and that is a property of the
+		## KIT, not a workaround: a cross-parameter constraint can make a setting
+		## illegal until its partner has moved (a glazed panel's coaming cannot grow
+		## until its glass band has shrunk). A player hits the same wall and does
+		## the same thing — sets the other one first.
+		var stuck := PackedStringArray()
+		for _pass in 2:
+			stuck = PackedStringArray()
+			for key in params.keys():
+				if not _probe_reach_param(str(key), params[key]):
+					stuck.append(str(key))
+			if stuck.is_empty():
+				break
+		if stuck.size() > 0:
+			unreachable.append("%s: cannot set %s" % [where, ", ".join(stuck)])
+			continue
+		if want.has("color"):
+			var hex := str(want["color"])
+			if not _probe_tint_offered(hex):
+				unreachable.append("%s: tint %s is not a swatch" % [where, hex])
+				continue
+			_set_piece_color(hex)
+		var cell := StructurePlan.piece_cell(want)
+		if _place_piece_at(cell).is_empty():
+			unreachable.append("%s: the click was refused" % where)
+	return {"built": _plan.pieces, "unreachable": unreachable}
+
+
+## Reaches a parameter value the way the controls do: a dropdown pick for a
+## choice, and for a numeric one a WALK ALONG THE DECLARED LIST, one step at a
+## time. Never a direct write — a direct write would prove nothing about whether
+## the stepper can get there.
+func _probe_reach_param(name: String, target: Variant) -> bool:
+	var declared := PieceKit.params_of(_piece_id)
+	if not declared.has(name):
+		return false
+	var spec := declared[name] as Dictionary
+	if not bool(spec.get("numeric", false)):
+		return _set_piece_param(name, str(target))
+	var values := spec["values"] as Array
+	var want_index := values.find(int(target))
+	if want_index < 0:
+		return false
+	for _step in values.size() + 1:
+		var at := values.find(_piece_params_for(_piece_id).get(name))
+		if at == want_index:
+			return true
+		if not _step_piece_param(name, 1 if want_index > at else -1):
+			return false
+	return values.find(_piece_params_for(_piece_id).get(name)) == want_index
+
+
+func _probe_tint_offered(hex: String) -> bool:
+	for tint_variant in _piece_tints():
+		if str((tint_variant as Array)[1]) == hex:
+			return true
+	return false
+
+
+## ── The tug wheelhouse: something the kit has never made ────────────────────
+##
+## A harbour tug's pilot house — a low plated casing with a raked front, a tall
+## all-round-glazed wheelhouse standing on it with a chamfered corner at each
+## turn, a SLOPED VISOR over the windscreen (`roof_slope`, which no vessel in
+## this repo used) and a short exhaust casing aft.
+##
+## The recipe is TEST DATA and lives in the probe, not in the tool: the tool
+## above contains no piece name and no parameter value. It is stated as the
+## placements a player performs, and `_probe_piece_tug_recipe` requires that
+## replaying it through the controls reproduces the shipped fixture exactly.
+##
+## RAKES ARE IN EIGHTH-CELLS (0.125 m a step). The kit's rake unit was widened
+## from quarter-cells to eighth-cells WHILE this tool was being written, and the
+## palette and the steppers needed no change for it — they read the sets out of
+## the data file. These numbers did: they are the doubled values, so the casing
+## front still stands 0.75 m out over its 2.0 m and the windscreen 1.0 m over its
+## 2.5 m, which is what the shape was designed at.
+const TUG_RECIPE: Array = [
+	## Casing ring: x 5..15, z 18..32 cells, 4 cells tall, raked front.
+	["corner_45", 5, 0, 18, 0, {"span": 1, "height": 4, "rake_a": 6, "rake_b": 0}, "#e3e0d4"],
+	["wall_panel", 6, 0, 18, 0, {"span": 8, "height": 4, "rake": 6}, "#e3e0d4"],
+	["corner_45", 15, 0, 18, 270, {"span": 1, "height": 4, "rake_a": 0, "rake_b": 6}, "#e3e0d4"],
+	["wall_panel", 15, 0, 19, 270, {"span": 8, "height": 4, "rake": 0, "opening": "window"}, "#e3e0d4"],
+	["wall_panel", 15, 0, 27, 270, {"span": 4, "height": 4, "rake": 0, "opening": "window"}, "#e3e0d4"],
+	["corner_45", 15, 0, 32, 180, {"span": 1, "height": 4, "rake_a": 0, "rake_b": 0}, "#e3e0d4"],
+	["wall_panel", 14, 0, 32, 180, {"span": 3, "height": 4, "rake": 0, "opening": "scuttle"}, "#e3e0d4"],
+	["wall_panel", 11, 0, 32, 180, {"span": 2, "height": 4, "rake": 0, "opening": "door"}, "#e3e0d4"],
+	["wall_panel", 9, 0, 32, 180, {"span": 3, "height": 4, "rake": 0, "opening": "scuttle"}, "#e3e0d4"],
+	["corner_45", 5, 0, 32, 90, {"span": 1, "height": 4, "rake_a": 0, "rake_b": 0}, "#e3e0d4"],
+	["wall_panel", 5, 0, 31, 90, {"span": 8, "height": 4, "rake": 0, "opening": "window"}, "#e3e0d4"],
+	["wall_panel", 5, 0, 23, 90, {"span": 4, "height": 4, "rake": 0, "opening": "window"}, "#e3e0d4"],
+	## Casing roof, one cell proud all round — the eave the kit's note calls for.
+	["deck_tile", 4, 4, 17, 0, {"span": 12, "depth": 16, "gauge": "deck"}, "#4d5257"],
+	["trim_band", 4, 4, 17, 0, {"span": 12, "profile": "eave", "offset": 0}, "#e3e0d4"],
+	["trim_band", 16, 4, 17, 270, {"span": 16, "profile": "eave", "offset": 0}, "#e3e0d4"],
+	["trim_band", 16, 4, 33, 180, {"span": 12, "profile": "eave", "offset": 0}, "#e3e0d4"],
+	["trim_band", 4, 4, 33, 90, {"span": 16, "profile": "eave", "offset": 0}, "#e3e0d4"],
+	## Wheelhouse: x 7..13, z 20..28, glazed on three sides, door aft.
+	["corner_45", 7, 4, 20, 0, {"span": 1, "height": 5, "rake_a": 8, "rake_b": -2}, "#e3e0d4"],
+	["wall_glazed", 8, 4, 20, 0, {"span": 4, "height": 5, "rake": 8, "sill": 2, "band": 2, "lights": 3}, "#e3e0d4"],
+	["corner_45", 13, 4, 20, 270, {"span": 1, "height": 5, "rake_a": -2, "rake_b": 8}, "#e3e0d4"],
+	["wall_glazed", 13, 4, 21, 270, {"span": 6, "height": 5, "rake": -2, "sill": 2, "band": 2, "lights": 4}, "#e3e0d4"],
+	["corner_45", 13, 4, 28, 180, {"span": 1, "height": 5, "rake_a": 2, "rake_b": -2}, "#e3e0d4"],
+	["wall_panel", 12, 4, 28, 180, {"span": 4, "height": 5, "rake": 2, "opening": "door"}, "#e3e0d4"],
+	["corner_45", 7, 4, 28, 90, {"span": 1, "height": 5, "rake_a": -2, "rake_b": 2}, "#e3e0d4"],
+	["wall_glazed", 7, 4, 27, 90, {"span": 6, "height": 5, "rake": -2, "sill": 2, "band": 2, "lights": 4}, "#e3e0d4"],
+	## Wheelhouse roof and the visor over the windscreen.
+	["deck_tile", 6, 9, 19, 0, {"span": 8, "depth": 8, "gauge": "deck"}, "#858a8f"],
+	["deck_tile", 6, 9, 27, 0, {"span": 8, "depth": 2, "gauge": "deck"}, "#858a8f"],
+	["roof_slope", 6, 8, 17, 0, {"span": 8, "depth": 2, "rise": 1, "gauge": "light"}, "#4d5257"],
+	## Exhaust casing aft on the casing roof.
+	["wall_panel", 9, 4, 30, 0, {"span": 2, "height": 6, "rake": 0}, "#9e5c1c"],
+	["wall_panel", 11, 4, 30, 270, {"span": 3, "height": 6, "rake": 0}, "#9e5c1c"],
+	["wall_panel", 11, 4, 33, 180, {"span": 2, "height": 6, "rake": 0}, "#9e5c1c"],
+	["wall_panel", 9, 4, 33, 90, {"span": 3, "height": 6, "rake": 0}, "#9e5c1c"],
+	["deck_tile", 9, 10, 30, 0, {"span": 2, "depth": 3, "gauge": "heavy"}, "#1c1c1f"],
+]
+
+
+func _tug_placements() -> Array:
+	var out: Array = []
+	for entry_variant in TUG_RECIPE:
+		var entry := entry_variant as Array
+		out.append({
+			"piece": str(entry[0]),
+			"cell": [int(entry[1]), int(entry[2]), int(entry[3])],
+			"facing": int(entry[4]),
+			"params": entry[5],
+			"color": str(entry[6]),
+		})
+	return out
+
+
+## The recipe, driven through the controls, must be what the shipped tug fixture
+## contains. This is what makes "built through the tool" a checked claim rather
+## than a sentence in a report: change one step of the recipe and it goes red.
+func _probe_piece_tug_recipe(expect: Callable) -> void:
+	var report := _probe_build_through_tool(_tug_placements())
+	var unreachable := report["unreachable"] as PackedStringArray
+	expect.call(
+		"tug recipe: every step is reachable through the tool (%d stuck%s)"
+		% [unreachable.size(), "" if unreachable.is_empty() else ": " + unreachable[0]],
+		unreachable.is_empty()
+	)
+	var built := _plan.pieces.duplicate(true)
+	var path := "%s/probe_piece_tug.json" % STRUCTURES_DIR
+	var raw: Variant = JSON.parse_string(FileAccess.get_file_as_string(path))
+	expect.call("the tug fixture is on disk", raw is Dictionary)
+	if not (raw is Dictionary):
+		return
+	var shipped := (raw as Dictionary).get("pieces", []) as Array
+	var differ := PackedStringArray()
+	for index in maxi(built.size(), shipped.size()):
+		var want: Dictionary = _probe_placement_signature(shipped[index] as Dictionary) if index < shipped.size() else {}
+		var got: Dictionary = _probe_placement_signature(built[index] as Dictionary) if index < built.size() else {}
+		if want != got and differ.size() < 3:
+			differ.append("#%d want %s got %s" % [index, JSON.stringify(want), JSON.stringify(got)])
+	expect.call(
+		"tug: the recipe driven through the tool IS the shipped fixture (%d differ%s)"
+		% [differ.size(), "" if differ.is_empty() else " — " + differ[0]],
+		differ.is_empty() and built.size() == shipped.size()
+	)
+
+
+## One-shot writer, off a flag, never in the gate's run. The fixture in the repo
+## is the output of the tool, not of a text editor.
+func _write_tug_fixture() -> void:
+	_probe_build_through_tool(_tug_placements())
+	_plan.hull = {
+		"_note": "hull_28x10 as FishingTrawlerSmall builds it, restated so the capture rig can hold the derived stations against the hull the game spawns.",
+		"loa_m": 28.0, "beam_m": 10.0, "depth_m": 5.6, "draft_m": 2.8,
+		"displacement_t": 256.0, "form": "fine_entry",
+		"bow_taper_fraction": 0.17857142857142858, "station_count": 8,
+	}
+	_plan.palette = {"wall": [0.85, 0.86, 0.88], "deck": [0.33, 0.31, 0.29]}
+	_plan.add_hull_edge({
+		"_is": "bulwark, both sides and the transom, capped — the deck edge of the vessel. NOT piece-authored: a sheer-following bulwark is a swept curve and the kit refuses to quantise it, which is a stated boundary rather than a gap.",
+		"side": "loop", "follow_sheer": true, "height": 1.1, "plate_m": 0.1,
+		"cap_w": 0.22, "cap_h": 0.06, "material": "painted",
+		"plate_color": [0.11, 0.13, 0.16], "cap_color": [0.86, 0.87, 0.88], "solid": true,
+	}, "hull_28x10")
+	_save_plan("probe_piece_tug")
+	## The `_note` is written back in afterwards because `StructurePlan.to_dict`
+	## does not carry one — it never has, for any fixture — so a plan that is
+	## loaded and re-saved loses it. Stated here rather than quietly worked around.
+	var path := "%s/probe_piece_tug.json" % STRUCTURES_DIR
+	var raw: Variant = JSON.parse_string(FileAccess.get_file_as_string(path))
+	if raw is Dictionary:
+		var doc := raw as Dictionary
+		doc["_note"] = TUG_NOTE
+		var file := FileAccess.open(path, FileAccess.WRITE)
+		if file != null:
+			file.store_string(JSON.stringify(doc, "\t"))
+			file.close()
+	print("[structure-studio] wrote probe_piece_tug.json — %d placements" % _plan.pieces.size())
+
+
+const TUG_NOTE := """BUILT THROUGH THE STUDIO'S PIECE TOOL. Every one of the 33 placements below was made by
+picking a piece off the kit palette, turning it with R, setting its parameters on steppers and
+dropdowns over the piece's own declared value sets, picking a tint off a swatch, and clicking a
+grid node. Not one number in this file was typed; there is no control in that tool a number CAN
+be typed into.
+
+That claim is checked rather than asserted. `structure_studio.gd`'s `--studio-probe` self-check
+carries the same 33 actions as data and requires that replaying them through the controls
+reproduces this file placement for placement and plate corner for plate corner — so changing one
+step of the recipe, or breaking the rotate key, or letting a stepper walk off its declared set,
+turns the gate red.
+
+WHAT IT IS. A harbour tug's pilot house: a plated casing with a raked front and windows in its
+sides, a tall all-round-glazed wheelhouse standing on it, chamfered at every corner by a
+`corner_45` facet, a sloped VISOR over the windscreen — `roof_slope`, which no vessel in this
+repo had used — and an exhaust casing standing clear above the wheelhouse roof.
+
+WHAT IS NOT PIECE-AUTHORED, and it is the kit's own stated boundary rather than a gap: the
+sheer-following bulwark. That is a swept curve, and quantising it to the 0.5 m grid would step
+the one curve the fleet was rebuilt to draw, so it is an `edges[]` entry as it is on every other
+vessel. The studio has no tool for it either — see the wave report.
+
+Rakes are in EIGHTH-CELLS (0.125 m a step), the kit's unit as of this file's writing."""
 
 
 ## Diagonal-wall leg of the probe. A 45° wall is the case every "is this an
@@ -512,9 +1299,17 @@ func _set_context(context: String) -> void:
 		_plan_offset = Vector3(-_deck_grid.half_beam, 0.0, -_deck_grid.half_loa)
 	else:
 		_deck_grid = null
-		_grid_width = 24
-		_grid_length = 24
-		_plan_offset = Vector3(-_grid_width * 0.5, 0.0, -_grid_length * 0.5)
+		## CELLS, not metres — a 24 x 24 m plot on the same 0.5 m grid the vessel
+		## context builds on. They were 24 and 24 and were read as metres by
+		## `_plan_offset` and as cells by `_build_grid_lines`, so the drawn grid was
+		## half the size of the plot and sat in a corner of it.
+		_grid_width = int(round(24.0 / DeckGrid.CELL_M))
+		_grid_length = int(round(24.0 / DeckGrid.CELL_M))
+		_plan_offset = Vector3(
+			-float(_grid_width) * DeckGrid.CELL_M * 0.5,
+			0.0,
+			-float(_grid_length) * DeckGrid.CELL_M * 0.5
+		)
 	_cam_focus = Vector3.ZERO
 	_rebuild_host_visual()
 	_rebake()
@@ -539,7 +1334,11 @@ func _rebuild_host_visual() -> void:
 	else:
 		var slab := MeshInstance3D.new()
 		var slab_mesh := BoxMesh.new()
-		slab_mesh.size = Vector3(float(_grid_width) + 8.0, 1.0, float(_grid_length) + 8.0)
+		slab_mesh.size = Vector3(
+			float(_grid_width) * DeckGrid.CELL_M + 8.0,
+			1.0,
+			float(_grid_length) * DeckGrid.CELL_M + 8.0
+		)
 		var ground := StandardMaterial3D.new()
 		ground.albedo_color = Color(0.24, 0.30, 0.22)
 		slab.material_override = ground
@@ -619,11 +1418,18 @@ func _build_orientation_markers() -> void:
 	## Painted flat on the deck plane just outside the grid — stencilled harbour
 	## markings, not floating billboards that block the camera. Family palette:
 	## amber bow, muted stern, nav red/green for port/starboard.
+	## `_grid_width` / `_grid_length` are CELL COUNTS and these are PLAN METRES —
+	## the same units mistake `_build_grid_lines` carries a note about and
+	## `_mouse_to_grid` used to make. On `hull_28x10` (20 x 56 cells, 10 x 28 m)
+	## it put STARBOARD 21.6 m out from a hull 10 m wide and STERN 57 m aft of a
+	## 28 m one, so all four markings were painted on open water off the grid.
+	var beam := float(_grid_width) * DeckGrid.CELL_M
+	var loa := float(_grid_length) * DeckGrid.CELL_M
 	var markers := [
-		["BOW", Vector3(_grid_width * 0.5, 0.06, -1.4), 0.0, BrandTokens.BRASS],
-		["STERN", Vector3(_grid_width * 0.5, 0.06, _grid_length + 1.4), 180.0, BrandTokens.INK_INVERSE_DIM],
-		["PORT", Vector3(-1.6, 0.06, _grid_length * 0.5), 90.0, BrandTokens.ALERT],
-		["STARBOARD", Vector3(_grid_width + 1.6, 0.06, _grid_length * 0.5), 270.0, BrandTokens.OK_LIGHT],
+		["BOW", Vector3(beam * 0.5, 0.06, -1.4), 0.0, BrandTokens.BRASS],
+		["STERN", Vector3(beam * 0.5, 0.06, loa + 1.4), 180.0, BrandTokens.INK_INVERSE_DIM],
+		["PORT", Vector3(-1.6, 0.06, loa * 0.5), 90.0, BrandTokens.ALERT],
+		["STARBOARD", Vector3(beam + 1.6, 0.06, loa * 0.5), 270.0, BrandTokens.OK_LIGHT],
 	]
 	for marker in markers:
 		var label := Label3D.new()
@@ -667,7 +1473,12 @@ func _build_scale_mannequin() -> void:
 	tag.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 	tag.position = Vector3(0, 2.1, 0)
 	mannequin.add_child(tag)
-	var spot := Vector3(2.0, 0.0, float(_grid_length) - 3.0)
+	## Same units bug as the orientation markings, and this one mattered more: the
+	## STUDIO'S OWN 1.8 m scale reference was standing at plan z = 53 m on a 28 m
+	## hull, i.e. 25 m astern of the transom, hanging over open water. It rendered
+	## perfectly and was never on the boat — the fourth variant of the failure
+	## CONVENTIONS §3a records three of. `_grid_length` is CELLS; this is METRES.
+	var spot := Vector3(2.0, 0.0, float(_grid_length) * DeckGrid.CELL_M - 3.0)
 	if _context != "vessel":
 		spot = Vector3(2.0, 0.0, 2.0)
 	mannequin.position = _plan_offset + spot
@@ -1171,9 +1982,16 @@ const NO_NODE := Vector3i(-2147483648, -2147483648, -2147483648)
 ## here simply gets no metre readout — the stepper still works, because the value
 ## set it steps through came out of the data file. A kit that adds `eighth_cells`
 ## therefore degrades to "no hint", never to a wrong hint.
+## Read off the kit's own build expressions, which are the only authority: a
+## `quarter_cells` step multiplies by 0.25 and an `eighth_cells` step by 0.125.
+## (The names are the kit's and they are looser than they look — a "quarter cell"
+## is 0.25 m, which is half of the 0.5 m cell.) `eighth_cells` arrived while this
+## tool was being written and the controls needed no change for it, which is the
+## point of reading the sets out of the data file; only this readout did.
 const PIECE_UNIT_METRES := {
 	"cells": WorldUnits.DECK_CELL_M,
 	"quarter_cells": WorldUnits.DECK_CELL_M * 0.5,
+	"eighth_cells": WorldUnits.DECK_CELL_M * 0.25,
 }
 
 
@@ -2449,9 +3267,18 @@ func _build_tool_palette() -> void:
 	palette.offset_top = 60.0
 	palette.offset_bottom = -36.0
 	_ui_root.add_child(palette)
+	## SCROLLED. The kit's parameter sets grew from four names to seven while this
+	## panel was being built, and the capture showed the result immediately: RAKE
+	## was cut off by the bottom of the window and OPENING and the tint swatches
+	## were below the fold, which means a player could not reach them at all. A
+	## palette whose contents are decided by a data file cannot assume a height.
+	var scroll := ScrollContainer.new()
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	palette.add_child(scroll)
 	var box := VBoxContainer.new()
+	box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	box.add_theme_constant_override(&"separation", BrandTokens.SPACE_MD)
-	palette.add_child(box)
+	scroll.add_child(box)
 
 	box.add_child(BrandComponents.section_header("BUILD CONTEXT"))
 	var context_row := HBoxContainer.new()
@@ -2912,7 +3739,12 @@ func _refresh_load_list() -> void:
 
 
 func _refresh_inspector() -> void:
+	## REMOVED, then freed. `queue_free` alone is deferred to the end of the frame,
+	## so the old controls stay in the tree — and stay counted, and stay drawn —
+	## until then. Two refreshes in one frame (selecting a piece right after a
+	## wall) left the wall's SpinBoxes sitting under the piece's steppers.
 	for child in _inspector_box.get_children():
+		_inspector_box.remove_child(child)
 		child.queue_free()
 	var entity := _plan.entity_by_id(_selected_id)
 	if _selected_id < 0 or entity.is_empty():

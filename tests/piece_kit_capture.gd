@@ -33,8 +33,12 @@ extends "res://tests/vessel_render_capture.gd"
 ##  - `_check_cost` carries these fixtures' own numbers, because `COST_BUDGET` is
 ##    a `const` and GDScript will not let a subclass shadow one. The DRAW-CALL
 ##    number is the assertion that matters, and the claim being made is that
-##    BUILDING FROM PIECES COSTS NOTHING AT THE DRAW CALL: 50 placements, six
-##    piece types and eight colours all bucket on MATERIAL alone.
+##    BUILDING FROM PIECES COSTS NOTHING AT THE DRAW CALL: every placement, every
+##    piece type and every tint buckets on MATERIAL alone.
+##  - `_add_scale_figure` and `_shoot` are overridden so the 1.8 m figure is
+##    placed where it can be SEEN and then checked that it was — see the block
+##    above `FIGURE_CHANGED_MIN`. That check found a shipped capture with no
+##    visible figure in it.
 
 const PieceKitScript := preload("res://scripts/construction/piece_kit.gd")
 
@@ -46,19 +50,99 @@ const FIXTURES_HERE: Array[String] = [
 	"res://resources/data/structures/probe_piece_trawler.json",
 	## The strict one: not a single hand-authored plate corner in the file.
 	"res://resources/data/structures/probe_piece_house.json",
+	## BUILT THROUGH THE STUDIO'S PIECE TOOL, not typed. A harbour tug's pilot
+	## house: a plated casing with a raked front, a tall all-round-glazed
+	## wheelhouse chamfered at every corner, a sloped VISOR over the windscreen
+	## (`roof_slope`, which no vessel in this repo had used) and an exhaust casing
+	## aft. `structure_studio.gd`'s own self-check replays the same 33 palette /
+	## stepper / rotate / click actions and requires them to reproduce this file
+	## placement for placement, so "built through the tool" is a checked claim.
+	"res://resources/data/structures/probe_piece_tug.json",
 ]
+
+## Where the 1.8 m figure stands for these fixtures.
+##
+## The parent's default (2.5, 0, 7.0) is a spot on the 28 m hulls' open foredeck,
+## and it is fine for the trawler and the house — but the tug's casing runs from
+## x = 2.5 m, so the default puts the figure INSIDE its port wall. That is the
+## exact failure CONVENTIONS §3a records three variants of, so the spot is data
+## here as it is upstream. `FIGURE_SPOT` is a `const` and GDScript will not let a
+## subclass shadow one, hence the override below rather than a second entry.
+const PIECE_FIGURE_SPOT := {
+	## Centreline, 5 m from the stem: clear of the casing (which starts at z = 9 m)
+	## and clear of the 5 m bow taper, with open sky behind it from every angle.
+	"probe_piece_tug": Vector3(5.0, 0.0, 5.0),
+	## FOUND BY THE CHECK BELOW, not by inspection. `probe_piece_house__profile_port`
+	## shipped with NO VISIBLE FIGURE — 4 samples, and looking at the PNG confirms
+	## it: the bulwark hides the figure completely. That is not this fixture's
+	## fault. At 3 degrees of elevation a 1.1 m bulwark on a sheered hull hides a
+	## 1.8 m figure standing anywhere on the main deck, so a fourth spot on the
+	## main deck would have moved the problem rather than fixed it. It stands on
+	## the wheelhouse roof instead (plan y = 5.0 m, the `deck_tile` at cell y = 10),
+	## which is clear of everything on this vessel and has sky behind it from all
+	## four angles.
+	"probe_piece_house": Vector3(4.5, 5.0, 20.5),
+}
+
+## ── The figure is VISIBLE, not merely placed ────────────────────────────────
+##
+## REALITY.md §8 and CONVENTIONS §3a: a capture with no visible scale figure has
+## no absolute scale, and this repo has shipped that bug three times — a figure
+## inside a wheelhouse, a figure inside a saloon, a figure off the side of the
+## ship. Every one of them rendered perfectly and appeared in zero frames, and
+## every check that existed at the time was green, because the checks asked
+## whether the figure had been ADDED.
+##
+## THE INSTRUMENT, and two wrong ones before it. Both wrong ones are recorded
+## because the shape of the mistake is the useful part:
+##
+##  1. COUNT THE HI-VIZ ORANGE IN THE FRAME. Blind. The suit is (0.95, 0.55,
+##     0.10) and `probe_trawler_bulwark`'s ochre sheer stripe is (0.62, 0.36,
+##     0.11) — the same hue to two decimal places — so the whole-frame count
+##     returned 3292 "figure" samples on a frame whose figure contributes about
+##     forty. It would have stayed in the thousands with the figure deleted.
+##  2. COUNT IT INSIDE THE FIGURE'S PROJECTED BOX. Sharper, and still wrong: it
+##     answers with the head excluded (skin is not orange) and with whatever the
+##     projection maths got wrong, and the projection maths was wrong.
+##
+## What is used instead needs no colour and no projection. THE FRAME IS RENDERED
+## AGAIN WITH THE FIGURE HIDDEN, and the two images are compared. Pixels that
+## change are pixels the figure is responsible for. A figure standing inside a
+## deckhouse changes nothing. A figure off the side of the ship changes nothing.
+## A figure behind a bulwark changes exactly the head and shoulders you can see,
+## which is the honest answer — and it is the same answer in a plan view, where
+## the figure is a nine-pixel disc, and in a profile, where it is a sliver over
+## the bulwark cap.
+##
+## Measured on these twelve frames: the honest views change 21 to 335 samples.
+## A hidden figure changes 0. The floor is 12.
+const FIGURE_CHANGED_MIN := 12
+## Sampled every other pixel on both axes: 1280x720 becomes 230k comparisons per
+## frame rather than 921k, and the floor is stated in those samples.
+const FIGURE_SAMPLE_STEP := 2
+## Any channel differing by more than this counts as changed. One step above the
+## renderer's own dither, and the noise control below measures what that is
+## rather than assuming it.
+const FIGURE_PIXEL_DELTA := 0.03
 
 ## Measured on the first clean run, then given ~8% headroom on triangles. Draw
 ## calls are exact and are the load-bearing half.
 const PIECE_BUDGET := {
 	## probe_trawler_bulwark, the hand-authored vessel this one replaces the
 	## deckhouse of, is budgeted at 8 draw calls. The piece-built version draws
-	## THE SAME 8: 43 placements, six piece types and eight colours all bucket on
+	## THE SAME 8: 49 placements, six piece types and eight colours all bucket on
 	## MATERIAL alone, and building from a kit costs nothing at the draw call.
 	"probe_piece_trawler": {"draw_calls": 8, "triangles": 33000},
 	## The bare hull plus a bulwark loop measures 6 (probe_sheer_bulwark); the
 	## whole piece-built superstructure adds ONE.
 	"probe_piece_house": {"draw_calls": 7, "triangles": 21000},
+	## The tug, BUILT THROUGH THE STUDIO. Same 7 as the house: a whole pilot house
+	## in 33 placements, five tints and six piece types costs the same draw calls
+	## as the bare hull and its bulwark plus one, because every one of them buckets
+	## on MATERIAL alone and they are all "painted". Triangles are the measured
+	## 25 726 (shadow pass included) plus 8%, halved because `_check_cost` doubles
+	## it — so this line has 8% of slack in it and no more.
+	"probe_piece_tug": {"draw_calls": 7, "triangles": 13900},
 }
 
 var _resolved_report: Dictionary = {}
@@ -170,6 +254,81 @@ func _check_fittings(plan: StructurePlan, stem: String) -> void:
 		],
 		mute == 0 and drawable == plan.items.size()
 	)
+
+
+## Stands the figure somewhere it can be SEEN on this fixture. Same geometry as
+## the parent's — same capsule, same head, same colours — only the spot differs,
+## so a tug photographs at the same scale as everything else in the folder.
+func _add_scale_figure(offset: Vector3, stem: String) -> void:
+	if not PIECE_FIGURE_SPOT.has(stem):
+		super._add_scale_figure(offset, stem)
+		return
+	super._add_scale_figure(offset, stem)
+	var figure := _stage.get_node_or_null("ScaleFigure")
+	if figure != null:
+		(figure as Node3D).position = offset + (PIECE_FIGURE_SPOT[stem] as Vector3)
+
+
+## Every frame is photographed by the parent, then SHOT AGAIN WITH THE FIGURE
+## HIDDEN and the two compared. See the note above the constants for why this
+## rather than a colour count.
+func _shoot(bounds: AABB, name: String, view: Dictionary) -> void:
+	await super._shoot(bounds, name, view)
+	var figure := _stage.get_node_or_null("ScaleFigure") as Node3D
+	if figure == null:
+		_t.fail("%s: no 1.8 m figure on the stage at all" % name)
+		return
+	var with_figure := get_viewport().get_texture().get_image()
+
+	## NOISE CONTROL, once per run. If two renders of the SAME scene already
+	## differed, the difference below would measure the renderer and every frame
+	## would pass. Measured rather than assumed — llvmpipe is deterministic here,
+	## and this is what says so.
+	if not _noise_measured:
+		_noise_measured = true
+		await _settle()
+		var again := get_viewport().get_texture().get_image()
+		var noise := _changed_samples(with_figure, again)
+		_t.check(
+			"two renders of one frame are identical (%d samples differ)" % noise, noise == 0
+		)
+
+	figure.visible = false
+	await _settle()
+	var without := get_viewport().get_texture().get_image()
+	figure.visible = true
+	var changed := _changed_samples(with_figure, without)
+	_t.check(
+		"%s: the 1.8 m figure is VISIBLE in the frame (%d samples change when it is hidden, floor %d)"
+		% [name, changed, FIGURE_CHANGED_MIN],
+		changed >= FIGURE_CHANGED_MIN
+	)
+
+
+var _noise_measured := false
+
+
+func _settle() -> void:
+	for _i in SETTLE_FRAMES:
+		await get_tree().process_frame
+	await RenderingServer.frame_post_draw
+
+
+## Samples where two frames of the same size differ. Both are sampled on the same
+## grid, so the number is comparable between views and between fixtures.
+func _changed_samples(a: Image, b: Image) -> int:
+	if a == null or b == null or a.get_size() != b.get_size():
+		return 0
+	var count := 0
+	for y in range(0, a.get_height(), FIGURE_SAMPLE_STEP):
+		for x in range(0, a.get_width(), FIGURE_SAMPLE_STEP):
+			var pa := a.get_pixel(x, y)
+			var pb := b.get_pixel(x, y)
+			if absf(pa.r - pb.r) > FIGURE_PIXEL_DELTA \
+					or absf(pa.g - pb.g) > FIGURE_PIXEL_DELTA \
+					or absf(pa.b - pb.b) > FIGURE_PIXEL_DELTA:
+				count += 1
+	return count
 
 
 func _check_cost(stem: String, meshes: int) -> void:
