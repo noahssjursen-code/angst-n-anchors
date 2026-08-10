@@ -77,6 +77,54 @@ const MATERIALS := {
 }
 
 
+# ── edges[]: swept runs ──────────────────────────────────────────────────────
+#
+# The bulwark, the guardrail, the rubbing strake. `StructureEdge` owns the
+# geometry and `StructurePlan.edge_spec` owns the resolution (including
+# `from_hull`, which lofts the hull's own sheer rather than letting a fixture
+# restate a curve). What lives here is the two-line hand-off, and one property
+# worth naming because it is the whole reason these three functions are so thin:
+#
+#   THE COLLIDERS ARE THE DRAWING. `StructureEdge.sweep_collider_boxes` calls
+#   `sweep_boxes` and bounds the boxes that come back — there is no second
+#   derivation of the geometry to keep in step. Both of this project's
+#   walk-through bugs were a drawing and a collision computed separately, one of
+#   which was later edited. So `edge_boxes` and `edge_collider_boxes` must go on
+#   resolving the SAME spec through StructureEdge and must never grow their own
+#   idea of where the run is. A "cheap" variant that re-lofted the path for
+#   collision would look identical in every count this project measures.
+#
+# A railing is the documented exception and it is StructureEdge's exception, not
+# a new one: `railing_collider_boxes` emits ONE barrier per segment rather than
+# one collider per rail and post, because a body must not be able to pass
+# BETWEEN the courses. See the note on that function.
+
+
+## The `StructureEdge` sweep spec for one `edges[]` entry, in plan metres. The
+## shared resolver — the same call in `bake` and in `collect_colliders`, so the
+## two cannot photograph different vessels.
+static func edge_spec(plan: StructurePlan, edge: Dictionary) -> Dictionary:
+	return plan.edge_spec(edge)
+
+
+static func edge_boxes(plan: StructurePlan, edge: Dictionary) -> Array:
+	var spec := edge_spec(plan, edge)
+	if spec.is_empty():
+		return []
+	if StructurePlan.edge_primitive(edge) == StructurePlan.EDGE_RAILING:
+		return StructureEdge.railing_boxes(spec)
+	return StructureEdge.sheer_band_boxes(spec)
+
+
+static func edge_collider_boxes(plan: StructurePlan, edge: Dictionary) -> Array:
+	var spec := edge_spec(plan, edge)
+	if spec.is_empty():
+		return []
+	if StructurePlan.edge_primitive(edge) == StructurePlan.EDGE_RAILING:
+		return StructureEdge.railing_collider_boxes(spec)
+	return StructureEdge.sweep_collider_boxes(spec)
+
+
 ## Collects the plan's walls, decks and stairs for baking. Every element carries
 ## `source_id` so editors can map geometry back to the plan entity that owns it.
 static func expand(plan: StructurePlan) -> Dictionary:
@@ -1380,6 +1428,12 @@ static func collect_colliders(plan: StructurePlan, offset := Vector3.ZERO) -> Ar
 			out.append(_collider_of(box_variant as Dictionary, offset))
 	for item_variant in plan.items:
 		out.append_array(_item_colliders(plan, item_variant as Dictionary, offset))
+	## `sweep_collider_boxes` already returns exactly the {center, size, yaw_deg}
+	## dictionary `_collider_of` consumes, so an edge gets the same one-liner
+	## every other entity gets — no edge-specific collider shape exists.
+	for edge_variant in plan.edges:
+		for box_variant in edge_collider_boxes(plan, edge_variant as Dictionary):
+			out.append(_collider_of(box_variant as Dictionary, offset))
 	return out
 
 
@@ -1428,6 +1482,13 @@ static func bake(plan: StructurePlan, offset := Vector3.ZERO, ghost := false) ->
 	for item_variant in plan.items:
 		for layer_variant in _item_layers(plan, item_variant as Dictionary):
 			_bucket_layer(buckets, layer_variant as Dictionary, offset, ghost)
+	## A swept run goes into the SAME buckets. Every box StructureEdge emits
+	## carries a material name from MATERIALS and its colour rides in the vertex
+	## stream, so a 70 m bulwark in two colours is one more surface at most — and
+	## on a plan that already paints something "painted", none.
+	for edge_variant in plan.edges:
+		for box_variant in edge_boxes(plan, edge_variant as Dictionary):
+			_bucket_layer(buckets, box_variant as Dictionary, offset, ghost)
 	for key in buckets.keys():
 		var bucket := buckets[key] as Dictionary
 		var st := bucket["st"] as SurfaceTool

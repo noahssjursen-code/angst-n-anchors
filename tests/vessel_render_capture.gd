@@ -32,6 +32,16 @@ const FIXTURES: Array[String] = [
 	"res://resources/data/structures/probe_ferry_catamaran.json",
 	"res://resources/data/structures/probe_spar_kit.json",
 	"res://resources/data/structures/probe_ferry_catamaran_trim.json",
+	## The sheer pair, and they are meant to be looked at SIDE BY SIDE:
+	## probe_sheer_bulwark__profile_port.png against
+	## probe_sheer_bulwark_flat__profile_port.png. One boolean apart — the control
+	## holds the cap at a constant height and is the two-parallel-bars shape every
+	## other fixture in this folder reads as. They arrived here from a throwaway
+	## rig of their own, which existed only because `StructureBaker` could not
+	## read `edges[]`; it can now, so they are photographed by the one real rig
+	## and are subject to every claim it makes about every other vessel.
+	"res://resources/data/structures/probe_sheer_bulwark.json",
+	"res://resources/data/structures/probe_sheer_bulwark_flat.json",
 ]
 
 ## A long lens rather than a wide one: 35° keeps the perspective flat enough
@@ -164,6 +174,7 @@ func _capture_plan(path: String, stem: String) -> void:
 		if grid != null:
 			offset = Vector3(-grid.half_beam, 0.0, -grid.half_loa)
 			deck_y = grid.deck_y
+			_check_hull_derivation(plan, stem, grid)
 			var boat: Node3D = VesselSpawn.instantiate(plan.hull_id, {}, "")
 			if _t.check("%s: hull %s instantiates" % [stem, plan.hull_id], boat != null):
 				_stage.add_child(boat)
@@ -171,6 +182,7 @@ func _capture_plan(path: String, stem: String) -> void:
 				if boat is PhysicsBody3D:
 					(boat as PhysicsBody3D).freeze = true
 				boat.process_mode = Node.PROCESS_MODE_DISABLED
+				_check_hull_restatement(plan, stem, boat)
 
 	_add_scale_figure(offset, stem)
 
@@ -191,6 +203,7 @@ func _capture_plan(path: String, stem: String) -> void:
 	_t.check("%s: vessel has a real extent" % stem, bounds.size.length() > 1.0)
 
 	_check_fittings(plan, stem)
+	_check_edges(plan, stem)
 	_check_rigging_attaches(plan, stem)
 	_check_fall_protection(plan, stem)
 
@@ -206,6 +219,80 @@ func _capture_plan(path: String, stem: String) -> void:
 	_stage.queue_free()
 	_stage = null
 	await get_tree().process_frame
+
+
+## ── The hull a plan lofts is the hull the game builds ───────────────────────
+##
+## `edges[].from_hull` lofts a bulwark off `HullStations`, and a plan reaches
+## those without naming a vessel script (the `--script` lane cannot — CONVENTIONS
+## §2), so `StructurePlan.make_hull_stations` re-derives them from catalog
+## numbers. A re-derivation nobody checks is a second hull that only LOOKS like
+## the first, and the two would drift silently: a bulwark lofted off the wrong
+## deck sits in mid-air, and at capture resolution mid-air by 120 mm is
+## invisible.
+##
+## This is the SCENE lane, so here the real hull can be built and the derivation
+## held against it. Two claims, and between them they pin every number the
+## conversion uses:
+##
+##   • the grid — `half_beam`, `half_loa` and the build plane. The build plane is
+##     `StructurePlan.BUILD_PLANE_M` above `HullStations.deck_y`, which is the
+##     same 0.12 four vessel scripts pass to `DeckGrid.from_hull` and which
+##     `hull_stations.gd`'s own sheer note names. It is a restated constant, so
+##     it is worth exactly what checks it, and this is what checks it.
+##   • the plan's `hull` block against the stations the hull actually carries.
+##     This claim is inherited from `tests/structure_sheer_capture.gd`, which was
+##     deleted when the `edges[]` seam landed. Deleting its rig must not delete
+##     its guarantee.
+func _check_hull_derivation(plan: StructurePlan, stem: String, grid: DeckGrid) -> void:
+	if plan.edges.is_empty():
+		return
+	var derived := plan.hull_grid()
+	if not _t.check("%s: the plan can loft its own hull" % stem, derived != null):
+		return
+	_t.check(
+		"%s: derived grid matches the built one (half_beam %.3f/%.3f, half_loa %.3f/%.3f, deck_y %.3f/%.3f)"
+		% [
+			stem, derived.half_beam, grid.half_beam,
+			derived.half_loa, grid.half_loa, derived.deck_y, grid.deck_y,
+		],
+		is_equal_approx(derived.half_beam, grid.half_beam)
+		and is_equal_approx(derived.half_loa, grid.half_loa)
+		and absf(derived.deck_y - grid.deck_y) < 1e-3
+	)
+
+
+func _check_hull_restatement(plan: StructurePlan, stem: String, boat: Node3D) -> void:
+	if plan.hull.is_empty():
+		return
+	var built: HullStations = boat.get("hull_stations") as HullStations
+	if not _t.check("%s: the built hull carries its stations" % stem, built != null):
+		return
+	var derived := plan.hull_stations()
+	if not _t.check("%s: the plan's hull block lofts" % stem, derived != null):
+		return
+	_t.check(
+		"%s: restated hull matches the built one (loa %.3f/%.3f, beam %.3f/%.3f, deck_y %.3f/%.3f)"
+		% [
+			stem, derived.length_m, built.length_m, derived.beam_m, built.beam_m,
+			derived.deck_y, built.deck_y,
+		],
+		absf(derived.length_m - built.length_m) < 1e-3
+		and absf(derived.beam_m - built.beam_m) < 1e-3
+		and absf(derived.deck_y - built.deck_y) < 1e-3
+	)
+	## The sheer itself, which is the only thing `from_hull` is for. Both ends,
+	## because a hull whose forward sheer matched and whose aft sheer did not
+	## would draw a bulwark that is right at the stem and wrong at the transom.
+	_t.check(
+		"%s: restated sheer matches (%.3f/%.3f m forward, %.3f/%.3f m aft)"
+		% [
+			stem, derived.sheer_forward_m, built.sheer_forward_m,
+			derived.sheer_aft_m, built.sheer_aft_m,
+		],
+		absf(derived.sheer_forward_m - built.sheer_forward_m) < 1e-3
+		and absf(derived.sheer_aft_m - built.sheer_aft_m) < 1e-3
+	)
 
 
 ## ── Cost ────────────────────────────────────────────────────────────────────
@@ -227,6 +314,13 @@ const COST_BUDGET := {
 	"probe_ferry_catamaran": {"draw_calls": 10, "triangles": 19000},
 	"probe_spar_kit": {"draw_calls": 9, "triangles": 9400},
 	"probe_ferry_catamaran_trim": {"draw_calls": 10, "triangles": 19600},
+	## The sheer pair carries ONE material and therefore one bucket, over a bare
+	## hull. 6 is what the hull plus a whole 76 m bulwark loop drew, measured —
+	## not a round number left loose. Put the cap in a second material and this
+	## goes red by one, which is the assertion: colour is free and a MATERIAL is
+	## not, and a bulwark is the easiest place in the codebase to forget that.
+	"probe_sheer_bulwark": {"draw_calls": 6, "triangles": 13200},
+	"probe_sheer_bulwark_flat": {"draw_calls": 6, "triangles": 13200},
 }
 
 
@@ -285,6 +379,94 @@ func _check_fittings(plan: StructurePlan, stem: String) -> void:
 		"%s: all %d fittings resolve to a drawn tube (%d mute)" % [stem, plan.items.size(), mute],
 		mute == 0 and drawable == plan.items.size()
 	)
+
+
+## ── Every edge draws, and what it draws is what it collides ─────────────────
+##
+## The same failure as `_check_fittings`, one primitive along: an `edges[]` entry
+## the baker cannot resolve emits NOTHING, silently, and a fixture whose whole
+## subject is a bulwark then photographs a bare hull. A `from_hull` edge has one
+## more way to come out empty than a hand-written one — the hull may not resolve
+## at all — and that is the case worth catching, because the picture it produces
+## is a perfectly good photograph of the wrong thing.
+##
+## The second claim is the one the seam exists for. `StructureEdge` derives the
+## colliders from the boxes it drew rather than from a second pass over the path,
+## and this holds the BAKER to that: every corner of every drawn box must lie
+## inside some collider the baker emits. It is a coverage claim, not a count, and
+## a count is what a re-derivation would still satisfy.
+const EDGE_COVER_SLACK := 1e-4
+
+
+func _check_edges(plan: StructurePlan, stem: String) -> void:
+	if plan.edges.is_empty():
+		return
+	var mute := 0
+	var uncollided := 0
+	var boxes: Array = []
+	for edge_variant in plan.edges:
+		var edge := edge_variant as Dictionary
+		var drawn := StructureBaker.edge_boxes(plan, edge)
+		if drawn.is_empty():
+			mute += 1
+			continue
+		## A run that declares itself solid and emits no collider is a wall you
+		## can walk through; one that declares `solid: false` (paint, a boot top)
+		## is opted out on purpose and its boxes are not part of the claim below.
+		if StructureBaker.edge_collider_boxes(plan, edge).is_empty():
+			if bool(edge.get("solid", true)):
+				uncollided += 1
+			continue
+		boxes.append_array(drawn)
+	_t.check(
+		"%s: all %d edge runs draw (%d mute, %d boxes)"
+		% [stem, plan.edges.size(), mute, boxes.size() ],
+		mute == 0
+	)
+	_t.check(
+		"%s: every solid edge run collides (%d silent)" % [stem, uncollided],
+		uncollided == 0
+	)
+	if boxes.is_empty():
+		return
+	var colliders := StructureBaker.collect_colliders(plan)
+	var outside := 0
+	var first := Vector3.ZERO
+	for box_variant in boxes:
+		for corner in _box_corners(box_variant as Dictionary):
+			if _near_solid_exact(colliders, corner):
+				continue
+			if outside == 0:
+				first = corner
+			outside += 1
+	_t.check(
+		"%s: every drawn edge corner is inside a collider (%d loose, first %v)"
+		% [stem, outside, first],
+		outside == 0
+	)
+
+
+func _box_corners(box: Dictionary) -> Array:
+	var centre := box["center"] as Vector3
+	var half := (box["size"] as Vector3) * 0.5
+	var basis := box.get("basis", Basis.IDENTITY) as Basis
+	var out: Array = []
+	for sx in [-1.0, 1.0]:
+		for sy in [-1.0, 1.0]:
+			for sz in [-1.0, 1.0]:
+				out.append(centre + basis * Vector3(half.x * sx, half.y * sy, half.z * sz))
+	return out
+
+
+## Containment with a float epsilon and nothing more — RIG_TOL's 0.3 m of grace
+## would let a collider miss the geometry by a hand's breadth and still pass.
+func _near_solid_exact(colliders: Array, point: Vector3) -> bool:
+	for collider_variant in colliders:
+		var collider := collider_variant as Dictionary
+		var half := (collider["size"] as Vector3) * 0.5 + Vector3.ONE * EDGE_COVER_SLACK
+		if _in_box(collider, point, half):
+			return true
+	return false
 
 
 ## ── Rigging is made fast to something ───────────────────────────────────────
@@ -422,6 +604,23 @@ const FALL_EDGES := {
 	"probe_ferry_catamaran_trim": [],
 }
 
+## The sheer pair, which carry nothing but ONE `edges[]` entry each. This is
+## therefore the claim that `StructureBaker.collect_colliders` actually reads
+## edges — delete that loop and every station below goes unguarded at once.
+##
+## It is the bulwark's own plating being walked into: the run lines sit just
+## OUTBOARD of the path (which is itself inset half a plate thickness from the
+## deck edge), so the first inboard probe lands in the middle of the plate rather
+## than beside it. Both sides start at z = 6, aft of the 5 m bow taper — forward
+## of that the deck edge is not at x = 0 and a straight run would be probing open
+## water. The stems are covered by `structure_sheer_test`'s body march instead,
+## which is the right instrument for a curve that is not axis-aligned.
+const SHEER_FALL_EDGES: Array = [
+	{"y": 0.0, "a": [-0.05, 6.0], "b": [-0.05, 27.9], "in": [1.0, 0.0]},
+	{"y": 0.0, "a": [10.05, 6.0], "b": [10.05, 27.9], "in": [-1.0, 0.0]},
+	{"y": 0.0, "a": [0.3, 28.05], "b": [9.7, 28.05], "in": [0.0, -1.0]},
+]
+
 ## Both ferry fixtures are the same vessel below id 100, so they share one list.
 const FERRY_FALL_EDGES: Array = [
 	# Main deck, hull edge. Bulwarks 1/2/3 only run z 4..41; the bow and stern
@@ -451,6 +650,8 @@ const FERRY_FALL_EDGES: Array = [
 func _fall_edges(stem: String) -> Array:
 	if stem.begins_with("probe_ferry_catamaran"):
 		return FERRY_FALL_EDGES
+	if stem.begins_with("probe_sheer_bulwark"):
+		return SHEER_FALL_EDGES
 	return FALL_EDGES.get(stem, []) as Array
 
 
@@ -590,13 +791,28 @@ func _light_the_stage() -> void:
 	fill.light_energy = 0.35
 	_stage.add_child(fill)
 
+	# A PALE SKY, not the dark studio this rig shot against until 2026-08-10.
+	#
+	# The question these photographs exist to answer is a silhouette question —
+	# squint at it, does that read as a boat — and a silhouette is the BOUNDARY
+	# between the subject and its ground. A near-black hull on a near-black
+	# ground has no boundary to read. The sheer rig found this the hard way: its
+	# first pass drew the curve correctly and photographed it as a grey wire on a
+	# grey field, which is a bad photograph of a good curve, and a reference
+	# photograph whose subject cannot be separated from its ground is not
+	# evidence of anything. Against a light sky the vessel is a dark shape and its
+	# top edge is the only thing the eye has to go on, which is exactly the test.
+	#
+	# The ambient is raised with it so the shadowed side does not go to black —
+	# the shadows are still what separate two untextured surfaces meeting at an
+	# angle (see the sun above), and they only read while there is light in them.
 	var env := WorldEnvironment.new()
 	var environment := Environment.new()
 	environment.background_mode = Environment.BG_COLOR
-	environment.background_color = Color(0.09, 0.13, 0.16)
+	environment.background_color = Color(0.74, 0.80, 0.85)
 	environment.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
-	environment.ambient_light_color = Color(0.55, 0.62, 0.70)
-	environment.ambient_light_energy = 0.45
+	environment.ambient_light_color = Color(0.62, 0.70, 0.78)
+	environment.ambient_light_energy = 0.60
 	env.environment = environment
 	_stage.add_child(env)
 

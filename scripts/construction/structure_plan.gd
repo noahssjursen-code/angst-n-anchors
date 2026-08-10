@@ -16,6 +16,9 @@ extends RefCounted
 ##             tread lands flush on start.y + height.
 ##   items  — {id, item_id, at:[x,y,z], yaw, pitch?, roll?,
 ##             host?:{id, face?, anchor?}, props?:{...}}  (point fittings)
+##   edges  — {id, primitive:"sheer_band"|"railing", path:[[x,y,z],…] | from_hull,
+##             profile?|width+thickness, base_y?, closed?, material?, colour keys,
+##             solid?}  (a cross-section swept along a polyline)
 ##
 ## There is deliberately NO box/room primitive. An axis-aligned box that expands
 ## to four walls, a floor and a ceiling can only ever draw a shed, and every
@@ -26,6 +29,30 @@ extends RefCounted
 ## Coordinates are grid-corner points in metres. For vessels x/z match
 ## DeckGrid cell corners (0..width, 0..length) and y is metres above the deck
 ## plane.
+##
+## ── edges[]: the swept runs ──────────────────────────────────────────────────
+##
+## A wall is a straight plate of constant height; an edge is a CROSS-SECTION
+## SWEPT ALONG A POLYLINE, and the two are not the same primitive. A bulwark
+## whose cap rises toward the stem, a guardrail following a curved deck edge, a
+## rubbing strake, a pipe run — none of them is a run of walls, and drawing them
+## as one is how a vessel ends up reading as two parallel horizontal bars.
+##
+## `StructureEdge` owns the geometry. This file owns the DOCUMENT: an edge is a
+## first-class plan entity with an id, so it counts, serialises, is addressable
+## and — like a wall — can HOST a fitting. A cleat belongs on a bulwark cap, and
+## a cleat that does not move when its bulwark moves is a trap for the builder.
+##
+## ── `from_hull`, and why an edge may not restate a curve ─────────────────────
+##
+## The one thing an edge must never do is write out a hull's sheer as a list of
+## points. That curve is derived — `HullStations.sheer_cap_y_at` is freeboard
+## times the hull form's own bow/stern keel rise — so a fixture that copied it
+## would be stale the moment anyone retuned `fine_entry`. `from_hull` says "the
+## deck edge of this hull, as a bulwark" and `edge_spec()` resolves it through
+## `StructureEdge.sheer_bulwark_spec`. The only authored length is `height`, the
+## cap AMIDSHIPS, which is a fall-barrier dimension set by the 1.8 m figure and
+## is the same on a 28 m trawler and a 150 m freighter.
 ##
 ## ── The item placement model ─────────────────────────────────────────────────
 ##
@@ -67,9 +94,32 @@ extends RefCounted
 ##   +z  the remaining axis — which on a VERTICAL face is the outward normal,
 ##       so `at.z` reads as "how far off the surface"; negative is inboard,
 ##       e.g. a cleat 0.4 m inboard of a bulwark is at.z = -0.4
-## Faces: wall "front"|"back"; deck "top"|"bottom"; stair "run"; item — none,
-## the frame IS the host item's resolved transform, so fittings compose (a lamp
-## on a mast on a wheelhouse).
+## Faces: wall "front"|"back"; deck "top"|"bottom"; stair "run"; edge
+## "cap"|"side"; item — none, the frame IS the host item's resolved transform, so
+## fittings compose (a lamp on a mast on a wheelhouse).
+##
+## An EDGE host is the one whose run is not a straight line. `anchor` therefore
+## walks ARC LENGTH along the polyline — "center" on a bulwark loop is halfway
+## ROUND the loop, at the transom, not on a chord across the deck — and the frame
+## is taken where it lands, so a fitting on a curved run is square to the curve
+## where it stands. `at` is still a straight offset in that frame, as it is for
+## every other host: the anchor picks the station, `at` is the local placement,
+## and a fitting 30 m along a curved run wants its own anchor rather than a
+## 30 m `at.x` that leaves the curve immediately.
+##
+## "cap" lifts the origin to the top of the swept section — a cleat asks for the
+## cap, not for the cap's thickness — and "side" leaves it on the path line.
+##
+## An edge's frame is built exactly as a wall's, `+z = run x UP`, which is the
+## LEFT HAND of the run. Which side of a vessel that lands on is decided by the
+## TRAVERSAL, not here, so it is worth saying where it actually lands rather than
+## leaving a builder to work it out: `StructureEdge.sheer_loop` goes starboard
+## bow->stern, across the transom, then port stern->bow, and on every segment of
+## it the left hand points INBOARD. So on a `from_hull` bulwark a cleat 0.4 m
+## inboard of the cap is `at = (0, 0, +0.4)` — the opposite sign to the wall
+## example above, because a wall's run direction is chosen by whoever drew it.
+## `structure_plan_edges_test` measures the sign on all 182 segments of the loop
+## rather than trusting this paragraph.
 ##
 ## `item_transform(item)` resolves the whole chain to plan space. Host cycles
 ## and chains deeper than ITEM_HOST_MAX_DEPTH are reported and fall back to the
@@ -145,17 +195,57 @@ const ITEM_FACES := {
 	"wall": ["front", "back"],
 	"deck": ["top", "bottom"],
 	"stair": ["run"],
+	"edge": ["cap", "side"],
 	"item": [""],
 }
 
+## Edge primitives, by the name `PartCatalog.PRIMITIVES` already gives them.
+const EDGE_SHEER_BAND := "sheer_band"
+const EDGE_RAILING := "railing"
+const EDGE_PRIMITIVES := [EDGE_SHEER_BAND, EDGE_RAILING]
+
+## The plan's y = 0 plane, in metres above `HullStations.deck_y`.
+##
+## NOT a new number and not a choice made here: it is the same 0.12 every vessel
+## script passes to `DeckGrid.from_hull(LOA_M, BEAM_M, DEPTH_M + 0.12, …)`, and
+## `hull_stations.gd`'s own sheer note names it — "the build plane
+## `DeckGrid.deck_y` = deck_y + 0.12, and every StructurePlan wall, plate strip
+## and box collider sits on it". It is written down here because a `from_hull`
+## edge is the first plan entity whose geometry arrives in SHIP-LOCAL metres and
+## has to be brought into the plan frame; `hull_grid()` is that conversion.
+##
+## A restated constant is worth exactly what checks it: `vessel_render_capture`
+## asserts `hull_grid()` against the DeckGrid the game actually builds for the
+## hull, so a vessel script that moved its build plane fails there rather than
+## silently floating every bulwark.
+const BUILD_PLANE_M := 0.12
+
+## Sea water, matching HullPhysicsProfile's own default. Sheer is a function of
+## freeboard and form, so this never touches the curve — it only keeps
+## `HullStations.from_form` on the same footing as the vessel scripts.
+const WATER_DENSITY := 1025.0
+
 var context := "vessel" ## "vessel" | "building"
 var hull_id := ""
+## Optional restatement of the hull's catalog numbers, for hulls that are NOT in
+## `HullCatalog` (the two hand-authored ones live in vessel scripts whose
+## dependency chain reaches autoload identifiers — CONVENTIONS §2 — so the
+## `--script` lane cannot name them). Keys mirror the catalog: loa_m, beam_m,
+## depth_m, draft_m, displacement_t, form, bow_taper_m | bow_taper_fraction,
+## station_count. Held against the real hull by `vessel_render_capture`.
+var hull: Dictionary = {}
 var walls: Array = []
 var decks: Array = []
 var stairs: Array = []
 var items: Array = []
+var edges: Array = []
 var palette: Dictionary = {}
 var _next_id := 1
+## Derived per hull id, memoised per plan. Both are pure functions of the hull's
+## catalog numbers, so caching them changes no result — it stops a fixture with
+## four edges lofting the same hull four times.
+var _stations_cache: Dictionary = {}
+var _grid_cache: Dictionary = {}
 
 
 static func is_plan(data: Dictionary) -> bool:
@@ -233,6 +323,162 @@ func add_stair(start: Vector3, dir: String, length: float, width := 1.0, height 
 	}
 	stairs.append(stair)
 	return stair
+
+
+## A swept run along an explicit polyline, in PLAN metres. `spec` is passed
+## through to `StructureEdge` untouched — profile, width/thickness, base_y,
+## closed, colour, material, solid — because the edge dict IS the sweep spec.
+func add_edge(path: Array, spec: Dictionary = {}, primitive := EDGE_SHEER_BAND) -> Dictionary:
+	var edge := spec.duplicate(true)
+	edge["id"] = allocate_id()
+	edge["primitive"] = primitive if EDGE_PRIMITIVES.has(primitive) else EDGE_SHEER_BAND
+	edge["path"] = path.duplicate(true)
+	edges.append(edge)
+	return edge
+
+
+## A sheered bulwark on this plan's hull. The curve is not written down: `opts`
+## carries the section and the amidships cap height, and everything that differs
+## between one hull and the next is derived — see `edge_spec`.
+func add_hull_edge(opts: Dictionary = {}, from_hull := "") -> Dictionary:
+	var edge := opts.duplicate(true)
+	edge["id"] = allocate_id()
+	edge["primitive"] = EDGE_SHEER_BAND
+	edge["from_hull"] = from_hull if not from_hull.is_empty() else hull_id
+	edges.append(edge)
+	return edge
+
+
+static func edge_primitive(edge: Dictionary) -> String:
+	var primitive := str(edge.get("primitive", EDGE_SHEER_BAND))
+	if EDGE_PRIMITIVES.has(primitive):
+		return primitive
+	push_error(
+		"StructurePlan: unknown edge primitive \"%s\" — expected one of %s"
+		% [primitive, EDGE_PRIMITIVES]
+	)
+	return EDGE_SHEER_BAND
+
+
+## The `StructureEdge` sweep spec one `edges[]` entry resolves to, in PLAN
+## metres.
+##
+## An edge that writes its own `path` IS its spec and is returned unchanged. An
+## edge that says `from_hull` is resolved through
+## `StructureEdge.sheer_bulwark_spec` against this hull's `HullStations` — the
+## whole point of the key, and the reason a fixture can ask for "a sheered
+## bulwark on this hull" without holding a copy of a curve it cannot keep in
+## sync.
+##
+## The resolved spec comes back in SHIP-LOCAL metres, because that is the frame
+## `HullStations` speaks. It is translated into the plan frame here, once, so an
+## edge composes with the walls, plates and hosted items around it. The
+## translation is `local_to_plan` — the conversion this file has always owned —
+## and it is a pure translation, so no point is approximated by it.
+func edge_spec(edge: Dictionary) -> Dictionary:
+	if not edge.has("from_hull"):
+		return edge
+	var id := str(edge["from_hull"]).strip_edges()
+	if id.is_empty() or id == "true":
+		id = hull_id
+	var stations := hull_stations(id)
+	if stations == null:
+		return {}
+	var spec := StructureEdge.sheer_bulwark_spec(stations, edge)
+	if spec.is_empty():
+		return {}
+	var grid := hull_grid(id)
+	if grid == null:
+		return {}
+	var path := PackedVector3Array()
+	for point in (spec["path"] as PackedVector3Array):
+		path.append(local_to_plan(point, grid))
+	spec["path"] = path
+	spec["base_y"] = float(spec.get("base_y", stations.deck_y)) - grid.deck_y
+	return spec
+
+
+## `HullStations` for a hull id, without naming a vessel script.
+##
+## Two sources, in order, and neither of them is a per-hull table:
+##   1. the plan's own `hull` block, for the two hand-authored hulls that live in
+##      BoatBody subclasses — see `hull`;
+##   2. `HullCatalog`, which is where every data-driven hull already is.
+## Both feed `HullStations.from_form`, which is the same call
+## `HullPhysicsProfile.make_stations()` makes, so the sheer that comes out is
+## the sheer the game builds rather than a second derivation of it.
+func hull_stations(id := "") -> HullStations:
+	var key := id if not id.is_empty() else hull_id
+	if _stations_cache.has(key):
+		return _stations_cache[key] as HullStations
+	var built := make_hull_stations(key, hull if key == hull_id else {})
+	_stations_cache[key] = built
+	return built
+
+
+## The `DeckGrid` a hull's vessel script builds — `DeckGrid.from_hull` over the
+## same three numbers, with the build plane at `stations.deck_y + BUILD_PLANE_M`.
+## This is the plan frame's definition, so it is what `plan_to_local` /
+## `local_to_plan` are fed when a plan has no grid handed to it.
+##
+## Only three fields of it are load-bearing here and only those three are
+## checked: `half_beam`, `half_loa` and `deck_y` are the whole of the frame
+## conversion. `bow_taper_cells` is passed the catalogue's universal 45° rule
+## (taper = half the beam — CONVENTIONS §3a) and is not used by any conversion,
+## so do not read this grid for cell shapes; ask the vessel for that one.
+func hull_grid(id := "") -> DeckGrid:
+	var key := id if not id.is_empty() else hull_id
+	if _grid_cache.has(key):
+		return _grid_cache[key] as DeckGrid
+	var stations := hull_stations(key)
+	var built: DeckGrid = null
+	if stations != null:
+		built = DeckGrid.from_hull(
+			stations.length_m,
+			stations.beam_m,
+			stations.deck_y + BUILD_PLANE_M,
+			stations.beam_m * 0.5,
+		)
+	_grid_cache[key] = built
+	return built
+
+
+static func make_hull_stations(id: String, restated: Dictionary = {}) -> HullStations:
+	var cfg := restated
+	if cfg.is_empty() and HullCatalog.has_id(id):
+		cfg = HullCatalog.get_by_id(id)
+	if cfg.is_empty():
+		push_error(
+			"StructurePlan: no hull numbers for \"%s\" — it is not in HullCatalog "
+			% id
+			+ "and the plan carries no `hull` block to loft it from"
+		)
+		return null
+	var loa := float(cfg.get("loa_m", 0.0))
+	var beam := float(cfg.get("beam_m", 0.0))
+	var depth := float(cfg.get("depth_m", 0.0))
+	if loa <= 0.0 or beam <= 0.0 or depth <= 0.0:
+		push_error("StructurePlan: hull \"%s\" has no positive loa/beam/depth" % id)
+		return null
+	var draft := float(cfg.get("draft_m", depth * 0.5))
+	## Displacement sets the underwater widths and has no bearing on sheer, which
+	## is a function of freeboard and form alone. The catalog omits it, so
+	## CatalogHullVessel's own fallback is used rather than inventing a hull.
+	var displacement := float(cfg.get("displacement_t", loa * beam * draft * 0.52))
+	var form := HullFormProfile.resolve(str(cfg.get("form", HullFormProfile.DEFAULT_ID)))
+	## Every hull in the catalogue tapers at exactly 45° in plan, so the taper is
+	## half the beam unless the entry says otherwise.
+	var taper := beam * 0.5
+	if cfg.has("bow_taper_m"):
+		taper = float(cfg["bow_taper_m"])
+	elif cfg.has("bow_taper_fraction"):
+		taper = loa * float(cfg["bow_taper_fraction"])
+	var count := clampi(int(round(loa / 8.0)), 8, 16)
+	if cfg.has("station_count"):
+		count = int(cfg["station_count"])
+	return HullStations.from_form(
+		loa, beam, depth, draft, displacement, form, WATER_DENSITY, taper, count
+	)
 
 
 ## Free-floating fitting at a float position in PLAN metres.
@@ -364,6 +610,13 @@ func _host_frame(
 		return Transform3D.IDENTITY
 	if kind == "item":
 		return _item_transform(entity, seen, depth + 1)
+	## An edge's run is a polyline, so its anchor slides along ARC LENGTH and its
+	## frame is taken where it lands. Sliding a straight `basis.x` out of the
+	## start point — what every other host does, correctly, because every other
+	## host IS straight — would put the "end" anchor of a closed bulwark loop
+	## 70 m off the bow.
+	if kind == "edge":
+		return _edge_frame(entity, face, anchor)
 	var frame := _face_frame(kind, entity, face)
 	var basis := frame["basis"] as Basis
 	var origin := frame["origin"] as Vector3
@@ -436,6 +689,112 @@ func _face_frame(kind: String, entity: Dictionary, face: String) -> Dictionary:
 				"span": length_s,
 			}
 	return {"basis": Basis.IDENTITY, "origin": Vector3.ZERO, "span": 0.0}
+
+
+## Attach frame on a swept run. Right-handed and built exactly as a wall's is —
+## +x along the run, +y up, +z = run x UP — so a fitting authored against a
+## bulwark reads the same way as one authored against a wall.
+##
+## "cap" lifts the origin to the TOP of the swept section, so `at` on a cap is
+## measured from the surface a cleat is bolted to rather than from the path line
+## buried inside the plating. The lift is read off the profile the run is
+## actually drawn with, so a cap rail, a top rail and a bare band each put it
+## where their own geometry ends.
+func _edge_frame(edge: Dictionary, face: String, anchor: String) -> Transform3D:
+	var allowed: Array = ITEM_FACES["edge"] as Array
+	var picked := face
+	if picked.is_empty():
+		picked = str(allowed[0])
+	elif not allowed.has(picked):
+		push_error(
+			"StructurePlan: edge host has no face \"%s\" — expected one of %s"
+			% [face, allowed]
+		)
+		picked = str(allowed[0])
+	var spec := edge_spec(edge)
+	var points := _path_points(spec)
+	if points.size() < 2:
+		push_error("StructurePlan: edge %d has no run to host on" % int(edge.get("id", -1)))
+		return Transform3D.IDENTITY
+	if bool(spec.get("closed", false)):
+		points.append(points[0])
+	var span := 0.0
+	for i in range(points.size() - 1):
+		span += points[i].distance_to(points[i + 1])
+	var slide := 0.0
+	match anchor:
+		ITEM_ANCHOR_CENTER:
+			slide = span * 0.5
+		ITEM_ANCHOR_END:
+			slide = span
+		ITEM_ANCHOR_START:
+			slide = 0.0
+		_:
+			push_error(
+				"StructurePlan: unknown item anchor \"%s\" — expected one of %s"
+				% [anchor, ITEM_ANCHORS]
+			)
+	var walked := 0.0
+	var origin: Vector3 = points[0]
+	var tangent: Vector3 = points[1] - points[0]
+	for i in range(points.size() - 1):
+		var a: Vector3 = points[i]
+		var b: Vector3 = points[i + 1]
+		var step := a.distance_to(b)
+		if step <= 0.0:
+			continue
+		tangent = b - a
+		origin = a
+		if walked + step >= slide or i == points.size() - 2:
+			origin = a.lerp(b, clampf((slide - walked) / step, 0.0, 1.0))
+			break
+		walked += step
+	if picked == "cap":
+		origin += Vector3(0.0, _section_top(edge, spec), 0.0)
+	## A stanchion is plumb and so is an attach frame: the run's HEADING is what
+	## the fitting follows, never its slope. A cleat on a sheered cap sits square
+	## to the deck, not raked back by the 7° the cap is climbing at the stem.
+	var run := Vector3(tangent.x, 0.0, tangent.z)
+	if run.length_squared() < 1e-12:
+		run = Vector3(1, 0, 0)
+	run = run.normalized()
+	return Transform3D(_frame_basis(run, Vector3.UP, run.cross(Vector3.UP)), origin)
+
+
+## How far above the path the swept section reaches — the cap's top face on a
+## bulwark, the top rail on a railing. Zero when the profile cannot be resolved,
+## which puts the frame on the path line rather than guessing.
+func _section_top(edge: Dictionary, spec: Dictionary) -> float:
+	var profile: Array = []
+	if edge_primitive(edge) == EDGE_RAILING:
+		profile = StructureEdge.railing_profile(spec)
+	elif spec.has("profile") or (spec.has("width") and spec.has("thickness")):
+		profile = StructureEdge.resolve_profile(spec)
+	var top := 0.0
+	for rect_variant in profile:
+		var rect := rect_variant as Dictionary
+		var v := float(rect.get("v", 0.0))
+		## A `to_base` rect hangs DOWN from the path to `base_y`; its `h` is the
+		## path's own height and says nothing about how far above the line it
+		## reaches, which is `v` and only `v`.
+		if bool(rect.get("to_base", false)):
+			top = maxf(top, v)
+			continue
+		top = maxf(top, v + float(rect.get("h", 0.0)) * 0.5)
+	return top
+
+
+## An edge's path, however it was written: a resolved `PackedVector3Array` from
+## `sheer_bulwark_spec`, or the `[[x,y,z], …]` an authored edge carries in JSON.
+static func _path_points(spec: Dictionary) -> PackedVector3Array:
+	var raw: Variant = spec.get("path", [])
+	if raw is PackedVector3Array:
+		return raw as PackedVector3Array
+	var out := PackedVector3Array()
+	if raw is Array:
+		for entry in (raw as Array):
+			out.append(entry if entry is Vector3 else vec3_of(entry))
+	return out
 
 
 static func _frame_basis(x_axis: Vector3, y_axis: Vector3, z_axis: Vector3) -> Basis:
@@ -610,18 +969,28 @@ static func cell_center_plan(cell: Vector3i) -> Vector3:
 	return cell_base_plan(cell) + Vector3(0.0, WorldUnits.DECK_CELL_M * 0.5, 0.0)
 
 
+## The four drawn collections plus items, in the order every lookup walks them.
+## One list, so adding a primitive cannot be half-done: an edge that counted but
+## could not be found by id, or could be found but not removed, is exactly the
+## sort of gap that only shows up in an editor a wave later.
+func _collections() -> Array:
+	return [walls, decks, stairs, edges, items]
+
+
+const ENTITY_KINDS := ["wall", "deck", "stair", "edge", "item"]
+
+
 func entity_kind_by_id(id: int) -> String:
-	var kinds := ["wall", "deck", "stair", "item"]
-	var collections := [walls, decks, stairs, items]
+	var collections := _collections()
 	for index in collections.size():
 		for entity in (collections[index] as Array):
 			if int((entity as Dictionary).get("id", -1)) == id:
-				return str(kinds[index])
+				return str(ENTITY_KINDS[index])
 	return ""
 
 
 func entity_by_id(id: int) -> Dictionary:
-	for collection in [walls, decks, stairs, items]:
+	for collection in _collections():
 		for entity in collection:
 			if int((entity as Dictionary).get("id", -1)) == id:
 				return entity
@@ -629,7 +998,7 @@ func entity_by_id(id: int) -> Dictionary:
 
 
 func remove_entity(id: int) -> bool:
-	for collection in [walls, decks, stairs, items]:
+	for collection in _collections():
 		for index in (collection as Array).size():
 			if int(((collection as Array)[index] as Dictionary).get("id", -1)) == id:
 				(collection as Array).remove_at(index)
@@ -638,11 +1007,17 @@ func remove_entity(id: int) -> bool:
 
 
 func is_empty() -> bool:
-	return walls.is_empty() and decks.is_empty() and stairs.is_empty() and items.is_empty()
+	for collection in _collections():
+		if not (collection as Array).is_empty():
+			return false
+	return true
 
 
 func entity_count() -> int:
-	return walls.size() + decks.size() + stairs.size() + items.size()
+	var total := 0
+	for collection in _collections():
+		total += (collection as Array).size()
+	return total
 
 
 func to_dict() -> Dictionary:
@@ -650,10 +1025,12 @@ func to_dict() -> Dictionary:
 		"format": FORMAT,
 		"context": context,
 		"hull_id": hull_id,
+		"hull": hull.duplicate(true),
 		"palette": palette.duplicate(true),
 		"walls": walls.duplicate(true),
 		"decks": decks.duplicate(true),
 		"stairs": stairs.duplicate(true),
+		"edges": edges.duplicate(true),
 		## Items are re-normalised on the way out so an editor that pokes a raw
 		## dictionary cannot break the round-trip's fixed point.
 		"items": normalize_items(items),
@@ -664,14 +1041,16 @@ static func from_dict(data: Dictionary) -> StructurePlan:
 	var plan := StructurePlan.new()
 	plan.context = str(data.get("context", "vessel"))
 	plan.hull_id = str(data.get("hull_id", ""))
+	plan.hull = (data.get("hull", {}) as Dictionary).duplicate(true)
 	plan.palette = (data.get("palette", {}) as Dictionary).duplicate(true)
 	plan.walls = (data.get("walls", []) as Array).duplicate(true)
 	plan.decks = (data.get("decks", []) as Array).duplicate(true)
 	plan.stairs = (data.get("stairs", []) as Array).duplicate(true)
+	plan.edges = (data.get("edges", []) as Array).duplicate(true)
 	## Migrates the legacy cell form and pins the canonical shape.
 	plan.items = normalize_items(data.get("items", []) as Array)
 	var highest := 0
-	for collection in [plan.walls, plan.decks, plan.stairs, plan.items]:
+	for collection in [plan.walls, plan.decks, plan.stairs, plan.edges, plan.items]:
 		for entity in collection:
 			var entity_dict := entity as Dictionary
 			var id := int(entity_dict.get("id", 0))

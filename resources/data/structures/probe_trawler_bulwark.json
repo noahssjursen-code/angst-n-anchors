@@ -1,81 +1,3347 @@
 {
-	"format": "structure_plan_v1",
-	"context": "vessel",
-	"hull_id": "hull_28x10",
-	"_note": "Probe fixture. Tests the claim that a bulwark, a cap rail, a hatch coaming and a mast are expressible with TODAY's primitives and no new code. Uses only the two colours already in the palette, so it must not add a draw call. Bow is -Z, so plan z=0 is the bow; the 45 degree taper occupies z=0..5 on this hull, which is why the bulwark starts at z=5 and staircases at the shoulder instead of following the stem. DRESSED, 2026-08-10: the crude box mast (walls 10/11) is gone and the vessel now carries a rig built only from spar and wire \u2014 9 m tapered main mast with spreader, radome, masthead light and whips; a raked derrick boom with topping lift, fall and hook block; two pairs of trawl gallows drawn as inverted-L polylines with blocks and warps running back to a trawl winch; a short aft mast; exhaust pipe and cap; shrouds, forestay, triatic and backstay all at sag EXACTLY zero; a samson post at the stemhead for the forestay to be made fast to; sidelights on the wheelhouse corners with the white masthead light above them; three cylindrical fenders on lanyards over the port side; four mooring bitts. 52 items. COST, measured on RenderingServer's own counter over the four canonical views: draw calls UNCHANGED at 8, because every fitting is painted / steel / wood \u2014 the three material buckets this plan already had \u2014 and the baker keys buckets on material alone. Triangles 8903 -> 10847 (+22%%). Geometry is what a rig costs; draw calls are not. ROOM PURGE 2026-08-10: the room primitive was deleted and this fixture's deckhouse went with it. What remains is the bare hull rig — bulwark walls, deck plates, stairs and items. Fittings that stood on the deckhouse now stand in open air on purpose; the superstructure is rebuilt from the sloped-plate primitive in the next wave, not re-authored out of walls.",
-	"palette": {
-		"wall": [0.85, 0.86, 0.88],
-		"deck": [0.33, 0.31, 0.29]
-	},
-	"walls": [
-		{"id": 1, "start": [0.2, 0, 5], "axis": "z", "length": 21, "height": 1.1, "thickness": 0.2, "openings": []},
-		{"id": 2, "start": [9.6, 0, 5], "axis": "z", "length": 21, "height": 1.1, "thickness": 0.2, "openings": []},
-		{"id": 3, "start": [0.2, 0, 25.8], "axis": "x", "length": 9.6, "height": 1.1, "thickness": 0.2, "openings": []}
-	],
-	"decks": [
-		{"id": 20, "origin": [0.1, 1.1, 5], "size": [0.5, 21], "thickness": 0.09, "openings": []},
-		{"id": 21, "origin": [9.5, 1.1, 5], "size": [0.5, 21], "thickness": 0.09, "openings": []},
-		{"id": 22, "origin": [0.1, 1.1, 25.7], "size": [9.8, 0.5], "thickness": 0.09, "openings": []},
-
-		{"id": 30, "origin": [2.1, 0.65, 9.1], "size": [1.9, 6.8], "thickness": 0.12, "openings": []},
-		{"id": 31, "origin": [4.05, 0.65, 9.1], "size": [1.9, 6.8], "thickness": 0.12, "openings": []},
-		{"id": 32, "origin": [6.0, 0.65, 9.1], "size": [1.9, 6.8], "thickness": 0.12, "openings": []},
-
-		{"id": 40, "origin": [2.2, 2.7, 16.6], "size": [5.6, 6.8], "thickness": 0.12, "openings": []}
-	],
-	"stairs": [],
-	"items": [
-		{"id": 200, "item_id": "spar", "at": [5.0, 0.0, 16.4], "props": {"__is": "mast - tapered, 9.0 m above its foot", "points": [[0.0, 0.0, 0.0], [0.0, 9.0, 0.0]], "radius": 0.14, "taper": 0.5, "sides": 8, "material": "steel", "color": [0.84, 0.85, 0.87]}},
-		{"id": 201, "item_id": "spar", "at": [5.0, 6.48, 16.4], "props": {"__is": "mast spreader - carries the sidelights and the floodlights", "points": [[-1.7, 0.0, 0.0], [1.7, 0.0, 0.0]], "radius": 0.063, "sides": 6, "material": "steel", "color": [0.84, 0.85, 0.87]}},
-		{"id": 202, "item_id": "spar", "at": [5.0, 7.74, 16.4], "props": {"__is": "radome", "points": [[0.0, 0.0, 0.0], [0.0, 0.345, 0.0]], "radius": 0.3, "sides": 12, "material": "painted", "color": [0.94, 0.94, 0.92]}},
-		{"id": 203, "item_id": "spar", "at": [5.0, 9.0, 16.4], "props": {"__is": "masthead light - white, above the sidelights", "points": [[0.0, 0.0, 0.0], [0.0, 0.26, 0.0]], "radius": 0.098, "sides": 8, "material": "painted", "color": [0.94, 0.94, 0.92]}},
-		{"id": 204, "item_id": "spar", "at": [3.98, 6.48, 16.4], "props": {"__is": "whip antenna", "points": [[0.0, 0.0, 0.0], [0.0, 1.9, 0.0]], "radius": 0.014, "sides": 4, "material": "steel", "color": [0.16, 0.17, 0.19]}},
-		{"id": 205, "item_id": "spar", "at": [6.02, 6.48, 16.4], "props": {"__is": "whip antenna", "points": [[0.0, 0.0, 0.0], [0.0, 1.9, 0.0]], "radius": 0.014, "sides": 4, "material": "steel", "color": [0.16, 0.17, 0.19]}},
-		{"id": 206, "item_id": "spar", "at": [3.64, 6.34, 16.4], "props": {"__is": "deck floodlight, aimed forward and down", "points": [[0.0, 0.0, 0.0], [0.0, -0.16, -0.28]], "radius": 0.1, "sides": 6, "material": "painted", "color": [0.94, 0.94, 0.92]}},
-		{"id": 207, "item_id": "spar", "at": [6.36, 6.34, 16.4], "props": {"__is": "deck floodlight, aimed forward and down", "points": [[0.0, 0.0, 0.0], [0.0, -0.16, -0.28]], "radius": 0.1, "sides": 6, "material": "painted", "color": [0.94, 0.94, 0.92]}},
-		{"id": 208, "item_id": "spar", "at": [5.0, 2.6, 16.2], "props": {"__is": "derrick boom - raked forward over the working deck", "points": [[0.0, 0.0, 0.0], [-1.4, 2.0, -6.8]], "radius": 0.1, "taper": 0.7, "sides": 8, "material": "steel", "color": [0.84, 0.85, 0.87]}},
-		{"id": 209, "item_id": "wire", "at": [5.0, 8.3, 16.4], "props": {"__is": "topping lift - running rigging under load, barely slack", "points": [[0.0, 0.0, 0.0], [-1.4, -3.7, -7.0]], "radius": 0.016, "sag": 0.06, "span_steps": 6, "sides": 4, "material": "steel", "color": [0.16, 0.17, 0.19]}},
-		{"id": 210, "item_id": "wire", "at": [3.6, 4.55, 9.4], "props": {"__is": "cargo fall off the boom head", "points": [[0.0, 0.0, 0.0], [0.0, -4.0, 0.3]], "radius": 0.014, "sag": 0.0, "sides": 4, "material": "steel", "color": [0.16, 0.17, 0.19]}},
-		{"id": 211, "item_id": "spar", "at": [3.6, 0.45, 9.7], "props": {"__is": "hook block", "points": [[0.0, 0.0, 0.0], [0.0, 0.42, 0.0]], "radius": 0.09, "sides": 6, "material": "steel", "color": [0.16, 0.17, 0.19]}},
-		{"id": 212, "item_id": "spar", "at": [0.55, 0.0, 8.6], "props": {"__is": "trawl gallows, port - leg and outboard head", "points": [[0.0, 0.0, 0.0], [0.0, 3.5, 0.0], [-0.5, 3.5, 0.0]], "radius": 0.1, "sides": 8, "material": "painted", "color": [0.72, 0.31, 0.23]}},
-		{"id": 213, "item_id": "spar", "at": [9.35, 0.0, 8.6], "props": {"__is": "trawl gallows, starboard", "points": [[0.0, 0.0, 0.0], [0.0, 3.5, 0.0], [0.5, 3.5, 0.0]], "radius": 0.1, "sides": 8, "material": "painted", "color": [0.72, 0.31, 0.23]}},
-		{"id": 214, "item_id": "spar", "at": [0.05, 3.42, 8.6], "props": {"__is": "gallows block, port", "points": [[0.0, 0.0, 0.0], [0.0, -0.38, 0.0]], "radius": 0.08, "sides": 6, "material": "steel", "color": [0.16, 0.17, 0.19]}},
-		{"id": 215, "item_id": "spar", "at": [9.85, 3.42, 8.6], "props": {"__is": "gallows block, starboard", "points": [[0.0, 0.0, 0.0], [0.0, -0.38, 0.0]], "radius": 0.08, "sides": 6, "material": "steel", "color": [0.16, 0.17, 0.19]}},
-		{"id": 216, "item_id": "spar", "at": [0.55, 0.0, 14.2], "props": {"__is": "trawl gallows, port - leg and outboard head", "points": [[0.0, 0.0, 0.0], [0.0, 3.5, 0.0], [-0.5, 3.5, 0.0]], "radius": 0.1, "sides": 8, "material": "painted", "color": [0.72, 0.31, 0.23]}},
-		{"id": 217, "item_id": "spar", "at": [9.35, 0.0, 14.2], "props": {"__is": "trawl gallows, starboard", "points": [[0.0, 0.0, 0.0], [0.0, 3.5, 0.0], [0.5, 3.5, 0.0]], "radius": 0.1, "sides": 8, "material": "painted", "color": [0.72, 0.31, 0.23]}},
-		{"id": 218, "item_id": "spar", "at": [0.05, 3.42, 14.2], "props": {"__is": "gallows block, port", "points": [[0.0, 0.0, 0.0], [0.0, -0.38, 0.0]], "radius": 0.08, "sides": 6, "material": "steel", "color": [0.16, 0.17, 0.19]}},
-		{"id": 219, "item_id": "spar", "at": [9.85, 3.42, 14.2], "props": {"__is": "gallows block, starboard", "points": [[0.0, 0.0, 0.0], [0.0, -0.38, 0.0]], "radius": 0.08, "sides": 6, "material": "steel", "color": [0.16, 0.17, 0.19]}},
-		{"id": 220, "item_id": "wire", "at": [0.05, 3.0, 8.6], "props": {"__is": "trawl warp, port - block to winch", "points": [[0.0, 0.0, 0.0], [3.35, -2.35, -1.6]], "radius": 0.015, "sag": 0.14, "span_steps": 8, "sides": 4, "material": "steel", "color": [0.16, 0.17, 0.19]}},
-		{"id": 221, "item_id": "wire", "at": [9.85, 3.0, 8.6], "props": {"__is": "trawl warp, starboard - block to winch", "points": [[0.0, 0.0, 0.0], [-3.25, -2.35, -1.6]], "radius": 0.015, "sag": 0.14, "span_steps": 8, "sides": 4, "material": "steel", "color": [0.16, 0.17, 0.19]}},
-		{"id": 222, "item_id": "wire", "at": [0.05, 3.0, 14.2], "props": {"__is": "trawl warp, port - block to winch", "points": [[0.0, 0.0, 0.0], [3.35, -2.35, -7.2]], "radius": 0.015, "sag": 0.14, "span_steps": 8, "sides": 4, "material": "steel", "color": [0.16, 0.17, 0.19]}},
-		{"id": 223, "item_id": "wire", "at": [9.85, 3.0, 14.2], "props": {"__is": "trawl warp, starboard - block to winch", "points": [[0.0, 0.0, 0.0], [-3.25, -2.35, -7.2]], "radius": 0.015, "sag": 0.14, "span_steps": 8, "sides": 4, "material": "steel", "color": [0.16, 0.17, 0.19]}},
-		{"id": 224, "item_id": "spar", "at": [5.0, 0.62, 7.0], "props": {"__is": "trawl winch drum", "points": [[-1.5, 0.0, 0.0], [1.5, 0.0, 0.0]], "radius": 0.42, "sides": 12, "material": "steel", "color": [0.72, 0.31, 0.23]}},
-		{"id": 225, "item_id": "spar", "at": [3.4, 0.62, 7.0], "props": {"__is": "winch end flange", "points": [[-0.13, 0.0, 0.0], [0.13, 0.0, 0.0]], "radius": 0.6, "sides": 12, "material": "steel", "color": [0.16, 0.17, 0.19]}},
-		{"id": 226, "item_id": "spar", "at": [3.4, 0.0, 7.0], "props": {"__is": "winch pedestal", "points": [[0.0, 0.0, 0.0], [0.0, 0.62, 0.0]], "radius": 0.22, "sides": 8, "material": "painted", "color": [0.84, 0.85, 0.87]}},
-		{"id": 227, "item_id": "spar", "at": [6.6, 0.62, 7.0], "props": {"__is": "winch end flange", "points": [[-0.13, 0.0, 0.0], [0.13, 0.0, 0.0]], "radius": 0.6, "sides": 12, "material": "steel", "color": [0.16, 0.17, 0.19]}},
-		{"id": 228, "item_id": "spar", "at": [6.6, 0.0, 7.0], "props": {"__is": "winch pedestal", "points": [[0.0, 0.0, 0.0], [0.0, 0.62, 0.0]], "radius": 0.22, "sides": 8, "material": "painted", "color": [0.84, 0.85, 0.87]}},
-		{"id": 229, "item_id": "spar", "at": [7.05, 2.7, 18.6], "props": {"__is": "exhaust pipe", "points": [[0.0, 0.0, 0.0], [0.0, 2.6, 0.0]], "radius": 0.12, "sides": 8, "material": "painted", "color": [0.24, 0.24, 0.26]}},
-		{"id": 230, "item_id": "spar", "at": [7.05, 5.24, 18.6], "props": {"__is": "exhaust rain cap", "points": [[0.0, 0.0, 0.0], [0.0, 0.14, 0.0]], "radius": 0.2, "sides": 8, "material": "painted", "color": [0.12, 0.12, 0.13]}},
-		{"id": 231, "item_id": "spar", "at": [5.0, 2.7, 22.6], "props": {"__is": "aft mast", "points": [[0.0, 0.0, 0.0], [0.0, 4.6, 0.0]], "radius": 0.09, "taper": 0.6, "sides": 8, "material": "steel", "color": [0.84, 0.85, 0.87]}},
-		{"id": 232, "item_id": "spar", "at": [5.0, 5.6, 22.6], "props": {"__is": "aft mast crosstree", "points": [[-1.1, 0.0, 0.0], [1.1, 0.0, 0.0]], "radius": 0.045, "sides": 6, "material": "steel", "color": [0.84, 0.85, 0.87]}},
-		{"id": 233, "item_id": "spar", "at": [5.0, 7.3, 22.6], "props": {"__is": "all-round white light on the aft mast", "points": [[0.0, 0.0, 0.0], [0.0, 0.24, 0.0]], "radius": 0.08, "sides": 8, "material": "painted", "color": [0.94, 0.94, 0.92]}},
-		{"id": 234, "item_id": "spar", "at": [2.42, 2.3, 17.4], "props": {"__is": "sidelight - port, red", "points": [[0.0, 0.0, 0.0], [0.0, 0.3, 0.0]], "radius": 0.1, "sides": 8, "material": "painted", "color": [0.86, 0.13, 0.11]}},
-		{"id": 235, "item_id": "spar", "at": [7.58, 2.3, 17.4], "props": {"__is": "sidelight - starboard, green", "points": [[0.0, 0.0, 0.0], [0.0, 0.3, 0.0]], "radius": 0.1, "sides": 8, "material": "painted", "color": [0.1, 0.6, 0.3]}},
-		{"id": 236, "item_id": "wire", "at": [5.0, 8.4, 16.4], "props": {"__is": "port shroud", "points": [[0.0, 0.0, 0.0], [-4.55, -7.3, -2.6]], "radius": 0.016, "sag": 0.0, "sides": 4, "material": "steel", "color": [0.16, 0.17, 0.19]}},
-		{"id": 237, "item_id": "wire", "at": [5.0, 8.4, 16.4], "props": {"__is": "starboard shroud", "points": [[0.0, 0.0, 0.0], [4.65, -7.3, -2.6]], "radius": 0.016, "sag": 0.0, "sides": 4, "material": "steel", "color": [0.16, 0.17, 0.19]}},
-		{"id": 238, "item_id": "spar", "at": [5.0, 0.0, 5.6], "props": {"__is": "samson post at the stemhead", "points": [[0.0, 0.0, 0.0], [0.0, 1.35, 0.0]], "radius": 0.15, "sides": 8, "material": "painted", "color": [0.94, 0.94, 0.92]}},
-		{"id": 239, "item_id": "wire", "at": [5.0, 8.4, 16.4], "props": {"__is": "forestay", "points": [[0.0, 0.0, 0.0], [0.0, -7.15, -10.8]], "radius": 0.016, "sag": 0.0, "sides": 4, "material": "steel", "color": [0.16, 0.17, 0.19]}},
-		{"id": 240, "item_id": "wire", "at": [5.0, 8.4, 16.4], "props": {"__is": "triatic stay - main masthead to aft masthead", "points": [[0.0, 0.0, 0.0], [0.0, -1.1, 6.2]], "radius": 0.014, "sag": 0.0, "sides": 4, "material": "steel", "color": [0.16, 0.17, 0.19]}},
-		{"id": 241, "item_id": "wire", "at": [5.0, 7.3, 22.6], "props": {"__is": "backstay - aft masthead to the transom cap", "points": [[0.0, 0.0, 0.0], [0.0, -6.24, 3.15]], "radius": 0.014, "sag": 0.0, "sides": 4, "material": "steel", "color": [0.16, 0.17, 0.19]}},
-		{"id": 242, "item_id": "spar", "at": [-0.28, -0.3, 10.4], "props": {"__is": "fender - cylindrical, hung vertically outboard", "points": [[0.0, -0.5, 0.0], [0.0, 0.5, 0.0]], "radius": 0.24, "sides": 10, "solid": false, "material": "wood", "color": [0.14, 0.14, 0.15]}},
-		{"id": 243, "item_id": "wire", "at": [0.35, 1.15, 10.4], "props": {"__is": "fender lanyard", "points": [[0.0, 0.0, 0.0], [-0.63, -0.95, 0.0]], "radius": 0.013, "sag": 0.02, "sides": 4, "material": "wood", "color": [0.6, 0.53, 0.38]}},
-		{"id": 244, "item_id": "spar", "at": [-0.28, -0.3, 13.2], "props": {"__is": "fender - cylindrical, hung vertically outboard", "points": [[0.0, -0.5, 0.0], [0.0, 0.5, 0.0]], "radius": 0.24, "sides": 10, "solid": false, "material": "wood", "color": [0.14, 0.14, 0.15]}},
-		{"id": 245, "item_id": "wire", "at": [0.35, 1.15, 13.2], "props": {"__is": "fender lanyard", "points": [[0.0, 0.0, 0.0], [-0.63, -0.95, 0.0]], "radius": 0.013, "sag": 0.02, "sides": 4, "material": "wood", "color": [0.6, 0.53, 0.38]}},
-		{"id": 246, "item_id": "spar", "at": [-0.28, -0.3, 16.0], "props": {"__is": "fender - cylindrical, hung vertically outboard", "points": [[0.0, -0.5, 0.0], [0.0, 0.5, 0.0]], "radius": 0.24, "sides": 10, "solid": false, "material": "wood", "color": [0.14, 0.14, 0.15]}},
-		{"id": 247, "item_id": "wire", "at": [0.35, 1.15, 16.0], "props": {"__is": "fender lanyard", "points": [[0.0, 0.0, 0.0], [-0.63, -0.95, 0.0]], "radius": 0.013, "sag": 0.02, "sides": 4, "material": "wood", "color": [0.6, 0.53, 0.38]}},
-		{"id": 248, "item_id": "spar", "at": [1.0, 0.0, 6.4], "props": {"__is": "mooring bitt", "points": [[0.0, 0.0, 0.0], [0.0, 0.6, 0.0]], "radius": 0.11, "sides": 8, "material": "painted", "color": [0.94, 0.94, 0.92]}},
-		{"id": 249, "item_id": "spar", "at": [9.0, 0.0, 6.4], "props": {"__is": "mooring bitt", "points": [[0.0, 0.0, 0.0], [0.0, 0.6, 0.0]], "radius": 0.11, "sides": 8, "material": "painted", "color": [0.94, 0.94, 0.92]}},
-		{"id": 250, "item_id": "spar", "at": [1.0, 0.0, 24.9], "props": {"__is": "mooring bitt", "points": [[0.0, 0.0, 0.0], [0.0, 0.6, 0.0]], "radius": 0.11, "sides": 8, "material": "painted", "color": [0.94, 0.94, 0.92]}},
-		{"id": 251, "item_id": "spar", "at": [9.0, 0.0, 24.9], "props": {"__is": "mooring bitt", "points": [[0.0, 0.0, 0.0], [0.0, 0.6, 0.0]], "radius": 0.11, "sides": 8, "material": "painted", "color": [0.94, 0.94, 0.92]}}
-	]
+ "format": "structure_plan_v1",
+ "context": "vessel",
+ "hull_id": "hull_28x10",
+ "_note": "REBUILT 2026-08-10, after the room purge took the deckhouse. Three things changed and they are all silhouette:\n\n1. THE BULWARK IS NOW ONE `edges[]` SHEER BAND, not three walls plus three cap-rail decks. The cap carries the curve, which is where sheer has to live: the loft may not draw it (deck_y is the floor of the deck plate, the DeckGrid, the walk slab and the buoyancy lever - see hull_stations.gd). The PLAN line is the hull's own deck edge, measured off StructureEdge.deck_half_beam_at: half-beam 1.12*z to z=4, 4.48+0.13*(z-4) to z=8, 5.0 aft of that, at every height above the deck.\n\n2. THE SHEER IS AUTHORED, AND THAT IS DELIBERATE. `sheer_bulwark_spec` derives it from the hull - freeboard x fine_entry's bow_keel_rise - and that gives 0.896 m forward, 0.28 m aft, with the low point exactly AMIDSHIPS because sheer_rise_at is symmetric in |z|. On a 28 m hull that reads as polite. A working boat's sheer is asymmetric: the low point sits about two thirds aft and the stem lifts several times what the transom does. This path puts the low point at z=18.5 (66% aft) with 1.60 m of rise forward and 0.33 m aft - a ratio of 4.8:1 against the derived 3.2:1, and 1.6x the Load Line Convention's standard forward sheer for this length (50*(L/3+10) mm = 0.966 m). The bulwark is 1.05 m at the low point, which is the fall-barrier dimension the 1.8 m figure sets and is NOT authored down; it is 2.65 m at the stem, which is what keeps a foredeck dry. `sheer_bulwark_spec` has no knob that scales the derived curve, so an authored path is the only way to say this from data. If one is added, this path should go back to `from_hull`.\n\n3. COLOUR DOES VALUE WORK, FOR FREE. The bucket key is material alone, so every colour here rides in the vertex stream: dark navy plating that merges into the hull's own topsides, an ochre sheer stripe standing 24 mm proud as the deliberate paint boundary, a bone cap rail so the curve itself is the lightest line on the hull, a cream deckhouse against a dark grey boat deck, and near-black glass bands. Squinted, that is four values instead of one.\n\nTHE DECKHOUSE IS RAKED PLATES, NEVER A BOX. A lower tier tapered in plan, tumbled home, with a front that overhangs 0.55 m forward; a wheelhouse SET BACK on all four sides with a 0.85 m forward-raked windscreen, a reverse-raked aft bulkhead and a roof sloping 0.30 m down aft; four tapering funnel plates raked aft under a black cap. The wheelhouse's windows are BANDS - a dark plate between a coaming and a header - because at capture distance a dark value reads as glass and a punched hole reads as a hole; the lower tier gets real openings and their proud casing instead, so both routes are exercised.\n\nTHE 52-ITEM RIG IS KEPT AND RE-BELAYED. The aft signal mast and the sidelights stood on the old deckhouse and now stand on the wheelhouse roof and its wings; the exhaust comes out of the funnel top instead of out of the air; the derrick heels to the mast at boat-deck height; the shrouds and the three fender lanyards land on the SWEPT cap, so their ends move with the curve; the forestay runs to the stemhead cap rather than to a samson post the 2.65 m bow bulwark would have hidden. A line to nowhere is the one thing a rig may not have.\n\nBOW OPEN, ON PURPOSE: the sheer band runs from z=5 aft, so the fore end of the working deck has no barrier across it. Its pair, probe_trawler_bow_bulwark, closes the loop round the stem and is otherwise this file. Keeping the two one flag apart is what makes the bow bulwark's fall-protection claim mean something.",
+ "palette": {
+  "wall": [
+   0.85,
+   0.86,
+   0.88
+  ],
+  "deck": [
+   0.33,
+   0.31,
+   0.29
+  ]
+ },
+ "hull": {
+  "_note": "hull_28x10 as FishingTrawlerSmall builds it. Restated so the capture rig can hold the derived stations against the hull the game actually spawns.",
+  "loa_m": 28.0,
+  "beam_m": 10.0,
+  "depth_m": 5.6,
+  "draft_m": 2.8,
+  "displacement_t": 256.0,
+  "form": "fine_entry",
+  "bow_taper_fraction": 0.17857142857142858,
+  "station_count": 8
+ },
+ "walls": [],
+ "decks": [
+  {
+   "id": 30,
+   "origin": [
+    2.1,
+    0.65,
+    9.1
+   ],
+   "size": [
+    1.9,
+    6.8
+   ],
+   "thickness": 0.12,
+   "color": [
+    0.3,
+    0.33,
+    0.31
+   ],
+   "openings": []
+  },
+  {
+   "id": 31,
+   "origin": [
+    4.05,
+    0.65,
+    9.1
+   ],
+   "size": [
+    1.9,
+    6.8
+   ],
+   "thickness": 0.12,
+   "color": [
+    0.3,
+    0.33,
+    0.31
+   ],
+   "openings": []
+  },
+  {
+   "id": 32,
+   "origin": [
+    6.0,
+    0.65,
+    9.1
+   ],
+   "size": [
+    1.9,
+    6.8
+   ],
+   "thickness": 0.12,
+   "color": [
+    0.3,
+    0.33,
+    0.31
+   ],
+   "openings": []
+  }
+ ],
+ "stairs": [],
+ "items": [
+  {
+   "id": 100,
+   "item_id": "plate",
+   "at": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "props": {
+    "__is": "lower tier, raked front \u2014 the top overhangs 0.55 m forward",
+    "primitive": "plate",
+    "corners": [
+     [
+      7.65,
+      0.0,
+      17.6
+     ],
+     [
+      2.35,
+      0.0,
+      17.6
+     ],
+     [
+      2.2,
+      2.6,
+      17.05
+     ],
+     [
+      7.8,
+      2.6,
+      17.05
+     ]
+    ],
+    "thickness": 0.1,
+    "color": [
+     0.89,
+     0.88,
+     0.83
+    ],
+    "material": "painted",
+    "openings": [
+     {
+      "type": "window",
+      "offset": 1.55,
+      "width": 0.85,
+      "sill": 1.45,
+      "height": 0.62
+     },
+     {
+      "type": "window",
+      "offset": 3.05,
+      "width": 0.85,
+      "sill": 1.45,
+      "height": 0.62
+     }
+    ]
+   }
+  },
+  {
+   "id": 101,
+   "item_id": "plate",
+   "at": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "props": {
+    "__is": "lower tier, port side \u2014 tapered in plan and tumbled home",
+    "primitive": "plate",
+    "corners": [
+     [
+      2.35,
+      0.0,
+      17.6
+     ],
+     [
+      2.05,
+      0.0,
+      24.9
+     ],
+     [
+      1.92,
+      2.6,
+      25.15
+     ],
+     [
+      2.2,
+      2.6,
+      17.05
+     ]
+    ],
+    "thickness": 0.1,
+    "color": [
+     0.89,
+     0.88,
+     0.83
+    ],
+    "material": "painted",
+    "openings": [
+     {
+      "type": "window",
+      "offset": 1.25,
+      "width": 0.75,
+      "sill": 1.35,
+      "height": 0.65
+     },
+     {
+      "type": "window",
+      "offset": 2.65,
+      "width": 0.75,
+      "sill": 1.35,
+      "height": 0.65
+     },
+     {
+      "type": "window",
+      "offset": 4.05,
+      "width": 0.75,
+      "sill": 1.35,
+      "height": 0.65
+     },
+     {
+      "type": "door",
+      "offset": 5.95,
+      "width": 0.85,
+      "sill": 0.0,
+      "height": 1.95
+     }
+    ]
+   }
+  },
+  {
+   "id": 102,
+   "item_id": "plate",
+   "at": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "props": {
+    "__is": "lower tier, starboard side",
+    "primitive": "plate",
+    "corners": [
+     [
+      7.95,
+      0.0,
+      24.9
+     ],
+     [
+      7.65,
+      0.0,
+      17.6
+     ],
+     [
+      7.8,
+      2.6,
+      17.05
+     ],
+     [
+      8.08,
+      2.6,
+      25.15
+     ]
+    ],
+    "thickness": 0.1,
+    "color": [
+     0.89,
+     0.88,
+     0.83
+    ],
+    "material": "painted",
+    "openings": [
+     {
+      "type": "door",
+      "offset": 0.95,
+      "width": 0.85,
+      "sill": 0.0,
+      "height": 1.95
+     },
+     {
+      "type": "window",
+      "offset": 2.85,
+      "width": 0.75,
+      "sill": 1.35,
+      "height": 0.65
+     },
+     {
+      "type": "window",
+      "offset": 4.25,
+      "width": 0.75,
+      "sill": 1.35,
+      "height": 0.65
+     },
+     {
+      "type": "window",
+      "offset": 5.65,
+      "width": 0.75,
+      "sill": 1.35,
+      "height": 0.65
+     }
+    ]
+   }
+  },
+  {
+   "id": 103,
+   "item_id": "plate",
+   "at": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "props": {
+    "__is": "lower tier, aft bulkhead \u2014 the working deck door",
+    "primitive": "plate",
+    "corners": [
+     [
+      2.05,
+      0.0,
+      24.9
+     ],
+     [
+      7.95,
+      0.0,
+      24.9
+     ],
+     [
+      8.08,
+      2.6,
+      25.15
+     ],
+     [
+      1.92,
+      2.6,
+      25.15
+     ]
+    ],
+    "thickness": 0.1,
+    "color": [
+     0.89,
+     0.88,
+     0.83
+    ],
+    "material": "painted",
+    "openings": [
+     {
+      "type": "door",
+      "offset": 2.45,
+      "width": 1.15,
+      "sill": 0.0,
+      "height": 2.0
+     }
+    ]
+   }
+  },
+  {
+   "id": 104,
+   "item_id": "plate",
+   "at": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "props": {
+    "__is": "boat deck \u2014 the lower tier's roof and the wheelhouse's floor",
+    "primitive": "plate",
+    "corners": [
+     [
+      2.06,
+      2.6,
+      16.91
+     ],
+     [
+      1.78,
+      2.6,
+      25.29
+     ],
+     [
+      8.22,
+      2.6,
+      25.29
+     ],
+     [
+      7.94,
+      2.6,
+      16.91
+     ]
+    ],
+    "thickness": 0.13,
+    "color": [
+     0.33,
+     0.35,
+     0.37
+    ],
+    "material": "painted"
+   }
+  },
+  {
+   "id": 105,
+   "item_id": "plate",
+   "at": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "props": {
+    "__is": "wheelhouse, forward \u2014 RAKED WINDSCREEN, top 0.85 m forward of its foot, coaming",
+    "primitive": "plate",
+    "corners": [
+     [
+      7.25,
+      2.6,
+      19.0
+     ],
+     [
+      2.75,
+      2.6,
+      19.0
+     ],
+     [
+      2.7058,
+      3.433,
+      18.711
+     ],
+     [
+      7.2942,
+      3.433,
+      18.711
+     ]
+    ],
+    "thickness": 0.09,
+    "color": [
+     0.89,
+     0.88,
+     0.83
+    ],
+    "material": "painted"
+   }
+  },
+  {
+   "id": 106,
+   "item_id": "plate",
+   "at": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "props": {
+    "__is": "wheelhouse, forward \u2014 RAKED WINDSCREEN, top 0.85 m forward of its foot, GLASS BAND",
+    "primitive": "plate",
+    "corners": [
+     [
+      7.2942,
+      3.433,
+      18.711
+     ],
+     [
+      2.7058,
+      3.433,
+      18.711
+     ],
+     [
+      2.6512,
+      4.462,
+      18.354
+     ],
+     [
+      7.3488,
+      4.462,
+      18.354
+     ]
+    ],
+    "thickness": 0.07,
+    "color": [
+     0.09,
+     0.11,
+     0.14
+    ],
+    "material": "painted"
+   }
+  },
+  {
+   "id": 107,
+   "item_id": "plate",
+   "at": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "props": {
+    "__is": "wheelhouse, forward \u2014 RAKED WINDSCREEN, top 0.85 m forward of its foot, header",
+    "primitive": "plate",
+    "corners": [
+     [
+      7.3488,
+      4.462,
+      18.354
+     ],
+     [
+      2.6512,
+      4.462,
+      18.354
+     ],
+     [
+      2.62,
+      5.05,
+      18.15
+     ],
+     [
+      7.38,
+      5.05,
+      18.15
+     ]
+    ],
+    "thickness": 0.09,
+    "color": [
+     0.89,
+     0.88,
+     0.83
+    ],
+    "material": "painted"
+   }
+  },
+  {
+   "id": 108,
+   "item_id": "plate",
+   "at": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "props": {
+    "__is": "wheelhouse, port side, coaming",
+    "primitive": "plate",
+    "corners": [
+     [
+      2.75,
+      2.6,
+      19.0
+     ],
+     [
+      2.6,
+      2.6,
+      23.4
+     ],
+     [
+      2.566,
+      3.331,
+      23.502
+     ],
+     [
+      2.7058,
+      3.433,
+      18.711
+     ]
+    ],
+    "thickness": 0.09,
+    "color": [
+     0.89,
+     0.88,
+     0.83
+    ],
+    "material": "painted"
+   }
+  },
+  {
+   "id": 109,
+   "item_id": "plate",
+   "at": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "props": {
+    "__is": "wheelhouse, port side, GLASS BAND",
+    "primitive": "plate",
+    "corners": [
+     [
+      2.7058,
+      3.433,
+      18.711
+     ],
+     [
+      2.566,
+      3.331,
+      23.502
+     ],
+     [
+      2.524,
+      4.234,
+      23.628
+     ],
+     [
+      2.6512,
+      4.462,
+      18.354
+     ]
+    ],
+    "thickness": 0.07,
+    "color": [
+     0.09,
+     0.11,
+     0.14
+    ],
+    "material": "painted"
+   }
+  },
+  {
+   "id": 110,
+   "item_id": "plate",
+   "at": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "props": {
+    "__is": "wheelhouse, port side, header",
+    "primitive": "plate",
+    "corners": [
+     [
+      2.6512,
+      4.462,
+      18.354
+     ],
+     [
+      2.524,
+      4.234,
+      23.628
+     ],
+     [
+      2.5,
+      4.75,
+      23.7
+     ],
+     [
+      2.62,
+      5.05,
+      18.15
+     ]
+    ],
+    "thickness": 0.09,
+    "color": [
+     0.89,
+     0.88,
+     0.83
+    ],
+    "material": "painted"
+   }
+  },
+  {
+   "id": 111,
+   "item_id": "plate",
+   "at": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "props": {
+    "__is": "wheelhouse, starboard side, coaming",
+    "primitive": "plate",
+    "corners": [
+     [
+      7.4,
+      2.6,
+      23.4
+     ],
+     [
+      7.25,
+      2.6,
+      19.0
+     ],
+     [
+      7.2942,
+      3.433,
+      18.711
+     ],
+     [
+      7.434,
+      3.331,
+      23.502
+     ]
+    ],
+    "thickness": 0.09,
+    "color": [
+     0.89,
+     0.88,
+     0.83
+    ],
+    "material": "painted"
+   }
+  },
+  {
+   "id": 112,
+   "item_id": "plate",
+   "at": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "props": {
+    "__is": "wheelhouse, starboard side, GLASS BAND",
+    "primitive": "plate",
+    "corners": [
+     [
+      7.434,
+      3.331,
+      23.502
+     ],
+     [
+      7.2942,
+      3.433,
+      18.711
+     ],
+     [
+      7.3488,
+      4.462,
+      18.354
+     ],
+     [
+      7.476,
+      4.234,
+      23.628
+     ]
+    ],
+    "thickness": 0.07,
+    "color": [
+     0.09,
+     0.11,
+     0.14
+    ],
+    "material": "painted"
+   }
+  },
+  {
+   "id": 113,
+   "item_id": "plate",
+   "at": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "props": {
+    "__is": "wheelhouse, starboard side, header",
+    "primitive": "plate",
+    "corners": [
+     [
+      7.476,
+      4.234,
+      23.628
+     ],
+     [
+      7.3488,
+      4.462,
+      18.354
+     ],
+     [
+      7.38,
+      5.05,
+      18.15
+     ],
+     [
+      7.5,
+      4.75,
+      23.7
+     ]
+    ],
+    "thickness": 0.09,
+    "color": [
+     0.89,
+     0.88,
+     0.83
+    ],
+    "material": "painted"
+   }
+  },
+  {
+   "id": 114,
+   "item_id": "plate",
+   "at": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "props": {
+    "__is": "wheelhouse, aft bulkhead \u2014 reverse rake, coaming",
+    "primitive": "plate",
+    "corners": [
+     [
+      2.6,
+      2.6,
+      23.4
+     ],
+     [
+      7.4,
+      2.6,
+      23.4
+     ],
+     [
+      7.434,
+      3.331,
+      23.502
+     ],
+     [
+      2.566,
+      3.331,
+      23.502
+     ]
+    ],
+    "thickness": 0.09,
+    "color": [
+     0.89,
+     0.88,
+     0.83
+    ],
+    "material": "painted"
+   }
+  },
+  {
+   "id": 115,
+   "item_id": "plate",
+   "at": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "props": {
+    "__is": "wheelhouse, aft bulkhead \u2014 reverse rake, GLASS BAND",
+    "primitive": "plate",
+    "corners": [
+     [
+      2.566,
+      3.331,
+      23.502
+     ],
+     [
+      7.434,
+      3.331,
+      23.502
+     ],
+     [
+      7.476,
+      4.234,
+      23.628
+     ],
+     [
+      2.524,
+      4.234,
+      23.628
+     ]
+    ],
+    "thickness": 0.07,
+    "color": [
+     0.09,
+     0.11,
+     0.14
+    ],
+    "material": "painted"
+   }
+  },
+  {
+   "id": 116,
+   "item_id": "plate",
+   "at": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "props": {
+    "__is": "wheelhouse, aft bulkhead \u2014 reverse rake, header",
+    "primitive": "plate",
+    "corners": [
+     [
+      2.524,
+      4.234,
+      23.628
+     ],
+     [
+      7.476,
+      4.234,
+      23.628
+     ],
+     [
+      7.5,
+      4.75,
+      23.7
+     ],
+     [
+      2.5,
+      4.75,
+      23.7
+     ]
+    ],
+    "thickness": 0.09,
+    "color": [
+     0.89,
+     0.88,
+     0.83
+    ],
+    "material": "painted"
+   }
+  },
+  {
+   "id": 117,
+   "item_id": "plate",
+   "at": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "props": {
+    "__is": "wheelhouse roof \u2014 sloped 0.30 m down aft, eaves all round",
+    "primitive": "plate",
+    "corners": [
+     [
+      2.46,
+      5.05,
+      17.99
+     ],
+     [
+      2.34,
+      4.75,
+      23.86
+     ],
+     [
+      7.66,
+      4.75,
+      23.86
+     ],
+     [
+      7.54,
+      5.05,
+      17.99
+     ]
+    ],
+    "thickness": 0.12,
+    "color": [
+     0.33,
+     0.35,
+     0.37
+    ],
+    "material": "painted"
+   }
+  },
+  {
+   "id": 118,
+   "item_id": "plate",
+   "at": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "props": {
+    "__is": "funnel, forward face \u2014 tapered and raked aft",
+    "primitive": "plate",
+    "corners": [
+     [
+      5.85,
+      2.6,
+      23.7
+     ],
+     [
+      4.15,
+      2.6,
+      23.7
+     ],
+     [
+      4.45,
+      5.0,
+      24.25
+     ],
+     [
+      5.55,
+      5.0,
+      24.25
+     ]
+    ],
+    "thickness": 0.07,
+    "color": [
+     0.72,
+     0.46,
+     0.13
+    ],
+    "material": "painted"
+   }
+  },
+  {
+   "id": 119,
+   "item_id": "plate",
+   "at": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "props": {
+    "__is": "funnel, port face",
+    "primitive": "plate",
+    "corners": [
+     [
+      4.15,
+      2.6,
+      23.7
+     ],
+     [
+      4.15,
+      2.6,
+      24.95
+     ],
+     [
+      4.45,
+      5.0,
+      25.2
+     ],
+     [
+      4.45,
+      5.0,
+      24.25
+     ]
+    ],
+    "thickness": 0.07,
+    "color": [
+     0.72,
+     0.46,
+     0.13
+    ],
+    "material": "painted"
+   }
+  },
+  {
+   "id": 120,
+   "item_id": "plate",
+   "at": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "props": {
+    "__is": "funnel, starboard face",
+    "primitive": "plate",
+    "corners": [
+     [
+      5.85,
+      2.6,
+      24.95
+     ],
+     [
+      5.85,
+      2.6,
+      23.7
+     ],
+     [
+      5.55,
+      5.0,
+      24.25
+     ],
+     [
+      5.55,
+      5.0,
+      25.2
+     ]
+    ],
+    "thickness": 0.07,
+    "color": [
+     0.72,
+     0.46,
+     0.13
+    ],
+    "material": "painted"
+   }
+  },
+  {
+   "id": 121,
+   "item_id": "plate",
+   "at": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "props": {
+    "__is": "funnel, aft face",
+    "primitive": "plate",
+    "corners": [
+     [
+      4.15,
+      2.6,
+      24.95
+     ],
+     [
+      5.85,
+      2.6,
+      24.95
+     ],
+     [
+      5.55,
+      5.0,
+      25.2
+     ],
+     [
+      4.45,
+      5.0,
+      25.2
+     ]
+    ],
+    "thickness": 0.07,
+    "color": [
+     0.72,
+     0.46,
+     0.13
+    ],
+    "material": "painted"
+   }
+  },
+  {
+   "id": 122,
+   "item_id": "plate",
+   "at": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "props": {
+    "__is": "funnel cap",
+    "primitive": "plate",
+    "corners": [
+     [
+      4.39,
+      5.0,
+      24.19
+     ],
+     [
+      4.39,
+      5.0,
+      25.26
+     ],
+     [
+      5.61,
+      5.0,
+      25.26
+     ],
+     [
+      5.61,
+      5.0,
+      24.19
+     ]
+    ],
+    "thickness": 0.09,
+    "color": [
+     0.11,
+     0.11,
+     0.12
+    ],
+    "material": "painted",
+    "solid": false
+   }
+  },
+  {
+   "id": 200,
+   "item_id": "spar",
+   "at": [
+    5.0,
+    0.0,
+    16.4
+   ],
+   "props": {
+    "__is": "mast - tapered, 9.0 m above its foot",
+    "points": [
+     [
+      0,
+      0,
+      0
+     ],
+     [
+      0,
+      9.0,
+      0
+     ]
+    ],
+    "radius": 0.14,
+    "taper": 0.5,
+    "sides": 8,
+    "material": "steel",
+    "color": [
+     0.84,
+     0.85,
+     0.87
+    ]
+   }
+  },
+  {
+   "id": 201,
+   "item_id": "spar",
+   "at": [
+    5.0,
+    6.48,
+    16.4
+   ],
+   "props": {
+    "__is": "mast spreader - carries the floodlights",
+    "points": [
+     [
+      -1.7,
+      0,
+      0
+     ],
+     [
+      1.7,
+      0,
+      0
+     ]
+    ],
+    "radius": 0.063,
+    "sides": 6,
+    "material": "steel",
+    "color": [
+     0.84,
+     0.85,
+     0.87
+    ]
+   }
+  },
+  {
+   "id": 202,
+   "item_id": "spar",
+   "at": [
+    5.0,
+    7.74,
+    16.4
+   ],
+   "props": {
+    "__is": "radome",
+    "points": [
+     [
+      0,
+      0,
+      0
+     ],
+     [
+      0,
+      0.345,
+      0
+     ]
+    ],
+    "radius": 0.3,
+    "sides": 12,
+    "material": "painted",
+    "color": [
+     0.94,
+     0.94,
+     0.92
+    ]
+   }
+  },
+  {
+   "id": 203,
+   "item_id": "spar",
+   "at": [
+    5.0,
+    9.0,
+    16.4
+   ],
+   "props": {
+    "__is": "masthead light - white, above the sidelights",
+    "points": [
+     [
+      0,
+      0,
+      0
+     ],
+     [
+      0,
+      0.26,
+      0
+     ]
+    ],
+    "radius": 0.098,
+    "sides": 8,
+    "material": "painted",
+    "color": [
+     0.94,
+     0.94,
+     0.92
+    ]
+   }
+  },
+  {
+   "id": 204,
+   "item_id": "spar",
+   "at": [
+    3.98,
+    6.48,
+    16.4
+   ],
+   "props": {
+    "__is": "whip antenna",
+    "points": [
+     [
+      0,
+      0,
+      0
+     ],
+     [
+      0,
+      1.9,
+      0
+     ]
+    ],
+    "radius": 0.014,
+    "sides": 4,
+    "material": "steel",
+    "color": [
+     0.16,
+     0.17,
+     0.19
+    ]
+   }
+  },
+  {
+   "id": 205,
+   "item_id": "spar",
+   "at": [
+    6.02,
+    6.48,
+    16.4
+   ],
+   "props": {
+    "__is": "whip antenna",
+    "points": [
+     [
+      0,
+      0,
+      0
+     ],
+     [
+      0,
+      1.9,
+      0
+     ]
+    ],
+    "radius": 0.014,
+    "sides": 4,
+    "material": "steel",
+    "color": [
+     0.16,
+     0.17,
+     0.19
+    ]
+   }
+  },
+  {
+   "id": 206,
+   "item_id": "spar",
+   "at": [
+    3.64,
+    6.34,
+    16.4
+   ],
+   "props": {
+    "__is": "deck floodlight, aimed forward and down",
+    "points": [
+     [
+      0,
+      0,
+      0
+     ],
+     [
+      0,
+      -0.16,
+      -0.28
+     ]
+    ],
+    "radius": 0.1,
+    "sides": 6,
+    "material": "painted",
+    "color": [
+     0.94,
+     0.94,
+     0.92
+    ]
+   }
+  },
+  {
+   "id": 207,
+   "item_id": "spar",
+   "at": [
+    6.36,
+    6.34,
+    16.4
+   ],
+   "props": {
+    "__is": "deck floodlight, aimed forward and down",
+    "points": [
+     [
+      0,
+      0,
+      0
+     ],
+     [
+      0,
+      -0.16,
+      -0.28
+     ]
+    ],
+    "radius": 0.1,
+    "sides": 6,
+    "material": "painted",
+    "color": [
+     0.94,
+     0.94,
+     0.92
+    ]
+   }
+  },
+  {
+   "id": 208,
+   "item_id": "spar",
+   "at": [
+    5.0,
+    2.6,
+    16.4
+   ],
+   "props": {
+    "__is": "derrick boom - raked forward over the working deck",
+    "points": [
+     [
+      0,
+      0,
+      0
+     ],
+     [
+      -1.4,
+      2.0,
+      -6.8
+     ]
+    ],
+    "radius": 0.1,
+    "taper": 0.7,
+    "sides": 8,
+    "material": "steel",
+    "color": [
+     0.84,
+     0.85,
+     0.87
+    ]
+   }
+  },
+  {
+   "id": 209,
+   "item_id": "wire",
+   "at": [
+    5.0,
+    8.3,
+    16.4
+   ],
+   "props": {
+    "__is": "topping lift - running rigging under load, barely slack",
+    "points": [
+     [
+      0,
+      0,
+      0
+     ],
+     [
+      -1.4,
+      -3.7,
+      -6.8
+     ]
+    ],
+    "radius": 0.016,
+    "sag": 0.06,
+    "span_steps": 6,
+    "sides": 4,
+    "material": "steel",
+    "color": [
+     0.16,
+     0.17,
+     0.19
+    ]
+   }
+  },
+  {
+   "id": 210,
+   "item_id": "wire",
+   "at": [
+    3.6,
+    4.6,
+    9.6
+   ],
+   "props": {
+    "__is": "cargo fall off the boom head",
+    "points": [
+     [
+      0,
+      0,
+      0
+     ],
+     [
+      0.0,
+      -3.5,
+      0.3
+     ]
+    ],
+    "radius": 0.014,
+    "sag": 0.0,
+    "sides": 4,
+    "material": "steel",
+    "color": [
+     0.16,
+     0.17,
+     0.19
+    ]
+   }
+  },
+  {
+   "id": 211,
+   "item_id": "spar",
+   "at": [
+    3.6,
+    0.95,
+    9.9
+   ],
+   "props": {
+    "__is": "hook block",
+    "points": [
+     [
+      0,
+      0,
+      0
+     ],
+     [
+      0,
+      0.42,
+      0
+     ]
+    ],
+    "radius": 0.09,
+    "sides": 6,
+    "material": "steel",
+    "color": [
+     0.16,
+     0.17,
+     0.19
+    ]
+   }
+  },
+  {
+   "id": 212,
+   "item_id": "spar",
+   "at": [
+    0.55,
+    0.0,
+    8.6
+   ],
+   "props": {
+    "__is": "trawl gallows, port - leg and outboard head",
+    "points": [
+     [
+      0,
+      0,
+      0
+     ],
+     [
+      0,
+      3.5,
+      0
+     ],
+     [
+      -0.5,
+      3.5,
+      0
+     ]
+    ],
+    "radius": 0.1,
+    "sides": 8,
+    "material": "painted",
+    "color": [
+     0.72,
+     0.31,
+     0.23
+    ]
+   }
+  },
+  {
+   "id": 213,
+   "item_id": "spar",
+   "at": [
+    9.35,
+    0.0,
+    8.6
+   ],
+   "props": {
+    "__is": "trawl gallows, starboard",
+    "points": [
+     [
+      0,
+      0,
+      0
+     ],
+     [
+      0,
+      3.5,
+      0
+     ],
+     [
+      0.5,
+      3.5,
+      0
+     ]
+    ],
+    "radius": 0.1,
+    "sides": 8,
+    "material": "painted",
+    "color": [
+     0.72,
+     0.31,
+     0.23
+    ]
+   }
+  },
+  {
+   "id": 214,
+   "item_id": "spar",
+   "at": [
+    0.05,
+    3.42,
+    8.6
+   ],
+   "props": {
+    "__is": "gallows block, port",
+    "points": [
+     [
+      0,
+      0,
+      0
+     ],
+     [
+      0,
+      -0.38,
+      0
+     ]
+    ],
+    "radius": 0.08,
+    "sides": 6,
+    "material": "steel",
+    "color": [
+     0.16,
+     0.17,
+     0.19
+    ]
+   }
+  },
+  {
+   "id": 215,
+   "item_id": "spar",
+   "at": [
+    9.85,
+    3.42,
+    8.6
+   ],
+   "props": {
+    "__is": "gallows block, starboard",
+    "points": [
+     [
+      0,
+      0,
+      0
+     ],
+     [
+      0,
+      -0.38,
+      0
+     ]
+    ],
+    "radius": 0.08,
+    "sides": 6,
+    "material": "steel",
+    "color": [
+     0.16,
+     0.17,
+     0.19
+    ]
+   }
+  },
+  {
+   "id": 216,
+   "item_id": "spar",
+   "at": [
+    0.55,
+    0.0,
+    14.2
+   ],
+   "props": {
+    "__is": "trawl gallows, port - leg and outboard head",
+    "points": [
+     [
+      0,
+      0,
+      0
+     ],
+     [
+      0,
+      3.5,
+      0
+     ],
+     [
+      -0.5,
+      3.5,
+      0
+     ]
+    ],
+    "radius": 0.1,
+    "sides": 8,
+    "material": "painted",
+    "color": [
+     0.72,
+     0.31,
+     0.23
+    ]
+   }
+  },
+  {
+   "id": 217,
+   "item_id": "spar",
+   "at": [
+    9.35,
+    0.0,
+    14.2
+   ],
+   "props": {
+    "__is": "trawl gallows, starboard",
+    "points": [
+     [
+      0,
+      0,
+      0
+     ],
+     [
+      0,
+      3.5,
+      0
+     ],
+     [
+      0.5,
+      3.5,
+      0
+     ]
+    ],
+    "radius": 0.1,
+    "sides": 8,
+    "material": "painted",
+    "color": [
+     0.72,
+     0.31,
+     0.23
+    ]
+   }
+  },
+  {
+   "id": 218,
+   "item_id": "spar",
+   "at": [
+    0.05,
+    3.42,
+    14.2
+   ],
+   "props": {
+    "__is": "gallows block, port",
+    "points": [
+     [
+      0,
+      0,
+      0
+     ],
+     [
+      0,
+      -0.38,
+      0
+     ]
+    ],
+    "radius": 0.08,
+    "sides": 6,
+    "material": "steel",
+    "color": [
+     0.16,
+     0.17,
+     0.19
+    ]
+   }
+  },
+  {
+   "id": 219,
+   "item_id": "spar",
+   "at": [
+    9.85,
+    3.42,
+    14.2
+   ],
+   "props": {
+    "__is": "gallows block, starboard",
+    "points": [
+     [
+      0,
+      0,
+      0
+     ],
+     [
+      0,
+      -0.38,
+      0
+     ]
+    ],
+    "radius": 0.08,
+    "sides": 6,
+    "material": "steel",
+    "color": [
+     0.16,
+     0.17,
+     0.19
+    ]
+   }
+  },
+  {
+   "id": 220,
+   "item_id": "wire",
+   "at": [
+    0.05,
+    3.0,
+    8.6
+   ],
+   "props": {
+    "__is": "trawl warp - gallows block to winch",
+    "points": [
+     [
+      0,
+      0,
+      0
+     ],
+     [
+      3.35,
+      -2.35,
+      -1.6
+     ]
+    ],
+    "radius": 0.015,
+    "sag": 0.14,
+    "span_steps": 8,
+    "sides": 4,
+    "material": "steel",
+    "color": [
+     0.16,
+     0.17,
+     0.19
+    ]
+   }
+  },
+  {
+   "id": 221,
+   "item_id": "wire",
+   "at": [
+    9.85,
+    3.0,
+    8.6
+   ],
+   "props": {
+    "__is": "trawl warp - gallows block to winch",
+    "points": [
+     [
+      0,
+      0,
+      0
+     ],
+     [
+      -3.25,
+      -2.35,
+      -1.6
+     ]
+    ],
+    "radius": 0.015,
+    "sag": 0.14,
+    "span_steps": 8,
+    "sides": 4,
+    "material": "steel",
+    "color": [
+     0.16,
+     0.17,
+     0.19
+    ]
+   }
+  },
+  {
+   "id": 222,
+   "item_id": "wire",
+   "at": [
+    0.05,
+    3.0,
+    14.2
+   ],
+   "props": {
+    "__is": "trawl warp - gallows block to winch",
+    "points": [
+     [
+      0,
+      0,
+      0
+     ],
+     [
+      3.35,
+      -2.35,
+      -7.2
+     ]
+    ],
+    "radius": 0.015,
+    "sag": 0.14,
+    "span_steps": 8,
+    "sides": 4,
+    "material": "steel",
+    "color": [
+     0.16,
+     0.17,
+     0.19
+    ]
+   }
+  },
+  {
+   "id": 223,
+   "item_id": "wire",
+   "at": [
+    9.85,
+    3.0,
+    14.2
+   ],
+   "props": {
+    "__is": "trawl warp - gallows block to winch",
+    "points": [
+     [
+      0,
+      0,
+      0
+     ],
+     [
+      -3.25,
+      -2.35,
+      -7.2
+     ]
+    ],
+    "radius": 0.015,
+    "sag": 0.14,
+    "span_steps": 8,
+    "sides": 4,
+    "material": "steel",
+    "color": [
+     0.16,
+     0.17,
+     0.19
+    ]
+   }
+  },
+  {
+   "id": 224,
+   "item_id": "spar",
+   "at": [
+    5.0,
+    0.62,
+    7.0
+   ],
+   "props": {
+    "__is": "trawl winch drum",
+    "points": [
+     [
+      -1.5,
+      0,
+      0
+     ],
+     [
+      1.5,
+      0,
+      0
+     ]
+    ],
+    "radius": 0.42,
+    "sides": 12,
+    "material": "steel",
+    "color": [
+     0.72,
+     0.31,
+     0.23
+    ]
+   }
+  },
+  {
+   "id": 225,
+   "item_id": "spar",
+   "at": [
+    3.4,
+    0.62,
+    7.0
+   ],
+   "props": {
+    "__is": "winch end flange",
+    "points": [
+     [
+      -0.13,
+      0,
+      0
+     ],
+     [
+      0.13,
+      0,
+      0
+     ]
+    ],
+    "radius": 0.6,
+    "sides": 12,
+    "material": "steel",
+    "color": [
+     0.16,
+     0.17,
+     0.19
+    ]
+   }
+  },
+  {
+   "id": 226,
+   "item_id": "spar",
+   "at": [
+    3.4,
+    0.0,
+    7.0
+   ],
+   "props": {
+    "__is": "winch pedestal",
+    "points": [
+     [
+      0,
+      0,
+      0
+     ],
+     [
+      0,
+      0.62,
+      0
+     ]
+    ],
+    "radius": 0.22,
+    "sides": 8,
+    "material": "painted",
+    "color": [
+     0.84,
+     0.85,
+     0.87
+    ]
+   }
+  },
+  {
+   "id": 227,
+   "item_id": "spar",
+   "at": [
+    6.6,
+    0.62,
+    7.0
+   ],
+   "props": {
+    "__is": "winch end flange",
+    "points": [
+     [
+      -0.13,
+      0,
+      0
+     ],
+     [
+      0.13,
+      0,
+      0
+     ]
+    ],
+    "radius": 0.6,
+    "sides": 12,
+    "material": "steel",
+    "color": [
+     0.16,
+     0.17,
+     0.19
+    ]
+   }
+  },
+  {
+   "id": 228,
+   "item_id": "spar",
+   "at": [
+    6.6,
+    0.0,
+    7.0
+   ],
+   "props": {
+    "__is": "winch pedestal",
+    "points": [
+     [
+      0,
+      0,
+      0
+     ],
+     [
+      0,
+      0.62,
+      0
+     ]
+    ],
+    "radius": 0.22,
+    "sides": 8,
+    "material": "painted",
+    "color": [
+     0.84,
+     0.85,
+     0.87
+    ]
+   }
+  },
+  {
+   "id": 229,
+   "item_id": "spar",
+   "at": [
+    5.0,
+    5.0,
+    24.7
+   ],
+   "props": {
+    "__is": "exhaust pipe, out of the funnel top",
+    "points": [
+     [
+      0,
+      0,
+      0
+     ],
+     [
+      0,
+      0.62,
+      0
+     ]
+    ],
+    "radius": 0.12,
+    "sides": 8,
+    "material": "painted",
+    "color": [
+     0.2,
+     0.2,
+     0.22
+    ]
+   }
+  },
+  {
+   "id": 230,
+   "item_id": "spar",
+   "at": [
+    5.0,
+    5.62,
+    24.7
+   ],
+   "props": {
+    "__is": "exhaust rain cap",
+    "points": [
+     [
+      0,
+      0,
+      0
+     ],
+     [
+      0,
+      0.14,
+      0
+     ]
+    ],
+    "radius": 0.2,
+    "sides": 8,
+    "material": "painted",
+    "color": [
+     0.12,
+     0.12,
+     0.13
+    ]
+   }
+  },
+  {
+   "id": 231,
+   "item_id": "spar",
+   "at": [
+    5.0,
+    4.78,
+    22.95
+   ],
+   "props": {
+    "__is": "aft signal mast, stepped on the wheelhouse roof",
+    "points": [
+     [
+      0,
+      0,
+      0
+     ],
+     [
+      0,
+      3.0,
+      0
+     ]
+    ],
+    "radius": 0.09,
+    "taper": 0.6,
+    "sides": 8,
+    "material": "steel",
+    "color": [
+     0.84,
+     0.85,
+     0.87
+    ]
+   }
+  },
+  {
+   "id": 232,
+   "item_id": "spar",
+   "at": [
+    5.0,
+    6.68,
+    22.95
+   ],
+   "props": {
+    "__is": "aft mast crosstree",
+    "points": [
+     [
+      -1.1,
+      0,
+      0
+     ],
+     [
+      1.1,
+      0,
+      0
+     ]
+    ],
+    "radius": 0.045,
+    "sides": 6,
+    "material": "steel",
+    "color": [
+     0.84,
+     0.85,
+     0.87
+    ]
+   }
+  },
+  {
+   "id": 233,
+   "item_id": "spar",
+   "at": [
+    5.0,
+    7.78,
+    22.95
+   ],
+   "props": {
+    "__is": "all-round white light on the aft mast",
+    "points": [
+     [
+      0,
+      0,
+      0
+     ],
+     [
+      0,
+      0.24,
+      0
+     ]
+    ],
+    "radius": 0.08,
+    "sides": 8,
+    "material": "painted",
+    "color": [
+     0.94,
+     0.94,
+     0.92
+    ]
+   }
+  },
+  {
+   "id": 234,
+   "item_id": "spar",
+   "at": [
+    2.6,
+    3.55,
+    18.65
+   ],
+   "props": {
+    "__is": "sidelight - port, red",
+    "points": [
+     [
+      0,
+      0,
+      0
+     ],
+     [
+      0,
+      0.3,
+      0
+     ]
+    ],
+    "radius": 0.1,
+    "sides": 8,
+    "material": "painted",
+    "color": [
+     0.86,
+     0.13,
+     0.11
+    ]
+   }
+  },
+  {
+   "id": 235,
+   "item_id": "spar",
+   "at": [
+    7.4,
+    3.55,
+    18.65
+   ],
+   "props": {
+    "__is": "sidelight - starboard, green",
+    "points": [
+     [
+      0,
+      0,
+      0
+     ],
+     [
+      0,
+      0.3,
+      0
+     ]
+    ],
+    "radius": 0.1,
+    "sides": 8,
+    "material": "painted",
+    "color": [
+     0.1,
+     0.6,
+     0.3
+    ]
+   }
+  },
+  {
+   "id": 236,
+   "item_id": "wire",
+   "at": [
+    5.0,
+    8.4,
+    16.4
+   ],
+   "props": {
+    "__is": "port shroud - made fast to the bulwark cap",
+    "points": [
+     [
+      0,
+      0,
+      0
+     ],
+     [
+      -4.9,
+      -7.1446,
+      -2.6
+     ]
+    ],
+    "radius": 0.016,
+    "sag": 0.0,
+    "sides": 4,
+    "material": "steel",
+    "color": [
+     0.16,
+     0.17,
+     0.19
+    ]
+   }
+  },
+  {
+   "id": 237,
+   "item_id": "wire",
+   "at": [
+    5.0,
+    8.4,
+    16.4
+   ],
+   "props": {
+    "__is": "starboard shroud - made fast to the bulwark cap",
+    "points": [
+     [
+      0,
+      0,
+      0
+     ],
+     [
+      4.9,
+      -7.1446,
+      -2.6
+     ]
+    ],
+    "radius": 0.016,
+    "sag": 0.0,
+    "sides": 4,
+    "material": "steel",
+    "color": [
+     0.16,
+     0.17,
+     0.19
+    ]
+   }
+  },
+  {
+   "id": 238,
+   "item_id": "spar",
+   "at": [
+    5.0,
+    0.0,
+    6.6
+   ],
+   "props": {
+    "__is": "samson post on the foredeck - taller than the bulwark it stands in",
+    "points": [
+     [
+      0,
+      0,
+      0
+     ],
+     [
+      0,
+      1.9,
+      0
+     ]
+    ],
+    "radius": 0.15,
+    "sides": 8,
+    "material": "painted",
+    "color": [
+     0.94,
+     0.94,
+     0.92
+    ]
+   }
+  },
+  {
+   "id": 239,
+   "item_id": "wire",
+   "at": [
+    5.0,
+    8.4,
+    16.4
+   ],
+   "props": {
+    "__is": "forestay - masthead to the samson post head",
+    "points": [
+     [
+      0,
+      0,
+      0
+     ],
+     [
+      0.0,
+      -6.55,
+      -9.8
+     ]
+    ],
+    "radius": 0.016,
+    "sag": 0.0,
+    "sides": 4,
+    "material": "steel",
+    "color": [
+     0.16,
+     0.17,
+     0.19
+    ]
+   }
+  },
+  {
+   "id": 240,
+   "item_id": "wire",
+   "at": [
+    5.0,
+    8.4,
+    16.4
+   ],
+   "props": {
+    "__is": "triatic stay - main masthead to aft masthead",
+    "points": [
+     [
+      0,
+      0,
+      0
+     ],
+     [
+      0.0,
+      -0.62,
+      6.55
+     ]
+    ],
+    "radius": 0.014,
+    "sag": 0.0,
+    "sides": 4,
+    "material": "steel",
+    "color": [
+     0.16,
+     0.17,
+     0.19
+    ]
+   }
+  },
+  {
+   "id": 241,
+   "item_id": "wire",
+   "at": [
+    5.0,
+    7.78,
+    22.95
+   ],
+   "props": {
+    "__is": "backstay - aft masthead to the transom cap",
+    "points": [
+     [
+      0,
+      0,
+      0
+     ],
+     [
+      0.0,
+      -6.3009,
+      4.85
+     ]
+    ],
+    "radius": 0.014,
+    "sag": 0.0,
+    "sides": 4,
+    "material": "steel",
+    "color": [
+     0.16,
+     0.17,
+     0.19
+    ]
+   }
+  },
+  {
+   "id": 242,
+   "item_id": "spar",
+   "at": [
+    -0.28,
+    -0.3,
+    10.4
+   ],
+   "props": {
+    "__is": "fender - cylindrical, hung vertically outboard",
+    "points": [
+     [
+      0,
+      -0.5,
+      0
+     ],
+     [
+      0,
+      0.5,
+      0
+     ]
+    ],
+    "radius": 0.24,
+    "sides": 10,
+    "solid": false,
+    "material": "wood",
+    "color": [
+     0.14,
+     0.14,
+     0.15
+    ]
+   }
+  },
+  {
+   "id": 243,
+   "item_id": "wire",
+   "at": [
+    0.1,
+    1.4644,
+    10.4
+   ],
+   "props": {
+    "__is": "fender lanyard",
+    "points": [
+     [
+      0,
+      0,
+      0
+     ],
+     [
+      -0.38,
+      -1.2644,
+      0.0
+     ]
+    ],
+    "radius": 0.013,
+    "sag": 0.02,
+    "sides": 4,
+    "material": "wood",
+    "color": [
+     0.6,
+     0.53,
+     0.38
+    ]
+   }
+  },
+  {
+   "id": 244,
+   "item_id": "spar",
+   "at": [
+    -0.28,
+    -0.3,
+    13.2
+   ],
+   "props": {
+    "__is": "fender - cylindrical, hung vertically outboard",
+    "points": [
+     [
+      0,
+      -0.5,
+      0
+     ],
+     [
+      0,
+      0.5,
+      0
+     ]
+    ],
+    "radius": 0.24,
+    "sides": 10,
+    "solid": false,
+    "material": "wood",
+    "color": [
+     0.14,
+     0.14,
+     0.15
+    ]
+   }
+  },
+  {
+   "id": 245,
+   "item_id": "wire",
+   "at": [
+    0.1,
+    1.2887,
+    13.2
+   ],
+   "props": {
+    "__is": "fender lanyard",
+    "points": [
+     [
+      0,
+      0,
+      0
+     ],
+     [
+      -0.38,
+      -1.0887,
+      0.0
+     ]
+    ],
+    "radius": 0.013,
+    "sag": 0.02,
+    "sides": 4,
+    "material": "wood",
+    "color": [
+     0.6,
+     0.53,
+     0.38
+    ]
+   }
+  },
+  {
+   "id": 246,
+   "item_id": "spar",
+   "at": [
+    -0.28,
+    -0.3,
+    16.0
+   ],
+   "props": {
+    "__is": "fender - cylindrical, hung vertically outboard",
+    "points": [
+     [
+      0,
+      -0.5,
+      0
+     ],
+     [
+      0,
+      0.5,
+      0
+     ]
+    ],
+    "radius": 0.24,
+    "sides": 10,
+    "solid": false,
+    "material": "wood",
+    "color": [
+     0.14,
+     0.14,
+     0.15
+    ]
+   }
+  },
+  {
+   "id": 247,
+   "item_id": "wire",
+   "at": [
+    0.1,
+    1.1489,
+    16.0
+   ],
+   "props": {
+    "__is": "fender lanyard",
+    "points": [
+     [
+      0,
+      0,
+      0
+     ],
+     [
+      -0.38,
+      -0.9489,
+      0.0
+     ]
+    ],
+    "radius": 0.013,
+    "sag": 0.02,
+    "sides": 4,
+    "material": "wood",
+    "color": [
+     0.6,
+     0.53,
+     0.38
+    ]
+   }
+  },
+  {
+   "id": 248,
+   "item_id": "spar",
+   "at": [
+    1.0,
+    0.0,
+    6.4
+   ],
+   "props": {
+    "__is": "mooring bitt",
+    "points": [
+     [
+      0,
+      0,
+      0
+     ],
+     [
+      0,
+      0.6,
+      0
+     ]
+    ],
+    "radius": 0.11,
+    "sides": 8,
+    "material": "painted",
+    "color": [
+     0.94,
+     0.94,
+     0.92
+    ]
+   }
+  },
+  {
+   "id": 249,
+   "item_id": "spar",
+   "at": [
+    9.0,
+    0.0,
+    6.4
+   ],
+   "props": {
+    "__is": "mooring bitt",
+    "points": [
+     [
+      0,
+      0,
+      0
+     ],
+     [
+      0,
+      0.6,
+      0
+     ]
+    ],
+    "radius": 0.11,
+    "sides": 8,
+    "material": "painted",
+    "color": [
+     0.94,
+     0.94,
+     0.92
+    ]
+   }
+  },
+  {
+   "id": 250,
+   "item_id": "spar",
+   "at": [
+    1.0,
+    0.0,
+    26.2
+   ],
+   "props": {
+    "__is": "mooring bitt",
+    "points": [
+     [
+      0,
+      0,
+      0
+     ],
+     [
+      0,
+      0.6,
+      0
+     ]
+    ],
+    "radius": 0.11,
+    "sides": 8,
+    "material": "painted",
+    "color": [
+     0.94,
+     0.94,
+     0.92
+    ]
+   }
+  },
+  {
+   "id": 251,
+   "item_id": "spar",
+   "at": [
+    9.0,
+    0.0,
+    26.2
+   ],
+   "props": {
+    "__is": "mooring bitt",
+    "points": [
+     [
+      0,
+      0,
+      0
+     ],
+     [
+      0,
+      0.6,
+      0
+     ]
+    ],
+    "radius": 0.11,
+    "sides": 8,
+    "material": "painted",
+    "color": [
+     0.94,
+     0.94,
+     0.92
+    ]
+   }
+  }
+ ],
+ "edges": [
+  {
+   "id": 1,
+   "primitive": "sheer_band",
+   "_is": "the deck edge of the vessel: plating, a proud sheer stripe and a cap, swept along a hand-authored sheer. The PLAN line is the hull's own deck edge; only the Y curve is authored, because sheer_bulwark_spec exposes no way to exaggerate the derived one and the derived one is too polite.",
+   "path": [
+    [
+     8.705,
+     1.8349,
+     5.0
+    ],
+    [
+     9.555,
+     1.8349,
+     5.0
+    ],
+    [
+     9.62,
+     1.7908,
+     5.5
+    ],
+    [
+     9.685,
+     1.7488,
+     6.0
+    ],
+    [
+     9.75,
+     1.7076,
+     6.5
+    ],
+    [
+     9.815,
+     1.6672,
+     7.0
+    ],
+    [
+     9.88,
+     1.6276,
+     7.5
+    ],
+    [
+     9.945,
+     1.5888,
+     8.0
+    ],
+    [
+     9.945,
+     1.5344,
+     8.7188
+    ],
+    [
+     9.945,
+     1.4819,
+     9.4375
+    ],
+    [
+     9.945,
+     1.4312,
+     10.1562
+    ],
+    [
+     9.945,
+     1.3824,
+     10.875
+    ],
+    [
+     9.945,
+     1.3356,
+     11.5938
+    ],
+    [
+     9.945,
+     1.2909,
+     12.3125
+    ],
+    [
+     9.945,
+     1.2484,
+     13.0312
+    ],
+    [
+     9.945,
+     1.2082,
+     13.75
+    ],
+    [
+     9.945,
+     1.1704,
+     14.4688
+    ],
+    [
+     9.945,
+     1.1352,
+     15.1875
+    ],
+    [
+     9.945,
+     1.1029,
+     15.9062
+    ],
+    [
+     9.945,
+     1.0736,
+     16.625
+    ],
+    [
+     9.945,
+     1.0478,
+     17.3438
+    ],
+    [
+     9.945,
+     1.026,
+     18.0625
+    ],
+    [
+     9.945,
+     1.0092,
+     18.7812
+    ],
+    [
+     9.945,
+     1.0,
+     19.5
+    ],
+    [
+     9.945,
+     1.0022,
+     20.0964
+    ],
+    [
+     9.945,
+     1.0089,
+     20.6929
+    ],
+    [
+     9.945,
+     1.0199,
+     21.2893
+    ],
+    [
+     9.945,
+     1.0354,
+     21.8857
+    ],
+    [
+     9.945,
+     1.0554,
+     22.4821
+    ],
+    [
+     9.945,
+     1.0798,
+     23.0786
+    ],
+    [
+     9.945,
+     1.1086,
+     23.675
+    ],
+    [
+     9.945,
+     1.1418,
+     24.2714
+    ],
+    [
+     9.945,
+     1.1795,
+     24.8679
+    ],
+    [
+     9.945,
+     1.2216,
+     25.4643
+    ],
+    [
+     9.945,
+     1.2681,
+     26.0607
+    ],
+    [
+     9.945,
+     1.319,
+     26.6571
+    ],
+    [
+     9.945,
+     1.3744,
+     27.2536
+    ],
+    [
+     9.945,
+     1.4343,
+     27.85
+    ],
+    [
+     0.055,
+     1.4343,
+     27.85
+    ],
+    [
+     0.055,
+     1.3744,
+     27.2536
+    ],
+    [
+     0.055,
+     1.319,
+     26.6571
+    ],
+    [
+     0.055,
+     1.2681,
+     26.0607
+    ],
+    [
+     0.055,
+     1.2216,
+     25.4643
+    ],
+    [
+     0.055,
+     1.1795,
+     24.8679
+    ],
+    [
+     0.055,
+     1.1418,
+     24.2714
+    ],
+    [
+     0.055,
+     1.1086,
+     23.675
+    ],
+    [
+     0.055,
+     1.0798,
+     23.0786
+    ],
+    [
+     0.055,
+     1.0554,
+     22.4821
+    ],
+    [
+     0.055,
+     1.0354,
+     21.8857
+    ],
+    [
+     0.055,
+     1.0199,
+     21.2893
+    ],
+    [
+     0.055,
+     1.0089,
+     20.6929
+    ],
+    [
+     0.055,
+     1.0022,
+     20.0964
+    ],
+    [
+     0.055,
+     1.0,
+     19.5
+    ],
+    [
+     0.055,
+     1.0092,
+     18.7812
+    ],
+    [
+     0.055,
+     1.026,
+     18.0625
+    ],
+    [
+     0.055,
+     1.0478,
+     17.3438
+    ],
+    [
+     0.055,
+     1.0736,
+     16.625
+    ],
+    [
+     0.055,
+     1.1029,
+     15.9062
+    ],
+    [
+     0.055,
+     1.1352,
+     15.1875
+    ],
+    [
+     0.055,
+     1.1704,
+     14.4688
+    ],
+    [
+     0.055,
+     1.2082,
+     13.75
+    ],
+    [
+     0.055,
+     1.2484,
+     13.0312
+    ],
+    [
+     0.055,
+     1.2909,
+     12.3125
+    ],
+    [
+     0.055,
+     1.3356,
+     11.5938
+    ],
+    [
+     0.055,
+     1.3824,
+     10.875
+    ],
+    [
+     0.055,
+     1.4312,
+     10.1562
+    ],
+    [
+     0.055,
+     1.4819,
+     9.4375
+    ],
+    [
+     0.055,
+     1.5344,
+     8.7188
+    ],
+    [
+     0.055,
+     1.5888,
+     8.0
+    ],
+    [
+     0.12,
+     1.6276,
+     7.5
+    ],
+    [
+     0.185,
+     1.6672,
+     7.0
+    ],
+    [
+     0.25,
+     1.7076,
+     6.5
+    ],
+    [
+     0.315,
+     1.7488,
+     6.0
+    ],
+    [
+     0.38,
+     1.7908,
+     5.5
+    ],
+    [
+     0.445,
+     1.8349,
+     5.0
+    ],
+    [
+     1.295,
+     1.8349,
+     5.0
+    ]
+   ],
+   "closed": false,
+   "base_y": -0.12,
+   "material": "painted",
+   "solid": true,
+   "profile": [
+    {
+     "u": 0.0,
+     "v": 0.02,
+     "w": 0.11,
+     "to_base": true,
+     "color": [
+      0.1,
+      0.12,
+      0.16
+     ]
+    },
+    {
+     "u": -0.06,
+     "v": 0.02,
+     "w": 0.026,
+     "to_base": true,
+     "color": [
+      0.71,
+      0.7,
+      0.65
+     ]
+    },
+    {
+     "u": 0.067,
+     "v": -0.155,
+     "w": 0.024,
+     "h": 0.23,
+     "color": [
+      0.72,
+      0.46,
+      0.13
+     ]
+    },
+    {
+     "u": 0.0,
+     "v": 0.05,
+     "w": 0.26,
+     "h": 0.1,
+     "color": [
+      0.91,
+      0.9,
+      0.85
+     ]
+    }
+   ]
+  },
+  {
+   "id": 2,
+   "primitive": "sheer_band",
+   "_is": "bridge-front bulwark round the open forward end of the boat deck",
+   "path": [
+    [
+     2.12,
+     3.615,
+     18.95
+    ],
+    [
+     2.12,
+     3.615,
+     17.0
+    ],
+    [
+     7.88,
+     3.615,
+     17.0
+    ],
+    [
+     7.88,
+     3.615,
+     18.95
+    ]
+   ],
+   "closed": false,
+   "base_y": 2.665,
+   "material": "painted",
+   "solid": true,
+   "profile": [
+    {
+     "u": 0.0,
+     "v": 0.018,
+     "w": 0.07,
+     "to_base": true,
+     "color": [
+      0.89,
+      0.88,
+      0.83
+     ]
+    },
+    {
+     "u": 0.0,
+     "v": 0.028,
+     "w": 0.17,
+     "h": 0.056,
+     "color": [
+      0.91,
+      0.9,
+      0.85
+     ]
+    }
+   ]
+  }
+ ]
 }
