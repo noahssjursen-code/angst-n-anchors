@@ -987,6 +987,71 @@ with `resolved(plan)` — the seam from `763dbdc` that made placements reach the
 at all. Before it they contributed 0 triangles and 0 colliders. `piece_kit_test`
 holds it with 10 checks; un-wiring `resolved()` turns 11 of 176 red.
 
+### HONEST GATE BASELINE — run `20260814-213618-10492`, on a quiet tree
+
+The first complete run since the waves stopped fighting each other for the tree.
+**107 units: 13 FAIL, 2 NOTRUN, 1 SKIP.** Every earlier figure in this file was
+measured against concurrent writers and should be ignored.
+
+```
+FAIL    boat_physics_validation          FAIL    building_blueprint_test
+FAIL    chart_rewrite_integration_test   FAIL    chart_weather_cache_test
+FAIL    deck_fitout_load_bench           FAIL    deck_fitout_staging_test
+FAIL    land_field_geography_test        FAIL    lighting_material_test
+FAIL    plan_interior_test               FAIL    port_perf_cache_test
+FAIL    port_trade_profile_test          FAIL    remote_realtime_join_smoke
+FAIL    shipyard_editor_ui_test
+NOTRUN  hull_visual_capture              NOTRUN  port_layout_visual_capture
+SKIP    ocean_wake_gpu_smoke
+```
+
+**The catalogue family is GONE from this list.** `vessel_outfit_test`,
+`vessel_registration_test`, `vessel_registration_audit_ui_test`,
+`hull_form_geometry_test`, `company_service_test`, `catch_hold_test`,
+`vessel_persistence_test`, `ship_display_units_test` all pass. All twelve
+construction units pass, `piece_kit_test` through `structure_spar_test`.
+
+`building_blueprint_test` remains, and its cause is known and written up below —
+the dead `_building_grid` parameter, awaiting an owner decision.
+
+### `plan_interior_test` — a REGRESSION from the door fix, measured not guessed
+
+It is 2/56 on the current tree and **1/56 with `structure_baker.gd` reverted to
+`2611976`**. The door fix caused one of the two:
+
+```
+demo_workboat:          no wall march begins inside a collider   0 -> 8
+probe_trawler_bulwark:  no wall march begins inside a collider  50 -> 51
+```
+
+The other (`probe_trawler_bulwark`, 50) is mine and older — description-based
+plate selection now picks up the raked front, written up under the CORRECTION
+heading.
+
+**Do not revert the door fix over this.** The casing round an opening is a door
+frame and *should* collide; before the fix it was drawn and not collided at all.
+The likely reading is that this test's wall-march start points now land inside
+casings that are legitimately solid, i.e. the instrument needs to account for
+them. **That is a hypothesis, not a finding** — the alternative is that the casing
+collider is fatter than the casing it draws, which would be the same class of bug
+the fix was for, and the two are told apart by measuring casing collider extents
+against casing draw extents, not by argument.
+
+### Untriaged, and never measured while the tree was quiet until now
+
+`deck_fitout_staging_test` (4 failures), `deck_fitout_load_bench` (worst staged
+frame 118.5 ms against a 100 ms budget), `shipyard_editor_ui_test` ("straight
+railing sits on the local -Z cell face" — note it names a railing, and the
+railing collider changed in `0cfe015`), `boat_physics_validation`,
+`hull_visual_capture` NOTRUN. Whether any is a regression from recent work is
+UNKNOWN; `deck_fitout_staging_test` hung when probed and was not measured against
+the reverted baker.
+
+`port_trade_profile_test` is a **half-finished lane conversion** — `extends
+SceneTree` with an orphan `.tscn` beside it, which the gate reports as STALE every
+run. Its actual failure is unrelated to the lane: `apron should sprinkle service
+props`, 1 of 123.
+
 ### Three units that reported no outcome — fixed, and one hypothesis killed
 
 `vessel_registration_test` **never used `TestReport`.** It kept a private failures
