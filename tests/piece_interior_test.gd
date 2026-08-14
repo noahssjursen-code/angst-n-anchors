@@ -763,7 +763,7 @@ func _check_panes(walls: Array, stem: String) -> void:
 			u += STATION_STEP
 	_pane_plates += panes
 	_pane_stations += stations
-	print("  [pane] %d glazed plates in the tier, %d swept, %d stations, %d walked through, %d began inside"
+	print("  [pane] %d glazed runs in the tier, %d swept, %d stations, %d walked through, %d began inside"
 		% [glazed, panes, stations, through.size(), stuck.size()])
 	if not through.is_empty():
 		print("  [pane] walked through: %s" % ", ".join(through))
@@ -772,10 +772,12 @@ func _check_panes(walls: Array, stem: String) -> void:
 	## windows and its ribbon glazing is all in the wheelhouse above the tier, so
 	## it has none here — and the old form of this check (`stations >= 20`) failed
 	## a fixture for a shape it never claimed to have. What must not be allowed is
-	## a fixture with glazing whose glass is quietly not swept, which is what this
-	## says; the run-level guard in `_ready` is what stops "0 of 0" from being the
-	## whole suite's answer.
-	_t.equal("%s: every glazed plate in the tier was swept (%d of %d)" % [stem, panes, glazed],
+	## a glazed RUN whose glass is quietly not swept: the only thing the sweep is
+	## permitted to skip is a plate under 0.45 m in its own height band, so a pane
+	## band shrunk below that turns this red rather than silently going unasked.
+	## The run-level guard in `_ready` is what stops "0 of 0" being the whole
+	## suite's answer.
+	_t.equal("%s: every glazed run in the tier was swept (%d of %d)" % [stem, panes, glazed],
 		panes, glazed)
 	_t.check("%s: ...and each swept pane carries stations (%d over %d plates)"
 		% [stem, stations, panes], panes == 0 or stations >= panes * 4)
