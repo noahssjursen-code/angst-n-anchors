@@ -968,208 +968,39 @@ same way the known-red list had — it named the bare-`assert()` conversion and 
 when both had long landed. **A stale next-actions list sends the next wave at work that is already
 done.** Regenerate this from the tree, not from the last copy of itself.
 
-### In flight — 2026-08-14, after four waves died on the account's weekly API limit
+### In flight — two waves, disjoint files
 
-Every wave in the previous table terminated mid-task on `You've hit your weekly
-limit`. Two left usable work, which is committed: the piece-interior test (997
-lines, no `.tscn` — I supplied one and it runs) and three prebuilt vessel JSONs
-(unverified against `VesselCompliance`). Four scratch probes carry leading
-underscores so the gate skips them; kept because they are the only record of what
-those agents measured.
-
-| Wave | Owns | Must not touch |
+| Wave | Owns | Target |
 |---|---|---|
-| **Impassable doors** — the critical path | `piece_kit.gd`, `structure_pieces.json`, `structure_baker.gd`, `piece_interior_test.*`, `piece_kit_test.gd`, `probe_piece_*` | the three not-tests |
-| **Units that report no outcome** | `vessel_registration_test.*`, `staged_vessel_visual_demo.*`, `building_blueprint_test.*`, `tools/gate.sh` | everything piece-related |
+| **Raked-plate over-collision** | `structure_baker.gd`, `plan_interior_test.*`, `structure_plate_test.*` | the 0.148 m excess — ONE cause behind `plan_interior_test`'s 51+8 stuck marches, the rake-8 drift sitting 0.008 m from red, and every raked wall stopping a player early |
+| **Staged fitout never merges** | `deck_fitout_job.gd`, `deck_fitout.gd`, `vessel_skin_baker.gd`, both deck_fitout tests | 3002 meshes at n=3000 staged against 3 sync; and `_prepare_gameplay` running a 118.9 ms validate as one indivisible 4 ms `_step` |
 
-**Careful with `structure_baker.gd`.** `bake()` and `collect_colliders()` both open
-with `resolved(plan)` — the seam from `763dbdc` that made placements reach the game
-at all. Before it they contributed 0 triangles and 0 colliders. `piece_kit_test`
-holds it with 10 checks; un-wiring `resolved()` turns 11 of 176 red.
+Both carry the measured trap that would fake a green: `skin_enabled = false` turns
+BOTH deck-fitout reds green while making every vessel worse.
 
-### HONEST GATE BASELINE — run `20260814-213618-10492`, on a quiet tree
+### Settled since the last baseline
 
-The first complete run since the waves stopped fighting each other for the tree.
-**107 units: 13 FAIL, 2 NOTRUN, 1 SKIP.** Every earlier figure in this file was
-measured against concurrent writers and should be ignored.
+- **Doors open.** `piece_interior_test` 124 checks. Root cause was that an opening's
+  `height` is a length on the plate SURFACE, so a raked wall's door shrank by
+  `h/√(h²+r²)`. Silent clamping 21.5% → 0.0%.
+- **Three of five untriaged reds fixed** — `shipyard_editor_ui_test` 36,
+  `boat_physics_validation` 54 (a check that had never passed once),
+  `hull_visual_capture` NOTRUN → 50.
+- **`CONVENTIONS.md` §3a was false** and is now qualified: halving `DECK_CELL_M`
+  moved no STRUCTURE-PLAN geometry but halved every BRICK. A `railing` is 0.5 m
+  tall with a 0.44 m post, knee-high beside the 1.8 m figure.
 
-```
-FAIL    boat_physics_validation          FAIL    building_blueprint_test
-FAIL    chart_rewrite_integration_test   FAIL    chart_weather_cache_test
-FAIL    deck_fitout_load_bench           FAIL    deck_fitout_staging_test
-FAIL    land_field_geography_test        FAIL    lighting_material_test
-FAIL    plan_interior_test               FAIL    port_perf_cache_test
-FAIL    port_trade_profile_test          FAIL    remote_realtime_join_smoke
-FAIL    shipyard_editor_ui_test
-NOTRUN  hull_visual_capture              NOTRUN  port_layout_visual_capture
-SKIP    ocean_wake_gpu_smoke
-```
+### Owner decisions outstanding
 
-**The catalogue family is GONE from this list.** `vessel_outfit_test`,
-`vessel_registration_test`, `vessel_registration_audit_ui_test`,
-`hull_form_geometry_test`, `company_service_test`, `catch_hold_test`,
-`vessel_persistence_test`, `ship_display_units_test` all pass. All twelve
-construction units pass, `piece_kit_test` through `structure_spar_test`.
-
-`building_blueprint_test` remains, and its cause is known and written up below —
-the dead `_building_grid` parameter, awaiting an owner decision.
-
-### `plan_interior_test` — a REGRESSION from the door fix, measured not guessed
-
-It is 2/56 on the current tree and **1/56 with `structure_baker.gd` reverted to
-`2611976`**. The door fix caused one of the two:
-
-```
-demo_workboat:          no wall march begins inside a collider   0 -> 8
-probe_trawler_bulwark:  no wall march begins inside a collider  50 -> 51
-```
-
-The other (`probe_trawler_bulwark`, 50) is mine and older — description-based
-plate selection now picks up the raked front, written up under the CORRECTION
-heading.
-
-**Do not revert the door fix over this.** The casing round an opening is a door
-frame and *should* collide; before the fix it was drawn and not collided at all.
-The likely reading is that this test's wall-march start points now land inside
-casings that are legitimately solid, i.e. the instrument needs to account for
-them. **That is a hypothesis, not a finding** — the alternative is that the casing
-collider is fatter than the casing it draws, which would be the same class of bug
-the fix was for, and the two are told apart by measuring casing collider extents
-against casing draw extents, not by argument.
-
-### RESOLVED by measurement: the casing is NOT fat — but raked plates over-collide
-
-I left open whether `plan_interior_test`'s regression was "the door frame is
-legitimately solid" or "the casing collider is fatter than the casing it draws",
-and said it had to be measured, not argued. Measured (`tests/_casing_extent_probe.gd`),
-asking how much THICKER each collider box is than the slab it is fitted to:
-
-```
-demo_workboat          220 boxes ( 47 casing)   any slab 0.1249 m   casing 0.0000 m
-probe_trawler_bulwark  602 boxes ( 30 casing)   any slab 0.1478 m   casing 0.0000 m
-```
-
-**Casing excess is exactly zero on both fixtures.** The flattering half of my
-hypothesis was right for the wrong reason and the unflattering half is refuted:
-the door fix does not over-collide. The casing is solid precisely where it is
-drawn, so the regression is the march start landing in a door frame that is
-legitimately there — the instrument, not the geometry.
-
-Note what the critic's 310,200-sample result could NOT have told us. It measured
-DRAWN → COLLIDER containment, and "every drawn point is inside some collider" is
-satisfied perfectly by a collider that is far too fat. The question needed the
-other direction and nobody had asked it.
-
-### NEW, LARGER, AND PRE-EXISTING: a raked plate collides 0.148 m thicker than it draws
-
-The same probe found what the door fix did not cause. `_plate_panel_colliders`
-dices a slab into cells and fits each cell the yaw-frame AABB of its four corners
-offset ±thickness/2. For a plumb plate that AABB *is* the plate. For a RAKED or
-SLOPED one it is not — a tilted quad's AABB exceeds the quad, and the excess is
-solid space nothing draws:
-
-```
-wheelhouse roof — sloped 0.25 m down aft          0.1249 m
-bow bulwark inboard face, port                    0.1478 m
-```
-
-Against a plate thickness of 0.10 m, that is **1.5× the plating in invisible
-solid**. It is the "staircase of 0.15 m cells" the critic named while measuring
-doorway heads, and it is almost certainly the 50 stuck marches on
-`probe_trawler_bulwark`'s raked front — the older of `plan_interior_test`'s two
-failures, which predates the door fix and which I had attributed to my own
-description-based plate selection.
-
-Not fixed here, and it is not a one-liner: finer cells shrink the excess and cost
-collider count, oriented boxes would fix it outright but `_collider_of` is
-yaw-only by contract, and the current behaviour errs SOLID, which is the safe
-direction for a hull. It wants an owner decision or its own wave. What it must
-not do is stay unmeasured, which it has been for the life of the file.
-
-### Untriaged, and never measured while the tree was quiet until now
-
-`deck_fitout_staging_test` (4 failures), `deck_fitout_load_bench` (worst staged
-frame 118.5 ms against a 100 ms budget), `shipyard_editor_ui_test` ("straight
-railing sits on the local -Z cell face" — note it names a railing, and the
-railing collider changed in `0cfe015`), `boat_physics_validation`,
-`hull_visual_capture` NOTRUN. Whether any is a regression from recent work is
-UNKNOWN; `deck_fitout_staging_test` hung when probed and was not measured against
-the reverted baker.
-
-`port_trade_profile_test` is a **half-finished lane conversion** — `extends
-SceneTree` with an orphan `.tscn` beside it, which the gate reports as STALE every
-run. Its actual failure is unrelated to the lane: `apron should sprinkle service
-props`, 1 of 123.
-
-### Three units that reported no outcome — fixed, and one hypothesis killed
-
-`vessel_registration_test` **never used `TestReport`.** It kept a private failures
-array and printed one prose sentence on success. The gate scored it only because
-`VERDICT_RE` matched the bare word "passed" — nothing in the log said how much had
-been asserted. Behind that, **four of its eight sub-tests began `if entry.is_empty(): return`**
-and contributed zero checks against an empty prebuilt catalogue. Measured by
-deleting one fixture: **17 real assertions silently vanish** — "swapped port/starboard
-lights fail registration", "certified vessel is deployable", and 15 more — with the
-verdict line unchanged by one character. Now `PASS (41 checks)`; every early return
-is a recorded failure naming the fixture it wanted.
-
-`staged_vessel_visual_demo` **is a demo, not a test** — zero assertions, an orbiting
-camera, a HUD, a `FileDialog`, `_unhandled_input` on SPACE/L/R/X/A. Adding `quit()`
-would have made the gate green on a unit that checks nothing. Moved to
-`scenes/showcases/`. Coverage lost: zero. Gate time recovered: **240 s every run**.
-
-`building_blueprint_test` compiled fine; **`BuildingFitout` → `BrickDoor` names
-`WorldGateway` bare**, so under `--script` the cascade killed `BrickDoor.new()`
-*inside the bake the test asserts on*. Converted to lane B. **The check count is 117
-in both lanes** — the compile error was NOT hiding un-run checks, which is the
-opposite of what I briefed, and the agent said so plainly rather than letting the
-expectation stand.
-
-**`tools/gate.sh` had a real hole:** the leading-underscore scratch escape existed
-**only in lane A**. A probe needing autoloads — the only kind that can reach
-`WorldGateway`/`HullRegistry`/`VesselSpawn` by bare identifier, so the kind most
-investigations need — must be a scene, and scenes were collected and run as units
-regardless of name. An agent following the documented convention would have been
-silently disobeyed. Fixed and mutation-verified.
-
-### THE `BrickCatalog.BRICKS` HYPOTHESIS IS DEAD — I was wrong twice
-
-I twice asserted that ten reds shared the empty-catalogue root cause. Measured at
-runtime: `bricks=64`, `prebuilt_entries=3`, all three `compliance_ok=true`. `BRICKS`
-was restored in `e9de76a` and the three prebuilt vessels committed there as
-*unverified* are in fact compliant — and they turned `vessel_registration_test`
-green before anyone touched it.
-
-`building_blueprint_test` was never a member: its 9 vocabulary checks pass on their
-own terms and its 4 reds have nothing to do with the catalogue. **Both times I
-asserted that grouping I was wrong about at least one member.** Ask for the
-dependency graph; do not hand one down.
-
-### OWNER DECISION — `BuildingLayout.place_footprint` ignores its grid
-
-Its fourth parameter is `_building_grid: BuildingGrid = null`, underscore-prefixed
-and **never read**. Both `_place_content` and `_place_surface` call `ensure_fit_cells`,
-which grows the layout's own volume instead. Probed:
-
-```
-before  grid_size=(8,6,8)  primaries=5
-place at (9,0,0) in an 8-wide grid → returned TRUE
-after   grid_size=(12,6,8) primaries=6   every cell shifted +2 on X
-```
-
-That one dead parameter is all four reds in `building_blueprint_test` (4/117):
-placement accepted, primary count wrong, the block authored at (1,1,1) now at
-(3,1,1), and an extra visual baked. Patching `place_footprint` to honour its
-argument gives **`PASS (117 checks)`** — verified by experiment, then reverted.
-
-It is a design question, not a slip, and it is §4a: **`BrickLayout.place_footprint`'s
-grid argument IS load-bearing and does reject out-of-bounds**, while
-`BuildingLayout`'s is inert. Two sibling classes, contradictory behaviour, one of
-them wrong. Either `BuildingLayout` honours a grid a caller hands it, or the dead
-parameter goes and the "placement outside the grid is rejected" check goes with it.
-Growth is *intentional* elsewhere — `_check_volume_growth` asserts it,
-`refit_volume_to_content` does it on load, and `building_brick_editor.gd` passes
-`null` on every call. Owner's call.
+1. **Is 0.5 m the right BRICK cell?** Nobody has looked at a rendered brick vessel
+   beside the figure. Structure plans are unaffected.
+2. **`BuildingLayout.place_footprint` ignores its `_building_grid`** — 4/117 in
+   `building_blueprint_test`. `BrickLayout`'s equivalent argument IS load-bearing
+   and does reject out-of-bounds. Two sibling classes, contradictory, one wrong.
+3. `budget_caps.crane` is 0 on every registration, so any crane fails compliance.
+4. No lifesaving requirement of any kind exists.
+5. No hull under 28 m, though two of three reference vessels are ~22 m and the
+   third ~15 m.
 
 ### CORRECTION to commit e9de76a, and to my own briefing of the catalogue wave
 
