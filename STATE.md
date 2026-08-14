@@ -968,16 +968,24 @@ same way the known-red list had — it named the bare-`assert()` conversion and 
 when both had long landed. **A stale next-actions list sends the next wave at work that is already
 done.** Regenerate this from the tree, not from the last copy of itself.
 
-### In flight — three waves, with their file ownership, because they overlap
+### In flight — 2026-08-14, after four waves died on the account's weekly API limit
+
+Every wave in the previous table terminated mid-task on `You've hit your weekly
+limit`. Two left usable work, which is committed: the piece-interior test (997
+lines, no `.tscn` — I supplied one and it runs) and three prebuilt vessel JSONs
+(unverified against `VesselCompliance`). Four scratch probes carry leading
+underscores so the gate skips them; kept because they are the only record of what
+those agents measured.
 
 | Wave | Owns | Must not touch |
 |---|---|---|
-| **Studio piece tool** — the critical path | `scripts/apps/structure_studio.gd`, `scripts/construction/structure_plan.gd` | the kit data + resolver |
-| **Kit set-widening** — camber, rake step, tier height, diagonal cap | `structure_pieces.json`, `piece_kit.gd`, `gen_piece_fixtures.py`, `piece_kit_test/capture` | the studio, the plan |
-| **Kit critic** — adversarial, briefed to BREAK the seam and mouse claims | `critic_*`, `piece_kit_critic_*` only | everything else |
+| **Impassable doors** — the critical path | `piece_kit.gd`, `structure_pieces.json`, `structure_baker.gd`, `piece_interior_test.*`, `piece_kit_test.gd`, `probe_piece_*` | the three not-tests |
+| **Units that report no outcome** | `vessel_registration_test.*`, `staged_vessel_visual_demo.*`, `building_blueprint_test.*`, `tools/gate.sh` | everything piece-related |
 
-Concurrent waves have already clobbered each other once in this repo, which is why ownership is
-written down rather than assumed.
+**Careful with `structure_baker.gd`.** `bake()` and `collect_colliders()` both open
+with `resolved(plan)` — the seam from `763dbdc` that made placements reach the game
+at all. Before it they contributed 0 triangles and 0 colliders. `piece_kit_test`
+holds it with 10 checks; un-wiring `resolved()` turns 11 of 176 red.
 
 ### CORRECTION to commit e9de76a, and to my own briefing of the catalogue wave
 
