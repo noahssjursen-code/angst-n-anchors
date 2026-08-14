@@ -211,13 +211,13 @@
 				"lift": 0.0,
 				"opening": "door",
 				"rake": 0.0,
-				"span": 2.0
+				"span": 3.0
 			},
 			"piece": "wall_panel"
 		},
 		{
 			"cell": [
-				9.0,
+				8.0,
 				0.0,
 				32.0
 			],
@@ -231,7 +231,7 @@
 				"lift": 0.0,
 				"opening": "scuttle",
 				"rake": 0.0,
-				"span": 3.0
+				"span": 2.0
 			},
 			"piece": "wall_panel"
 		},

@@ -173,7 +173,7 @@
    ],
    "facing": 90,
    "params": {
-    "span": 2,
+    "span": 3,
     "height": 5,
     "head": 0,
     "fall": 0,
@@ -189,7 +189,7 @@
    "cell": [
     5,
     0,
-    47
+    46
    ],
    "facing": 90,
    "params": {
@@ -211,11 +211,11 @@
    "cell": [
     5,
     0,
-    39
+    38
    ],
    "facing": 90,
    "params": {
-    "span": 3,
+    "span": 2,
     "height": 5,
     "head": 1,
     "fall": -1,
@@ -234,7 +234,7 @@
    ],
    "facing": 270,
    "params": {
-    "span": 3,
+    "span": 2,
     "height": 5,
     "head": 2,
     "fall": 1,
@@ -249,7 +249,7 @@
    "cell": [
     15,
     0,
-    39
+    38
    ],
    "facing": 270,
    "params": {
@@ -271,11 +271,11 @@
    "cell": [
     15,
     0,
-    47
+    46
    ],
    "facing": 270,
    "params": {
-    "span": 2,
+    "span": 3,
     "height": 5,
     "head": 0,
     "fall": 0,
@@ -316,7 +316,7 @@
     "height": 5,
     "head": 0,
     "rake": 2,
-    "span": 2,
+    "span": 3,
     "opening": "door"
    },
    "color": "#e3e0d4",
@@ -326,7 +326,7 @@
    "id": 20,
    "piece": "wall_panel",
    "cell": [
-    9,
+    8,
     0,
     50
    ],
@@ -335,7 +335,7 @@
     "height": 5,
     "head": 0,
     "rake": 2,
-    "span": 3
+    "span": 2
    },
    "color": "#e3e0d4",
    "_is": "lower tier, aft bulkhead"
@@ -1040,12 +1040,29 @@
    ],
    "facing": 180,
    "params": {
-    "span": 8,
+    "span": 3,
     "profile": "strake",
     "offset": 2
    },
    "color": "#9e5c1c",
-   "_is": "rubbing strake across the raked aft bulkhead"
+   "_is": "rubbing strake across the raked aft bulkhead, starboard of the door \u2014 it STOPS at the door panel. A strake is 0.22 m of proud band at 0.50 m, and run through the doorway it is a shin-height bar across it: piece_interior_test marched 14 capsules at that door and every one of them was stopped by this run or began inside it."
+  },
+  {
+   "id": 62,
+   "piece": "trim_band",
+   "cell": [
+    8,
+    1,
+    50
+   ],
+   "facing": 180,
+   "params": {
+    "span": 2,
+    "profile": "strake",
+    "offset": 2
+   },
+   "color": "#9e5c1c",
+   "_is": "rubbing strake across the raked aft bulkhead, port of the door \u2014 picks the run up past the casing"
   },
   {
    "id": 59,

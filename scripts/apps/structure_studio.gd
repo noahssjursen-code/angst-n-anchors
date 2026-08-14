@@ -1016,8 +1016,12 @@ const TUG_RECIPE: Array = [
 	["wall_panel", 15, 0, 27, 270, {"span": 4, "height": 4, "rake": 0, "opening": "window"}, "#e3e0d4"],
 	["corner_45", 15, 0, 32, 180, {"span": 1, "height": 4, "rake_a": 0, "rake_b": 0}, "#e3e0d4"],
 	["wall_panel", 14, 0, 32, 180, {"span": 3, "height": 4, "rake": 0, "opening": "scuttle"}, "#e3e0d4"],
-	["wall_panel", 11, 0, 32, 180, {"span": 2, "height": 4, "rake": 0, "opening": "door"}, "#e3e0d4"],
-	["wall_panel", 9, 0, 32, 180, {"span": 3, "height": 4, "rake": 0, "opening": "scuttle"}, "#e3e0d4"],
+	## Three cells, not two: the kit's door is 1.20 m of clear opening (the player
+	## capsule is 0.70 m across) and `wall_panel`'s constraint refuses one on a
+	## panel under three cells. The aft face is 8 cells, so the scuttle beside it
+	## gives one up: 3 + 3 + 2.
+	["wall_panel", 11, 0, 32, 180, {"span": 3, "height": 4, "rake": 0, "opening": "door"}, "#e3e0d4"],
+	["wall_panel", 8, 0, 32, 180, {"span": 2, "height": 4, "rake": 0, "opening": "scuttle"}, "#e3e0d4"],
 	["corner_45", 5, 0, 32, 90, {"span": 1, "height": 4, "rake_a": 0, "rake_b": 0}, "#e3e0d4"],
 	["wall_panel", 5, 0, 31, 90, {"span": 8, "height": 4, "rake": 0, "opening": "window"}, "#e3e0d4"],
 	["wall_panel", 5, 0, 23, 90, {"span": 4, "height": 4, "rake": 0, "opening": "window"}, "#e3e0d4"],

@@ -1,4 +1,29 @@
-extends SceneTree
+extends Node
+
+## ── Why this is a lane-B scene test and not a `--script` one ────────────────
+## It was lane A (`extends SceneTree`, run with `--script`), and on every gate
+## run it emitted BOTH a compile error and assertion failures:
+##
+##     SCRIPT ERROR: Compile Error: Identifier not found: WorldGateway
+##                   at: GDScript::reload (res://scripts/ship/brick_door.gd:96)
+##     SCRIPT ERROR: Compile Error: Failed to compile depended scripts.
+##                   at: GDScript::reload (res://scripts/port/building_fitout.gd:0)
+##     ERROR: building_blueprint_test: placement outside the grid is rejected
+##
+## That is the trap `ship_display_units_test` documents (7cb88bb), one layer
+## deeper: the file itself compiles, but `BuildingFitout` — which it bakes
+## through — preloads `BrickDoor`, and `brick_door.gd:96` names the autoload
+## `WorldGateway` as a bare global identifier. `--script` REGISTERS NO AUTOLOADS
+## (CONVENTIONS §2), so `BrickDoor` never compiles, `BuildingFitout` never
+## compiles, and `BrickDoor.new()` dies at runtime with "Nonexistent function
+## 'new' in base 'GDScript'" — inside the bake this test is asserting on.
+##
+## So the bake checks were failing for a reason that has nothing to do with the
+## bake, and the assertion failures beside them were indistinguishable from it
+## in a results table (both read `FAIL(1)`). Booting a `.tscn` registers the
+## autoloads; that is the whole of the fix. Not one assertion was changed by the
+## conversion — the reds that remain are the reds that were always there, and
+## they are now the only thing in the log.
 
 const TestReport := preload("res://tests/support/test_report.gd")
 
@@ -12,6 +37,10 @@ const TestReport := preload("res://tests/support/test_report.gd")
 ## `BrickCatalog.BRICKS` is `{}` (scripts/ship/brick_catalog.gd:17). They go
 ## green when the vocabulary returns, not when the bounds are loosened.
 ##
+## UPDATE 2026-08-14: the vocabulary DID return — `BrickCatalog.BRICKS` holds 64
+## entries again (restored in e9de76a, header at scripts/ship/brick_catalog.gd:13)
+## and every one of those vocabulary checks now passes on its own terms.
+##
 ## The brick-independent coverage added alongside the inversion is kept — it is
 ## real coverage. Its "refuses an uncatalogued id" checks now name
 ## `UNKNOWN_BRICK`, which is not a brick under any vocabulary, so they exercise
@@ -21,10 +50,10 @@ const TestReport := preload("res://tests/support/test_report.gd")
 const UNKNOWN_BRICK := "not_a_brick_in_any_vocabulary"
 
 
-func _initialize() -> void:
+func _ready() -> void:
 	var t := TestReport.new("building_blueprint_test")
 	_run(t)
-	t.finish(self)
+	t.finish(get_tree())
 
 
 func _run(t: TestReport) -> void:
@@ -92,6 +121,36 @@ func _check_placement_and_bake(t: TestReport) -> void:
 	t.check("erasing the stacked cell reports a removal", layout.erase_footprint_at(Vector3i(0, 0, 4)))
 	var floor_left := layout.get_brick(Vector3i(0, 0, 4))
 	t.check("erase strips content first, keeps floor", BuildingLayout.entry_is_surface_only(floor_left))
+	## ── DIAGNOSED RED, and the root cause of the three checks that follow ──────
+	## Measured 2026-08-14 (probe: place the house, then place at (9,0,0) in an
+	## 8-wide grid):
+	##
+	##     before  grid_size=(8,6,8)   primaries=5
+	##     after   returned TRUE       grid_size=(12,6,8)  primaries=6
+	##
+	## `BuildingLayout.place_footprint` declares its fourth parameter
+	## `_building_grid: BuildingGrid = null` — underscore-prefixed and never read.
+	## Neither `_place_content` nor `_place_surface` consults the caller's grid;
+	## both call `ensure_fit_cells`, which GROWS the layout's own volume (8 -> 12
+	## on X) and shifts every existing cell by +2. So this placement is accepted,
+	## and the shift is why the next two checks fail too: `iter_primary_cells()`
+	## returns 6 instead of 5, and the yawed block that was authored at (1,1,1) is
+	## now at (3,1,1), leaving (1,1,1) empty.
+	##
+	## NOT "fixed" here, because that would mean editing `scripts/port/
+	## building_layout.gd`, which this wave does not own, and because it is a real
+	## design question rather than an arithmetic slip: the growth is deliberate
+	## (`_check_volume_growth` below asserts it, `refit_volume_to_content` does it
+	## on load, and `building_brick_editor.gd` passes `null` for the grid on every
+	## call). Only `shipyard_brick_editor.gd` passes a grid, and that is the OTHER
+	## class — `BrickLayout.place_footprint`, whose grid argument is load-bearing
+	## and does reject out-of-bounds cells.
+	##
+	## So the two are contradictory and one of them is wrong (REALITY.md §4a):
+	## either `BuildingLayout` must honour the grid a caller hands it, or the dead
+	## parameter must go and this check with it. Leaving the check red states the
+	## contradiction instead of picking a side quietly. It is not weakened, not
+	## inverted, and not skipped.
 	t.check(
 		"placement outside the grid is rejected",
 		not layout.place_footprint(Vector3i(9, 0, 0), "block", 0, grid),
@@ -109,8 +168,30 @@ func _check_placement_and_bake(t: TestReport) -> void:
 		"the baked fitout carries the blueprint id",
 		str(fitout.get_meta("building_blueprint_id", "")) == "roundtrip_house",
 	)
-	## foundation, wall block, door, painted block, floor-only leftover, + collision
-	t.check("primary visuals plus collision root", fitout.get_child_count() == 5 + 1)
+	## ── The constant was wrong, independently of the grid bug above ────────────
+	## `BuildingFitout.build` emits one Node3D per primary cell on top of TWO
+	## fixed scaffolding children: `BuildingLighting` and the `Collision` root.
+	## `_check_fitout` below asserts both by name, and asserts that a bake of one
+	## unresolvable brick has exactly 2 children — i.e. the same file already
+	## states that lighting is a child.
+	##
+	## This check said `5 + 1`. Its own comment enumerated "foundation, wall
+	## block, door, painted block, floor-only leftover, + collision" and forgot
+	## the lighting node, so it demanded six children of a bake that produces
+	## seven. Measured on the house authored above with the out-of-bounds
+	## placement removed: BuildingLighting, Collision, and five visuals = 7.
+	## Two checks in one file disagreeing about one object is the finding
+	## (REALITY.md §4a), and here the one with the hand-written total is the wrong
+	## one.
+	##
+	## The 5 is NOT relaxed — it is the house authored above, stated absolutely —
+	## so this check still fails while `place_footprint` grows the volume and adds
+	## a sixth visual. It goes green when that is settled, not before.
+	t.check(
+		"one visual per primary cell plus lighting and the collision root (got %d children)"
+		% fitout.get_child_count(),
+		fitout.get_child_count() == 5 + 2,
+	)
 	fitout.free()
 
 	t.check(

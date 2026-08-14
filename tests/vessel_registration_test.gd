@@ -1,9 +1,44 @@
 extends Node
 
-var _failures := PackedStringArray()
+## Lane B (a sibling `.tscn` exists): `HarbourController`, `VesselSpawn` and the
+## compliance chain reach autoloads by bare identifier, so `--script` cannot run
+## this file. Running it in lane A produces `Identifier not found: WorldGateway`,
+## which was once read as a defect in the test and was not (STATE.md, "CORRECTION
+## to commit e9de76a"). Check the lane before diagnosing the failure.
+##
+## ── Why this now reports through TestReport ─────────────────────────────────
+## Rewritten 2026-08-14. It kept its own `_failures` array and, on success,
+## printed one sentence:
+##
+##     Vessel registration: legal code, checklists, and lifecycle gates passed
+##
+## No unit name, no check count, no `NO CHECKS RAN` floor. Two things followed
+## from that, and the second is the one that matters:
+##
+## 1. It spoke a private dialect. The gate matches a verdict by regex and only
+##    caught this one on the bare word "passed"; nothing in the log said how much
+##    had actually been asserted, so the unit could not be read at a glance next
+##    to the rest of the suite.
+##
+## 2. FOUR of its eight sub-tests began `if entry.is_empty(): return` and
+##    contributed ZERO checks when the prebuilt catalogue was empty — and the
+##    verdict line did not change shape by one character. That is REALITY.md §4
+##    verbatim ("early return on a missing fixture ... then reporting success").
+##    Measured against the empty catalogue on 2026-08-10 this file emitted two
+##    failures; it should have emitted two failures AND said that four whole
+##    sub-tests never ran.
+##
+## Every early return is now a recorded failure that names the fixture it wanted,
+## so a missing fixture is red rather than silent, and the check count moves when
+## coverage moves. No assertion was removed or loosened in the rewrite.
+
+const TestReport := preload("res://tests/support/test_report.gd")
+
+var _t: TestReport
 
 
 func _ready() -> void:
+	_t = TestReport.new("vessel_registration_test")
 	_test_catalog_and_inheritance()
 	_test_official_fishing_registration()
 	_test_fishing_berth_deployment_filter()
@@ -12,13 +47,20 @@ func _ready() -> void:
 	_test_nav_light_placement()
 	_test_seeded_registration_types()
 	_test_deployment_gate()
-	if _failures.is_empty():
-		print("Vessel registration: legal code, checklists, and lifecycle gates passed")
-		get_tree().quit()
-	else:
-		for failure in _failures:
-			push_error("Vessel registration: " + failure)
-		get_tree().quit(1)
+	_t.finish(get_tree())
+
+
+## The fixture four sub-tests are built on. Returning it silently when it is
+## missing is what let those sub-tests evaporate; every caller now records a
+## failure naming itself, so an absent trawler costs four visible checks rather
+## than four invisible skips.
+func _require_trawler(who: String) -> Dictionary:
+	var entry := _official_trawler()
+	_check(
+		not entry.is_empty(),
+		"%s has the official trawler fixture to run against" % who,
+	)
+	return entry
 
 
 func _test_catalog_and_inheritance() -> void:
@@ -51,6 +93,7 @@ func _test_official_fishing_registration() -> void:
 	var entry := _official_trawler()
 	_check(not entry.is_empty(), "official trawler survives catalog compliance gate")
 	if entry.is_empty():
+		_check(false, "official fishing registration ran its remaining seven checks")
 		return
 	_check(not bool(entry.get("is_draft", true)), "certified trawler is not a draft")
 	var hull_id := str(entry.get("hull_id", ""))
@@ -78,7 +121,7 @@ func _test_official_fishing_registration() -> void:
 
 
 func _test_fishing_berth_deployment_filter() -> void:
-	var record := _official_trawler()
+	var record := _require_trawler("the fishing-berth deployment filter")
 	if record.is_empty():
 		return
 	var harbour := HarbourController.new()
@@ -108,7 +151,13 @@ func _test_official_starter_catalog() -> void:
 		_check(not entry.get("prebuilt_layout", {}).is_empty(), "starter keeps its brick layout")
 		break
 	_check(found_starter, "28×10 m starter stays in the authoring catalog")
-	for sale in PrebuiltVesselCatalog.for_sale_entries():
+	## The loop below contributes nothing over an empty sale list, and an empty
+	## sale list is exactly the state STATE.md calls "no starter vessel for any
+	## new player" — so the emptiness is asserted, not iterated over (REALITY.md
+	## §4, "negatives against an empty universe").
+	var for_sale := PrebuiltVesselCatalog.for_sale_entries()
+	_check(not for_sale.is_empty(), "the Shipwright has something to sell")
+	for sale in for_sale:
 		_check(
 			not bool(sale.get("is_draft", false)),
 			"Shipwright sale list excludes drafts",
@@ -146,7 +195,7 @@ func _test_stricter_registration_budget() -> void:
 
 
 func _test_nav_light_placement() -> void:
-	var entry := _official_trawler()
+	var entry := _require_trawler("the port/starboard nav-light check")
 	if entry.is_empty():
 		return
 	var layout_dict := (entry.get("prebuilt_layout", {}) as Dictionary).duplicate(true)
@@ -168,7 +217,7 @@ func _test_nav_light_placement() -> void:
 
 
 func _test_seeded_registration_types() -> void:
-	var entry := _official_trawler()
+	var entry := _require_trawler("the seeded registration-type checks")
 	if entry.is_empty():
 		return
 	var hull_id := str(entry.get("hull_id", ""))
@@ -199,7 +248,7 @@ func _test_seeded_registration_types() -> void:
 
 
 func _test_deployment_gate() -> void:
-	var entry := _official_trawler()
+	var entry := _require_trawler("the deployment gate")
 	if entry.is_empty():
 		return
 	var record := {
@@ -220,5 +269,4 @@ func _test_deployment_gate() -> void:
 
 
 func _check(condition: bool, message: String) -> void:
-	if not condition:
-		_failures.append(message)
+	_t.check(message, condition)

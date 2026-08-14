@@ -2,6 +2,34 @@ extends Node3D
 
 ## Runnable visual showcase for the large-vessel staged fitout pipeline.
 ## Space: advance · L: load JSON · R: restart · X: cutaway · A: auto/manual.
+##
+## ── Why this lives in scenes/showcases/ and not in tests/ ───────────────────
+## Moved 2026-08-14. It sat in `tests/`, so the gate globbed it as a lane-B unit
+## and burned the full 240 s timeout on it EVERY run — reported as `TIMEOUT`,
+## which reads like a hang or a slow test and is neither.
+##
+## It never called `quit()` because it is not a test and has nothing to quit
+## for: it makes no assertion, records no check, and prints no verdict. It is an
+## interactive app — an orbiting camera in `_process`, a HUD with buttons, a
+## `FileDialog`, and `_unhandled_input` waiting on SPACE/L/R/X/A. There is no
+## outcome for it to report, so no amount of adding `quit()` would have turned
+## it into a unit; it would only have made the gate green on a unit that checks
+## nothing (REALITY.md §4).
+##
+## Removing it from `tests/` therefore costs ZERO coverage — grep this file for
+## `check`, `assert` or a verdict line and there is nothing to lose — and buys
+## back 240 s of every gate run. AGENTS.md already classified it as a demo
+## ("Current demos"), named to the `<feature>_visual_demo.tscn` convention, and
+## already noted it as the only one outside `scenes/showcases/`. It is now where
+## its own naming convention says it belongs.
+##
+## The gate cannot pick it up here: lane A is `tests/*.gd`, lane B is
+## `tests/*.tscn`, and lane C requires either a self-check marker or a script
+## that speaks the verdict language. This file has neither. If this demo ever
+## grows a self-check, it joins lane C by declaring one — see tools/gate.sh for
+## the marker's exact spelling, which is deliberately NOT quoted here: the gate
+## greps every .gd in the tree for that literal token and a bare mention of it
+## in prose is a hard FAIL(selfcheck), which is how this comment first read.
 
 const HULL_ID := "hull_120x28"
 const SHELL_CLASSIFIER := preload("res://scripts/ship/brick_shell_classifier.gd")

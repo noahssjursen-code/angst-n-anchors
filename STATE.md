@@ -987,6 +987,76 @@ with `resolved(plan)` — the seam from `763dbdc` that made placements reach the
 at all. Before it they contributed 0 triangles and 0 colliders. `piece_kit_test`
 holds it with 10 checks; un-wiring `resolved()` turns 11 of 176 red.
 
+### Three units that reported no outcome — fixed, and one hypothesis killed
+
+`vessel_registration_test` **never used `TestReport`.** It kept a private failures
+array and printed one prose sentence on success. The gate scored it only because
+`VERDICT_RE` matched the bare word "passed" — nothing in the log said how much had
+been asserted. Behind that, **four of its eight sub-tests began `if entry.is_empty(): return`**
+and contributed zero checks against an empty prebuilt catalogue. Measured by
+deleting one fixture: **17 real assertions silently vanish** — "swapped port/starboard
+lights fail registration", "certified vessel is deployable", and 15 more — with the
+verdict line unchanged by one character. Now `PASS (41 checks)`; every early return
+is a recorded failure naming the fixture it wanted.
+
+`staged_vessel_visual_demo` **is a demo, not a test** — zero assertions, an orbiting
+camera, a HUD, a `FileDialog`, `_unhandled_input` on SPACE/L/R/X/A. Adding `quit()`
+would have made the gate green on a unit that checks nothing. Moved to
+`scenes/showcases/`. Coverage lost: zero. Gate time recovered: **240 s every run**.
+
+`building_blueprint_test` compiled fine; **`BuildingFitout` → `BrickDoor` names
+`WorldGateway` bare**, so under `--script` the cascade killed `BrickDoor.new()`
+*inside the bake the test asserts on*. Converted to lane B. **The check count is 117
+in both lanes** — the compile error was NOT hiding un-run checks, which is the
+opposite of what I briefed, and the agent said so plainly rather than letting the
+expectation stand.
+
+**`tools/gate.sh` had a real hole:** the leading-underscore scratch escape existed
+**only in lane A**. A probe needing autoloads — the only kind that can reach
+`WorldGateway`/`HullRegistry`/`VesselSpawn` by bare identifier, so the kind most
+investigations need — must be a scene, and scenes were collected and run as units
+regardless of name. An agent following the documented convention would have been
+silently disobeyed. Fixed and mutation-verified.
+
+### THE `BrickCatalog.BRICKS` HYPOTHESIS IS DEAD — I was wrong twice
+
+I twice asserted that ten reds shared the empty-catalogue root cause. Measured at
+runtime: `bricks=64`, `prebuilt_entries=3`, all three `compliance_ok=true`. `BRICKS`
+was restored in `e9de76a` and the three prebuilt vessels committed there as
+*unverified* are in fact compliant — and they turned `vessel_registration_test`
+green before anyone touched it.
+
+`building_blueprint_test` was never a member: its 9 vocabulary checks pass on their
+own terms and its 4 reds have nothing to do with the catalogue. **Both times I
+asserted that grouping I was wrong about at least one member.** Ask for the
+dependency graph; do not hand one down.
+
+### OWNER DECISION — `BuildingLayout.place_footprint` ignores its grid
+
+Its fourth parameter is `_building_grid: BuildingGrid = null`, underscore-prefixed
+and **never read**. Both `_place_content` and `_place_surface` call `ensure_fit_cells`,
+which grows the layout's own volume instead. Probed:
+
+```
+before  grid_size=(8,6,8)  primaries=5
+place at (9,0,0) in an 8-wide grid → returned TRUE
+after   grid_size=(12,6,8) primaries=6   every cell shifted +2 on X
+```
+
+That one dead parameter is all four reds in `building_blueprint_test` (4/117):
+placement accepted, primary count wrong, the block authored at (1,1,1) now at
+(3,1,1), and an extra visual baked. Patching `place_footprint` to honour its
+argument gives **`PASS (117 checks)`** — verified by experiment, then reverted.
+
+It is a design question, not a slip, and it is §4a: **`BrickLayout.place_footprint`'s
+grid argument IS load-bearing and does reject out-of-bounds**, while
+`BuildingLayout`'s is inert. Two sibling classes, contradictory behaviour, one of
+them wrong. Either `BuildingLayout` honours a grid a caller hands it, or the dead
+parameter goes and the "placement outside the grid is rejected" check goes with it.
+Growth is *intentional* elsewhere — `_check_volume_growth` asserts it,
+`refit_volume_to_content` does it on load, and `building_brick_editor.gd` passes
+`null` on every call. Owner's call.
+
 ### CORRECTION to commit e9de76a, and to my own briefing of the catalogue wave
 
 That commit claimed *"vessel_registration_test does not COMPILE in lane A"* and

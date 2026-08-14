@@ -383,6 +383,15 @@ static func _parse_footprint(
 ## whole height has no header left, and that is a legal pick of two legal values.
 ## Each entry is {expr, min, _is}; a setting whose expression falls under `min`
 ## is refused with the piece's own words.
+##
+## An `expr` may itself be a `{"$choice": ...}` — the SAME mechanism the build
+## tree carries, and it is here for the case a per-parameter set cannot reach at
+## all: what a legal `span` is DEPENDS on which `opening` was picked. A 1.20 m
+## door needs three cells and a 0.40 m scuttle needs one, and neither the span
+## set nor the opening set can say so alone. Every choice combination is walked
+## at load, so a branch that names a parameter the piece does not have, or that
+## is violated by the piece's own defaults, is a rejected piece rather than a
+## clamp on somebody's boat.
 static func _parse_constraints(
 	id: String, raw: Variant, params: Dictionary, errors: PackedStringArray
 ) -> Array:
@@ -403,13 +412,28 @@ static func _parse_constraints(
 		if not entry.has("expr"):
 			errors.append("piece \"%s\": constraints[%d] needs an \"expr\"" % [id, index])
 			continue
+		var where := "piece \"%s\" constraints[%d].expr" % [id, index]
 		var probe_errors := PackedStringArray()
-		var _probe := _eval(
-			entry["expr"], numeric, "piece \"%s\" constraints[%d].expr" % [id, index], probe_errors
-		)
+		for probe_variant in _choice_combinations(params):
+			var choices: Dictionary = {}
+			for key in (probe_variant as Dictionary).keys():
+				var value: Variant = (probe_variant as Dictionary)[key]
+				if value is String:
+					choices[str(key)] = str(value)
+			var branch: Variant = _choose(entry["expr"], choices, where, probe_errors)
+			var _probe := _eval(branch, numeric, where, probe_errors)
 		for message in probe_errors:
 			errors.append(message)
-		if _probe < float(entry.get("min", 0.0)) - 1e-6:
+		var default_choices: Dictionary = {}
+		for key in params.keys():
+			var spec := params[key] as Dictionary
+			if not bool(spec.get("numeric", false)):
+				default_choices[str(key)] = str(spec["default"])
+		var at_defaults := _eval(
+			_choose(entry["expr"], default_choices, where, probe_errors), numeric, where,
+			PackedStringArray()
+		)
+		if at_defaults < float(entry.get("min", 0.0)) - 1e-6:
 			errors.append(
 				"piece \"%s\": constraints[%d] is already violated by the piece's own defaults"
 				% [id, index]
@@ -563,18 +587,25 @@ static func resolve_params(piece_id: String, given: Dictionary) -> Dictionary:
 		out[name] = value
 	if errors.is_empty():
 		var numeric: Dictionary = {}
+		var picked: Dictionary = {}
 		for key in out.keys():
 			var value: Variant = out[key]
 			if value is int or value is float:
 				numeric[str(key)] = float(value)
+			elif value is String:
+				picked[str(key)] = str(value)
 		for constraint_variant in piece.get("constraints", []) as Array:
 			var constraint := constraint_variant as Dictionary
-			var value := _eval(constraint["expr"], numeric, "piece \"%s\" constraint" % piece_id, errors)
+			var where := "piece \"%s\" constraint" % piece_id
+			## $choice FIRST: WHICH relationship applies can itself depend on a
+			## choice parameter — see _parse_constraints.
+			var expr: Variant = _choose(constraint["expr"], picked, where, errors)
+			var value := _eval(expr, numeric, where, errors)
 			if value < float(constraint["min"]) - 1e-6:
 				errors.append(
 					"piece \"%s\": %s = %s, which is under %s — %s"
 					% [
-						piece_id, str(constraint["expr"]), str(value), str(constraint["min"]),
+						piece_id, str(expr), str(value), str(constraint["min"]),
 						str(constraint["why"]),
 					]
 				)

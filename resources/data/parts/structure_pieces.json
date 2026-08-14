@@ -138,8 +138,12 @@
         "lift":   {"unit": "eighth_cells", "values": [-4, -3, -2, -1, 0, 1, 2, 3, 4], "default": 0,
                    "_is": "moves the whole piece up off its grid node in 0.125 m steps, +-0.5 m. What lets a wall stand on a deck that is not on a whole cell."},
         "opening": {"unit": "choice", "values": ["none", "door", "window", "scuttle"], "default": "none",
-                    "_is": "a real hole with its proud casing, centred on the panel. A door is 0.85 x 1.95 m against a 1.8 m figure; a window 0.80 x 0.70 at 1.20 m sill; a scuttle 0.40 x 0.40. The opening is the piece, not a set of four numbers - which is why span is fixed by what fits, not by the hole."}
+                    "_is": "a real hole with its proud casing, centred on the panel. A door is 1.20 x 1.95 m; a window 0.80 x 0.70 at 1.20 m sill; a scuttle 0.40 x 0.40. The opening is the piece, not a set of four numbers - which is why span is fixed by what fits, not by the hole, and why `constraints` refuses a hole the panel is too narrow to carry. WHY A DOOR IS 1.20 m AND NOT THE 0.85 m A HOUSE DOOR IS, measured rather than chosen: the thing that walks through it is not a person, it is `scenes/shared/player.tscn` - a capsule of RADIUS 0.35, so 0.70 m across the shoulders where a person is 0.45. At 0.85 m the clear column left for the capsule's centre line was 0.13 m wide, and `piece_interior_test` reported every doorway in every piece-built deckhouse as impassable. Every hand-authored deckhouse in this repo had already been widened to 1.10-2.00 m by the same measurement on the same figure (`plan_interior_test`, `demo_workboat`); the kit was the one authoring layer still quoting the real-world number."}
       },
+      "constraints": [
+        {"expr": {"$choice": "opening", "none": 8, "door": "span-3", "window": "span-2", "scuttle": "span-1"}, "min": 0,
+         "_is": "a hole needs a panel wide enough to carry it AND to keep plating either side of it. A 1.20 m door wants 3 cells (0.15 m of plating each side), a 0.80 m window 2, a 0.40 m scuttle 1. Without this the baker CLAMPS the opening to what fits - a span-2 panel with a door quietly became a 1.00 m hole with no plating at all - and a kit whose pieces quietly change size is worse than one that refuses."}
+      ],
       "build": [
         {
           "primitive": "plate",
@@ -153,7 +157,7 @@
           "openings": {
             "$choice": "opening",
             "none": [],
-            "door":    [{"type": "door",   "offset": "span*0.25-0.425", "width": 0.85, "sill": 0.00, "height": 1.95}],
+            "door":    [{"type": "door",   "offset": "span*0.25-0.60",  "width": 1.20, "sill": 0.00, "height": 1.95}],
             "window":  [{"type": "window", "offset": "span*0.25-0.40",  "width": 0.80, "sill": 1.20, "height": 0.70}],
             "scuttle": [{"type": "window", "offset": "span*0.25-0.20",  "width": 0.40, "sill": 1.30, "height": 0.40}]
           }

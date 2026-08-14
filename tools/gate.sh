@@ -383,6 +383,17 @@ done < <(grep -l '^extends SceneTree' tests/*.gd 2>/dev/null | sort)
 for tscn in tests/*.tscn; do
   [ -e "$tscn" ] || continue
   gd="${tscn%.tscn}.gd"
+  # Same leading-underscore rule as lane A above, and it has to be here too.
+  # It was NOT, and the gap was the wrong way round: the documented escape
+  # hatch ("name a scratch probe _foo and the gate leaves it alone") worked
+  # only for `extends SceneTree` probes, while a probe that needs the autoloads
+  # — the ONLY kind that can reach WorldGateway, HullRegistry or VesselSpawn by
+  # bare identifier, and therefore the kind most investigations need — has to be
+  # a scene, and a scene was collected and run as a unit regardless of its name.
+  # An agent following the convention would have been silently disobeyed.
+  case "$(basename "$tscn")" in
+    _*) SKIPPED_SCRATCH+=("$tscn"); continue ;;
+  esac
   # No sibling script: nothing for this gate to assert on.
   [ -f "$gd" ] || continue
   # Stale pairing — see the header. Skipped, never run: it can only time out.

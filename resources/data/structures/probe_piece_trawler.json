@@ -304,7 +304,7 @@
    ],
    "facing": 90,
    "params": {
-    "span": 2,
+    "span": 3,
     "height": 5,
     "head": 0,
     "fall": 0,
@@ -320,7 +320,7 @@
    "cell": [
     5,
     0,
-    47
+    46
    ],
    "facing": 90,
    "params": {
@@ -342,11 +342,11 @@
    "cell": [
     5,
     0,
-    39
+    38
    ],
    "facing": 90,
    "params": {
-    "span": 3,
+    "span": 2,
     "height": 5,
     "head": 1,
     "fall": -1,
@@ -365,7 +365,7 @@
    ],
    "facing": 270,
    "params": {
-    "span": 3,
+    "span": 2,
     "height": 5,
     "head": 2,
     "fall": 1,
@@ -380,7 +380,7 @@
    "cell": [
     15,
     0,
-    39
+    38
    ],
    "facing": 270,
    "params": {
@@ -402,11 +402,11 @@
    "cell": [
     15,
     0,
-    47
+    46
    ],
    "facing": 270,
    "params": {
-    "span": 2,
+    "span": 3,
     "height": 5,
     "head": 0,
     "fall": 0,
@@ -447,7 +447,7 @@
     "height": 5,
     "head": 0,
     "rake": 2,
-    "span": 2,
+    "span": 3,
     "opening": "door"
    },
    "color": "#e3e0d4",
@@ -457,7 +457,7 @@
    "id": 128,
    "piece": "wall_panel",
    "cell": [
-    9,
+    8,
     0,
     50
    ],
@@ -466,7 +466,7 @@
     "height": 5,
     "head": 0,
     "rake": 2,
-    "span": 3
+    "span": 2
    },
    "color": "#e3e0d4",
    "_is": "lower tier, aft bulkhead"

@@ -77,7 +77,9 @@ Current demos:
 - `scenes/showcases/vessel_skin_showcase.tscn` — legacy per-brick vs `VesselSkinBaker` merged-skin rendering, side by side on real prebuilts with live mesh/node counts
 - `scenes/showcases/crane_showcase.tscn` — bulk grab + provision T-crane (containers)
 - `scenes/showcases/marine_autopilot_showcase.tscn` — deterministic sea route + replicated progress viewer
-- `tests/staged_vessel_visual_demo.tscn` — staged deck fitout construction
+- `scenes/showcases/staged_vessel_visual_demo.tscn` — staged deck fitout construction
+  (moved out of `tests/` 2026-08-14: it asserts nothing and reports no verdict, so
+  the gate could only ever score it as a 240 s TIMEOUT)
 
 ---
 

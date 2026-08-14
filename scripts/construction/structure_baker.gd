@@ -1051,11 +1051,24 @@ static func plate_panels(spec: Dictionary) -> Array:
 	return out
 
 
-## Casing round every opening: jambs straddling the cut edges, a lintel across
-## their heads, a sill under a window — the same joinery a wall opening gets, in
-## the plate's own parameter space and proud of BOTH faces. A deckhouse side with
-## flush-cut holes reads as a cardboard cut-out; the proud frame is what makes a
-## window read as a window from any angle.
+## Casing round every opening: a jamb up each side, a lintel across the head, a
+## sill under a window — the same joinery a wall opening gets, in the plate's own
+## parameter space and proud of BOTH faces. A deckhouse side with flush-cut holes
+## reads as a cardboard cut-out; the proud frame is what makes a window read as a
+## window from any angle.
+##
+## ── The casing stands AROUND the hole, never across it ──────────────────────
+##
+## Each member laps the PLATING by PLATE_FRAME_WIDTH - SKIN_EPS and the clear
+## opening by SKIN_EPS, so the joint is still buried and `width`/`height` still
+## mean what the author typed. They did not always: the jambs used to be centred
+## ON the cut edges and the lintel ON the head, which quietly took
+## PLATE_FRAME_WIDTH/2 off each side of every doorway and off its head. That cost
+## nothing while the casing was drawn and not collided — and the moment it was
+## collided (which it now is, because a drawn thing the body walks through is the
+## drift this project keeps fixing) it would have taken 0.09 m off the shoulders
+## and 0.045 m off the head of every door in the game, against a player capsule
+## that already has to be measured to the centimetre to get through one.
 static func plate_frames(spec: Dictionary) -> Array:
 	var c := plate_corners(spec)
 	if c.size() != 4:
@@ -1063,7 +1076,7 @@ static func plate_frames(spec: Dictionary) -> Array:
 	var ref := plate_ref_lengths(c)
 	if ref.x <= 0.0 or ref.y <= 0.0:
 		return []
-	var half_w := PLATE_FRAME_WIDTH * 0.5
+	var w := PLATE_FRAME_WIDTH
 	var out: Array = []
 	for opening in plate_openings(spec, ref):
 		var off := float(opening["off"])
@@ -1071,66 +1084,94 @@ static func plate_frames(spec: Dictionary) -> Array:
 		var sill := float(opening["sill"])
 		var head := sill + float(opening["h"])
 		var has_sill := sill > 0.05
-		var jamb_lo := (sill + half_w - SKIN_EPS) if has_sill else 0.0
-		var jamb_hi := head - half_w + SKIN_EPS
-		var jamb_len := maxf(jamb_hi - jamb_lo, 0.1)
+		var jamb_lo := (sill - SKIN_EPS) if has_sill else 0.0
+		var jamb_hi := head + SKIN_EPS
 		var jamb_mid := (jamb_hi + jamb_lo) * 0.5
-		var span := width + PLATE_FRAME_WIDTH * 2.0
+		var jamb_len := maxf(jamb_hi - jamb_lo, 0.1)
+		var span := width + w * 2.0
 		var members := [
-			{"u": off, "v": jamb_mid, "ul": PLATE_FRAME_WIDTH, "vl": jamb_len},
-			{"u": off + width, "v": jamb_mid, "ul": PLATE_FRAME_WIDTH, "vl": jamb_len},
-			{"u": off + width * 0.5, "v": head, "ul": span, "vl": PLATE_FRAME_WIDTH},
+			{"u": off - w * 0.5 + SKIN_EPS, "v": jamb_mid, "ul": w, "vl": jamb_len},
+			{"u": off + width + w * 0.5 - SKIN_EPS, "v": jamb_mid, "ul": w, "vl": jamb_len},
+			{"u": off + width * 0.5, "v": head + w * 0.5 - SKIN_EPS, "ul": span, "vl": w},
 		]
 		if has_sill:
-			members.append({"u": off + width * 0.5, "v": sill, "ul": span, "vl": PLATE_FRAME_WIDTH})
+			members.append(
+				{"u": off + width * 0.5, "v": sill - w * 0.5 + SKIN_EPS, "ul": span, "vl": w}
+			)
 		for member in members:
 			var u := float(member["u"])
 			var v := float(member["v"])
 			var ul := float(member["ul"]) * 0.5
 			var vl := float(member["vl"]) * 0.5
+			var u0 := clampf(u - ul, 0.0, ref.x)
+			var u1 := clampf(u + ul, 0.0, ref.x)
+			var v0 := clampf(v - vl, 0.0, ref.y)
+			var v1 := clampf(v + vl, 0.0, ref.y)
+			## An opening flush with the plate's own edge clamps its outer jamb to
+			## a sliver. MIN_PANEL is the same two centimetres the panel
+			## decomposition drops, and it is applied here for the same reason: a
+			## slab that thin is a z-fighting artefact and a physics shape nobody
+			## asked for.
+			if u1 - u0 < MIN_PANEL or v1 - v0 < MIN_PANEL:
+				continue
 			out.append({
-				"u0": clampf((u - ul) / ref.x, 0.0, 1.0), "u1": clampf((u + ul) / ref.x, 0.0, 1.0),
-				"v0": clampf((v - vl) / ref.y, 0.0, 1.0), "v1": clampf((v + vl) / ref.y, 0.0, 1.0),
+				"u0": u0 / ref.x, "u1": u1 / ref.x, "v0": v0 / ref.y, "v1": v1 / ref.y,
 			})
 	return out
 
 
-## Renderable layers for one plate spec whose corners are ALREADY in plan space.
-static func plate_layers(spec: Dictionary, corners: PackedVector3Array, source_id := -1) -> Array:
+## EVERY slab one plate draws: its panels (the plate minus its openings) and the
+## casing round each opening, as {u0,u1,v0,v1,thickness,frame} in the plate's own
+## normalised parameter space.
+##
+## ONE list, and it is the only decomposition of a plate that exists — `plate_layers`
+## draws it and `plate_colliders` collides it. REALITY.md §3b: where geometry and
+## collision are computed separately they drift, and this project has now deleted
+## the second derivation four times. The casing was the fourth. It was drawn
+## PLATE_FRAME_PROUD past both faces while `plate_colliders` walked `plate_panels`
+## alone, so 44 of the 72 casing corners on `probe_piece_house` — and 200 of 240 on
+## `probe_piece_tug` — stood outside every box the baker emitted: a door frame you
+## can see, and put your shoulder through.
+static func plate_slabs(spec: Dictionary) -> Array:
 	var thickness := plate_thickness(spec)
+	var out: Array = []
+	for panel_variant in plate_panels(spec):
+		var panel := (panel_variant as Dictionary).duplicate()
+		panel["thickness"] = thickness
+		panel["frame"] = false
+		out.append(panel)
+	for frame_variant in plate_frames(spec):
+		var frame := (frame_variant as Dictionary).duplicate()
+		## Proud of BOTH faces, so the casing reads as depth from inside and out —
+		## same trick, same reason, as a wall's opening frame.
+		frame["thickness"] = thickness + PLATE_FRAME_PROUD * 2.0
+		frame["frame"] = true
+		out.append(frame)
+	return out
+
+
+## Renderable layers for one plate spec whose corners are ALREADY in plan space.
+## Walks `plate_slabs` — the same list `plate_colliders` walks.
+static func plate_layers(spec: Dictionary, corners: PackedVector3Array, source_id := -1) -> Array:
 	var segments := plate_segments(spec)
 	var color := _color_of(spec.get("color", null), DEFAULT_PLATE_COLOR)
 	var material := str(spec.get("material", "painted"))
-	var out: Array = []
-	for panel_variant in plate_panels(spec):
-		var panel := panel_variant as Dictionary
-		out.append({
-			"kind": "slab",
-			"quad": plate_subquad(
-				corners, float(panel["u0"]), float(panel["u1"]),
-				float(panel["v0"]), float(panel["v1"])
-			),
-			"thickness": thickness,
-			"segments": segments,
-			"color": color,
-			"material": material,
-			"source_id": source_id,
-		})
 	var frame_color := _color_of(spec.get("frame_color", null), color.darkened(0.45))
-	for frame_variant in plate_frames(spec):
-		var frame := frame_variant as Dictionary
+	var frame_material := str(spec.get("frame_material", "steel"))
+	var out: Array = []
+	for slab_variant in plate_slabs(spec):
+		var slab := slab_variant as Dictionary
+		var is_frame := bool(slab["frame"])
 		out.append({
 			"kind": "slab",
 			"quad": plate_subquad(
-				corners, float(frame["u0"]), float(frame["u1"]),
-				float(frame["v0"]), float(frame["v1"])
+				corners, float(slab["u0"]), float(slab["u1"]),
+				float(slab["v0"]), float(slab["v1"])
 			),
-			## Proud of BOTH faces, so the casing reads as depth from inside and
-			## out — same trick, same reason, as a wall's opening frame.
-			"thickness": thickness + PLATE_FRAME_PROUD * 2.0,
-			"segments": 1,
-			"color": frame_color,
-			"material": str(spec.get("frame_material", "steel")),
+			"thickness": float(slab["thickness"]),
+			"segments": 1 if is_frame else segments,
+			"color": frame_color if is_frame else color,
+			"material": frame_material if is_frame else material,
 			"source_id": source_id,
 		})
 	return out
@@ -1175,18 +1216,18 @@ static func plate_layers(spec: Dictionary, corners: PackedVector3Array, source_i
 ##     For an upright rectangular plate that sum is 0 and the answer is ONE box,
 ##     bit-exact. For the 0.85 m rake above it is 0.85 m, which is six steps.
 ##
-## Openings come through plate_panels(), so a door is a genuine hole in collision
-## exactly as it is in the geometry — the two read the same decomposition.
+## Openings come through plate_slabs(), so a door is a genuine hole in collision
+## exactly as it is in the geometry — the two read the same decomposition, casing
+## and all.
 static func plate_colliders(spec: Dictionary, corners: PackedVector3Array, offset: Vector3) -> Array:
 	if corners.size() != 4 or not bool(spec.get("solid", true)):
 		return []
-	var thickness := plate_thickness(spec)
 	var out: Array = []
-	for panel_variant in plate_panels(spec):
-		var panel := panel_variant as Dictionary
+	for slab_variant in plate_slabs(spec):
+		var slab := slab_variant as Dictionary
 		out.append_array(_plate_panel_colliders(
-			corners, thickness, offset,
-			float(panel["u0"]), float(panel["u1"]), float(panel["v0"]), float(panel["v1"])
+			corners, float(slab["thickness"]), offset,
+			float(slab["u0"]), float(slab["u1"]), float(slab["v0"]), float(slab["v1"])
 		))
 	return out
 

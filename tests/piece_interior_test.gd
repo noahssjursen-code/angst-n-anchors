@@ -128,7 +128,7 @@ const FIXTURES: Array[Dictionary] = [
 		"path": "res://resources/data/structures/probe_piece_house.json",
 		"hull": "hull_28x10",
 		"registration": "fishing_vessel",
-		"what": "the strict fixture — 57 placements, zero hand-authored plates",
+		"what": "the strict fixture — 58 placements, zero hand-authored plates",
 		## Lower tier: x 2.50..7.50, z 17.00..25.25, y 0..2.75.
 		"tier": [2.0, 8.0, 16.5, 25.5, -0.2, 2.4],
 		"inside": [[5.0, 21.0], [3.6, 19.0], [6.4, 23.0], [5.0, 24.2]],
@@ -159,12 +159,22 @@ var _boxes: Array = []
 var _owner_of: Dictionary = {}      ## collider index -> item id (plates only)
 var _indices_of: Dictionary = {}    ## item id -> Dictionary of collider indices
 var _offset := Vector3.ZERO
+## Run-level pane tallies. A per-fixture coverage check is honest but VACUOUS on
+## a fixture that carries no glazing in its tier, so the suite states once that
+## the pane sweep met glass somewhere. Without this, glazing could stop being
+## selected everywhere and every fixture would still report "0 of 0 swept".
+var _pane_plates := 0
+var _pane_stations := 0
 
 
 func _ready() -> void:
 	_t = TestReport.new("piece_interior_test")
 	for fixture in FIXTURES:
 		await _run_fixture(fixture)
+	print("\n[pane] across the run: %d glazed plates swept, %d stations"
+		% [_pane_plates, _pane_stations])
+	_t.check("the pane sweep met glazing somewhere in the run (%d plates, %d stations)"
+		% [_pane_plates, _pane_stations], _pane_plates >= 9 and _pane_stations >= 40)
 	_t.finish(get_tree())
 
 
@@ -438,15 +448,31 @@ func _figure(height: float) -> PhysicsShapeQueryParameters3D:
 
 # ── 2. The inside is walkable ────────────────────────────────────────────────
 
+## THE DROP IS MADE BY THE KNEELING FIGURE, and that is an instrument decision
+## with a measurement behind it (REALITY.md §8 — suspect the camera before the
+## subject). The claim here is WHERE THE FLOOR IS, and the capsule's bottom is at
+## `DROP_FROM` above the deck whatever height the capsule is, so the answer this
+## returns does not depend on the figure at all — measured, the house and the
+## trawler report the same 0.058 m either way. What DOES depend on it is whether
+## the probe starts clear: a standing figure dropped from 0.60 m has its head at
+## 2.40 m, and `probe_piece_tug`'s pilot-house casing is 2.00 m tall with its roof
+## slab at 1.93..2.07. All four of its stations began INSIDE that roof, the floor
+## could not be measured at all, and the three checks that need a floor — headroom,
+## the shell sweep and the doors — were skipped on a whole fixture. The figure was
+## standing in the ceiling.
+##
+## The standing figure is not let off: `_check_headroom` plants a full 1.8 m
+## capsule ON the floor this finds and asserts nothing overlaps it, which is the
+## claim "a player can stand up in here" stated where it belongs.
 func _check_floor(fixture: Dictionary, stem: String) -> float:
-	var query := _figure(STAND_H)
+	var query := _figure(KNEE_H)
 	var surfaces: Array[float] = []
 	var fell := 0
 	var stuck := 0
 	for station_variant in fixture["inside"] as Array:
 		var station: Array = station_variant
 		var here := Vector3(float(station[0]), 0.0, float(station[1]))
-		var from := here + Vector3(0.0, DROP_FROM + STAND_H * 0.5, 0.0) + _offset
+		var from := here + Vector3(0.0, DROP_FROM + KNEE_H * 0.5, 0.0) + _offset
 		var drop := _march(from, Vector3.DOWN * DROP_LEN, query, {})
 		if bool(drop["started_inside"]):
 			stuck += 1
@@ -699,13 +725,18 @@ func _check_panes(walls: Array, stem: String) -> void:
 	var through := PackedStringArray()
 	var stuck := PackedStringArray()
 	var panes := 0
+	var glazed := 0
 	for wall_variant in walls:
 		var wall := wall_variant as Dictionary
 		if str(wall["kind"]) != "wall_glazed":
 			continue
 		var ref := wall["ref"] as Vector2
 		if ref.x < MIN_RUN:
+			## A MULLION. `wall_glazed` resolves to a coaming, a pane, a header and
+			## `lights - 1` mullions, and a mullion is 0.10 m wide — it is not a run
+			## and cannot be asked to stop anything on its own (see MIN_RUN).
 			continue
+		glazed += 1
 		var span := float(wall["y_hi"]) - float(wall["y_lo"])
 		if span < 0.45:
 			continue
@@ -730,12 +761,24 @@ func _check_panes(walls: Array, stem: String) -> void:
 			elif not bool(march["blocked"]):
 				through.append(where)
 			u += STATION_STEP
-	print("  [pane] %d glazed plates, %d stations, %d walked through, %d began inside"
-		% [panes, stations, through.size(), stuck.size()])
+	_pane_plates += panes
+	_pane_stations += stations
+	print("  [pane] %d glazed plates in the tier, %d swept, %d stations, %d walked through, %d began inside"
+		% [glazed, panes, stations, through.size(), stuck.size()])
 	if not through.is_empty():
 		print("  [pane] walked through: %s" % ", ".join(through))
-	_t.check("%s: the pane sweep covered the glazing (%d stations over %d plates)"
-		% [stem, stations, panes], stations >= 20)
+	## COVERAGE, stated against what the tier actually carries rather than against
+	## a number. `probe_piece_tug`'s pilot-house casing is plated with PUNCHED
+	## windows and its ribbon glazing is all in the wheelhouse above the tier, so
+	## it has none here — and the old form of this check (`stations >= 20`) failed
+	## a fixture for a shape it never claimed to have. What must not be allowed is
+	## a fixture with glazing whose glass is quietly not swept, which is what this
+	## says; the run-level guard in `_ready` is what stops "0 of 0" from being the
+	## whole suite's answer.
+	_t.equal("%s: every glazed plate in the tier was swept (%d of %d)" % [stem, panes, glazed],
+		panes, glazed)
+	_t.check("%s: ...and each swept pane carries stations (%d over %d plates)"
+		% [stem, stations, panes], panes == 0 or stations >= panes * 4)
 	_t.equal("%s: no pane march begins inside the plate it is marching at (%d)"
 		% [stem, stuck.size()], stuck.size(), 0)
 	_t.check("%s: a window band is not a doorway (%d/%d through, e.g. %s)"
@@ -751,10 +794,11 @@ func _check_panes(walls: Array, stem: String) -> void:
 # what a re-derivation would still satisfy.
 #
 # Panels and opening CASINGS are counted apart on purpose. A panel is the wall;
-# a casing is the proud joinery round a hole, PLATE_FRAME_PROUD past both faces
-# and PLATE_FRAME_WIDTH/2 into the opening itself, and `plate_colliders` walks
-# `plate_panels` only. If the casings are loose, the two numbers say so
-# separately instead of averaging into one verdict nobody can act on.
+# a casing is the proud joinery round a hole, PLATE_FRAME_PROUD past both faces.
+# If the casings are loose, the two numbers say so separately instead of
+# averaging into one verdict nobody can act on. They WERE loose — 44 of 72 on the
+# house, 200 of 240 on the tug — because `plate_colliders` walked `plate_panels`
+# and `plate_layers` walked panels AND frames. Both now walk `plate_slabs`.
 
 func _check_drawn_is_collided(plan: StructurePlan, stem: String) -> void:
 	var panel_corners := 0
