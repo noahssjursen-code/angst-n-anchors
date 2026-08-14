@@ -678,8 +678,48 @@ func _check_collision() -> void:
 	_t.check("the raked windscreen is stepped, not one unrotated box (%d)" % screen_boxes.size(),
 		screen_boxes.size() >= 10)
 	_t.check("the sloped roof is stepped too (%d)" % roof_boxes.size(), roof_boxes.size() >= 2)
-	_t.check("stepping stays bounded (%d boxes for a 4 x 2.4 m windscreen)" % screen_boxes.size(),
-		screen_boxes.size() <= 60)
+	## The staircase bound is stated over the PANELS, which is the population it
+	## has always covered and the number it was measured at — 41 boxes against a
+	## ceiling of 60. Opening CASINGS became collider-bearing when `plate_colliders`
+	## joined `plate_layers` on `plate_slabs` (a drawn thing the body walked through
+	## was the drift REALITY.md §3b keeps naming), and they are a different
+	## population with a different driver: three or four members per opening rather
+	## than one staircase per rake. So they are counted apart rather than folded
+	## into a bound that would have had to be loosened to hold them — which is the
+	## move §7 exists to forbid.
+	var screen_panel_boxes := 0
+	var screen_casing_boxes := 0
+	var screen_corners := _corners(ID_SCREEN)
+	for slab_variant in StructureBaker.plate_slabs(_props(ID_SCREEN)):
+		var slab := slab_variant as Dictionary
+		var n: int = StructureBaker._plate_panel_colliders(
+			screen_corners, float(slab["thickness"]), Vector3.ZERO,
+			float(slab["u0"]), float(slab["u1"]), float(slab["v0"]), float(slab["v1"])
+		).size()
+		if bool(slab["frame"]):
+			screen_casing_boxes += n
+		else:
+			screen_panel_boxes += n
+	print("[collide] windscreen: %d panel boxes + %d casing boxes"
+		% [screen_panel_boxes, screen_casing_boxes])
+	_t.equal("the split accounts for every windscreen box",
+		screen_panel_boxes + screen_casing_boxes, screen_boxes.size())
+	_t.check("stepping stays bounded (%d panel boxes for a 4 x 2.4 m windscreen)"
+		% screen_panel_boxes, screen_panel_boxes <= 60)
+	## And the casing staircase is bounded too, stated PER OPENING because that is
+	## what drives its member count: three members round a window, each stepped by
+	## the same rake as the panels beside it. Measured at 24 boxes for the
+	## windscreen's three openings, against a ceiling of twelve each.
+	_t.check("the casing stays bounded too (%d boxes for %d openings)"
+		% [screen_casing_boxes,
+		   StructureBaker.plate_openings(
+			   _props(ID_SCREEN),
+			   StructureBaker.plate_ref_lengths(StructureBaker.plate_corners(_props(ID_SCREEN)))
+		   ).size()],
+		screen_casing_boxes <= StructureBaker.plate_openings(
+			_props(ID_SCREEN),
+			StructureBaker.plate_ref_lengths(StructureBaker.plate_corners(_props(ID_SCREEN)))
+		).size() * 12)
 
 	## E3. Containment, over EVERY plate: the collider never under-covers the
 	## geometry. Sampled on the drawn surface and on both skins, because that is

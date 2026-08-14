@@ -105,6 +105,15 @@ const HEAD_MARGIN := 0.05
 ## See plan_interior_test: a raked plate's collider is a staircase of cells, so
 ## every opening is that much narrower in collision than in the drawing.
 const JAMB_MARGIN := 0.16
+## How much narrower the PHYSICS WORLD is allowed to be than the drawing at a
+## doorway. Not a fudge: 0.01 m is the SKIN_EPS the casing laps into the reveal
+## at each jamb and 0.01 m is the scan step, so the floor is 0.04 m and the
+## measured loss on all five piece-built doorways is exactly that. It is set at
+## 0.06 rather than at the measurement so a float does not decide the verdict —
+## and it is far under the 0.09 m a casing centred ON the cut edge would cost,
+## which is the thing this check exists to catch coming back.
+const DOOR_PHYSICS_SLACK := 0.06
+const DOOR_SCAN_STEP := 0.01
 
 ## Slack on the drawn-vs-collided containment test. Float epsilon and nothing
 ## more — a hand's breadth of grace would let a collider miss the geometry.
@@ -636,6 +645,7 @@ func _check_openings(walls: Array, stem: String, floor_y: float) -> void:
 	var doors := 0
 	var doors_low := PackedStringArray()
 	var doors_narrow := PackedStringArray()
+	var doors_pinched := PackedStringArray()
 	var stations := 0
 	var stuck := PackedStringArray()
 	var blocked := PackedStringArray()
@@ -661,10 +671,14 @@ func _check_openings(walls: Array, stem: String, floor_y: float) -> void:
 				doors_low.append("%s@%.2f head at plan y %.3f, a 1.8 m figure needs %.3f"
 					% [str(wall["name"]), float(opening["off"]), head, need])
 			var band_lo := floor_y + STAND_EPS
+			var clear := _physics_clear_width(corners, ref, opening)
+			if clear < float(opening["w"]) - DOOR_PHYSICS_SLACK:
+				doors_pinched.append("%s@%.2f drawn %.3f m, open %.3f m in physics"
+					% [str(wall["name"]), float(opening["off"]), float(opening["w"]), clear])
 			var column := _door_column(corners, ref, opening, band_lo)
 			var width := float(column["width"])
-			print("  [door] %s@%.2f nominal %.2f m · walkable column %.3f m · head %.3f m"
-				% [str(wall["name"]), float(opening["off"]), float(opening["w"]), width,
+			print("  [door] %s@%.2f nominal %.2f m · open %.3f m in physics · walkable column %.3f m · head %.3f m"
+				% [str(wall["name"]), float(opening["off"]), float(opening["w"]), clear, width,
 				   head - floor_y])
 			if width < DOOR_PLAY_MIN:
 				doors_narrow.append("%s@%.2f only %.3f m of play"
@@ -706,6 +720,19 @@ func _check_openings(walls: Array, stem: String, floor_y: float) -> void:
 		% [stem, doors_narrow.size(),
 		   "none" if doors_narrow.is_empty() else ", ".join(doors_narrow)],
 		doors_narrow.is_empty())
+	## THE DRAWING AND THE PHYSICS AGREE ABOUT THE HOLE. Every check above reads
+	## the DRAWN opening — `plate_openings` on the plate's own props — so all of
+	## them would go on passing while the collider quietly closed the doorway in.
+	## That is not hypothetical: the opening casing is drawn PLATE_FRAME_WIDTH
+	## wide, it now emits colliders (it did not, and 44 of 72 of its corners stood
+	## outside every box), and centred ON the cut edge it would take 0.045 m off
+	## each jamb and off the head of every door in the game — with nothing here
+	## measuring it. This asks the space state directly, point by point along the
+	## run at the door's own mid-height.
+	_t.check("%s: every doorway is as wide in physics as it is drawn (%d pinched: %s)"
+		% [stem, doors_pinched.size(),
+		   "none" if doors_pinched.is_empty() else ", ".join(doors_pinched)],
+		doors_pinched.is_empty())
 	_t.check("%s: the door sweep planted stations (%d)" % [stem, stations],
 		stations >= doors * DOOR_STATIONS)
 	_t.check("%s: a player on deck walks through a piece-built door (%d/%d blocked, e.g. %s)"
@@ -713,6 +740,50 @@ func _check_openings(walls: Array, stem: String, floor_y: float) -> void:
 		blocked.is_empty())
 	_t.check("%s: the fixture punches windows as well as doors (%d)" % [stem, window_stations],
 		window_stations >= 0)
+
+
+## The widest run of the doorway, along the plate's own u, at which a POINT in
+## the plate's mid-plane is in nothing at all. A point rather than a shape,
+## because a shape's radius would have to be subtracted back out and this is the
+## one measurement that must not carry an arithmetic correction. Asked of the
+## whole vessel, unfiltered: a strake, a stanchion or a neighbouring plate
+## standing in the doorway narrows it exactly as the door's own casing does.
+func _physics_clear_width(corners: PackedVector3Array, ref: Vector2, opening: Dictionary) -> float:
+	var query := PhysicsPointQueryParameters3D.new()
+	query.collide_with_bodies = true
+	query.collide_with_areas = false
+	query.collision_mask = 0xFFFFFFFF
+	var off := float(opening["off"])
+	var width := float(opening["w"])
+	var sill := float(opening["sill"])
+	var height := float(opening["h"])
+	var narrowest := INF
+	## Three heights, and the answer is the WORST of them: a doorway is an
+	## aperture, not a line. A rubbing strake laid across the bulkhead at 0.50 m
+	## leaves the mid-height scan reading a full 1.18 m and shuts the door at the
+	## shins — measured, on this fixture, before the strake was stopped either
+	## side of the casing.
+	for band in [0.25, 0.5, 0.75]:
+		## `band` comes out of an untyped array literal as a Variant, so the
+		## division cannot infer — hence the explicit float. (This line is where
+		## the wave that wrote this function was killed mid-edit.)
+		var v := (sill + height * float(band)) / ref.y
+		var best := 0.0
+		var run_lo := NAN
+		var u := off - 0.10
+		while u <= off + width + 0.10:
+			query.position = (
+				StructureBaker.plate_point(corners, clampf(u / ref.x, 0.0, 1.0), v) + _offset
+			)
+			if _space.intersect_point(query, 1).is_empty():
+				if is_nan(run_lo):
+					run_lo = u
+				best = maxf(best, u - run_lo)
+			else:
+				run_lo = NAN
+			u += DOOR_SCAN_STEP
+		narrowest = minf(narrowest, best)
+	return narrowest
 
 
 ## 4-and-a-bit: a recessed pane is not a way through. Every glazed plate that

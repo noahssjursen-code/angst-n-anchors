@@ -199,6 +199,87 @@ func _check_every_piece_draws() -> void:
 		_says(over["errors"] as PackedStringArray, "header")
 	)
 
+	## ── The opening/span constraint ──────────────────────────────────────────
+	##
+	## The one relationship in the kit whose LEFT-HAND SIDE depends on a CHOICE:
+	## how many cells of panel a hole needs is a fact about WHICH hole. A 1.20 m
+	## door wants 3 cells, a 0.80 m window 2, a 0.40 m scuttle 1, and no
+	## per-parameter value set can say that — `span` and `opening` are each legal
+	## alone. Before it existed the baker CLAMPED: `plate_openings` cuts the
+	## opening down to what is left of the plate, so a door on a two-cell panel
+	## came out as a 1.00 m hole with NO plating either side of it, silently, which
+	## is the "a kit whose pieces quietly change size" failure the header forbids.
+	var narrow := PieceKit.resolve("wall_panel", {"span": 2, "opening": "door"})
+	_t.check(
+		"a door on a two-cell panel is refused, not clamped to what fits",
+		(narrow["specs"] as Array).is_empty()
+	)
+	_t.check(
+		"and the refusal names the span: %s" % ", ".join(narrow["errors"] as PackedStringArray),
+		_says(narrow["errors"] as PackedStringArray, "span")
+	)
+	## Paired, so the constraint is not simply refusing everything — which is the
+	## cheapest way for a refusal to look like a working rule.
+	_t.check(
+		"the same door on a three-cell panel draws",
+		not (PieceKit.resolve("wall_panel", {"span": 3, "opening": "door"})["specs"] as Array).is_empty()
+	)
+	_t.check(
+		"...and a two-cell panel still takes a window",
+		not (PieceKit.resolve("wall_panel", {"span": 2, "opening": "window"})["specs"] as Array).is_empty()
+	)
+	_t.check(
+		"...and a one-cell panel still takes a scuttle",
+		not (PieceKit.resolve("wall_panel", {"span": 1, "opening": "scuttle"})["specs"] as Array).is_empty()
+	)
+	_t.check(
+		"...and a one-cell panel with no opening at all is still a panel",
+		not (PieceKit.resolve("wall_panel", {"span": 1, "opening": "none"})["specs"] as Array).is_empty()
+	)
+	## THE PROPERTY, not the numbers: whatever the kit's holes are sized at, no
+	## legal (span, opening) pair may resolve to an opening the baker had to shrink
+	## to make fit. Stated over the whole cross product rather than the three cases
+	## above, so widening a hole without widening its constraint turns this red.
+	var clamped := PackedStringArray()
+	var pairs := 0
+	var params := PieceKit.params_of("wall_panel")
+	for span_value in (params["span"] as Dictionary)["values"] as Array:
+		for opening_value in (params["opening"] as Dictionary)["values"] as Array:
+			var given := {"span": span_value, "opening": opening_value}
+			var resolved := PieceKit.resolve("wall_panel", given)
+			var specs := resolved["specs"] as Array
+			if specs.is_empty():
+				continue
+			pairs += 1
+			var spec := specs[0] as Dictionary
+			var corners: Array = []
+			for corner in spec["corners"] as PackedVector3Array:
+				corners.append([corner.x, corner.y, corner.z])
+			var probe := {"corners": corners, "thickness": float(spec["thickness"])}
+			var ref := StructureBaker.plate_ref_lengths(StructureBaker.plate_corners(probe))
+			probe["openings"] = spec.get("openings", [])
+			for asked_variant in probe["openings"] as Array:
+				var asked := asked_variant as Dictionary
+				var got_list := StructureBaker.plate_openings(probe, ref)
+				if got_list.is_empty():
+					clamped.append("%s@span %s: the opening vanished" % [opening_value, span_value])
+					continue
+				var got := got_list[0] as Dictionary
+				if absf(float(got["w"]) - float(asked["width"])) > 1e-6 \
+						or absf(float(got["off"]) - float(asked["offset"])) > 1e-6 \
+						or absf(float(got["h"]) - float(asked["height"])) > 1e-6:
+					clamped.append(
+						"%s@span %s: asked %.3f wide at %.3f, got %.3f at %.3f"
+						% [opening_value, span_value, float(asked["width"]),
+						   float(asked["offset"]), float(got["w"]), float(got["off"])]
+					)
+	_t.check("the span x opening cross product was walked (%d legal pairs draw)" % pairs, pairs >= 12)
+	_t.check(
+		"no legal (span, opening) pair resolves to an opening the baker had to shrink (%d: %s)"
+		% [clamped.size(), "none" if clamped.is_empty() else clamped[0]],
+		clamped.is_empty()
+	)
+
 
 ## One dictionary per (choice combination x numeric-parameter extreme), plus the
 ## all-defaults case. Not the full cross product — that is thousands of settings
