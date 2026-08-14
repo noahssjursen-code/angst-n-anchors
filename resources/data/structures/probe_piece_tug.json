@@ -715,7 +715,7 @@
 				"lift": 0.0,
 				"gauge": "heavy"
 			},
-			"color": "#3b3f43",
+			"color": "#4d5257",
 			"_is": "a HEAVY sole laid aft in the casing, under the door — 0.30 m of tile, the thickest floor the kit can lay, so its walking surface stands 0.150 m over the node the walls stand on. It is here because that is the worst legal floor a doorway can open onto and the kit's 2.10 m door head is sized for exactly it: measured on the spawned vessel, this doorway clears 1.89 m over this sole. Laid as `deck` or `light` gauge the floor would be lower and the check softer."
 		}
 	],

@@ -1063,7 +1063,7 @@ const TUG_RECIPE: Array = [
 	## the worst floor a player can put under it rather than over the hull's own
 	## plating. `piece_interior_test` reads the floor it makes and the head over
 	## it from the physics world.
-	["deck_tile", 6, 0, 20, 0, {"span": 8, "depth": 12, "gauge": "heavy"}, "#3b3f43"],
+	["deck_tile", 6, 0, 20, 0, {"span": 8, "depth": 12, "gauge": "heavy"}, "#4d5257"],
 ]
 
 
