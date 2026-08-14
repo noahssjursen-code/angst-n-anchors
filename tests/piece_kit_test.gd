@@ -424,6 +424,47 @@ func _check_expressions() -> void:
 		_says(unclosed, "unclosed")
 	)
 
+	## `sqrt` and `abs`, which the door's geometry needs: an opening is measured
+	## ALONG the plate, and a raked plate's surface length is Pythagorean. Before
+	## these the kit could not say so, and what it could not say it did not check.
+	var fn_errors := PackedStringArray()
+	_t.near("sqrt(2.5*2.5+1.0*1.0) is the v-length of a wall raked 1.0 m over 2.5 m",
+		PieceKit._eval("sqrt(2.5*2.5+1.0*1.0)", {}, "probe", fn_errors), 2.6925824, 1e-6)
+	_t.near("abs(-4)*0.125 is 0.5 whichever way the fall goes",
+		PieceKit._eval("abs(-4)*0.125", {}, "probe", fn_errors), 0.5)
+	_t.near("a function binds tighter than the arithmetic round it: 1/sqrt(4)+1 is 1.5",
+		PieceKit._eval("1/sqrt(4)+1", {}, "probe", fn_errors), 1.5)
+	_t.check("and those parsed with no complaint", fn_errors.is_empty())
+	var bad_fn := PackedStringArray()
+	var _w := PieceKit._eval("hypot(3)", {}, "probe", bad_fn)
+	_t.check(
+		"an unknown function is NAMED, not read as a parameter: %s" % ", ".join(bad_fn),
+		_says(bad_fn, "no function")
+	)
+	var neg_root := PackedStringArray()
+	var _x := PieceKit._eval("sqrt(0-1)", {}, "probe", neg_root)
+	_t.check(
+		"sqrt of a negative is an error, not a plausible 0: %s" % ", ".join(neg_root),
+		_says(neg_root, "negative")
+	)
+	## A derived name resolves in a constraint, in the build tree and in the
+	## footprint alike — one formula, and the piece cannot hold two copies of it.
+	var derived_errors := PackedStringArray()
+	_t.near(
+		"wall_panel's own `door_h` is the opening height its build step asks for",
+		PieceKit._eval(
+			"door_h",
+			PieceKit._with_derived(
+				(PieceKit.get_piece("wall_panel")["derived"] as Array),
+				{"span": 4.0, "height": 5.0, "head": 0.0, "rake": 8.0, "fall": 0.0, "lift": 0.0},
+				"probe", derived_errors
+			),
+			"probe", derived_errors
+		),
+		2.10 * 2.6925824 / 2.5, 1e-6
+	)
+	_t.check("and it evaluated with no complaint", derived_errors.is_empty())
+
 
 func _check_tiling() -> void:
 	## Two panels butted on one line at one rake. The shared edge must be
@@ -1914,7 +1955,9 @@ func _check_openings_fit() -> void:
 		% [doors, worst_head] + "worst point (%s), against %.3f m of player + sole + collider — "
 		% [worst_at, need] + "%d too low (%s)"
 		% [low.size(), "none" if low.is_empty() else low[0]],
-		low.is_empty() and doors > 2400
+		## 2,380 of the sampled settings carry a door, measured. A floor, so a
+		## sweep that stops sweeping cannot pass by testing nothing.
+		low.is_empty() and doors > 2300
 	)
 
 	## THE REFUSALS SPEAK, and these three are the settings a critic measured

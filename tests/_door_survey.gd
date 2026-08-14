@@ -9,6 +9,26 @@ extends SceneTree
 ##   panel's own foot.
 ## `lift` is excluded from the sweep and checked separately: it is a pure
 ## translation of every corner, so it cannot change a ref length or an opening.
+##
+## WHAT IT MEASURED, before and after the door rule landed. Basis: span(6) x
+## height(5) x head(8) x rake(17) x fall(9), lift fixed, per opening choice.
+##
+##                     accepted   clamped        casing short   worst door head
+##   before  door        24 480     6 432 (26%)         7 336     0.549 m
+##           window      30 600     7 370 (24%)         8 560
+##           scuttle     36 720     5 940 (16%)        12 020
+##           ALL HOLES   91 800    19 742 (21.5%)      27 916
+##
+##   after   door         7 208         0               0        2.100 m
+##           window      22 040         0               0
+##           scuttle     29 640         0            4 940
+##           ALL HOLES   58 888         0 (0.0%)        4 940
+##
+## The 19 742 reproduces an adversarial critic's figure exactly. The 4 940 that
+## remain are all one shape and none of them is a MISSING member: a 0.40 m
+## scuttle in a 0.50 m panel leaves 0.05 m of plating, so its 0.09 m outer jamb
+## is clipped to 0.06 m at both sides, symmetrically. That is a `span` claim, and
+## `span-1` for a scuttle is the constraint that would have to change.
 
 const SPANS := [1, 2, 3, 4, 6, 8]
 const HEIGHTS := [2, 3, 4, 5, 6]

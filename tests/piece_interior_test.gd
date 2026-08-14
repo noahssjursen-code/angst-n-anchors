@@ -109,13 +109,25 @@ const HEAD_MARGIN := 0.05
 ## See plan_interior_test: a raked plate's collider is a staircase of cells, so
 ## every opening is that much narrower in collision than in the drawing.
 const JAMB_MARGIN := 0.16
-## How much narrower the PHYSICS WORLD is allowed to be than the drawing at a
-## doorway. Not a fudge: 0.01 m is the SKIN_EPS the casing laps into the reveal
-## at each jamb and 0.01 m is the scan step, so the floor is 0.04 m and the
-## measured loss on all five piece-built doorways is exactly that. It is set at
-## 0.06 rather than at the measurement so a float does not decide the verdict —
-## and it is far under the 0.09 m a casing centred ON the cut edge would cost,
-## which is the thing this check exists to catch coming back.
+## How far the PHYSICS WORLD is allowed to fall short of the drawing at a
+## doorway, in width and now in head. Not a fudge, and the old comment here was
+## wrong about its own evidence — it said "all five piece-built doorways" lose
+## "exactly" 0.04 m. THERE ARE SEVEN, and they lose 0.040 m (four of them) and
+## 0.020 m (three): 0.01 m is the SKIN_EPS the casing laps into the reveal at
+## each jamb and 0.01 m is the scan step, which is 0.04 m when both jambs pay and
+## 0.02 m when the scan lands kindly.
+##
+## The HEAD spends the same allowance against a different mechanism: a casing
+## slab's box is fitted to the slab plus and minus half its 0.20 m thickness
+## ALONG THE PLATE NORMAL, so on a raked plate the lintel's box hangs below the
+## lintel. Measured on a spawned vessel — 0.022 m at rake 2, 0.052 m at rake 8,
+## which is the kit's most extreme legal door and 0.008 m off turning this red.
+## That thinness is reported rather than papered over; the fix is not a bigger
+## number here, it is a collider that follows the slab.
+##
+## It stays at 0.06 rather than at the measurement so a float does not decide the
+## verdict — and it is far under the 0.09 m a casing centred ON the cut edge
+## would cost, which is the thing this check exists to catch coming back.
 const DOOR_PHYSICS_SLACK := 0.06
 const DOOR_SCAN_STEP := 0.01
 
@@ -490,10 +502,11 @@ func _figure(height: float) -> PhysicsShapeQueryParameters3D:
 ## subject). The claim here is WHERE THE FLOOR IS, and the capsule's bottom is at
 ## `DROP_FROM` above the deck whatever height the capsule is, so the answer this
 ## returns does not depend on the figure at all — measured, the house and the
-## trawler report the same 0.058 m either way. What DOES depend on it is whether
+## trawler report the same floor either way. What DOES depend on it is whether
 ## the probe starts clear: a standing figure dropped from 0.60 m has its head at
-## 2.40 m, and `probe_piece_tug`'s pilot-house casing is 2.00 m tall with its roof
-## slab at 1.93..2.07. All four of its stations began INSIDE that roof, the floor
+## 2.40 m, and `probe_piece_tug`'s pilot-house casing was 2.00 m tall with its
+## roof slab at 1.93..2.07 (it is 2.50 m now — a 2.00 m panel cannot carry a
+## door). All four of its stations began INSIDE that roof, the floor
 ## could not be measured at all, and the three checks that need a floor — headroom,
 ## the shell sweep and the doors — were skipped on a whole fixture. The figure was
 ## standing in the ceiling.
@@ -974,7 +987,7 @@ func _check_panes(walls: Array, stem: String, glazes: bool) -> void:
 	_t.check("%s: the tier carries the glazing the fixture declares (%d runs)" % [stem, glazed],
 		glazed >= MIN_GLAZED_RUNS if glazes else glazed == 0)
 	_t.check("%s: ...and each swept pane carries stations (%d over %d plates)"
-		% [stem, stations, panes], stations >= panes * 4 if glazes else stations == 0)
+		% [stem, stations, panes], (panes > 0 and stations >= panes * 4) if glazes else stations == 0)
 	_t.equal("%s: no pane march begins inside the plate it is marching at (%d)"
 		% [stem, stuck.size()], stuck.size(), 0)
 	_t.check("%s: a window band is not a doorway (%d/%d through, e.g. %s)"
