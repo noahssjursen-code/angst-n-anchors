@@ -1,8 +1,24 @@
 extends Node
 
 ## Times DeckFitout.apply for synthetic solid-block layouts.
-## Run: godot --headless --path <project> res://tests/deck_fitout_load_bench.tscn
-## Soft budgets catch pathological regressions; print lines are the real signal.
+## Run: xvfb-run -a godot --rendering-driver opengl3 res://tests/deck_fitout_load_bench.tscn
+##
+## WHAT CAN AND CANNOT BE MEASURED ON THIS BOX.
+##
+## There is no Vulkan ICD here; rendering is Mesa llvmpipe on 4 cores. So a
+## number is only worth asserting on if no software rasterisation is inside it:
+##
+##   HONEST  `dispatch_ms` on the SYNCHRONOUS path — one call, no awaited frame,
+##           pure GDScript + PhysicsServer.
+##   HONEST  `worst_frame_ms` — `DeckFitoutJob` brackets `Time.get_ticks_usec()`
+##           around its own `_step` loop inside `_process`, so the frame's draw
+##           is outside the measurement.
+##   HONEST  `meshes` — a count. It says the same thing on any machine.
+##   NOT     `fitout_ms` on the STAGED path. It is wall clock across every frame
+##           the job needed, and each of those frames is a full llvmpipe render
+##           of the scene. At n=3000 it read 150,688 ms, which is a measurement
+##           of Mesa, not of DeckFitout. It is printed and not budgeted, and the
+##           right way to bound staged cost here is the two lines above.
 
 const HULL_ID := "hull_90x24"
 const COUNTS := [100, 500, 1000, 3000]
@@ -10,21 +26,16 @@ const COUNTS := [100, 500, 1000, 3000]
 const SOFT_MS_PER_BLOCK := 8.0
 const SOFT_FLOOR_MS := 500.0
 const STAGED_SOFT_FRAME_MS := 100.0
+const TestReport := preload("res://tests/support/test_report.gd")
 
-var _failures := PackedStringArray()
+var _t := TestReport.new("deck_fitout_load_bench", false)
 
 
 func _ready() -> void:
 	print("DeckFitout load bench — hull=%s brick=block" % HULL_ID)
 	for count in COUNTS:
 		await _bench_count(int(count))
-	if _failures.is_empty():
-		print("DeckFitout load bench: completed")
-		get_tree().quit()
-	else:
-		for failure in _failures:
-			push_error("DeckFitout load bench: " + failure)
-		get_tree().quit(1)
+	_t.finish(get_tree())
 
 
 func _bench_count(count: int) -> void:
@@ -70,16 +81,31 @@ func _bench_count(count: int) -> void:
 	)
 
 	var soft_budget := maxf(SOFT_FLOOR_MS, float(placed) * SOFT_MS_PER_BLOCK)
-	_check(
-		fitout_ms <= soft_budget,
-		"n=%d fitout %.0fms exceeds soft budget %.0fms" % [placed, fitout_ms, soft_budget],
-	)
 	if placed > DeckFitout.LARGE_LAYOUT_THRESHOLD:
 		_check(
 			worst_frame_ms <= STAGED_SOFT_FRAME_MS,
 			"n=%d worst staged frame %.1fms exceeds %.1fms"
 			% [placed, worst_frame_ms, STAGED_SOFT_FRAME_MS],
 		)
+	else:
+		_check(
+			dispatch_ms <= soft_budget,
+			"n=%d synchronous fitout %.0fms exceeds soft budget %.0fms"
+			% [placed, dispatch_ms, soft_budget],
+		)
+
+	## Every brick in this bench is `block`, which `VesselSkinBaker.is_baked_brick`
+	## accepts, and that file's header promises "a handful of merged surfaces
+	## instead of one scene node per brick". Hold BOTH entry points to it. This
+	## is the clock-free statement of the same regression the wall-clock budget
+	## was reacting to: at n=3000 the staged path emits 3002 meshes for 3000
+	## bricks, because DeckFitoutJob calls create_item_visual per item and never
+	## reaches VesselSkinBaker at all.
+	_check(
+		mesh_n < placed,
+		"n=%d draws %d meshes — static bricks are not merged into a skin"
+		% [placed, mesh_n],
+	)
 
 	boat.queue_free()
 	await get_tree().process_frame
@@ -128,5 +154,4 @@ func _count_mesh_instances(root: Node) -> int:
 
 
 func _check(condition: bool, message: String) -> void:
-	if not condition:
-		_failures.append(message)
+	_t.check(message, condition)

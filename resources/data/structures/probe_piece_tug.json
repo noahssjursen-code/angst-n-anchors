@@ -1,5 +1,5 @@
 {
-	"_note": "BUILT THROUGH THE STUDIO'S PIECE TOOL. Every one of the 33 placements below was made by\npicking a piece off the kit palette, turning it with R, setting its parameters on steppers and\ndropdowns over the piece's own declared value sets, picking a tint off a swatch, and clicking a\ngrid node. Not one number in this file was typed; there is no control in that tool a number CAN\nbe typed into.\n\nThat claim is checked rather than asserted. `structure_studio.gd`'s `--studio-probe` self-check\ncarries the same 33 actions as data and requires that replaying them through the controls\nreproduces this file placement for placement and plate corner for plate corner — so changing one\nstep of the recipe, or breaking the rotate key, or letting a stepper walk off its declared set,\nturns the gate red.\n\nWHAT IT IS. A harbour tug's pilot house: a plated casing with a raked front and windows in its\nsides, a tall all-round-glazed wheelhouse standing on it, chamfered at every corner by a\n`corner_45` facet, a sloped VISOR over the windscreen — `roof_slope`, which no vessel in this\nrepo had used — and an exhaust casing standing clear above the wheelhouse roof.\n\nWHAT IS NOT PIECE-AUTHORED, and it is the kit's own stated boundary rather than a gap: the\nsheer-following bulwark. That is a swept curve, and quantising it to the 0.5 m grid would step\nthe one curve the fleet was rebuilt to draw, so it is an `edges[]` entry as it is on every other\nvessel. The studio has no tool for it either — see the wave report.\n\nRakes are in EIGHTH-CELLS (0.125 m a step), the kit's unit as of this file's writing.",
+	"_note": "BUILT THROUGH THE STUDIO'S PIECE TOOL. Every one of the 33 placements below was made by\npicking a piece off the kit palette, turning it with R, setting its parameters on steppers and\ndropdowns over the piece's own declared value sets, picking a tint off a swatch, and clicking a\ngrid node. Not one number in this file was typed; there is no control in that tool a number CAN\nbe typed into.\n\nThat claim is checked rather than asserted. `structure_studio.gd`'s `--studio-probe` self-check\ncarries the same 33 actions as data and requires that replaying them through the controls\nreproduces this file placement for placement and plate corner for plate corner — so changing one\nstep of the recipe, or breaking the rotate key, or letting a stepper walk off its declared set,\nturns the gate red.\n\nWHAT IT IS. A harbour tug's pilot house: a plated casing 2.50 m tall with a raked front and windows in its\nsides, a tall all-round-glazed wheelhouse standing on it, chamfered at every corner by a\n`corner_45` facet, a sloped VISOR over the windscreen — `roof_slope`, which no vessel in this\nrepo had used — and an exhaust casing standing clear above the wheelhouse roof.\n\nWHAT IS NOT PIECE-AUTHORED, and it is the kit's own stated boundary rather than a gap: the\nsheer-following bulwark. That is a swept curve, and quantising it to the 0.5 m grid would step\nthe one curve the fleet was rebuilt to draw, so it is an `edges[]` entry as it is on every other\nvessel. The studio has no tool for it either — see the wave report.\n\nRakes are in EIGHTH-CELLS (0.125 m a step), the kit's unit as of this file's writing.",
 	"context": "vessel",
 	"decks": [],
 	"edges": [
@@ -67,7 +67,7 @@
 			"params": {
 				"fall": 0.0,
 				"head": 0.0,
-				"height": 4.0,
+				"height": 5.0,
 				"lift": 0.0,
 				"rake_a": 6.0,
 				"rake_b": 0.0,
@@ -87,7 +87,7 @@
 			"params": {
 				"fall": 0.0,
 				"head": 0.0,
-				"height": 4.0,
+				"height": 5.0,
 				"lift": 0.0,
 				"opening": "none",
 				"rake": 6.0,
@@ -107,7 +107,7 @@
 			"params": {
 				"fall": 0.0,
 				"head": 0.0,
-				"height": 4.0,
+				"height": 5.0,
 				"lift": 0.0,
 				"rake_a": 0.0,
 				"rake_b": 6.0,
@@ -127,7 +127,7 @@
 			"params": {
 				"fall": 0.0,
 				"head": 0.0,
-				"height": 4.0,
+				"height": 5.0,
 				"lift": 0.0,
 				"opening": "window",
 				"rake": 0.0,
@@ -147,7 +147,7 @@
 			"params": {
 				"fall": 0.0,
 				"head": 0.0,
-				"height": 4.0,
+				"height": 5.0,
 				"lift": 0.0,
 				"opening": "window",
 				"rake": 0.0,
@@ -167,7 +167,7 @@
 			"params": {
 				"fall": 0.0,
 				"head": 0.0,
-				"height": 4.0,
+				"height": 5.0,
 				"lift": 0.0,
 				"rake_a": 0.0,
 				"rake_b": 0.0,
@@ -187,7 +187,7 @@
 			"params": {
 				"fall": 0.0,
 				"head": 0.0,
-				"height": 4.0,
+				"height": 5.0,
 				"lift": 0.0,
 				"opening": "scuttle",
 				"rake": 0.0,
@@ -207,7 +207,7 @@
 			"params": {
 				"fall": 0.0,
 				"head": 0.0,
-				"height": 4.0,
+				"height": 5.0,
 				"lift": 0.0,
 				"opening": "door",
 				"rake": 0.0,
@@ -227,7 +227,7 @@
 			"params": {
 				"fall": 0.0,
 				"head": 0.0,
-				"height": 4.0,
+				"height": 5.0,
 				"lift": 0.0,
 				"opening": "scuttle",
 				"rake": 0.0,
@@ -247,7 +247,7 @@
 			"params": {
 				"fall": 0.0,
 				"head": 0.0,
-				"height": 4.0,
+				"height": 5.0,
 				"lift": 0.0,
 				"rake_a": 0.0,
 				"rake_b": 0.0,
@@ -267,7 +267,7 @@
 			"params": {
 				"fall": 0.0,
 				"head": 0.0,
-				"height": 4.0,
+				"height": 5.0,
 				"lift": 0.0,
 				"opening": "window",
 				"rake": 0.0,
@@ -287,7 +287,7 @@
 			"params": {
 				"fall": 0.0,
 				"head": 0.0,
-				"height": 4.0,
+				"height": 5.0,
 				"lift": 0.0,
 				"opening": "window",
 				"rake": 0.0,
@@ -298,7 +298,7 @@
 		{
 			"cell": [
 				4.0,
-				4.0,
+				5.0,
 				17.0
 			],
 			"color": "#4d5257",
@@ -316,7 +316,7 @@
 		{
 			"cell": [
 				4.0,
-				4.0,
+				5.0,
 				17.0
 			],
 			"color": "#e3e0d4",
@@ -333,7 +333,7 @@
 		{
 			"cell": [
 				16.0,
-				4.0,
+				5.0,
 				17.0
 			],
 			"color": "#e3e0d4",
@@ -350,7 +350,7 @@
 		{
 			"cell": [
 				16.0,
-				4.0,
+				5.0,
 				33.0
 			],
 			"color": "#e3e0d4",
@@ -367,7 +367,7 @@
 		{
 			"cell": [
 				4.0,
-				4.0,
+				5.0,
 				33.0
 			],
 			"color": "#e3e0d4",
@@ -384,7 +384,7 @@
 		{
 			"cell": [
 				7.0,
-				4.0,
+				5.0,
 				20.0
 			],
 			"color": "#e3e0d4",
@@ -404,7 +404,7 @@
 		{
 			"cell": [
 				8.0,
-				4.0,
+				5.0,
 				20.0
 			],
 			"color": "#e3e0d4",
@@ -426,7 +426,7 @@
 		{
 			"cell": [
 				13.0,
-				4.0,
+				5.0,
 				20.0
 			],
 			"color": "#e3e0d4",
@@ -446,7 +446,7 @@
 		{
 			"cell": [
 				13.0,
-				4.0,
+				5.0,
 				21.0
 			],
 			"color": "#e3e0d4",
@@ -468,7 +468,7 @@
 		{
 			"cell": [
 				13.0,
-				4.0,
+				5.0,
 				28.0
 			],
 			"color": "#e3e0d4",
@@ -488,7 +488,7 @@
 		{
 			"cell": [
 				12.0,
-				4.0,
+				5.0,
 				28.0
 			],
 			"color": "#e3e0d4",
@@ -508,7 +508,7 @@
 		{
 			"cell": [
 				7.0,
-				4.0,
+				5.0,
 				28.0
 			],
 			"color": "#e3e0d4",
@@ -528,7 +528,7 @@
 		{
 			"cell": [
 				7.0,
-				4.0,
+				5.0,
 				27.0
 			],
 			"color": "#e3e0d4",
@@ -550,7 +550,7 @@
 		{
 			"cell": [
 				6.0,
-				9.0,
+				10.0,
 				19.0
 			],
 			"color": "#858a8f",
@@ -568,7 +568,7 @@
 		{
 			"cell": [
 				6.0,
-				9.0,
+				10.0,
 				27.0
 			],
 			"color": "#858a8f",
@@ -586,7 +586,7 @@
 		{
 			"cell": [
 				6.0,
-				8.0,
+				9.0,
 				17.0
 			],
 			"color": "#4d5257",
@@ -604,7 +604,7 @@
 		{
 			"cell": [
 				9.0,
-				4.0,
+				5.0,
 				30.0
 			],
 			"color": "#9e5c1c",
@@ -624,7 +624,7 @@
 		{
 			"cell": [
 				11.0,
-				4.0,
+				5.0,
 				30.0
 			],
 			"color": "#9e5c1c",
@@ -644,7 +644,7 @@
 		{
 			"cell": [
 				11.0,
-				4.0,
+				5.0,
 				33.0
 			],
 			"color": "#9e5c1c",
@@ -664,7 +664,7 @@
 		{
 			"cell": [
 				9.0,
-				4.0,
+				5.0,
 				33.0
 			],
 			"color": "#9e5c1c",
@@ -684,7 +684,7 @@
 		{
 			"cell": [
 				9.0,
-				10.0,
+				11.0,
 				30.0
 			],
 			"color": "#1c1c1f",

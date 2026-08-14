@@ -1037,6 +1037,55 @@ collider is fatter than the casing it draws, which would be the same class of bu
 the fix was for, and the two are told apart by measuring casing collider extents
 against casing draw extents, not by argument.
 
+### RESOLVED by measurement: the casing is NOT fat — but raked plates over-collide
+
+I left open whether `plan_interior_test`'s regression was "the door frame is
+legitimately solid" or "the casing collider is fatter than the casing it draws",
+and said it had to be measured, not argued. Measured (`tests/_casing_extent_probe.gd`),
+asking how much THICKER each collider box is than the slab it is fitted to:
+
+```
+demo_workboat          220 boxes ( 47 casing)   any slab 0.1249 m   casing 0.0000 m
+probe_trawler_bulwark  602 boxes ( 30 casing)   any slab 0.1478 m   casing 0.0000 m
+```
+
+**Casing excess is exactly zero on both fixtures.** The flattering half of my
+hypothesis was right for the wrong reason and the unflattering half is refuted:
+the door fix does not over-collide. The casing is solid precisely where it is
+drawn, so the regression is the march start landing in a door frame that is
+legitimately there — the instrument, not the geometry.
+
+Note what the critic's 310,200-sample result could NOT have told us. It measured
+DRAWN → COLLIDER containment, and "every drawn point is inside some collider" is
+satisfied perfectly by a collider that is far too fat. The question needed the
+other direction and nobody had asked it.
+
+### NEW, LARGER, AND PRE-EXISTING: a raked plate collides 0.148 m thicker than it draws
+
+The same probe found what the door fix did not cause. `_plate_panel_colliders`
+dices a slab into cells and fits each cell the yaw-frame AABB of its four corners
+offset ±thickness/2. For a plumb plate that AABB *is* the plate. For a RAKED or
+SLOPED one it is not — a tilted quad's AABB exceeds the quad, and the excess is
+solid space nothing draws:
+
+```
+wheelhouse roof — sloped 0.25 m down aft          0.1249 m
+bow bulwark inboard face, port                    0.1478 m
+```
+
+Against a plate thickness of 0.10 m, that is **1.5× the plating in invisible
+solid**. It is the "staircase of 0.15 m cells" the critic named while measuring
+doorway heads, and it is almost certainly the 50 stuck marches on
+`probe_trawler_bulwark`'s raked front — the older of `plan_interior_test`'s two
+failures, which predates the door fix and which I had attributed to my own
+description-based plate selection.
+
+Not fixed here, and it is not a one-liner: finer cells shrink the excess and cost
+collider count, oriented boxes would fix it outright but `_collider_of` is
+yaw-only by contract, and the current behaviour errs SOLID, which is the safe
+direction for a hull. It wants an owner decision or its own wave. What it must
+not do is stay unmeasured, which it has been for the life of the file.
+
 ### Untriaged, and never measured while the tree was quiet until now
 
 `deck_fitout_staging_test` (4 failures), `deck_fitout_load_bench` (worst staged

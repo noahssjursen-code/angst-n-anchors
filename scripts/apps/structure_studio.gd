@@ -1008,48 +1008,55 @@ func _probe_tint_offered(hex: String) -> bool:
 ## front still stands 0.75 m out over its 2.0 m and the windscreen 1.0 m over its
 ## 2.5 m, which is what the shape was designed at.
 const TUG_RECIPE: Array = [
-	## Casing ring: x 5..15, z 18..32 cells, 4 cells tall, raked front.
-	["corner_45", 5, 0, 18, 0, {"span": 1, "height": 4, "rake_a": 6, "rake_b": 0}, "#e3e0d4"],
-	["wall_panel", 6, 0, 18, 0, {"span": 8, "height": 4, "rake": 6}, "#e3e0d4"],
-	["corner_45", 15, 0, 18, 270, {"span": 1, "height": 4, "rake_a": 0, "rake_b": 6}, "#e3e0d4"],
-	["wall_panel", 15, 0, 19, 270, {"span": 8, "height": 4, "rake": 0, "opening": "window"}, "#e3e0d4"],
-	["wall_panel", 15, 0, 27, 270, {"span": 4, "height": 4, "rake": 0, "opening": "window"}, "#e3e0d4"],
-	["corner_45", 15, 0, 32, 180, {"span": 1, "height": 4, "rake_a": 0, "rake_b": 0}, "#e3e0d4"],
-	["wall_panel", 14, 0, 32, 180, {"span": 3, "height": 4, "rake": 0, "opening": "scuttle"}, "#e3e0d4"],
+	## Casing ring: x 5..15, z 18..32 cells, 5 cells tall, raked front. It was 4
+	## cells (2.00 m) until `wall_panel` learned what a door costs: a 2.00 m panel
+	## cannot carry one. The kit's door is 2.05 m of clear head above the panel's
+	## foot — 1.80 m of player, the 0.155 m walking surface of the thickest sole
+	## the kit can lay at that node, and the collider hang — so it needs a 2.13 m
+	## plate and the constraint refuses anything shorter. The casing was also the
+	## fixture with 0.06 m of standing headroom inside it; at 5 cells that is
+	## 0.56 m.
+	["corner_45", 5, 0, 18, 0, {"span": 1, "height": 5, "rake_a": 6, "rake_b": 0}, "#e3e0d4"],
+	["wall_panel", 6, 0, 18, 0, {"span": 8, "height": 5, "rake": 6}, "#e3e0d4"],
+	["corner_45", 15, 0, 18, 270, {"span": 1, "height": 5, "rake_a": 0, "rake_b": 6}, "#e3e0d4"],
+	["wall_panel", 15, 0, 19, 270, {"span": 8, "height": 5, "rake": 0, "opening": "window"}, "#e3e0d4"],
+	["wall_panel", 15, 0, 27, 270, {"span": 4, "height": 5, "rake": 0, "opening": "window"}, "#e3e0d4"],
+	["corner_45", 15, 0, 32, 180, {"span": 1, "height": 5, "rake_a": 0, "rake_b": 0}, "#e3e0d4"],
+	["wall_panel", 14, 0, 32, 180, {"span": 3, "height": 5, "rake": 0, "opening": "scuttle"}, "#e3e0d4"],
 	## Three cells, not two: the kit's door is 1.20 m of clear opening (the player
 	## capsule is 0.70 m across) and `wall_panel`'s constraint refuses one on a
 	## panel under three cells. The aft face is 8 cells, so the scuttle beside it
 	## gives one up: 3 + 3 + 2.
-	["wall_panel", 11, 0, 32, 180, {"span": 3, "height": 4, "rake": 0, "opening": "door"}, "#e3e0d4"],
-	["wall_panel", 8, 0, 32, 180, {"span": 2, "height": 4, "rake": 0, "opening": "scuttle"}, "#e3e0d4"],
-	["corner_45", 5, 0, 32, 90, {"span": 1, "height": 4, "rake_a": 0, "rake_b": 0}, "#e3e0d4"],
-	["wall_panel", 5, 0, 31, 90, {"span": 8, "height": 4, "rake": 0, "opening": "window"}, "#e3e0d4"],
-	["wall_panel", 5, 0, 23, 90, {"span": 4, "height": 4, "rake": 0, "opening": "window"}, "#e3e0d4"],
+	["wall_panel", 11, 0, 32, 180, {"span": 3, "height": 5, "rake": 0, "opening": "door"}, "#e3e0d4"],
+	["wall_panel", 8, 0, 32, 180, {"span": 2, "height": 5, "rake": 0, "opening": "scuttle"}, "#e3e0d4"],
+	["corner_45", 5, 0, 32, 90, {"span": 1, "height": 5, "rake_a": 0, "rake_b": 0}, "#e3e0d4"],
+	["wall_panel", 5, 0, 31, 90, {"span": 8, "height": 5, "rake": 0, "opening": "window"}, "#e3e0d4"],
+	["wall_panel", 5, 0, 23, 90, {"span": 4, "height": 5, "rake": 0, "opening": "window"}, "#e3e0d4"],
 	## Casing roof, one cell proud all round — the eave the kit's note calls for.
-	["deck_tile", 4, 4, 17, 0, {"span": 12, "depth": 16, "gauge": "deck"}, "#4d5257"],
-	["trim_band", 4, 4, 17, 0, {"span": 12, "profile": "eave", "offset": 0}, "#e3e0d4"],
-	["trim_band", 16, 4, 17, 270, {"span": 16, "profile": "eave", "offset": 0}, "#e3e0d4"],
-	["trim_band", 16, 4, 33, 180, {"span": 12, "profile": "eave", "offset": 0}, "#e3e0d4"],
-	["trim_band", 4, 4, 33, 90, {"span": 16, "profile": "eave", "offset": 0}, "#e3e0d4"],
+	["deck_tile", 4, 5, 17, 0, {"span": 12, "depth": 16, "gauge": "deck"}, "#4d5257"],
+	["trim_band", 4, 5, 17, 0, {"span": 12, "profile": "eave", "offset": 0}, "#e3e0d4"],
+	["trim_band", 16, 5, 17, 270, {"span": 16, "profile": "eave", "offset": 0}, "#e3e0d4"],
+	["trim_band", 16, 5, 33, 180, {"span": 12, "profile": "eave", "offset": 0}, "#e3e0d4"],
+	["trim_band", 4, 5, 33, 90, {"span": 16, "profile": "eave", "offset": 0}, "#e3e0d4"],
 	## Wheelhouse: x 7..13, z 20..28, glazed on three sides, door aft.
-	["corner_45", 7, 4, 20, 0, {"span": 1, "height": 5, "rake_a": 8, "rake_b": -2}, "#e3e0d4"],
-	["wall_glazed", 8, 4, 20, 0, {"span": 4, "height": 5, "rake": 8, "sill": 2, "band": 2, "lights": 3}, "#e3e0d4"],
-	["corner_45", 13, 4, 20, 270, {"span": 1, "height": 5, "rake_a": -2, "rake_b": 8}, "#e3e0d4"],
-	["wall_glazed", 13, 4, 21, 270, {"span": 6, "height": 5, "rake": -2, "sill": 2, "band": 2, "lights": 4}, "#e3e0d4"],
-	["corner_45", 13, 4, 28, 180, {"span": 1, "height": 5, "rake_a": 2, "rake_b": -2}, "#e3e0d4"],
-	["wall_panel", 12, 4, 28, 180, {"span": 4, "height": 5, "rake": 2, "opening": "door"}, "#e3e0d4"],
-	["corner_45", 7, 4, 28, 90, {"span": 1, "height": 5, "rake_a": -2, "rake_b": 2}, "#e3e0d4"],
-	["wall_glazed", 7, 4, 27, 90, {"span": 6, "height": 5, "rake": -2, "sill": 2, "band": 2, "lights": 4}, "#e3e0d4"],
+	["corner_45", 7, 5, 20, 0, {"span": 1, "height": 5, "rake_a": 8, "rake_b": -2}, "#e3e0d4"],
+	["wall_glazed", 8, 5, 20, 0, {"span": 4, "height": 5, "rake": 8, "sill": 2, "band": 2, "lights": 3}, "#e3e0d4"],
+	["corner_45", 13, 5, 20, 270, {"span": 1, "height": 5, "rake_a": -2, "rake_b": 8}, "#e3e0d4"],
+	["wall_glazed", 13, 5, 21, 270, {"span": 6, "height": 5, "rake": -2, "sill": 2, "band": 2, "lights": 4}, "#e3e0d4"],
+	["corner_45", 13, 5, 28, 180, {"span": 1, "height": 5, "rake_a": 2, "rake_b": -2}, "#e3e0d4"],
+	["wall_panel", 12, 5, 28, 180, {"span": 4, "height": 5, "rake": 2, "opening": "door"}, "#e3e0d4"],
+	["corner_45", 7, 5, 28, 90, {"span": 1, "height": 5, "rake_a": -2, "rake_b": 2}, "#e3e0d4"],
+	["wall_glazed", 7, 5, 27, 90, {"span": 6, "height": 5, "rake": -2, "sill": 2, "band": 2, "lights": 4}, "#e3e0d4"],
 	## Wheelhouse roof and the visor over the windscreen.
-	["deck_tile", 6, 9, 19, 0, {"span": 8, "depth": 8, "gauge": "deck"}, "#858a8f"],
-	["deck_tile", 6, 9, 27, 0, {"span": 8, "depth": 2, "gauge": "deck"}, "#858a8f"],
-	["roof_slope", 6, 8, 17, 0, {"span": 8, "depth": 2, "rise": 1, "gauge": "light"}, "#4d5257"],
+	["deck_tile", 6, 10, 19, 0, {"span": 8, "depth": 8, "gauge": "deck"}, "#858a8f"],
+	["deck_tile", 6, 10, 27, 0, {"span": 8, "depth": 2, "gauge": "deck"}, "#858a8f"],
+	["roof_slope", 6, 9, 17, 0, {"span": 8, "depth": 2, "rise": 1, "gauge": "light"}, "#4d5257"],
 	## Exhaust casing aft on the casing roof.
-	["wall_panel", 9, 4, 30, 0, {"span": 2, "height": 6, "rake": 0}, "#9e5c1c"],
-	["wall_panel", 11, 4, 30, 270, {"span": 3, "height": 6, "rake": 0}, "#9e5c1c"],
-	["wall_panel", 11, 4, 33, 180, {"span": 2, "height": 6, "rake": 0}, "#9e5c1c"],
-	["wall_panel", 9, 4, 33, 90, {"span": 3, "height": 6, "rake": 0}, "#9e5c1c"],
-	["deck_tile", 9, 10, 30, 0, {"span": 2, "depth": 3, "gauge": "heavy"}, "#1c1c1f"],
+	["wall_panel", 9, 5, 30, 0, {"span": 2, "height": 6, "rake": 0}, "#9e5c1c"],
+	["wall_panel", 11, 5, 30, 270, {"span": 3, "height": 6, "rake": 0}, "#9e5c1c"],
+	["wall_panel", 11, 5, 33, 180, {"span": 2, "height": 6, "rake": 0}, "#9e5c1c"],
+	["wall_panel", 9, 5, 33, 90, {"span": 3, "height": 6, "rake": 0}, "#9e5c1c"],
+	["deck_tile", 9, 11, 30, 0, {"span": 2, "depth": 3, "gauge": "heavy"}, "#1c1c1f"],
 ]
 
 

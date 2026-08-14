@@ -49,8 +49,8 @@ func _init() -> void:
 func _lift_is_translation() -> void:
 	var worst := 0.0
 	for lift in [-4, 0, 3]:
-		var a := _corners({"span": 4, "height": 5, "rake": 3, "fall": 2, "opening": "door", "lift": 0})
-		var b := _corners({"span": 4, "height": 5, "rake": 3, "fall": 2, "opening": "door", "lift": lift})
+		var a := _corners({"span": 4, "height": 5, "rake": 3, "fall": 0, "opening": "door", "lift": 0})
+		var b := _corners({"span": 4, "height": 5, "rake": 3, "fall": 0, "opening": "door", "lift": lift})
 		for i in 4:
 			worst = maxf(worst, absf((b[i] - a[i]).y - float(lift) * 0.125))
 			worst = maxf(worst, (b[i] - a[i]).x)
@@ -68,9 +68,11 @@ func _corners(given: Dictionary) -> PackedVector3Array:
 
 func _sweep(opening: String) -> Dictionary:
 	var tried := 0
+	var refused: Dictionary = {}
 	var accepted := 0
 	var clamped := 0
 	var casing := 0
+	var lost := 0
 	var worst_head := INF
 	var worst_at := ""
 	var examples := PackedStringArray()
@@ -86,6 +88,11 @@ func _sweep(opening: String) -> Dictionary:
 						}
 						var out := PieceKit.resolve("wall_panel", given)
 						if (out["errors"] as PackedStringArray).size() > 0:
+							var why := ", ".join(out["errors"] as PackedStringArray)
+							var tag := "narrow" if why.contains("wide enough") else (
+								"short" if why.contains("TALL ENOUGH") else (
+								"ramped head" if why.contains("LEVEL") else "other"))
+							refused[tag] = int(refused.get(tag, 0)) + 1
 							continue
 						accepted += 1
 						if opening == "none":
@@ -124,6 +131,8 @@ func _sweep(opening: String) -> Dictionary:
 							var dv := (float(frame["v1"]) - float(frame["v0"])) * ref.y
 							if minf(du, dv) > 0.09 - 1e-6:
 								full += 1
+						if frames.size() < want_members:
+							lost += 1
 						if full < want_members:
 							casing += 1
 						if opening == "door" and not got.is_empty():
@@ -143,6 +152,8 @@ func _sweep(opening: String) -> Dictionary:
 		print("  door: worst DRAWN head above the panel foot %.3f m at %s" % [worst_head, worst_at])
 	for line in examples:
 		print("  [%s] %s" % [opening, line])
+	print("  [%s] refused: %s" % [opening, str(refused)])
+	print("  [%s] casing members MISSING entirely: %d" % [opening, lost])
 	return {"tried": tried, "accepted": accepted, "clamped": clamped, "casing": casing}
 
 

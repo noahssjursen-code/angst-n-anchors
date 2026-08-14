@@ -87,6 +87,24 @@ extends RefCounted
 ## 0..N-1. That is what draws N-1 mullions across a window band without the kit
 ## needing a mullion piece.
 ##
+## …and `derived`, which is NOT a third mechanism but the deletion of a second
+## copy. A piece may name sub-expressions — `"v_plate": "(v_top+v_far)*0.5"` —
+## and use the name anywhere an expression is legal. It exists because
+## `wall_panel`'s door has to say the SAME formula twice: once as the opening's
+## own height and once as the constraint that keeps that height inside the plate.
+## Two copies of a formula drift, and this project has deleted the second
+## derivation four times already (REALITY.md §3b). Derived names are evaluated in
+## declaration order, may refer to earlier ones, and may not shadow a parameter.
+##
+## The expression language grew `sqrt()` and `abs()` for the same door. A raked
+## wall's surface length is Pythagorean — `sqrt(rise² + rake²)` — and an opening
+## is measured ALONG that surface, so the vertical clearance under a 1.95 m hole
+## in a wall raked 1.0 m over 2.5 m is 1.81 m, not 1.95 m. Without a square root
+## the kit could not say that, and what it could not say it did not check: the
+## door's own stepper ran to a rake whose doorway a 1.8 m player cannot enter.
+## The same gap is why `corner_45` carries the literal 0.08838834764831845
+## (= 0.125/√2) instead of writing what it means.
+##
 ## A piece may also declare `constraints`: relationships BETWEEN its parameters
 ## that a per-parameter value set cannot say. Two legal values can still make an
 ## illegal piece — a glazed panel whose coaming and glass together fill its whole
@@ -131,6 +149,14 @@ const OPENING_TYPES: Array[String] = ["door", "window", "hatch"]
 ## are the grid; `count` is a plain integer; `choice` is a named string. There is
 ## no "float" unit and there will not be one — see the header.
 const PARAM_UNITS: Array[String] = ["cells", "quarter_cells", "eighth_cells", "count", "choice"]
+
+## The only functions an expression may call. One argument each, no side effects,
+## no engine reach — the same reason the parser is hand-written rather than
+## Godot's `Expression`. `sqrt` is here because a raked wall's surface length is
+## Pythagorean and an opening is measured along that surface; `abs` because
+## `fall` is signed and what a falling head costs a doorway does not care which
+## way it falls.
+const FUNCTIONS: Array[String] = ["sqrt", "abs"]
 
 static var _pieces: Dictionary = {}
 static var _order: PackedStringArray = PackedStringArray()
@@ -251,8 +277,13 @@ static func _build_piece(
 		piece["color"] = DEFAULT_COLOR
 
 	piece["params"] = _parse_params(id, src.get("params", {}), errors)
-	piece["footprint"] = _parse_footprint(id, src.get("footprint", {}), piece["params"], errors)
-	piece["constraints"] = _parse_constraints(id, src.get("constraints", []), piece["params"], errors)
+	piece["derived"] = _parse_derived(id, src.get("derived", null), piece["params"], errors)
+	piece["footprint"] = _parse_footprint(
+		id, src.get("footprint", {}), piece["params"], piece["derived"], errors
+	)
+	piece["constraints"] = _parse_constraints(
+		id, src.get("constraints", []), piece["params"], piece["derived"], errors
+	)
 
 	var build: Variant = src.get("build", null)
 	if build == null:
@@ -357,17 +388,83 @@ static func _parse_params(id: String, raw: Variant, errors: PackedStringArray) -
 	return out
 
 
+## NAMED SUB-EXPRESSIONS, evaluated in declaration order and usable anywhere an
+## expression is legal. This is not a new way for a piece to say something — it
+## is the way to say something ONCE. `wall_panel`'s door needs its opening height
+## and the constraint that keeps that opening inside the plate to be the same
+## formula; written twice they drift, and a drifted constraint stops guarding the
+## clamp it was written for while still passing (REALITY.md §3b, §4a).
+##
+## A derived name may not shadow a parameter — a reader seeing `rake` in an
+## expression must be able to trust it is the stepper value — and may not be
+## `i`, which belongs to `repeat`.
+static func _parse_derived(
+	id: String, raw: Variant, params: Dictionary, errors: PackedStringArray
+) -> Array:
+	var out: Array = []
+	if raw == null:
+		return out
+	if not (raw is Dictionary):
+		errors.append("piece \"%s\": \"derived\" must be an object of name -> expression" % id)
+		return out
+	var scope := _numeric_defaults(params)
+	for key in (raw as Dictionary).keys():
+		var name := str(key)
+		if name.begins_with("_"):
+			continue
+		if params.has(name):
+			errors.append(
+				"piece \"%s\": derived \"%s\" shadows a parameter of the same name" % [id, name]
+			)
+			continue
+		if name == "i" or FUNCTIONS.has(name):
+			errors.append("piece \"%s\": derived \"%s\" is a reserved name" % [id, name])
+			continue
+		if not _is_name_start(name[0]):
+			errors.append("piece \"%s\": derived \"%s\" is not a legal name" % [id, name])
+			continue
+		var expr: Variant = (raw as Dictionary)[key]
+		if expr is Dictionary:
+			errors.append(
+				"piece \"%s\": derived \"%s\" must be a plain expression — $choice belongs in"
+				% [id, name] + " \"build\" or in a constraint, where the branch is what varies"
+			)
+			continue
+		var where := "piece \"%s\" derived.%s" % [id, name]
+		scope[name] = _eval(expr, scope, where, errors)
+		out.append({"name": name, "expr": expr})
+	return out
+
+
+## `numeric` plus every derived value, in order. Every place that builds a
+## parameter bag runs through here, so a derived name resolves identically at
+## load, in a constraint, in a footprint and in the build tree.
+static func _with_derived(
+	derived: Array, numeric: Dictionary, where: String, errors: PackedStringArray
+) -> Dictionary:
+	if derived.is_empty():
+		return numeric
+	var out := numeric.duplicate()
+	for entry_variant in derived:
+		var entry := entry_variant as Dictionary
+		var name := str(entry["name"])
+		out[name] = _eval(entry["expr"], out, "%s derived.%s" % [where, name], errors)
+	return out
+
+
 ## A piece's size on the grid, in CELLS, as expressions over its own parameters.
 ## Declared rather than derived so a placement tool can reserve the footprint
 ## before any geometry is resolved.
 static func _parse_footprint(
-	id: String, raw: Variant, params: Dictionary, errors: PackedStringArray
+	id: String, raw: Variant, params: Dictionary, derived: Array, errors: PackedStringArray
 ) -> Dictionary:
 	var out: Dictionary = {"run": 0, "depth": 0, "rise": 0}
 	if not (raw is Dictionary):
 		errors.append("piece \"%s\": \"footprint\" must be {run, depth, rise} in cells" % id)
 		return out
-	var numeric := _numeric_defaults(params)
+	var numeric := _with_derived(
+		derived, _numeric_defaults(params), "piece \"%s\" footprint" % id, errors
+	)
 	for key in ["run", "depth", "rise"]:
 		var value: Variant = (raw as Dictionary).get(key, 0)
 		## Stored RAW — a footprint is an expression over the piece's own
@@ -393,7 +490,7 @@ static func _parse_footprint(
 ## is violated by the piece's own defaults, is a rejected piece rather than a
 ## clamp on somebody's boat.
 static func _parse_constraints(
-	id: String, raw: Variant, params: Dictionary, errors: PackedStringArray
+	id: String, raw: Variant, params: Dictionary, derived: Array, errors: PackedStringArray
 ) -> Array:
 	var out: Array = []
 	if raw == null:
@@ -401,7 +498,9 @@ static func _parse_constraints(
 	if not (raw is Array):
 		errors.append("piece \"%s\": \"constraints\" must be an array" % id)
 		return out
-	var numeric := _numeric_defaults(params)
+	var numeric := _with_derived(
+		derived, _numeric_defaults(params), "piece \"%s\" constraints" % id, errors
+	)
 	var index := -1
 	for entry_raw in raw as Array:
 		index += 1
@@ -594,6 +693,9 @@ static func resolve_params(piece_id: String, given: Dictionary) -> Dictionary:
 				numeric[str(key)] = float(value)
 			elif value is String:
 				picked[str(key)] = str(value)
+		numeric = _with_derived(
+			piece.get("derived", []) as Array, numeric, "piece \"%s\"" % piece_id, errors
+		)
 		for constraint_variant in piece.get("constraints", []) as Array:
 			var constraint := constraint_variant as Dictionary
 			var where := "piece \"%s\" constraint" % piece_id
@@ -626,6 +728,9 @@ static func footprint_cells(piece_id: String, given: Dictionary = {}) -> Vector3
 		if value is int or value is float:
 			numeric[str(key)] = float(value)
 	var errors := PackedStringArray()
+	numeric = _with_derived(
+		piece.get("derived", []) as Array, numeric, "piece \"%s\" footprint" % piece_id, errors
+	)
 	var foot := piece["footprint"] as Dictionary
 	return Vector3i(
 		roundi(_eval(foot["run"], numeric, "footprint.run", errors)),
@@ -666,7 +771,12 @@ static func _expand(piece: Dictionary, params: Dictionary, errors: PackedStringA
 			numeric[str(key)] = float(value)
 		else:
 			choices[str(key)] = str(value)
-	var steps_raw: Variant = _choose(piece.get("build", null), choices, "piece \"%s\" build" % id, errors)
+	numeric = _with_derived(
+		piece.get("derived", []) as Array, numeric, "piece \"%s\" build" % id, errors
+	)
+	var steps_raw: Variant = _choose(
+		piece.get("build", null), choices, "piece \"%s\" build" % id, errors
+	)
 	if not (steps_raw is Array):
 		errors.append("piece \"%s\": build must resolve to an array of steps" % id)
 		return []
@@ -929,6 +1039,17 @@ static func _is_name_start(chr: String) -> bool:
 	return (chr >= "a" and chr <= "z") or (chr >= "A" and chr <= "Z") or chr == "_"
 
 
+## A NAME immediately followed by "(" is a call, whether or not the kit knows the
+## function. Reading it as a call either way is deliberate: `foo(2)` then names
+## the function that does not exist, instead of parsing as the parameter `foo`
+## and reporting a trailing bracket.
+static func _opens_bracket(tokens: Array, index: int) -> bool:
+	if index >= tokens.size():
+		return false
+	var token := tokens[index] as Dictionary
+	return str(token["kind"]) == "op" and str(token["text"]) == "("
+
+
 static func _parse_expr(
 	tokens: Array, cursor: Array, params: Dictionary, where: String, errors: PackedStringArray
 ) -> float:
@@ -987,6 +1108,33 @@ static func _parse_unary(
 			return inner
 		cursor[0] = int(cursor[0]) + 1
 		return inner
+	if str(token["kind"]) == "name" and _opens_bracket(tokens, int(cursor[0]) + 1):
+		var fname := str(token["text"])
+		cursor[0] = int(cursor[0]) + 2
+		var arg := _parse_expr(tokens, cursor, params, where, errors)
+		if int(cursor[0]) >= tokens.size():
+			errors.append("%s: unclosed \"(\" after \"%s\"" % [where, fname])
+			return 0.0
+		var close := tokens[int(cursor[0])] as Dictionary
+		if str(close["kind"]) != "op" or str(close["text"]) != ")":
+			errors.append("%s: expected \")\" after %s(, got \"%s\"" % [where, fname, str(close["text"])])
+			return 0.0
+		cursor[0] = int(cursor[0]) + 1
+		if not FUNCTIONS.has(fname):
+			errors.append(
+				"%s: no function \"%s\" — an expression may call %s"
+				% [where, fname, ", ".join(PackedStringArray(FUNCTIONS))]
+			)
+			return 0.0
+		if fname == "abs":
+			return absf(arg)
+		if arg < 0.0:
+			## Not a clamp. A square root of a negative means the piece asked for a
+			## length that does not exist, and returning 0 would hand the build a
+			## plausible number for an impossible shape.
+			errors.append("%s: sqrt(%.6f) — the argument is negative" % [where, arg])
+			return 0.0
+		return sqrt(arg)
 	cursor[0] = int(cursor[0]) + 1
 	if str(token["kind"]) == "num":
 		return float(token["value"])
