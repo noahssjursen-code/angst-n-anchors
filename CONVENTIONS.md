@@ -132,9 +132,30 @@ a 28 m hull is 56 cells long. A 1 m grid was too coarse to build detail on, whic
 reason this constant exists.
 
 `half_beam` and `half_loa` derive from metres (`width × CELL_M × 0.5`), so the factors cancel
-and **changing `DECK_CELL_M` moves no geometry**. Verified: all fixtures re-rendered
-**byte-identical** (same MD5) after halving it, and the change caused **zero** new gate failures
-against a 1.0 control.
+and changing `DECK_CELL_M` moves no **structure-plan** geometry. Fixtures re-rendered
+byte-identical (same MD5) after halving it.
+
+> ### ⚠ THAT CLAIM USED TO BE WRITTEN WITHOUT THE WORD "STRUCTURE-PLAN", AND IT WAS FALSE
+>
+> It said *"changing `DECK_CELL_M` moves no geometry… zero new gate failures against a 1.0
+> control"*. It is true for structure plans, whose every dimension is in metres. It is **false
+> for BRICKS**: `BrickCatalog.size_m` is `footprint × CELL_M`, so halving the constant in
+> `a70bdbc` **halved every brick in the game**.
+>
+> Measured, not inferred: `shipyard_editor_ui_test` failed on a railing post whose z moved from
+> **−0.472 to −0.222** — and a `railing` brick is now **0.5 m tall with a 0.44 m post**, which is
+> knee-high beside the 1.8 m figure this very section says to size everything against.
+>
+> The "zero new gate failures" half was also wrong, and it took months to surface because the
+> failure it caused was read as an ordinary red in a stale known-red list.
+>
+> **Whether 0.5 m is the right BRICK cell is an open product decision** — it is a real question
+> about the old LEGO-brick system, not a slip to patch. Nobody has looked at a rendered brick
+> vessel beside the figure. Until someone does, do not repeat the byte-identical claim without
+> the qualifier.
+>
+> The general lesson is the one this file exists for: a doc line that says a change is safe is a
+> claim, and a claim that was verified **on one subsystem** is not a claim about the codebase.
 
 **Anything under 0.5 m cannot sit on the grid at any resolution** — cleats, fairleads, chocks,
 blocks, sheaves, light fixtures, stanchions. Those are free-positioned items with float

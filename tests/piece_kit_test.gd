@@ -62,6 +62,7 @@ func _initialize() -> void:
 	_check_trim_lattice()
 	_check_diagonal_run()
 	_check_cross_products()
+	_check_openings_fit()
 	_check_production_path()
 	_check_shell_closes()
 	_check_every_shell()
@@ -1767,6 +1768,179 @@ func _check_fixtures() -> void:
 			"probe_trawler_bulwark authors %d plates; the piece-built one authors %d — %d fewer"
 			% [before, authored, before - authored],
 			authored < before
+		)
+
+
+# ── The hole a panel asks for is the hole it gets ───────────────────────────
+#
+# `wall_panel`'s opening was related to `span` and to nothing else, and `span` is
+# the ONE parameter that does not set the plate's v-length: `height`, `head`,
+# `rake` and `fall` all do. Over the 91,800 legal settings that punch a hole,
+# 19,742 — 21.5% — had that hole silently CUT DOWN by `plate_openings`, which
+# clamps to `ref.y - sill`. A `height 2` panel with a `door` asked for a
+# 1.20 x 1.95 m opening and got 1.20 x 1.00 with no lintel over it, and nothing
+# in the kit, the baker or this test said a word. The piece's own header calls
+# that out as the thing it exists to prevent.
+#
+# The two claims below are properties, not restatements:
+#
+#   THE HOLE. For every accepted setting, the opening the baker CUTS equals the
+#   opening the piece ASKED FOR, to the bit, and every casing member the opening
+#   calls for is emitted. Nothing here names a constraint or a number out of the
+#   kit file — it compares what went in against what came out.
+#
+#   THE HEAD. An opening's sill and height are measured ALONG THE PLATE, so a
+#   1.95 m door in a wall raked 1.0 m over 2.5 m stands 1.81 m tall in the world.
+#   That is the bug the rake stepper shipped: the doorway stopped admitting a
+#   1.80 m player between rake 3 and rake 4, and the stepper goes to 8. So the
+#   claim is stated in WORLD VERTICAL — how far the lowest point of the head
+#   stands above the panel's own foot — and the bar it has to clear is built out
+#   of the player, the thickest sole the kit itself can lay under him, and the
+#   collider hang. Not one of those terms is the door's own number.
+
+## The player, and how far the physics world may sit below the drawing at a head:
+## a casing box is fitted to the slab plus and minus half its 0.20 m thickness
+## ALONG THE PLATE NORMAL, and a raked plate's normal tilts, so the lintel's box
+## hangs below the lintel. Measured on a spawned vessel through PhysicsServer3D
+## by `piece_interior_test`: 0.022 m at rake 2, 0.052 m at rake 8. This is the
+## drawing-side bound, and it is the same 0.06 m that test allows a doorway to
+## lose between the drawing and the physics — one number, two places to spend it.
+const FIGURE_H := 1.80
+const COLLIDER_HANG := 0.06
+const HEAD_PLAY := 0.02
+
+## `head` and `fall` are sampled rather than walked: both move the plate's
+## v-length monotonically and neither interacts with the rake, so a quarter of
+## each is a sample and the axis that carries the bug — `rake` — is complete,
+## as are span, height and the opening choice. The full product is 146,880
+## settings and 56 s; this is 40,800 and 14 s. `lift` is excluded because it is a
+## pure translation of all four corners, which is checked in `_check_grid_units`.
+const HEAD_SAMPLE: Array[int] = [0, 2, 5, 7]
+const FALL_SAMPLE: Array[int] = [-4, -1, 0, 1, 4]
+
+
+func _check_openings_fit() -> void:
+	## THE WORST FLOOR THE KIT CAN LAY, read off the kit rather than typed here: a
+	## deck tile's plate is centred on its node, so its walking surface stands half
+	## its own gauge above the node the wall beside it stands on.
+	var sole := 0.0
+	for gauge in (PieceKit.params_of("deck_tile")["gauge"] as Dictionary)["values"] as Array:
+		for spec_variant in PieceKit.resolve("deck_tile", {"gauge": gauge})["specs"] as Array:
+			sole = maxf(sole, float((spec_variant as Dictionary).get("thickness", 0.0)) * 0.5)
+	_t.check("the thickest sole the kit can lay stands %.3f m over its node" % sole, sole > 0.14)
+	var need := FIGURE_H + sole + COLLIDER_HANG + HEAD_PLAY
+
+	var p := PieceKit.params_of("wall_panel")
+	var accepted := 0
+	var clamped := PackedStringArray()
+	var casing := PackedStringArray()
+	var low := PackedStringArray()
+	var worst_head := INF
+	var worst_at := ""
+	var doors := 0
+	for opening in (p["opening"] as Dictionary)["values"] as Array:
+		if str(opening) == "none":
+			continue
+		for span in (p["span"] as Dictionary)["values"] as Array:
+			for height in (p["height"] as Dictionary)["values"] as Array:
+				for head in HEAD_SAMPLE:
+					for rake in (p["rake"] as Dictionary)["values"] as Array:
+						for fall in FALL_SAMPLE:
+							var setting := {
+								"opening": opening, "span": span, "height": height,
+								"head": head, "rake": rake, "fall": fall,
+							}
+							var result := PieceKit.resolve("wall_panel", setting)
+							var specs := result["specs"] as Array
+							if specs.is_empty():
+								continue
+							accepted += 1
+							var spec := specs[0] as Dictionary
+							var corners := StructureBaker.plate_corners(spec)
+							var ref := StructureBaker.plate_ref_lengths(corners)
+							var asked := (spec["openings"] as Array)[0] as Dictionary
+							var cut := StructureBaker.plate_openings(spec, ref)
+							if cut.size() != 1:
+								if clamped.size() < 3:
+									clamped.append("%s: the opening did not survive at all" % str(setting))
+								continue
+							var got := cut[0] as Dictionary
+							if (absf(float(got["w"]) - float(asked["width"])) > 1e-6
+									or absf(float(got["h"]) - float(asked["height"])) > 1e-6
+									or absf(float(got["sill"]) - float(asked["sill"])) > 1e-6
+									or absf(float(got["off"]) - float(asked["offset"])) > 1e-6):
+								if clamped.size() < 3:
+									clamped.append("%s: asked %.2f x %.3f at sill %.2f, cut %.2f x %.3f at sill %.2f"
+										% [str(setting), float(asked["width"]), float(asked["height"]),
+										   float(asked["sill"]), float(got["w"]), float(got["h"]),
+										   float(got["sill"])])
+								continue
+							## A door has jambs and a lintel; anything with a sill has a
+							## fourth member under it.
+							var members := 4 if float(got["sill"]) > 0.05 else 3
+							if StructureBaker.plate_frames(spec).size() < members and casing.size() < 3:
+								casing.append("%s: %d casing members of %d"
+									% [str(setting), StructureBaker.plate_frames(spec).size(), members])
+							if str(opening) != "door":
+								continue
+							doors += 1
+							var v := (float(got["sill"]) + float(got["h"])) / ref.y
+							var clear := INF
+							for i in 9:
+								var u := lerpf(float(got["off"]),
+									float(got["off"]) + float(got["w"]), float(i) / 8.0) / ref.x
+								clear = minf(clear, StructureBaker.plate_point(corners, u, v).y)
+							clear -= minf(corners[0].y, corners[1].y)
+							if clear < worst_head:
+								worst_head = clear
+								worst_at = str(setting)
+							if clear < need and low.size() < 3:
+								low.append("%s: %.3f m of head, needs %.3f" % [str(setting), clear, need])
+	_t.check(
+		"wall_panel: %d accepted settings punch a hole and the baker cuts every one of them "
+		% accepted + "AS ASKED — %d clamped (%s)"
+		% [clamped.size(), "none" if clamped.is_empty() else clamped[0]],
+		## The coverage floor: 16,877 settings punch a hole in the sampled sweep,
+		## measured. A check that walks nothing passes everything.
+		clamped.is_empty() and accepted > 16000
+	)
+	_t.check(
+		"...and every one keeps its casing — %d short (%s)"
+		% [casing.size(), "none" if casing.is_empty() else casing[0]],
+		casing.is_empty()
+	)
+	_t.check(
+		"every one of the %d accepted DOORS stands %.3f m clear over the panel's foot at its "
+		% [doors, worst_head] + "worst point (%s), against %.3f m of player + sole + collider — "
+		% [worst_at, need] + "%d too low (%s)"
+		% [low.size(), "none" if low.is_empty() else low[0]],
+		low.is_empty() and doors > 2400
+	)
+
+	## THE REFUSALS SPEAK, and these three are the settings a critic measured
+	## being clamped in silence.
+	for probe in [
+		{"opening": "door", "span": 3, "height": 2},
+		{"opening": "window", "span": 2, "height": 2},
+		{"opening": "scuttle", "span": 1, "height": 3},
+	]:
+		var refusal := PieceKit.resolve("wall_panel", probe)
+		_t.check(
+			"%s is refused in the piece's own words (%s)"
+			% [str(probe), ", ".join((refusal["errors"] as PackedStringArray))],
+			(refusal["specs"] as Array).is_empty()
+				and _says(refusal["errors"] as PackedStringArray, "which is under")
+		)
+	## ...and the constraint is not simply refusing every door: the whole rake
+	## stepper still carries one on a tier-height panel, which is the case the
+	## fleet is built out of and the case the old geometry lost.
+	for rake in (p["rake"] as Dictionary)["values"] as Array:
+		var built := PieceKit.resolve(
+			"wall_panel", {"opening": "door", "span": 3, "height": 5, "rake": rake}
+		)
+		_t.check(
+			"a tier-height panel still carries a door at rake %d" % int(rake),
+			not (built["specs"] as Array).is_empty()
 		)
 
 

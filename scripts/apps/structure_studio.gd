@@ -1057,6 +1057,13 @@ const TUG_RECIPE: Array = [
 	["wall_panel", 11, 5, 33, 180, {"span": 2, "height": 6, "rake": 0}, "#9e5c1c"],
 	["wall_panel", 9, 5, 33, 90, {"span": 3, "height": 6, "rake": 0}, "#9e5c1c"],
 	["deck_tile", 9, 11, 30, 0, {"span": 2, "depth": 3, "gauge": "heavy"}, "#1c1c1f"],
+	## A HEAVY sole aft in the casing, under the door. It is the thickest floor
+	## the kit can lay — 0.30 m of tile, centred on its node, so you walk on
+	## 0.150 m of it — and it is here so the fixture's doorway is measured over
+	## the worst floor a player can put under it rather than over the hull's own
+	## plating. `piece_interior_test` reads the floor it makes and the head over
+	## it from the physics world.
+	["deck_tile", 6, 0, 20, 0, {"span": 8, "depth": 12, "gauge": "heavy"}, "#3b3f43"],
 ]
 
 
@@ -1138,14 +1145,14 @@ func _write_tug_fixture() -> void:
 	print("[structure-studio] wrote probe_piece_tug.json — %d placements" % _plan.pieces.size())
 
 
-const TUG_NOTE := """BUILT THROUGH THE STUDIO'S PIECE TOOL. Every one of the 33 placements below was made by
+const TUG_NOTE := """BUILT THROUGH THE STUDIO'S PIECE TOOL. Every one of the 34 placements below was made by
 picking a piece off the kit palette, turning it with R, setting its parameters on steppers and
 dropdowns over the piece's own declared value sets, picking a tint off a swatch, and clicking a
 grid node. Not one number in this file was typed; there is no control in that tool a number CAN
 be typed into.
 
 That claim is checked rather than asserted. `structure_studio.gd`'s `--studio-probe` self-check
-carries the same 33 actions as data and requires that replaying them through the controls
+carries the same 34 actions as data and requires that replaying them through the controls
 reproduces this file placement for placement and plate corner for plate corner — so changing one
 step of the recipe, or breaking the rotate key, or letting a stepper walk off its declared set,
 turns the gate red.

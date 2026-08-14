@@ -1,6 +1,8 @@
 extends Node
 
-var _failures := PackedStringArray()
+const TestReport := preload("res://tests/support/test_report.gd")
+
+var _t := TestReport.new("shipyard_editor_ui_test", false)
 
 
 func _ready() -> void:
@@ -53,10 +55,25 @@ func _ready() -> void:
 	## Two edge posts + handrail + mid-rail + toe plate.
 	_check(railing.get_child_count() == 5, "straight railing is a tileable edge-post segment")
 	_check(railing_45.get_child_count() == 1, "45-degree railing wraps a diagonal segment")
-	var straight_post: Node3D = railing.get_child(0) as Node3D
+	## `position.z < -0.4` was a restated number, not a property. It was derived
+	## from a 1.0 m cell — `_railing_edge_z` returns `-sz.z * 0.5 + 0.028`, which
+	## was -0.472 while `WorldUnits.DECK_CELL_M` was 1.0. `a70bdbc` halved that
+	## constant to 0.5, so the face moved to -0.25 and the rail to -0.222, and a
+	## bound of -0.4 became unreachable: it now asks for a post OUTSIDE the cell
+	## it belongs to. The railing is drawn exactly where it always was, in cell
+	## terms. State that instead — every part of the run hugs the -Z cell face,
+	## measured against the brick's own size, so the check survives the next
+	## change to the cell constant.
+	var rail_face_z := -BrickCatalog.size_m("railing").z * 0.5
+	var outboard := 0
+	for child in railing.get_children():
+		var part := child as Node3D
+		if part != null and part.position.z <= rail_face_z + 0.08 and part.position.z >= rail_face_z:
+			outboard += 1
 	_check(
-		straight_post != null and straight_post.position.z < -0.4,
-		"straight railing sits on the local -Z cell face",
+		outboard == railing.get_child_count() and railing.get_child_count() > 0,
+		"straight railing sits on the local -Z cell face (%d of %d parts within 0.08 m of z=%.3f)"
+		% [outboard, railing.get_child_count(), rail_face_z],
 	)
 	var diagonal_root: Node3D = railing_45.get_child(0) as Node3D
 	_check(
@@ -111,15 +128,8 @@ func _ready() -> void:
 	editor.queue_free()
 	await get_tree().process_frame
 	await get_tree().process_frame
-	if _failures.is_empty():
-		print("Shipyard editor UI: shell, palette, and contextual states passed")
-		get_tree().quit()
-	else:
-		for failure in _failures:
-			push_error("Shipyard editor UI: " + failure)
-		get_tree().quit(1)
+	_t.finish(get_tree())
 
 
 func _check(condition: bool, message: String) -> void:
-	if not condition:
-		_failures.append(message)
+	_t.check(message, condition)

@@ -97,6 +97,10 @@ const MIN_RUN := 1.00
 ## stop it.
 const BAND_OVERLAP_MIN := 0.15
 
+## A fixture that declares glazing in its tier must carry a real band of it —
+## nine runs is what the house and the trawler resolve to, measured.
+const MIN_GLAZED_RUNS := 9
+
 const DOOR_STATIONS := 7
 const COLUMN_SAMPLES := 9
 const COLUMN_STEP := 0.01
@@ -114,6 +118,16 @@ const JAMB_MARGIN := 0.16
 ## which is the thing this check exists to catch coming back.
 const DOOR_PHYSICS_SLACK := 0.06
 const DOOR_SCAN_STEP := 0.01
+
+## The head scan: columns across the doorway's walkable width, each walked along
+## the path a player takes through the wall, each read upward from just over the
+## floor. 0.05 m of path step is well under the 0.09 m casing it is looking for,
+## and the 2.60 m ceiling is above anything the kit can put over a door.
+const HEAD_COLUMNS := 5
+const HEAD_PATH := 0.50
+const HEAD_PATH_STEP := 0.05
+const HEAD_SCAN_LO := 0.05
+const HEAD_SCAN_HI := 2.60
 
 ## Slack on the drawn-vs-collided containment test. Float epsilon and nothing
 ## more — a hand's breadth of grace would let a collider miss the geometry.
@@ -141,6 +155,10 @@ const FIXTURES: Array[Dictionary] = [
 		## Lower tier: x 2.50..7.50, z 17.00..25.25, y 0..2.75.
 		"tier": [2.0, 8.0, 16.5, 25.5, -0.2, 2.4],
 		"inside": [[5.0, 21.0], [3.6, 19.0], [6.4, 23.0], [5.0, 24.2]],
+		## Nine glazed runs in this tier, resolved and counted. Declared so that
+		## glazing disappearing from the fixture is a red check and not a quieter
+		## "0 of 0 swept".
+		"glazed_in_tier": true,
 	},
 	{
 		"path": "res://resources/data/structures/probe_piece_trawler.json",
@@ -149,13 +167,18 @@ const FIXTURES: Array[Dictionary] = [
 		"what": "the same deckhouse on a fully dressed trawler — spars, wires, gallows",
 		"tier": [2.0, 8.0, 16.5, 25.5, -0.2, 2.4],
 		"inside": [[5.0, 21.0], [3.6, 19.0], [6.4, 23.0], [5.0, 24.2]],
+		"glazed_in_tier": true,
 	},
 	{
 		"path": "res://resources/data/structures/probe_piece_tug.json",
 		"hull": "hull_28x10",
 		"registration": "fishing_vessel",
 		"what": "built through the studio's piece tool, 33 placements",
-		## Pilot-house casing: x 2.50..7.50, z 8.25..16.00, y 0..2.00.
+		## Pilot-house casing: x 2.50..7.50, z 8.25..16.00, y 0..2.50. It was 2.00 m
+		## until the door rule: a 2.00 m panel cannot carry a doorway a 1.8 m figure
+		## walks through once the sole under their feet and the collider over their
+		## head are counted, so the casing is a cell taller and its standing
+		## headroom went from 0.06 m to 0.56 m with it.
 		"tier": [2.0, 8.0, 8.0, 16.5, -0.2, 1.9],
 		"inside": [[5.0, 12.0], [3.6, 10.5], [6.4, 14.5], [5.0, 15.2]],
 		## The only fixture of the three that punches windows — six stations,
@@ -241,7 +264,7 @@ func _run_fixture(fixture: Dictionary) -> void:
 			_check_headroom(fixture, stem, floor_y)
 			_check_shell(walls, stem, floor_y)
 			_check_openings(walls, stem, floor_y, bool(fixture.get("punches_windows", false)))
-		_check_panes(walls, stem)
+		_check_panes(walls, stem, bool(fixture.get("glazed_in_tier", false)))
 		_check_drawn_is_collided(resolved, stem)
 		_check_controls(stem, floor_y)
 
@@ -495,7 +518,21 @@ func _check_floor(fixture: Dictionary, stem: String) -> float:
 		if not bool(drop["blocked"]):
 			fell += 1
 			continue
-		surfaces.append(DROP_FROM - float(drop["stop_m"]))
+		## THE MARCH REPORTS THE FIRST BLOCKED STEP, WHICH IS BELOW THE FLOOR.
+		## `stop_m` is a step boundary, so the surface it names is up to MARCH_STEP
+		## too low — and every check downstream stands a figure on it. Measured
+		## with a `heavy` deck tile laid as a sole (true surface 0.150 m): the
+		## unrefined answer was 0.097 m, the standing figure was planted 0.053 m
+		## INSIDE the tile, and `_check_headroom` reported all four stations
+		## obstructed by the floor they were standing on. REALITY.md §8 — the
+		## instrument, not the subject. Bisecting the last free step against the
+		## first blocked one lands the surface inside 0.2 mm.
+		## and the surface itself is read with the SAME instrument the head is —
+		## a point query, walked down onto the floor. A shape march cannot do
+		## better than its own step and its own radius; a point has neither, so
+		## the clearance a doorway is judged by is one measurement minus another
+		## rather than two instruments differenced.
+		surfaces.append(_physics_floor_y(here, DROP_FROM - float(drop["stop_m"]) + MARCH_STEP * 2.0))
 	print("  [floor] %d stations: %d stood, %d fell through, %d began inside something"
 		% [(fixture["inside"] as Array).size(), surfaces.size(), fell, stuck])
 	_t.equal("%s: no floor probe inside the deckhouse begins in a collider" % stem, stuck, 0)
@@ -515,6 +552,27 @@ func _check_floor(fixture: Dictionary, stem: String) -> float:
 	_t.check("%s: the floor is level across the deckhouse (%.3f m of step)" % [stem, hi - lo],
 		hi - lo < 0.10)
 	return hi
+
+
+## The top of whatever is underfoot at `here`, in plan y, walked DOWN from a
+## height the capsule drop has already shown to be clear. Point queries carry no
+## radius and no step, so this is the floor to within DOOR_SCAN_STEP, and it errs
+## LOW — which makes every clearance measured off it slightly pessimistic, never
+## generous. The capsule march that found the floor cannot do this: it reports
+## the first step at which a 0.35 m capsule OVERLAPS, which on a `heavy` sole
+## (true top 0.150 m) read 0.097 m.
+func _physics_floor_y(here: Vector3, from_y: float) -> float:
+	var query := PhysicsPointQueryParameters3D.new()
+	query.collide_with_bodies = true
+	query.collide_with_areas = false
+	query.collision_mask = 0xFFFFFFFF
+	var y := from_y
+	while y > -0.30:
+		query.position = Vector3(here.x, y, here.z) + _offset
+		if not _space.intersect_point(query, 1).is_empty():
+			return y
+		y -= DOOR_SCAN_STEP
+	return from_y
 
 
 ## A march that begins stuck is VACUOUS, and a deckhouse a 1.8 m figure cannot
@@ -651,6 +709,7 @@ func _check_openings(walls: Array, stem: String, floor_y: float, punches_windows
 	var doors_low := PackedStringArray()
 	var doors_narrow := PackedStringArray()
 	var doors_pinched := PackedStringArray()
+	var doors_hung := PackedStringArray()
 	var stations := 0
 	var stuck := PackedStringArray()
 	var blocked := PackedStringArray()
@@ -670,11 +729,6 @@ func _check_openings(walls: Array, stem: String, floor_y: float, punches_windows
 				window_stations += 1
 				continue
 			doors += 1
-			var head := _door_head_y(corners, ref, opening)
-			var need := floor_y + STAND_H + HEAD_MARGIN
-			if head < need:
-				doors_low.append("%s@%.2f head at plan y %.3f, a 1.8 m figure needs %.3f"
-					% [str(wall["name"]), float(opening["off"]), head, need])
 			var band_lo := floor_y + STAND_EPS
 			var clear := _physics_clear_width(corners, ref, opening)
 			if clear < float(opening["w"]) - DOOR_PHYSICS_SLACK:
@@ -682,9 +736,24 @@ func _check_openings(walls: Array, stem: String, floor_y: float, punches_windows
 					% [str(wall["name"]), float(opening["off"]), float(opening["w"]), clear])
 			var column := _door_column(corners, ref, opening, band_lo)
 			var width := float(column["width"])
-			print("  [door] %s@%.2f nominal %.2f m · open %.3f m in physics · walkable column %.3f m · head %.3f m"
+			## THE HEAD IS ASKED OF THE SPACE STATE. The drawn head is measured too,
+			## and only so the two can be held against each other — a doorway whose
+			## collider closes in 0.10 m below its own lintel is the same class of
+			## drift as a casing that draws and does not collide, and neither shows
+			## up in a check that reads one of them.
+			var head := _physics_head_y(corners, ref, opening, column, floor_y, normal)
+			var drawn := _door_head_y(corners, ref, opening)
+			var need := floor_y + STAND_H + HEAD_MARGIN
+			if head < need:
+				doors_low.append("%s@%.2f physics head at plan y %.3f (%.3f m over the floor), "
+					% [str(wall["name"]), float(opening["off"]), head, head - floor_y]
+					+ "a 1.8 m figure needs %.3f" % need)
+			if drawn - head > DOOR_PHYSICS_SLACK:
+				doors_hung.append("%s@%.2f drawn head %.3f, physics head %.3f (%.3f m lower)"
+					% [str(wall["name"]), float(opening["off"]), drawn, head, drawn - head])
+			print("  [door] %s@%.2f nominal %.2f m · open %.3f m in physics · walkable column %.3f m · head %.3f m drawn, %.3f m in physics"
 				% [str(wall["name"]), float(opening["off"]), float(opening["w"]), clear, width,
-				   head - floor_y])
+				   drawn - floor_y, head - floor_y])
 			if width < DOOR_PLAY_MIN:
 				doors_narrow.append("%s@%.2f only %.3f m of play"
 					% [str(wall["name"]), float(opening["off"]), width])
@@ -718,9 +787,18 @@ func _check_openings(walls: Array, stem: String, floor_y: float, punches_windows
 	_t.check("%s: the tier carries doorways to walk through (%d)" % [stem, doors], doors >= 1)
 	_t.equal("%s: no door march begins inside a collider (%d)" % [stem, stuck.size()],
 		stuck.size(), 0)
-	_t.check("%s: every doorway is tall enough for the 1.8 m figure (%d too low: %s)"
+	## ASKED OF THE SPACE STATE, not of `plate_point`. This is the check the rake
+	## defeated: the kit's own stepper offered a rake whose 1.95 m doorway stood
+	## 1.675 m clear in physics, and every check in this file went on passing
+	## because none of them looked above 1.46 m or asked the collider anything.
+	_t.check("%s: every doorway clears a 1.8 m figure IN PHYSICS (%d too low: %s)"
 		% [stem, doors_low.size(), "none" if doors_low.is_empty() else ", ".join(doors_low)],
 		doors_low.is_empty())
+	## The drawing and the physics agree about the HEAD, the same way the check
+	## below holds them together about the WIDTH.
+	_t.check("%s: no doorway's collider hangs below its own lintel (%d: %s)"
+		% [stem, doors_hung.size(), "none" if doors_hung.is_empty() else ", ".join(doors_hung)],
+		doors_hung.is_empty())
 	_t.check("%s: every doorway leaves a walkable column (%d too narrow: %s)"
 		% [stem, doors_narrow.size(),
 		   "none" if doors_narrow.is_empty() else ", ".join(doors_narrow)],
@@ -792,7 +870,13 @@ func _physics_clear_width(corners: PackedVector3Array, ref: Vector2, opening: Di
 	## leaves the mid-height scan reading a full 1.18 m and shuts the door at the
 	## shins — measured, on this fixture, before the strake was stopped either
 	## side of the casing.
-	for band in [0.25, 0.5, 0.75]:
+	## 0.90 IS THERE BECAUSE THE HEAD IS WHERE THE TWO DISAGREE. At 0.25/0.5/0.75
+	## of a 1.95 m door the highest sample was 1.46 m, and the casing's lintel —
+	## the one member whose collider hangs below what it draws — starts above 1.9.
+	## A critic scanned this function's three bands over every rake the stepper
+	## offers and got 1.160 m at all three every time, including the rakes whose
+	## doorway a 1.8 m figure cannot enter: full marks on a hole 0.135 m too short.
+	for band in [0.25, 0.5, 0.75, 0.90]:
 		## `band` comes out of an untyped array literal as a Variant, so the
 		## division cannot infer — hence the explicit float. (This line is where
 		## the wave that wrote this function was killed mid-edit.)
@@ -819,7 +903,7 @@ func _physics_clear_width(corners: PackedVector3Array, ref: Vector2, opening: Di
 ## the floor-level sweep did NOT reach — the pane, the header — is asked to stop
 ## a figure sized to its own band. The pane is set 90 mm into the reveal and is
 ## the only thing there, so this is a claim about the glass and nothing else.
-func _check_panes(walls: Array, stem: String) -> void:
+func _check_panes(walls: Array, stem: String, glazes: bool) -> void:
 	var inside := _tier_centre(walls)
 	var stations := 0
 	var through := PackedStringArray()
@@ -879,8 +963,18 @@ func _check_panes(walls: Array, stem: String) -> void:
 	## suite's answer.
 	_t.equal("%s: every glazed run in the tier was swept (%d of %d)" % [stem, panes, glazed],
 		panes, glazed)
+	## ...AND THE FIXTURE SAYS WHETHER THERE SHOULD BE ANY. Four checks in this
+	## function passed over an empty set on the tug — `0 of 0` swept, `0 over 0`
+	## stations, `0` began inside, `0/0` walked through — and the run-level guard
+	## meant to catch that is a bound of 9 plates and 40 stations against a measured
+	## 18 and 268, so glazing could vanish from one whole fixture and every check
+	## here would stay green. Stated per fixture, the same way `punches_windows` is:
+	## the tug's tier is a plated casing and carries none, the house and the trawler
+	## carry nine runs each, and either answer becoming the other turns this red.
+	_t.check("%s: the tier carries the glazing the fixture declares (%d runs)" % [stem, glazed],
+		glazed >= MIN_GLAZED_RUNS if glazes else glazed == 0)
 	_t.check("%s: ...and each swept pane carries stations (%d over %d plates)"
-		% [stem, stations, panes], panes == 0 or stations >= panes * 4)
+		% [stem, stations, panes], stations >= panes * 4 if glazes else stations == 0)
 	_t.equal("%s: no pane march begins inside the plate it is marching at (%d)"
 		% [stem, stuck.size()], stuck.size(), 0)
 	_t.check("%s: a window band is not a doorway (%d/%d through, e.g. %s)"
@@ -1092,8 +1186,63 @@ func _station_kind(openings: Array, u: float, band_lo: float, band_hi: float) ->
 	return "shell"
 
 
+## WHAT THE PHYSICS WORLD PUTS OVER THE DOORWAY, asked of the space state and of
+## nothing else. The lowest occupied point above the floor, over a grid of
+## vertical columns that spans the door's width and the whole path a player walks
+## along to get through it — so the answer is the headroom a body actually has,
+## not the height a number was authored at.
+##
+## THIS EXISTS BECAUSE THE DRAWN ANSWER WAS NOT THE ANSWER. `_door_head_y` calls
+## `plate_point` on the opening the plate declares; it is a restatement of the
+## authored number in world coordinates (REALITY.md §4a) and it cannot see the
+## collider at all. The two disagree by 0.007 m plumb and by 0.041 m at rake 8,
+## because a casing slab's box is fitted to the slab ± half its 0.20 m thickness
+## ALONG THE PLATE NORMAL, and a raked plate's normal tilts — so the lintel's box
+## hangs below the lintel you can see. The old head check read the drawing and
+## passed on a doorway a 1.8 m figure could not enter.
+##
+## Scanning UPWARD from just over the floor is deliberate: whatever is lowest is
+## what a player meets, so a rubbing strake laid across the doorway at 0.50 m is
+## reported as a 0.50 m head and fails, which is the honest answer. Unfiltered,
+## for the same reason the door march is.
+func _physics_head_y(corners: PackedVector3Array, ref: Vector2, opening: Dictionary,
+		column: Dictionary, floor_y: float, normal: Vector3) -> float:
+	var query := PhysicsPointQueryParameters3D.new()
+	query.collide_with_bodies = true
+	query.collide_with_areas = false
+	query.collision_mask = 0xFFFFFFFF
+	var v := _v_at_height(corners, 0.5, floor_y + HEAD_SCAN_LO)
+	var lowest := floor_y + HEAD_SCAN_HI
+	## THE HEAD OF A RAKED DOORWAY IS NOT OVER ITS THRESHOLD. `wall_panel` rakes
+	## up to 1.0 m, so the lintel stands that far outboard of the foot the player
+	## crosses, and a scan that walked a fixed 0.5 m either side of the threshold
+	## MISSED IT ENTIRELY — measured, on the first mutation run: the raked door
+	## reported a 2.370 m head, higher than its own drawing, because the columns
+	## never reached the lintel. The path is taken from the plate's own reach.
+	var reach := 0.0
+	for point in corners:
+		reach = maxf(reach, (point - StructureBaker.plate_point(corners, 0.5, v)).dot(normal))
+	for i in HEAD_COLUMNS:
+		var u := lerpf(float(column["lo"]), float(column["hi"]),
+			float(i) / float(HEAD_COLUMNS - 1))
+		var base := StructureBaker.plate_point(corners, u / ref.x, v) + _offset
+		var t := -HEAD_PATH
+		while t <= reach + HEAD_PATH + 1e-6:
+			var here := base + normal * t
+			var y := floor_y + HEAD_SCAN_LO
+			while y < lowest:
+				query.position = Vector3(here.x, y + _offset.y, here.z)
+				if not _space.intersect_point(query, 1).is_empty():
+					lowest = y
+					break
+				y += DOOR_SCAN_STEP
+			t += HEAD_PATH_STEP
+	return lowest
+
+
 ## The LOWEST point of a doorway's head, in plan y — the height a player has to
 ## duck under. Sampled across the door because a raked head is not level.
+## THE DRAWING'S ANSWER: see `_physics_head_y` for why it is not the verdict.
 func _door_head_y(corners: PackedVector3Array, ref: Vector2, opening: Dictionary) -> float:
 	var v := (float(opening["sill"]) + float(opening["h"])) / ref.y
 	var lowest := INF

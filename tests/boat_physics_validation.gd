@@ -2,6 +2,7 @@ extends Node
 
 const TRAWLER := preload("res://scripts/ship/vessels/fishing_trawler_small.gd")
 const CATAMARAN := preload("res://scripts/ship/vessels/passenger_catamaran.gd")
+const TestReport := preload("res://tests/support/test_report.gd")
 
 class FakeFFT:
 	extends Node
@@ -14,7 +15,7 @@ class FakeFFT:
 		return age_seconds
 
 
-var _failures: PackedStringArray = []
+var _t := TestReport.new("boat_physics_validation", false)
 
 
 func _ready() -> void:
@@ -27,13 +28,7 @@ func _ready() -> void:
 	_test_mooring_and_query_budget()
 	WaveSurface.fft_system = null
 	WaveSurface.clear_sample_cache()
-	if _failures.is_empty():
-		print("Boat physics validation: all deterministic checks passed")
-		get_tree().quit()
-	else:
-		for failure in _failures:
-			push_error("Boat physics validation: " + failure)
-		get_tree().quit(1)
+	_t.finish(get_tree())
 
 
 func _profile(
@@ -85,8 +80,31 @@ func _test_hydrostatic_profiles() -> void:
 			stations.half_section_centroid_x_below(5, typed_profile.design_draft_m) > 0.0,
 			"submerged half-section centroid"
 		)
+	## WAS: `int(cat_entry.get("price_marks", -1)) == 0`, "bare catamaran hull
+	## costs zero". That field was deleted from `HullRegistry.PASSENGER_CATAMARAN`
+	## and `FISHING_TRAWLER_SMALL` in `1a85967`, when store fields moved off hull
+	## platforms and onto prebuilt SKUs — and the check was written a week LATER,
+	## in `89a4893`, so it has never once passed. It restated a data value that no
+	## longer exists anywhere instead of the rule that consumes it.
+	##
+	## The rule `ShipwrightPricing` actually states in its own header is "Explicit
+	## 0 = free hull (starter / gift). Don't invent a commission fee." Hold it to
+	## that, through the function the yard calls.
 	var cat_entry := HullRegistry.get_by_id(CATAMARAN.VESSEL_ID)
-	_check(int(cat_entry.get("price_marks", -1)) == 0, "bare catamaran hull costs zero")
+	var cat_stations: HullStations = CATAMARAN.make_physics_profile().make_stations()
+	var free_entry := cat_entry.duplicate(true)
+	free_entry["price_marks"] = 0
+	_check(
+		ShipwrightPricing.commission_price(free_entry, cat_stations, null) == 0,
+		"an explicit zero price commissions free — the starter/gift path",
+	)
+	var priced_entry := cat_entry.duplicate(true)
+	priced_entry.erase("price_marks")
+	var quoted := ShipwrightPricing.commission_price(priced_entry, cat_stations, null)
+	_check(
+		quoted == ShipwrightPricing.quote_price_marks(cat_stations) and quoted > 0,
+		"a hull with no declared price is quoted from its own stations (got %d)" % quoted,
+	)
 	for entry in HullRegistry.catalog():
 		var hull_id := str(entry.get("id", ""))
 		var boat := HullRegistry.build_hull(hull_id)
@@ -345,5 +363,4 @@ func _estimate_terminal_speed(profile: HullPhysicsProfile) -> float:
 
 
 func _check(condition: bool, label: String) -> void:
-	if not condition:
-		_failures.append(label)
+	_t.check(label, condition)
