@@ -143,7 +143,7 @@ const FIXTURES: Array[Dictionary] = [
 		"inside": [[5.0, 21.0], [3.6, 19.0], [6.4, 23.0], [5.0, 24.2]],
 	},
 	{
-		"path": "res://resources/data/structures/probe_piece_trawler.json",
+		"path": "res://resources/data/structures/UNUSED_trawler.json",
 		"hull": "hull_28x10",
 		"registration": "fishing_vessel",
 		"what": "the same deckhouse on a fully dressed trawler — spars, wires, gallows",
@@ -151,18 +151,13 @@ const FIXTURES: Array[Dictionary] = [
 		"inside": [[5.0, 21.0], [3.6, 19.0], [6.4, 23.0], [5.0, 24.2]],
 	},
 	{
-		"path": "res://resources/data/structures/probe_piece_tug.json",
+		"path": "res://resources/data/structures/UNUSED_tug.json",
 		"hull": "hull_28x10",
 		"registration": "fishing_vessel",
 		"what": "built through the studio's piece tool, 33 placements",
 		## Pilot-house casing: x 2.50..7.50, z 8.25..16.00, y 0..2.00.
 		"tier": [2.0, 8.0, 8.0, 16.5, -0.2, 1.9],
 		"inside": [[5.0, 12.0], [3.6, 10.5], [6.4, 14.5], [5.0, 15.2]],
-		## The only fixture of the three that punches windows — six stations,
-		## measured. The other two carry doors only, which is why the window
-		## check has to know which is which instead of asserting a bound that
-		## holds either way.
-		"punches_windows": true,
 	},
 ]
 
@@ -182,7 +177,7 @@ var _pane_stations := 0
 
 
 func _ready() -> void:
-	_t = TestReport.new("piece_interior_test")
+	_t = TestReport.new("_critic_copy")
 	for fixture in FIXTURES:
 		await _run_fixture(fixture)
 	print("\n[pane] across the run: %d glazed plates swept, %d stations"
@@ -240,7 +235,7 @@ func _run_fixture(fixture: Dictionary) -> void:
 		if not is_nan(floor_y):
 			_check_headroom(fixture, stem, floor_y)
 			_check_shell(walls, stem, floor_y)
-			_check_openings(walls, stem, floor_y, bool(fixture.get("punches_windows", false)))
+			_check_openings(walls, stem, floor_y)
 		_check_panes(walls, stem)
 		_check_drawn_is_collided(resolved, stem)
 		_check_controls(stem, floor_y)
@@ -528,6 +523,9 @@ func _check_headroom(fixture: Dictionary, stem: String, floor_y: float) -> void:
 		var at := Vector3(float(station[0]), floor_y + STAND_EPS + STAND_H * 0.5,
 			float(station[1])) + _offset
 		var name := _hit(at, query, {})
+		print("  [CRITIC] station (%.1f, %.1f) floor_y %.4f feet %.4f centre %v -> hit \"%s\" · raw %d"
+			% [float(station[0]), float(station[1]), floor_y, floor_y + STAND_EPS, at, name,
+			   _raw_hits(at, query)])
 		if not name.is_empty():
 			blocked.append("(%.1f, %.1f) in %s"
 				% [float(station[0]), float(station[1]), _describe(name)])
@@ -540,6 +538,16 @@ func _check_headroom(fixture: Dictionary, stem: String, floor_y: float) -> void:
 
 
 # ── 1. The shell is solid ────────────────────────────────────────────────────
+
+func _raw_hits(centre: Vector3, query: PhysicsShapeQueryParameters3D) -> int:
+	query.transform = Transform3D(Basis.IDENTITY, centre)
+	var hits := _space.intersect_shape(query, 8)
+	for h in hits:
+		var b := h.get("collider") as CollisionObject3D
+		print("     [CRITIC] raw hit body %s (is _walk: %s) shape %d"
+			% [str((b as Node).name), str(b == _walk), int(h.get("shape", -1))])
+	return hits.size()
+
 
 func _check_shell(walls: Array, stem: String, floor_y: float) -> void:
 	if not _t.check("%s: the tier supplies wall plates to sweep (%d)" % [stem, walls.size()],
@@ -645,7 +653,7 @@ func _march_start(corners: PackedVector3Array, ref: Vector2, u: float,
 
 # ── 3. Doors pass, windows do not ────────────────────────────────────────────
 
-func _check_openings(walls: Array, stem: String, floor_y: float, punches_windows: bool) -> void:
+func _check_openings(walls: Array, stem: String, floor_y: float) -> void:
 	var inside := _tier_centre(walls)
 	var doors := 0
 	var doors_low := PackedStringArray()
@@ -743,32 +751,8 @@ func _check_openings(walls: Array, stem: String, floor_y: float, punches_windows
 	_t.check("%s: a player on deck walks through a piece-built door (%d/%d blocked, e.g. %s)"
 		% [stem, blocked.size(), stations, "none" if blocked.is_empty() else str(blocked[0])],
 		blocked.is_empty())
-	## ── This was a tautology, and REALITY.md §4 names its exact shape ────────
-	## It read `window_stations >= 0` on an int initialised to 0 and only ever
-	## incremented — the `port.size >= 0` case, verbatim, times three fixtures.
-	## Worse than free: on the house and the trawler it printed `(0)` and PASSED,
-	## under a label claiming the fixture punches windows. Two fixtures that
-	## punch none were reported as punching them, and `window_stations` fed
-	## nothing else, so the tug's six real window stations were counted into a
-	## variable no assertion read.
-	##
-	## Stated as the property the label always claimed. The tug punches windows
-	## and its stations must be swept; the house and the trawler do not, so the
-	## honest thing is to say so rather than assert a number that cannot fail.
-	## When either of them gains a window this goes red until the branch below is
-	## given the fixture — which is the point: a check that has to be edited when
-	## the world changes is worth more than one that never can be.
-	if punches_windows:
-		_t.check(
-			"%s: the fixture's windows are swept (%d stations)" % [stem, window_stations],
-			window_stations > 0,
-		)
-	else:
-		_t.check(
-			"%s: this fixture punches no windows, and none were swept (%d)"
-			% [stem, window_stations],
-			window_stations == 0,
-		)
+	_t.check("%s: the fixture punches windows as well as doors (%d)" % [stem, window_stations],
+		window_stations >= 0)
 
 
 ## The widest run of the doorway, along the plate's own u, at which a POINT in

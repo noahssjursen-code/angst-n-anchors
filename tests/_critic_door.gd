@@ -25,8 +25,12 @@ func _ready() -> void:
 	print("%-6s %-9s %-9s %-9s | %-7s %-7s %-7s %-7s | %-7s %s"
 		% ["rake", "rake_m", "drawn_hd", "phys_hd", "w@.25", "w@.50", "w@.75", "w@.90",
 		   "tallest", "verdict vs the 1.8 m figure"])
-	for rake in [0, 1, 2, 3, 4, 5, 6, 7, 8, -4, -6, -8]:
-		await _case({"span": 4, "height": 5, "rake": rake, "opening": "door"}, rake)
+	for rake in [0, 2, 3, 4, 5, 6, 8]:
+		await _case({"span": 4, "height": 5, "rake": rake, "opening": "door"}, rake, "")
+	## The same plumb door with a floor laid inside it — `deck_tile` is the piece
+	## a player uses for a sole, and its gauges are 0.08 / 0.13 / 0.30 m.
+	for gauge in ["light", "deck", "heavy"]:
+		await _case({"span": 4, "height": 5, "rake": 0, "opening": "door"}, 0, gauge)
 	get_tree().quit()
 
 
@@ -116,12 +120,18 @@ func _clear_at(corners: PackedVector3Array, ref: Vector2, opening: Dictionary, b
 	return best
 
 
-func _case(params: Dictionary, rake: int) -> void:
+func _case(params: Dictionary, rake: int, sole: String) -> void:
 	var layout := _load("res://resources/data/structures/probe_piece_house.json")
-	layout["pieces"] = [{
+	var placements: Array = [{
 		"id": 900, "piece": "wall_panel", "cell": [4, 0, 40], "facing": 90,
 		"params": params, "color": "#e3e0d4",
 	}]
+	if not sole.is_empty():
+		placements.append({
+			"id": 901, "piece": "deck_tile", "cell": [4, 0, 40], "facing": 90,
+			"params": {"span": 4, "depth": 4, "gauge": sole}, "color": "#4d5257",
+		})
+	layout["pieces"] = placements
 	layout["items"] = []
 	var boat := await _spawn(layout)
 	var plan := StructureBaker.resolved(StructurePlan.from_dict(layout))
@@ -175,23 +185,27 @@ func _case(params: Dictionary, rake: int) -> void:
 		var clear := true
 		for i in 46:
 			var at := centre + flat * (0.9 - 0.04 * float(i))
-			at.y = deck + trial * 0.5
+			at.y = deck + 0.005 + trial * 0.5
 			if not _capsule_free(at, trial):
 				clear = false
 				break
 		if clear:
 			tallest = trial
 		trial += 0.005
-	var bar := deck + 1.8 + 0.05
-	print("%-6d %-9.3f %-9.3f %-9.3f | %-7.3f %-7.3f %-7.3f %-7.3f | %-7.3f %s"
-		% [rake, rake * 0.125, drawn - deck,
+	## The bar piece_interior_test applies, from ITS floor measurement (0.058 on
+	## every fixture — the drop march resolves to 0.04 m).
+	var bar := 0.058 + 1.8 + 0.05
+	print("%-6s %-9.3f %-9.3f %-9.3f | %-7.3f %-7.3f %-7.3f %-7.3f | %-7.3f %s"
+		% ["%d%s" % [rake, "" if sole.is_empty() else "/" + sole.left(2)],
+		   rake * 0.125, drawn - deck,
 		   (NAN if is_nan(phys) else phys - deck),
 		   _clear_at(corners, ref, opening, 0.25), _clear_at(corners, ref, opening, 0.5),
 		   _clear_at(corners, ref, opening, 0.75), _clear_at(corners, ref, opening, 0.90),
 		   tallest,
-		   "%s · doors_low says %s" % [
-			   "PASSES" if tallest >= 1.8 else "IMPASSABLE",
-			   "ok" if drawn >= bar else "too low",
+		   "%s · deck top %.3f · doors_low says %s" % [
+			   "passes" if tallest >= 1.8 else "IMPASSABLE",
+			   deck,
+			   "ok" if drawn >= bar else "TOO LOW",
 		   ]])
 	boat.queue_free()
 	await get_tree().physics_frame
