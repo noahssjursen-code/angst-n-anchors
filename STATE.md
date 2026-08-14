@@ -979,6 +979,52 @@ done.** Regenerate this from the tree, not from the last copy of itself.
 Concurrent waves have already clobbered each other once in this repo, which is why ownership is
 written down rather than assumed.
 
+### CORRECTION to commit e9de76a, and to my own briefing of the catalogue wave
+
+That commit claimed *"vessel_registration_test does not COMPILE in lane A"* and
+concluded at least one of the ten catalogue reds was a lane problem. **That was my
+error, not the test's.** `vessel_registration_test` HAS a `.tscn` and is a lane-B
+unit; I ran it with `--script`, which registers no autoloads, and reported the
+resulting compile error as a defect. Measured lane classification of the family:
+
+| unit | lane |
+|---|---|
+| `building_blueprint_test` | **lane A, and it genuinely does not compile** |
+| `vessel_outfit_test`, `vessel_registration_test`, `vessel_registration_audit_ui_test`, `hull_form_geometry_test`, `company_service_test`, `catch_hold_test`, `vessel_persistence_test` | lane B (`.tscn` present) |
+
+So the lane defect is real but belongs to **`building_blueprint_test`** alone. Run
+in lane A it emits `Identifier not found: WorldGateway` **and** a genuine assertion
+failure (`placement outside the grid is rejected`) — a compile error on a depended
+script, with the test still executing some checks past it. Two problems in one
+unit, and the compile error masks how much of it never ran.
+
+`vessel_registration_test` run correctly in lane B printed **no verdict line at
+all** — it neither passed nor failed nor reported. A unit that produces no outcome
+is not a test (same class as `staged_vessel_visual_demo`'s 240 s timeout). Not yet
+diagnosed.
+
+This is the trap the correction itself illustrates: **a compile failure and an
+assertion failure are indistinguishable in a results table**, and so is running a
+test in the wrong lane. Verify the lane before you diagnose the failure.
+
+### Piece-built deckhouses: solid, but no door opens
+
+`tests/piece_interior_test.gd` (arrived from a wave that died on the API limit;
+I supplied the missing `.tscn`) goes through `VesselSpawn` → `apply_plan` → real
+`PhysicsServer3D`. **83 of 93 pass.** The seam wired in `763dbdc` holds: a standing
+player is stopped by every piece-built wall plate (0/115 through), kneeling too
+(0/71), with coverage asserted and no march beginning inside its own plate.
+
+The ten reds are one finding: **every doorway has 0.000 m of walkable play.** The
+opening is drawn and the collider closes it. Also 44/72 loose corners on opening
+casings (house, trawler), 200/240 on the tug, and 4 floor probes inside the tug's
+deckhouse that begin in a collider.
+
+Worth copying: that test contains a vacuous pass AND the guard that catches it.
+*"a player on deck walks through a piece-built door"* passes at **0/0** because the
+column had no stations; the next check, *"the door sweep planted stations (0)"*,
+fails and exposes it.
+
 ### Then, in order
 
 1. **Judge the studio tool against the mouse test.** Not "does it compile" — can a player place a
