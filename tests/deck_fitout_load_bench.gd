@@ -298,9 +298,8 @@ func _fill_blocks(grid: DeckGrid, count: int) -> BrickLayout:
 				if remaining <= 0:
 					return layout
 				var cell := Vector3i(ix, y, iz)
-				if not grid.in_bounds(cell):
+				if not layout.set_brick(grid, cell, "block", 0):
 					continue
-				layout.set_brick(cell, "block", 0)
 				remaining -= 1
 		y += 1
 		if y > 64:

@@ -347,28 +347,39 @@ func _on_readiness_changed(readiness: int) -> void:
 func _make_large_layout() -> BrickLayout:
 	var layout := BrickLayout.new()
 	layout.hull_id = HULL_ID
+	var grid := HullRegistry.make_grid(HULL_ID)
 	var x0 := 4
 	var x1 := 23
-	var z0 := 20
+	## `z0` used to be a bare 20, and hull_120x28's bow taper is 28 cells deep, so
+	## the whole forward end of this box stood on cells the deck does not have —
+	## drawn anyway, because the skin bake never asked. `set_brick` refuses them
+	## now, so the box starts aft of the taper instead of losing its bow rows.
+	var z0 := maxi(20, grid.bow_taper_cells)
 	var z1 := 99
 	var top_y := 10
+	var refused := 0
 	for y in range(top_y):
 		for x in range(x0, x1 + 1):
 			var end_id := "block_window" if y > 0 and x % 3 != 0 else "block"
-			layout.set_brick(Vector3i(x, y, z0), end_id, 0)
-			layout.set_brick(Vector3i(x, y, z1), end_id, 180)
+			refused += 0 if layout.set_brick(grid, Vector3i(x, y, z0), end_id, 0) else 1
+			refused += 0 if layout.set_brick(grid, Vector3i(x, y, z1), end_id, 180) else 1
 		for z in range(z0 + 1, z1):
 			var side_id := "block_window" if y > 0 and z % 3 != 0 else "block"
-			layout.set_brick(Vector3i(x0, y, z), side_id, 90)
-			layout.set_brick(Vector3i(x1, y, z), side_id, 270)
+			refused += 0 if layout.set_brick(grid, Vector3i(x0, y, z), side_id, 90) else 1
+			refused += 0 if layout.set_brick(grid, Vector3i(x1, y, z), side_id, 270) else 1
 	for x in range(x0, x1 + 1):
 		for z in range(z0, z1 + 1):
-			layout.set_brick(Vector3i(x, top_y, z), "roof_flat", 0)
+			refused += 0 if layout.set_brick(grid, Vector3i(x, top_y, z), "roof_flat", 0) else 1
 	## Enclosed corridor wall: deliberately hidden until full-detail promotion.
 	var corridor_x := int((x0 + x1) / 2)
 	for y in range(top_y):
 		for z in range(z0 + 10, z1 - 9):
-			layout.set_brick(Vector3i(corridor_x, y, z), "block", 0)
+			refused += 0 if layout.set_brick(grid, Vector3i(corridor_x, y, z), "block", 0) else 1
+	if refused > 0:
+		push_warning(
+			"staged_vessel_visual_demo: %d generated cells are off the %d x %d deck"
+			% [refused, grid.width, grid.length]
+		)
 	return layout
 
 

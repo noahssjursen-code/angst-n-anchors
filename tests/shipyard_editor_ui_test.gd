@@ -125,6 +125,49 @@ func _ready() -> void:
 			editor.call("_paste_clipboard_on_layer")
 			_check(layout.has_cell(Vector3i(cell.x, 1, cell.z)), "paste-on-layer stamps copied brick")
 
+			## ── STRIP TEST: does the off-deck refusal reach a PLAYER? ──
+			##
+			## REALITY.md §3d. `VesselOutfit` now raises "N bricks sit off the deck",
+			## `BrickRules` passes it through and `_refresh_rules` reads it — and for
+			## that whole chain the panel printed NOTHING, because the label appended
+			## `errors` only `if checklist.is_empty()`, i.e. only when no registration
+			## had been chosen. With a registration selected — the only state in which
+			## you can build — every error the compliance chain computed was thrown
+			## away one line before the Label a player looks at.
+			##
+			## This asserts the sentence is IN the rules label's text, which is the
+			## node on screen. It is not a claim about the report dictionary.
+			var rules_lbl := editor.get("_rules_lbl") as Label
+			_check(rules_lbl != null, "the rules panel has a label a player reads")
+			if rules_lbl != null:
+				editor.call("_refresh_rules")
+				var before: String = rules_lbl.text
+				_check(
+					not ("off the" in before),
+					"a layout entirely on the deck says nothing about off-deck bricks",
+				)
+				## Smuggled in through the deserialiser's raw path, because the setter
+				## refuses it — which is the other half of the fix, asserted here too.
+				var off_cell := Vector3i(grid.width + 4, 0, grid.length + 4)
+				_check(
+					not layout.set_brick(grid, off_cell, "bollard", 0),
+					"the editor's own setter refuses a cell off the hull",
+				)
+				layout._store_cell(off_cell, "bollard", 0)
+				editor.call("_refresh_rules")
+				var after: String = rules_lbl.text
+				_check(
+					("off the %d x %d deck" % [grid.width, grid.length]) in after,
+					"the rules panel TELLS the player which deck the brick missed",
+				)
+				_check(
+					("(%d, %d, %d)" % [off_cell.x, off_cell.y, off_cell.z]) in after,
+					"and names the cell it landed on",
+				)
+				_check(after != before, "the panel text changed when the brick went overboard")
+				layout.erase_cell(off_cell)
+				editor.call("_refresh_rules")
+
 	editor.queue_free()
 	await get_tree().process_frame
 	await get_tree().process_frame

@@ -112,16 +112,47 @@ static func brick_allowed_for_registration(
 	return brick_placement_denied_reason(registration_id, hull_id, brick_id).is_empty()
 
 
+## Counts what the vessel actually carries. Every count is now conditional on the
+## brick being ON the deck — and the answer is not re-derived here: `off_grid` is
+## the set `VesselOutfit.validate` already refused, threaded through `outfit`
+## (REALITY.md §3b, one derivation).
+##
+## AN OFF-DECK BRICK IS NOT A MISSING BRICK, and the two must not read the same,
+## which is why the fix is split across two places rather than doubled in one:
+##
+##   • Here it is NOT COUNTED, so the checklist says what is missing — "One
+##     working helm — at least 1 (current: 0)". Without this a helm floating in
+##     the sea satisfies the helm rule; the side rules are worse, because
+##     `_correct_side_count` reads `cell_center_local(cell).x`, which is
+##     arithmetic on an index and returns a sign for any integer, 12 m off the bow
+##     as readily as on the foredeck. That is how the headline layout scored 8/8.
+##   • `VesselOutfit` raises ONE error naming the cells, and it arrives in this
+##     report's `errors` (line ~19). Without that the player is told to fit a
+##     helm they can see they already bought.
+##
+## Neither half is sufficient, and that is measured rather than argued. Mutation
+## M3 — keep the error, drop this skip — leaves `vessel_registration_test` at
+## **7 of 8 legal requirements met by bricks in the sea** (1/74 red): only the
+## helm rule falls, because the helm slot is filtered at its source, while both
+## nav-light side rules, the white-above-side rule and the four-mooring minimum
+## are all satisfied by equipment 12 m off the bow. A 7/8 checklist printed beside
+## a refusal is the two-green-tests-disagreeing shape of REALITY.md §4a.
 static func _measure(layout: BrickLayout, grid: DeckGrid, outfit: Dictionary) -> Dictionary:
 	var brick_counts := {}
 	var tag_counts := {}
 	var positions := {}
 	var capacity := {}
 	var max_ratings := {}
+	var off_grid: Array = outfit.get("off_grid", [])
+	var off_grid_cells := {}
+	for raw in off_grid:
+		off_grid_cells[(raw as Dictionary).get("cell", Vector3i.ZERO)] = true
 	if layout != null:
 		for item in layout.iter_primary_cells():
 			var cell: Vector3i = item.get("cell", Vector3i.ZERO)
 			var brick_id := str(item.get("brick_id", ""))
+			if off_grid_cells.has(cell):
+				continue
 			_measure_equipment(brick_id, cell, brick_counts, tag_counts, positions, capacity, max_ratings)
 			var mounted_light := str(item.get("light_id", ""))
 			if not mounted_light.is_empty():
@@ -150,6 +181,7 @@ static func _measure(layout: BrickLayout, grid: DeckGrid, outfit: Dictionary) ->
 		"usage": usage,
 		"capabilities": capabilities,
 		"accepted_slots": outfit.get("accepted_slots", {}),
+		"off_grid": off_grid,
 		"grid": grid,
 	}
 
@@ -301,6 +333,16 @@ static func _requirement_text(rule: Dictionary) -> String:
 	return "required"
 
 
+## SIGNATURE IS LOAD-BEARING BEYOND THIS FILE. `PlanOutfit.compliance` calls this
+## twice (plan_outfit.gd:317, :330) so the plan path and the brick path emit the
+## same report shape. An earlier attempt at this same wave added a `metrics`
+## parameter here and did not update those two calls: both
+## `vessel_registration_test` and `deck_fitout_staging_test` went NOTRUN on parse
+## errors, and every other unit in the family ran with 20–26 script errors.
+##
+## `off_grid_bricks` therefore comes off `outfit`, which this already receives —
+## no new parameter, and it is correct for the plan path too, where the key is
+## absent and the count is 0.
 static func _result(
 	outfit: Dictionary,
 	registration_id: String,
@@ -310,6 +352,7 @@ static func _result(
 	warnings: PackedStringArray,
 ) -> Dictionary:
 	return {
+		"off_grid_bricks": (outfit.get("off_grid", []) as Array).size(),
 		"ok": bool(outfit.get("ok", false)) and registration_ok and errors.is_empty(),
 		"outfit_ok": bool(outfit.get("ok", false)),
 		"registration_ok": registration_ok,

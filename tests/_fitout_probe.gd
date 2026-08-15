@@ -17,9 +17,9 @@ func _ready() -> void:
 		for x in range(5):
 			for z in range(5):
 				if x == 0 or x == 4 or z == 0 or z == 4 or y == 2:
-					layout.set_brick(Vector3i(x + 5, y, z + 10), "block", 0)
+					layout.set_brick(grid, Vector3i(x + 5, y, z + 10), "block", 0)
 	var inner := Vector3i(7, 1, 12)
-	layout.set_brick(inner, "block", 0)
+	layout.set_brick(grid, inner, "block", 0)
 	print("fixture primary cells=%d" % layout.iter_primary_cells().size())
 	print("is_partial_bow_cell(5,0,10)=%s in_bounds=%s" % [
 		grid.is_partial_bow_cell(Vector3i(5, 0, 10)), grid.in_bounds(Vector3i(5, 0, 10))
@@ -94,9 +94,8 @@ func _fill_blocks(grid: DeckGrid, count: int) -> BrickLayout:
 				if remaining <= 0:
 					return layout
 				var cell := Vector3i(x, y, z)
-				if not grid.in_bounds(cell):
+				if not layout.set_brick(grid, cell, "block", 0):
 					continue
-				layout.set_brick(cell, "block", 0)
 				remaining -= 1
 		y += 1
 	return layout

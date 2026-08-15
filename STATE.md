@@ -1760,6 +1760,8 @@ file is not red by construction. It belongs beside decision #1 below.
    `tests/_placement_grid_survey.{gd,tscn}` is the instrument and every row is a
    measurement.
 
+   **CLOSED 2026-08-15 for the worst of the eight — see 2c. Seven remain named.**
+
    **The worst of the eight, measured in its worst form — a legally registered vessel
    with nothing on it.** A `BrickLayout` carrying every one of the eight bricks
    `general_vessel` requires (helm, three nav lights, four bollards), authored at
@@ -1781,6 +1783,64 @@ file is not red by construction. It belongs beside decision #1 below.
    `_prebuilt_gen.gd`, which another wave owns. The starter-vessel wave's `OFF-DECK`
    guard lives in the *generator*, which is a second derivation covering four files;
    the one-derivation fix is to move it into the setter.
+
+2c. **The certified-empty vessel is dead.** `set_brick(grid, cell, brick_id, …) -> bool`
+   — grid **first and required**, deliberately, so an un-updated caller is a *compile*
+   error rather than a silently-defaulted null. All 22 showcase calls plus every other
+   caller updated. The headline, before and after:
+
+   ```
+   before   stored 8, off-grid 8   validate ok=true   8/8 legal requirements
+   after    accepted 0 of 8        validate ok=false  0/8, off_grid_bricks=8
+            ERROR 8 bricks sit off the deck and are not fitted: Helm console at
+            (5, 1, 55) is off the 10 x 30 deck · Nav light (port) at (1, 2, 55) …
+   ```
+
+   **One predicate, `BrickLayout.cell_on_grid`, and neither obvious bound was right.**
+   `in_bounds` refuses the bow half cells the `diagonal_plan` bricks exist to fill;
+   `has_deck_cell` accepts a full cube hanging over the water. Measured across five
+   hulls (hull_15x5 270 FULL / 10 HALF, hull_150x32 18144 / 64). Both directions are
+   asserted and both mutations redden — M6 `has_deck_cell` **2/74**, M7 bare
+   `in_bounds` **1/74, 2/78**.
+
+   **Both halves of the compliance fix were needed, and a mutation proved it.**
+   `VesselOutfit` skips the brick *and* raises one error naming the cells — keeping
+   the error but dropping the skip (M3) leaves **7 of 8 legal requirements met by
+   bricks in the sea**.
+
+   **`_item_is_valid` was never the leak.** It gated only `create_item_visual` /
+   `mount_item_gameplay`, while `apply_sync` fed everything to the skin session first
+   — `VesselSkinBaker.Session` never asks the grid, and an off-deck block bakes 36
+   vertices exactly like an on-deck one. `DeckFitout.on_deck_items` now partitions
+   once, at the top of both entry points, before anything draws. M4 quantifies the
+   leak: **924 vs 828 vertices**.
+
+   **The generator's guard is deleted** — `_on_deck` is gone from `_prebuilt_gen.gd`
+   *and* from a second copy in `_house_iter.gd`; the generator keeps only its policy.
+   Control: all four prebuilt JSONs re-emit **byte-identical, md5 unchanged, GEN OK,
+   zero OFF-DECK** — verified independently. Shipped data rejected: **zero**, 1254
+   cells re-measured, 0 off by either bound.
+
+   **THE STRIP TEST IS THE FINDING (REALITY §3d): the report reached nothing.**
+   `shipyard_brick_editor.gd:3058` read `if not errors.is_empty() and
+   checklist.is_empty():` — so errors were shown **only when no registration was
+   chosen**, i.e. never in the state you can actually build in. Every error the whole
+   chain computed was discarded one line before the Label. Fixed, and
+   `shipyard_editor_ui_test` now asserts the sentence is on screen with the deck's
+   dimensions and the cell index. Restoring that clause reddens three checks
+   — *"the rules panel TELLS the player which deck the brick missed"* — reproduced
+   independently by the orchestrator.
+
+   **From the killed attempt: taken and discarded, with reasons.** Taken — the single
+   predicate and the grid-as-parameter argument, which is checkable and was checked:
+   the headline layout's own `hull_id` resolves to a 20 × 56 deck on which all eight
+   cells *are* in bounds, so a layout carrying its own grid would have certified the
+   headline vessel green. Discarded — its 7-arg `_result` signature change, the thing
+   that broke the tree, **was never needed** (`_result` already receives `outfit`, so
+   the count comes off that dictionary); its `_accepted_on_grid` post-filter, wrong
+   layer, re-walking slots that `VesselOutfit` builds with the grid already in hand;
+   and its `set_meta("brick_placement_faults")`, which **nothing reads** — a meta with
+   no consumer is not a delivery.
 
    Also named and left: `BrickLayout.from_dict` trusts a save file's cells verbatim,
    so an owned vessel is never re-checked against its hull; `StructurePlan.add_wall/

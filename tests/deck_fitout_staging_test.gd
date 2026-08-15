@@ -41,7 +41,111 @@ func _ready() -> void:
 	await _test_reapply_cancels_job()
 	await _test_staged_collision_is_delivered_and_never_absent()
 	await _test_abandoned_staging_window_is_flushed()
+	_test_off_deck_bricks_reach_no_geometry()
 	_t.finish(get_tree())
+
+
+## STRIP TEST for the off-deck drop (REALITY.md §3d): fit a boat out twice —
+## once with off-deck bricks in the layout, once without — and compare what the
+## GAME's own path produced. If the numbers differ, an off-deck brick reached
+## geometry.
+##
+## It has to go through `apply_sync` rather than `create_item_visual`, because
+## `create_item_visual` was never the leak. `_item_is_valid` gated it and the
+## survey duly measured "0 of 8 drawn" — but `apply_sync` offers every item to
+## `VesselSkinBaker.Session` FIRST, and that class never asked the grid. Measured
+## at 9912ada on a 10 x 30 grid, an off-deck `block` registered, emitted and
+## committed **36 vertices, the same 36 an on-deck one produces**, and most
+## bricks on a vessel are baked. The survey's zero held only because a helm, a
+## bollard and a nav light are all LIVE bricks.
+func _test_off_deck_bricks_reach_no_geometry() -> void:
+	var grid := HullRegistry.make_grid(HULL_ID)
+	var clean := _cabin_layout(true)
+	var smuggled := _cabin_layout(true)
+	## Off the deck by a wide margin, and BAKED bricks — the ones that go through
+	## the skin session rather than through `create_item_visual`.
+	var off_cells := [
+		Vector3i(grid.width + 6, 0, grid.length + 6),
+		Vector3i(grid.width + 7, 0, grid.length + 6),
+		Vector3i(-5, 0, 30),
+	]
+	for cell_raw in off_cells:
+		var cell: Vector3i = cell_raw
+		_check(
+			not smuggled.set_brick(grid, cell, "block", 0),
+			"the setter refuses (%d, %d, %d)" % [cell.x, cell.y, cell.z],
+		)
+		smuggled._store_cell(cell, "block", 0)
+	_check(
+		smuggled.count() == clean.count() + off_cells.size(),
+		"the smuggled layout carries %d more cells than the clean one"
+		% off_cells.size(),
+	)
+	_check(
+		VesselSkinBaker.is_baked_brick("block"),
+		"the smuggled bricks go through the merged skin, not through create_item_visual",
+	)
+
+	var clean_boat := _new_boat()
+	DeckFitout.apply_sync(clean_boat, clean, grid, "general_vessel")
+	var clean_stats := _fitout_stats(clean_boat)
+	clean_boat.queue_free()
+
+	var dirty_boat := _new_boat()
+	DeckFitout.apply_sync(dirty_boat, smuggled, grid, "general_vessel")
+	var dirty_stats := _fitout_stats(dirty_boat)
+	dirty_boat.queue_free()
+
+	_check(
+		int(clean_stats["vertices"]) > 0 and int(clean_stats["nodes"]) > 0,
+		"the control fitout drew something at all (%d vertices, %d nodes)"
+		% [int(clean_stats["vertices"]), int(clean_stats["nodes"])],
+	)
+	_check(
+		int(dirty_stats["vertices"]) == int(clean_stats["vertices"]),
+		"three bricks off the deck contribute no vertices (%d vs %d)"
+		% [int(dirty_stats["vertices"]), int(clean_stats["vertices"])],
+	)
+	_check(
+		int(dirty_stats["nodes"]) == int(clean_stats["nodes"]),
+		"three bricks off the deck contribute no nodes (%d vs %d)"
+		% [int(dirty_stats["nodes"]), int(clean_stats["nodes"])],
+	)
+	## And the drop is REPORTED rather than silent — the whole point of the wave.
+	_check(
+		DeckFitout.placement_faults(grid, smuggled).size() == off_cells.size(),
+		"the fitout can name every brick it refused to draw",
+	)
+	_check(
+		DeckFitout.placement_faults(grid, clean).is_empty(),
+		"and names none on a layout that is entirely on the deck",
+	)
+
+
+func _fitout_stats(boat: BoatBody) -> Dictionary:
+	var root := boat.get_node_or_null(DeckFitout.FITOUT_ROOT)
+	if root == null:
+		return {"vertices": 0, "nodes": 0}
+	return {"vertices": _vertices_of(root), "nodes": _descendants_of(root)}
+
+
+func _vertices_of(node: Node) -> int:
+	var n := 0
+	if node is MeshInstance3D:
+		var mi := node as MeshInstance3D
+		if mi.mesh != null:
+			for i in range(mi.mesh.get_surface_count()):
+				n += mi.mesh.surface_get_array_len(i)
+	for c in node.get_children():
+		n += _vertices_of(c)
+	return n
+
+
+func _descendants_of(node: Node) -> int:
+	var n := node.get_child_count()
+	for c in node.get_children():
+		n += _descendants_of(c)
+	return n
 
 
 ## The 5x5x3 hollow cabin every staging fixture is built from. `sealed` adds the
@@ -49,11 +153,13 @@ func _ready() -> void:
 func _cabin_layout(sealed: bool) -> BrickLayout:
 	var layout := BrickLayout.new()
 	layout.hull_id = HULL_ID
+	var grid := HullRegistry.make_grid(HULL_ID)
 	for y in range(3):
 		for x in range(5):
 			for z in range(5):
 				if x == 0 or x == 4 or z == 0 or z == 4 or y == 2:
 					layout.set_brick(
+						grid,
 						Vector3i(
 							CABIN_ORIGIN.x + x, CABIN_ORIGIN.y + y, CABIN_ORIGIN.z + z
 						),
@@ -61,7 +167,7 @@ func _cabin_layout(sealed: bool) -> BrickLayout:
 						0,
 					)
 	if sealed:
-		layout.set_brick(CABIN_INNER_CELL, "block", 0)
+		layout.set_brick(grid, CABIN_INNER_CELL, "block", 0)
 	return layout
 
 
@@ -91,7 +197,7 @@ func _test_shell_classifier() -> void:
 	_check(layout.attach_sign(host, "wall_text", 0, "TEST"), "exterior host accepts sign")
 	_check(layout.attach_light(host, "light_external", 0), "exterior host accepts light")
 	var inner := CABIN_INNER_CELL
-	layout.set_brick(inner, "block", 0)
+	_check(layout.set_brick(grid, inner, "block", 0), "sealed cabin block lands on the deck")
 	_assert_fixture_on_deck(grid, layout)
 	var result: Dictionary = BRICK_SHELL_CLASSIFIER.classify(layout, grid)
 	var exterior_keys: Dictionary = result.get("exterior_keys", {})
@@ -108,8 +214,11 @@ func _test_shell_classifier() -> void:
 	bow_layout.hull_id = HULL_ID
 	var partial := _first_partial_cell(grid)
 	if partial.x >= 0:
-		bow_layout.set_brick(
-			partial, "block_45", grid.partial_bow_yaw_degrees(partial)
+		_check(
+			bow_layout.set_brick(
+				grid, partial, "block_45", grid.partial_bow_yaw_degrees(partial)
+			),
+			"a diagonal brick yawed outboard is accepted on a bow HALF cell",
 		)
 		var bow_result: Dictionary = BRICK_SHELL_CLASSIFIER.classify(bow_layout, grid)
 		_check(
@@ -262,7 +371,7 @@ func _test_sync_staged_parity() -> void:
 	## node, and a sign mounted on a merged block must keep its own node too.
 	var live_cell := _first_free_cell(grid, layout)
 	if live_cell.x >= 0:
-		layout.set_brick(live_cell, "bollard", 0)
+		layout.set_brick(grid, live_cell, "bollard", 0)
 	_check(
 		live_cell.x >= 0 and not VesselSkinBaker.is_baked_brick("bollard"),
 		"parity fixture places a live (unmergeable) brick",
@@ -405,9 +514,8 @@ func _fill_blocks(grid: DeckGrid, count: int) -> BrickLayout:
 				if remaining <= 0:
 					return layout
 				var cell := Vector3i(x, y, z)
-				if not grid.in_bounds(cell):
+				if not layout.set_brick(grid, cell, "block", 0):
 					continue
-				layout.set_brick(cell, "block", 0)
 				remaining -= 1
 		y += 1
 	return layout

@@ -164,11 +164,16 @@ func _e4() -> void:
 	print("\n=== E4. the staged path (>1000 bricks) ===")
 	var layout := BrickLayout.new()
 	layout.hull_id = "fishing_trawler_small"
+	## Was `range(-20, 20)` on both axes — 800 of the 1600 cells had a negative
+	## index and were written into the sea, which is exactly the defect this
+	## probe's own subject now refuses. Anchored on the real grid instead, so the
+	## staged path is still exercised by >1000 bricks that are all ON the deck.
+	var grid := HullRegistry.make_grid("fishing_trawler_small")
 	var n := 0
-	for x in range(-20, 20):
-		for z in range(-20, 20):
-			layout.set_brick(Vector3i(x, 0, z), "block", 0)
-			n += 1
+	for x in range(grid.width):
+		for z in range(grid.length):
+			if layout.set_brick(grid, Vector3i(x, 0, z), "block", 0):
+				n += 1
 	print("[E4] layout has %d primary cells (threshold is %d)"
 		% [layout.iter_primary_cells().size(), DeckFitout.LARGE_LAYOUT_THRESHOLD])
 	var boat := BoatBody.new()

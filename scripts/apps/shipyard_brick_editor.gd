@@ -3044,7 +3044,18 @@ func _refresh_rules() -> void:
 			]
 	if not warnings.is_empty():
 		_rules_lbl.text += "\n" + "\n".join(warnings)
-	if not errors.is_empty() and checklist.is_empty():
+	## Errors used to be printed ONLY when the checklist was empty — i.e. only
+	## when no registration had been chosen, whose sole error is "Choose a vessel
+	## registration before building". With a registration selected (the normal
+	## case, and the only one in which you can build) every other error VesselOutfit
+	## raises — the cargo budget, the helm budget, and now "3 bricks sit off the
+	## deck" — was computed, returned, and thrown away one line before the label.
+	##
+	## This is the REALITY.md §3d strip test for the off-deck report: with the
+	## `and checklist.is_empty()` still there, the fix reaches nothing a player
+	## can see, because the checklist merely says the helm is missing and gives no
+	## reason. `shipyard_editor_ui_test` holds the property both ways.
+	if not errors.is_empty():
 		_rules_lbl.text += "\n" + "\n".join(errors)
 	var caps: Dictionary = report.get("capabilities", {})
 	_caps_lbl.text = (

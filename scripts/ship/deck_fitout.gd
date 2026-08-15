@@ -217,7 +217,10 @@ static func apply_sync(
 		return {}
 	clear(boat)
 	var g := grid if grid != null else grid_for_boat(boat)
-	var items := primary_items if not primary_items.is_empty() else layout.iter_primary_cells()
+	var all_items := primary_items if not primary_items.is_empty() else layout.iter_primary_cells()
+	var partition := on_deck_items(g, all_items)
+	var items: Array = partition["kept"]
+	_warn_placement_faults(boat, g, partition["faults"] as Array)
 	var hull_id := str(layout.hull_id)
 	if hull_id.is_empty() and boat.has_meta("editor_hull_id"):
 		hull_id = str(boat.get_meta("editor_hull_id"))
@@ -287,7 +290,14 @@ static func apply_staged(
 		return {}
 	clear(boat)
 	var g := grid if grid != null else grid_for_boat(boat)
-	var items := primary_items if not primary_items.is_empty() else layout.iter_primary_cells()
+	var all_items := primary_items if not primary_items.is_empty() else layout.iter_primary_cells()
+	## Same filter as `apply_sync`, and it must be here rather than inside the job:
+	## the job is handed the item list and walks it through the SAME skin session,
+	## so an unfiltered list would bake off-deck geometry a frame at a time
+	## instead of all at once (REALITY.md §3b — the two entry points may not drift).
+	var partition := on_deck_items(g, all_items)
+	var items: Array = partition["kept"]
+	_warn_placement_faults(boat, g, partition["faults"] as Array)
 	var hull_id := str(layout.hull_id)
 	if hull_id.is_empty() and boat.has_meta("editor_hull_id"):
 		hull_id = str(boat.get_meta("editor_hull_id"))
@@ -503,20 +513,96 @@ static func readiness_of(boat: BoatBody) -> int:
 	return int(boat.get_meta("fitout_readiness", READINESS_HULL))
 
 
+## Was the only correct copy of "can this brick stand here" in the repo, and the
+## only component that noticed the eight-off-grid-brick vessel — which it did by
+## returning false and drawing nothing, destroying the evidence between an `if`
+## and a `return null`. The predicate now lives on `BrickLayout` and is shared
+## with the setter, `place_footprint` and `VesselOutfit` (REALITY.md §3b). This
+## stays as a per-item guard because `create_item_visual` and
+## `mount_item_gameplay` are public and the staged job calls them one at a time.
 static func _item_is_valid(
 	grid: DeckGrid,
 	cell: Vector3i,
 	brick_id: String,
 	yaw: int,
 ) -> bool:
-	if not BrickCatalog.has(brick_id):
-		return false
-	if grid.is_partial_bow_cell(cell):
-		return (
-			BrickCatalog.has_tag(brick_id, "diagonal_plan")
-			and yaw == grid.partial_bow_yaw_degrees(cell)
-		)
-	return grid.in_bounds(cell)
+	return BrickLayout.cell_on_grid(grid, cell, brick_id, yaw)
+
+
+## Splits a primary-cell list into what this deck can carry and what it cannot,
+## BEFORE anything draws. Both fit-out entry points filter here, and that is the
+## point of doing it here rather than at each drawing site:
+##
+## `_item_is_valid` gated `create_item_visual` and `mount_item_gameplay`, and
+## those are NOT every drawing path. Measured 2026-08-15
+## (`tests/_offgrid_facts.gd`, section B) on a 10 x 30 grid:
+##
+##     on-deck  block (3,0,5)    register=true emit=true  36 vertices
+##     OFF-DECK block (19,0,55)  register=true emit=true  36 vertices
+##
+## `VesselSkinBaker.Session` never asks the grid, and MOST bricks on a vessel are
+## baked (`is_baked_brick` is true for block and railing, false for helm,
+## bollard and the nav lights). The survey's "0 of 8 drawn" held only because
+## every brick `general_vessel` requires happens to be a live node — a hull of
+## off-deck blocks and railings was drawn in full, hanging in the sea.
+## `create_cell_mounts` was the third leak: it drew a nav light mounted on an
+## off-deck block (1 node created, same probe, section C).
+##
+## Filtering the item list once closes all three, and leaves one place to change
+## if a fourth consumer appears.
+static func on_deck_items(grid: DeckGrid, items: Array) -> Dictionary:
+	var kept: Array = []
+	var faults: Array = []
+	for raw in items:
+		var item := raw as Dictionary
+		var cell: Vector3i = item.get("cell", Vector3i(-1, -1, -1))
+		var brick_id := str(item.get("brick_id", ""))
+		if _item_is_valid(grid, cell, brick_id, int(item.get("yaw", 0))):
+			kept.append(item)
+		elif BrickCatalog.has(brick_id):
+			## An unknown brick id is a catalogue miss, not a placement fault —
+			## every consumer already ignores it, and reporting it here would put
+			## "cargo_tile at (3,0,5) is off the deck" in front of a player whose
+			## deck is fine.
+			faults.append({"cell": cell, "brick_id": brick_id})
+	return {"kept": kept, "faults": faults}
+
+
+## The refusal in the form a test or a tool can read: one line per brick this
+## layout puts where this deck does not exist.
+static func placement_faults(grid: DeckGrid, layout: BrickLayout) -> PackedStringArray:
+	var out := PackedStringArray()
+	if grid == null or layout == null:
+		return out
+	for raw in (on_deck_items(grid, layout.iter_primary_cells()).get("faults", []) as Array):
+		var fault := raw as Dictionary
+		out.append(BrickLayout.off_grid_reason(
+			grid, fault.get("cell", Vector3i.ZERO) as Vector3i, str(fault.get("brick_id", ""))
+		))
+	return out
+
+
+## Says out loud what used to vanish. The player-facing report is the compliance
+## error (`VesselOutfit` raises it, the shipyard's rules panel prints it); this is
+## the engine-log half, so a fit-out that quietly drops bricks leaves a trace even
+## when nobody is looking at a rules panel.
+static func _warn_placement_faults(boat: BoatBody, grid: DeckGrid, faults: Array) -> void:
+	if faults.is_empty():
+		return
+	var lines := PackedStringArray()
+	for raw in faults:
+		var fault := raw as Dictionary
+		lines.append(BrickLayout.off_grid_reason(
+			grid, fault.get("cell", Vector3i.ZERO) as Vector3i, str(fault.get("brick_id", ""))
+		))
+	push_warning(
+		"DeckFitout: %d brick(s) off the %d x %d deck on %s — not drawn, not mounted, not counted. %s"
+		% [
+			lines.size(), grid.width, grid.length,
+			boat.name if boat != null else "<no boat>",
+			" · ".join(lines),
+		]
+	)
 
 
 static func _cell_set(cells: Variant) -> Dictionary:

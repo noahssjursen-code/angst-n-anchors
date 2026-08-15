@@ -47,7 +47,188 @@ func _ready() -> void:
 	_test_nav_light_placement()
 	_test_seeded_registration_types()
 	_test_deployment_gate()
+	_test_off_deck_bricks_are_not_equipment()
+	_test_setter_refuses_off_deck()
 	_t.finish(get_tree())
+
+
+## STATE.md 2b's headline, as a check. Measured at 9912ada, before the fix:
+##
+##     bricks stored 8, of which OFF-GRID 8
+##     VesselCompliance.validate  ok=true  errors []  8/8 legal requirements
+##
+## A General Vessel with no helm, no navigation lights and no mooring points
+## anywhere on it, certified green.
+##
+## THE CONTROL IS THE HALF THAT MATTERS. These eight cells are legal — they were
+## authored for hull_28x10's 20 x 56 deck and are in bounds there — so the same
+## eight bricks are asserted to CERTIFY on that hull in the same sub-test. Without
+## it this would pass just as well for a rule that refuses helms, or bollards, or
+## anything at z=55, and REALITY.md §2's warning about a check that agrees with
+## you applies directly: the property is "these bricks are not on THIS deck", not
+## "these bricks are bad".
+const HEADLINE_CELLS := [
+	[Vector3i(5, 1, 55), "helm"],
+	[Vector3i(1, 2, 55), "light_nav_port"],
+	[Vector3i(8, 2, 55), "light_nav_stbd"],
+	[Vector3i(5, 3, 55), "light_nav_white"],
+	[Vector3i(2, 0, 55), "bollard"],
+	[Vector3i(3, 0, 55), "bollard"],
+	[Vector3i(6, 0, 55), "bollard"],
+	[Vector3i(7, 0, 55), "bollard"],
+]
+
+
+func _headline_layout(hull_id: String) -> BrickLayout:
+	## Written through the deserialiser's raw path, because `set_brick` refuses
+	## these cells on the small hull now — which is the point of the other
+	## sub-test. A save file can still carry them, so the compliance chain has to
+	## refuse them on its own.
+	var layout := BrickLayout.new()
+	layout.hull_id = hull_id
+	for row in HEADLINE_CELLS:
+		layout._store_cell(row[0] as Vector3i, str(row[1]), 0)
+	return layout
+
+
+func _test_off_deck_bricks_are_not_equipment() -> void:
+	var small := DeckGrid.from_hull(15.0, 5.0, 0.0, 2.0)
+	_check(
+		small.width == 10 and small.length == 30,
+		"the headline's small hull is 10 x 30 cells (got %d x %d)" % [small.width, small.length],
+	)
+	var layout := _headline_layout("fishing_trawler_small")
+	_check(layout.count() == 8, "the headline layout carries all eight required bricks")
+	var off := 0
+	for row in layout.iter_primary_cells():
+		if not small.in_bounds(row["cell"] as Vector3i):
+			off += 1
+	_check(off == 8, "all eight are off the 10 x 30 deck (%d of 8)" % off)
+
+	var report := VesselCompliance.validate(
+		layout, "fishing_trawler_small", "general_vessel", small
+	)
+	_check(not bool(report.get("ok", true)), "a vessel whose whole outfit is off the deck is refused")
+	_check(
+		int(report.get("off_grid_bricks", 0)) == 8,
+		"the report counts the off-deck bricks (%d)" % int(report.get("off_grid_bricks", -1)),
+	)
+	## Not counted, so the checklist reads as MISSING rather than as satisfied.
+	var passed := 0
+	for raw in report.get("checklist", []) as Array:
+		if raw is Dictionary and bool((raw as Dictionary).get("ok", false)):
+			passed += 1
+	_check(
+		passed == 0,
+		"no legal requirement is met by a brick off the deck (%s)"
+		% VesselCompliance.checklist_summary(report),
+	)
+	_check(
+		not bool((report.get("capabilities", {}) as Dictionary).get("has_helm", true)),
+		"a helm off the deck is not the vessel's helm",
+	)
+	## Reported, so the player is told WHY the helm they bought is missing. An
+	## off-deck brick is not the same as an absent one and must not read the same.
+	var named := false
+	for e in report.get("errors", PackedStringArray()):
+		if "off the 10 x 30 deck" in str(e) and "Helm" in str(e):
+			named = true
+	_check(named, "the refusal names the brick, the cell and the deck it missed")
+
+	## THE CONTROL, in two halves.
+	##
+	## First: the same eight CELLS, unchanged, on hull_28x10's 20 x 56 deck. Zero
+	## off-grid there — so what the small hull refused was the deck, not the cells.
+	var big_grid := HullRegistry.make_grid("hull_28x10")
+	var same_cells := _headline_layout("hull_28x10")
+	var same_report := VesselCompliance.validate(
+		same_cells, "hull_28x10", "general_vessel", big_grid
+	)
+	_check(
+		int(same_report.get("off_grid_bricks", -1)) == 0,
+		"the same eight cells are ON hull_28x10's %d x %d deck" % [big_grid.width, big_grid.length],
+	)
+
+	## Second, and this is the half that holds the check in the ACCEPTING
+	## direction: the same eight BRICKS, laid out for the wider deck, must
+	## certify. They do not certify at the cells above and that is not an
+	## off-deck fault — `light_nav_stbd` at x=8 is PORT of centre on a 20-wide
+	## hull, so the side rule refuses it. Two different refusals that would
+	## otherwise be indistinguishable in one assertion (REALITY.md §4a).
+	var legal := BrickLayout.new()
+	legal.hull_id = "hull_28x10"
+	var mid := big_grid.width / 2
+	var stbd := big_grid.width - 2
+	for row in [
+		[Vector3i(mid, 1, 55), "helm"],
+		[Vector3i(1, 2, 55), "light_nav_port"],
+		[Vector3i(stbd, 2, 55), "light_nav_stbd"],
+		[Vector3i(mid, 3, 55), "light_nav_white"],
+		[Vector3i(2, 0, 55), "bollard"],
+		[Vector3i(3, 0, 55), "bollard"],
+		[Vector3i(stbd - 1, 0, 55), "bollard"],
+		[Vector3i(stbd, 0, 55), "bollard"],
+	]:
+		_check(
+			legal.set_brick(big_grid, row[0] as Vector3i, str(row[1]), 0),
+			"control fixture places %s on the wide deck" % str(row[1]),
+		)
+	var legal_report := VesselCompliance.validate(legal, "hull_28x10", "general_vessel", big_grid)
+	_check(
+		bool(legal_report.get("ok", false)),
+		"the same eight bricks certify as a General Vessel when they are on the deck "
+		+ "(errors: %s)" % str(legal_report.get("errors")),
+	)
+
+
+func _test_setter_refuses_off_deck() -> void:
+	var small := DeckGrid.from_hull(15.0, 5.0, 0.0, 2.0)
+	var layout := BrickLayout.new()
+	_check(
+		layout.set_brick(small, Vector3i(3, 0, 20), "bollard", 0),
+		"set_brick accepts a cell on the deck",
+	)
+	_check(
+		not layout.set_brick(small, Vector3i(19, 0, 55), "bollard", 0),
+		"set_brick refuses a cell off the deck",
+	)
+	_check(
+		not layout.set_brick(small, Vector3i(-4, 0, -9), "bollard", 0),
+		"set_brick refuses a negative cell",
+	)
+	_check(
+		not layout.set_brick(null, Vector3i(3, 0, 21), "bollard", 0),
+		"set_brick refuses when no deck is named at all",
+	)
+	_check(layout.count() == 1, "a refused set_brick stores nothing (%d cells)" % layout.count())
+
+	## `in_bounds` vs `has_deck_cell`, stated as the property that picks between
+	## them: a bow HALF cell carries a diagonal aimed outboard and nothing else.
+	## `in_bounds` alone would refuse the first; `has_deck_cell` alone would accept
+	## the second, which draws a whole cube over the water.
+	var half := Vector3i(-1, 0, 0)
+	for iz in range(small.length):
+		for ix in range(small.width):
+			if small.is_partial_bow_cell(Vector3i(ix, 0, iz)):
+				half = Vector3i(ix, 0, iz)
+				break
+		if half.x >= 0:
+			break
+	_check(half.x >= 0, "the tapered hull has a bow half cell to test against")
+	if half.x >= 0:
+		var bow := BrickLayout.new()
+		_check(
+			bow.set_brick(small, half, "block_45", small.partial_bow_yaw_degrees(half)),
+			"a diagonal brick aimed outboard is accepted on a bow half cell",
+		)
+		_check(
+			not bow.set_brick(small, half, "block", 0),
+			"a square block is refused on the same bow half cell",
+		)
+		_check(
+			not bow.set_brick(small, half, "block_45", small.partial_bow_yaw_degrees(half) + 90),
+			"a diagonal aimed the wrong way is refused on the same cell",
+		)
 
 
 ## The fixture four sub-tests are built on. Returning it silently when it is
@@ -239,8 +420,12 @@ func _test_seeded_registration_types() -> void:
 			fishing_cells.append(item["cell"] as Vector3i)
 	for cell in fishing_cells:
 		passenger.erase_footprint_at(cell)
+	var passenger_grid := HullRegistry.make_grid(hull_id)
 	for i in range(4):
-		passenger.set_brick(Vector3i(2 + i, 2, 10), "passenger_seat", 0)
+		_check(
+			passenger.set_brick(passenger_grid, Vector3i(2 + i, 2, 10), "passenger_seat", 0),
+			"passenger seat %d lands on the deck" % (i + 1),
+		)
 	var passenger_report := VesselCompliance.validate(
 		passenger, hull_id, "passenger_vessel", HullRegistry.make_grid(hull_id)
 	)

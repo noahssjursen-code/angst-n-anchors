@@ -80,10 +80,26 @@ static func validate(
 	var brick_n := layout.count()
 	var max_y := 0
 
+	## THE ONE WALK that asks whether a brick is on the deck. Everything
+	## downstream — the slot budgets, `accepted_slots`, `capabilities`, and
+	## `VesselCompliance._measure`'s registration counts — consumes the result of
+	## this loop rather than re-deriving it (REALITY.md §3b).
+	##
+	## This loop used to take `grid` and ask it nothing about bricks. That is how
+	## a layout with all eight `general_vessel` bricks authored for a 20 x 56 hull
+	## and written onto a 10 x 30 one reported `ok=true, errors []`: an off-deck
+	## helm filled the helm slot, so `has_helm` was true and the helm requirement
+	## was met by a helm in the sea.
+	var off_grid: Array = []
 	for item in layout.iter_primary_cells():
 		var cell: Vector3i = item["cell"]
 		var brick_id := str(item.get("brick_id", ""))
 		if not BrickCatalog.has(brick_id):
+			continue
+		## An unknown brick id is not a PLACEMENT fault — the catalogue is the
+		## authority there and has always ignored it — so the order matters.
+		if not BrickLayout.cell_on_grid(g, cell, brick_id, int(item.get("yaw", 0))):
+			off_grid.append({"cell": cell, "brick_id": brick_id})
 			continue
 		max_y = maxi(max_y, cell.y + BrickCatalog.footprint_of(brick_id).y - 1)
 		if BrickCatalog.has_tag(brick_id, "fishing") or BrickCatalog.has_tag(brick_id, "trommel"):
@@ -100,6 +116,9 @@ static func validate(
 			wall_n += 1
 		if BrickCatalog.has_tag(brick_id, "window"):
 			window_n += 1
+
+	if not off_grid.is_empty():
+		errors.append(_off_grid_error(off_grid, g))
 
 	var accepted_fishing: Array[Vector3i] = []
 	var accepted_helm: Array[Vector3i] = []
@@ -229,7 +248,33 @@ static func validate(
 		"brick_count": brick_n,
 		"max_stack_y": max_y,
 	}
-	return _result(errors.is_empty(), errors, warnings, budget, usage, accepted_slots, caps)
+	var report := _result(errors.is_empty(), errors, warnings, budget, usage, accepted_slots, caps)
+	## The cells this walk refused, so `VesselCompliance._measure` skips exactly
+	## the same bricks without asking the predicate a second time.
+	report["off_grid"] = off_grid
+	return report
+
+
+## One sentence a player can act on: how many, which, and where they should be.
+## Capped, so a 300-brick layout pasted onto the wrong hull does not produce a
+## 300-line error nobody reads — but the COUNT is always the true count.
+static func _off_grid_error(off_grid: Array, grid: DeckGrid) -> String:
+	var shown: Array[String] = []
+	for i in range(mini(off_grid.size(), 4)):
+		var row := off_grid[i] as Dictionary
+		shown.append(BrickLayout.off_grid_reason(
+			grid, row.get("cell", Vector3i.ZERO) as Vector3i, str(row.get("brick_id", ""))
+		))
+	var tail := ""
+	if off_grid.size() > shown.size():
+		tail = " (+%d more)" % (off_grid.size() - shown.size())
+	return "%d %s off the deck and %s not fitted: %s%s" % [
+		off_grid.size(),
+		"brick sits" if off_grid.size() == 1 else "bricks sit",
+		"is" if off_grid.size() == 1 else "are",
+		" · ".join(shown),
+		tail,
+	]
 
 
 static func budget_summary(budget: Dictionary, usage: Dictionary) -> String:

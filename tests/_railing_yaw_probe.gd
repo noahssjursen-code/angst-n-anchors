@@ -19,7 +19,7 @@ func _run() -> void:
 	for yaw in [0, 90, 180, 270]:
 		var layout := BrickLayout.new()
 		layout.hull_id = "hull_15x5"
-		layout.set_brick(cell, "railing", yaw)
+		layout.set_brick(grid, cell, "railing", yaw)
 		var boat := VesselSpawn.instantiate("hull_15x5", layout.to_dict(), "general_vessel")
 		add_child(boat)
 		await get_tree().process_frame

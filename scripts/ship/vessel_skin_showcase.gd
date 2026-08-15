@@ -18,6 +18,8 @@ var _focus := 0
 var _orbit_yaw := 0.6
 var _orbit_pitch := 0.45
 var _orbit_distance := 42.0
+## Cells the deck refused, per demo. Emptied by `_report_refusals`.
+var _refused := PackedStringArray()
 
 
 func _ready() -> void:
@@ -78,48 +80,78 @@ func _demo_bare_hull() -> Dictionary:
 	return {"id": "bare_hull", "name": "Bare hull", "hull_id": "hull_28x10", "brick_layout": layout.to_dict()}
 
 
+## Writes one cell and COUNTS the refusal instead of losing it. `set_brick` takes
+## the deck now and returns false for a cell the hull does not have — or for a
+## brick id the catalogue does not have (2026-08-15); before that it took no grid
+## at all, returned `void`, and stored whatever it was handed.
+##
+## MEASURED when the guard landed (`tests/_offgrid_facts.gd`, section E), and it
+## says something different from what the coordinates suggest: `_demo_workboat`
+## loses **102 cells and keeps 59**, `_demo_sampler` loses **20 and keeps 4** —
+## and every single loss is an UNCATALOGUED BRICK ID (`block_half`,
+## `block_quarter`, `wall_panel*`, `block_45_half`), not an off-deck cell. Zero
+## of the catalogued cells miss the hull. This is the header's own "dormant while
+## the catalog is empty" made visible: the demos are written in a vocabulary
+## `BrickCatalog` does not carry, and both are absent from `_spawn_all`'s `demos`
+## array, so nothing renders them today.
+##
+## Left as they are rather than re-authored: reviving this vocabulary is the M2
+## authoring-layer question, not this wave's. What changed is that the loss is
+## now COUNTED and named instead of vanishing inside a `void` setter.
+func _place(
+	layout: BrickLayout, grid: DeckGrid, cell: Vector3i, brick_id: String, yaw: int = 0
+) -> void:
+	if not layout.set_brick(grid, cell, brick_id, yaw):
+		_refused.append(BrickLayout.off_grid_reason(grid, cell, brick_id))
+
+
 ## Demo built from the fine-building vocabulary: thin-panel cabin with window
 ## band and door, half-block bulwarks, quarter ledge, 45° pieces at the bow.
-## Dormant while the catalog is empty; revives as the new vocabulary lands.
+## Dormant while the catalog is empty; revives as the new vocabulary lands — see
+## `_place` for what "dormant" costs, measured.
 func _demo_workboat() -> Dictionary:
 	var layout := BrickLayout.new()
 	layout.hull_id = "hull_28x10"
+	## The deck every cell below is written onto. `set_brick` REFUSES a cell that
+	## is not on it (2026-08-15) — it used to take no grid and could not refuse.
+	var grid := HullRegistry.make_grid(layout.hull_id)
 	## Half-block bulwarks along both rails and the stern.
 	for z in range(8, 27):
-		layout.set_brick(Vector3i(0, 0, z), "block_half")
-		layout.set_brick(Vector3i(9, 0, z), "block_half")
+		_place(layout, grid, Vector3i(0, 0, z), "block_half")
+		_place(layout, grid, Vector3i(9, 0, z), "block_half")
 	for x in range(0, 10):
-		layout.set_brick(Vector3i(x, 0, 27), "block_half")
+		_place(layout, grid, Vector3i(x, 0, 27), "block_half")
 	## 45° half wedges close the bulwark run toward the bow.
-	layout.set_brick(Vector3i(0, 0, 7), "block_45_half", 90)
-	layout.set_brick(Vector3i(9, 0, 7), "block_45_half", 180)
+	_place(layout, grid, Vector3i(0, 0, 7), "block_45_half", 90)
+	_place(layout, grid, Vector3i(9, 0, 7), "block_45_half", 180)
 	## Quarter-block ledge across the working deck.
 	for x in range(1, 9):
-		layout.set_brick(Vector3i(x, 0, 12), "block_quarter")
+		_place(layout, grid, Vector3i(x, 0, 12), "block_quarter")
 	## Cabin: corner columns, thin panel walls, window band, aft door, roof.
 	for corner_x in [2, 7]:
 		for corner_z in [19, 25]:
 			for y in range(0, 3):
-				layout.set_brick(Vector3i(corner_x, y, corner_z), "block")
+				_place(layout, grid, Vector3i(corner_x, y, corner_z), "block")
 	for x in range(3, 7):
-		layout.set_brick(Vector3i(x, 0, 19), "wall_panel", 0)
-		layout.set_brick(Vector3i(x, 1, 19), "block_window", 0)
-		layout.set_brick(Vector3i(x, 2, 19), "wall_panel", 0)
-	layout.set_brick(Vector3i(3, 0, 25), "wall_panel", 180)
-	layout.set_brick(Vector3i(3, 1, 25), "wall_panel", 180)
-	layout.set_brick(Vector3i(3, 2, 25), "wall_panel", 180)
-	layout.set_brick(Vector3i(6, 2, 25), "wall_panel", 180)
-	layout.set_brick(Vector3i(4, 0, 25), "block_door", 180)
+		_place(layout, grid, Vector3i(x, 0, 19), "wall_panel", 0)
+		_place(layout, grid, Vector3i(x, 1, 19), "block_window", 0)
+		_place(layout, grid, Vector3i(x, 2, 19), "wall_panel", 0)
+	_place(layout, grid, Vector3i(3, 0, 25), "wall_panel", 180)
+	_place(layout, grid, Vector3i(3, 1, 25), "wall_panel", 180)
+	_place(layout, grid, Vector3i(3, 2, 25), "wall_panel", 180)
+	_place(layout, grid, Vector3i(6, 2, 25), "wall_panel", 180)
+	_place(layout, grid, Vector3i(4, 0, 25), "block_door", 180)
 	for z in range(20, 25):
 		for y in range(0, 3):
-			layout.set_brick(Vector3i(2, y, z), "wall_panel", 270)
-			layout.set_brick(Vector3i(7, y, z), "wall_panel", 90)
+			_place(layout, grid, Vector3i(2, y, z), "wall_panel", 270)
+			_place(layout, grid, Vector3i(7, y, z), "wall_panel", 90)
 	for x in range(2, 8):
 		for z in range(19, 26):
-			layout.set_brick(Vector3i(x, 3, z), "roof_flat")
+			_place(layout, grid, Vector3i(x, 3, z), "roof_flat")
 	## Diagonal thin panels as a chamfered windbreak ahead of the cabin.
-	layout.set_brick(Vector3i(2, 0, 18), "wall_panel_45", 0)
-	layout.set_brick(Vector3i(7, 0, 18), "wall_panel_45", 90)
+	_place(layout, grid, Vector3i(2, 0, 18), "wall_panel_45", 0)
+	_place(layout, grid, Vector3i(7, 0, 18), "wall_panel_45", 90)
+	_report_refusals("panel_workboat")
 	return {"id": "panel_workboat", "name": "Panel workboat (new blocks)", "hull_id": "hull_28x10", "brick_layout": layout.to_dict()}
 
 
@@ -127,6 +159,7 @@ func _demo_workboat() -> Dictionary:
 func _demo_sampler() -> Dictionary:
 	var layout := BrickLayout.new()
 	layout.hull_id = "hull_28x10"
+	var grid := HullRegistry.make_grid(layout.hull_id)
 	var pieces: Array[String] = [
 		"block", "block_half", "block_quarter",
 		"block_45", "block_45_half", "block_45_quarter",
@@ -134,9 +167,19 @@ func _demo_sampler() -> Dictionary:
 		"wall_panel_45", "wall_panel_45_half", "wall_panel_45_quarter",
 	]
 	for index in pieces.size():
-		layout.set_brick(Vector3i(3, 0, 8 + index), pieces[index])
-		layout.set_brick(Vector3i(6, 0, 8 + index), pieces[index], 90)
+		_place(layout, grid, Vector3i(3, 0, 8 + index), pieces[index])
+		_place(layout, grid, Vector3i(6, 0, 8 + index), pieces[index], 90)
+	_report_refusals("block_sampler")
 	return {"id": "block_sampler", "name": "Block sampler (yaw 0 + 90)", "hull_id": "hull_28x10", "brick_layout": layout.to_dict()}
+
+
+func _report_refusals(demo_id: String) -> void:
+	if _refused.is_empty():
+		return
+	push_warning("vessel_skin_showcase %s: %d cell(s) off the deck — %s" % [
+		demo_id, _refused.size(), " · ".join(_refused),
+	])
+	_refused = PackedStringArray()
 
 
 func _spawn_variant(record: Dictionary, skin: bool, at: Vector3) -> BoatBody:

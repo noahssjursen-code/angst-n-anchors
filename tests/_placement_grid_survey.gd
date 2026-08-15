@@ -72,31 +72,34 @@ func _ready() -> void:
 	var r := b2b.place_footprint(Vector3i(9, 0, 0), "not_a_brick_in_any_vocabulary", 0, b2b.grid())
 	print("  unknown-brick refusal -> ", r, " grid ", before_size, " -> ", b2b.grid_size)
 
-	print("=== 3. BrickLayout.set_brick — NO grid argument at all ===")
+	print("=== 3. BrickLayout.set_brick — takes the grid since 2026-08-15 ===")
 	var grid_small := DeckGrid.from_hull(15.0, 5.0, 0.0, 2.0)
 	print("  grid width/length -> ", grid_small.width, " x ", grid_small.length)
 	var vl := BrickLayout.new()
 	vl.hull_id = "fishing_trawler_small"
-	vl.set_brick(Vector3i(3, 0, 5), "block")
-	vl.set_brick(Vector3i(19, 0, 55), "block")   ## authored for a 20x56 hull
-	vl.set_brick(Vector3i(-4, 0, -9), "block")
-	print("  set_brick returns  -> (void — it cannot refuse)")
-	print("  stored cells       -> ", vl.count())
-	print("  in_bounds(19,0,55) -> ", grid_small.in_bounds(Vector3i(19, 0, 55)))
-	print("  in_bounds(-4,0,-9) -> ", grid_small.in_bounds(Vector3i(-4, 0, -9)))
+	print("  on deck   (3,0,5)   -> ", vl.set_brick(grid_small, Vector3i(3, 0, 5), "block"))
+	## authored for a 20x56 hull
+	print("  off deck  (19,0,55) -> ", vl.set_brick(grid_small, Vector3i(19, 0, 55), "block"))
+	print("  negative  (-4,0,-9) -> ", vl.set_brick(grid_small, Vector3i(-4, 0, -9), "block"))
+	print("  no grid at all      -> ", vl.set_brick(null, Vector3i(3, 0, 6), "block"))
+	print("  stored cells        -> ", vl.count(), " (was 3 before the setter took a grid)")
 
 	print("=== 4. THE VESSEL CASE — a fully certified boat with nothing on it ===")
 	## Every brick `general_vessel` requires, authored at cells from a 20x56 hull
 	## and written onto a 10x30 grid. Side rules still read the right side, so the
 	## ONLY thing wrong with this boat is that none of it is on the hull.
+	## Written through `_store_cell`, the deserialiser's raw path, because that is
+	## the only way to build this layout now — the setter refuses every one of
+	## these cells. Keeping the probe able to CONSTRUCT the bad vessel is the
+	## point: it is what proves the rest of the chain now refuses it too.
 	var vc := BrickLayout.new()
 	vc.hull_id = "fishing_trawler_small"
-	vc.set_brick(Vector3i(5, 1, 55), "helm")
-	vc.set_brick(Vector3i(1, 2, 55), "light_nav_port")
-	vc.set_brick(Vector3i(8, 2, 55), "light_nav_stbd")
-	vc.set_brick(Vector3i(5, 3, 55), "light_nav_white")
+	vc._store_cell(Vector3i(5, 1, 55), "helm", 0)
+	vc._store_cell(Vector3i(1, 2, 55), "light_nav_port", 0)
+	vc._store_cell(Vector3i(8, 2, 55), "light_nav_stbd", 0)
+	vc._store_cell(Vector3i(5, 3, 55), "light_nav_white", 0)
 	for ix in [2, 3, 6, 7]:
-		vc.set_brick(Vector3i(ix, 0, 55), "bollard")
+		vc._store_cell(Vector3i(ix, 0, 55), "bollard", 0)
 	var off := 0
 	for row in vc.iter_primary_cells():
 		if not grid_small.in_bounds(row["cell"] as Vector3i):

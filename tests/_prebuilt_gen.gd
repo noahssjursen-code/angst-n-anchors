@@ -21,20 +21,24 @@ extends SceneTree
 ## Every cell index here used to be a constant measured off hull_28x10's
 ## 20 × 56 grid: the deckhouse at `x0=7..12`, the aft house at `z0=40..47`, the
 ## mast at `x=9`, mooring at `z=14`. On hull_15x5 — 10 × 30 — every one of
-## those is off the deck, and `BrickLayout.set_brick` does not take a grid, so
+## those is off the deck, and `BrickLayout.set_brick` did not take a grid, so
 ## it would have written bricks into the sea and reported success.
 ##
 ## The rule now, and it is checkable rather than hoped for:
 ##
 ##   **Every index is derived from `grid.width` / `grid.length` /
 ##   `grid.bow_taper_cells`, or from a placement already made; and every cell is
-##   tested against `grid.cell_shape(...) == FULL` before it is written. A
-##   placement that would land off the deck refuses the whole vessel.**
+##   tested against the deck before it is written. A placement that would land
+##   off the deck refuses the whole vessel.**
 ##
-## `_on_deck` is that test, `_refused` is that refusal. The three hull_28x10
-## presets re-emit BYTE-IDENTICAL under the derived formulas (md5 unchanged),
-## which is the control proving the parameterisation is faithful and not a
-## redesign wearing the old numbers.
+## THE TEST MOVED, 2026-08-15 (second edit that day). It was a private `_on_deck`
+## predicate in this file — a second derivation of a rule three other files also
+## carried. `BrickLayout.set_brick` now takes the grid and returns false, so the
+## rule is asked once, in the setter. `_set_on_deck` is this file's POLICY on the
+## answer (refuse the whole vessel); `_refusals` is that refusal. The three
+## hull_28x10 presets re-emit BYTE-IDENTICAL under the derived formulas (md5
+## unchanged), which is the control proving the parameterisation is faithful and
+## not a redesign wearing the old numbers.
 ##
 ## Run:
 ##   xvfb-run -a --server-args="-screen 0 1280x720x24" godot \
@@ -85,24 +89,31 @@ func _initialize() -> void:
 # ── the grid is the only source of position ─────────────────────────────────
 
 
-## True when this cell is a whole deck cell a brick may stand on. The half cells
-## of the 45° bow are NOT full: `place_footprint` refuses them for anything but
-## a `diagonal_plan` brick, and `set_brick` would happily write one anyway.
-func _on_deck(grid: DeckGrid, cell: Vector3i) -> bool:
-	return cell.y >= 0 and grid.cell_shape(cell.x, cell.z) == DeckGrid.CellShape.FULL
-
-
 func _refuse(what: String) -> void:
 	_refusals.append(what)
 
 
+## The OFF-DECK guard used to live here, as a private `_on_deck` predicate
+## (`cell.y >= 0 and grid.cell_shape(...) == FULL`) that this file applied before
+## calling a `set_brick` which could not refuse. It was a SECOND derivation of a
+## rule that `place_footprint` and `DeckFitout._item_is_valid` each also carried,
+## and it covered four files — this generator, and nothing a player touches.
+##
+## It is deleted. `BrickLayout.set_brick` takes the grid and returns false, so
+## the rule is asked once, in the setter, by everything (REALITY.md §3b). What
+## stays here is this generator's own POLICY, which is not the same thing as the
+## rule: a refusal fails the whole vessel and no JSON is written.
+##
+## The deleted predicate and the surviving one are not identical, and the
+## difference is a widening, not a loosening: `_on_deck` was `== FULL` flat, so it
+## would have refused a `diagonal_plan` brick on a correctly-yawed bow half cell —
+## the exact placement those bricks exist for. No preset here places one, so the
+## four emitted files are unaffected (verified byte-identical, md5 unchanged).
 func _set_on_deck(
 	layout: BrickLayout, grid: DeckGrid, cell: Vector3i, brick_id: String, yaw: int = 0
 ) -> void:
-	if not _on_deck(grid, cell):
-		_refuse("%s at %v is off the %d x %d deck" % [brick_id, cell, grid.width, grid.length])
-		return
-	layout.set_brick(cell, brick_id, yaw)
+	if not layout.set_brick(grid, cell, brick_id, yaw):
+		_refuse(BrickLayout.off_grid_reason(grid, cell, brick_id))
 
 
 # ── shared hull furniture ───────────────────────────────────────────────────
@@ -147,7 +158,7 @@ func _base(hull_id: String, grid: DeckGrid) -> BrickLayout:
 		for iz in range(grid.length):
 			if not grid.is_edge_cell(ix, iz):
 				continue
-			layout.set_brick(Vector3i(ix, 0, iz), "railing", _railing_yaw(grid, ix, iz))
+			_set_on_deck(layout, grid, Vector3i(ix, 0, iz), "railing", _railing_yaw(grid, ix, iz))
 	return layout
 
 

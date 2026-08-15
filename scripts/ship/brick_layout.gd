@@ -47,7 +47,116 @@ func has_cell(cell: Vector3i) -> bool:
 	return cells.has(cell_key(cell))
 
 
-func set_brick(cell: Vector3i, brick_id: String, yaw: int = 0, props: Dictionary = {}) -> void:
+## THE ONE PREDICATE — "may this brick, at this yaw, stand on this cell of this
+## grid?". Asked by `set_brick`, by `place_footprint`, by `DeckFitout`
+## (`_item_is_valid`, and the item filter that guards the skin bake), by
+## `VesselOutfit.validate` and by the starter-vessel generator. Every one of
+## those carried its own answer, or none at all (REALITY.md §3b — the fix that
+## holds is deleting the second formula, not writing a more careful one).
+##
+## It is NOT `in_bounds` and NOT `has_deck_cell`, and neither alone is right.
+## Both were candidates; measured on all five shipped hulls 2026-08-15
+## (`tests/_offgrid_facts.gd`, section D — hull_15x5 has 270 FULL / 10 HALF,
+## hull_150x32 has 18144 / 64):
+##
+##   • `in_bounds` is `cell_shape == FULL`. It rejects the two HALF cells on
+##     every row of a 45° bow taper — correct for a `block`, wrong for the
+##     `diagonal_plan` bricks (`block_45_half`, `wedge_45_plan`) that exist
+##     precisely to fill them. `vessel_skin_showcase` places two.
+##   • `has_deck_cell` is `cell_shape != NONE`. It accepts a full-size `block`
+##     on a bow half cell, which draws a whole cube hanging over the water on
+##     the side the taper cut away.
+##
+## So: `in_bounds` for ordinary bricks, widened to the half cells for a
+## `diagonal_plan` brick yawed to point its missing corner outboard. That is
+## what `DeckFitout._item_is_valid` already computed — the only correct copy in
+## the repo, and now the only copy.
+##
+## Rejects nothing that ships: all four prebuilt vessels carry 0 off-grid cells
+## of 1254 by BOTH bounds, and 0 cells on a bow half cell (measured, same probe).
+static func cell_on_grid(grid: DeckGrid, cell: Vector3i, brick_id: String, yaw: int) -> bool:
+	if grid == null:
+		return false
+	var id := brick_id.strip_edges()
+	if not BrickCatalog.has(id):
+		return false
+	if grid.is_partial_bow_cell(cell):
+		return (
+			BrickCatalog.has_tag(id, "diagonal_plan")
+			and norm_yaw_step(yaw, BrickCatalog.yaw_step_of(id))
+				== grid.partial_bow_yaw_degrees(cell)
+		)
+	return grid.in_bounds(cell)
+
+
+## Human-readable refusal for one cell, so what a player reads names the brick,
+## the cell and the deck it missed rather than "invalid placement".
+static func off_grid_reason(grid: DeckGrid, cell: Vector3i, brick_id: String) -> String:
+	## `%v` on a Vector3i formats as "(5.000000, 1.000000, 55.000000)". A cell
+	## index is an integer triple and reads as one.
+	var at := "%s at (%d, %d, %d)" % [BrickCatalog.display_name(brick_id), cell.x, cell.y, cell.z]
+	## `set_brick` refuses an uncatalogued id as well as an off-deck cell, and the
+	## two must not read the same. Measured 2026-08-15: all 102 cells
+	## `vessel_skin_showcase._demo_workboat` loses are `block_half` / `wall_panel`
+	## / `block_45_half` — a vocabulary `BrickCatalog` does not carry (64 live
+	## definitions, none of them these) — and NOT ONE of its 59 catalogued cells is
+	## off the hull. Reporting those as "off the 20 x 56 deck" would have sent the
+	## next reader to the coordinates instead of to the catalogue.
+	if not BrickCatalog.has(brick_id.strip_edges()):
+		return "%s is not in the brick catalogue" % at
+	if grid == null:
+		return "%s has no deck to stand on" % at
+	if grid.is_partial_bow_cell(cell):
+		return "%s sits on a half cell of the bow taper" % at
+	return "%s is off the %d x %d deck" % [at, grid.width, grid.length]
+
+
+## Writes one cell, OVERWRITING whatever was there (unlike `place_footprint`,
+## which refuses an occupied cell and claims a whole footprint).
+##
+## `grid` is REQUIRED and comes first. This used to take no grid and return
+## `void`, so it could not refuse: a layout carrying every brick `general_vessel`
+## requires, authored at 20 x 56 indices and written onto a 10 x 30 hull, stored
+## all eight off the deck and certified 8/8 (STATE.md 2b).
+##
+## The grid is a PARAMETER, not a field derived from `self.hull_id`, and that is
+## the load-bearing half. MEASURED, not argued: the headline layout's own
+## `hull_id` is `"fishing_trawler_small"`, which `HullRegistry` resolves to
+## hull_28x10 — a 20 x 56 grid, on which every one of those eight cells IS in
+## bounds. A layout that carried its own grid would have certified the headline
+## vessel green. The layout's claim about which hull it is for is exactly what is
+## wrong with it; the caller states the deck, the layout never gets a vote.
+##
+## Grid-first rather than appended is also deliberate: it makes every un-updated
+## call site a COMPILE error (`argument 1 should be DeckGrid but is Vector3i`)
+## rather than a silently-defaulted null. A guard you can forget to pass is a
+## guard that gets forgotten.
+##
+## Returns true when the cell was written, false when it was refused. `null`
+## refuses everything: there is no way to write a cell without naming the deck.
+func set_brick(
+	grid: DeckGrid,
+	cell: Vector3i,
+	brick_id: String,
+	yaw: int = 0,
+	props: Dictionary = {},
+) -> bool:
+	var id := brick_id.strip_edges()
+	if not cell_on_grid(grid, cell, id, yaw):
+		return false
+	_store_cell(cell, id, yaw, props)
+	return true
+
+
+## Deserialiser-only raw write: no grid, no refusal. Private and separate from
+## `set_brick` so that "trusting a stored record" is a decision a reader can see,
+## and so no authoring path reaches it by omitting an argument.
+##
+## Loading is not the layer that judges a layout: silently dropping a player's
+## bricks on load would destroy their vessel to repair a record. Every production
+## caller of `from_dict` runs the loaded layout through `VesselCompliance.validate`
+## against the grid it is actually being put on, and that is now the check.
+func _store_cell(cell: Vector3i, brick_id: String, yaw: int, props: Dictionary = {}) -> void:
 	var id := brick_id.strip_edges()
 	var entry := {
 		"brick_id": id,
@@ -163,14 +272,13 @@ func place_footprint(
 	var occupied := grid.footprint_cells(origin, fp, yaw_steps)
 	var allow_on_cargo := BrickCatalog.has_tag(brick_id, "text")
 	for c in occupied:
-		if grid.is_partial_bow_cell(c):
-			if (
-				not BrickCatalog.has_tag(brick_id, "diagonal_plan")
-				or occupied.size() != 1
-				or yaw_n != grid.partial_bow_yaw_degrees(c)
-			):
-				return false
-		elif not grid.in_bounds(c):
+		## The same predicate `set_brick` uses (REALITY.md §3b — one derivation),
+		## plus the one rule that is about the FOOTPRINT rather than the cell: a
+		## multi-cell brick may not claim a half cell of the bow taper even when
+		## it is a diagonal, because only its origin cell would be the wedge.
+		if not cell_on_grid(grid, c, brick_id, yaw_n):
+			return false
+		if grid.is_partial_bow_cell(c) and occupied.size() != 1:
 			return false
 		if has_cell(c):
 			return false
@@ -181,7 +289,7 @@ func place_footprint(
 	var painted := color_to_array(props.get("color", null))
 	for c in occupied:
 		if primary:
-			set_brick(c, brick_id, yaw_n, props)
+			_store_cell(c, brick_id, yaw_n, props)
 			primary = false
 		else:
 			var filler := {
@@ -492,6 +600,23 @@ func to_dict() -> Dictionary:
 	}
 
 
+## DELIBERATELY TRUSTS the record's cells — it takes no grid and refuses nothing,
+## and that is a decision rather than an oversight (STATE.md 2b names it).
+##
+## Loading is not the layer that judges: dropping a player's bricks on load would
+## destroy their vessel to repair a file, and this runs before anyone has said
+## which hull the layout is being put on. What replaces the check is that every
+## production caller re-checks: `DeckFitout.apply_any` / `compliance_for_layout`,
+## `PrebuiltVesselCatalog`, `ShipwrightNPC` and `VesselSpawn` all run the loaded
+## layout through `VesselCompliance.validate` against a real grid, which as of
+## this change refuses off-deck bricks.
+##
+## THE DEFECT THAT REMAINS, stated so it is not rediscovered as a surprise: a
+## record can be loaded, edited and re-saved without ever meeting a grid, if a
+## future caller uses `from_dict` → `to_dict` without a compliance pass in
+## between. The symptom would be a saved vessel whose bricks are stored off its
+## own hull and which only reports the fault at the moment it is fitted out —
+## not at the moment it was saved. Nothing in the gate holds that today.
 static func from_dict(d: Dictionary) -> BrickLayout:
 	var layout := BrickLayout.new()
 	layout.hull_id = str(d.get("hull_id", "fishing_trawler_small"))
@@ -504,7 +629,7 @@ static func from_dict(d: Dictionary) -> BrickLayout:
 				continue
 			var e := item as Dictionary
 			var cell := Vector3i(int(e.get("x", 0)), int(e.get("y", 0)), int(e.get("z", 0)))
-			layout.set_brick(cell, str(e.get("brick_id", "block")), int(e.get("yaw", 0)))
+			layout._store_cell(cell, str(e.get("brick_id", "block")), int(e.get("yaw", 0)))
 	## Migrate legacy cargo_zones → container_pads once.
 	var pads_raw: Variant = d.get("container_pads", null)
 	if pads_raw == null:
@@ -622,9 +747,9 @@ static func _paint_cabin(layout: BrickLayout, grid: DeckGrid, z0: int) -> void:
 			var on_edge := ix == x0 or ix == x0 + cabin_w - 1 or iz == z_start or iz == z_start + cabin_l - 1
 			if on_edge:
 				for iy in range(2):
-					layout.set_brick(Vector3i(ix, iy, iz), "block", 0)
+					layout.set_brick(grid, Vector3i(ix, iy, iz), "block", 0)
 			else:
-				layout.set_brick(Vector3i(ix, 2, iz), "block", 0)
+				layout.set_brick(grid, Vector3i(ix, 2, iz), "block", 0)
 
 
 static func _paint_edge_railings(layout: BrickLayout, grid: DeckGrid) -> void:
@@ -637,4 +762,4 @@ static func _paint_edge_railings(layout: BrickLayout, grid: DeckGrid) -> void:
 				continue
 			if layout.deck_reserved_contains(c):
 				continue
-			layout.set_brick(c, "railing", 0)
+			layout.set_brick(grid, c, "railing", 0)

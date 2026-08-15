@@ -545,21 +545,18 @@ func _roof_cap(
 
 # ── shared hull furniture, copied from tests/_prebuilt_gen.gd ───────────────
 
-func _on_deck(grid: DeckGrid, cell: Vector3i) -> bool:
-	return cell.y >= 0 and grid.cell_shape(cell.x, cell.z) == DeckGrid.CellShape.FULL
-
-
 func _refuse(what: String) -> void:
 	_refusals.append(what)
 
 
+## `_on_deck` used to live here too, copied from `_prebuilt_gen.gd`. Both copies
+## are deleted: `BrickLayout.set_brick` takes the grid and returns false, so the
+## rule is asked once, in the setter (REALITY.md §3b).
 func _set_on_deck(
 	layout: BrickLayout, grid: DeckGrid, cell: Vector3i, brick_id: String, yaw: int = 0
 ) -> void:
-	if not _on_deck(grid, cell):
-		_refuse("%s at %v is off the %d x %d deck" % [brick_id, cell, grid.width, grid.length])
-		return
-	layout.set_brick(cell, brick_id, yaw)
+	if not layout.set_brick(grid, cell, brick_id, yaw):
+		_refuse(BrickLayout.off_grid_reason(grid, cell, brick_id))
 
 
 func _railing_yaw(grid: DeckGrid, ix: int, iz: int) -> int:
@@ -586,7 +583,7 @@ func _base(grid: DeckGrid) -> BrickLayout:
 				or grid.cell_shape(x, z + 1) != DeckGrid.CellShape.FULL
 			)
 			if edge:
-				layout.set_brick(Vector3i(x, 0, z), "railing", _railing_yaw(grid, x, z))
+				_set_on_deck(layout, grid, Vector3i(x, 0, z), "railing", _railing_yaw(grid, x, z))
 	return layout
 
 
