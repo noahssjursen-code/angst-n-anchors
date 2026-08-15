@@ -194,9 +194,14 @@ hand-assigned ids from a range it picked for itself, and the ranges overlapped.
 
 *(Re-measured 2026-08-15 across all 19 fixtures in `resources/data/structures/`: **zero**
 duplicate ids remain, and `probe_piece_trawler` now carries 49 placements, not 43. The paragraph
-above is history, not a current defect — but `plan_entity_id_test` is still `FAIL(1)` in the gate,
-so the property is not green even though the fixtures are clean. Do not read this section as a
-live fixture problem, and do not read the passing fixtures as a passing test.)*
+above is history, not a current defect. **The qualifier that used to stand here — "but
+`plan_entity_id_test` is still `FAIL(1)`, so the property is not green even though the fixtures
+are clean" — went stale and was caught by a wave reading it, not by anything in the gate.** It
+PASSES, in run `20260815-173351-24731` and on both sides of that wave's own baseline. A
+correction written to stop a reader trusting a green test became a reason to distrust a test
+that had since been fixed, which is §4a wearing the other face: **a restated status rots exactly
+like a restated number, and a caveat is a claim.** Re-read your own qualifiers against the
+current `results.tsv` before quoting them.)*
 
 It survived because every check those fixtures had was about GEOMETRY — corners, colliders, draw
 calls, silhouettes. All green, all true, all pointed at the same face of the object. Nobody had
