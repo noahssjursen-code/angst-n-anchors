@@ -17,11 +17,18 @@ extends Node
 ##   • plan view uses Vector3.FORWARD as the up-vector — UP is degenerate there;
 ##   • pale sky, shadows on.
 ##
-## One frame is a CUTAWAY: the hull's own `Deck` plate mesh is hidden. That plate
-## is an opaque slab spanning the whole deck, including the hatch, so everything
-## the hold draws below the deck plane — liner, pit floor, chilled water, fish —
-## is behind it in every normal view. The cutaway is the only way to see what is
-## actually drawn down there.
+## SHOOTS BOTH HATCH STATES — 2026-08-15. `hold__closed__*` is a working boat at
+## sea; `hold__open__*` is the same boat with the hatch worked. Both carry the
+## same figure at the same physics-derived height, so the pair answers "what
+## changed" and not just "what does it look like".
+##
+## The CUTAWAY frame hides the hull's own `Deck` plate mesh. That plate used to
+## be an opaque slab spanning the whole deck INCLUDING the hatch — which is why
+## `bd548bc` could report that the catch "read as a pool at deck level" (it shot
+## a hold at 3900 of 4000 kg, whose surface pokes 0.058 m above the plate) while
+## a hold at 25% showed the plate and nothing else. `DeckFitout` now cuts the
+## plate around the liner, so the cutaway should now look almost the same as the
+## normal view over the hatch, and different everywhere else.
 
 const OUT_DIR := "res://screenshots/vessels/hold"
 const SKY := Color(0.80, 0.85, 0.90)
@@ -70,67 +77,109 @@ func _run() -> void:
 		return
 	var hold: CatchHoldComponent = holds[0]
 	var hl := boat.to_local(hold.global_position)
-	print("HOLD boat-local %v footprint %v" % [hl, hold.footprint_m])
-
-	## Where physics says a person's feet land over the middle of the hatch.
-	var stand_y := _support_y(boat, Vector3(hl.x, hl.y + 3.0, hl.z))
-	print("SUPPORT over the hatch centre: boat-local y=%.3f (hold deck plane y=%.3f)"
-		% [stand_y, hl.y])
-	var on_hatch := _make_figure()
-	on_hatch.position = Vector3(hl.x, stand_y, hl.z)
-	boat.add_child(on_hatch)
-	var beside_y := _support_y(boat, Vector3(hl.x, hl.y + 3.0, hl.z + hold.footprint_m.z * 0.5 + 0.7))
-	var beside := _make_figure()
-	beside.position = Vector3(hl.x, beside_y, hl.z + hold.footprint_m.z * 0.5 + 0.7)
-	boat.add_child(beside)
-	var figures: Array[Node3D] = [on_hatch, beside]
-	boat.set_meta("scale_figures", figures)
+	print("HOLD boat-local %v footprint %v  boards=%d slot=%.3f m (player capsule %.2f)" % [
+		hl, hold.footprint_m, hold.hatch_board_count(), hold.hatch_slot_width_m(),
+		CatchHoldComponent.PLAYER_CAPSULE_DIAMETER_M,
+	])
 
 	var world_centre := boat.to_global(Vector3(hl.x, hl.y, hl.z))
-	## EMPTY first — that is the state a working boat is in most of the time, and
-	## the fill visual hides what the aperture itself looks like.
-	await _persp("hold__%s__empty_quarter" % _tag,
-		world_centre + Vector3(4.6, 3.4, 4.6), world_centre + Vector3(0.0, 0.4, 0.0))
-	await _ortho_plan("hold__%s__empty_plan_ortho" % _tag, world_centre, 6.0)
-	## Then filled: the chilled water and the fish scatter are drawn only when
-	## there is catch aboard.
-	hold.accept_lot(CatchLot.create({"lot_id": "shot", "mass_kg": 3900.0}))
-	await _persp("hold__%s__quarter" % _tag,
-		world_centre + Vector3(4.6, 3.4, 4.6), world_centre + Vector3(0.0, 0.4, 0.0))
-	await _persp("hold__%s__eye_level" % _tag,
-		world_centre + Vector3(0.9, 1.7, 4.2), world_centre + Vector3(0.0, 0.3, 0.0))
-	## From ASTERN. The deckhouse stands forward of the hold on this boat, so a
-	## bow-on ortho photographs the back of the house and puts both figures
-	## behind glazing — measured, figure_px 1408 (REALITY §8: check the camera).
-	await _ortho("hold__%s__section_ortho" % _tag,
-		world_centre + Vector3(0.0, 0.9, 40.0), world_centre + Vector3(0.0, 0.9, 0.0), 6.0)
-	await _ortho_plan("hold__%s__plan_ortho" % _tag, world_centre, 6.0)
+	for open in [false, true]:
+		hold.set_hatch_open(open)
+		await get_tree().physics_frame
+		_tag = "open" if open else "closed"
+		## The figures are rebuilt per state, because where physics puts a
+		## person's feet over the hatch is exactly what the state changes.
+		for old in boat.get_meta("scale_figures", []) as Array:
+			var node := old as Node3D
+			if node != null and is_instance_valid(node):
+				boat.remove_child(node)
+				node.free()
+		var stand_y := _support_y(boat, Vector3(hl.x, hl.y + 3.0, hl.z))
+		print("SUPPORT over the hatch centre, hatch %s: boat-local y=%.3f (hold deck plane y=%.3f)"
+			% [_tag, stand_y, hl.y])
+		var on_hatch := _make_figure()
+		on_hatch.position = Vector3(hl.x, stand_y, hl.z)
+		boat.add_child(on_hatch)
+		var beside_z := hl.z + hold.footprint_m.z * 0.5 + 0.7
+		var beside := _make_figure()
+		beside.position = Vector3(hl.x, _support_y(boat, Vector3(hl.x, hl.y + 3.0, beside_z)), beside_z)
+		boat.add_child(beside)
+		var figures: Array[Node3D] = [on_hatch, beside]
+		boat.set_meta("scale_figures", figures)
 
-	## Cutaway: hide the hull's opaque deck plate and shoot the same quarter.
-	var deck_plate := boat.get_node_or_null("HullVisual/Deck") as MeshInstance3D
-	if deck_plate != null:
-		deck_plate.visible = false
-		await _persp("hold__%s__cutaway_no_deck_plate" % _tag,
-			world_centre + Vector3(4.6, 3.4, 4.6), world_centre + Vector3(0.0, -0.3, 0.0))
-		deck_plate.visible = true
-	else:
-		print("NO DECK PLATE NODE — cutaway skipped")
+		## EMPTY first — that is the state a working boat is in most of the time,
+		## and the fill visual hides what the aperture itself looks like.
+		hold.withdraw_oldest(hold.get_state().total_mass_kg())
+		await get_tree().process_frame
+		await _persp("hold__%s__empty_quarter" % _tag,
+			world_centre + Vector3(4.6, 3.4, 4.6), world_centre + Vector3(0.0, 0.4, 0.0))
+		await _ortho_plan("hold__%s__empty_plan_ortho" % _tag, world_centre, 6.0)
+		## Then a QUARTER full — the fill stage the old deck plate hid entirely,
+		## and the one the showcase exists to display.
+		hold.accept_lot(CatchLot.create({"lot_id": "shot-q", "mass_kg": 1000.0}))
+		await _persp("hold__%s__quarter_full" % _tag,
+			world_centre + Vector3(4.6, 3.4, 4.6), world_centre + Vector3(0.0, 0.4, 0.0))
+		## Then brimful.
+		hold.accept_lot(CatchLot.create({"lot_id": "shot", "mass_kg": 2900.0}))
+		await _persp("hold__%s__quarter" % _tag,
+			world_centre + Vector3(4.6, 3.4, 4.6), world_centre + Vector3(0.0, 0.4, 0.0))
+		await _persp("hold__%s__eye_level" % _tag,
+			world_centre + Vector3(0.9, 1.7, 4.2), world_centre + Vector3(0.0, 0.3, 0.0))
+		## From ASTERN. The deckhouse stands forward of the hold on this boat, so
+		## a bow-on ortho photographs the back of the house and puts both figures
+		## behind glazing — measured, figure_px 1408 (REALITY §8: check the camera).
+		await _ortho("hold__%s__section_ortho" % _tag,
+			world_centre + Vector3(0.0, 0.9, 40.0), world_centre + Vector3(0.0, 0.9, 0.0), 6.0)
+		await _ortho_plan("hold__%s__plan_ortho" % _tag, world_centre, 6.0)
+
+		## Cutaway: hide the hull's deck plate and shoot the same quarter. With
+		## the plate now cut around the liner this should differ from the frame
+		## above only OUTSIDE the hatch.
+		var deck_plate := boat.get_node_or_null("HullVisual/Deck") as MeshInstance3D
+		if deck_plate != null:
+			deck_plate.visible = false
+			await _persp("hold__%s__cutaway_no_deck_plate" % _tag,
+				world_centre + Vector3(4.6, 3.4, 4.6), world_centre + Vector3(0.0, -0.3, 0.0))
+			deck_plate.visible = true
+		else:
+			print("NO DECK PLATE NODE — cutaway skipped")
 
 	print("SHOT DONE")
 	get_tree().quit(0)
 
 
+## Where a PERSON's feet come to rest, dropped from `from_local`.
+##
+## A CAPSULE, not a ray, and the difference is the point of the open frames. A
+## ray is 0 m across and falls through anything; the player is 0.70 m across
+## (`scenes/shared/player.tscn`, radius 0.35) and an open hatch slot is 0.587 m,
+## so a ray reports the WalkDeck slab 0.19 m below the boards where a person
+## simply cannot go. Placed by ray the figure sank into the open hatch in a
+## picture no player could ever produce — REALITY §8, the instrument before the
+## subject. The ray answer is printed beside it so the gap is visible rather
+## than quietly corrected away.
 func _support_y(boat: BoatBody, from_local: Vector3) -> float:
 	var space := boat.get_world_3d().direct_space_state
+	var capsule := CapsuleShape3D.new()
+	capsule.radius = 0.35
+	capsule.height = 1.8
+	var params := PhysicsShapeQueryParameters3D.new()
+	params.shape = capsule
+	params.transform = Transform3D(
+		Basis.IDENTITY, boat.to_global(from_local + Vector3(0.0, capsule.height * 0.5, 0.0))
+	)
+	params.collision_mask = BoatBody.LAYER_BOAT_WALK
+	params.motion = Vector3(0.0, -10.0, 0.0)
+	var feet := from_local.y - 10.0 * float(space.cast_motion(params)[0])
 	var ray := PhysicsRayQueryParameters3D.create(
 		boat.to_global(from_local),
-		boat.to_global(from_local - Vector3(0.0, 8.0, 0.0)),
+		boat.to_global(from_local - Vector3(0.0, 10.0, 0.0)),
 		BoatBody.LAYER_BOAT_WALK,
 	)
 	var hit := space.intersect_ray(ray)
-	if hit.is_empty():
-		return from_local.y
-	return boat.to_local(hit["position"] as Vector3).y
+	var ray_y := from_local.y if hit.is_empty() else boat.to_local(hit["position"] as Vector3).y
+	print("   SUPPORT at %v: capsule feet %.3f, ray %.3f" % [from_local, feet, ray_y])
+	return feet
 
 
 func _build_stage() -> void:
