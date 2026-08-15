@@ -2362,6 +2362,67 @@ file is not red by construction. It belongs beside decision #1 below.
 5f. **The bow rail is a staircase.** At the 45° bow taper the generator places plain
    `railing` bricks, so the rail steps around the taper instead of following it.
    `railing_45` exists in the catalogue and **no preset uses it.**
+5j. **The starter boat's fish hold was a hole you stood over in mid-air — CLOSED
+   2026-08-15 (`bd548bc`), and the price is recorded with it.** The hold drew 28
+   meshes including a 1.16 m pit and collided with **nothing** — 0 `CollisionObject3D`
+   and 0 `CollisionShape3D` under it. What carried a deckhand across was the vessel's
+   own 5.00 × 0.14 × 15.00 m deck slab, so a capsule stood **1.09 m above the nearest
+   drawn surface**, shin-deep in the drawn chilled water; dropped down the hatch it
+   stopped at 2.751 against a drawn pit floor at 1.660. Now **42 of 42 stations from
+   0 of 42**, standing on hatch boards the hold itself draws.
+
+   **The cheapest passing fix would have been to assert the deck slab, and it was
+   refused.** The open-hold options need the *hull* cut open: `WalkHullCollider` tops
+   out **0.51 m below the deck plane**, and the hull's deck plate mesh spans the
+   aperture too, so "just open it" drops a player onto invisible steel with 0.65 m of
+   drawn pit still beneath them. Against a 0.45 m step, a 1.16 m pit is a trap rather
+   than a hazard until something lets a player climb out.
+
+   **The price, stated rather than buried: a player can no longer see their catch**,
+   and `catch_hold_showcase` — whose whole job is showing fill stages — shows a lid.
+   **A wave is on the openable hatch now.**
+
+   Two mutations earned their place. A collider shifted 0.30 m to starboard reddened
+   only 5 of 161, because a wide hatch has boards under its middle — so the check
+   became a **shape-for-shape match read back off `PhysicsServer3D`** in both
+   directions. And butting the boards flush lets a downward ray pass **between** two
+   of them and report the deck 0.250 m below (7 of 63 stations on the 19 m hatch),
+   which is why `HATCH_LAP_M` exists — reproduced independently at the same 7 of 63.
+   A third **passed and is recorded as a finding**: deleting the two-hold overlap
+   memory changes nothing in any fixture, because the berth picker always takes the
+   larger run beside its own gear brick, so that guard has never been shown the shape
+   it guards. `MAX_FISHING` is 1, so the second hold is unreachable today regardless.
+
+5k. **The studio's properties drawer had never been on screen — FIXED 2026-08-15
+   (`2ab3eee`), and the registration checklist now closes the authoring loop.**
+   `PRESET_RIGHT_WIDE` left offsets at zero, so on the project's 1920 × 1080 viewport
+   the drawer sat at **x = 1920** and the context strip at **y = 1080**. That is the
+   inspector, the surface library, SAVE JSON, LOAD SELECTED, the tool hints, the
+   metrics — and **every status toast, including the off-hull refusal item 2d records
+   as delivered, whose probe asserted the status STRING and never a rect.**
+   Reproduced independently: restoring the offset puts the drawer at (1920, 60) and
+   reddens the new check.
+
+   The checklist reads from **one call** to `PlanOutfit.compliance` with the same
+   arguments `DeckFitout.apply_plan` makes at spawn — no second evaluator — and a
+   probe authors by clicking, **reads the text off the Label nodes**, spawns the same
+   plan and compares rule by rule.
+
+   **The cost answer was not cache, debounce or defer.** Measured on the 617-entity
+   feeder: fence 101 ms, compliance 118 ms, both separately **219 ms** — and the fence
+   is 100 of that, which `compliance` *already takes*. It now publishes the partition
+   it holds: rebake **+6.4%** against +33% naive. A cache would also have been worse
+   on correctness — a stale checklist says CERTIFIED about a plan that is not.
+
+   Two more found by looking: `_load_plan` never rebuilt the deck grid, so loading the
+   feeder into a studio booted on `hull_28x10` reported **596 of 617 entities off the
+   hull**; and the wave's own first cut printed *"FITTED, BUT NOT ALL ON THE PORT
+   SIDE"* under a boat with no lights, because `tag_side` fails identically for
+   misplaced and missing — its own §5 check passed that, and the **capture** caught it.
+
+   **Nobody has ever audited what is inside the drawer**, because until now nobody
+   could see it. A wave is on that.
+
 5g. **The deckhouse was a shoebox on every preset — REBUILT 2026-08-15 (`3582276`),
    and the vocabulary to fix it was already in the catalogue.** `_add_deckhouse` used
    **four brick ids out of 64**: five levels of `block`, `block_window` where the band
