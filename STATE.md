@@ -78,8 +78,8 @@ names, so `git diff` on an image shows what a change did to the silhouette.
 | | |
 |---|---|
 | Gate | Three lanes — A `--script`, B scene, C app self-check. Capability skips are self-policing: a skipped unit that passes when forced turns the gate red. Scratch probes (`_`-prefixed) are skipped and reported. |
-| Tests | Zero bare `assert()` anywhere (38 files converted). `TestReport` fails a run that executed zero checks. |
-| Colour | **Free.** The bucket key is material alone, colour rides in vertex data. A 20-colour plan bakes to 4 draw calls, measured on the renderer's own counter. |
+| Tests | Zero bare `assert()` **in `tests/`** — 0 of 162 files. **NOT the repo: 16 remain in 8 production files**, and a production assert firing inside a lane-A test still idles it to TIMEOUT (CONVENTIONS §2). A wave is on it. `TestReport` fails a run that executed zero checks. |
+| Colour | **Free in the solid bake, priced in the studio x-ray.** The bucket key is material alone and colour rides in vertex data, so `demo_workboat` measures **3 mesh instances / 11 renderer draw calls at BOTH 22 and 64 distinct colours** — zero delta. The ghost/x-ray path still keys by colour and costs **112 instances at 64 colours**, which is what mutation-verifies the claim without editing production code. Earlier text here said "4 draw calls": wrong on both readings — buckets are 3 (`MATERIALS.size()` is the BOUND, not the count) and renderer draw calls are 11. |
 | Collision | Diagonal walls collide as drawn, asserted against `PhysicsServer3D` on a real body — not against the baker's dictionaries. Every edge run's barrier is the yaw-frame BOUND of the boxes it draws, not a second formula — 0 loose corners across all nine capture fixtures. |
 | Items | Float metres, free yaw + optional pitch/roll, props bag, **host-relative placement** so a fitting follows its host. Part catalog + plan-side compliance measurement exist. |
 | Scale | Settled: 1 unit = 1 m, player 1.8 m, deck cells 0.5 m as a *build resolution*. `hull_28x10` is a 28 × 10 m vessel. |
@@ -428,7 +428,7 @@ four canonical-angle PNGs and 15 machine-checkable claims come out. Runs in the 
 
 Views: `profile_port`, `bow_quarter`, `stern_quarter`, `plan`. Camera fits the projected
 bounding box against a 35° lens on both axes. Autoload HUD is hidden before shooting.
-Asserts the bake stays merged — the demo workboat bakes to **4 mesh instances**, which is the
+Asserts the bake stays merged — the demo workboat bakes to **3 mesh instances** (this said 4; re-measured), which is the
 draw-cost headroom the parts work gets to spend.
 
 Remaining: fold it into `tools/gate.sh` as lane B, and add per-view visual-regression
@@ -446,12 +446,18 @@ evidence.
 
 The constraint is **not part count**. `StructureBaker._bucket_layer` keys surfaces by
 `"<material>_<rrggbb>"`; one bucket is one `MeshInstance3D` is one draw call.
+
+> **⚠ SUPERSEDED — this section describes the code BEFORE vertex colour landed.** The bucket
+> key is material alone now. Measured: 22 colours and 64 colours both bake `demo_workboat` to 3
+> mesh instances and 11 renderer draw calls. The paragraph below is kept because it is why the
+> change was made, not because it is true. It contradicted the table at the top of this file for
+> long enough that a doc audit had to find it.
 `demo_workboat` bakes to 4. Therefore:
 
 - Parts that reuse an existing (material, colour) pair cost **triangles and bake CPU, not
   draw calls**. A bulwark, a mast, forty bollards and a hatch coaming in colours the plan
   already declares add **zero** draw calls.
-- **Every new colour costs +1 draw call on every vessel in the harbour.**
+- ~~**Every new colour costs +1 draw call on every vessel in the harbour.**~~ — false since vertex colour; see the notice above.
 
 So the expensive trap is not geometry — it is **per-vessel free-choice colour**. Thirty UGC
 ships each picking arbitrary RGB is thirty × N unshared surfaces with no batching.
