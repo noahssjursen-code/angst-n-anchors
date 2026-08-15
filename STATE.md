@@ -978,6 +978,82 @@ done.** Regenerate this from the tree, not from the last copy of itself.
 Both carry the measured trap that would fake a green: `skin_enabled = false` turns
 BOTH deck-fitout reds green while making every vessel worse.
 
+### THE PLATE-COLLISION TEST WAS DARK IN MY OWN COMMIT THAT CHANGED PLATE COLLISION
+
+`structure_plate_test` did not compile from `65b6a0a` to `bc61fac`. That commit
+renamed `PLATE_COLLIDER_STEP` → `PLATE_COLLIDER_SLOP` and left three references to
+the old name in the test: `Parse Error: Cannot find member` — the file never
+loaded and produced no verdict.
+
+**`65b6a0a` is mine.** I committed a dead wave's plate-collision rewrite and
+verified it with `plan_interior_test`, `piece_interior_test` and the two
+deck_fitout units — never the test named after the thing being changed. I wrote in
+that same message that the work needed re-spawning to finish, which is precisely
+when a guard test matters most.
+
+Two compounding process failures, both mine:
+
+1. **I did not run the test named after the subsystem I was committing.** The rule
+   that would have caught it is not subtle: when committing someone else's
+   unfinished work, run the unit that guards the thing they were changing.
+2. **A broad `git add -A` swept the fix into `bc61fac`**, a commit about the deck
+   fitout, so the repair is recorded under an unrelated heading and the commit that
+   caused the outage never mentions it. This is the same hazard a wave flagged
+   early in this session when its in-progress files were swept into someone else's
+   commit. I then did it myself.
+
+It runs now at **3/97**, and all three are honest cost bounds the file already
+carried, blown by the finer dice — 999 boxes against 400, 115 panel boxes against
+60, 56 casing boxes against 12-per-opening. **Not widened.** Against the old grid
+they pass and the two proud checks fail instead (0.1443 and 0.1180 against 0.05),
+which states the whole trade as two red lines whichever way it is taken.
+
+**A check inside it was green on the phantom.** `_check_slope_is_followed` asserted
+the literal point (5.0, 4.82, 18.0) was INSIDE the wheelhouse roof. The roof's
+drawn top at z=18 is 4.7858 — that point stands 0.0342 m ABOVE it. Old baker:
+solid, from the phantom. New baker: open air. It was passing on collision that
+should never have existed, and it would have punished anyone tightening the
+collider. Restated from the roof's own geometry.
+
+### The raked-collider verdict: algorithm free, constant costs, and one thing dicing cannot fix
+
+```
+                   grid    0.15    0.10    0.08    0.05
+demo_workboat       359     357     436     500     675     boxes
+trawler_bulwark     760     612     876    1137    2118
+container_feeder   2448    2467    2608    2735    3086
+plate_deckhouse     384     399     543     637     999
+worst proud       0.150   0.126   0.086   0.075   0.050   m
+```
+
+The **28 m trawler is the worst case, not the 150 m hull** — containers are plumb
+boxes that dice to one box each; a small working boat is nearly all raked plate.
+Body-build cost: feeder 2109 → 3673 ms, trawler 204 → 1849 ms.
+
+**Recommendation on record and deliberately NOT taken:** ship the algorithm (free —
+612 boxes against the old grid's 760 at the same constant), set the slop at 0.08
+(the knee). Countervailing: 0.05 is the only value under the plate's own 0.045 m
+half-thickness, and **nobody has walked a raked wall at any value.** Owner's call.
+
+**The rake-8 doorway drift did not move at all** — 0.0140 m of margin before and
+after, at 2.8× the boxes. The hang is half the 0.19 m casing thickness × sin(tilt)
+along the panel normal, and `_plate_panel_colliders` uses ONE `half` vector per
+cell by construction, so dicing cannot touch it. Confirmed by mutation
+(`PLATE_FRAME_PROUD` 0.05 → 0.0 moves it 0.0460 → 0.0260). No shipped fixture uses
+rake 8, which is why `piece_interior_test` has never reported this number.
+
+**`plan_interior_test`'s last failure is the MAST, not collision.** 17 of its 18
+stuck stations are `spar #89 mast` on the centreline forward of the deckhouse;
+exactly 1 is the raked plate. Confirmed independently by two probes. So my earlier
+correction — that the raked collider explained the stuck marches — was 1/18 right.
+
+### BIGGER THAN THE SLOP: adding collider boxes is O(n²)
+
+Through the scene tree AND through `PhysicsServer3D.body_add_shape`:
+500/2000/4000/8000 boxes cost 79/1432/7187/33774 ms. The container feeder cost
+2.1 s to build **before** any of this work. Pre-existing spawn-time defect that the
+dice makes worse but did not cause, and worth more than any slop value.
+
 ### Settled since the last baseline
 
 - **Doors open.** `piece_interior_test` 124 checks. Root cause was that an opening's
