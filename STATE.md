@@ -1364,6 +1364,67 @@ reports honestly (now 2/43, on `TestReport` instead of a private accumulator tha
 de-duplicated labels and printed prose). And it needs **two** owner calls on **two
 different constants**, not "an owner call on world constants".
 
+### BUILDINGS COLLIDE — closed 2026-08-15. **15/37 red → 5/41 red, and all five
+### remaining are the open cell decision, proved by mutation.**
+
+Per-brick collision: **579 shapes for 516 bricks**, where there was 1. Measured
+through `PhysicsServer3D` on bodies in the tree, not from dictionaries:
+
+| | before | after |
+|---|---|---|
+| standing / kneeling capsule stopped by the wall | 206/206 walked through | **0/206** |
+| dropped inside, lands on a floor | 0 of 25, all fell | **25 of 25** |
+| collision floor vs drawn floor | 3.000 vs 0.250 m | **0.000 vs 0.250** |
+| collision top vs drawn top | 10.000 vs 6.750 | **6.750 vs 6.750** |
+| doorway carries an openable door | 0 for 2 | **2 for 2**, shut door stops at 0.672 m |
+| deleting every brick removes collision | 1 → 1 | **579 → 0** |
+
+**The vessel mechanism transferred for free, and that is the finding.** No
+`begin_*` call was added: `BuildingCache.instance()` already assembles into a
+**detached** root, so every `body_add_shape` happens out of a space. The one-input
+control on a `StaticBody3D` reproduces Jolt's compound rebuild exactly —
+128/577/2048 boxes cost 0.54/2.45/8.65 ms detached against 6.34/109.25/1443.63 ms
+in a space (**×11.7 / ×44.5 / ×167.0**). A building is stamped whole and handed
+over; a vessel is refitted while a player stands on it, which is why `BoatBody`
+needs the staging window and this does not. **Written into the header as a rule:
+do not put the returned root in a tree before the shapes are on it — that is the
+44×.**
+
+**The gap was NOT closed, deliberately.** Colliders are the size of the bricks, so
+the 2.000 factor is now visible *in the collision*: 5560 of 7992 wall samples open
+(69.6%, down from 100%), the longest run a horizontal slot at y = 0.90 that falls
+between courses; 21 of 25 floor stations have no tile directly underfoot; the
+doorway's physics head is one full cell above the drawn lintel. A capsule is
+stopped at every station; a point, a ray and daylight are not. **Making the boxes
+bigger would have turned four of the five red checks green by hiding an owner
+decision.**
+
+**And that decision now has a measured consequence.** Mutating `BrickCatalog.size_m`
+to the grid it stands on — resolution **(a)** of owner decision #1 — and changing
+nothing else takes `building_interior_test` to **PASS (41)**: wall scan 0 of 7704
+open, floor 25/25, every doorway check green. Verified independently by the
+orchestrator in an isolated copy. **Owner decision #1 is no longer only a look
+question; it is the last thing between the buildings and a green subsystem.**
+
+**Three mutations passed first time and all three are recorded as findings**, one of
+which condemns a check that had been trusted: breaking collider harvesting entirely
+left *"collides as more than one volume"* GREEN at `2 shapes for 516 bricks` — the
+two being door slabs hanging in the air on a building with no wall, floor or roof
+collision at all. **A count cannot tell a building from two doors**, and that was
+the very check written to catch "one box for 516 bricks". It is kept, named as
+blind in the file, and backed by a new parity check censusing both sides through
+`PhysicsServer3D` (reddens 2 of 579 under that mutation).
+
+**Cost:** stamp 7.57 → 14.01 ms, tree entry 2.46 → 5.30, +19% at 20 buildings — but
+**4 distinct shape RIDs across 11580 shapes**. The port-scale curve is quadratic in
+building count *and was already quadratic with collision off at 0 shapes, before and
+after alike* — pre-existing, on the scene-graph side, unattributed. `PortStructureLod`
+stamping lazily is what has been hiding it.
+
+---
+
+*(Historical — the defect as it stood before the fix:)*
+
 ### BUILDINGS DO NOT COLLIDE — measured through `PhysicsServer3D`, not read from code
 
 `tests/building_interior_test.gd` (lane B, 37 checks, 15 red). The recorded guess

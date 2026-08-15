@@ -177,6 +177,7 @@ func _ready() -> void:
 			str((census["union"] as AABB).position), str((census["union"] as AABB).size)])
 
 	await _check_bricks_reach_physics(layout, int(census["shapes"]))
+	await _check_stamp_carries_the_fitouts_collision(layout, int(census["shapes"]))
 	_check_collision_is_where_the_building_is(census)
 
 	if not _t.check("the stamp draws geometry to measure the shell against (%d meshes)"
@@ -269,10 +270,62 @@ func _check_bricks_reach_physics(layout: BuildingLayout, full_shapes: int) -> vo
 	## And the stronger form of the same property, stated so a single box cannot
 	## satisfy it: a building assembled from parts collides as parts. One shape
 	## for 516 bricks is one shape for a doorway too.
+	##
+	## ⚠ THIS CHECK IS BLIND ON ITS OWN AND THE ONE BELOW IT IS WHY IT STAYS.
+	## Found by mutation, 2026-08-15 (REALITY.md §8): stub `BuildingCache`'s
+	## collider harvest out entirely — no wall, no floor, no roof anywhere in
+	## the physics world — and BOTH claims above still PASS, reading
+	## `2 -> 0` and `2 shapes for 516 bricks`. The two shapes are the
+	## `DoorLeafBody` slabs `BrickDoor` builds per instance, and they are enough
+	## to satisfy "more than one" and "more than the empty control". A count of
+	## shapes cannot tell a building from two doors hanging in the air. What
+	## catches that is `_check_stamp_carries_the_fitouts_collision`.
 	_t.check(
 		"the stamped building collides as more than one volume (%d shapes for %d bricks)"
 		% [full_shapes, layout.iter_primary_cells().size()],
 		full_shapes > 1,
+	)
+
+
+## THE PROPERTY THE TWO COUNTS ABOVE WERE GROPING AT, and the only one of the
+## three a mutation could not walk past: whatever the fit-out puts in the physics
+## world for this blueprint, the CACHE's stamp of it puts there too.
+##
+## This is the collision twin of `building_cache_visual_test`'s claim, which
+## holds the same cache to the same producer per `VisualInstance3D` class — and
+## it is stated for the same reason. `BuildingCache` exists to be a cheaper
+## `BuildingFitout`; the one thing it may not be is a DIFFERENT one. The single
+## footprint box this file was written against was 1 shape where the fit-out
+## draws 577.
+##
+## BOTH SIDES GO THROUGH `PhysicsServer3D` ON A BODY IN THE TREE, not through
+## the fit-out's `CollisionShape3D` children — a node with a shape assigned and
+## no owner is not collision, and counting nodes would report one (REALITY.md
+## §3). The fit-out is therefore added to the tree, which is also the only way
+## its `BrickDoor` children build their leaf bodies, so the two censuses are
+## taken of the same kind of thing.
+##
+## WHAT IT CANNOT SEE, said rather than left to be discovered: a defect that
+## lands in `BuildingFitout` itself moves both sides together and this stays
+## green. That is the same limit `building_cache_visual_test` names, and it is
+## why the marches below go at the DRAWN geometry instead of at either producer.
+func _check_stamp_carries_the_fitouts_collision(layout: BuildingLayout, stamped: int) -> void:
+	var fitout := BuildingFitout.build(layout, true)
+	fitout.position = Vector3(0.0, 0.0, 400.0)
+	add_child(fitout)
+	await get_tree().physics_frame
+	await get_tree().physics_frame
+	var built := int((_census(fitout)["shapes"]) as int)
+	fitout.queue_free()
+	await get_tree().physics_frame
+	print("  [parity] PhysicsServer3D shapes: BuildingFitout %d, BuildingCache stamp %d"
+		% [built, stamped])
+	if not _t.check("the fit-out this cache stands in for emits collision at all (%d shapes)"
+			% built, built > 0):
+		return
+	_t.check(
+		"the stamp carries every collider the fit-out builds (%d of %d)" % [stamped, built],
+		stamped >= built,
 	)
 
 

@@ -154,14 +154,18 @@ static func _add_brick_door(
 			post,
 			float(yaw),
 		)
+	var leaf_size := Vector3(sz.x * 0.8, sz.y * 0.88, 0.12)
 	var door := BrickDoor.new()
 	door.name = "BrickDoor"
-	door.configure(
-		null,
-		Vector3.ZERO,
-		float(yaw),
-		Vector3(sz.x * 0.8, sz.y * 0.88, 0.12),
-	)
+	door.configure(null, Vector3.ZERO, float(yaw), leaf_size)
+	## ONE DERIVATION (REALITY.md §3b). `BuildingCache` cannot flatten a
+	## `BrickDoor` — it is behaviour, and its leaf swings — so it drops the
+	## prototype's door and builds a fresh one per stamped instance. These two
+	## metas are how it gets the same arguments this line just computed, instead
+	## of re-deriving `leaf_size` from `size_m` in a second file that would then
+	## drift from this one.
+	door.set_meta("brick_door_yaw_deg", float(yaw))
+	door.set_meta("brick_door_leaf_size", leaf_size)
 	visual.add_child(door)
 
 

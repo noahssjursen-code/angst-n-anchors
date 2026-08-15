@@ -1,11 +1,82 @@
 class_name BuildingCache
 extends RefCounted
 
-## Bakes voxel blueprint visuals once and stamps shared-mesh copies.
-## Collision is a single box per instance derived from the layout grid bounds.
+## Bakes a voxel blueprint ONCE and stamps shared-resource copies of it —
+## visuals, collision and doors.
+##
+## ── WHAT THIS CACHE USED TO COLLIDE AS, AND WHY IT IS GONE ──────────────────
+## Until 2026-08-15 the header of this file read *"Collision is a single box per
+## instance derived from the layout grid bounds"*, and that box was derived by a
+## second function (`_measure_footprint`) from the CELL BOUNDS, while the
+## drawing came cell by cell out of `BuildingFitout`. Two derivations of one
+## building, which is REALITY.md §3b, and they had drifted:
+##
+##     PhysicsServer3D held  1 shape for 516 bricks
+##     drawn        y 0.250 .. 6.750
+##     collision    y 3.000 .. 10.000      <- 2.750 m of air under the box
+##
+## `col.position = center + Vector3(0, shape.size.y * 0.5 - 0.5, 0)` added half
+## the height to a `center` that was already the midpoint. A 1.8 m capsule
+## walked through 206 of 206 wall stations and fell through the floor at 25 of
+## 25 interior stations: at head height the warehouse was a hologram, and what
+## was solid was a slab of air over the roofline.
+##
+## Correcting that offset alone was measured and rejected — it makes the
+## building one sealed monolith whose doorways admit nobody (12/37 in
+## `building_interior_test`, the doorway going red at 0.000 m clear). A building
+## is not a box; it is the bricks it draws.
+##
+## ── WHAT IT COLLIDES AS NOW: THE SAME DATA THE VISUAL IS BUILT FROM ─────────
+## `_bake_prototype` builds the fit-out ONCE **with collision on** and harvests
+## three prototypes out of that one tree:
+##
+##  - the flat visual list (`VisualFlatten`, unchanged);
+##  - every `CollisionShape3D` `BuildingFitout` emitted, as `{shape, transform}`
+##    with the `Shape3D` **resource shared** across every instance — 577 boxes
+##    for the warehouse, 4 distinct sizes, so the server holds 4 shape RIDs and
+##    not 577;
+##  - each doorway's visual subtree, kept UNFLATTENED, because `BrickDoor`
+##    finds its hinge and leaf by node path and a flattened tree has neither.
+##
+## There is no second derivation of the collision left in this file: the boxes
+## are the boxes `BuildingFitout._add_collider` drew the bricks with, so when the
+## open cell decision (STATE.md #1) lands, collision follows the drawing for
+## free.
+##
+## ⚠ THE WALL IS STILL HALF DAYLIGHT AND THAT IS NOT THIS FILE'S TO CLOSE.
+## `BuildingGrid.CELL_M` is 1.0 and `BrickCatalog.size_m("block")` draws 0.500 m
+## — factor exactly 2.000 — so a per-brick collision shell has a 0.50 m gap at
+## every join, and `building_interior_test`'s point scan measures it. A capsule
+## is stopped (it does not fit a 0.50 m slot) and a bullet, a camera and daylight
+## are not. Making the colliders bigger than the bricks would hide an open owner
+## decision behind a green check; they are the size of the bricks.
+##
+## ── COST, AND WHY THE VESSEL FIX APPLIES HERE FOR FREE ──────────────────────
+## `BoatBody.begin_walk_collider_batch/staging` exist because **Jolt rebuilds a
+## body's whole compound shape on every `body_add_shape`, but only while the
+## body is in a space** (STATE.md, and REALITY.md §4e). Measured again here, on
+## a `StaticBody3D`, varying that one input and nothing else
+## (`tests/_building_collision_cost_probe.gd`):
+##
+##      boxes    detached    in a space
+##        128     0.54 ms       6.34 ms       x11.7
+##        577     2.45 ms     109.25 ms       x44.5   <- this warehouse
+##       2048     8.65 ms    1443.63 ms      x167.0
+##
+## Detached is linear in the box count (0.54 -> 8.65 over 16x); in a space it is
+## quadratic. 577 is not a number this file chose — it is what `BuildingFitout`
+## emits for `warehouse.json`, and the cache stamps exactly that.
+##
+## `instance()` needs no staging call to get that, because it assembles into a
+## detached root and the CALLER adds it to the tree: every `body_add_shape` here
+## happens out of any space. That is a property of this function's shape, so it
+## is stated as a rule rather than left to be re-derived — **do not add the
+## returned root, or the `Collision` body, to a tree before the shapes are on
+## it.** Doing so is the whole 169x.
 
 static var _visual_prototypes: Dictionary = {}  ## blueprint_id -> Node3D
-static var _footprint_cache: Dictionary = {}  ## blueprint_id -> {size, center}
+static var _collider_prototypes: Dictionary = {}  ## blueprint_id -> Array[Dictionary]
+static var _door_prototypes: Dictionary = {}  ## blueprint_id -> Array[Dictionary]
 
 
 static func clear() -> void:
@@ -13,8 +84,14 @@ static func clear() -> void:
 		var proto: Node3D = _visual_prototypes[key] as Node3D
 		if proto != null and is_instance_valid(proto):
 			proto.free()
+	for key in _door_prototypes.keys():
+		for entry_variant in (_door_prototypes[key] as Array):
+			var node: Node3D = (entry_variant as Dictionary).get("node") as Node3D
+			if node != null and is_instance_valid(node):
+				node.free()
 	_visual_prototypes.clear()
-	_footprint_cache.clear()
+	_collider_prototypes.clear()
+	_door_prototypes.clear()
 
 
 static func instance(
@@ -27,13 +104,16 @@ static func instance(
 	if blueprint_id.is_empty():
 		return BuildingFitout.build(layout, collision_enabled)
 
+	_ensure_prototype(blueprint_id, layout)
+
 	var root := Node3D.new()
 	root.name = BuildingFitout.ROOT_NAME
 	root.set_meta("building_blueprint_id", blueprint_id)
 
-	var visual := _stamp_visual(blueprint_id, layout)
+	var visual := VisualFlatten.stamp(_visual_prototypes[blueprint_id] as Node3D)
 	visual.name = "Visual"
 	root.add_child(visual)
+	_stamp_doors(visual, blueprint_id)
 
 	var lighting := BuildingLighting.new()
 	lighting.name = "BuildingLighting"
@@ -43,16 +123,9 @@ static func instance(
 		var body := StaticBody3D.new()
 		body.name = "Collision"
 		root.add_child(body)
-		_add_footprint_collision(body, blueprint_id, layout)
+		_stamp_collision(body, blueprint_id)
 
 	return root
-
-
-static func _stamp_visual(blueprint_id: String, layout: BuildingLayout) -> Node3D:
-	if not _visual_prototypes.has(blueprint_id):
-		_bake_prototype(blueprint_id, layout)
-	var proto: Node3D = _visual_prototypes[blueprint_id] as Node3D
-	return VisualFlatten.stamp(proto)
 
 
 ## Flattens the fit-out tree into a list of childless `VisualInstance3D` at
@@ -90,53 +163,140 @@ static func _stamp_visual(blueprint_id: String, layout: BuildingLayout) -> Node3
 ##    `VisualFlatten`'s `Node3D` filter, mutation-verified in
 ##    `visual_stamp_cache_test` ("the behaviour controller is not carried into
 ##    the prototype", red under a loosened filter).
-##  - `BrickDoor` — behaviour with no geometry of its own; its leaf and jamb
-##    meshes are the tree it hangs beside, and they are kept. A stamped building
-##    therefore has door geometry and no openable door. That loss is asserted
-##    (red) by `building_interior_test`'s "every doorway carries a door a player
-##    can open", and closing it means per-instance construction, not a filter.
+##  - `BrickDoor` — behaviour, and no longer a LOSS. The prototype's door node
+##    is freed here, and `_stamp_doors` builds a fresh, configured one per
+##    instance over a duplicated (not flattened) door subtree. See
+##    `_harvest_doors`.
 ##  - `Marker3D` anchors (`HelmEye`, `Emitter`) — attachment points for the ship
 ##    lighting path, which land buildings do not run.
+static func _ensure_prototype(blueprint_id: String, layout: BuildingLayout) -> void:
+	if _visual_prototypes.has(blueprint_id):
+		return
+	_bake_prototype(blueprint_id, layout)
+
+
 static func _bake_prototype(blueprint_id: String, layout: BuildingLayout) -> void:
-	var baked := BuildingFitout.build(layout, false)
+	## COLLISION ON, always, whatever the caller asked for: this is where the
+	## colliders are harvested from, and a prototype baked without them would
+	## have to be re-baked the first time anyone asked for a solid building.
+	var baked := BuildingFitout.build(layout, true)
+	## Doors come out FIRST — their subtrees must not reach `VisualFlatten`, or
+	## the leaf would be drawn twice: once flat and once under the openable copy.
+	_door_prototypes[blueprint_id] = _harvest_doors(baked)
+	_collider_prototypes[blueprint_id] = _harvest_colliders(baked)
 	var root := Node3D.new()
 	root.name = "BuildingPrototype"
 	VisualFlatten.flatten(baked, root)
 	baked.free()
 	_visual_prototypes[blueprint_id] = root
-	_footprint_cache[blueprint_id] = _measure_footprint(layout)
 
 
-static func _measure_footprint(layout: BuildingLayout) -> Dictionary:
-	var grid := layout.grid()
-	var min_cell := Vector3i(999999, 999999, 999999)
-	var max_cell := Vector3i(-999999, -999999, -999999)
-	var found := false
-	for item in layout.iter_primary_cells():
-		if BuildingLayout.entry_is_surface_only(item):
+## Every `CollisionShape3D` the fit-out put on its `Collision` body, as
+## `{shape, transform, name}`. The `Shape3D` RESOURCE is kept, not copied: two
+## bricks of the same size share one `BoxShape3D`, so `PhysicsServer3D` holds a
+## handful of shape RIDs for hundreds of boxes, and every stamped instance
+## shares those same RIDs again. Measured on the warehouse: 577 boxes, **4**
+## distinct sizes.
+static func _harvest_colliders(baked: Node3D) -> Array:
+	var out: Array = []
+	var body := baked.get_node_or_null("Collision") as StaticBody3D
+	if body == null:
+		return out
+	## Deduplicates by value so identical boxes converge on one resource. The
+	## fit-out makes a fresh `BoxShape3D` per brick; the cache does not have to
+	## keep 577 of them alive.
+	var by_size: Dictionary = {}
+	for child in body.get_children():
+		var col := child as CollisionShape3D
+		if col == null or col.shape == null:
 			continue
-		found = true
-		var cell := item["cell"] as Vector3i
-		min_cell = Vector3i(mini(min_cell.x, cell.x), mini(min_cell.y, cell.y), mini(min_cell.z, cell.z))
-		max_cell = Vector3i(maxi(max_cell.x, cell.x), maxi(max_cell.y, cell.y), maxi(max_cell.z, cell.z))
-	if not found:
-		return {"size": Vector3(8.0, 6.0, 8.0), "center": Vector3.ZERO}
-	var min_p := grid.cell_center_local(min_cell)
-	var max_p := grid.cell_center_local(max_cell)
-	var size := max_p - min_p + Vector3.ONE
-	return {"size": size, "center": (min_p + max_p) * 0.5}
+		var shape := col.shape
+		if shape is BoxShape3D:
+			var key := str((shape as BoxShape3D).size)
+			if by_size.has(key):
+				shape = by_size[key] as Shape3D
+			else:
+				by_size[key] = shape
+		out.append({"shape": shape, "transform": col.transform, "name": col.name})
+	return out
 
 
-static func _add_footprint_collision(body: StaticBody3D, blueprint_id: String, layout: BuildingLayout) -> void:
-	if not _footprint_cache.has(blueprint_id):
-		_footprint_cache[blueprint_id] = _measure_footprint(layout)
-	var fp: Dictionary = _footprint_cache[blueprint_id]
-	var size: Vector3 = fp.get("size", Vector3(8.0, 6.0, 8.0))
-	var center: Vector3 = fp.get("center", Vector3.ZERO)
-	var col := CollisionShape3D.new()
-	col.name = "Footprint"
-	var shape := BoxShape3D.new()
-	shape.size = Vector3(maxf(size.x, 1.0), maxf(size.y, 2.5), maxf(size.z, 1.0))
-	col.shape = shape
-	col.position = center + Vector3(0.0, shape.size.y * 0.5 - 0.5, 0.0)
-	body.add_child(col)
+## ⚠ NOT IN A TREE WHEN THIS RUNS, AND THAT IS THE PERFORMANCE FIX.
+## See the header: shapes added to a body that is in no physics space cost
+## nothing to add; in a space each add rebuilds the whole compound.
+static func _stamp_collision(body: StaticBody3D, blueprint_id: String) -> void:
+	for entry_variant in (_collider_prototypes.get(blueprint_id, []) as Array):
+		var entry := entry_variant as Dictionary
+		var col := CollisionShape3D.new()
+		col.name = str(entry["name"])
+		col.shape = entry["shape"] as Shape3D
+		col.transform = entry["transform"] as Transform3D
+		body.add_child(col)
+
+
+## Lifts each doorway's visual subtree OUT of the baked tree and returns it as a
+## prototype, with the arguments `BuildingFitout` configured its `BrickDoor`
+## with.
+##
+## WHY A DOORWAY CANNOT BE FLATTENED. `BrickDoor._ready` resolves
+## `parent/DoorHinge/DoorLeaf` by node path and hangs its interact areas and its
+## closed-leaf collider off them, then swings the hinge. `VisualFlatten` returns
+## childless visuals at accumulated transforms — correct for a wall, and it
+## destroys exactly the structure a door is. So the door brick keeps its shape
+## and is `duplicate()`d per instance, which still SHARES its `Mesh` and
+## `Material` resources (measured in `visual_flatten.gd`'s header), so the cache
+## is still a cache. It costs 72 of the warehouse's 717 meshes being copied as
+## nodes rather than stamped flat, for two doors that open.
+##
+## The prototype's own `BrickDoor` is freed rather than duplicated: it never
+## entered a tree, so it never ran `_ready`, and its configuration lives in
+## `var`s that `duplicate()` would not carry anyway. A per-instance door is a
+## per-instance node.
+static func _harvest_doors(baked: Node3D) -> Array:
+	var doors: Array = []
+	_find_doors(baked, doors)
+	var out: Array = []
+	for door_variant in doors:
+		var door := door_variant as BrickDoor
+		var brick := door.get_parent() as Node3D
+		if brick == null:
+			continue
+		var xform := brick.transform
+		var walk := brick.get_parent() as Node3D
+		while walk != null and walk != baked:
+			xform = walk.transform * xform
+			walk = walk.get_parent() as Node3D
+		out.append({
+			"node": brick,
+			"transform": xform,
+			"yaw_deg": float(door.get_meta("brick_door_yaw_deg", 0.0)),
+			"leaf_size": door.get_meta("brick_door_leaf_size", Vector3(1.8, 2.8, 0.1)) as Vector3,
+		})
+		brick.remove_child(door)
+		door.free()
+		var brick_parent := brick.get_parent()
+		if brick_parent != null:
+			brick_parent.remove_child(brick)
+	return out
+
+
+static func _stamp_doors(visual: Node3D, blueprint_id: String) -> void:
+	for entry_variant in (_door_prototypes.get(blueprint_id, []) as Array):
+		var entry := entry_variant as Dictionary
+		var proto := entry["node"] as Node3D
+		if proto == null or not is_instance_valid(proto):
+			continue
+		var brick := proto.duplicate() as Node3D
+		brick.transform = entry["transform"] as Transform3D
+		visual.add_child(brick)
+		var door := BrickDoor.new()
+		door.name = "BrickDoor"
+		door.configure(null, Vector3.ZERO, float(entry["yaw_deg"]), entry["leaf_size"] as Vector3)
+		brick.add_child(door)
+
+
+static func _find_doors(node: Node, out: Array) -> void:
+	if node is BrickDoor:
+		out.append(node)
+	for child in node.get_children():
+		_find_doors(child, out)
