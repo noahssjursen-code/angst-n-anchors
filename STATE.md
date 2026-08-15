@@ -1192,31 +1192,124 @@ file is not red by construction. It belongs beside decision #1 below.
                                                                 factor  2.000
    ```
    `a70bdbc` halved `WorldUnits.DECK_CELL_M` and did not touch
-   `BuildingGrid.CELL_M`. **No blueprint data produces a solid wall.** Every
-   symptom falls out of the one factor: 0.500 m of daylight per join (exactly one
-   brick), roof slabs 0.50 m above the wall tops, `roof_flat_4x4` drawn 2.0 m on a
-   4.0 m pitch, a `block_door_double` that draws **1.5 m for a 1.8 m player**, and
-   a ground course floating 0.25 m above y=0 — the building does not touch the
-   ground. Measured on the first building the game has ever had; invisible for six
-   days because `resources/data/buildings/` was empty.
+   `BuildingGrid.CELL_M`. **No blueprint data produces a solid wall.** Symptoms
+   that do fall out of the one factor: 0.500 m of daylight per join (exactly one
+   brick), `roof_flat_4x4` drawn 2.0 m on a 4.0 m pitch, a `block_door_double`
+   that draws **1.5 m for a 1.8 m player**, and a ground course floating 0.25 m
+   above y=0 — the building does not touch the ground. Measured on the first
+   building the game has ever had; invisible for six days because
+   `resources/data/buildings/` was empty.
+
+   **"Every symptom falls out of the one factor" was wrong, and the roof is the
+   counter-example** (measured 2026-08-15 while rendering the variants; the
+   over-generalisation is REALITY §4d, and it survived here because one cause
+   explaining five symptoms is a satisfying sentence). Daylight between wall top
+   and roof underside: **0.820 m today, 0.820 m under (a), 0.320 m under (b)** —
+   *unchanged* by the fix that closes every other symptom. The cause is
+   elsewhere: `brick_catalog.gd:731-735` draws `roof_flat*` as a 0.18 m plate
+   **pinned to the TOP of its cell**, and `warehouse.json` puts the roof course at
+   y=6 with the walls ending at y=5. The roof floats by construction. The quoted
+   "0.50 m" was wrong at every variant as well.
+
+   **Rendered 2026-08-15** — `screenshots/decisions/q1_brick_cell__*`, orthographic
+   elevation and quarter, 1.8 m figure in frame, one camera rig across all three
+   (the "today" pass was re-run last and came back md5-identical, so the frames
+   are comparable by construction rather than by assertion). Looked at, by the
+   wave and by the orchestrator:
+
+   - **today** is not a building. It is a regular lattice of separate grey cubes
+     floating in the sky, one cube then one cube of daylight, the bottom course
+     hanging clear of a ground band you can see straight under. The roof slabs
+     are detached dark bars hovering over the tops of the cube columns. **The
+     1.8 m figure stands taller than the double cargo door.**
+   - **(a)** is a warehouse: continuous wall 20.07 × 7.00 × 12.03 m on the
+     ground, window band, 3.00 m door the figure walks through.
+   - **(b)** is a solid shed 10.04 × 3.50 × 6.02 m whose door is **1.50 m —
+     shorter than the player.**
 
    Two resolutions, and there is no third that leaves both constants alone:
    **(a)** give `BrickCatalog.size_m` the cell size of the grid it is drawn on
    (buildings 1.0, vessels 0.5) — buildings become solid, **no vessel moves**, and
    `size_m` gains a parameter nearly every caller must pass.
    **(b)** set `BuildingGrid.CELL_M = 0.5` — buildings become solid at **half**
-   their authored size (this warehouse becomes 10 x 6 x 3.25 m on a 22 m pad) and
-   every existing blueprint needs re-authoring.
+   their authored size (this warehouse measures 10.04 wide × 3.50 tall × 6.02
+   deep; the "10 x 6 x 3.25 m" predicted here before it was rendered was wrong on
+   two axes) and every existing blueprint needs re-authoring.
+
+   **What the renders settle, and what they do not.** They settle *today*
+   decisively: it is a pegboard, not a building, and no taste is involved. They do
+   **not** settle (a) against (b), and the frames must not be read as though they
+   do — **(b) was rendered with today's blueprint, and re-authoring the blueprint
+   is precisely (b)'s stated cost.** So the shed is (b)-minus-the-work, not (b).
+   A fair (b) frame needs `warehouse.json` re-authored at double the cell counts;
+   until that exists, "the door is shorter than the player" is a fact about an
+   un-migrated blueprint and not an argument against the option. The wave has
+   been sent back for that frame.
 2. **`BuildingLayout.place_footprint` ignores its `_building_grid`** — 4/117 in
    `building_blueprint_test`. `BrickLayout`'s equivalent argument IS load-bearing
    and does reject out-of-bounds. Two sibling classes, contradictory, one wrong.
 3. **`land_field`: does OPEN_WATER promise a distance?** `distance_to_land(-15000, 14500) > 5000` measures **3779.9 m**. Not a fluke: minimum SDF inside OPEN_WATER is **1430.7 m**, and **5295 of 16692 samples (31.7%) sit closer than 5 km to land**. `norway_coast.json` has `open_water_x_m = -13500` against a westernmost land sample at **x = -12125** — 1.375 km of margin behind a 5 km claim. (A) push it to ≤ −17125 and the open-ocean strip shrinks 6.5 → 2.9 km with ~32% of open water reclassifying; (B) accept that OPEN_WATER is a position label, noting the two neighbouring checks at that same point (`wave_shelter > 0.999`, `coastal_exposure > 0.92`) both PASS. **This exact bound was relaxed once as a cheat and deliberately restored** — not touched.
 4. **`land_field`: `COASTAL_DISTANCE_M` vs the band sampled.** `coastal_exposure < 0.80` at 1383.4 m measures **0.8234**; band p100 is **0.8621**, and `smoothstep(80, 1800, 1400) = 0.8629` — the claim is **arithmetically impossible past ~1306 m**. Accept the ceiling, or raise `COASTAL_DISTANCE_M` to ≥ ~1932 m. Untouched.
-5. **Apron prop density.** Post-fix the fixture yields 2 against a `>= 3` check; 19 of 60 ports yield fewer than 3. Three piers occupy 160 m of 301.54 m, leaving two 24 m gaps, and `APRON_DECOR_STEP_M` is 20 m. How densely a working apron should be dressed is a LOOK question — REALITY §2 says no metric decides it. Not tuned.
+5. **Apron props — NOT a density question. The props are never drawn at all.**
+   Filed here for days as "how densely should an apron be dressed, a LOOK question
+   no metric decides". Rendering it 2026-08-15 found the frame empty and then
+   found why: **`PortLayoutGraphVisualizer._stamp_apron_decor()` has no callers
+   anywhere in the repo** (verified independently — one definition,
+   `port_layout_graph_visualizer.gd:1166`, zero call sites outside probes).
+   `_rebuild()` does not call it and carries the comment *"Apron props deferred —
+   layout first via asphalt/apron gizmos, then decorate"*. The decorate step never
+   landed. `apron_decor` is produced by `PortLandPlan`, consumed by that dead
+   function, by `port_trade_profile_test`, and by nothing else.
+
+   **This is the piece-kit defect again** (REALITY §3): a subsystem measured,
+   tested and argued about at length that the running game never reaches. The red
+   `port_trade_profile_test` check "apron should sprinkle service props" is
+   asserting a density on data that reaches no frame — it is 1/130 against
+   geometry no player can see. `screenshots/decisions/q2_apron__asshipped-nothing-drawn__*`
+   is the strip test in image form; every other q2 frame exists only because the
+   probe called the dead function by hand.
+
+   Also measured, and it kills the tuning premise independently:
+   **`APRON_DECOR_STEP_M` is not the governing constant.** 20 m → 5 m is a 4×
+   change and moves the count 2 → 4 → 4 → 7, and no prop ever lands past
+   x ≈ 191 m of a 301.5 m face at any value. The real bound is elsewhere — the
+   blocked-arc skip, `_near_quay_station`, or `APRON_DECOR_MIN_SPACING_M`. Tuning
+   the step to satisfy `>= 3` would have been tuning the wrong knob to green a
+   check on invisible data.
+
+   **The owner question is no longer "how many" but "at all?"** — should aprons be
+   dressed with props, yes or no? Nothing tuned, nothing wired.
 6. `budget_caps.crane` is 0 on every registration, so any crane fails compliance.
 7. No lifesaving requirement of any kind exists.
 8. No hull under 28 m, though two of three reference vessels are ~22 m and the
    third ~15 m.
+9. **Raked-plate `PLATE_COLLIDER_SLOP` — rendered 2026-08-15, still open.**
+   `screenshots/decisions/q3_plate_slop__*`, on item 100 of
+   `probe_plate_deckhouse.json` (shipped data, raked front overhanging 0.45 m,
+   tapered in plan). Pale plate is `StructureBaker.bake`; red boxes are exactly
+   what `collect_colliders` emits, drawn where they sit.
+
+   | slop | boxes | worst phantom |
+   |---|---|---|
+   | 0.05 (today) | 82 | 0.0874 m |
+   | 0.08 (the knee) | 47 | 0.1060 m |
+   | 0.35 (bracket) | 18 | 0.2350 m |
+
+   Looked at: at 0.05 the colliders are a fine-toothed red staircase hugging the
+   diagonal; at 0.08 about half as many steps, each reaching visibly further into
+   the air, but still following the rake; at 0.35 it stops being a staircase and
+   becomes **a fat vertical slab the diagonal plate cuts through**, ~0.24 m of
+   solid nothing standing in front of the wall. Window openings stay uncovered at
+   all three. The owner question: is ~2 cm more air in front of a raked wall worth
+   43% fewer boxes — 0.05 or 0.08?
+
+   **Two limits on that evidence, both stated by the wave rather than found later.**
+   The frames stop at the *producer* — the boxes `collect_colliders` returns — and
+   do not go `VesselSpawn` → `apply_plan` → `PhysicsServer3D`, which is the exact
+   layer the last plate bug lived in (REALITY §3). And **the cost side is
+   unmeasured**: one plate's box count and nothing else — no whole-fixture totals,
+   no timings, no re-run of `_plate_phantom_probe` at 0.08. The "knee" is still
+   somebody else's number, unopened.
 
 ### CORRECTION to commit e9de76a, and to my own briefing of the catalogue wave
 
