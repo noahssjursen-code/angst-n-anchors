@@ -27,14 +27,33 @@ const WIN_FRAME := Color(0.72, 0.74, 0.78)
 ## `PlanOutfit` or to `VesselCompliance` by shape. So the parts vocabulary
 ## landing did NOT unblock the brick vocabulary — it built the other half.
 ##
-## The eventual single vocabulary is M3's: `resources/data/parts/catalog.json`
-## carries the same compliance identities (`helm`, `mooring`, `fishing`,
-## `bulk_hold`, `nav_white`, `passenger_capacity`) and `PlanOutfit` already
-## measures them. What it cannot yet express is `general_vessel`'s SIDELIGHT
-## rules — `brick_count light_nav_port` / `light_nav_stbd` and the two
-## `brick_side` rules address brick IDS, and the part catalog has no
-## port/starboard lantern at all. Until it does, a plan-drawn ship cannot pass
-## `general_vessel` and the brick path is the only certifiable one.
+## THE SINGLE VOCABULARY IS TAGS, and as of 2026-08-15 the registration
+## catalogue speaks nothing else. `resources/data/parts/catalog.json` carries the
+## same compliance identities this file does — `helm`, `mooring`, `fishing`,
+## `bulk_hold`, `nav_white`, `nav_port`, `nav_stbd`, `passenger_capacity` — and
+## `PlanOutfit` measures them off a plan exactly as `VesselCompliance._measure`
+## measures them off a layout.
+##
+## The paragraph that stood here recorded the defect this replaced, and it is
+## worth keeping the shape of it: `general_vessel`'s two sidelight rules were
+## `brick_count light_nav_port` / `light_nav_stbd` and its two side rules were
+## `brick_side` on the same ids, so they addressed a brick ID. No part carried
+## those ids, so a plan-built boat failed **5 of general_vessel's 8 rules no
+## matter what was fitted** — including `white_light_height`, whose evaluator
+## hardcoded four brick ids of its own. Measured through `VesselSpawn` ->
+## `apply_plan`: 3 of 8 met. The fix was NOT to weaken the law: a plan vessel
+## must still carry a port sidelight to port, a starboard sidelight to starboard
+## and a white light above both. It was to give the two paths one address for the
+## same legal object — the `nav_port` / `nav_stbd` tags below, and the
+## `lantern_sidelight_port` / `lantern_sidelight_starboard` parts that carry them
+## on the plan side.
+##
+## Why a tag and not a shared id: `white_light` was already `tag_count nav_white`
+## and was already the ONE equipment rule a plan passed, so the addressing mode
+## predicted the failure exactly. And an id could never have held the law anyway
+## — two bricks here (`light_nav_white`, `light_mast_white`) are one legal white
+## light, which is why the old evaluator had to hardcode a LIST of ids. That list
+## was a tag written in GDScript.
 const BRICKS: Dictionary = {
 	"block": {
 		"display": "Block",
@@ -373,8 +392,10 @@ const BRICKS: Dictionary = {
 	"light_nav_port": {
 		"display": "Nav light (port)",
 		## Mounts on a block; yaw aims the lens (−Z) in 45° steps.
+		## `nav_port` is the LEGAL identity — see the `nav_white` pair below and
+		## the header. The registration catalogue addresses this tag, never this id.
 		"footprint": [1, 1, 1],
-		"tags": ["light", "nav", "attach", "ship_only"],
+		"tags": ["light", "nav", "nav_port", "attach", "ship_only"],
 		"light_type": 0,
 		"yaw_step": 45,
 		"mass_kg": 10.0,
@@ -383,7 +404,7 @@ const BRICKS: Dictionary = {
 	"light_nav_stbd": {
 		"display": "Nav light (stbd)",
 		"footprint": [1, 1, 1],
-		"tags": ["light", "nav", "attach", "ship_only"],
+		"tags": ["light", "nav", "nav_stbd", "attach", "ship_only"],
 		"light_type": 1,
 		"yaw_step": 45,
 		"mass_kg": 10.0,

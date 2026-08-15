@@ -40,6 +40,7 @@ var _t: TestReport
 func _ready() -> void:
 	_t = TestReport.new("vessel_registration_test")
 	_test_catalog_and_inheritance()
+	_test_every_rule_is_answerable_by_both_vocabularies()
 	_test_official_fishing_registration()
 	_test_fishing_berth_deployment_filter()
 	_test_official_starter_catalog()
@@ -261,6 +262,177 @@ func _test_catalog_and_inheritance() -> void:
 				== PackedStringArray(["fishing"]),
 		"fishing vessels deploy only at fishing berths",
 	)
+
+
+## STATE.md 2f, as a standing property rather than a count.
+##
+## A vessel a player owns arrives by one of TWO paths — bricks stacked in the
+## shipyard, or a `structure_plan_v1` document drawn in Structure Studio — and
+## both end at the same registration. So a rule that only ONE of them can
+## address is a rule that certifies one kind of boat and refuses the other
+## whatever is fitted to it. That is what `port_light` was: `brick_count
+## light_nav_port` names a brick id, no catalogue part carried it, and a plan
+## failed five of `general_vessel`'s eight rules no matter how it was outfitted.
+##
+## Nothing in the gate asked the question, which is why it sat. This asks it of
+## EVERY rule of EVERY registration, and the control below is the half that
+## matters: a made-up tag must be reported unanswerable, or this loop is only
+## saying that dictionaries have keys.
+func _test_every_rule_is_answerable_by_both_vocabularies() -> void:
+	var reg_ids := VesselRegistrationCatalog.ids()
+	_check(reg_ids.size() >= 5, "there are registrations to survey (%d)" % reg_ids.size())
+	var rules := 0
+	var one_sided := PackedStringArray()
+	var why: Dictionary = {}
+	for reg_id_raw in reg_ids:
+		var reg_id := str(reg_id_raw)
+		for raw in VesselRegistrationCatalog.resolved_registration(reg_id).get("rules", []) as Array:
+			if not (raw is Dictionary):
+				continue
+			rules += 1
+			var answer := _answerable(raw as Dictionary)
+			if not (bool(answer["brick"]) and bool(answer["plan"])):
+				var name := "%s/%s" % [reg_id, str((raw as Dictionary).get("id", ""))]
+				one_sided.append(name)
+				why[name] = str(answer["why"])
+	one_sided.sort()
+	_check(rules >= 51, "every resolved rule was surveyed (%d)" % rules)
+	## ONE rule is one-sided today and it is NAMED, not excused. `has_cabin` is
+	## false for every plan because the room primitive was deleted and nothing
+	## replaced its declaration of enclosure (`PlanOutfit.has_cabin`). Listing it
+	## explicitly is what makes this check able to catch the NEXT one: an equality
+	## against a known set reddens when a rule joins the list, where
+	## "at most one" would absorb it.
+	_check(
+		one_sided == PackedStringArray(["passenger_vessel/cabin"]),
+		"exactly one shipped rule is one-sided, and it is the known cabin gap: %s" % (
+			"none" if one_sided.is_empty() else " · ".join(one_sided)
+		)
+	)
+	_check(
+		str(why.get("passenger_vessel/cabin", "")).contains("has_cabin"),
+		"and it is one-sided for the recorded reason, not a new one",
+	)
+	_check(
+		not PlanOutfit.has_cabin(null),
+		"the reason is live in the code, not just in this comment",
+	)
+	## THE CONTROL. Three rules that really are one-sided or unanswerable, so the
+	## loop above is known to be capable of saying no.
+	_check(
+		not bool(_answerable({"kind": "tag_count", "tag": "tag_of_the_gods"})["plan"]),
+		"control: a tag nothing carries is unanswerable by a plan",
+	)
+	_check(
+		not bool(_answerable({"kind": "tag_count", "tag": "tag_of_the_gods"})["brick"]),
+		"control: and unanswerable by a brick layout",
+	)
+	_check(
+		not bool(_answerable({"kind": "brick_count", "brick_id": "light_nav_port"})["plan"]),
+		"control: the OLD sidelight rule is still one-sided if anyone writes it again",
+	)
+	_check(
+		bool(_answerable({"kind": "brick_count", "brick_id": "light_nav_port"})["brick"]),
+		"control: ...and the brick path still answers it, which is why it looked fine",
+	)
+
+
+## Can each build path produce equipment that ADDRESSES this rule at all? This
+## is not "does the rule pass" — it is "is there anything in this vocabulary the
+## rule could be talking about".
+##
+## A `max`-only ceiling (`equipment_rating_max`) and the measured kinds
+## (`cargo_cells`, `metric_range`, `capability`) are answered off geometry both
+## paths produce, so they are answerable by construction.
+func _answerable(rule: Dictionary) -> Dictionary:
+	var kind := str(rule.get("kind", ""))
+	match kind:
+		"brick_count", "brick_side":
+			var bid := str(rule.get("brick_id", ""))
+			return {
+				"brick": BrickCatalog.has(bid), "plan": PartCatalog.has(bid),
+				"why": "brick id \"%s\"" % bid,
+			}
+		"tag_count", "tag_side":
+			var tag := str(rule.get("tag", ""))
+			return {
+				"brick": _any_brick_tagged(tag), "plan": _any_part_tagged(tag),
+				"why": "tag \"%s\"" % tag,
+			}
+		"slot_count":
+			var slot := str(rule.get("slot", ""))
+			return {
+				"brick": _any_brick_in_slot(slot), "plan": _any_part_in_slot(slot),
+				"why": "outfit slot \"%s\"" % slot,
+			}
+		"capacity":
+			var field := str(rule.get("field", ""))
+			return {
+				"brick": _any_brick_with_capacity(field), "plan": _any_part_with_capacity(field),
+				"why": "capacity field \"%s\"" % field,
+			}
+		"white_above_sidelights":
+			## Three tags, and every one of them has to be carriable on both sides
+			## or the height can never be measured.
+			var brick_ok := true
+			var plan_ok := true
+			for tag in ["nav_white", "nav_port", "nav_stbd"]:
+				brick_ok = brick_ok and _any_brick_tagged(tag)
+				plan_ok = plan_ok and _any_part_tagged(tag)
+			return {"brick": brick_ok, "plan": plan_ok, "why": "nav_white/nav_port/nav_stbd"}
+		"capability":
+			var cap := str(rule.get("capability", ""))
+			## `has_cabin` is false for every plan by construction — the room
+			## primitive was deleted and nothing declares enclosure yet. It is a
+			## KNOWN one-sided rule and it is named here rather than excused: see
+			## `PlanOutfit.has_cabin`.
+			return {
+				"brick": true, "plan": cap != "has_cabin",
+				"why": "capability \"%s\" (PlanOutfit.has_cabin is hardcoded false)" % cap,
+			}
+	return {"brick": true, "plan": true, "why": "measured off geometry"}
+
+
+func _any_brick_tagged(tag: String) -> bool:
+	for brick_id in BrickCatalog.BRICKS.keys():
+		if BrickCatalog.has_tag(str(brick_id), tag):
+			return true
+	return false
+
+
+func _any_part_tagged(tag: String) -> bool:
+	for part_id in PartCatalog.ids():
+		if PartCatalog.has_tag(str(part_id), tag):
+			return true
+	return false
+
+
+func _any_brick_in_slot(slot: String) -> bool:
+	for brick_id in BrickCatalog.BRICKS.keys():
+		if VesselCompliance.outfit_slot_for_brick(str(brick_id)) == slot:
+			return true
+	return false
+
+
+func _any_part_in_slot(slot: String) -> bool:
+	for part_id in PartCatalog.ids():
+		if PartCatalog.outfit_slot_of(str(part_id)) == slot:
+			return true
+	return false
+
+
+func _any_brick_with_capacity(field: String) -> bool:
+	for brick_id in BrickCatalog.BRICKS.keys():
+		if int((BrickCatalog.BRICKS[brick_id] as Dictionary).get(field, 0)) != 0:
+			return true
+	return false
+
+
+func _any_part_with_capacity(field: String) -> bool:
+	for part_id in PartCatalog.ids():
+		if int(PartCatalog.compliance_of(str(part_id)).get(field, 0)) != 0:
+			return true
+	return false
 
 
 func _official_trawler() -> Dictionary:

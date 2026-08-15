@@ -9,6 +9,13 @@ extends Node3D
 ##                     dropdown over the piece's own declared set: there is no
 ##                     field in this tool a number can be typed into, which is the
 ##                     whole difference between a kit and CAD.
+##   I  fitting tool — pick a fitting off the CATALOGUE palette, R turns it by
+##                     that part's own declared yaw step, click a grid node to
+##                     stand it there. Bollards, helm, navigation lights: the
+##                     gear a registration counts. Placed at the part's declared
+##                     default size — sizing a fitting is not in this tool yet,
+##                     and that limit is stated on `_fitting_id` rather than
+##                     worked around with a step this file invented.
 ##   W  wall tool    — click-drag along the grid, release to place a wall run
 ##   D  deck tool    — click-drag a rectangle deck plate
 ##   S  stairs       — click-drag along the climb direction: a solid stepped
@@ -90,7 +97,7 @@ const PIECE_TINT_LIBRARY: Array = [
 	["Signal yellow", "#d8a52a"],
 ]
 
-enum Tool { SELECT, WALL, DECK, STAIR, OPENING, PIECE }
+enum Tool { SELECT, WALL, DECK, STAIR, OPENING, PIECE, FITTING }
 
 const DEFAULT_STAIR_WIDTH := 1.0
 
@@ -180,6 +187,39 @@ var _piece_tint_box: HFlowContainer
 var _piece_facing_label: Label
 var _piece_param_key := ""
 
+## ── The FITTING tool ────────────────────────────────────────────────────────
+##
+## Same shape as the piece tool and for the same reason (§5): before this, this
+## studio could author walls, decks, stairs, openings and kit pieces, and
+## `_plan.items` — every fitting in `PartCatalog`, which is every object a
+## registration counts — could be written by a JSON author and by nothing else.
+## `add_item` appeared nowhere in this file. So a player could draw a hull full
+## of superstructure and could not place the bollard, the helm or the navigation
+## light that makes it a legal vessel: seventeen of seventeen catalogue parts
+## were unreachable with a mouse. Fixing the rule vocabulary (STATE.md 2f) only
+## moves that blocker unless the fittings can be fitted.
+##
+## Nothing here names a part. The palette is `PartCatalog.ids()`, the rotation
+## step is the part's own declared `yaw_step`, and the tooltip is its own
+## `description`.
+##
+## THE LIMIT, NAMED RATHER THAN PAPERED OVER: a part is placed at its DECLARED
+## DEFAULT parameters. A `params` entry is a continuous `{default, min, max}`
+## range, not the finite `values` list a kit piece declares, so there is no
+## declared step to walk — and inventing one here would be this studio choosing
+## the quantisation of somebody else's data, which is what `PIECE_UNIT_METRES`
+## deliberately refuses to do. Sizing a fitting is the next tool, not this one.
+var _fitting_id := ""
+var _fitting_yaw := 0.0
+var _fitting_ghost: Node3D
+var _fitting_ghost_key := ""
+## The item the ghost is currently drawing, or {} when nothing is previewed. The
+## commit path places THIS dictionary — same property the piece tool has.
+var _fitting_ghost_item: Dictionary = {}
+var _fitting_buttons: Dictionary = {}
+var _fitting_section: VBoxContainer
+var _fitting_yaw_label: Label
+
 
 func _ready() -> void:
 	_build_scene()
@@ -190,6 +230,8 @@ func _ready() -> void:
 			_run_studio_probe()
 		elif str(arg) == "--studio-shot":
 			_shoot_piece_tool()
+		elif str(arg) == "--studio-fitting-shot":
+			_shoot_fitting_tool()
 
 
 ## A photograph of the piece tool in use, because a UI surface is not reviewable
@@ -231,6 +273,51 @@ func _shoot_piece_tool() -> void:
 	)
 	var error := get_viewport().get_texture().get_image().save_png(out)
 	print("[structure-studio] piece tool shot -> %s (%d)" % [out, error])
+	get_tree().quit(0 if error == OK else 1)
+
+
+## A photograph of the FITTING tool in use — same reason as the piece shot, and
+## the surface a reviewer has to look at to answer "could a player fit a
+## navigation light". Stands a deck under the fittings, places the legal outfit
+## through the tool's own click path and leaves a ghost on the cursor node.
+##
+##   xvfb-run -a --server-args="-screen 0 1600x900x24" godot \
+##     --rendering-driver opengl3 --audio-driver Dummy \
+##     res://scenes/apps/structure_studio.tscn -- --studio-fitting-shot
+func _shoot_fitting_tool() -> void:
+	_set_context("vessel")
+	_place_deck(Vector3(1, 0, 8), Vector3(9, 0, 24))
+	_set_tool(Tool.FITTING)
+	_set_build_level(0.0)
+	_probe_click_fitting("helm_console", Vector3i(10, 0, 40))
+	for i in 4:
+		_probe_click_fitting("bollard_pair", Vector3i(4 + i * 4, 0, 20))
+	_probe_click_fitting("lantern_sidelight_port", Vector3i(3, 0, 30))
+	_probe_click_fitting("lantern_sidelight_starboard", Vector3i(17, 0, 30))
+	for _press in 6:
+		_set_build_level(_active_base + NODE_SNAP)
+	_probe_click_fitting("lantern_all_round", Vector3i(10, 6, 38))
+	_set_build_level(0.0)
+	_select_fitting_type("bollard_pair")
+	var node := Vector3i(10, 0, 26)
+	_update_fitting_ghost(node)
+	_start_marker.position = _plan_offset + _fitting_plan_point(node)
+	_start_marker.visible = true
+	_cam_focus = _plan_offset + Vector3(5.0, 1.2, 14.0)
+	_cam_yaw = 3.9
+	_cam_pitch = 0.34
+	_cam_distance = 15.0
+	_set_status("fitting tool — bollard ghost standing on node 10, 0, 26")
+	_refresh_panel()
+	for _i in 12:
+		await get_tree().process_frame
+	await RenderingServer.frame_post_draw
+	var out := "res://screenshots/studio/structure_studio__fitting_tool.png"
+	DirAccess.make_dir_recursive_absolute(
+		ProjectSettings.globalize_path("res://screenshots/studio")
+	)
+	var error := get_viewport().get_texture().get_image().save_png(out)
+	print("[structure-studio] fitting tool shot -> %s (%d)" % [out, error])
 	get_tree().quit(0 if error == OK else 1)
 
 
@@ -341,6 +428,10 @@ func _run_studio_probe() -> void:
 	_probe_piece_tug_recipe(expect)
 	_probe_entity_ids(expect)
 	_probe_off_hull_is_on_screen(expect)
+	## ── The fitting tool ────────────────────────────────────────────────────
+	_probe_fitting_palette(expect)
+	_probe_fitting_mouse(expect)
+	_probe_a_mouse_built_vessel_certifies(expect)
 	for arg in OS.get_cmdline_user_args():
 		if str(arg) == "--studio-write-fixtures":
 			_write_tug_fixture()
@@ -400,6 +491,210 @@ func _probe_off_hull_is_on_screen(expect: Callable) -> void:
 		_status.contains("WALL") and _status.contains("10.0 X 28.0 M HULL")
 	)
 	_set_context("vessel")
+
+
+## ── Fitting-tool probe ──────────────────────────────────────────────────────
+##
+## REALITY.md §5, asked of the catalogue: could a player place a bollard with a
+## mouse? Until this tool landed the answer was NO for all seventeen parts —
+## `add_item` appeared nowhere in this file — so every object a registration
+## counts was authorable in JSON and nowhere else. Fixing the rule vocabulary
+## (STATE.md 2f) would only have moved that blocker.
+##
+## Same method the wheelhouse wave used on the brick editor's palette: count how
+## many catalogue ids are UNREACHABLE, and carry a made-up id as the control so
+## the count is known to be capable of being non-zero.
+func _probe_fitting_palette(expect: Callable) -> void:
+	_set_context("vessel")
+	var ids := PartCatalog.ids()
+	expect.call("the catalogue loads for the palette (%d parts)" % ids.size(), ids.size() > 0)
+	expect.call(
+		"the catalogue loads clean (%s)" % ", ".join(PartCatalog.load_errors()),
+		PartCatalog.load_errors().is_empty()
+	)
+	_set_tool(Tool.FITTING)
+	expect.call("picking up the FITTING tool arms a fitting", not _fitting_id.is_empty())
+
+	var unreachable := PackedStringArray()
+	for id_variant in ids:
+		var id := str(id_variant)
+		if not _fitting_buttons.has(id):
+			unreachable.append("%s: not on the palette" % id)
+			continue
+		var button := _fitting_buttons[id] as Button
+		## Visible in the TREE, not merely present in the dictionary — a button
+		## under a hidden section is a button nobody can press, and pressing it
+		## from code would not notice.
+		if not button.is_visible_in_tree():
+			unreachable.append("%s: on the palette but not visible" % id)
+			continue
+		button.pressed.emit()
+		if _fitting_id != id:
+			unreachable.append("%s: the palette button did not arm it" % id)
+	expect.call(
+		"every catalogue part is reachable off the palette (%d of %d unreachable%s)"
+		% [unreachable.size(), ids.size(),
+			"" if unreachable.is_empty() else ": " + ", ".join(unreachable)],
+		unreachable.is_empty()
+	)
+	## Seventeen buttons are taller than this panel, and the capture showed it.
+	## The palette scrolls, which is the only reason the parts below the fold are
+	## reachable at all — the piece tool learned this when the kit grew from four
+	## parameters to seven and RAKE fell off the bottom of the window.
+	var scrolled := false
+	var walk: Node = _fitting_section
+	while walk != null:
+		if walk is ScrollContainer:
+			scrolled = true
+			break
+		walk = walk.get_parent()
+	expect.call("the fittings palette is inside a scroll container", scrolled)
+
+	## THE CONTROL. A part id the catalogue does not hold must be refused, or the
+	## loop above is only saying that a dictionary has keys.
+	var armed_before := _fitting_id
+	_select_fitting_type("bollard_of_the_gods")
+	expect.call(
+		"control: a part the catalogue never heard of does not arm",
+		_fitting_id == armed_before
+	)
+	expect.call(
+		"control: and the builder is told why",
+		_status.to_lower().contains("bollard_of_the_gods")
+	)
+
+	## R turns the armed fitting by the PART's own step, which the catalogue
+	## declares — this file holds no angle.
+	_select_fitting_type(str(ids[0]))
+	var step := PartCatalog.yaw_step_of(str(ids[0]))
+	var before := _fitting_yaw
+	_rotate_fitting(1)
+	expect.call(
+		"R turns the armed fitting by its own declared step (%d°)" % step,
+		is_equal_approx(_fitting_yaw, fposmod(before + float(step), 360.0))
+	)
+	_rotate_fitting(-1)
+	expect.call("and back again", is_equal_approx(_fitting_yaw, before))
+
+
+## THE CURSOR: a grid node under the mouse, a ghost standing on it, and a click
+## that puts the fitting exactly where the ghost was.
+func _probe_fitting_mouse(expect: Callable) -> void:
+	_set_context("vessel")
+	_set_tool(Tool.FITTING)
+	_select_fitting_type("bollard_pair")
+	_set_build_level(0.0)
+
+	var want := Vector3i(8, 0, 24)
+	var aim := _plan_offset + _fitting_plan_point(want)
+	_camera.position = aim + Vector3(0.0, 14.0, 14.0)
+	_camera.look_at(aim, Vector3.UP)
+	var screen := _camera.unproject_position(aim)
+	var node := _mouse_to_node(screen)
+	expect.call(
+		"the cursor reads grid node (%d, %d, %d) under the fitting tool"
+		% [node.x, node.y, node.z],
+		node == want
+	)
+	_update_fitting_ghost(node)
+	expect.call("a ghost is drawn at the node", _fitting_ghost != null)
+	var ghost_item := _fitting_ghost_item.duplicate(true)
+	var ghost_bounds := _probe_node_bounds(_fitting_ghost)
+	expect.call("the ghost has a real extent", ghost_bounds.size.length() > 0.1)
+
+	var placed := _place_fitting_at(node)
+	expect.call("the click places a fitting", not placed.is_empty())
+	if placed.is_empty():
+		return
+	var committed := placed.duplicate(true)
+	var previewed := ghost_item.duplicate(true)
+	committed.erase("id")
+	previewed.erase("id")
+	expect.call(
+		"THE FITTING COMMITTED IS THE FITTING THE GHOST DREW (%s vs %s)"
+		% [JSON.stringify(previewed), JSON.stringify(committed)],
+		committed == previewed
+	)
+	## Selection, focus and DEL all read `_entity_bounds`, and items had no entry
+	## in it at all before this — a fitting in a loaded plan could not be clicked.
+	var id := int(placed["id"])
+	expect.call("the placed fitting is pickable (has bounds)", _entity_bounds.has(id))
+	if _entity_bounds.has(id):
+		expect.call(
+			"and it lands inside the volume the ghost showed",
+			ghost_bounds.grow(0.05).encloses((_entity_bounds[id] as AABB))
+		)
+	## Selecting it and pressing DEL removes it, through the same path a player uses.
+	_selected_id = id
+	_delete_selected()
+	expect.call("DEL removes the fitting", _plan.entity_by_id(id).is_empty())
+
+
+## THE PAYOFF, and the sentence STATE.md 2f exists for: a vessel a player built
+## with a mouse is a vessel the registration system certifies.
+##
+## Every placement below goes through the palette button, the level control and
+## the click — never `_plan.add_item` — and the verdict comes from
+## `PlanOutfit.compliance`, the same call `DeckFitout.apply_plan` makes.
+func _probe_a_mouse_built_vessel_certifies(expect: Callable) -> void:
+	_set_context("vessel")
+	_set_tool(Tool.FITTING)
+	_set_build_level(0.0)
+
+	## Port is −x on the deck grid and this hull is 20 cells in the beam, so a
+	## node at x = 2 is to port and x = 18 to starboard.
+	_probe_click_fitting("helm_console", Vector3i(10, 0, 46))
+	for i in 4:
+		_probe_click_fitting("bollard_pair", Vector3i(4 + i * 4, 0, 8))
+	_probe_click_fitting("lantern_sidelight_port", Vector3i(2, 0, 30))
+	_probe_click_fitting("lantern_sidelight_starboard", Vector3i(18, 0, 30))
+	## PgUp six times: the masthead light goes 3 m up, above the sidelights.
+	for _press in 6:
+		_set_build_level(_active_base + NODE_SNAP)
+	expect.call("PgUp reaches 3.00 m for the masthead light", is_equal_approx(_active_base, 3.0))
+	_probe_click_fitting("lantern_all_round", Vector3i(10, 6, 44))
+	_set_build_level(0.0)
+
+	expect.call("eight fittings were placed with the mouse", _plan.items.size() == 8)
+	expect.call("and none of them is off the hull", _off_hull.is_empty())
+
+	var report := PlanOutfitScript.compliance(_plan, _hull_id, "general_vessel", _deck_grid)
+	var failed := PackedStringArray()
+	for raw in report.get("checklist", []) as Array:
+		if not bool((raw as Dictionary).get("ok", false)):
+			failed.append(str((raw as Dictionary).get("id", "")))
+	expect.call(
+		"A VESSEL BUILT WITH THE MOUSE IS CERTIFIED A GENERAL VESSEL (failed: %s)"
+		% ("none" if failed.is_empty() else ", ".join(failed)),
+		bool(report.get("registration_ok", false))
+	)
+	expect.call("and the whole report is ok", bool(report.get("ok", false)))
+
+	## THE LAW STILL BITES. Pull the port sidelight back off and the same vessel
+	## is refused — the rule sees the light, it did not stop asking for one.
+	var port_id := -1
+	for item_variant in _plan.items:
+		if str((item_variant as Dictionary).get("item_id", "")) == "lantern_sidelight_port":
+			port_id = int((item_variant as Dictionary).get("id", -1))
+	_selected_id = port_id
+	_delete_selected()
+	var dark := PlanOutfitScript.compliance(_plan, _hull_id, "general_vessel", _deck_grid)
+	expect.call(
+		"deleting the port sidelight refuses the vessel again",
+		not bool(dark.get("registration_ok", true))
+	)
+	_set_context("vessel")
+
+
+## One palette click plus one viewport click, at a named node. The camera is
+## aimed the way a player aims it, so the cursor ray is the thing under test.
+func _probe_click_fitting(part_id: String, node: Vector3i) -> void:
+	if _fitting_buttons.has(part_id):
+		(_fitting_buttons[part_id] as Button).pressed.emit()
+	var aim := _plan_offset + _fitting_plan_point(node)
+	_camera.position = aim + Vector3(0.0, 16.0, 16.0)
+	_camera.look_at(aim, Vector3.UP)
+	_on_left_press(_camera.unproject_position(aim))
 
 
 ## The controls themselves: palette, steppers, dropdowns, rotate, tints.
@@ -1533,6 +1828,7 @@ func _set_context(context: String) -> void:
 	## preview standing where the old hull was. Its cache key is the placement, not
 	## the offset, so it would not have rebuilt itself.
 	_hide_piece_ghost()
+	_hide_fitting_ghost()
 	if context == "vessel":
 		_deck_grid = HullRegistry.make_grid(_hull_id)
 		_grid_width = _deck_grid.width
@@ -1891,6 +2187,26 @@ func _recompute_bounds() -> void:
 		for step in (resolved["items"] as Array).size():
 			for corner in PieceKit.placed_corners(placement, step):
 				_grow_point_bounds(id, corner + _plan_offset)
+	## ITEMS, which had no bound at all until the fitting tool landed — so a
+	## fitting in a loaded plan could be neither clicked, focused, moved nor
+	## deleted, and one placed here would have been write-only. The extent comes
+	## from `PlanOutfit.item_world_points`, which is the project's ONE derivation
+	## of what an item occupies (REALITY.md §3b): the baker's own geometry for a
+	## raw primitive, the catalogue's resolved box for a part. Bounding it any
+	## other way here would be the second formula that always drifts.
+	for item_variant in _plan.items:
+		var item := item_variant as Dictionary
+		var item_id := int(item.get("id", -1))
+		var origin := _plan.item_transform(item).origin
+		_entity_base_y[item_id] = origin.y
+		var points := PlanOutfitScript.item_world_points(_plan, item)
+		if points.is_empty():
+			## An item the baker draws nothing for still has a position, and a
+			## zero-size bound at it is honest: it can be picked and deleted.
+			_grow_point_bounds(item_id, origin + _plan_offset)
+			continue
+		for point in points:
+			_grow_point_bounds(item_id, point + _plan_offset)
 
 
 ## Grows an entity's world bound by one baked box. `size` is stated in the
@@ -1980,10 +2296,21 @@ func _handle_key(key: InputEventKey) -> void:
 			_set_tool(Tool.OPENING)
 		KEY_P:
 			_set_tool(Tool.PIECE)
+		KEY_I:
+			_set_tool(Tool.FITTING)
 		KEY_R:
-			## Turns whichever piece is in hand: the selected one if there is one,
-			## otherwise the one about to be placed.
-			if not _rotate_selected_piece():
+			## Turns whatever is in hand: the selected entity if there is one,
+			## otherwise the thing the armed tool is about to place. A fitting and
+			## a placement are asked in that order because only one of them can
+			## answer — `_rotate_selected_*` returns false unless the selection is
+			## its own kind.
+			if _rotate_selected_fitting():
+				pass
+			elif _rotate_selected_piece():
+				pass
+			elif _tool == Tool.FITTING:
+				_rotate_fitting()
+			else:
 				_rotate_piece()
 		KEY_DELETE, KEY_BACKSPACE:
 			_delete_selected()
@@ -2052,6 +2379,12 @@ func _on_left_press(screen_pos: Vector2) -> void:
 		## with the mouse — that is the difference between this and the ROOM tool
 		## that was deleted for making custom-sized boxes.
 		_place_piece_at(_mouse_to_node(screen_pos))
+		return
+	if _tool == Tool.FITTING:
+		## One click, one fitting, at the node the ghost is standing on. No drag:
+		## a fitting's size is the part's own parameter, not something swept out
+		## with the mouse.
+		_place_fitting_at(_mouse_to_node(screen_pos))
 		return
 	var grid_point := _mouse_to_grid(screen_pos)
 	if grid_point == Vector3.INF:
@@ -2122,6 +2455,14 @@ func _set_tool(tool: Tool) -> void:
 		var ids := _kit_ids()
 		if ids.size() > 0:
 			_select_piece_type(str(ids[0]))
+	if tool != Tool.FITTING:
+		_hide_fitting_ghost()
+	elif _fitting_id.is_empty():
+		## Same rule as the piece tool: arm the catalogue's first part so the tool
+		## works the moment it is picked up, and let the data file say which.
+		var part_ids := _catalogue_ids()
+		if part_ids.size() > 0:
+			_select_fitting_type(str(part_ids[0]))
 	_refresh_panel()
 
 
@@ -2514,6 +2855,143 @@ func _place_piece_at(cell: Vector3i) -> Dictionary:
 	_rebake()
 	_refresh_panel()
 	return placed
+
+
+# ── The fitting tool ─────────────────────────────────────────────────────────
+
+## The catalogue's part ids, in the catalogue's own order. Empty when the data
+## file failed to load — a state the palette shows rather than crashes on.
+func _catalogue_ids() -> PackedStringArray:
+	return PartCatalog.ids()
+
+
+## Picking a fitting off the palette.
+func _select_fitting_type(part_id: String) -> void:
+	if not PartCatalog.has(part_id):
+		_set_status("no fitting \"%s\" in the catalogue" % part_id, false)
+		return
+	_fitting_id = part_id
+	## Snap the armed yaw onto the new part's own step, so switching from a
+	## 15° part to a 45° one cannot leave a yaw the part does not offer.
+	_fitting_yaw = _snap_fitting_yaw(_fitting_yaw)
+	_fitting_ghost_key = ""
+	_set_status("%s selected" % PartCatalog.display_name(part_id))
+	_refresh_panel()
+
+
+func _snap_fitting_yaw(yaw: float) -> float:
+	if _fitting_id.is_empty():
+		return 0.0
+	var step := float(PartCatalog.yaw_step_of(_fitting_id))
+	return fposmod(roundf(yaw / step) * step, 360.0)
+
+
+## One step of the ARMED part's own declared `yaw_step`. Not a number chosen
+## here: a bollard pair turns in 15° and a nav light in whatever its entry says,
+## and the catalogue is the only authority on which.
+func _rotate_fitting(steps := 1) -> void:
+	if _fitting_id.is_empty():
+		return
+	var step := float(PartCatalog.yaw_step_of(_fitting_id))
+	_fitting_yaw = fposmod(_fitting_yaw + step * float(steps), 360.0)
+	_fitting_ghost_key = ""
+	_set_status("yaw %d°" % roundi(_fitting_yaw))
+	_refresh_panel()
+
+
+## Where the tool would stand the fitting, in PLAN metres. A node index times the
+## node snap — the same conversion the piece tool's ghost and commit share, so
+## the preview and the placement cannot land in different places.
+func _fitting_plan_point(cell: Vector3i) -> Vector3:
+	return Vector3(float(cell.x) * NODE_SNAP, float(cell.y) * NODE_SNAP, float(cell.z) * NODE_SNAP)
+
+
+## The item the tool would commit at this node, with no id yet. ONE function,
+## used by the ghost and by the commit.
+func _fitting_item_at(cell: Vector3i) -> Dictionary:
+	var at := _fitting_plan_point(cell)
+	return StructurePlan.normalize_item({
+		"item_id": _fitting_id,
+		"at": [at.x, at.y, at.z],
+		"yaw": _fitting_yaw,
+	})
+
+
+## The ghost is the REAL BAKE of the item about to be committed, drawn through
+## `StructureBaker` exactly as the committed one will be.
+func _update_fitting_ghost(cell: Vector3i) -> void:
+	if _fitting_id.is_empty() or cell == NO_NODE:
+		_hide_fitting_ghost()
+		return
+	var item := _fitting_item_at(cell)
+	var key := JSON.stringify(item)
+	if key == _fitting_ghost_key and _fitting_ghost != null and is_instance_valid(_fitting_ghost):
+		_fitting_ghost.visible = true
+		return
+	_hide_fitting_ghost()
+	var probe := StructurePlan.new()
+	probe.context = _context
+	probe.hull_id = _hull_id
+	probe.items = [item]
+	_fitting_ghost = StructureBaker.bake(probe, _plan_offset, true)
+	add_child(_fitting_ghost)
+	_fitting_ghost_key = key
+	_fitting_ghost_item = item
+
+
+func _hide_fitting_ghost() -> void:
+	if _fitting_ghost != null and is_instance_valid(_fitting_ghost):
+		_fitting_ghost.queue_free()
+	_fitting_ghost = null
+	_fitting_ghost_key = ""
+	_fitting_ghost_item = {}
+
+
+## Stands the armed fitting on a grid node. Returns the item, or {} when nothing
+## was armed or the cursor was off the grid.
+func _place_fitting_at(cell: Vector3i) -> Dictionary:
+	if _fitting_id.is_empty():
+		_set_status("pick a fitting first", false)
+		return {}
+	if cell == NO_NODE:
+		return {}
+	var at := _fitting_plan_point(cell)
+	_snapshot()
+	var placed := _plan.add_item(_fitting_id, at, _fitting_yaw)
+	_set_status("%s at (%.1f, %.1f, %.1f) m yaw %d°" % [
+		PartCatalog.display_name(_fitting_id), at.x, at.y, at.z, roundi(_fitting_yaw),
+	])
+	_rebake()
+	_refresh_panel()
+	return placed
+
+
+## The selected entity, if it is a fitting. An item is the only plan entity with
+## an `item_id` key.
+func _selected_fitting() -> Dictionary:
+	var entity := _plan.entity_by_id(_selected_id)
+	if entity.is_empty() or not entity.has("item_id"):
+		return {}
+	return entity
+
+
+## Turning a PLACED fitting, by its own part's step. Returns false when the
+## selection is not a fitting, so `R` can fall through to the piece tool's.
+func _rotate_selected_fitting(steps := 1) -> bool:
+	var item := _selected_fitting()
+	if item.is_empty():
+		return false
+	var part_id := str(item.get("item_id", ""))
+	if not PartCatalog.has(part_id):
+		return false
+	var step := float(PartCatalog.yaw_step_of(part_id))
+	_snapshot()
+	StructurePlan.set_item_rotation(
+		item, fposmod(float(item.get("yaw", 0.0)) + step * float(steps), 360.0)
+	)
+	_rebake()
+	_refresh_panel()
+	return true
 
 
 ## The selected entity, if it is a placement. A placement is the only plan entity
@@ -3252,6 +3730,8 @@ func _update_hover_feedback() -> void:
 		_start_marker.visible = false
 		if _piece_ghost != null and is_instance_valid(_piece_ghost):
 			_piece_ghost.visible = false
+		if _fitting_ghost != null and is_instance_valid(_fitting_ghost):
+			_fitting_ghost.visible = false
 		return
 	var mouse := get_viewport().get_mouse_position()
 	_opening_ghost.visible = false
@@ -3259,12 +3739,20 @@ func _update_hover_feedback() -> void:
 	_start_marker.visible = false
 	if _tool != Tool.PIECE and _piece_ghost != null and is_instance_valid(_piece_ghost):
 		_piece_ghost.visible = false
+	if _tool != Tool.FITTING and _fitting_ghost != null and is_instance_valid(_fitting_ghost):
+		_fitting_ghost.visible = false
 	match _tool:
 		Tool.PIECE:
 			var node := _mouse_to_node(mouse)
 			_update_piece_ghost(node)
 			if node != NO_NODE:
 				_start_marker.position = _plan_offset + StructurePlan.piece_node_plan(node)
+				_start_marker.visible = true
+		Tool.FITTING:
+			var fitting_node := _mouse_to_node(mouse)
+			_update_fitting_ghost(fitting_node)
+			if fitting_node != NO_NODE:
+				_start_marker.position = _plan_offset + _fitting_plan_point(fitting_node)
 				_start_marker.visible = true
 		Tool.OPENING:
 			var ctx := _opening_context_at(mouse)
@@ -3454,6 +3942,7 @@ var _toast_timer: Timer
 
 const TOOL_HINTS := {
 	Tool.PIECE: "Piece: pick one off the kit palette, R turns it, click a grid node to stand it there. Every setting is a stepper over the piece's own list — nothing is typed.",
+	Tool.FITTING: "Fitting: pick one off the catalogue palette, R turns it by its own step, click a grid node to stand it there. Bollards, helm, navigation lights — the gear a registration counts.",
 	Tool.SELECT: "Select: click to pick — arrows move it, drag a face pad to resize, DEL removes.",
 	Tool.WALL: "Wall: click-drag along the grid, release to raise one wall run.",
 	Tool.DECK: "Deck: drag a footprint to lay a deck plate.",
@@ -3510,6 +3999,7 @@ func _build_top_bar() -> void:
 	var tool_defs := [
 		[Tool.SELECT, "SELECT"],
 		[Tool.PIECE, "PIECE"],
+		[Tool.FITTING, "FITTING"],
 		[Tool.WALL, "WALL"],
 		[Tool.DECK, "DECK"],
 		[Tool.STAIR, "STAIR"],
@@ -3726,6 +4216,72 @@ func _build_piece_section(box: VBoxContainer) -> void:
 		_piece_tint_box.add_child(swatch)
 	_piece_section.add_child(_piece_tint_box)
 	box.add_child(_piece_section)
+	_build_fitting_section(box)
+
+
+## The catalogue palette. Same shape as the kit palette above and driven the same
+## way — one button per `PartCatalog.ids()` entry, the part's own description as
+## the tooltip, and its own `yaw_step` on the turn buttons. No part id appears in
+## this file.
+func _build_fitting_section(box: VBoxContainer) -> void:
+	_fitting_section = VBoxContainer.new()
+	_fitting_section.add_theme_constant_override(&"separation", BrandTokens.SPACE_XS)
+	_fitting_section.add_child(BrandComponents.section_header("FITTINGS"))
+
+	var catalogue_errors := PartCatalog.load_errors()
+	if catalogue_errors.size() > 0:
+		var broken := BrandLabel.new(
+			"CATALOGUE FAILED TO LOAD\n%s" % "\n".join(catalogue_errors),
+			BrandLabel.Role.MICRO_DATA
+		)
+		broken.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		broken.add_theme_color_override(&"font_color", BrandTokens.ALERT)
+		_fitting_section.add_child(broken)
+
+	var flow := VBoxContainer.new()
+	flow.add_theme_constant_override(&"separation", BrandTokens.SPACE_XS)
+	for id_variant in _catalogue_ids():
+		var id := str(id_variant)
+		var button := BrandComponents.tool_button(PartCatalog.display_name(id).to_upper(), 0.0)
+		button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		button.tooltip_text = str(PartCatalog.get_entry(id).get("description", ""))
+		button.pressed.connect(func() -> void: _select_fitting_type(id))
+		flow.add_child(button)
+		_fitting_buttons[id] = button
+	_fitting_section.add_child(flow)
+
+	var yaw_row := HBoxContainer.new()
+	yaw_row.add_theme_constant_override(&"separation", BrandTokens.SPACE_XS)
+	var turn_back := BrandComponents.compact_button("⟲", BrandTokens.MIN_HIT_TARGET)
+	turn_back.pressed.connect(func() -> void:
+		if not _rotate_selected_fitting(-1):
+			_rotate_fitting(-1)
+	)
+	yaw_row.add_child(turn_back)
+	_fitting_yaw_label = BrandLabel.new("", BrandLabel.Role.DATA)
+	_fitting_yaw_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_fitting_yaw_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_fitting_yaw_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	yaw_row.add_child(_fitting_yaw_label)
+	var turn_on := BrandComponents.compact_button("⟳", BrandTokens.MIN_HIT_TARGET)
+	turn_on.pressed.connect(func() -> void:
+		if not _rotate_selected_fitting(1):
+			_rotate_fitting(1)
+	)
+	yaw_row.add_child(turn_on)
+	_fitting_section.add_child(yaw_row)
+	box.add_child(_fitting_section)
+
+
+func _refresh_fitting_section() -> void:
+	if _fitting_section == null:
+		return
+	_fitting_section.visible = _tool == Tool.FITTING
+	for id in _fitting_buttons.keys():
+		(_fitting_buttons[id] as Button).set_pressed_no_signal(str(id) == _fitting_id)
+	if _fitting_yaw_label != null:
+		var step := PartCatalog.yaw_step_of(_fitting_id) if not _fitting_id.is_empty() else 0
+		_fitting_yaw_label.text = "YAW %d°  (STEP %d°)" % [roundi(_fitting_yaw), step]
 
 
 ## Rebuilt whenever the armed piece, its settings or its facing change. Cheap —
@@ -3961,6 +4517,7 @@ func _refresh_panel() -> void:
 		(_context_buttons[context] as Button).set_pressed_no_signal(context == _context)
 	_opening_section.visible = _tool == Tool.OPENING
 	_refresh_piece_section()
+	_refresh_fitting_section()
 	for opening_type in _opening_buttons.keys():
 		(_opening_buttons[opening_type] as Button).set_pressed_no_signal(opening_type == _opening_type)
 	_level_label.text = "%.2f M · CELL %d" % [_active_base, roundi(_active_base / NODE_SNAP)]
@@ -3970,8 +4527,8 @@ func _refresh_panel() -> void:
 	var armed_material := str((_lib[_armed_slot] as Dictionary)["material"])
 	for material_name in _lib_material_buttons.keys():
 		(_lib_material_buttons[material_name] as Button).set_pressed_no_signal(material_name == armed_material)
-	_entities_label.text = "STRUCTURE\n%d PARTS\n%d KIT PIECES\n%d UNDO STEPS" % [
-		_plan.entity_count(), _plan.pieces.size(), _undo_stack.size()
+	_entities_label.text = "STRUCTURE\n%d PARTS\n%d KIT PIECES\n%d FITTINGS\n%d UNDO STEPS" % [
+		_plan.entity_count(), _plan.pieces.size(), _plan.items.size(), _undo_stack.size()
 	]
 	## Persistent, not a toast: a builder who dismissed the message still has to
 	## be able to see that part of their ship will not be built.

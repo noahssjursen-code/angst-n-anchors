@@ -457,8 +457,19 @@ light **on the starboard side** · white masthead light(s) **above the sidelight
 mooring points · ≥1 bulk hold · exposed catch deck ≥4 cells · ≥4 passenger seats ·
 enclosed cabin · ≥1 marked door · per-category `cargo_cells` and `budget_caps`.
 
-**Every rule addresses brick ids and brick tags** (`light_nav_port`, `tag: mooring`) — the
-vocabulary that was wiped. `AGENTS.md`: *"Legacy compliance/budgets do not yet apply to
+> **⚠ THIS SENTENCE WAS WRONG, AND MEASURED WRONG ON 2026-08-15 — see item 2f.** It
+> read *"Every rule addresses brick ids and brick tags (`light_nav_port`, `tag:
+> mooring`) — the vocabulary that was wiped."* Surveyed over all five registrations
+> (`tests/_reg_vocab_survey.gd`): of **51 resolved rules**, only **5 authored rules**
+> ever named a brick id, and they were exactly the five a plan could never satisfy.
+> The rest address compliance TAGS, outfit SLOTS, capacity fields, capabilities and
+> measured geometry — all of which `PlanOutfit` already answered. The rule set was
+> never a brick-only vocabulary; it had five brick-only rules in it, which is a much
+> smaller and much more fixable thing than this paragraph claimed. Those five are
+> now tag-addressed and `vessel_registration_test` holds every shipped rule to being
+> answerable by BOTH build paths.
+
+`AGENTS.md`: *"Legacy compliance/budgets do not yet apply to
 plans — that rework lands with the new vocabulary."*
 
 So: **the parts vocabulary is the reconnection.** Each part must satisfy three masters —
@@ -1921,13 +1932,91 @@ file is not red by construction. It belongs beside decision #1 below.
    the envelope to the deck reddens the overhang checks. Shipped fixtures rejected:
    **0**. Cost: `compliance` restructured to one pass, feeder 277 → 170 ms.
 
-2f. **`general_vessel` can never be met by a plan-built boat.** Its `port_light` and
-   `starboard_light` rules name the **brick** ids `light_nav_port` / `light_nav_stbd`,
-   and no catalogue part carries those ids — so a plan vessel fails **4 of 8 rules
-   regardless of what is fitted** (`registration_ok=false` in every strip run of 2e).
-   The brick path and the plan path are two vocabularies and the rule set speaks only
-   one. Found while fixing 2e, not fixed. It sits directly under the studio's whole
-   purpose: a player can author a plan the registration system cannot certify.
+2f. **`general_vessel` could never be met by a plan-built boat — CLOSED 2026-08-15,
+   and the headline was FIVE of 8, not four.** Measured through the production path
+   (`VesselSpawn.instantiate` → `DeckFitout.apply_plan` → the boat's own
+   `vessel_outfit` meta, `tests/_reg_headline.tscn`), on a plan carrying every
+   catalogue part that bears on the licence:
+
+   ```
+   BEFORE  general_vessel     3 of 8 met   FAILS 5   registration_ok=false
+   AFTER   general_vessel     8 of 8 met   FAILS 0   registration_ok=true  ok=true
+   BEFORE  fishing_vessel     5 of 10                AFTER 10 of 10
+   BEFORE  passenger_vessel   6 of 12                AFTER 11 of 12  (cabin, below)
+   ```
+
+   The fifth failure this entry missed is `white_light_height`:
+   `VesselCompliance._white_height_delta` hardcoded FOUR brick ids of its own and
+   returned −1.0 for every plan ever authored. `plan_compliance_test` had it right
+   all along — it listed five failing rule ids, and this entry said four.
+
+   **THE SURVEY (step 1), and STATE.md:441 was wrong.** *"Every rule addresses brick
+   ids and brick tags"* is false. Over **all five registrations, 51 resolved rules**
+   (`tests/_reg_vocab_survey.gd`): 1 addresses an outfit slot, 3 a compliance tag,
+   3 measured geometry, 1 a capacity field, 1 a capability, 1 a rating ceiling — and
+   only **5 authored rules** addressed a brick id. Those five, inherited by all five
+   registrations, were **26 of 51 resolved rules a plan could never satisfy**; a
+   brick layout could satisfy **51 of 51**. The one non-light entry in that 26 is
+   `passenger_vessel/cabin`, which is the separately-recorded `has_cabin` gap.
+
+   **WHAT A PLAN CAN OFFER, measured, not assumed.** 15 catalogue parts carried tags
+   `{mooring, helm, bulk_hold, light, nav_white, fishing}` and slots `{helm, fishing}`;
+   64 bricks carry 51 distinct tags. **Zero part ids collide with brick ids.** So
+   `white_light` (`tag_count nav_white`) was already the ONE `general_vessel`
+   equipment rule a plan passed — same law, tag-addressed — and the addressing mode
+   predicted the failure exactly.
+
+   **THE VOCABULARY DECISION: tags, argued from that.** Not "the catalogue grows
+   parts carrying the brick ids", because (a) 2e had just RENAMED two ids apart for
+   colliding across two vocabularies and made `PartCatalog` refuse such an id at
+   load — re-introducing cross-vocabulary id sharing one wave later contradicts a
+   fence this repo had just built; (b) id-addressing had already failed inside the
+   brick path alone, before any plan existed: `_white_height_delta` had to hardcode a
+   LIST of two white ids because two bricks are one legal light, and that list was a
+   tag written in GDScript; (c) it would have needed `light_nav_white` in the part
+   catalogue as well, duplicating `lantern_all_round`, giving one lamp two ids.
+
+   Landed: tags `nav_port` / `nav_stbd` on the two bricks AND on two new parts
+   (`lantern_sidelight_port`, `lantern_sidelight_starboard`); `port_light` /
+   `starboard_light` → `tag_count`; a new `tag_side` rule kind for the two side
+   rules; `_white_height_delta` reading all three terms by tag; `tag_positions`
+   built in the SAME loop as `tag_counts` on both sides (§3b).
+
+   **THE LAW DID NOT MOVE.** A plan vessel must still carry a red light to port, a
+   green one to starboard and a white one above both. Pinned from both directions:
+   an UNLIT plan is still refused, by exactly those five rules, and deleting one
+   sidelight from a certified plan refuses it again naming `port_light`,
+   `port_light_side`, `white_light_height`.
+
+   **No brick vessel stopped certifying.** All four prebuilt presets re-measured
+   through `VesselCompliance.validate`: `28_10_m` 10/10, `bulk_small` 11/11,
+   `fishing_trawler` 10/10, `sjark_15m` 10/10 — **GEN OK, four of four**, unchanged.
+
+   **§5 — AND THE BLOCKER HAD ONLY MOVED.** Structure Studio had **no fitting tool
+   at all**: `enum Tool` was `{SELECT, WALL, DECK, STAIR, OPENING, PIECE}` and
+   `add_item` appeared **nowhere** in its 4205 lines, so **17 of 17 catalogue parts
+   were unplaceable with a mouse** — every object a registration counts was
+   authorable in JSON and nowhere else. `_recompute_bounds` did not bound items
+   either, so a fitting in a loaded plan could not be clicked, focused or deleted.
+   Landed: an `I` FITTING tool with a palette off `PartCatalog.ids()`, R turning by
+   the part's OWN declared `yaw_step`, ghost-then-click sharing one placement
+   function, item bounds derived from `PlanOutfit.item_world_points` (the one
+   derivation). Lane C `studio_probe` **109 → 132 checks**, including
+   *"A VESSEL BUILT WITH THE MOUSE IS CERTIFIED A GENERAL VESSEL"* — eight fittings
+   placed through palette clicks, level presses and viewport clicks, never
+   `_plan.add_item`. Capture: `screenshots/studio/structure_studio__fitting_tool.png`.
+
+   **The check nobody had written.** `vessel_registration_test` (74 → 83) now asks of
+   EVERY rule of EVERY registration whether both build paths can address it. It
+   names the one remaining one-sided rule explicitly — `passenger_vessel/cabin` —
+   by equality against a known set, so the NEXT one reddens rather than being
+   absorbed. Its control is a made-up tag and the OLD sidelight rule, which it still
+   reports as one-sided.
+
+   **THE LIMIT NAMED:** a fitting is placed at its DECLARED DEFAULT parameters. A
+   part's `params` is a continuous `{default, min, max}`, not the finite `values`
+   list a kit piece declares, so there is no declared step to walk and this studio
+   does not invent one. Sizing a fitting is the next tool.
 
 2e. **The catalogue fittings drew nothing — CLOSED 2026-08-15.** The strip test, run
    through the production path (`VesselSpawn.instantiate` → `DeckFitout.apply_plan` →

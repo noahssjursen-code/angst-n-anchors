@@ -16,11 +16,19 @@ extends RefCounted
 ## `compliance_for_layout` both route a `structure_plan_v1` document here — and
 ## this paragraph is kept as the reason the file exists, not as a live defect.
 ##
-## The rule evaluator itself needs NO changes. All ten kinds in
-## `VesselCompliance._evaluate_rule` read five dictionaries — `brick_counts`,
-## `tag_counts`, `positions`, `capacity`, `max_ratings` — plus the
-## VesselOutfit-shaped `accepted_slots` / `usage` / `capabilities`. This file
+## The rule evaluator itself needs NO changes. All ELEVEN kinds in
+## `VesselCompliance._evaluate_rule` read six dictionaries — `brick_counts`,
+## `tag_counts`, `tag_positions`, `positions`, `capacity`, `max_ratings` — plus
+## the VesselOutfit-shaped `accepted_slots` / `usage` / `capabilities`. This file
 ## populates exactly those, from `plan.items` and the plan's walls/decks/stairs.
+##
+## `tag_positions` and the `tag_side` kind arrived 2026-08-15 with the fix for
+## STATE.md 2f: the two sidelight rules and `white_above_sidelights` addressed
+## brick IDS, which no part can carry, so a plan failed 5 of `general_vessel`'s 8
+## rules whatever was fitted. Measured through `VesselSpawn` -> `apply_plan`,
+## 3 of 8. The law did not move — a plan vessel still has to carry a red light to
+## port, a green one to starboard and a white one above both — only its address
+## did, from an id one vocabulary holds to a tag both do.
 ##
 ## ── The seam a later wave closes ────────────────────────────────────────────
 ##
@@ -80,7 +88,7 @@ extends RefCounted
 ##
 ## One world unit is one metre. Plan coordinates are metres; deck-grid cells are
 ## `WorldUnits.DECK_CELL_M` (0.5 m) and exist only because the cell-counting
-## rules (`brick_side`, `white_above_sidelights`, cargo area) are written in
+## rules (`tag_side`, `white_above_sidelights`, cargo area) are written in
 ## cells. `StructurePlan.plan_to_cell` is the only converter used.
 
 ## ── "On the hull", for a plan ───────────────────────────────────────────────
@@ -670,14 +678,18 @@ static func _validate_built(
 
 # ── VesselCompliance._measure-shaped metrics ────────────────────────────────
 
-## Returns { brick_counts, tag_counts, positions, capacity, max_ratings, usage,
-## capabilities, accepted_slots, grid } — the exact dictionary
-## `VesselCompliance._evaluate_rule` reads. `brick_counts` and `positions` are
-## keyed by PART id, which is what a plan's `item_id` is, so a rule written
-## against a brick id matches a part of the same id and nothing else.
+## Returns { brick_counts, tag_counts, tag_positions, positions, capacity,
+## max_ratings, usage, capabilities, accepted_slots, grid } — the exact
+## dictionary `VesselCompliance._evaluate_rule` reads. `brick_counts` and
+## `positions` are keyed by PART id, which is what a plan's `item_id` is, so a
+## rule written against a brick id matches a part of the same id and nothing
+## else — which is precisely why the shipped sidelight rules do not use one.
+## `tag_counts` and `tag_positions` are keyed by COMPLIANCE TAG, the address both
+## build paths answer to.
 static func measure(plan: StructurePlan, grid: DeckGrid, outfit: Dictionary) -> Dictionary:
 	var brick_counts := {}
 	var tag_counts := {}
+	var tag_positions := {}
 	var positions := {}
 	var capacity := {}
 	var max_ratings := {}
@@ -699,6 +711,13 @@ static func measure(plan: StructurePlan, grid: DeckGrid, outfit: Dictionary) -> 
 			for tag in Parts.tags_of(part_id):
 				var key := str(tag)
 				tag_counts[key] = int(tag_counts.get(key, 0)) + 1
+				## Same loop as the count, for the same reason
+				## `VesselCompliance._measure_equipment` does it: a rule that
+				## counts a tag and a rule that LOCATES it must be looking at one
+				## set of fittings (REALITY.md §3b).
+				if not tag_positions.has(key):
+					tag_positions[key] = []
+				(tag_positions[key] as Array).append(cell)
 				max_ratings[key] = maxi(int(max_ratings.get(key, 0)), rating)
 			var seats := int(compliance_data.get("passenger_capacity", 0))
 			if seats != 0:
@@ -712,6 +731,7 @@ static func measure(plan: StructurePlan, grid: DeckGrid, outfit: Dictionary) -> 
 	return {
 		"brick_counts": brick_counts,
 		"tag_counts": tag_counts,
+		"tag_positions": tag_positions,
 		"positions": positions,
 		"capacity": capacity,
 		"max_ratings": max_ratings,

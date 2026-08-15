@@ -140,6 +140,7 @@ static func brick_allowed_for_registration(
 static func _measure(layout: BrickLayout, grid: DeckGrid, outfit: Dictionary) -> Dictionary:
 	var brick_counts := {}
 	var tag_counts := {}
+	var tag_positions := {}
 	var positions := {}
 	var capacity := {}
 	var max_ratings := {}
@@ -153,11 +154,15 @@ static func _measure(layout: BrickLayout, grid: DeckGrid, outfit: Dictionary) ->
 			var brick_id := str(item.get("brick_id", ""))
 			if off_grid_cells.has(cell):
 				continue
-			_measure_equipment(brick_id, cell, brick_counts, tag_counts, positions, capacity, max_ratings)
+			_measure_equipment(
+				brick_id, cell, brick_counts, tag_counts, tag_positions,
+				positions, capacity, max_ratings
+			)
 			var mounted_light := str(item.get("light_id", ""))
 			if not mounted_light.is_empty():
 				_measure_equipment(
-					mounted_light, cell, brick_counts, tag_counts, positions, capacity, max_ratings
+					mounted_light, cell, brick_counts, tag_counts, tag_positions,
+					positions, capacity, max_ratings
 				)
 		## Bulk holds live outside the brick cell map — count them for registration rules.
 		var bulk_n := layout.count_tag("bulk_hold")
@@ -175,6 +180,7 @@ static func _measure(layout: BrickLayout, grid: DeckGrid, outfit: Dictionary) ->
 	return {
 		"brick_counts": brick_counts,
 		"tag_counts": tag_counts,
+		"tag_positions": tag_positions,
 		"positions": positions,
 		"capacity": capacity,
 		"max_ratings": max_ratings,
@@ -186,11 +192,16 @@ static func _measure(layout: BrickLayout, grid: DeckGrid, outfit: Dictionary) ->
 	}
 
 
+## `tag_positions` is filled in the SAME loop as `tag_counts`, deliberately: a
+## rule that counts a tag and a rule that locates it must be looking at one set
+## of equipment, and two loops over the same list are two chances to disagree
+## (REALITY.md §3b). `PlanOutfit.measure` does the same thing on its own side.
 static func _measure_equipment(
 	brick_id: String,
 	cell: Vector3i,
 	brick_counts: Dictionary,
 	tag_counts: Dictionary,
+	tag_positions: Dictionary,
 	positions: Dictionary,
 	capacity: Dictionary,
 	max_ratings: Dictionary,
@@ -205,6 +216,9 @@ static func _measure_equipment(
 	for tag in entry.get("tags", []) as Array:
 		var key := str(tag)
 		tag_counts[key] = int(tag_counts.get(key, 0)) + 1
+		if not tag_positions.has(key):
+			tag_positions[key] = []
+		(tag_positions[key] as Array).append(cell)
 		max_ratings[key] = maxi(
 			int(max_ratings.get(key, 0)),
 			int(entry.get("equipment_rating", 0))
@@ -250,10 +264,13 @@ static func _evaluate_rule(
 		"equipment_rating_max":
 			current = int(metrics.get("max_ratings", {}).get(str(rule.get("tag", "")), 0))
 			ok = int(current) <= int(rule.get("max_rating", 0))
-		"brick_side":
-			current = _correct_side_count(rule, metrics)
-			var total := int(metrics.get("brick_counts", {}).get(str(rule.get("brick_id", "")), 0))
-			ok = total > 0 and int(current) == total
+		"brick_side", "tag_side":
+			## `cells` IS the total. The count of correctly-sided equipment and the
+			## count of equipment come off the SAME list, so they cannot be two
+			## measurements of the same fitting that disagree (REALITY.md §3b).
+			var cells := _addressed_cells(rule, metrics)
+			current = _correct_side_count(cells, str(rule.get("side", "")), metrics)
+			ok = cells.size() > 0 and int(current) == cells.size()
 		"white_above_sidelights":
 			current = _white_height_delta(metrics)
 			ok = float(current) > 0.0
@@ -281,13 +298,24 @@ static func _within(value: int, rule: Dictionary) -> bool:
 	return true
 
 
-static func _correct_side_count(rule: Dictionary, metrics: Dictionary) -> int:
-	var cells: Array = metrics.get("positions", {}).get(str(rule.get("brick_id", "")), [])
+## The cells a locating rule addresses. `brick_side` names one catalogue object
+## by id; `tag_side` names the LEGAL object by tag, which is the only address the
+## brick path and the plan path both answer to.
+static func _addressed_cells(rule: Dictionary, metrics: Dictionary) -> Array:
+	if str(rule.get("kind", "")) == "tag_side":
+		return (metrics.get("tag_positions", {}) as Dictionary).get(
+			str(rule.get("tag", "")), []
+		) as Array
+	return (metrics.get("positions", {}) as Dictionary).get(
+		str(rule.get("brick_id", "")), []
+	) as Array
+
+
+static func _correct_side_count(cells: Array, side: String, metrics: Dictionary) -> int:
 	var grid := metrics.get("grid", null) as DeckGrid
 	if grid == null:
 		return 0
 	var n := 0
-	var side := str(rule.get("side", ""))
 	for raw in cells:
 		var cell := raw as Vector3i
 		var local_x := grid.cell_center_local(cell).x
@@ -296,13 +324,21 @@ static func _correct_side_count(rule: Dictionary, metrics: Dictionary) -> int:
 	return n
 
 
+## White light above the sidelights, addressed by TAG on all three terms.
+##
+## This function used to name FOUR brick ids — `light_nav_white`,
+## `light_mast_white`, `light_nav_port`, `light_nav_stbd` — so it answered −1.0
+## for every plan ever authored, and it was the fifth of `general_vessel`'s five
+## unmeetable rules rather than the four STATE.md 2f recorded. The two white ids
+## are the tell: two catalogue objects were already ONE legal light, and the list
+## holding them together was a tag written in GDScript. It is a tag now, and a
+## third white lantern joins the law by declaring `nav_white` instead of by
+## editing this file.
 static func _white_height_delta(metrics: Dictionary) -> float:
-	var positions: Dictionary = metrics.get("positions", {})
-	var whites: Array = []
-	whites.append_array(positions.get("light_nav_white", []) as Array)
-	whites.append_array(positions.get("light_mast_white", []) as Array)
-	var ports: Array = positions.get("light_nav_port", [])
-	var stbd: Array = positions.get("light_nav_stbd", [])
+	var tag_positions: Dictionary = metrics.get("tag_positions", {})
+	var whites: Array = tag_positions.get("nav_white", []) as Array
+	var ports: Array = tag_positions.get("nav_port", []) as Array
+	var stbd: Array = tag_positions.get("nav_stbd", []) as Array
 	if whites.is_empty() or ports.is_empty() or stbd.is_empty():
 		return -1.0
 	var white_y := -99999
@@ -318,7 +354,7 @@ static func _requirement_text(rule: Dictionary) -> String:
 	match str(rule.get("kind", "")):
 		"equipment_rating_max":
 			return "rating ≤ %d" % int(rule.get("max_rating", 0))
-		"brick_side":
+		"brick_side", "tag_side":
 			return "all on %s side" % str(rule.get("side", "correct"))
 		"white_above_sidelights":
 			return "white light above side lights"

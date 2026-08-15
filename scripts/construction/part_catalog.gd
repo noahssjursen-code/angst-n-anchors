@@ -162,9 +162,15 @@ const COMPLIANCE_NUMERICS: Dictionary = {
 ## Tags registrations and the skin baker currently key off. Not a closed set —
 ## an unlisted tag warns rather than failing, so a new registration can land its
 ## vocabulary first. Slot tags mirror VesselCompliance.outfit_slot_for_brick().
+## `nav_port` / `nav_stbd` are the sidelights' LEGAL identity and are spelled the
+## same in `BrickCatalog.BRICKS`, because the registration catalogue addresses
+## them by tag on both paths (2026-08-15). Before that the two sidelight rules
+## named brick IDS and no part could ever carry one, so a plan-built vessel failed
+## 5 of `general_vessel`'s 8 rules whatever was fitted.
 const KNOWN_TAGS: Array[String] = [
-	"mooring", "nav_white", "helm", "fishing", "trommel", "crane", "tow",
-	"bulk_hold", "cargo", "light", "door", "ladder", "text", "ship_only",
+	"mooring", "nav_white", "nav_port", "nav_stbd", "helm", "fishing", "trommel",
+	"crane", "tow", "bulk_hold", "cargo", "light", "door", "ladder", "text",
+	"ship_only",
 ]
 
 ## tag -> outfit budget slot, in the priority order VesselCompliance uses.

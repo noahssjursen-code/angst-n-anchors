@@ -29,7 +29,7 @@ extends SceneTree
 const PO := preload("res://scripts/ship/plan_outfit.gd")
 const Parts := preload("res://scripts/construction/part_catalog.gd")
 const HULL := "hull_28x10"
-const EXPECTED_CHECKS := 109
+const EXPECTED_CHECKS := 127
 
 var _failures := 0
 var _checks := 0
@@ -48,8 +48,9 @@ func _initialize() -> void:
 	_test_a_fence_is_not_a_cabin()
 	_test_doors_come_from_openings()
 	_test_rule_kinds_are_satisfiable()
-	_test_white_above_sidelights_is_blocked_on_the_catalog()
+	_test_sidelight_rules_are_tag_addressed()
 	_test_general_vessel_scoreboard()
+	_test_a_lit_plan_certifies()
 	_test_fishing_vessel_scoreboard()
 	_test_budgets_are_enforced()
 	_test_cargo_is_a_union_of_deck_cells()
@@ -99,6 +100,30 @@ func _outfitted_plan(with_fishing: bool, helms: int = 1) -> StructurePlan:
 	if with_fishing:
 		plan.add_item("net_drum", Vector3(5.0, 0.0, 18.0))
 	return plan
+
+
+## The same vessel with its navigation lights fitted: a red one to port, a green
+## one to starboard, each 1.2 m up, under the all-round white light `_outfitted_plan`
+## already carries 6.0 m up. `white_y` moves the white one so the height rule can
+## be shown biting rather than merely passing.
+##
+## Port is −x in `DeckGrid.cell_center_local`, and the deck is 10 m wide, so
+## x = 1.0 is to port and x = 9.0 is to starboard on this hull.
+func _lit_plan(with_fishing: bool, white_y := 6.0) -> StructurePlan:
+	var plan := _outfitted_plan(with_fishing)
+	if not is_equal_approx(white_y, 6.0):
+		var lantern := plan.items[_index_of_part(plan, "lantern_all_round")] as Dictionary
+		lantern["at"] = [5.0, white_y, 23.0]
+	plan.add_item("lantern_sidelight_port", Vector3(1.0, 1.2, 20.0))
+	plan.add_item("lantern_sidelight_starboard", Vector3(9.0, 1.2, 20.0))
+	return plan
+
+
+func _index_of_part(plan: StructurePlan, part_id: String) -> int:
+	for i in plan.items.size():
+		if str((plan.items[i] as Dictionary).get("item_id", "")) == part_id:
+			return i
+	return -1
 
 
 func _failed_ids(report: Dictionary) -> PackedStringArray:
@@ -340,39 +365,88 @@ func _test_rule_kinds_are_satisfiable() -> void:
 	)
 
 
-func _test_white_above_sidelights_is_blocked_on_the_catalog() -> void:
-	## The tenth rule kind is the one the earlier survey's "all ten work as-is"
-	## misses: `VesselCompliance._white_height_delta` hardcodes four brick ids.
-	## No part in the kit carries them, so no plan can satisfy it today. This is
-	## a CATALOG gap, not a measurement gap — pin it, and pin the diagnosis.
+## The sidelight rules are TAG-addressed, and that is the whole of STATE.md 2f.
+##
+## They used to name the brick ids `light_nav_port` / `light_nav_stbd`, and
+## `white_above_sidelights` hardcoded four brick ids of its own, so a plan failed
+## FIVE of `general_vessel`'s eight rules regardless of what was fitted — the
+## paragraph that stood here called that "a CATALOG gap" and pinned it. It is
+## gone, and what replaces it is the property rather than the count: the same
+## legal object is addressable from the plan side and the brick side by the same
+## word.
+func _test_sidelight_rules_are_tag_addressed() -> void:
 	var grid := _grid()
-	var plan := _outfitted_plan(true)
+	var plan := _lit_plan(true)
 	var outfit := PO.validate(plan, HULL, grid)
 	var metrics := PO.measure(plan, grid, outfit)
-	var verdict := _evaluate({"kind": "white_above_sidelights"}, metrics, outfit)
-	_check("white_above_sidelights cannot pass today", not bool(verdict["ok"]))
+
+	## Both vocabularies carry the tags, and neither carries the other's ids.
 	_check(
-		"and it fails for want of sidelight POSITIONS, not a bad measurement",
-		is_equal_approx(float(verdict["current"]), -1.0)
+		"a catalogue part carries nav_port",
+		Parts.has_tag("lantern_sidelight_port", "nav_port")
 	)
-	var missing := PackedStringArray()
-	for id in ["light_nav_port", "light_nav_stbd", "light_nav_white", "light_mast_white"]:
-		if not Parts.has(id):
-			missing.append(id)
 	_check(
-		"the kit carries none of the four ids that rule hardcodes",
-		missing.size() == 4
+		"a catalogue part carries nav_stbd",
+		Parts.has_tag("lantern_sidelight_starboard", "nav_stbd")
+	)
+	_check("a brick carries nav_port", BrickCatalog.has_tag("light_nav_port", "nav_port"))
+	_check("a brick carries nav_stbd", BrickCatalog.has_tag("light_nav_stbd", "nav_stbd"))
+	_check(
+		"and the kit still carries none of the brick IDS — the tag is the address",
+		not Parts.has("light_nav_port") and not Parts.has("light_nav_stbd")
+	)
+
+	## `tag_side` locates equipment the plan really carries.
+	var port_side := _evaluate(
+		{"kind": "tag_side", "tag": "nav_port", "side": "port"}, metrics, outfit
+	)
+	_check("tag_side: the red light is to port", bool(port_side["ok"]))
+	_check(
+		"tag_side: the same light is not to starboard",
+		not bool(_evaluate(
+			{"kind": "tag_side", "tag": "nav_stbd", "side": "port"}, metrics, outfit
+		)["ok"])
+	)
+	_check(
+		"tag_side: a tag nothing carries locates nothing and fails",
+		not bool(_evaluate(
+			{"kind": "tag_side", "tag": "nav_white_of_the_gods", "side": "port"}, metrics, outfit
+		)["ok"])
+	)
+
+	## `white_above_sidelights` measures a real height difference now, and the
+	## number is the property: the lantern is 6.0 m up and the sidelights 1.2 m,
+	## which is 12 cells against 2, so the delta is 10 half-metre cells.
+	var verdict := _evaluate({"kind": "white_above_sidelights"}, metrics, outfit)
+	_check("white_above_sidelights passes on a lit plan", bool(verdict["ok"]))
+	_check(
+		"and it is the real cell delta, not a token",
+		is_equal_approx(float(verdict["current"]), 10.0)
+	)
+
+	## Drop the white light BELOW the sidelights and the rule must bite. This is
+	## the half that proves the law was not weakened to let a plan through.
+	var low := _lit_plan(true, 0.4)
+	var low_outfit := PO.validate(low, HULL, grid)
+	var low_metrics := PO.measure(low, grid, low_outfit)
+	var low_verdict := _evaluate({"kind": "white_above_sidelights"}, low_metrics, low_outfit)
+	_check("a white light below the sidelights fails", not bool(low_verdict["ok"]))
+	_check(
+		"and it fails on the measurement, not on absence",
+		float(low_verdict["current"]) <= 0.0 and not is_equal_approx(float(low_verdict["current"]), -1.0)
 	)
 
 
 # ── 4. Scoreboards ──────────────────────────────────────────────────────────
 
-## The two scoreboards below are TODAY'S numbers, and they are meant to move:
-## the day the kit gains `light_nav_port` / `light_nav_stbd` / `light_nav_white`
-## parts, these go to 8/8 and 10/10 and this test fails on purpose. That is the
-## signal that a plan can finally be registered — not a regression.
+## AN UNLIT PLAN IS REFUSED, and by exactly the five rules that ask for lights.
+## This was written as "today's numbers, meant to move"; the numbers have not
+## moved, because they were never about the catalogue's reach. They are about
+## the law biting a boat with no navigation lights on it, which it must go on
+## doing — see `_test_a_lit_plan_certifies` for the other half.
 func _test_general_vessel_scoreboard() -> void:
-	## A full plan minus fishing gear (general_vessel caps fishing at 0).
+	## A full plan minus fishing gear (general_vessel caps fishing at 0), and
+	## with no navigation lights except the all-round white one.
 	var report := PO.compliance(_outfitted_plan(false), HULL, "general_vessel", _grid())
 	_check("a well-built plan still breaks no budget", bool(report["outfit_ok"]))
 	_check(
@@ -392,6 +466,43 @@ func _test_general_vessel_scoreboard() -> void:
 	_check("so the plan is still refused", not bool(report["ok"]))
 
 
+## THE OTHER HALF, and the one STATE.md 2f is about: fit the lights and the
+## same plan is certified — through `PlanOutfit.compliance`, which is what
+## `DeckFitout.apply_plan` calls.
+func _test_a_lit_plan_certifies() -> void:
+	var report := PO.compliance(_lit_plan(false), HULL, "general_vessel", _grid())
+	_check(
+		"a lit plan meets all eight of general_vessel's requirements",
+		VesselCompliance.checklist_summary(report) == "8/8 legal requirements"
+	)
+	_check("nothing on the checklist fails", _failed_ids(report).is_empty())
+	_check("so the registration verdict is yes", bool(report["registration_ok"]))
+	_check("and the whole report is ok", bool(report["ok"]))
+
+	## Remove ONE light and the boat stops being legal — the rule sees the
+	## equipment, it does not merely stop asking.
+	var one_eyed := _lit_plan(false)
+	one_eyed.items.remove_at(_index_of_part(one_eyed, "lantern_sidelight_port"))
+	var dark := PO.compliance(one_eyed, HULL, "general_vessel", _grid())
+	_check("pulling the port sidelight refuses the vessel", not bool(dark["registration_ok"]))
+	_check(
+		"and it names the port rules, not a generic failure",
+		_failed_ids(dark) == PackedStringArray([
+			"port_light", "port_light_side", "white_light_height",
+		])
+	)
+
+	## A second port light is one too many — `max` still holds under a tag.
+	var doubled := _lit_plan(false)
+	doubled.add_item("lantern_sidelight_port", Vector3(1.0, 1.2, 12.0))
+	var over := PO.compliance(doubled, HULL, "general_vessel", _grid())
+	_check("two port sidelights breaks the 1..1 bound", not bool(over["registration_ok"]))
+	_check(
+		"and it is the count rule that says so",
+		int(_rule(over, "port_light")["current"]) == 2
+	)
+
+
 func _test_fishing_vessel_scoreboard() -> void:
 	var report := PO.compliance(_outfitted_plan(true), HULL, "fishing_vessel", _grid())
 	_check("fishing_vessel inherits general_vessel's eight and adds two",
@@ -399,6 +510,12 @@ func _test_fishing_vessel_scoreboard() -> void:
 	_check(
 		"five of ten pass",
 		VesselCompliance.checklist_summary(report) == "5/10 legal requirements"
+	)
+	_check(
+		"and a LIT fishing plan meets all ten",
+		VesselCompliance.checklist_summary(
+			PO.compliance(_lit_plan(true), HULL, "fishing_vessel", _grid())
+		) == "10/10 legal requirements"
 	)
 	_check("the fishing gear requirement passes", bool(_rule(report, "fishing_gear")["ok"]))
 	_check("the catch deck requirement passes", bool(_rule(report, "catch_deck")["ok"]))

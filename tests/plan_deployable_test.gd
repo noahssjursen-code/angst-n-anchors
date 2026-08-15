@@ -28,17 +28,19 @@ extends Node
 ## fixed: reading a plan as bricks still gives nothing, which is exactly why the
 ## shape has to be detected before the reader is chosen.
 ##
-## ── The honest limit, and why §5 injects a registration ─────────────────────
+## ── The limit that WAS honest, and is now closed (STATE.md 2f) ──────────────
 ##
-## **A plan still cannot pass `general_vessel`, and no wiring can change that.**
-## Every registration in the catalog inherits `general_vessel`, which requires
-## `light_nav_port` and `light_nav_stbd` by part id plus a white light above
-## them — and `resources/data/parts/catalog.json` contains no navigation-light
-## part of any kind. So the ceiling for a plan is 3/8 today. §4 pins that number
-## and pins that the five failures are exactly the navigation-light rules, so
-## the day the kit gains those parts this test says so out loud.
+## This header used to read *"a plan still cannot pass `general_vessel`, and no
+## wiring can change that"* — because the two sidelight rules named brick ids no
+## catalogue part carried, so the ceiling for a plan was 3/8. That is fixed: the
+## rules are tag-addressed and the kit carries two sidelight parts. §4 now pins
+## BOTH halves — an unlit plan is still refused by those same five rules, and a
+## lit one certifies under the real `general_vessel`.
 ##
-## That leaves the deploy/save path with nothing to prove itself on, so §5
+## §5's injected registration is KEPT even so, and not out of inertia: its four
+## controls are about the deploy/save seam choosing the right reader, and they
+## want a licence whose requirements are stated in this file rather than one
+## whose content can move underneath them. It
 ## injects a test-only registration into `VesselRegistrationCatalog._cache`
 ## whose three requirements a plan CAN meet. (It carried a fourth, an enclosed-
 ## accommodation rule, until deleting the room primitive took the only thing a
@@ -68,7 +70,7 @@ const HARNESS_REGISTRATION := "harness_minimum"
 ## A script error aborts the enclosing function and lets `_run` carry on, so a
 ## broken seam could report PASS having asserted a third of what it claims.
 ## Pinned for exactly that reason — the count itself is a check.
-const EXPECTED_CHECKS := 61
+const EXPECTED_CHECKS := 64
 
 var _t: TestReport = null
 var _spawned: Array[Node] = []
@@ -84,7 +86,7 @@ func _run() -> void:
 	_test_reading_a_plan_as_bricks_yields_nothing()
 	_test_apply_any_threads_the_registration()
 	_test_apply_plan_reports_a_real_verdict()
-	_test_the_ceiling_is_the_part_catalog()
+	_test_a_plan_can_meet_general_vessel()
 	_test_a_passing_plan_deploys_and_survives_a_save()
 	_cleanup()
 	var ran := _t.check_count()
@@ -114,6 +116,17 @@ func _outfitted_plan() -> StructurePlan:
 	for i in 4:
 		plan.add_item("bollard_pair", Vector3(1.0 + float(i) * 0.6, 0.0, 4.0 + float(i) * 2.0))
 	plan.add_item("lantern_all_round", Vector3(5.0, 6.0, 23.0))
+	return plan
+
+
+## The same vessel with its navigation lights fitted — a red one to port, a green
+## one to starboard, under the all-round white light 6 m up. Port is −x in
+## `DeckGrid.cell_center_local` and this hull is 10 m in the beam, so x = 1.0 is
+## to port and x = 9.0 to starboard.
+func _lit_plan() -> StructurePlan:
+	var plan := _outfitted_plan()
+	plan.add_item("lantern_sidelight_port", Vector3(1.0, 1.2, 20.0))
+	plan.add_item("lantern_sidelight_starboard", Vector3(9.0, 1.2, 20.0))
 	return plan
 
 
@@ -274,37 +287,49 @@ func _test_apply_plan_reports_a_real_verdict() -> void:
 
 # ── 4. The ceiling, and whose fault it is ───────────────────────────────────
 
-## Every registration inherits `general_vessel`. `general_vessel` names
-## `light_nav_port` / `light_nav_stbd` by part id and needs a white light ABOVE
-## them. The kit has no navigation-light part at all, so this is a DATA gap in
-## `resources/data/parts/catalog.json`, not a wiring gap — pin both halves so a
-## future reader cannot mistake one for the other.
-func _test_the_ceiling_is_the_part_catalog() -> void:
-	var report := PO.compliance(_outfitted_plan(), HULL, "general_vessel", _grid())
-	_t.check("a well-built plan breaks no OUTFIT budget", bool(report.get("outfit_ok", false)))
-	_t.check("but it is still refused", not bool(report.get("ok", true)))
+## THE CEILING IS GONE — STATE.md 2f, closed 2026-08-15.
+##
+## This sub-test was `_test_the_ceiling_is_the_part_catalog` and it pinned a
+## number: a plan could reach 3/8 on `general_vessel` and no further, because
+## the two sidelight rules named the brick ids `light_nav_port` /
+## `light_nav_stbd` and `white_above_sidelights` hardcoded four more, and no
+## catalogue part could carry any of them. The rules are tag-addressed now and
+## the kit carries `lantern_sidelight_port` / `lantern_sidelight_starboard`.
+##
+## THE LAW DID NOT MOVE, and this keeps both halves so that cannot be misread:
+## an unlit plan is still refused by exactly those five rules, and the same plan
+## with lights on it certifies under the REAL `general_vessel`.
+func _test_a_plan_can_meet_general_vessel() -> void:
+	var unlit := PO.compliance(_outfitted_plan(), HULL, "general_vessel", _grid())
+	_t.check("a well-built plan breaks no OUTFIT budget", bool(unlit.get("outfit_ok", false)))
+	_t.check("but with no navigation lights it is refused", not bool(unlit.get("ok", true)))
 	_t.check(
 		"the five failures are exactly the navigation-light rules",
-		_failed_ids(report) == PackedStringArray([
+		_failed_ids(unlit) == PackedStringArray([
 			"port_light", "port_light_side", "starboard_light",
 			"starboard_light_side", "white_light_height",
 		])
 	)
-	var missing := PackedStringArray()
+
+	var lit := PO.compliance(_lit_plan(), HULL, "general_vessel", _grid())
+	_t.check("fitting the two sidelights certifies the same plan", bool(lit.get("ok", false)))
+	_t.check("and the registration verdict says so", bool(lit.get("registration_ok", false)))
+	_t.check("nothing on its checklist fails", _failed_ids(lit).is_empty())
+	## The rule SEES the lights — it did not stop asking. The kit still carries
+	## none of the brick ids those rules used to name.
+	var brick_ids := PackedStringArray()
 	for id in ["light_nav_port", "light_nav_stbd", "light_nav_white", "light_mast_white"]:
-		if not PartCatalog.has(id):
-			missing.append(id)
-	_t.equal(
-		"and the kit carries none of the four part ids those rules name",
-		missing.size(),
-		4,
-	)
-	## Not one licence escapes it: they all inherit general_vessel.
+		if PartCatalog.has(id):
+			brick_ids.append(id)
+	_t.equal("and it did so by TAG — the kit carries none of the brick ids", brick_ids.size(), 0)
+
+	## Not one licence is left behind: they all inherit general_vessel, so the
+	## lights that certify here must certify there.
 	for registration_id in ["fishing_vessel", "cargo_vessel", "bulk_vessel", "passenger_vessel"]:
 		_t.check(
-			"%s inherits the same unmeetable lights" % registration_id,
-			_failed_ids(
-				PO.compliance(_outfitted_plan(), HULL, registration_id, _grid())
+			"%s no longer fails on the lights" % registration_id,
+			not _failed_ids(
+				PO.compliance(_lit_plan(), HULL, registration_id, _grid())
 			).has("port_light")
 		)
 

@@ -22,16 +22,16 @@
         {
           "id": "port_light",
           "label": "Port navigation light",
-          "kind": "brick_count",
-          "brick_id": "light_nav_port",
+          "kind": "tag_count",
+          "tag": "nav_port",
           "min": 1,
           "max": 1
         },
         {
           "id": "starboard_light",
           "label": "Starboard navigation light",
-          "kind": "brick_count",
-          "brick_id": "light_nav_stbd",
+          "kind": "tag_count",
+          "tag": "nav_stbd",
           "min": 1,
           "max": 1
         },
@@ -46,15 +46,15 @@
         {
           "id": "port_light_side",
           "label": "Port light mounted on port side",
-          "kind": "brick_side",
-          "brick_id": "light_nav_port",
+          "kind": "tag_side",
+          "tag": "nav_port",
           "side": "port"
         },
         {
           "id": "starboard_light_side",
           "label": "Starboard light mounted on starboard side",
-          "kind": "brick_side",
-          "brick_id": "light_nav_stbd",
+          "kind": "tag_side",
+          "tag": "nav_stbd",
           "side": "starboard"
         },
 		{

@@ -267,8 +267,20 @@ builder; `scenes/apps/building_brick_editor.tscn` is gone, but
 present and still loadable**, so "retired" here means "do not author new work in
 it", not "deleted") or write
 JSON directly in `resources/data/structures/`
-(see `demo_workboat.json`). Legacy compliance/budgets do not yet apply to
-plans — that rework lands with the new vocabulary.
+(see `demo_workboat.json`).
+
+**Compliance DOES apply to plans, and as of 2026-08-15 a plan can be certified.**
+This paragraph read *"legacy compliance/budgets do not yet apply to plans — that
+rework lands with the new vocabulary"*. `PlanOutfit` has measured a plan through
+`VesselCompliance`'s own rule evaluator since it was written; what was missing was
+that five of `general_vessel`'s rules addressed BRICK IDS no part could carry, so a
+plan-built boat failed 5 of 8 whatever was fitted. Those five are tag-addressed now
+(`nav_port` / `nav_stbd` / `nav_white`, plus the `tag_side` rule kind), the kit
+carries `lantern_sidelight_port` / `lantern_sidelight_starboard`, and Structure
+Studio's `I` FITTING tool is how a player places them. Measured through
+`VesselSpawn` → `apply_plan`: **8 of 8, `registration_ok=true`** (STATE.md 2f).
+`vessel_registration_test` now holds every shipped rule to being addressable by
+BOTH build paths, so writing a new brick-id rule reddens the gate.
 
 `BrickCatalog` is the legacy voxel construction kit (vessel decks + land
 buildings). **It is not wiped** — `BrickCatalog.ids()` returns **64 definitions**

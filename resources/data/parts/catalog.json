@@ -422,6 +422,96 @@
     },
 
     {
+      "id": "lantern_sidelight_port",
+      "display": "Port sidelight",
+      "description": "Post carrying a red lens behind an inboard screen board. The port navigation light of any powered vessel.",
+      "material": "metal",
+      "color": "#8f2118",
+      "mass_kg": 7.0,
+      "yaw_step": 15,
+      "compliance": {"tags": ["light", "nav_port"]},
+      "params": {
+        "height": {"default": 0.9, "min": 0.2, "max": 3.0}
+      },
+      "build": [
+        {
+          "primitive": "spar",
+          "from": [0, 0, 0],
+          "to": [0, "$height", 0],
+          "radius": 0.035,
+          "sides": 8,
+          "taper": 1.0,
+          "color": "#4d5257"
+        },
+        {
+          "primitive": "spar",
+          "from": [0, "$height", 0],
+          "to": [0, "$height+0.16", 0],
+          "radius": 0.085,
+          "sides": 12,
+          "taper": 1.0,
+          "color": "#b52a1e"
+        },
+        {
+          "primitive": "plate",
+          "corners": [
+            [-0.1, "$height-0.02", 0.07],
+            [0.1, "$height-0.02", 0.07],
+            [0.1, "$height+0.2", 0.07],
+            [-0.1, "$height+0.2", 0.07]
+          ],
+          "thickness": 0.02,
+          "color": "#26282b"
+        }
+      ]
+    },
+
+    {
+      "id": "lantern_sidelight_starboard",
+      "display": "Starboard sidelight",
+      "description": "Post carrying a green lens behind an inboard screen board. The starboard navigation light of any powered vessel.",
+      "material": "metal",
+      "color": "#1a6b24",
+      "mass_kg": 7.0,
+      "yaw_step": 15,
+      "compliance": {"tags": ["light", "nav_stbd"]},
+      "params": {
+        "height": {"default": 0.9, "min": 0.2, "max": 3.0}
+      },
+      "build": [
+        {
+          "primitive": "spar",
+          "from": [0, 0, 0],
+          "to": [0, "$height", 0],
+          "radius": 0.035,
+          "sides": 8,
+          "taper": 1.0,
+          "color": "#4d5257"
+        },
+        {
+          "primitive": "spar",
+          "from": [0, "$height", 0],
+          "to": [0, "$height+0.16", 0],
+          "radius": 0.085,
+          "sides": 12,
+          "taper": 1.0,
+          "color": "#1f8a2c"
+        },
+        {
+          "primitive": "plate",
+          "corners": [
+            [-0.1, "$height-0.02", 0.07],
+            [0.1, "$height-0.02", 0.07],
+            [0.1, "$height+0.2", 0.07],
+            [-0.1, "$height+0.2", 0.07]
+          ],
+          "thickness": 0.02,
+          "color": "#26282b"
+        }
+      ]
+    },
+
+    {
       "id": "helm_console",
       "display": "Helm console",
       "description": "Raked instrument face between two grab rails. The steering position of any wheelhouse or open bridge.",

@@ -74,9 +74,16 @@ static func catalog_version() -> int:
 
 static func validate_catalog(catalog: Dictionary) -> PackedStringArray:
 	var errors := PackedStringArray()
+	## `tag_side` is `brick_side` addressed by TAG, and it is what the shipped
+	## sidelight rules use: a brick id names one vocabulary's object, a tag names
+	## the legal thing both vocabularies carry. `brick_count` / `brick_side` are
+	## kept — a registration may legitimately demand one specific model — but a
+	## rule that must be met by BOTH build paths has to be tag-addressed, which is
+	## the property `vessel_registration_test` now holds every shipped rule to.
 	var allowed_kinds := [
 		"slot_count", "brick_count", "tag_count", "cargo_cells", "metric_range", "capacity",
-		"capability", "equipment_rating_max", "brick_side", "white_above_sidelights",
+		"capability", "equipment_rating_max", "brick_side", "tag_side",
+		"white_above_sidelights",
 	]
 	if int(catalog.get("version", 0)) != FORMAT_VERSION:
 		errors.append("Unsupported registration catalog version")
