@@ -312,8 +312,27 @@ added since: `box_winding_test`, `shipping_lane_traffic_integrity_test`,
 `building_cache_visual_test`, `visual_stamp_cache_test`, `starter_small_hull_test`,
 `hull_sheer_test`.
 
-**SUPERSEDED by run `20260815-103207-31656`, also over a quiet tree: 112 units,
-103 PASS, 7 FAIL, 1 NOTRUN, 1 SKIP.** `land_field_geography_test` moved 2/43 → **PASS
+**SUPERSEDED AGAIN — run `20260815-163256-2208`, quiet tree: 115 units, 108 PASS,
+5 FAIL, 1 NOTRUN, 1 SKIP.** Not one failure is unexplained and none is new:
+`port_trade_profile_test` 1/130 (the apron props no code draws),
+`remote_realtime_join_smoke` (needs a live server), `structure_plate_test` 3/97 (the
+open slop decision), `building_interior_test` 5/41 (**all five the open cell decision
+— mutating `BrickCatalog.size_m` to the grid takes it to PASS (41)**),
+`plan_interior_test` 1/56 (the mast); plus `port_layout_visual_capture` NOTRUN — a
+capture script sitting in `tests/` without a leading underscore that never declares a
+verdict, REALITY §4's own shape, still live — and `ocean_wake_gpu_smoke` SKIP,
+self-policing.
+
+**From 105 units / 19 FAIL on 2026-08-10 to 115 / 5.** The ten extra units are checks
+that did not exist that morning, and eight of them guard defects that were invisible
+until the wave that found them: `box_winding_test`,
+`shipping_lane_traffic_integrity_test`, `building_cache_visual_test`,
+`visual_stamp_cache_test`, `starter_small_hull_test`, `hull_sheer_test`,
+`starter_vessel_grant_test`, `deckhouse_shape_test`, `plan_hull_bounds_test`,
+`plan_fitting_draws_test`.
+
+*(Superseded, kept for the shape of the day: run `20260815-103207-31656`, 112 units,
+103 PASS, 7 FAIL, 1 NOTRUN, 1 SKIP.)* `land_field_geography_test` moved 2/43 → **PASS
 (53)** and `building_interior_test` 15/37 → **5/41** (still red; all five are the open
 cell decision).
 
