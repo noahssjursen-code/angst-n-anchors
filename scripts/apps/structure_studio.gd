@@ -340,6 +340,7 @@ func _run_studio_probe() -> void:
 	_probe_piece_fixture(expect, "%s/probe_piece_tug.json" % STRUCTURES_DIR, "tug")
 	_probe_piece_tug_recipe(expect)
 	_probe_entity_ids(expect)
+	_probe_off_hull_is_on_screen(expect)
 	for arg in OS.get_cmdline_user_args():
 		if str(arg) == "--studio-write-fixtures":
 			_write_tug_fixture()
@@ -368,6 +369,37 @@ func _run_studio_probe() -> void:
 ## `_plan.add_piece`. The question this file has to answer is REALITY.md's — could
 ## a player do this with a mouse, without typing a number — and a probe that
 ## reaches past the controls into the plan cannot answer it.
+
+
+## Does a builder who drags a wall off the boat SEE it? (REALITY.md §3d.)
+##
+## `PlanOutfit` refuses off-hull entities and `DeckFitout.apply_plan` then does
+## not build them — but the identical chain on the brick side computed every
+## error correctly and threw it away one line before the Label, so a player never
+## saw one (STATE.md 2c). This asserts the sentence is on the panel, not that the
+## function returned a list. Restoring the panel line to the plain entity count
+## turns this red.
+func _probe_off_hull_is_on_screen(expect: Callable) -> void:
+	_set_context("vessel")
+	_place_wall(Vector3(2, 0, 6), Vector3(8, 0, 6))
+	expect.call("control: a wall on the deck is not reported off the hull", _off_hull.is_empty())
+	var clean_panel := _entities_label.text
+	expect.call(
+		"control: the panel says nothing about the hull",
+		not clean_panel.contains("OFF THE HULL")
+	)
+	_place_wall(Vector3(900, 0, 900), Vector3(906, 0, 900))
+	expect.call("a wall 900 m off the bow is reported off the hull", _off_hull.size() == 1)
+	_refresh_panel()
+	expect.call(
+		"and the STRUCTURE panel TELLS the builder it will not be built",
+		_entities_label.text.contains("1 OFF THE HULL — NOT BUILT")
+	)
+	expect.call(
+		"and the toast names the entity and the deck it missed",
+		_status.contains("WALL") and _status.contains("10.0 X 28.0 M HULL")
+	)
+	_set_context("vessel")
 
 
 ## The controls themselves: palette, steppers, dropdowns, rotate, tints.
@@ -1479,7 +1511,15 @@ func _probe_bounds_hold(wall: Dictionary) -> bool:
 
 # ── Context / plan lifecycle ─────────────────────────────────────────────────
 
+## Preloaded rather than named, for the reason `plan_outfit.gd`'s own header
+## gives: a script that names a global the class cache has not caught up with
+## fails to COMPILE, and this app is a lane C gate unit.
+const PlanOutfitScript := preload("res://scripts/ship/plan_outfit.gd")
+
 var _deck_grid: DeckGrid
+## Entities of `_plan` that `PlanOutfit` will refuse to build. Recomputed by
+## `_recompute_off_hull` on every rebake; read by the panel and by the probe.
+var _off_hull: Array = []
 
 
 func _set_context(context: String) -> void:
@@ -1784,6 +1824,33 @@ func _rebake() -> void:
 		add_child(_ghost_root)
 	_recompute_bounds()
 	_update_selection_visual()
+	_recompute_off_hull()
+
+
+## Which entities of the working plan stand nowhere on the hull, recomputed with
+## the bake because that is when the answer can change.
+##
+## THIS IS THE HALF THAT REACHES A PERSON. `PlanOutfit` has computed an off-deck
+## warning for slot fittings since it was written and **nothing anywhere read it**
+## — not this studio, which is the one place a plan is authored, and not
+## `DeckFitout.apply_plan`, which reads `errors` only and pushes them to the
+## engine console. The brick side had the identical defect one layer up:
+## `shipyard_brick_editor` computed a whole error chain and discarded it one line
+## before the Label (STATE.md 2c). A refusal a builder cannot see is not a
+## refusal; it is a vessel that silently loses geometry the next time it spawns.
+##
+## Cost, measured: the fence is about what `collect_colliders` costs — 26 ms on
+## `demo_workboat`, 98 ms on the 617-entity `probe_container_feeder` — against a
+## rebake that already bakes the whole plan twice (solid + ghost). It is taken
+## here, once per rebake, and never in `_refresh_ui`, which runs on every button.
+func _recompute_off_hull() -> void:
+	_off_hull.clear()
+	if _context != "vessel" or _deck_grid == null:
+		return
+	_off_hull = PlanOutfitScript.off_hull_entities(_plan, _deck_grid)
+	if _off_hull.is_empty():
+		return
+	_set_status(str((_off_hull[0] as Dictionary)["message"]).to_upper(), false)
 
 
 func _recompute_bounds() -> void:
@@ -3906,6 +3973,10 @@ func _refresh_panel() -> void:
 	_entities_label.text = "STRUCTURE\n%d PARTS\n%d KIT PIECES\n%d UNDO STEPS" % [
 		_plan.entity_count(), _plan.pieces.size(), _undo_stack.size()
 	]
+	## Persistent, not a toast: a builder who dismissed the message still has to
+	## be able to see that part of their ship will not be built.
+	if not _off_hull.is_empty():
+		_entities_label.text += "\n%d OFF THE HULL — NOT BUILT" % _off_hull.size()
 	_hull_option.visible = _context == "vessel"
 	_context_label.text = (
 		"VESSEL / %s" % _hull_id.to_upper() if _context == "vessel" else "LAND BUILDING"

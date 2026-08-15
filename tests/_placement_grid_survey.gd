@@ -22,6 +22,14 @@ extends Node
 ##   • §8 — an off-hull `add_wall`/`add_deck`/`add_stair` is not refused, not
 ##     warned about, and IS drawn and collided: bake AABB 4x4 m -> **910x910 m**,
 ##     1 -> 17 colliders.
+##     CLOSED 2026-08-15 at the CONSUMER, which is why §8 still prints 910.
+##     `StructureBaker.bake` / `collect_colliders` are the producer and still
+##     draw whatever they are handed — deliberately; they have no hull. The fence
+##     is `PlanOutfit.off_hull_entities`, taken by `DeckFitout.apply_plan` before
+##     anything is baked or collided, and through `VesselSpawn` the same plan now
+##     leaves **one** shape on the WalkDeck and draws 4 x 4 m. §7 shows the other
+##     half: `PlanOutfit.validate` returns ok=false and names the entities.
+##     `tests/plan_hull_bounds_test.tscn` asserts both, through PhysicsServer3D.
 ##   • §2 — `BuildingLayout.place_footprint` ignored the grid it was handed and
 ##     grew its own volume instead (8 -> 12), shifting every stored cell.
 ##     FIXED 2026-08-15; re-running this probe now prints `false` there.

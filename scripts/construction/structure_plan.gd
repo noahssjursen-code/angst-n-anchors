@@ -1141,6 +1141,52 @@ func remove_entity(id: int) -> bool:
 	return false
 
 
+## This plan minus the entities `dropped` names — `{kind: {index: true}}`, where
+## `kind` is one of ENTITY_KINDS and `index` is a position in that collection.
+##
+## BY INDEX, NOT BY ID, and that is the whole reason this lives here rather than
+## in the caller: `remove_entity` above resolves an id by walking the collections
+## and taking the FIRST match, so a plan carrying a duplicate id silently loses
+## the wrong entity (REALITY.md §4b — `probe_piece_trawler` carried 51 of them).
+## An index is unambiguous whatever the ids say.
+##
+## The copy is shallow: entity dictionaries are shared with the source, because
+## every consumer of a filtered plan (the baker, PlanOutfit) reads them and
+## `StructureBaker.expand` duplicates before it writes. `_next_id` is carried
+## across rather than recomputed, so an id already spent stays spent even if the
+## entity that spent it was the one removed.
+func without_entities(dropped: Dictionary) -> StructurePlan:
+	var out := StructurePlan.new()
+	out.context = context
+	out.hull_id = hull_id
+	out.hull = hull
+	out.palette = palette
+	out._next_id = _next_id
+	var kinds := _collections()
+	var kept: Array = []
+	for index in kinds.size():
+		var kind := str(ENTITY_KINDS[index])
+		var source := kinds[index] as Array
+		var drop := dropped.get(kind, {}) as Dictionary
+		if drop.is_empty():
+			kept.append(source.duplicate())
+			continue
+		var list: Array = []
+		for i in source.size():
+			if not drop.has(i):
+				list.append(source[i])
+		kept.append(list)
+	## `_collections()` order is walls, decks, stairs, EDGES, ITEMS, pieces — the
+	## order ENTITY_KINDS declares, which is not the order they are drawn in.
+	out.walls = kept[0]
+	out.decks = kept[1]
+	out.stairs = kept[2]
+	out.edges = kept[3]
+	out.items = kept[4]
+	out.pieces = kept[5]
+	return out
+
+
 func is_empty() -> bool:
 	for collection in _collections():
 		if not (collection as Array).is_empty():

@@ -1626,26 +1626,85 @@ static func _run_colliders(a: Vector3, b: Vector3, radius: float, offset: Vector
 ## each the sub-run's bounding box grown by the tube radius. That over-covers by
 ## roughly half a step and never under-covers.
 static func collect_colliders(plan_in: StructurePlan, offset := Vector3.ZERO) -> Array:
+	var out: Array = []
+	for row_variant in entity_colliders(plan_in, offset):
+		out.append_array((row_variant as Dictionary)["boxes"] as Array)
+	return out
+
+
+## The SAME boxes `collect_colliders` returns, grouped by the plan entity that
+## drew each one: `[{kind, index, id, boxes:[…]}, …]`.
+##
+## `collect_colliders` is now literally the flattening of this list, so the two
+## cannot disagree about what a plan puts in the world (§3b — one derivation).
+## It exists because a consumer has to ask a question the flat list cannot
+## answer — "WHICH entity drew this box, and does that entity stand on the boat
+## at all" (`PlanOutfit.off_hull_entities`) — and answering it from a second walk
+## over the plan is the duplicated derivation that always drifts.
+##
+## `index` is the entity's position in its own collection of the RESOLVED plan,
+## and it is what a caller should remove by. An id is an address the plan does
+## not guarantee unique (REALITY.md §4b) and `probe_piece_trawler` carried 51
+## duplicates within living memory; dropping the wrong entity because two shared
+## an id is a worse outcome than the one being fixed.
+##
+## The plan is `resolved()` FIRST, so a piece-kit placement is measured as the
+## plates it actually becomes and not as the node it stands on.
+static func entity_colliders(plan_in: StructurePlan, offset := Vector3.ZERO) -> Array:
 	var plan := resolved(plan_in)
 	var expanded := expand(plan)
 	var out: Array = []
+	var index := 0
 	for wall_variant in expanded["walls"] as Array:
-		for box_variant in wall_boxes(wall_variant as Dictionary):
-			out.append(_collider_of(box_variant as Dictionary, offset))
+		var wall := wall_variant as Dictionary
+		var boxes: Array = []
+		for box_variant in wall_boxes(wall):
+			boxes.append(_collider_of(box_variant as Dictionary, offset))
+		out.append({
+			"kind": "wall", "index": index, "id": int(wall.get("source_id", -1)), "boxes": boxes,
+		})
+		index += 1
+	index = 0
 	for deck_variant in expanded["decks"] as Array:
-		for box_variant in deck_boxes(deck_variant as Dictionary):
-			out.append(_collider_of(box_variant as Dictionary, offset))
+		var deck := deck_variant as Dictionary
+		var boxes: Array = []
+		for box_variant in deck_boxes(deck):
+			boxes.append(_collider_of(box_variant as Dictionary, offset))
+		out.append({
+			"kind": "deck", "index": index, "id": int(deck.get("source_id", -1)), "boxes": boxes,
+		})
+		index += 1
+	index = 0
 	for stair_variant in expanded["stairs"] as Array:
-		for box_variant in stair_boxes(stair_variant as Dictionary):
-			out.append(_collider_of(box_variant as Dictionary, offset))
+		var stair := stair_variant as Dictionary
+		var boxes: Array = []
+		for box_variant in stair_boxes(stair):
+			boxes.append(_collider_of(box_variant as Dictionary, offset))
+		out.append({
+			"kind": "stair", "index": index, "id": int(stair.get("source_id", -1)), "boxes": boxes,
+		})
+		index += 1
+	index = 0
 	for item_variant in plan.items:
-		out.append_array(_item_colliders(plan, item_variant as Dictionary, offset))
+		var item := item_variant as Dictionary
+		out.append({
+			"kind": "item", "index": index, "id": int(item.get("id", -1)),
+			"boxes": _item_colliders(plan, item, offset),
+		})
+		index += 1
 	## `sweep_collider_boxes` already returns exactly the {center, size, yaw_deg}
 	## dictionary `_collider_of` consumes, so an edge gets the same one-liner
 	## every other entity gets — no edge-specific collider shape exists.
+	index = 0
 	for edge_variant in plan.edges:
-		for box_variant in edge_collider_boxes(plan, edge_variant as Dictionary):
-			out.append(_collider_of(box_variant as Dictionary, offset))
+		var edge := edge_variant as Dictionary
+		var boxes: Array = []
+		for box_variant in edge_collider_boxes(plan, edge):
+			boxes.append(_collider_of(box_variant as Dictionary, offset))
+		out.append({
+			"kind": "edge", "index": index, "id": int(edge.get("id", -1)), "boxes": boxes,
+		})
+		index += 1
 	return out
 
 

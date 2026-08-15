@@ -8,10 +8,13 @@ extends RefCounted
 ##
 ## ── Why this file exists ────────────────────────────────────────────────────
 ##
-## `DeckFitout.apply_plan` returns a hardcoded `{"outfit_ok": true}` and never
-## calls a validator, while persistence and deployment run `BrickLayout.from_dict`
-## on a plan dict, get an empty layout, fail the helm rule and refuse. So a plan
-## ship can be drawn and can be neither saved, spawned, crewed nor sold.
+## `DeckFitout.apply_plan` used to return a hardcoded `{"outfit_ok": true}` and
+## never call a validator, while persistence and deployment ran
+## `BrickLayout.from_dict` on a plan dict, got an empty layout, failed the helm
+## rule and refused. So a plan ship could be drawn and could be neither saved,
+## spawned, crewed nor sold. Both halves are wired now — `apply_plan` and
+## `compliance_for_layout` both route a `structure_plan_v1` document here — and
+## this paragraph is kept as the reason the file exists, not as a live defect.
 ##
 ## The rule evaluator itself needs NO changes. All ten kinds in
 ## `VesselCompliance._evaluate_rule` read five dictionaries — `brick_counts`,
@@ -80,6 +83,82 @@ extends RefCounted
 ## rules (`brick_side`, `white_above_sidelights`, cargo area) are written in
 ## cells. `StructurePlan.plan_to_cell` is the only converter used.
 
+## ── "On the hull", for a plan ───────────────────────────────────────────────
+##
+## THE ONE PREDICATE is `on_hull_point` / `off_hull_entities` below, and the
+## question it asks is NOT "is this over the deck". That question has a right
+## answer for a BRICK, which occupies a cell (`BrickLayout.cell_on_grid`), and no
+## right answer for a plan, which is authored in free metres. Measured over the
+## 19 shipped fixtures — 2342 entities, 15 057 drawn boxes,
+## `tests/_plan_fence_facts.gd` — **61 entities have a corner outside the deck
+## rectangle and 10 lie entirely outside it**, and they are not mistakes:
+##
+##     +4.000 m  critic_barge            deck plate outboard of the side
+##     +2.000 m  critic_yacht            deck plate outboard of the side
+##     +0.683 m  probe_trawler_bulwark   bow cap rail / stem head cap
+##     +0.580 m  demo_workboat           davit block
+##     +0.220 m  probe_ferry_catamaran_trim  rubbing strake, forward
+##
+## A stem rakes forward of the forward perpendicular, a cap rail overhangs the
+## plating it caps, a rubbing strake stands proud by definition, and a davit
+## swings out over the water. **Containment in the deck rejects real ships** —
+## 61 entities on the every-corner reading, 10 on the any-corner one. Loosening
+## a containment rule until it agreed would be REALITY.md §2, a metric tuned to
+## a known answer.
+##
+## So the fence is not the deck. It is the VESSEL:
+##
+##     deck rectangle  x in [0, width * CELL_M], z in [0, length * CELL_M]
+##     envelope        that rectangle grown by `grid.half_beam` on all four sides
+##
+## `half_beam` is the hull's own half-breadth — a field `DeckGrid` publishes,
+## `width * CELL_M * 0.5` — not a constant chosen here. It scales with the ship
+## (5 m on the 28 m trawler, 16 m on the 150 m feeder) and it is the natural size
+## of the things that hang off a hull's side. Measured against it: **zero of 2342
+## shipped entities are refused**, the worst standing 4.000 m clear of a 5.00 m
+## bound, while the off-hull slab in `tests/_placement_grid_survey.gd` stands
+## **890 m** clear. That is not a threshold separating near misses from far ones;
+## it is the gap between "bolted to this boat" and "authored for a different one".
+##
+## EVERY corner has to be inside, not merely one of them — `on_hull_points`
+## below, and it is the half the numbers argue for rather than the wording. A
+## wall has extent: bounds-checking one point of a footprint passed an entire
+## 119-check file on the buildings side (STATE.md 2, M3). Read the loose way
+## round, a 900 m wall with one end bolted to the deck is "on the hull" and the
+## slab comes straight back — measured, `tests/_plan_fence_facts.gd` §E: a
+## 900 m wall started at (2, 0, 2) bakes a **902 m** AABB, and the any-corner
+## reading refuses none of it while the every-corner reading refuses it. Both
+## readings cost the same on shipped data: zero.
+##
+## Two things this deliberately does NOT do:
+##   • It does not test the bow taper. The taper is a CELL STAIRCASE
+##     approximating a curve, and the entities above cross it on purpose.
+##     Growing a staircase by a metre and calling the result a hull outline
+##     would be a second derivation of `DeckGrid.cell_shape` with none of its
+##     meaning.
+##   • It does not read `plan.hull_grid()`. THE CALLER STATES THE DECK — the same
+##     argument `BrickLayout.set_brick` makes, and it is checkable here too:
+##     `hull_grid()` always passes `beam * 0.5` as the bow taper while
+##     `PassengerCatamaran.make_grid()` passes 0.0, so reading the plan's own
+##     grid cuts a triangle off each bow corner of a bridge deck that has none.
+##     `hull_grid`'s own header already says "do not read this grid for cell
+##     shapes; ask the vessel for that one".
+##
+## ── The band this fence is NOT ──────────────────────────────────────────────
+##
+## Below it sits an older, finer gradient over ITEMS ONLY, and it is deliberate:
+## a slot fitting whose origin cell is off the deck is a WARNING, a cargo item
+## covering a cell outside the exposed deck is an ERROR. A deckhouse fitting
+## overhanging the sheer is normal; a container floating beside the ship is not.
+## That gradient is kept exactly as it was. What was wrong with it is that it had
+## a SILENT third case, and the third case is where the compliance-counted parts
+## live: measured over the catalog, `helm_console` warns, `net_drum` warns,
+## `hold_coaming` errors, and the remaining **12 parts say nothing at all —
+## including `bollard_pair` (tag "mooring") and `lantern_all_round` (tag
+## "nav_white")**, which are exactly the fittings `general_vessel` counts. The
+## fence above closes that at the "is it on the boat at all" level, for every
+## entity kind and not just for items; it does not flatten the finer band into it.
+
 ## Compliance tags that make an item's deck footprint count against the cargo
 ## budget. Both are catalog tags, so a new hold part needs no code here.
 const CARGO_TAGS: Array[String] = ["cargo", "bulk_hold"]
@@ -102,6 +181,242 @@ const SHADOW_EPS := 1e-9
 const Parts := preload("res://scripts/construction/part_catalog.gd")
 
 
+# ── "On the hull": the one predicate ────────────────────────────────────────
+
+## Is this plan-space XZ point inside the vessel's envelope? See the header for
+## why the envelope is the deck rectangle grown by the hull's own half-breadth
+## and not the deck itself.
+static func on_hull_point(grid: DeckGrid, x: float, z: float) -> bool:
+	if grid == null:
+		return false
+	var m := WorldUnits.DECK_CELL_M
+	var margin := grid.half_beam
+	return (
+		x >= -margin
+		and x <= float(grid.width) * m + margin
+		and z >= -margin
+		and z <= float(grid.length) * m + margin
+	)
+
+
+## Every XZ point of an entity that has to land on the vessel.
+##
+## `boxes` are the oriented collider boxes `StructureBaker.entity_colliders`
+## emits for that entity — the boxes the plan really draws and really collides,
+## so this cannot drift from the geometry (§3b). All four XZ corners of every box
+## are taken, never the centre: a wall has extent, and bounds-checking one point
+## is the mutation that passed an entire 119-check file on the buildings side.
+##
+## `item` widens that, and it has to. `StructureBaker._item_colliders` emits
+## boxes for exactly two primitives — `plate` and solid `spar`. A `bollard_pair`,
+## a `lantern_all_round` and a `helm_console` emit NONE, and those are precisely
+## the parts a registration counts, so a fence read off colliders alone would let
+## a boat whose whole legal outfit is in the sea straight through — the plan-side
+## twin of STATE.md 2c. An item therefore contributes its own extent as well, and
+## WHICH extent depends on what draws it — see `item_hull_points`.
+static func hull_test_points(
+	plan: StructurePlan, kind: String, entity: Dictionary, boxes: Array
+) -> PackedVector2Array:
+	var out := PackedVector2Array()
+	for box_variant in boxes:
+		var box := box_variant as Dictionary
+		var c: Vector3 = box["center"]
+		var s: Vector3 = box["size"]
+		var basis := Basis(Vector3.UP, deg_to_rad(float(box.get("yaw_deg", 0.0))))
+		for corner_i in 4:
+			var corner := c + basis * Vector3(
+				(s.x * 0.5) if (corner_i & 1) != 0 else (-s.x * 0.5),
+				0.0,
+				(s.z * 0.5) if (corner_i & 2) != 0 else (-s.z * 0.5),
+			)
+			out.append(Vector2(corner.x, corner.z))
+	if kind != "item" or plan == null:
+		return out
+	out.append_array(item_hull_points(plan, entity))
+	return out
+
+
+## The XZ extent of ONE item, in plan metres — and the reason it is not one line.
+##
+## A plan item is drawn one of two ways and only one of them is in the catalog.
+## `StructureBaker._item_layers` draws `plate`, `spar` and `wire` straight from
+## the item's OWN props, while every other `item_id` goes through
+## `PartCatalog.expand_props`. Those two disagree, and measuring it is how these
+## nine shipped entities were found:
+##
+##     demo_workboat #265  wire  "fender lanyard"  points [[0,0,0],[0.33,-1.08,0]]
+##
+## The `wire` PART declares `run`/`rise`/`sag`/`radius` and no `points`, so
+## `expand_props` drops the prop (it says so, in `prop_warnings`, which nothing
+## reads) and falls back to the catalog default `run` of **8.0 m**. A 0.33 m
+## lanyard measured as an 8 m one lands 8 m off the side of a 10 m boat, and the
+## fence refused all nine of them. Nothing was wrong with the fixtures: the
+## catalog was answering for geometry it does not draw.
+##
+## So: a baker primitive is measured off the path the BAKER draws, and everything
+## else off the catalog that expands it. `part_local_aabb` is still the reading
+## for catalog fittings, unchanged, because it is the same expansion
+## `item_footprint_cells` and `max_stack_cells` already use — a fitting must not
+## get two answers within this file. Sag is ignored deliberately: `wire_path`
+## bends downward under gravity in Y only, so it cannot move an XZ point.
+##
+## An item that yields nothing either way falls back to its origin, which is
+## still the position the builder typed — so an uncatalogued fitting cannot be a
+## hole in the fence.
+static func item_hull_points(plan: StructurePlan, item: Dictionary) -> PackedVector2Array:
+	var out := PackedVector2Array()
+	var xform := plan.item_transform(item)
+	var primitive := StructureBaker.item_primitive(item)
+	var props := StructurePlan.item_props(item)
+	if primitive == "plate":
+		for point in StructureBaker.plate_corners(props):
+			var world := xform * point
+			out.append(Vector2(world.x, world.z))
+	elif primitive == "spar" or primitive == "wire":
+		for point in StructureBaker.spar_path(props):
+			var world := xform * point
+			out.append(Vector2(world.x, world.z))
+	else:
+		var box := part_local_aabb(str(item.get("item_id", "")), props)
+		if bool(box.get("ok", false)):
+			var mn: Vector3 = box["min"]
+			var mx: Vector3 = box["max"]
+			for corner_i in 8:
+				var corner := xform * Vector3(
+					mx.x if (corner_i & 1) != 0 else mn.x,
+					mx.y if (corner_i & 2) != 0 else mn.y,
+					mx.z if (corner_i & 4) != 0 else mn.z,
+				)
+				out.append(Vector2(corner.x, corner.z))
+	if out.is_empty():
+		out.append(Vector2(xform.origin.x, xform.origin.z))
+	return out
+
+
+## Does EVERYTHING this entity draws stand on the vessel? See the header for why
+## it is every point and not any point.
+##
+## An entity with no test points at all — a wire, a non-solid spar, a plate the
+## baker refused — puts nothing in the world and is left alone: it is not
+## standing anywhere, so there is nothing to refuse. Items never reach that case,
+## because an item with no boxes still contributes its origin.
+static func on_hull_points(points: PackedVector2Array, grid: DeckGrid) -> bool:
+	if grid == null or points.is_empty():
+		return true
+	for point in points:
+		if not on_hull_point(grid, point.x, point.y):
+			return false
+	return true
+
+
+## Every entity of `plan` that does not stand on the vessel, as
+## `[{kind, id, index, at, message}, …]`.
+##
+## `index` is the entity's position within its own collection of the RESOLVED
+## plan, and it — not `id` — is what the partition removes by; see
+## `StructurePlan.without_entities` for why.
+static func off_hull_entities(plan: StructurePlan, grid: DeckGrid) -> Array:
+	var out: Array = []
+	if plan == null or grid == null:
+		return out
+	## Resolved once, here, and the resolved plan is what is walked. That is not
+	## tidiness: `resolved()` re-runs the whole piece kit and re-reports every
+	## refusal it finds, so resolving four times down one validation prints four
+	## copies of every kit error. It returns its argument untouched when `pieces`
+	## is empty.
+	var resolved := StructureBaker.resolved(plan)
+	var by_kind := {
+		"wall": resolved.walls, "deck": resolved.decks, "stair": resolved.stairs,
+		"item": resolved.items, "edge": resolved.edges,
+	}
+	for row_variant in StructureBaker.entity_colliders(resolved):
+		var row := row_variant as Dictionary
+		var kind := str(row["kind"])
+		var index := int(row["index"])
+		var collection := by_kind.get(kind, []) as Array
+		var entity: Dictionary = (
+			collection[index] as Dictionary if index < collection.size() else {}
+		)
+		var points := hull_test_points(resolved, kind, entity, row["boxes"] as Array)
+		if on_hull_points(points, grid):
+			continue
+		var at := Vector3(points[0].x, 0.0, points[0].y)
+		if not (row["boxes"] as Array).is_empty():
+			at = ((row["boxes"] as Array)[0] as Dictionary)["center"]
+		out.append({
+			"kind": kind,
+			"id": int(row["id"]),
+			"index": index,
+			"at": at,
+			"message": off_hull_reason(grid, kind, int(row["id"]), at),
+		})
+	return out
+
+
+## Human-readable refusal for one entity, in the builder's words — the plan-side
+## twin of `BrickLayout.off_grid_reason`. It names WHAT, WHERE and the deck it
+## missed, because "invalid placement" sends the next reader nowhere.
+static func off_hull_reason(grid: DeckGrid, kind: String, id: int, at: Vector3) -> String:
+	var m := WorldUnits.DECK_CELL_M
+	return (
+		"%s %d at (%.1f, %.1f, %.1f) m is not on the %.1f x %.1f m hull"
+		% [kind.capitalize(), id, at.x, at.y, at.z, float(grid.width) * m, float(grid.length) * m]
+	)
+
+
+## One sentence for the whole set, shaped like `VesselOutfit`'s off-deck error so
+## a plan-built vessel and a brick-built one tell the builder the same thing.
+static func off_hull_error(off: Array) -> String:
+	var named := PackedStringArray()
+	for row in off:
+		if named.size() >= 4:
+			break
+		named.append(str((row as Dictionary)["message"]))
+	var tail := ""
+	if off.size() > named.size():
+		tail = " (+%d more)" % (off.size() - named.size())
+	return (
+		"%d plan %s off the hull and %s not built: %s%s"
+		% [
+			off.size(),
+			"entity is" if off.size() == 1 else "entities are",
+			"it is" if off.size() == 1 else "they are",
+			" · ".join(named),
+			tail,
+		]
+	)
+
+
+## The plan with everything `off_hull_entities` named removed — RESOLVED, so a
+## piece placement is measured and dropped as the plates it actually becomes.
+##
+## This is the half that makes the refusal real. `DeckFitout.apply_plan` bakes
+## and collides whatever it is handed, so an error on its own leaves the geometry
+## in the world; the wave that fixed the brick side proved the same point with a
+## mutation (STATE.md 2c, M3 — keeping the error but dropping the skip left 7 of
+## 8 legal requirements met by bricks in the sea).
+static func on_hull_plan(plan: StructurePlan, grid: DeckGrid) -> StructurePlan:
+	if plan == null:
+		return plan
+	var resolved := StructureBaker.resolved(plan)
+	return _without(resolved, off_hull_entities(resolved, grid))
+
+
+## The partition, given a report `off_hull_entities` has already produced. Split
+## out so a caller that needs BOTH the report and the plan pays for one pass.
+static func _without(resolved: StructurePlan, off: Array) -> StructurePlan:
+	if off.is_empty():
+		return resolved
+	var drop := {}
+	for row_variant in off:
+		var row := row_variant as Dictionary
+		var kind := str(row["kind"])
+		if not drop.has(kind):
+			drop[kind] = {}
+		(drop[kind] as Dictionary)[int(row["index"])] = true
+	return resolved.without_entities(drop)
+
+
 # ── VesselOutfit-shaped validation ──────────────────────────────────────────
 
 ## Returns { ok, errors, warnings, budget, usage, accepted_slots, capabilities }
@@ -112,8 +427,6 @@ static func validate(
 	grid: DeckGrid = null,
 	policy_caps: Dictionary = {},
 ) -> Dictionary:
-	var errors := PackedStringArray()
-	var warnings := PackedStringArray()
 	var declared_hull := hull_id
 	if declared_hull.is_empty() and plan != null:
 		declared_hull = plan.hull_id
@@ -121,7 +434,54 @@ static func validate(
 	var budget := VesselOutfit.budget_for_hull(id, policy_caps)
 	var g := grid if grid != null else HullRegistry.make_grid(id)
 	if plan == null:
-		return _result(true, errors, warnings, budget, {}, _empty_slots(), {})
+		return _result(
+			true, PackedStringArray(), PackedStringArray(), budget, {}, _empty_slots(), {}
+		)
+	## THE VESSEL FENCE, taken once and before anything is measured. See the
+	## header for what it asks; `_validate_built` is what it hands the answer to.
+	var resolved_plan := StructureBaker.resolved(plan)
+	var off_hull := off_hull_entities(resolved_plan, g)
+	return _validate_built(plan, _without(resolved_plan, off_hull), off_hull, g, budget)
+
+
+## `validate` with the fence already taken, so a caller that needs BOTH the
+## report and the partitioned plan pays for ONE pass over the geometry.
+## Measured on `probe_container_feeder` (617 entities, 3084 boxes): the fence
+## costs 93 ms, about what `collect_colliders` costs, and `compliance` used to
+## run it twice.
+##
+## `plan` is the AUTHORED document and `built` the partitioned RESOLVED one, and
+## both are needed. The item loop walks the authored items on purpose: a piece
+## placement resolves to `plate` items the part catalog has never heard of, and
+## measuring those would bury a builder in "no part plate in the catalog"
+## warnings for a deckhouse they built out of the kit's own pieces.
+static func _validate_built(
+	plan: StructurePlan,
+	built: StructurePlan,
+	off_hull: Array,
+	g: DeckGrid,
+	budget: Dictionary,
+) -> Dictionary:
+	var errors := PackedStringArray()
+	var warnings := PackedStringArray()
+	## An entity that stands nowhere on the hull is not judged, it is REFUSED —
+	## and as an ERROR, not a warning, because the question it fails is not "is
+	## this fitting a little outboard" (see the header: real ships are) but "is
+	## any of this on the boat at all".
+	##
+	## The skip is the half that matters, and the brick side proved it with a
+	## mutation: keeping the error while still MEASURING the strays left 7 of 8
+	## legal requirements met by gear in the sea (STATE.md 2c, M3). `bollard_pair`
+	## and `lantern_all_round` are the parts `general_vessel` counts, and nothing
+	## in this file used to ask where they were.
+	var off_hull_items := {}
+	for row_variant in off_hull:
+		var row := row_variant as Dictionary
+		if str(row["kind"]) == "item":
+			off_hull_items[int(row["id"])] = true
+	var judged := built
+	if not off_hull.is_empty():
+		errors.append(off_hull_error(off_hull))
 
 	## One pass over items: slot candidates, cargo footprints, unknown parts.
 	var slot_items := {"fishing": [], "helm": [], "crane": [], "tow": []}
@@ -133,6 +493,10 @@ static func validate(
 		var item := raw as Dictionary
 		var part_id := str(item.get("item_id", ""))
 		var item_id := int(item.get("id", -1))
+		if off_hull_items.has(item_id):
+			## Already named in the one error above. Measured as nothing, so it
+			## cannot take a slot, buy a cargo cell or satisfy a legal rule.
+			continue
 		if not Parts.has(part_id):
 			## Never silent: an unknown fitting is measured as nothing, and the
 			## builder is told which one and why.
@@ -220,8 +584,10 @@ static func validate(
 		"has_crane": (accepted_slots["crane"] as Array).size() >= 1,
 		"has_fishing": (accepted_slots["fishing"] as Array).size() >= 1,
 		"has_tow": (accepted_slots["tow"] as Array).size() >= 1,
-		"doors": door_count(plan) + door_items,
-		"windows": opening_count(plan, StructurePlan.OPENING_WINDOW),
+		## Read off `judged`: a door cut into a wall that is not on the boat is not
+		## a door onto anything.
+		"doors": door_count(judged) + door_items,
+		"windows": opening_count(judged, StructurePlan.OPENING_WINDOW),
 		"helms": (accepted_slots["helm"] as Array).size(),
 		## The brick path's "brick_count" is "how many pieces is this made of".
 		## A plan's pieces are its entities.
@@ -308,14 +674,30 @@ static func compliance(
 	var g := grid if grid != null else HullRegistry.make_grid(id)
 	var registration := VesselRegistrationCatalog.resolved_registration(registration_id)
 	var caps: Dictionary = registration.get("budget_caps", {})
-	var outfit := validate(plan, id, g, caps)
+	## ONE fence pass for the whole report. `validate` would take its own, and
+	## `measure` below needs the SAME partition — running it twice cost 190 ms of
+	## the 277 ms this function spent on `probe_container_feeder`.
+	var resolved_plan := StructureBaker.resolved(plan)
+	var off_hull := off_hull_entities(resolved_plan, g)
+	var built := _without(resolved_plan, off_hull)
+	var outfit := (
+		_validate_built(plan, built, off_hull, g, VesselOutfit.budget_for_hull(id, caps))
+		if plan != null
+		else validate(plan, id, g, caps)
+	)
 	var checklist: Array[Dictionary] = []
 	var errors: PackedStringArray = (outfit.get("errors", PackedStringArray()) as PackedStringArray).duplicate()
 	var warnings: PackedStringArray = (outfit.get("warnings", PackedStringArray()) as PackedStringArray).duplicate()
 	if registration.is_empty():
 		errors.append("Choose a vessel registration before building.")
 		return VesselCompliance._result(outfit, registration_id, false, checklist, errors, warnings)
-	var metrics := measure(plan, g, outfit)
+	## MEASURED ON THE HULL, not on the document. `measure` is what feeds
+	## `brick_counts`, `tag_counts` and `positions` to the rule evaluator, so a
+	## bollard 900 m off the bow counted toward "at least four mooring points" and
+	## a lantern in the sea satisfied "white masthead light" — the plan-side twin
+	## of the certified-empty vessel (STATE.md 2b/2c), and the reason this reads
+	## the partitioned plan rather than the authored one.
+	var metrics := measure(built, g, outfit)
 	var registration_ok := true
 	for raw in registration.get("rules", []) as Array:
 		if not (raw is Dictionary):

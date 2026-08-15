@@ -116,9 +116,18 @@ static func apply_plan(
 	boat.add_child(root)
 	boat.ensure_walk_deck()
 	boat.clear_walk_brick_colliders()
+	## PARTITIONED ONCE, AT THE TOP, BEFORE ANYTHING DRAWS — the same shape as
+	## `on_deck_items` on the brick path, and for the same reason. This function
+	## used to bake and collide whatever it was handed and judge it afterwards, so
+	## a plan authored against the wrong hull put a **910 x 910 m** slab of walk
+	## collider in open water (17 boxes where the on-hull plan had 1) and the
+	## verdict computed below changed nothing that was already in the world.
+	## `PlanOutfit.compliance` refuses the same entities off the same predicate,
+	## so the report and the geometry cannot disagree about what got built.
+	var built := PlanOutfitScript.on_hull_plan(plan, g)
 	## Plan coordinates are grid-corner space; shift into boat-local.
 	var offset := Vector3(-g.half_beam, g.deck_y, -g.half_loa)
-	root.add_child(StructureBaker.bake(plan, offset))
+	root.add_child(StructureBaker.bake(built, offset))
 	var total_mass := 0.0
 	var weighted := Vector3.ZERO
 	var index := 0
@@ -129,7 +138,7 @@ static func apply_plan(
 	## boxes, their sizes, their yaws and their order are untouched.
 	## See BoatBody.begin_walk_collider_batch for the measurement.
 	boat.begin_walk_collider_batch()
-	for box_variant in StructureBaker.collect_colliders(plan, offset):
+	for box_variant in StructureBaker.collect_colliders(built, offset):
 		var box := box_variant as Dictionary
 		var size: Vector3 = box["size"]
 		## `size` is read in the box's OWN frame, so the yaw the baker drew it

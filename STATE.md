@@ -1842,6 +1842,74 @@ file is not red by construction. It belongs beside decision #1 below.
    and its `set_meta("brick_placement_faults")`, which **nothing reads** — a meta with
    no consumer is not a delivery.
 
+2d. **The plan side is fenced — CLOSED 2026-08-15.** `StructurePlan.add_wall/add_deck/
+   add_stair/add_piece/add_item` still refuse nothing **at the setter, deliberately**:
+   a plan entity has no grid at authoring time, so the fence is at the *consumer*.
+   That is a different shape of fix from `BrickLayout.set_brick` and worth knowing.
+
+   **"On the hull" is not "on the deck", and the number settles it.** Measured over 19
+   shipped fixtures — 2342 entities, 15 057 drawn boxes:
+
+   | rule | shipped entities refused |
+   |---|---|
+   | every corner inside the deck rectangle | **61** |
+   | any corner inside the deck rectangle | 10 |
+   | **every corner inside rect + `half_beam`** | **0** |
+   | every corner inside rect + 1 m | 2 |
+
+   Real ships legitimately cross the deck outline — stem faces, cap rails, rubbing
+   strakes, a davit block. The margin is the hull's **own half-breadth**, not a chosen
+   constant. Worst shipped entity stands 4.000 m clear against a 5.00 m bound; the
+   off-hull slab stands **890 m** clear.
+
+   ```
+   as authored                  bake AABB 910.0 x 910.0 m   colliders 17
+   after, through PhysicsServer3D   drawn 4.0 x 4.0 m       plan shapes  1
+   ```
+
+   **The killed patch's any-corner rule was discarded with a measurement**, and the
+   reason generalises: on the buildings side "a wall has extent" made the check
+   *stricter*; here it was being used to make it *looser*. A 900 m wall with one end
+   bolted to the deck bakes a 902 m AABB and the any-corner rule refuses none of it.
+   Both readings refuse 0 shipped entities, so the loose one bought nothing.
+
+   **The warning/error gradient was deliberate and was kept.** Measured over the part
+   catalog: slot fittings warn, cargo errors — and **12 parts are silent, including
+   `bollard_pair` and `lantern_all_round`**, exactly the fittings `general_vessel`
+   counts. The defect was the silent third case, not the gradient. The new hull fence
+   is a separate coarser band; the deck-level split is untouched and pinned so
+   collapsing either half reddens.
+
+   **`PlanOutfit`'s warnings channel had no consumer anywhere in the project** —
+   §3d again, and worse than the shipyard case, because `structure_studio.gd` (4205
+   lines, the one place a plan is authored) **never called `PlanOutfit` at all.** The
+   STRUCTURE panel now carries "N OFF THE HULL — NOT BUILT" and names the entity;
+   lane C `studio_probe` 104 → **109 checks**, and blanking the line reddens 1.
+
+   **A mutation passed first time and was a blind check**: baking the authored plan
+   while colliders stayed partitioned left the test green — nothing asserted the
+   *drawn* geometry through the production path, so a fix that kept the mesh would
+   have left 910 m of visible steel. The added check reddens 1/45.
+
+   **`part_local_aabb` answers for geometry it does not draw.** The first cut refused
+   **9 shipped entities** — three fender lanyards and six trawl warps, all `wire`.
+   `StructureBaker` draws `plate`/`spar`/`wire` from the item's own props, but the
+   `wire` PART declares no `points`, so a **0.33 m lanyard was measured with the
+   catalog's default 8.0 m run** and landed 8 m off the side of a 10 m boat. Because a
+   wire is drawn and never collided, **every collider count stayed green while nine
+   pieces of rigging would have vanished from the render** — which is why the fixture
+   sweep now compares vertices as well as colliders. Verified independently: shrinking
+   the envelope to the deck reddens the overhang checks. Shipped fixtures rejected:
+   **0**. Cost: `compliance` restructured to one pass, feeder 277 → 170 ms.
+
+   **Still live from the same mechanism:** `item_footprint_cells` and `max_stack_cells`
+   both still ask `part_local_aabb` about a `wire`, overstating its top by exactly
+   +4.00 m. No shipped fixture's number moves today and no wire is cargo-tagged, so
+   the path is unreached — but the mechanism is. And **a plan's catalog fittings are
+   measured but drawn by nothing**: `_item_layers` returns `[]` for anything not
+   `plate`/`spar`/`wire`, so a `bollard_pair` counts toward a registration and appears
+   in no frame. Same shape as the piece-kit finding.
+
    Also named and left: `BrickLayout.from_dict` trusts a save file's cells verbatim,
    so an owned vessel is never re-checked against its hull; `StructurePlan.add_wall/
    add_deck/add_stair/add_piece/add_item` refuse nothing and the baker **draws and

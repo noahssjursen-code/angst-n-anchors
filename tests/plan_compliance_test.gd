@@ -29,7 +29,7 @@ extends SceneTree
 const PO := preload("res://scripts/ship/plan_outfit.gd")
 const Parts := preload("res://scripts/construction/part_catalog.gd")
 const HULL := "hull_28x10"
-const EXPECTED_CHECKS := 106
+const EXPECTED_CHECKS := 109
 
 var _failures := 0
 var _checks := 0
@@ -450,15 +450,38 @@ func _test_budgets_are_enforced() -> void:
 	)
 	_check("and it does not fail the outfit", bool(stray_outfit["ok"]))
 
-	## A fitting placed off the ship is called out.
+	## A fitting placed off the ship is called out — and there are now TWO bands,
+	## which this pair pins apart.
+	##
+	## This check used to put the helm at x = 40 on a 10 m beam and assert a
+	## WARNING. That coordinate is 30 m outboard: it is not a fitting overhanging
+	## the sheer, it is a fitting that belongs to no hull this boat has, and
+	## `PlanOutfit`'s hull fence now refuses it as an ERROR and does not build it
+	## (`plan_hull_bounds_test`). Keeping the old assertion would have demanded
+	## that the worse case be reported more gently than the milder one, so the
+	## case was split rather than moved: the mild one still warns, the gross one
+	## errors, and neither can quietly become the other.
+	var outboard := StructurePlan.new()
+	outboard.hull_id = HULL
+	outboard.add_item("helm_console", Vector3(10.4, 0.0, 10.0))
+	var outboard_outfit := PO.validate(outboard, HULL, grid)
+	_check(
+		"a helm 0.4 m outboard of the deck edge is reported as a warning",
+		" | ".join(outboard_outfit["warnings"] as PackedStringArray)
+			.contains("not over the vessel's deck")
+	)
+	_check("and a fitting on the boat does not refuse the vessel", bool(outboard_outfit["ok"]))
+
 	var overboard := StructurePlan.new()
 	overboard.hull_id = HULL
 	overboard.add_item("helm_console", Vector3(40.0, 0.0, 10.0))
+	var overboard_outfit := PO.validate(overboard, HULL, grid)
 	_check(
-		"a helm placed off the deck is reported",
-		" | ".join(PO.validate(overboard, HULL, grid)["warnings"] as PackedStringArray)
-			.contains("not over the vessel's deck")
+		"a helm 30 m off the side is an ERROR naming the hull it missed",
+		" | ".join(overboard_outfit["errors"] as PackedStringArray)
+			.contains("is not on the 10.0 x 28.0 m hull")
 	)
+	_check("and that one does refuse the vessel", not bool(overboard_outfit["ok"]))
 
 
 func _test_cargo_is_a_union_of_deck_cells() -> void:
