@@ -267,11 +267,39 @@ missing and it wasn't" is the reusable part.
    line without putting plating above `deck_y`, and that is still the bulwark cap's
    job (`StructurePlan`), for the reasons the sheer note gives.
 
-**Known-red — gate RED: 81 PASS, 19 FAIL, 2 TIMEOUT, 2 NOTRUN, 1 SKIP of 105 units, measured on
-run `20260810-081647-26225`.** The list
-below replaces a seven-item one written on 2026-08-09 that had gone stale by fourteen. **A stale
-known-red list is worse than none**: it reads as "these are the only ones", so a genuinely new
-failure hides inside "the usual reds". Regenerate it from `results.tsv`, do not maintain it by hand.
+## BASELINE — gate `20260815-081032-23858`, **111 units: 102 PASS, 7 FAIL, 1 NOTRUN, 1 SKIP**
+
+**Measured over a QUIET tree — no wave editing — which is the only kind of full run
+that means anything.** Not one failure is unexplained, and every one is on the list
+below: `land_field_geography_test` 2/43 and `port_trade_profile_test` 1/130 (owner
+decisions), `remote_realtime_join_smoke` (needs a live server), `structure_plate_test`
+(the open slop decision), `building_blueprint_test` / `building_interior_test` /
+`plan_interior_test` (the buildings decisions), `port_layout_visual_capture` NOTRUN
+(autoload cascade), `ocean_wake_gpu_smoke` SKIP (self-policing, no RenderingDevice).
+
+From 105 units / 19 FAIL on 2026-08-10 to 111 / 7. The six extra units are the checks
+added since: `box_winding_test`, `shipping_lane_traffic_integrity_test`,
+`building_cache_visual_test`, `visual_stamp_cache_test`, `starter_small_hull_test`,
+`hull_sheer_test`.
+
+**A full gate run over a tree with a live wave in it is not a baseline, and the attempt
+an hour earlier proved why** (run `20260815-073150-10087`, same day, RED with 12 FAIL +
+1 TIMEOUT). Six units died on `Identifier "VisualFlatten" not declared` — a half-applied
+refactor, and a parse error is indistinguishable from a real defect in a results table.
+The sharper one was `structure_edge_test`, which went red not on a missing identifier
+but on **a plausible geometric number** ("half-beam 5.000 m at deck, 5.128 m 1.15 m
+down") because the sheer wave was mid-edit in `hull_stations.gd`. That is exactly the
+shape of a genuine regression. **Both cleared on the quiet run**, which is the proof the
+diagnosis was right — and the reason to wait for quiet rather than explain a snapshot
+away.
+
+The list below replaces a seven-item one written on 2026-08-09 that had gone stale by
+fourteen. **A stale known-red list is worse than none**: it reads as "these are the only
+ones", so a genuinely new failure hides inside "the usual reds". Regenerate it from
+`results.tsv`, do not maintain it by hand.
+
+*(Historical: the paragraph here previously recorded 81 PASS / 19 FAIL / 2 TIMEOUT /
+2 NOTRUN / 1 SKIP of 105 units on run `20260810-081647-26225`.)*
 
 *Empty-catalogue family* — one root cause, `BrickCatalog.BRICKS` is `{}` and
 `resources/data/vessels/prebuilt/` holds only `.gitkeep`: `building_blueprint_test`,
