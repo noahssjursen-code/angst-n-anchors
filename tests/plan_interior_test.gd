@@ -172,6 +172,8 @@ var _space: PhysicsDirectSpaceState3D
 var _figures: Array[Dictionary] = []
 var _offset := Vector3.ZERO
 var _boxes: Array = []
+## Box VALUE key -> the entity that emitted it. See `_owner_of`.
+var _owner_by_key: Dictionary = {}
 
 
 func _ready() -> void:
@@ -251,9 +253,57 @@ func _describe(hit_name: String) -> String:
 	var box := _boxes[index] as Dictionary
 	var c: Vector3 = box["center"]
 	var h: Vector3 = (box["size"] as Vector3) * 0.5
-	return "%s plan centre (%.3f, %.3f, %.3f) half %s yaw %.1f (y %.3f..%.3f)" % [
-		hit_name, c.x, c.y, c.z, str(h), float(box["yaw_deg"]), c.y - h.y, c.y + h.y
+	return "%s = %s plan centre (%.3f, %.3f, %.3f) half %s yaw %.1f (y %.3f..%.3f)" % [
+		hit_name, _owner_of(box), c.x, c.y, c.z, str(h), float(box["yaw_deg"]),
+		c.y - h.y, c.y + h.y
 	]
+
+
+## WHICH ENTITY EMITTED THIS BOX. Not a verdict — a label on one, and the reason
+## it exists is that "began inside BrickCol_plan_1835" reads as a plate defect and
+## the box that actually stops the trawler's raked-front sweep is the MAST. A
+## reader who cannot tell those apart re-derives the answer by hand, which is an
+## hour, and this file's whole method is that a failure names its own cause.
+##
+## The map is built by re-emitting each entity's boxes and keying them on the
+## VALUES `collect_colliders` produced, because the array it returns carries no
+## provenance and re-deriving the walk order here would be a second copy of the
+## baker's own loop. An unmatched box prints "unattributed" beside the shape name
+## it already printed, so a missed key is VISIBLE and costs a label, never a
+## verdict. Measured on both fixtures: nothing came back unattributed, and the
+## boxes it names for the trawler's stuck stations are the ones
+## `tests/_stuck_march_probe.gd` blames by an independent route.
+func _owner_of(box: Dictionary) -> String:
+	return str(_owner_by_key.get(_box_key(box), "unattributed"))
+
+
+func _box_key(box: Dictionary) -> String:
+	var c := box["center"] as Vector3
+	var s := box["size"] as Vector3
+	return "%.4f|%.4f|%.4f|%.4f|%.4f|%.4f|%.2f" % [
+		c.x, c.y, c.z, s.x, s.y, s.z, float(box.get("yaw_deg", 0.0))]
+
+
+func _index_owners(plan: StructurePlan) -> void:
+	_owner_by_key.clear()
+	var resolved := StructureBaker.resolved(plan)
+	for item_variant in resolved.items:
+		var item := item_variant as Dictionary
+		var props := StructurePlan.item_props(item)
+		var primitive := StructureBaker.item_primitive(item)
+		var label := "%s #%d %s" % [primitive, int(item.get("id", -1)),
+			str(props.get("__is", "")).substr(0, 44)]
+		var boxes: Array = (
+			StructureBaker.plate_colliders(props, StructureBaker.plate_corners(props),
+				Vector3.ZERO) if primitive == "plate"
+			else StructureBaker._item_colliders(resolved, item, Vector3.ZERO))
+		for box_variant in boxes:
+			_owner_by_key[_box_key(box_variant as Dictionary)] = label
+	for edge_variant in resolved.edges:
+		var edge := edge_variant as Dictionary
+		for box_variant in StructureBaker.edge_collider_boxes(resolved, edge):
+			_owner_by_key[_box_key(box_variant as Dictionary)] = "edge #%d %s" % [
+				int(edge.get("id", -1)), str(edge.get("kind", "")).substr(0, 32)]
 
 
 func _load(path: String) -> Dictionary:
@@ -274,6 +324,7 @@ func _load(path: String) -> Dictionary:
 func _measure_offset(plan: StructurePlan, stem: String) -> bool:
 	var boxes := StructureBaker.collect_colliders(plan)
 	_boxes = boxes
+	_index_owners(plan)
 	if not _t.check("%s: the plan bakes to collider boxes (%d)" % [stem, boxes.size()],
 			boxes.size() > 8):
 		return false
@@ -480,7 +531,7 @@ func _check_walls(plan: StructurePlan, fixture: Dictionary, stem: String, floor_
 						corners, u / ref.x, floor_y, figure, normal, named["props"])
 					var where := "%s %s@%.2f" % [figure["name"], wall_id, u]
 					if bool(march["started_inside"]):
-						stuck.append("%s in %s" % [where, march["hit"]])
+						stuck.append("%s in %s" % [where, _describe(str(march["hit"]))])
 						continue
 					row["stations"] = int(row["stations"]) + 1
 					if bool(march["blocked"]):
@@ -503,7 +554,7 @@ func _check_walls(plan: StructurePlan, fixture: Dictionary, stem: String, floor_
 					corners, u / ref.x, floor_y, figure, normal, named["props"])
 				var where := "%s %s@%.2f" % [figure["name"], wall_id, u]
 				if bool(march["started_inside"]):
-					stuck.append("%s in %s" % [where, march["hit"]])
+					stuck.append("%s in %s" % [where, _describe(str(march["hit"]))])
 					continue
 				row["solid"] = int(row["solid"]) + 1
 				if kind == "window":

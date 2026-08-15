@@ -12,20 +12,29 @@ extends Node
 ## vessels that most need the merged skin — the large ones, which are the only
 ## ones that come through here — were the only ones that never got it.
 ##
-## WHAT IS AND IS NOT INSIDE THE FRAME BUDGET. Every unit below is one `_step`
-## and costs well under FRAME_BUDGET_USEC on the measured layouts:
+## WHAT IS AND IS NOT INSIDE THE FRAME BUDGET. Every unit below is one `_step`.
+## Costs are off `tests/_fitout_seam_probe.gd` at 3000 bricks, called straight
+## through with no renderer competing:
 ##
-##   register one item into the skin      ~0.05 ms   (footprint cells + bucket)
-##   emit one item's faces                ~0.01 ms
-##   create one live brick's visual       ~0.07 ms
-##   mount one brick's gameplay           ~0.03 ms
-##   commit the whole skin                 2.5 ms at 3000 bricks — indivisible,
-##                                         but inside the 4 ms budget
+##   register one item into the skin      0.012 ms  (footprint cells + bucket)
+##   emit one item's faces                0.026 ms mean, 1.95 ms worst single
+##   mount one brick's gameplay          ~0.03 ms — CARRIED, not re-measured
+##   commit the whole skin                 3.2 ms at 3000 bricks (one material
+##                                         bucket), + 0.0 ms to parent it
 ##
 ## `_prepare_gameplay` is the exception and is DECLARED as one: a single
-## `VesselCompliance.validate` call, 118 ms at 3000 bricks, with no resumable
-## seam anywhere in it. It is counted in `indivisible_steps` rather than hidden,
-## and `max_divisible_frame_usec` reports the budget the loop actually keeps.
+## `VesselCompliance.validate` call — 113 ms at 3000 bricks, 28x this job's own
+## budget — with no resumable seam anywhere in it. 72% of that is
+## `VesselOutfit.validate`, which DOES walk the layout brick by brick and so
+## could be given one; that is a change to two files this job does not own.
+## It is counted in `indivisible_steps` rather than hidden.
+##
+## DO NOT ADD A MILLISECOND ASSERTION AROUND ANY OF THOSE NUMBERS ON THIS BOX.
+## `max_unit_usec` is wall clock around GDScript that is sharing four cores with
+## llvmpipe rasterising the skin, and it was measured at 31.59 ms
+## (EXTERIOR_VISUALS) and 4.59 ms (GAMEPLAY) on two runs of identical code. The
+## assertable, clock-free statement is `steps_by_phase`: is the work divided at
+## all, and which steps are declared as not divided.
 
 signal readiness_changed(readiness: Readiness)
 
@@ -63,6 +72,14 @@ var max_unit_usec: int = 0
 var max_unit_phase: String = ""
 ## [{"name": String, "usec": int}] for every step that cannot be subdivided.
 var indivisible_steps: Array[Dictionary] = []
+## Phase name -> how many `_step` calls were spent in it. CLOCK-FREE evidence
+## that a phase is divided into units at all, and the only evidence there is:
+## `max_unit_usec` was measured swinging 4.6 ms -> 31.6 ms between two runs of
+## the same code on this box, because it times GDScript work while llvmpipe
+## rasterises the growing skin on the same four cores. A phase that collapsed
+## its whole loop into one call would cost the same milliseconds on a fast box
+## and only this counter would notice.
+var steps_by_phase: Dictionary = {}
 var exterior_ready_usec: int = 0
 var interactive_ready_usec: int = 0
 
@@ -138,6 +155,8 @@ func _process(_delta: float) -> void:
 	while not did_work or Time.get_ticks_usec() - frame_started < FRAME_BUDGET_USEC:
 		did_work = true
 		var unit_phase := _phase
+		var phase_name := str(Phase.keys()[int(unit_phase)])
+		steps_by_phase[phase_name] = int(steps_by_phase.get(phase_name, 0)) + 1
 		var unit_started := Time.get_ticks_usec()
 		var more := _step()
 		var unit_elapsed := Time.get_ticks_usec() - unit_started
@@ -161,6 +180,7 @@ func _publish_timings() -> void:
 	_boat.set_meta("fitout_max_unit_usec", max_unit_usec)
 	_boat.set_meta("fitout_max_unit_phase", max_unit_phase)
 	_boat.set_meta("fitout_indivisible_steps", indivisible_steps.duplicate(true))
+	_boat.set_meta("fitout_steps_by_phase", steps_by_phase.duplicate())
 
 
 ## Records a step that has no resumable seam. Declaring one is a design
@@ -220,6 +240,7 @@ func _step() -> bool:
 				_run_indivisible("VesselCompliance.validate", _prepare_gameplay)
 				return true
 			if _cursor < _all_items.size():
+				_open_mass_batch()
 				_mount_gameplay(_all_items[_cursor] as Dictionary)
 				_cursor += 1
 				return true
@@ -303,7 +324,7 @@ func _prepare_gameplay() -> void:
 
 
 func _add_visual(item: Dictionary) -> void:
-	if false and _skin != null and _skin.emit_item(item):
+	if _skin != null and _skin.emit_item(item):
 		## Static brick: its geometry is in the merged skin. Signs and light
 		## fixtures mounted ON the cell are still their own nodes.
 		DeckFitout.create_cell_mounts(_root, _grid, item)

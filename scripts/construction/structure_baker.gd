@@ -874,9 +874,40 @@ const PLATE_MAX_SEGMENTS := 16
 ## demo_workboat 0.1249 m, probe_trawler_bulwark 0.1478 m, critic_ferry 0.1528 m
 ## of solid air in front of every raked wall in the game.
 ##
-## 0.03 m is a third of the plating and under the 0.045 m half-thickness of the
-## plate itself, so the phantom is smaller than the thing casting it. What it
-## costs is in plate_colliders()'s header.
+## 0.05 m is half the plating and just over the 0.045 m half-thickness of the
+## plate itself. (This paragraph said "0.03 m is a third of the plating" against
+## a constant that has always been 0.05 — a comment disagreeing with the value
+## beside it, which is the softest artefact in a codebase disagreeing with the
+## load-bearing one. CONVENTIONS.md 3a.)
+##
+## ── WHAT IT COSTS, MEASURED, AND WHY THE VALUE IS AN OWNER DECISION ─────────
+##
+## The curve, from `tests/_plate_cost_probe.gd`, as collect_colliders() boxes and
+## the worst box PROUD of its slab. "grid" is the pre-65b6a0a fixed nu x nv grid
+## at its 0.15 m step; every other row is this adaptive dice.
+##
+##                       grid    0.15    0.10    0.08    0.05
+##   demo_workboat        359     357     436     500     675   boxes
+##   trawler_bulwark      760     612     876    1137    2118
+##   container_feeder    2448    2467    2608    2735    3086
+##   worst proud       0.150   0.126   0.086   0.075   0.050   m
+##
+## Two things that curve says and a single before/after pair does not:
+##
+##  - THE ALGORITHM IS FREE AND THE CONSTANT IS WHAT COSTS. At the SAME 0.15 m
+##    the adaptive dice is 612 boxes to the grid's 760 on the trawler and the
+##    same everywhere else. Every box above the "grid" row is bought by the
+##    constant, not by the rewrite.
+##  - THE 150 M HULL IS NOT THE WORST CASE. `probe_container_feeder` is 1.26x at
+##    0.05 where the 28 m trawler is 2.79x, because 251 of its containers are one
+##    axis-aligned plate each and dice to one box whatever this says. Plate-heavy
+##    superstructure is what this constant prices, not length.
+##
+## The cost is superlinear in the box count and that is not this file's doing:
+## putting boxes on a body is O(n^2) in Godot, through the scene tree AND through
+## PhysicsServer3D.body_add_shape (`tests/_collider_build_probe.gd`: 500 boxes
+## 79 ms, 2000 boxes 1432 ms, 8000 boxes 33.8 s). The feeder's collision costs
+## 2109 ms to build at the grid and 3673 ms at 0.05.
 const PLATE_COLLIDER_SLOP := 0.05
 ## Cells one slab may be cut into, whatever the slop asks for — the ceiling the
 ## old 32 x 32 grid had, kept so a pathological quad cannot spend the physics

@@ -666,15 +666,71 @@ func _check_collision() -> void:
 	var roof_boxes := StructureBaker.collect_colliders(_solo(_item(ID_ROOF)))
 	print("[collide] windscreen -> %d boxes, sloped roof -> %d boxes, upright control -> 1"
 		% [screen_boxes.size(), roof_boxes.size()])
-	## The step count is tied to the rake and to PLATE_COLLIDER_STEP, stated on a
-	## plate with NO openings so the number cannot be coming from the panel
-	## decomposition: 0.9 m of rake over a 0.15 m step is six boxes.
+	## THE DICE'S CONTRACT, stated on a plate with NO openings so the answer cannot
+	## be coming from the panel decomposition.
+	##
+	## This check used to read `0.9 m of rake at a 0.15 m step is exactly 6 boxes`
+	## against `StructureBaker.PLATE_COLLIDER_STEP`. That constant was replaced by
+	## `PLATE_COLLIDER_SLOP` in 65b6a0a and the reference was left behind, so this
+	## whole file stopped COMPILING and reported no verdict at all — REALITY.md's
+	## "a test that has never run has never been checked", live in the tree for the
+	## commit that shipped the finer dice. Restating the new constant would put the
+	## same trap back one rename later.
+	##
+	## So it states the PROPERTY the constant is named for instead: how far the
+	## boxes stand PROUD of the slab they wrap. That is the phantom a player is
+	## stopped by, it is what `PLATE_COLLIDER_SLOP` promises to bound, and it
+	## survives any change to how the dice reaches it.
 	var bare_rake := {
 		"corners": [[0, 0, 0], [4, 0, 0], [4, 2.4, -0.9], [0, 2.4, -0.9]], "thickness": 0.09,
 	}
 	var bare_boxes := StructureBaker.collect_colliders(_solo(_plate_item(bare_rake)))
-	_t.equal("0.9 m of rake at a %.2f m step is exactly %d boxes"
-		% [StructureBaker.PLATE_COLLIDER_STEP, 6], bare_boxes.size(), 6)
+	var bare_proud := 0.0
+	for box_variant in bare_boxes:
+		var size := (box_variant as Dictionary)["size"] as Vector3
+		bare_proud = maxf(bare_proud, minf(size.x, minf(size.y, size.z)) - 0.09)
+	print("[collide] a bare 0.9 m rake over 2.4 m: %d boxes, worst %.4f m proud of a 0.09 m slab"
+		% [bare_boxes.size(), bare_proud])
+	## A raked plate MUST be cut. One box round this quad stands 0.9 m proud, so a
+	## single box is the failure this dice exists to prevent.
+	_t.check("0.9 m of rake is cut into more than one box (%d)" % bare_boxes.size(),
+		bare_boxes.size() > 1)
+	_t.check("no box round the bare rake stands more than the declared slop proud "
+		+ "(%.4f m against %.4f)" % [bare_proud, StructureBaker.PLATE_COLLIDER_SLOP],
+		bare_proud <= StructureBaker.PLATE_COLLIDER_SLOP + 1e-6)
+	## And over EVERY plate in the fixture, not only the one authored for it —
+	## REALITY.md 3c. This is the check that would have named the 0.15 m phantom
+	## the fleet shipped with: at the old step it reads 0.118 m on this fixture.
+	var worst_proud := 0.0
+	var worst_at := ""
+	for item_variant in StructureBaker.resolved(_plan).items:
+		var item := item_variant as Dictionary
+		if StructureBaker.item_primitive(item) != "plate":
+			continue
+		var props := StructurePlan.item_props(item)
+		if not bool(props.get("solid", true)):
+			continue
+		var corners := StructureBaker.plate_corners(props)
+		if corners.size() != 4:
+			continue
+		for slab_variant in StructureBaker.plate_slabs(props):
+			var slab := slab_variant as Dictionary
+			var thickness := float(slab["thickness"])
+			for cell_variant in StructureBaker._plate_panel_colliders(
+					corners, thickness, Vector3.ZERO,
+					float(slab["u0"]), float(slab["u1"]),
+					float(slab["v0"]), float(slab["v1"])):
+				var size := (cell_variant as Dictionary)["size"] as Vector3
+				var proud := minf(size.x, minf(size.y, size.z)) - thickness
+				if proud > worst_proud:
+					worst_proud = proud
+					worst_at = str(props.get("__is", "item %d" % int(item.get("id", -1))))
+	print("[collide] worst box PROUD of its slab across the fixture: %.4f m on %s"
+		% [worst_proud, worst_at.substr(0, 52)])
+	_t.check("no plate box anywhere in the fixture stands more than the declared slop "
+		+ "proud (%.4f m against %.4f, on %s)"
+		% [worst_proud, StructureBaker.PLATE_COLLIDER_SLOP, worst_at.substr(0, 40)],
+		worst_proud <= StructureBaker.PLATE_COLLIDER_SLOP + 1e-6)
 	_t.check("the raked windscreen is stepped, not one unrotated box (%d)" % screen_boxes.size(),
 		screen_boxes.size() >= 10)
 	_t.check("the sloped roof is stepped too (%d)" % roof_boxes.size(), roof_boxes.size() >= 2)
@@ -893,17 +949,62 @@ func _check_no_phantom_under_the_overhang() -> void:
 	_t.equal("no point forward of the drawn raked front is solid", phantom, 0)
 
 
+## The high and low ends of a plate's centreline, along whichever parametric
+## direction drops further, at parameters `a` and `b`. Returned high end first.
+func _steepest_run(quad: PackedVector3Array, a: float, b: float) -> Array:
+	var along_u := absf(StructureBaker.plate_point(quad, 1.0, 0.5).y
+		- StructureBaker.plate_point(quad, 0.0, 0.5).y)
+	var along_v := absf(StructureBaker.plate_point(quad, 0.5, 1.0).y
+		- StructureBaker.plate_point(quad, 0.5, 0.0).y)
+	var first := (StructureBaker.plate_point(quad, a, 0.5) if along_u >= along_v
+		else StructureBaker.plate_point(quad, 0.5, a))
+	var second := (StructureBaker.plate_point(quad, b, 0.5) if along_u >= along_v
+		else StructureBaker.plate_point(quad, 0.5, b))
+	return [first, second] if first.y >= second.y else [second, first]
+
+
 ## E6. THE SLOPE. The wheelhouse roof falls 0.25 m from stem to aft, so one
 ## height is roof forward and open air aft. A single slab makes both solid.
+##
+## THE HEIGHT IS TAKEN FROM THE ROOF, NOT TYPED. It used to be the literal 4.82,
+## and 4.82 is 0.034 m ABOVE the roof's own drawn top at z = 18 — the check was
+## green only because the collider at the old 0.15 m step stood 0.118 m proud of
+## the slab, so "inside the roof" was satisfied by the phantom rather than by the
+## roof. Cutting the phantom to 0.05 m turned it red, which is a restated number
+## holding a bug in place exactly as REALITY.md 4a describes: anyone tightening
+## the collider would have reddened a green test and been tempted to conclude
+## they were wrong.
+##
+## Stated as the property instead — the roof is solid where it is DRAWN and open
+## air at the same height where it has fallen away — it says the thing it is
+## named for and it cannot be satisfied by a fat box.
 func _check_slope_is_followed() -> void:
-	var forward := Vector3(5.0, 4.82, 18.0)
-	var aft := Vector3(5.0, 4.82, 21.6)
-	var under_aft := Vector3(5.0, 4.60, 21.6)
-	print("[slope] at y=4.82: forward solid=%s, aft solid=%s; at y=4.60 aft solid=%s"
-		% [str(_solid(forward)), str(_solid(aft)), str(_solid(under_aft))])
-	_t.check("4.82 m above the deck is INSIDE the roof at its forward end", _solid(forward))
-	_t.check("the same height is OPEN AIR aft, because the roof slopes away", not _solid(aft))
-	_t.check("...and 0.22 m lower, aft, is inside the roof again", _solid(under_aft))
+	var roof := _corners(ID_ROOF)
+	## The two ends of the centreline run that FALLS. Which parametric direction
+	## that is belongs to the plate, not to this test — the roof's u happens to be
+	## fore-and-aft and its v athwartships, and assuming the other way round read a
+	## 0.000 m drop across the beam.
+	var ends := _steepest_run(roof, 0.25, 0.85)
+	var forward := ends[0] as Vector3
+	var aft := ends[1] as Vector3
+	var drop := forward.y - aft.y
+	## The height that is roof forward and sky aft: the forward surface, which the
+	## aft end has fallen clear of by `drop` minus its own half thickness.
+	var level := Vector3(aft.x, forward.y, aft.z)
+	print("[slope] roof falls %.3f m from z=%.2f to z=%.2f · solid at the forward "
+		% [drop, forward.z, aft.z]
+		+ "surface=%s · at that height aft=%s · at the aft surface=%s"
+		% [str(_solid(forward)), str(_solid(level)), str(_solid(aft))])
+	_t.check("the roof's own drawn surface is solid at its forward end (%.3f m)" % forward.y,
+		_solid(forward))
+	## Only meaningful if the roof has actually dropped clear of its own thickness
+	## between the two stations — otherwise "open air" is a claim about nothing.
+	_t.check("the roof drops more than its own thickness between the two stations "
+		+ "(%.3f m against %.3f)" % [drop, StructureBaker.plate_thickness(_props(ID_ROOF))],
+		drop > StructureBaker.plate_thickness(_props(ID_ROOF)))
+	_t.check("the same height is OPEN AIR aft, because the roof slopes away",
+		not _solid(level))
+	_t.check("...and the roof's own surface aft is inside the roof again", _solid(aft))
 
 
 ## E7. Every opening is a genuine hole in COLLISION, not only in the picture, and

@@ -229,6 +229,24 @@ func _test_threshold_and_completion() -> void:
 		"1001-brick staged fitout merges like the synchronous one (staged %d, sync %d meshes)"
 		% [_count_mesh_instances(large_boat), _count_mesh_instances(oracle_boat)],
 	)
+	## EVERY parity check in this file — mesh counts, triangle counts, cell
+	## histograms, colliders, mass — is satisfied by two paths that are equally
+	## UNMERGED. `DeckFitout.skin_enabled = false` produces exactly that, and it
+	## is the measured way to fake this file green while making every vessel
+	## worse: with it off this test dropped to 1/43 and the one survivor was an
+	## unrelated probe artifact. Parity is not the property on its own. State
+	## the merge itself, on both entry points, or nothing here holds it.
+	var brick_n := large_layout.iter_primary_cells().size()
+	_check(
+		_count_mesh_instances(large_boat) < brick_n,
+		"staged fitout merges %d static bricks into fewer meshes (drew %d)"
+		% [brick_n, _count_mesh_instances(large_boat)],
+	)
+	_check(
+		_count_mesh_instances(oracle_boat) < brick_n,
+		"synchronous fitout merges %d static bricks into fewer meshes (drew %d)"
+		% [brick_n, _count_mesh_instances(oracle_boat)],
+	)
 	oracle_boat.queue_free()
 	large_boat.queue_free()
 	await get_tree().process_frame
@@ -393,9 +411,33 @@ func _fill_blocks(grid: DeckGrid, count: int) -> BrickLayout:
 	return layout
 
 
+## Bail on the CONDITION, not only on the frame count. `DeckFitout.clear` is the
+## only thing that removes the job node, so once a staged fitout has lost it the
+## readiness meta can never advance and every remaining frame of `max_frames` is
+## spent for nothing.
+##
+## Found by accident while mutating this wave: a parse error in
+## `deck_fitout_job.gd` makes `load(FITOUT_JOB_SCRIPT).new()` return null,
+## `apply_staged` adds no job, and all five waits here spin their full 300-600
+## frames. Measured with the same injected parse error: 30 s and a wall of
+## consequential failures without this guard, 5 s and "no staged job exists to
+## reach readiness N" with it. That is a diagnosability fix — a compile failure
+## and a genuine assertion failure are otherwise indistinguishable in a results
+## table (REALITY.md 4a).
+##
+## IT IS NOT A PROVEN FIX FOR THE INTERMITTENT HANG THIS FILE IS RECORDED AS
+## HAVING. That hang was not reproduced: this test ran clean 4 times, and the
+## pre-wave version of it ran in 19 s.
 func _wait_for_readiness(boat: BoatBody, target: int, max_frames: int) -> void:
 	for _frame in range(max_frames):
 		if DeckFitout.readiness_of(boat) >= target:
+			return
+		if boat.get_node_or_null(DeckFitout.FITOUT_JOB) == null:
+			_check(
+				false,
+				"no staged job exists to reach readiness %d (readiness stuck at %d)"
+				% [target, DeckFitout.readiness_of(boat)],
+			)
 			return
 		await get_tree().process_frame
 	_check(false, "fitout did not reach readiness %d within %d frames" % [target, max_frames])
@@ -477,6 +519,16 @@ func _triangle_centroids(boat: BoatBody) -> PackedVector3Array:
 ## How many of the fitout's triangles sit in one deck cell. A voxel face lies ON
 ## the cell boundary, so the box is grown a hair; a neighbouring cell's faces sit
 ## a half-cell away and are never picked up by that slack.
+##
+## KNOWN IMPRECISION, measured rather than assumed. The grown box also contains
+## the SHARED face between this cell and a solid neighbour, because that face
+## lies exactly on the boundary and its triangle centroids do too. So "0
+## triangles in an empty cell" is only true while that cell's solid neighbours
+## have their shared faces culled — which the merged skin does, since the whole
+## solid field including the interior is registered before any face is emitted.
+## With `skin_enabled = false` the same query on `CABIN_INNER_CELL` returns 2:
+## the un-culled underside of the roof brick directly above it, not the interior
+## brick this test is watching for.
 func _triangles_in_cell(boat: BoatBody, grid: DeckGrid, cell: Vector3i) -> int:
 	var box := _cell_box(grid, cell)
 	var n := 0

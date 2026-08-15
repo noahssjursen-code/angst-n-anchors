@@ -20,17 +20,23 @@ extends Node
 ##           of Mesa, not of DeckFitout. It is printed and not budgeted, and the
 ##           right way to bound staged cost here is the two lines above.
 ##
-## THE FRAME BUDGET IS ASSERTED RELATIVELY, NOT AS A MILLISECOND WALL.
+## THE FRAME BUDGET IS ASSERTED AS DIVISIBILITY, NOT AS A MILLISECOND WALL.
 ## `DeckFitoutJob._process` checks the clock BEFORE starting each unit of work
-## and never during one, so the contract it can actually keep is: a frame
-## overruns FRAME_BUDGET_USEC by at most one unit. Both sides of that are
-## measured on the machine running the test, which is why it says the same thing
-## on a fast box and on llvmpipe — unlike an absolute "100 ms" line, which was
-## the bound this file had and which reported the compliance pass as a budget
-## failure rather than as what it is: one step that cannot be subdivided.
+## and never during one. The relative form of that contract — "a frame overruns
+## FRAME_BUDGET_USEC by at most one unit" — was asserted here and is arithmetic,
+## not a property: see `_check_staged_budget` for the mutation that walked a
+## 200 ms unit straight through it. What is asserted now is that each phase is
+## cut into one step per brick, which is clock-free and therefore says the same
+## thing on a fast box and on llvmpipe, plus the pinned set of steps that are
+## admittedly not cut at all.
 
 const HULL_ID := "hull_90x24"
-const COUNTS := [100, 500, 1000, 3000]
+## 1000 and 1001 straddle `DeckFitout.LARGE_LAYOUT_THRESHOLD`, so the same
+## layout goes through the synchronous path and the staged one at effectively
+## the same size. That pair is the whole subject of this bench: they must draw
+## the same handful of meshes, and for months the staged side of it drew one per
+## brick.
+const COUNTS := [100, 500, 1000, 1001, 3000]
 ## Headless CI machines vary; keep soft so we catch "minutes" not "ms noise".
 const SOFT_MS_PER_BLOCK := 8.0
 const SOFT_FLOOR_MS := 500.0
@@ -93,6 +99,7 @@ func _bench_count(count: int) -> void:
 	var unit_ms := float(boat.get_meta("fitout_max_unit_usec", 0)) / 1000.0
 	var unit_phase := str(boat.get_meta("fitout_max_unit_phase", ""))
 	var indivisible: Array = boat.get_meta("fitout_indivisible_steps", [])
+	var steps_by_phase: Dictionary = boat.get_meta("fitout_steps_by_phase", {})
 	print(
 		(
 			"  n=%d layout=%.1fms dispatch=%.1fms exterior=%.1fms full=%.1fms (%.2f ms/block) worst_frame=%.1fms budgeted_frame=%.1fms unit=%.2fms(%s) meshes≈%d"
@@ -120,7 +127,7 @@ func _bench_count(count: int) -> void:
 
 	var soft_budget := maxf(SOFT_FLOOR_MS, float(placed) * SOFT_MS_PER_BLOCK)
 	if placed > DeckFitout.LARGE_LAYOUT_THRESHOLD:
-		_check_staged_budget(placed, divisible_ms, unit_ms, indivisible)
+		_check_staged_budget(placed, divisible_ms, indivisible, steps_by_phase, layout, grid)
 	else:
 		_check(
 			dispatch_ms <= soft_budget,
@@ -146,38 +153,53 @@ func _bench_count(count: int) -> void:
 	await get_tree().process_frame
 
 
-## What the staged path promises, stated as three things that are all true or
-## the promise is broken.
+## What the staged path promises. Stated as DIVISIBILITY, which is clock-free,
+## plus one soft wall-clock tripwire — not as a millisecond bound on a unit.
 ##
-## 1. Every frame the loop CAN budget stays within one unit of the budget. Both
-##    numbers come off this run, so no machine's clock speed is baked in.
-## 2. The absolute soft ceiling is kept as a "minutes, not ms" tripwire.
-## 3. The steps that CANNOT be budgeted are exactly the two named below, and no
-##    others. `VesselCompliance.validate` is a single O(n) GDScript pass with no
-##    resumable seam in it — 118 ms at n=3000 on this box, 30x the job's own
-##    budget, in ONE `_step`; `finish_fitout` serialises the layout in one
-##    `to_dict()`, 12 ms. This bench does not pretend either is budgeted and it
-##    does not raise the budget to cover them: it pins the set, so a third
-##    monolith cannot join them quietly, and prints what each one costs. Making
-##    the compliance pass budgetable means giving VesselCompliance a resumable
-##    seam, which this wave does not own — the measurement is the deliverable
-##    and the decision is the owner's.
+## WHY THE PREVIOUS FORM OF THIS CHECK WAS WORTHLESS, MEASURED. It asserted
+## `worst_budgeted_frame <= FRAME_BUDGET + worst_unit`, both numbers off the
+## same run. `DeckFitoutJob._process` reads the clock BEFORE each unit and never
+## during one, so a frame is arithmetically incapable of exceeding budget + the
+## worst unit it contains — the right-hand side inflates to meet the left every
+## time. MUTATION-VERIFIED at n=1001: a 200 ms busy-wait inside `_commit_skin`
+## — a step the loop treats as budgetable — produced `budgeted_frame` 204.9 ms
+## against an allowance of 4.0 + `unit` 202.10 = 206.1 ms, and the check PASSED.
+## Only the absolute 100 ms tripwire below noticed. In production it absorbed a
+## 31.59 ms unit in silence.
+##
+## AND A MILLISECOND BOUND CANNOT REPLACE IT ON THIS BOX. Two runs of identical
+## code measured the worst divisible unit at 31.59 ms (EXTERIOR_VISUALS) and
+## 4.59 ms (GAMEPLAY): it is wall clock around GDScript sharing four cores with
+## llvmpipe. The seam probe times the same work at 0.026 ms/item, worst single
+## 1.95 ms, when nothing is rendering. Asserting 4 ms there buys a coin flip.
+##
+## So what is asserted is the property a frame budget actually rests on: the
+## work is CUT INTO UNITS, one per brick, in every phase — and the steps that
+## are NOT cut are named. `VesselCompliance.validate` is a single O(n) GDScript
+## pass, 113 ms at n=3000 on this box (stable within 0.6% across three runs
+## while wall clock swung 130-150 s), 28x the job's own 4 ms budget, in ONE
+## `_step`; `finish_fitout` serialises the layout in one `to_dict()`, 15 ms.
+## This bench does not pretend either is budgeted and it does not raise the
+## budget to cover them: it pins the SET, so a third monolith cannot join them
+## quietly, and prints what each one costs. 72% of the compliance pass is
+## `VesselOutfit.validate`, which walks the layout brick by brick and therefore
+## does have a seam — splitting it is a change to two files this wave does not
+## own, so the measurement is the deliverable and the decision is the owner's.
 func _check_staged_budget(
 	placed: int,
 	divisible_ms: float,
-	unit_ms: float,
 	indivisible: Array,
+	steps_by_phase: Dictionary,
+	layout: BrickLayout,
+	grid: DeckGrid,
 ) -> void:
-	var allowance := float(DeckFitoutJob.FRAME_BUDGET_USEC) / 1000.0 + unit_ms
 	_check(
-		unit_ms > 0.0 and divisible_ms > 0.0,
+		divisible_ms > 0.0,
 		"n=%d staged job reports its own frame timings" % placed,
 	)
-	_check(
-		divisible_ms <= allowance,
-		"n=%d worst budgeted staged frame %.1fms exceeds budget+one unit %.1fms"
-		% [placed, divisible_ms, allowance],
-	)
+	## Kept: an absolute "minutes, not ms" tripwire, soft by 3x against the
+	## noise measured above, and the one thing here that can still catch a
+	## frame-loop that stops yielding at all.
 	_check(
 		divisible_ms <= STAGED_SOFT_FRAME_MS,
 		"n=%d worst budgeted staged frame %.1fms exceeds %.1fms"
@@ -192,6 +214,32 @@ func _check_staged_budget(
 		"n=%d un-budgetable steps are exactly %s, got %s"
 		% [placed, str(expected), str(names)],
 	)
+	## Divisibility, phase by phase, against item counts this test derives for
+	## itself rather than reading back off the job. MUTATION-VERIFIED at n=1001:
+	## collapsing EXTERIOR_VISUALS into a single `while` that emits all 1001
+	## items in one step reddens only this — `budgeted_frame` 47.5 ms and `unit`
+	## 47.36 ms both stayed inside their bounds, and the run would otherwise have
+	## been a clean PASS.
+	##
+	## REGISTER_SKIN is on this list deliberately. `DeckFitout.skin_enabled =
+	## false` skips that phase entirely, which is the measured way to turn both
+	## of this file's historic reds green while making every vessel worse; it
+	## turns this one red instead.
+	var shell: Dictionary = BrickShellClassifier.classify(layout, grid)
+	var expected_steps := {
+		"REGISTER_SKIN": placed,
+		"EXTERIOR_VISUALS": (shell.get("exterior", []) as Array).size(),
+		"INTERIOR_VISUALS": (shell.get("interior", []) as Array).size(),
+		"GAMEPLAY": placed,
+	}
+	for phase in expected_steps:
+		var want := int(expected_steps[phase])
+		var got := int(steps_by_phase.get(phase, 0))
+		_check(
+			got >= want,
+			"n=%d phase %s spent %d steps on %d items — it is not divided per brick"
+			% [placed, phase, got, want],
+		)
 
 
 func _step_names(steps: Array) -> PackedStringArray:
@@ -201,9 +249,19 @@ func _step_names(steps: Array) -> PackedStringArray:
 	return out
 
 
+## See the same helper in `deck_fitout_staging_test.gd`: with no job node the
+## readiness meta can never advance, so spinning the rest of `max_frames` turns
+## a compile error in `deck_fitout_job.gd` into a TIMEOUT instead of a message.
 func _wait_for_readiness(boat: BoatBody, target: int, max_frames: int) -> void:
 	for _frame in range(max_frames):
 		if DeckFitout.readiness_of(boat) >= target:
+			return
+		if boat.get_node_or_null(DeckFitout.FITOUT_JOB) == null:
+			_check(
+				false,
+				"no staged job exists to reach readiness %d (readiness stuck at %d)"
+				% [target, DeckFitout.readiness_of(boat)],
+			)
 			return
 		await get_tree().process_frame
 	_check(false, "n=%d did not reach readiness %d" % [boat.get_meta("brick_layout", {}).size(), target])
