@@ -198,22 +198,22 @@
         "yaw": 90
       },
       "2,2,13": {
-        "brick_id": "block",
-        "light_id": "light_nav_port",
-        "light_yaw": 270,
-        "yaw": 0
+        "brick_id": "block_windshield",
+        "yaw": 90
       },
       "2,2,14": {
-        "brick_id": "block",
-        "yaw": 0
+        "brick_id": "block_windshield",
+        "occupied_by": "2,2,13",
+        "yaw": 90
       },
       "2,2,15": {
-        "brick_id": "block",
-        "yaw": 0
+        "brick_id": "block_windshield",
+        "occupied_by": "2,2,13",
+        "yaw": 90
       },
       "2,2,16": {
-        "brick_id": "block",
-        "yaw": 0
+        "brick_id": "block_window",
+        "yaw": 180
       },
       "2,2,9": {
         "brick_id": "block_windshield",
@@ -234,20 +234,22 @@
         "yaw": 90
       },
       "2,3,13": {
-        "brick_id": "block",
-        "yaw": 0
+        "brick_id": "block_windshield",
+        "yaw": 90
       },
       "2,3,14": {
-        "brick_id": "block",
-        "yaw": 0
+        "brick_id": "block_windshield",
+        "occupied_by": "2,3,13",
+        "yaw": 90
       },
       "2,3,15": {
-        "brick_id": "block",
-        "yaw": 0
+        "brick_id": "block_windshield",
+        "occupied_by": "2,3,13",
+        "yaw": 90
       },
       "2,3,16": {
-        "brick_id": "block",
-        "yaw": 0
+        "brick_id": "block_windshield",
+        "yaw": 180
       },
       "2,3,9": {
         "brick_id": "block_windshield",
@@ -259,6 +261,8 @@
       },
       "2,4,11": {
         "brick_id": "block",
+        "light_id": "light_nav_port",
+        "light_yaw": 270,
         "yaw": 0
       },
       "2,4,12": {
@@ -359,7 +363,8 @@
         "yaw": 0
       },
       "3,3,16": {
-        "brick_id": "block_window",
+        "brick_id": "block_windshield",
+        "occupied_by": "2,3,16",
         "yaw": 180
       },
       "3,3,9": {
@@ -380,23 +385,27 @@
         "yaw": 0
       },
       "3,5,10": {
-        "brick_id": "roof_flat",
+        "brick_id": "roof_flat_4x4",
+        "occupied_by": "3,5,9",
         "yaw": 0
       },
       "3,5,11": {
-        "brick_id": "roof_flat",
+        "brick_id": "roof_flat_4x4",
+        "occupied_by": "3,5,9",
         "yaw": 0
       },
       "3,5,12": {
-        "brick_id": "roof_flat",
+        "brick_id": "roof_flat_4x4",
+        "occupied_by": "3,5,9",
         "yaw": 0
       },
       "3,5,13": {
-        "brick_id": "roof_flat",
+        "brick_id": "roof_flat_2x2",
         "yaw": 0
       },
       "3,5,14": {
-        "brick_id": "roof_flat",
+        "brick_id": "roof_flat_2x2",
+        "occupied_by": "3,5,13",
         "yaw": 0
       },
       "3,5,15": {
@@ -412,7 +421,7 @@
         "yaw": 180
       },
       "3,5,9": {
-        "brick_id": "roof_flat",
+        "brick_id": "roof_flat_4x4",
         "yaw": 0
       },
       "4,0,1": {
@@ -474,8 +483,9 @@
         "yaw": 0
       },
       "4,3,16": {
-        "brick_id": "block",
-        "yaw": 0
+        "brick_id": "block_windshield",
+        "occupied_by": "2,3,16",
+        "yaw": 180
       },
       "4,3,9": {
         "brick_id": "block_windshield",
@@ -495,23 +505,28 @@
         "yaw": 0
       },
       "4,5,10": {
-        "brick_id": "roof_flat",
+        "brick_id": "roof_flat_4x4",
+        "occupied_by": "3,5,9",
         "yaw": 0
       },
       "4,5,11": {
-        "brick_id": "roof_flat",
+        "brick_id": "roof_flat_4x4",
+        "occupied_by": "3,5,9",
         "yaw": 0
       },
       "4,5,12": {
-        "brick_id": "roof_flat",
+        "brick_id": "roof_flat_4x4",
+        "occupied_by": "3,5,9",
         "yaw": 0
       },
       "4,5,13": {
-        "brick_id": "roof_flat",
+        "brick_id": "roof_flat_2x2",
+        "occupied_by": "3,5,13",
         "yaw": 0
       },
       "4,5,14": {
-        "brick_id": "roof_flat",
+        "brick_id": "roof_flat_2x2",
+        "occupied_by": "3,5,13",
         "yaw": 0
       },
       "4,5,15": {
@@ -527,7 +542,8 @@
         "yaw": 180
       },
       "4,5,9": {
-        "brick_id": "roof_flat",
+        "brick_id": "roof_flat_4x4",
+        "occupied_by": "3,5,9",
         "yaw": 0
       },
       "4,6,11": {
@@ -624,8 +640,8 @@
         "yaw": 0
       },
       "5,3,16": {
-        "brick_id": "block",
-        "yaw": 0
+        "brick_id": "block_windshield",
+        "yaw": 180
       },
       "5,3,9": {
         "brick_id": "block_windshield",
@@ -644,23 +660,27 @@
         "yaw": 0
       },
       "5,5,10": {
-        "brick_id": "roof_flat",
+        "brick_id": "roof_flat_4x4",
+        "occupied_by": "3,5,9",
         "yaw": 0
       },
       "5,5,11": {
-        "brick_id": "roof_flat",
+        "brick_id": "roof_flat_4x4",
+        "occupied_by": "3,5,9",
         "yaw": 0
       },
       "5,5,12": {
-        "brick_id": "roof_flat",
+        "brick_id": "roof_flat_4x4",
+        "occupied_by": "3,5,9",
         "yaw": 0
       },
       "5,5,13": {
-        "brick_id": "roof_flat",
+        "brick_id": "roof_flat_2x2",
         "yaw": 0
       },
       "5,5,14": {
-        "brick_id": "roof_flat",
+        "brick_id": "roof_flat_2x2",
+        "occupied_by": "5,5,13",
         "yaw": 0
       },
       "5,5,15": {
@@ -676,7 +696,8 @@
         "yaw": 180
       },
       "5,5,9": {
-        "brick_id": "roof_flat",
+        "brick_id": "roof_flat_4x4",
+        "occupied_by": "3,5,9",
         "yaw": 0
       },
       "5,6,11": {
@@ -753,7 +774,8 @@
         "yaw": 0
       },
       "6,3,16": {
-        "brick_id": "block_window",
+        "brick_id": "block_windshield",
+        "occupied_by": "5,3,16",
         "yaw": 180
       },
       "6,3,9": {
@@ -774,23 +796,28 @@
         "yaw": 0
       },
       "6,5,10": {
-        "brick_id": "roof_flat",
+        "brick_id": "roof_flat_4x4",
+        "occupied_by": "3,5,9",
         "yaw": 0
       },
       "6,5,11": {
-        "brick_id": "roof_flat",
+        "brick_id": "roof_flat_4x4",
+        "occupied_by": "3,5,9",
         "yaw": 0
       },
       "6,5,12": {
-        "brick_id": "roof_flat",
+        "brick_id": "roof_flat_4x4",
+        "occupied_by": "3,5,9",
         "yaw": 0
       },
       "6,5,13": {
-        "brick_id": "roof_flat",
+        "brick_id": "roof_flat_2x2",
+        "occupied_by": "5,5,13",
         "yaw": 0
       },
       "6,5,14": {
-        "brick_id": "roof_flat",
+        "brick_id": "roof_flat_2x2",
+        "occupied_by": "5,5,13",
         "yaw": 0
       },
       "6,5,15": {
@@ -806,7 +833,8 @@
         "yaw": 180
       },
       "6,5,9": {
-        "brick_id": "roof_flat",
+        "brick_id": "roof_flat_4x4",
+        "occupied_by": "3,5,9",
         "yaw": 0
       },
       "7,0,10": {
@@ -896,22 +924,22 @@
         "yaw": 270
       },
       "7,2,13": {
-        "brick_id": "block",
-        "light_id": "light_nav_stbd",
-        "light_yaw": 90,
-        "yaw": 0
+        "brick_id": "block_windshield",
+        "yaw": 270
       },
       "7,2,14": {
-        "brick_id": "block",
-        "yaw": 0
+        "brick_id": "block_windshield",
+        "occupied_by": "7,2,13",
+        "yaw": 270
       },
       "7,2,15": {
-        "brick_id": "block",
-        "yaw": 0
+        "brick_id": "block_windshield",
+        "occupied_by": "7,2,13",
+        "yaw": 270
       },
       "7,2,16": {
-        "brick_id": "block",
-        "yaw": 0
+        "brick_id": "block_window",
+        "yaw": 180
       },
       "7,2,9": {
         "brick_id": "block_windshield",
@@ -933,20 +961,23 @@
         "yaw": 270
       },
       "7,3,13": {
-        "brick_id": "block",
-        "yaw": 0
+        "brick_id": "block_windshield",
+        "yaw": 270
       },
       "7,3,14": {
-        "brick_id": "block",
-        "yaw": 0
+        "brick_id": "block_windshield",
+        "occupied_by": "7,3,13",
+        "yaw": 270
       },
       "7,3,15": {
-        "brick_id": "block",
-        "yaw": 0
+        "brick_id": "block_windshield",
+        "occupied_by": "7,3,13",
+        "yaw": 270
       },
       "7,3,16": {
-        "brick_id": "block",
-        "yaw": 0
+        "brick_id": "block_windshield",
+        "occupied_by": "5,3,16",
+        "yaw": 180
       },
       "7,3,9": {
         "brick_id": "block_windshield",
@@ -959,6 +990,8 @@
       },
       "7,4,11": {
         "brick_id": "block",
+        "light_id": "light_nav_stbd",
+        "light_yaw": 90,
         "yaw": 0
       },
       "7,4,12": {
