@@ -1708,8 +1708,92 @@ file is not red by construction. It belongs beside decision #1 below.
 2. **`BuildingLayout.place_footprint` ignores its `_building_grid`** — 4/117 in
    `building_blueprint_test`. `BrickLayout`'s equivalent argument IS load-bearing
    and does reject out-of-bounds. Two sibling classes, contradictory, one wrong.
-3. **`land_field`: does OPEN_WATER promise a distance?** `distance_to_land(-15000, 14500) > 5000` measures **3779.9 m**. Not a fluke: minimum SDF inside OPEN_WATER is **1430.7 m**, and **5295 of 16692 samples (31.7%) sit closer than 5 km to land**. `norway_coast.json` has `open_water_x_m = -13500` against a westernmost land sample at **x = -12125** — 1.375 km of margin behind a 5 km claim. (A) push it to ≤ −17125 and the open-ocean strip shrinks 6.5 → 2.9 km with ~32% of open water reclassifying; (B) accept that OPEN_WATER is a position label, noting the two neighbouring checks at that same point (`wave_shelter > 0.999`, `coastal_exposure > 0.92`) both PASS. **This exact bound was relaxed once as a cheat and deliberately restored** — not touched.
-4. **`land_field`: `COASTAL_DISTANCE_M` vs the band sampled.** `coastal_exposure < 0.80` at 1383.4 m measures **0.8234**; band p100 is **0.8621**, and `smoothstep(80, 1800, 1400) = 0.8629` — the claim is **arithmetically impossible past ~1306 m**. Accept the ceiling, or raise `COASTAL_DISTANCE_M` to ≥ ~1932 m. Untouched.
+3. ~~**`land_field`: does OPEN_WATER promise a distance?**~~ — **BROKEN CHECK over a
+   REAL world change. Fixed 2026-08-15, and the history recorded here was wrong.**
+   This entry said the bound had no derivation and framed it as a choice about world
+   constants. Bisected instead, by restoring `c584530`'s generator and world data into
+   a scratch tree and running the *old* test over all four combinations:
+
+   | generator | `norway_coast.json` | result |
+   |---|---|---|
+   | day-one | day-one | **PASS (43)** |
+   | today | day-one | 1/43 |
+   | day-one | today | 1/43 |
+   | today | today | 2/43 (the baseline) |
+
+   **The bound was TRUE of the world as first shipped**, and either world change breaks
+   it alone (`lobes_min/max` 2–4 → 3–5, `coast_amplitude_m` 1850 → 2800 — the
+   archipelago reached west). It was a world-shape invariant nobody restated when the
+   world was deliberately re-shaped, and it sat here for six days labelled a decision
+   about constants. **What it reported was real; what it asserted was a number with no
+   derivation and no consumer.**
+
+   **Nothing outside `tests/` reads `Region.OPEN_WATER`.** `classify_region`'s only
+   production caller is `CoastalPortPlacer`, which branches on MAINLAND/FJORD/
+   ARCHIPELAGO and folds everything else to MAINLAND — so the label cannot promise a
+   player anything, because no code the game runs asks it. (The exposure *field* is
+   different: `WeatherComposer._exposure_at` consumes it for sea state, which is why
+   `COASTAL_DISTANCE_M` is a genuine taste question and the region enum is not.)
+
+   **Rendered rather than argued** (`screenshots/decisions/open_water_promise__*`):
+   the plan view shows the cut as a straight red longitude line drawn without
+   reference to where the islands landed, with the 5 km ring round the sample visibly
+   clipping the northern island. Ray-marched at the player camera's own 75° FOV with a
+   1.8 m post for scale, **3779.9 m and 6368.5 m (the sample that PASSED) are the same
+   picture** — land as an 8–13 px strip on the horizon.
+
+   Now: the premise is `> COASTAL_DISTANCE_M` (past the last distance-driven falloff,
+   which is what the neighbouring shelter/exposure checks actually need), the
+   deep-offshore twin is an **ordering** rather than a second copy of a threshold, and
+   a **raster-wide property** replaced the single point — no OPEN_WATER cell is land,
+   and every one clears the coast by more than one raster cell (0 of 10794, minimum
+   1386.0 m against a 156.25 m cell). **The old check was blind where this is not:**
+   moving the cut to −11000 puts 91 land cells inside OPEN_WATER and the baseline file
+   still reports its usual 2/43, unchanged; the new one reddens 2/53 at −559.0 m
+   (reproduced independently by the orchestrator).
+
+   **What remains for the owner is smaller and sharper:** *should the world keep sea
+   room offshore at all?* It is one bound in one function now, holding the whole label
+   instead of one coordinate, and at 5000 m it goes red today (32.1% of open-water
+   cells sit inside 5 km). It gates nothing.
+4. ~~**`land_field`: `COASTAL_DISTANCE_M` vs the band sampled.**~~ — **BROKEN CHECK.
+   Fixed 2026-08-15. This entry, and the orchestrator's framing of it, were both
+   wrong about *why*.**
+
+   The claim here — and my brief — said `coastal_exposure < 0.80` was *arithmetically
+   impossible* past ~1306 m. **It is not.** `coastal_exposure = coastal_opening(d) ·
+   mean_fetch^0.65`, and the smoothstep is only a **ceiling**: at 1383.4 m the check
+   needs `mean_fetch < 0.9070`, and **308 of the 338 samples beyond 1306.1 m do read
+   under 0.80** because their horizon is blocked. The bound is not impossible for the
+   band. It is impossible for **the point the scan picks**.
+
+   **The defect is sample selection.** `_find_water` returns the first raster-scan
+   hit, `(-12500, -15000)` — the south-west fringe of the belt and **p99.7 of the
+   2148-sample band** whose p90 is 0.7402. The file's own comment twelve lines below
+   already said so ("the first hit lands on the seaward fringe of the belt, which is
+   the most exposed water in the band") while the line above held that sample to the
+   band's ninetieth percentile. It **passed** on 2026-08-09 at the same seed and the
+   same bound, and its sibling on the same instrument (`fjord has low coastal
+   exposure`) was failing then and passes now — two single-sample bounds swapping
+   colour across world changes neither mentions.
+
+   Now: `land_field.gd` names `COASTAL_RAMP_FOOT_M` (was a bare `80.0`) and exports
+   `coastal_opening(d)`, which `coastal_exposure` calls — one derivation, shared by
+   field and test. The check is three properties: the sample is inside the ramp,
+   exposure stays under its own ceiling, and — **with no constant at all** — at a
+   kilometre the wave field has saturated while the exposure field has not. Nothing
+   depends on the value of `COASTAL_DISTANCE_M` any more.
+
+   **A mutation passed first time and was closed.** Flooring `coastal_opening` at 0.95
+   left the ceiling check GREEN at `0.9176 ≤ 0.9500` — **one derivation cuts both
+   ways, and the bound moved with the break.** Four non-self-referential shape checks
+   were added (zero at the foot, saturated at the top, monotone, actually rising);
+   that mutation now reddens 6/53.
+
+   **Still blind, stated:** weakening the fetch discount (0.65 → 0.20) passes both new
+   exposure checks at `0.8434 ≤ 0.8524` — the ceiling bounds the proximity term and
+   says nothing about the fetch term's strength. Only `fjord has low coastal exposure`
+   catches it, 1/53.
 5. **Apron props — NOT a density question. The props are never drawn at all.**
    Filed here for days as "how densely should an apron be dressed, a LOOK question
    no metric decides". Rendering it 2026-08-15 found the frame empty and then

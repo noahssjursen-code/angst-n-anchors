@@ -13,6 +13,13 @@ extends RefCounted
 ## attenuation a second time.
 const WAVE_SHELTER_FALLOFF_M := 450.0
 const LEGACY_SHELTER_FALLOFF_M := 3000.0
+## Foot and top of the proximity ramp under `coastal_exposure`. Inside the ramp,
+## how far you are from land caps how exposed you can read; past
+## `COASTAL_DISTANCE_M` distance stops modulating anything and only fetch is
+## left. `COASTAL_RAMP_FOOT_M` was an unnamed 80.0 inside `coastal_exposure`
+## until 2026-08-15; it is named because `land_field_geography_test` states the
+## ramp as a bound and must not carry a second copy of the numbers (REALITY 3b).
+const COASTAL_RAMP_FOOT_M := 80.0
 const COASTAL_DISTANCE_M := 1800.0
 const FETCH_DISTANCE_M := 12000.0
 const FETCH_RAY_COUNT := 16
@@ -286,6 +293,17 @@ static func directional_fetch(world_pos: Vector3, direction: Vector2) -> float:
 	return 1.0
 
 
+## The proximity term of `coastal_exposure`, and the CEILING on it: exposure is
+## this multiplied by `mean_fetch ** 0.65`, and fetch is clamped to 0..1, so no
+## point at `coast_distance` from land can read more exposed than this however
+## open its horizon. Exported because that ceiling is the only bound a single
+## coastal sample can be held to — see `land_field_geography_test`, where a
+## hand-picked 0.80 stood in for it for six days and could not be met by the
+## sample the scan selects.
+static func coastal_opening(coast_distance: float) -> float:
+	return smoothstep(COASTAL_RAMP_FOOT_M, COASTAL_DISTANCE_M, coast_distance)
+
+
 ## Kilometre-scale openness/fetch proxy for weather, sea state, and open-water
 ## gameplay. It intentionally does not reuse wave_shelter.
 static func coastal_exposure(world_pos: Vector3) -> float:
@@ -305,8 +323,9 @@ static func coastal_exposure(world_pos: Vector3) -> float:
 			var angle := TAU * float(ray_index) / float(FETCH_RAY_COUNT)
 			fetch_sum += directional_fetch(world_pos, Vector2(cos(angle), sin(angle)))
 		var mean_fetch := fetch_sum / float(FETCH_RAY_COUNT)
-		var coastal_opening := smoothstep(80.0, COASTAL_DISTANCE_M, coast_distance)
-		exposure = clampf(coastal_opening * pow(mean_fetch, 0.65), 0.0, 1.0)
+		exposure = clampf(
+			coastal_opening(coast_distance) * pow(mean_fetch, 0.65), 0.0, 1.0
+		)
 	if _exposure_cache.size() >= EXPOSURE_CACHE_LIMIT:
 		_exposure_cache.clear()
 	_exposure_cache[cache_key] = exposure
