@@ -27,7 +27,18 @@ extends Node
 ## `BuildingFitout` would be REALITY.md §3 exactly: the producer next to the one
 ## the game runs.
 ##
-## FOUR INSTRUMENT DECISIONS, each forced by a false or vacuous result while this
+## WHAT IT MEASURES, ON THE SHIPPED WAREHOUSE, AT THE TIME OF WRITING:
+## `PhysicsServer3D` holds **one** shape for 516 bricks — a 20 x 7 x 12 m box
+## spanning **y 3.000..10.000** against a building drawn 0.250..6.750. It is not
+## a solid warehouse. It is a slab of air 2.75 m over the roofline of nothing,
+## and a 1.8 m capsule marched at all four walls walks through **206 of 206**
+## stations, through both doorways, and falls through the floor at 25 of 25
+## interior stations. The recorded guess this file was written to settle — "one
+## collision box over the whole footprint, so the warehouse is solid to the
+## player and its doors admit nobody" — has the first clause right and the
+## second exactly backwards.
+##
+## SIX INSTRUMENT DECISIONS, each forced by a false or vacuous result while this
 ## file was being built.
 ##
 ##  - THE MARCHER IS PROVEN BEFORE IT IS BELIEVED. Every solidity claim here is
@@ -61,13 +72,25 @@ extends Node
 ##    player's 0.45 m step. One number for the opening would have averaged those
 ##    into a pass.
 ##
-## AND ONE VACUITY TRAP THAT IS NAMED RATHER THAN AVOIDED. "A player walks
-## through the doorway" PASSES on a building with no collision anywhere
+##  - A DOOR IS ASKED BOTH QUESTIONS, SHUT AND OPEN. The first form of the door
+##    march demanded a capsule pass a CLOSED doorway, which is the opposite of
+##    what `BrickDoor` is for — its `DoorLeafBody` collider is `disabled = open`
+##    — so the check would have gone red the day the warehouse got working doors
+##    and stayed green on the building that has none. It now marches shut, calls
+##    `set_open(true)`, and marches again.
+##
+##  - THE DOORWAY'S HEAD COLUMNS ARE INSET BY THE PLAYER'S OWN RADIUS. Flush
+##    with the declared opening they land on the JAMB POSTS `_add_brick_door`
+##    stands 0.07 m inside each edge, and every doorway reported a 0.167 m head
+##    — a jamb at ankle height, read as a lintel.
+##
+## AND ONE VACUITY TRAP THAT IS NAMED RATHER THAN AVOIDED. "An opened door
+## admits a 1.8 m figure" PASSES on a building with no collision anywhere
 ## (REALITY.md §4c — green on the defect). What stops it being a lie is that it
-## is never read alone: the shell march beside it must go RED at the same time
-## for that pass to mean anything, and the physics head is held against the
-## DRAWN head rather than against a bound, so an absent collider disagrees with
-## the drawing as loudly as a low one does.
+## is never read alone: the door-node count, the shut-door march and the shell
+## sweep beside it all go RED at the same time, and the physics head is held
+## against the DRAWN head rather than against a bound, so an absent collider
+## disagrees with the drawing as loudly as a low one does.
 
 const TestReport := preload("res://tests/support/test_report.gd")
 
@@ -170,7 +193,7 @@ func _ready() -> void:
 	## FLOOR. Scanned from a fixed height instead, the head reads the SOLE
 	## underfoot: measured on the per-brick path, every doorway reported a
 	## 0.050 m head, which is the floor tile at the threshold and not a lintel.
-	_check_doors(_check_interior())
+	await _check_doors(building, _check_interior())
 
 	building.queue_free()
 	await get_tree().physics_frame
@@ -273,8 +296,8 @@ func _check_collision_is_where_the_building_is(census: Dictionary) -> void:
 	print("  [where] drawn y %.3f..%.3f · collision y %.3f..%.3f"
 		% [drawn_floor, drawn_top, physics_floor, physics_top])
 	_t.check(
-		"the collision stands on the ground the building is drawn on "
-		% [] + "(drawn floor %.3f m, collision floor %.3f m, %.3f m apart)"
+		("the collision stands on the ground the building is drawn on "
+			+ "(drawn floor %.3f m, collision floor %.3f m, %.3f m apart)")
 		% [drawn_floor, physics_floor, absf(physics_floor - drawn_floor)],
 		absf(physics_floor - drawn_floor) <= STEP_H,
 	)
@@ -364,8 +387,8 @@ func _check_shell_is_continuous() -> void:
 		% [samples, str(BODY_HEIGHTS), open, worst_run, worst_where])
 	_t.check("the wall scan sampled the shell (%d points)" % samples, samples >= 400)
 	_t.check(
-		"the wall is continuous at the heights a standing player occupies "
-		% [] + "(%d of %d samples are open air, longest run %.3f m at %s)"
+		("the wall is continuous at the heights a standing player occupies "
+			+ "(%d of %d samples are open air, longest run %.3f m at %s)")
 		% [open, samples, worst_run, worst_where if open > 0 else "nowhere"],
 		open == 0,
 	)
@@ -373,19 +396,52 @@ func _check_shell_is_continuous() -> void:
 
 # ── 3. Do the doors admit anyone? ────────────────────────────────────────────
 
-func _check_doors(floor_y: float) -> void:
+## A DOOR IS NOT A HOLE, AND THE FIRST FORM OF THIS CHECK ASKED FOR ONE.
+## It marched a capsule at the closed doorway and demanded it pass — which is
+## the OPPOSITE of what a working door does. `BrickDoor` builds a `DoorLeafBody`
+## whose collider is `disabled = open`, so a shut door SHOULD stop a player, and
+## the check as written would have gone red the day the warehouse got working
+## doors and green on the building that has none (REALITY.md §4c, the check that
+## passes because something is broken). So the claim is stated as the pair a
+## door actually makes: shut, it stops you; opened, it admits you. Neither half
+## can be satisfied by a building whose doors are painted on — that building has
+## no `BrickDoor` to open, which is the check above them both.
+func _check_doors(building: Node, floor_y: float) -> void:
 	if not _t.check("the blueprint carries doorways (%d)" % _doors.size(), _doors.size() >= 1):
 		return
+	var nodes := _door_nodes(building)
+	## `BuildingCache._flatten_visuals` copies MESHES and recurses past
+	## everything else, so a stamped building keeps the door's leaf and jamb
+	## geometry and loses the `BrickDoor` that owns them — along with its
+	## interact areas and its collider. Measured: 0 nodes for 2 doorways.
+	_t.check("every doorway carries a door a player can open (%d BrickDoor nodes for %d doorways)"
+		% [nodes.size(), _doors.size()], nodes.size() >= _doors.size())
 	var scan_from := (0.0 if is_nan(floor_y) else floor_y) + HEAD_SCAN_LO
-	var blocked := PackedStringArray()
+	var plant := (0.0 if is_nan(floor_y) else floor_y) + STAND_EPS + STAND_H * 0.5
+	var shut := _door_marches(plant)
+	for node in nodes:
+		node.call("set_open", true)
+	await get_tree().physics_frame
+	await get_tree().physics_frame
+	var opened := _door_marches(plant)
+	print("  [door] marched shut: %d of %d doorways stopped a player · marched open: %d of %d"
+		% [shut.size(), _doors.size(), _doors.size() - opened.size(), _doors.size()])
+	if not shut.is_empty():
+		print("  [door] shut, stopped by: %s" % ", ".join(shut))
+	if not opened.is_empty():
+		print("  [door] OPEN and still obstructed: %s" % ", ".join(opened))
+	_t.check("a shut door stops a player (%d of %d doorways blocked)"
+		% [shut.size(), _doors.size()], shut.size() == _doors.size())
+	_t.check("an opened door admits a %.2f m figure (%d still obstructed: %s)"
+		% [STAND_H, opened.size(), "none" if opened.is_empty() else ", ".join(opened)],
+		opened.is_empty())
+
 	var low_head := PackedStringArray()
 	var high_sill := PackedStringArray()
 	var disagree := PackedStringArray()
 	var narrow := PackedStringArray()
 	for door_variant in _doors:
 		var door := door_variant as Dictionary
-		var face := door["face"] as Dictionary
-		var normal := face["normal"] as Vector3
 		var drawn_sill := float(door["sill"])
 		var drawn_head := float(door["head"])
 		var opening := drawn_head - drawn_sill
@@ -412,22 +468,6 @@ func _check_doors(floor_y: float) -> void:
 				% [str(door["name"]), drawn_head, physics_head])
 		if physics_width < CAPSULE_R * 2.0:
 			narrow.append("%s only %.3f m clear" % [str(door["name"]), physics_width])
-		var start := _face_point(face, float(door["u"])) + normal * START_OUT
-		start.y = maxf(drawn_sill, STAND_EPS) + STAND_H * 0.5
-		var march := _march(start, -normal * DOOR_MARCH_LEN, _figure(STAND_H))
-		if bool(march["started_inside"]):
-			blocked.append("%s began inside %s" % [str(door["name"]), str(march["hit"])])
-		elif bool(march["blocked"]):
-			blocked.append("%s stopped at %.3f m by %s"
-				% [str(door["name"]), float(march["stop_m"]), str(march["hit"])])
-	## NOT READ ALONE. This passes on a building with no collision anywhere, and
-	## the shell checks above are what make its pass mean something — see the
-	## header. Kept because a doorway a collider closes is the failure
-	## `piece_interior_test` found on every vessel door, and nothing else here
-	## would see it.
-	_t.check("a player on the apron walks through the doorway (%d obstructed: %s)"
-		% [blocked.size(), "none" if blocked.is_empty() else ", ".join(blocked)],
-		blocked.is_empty())
 	_t.check("the doorway's threshold is at the floor (%d too high: %s)"
 		% [high_sill.size(), "none" if high_sill.is_empty() else ", ".join(high_sill)],
 		high_sill.is_empty())
@@ -442,15 +482,54 @@ func _check_doors(floor_y: float) -> void:
 		narrow.is_empty())
 
 
+## Every `BrickDoor` under the stamp. Found by class rather than by node name:
+## `BuildingFitout` names the node "BrickDoor" today, and a name is not a
+## guarantee.
+func _door_nodes(node: Node) -> Array:
+	var out: Array = []
+	if node is BrickDoor:
+		out.append(node)
+	for child in node.get_children():
+		out.append_array(_door_nodes(child))
+	return out
+
+
+## Which doorways stop a 1.8 m figure walked at them from outside, planted on
+## the floor the interior probe found. Unfiltered: "a player gets through this
+## door" is a claim about the whole building, not about one brick.
+func _door_marches(plant_y: float) -> PackedStringArray:
+	var out := PackedStringArray()
+	for door_variant in _doors:
+		var door := door_variant as Dictionary
+		var face := door["face"] as Dictionary
+		var normal := face["normal"] as Vector3
+		var start := _face_point(face, float(door["u"])) + normal * START_OUT
+		start.y = plant_y
+		var march := _march(start, -normal * DOOR_MARCH_LEN, _figure(STAND_H))
+		if bool(march["started_inside"]):
+			out.append("%s began inside %s" % [str(door["name"]), str(march["hit"])])
+		elif bool(march["blocked"]):
+			out.append("%s stopped at %.3f m by %s"
+				% [str(door["name"]), float(march["stop_m"]), str(march["hit"])])
+	return out
+
+
 ## The lowest occupied point over the doorway's walkable column, asked of the
 ## space state and of nothing else. Walked along the path a player takes through
 ## the wall, because a lintel is not over the threshold.
+##
+## THE COLUMNS ARE INSET BY THE PLAYER'S OWN RADIUS. Flush with the declared
+## opening they land on the door's JAMB POSTS — `_add_brick_door` stands them
+## 0.07 m inside each edge — and every doorway reported a 0.167 m head, which is
+## a jamb at ankle height and not a lintel. A player walks between the jambs.
 func _physics_head(door: Dictionary, scan_from: float) -> float:
 	var face := door["face"] as Dictionary
 	var normal := face["normal"] as Vector3
 	var lowest := HEAD_SCAN_HI
+	var lo := float(door["u_lo"]) + CAPSULE_R
+	var hi := float(door["u_hi"]) - CAPSULE_R
 	for i in 5:
-		var u := lerpf(float(door["u_lo"]), float(door["u_hi"]), float(i) / 4.0)
+		var u := lerpf(lo, hi, float(i) / 4.0)
 		var base := _face_point(face, u)
 		var t := -0.4
 		while t <= 1.2:

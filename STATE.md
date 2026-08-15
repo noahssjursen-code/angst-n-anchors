@@ -1101,6 +1101,51 @@ reports honestly (now 2/43, on `TestReport` instead of a private accumulator tha
 de-duplicated labels and printed prose). And it needs **two** owner calls on **two
 different constants**, not "an owner call on world constants".
 
+### BUILDINGS DO NOT COLLIDE — measured through `PhysicsServer3D`, not read from code
+
+`tests/building_interior_test.gd` (lane B, 37 checks, 15 red). The recorded guess
+was *"one collision box; the warehouse is solid and its doors admit nobody."*
+**Half right, and the wrong half is the important one.**
+
+**One box: TRUE** — `PhysicsServer3D` holds **1 shape for 516 bricks**.
+**Solid: FALSE, and backwards.** That box spans y 3.000…10.000; the building is
+drawn y 0.250…6.750. Its underside stands **2.750 m above the building's own
+base**. At ground level the warehouse is a hologram: a 1.8 m capsule walks through
+**206 of 206** wall stations on all four faces, through both doorways, and falls
+through the floor at **25 of 25** interior stations. What is solid is a slab of air
+three metres up.
+
+**The cause is one line of arithmetic**, `scripts/core/building_cache.gd:137`:
+```gdscript
+col.position = center + Vector3(0.0, shape.size.y * 0.5 - 0.5, 0.0)
+```
+`center` is already the MIDPOINT of the cell-centre bounds; the offset term assumes
+it is the BOTTOM. Half the height is counted twice, so the box floats by exactly
+`(max.y − min.y) / 2` = 3.000 m. **On a one-storey building it would float less and
+nobody would notice.** Independent of the pitch bug.
+
+**The doors are painted on.** `_flatten_visuals` / `_stamp_node` copy
+`MeshInstance3D` and nothing else, so the leaf and jamb GEOMETRY survives the cache
+while the `BrickDoor` that owns their colliders, interact areas and F-prompt is
+discarded — **0 `BrickDoor` nodes for 2 doorways**. And the drawn opening is
+**1.500 m tall with a 0.750 m sill**: a 1.8 m player is 0.300 m too tall and the
+threshold is 0.300 m above his 0.45 m step.
+
+**The wall is 50% air, and a player still cannot get through it.** 0.5 m bricks on
+a 1.0 m lattice: a 0.70 m capsule is STOPPED at every join (0 of 206 through), but
+a point scan reads `0.50 m solid, 0.50 m open` repeating, and **at y = 0.90 m the
+whole wall is one continuous open slot 18.34 m long** — 5560 of 7992 samples are
+air. A raycast, a projectile, a camera and daylight all pass. That is why the shell
+needs TWO instruments: a march answers "is a player stopped", only a point scan
+sees a wall that is half missing. **The floor has the same defect and it matters
+more** — 21 of 25 interior stations have no floor directly beneath them.
+
+**This is a DECISION, not a repair, which is why it was left red.** Correcting the
+y-offset alone (mutation M1) turns the warehouse into a solid monolith whose doors
+admit nobody — 12/37, with the doorway going red at 0.000 m clear. The composite
+(per-brick colliders + the pitch resolution (a)) measures **PASS (39)**, so the
+file is not red by construction. It belongs beside decision #1 below.
+
 ### Owner decisions outstanding
 
 1. **The brick cell — and it is TWO questions, not one. The land half is a BUG.**
