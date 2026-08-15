@@ -79,7 +79,7 @@ names, so `git diff` on an image shows what a change did to the silhouette.
 |---|---|
 | Gate | Three lanes — A `--script`, B scene, C app self-check. Capability skips are self-policing: a skipped unit that passes when forced turns the gate red. Scratch probes (`_`-prefixed) are skipped and reported. |
 | Tests | Zero bare `assert()` **anywhere** — `tests/` (162 files) and `scripts/` alike, as of `29435d1`. The 16 production ones became guards that refuse loudly and leave a state the class's own queries define; none was a deletable note, and each was measured pre-guard against a `git archive HEAD` copy. **One (`ocean_clipmap`) mutation-passed** — 9 child meshes either way in debug, only the release half differs and this container has no export templates, so that guard is unverified and recorded as a finding, not a relief. `TestReport` fails a run that executed zero checks. |
-| Units that cannot go red | Swept, all 107: **three found, two closed.** `winding_probe.gd` scored PASS in 6 s with no assertions — now `_winding_probe.gd` (a dev note about the *engine's* BoxMesh convention, which is why converting it in place would have landed a layer below the bug) and the property is asserted on the mesh the baker commits, in `tests/box_winding_test.gd` (mutations: 3/18 and 6/18 red, control PASS 18, verified twice independently). `shipping_lane_traffic_profile.gd` was the same defect at **123 s measured, the most expensive lane-A unit** — now `_shipping_lane_traffic_profile.gd` (still a working hand-run instrument) and replaced by `shipping_lane_traffic_integrity_test.gd`, 12 checks in **25 s**: net **−98 s** off the gate. `port_layout_visual_capture` has no red path either but is already NOTRUN, so it is not scoring a false PASS. **All three are now closed or accounted for.** |
+| Units that cannot go red | Swept, all 107: **three found, all three now closed or accounted for.** `winding_probe.gd` scored PASS in 6 s with no assertions — now `_winding_probe.gd` (a dev note about the *engine's* BoxMesh convention, which is why converting it in place would have landed a layer below the bug) and the property is asserted on the mesh the baker commits, in `tests/box_winding_test.gd` (mutations: 3/18 and 6/18 red, control PASS 18, verified twice independently). `shipping_lane_traffic_profile.gd` was the same defect at **123 s measured, the most expensive lane-A unit** — now `_shipping_lane_traffic_profile.gd` (still a working hand-run instrument) and replaced by `shipping_lane_traffic_integrity_test.gd`, 12 checks in **25 s**: net **−98 s** off the gate. `port_layout_visual_capture` has no red path either but is already NOTRUN, so it is not scoring a false PASS. **All three are now closed or accounted for.** |
 | Colour | **Free in the solid bake, priced in the studio x-ray.** The bucket key is material alone and colour rides in vertex data, so `demo_workboat` measures **3 mesh instances / 11 renderer draw calls at BOTH 22 and 64 distinct colours** — zero delta. The ghost/x-ray path still keys by colour and costs **112 instances at 64 colours**, which is what mutation-verifies the claim without editing production code. Earlier text here said "4 draw calls": wrong on both readings — buckets are 3 (`MATERIALS.size()` is the BOUND, not the count) and renderer draw calls are 11. |
 | Collision | Diagonal walls collide as drawn, asserted against `PhysicsServer3D` on a real body — not against the baker's dictionaries. Every edge run's barrier is the yaw-frame BOUND of the boxes it draws, not a second formula — 0 loose corners across all nine capture fixtures. |
 | Items | Float metres, free yaw + optional pitch/roll, props bag, **host-relative placement** so a fitting follows its host. Part catalog + plan-side compliance measurement exist. |
@@ -1079,11 +1079,11 @@ one is an owner decision on a *look* question, one is a product blocker, one nee
 a live server, one is a deliberate stated trade, one is diagnosed to a mast, and
 one is a fixture defect a wave is fixing now.
 
-**That is the milestone, and as of `29435d1` the last two holes in it are closed
-or owned.** "No test that cannot fail" was an overstatement when written: the
-107-unit sweep found three units with no path to red. Two are handled
-(`_winding_probe.gd` + `box_winding_test.gd`; the traffic profiler is a wave),
-the third was already NOTRUN. The instrument is honest: no bare `assert()`
+**That is the milestone, and as of `3dde22e` the last holes in it are closed.**
+"No test that cannot fail" was an overstatement when written: the 107-unit sweep
+found three units with no path to red. Both live ones are now handled —
+`_winding_probe.gd` + `box_winding_test.gd`, and `_shipping_lane_traffic_profile.gd`
++ `shipping_lane_traffic_integrity_test.gd` — and the third was already NOTRUN. The instrument is honest: no bare `assert()`
 anywhere, no unit that reports no outcome, every skip self-policing, and the
 scratch-probe escape works in both lanes. What remains is not "unknown failures"
 — it is decisions and product work.
