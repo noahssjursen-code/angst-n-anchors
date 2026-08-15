@@ -39,7 +39,9 @@ scripts/
   npc/          # NpcBase, ShipwrightNpc (parked; port NPCs rebuilt later)
   cargo/        # CommodityCatalog, ContainerUnit/Node/Factory, bulk hold lots/rules
   company/      # Company/economy contracts + local authority service (future server seam)
-  apps/         # Engine authoring apps (BuildingBrickEditor, PortSlotEditor, ShipyardBrickEditor)
+  apps/         # Engine authoring apps (StructureStudio, ShipyardBrickEditor, BuildingBrickEditor,
+                #   VesselRegistrationAudit, the character/wardrobe authors). There is NO
+                #   PortSlotEditor — this line named one until 2026-08-15 and no such file exists.
   ui/           # HUDs, menus, overlays, GameMenu + DebugHud autoloads
   state/        # GameState autoload (cross-system read model), sub-states: PlayerState, ShipState, ContractState, WorldState
 
@@ -103,8 +105,17 @@ Each autoload lives in its system folder and is registered in `project.godot`.
 | `LocalPlayerView` | `state/` | **The MP seam.** Per-client view of the local player's world. UI reads through here, not direct autoloads |
 | `WorldGateway` | `network/` | Command/event/projection authority seam shared by local and remote backends |
 | `Tutorial` | `state/` | First-time hint chain (fires once per captain, persisted) |
+| `ServerConfig` | `network/` | Server/session configuration read by the network stack |
+| `NetworkManager` | `network/` | Peer lifecycle and transport for the multiplayer backend |
+| `LoadingGate` | `ui/` | Full-screen loading curtain (draws a `CanvasLayer` — hide it in capture rigs) |
+| `LodService` | `core/` | Shared level-of-detail budget/scheduling service |
 
-The autoloads listed above are the **actual** registered singletons. Do not reference `Economy`, `ContractBoard`, `FleetManager`, `ContractRegistry`, `PortOperations`, or `World` — those don't exist (or were purged).
+The autoloads listed above are the actual registered singletons, checked against
+`project.godot` on 2026-08-15 — **all 19 of them**. The table used to claim to be the actual list
+while omitting `ServerConfig`, `NetworkManager`, `LoadingGate` and `LodService`; the last two are
+exactly the sort of omission that costs an hour, because both draw or budget over your scene.
+Do not reference `Economy`, `ContractBoard`, `FleetManager`, `ContractRegistry`,
+`PortOperations`, or `World` — those don't exist (or were purged).
 
 ### Convention — `LocalPlayerView` is the MP seam
 
@@ -158,8 +169,11 @@ issue/revise consignments and validate delivered cargo.
 ## Vessel System — Deck-grid bricks + outfit budget
 
 Hulls are reusable geometry components, not ships. A finished store ship (prebuilt)
-combines one `hull_id` with a name, price, `shaft_power_kw`, and **1×1×1 m brick
-grid**. Many differently powered and outfitted ships may share the same hull.
+combines one `hull_id` with a name, price, `shaft_power_kw`, and a brick grid whose
+**cell is 0.5 m, not 1 m** (`WorldUnits.DECK_CELL_M`; `BrickCatalog.size_m` is
+`footprint × DeckGrid.CELL_M`, so a 1×1×1 footprint draws 0.5 × 0.5 × 0.5 m — measured
+2026-08-15). This line said "1×1×1 m brick grid" and it was double on every axis.
+Many differently powered and outfitted ships may share the same hull.
 
 A vessel is a **fair, registered data model** (same hard rules for official store ships and UGC):
 
@@ -240,18 +254,30 @@ deliberately bare hulls plus their item rigs until that primitive lands; do not
 re-author superstructure out of wall runs in the meantime. One consequence
 lives in `PlanOutfit`: nothing declares enclosure any more, so `has_cabin` is
 false for every plan and a licence demanding a cabin cannot be met by one.
+(Confirmed 2026-08-15 over all 18 shipped plan fixtures: 0 report a cabin. Note
+the mechanism is stronger than the wording — `PlanOutfit.has_cabin` takes the
+plan as `_plan` and `return false` unconditionally, so this is true of any plan
+that could ever be written, not just of the ones we ship.)
 `DeckFitout.apply_any`
 routes vessel records: `structure_plan_v1` dicts take the parametric path,
 legacy `cells` dicts still take the voxel path. Author plans in
 **Structure Studio** (`scenes/apps/structure_studio.tscn` — the single unified
-builder; the old shipyard/building brick editor scenes are retired) or write
+builder; `scenes/apps/building_brick_editor.tscn` is gone, but
+`scenes/apps/shipyard_brick_editor.tscn` and its 3000-line script are **still
+present and still loadable**, so "retired" here means "do not author new work in
+it", not "deleted") or write
 JSON directly in `resources/data/structures/`
 (see `demo_workboat.json`). Legacy compliance/budgets do not yet apply to
 plans — that rework lands with the new vocabulary.
 
 `BrickCatalog` is the legacy voxel construction kit (vessel decks + land
-buildings). Its definitions are currently WIPED pending the rebuild; the
-tag-driven mounting machinery stays and revives per definition added.
+buildings). **It is not wiped** — `BrickCatalog.ids()` returns **64 definitions**
+(measured 2026-08-15), including `block`, `block_45`, `block_door`,
+`block_windshield` and the railing family, each with a real footprint and a
+`size_m`. This paragraph claimed the definitions were "currently WIPED pending
+the rebuild", which would have told a reader that a brick vessel draws nothing;
+it draws 64 kinds of brick, all of them at half the cell they are addressed on
+(see `scripts/port/building_grid.gd`). The tag-driven mounting machinery stays.
 
 Static bricks render through `VesselSkinBaker` (`DeckFitout.skin_enabled`, default on):
 full-cell cuboids become culled voxel faces with baked corner AO plus applied
@@ -263,7 +289,11 @@ reusable by headless services (e.g. future build moderation renders).
 
 ### Vessel orientation
 
-**Bow = −Z, Stern = +Z, Port = −X, Starboard = +X.** Grid cells are vessel metres.
+**Bow = −Z, Stern = +Z, Port = −X, Starboard = +X.** Grid axes are vessel-local, and a grid cell
+is **0.5 m, not a metre** — a 28 m hull is 56 cells long. This line read "Grid cells are vessel
+metres", which is the same doubling as the brick-grid line above and the same one REALITY.md §4d
+is about. Cell counts are a build resolution; convert with `WorldUnits.DECK_CELL_M`, never by
+assuming one cell is one metre.
 
 ### Navigation and autonomous vessels
 

@@ -5,6 +5,15 @@ extends RefCounted
 ## the build — there is no gameplay size ceiling. Local origin is the footprint
 ## centre at ground level.
 
+## ⚠ THIS DISAGREES WITH THE BRICK IT ADDRESSES, BY A FACTOR OF EXACTLY 2.000.
+## Measured 2026-08-15: `cell_center_local` steps 1.0 m per cell, while
+## `BrickCatalog.size_m("block")` — a 1×1×1 footprint — draws (0.5, 0.5, 0.5),
+## because `size_m` is `footprint × DeckGrid.CELL_M` and `DeckGrid.CELL_M` is
+## `WorldUnits.DECK_CELL_M` = 0.5. Every blueprint therefore lays half-size
+## bricks on a full-size lattice and no blueprint data can produce a solid wall.
+## Do NOT "fix" this by editing either constant on sight: whether the brick cell
+## should be 0.5 or 1.0 is the open product decision recorded in CONVENTIONS.md
+## §3a, and both constants have consumers outside this file.
 const CELL_M := 1.0
 
 var width: int = 32

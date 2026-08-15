@@ -2,7 +2,21 @@ class_name HullCatalog
 extends RefCounted
 
 ## Reusable data-driven hull components for the shipyard editor.
-## Edit resources/data/vessels/hulls/catalog.json — dimensions are in-world metres (2× real).
+## Edit resources/data/vessels/hulls/catalog.json — `loa_m` / `beam_m` / `depth_m`
+## are REAL METRES. One world unit is one metre; `hull_150x32` is a 150 m ship.
+##
+## This line read *"dimensions are in-world metres (2× real)"*. That is the note
+## CONVENTIONS.md §3a says was corrected on 2026-08-09 — the correction landed in
+## the JSON's own `notes` field and in `HullRegistry`, and never here. Two
+## readers were talked into a double-scale world by this sentence.
+##
+## `_normalize` still OVERWRITES the authored `display` with
+## `ShipClass.format_display_dimensions(loa_m, beam_m)`, which multiplies by
+## `ShipClass.DISPLAY_METRE_SCALE` = 0.5. Measured 2026-08-15: hull_150x32 is
+## labelled "75.0 × 16.0 m" and hull_70x18 "35.0 × 9.0 m" in the player-facing
+## catalog. So the DATA is single-scale and the LABEL is still half. Which of the
+## two is wrong is an owner decision (see CONVENTIONS.md §3a) — do not silently
+## "fix" either side.
 
 const CATALOG_PATH := "res://resources/data/vessels/hulls/catalog.json"
 

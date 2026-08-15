@@ -192,6 +192,12 @@ Measured on the shipped fixtures: **`probe_piece_trawler` carried 51 duplicate i
 piece placements were addressable.** Both trawler bulwark fixtures carried 8. Every generator had
 hand-assigned ids from a range it picked for itself, and the ranges overlapped.
 
+*(Re-measured 2026-08-15 across all 19 fixtures in `resources/data/structures/`: **zero**
+duplicate ids remain, and `probe_piece_trawler` now carries 49 placements, not 43. The paragraph
+above is history, not a current defect — but `plan_entity_id_test` is still `FAIL(1)` in the gate,
+so the property is not green even though the fixtures are clean. Do not read this section as a
+live fixture problem, and do not read the passing fixtures as a passing test.)*
+
 It survived because every check those fixtures had was about GEOMETRY — corners, colliders, draw
 calls, silhouettes. All green, all true, all pointed at the same face of the object. Nobody had
 asked "does this plan's id space hold together", so nobody got the answer. It would have surfaced
@@ -244,6 +250,69 @@ wrong too; the failure it caused sat unread in a stale known-red list for months
 **Rule.** A verification covers what it ran over. Before writing "changing X is safe", name the
 subsystems you checked and the ones you did not — and if you did not check a subsystem that
 consumes X, say so in the same sentence.
+
+### The audit that rule bought — 2026-08-15
+
+Applied to every "safe / verified / byte-identical / free / always / never / every" line in
+`CONVENTIONS.md`, `AGENTS.md`, `STATE.md` and the `scripts/**` headers. Findings, worst first,
+each with the measurement that settles it:
+
+**1. The qualifier added to §3a on 2026-08-14 is ALREADY too broad.** *"Changing `DECK_CELL_M`
+moves no **structure-plan** geometry"* is true of the five collections authored in metres —
+`walls`, `decks`, `stairs`, `edges`, `items` — and false of the sixth. `pieces[]` did not exist
+when that run was made, and a placement resolves through `PieceKit.node_plan`, which is literally
+`cell × DECK_CELL_M`. Doubling the node term on `probe_piece_house.json` doubled the resolved
+item AABB in all six numbers, exactly. Three shipped fixtures carry pieces. **The same trap, one
+level down, inside the correction written to prevent it** — which is why the rule says name the
+subsystems, not "name the subsystem you thought of".
+
+**2. "Nothing is double-scale" was false at the label layer the whole time.** §3a also said
+*"Labels and comments were corrected to match the data"*. Two labels were.
+`ShipClass.METRIC_SCALE` is still 2.0, `format_display_dimensions(28, 10)` still returns
+`"14.0 × 5.0 m"`, `HullCatalog._normalize` still overwrites every player-facing hull label with
+the halved string (hull_150x32 reads "75.0 × 16.0 m"), `VesselSpawn` still renames a captain's
+"28x10 Cargo" to "14x5 Cargo", and `hull_catalog.gd:5` still carried the exact *"(2× real)"* note
+§3a says was deleted. `ship_display_units_test` asserts all of it **green**, in lane B, today —
+so two passing tests disagree about how long the starter boat is (§4a). A correction is not
+"done" because the sentence that caused the confusion was edited; it is done when the code that
+produces the wrong value is gone or is named as still there.
+
+**3. The doc lie sat on the constant.** `deck_grid.gd` opened *"Cell edge = WorldUnits.DECK_CELL_M
+(1.0 m). A 30×24 m deck is 30×24 cells"* against a constant of 0.5, and `world_units.gd` said
+*"stays a 30×24 grid at the 1 m cell scale"* on the line above `const DECK_CELL_M := 0.5`.
+Measured: 30 × 24 m → **60 × 48 cells**. `cargo_slot_pad.gd` said 1 m too. A comment does not
+inherit the truth of the constant it is attached to; it is the softest artefact in the file
+(§3a's own lesson) and it lied on top of the most load-bearing number in the project for six days.
+
+**4. "Colour is free" — TRUE, and stronger than it was written, with one named exception.**
+Not inferred from a bucket count: `demo_workboat` repainted from 22 distinct colours to 64, one
+fixed camera pose, `RENDERING_INFO_TOTAL_DRAW_CALLS_IN_FRAME`:
+
+```
+22 colours -> 3 mesh instances, 11 draw calls, 30224 primitives
+64 colours -> 3 mesh instances, 11 draw calls, 30224 primitives
+```
+
+Zero delta. The mutation is live in production and was measured on the same fixture: the ghost
+bake keys on `material_rrggbb`, and at 64 colours costs **112 mesh instances, 112 draw calls** —
++101. So colour is free in the SOLID bake (everything that ships) and priced per colour in the
+studio's x-ray overlay. It bakes to **3**, not 4: `MATERIALS.size()` is the bound, and quoting a
+bound as a count is how a number goes stale.
+
+**5. Quoted counts rot faster than the properties they illustrate.** The strip-test table in
+`structure_baker.gd` read 57 pieces / 4692 triangles / **241 colliders**; re-measured, it is 58 /
+4704 / **554**, because `PLATE_COLLIDER_SLOP` tightened from 0.15 to 0.05 after that run. The
+property (placements contribute geometry and collision) held; the number did not. By contrast the
+plate cost table in the same file reproduced **exactly** — 675 / 2118 / 3086 boxes at 0.05 — which
+is what a measurement looks like when the constant it was taken at has not moved.
+
+**6. A probe the gate scores as a passing test.** `tests/winding_probe.gd` has no underscore, so
+the gate discovers it; it prints a convention and calls `quit(0)` unconditionally. It cannot go
+red, and it is cited in `structure_baker.gd` as *"verified in tests/winding_probe.gd"*. §4's
+"scratch probe left in `tests/`" is still live, and it is now load-bearing in a comment.
+
+**Corollary — a citation is not a verification.** Before writing "verified in X", open X and find
+the assertion. If X has no `TestReport`, X verifies nothing.
 
 ## 4e. The misattributed profile — both numbers moved, neither was the cause
 
@@ -344,7 +413,11 @@ no visible scale figure has no absolute scale — check the figure is *visible*,
 3d. **Grep for your subsystem's callers outside `tests/`.** If the only ones are test rigs, it is
     not delivered. Strip the input, re-measure, compare — if nothing changes, nothing works.
 3e. **When a check reddens as you fix something, ask what it was passing on.**
-3f. **Name the subsystems a verification covered.** It does not cover the ones it did not run over.
+3f. **Name the subsystems a verification covered.** It does not cover the ones it did not run
+    over — including the ones that did not exist when it ran. Re-read the qualifier you wrote
+    last time; §4d's own correction went stale in a day.
+3f'. **A citation is not a verification.** "Verified in X" means you opened X and found the
+    assertion. Quote counts with the constants they were taken at, or they rot.
 3g. **Vary one input before optimising a hotspot.** A profile says where, never why.
 3h. **Run the test named after the thing you are changing.** Especially when committing someone
     else's unfinished work — that is exactly when its guard matters most, and I have failed this

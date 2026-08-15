@@ -2,8 +2,21 @@ class_name DeckGrid
 extends RefCounted
 
 ## Deck brick grid in vessel-local metres.
-## Cell edge = WorldUnits.DECK_CELL_M (1.0 m). A 30×24 m deck is 30×24 cells;
-## starter trawler 14×5 → 14×5 cells.
+##
+## Cell edge = WorldUnits.DECK_CELL_M, which is **0.5 m — two cells per metre**.
+## A cell count is a BUILD RESOLUTION, never a size: measured through
+## `from_hull` (2026-08-15), a 30 × 24 m deck is **60 × 48 cells**, hull_28x10 is
+## **56 × 20**, hull_70x18 is 140 × 36, hull_120x28 is 240 × 56, hull_150x32 is
+## 300 × 64.
+##
+## This paragraph read *"Cell edge = WorldUnits.DECK_CELL_M (1.0 m). A 30×24 m
+## deck is 30×24 cells; starter trawler 14×5 → 14×5 cells"* against a constant
+## that is 0.5, i.e. every number in it was double. It is the doc lie that sat
+## directly on top of the constant at the centre of REALITY.md §4d, and
+## `ship_display_units_test` records what an assertion written from it does:
+## `grid.length == 28` on a 28 m hull demands the halved value under a label
+## forbidding exactly that shrinkage.
+##
 ## Cell indices: ix ∈ [0, width), iz ∈ [0, length), iy ≥ 0 above deck.
 
 const CELL_M := WorldUnits.DECK_CELL_M

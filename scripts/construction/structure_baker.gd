@@ -171,6 +171,20 @@ static func edge_collider_boxes(plan: StructurePlan, edge: Dictionary) -> Array:
 ##
 ## i.e. the placements now contribute 1260 triangles and 203 colliders where
 ## they contributed nothing.
+##
+## RE-MEASURED 2026-08-15 (`tests/_doc_claim_audit.gd`), because the fixture
+## gained a placement and PLATE_COLLIDER_SLOP tightened from 0.15 to 0.05 after
+## the run above — the numbers moved, the property did not:
+##
+##                            pieces  triangles  colliders
+##     probe_piece_house          58       4704        554   (stripped: 3432 / 38)
+##     probe_piece_trawler        49       7388       2026   (stripped: 6224 / 1540)
+##     probe_piece_tug            34       5544        423   (stripped: 4344 / 46)
+##
+## Note the collider column more than doubled against the 241 above while the
+## triangle column barely moved: that is the SLOP constant, not this file. A
+## quoted count is only true of the constants it was taken at — re-run the strip
+## test rather than reading these three rows as current.
 static func resolved(plan: StructurePlan) -> StructurePlan:
 	if plan == null or plan.pieces.is_empty():
 		return plan
@@ -1731,6 +1745,22 @@ static func _palette_color(plan: StructurePlan, slot: String, fallback: Color) -
 ## regression this exists to prevent — a 12-colour plan would go from 4 mesh
 ## instances to 12+, which is the whole draw-call budget for a harbour.
 ##
+## MEASURED 2026-08-15 on the renderer's own counter, one fixed camera pose,
+## `demo_workboat` repainted in place (`tests/_colour_drawcall_probe.tscn`):
+##
+##     22 distinct colours -> 3 mesh instances, 11 draw calls, 30224 primitives
+##     64 distinct colours -> 3 mesh instances, 11 draw calls, 30224 primitives
+##
+## Zero delta on all three, at three times the colour count the claim is usually
+## stated at. Note it is THREE instances, not four: MATERIALS.size() is the
+## bound, not the count — `demo_workboat` uses painted/steel/wood and never
+## touches "metal". Quote the bound, not "it bakes to 4".
+##
+## The `keyed_by_color` branch below is the same measurement run as the
+## mutation: it IS "put colour back in the key", live in production for the
+## ghost, and on that same fixture at 64 colours it costs **112 mesh instances
+## and 112 draw calls**. That is the regression, priced.
+##
 ## `keyed_by_color` is the translucent-ghost exception documented on bake(): a
 ## blended surface may only carry one colour, or the composite depends on
 ## submission order.
@@ -1786,7 +1816,16 @@ static func _offset_path(path: PackedVector3Array, offset: Vector3) -> PackedVec
 
 ## Box of `size` centred on `center`, 12 triangles, clockwise-front winding
 ## (Godot convention: right-hand cross of vertex order = MINUS the outward
-## normal — verified in tests/winding_probe.gd).
+## normal).
+##
+## "verified in tests/winding_probe.gd" used to end that sentence. It is not a
+## verification: that file inspects a built-in `BoxMesh`, PRINTS the convention
+## it finds and calls `quit(0)` unconditionally. It carries no `TestReport` and
+## no assertion, so it cannot go red — and because it lacks the leading
+## underscore the gate discovers it and scores it `PASS` (6 s) alongside real
+## units. Nothing holds THIS emitter to the convention; the check that would is
+## a normals-outward assertion on a baked box, and it does not exist yet
+## (REALITY.md §4, "a scratch probe left in tests/").
 ##
 ## `basis` rotates the box about its own centre; `size` is then read in that
 ## rotated frame. A rotation has determinant +1, so it carries vertex order and

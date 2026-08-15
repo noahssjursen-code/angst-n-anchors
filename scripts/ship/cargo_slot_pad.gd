@@ -2,7 +2,10 @@
 class_name CargoSlotPadComponent
 extends Node3D
 
-## Visible container slot grid on a ship deck. Cells are 1 m (DeckGrid.CELL_M).
+## Visible container slot grid on a ship deck. Cells are **0.5 m**
+## (`DeckGrid.CELL_M`) — this line said 1 m, which is double, and `cell_size_m`
+## is set from `DeckGrid.CELL_M` by `DeckFitout`, so the pad has always drawn
+## the 0.5 m cell the comment denied.
 ## Containers reserve a footprint block (default 4×4 m — two wide on an 8 m pad).
 
 const PAD_GROUP := "cargo_slot_pad"

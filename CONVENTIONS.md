@@ -121,19 +121,66 @@ region, or a baked structure ships with a capture.
 
 ## 3a. Scale — read this before authoring any plan
 
-### Settled, 2026-08-09. One world unit is one metre. Nothing is double-scale.
+### Settled, 2026-08-09, FOR THE PHYSICS AND GEOMETRY LAYER. One world unit is one metre.
 
 **The player is 1.8 m** (`scenes/shared/player.tscn`, capsule 1.8, eye 1.6, step 0.45, jump 0.9
 — all 1× human). **Hull `loa_m` / `beam_m` / `depth_m` are real metres.** `hull_28x10` is a
-**28 × 10 m vessel**. Size everything against the figure.
+**28 × 10 m vessel** — its record lives in `HullRegistry.FISHING_TRAWLER_SMALL`, not in
+`resources/data/vessels/hulls/catalog.json`, whose smallest hull is 70 m. Size everything
+against the figure.
+
+> ### ⚠ "NOTHING IS DOUBLE-SCALE" IS FALSE OF THE PLAYER-FACING LABEL LAYER — MEASURED 2026-08-15
+>
+> That heading used to end *"Nothing is double-scale"*, and the paragraph below used to end
+> *"Labels and comments were corrected to match the data; no physics was touched."* The physics
+> half is true. The labels half is not: the correction landed in the JSON catalog's `notes` and
+> in `HullRegistry`'s `display` string, and in **no other label**.
+>
+> Still live, measured by calling the functions (`tests/_doc_claim_audit.gd`):
+>
+> | Site | Measured |
+> |---|---|
+> | `ShipClass.METRIC_SCALE` | **2.0**, with the header *"World hulls and berth clearances use 2× those values"* |
+> | `ShipClass.DISPLAY_METRE_SCALE` | **0.5** |
+> | `ShipClass.format_display_dimensions(28, 10)` | **`"14.0 × 5.0 m"`** |
+> | `HullCatalog._normalize` | **overwrites** the authored `display` with the halved string on every load |
+> | Player-facing catalog labels | hull_150x32 → `"75.0 × 16.0 m"`, hull_120x28 → `"60.0 × 14.0 m"`, hull_70x18 → `"35.0 × 9.0 m"` |
+> | `VesselSpawn.LEGACY_STOCK_DISPLAY_NAMES` | renames a captain's `"28x10 Cargo"` to `"14x5 Cargo"` |
+> | `scripts/ship/hull_catalog.gd:5` | still carried the exact *"dimensions are in-world metres (2× real)"* note this section says was deleted (corrected 2026-08-15) |
+>
+> And `tests/ship_display_units_test` asserts all of it **green**, in lane B, today — its own
+> header states *"`hull_28x10` is 28 x 10 CELLS — a 14.0 x 5.0 m boat"*. So the repo contains two
+> passing tests that disagree about how long the starter boat is, which is REALITY.md §4a: the
+> disagreement is the finding, do not average it.
+>
+> **Which side is wrong is an owner decision, not a slip to patch.** The five-field argument
+> below says the hull is really 28 × 10 m, so the display layer is the leftover — but changing it
+> renames every vessel a player owns. Nobody has decided. Until someone does, **do not write
+> "nothing is double-scale" without naming the layer**: geometry, physics, grids and berth
+> geometry are 1×; the shipyard label, the vessel name and `ShipClass`'s length table are 0.5×.
 
 **Deck-grid cells are 0.5 m — two cells per metre.** That is a *build resolution*, not a size:
 a 28 m hull is 56 cells long. A 1 m grid was too coarse to build detail on, which is the only
-reason this constant exists.
+reason this constant exists. Measured through `DeckGrid.from_hull` 2026-08-15: 28 m → 56 cells,
+70 → 140, 120 → 240, 150 → 300, and a 30 × 24 m deck is **60 × 48**.
 
 `half_beam` and `half_loa` derive from metres (`width × CELL_M × 0.5`), so the factors cancel
-and changing `DECK_CELL_M` moves no **structure-plan** geometry. Fixtures re-rendered
-byte-identical (same MD5) after halving it.
+and changing `DECK_CELL_M` moves no geometry in the five collections that are authored in
+metres — `walls`, `decks`, `stairs`, `edges`, `items`. Fixtures re-rendered byte-identical
+(same MD5) after halving it.
+
+**That is now narrower than the sixth collection.** `pieces[]` did not exist when that run was
+made. A placement resolves through `PieceKit.node_plan` / `StructurePlan.piece_node_plan`, which
+are literally `cell × DECK_CELL_M`, so a piece-built plan moves with this constant exactly as a
+brick does. Measured on `probe_piece_house.json` by doubling the node term: the resolved item
+AABB went from position (2.0, 0.0, 12.0) size (6.0, 5.5, 13.5) to position (4.0, 0.0, 24.0) size
+(12.0, 11.0, 27.0) — exactly 2×, in all six numbers. Three shipped fixtures carry pieces
+(`probe_piece_house` 58 placements, `probe_piece_trawler` 49, `probe_piece_tug` 34).
+
+Separately, `resources/data/parts/structure_pieces.json` declares `cell_m: 0.5` and
+`PieceKit.parse_document` compares it against `WorldUnits.DECK_CELL_M`. Doctoring that field to
+1.0 produces the error *"the kit and the grid must agree"* — **but the kit still parses and
+still returns all six pieces**. The guard reports; it does not stop.
 
 > ### ⚠ THAT CLAIM USED TO BE WRITTEN WITHOUT THE WORD "STRUCTURE-PLAN", AND IT WAS FALSE
 >
@@ -154,6 +201,12 @@ byte-identical (same MD5) after halving it.
 > vessel beside the figure. Until someone does, do not repeat the byte-identical claim without
 > the qualifier.
 >
+> **The measured consequence, 2026-08-15.** `BuildingGrid.CELL_M` is **1.0** and steps
+> `cell_center_local` by 1.0 m. `BrickCatalog.size_m("block")` — footprint 1×1×1 — draws
+> **(0.5, 0.5, 0.5)**. A factor of exactly **2.000**: every land blueprint lays half-size bricks
+> on a full-size lattice, so no blueprint data produces a solid wall. `BrickCatalog` also has
+> **64 live definitions**, not the "currently WIPED" state `AGENTS.md` claimed until today.
+>
 > The general lesson is the one this file exists for: a doc line that says a change is safe is a
 > claim, and a claim that was verified **on one subsystem** is not a claim about the codebase.
 
@@ -168,7 +221,9 @@ The catalog carried a note reading "Dimensions are in-world metres (2× real)" a
 landed — and between them they convinced two readers in a row that the world was double-scale.
 I then copied the mistake into this file, where every agent reads it.
 
-Five independent fields say 28 m and only a label and a comment said 14 m:
+Five independent fields say 28 m and only a label and a comment said 14 m (these live in
+`HullRegistry.FISHING_TRAWLER_SMALL`, verified 2026-08-15 — `hull_28x10` is **not** in the JSON
+hull catalog, so do not go looking for them there):
 
 | Field | `hull_28x10` | a 14 × 5 m boat | a 28 × 10 m boat |
 |---|---|---|---|
@@ -177,7 +232,11 @@ Five independent fields say 28 m and only a label and a comment said 14 m:
 | `default_shaft_power_kw` | 1871 | ~300–500 | ~1500–1900 |
 
 `tests/vessel_registration_test.gd` had been calling it the *"28×10 m starter"* the whole time.
-Labels and comments were corrected to match the data; no physics was touched.
+**Two labels and one comment were corrected; the machinery that produces the rest was not** —
+see the boxed warning above. `HullRegistry.display` and the JSON `notes` field now read 28 × 10;
+`ShipClass.format_display_dimensions`, `HullCatalog._normalize`,
+`VesselSpawn.LEGACY_STOCK_DISPLAY_NAMES` and `hull_catalog.gd`'s own header still halved
+everything until this audit, and the first three still do. No physics was touched, then or now.
 
 **The lesson, since it will recur: a display string and a comment are the two softest artefacts
 in a codebase.** When they disagree with five numeric fields and a test's own wording, they are

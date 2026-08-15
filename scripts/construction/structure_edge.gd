@@ -1128,12 +1128,24 @@ static func sheer_bulwark_spec(stations: HullStations, opts: Dictionary = {}) ->
 	var samples := int(opts.get("samples", sheer_samples_for(stations, cap_h - overlap)))
 
 	var profile := bulwark_profile(plate, cap_w, cap_h, overlap)
-	## Colour is FREE — it rides in the vertex stream and the bake buckets on
-	## material alone. Spend it here: plating in the topsides colour and the cap
-	## in a contrasting one means the eye reads hull and bulwark as ONE body
-	## whose top edge is the sheer, instead of as a hull with a pale bar sitting
-	## on it. That is a colour decision doing silhouette work, and it costs
-	## nothing but two vertex attributes.
+	## Colour is FREE IN THE SOLID BAKE — it rides in the vertex stream and the
+	## bake buckets on material alone. Verified 2026-08-15 on the renderer's own
+	## counter, not on a bucket count: `demo_workboat` repainted from 22 distinct
+	## colours to 64 held at 3 mesh instances, 11 draw calls and 30 224
+	## primitives — delta ZERO on all three.
+	##
+	## It is NOT free in `StructureBaker.bake(plan, offset, ghost = true)`, the
+	## studio's x-ray overlay, which keeps colour in the bucket key because alpha
+	## blending is order-dependent. Same fixture, same 64 colours, ghost: **112
+	## mesh instances and 112 draw calls**, +101 over the solid bake. So spend
+	## colour freely on anything that ships and be aware that the editor overlay
+	## pays per colour.
+	##
+	## Spend it here: plating in the topsides colour and the cap in a contrasting
+	## one means the eye reads hull and bulwark as ONE body whose top edge is the
+	## sheer, instead of as a hull with a pale bar sitting on it. That is a colour
+	## decision doing silhouette work, and in the solid bake it costs nothing but
+	## two vertex attributes.
 	(profile[0] as Dictionary)["color"] = _color_of(
 		opts.get("plate_color", Color(0.13, 0.15, 0.18))
 	)
