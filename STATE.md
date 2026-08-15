@@ -312,6 +312,14 @@ added since: `box_winding_test`, `shipping_lane_traffic_integrity_test`,
 `building_cache_visual_test`, `visual_stamp_cache_test`, `starter_small_hull_test`,
 `hull_sheer_test`.
 
+**Changed since that run, and NOT re-measured by a full pass — do not read the numbers
+above as current.** Both verified by their own units against a `git archive HEAD`
+baseline, neither by a 111-unit run: `building_interior_test` went **15/37 → 5/41**
+(still red, and all five remaining are the open cell decision — mutating
+`BrickCatalog.size_m` to the grid takes it to PASS (41)), and `starter_vessel_grant_test`
+**PASS (49)** was added, so the tree is **112 units**. The next quiet-tree full run
+re-baselines this section; until then it is a run, not the state.
+
 **A full gate run over a tree with a live wave in it is not a baseline, and the attempt
 an hour earlier proved why** (run `20260815-073150-10087`, same day, RED with 12 FAIL +
 1 TIMEOUT). Six units died on `Identifier "VisualFlatten" not declared` — a half-applied
