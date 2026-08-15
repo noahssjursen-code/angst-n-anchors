@@ -41,6 +41,54 @@ const PIT_FLOOR_M := 0.08
 const MANIFOLD_REACH_M := 0.42
 const MANIFOLD_FLANGE_R := 0.18
 
+## THE HATCH IS CLOSED, AND WHAT CLOSES IT IS DRAWN — 2026-08-15.
+##
+## Until today this node drew a 1.16 m pit and NOTHING it drew collided: not one
+## CollisionShape3D, not one CollisionObject3D, on any vessel. What carried a
+## player over the aperture was `BoatBody`'s WalkDeck slab, a 5.00 x 0.14 x
+## 15.00 m box spanning the whole hull — so a deckhand walked over an open hatch
+## on a surface the hold does not draw. Measured on the granted starter
+## (`tests/_hold_walk_probe.gd`, `hull_15x5`): all 50 capsule stations over the
+## footprint stood on that slab at boat-local y 2.750, and a capsule dropped
+## down the middle of the hatch stopped there too, 1.09 m above the drawn pit
+## floor and 0.09 m above the drawn surface of its own chilled water.
+##
+## A fish hold IS a hole in the deck, so "close it" is a choice and not the only
+## one. It is the one this drawing can honour, because the other two need the
+## HULL cut open and this node cannot do that:
+##
+##   • the same WalkDeck also carries a hull box (5.00 x 2.21 x 15.00 m) whose
+##     top stands 0.51 m BELOW the deck plane. An aperture that were merely
+##     opened would drop a player 0.51 m onto invisible steel with 0.65 m of
+##     drawn pit still beneath their feet — the same "standing on nothing"
+##     defect, one storey down;
+##   • the hull's own deck plate mesh spans the aperture as well, so an open
+##     hold needs three separate holes cut — slab, hull box, plate — every one
+##     of them in `BoatBody` / the hull loft, on every vessel in the game;
+##   • the player capsule steps 0.45 m and jumps 0.90 m. This coaming is 0.26 m,
+##     so it is not a barrier a player would notice, and a 1.16 m pit with
+##     vertical sides is not climbable. Falling in would be a trap, not a
+##     hazard, until somebody draws a ladder.
+##
+## So the hold gets hatch boards, dropped into the coaming so the rim still
+## stands proud of them, and they are what a player's feet are on — 0.20 m above
+## the deck, against a 0.45 m step height. Opening them is a gameplay action
+## nothing in the game can perform yet; when it can, the thing it opens exists.
+const HATCH_COVER_M := 0.06
+## Target board width. The count is derived from the hatch so a 2 m hold gets
+## boards a person could lift, not one slab and not twenty battens.
+const HATCH_BOARD_M := 0.62
+## How far each board laps into its neighbour and into the coaming.
+##
+## MEASURED, not styled. Butted flush, two boards share a face exactly, and a
+## downward ray on that plane passes between both boxes and reports the deck
+## 0.250 m below: 7 of 63 stations on `hull_150x32`, whose 19.0 m hatch takes 30
+## boards, all of them on the seam row. A capsule cannot fall through a
+## zero-width seam, but an interaction ray can, and a hold that answers "the
+## deck" to "what is under the cursor" is the same lie one layer thinner. A lap
+## removes the degeneracy; 4 mm is invisible beside a 0.06 m board.
+const HATCH_LAP_M := 0.004
+
 @export var hold_id: String = "catch_hold"
 @export var capacity_kg: float = 4000.0
 ## Outer drawn extent in local metres: x across, y BELOW the deck plane
@@ -48,6 +96,11 @@ const MANIFOLD_FLANGE_R := 0.18
 @export var footprint_m := Vector3(3.00, 1.16, 2.40)
 
 var state := CatchHoldState.new()
+## Every box `_build_visual` drew as STRUCTURE, in hold-local metres, appended
+## by the same statement that built the mesh. `DeckFitout` registers exactly
+## these on the vessel's WalkDeck, so the collider is not a second derivation of
+## the drawing that can drift away from it (REALITY §3b).
+var _solid: Array[Dictionary] = []
 var _fill_root: Node3D
 var _boat: BoatBody
 var _pump_connection: Node3D
@@ -190,10 +243,70 @@ func _liner_half() -> Vector2:
 	)
 
 
+## Draws a box AND records it as one of this hold's solid boxes. The two happen
+## in one statement on purpose: a collider derived a second time from the same
+## constants is a second derivation, and this project has fixed that drift three
+## times (REALITY §3b).
+func _add_solid(
+	parent: Node3D,
+	pos: Vector3,
+	size: Vector3,
+	color: Color,
+	roughness: float,
+	metallic: float,
+) -> void:
+	var mesh := MeshBuilder.box(size, color, roughness, metallic)
+	mesh.position = pos
+	parent.add_child(mesh)
+	_solid.append({"pos": pos, "size": size})
+
+
+## Same, for an athwartships pipe. Its solid box is the cylinder's own bounding
+## box — a box around a round thing, which is what every collider in this
+## project is; the corners it adds are 0.09 m of steel on a 0.36 m flange.
+func _add_solid_pipe(
+	parent: Node3D,
+	pos: Vector3,
+	radius: float,
+	length: float,
+	color: Color,
+	roughness: float,
+	metallic: float,
+) -> void:
+	var mesh := MeshBuilder.cylinder(radius, length, color, roughness, metallic)
+	mesh.rotation_degrees = Vector3(0.0, 0.0, 90.0)
+	mesh.position = pos
+	parent.add_child(mesh)
+	_solid.append({"pos": pos, "size": Vector3(length, radius * 2.0, radius * 2.0)})
+
+
+## The boxes this node draws as structure, in hold-local metres. `DeckFitout`
+## puts exactly these on the vessel's WalkDeck; nothing else may invent one.
+##
+## The pit floor and the insulated liner are NOT here, and that is a decision
+## rather than an oversight: the boards close the only way in, and the WalkDeck's
+## hull box already fills the drawn pit from 0.51 m below the deck plane
+## downwards, so a liner collider would be a box inside a bigger box that a
+## player can never touch. If the hatch is ever made to open, they belong here
+## and the hull box needs a hole — see the header.
+func solid_boxes() -> Array[Dictionary]:
+	## A hold configured but never yet in a tree has not drawn anything, and a
+	## caller asking what it draws would get an empty answer and register no
+	## colliders at all. Building here rather than reporting nothing keeps the
+	## list and the meshes the same object in every construction order.
+	if _solid.is_empty():
+		_build_visual()
+	var out: Array[Dictionary] = []
+	for box in _solid:
+		out.append((box as Dictionary).duplicate())
+	return out
+
+
 func _build_visual() -> void:
 	for child in get_children():
 		remove_child(child)
 		child.queue_free()
+	_solid.clear()
 	var hold := Node3D.new()
 	hold.name = "OpenRswFishHold"
 	add_child(hold)
@@ -232,7 +345,8 @@ func _build_visual() -> void:
 		var skin := MeshBuilder.box(wall[1], inner, 0.92, 0.04)
 		skin.position = wall[0]
 		hold.add_child(skin)
-	## Low stainless coaming around the open access hatch.
+	## Low stainless coaming around the hatch. SOLID: it is the curb a deckhand
+	## steps over, and the drawing was the only thing here that ever existed.
 	var coam_y := COAMING_HEIGHT_M * 0.5
 	for wall in [
 		[
@@ -252,14 +366,53 @@ func _build_visual() -> void:
 			Vector3(coam.x * 2.0, COAMING_HEIGHT_M, COAMING_WALL_M),
 		],
 	]:
-		var mesh := MeshBuilder.box(wall[1], steel, 0.7, 0.15)
-		mesh.position = wall[0]
-		hold.add_child(mesh)
+		_add_solid(hold, wall[0], wall[1], steel, 0.7, 0.15)
+	## Hatch boards, spanning the coaming's clear opening and dropped into it — so
+	## the assembly reads as a hatch a person steps up onto, and the step is
+	## 0.20 m against a 0.45 m step height.
+	##
+	## CONTIGUOUS AND LAPPED, deliberately. Each board is registered as the box it
+	## draws, so a gap between two boards is a gap in the COLLIDER: a foot, or a
+	## downward ray, would find the deck 0.26 m below through it — and butted
+	## flush is not enough, see HATCH_LAP_M. The seams are drawn by alternating
+	## the board shade instead, which is free in the solid bake.
+	var open := Vector2(
+		maxf(coam.x - COAMING_WALL_M, 0.05), maxf(coam.y - COAMING_WALL_M, 0.05)
+	)
+	var boards := maxi(2, int(round(open.y * 2.0 / HATCH_BOARD_M)))
+	var board_z := open.y * 2.0 / float(boards)
+	## RECESSED one board thickness, not flush. Flush was tried and photographed
+	## first (`screenshots/vessels/hold/hold__after__quarter.png` at that
+	## version): the boards and the coaming top formed one continuous grey
+	## surface, so the hatch read as a plain slab dropped on the deck with no
+	## rim, no shadow line and nothing to say it was a hold. Dropped into the
+	## coaming it reads as a hatch again — the coaming stands 0.06 m proud all
+	## round and casts a line onto the boards (REALITY §1: look, then say what
+	## you changed and why).
+	var board_y := COAMING_HEIGHT_M - HATCH_COVER_M * 1.5
+	for i in range(boards):
+		_add_solid(
+			hold,
+			Vector3(0.0, board_y, -open.y + (float(i) + 0.5) * board_z),
+			Vector3(
+				open.x * 2.0 + HATCH_LAP_M * 2.0,
+				HATCH_COVER_M,
+				board_z + HATCH_LAP_M * 2.0,
+			),
+			steel.lerp(Color(0.20, 0.24, 0.26), 0.42 if i % 2 == 1 else 0.14),
+			0.62,
+			0.30,
+		)
 	## Capped discharge manifold for the fish-landing pump hose. Its outer face is
 	## the starboard edge of `footprint_m`. The cap is a CYLINDER, so its own
 	## half-thickness and its radius both reach past the point it is positioned
 	## at — which is how the old drawing ended up 0.42 m wider than anything in
 	## `DeckFitout` accounted for. Every term below is measured to the outer face.
+	## SOLID as well, and its box is its own bounding box: a capped pipe standing
+	## proud of the deck is something a deckhand walks into, and leaving it as
+	## the one drawn thing with no collider would have left the property this
+	## component now holds ("what the hold draws is what you stand on") with an
+	## exception in it — which is how exceptions become the next bug.
 	var reach := _manifold_reach()
 	var flange_r := minf(MANIFOLD_FLANGE_R, reach * 0.42)
 	## Clamped, because the flange is a CYLINDER: its radius bulges in z as well
@@ -268,18 +421,24 @@ func _build_visual() -> void:
 	## sideways.
 	var manifold_z := minf(coam.y * 0.68, footprint_m.z * 0.5 - flange_r)
 	var pipe_len := maxf(reach - flange_r * 0.44, 0.06)
-	var pipe := MeshBuilder.cylinder(flange_r * 0.56, pipe_len, steel, 0.42, 0.72)
-	pipe.rotation_degrees = Vector3(0.0, 0.0, 90.0)
-	pipe.position = Vector3(coam.x + pipe_len * 0.5, coam_y, manifold_z)
-	hold.add_child(pipe)
-	var flange := MeshBuilder.cylinder(
-		flange_r, flange_r * 0.44, Color(0.12, 0.16, 0.18), 0.5, 0.55
+	_add_solid_pipe(
+		hold,
+		Vector3(coam.x + pipe_len * 0.5, coam_y, manifold_z),
+		flange_r * 0.56,
+		pipe_len,
+		steel,
+		0.42,
+		0.72,
 	)
-	flange.rotation_degrees = Vector3(0.0, 0.0, 90.0)
-	flange.position = Vector3(
-		footprint_m.x * 0.5 - flange_r * 0.22, coam_y, manifold_z
+	_add_solid_pipe(
+		hold,
+		Vector3(footprint_m.x * 0.5 - flange_r * 0.22, coam_y, manifold_z),
+		flange_r,
+		flange_r * 0.44,
+		Color(0.12, 0.16, 0.18),
+		0.5,
+		0.55,
 	)
-	hold.add_child(flange)
 	_pump_connection = Node3D.new()
 	_pump_connection.name = "PumpConnection"
 	_pump_connection.position = Vector3(footprint_m.x * 0.5, coam_y, manifold_z)

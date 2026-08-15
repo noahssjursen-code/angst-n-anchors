@@ -444,7 +444,7 @@ static func mount_item_gameplay(
 		(BrickCatalog.has_tag(brick_id, "trommel") or BrickCatalog.has_tag(brick_id, "fishing"))
 		and accepted_fishing.has(cell)
 	):
-		_mount_fishing(root, visual, grid, item, boat_local, state.get("layout", null) as BrickLayout)
+		_mount_fishing(boat, root, visual, grid, item, boat_local, state)
 	if BrickCatalog.has_tag(brick_id, "mooring"):
 		_mount_mooring(visual, brick_id)
 	var light_id := str(item.get("light_id", ""))
@@ -689,13 +689,15 @@ static func _mount_ladder(visual: Node3D) -> void:
 
 
 static func _mount_fishing(
+	boat: BoatBody,
 	root: Node3D,
 	visual: Node3D,
 	grid: DeckGrid,
 	item: Dictionary,
 	gear_local: Vector3,
-	layout: BrickLayout,
+	state: Dictionary,
 ) -> void:
+	var layout := state.get("layout", null) as BrickLayout
 	## Drop catalog preview meshes — FishingSystem owns the live trommel + net.
 	for child in visual.get_children():
 		visual.remove_child(child)
@@ -718,23 +720,59 @@ static func _mount_fishing(
 	## deck has no room the hold is not mounted — a hold drawn over the sea is
 	## worse than a boat that visibly cannot carry fish, and the absence is
 	## loud (REALITY §7: red with a diagnosis beats green with a lie).
-	var berth := _catch_hold_berth(grid, layout, item)
+	##
+	## TWO GEAR BRICKS USED TO GIVE TWO HOLDS ON TOP OF EACH OTHER. This runs once
+	## per accepted fishing brick and had no memory of the holds already placed,
+	## so a player build with a second `trommel_small` got a second hatch derived
+	## from the same clear deck — overlapping the first, sharing its `hold_id`,
+	## and therefore overwriting its mass entry. No shipped preset has two; a
+	## player build can. `state` now carries the cells the holds already took.
+	var taken: Dictionary = state.get("hold_cells", {})
+	var berth := _catch_hold_berth(grid, layout, item, taken)
 	if berth.is_empty():
 		push_warning(
 			"DeckFitout: no clear deck for a catch hold beside the gear at %v — hold not mounted"
 			% [item.get("cell", Vector3i.ZERO)]
 		)
 		return
+	_reserve_berth_cells(grid, berth, taken)
+	state["hold_cells"] = taken
+	var hold_i := int(state.get("hold_i", 0))
+	state["hold_i"] = hold_i + 1
 	var hold := CatchHoldComponent.new()
-	hold.name = "CatchHold"
+	hold.name = "CatchHold" if hold_i == 0 else "CatchHold%d" % (hold_i + 1)
 	var centre: Vector3 = berth["center"]
-	hold.position = Vector3(centre.x, gear_local.y - CELL_HALF_M + HOLD_DECK_LIFT_M, centre.z)
+	var hold_local := Vector3(
+		centre.x, gear_local.y - CELL_HALF_M + HOLD_DECK_LIFT_M, centre.z
+	)
+	hold.position = hold_local
 	hold.configure_footprint(berth["size"] as Vector3)
 	## Capacity is a declared gameplay number and is deliberately NOT derived
 	## from the footprint: resizing the drawing must not silently re-balance how
 	## much fish a boat carries (see catch_hold_component.gd's header).
-	hold.configure("primary_catch_hold", 4000.0)
+	##
+	## The id must be UNIQUE per hold: `CatchHoldComponent._sync_payload_mass`
+	## keys the vessel's mass ledger on "catch:" + hold_id, so two holds calling
+	## themselves `primary_catch_hold` meant the second one's four tonnes of fish
+	## replaced the first one's instead of adding to it.
+	hold.configure(
+		"primary_catch_hold" if hold_i == 0 else "catch_hold_%d" % (hold_i + 1), 4000.0
+	)
 	root.add_child(hold)
+	## THE HOLD'S OWN GEOMETRY, ON THE BODY A PLAYER COLLIDES WITH. Until today
+	## nothing the hold drew collided at all, and the WalkDeck's full-hull slab
+	## carried a deckhand straight over the open hatch. These are the boxes the
+	## component recorded as it DREW them — this function may not invent one, or
+	## the collider and the drawing become two derivations that drift.
+	var solids := hold.solid_boxes()
+	for i in solids.size():
+		var box: Dictionary = solids[i]
+		boat.add_walk_brick_collider(
+			"hold_%d_%d" % [hold_i, i],
+			hold_local + (box["pos"] as Vector3),
+			box["size"] as Vector3,
+			0.0,
+		)
 
 
 ## The clear rectangle of deck this hull offers for a fish hold, in vessel-local
@@ -748,11 +786,16 @@ static func _mount_fishing(
 ## and four ratios — two against this hull's own beam and length, two against the
 ## hatch's own other side. None of them is a length standing in for a hull.
 static func _catch_hold_berth(
-	grid: DeckGrid, layout: BrickLayout, item: Dictionary
+	grid: DeckGrid, layout: BrickLayout, item: Dictionary, taken: Dictionary = {}
 ) -> Dictionary:
 	if grid == null:
 		return {}
 	var built := _occupied_columns(layout)
+	## Deck a hold already has. Same dictionary shape as `built`, merged here
+	## rather than checked separately, so every path that asks "is this cell
+	## clear" answers the same way for a wheelhouse column and for a hatch.
+	for key in taken:
+		built[key] = true
 	var gear_cell: Vector3i = item.get("cell", Vector3i(-1, -1, -1))
 	var fp := BrickCatalog.footprint_of(str(item.get("brick_id", "")))
 	var yaw_steps := int(round(float(int(item.get("yaw", 0))) / 90.0)) % 4
@@ -787,6 +830,37 @@ static func _catch_hold_berth(
 		if not berth.is_empty():
 			return berth
 	return {}
+
+
+## Marks every deck cell a placed hold occupies, plus the walking margin around
+## it, so the next gear brick's hold cannot be derived from deck this one is
+## standing on. The margin is the same `HOLD_DECK_CLEARANCE_M` a hold holds
+## clear of a bulwark: two hatches with no gangway between them are as
+## unusable as one hatch under the wheelhouse.
+static func _reserve_berth_cells(
+	grid: DeckGrid, berth: Dictionary, taken: Dictionary
+) -> void:
+	if grid == null or berth.is_empty():
+		return
+	var centre: Vector3 = berth["center"]
+	var size: Vector3 = berth["size"]
+	var lo := Vector2(
+		centre.x - size.x * 0.5 - HOLD_DECK_CLEARANCE_M,
+		centre.z - size.z * 0.5 - HOLD_DECK_CLEARANCE_M,
+	)
+	var hi := Vector2(
+		centre.x + size.x * 0.5 + HOLD_DECK_CLEARANCE_M,
+		centre.z + size.z * 0.5 + HOLD_DECK_CLEARANCE_M,
+	)
+	for iz in range(grid.length):
+		var z0 := -grid.half_loa + float(iz) * DeckGrid.CELL_M
+		if z0 + DeckGrid.CELL_M <= lo.y or z0 >= hi.y:
+			continue
+		for ix in range(grid.width):
+			var x0 := -grid.half_beam + float(ix) * DeckGrid.CELL_M
+			if x0 + DeckGrid.CELL_M <= lo.x or x0 >= hi.x:
+				continue
+			taken[Vector2i(ix, iz)] = true
 
 
 static func _berth_area(berth: Dictionary) -> float:

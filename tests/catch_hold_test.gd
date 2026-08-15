@@ -42,6 +42,7 @@ func _ready() -> void:
 	await _test_shore_rsw_transfer_and_capacity()
 	await _test_official_trawler_runtime()
 	await _test_the_hold_fits_the_boat()
+	await _test_two_gear_bricks_do_not_share_a_hatch()
 	_t.finish(get_tree())
 
 
@@ -475,6 +476,281 @@ func _check_one_hold(
 		clear_sides >= 1,
 	)
 
+	_check_the_hold_is_what_you_stand_on(label, hold, boat, grid, space)
+
+	## THE FENCE, restated on purpose (and knowingly against REALITY §4a). 4000 kg
+	## is a declared gameplay number that nothing derives from the drawing, and
+	## the wave that resized the hold and the wave that closed it were both told
+	## not to move it. A check that pins a constant is worth having exactly when
+	## the constant is an owner decision and the code around it keeps changing.
+	_t.check(
+		"%s: the hold still declares 4000 kg (%.0f)" % [label, hold.get_state().capacity_kg],
+		is_equal_approx(hold.get_state().capacity_kg, 4000.0),
+	)
+
+
+# ── 7b · the hold is a thing you STAND ON ───────────────────────────────────
+
+## How far the physics support may sit from the drawn surface below it. The
+## defect this replaces was 1.09 m: a 1.16 m pit whose only collider was the
+## vessel's own deck slab, 0.14 m of steel spanning the whole hull.
+const STAND_EPSILON_M := 0.02
+## Stations per axis across the hold's footprint. 9 x 9 on a 3.0 x 2.0 m hatch
+## is a station every ~0.4 m / ~0.25 m, which no board can hide between.
+const STAND_STATIONS := 9
+
+
+## THE property this wave exists for: **what a deckhand's feet are on is
+## something the hold DRAWS.**
+##
+## Before today the hold drew a 1.16 m pit and had no collider of any kind —
+## measured on the granted starter, 0 `CollisionObject3D` and 0
+## `CollisionShape3D` under a `CatchHoldComponent` on any vessel. What carried a
+## player was `BoatBody`'s WalkDeck slab (5.00 x 0.14 x 15.00 m on `hull_15x5`),
+## so all 50 marched stations over the hatch stood on deck-level steel 1.09 m
+## above the drawn pit floor, and a capsule dropped down the middle of the hatch
+## stopped at that same slab.
+##
+## Stated as the property rather than as the fix (REALITY §4a): at every station
+## over the footprint where this hold draws something above the deck plane, the
+## surface PhysicsServer3D puts a capsule's feet on is that drawn surface, to
+## within 2 cm. It does not mention hatch boards, so a hold that is opened
+## later — with the deck slab and the hull box cut, which is what opening it
+## needs — states the same sentence about its own pit floor.
+##
+## Two deliberate limits, both named because they bound what this proves:
+##   • the fill (chilled water, fish) is excluded. It is not structure, nobody
+##     stands on a fish, and including it would compare the support against a
+##     surface that moves with how much catch is aboard;
+##   • "drawn surface" means the top of a mesh's BOUNDING BOX in that column.
+##     For the nine boxes that is exact; for the two pipe cylinders it is the
+##     box around a round thing, which is what their collider is too.
+func _check_the_hold_is_what_you_stand_on(
+	label: String,
+	hold: CatchHoldComponent,
+	boat: BoatBody,
+	grid: DeckGrid,
+	space: PhysicsDirectSpaceState3D,
+) -> void:
+	var solids := _structure_boxes(hold, boat)
+	if not _t.check(
+		"%s: the hold draws structure to stand on (%d meshes)" % [label, solids.size()],
+		solids.size() >= 5,
+	):
+		return
+	var hl := boat.to_local(hold.global_position)
+	var half := Vector2(hold.footprint_m.x * 0.5, hold.footprint_m.z * 0.5)
+	var deck_plane := hl.y
+	var sampled := 0
+	var wrong := 0
+	var worst := 0.0
+	var worst_at := Vector3.ZERO
+	var worst_support := 0.0
+	var worst_drawn := 0.0
+	for ix in STAND_STATIONS:
+		for iz in STAND_STATIONS:
+			var at := Vector3(
+				hl.x + lerpf(-half.x + 0.03, half.x - 0.03, float(ix) / float(STAND_STATIONS - 1)),
+				0.0,
+				hl.z + lerpf(-half.y + 0.03, half.y - 0.03, float(iz) / float(STAND_STATIONS - 1)),
+			)
+			var drawn := _drawn_top_at(solids, at.x, at.z)
+			## Only where the hold draws something a foot could land on. Deck
+			## outside its own geometry is the vessel's business, not the hold's.
+			if drawn <= deck_plane + 0.01:
+				continue
+			sampled += 1
+			## Through the real body, from above the highest thing the hold
+			## draws, so the ray cannot start inside what it is measuring.
+			var ray := PhysicsRayQueryParameters3D.create(
+				boat.to_global(Vector3(at.x, drawn + 0.60, at.z)),
+				boat.to_global(Vector3(at.x, deck_plane - 2.0, at.z)),
+				BoatBody.LAYER_BOAT_WALK,
+			)
+			var hit := space.intersect_ray(ray)
+			var support := -1000.0
+			if not hit.is_empty():
+				support = boat.to_local(hit["position"] as Vector3).y
+			var gap := absf(drawn - support)
+			if gap > STAND_EPSILON_M:
+				wrong += 1
+				if gap > worst:
+					worst = gap
+					worst_at = at
+					worst_support = support
+					worst_drawn = drawn
+	if not _t.check(
+		"%s: the stand survey sampled the hold's own footprint (%d stations)"
+		% [label, sampled],
+		sampled >= 20,
+	):
+		return
+	_t.check(
+		(
+			"%s: a deckhand's feet land on drawn hold geometry"
+			+ " (%d of %d stations off, worst %.3f m at %v — drawn %.3f, physics %.3f)"
+		) % [label, wrong, sampled, worst, worst_at, worst_drawn, worst_support],
+		wrong == 0,
+	)
+
+	## The stand lattice above is a SAMPLE, and a coarse one on a 19 m hatch:
+	## shifting every registered collider 0.30 m sideways — the exact shape of the
+	## `DeckFitout` consumer bug REALITY §3 was written about — reddens it on only
+	## 5 of the 11 holds, because a station over the middle of a wide hatch still
+	## finds a board under it. So the shapes are also compared one for one, off
+	## the physics server, against the meshes they were drawn from.
+	_check_every_drawn_box_is_on_the_body(label, hold, boat, solids)
+
+	## And the fall-through half, through the same body: a capsule dropped down
+	## the middle of the hatch comes to rest ON the hold, not on whatever the
+	## vessel happens to have underneath and not in the hull.
+	var capsule := CapsuleShape3D.new()
+	capsule.radius = 0.35
+	capsule.height = 1.8
+	var top := _drawn_top_at(solids, hl.x, hl.z)
+	var params := PhysicsShapeQueryParameters3D.new()
+	params.shape = capsule
+	params.transform = Transform3D(
+		Basis.IDENTITY, boat.to_global(Vector3(hl.x, top + 3.0 + capsule.height * 0.5, hl.z))
+	)
+	params.collision_mask = BoatBody.LAYER_BOAT_WALK
+	params.motion = Vector3(0.0, -6.0, 0.0)
+	var rest := top + 3.0 - 6.0 * float(space.cast_motion(params)[0])
+	_t.check(
+		"%s: a capsule dropped down the hatch rests on the hold (%.3f m, drawn top %.3f)"
+		% [label, rest, top],
+		absf(rest - top) <= STAND_EPSILON_M,
+	)
+
+
+## Every structural mesh the hold drew has a shape ON THE WALKDECK BODY, at the
+## same place and the same size, read back out of PhysicsServer3D.
+##
+## This is the seam REALITY §3 is about: `CatchHoldComponent` records the boxes
+## as it draws them, and `DeckFitout._mount_fishing` is the CONSUMER that has to
+## put them on the body in vessel-local metres. The walk-through-bulwark bug
+## lived in exactly that hop — a producer that was right and a consumer that
+## passed the wrong argument — so the check goes to the body, not to
+## `solid_boxes()`, which would only prove the component agrees with itself.
+func _check_every_drawn_box_is_on_the_body(
+	label: String, hold: CatchHoldComponent, boat: BoatBody, solids: Array[AABB]
+) -> void:
+	var walk := boat.call("get_walk_deck") as CollisionObject3D
+	if walk == null:
+		return
+	var named := {}
+	for child in walk.get_children():
+		var cs := child as CollisionShape3D
+		if cs != null and cs.shape != null and str(cs.name).begins_with("BrickCol_hold_"):
+			named[cs.shape.get_rid()] = str(cs.name)
+	var body := walk.get_rid()
+	var on_body: Array[AABB] = []
+	var to_boat := boat.global_transform.affine_inverse()
+	for i in PhysicsServer3D.body_get_shape_count(body):
+		var rid: RID = PhysicsServer3D.body_get_shape(body, i)
+		if not named.has(rid):
+			continue
+		var data: Variant = PhysicsServer3D.shape_get_data(rid)
+		if not (data is Vector3):
+			continue
+		var half := data as Vector3
+		var world: Transform3D = walk.global_transform * PhysicsServer3D.body_get_shape_transform(body, i)
+		var centre := to_boat * world.origin
+		on_body.append(AABB(centre - half, half * 2.0))
+	if not _t.check(
+		"%s: the hold's colliders are on the WalkDeck body (%d shapes)"
+		% [label, on_body.size()],
+		on_body.size() >= 5,
+	):
+		return
+	## Both directions, and the deck plane is the line between them — which is the
+	## design decision stated as a property rather than as a list of part names:
+	## ABOVE the deck everything the hold draws is solid, BELOW it the hold
+	## invents no collision at all (the liner and the pit floor are drawn and are
+	## deliberately not solid — the boards close the only way in, and the
+	## WalkDeck's hull box already fills that space).
+	var plane := boat.to_local(hold.global_position).y
+	var above: Array[AABB] = []
+	for drawn in solids:
+		if drawn.end.y > plane + 0.01:
+			above.append(drawn)
+	if not _t.check(
+		"%s: the hold draws structure above the deck to be solid (%d boxes)"
+		% [label, above.size()],
+		above.size() >= 5,
+	):
+		return
+	var missing := 0
+	var first_missing := ""
+	for drawn in above:
+		if not _matches_one(drawn, on_body):
+			missing += 1
+			if first_missing.is_empty():
+				first_missing = "%v size %v" % [drawn.position, drawn.size]
+	_t.check(
+		"%s: every box the hold draws above the deck is a shape on the body"
+		% label + " (%d of %d unmatched%s)"
+		% [missing, above.size(), "" if first_missing.is_empty() else ", first " + first_missing],
+		missing == 0,
+	)
+	var phantom := 0
+	var first_phantom := ""
+	for shape in on_body:
+		if not _matches_one(shape, above):
+			phantom += 1
+			if first_phantom.is_empty():
+				first_phantom = "%v size %v" % [shape.position, shape.size]
+	_t.check(
+		"%s: the hold puts no shape on the body it did not draw" % label
+		+ " (%d of %d phantom%s)"
+		% [phantom, on_body.size(), "" if first_phantom.is_empty() else ", first " + first_phantom],
+		phantom == 0,
+	)
+
+
+func _matches_one(box: AABB, against: Array[AABB]) -> bool:
+	for other in against:
+		if (
+			(other.position - box.position).length() <= STAND_EPSILON_M
+			and (other.size - box.size).length() <= STAND_EPSILON_M
+		):
+			return true
+	return false
+
+
+## The hold's STRUCTURAL meshes as boat-local boxes — everything it draws except
+## the catch, which is what `FishAndChilledWater` holds.
+func _structure_boxes(hold: CatchHoldComponent, boat: BoatBody) -> Array[AABB]:
+	var out: Array[AABB] = []
+	var to_boat := boat.global_transform.affine_inverse()
+	for node in hold.find_children("*", "MeshInstance3D", true, false):
+		var mi := node as MeshInstance3D
+		if mi.mesh == null or not mi.is_visible_in_tree():
+			continue
+		var fill := false
+		var walk: Node = mi
+		while walk != null and walk != hold:
+			if str(walk.name) == "FishAndChilledWater":
+				fill = true
+				break
+			walk = walk.get_parent()
+		if fill:
+			continue
+		out.append((to_boat * mi.global_transform) * mi.get_aabb())
+	return out
+
+
+## Top of the highest drawn structural box covering this column, or -INF.
+func _drawn_top_at(boxes: Array[AABB], x: float, z: float) -> float:
+	var top := -1e9
+	for box in boxes:
+		if x < box.position.x or x > box.end.x:
+			continue
+		if z < box.position.z or z > box.end.z:
+			continue
+		top = maxf(top, box.end.y)
+	return top
+
 
 ## Every corner of every visible mesh under the hold, expressed in `frame`'s
 ## local metres — the boat for the deck checks, the hold itself for the
@@ -498,6 +774,180 @@ func _drawn_bounds(corners: Array[Vector3]) -> AABB:
 	for corner in corners:
 		out = out.expand(corner)
 	return out
+
+
+# ── 8 · two gear bricks do not get two hatches on the same deck ─────────────
+
+const TWO_GEAR_HULL := "hull_28x10"
+
+
+## `DeckFitout._mount_fishing` runs once per ACCEPTED fishing brick and used to
+## derive its berth from the clear deck with no memory of the holds already
+## placed — so a second winch produced a second hatch cut out of the same
+## rectangle, overlapping the first, and calling itself `primary_catch_hold`
+## as well, which made the vessel's mass ledger keep only one of the two four
+## tonne entries (`"catch:" + hold_id` is the key).
+##
+## Two halves, because the defect and its gate are different facts:
+##
+##  a) THE GATE. `VesselOutfit.MAX_FISHING` is 1 and no shipped hull overrides
+##     it, so a two-winch layout through the whole production path mounts ONE
+##     hold today. That is measured here, not assumed — if it ever stops being
+##     true this check says so.
+##  b) THE DEFECT. The override the budget reads (`outfit_fishing` on a hull
+##     entry) is one JSON field away, and when it is set `apply_sync` calls
+##     `mount_item_gameplay` once per accepted cell through the same `state`
+##     dictionary. This drives exactly that loop, with the accepted set
+##     `VesselOutfit` would emit, and asserts the two hatches are separate
+##     rectangles with separate ids.
+##
+## WHAT THIS FIXTURE DOES **NOT** REACH, measured rather than assumed
+## (`tests/_two_hold_probe.gd`). `DeckFitout` now remembers the cells a placed
+## hold took, and DELETING that memory changes nothing here: the two berths come
+## out identical either way, in all three layouts tried — winches ten cells
+## apart, winches at the two ends of the deck, and a bare deck with no
+## deckhouse. The reason is that `_berth_from_run` picks the LARGER of the runs
+## either side of its own gear brick, and the starter deckhouse sits between the
+## winches and splits the deck into two runs, so the gear positions separate the
+## holds without any memory being consulted. So the overlap is LATENT, not
+## live: the id half of the same defect is real and reddens this file (removing
+## the per-hold id gives "expected 2, got 1"), and the geometry half is a guard
+## whose mutation PASSES. Recorded as a finding, not a relief (REALITY §8) — the
+## next person to touch `_berth_from_run`'s run selection is the one who will
+## need this check, and it has never been shown the shape it guards.
+func _test_two_gear_bricks_do_not_share_a_hatch() -> void:
+	var grid := HullRegistry.make_grid(TWO_GEAR_HULL)
+	## Two layouts of the same deck: one WITHOUT the winches, which is what the
+	## second vessel is spawned from, and one with both, which is what the mount
+	## loop is told the deck holds. They are separate because `apply_sync` calls
+	## `clear(boat)` before it mounts anything — a fit-out never runs against a
+	## vessel that already carries a hold, and a test that mounted into one would
+	## be measuring a situation the game cannot produce.
+	var bare := BrickLayout.starter_cargo(TWO_GEAR_HULL, grid)
+	var layout := BrickLayout.starter_cargo(TWO_GEAR_HULL, grid)
+	var helm_at := _first_clear(layout, grid, "helm", grid.length / 2, -1)
+	if helm_at.x >= 0:
+		layout.place_footprint(helm_at, "helm", 0, grid)
+		bare.place_footprint(helm_at, "helm", 0, grid)
+	var winches: Array[Vector3i] = []
+	var from_z := grid.length / 2
+	for i in 2:
+		var at := _first_clear(layout, grid, "trommel_small", from_z, 1)
+		if at.x < 0 or not layout.place_footprint(at, "trommel_small", 0, grid):
+			break
+		winches.append(at)
+		from_z = at.z + 6
+	if not _t.check("two trawl winches fit on the %s deck (%d)" % [TWO_GEAR_HULL, winches.size()],
+			winches.size() == 2):
+		return
+
+	## (a) The shipped budget, measured.
+	var budget := VesselOutfit.budget_for_hull(TWO_GEAR_HULL)
+	_t.equal("the shipped fishing-slot budget is one per hull", int(budget.get("fishing", 0)), 1)
+	var boat := VesselSpawn.instantiate(TWO_GEAR_HULL, layout.to_dict(), "fishing_vessel")
+	if not _t.check("the two-winch layout spawns", boat != null):
+		return
+	boat.freeze = true
+	boat.automatic_physics_lod = false
+	add_child(boat)
+	await get_tree().physics_frame
+	await get_tree().physics_frame
+	_t.equal(
+		"with one accepted fishing slot the vessel mounts one hold",
+		CatchHoldComponent.get_all_for_ship(boat).size(),
+		1,
+	)
+
+	remove_child(boat)
+	boat.free()
+	await get_tree().process_frame
+
+	## (b) The same loop, with both cells accepted, on a vessel whose fit-out has
+	## just run and mounted no hold — the state `apply_sync` is in when it
+	## reaches its first accepted gear brick.
+	var boat2 := VesselSpawn.instantiate(TWO_GEAR_HULL, bare.to_dict(), "fishing_vessel")
+	if not _t.check("the winch-free control layout spawns", boat2 != null):
+		return
+	boat2.freeze = true
+	boat2.automatic_physics_lod = false
+	add_child(boat2)
+	await get_tree().physics_frame
+	await get_tree().physics_frame
+	if not _t.equal(
+		"the control vessel starts with no hold",
+		CatchHoldComponent.get_all_for_ship(boat2).size(),
+		0,
+	):
+		remove_child(boat2)
+		boat2.free()
+		return
+	var root := boat2.get_node_or_null(DeckFitout.FITOUT_ROOT) as Node3D
+	if not _t.check("the fit-out root exists to mount into", root != null):
+		remove_child(boat2)
+		boat2.free()
+		return
+	var accepted := {}
+	for cell in winches:
+		accepted[cell] = true
+	var state := {"brick_i": 0, "ladder_n": 0, "layout": layout}
+	var mounted := 0
+	for cell in winches:
+		var item := {"cell": cell, "brick_id": "trommel_small", "yaw": 0}
+		var visual := DeckFitout.create_item_visual(root, grid, item)
+		DeckFitout.mount_item_gameplay(boat2, root, grid, item, visual, accepted, {}, state)
+		mounted += 1
+	await get_tree().physics_frame
+	var holds := CatchHoldComponent.get_all_for_ship(boat2)
+	## Measured, not assumed: a fit-out that quietly refuses the second hold
+	## would leave every check below it comparing a set of one with itself.
+	if not _t.check(
+		"two accepted gear bricks mount two holds (%d holds from %d mounts)"
+		% [holds.size(), mounted],
+		holds.size() == 2,
+	):
+		remove_child(boat2)
+		boat2.free()
+		return
+	var ids := {}
+	var boxes: Array[AABB] = []
+	for hold in holds:
+		ids[hold.get_state().hold_id] = true
+		boxes.append(_drawn_bounds(_drawn_corners(hold, boat2)))
+	_t.equal("every hold on the vessel has its own id", ids.size(), holds.size())
+	var overlaps := 0
+	var worst := ""
+	for i in range(boxes.size()):
+		for j in range(i + 1, boxes.size()):
+			var a := boxes[i]
+			var b := boxes[j]
+			var dx := minf(a.end.x, b.end.x) - maxf(a.position.x, b.position.x)
+			var dz := minf(a.end.z, b.end.z) - maxf(a.position.z, b.position.z)
+			if dx > 0.0 and dz > 0.0:
+				overlaps += 1
+				worst = "%.2f x %.2f m at z %.2f" % [dx, dz, (a.position.z + a.end.z) * 0.5]
+	_t.check(
+		"no two hatches on one deck overlap (%d overlapping pairs%s)"
+		% [overlaps, "" if worst.is_empty() else ", worst " + worst],
+		overlaps == 0,
+	)
+	## And the walking margin between them is the one the derivation promises,
+	## so "not overlapping" cannot be satisfied by two hatches edge to edge.
+	if boxes.size() >= 2:
+		var gap := 1e9
+		for i in range(boxes.size()):
+			for j in range(i + 1, boxes.size()):
+				gap = minf(gap, maxf(
+					boxes[j].position.z - boxes[i].end.z,
+					boxes[i].position.z - boxes[j].end.z,
+				))
+		_t.check(
+			"a deckhand can walk between two hatches (%.3f m of deck, margin %.2f)"
+			% [gap, DeckFitout.HOLD_DECK_CLEARANCE_M],
+			gap >= DeckFitout.HOLD_DECK_CLEARANCE_M - OVERHANG_EPSILON_M,
+		)
+	remove_child(boat2)
+	boat2.free()
+	await get_tree().process_frame
 
 
 ## The painted starter deck plus a helm and a trawl winch, on any hull. This is
