@@ -112,20 +112,38 @@ kit deliberately refuses to quantise the one curve the fleet was rebuilt to draw
 
 **What is missing, in the order it matters**
 
-1. **The tool.** `structure_studio.gd` is still `enum Tool { SELECT, WALL, DECK, STAIR, OPENING }`
-   — it cannot author superstructure at all. The ROOM tool was deleted for making boxes and
-   nothing replaced it. Until a player can place a piece with a mouse, the kit is a better format,
-   **not a feature**. This is the critical path; a wave is on it. Note `GRID_SNAP := 1.0` in the
-   studio against `cell_m: 0.5` in the kit — they disagree.
-2. **Geometry for `items[]`** — the mechanism exists, nothing draws the parts yet.
-3. **`DeckFitout.apply_plan` still returns a hardcoded `outfit_ok: true`** and never calls the
-   validator, so a Structure Studio ship cannot be saved, spawned, crewed or sold. `plan_outfit.gd`
-   is the measurement pass that fixes it; it is not wired in.
-4. **No starter vessel for any new player** — `resources/data/vessels/prebuilt/` holds only
-   `.gitkeep`, so onboarding rolls back. Same root as (2): nothing can be built worth shipping
-   until parts exist.
-5. **No small hulls.** Every hull is ≥ 28 m. Two of the three references are ~22 m and the third
-   ~15 m — a player cannot start from a hull that fits them.
+**AUDITED 2026-08-15 against the tree, and four of the five were stale.** This list is
+where the orchestrator picks the next wave, so a stale entry does not just misinform —
+it dispatches work that is already done. Every item below was re-checked in the source,
+not carried forward. What each one used to say is kept, because "we thought this was
+missing and it wasn't" is the reusable part.
+
+1. ~~**The tool.** `structure_studio.gd` is still `enum Tool { SELECT, WALL, DECK, STAIR,
+   OPENING }` — it cannot author superstructure at all… This is the critical path.~~
+   **LANDED.** The enum is `{ SELECT, WALL, DECK, STAIR, OPENING, PIECE }`, "piece" appears
+   414 times in the file, and the tool has a kit palette, R to rotate, click-a-grid-node
+   placement and steppers over each piece's own list ("nothing is typed"). It is covered by
+   the lane-C self-check, not merely present: `_probe_piece_controls`, `_probe_piece_levels`,
+   `_probe_piece_mouse`, `_probe_piece_selection`, `_probe_piece_persistence`, two fixtures
+   and a recipe probe. **The kit is a feature now, not a format.** `GRID_SNAP := 1.0` vs
+   `cell_m: 0.5` still deserves a look, but the file already explains it as the DRAW tools'
+   snap, so it is a question, not the defect this entry claimed.
+2. ~~**Geometry for `items[]`** — the mechanism exists, nothing draws the parts yet.~~
+   **LANDED.** `StructureBaker._item_layers` draws spar, wire and plate primitives, resolved
+   via `props.primitive` or falling back to `item_id`, and an unknown fitting draws nothing
+   rather than being silently turned into a box.
+3. ~~**`DeckFitout.apply_plan` still returns a hardcoded `outfit_ok: true`**~~ **LANDED.**
+   `deck_fitout.gd:137` is `caps["outfit_ok"] = bool(report.get("ok", false))` and `:437` is
+   the same off `outfit`. The validator is called; the verdict is the validator's.
+4. ~~**No starter vessel for any new player** — `prebuilt/` holds only `.gitkeep`.~~
+   **LANDED.** `resources/data/vessels/prebuilt/` holds `28_10_m.json`, `bulk_small.json`
+   and `fishing_trawler.json`.
+5. **No small hulls — THIS ONE STILL HOLDS, and it is now the whole of item 5.**
+   `hull_registry.gd` defines exactly two hulls: `hull_28x10` (28.0 × 10.0 m) and
+   `hull_45x16_cat` (45.0 × 16.0 m). All three prebuilt vessels are the same
+   `hull_28x10` — so "three starter vessels" is one hull wearing three outfits. Every
+   legacy alias also collapses onto 28 m or larger. Two of the three references are
+   ~22 m and the third ~15 m: **a player still cannot start from a hull that fits them.**
 
 **Known-red — gate RED: 81 PASS, 19 FAIL, 2 TIMEOUT, 2 NOTRUN, 1 SKIP of 105 units, measured on
 run `20260810-081647-26225`.** The list
