@@ -1358,21 +1358,62 @@ file is not red by construction. It belongs beside decision #1 below.
    "every blueprint" population is **one**, and the three multi-cell bricks tested
    are 3 of 64 in the catalogue, with more expected to fail the same way; and no
    frame in this whole pass had collision enabled.
-1b. **`BuildingCache` silently drops every non-mesh visual — the warehouse sign is
-   drawn on no building the game stamps.** Found 2026-08-15 while rendering the
-   brick-cell variants, verified independently: `_flatten_visuals`
-   (`building_cache.gd:76`) and `_stamp_node` (`:93`) both reconstruct
-   `MeshInstance3D` **and only that**. A `Label3D` is a `Node3D`, so it is
-   recursed into, contributes no mesh children, and vanishes without a word.
-   `BuildingFitout.build` emits 1 `Label3D` per warehouse (8 after a (b)
-   migration); the AABB report over the cached tree lists no `wall_text_lg` under
-   any variant, and no lettering appears in any of the eight Q1 frames. The
-   production path is `PortLayoutGraphVisualizer:1130` →
-   `BuildingCache.instance(captured, true)`, so this is the shipping path.
-   `BuildingLighting` is skipped by name one line above, which is deliberate — but
-   any brick whose visual is a light is presumably lost the same way, and that was
-   **not** checked. Nothing in the gate covers a non-mesh visual surviving the
-   cache, which is why this sat invisible.
+1b. ~~**`BuildingCache` silently drops every non-mesh visual**~~ — **FIXED
+   2026-08-15.** The survey found the defect was bigger than the sign that
+   exposed it: **16 of 64 bricks lost a visual**, and the largest loss was not a
+   non-mesh node at all. `_flatten_visuals` copied a `MeshInstance3D` **and did
+   not recurse into it**, so `BrickCatalog._add_door_face`'s 9 panel/stile/rail/
+   handle meshes — parented to the `DoorLeaf` *mesh* — were discarded: **72 of the
+   warehouse's 717 meshes**, both cargo doors stamping as blank slabs. Nobody had
+   suspected that; the brief was about `Label3D`.
+
+   Also lost: `Label3D` from 4 text bricks and from any `sign_id` plaque;
+   `OmniLight3D` from all 8 light-tagged bricks; and the
+   `building_lens_base_emission` metadata, so the mesh survived but
+   `BuildingLighting` could no longer dim its lens.
+
+   **The line drawn is `VisualInstance3D`, not `Node3D`** — everything in Godot
+   that puts pixels on screen is one, and everything else is a transform holder
+   (whose contribution *is* the accumulated transform) or a behaviour node a
+   flatten-and-stamp cache cannot carry anyway. Deliberate drops are now named
+   with reasons in the header: `BuildingLighting` (re-created per instance),
+   `BrickDoor` (behaviour, and its loss is already red in
+   `building_interior_test`), `Marker3D` anchors. **A silent drop was the defect;
+   a named drop is a decision.** The duplicated five-field mesh copy became one
+   `_copy_visual` (§3b).
+
+   `tests/building_cache_visual_test.{gd,tscn}` (lane B) asserts on the tree
+   `BuildingCache.instance()` returns — never on `BuildingFitout`, which is the
+   layer above the defect and where it hid. Property form: for every
+   `VisualInstance3D` class the fit-out emitted, the stamped tree emits at least
+   as many, **per class**, so 72 doorleaf meshes cannot be cancelled out by a
+   surplus elsewhere and a class the file has never heard of is still covered.
+   Verified independently by the orchestrator: HEAD's mesh-only filter against
+   this test is **9/20 FAILED**; the fix is **PASS (34)**.
+
+   Two mutations passed first time and both are recorded as findings. Deleting
+   `_copy_metadata` was green — the light metadata rides on `duplicate()` and
+   nothing was aimed at the mesh half; a new check now reddens it 1/34. The other
+   was the *mutation* being wrong, not the check: `_copy_visual` does not own the
+   transform, the caller assigns it one line later.
+
+   Measured and corrected while in there: `model_cache.gd:97` claims
+   "Node.duplicate deep-copies Resources by default". In 4.6 `duplicate()` shares
+   `Font`, `Mesh` and `Material` by reference and carries metadata. **Cost:** 645
+   → 717 meshes per warehouse (+11.2%) plus one `Label3D` at 0.041 ms; the +72 are
+   door panelling that should always have been there. Full gate over 109 units
+   moved nothing — all 6 FAIL / 1 NOTRUN / 1 SKIP are on the known list.
+1c. **The same flatten/stamp pair, with both of the same defects, is duplicated in
+   `scripts/core/model_cache.gd` and `scripts/port/land_decor_cache.gd`** —
+   essentially byte-for-byte, and `model_cache.gd` justifies its manual stamp with
+   the `duplicate()` claim measured false above. Untouched: different subsystems
+   (vessels, decor), and the fix needs its own mutation-verified unit rather than
+   a copied one. This is one-derivation (§3b) at a scale larger than the two
+   functions that were merged — three caches, one algorithm, three copies.
+   **Unverified there:** whether `deck_text` and the ship-only light bricks lose
+   their visuals on the vessel side too. `BrickCatalog` is shared with decks, so
+   the same bricks reach a hull through `DeckFitout` — this fix covers land
+   buildings only (§4d).
 2. **`BuildingLayout.place_footprint` ignores its `_building_grid`** — 4/117 in
    `building_blueprint_test`. `BrickLayout`'s equivalent argument IS load-bearing
    and does reject out-of-bounds. Two sibling classes, contradictory, one wrong.
