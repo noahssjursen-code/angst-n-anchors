@@ -1,5 +1,11 @@
 extends Node3D
 
+## gate-selfcheck: res://scenes/apps/structure_studio.tscn -- --studio-probe
+## ^ MUST stay inside the first 40 lines. It was at line 59 on 2026-08-15 —
+## header prose had pushed it past the limit and the gate scored this unit
+## FAIL(selfcheck) with no probe run at all. Kept at the top, above the prose,
+## so growing the header cannot silently unhook the app from the gate again.
+
 ## STRUCTURE STUDIO — the unified parametric builder for vessels and land
 ## buildings. Replaces the separate shipyard/building brick editors.
 ##
@@ -23,20 +29,39 @@ extends Node3D
 ##   O  opening tool — click a wall or deck to punch the selected opening type
 ##   Q  select       — click an entity: XYZ gizmo arrows to move, panel to edit,
 ##                     DEL to delete
-##   Ctrl+Z / Ctrl+Y — undo / redo (full-plan snapshots)
+##   Ctrl+Z / Ctrl+Y — undo / redo (full-plan snapshots, INCLUDING the two steps
+##                     that used to be unrecoverable: a BUILD CONTEXT switch and
+##                     a hull change. Both start a new plan; both leave the old
+##                     one on the stack, on its own hull. See `_set_context`.)
 ##   PgUp/PgDn       — build level up/down (grid follows; upper decks ghost)
 ##   F               — focus camera on selection · Esc cancels a drag
 ##   RMB drag orbit · MMB drag pan · wheel zoom
 ##
-## Context switch (top bar): Ship (build on a hull) or Building (ground slab).
-## Save/Load: JSON plans in res://resources/data/structures/.
+## Context switch (left palette): Vessel (build on a hull) or Building (ground
+## slab). Save/Load: JSON plans in res://resources/data/structures/.
+##
+## THE SIDE PANELS SCROLL AND THE SCROLLBAR IS 0 PX WIDE. `brand_theme.gd` styles
+## every branded `ScrollContainer`'s bar with no border and no margin, so nothing
+## on screen says the drawer holds 1565 px of content in a 948 px viewport, or
+## the fitting palette 1627. Measured through `Viewport.push_input`: the WHEEL
+## reaches all of it — 7 notches to the foot of the drawer, and the camera behind
+## does not move while it does — so SAVE JSON and LOAD SELECTED are reachable but
+## unsignposted. Held by `_probe_below_the_fold_is_reachable`; first measured in
+## `tests/_studio_wheel_probe.gd`, and what a visible bar would cost the other
+## eleven branded ScrollContainers is measured in `tests/_studio_scrollbar_cost.gd`
+## (a 6 px bar makes each studio scroll 6 px WIDER than the panel holding it, so
+## it is a layout change in every one of them, not a theme constant).
+##
+## KNOWN AND NOT FIXED: once a panel is at the end of its travel the notch is not
+## consumed, so it falls through to `_handle_mouse_button` and zooms the camera —
+## 34.000 to 38.760 on the eighth notch over the drawer, and on EVERY notch over a
+## palette short enough not to scroll.
 ##
 ## This app carries its own self-check and DECLARES it to the gate below. The
 ## gate discovers lane C by this marker alone — there is no list of app names in
 ## tools/gate.sh, so a second such app joins by adding one line to its own
 ## script, exactly like `## gate-requires:`.
 ##
-## gate-selfcheck: res://scenes/apps/structure_studio.tscn -- --studio-probe
 
 ## The SHIPPED plans — the worked examples the fleet is built from, versioned in
 ## git and read by nine gate fixtures. READ ONLY, from this app's point of view.
@@ -406,9 +431,15 @@ func _shoot_registration_checklist() -> void:
 ## `2ab3eee` put the drawer on screen and shot the REGISTRATION checklist at the
 ## top of it. Everything under that has still only ever been seen as a rect in a
 ## probe's output: the surface library, the inspector, and the file controls. The
-## drawer's own scroll is 948 px tall over 1628 px of content, so the second frame
+## drawer's own scroll is 948 px tall over 1565 px of content, so the second frame
 ## is the one a builder has to scroll to, and the reason both frames exist is that
 ## the gap between them IS the finding.
+##
+## THE SECOND FRAME IS SCROLLED WITH THE WHEEL, not by assigning `scroll_vertical`.
+## The first cut of this shot assigned it, which is why the audit that took it
+## could not say whether a builder could reach the bottom at all — an assignment
+## moves a ScrollContainer whether or not any input can. Seven notches, pushed
+## through `Viewport.push_input`, is what a player's hand does.
 ##
 ##   xvfb-run -a --server-args="-screen 0 1600x900x24" godot \
 ##     --rendering-driver opengl3 --audio-driver Dummy \
@@ -437,10 +468,20 @@ func _shoot_properties_drawer() -> void:
 	_refresh_panel()
 	_drawer_scroll.scroll_vertical = 0
 	await _write_shot("structure_studio__drawer_top.png")
-	## And the same frame scrolled to the bottom, which is where the properties
-	## the panel is NAMED for actually are.
-	_drawer_scroll.scroll_vertical = int(_drawer_scroll.get_v_scroll_bar().max_value)
-	_set_status("scrolled to the foot of the drawer")
+	## And the same frame WHEELED to the bottom, which is where the properties the
+	## panel is NAMED for actually are.
+	var at := _drawer_scroll.get_global_rect().get_center()
+	var notches := 0
+	while notches < 400:
+		var was := _drawer_scroll.scroll_vertical
+		await _probe_wheel(at)
+		notches += 1
+		if _drawer_scroll.scroll_vertical == was:
+			break
+	_set_status("%d wheel notches over the drawer" % notches)
+	print("[structure-studio] drawer wheeled %d notches to scroll_vertical=%d" % [
+		notches, _drawer_scroll.scroll_vertical
+	])
 	await _write_shot("structure_studio__drawer_properties.png")
 	get_tree().quit(0)
 
@@ -579,6 +620,9 @@ func _run_studio_probe() -> void:
 	_probe_the_library_paints_what_it_says(expect)
 	_probe_saving_cannot_touch_shipped_data(expect)
 	_probe_the_round_trip_is_the_same_plan(expect)
+	## ── The controls that throw a plan away ─────────────────────────────────
+	await _probe_a_click_cannot_lose_the_plan(expect)
+	await _probe_below_the_fold_is_reachable(expect)
 	for arg in OS.get_cmdline_user_args():
 		if str(arg) == "--studio-write-fixtures":
 			_write_tug_fixture()
@@ -1711,6 +1755,295 @@ func _probe_the_round_trip_is_the_same_plan(expect: Callable) -> void:
 	)
 	_probe_remove_own_save(path)
 	_set_context("vessel")
+
+
+## ── THE CONTROLS THAT THROW A PLAN AWAY ─────────────────────────────────────
+##
+## THE FIRST THING IN THIS FILE DRIVEN BY A REAL MOUSE EVENT AT A COORDINATE.
+## Every other probe here reaches a control by emitting its `pressed` signal,
+## which asserts the callback and nothing about the button: a control under
+## another panel, outside the viewport, below a scroll fold or behind a
+## `MOUSE_FILTER_IGNORE` parent emits `pressed` exactly as well as one a player
+## can hit. `_probe_click` pushes an `InputEventMouseButton` through
+## `Viewport.push_input`, so the viewport's own hit test decides which control
+## receives it — the same code path a mouse takes.
+##
+## What it holds:
+##
+##  1. **Clicking the context you are already in destroys nothing.** It used to
+##     empty the plan and the undo stack in one click, and the check twenty lines
+##     up — "context switch clears the plan" — asserted that as correct
+##     behaviour, which is REALITY §4c: green BECAUSE of the defect. That check
+##     still stands, because `_set_context` IS the reset; what changed is that a
+##     button no longer calls it blind.
+##  2. **A switch that does throw the plan away leaves it on the undo stack**,
+##     and UNDO — a button already on the top bar — brings it back.
+##  3. **Undo brings it back ON ITS OWN HULL.** The plan document carries
+##     `hull_id`, so this asserts the grid the studio builds on is the grid of
+##     the hull the RESTORED PLAN names, not a number restated here.
+func _probe_a_click_cannot_lose_the_plan(expect: Callable) -> void:
+	## Containers sort deferred, so a control's rect is meaningless until a frame
+	## has passed — a click at `_ready` time would land at the origin and this
+	## whole section would test nothing (REALITY §7).
+	for _frame in 2:
+		await get_tree().process_frame
+
+	_set_context("vessel")
+	_set_tool(Tool.SELECT)
+	## The stack is CAPPED AT 100 and this probe has already filled it, so a
+	## saturated `_undo_stack` absorbs an extra push without changing size — the
+	## first cut of the depth check below was blind for exactly that reason, and
+	## a mutation that reddened only its neighbour is what found it (REALITY §4).
+	_undo_stack.clear()
+	_redo_stack.clear()
+	_place_wall(Vector3(0, 0, 6), Vector3(6, 0, 6))
+	_place_wall(Vector3(1, 0, 8), Vector3(1, 0, 12))
+	_place_deck(Vector3(0, 0, 20), Vector3(6, 0, 24))
+	var authored := _plan.entity_count()
+	var authored_doc := JSON.stringify(_plan.to_dict())
+	var authored_hull := _hull_id
+	var undo_depth := _undo_stack.size()
+	expect.call("three entities authored to click at", authored == 3)
+	expect.call(
+		"control: the undo stack is below its 100-step cap, so its depth can move (%d)"
+		% undo_depth,
+		undo_depth > 0 and undo_depth < 100
+	)
+
+	## ── The re-click. VESSEL, while already in the vessel context.
+	var vessel_button := _context_buttons.get("vessel") as Button
+	var building_button := _context_buttons.get("building") as Button
+	expect.call(
+		"both BUILD CONTEXT buttons are hittable (on screen, unobscured)",
+		_probe_hittable(vessel_button) and _probe_hittable(building_button)
+	)
+	await _probe_click(vessel_button)
+	expect.call(
+		"clicking the context you are ALREADY in leaves the plan untouched (%d entities)"
+		% _plan.entity_count(),
+		JSON.stringify(_plan.to_dict()) == authored_doc
+	)
+	expect.call(
+		"and leaves the undo stack untouched (%d steps)" % _undo_stack.size(),
+		_undo_stack.size() == undo_depth
+	)
+
+	## ── The real switch. It MAY empty the plan; it may not lose it.
+	await _probe_click(building_button)
+	expect.call(
+		"clicking the OTHER context does switch (control: the click landed)",
+		_context == "building"
+	)
+	expect.call("and starts an empty plan", _plan.is_empty())
+	var undo_button := _probe_button_with_text(_ui_root.get_node_or_null(^"TopBar"), "UNDO")
+	expect.call("UNDO is on the top bar and hittable", _probe_hittable(undo_button))
+	await _probe_click(undo_button)
+	expect.call(
+		"ONE click on UNDO brings the discarded plan back (%d of %d entities)"
+		% [_plan.entity_count(), authored],
+		JSON.stringify(_plan.to_dict()) == authored_doc
+	)
+	expect.call("and puts the studio back in the context it was built in", _context == "vessel")
+
+	## ── The hull dropdown. The popup row is chosen through `index_pressed`,
+	## which is the signal `OptionButton` itself connects the player's click on a
+	## popup row to — but the dropdown BUTTON is opened with a real click first,
+	## so the hit target is asserted too.
+	expect.call("the hull dropdown is hittable", _probe_hittable(_hull_option))
+	await _probe_click(_hull_option)
+	expect.call("clicking it opens the hull list", _hull_option.get_popup().visible)
+	_hull_option.get_popup().hide()
+	var other := -1
+	for index in _hull_option.item_count:
+		if str(_hull_option.get_item_text(index)) != authored_hull:
+			other = index
+			break
+	expect.call("the list offers a hull other than the one we are on", other >= 0)
+	if other < 0:
+		return
+	var other_hull := str(_hull_option.get_item_text(other))
+	_hull_option.get_popup().index_pressed.emit(other)
+	expect.call("choosing another hull moves the studio to it", _hull_id == other_hull)
+	expect.call("and starts an empty plan for it", _plan.is_empty())
+	await _probe_click(undo_button)
+	expect.call(
+		"ONE click on UNDO brings the plan back after a hull change (%d of %d)"
+		% [_plan.entity_count(), authored],
+		JSON.stringify(_plan.to_dict()) == authored_doc
+	)
+	## THE PROPERTY, not the number: whatever hull the restored plan names, that
+	## is the hull the studio is drawing and the grid it is building on. Restating
+	## "20 x 56" here would pass on a studio that had adopted the wrong hull and a
+	## plan that had adopted it too.
+	var want := HullRegistry.make_grid(_plan.hull_id)
+	expect.call(
+		"the studio follows the restored plan's own hull (%s, plan says %s)"
+		% [_hull_id, _plan.hull_id],
+		_hull_id == _plan.hull_id
+	)
+	expect.call(
+		"and builds on that hull's grid (%d x %d, %s is %d x %d)"
+		% [_deck_grid.width, _deck_grid.length, _plan.hull_id, want.width, want.length],
+		_deck_grid.width == want.width and _deck_grid.length == want.length
+	)
+	_set_context("vessel")
+	_undo_stack.clear()
+	_redo_stack.clear()
+
+
+## ── CAN A BUILDER REACH WHAT IS BELOW THE FOLD? ─────────────────────────────
+##
+## The drawer's scroll viewport is 948 px over 1565 px of content, so SAVE JSON
+## starts 440 px and LOAD SELECTED 566 px past the bottom of it, and the vertical
+## scrollbar `brand_theme.gd` styles for the whole branded UI is **0 px wide** —
+## there is no grabber to drag and no visible hint that anything is down there.
+##
+## The drawer capture reached the bottom by ASSIGNING `scroll_vertical`, which
+## proves a ScrollContainer can be moved by an assignment and says nothing about
+## whether a player can move it. The open question was whether a wheel notch
+## delivered over the drawer scrolls it or is swallowed by the camera zoom in
+## `_handle_mouse_button` — and if it were swallowed, SAVE JSON would be
+## unreachable by any means, which is a hard defect and not a signposting one.
+##
+## Measured: it scrolls, and the camera does not move while it does. This holds
+## that. It is asserted through `Viewport.push_input` because setting
+## `scroll_vertical` here would assert the same nothing the capture did.
+##
+## Two vacuity guards, because both failure modes are silent:
+##   * if the content ever fits the viewport there is nothing below the fold and
+##     "everything is reachable" is free, so the overflow is asserted first;
+##   * the camera distance is read before and after, because a wheel that
+##     reaches the camera INSTEAD is the exact defect this asks about.
+func _probe_below_the_fold_is_reachable(expect: Callable) -> void:
+	for _frame in 2:
+		await get_tree().process_frame
+	_set_tool(Tool.FITTING) ## the tallest state of the left palette
+	_refresh_panel()
+	for _frame in 2:
+		await get_tree().process_frame
+
+	for case in [
+		{"scroll": _drawer_scroll, "what": "the drawer", "buttons": ["SAVE JSON", "LOAD SELECTED"]},
+		{"scroll": _probe_first_scroll(_ui_root.get_node_or_null(^"ToolPalette")),
+			"what": "the tool palette", "buttons": []},
+	]:
+		var scroll := case["scroll"] as ScrollContainer
+		var what := str(case["what"])
+		if scroll == null:
+			expect.call("%s has a scroll container" % what, false)
+			continue
+		var content := scroll.get_child(0) as Control
+		expect.call(
+			"control: %s really does overflow (%.0f px of content in %.0f px)"
+			% [what, content.size.y, scroll.size.y],
+			content.size.y > scroll.size.y + 1.0
+		)
+		scroll.scroll_vertical = 0
+		await get_tree().process_frame
+		var at := scroll.get_global_rect().get_center()
+		var camera_before := _cam_distance
+		await _probe_wheel(at)
+		expect.call(
+			"one wheel notch over %s scrolls it (%d px)" % [what, scroll.scroll_vertical],
+			scroll.scroll_vertical > 0
+		)
+		expect.call(
+			"and the camera behind %s does not move with it (%.3f -> %.3f)"
+			% [what, camera_before, _cam_distance],
+			is_equal_approx(camera_before, _cam_distance)
+		)
+		var notches := 1
+		while notches < 400:
+			var was := scroll.scroll_vertical
+			await _probe_wheel(at)
+			notches += 1
+			if scroll.scroll_vertical == was:
+				break
+		var travel := int(scroll.get_v_scroll_bar().max_value - scroll.get_v_scroll_bar().page)
+		expect.call(
+			"the wheel alone reaches the foot of %s in %d notches (%d of %d px)"
+			% [what, notches, scroll.scroll_vertical, travel],
+			scroll.scroll_vertical >= travel
+		)
+		var fold := scroll.get_global_rect().end.y
+		for text_variant in (case["buttons"] as Array):
+			var text := str(text_variant)
+			var button := _probe_drawer_button(text)
+			expect.call(
+				"%s is fully on screen once the wheel has been used (%s)"
+				% [text, "" if button == null else str(button.get_global_rect())],
+				button != null and button.get_global_rect().end.y <= fold + 1.0
+			)
+	_set_tool(Tool.SELECT)
+
+
+## One wheel-down notch at `at`, both halves, through the whole input stack.
+func _probe_wheel(at: Vector2) -> void:
+	for pressed in [true, false]:
+		var event := InputEventMouseButton.new()
+		event.button_index = MOUSE_BUTTON_WHEEL_DOWN
+		event.pressed = pressed
+		event.position = at
+		event.global_position = at
+		event.factor = 1.0
+		get_viewport().push_input(event, true)
+	await get_tree().process_frame
+
+
+func _probe_first_scroll(root: Node) -> ScrollContainer:
+	if root == null:
+		return null
+	if root is ScrollContainer:
+		return root as ScrollContainer
+	for child in root.get_children():
+		var hit := _probe_first_scroll(child)
+		if hit != null:
+			return hit
+	return null
+
+
+## A control a player could get the pointer onto at all: in the tree, visible,
+## not zero-sized, and wholly inside the viewport. It does NOT say the control is
+## topmost — nothing here reads the z-order. What settles that is the click
+## itself: if another panel covers this one, `_probe_click` lands on that panel
+## and the assertion after it fails, which is why every use of this is paired
+## with one (a mutation moving the click 400 px reddens four of them).
+func _probe_hittable(control: Control) -> bool:
+	if control == null or not control.is_visible_in_tree():
+		return false
+	var rect := control.get_global_rect()
+	if rect.size.x < 1.0 or rect.size.y < 1.0:
+		return false
+	if not Rect2(Vector2.ZERO, get_viewport().get_visible_rect().size).encloses(rect):
+		return false
+	return true
+
+
+## One left click, delivered where the control IS. `push_input` runs the whole
+## stack — `Viewport`'s GUI hit test first, `_unhandled_input` after — so a
+## control the viewport does not find never sees this.
+func _probe_click(control: Control) -> void:
+	var at := control.get_global_rect().get_center()
+	for pressed in [true, false]:
+		var event := InputEventMouseButton.new()
+		event.button_index = MOUSE_BUTTON_LEFT
+		event.pressed = pressed
+		event.position = at
+		event.global_position = at
+		get_viewport().push_input(event, true)
+	await get_tree().process_frame
+
+
+func _probe_button_with_text(root: Node, text: String) -> Button:
+	if root == null:
+		return null
+	if root is Button and (root as Button).text == text:
+		return root as Button
+	for child in root.get_children():
+		var hit := _probe_button_with_text(child, text)
+		if hit != null:
+			return hit
+	return null
 
 
 ## A `from_hull` bulwark on the studio's current hull, WITH the hull's numbers
@@ -2920,21 +3253,69 @@ var _compliance: Dictionary = {}
 var _registration_id := "general_vessel"
 
 
+## START A NEW, EMPTY PLAN IN `context`. This is the RESET, not the button —
+## `_choose_context` and `_choose_hull` are what a click reaches, and they guard
+## the two things this function cannot: that the click changed anything at all,
+## and that the plan it is about to throw away can be got back.
+##
+## It used to `_undo_stack.clear()`, and that made this the worst one-click
+## work-loss in the app: the two BUILD CONTEXT buttons and every row of the hull
+## dropdown emptied the plan AND the undo stack with no confirmation and no
+## recovery. Measured by PRESSING every one of the studio's **119 click targets**
+## — 83 buttons and 36 dropdown rows, collected with each of the seven tools
+## armed in turn — those eleven were the only ones that touched either
+## (`tests/_studio_discard_survey.gd`); nothing else in the app clears undo at
+## all, so this was the single recovery hole in the surface. The wipe
+## itself is correct (a vessel plan is not a building plan, and a plan drawn for
+## one hull is not a plan for another); losing the way back was not.
+##
+## Now the outgoing plan is snapshotted, so UNDO — a button already on the top
+## bar, and Ctrl+Z — brings it back, on its own hull, because `_undo` adopts the
+## restored plan's frame through `_apply_plan_frame`.
 func _set_context(context: String) -> void:
-	_context = context
+	## A snapshot of nothing is junk on the stack; boot goes through here too.
+	var discarded := _plan.entity_count()
+	if not _plan.is_empty():
+		_snapshot()
 	_plan = StructurePlan.new()
 	_plan.context = context
-	_undo_stack.clear()
-	_redo_stack.clear()
+	if context == "vessel":
+		_plan.hull_id = _hull_id
 	_selected_id = -1
 	## The ghost is baked at the CURRENT `_plan_offset`, so a hull change leaves a
 	## preview standing where the old hull was. Its cache key is the placement, not
 	## the offset, so it would not have rebuilt itself.
 	_hide_piece_ghost()
 	_hide_fitting_ghost()
-	if context == "vessel":
+	_apply_plan_frame()
+	_cam_focus = Vector3.ZERO
+	_rebake()
+	if discarded > 0:
+		## The builder has to be told a plan just went away and where it went.
+		_set_status("NEW %s PLAN — %d ENTITIES ON UNDO" % [context.to_upper(), discarded])
+	_refresh_panel()
+
+
+## THE GRID, THE DRAWN HULL AND THE CONTEXT, DERIVED FROM `_plan` AND NOTHING
+## ELSE — one derivation, shared by `_set_context`, `_load_plan`, `_undo` and
+## `_redo` (REALITY §3b).
+##
+## Each of those four used to carry its own partial version, and the gaps were
+## real: `_undo` carried none at all, so undoing a load that changed the hull left
+## a 28 m trawler's plan standing on a 150 m feeder's grid with the feeder drawn
+## under it — measured before this existed, `hull_id=hull_150x32 grid=64x300`
+## against `plan.hull_id=hull_28x10`. That is the same lie `_apply_hull_grid`'s
+## header records at 596 of 617 entities, one control over. `_load_plan` carried
+## the vessel half and no building half, so loading a building plan kept the
+## hull's grid under a plot.
+func _apply_plan_frame() -> void:
+	_context = _plan.context
+	if _context == "vessel":
+		if not _plan.hull_id.is_empty():
+			_hull_id = _plan.hull_id
 		_apply_hull_grid()
-		_plan.hull_id = _hull_id
+		if _hull_option != null:
+			_hull_option.selected = _hull_option_index_for(_hull_id)
 	else:
 		_deck_grid = null
 		## CELLS, not metres — a 24 x 24 m plot on the same 0.5 m grid the vessel
@@ -2948,10 +3329,47 @@ func _set_context(context: String) -> void:
 			0.0,
 			-float(_grid_length) * DeckGrid.CELL_M * 0.5
 		)
-	_cam_focus = Vector3.ZERO
 	_rebuild_host_visual()
-	_rebake()
-	_refresh_panel()
+
+
+## WHAT THE BUILD CONTEXT BUTTONS ACTUALLY CALL.
+##
+## A click on the context you are already in must not be able to destroy
+## anything. It did: pressing VESSEL while in the vessel context took a 3-entity
+## plan with a 4-deep undo stack to 0 and 0 (`tests/_studio_discard_survey.gd`),
+## and the lane C probe asserted that wipe as correct behaviour — REALITY §4c,
+## a check green *because* of the defect.
+func _choose_context(context: String) -> void:
+	if context == _context:
+		_set_status("ALREADY BUILDING A %s — NOTHING CHANGED" % context.to_upper())
+		_refresh_panel()
+		return
+	_set_context(context)
+
+
+## What the hull dropdown calls. Godot's own `OptionButton` does not re-emit
+## `item_selected` for the row already selected — measured, not assumed
+## (`_studio_discard_survey.gd`, "chose the same row -> plan 3 entities") — but
+## this file must not depend on that to keep a plan, and picking a hull from the
+## building context is a real change even when the id matches.
+func _choose_hull(hull_id: String) -> void:
+	if hull_id == _hull_id and _context == "vessel":
+		_set_status("ALREADY ON %s — NOTHING CHANGED" % hull_id.to_upper())
+		_refresh_panel()
+		return
+	_hull_id = hull_id
+	_set_context("vessel")
+
+
+## True when `_plan` was drawn for a different boat than the one on screen. The
+## only case undo/redo has to pay `_apply_plan_frame` for — spawning the host
+## vessel is the single most expensive call in this file and Ctrl+Z is held down.
+func _plan_frame_differs() -> bool:
+	if _plan.context != _context:
+		return true
+	if _plan.context != "vessel":
+		return false
+	return not _plan.hull_id.is_empty() and _plan.hull_id != _hull_id
 
 
 ## THE GRID THE STUDIO IS BUILDING ON, DERIVED FROM `_hull_id` AND NOTHING ELSE.
@@ -3178,9 +3596,7 @@ func _undo() -> void:
 		return
 	_redo_stack.append(_plan.to_dict())
 	_plan = StructurePlan.from_dict(_undo_stack.pop_back())
-	_selected_id = -1
-	_rebake()
-	_refresh_panel()
+	_restore_frame_after_history()
 
 
 func _redo() -> void:
@@ -3188,7 +3604,18 @@ func _redo() -> void:
 		return
 	_undo_stack.append(_plan.to_dict())
 	_plan = StructurePlan.from_dict(_redo_stack.pop_back())
+	_restore_frame_after_history()
+
+
+## Shared tail of undo and redo. Since a context switch and a hull change are
+## both undoable, a step on either stack may be a plan for a different boat —
+## so the grid and the drawn hull follow the plan, and only when they have to.
+func _restore_frame_after_history() -> void:
 	_selected_id = -1
+	if _plan_frame_differs():
+		_hide_piece_ghost()
+		_hide_fitting_ghost()
+		_apply_plan_frame()
 	_rebake()
 	_refresh_panel()
 
@@ -4844,18 +5271,14 @@ func _load_plan(path: String) -> void:
 		return
 	_snapshot()
 	_plan = StructurePlan.from_dict(parsed as Dictionary)
-	_context = _plan.context
-	if _context == "vessel" and not _plan.hull_id.is_empty():
-		_hull_id = _plan.hull_id
-		## The grid has to follow the hull the document declares. See
-		## `_apply_hull_grid` for the 596-of-617 measurement this line closes, and
-		## for why a checklist makes it load-bearing rather than cosmetic.
-		_apply_hull_grid()
-		_hull_option.selected = _hull_option_index_for(_hull_id)
 	_selected_id = -1
 	_hide_piece_ghost() ## same reason as `_set_context`: the offset may have moved
+	_hide_fitting_ghost()
+	## The grid has to follow the hull the document declares. See `_apply_hull_grid`
+	## for the 596-of-617 measurement this closes, and for why a checklist makes it
+	## load-bearing rather than cosmetic.
+	_apply_plan_frame()
 	_set_status("LOADED / %s" % path.get_file())
-	_rebuild_host_visual()
 	_rebake()
 	_refresh_panel()
 
@@ -5283,7 +5706,7 @@ func _build_tool_palette() -> void:
 	for context in ["vessel", "building"]:
 		var button := BrandComponents.tool_button(context.to_upper(), 0.0)
 		button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		button.pressed.connect(func() -> void: _set_context(context))
+		button.pressed.connect(func() -> void: _choose_context(context))
 		context_row.add_child(button)
 		_context_buttons[context] = button
 
@@ -5299,8 +5722,7 @@ func _build_tool_palette() -> void:
 		if str((hulls[index] as Dictionary).get("id", "")) == _hull_id:
 			_hull_option.select(index)
 	_hull_option.item_selected.connect(func(index: int) -> void:
-		_hull_id = str((hulls[index] as Dictionary).get("id", _hull_id))
-		_set_context("vessel")
+		_choose_hull(str((hulls[index] as Dictionary).get("id", _hull_id)))
 	)
 	box.add_child(_hull_option)
 
