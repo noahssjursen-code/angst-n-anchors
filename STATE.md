@@ -2091,10 +2091,77 @@ file is not red by construction. It belongs beside decision #1 below.
    per-pane geometry is not addressable from the spawned scene, and **deleted it
    rather than ship a check it did not believe.** That is the right call and it leaves
    CONVENTIONS §3 unmet for this change. `DeckFitout.skin_enabled = false` is the
-   route in; **a wave is on it**, together with two smaller gaps from the same work:
-   `BrickDoor` was never driven open (so every capsule sweep measures its closed
-   state, and "blocked at the door" cannot be told from "the doorway is too small"),
-   and the three 28 m presets were changed but never rendered at working scale.
+   route in — **and that turned out to be wrong in a useful way. CLOSED 2026-08-15.**
+
+   **The merged-skin finding was true of NODES and false of GEOMETRY.**
+   `VesselSkinBaker` merges bricks into a handful of `MeshInstance3D`s so no per-pane
+   *node* exists — but the merged meshes still carry every *vertex*. Measured with the
+   merger on and off across all four presets: roof fall 0.5000 m both ways, widest
+   front pane 1.340 × 0.340 m both ways, front glazed 89.3% both ways, forward-most z
+   per level identical, differing only by 552 culled interior triangles. So
+   `tests/deckhouse_shape_test.gd` asserts **at the shipping configuration** — no
+   `skin_enabled = false` needed, and REALITY §3's "asserting on a config the game
+   does not use" was avoided rather than accepted. §4 of the test holds that parity
+   open in the gate, with a guard that the merger is actually doing something
+   (38336 < 38888) so the comparison is not a configuration against itself.
+
+   **PASS (45), lane B, 14 s**, on the boat onboarding actually grants. It names and
+   counts **no brick id** — three shape properties: the roof falls to its perimeter,
+   the front is a glazed band (widest uninterrupted glass run ≥ 2× as wide as tall,
+   spanning ≥ 25% of the beam), and the brow stands proud of the wall below.
+
+   **The obvious formulation was blind and was nearly shipped:** "the top surface has
+   more than one height" **passes on the shoebox**, because `roof_flat` draws a 0.18 m
+   slab at the top of its cell and so already presents two vertex heights. Recorded in
+   the test header. Two instrument bugs were caught the same way — a vertex-in-band
+   level filter read a solid wall as an empty level (a `block` fills its cell exactly,
+   so every vertex sits *on* the plane), and counting occupied rows rather than the
+   tallest contiguous run turned a 3.94 aspect into 1.97, a hair above the 2.0 floor
+   it feeds.
+
+   Mutations, all red, none passed: flat cap **4/45** (fall 0.5000 → 0.0000 on all
+   four presets — reproduced independently by the orchestrator, with `GEN OK` still
+   returned, which is what proves the generator could never have caught it);
+   windshield → punched panes **8/45** (pane 1.340×0.340 aspect 3.94 → 0.340×0.340
+   aspect 1.00); brow removed **4/45**; one windshield per row **4/45**; and dropping
+   brick yaw in the merger **5/45**, red on parity *and* on the roof, correctly,
+   because with the merger on the roof really is drawn flat.
+
+5h. **A player cannot get inside the wheelhouse of the boat they are given.** Measured
+   with `BrickDoor` actually driven open (`toggle()`, the call `F` makes), which had
+   never been done — every earlier sweep measured the closed state, so "blocked at the
+   door" could not be told from "the doorway is too small".
+
+   `block_door` is [2,3,1] cells → drawn 1.00 × 1.50 × 0.50 m; clear opening measured
+   off the meshes **0.680 m wide × 1.180 m high**. Open, the leaf shape is *disabled*
+   rather than removed (shape count 234 → 234) but the sweeps change, so the open
+   state is effective. **The tallest capsule an OPEN door passes is 1.25 m** — against
+   a 1.80 m player. Varying one input at a time: still 1.25 m at 0.70, 0.60, 0.40 and
+   0.20 m across, so **height is the binding limit and width is not** — the head hits
+   the wall block above the door brick. Fenced (open cell decision #1), not fixed.
+
+5i. **The house is not sized to its hull, and on the 28 m presets it reads badly.**
+   Rendered at working scale for the first time (`screenshots/vessels/starter_28m/`,
+   15 frames) after being changed in `3582276` and never looked at. One absolute
+   3.0 × 4.0 m box, 2.5 m to the eaves, identical on all four presets: 60% of the beam
+   and 27% of the length on the 15 m sjark, where it reads as a wheelhouse — **30% and
+   14% on the 28 m hulls, where it reads as a barge with a portacabin on the
+   transom.** The 1.8 m figure's head reaches the eaves. Confirmed by eye.
+
+   Three more, all visible in those frames: **the aft face is still the old drawing** —
+   two 0.34 m punched squares beside a domestic brown door, which with the hipped cap
+   above reads as a cottage gable, because the windscreen change reached the front and
+   forward sides only. **More than half the house's length in profile is unbroken
+   white.** And **the masthead light stands below the wheelhouse roof on all three
+   28 m presets** (deck-stepped mast, light at 1.75 m against a 3.00 m roof) — the
+   sjark's own comment names exactly this as why its mast is stepped on the roof, and
+   the other three were left. All four still certify, because `white_light_height`
+   only asks for white-above-sidelights and the sidelights are at 1.25 m. On
+   `28_10_m` and `bulk_small` the mast is dead on the centreline forward of the house,
+   so **the lantern sits in the middle of the windscreen at helm eye height.**
+
+   **The new check set holds the forward face, the roof and the brow. Nothing holds
+   the aft or side faces, so every finding in this item is unguarded.**
 
    Still weak in the picture, on record: the aft ~60% of both side walls is a blank
    2.5 × 2.5 m white field — the biggest remaining visual weakness — and the roof's
