@@ -211,6 +211,58 @@ were not the one being worked on.
 (`set(range(100, 123))`) breaks silently the moment ids are reassigned — it did, in the same hour,
 and only a plate count caught it. Select on what a thing says it is.
 
+## 4c. The green-on-the-defect trap — a check that passes BECAUSE something is broken
+
+Worse than a check that cannot fail: a check that fails once you fix the bug.
+
+`structure_plate_test._check_slope_is_followed` asserted the literal point
+`(5.0, 4.82, 18.0)` was INSIDE the wheelhouse roof. Measured, the roof's drawn top at z=18 is
+**4.7858** — that point stands **0.0342 m above it**, in open air. It passed only because the
+collider was phantom-thick, and it would have gone RED for anyone who tightened the collider to
+match the drawing.
+
+The same shape, from the other end: `port_trade_profile_test`'s "apron should sprinkle service
+props" goes GREEN when the quay keep-out is deleted entirely — 14 props, **9 of them standing on
+berth loading faces.** The naive fix scores better than the correct one.
+
+**Rule.** When a check goes red as you fix something, do not assume you broke it. Ask what it was
+passing on. And when a fix makes a check go green, ask whether it did so for the reason you
+intended — a wave here added a keep-out *property* check precisely because the count check
+rewarded removing the keep-out.
+
+## 4d. The one-subsystem generalisation — a verified claim, extrapolated
+
+`CONVENTIONS.md` §3a said: *"changing `DECK_CELL_M` moves no geometry. Verified: all fixtures
+re-rendered byte-identical, zero new gate failures against a 1.0 control."*
+
+Both halves were true **of structure plans**, whose every dimension is in metres. Both were false
+of **bricks**: `BrickCatalog.size_m` is `footprint × CELL_M`, so halving the constant halved every
+brick in the game. A `railing` is **0.5 m tall with a 0.44 m post** — knee-high beside the 1.8 m
+figure the same section says to size everything against. The "zero new gate failures" half was
+wrong too; the failure it caused sat unread in a stale known-red list for months.
+
+**Rule.** A verification covers what it ran over. Before writing "changing X is safe", name the
+subsystems you checked and the ones you did not — and if you did not check a subsystem that
+consumes X, say so in the same sentence.
+
+## 4e. The misattributed profile — both numbers moved, neither was the cause
+
+A probe reported that adding collider boxes was quadratic "through the scene tree AND through
+`PhysicsServer3D`". Two independent quadratics, apparently. They were **one**: Jolt rebuilds a
+body's entire compound shape on every `body_add_shape`, but **only while the body is in a space**.
+Out of a space, 8000 boxes cost **17.7 ms instead of 17942**.
+
+Anyone optimising "the scene tree half" would have measured a real improvement and shipped a
+still-quadratic curve. What found it was holding box count fixed and varying **one thing at a
+time** — in-space against out-of-space, shared RIDs against fresh, trimesh against boxes.
+
+The same wave then tried caching two `get_node_or_null` lookups, measured **no change**, and
+reverted the code rather than keeping a plausible-looking non-fix.
+
+**Rule.** A profile tells you where time goes, not why. Before optimising a hotspot, vary one
+input and confirm the cost moves with the thing you think is causing it. And when an optimisation
+measures flat, delete it.
+
 ## 5. The self-shaped-tool trap — building for the agent, not the player
 
 The newest and possibly worst. The `plate` primitive is four free 3D corners. Agents authored
@@ -291,6 +343,13 @@ no visible scale figure has no absolute scale — check the figure is *visible*,
     test. Run it over every fixture, not the one you are working on.
 3d. **Grep for your subsystem's callers outside `tests/`.** If the only ones are test rigs, it is
     not delivered. Strip the input, re-measure, compare — if nothing changes, nothing works.
+3e. **When a check reddens as you fix something, ask what it was passing on.**
+3f. **Name the subsystems a verification covered.** It does not cover the ones it did not run over.
+3g. **Vary one input before optimising a hotspot.** A profile says where, never why.
+3h. **Run the test named after the thing you are changing.** Especially when committing someone
+    else's unfinished work — that is exactly when its guard matters most, and I have failed this
+    once: I committed a plate-collision rewrite while `structure_plate_test` had not compiled for
+    two commits, then swept the repair into an unrelated commit with a broad `git add -A`.
 4. **Could a player do this with a mouse?** If not, it is a format, not a feature.
 5. **Say what you did not verify.**
 6. **Red with a diagnosis beats green with a lie**, every time.
