@@ -70,10 +70,36 @@ static func resolve(
 ) -> Dictionary:
 	var size := validate_size_m(world_size_m)
 	var file := FileAccess.open(archetype_path, FileAccess.READ)
-	assert(file != null, "WorldConfig: missing archetype %s" % archetype_path)
-	var parsed: Variant = JSON.parse_string(file.get_as_text())
-	assert(parsed is Dictionary, "WorldConfig: archetype must be a JSON object")
-	var config := (parsed as Dictionary).duplicate(true)
+	## Both of these were bare `assert()`s, and both are load-bearing: the very
+	## next line calls `file.get_as_text()` on a null FileAccess, and the line
+	## after that calls `.duplicate(true)` on a null Dictionary cast. `assert` is
+	## compiled out of release builds, so in a shipped game a missing or
+	## malformed archetype was a null dereference during world boot with no
+	## diagnostic at all — the one place the message inside the assert was
+	## needed most is the one place it did not exist.
+	##
+	## The fallback is an empty archetype rather than an early return: every
+	## reader below (`_scale_metres_in_place`, and the generator downstream)
+	## already treats a missing section as "use my defaults", so an empty
+	## dictionary still yields a generatable world of the requested size instead
+	## of a crash — and the pushed error names the path that failed.
+	var config := {}
+	if file == null:
+		push_error(
+			"WorldConfig: cannot open archetype %s (%s) — falling back to an empty archetype" % [
+				archetype_path, error_string(FileAccess.get_open_error()),
+			]
+		)
+	else:
+		var parsed: Variant = JSON.parse_string(file.get_as_text())
+		if parsed is Dictionary:
+			config = (parsed as Dictionary).duplicate(true)
+		else:
+			push_error(
+				"WorldConfig: archetype %s must be a JSON object, parsed as %s — falling back to an empty archetype" % [
+					archetype_path, type_string(typeof(parsed)),
+				]
+			)
 	config["world_size_m"] = size
 	config["archetype_path"] = archetype_path
 	var scale := scale_factor(size)

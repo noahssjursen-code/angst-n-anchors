@@ -59,12 +59,51 @@ static func initialize(source: Variant) -> void:
 	if source is WorldLayout:
 		initialize_from_layout(source as WorldLayout)
 		return
-	assert(source is Array, "LandField.initialize expects WorldLayout or Array")
+	## Was a bare `assert()`, and it is the clearest case of the sixteen.
+	##
+	## Measured, not assumed (`tests/_hole_facts_probe.gd`): the next line's
+	## `source as Array` on a Variant holding an int, a String or `null` is not a
+	## silent empty Array — it is `SCRIPT ERROR: Invalid cast: could not convert
+	## value to 'Array'`, which ABORTS the enclosing function and leaves the
+	## process alive. That is the same mechanism CONVENTIONS §2 records for a
+	## failed `assert()`, so in the SceneTree lane a mistyped call here does not
+	## fail: it idles to the gate's timeout, and everything it printed is lost
+	## with the pipe buffer. In a release build the `assert` is compiled out and
+	## the invalid cast is all that is left.
+	##
+	## In a DEBUG build the `assert` fired first and aborted just the same, and
+	## what that leaves behind is the real damage. Measured against the pre-guard
+	## file with one island installed and then a bad `initialize(5)`:
+	##
+	##   pre-guard:  distance_to_land(0,0) = -725.0   wave_shelter = 0.0
+	##   with guard: distance_to_land(0,0) = inf      wave_shelter = 1.0
+	##
+	## An aborted `initialize` does not clear anything — the PREVIOUS world's
+	## islands stay installed, so a new world is sheltered by land that is not
+	## there any more, indefinitely and silently. The guard's fallback is not
+	## "the same broken state with an error on top"; it is the state the caller
+	## asked for and did not get.
+	if not (source is Array):
+		push_error(
+			"LandField.initialize expects a WorldLayout or an Array of islands, got %s — initializing an EMPTY land field (every query will read as open ocean)" % type_string(typeof(source))
+		)
+		_initialize_legacy([])
+		return
 	_initialize_legacy(source as Array)
 
 
 static func initialize_from_layout(layout: WorldLayout) -> void:
-	assert(layout != null, "LandField requires a WorldLayout")
+	## Was a bare `assert()`, and the same shape as the one above. In debug it
+	## aborted and left the previous world's islands installed (measured:
+	## `distance_to_land(0,0)` stayed at -725.0 after a null call); in a release
+	## build, with the assert gone, `_layout` is set to null, `_initialized` is
+	## set true, and `_bake_shelter_texture()` dereferences it. Falling back to
+	## the empty legacy field keeps the class in a state its own queries define
+	## — no islands, no shelter — rather than either of those.
+	if layout == null:
+		push_error("LandField.initialize_from_layout was given no WorldLayout — initializing an EMPTY land field (every query will read as open ocean)")
+		_initialize_legacy([])
+		return
 	_clear_legacy_islands()
 	_layout = layout
 	_exposure_cache.clear()

@@ -18,6 +18,16 @@ const CHUNK_SIZE_M := 1000.0
 ## (Dropped non-nested 40↔50 and 200↔500 which caused T-junction height seams.)
 const DEFAULT_LOD_STEPS := [25.0, 50.0, 100.0, 200.0]
 const DEFAULT_LOD_DISTANCES := [2200.0, 4800.0, 9000.0]
+## Substituted by `build_chunk_mesh_data`'s guard when the requested step is
+## non-positive or non-finite. It is the finest step this file ships (40 cells
+## across a chunk), so the fallback never coarsens a chunk below what a caller
+## could legitimately have asked for.
+const FALLBACK_STEP_M := 25.0
+## Ceiling on the cell count one chunk may be tessellated to. 1000 cells is a
+## 1 m step — four times finer than FALLBACK_STEP_M and 25x the finest shipped
+## LOD — so it constrains nothing real; it exists so that a step of 1e-6 cannot
+## resize four packed arrays to 10^18 entries before anyone notices.
+const MAX_CHUNK_CELLS := 1000
 const DEFAULT_VISUAL_RADIUS_M := 20000.0
 const SKIRT_DEPTH_M := 12.0
 const LOD_HYSTERESIS_M := 350.0
@@ -983,8 +993,47 @@ static func build_chunk_mesh_data(
 		flatten_zones: Array = [],
 		skirt_depth_m := SKIRT_DEPTH_M,
 ) -> Dictionary:
-	assert(step_m > 0.0 and is_equal_approx(fmod(CHUNK_SIZE_M, step_m), 0.0))
-	var cells := int(round(CHUNK_SIZE_M / step_m))
+	## Was a bare `assert()`. This is the file's load-bearing invariant, not a
+	## note: the header's promise is that neighbouring chunks and power-of-two
+	## LODs share BIT-IDENTICAL boundary vertices, and that holds only while
+	## `step_m` divides CHUNK_SIZE_M exactly. A non-dividing step puts this
+	## chunk's border samples between the neighbour's — a visible one-kilometre
+	## seam. `step_m == 0` is worse, and measured rather than guessed
+	## (`tests/_hole_facts_probe.gd --case=divzero`): `1000.0 / 0.0` is `inf`,
+	## `int(round(inf))` is INT64_MIN, `side * side` then OVERFLOWS back to 1, so
+	## the four packed arrays are resized to ONE element, every loop below runs
+	## zero times, and the dictionary goes out with `surface_side` = INT64_MIN+1.
+	## Not a crash — a chunk-shaped hole with a negative side length in it.
+	##
+	## `assert` guarded neither case in a release build, and in the SceneTree
+	## lane a firing one aborted this function and returned an empty Dictionary
+	## to a caller that then indexed it (measured: `Invalid access to property or
+	## key 'surface_side' on a base object of type 'Dictionary'`).
+	##
+	## Snap to the nearest exact divisor instead. That keeps the seam promise —
+	## the substituted step still divides CHUNK_SIZE_M — and the step actually
+	## used is written into the returned dictionary's `step_m`, so no caller is
+	## told it got the resolution it asked for.
+	var effective_step := step_m
+	var cells := 0
+	if not is_finite(step_m) or step_m <= 0.0:
+		effective_step = FALLBACK_STEP_M
+		cells = int(round(CHUNK_SIZE_M / effective_step))
+		push_error(
+			"WorldTerrainStreamer.build_chunk_mesh_data: step_m must be a positive finite metre count, got %s — using %s m" % [
+				step_m, effective_step,
+			]
+		)
+	else:
+		cells = clampi(int(round(CHUNK_SIZE_M / step_m)), 1, MAX_CHUNK_CELLS)
+		effective_step = CHUNK_SIZE_M / float(cells)
+		if not is_equal_approx(effective_step, step_m):
+			push_error(
+				"WorldTerrainStreamer.build_chunk_mesh_data: step_m %s does not divide CHUNK_SIZE_M (%s) — chunk borders would not line up; using %s m" % [
+					step_m, CHUNK_SIZE_M, effective_step,
+				]
+			)
+	step_m = effective_step
 	var side := cells + 1
 	var origin := chunk_origin(coord)
 	var vertices := PackedVector3Array()
@@ -1128,6 +1177,24 @@ static func _shore_edge_vertex(
 
 ## Pure ordered border samples, excluding skirts. These are useful for seam tests.
 static func sample_chunk_border(layout: Object, coord: Vector2i, step_m: float, edge: StringName, flatten_zones: Array = []) -> PackedVector3Array:
+	## The `_:` arm of the match below was `assert(false, ...)` — an
+	## unreachable-branch note, and the most dangerous of the sixteen despite
+	## looking like the most harmless. `edge` cannot change inside the loop, so
+	## the note was re-evaluated `side` times; and with `assert` compiled out (or
+	## simply aborting the caller's function in the SceneTree lane) a misspelt
+	## edge returns an EMPTY PackedVector3Array. This function exists to be
+	## compared against itself across a chunk seam, and two empty arrays are
+	## EQUAL — so a typo in either edge name of a seam check turns it green on
+	## nothing at all (REALITY.md §4, "negatives against an empty universe").
+	##
+	## Hoisted out of the loop and made an explicit branch: an unknown edge is
+	## reported by name and returns empty once, deliberately, instead of by
+	## falling off the end of a silent no-op.
+	if edge != &"north" and edge != &"south" and edge != &"west" and edge != &"east":
+		push_error(
+			"WorldTerrainStreamer.sample_chunk_border: edge must be north, south, west or east, got \"%s\"" % edge
+		)
+		return PackedVector3Array()
 	var data := build_chunk_mesh_data(layout, coord, step_m, flatten_zones, 0.0)
 	var vertices: PackedVector3Array = data["vertices"]
 	var side := int(data["surface_side"])
@@ -1142,8 +1209,6 @@ static func sample_chunk_border(layout: Object, coord: Vector2i, step_m: float, 
 				result.append(vertices[i * side])
 			&"east":
 				result.append(vertices[i * side + side - 1])
-			_:
-				assert(false, "edge must be north, south, west, or east")
 	return result
 
 

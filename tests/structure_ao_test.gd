@@ -180,7 +180,9 @@ func _test_emitter_is_drop_in() -> void:
 	_check("the emitter carries a vertex colour channel", colors.size() == verts.size())
 	## Intrinsic winding check, independent of the baker: Godot front faces wind
 	## CLOCKWISE, so the right-hand cross of the vertex order is MINUS the
-	## outward normal (tests/winding_probe.gd).
+	## outward normal. The convention itself is asserted in
+	## tests/box_winding_test.gd; this citation used to name tests/winding_probe.gd,
+	## which asserted nothing and is now tests/_winding_probe.gd.
 	var winding_ok := verts.size() > 0
 	for tri in verts.size() / 3:
 		var p0 := verts[tri * 3]

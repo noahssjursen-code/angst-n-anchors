@@ -55,10 +55,43 @@ func _initialize(
 		waterways: Array[Dictionary],
 		checksum: String,
 ) -> void:
-	assert(_resolution == 0, "WorldLayout may only be initialized once")
-	assert(resolution >= 2)
-	assert(signed_distance.size() == resolution * resolution)
-	assert(regions.size() == resolution * resolution)
+	## These four were bare `assert()`s until 2026-08-15. All four are real
+	## invariants, not developer notes, and `assert` was the wrong tool for every
+	## one of them: Godot compiles `assert` out of release builds, and in a
+	## SceneTree script a failed one aborts this function while the CALLER carries
+	## on — so the layout the generator hands out is half-built, and every sampler
+	## reads it forever after.
+	##
+	## What each one is holding up:
+	##  - re-initialization would swap the raster under live consumers that hold
+	##    this object (the streamer caches chunk meshes keyed on it);
+	##  - `resolution < 2` divides by zero below (`size_m / float(res - 1)`);
+	##    measured, that is `inf`, not an error, so `_cell_size_m` is `inf` and
+	##    every `grid` coordinate collapses to 0;
+	##  - a raster whose length disagrees with `resolution²` then indexes out of
+	##    bounds. Measured against the pre-guard file: `Out of bounds get index
+	##    '0' (on base: 'PackedFloat32Array')`, after which
+	##    `sample_signed_distance` returns **0.0** — which reads as "exactly on
+	##    the coastline" everywhere in the world.
+	##
+	## The guard refuses the input and leaves the object in its documented empty
+	## state — `_resolution == 0` — which the two samplers below now answer as
+	## open water instead of dividing by zero. A refused layout is loud, inert and
+	## survivable; a half-built one is silent and wrong.
+	if _resolution != 0:
+		push_error("WorldLayout may only be initialized once (already %d²)" % _resolution)
+		return
+	if resolution < 2:
+		push_error("WorldLayout requires resolution >= 2, got %d — layout left empty" % resolution)
+		return
+	var expected_cells := resolution * resolution
+	if signed_distance.size() != expected_cells or regions.size() != expected_cells:
+		push_error(
+			"WorldLayout raster size mismatch at resolution %d: expected %d cells, got %d signed-distance and %d region entries — layout left empty" % [
+				resolution, expected_cells, signed_distance.size(), regions.size(),
+			]
+		)
+		return
 	_seed = layout_seed
 	_world_size_m = size_m
 	_resolution = resolution
@@ -96,6 +129,13 @@ static func _make_noise(noise_seed: int, frequency: float, octaves: int, gain: f
 ## Bilinear O(1) signed distance in metres. Negative is land, positive is water.
 ## Positions outside the bounded map return positive distance from its edge.
 func sample_signed_distance(world_xz: Vector2) -> float:
+	## An empty layout (never initialized, or refused by the guard in
+	## `_initialize`) has no raster to bilinear-sample and `_cell_size_m == 0.0`.
+	## Answering "open water, far from land" is the only defined answer available
+	## and it is the safe one: `is_land` says false, the terrain streamer builds
+	## flat sea, and nothing indexes an empty PackedFloat32Array.
+	if _resolution == 0:
+		return _world_size_m
 	var half := _world_size_m * 0.5
 	var outside_x := maxf(absf(world_xz.x) - half, 0.0)
 	var outside_z := maxf(absf(world_xz.y) - half, 0.0)
@@ -119,6 +159,9 @@ func is_land(world_xz: Vector2) -> bool:
 
 ## Nearest-cell O(1) macro region classification.
 func classify_region(world_xz: Vector2) -> Region:
+	## Same empty-layout branch as `sample_signed_distance` — see the note there.
+	if _resolution == 0:
+		return Region.OPEN_WATER
 	var half := _world_size_m * 0.5
 	if absf(world_xz.x) > half or absf(world_xz.y) > half:
 		return Region.OPEN_WATER

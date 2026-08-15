@@ -17,13 +17,41 @@ const POPULATION_RANGE: Dictionary = {
 }
 
 
+## Both entry points below carried the same bare `assert()` on this. It is a
+## genuine invariant — a definition written by generation N must not be expanded
+## by generation N+k's rules — but `assert` was never enforcing it: it is
+## compiled out of release builds, so a stale definition sailed straight through
+## into `expand_uncached`, which then copies the STALE number onto the PortData
+## it just built with CURRENT rules (`data.port_generation_version =
+## definition.port_generation_version`) and hands that on to
+## `PortLayoutGenerator`, where it becomes `graph.generation_version`. The assert
+## was not merely absent; what it was absent from was a path that MISLABELS its
+## own output. That label is the worse half: a v46 port claiming to be v43 is a
+## wrong answer that survives being saved.
+##
+## There is no migration table in this repo and inventing one here would be
+## fiction. So the guard does the only honest thing available: report the
+## mismatch by both numbers, and re-stamp the definition at the version that is
+## actually about to generate it, so whatever comes out is labelled with the
+## rules that made it. Returns true when it had to intervene.
+static func _restamp_generation(definition: PortDefinition, site: String) -> bool:
+	var current := PortDefinition.CURRENT_PORT_GENERATION_VERSION
+	if definition.port_generation_version == current:
+		return false
+	push_error(
+		"PortExpander.%s: port \"%s\" was written at generation %d and there is no migration to %d — regenerating it at %d and re-stamping the definition, because the alternative is a port built by %d's rules that says it is %d" % [
+			site, definition.port_id, definition.port_generation_version, current,
+			current, current, definition.port_generation_version,
+		]
+	)
+	definition.port_generation_version = current
+	return true
+
+
 ## Chart / menu summary without coast tracing or PortLayoutGraph generation.
 ## Same trade + size rules as `expand`, cheap enough for dozens of ports.
 static func chart_summary(definition: PortDefinition, world_seed: int) -> Dictionary:
-	assert(
-		definition.port_generation_version == PortDefinition.CURRENT_PORT_GENERATION_VERSION,
-		"PortExpander: incompatible port generation version %d" % definition.port_generation_version,
-	)
+	_restamp_generation(definition, "chart_summary")
 	var site_max := clampi(
 		definition.site_max_size if definition.site_max_size > 0 else PortSizing.MAX_SIZE,
 		PortSizing.MIN_SIZE,
@@ -108,6 +136,10 @@ static func expand(
 		world_layout: WorldLayout = null,
 		extra_attributes: Dictionary = {},
 ) -> PortData:
+	## Before the cache, not after: `PortDataCache` mixes
+	## `definition.port_generation_version` into its key, so re-stamping inside
+	## `expand_uncached` alone would file v46 data under a v43 key.
+	_restamp_generation(definition, "expand")
 	return PortDataCache.expand(definition, world_seed, world_layout, extra_attributes)
 
 
@@ -117,10 +149,7 @@ static func expand_uncached(
 		world_layout: WorldLayout = null,
 		extra_attributes: Dictionary = {},
 ) -> PortData:
-	assert(
-		definition.port_generation_version == PortDefinition.CURRENT_PORT_GENERATION_VERSION,
-		"PortExpander: incompatible port generation version %d" % definition.port_generation_version,
-	)
+	_restamp_generation(definition, "expand_uncached")
 	var data := PortData.new()
 	data.port_id = definition.port_id
 	data.display_name = definition.display_name

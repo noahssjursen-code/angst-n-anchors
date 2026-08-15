@@ -1818,14 +1818,18 @@ static func _offset_path(path: PackedVector3Array, offset: Vector3) -> PackedVec
 ## (Godot convention: right-hand cross of vertex order = MINUS the outward
 ## normal).
 ##
-## "verified in tests/winding_probe.gd" used to end that sentence. It is not a
+## "verified in tests/winding_probe.gd" used to end that sentence. It was not a
 ## verification: that file inspects a built-in `BoxMesh`, PRINTS the convention
-## it finds and calls `quit(0)` unconditionally. It carries no `TestReport` and
-## no assertion, so it cannot go red — and because it lacks the leading
-## underscore the gate discovers it and scores it `PASS` (6 s) alongside real
-## units. Nothing holds THIS emitter to the convention; the check that would is
-## a normals-outward assertion on a baked box, and it does not exist yet
-## (REALITY.md §4, "a scratch probe left in tests/").
+## it finds and calls `quit(0)` unconditionally — no `TestReport`, no assertion,
+## no way to go red — and, lacking a leading underscore, the gate discovered it
+## and scored it `PASS` (6 s) alongside real units.
+##
+## Closed 2026-08-15. That file is now `tests/_winding_probe.gd` (underscored,
+## so the gate skips it) and the check this comment said did not exist is
+## `tests/box_winding_test.gd`: it commits a box through THIS function and
+## asserts, on the emitted mesh, that every stored normal points away from the
+## box centre and that every triangle's right-hand cross opposes it. Mutation
+## verified by reversing a face's vertex order and by flipping a face normal.
 ##
 ## `basis` rotates the box about its own centre; `size` is then read in that
 ## rotated frame. A rotation has determinant +1, so it carries vertex order and

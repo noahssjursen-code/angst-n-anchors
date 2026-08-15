@@ -75,7 +75,25 @@ const THEMES: Array[Dictionary] = [
 
 
 static func derive(definition: PortDefinition, world_seed: int) -> PortTradeProfile:
-	assert(definition != null, "PortTradeProfile requires a port definition")
+	## Was a bare `assert()`. Load-bearing: two lines down is `definition.size`,
+	## which on null is a hard "Invalid access on a base of type Nil" — and with
+	## `assert` compiled out of release builds that is precisely what shipped.
+	## The message the assert carried never reached anyone who needed it.
+	##
+	## The fallback is the universal-service profile every harbour has anyway:
+	## provisions in both directions, no theme. It is a real, usable profile, so
+	## a caller that ignores the error still gets a port that trades rather than
+	## one that crashes — and the theme id is left empty, which is not a value
+	## `_pick_theme` can ever return, so a substituted profile is distinguishable
+	## from a derived one downstream.
+	if definition == null:
+		push_error("PortTradeProfile.derive was given no port definition — returning a themeless provisions-only profile")
+		var fallback := PortTradeProfile.new()
+		fallback.theme_id = ""
+		_ensure_list_starts_with(fallback.destiny_export_slots, "provisions")
+		_ensure_list_starts_with(fallback.destiny_import_slots, "provisions")
+		_apply_size_unlock(fallback, PortSizing.MIN_SIZE)
+		return fallback
 	var profile := PortTradeProfile.new()
 	var size := PortSizing.normalized_size(definition.size)
 	var rng := RandomNumberGenerator.new()

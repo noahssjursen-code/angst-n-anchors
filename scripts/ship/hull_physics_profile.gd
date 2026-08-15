@@ -5,6 +5,16 @@ extends Resource
 ## buoyancy, resistance and controls all consume this resource so a hull cannot
 ## silently use one draft for lift and another for drag.
 
+## Bounds used only by `stations_geometry()` to substitute a floatable hull for
+## one `validate()` has rejected. They are deliberately generous: the point is a
+## hull that produces finite buoyancy forces, not a plausible one — a profile
+## that reaches them is already being reported as invalid.
+const MIN_HULL_DIMENSION_M := 0.5
+const MIN_DRAFT_FRACTION := 0.05
+const MAX_DRAFT_FRACTION := 0.9
+const MIN_BLOCK_COEFFICIENT := 0.05
+const MAX_BLOCK_COEFFICIENT := 0.9
+
 @export_group("Hydrostatics")
 @export var length_m: float = 15.0
 @export var beam_m: float = 5.0
@@ -79,30 +89,98 @@ func validate() -> PackedStringArray:
 
 
 func make_stations() -> HullStations:
+	## Was `assert(errors.is_empty(), ...)` — a genuine invariant (the whole point
+	## of `validate()` is that a hull cannot use one draft for lift and another
+	## for drag) held by the wrong tool, in both builds:
+	##
+	##  - DEBUG, measured against the pre-guard file: the assert fires and aborts
+	##    `make_stations`, which then returns **null**. Its three production
+	##    callers (`catalog_hull_vessel`, `fishing_trawler_small`,
+	##    `passenger_catamaran`) and `calibrate_longitudinal_mass_center` all
+	##    dereference the result on the next line.
+	##  - RELEASE: `assert` is compiled out, so the invalid numbers go straight
+	##    into `HullStations` — a draft past the depth puts the waterline above
+	##    the deck, a displacement past the rectangular envelope asks for a hull
+	##    denser than the box it fits in. Silently wrong buoyancy, which is the
+	##    failure mode `assert` is least able to catch.
+	##
+	## So: report the errors by name, then build from CLAMPED geometry. Measured
+	## on a 28x10 hull given draft 9.0 (depth 5.6) and 9000 t: pre-guard
+	## `make_stations()` -> null; with the guard -> draft 5.04, 1301.832 t,
+	## `volume_below` 1151.6 m3, finite and positive.
+	##
+	## Valid profiles take the path they always did: `stations_geometry()`
+	## returns the authored numbers untouched when `validate()` is empty, and the
+	## control in the probe confirms it — 28x10 trawler, `volume_below(2.4)` =
+	## 249.756097587721 m3 before and after, to the last digit.
 	var errors := validate()
-	assert(errors.is_empty(), "Invalid HullPhysicsProfile: %s" % "; ".join(errors))
+	var g := stations_geometry()
+	if not errors.is_empty():
+		push_error(
+			"HullPhysicsProfile (%s): %s — building stations from clamped geometry L=%.3f B=%.3f D=%.3f draft=%.3f disp=%.3f t" % [
+				resource_path if resource_path != "" else "<unsaved>",
+				"; ".join(errors),
+				g["length_m"], g["beam_m"], g["depth_m"], g["draft_m"], g["displacement_t"],
+			]
+		)
 	if not hull_form.is_empty():
 		return HullStations.from_form(
-			length_m,
-			beam_m,
-			depth_m,
-			design_draft_m,
-			design_displacement_t,
+			g["length_m"],
+			g["beam_m"],
+			g["depth_m"],
+			g["draft_m"],
+			g["displacement_t"],
 			hull_form,
 			water_density,
-			length_m * bow_taper_fraction,
+			float(g["length_m"]) * bow_taper_fraction,
 			station_count
 		)
 	return HullStations.from_design(
-		length_m,
-		beam_m,
-		depth_m,
-		design_draft_m,
-		design_displacement_t,
+		g["length_m"],
+		g["beam_m"],
+		g["depth_m"],
+		g["draft_m"],
+		g["displacement_t"],
 		water_density,
 		bow_taper_fraction,
 		station_count
 	)
+
+
+## The five hydrostatic numbers `make_stations` actually builds from.
+##
+## With `validate()` empty this is the authored profile, returned unchanged —
+## the clamping below only ever runs on a profile that has already been
+## rejected, so no valid hull's stations move by a single float.
+func stations_geometry() -> Dictionary:
+	if validate().is_empty():
+		return {
+			"length_m": length_m,
+			"beam_m": beam_m,
+			"depth_m": depth_m,
+			"draft_m": design_draft_m,
+			"displacement_t": design_displacement_t,
+			"clamped": false,
+		}
+	var length := maxf(length_m, MIN_HULL_DIMENSION_M)
+	var beam := maxf(beam_m, MIN_HULL_DIMENSION_M)
+	var depth := maxf(depth_m, MIN_HULL_DIMENSION_M)
+	## Strictly between keel and deck, which is exactly what `validate()` demands.
+	var draft := clampf(design_draft_m, depth * MIN_DRAFT_FRACTION, depth * MAX_DRAFT_FRACTION)
+	## And strictly inside the rectangular draft envelope, likewise.
+	var envelope_t := length * beam * draft * water_density / 1000.0
+	return {
+		"length_m": length,
+		"beam_m": beam,
+		"depth_m": depth,
+		"draft_m": draft,
+		"displacement_t": clampf(
+			design_displacement_t,
+			envelope_t * MIN_BLOCK_COEFFICIENT,
+			envelope_t * MAX_BLOCK_COEFFICIENT,
+		),
+		"clamped": true,
+	}
 
 
 func design_mass_kg() -> float:

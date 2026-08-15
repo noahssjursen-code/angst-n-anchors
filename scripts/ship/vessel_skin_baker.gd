@@ -446,8 +446,15 @@ static func _append_box(st: SurfaceTool, center: Vector3, size: Vector3) -> void
 	for face in faces:
 		var idx: Array = face[0]
 		var normal: Vector3 = face[1]
-		## Clockwise front (see winding_probe): the old [0,2,1] order was
-		## inverted — inward normals were part of why trim strips shaded black.
+		## Clockwise front: the old [0,2,1] order was inverted — inward normals
+		## were part of why trim strips shaded black.
+		##
+		## This used to read "(see winding_probe)". That file printed the
+		## ENGINE's convention and could not go red; it is now
+		## `tests/_winding_probe.gd` and the convention is asserted against an
+		## emitted mesh in `tests/box_winding_test.gd`. That test covers
+		## `StructureBaker._append_box`, not this function — the two are
+		## supposed to agree and nothing yet checks that they do.
 		for tri in [[0, 1, 2], [0, 2, 3]]:
 			for k in tri:
 				st.set_normal(normal)

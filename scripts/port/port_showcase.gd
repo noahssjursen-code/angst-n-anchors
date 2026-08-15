@@ -548,7 +548,39 @@ func _select_world_port(layout: WorldLayout) -> PortDefinition:
 			var candidate := raw as PortDefinition
 			if candidate != null:
 				pool.append(candidate)
-	assert(not pool.is_empty(), "PortShowcase requires at least one generated port site")
+	## Was a bare `assert()`, and load-bearing: the very next line is
+	## `pool[absi(world_seed) % pool.size()]`, and `% 0` is an integer division
+	## by zero. `assert` is compiled out of release builds, so in a shipped
+	## showcase an empty pool was a hard error inside a modulo, three lines from
+	## anything that names the cause. The pool can genuinely empty — placement is
+	## a search over generated coastline and a hostile seed can find no site.
+	##
+	## The caller dereferences the return value immediately (`definition.site_seed
+	## ^= ...`), so null is not an option here; the fallback has to be a real
+	## definition. It is deliberately marked in its own display name, and it sits
+	## at the world origin rather than at a plausible coastal position, so the
+	## substitution is visible in the showcase rather than being mistaken for a
+	## site the placer chose.
+	if pool.is_empty():
+		push_error(
+			"PortShowcase: no port site was generated for seed %d in region %d — showing a placeholder at the world origin" % [
+				world_seed, region_index,
+			]
+		)
+		var placeholder := PortDefinition.new()
+		placeholder.port_id = "showcase_placeholder"
+		placeholder.display_name = "NO SITE GENERATED — PLACEHOLDER"
+		placeholder.world_position = Vector3.ZERO
+		placeholder.region_kind = desired_region
+		placeholder.site_max_size = PortSizing.MAX_SIZE
+		placeholder.size = clampi(port_size, PortSizing.MIN_SIZE, PortSizing.MAX_SIZE)
+		placeholder.site_seed = world_seed
+		placeholder.has_lighthouse = has_lighthouse
+		placeholder.has_fog_horn = has_fog_horn
+		placeholder.ground_mode = PortDefinition.GroundMode.WORLD_TERRAIN
+		placeholder.port_generation_version = PortDefinition.CURRENT_PORT_GENERATION_VERSION
+		placeholder.set_meta("showcase_geo_max_size", PortSizing.MAX_SIZE)
+		return placeholder
 	var picked := pool[absi(world_seed) % pool.size()]
 	var definition := PortDefinition.from_dict(picked.to_dict())
 	definition.display_name = "%s — TERRAIN FIT" % picked.display_name

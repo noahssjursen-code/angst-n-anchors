@@ -25,7 +25,28 @@ var _false_color := false
 
 
 func build(materials: Array[ShaderMaterial]) -> void:
-	assert(materials.size() == 4, "OceanClipmap requires near, mid, far, and horizon materials")
+	## Was a bare `assert()`, and this is the WEAKEST of the sixteen conversions —
+	## said plainly because a guard that buys nothing should not be sold as one.
+	##
+	## Measured in a debug build, `assert` and this guard are indistinguishable:
+	## both refuse before the `queue_free()` loop, and the existing clipmap keeps
+	## its 9 child meshes either way. What the guard adds is (a) the count in the
+	## message and (b) coverage in a RELEASE build, where `assert` is compiled
+	## out and `materials[TIER_HORIZON]` — index 3 — indexes out of bounds
+	## AFTER the previous clipmap has been freed, leaving no ocean and a `_stats`
+	## dictionary describing rings that were never built. That release half is
+	## reasoned from Godot's documented behaviour, NOT measured: this container
+	## has no export templates and cannot build one.
+	##
+	## Refusing before anything is torn down is the whole point. A `push_error`
+	## that then fell through into the same indexing would be no fix at all.
+	if materials.size() != TIER_HORIZON + 1:
+		push_error(
+			"OceanClipmap.build requires %d materials (near, mid, far, horizon), got %d — keeping the existing clipmap" % [
+				TIER_HORIZON + 1, materials.size(),
+			]
+		)
+		return
 	for child in get_children():
 		child.queue_free()
 	_meshes.clear()
