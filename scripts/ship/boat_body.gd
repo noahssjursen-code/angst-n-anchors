@@ -384,6 +384,11 @@ func _integrate_forces(state: PhysicsDirectBodyState3D) -> void:
 
 
 func _physics_process(_delta: float) -> void:
+	## Every collider batch opens and closes inside ONE synchronous call, so a
+	## batch still open at a frame boundary means a fit-out aborted between the
+	## two. Left alone it is permanent and silent, and the vessel is walk-through
+	## for the rest of its life. See `_walk_collider_batch_watchdog`.
+	_walk_collider_batch_watchdog()
 	if Engine.is_editor_hint():
 		var missing_single := _transformer == null or not is_instance_valid(_transformer)
 		if _model_assembler == null and missing_single:
@@ -1177,6 +1182,49 @@ var _walk_collider_batch_space := RID()
 ## no collision at all. Callers that emit in bulk open the window and close it;
 ## by the time `end_walk_collider_batch` returns the body is back in its space
 ## with every shape on it.
+## ── The latch, and why there is a net under it ──────────────────────────────
+## An adversarial critic measured what one unbalanced `begin` costs. A GDScript
+## runtime error aborts the INNERMOST function and the caller resumes, so a line
+## added inside either fit-out loop that can error skips `end_walk_collider_batch`
+## entirely. The depth is then 1 forever — `end` decrements only after passing a
+## `depth <= 0` guard and returns early while depth stays above 0 — so no later
+## batch ever restores the space. Measured on `probe_trawler_bow_bulwark`, 2144
+## boxes, capsule stations marching 2.00 m outboard through the port bulwark:
+##
+##   healthy                                0/69 through, 1951 shape hits
+##   batch opened, never closed            69/69 through,    0 shape hits
+##   ...after a further full apply_plan    69/69
+##   ...after 5 more physics frames        69/69
+##   ...after clear_walk_brick_colliders() 69/69, and only 2 shapes left — the
+##                                         clear ran INSIDE the latched batch, so
+##                                         the deck slab went too and the player
+##                                         falls THROUGH THE DECK, not just walls
+##
+## The critic could not reach it today: neither loop body contains a `return`,
+## `await`, `call_deferred` or signal emission, GDScript's typed returns turn an
+## aborted `-> Array` into `[]` rather than null, and a sweep of 20 shipped
+## fixtures plus 22 hostile wire-format dictionaries produced 0 malformed
+## collider entries. **Any line added to either loop creates the trigger.**
+##
+## The sibling mass batch in this same subsystem already has this net —
+## `deck_fitout_job.gd:314`, `_exit_tree() -> _close_mass_batch()` — and its
+## failure is only a stale mass number. This one's failure is a walk-through
+## vessel, and unlike the mass batch it cannot self-heal. So: a batch that
+## survives a frame boundary is a bug by definition (every caller opens and
+## closes inside one synchronous call), and `_physics_process` closes it.
+func _walk_collider_batch_watchdog() -> void:
+	if _walk_collider_batch_depth <= 0:
+		return
+	push_error(
+		"BoatBody: a WalkDeck collider batch survived a frame (depth %d) — a "
+		% _walk_collider_batch_depth
+		+ "fit-out aborted between begin and end. Forcing it closed; this vessel "
+		+ "would otherwise have had NO collision for the rest of its life."
+	)
+	_walk_collider_batch_depth = 1
+	end_walk_collider_batch()
+
+
 func begin_walk_collider_batch() -> void:
 	if _walk_collider_batch_depth > 0:
 		_walk_collider_batch_depth += 1

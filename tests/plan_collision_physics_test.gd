@@ -452,8 +452,29 @@ func _check_fitout_leaves_the_body_in_its_space(layout: Dictionary) -> void:
 			plan_shapes += 1
 	print("[batch] after apply_plan returned: space valid=%s, %d shapes, %d of them plan colliders"
 		% [str(space_after.is_valid()), shapes_after, plan_shapes])
-	_t.check("apply_plan returns with the WalkDeck back in a physics space",
-		space_after.is_valid())
+	## ── This asserted `is_valid()`, and a critic walked straight through it ──
+	## "A valid space" is not "the world's space", and choosing WHICH space to
+	## restore is exactly what `end_walk_collider_batch` does — it has a whole
+	## `is_inside_tree()` / `world.space` branch for the re-parent case. Measured
+	## by moving the body into a freshly created, active, valid space instead:
+	## all three §5 assertions PASSED while the vessel was 69/69 stations
+	## walk-through at 2.00 m. The earlier mutations only went red because they
+	## also destroyed RID validity; one that keeps a valid RID and loses the
+	## world was invisible.
+	##
+	## REALITY.md §4a: assert the property. The property is that the body is in
+	## the space the WORLD is simulating, and the only way to be sure of that is
+	## to name that space rather than to ask whether some space exists.
+	var world_space := RID()
+	if walk.is_inside_tree():
+		var walk_world := walk.get_world_3d()
+		if walk_world != null:
+			world_space = walk_world.space
+	_t.check(
+		"apply_plan returns with the WalkDeck in THE WORLD'S space (body %s, world %s)"
+		% [str(space_after), str(world_space)],
+		space_after.is_valid() and world_space.is_valid() and space_after == world_space,
+	)
 	_t.equal("apply_plan returns with every baked box already on the body",
 		plan_shapes, _boxes.size())
 	## Guards the two above: if the baker ever stopped emitting, `plan_shapes ==
