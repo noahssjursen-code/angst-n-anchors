@@ -78,7 +78,8 @@ names, so `git diff` on an image shows what a change did to the silhouette.
 | | |
 |---|---|
 | Gate | Three lanes — A `--script`, B scene, C app self-check. Capability skips are self-policing: a skipped unit that passes when forced turns the gate red. Scratch probes (`_`-prefixed) are skipped and reported. |
-| Tests | Zero bare `assert()` **in `tests/`** — 0 of 162 files. **NOT the repo: 16 remain in 8 production files**, and a production assert firing inside a lane-A test still idles it to TIMEOUT (CONVENTIONS §2). A wave is on it. `TestReport` fails a run that executed zero checks. |
+| Tests | Zero bare `assert()` **anywhere** — `tests/` (162 files) and `scripts/` alike, as of `29435d1`. The 16 production ones became guards that refuse loudly and leave a state the class's own queries define; none was a deletable note, and each was measured pre-guard against a `git archive HEAD` copy. **One (`ocean_clipmap`) mutation-passed** — 9 child meshes either way in debug, only the release half differs and this container has no export templates, so that guard is unverified and recorded as a finding, not a relief. `TestReport` fails a run that executed zero checks. |
+| Units that cannot go red | Swept, all 107: **three found, two closed.** `winding_probe.gd` scored PASS in 6 s with no assertions — now `_winding_probe.gd` (a dev note about the *engine's* BoxMesh convention, which is why converting it in place would have landed a layer below the bug) and the property is asserted on the mesh the baker commits, in `tests/box_winding_test.gd` (mutations: 3/18 and 6/18 red, control PASS 18, verified twice independently). `shipping_lane_traffic_profile.gd` is the same defect at **114 s, the most expensive lane-A unit** — a wave owns it. `port_layout_visual_capture` has no red path either but is already NOTRUN, so it is not scoring a false PASS. |
 | Colour | **Free in the solid bake, priced in the studio x-ray.** The bucket key is material alone and colour rides in vertex data, so `demo_workboat` measures **3 mesh instances / 11 renderer draw calls at BOTH 22 and 64 distinct colours** — zero delta. The ghost/x-ray path still keys by colour and costs **112 instances at 64 colours**, which is what mutation-verifies the claim without editing production code. Earlier text here said "4 draw calls": wrong on both readings — buckets are 3 (`MATERIALS.size()` is the BOUND, not the count) and renderer draw calls are 11. |
 | Collision | Diagonal walls collide as drawn, asserted against `PhysicsServer3D` on a real body — not against the baker's dictionaries. Every edge run's barrier is the yaw-frame BOUND of the boxes it draws, not a second formula — 0 loose corners across all nine capture fixtures. |
 | Items | Float metres, free yaw + optional pitch/roll, props bag, **host-relative placement** so a fitting follows its host. Part catalog + plan-side compliance measurement exist. |
@@ -976,10 +977,15 @@ done.** Regenerate this from the tree, not from the last copy of itself.
 
 ### In flight
 
+Regenerated 2026-08-15 at `29435d1`. The table this replaces still named the collision-batch
+critic and the duplicate-id wave, both landed days ago — the exact staleness the paragraph above
+warns about, repeated. **Rewrite this table when a wave lands, not when you next notice it.**
+
 | Wave | Owns | Target |
 |---|---|---|
-| **Critic on the collision batch** | `critic_*` and `_`-probes only | the batch takes a vessel's collision body OUT of its physics space for a fit-out loop — a vessel with no collision is one a player falls through. Attacking unpaired begin/end, re-entrancy, the window itself, and whether ×15.6 reproduces on a quiet tree |
-| **Duplicate id + empty building catalogue** | `resources/data/buildings/**`, `probe_piece_tug.json`, `structure_studio.gd`, `structure_plan.gd`, `plan_entity_id_test.*`, `port_perf_cache_test.*` | id 34 lives in both `edges` and `pieces` — and the real question is whether the WRITER or the FORMAT permits it, since a player builds that file through the studio |
+| **Staged fit-out is still O(n²)** | `deck_fitout.gd`, `deck_fitout_job.gd`, `boat_body.gd` | the synchronous path went linear by lifting the WalkDeck body out of its physics space; `DeckFitoutJob` (>1000 bricks) never got it, so the vessels that most need it are the only ones that never do. Binding constraint: **at no point may a vessel a player is standing on become non-colliding.** Fenced from reducing collider count — that is the open slop decision. Briefed to measure the staged curve FIRST |
+| **The three look questions** | render probes, `building_grid.gd`, `port_trade_profile.gd`, scratch copies | brick cell, apron density, raked-plate slop have sat in Owner decisions as prose while `REALITY.md` §2 forbids settling any of them with a metric — **and nobody has looked at a render of one.** Changes no default; delivers orthographic elevations with a 1.8 m figure in frame (the last misread of this warehouse was 2.4× off, from a perspective lens with the figure 12 m off-corner) and one answerable question each |
+| **The traffic profiler cannot go red** | `shipping_lane_traffic_profile.gd` and its replacement test | zero assertions, unconditional `quit(0)`, scored PASS at **114 s — the most expensive lane-A unit.** Owns BOTH halves in one change, because it is also the only thing driving the traffic stack at 35 ports / 250 vessels: underscore the profiler *and* write the test that asserts what the exercise was standing guard over. A silent PASS replaced by silent absence is not an improvement |
 
 ### WHERE THIS STANDS — every red is diagnosed, nothing is unexplained
 
@@ -989,17 +995,36 @@ one is an owner decision on a *look* question, one is a product blocker, one nee
 a live server, one is a deliberate stated trade, one is diagnosed to a mast, and
 one is a fixture defect a wave is fixing now.
 
-**That is the milestone.** The instrument is honest: no bare `assert()`, no unit
-that reports no outcome, no test that cannot fail, every skip self-policing, and
-the scratch-probe escape now works in both lanes. What remains is not "unknown
-failures" — it is decisions and product work.
+**That is the milestone, and as of `29435d1` the last two holes in it are closed
+or owned.** "No test that cannot fail" was an overstatement when written: the
+107-unit sweep found three units with no path to red. Two are handled
+(`_winding_probe.gd` + `box_winding_test.gd`; the traffic profiler is a wave),
+the third was already NOTRUN. The instrument is honest: no bare `assert()`
+anywhere, no unit that reports no outcome, every skip self-policing, and the
+scratch-probe escape works in both lanes. What remains is not "unknown failures"
+— it is decisions and product work.
+
+Two things that sweep left behind and did not fix:
+
+- **`VesselSkinBaker._emit_face` has no winding check.** `box_winding_test`
+  covers `StructureBaker._append_box` only. The two emitters are supposed to
+  agree on Godot's clockwise-front convention and **nothing checks that they
+  do** — the comment in the file says so rather than implying coverage.
+- **`port_expander`'s re-stamp is a decision, not a repair.** The guard
+  regenerates a stale port at the current generation instead of refusing it.
+  Regenerate-vs-refuse is a save-compatibility call; there is no migration table
+  in the repo and none was invented.
 
 ### Next, when the two waves land
 
 1. **The owner decisions below are the critical path**, not more code. Five of the
    eight block real product questions, and three of those (brick cell size, apron
    density, the raked-plate slop) are LOOK questions that no metric may settle —
-   `REALITY.md` §2. They need eyes on a render, and nobody has looked.
+   `REALITY.md` §2. A wave is rendering all three now so the owner is looking at
+   pictures instead of paragraphs. **Note that the brick-cell one is only half a
+   taste question:** on land it is a BUG — `BuildingGrid.CELL_M` 1.0 against a
+   drawn brick of 0.5, factor exactly 2.000, so no blueprint data produces a
+   solid wall. The taste half is which of the two fixes.
 2. `apply_staged` (>1000 bricks) is still O(n²) — a batch cannot span frames
    without leaving a vessel non-colliding while a player stands on it.
 3. `plan_interior_test`'s 18 in-collider march starts: 17 are the mast, 1 is the
