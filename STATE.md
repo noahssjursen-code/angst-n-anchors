@@ -1985,6 +1985,59 @@ file is not red by construction. It belongs beside decision #1 below.
 5f. **The bow rail is a staircase.** At the 45° bow taper the generator places plain
    `railing` bricks, so the rail steps around the taper instead of following it.
    `railing_45` exists in the catalogue and **no preset uses it.**
+5g. **The deckhouse was a shoebox on every preset — REBUILT 2026-08-15 (`3582276`),
+   and the vocabulary to fix it was already in the catalogue.** `_add_deckhouse` used
+   **four brick ids out of 64**: five levels of `block`, `block_window` where the band
+   crossed, `block_door`, and a solid slab of `roof_flat`. `roof_slope`, `roof_corner`,
+   `block_45`, `block_windshield`, `block_window_45`, `block_window_corner`,
+   `ledge_45` and `ledge_45_corner` were all present and **unused**. The shoebox was a
+   limit of what the generator asked for, not of the vocabulary it was asking.
+
+   Looked at before anything was touched: a pure white cube, dead-flat top, no trim or
+   shadow line, and three window slots **the same value as the sky behind them** so
+   they read as holes punched to daylight rather than glass — with a dark mast slab
+   floating above, overhanging both ends, so the top read as two stacked plates. The
+   28 m cargo's house is the **same drawing at a different size**, so this was never
+   starter-specific.
+
+   Now: a cantilevered brow, a hipped `roof_slope`/`roof_corner` cap, a full-width
+   `block_windshield` band, two aft windows. Eleven rendered iterations
+   (`screenshots/vessels/iter_house/`, 60 frames). Two findings cost most of them —
+   **`ledge_45` is a RAMP**, widest at its base at *every* yaw, so it can flare a foot
+   but cannot soffit a brow (three variants tried it); and **`roof_slope` fills its
+   whole cell**, so an eave's soffit lands exactly on the wall plane and z-fights,
+   which is why v10 drops the eave v8 and v9 had added.
+
+   **The piece kit cannot reach a brick vessel**, measured both directions rather than
+   assumed (`tests/_kit_reach_probe.gd`): `apply_any` routes on the single test
+   `StructurePlan.is_plan(dict)`, and bolting 40 `wall_panel` placements onto the
+   shipped sjark layout round-trips **byte-identical at 271 cells / 231 primaries** —
+   the placements are dropped at parse. Converting wholesale fails too: **4 of
+   `general_vessel`'s 8 rules address brick IDs** a plan does not carry. The kit is
+   not a path to better vessels today.
+
+   §5 holds: all 13 bricks the new house uses are in the shipyard editor's palette,
+   0 of 18 unreachable with a made-up id as the control. Diff characterised and
+   **verified independently**: +12 cells, 0 removed, 50 changed on all four presets,
+   metadata byte-identical, all six door cells untouched, `GEN OK` on all four.
+
+   **THE GAP, confirmed by the orchestrator rather than accepted on report: nothing in
+   the gate can tell the new house from the shoebox.** Reverting the hipped cap to
+   `roof_flat` and regenerating still emits `GEN OK` and leaves the gate at 104 PASS.
+   The wave wrote a test for exactly this, found it could not distinguish the two
+   because **`VesselSkinBaker` merges every static brick into a few meshes** so
+   per-pane geometry is not addressable from the spawned scene, and **deleted it
+   rather than ship a check it did not believe.** That is the right call and it leaves
+   CONVENTIONS §3 unmet for this change. `DeckFitout.skin_enabled = false` is the
+   route in; **a wave is on it**, together with two smaller gaps from the same work:
+   `BrickDoor` was never driven open (so every capsule sweep measures its closed
+   state, and "blocked at the door" cannot be told from "the doorway is too small"),
+   and the three 28 m presets were changed but never rendered at working scale.
+
+   Still weak in the picture, on record: the aft ~60% of both side walls is a blank
+   2.5 × 2.5 m white field — the biggest remaining visual weakness — and the roof's
+   45° fall reads slightly cottage-like, because that is the catalogue's only 1×1×1
+   roof wedge.
 6. `budget_caps.crane` is 0 on every registration, so any crane fails compliance.
 7. No lifesaving requirement of any kind exists.
 8. No hull under 28 m, though two of three reference vessels are ~22 m and the
