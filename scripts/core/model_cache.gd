@@ -2,14 +2,52 @@
 class_name ModelCache
 extends RefCounted
 
-## Builds a JSON model once via ModelAssembler, bakes a dumb visual Node3D
-## (MeshInstance3D children only, shared ArrayMeshes), and stamps copies.
+## Builds a JSON model once via ModelAssembler, bakes a dumb visual Node3D of
+## childless visuals at shared resources, and stamps copies.
 ##
 ## Use for static props that do not need live part/role lookups (port street
 ## buildings, bollards). Interactive / articulated models stay on ModelAssembler.
 ##
 ## Critical: never duplicate a live ModelAssembler — its `_ready` would rebuild
 ## from JSON. Always stamp the baked prototype.
+##
+## ── THIS FILE USED TO SAY "MeshInstance3D children only" AND MEAN IT ────────
+## The flatten and the stamp below were a hand-written pair that rebuilt
+## `MeshInstance3D` and only that, and recursed only PAST a mesh rather than
+## through it — byte-for-byte the pair that cost `BuildingCache` a `Label3D`,
+## eight `OmniLight3D`, a metadata key and 72 of 717 meshes. Both are now
+## `VisualFlatten`, the one implementation all three prototype caches call.
+##
+## **Measured before the port, and this cache lost NOTHING** — producer census
+## against stamped census, per class, over every model document the game asks
+## for (`tests/_cache_survey.gd`): 9/4/1/3/6/3/8/22 `MeshInstance3D` in, the same
+## out, zero visuals nested under a visual, max visual nesting depth 1. That is
+## a property of the PRODUCER, not luck: `ModelAssembler` emits only
+## `MeshTransformer` and nested `ModelAssembler` (both plain `Node3D`), and a
+## `MeshTransformer` hangs its single `MeshInstance3D` off ITSELF, never off
+## another mesh. It cannot express the shapes the old filter dropped.
+##
+## So the change here is a merge, not a repair — made because that safety was a
+## fact about a different file that nothing in the gate held in place, and
+## because the sentence at the top of this one ("MeshInstance3D children only")
+## is the exact shape of sentence that kept the same drop invisible in buildings
+## for as long as the blueprint existed.
+##
+## The old stamp also justified itself with "Node.duplicate deep-copies
+## Resources by default". **That is false in 4.6** — re-measured independently
+## rather than inherited: `duplicate()` SHARES `Mesh`, `Material` and `Font` by
+## reference and carries metadata and children. It was deleted with the code it
+## justified; `tests/visual_stamp_cache_test.gd` asserts the measurement so it
+## cannot rot back into a comment.
+##
+## **COST**, against a `git archive HEAD` baseline on the same box, best of
+## 3 × 500 stamps (`tests/_stamp_cost_probe.gd`). Node count per stamp is
+## unchanged everywhere — nothing was gained here, only unified:
+##
+##     foghorn_building     0.0710 -> 0.0816 ms/stamp   9 nodes  (+14.9%)
+##     lighthouse_building  0.0324 -> 0.0371 ms/stamp   4 nodes  (+14.5%)
+##     container_cube       0.0112 -> 0.0132 ms/stamp   1 node   (+17.9%)
+##     docking_bollard      0.0255 -> 0.0300 ms/stamp   3 nodes  (+17.6%)
 
 static var _prototypes: Dictionary = {}  ## key -> Node3D (held off-tree)
 
@@ -58,7 +96,14 @@ static func _cache_key(model_path: String, absolute_scale: float) -> String:
 	return "%s|%.4f" % [model_path, absolute_scale]
 
 
-## Build via ModelAssembler off-tree, flatten MeshInstance3Ds into a dumb root.
+## Build via ModelAssembler off-tree, flatten its visuals into a dumb root.
+##
+## `build_part_colliders = false`, so a `MeshTransformer` builds no
+## `CollisionShape3D` and no local `StaticBody3D` — nothing physical reaches the
+## prototype, and `VisualFlatten` would drop it anyway (a `CollisionShape3D` is a
+## `Node3D`, not a `VisualInstance3D`). Callers that want collision build it
+## themselves around the stamped visual: `ContainerNode` and `MooringPost` do;
+## `LighthouseBuilding` is a bare `Node3D` and has none.
 static func _bake(model_path: String, absolute_scale: float) -> Node3D:
 	var assembler := ModelAssembler.new()
 	assembler.build_part_colliders = false
@@ -69,45 +114,17 @@ static func _bake(model_path: String, absolute_scale: float) -> Node3D:
 
 	var root := Node3D.new()
 	root.name = "CachedModel"
-	_collect_mesh_instances(assembler, root, Transform3D.IDENTITY)
+	VisualFlatten.flatten(assembler, root)
 	assembler.free()
 	return root
 
 
-static func _collect_mesh_instances(src: Node, dst_root: Node3D, parent_xform: Transform3D) -> void:
-	for child in src.get_children():
-		if not (child is Node3D):
-			continue
-		var node_3d := child as Node3D
-		var xform := parent_xform * node_3d.transform
-		if child is MeshInstance3D:
-			var src_mi := child as MeshInstance3D
-			var mi := MeshInstance3D.new()
-			mi.name = src_mi.name
-			mi.mesh = src_mi.mesh
-			mi.material_override = src_mi.material_override
-			mi.cast_shadow = src_mi.cast_shadow
-			mi.gi_mode = src_mi.gi_mode
-			mi.transform = xform
-			dst_root.add_child(mi)
-		else:
-			_collect_mesh_instances(child, dst_root, xform)
-
-
-## Manual stamp so ArrayMesh / material resources stay shared (Node.duplicate
-## deep-copies Resources by default).
+## The visuals are `VisualFlatten.stamp`, shared with the other two caches. The
+## root keeps the prototype's `"CachedModel"` name only because it always has —
+## checked, not assumed: every caller in the repo renames it on the next line
+## (`"Model"`, `"LighthouseModel"`, …) and nothing looks the string up, so this
+## is behaviour preservation and not a contract.
 static func _stamp(prototype: Node3D) -> Node3D:
-	var root := Node3D.new()
+	var root := VisualFlatten.stamp(prototype)
 	root.name = prototype.name
-	for child in prototype.get_children():
-		if child is MeshInstance3D:
-			var src := child as MeshInstance3D
-			var mi := MeshInstance3D.new()
-			mi.name = src.name
-			mi.mesh = src.mesh
-			mi.material_override = src.material_override
-			mi.cast_shadow = src.cast_shadow
-			mi.gi_mode = src.gi_mode
-			mi.transform = src.transform
-			root.add_child(mi)
 	return root

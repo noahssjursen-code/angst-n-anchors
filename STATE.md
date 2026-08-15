@@ -179,7 +179,7 @@ missing and it wasn't" is the reusable part.
    points, cabin, catch deck ≥4 cells) on a **10-cell beam** or it lands as a
    `draft` preset that push_warnings on every catalog load.
 
-   **Three findings this hull surfaced, none of them fixed:**
+   **Three findings this hull surfaced. One is now fixed — 2026-08-15:**
    - **The shipyard will label it "7.5 × 2.5 m".** `HullCatalog._normalize`
      overwrites the authored `display` via `ShipClass.format_display_dimensions`,
      which applies `DISPLAY_METRE_SCALE = 0.5`. `_normalize` runs **only on JSON
@@ -187,12 +187,19 @@ missing and it wasn't" is the reusable part.
      reading "28.0 × 10.0 m" in the same dropdown. The 2× is an open owner decision
      (CONVENTIONS §3a) — but it now has a **visible asymmetry**, and the smallest,
      most-seen hull is on the wrong side of it.
-   - **Deck plate and shell disagree at the bow shoulder**: the lofted shell is
+   - ~~**Deck plate and shell disagree at the bow shoulder**: the lofted shell is
      0.219 m per side WIDER than the flat deck plate on this hull (**0.480 m on
      `hull_28x10`**), because `pointed_deck_plate` chamfers linearly while
-     `_assign_form_sections` blends with a smoothstep — a straight line and an
-     S-curve over the same interval cannot agree. Two derivations of one edge,
-     shared code, exactly the §3b shape.
+     `_assign_form_sections` blends with a smoothstep.~~ **CLOSED.** Two changes,
+     both in `_assign_form_sections`: the entry now blends from a smoothstep
+     underwater to a STRAIGHT chamfer at the deck edge, matching the plate and
+     `DeckGrid.cell_shape`; and `HullStations.form_station_zs` snaps a station onto
+     each longitudinal kink, without which the loft's own chord cuts the chamfer
+     corner and lands **worse** (−0.341 m on hull_15x5 with the straight taper and
+     no snap). Measured along the continuous drawn curves, 800 samples:
+     **0.2181 → 0.0000 m on hull_15x5 and 0.4788 → 0.0000 m on hull_28x10.**
+     `hull_sheer_test._check_deck_edge_matches_plate` holds it, on every hull;
+     mutated back to the smoothstep it reads −0.2266 m and goes red.
    - **`ShipClass` fits nothing here.** `LAUNCH` maxes at 10.0 m authored,
      `COASTAL_TRADER` at 35.0 — so a 15 m boat gets `coastal_trader` and shares a
      class with the 28 m trawler, `BEAM_M[COASTAL_TRADER] = 24.0` against this
@@ -200,16 +207,65 @@ missing and it wasn't" is the reusable part.
      also non-monotonic independently of this hull (COASTAL_TRADER 24 >
      SHORT_SEA_COASTER 14). Left alone — `ShipClass` is an open owner decision.
 
-   **Looked at, not asserted:** put beside the 28 m at matched scale, the silhouettes
-   are the same drawing — dead-flat sheer stem to transom, blunt near-vertical stem,
-   slab topsides, no rubbing strake. It reads as a scaled-down trawler, with the
-   scale itself genuinely right (figure's knee at the deck edge; keel-to-deck is 1.4
-   figures against 3.1 on the 28 m). The bow-on view is the one that reads as real
-   small craft — narrow V bottom, hard chine, strong flare to the deck edge. **A
-   15 m boat is where flat sheer hurts most, because a real boat that size is all
-   sheer.** Sheer is computed here (0.336 m forward, 0.105 aft) and carried, but the
-   loft deliberately never draws it — it belongs to the bulwark cap, which is
-   `StructurePlan` work this hull does not have yet.
+   **Looked at, not asserted — the original observation, kept because it is what
+   started the fix:** put beside the 28 m at matched scale, the silhouettes were the
+   same drawing — dead-flat sheer stem to transom, blunt near-vertical stem, slab
+   topsides, no rubbing strake. The scale itself was genuinely right (figure's knee at
+   the deck edge; keel-to-deck 1.4 figures against 3.1 on the 28 m) and the bow-on view
+   already read as real small craft — narrow V bottom, hard chine, strong flare.
+
+   **What changed, 2026-08-15 — `screenshots/vessels/iter/v0…v12__*.png` is the
+   series.** The loft (`HullStations._assign_form_sections`) draws the silhouette of
+   **all 9 form hulls** — 7 in the JSON catalog plus `FishingTrawlerSmall` and
+   `PassengerCatamaran` — so every one of them moved, including every vessel a player
+   already owns. Three levers, all strictly **below `deck_y`**, so the ceiling the
+   sheer note protects is untouched and `hull_sheer_test`'s ceiling / displacement /
+   lever / plan-clearance checks are unchanged and still zero:
+
+   - **Stations are clustered toward the ends and snapped onto every longitudinal
+     kink.** Before, hull_15x5's 4.05 m bow taper contained exactly ONE station, so
+     entry, forefoot and stem were all resolved by a single vertex — which is why
+     every hull's bow read as a blunt wedge whatever its form said. Same station
+     count (8): this buys resolution, it does not buy vertices.
+   - **The stem rakes.** The forward extremity at height y is set back from the
+     deck-level stem by `bow_keel_rise × depth × (1 − y/depth)`, and the levels below
+     the stem line collapse ONTO it. Zeroing the widths alone was not enough and is
+     the trap worth remembering: a level at its nominal Y with `half_beam == 0` still
+     emits a vertex at z = −L/2, so the projected outline stayed exactly plumb. Two
+     renders apart, indistinguishable — v1 and v2 in the series.
+   - **The sheer is drawn, on the rubbing strake.** `sheer_forward_m` was computed on
+     every hull and read by nothing that draws. A constant-height band standing proud
+     of the deck edge now carries `sheer_rise_at(z)`, clamped to stay clear of the
+     deck edge. The DECK EDGE is still flat — that limit is real and the note in
+     `hull_stations.gd` argues it properly — but the hull has a curve in it.
+
+   **The strake is painted in the anti-fouling material, and that is a budget
+   decision, measured.** A third surface in `HullLivery.accent_color` was built and
+   rendered and cost **+2 draw calls per vessel** (demo_workboat 16 → 18,
+   probe_ferry_catamaran 20 → 22), reddening `vessel_render_capture`,
+   `trawler_render_capture`, `piece_kit_capture` and `structure_bake_budget_test`.
+   Geometry alone does not draw the line either: rendered with no material boundary,
+   the band is invisible in profile at `topsides_color` (0.14, 0.16, 0.18), which is
+   near black and compresses every shading difference to a few RGB units.
+
+   **`hull_15x5` also has its own form now — `workboat_small`.** It shared
+   `fine_entry` with `hull_28x10`, and a preset is a normalised SHAPE, so two hulls on
+   one preset are the same drawing at two sizes by construction. Nothing else uses it.
+
+   **Held by:** `hull_sheer_test` **123 → 258 checks**, all green, with four new
+   per-hull properties — the curve is DRAWN (`_check_curve_is_drawn`), the strake band
+   is PAINTED (`_check_strake_is_painted`), the stem RAKES on the baked surface
+   (`_check_stem_rakes`), and the deck edge matches the deck plate
+   (`_check_deck_edge_matches_plate`). Every one was mutation-verified, and two of them
+   PASSED their first mutation and had to be re-pointed: a width-only stem rake (the
+   vertices stayed at z = −L/2) and a strake check read at the bow (where every level
+   collapses onto the stem line at `deck_y` whatever the paint does). Gate family of 43
+   units: **41 PASS / 2 FAIL, byte-identical to the pre-change baseline** — the two reds
+   are `structure_plate_test` and `plan_interior_test`, both pre-existing.
+
+   **Still flat:** the deck edge, on every hull. A bare hull cannot curve its top
+   line without putting plating above `deck_y`, and that is still the bulwark cap's
+   job (`StructurePlan`), for the reasons the sheer note gives.
 
 **Known-red — gate RED: 81 PASS, 19 FAIL, 2 TIMEOUT, 2 NOTRUN, 1 SKIP of 105 units, measured on
 run `20260810-081647-26225`.** The list
@@ -1469,17 +1525,59 @@ file is not red by construction. It belongs beside decision #1 below.
    → 717 meshes per warehouse (+11.2%) plus one `Label3D` at 0.041 ms; the +72 are
    door panelling that should always have been there. Full gate over 109 units
    moved nothing — all 6 FAIL / 1 NOTRUN / 1 SKIP are on the known list.
-1c. **The same flatten/stamp pair, with both of the same defects, is duplicated in
-   `scripts/core/model_cache.gd` and `scripts/port/land_decor_cache.gd`** —
-   essentially byte-for-byte, and `model_cache.gd` justifies its manual stamp with
-   the `duplicate()` claim measured false above. Untouched: different subsystems
-   (vessels, decor), and the fix needs its own mutation-verified unit rather than
-   a copied one. This is one-derivation (§3b) at a scale larger than the two
-   functions that were merged — three caches, one algorithm, three copies.
-   **Unverified there:** whether `deck_text` and the ship-only light bricks lose
-   their visuals on the vessel side too. `BrickCatalog` is shared with decks, so
-   the same bricks reach a hull through `DeckFitout` — this fix covers land
-   buildings only (§4d).
+1c. ~~The same flatten/stamp pair duplicated in `model_cache.gd` and
+   `land_decor_cache.gd`~~ — **RESOLVED 2026-08-15, and the answer was not the one
+   the template predicted. Both other caches were CLEAN.**
+
+   The census — producer vs stamped, per `VisualInstance3D` class — found **zero
+   losses** across all 11 `ModelCache` documents (foghorn, lighthouse, container,
+   bollard, fuel station, two cranes, npc study…) and all 8 `LandDecorCache`
+   variants. Max visual nesting depth is 1 everywhere, and that is **structural,
+   not luck**: `ModelAssembler` emits only `MeshTransformer` and nested
+   `ModelAssembler` (plain `Node3D`) and hangs each mesh off a `MeshTransformer`,
+   **never off another mesh** — it cannot express the shape the old filter dropped.
+   `LandDecorCache._bake_house` builds a flat row in the same file. **No defect was
+   manufactured to match the buildings template**, which was the trap in the brief.
+
+   **My briefing premise was wrong and the wave corrected it:** `DeckFitout` does
+   not feed `ModelCache` at all — its callers are `ContainerNode`,
+   `LighthouseBuilding`, `FogHornBuilding`, `MooringPoint`, `MooringPost` and two
+   showcases, and nothing in `scripts/ship/` uses it.
+
+   **The vessel side never had this defect either**, which closes the §4d gap left
+   open above. `DeckFitout` uses no prototype cache — `create_item_visual` /
+   `create_cell_mounts` add `BrickCatalog.create_visual`'s node directly. The one
+   lossy step on a hull is `VesselSkinBaker`, and **0 of 12** text/light bricks are
+   swallowed by the skin bake (`LIVE_TAGS` covers both), while `_merge_node_tree`
+   recurses *through* a mesh (a mesh-under-a-mesh contributes 48 vertices, not 24).
+
+   **What did land is the one-derivation fix.** `scripts/core/visual_flatten.gd`
+   (`VisualFlatten.flatten/.stamp/.copy_visual/.copy_metadata`) is now the single
+   implementation all three caches call; three hand-written pairs deleted, 296 →
+   218 lines plus 43 shared. It takes **no flags**, and that was established rather
+   than assumed: the only candidate for per-cache behaviour was `BuildingCache`'s
+   named `BuildingLighting` skip, and a mutation proved it a **no-op**
+   (`BuildingLighting extends Node`, so it never reached the `Node3D` test) — so it
+   was deleted on that evidence, because two mechanisms for one drop is the
+   duplication this wave existed to remove. The deliberate drops stay *named* in
+   both headers. Cost: **+14.5–21.5% per stamp**, ~35% of which is one
+   `get_meta_list()` per mesh; node counts identical, renders byte-identical
+   (md5 `449e64cd…`).
+
+   Verified independently: `visual_stamp_cache_test` **PASS (104)**,
+   `building_cache_visual_test` still **PASS (34)** unchanged, `port_perf_cache_test`
+   PASS — and restoring the mesh-only filter inside the shared function reddens it
+   **8/90**.
+
+   **Four mutations passed first time and all four are recorded as findings**, two
+   of which were the *check* being wrong: a `gi_mode` check written as
+   prototype-vs-stamp compares two outputs of the same copy routine, so a dropped
+   field matches itself at the default — green on the bug. Re-anchored on a source
+   fixture with a non-default value it reddens 2/104. A third is a genuine
+   non-defect: `stamp` via plain `duplicate()` is behaviourally identical and
+   **3.6× slower** (house 0.0435 → 0.1570 ms), so the field copy is a cost decision
+   recorded in the header and **not asserted** — a wall-clock threshold on llvmpipe
+   would fail for the weather. **Nothing in the gate holds that field copy.**
 2. **`BuildingLayout.place_footprint` ignores its `_building_grid`** — 4/117 in
    `building_blueprint_test`. `BrickLayout`'s equivalent argument IS load-bearing
    and does reject out-of-bounds. Two sibling classes, contradictory, one wrong.

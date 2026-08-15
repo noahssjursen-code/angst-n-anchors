@@ -68,8 +68,17 @@ static func _bake_house(variant: int) -> Node3D:
 
 	var root := Node3D.new()
 	root.name = "HousePrototype"
+	var bucket_index := 0
 	for bucket in by_material.values():
 		var mi := MeshInstance3D.new()
+		## Named because the stamp now COPIES the name (`VisualFlatten.copy_visual`
+		## does, this file's old `_stamp` did not). Left unnamed, the prototype's
+		## auto-generated `@MeshInstance3D@17` was copied into every stamp and
+		## sanitised by `Node.set_name` — `@` is not a legal name character — so
+		## every house drew five children called `_MeshInstance3D_17`. Nothing reads
+		## these names, but a debugger and a remote-scene tree do.
+		mi.name = "HouseSurface_%d" % bucket_index
+		bucket_index += 1
 		mi.mesh = _merge_parts(bucket["parts"] as Array)
 		mi.material_override = bucket["mat"]
 		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
@@ -110,15 +119,35 @@ static func _prism_mesh(size: Vector3) -> PrismMesh:
 	return mesh
 
 
+## `VisualFlatten.stamp` — the one implementation the three prototype caches in
+## this project share (REALITY.md §3b). This file used to carry its own
+## mesh-only copy of it, the same pair that cost `BuildingCache` a `Label3D`,
+## eight `OmniLight3D`, a metadata key and 72 of 717 meshes.
+##
+## **Measured before the port, and this cache lost NOTHING** — prototype census
+## against stamped census, per class, all eight variants
+## (`tests/_cache_survey.gd`): 5 `MeshInstance3D` in, 5 out, zero visuals nested
+## under a visual. Nor could it have: `_bake_house`, in this same file, builds a
+## flat row of `MeshInstance3D` by merging five primitives (four boxes and a
+## prism) into one mesh per material. There is no producer under this that can
+## change shape without changing this file.
+##
+## The port is therefore a merge, not a repair — and unlike buildings it is NOT
+## free, because this stamps far more instances than a port has buildings:
+## `PortLayoutGraphVisualizer` places a house per village cell and
+## `ImpostorWarmup` bakes all eight variants at boot. Measured against a
+## `git archive HEAD` baseline, same box, best of 3 × 500 stamps
+## (`tests/_stamp_cost_probe.gd`):
+##
+##     LandDecorCache.house_instance   0.0358 -> 0.0435 ms/stamp   (+21.5%)
+##     nodes per stamp                 5 -> 5                      (unchanged)
+##
+## +0.0077 ms per house. Attributed rather than guessed (REALITY.md §3g): with
+## `copy_metadata` removed it measures 0.0408, so ~35% of the increase is one
+## `get_meta_list()` call per mesh on nodes that carry no metadata, and the rest
+## is the two extra field assignments (`gi_mode`, `name`) and the call through a
+## shared static. Nothing here is a per-frame cost — a house is stamped once when
+## its cell loads — so the trade taken is +0.008 ms per house for deleting a
+## second copy of an algorithm that was measured wrong in the first.
 static func _stamp(prototype: Node3D) -> Node3D:
-	var root := Node3D.new()
-	for child in prototype.get_children():
-		if child is MeshInstance3D:
-			var src := child as MeshInstance3D
-			var mi := MeshInstance3D.new()
-			mi.mesh = src.mesh
-			mi.material_override = src.material_override
-			mi.cast_shadow = src.cast_shadow
-			mi.transform = src.transform
-			root.add_child(mi)
-	return root
+	return VisualFlatten.stamp(prototype)
