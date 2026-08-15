@@ -162,11 +162,67 @@ func _add_mooring(layout: BrickLayout, grid: DeckGrid) -> void:
 			)
 
 
-## Deckhouse: a walled box with a glazed forward face, a door aft and a flat
-## roof, centred on the beam. `width_cells` / `length_cells` are the intent and
-## the beam is the limit — two clear cells a side, always, so the side decks
-## survive on a 10-cell beam. `z_frac` places the forward face along the hull.
-## Five levels is 2.5 m of headroom at the 0.5 m cell (CONVENTIONS §3a).
+## Deckhouse — a WHEELHOUSE, not a shoebox. `width_cells` / `length_cells` are
+## the intent and the beam is the limit — two clear cells a side, always, so the
+## side decks survive on a 10-cell beam. `z_frac` places the forward face along
+## the hull. Five levels is 2.5 m of headroom at the 0.5 m cell (CONVENTIONS §3a).
+##
+## ── WHAT THIS USED TO DRAW, AND WHY IT CHANGED — 2026-08-15 ────────────────
+##
+## Five levels of `block`, a `block_window` wherever the band crossed, and a
+## solid slab of `roof_flat` on top. Four brick ids out of the catalogue's 64.
+## The result is in `screenshots/vessels/starter/starter__profile_port_ortho.png`
+## as it shipped: a plain white rectangle with a dead-flat top, dead-vertical
+## ends, and three pale slits that read as holes punched through to the sky
+## rather than as glass. It is the loudest thing in the starter's silhouette and
+## the weakest element in it.
+##
+## Nothing had to be built to fix that. `BrickCatalog` already carries
+## `roof_slope`, `roof_corner`, `block_45`, `block_windshield` and the rest —
+## the shoebox was a limit of what this generator ASKED FOR, not of the
+## vocabulary it was asking. Three changes, each using a brick that was already
+## in the palette a player can click:
+##
+##   BROW    the top level's front ROW is cantilevered one cell proud of the
+##           window band and the roof follows it out, so the front breaks
+##           forward at the top the way a wheelhouse front rakes. Tried first
+##           with `ledge_45`: a 45° wedge is a RAMP, widest at its base at every
+##           yaw (measured in `tests/_wedge_yaw_probe.gd`), so it can flare a
+##           foot but it cannot soffit an overhang, and the front came out as a
+##           notch with a loose block in it. A cantilevered row is simpler and
+##           is how the real thing is built.
+##   ROOF    a hipped cap — `roof_slope` all round the perimeter falling
+##           outboard, `roof_corner` mitring the four corners, `roof_flat` only
+##           inside. The flat white lid is gone and the roof has a fall you can
+##           see from every angle. Deliberately NOT carried out past the walls
+##           as an eave: `roof_slope` fills its whole cell, so an eave presents
+##           a 0.5 m grey band across the wall top in profile AND lands its
+##           underside exactly on the wall top plane, which z-fights — compare
+##           `screenshots/vessels/iter_house/v9__house_profile_ortho.png` (a
+##           jagged white sawtooth the full length of the house) with
+##           `v6__house_profile_ortho.png` (none). `roof_flat` never had that
+##           problem because it draws a 0.18 m slab at the TOP of its cell.
+##   GLASS   `block_windshield` — three cells of ONE 1.34 m pane behind a
+##           perimeter frame — instead of `block_window`, which is a 0.34 m pane
+##           in a frame of its own. Six of those in a row is the grid of punched
+##           squares; two windshields is a windscreen. Plus two aft-facing
+##           windows either side of the door, because the after face is the one
+##           a captain stands in front of on the working deck and it was 3.0 x
+##           2.5 m of unbroken white.
+##
+## Tried and REJECTED by looking, not by argument: chamfering the plan corners
+## with `block_45` (the brick equivalent of the piece kit's `corner_45`). It
+## works and it is the right instinct, but a 6-cell front with both corners
+## chamfered leaves a 4-cell straight run, and 4 is not a whole number of 3-cell
+## windshields — so the chamfer costs the full-width windscreen and buys a 0.5 m
+## cut that reads as a lighting artefact at this scale. `v7__house_quarter.png`
+## against `v6__house_quarter.png` is the comparison.
+##
+## NOT FIXED, and named rather than worked around: `block_door` is a [2,3,1]
+## footprint, which at the 0.5 m cell is 1.0 x 1.5 x 0.5 m — its own comment
+## claims "2 m wide x 3 m tall". A 1.8 m player does not fit through it, and
+## there is no taller door in the catalogue. That is downstream of the open
+## owner decision on `DeckGrid.CELL_M` (CONVENTIONS §3a) and is not settled here.
 func _add_deckhouse(
 	layout: BrickLayout, grid: DeckGrid, width_cells: int, length_cells: int, z_frac: float
 ) -> Dictionary:
@@ -180,6 +236,11 @@ func _add_deckhouse(
 		grid.length - house_l - 2,
 	)
 	var z1 := z0 + house_l - 1
+	## The brow stands one cell forward of the house front. Clamped rather than
+	## assumed: on a hull whose bow taper reaches the house there is no cell
+	## there, and a brow written into the sea would certify anyway (`_measure`
+	## never asks the grid) — which is the whole reason `_set_on_deck` exists.
+	var z_brow := maxi(z0 - 1, grid.bow_taper_cells)
 	var door_cells := {}
 	for dx in range(2):
 		for dy in range(3):
@@ -193,21 +254,103 @@ func _add_deckhouse(
 				var c := Vector3i(x, y, z)
 				if door_cells.has(c):
 					continue
-				## Window band across the forward face and the front third of
-				## each side, at eye height for the 1.8 m figure.
-				var glazed := (y == 2 or y == 3) and (z == z0 or (x == x0 or x == x1) and z <= z0 + 2)
-				_set_on_deck(layout, grid, c, "block_window" if glazed else "block")
-	for x in range(x0, x1 + 1):
-		for z in range(z0, z1 + 1):
-			_set_on_deck(layout, grid, Vector3i(x, 5, z), "roof_flat")
+				_set_on_deck(layout, grid, c, "block")
+	_glaze_deckhouse(layout, grid, x0, x1, z0, z1)
+	if z_brow < z0:
+		for x in range(x0, x1 + 1):
+			_set_on_deck(layout, grid, Vector3i(x, 4, z_brow), "block")
+	_cap_deckhouse(layout, grid, x0, x1, z_brow, z1, 5)
 	if not layout.place_footprint(Vector3i(x0 + 2, 0, z1), "block_door", 0, grid):
 		_refuse("deckhouse door at %v" % Vector3i(x0 + 2, 0, z1))
 	return {
-		"x0": x0, "x1": x1, "z0": z0, "z1": z1,
+		"x0": x0, "x1": x1, "z0": z0, "z1": z1, "z_brow": z_brow,
 		"roof_y": 5,
-		"port_wall": Vector3i(x0, 2, z0 + 2),
-		"stbd_wall": Vector3i(x1, 2, z0 + 2),
+		## The sidelights ride on the SOLID wall just abaft the window band. On
+		## a glazed cell `attach_light` silently walks to the windshield's
+		## primary cell three cells forward, which still satisfies `brick_side`
+		## but puts the light somewhere nobody chose.
+		"port_wall": Vector3i(x0, 2, z0 + 4),
+		"stbd_wall": Vector3i(x1, 2, z0 + 4),
 	}
+
+
+## The window band. A run gets `block_windshield` (footprint [3,1,1] — one
+## 1.34 m pane, perimeter frame only) wherever it is a whole number of them, and
+## `block_window` for the remainder. Rows 2 and 3 put the glass between 1.0 m
+## and 2.0 m above the deck, which brackets the 1.6 m eye height of the figure
+## everything here is sized against.
+func _glaze_deckhouse(
+	layout: BrickLayout, grid: DeckGrid, x0: int, x1: int, z0: int, z1: int
+) -> void:
+	var span := BrickCatalog.footprint_of("block_windshield").x
+	for y in [2, 3]:
+		## Forward face, corner to corner.
+		var x := x0
+		while x <= x1:
+			if x1 - x + 1 >= span:
+				for dx in range(span):
+					layout.erase_cell(Vector3i(x + dx, y, z0))
+				if layout.place_footprint(
+					Vector3i(x, y, z0), "block_windshield", 0, grid
+				):
+					x += span
+					continue
+				_refuse("front windshield at %v" % Vector3i(x, y, z0))
+			layout.erase_cell(Vector3i(x, y, z0))
+			_set_on_deck(layout, grid, Vector3i(x, y, z0), "block_window", 0)
+			x += 1
+		## Each side, the forward `span` cells abaft the corner. Glass is on the
+		## brick's local −Z face, so yaw aims it outboard: 90 to port, 270 to
+		## starboard, 180 aft. Measured in `tests/_wedge_yaw_probe.gd`, not
+		## derived from the rotation convention — deriving it is how every
+		## railing on all four presets ended up running athwartships.
+		for side in [[x0, 90], [x1, 270]]:
+			var sx: int = side[0]
+			var yaw: int = side[1]
+			for dz in range(span):
+				layout.erase_cell(Vector3i(sx, y, z0 + 1 + dz))
+			if not layout.place_footprint(
+				Vector3i(sx, y, z0 + 1), "block_windshield", yaw, grid
+			):
+				_refuse("side windshield at %v yaw %d" % [Vector3i(sx, y, z0 + 1), yaw])
+				for dz in range(span):
+					_set_on_deck(
+						layout, grid, Vector3i(sx, y, z0 + 1 + dz), "block_window", yaw
+					)
+		## Aft face, either side of the door.
+		for x_aft in [x0 + 1, x1 - 1]:
+			layout.erase_cell(Vector3i(x_aft, y, z1))
+			_set_on_deck(layout, grid, Vector3i(x_aft, y, z1), "block_window", 180)
+
+
+## A hipped cap instead of a flat slab: the perimeter falls outboard on
+## `roof_slope`, the corners are mitred with `roof_corner`, and `roof_flat` fills
+## only what is left. Every yaw below is the measured one — a `roof_slope`'s HIGH
+## edge is at local −Z at yaw 0, and a `roof_corner`'s peak is at (−X,−Z).
+func _cap_deckhouse(
+	layout: BrickLayout, grid: DeckGrid, x0: int, x1: int, z0: int, z1: int, roof_y: int
+) -> void:
+	for x in range(x0, x1 + 1):
+		for z in range(z0, z1 + 1):
+			var c := Vector3i(x, roof_y, z)
+			var on_x := x == x0 or x == x1
+			var on_z := z == z0 or z == z1
+			if on_x and on_z:
+				## Hip corner — peak INBOARD, so both falls run away from it.
+				var yaw := 270
+				if x == x0 and z == z0:
+					yaw = 180
+				elif x == x1 and z == z0:
+					yaw = 90
+				elif x == x1 and z == z1:
+					yaw = 0
+				_set_on_deck(layout, grid, c, "roof_corner", yaw)
+			elif on_z:
+				_set_on_deck(layout, grid, c, "roof_slope", 180 if z == z0 else 0)
+			elif on_x:
+				_set_on_deck(layout, grid, c, "roof_slope", 270 if x == x0 else 90)
+			else:
+				_set_on_deck(layout, grid, c, "roof_flat")
 
 
 ## Sidelights ride on the deckhouse walls as MOUNTED lights, which is what makes
