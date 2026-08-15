@@ -38,7 +38,36 @@ extends Node3D
 ##
 ## gate-selfcheck: res://scenes/apps/structure_studio.tscn -- --studio-probe
 
+## The SHIPPED plans — the worked examples the fleet is built from, versioned in
+## git and read by nine gate fixtures. READ ONLY, from this app's point of view.
 const STRUCTURES_DIR := "res://resources/data/structures"
+
+## ── WHERE A BUILDER'S OWN PLAN GOES, AND WHY IT IS NOT THE LINE ABOVE ───────
+##
+## `_save_plan` used to write `res://resources/data/structures/<name>.json`, the
+## same directory the line above declares read-only, with `FileAccess.WRITE` and
+## no existence check. Two consequences, both measured
+## (`tests/_studio_drawer_drive.gd`, section 6):
+##
+##  1. A name that snake-cases onto a shipped fixture REPLACES IT, silently, with
+##     the toast reading `SAVED /` exactly as it does for a new file. Measured: a
+##     249-byte plan carrying a marker string, saved over by a builder typing
+##     "Audit Decoy Fixture", came back 489 bytes with the marker gone. There is
+##     no confirmation, no backup and no undo — `_undo` restores the PLAN, never
+##     the file. And `to_snake_case` collapses "Demo Workboat", "demo workboat",
+##     "DemoWorkboat" and "demo-workboat" onto the one file name, so the collision
+##     does not need the builder to type the fixture's name.
+##  2. `res://` is inside the PCK in an exported build and is not writable there,
+##     so the whole control could only ever have worked from a source tree. Every
+##     other thing a player writes in this project goes to `user://`
+##     (`AssetPaths.USER_SAVE_DIR`, `USER_ORDERS_DIR`, `LocalCaptainStore.ROOT_DIR`);
+##     the studio was the one place that did not.
+##
+## So a builder's plans live here, and the shipped fixtures stay where they are.
+## `_saved_plan_paths` reads BOTH — the worked examples are the point of the LOAD
+## list — and a builder's own saves come first, because those are the ones they
+## are looking for.
+const SAVED_PLANS_DIR := "user://structures"
 
 ## ── The two snaps, and why there are two ────────────────────────────────────
 ##
@@ -234,6 +263,8 @@ func _ready() -> void:
 			_shoot_fitting_tool()
 		elif str(arg) == "--studio-registration-shot":
 			_shoot_registration_checklist()
+		elif str(arg) == "--studio-drawer-shot":
+			_shoot_properties_drawer()
 
 
 ## A photograph of the piece tool in use, because a UI surface is not reviewable
@@ -370,6 +401,50 @@ func _shoot_registration_checklist() -> void:
 	get_tree().quit(0)
 
 
+## TWO PHOTOGRAPHS OF THE PROPERTIES DRAWER, WHICH HAS NEVER BEEN PHOTOGRAPHED.
+##
+## `2ab3eee` put the drawer on screen and shot the REGISTRATION checklist at the
+## top of it. Everything under that has still only ever been seen as a rect in a
+## probe's output: the surface library, the inspector, and the file controls. The
+## drawer's own scroll is 948 px tall over 1628 px of content, so the second frame
+## is the one a builder has to scroll to, and the reason both frames exist is that
+## the gap between them IS the finding.
+##
+##   xvfb-run -a --server-args="-screen 0 1600x900x24" godot \
+##     --rendering-driver opengl3 --audio-driver Dummy \
+##     res://scenes/apps/structure_studio.tscn -- --studio-drawer-shot
+func _shoot_properties_drawer() -> void:
+	_set_context("vessel")
+	_place_deck(Vector3(1, 0, 8), Vector3(9, 0, 24))
+	_place_wall(Vector3(2, 0, 10), Vector3(8, 0, 10))
+	_set_tool(Tool.FITTING)
+	_set_build_level(0.0)
+	_probe_click_fitting("helm_console", Vector3i(10, 0, 40))
+	for index in 4:
+		_probe_click_fitting("bollard_pair", Vector3i(4 + index * 4, 0, 20))
+	_probe_click_fitting("lantern_sidelight_port", Vector3i(3, 0, 30))
+	_probe_click_fitting("lantern_sidelight_starboard", Vector3i(17, 0, 30))
+	## Select the port sidelight: the inspector that used to read DECK / PART 007
+	## with a thickness spinner on it.
+	_set_tool(Tool.SELECT)
+	_selected_id = int((_plan.items[_plan.items.size() - 2] as Dictionary)["id"])
+	_update_selection_visual()
+	_cam_focus = _plan_offset + Vector3(5.0, 1.2, 14.0)
+	_cam_yaw = 3.9
+	_cam_pitch = 0.34
+	_cam_distance = 17.0
+	_set_status("port sidelight selected")
+	_refresh_panel()
+	_drawer_scroll.scroll_vertical = 0
+	await _write_shot("structure_studio__drawer_top.png")
+	## And the same frame scrolled to the bottom, which is where the properties
+	## the panel is NAMED for actually are.
+	_drawer_scroll.scroll_vertical = int(_drawer_scroll.get_v_scroll_bar().max_value)
+	_set_status("scrolled to the foot of the drawer")
+	await _write_shot("structure_studio__drawer_properties.png")
+	get_tree().quit(0)
+
+
 func _write_shot(file_name: String) -> void:
 	for _i in 12:
 		await get_tree().process_frame
@@ -438,7 +513,7 @@ func _run_studio_probe() -> void:
 	_redo()
 	expect.call("undo/redo returns to the same plan", _plan.entity_count() == undo_before)
 	_save_plan("studio_probe_tmp")
-	var probe_path := "%s/studio_probe_tmp.json" % STRUCTURES_DIR
+	var probe_path := _plan_save_path("studio_probe_tmp")
 	_set_context("vessel") ## wipes the plan
 	expect.call("context switch clears the plan", _plan.is_empty())
 	_load_plan(probe_path)
@@ -499,6 +574,11 @@ func _run_studio_probe() -> void:
 	_probe_the_checklist_says_where_to_go(expect)
 	_probe_the_advice_matches_the_state(expect)
 	_probe_every_fixture_lands_on_its_own_hull(expect)
+	## ── The properties drawer's own controls ────────────────────────────────
+	_probe_the_inspector_names_what_is_selected(expect)
+	_probe_the_library_paints_what_it_says(expect)
+	_probe_saving_cannot_touch_shipped_data(expect)
+	_probe_the_round_trip_is_the_same_plan(expect)
 	for arg in OS.get_cmdline_user_args():
 		if str(arg) == "--studio-write-fixtures":
 			_write_tug_fixture()
@@ -1000,7 +1080,11 @@ func _probe_every_fixture_lands_on_its_own_hull(expect: Callable) -> void:
 	var wrong_grid := PackedStringArray()
 	var refused := PackedStringArray()
 	var loaded := 0
-	for path_variant in _saved_plan_paths():
+	## `STRUCTURES_DIR`, not `_saved_plan_paths()`: this check is about the SHIPPED
+	## documents, and the load list now also carries whatever the builder has saved
+	## to `SAVED_PLANS_DIR`. A gate check whose universe a player can edit is a
+	## gate check that stops meaning what it says.
+	for path_variant in _shipped_plan_paths():
 		var path := str(path_variant)
 		## Deliberately NOT reset between fixtures: loading a 150 m feeder over a
 		## 28 m trawler is exactly the sequence that produced 596 phantom
@@ -1118,6 +1202,579 @@ func _registration_panel_text() -> String:
 		if label != null:
 			parts.append(label.text)
 	return "\n".join(parts)
+
+
+## ── THE PROPERTIES DRAWER'S OWN CONTROLS ────────────────────────────────────
+##
+## The drawer was off the right edge of the viewport until `2ab3eee` — origin at
+## x = 1920 on a 1920-wide viewport — so nothing inside it had ever been seen,
+## and nothing inside it had ever been checked either. The four probes below are
+## the audit: what does each control DO, does anything read what it writes, and
+## is it wired to anything at all.
+##
+## They press the ACTUAL BUTTON NODE, found by its label in the drawer's own
+## tree, for the reason `_probe_fitting_palette` gives: a probe that calls the
+## method behind a control cannot tell you whether the control reaches it.
+
+
+## The button a player would press, by the words written on it. Returns null when
+## no such button is in the drawer, and the callers treat that as a failure rather
+## than skipping — a control that has been RENAMED has moved out of reach of
+## whoever was told to press it (REALITY §4's early-return-on-missing-fixture, in
+## a UI).
+func _probe_drawer_button(text: String) -> Button:
+	return _probe_find_button(_drawer, text)
+
+
+func _probe_find_button(node: Node, text: String) -> Button:
+	if node is Button and (node as Button).text == text:
+		return node as Button
+	for child in node.get_children():
+		var hit := _probe_find_button(child, text)
+		if hit != null:
+			return hit
+	return null
+
+
+## The drawer's colour swatches, in `COLOR_LIBRARY` order. They carry no text —
+## the colour IS the label — so they are found by the 32 x 32 they are built at.
+func _probe_swatch_buttons() -> Array[Button]:
+	var out: Array[Button] = []
+	_probe_collect_swatches(_drawer, out)
+	return out
+
+
+func _probe_collect_swatches(node: Node, out: Array[Button]) -> void:
+	for child in node.get_children():
+		if child is Button:
+			var button := child as Button
+			if button.text.is_empty() and button.custom_minimum_size == Vector2(32, 32):
+				out.append(button)
+		_probe_collect_swatches(child, out)
+
+
+## DOES THE INSPECTOR NAME WHAT IS SELECTED? For all six collections, not the
+## four the old probe happened to select.
+##
+## `_refresh_inspector`'s kind ladder tested `piece`, `axis`, `dir` and fell
+## through to "deck". An `items[]` fitting and an `edges[]` run have none of those
+## keys, so BOTH came out as DECK / PART nnn with a THICKNESS spinner — a control
+## that took an undo snapshot, rebaked, and wrote a key `normalize_item` throws
+## away. Seventeen catalogue fittings and every swept run, described as a deck
+## plate, for as long as the fitting tool has existed.
+##
+## The property asserted is not "the header string is X". It is: THE INSPECTOR
+## NAMES THE COLLECTION THE SELECTION CAME FROM, and it offers no numeric field
+## the collection's own normaliser would discard. The second half is what catches
+## the spinner, and it is stated against `normalize_item` rather than against a
+## list of field names kept here.
+func _probe_the_inspector_names_what_is_selected(expect: Callable) -> void:
+	_set_context("vessel")
+	_place_deck(Vector3(1, 0, 8), Vector3(9, 0, 24))
+	_place_wall(Vector3(2, 0, 10), Vector3(8, 0, 10))
+	_place_stair(Vector3(3, 0, 14), Vector3(3, 0, 17))
+	_set_tool(Tool.PIECE)
+	var kit := _kit_ids()
+	_select_piece_type(str(kit[0]))
+	_place_piece_at(Vector3i(8, 0, 20))
+	_set_tool(Tool.FITTING)
+	_set_build_level(0.0)
+	_probe_click_fitting("bollard_pair", Vector3i(10, 0, 40))
+	_probe_add_bulwark()
+
+	var kinds := {
+		"wall": _plan.walls[0], "deck": _plan.decks[0], "stair": _plan.stairs[0],
+		"piece": _plan.pieces[0], "fitting": _plan.items[0], "edge": _plan.edges[0],
+	}
+	var mislabelled := PackedStringArray()
+	for kind_variant in kinds.keys():
+		var kind := str(kind_variant)
+		var entity := kinds[kind] as Dictionary
+		expect.call(
+			"a %s is recognised as a %s, not as a deck plate (got \"%s\")"
+			% [kind, kind, _selected_kind(entity)],
+			_selected_kind(entity) == kind
+		)
+		_selected_id = int(entity.get("id", -1))
+		_update_selection_visual()
+		_refresh_panel()
+		var header := _probe_inspector_header()
+		## The header must NAME the thing. For a wall/deck/stair the kind is the
+		## word; for a piece and a fitting it is the part's own display name, which
+		## is stronger — this file holds no piece names and no part names.
+		var wanted := kind.to_upper()
+		if kind == "piece":
+			wanted = PieceKit.display_name(str(entity["piece"])).to_upper()
+		elif kind == "fitting":
+			wanted = PartCatalog.display_name(str(entity["item_id"])).to_upper()
+		elif kind == "edge":
+			wanted = str(entity["primitive"]).replace("_", " ").to_upper()
+		if not header.begins_with(wanted):
+			mislabelled.append("%s -> \"%s\" (wanted \"%s\")" % [kind, header, wanted])
+	expect.call(
+		"the drawer's header names the selection, for all six collections (%s)"
+		% ("all six" if mislabelled.is_empty() else ", ".join(mislabelled)),
+		mislabelled.is_empty()
+	)
+
+	## THE SPINNER. Select the fitting, drive EVERY numeric control the inspector
+	## built for it, and ask whether the item survived unchanged. This is the
+	## check that would have been red for the whole life of the fitting tool.
+	var fitting := _plan.items[0] as Dictionary
+	_selected_id = int(fitting["id"])
+	_refresh_panel()
+	var before := JSON.stringify(StructurePlan.normalize_item(fitting.duplicate(true)))
+	var spins := _probe_inspector_spinboxes()
+	for spin in spins:
+		spin.value_changed.emit(spin.value + spin.step)
+	var after_edit := fitting.duplicate(true)
+	var discarded := PackedStringArray()
+	for key in after_edit.keys():
+		if not StructurePlan.normalize_item(after_edit).has(key):
+			discarded.append(str(key))
+	expect.call(
+		"no control in a fitting's inspector writes a key the plan discards (%s)"
+		% ("none" if discarded.is_empty() else ", ".join(discarded)),
+		discarded.is_empty()
+	)
+	expect.call(
+		"driving every numeric control in a fitting's inspector leaves the fitting"
+		+ " intact (%d spinners)" % spins.size(),
+		JSON.stringify(StructurePlan.normalize_item(fitting.duplicate(true))) == before
+	)
+
+	## AND THE ROTATE CONTROL IS REAL. `R` has always turned a placed fitting;
+	## there was no button for it, so a builder who did not know the shortcut
+	## could not turn a bollard after placing it.
+	var yaw_before := float(fitting.get("yaw", 0.0))
+	var turn := _probe_find_button(_inspector_box, "⟳  [R]")
+	expect.call("a placed fitting has a rotate button in the drawer", turn != null)
+	if turn != null:
+		turn.pressed.emit()
+		var step := float(PartCatalog.yaw_step_of(str(fitting["item_id"])))
+		var yaw_after := float((_plan.entity_by_id(_selected_id)).get("yaw", 0.0))
+		expect.call(
+			"pressing it turns the fitting by its part's own step (%.0f -> %.0f, step %.0f)"
+			% [yaw_before, yaw_after, step],
+			is_equal_approx(yaw_after, fposmod(yaw_before + step, 360.0))
+		)
+	## And an edge can still be deleted, which is the whole reason `edges[]` is a
+	## first-class plan entity — this studio cannot draw one, so if the drawer
+	## could not remove one either, a loaded bulwark would be permanent.
+	var edge_id := int((_plan.edges[0] as Dictionary)["id"])
+	_selected_id = edge_id
+	_refresh_panel()
+	var drop := _probe_find_button(_inspector_box, "DELETE RUN  [DEL]")
+	expect.call("a swept run has a delete button in the drawer", drop != null)
+	if drop != null:
+		drop.pressed.emit()
+		expect.call("and pressing it removes the run", _plan.entity_by_id(edge_id).is_empty())
+	_set_context("vessel")
+
+
+func _probe_inspector_header() -> String:
+	if _inspector_box.get_child_count() == 0:
+		return ""
+	var first := _inspector_box.get_child(0)
+	return (first as Label).text if first is Label else ""
+
+
+func _probe_inspector_spinboxes() -> Array[SpinBox]:
+	var out: Array[SpinBox] = []
+	_probe_collect_spinboxes(_inspector_box, out)
+	return out
+
+
+func _probe_collect_spinboxes(node: Node, out: Array[SpinBox]) -> void:
+	for child in node.get_children():
+		if child is SpinBox:
+			out.append(child as SpinBox)
+		_probe_collect_spinboxes(child, out)
+
+
+## DOES THE SURFACE LIBRARY PAINT WHAT IT SAYS IT PAINTS?
+##
+## It had an OUTSIDE / INSIDE toggle. With INSIDE armed a swatch wrote the
+## selection's ONE `color` key — the same one OUTSIDE writes — and stored its
+## value in `_lib["in"]`, which `_stamp_library_style` never read. So "inside"
+## painted the outside and armed nothing. Both halves are asserted here, from the
+## buttons, so re-splitting the slot cannot go quiet again.
+func _probe_the_library_paints_what_it_says(expect: Callable) -> void:
+	_set_context("vessel")
+	_place_wall(Vector3(2, 0, 10), Vector3(8, 0, 10))
+	var wall := _plan.walls[0] as Dictionary
+	_selected_id = int(wall["id"])
+	_refresh_panel()
+	var swatches := _probe_swatch_buttons()
+	expect.call(
+		"every library swatch is on the drawer (%d of %d)" % [swatches.size(), COLOR_LIBRARY.size()],
+		swatches.size() == COLOR_LIBRARY.size()
+	)
+	if swatches.is_empty():
+		return
+	## Pick a swatch the wall is definitely not already wearing.
+	var index := 0
+	for candidate in COLOR_LIBRARY.size():
+		var colour := (COLOR_LIBRARY[candidate] as Array)[1] as Color
+		if not is_equal_approx(colour.r, float((wall["color"] as Array)[0])):
+			index = candidate
+			break
+	var wanted_colour := (COLOR_LIBRARY[index] as Array)[1] as Color
+	(swatches[index] as Button).pressed.emit()
+	expect.call(
+		"pressing a swatch paints the selected wall (%s)" % [wall.get("color")],
+		is_equal_approx(float((wall["color"] as Array)[0]), wanted_colour.r)
+		and is_equal_approx(float((wall["color"] as Array)[2]), wanted_colour.b)
+	)
+	## THE HALF THAT WAS DEAD: the swatch is also the style the NEXT wall is born
+	## with. `_stamp_library_style` read a slot the swatch did not write, so a wall
+	## drawn straight after pressing one came out in the previous colour.
+	_place_wall(Vector3(2, 0, 14), Vector3(8, 0, 14))
+	var fresh := _plan.walls[1] as Dictionary
+	expect.call(
+		"and the next wall drawn is born in it (%s)" % [fresh.get("color")],
+		is_equal_approx(float((fresh["color"] as Array)[0]), wanted_colour.r)
+		and is_equal_approx(float((fresh["color"] as Array)[2]), wanted_colour.b)
+	)
+	var material_button := _probe_drawer_button("WOOD")
+	expect.call("the material buttons are on the drawer", material_button != null)
+	if material_button != null:
+		material_button.pressed.emit()
+		expect.call(
+			"pressing a material paints the selected wall (%s)" % [wall.get("material")],
+			str(wall.get("material", "")) == "wood"
+		)
+		_place_wall(Vector3(2, 0, 18), Vector3(8, 0, 18))
+		expect.call(
+			"and the next wall drawn is born in it",
+			str((_plan.walls[2] as Dictionary).get("material", "")) == "wood"
+		)
+	## AND IT DOES NOT CLAIM TO HAVE PAINTED WHAT IT CANNOT REACH. A placement's
+	## tint is an `#rrggbb` string off the kit swatches and a fitting's colour
+	## belongs to its part; the library writes neither, and used to say "colour
+	## set" over both.
+	_set_tool(Tool.PIECE)
+	_select_piece_type(str(_kit_ids()[0]))
+	var placement := _place_piece_at(Vector3i(8, 0, 20))
+	_selected_id = int(placement["id"])
+	_refresh_panel()
+	var tint_before := str(placement.get("color", ""))
+	swatches[index].pressed.emit()
+	expect.call(
+		"a library swatch does not silently repaint a kit placement",
+		str(placement.get("color", "")) == tint_before
+	)
+	expect.call(
+		"and it says so rather than reporting success (\"%s\")" % _status,
+		_status.contains("PIECE KIT")
+	)
+	_set_tool(Tool.FITTING)
+	_set_build_level(0.0)
+	_probe_click_fitting("bollard_pair", Vector3i(10, 0, 40))
+	var item := _plan.items[0] as Dictionary
+	_selected_id = int(item["id"])
+	_refresh_panel()
+	swatches[index].pressed.emit()
+	expect.call(
+		"a library swatch writes no colour key into a fitting (%s)" % [item.keys()],
+		not item.has("color") and not item.has("material")
+	)
+	_set_context("vessel")
+
+
+## CAN PRESSING SAVE DESTROY SOMEBODY ELSE'S PLAN?
+##
+## It could, and it did in this container's own measurement: `_save_plan` opened
+## `res://resources/data/structures/<name>.json` with `FileAccess.WRITE` and no
+## existence check, so a builder typing a name that snake-cases onto a shipped
+## fixture replaced it — silently, with the toast reading `SAVED /` exactly as it
+## does for a new file, and with no undo (`_undo` restores the PLAN, never the
+## file). `to_snake_case` collapses "Demo Workboat", "demo workboat",
+## "DemoWorkboat" and "demo-workboat" onto one name, so the collision does not
+## need the builder to type the fixture's own name.
+##
+## The property: PRESSING SAVE JSON CHANGES NO BYTE UNDER `STRUCTURES_DIR`. Not
+## "the path string starts with user://" — the bytes, measured before and after,
+## over every shipped document, with the save deliberately aimed at one of them.
+func _probe_saving_cannot_touch_shipped_data(expect: Callable) -> void:
+	var shipped := _shipped_plan_paths()
+	expect.call("there are shipped documents to protect (%d)" % shipped.size(), shipped.size() >= 10)
+	var before: Dictionary = {}
+	for path_variant in shipped:
+		before[str(path_variant)] = FileAccess.get_file_as_string(str(path_variant)).md5_text()
+
+	_set_context("vessel")
+	_place_wall(Vector3(2, 0, 10), Vector3(8, 0, 10))
+	## Aim at a real fixture, by the display spelling a builder would type.
+	var victim := str(shipped[0])
+	var typed := victim.get_file().get_basename().replace("_", " ").capitalize()
+	expect.call(
+		"the name a builder types resolves onto the fixture's file name (%s -> %s)"
+		% [typed, typed.to_snake_case()],
+		typed.to_snake_case() == victim.get_file().get_basename()
+	)
+	_name_edit.text = typed
+	var save_button := _probe_drawer_button("SAVE JSON")
+	expect.call("SAVE JSON is a button in the drawer", save_button != null)
+	if save_button == null:
+		return
+	save_button.pressed.emit()
+
+	var damaged := PackedStringArray()
+	for path in before.keys():
+		if FileAccess.get_file_as_string(str(path)).md5_text() != str(before[path]):
+			damaged.append(str(path).get_file())
+	expect.call(
+		"pressing SAVE JSON changes no shipped document (%s)"
+		% ("all %d unchanged" % before.size() if damaged.is_empty() else ", ".join(damaged)),
+		damaged.is_empty()
+	)
+	var written := _plan_save_path(typed)
+	expect.call(
+		"and the plan really was written, under the builder's own directory (%s)" % written,
+		FileAccess.file_exists(written) and written.begins_with(SAVED_PLANS_DIR)
+	)
+	## Pressing it again over the builder's OWN file must still work — a builder
+	## has to be able to re-save — but must say it is replacing rather than
+	## creating, which is the only warning this control has.
+	save_button.pressed.emit()
+	expect.call(
+		"saving over your own file says REPLACED, not SAVED (\"%s\")" % _status,
+		_status.begins_with("REPLACED")
+	)
+	## GUARDED. This probe deliberately aims a save at a shipped fixture's name, so
+	## its cleanup must never be able to delete one. It could: run this check
+	## against the OLD save path and the tidy-up removed
+	## `resources/data/structures/critic_barge.json` from the working tree — a
+	## probe that repairs the tree it is measuring, in the direction of hiding the
+	## damage. The check goes red either way; the deletion was pure collateral.
+	_probe_remove_own_save(written)
+
+
+## Delete a file this probe wrote, and ONLY if it is under the builder's own
+## directory. Anything else is somebody's fixture and stays where it is.
+func _probe_remove_own_save(path: String) -> void:
+	if path.begins_with(SAVED_PLANS_DIR):
+		DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
+
+
+## SAVE A PLAN AUTHORED IN THE STUDIO, LOAD IT BACK, IS IT THE SAME PLAN?
+##
+## The existing save/load checks count entities and spot-check two keys, and the
+## plan they round-trip has only ever contained walls, decks and stairs — the
+## three collections that existed when it was written. It has never carried a
+## fitting, a swept run, a painted surface or a kit placement all at once, which
+## is three of the six collections and every field the two newest tools write.
+##
+## So this authors ONE plan through the tools that has something in all six, saves
+## it with the drawer's SAVE JSON button, wipes, and loads it back with the
+## drawer's LOAD SELECTED button — then compares, key by key, and names every
+## difference. A save path that writes a file nothing can load and a load path
+## that drops what the save wrote are the same defect from two ends, and neither
+## is visible in an entity count.
+##
+## ── WHAT IS MEASURED WITH, AND WHY IT IS NOT `to_dict()` ────────────────────
+##
+## The first cut of this check compared `_plan.to_dict()` before against
+## `_plan.to_dict()` after, and it MUTATION-PASSED: deleting `"edges"` from
+## `StructurePlan.to_dict` left the check green (`PASS (187)`), because both sides
+## of the comparison were taken through the very function that had stopped
+## emitting the collection. It could not see a field the serialiser drops — which
+## is exactly the failure a round-trip check exists to catch, and exactly the
+## §4 shape: a check whose instrument is the thing under test.
+##
+## So the comparison reads the plan's OWN SIX MEMBER ARRAYS on both sides, and a
+## third claim is added at the layer where a builder's work actually lives: the
+## FILE ON DISK is parsed independently and every collection has to be in it with
+## the right count. `to_dict` is now the subject, not the ruler.
+func _probe_the_round_trip_is_the_same_plan(expect: Callable) -> void:
+	_set_context("vessel")
+	_place_deck(Vector3(1, 0, 8), Vector3(9, 0, 24))
+	_place_wall(Vector3(2, 0, 10), Vector3(8, 0, 10))
+	_place_stair(Vector3(3, 0, 14), Vector3(3, 0, 17))
+	## Painted through the library, so `color` and `material` are not defaults.
+	_selected_id = int((_plan.walls[0] as Dictionary)["id"])
+	_refresh_panel()
+	var swatches := _probe_swatch_buttons()
+	if not swatches.is_empty():
+		swatches[COLOR_LIBRARY.size() - 1].pressed.emit()
+	var wood := _probe_drawer_button("WOOD")
+	if wood != null:
+		wood.pressed.emit()
+	## A cut in the wall, a kit placement, and the fittings a registration counts.
+	_set_tool(Tool.OPENING)
+	((_plan.walls[0] as Dictionary)["openings"] as Array).append(
+		{"type": "door", "offset": 1.0, "width": 1.6, "height": 2.2}
+	)
+	_set_tool(Tool.PIECE)
+	_select_piece_type(str(_kit_ids()[0]))
+	_place_piece_at(Vector3i(8, 0, 20))
+	_set_tool(Tool.FITTING)
+	_set_build_level(0.0)
+	_probe_click_fitting("helm_console", Vector3i(10, 0, 40))
+	for index in 4:
+		_probe_click_fitting("bollard_pair", Vector3i(4 + index * 4, 0, 20))
+	_probe_click_fitting("lantern_sidelight_port", Vector3i(3, 0, 30))
+	## Turned after placing, so `yaw` is not the default either.
+	_selected_id = int((_plan.items[0] as Dictionary)["id"])
+	_refresh_panel()
+	var turn := _probe_find_button(_inspector_box, "⟳  [R]")
+	if turn != null:
+		turn.pressed.emit()
+	## `edges[]` has no tool in this studio — a sheer-following bulwark is the one
+	## curve the kit refuses to quantise — so it is added through the plan. Named
+	## rather than skipped: this collection is the one a builder can LOAD and
+	## cannot DRAW, and the round trip has to carry it either way.
+	_probe_add_bulwark()
+	_rebake()
+	_refresh_panel()
+
+	var before := _probe_collections()
+	var filled := PackedStringArray()
+	for key in before.keys():
+		if (before[key] as Array).is_empty():
+			filled.append(str(key))
+	expect.call(
+		"the round-trip plan has something in all six collections (%s)"
+		% ("all six" if filled.is_empty() else "empty: " + ", ".join(filled)),
+		filled.is_empty()
+	)
+
+	_name_edit.text = "studio round trip probe"
+	var save_button := _probe_drawer_button("SAVE JSON")
+	var load_button := _probe_drawer_button("LOAD SELECTED")
+	expect.call("SAVE JSON and LOAD SELECTED are both in the drawer",
+		save_button != null and load_button != null)
+	if save_button == null or load_button == null:
+		return
+	save_button.pressed.emit()
+	var path := _plan_save_path(_name_edit.text)
+
+	_set_context("vessel")
+	expect.call("the plan really was wiped before loading", _plan.entity_count() == 0)
+	_refresh_panel()
+	var found := -1
+	for index in _load_option.item_count:
+		if str(_load_option.get_item_metadata(index)) == path:
+			found = index
+	expect.call(
+		"the saved plan is offered in the LOAD list (%d entries)" % _load_option.item_count,
+		found >= 0
+	)
+	if found >= 0:
+		_load_option.select(found)
+	load_button.pressed.emit()
+
+	var after := _probe_collections()
+	var differences := PackedStringArray()
+	_probe_diff_plan("plan", before, after, differences)
+	expect.call(
+		"SAVE JSON then LOAD SELECTED gives back the SAME PLAN (%s)"
+		% ("identical" if differences.is_empty()
+			else "%d differences: %s" % [differences.size(), differences[0]]),
+		differences.is_empty()
+	)
+	## AND THE WORK IS IN THE FILE. Read straight off disk, not through the plan
+	## object — a serialiser that silently stops emitting a collection writes a
+	## file that has lost a builder's bulwark, and BOTH readings above would still
+	## agree with each other about it (they did; see the header).
+	var raw: Variant = JSON.parse_string(FileAccess.get_file_as_string(path))
+	expect.call("the saved file parses as JSON", raw is Dictionary)
+	if raw is Dictionary:
+		var doc := raw as Dictionary
+		var missing := PackedStringArray()
+		for key in before.keys():
+			var wanted := (before[key] as Array).size()
+			var got := (doc.get(key, []) as Array).size()
+			if got != wanted:
+				missing.append("%s: %d in the plan, %d in the file" % [key, wanted, got])
+		expect.call(
+			"and the FILE on disk carries every collection the plan held (%s)"
+			% ("all six" if missing.is_empty() else ", ".join(missing)),
+			missing.is_empty()
+		)
+	## Not a count: the same number of entities with a fitting's yaw reset, or a
+	## wall's paint dropped, would pass a count and fail a builder. Stated as the
+	## whole document above; these two are the fields the newest tools write, named
+	## so a failure says WHICH one moved.
+	expect.call(
+		"the fitting keeps the yaw it was turned to (%s -> %s)"
+		% [(before["items"] as Array)[0].get("yaw"), (after["items"] as Array)[0].get("yaw")],
+		float((before["items"] as Array)[0].get("yaw", -1.0))
+		== float((after["items"] as Array)[0].get("yaw", -2.0))
+	)
+	expect.call(
+		"the wall keeps the colour it was painted (%s -> %s)"
+		% [(before["walls"] as Array)[0].get("color"), (after["walls"] as Array)[0].get("color")],
+		str((before["walls"] as Array)[0].get("color"))
+		== str((after["walls"] as Array)[0].get("color"))
+	)
+	_probe_remove_own_save(path)
+	_set_context("vessel")
+
+
+## A `from_hull` bulwark on the studio's current hull, WITH the hull's numbers
+## restated into the plan.
+##
+## Without the `hull` block this prints six copies of *"no hull numbers for
+## `hull_28x10` — it is not in HullCatalog and the plan carries no `hull` block to
+## loft it from"* and resolves to nothing: `hull_28x10` lives in `HullRegistry`,
+## not in the JSON catalogue (CONVENTIONS §3a), which is exactly why
+## `_write_tug_fixture` restates it and why `StructurePlan.hull` exists. An edge
+## that cannot loft would still have served the drawer checks — they are about the
+## DOCUMENT — and that is the trap: it would have been a fixture that looked like
+## a bulwark and was not one.
+func _probe_add_bulwark() -> void:
+	_plan.hull = {
+		"loa_m": 28.0, "beam_m": 10.0, "depth_m": 5.6, "draft_m": 2.8,
+		"displacement_t": 256.0, "form": "fine_entry",
+		"bow_taper_fraction": 0.17857142857142858, "station_count": 8,
+	}
+	_plan.add_hull_edge({
+		"side": "loop", "follow_sheer": true, "height": 1.1, "plate_m": 0.1,
+		"cap_w": 0.22, "cap_h": 0.06, "material": "painted",
+		"plate_color": [0.11, 0.13, 0.16], "cap_color": [0.86, 0.87, 0.88], "solid": true,
+	}, _hull_id)
+
+
+## The plan's six collections, deep-copied, read off the OBJECT'S OWN MEMBERS.
+## Deliberately not `to_dict()` — see the round-trip probe's header for the
+## mutation that passed when this was measured through the serialiser.
+func _probe_collections() -> Dictionary:
+	return {
+		"walls": _plan.walls.duplicate(true),
+		"decks": _plan.decks.duplicate(true),
+		"stairs": _plan.stairs.duplicate(true),
+		"edges": _plan.edges.duplicate(true),
+		"pieces": _plan.pieces.duplicate(true),
+		"items": _plan.items.duplicate(true),
+	}
+
+
+## Every place two plan documents disagree, as a path a person can act on.
+func _probe_diff_plan(path: String, a: Variant, b: Variant, out: PackedStringArray) -> void:
+	if a is Dictionary and b is Dictionary:
+		var keys: Dictionary = {}
+		for key in (a as Dictionary).keys():
+			keys[key] = true
+		for key in (b as Dictionary).keys():
+			keys[key] = true
+		for key in keys.keys():
+			if not (a as Dictionary).has(key):
+				out.append("%s.%s appeared" % [path, key])
+			elif not (b as Dictionary).has(key):
+				out.append("%s.%s was LOST (%s)" % [path, key, (a as Dictionary)[key]])
+			else:
+				_probe_diff_plan("%s.%s" % [path, key],
+					(a as Dictionary)[key], (b as Dictionary)[key], out)
+	elif a is Array and b is Array:
+		if (a as Array).size() != (b as Array).size():
+			out.append("%s: %d -> %d entries" % [path, (a as Array).size(), (b as Array).size()])
+			return
+		for index in (a as Array).size():
+			_probe_diff_plan("%s[%d]" % [path, index], (a as Array)[index], (b as Array)[index], out)
+	elif typeof(a) != typeof(b) or str(a) != str(b):
+		out.append("%s: %s -> %s" % [path, a, b])
 
 
 ## One palette click plus one viewport click, at a named node. The camera is
@@ -1559,7 +2216,7 @@ func _probe_piece_persistence(expect: Callable) -> void:
 	)
 
 	_save_plan("studio_piece_probe_tmp")
-	var path := "%s/studio_piece_probe_tmp.json" % STRUCTURES_DIR
+	var path := _plan_save_path("studio_piece_probe_tmp")
 	_set_context("vessel")
 	expect.call("context switch clears the placements", _plan.pieces.is_empty())
 	_load_plan(path)
@@ -1633,7 +2290,7 @@ func _probe_entity_ids(expect: Callable) -> void:
 	var reissued := int((_plan.walls[_plan.walls.size() - 1] as Dictionary).get("id", -1))
 	note.call("after placing again on the redone plan")
 	_save_plan("studio_id_probe_tmp")
-	var path := "%s/studio_id_probe_tmp.json" % STRUCTURES_DIR
+	var path := _plan_save_path("studio_id_probe_tmp")
 	_load_plan(path)
 	note.call("after save/load")
 	_place_deck(Vector3(0, 0, 30), Vector3(4, 0, 34))
@@ -2012,19 +2669,23 @@ func _write_tug_fixture() -> void:
 		"cap_w": 0.22, "cap_h": 0.06, "material": "painted",
 		"plate_color": [0.11, 0.13, 0.16], "cap_color": [0.86, 0.87, 0.88], "solid": true,
 	}, "hull_28x10")
-	_save_plan("probe_piece_tug")
-	## The `_note` is written back in afterwards because `StructurePlan.to_dict`
-	## does not carry one — it never has, for any fixture — so a plan that is
-	## loaded and re-saved loses it. Stated here rather than quietly worked around.
+	## Written straight to `STRUCTURES_DIR`, NOT through `_save_plan`. This is the
+	## maintainer's fixture writer behind `--studio-write-fixtures`, and the
+	## fixture is shipped game data; `_save_plan` is the BUILDER'S path and now
+	## goes to `SAVED_PLANS_DIR` for the reasons that constant gives. Routing this
+	## through the builder's path would have written the fixture to `user://` and
+	## then re-stamped the stale shipped copy with a note.
+	##
+	## The `_note` is added here because `StructurePlan.to_dict` does not carry one
+	## — it never has, for any fixture — so a plan that is loaded and re-saved
+	## loses it. Stated rather than quietly worked around.
 	var path := "%s/probe_piece_tug.json" % STRUCTURES_DIR
-	var raw: Variant = JSON.parse_string(FileAccess.get_file_as_string(path))
-	if raw is Dictionary:
-		var doc := raw as Dictionary
-		doc["_note"] = TUG_NOTE
-		var file := FileAccess.open(path, FileAccess.WRITE)
-		if file != null:
-			file.store_string(JSON.stringify(doc, "\t"))
-			file.close()
+	var doc := _plan.to_dict()
+	doc["_note"] = TUG_NOTE
+	var file := FileAccess.open(path, FileAccess.WRITE)
+	if file != null:
+		file.store_string(JSON.stringify(doc, "\t"))
+		file.close()
 	print("[structure-studio] wrote probe_piece_tug.json — %d placements" % _plan.pieces.size())
 
 
@@ -4140,21 +4801,34 @@ func _update_selection_visual() -> void:
 
 # ── Persistence ──────────────────────────────────────────────────────────────
 
-func _save_plan(plan_name: String) -> void:
+## The file a given name saves to. ONE derivation, so the probe's temp files and
+## the SAVE JSON button cannot disagree about where a plan went (REALITY §3b) —
+## they did, and the probes were reaching into `STRUCTURES_DIR` by hand.
+func _plan_save_path(plan_name: String) -> String:
 	var trimmed := plan_name.strip_edges().to_snake_case()
 	if trimmed.is_empty():
+		return ""
+	return "%s/%s.json" % [SAVED_PLANS_DIR, trimmed]
+
+
+func _save_plan(plan_name: String) -> void:
+	var path := _plan_save_path(plan_name)
+	if path.is_empty():
 		_set_status("NAME THE STRUCTURE FIRST", false)
 		_refresh_panel()
 		return
-	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(STRUCTURES_DIR))
-	var path := "%s/%s.json" % [STRUCTURES_DIR, trimmed]
+	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(SAVED_PLANS_DIR))
+	## REPLACING, not creating, is a different sentence. The toast said `SAVED /`
+	## either way and the builder had no other signal — no dialog, no backup, and
+	## `_undo` restores the plan in memory, never the file that was overwritten.
+	var replacing := FileAccess.file_exists(path)
 	var file := FileAccess.open(path, FileAccess.WRITE)
 	if file == null:
 		_set_status("SAVE FAILED / %s" % path, false)
 	else:
 		file.store_string(JSON.stringify(_plan.to_dict(), "\t"))
 		file.close()
-		_set_status("SAVED / %s" % path)
+		_set_status("%s / %s" % ["REPLACED" if replacing else "SAVED", path.get_file()])
 	_refresh_panel()
 
 
@@ -4197,14 +4871,32 @@ func _hull_option_index_for(hull_id: String) -> int:
 	return _hull_option.selected
 
 
+## Everything the LOAD list may offer: the builder's own saves first, then the
+## shipped worked examples. Two directories, one list — see `SAVED_PLANS_DIR`.
 func _saved_plan_paths() -> PackedStringArray:
+	var out := _plan_paths_in(SAVED_PLANS_DIR)
+	out.append_array(_shipped_plan_paths())
+	return out
+
+
+## The shipped worked examples alone. Kept separate from the line above because a
+## check about the FIXTURES must not widen the moment a builder saves a plan.
+func _shipped_plan_paths() -> PackedStringArray:
+	return _plan_paths_in(STRUCTURES_DIR)
+
+
+func _plan_paths_in(directory: String) -> PackedStringArray:
 	var out := PackedStringArray()
-	var dir := DirAccess.open(STRUCTURES_DIR)
+	var dir := DirAccess.open(directory)
 	if dir == null:
 		return out
+	var names := PackedStringArray()
 	for file_name in dir.get_files():
 		if file_name.ends_with(".json"):
-			out.append("%s/%s" % [STRUCTURES_DIR, file_name])
+			names.append(file_name)
+	names.sort()
+	for file_name in names:
+		out.append("%s/%s" % [directory, file_name])
 	return out
 
 
@@ -4431,17 +5123,33 @@ var _opening_buttons: Dictionary = {}
 var _opening_section: VBoxContainer
 var _level_label: Label
 var _ghost_button: Button
-## Modal surface library: arm a slot (Outside/Inside), then every swatch or
-## material click paints that slot of the selection — and defines the style
-## every NEWLY drawn wall/deck/stair is born with.
-var _armed_slot := "out"
-var _lib: Dictionary = {
-	"out": {"color": [0.82, 0.84, 0.86], "material": "painted"},
-	"in": {"color": [0.78, 0.70, 0.58], "material": "wood"},
-}
-var _slot_buttons: Dictionary = {}
+## The surface library: every swatch or material click paints the selection AND
+## defines the style every NEWLY drawn wall/deck/stair is born with.
+##
+## ── THE "INSIDE" SLOT WAS TWO DEFECTS IN ONE CONTROL, AND IS GONE ───────────
+##
+## This was `{"out": …, "in": …}` behind an OUTSIDE / INSIDE toggle. Driven
+## through the buttons (`tests/_studio_drawer_drive.gd`, section 3):
+##
+##   * with INSIDE armed, clicking a swatch wrote the SELECTION'S ONE `color`
+##     key — the same key OUTSIDE writes — so "inside" painted the outside, and
+##     the toast said `inside colour set` while it did it. `_library_keys_for_selection`
+##     admitted as much in its own comment: "walls, plates and stairs carry a
+##     single surface — both slots address it";
+##   * and the value it stored in `_lib["in"]` was read by NOTHING. `_stamp_library_style`
+##     reads `_lib["out"]` alone, so a wall drawn with INSIDE armed came out in
+##     the OUTSIDE colour. Measured: INSIDE + hull red, then draw → `[0.9, 0.86, 0.76]`.
+##     That is REALITY §3d exactly — a value with no consumer.
+##
+## There is nothing for it to mean. `structure_plan_v1` gives a wall, a plate and
+## a stair ONE `color` and ONE `material`; an inside surface is not a control this
+## studio was missing, it is a field the format does not have. So the slot row is
+## deleted rather than wired, and the day the format carries a second surface the
+## control comes back pointing at it.
+var _lib: Dictionary = {"color": [0.82, 0.84, 0.86], "material": "painted"}
 var _lib_material_buttons: Dictionary = {}
 var _drawer: PanelContainer
+var _drawer_scroll: ScrollContainer
 var _drawer_info: Label
 var _inspector_box: VBoxContainer
 var _load_option: OptionButton
@@ -4933,6 +5641,12 @@ func _build_drawer() -> void:
 	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	root_box.add_child(scroll)
+	## Held so a capture can photograph the part of the drawer below the fold.
+	## Measured on the default boat: the scroll viewport is 948 px and its content
+	## is 1628, so PROPERTIES, the whole inspector and the entire STRUCTURE FILE
+	## block — name field, SAVE JSON, LOAD SELECTED — start 240 to 630 px past the
+	## bottom of it. See `_shoot_properties_drawer`.
+	_drawer_scroll = scroll
 
 	var box := VBoxContainer.new()
 	box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -5555,9 +6269,7 @@ func _refresh_panel() -> void:
 		(_opening_buttons[opening_type] as Button).set_pressed_no_signal(opening_type == _opening_type)
 	_level_label.text = "%.2f M · CELL %d" % [_active_base, roundi(_active_base / NODE_SNAP)]
 	_ghost_button.set_pressed_no_signal(_ghost_levels)
-	for slot in _slot_buttons.keys():
-		(_slot_buttons[slot] as Button).set_pressed_no_signal(slot == _armed_slot)
-	var armed_material := str((_lib[_armed_slot] as Dictionary)["material"])
+	var armed_material := str(_lib["material"])
 	for material_name in _lib_material_buttons.keys():
 		(_lib_material_buttons[material_name] as Button).set_pressed_no_signal(material_name == armed_material)
 	_entities_label.text = "STRUCTURE\n%d PARTS\n%d KIT PIECES\n%d FITTINGS\n%d UNDO STEPS" % [
@@ -5606,10 +6318,145 @@ func _refresh_load_list() -> void:
 	_load_option.clear()
 	var paths := _saved_plan_paths()
 	for index in paths.size():
-		_load_option.add_item(paths[index].get_file(), index)
+		## The list draws from two directories now, so the same base name can
+		## appear twice. Saying which is which is not decoration: picking the
+		## wrong one and pressing LOAD SELECTED replaces the plan on screen.
+		var label := paths[index].get_file()
+		if paths[index].begins_with(STRUCTURES_DIR):
+			label += "   (shipped)"
+		_load_option.add_item(label, index)
 		_load_option.set_item_metadata(index, paths[index])
 	if previous >= 0 and previous < _load_option.item_count:
 		_load_option.select(previous)
+
+
+## WHICH OF THE SIX COLLECTIONS THE SELECTION CAME FROM, BY WHAT IT DECLARES.
+##
+## `StructurePlan` keeps six collections in ONE id space, so a selection is just
+## a dictionary and the inspector has to recognise it. It used to test three keys
+## and fall through:
+##
+##     piece -> "piece" · axis -> "wall" · dir -> "stair" · anything else -> "deck"
+##
+## An ITEM is `{id, item_id, at, yaw}` and an EDGE is `{id, primitive, path|from_hull, …}`.
+## Neither has `axis`, `dir` or `piece`, so BOTH landed on "deck" — measured with
+## `tests/_studio_inspector_kinds.gd`: selecting a placed navigation light drew
+##
+##     DECK / PART 006 · THICKNESS 0.500 · Surface: Painted · DELETE PART
+##
+## and selecting `probe_sheer_bulwark`'s hull bulwark drew the same thing. The
+## THICKNESS spinner was live: driving it wrote `thickness` into the item, took an
+## undo snapshot and rebaked, and `normalize_item` threw the key away on the next
+## save. So all seventeen catalogue fittings and every swept run were described as
+## a deck plate and offered a control that costs an undo step and does nothing.
+##
+## That is exactly the trap the comment on the `piece` branch warned about, one
+## collection later: the fitting tool and `edges[]` both arrived after this ladder
+## was written, and nothing pointed a check at it because the probe only ever
+## selected walls, decks, stairs and placements (REALITY §4b).
+##
+## Tested in declaration order, most specific first, and each key is the one that
+## collection's own writer guarantees: `add_piece` always writes `piece`, `add_item`
+## always writes `item_id`, `add_edge`/`add_hull_edge` always write `primitive`.
+func _selected_kind(entity: Dictionary) -> String:
+	if entity.has("piece"):
+		return "piece"
+	if entity.has("item_id"):
+		return "fitting"
+	if entity.has("primitive"):
+		return "edge"
+	if entity.has("axis"):
+		return "wall"
+	if entity.has("dir"):
+		return "stair"
+	return "deck"
+
+
+## Inspector for a PLACED FITTING. The rotate control is the one the `R` key has
+## always driven (`_rotate_selected_fitting`, by the part's own declared step) —
+## it simply had no button, so a builder who did not know the shortcut could not
+## turn a bollard after placing it. No sizing row: a part's `params` are a
+## continuous range, and inventing a step here is the thing `_fitting_id`'s header
+## refuses to do.
+func _refresh_fitting_inspector(item: Dictionary) -> void:
+	var part_id := str(item.get("item_id", ""))
+	var known := PartCatalog.has(part_id)
+	_drawer_info.text = (
+		str(PartCatalog.get_entry(part_id).get("description", "")) if known
+		else "No part \"%s\" in the catalogue — this fitting draws nothing." % part_id
+	)
+	var header := BrandLabel.new(
+		"%s / PART %03d" % [
+			(PartCatalog.display_name(part_id) if known else part_id).to_upper(), _selected_id
+		],
+		BrandLabel.Role.DATA
+	)
+	header.add_theme_color_override(&"font_color", BrandTokens.BRASS_DEEP)
+	_inspector_box.add_child(header)
+	var at := StructurePlan.vec3_of(item.get("at"))
+	_inspector_box.add_child(BrandComponents.key_value_row(
+		"At", "%.1f, %.1f, %.1f m" % [at.x, at.y, at.z]
+	))
+	var step := PartCatalog.yaw_step_of(part_id) if known else 0
+	var yaw_row := HBoxContainer.new()
+	yaw_row.add_theme_constant_override(&"separation", BrandTokens.SPACE_XS)
+	var back := BrandComponents.compact_button("⟲", BrandTokens.MIN_HIT_TARGET)
+	back.pressed.connect(func() -> void: _rotate_selected_fitting(-1))
+	yaw_row.add_child(back)
+	var yaw_label := BrandLabel.new(
+		"YAW %d°  (STEP %d°)" % [roundi(float(item.get("yaw", 0.0))), step],
+		BrandLabel.Role.DATA
+	)
+	yaw_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	yaw_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	yaw_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	yaw_row.add_child(yaw_label)
+	var forward := BrandComponents.compact_button("⟳  [R]", BrandTokens.MIN_HIT_TARGET)
+	forward.pressed.connect(func() -> void: _rotate_selected_fitting(1))
+	yaw_row.add_child(forward)
+	_inspector_box.add_child(yaw_row)
+	_inspector_box.add_child(BrandComponents.separator())
+	var delete_btn := BrandButton.new("DELETE FITTING  [DEL]", BrandButton.Variant.DANGER)
+	delete_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	delete_btn.pressed.connect(func() -> void: _delete_selected())
+	_inspector_box.add_child(delete_btn)
+
+
+## Inspector for a SWEPT RUN. This studio has no tool that draws one — a
+## sheer-following bulwark is the one curve the piece kit deliberately refuses to
+## quantise — so every edge on screen arrived from the plan file. The panel says
+## that rather than offering fields that would only ever be typed numbers
+## (REALITY §5), and it can still be selected, found and deleted, which is the
+## reason `edges[]` is a first-class plan entity at all.
+func _refresh_edge_inspector(edge: Dictionary) -> void:
+	var primitive := str(edge.get("primitive", "?"))
+	_drawer_info.text = (
+		"%s. Authored in the plan file — this studio has no tool that draws a"
+		+ " swept run, so its shape is not editable here. Select and DELETE work."
+	) % str(edge.get("_is", primitive.replace("_", " ").capitalize()))
+	var header := BrandLabel.new(
+		"%s / PART %03d" % [primitive.replace("_", " ").to_upper(), _selected_id],
+		BrandLabel.Role.DATA
+	)
+	header.add_theme_color_override(&"font_color", BrandTokens.BRASS_DEEP)
+	_inspector_box.add_child(header)
+	_inspector_box.add_child(BrandComponents.key_value_row(
+		"Path", "from the hull" if edge.has("from_hull") else "%d points" % (
+			(edge.get("path", []) as Array).size()
+		)
+	))
+	if edge.has("height"):
+		_inspector_box.add_child(BrandComponents.key_value_row(
+			"Height", "%.2f m" % float(edge.get("height", 0.0))
+		))
+	_inspector_box.add_child(BrandComponents.key_value_row(
+		"Surface", str(edge.get("material", "painted")).capitalize()
+	))
+	_inspector_box.add_child(BrandComponents.separator())
+	var delete_btn := BrandButton.new("DELETE RUN  [DEL]", BrandButton.Variant.DANGER)
+	delete_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	delete_btn.pressed.connect(func() -> void: _delete_selected())
+	_inspector_box.add_child(delete_btn)
 
 
 func _refresh_inspector() -> void:
@@ -5622,22 +6469,23 @@ func _refresh_inspector() -> void:
 		child.queue_free()
 	var entity := _plan.entity_by_id(_selected_id)
 	if _selected_id < 0 or entity.is_empty():
-		_drawer_info.text = "Nothing selected. Use Select / Move and click a wall, deck plate or stair."
+		## Names all five things a click can pick, not the three that existed when
+		## this string was written: a builder who has just placed a kit piece or a
+		## fitting was being told, by the panel, that it was not selectable.
+		_drawer_info.text = (
+			"Nothing selected. Use Select / Move and click a wall, deck plate,"
+			+ " stair, kit piece or fitting."
+		)
 		return
-	var kind := "wall"
-	## A placement is tested for FIRST: it has no `axis`, no `dir` and no `size`,
-	## so the wall/stair/deck ladder below would have called every piece a deck
-	## plate and offered it a thickness field it does not have.
-	if entity.has("piece"):
-		kind = "piece"
-	elif entity.has("axis"):
-		kind = "wall"
-	elif entity.has("dir"):
-		kind = "stair"
-	else:
-		kind = "deck"
+	var kind := _selected_kind(entity)
 	if kind == "piece":
 		_refresh_piece_inspector(entity)
+		return
+	if kind == "fitting":
+		_refresh_fitting_inspector(entity)
+		return
+	if kind == "edge":
+		_refresh_edge_inspector(entity)
 		return
 	_drawer_info.text = ""
 	var header := BrandLabel.new(
@@ -5757,23 +6605,10 @@ func _refresh_piece_inspector(placement: Dictionary) -> void:
 	_inspector_box.add_child(delete_btn)
 
 
-## The standing right-hand surface library. Modal: arm Outside or Inside, then
-## clicks on materials/swatches paint that slot of the current selection AND
-## become the default style for everything drawn next.
+## The standing right-hand surface library: a material or a swatch paints the
+## current selection AND becomes the style everything drawn next is born with.
+## No Outside/Inside slots — see `_lib` for what they did and why they are gone.
 func _build_library_section(box: VBoxContainer) -> void:
-	var slot_row := HBoxContainer.new()
-	slot_row.add_theme_constant_override(&"separation", BrandTokens.SPACE_XS)
-	for slot_def in [["out", "Outside"], ["in", "Inside"]]:
-		var slot := str(slot_def[0])
-		var btn := BrandComponents.tool_button(str(slot_def[1]).to_upper(), 0.0)
-		btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		btn.pressed.connect(func() -> void:
-			_armed_slot = slot
-			_refresh_panel()
-		)
-		slot_row.add_child(btn)
-		_slot_buttons[slot] = btn
-	box.add_child(slot_row)
 	var material_flow := HFlowContainer.new()
 	material_flow.add_theme_constant_override(&"h_separation", BrandTokens.SPACE_XS)
 	material_flow.add_theme_constant_override(&"v_separation", BrandTokens.SPACE_XS)
@@ -5817,37 +6652,63 @@ func _library_keys_for_selection() -> Dictionary:
 	## are the control for that, and they write hex.
 	if entity.has("piece"):
 		return {}
-	## Walls, plates and stairs carry a single surface — both slots address it.
+	## A fitting's colour belongs to its PART (`PartCatalog.color_of`), and an
+	## `items[]` entry has no `color` or `material` key at all — `normalize_item`
+	## drops both. Writing them would have been the same shape as the placement
+	## case above: a key no reader accepts.
+	if entity.has("item_id"):
+		return {}
+	## Walls, plates and stairs carry ONE surface, and that is what the library
+	## paints.
 	return {"entity": entity, "color": "color", "material": "material"}
 
 
+## What the toast should say when the library cannot reach the selection. Saying
+## "colour set" over a placement it did not touch is the small version of a
+## checklist that reads CERTIFIED over a boat the spawn refuses.
+func _library_refusal() -> String:
+	var entity := _plan.entity_by_id(_selected_id)
+	if entity.has("piece"):
+		return "a placement's tint comes off the PIECE KIT swatches, not this library"
+	if entity.has("item_id"):
+		return "a fitting is painted by its part, not by this library"
+	return ""
+
+
 func _apply_library_color(rgb: Array) -> void:
-	(_lib[_armed_slot] as Dictionary)["color"] = rgb.duplicate()
+	_lib["color"] = rgb.duplicate()
 	var keys := _library_keys_for_selection()
 	if not keys.is_empty():
 		_snapshot()
 		(keys["entity"] as Dictionary)[str(keys["color"])] = rgb.duplicate()
 		_rebake()
-	_set_status("%s colour set" % ("outside" if _armed_slot == "out" else "inside"))
+	var refusal := _library_refusal()
+	if refusal.is_empty():
+		_set_status("surface colour set")
+	else:
+		_set_status("armed for the next surface — %s" % refusal, false)
 	_refresh_panel()
 
 
 func _apply_library_material(material_name: String) -> void:
-	(_lib[_armed_slot] as Dictionary)["material"] = material_name
+	_lib["material"] = material_name
 	var keys := _library_keys_for_selection()
 	if not keys.is_empty():
 		_snapshot()
 		(keys["entity"] as Dictionary)[str(keys["material"])] = material_name
 		_rebake()
-	_set_status("%s material: %s" % ["outside" if _armed_slot == "out" else "inside", material_name])
+	var refusal := _library_refusal()
+	if refusal.is_empty():
+		_set_status("surface material: %s" % material_name)
+	else:
+		_set_status("armed %s for the next surface — %s" % [material_name, refusal], false)
 	_refresh_panel()
 
 
 ## Style every new entity with the armed library so drawing is paint-first.
 func _stamp_library_style(entity: Dictionary) -> void:
-	var out := _lib["out"] as Dictionary
-	entity["color"] = (out["color"] as Array).duplicate()
-	entity["material"] = str(out["material"])
+	entity["color"] = (_lib["color"] as Array).duplicate()
+	entity["material"] = str(_lib["material"])
 
 
 func _spin_row(label_text: String, value: float, min_value: float, max_value: float, step: float, on_change: Callable) -> HBoxContainer:
