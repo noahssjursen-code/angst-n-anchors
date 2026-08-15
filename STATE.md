@@ -138,12 +138,78 @@ missing and it wasn't" is the reusable part.
 4. ~~**No starter vessel for any new player** — `prebuilt/` holds only `.gitkeep`.~~
    **LANDED.** `resources/data/vessels/prebuilt/` holds `28_10_m.json`, `bulk_small.json`
    and `fishing_trawler.json`.
-5. **No small hulls — THIS ONE STILL HOLDS, and it is now the whole of item 5.**
-   `hull_registry.gd` defines exactly two hulls: `hull_28x10` (28.0 × 10.0 m) and
-   `hull_45x16_cat` (45.0 × 16.0 m). All three prebuilt vessels are the same
-   `hull_28x10` — so "three starter vessels" is one hull wearing three outfits. Every
-   legacy alias also collapses onto 28 m or larger. Two of the three references are
-   ~22 m and the third ~15 m: **a player still cannot start from a hull that fits them.**
+5. **No small hulls — HALF CLOSED 2026-08-15. `hull_15x5` exists and floats; a new
+   player still does not start on it.**
+
+   Was: two hulls only (28 × 10 and 45 × 16), all three prebuilt vessels the same
+   `hull_28x10` — one hull wearing three outfits — and every legacy alias
+   collapsing onto 28 m or larger.
+
+   Now: **`hull_15x5`**, 15.0 × 5.0 × 2.6 m, draft 1.55, 44.0 t, `fine_entry`,
+   280 kW, added through the `HullCatalog` JSON path (`CatalogHullVessel`), which
+   every `HullRegistry` consumer checks first — so no registry code changed and it
+   is reachable from `shipyard_brick_editor.gd:220` and `structure_studio.gd:3512`,
+   i.e. **by a player, not only by a rig** (§3d). It passes `validate()` **cleanly,
+   not clamp-rescued** — the design probe reports `stations_geometry()["clamped"]`
+   alongside the verdict and carries two deliberately invalid candidates that come
+   back `REJECT / clamped=true`, so it can tell the two apart; the gate test asserts
+   both halves.
+
+   Measured in the world against `hull_28x10` through the identical probe:
+
+   | | hull_15x5 | 28x10 control |
+   |---|---|---|
+   | settled vs declared draft | 1.5489 / 1.5500 m (−0.07%) | 2.7981 / 2.8000 (−0.07%) |
+   | volume below × ρ vs declared t | 44.000 / 44.000 (0.0000%) | 256.000 / 256.000 |
+   | 1.8 m capsule drops, real `PhysicsServer3D` | **13/13 landed** | 13/13 |
+   | full ahead + hard over | yaw −12.55°, heel 0.272° | yaw −6.73°, heel 0.350° |
+
+   The small hull turns in half the distance at the same helm — correct for the
+   shorter boat, and evidence the drive test reads the subject rather than the rig.
+   Verified independently: `starter_small_hull_test` **PASS (23)**, and removing the
+   hull from the catalogue reddens it **2/23**.
+
+   **What is NOT done, and it is the half that matters for onboarding:**
+   `PrebuiltVesselCatalog` reads `resources/data/vessels/prebuilt/`, and all three
+   presets are still `hull_28x10` brick layouts, so `CompanyService.build_starter_vessel_record`
+   is unchanged. **The hull is purchasable and buildable, not granted.** Authoring a
+   fourth preset is not small: `_prebuilt_gen.gd` hardcodes cell indices for a
+   20 × 56 grid and this hull is 10 × 30, and the layout must clear `general_vessel`
+   (helm, port/starboard/white lights with white above the sidelights, ≥4 mooring
+   points, cabin, catch deck ≥4 cells) on a **10-cell beam** or it lands as a
+   `draft` preset that push_warnings on every catalog load.
+
+   **Three findings this hull surfaced, none of them fixed:**
+   - **The shipyard will label it "7.5 × 2.5 m".** `HullCatalog._normalize`
+     overwrites the authored `display` via `ShipClass.format_display_dimensions`,
+     which applies `DISPLAY_METRE_SCALE = 0.5`. `_normalize` runs **only on JSON
+     hulls**, so the 15 m starter reads "7.5 × 2.5 m" directly above `hull_28x10`
+     reading "28.0 × 10.0 m" in the same dropdown. The 2× is an open owner decision
+     (CONVENTIONS §3a) — but it now has a **visible asymmetry**, and the smallest,
+     most-seen hull is on the wrong side of it.
+   - **Deck plate and shell disagree at the bow shoulder**: the lofted shell is
+     0.219 m per side WIDER than the flat deck plate on this hull (**0.480 m on
+     `hull_28x10`**), because `pointed_deck_plate` chamfers linearly while
+     `_assign_form_sections` blends with a smoothstep — a straight line and an
+     S-curve over the same interval cannot agree. Two derivations of one edge,
+     shared code, exactly the §3b shape.
+   - **`ShipClass` fits nothing here.** `LAUNCH` maxes at 10.0 m authored,
+     `COASTAL_TRADER` at 35.0 — so a 15 m boat gets `coastal_trader` and shares a
+     class with the 28 m trawler, `BEAM_M[COASTAL_TRADER] = 24.0` against this
+     hull's 5.0 (4.8×), and `berth_count` reserves a 35 m slot for it. The table is
+     also non-monotonic independently of this hull (COASTAL_TRADER 24 >
+     SHORT_SEA_COASTER 14). Left alone — `ShipClass` is an open owner decision.
+
+   **Looked at, not asserted:** put beside the 28 m at matched scale, the silhouettes
+   are the same drawing — dead-flat sheer stem to transom, blunt near-vertical stem,
+   slab topsides, no rubbing strake. It reads as a scaled-down trawler, with the
+   scale itself genuinely right (figure's knee at the deck edge; keel-to-deck is 1.4
+   figures against 3.1 on the 28 m). The bow-on view is the one that reads as real
+   small craft — narrow V bottom, hard chine, strong flare to the deck edge. **A
+   15 m boat is where flat sheer hurts most, because a real boat that size is all
+   sheer.** Sheer is computed here (0.336 m forward, 0.105 aft) and carried, but the
+   loft deliberately never draws it — it belongs to the bulwark cap, which is
+   `StructurePlan` work this hull does not have yet.
 
 **Known-red — gate RED: 81 PASS, 19 FAIL, 2 TIMEOUT, 2 NOTRUN, 1 SKIP of 105 units, measured on
 run `20260810-081647-26225`.** The list

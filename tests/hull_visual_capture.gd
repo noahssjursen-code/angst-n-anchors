@@ -34,6 +34,10 @@ const MIN_COVERAGE := 0.02
 const MAX_COVERAGE := 0.92
 const BACKGROUND := Color(0.055, 0.075, 0.095)
 const HULL_IDS := [
+	## The smallest hull in the game, and the one a beginner starts from. It is
+	## FIRST because the figure-visibility check is hardest to satisfy on the
+	## smallest deck, so a rig that has drifted fails here first.
+	"hull_15x5",
 	"hull_28x10",
 	"hull_45x16_cat",
 	"hull_150x32",

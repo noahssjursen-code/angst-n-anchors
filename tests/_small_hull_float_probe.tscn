@@ -1,0 +1,6 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource path="res://tests/_small_hull_float_probe.gd" type="Script" id="1"]
+
+[node name="SmallHullFloatProbe" type="Node"]
+script = ExtResource("1")

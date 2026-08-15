@@ -3,6 +3,21 @@
   "notes": "Reusable hull components only. loa_m/beam_m/depth_m are REAL METRES and one world unit is one metre \u2014 the player is 1.8. Deck-grid cells are 0.5 m, so a 28 m hull is 56 cells long; cell counts are a build resolution, not a size. Store ships add name, price, brick layout, and shaft power separately.",
   "hulls": [
     {
+      "id": "hull_15x5",
+      "display": "15 × 5 m",
+      "notes": "Smallest hull in the game and the one a beginner starts from. Sized on the ~15 m Norwegian sjark (STATE.md's FISHING reference): L/B 3.0, 1.05 m freeboard, 44 t at 1.55 m draft (Cb 0.369). Deck grid 10 × 30 cells with a 5-cell 45° bow. 280 kW is a real sjark engine and is what CatalogHullVessel's own 5 m/s cruise model asks for at 44 t.",
+      "shape": "pointed",
+      "form": "fine_entry",
+      "ship_class": "coastal_trader",
+      "default_shaft_power_kw": 280.0,
+      "loa_m": 15.0,
+      "beam_m": 5.0,
+      "depth_m": 2.6,
+      "draft_m": 1.55,
+      "displacement_t": 44.0,
+      "bow_taper_m": 2.5
+    },
+    {
       "id": "hull_90x24",
       "display": "90 \u00d7 24 m",
       "shape": "pointed",
