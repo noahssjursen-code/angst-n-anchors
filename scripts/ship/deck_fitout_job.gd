@@ -140,6 +140,7 @@ func configure(
 	_boat = boat
 	_root = root
 	_layout = layout
+	_mount_state["layout"] = layout
 	_grid = grid
 	_hull_id = hull_id
 	_declared = declared

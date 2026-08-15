@@ -1759,20 +1759,119 @@ file is not red by construction. It belongs beside decision #1 below.
    absent from the check. Measured: a network missing one port's gates entirely
    reported **0 issues**. The new integrity test catches that case by comparing
    against the placed-port count; the validator still should.
-5d. **The RSW fish hold overhangs the starter boat by 1.130 m and stands over open
-   water.** Found 2026-08-15 while rendering the starter vessel, and **photographed**
-   (`screenshots/vessels/starter/starter__stern_quarter.png`,
-   `starter__bow_on_ortho.png`). `DeckFitout._add_fishing_gear` attaches a
-   `CatchHoldComponent` whenever a fishing brick is placed, at a **hull-independent**
-   size — `hold.scale = Vector3(1.10, 1.0, 2.10)`, a constant whose own comment
-   invokes the half-scale confusion. Measured identical in absolute metres on both
-   hulls: local x **−3.168 … +3.630 m**. On `hull_28x10` (half-beam 5.00 m) it fits;
-   on `hull_15x5` (half-beam **2.50 m**) the pump flange hangs over the sea. Its z
-   placement (`gear_local + inward_z * 6.1`) also puts the hatch inside the
-   wheelhouse. **Not fixed, and deliberately:** size *and* position are both
-   hull-independent so it is not one clamp, it is shared with every existing fishing
-   vessel, and hold sizing is an owner decision. **It would be red today if a check
-   existed. This is the next test.**
+5d. **The RSW fish hold overhung the starter boat by 1.130 m and stood over open
+   water — CLOSED 2026-08-15.** The hold is now sized and placed by the boat it
+   is on; **zero overhang on every hull**, held by a property check, four
+   mutations verified.
+
+   Was: `DeckFitout._mount_fishing` attached a `CatchHoldComponent` at a
+   hull-independent size AND a hull-independent position —
+   `hold.scale = Vector3(1.10, 1.0, 2.10)` and `gear_local + inward_z * 6.1` —
+   so the same drawing landed on a 10 m beam and on a 5 m one. Measured identical
+   in absolute metres on both hulls: local x **−3.168 … +3.630 m**.
+
+   | measured, per hull | before | after |
+   |---|---|---|
+   | `hull_15x5` (half-beam 2.500) starboard overhang | **1.130 m** | **0.000** |
+   | `hull_15x5` port overhang | **0.668 m** | **0.000** |
+   | `hull_15x5` **bow** overhang (not in the original report) | **0.157 m** | **0.000** |
+   | `hull_28x10` (half-beam 5.000) overhang | 0.000 | 0.000 |
+   | brick columns standing inside the hatch, `sjark_15m` | the whole deckhouse — `railing block block_window roof_flat helm block_door mast_base mast_pole` | **none** |
+   | brick columns standing inside the hatch, `fishing_trawler` | the whole deckhouse — same list minus the railings | **none** |
+   | 1.8 m capsule standing positions clear around the hatch (`PhysicsServer3D`) | sjark **1 of 4**, trawler 4 of 4 | sjark **4 of 4**, trawler **4 of 4** |
+   | `capacity_kg` on both hulls | 4000 | **4000 — unchanged** |
+
+   **THE SURVEY — the count of affected vessels is two, and the previous wave's
+   "shared with every existing fishing vessel" is right only because there are
+   two.** `PrebuiltVesselCatalog` ships four presets; exactly two carry a brick
+   tagged `fishing`/`trommel` and therefore a hold: `fishing_trawler`
+   (`hull_28x10`) and `sjark_15m` (`hull_15x5`). `28_10_m` and `bulk_small` mount
+   none. Both affected ones were wrong — the sjark over the side, and **both** with
+   the hatch inside the wheelhouse, which the original report only noticed on the
+   sjark. Two further facts the survey turned up: any player build gets one the
+   moment a `trommel_small` is placed and accepted (`accepted_slots.fishing` is
+   populated even when the registration verdict is `ok=false`), and **a
+   structure-plan vessel can never have a hold at all** — `apply_plan` has no
+   fishing branch, so the whole feature is reachable only from the brick path.
+
+   **CAPACITY DOES NOT MOVE, and it never could have.** `capacity_kg` is a
+   declared number passed to `configure()`; the drawn mesh feeds nothing.
+   Verified by reading every consumer: `FishingSystem:448`,
+   `FishLandingPump:102`, `GameState:199`, `crane_showcase:961` and
+   `catch_hold_showcase:84` all read `state.capacity_kg`. Both hulls measure
+   **4000 kg before and 4000 kg after.** The only thing that referred to the
+   drawn size was a comment.
+
+   **THE CONSTANT WAS NOT A VICTIM OF THE 2.000 FACTOR.** Its comment claimed the
+   mesh was "authored in displayed metres" and needed expanding "into grid space",
+   which is the `DeckGrid.CELL_M` 0.5 / authored-metre confusion of owner decision
+   #1 — but a unit conversion would be **2.000 on both axes**, and this was
+   **1.10 and 2.10**, with 1.000 in y. It was a hand-tuned fudge to fill the 28 m
+   deck with the half-scale story attached afterwards. The replacement derives in
+   METRES from `half_beam` and `half_loa`, which are **invariant** under that
+   decision: measured over all nine registry hulls, `half_beam == beam_m / 2` to
+   ±0.000000 (`floor(beam/C) · C · 0.5` cancels `C` for any beam that is a whole
+   number of cells, which every shipped hull is at 0.5 **and** at 1.0). Nothing
+   in `BrickCatalog.size_m`, `BuildingGrid.CELL_M` or `DeckGrid.CELL_M` was
+   touched.
+
+   **How it is derived now** (`DeckFitout._catch_hold_berth`): the clear deck is
+   the set of cells the GRID calls `FULL` (so the bow taper and both deck ends
+   bound it without being named) minus every column the LAYOUT has built on (so
+   the hatch cannot land under the wheelhouse); the candidates are the runs
+   immediately forward and immediately aft of the GEAR BRICK, larger wins, ties
+   go to the one nearer midships; a 0.50 m walking margin is held on all four
+   sides; and the result is capped at 0.60 × beam and 0.30 × LOA, plus an aspect
+   cap so a hatch stays roughly square. `CatchHoldComponent.scale` is gone: the
+   node now takes `footprint_m` and derives every internal dimension from it, so
+   the declared size IS the drawn size.
+
+   **The aspect cap exists because of a render, not a number.** The first version
+   produced 6.0 × 2.0 m on the 28 m trawler, which photographs as a low ledge
+   lying across the deck rather than as a hatch. Looked at, then constrained
+   (REALITY §1). Resulting footprints: sjark **3.0 × 2.0 m** at z 4.5…6.5,
+   trawler **6.0 × 6.0 m** at z 5.5…13.0.
+
+   **Held by:** `catch_hold_test`, converted to `TestReport` (it reported a bare
+   pass/fail and NO check count before) and extended with a
+   section 7 that spawns every prebuilt vessel AND a synthetic winch-on-deck
+   layout on **every hull in `HullRegistry.catalog()`** — 11 holds measured.
+   The property is stated on the DRAWN meshes, not on the footprint constant:
+   every corner of every `MeshInstance3D` the hold committed must stand over a
+   cell that hull calls FULL deck. Each hold is FILLED to 3900 kg before it is
+   measured, because the chilled water and the fish scatter are drawn only when
+   there is catch aboard — corner counts go 88 → 160 (sjark) and 88 → 576
+   (trawler), i.e. an empty hold hides most of its own geometry from any
+   measurement. **Control PASS (95 checks).** Mutations, all four verified:
+   restoring the shipped constants **6/95 red** (worst 0.900 m on hull_15x5);
+   making `_cell_is_clear` stop consulting the hull and the layout **10/95 red**;
+   letting the manifold escape its declared footprint by 0.42 m as it used to
+   **11/95 red**; dropping the fish scatter's margin so it hangs through its own
+   liner **11/95 red**.
+
+   **That third mutation PASSED first time and is recorded as a finding.** With
+   only the off-deck property, 0.42 m of undeclared growth lands on the 0.50 m
+   walkway and is legitimately "not off the deck" — the check was blind to the
+   exact seam the original bug lived in. A second, adjacent property was added
+   (the drawn bounds must lie inside `footprint_m`, which is the guarantee the
+   component's own header makes) and that is the one that reddens 11/95.
+
+   **Renders, re-shot from `tests/_starter_shot`:** the two frames named in the
+   original report both changed. `starter__bow_on_ortho` used to show a pipe stub
+   projecting into clear air off the port side and a wide grey band spanning the
+   whole beam at deck level — that band was the hold coaming, 6.34 m across a
+   5.00 m boat, hiding the foredeck entirely. It is gone; the frame now reads
+   bulwark to bulwark with the foredeck railings and bollards visible.
+   `starter__profile_port_ortho` used to be a flat grey slab lying over the
+   forward two-thirds of the boat, hiding the sheer and the whole railing run —
+   now the railing runs unbroken bow to stern and the hold is a low band aft,
+   which is what a hatch coaming should be in profile. `starter__stern_quarter`
+   and `starter__plan_ortho` show a stainless rectangle on the after working deck
+   with a walkway on all four sides and the manifold stub well inboard of the
+   rail. The 28 m preset had no capture rig at all — `trawler_render_capture`
+   shoots a structure-plan fixture, not this brick preset — so one was added:
+   `screenshots/vessels/fishing_trawler_28m__stern_quarter.png`, figure_px 3521.
+
 5e. **`catch_deck` cannot fail on any real hull.** `capabilities.exposed_deck_cells`
    comes straight from `VesselOutfit.budget_for_hull` — a count of `FULL` grid cells —
    so `min: 4` is met by any hull bigger than 1 × 4 **regardless of what is built on

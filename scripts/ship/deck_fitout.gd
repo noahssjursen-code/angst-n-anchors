@@ -27,6 +27,35 @@ const READINESS_EXTERIOR := 1
 const READINESS_FULL_VISUAL := 2
 const READINESS_INTERACTIVE := 3
 
+## THE FISH HOLD'S PROPORTIONS. Everything here is a fraction of the hull it is
+## mounted on or an absolute walking margin; there is no metre constant standing
+## in for a hull dimension, which is what the 2026-08-15 overhang was.
+##
+## Deck plane offset. `gear_local` is a CELL CENTRE, half a cell above the deck;
+## the hold's own y = 0 is the deck plane, and the coaming stands proud of it.
+const CELL_HALF_M := DeckGrid.CELL_M * 0.5
+const HOLD_DECK_LIFT_M := 0.02
+## Walking margin held clear on all four sides of the hold, between its coaming
+## and whatever bounds the clear deck (a bulwark, a rail, a deckhouse).
+const HOLD_DECK_CLEARANCE_M := 0.50
+## Proportional ceilings, so a wide hull does not end up with its whole working
+## deck replaced by hatch. Fractions of the hull's OWN beam and length, which is
+## what makes them survive a hull nobody has authored yet.
+const HOLD_MAX_BEAM_FRACTION := 0.60
+const HOLD_MAX_LOA_FRACTION := 0.30
+## Below this the rectangle is not a hold, it is a puddle.
+const HOLD_MIN_SIDE_M := 1.00
+## A hatch is roughly square. Without these the widest clear run on a beamy hull
+## produces a 6.0 x 2.0 m coaming standing 0.26 m proud, which renders as a low
+## ledge lying across the deck rather than as a hold — looked at on the 28 m
+## trawler, which is why they are here (REALITY §1: describe what you SEE).
+const HOLD_MAX_WIDTH_PER_LENGTH := 1.60
+const HOLD_MAX_LENGTH_PER_WIDTH := 2.00
+## Depth below the deck plane. Unchanged from the old drawing (1.16 m), and NOT
+## derived from the hull: it is bounded by hull depth, not by deck area, and
+## every hull that can carry a trawl winch has more than this under its deck.
+const HOLD_DEPTH_M := 1.16
+
 
 ## Routes a layout dictionary to the right construction system: parametric
 ## StructurePlan documents (walls/decks/stairs/items/openings) or legacy voxel bricks.
@@ -226,7 +255,10 @@ static func apply_sync(
 	if skin != null:
 		skin.commit()
 		attach_skin(root, skin)
-	var state := {"brick_i": 0, "ladder_n": 0}
+	## `layout` rides in the mount state so `_mount_fishing` can see what is
+	## already built on the deck. Both fit-out entry points thread the same dict,
+	## so the immediate path and the staged job derive the same hold (REALITY 3b).
+	var state := {"brick_i": 0, "ladder_n": 0, "layout": layout}
 	boat.begin_mass_batch()
 	## `mount_item_gameplay` emits walk colliders (one per brick, one per stair
 	## tread, two per door jamb), and each one costs a Jolt compound rebuild of
@@ -393,7 +425,7 @@ static func mount_item_gameplay(
 		(BrickCatalog.has_tag(brick_id, "trommel") or BrickCatalog.has_tag(brick_id, "fishing"))
 		and accepted_fishing.has(cell)
 	):
-		_mount_fishing(root, visual, boat_local)
+		_mount_fishing(root, visual, grid, item, boat_local, state.get("layout", null) as BrickLayout)
 	if BrickCatalog.has_tag(brick_id, "mooring"):
 		_mount_mooring(visual, brick_id)
 	var light_id := str(item.get("light_id", ""))
@@ -564,7 +596,10 @@ static func _mount_ladder(visual: Node3D) -> void:
 static func _mount_fishing(
 	root: Node3D,
 	visual: Node3D,
+	grid: DeckGrid,
+	item: Dictionary,
 	gear_local: Vector3,
+	layout: BrickLayout,
 ) -> void:
 	## Drop catalog preview meshes — FishingSystem owns the live trommel + net.
 	for child in visual.get_children():
@@ -574,20 +609,205 @@ static func _mount_fishing(
 	fishing.name = "FishingSystem"
 	fishing.anchored_to_brick = true
 	visual.add_child(fishing)
-	## The refrigerated volume is below deck. Its visible hatch belongs in
-	## vessel space so the winch brick's yaw cannot throw it over the side.
+	## THE HOLD IS SIZED AND PLACED BY THE BOAT, NOT BY A CONSTANT — 2026-08-15.
+	##
+	## It used to be `position = gear_local + inward_z * 6.1` at
+	## `scale = Vector3(1.10, 1.0, 2.10)`, both hull-independent, which drew the
+	## SAME 6.80 x 9.11 m hold on a 10 m beam and on a 5 m one. On the granted
+	## starter (`hull_15x5`, half-beam 2.50) the pump flange stood 1.130 m
+	## outboard of the deck edge over open water, the coaming overhung the bow by
+	## 0.157 m, and both hulls put the hatch under their own wheelhouse.
+	##
+	## `_catch_hold_berth` answers the question the constants were standing in
+	## for: which rectangle of THIS deck is clear, next to THIS gear brick. If the
+	## deck has no room the hold is not mounted — a hold drawn over the sea is
+	## worse than a boat that visibly cannot carry fish, and the absence is
+	## loud (REALITY §7: red with a diagnosis beats green with a lie).
+	var berth := _catch_hold_berth(grid, layout, item)
+	if berth.is_empty():
+		push_warning(
+			"DeckFitout: no clear deck for a catch hold beside the gear at %v — hold not mounted"
+			% [item.get("cell", Vector3i.ZERO)]
+		)
+		return
 	var hold := CatchHoldComponent.new()
 	hold.name = "CatchHold"
-	var inward_z := -1.0 if gear_local.z >= 0.0 else 1.0
-	hold.position = gear_local + Vector3(0.0, 0.08, inward_z * 6.1)
-	## Vessel construction cells are displayed at half-scale. The raw hold mesh
-	## is authored in displayed metres, so expand its deck footprint into grid
-	## space while keeping its depth unchanged.
-	## Keep generous walking clearance along both rails. Most of the enlarged
-	## footprint runs fore-aft, where this hull actually has working-deck room.
-	hold.scale = Vector3(1.10, 1.0, 2.10)
+	var centre: Vector3 = berth["center"]
+	hold.position = Vector3(centre.x, gear_local.y - CELL_HALF_M + HOLD_DECK_LIFT_M, centre.z)
+	hold.configure_footprint(berth["size"] as Vector3)
+	## Capacity is a declared gameplay number and is deliberately NOT derived
+	## from the footprint: resizing the drawing must not silently re-balance how
+	## much fish a boat carries (see catch_hold_component.gd's header).
 	hold.configure("primary_catch_hold", 4000.0)
 	root.add_child(hold)
+
+
+## The clear rectangle of deck this hull offers for a fish hold, in vessel-local
+## metres, or {} when it offers none.
+##
+## Derived, in order, from: which cells the grid says are FULL deck (so the bow
+## taper and the deck ends bound it without being named), which columns the
+## layout has already built on (so the hatch cannot land under the wheelhouse),
+## and where the gear brick is (so the hold is beside its winch). The judgement
+## in it is the HOLD_* block at the top of this file: a walking margin in metres,
+## and four ratios — two against this hull's own beam and length, two against the
+## hatch's own other side. None of them is a length standing in for a hull.
+static func _catch_hold_berth(
+	grid: DeckGrid, layout: BrickLayout, item: Dictionary
+) -> Dictionary:
+	if grid == null:
+		return {}
+	var built := _occupied_columns(layout)
+	var gear_cell: Vector3i = item.get("cell", Vector3i(-1, -1, -1))
+	var fp := BrickCatalog.footprint_of(str(item.get("brick_id", "")))
+	var yaw_steps := int(round(float(int(item.get("yaw", 0))) / 90.0)) % 4
+	if yaw_steps < 0:
+		yaw_steps += 4
+	var gear_z0 := gear_cell.z
+	var gear_z1 := gear_cell.z
+	for c in grid.footprint_cells(gear_cell, fp, yaw_steps):
+		gear_z0 = mini(gear_z0, c.z)
+		gear_z1 = maxi(gear_z1, c.z)
+
+	## The clear deck immediately forward of the gear and the clear deck
+	## immediately aft of it are the two candidates; the bigger one wins, and a
+	## tie goes to the one nearer midships, because a full hold's payload belongs
+	## near the pivot. Only if the winch is boxed in on both sides does this fall
+	## back to the best clear run anywhere on the deck.
+	var toward_midships := -1 if float(gear_z0 + gear_z1) * 0.5 >= float(grid.length) * 0.5 else 1
+	var near := _berth_from_run(
+		grid, built, _run_from(grid, built, gear_z0, gear_z1, toward_midships)
+	)
+	var far := _berth_from_run(
+		grid, built, _run_from(grid, built, gear_z0, gear_z1, -toward_midships)
+	)
+	if not near.is_empty() and not far.is_empty():
+		return near if _berth_area(near) >= _berth_area(far) else far
+	if not near.is_empty():
+		return near
+	if not far.is_empty():
+		return far
+	for run in _maximal_runs(grid, built):
+		var berth := _berth_from_run(grid, built, run as Vector2i)
+		if not berth.is_empty():
+			return berth
+	return {}
+
+
+static func _berth_area(berth: Dictionary) -> float:
+	var size: Vector3 = berth["size"]
+	return size.x * size.z
+
+
+## Cell rows [z0, z1] of the maximal clear run starting one row beyond the given
+## span and walking in `step`. Returns (-1, -1) when the very next row is blocked.
+static func _run_from(
+	grid: DeckGrid, built: Dictionary, from_z0: int, from_z1: int, step: int
+) -> Vector2i:
+	var iz := (from_z1 + 1) if step > 0 else (from_z0 - 1)
+	var first := iz
+	var last := iz
+	var any := false
+	while iz >= 0 and iz < grid.length:
+		if _clear_half_beam(grid, built, iz) <= 0.0:
+			break
+		if not any:
+			first = iz
+			any = true
+		last = iz
+		iz += step
+	if not any:
+		return Vector2i(-1, -1)
+	return Vector2i(mini(first, last), maxi(first, last))
+
+
+## Every maximal run of rows whose centreline is clear, one pass, biggest first.
+## The fallback when neither side of the gear brick has room — a vessel whose
+## winch is boxed in still gets a hold if the deck has one anywhere.
+static func _maximal_runs(grid: DeckGrid, built: Dictionary) -> Array:
+	var runs: Array = []
+	var start := -1
+	for iz in range(grid.length + 1):
+		var open := iz < grid.length and _clear_half_beam(grid, built, iz) > 0.0
+		if open and start < 0:
+			start = iz
+		elif not open and start >= 0:
+			runs.append(Vector2i(start, iz - 1))
+			start = -1
+	runs.sort_custom(func(a: Vector2i, b: Vector2i) -> bool: return (a.y - a.x) > (b.y - b.x))
+	return runs
+
+
+## Half-width of the clear, FULL-deck, unbuilt strip straddling the centreline on
+## one cell row, in metres. Zero when the centreline itself is blocked.
+static func _clear_half_beam(grid: DeckGrid, built: Dictionary, iz: int) -> float:
+	var mid := grid.width / 2
+	var left := mid
+	while left - 1 >= 0 and _cell_is_clear(grid, built, left - 1, iz):
+		left -= 1
+	var right := mid - 1
+	while right + 1 < grid.width and _cell_is_clear(grid, built, right + 1, iz):
+		right += 1
+	if right < left:
+		return 0.0
+	## Cell edges in local metres, then the symmetric half the centreline allows.
+	var x_lo := -grid.half_beam + float(left) * DeckGrid.CELL_M
+	var x_hi := -grid.half_beam + float(right + 1) * DeckGrid.CELL_M
+	if x_lo > 0.0 or x_hi < 0.0:
+		return 0.0
+	return minf(absf(x_lo), absf(x_hi))
+
+
+static func _cell_is_clear(grid: DeckGrid, built: Dictionary, ix: int, iz: int) -> bool:
+	if grid.cell_shape(ix, iz) != DeckGrid.CellShape.FULL:
+		return false
+	return not built.has(Vector2i(ix, iz))
+
+
+## Every (ix, iz) column the layout has anything standing on, at any height.
+static func _occupied_columns(layout: BrickLayout) -> Dictionary:
+	var out := {}
+	if layout == null:
+		return out
+	for key in layout.cells:
+		var cell := BrickLayout.parse_key(str(key))
+		out[Vector2i(cell.x, cell.z)] = true
+	return out
+
+
+## Largest usable hold rectangle inside a clear run of rows, after the walking
+## clearance and the proportional ceilings. Prefixes of the run are all tried
+## because the far end of a run can be narrower than the near end (a bow taper),
+## and a shorter, wider hold can beat a longer, thinner one.
+static func _berth_from_run(
+	grid: DeckGrid, built: Dictionary, run: Vector2i
+) -> Dictionary:
+	if run.x < 0:
+		return {}
+	var max_half_x := grid.half_beam * HOLD_MAX_BEAM_FRACTION
+	var max_len := grid.half_loa * 2.0 * HOLD_MAX_LOA_FRACTION
+	var best := {}
+	var best_area := 0.0
+	for anchor in [run.x, run.y]:
+		var step := 1 if anchor == run.x else -1
+		var half_x := 1e9
+		var iz := int(anchor)
+		while iz >= run.x and iz <= run.y:
+			half_x = minf(half_x, _clear_half_beam(grid, built, iz))
+			var z_lo := -grid.half_loa + float(mini(int(anchor), iz)) * DeckGrid.CELL_M
+			var z_hi := -grid.half_loa + float(maxi(int(anchor), iz) + 1) * DeckGrid.CELL_M
+			var w := minf(half_x - HOLD_DECK_CLEARANCE_M, max_half_x) * 2.0
+			var l := minf(z_hi - z_lo - HOLD_DECK_CLEARANCE_M * 2.0, max_len)
+			w = minf(w, l * HOLD_MAX_WIDTH_PER_LENGTH)
+			l = minf(l, w * HOLD_MAX_LENGTH_PER_WIDTH)
+			if w >= HOLD_MIN_SIDE_M and l >= HOLD_MIN_SIDE_M and w * l > best_area:
+				best_area = w * l
+				best = {
+					"center": Vector3(0.0, 0.0, (z_lo + z_hi) * 0.5),
+					"size": Vector3(w, HOLD_DEPTH_M, l),
+				}
+			iz += step
+	return best
 
 
 static func _add_brick_door(
