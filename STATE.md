@@ -169,15 +169,45 @@ missing and it wasn't" is the reusable part.
    Verified independently: `starter_small_hull_test` **PASS (23)**, and removing the
    hull from the catalogue reddens it **2/23**.
 
-   **What is NOT done, and it is the half that matters for onboarding:**
-   `PrebuiltVesselCatalog` reads `resources/data/vessels/prebuilt/`, and all three
-   presets are still `hull_28x10` brick layouts, so `CompanyService.build_starter_vessel_record`
-   is unchanged. **The hull is purchasable and buildable, not granted.** Authoring a
-   fourth preset is not small: `_prebuilt_gen.gd` hardcodes cell indices for a
-   20 × 56 grid and this hull is 10 × 30, and the layout must clear `general_vessel`
-   (helm, port/starboard/white lights with white above the sidelights, ≥4 mooring
-   points, cabin, catch deck ≥4 cells) on a **10-cell beam** or it lands as a
-   `draft` preset that push_warnings on every catalog load.
+   **CLOSED 2026-08-15 — a new captain is granted `sjark_15m`, verified end to end.**
+   `tests/starter_vessel_grant_test` **PASS (49)**; reverting `DEFAULT_STARTER` to
+   `general_cargo` reddens it **2/49** (reproduced independently by the orchestrator).
+
+   **Why it had stayed half closed was not the preset — it was the default.** The
+   career defaulted to the literal `"general_cargo"` in **four separate places**
+   (`company_setup_panel.gd:20`, `:51`, `main_menu.gd:20`, and the multiplayer
+   starter-repair path). That is now one constant, `CompanyContracts.DEFAULT_STARTER`,
+   pointed at `"fishing"`, and a mutation that re-hardcodes the string in the panel
+   reddens the unit — so the constant is load-bearing, not decoration (§3d).
+
+   Selection is **by name**, not order or cost: career → `STARTER_VESSELS[id]["prebuilt_id"]`
+   → linear scan of `catalog_entries()`, refusing anything `is_draft` or not
+   compliance-ok.
+
+   **Existing players are untouched, with one exception I am accepting as a
+   decision rather than a finding.** `PlayerData.ledger_vessel_record` deep-copies
+   `brick_layout` per owned vessel and `_grant_starter_vessel` refuses when
+   `owned_vessels` is non-empty, so an existing captain's boat is a snapshot no
+   preset edit can reach; `WorldTrafficService` whitelists `["28_10_m","bulk_small"]`
+   and the showcases pin explicit ids. The exception is `vessel_sync.gd:488`, the
+   multiplayer starter-*repair* path for a captain with zero vessels, which now
+   hands out the sjark. **Accepted:** it is the "nobody chose" path, so it should
+   hand out the same thing onboarding does. Recorded here because it is a behaviour
+   change, not a repair.
+
+   **The three shipped presets changed, and the diff was characterised before it was
+   trusted:** 128 cells each, **field `yaw` only**, zero cells added or removed,
+   metadata byte-identical — verified independently. That is the railing fix, not the
+   generator: `railing` draws its run along the local −Z face, and every preset placed
+   every railing at yaw 0, so only the bow and transom runs pointed the right way and
+   the port/starboard rails ran **athwartships** — a row of little gates standing
+   across the deck. Not guessed: a probe placed one railing at each yaw and measured
+   the drawn AABB. The 28 m boats improved too.
+
+   `_prebuilt_gen.gd` was parameterised off `grid.width` / `length` /
+   `bow_taper_cells` rather than replaced, and **the control is that all three shipped
+   presets re-emit byte-identical** (md5 unchanged). Restoring one pre-refactor
+   constant on the 10-wide hull produces 40+ `OFF-DECK` reports and `GEN REFUSED`.
 
    **Three findings this hull surfaced. One is now fixed — 2026-08-15:**
    - **The shipyard will label it "7.5 × 2.5 m".** `HullCatalog._normalize`
@@ -1721,6 +1751,29 @@ file is not red by construction. It belongs beside decision #1 below.
    absent from the check. Measured: a network missing one port's gates entirely
    reported **0 issues**. The new integrity test catches that case by comparing
    against the placed-port count; the validator still should.
+5d. **The RSW fish hold overhangs the starter boat by 1.130 m and stands over open
+   water.** Found 2026-08-15 while rendering the starter vessel, and **photographed**
+   (`screenshots/vessels/starter/starter__stern_quarter.png`,
+   `starter__bow_on_ortho.png`). `DeckFitout._add_fishing_gear` attaches a
+   `CatchHoldComponent` whenever a fishing brick is placed, at a **hull-independent**
+   size — `hold.scale = Vector3(1.10, 1.0, 2.10)`, a constant whose own comment
+   invokes the half-scale confusion. Measured identical in absolute metres on both
+   hulls: local x **−3.168 … +3.630 m**. On `hull_28x10` (half-beam 5.00 m) it fits;
+   on `hull_15x5` (half-beam **2.50 m**) the pump flange hangs over the sea. Its z
+   placement (`gear_local + inward_z * 6.1`) also puts the hatch inside the
+   wheelhouse. **Not fixed, and deliberately:** size *and* position are both
+   hull-independent so it is not one clamp, it is shared with every existing fishing
+   vessel, and hold sizing is an owner decision. **It would be red today if a check
+   existed. This is the next test.**
+5e. **`catch_deck` cannot fail on any real hull.** `capabilities.exposed_deck_cells`
+   comes straight from `VesselOutfit.budget_for_hull` — a count of `FULL` grid cells —
+   so `min: 4` is met by any hull bigger than 1 × 4 **regardless of what is built on
+   it**. Measured 270 on the sjark and 1010 on the 28 m, unchanged by covering the
+   deck in blocks. A vessel with every deck cell blocked still certifies as having a
+   catch deck. The rule does not measure a catch deck; it measures hull size.
+5f. **The bow rail is a staircase.** At the 45° bow taper the generator places plain
+   `railing` bricks, so the rail steps around the taper instead of following it.
+   `railing_45` exists in the catalogue and **no preset uses it.**
 6. `budget_caps.crane` is 0 on every registration, so any crane fails compliance.
 7. No lifesaving requirement of any kind exists.
 8. No hull under 28 m, though two of three reference vessels are ~22 m and the

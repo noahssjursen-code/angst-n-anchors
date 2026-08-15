@@ -1,0 +1,1084 @@
+{
+  "brick_layout": {
+    "bulk_holds": [],
+    "cargo_zones": [],
+    "cells": {
+      "0,0,10": {
+        "brick_id": "railing",
+        "yaw": 90
+      },
+      "0,0,11": {
+        "brick_id": "railing",
+        "yaw": 90
+      },
+      "0,0,12": {
+        "brick_id": "railing",
+        "yaw": 90
+      },
+      "0,0,13": {
+        "brick_id": "railing",
+        "yaw": 90
+      },
+      "0,0,14": {
+        "brick_id": "railing",
+        "yaw": 90
+      },
+      "0,0,15": {
+        "brick_id": "railing",
+        "yaw": 90
+      },
+      "0,0,16": {
+        "brick_id": "railing",
+        "yaw": 90
+      },
+      "0,0,17": {
+        "brick_id": "railing",
+        "yaw": 90
+      },
+      "0,0,18": {
+        "brick_id": "railing",
+        "yaw": 90
+      },
+      "0,0,19": {
+        "brick_id": "railing",
+        "yaw": 90
+      },
+      "0,0,20": {
+        "brick_id": "railing",
+        "yaw": 90
+      },
+      "0,0,21": {
+        "brick_id": "railing",
+        "yaw": 90
+      },
+      "0,0,22": {
+        "brick_id": "railing",
+        "yaw": 90
+      },
+      "0,0,23": {
+        "brick_id": "railing",
+        "yaw": 90
+      },
+      "0,0,24": {
+        "brick_id": "railing",
+        "yaw": 90
+      },
+      "0,0,25": {
+        "brick_id": "railing",
+        "yaw": 90
+      },
+      "0,0,26": {
+        "brick_id": "railing_mooring",
+        "yaw": 90
+      },
+      "0,0,27": {
+        "brick_id": "railing",
+        "yaw": 90
+      },
+      "0,0,28": {
+        "brick_id": "railing",
+        "yaw": 90
+      },
+      "0,0,29": {
+        "brick_id": "railing",
+        "yaw": 90
+      },
+      "0,0,5": {
+        "brick_id": "railing",
+        "yaw": 90
+      },
+      "0,0,6": {
+        "brick_id": "railing",
+        "yaw": 90
+      },
+      "0,0,7": {
+        "brick_id": "railing_mooring",
+        "yaw": 90
+      },
+      "0,0,8": {
+        "brick_id": "railing",
+        "yaw": 90
+      },
+      "0,0,9": {
+        "brick_id": "railing",
+        "yaw": 90
+      },
+      "1,0,29": {
+        "brick_id": "railing",
+        "yaw": 180
+      },
+      "1,0,4": {
+        "brick_id": "railing",
+        "yaw": 90
+      },
+      "2,0,10": {
+        "brick_id": "block",
+        "yaw": 0
+      },
+      "2,0,11": {
+        "brick_id": "block",
+        "yaw": 0
+      },
+      "2,0,12": {
+        "brick_id": "block",
+        "yaw": 0
+      },
+      "2,0,13": {
+        "brick_id": "block",
+        "yaw": 0
+      },
+      "2,0,14": {
+        "brick_id": "block",
+        "yaw": 0
+      },
+      "2,0,15": {
+        "brick_id": "block",
+        "yaw": 0
+      },
+      "2,0,16": {
+        "brick_id": "block",
+        "yaw": 0
+      },
+      "2,0,29": {
+        "brick_id": "railing",
+        "yaw": 180
+      },
+      "2,0,3": {
+        "brick_id": "railing",
+        "yaw": 90
+      },
+      "2,0,9": {
+        "brick_id": "block",
+        "yaw": 0
+      },
+      "2,1,10": {
+        "brick_id": "block",
+        "yaw": 0
+      },
+      "2,1,11": {
+        "brick_id": "block",
+        "yaw": 0
+      },
+      "2,1,12": {
+        "brick_id": "block",
+        "yaw": 0
+      },
+      "2,1,13": {
+        "brick_id": "block",
+        "yaw": 0
+      },
+      "2,1,14": {
+        "brick_id": "block",
+        "yaw": 0
+      },
+      "2,1,15": {
+        "brick_id": "block",
+        "yaw": 0
+      },
+      "2,1,16": {
+        "brick_id": "block",
+        "yaw": 0
+      },
+      "2,1,9": {
+        "brick_id": "block",
+        "yaw": 0
+      },
+      "2,2,10": {
+        "brick_id": "block_window",
+        "yaw": 0
+      },
+      "2,2,11": {
+        "brick_id": "block_window",
+        "light_id": "light_nav_port",
+        "light_yaw": 270,
+        "yaw": 0
+      },
+      "2,2,12": {
+        "brick_id": "block",
+        "yaw": 0
+      },
+      "2,2,13": {
+        "brick_id": "block",
+        "yaw": 0
+      },
+      "2,2,14": {
+        "brick_id": "block",
+        "yaw": 0
+      },
+      "2,2,15": {
+        "brick_id": "block",
+        "yaw": 0
+      },
+      "2,2,16": {
+        "brick_id": "block",
+        "yaw": 0
+      },
+      "2,2,9": {
+        "brick_id": "block_window",
+        "yaw": 0
+      },
+      "2,3,10": {
+        "brick_id": "block_window",
+        "yaw": 0
+      },
+      "2,3,11": {
+        "brick_id": "block_window",
+        "yaw": 0
+      },
+      "2,3,12": {
+        "brick_id": "block",
+        "yaw": 0
+      },
+      "2,3,13": {
+        "brick_id": "block",
+        "yaw": 0
+      },
+      "2,3,14": {
+        "brick_id": "block",
+        "yaw": 0
+      },
+      "2,3,15": {
+        "brick_id": "block",
+        "yaw": 0
+      },
+      "2,3,16": {
+        "brick_id": "block",
+        "yaw": 0
+      },
+      "2,3,9": {
+        "brick_id": "block_window",
+        "yaw": 0
+      },
+      "2,4,10": {
+        "brick_id": "block",
+        "yaw": 0
+      },
+      "2,4,11": {
+        "brick_id": "block",
+        "yaw": 0
+      },
+      "2,4,12": {
+        "brick_id": "block",
+        "yaw": 0
+      },
+      "2,4,13": {
+        "brick_id": "block",
+        "yaw": 0
+      },
+      "2,4,14": {
+        "brick_id": "block",
+        "yaw": 0
+      },
+      "2,4,15": {
+        "brick_id": "block",
+        "yaw": 0
+      },
+      "2,4,16": {
+        "brick_id": "block",
+        "yaw": 0
+      },
+      "2,4,9": {
+        "brick_id": "block",
+        "yaw": 0
+      },
+      "2,5,10": {
+        "brick_id": "roof_flat",
+        "yaw": 0
+      },
+      "2,5,11": {
+        "brick_id": "roof_flat",
+        "yaw": 0
+      },
+      "2,5,12": {
+        "brick_id": "roof_flat",
+        "yaw": 0
+      },
+      "2,5,13": {
+        "brick_id": "roof_flat",
+        "yaw": 0
+      },
+      "2,5,14": {
+        "brick_id": "roof_flat",
+        "yaw": 0
+      },
+      "2,5,15": {
+        "brick_id": "roof_flat",
+        "yaw": 0
+      },
+      "2,5,16": {
+        "brick_id": "roof_flat",
+        "yaw": 0
+      },
+      "2,5,9": {
+        "brick_id": "roof_flat",
+        "yaw": 0
+      },
+      "3,0,16": {
+        "brick_id": "block",
+        "yaw": 0
+      },
+      "3,0,2": {
+        "brick_id": "railing",
+        "yaw": 90
+      },
+      "3,0,29": {
+        "brick_id": "railing",
+        "yaw": 180
+      },
+      "3,0,9": {
+        "brick_id": "block",
+        "yaw": 0
+      },
+      "3,1,16": {
+        "brick_id": "block",
+        "yaw": 0
+      },
+      "3,1,9": {
+        "brick_id": "block",
+        "yaw": 0
+      },
+      "3,2,16": {
+        "brick_id": "block",
+        "yaw": 0
+      },
+      "3,2,9": {
+        "brick_id": "block_window",
+        "yaw": 0
+      },
+      "3,3,16": {
+        "brick_id": "block",
+        "yaw": 0
+      },
+      "3,3,9": {
+        "brick_id": "block_window",
+        "yaw": 0
+      },
+      "3,4,16": {
+        "brick_id": "block",
+        "yaw": 0
+      },
+      "3,4,9": {
+        "brick_id": "block",
+        "yaw": 0
+      },
+      "3,5,10": {
+        "brick_id": "roof_flat",
+        "yaw": 0
+      },
+      "3,5,11": {
+        "brick_id": "roof_flat",
+        "yaw": 0
+      },
+      "3,5,12": {
+        "brick_id": "roof_flat",
+        "yaw": 0
+      },
+      "3,5,13": {
+        "brick_id": "roof_flat",
+        "yaw": 0
+      },
+      "3,5,14": {
+        "brick_id": "roof_flat",
+        "yaw": 0
+      },
+      "3,5,15": {
+        "brick_id": "roof_flat",
+        "yaw": 0
+      },
+      "3,5,16": {
+        "brick_id": "roof_flat",
+        "yaw": 0
+      },
+      "3,5,9": {
+        "brick_id": "roof_flat",
+        "yaw": 0
+      },
+      "4,0,1": {
+        "brick_id": "railing",
+        "yaw": 90
+      },
+      "4,0,11": {
+        "brick_id": "helm",
+        "yaw": 0
+      },
+      "4,0,16": {
+        "brick_id": "block_door",
+        "yaw": 0
+      },
+      "4,0,19": {
+        "brick_id": "trommel_small",
+        "yaw": 0
+      },
+      "4,0,20": {
+        "brick_id": "trommel_small",
+        "occupied_by": "4,0,19",
+        "yaw": 0
+      },
+      "4,0,21": {
+        "brick_id": "trommel_small",
+        "occupied_by": "4,0,19",
+        "yaw": 0
+      },
+      "4,0,22": {
+        "brick_id": "trommel_small",
+        "occupied_by": "4,0,19",
+        "yaw": 0
+      },
+      "4,0,29": {
+        "brick_id": "railing",
+        "yaw": 180
+      },
+      "4,0,9": {
+        "brick_id": "block",
+        "yaw": 0
+      },
+      "4,1,16": {
+        "brick_id": "block_door",
+        "occupied_by": "4,0,16",
+        "yaw": 0
+      },
+      "4,1,9": {
+        "brick_id": "block",
+        "yaw": 0
+      },
+      "4,2,16": {
+        "brick_id": "block_door",
+        "occupied_by": "4,0,16",
+        "yaw": 0
+      },
+      "4,2,9": {
+        "brick_id": "block_window",
+        "yaw": 0
+      },
+      "4,3,16": {
+        "brick_id": "block",
+        "yaw": 0
+      },
+      "4,3,9": {
+        "brick_id": "block_window",
+        "yaw": 0
+      },
+      "4,4,16": {
+        "brick_id": "block",
+        "yaw": 0
+      },
+      "4,4,9": {
+        "brick_id": "block",
+        "yaw": 0
+      },
+      "4,5,10": {
+        "brick_id": "roof_flat",
+        "yaw": 0
+      },
+      "4,5,11": {
+        "brick_id": "roof_flat",
+        "yaw": 0
+      },
+      "4,5,12": {
+        "brick_id": "roof_flat",
+        "yaw": 0
+      },
+      "4,5,13": {
+        "brick_id": "roof_flat",
+        "yaw": 0
+      },
+      "4,5,14": {
+        "brick_id": "roof_flat",
+        "yaw": 0
+      },
+      "4,5,15": {
+        "brick_id": "roof_flat",
+        "yaw": 0
+      },
+      "4,5,16": {
+        "brick_id": "roof_flat",
+        "yaw": 0
+      },
+      "4,5,9": {
+        "brick_id": "roof_flat",
+        "yaw": 0
+      },
+      "4,6,11": {
+        "brick_id": "mast_base",
+        "yaw": 0
+      },
+      "4,6,12": {
+        "brick_id": "mast_base",
+        "occupied_by": "4,6,11",
+        "yaw": 0
+      },
+      "4,7,11": {
+        "brick_id": "mast_pole",
+        "yaw": 0
+      },
+      "4,7,12": {
+        "brick_id": "mast_pole",
+        "occupied_by": "4,7,11",
+        "yaw": 0
+      },
+      "4,8,11": {
+        "brick_id": "mast_pole",
+        "yaw": 0
+      },
+      "4,8,12": {
+        "brick_id": "mast_pole",
+        "occupied_by": "4,8,11",
+        "yaw": 0
+      },
+      "4,9,11": {
+        "brick_id": "mast_pole",
+        "light_id": "light_mast_white",
+        "light_yaw": 0,
+        "yaw": 0
+      },
+      "4,9,12": {
+        "brick_id": "mast_pole",
+        "occupied_by": "4,9,11",
+        "yaw": 0
+      },
+      "5,0,1": {
+        "brick_id": "railing",
+        "yaw": 270
+      },
+      "5,0,16": {
+        "brick_id": "block_door",
+        "occupied_by": "4,0,16",
+        "yaw": 0
+      },
+      "5,0,19": {
+        "brick_id": "trommel_small",
+        "occupied_by": "4,0,19",
+        "yaw": 0
+      },
+      "5,0,20": {
+        "brick_id": "trommel_small",
+        "occupied_by": "4,0,19",
+        "yaw": 0
+      },
+      "5,0,21": {
+        "brick_id": "trommel_small",
+        "occupied_by": "4,0,19",
+        "yaw": 0
+      },
+      "5,0,22": {
+        "brick_id": "trommel_small",
+        "occupied_by": "4,0,19",
+        "yaw": 0
+      },
+      "5,0,29": {
+        "brick_id": "railing",
+        "yaw": 180
+      },
+      "5,0,9": {
+        "brick_id": "block",
+        "yaw": 0
+      },
+      "5,1,16": {
+        "brick_id": "block_door",
+        "occupied_by": "4,0,16",
+        "yaw": 0
+      },
+      "5,1,9": {
+        "brick_id": "block",
+        "yaw": 0
+      },
+      "5,2,16": {
+        "brick_id": "block_door",
+        "occupied_by": "4,0,16",
+        "yaw": 0
+      },
+      "5,2,9": {
+        "brick_id": "block_window",
+        "yaw": 0
+      },
+      "5,3,16": {
+        "brick_id": "block",
+        "yaw": 0
+      },
+      "5,3,9": {
+        "brick_id": "block_window",
+        "yaw": 0
+      },
+      "5,4,16": {
+        "brick_id": "block",
+        "yaw": 0
+      },
+      "5,4,9": {
+        "brick_id": "block",
+        "yaw": 0
+      },
+      "5,5,10": {
+        "brick_id": "roof_flat",
+        "yaw": 0
+      },
+      "5,5,11": {
+        "brick_id": "roof_flat",
+        "yaw": 0
+      },
+      "5,5,12": {
+        "brick_id": "roof_flat",
+        "yaw": 0
+      },
+      "5,5,13": {
+        "brick_id": "roof_flat",
+        "yaw": 0
+      },
+      "5,5,14": {
+        "brick_id": "roof_flat",
+        "yaw": 0
+      },
+      "5,5,15": {
+        "brick_id": "roof_flat",
+        "yaw": 0
+      },
+      "5,5,16": {
+        "brick_id": "roof_flat",
+        "yaw": 0
+      },
+      "5,5,9": {
+        "brick_id": "roof_flat",
+        "yaw": 0
+      },
+      "5,6,11": {
+        "brick_id": "mast_base",
+        "occupied_by": "4,6,11",
+        "yaw": 0
+      },
+      "5,6,12": {
+        "brick_id": "mast_base",
+        "occupied_by": "4,6,11",
+        "yaw": 0
+      },
+      "5,7,11": {
+        "brick_id": "mast_pole",
+        "occupied_by": "4,7,11",
+        "yaw": 0
+      },
+      "5,7,12": {
+        "brick_id": "mast_pole",
+        "occupied_by": "4,7,11",
+        "yaw": 0
+      },
+      "5,8,11": {
+        "brick_id": "mast_pole",
+        "occupied_by": "4,8,11",
+        "yaw": 0
+      },
+      "5,8,12": {
+        "brick_id": "mast_pole",
+        "occupied_by": "4,8,11",
+        "yaw": 0
+      },
+      "5,9,11": {
+        "brick_id": "mast_pole",
+        "occupied_by": "4,9,11",
+        "yaw": 0
+      },
+      "5,9,12": {
+        "brick_id": "mast_pole",
+        "occupied_by": "4,9,11",
+        "yaw": 0
+      },
+      "6,0,16": {
+        "brick_id": "block",
+        "yaw": 0
+      },
+      "6,0,2": {
+        "brick_id": "railing",
+        "yaw": 270
+      },
+      "6,0,29": {
+        "brick_id": "railing",
+        "yaw": 180
+      },
+      "6,0,9": {
+        "brick_id": "block",
+        "yaw": 0
+      },
+      "6,1,16": {
+        "brick_id": "block",
+        "yaw": 0
+      },
+      "6,1,9": {
+        "brick_id": "block",
+        "yaw": 0
+      },
+      "6,2,16": {
+        "brick_id": "block",
+        "yaw": 0
+      },
+      "6,2,9": {
+        "brick_id": "block_window",
+        "yaw": 0
+      },
+      "6,3,16": {
+        "brick_id": "block",
+        "yaw": 0
+      },
+      "6,3,9": {
+        "brick_id": "block_window",
+        "yaw": 0
+      },
+      "6,4,16": {
+        "brick_id": "block",
+        "yaw": 0
+      },
+      "6,4,9": {
+        "brick_id": "block",
+        "yaw": 0
+      },
+      "6,5,10": {
+        "brick_id": "roof_flat",
+        "yaw": 0
+      },
+      "6,5,11": {
+        "brick_id": "roof_flat",
+        "yaw": 0
+      },
+      "6,5,12": {
+        "brick_id": "roof_flat",
+        "yaw": 0
+      },
+      "6,5,13": {
+        "brick_id": "roof_flat",
+        "yaw": 0
+      },
+      "6,5,14": {
+        "brick_id": "roof_flat",
+        "yaw": 0
+      },
+      "6,5,15": {
+        "brick_id": "roof_flat",
+        "yaw": 0
+      },
+      "6,5,16": {
+        "brick_id": "roof_flat",
+        "yaw": 0
+      },
+      "6,5,9": {
+        "brick_id": "roof_flat",
+        "yaw": 0
+      },
+      "7,0,10": {
+        "brick_id": "block",
+        "yaw": 0
+      },
+      "7,0,11": {
+        "brick_id": "block",
+        "yaw": 0
+      },
+      "7,0,12": {
+        "brick_id": "block",
+        "yaw": 0
+      },
+      "7,0,13": {
+        "brick_id": "block",
+        "yaw": 0
+      },
+      "7,0,14": {
+        "brick_id": "block",
+        "yaw": 0
+      },
+      "7,0,15": {
+        "brick_id": "block",
+        "yaw": 0
+      },
+      "7,0,16": {
+        "brick_id": "block",
+        "yaw": 0
+      },
+      "7,0,29": {
+        "brick_id": "railing",
+        "yaw": 180
+      },
+      "7,0,3": {
+        "brick_id": "railing",
+        "yaw": 270
+      },
+      "7,0,9": {
+        "brick_id": "block",
+        "yaw": 0
+      },
+      "7,1,10": {
+        "brick_id": "block",
+        "yaw": 0
+      },
+      "7,1,11": {
+        "brick_id": "block",
+        "yaw": 0
+      },
+      "7,1,12": {
+        "brick_id": "block",
+        "yaw": 0
+      },
+      "7,1,13": {
+        "brick_id": "block",
+        "yaw": 0
+      },
+      "7,1,14": {
+        "brick_id": "block",
+        "yaw": 0
+      },
+      "7,1,15": {
+        "brick_id": "block",
+        "yaw": 0
+      },
+      "7,1,16": {
+        "brick_id": "block",
+        "yaw": 0
+      },
+      "7,1,9": {
+        "brick_id": "block",
+        "yaw": 0
+      },
+      "7,2,10": {
+        "brick_id": "block_window",
+        "yaw": 0
+      },
+      "7,2,11": {
+        "brick_id": "block_window",
+        "light_id": "light_nav_stbd",
+        "light_yaw": 90,
+        "yaw": 0
+      },
+      "7,2,12": {
+        "brick_id": "block",
+        "yaw": 0
+      },
+      "7,2,13": {
+        "brick_id": "block",
+        "yaw": 0
+      },
+      "7,2,14": {
+        "brick_id": "block",
+        "yaw": 0
+      },
+      "7,2,15": {
+        "brick_id": "block",
+        "yaw": 0
+      },
+      "7,2,16": {
+        "brick_id": "block",
+        "yaw": 0
+      },
+      "7,2,9": {
+        "brick_id": "block_window",
+        "yaw": 0
+      },
+      "7,3,10": {
+        "brick_id": "block_window",
+        "yaw": 0
+      },
+      "7,3,11": {
+        "brick_id": "block_window",
+        "yaw": 0
+      },
+      "7,3,12": {
+        "brick_id": "block",
+        "yaw": 0
+      },
+      "7,3,13": {
+        "brick_id": "block",
+        "yaw": 0
+      },
+      "7,3,14": {
+        "brick_id": "block",
+        "yaw": 0
+      },
+      "7,3,15": {
+        "brick_id": "block",
+        "yaw": 0
+      },
+      "7,3,16": {
+        "brick_id": "block",
+        "yaw": 0
+      },
+      "7,3,9": {
+        "brick_id": "block_window",
+        "yaw": 0
+      },
+      "7,4,10": {
+        "brick_id": "block",
+        "yaw": 0
+      },
+      "7,4,11": {
+        "brick_id": "block",
+        "yaw": 0
+      },
+      "7,4,12": {
+        "brick_id": "block",
+        "yaw": 0
+      },
+      "7,4,13": {
+        "brick_id": "block",
+        "yaw": 0
+      },
+      "7,4,14": {
+        "brick_id": "block",
+        "yaw": 0
+      },
+      "7,4,15": {
+        "brick_id": "block",
+        "yaw": 0
+      },
+      "7,4,16": {
+        "brick_id": "block",
+        "yaw": 0
+      },
+      "7,4,9": {
+        "brick_id": "block",
+        "yaw": 0
+      },
+      "7,5,10": {
+        "brick_id": "roof_flat",
+        "yaw": 0
+      },
+      "7,5,11": {
+        "brick_id": "roof_flat",
+        "yaw": 0
+      },
+      "7,5,12": {
+        "brick_id": "roof_flat",
+        "yaw": 0
+      },
+      "7,5,13": {
+        "brick_id": "roof_flat",
+        "yaw": 0
+      },
+      "7,5,14": {
+        "brick_id": "roof_flat",
+        "yaw": 0
+      },
+      "7,5,15": {
+        "brick_id": "roof_flat",
+        "yaw": 0
+      },
+      "7,5,16": {
+        "brick_id": "roof_flat",
+        "yaw": 0
+      },
+      "7,5,9": {
+        "brick_id": "roof_flat",
+        "yaw": 0
+      },
+      "8,0,29": {
+        "brick_id": "railing",
+        "yaw": 180
+      },
+      "8,0,4": {
+        "brick_id": "railing",
+        "yaw": 270
+      },
+      "9,0,10": {
+        "brick_id": "railing",
+        "yaw": 270
+      },
+      "9,0,11": {
+        "brick_id": "railing",
+        "yaw": 270
+      },
+      "9,0,12": {
+        "brick_id": "railing",
+        "yaw": 270
+      },
+      "9,0,13": {
+        "brick_id": "railing",
+        "yaw": 270
+      },
+      "9,0,14": {
+        "brick_id": "railing",
+        "yaw": 270
+      },
+      "9,0,15": {
+        "brick_id": "railing",
+        "yaw": 270
+      },
+      "9,0,16": {
+        "brick_id": "railing",
+        "yaw": 270
+      },
+      "9,0,17": {
+        "brick_id": "railing",
+        "yaw": 270
+      },
+      "9,0,18": {
+        "brick_id": "railing",
+        "yaw": 270
+      },
+      "9,0,19": {
+        "brick_id": "railing",
+        "yaw": 270
+      },
+      "9,0,20": {
+        "brick_id": "railing",
+        "yaw": 270
+      },
+      "9,0,21": {
+        "brick_id": "railing",
+        "yaw": 270
+      },
+      "9,0,22": {
+        "brick_id": "railing",
+        "yaw": 270
+      },
+      "9,0,23": {
+        "brick_id": "railing",
+        "yaw": 270
+      },
+      "9,0,24": {
+        "brick_id": "railing",
+        "yaw": 270
+      },
+      "9,0,25": {
+        "brick_id": "railing",
+        "yaw": 270
+      },
+      "9,0,26": {
+        "brick_id": "railing_mooring",
+        "yaw": 270
+      },
+      "9,0,27": {
+        "brick_id": "railing",
+        "yaw": 270
+      },
+      "9,0,28": {
+        "brick_id": "railing",
+        "yaw": 270
+      },
+      "9,0,29": {
+        "brick_id": "railing",
+        "yaw": 270
+      },
+      "9,0,5": {
+        "brick_id": "railing",
+        "yaw": 270
+      },
+      "9,0,6": {
+        "brick_id": "railing",
+        "yaw": 270
+      },
+      "9,0,7": {
+        "brick_id": "railing_mooring",
+        "yaw": 270
+      },
+      "9,0,8": {
+        "brick_id": "railing",
+        "yaw": 270
+      },
+      "9,0,9": {
+        "brick_id": "railing",
+        "yaw": 270
+      }
+    },
+    "container_pads": [],
+    "hull_id": "hull_15x5"
+  },
+  "draft": false,
+  "format_version": 2,
+  "hull_id": "hull_15x5",
+  "id": "sjark_15m",
+  "name": "Coastal sjark",
+  "price_marks": 19500,
+  "registration_id": "fishing_vessel",
+  "shaft_power_kw": 280.0
+}

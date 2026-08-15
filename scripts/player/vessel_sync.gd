@@ -486,7 +486,7 @@ static func _apply_server_vessels(session: Node, rows: Array, on_complete: Calla
 		if not captain_id.is_empty() and not _starter_repairs.has(captain_id):
 			_starter_repairs[captain_id] = true
 			var starter := CompanyService.build_starter_vessel_record(
-				"general_cargo", "starter-%s" % captain_id,
+				CompanyContracts.DEFAULT_STARTER, "starter-%s" % captain_id,
 			)
 			if not starter.is_empty():
 				data.upsert_owned_vessel(starter)

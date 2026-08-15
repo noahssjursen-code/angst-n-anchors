@@ -17,7 +17,7 @@ var _name_field: LineEdit
 var _status: Label
 var _confirm: Button
 var _selected_color := BRAND_COLORS[0]
-var _selected_starter := "general_cargo"
+var _selected_starter := CompanyContracts.DEFAULT_STARTER
 var _color_buttons: Array[Button] = []
 var _starter_buttons: Dictionary = {}
 
@@ -48,7 +48,7 @@ func open_for_captain(captain_name: String) -> void:
 		await ready
 	_name_field.text = "%s Maritime" % captain_name.strip_edges()
 	_selected_color = BRAND_COLORS[0]
-	_selected_starter = "general_cargo"
+	_selected_starter = CompanyContracts.DEFAULT_STARTER
 	_status.text = ""
 	_refresh_choices()
 	visible = true

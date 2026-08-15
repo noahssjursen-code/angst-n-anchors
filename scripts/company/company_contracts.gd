@@ -8,10 +8,30 @@ const SCHEMA_VERSION := 1
 const STARTING_MARKS := 6400
 const STARTER_WAREHOUSE_CAPACITY_UNITS := 24
 
+## The career a new captain starts in when nobody has chosen one: the value the
+## onboarding panel opens on, and the one the multiplayer starter-repair path
+## grants. It lived as the string "general_cargo" in three separate files, which
+## is how "a new player starts on a 28 m coastal trader" survived `hull_15x5`
+## landing — the small hull was purchasable and buildable, and no default
+## pointed at it (STATE.md item 5).
+##
+## Changing this changes which BOAT a click-through new player is given AND
+## which home ports the picker will accept: `MainMenu._starter_terminal_family`
+## maps the career to a required berth family, and `fishing` requires a fish
+## landing. Measured over five generated worlds (`tests/_fishport_survey.gd`):
+## 115 of 175 ports (65.7%, never fewer than 21 of 35 in a world) offer one, so
+## a fishing captain always has a wide choice — but `port-home` itself was
+## ineligible in 2 of those 5 worlds, so the named home port is sometimes not
+## one of them.
+const DEFAULT_STARTER := "fishing"
+
 const STARTER_VESSELS := {
 	"fishing": {
-		"prebuilt_id": "fishing_trawler",
-		"label": "Coastal trawler",
+		## The 15 m sjark, not the 28 m trawler. `hull_28x10` is still what
+		## `fishing_trawler` is built on and the Shipwright still sells it; it is
+		## simply no longer what a beginner is handed.
+		"prebuilt_id": "sjark_15m",
+		"label": "Coastal sjark · 15 m",
 		"role": "Harvest fish and land your own catch.",
 		"career": "Fishing",
 	},

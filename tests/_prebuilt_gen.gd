@@ -1,11 +1,51 @@
 extends SceneTree
 
 ## Scratch probe (leading underscore — not a gate unit).
-## Authors the three starter vessels through the real BrickLayout API, validates
+## Authors the starter vessels through the real BrickLayout API, validates
 ## each against VesselCompliance, and writes the prebuilt JSON only when the
 ## report says ok. Re-runnable: same input, same file.
+##
+## ── WHY THIS FILE IS THE AUTHORING PATH AND NOT A HAND-WRITTEN JSON ─────────
+##
+## A preset is a `cells` dictionary of ~300 entries keyed "x,y,z". Typing one
+## is exactly REALITY.md §5 — the format is easy for an agent and impossible
+## for a player — and, worse, it BYPASSES the only thing standing between a
+## broken layout and a silent half-failure: `PrebuiltVesselCatalog` marks a
+## non-compliant preset `is_draft` and merely `push_warning`s, so a hand-written
+## mistake ships as a warning nobody reads. `_emit` refuses to write a file at
+## all unless `VesselCompliance.validate()` returns ok, and prints the whole
+## checklist either way.
+##
+## ── WHAT CHANGED 2026-08-15, AND THE PROPERTY IT BUYS ───────────────────────
+##
+## Every cell index here used to be a constant measured off hull_28x10's
+## 20 × 56 grid: the deckhouse at `x0=7..12`, the aft house at `z0=40..47`, the
+## mast at `x=9`, mooring at `z=14`. On hull_15x5 — 10 × 30 — every one of
+## those is off the deck, and `BrickLayout.set_brick` does not take a grid, so
+## it would have written bricks into the sea and reported success.
+##
+## The rule now, and it is checkable rather than hoped for:
+##
+##   **Every index is derived from `grid.width` / `grid.length` /
+##   `grid.bow_taper_cells`, or from a placement already made; and every cell is
+##   tested against `grid.cell_shape(...) == FULL` before it is written. A
+##   placement that would land off the deck refuses the whole vessel.**
+##
+## `_on_deck` is that test, `_refused` is that refusal. The three hull_28x10
+## presets re-emit BYTE-IDENTICAL under the derived formulas (md5 unchanged),
+## which is the control proving the parameterisation is faithful and not a
+## redesign wearing the old numbers.
+##
+## Run:
+##   xvfb-run -a --server-args="-screen 0 1280x720x24" godot \
+##     --rendering-driver opengl3 --audio-driver Dummy --script res://tests/_prebuilt_gen.gd
 
 const OUT_DIR := "res://resources/data/vessels/prebuilt"
+
+const BIG := "hull_28x10"
+const SMALL := "hull_15x5"
+
+var _refusals := PackedStringArray()
 
 
 func _initialize() -> void:
@@ -31,41 +71,115 @@ func _initialize() -> void:
 		"price_marks": 56000,
 		"shaft_power_kw": 1871.0,
 	}) and ok
+	ok = _emit(_sjark(), {
+		"id": "sjark_15m",
+		"name": "Coastal sjark",
+		"registration_id": "fishing_vessel",
+		"price_marks": 19500,
+		"shaft_power_kw": 280.0,
+	}) and ok
 	print("GEN %s" % ("OK" if ok else "REFUSED"))
 	quit(0 if ok else 1)
 
 
+# ── the grid is the only source of position ─────────────────────────────────
+
+
+## True when this cell is a whole deck cell a brick may stand on. The half cells
+## of the 45° bow are NOT full: `place_footprint` refuses them for anything but
+## a `diagonal_plan` brick, and `set_brick` would happily write one anyway.
+func _on_deck(grid: DeckGrid, cell: Vector3i) -> bool:
+	return cell.y >= 0 and grid.cell_shape(cell.x, cell.z) == DeckGrid.CellShape.FULL
+
+
+func _refuse(what: String) -> void:
+	_refusals.append(what)
+
+
+func _set_on_deck(
+	layout: BrickLayout, grid: DeckGrid, cell: Vector3i, brick_id: String, yaw: int = 0
+) -> void:
+	if not _on_deck(grid, cell):
+		_refuse("%s at %v is off the %d x %d deck" % [brick_id, cell, grid.width, grid.length])
+		return
+	layout.set_brick(cell, brick_id, yaw)
+
+
 # ── shared hull furniture ───────────────────────────────────────────────────
 
-const HULL := "hull_28x10"
+
+## The yaw that turns a railing's run OUTBOARD on this cell.
+##
+## `railing` draws its run spanning local X on the local −Z face — "outboard when
+## yaw matches", says `_add_railing_visual`. Nothing was matching it: every
+## preset placed every railing at yaw 0, so the runs along the SIDES lay
+## athwartships, and the port and starboard deck edges rendered as a row of
+## little gates standing across the deck instead of a rail along the side. It is
+## plainly visible in `screenshots/vessels/starter/starter__bow_quarter.png`
+## before this changed, and it was on all four presets.
+##
+## The four values are MEASURED, not derived from the rotation convention:
+## `tests/_railing_yaw_probe.gd` places one railing on port-edge cell (0,0,20) of
+## hull_15x5 at each yaw and reports the drawn AABB —
+##   yaw   0 -> x span 0.57 m, z span 0.09 m at z−  (run across the deck, fwd face)
+##   yaw  90 -> x span 0.09 m at x −2.47, z span 0.57 m  (run along the PORT face)
+##   yaw 180 -> run across the deck on the after face
+##   yaw 270 -> run along the +X face  (STARBOARD)
+##
+## A corner cell is an edge on two faces and can hold one brick, so the side wins:
+## a break in a long side run reads far worse than a notch at a transom corner.
+func _railing_yaw(grid: DeckGrid, ix: int, iz: int) -> int:
+	if grid.cell_shape(ix - 1, iz) != DeckGrid.CellShape.FULL:
+		return 90
+	if grid.cell_shape(ix + 1, iz) != DeckGrid.CellShape.FULL:
+		return 270
+	if grid.cell_shape(ix, iz - 1) != DeckGrid.CellShape.FULL:
+		return 0
+	return 180
 
 
-func _base(grid: DeckGrid) -> BrickLayout:
+func _base(hull_id: String, grid: DeckGrid) -> BrickLayout:
 	var layout := BrickLayout.new()
-	layout.hull_id = HULL
+	layout.hull_id = hull_id
 	## Deck-edge railing all round, the same mechanism `_paint_edge_railings`
 	## uses — one railing per edge cell, so it follows the bow taper exactly.
 	for ix in range(grid.width):
 		for iz in range(grid.length):
 			if not grid.is_edge_cell(ix, iz):
 				continue
-			layout.set_brick(Vector3i(ix, 0, iz), "railing", 0)
+			layout.set_brick(Vector3i(ix, 0, iz), "railing", _railing_yaw(grid, ix, iz))
 	return layout
 
 
 ## Four mooring points, two a side, fore and aft — the general-vessel minimum.
+## Fore is a quarter of the way aft, but never inside the bow taper, where the
+## outboard cells are half cells and a mooring bit would hang over the water.
 func _add_mooring(layout: BrickLayout, grid: DeckGrid) -> void:
-	for z in [14, grid.length - 4]:
+	for z in [maxi(grid.bow_taper_cells + 2, grid.length / 4), grid.length - 4]:
 		for x in [0, grid.width - 1]:
-			layout.set_brick(Vector3i(x, 0, z), "railing_mooring", 0)
+			_set_on_deck(
+				layout, grid, Vector3i(x, 0, z), "railing_mooring", _railing_yaw(grid, x, z)
+			)
 
 
 ## Deckhouse: a walled box with a glazed forward face, a door aft and a flat
-## roof. `x0..x1` / `z0..z1` are inclusive perimeter cells; five levels is
-## 2.5 m of headroom at the 0.5 m cell (CONVENTIONS §3a).
+## roof, centred on the beam. `width_cells` / `length_cells` are the intent and
+## the beam is the limit — two clear cells a side, always, so the side decks
+## survive on a 10-cell beam. `z_frac` places the forward face along the hull.
+## Five levels is 2.5 m of headroom at the 0.5 m cell (CONVENTIONS §3a).
 func _add_deckhouse(
-	layout: BrickLayout, grid: DeckGrid, x0: int, x1: int, z0: int, z1: int
+	layout: BrickLayout, grid: DeckGrid, width_cells: int, length_cells: int, z_frac: float
 ) -> Dictionary:
+	var house_w := mini(width_cells, grid.width - 4)
+	var house_l := mini(length_cells, grid.length - 6)
+	var x0 := (grid.width - house_w) / 2
+	var x1 := x0 + house_w - 1
+	var z0 := clampi(
+		int(round(float(grid.length) * z_frac)),
+		grid.bow_taper_cells + 1,
+		grid.length - house_l - 2,
+	)
+	var z1 := z0 + house_l - 1
 	var door_cells := {}
 	for dx in range(2):
 		for dy in range(3):
@@ -82,77 +196,146 @@ func _add_deckhouse(
 				## Window band across the forward face and the front third of
 				## each side, at eye height for the 1.8 m figure.
 				var glazed := (y == 2 or y == 3) and (z == z0 or (x == x0 or x == x1) and z <= z0 + 2)
-				layout.set_brick(c, "block_window" if glazed else "block", 0)
+				_set_on_deck(layout, grid, c, "block_window" if glazed else "block")
 	for x in range(x0, x1 + 1):
 		for z in range(z0, z1 + 1):
-			layout.set_brick(Vector3i(x, 5, z), "roof_flat", 0)
-	layout.place_footprint(Vector3i(x0 + 2, 0, z1), "block_door", 0, grid)
-	return {"port_wall": Vector3i(x0, 2, z0 + 2), "stbd_wall": Vector3i(x1, 2, z0 + 2)}
+			_set_on_deck(layout, grid, Vector3i(x, 5, z), "roof_flat")
+	if not layout.place_footprint(Vector3i(x0 + 2, 0, z1), "block_door", 0, grid):
+		_refuse("deckhouse door at %v" % Vector3i(x0 + 2, 0, z1))
+	return {
+		"x0": x0, "x1": x1, "z0": z0, "z1": z1,
+		"roof_y": 5,
+		"port_wall": Vector3i(x0, 2, z0 + 2),
+		"stbd_wall": Vector3i(x1, 2, z0 + 2),
+	}
 
 
 ## Sidelights ride on the deckhouse walls as MOUNTED lights, which is what makes
 ## `brick_side` measurable: the host cell is the light's position, and the port
 ## light is on a cell whose local x is negative.
 func _add_nav_lights(layout: BrickLayout, house: Dictionary, mast_top: Vector3i) -> void:
-	layout.attach_light(house["port_wall"] as Vector3i, "light_nav_port", 270)
-	layout.attach_light(house["stbd_wall"] as Vector3i, "light_nav_stbd", 90)
-	layout.attach_light(mast_top, "light_mast_white", 0)
+	if not layout.attach_light(house["port_wall"] as Vector3i, "light_nav_port", 270):
+		_refuse("port sidelight has no wall to mount on at %v" % house["port_wall"])
+	if not layout.attach_light(house["stbd_wall"] as Vector3i, "light_nav_stbd", 90):
+		_refuse("starboard sidelight has no wall to mount on at %v" % house["stbd_wall"])
+	if not layout.attach_light(mast_top, "light_mast_white", 0):
+		_refuse("masthead light has no mast to mount on at %v" % mast_top)
 
 
-## Mast: a tabernacle base and three pole segments. The masthead light sits on
-## the top segment, which is what puts it above the sidelights.
-func _add_mast(layout: BrickLayout, grid: DeckGrid, x: int, z: int) -> Vector3i:
-	layout.place_footprint(Vector3i(x, 0, z), "mast_base", 0, grid)
-	for y in range(1, 4):
-		layout.place_footprint(Vector3i(x, y, z), "mast_pole", 0, grid)
-	return Vector3i(x, 3, z)
+## Mast: a tabernacle base and three pole segments on the 2×2 column that
+## `mast_base` / `mast_pole` share, centred on the beam. `y0` is the deck level
+## it stands on — 0 for a deck-stepped mast, the roof level + 1 for a mast on
+## the wheelhouse top. The masthead light sits on the top segment, which is what
+## puts it above the sidelights.
+func _add_mast(layout: BrickLayout, grid: DeckGrid, z: int, y0: int = 0) -> Vector3i:
+	var x := (grid.width - 2) / 2
+	if not layout.place_footprint(Vector3i(x, y0, z), "mast_base", 0, grid):
+		_refuse("mast base at %v" % Vector3i(x, y0, z))
+	for y in range(y0 + 1, y0 + 4):
+		if not layout.place_footprint(Vector3i(x, y, z), "mast_pole", 0, grid):
+			_refuse("mast pole at %v" % Vector3i(x, y, z))
+	return Vector3i(x, y0 + 3, z)
 
 
-# ── the three starters ──────────────────────────────────────────────────────
+func _add_helm(layout: BrickLayout, grid: DeckGrid, house: Dictionary) -> void:
+	_set_on_deck(
+		layout, grid, Vector3i((grid.width - 2) / 2, 0, int(house["z0"]) + 2), "helm"
+	)
+
+
+# ── the four starters ───────────────────────────────────────────────────────
 
 
 func _trawler() -> Dictionary:
-	var grid := HullRegistry.make_grid(HULL)
-	var layout := _base(grid)
+	var grid := HullRegistry.make_grid(BIG)
+	var layout := _base(BIG, grid)
 	_add_mooring(layout, grid)
 	## Wheelhouse forward, open working deck aft — the sjark arrangement.
-	var house := _add_deckhouse(layout, grid, 7, 12, 16, 23)
-	layout.set_brick(Vector3i(9, 0, 18), "helm", 0)
-	var mast_top := _add_mast(layout, grid, 9, 26)
+	var house := _add_deckhouse(layout, grid, 6, 8, 2.0 / 7.0)
+	_add_helm(layout, grid, house)
+	var mast_top := _add_mast(layout, grid, int(house["z1"]) + 3)
 	_add_nav_lights(layout, house, mast_top)
 	## Net drum on the working deck aft of the house.
-	layout.place_footprint(Vector3i(9, 0, 34), "trommel_small", 0, grid)
-	return {"layout": layout, "registration_id": "fishing_vessel"}
+	_add_trommel(layout, grid, int(house["z1"]) + 11)
+	return {"hull_id": BIG, "layout": layout}
 
 
 func _cargo() -> Dictionary:
-	var grid := HullRegistry.make_grid(HULL)
-	var layout := _base(grid)
+	var grid := HullRegistry.make_grid(BIG)
+	var layout := _base(BIG, grid)
 	_add_mooring(layout, grid)
 	## Superstructure aft, clear cargo deck forward — the coaster arrangement.
-	var house := _add_deckhouse(layout, grid, 7, 12, 40, 47)
-	layout.set_brick(Vector3i(9, 0, 42), "helm", 0)
-	var mast_top := _add_mast(layout, grid, 9, 36)
+	var house := _add_deckhouse(layout, grid, 6, 8, 5.0 / 7.0)
+	_add_helm(layout, grid, house)
+	var mast_top := _add_mast(layout, grid, int(house["z0"]) - 4)
 	_add_nav_lights(layout, house, mast_top)
-	## Two container pads on the open deck. Spans tile the 4×4-cell container
-	## footprint, which `add_container_pad` refuses otherwise.
-	layout.add_container_pad(Vector3i(4, 0, 14, ), Vector3i(11, 0, 21), grid)
-	layout.add_container_pad(Vector3i(4, 0, 22), Vector3i(11, 0, 29), grid)
-	return {"layout": layout, "registration_id": "cargo_vessel"}
+	## Two container pads on the open deck. Spans tile the container footprint,
+	## which `add_container_pad` refuses otherwise. The pad is NOT centred on the
+	## beam — it starts a fifth of the way across, which is where this preset was
+	## authored, and re-deriving it as centred would move a shipped vessel.
+	var pad_w := ContainerUnit.DEFAULT_FOOTPRINT.x * 2
+	var pad_x0 := int(round(float(grid.width) * 0.2))
+	var pad_z0 := maxi(grid.bow_taper_cells + 4, grid.length / 4)
+	if not layout.add_container_pad(
+		Vector3i(pad_x0, 0, pad_z0),
+		Vector3i(pad_x0 + pad_w - 1, 0, pad_z0 + pad_w - 1),
+		grid,
+	):
+		_refuse("forward container pad at z%d" % pad_z0)
+	if not layout.add_container_pad(
+		Vector3i(pad_x0, 0, pad_z0 + pad_w),
+		Vector3i(pad_x0 + pad_w - 1, 0, pad_z0 + pad_w * 2 - 1),
+		grid,
+	):
+		_refuse("after container pad at z%d" % (pad_z0 + pad_w))
+	return {"hull_id": BIG, "layout": layout}
 
 
 func _bulk() -> Dictionary:
-	var grid := HullRegistry.make_grid(HULL)
-	var layout := _base(grid)
+	var grid := HullRegistry.make_grid(BIG)
+	var layout := _base(BIG, grid)
 	_add_mooring(layout, grid)
-	var house := _add_deckhouse(layout, grid, 7, 12, 40, 47)
-	layout.set_brick(Vector3i(9, 0, 42), "helm", 0)
-	var mast_top := _add_mast(layout, grid, 9, 36)
+	var house := _add_deckhouse(layout, grid, 6, 8, 5.0 / 7.0)
+	_add_helm(layout, grid, house)
+	var mast_top := _add_mast(layout, grid, int(house["z0"]) - 4)
 	_add_nav_lights(layout, house, mast_top)
 	## One hold amidships. `add_bulk_hold` registers the zone, which is what
 	## `count_tag("bulk_hold")` reads — a placed brick would not count.
-	layout.add_bulk_hold(Vector3i(7, 0, 16), "bulk_hold_6x12", 0, grid)
-	return {"layout": layout, "registration_id": "bulk_vessel"}
+	var hold_fp := BrickCatalog.footprint_of("bulk_hold_6x12")
+	var hold_x0 := (grid.width - hold_fp.x) / 2
+	var hold_z0 := maxi(grid.bow_taper_cells + 6, grid.length / 4 + 2)
+	if not layout.add_bulk_hold(Vector3i(hold_x0, 0, hold_z0), "bulk_hold_6x12", 0, grid):
+		_refuse("bulk hold at %v" % Vector3i(hold_x0, 0, hold_z0))
+	return {"hull_id": BIG, "layout": layout}
+
+
+## The 15 m sjark — the beginner's boat. Same vocabulary as the trawler above
+## on a hull less than half its length: wheelhouse forward of amidships, mast
+## STEPPED ON THE WHEELHOUSE ROOF (a 2 m deck-stepped mast on a 2.5 m house puts
+## the masthead light below the roof it is supposed to be seen over), open
+## working deck aft with the net drum.
+func _sjark() -> Dictionary:
+	var grid := HullRegistry.make_grid(SMALL)
+	var layout := _base(SMALL, grid)
+	_add_mooring(layout, grid)
+	var house := _add_deckhouse(layout, grid, 6, 8, 0.30)
+	_add_helm(layout, grid, house)
+	var mast_top := _add_mast(
+		layout, grid, int(house["z0"]) + 2, int(house["roof_y"]) + 1
+	)
+	_add_nav_lights(layout, house, mast_top)
+	_add_trommel(layout, grid, int(house["z1"]) + 3)
+	return {"hull_id": SMALL, "layout": layout}
+
+
+## Net drum on the centreline, `z0` cells aft. Clamped so its 4-cell run always
+## lands on deck rather than hanging off the transom.
+func _add_trommel(layout: BrickLayout, grid: DeckGrid, z0: int) -> void:
+	var fp := BrickCatalog.footprint_of("trommel_small")
+	var x := (grid.width - fp.x) / 2
+	var z := mini(z0, grid.length - fp.z - 1)
+	if not layout.place_footprint(Vector3i(x, 0, z), "trommel_small", 0, grid):
+		_refuse("trommel at %v" % Vector3i(x, 0, z))
 
 
 # ── emit ────────────────────────────────────────────────────────────────────
@@ -160,12 +343,14 @@ func _bulk() -> Dictionary:
 
 func _emit(built: Dictionary, meta: Dictionary) -> bool:
 	var layout: BrickLayout = built["layout"]
+	var hull_id := str(built["hull_id"])
 	var registration_id := str(meta["registration_id"])
-	var grid := HullRegistry.make_grid(HULL)
-	var report := VesselCompliance.validate(layout, HULL, registration_id, grid)
+	var grid := HullRegistry.make_grid(hull_id)
+	var report := VesselCompliance.validate(layout, hull_id, registration_id, grid)
 	var cells_n := (layout.to_dict().get("cells", {}) as Dictionary).size()
-	print("--- %s (%s) cells=%d primaries=%d" % [
-		meta["id"], registration_id, cells_n, layout.iter_primary_cells().size(),
+	print("--- %s  hull=%s (%dx%d cells, %d-cell bow)  %s  cells=%d primaries=%d" % [
+		meta["id"], hull_id, grid.width, grid.length, grid.bow_taper_cells,
+		registration_id, cells_n, layout.iter_primary_cells().size(),
 	])
 	for raw in report.get("checklist", []) as Array:
 		var item := raw as Dictionary
@@ -174,13 +359,20 @@ func _emit(built: Dictionary, meta: Dictionary) -> bool:
 		])
 	for e in report.get("errors", PackedStringArray()):
 		print("    ERR " + str(e))
-	if not bool(report.get("ok", false)):
+	## Off-deck placements are a REFUSAL, not a warning: a brick written into the
+	## sea still counts for compliance (`_measure` never asks the grid), so the
+	## catalogue would certify a vessel with furniture overboard.
+	for r in _refusals:
+		print("    OFF-DECK " + str(r))
+	var clean := _refusals.is_empty()
+	_refusals = PackedStringArray()
+	if not bool(report.get("ok", false)) or not clean:
 		return false
 	var preset := {
 		"format_version": 2,
 		"id": str(meta["id"]),
 		"name": str(meta["name"]),
-		"hull_id": HULL,
+		"hull_id": hull_id,
 		"registration_id": registration_id,
 		"price_marks": int(meta["price_marks"]),
 		"shaft_power_kw": float(meta["shaft_power_kw"]),
