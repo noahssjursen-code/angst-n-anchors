@@ -1,5 +1,33 @@
 extends SceneTree
 
+## HAND-RUN PROFILER. NOT A TEST. The leading underscore is what keeps it out
+## of the gate, and it is deliberate.
+##
+## This file contains zero assertions and calls `quit(0)` unconditionally, so
+## it cannot go red under any defect. Until 2026-08-15 it had no underscore:
+## the gate discovered it, ran it, and scored it PASS — 114 s, the most
+## expensive lane-A unit in the suite, occupying one of two job slots on every
+## run to prove nothing (REALITY.md §4, "a scratch probe left in tests/").
+##
+## It is kept, rather than deleted, because it is still the only thing that
+## drives the traffic stack at full size: world generation, `CoastalPortPlacer`,
+## `PortExpander` over 35 ports, `ShippingLaneNetworkBuilder.build` + `validate`,
+## and 12 x 1000 s of `ShippingLaneTrafficSimulator.advance` with 250 vessels.
+## Run it by hand when you are changing the traffic stack and want the timings:
+##
+##   xvfb-run -a --server-args="-screen 0 1280x720x24" godot \
+##     --rendering-driver opengl3 --audio-driver Dummy \
+##     --script res://tests/_shipping_lane_traffic_profile.gd \
+##     -- --ports=35 --vessels=250 --chunks=12
+##
+## The properties the gate used to *appear* to be getting from this file are
+## asserted in `tests/shipping_lane_traffic_integrity_test.gd`, at 35 ports and
+## 24 vessels, in ~26 s. What that unit does NOT cover, and this one still
+## shows, is the 250-vessel regime — where, measured on 2026-08-15, the
+## simulator reports 3 collisions and leaves 226 of 250 vessels parked in
+## `scheduled_strategic` with `trips_completed` frozen at 25 from t=2000 s
+## onward. That is a live defect, visible only here, and asserted nowhere.
+
 const DEFAULT_SEED := 42
 const DEFAULT_PORT_COUNT := 35
 const DEFAULT_VESSEL_COUNT := 250

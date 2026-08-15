@@ -79,7 +79,7 @@ names, so `git diff` on an image shows what a change did to the silhouette.
 |---|---|
 | Gate | Three lanes — A `--script`, B scene, C app self-check. Capability skips are self-policing: a skipped unit that passes when forced turns the gate red. Scratch probes (`_`-prefixed) are skipped and reported. |
 | Tests | Zero bare `assert()` **anywhere** — `tests/` (162 files) and `scripts/` alike, as of `29435d1`. The 16 production ones became guards that refuse loudly and leave a state the class's own queries define; none was a deletable note, and each was measured pre-guard against a `git archive HEAD` copy. **One (`ocean_clipmap`) mutation-passed** — 9 child meshes either way in debug, only the release half differs and this container has no export templates, so that guard is unverified and recorded as a finding, not a relief. `TestReport` fails a run that executed zero checks. |
-| Units that cannot go red | Swept, all 107: **three found, two closed.** `winding_probe.gd` scored PASS in 6 s with no assertions — now `_winding_probe.gd` (a dev note about the *engine's* BoxMesh convention, which is why converting it in place would have landed a layer below the bug) and the property is asserted on the mesh the baker commits, in `tests/box_winding_test.gd` (mutations: 3/18 and 6/18 red, control PASS 18, verified twice independently). `shipping_lane_traffic_profile.gd` is the same defect at **114 s, the most expensive lane-A unit** — a wave owns it. `port_layout_visual_capture` has no red path either but is already NOTRUN, so it is not scoring a false PASS. |
+| Units that cannot go red | Swept, all 107: **three found, two closed.** `winding_probe.gd` scored PASS in 6 s with no assertions — now `_winding_probe.gd` (a dev note about the *engine's* BoxMesh convention, which is why converting it in place would have landed a layer below the bug) and the property is asserted on the mesh the baker commits, in `tests/box_winding_test.gd` (mutations: 3/18 and 6/18 red, control PASS 18, verified twice independently). `shipping_lane_traffic_profile.gd` was the same defect at **123 s measured, the most expensive lane-A unit** — now `_shipping_lane_traffic_profile.gd` (still a working hand-run instrument) and replaced by `shipping_lane_traffic_integrity_test.gd`, 12 checks in **25 s**: net **−98 s** off the gate. `port_layout_visual_capture` has no red path either but is already NOTRUN, so it is not scoring a false PASS. **All three are now closed or accounted for.** |
 | Colour | **Free in the solid bake, priced in the studio x-ray.** The bucket key is material alone and colour rides in vertex data, so `demo_workboat` measures **3 mesh instances / 11 renderer draw calls at BOTH 22 and 64 distinct colours** — zero delta. The ghost/x-ray path still keys by colour and costs **112 instances at 64 colours**, which is what mutation-verifies the claim without editing production code. Earlier text here said "4 draw calls": wrong on both readings — buckets are 3 (`MATERIALS.size()` is the BOUND, not the count) and renderer draw calls are 11. |
 | Collision | Diagonal walls collide as drawn, asserted against `PhysicsServer3D` on a real body — not against the baker's dictionaries. Every edge run's barrier is the yaw-frame BOUND of the boxes it draws, not a second formula — 0 loose corners across all nine capture fixtures. |
 | Items | Float metres, free yaw + optional pitch/roll, props bag, **host-relative placement** so a fitting follows its host. Part catalog + plan-side compliance measurement exist. |
@@ -985,7 +985,7 @@ warns about, repeated. **Rewrite this table when a wave lands, not when you next
 |---|---|---|
 | **Staged fit-out is still O(n²)** | `deck_fitout.gd`, `deck_fitout_job.gd`, `boat_body.gd` | the synchronous path went linear by lifting the WalkDeck body out of its physics space; `DeckFitoutJob` (>1000 bricks) never got it, so the vessels that most need it are the only ones that never do. Binding constraint: **at no point may a vessel a player is standing on become non-colliding.** Fenced from reducing collider count — that is the open slop decision. Briefed to measure the staged curve FIRST |
 | **The three look questions** | render probes, `building_grid.gd`, `port_trade_profile.gd`, scratch copies | brick cell, apron density, raked-plate slop have sat in Owner decisions as prose while `REALITY.md` §2 forbids settling any of them with a metric — **and nobody has looked at a render of one.** Changes no default; delivers orthographic elevations with a 1.8 m figure in frame (the last misread of this warehouse was 2.4× off, from a perspective lens with the figure 12 m off-corner) and one answerable question each |
-| **The traffic profiler cannot go red** | `shipping_lane_traffic_profile.gd` and its replacement test | zero assertions, unconditional `quit(0)`, scored PASS at **114 s — the most expensive lane-A unit.** Owns BOTH halves in one change, because it is also the only thing driving the traffic stack at 35 ports / 250 vessels: underscore the profiler *and* write the test that asserts what the exercise was standing guard over. A silent PASS replaced by silent absence is not an improvement |
+| **`BuildingCache` drops every non-mesh visual** | `building_cache.gd`, a new gate unit, render probes | `_flatten_visuals` and `_stamp_node` reconstruct `MeshInstance3D` and only that, so the warehouse sign is drawn on no building the game stamps. Briefed to **survey all 64 bricks before touching the filter** — the pass that found this checked three — and to end with a picture of the sign, looked at |
 
 ### WHERE THIS STANDS — every red is diagnosed, nothing is unexplained
 
@@ -1389,6 +1389,26 @@ file is not red by construction. It belongs beside decision #1 below.
 
    **The owner question is no longer "how many" but "at all?"** — should aprons be
    dressed with props, yes or no? Nothing tuned, nothing wired.
+5b. **The traffic simulator stalls at 250 vessels, and nothing in the gate would
+   notice.** Found 2026-08-15 while replacing the traffic profiler, by a wave
+   that considered `collisions == 0` as an assertion and measured it before
+   asserting it. True at 24 vessels; at the profiler's own fleet — seed 42, 35
+   ports, **250 vessels** — the simulator reports **3 collisions** and parks
+   **226 of 250 in `scheduled_strategic`**, with `trips_completed` frozen at 25
+   from t = 2000 s onward. The traffic stops.
+
+   Deliberately **not** asserted: turning it red is a decision about a live
+   product defect, not a test-instrument repair, and that wave was fenced to the
+   instrument. It is recorded in both traffic files' headers so the next reader
+   meets it. **After the profiler change nothing in the gate goes red if this gets
+   worse** — the new unit runs 24 vessels, and the 250-vessel regime is now a
+   hand-run instrument only. That is the honest cost of the −98 s.
+5c. **`ShippingLaneNetworkBuilder.validate()` cannot see a port that publishes no
+   gates at all.** Its `missing_port_gates` check iterates
+   `network.port_gate_nodes.keys()`, so a port absent from that dictionary is
+   absent from the check. Measured: a network missing one port's gates entirely
+   reported **0 issues**. The new integrity test catches that case by comparing
+   against the placed-port count; the validator still should.
 6. `budget_caps.crane` is 0 on every registration, so any crane fails compliance.
 7. No lifesaving requirement of any kind exists.
 8. No hull under 28 m, though two of three reference vessels are ~22 m and the

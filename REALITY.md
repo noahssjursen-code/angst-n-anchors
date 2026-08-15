@@ -423,6 +423,23 @@ no visible scale figure has no absolute scale — check the figure is *visible*,
     else's unfinished work — that is exactly when its guard matters most, and I have failed this
     once: I committed a plate-collision rewrite while `structure_plate_test` had not compiled for
     two commits, then swept the repair into an unrelated commit with a broad `git add -A`.
+3i. **`git add <paths>` does not make a commit selective. Read `git diff --cached --stat`
+    before every commit, and only then write the message.** A selective `git add` controls
+    what *you* put in the index; `git commit` writes the *whole index*, including anything
+    another agent staged. `git mv` stages. So does any `git add` a wave runs itself.
+
+    Failed 2026-08-15, and it is worth being precise about why the earlier defence did not
+    hold. After the `9e18cf4` incident (a live mutation swept in by `git add -A`) I adopted
+    "stage selectively by path", and believed the problem solved. It is not the same problem:
+    naming paths defends against *my* over-broad add, and not at all against a rename someone
+    else already staged. Commit `246c75a` — captioned as three decision renders — silently
+    contains another wave's `git mv` of `shipping_lane_traffic_profile.gd`. The content was
+    harmless and the wave wanted that rename anyway. **The damage is that the commit does not
+    describe its own contents**, which is the thing the log exists to do, and I would not have
+    known if the wave had not told me.
+
+    Two agents in one working tree means the index is shared mutable state. Either read it
+    back before committing, or name the paths on the commit itself (`git commit -- <paths>`).
 4. **Could a player do this with a mouse?** If not, it is a format, not a feature.
 5. **Say what you did not verify.**
 6. **Red with a diagnosis beats green with a lie**, every time.
