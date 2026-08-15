@@ -636,6 +636,10 @@ static func clear(boat: BoatBody) -> void:
 		boat.remove_child(existing)
 		existing.free()
 	boat.clear_walk_brick_colliders()
+	## The holes a fish hold cut in the drawn deck belong to the fit-out that
+	## mounted it, not to the hull. Left behind, a re-fit-out with the hold
+	## moved (or removed) would leave a rectangle of missing deck.
+	boat.clear_deck_plate_apertures()
 	if boat.has_meta("brick_capabilities"):
 		boat.remove_meta("brick_capabilities")
 	if boat.has_meta("brick_layout"):
@@ -765,14 +769,32 @@ static func _mount_fishing(
 	## component recorded as it DREW them — this function may not invent one, or
 	## the collider and the drawing become two derivations that drift.
 	var solids := hold.solid_boxes()
+	var shapes: Array[CollisionShape3D] = []
 	for i in solids.size():
 		var box: Dictionary = solids[i]
-		boat.add_walk_brick_collider(
+		shapes.append(boat.add_walk_brick_collider(
 			"hold_%d_%d" % [hold_i, i],
 			hold_local + (box["pos"] as Vector3),
 			box["size"] as Vector3,
 			0.0,
-		)
+		))
+	## Handed back so the hold can MOVE them when its hatch is worked. The hold
+	## redraws its boards and re-points these in the same call, so there is no
+	## frame where the drawing and the collision disagree — and the count never
+	## changes, because a lifted board is stowed, not deleted.
+	hold.adopt_colliders(shapes, hold_local)
+	## The hull's own deck plate spans this aperture like everything else, so an
+	## opened hatch would show the plate where the catch is. Cut it — a drawing,
+	## not a collider (`BoatBody.add_deck_plate_aperture` explains the split).
+	var aperture := hold.hatch_aperture_m()
+	boat.add_deck_plate_aperture(Rect2(
+		aperture.position + Vector2(hold_local.x, hold_local.z), aperture.size
+	))
+	## And the thing that opens it. Same pattern as `BrickDoor` — look at it, F.
+	var hatch := HoldHatch.new()
+	hatch.name = "HoldHatch"
+	hatch.configure(hold, boat)
+	hold.add_child(hatch)
 
 
 ## The clear rectangle of deck this hull offers for a fish hold, in vessel-local

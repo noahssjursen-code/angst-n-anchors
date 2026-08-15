@@ -225,6 +225,13 @@ func _build_hull_visual(stations: HullStations) -> void:
 		0.95
 	)
 	deck.name = "Deck"
+	## See `CatalogHullVessel` — the plate's own arguments, so a fish hold can
+	## have a hole cut in it after the hull is built.
+	deck.set_meta("plate_args", {
+		"ring": MeshBuilder.pointed_plan_ring(LOA_M, BEAM_M, BOW_FRAC),
+		"y0": stations.deck_y,
+		"y1": stations.deck_y + 0.1,
+	})
 	root.add_child(deck)
 
 

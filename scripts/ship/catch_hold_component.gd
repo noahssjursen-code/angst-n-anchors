@@ -25,6 +25,8 @@ extends Node3D
 ## number `configure()` is handed. Resizing the drawing moves no game balance.
 
 signal fill_changed(state: CatchHoldState)
+## Emitted after the boards have moved and the colliders have followed them.
+signal hatch_changed(open: bool)
 
 ## Wall/liner thicknesses and coaming height are absolute: a coaming is
 ## shin-high on a 15 m boat and on a 90 m one, and steel plate does not get
@@ -41,43 +43,60 @@ const PIT_FLOOR_M := 0.08
 const MANIFOLD_REACH_M := 0.42
 const MANIFOLD_FLANGE_R := 0.18
 
-## THE HATCH IS CLOSED, AND WHAT CLOSES IT IS DRAWN — 2026-08-15.
+## THE HATCH OPENS, AND WHAT IT OPENS INTO IS NOT A HOLE A PERSON FITS THROUGH
+## — 2026-08-15.
 ##
-## Until today this node drew a 1.16 m pit and NOTHING it drew collided: not one
-## CollisionShape3D, not one CollisionObject3D, on any vessel. What carried a
-## player over the aperture was `BoatBody`'s WalkDeck slab, a 5.00 x 0.14 x
-## 15.00 m box spanning the whole hull — so a deckhand walked over an open hatch
-## on a surface the hold does not draw. Measured on the granted starter
-## (`tests/_hold_walk_probe.gd`, `hull_15x5`): all 50 capsule stations over the
-## footprint stood on that slab at boat-local y 2.750, and a capsule dropped
-## down the middle of the hatch stopped there too, 1.09 m above the drawn pit
-## floor and 0.09 m above the drawn surface of its own chilled water.
+## History, because the shape of the answer comes from it. This node used to draw
+## a 1.16 m pit and NOTHING it drew collided: not one CollisionShape3D, not one
+## CollisionObject3D, on any vessel. What carried a player over the aperture was
+## `BoatBody`'s WalkDeck slab, a 5.00 x 0.14 x 15.00 m box spanning the whole
+## hull, so a deckhand walked over an open hatch on a surface the hold does not
+## draw — 50 of 50 capsule stations at boat-local y 2.750, 1.09 m above the drawn
+## pit floor. `bd548bc` closed it with solid boards and said the price out loud:
+## a player could no longer see their catch.
 ##
-## A fish hold IS a hole in the deck, so "close it" is a choice and not the only
-## one. It is the one this drawing can honour, because the other two need the
-## HULL cut open and this node cannot do that:
+## THE ARGUMENT FOR HOW IT OPENS. A fish hold is a hole in the deck, and the
+## honest way to open one is to let a player climb down it. Measured, this hull
+## cannot offer that:
 ##
-##   • the same WalkDeck also carries a hull box (5.00 x 2.21 x 15.00 m) whose
-##     top stands 0.51 m BELOW the deck plane. An aperture that were merely
-##     opened would drop a player 0.51 m onto invisible steel with 0.65 m of
-##     drawn pit still beneath their feet — the same "standing on nothing"
-##     defect, one storey down;
-##   • the hull's own deck plate mesh spans the aperture as well, so an open
-##     hold needs three separate holes cut — slab, hull box, plate — every one
-##     of them in `BoatBody` / the hull loft, on every vessel in the game;
-##   • the player capsule steps 0.45 m and jumps 0.90 m. This coaming is 0.26 m,
-##     so it is not a barrier a player would notice, and a 1.16 m pit with
-##     vertical sides is not climbable. Falling in would be a trap, not a
-##     hazard, until somebody draws a ladder.
+##   • the WalkDeck's hull box (5.00 x 2.21 x 15.00 m) tops out 0.51 m BELOW the
+##     deck plane, and the drawn pit floor is 0.55 m below THAT. Opening the
+##     aperture drops a player onto invisible steel with 0.65 m of drawn pit
+##     still under their feet — the same defect one storey down;
+##   • and the way back out does not exist. `scripts/player/player.gd` has
+##     `max_step_height 0.45` and `jump_peak_height 0.9`, and NO climb path of
+##     any kind — grep for it. The pit floor stands 1.06 m below the deck plane
+##     on `hull_15x5`, so a player who got in could not get out. A hazard needs
+##     an exit or it is a trap, and the exit would be a ladder the controller
+##     cannot use or a stair 1.2 m long in a 2.0 m hold.
 ##
-## So the hold gets hatch boards, dropped into the coaming so the rim still
-## stands proud of them, and they are what a player's feet are on — 0.20 m above
-## the deck, against a 0.45 m step height. Opening them is a gameplay action
-## nothing in the game can perform yet; when it can, the thing it opens exists.
+## So the aperture opens to LOOK, not to enter, and the property that makes that
+## true is measured rather than asserted: **the player capsule is 0.70 m across**
+## (`scenes/shared/player.tscn`: radius 0.35) **and no clear opening this hatch
+## ever presents is wider than 0.62 m.** The hatch boards slide, alternate boards
+## lifting onto their neighbours, so what is open is a run of slots each one
+## board wide — which is how pound boards are actually worked, and which scales:
+## a 19 m hatch on `hull_150x32` opens into 15 slots, not into one 19 m hole.
+##
+## Because nothing a player controls can pass the deck plane, the two colliders
+## below it — the WalkDeck slab and the hull box — are left whole. Cutting a hole
+## in a vessel's player-blocking hull volume to serve a space nothing can reach
+## would be risk with no payoff. The third hole IS cut, because it is a drawing
+## and not a collider: `BoatBody.add_deck_plate_aperture` re-meshes
+## `HullVisual/Deck` around the liner, without which an open hatch shows the deck
+## plate where the catch should be at every fill below brimful.
 const HATCH_COVER_M := 0.06
 ## Target board width. The count is derived from the hatch so a 2 m hold gets
 ## boards a person could lift, not one slab and not twenty battens.
 const HATCH_BOARD_M := 0.62
+## The player capsule's diameter — `scenes/shared/player.tscn`, radius 0.35.
+## An open slot narrower than this is a slot a player cannot fall through, and
+## that is the whole safety argument for opening the hatch at all.
+const PLAYER_CAPSULE_DIAMETER_M := 0.70
+## How much narrower than the player an open slot is held. Small on purpose: the
+## board pitch that already shipped (0.62) clears it, so the margin does not move
+## any hatch that exists, it states why 0.62 is allowed to.
+const HATCH_SLOT_MARGIN_M := 0.08
 ## How far each board laps into its neighbour and into the coaming.
 ##
 ## MEASURED, not styled. Butted flush, two boards share a face exactly, and a
@@ -105,6 +124,15 @@ var _fill_root: Node3D
 var _boat: BoatBody
 var _pump_connection: Node3D
 var _hose_drop: Node3D
+var _hatch_open := false
+## The WalkDeck shapes `DeckFitout` built from `_solid`, in the same order, handed
+## back so the boards can MOVE when the hatch is worked. Not re-derived here: the
+## consumer that put them on the body is the one that knows where the hold sits
+## on it, and a second derivation of that is exactly the drift REALITY §3b is
+## about. Empty on a hold with no vessel (the showcase), which is why every user
+## of this list tolerates it being empty rather than requiring it.
+var _colliders: Array[CollisionShape3D] = []
+var _collider_origin := Vector3.ZERO
 
 
 func _ready() -> void:
@@ -137,6 +165,7 @@ func configure_footprint(size_m: Vector3) -> void:
 	)
 	if is_inside_tree():
 		_build_visual()
+		_sync_colliders()
 
 
 func get_state() -> CatchHoldState:
@@ -243,6 +272,114 @@ func _liner_half() -> Vector2:
 	)
 
 
+## Half-extent of the coaming's CLEAR opening — the rectangle the boards span.
+func _hatch_opening_half() -> Vector2:
+	var c := _coaming_half()
+	return Vector2(maxf(c.x - COAMING_WALL_M, 0.05), maxf(c.y - COAMING_WALL_M, 0.05))
+
+
+## The widest a board — and therefore the widest an OPEN SLOT — may be.
+## Stated against the player rather than against taste: `HATCH_BOARD_M` is what
+## a board should look like, and the capsule term is what it may not exceed.
+func _hatch_board_pitch_max() -> float:
+	return minf(HATCH_BOARD_M, PLAYER_CAPSULE_DIAMETER_M - HATCH_SLOT_MARGIN_M)
+
+
+## How many boards span this hatch. CEIL, not round: rounding lets a hatch just
+## under 1.5 boards long take two boards of 0.775 m each, which is wider than the
+## player and would open a slot a person falls through.
+func hatch_board_count() -> int:
+	return maxi(2, ceili(_hatch_opening_half().y * 2.0 / _hatch_board_pitch_max()))
+
+
+## Clear fore-and-aft width of one open slot, in metres. The number the safety
+## argument turns on; `catch_hold_test` reads it back off PhysicsServer3D rather
+## than off this function.
+func hatch_slot_width_m() -> float:
+	return _hatch_opening_half().y * 2.0 / float(hatch_board_count())
+
+
+## The rectangle of DECK this hold needs cut out of the hull's plate, in
+## hold-local XZ metres. It is the liner's outer face, so the plate's cut edge
+## and the liner's outer skin are the same line — no ledge to see, no gap.
+func hatch_aperture_m() -> Rect2:
+	var l := _liner_half()
+	return Rect2(-l.x, -l.y, l.x * 2.0, l.y * 2.0)
+
+
+## Which boards come up when the hatch is worked: every other one. That is what
+## keeps an open slot ONE board wide however long the hatch is — no two slots are
+## ever adjacent, so the 19 m hatch on `hull_150x32` opens into 15 separate
+## 0.61 m slots rather than into a hole.
+func _board_is_lifted(i: int) -> bool:
+	return i % 2 == 1
+
+
+func is_hatch_open() -> bool:
+	return _hatch_open
+
+
+func toggle_hatch() -> void:
+	set_hatch_open(not _hatch_open)
+
+
+## Work the hatch. The boards are REDRAWN in their new places and the shapes on
+## the vessel follow them in the same call, so there is no frame in which what a
+## player stands on and what a player sees disagree.
+func set_hatch_open(open: bool) -> void:
+	if open == _hatch_open:
+		return
+	_hatch_open = open
+	if is_inside_tree():
+		_build_visual()
+		_sync_colliders()
+	hatch_changed.emit(_hatch_open)
+
+
+## Take ownership of the WalkDeck shapes built from `_solid`, in `_solid` order.
+## `boat_local_origin` is where this hold sits on the vessel — the offset
+## `DeckFitout` already applied when it placed them.
+func adopt_colliders(shapes: Array, boat_local_origin: Vector3) -> void:
+	_colliders.clear()
+	for shape in shapes:
+		var cs := shape as CollisionShape3D
+		if cs != null:
+			_colliders.append(cs)
+	_collider_origin = boat_local_origin
+
+
+## Re-point every adopted shape at the box its mesh was just drawn from. The
+## count and the order are invariant across hatch states BY CONSTRUCTION — a
+## board that is lifted is drawn somewhere else, never dropped — so this is a
+## positional update and not a rebuild, and a count mismatch is a defect worth
+## refusing loudly rather than papering over.
+func _sync_colliders() -> void:
+	if _colliders.is_empty():
+		return
+	if _boat == null or not is_instance_valid(_boat):
+		_boat = _find_boat()
+	if _boat == null:
+		return
+	if _colliders.size() != _solid.size():
+		push_warning(
+			"CatchHoldComponent: %d adopted colliders against %d drawn boxes — the "
+			% [_colliders.size(), _solid.size()]
+			+ "hatch will not be what you stand on. Refusing to move them."
+		)
+		return
+	for i in _solid.size():
+		var cs := _colliders[i]
+		if cs == null or not is_instance_valid(cs):
+			continue
+		var box := cs.shape as BoxShape3D
+		if box == null:
+			continue
+		box.size = _solid[i]["size"] as Vector3
+		cs.position = _boat.boat_to_walk_deck_local(
+			_collider_origin + (_solid[i]["pos"] as Vector3)
+		)
+
+
 ## Draws a box AND records it as one of this hold's solid boxes. The two happen
 ## in one statement on purpose: a collider derived a second time from the same
 ## constants is a second derivation, and this project has fixed that drift three
@@ -302,8 +439,22 @@ func solid_boxes() -> Array[Dictionary]:
 	return out
 
 
+## Names of the roots this function owns. Everything else parented to the hold —
+## the `HoldHatch` that works it, the state binding under that — is somebody
+## else's and MUST survive a rebuild.
+##
+## This is not tidiness. `_ready` calls `_build_visual` and `_ready` fires when
+## the hold's parent enters the tree, which is AFTER `DeckFitout` has attached
+## the hatch during a deferred fit-out — so a blanket `for child in
+## get_children(): free()` deleted the hatch on every vessel whose fit-out ran
+## before the boat was in the tree. Measured: 11 of 11 holds carried no hatch.
+const OWNED_ROOTS := ["OpenRswFishHold", "FishAndChilledWater"]
+
+
 func _build_visual() -> void:
 	for child in get_children():
+		if not OWNED_ROOTS.has(str(child.name)):
+			continue
 		remove_child(child)
 		child.queue_free()
 	_solid.clear()
@@ -311,7 +462,14 @@ func _build_visual() -> void:
 	hold.name = "OpenRswFishHold"
 	add_child(hold)
 	var steel := Color(0.34, 0.39, 0.42)
-	var inner := Color(0.025, 0.045, 0.055)
+	## PALE, and that changed today. The liner used to be (0.025, 0.045, 0.055) —
+	## near black — chosen when nothing could ever see it, to "read as a volume
+	## below deck" from a cutaway. Now that the hatch opens, that colour is what a
+	## player looks at: photographed through an open slot at 25% fill the hold was
+	## a black hole with nothing in it, because the chilled water is 0.8 m down
+	## and no light reaches a narrow slot at a quarter angle. A real insulated
+	## fish hold is white for hygiene; a white one is also legible.
+	var inner := Color(0.80, 0.82, 0.80)
 	var coam := _coaming_half()
 	var liner := _liner_half()
 	var depth := footprint_m.y
@@ -376,11 +534,9 @@ func _build_visual() -> void:
 	## downward ray, would find the deck 0.26 m below through it — and butted
 	## flush is not enough, see HATCH_LAP_M. The seams are drawn by alternating
 	## the board shade instead, which is free in the solid bake.
-	var open := Vector2(
-		maxf(coam.x - COAMING_WALL_M, 0.05), maxf(coam.y - COAMING_WALL_M, 0.05)
-	)
-	var boards := maxi(2, int(round(open.y * 2.0 / HATCH_BOARD_M)))
-	var board_z := open.y * 2.0 / float(boards)
+	var open := _hatch_opening_half()
+	var boards := hatch_board_count()
+	var board_z := hatch_slot_width_m()
 	## RECESSED one board thickness, not flush. Flush was tried and photographed
 	## first (`screenshots/vessels/hold/hold__after__quarter.png` at that
 	## version): the boards and the coaming top formed one continuous grey
@@ -391,9 +547,19 @@ func _build_visual() -> void:
 	## you changed and why).
 	var board_y := COAMING_HEIGHT_M - HATCH_COVER_M * 1.5
 	for i in range(boards):
+		var laid := Vector3(0.0, board_y, -open.y + (float(i) + 0.5) * board_z)
+		var at := laid
+		if _hatch_open and _board_is_lifted(i):
+			## Lifted and laid ON the board it slides over: one pitch back, one
+			## thickness up, which puts the stowed board's top flush with the
+			## coaming rim rather than proud of it. It is still drawn and still
+			## solid — a stowed board is a thing on the deck, and a cover that
+			## simply vanished would be the "collides with nothing" defect
+			## wearing the other face.
+			at = Vector3(0.0, board_y + HATCH_COVER_M, laid.z - board_z)
 		_add_solid(
 			hold,
-			Vector3(0.0, board_y, -open.y + (float(i) + 0.5) * board_z),
+			at,
 			Vector3(
 				open.x * 2.0 + HATCH_LAP_M * 2.0,
 				HATCH_COVER_M,

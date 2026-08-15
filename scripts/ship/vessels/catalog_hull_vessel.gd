@@ -262,6 +262,14 @@ func _build_lofted_hull_visual(
 		0.95
 	)
 	deck.name = "Deck"
+	## What the plate was drawn from, so `BoatBody.add_deck_plate_aperture` can
+	## re-mesh it with a hole when a fish hold lands on this deck. Stored rather
+	## than re-derived: the hole has to match the plate the hull actually drew.
+	deck.set_meta("plate_args", {
+		"ring": MeshBuilder.pointed_plan_ring(loa_m, beam_m, bow_frac),
+		"y0": stations.deck_y,
+		"y1": stations.deck_y + 0.1,
+	})
 	root.add_child(deck)
 
 

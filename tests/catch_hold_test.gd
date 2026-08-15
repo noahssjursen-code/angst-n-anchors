@@ -339,7 +339,7 @@ func _hold_geometry_on(
 	var seen := 0
 	for hold in holds:
 		seen += 1
-		_check_one_hold(label, hold, boat, grid, built)
+		await _check_one_hold(label, hold, boat, grid, built)
 	remove_child(boat)
 	boat.free()
 	await get_tree().process_frame
@@ -477,6 +477,7 @@ func _check_one_hold(
 	)
 
 	_check_the_hold_is_what_you_stand_on(label, hold, boat, grid, space)
+	await _check_the_hatch_opens(label, hold, boat, grid, space)
 
 	## THE FENCE, restated on purpose (and knowingly against REALITY §4a). 4000 kg
 	## is a declared gameplay number that nothing derives from the drawing, and
@@ -495,9 +496,18 @@ func _check_one_hold(
 ## defect this replaces was 1.09 m: a 1.16 m pit whose only collider was the
 ## vessel's own deck slab, 0.14 m of steel spanning the whole hull.
 const STAND_EPSILON_M := 0.02
-## Stations per axis across the hold's footprint. 9 x 9 on a 3.0 x 2.0 m hatch
-## is a station every ~0.4 m / ~0.25 m, which no board can hide between.
-const STAND_STATIONS := 9
+## Station SPACING across the hold's footprint, in metres, and the per-axis
+## bounds it is clamped to.
+##
+## A fixed 9 x 9 lattice was 0.4 m apart on the sjark's 3.0 x 2.0 m hatch and
+## 2.4 m apart on `hull_150x32`'s, which is coarser than a hatch board — and once
+## the hatch opens, a coarse lattice on a big hold lands in open slots and skips
+## almost everything (14 of 81 stations found any drawn surface at all, under the
+## 20 this check demands before it will believe itself). Spacing in metres keeps
+## the sampling honest on hulls of every size; the cap keeps the cost bounded.
+const STAND_STATION_SPACING_M := 0.30
+const STAND_STATIONS_MIN := 9
+const STAND_STATIONS_MAX := 17
 
 
 ## THE property this wave exists for: **what a deckhand's feet are on is
@@ -547,12 +557,18 @@ func _check_the_hold_is_what_you_stand_on(
 	var worst_at := Vector3.ZERO
 	var worst_support := 0.0
 	var worst_drawn := 0.0
-	for ix in STAND_STATIONS:
-		for iz in STAND_STATIONS:
+	var nx := clampi(
+		ceili(half.x * 2.0 / STAND_STATION_SPACING_M), STAND_STATIONS_MIN, STAND_STATIONS_MAX
+	)
+	var nz := clampi(
+		ceili(half.y * 2.0 / STAND_STATION_SPACING_M), STAND_STATIONS_MIN, STAND_STATIONS_MAX
+	)
+	for ix in nx:
+		for iz in nz:
 			var at := Vector3(
-				hl.x + lerpf(-half.x + 0.03, half.x - 0.03, float(ix) / float(STAND_STATIONS - 1)),
+				hl.x + lerpf(-half.x + 0.03, half.x - 0.03, float(ix) / float(nx - 1)),
 				0.0,
-				hl.z + lerpf(-half.y + 0.03, half.y - 0.03, float(iz) / float(STAND_STATIONS - 1)),
+				hl.z + lerpf(-half.y + 0.03, half.y - 0.03, float(iz) / float(nz - 1)),
 			)
 			var drawn := _drawn_top_at(solids, at.x, at.z)
 			## Only where the hold draws something a foot could land on. Deck
@@ -604,10 +620,23 @@ func _check_the_hold_is_what_you_stand_on(
 	## And the fall-through half, through the same body: a capsule dropped down
 	## the middle of the hatch comes to rest ON the hold, not on whatever the
 	## vessel happens to have underneath and not in the hull.
+	##
+	## STATED AS "WHAT STOPPED IT", not as "how high it stopped" — 2026-08-15,
+	## and the difference is what makes it survive the hatch opening. The height
+	## form (`rest == the drawn top in this column`) is only true when something
+	## is drawn in that column: over an OPEN slot nothing is, the capsule bridges
+	## the two boards either side and rests 0.095 m lower than both, and the
+	## check would have had to be relaxed to a range. Worse, a height check here
+	## is nearly vacuous in the open state anyway — `BoatBody`'s WalkDeck slab
+	## still spans the aperture 0.19 m below the boards, so a capsule that fell
+	## clean through the hatch would stop above the deck plane regardless and
+	## score green on the defect (REALITY §4c). Naming the SHAPE cannot: before
+	## `bd548bc` what stopped it was `WalkDeckCollider`, and that is exactly what
+	## this refuses.
 	var capsule := CapsuleShape3D.new()
 	capsule.radius = 0.35
 	capsule.height = 1.8
-	var top := _drawn_top_at(solids, hl.x, hl.z)
+	var top := _drawn_top_in_radius(solids, hl.x, hl.z, capsule.radius)
 	var params := PhysicsShapeQueryParameters3D.new()
 	params.shape = capsule
 	params.transform = Transform3D(
@@ -616,10 +645,25 @@ func _check_the_hold_is_what_you_stand_on(
 	params.collision_mask = BoatBody.LAYER_BOAT_WALK
 	params.motion = Vector3(0.0, -6.0, 0.0)
 	var rest := top + 3.0 - 6.0 * float(space.cast_motion(params)[0])
+	var stoppers := _shapes_supporting(space, boat, capsule, Vector3(hl.x, rest, hl.z))
+	var foreign := PackedStringArray()
+	for shape_name in stoppers:
+		if not str(shape_name).begins_with("BrickCol_hold_"):
+			foreign.append(str(shape_name))
 	_t.check(
-		"%s: a capsule dropped down the hatch rests on the hold (%.3f m, drawn top %.3f)"
-		% [label, rest, top],
-		absf(rest - top) <= STAND_EPSILON_M,
+		(
+			"%s: a capsule dropped down the hatch is stopped by the hold itself"
+			+ " (rest %.3f, drawn within a foot's reach %.3f; stopped by %s)"
+		) % [label, rest, top, "nothing" if stoppers.is_empty() else " ".join(stoppers)],
+		not stoppers.is_empty() and foreign.is_empty(),
+	)
+	## …and it never gets below the deck it was standing on. The pair is the
+	## whole safety statement: something the HOLD drew holds it up, and it holds
+	## it up at deck level.
+	_t.check(
+		"%s: a capsule dropped down the hatch stays at deck level (%.3f, deck plane %.3f)"
+		% [label, rest, deck_plane],
+		rest >= deck_plane - STAND_EPSILON_M,
 	)
 
 
@@ -708,6 +752,347 @@ func _check_every_drawn_box_is_on_the_body(
 	)
 
 
+# ── 7c · the hatch opens, and what it opens is not a hole a person fits in ───
+
+## The player capsule's plan diameter — `scenes/shared/player.tscn`, radius 0.35.
+## Restated here rather than read off `CatchHoldComponent` on purpose: the
+## component derives its board pitch FROM this number, so reading it back off the
+## component would be the check agreeing with its own subject.
+const PLAYER_CAPSULE_D_M := 0.70
+## Lattice step for the fits-through sweep, in metres.
+const FIT_STEP_M := 0.05
+
+
+## THE OTHER property this wave exists for: **the hatch opens, and a player
+## cannot fall through what it opens.**
+##
+## `bd548bc` closed the hold with solid boards and stated the price — a player
+## could no longer see their catch, and `catch_hold_showcase`, whose whole job is
+## displaying fill stages, displayed a lid. Opening it again cannot simply undo
+## that: the WalkDeck's hull box tops out 0.51 m below the deck plane, the drawn
+## pit floor is 0.55 m below THAT, and `scripts/player/player.gd` has a 0.45 m
+## step, a 0.90 m jump and no climb path at all — so an aperture a player could
+## enter would be a 1.06 m trap with invisible steel at the bottom.
+##
+## So the boards do not all lift. Alternate boards stow on their neighbours and
+## what opens is a run of slots one board wide. The property below is the whole
+## safety argument and it is stated against the PLAYER, not against the boards:
+## nowhere inside the hatch's aperture is there a 0.70 x 0.70 m square of plan
+## free of hold structure, in either state. It says nothing about how many boards
+## there are or which ones lift, so a different stow pattern has to satisfy the
+## same sentence.
+##
+## Measured off the shapes `PhysicsServer3D` holds, not off the meshes, because
+## what stops a player is a shape (REALITY §3).
+func _check_the_hatch_opens(
+	label: String,
+	hold: CatchHoldComponent,
+	boat: BoatBody,
+	grid: DeckGrid,
+	space: PhysicsDirectSpaceState3D,
+) -> void:
+	_t.check(
+		"%s: the hold carries a hatch a player can work" % label,
+		hold.get_node_or_null("HoldHatch") != null,
+	)
+	_t.check(
+		"%s: a hold mounted on a vessel starts closed" % label, not hold.is_hatch_open()
+	)
+	var closed_open_area := _open_plan_fraction(hold, boat)
+	_t.check(
+		"%s: a CLOSED hatch is covered (%.1f%% of the aperture open)"
+		% [label, closed_open_area * 100.0],
+		closed_open_area <= 0.02,
+	)
+	_check_no_player_sized_hole(label + " closed", hold, boat)
+
+	hold.set_hatch_open(true)
+	await get_tree().physics_frame
+	_t.check("%s: the hatch reports open once it is worked" % label, hold.is_hatch_open())
+	## A board that vanished when it was lifted would be the "draws something,
+	## collides with nothing" defect wearing the other face, so the count of
+	## structural meshes has to be the same on both sides of the toggle.
+	_t.equal(
+		"%s: opening the hatch stows its boards rather than deleting them" % label,
+		_structure_boxes(hold, boat).size(),
+		_closed_structure_count(hold, boat),
+	)
+	var open_area := _open_plan_fraction(hold, boat)
+	## Non-vacuity: without this, a hatch that opened nothing would satisfy every
+	## safety check on this page perfectly.
+	_t.check(
+		"%s: an OPEN hatch actually opens (%.1f%% of the aperture clear)"
+		% [label, open_area * 100.0],
+		open_area >= 0.25,
+	)
+	_check_no_player_sized_hole(label + " open", hold, boat)
+	## The full stand / shape-for-shape / drop battery again, in the open state.
+	## Same function, same sentences — a state the checks were not written for is
+	## exactly where they stop holding.
+	_check_the_hold_is_what_you_stand_on(label + " OPEN", hold, boat, grid, space)
+	_check_the_deck_is_cut(label, hold, boat)
+
+	hold.set_hatch_open(false)
+	await get_tree().physics_frame
+	_t.check(
+		"%s: closing the hatch covers it again (%.1f%% open)"
+		% [label, _open_plan_fraction(hold, boat) * 100.0],
+		_open_plan_fraction(hold, boat) <= 0.02,
+	)
+
+
+## Structural mesh count with the hatch closed, measured by closing it, so the
+## comparison above is against a measurement and not against a remembered number.
+func _closed_structure_count(hold: CatchHoldComponent, boat: BoatBody) -> int:
+	var was := hold.is_hatch_open()
+	hold.set_hatch_open(false)
+	var n := _structure_boxes(hold, boat).size()
+	hold.set_hatch_open(was)
+	return n
+
+
+## The hold's own shapes ON THE WALKDECK BODY that stand above the deck plane,
+## as boat-local boxes, read back out of PhysicsServer3D.
+func _hold_shapes_above_deck(hold: CatchHoldComponent, boat: BoatBody) -> Array[AABB]:
+	var out: Array[AABB] = []
+	var walk := boat.call("get_walk_deck") as CollisionObject3D
+	if walk == null:
+		return out
+	var mine := {}
+	for child in walk.get_children():
+		var cs := child as CollisionShape3D
+		if cs != null and cs.shape != null and not cs.disabled:
+			if str(cs.name).begins_with("BrickCol_hold_"):
+				mine[cs.shape.get_rid()] = true
+	var body := walk.get_rid()
+	var to_boat := boat.global_transform.affine_inverse()
+	var plane := boat.to_local(hold.global_position).y
+	for i in PhysicsServer3D.body_get_shape_count(body):
+		var rid: RID = PhysicsServer3D.body_get_shape(body, i)
+		if not mine.has(rid):
+			continue
+		var data: Variant = PhysicsServer3D.shape_get_data(rid)
+		if not (data is Vector3):
+			continue
+		var half := data as Vector3
+		var world: Transform3D = (
+			walk.global_transform * PhysicsServer3D.body_get_shape_transform(body, i)
+		)
+		var box := AABB((to_boat * world.origin) - half, half * 2.0)
+		if box.end.y > plane + 0.01:
+			out.append(box)
+	return out
+
+
+## The hatch's aperture — the hole cut in the deck — in boat-local XZ metres.
+func _aperture_in_boat(hold: CatchHoldComponent, boat: BoatBody) -> Rect2:
+	var local := hold.hatch_aperture_m()
+	var at := boat.to_local(hold.global_position)
+	return Rect2(local.position + Vector2(at.x, at.z), local.size)
+
+
+## What fraction of the aperture has no hold structure over it.
+func _open_plan_fraction(hold: CatchHoldComponent, boat: BoatBody) -> float:
+	var rect := _aperture_in_boat(hold, boat)
+	var solids := _hold_shapes_above_deck(hold, boat)
+	var free := 0
+	var total := 0
+	var z := rect.position.y + FIT_STEP_M * 0.5
+	while z < rect.end.y:
+		var x := rect.position.x + FIT_STEP_M * 0.5
+		while x < rect.end.x:
+			total += 1
+			var covered := false
+			for box in solids:
+				if x >= box.position.x and x <= box.end.x and z >= box.position.z and z <= box.end.z:
+					covered = true
+					break
+			if not covered:
+				free += 1
+			x += FIT_STEP_M
+		z += FIT_STEP_M
+	return 0.0 if total == 0 else float(free) / float(total)
+
+
+## No player-sized square of the aperture is free of hold structure. A capsule
+## sweep would NOT do here and the reason is worth stating: `BoatBody`'s WalkDeck
+## slab still spans the aperture 0.19 m below the boards, so a dropped capsule
+## comes to rest above the deck plane whatever the hatch does — the sweep would
+## be green on an aperture wide open (REALITY §4c). The geometric statement
+## cannot be satisfied that way.
+func _check_no_player_sized_hole(
+	label: String, hold: CatchHoldComponent, boat: BoatBody
+) -> void:
+	var rect := _aperture_in_boat(hold, boat)
+	var solids := _hold_shapes_above_deck(hold, boat)
+	if not _t.check(
+		"%s: the hatch has shapes above the deck to measure (%d)" % [label, solids.size()],
+		solids.size() >= 3,
+	):
+		return
+	var half := PLAYER_CAPSULE_D_M * 0.5
+	var worst := Vector2.ZERO
+	var holes := 0
+	var z := rect.position.y + half
+	while z <= rect.end.y - half + 0.0001:
+		var x := rect.position.x + half
+		while x <= rect.end.x - half + 0.0001:
+			var free := true
+			for box in solids:
+				if (
+					x + half > box.position.x and x - half < box.end.x
+					and z + half > box.position.z and z - half < box.end.z
+				):
+					free = false
+					break
+			if free:
+				holes += 1
+				worst = Vector2(x, z)
+			x += FIT_STEP_M
+		z += FIT_STEP_M
+	_t.check(
+		(
+			"%s: no %.2f m square of the hatch is free of structure"
+			+ " (%d such squares%s; aperture %.2f x %.2f m)"
+		) % [
+			label, PLAYER_CAPSULE_D_M, holes,
+			"" if holes == 0 else ", e.g. at %v" % worst,
+			rect.size.x, rect.size.y,
+		],
+		holes == 0,
+	)
+
+
+## THE HULL'S OWN DECK PLATE IS CUT, and this is the check that says so.
+##
+## `HullVisual/Deck` is one opaque slab spanning the whole planform. Measured
+## (`tests/_hold_open_look.gd`): with the boards taken away and the hold at 25%,
+## the plate is what you see — it spans boat-local 2.600..2.700 and the chilled
+## water's surface is at 1.962. Only a brimful hold pokes above it, which is why the wave that
+## closed the hatch could report the catch "read as a pool at deck level": it
+## photographed 3900 of 4000 kg. Without the cut, an openable hatch opens onto a
+## picture of the deck.
+##
+## Stated in PLAN, over the plate's real triangles: no triangle of the plate may
+## cover a point inside the aperture. The control in the same check is the half
+## that stops it being a negative against an empty universe — a ring of points
+## just OUTSIDE the aperture must be covered, so a vessel that drew no plate at
+## all, or a plate cut to nothing, fails instead of passing.
+func _check_the_deck_is_cut(
+	label: String, hold: CatchHoldComponent, boat: BoatBody
+) -> void:
+	var plate := boat.get_node_or_null("HullVisual/Deck") as MeshInstance3D
+	if plate == null or plate.mesh == null:
+		## Not every hull draws a `pointed_deck_plate`. Recorded, not skipped.
+		_t.check(
+			"%s: hull draws no deck plate, so there is none to cut" % label, true
+		)
+		return
+	var faces := plate.mesh.get_faces()
+	if not _t.check(
+		"%s: the deck plate has triangles to measure (%d)" % [label, faces.size() / 3],
+		faces.size() >= 3,
+	):
+		return
+	var to_boat := boat.global_transform.affine_inverse() * plate.global_transform
+	var tris := PackedVector2Array()
+	for i in range(0, faces.size(), 3):
+		for k in range(3):
+			var p := to_boat * faces[i + k]
+			tris.append(Vector2(p.x, p.z))
+	var rect := _aperture_in_boat(hold, boat)
+	var inside_covered := 0
+	var inside_total := 0
+	var inset := 0.06
+	var z := rect.position.y + inset
+	while z <= rect.end.y - inset + 0.0001:
+		var x := rect.position.x + inset
+		while x <= rect.end.x - inset + 0.0001:
+			inside_total += 1
+			if _plan_covered(tris, Vector2(x, z)):
+				inside_covered += 1
+			x += 0.10
+		z += 0.10
+	_t.check(
+		"%s: the deck plate is cut open over the hatch (%d of %d sample points still plated)"
+		% [label, inside_covered, inside_total],
+		inside_total > 0 and inside_covered == 0,
+	)
+	var ring_covered := 0
+	var ring_total := 0
+	for step in range(12):
+		var t := float(step) / 12.0
+		for at in [
+			Vector2(lerpf(rect.position.x, rect.end.x, t), rect.position.y - 0.30),
+			Vector2(lerpf(rect.position.x, rect.end.x, t), rect.end.y + 0.30),
+			Vector2(rect.position.x - 0.30, lerpf(rect.position.y, rect.end.y, t)),
+			Vector2(rect.end.x + 0.30, lerpf(rect.position.y, rect.end.y, t)),
+		]:
+			ring_total += 1
+			if _plan_covered(tris, at as Vector2):
+				ring_covered += 1
+	_t.check(
+		"%s: the deck around the hatch is still plated (%d of %d ring points covered)"
+		% [label, ring_covered, ring_total],
+		ring_covered == ring_total,
+	)
+
+
+func _plan_covered(tris: PackedVector2Array, at: Vector2) -> bool:
+	for i in range(0, tris.size(), 3):
+		var a := tris[i]
+		var b := tris[i + 1]
+		var c := tris[i + 2]
+		var d1 := (at - b).cross(a - b)
+		var d2 := (at - c).cross(b - c)
+		var d3 := (at - a).cross(c - a)
+		var neg := d1 < 0.0 or d2 < 0.0 or d3 < 0.0
+		var pos := d1 > 0.0 or d2 > 0.0 or d3 > 0.0
+		if not (neg and pos):
+			return true
+	return false
+
+
+## Which shapes on the vessel's WalkDeck hold a capsule up at `feet_local`.
+## The capsule is pressed 0.02 m into whatever it is standing on so the overlap
+## is real; the answer is a set of SHAPE NAMES, which is what lets the drop check
+## say "the hold stopped it" rather than "it stopped somewhere plausible".
+func _shapes_supporting(
+	space: PhysicsDirectSpaceState3D,
+	boat: BoatBody,
+	capsule: CapsuleShape3D,
+	feet_local: Vector3,
+) -> PackedStringArray:
+	var out := PackedStringArray()
+	var walk := boat.call("get_walk_deck") as CollisionObject3D
+	if walk == null:
+		return out
+	var names := {}
+	for child in walk.get_children():
+		var cs := child as CollisionShape3D
+		if cs != null and cs.shape != null and not cs.disabled:
+			names[cs.shape.get_rid()] = str(cs.name)
+	var body := walk.get_rid()
+	var params := PhysicsShapeQueryParameters3D.new()
+	params.shape = capsule
+	params.transform = Transform3D(
+		Basis.IDENTITY,
+		boat.to_global(feet_local + Vector3(0.0, capsule.height * 0.5 - 0.02, 0.0)),
+	)
+	params.collision_mask = BoatBody.LAYER_BOAT_WALK
+	for hit in space.intersect_shape(params, 24):
+		if (hit.get("collider") as Node) != walk:
+			continue
+		var idx := int(hit.get("shape", -1))
+		if idx < 0 or idx >= PhysicsServer3D.body_get_shape_count(body):
+			continue
+		var rid: RID = PhysicsServer3D.body_get_shape(body, idx)
+		var shape_name := str(names.get(rid, "shape#%d" % idx))
+		if not out.has(shape_name):
+			out.append(shape_name)
+	return out
+
+
 func _matches_one(box: AABB, against: Array[AABB]) -> bool:
 	for other in against:
 		if (
@@ -738,6 +1123,21 @@ func _structure_boxes(hold: CatchHoldComponent, boat: BoatBody) -> Array[AABB]:
 			continue
 		out.append((to_boat * mi.global_transform) * mi.get_aabb())
 	return out
+
+
+## Top of the highest drawn structural box within `r` of this column — a foot's
+## REACH rather than a mathematical point. A capsule bridges an open hatch slot
+## and rests on the boards either side of it, so the point form answers "nothing
+## is drawn here" where the physical answer is "it is standing on those two".
+func _drawn_top_in_radius(boxes: Array[AABB], x: float, z: float, r: float) -> float:
+	var top := -1e9
+	for box in boxes:
+		if x < box.position.x - r or x > box.end.x + r:
+			continue
+		if z < box.position.z - r or z > box.end.z + r:
+			continue
+		top = maxf(top, box.end.y)
+	return top
 
 
 ## Top of the highest drawn structural box covering this column, or -INF.

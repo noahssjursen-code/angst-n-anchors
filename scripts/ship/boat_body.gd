@@ -1526,6 +1526,66 @@ func boat_to_walk_deck_local(boat_local: Vector3) -> Vector3:
 	return boat_local - _walk_deck_local_origin()
 
 
+## HOLES IN THE DRAWN DECK — 2026-08-15.
+##
+## `HullVisual/Deck` is one opaque `pointed_deck_plate` spanning the whole
+## planform, and it spans a fish hold's aperture with everything else. Measured
+## on the granted starter (`tests/_hold_open_look.gd`): with the hatch boards
+## taken away, a hold filled to 25% shows the PLATE where the catch should be —
+## the water's top surface sits at boat-local y 1.962 and the plate spans
+## 2.600..2.700. Only a brimful hold (surface 2.658) pokes above it, and it can
+## only do that past the plate's LOWER face, which is why the
+## wave that closed the hatch recorded "the catch read as a pool at deck level":
+## it photographed 3900 of 4000 kg.
+##
+## So a hold that opens needs the plate cut, and this is where that happens.
+## Apertures are vessel-local XZ rectangles and the plate is re-meshed IN PLACE:
+## the same `MeshInstance3D`, so `HullLivery.apply_to_boat`'s `material_override`
+## and every consumer that finds the plate by node name are untouched.
+##
+## Hulls that draw no `pointed_deck_plate` (the catamaran, traffic proxies) carry
+## no `plate_args` meta and this is a no-op on them rather than an error.
+var _deck_plate_apertures: Array[Rect2] = []
+
+
+func add_deck_plate_aperture(rect: Rect2) -> void:
+	if rect.size.x <= 0.0 or rect.size.y <= 0.0:
+		return
+	for existing in _deck_plate_apertures:
+		if existing.is_equal_approx(rect):
+			return
+	_deck_plate_apertures.append(rect)
+	_rebuild_deck_plate()
+
+
+func clear_deck_plate_apertures() -> void:
+	if _deck_plate_apertures.is_empty():
+		return
+	_deck_plate_apertures.clear()
+	_rebuild_deck_plate()
+
+
+func get_deck_plate_apertures() -> Array[Rect2]:
+	return _deck_plate_apertures.duplicate()
+
+
+func _rebuild_deck_plate() -> void:
+	var mi := get_node_or_null("HullVisual/Deck") as MeshInstance3D
+	if mi == null or not mi.has_meta("plate_args"):
+		return
+	var a: Dictionary = mi.get_meta("plate_args")
+	## `y0` / `y1` are in the plate NODE's own frame, so a hull that positions its
+	## deck (the catamaran's bridge deck) and one that bakes the height into the
+	## mesh (`pointed_deck_plate`) both describe themselves the same way.
+	mi.mesh = MeshBuilder.plan_plate_mesh(
+		a.get("ring", PackedVector2Array()) as PackedVector2Array,
+		float(a.get("y0", 0.0)),
+		float(a.get("y1", 0.1)),
+		mi.material_override as StandardMaterial3D,
+		_deck_plate_apertures,
+	)
+
+
 func _build_merged_collision() -> void:
 	_clear_merged_collision()
 

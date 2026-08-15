@@ -246,6 +246,13 @@ func _build_hull_visual(stations: HullStations) -> void:
 		0.0,
 	)
 	deck.name = "Deck"
+	## See `CatalogHullVessel` — the plate's own planform, in this NODE's frame
+	## (the box is centred on its own origin), so a fish hold can cut it too.
+	deck.set_meta("plate_args", {
+		"ring": MeshBuilder.rect_plan_ring(BEAM_M, LOA_M),
+		"y0": -0.05,
+		"y1": 0.05,
+	})
 	deck.position.y = stations.deck_y + 0.05
 	root.add_child(deck)
 

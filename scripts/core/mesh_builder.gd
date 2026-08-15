@@ -324,18 +324,132 @@ static func pointed_deck_plate(
 	roughness: float = 0.95,
 ) -> MeshInstance3D:
 	var mat := make_material(color, roughness, 0.0)
+	var mi := MeshInstance3D.new()
+	mi.mesh = pointed_deck_plate_mesh(loa, beam, deck_y, thickness, bow_frac, mat)
+	mi.material_override = mat
+	return mi
+
+
+## The plate's MESH alone, optionally with rectangular holes cut in it.
+##
+## SEPARATE FROM THE NODE ON PURPOSE. A hole has to be cut AFTER the hull is
+## built, because what needs one is a fish hold, and where a fish hold lands is
+## derived from the deck the fit-out finds. `BoatBody.set_deck_plate_apertures`
+## swaps this resource on the existing `HullVisual/Deck` instance rather than
+## rebuilding the node, so `HullLivery`'s `material_override` and the node name
+## every other consumer looks for survive the cut.
+##
+## `apertures` are axis-aligned rectangles in vessel XZ metres. The plan ring is
+## convex, so each one is realised by clipping the ring into the four convex
+## pieces that surround the hole (aft of it, forward of it, and the port and
+## starboard strips beside it) and extruding each — no ear clipping, no bridge
+## edges, and the pieces stay fan-triangulable.
+##
+## What this does NOT draw is the cut EDGE: the four vertical faces of the hole
+## itself. Every caller today puts an insulated hold liner in the hole whose
+## outer face IS the cut line, so a reveal would be coincident geometry. A hole
+## with nothing in it would show the plate's underside through it.
+static func pointed_deck_plate_mesh(
+	loa: float,
+	beam: float,
+	deck_y: float,
+	thickness: float = 0.12,
+	bow_frac: float = 0.28,
+	mat: StandardMaterial3D = null,
+	apertures: Array[Rect2] = [],
+) -> ArrayMesh:
+	return plan_plate_mesh(
+		pointed_plan_ring(loa, beam, bow_frac), deck_y - thickness, deck_y, mat, apertures
+	)
+
+
+## The pointed planform every hull plate and shell shares, as an XZ ring.
+static func pointed_plan_ring(loa: float, beam: float, bow_frac: float) -> PackedVector2Array:
+	return _pointed_plan_ring(loa, beam, bow_frac)
+
+
+## A rectangular planform, for the hulls that draw a flat bridge deck.
+static func rect_plan_ring(width: float, length: float) -> PackedVector2Array:
+	var hx := width * 0.5
+	var hz := length * 0.5
+	## Same winding as `_pointed_plan_ring` — stern to starboard to bow.
+	return PackedVector2Array([
+		Vector2(-hx, hz), Vector2(hx, hz), Vector2(hx, -hz), Vector2(-hx, -hz),
+	])
+
+
+## Extrude any convex plan ring between two heights, with rectangular holes.
+static func plan_plate_mesh(
+	ring: PackedVector2Array,
+	y0: float,
+	y1: float,
+	mat: StandardMaterial3D = null,
+	apertures: Array[Rect2] = [],
+) -> ArrayMesh:
 	var st := SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
 	st.set_smooth_group(-1)
-	st.set_material(mat)
-	var ring := _pointed_plan_ring(loa, beam, bow_frac)
-	var y0 := deck_y - thickness
-	_extrude_plan_ring(st, ring, y0, deck_y)
+	if mat != null:
+		st.set_material(mat)
+	var pieces: Array[PackedVector2Array] = [ring]
+	for hole in apertures:
+		var next: Array[PackedVector2Array] = []
+		for piece in pieces:
+			next.append_array(_plan_ring_minus_rect(piece, hole))
+		pieces = next
+	for piece in pieces:
+		if piece.size() >= 3:
+			_extrude_plan_ring(st, piece, y0, y1)
 	st.generate_normals()
-	var mi := MeshInstance3D.new()
-	mi.mesh = st.commit()
-	mi.material_override = mat
-	return mi
+	return st.commit()
+
+
+## A convex plan ring with an axis-aligned rectangle removed, as up to four
+## convex pieces. Pieces that clip away to nothing are dropped, so a hole that
+## misses the ring entirely returns the ring unchanged in one piece.
+static func _plan_ring_minus_rect(ring: PackedVector2Array, hole: Rect2) -> Array[PackedVector2Array]:
+	var x0 := hole.position.x
+	var x1 := hole.position.x + hole.size.x
+	var z0 := hole.position.y
+	var z1 := hole.position.y + hole.size.y
+	if hole.size.x <= 0.0 or hole.size.y <= 0.0:
+		return [ring]
+	var band := _clip_plan(_clip_plan(ring, Vector2(0.0, -1.0), -z0), Vector2(0.0, 1.0), z1)
+	if band.size() < 3:
+		## The hole misses this piece's z span entirely.
+		return [ring]
+	var out: Array[PackedVector2Array] = []
+	for part in [
+		_clip_plan(ring, Vector2(0.0, 1.0), z0),                    ## aft of the hole
+		_clip_plan(ring, Vector2(0.0, -1.0), -z1),                  ## forward of it
+		_clip_plan(band, Vector2(1.0, 0.0), x0),                    ## port strip
+		_clip_plan(band, Vector2(-1.0, 0.0), -x1),                  ## starboard strip
+	]:
+		if (part as PackedVector2Array).size() >= 3:
+			out.append(part)
+	if out.is_empty():
+		return [ring]
+	return out
+
+
+## Sutherland-Hodgman: the part of a convex ring where dot(normal, p) <= offset.
+static func _clip_plan(
+	ring: PackedVector2Array, normal: Vector2, offset: float
+) -> PackedVector2Array:
+	var out := PackedVector2Array()
+	var n := ring.size()
+	if n < 3:
+		return out
+	for i in range(n):
+		var a := ring[i]
+		var b := ring[(i + 1) % n]
+		var da := normal.dot(a) - offset
+		var db := normal.dot(b) - offset
+		if da <= 0.0:
+			out.append(a)
+		if (da < 0.0 and db > 0.0) or (da > 0.0 and db < 0.0):
+			out.append(a.lerp(b, da / (da - db)))
+	return out
 
 
 ## Convex points for a bow wedge collision (keel→deck), tip at −Z.
