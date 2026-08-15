@@ -1,5 +1,5 @@
 {
-	"_note": "BUILT THROUGH THE STUDIO'S PIECE TOOL. Every one of the 34 placements below was made by\npicking a piece off the kit palette, turning it with R, setting its parameters on steppers and\ndropdowns over the piece's own declared value sets, picking a tint off a swatch, and clicking a\ngrid node. Not one number in this file was typed; there is no control in that tool a number CAN\nbe typed into.\n\nThat claim is checked rather than asserted. `structure_studio.gd`'s `--studio-probe` self-check\ncarries the same 34 actions as data and requires that replaying them through the controls\nreproduces this file placement for placement and plate corner for plate corner — so changing one\nstep of the recipe, or breaking the rotate key, or letting a stepper walk off its declared set,\nturns the gate red.\n\nWHAT IT IS. A harbour tug's pilot house: a plated casing 2.50 m tall with a raked front and windows in its\nsides, a tall all-round-glazed wheelhouse standing on it, chamfered at every corner by a\n`corner_45` facet, a sloped VISOR over the windscreen — `roof_slope`, which no vessel in this\nrepo had used — an exhaust casing standing clear above the wheelhouse roof, and a HEAVY sole in the casing under the door — the thickest floor the kit can lay, which is what the door head is sized against.\n\nWHAT IS NOT PIECE-AUTHORED, and it is the kit's own stated boundary rather than a gap: the\nsheer-following bulwark. That is a swept curve, and quantising it to the 0.5 m grid would step\nthe one curve the fleet was rebuilt to draw, so it is an `edges[]` entry as it is on every other\nvessel. The studio has no tool for it either — see the wave report.\n\nRakes are in EIGHTH-CELLS (0.125 m a step), the kit's unit as of this file's writing.",
+	"_note": "BUILT THROUGH THE STUDIO'S PIECE TOOL. Every one of the 34 placements below was made by\npicking a piece off the kit palette, turning it with R, setting its parameters on steppers and\ndropdowns over the piece's own declared value sets, picking a tint off a swatch, and clicking a\ngrid node. Not one number in this file was typed; there is no control in that tool a number CAN\nbe typed into.\n\nThat claim is checked rather than asserted. `structure_studio.gd`'s `--studio-probe` self-check\ncarries the same 34 actions as data and requires that replaying them through the controls\nreproduces this file placement for placement and plate corner for plate corner — so changing one\nstep of the recipe, or breaking the rotate key, or letting a stepper walk off its declared set,\nturns the gate red.\n\nWHAT IT IS. A harbour tug's pilot house: a plated casing 2.50 m tall with a raked front and\nwindows in its sides, a tall all-round-glazed wheelhouse standing on it, chamfered at every\ncorner by a `corner_45` facet, a sloped VISOR over the windscreen — `roof_slope`, which no vessel\nin this repo had used — an exhaust casing standing clear above the wheelhouse roof, and a HEAVY\nsole in the casing under the door: the thickest floor the kit can lay, which is what the door\nhead is sized against.\n\nEVERY ID IN THIS FILE IS ALLOCATED BY `StructurePlan`, and that is load-bearing rather than\ncosmetic. The 34 placements take 1..34 in the order the recipe places them and the bulwark edge\ntakes 35, because it is added after them. A hand-edit that appends a placement and types its own\nid is how this file once carried TWO entities numbered 34 — an `edges[]` entry and a piece — and\n`entity_by_id(34)` silently returned the edge for both. Regenerate it; do not type into it.\n\nWHAT IS NOT PIECE-AUTHORED, and it is the kit's own stated boundary rather than a gap: the\nsheer-following bulwark. That is a swept curve, and quantising it to the 0.5 m grid would step\nthe one curve the fleet was rebuilt to draw, so it is an `edges[]` entry as it is on every other\nvessel. The studio has no tool for it either — see the wave report.\n\nRakes are in EIGHTH-CELLS (0.125 m a step), the kit's unit as of this file's writing.",
 	"context": "vessel",
 	"decks": [],
 	"edges": [
@@ -15,7 +15,7 @@
 			"follow_sheer": true,
 			"from_hull": "hull_28x10",
 			"height": 1.1,
-			"id": 34.0,
+			"id": 35.0,
 			"material": "painted",
 			"plate_color": [
 				0.11,
@@ -65,6 +65,7 @@
 			"facing": 0.0,
 			"id": 1.0,
 			"params": {
+				"chain": "corner",
 				"fall": 0.0,
 				"head": 0.0,
 				"height": 5.0,
@@ -105,6 +106,7 @@
 			"facing": 270.0,
 			"id": 3.0,
 			"params": {
+				"chain": "corner",
 				"fall": 0.0,
 				"head": 0.0,
 				"height": 5.0,
@@ -165,6 +167,7 @@
 			"facing": 180.0,
 			"id": 6.0,
 			"params": {
+				"chain": "corner",
 				"fall": 0.0,
 				"head": 0.0,
 				"height": 5.0,
@@ -245,6 +248,7 @@
 			"facing": 90.0,
 			"id": 10.0,
 			"params": {
+				"chain": "corner",
 				"fall": 0.0,
 				"head": 0.0,
 				"height": 5.0,
@@ -391,6 +395,7 @@
 			"facing": 0.0,
 			"id": 18.0,
 			"params": {
+				"chain": "corner",
 				"fall": 0.0,
 				"head": 0.0,
 				"height": 5.0,
@@ -433,6 +438,7 @@
 			"facing": 270.0,
 			"id": 20.0,
 			"params": {
+				"chain": "corner",
 				"fall": 0.0,
 				"head": 0.0,
 				"height": 5.0,
@@ -475,6 +481,7 @@
 			"facing": 180.0,
 			"id": 22.0,
 			"params": {
+				"chain": "corner",
 				"fall": 0.0,
 				"head": 0.0,
 				"height": 5.0,
@@ -515,6 +522,7 @@
 			"facing": 90.0,
 			"id": 24.0,
 			"params": {
+				"chain": "corner",
 				"fall": 0.0,
 				"head": 0.0,
 				"height": 5.0,
@@ -700,23 +708,22 @@
 			"piece": "deck_tile"
 		},
 		{
-			"id": 34.0,
-			"piece": "deck_tile",
 			"cell": [
 				6.0,
 				0.0,
 				20.0
 			],
+			"color": "#4d5257",
 			"facing": 0.0,
+			"id": 34.0,
 			"params": {
-				"span": 8.0,
 				"depth": 12.0,
 				"fall": 0.0,
+				"gauge": "heavy",
 				"lift": 0.0,
-				"gauge": "heavy"
+				"span": 8.0
 			},
-			"color": "#4d5257",
-			"_is": "a HEAVY sole laid aft in the casing, under the door — 0.30 m of tile, the thickest floor the kit can lay, so its walking surface stands 0.150 m over the node the walls stand on. It is here because that is the worst legal floor a doorway can open onto and the kit's 2.10 m door head is sized for exactly it: measured on the spawned vessel, this doorway clears 1.89 m over this sole. Laid as `deck` or `light` gauge the floor would be lower and the check softer."
+			"piece": "deck_tile"
 		}
 	],
 	"stairs": [],

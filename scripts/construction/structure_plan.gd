@@ -1202,7 +1202,7 @@ static func from_dict(data: Dictionary) -> StructurePlan:
 			if entity_dict.has("id"):
 				entity_dict["id"] = id
 			highest = maxi(highest, id)
-	plan._next_id = highest + 1
+	plan._next_id = highest
 	return plan
 
 

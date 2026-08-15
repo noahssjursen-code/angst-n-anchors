@@ -968,91 +968,39 @@ same way the known-red list had — it named the bare-`assert()` conversion and 
 when both had long landed. **A stale next-actions list sends the next wave at work that is already
 done.** Regenerate this from the tree, not from the last copy of itself.
 
-### In flight — two waves, disjoint files
+### In flight
 
 | Wave | Owns | Target |
 |---|---|---|
-| **Raked-plate over-collision** | `structure_baker.gd`, `plan_interior_test.*`, `structure_plate_test.*` | the 0.148 m excess — ONE cause behind `plan_interior_test`'s 51+8 stuck marches, the rake-8 drift sitting 0.008 m from red, and every raked wall stopping a player early |
-| **Staged fitout never merges** | `deck_fitout_job.gd`, `deck_fitout.gd`, `vessel_skin_baker.gd`, both deck_fitout tests | 3002 meshes at n=3000 staged against 3 sync; and `_prepare_gameplay` running a 118.9 ms validate as one indivisible 4 ms `_step` |
+| **Critic on the collision batch** | `critic_*` and `_`-probes only | the batch takes a vessel's collision body OUT of its physics space for a fit-out loop — a vessel with no collision is one a player falls through. Attacking unpaired begin/end, re-entrancy, the window itself, and whether ×15.6 reproduces on a quiet tree |
+| **Duplicate id + empty building catalogue** | `resources/data/buildings/**`, `probe_piece_tug.json`, `structure_studio.gd`, `structure_plan.gd`, `plan_entity_id_test.*`, `port_perf_cache_test.*` | id 34 lives in both `edges` and `pieces` — and the real question is whether the WRITER or the FORMAT permits it, since a player builds that file through the studio |
 
-Both carry the measured trap that would fake a green: `skin_enabled = false` turns
-BOTH deck-fitout reds green while making every vessel worse.
+### WHERE THIS STANDS — every red is diagnosed, nothing is unexplained
 
-### THE PLATE-COLLISION TEST WAS DARK IN MY OWN COMMIT THAT CHANGED PLATE COLLISION
+Gate `20260815-021225-7388`, 107 units: **8 FAIL, 1 NOTRUN, 1 SKIP**, from 13 FAIL
+at the previous baseline. Not one failure is a mystery. Three are owner decisions,
+one is an owner decision on a *look* question, one is a product blocker, one needs
+a live server, one is a deliberate stated trade, one is diagnosed to a mast, and
+one is a fixture defect a wave is fixing now.
 
-`structure_plate_test` did not compile from `65b6a0a` to `bc61fac`. That commit
-renamed `PLATE_COLLIDER_STEP` → `PLATE_COLLIDER_SLOP` and left three references to
-the old name in the test: `Parse Error: Cannot find member` — the file never
-loaded and produced no verdict.
+**That is the milestone.** The instrument is honest: no bare `assert()`, no unit
+that reports no outcome, no test that cannot fail, every skip self-policing, and
+the scratch-probe escape now works in both lanes. What remains is not "unknown
+failures" — it is decisions and product work.
 
-**`65b6a0a` is mine.** I committed a dead wave's plate-collision rewrite and
-verified it with `plan_interior_test`, `piece_interior_test` and the two
-deck_fitout units — never the test named after the thing being changed. I wrote in
-that same message that the work needed re-spawning to finish, which is precisely
-when a guard test matters most.
+### Next, when the two waves land
 
-Two compounding process failures, both mine:
-
-1. **I did not run the test named after the subsystem I was committing.** The rule
-   that would have caught it is not subtle: when committing someone else's
-   unfinished work, run the unit that guards the thing they were changing.
-2. **A broad `git add -A` swept the fix into `bc61fac`**, a commit about the deck
-   fitout, so the repair is recorded under an unrelated heading and the commit that
-   caused the outage never mentions it. This is the same hazard a wave flagged
-   early in this session when its in-progress files were swept into someone else's
-   commit. I then did it myself.
-
-It runs now at **3/97**, and all three are honest cost bounds the file already
-carried, blown by the finer dice — 999 boxes against 400, 115 panel boxes against
-60, 56 casing boxes against 12-per-opening. **Not widened.** Against the old grid
-they pass and the two proud checks fail instead (0.1443 and 0.1180 against 0.05),
-which states the whole trade as two red lines whichever way it is taken.
-
-**A check inside it was green on the phantom.** `_check_slope_is_followed` asserted
-the literal point (5.0, 4.82, 18.0) was INSIDE the wheelhouse roof. The roof's
-drawn top at z=18 is 4.7858 — that point stands 0.0342 m ABOVE it. Old baker:
-solid, from the phantom. New baker: open air. It was passing on collision that
-should never have existed, and it would have punished anyone tightening the
-collider. Restated from the roof's own geometry.
-
-### The raked-collider verdict: algorithm free, constant costs, and one thing dicing cannot fix
-
-```
-                   grid    0.15    0.10    0.08    0.05
-demo_workboat       359     357     436     500     675     boxes
-trawler_bulwark     760     612     876    1137    2118
-container_feeder   2448    2467    2608    2735    3086
-plate_deckhouse     384     399     543     637     999
-worst proud       0.150   0.126   0.086   0.075   0.050   m
-```
-
-The **28 m trawler is the worst case, not the 150 m hull** — containers are plumb
-boxes that dice to one box each; a small working boat is nearly all raked plate.
-Body-build cost: feeder 2109 → 3673 ms, trawler 204 → 1849 ms.
-
-**Recommendation on record and deliberately NOT taken:** ship the algorithm (free —
-612 boxes against the old grid's 760 at the same constant), set the slop at 0.08
-(the knee). Countervailing: 0.05 is the only value under the plate's own 0.045 m
-half-thickness, and **nobody has walked a raked wall at any value.** Owner's call.
-
-**The rake-8 doorway drift did not move at all** — 0.0140 m of margin before and
-after, at 2.8× the boxes. The hang is half the 0.19 m casing thickness × sin(tilt)
-along the panel normal, and `_plate_panel_colliders` uses ONE `half` vector per
-cell by construction, so dicing cannot touch it. Confirmed by mutation
-(`PLATE_FRAME_PROUD` 0.05 → 0.0 moves it 0.0460 → 0.0260). No shipped fixture uses
-rake 8, which is why `piece_interior_test` has never reported this number.
-
-**`plan_interior_test`'s last failure is the MAST, not collision.** 17 of its 18
-stuck stations are `spar #89 mast` on the centreline forward of the deckhouse;
-exactly 1 is the raked plate. Confirmed independently by two probes. So my earlier
-correction — that the raked collider explained the stuck marches — was 1/18 right.
-
-### BIGGER THAN THE SLOP: adding collider boxes is O(n²)
-
-Through the scene tree AND through `PhysicsServer3D.body_add_shape`:
-500/2000/4000/8000 boxes cost 79/1432/7187/33774 ms. The container feeder cost
-2.1 s to build **before** any of this work. Pre-existing spawn-time defect that the
-dice makes worse but did not cause, and worth more than any slop value.
+1. **The owner decisions below are the critical path**, not more code. Five of the
+   eight block real product questions, and three of those (brick cell size, apron
+   density, the raked-plate slop) are LOOK questions that no metric may settle —
+   `REALITY.md` §2. They need eyes on a render, and nobody has looked.
+2. `apply_staged` (>1000 bricks) is still O(n²) — a batch cannot span frames
+   without leaving a vessel non-colliding while a player stands on it.
+3. `plan_interior_test`'s 18 in-collider march starts: 17 are the mast, 1 is the
+   raked plate. The mast is real geometry; the sweep's stand-off is the instrument.
+4. `_prepare_gameplay` runs a 108–113 ms `VesselCompliance.validate` as one
+   indivisible step. 72% is `VesselOutfit.validate`, which walks brick by brick and
+   therefore HAS a seam.
 
 ### Settled since the last baseline
 

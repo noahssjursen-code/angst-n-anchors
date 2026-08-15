@@ -339,6 +339,7 @@ func _run_studio_probe() -> void:
 	_probe_piece_fixture(expect, "%s/probe_piece_trawler.json" % STRUCTURES_DIR, "trawler")
 	_probe_piece_fixture(expect, "%s/probe_piece_tug.json" % STRUCTURES_DIR, "tug")
 	_probe_piece_tug_recipe(expect)
+	_probe_entity_ids(expect)
 	for arg in OS.get_cmdline_user_args():
 		if str(arg) == "--studio-write-fixtures":
 			_write_tug_fixture()
@@ -815,6 +816,120 @@ func _probe_piece_persistence(expect: Callable) -> void:
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
 
 
+## ── Can the TOOL make two entities with one id? ─────────────────────────────
+##
+## `probe_piece_tug.json` shipped with an `edges[]` entry and a piece placement
+## both numbered 34, so `entity_by_id(34)` returned the edge for both and the
+## placement was unaddressable. `plan_entity_id_test` catches that in the
+## FIXTURES; this asks the question one layer up, where it matters more — can a
+## player produce it with a mouse?
+##
+## The interesting move is not "place things and count". It is DELETE followed by
+## a round trip: `StructurePlan.from_dict` re-anchors `_next_id` to the highest id
+## it can see, and every undo, redo, save/load and context switch goes through it.
+## So the allocator is reset by the editor constantly, against a plan whose
+## highest id may have just been removed — which is exactly the shape that hands
+## out a number twice if the anchoring is off by one.
+##
+## The claim is a PROPERTY, not a count: after each of these moves, no two
+## entities anywhere in the plan share an id. The walk is guarded against a
+## seventh collection being added and silently not walked (`entity_count`).
+func _probe_entity_ids(expect: Callable) -> void:
+	## Four placements through the real controls, then the other three primitives.
+	_probe_build_through_tool(_tug_placements().slice(0, 4))
+	_place_wall(Vector3(0, 0, 6), Vector3(6, 0, 6))
+	_place_deck(Vector3(0, 0, 20), Vector3(6, 0, 24))
+	_place_stair(Vector3(1, 0, 24), Vector3(1, 0, 27))
+	var seeded := _plan.entity_count()
+	## Guard against the vacuous pass: everything below is trivially true of an
+	## empty plan, and an empty plan is what a refused click leaves behind.
+	expect.call(
+		"ids: the sequence built a plan to check (%d entities, 4 kinds)" % seeded,
+		seeded == 7 and _plan.pieces.size() == 4
+	)
+	var collisions := PackedStringArray()
+	var note := func(step: String) -> void:
+		var found := _probe_duplicate_ids()
+		if not found.is_empty() and collisions.size() < 4:
+			collisions.append("%s: %s" % [step, found[0]])
+	note.call("after building")
+
+	## Delete the HIGHEST id, which is the one `from_dict` anchors on, then take
+	## every round trip the editor offers.
+	var highest := 0
+	for id_variant in _probe_all_ids():
+		highest = maxi(highest, int(id_variant))
+	_selected_id = highest
+	_delete_selected()
+	note.call("after deleting the highest id")
+	expect.call("ids: deleting the highest id removed one entity",
+		_plan.entity_count() == seeded - 1)
+	_undo()
+	note.call("after undo")
+	_redo()
+	note.call("after redo")
+	_place_wall(Vector3(0, 0, 9), Vector3(6, 0, 9))
+	var reissued := int((_plan.walls[_plan.walls.size() - 1] as Dictionary).get("id", -1))
+	note.call("after placing again on the redone plan")
+	_save_plan("studio_id_probe_tmp")
+	var path := "%s/studio_id_probe_tmp.json" % STRUCTURES_DIR
+	_load_plan(path)
+	note.call("after save/load")
+	_place_deck(Vector3(0, 0, 30), Vector3(4, 0, 34))
+	note.call("after placing on the reloaded plan")
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
+
+	expect.call(
+		"ids: no tool action ever gave two entities the same id (%d collisions%s)"
+		% [collisions.size(), "" if collisions.is_empty() else " — " + collisions[0]],
+		collisions.is_empty()
+	)
+	## COVERAGE, not product behaviour. `from_dict` anchors on the highest id it
+	## can SEE, so the wall placed after the delete takes the number the deleted
+	## entity had. That is the one case where an off-by-one in the anchoring hands
+	## a live id out twice, and this states that the sequence above really walked
+	## it — a run where it did not would leave the check above blind (REALITY §8).
+	## Ids are therefore unique within a document but NOT permanent across a
+	## delete: an editor holding "#7" over a reload can be holding a new entity.
+	expect.call(
+		"ids: the delete freed #%d and the next placement took it back, so the reset path was covered"
+		% highest,
+		reissued == highest
+	)
+	## And the last leg placed onto the RELOADED plan rather than stopping at the
+	## save, so `note` covered the load path with a live plan under it.
+	expect.call("ids: the reloaded plan was still buildable on (%d entities)"
+		% _plan.entity_count(), _plan.entity_count() == seeded + 1)
+
+
+## Every entity id in the plan, in walk order, with the walk held to
+## `entity_count` so a collection added later cannot be silently skipped.
+func _probe_all_ids() -> PackedInt32Array:
+	var out := PackedInt32Array()
+	for collection in [_plan.walls, _plan.decks, _plan.stairs, _plan.edges, _plan.items, _plan.pieces]:
+		for entity in (collection as Array):
+			out.append(int((entity as Dictionary).get("id", 0)))
+	if out.size() != _plan.entity_count():
+		push_error(
+			"studio_probe: walked %d ids but the plan holds %d entities — a collection is not being walked"
+			% [out.size(), _plan.entity_count()]
+		)
+	return out
+
+
+## Ids used by more than one entity, as ["34 x2", …]. Empty is the invariant.
+func _probe_duplicate_ids() -> PackedStringArray:
+	var counts: Dictionary = {}
+	for id in _probe_all_ids():
+		counts[id] = int(counts.get(id, 0)) + 1
+	var out := PackedStringArray()
+	for id in counts.keys():
+		if int(counts[id]) > 1:
+			out.append("%d x%d" % [int(id), int(counts[id])])
+	out.sort()
+	return out
+
+
 ## Every plate corner a plan's placements resolve to, in plan metres. Through
 ## `PieceKit` — the path a capture rig and a spawned vessel take.
 func _probe_plate_corners(plan: StructurePlan) -> PackedVector3Array:
@@ -1063,6 +1178,13 @@ const TUG_RECIPE: Array = [
 	## the worst floor a player can put under it rather than over the hull's own
 	## plating. `piece_interior_test` reads the floor it makes and the head over
 	## it from the physics world.
+	##
+	## That rationale lived in an `_is` note ON the placement inside the fixture
+	## until the file was regenerated, and it is stated here instead because the
+	## writer cannot carry one: `to_dict` does not emit `_is` for a placement and
+	## the tool has no control that would type it. A note added to the JSON by hand
+	## survives exactly until the next `--studio-write-fixtures`, which is the same
+	## hand-edit that gave two entities the same id.
 	["deck_tile", 6, 0, 20, 0, {"span": 8, "depth": 12, "gauge": "heavy"}, "#4d5257"],
 ]
 
@@ -1157,10 +1279,18 @@ reproduces this file placement for placement and plate corner for plate corner �
 step of the recipe, or breaking the rotate key, or letting a stepper walk off its declared set,
 turns the gate red.
 
-WHAT IT IS. A harbour tug's pilot house: a plated casing with a raked front and windows in its
-sides, a tall all-round-glazed wheelhouse standing on it, chamfered at every corner by a
-`corner_45` facet, a sloped VISOR over the windscreen — `roof_slope`, which no vessel in this
-repo had used — and an exhaust casing standing clear above the wheelhouse roof.
+WHAT IT IS. A harbour tug's pilot house: a plated casing 2.50 m tall with a raked front and
+windows in its sides, a tall all-round-glazed wheelhouse standing on it, chamfered at every
+corner by a `corner_45` facet, a sloped VISOR over the windscreen — `roof_slope`, which no vessel
+in this repo had used — an exhaust casing standing clear above the wheelhouse roof, and a HEAVY
+sole in the casing under the door: the thickest floor the kit can lay, which is what the door
+head is sized against.
+
+EVERY ID IN THIS FILE IS ALLOCATED BY `StructurePlan`, and that is load-bearing rather than
+cosmetic. The 34 placements take 1..34 in the order the recipe places them and the bulwark edge
+takes 35, because it is added after them. A hand-edit that appends a placement and types its own
+id is how this file once carried TWO entities numbered 34 — an `edges[]` entry and a piece — and
+`entity_by_id(34)` silently returned the edge for both. Regenerate it; do not type into it.
 
 WHAT IS NOT PIECE-AUTHORED, and it is the kit's own stated boundary rather than a gap: the
 sheer-following bulwark. That is a swept curve, and quantising it to the 0.5 m grid would step
