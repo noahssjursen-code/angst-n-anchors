@@ -8,6 +8,8 @@ extends RefCounted
 const DEFAULT_TOPSIDES := Color(0.14, 0.16, 0.18)
 const DEFAULT_KEEL := Color(0.34, 0.055, 0.04)
 const DEFAULT_DECK := Color(0.38, 0.34, 0.28)
+## Still read by nothing on a hull — REALITY §3d. A sheer-strake surface that would have
+## used it was built and reverted for costing +2 draw calls a vessel; see `MeshBuilder`.
 const DEFAULT_ACCENT := Color(0.82, 0.78, 0.62)
 
 

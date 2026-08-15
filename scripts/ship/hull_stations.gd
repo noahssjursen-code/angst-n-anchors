@@ -34,9 +34,18 @@ const BODY_FRAME_Y_ROT := deg_to_rad(-90.0)
 @export var section_fullness_exponent: float = 1.0
 @export var form_id: String = ""
 ## Sheer: how far a bulwark cap / rail should stand above `deck_y` at the stem and at the
-## transom. Zero amidships. Derived by `sheer_ends`; **not** applied to the loft — see below.
+## transom. Zero amidships. Derived by `sheer_ends`. The loft does not lift its DECK EDGE
+## by this — it carries the curve on the rubbing strake instead. See below.
 @export var sheer_forward_m: float = 0.0
 @export var sheer_aft_m: float = 0.0
+## Index of the section level where the rubbing strake BEGINS; the band is the gap
+## between `strake_level` and `strake_level + 1`. −1 on lattices that have no strake
+## (`from_box`, `from_pointed`, `from_design`, `from_hull_json`). The loft NAMES the
+## level rather than leaving consumers to infer one from the section size — an inferred
+## index shipped once and painted the wrong band. `hull_sheer_test` reads it to hold the
+## sheer curve on the band; a mesh builder that wanted to paint the band would read the
+## same field rather than counting levels from the top.
+@export var strake_level: int = -1
 
 
 ## ── Sheer: the curve lives here, the plating does not ────────────────────────────
@@ -83,8 +92,24 @@ const BODY_FRAME_Y_ROT := deg_to_rad(-90.0)
 ## Therefore the split, and it is the whole decision:
 ##   • THE CURVE lives here, derived per hull, and is the single authority: `sheer_ends`,
 ##     `sheer_rise_at`, `sheer_cap_y_at`.
-##   • THE PLATING does not. The loft tops out flat at `deck_y` on every station of every
-##     hull, and `tests/hull_sheer_test.gd` holds it there.
+##   • THE DECK EDGE does not follow it. The loft tops out flat at `deck_y` on every
+##     station of every hull, and `tests/hull_sheer_test.gd` holds it there.
+##
+## ── What that argument does NOT forbid, and did not say — corrected 2026-08-15 ────
+## Everything above is about the CEILING. It was re-measured before this correction and
+## every number in it still holds. But it was read, by the wave that wrote it and by the
+## one after, as "a bare hull cannot show sheer", and that is a stronger claim than the
+## evidence supports. The constraint is `deck_y`; it says nothing about the freeboard
+## BELOW `deck_y`, which was flat because nobody had drawn anything there.
+##
+## So the loft now draws the curve one level down, on the RUBBING STRAKE: a band of
+## constant height, standing proud of the deck edge, whose Y is
+## `strake_base + band + sheer_rise_at(z)`, clamped to stay `STRAKE_MIN_CLEAR_FRACTION`
+## of the freeboard under the deck edge. Nothing enters the deck plate, the plan's
+## colliders or the space above the walking plane — the ceiling checks are unchanged and
+## still zero — and the hull has a curve in it that a person can see. What a bare hull
+## still cannot do is curve its TOP LINE; that is the bulwark cap's job and this note's
+## original argument for it stands.
 ##
 ## The rule, derived per hull from fields the catalog already carries — never a magic
 ## number per hull:
@@ -106,6 +131,78 @@ const BODY_FRAME_Y_ROT := deg_to_rad(-90.0)
 ## 0.896 m on hull_28x10.
 const SHEER_BOW_KEY := "bow_keel_rise"
 const SHEER_STERN_KEY := "stern_keel_rise"
+
+## ── Where the shape is, and where the stations were ──────────────────────────────
+## Evenly-spaced stations spend their budget in the parallel midbody, where nothing
+## changes, and starve the ends, where everything does. Measured before this constant
+## existed: on `hull_15x5` the bow taper is 4.05 m long and contained exactly ONE
+## station, so the entry, the forefoot and the stem were all resolved by a single
+## vertex — which is why every hull's bow read as a blunt wedge regardless of form.
+##
+## `station_z` keeps the endpoints exactly on ±L/2 and pulls the interior toward
+## them with a cosine, blended with the uniform spacing so the midbody still gets
+## strips. `station_length`'s midpoint rule already handles uneven spacing, so the
+## strip integration and the collision decomposition follow for free.
+const STATION_CLUSTER := 0.65
+## The strake's minimum clearance under the deck edge, as a fraction of freeboard.
+const STRAKE_MIN_CLEAR_FRACTION := 0.10
+## The strake band's height, as a fraction of freeboard. Constant along the hull.
+const STRAKE_BAND_FRACTION := 0.16
+
+
+## Ship-local Z of station `index` of `count`, clustered toward the ends.
+static func station_z(index: int, count: int, length: float) -> float:
+	if count <= 1:
+		return 0.0
+	var t := float(index) / float(count - 1)
+	var clustered := 0.5 * (1.0 - cos(PI * t))
+	return lerpf(-length * 0.5, length * 0.5, lerpf(t, clustered, STATION_CLUSTER))
+
+
+## The station lattice for one form hull: clustered toward the ends, then with one
+## station SNAPPED ONTO each longitudinal kink in the shape.
+##
+## The snap is what lets the loft agree with anything else. A loft is piecewise linear
+## between stations, so it reproduces a straight taper exactly — but only if a station
+## sits on the corner where that taper starts. Without the snap the chord cuts the
+## corner and the deck edge falls INSIDE `pointed_deck_plate` by the size of the cut:
+## measured on hull_15x5 at −0.3409 m per side with a straight deck taper and no snap,
+## which is worse than the +0.2181 m the smoothstep used to be out by.
+static func form_station_zs(
+	length: float,
+	count: int,
+	deck_bow_length: float,
+	underwater_bow_length: float,
+	stern_length: float,
+	stem_rake_run: float = 0.0,
+) -> Array[float]:
+	var zs: Array[float] = []
+	for i in range(count):
+		zs.append(station_z(i, count, length))
+	var kinks: Array[float] = []
+	## Order matters: the nearest free station is claimed per kink in this order, so the
+	## stem rake — the shortest run and the one the eye reads first — gets first refusal.
+	for run in [stem_rake_run, deck_bow_length, underwater_bow_length]:
+		if run > 0.001 and run < length * 0.5:
+			kinks.append(-length * 0.5 + run)
+	if stern_length > 0.001 and stern_length < length * 0.5:
+		kinks.append(length * 0.5 - stern_length)
+	var claimed := {}
+	for kink in kinks:
+		var best := -1
+		var best_d := 1e18
+		for i in range(1, zs.size() - 1):
+			if claimed.has(i):
+				continue
+			var d := absf(zs[i] - kink)
+			if d < best_d:
+				best_d = d
+				best = i
+		if best >= 0:
+			zs[best] = kink
+			claimed[best] = true
+	zs.sort()
+	return zs
 
 
 ## (forward, aft) sheer rise in metres for one hull form.
@@ -424,6 +521,11 @@ static func from_form(
 		displacement_t * 1000.0 / maxf(water_density, 1.0),
 		0.01
 	)
+	## The caller's count is respected. Raising the floor to 12 was tried and MEASURED:
+	## it cost `plan_collision_physics_test` its 240 s budget (118 s -> TIMEOUT) and put
+	## `deck_fitout_load_bench` 2.3x over its staged-frame budget, for a shape the kink
+	## snapping in `form_station_zs` already resolves at 8. Spend the stations you have
+	## where the shape is; do not buy more.
 	var count := maxi(station_count, 7)
 	result.length_m = length
 	result.beam_m = beam
@@ -487,29 +589,54 @@ static func _assign_form_sections(
 	var chine_y := draft * clampf(
 		float(form.get("chine_draft_fraction", 0.36)), 0.12, 0.85
 	)
-	var shoulder_y := lerpf(
+	## THE RUBBING STRAKE — a band of CONSTANT height that the sheer curve moves bodily.
+	##
+	## Two levels, not one, and that is the whole reason it works. With a single level the
+	## band ran from the strake to the flat deck edge, so its height WAS the sheer rise:
+	## fat amidships, thin at the ends, which is a wedge and reads as reverse sheer. With
+	## two the band keeps its height and slides, and what curves is a stripe rather than a
+	## taper. Rendered both on hull_15x5 — v7 and v8 of this change.
+	##
+	## `shoulder_freeboard_fraction` places the band's bottom, `shoulder_width` is how far
+	## it stands PROUD of the deck edge. That field used to be clamped to 1.0, i.e. inboard
+	## of the deck, which draws nothing: a panel that flares outward going up and another
+	## panel that flares outward going up have the same normal, so both sides of the
+	## "knuckle" shaded identically. Measured on hull_15x5 at 0.96 and again at 0.88 — two
+	## renders, no visible difference. Above 1.0 there is flare below the band and
+	## tumblehome above it, which is two normals a light can tell apart.
+	var freeboard := maxf(depth - draft, 0.0)
+	var strake_base_y := lerpf(
 		draft,
 		depth,
 		clampf(float(form.get("shoulder_freeboard_fraction", 0.58)), 0.1, 0.95)
 	)
+	var strake_band := maxf(freeboard * STRAKE_BAND_FRACTION, 0.03)
+	var strake_proud := clampf(float(form.get("shoulder_width", 0.98)), 0.02, 1.15)
 	var base_widths := [
 		clampf(float(form.get("bottom_width", 0.5)) * fullness, 0.02, 1.0),
 		clampf(float(form.get("chine_width", 0.75)) * fullness, 0.02, 1.0),
 		clampf(float(form.get("waterline_width", 0.88)) * fullness, 0.02, 1.0),
-		clampf(float(form.get("shoulder_width", 0.98)), 0.02, 1.0),
+		strake_proud,
+		strake_proud,
 		1.0,
 	]
-	var vertical_y := [0.0, chine_y, draft, shoulder_y, depth]
 	var bow_rise := depth * clampf(float(form.get("bow_keel_rise", 0.2)), 0.0, 0.7)
 	var stern_rise := depth * clampf(float(form.get("stern_keel_rise", 0.05)), 0.0, 0.5)
 	var stern_width := clampf(float(form.get("stern_underwater_width", 0.72)), 0.1, 1.0)
 	var sheer := sheer_ends(depth, draft, form)
 	result.sheer_forward_m = sheer.x
 	result.sheer_aft_m = sheer.y
+	## The strake never merges with the deck edge, however hard the sheer pushes: a band
+	## that closed to zero at the stem would read as a crease running INTO the deck edge
+	## rather than sweeping parallel to it.
+	var strake_clear := maxf((depth - draft) * STRAKE_MIN_CLEAR_FRACTION, 0.04)
 
-	for i in range(station_count):
-		var t := float(i) / float(station_count - 1)
-		var z := lerpf(-length * 0.5, length * 0.5, t)
+	var station_zs := form_station_zs(
+		length, station_count, deck_bow_length, underwater_bow_length, stern_length,
+		bow_rise
+	)
+	for i in range(station_zs.size()):
+		var z := station_zs[i]
 		var bow_distance := z + length * 0.5
 		var stern_distance := length * 0.5 - z
 		var bow_keel_factor := 1.0 - smoothstep(
@@ -523,18 +650,71 @@ static func _assign_form_sections(
 			stern_rise * stern_keel_factor
 		)
 		local_keel = minf(local_keel, chine_y * 0.82)
+		## THE STEM LINE — the hull's forward edge in PROFILE. Everything below it at
+		## this station is outside the hull, so those levels collapse onto it and the
+		## silhouette's front edge rakes aft as it goes down.
+		##
+		## Zeroing the half-beam alone was NOT enough and this is the whole trap: a
+		## level at its nominal Y with `half_beam == 0` still puts a VERTEX at
+		## z = −L/2, so the projected outline still reached the tip at every height and
+		## the stem rendered exactly plumb. Measured on hull_15x5 — v1 of this change
+		## raked the widths and left the profile picture unchanged. The Y has to move.
+		var stem_floor := depth * (1.0 - clampf(bow_distance / maxf(bow_rise, 0.001), 0.0, 1.0))
+		var section_floor := maxf(local_keel, stem_floor)
+		## THE SHEER, DRAWN. The strake band is the part of the freeboard that is free to
+		## move, and it carries `sheer_rise_at` — the curve this file has derived and never
+		## used. It sweeps up at both ends, bow-dominant, and stays under the deck edge, so
+		## the loft still tops out flat on the build plane and nothing above it moves.
+		var strake_top := clampf(
+			strake_base_y + strake_band + result.sheer_rise_at(z),
+			draft + 0.02,
+			depth - strake_clear
+		)
+		var strake_bottom := clampf(strake_top - strake_band, draft + 0.01, strake_top - 0.01)
+		var vertical_y := [0.0, chine_y, draft, strake_bottom, strake_top, depth]
+		result.strake_level = 3
 		var section: Array[Vector2] = []
 		for j in range(vertical_y.size()):
-			var y := maxf(float(vertical_y[j]), local_keel) if j == 0 else float(vertical_y[j])
+			var y := maxf(float(vertical_y[j]), section_floor)
 			var y_normalized := clampf(y / depth, 0.0, 1.0)
-			var bow_length := lerpf(
-				underwater_bow_length,
-				deck_bow_length,
-				smoothstep(0.45, 1.0, y_normalized)
+			## THE STEM RAKE — the hull's forward extremity at this height, set back
+			## from the deck-level stem. Zero at the deck edge, `bow_rise` at the keel,
+			## linear between: the stem and the forefoot are cut away by the same
+			## number, so a form that lifts its forefoot also rakes its stem.
+			##
+			## The transom does NOT get the mirror treatment. The stern taper reaches
+			## `stern_underwater_width`, never zero, because the aft station IS the
+			## transom face; setting it back the same way zeroes that station and turns
+			## every hull in the fleet into a double-ender. Measured, then reverted.
+			var stem_setback := bow_rise * (1.0 - y_normalized)
+			var raked_bow := bow_distance - stem_setback
+			var bow_length := maxf(
+				lerpf(
+					underwater_bow_length,
+					deck_bow_length,
+					smoothstep(0.45, 1.0, y_normalized)
+				) - stem_setback,
+				0.001
 			)
 			var longitudinal := 1.0
-			if bow_length > 0.001 and bow_distance < bow_length:
-				longitudinal *= smoothstep(0.0, bow_length, bow_distance)
+			if raked_bow <= 0.0:
+				longitudinal = 0.0
+			elif raked_bow < bow_length:
+				## The entry blends from an S-curve underwater to a STRAIGHT chamfer at
+				## the deck edge, and the straight half is not a taste decision — it is
+				## the §3b fix. `pointed_deck_plate` and `DeckGrid.cell_shape` both cut
+				## the bow with a linear 45 degree chamfer over `bow_taper_m`; the loft
+				## cut it with a smoothstep over the same interval, and a straight line
+				## and an S-curve over one interval cannot agree. Measured worst
+				## disagreement at the deck edge, shell minus plate, per side:
+				## hull_15x5 +0.2181 m and hull_28x10 +0.4788 m before this line.
+				## A linear deck-level taper is also reproduced EXACTLY by the loft's
+				## own piecewise-linear interpolation between stations, so the residual
+				## is only the corner the chord cuts at the chamfer shoulder.
+				var raw := clampf(raked_bow / bow_length, 0.0, 1.0)
+				longitudinal *= lerpf(
+					smoothstep(0.0, 1.0, raw), raw, smoothstep(0.45, 1.0, y_normalized)
+				)
 			if stern_length > 0.001 and stern_distance < stern_length:
 				var stern_blend := smoothstep(0.0, stern_length, stern_distance)
 				var stern_edge_width := lerpf(stern_width, 1.0, y_normalized)
@@ -543,11 +723,12 @@ static func _assign_form_sections(
 				y,
 				half_beam * float(base_widths[j]) * longitudinal
 			))
-		## No sheer is applied to the section levels, and that is a decision, not an
+		## No sheer is applied to the TOP level, and that is a decision, not an
 		## omission — see the sheer note at the top of this file. The top level stays at
 		## exactly `depth` on every station so that `deck_y` remains both the flat build
 		## plane and the ceiling of the loft: nothing this file emits may enter the deck
-		## plate, the plan's colliders or the space above the walking plane.
+		## plate, the plan's colliders or the space above the walking plane. The curve is
+		## drawn one level down, where it costs nothing and reaches nothing.
 		result.stations.append({"z": z, "section": section})
 
 

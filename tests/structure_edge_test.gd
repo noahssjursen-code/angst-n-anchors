@@ -584,10 +584,19 @@ func _test_sheer_comes_from_hull_stations() -> void:
 
 	## The half-beam is read at the BAND's height, so a strake low on a flared
 	## hull hugs the narrower section instead of standing off it.
+	##
+	## Sampled at the DESIGN WATERLINE, not at a fixed 1.15 m below the deck. That
+	## height used to work only because the loft flared monotonically all the way to
+	## the deck edge; since `HullStations` grew a rubbing strake that stands PROUD of
+	## the deck edge, the hull is at its widest inside the freeboard and 1.15 m down
+	## reads 5.128 m against 5.000 m at the deck — the check went red on a hull that
+	## is doing exactly what it is supposed to. The waterline is narrower than the
+	## deck edge on every flared hull in the fleet, strake or no strake, so the
+	## property survives the next shape change too.
 	var at_deck := StructureEdge.deck_half_beam_at(stations, 0.0, stations.deck_y)
-	var at_strake := StructureEdge.deck_half_beam_at(stations, 0.0, stations.deck_y - 1.15)
+	var at_strake := StructureEdge.deck_half_beam_at(stations, 0.0, stations.design_draft_m)
 	_t.check(
-		"half-beam is sampled at the band's own height (%.3f m at deck, %.3f m 1.15 m down)"
+		"half-beam is sampled at the band's own height (%.3f m at deck, %.3f m at the waterline)"
 		% [at_deck, at_strake],
 		at_strake < at_deck - 1e-4,
 	)

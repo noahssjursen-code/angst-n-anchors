@@ -7,7 +7,7 @@
       "display": "15 × 5 m",
       "notes": "Smallest hull in the game and the one a beginner starts from. Sized on the ~15 m Norwegian sjark (STATE.md's FISHING reference): L/B 3.0, 1.05 m freeboard, 44 t at 1.55 m draft (Cb 0.369). Deck grid 10 × 30 cells with a 5-cell 45° bow. 280 kW is a real sjark engine and is what CatalogHullVessel's own 5 m/s cruise model asks for at 44 t.",
       "shape": "pointed",
-      "form": "fine_entry",
+      "form": "workboat_small",
       "ship_class": "coastal_trader",
       "default_shaft_power_kw": 280.0,
       "loa_m": 15.0,

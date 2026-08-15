@@ -368,6 +368,20 @@ static func pointed_bow_collision_points(
 ## starts at that Y and goes up, and the player's mask has nothing above it. Plating
 ## that stands proud of a flat deck is a bulwark; it has to be drawn by whoever can
 ## also collide it. See the sheer note in `scripts/ship/hull_stations.gd`.
+##
+## TWO surfaces, and it stays two. Surface 1 is not only the anti-fouling bottom: it is
+## the hull's SECOND COLOUR, and it paints both the body below the design waterline and
+## the rubbing-strake band that `HullStations` sweeps along the sheer curve.
+##
+## Sharing surface 1 is a budget decision and it was measured, not assumed. A third
+## surface — the band in `HullLivery.accent_color` — was built and rendered and cost
+## **+2 draw calls per vessel**: demo_workboat 16 -> 18, probe_ferry_catamaran 20 -> 22,
+## which reddened `vessel_render_capture`, `trawler_render_capture`, `piece_kit_capture`
+## and `structure_bake_budget_test` against budgets that exist because harbours are full
+## of these ships. Geometry alone does not draw the line either — the band was rendered
+## on hull_15x5 with no material boundary and the sheer is invisible in profile at
+## `topsides_color` (0.14, 0.16, 0.18), which is near black and compresses every shading
+## difference to a few RGB units. So: one extra material boundary, zero extra materials.
 static func lofted_hull_shell(
 	hull_stations: HullStations,
 	color: Color = Color(0.12, 0.14, 0.16),
@@ -395,11 +409,12 @@ static func lofted_hull_shell(
 			var a1: Vector2 = section_a[j + 1]
 			var b0: Vector2 = section_b[j]
 			var b1: Vector2 = section_b[j + 1]
-			var faces := (
-				keel_faces
-				if maxf(a1.x, b1.x) <= hull_stations.design_draft_m + 0.001
-				else upper_faces
-			)
+			var faces := upper_faces
+			if (
+				j == hull_stations.strake_level
+				or maxf(a1.x, b1.x) <= hull_stations.design_draft_m + 0.001
+			):
+				faces = keel_faces
 			## Starboard side.
 			faces.append([
 				Vector3(a0.y, a0.x, za),
@@ -451,7 +466,7 @@ static func lofted_hull_shell(
 	var upper_mat := make_material(color, roughness, metallic, double_sided)
 	upper_mat.resource_name = "Hull Topsides"
 	var keel_mat := make_material(keel_color, 0.96, 0.0, double_sided)
-	keel_mat.resource_name = "Anti-fouling Keel"
+	keel_mat.resource_name = "Anti-fouling & Rubbing Strake"
 	var center := Vector3(0.0, hull_stations.height_m * 0.5, 0.0)
 	var mesh := _commit_loft_surface(upper_faces, upper_mat, center)
 	mesh = _commit_loft_surface(keel_faces, keel_mat, center, mesh)

@@ -44,7 +44,10 @@ func _run() -> void:
 	var small := _place("hull_15x5", Vector3.ZERO)
 	await _ortho("hull_15x5__profile_ortho", Vector3(60.0, WL + 0.6, 0.0), Vector3(0.0, WL + 0.6, 0.0), 19.0)
 	await _ortho("hull_15x5__bow_on_ortho", Vector3(0.0, WL + 0.6, -60.0), Vector3(0.0, WL + 0.6, 0.0), 9.0)
-	await _ortho("hull_15x5__plan_ortho", Vector3(0.0, 60.0, 0.01), Vector3.ZERO, 8.0)
+	## Straight down. `look_at` with UP parallel to the view direction is degenerate,
+	## and 8 m across on a 15 m boat cropped to a patch of bare deck — the old call did
+	## both and the frame it produced showed no boat at all (REALITY §8).
+	await _ortho_plan("hull_15x5__plan_ortho", 30.0)
 	await _persp("hull_15x5__bow_quarter", Vector3(-11.0, 4.2, -13.0), Vector3(0.0, WL + 0.8, -1.0))
 	await _persp("hull_15x5__stern_quarter", Vector3(10.0, 3.8, 13.0), Vector3(0.0, WL + 0.8, 1.0))
 	small.free()
@@ -155,6 +158,13 @@ func _ortho(case: String, from: Vector3, look_at: Vector3, width_m: float) -> vo
 	_camera.size = width_m
 	_camera.look_at_from_position(from, look_at, Vector3.UP)
 	await _save(case, "ortho %.1f m across" % width_m)
+
+
+func _ortho_plan(case: String, width_m: float) -> void:
+	_camera.projection = Camera3D.PROJECTION_ORTHOGONAL
+	_camera.size = width_m
+	_camera.look_at_from_position(Vector3(0.0, 60.0, 0.0), Vector3.ZERO, Vector3.FORWARD)
+	await _save(case, "plan ortho %.1f m across" % width_m)
 
 
 func _persp(case: String, from: Vector3, look_at: Vector3) -> void:

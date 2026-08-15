@@ -16,12 +16,25 @@ extends SceneTree
 ## shrink in the per-station lateral lever. Control, with the curve not extruded: zero on
 ## every one of those. This file is what keeps it at zero.
 ##
-## So the checks come in two halves and both matter:
+## So the checks come in three parts and all of them matter:
 ##   • THE CEILING — nothing the loft emits may reach the deck plate, the plan's
 ##     colliders, or the space above the walking plane, on any hull.
 ##   • THE CURVE — it must still be derived, per hull, from `bow_keel_rise` /
 ##     `stern_keel_rise` and freeboard, and still be a bow-dominant parabola, because the
 ##     bulwark work that has to carry it takes its cap height from here.
+##   • THE CURVE IS USED — added 2026-08-15. The two halves above were both green for
+##     days while `sheer_forward_m` was computed on every hull and read by nothing that
+##     draws, and every hull in the fleet rendered as the same flat slab. A derivation
+##     with no consumer is REALITY §3d in miniature, and no check pointed at it. The
+##     rubbing strake now carries the curve, and `_check_curve_is_drawn` holds it there:
+##     the strake band must be HIGHER at the stem than amidships, by the sheer rise, on
+##     every hull.
+##
+## `_check_deck_edge_matches_plate` is the other new one, and it closes a §3b split the
+## STATE entry named and nobody had a check for: the loft cut the bow with a smoothstep
+## while `pointed_deck_plate` and `DeckGrid` cut it with a straight 45 degree chamfer over
+## the same interval, so the drawn deck edge and the drawn deck plate disagreed by
+## 0.2181 m per side on hull_15x5 and 0.4788 m on hull_28x10.
 ##
 ## The collider half is an exact triangle-vs-oriented-box SAT, not a point sampler: the
 ## intrusion this guards against is a sliver a few centimetres wide along the deck edge,
@@ -50,6 +63,10 @@ func _initialize() -> void:
 		_check_displacement(t, case)
 		_check_lever(t, case)
 		_check_curve(t, case)
+		_check_curve_is_drawn(t, case)
+		_check_stem_rakes(t, case)
+		_check_strake_is_painted(t, case)
+		_check_deck_edge_matches_plate(t, case)
 
 	_check_baked_shell(t)
 	_check_plan_clearance(t)
@@ -165,6 +182,263 @@ func _check_curve(t: TestReport, case: Dictionary) -> void:
 	)
 
 
+# ── The curve is USED ────────────────────────────────────────────────────────────
+
+## The strake band is the level pair `stations.strake_level` names. Its Y must rise from
+## amidships toward the stem by the sheer curve — that is the whole point of computing
+## the curve, and it was computed and dropped on the floor until 2026-08-15.
+##
+## Stated as a PROPERTY and not as the formula (§4a): "the strake at the stem stands
+## higher above the strake amidships, and by the amount `sheer_rise_at` asks for, up to
+## the clearance clamp". Restating `strake_base + band + rise` would pass on any code
+## that computes the same expression twice and draws neither.
+func _check_curve_is_drawn(t: TestReport, case: Dictionary) -> void:
+	var s: HullStations = case["stations"]
+	var id: String = case["id"]
+	if not t.check("%s: the loft names a strake level" % id, s.strake_level >= 0):
+		return
+	## The strake only exists where the hull has width: at the stem station every level
+	## collapses onto the stem line by construction, so a sampler that reads the tip
+	## reads `deck_y` and learns nothing. Read the drawn band instead.
+	var live: Array = []
+	for station in s.stations:
+		var section: Array = station["section"]
+		if (section[s.strake_level] as Vector2).y > 0.001:
+			live.append(station)
+	if not t.check("%s: the strake band is drawn at 3+ stations" % id, live.size() >= 3):
+		return
+	var clamp_y := s.deck_y - maxf(
+		(float(case["depth"]) - float(case["draft"])) * HullStations.STRAKE_MIN_CLEAR_FRACTION,
+		0.04,
+	)
+	var mid := 1e18
+	var mid_z := 0.0
+	var mid_abs := 1e18
+	for station in live:
+		if absf(float(station["z"])) < mid_abs:
+			mid_abs = absf(float(station["z"]))
+			mid_z = float(station["z"])
+			mid = ((station["section"] as Array)[s.strake_level] as Vector2).x
+	var fwd := ((live[0]["section"] as Array)[s.strake_level] as Vector2).x
+	var aft := ((live[live.size() - 1]["section"] as Array)[s.strake_level] as Vector2).x
+	t.check(
+		"%s: the strake is higher forward than amidships (%.4f vs %.4f)" % [id, fwd, mid],
+		fwd > mid + 0.02,
+	)
+	t.check(
+		"%s: the strake is higher aft than amidships (%.4f vs %.4f)" % [id, aft, mid],
+		aft > mid + 0.002,
+	)
+	t.check(
+		"%s: the drawn rise is bow-dominant (fwd %.4f, aft %.4f)"
+			% [id, fwd - mid, aft - mid],
+		(fwd - mid) > (aft - mid),
+	)
+	## And it is THAT curve. Every station where the clearance clamp is not biting must
+	## show exactly the rise `sheer_rise_at` asks for at that station's own Z — stated
+	## against the curve, not against a re-typed copy of the formula (§4a).
+	var off := 0
+	var worst := 0.0
+	var unclamped := 0
+	for station in live:
+		var y := ((station["section"] as Array)[s.strake_level] as Vector2).x
+		if y >= clamp_y - 0.0001:
+			continue
+		unclamped += 1
+		var want := s.sheer_rise_at(float(station["z"])) - s.sheer_rise_at(mid_z)
+		var delta := absf((y - mid) - want)
+		worst = maxf(worst, delta)
+		if delta > 0.005:
+			off += 1
+	t.check("%s: unclamped strake stations exist to check" % id, unclamped >= 2)
+	t.equal(
+		"%s: every unclamped strake station rises by sheer_rise_at (worst %.5f m, of %d)"
+			% [id, worst, unclamped],
+		off,
+		0,
+	)
+	## Nothing the strake does may reach the deck edge, anywhere it is drawn.
+	var over := 0
+	for station in live:
+		if ((station["section"] as Array)[s.strake_level] as Vector2).x > clamp_y + 0.0001:
+			over += 1
+	t.equal("%s: the strake stays clear of the deck edge" % id, over, 0)
+
+
+## The stem must lean, measured ON THE BAKED SURFACE.
+##
+## Not on the section widths, and that distinction is the whole check. The first version
+## of this raked the half-beams and left every level at its nominal Y, so the loft still
+## emitted a VERTEX at z = −L/2 at keel height and the rendered outline was exactly
+## plumb — two renders of hull_15x5 apart and indistinguishable. A section-width sampler
+## calls that a raked stem, because the widths did rake. It is what the triangles reach
+## that draws the picture, so that is what is asserted: the forward-most point of the
+## baked shell down at the keel must sit aft of the forward-most point at the deck edge.
+##
+## This mutation was run and PASSED against the width-only version (§8: a mutation that
+## passes is a blind check, not a safe one) — which is how the check came to be pointed
+## at the mesh instead.
+func _check_stem_rakes(t: TestReport, case: Dictionary) -> void:
+	var s: HullStations = case["stations"]
+	var id: String = case["id"]
+	var mesh: ArrayMesh = MeshBuilder.lofted_hull_shell(s).mesh
+	if not t.check("%s: shell bakes for the stem check" % id, mesh != null):
+		return
+	var faces: PackedVector3Array = mesh.get_faces()
+	## Measured at the DESIGN WATERLINE against the deck edge, because that is the span
+	## a person sees. A band down at the keel cannot tell the two versions apart: the
+	## forefoot is already lifted at the bow by `bow_keel_rise`, so keel-height vertices
+	## are aft of the stem whether the stem rakes or not — that sampler was written,
+	## mutated, and passed on the bug (§8) before this one replaced it.
+	var wl_band := s.design_draft_m + (s.deck_y - s.keel_y) * 0.02
+	var deck_band := s.deck_y - maxf((s.deck_y - s.design_draft_m) * 0.1, 0.02)
+	var deck_front := 1e9
+	var wl_front := 1e9
+	for v in faces:
+		if v.y >= deck_band:
+			deck_front = minf(deck_front, v.z)
+		if v.y <= wl_band:
+			wl_front = minf(wl_front, v.z)
+	t.check(
+		"%s: the stem rakes — waterline reaches %.3f, the stem head %.3f"
+			% [id, wl_front, deck_front],
+		wl_front > deck_front + s.length_m * 0.01,
+	)
+
+
+## The strake band has to be PAINTED, not merely shaped.
+##
+## This check exists because the mutation that deletes the material split passed the
+## whole suite, and then passed the FIRST version of this check too (§8 twice over: a
+## mutation that passes is a blind check, not a safe one). Every other check here is
+## about where the band SITS, and the band sits in the same place painted or not —
+## while the thing the change was made for, a sheer line a person can see in profile,
+## exists only where there is a material boundary. Rendered without the split, at
+## `topsides_color` (0.14, 0.16, 0.18), the band is invisible: near-black compresses
+## every shading difference to a few RGB units.
+##
+## The first version asked "does surface 1 reach the freeboard anywhere" and "is it
+## higher forward than amidships", and both were vacuous: near the stem every section
+## level collapses onto the stem line at `deck_y`, so surface 1 touches the deck edge
+## at the bow whether the strake is painted or not. Measured on hull_15x5 —
+## `fwd_top` is 2.600 either way. AMIDSHIPS is the only place the stem collapse cannot
+## reach, so that is where the property is stated, and it is stated as an equality
+## against the level the loft NAMES rather than as "higher than the waterline".
+func _check_strake_is_painted(t: TestReport, case: Dictionary) -> void:
+	var s: HullStations = case["stations"]
+	var id: String = case["id"]
+	if s.strake_level < 0:
+		return
+	var mesh: ArrayMesh = MeshBuilder.lofted_hull_shell(s).mesh
+	if not t.check(
+		"%s: shell bakes with 2 surfaces" % id,
+		mesh != null and mesh.get_surface_count() == 2,
+	):
+		return
+	## The midships station and the band top the loft says it drew there.
+	var mid_station := {}
+	var mid_abs := 1e18
+	for station in s.stations:
+		var section: Array = station["section"]
+		if (section[s.strake_level] as Vector2).y <= 0.001:
+			continue
+		if absf(float(station["z"])) < mid_abs:
+			mid_abs = absf(float(station["z"]))
+			mid_station = station
+	if not t.check(
+		"%s: a midships station exists inside the sample window" % id,
+		not mid_station.is_empty() and mid_abs < s.length_m * 0.20,
+	):
+		return
+	var want := (
+		(mid_station["section"] as Array)[s.strake_level + 1] as Vector2
+	).x
+	var window := maxf(s.length_m * 0.02, 0.05)
+	var verts: PackedVector3Array = mesh.surface_get_arrays(1)[Mesh.ARRAY_VERTEX]
+	var mid_top := -1e9
+	var sampled := 0
+	for v in verts:
+		if absf(v.z - float(mid_station["z"])) <= window:
+			sampled += 1
+			mid_top = maxf(mid_top, v.y)
+	t.check("%s: surface 1 has vertices at midships (%d)" % [id, sampled], sampled > 0)
+	t.near(
+		"%s: the second colour tops out on the strake band amidships (%.4f)" % [id, mid_top],
+		mid_top,
+		want,
+		0.0001,
+	)
+	## Painting the WHOLE freeboard would satisfy "the strake is painted" — the
+	## equality above is what rules it out, because it pins the boundary on the level
+	## the loft names rather than merely somewhere above the waterline.
+
+
+## §3b. The drawn deck edge and the drawn deck plate are two derivations of one line.
+## `pointed_deck_plate` and `DeckGrid.cell_shape` chamfer the bow linearly over
+## `bow_taper_m`; the loft has to do the same, and a station has to land on the corner
+## or the chord cuts it. Sampled along the CONTINUOUS drawn curves, not at the stations,
+## because a station-only sampler reports whatever the spacing happens to hit.
+func _check_deck_edge_matches_plate(t: TestReport, case: Dictionary) -> void:
+	var s: HullStations = case["stations"]
+	var ring := MeshBuilder._pointed_plan_ring(
+		s.length_m, s.beam_m, clampf(float(case["bow_taper_m"]) / s.length_m, 0.0, 0.5)
+	)
+	var worst := 0.0
+	var worst_z := 0.0
+	for k in range(801):
+		var z := lerpf(-s.length_m * 0.5, s.length_m * 0.5, float(k) / 800.0)
+		var d := _deck_edge_half_beam(s, z) - _ring_half_beam(ring, z)
+		if absf(d) > absf(worst):
+			worst = d
+			worst_z = z
+	t.check(
+		"%s: deck edge and deck plate agree (worst %+.4f m per side at z=%.3f)"
+			% [case["id"], worst, worst_z],
+		absf(worst) < 0.01,
+	)
+
+
+func _strake_y(s: HullStations, z: float) -> float:
+	var best := 0.0
+	var best_d := 1e18
+	for station in s.stations:
+		var d := absf(float(station["z"]) - z)
+		if d < best_d:
+			best_d = d
+			var section: Array = station["section"]
+			best = (section[s.strake_level] as Vector2).x
+	return best
+
+
+## What the loft DRAWS at the deck edge between stations: it lofts linearly, so the edge
+## between two stations is the straight line between their top levels.
+func _deck_edge_half_beam(s: HullStations, z: float) -> float:
+	var n := s.stations.size()
+	if n == 0:
+		return 0.0
+	for i in range(n - 1):
+		var za := float(s.stations[i]["z"])
+		var zb := float(s.stations[i + 1]["z"])
+		if z >= za and z <= zb:
+			var ha := ((s.stations[i]["section"] as Array).back() as Vector2).y
+			var hb := ((s.stations[i + 1]["section"] as Array).back() as Vector2).y
+			return lerpf(ha, hb, (z - za) / maxf(zb - za, 1e-6))
+	return ((s.stations[n - 1]["section"] as Array).back() as Vector2).y
+
+
+func _ring_half_beam(ring: PackedVector2Array, z: float) -> float:
+	var best := 0.0
+	for i in range(ring.size()):
+		var a := ring[i]
+		var b := ring[(i + 1) % ring.size()]
+		if absf(b.y - a.y) < 1e-6:
+			continue
+		if z < minf(a.y, b.y) or z > maxf(a.y, b.y):
+			continue
+		best = maxf(best, absf(a.x + (z - a.y) / (b.y - a.y) * (b.x - a.x)))
+	return best
+
+
 # ── The baked shell ──────────────────────────────────────────────────────────────
 
 ## Exact, not sampled: a triangle's interior cannot reach higher than its highest vertex,
@@ -176,6 +450,9 @@ func _check_baked_shell(t: TestReport) -> void:
 	var mesh: ArrayMesh = MeshBuilder.lofted_hull_shell(stations).mesh
 	if not t.check("trawler shell bakes", mesh != null and mesh.get_surface_count() > 0):
 		return
+	## Two, and the budget tests are why: a third surface for the strake measured
+	## +2 draw calls a vessel. `HullLivery` addresses these by index, so the COUNT is
+	## load-bearing and not decoration.
 	t.equal("shell is still 2 surfaces", mesh.get_surface_count(), 2)
 	var faces: PackedVector3Array = mesh.get_faces()
 	var max_y := -1e9
@@ -248,6 +525,7 @@ func _hull_cases() -> Array:
 			"id": str(entry.get("id", "")),
 			"depth": float(entry.get("depth_m", 1.0)),
 			"draft": float(entry.get("draft_m", 1.0)),
+			"bow_taper_m": float(entry.get("bow_taper_m", 0.0)),
 			"form": entry.get("hull_form", {}) as Dictionary,
 			"stations": HullStations.from_form(
 				float(entry.get("loa_m", 1.0)),
@@ -269,6 +547,7 @@ func _hull_cases() -> Array:
 			"id": "%.0fx%.0f" % [profile.length_m, profile.beam_m],
 			"depth": profile.depth_m,
 			"draft": profile.design_draft_m,
+			"bow_taper_m": profile.length_m * profile.bow_taper_fraction,
 			"form": profile.hull_form,
 			"stations": profile.make_stations(),
 		})
