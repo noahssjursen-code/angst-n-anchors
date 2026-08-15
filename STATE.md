@@ -312,13 +312,33 @@ added since: `box_winding_test`, `shipping_lane_traffic_integrity_test`,
 `building_cache_visual_test`, `visual_stamp_cache_test`, `starter_small_hull_test`,
 `hull_sheer_test`.
 
-**Changed since that run, and NOT re-measured by a full pass — do not read the numbers
-above as current.** Both verified by their own units against a `git archive HEAD`
-baseline, neither by a 111-unit run: `building_interior_test` went **15/37 → 5/41**
-(still red, and all five remaining are the open cell decision — mutating
-`BrickCatalog.size_m` to the grid takes it to PASS (41)), and `starter_vessel_grant_test`
-**PASS (49)** was added, so the tree is **112 units**. The next quiet-tree full run
-re-baselines this section; until then it is a run, not the state.
+**SUPERSEDED by run `20260815-103207-31656`, also over a quiet tree: 112 units,
+103 PASS, 7 FAIL, 1 NOTRUN, 1 SKIP.** `land_field_geography_test` moved 2/43 → **PASS
+(53)** and `building_interior_test` 15/37 → **5/41** (still red; all five are the open
+cell decision).
+
+**And it caught a regression no filtered run could: `captain_onboarding_test`, red and
+NOT on any known list.** It asserted `_selected_starter == "general_cargo"` in three
+places — a fourth copy of a value the starter wave had just made a constant
+(`CompanyContracts.DEFAULT_STARTER`) — so it went red the moment the default career
+became `fishing`, correctly reporting a change it had no business freezing. **The wave
+that caused it ran two filtered families, 29 units, all green, and wrote in its own
+"what I did NOT verify": *"I checked by grep that no other test names the prebuilt
+presets, but grep is not a run."* That was exactly right, and this is the miss.**
+A filtered gate is not a gate.
+
+Fixed as a property: the panel's default must equal what `CompanyContracts` declares,
+the declared default must have a card, and — independent of *which* career is default
+and not derivable from the constant — exactly one card is pressed. Control PASS;
+re-hardcoding `"general_cargo"` in the panel reddens it. The panel-ignores-the-constant
+seam is separately covered by `starter_vessel_grant_test`'s own mutation, so pointing
+this test at the constant is not self-referential.
+
+Tree after that fix is **112 units, 104 PASS, 6 FAIL** — *inferred from one unit
+re-run green, not from a full pass.* The remaining six: `port_trade_profile_test`
+1/130, `remote_realtime_join_smoke` (live server), `structure_plate_test`,
+`building_blueprint_test`, `building_interior_test`, `plan_interior_test`, plus
+`port_layout_visual_capture` NOTRUN and `ocean_wake_gpu_smoke` SKIP.
 
 **A full gate run over a tree with a live wave in it is not a baseline, and the attempt
 an hour earlier proved why** (run `20260815-073150-10087`, same day, RED with 12 FAIL +
