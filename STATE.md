@@ -1103,8 +1103,34 @@ different constants**, not "an owner call on world constants".
 
 ### Owner decisions outstanding
 
-1. **Is 0.5 m the right BRICK cell?** Nobody has looked at a rendered brick vessel
-   beside the figure. Structure plans are unaffected.
+1. **The brick cell — and it is TWO questions, not one. The land half is a BUG.**
+
+   **On vessels**, brick size and cell pitch are the SAME constant
+   (`DeckGrid.CELL_M`), so bricks still tile — everything is simply half the size
+   it was. A `railing` is 0.5 m tall with a 0.44 m post. That is a taste question.
+
+   **On land they are two different constants and they disagree by exactly 2:**
+   ```
+   brick drawn   BrickCatalog.size_m("block") = (1,1,1) x DeckGrid.CELL_M = 0.500 m
+   pitch         BuildingGrid.cell_center_local, CELL_M = 1.0        = 1.000 m
+                                                                factor  2.000
+   ```
+   `a70bdbc` halved `WorldUnits.DECK_CELL_M` and did not touch
+   `BuildingGrid.CELL_M`. **No blueprint data produces a solid wall.** Every
+   symptom falls out of the one factor: 0.500 m of daylight per join (exactly one
+   brick), roof slabs 0.50 m above the wall tops, `roof_flat_4x4` drawn 2.0 m on a
+   4.0 m pitch, a `block_door_double` that draws **1.5 m for a 1.8 m player**, and
+   a ground course floating 0.25 m above y=0 — the building does not touch the
+   ground. Measured on the first building the game has ever had; invisible for six
+   days because `resources/data/buildings/` was empty.
+
+   Two resolutions, and there is no third that leaves both constants alone:
+   **(a)** give `BrickCatalog.size_m` the cell size of the grid it is drawn on
+   (buildings 1.0, vessels 0.5) — buildings become solid, **no vessel moves**, and
+   `size_m` gains a parameter nearly every caller must pass.
+   **(b)** set `BuildingGrid.CELL_M = 0.5` — buildings become solid at **half**
+   their authored size (this warehouse becomes 10 x 6 x 3.25 m on a 22 m pad) and
+   every existing blueprint needs re-authoring.
 2. **`BuildingLayout.place_footprint` ignores its `_building_grid`** — 4/117 in
    `building_blueprint_test`. `BrickLayout`'s equivalent argument IS load-bearing
    and does reject out-of-bounds. Two sibling classes, contradictory, one wrong.

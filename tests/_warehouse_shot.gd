@@ -19,6 +19,7 @@ const VIEWS := [
 ]
 
 var _camera: Camera3D
+var _figure: Node3D
 
 
 func _ready() -> void:
@@ -43,10 +44,10 @@ func _ready() -> void:
 	ground.material_override = ground_mat
 	add_child(ground)
 
-	var figure := _figure()
+	_figure = _make_figure()
 	## Standing off the quay-facing corner, in the open, with sky behind it.
-	figure.position = Vector3(-12.0, 0.0, -9.0)
-	add_child(figure)
+	_figure.position = Vector3(-12.0, 0.0, -9.0)
+	add_child(_figure)
 
 	_light()
 	var bounds := _bounds(building)
@@ -54,10 +55,95 @@ func _ready() -> void:
 	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(OUT_DIR))
 	for view in VIEWS:
 		await _shoot(bounds, view as Dictionary)
+	await _elevation(bounds)
 	get_tree().quit(0)
 
 
-func _figure() -> Node3D:
+## ── SETTLING THE SCALE READING, WHICH TWO PEOPLE DISAGREED ABOUT ────────────
+##
+## The stamped building measures 6.50 m tall and the figure is a 1.8 m capsule,
+## so the figure must be 27.7% of the building's height. A reader of the two
+## perspective frames counted it at nearly two thirds. One of those is wrong, and
+## a perspective frame cannot settle it: the figure stands off the corner, 12 m
+## out, and the near wall is metres closer to the lens, so its apparent size is
+## not a ratio of anything.
+##
+## So: an ORTHOGRAPHIC elevation, where pixel height is proportional to world
+## height at any depth, and the figure's pixels are found by rendering the SAME
+## frame twice, with and without it, and diffing (the instrument
+## `piece_kit_capture` uses, for the same reason: no colour threshold to get
+## wrong, and the building's own door tint is orange too).
+func _elevation(bounds: AABB) -> void:
+	_camera.projection = Camera3D.PROJECTION_ORTHOGONAL
+	_camera.size = bounds.size.y * 1.9
+	var centre := bounds.get_center()
+	## Against the front wall, not off the corner, so a reader sees the figure
+	## beside the thing it is measuring.
+	_figure.position = Vector3(bounds.position.x + 1.0, 0.0, bounds.position.z - 1.2)
+	_camera.position = centre + Vector3(0.0, 0.0, -60.0)
+	_camera.look_at(centre, Vector3.UP)
+	## Shadows off for the measured pair only: a cast shadow moves ground pixels
+	## and the difference between the two frames would then include it, which
+	## would make the figure read taller than it is. The two frames above keep
+	## their shadows — those are for looking at, this one is for measuring.
+	for child in get_children():
+		if child is DirectionalLight3D:
+			(child as DirectionalLight3D).shadow_enabled = false
+	var with_figure := await _frame()
+	with_figure.save_png("%s/warehouse__elevation.png" % OUT_DIR)
+	_figure.visible = false
+	var without := await _frame()
+	_figure.visible = true
+
+	## THE FIGURE IS THE RULER, which is the only thing a scale figure is for.
+	## Its foot is on y = 0 and so is the building's, so the row its silhouette
+	## ends on IS the ground line, and the building is measured from the same one.
+	var sky := without.get_pixel(4, 4)
+	var top := -1
+	for y in without.get_height():
+		for x in without.get_width():
+			if x < 320 and y < 80:
+				continue ## the engine's own overlay
+			if without.get_pixel(x, y).is_equal_approx(sky):
+				continue
+			top = y
+			break
+		if top >= 0:
+			break
+	var fig_top := -1
+	var fig_bottom := -1
+	for y in with_figure.get_height():
+		for x in with_figure.get_width():
+			if x < 320 and y < 80:
+				continue
+			var a := with_figure.get_pixel(x, y)
+			var b := without.get_pixel(x, y)
+			if absf(a.r - b.r) + absf(a.g - b.g) + absf(a.b - b.b) < 0.06:
+				continue
+			if fig_top < 0:
+				fig_top = y
+			fig_bottom = y
+			break
+	var fig_px := fig_bottom - fig_top + 1
+	var building_px := fig_bottom - top + 1
+	var m_per_px := 1.8 / float(fig_px)
+	printerr("[shot] ORTHO figure %d px (rows %d..%d) = 1.80 m -> %.4f m/px"
+		% [fig_px, fig_top, fig_bottom, m_per_px])
+	printerr("[shot] ORTHO building %d px -> %.2f m measured off the figure; AABB says %.2f m"
+		% [building_px, float(building_px) * m_per_px, bounds.size.y])
+	printerr("[shot] ORTHO figure is %.1f%% of the building (world 1.8/%.2f = %.1f%%)"
+		% [100.0 * float(fig_px) / float(building_px), bounds.size.y,
+			100.0 * 1.8 / bounds.size.y])
+
+
+func _frame() -> Image:
+	for _i in 4:
+		await get_tree().process_frame
+	await RenderingServer.frame_post_draw
+	return get_viewport().get_texture().get_image()
+
+
+func _make_figure() -> Node3D:
 	var root := Node3D.new()
 	var body := MeshInstance3D.new()
 	var capsule := CapsuleMesh.new()
