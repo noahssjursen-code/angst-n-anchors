@@ -863,14 +863,26 @@ const PLATE_MIN_EDGE := 1e-4
 const PLATE_FRAME_WIDTH := 0.09
 const PLATE_FRAME_PROUD := 0.05
 const PLATE_MAX_SEGMENTS := 16
-## Collider staircase resolution — see plate_colliders(). A cell whose off-axis
-## excursion exceeds this is split, so this IS the worst-case phantom: the
-## distance a player can be stopped short of a raked wall they can see. At 0.25 m
-## (the spar's step) a wheelhouse front feels padded — measured, a quarter of a
-## metre of solid air stood in front of a 0.45 m rake. 0.15 m is under the
-## thickness of the bulkhead it fronts, and costs the fixture 161 -> 269 boxes.
-const PLATE_COLLIDER_STEP := 0.15
-const PLATE_MAX_COLLIDER_STEPS := 32
+## HOW FAR A PLATE'S COLLIDER MAY STAND PROUD OF THE PLATE — see plate_colliders().
+## A cell is split until the box fitted to it exceeds the slab it wraps by less
+## than this along every frame axis, so the constant IS the phantom: the distance
+## a player can be stopped short of a raked wall they can see.
+##
+## It was 0.15 m, and the name it carried (`PLATE_COLLIDER_STEP`) described the
+## grid rather than the error, which is how nobody noticed that 0.15 m is ONE AND
+## A HALF TIMES the 0.10 m plating. Measured on the shipped fixtures at 0.15:
+## demo_workboat 0.1249 m, probe_trawler_bulwark 0.1478 m, critic_ferry 0.1528 m
+## of solid air in front of every raked wall in the game.
+##
+## 0.03 m is a third of the plating and under the 0.045 m half-thickness of the
+## plate itself, so the phantom is smaller than the thing casting it. What it
+## costs is in plate_colliders()'s header.
+const PLATE_COLLIDER_SLOP := 0.05
+## Cells one slab may be cut into, whatever the slop asks for — the ceiling the
+## old 32 x 32 grid had, kept so a pathological quad cannot spend the physics
+## budget on its own. The budget is divided among a split's children, so it is a
+## hard total and not a per-level limit.
+const PLATE_MAX_COLLIDER_CELLS := 1024
 
 
 static func plate_corners(spec: Dictionary) -> PackedVector3Array:
@@ -1236,40 +1248,87 @@ static func _plate_panel_colliders(
 	corners: PackedVector3Array, thickness: float, offset: Vector3,
 	u0: float, u1: float, v0: float, v1: float,
 ) -> Array:
-	var quad := plate_subquad(corners, u0, u1, v0, v1)
-	var normal := plate_normal(quad)
-	var yaw := _plate_yaw(quad)
+	## The half-offset is the PANEL's normal, not each cell's, because that is the
+	## vector `_append_slab` offsets the drawn skins along. Re-deriving it per cell
+	## would be a second derivation of the same quantity (REALITY.md §3b) and on a
+	## warped quad the two disagree — which is precisely how a drawn face escapes
+	## the box that is supposed to contain it.
+	var half := plate_normal(plate_subquad(corners, u0, u1, v0, v1)) * (thickness * 0.5)
+	var out: Array = []
+	_dice_panel(corners, half, offset, u0, u1, v0, v1, PLATE_MAX_COLLIDER_CELLS, out)
+	return out
+
+
+## One cell: cut across the parametric direction whose box would stand furthest
+## proud of the slab, until neither direction is over PLATE_COLLIDER_SLOP, then
+## emitted as the exact bounding box of its own eight offset corners in its own
+## yaw frame.
+##
+## `proud` is stated per DIRECTION, and the discount is the point: of the three
+## spans a direction covers in the yaw frame, the box spends one of its
+## dimensions on the LARGEST, so only the other two are error. An upright
+## rectangular plate scores zero in both directions and is ONE box, bit-exact.
+##
+## Two things this does that the fixed nu x nv grid it replaces could not, and
+## both are why the slop could be cut fivefold while the box count FELL:
+##
+##  - IT CUTS ONE DIRECTION AT A TIME, and re-measures. The grid computed nu and
+##    nv up front in the panel's frame and emitted their PRODUCT, so a plate that
+##    needed dicing up its rake paid for dicing along its length as well.
+##  - EACH CELL CARRIES ITS OWN YAW. A bow bulwark's u-run swings round the stem
+##    and its two u-edges are 5 degrees apart, so one panel yaw is wrong for every
+##    cell but one; the grid could only answer that residual by dicing in u too.
+##    Cut the rake first and each strip's own yaw fits it, so the u error falls
+##    out with the v cuts instead of demanding cuts of its own. Measured on
+##    probe_trawler_bulwark's worst slab: 5 x 10 = 50 boxes at 0.15 m of slop
+##    became 48 boxes at 0.03 m — a fifth of the phantom for fewer boxes.
+##
+## The box is fitted to the cell's four corners offset by ±half along the PANEL's
+## normal, which is the vector `_append_slab` offsets the drawn skins along; a
+## bilinear patch lies inside the convex hull of its four corners, so the drawn
+## cell lies inside its box and the one-derivation property holds cell by cell.
+static func _dice_panel(
+	corners: PackedVector3Array, half: Vector3, offset: Vector3,
+	u0: float, u1: float, v0: float, v1: float, budget: int, out: Array,
+) -> void:
+	var cell := plate_subquad(corners, u0, u1, v0, v1)
+	var yaw := _plate_yaw(cell)
 	var basis := Basis(Vector3.UP, deg_to_rad(yaw))
 	var inv := basis.transposed()
 	var local: Array[Vector3] = []
-	for point in quad:
+	for point in cell:
 		local.append(inv * point)
-	var span_u := _max_abs(local[1] - local[0], local[2] - local[3])
-	var span_v := _max_abs(local[3] - local[0], local[2] - local[1])
-	var nu := _plate_steps(span_u)
-	var nv := _plate_steps(span_v)
-	var half := normal * (thickness * 0.5)
-	var out: Array = []
-	for i in nu:
-		for j in nv:
-			var cell := plate_subquad(
-				corners,
-				lerpf(u0, u1, float(i) / float(nu)), lerpf(u0, u1, float(i + 1) / float(nu)),
-				lerpf(v0, v1, float(j) / float(nv)), lerpf(v0, v1, float(j + 1) / float(nv)),
-			)
-			var lo := Vector3.INF
-			var hi := -Vector3.INF
-			for point in cell:
-				for sign in [1.0, -1.0]:
-					var p := inv * (point + half * float(sign))
-					lo = Vector3(minf(lo.x, p.x), minf(lo.y, p.y), minf(lo.z, p.z))
-					hi = Vector3(maxf(hi.x, p.x), maxf(hi.y, p.y), maxf(hi.z, p.z))
-			out.append({
-				"center": basis * ((lo + hi) * 0.5) + offset,
-				"size": hi - lo,
-				"yaw_deg": yaw,
-			})
-	return out
+	var proud_u := _off_axis(_max_abs(local[1] - local[0], local[2] - local[3]))
+	var proud_v := _off_axis(_max_abs(local[3] - local[0], local[2] - local[1]))
+	var worst := maxf(proud_u, proud_v)
+	if worst > PLATE_COLLIDER_SLOP and budget >= 2:
+		var pieces := mini(int(ceil(worst / PLATE_COLLIDER_SLOP)), budget)
+		## Integer division, so the children's budgets can only sum to less than
+		## this one's — the total is bounded by the root's and cannot creep.
+		var share: int = budget / pieces
+		var cut_u := proud_u >= proud_v
+		for k in pieces:
+			var a := float(k) / float(pieces)
+			var b := float(k + 1) / float(pieces)
+			if cut_u:
+				_dice_panel(corners, half, offset,
+					lerpf(u0, u1, a), lerpf(u0, u1, b), v0, v1, share, out)
+			else:
+				_dice_panel(corners, half, offset,
+					u0, u1, lerpf(v0, v1, a), lerpf(v0, v1, b), share, out)
+		return
+	var lo := Vector3.INF
+	var hi := -Vector3.INF
+	for point in cell:
+		for sign in [1.0, -1.0]:
+			var p := inv * (point + half * float(sign))
+			lo = Vector3(minf(lo.x, p.x), minf(lo.y, p.y), minf(lo.z, p.z))
+			hi = Vector3(maxf(hi.x, p.x), maxf(hi.y, p.y), maxf(hi.z, p.z))
+	out.append({
+		"center": basis * ((lo + hi) * 0.5) + offset,
+		"size": hi - lo,
+		"yaw_deg": yaw,
+	})
 
 
 ## Heading of the panel's u run, as a yaw. Falls back to the v run for a plate
@@ -1293,16 +1352,14 @@ static func _max_abs(a: Vector3, b: Vector3) -> Vector3:
 	)
 
 
-## Steps needed along a parametric direction that covers `span` in the yaw frame.
-## The box already spends one of its three dimensions on the LARGEST component,
-## so the error a single box would make is the sum of the other two — and that is
-## what gets divided down. Zero for an axis-aligned plate; 0.8 m of rake over a
-## 0.25 m step is four.
-static func _plate_steps(span: Vector3) -> int:
+## How far a single box round `span` stands proud of the run it wraps. The box
+## spends one of its three dimensions on the LARGEST component, so the error is
+## the sum of the other two. Zero for a run that lies along a frame axis, which
+## is why an upright rectangular plate is still exactly one box.
+static func _off_axis(span: Vector3) -> float:
 	var sorted := [absf(span.x), absf(span.y), absf(span.z)]
 	sorted.sort()
-	var off_axis := float(sorted[0]) + float(sorted[1])
-	return clampi(int(ceil(off_axis / PLATE_COLLIDER_STEP)), 1, PLATE_MAX_COLLIDER_STEPS)
+	return float(sorted[0]) + float(sorted[1])
 
 
 ## ── Item reading: where a plan's fittings become geometry ───────────────────

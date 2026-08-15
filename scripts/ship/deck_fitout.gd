@@ -198,20 +198,26 @@ static func apply_sync(
 	boat.ensure_walk_deck()
 	boat.clear_walk_brick_colliders()
 	var visual_by_key := {}
-	var baked_items: Array = []
+	## Same three calls the staged job makes, in the same order, through the same
+	## Session — register everything, then emit, then commit (REALITY.md 3b: one
+	## derivation, so the two entry points cannot drift into different geometry).
+	var skin := new_skin_session(g)
+	if skin != null:
+		for item_raw in items:
+			skin.register_item(item_raw as Dictionary)
 	for item_raw in items:
 		var item := item_raw as Dictionary
-		if skin_enabled and VesselSkinBaker.is_baked_brick(str(item.get("brick_id", ""))):
+		if skin != null and skin.emit_item(item):
 			## Static brick: geometry goes into the merged skin; only mounted
 			## sign/light fixtures on the cell still need individual nodes.
-			baked_items.append(item)
-			_create_cell_mounts(root, g, item)
+			create_cell_mounts(root, g, item)
 			continue
 		var visual := create_item_visual(root, g, item)
 		if visual != null:
 			visual_by_key[BrickLayout.cell_key(item["cell"] as Vector3i)] = visual
-	if not baked_items.is_empty():
-		root.add_child(VesselSkinBaker.bake_items(g, baked_items))
+	if skin != null:
+		skin.commit()
+		attach_skin(root, skin)
 	var state := {"brick_i": 0, "ladder_n": 0}
 	boat.begin_mass_batch()
 	for item_raw in items:
@@ -259,6 +265,25 @@ static func apply_staged(
 	return caps
 
 
+## The skin both entry points bake into, or null when merging is off. Held by the
+## caller so a frame-budgeted one can spend it a few items per frame.
+static func new_skin_session(grid: DeckGrid) -> VesselSkinBaker.Session:
+	if not skin_enabled or grid == null:
+		return null
+	return VesselSkinBaker.Session.new(grid)
+
+
+## Parents a session's bake once it has geometry. An empty SkinBake node is not
+## attached at all: a vessel of nothing but doors and lights should leave no
+## trace of the merger, and the fitout root's children are counted by tests.
+static func attach_skin(root: Node3D, skin: VesselSkinBaker.Session) -> void:
+	if root == null or skin == null or skin.root == null:
+		return
+	if skin.root.get_parent() != null or skin.root.get_child_count() == 0:
+		return
+	root.add_child(skin.root)
+
+
 static func create_item_visual(
 	root: Node3D,
 	grid: DeckGrid,
@@ -277,13 +302,14 @@ static func create_item_visual(
 	visual.position = footprint_center_local(grid, cell, brick_id, yaw)
 	visual.rotation_degrees = Vector3(0.0, float(yaw), 0.0)
 	root.add_child(visual)
-	_create_cell_mounts(root, grid, item)
+	create_cell_mounts(root, grid, item)
 	return visual
 
 
 ## Sign plaques and light fixtures mounted ON a cell need their own nodes even
-## when the base brick's geometry lives in the merged skin bake.
-static func _create_cell_mounts(root: Node3D, grid: DeckGrid, item: Dictionary) -> void:
+## when the base brick's geometry lives in the merged skin bake. Public because
+## the staged job walks the same branch.
+static func create_cell_mounts(root: Node3D, grid: DeckGrid, item: Dictionary) -> void:
 	var cell: Vector3i = item.get("cell", Vector3i(-1, -1, -1))
 	var yaw := int(item.get("yaw", 0))
 	var sign_id := str(item.get("sign_id", ""))

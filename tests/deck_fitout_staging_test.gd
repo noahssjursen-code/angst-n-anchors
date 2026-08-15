@@ -133,8 +133,6 @@ func _test_exterior_precedes_interior() -> void:
 	var grid := HullRegistry.make_grid(HULL_ID)
 	var layout := _cabin_layout(true)
 	_assert_fixture_on_deck(grid, layout)
-	var shell_name := _visual_name(CABIN_SHELL_CELL)
-	var inner_name := _visual_name(CABIN_INNER_CELL)
 	var boat := _new_boat()
 	boat.set_meta("remote_replica", true)
 	DeckFitout.apply_staged(boat, layout, grid, "general_vessel")
@@ -142,16 +140,45 @@ func _test_exterior_precedes_interior() -> void:
 	var root := boat.get_node_or_null(DeckFitout.FITOUT_ROOT)
 	_check(root != null, "staged shell creates fitout root")
 	if root != null:
-		_check(root.get_node_or_null(shell_name) != null, "exterior wall appears first")
+		## Named nodes (`block_20_0_60`) used to stand in for "this brick is
+		## drawn". Static bricks now merge into one skin and have no node of
+		## their own, so ask the renderer instead: how many drawn triangles have
+		## their centroid inside this cell? That is the same question the node
+		## lookup was a proxy for, and it survives the merge.
+		var shell_before := _triangles_in_cell(boat, grid, CABIN_SHELL_CELL)
+		var inner_before := _triangles_in_cell(boat, grid, CABIN_INNER_CELL)
+		_check(shell_before > 0, "exterior wall is drawn first (%d triangles)" % shell_before)
 		## Paired with the check above so neither can pass on an empty root:
 		## "interior is absent" is only evidence of staging when the shell is
 		## present in the same breath.
-		_check(root.get_node_or_null(inner_name) == null, "interior waits after shell")
+		_check(
+			inner_before == 0,
+			"interior waits after shell (%d triangles already drawn)" % inner_before,
+		)
 	DeckFitout.request_full_detail(boat)
 	await _wait_for_readiness(boat, DeckFitout.READINESS_FULL_VISUAL, 300)
 	if root != null:
-		_check(root.get_node_or_null(inner_name) != null, "interior appears after promotion")
+		var inner_after := _triangles_in_cell(boat, grid, CABIN_INNER_CELL)
+		_check(
+			inner_after > 0,
+			"interior is drawn after promotion (%d triangles)" % inner_after,
+		)
 	await _wait_for_readiness(boat, DeckFitout.READINESS_INTERACTIVE, 300)
+
+	## Same fixture, synchronous: the staged skin must end up as the geometry
+	## the immediate path builds, not merely as "some merged thing".
+	var sync_boat := _new_boat()
+	DeckFitout.apply_sync(sync_boat, layout, grid, "general_vessel")
+	_check(
+		_triangles_in_cell(boat, grid, CABIN_INNER_CELL)
+		== _triangles_in_cell(sync_boat, grid, CABIN_INNER_CELL),
+		"promoted interior cell matches the synchronous bake (staged %d, sync %d)"
+		% [
+			_triangles_in_cell(boat, grid, CABIN_INNER_CELL),
+			_triangles_in_cell(sync_boat, grid, CABIN_INNER_CELL),
+		],
+	)
+	sync_boat.queue_free()
 	boat.queue_free()
 	await get_tree().process_frame
 
@@ -181,10 +208,28 @@ func _test_threshold_and_completion() -> void:
 	)
 	await _wait_for_readiness(large_boat, 3, 600)
 	_check(DeckFitout.readiness_of(large_boat) == 3, "local large fitout becomes interactive")
+
+	## This used to count scene nodes and demand one per brick, which is the
+	## defect rather than the property: the staged path met it by drawing 1001
+	## MeshInstance3Ds for a layout the synchronous path draws in one. What it
+	## was for — the staged run drops no brick — is the same 1001 bricks through
+	## the immediate path as the oracle. Triangles, not nodes.
+	var oracle_boat := _new_boat()
+	DeckFitout.apply_sync(oracle_boat, large_layout, grid, "general_vessel")
+	var staged_triangles := _triangle_centroids(large_boat).size()
+	var sync_triangles := _triangle_centroids(oracle_boat).size()
+	_check(sync_triangles > 0, "oracle fitout draws geometry for 1001 bricks")
 	_check(
-		_count_primary_visuals(large_boat) == large_layout.iter_primary_cells().size(),
-		"staged fitout creates every primary visual",
+		staged_triangles == sync_triangles,
+		"staged fitout draws every brick the synchronous one does (staged %d, sync %d triangles)"
+		% [staged_triangles, sync_triangles],
 	)
+	_check(
+		_count_mesh_instances(large_boat) == _count_mesh_instances(oracle_boat),
+		"1001-brick staged fitout merges like the synchronous one (staged %d, sync %d meshes)"
+		% [_count_mesh_instances(large_boat), _count_mesh_instances(oracle_boat)],
+	)
+	oracle_boat.queue_free()
 	large_boat.queue_free()
 	await get_tree().process_frame
 
@@ -192,6 +237,18 @@ func _test_threshold_and_completion() -> void:
 func _test_sync_staged_parity() -> void:
 	var grid := HullRegistry.make_grid(HULL_ID)
 	var layout := _fill_blocks(grid, 30)
+	## A layout of nothing but `block` would never exercise the live-brick
+	## branch, and "everything merged" would pass it. A bollard must stay its own
+	## node, and a sign mounted on a merged block must keep its own node too.
+	var live_cell := _first_free_cell(grid, layout)
+	if live_cell.x >= 0:
+		layout.set_brick(live_cell, "bollard", 0)
+	_check(
+		live_cell.x >= 0 and not VesselSkinBaker.is_baked_brick("bollard"),
+		"parity fixture places a live (unmergeable) brick",
+	)
+	var sign_host: Vector3i = (layout.iter_primary_cells()[0] as Dictionary).get("cell")
+	_check(layout.attach_sign(sign_host, "wall_text", 0, "PARITY"), "parity fixture mounts a sign")
 	var sync_boat := _new_boat()
 	DeckFitout.apply_sync(sync_boat, layout, grid, "general_vessel")
 	var sync_caps := (
@@ -219,7 +276,7 @@ func _test_sync_staged_parity() -> void:
 	)
 	## Same layout, two entry points, and what actually reaches the renderer is
 	## the property that matters — `apply_sync` merges static bricks through
-	## VesselSkinBaker, `DeckFitoutJob` does not, so a large vessel pays one
+	## VesselSkinBaker, `DeckFitoutJob` did not, so a large vessel paid one
 	## MeshInstance3D per brick where a small one pays a handful. Stated as a
 	## count of drawn meshes rather than of scene nodes, because the count of
 	## drawn meshes is what the divergence costs.
@@ -227,6 +284,35 @@ func _test_sync_staged_parity() -> void:
 		_count_mesh_instances(staged_boat) == _count_mesh_instances(sync_boat),
 		"staged fitout draws the same mesh count as synchronous fitout (staged %d, sync %d)"
 		% [_count_mesh_instances(staged_boat), _count_mesh_instances(sync_boat)],
+	)
+	## Equal mesh COUNTS would also be satisfied by two merged skins that drew
+	## different geometry — say one that culled faces against a half-registered
+	## solid field. Same triangles, in the same cells, is the property.
+	var staged_tris := _triangle_centroids(staged_boat)
+	var sync_tris := _triangle_centroids(sync_boat)
+	_check(sync_tris.size() > 0, "synchronous fitout draws geometry at all")
+	_check(
+		staged_tris.size() == sync_tris.size(),
+		"staged fitout draws the same triangle count (staged %d, sync %d)"
+		% [staged_tris.size(), sync_tris.size()],
+	)
+	_check(
+		_cell_histogram(grid, staged_tris) == _cell_histogram(grid, sync_tris),
+		"staged fitout puts the same triangles in the same cells as synchronous",
+	)
+	## The merged path hands `mount_item_gameplay` a null visual for every baked
+	## brick. Mass and colliders do not need a node and must not be skipped with
+	## it — a merged deck you fall through would pass every check above.
+	_check(
+		_count_brick_colliders(staged_boat) == _count_brick_colliders(sync_boat),
+		"staged fitout builds the same brick colliders (staged %d, sync %d)"
+		% [_count_brick_colliders(staged_boat), _count_brick_colliders(sync_boat)],
+	)
+	_check(_count_brick_colliders(sync_boat) > 0, "synchronous fitout builds brick colliders")
+	_check(
+		is_equal_approx(staged_boat.mass, sync_boat.mass),
+		"staged fitout registers the same brick mass (staged %.1f, sync %.1f)"
+		% [staged_boat.mass, sync_boat.mass],
 	)
 	sync_boat.queue_free()
 	staged_boat.queue_free()
@@ -341,6 +427,104 @@ func _count_mesh_instances(boat: BoatBody) -> int:
 		for child in node.get_children():
 			stack.append(child)
 	return n
+
+
+## Centroid, in fitout-root space, of every triangle the fitout draws.
+##
+## The unit both entry points can be compared in. A brick used to be a scene
+## node you could look up by name; a merged brick is a handful of faces inside
+## somebody else's mesh, and "is this brick on screen" has to be asked of the
+## geometry or it cannot be asked of the merged path at all.
+func _triangle_centroids(boat: BoatBody) -> PackedVector3Array:
+	var out := PackedVector3Array()
+	var root := boat.get_node_or_null(DeckFitout.FITOUT_ROOT) as Node3D
+	if root == null:
+		return out
+	var inverse := root.global_transform.affine_inverse()
+	var stack: Array[Node] = [root]
+	while not stack.is_empty():
+		var node: Node = stack.pop_back()
+		var instance := node as MeshInstance3D
+		if instance != null and instance.mesh != null:
+			var to_root := inverse * instance.global_transform
+			for surface in instance.mesh.get_surface_count():
+				var arrays := instance.mesh.surface_get_arrays(surface)
+				if arrays.is_empty():
+					continue
+				var verts := arrays[Mesh.ARRAY_VERTEX] as PackedVector3Array
+				var index_raw: Variant = arrays[Mesh.ARRAY_INDEX]
+				var indices := (
+					index_raw as PackedInt32Array if index_raw is PackedInt32Array
+					else PackedInt32Array()
+				)
+				if indices.is_empty():
+					indices = PackedInt32Array(range(verts.size()))
+				var i := 0
+				while i + 2 < indices.size():
+					out.append(
+						to_root
+						* (
+							(verts[indices[i]] + verts[indices[i + 1]] + verts[indices[i + 2]])
+							/ 3.0
+						)
+					)
+					i += 3
+		for child in node.get_children():
+			stack.append(child)
+	return out
+
+
+## How many of the fitout's triangles sit in one deck cell. A voxel face lies ON
+## the cell boundary, so the box is grown a hair; a neighbouring cell's faces sit
+## a half-cell away and are never picked up by that slack.
+func _triangles_in_cell(boat: BoatBody, grid: DeckGrid, cell: Vector3i) -> int:
+	var box := _cell_box(grid, cell)
+	var n := 0
+	for centroid in _triangle_centroids(boat):
+		if box.has_point(centroid):
+			n += 1
+	return n
+
+
+func _cell_box(grid: DeckGrid, cell: Vector3i) -> AABB:
+	var base := grid.cell_base_local(cell)
+	var half := DeckGrid.CELL_M * 0.5
+	return AABB(
+		Vector3(base.x - half, base.y, base.z - half),
+		Vector3.ONE * DeckGrid.CELL_M,
+	).grow(0.001)
+
+
+## cell key -> triangle count, so two bakes can be compared without depending on
+## the order their vertices were emitted in (the staged path emits the exterior
+## first; the synchronous one walks the layout straight through).
+func _cell_histogram(grid: DeckGrid, centroids: PackedVector3Array) -> Dictionary:
+	var out := {}
+	for centroid in centroids:
+		var cell := grid.local_to_cell(centroid)
+		var key := BrickLayout.cell_key(cell)
+		out[key] = int(out.get(key, 0)) + 1
+	return out
+
+
+func _count_brick_colliders(boat: BoatBody) -> int:
+	var walk := boat.get_walk_deck()
+	if walk == null:
+		return 0
+	var n := 0
+	for child in walk.get_children():
+		if child is CollisionShape3D and str(child.name).begins_with(BoatBody.BRICK_COL_PREFIX):
+			n += 1
+	return n
+
+
+func _first_free_cell(grid: DeckGrid, layout: BrickLayout) -> Vector3i:
+	for z in range(grid.length):
+		for x in range(grid.width):
+			var cell := Vector3i(x, 0, z)
+			if grid.in_bounds(cell) and not layout.has_cell(cell):
+				return cell
+	return Vector3i(-1, -1, -1)
 
 
 ## Boat-local AABB of every mesh the fitout actually draws.

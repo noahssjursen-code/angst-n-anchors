@@ -21,6 +21,16 @@ extends RefCounted
 ##
 ## Pure function of (layout, grid): no BoatBody or gameplay dependencies, so a
 ## headless service (e.g. the future build-moderation renderer) can call it.
+##
+## RESUMABLE. `bake_items()` is one call and, at 3000 bricks, one 140 ms call —
+## 35x DeckFitoutJob's own 4 ms frame budget, which is why the staged path never
+## called it and drew one MeshInstance3D per brick instead. `Session` is the same
+## bake taken apart into units a frame-budgeted caller can spend one at a time:
+## register an item (~0.05 ms), emit an item's faces (~0.01 ms), commit (2.5 ms
+## for a whole 3000-brick skin, measured — the one indivisible step, and it fits
+## inside the budget). `bake_items()` is now that Session driven to completion,
+## so the staged and synchronous paths emit the same faces from the same code —
+## no second derivation to drift (REALITY.md 3b).
 
 const TRIM_COLOR := Color(0.13, 0.14, 0.16)
 const TRIM_THICKNESS := 0.11
@@ -41,14 +51,26 @@ const LIVE_TAGS: Array[String] = [
 ## brick_id -> true when the catalog visual is a single plain BoxMesh (cached).
 static var _box_family_cache: Dictionary = {}
 
+## brick_id -> is_baked_brick(). `BrickCatalog.has_tag` deep-copies the whole
+## catalog entry per call, so the uncached eight-tag scan costs 21 us — 64 ms of
+## a 3000-brick bake, measured, spent asking the same question about the same
+## brick id 3000 times. The catalog is static data; one answer per id is enough.
+static var _baked_brick_cache: Dictionary = {}
+
 
 static func is_baked_brick(brick_id: String) -> bool:
+	if _baked_brick_cache.has(brick_id):
+		return bool(_baked_brick_cache[brick_id])
+	var result := true
 	if not BrickCatalog.has(brick_id):
-		return false
-	for tag in LIVE_TAGS:
-		if BrickCatalog.has_tag(brick_id, tag):
-			return false
-	return true
+		result = false
+	else:
+		for tag in LIVE_TAGS:
+			if BrickCatalog.has_tag(brick_id, tag):
+				result = false
+				break
+	_baked_brick_cache[brick_id] = result
+	return result
 
 
 ## Detects full-cell cuboid bricks by inspecting their catalog visual once:
@@ -79,64 +101,22 @@ static func _is_box_family(brick_id: String) -> bool:
 
 ## Bakes the given primary items (subset of layout.iter_primary_cells()) into
 ## one Node3D holding a few MeshInstance3D children (one per material bucket).
+## Convenience wrapper: a Session driven straight to completion.
 static func bake_items(grid: DeckGrid, items: Array) -> Node3D:
-	var root := Node3D.new()
-	root.name = "SkinBake"
-	if grid == null or items.is_empty():
-		return root
-
-	## Pass 1 — classify: voxel field for box bricks, exact-merge list for rest.
-	var solid: Dictionary = {} ## Vector3i -> bucket key (String)
-	var box_buckets: Dictionary = {} ## bucket key -> {"material": StandardMaterial3D, "st": SurfaceTool}
-	var generic: Array = []
+	var session := Session.new(grid)
 	for item_raw in items:
-		var item := item_raw as Dictionary
-		var brick_id := str(item.get("brick_id", ""))
-		if not is_baked_brick(brick_id):
-			continue
-		if _is_box_family(brick_id):
-			_register_box_cells(grid, item, solid, box_buckets)
-		else:
-			generic.append(item)
-
-	## Pass 2 — voxel faces with AO, per color bucket.
-	for cell_variant in solid.keys():
-		var cell := cell_variant as Vector3i
-		var bucket := box_buckets[solid[cell]] as Dictionary
-		_emit_cell_faces(bucket["st"] as SurfaceTool, grid, cell, solid)
-
-	## Pass 3 — applied trim: edge strips, base skirts, corner posts.
-	var trim_st := SurfaceTool.new()
-	trim_st.begin(Mesh.PRIMITIVE_TRIANGLES)
-	var trim_count := _emit_trim(trim_st, grid, solid) if EMIT_TRIM else 0
-
-	## Pass 4 — exact-merge every other static brick per material bucket.
-	var merge_buckets: Dictionary = {} ## material instance id -> {"material", "st"}
-	for item_raw in generic:
-		_merge_generic_brick(grid, item_raw as Dictionary, merge_buckets)
-
-	## Commit all buckets.
-	for key in box_buckets.keys():
-		var bucket := box_buckets[key] as Dictionary
-		_commit_bucket(root, "Boxes_%s" % str(key), bucket)
-	if trim_count > 0:
-		var trim_material := StandardMaterial3D.new()
-		trim_material.albedo_color = TRIM_COLOR
-		trim_material.roughness = 0.55
-		trim_material.metallic = 0.25
-		trim_st.set_material(trim_material)
-		var trim_mesh := trim_st.commit()
-		if trim_mesh != null and trim_mesh.get_surface_count() > 0:
-			var trim_instance := MeshInstance3D.new()
-			trim_instance.name = "Trim"
-			trim_instance.mesh = trim_mesh
-			root.add_child(trim_instance)
-	for key in merge_buckets.keys():
-		var bucket := merge_buckets[key] as Dictionary
-		_commit_bucket(root, "Merged_%d" % int(key), bucket)
-	return root
+		session.register_item(item_raw as Dictionary)
+	for item_raw in items:
+		session.emit_item(item_raw as Dictionary)
+	session.commit()
+	return session.root
 
 
+## Writes a bucket's accumulated geometry into `bucket["node"]`, creating the
+## MeshInstance3D on first commit and REPLACING its mesh on later ones. A
+## SurfaceTool keeps its vertices after commit() (verified), so a staged caller
+## can show the exterior, keep adding interior faces into the same tool, and
+## re-commit — the final mesh is the one the synchronous path would have built.
 static func _commit_bucket(root: Node3D, instance_name: String, bucket: Dictionary) -> void:
 	var st := bucket["st"] as SurfaceTool
 	var material := bucket["material"] as Material
@@ -145,10 +125,13 @@ static func _commit_bucket(root: Node3D, instance_name: String, bucket: Dictiona
 	var mesh := st.commit()
 	if mesh == null or mesh.get_surface_count() == 0:
 		return
-	var instance := MeshInstance3D.new()
-	instance.name = instance_name
+	var instance := bucket.get("node", null) as MeshInstance3D
+	if instance == null or not is_instance_valid(instance):
+		instance = MeshInstance3D.new()
+		instance.name = instance_name
+		root.add_child(instance)
+		bucket["node"] = instance
 	instance.mesh = mesh
-	root.add_child(instance)
 
 
 # ── Box voxel path ───────────────────────────────────────────────────────────
@@ -513,3 +496,122 @@ static func _merge_node_tree(node: Node, accumulated: Transform3D, buckets: Dict
 			((buckets[key] as Dictionary)["st"] as SurfaceTool).append_from(mesh, surface, next)
 	for child in node.get_children():
 		_merge_node_tree(child, next, buckets)
+
+
+# ── Resumable bake ───────────────────────────────────────────────────────────
+
+
+## One vessel's skin, built a unit at a time.
+##
+## Order matters and is the whole reason this is two methods and not one:
+## `register_item` populates the solid field, `emit_item` culls faces and shades
+## corners AGAINST that field. A caller must register every item it intends to
+## bake — including bricks it will only reveal later — before emitting the first
+## face, or the faces between an early brick and a late one are drawn instead of
+## culled and the AO at those corners is wrong. DeckFitoutJob registers the
+## interior with the exterior for exactly that reason, and emits it a stage later.
+##
+## `commit()` may be called repeatedly: each call re-commits every bucket into
+## its own MeshInstance3D, so the node set is a function of the material buckets,
+## never of the brick count.
+class Session:
+	extends RefCounted
+
+	var root: Node3D
+
+	var _grid: DeckGrid
+	## Vector3i -> box bucket key. The culling/AO field, global to the vessel.
+	var _solid: Dictionary = {}
+	## bucket key -> {"material", "st", "node"}
+	var _box_buckets: Dictionary = {}
+	## material instance id -> {"material", "st", "node"}
+	var _merge_buckets: Dictionary = {}
+	## cell key -> true for box-family items, false for exact-merge items.
+	var _box_item: Dictionary = {}
+	var _trim_node: MeshInstance3D = null
+
+	func _init(grid: DeckGrid) -> void:
+		_grid = grid
+		root = Node3D.new()
+		root.name = "SkinBake"
+
+	## True when this item's geometry belongs to the skin (caller must NOT also
+	## create a scene node for it). False for live bricks and for anything the
+	## grid rejects — the caller keeps those as individual visuals.
+	func register_item(item: Dictionary) -> bool:
+		if _grid == null:
+			return false
+		var brick_id := str(item.get("brick_id", ""))
+		if not VesselSkinBaker.is_baked_brick(brick_id):
+			return false
+		var key := BrickLayout.cell_key(item.get("cell", Vector3i(-1, -1, -1)))
+		if _box_item.has(key):
+			return true
+		if VesselSkinBaker._is_box_family(brick_id):
+			VesselSkinBaker._register_box_cells(_grid, item, _solid, _box_buckets)
+			_box_item[key] = true
+		else:
+			_box_item[key] = false
+		return true
+
+	## Emits one registered item's geometry into its bucket. Returns false for
+	## items this session never took (live bricks), so the caller can fall back
+	## to a scene node with no second is_baked_brick test to keep in sync.
+	func emit_item(item: Dictionary) -> bool:
+		if _grid == null:
+			return false
+		var key := BrickLayout.cell_key(item.get("cell", Vector3i(-1, -1, -1)))
+		if not _box_item.has(key):
+			return false
+		if not bool(_box_item[key]):
+			VesselSkinBaker._merge_generic_brick(_grid, item, _merge_buckets)
+			return true
+		var brick_id := str(item.get("brick_id", ""))
+		var origin: Vector3i = item.get("cell", Vector3i(-1, -1, -1))
+		var yaw_steps := int(round(float(int(item.get("yaw", 0))) / 90.0)) % 4
+		if yaw_steps < 0:
+			yaw_steps += 4
+		for cell_variant in _grid.footprint_cells(
+			origin, BrickCatalog.footprint_of(brick_id), yaw_steps
+		):
+			var cell := cell_variant as Vector3i
+			if not _solid.has(cell):
+				continue
+			var bucket := _box_buckets[_solid[cell]] as Dictionary
+			VesselSkinBaker._emit_cell_faces(bucket["st"] as SurfaceTool, _grid, cell, _solid)
+		return true
+
+	## Publishes everything emitted so far. Safe to call after every stage.
+	func commit() -> void:
+		for bucket_key in _box_buckets.keys():
+			VesselSkinBaker._commit_bucket(
+				root, "Boxes_%s" % str(bucket_key), _box_buckets[bucket_key] as Dictionary
+			)
+		for bucket_key in _merge_buckets.keys():
+			VesselSkinBaker._commit_bucket(
+				root, "Merged_%d" % int(bucket_key), _merge_buckets[bucket_key] as Dictionary
+			)
+		_commit_trim()
+
+	## Trim is a function of the whole solid field rather than of any one brick,
+	## so it is rebuilt from scratch on each commit rather than appended to.
+	func _commit_trim() -> void:
+		if not VesselSkinBaker.EMIT_TRIM:
+			return
+		var st := SurfaceTool.new()
+		st.begin(Mesh.PRIMITIVE_TRIANGLES)
+		if VesselSkinBaker._emit_trim(st, _grid, _solid) <= 0:
+			return
+		var material := StandardMaterial3D.new()
+		material.albedo_color = VesselSkinBaker.TRIM_COLOR
+		material.roughness = 0.55
+		material.metallic = 0.25
+		st.set_material(material)
+		var mesh := st.commit()
+		if mesh == null or mesh.get_surface_count() == 0:
+			return
+		if _trim_node == null or not is_instance_valid(_trim_node):
+			_trim_node = MeshInstance3D.new()
+			_trim_node.name = "Trim"
+			root.add_child(_trim_node)
+		_trim_node.mesh = mesh

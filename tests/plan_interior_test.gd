@@ -81,21 +81,43 @@ const KNEE_H := 0.8
 
 const MARCH_STEP := 0.02   ## << the 0.10 m plate thickness; cannot tunnel a wall
 const STATION_STEP := 0.10 ## along a wall
-const START_OUT := 0.60    ## how far outside the shell a march begins
-const MARCH_LEN := 1.30    ## far enough to end a capsule-radius clear inside
+## The LEAST a march stands off the wall. The real stand-off is derived per
+## station by `_stand_off` — see there for why a constant cannot do this job on a
+## raked plate — and this is only the floor under that derivation, kept so a
+## plumb wall is swept from where it always was.
+const START_OUT := 0.60
+const MARCH_IN := 0.70     ## how far PAST the wall surface a march must reach
 const DROP_FROM := 0.50    ## how far above the deck the floor march begins
 const DROP_LEN := 1.00
+## Clearance between the capsule and the furthest the wall's own drawn solid
+## reaches towards it. Float grace on a derived quantity, not a fudge factor: at
+## zero, a march begins exactly touching the casing it is marching at.
+const START_CLEAR := 0.08
 
 ## How far clear of a DRAWN jamb the capsule has to be before the physics can be
 ## expected to agree with the drawing. It is not a fudge factor: a raked plate's
 ## collider is a STAIRCASE — `StructureBaker._plate_panel_colliders` cuts each
 ## panel into cells and gives each cell the bounding box of its own corners, so
-## the box stands up to one PLATE_COLLIDER_STEP (0.15 m) proud of the leaning
-## surface it wraps. Every opening in a raked plate is therefore that much
-## narrower in collision than it is in the picture, and a doorway measured
-## against the drawing alone reads wider than it walks. Measured on demo_workboat:
-## with a 0.06 m margin the column came out 0.315 m and four of its own stations
-## were then stopped by the staircase.
+## the box stands proud of the leaning surface it wraps, and every opening in a
+## raked plate is that much narrower in collision than it is in the picture.
+##
+## THE STAIRCASE IS NOT WHAT THIS PAYS FOR, and the paragraph above is kept only
+## because it is what everyone assumes. `StructureBaker.PLATE_COLLIDER_SLOP` cut
+## the staircase from 0.15 m to 0.05 m; taking this margin down with it, to 0.08,
+## does NOT work — measured, on demo_workboat: the door columns widen from
+## 0.135-0.216 m of play to 0.290-0.374 m, and two of the twenty-seven standing
+## door stations are then stopped by the jamb CASING's own collider, at plan y
+## 0.203-0.435 on the port and starboard doors.
+##
+## So most of this margin is the casing reveal (the jamb member laps SKIN_EPS
+## into the opening and its box is 0.115 m wide against a drawn 0.09 m) plus the
+## difference between wall PARAMETER and horizontal RUN on a plate that is
+## flared and curved in plan — neither of which shrinks when the collider gets
+## tighter. It stays at 0.16, unchanged and unwidened; what it wants is not a
+## better constant but a `_door_column` that measures the walkable column from
+## the physics world the way `piece_interior_test._physics_head_y` measures the
+## head. That is a separate piece of work and it is written up rather than
+## guessed at.
 const JAMB_MARGIN := 0.16
 ## How many stations to plant across the walkable column of each doorway.
 const DOOR_STATIONS := 9
@@ -454,10 +476,8 @@ func _check_walls(plan: StructurePlan, fixture: Dictionary, stem: String, floor_
 					float(i) / float(DOOR_STATIONS - 1))
 				for figure in _figures:
 					var row: Dictionary = tally[figure["name"]]
-					var at := _wall_point_at_height(
-						corners, u / ref.x, floor_y + float(figure["lift"]))
-					var march := _march(at + normal * START_OUT + _offset,
-						-normal * MARCH_LEN, figure["query"])
+					var march := _wall_march(
+						corners, u / ref.x, floor_y, figure, normal, named["props"])
 					var where := "%s %s@%.2f" % [figure["name"], wall_id, u]
 					if bool(march["started_inside"]):
 						stuck.append("%s in %s" % [where, march["hit"]])
@@ -479,9 +499,8 @@ func _check_walls(plan: StructurePlan, fixture: Dictionary, stem: String, floor_
 				continue
 			for figure in _figures:
 				var row: Dictionary = tally[figure["name"]]
-				var at := _wall_point_at_height(corners, u / ref.x, floor_y + float(figure["lift"]))
-				var march := _march(at + normal * START_OUT + _offset,
-					-normal * MARCH_LEN, figure["query"])
+				var march := _wall_march(
+					corners, u / ref.x, floor_y, figure, normal, named["props"])
 				var where := "%s %s@%.2f" % [figure["name"], wall_id, u]
 				if bool(march["started_inside"]):
 					stuck.append("%s in %s" % [where, march["hit"]])
@@ -556,6 +575,61 @@ func _check_walls(plan: StructurePlan, fixture: Dictionary, stem: String, floor_
 			% [stem, fig, window_through.size(), int(row["windows"]),
 			   "none" if window_through.is_empty() else str(window_through[0])],
 			window_through.is_empty())
+
+
+## ── Where a march at a raked wall has to BEGIN ───────────────────────────────
+##
+## THE STAND-OFF WAS A CONSTANT, AND ON A RAKED PLATE A CONSTANT CANNOT DO IT.
+## Every march used to start a flat 0.60 m outboard of the point where the plate
+## reaches the figure's CENTRE height. A capsule is 1.8 m tall and a deckhouse
+## front rakes 0.56 m over its own height, so the wall the capsule's CROWN meets
+## stands a quarter of a metre further outboard than the wall its waist meets —
+## and the casing round an opening stands PLATE_FRAME_PROUD past the skin on top
+## of that. The rig was starting the player inside the wall, and then recording
+## it as "began inside a collider", which reads as a collision defect.
+##
+## Measured, with a probe that asked how deep the start capsule sits in the DRAWN
+## mid-surface: on both fixtures' raked fronts the capsule cleared the
+## mid-surface by 0.13 m and still overlapped the 0.20 m-thick casing standing
+## proud of it. Two of demo_workboat's eight stuck marches were exactly this and
+## no part of it is the collider.
+##
+## So the stand-off is DERIVED per station: the furthest the wall's own drawn
+## solid reaches towards the player over the heights the capsule occupies, plus
+## START_CLEAR. This makes the march LONGER, never shorter — the capsule still
+## has to cross the same wall and MARCH_IN still carries it a body's width past
+## the surface — so no claim below gets easier by being measured from further
+## out.
+func _wall_march(corners: PackedVector3Array, u: float, floor_y: float,
+		figure: Dictionary, normal: Vector3, props: Dictionary) -> Dictionary:
+	var centre_y := floor_y + float(figure["lift"])
+	var at := _wall_point_at_height(corners, u, centre_y)
+	var out := _stand_off(corners, u, centre_y, float(figure["height"]), normal, at, props)
+	return _march(at + normal * out + _offset, -normal * (out + MARCH_IN), figure["query"])
+
+
+func _stand_off(corners: PackedVector3Array, u: float, centre_y: float, height: float,
+		normal: Vector3, at: Vector3, props: Dictionary) -> float:
+	var reach := 0.0
+	for i in 41:
+		var dy := (float(i) / 40.0 - 0.5) * height
+		var here := _wall_point_at_height(corners, u, centre_y + dy)
+		reach = maxf(reach, (here - at).dot(normal) + _capsule_half_width(dy, height))
+	## `_wall_point_at_height` returns the MID-surface. The drawn solid is half a
+	## thickness proud of that, and a casing is PLATE_FRAME_PROUD further again.
+	reach += StructureBaker.plate_thickness(props) * 0.5 + StructureBaker.PLATE_FRAME_PROUD
+	return maxf(reach + START_CLEAR, START_OUT)
+
+
+## How wide the capsule is `dy` above or below its centre. A capsule is not a
+## cylinder: at the crown it has tapered to nothing, and using the full radius
+## there would stand every march off further than it needs to be.
+func _capsule_half_width(dy: float, height: float) -> float:
+	var straight := maxf(height * 0.5 - CAPSULE_R, 0.0)
+	if absf(dy) <= straight:
+		return CAPSULE_R
+	var t := clampf((absf(dy) - straight) / CAPSULE_R, 0.0, 1.0)
+	return CAPSULE_R * sqrt(maxf(1.0 - t * t, 0.0))
 
 
 ## Where the shell sweep stands: a uniform run along the whole wall. Doors are
