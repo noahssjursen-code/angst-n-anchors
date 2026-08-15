@@ -1902,13 +1902,92 @@ file is not red by construction. It belongs beside decision #1 below.
    the envelope to the deck reddens the overhang checks. Shipped fixtures rejected:
    **0**. Cost: `compliance` restructured to one pass, feeder 277 → 170 ms.
 
-   **Still live from the same mechanism:** `item_footprint_cells` and `max_stack_cells`
-   both still ask `part_local_aabb` about a `wire`, overstating its top by exactly
-   +4.00 m. No shipped fixture's number moves today and no wire is cargo-tagged, so
-   the path is unreached — but the mechanism is. And **a plan's catalog fittings are
-   measured but drawn by nothing**: `_item_layers` returns `[]` for anything not
-   `plate`/`spar`/`wire`, so a `bollard_pair` counts toward a registration and appears
-   in no frame. Same shape as the piece-kit finding.
+2f. **`general_vessel` can never be met by a plan-built boat.** Its `port_light` and
+   `starboard_light` rules name the **brick** ids `light_nav_port` / `light_nav_stbd`,
+   and no catalogue part carries those ids — so a plan vessel fails **4 of 8 rules
+   regardless of what is fitted** (`registration_ok=false` in every strip run of 2e).
+   The brick path and the plan path are two vocabularies and the rule set speaks only
+   one. Found while fixing 2e, not fixed. It sits directly under the studio's whole
+   purpose: a player can author a plan the registration system cannot certify.
+
+2e. **The catalogue fittings drew nothing — CLOSED 2026-08-15.** The strip test, run
+   through the production path (`VesselSpawn.instantiate` → `DeckFitout.apply_plan` →
+   the scene tree, mesh census off the committed `ArrayMesh`, collider census off
+   `PhysicsServer3D`), `tests/_fitting_strip.tscn`:
+
+   ```
+   AS AUTHORED     18 fittings | 12 triangles  1 mesh instance  1 plan collider
+   ITEMS DELETED    0          | 12 triangles  1 mesh instance  1 plan collider
+   ```
+
+   Identical; the 12 triangles are the deck plate under them. **All 15 catalogue part
+   ids drew nothing** — including `spar` and `wire`, whose ids collide with baker
+   primitive names, so `_item_layers` took the primitive branch and `spar_path` found
+   no `from`/`to` in a props bag carrying the part's `length`/`radius` parameters.
+   Meanwhile `PlanOutfit` counted all 18: `brick_counts` 18, `tag_counts`
+   `{mooring: 4, helm: 1, bulk_hold: 1, light: 1, nav_white: 1, fishing: 1}`.
+
+   **NONE of them was abstract.** All 15 describe a physical object in their own
+   `description` field. `part_catalog.gd`'s header had specified the fix verbatim —
+   five emitters on `StructureBaker` named by `PRIMITIVES[p].emitter` — and
+   `structure_edge.gd`'s header named two of the five again. Neither was ever
+   written, so `baker_supports()` was **false for all five primitives**,
+   `emit_boxes()` returned `[]` for every spec, and every part was unbuildable.
+   Landed: the five emitters, one shared spec transform, one expansion feeding BOTH
+   `_item_layers` and `_item_colliders`. After: **15 of 15 draw**, 18 fittings
+   contribute **+1844 triangles, +123 collider shapes**. Shipped fixture diff: 19
+   fixtures, **282 972 vertices, 94 324 triangles, 15 073 colliders, every bake AABB
+   byte-identical to `3cd289d`** — no shipped item is a catalogue part, so nothing
+   moved.
+
+   **Compliance still counts them, deliberately.** With the fittings deleted the same
+   plan loses `helm`, `nav_white`, `white_light_height` and `mooring_points` — 4 of
+   `general_vessel`'s 8 requirements — so the boat stops certifying. "Stop counting
+   what we cannot draw" trades an invisible bollard for an unregisterable boat, and
+   `plan_fitting_draws_test` pins the counting alongside the drawing so neither half
+   can be fixed by breaking the other.
+
+   **The two colliding ids are renamed, not deleted:** `spar` → `spar_run`, `wire` →
+   `wire_run`, matching `railing_run` / `sheer_band_run`, which never collided. 916
+   shipped items spell `item_id: "spar"` / `"wire"` meaning the baker primitive, so the
+   shadow could not be resolved the other way. `PartCatalog` now **refuses at load** a
+   part whose id spells a primitive, naming it — the ambiguity is an error rather than
+   a silent hole. `PlanOutfit` no longer calls a raw primitive an "unknown fitting":
+   it is measured as geometry and carries no compliance identity, which is a different
+   sentence from "the catalog has never heard of it" and saves 916 lines of noise.
+
+   **Three checks asserted the defect (REALITY §4c)** and went RED on the fix:
+   `part_catalog_test`'s *"no primitive is bakeable yet, so no part is buildable yet"*
+   and *"StructureBaker has none of the five emitters yet (this test's premise)"*, and
+   `plan_item_handoff_test`'s *"plate is declared-but-unbuildable, and says so"* /
+   *"emit_boxes returns nothing for an unimplemented primitive"*. All four restated
+   the missing feature as correct behaviour; all four are now the property
+   (buildability AGREES with the baker's method list, in both directions).
+
+   **`part_local_aabb`'s two other readers are one derivation now.**
+   `item_hull_points`, `item_footprint_cells` and `max_stack_cells` all read
+   `PlanOutfit.item_world_points`. The wire overstatement is **+4.00 m → +0.00 m**,
+   but the wire was the small half: the same reading was applied to every `spar` item
+   and `spar` was a catalog id, so air draught came out **31 cells / 15.5 m on
+   `demo_workboat` against a drawn top of 10.04 m** and **30 / 15.0 m on
+   `probe_trawler_bulwark` against 9.26 m**. Now 20 and 18, which floor the bake AABB
+   exactly. `capabilities.max_stack_y` has no consumer, which is why a number 5.5 m
+   wrong sat unread — §3d from the other end.
+
+   **A mutation passed first time and was a blind check** (standing order 8): the
+   first air-draught assertion used only a boom lying FLAT, which catches an
+   overstatement. After the rename the failure mode inverted — `part_local_aabb`
+   answers `ok=false` for an id the catalog no longer holds, so reverting the fix
+   *understated* and the check stayed green. It now carries an upright post and a
+   plate, and reddens 2/20.
+
+   Renders in `screenshots/vessels/fittings/` (7 frames, orthographic where size
+   could be misread, 1.8 m figure measured visible in every one). What they show:
+   the guardrail, the bollards, the hold coaming and the mast all read at credible
+   size against the figure, and the deck reads as a working deck where it was bare
+   before. The one thing that does not read is `funnel_tapered` — a pure white
+   flared drum that is the loudest value in the frame on a dark boat. That is
+   catalogue data, not geometry, and it is named rather than tuned.
 
    Also named and left: `BrickLayout.from_dict` trusts a save file's cells verbatim,
    so an owned vessel is never re-checked against its hull; `StructurePlan.add_wall/

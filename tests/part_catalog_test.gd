@@ -148,7 +148,7 @@ func _test_compliance_identity() -> void:
 	_check("helm part fills the helm slot", PC.outfit_slot_of("helm_console") == "helm")
 	_check("fishing part fills the fishing slot", PC.outfit_slot_of("net_drum") == "fishing")
 	_check("bulk hold part carries the bulk_hold tag", PC.has_tag("hold_coaming", "bulk_hold"))
-	_check("a part with no slot tag has no slot", PC.outfit_slot_of("spar") == "")
+	_check("a part with no slot tag has no slot", PC.outfit_slot_of("spar_run") == "")
 	var seat := PC.compliance_of("bench_seat")
 	_check("passenger_capacity survives the load", int(seat.get("passenger_capacity", 0)) == 3)
 	var drum := PC.compliance_of("net_drum")
@@ -156,7 +156,7 @@ func _test_compliance_identity() -> void:
 	var hold := PC.compliance_of("hold_coaming")
 	_check("hold_depth_m survives the load", absf(float(hold.get("hold_depth_m", 0.0)) - 2.5) < 1e-5)
 	_check("an untagged part reports zero capacity",
-		int(PC.compliance_of("spar").get("passenger_capacity", -1)) == 0)
+		int(PC.compliance_of("spar_run").get("passenger_capacity", -1)) == 0)
 
 
 func _test_live_or_baked_follows_the_skin_baker() -> void:
@@ -191,19 +191,19 @@ func _test_live_or_baked_follows_the_skin_baker() -> void:
 
 
 func _test_parameters_and_clamping() -> void:
-	var default_specs := PC.expand("spar")
+	var default_specs := PC.expand("spar_run")
 	var top := (_spec_for(default_specs, 0).get("to", Vector3.ZERO) as Vector3).y
 	_check("a parameter default drives the geometry", absf(top - 6.0) < 1e-4)
 
-	var tall := PC.expand("spar", {"length": 12.0})
+	var tall := PC.expand("spar_run", {"length": 12.0})
 	var tall_top := (_spec_for(tall, 0).get("to", Vector3.ZERO) as Vector3).y
 	_check("an override drives the geometry", absf(tall_top - 12.0) < 1e-4)
 
-	var silly := PC.expand("spar", {"length": 900.0})
+	var silly := PC.expand("spar_run", {"length": 900.0})
 	var clamped := (_spec_for(silly, 0).get("to", Vector3.ZERO) as Vector3).y
 	_check("an out-of-range override is clamped to the declared max", absf(clamped - 30.0) < 1e-4)
 
-	var typo := PC.expand_checked("spar", {"lenght": 12.0})
+	var typo := PC.expand_checked("spar_run", {"lenght": 12.0})
 	_check("an override of a parameter that does not exist is refused, not ignored",
 		(typo["specs"] as Array).is_empty()
 			and _errors_mention(typo, ["lenght", "spar"]))
@@ -254,6 +254,24 @@ func _test_unknown_primitive_is_reported_not_skipped() -> void:
 	_check("a known primitive with no emitter still loads",
 		(known["entries"] as Dictionary).has("known_prim")
 			and (known["errors"] as PackedStringArray).is_empty())
+
+	## A PART ID MAY NOT SPELL A PRIMITIVE, and this is the check for a defect
+	## that shipped: the catalog held parts named `spar` and `wire`, and
+	## `StructureBaker.item_primitive` falls back to a plan item's `item_id`, so
+	## a `{item_id: "spar"}` item resolved to the baker primitive and the part's
+	## build[] was never reached. Both drew exactly nothing when placed as parts
+	## while the other thirteen drew. They are `spar_run` and `wire_run` now, and
+	## a shadowed id can no longer load in silence.
+	var shadowed := PC.parse_document({"version": 1, "parts": [_good_part("spar")]})
+	_check("a part id that spells a primitive is rejected, not shadowed",
+		not (shadowed["entries"] as Dictionary).has("spar")
+			and _errors_mention(shadowed, ["spar", "primitive"]))
+	var every_id_ok := true
+	for id in PC.ids():
+		if PC.PRIMITIVES.has(str(id)):
+			print("    shipped part %s shadows a primitive" % str(id))
+			every_id_ok = false
+	_check("no shipped part id spells a primitive", every_id_ok)
 
 
 func _test_malformed_entries_are_rejected_by_name() -> void:
@@ -355,30 +373,89 @@ func _test_materials_come_from_the_baker() -> void:
 
 # ── Buildability: declared, not silently dropped ────────────────────────────
 
+## THIS SUB-TEST USED TO ASSERT THE DEFECT (REALITY.md §4c). It read
+##
+##     _check("no primitive is bakeable yet, so no part is buildable yet",
+##         PC.buildable_ids().is_empty() and report.size() == PC.ids().size())
+##
+## — green, honest about what it measured, and it would have gone RED for anyone
+## who landed the five emitters `part_catalog.gd`'s own header says a later wave
+## lands. It cemented "no catalog part draws" as correct behaviour, next to a
+## strip test showing 18 fittings contributing 0 triangles and 0 colliders
+## through the production path.
+##
+## What replaces it is the property rather than the state: buildability AGREES
+## with the baker's method list, in both directions, and the report is empty
+## exactly when nothing is missing.
 func _test_unbuildable_parts_are_declared() -> void:
 	var report := PC.unbuildable_report()
 	print("  unbuildable: %d of %d parts" % [report.size(), PC.ids().size()])
 	if report.size() > 0:
 		print("    e.g. %s" % str((report[0] as Dictionary)["reason"]))
-	## StructureBaker cannot emit any of the five yet, so the honest answer is
-	## "all of them, and here is the emitter each one is waiting on".
-	_check("no primitive is bakeable yet, so no part is buildable yet",
-		PC.buildable_ids().is_empty() and report.size() == PC.ids().size())
-	var reasons_ok := true
-	for row_raw in report:
-		var row := row_raw as Dictionary
-		var missing := row["missing_primitives"] as PackedStringArray
-		if missing.is_empty():
-			reasons_ok = false
-			continue
-		for prim in missing:
-			var emitter := PC.emitter_method_for(str(prim))
-			if emitter.is_empty() or not str(row["reason"]).contains(emitter):
-				print("    %s reason does not name %s" % [str(row["id"]), emitter])
+	var baker_methods := _baker_method_names()
+	## Direction 1: a primitive is supported exactly when the baker holds the
+	## method PRIMITIVES names for it. Nothing here restates "five" or "true" —
+	## delete an emitter and this reddens on that primitive.
+	var supports_ok := true
+	for prim in PC.PRIMITIVES.keys():
+		var emitter := PC.emitter_method_for(str(prim))
+		if PC.baker_supports(str(prim)) != baker_methods.has(emitter):
+			print("    %s: baker_supports=%s but StructureBaker.%s exists=%s"
+				% [str(prim), str(PC.baker_supports(str(prim))), emitter,
+					str(baker_methods.has(emitter))])
+			supports_ok = false
+	_check("a primitive is supported exactly when StructureBaker holds its emitter",
+		supports_ok)
+	## Direction 2: a part is buildable exactly when none of its primitives is
+	## missing, and the report holds exactly the parts that are not.
+	var buildable_ok := true
+	for id in PC.ids():
+		var missing := PC.missing_primitives(str(id))
+		if PC.is_buildable(str(id)) != missing.is_empty():
+			buildable_ok = false
+	_check("a part is buildable exactly when none of its primitives is missing",
+		buildable_ok)
+	_check("the unbuildable report holds exactly the parts that are not buildable",
+		report.size() == PC.ids().size() - PC.buildable_ids().size())
+	## Every part is buildable today, so this loop has nothing to iterate — and a
+	## check over an empty universe is a vacuous PASS (REALITY.md §4), so it only
+	## counts when there is something to say. It goes live again the moment an
+	## emitter is removed, which is the only state it was ever about.
+	if report.is_empty():
+		print("  (no unbuildable parts — the reason-text check has nothing to run over)")
+	else:
+		var reasons_ok := true
+		for row_raw in report:
+			var row := row_raw as Dictionary
+			var missing := row["missing_primitives"] as PackedStringArray
+			if missing.is_empty():
 				reasons_ok = false
-	_check("each unbuildable part names the emitter it is waiting on", reasons_ok)
-	_check("a part is not buildable while any one of its primitives is missing",
-		not PC.is_buildable("mast_with_platform"))
+				continue
+			for prim in missing:
+				var emitter := PC.emitter_method_for(str(prim))
+				if emitter.is_empty() or not str(row["reason"]).contains(emitter):
+					print("    %s reason does not name %s" % [str(row["id"]), emitter])
+					reasons_ok = false
+		_check("each unbuildable part names the emitter it is waiting on", reasons_ok)
+	## The real negative, and it can fail: an id the catalog does not hold is not
+	## buildable however many emitters exist.
+	_check("an id the catalog does not hold is not buildable",
+		not PC.is_buildable("gantry_crane_of_theseus"))
+	## Every shipped part draws today. This is the strip test's finding as an
+	## assertion — before the emitters landed it was 0 of 15.
+	_check("every shipped part is buildable (%d of %d)"
+		% [PC.buildable_ids().size(), PC.ids().size()],
+		PC.buildable_ids().size() == PC.ids().size())
+
+
+func _baker_method_names() -> PackedStringArray:
+	var script := load(BAKER_PATH) as Script
+	var names := PackedStringArray()
+	if script == null:
+		return names
+	for method in script.get_script_method_list():
+		names.append(str((method as Dictionary).get("name", "")))
+	return names
 
 
 func _test_emitter_call_site_is_real() -> void:
@@ -390,23 +467,43 @@ func _test_emitter_call_site_is_real() -> void:
 			and PC.emitter_method_for("sheer_band") == "sheer_band_boxes")
 	_check("an unknown primitive has no emitter", PC.emitter_method_for("gantry") == "")
 
+	## THIS USED TO BE `_check("StructureBaker has none of the five emitters yet
+	## (this test's premise)", none_yet)` — the second assertion in this file
+	## that would go red when the feature it describes arrived. Replaced by the
+	## thing it was standing in for: the dispatch reaches a real method and comes
+	## back with geometry, for EVERY primitive in the kit.
 	var script := load(BAKER_PATH) as Script
-	var names := PackedStringArray()
-	for method in script.get_script_method_list():
-		names.append(str((method as Dictionary).get("name", "")))
-	var none_yet := true
+	var names := _baker_method_names()
+	var missing := PackedStringArray()
 	for prim in PC.PRIMITIVES.keys():
-		if names.has(PC.emitter_method_for(str(prim))):
-			none_yet = false
-	_check("StructureBaker has none of the five emitters yet (this test's premise)", none_yet)
+		if not names.has(PC.emitter_method_for(str(prim))):
+			missing.append(str(prim))
+	_check("StructureBaker holds an emitter for every primitive in the kit (missing: %s)"
+		% ("none" if missing.is_empty() else ", ".join(missing)), missing.is_empty())
 
-	## Prove the documented call site works today, using a static the baker
-	## already has. A later wave adds spar_boxes() and the same line drives it.
+	## The documented call site, driven through the primitive it was written for.
 	var boxes: Variant = script.call("wall_boxes", {
 		"start": [0, 0, 0], "axis": "x", "length": 4.0, "height": 3.0, "thickness": 0.2,
 	})
 	_check("StructureBaker.call(<emitter>, spec) dispatches a static by name",
 		boxes is Array and (boxes as Array).size() > 0)
+
+	## And `emit_boxes` — the seam a consumer is told to use — returns geometry
+	## for a spec of EVERY primitive, not just the one this test remembered.
+	var emitted := {}
+	for prim in PC.PRIMITIVES.keys():
+		emitted[str(prim)] = 0
+	for id in PC.ids():
+		for spec_variant in PC.expand(str(id)):
+			var one := spec_variant as Dictionary
+			var prim := str(one.get("primitive", ""))
+			emitted[prim] = int(emitted.get(prim, 0)) + PC.emit_boxes(one).size()
+	var silent := PackedStringArray()
+	for prim in emitted.keys():
+		if int(emitted[prim]) <= 0:
+			silent.append(str(prim))
+	_check("emit_boxes returns geometry for every primitive the kit uses (silent: %s)"
+		% ("none" if silent.is_empty() else ", ".join(silent)), silent.is_empty())
 
 	## And the spec handed to that call is complete: primitive, owner, surface.
 	var spec := _spec_for(PC.expand("net_drum"), 0)

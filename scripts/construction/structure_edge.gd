@@ -53,10 +53,14 @@ extends RefCounted
 ## which is why every path here is float Vector3 and nothing snaps.
 ##
 ## ── THE CALL SITE (this file emits, StructureBaker merges) ──────────────────
-## StructureBaker is owned elsewhere and is not edited by this file. Two static
-## forwarders there flip `PartCatalog.baker_supports()` for both primitives,
-## because PartCatalog probes the BAKER's method list by the names in
-## PRIMITIVES[p].emitter:
+## LANDED 2026-08-15, and this block is kept as the record of what was missing
+## rather than as a plan. `StructureBaker.railing_boxes` and
+## `StructureBaker.sheer_band_boxes` exist and forward here, which is what flips
+## `PartCatalog.baker_supports()` for both primitives — PartCatalog probes the
+## BAKER's method list by the names in PRIMITIVES[p].emitter, and until those two
+## names existed every catalog part needing a railing or a swept band reported
+## unbuildable and drew nothing. Measured through `VesselSpawn` before they
+## landed: 15 of 15 catalog parts contributed 0 triangles and 0 colliders.
 ##
 ##     static func railing_boxes(spec: Dictionary) -> Array:
 ##         return StructureEdge.railing_boxes(spec)

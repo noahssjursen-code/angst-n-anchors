@@ -21,6 +21,13 @@ extends RefCounted
 ## Axis-aligned walls keep the identity basis and their existing extent order,
 ## so no geometry, collider or bound that exists today moves by a float.
 
+## Preloaded rather than named as the global class, because `PartCatalog`
+## reaches back the other way at RUNTIME (`_probe_baker` does
+## `load("res://scripts/construction/structure_baker.gd")` to read this file's
+## method list). A preload is a resource-cache hit in that direction and cannot
+## become a compile-time class-resolution cycle.
+const Parts := preload("res://scripts/construction/part_catalog.gd")
+
 const DEFAULT_WALL_COLOR := Color(0.82, 0.84, 0.86)
 const DEFAULT_DECK_COLOR := Color(0.36, 0.34, 0.31)
 const DEFAULT_INTERIOR_COLOR := Color(0.78, 0.70, 0.58) ## warm timber
@@ -449,10 +456,19 @@ static func _stair_layers(stair: Dictionary, fallback: Color) -> Array:
 
 # ── Surface layers (color + material per side) ───────────────────────────────
 
+## A plan writes colour as `[r, g, b]` because that is what survives JSON. A
+## resolved `PartCatalog` spec already holds a `Color` (the catalog parsed the
+## part's `#rrggbb` at load), and both reach this function through the same
+## layers. Falling through a Color to the fallback painted every catalogue
+## fitting in one grey — a #4d5257 bollard and a #f2efe4 lantern lens both.
 static func _color_of(value: Variant, fallback: Color) -> Color:
+	if value is Color:
+		return value as Color
 	if value is Array and (value as Array).size() >= 3:
 		var list := value as Array
 		return Color(float(list[0]), float(list[1]), float(list[2]))
+	if value is String and Color.html_is_valid(value as String):
+		return Color(value as String)
 	return fallback
 
 
@@ -1427,53 +1443,83 @@ static func _off_axis(span: Vector3) -> float:
 ## catalog part may keep its own name and still resolve to a primitive.
 
 
+## The primitives an ITEM may spell directly, drawn from its own props rather
+## than through the catalog. `railing` and `sheer_band` are deliberately absent:
+## those are `edges[]` entities, and an item reaches them through a catalog part
+## (`railing_run`, `sheer_band_run`) which is why neither ever collided with an
+## item_id.
+const ITEM_PRIMITIVES: Array[String] = ["plate", "spar", "wire"]
+
+
 static func item_primitive(item: Dictionary) -> String:
 	var props := StructurePlan.item_props(item)
 	return str(props.get("primitive", item.get("item_id", "")))
 
 
-## Renderable layers for one item. Empty for anything this baker cannot draw yet
-## — an unknown fitting costs nothing and is not silently turned into a box.
+## Does this item draw from its OWN props, or from a catalog part? The two
+## readings are not interchangeable and telling them apart is the difference
+## between "measured as geometry" and "unknown fitting" — see
+## `PlanOutfit._validate_built`, which used to call 916 shipped spars and wires
+## un-measurable the moment the catalog stopped holding an entry of that id.
+static func item_draws_as_primitive(item: Dictionary) -> bool:
+	return ITEM_PRIMITIVES.has(item_primitive(item))
+
+
+## Renderable layers for one item. An item is drawn one of two ways: a BAKER
+## PRIMITIVE straight from the item's own props, or a CATALOGUE PART expanded
+## through `PartCatalog` into a list of those same primitives. Empty only for an
+## id neither reading recognises — an unknown fitting costs nothing and is not
+## silently turned into a box.
 static func _item_layers(plan: StructurePlan, item: Dictionary) -> Array:
 	var primitive := item_primitive(item)
+	var source_id := int(item.get("id", -1))
 	if primitive == "plate":
 		var spec := StructurePlan.item_props(item)
 		var problem := plate_problem(spec)
 		if not problem.is_empty():
 			push_error(
 				"StructureBaker: item %d is a degenerate plate — %s. Nothing drawn."
-				% [int(item.get("id", -1)), problem]
+				% [source_id, problem]
 			)
 			return []
 		return plate_layers(
 			spec,
 			_transformed(plate_corners(spec), plan.item_transform(item)),
-			int(item.get("id", -1)),
+			source_id,
 		)
-	if primitive != "spar" and primitive != "wire":
-		return []
-	var props := StructurePlan.item_props(item)
-	var xform := plan.item_transform(item)
-	var wire := primitive == "wire"
-	var path := PackedVector3Array()
+	if primitive == "spar" or primitive == "wire":
+		var props := StructurePlan.item_props(item)
+		## Transform FIRST, sag SECOND: gravity is not in the fitting's frame,
+		## and `_tube_layers` is where the sag goes on.
+		var moved := _respec(props, _transformed(spar_path(props), plan.item_transform(item)))
+		return _tube_layers(moved, primitive == "wire", source_id)
+	var out: Array = []
+	for spec_variant in catalog_specs(plan, item):
+		out.append_array(primitive_layers(spec_variant as Dictionary, source_id))
+	return out
+
+
+## The tube one already-positioned spar or wire spec draws, as a single layer.
+## Shared by the item path and by `spar_boxes` / `wire_boxes`, so a mast placed
+## as a raw `spar` and a mast placed as the catalogue's `mast_with_platform`
+## cannot be drawn by two different pieces of code.
+static func _tube_layers(spec: Dictionary, wire: bool, source_id: int) -> Array:
+	var path := spar_path(spec)
 	if wire:
-		## Transform FIRST, sag SECOND: gravity is not in the fitting's frame.
-		path = wire_path(_respec(props, _transformed(spar_path(props), xform)))
-	else:
-		path = _transformed(spar_path(props), xform)
+		path = wire_path(_respec(spec, path))
 	if path.size() < 2:
 		return []
-	var sides := spar_sides(props, WIRE_DEFAULT_SIDES if wire else SPAR_DEFAULT_SIDES)
-	var radii := spar_radii(props, path, WIRE_DEFAULT_RADIUS if wire else SPAR_DEFAULT_RADIUS)
+	var sides := spar_sides(spec, WIRE_DEFAULT_SIDES if wire else SPAR_DEFAULT_SIDES)
+	var radii := spar_radii(spec, path, WIRE_DEFAULT_RADIUS if wire else SPAR_DEFAULT_RADIUS)
 	return [{
 		"kind": "tube",
 		"points": path,
 		"radii": radii,
 		"sides": sides,
-		"capped": bool(props.get("capped", true)),
-		"color": _color_of(props.get("color", null), DEFAULT_WIRE_COLOR if wire else DEFAULT_SPAR_COLOR),
-		"material": str(props.get("material", "steel" if wire else "metal")),
-		"source_id": int(item.get("id", -1)),
+		"capped": bool(spec.get("capped", true)),
+		"color": _color_of(spec.get("color", null), DEFAULT_WIRE_COLOR if wire else DEFAULT_SPAR_COLOR),
+		"material": str(spec.get("material", "steel" if wire else "metal")),
+		"source_id": source_id,
 	}]
 
 
@@ -1509,15 +1555,29 @@ static func _item_colliders(plan: StructurePlan, item: Dictionary, offset: Vecto
 		return plate_colliders(
 			spec, _transformed(plate_corners(spec), plan.item_transform(item)), offset
 		)
-	if primitive != "spar":
+	if primitive == "spar":
+		var props := StructurePlan.item_props(item)
+		if not bool(props.get("solid", true)):
+			return []
+		return _run_path_colliders(
+			_transformed(spar_path(props), plan.item_transform(item)), props, offset
+		)
+	if primitive == "wire":
+		## A WIRE IS NEVER SOLID — see collect_colliders().
 		return []
-	var props := StructurePlan.item_props(item)
-	if not bool(props.get("solid", true)):
-		return []
-	var path := _transformed(spar_path(props), plan.item_transform(item))
+	var out: Array = []
+	for spec_variant in catalog_specs(plan, item):
+		out.append_array(primitive_colliders(spec_variant as Dictionary, offset))
+	return out
+
+
+## One tube run's colliders, given the path it was DRAWN along. Shared by the
+## item path and by `primitive_colliders`, so a spar's obstruction is derived
+## once (§3b) — the drawing and the collision take the same polyline.
+static func _run_path_colliders(path: PackedVector3Array, spec: Dictionary, offset: Vector3) -> Array:
 	if path.size() < 2:
 		return []
-	var radii := spar_radii(props, path, SPAR_DEFAULT_RADIUS)
+	var radii := spar_radii(spec, path, SPAR_DEFAULT_RADIUS)
 	var out: Array = []
 	for index in range(path.size() - 1):
 		var a := path[index]
@@ -1527,6 +1587,172 @@ static func _item_colliders(plan: StructurePlan, item: Dictionary, offset: Vecto
 			continue
 		out.append_array(_run_colliders(a, b, radius, offset))
 	return out
+
+
+# ── Catalogue parts: the seam that was specified and never landed ────────────
+#
+# `PartCatalog` turns a named fitting into a list of resolved primitive specs
+# and stops; `PRIMITIVES[p].emitter` names the five functions on THIS file that
+# were to draw them, and its header says so verbatim ("A later wave lands the
+# emitters in StructureBaker as static functions named by PRIMITIVES[p].emitter
+# — spar_boxes, railing_boxes, wire_boxes, plate_boxes, sheer_band_boxes").
+# `structure_edge.gd`'s header names two of the five again. None of the five
+# existed, so `baker_supports()` was false for all five primitives,
+# `emit_boxes()` returned [] for every spec, `is_buildable()` was false for
+# every part, and `_item_layers` fell off the end of its plate/spar/wire chain
+# and returned [] for every catalogue id.
+#
+# THE STRIP TEST (REALITY.md §3d), through the production path — a plan on
+# `hull_28x10` carrying one of each of the 15 catalogue parts, taken through
+# `VesselSpawn.instantiate` -> `DeckFitout.apply_plan` -> the scene tree, with
+# the mesh census read off the committed ArrayMesh and the collider census read
+# off `PhysicsServer3D` (`tests/_fitting_strip.tscn`):
+#
+#     AS AUTHORED     18 items | 12 triangles  1 mesh instance  1 plan collider
+#     ITEMS DELETED    0 items | 12 triangles  1 mesh instance  1 plan collider
+#
+# Identical, and the 12 triangles are the deck plate. **All 15 catalogue part
+# ids drew nothing**, including `spar` and `wire`, whose ids collide with baker
+# primitive names: `item_primitive` matched, and then `spar_path` found no
+# `from`/`to` in a props bag that carries the part's `length`/`radius`
+# parameters, so the path was shorter than two points and the layer was dropped.
+#
+# Meanwhile `PlanOutfit` counted all 18 — brick_counts 18, tag_counts
+# {mooring: 4, helm: 1, bulk_hold: 1, light: 1, nav_white: 1, fishing: 1} — so
+# four of `general_vessel`'s eight requirements were met by fittings that
+# appeared in no frame. Same shape as the piece-kit finding, one vocabulary
+# further out.
+#
+# What lands here is the seam as specified: five emitters, one shared spec
+# transform, and one expansion feeding BOTH `_item_layers` and `_item_colliders`
+# so a bollard's drawing and a bollard's obstruction cannot drift (§3b).
+
+
+## The resolved primitive specs for one plan item that names a CATALOGUE part,
+## carried into plan space by the item's own transform. Empty for a baker
+## primitive (drawn from the item's own props, above) and for an id the catalog
+## does not hold — `PlanOutfit` is what tells the builder about that one, by
+## name, so this stays silent rather than pushing an error per bake.
+##
+## ONE DERIVATION: `_item_layers` and `_item_colliders` both read this list.
+static func catalog_specs(plan: StructurePlan, item: Dictionary) -> Array:
+	var part_id := str(item.get("item_id", ""))
+	if not Parts.has(part_id):
+		return []
+	var expansion := Parts.expand_props(part_id, StructurePlan.item_props(item))
+	for message in expansion.get("errors", PackedStringArray()) as PackedStringArray:
+		push_error("StructureBaker: item %d (%s): %s" % [int(item.get("id", -1)), part_id, message])
+	var xform := plan.item_transform(item)
+	var out: Array = []
+	for spec_variant in expansion.get("specs", []) as Array:
+		out.append(transformed_spec(spec_variant as Dictionary, xform))
+	return out
+
+
+## A copy of one resolved primitive spec with every POINT field carried through
+## `xform`. Scalars are left alone: an item transform is rigid, so a radius, a
+## thickness and a height are the same number in either frame.
+##
+## Transforming the SPEC rather than the emitted geometry is what lets the
+## drawing and the collision come off one expansion — and it keeps the wire rule
+## intact, because `_tube_layers` sags the path AFTER this, in world Y, where
+## gravity actually points.
+static func transformed_spec(spec: Dictionary, xform: Transform3D) -> Dictionary:
+	var def: Dictionary = Parts.PRIMITIVES.get(str(spec.get("primitive", "")), {})
+	var fields: Dictionary = def.get("fields", {})
+	var out := spec.duplicate(true)
+	for key in fields.keys():
+		var name := str(key)
+		if not out.has(name):
+			continue
+		match str(fields[name]):
+			"point":
+				out[name] = xform * _point_of(out[name])
+			"points":
+				out[name] = _transformed(polyline_of(out[name]), xform)
+	return out
+
+
+## Renderable layers for ONE resolved primitive spec, in whatever frame the spec
+## is written in. The dispatch `PartCatalog.emit_boxes` reaches through the five
+## named wrappers below.
+static func primitive_layers(spec: Dictionary, source_id := -1) -> Array:
+	match str(spec.get("primitive", "")):
+		"spar":
+			return _tube_layers(spec, false, source_id)
+		"wire":
+			return _tube_layers(spec, true, source_id)
+		"plate":
+			var problem := plate_problem(spec)
+			if not problem.is_empty():
+				push_error(
+					"StructureBaker: part \"%s\" step %d is a degenerate plate — %s. Nothing drawn."
+					% [str(spec.get("part_id", "?")), int(spec.get("step", -1)), problem]
+				)
+				return []
+			return plate_layers(spec, plate_corners(spec), source_id)
+		"railing":
+			return StructureEdge.railing_boxes(spec)
+		"sheer_band":
+			return StructureEdge.sheer_band_boxes(spec)
+	return []
+
+
+## Collider boxes for ONE resolved primitive spec, offset into host-local space.
+## The policy is the one `collect_colliders()` argues at length and is not
+## restated per primitive: a spar is an obstruction, a plate is a wall, a
+## railing is a barrier you cannot pass between the courses of, a swept band is
+## its own bound — and A WIRE IS NEVER SOLID.
+static func primitive_colliders(spec: Dictionary, offset: Vector3) -> Array:
+	match str(spec.get("primitive", "")):
+		"spar":
+			if not bool(spec.get("solid", true)):
+				return []
+			return _run_path_colliders(spar_path(spec), spec, offset)
+		"plate":
+			if not plate_problem(spec).is_empty():
+				return []
+			return plate_colliders(spec, plate_corners(spec), offset)
+		"railing":
+			return _offset_colliders(StructureEdge.railing_collider_boxes(spec), offset)
+		"sheer_band":
+			return _offset_colliders(StructureEdge.sweep_collider_boxes(spec), offset)
+	return []
+
+
+static func _offset_colliders(boxes: Array, offset: Vector3) -> Array:
+	var out: Array = []
+	for box_variant in boxes:
+		out.append(_collider_of(box_variant as Dictionary, offset))
+	return out
+
+
+## ── The five emitters PartCatalog probes for, by name ───────────────────────
+## `PartCatalog._probe_baker` reads this file's method list and matches
+## `PRIMITIVES[p].emitter`, so these five names are the whole of
+## `baker_supports()` / `is_buildable()` / `unbuildable_report()`. They return
+## `_bucket_layer` LAYERS, which is a superset of the box dictionary the seam
+## was first sketched with: a spar is a tube and a plate is a slab, and neither
+## is honestly a box.
+
+static func spar_boxes(spec: Dictionary) -> Array:
+	return primitive_layers(spec)
+
+
+static func wire_boxes(spec: Dictionary) -> Array:
+	return primitive_layers(spec)
+
+
+static func plate_boxes(spec: Dictionary) -> Array:
+	return primitive_layers(spec)
+
+
+static func railing_boxes(spec: Dictionary) -> Array:
+	return StructureEdge.railing_boxes(spec)
+
+
+static func sheer_band_boxes(spec: Dictionary) -> Array:
+	return StructureEdge.sheer_band_boxes(spec)
 
 
 static func _run_colliders(a: Vector3, b: Vector3, radius: float, offset: Vector3) -> Array:

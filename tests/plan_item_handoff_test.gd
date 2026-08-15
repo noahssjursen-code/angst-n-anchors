@@ -30,7 +30,7 @@ extends SceneTree
 const PC := preload("res://scripts/construction/part_catalog.gd")
 const PO := preload("res://scripts/ship/plan_outfit.gd")
 const HULL := "hull_28x10"
-const EXPECTED_CHECKS := 43
+const EXPECTED_CHECKS := 45
 
 ## An 8 x 4 m hold covers 32 m². Its coaming skin adds 0.06 m per face, so the
 ## measured box is 4.12 x 8.12 = 33.5 m² — 134 cells at 0.5 m. Anything above
@@ -156,14 +156,35 @@ func _test_expand_props_is_the_seam() -> void:
 		if PC.emitter_method_for(primitive).is_empty():
 			named = false
 	_check("every resolved spec names an emitter method", named)
+	## THESE TWO USED TO ASSERT THE DEFECT (REALITY.md §4c):
+	##
+	##     _check("plate is declared-but-unbuildable, and says so",
+	##         not PC.baker_supports("plate") and not PC.is_buildable("hold_coaming"))
+	##     _check("emit_boxes returns nothing for an unimplemented primitive",
+	##         PC.emit_boxes(specs[0] as Dictionary).is_empty())
+	##
+	## Both were green, both were honest about what they measured, and both went
+	## RED the moment `StructureBaker` grew the five emitters its own header says
+	## a later wave lands — while a strip test through `VesselSpawn` showed the
+	## hold_coaming they describe contributing 0 triangles to the frame. What
+	## replaces them is the property: buildability AGREES with the baker, and the
+	## dispatch returns geometry when there is an emitter and nothing when there
+	## is not.
 	_check(
-		"plate is declared-but-unbuildable, and says so",
-		not PC.baker_supports("plate") and not PC.is_buildable("hold_coaming")
+		"a primitive is buildable exactly when the baker holds its emitter",
+		PC.baker_supports("plate")
+			== _baker_has(PC.emitter_method_for("plate"))
 	)
-	## emit_boxes owns the dispatch: [] for a primitive the baker cannot draw,
-	## never a crash and never a silently invented box.
-	_check("emit_boxes returns nothing for an unimplemented primitive",
-		PC.emit_boxes(specs[0] as Dictionary).is_empty())
+	_check(
+		"a part is buildable exactly when none of its primitives is missing",
+		PC.is_buildable("hold_coaming") == PC.missing_primitives("hold_coaming").is_empty()
+	)
+	## emit_boxes owns the dispatch: geometry for a primitive the baker draws,
+	## [] for one it does not, never a crash and never a silently invented box.
+	_check("emit_boxes returns geometry for a resolved plate spec",
+		not PC.emit_boxes(specs[0] as Dictionary).is_empty())
+	_check("emit_boxes returns nothing for a primitive that is not in the kit",
+		PC.emit_boxes({"primitive": "gantry"}).is_empty())
 	## ...and the dispatch really does reach a static by name, proved on the one
 	## emitter the baker already has.
 	var baker: Script = load("res://scripts/construction/structure_baker.gd")
@@ -175,6 +196,18 @@ func _test_expand_props_is_the_seam() -> void:
 		"dispatch by emitter name is a real seam",
 		boxes is Array and (boxes as Array).size() > 0
 	)
+
+
+func _baker_has(method: String) -> bool:
+	if method.is_empty():
+		return false
+	var script: Script = load("res://scripts/construction/structure_baker.gd")
+	if script == null:
+		return false
+	for entry in script.get_script_method_list():
+		if str((entry as Dictionary).get("name", "")) == method:
+			return true
+	return false
 
 
 # ── 2. Free rotation stays free ─────────────────────────────────────────────

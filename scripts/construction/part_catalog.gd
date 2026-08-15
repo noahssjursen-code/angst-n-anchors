@@ -31,17 +31,26 @@ extends RefCounted
 ##
 ## ── Geometry is NOT emitted here ────────────────────────────────────────────
 ## This catalog resolves parts to primitive specs and stops. StructureBaker owns
-## triangles. It cannot draw any of the five yet, so every part currently reports
-## as declared-but-unbuildable — loudly, via unbuildable_report(), never by
-## silently dropping the part.
+## triangles. A part the baker cannot draw reports as declared-but-unbuildable —
+## loudly, via unbuildable_report(), never by silently dropping the part.
 ##
-## A later wave lands the emitters in StructureBaker as static functions named by
-## PRIMITIVES[p].emitter — `spar_boxes`, `railing_boxes`, `wire_boxes`,
-## `plate_boxes`, `sheer_band_boxes` — each taking one resolved spec and
-## returning the same box dictionaries `wall_boxes()` already returns
-## ({center, size, basis, color, material}). Nothing in this file changes when
-## they land: baker_supports() re-reads the baker's method list, so a wave that
-## ships spars alone flips exactly the spar-only parts to buildable.
+## THE FIVE EMITTERS LANDED 2026-08-15, and the paragraph that used to stand here
+## ("a later wave lands the emitters…") is worth keeping as the record of how long
+## a designed seam can sit open while everything around it stays green. Nothing in
+## this file changed when they arrived: `baker_supports()` re-reads the baker's
+## method list, so the day `StructureBaker` grew `spar_boxes`, `railing_boxes`,
+## `wire_boxes`, `plate_boxes` and `sheer_band_boxes` every part flipped to
+## buildable on its own. What did NOT happen on its own was drawing: the emitters
+## being absent meant `emit_boxes()` returned [] for every spec and
+## `StructureBaker._item_layers` returned [] for every catalog `item_id`, so a
+## `bollard_pair` in a plan counted toward a registration and appeared in no
+## frame. Measured through `VesselSpawn` -> `apply_plan`, 15 of 15 parts drew
+## nothing; `tests/plan_fitting_draws_test.gd` is the check that now says so.
+##
+## One correction to the sketch: the emitters return `_bucket_layer` LAYERS, not
+## the box dictionary `wall_boxes()` returns. A spar is a tube and a plate is a
+## slab; neither is honestly a box, and `_bucket_layer` has taken all three kinds
+## since the swept primitives landed.
 ##
 ## ── THE ITEM HAND-OFF, verbatim and compiling ───────────────────────────────
 ##
@@ -243,6 +252,24 @@ static func parse_document(doc: Dictionary) -> Dictionary:
 			continue
 		if entries.has(id):
 			errors.append("part \"%s\": duplicate id at parts[%d]" % [id, index])
+			continue
+		## A PART ID MAY NOT SPELL A PRIMITIVE. `StructureBaker.item_primitive`
+		## falls back to a plan item's `item_id` when its props declare no
+		## `primitive`, which is how 916 shipped items say "spar" and "wire", so a
+		## catalog part of that id is SHADOWED: the baker draws the item's own
+		## props and the part's build steps are never reached. Measured before
+		## this rule landed — the catalog held `spar` and `wire`, and both drew
+		## exactly nothing when placed as parts while the other thirteen drew.
+		## The two are now `spar_run` and `wire_run`, matching `railing_run` and
+		## `sheer_band_run`, which never collided.
+		if PRIMITIVES.has(id):
+			errors.append(
+				(
+					"part \"%s\" at parts[%d]: a part id may not spell a primitive — "
+					+ "a plan item of that id resolves to the baker primitive and this "
+					+ "part's build[] is never reached. Name it \"%s_run\" or similar."
+				) % [id, index, id]
+			)
 			continue
 		var entry_errors := PackedStringArray()
 		var entry := _build_entry(id, src, entry_errors, warnings)
@@ -861,8 +888,13 @@ static func unbuildable_report() -> Array[Dictionary]:
 	return out
 
 
-## Boxes for one resolved spec, or [] when the baker cannot draw that primitive
-## yet. This is where the dynamic dispatch lives, and it lives here for a reason
+## Renderable LAYERS for one resolved spec, or [] when the baker cannot draw that
+## primitive. The name is historical and the shape is wider than it says: a layer
+## is any `StructureBaker._bucket_layer` input — a box, a slab (a plate) or a
+## tube (a spar or a wire). The seam was first sketched as boxes alone, which is
+## not what a round member is.
+##
+## This is where the dynamic dispatch lives, and it lives here for a reason
 ## a probe measured: `StructureBaker.call("spar_boxes", spec)` — the spelling the
 ## hand-off used to document — is a PARSE ERROR ("cannot call non-static
 ## function call() on the class ... directly"), because a global class name is a

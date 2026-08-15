@@ -254,42 +254,96 @@ static func hull_test_points(
 ## catalog was answering for geometry it does not draw.
 ##
 ## So: a baker primitive is measured off the path the BAKER draws, and everything
-## else off the catalog that expands it. `part_local_aabb` is still the reading
-## for catalog fittings, unchanged, because it is the same expansion
-## `item_footprint_cells` and `max_stack_cells` already use — a fitting must not
-## get two answers within this file. Sag is ignored deliberately: `wire_path`
-## bends downward under gravity in Y only, so it cannot move an XZ point.
+## else off the catalog that expands it. Sag is ignored deliberately: `wire_path`
+## bends downward under gravity in Y only, so it cannot move an XZ point, and for
+## a height reading the unsagged endpoints ARE the top.
 ##
-## An item that yields nothing either way falls back to its origin, which is
-## still the position the builder typed — so an uncatalogued fitting cannot be a
-## hole in the fence.
+## ── ONE DERIVATION, and what it cost to get here ────────────────────────────
+##
+## That branch used to live in this function alone. `item_footprint_cells` and
+## `max_stack_cells` asked `part_local_aabb` about EVERY item, including a
+## `wire`, and got the catalog's answer for geometry the baker does not take from
+## the catalog. Measured on the shipped fixtures before this changed
+## (`tests/_plan_wire_aabb.gd`), the overstatement was exactly the catalog's
+## default `rise`:
+##
+##     demo_workboat          wire #256  +4.00 m over a drawn top of 4.50 m
+##     probe_trawler_bulwark  wire  #98  +4.00 m over a drawn top of 8.30 m
+##
+## THE WIRE WAS THE SMALL HALF. The same reading was applied to every `spar`
+## item, and `spar` was a catalog id too, so 844 shipped spars were measured with
+## the part's default `length` of 6.0 m stacked on top of wherever they stood.
+## `max_stack_cells` — the plan's air draught — came out:
+##
+##                            reported        drawn top (bake AABB)
+##     demo_workboat          31 cells 15.5 m      10.04 m
+##     probe_trawler_bulwark  30 cells 15.0 m       9.26 m
+##
+## i.e. 5.5 m and 6.0 m of air draught that no fixture draws. It now reports 20
+## and 18 cells, which floor to the bake AABB exactly. Nothing consumes
+## `capabilities.max_stack_y` today (no registration rule names it), which is
+## why a number that wrong sat unread — §3d from the other end.
+##
+## `item_local_points` below is now the single producer and these three are its
+## only readers. A `plate` item gained a reading it never had (`part_local_aabb`
+## was asked about the id "plate", which is not a catalog part, so it answered
+## `ok=false` and a plate contributed nothing to either number).
+##
+## An item that yields nothing at all falls back to its origin, which is still
+## the position the builder typed — so an uncatalogued fitting cannot be a hole
+## in the fence.
 static func item_hull_points(plan: StructurePlan, item: Dictionary) -> PackedVector2Array:
 	var out := PackedVector2Array()
+	for point in item_world_points(plan, item):
+		out.append(Vector2(point.x, point.z))
+	if out.is_empty():
+		var origin := plan.item_transform(item).origin
+		out.append(Vector2(origin.x, origin.z))
+	return out
+
+
+## THE ONE DERIVATION of what a plan item occupies: its own extreme points, in
+## PLAN metres. Read by `item_hull_points` (the hull fence), by
+## `item_footprint_cells` (cargo deck cells) and by `max_stack_cells` (air
+## draught), so a fitting cannot be three different sizes in one file.
+##
+## A BAKER PRIMITIVE is measured off the geometry `StructureBaker` draws for it —
+## the plate's own corners, the spar's or wire's own polyline — because that is
+## what lands in the world.
+##
+## A CATALOG PART is measured off `part_local_aabb`, which bounds the resolved
+## primitive specs and then inflates by radius and thickness. That is a
+## CONSERVATIVE box around the drawn geometry rather than the drawn geometry
+## itself, and it is named here rather than quietly equated: it over-covers, which
+## is the safe side for a fence and for a cargo footprint, and no shipped fixture
+## places a catalog part today (all 1752 shipped items are raw primitives), so
+## nothing measured is calibrated on it.
+static func item_world_points(plan: StructurePlan, item: Dictionary) -> PackedVector3Array:
+	var out := PackedVector3Array()
+	if plan == null:
+		return out
 	var xform := plan.item_transform(item)
-	var primitive := StructureBaker.item_primitive(item)
 	var props := StructurePlan.item_props(item)
+	var primitive := StructureBaker.item_primitive(item)
 	if primitive == "plate":
 		for point in StructureBaker.plate_corners(props):
-			var world := xform * point
-			out.append(Vector2(world.x, world.z))
-	elif primitive == "spar" or primitive == "wire":
+			out.append(xform * point)
+		return out
+	if primitive == "spar" or primitive == "wire":
 		for point in StructureBaker.spar_path(props):
-			var world := xform * point
-			out.append(Vector2(world.x, world.z))
-	else:
-		var box := part_local_aabb(str(item.get("item_id", "")), props)
-		if bool(box.get("ok", false)):
-			var mn: Vector3 = box["min"]
-			var mx: Vector3 = box["max"]
-			for corner_i in 8:
-				var corner := xform * Vector3(
-					mx.x if (corner_i & 1) != 0 else mn.x,
-					mx.y if (corner_i & 2) != 0 else mn.y,
-					mx.z if (corner_i & 4) != 0 else mn.z,
-				)
-				out.append(Vector2(corner.x, corner.z))
-	if out.is_empty():
-		out.append(Vector2(xform.origin.x, xform.origin.z))
+			out.append(xform * point)
+		return out
+	var box := part_local_aabb(str(item.get("item_id", "")), props)
+	if not bool(box.get("ok", false)):
+		return out
+	var mn: Vector3 = box["min"]
+	var mx: Vector3 = box["max"]
+	for corner_i in 8:
+		out.append(xform * Vector3(
+			mx.x if (corner_i & 1) != 0 else mn.x,
+			mx.y if (corner_i & 2) != 0 else mn.y,
+			mx.z if (corner_i & 4) != 0 else mn.z,
+		))
 	return out
 
 
@@ -498,8 +552,17 @@ static func _validate_built(
 			## cannot take a slot, buy a cargo cell or satisfy a legal rule.
 			continue
 		if not Parts.has(part_id):
-			## Never silent: an unknown fitting is measured as nothing, and the
-			## builder is told which one and why.
+			## A RAW PRIMITIVE IS NOT AN UNKNOWN FITTING. An item whose props (or
+			## whose id) name one of the baker's own primitives is drawn and
+			## collided from those props — 916 of the shipped fleet's items are
+			## spelled that way — and it carries no compliance identity by
+			## construction: no tags, no rating, no seats. Measuring it as nothing
+			## is correct; SAYING it could not be measured is not, and it would put
+			## 916 lines in the builder's report.
+			if StructureBaker.item_draws_as_primitive(item):
+				continue
+			## Everything else is never silent: an unknown fitting is measured as
+			## nothing, and the builder is told which one and why.
 			warnings.append(
 				"Plan item %d: no part \"%s\" in the catalog — not measured."
 				% [item_id, part_id]
@@ -783,20 +846,11 @@ static func item_footprint_cells(
 	var out: Array[Vector3i] = []
 	if plan == null or grid == null:
 		return out
-	var box := part_local_aabb(str(item.get("item_id", "")), StructurePlan.item_props(item))
-	if not bool(box.get("ok", false)):
-		return out
-	var xform := plan.item_transform(item)
-	var mn: Vector3 = box["min"]
-	var mx: Vector3 = box["max"]
 	var corners := PackedVector2Array()
-	for corner_i in 8:
-		var corner := xform * Vector3(
-			mx.x if (corner_i & 1) != 0 else mn.x,
-			mx.y if (corner_i & 2) != 0 else mn.y,
-			mx.z if (corner_i & 4) != 0 else mn.z,
-		)
-		corners.append(Vector2(corner.x, corner.z))
+	for point in item_world_points(plan, item):
+		corners.append(Vector2(point.x, point.z))
+	if corners.is_empty():
+		return out
 	var shadow := _shadow_hull(corners)
 	var lo := Vector2.INF
 	var hi := -Vector2.INF
@@ -957,11 +1011,12 @@ static func max_stack_cells(plan: StructurePlan, grid: DeckGrid) -> int:
 		)
 	for raw in plan.items:
 		var item := raw as Dictionary
-		var box := part_local_aabb(str(item.get("item_id", "")), StructurePlan.item_props(item))
-		var reach := 0.0
-		if bool(box.get("ok", false)):
-			reach = maxf(0.0, (box["max"] as Vector3).y)
-		top = maxf(top, plan.item_transform(item).origin.y + reach)
+		## The item's own points are already in PLAN space, so this reads the
+		## drawn top directly. The old line added a LOCAL reach to a WORLD origin,
+		## which is only the same number while the item is unpitched and unrolled.
+		top = maxf(top, plan.item_transform(item).origin.y)
+		for point in item_world_points(plan, item):
+			top = maxf(top, point.y)
 	return int(floor(maxf(top, 0.0) / WorldUnits.DECK_CELL_M))
 
 

@@ -11,7 +11,7 @@
 
   "parts": [
     {
-      "id": "spar",
+      "id": "spar_run",
       "display": "Spar",
       "description": "One round member. Mast, post, boom, derrick, gallows leg, davit, stanchion, exhaust pipe, jackstaff, antenna, crane pedestal.",
       "material": "steel",
@@ -61,7 +61,7 @@
     },
 
     {
-      "id": "wire",
+      "id": "wire_run",
       "display": "Wire",
       "description": "One tensioned line with sag. Standing rigging, running rigging, stays, lifelines, aerials.",
       "material": "metal",
