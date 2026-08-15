@@ -1025,8 +1025,11 @@ Two things that sweep left behind and did not fix:
    taste question:** on land it is a BUG — `BuildingGrid.CELL_M` 1.0 against a
    drawn brick of 0.5, factor exactly 2.000, so no blueprint data produces a
    solid wall. The taste half is which of the two fixes.
-2. `apply_staged` (>1000 bricks) is still O(n²) — a batch cannot span frames
-   without leaving a vessel non-colliding while a player stands on it.
+2. ~~`apply_staged` (>1000 bricks) is still O(n²)~~ — **closed 2026-08-15, see
+   "STAGED FIT-OUT IS LINEAR TOO" below.** The premise of this line was that a
+   batch cannot span frames without leaving a vessel non-colliding; the answer was
+   that it need not span frames at all, because a collider built on a node that
+   is never in the tree is in no space to begin with.
 3. `plan_interior_test`'s 18 in-collider march starts: 17 are the mast, 1 is the
    raked plate. The mast is real geometry; the sweep's stand-off is the instrument.
 4. `_prepare_gameplay` runs a 108–113 ms `VesselCompliance.validate` as one
@@ -1078,10 +1081,71 @@ the boat enters the tree, so its WalkDeck has no space and those adds were alrea
 linear. Refit is the shipyard editor, `apply_brick_layout`, and
 `ReplicationDrawingService` — real, but not the spawn path I implied.
 
-Still quadratic and untouched: `apply_staged` (>1000 bricks) mounts across frames,
-and a batch cannot span frames without leaving a vessel non-colliding while a
-player stands on it. Frame-budgeted, so no single frame stalls, but total cost
-still grows O(n²).
+### STAGED FIT-OUT IS LINEAR TOO — 2026-08-15
+
+The paragraph that stood here said `apply_staged` was *"still quadratic and
+untouched"*, because a batch cannot span frames without leaving a vessel
+non-colliding while a player stands on it. That reasoning was sound and it was
+also the whole trap: **the vessels that most need the fix were the only ones that
+never got it.** The way out is that the batch need not span frames — a collider
+built as a child of a `Node3D` that **never enters the tree** is in no physics
+space, so there is no compound to rebuild and no `body_add_shape` at all.
+
+`BoatBody.begin_walk_collider_staging()` / `end_walk_collider_staging()`.
+`DeckFitoutJob` opens the window lazily at its first mount and closes it in one
+synchronous flush, declared as its own `INDIVISIBLE_STEPS` entry —
+a declaration, not a hiding place, and mutation M3 is its guard.
+
+GAMEPLAY phase, hull_90x24, `block` bricks. **The shapes are
+machine-independent; the milliseconds are llvmpipe / 4 cores and are not:**
+
+```
+bricks                    1001   1500   2000   3000   4000    over 4x n
+BEFORE, WalkDeck in space  596   1217   2091   4928   9416 ms   x15.8  QUADRATIC
+BEFORE, control out of it  203    294    427    686    990 ms   x4.9
+AFTER,  WalkDeck in space  175    249    322    500    665 ms   x3.80  LINEAR
+AFTER,  control out of it  162    237    335    499    704 ms   x4.3
+```
+
+The control varies exactly one input — whether the body is in a space — holding
+boxes, sizes, yaws and order identical (REALITY §4e). Before, that one input
+controlled **66% → 89%** of the phase; after, **7% → −6%**, i.e. nothing. *The
+cost the fix claimed to remove is the cost that stopped responding to the input.*
+Whole fit-out at n=4000: **9649 → 934 ms**, wall clock 42836 → 6735, frames 1847
+→ 181. Box count untouched — `body_get_shape_count` is n+2 in both runs and
+`PLATE_COLLIDER_SLOP` was not gone near.
+
+**Is a player-bearing vessel ever non-colliding? Two questions, different answers,
+and both are stated because the second one reads as a regression alone.**
+
+- *The body leaving its space (falling through the deck).* Once, in the flush,
+  17.1 ms at n=3000, inside one synchronous `_process`. Sampled every physics
+  frame of a 1200-brick fit-out: **0 of 64 / 93 / 104 / 313 frames** across four
+  runs found the WalkDeck out of the world's space or its slab missing.
+- *Brick collision (walking through walls).* This window exists either way — the
+  staged path already cleared every collider at dispatch. At n=3000:
+
+  ```
+                first box on body   all 3000 on body   integrated missing / wall
+  BEFORE           1643 ms             41577 ms          15411 of 41632 (37%)
+  AFTER               —                 5180 ms           5115 of  5180 (99%)
+  ```
+
+  Exposure changes from *partial for a long time* to **total for a short time**.
+  The integral is 3.0× better and full collidability arrives 8.0× sooner.
+
+Verified independently by the orchestrator, not taken on report: `deck_fitout_staging_test`,
+`deck_fitout_load_bench`, `plan_collision_physics_test`, `piece_interior_test` — **4/4 GREEN**;
+and the flush deferred by one frame reddens it, control PASS (66) → **2/66 FAILED**.
+
+**Still wrong, and stated by the wave rather than found later:** the flush is the
+one un-budgeted moment and it grows linearly (23 ms at 4000 bricks in a single
+frame; ~115 ms at 20000 — a hitch, not a stall, but nothing bounds it). A door
+toggled *during* the staging window is not checked to keep its state across the
+reparent. No player capsule was actually marched on a staged vessel — "never
+non-colliding" is a per-frame space+slab sample. And **no shipped fixture exceeds
+1000 bricks**, so the staged path has no fixture-based measurement at all: the
+game reaches the path, but it is not established that the game's *data* does.
 
 ### EVERY RED NOW HAS A DIAGNOSIS — gate `20260815-021225-7388`, 107 units
 

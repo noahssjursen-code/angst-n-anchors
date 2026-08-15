@@ -353,6 +353,11 @@ func _exit_tree() -> void:
 	if _walk_deck != null and is_instance_valid(_walk_deck):
 		_walk_deck.queue_free()
 		_walk_deck = null
+	## The stage is never in the tree, so nothing else will ever free it.
+	if _walk_collider_stage != null and is_instance_valid(_walk_collider_stage):
+		_walk_collider_stage.free()
+	_walk_collider_stage = null
+	_walk_collider_stage_owner = null
 
 
 func _notification(what: int) -> void:
@@ -389,6 +394,7 @@ func _physics_process(_delta: float) -> void:
 	## two. Left alone it is permanent and silent, and the vessel is walk-through
 	## for the rest of its life. See `_walk_collider_batch_watchdog`.
 	_walk_collider_batch_watchdog()
+	_walk_collider_staging_watchdog()
 	if Engine.is_editor_hint():
 		var missing_single := _transformer == null or not is_instance_valid(_transformer)
 		if _model_assembler == null and missing_single:
@@ -1156,6 +1162,13 @@ func _ensure_walk_hull_collider() -> void:
 
 var _walk_collider_batch_depth := 0
 var _walk_collider_batch_space := RID()
+## Detached parent that holds brick colliders while a MULTI-FRAME fit-out builds
+## them. Never enters the tree, so its children have no physics presence at all.
+var _walk_collider_stage: Node3D = null
+## The node whose life the staging window is tied to. When it dies, the window is
+## abandoned and the watchdog flushes rather than leaving the vessel without the
+## colliders it built. See `_walk_collider_staging_watchdog`.
+var _walk_collider_stage_owner: Node = null
 
 
 ## Batches many add/remove_walk_brick_collider calls into one physics re-space.
@@ -1266,6 +1279,135 @@ func end_walk_collider_batch() -> void:
 	ensure_walk_deck()
 
 
+## ── Multi-frame staging: the window `begin_walk_collider_batch` cannot open ──
+##
+## `begin/end_walk_collider_batch` is the SYNCHRONOUS answer: it lifts this
+## vessel's WalkDeck out of its physics space, spools boxes onto a body nothing
+## is simulating, and puts it back before the call returns. `DeckFitoutJob` mounts
+## a >1000-brick vessel across hundreds of frames and so cannot use it — a body
+## out of its space at a frame boundary is a vessel a player falls through, and
+## `_walk_collider_batch_watchdog` exists to force exactly that case closed.
+##
+## MEASURED COST OF LEAVING IT THAT WAY (`tests/_staged_collision_probe.gd`,
+## Mesa llvmpipe / 4 cores; the milliseconds are this box, the SHAPE is not).
+## `DeckFitoutJob`'s GAMEPLAY phase, which is where every collider is emitted:
+##
+##   bricks               1001    1500    2000    3000    4000
+##   WalkDeck in space     596    1217    2091    4928    9416 ms   x15.8 for 4x
+##   same, out of space    203     294     427     686     990 ms   x4.9  for 4x
+##
+## Quadratic against linear, and at 4000 bricks the difference — 8426 ms — is
+## **87% of the entire staged fit-out's own CPU** (9649 ms of `_step`). It is the
+## same Jolt compound rebuild the synchronous batch removed, reached by the one
+## path the batch could not reach.
+##
+## WHAT STAGING DOES, AND WHY THIS OPTION. Colliders are built as children of a
+## `Node3D` that is never in the tree. A node outside the tree is not in any
+## physics space, so there is no compound to rebuild and no `body_add_shape` at
+## all: the per-brick cost becomes node allocation. When the fit-out finishes,
+## ONE synchronous `end_walk_collider_staging()` opens a normal collider batch
+## and reparents the lot — n linear out-of-space adds and a single rebuild.
+##
+## Rejected alternatives, and the reason each loses:
+##
+##  · *Open and close a batch every frame.* Correct, and ~100x, but it pays one
+##    O(k) compound rebuild per frame for k shapes already placed, so the curve
+##    stays quadratic — divided by the bricks-per-frame the budget allows, not
+##    flattened. It also puts the WalkDeck, deck slab and all, out of its space
+##    once per frame instead of once per fit-out.
+##  · *Build a second body and swap it in.* Linear too, and it never takes the
+##    live body out of its space — but it splits one WalkDeck into two, which is
+##    the body every `_boat_owner` lookup, every shape-owner query and
+##    `plan_collision_physics_test` §5 name. A physics-topology change to buy
+##    what a detached parent buys with none of it.
+##
+## WHAT THE VESSEL COLLIDES WITH MEANWHILE. The staged path already clears every
+## brick collider at dispatch (`DeckFitout.apply_staged`) and does not emit the
+## first new one until its LAST phase, so brick collision is absent for the whole
+## fit-out either way; what a player stands on throughout is the WalkDeck's own
+## deck slab, which never leaves the body and never leaves its space. Staging
+## SHORTENS that window rather than opening a new one: it is bounded by how long
+## the mount phase takes, and the mount phase is what these numbers are about.
+## The single window in which the body itself leaves its space is the flush, and
+## it is inside one synchronous call with no physics frame in it —
+## `deck_fitout_staging_test` asserts that as a physics-frame count, not as a
+## duration.
+func begin_walk_collider_staging(owner: Node) -> void:
+	if _walk_collider_stage != null and is_instance_valid(_walk_collider_stage):
+		return
+	if ensure_walk_deck() == null:
+		return
+	_walk_collider_stage = Node3D.new()
+	_walk_collider_stage.name = "WalkColliderStage"
+	_walk_collider_stage_owner = owner
+
+
+func is_walk_collider_staging() -> bool:
+	return _walk_collider_stage != null and is_instance_valid(_walk_collider_stage)
+
+
+## How many colliders are built but not yet on the body. Public so a test can
+## state the property directly instead of inferring it from a shape count.
+func walk_collider_staged_count() -> int:
+	if not is_walk_collider_staging():
+		return 0
+	return _walk_collider_stage.get_child_count()
+
+
+## Moves every staged collider onto the WalkDeck and returns how many. One
+## `begin/end_walk_collider_batch` around the whole move, so the adds are the
+## linear out-of-space ones and the compound is rebuilt once.
+func end_walk_collider_staging() -> int:
+	var stage := _walk_collider_stage
+	_walk_collider_stage = null
+	_walk_collider_stage_owner = null
+	if stage == null or not is_instance_valid(stage):
+		return 0
+	var pending := stage.get_children()
+	var walk := ensure_walk_deck()
+	if walk == null or pending.is_empty():
+		stage.free()
+		return 0
+	begin_walk_collider_batch()
+	for child in pending:
+		stage.remove_child(child)
+		walk.add_child(child)
+	end_walk_collider_batch()
+	stage.free()
+	return pending.size()
+
+
+## A staging window is ALLOWED to span frames — that is the whole point — so the
+## batch watchdog's rule ("open at a frame boundary is a bug") cannot apply here.
+## What replaces it is ownership: the window belongs to the node that opened it,
+## and a window whose owner is gone is one nobody will ever close. Left alone the
+## colliders sit in an orphan node forever and the vessel is walk-through with no
+## error anywhere, which is the same silent failure the batch latch produced.
+func _walk_collider_staging_watchdog() -> void:
+	if not is_walk_collider_staging():
+		return
+	var owner := _walk_collider_stage_owner
+	if owner != null and is_instance_valid(owner) and owner.is_inside_tree():
+		return
+	var staged := walk_collider_staged_count()
+	push_error(
+		"BoatBody: a WalkDeck collider staging window outlived its owner with %d "
+		% staged
+		+ "colliders built and none on the body — flushing them. This vessel would "
+		+ "otherwise have had no brick collision at all."
+	)
+	end_walk_collider_staging()
+
+
+## Where a new brick collider is parented. ONE derivation, so the staged and the
+## direct path cannot drift into different collider geometry (REALITY.md §3b):
+## both add functions ask this and neither knows which answer it got.
+func _walk_collider_parent() -> Node:
+	if is_walk_collider_staging():
+		return _walk_collider_stage
+	return ensure_walk_deck()
+
+
 ## Attach a brick CollisionShape3D as a *direct* child of WalkDeck (Godot ignores nested shapes).
 func add_walk_brick_collider(
 	name_suffix: String,
@@ -1273,7 +1415,7 @@ func add_walk_brick_collider(
 	size: Vector3,
 	yaw_deg: float,
 ) -> CollisionShape3D:
-	var walk := ensure_walk_deck()
+	var walk := _walk_collider_parent()
 	if walk == null:
 		return null
 	var cs := CollisionShape3D.new()
@@ -1293,8 +1435,10 @@ func add_walk_brick_convex_collider(
 	points: PackedVector3Array,
 	yaw_deg: float,
 ) -> CollisionShape3D:
-	var walk := ensure_walk_deck()
-	if walk == null or points.size() < 4:
+	if points.size() < 4:
+		return null
+	var walk := _walk_collider_parent()
+	if walk == null:
 		return null
 	var cs := CollisionShape3D.new()
 	cs.name = "%s%s" % [BRICK_COL_PREFIX, name_suffix]
@@ -1308,6 +1452,14 @@ func add_walk_brick_convex_collider(
 
 
 func clear_walk_brick_colliders() -> void:
+	## Colliders built into an open staging window are brick colliders that have
+	## not landed yet. Leaving them would let a cancelled fit-out's boxes flush
+	## onto the vessel AFTER the layout that replaced them — the shipyard editor's
+	## "apply, change your mind, apply again" is exactly that sequence.
+	if is_walk_collider_staging():
+		for child in _walk_collider_stage.get_children():
+			_walk_collider_stage.remove_child(child)
+			child.free()
 	var walk := get_walk_deck()
 	if walk == null:
 		return

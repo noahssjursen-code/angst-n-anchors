@@ -39,6 +39,8 @@ func _ready() -> void:
 	await _test_threshold_and_completion()
 	await _test_remote_pause_and_promotion()
 	await _test_reapply_cancels_job()
+	await _test_staged_collision_is_delivered_and_never_absent()
+	await _test_abandoned_staging_window_is_flushed()
 	_t.finish(get_tree())
 
 
@@ -557,6 +559,276 @@ func _cell_histogram(grid: DeckGrid, centroids: PackedVector3Array) -> Dictionar
 		var key := BrickLayout.cell_key(cell)
 		out[key] = int(out.get(key, 0)) + 1
 	return out
+
+
+## ── The staged path's collision contract ─────────────────────────────────────
+##
+## `plan_collision_physics_test` §5 holds the SYNCHRONOUS fit-out to two things:
+## when `apply_plan` returns, with no frame allowed to pass, the WalkDeck is in
+## THE WORLD'S space and already carries a shape for every box the baker emitted.
+## It exists because an earlier version passed on a vessel that was 69 of 69
+## stations walk-through. The staged path had no equivalent, and it is the path
+## where the risk is real: a >1000-brick vessel mounts across hundreds of frames,
+## in the tree, with a player able to be standing on it the whole time.
+##
+## Three properties, and each one is a different failure:
+##
+##   A. THE VESSEL IS NEVER NON-COLLIDING. Sampled EVERY frame of the fit-out:
+##      the WalkDeck is in the world's space and its deck slab is present and
+##      enabled. This is the check that forbids the obvious fix — wrapping the
+##      mount phase in `begin/end_walk_collider_batch` and letting it span
+##      frames — which is quadratic-free and leaves a player falling through the
+##      deck of a vessel he is standing on.
+##   B. THE COLLIDERS ARE ACTUALLY DELIVERED, and delivered by the time anything
+##      can observe completion. Read inside the `readiness_changed` emission, so
+##      the same "nothing awaited" discipline as §5: a flush moved to
+##      `call_deferred` or dropped altogether reddens here and nowhere else.
+##   C. THE FLUSH HAD SOMETHING TO FLUSH. Without it, B is `0 == 0` on a vessel
+##      with no walls, which is precisely the shape §4 warns about.
+const STAGED_COLLIDER_BRICKS := 1200
+
+var _watch_walk: CollisionObject3D = null
+var _watch_world_space := RID()
+var _watch_frames := 0
+var _watch_no_space := 0
+var _watch_no_slab := 0
+var _interactive_snapshot: Dictionary = {}
+
+
+func _test_staged_collision_is_delivered_and_never_absent() -> void:
+	var grid := HullRegistry.make_grid(HULL_ID)
+	var layout := _fill_blocks(grid, STAGED_COLLIDER_BRICKS)
+	var placed := layout.count()
+	_check(
+		placed > DeckFitout.LARGE_LAYOUT_THRESHOLD,
+		"the collision fixture is over the staging threshold (%d bricks > %d)"
+		% [placed, DeckFitout.LARGE_LAYOUT_THRESHOLD],
+	)
+	var boat := VesselSpawn.instantiate(HULL_ID, {"hull_id": HULL_ID, "cells": {}}) as BoatBody
+	if not _t.check("a vessel spawned for the staged collision check", boat != null):
+		return
+	add_child(boat)
+	await get_tree().physics_frame
+	await get_tree().physics_frame
+	_watch_walk = boat.get_walk_deck() as CollisionObject3D
+	if not _t.check("the staged vessel has a WalkDeck body", _watch_walk != null):
+		boat.queue_free()
+		return
+	var rid := _watch_walk.get_rid()
+	var world := _watch_walk.get_world_3d()
+	_watch_world_space = world.space if world != null else RID()
+	_check(
+		_watch_world_space.is_valid()
+		and PhysicsServer3D.body_get_space(rid) == _watch_world_space,
+		"the WalkDeck is in the world's space before the staged fit-out begins",
+	)
+	_watch_frames = 0
+	_watch_no_space = 0
+	_watch_no_slab = 0
+	_interactive_snapshot = {}
+
+	DeckFitout.apply(boat, layout, grid, "general_vessel")
+	var job := boat.get_node_or_null(DeckFitout.FITOUT_JOB)
+	if not _t.check("the staged fit-out dispatched a job", job != null):
+		boat.queue_free()
+		return
+	job.connect("readiness_changed", _snapshot_at_interactive)
+
+	for _frame in range(20000):
+		if DeckFitout.readiness_of(boat) >= DeckFitout.READINESS_INTERACTIVE:
+			break
+		if boat.get_node_or_null(DeckFitout.FITOUT_JOB) == null:
+			break
+		_sample_walk_deck()
+		await get_tree().physics_frame
+	print(
+		"[staged collision] %d bricks, sampled %d physics frames of the fit-out: "
+		% [placed, _watch_frames]
+		+ "%d out of the world's space, %d without an enabled deck slab"
+		% [_watch_no_space, _watch_no_slab]
+	)
+	_check(
+		_watch_frames >= 8,
+		"the staged fit-out was sampled across many frames (%d) — a run that "
+		% _watch_frames
+		+ "finished in one frame would make the sampling below vacuous",
+	)
+	_check(
+		_watch_no_space == 0,
+		"the WalkDeck stayed in the world's space on every frame of the staged "
+		+ "fit-out (%d of %d frames out of it)" % [_watch_no_space, _watch_frames],
+	)
+	_check(
+		_watch_no_slab == 0,
+		"the WalkDeck's deck slab stayed present and enabled on every frame of "
+		+ "the staged fit-out (%d of %d frames without it)"
+		% [_watch_no_slab, _watch_frames],
+	)
+
+	var expected := _count_expected_brick_colliders(grid, layout)
+	_check(
+		expected > 8,
+		"the staged collision fixture emits colliders to count (%d)" % expected,
+	)
+	_check(
+		not _interactive_snapshot.is_empty(),
+		"the job announced INTERACTIVE readiness (the snapshot below was taken)",
+	)
+	if not _interactive_snapshot.is_empty():
+		_check(
+			bool(_interactive_snapshot.get("space_is_world", false)),
+			"the staged fit-out reaches INTERACTIVE with the WalkDeck in THE "
+			+ "WORLD'S space (body %s, world %s)"
+			% [
+				str(_interactive_snapshot.get("space", RID())),
+				str(_watch_world_space),
+			],
+		)
+		_t.equal(
+			"the staged fit-out reaches INTERACTIVE with every brick collider "
+			+ "already on the body, in the same call stack",
+			int(_interactive_snapshot.get("brick_shapes", -1)),
+			expected,
+		)
+	_t.equal(
+		"the closing flush moved every staged collider onto the body",
+		int(boat.get_meta("fitout_staged_colliders_flushed", -1)),
+		expected,
+	)
+	## The scene-tree half of the same statement. A shape count with no node
+	## behind it, or a node the physics server never heard of, are both
+	## walk-through — `_count_brick_colliders` reads the tree,
+	## `_interactive_snapshot.brick_shapes` reads PhysicsServer3D.
+	_t.equal(
+		"every staged collider is a WalkDeck child once the fit-out completes",
+		_count_brick_colliders(boat),
+		expected,
+	)
+	_t.equal(
+		"no collider is left behind in the staging window",
+		boat.walk_collider_staged_count(),
+		0,
+	)
+	boat.queue_free()
+	await get_tree().process_frame
+
+
+## The net under staging, and the reason it needs one. A collider batch is
+## illegal across a frame boundary and `BoatBody._physics_process` forces one
+## closed; a staging window is LEGAL across frames, so that rule cannot police
+## it. What replaces it is ownership — and the failure it catches is silent:
+## colliders built into an orphan node, a vessel with no walls, no error
+## anywhere. `BoatBody.begin_walk_collider_staging`'s header claims the flush
+## happens; REALITY.md §3c says go and find the check that holds it to that.
+##
+## Driven through the public API rather than through a fit-out, because the
+## trigger is a fit-out that DIED — there is no way to reach it from a job that
+## is behaving.
+func _test_abandoned_staging_window_is_flushed() -> void:
+	var boat := _new_boat()
+	await get_tree().physics_frame
+	await get_tree().physics_frame
+	var walk := boat.get_walk_deck() as CollisionObject3D
+	if not _t.check("the watchdog fixture has a WalkDeck body", walk != null):
+		boat.queue_free()
+		return
+	var rid := walk.get_rid()
+	var before := PhysicsServer3D.body_get_shape_count(rid)
+	var owner_node := Node.new()
+	owner_node.name = "PretendFitoutJob"
+	boat.add_child(owner_node)
+	boat.begin_walk_collider_staging(owner_node)
+	boat.add_walk_brick_collider("watchdog_0", Vector3(0.0, 1.0, 0.0), Vector3.ONE, 0.0)
+	boat.add_walk_brick_collider("watchdog_1", Vector3(0.0, 1.0, 2.0), Vector3.ONE, 0.0)
+	_t.equal("colliders built in a staging window are not on the body yet",
+		PhysicsServer3D.body_get_shape_count(rid), before)
+	_t.equal("...they are held in the window", boat.walk_collider_staged_count(), 2)
+
+	## The window survives frames while its owner lives — otherwise the watchdog
+	## would be closing every staged fit-out on its first frame and this whole
+	## design would be inert.
+	await get_tree().physics_frame
+	await get_tree().physics_frame
+	_t.equal("a staging window whose owner is alive survives a frame boundary",
+		boat.walk_collider_staged_count(), 2)
+
+	boat.remove_child(owner_node)
+	owner_node.free()
+	await get_tree().physics_frame
+	await get_tree().physics_frame
+	_t.equal("an abandoned staging window is flushed, not stranded",
+		boat.walk_collider_staged_count(), 0)
+	_t.equal("...and its colliders land on the body",
+		PhysicsServer3D.body_get_shape_count(rid), before + 2)
+	boat.queue_free()
+	await get_tree().process_frame
+
+
+func _sample_walk_deck() -> void:
+	if _watch_walk == null or not is_instance_valid(_watch_walk):
+		return
+	_watch_frames += 1
+	if PhysicsServer3D.body_get_space(_watch_walk.get_rid()) != _watch_world_space:
+		_watch_no_space += 1
+	var slab := _watch_walk.get_node_or_null(
+		BoatBody.WALK_DECK_COLLIDER_NAME
+	) as CollisionShape3D
+	if slab == null or slab.disabled or slab.shape == null:
+		_watch_no_slab += 1
+
+
+## Runs INSIDE `DeckFitoutJob._set_readiness`'s emission — the staged equivalent
+## of §5's "nothing awaited". Every number here is read from PhysicsServer3D in
+## the job's own call stack, before `_process` has returned and before any frame
+## boundary, so a flush that is deferred by even one idle frame is visible.
+func _snapshot_at_interactive(readiness: int) -> void:
+	if readiness != DeckFitout.READINESS_INTERACTIVE:
+		return
+	if _watch_walk == null or not is_instance_valid(_watch_walk):
+		return
+	var rid := _watch_walk.get_rid()
+	var brick_shapes := 0
+	for i in PhysicsServer3D.body_get_shape_count(rid):
+		var owner_node := _watch_walk.shape_owner_get_owner(
+			_watch_walk.shape_find_owner(i)
+		) as Node
+		if owner_node != null and str(owner_node.name).begins_with(
+			BoatBody.BRICK_COL_PREFIX
+		):
+			brick_shapes += 1
+	var space := PhysicsServer3D.body_get_space(rid)
+	_interactive_snapshot = {
+		"space": space,
+		"space_is_world": space.is_valid() and space == _watch_world_space,
+		"shapes": PhysicsServer3D.body_get_shape_count(rid),
+		"brick_shapes": brick_shapes,
+	}
+
+
+## How many colliders this layout OUGHT to produce, derived from the catalogue
+## rather than read back off the thing under test. `block` carries none of the
+## tags `DeckFitout.mount_item_gameplay` diverts, so it is one box per brick —
+## but deriving it means a fixture that later gains a door or a stair still
+## states the right number instead of quietly agreeing with whatever was built.
+func _count_expected_brick_colliders(grid: DeckGrid, layout: BrickLayout) -> int:
+	var n := 0
+	for item_raw in layout.iter_primary_cells():
+		var item := item_raw as Dictionary
+		var cell: Vector3i = item.get("cell", Vector3i(-1, -1, -1))
+		var brick_id := str(item.get("brick_id", ""))
+		if not grid.in_bounds(cell) or not BrickCatalog.has(brick_id):
+			continue
+		if BrickCatalog.has_tag(brick_id, "text"):
+			continue
+		if (
+			BrickCatalog.has_tag(brick_id, "door")
+			or BrickCatalog.has_tag(brick_id, "stairs")
+			or BrickCatalog.has_tag(brick_id, "helm")
+			or BrickCatalog.has_tag(brick_id, "light")
+		):
+			continue
+		n += 1
+	return n
 
 
 func _count_brick_colliders(boat: BoatBody) -> int:

@@ -22,6 +22,12 @@ extends Node
 ##   commit the whole skin                 3.2 ms at 3000 bricks (one material
 ##                                         bucket), + 0.0 ms to parent it
 ##
+##   flush the staged colliders             17.1 ms at 3000 bricks, 23.1 at 4000
+##                                         — linear, and the ONE moment in a
+##                                           staged fit-out when the WalkDeck
+##                                           leaves its physics space. See
+##                                           `_open_collider_stage`.
+##
 ## `_prepare_gameplay` is the exception and is DECLARED as one: a single
 ## `VesselCompliance.validate` call — 113 ms at 3000 bricks, 28x this job's own
 ## budget — with no resumable seam anywhere in it. 72% of that is
@@ -80,8 +86,21 @@ var indivisible_steps: Array[Dictionary] = []
 ## its whole loop into one call would cost the same milliseconds on a fast box
 ## and only this counter would notice.
 var steps_by_phase: Dictionary = {}
+## Phase name -> total usec spent inside `_step` for that phase. Wall clock, so
+## machine-dependent in absolute terms (§ the header) — but it brackets only the
+## job's own GDScript, never the frame's draw, so the SHAPE of `usec_by_phase`
+## against brick count is the one thing here that says the same on any box. It
+## exists because "the staged fit-out is slow" was true for years without anyone
+## being able to say WHICH phase, and a fix aimed at the wrong phase measures a
+## real improvement on the wrong half.
+var usec_by_phase: Dictionary = {}
 var exterior_ready_usec: int = 0
 var interactive_ready_usec: int = 0
+## How many colliders the closing flush moved from the staging node onto the
+## WalkDeck. Zero after a complete fit-out of a vessel with colliders means the
+## flush ran on an empty window, which is the failure staging can produce that
+## the old code could not: colliders built and never delivered.
+var staged_colliders_flushed: int = 0
 
 var _boat: BoatBody
 var _root: Node3D
@@ -104,6 +123,7 @@ var _started_usec := 0
 var _gameplay_prepared := false
 var _skin: VesselSkinBaker.Session = null
 var _mass_batch_open := false
+var _collider_stage_open := false
 var _frame_indivisible_usec := 0
 
 
@@ -160,6 +180,7 @@ func _process(_delta: float) -> void:
 		var unit_started := Time.get_ticks_usec()
 		var more := _step()
 		var unit_elapsed := Time.get_ticks_usec() - unit_started
+		usec_by_phase[phase_name] = int(usec_by_phase.get(phase_name, 0)) + unit_elapsed
 		if _frame_indivisible_usec == 0 and unit_elapsed > max_unit_usec:
 			max_unit_usec = unit_elapsed
 			max_unit_phase = Phase.keys()[int(unit_phase)]
@@ -181,6 +202,8 @@ func _publish_timings() -> void:
 	_boat.set_meta("fitout_max_unit_phase", max_unit_phase)
 	_boat.set_meta("fitout_indivisible_steps", indivisible_steps.duplicate(true))
 	_boat.set_meta("fitout_steps_by_phase", steps_by_phase.duplicate())
+	_boat.set_meta("fitout_usec_by_phase", usec_by_phase.duplicate())
+	_boat.set_meta("fitout_staged_colliders_flushed", staged_colliders_flushed)
 
 
 ## Records a step that has no resumable seam. Declaring one is a design
@@ -241,6 +264,7 @@ func _step() -> bool:
 				return true
 			if _cursor < _all_items.size():
 				_open_mass_batch()
+				_open_collider_stage()
 				_mount_gameplay(_all_items[_cursor] as Dictionary)
 				_cursor += 1
 				return true
@@ -264,6 +288,17 @@ func _step() -> bool:
 						_declared,
 						_mount_state,
 					)
+			)
+			## Declared as its own step rather than folded into the one above,
+			## because it is the whole subject of the staging change, and an
+			## allowance nobody can attribute is an allowance nobody can shrink.
+			## `finish_fitout` runs FIRST: it mounts pads and holds, and any
+			## collider they ever come to emit has to land in the same flush as
+			## the bricks', or the vessel would gain that one box afterwards
+			## through the in-space path this exists to avoid.
+			_run_indivisible(
+				"BoatBody.flush_walk_collider_staging",
+				_close_collider_stage,
 			)
 			interactive_ready_usec = Time.get_ticks_usec() - _started_usec
 			_boat.set_meta("fitout_interactive_ready_usec", interactive_ready_usec)
@@ -308,11 +343,49 @@ func _close_mass_batch() -> void:
 		_boat.end_mass_batch()
 
 
+## The staged path's answer to the quadratic the synchronous path shed a wave
+## ago. `apply_sync` wraps its whole mount loop in `begin/end_walk_collider_batch`
+## and hands the body back complete in one call; this job's mount loop is spread
+## over hundreds of frames, and a batch left open across one is a vessel a player
+## falls through — `BoatBody._physics_process` forces exactly that case closed.
+##
+## So the colliders are built into a detached node instead and moved onto the
+## body in one synchronous flush at the end. Measured on this box, the GAMEPLAY
+## phase's own `_step` time at 4000 bricks: 9416 ms -> 990 ms, and the curve goes
+## from x15.8 to x4.9 across a 4x brick range. See
+## `BoatBody.begin_walk_collider_staging` for the full table and for the two
+## options this was chosen over.
+##
+## Opened lazily at the first mount for the same reason the mass batch is: a
+## remote replica stops after EXTERIOR_VISUALS and never mounts anything, and a
+## window opened for it would be one nobody ever closes.
+func _open_collider_stage() -> void:
+	if _collider_stage_open or _boat == null or not is_instance_valid(_boat):
+		return
+	_boat.begin_walk_collider_staging(self)
+	_collider_stage_open = true
+
+
+func _close_collider_stage() -> void:
+	if not _collider_stage_open:
+		return
+	_collider_stage_open = false
+	if _boat != null and is_instance_valid(_boat):
+		staged_colliders_flushed = _boat.end_walk_collider_staging()
+
+
 ## A cancelled fitout (reapply, despawn) must not leave the boat batched open —
 ## its mass would never refresh again. `DeckFitout.clear` removes this node,
 ## which lands here.
 func _exit_tree() -> void:
 	_close_mass_batch()
+	## FLUSH, not discard. A cancelled fit-out's colliders are about to be thrown
+	## away by `DeckFitout.clear`'s `clear_walk_brick_colliders()` anyway, so the
+	## cost of flushing is one wasted linear pass — while the cost of discarding
+	## is a vessel with no brick collision on any path that frees this job without
+	## clearing, and "no caller does that today" is how the batch latch was argued
+	## safe too.
+	_close_collider_stage()
 
 
 func _prepare_gameplay() -> void:

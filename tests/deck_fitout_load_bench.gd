@@ -20,6 +20,13 @@ extends Node
 ##           of Mesa, not of DeckFitout. It is printed and not budgeted, and the
 ##           right way to bound staged cost here is the two lines above.
 ##
+##           REALITY.md §4d-5, a quoted number rots faster than the property it
+##           illustrates: that 150,688 ms was taken before the merged skin landed
+##           on this path and before collider staging did. Re-measured 2026-08-15
+##           on the same box and the same fixture, n=3000 now reads **3768 ms**.
+##           The PROPERTY the line above states is unchanged and still the reason
+##           not to budget it — most of those 3768 ms is still llvmpipe.
+##
 ## THE FRAME BUDGET IS ASSERTED AS DIVISIBILITY, NOT AS A MILLISECOND WALL.
 ## `DeckFitoutJob._process` checks the clock BEFORE starting each unit of work
 ## and never during one. The relative form of that contract — "a frame overruns
@@ -44,7 +51,20 @@ const STAGED_SOFT_FRAME_MS := 100.0
 ## The steps `DeckFitoutJob` declares it cannot subdivide. Pinned as a SET, not
 ## as a count: a step that leaves this list is a fix, a step that joins it is a
 ## design decision, and either way somebody has to come and change this line.
-const INDIVISIBLE_STEPS := ["VesselCompliance.validate", "DeckFitout.finish_fitout"]
+## `BoatBody.flush_walk_collider_staging` joined this list deliberately, and it
+## is the one entry here that is a FIX rather than a debt: the staged path used
+## to add every collider straight onto a WalkDeck that was in a physics space,
+## which made Jolt rebuild the whole compound per box — 9416 ms of GAMEPLAY at
+## 4000 bricks against 990 ms with the body out of a space, x15.8 against x4.9
+## across a 4x brick range. The colliders are now built detached and moved on in
+## one synchronous flush, and that flush is the step. It is declared instead of
+## absorbed because it is the only moment in a staged fit-out when the WalkDeck
+## leaves its space, and an un-named step is one nobody can watch grow.
+const INDIVISIBLE_STEPS := [
+	"VesselCompliance.validate",
+	"DeckFitout.finish_fitout",
+	"BoatBody.flush_walk_collider_staging",
+]
 const TestReport := preload("res://tests/support/test_report.gd")
 
 var _t := TestReport.new("deck_fitout_load_bench", false)
