@@ -57,15 +57,60 @@ func set_brick(cell: Vector3i, brick_id: String, yaw: int = 0, color: Variant = 
 	return true
 
 
+## Cardinal quarter-turns a brick's footprint is rotated by. Grid cells do not
+## rotate at 45°, so a 45° brick occupies the cells of its nearest cardinal —
+## which is what `_place_surface`, `_place_content` and `fits_in_grid` must all
+## agree on, hence one function rather than three copies of the arithmetic.
+static func yaw_steps_of(brick_id: String, yaw: int) -> int:
+	var yaw_n := norm_yaw(yaw, BrickCatalog.yaw_step_of(brick_id))
+	return int(round(float(yaw_n) / 90.0)) % 4
+
+
+## Every cell this brick would occupy at `origin` lies inside `building_grid`.
+static func fits_in_grid(
+		building_grid: BuildingGrid,
+		origin: Vector3i,
+		brick_id: String,
+		yaw: int,
+) -> bool:
+	if building_grid == null:
+		return true
+	var fp := BrickCatalog.footprint_of(brick_id)
+	for c in building_grid.footprint_cells(origin, fp, yaw_steps_of(brick_id, yaw)):
+		if not building_grid.in_bounds(c):
+			return false
+	return true
+
+
+## `building_grid`, when given, is the volume the CALLER is authoring in, and a
+## placement that would leave it is refused. That is the contract
+## `BrickLayout.place_footprint` has had all along; this class declared the same
+## parameter, named it `_building_grid`, and read it nowhere — so a blueprint
+## editor holding an 8-wide volume could place at x = 9 and be told it worked.
+##
+## Pass `null` to author freeform. Then the layout's OWN volume grows to fit
+## (`ensure_fit_cells`), which is deliberate: `building_brick_editor.gd` passes
+## null on every call, `refit_volume_to_content` does the same on load, and
+## `_check_volume_growth` in `building_blueprint_test` asserts the invariant that
+## growth keeps existing bricks at their world position.
+##
+## The check runs BEFORE `_place_surface` / `_place_content`, and that ordering is
+## load-bearing rather than tidy: `ensure_fit_cells` SHIFTS every stored cell to
+## make room, so a refusal issued after it had run would return false having
+## already moved the caller's entire building sideways. Measured on the house
+## `building_blueprint_test` authors: one rejected placement at (9,0,0) moved the
+## grid 8 -> 12 and the yawed block from (1,1,1) to (3,1,1).
 func place_footprint(
 		origin: Vector3i,
 		brick_id: String,
 		yaw: int,
-		_building_grid: BuildingGrid = null,
+		building_grid: BuildingGrid = null,
 		color: Variant = null,
 		props: Dictionary = {},
 ) -> bool:
 	if not BrickCatalog.has(brick_id):
+		return false
+	if not fits_in_grid(building_grid, origin, brick_id, yaw):
 		return false
 	if is_surface_brick(brick_id):
 		return _place_surface(origin, brick_id, yaw, color)
@@ -113,7 +158,7 @@ func _place_surface(origin: Vector3i, brick_id: String, yaw: int, color: Variant
 	## Floors occupy the cell as a underlay — may share with walls/props.
 	var fp := BrickCatalog.footprint_of(brick_id)
 	var yaw_n := norm_yaw(yaw, BrickCatalog.yaw_step_of(brick_id))
-	var yaw_steps := int(round(float(yaw_n) / 90.0)) % 4
+	var yaw_steps := yaw_steps_of(brick_id, yaw)
 	var tentative := grid().footprint_cells(origin, fp, yaw_steps)
 	origin += ensure_fit_cells(tentative)
 	var g := grid()
@@ -152,7 +197,7 @@ func _place_content(
 ) -> bool:
 	var fp := BrickCatalog.footprint_of(brick_id)
 	var yaw_n := norm_yaw(yaw, BrickCatalog.yaw_step_of(brick_id))
-	var yaw_steps := int(round(float(yaw_n) / 90.0)) % 4
+	var yaw_steps := yaw_steps_of(brick_id, yaw)
 	var tentative := grid().footprint_cells(origin, fp, yaw_steps)
 	origin += ensure_fit_cells(tentative)
 	var g := grid()

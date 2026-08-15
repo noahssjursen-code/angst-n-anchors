@@ -1725,9 +1725,71 @@ file is not red by construction. It belongs beside decision #1 below.
    **3.6× slower** (house 0.0435 → 0.1570 ms), so the field copy is a cost decision
    recorded in the header and **not asserted** — a wall-clock threshold on llvmpipe
    would fail for the weather. **Nothing in the gate holds that field copy.**
-2. **`BuildingLayout.place_footprint` ignores its `_building_grid`** — 4/117 in
-   `building_blueprint_test`. `BrickLayout`'s equivalent argument IS load-bearing
-   and does reject out-of-bounds. Two sibling classes, contradictory, one wrong.
+2. ~~**`BuildingLayout.place_footprint` ignores its `_building_grid`**~~ — **FIXED
+   2026-08-15, and the survey it prompted found a FAMILY of nine.**
+
+   All four `building_blueprint_test` reds were **one** defect, established by
+   measurement rather than assumed: placing at (9,0,0) in an 8-wide grid returned
+   `true`, grew `grid_size` 8→12 and **shifted every stored cell by +2**, so the block
+   authored at (1,1,1) ended up at (3,1,1). "got 8 children" was not a visual defect —
+   8 is exactly 6 primaries + `BuildingLighting` + `Collision`. `PASS (132)` from
+   4/119; `building_cache_visual_test` still PASS (34).
+
+   The check runs **before** `ensure_fit_cells`, and that ordering is load-bearing
+   rather than tidy: a refusal issued afterwards returns `false` having already moved
+   the caller's whole building sideways. Mutation M2 (same check, moved after) reddens
+   2/132.
+
+   **The mutation that matters is M3, and it is a finding.** The obvious fix — bounds-
+   check the **origin cell** — **passed the entire original 119-check file**, because
+   the only rejection it exercised was a 1×1×1 block one cell past the width, where
+   origin and footprint are the same cell. **A brick is not a point.** Thirteen new
+   checks now cover a 2×3×1 door whose origin is in bounds but whose footprint leaves
+   on X, on Y and on Z when yawed — and the *same origin* at 90° must be **accepted**,
+   which holds the yaw arithmetic in the accepting direction too. Reproduced
+   independently: origin-only reddens "no refused placement stored a cell" and "no
+   refused placement grew the volume".
+
+   **Shipped data rejected by the new validation: zero.** `warehouse.json` has 780
+   cells, 0 outside its declared `grid_size`, and loads through `from_dict`, not
+   `place_footprint`; the only production caller passes `null` (freeform-and-grow) on
+   every call.
+
+2b. **NINE unvalidated placement paths. One fixed, eight named.** Two grid classes
+   exist (`BuildingGrid`, `DeckGrid`), which bounds the survey;
+   `tests/_placement_grid_survey.{gd,tscn}` is the instrument and every row is a
+   measurement.
+
+   **The worst of the eight, measured in its worst form — a legally registered vessel
+   with nothing on it.** A `BrickLayout` carrying every one of the eight bricks
+   `general_vessel` requires (helm, three nav lights, four bollards), authored at
+   20×56 indices and written onto a **10×30** hull:
+
+   ```
+   bricks stored 8, of which OFF-GRID 8
+   VesselCompliance.validate   ok=true  errors [] warnings []  8/8 legal requirements
+   VesselOutfit.validate       ok=true  errors []
+   DeckFitout visuals drawn    0 of 8   (in-bounds control -> drawn)
+   ```
+
+   **A General Vessel with no helm, no navigation lights and no mooring points
+   anywhere on it, certified green.** Three failures compound: `BrickLayout.set_brick`
+   takes no grid and returns `void` so it *cannot* refuse; `VesselCompliance._measure`
+   never consults the grid; and `DeckFitout._item_is_valid` — the one component that
+   knows — **drops the brick silently, destroying the evidence instead of reporting
+   it.** Not fixed here: the setter fix is a signature change touching
+   `_prebuilt_gen.gd`, which another wave owns. The starter-vessel wave's `OFF-DECK`
+   guard lives in the *generator*, which is a second derivation covering four files;
+   the one-derivation fix is to move it into the setter.
+
+   Also named and left: `BrickLayout.from_dict` trusts a save file's cells verbatim,
+   so an owned vessel is never re-checked against its hull; `StructurePlan.add_wall/
+   add_deck/add_stair/add_piece/add_item` refuse nothing and the baker **draws and
+   collides** whatever it is given (strip-tested: bake AABB 4×4 m → **910×910 m**,
+   colliders 1 → 17); `add_container_pad(…, null)` skips its own check (latent — both
+   production callers pass a grid); and `BuildingRules.validate`'s bounds check
+   re-reads the *already-grown* grid, so it can never fire for anything built through
+   `place_footprint`, and is a warning rather than an error.
 3. ~~**`land_field`: does OPEN_WATER promise a distance?**~~ — **BROKEN CHECK over a
    REAL world change. Fixed 2026-08-15, and the history recorded here was wrong.**
    This entry said the bound had no derivation and framed it as a choice about world

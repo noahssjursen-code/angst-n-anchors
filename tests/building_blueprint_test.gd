@@ -59,6 +59,7 @@ func _ready() -> void:
 func _run(t: TestReport) -> void:
 	_check_vocabulary(t)
 	_check_placement_and_bake(t)
+	_check_grid_argument(t)
 	_check_catalog_gate(t)
 	_check_grid_math(t)
 	_check_layout_bookkeeping(t)
@@ -121,36 +122,32 @@ func _check_placement_and_bake(t: TestReport) -> void:
 	t.check("erasing the stacked cell reports a removal", layout.erase_footprint_at(Vector3i(0, 0, 4)))
 	var floor_left := layout.get_brick(Vector3i(0, 0, 4))
 	t.check("erase strips content first, keeps floor", BuildingLayout.entry_is_surface_only(floor_left))
-	## ── DIAGNOSED RED, and the root cause of the three checks that follow ──────
-	## Measured 2026-08-14 (probe: place the house, then place at (9,0,0) in an
-	## 8-wide grid):
+	## ── SETTLED 2026-08-15. Kept because the diagnosis is the reusable part. ───
+	## This check, and the three below it, were red for days as ONE defect, and
+	## that was established by measurement rather than assumed. Probe: author the
+	## house, then place at (9,0,0) in an 8-wide grid.
 	##
-	##     before  grid_size=(8,6,8)   primaries=5
-	##     after   returned TRUE       grid_size=(12,6,8)  primaries=6
+	##     before  grid_size=(8,6,8)   primaries=5   fitout children=7
+	##     after   returned TRUE       grid_size=(12,6,8)  primaries=6  children=8
 	##
-	## `BuildingLayout.place_footprint` declares its fourth parameter
+	## `BuildingLayout.place_footprint` declared its fourth parameter
 	## `_building_grid: BuildingGrid = null` — underscore-prefixed and never read.
-	## Neither `_place_content` nor `_place_surface` consults the caller's grid;
+	## Neither `_place_content` nor `_place_surface` consulted the caller's grid;
 	## both call `ensure_fit_cells`, which GROWS the layout's own volume (8 -> 12
-	## on X) and shifts every existing cell by +2. So this placement is accepted,
-	## and the shift is why the next two checks fail too: `iter_primary_cells()`
-	## returns 6 instead of 5, and the yawed block that was authored at (1,1,1) is
-	## now at (3,1,1), leaving (1,1,1) empty.
+	## on X) and shifts every existing cell by +2. So the placement was accepted,
+	## and that single shift is the whole of the other three reds:
+	## `iter_primary_cells()` returned 6 not 5, the yawed block authored at (1,1,1)
+	## moved to (3,1,1) leaving (1,1,1) empty, and the bake drew a sixth visual.
+	## The "got 8 children" red in particular is NOT a `BuildingCache`/visual
+	## defect, which is what its wording invites you to assume — 8 is exactly
+	## 6 primaries + lighting + collision.
 	##
-	## NOT "fixed" here, because that would mean editing `scripts/port/
-	## building_layout.gd`, which this wave does not own, and because it is a real
-	## design question rather than an arithmetic slip: the growth is deliberate
-	## (`_check_volume_growth` below asserts it, `refit_volume_to_content` does it
-	## on load, and `building_brick_editor.gd` passes `null` for the grid on every
-	## call). Only `shipyard_brick_editor.gd` passes a grid, and that is the OTHER
-	## class — `BrickLayout.place_footprint`, whose grid argument is load-bearing
-	## and does reject out-of-bounds cells.
-	##
-	## So the two are contradictory and one of them is wrong (REALITY.md §4a):
-	## either `BuildingLayout` must honour the grid a caller hands it, or the dead
-	## parameter must go and this check with it. Leaving the check red states the
-	## contradiction instead of picking a side quietly. It is not weakened, not
-	## inverted, and not skipped.
+	## Fixed by making the parameter load-bearing: `fits_in_grid` refuses any
+	## placement whose footprint leaves the grid the caller passed, which is the
+	## contract `BrickLayout.place_footprint` always had. `null` still means
+	## freeform-and-grow, which is what `building_brick_editor.gd` passes on every
+	## call and what `_check_volume_growth` below asserts. See `_check_grid_argument`
+	## for the properties that hold the fix.
 	t.check(
 		"placement outside the grid is rejected",
 		not layout.place_footprint(Vector3i(9, 0, 0), "block", 0, grid),
@@ -184,9 +181,9 @@ func _check_placement_and_bake(t: TestReport) -> void:
 	## (REALITY.md §4a), and here the one with the hand-written total is the wrong
 	## one.
 	##
-	## The 5 is NOT relaxed — it is the house authored above, stated absolutely —
-	## so this check still fails while `place_footprint` grows the volume and adds
-	## a sixth visual. It goes green when that is settled, not before.
+	## The 5 is NOT relaxed — it is the house authored above, stated absolutely.
+	## It failed while `place_footprint` grew the volume and added a sixth visual,
+	## and it went green when that was settled, which is what it said it would do.
 	t.check(
 		"one visual per primary cell plus lighting and the collision root (got %d children)"
 		% fitout.get_child_count(),
@@ -204,6 +201,72 @@ func _check_placement_and_bake(t: TestReport) -> void:
 		if not t.check("blueprint %s loads" % blueprint_id, loaded != null):
 			continue
 		t.check("blueprint %s reports its own id" % blueprint_id, loaded.blueprint_id == blueprint_id)
+
+
+## ── The grid argument, stated as a property rather than as one coordinate ────
+## Written because the obvious fix to `place_footprint` — bounds-check the ORIGIN
+## cell — passes every check in `_check_placement_and_bake` above. Measured: with
+## `fits_in_grid` reduced to `building_grid.in_bounds(origin)` the file reports
+## **PASS (119)**, because the only rejection it exercises is a 1×1×1 block one
+## cell past the width, where origin and footprint are the same cell. A brick is
+## not a point, so the property is "no cell this brick would occupy is outside the
+## grid", and it takes a MULTI-CELL brick on each axis to say so.
+##
+## The 2×3×1 door is the instrument: at (7,0,1) it spans x = 7..8 in an 8-wide
+## grid and must be refused, and the SAME origin at 90° spans x = 7, z = 1..2 and
+## must be accepted — so the pair also holds `yaw_steps_of`, which a footprint
+## check that ignored yaw would fail in the accepting direction rather than the
+## refusing one.
+func _check_grid_argument(t: TestReport) -> void:
+	var layout := BuildingLayout.new()
+	layout.grid_size = Vector3i(8, 6, 8)
+	var grid := layout.grid()
+
+	t.check(
+		"set_brick refuses a cell outside its own volume",
+		not layout.set_brick(Vector3i(8, 0, 0), "block"),
+	)
+	t.check("a refused set_brick stores nothing", layout.count() == 0)
+
+	t.check(
+		"a 1×1×1 brick one cell past the width is refused",
+		not layout.place_footprint(Vector3i(8, 0, 0), "block", 0, grid),
+	)
+	t.check(
+		"an in-bounds origin whose footprint leaves the grid on X is refused",
+		not layout.place_footprint(Vector3i(7, 0, 1), "block_door", 0, grid),
+	)
+	t.check(
+		"an in-bounds origin whose footprint leaves the grid on Y is refused",
+		not layout.place_footprint(Vector3i(1, 4, 1), "block_door", 0, grid),
+	)
+	t.check(
+		"an in-bounds origin whose footprint leaves the grid on Z is refused",
+		not layout.place_footprint(Vector3i(1, 0, 7), "block_door", 90, grid),
+	)
+	t.check("no refused placement stored a cell", layout.count() == 0)
+	## The refusal must happen BEFORE `ensure_fit_cells`, which shifts every stored
+	## cell to make room. A check that ran after it would return false having
+	## already moved the caller's building sideways — measured on the house above:
+	## grid 8 -> 12 and the yawed block from (1,1,1) to (3,1,1).
+	t.check("no refused placement grew the volume", layout.grid_size == Vector3i(8, 6, 8))
+
+	## Same origin, different facing: the footprint rotates, so this one fits.
+	t.check(
+		"the same door yawed a quarter turn fits and is accepted",
+		layout.place_footprint(Vector3i(7, 0, 1), "block_door", 90, grid),
+	)
+	t.check("the accepted door occupies its six cells", layout.count() == 6)
+	t.check("it spans Z, not X", layout.has_cell(Vector3i(7, 0, 2)))
+
+	## A null grid is the freeform contract the building editor uses: grow to fit.
+	var freeform := BuildingLayout.new()
+	freeform.grid_size = Vector3i(8, 6, 8)
+	t.check(
+		"a null grid still grows the volume to fit",
+		freeform.place_footprint(Vector3i(9, 0, 0), "block", 0, null),
+	)
+	t.check("and the volume grew", freeform.grid_size.x > 8)
 
 
 ## Everything downstream of the catalog refuses ids it cannot resolve. These
