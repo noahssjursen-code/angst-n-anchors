@@ -877,37 +877,49 @@ const PLATE_MAX_SEGMENTS := 16
 ## 0.05 m is half the plating and just over the 0.045 m half-thickness of the
 ## plate itself. (This paragraph said "0.03 m is a third of the plating" against
 ## a constant that has always been 0.05 — a comment disagreeing with the value
-## beside it, which is the softest artefact in a codebase disagreeing with the
-## load-bearing one. CONVENTIONS.md 3a.)
+## beside it. CONVENTIONS.md 7: documentation drift is a defect.)
 ##
 ## ── WHAT IT COSTS, MEASURED, AND WHY THE VALUE IS AN OWNER DECISION ─────────
 ##
 ## The curve, from `tests/_plate_cost_probe.gd`, as collect_colliders() boxes and
 ## the worst box PROUD of its slab. "grid" is the pre-65b6a0a fixed nu x nv grid
-## at its 0.15 m step; every other row is this adaptive dice.
+## at its 0.15 m step; every other column is this adaptive dice.
 ##
 ##                       grid    0.15    0.10    0.08    0.05
 ##   demo_workboat        359     357     436     500     675   boxes
 ##   trawler_bulwark      760     612     876    1137    2118
 ##   container_feeder    2448    2467    2608    2735    3086
-##   worst proud       0.150   0.126   0.086   0.075   0.050   m
+##   worst proud        0.150   0.126   0.086   0.075   0.050  m
 ##
-## Two things that curve says and a single before/after pair does not:
+## Three things that curve says and a single before/after pair does not:
 ##
 ##  - THE ALGORITHM IS FREE AND THE CONSTANT IS WHAT COSTS. At the SAME 0.15 m
-##    the adaptive dice is 612 boxes to the grid's 760 on the trawler and the
-##    same everywhere else. Every box above the "grid" row is bought by the
+##    the adaptive dice is 612 boxes to the grid's 760 on the trawler and level
+##    everywhere else. Every box above the "grid" column is bought by the
 ##    constant, not by the rewrite.
 ##  - THE 150 M HULL IS NOT THE WORST CASE. `probe_container_feeder` is 1.26x at
 ##    0.05 where the 28 m trawler is 2.79x, because 251 of its containers are one
 ##    axis-aligned plate each and dice to one box whatever this says. Plate-heavy
 ##    superstructure is what this constant prices, not length.
+##  - THE KNEE IS AROUND 0.08. Trawler: 0.15 -> 0.08 removes 58% of the phantom
+##    for 1.9x the boxes; 0.08 -> 0.05 removes another 13 points for another
+##    1.9x.
 ##
 ## The cost is superlinear in the box count and that is not this file's doing:
 ## putting boxes on a body is O(n^2) in Godot, through the scene tree AND through
 ## PhysicsServer3D.body_add_shape (`tests/_collider_build_probe.gd`: 500 boxes
 ## 79 ms, 2000 boxes 1432 ms, 8000 boxes 33.8 s). The feeder's collision costs
-## 2109 ms to build at the grid and 3673 ms at 0.05.
+## 2109 ms to build at the grid and 3673 ms at 0.05; the trawler's, 204 and 1849.
+##
+## THE ALTERNATIVE THIS CONSTANT EXISTS INSTEAD OF is an oriented box — yaw AND
+## pitch — which is EXACT for a planar quad and needs no dice at all. Measured
+## ceiling, by disabling the split: 100 plate boxes on the trawler against 1913,
+## 364 on the feeder against 1217, and zero phantom rather than 0.05 m. It is not
+## free: `_collider_of`'s contract is yaw-only and `yaw_deg` is read at 121 sites
+## under scripts/ and 53 under tests/, `BoatBody.add_walk_brick_collider` sets
+## `rotation_degrees = Vector3(0, yaw, 0)`, and a WARPED plate (a corner off the
+## plane of the other three — structure_plate_test section B builds one) is still
+## not one box, so the dice has to survive alongside it.
 const PLATE_COLLIDER_SLOP := 0.05
 ## Cells one slab may be cut into, whatever the slop asks for — the ceiling the
 ## old 32 x 32 grid had, kept so a pathological quad cannot spend the physics
