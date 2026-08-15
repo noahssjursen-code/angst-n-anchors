@@ -100,8 +100,7 @@ static func apply_plan(
 	## boxes, their sizes, their yaws and their order are untouched.
 	## See BoatBody.begin_walk_collider_batch for the measurement.
 	boat.begin_walk_collider_batch()
-	var _all := StructureBaker.collect_colliders(plan, offset) ## MUT M3
-	for box_variant in _all.slice(0, int(_all.size() * 0.9)):
+	for box_variant in StructureBaker.collect_colliders(plan, offset):
 		var box := box_variant as Dictionary
 		var size: Vector3 = box["size"]
 		## `size` is read in the box's OWN frame, so the yaw the baker drew it

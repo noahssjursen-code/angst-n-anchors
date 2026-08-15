@@ -1066,6 +1066,63 @@ dice makes worse but did not cause, and worth more than any slop value.
   moved no STRUCTURE-PLAN geometry but halved every BRICK. A `railing` is 0.5 m
   tall with a 0.44 m post, knee-high beside the 1.8 m figure.
 
+### COLLISION BUILD IS LINEAR — and the cause was neither the tree nor shape creation
+
+`500 → 8000` boxes (16×): **unbatched ×357.6, batched ×15.6.**
+
+Both "quadratics" were the SAME one: **Jolt rebuilds the body's entire compound
+shape on every `body_add_shape`, and only while the body is in a space.** Out of a
+space, 8000 boxes cost **17.7 ms instead of 17942**. RID reuse bought 1.7× on a
+still-quadratic curve; a trimesh was near-linear but changes what collision *is*,
+and was beaten 17× by the option that doesn't.
+
+`BoatBody.begin_walk_collider_batch()` / `end_walk_collider_batch()` lift the
+WalkDeck out of its space for the loop. Same boxes, same sizes, same yaws, same
+order — **box count untouched, `PLATE_COLLIDER_SLOP` not gone near.** Deliberately
+NOT automatic: a batch closed by `call_deferred` leaves the WalkDeck with no
+collision for the rest of the frame, which is mutation M2.
+
+A second, independent quadratic surfaced once the first was gone: writing
+`_walk_deck.global_transform` notifies every `CollisionShape3D` child, and at 8000
+boxes **1408 ms of 1511 was that one assignment** — the same in a space as out of
+one, so Godot rather than Jolt. Now runs once per batch.
+
+| fixture | boxes | refit before → after |
+|---|---|---|
+| demo_workboat | 675 | 375 → 93 ms |
+| probe_trawler_bulwark | 2118 | 3225 → 229 ms |
+| probe_container_feeder | 3086 | **6095 → 597 ms** |
+
+**MY EARLIER NUMBER WAS MISLABELLED.** I recorded 2109/3673 ms as the feeder's
+*spawn* cost. It is the **refit** cost: `VesselSpawn.instantiate` fits out BEFORE
+the boat enters the tree, so its WalkDeck has no space and those adds were already
+linear. Refit is the shipyard editor, `apply_brick_layout`, and
+`ReplicationDrawingService` — real, but not the spawn path I implied.
+
+Still quadratic and untouched: `apply_staged` (>1000 bricks) mounts across frames,
+and a batch cannot span frames without leaving a vessel non-colliding while a
+player stands on it. Frame-budgeted, so no single frame stalls, but total cost
+still grows O(n²).
+
+### EVERY RED NOW HAS A DIAGNOSIS — gate `20260815-021225-7388`, 107 units
+
+**8 FAIL, 1 NOTRUN, 1 SKIP**, down from 13 FAIL at the last baseline. Not one is
+unexplained:
+
+| unit | cause | kind |
+|---|---|---|
+| `building_blueprint_test` | `BuildingLayout` ignores its `_building_grid` | owner decision |
+| `land_field_geography_test` | two constants, two decisions | owner decision |
+| `plan_entity_id_test` | **duplicate id 34 (edge+piece) in `probe_piece_tug.json`** | fixture bug, NEW |
+| `plan_interior_test` | 17 of 18 stations are the mast; 1 is the raked plate | diagnosed |
+| `port_perf_cache_test` | empty building catalogue since `aabdf198` | product blocker |
+| `port_trade_profile_test` | apron density is a look question | owner decision |
+| `remote_realtime_join_smoke` | needs a live server | opt-in |
+| `structure_plate_test` | 3 declared cost bounds, left red as a stated trade | deliberate |
+
+`plan_entity_id_test` was NOT on any known-red list — it is a real fixture defect
+found by a wave that was looking at something else entirely.
+
 ### The last six untriaged reds: SIX distinct causes, no two shared
 
 Gate run `20260815-020629-32459`. Three PASS, three red-with-a-diagnosis.

@@ -1039,6 +1039,10 @@ func _ensure_walk_deck() -> void:
 		cs.shape = box
 		cs.disabled = true
 		_walk_deck.add_child(cs)
+		## A pending enable belongs to the body that just went away. Left set, the
+		## dedupe below would swallow the new body's only enable call and its deck
+		## slab would stay `disabled` forever.
+		_walk_enable_pending = false
 
 	# Prefer a sibling under the same parent so walk/brick colliders stay off the RigidBody.
 	var parent_node := get_parent()
