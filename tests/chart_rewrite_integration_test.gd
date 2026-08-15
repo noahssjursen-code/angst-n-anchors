@@ -98,8 +98,16 @@ func _check_all(t: TestReport) -> void:
 		(position.x - bounds.position.x) / bounds.size.x * chart.size.x,
 		(position.z - bounds.position.y) / bounds.size.y * chart.size.y,
 	)
+	## Picking a home port is TWO steps, and has been since `d2a484d` moved the
+	## emit out of `_click_chart` and behind the "SAIL FROM HERE" button. This
+	## test kept asserting the one-step flow it was written against in `a0811ca`,
+	## and a bare `assert()` swallowed the failure until the suite converted.
+	## Assert both steps: a click selects and does NOT commit; confirming commits.
 	overlay.call("_click_chart", screen)
-	t.check("clicking a port confirms it as the home port", _picked == str(first["id"]))
+	t.equal("clicking a port selects it", overlay.get_selected_port_id(), str(first["id"]))
+	t.check("clicking alone does not commit the home port", _picked.is_empty())
+	overlay.call("_confirm_home_port")
+	t.check("confirming the selection commits the home port", _picked == str(first["id"]))
 	print(
 		"Marine chart rewrite integration/performance timings (base=%d us weather=%d us)"
 		% [base.build_usec, int(weather.debug_stats()["build_usec"])]

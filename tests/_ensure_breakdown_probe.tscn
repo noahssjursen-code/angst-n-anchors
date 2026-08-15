@@ -1,0 +1,6 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://tests/_ensure_breakdown_probe.gd" id="1_ensbrk"]
+
+[node name="EnsureBreakdownProbe" type="Node"]
+script = ExtResource("1_ensbrk")

@@ -1066,6 +1066,36 @@ dice makes worse but did not cause, and worth more than any slop value.
   moved no STRUCTURE-PLAN geometry but halved every BRICK. A `railing` is 0.5 m
   tall with a 0.44 m post, knee-high beside the 1.8 m figure.
 
+### The last six untriaged reds: SIX distinct causes, no two shared
+
+Gate run `20260815-020629-32459`. Three PASS, three red-with-a-diagnosis.
+
+**Two were real product defects, not test problems:**
+
+- **`lighting_material_test`** (3/80 → PASS 80). `Palette` held **65 keys pointing
+  at 33 `StandardMaterial3D` objects** — `Palette.make()` gained an `exposed`
+  dimension in `79f030e` and put it in *Palette's* key, but the instance comes from
+  `MeshBuilder.make_material()`, whose key is only `(color, roughness, metallic,
+  double_sided)`. Exposed and interior were **one object**. In the game, not just
+  the test: rain wetted everything or nothing depending on call order, and emission
+  set for `emission_glass` leaked onto any non-emissive surface sharing its colour.
+- **`port_perf_cache_test`** (2/4 → 1/7). `PortExpander.expand_uncached` resolves a
+  definition *in place*, and both mutated fields are in `PortDataCache`'s key — so
+  the first expansion of every port was a guaranteed miss stored under a key nobody
+  would look up again, and the caller got a **second full expansion**.
+- **`port_trade_profile_test`** — `_apron_blocked_arcs` used a *berth-machinery*
+  clearance (45.3 m at size 2) as a keep-out for *decorative* props. Three stations
+  on a 301.54 m dock face merged to one interval covering **100%** of it. Strip test
+  over 60 ports: **35 produced zero props, 99 total.** After: **0 zero-prop ports,
+  320 props.**
+
+### STATE.md WAS WRONG TWICE ABOUT `land_field_geography_test`
+
+It is **not** environmental and does **not** fail to quit — it runs in 21 s and
+reports honestly (now 2/43, on `TestReport` instead of a private accumulator that
+de-duplicated labels and printed prose). And it needs **two** owner calls on **two
+different constants**, not "an owner call on world constants".
+
 ### Owner decisions outstanding
 
 1. **Is 0.5 m the right BRICK cell?** Nobody has looked at a rendered brick vessel
@@ -1073,9 +1103,12 @@ dice makes worse but did not cause, and worth more than any slop value.
 2. **`BuildingLayout.place_footprint` ignores its `_building_grid`** — 4/117 in
    `building_blueprint_test`. `BrickLayout`'s equivalent argument IS load-bearing
    and does reject out-of-bounds. Two sibling classes, contradictory, one wrong.
-3. `budget_caps.crane` is 0 on every registration, so any crane fails compliance.
-4. No lifesaving requirement of any kind exists.
-5. No hull under 28 m, though two of three reference vessels are ~22 m and the
+3. **`land_field`: does OPEN_WATER promise a distance?** `distance_to_land(-15000, 14500) > 5000` measures **3779.9 m**. Not a fluke: minimum SDF inside OPEN_WATER is **1430.7 m**, and **5295 of 16692 samples (31.7%) sit closer than 5 km to land**. `norway_coast.json` has `open_water_x_m = -13500` against a westernmost land sample at **x = -12125** — 1.375 km of margin behind a 5 km claim. (A) push it to ≤ −17125 and the open-ocean strip shrinks 6.5 → 2.9 km with ~32% of open water reclassifying; (B) accept that OPEN_WATER is a position label, noting the two neighbouring checks at that same point (`wave_shelter > 0.999`, `coastal_exposure > 0.92`) both PASS. **This exact bound was relaxed once as a cheat and deliberately restored** — not touched.
+4. **`land_field`: `COASTAL_DISTANCE_M` vs the band sampled.** `coastal_exposure < 0.80` at 1383.4 m measures **0.8234**; band p100 is **0.8621**, and `smoothstep(80, 1800, 1400) = 0.8629` — the claim is **arithmetically impossible past ~1306 m**. Accept the ceiling, or raise `COASTAL_DISTANCE_M` to ≥ ~1932 m. Untouched.
+5. **Apron prop density.** Post-fix the fixture yields 2 against a `>= 3` check; 19 of 60 ports yield fewer than 3. Three piers occupy 160 m of 301.54 m, leaving two 24 m gaps, and `APRON_DECOR_STEP_M` is 20 m. How densely a working apron should be dressed is a LOOK question — REALITY §2 says no metric decides it. Not tuned.
+6. `budget_caps.crane` is 0 on every registration, so any crane fails compliance.
+7. No lifesaving requirement of any kind exists.
+8. No hull under 28 m, though two of three reference vessels are ~22 m and the
    third ~15 m.
 
 ### CORRECTION to commit e9de76a, and to my own briefing of the catalogue wave

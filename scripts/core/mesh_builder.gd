@@ -32,8 +32,25 @@ static func texture_cache_size() -> int:
 	return _texture_cache.size()
 
 
-static func make_material(color: Color, roughness: float = 0.85, metallic: float = 0.0, double_sided: bool = false) -> StandardMaterial3D:
+## `variant` widens the cache key for callers that go on to CONFIGURE the
+## material they get back — emission, metas, a wetness response. Without it two
+## such callers asking for the same colour/roughness/metallic share one
+## StandardMaterial3D and each one's configuration overwrites the other's.
+## `Palette` hit exactly that: `make(preset, false, true)` and
+## `make(preset, false, false)` were two Palette cache entries pointing at ONE
+## material, so `palette_exposed` was whichever was created last and rain wetted
+## either everything or nothing. A caller that only reads the material leaves
+## `variant` empty and shares as before.
+static func make_material(
+		color: Color,
+		roughness: float = 0.85,
+		metallic: float = 0.0,
+		double_sided: bool = false,
+		variant: String = "",
+) -> StandardMaterial3D:
 	var key := _material_cache_key(color, roughness, metallic, double_sided)
+	if not variant.is_empty():
+		key += "|" + variant
 	if _material_cache.has(key):
 		return _material_cache[key] as StandardMaterial3D
 	var mat := StandardMaterial3D.new()

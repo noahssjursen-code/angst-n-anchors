@@ -2,9 +2,16 @@ extends SceneTree
 
 const GENERATOR := preload("res://scripts/world/world_layout_generator.gd")
 const LAND_FIELD := preload("res://scripts/weather/land_field.gd")
+const TestReport := preload("res://tests/support/test_report.gd")
 const FIXED_SEED := 90210
 
-var _failures := PackedStringArray()
+## This file used to keep its own PackedStringArray and print
+## "LandField geography tests: all checks passed" — prose, no count, and a
+## de-duplicating accumulator that hid repeat failures of the same label. The
+## suite's verdict language is what the gate scores lane A by, and a unit that
+## cannot say how many checks it ran cannot be audited for vacuity. Every bound
+## below is untouched; only the bookkeeping changed.
+var _t := TestReport.new("land_field_geography_test")
 
 
 func _initialize() -> void:
@@ -189,16 +196,8 @@ func _find_water(layout: WorldLayout, region: int, min_distance: float, max_dist
 
 
 func _check(condition: bool, label: String) -> bool:
-	if not condition and not _failures.has(label):
-		_failures.append(label)
-	return condition
+	return _t.check(label, condition)
 
 
 func _finish() -> void:
-	if _failures.is_empty():
-		print("LandField geography tests: all checks passed")
-		quit()
-		return
-	for failure in _failures:
-		push_error("LandField geography test: " + failure)
-	quit(1)
+	_t.finish(self)

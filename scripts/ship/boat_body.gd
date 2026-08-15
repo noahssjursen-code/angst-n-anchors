@@ -1052,9 +1052,30 @@ func _ensure_walk_deck() -> void:
 		_defer_walk_deck_attachment(parent_node)
 
 	_walk_deck.set_meta("_boat_owner", self)
+	## Inside a collider batch these three are pure repetition — the WalkDeck's
+	## own transform and hull shell cannot change while a caller is spooling
+	## boxes onto it — and `_sync_walk_deck_transform` is the SECOND quadratic in
+	## this file. Writing a CollisionObject3D's `global_transform` notifies every
+	## one of its CollisionShape3D children, so once per added collider is
+	## O(n^2), and unlike the Jolt rebuild it is charged whether or not the body
+	## is in a space. Measured per N calls against a WalkDeck already carrying N
+	## children (`tests/_ensure_breakdown_probe.gd`): the transform write alone
+	## is 1.9 / 62.0 / 331.2 / 1408.0 ms at 500 / 2000 / 4000 / 8000 in a space
+	## and 1.6 / 62.8 / 342.2 / 1381.1 ms out of one, against a whole-`ensure`
+	## cost of 5.5 / 82.7 / 430.2 / 1511.1 ms. `end_walk_collider_batch` does all
+	## three once, so the state a caller sees when the batch closes is the state
+	## the unbatched path would have left.
+	if _walk_collider_batch_depth > 0:
+		return
 	_ensure_walk_hull_collider()
 	_sync_walk_deck_transform()
-	call_deferred("_enable_walk_deck_collision")
+	## Deduplicated for the same reason: `ensure_walk_deck` runs once per
+	## collider added, so a 3086-box vessel queued 3086 identical deferred calls,
+	## each of which then re-wrote that same transform over 3086 children — the
+	## quadratic again, paid after the frame where no build timer sees it.
+	if not _walk_enable_pending:
+		_walk_enable_pending = true
+		call_deferred("_enable_walk_deck_collision")
 
 
 func _defer_walk_deck_attachment(target_parent: Node) -> void:
@@ -1102,6 +1123,9 @@ func _walk_hull_boat_local_center() -> Vector3:
 	return Vector3(0.0, sz.y * 0.5, 0.0)
 
 
+var _walk_enable_pending := false
+
+
 func _ensure_walk_hull_collider() -> void:
 	## Player-facing hull volume on boat_walk — RigidBody hull stays on boat_hull.
 	if _walk_deck == null or not is_instance_valid(_walk_deck):
@@ -1119,6 +1143,75 @@ func _ensure_walk_hull_collider() -> void:
 	cs.position = boat_to_walk_deck_local(_walk_hull_boat_local_center())
 	cs.rotation = Vector3.ZERO
 	cs.disabled = false
+
+
+var _walk_collider_batch_depth := 0
+var _walk_collider_batch_space := RID()
+
+
+## Batches many add/remove_walk_brick_collider calls into one physics re-space.
+##
+## MEASURED, not inferred (`tests/_collider_shape_probe.gd`,
+## `tests/_despace_probe.gd`, Mesa llvmpipe / 4 cores — the SHAPE is
+## machine-independent, the milliseconds are not):
+##
+##   boxes           500     2000     4000     8000
+##   in a space    100.0   2074.7   9495.5  41223.2 ms   x412 for 16x boxes
+##   out of one      5.9     25.0     47.8     93.8 ms   x15.9 for 16x boxes
+##
+## The whole quadratic is Jolt rebuilding the body's compound shape on EVERY
+## `body_add_shape`, which is O(shapes already on the body). Nothing about the
+## scene tree, the node names, or shape creation is superlinear: shapes added
+## with the body out of its space are linear at both layers. So the fix is not
+## fewer boxes and not a different shape type — it is not paying for the rebuild
+## n times. The colliders that come out are the same boxes, at the same
+## transforms, in the same order.
+##
+## Deliberately NOT automatic. An implicit batch closed by `call_deferred` would
+## leave the WalkDeck out of its space for the rest of the frame, and any caller
+## that queried PhysicsServer3D synchronously after a fit-out would silently see
+## no collision at all. Callers that emit in bulk open the window and close it;
+## by the time `end_walk_collider_batch` returns the body is back in its space
+## with every shape on it.
+func begin_walk_collider_batch() -> void:
+	if _walk_collider_batch_depth > 0:
+		_walk_collider_batch_depth += 1
+		return
+	## Full ensure BEFORE the depth goes up, or this one would take the batch
+	## early-return itself and the WalkDeck would enter the window unsynced.
+	var walk := ensure_walk_deck()
+	_walk_collider_batch_depth = 1
+	if walk == null or not is_instance_valid(walk):
+		return
+	## Not in a space yet (fit-out before the boat is in the tree) is already the
+	## fast path — leave it alone rather than inventing a space to restore.
+	_walk_collider_batch_space = PhysicsServer3D.body_get_space(walk.get_rid())
+	if _walk_collider_batch_space.is_valid():
+		PhysicsServer3D.body_set_space(walk.get_rid(), RID())
+
+
+func end_walk_collider_batch() -> void:
+	if _walk_collider_batch_depth <= 0:
+		return
+	_walk_collider_batch_depth -= 1
+	if _walk_collider_batch_depth > 0:
+		return
+	var space := _walk_collider_batch_space
+	_walk_collider_batch_space = RID()
+	var walk := get_walk_deck()
+	if walk != null and is_instance_valid(walk) and space.is_valid():
+		## The tree is the authority on which space this body belongs to: if the
+		## WalkDeck was re-parented into another world mid-batch, the RID captured
+		## on open is stale and putting it back would strand it in a dead space.
+		if walk.is_inside_tree():
+			var world := walk.get_world_3d()
+			if world != null and world.space.is_valid():
+				space = world.space
+		PhysicsServer3D.body_set_space(walk.get_rid(), space)
+	## Now the depth is back to zero, so this is the FULL ensure the per-add
+	## calls skipped: hull shell refreshed, transform synced, collision enable
+	## queued. Once, instead of once per box.
+	ensure_walk_deck()
 
 
 ## Attach a brick CollisionShape3D as a *direct* child of WalkDeck (Godot ignores nested shapes).
@@ -1170,9 +1263,15 @@ func clear_walk_brick_colliders() -> void:
 	for child in walk.get_children():
 		if child is CollisionShape3D and str(child.name).begins_with(BRICK_COL_PREFIX):
 			to_free.append(child)
+	if to_free.is_empty():
+		return
+	## Removal pays the same Jolt compound rebuild per shape that adding does,
+	## so a re-fit-out of a heavy vessel was quadratic twice over.
+	begin_walk_collider_batch()
 	for child in to_free:
 		walk.remove_child(child)
 		child.free()
+	end_walk_collider_batch()
 
 
 func _sync_walk_deck_transform() -> void:
@@ -1186,6 +1285,7 @@ func _sync_walk_deck_transform() -> void:
 
 
 func _enable_walk_deck_collision() -> void:
+	_walk_enable_pending = false
 	if _walk_deck == null or not is_instance_valid(_walk_deck):
 		return
 	if not is_inside_tree() or not _walk_deck.is_inside_tree():

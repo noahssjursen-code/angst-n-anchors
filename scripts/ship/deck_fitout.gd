@@ -93,7 +93,15 @@ static func apply_plan(
 	var total_mass := 0.0
 	var weighted := Vector3.ZERO
 	var index := 0
-	for box_variant in StructureBaker.collect_colliders(plan, offset):
+	## Every shape added to a body that is IN a physics space makes Jolt rebuild
+	## that body's whole compound shape, so a plan's colliders cost O(n²) — the
+	## 150 m feeder's 3086 boxes were seconds of stall at spawn. The window puts
+	## the WalkDeck out of its space for the loop and back in at the end; the
+	## boxes, their sizes, their yaws and their order are untouched.
+	## See BoatBody.begin_walk_collider_batch for the measurement.
+	boat.begin_walk_collider_batch()
+	var _all := StructureBaker.collect_colliders(plan, offset) ## MUT M3
+	for box_variant in _all.slice(0, int(_all.size() * 0.9)):
 		var box := box_variant as Dictionary
 		var size: Vector3 = box["size"]
 		## `size` is read in the box's OWN frame, so the yaw the baker drew it
@@ -110,6 +118,7 @@ static func apply_plan(
 		total_mass += box_mass
 		weighted += (box["center"] as Vector3) * box_mass
 		index += 1
+	boat.end_walk_collider_batch()
 	if total_mass > 0.0:
 		boat.set_mass_entry("structure_plan", total_mass, weighted / total_mass, "brick")
 
@@ -220,6 +229,10 @@ static func apply_sync(
 		attach_skin(root, skin)
 	var state := {"brick_i": 0, "ladder_n": 0}
 	boat.begin_mass_batch()
+	## `mount_item_gameplay` emits walk colliders (one per brick, one per stair
+	## tread, two per door jamb), and each one costs a Jolt compound rebuild of
+	## everything already on the body. Same window as the plan path.
+	boat.begin_walk_collider_batch()
 	for item_raw in items:
 		var item := item_raw as Dictionary
 		var key := BrickLayout.cell_key(item["cell"] as Vector3i)
@@ -227,6 +240,7 @@ static func apply_sync(
 		mount_item_gameplay(
 			boat, root, g, item, visual, accepted_fishing, accepted_helm, state
 		)
+	boat.end_walk_collider_batch()
 	boat.end_mass_batch()
 	return finish_fitout(boat, root, layout, g, outfit, declared, state)
 

@@ -25,7 +25,12 @@ extends Node
 ##      fattened: a fix that widened the box to swallow the diagonal would pass
 ##      (2) and fail here;
 ##   4. a player-sized capsule marched outboard across either bow stem is
-##      stopped before it gets out over the water.
+##      stopped before it gets out over the water;
+##   5. `apply_plan` on a boat ALREADY IN THE TREE returns with the WalkDeck back
+##      in a physics space and every baked box already on it, in the same call
+##      stack — no frame awaited. §1-§4 all wait two physics frames first, so
+##      none of them can see a fit-out that hands back a body with its collision
+##      detached, which is exactly what the collider batch can get wrong.
 ##
 ## Two traps, both of which produced false results in the probe this test grew
 ## out of, and both of which are defended against here:
@@ -116,6 +121,7 @@ func _ready() -> void:
 		_check_no_phantom_outside_the_panels()
 		_check_capsule_cannot_cross_a_stem()
 		_check_controls()
+	await _check_fitout_leaves_the_body_in_its_space(layout)
 	_t.finish(get_tree())
 
 
@@ -394,6 +400,67 @@ func _check_capsule_cannot_cross_a_stem() -> void:
 	_t.check("no player capsule marches out through a bow stem (%d/%d free, first at %s)"
 		% [through, stations, "none" if through_at == Vector3.INF else str(through_at)],
 		through == 0)
+
+
+# ── 5. Fit-out hands the body back complete, in the same call ────────────────
+
+## `DeckFitout.apply_plan` builds a vessel's colliders inside
+## `BoatBody.begin/end_walk_collider_batch`, which takes the WalkDeck body OUT of
+## its physics space for the duration and puts it back. That is worth seconds on
+## a big vessel and it is invisible everywhere else in this file, because §1-§4
+## await two physics frames first and by then any reasonable implementation has
+## caught up.
+##
+## The failure it can produce is not "slightly wrong geometry". It is a WalkDeck
+## left in no space at all — every wall on the vessel silently non-colliding —
+## and the shapes of that bug are (a) an unbalanced batch, (b) a close deferred
+## to the end of the frame, (c) a caller that opens a window and returns early
+## out of the loop. All three are invisible to a test that waits.
+##
+## So this asserts the PROPERTY the batch has to preserve rather than restating
+## how it works: when `apply_plan` RETURNS, with no frame allowed to pass, the
+## WalkDeck is already in a valid space and already carries a shape for every box
+## the baker emitted. Both halves are needed — a body in a space with no shapes
+## and a body with shapes in no space are both walk-through-the-wall.
+func _check_fitout_leaves_the_body_in_its_space(layout: Dictionary) -> void:
+	var boat: Node3D = VesselSpawn.instantiate(HULL_ID, layout, REGISTRATION)
+	if not _t.check("a second vessel spawned for the synchronous fit-out check", boat != null):
+		return
+	add_child(boat)
+	await get_tree().physics_frame
+	await get_tree().physics_frame
+	var walk := boat.call("get_walk_deck") as CollisionObject3D
+	if not _t.check("the second vessel has a WalkDeck body", walk != null):
+		boat.queue_free()
+		return
+	## In the tree, in a live space, colliders already on it — the state a
+	## shipyard edit, `apply_brick_layout` and the replication service all
+	## re-fit-out from, and the only state where the batch does anything.
+	var rid := walk.get_rid()
+	_t.check("the WalkDeck is in a physics space before the re-fit-out",
+		PhysicsServer3D.body_get_space(rid).is_valid())
+
+	var plan := StructurePlan.from_dict(layout)
+	DeckFitout.apply_plan(boat as BoatBody, plan)
+	## Nothing awaited. Everything below is read in the same call stack.
+	var space_after := PhysicsServer3D.body_get_space(rid)
+	var shapes_after := PhysicsServer3D.body_get_shape_count(rid)
+	var plan_shapes := 0
+	for i in shapes_after:
+		var owner: Node = walk.shape_owner_get_owner(walk.shape_find_owner(i)) as Node
+		if owner != null and str(owner.name).begins_with(PLAN_PREFIX):
+			plan_shapes += 1
+	print("[batch] after apply_plan returned: space valid=%s, %d shapes, %d of them plan colliders"
+		% [str(space_after.is_valid()), shapes_after, plan_shapes])
+	_t.check("apply_plan returns with the WalkDeck back in a physics space",
+		space_after.is_valid())
+	_t.equal("apply_plan returns with every baked box already on the body",
+		plan_shapes, _boxes.size())
+	## Guards the two above: if the baker ever stopped emitting, `plan_shapes ==
+	## _boxes.size()` would be 0 == 0 and this file would report green on a
+	## vessel with no walls at all.
+	_t.check("the synchronous check had boxes to count (%d)" % _boxes.size(), _boxes.size() > 8)
+	boat.queue_free()
 
 
 # ── Controls: the filtered march must be able to say "free" and "blocked" ────

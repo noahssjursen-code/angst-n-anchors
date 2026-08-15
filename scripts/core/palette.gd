@@ -196,7 +196,17 @@ static func make(preset: Dictionary, double_sided: bool = false, exposed: bool =
 	]
 	if _material_cache.has(key):
 		return _material_cache[key] as StandardMaterial3D
-	var material := MeshBuilder.make_material(color, roughness, metallic, double_sided)
+	## The variant tag is what keeps the exposed and interior copies APART in
+	## MeshBuilder's cache. This palette cache already keyed on `actual_exposed`
+	## and on emission; MeshBuilder's did not, so both keys resolved to one
+	## StandardMaterial3D and the `set_meta` calls below fought over it. One
+	## object cannot be both weather-exposed and interior.
+	var variant := "palette|%s|%.3f|%s" % [
+		emission.to_html(true), emission_energy, actual_exposed,
+	]
+	var material := MeshBuilder.make_material(
+		color, roughness, metallic, double_sided, variant
+	)
 	if is_emissive:
 		material.emission_enabled = true
 		material.emission = emission

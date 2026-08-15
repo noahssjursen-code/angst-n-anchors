@@ -20,7 +20,15 @@ func _run() -> void:
 	definition.site_seed = 991122
 
 	var a := PortExpander.expand(definition, 424242)
+	## Two INDEPENDENT expansions. `PortDataCache` now registers the resolved
+	## definition as well as the request, so without this clear the second call
+	## returns the first PortData object and every determinism check below
+	## compares a thing to itself. The cache's own identity guarantee is
+	## `port_perf_cache_test`'s job; this file's is that the generator is
+	## reproducible, which needs it to actually run twice.
+	PortDataCache.clear()
 	var b := PortExpander.expand(definition, 424242)
+	t.check("the determinism checks compare two distinct expansions", a != b)
 	if not t.check("both expansions produce a trade profile", a.trade_profile != null and b.trade_profile != null):
 		t.finish(self)
 		return
@@ -162,6 +170,42 @@ func _run() -> void:
 		var local_arr: Array = entry.get("local", []) as Array
 		t.check("apron prop needs local XZ", local_arr.size() >= 2)
 		t.check("apron prop needs kind", not str(entry.get("kind", "")).is_empty())
+	## The prop keep-out around a pier root has no check anywhere else, and it is
+	## the thing that breaks if the clearance is ever re-derived: a prop dropped
+	## on a berth's loading face reads as rubbish left in the truck lane. State
+	## the property (no prop stands within a station's own along-face footprint)
+	## rather than the clearance constant, so the check survives a re-tune.
+	var apron_props := apron.get("points", []) as Array
+	var quay_stations := plan.get("quay_stations", []) as Array
+	if not quay_stations.is_empty():
+		var inland_dir: Vector2 = PortCoastTracer.PORT_LOCAL_INLAND_DIR
+		var along_dir := Vector2(-inland_dir.y, inland_dir.x)
+		var intruders := 0
+		var pairs := 0
+		for raw_prop in apron_props:
+			var local_arr: Array = (raw_prop as Dictionary).get("local", []) as Array
+			if local_arr.size() < 2:
+				continue
+			var prop := Vector2(float(local_arr[0]), float(local_arr[1]))
+			for raw_station in quay_stations:
+				var station: Dictionary = raw_station
+				var origin_arr: Array = station.get("origin", [0.0, 0.0]) as Array
+				var origin := Vector2(float(origin_arr[0]), float(origin_arr[1]))
+				var half_w := float(
+					station.get("width_m", PortSizing.quay_deck_width_m(a.size))
+				) * 0.5
+				pairs += 1
+				if absf((prop - origin).dot(along_dir)) < half_w:
+					intruders += 1
+		## Without this the intruder count below is 0 whenever the sprinkler
+		## produced nothing, and a keep-out check that passes on an empty apron
+		## is the vacuous pass this suite keeps finding.
+		t.check(
+			"the quay keep-out sweep had something to check (%d props x %d stations)"
+			% [apron_props.size(), quay_stations.size()],
+			pairs > 0,
+		)
+		t.equal("no apron prop stands on a quay station's own width", intruders, 0)
 	var apron_pads: Dictionary = land.get("apron_pads", {}) as Dictionary
 	t.check("apron should seed every required brick pad",
 			int(apron_pads.get("pad_count", 0)) >= PortApronPadCatalog.UNIVERSAL_REQUIRED_V1.size())

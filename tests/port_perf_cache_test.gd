@@ -1,9 +1,19 @@
-extends SceneTree
+extends Node
+
+## LANE B. This file reaches `BuildingCache`, which preloads
+## `scripts/port/building_fitout.gd` -> `scripts/ship/brick_door.gd`, and
+## `brick_door.gd:96` names the `WorldGateway` autoload as a bare compile-time
+## identifier. Under `--script` that is `Identifier not found`, the failure
+## cascades to the test itself, and Godot then loads and runs it anyway — so the
+## unit reported `FAIL(2)` in the results table with no way to tell a compile
+## failure from an assertion failure. `REALITY.md` §4a: fix the compile before
+## trusting one word of what a unit asserts. Booted as a scene the autoloads
+## exist and the cascade is gone.
 
 const TestReport := preload("res://tests/support/test_report.gd")
 
 
-func _initialize() -> void:
+func _ready() -> void:
 	var t := TestReport.new("port_perf_cache_test")
 	var layout := WorldLayoutGenerator.generate(424242)
 	var definition := PortDefinition.new()
@@ -22,15 +32,19 @@ func _initialize() -> void:
 	t.check("cached PortData must retain layout graph", first.layout_graph != null)
 	t.equal("cached PortData must retain port id", first.port_id, "perf-cache-test")
 
+	## `resources/data/buildings/` has held only `.gitkeep` since `aabdf198`
+	## wiped `BrickCatalog.BRICKS` to `{}`, so this is red on a product blocker
+	## and stays red until the parts vocabulary can author a blueprint again.
+	## It used to `return` here, which buried the six unrelated checks below
+	## behind a catalogue that has nothing to do with land decor or materials.
+	## Record it and carry on: the failure still reddens the unit.
 	BuildingCache.clear()
 	var warehouse := BuildingBlueprintCatalog.by_id("warehouse")
-	if not t.check("warehouse blueprint must load", warehouse != null):
-		t.finish(self)
-		return
-	var building_a := BuildingCache.instance(warehouse, true)
-	var building_b := BuildingCache.instance(warehouse, true)
-	t.check("building cache must stamp children", building_a.get_child_count() > 0)
-	t.check("building cache must stamp children", building_b.get_child_count() > 0)
+	if t.check("warehouse blueprint must load", warehouse != null):
+		var building_a := BuildingCache.instance(warehouse, true)
+		var building_b := BuildingCache.instance(warehouse, true)
+		t.check("building cache must stamp children", building_a.get_child_count() > 0)
+		t.check("building cache must stamp children", building_b.get_child_count() > 0)
 
 	LandDecorCache.clear()
 	var house_a := LandDecorCache.house_instance(3, 0.2, 0.5)
@@ -47,4 +61,4 @@ func _initialize() -> void:
 	var mat_b := MeshBuilder.make_material(Color(0.2, 0.3, 0.4))
 	t.check("MeshBuilder material cache should reuse materials", mat_a == mat_b)
 
-	t.finish(self)
+	t.finish(get_tree())

@@ -1025,7 +1025,7 @@ static func _build_apron_decor(
 	if total_arc < APRON_DECOR_EDGE_PAD_M * 2.0 + APRON_DECOR_STEP_M:
 		return {"points": [], "point_count": 0}
 
-	var blocked := _apron_blocked_arcs(dock_face, berth_plan, size)
+	var blocked := _apron_blocked_arcs(berth_plan)
 	var rng := RandomNumberGenerator.new()
 	rng.seed = int(site_seed) ^ 0xA70A40A1
 	var points: Array = []
@@ -1146,25 +1146,25 @@ static func _pick_apron_family(rng: RandomNumberGenerator, profile: PortTradePro
 	return pool[rng.randi_range(0, pool.size() - 1)]
 
 
-static func _apron_blocked_arcs(
-		dock_face: PackedVector2Array,
-		berth_plan: Dictionary,
-		size: int,
-) -> Array:
+## Arc-length keep-out for DECORATIVE apron props — lamps, crates, pallets,
+## drums, hose reels, signs, hatches, all metre-scale and set 15-40 m inland of
+## the dock face.
+##
+## The quay-station keep-out is NOT here. It used to be, copied from
+## `PortBerthPlan._quay_loading_exclusions_along_face`, which widens each pier
+## root by `PortSizing.asphalt_quay_loading_clearance_m()` — a berth-machinery
+## figure (45.3 m at size 2, derived from design hull beam and berth gap). That
+## is the right number for keeping ASPHALT BERTHS and brick PADS off a loading
+## face and the wrong number by an order of magnitude for a lamp post. Three
+## stations on a 301.5 m dock face merged to one interval [-31.3, 331.3] and
+## blocked 100 % of it; across a 60-port sweep, 35 ports produced zero props.
+##
+## The prop-scale quay keep-out already existed in the placement loop as
+## `_near_quay_station` (station half-width + APRON_QUAY_RADIUS_CLEAR_M, tested
+## at the sampled face position). Two formulas for one keep-out drift; this is
+## the one that was wrong, so it is deleted rather than re-tuned.
+static func _apron_blocked_arcs(berth_plan: Dictionary) -> Array:
 	var blocked: Array = []
-	var loading_clear := PortSizing.asphalt_quay_loading_clearance_m(size)
-	for raw in berth_plan.get("quay_stations", []) as Array:
-		var station: Dictionary = raw
-		var origin := Vector2(
-			float((station.get("origin", [0.0, 0.0]) as Array)[0]),
-			float((station.get("origin", [0.0, 0.0]) as Array)[1]),
-		)
-		var root_arc := _nearest_arc_on_polyline(dock_face, origin)
-		var half_w := float(station.get("width_m", PortSizing.quay_deck_width_m(size))) * 0.5
-		blocked.append({
-			"lo": root_arc - half_w - loading_clear,
-			"hi": root_arc + half_w + loading_clear,
-		})
 	for raw in berth_plan.get("asphalt_stations", []) as Array:
 		var station: Dictionary = raw
 		var arc_m := float(station.get("arc_m", 0.0))
@@ -1216,27 +1216,6 @@ static func _merge_arc_intervals(intervals: Array) -> Array:
 		else:
 			merged.append(nxt)
 	return merged
-
-
-static func _nearest_arc_on_polyline(path: PackedVector2Array, point: Vector2) -> float:
-	if path.size() < 2:
-		return 0.0
-	var best_arc := 0.0
-	var best_dist := INF
-	var arc := 0.0
-	for index in range(path.size() - 1):
-		var a := path[index]
-		var b := path[index + 1]
-		var ab := b - a
-		var len_sq := ab.length_squared()
-		var t := 0.0 if len_sq < 0.0001 else clampf((point - a).dot(ab) / len_sq, 0.0, 1.0)
-		var closest := a + ab * t
-		var dist := closest.distance_squared_to(point)
-		if dist < best_dist:
-			best_dist = dist
-			best_arc = arc + ab.length() * t
-		arc += ab.length()
-	return best_arc
 
 
 static func _trapezoid_point(corners: PackedVector2Array, u: float, v: float) -> Vector2:

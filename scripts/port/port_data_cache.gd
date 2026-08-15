@@ -27,6 +27,18 @@ static func expand(
 		extra_attributes,
 	)
 	_cache[key] = data
+	## `expand_uncached` RESOLVES the definition in place: it clamps `size` and
+	## writes back `site_max_size` (`port_expander.gd` ~:131-153), and both are
+	## part of the key above. So `key` describes the REQUEST as it arrived and
+	## the same definition object can never produce it again — a fresh
+	## definition defaults `site_max_size` to 8 and comes back holding 4, so the
+	## first expansion of every port was a miss stored under a key nothing would
+	## ever look up, and the caller got a second full expansion. Register the
+	## resolved key against the same PortData so the request and its resolution
+	## are one cache entry's worth of work.
+	var resolved_key := _cache_key(definition, world_seed, world_layout, extra_attributes)
+	if resolved_key != key:
+		_cache[resolved_key] = data
 	return data
 
 
