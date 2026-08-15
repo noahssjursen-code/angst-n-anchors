@@ -30,7 +30,18 @@ static func validate(layout: BuildingLayout) -> Dictionary:
 		var yaw_steps := int(round(float(yaw) / 90.0)) % 4
 		for occupied in grid.footprint_cells(cell, fp, yaw_steps):
 			if not grid.in_bounds(occupied):
-				# Volume should have grown with the build; treat as a soft warn.
+				## WHAT THIS CAN ACTUALLY CATCH, measured 2026-08-15
+				## (`tests/_building_bounds_probe.gd`, pinned by
+				## `building_blueprint_test._check_grid_size_warning_is_a_loader_check`):
+				## exactly one shape — a cell BELOW the ground plane in a loaded
+				## record. `place_footprint` grows the volume through
+				## `ensure_fit_cells` before this ever looks, `set_brick` refuses
+				## out of bounds outright, and `from_dict`'s
+				## `refit_volume_to_content` grows and remaps a positive index
+				## (a record's "40,0,40" comes back as "73,0,73"). But
+				## `ensure_fit_cells` shifts by `Vector3i(dx, 0, dz)` and grows Y
+				## upward only, so a negative y is the one thing no route repairs.
+				## Soft on purpose: a stale record is repaired, not refused.
 				warnings.append(
 					"Brick '%s' at %s sits outside the stored grid_size."
 					% [brick_id, BuildingLayout.cell_key(cell)]

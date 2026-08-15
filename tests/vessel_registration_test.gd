@@ -50,6 +50,7 @@ func _ready() -> void:
 	_test_deployment_gate()
 	_test_off_deck_bricks_are_not_equipment()
 	_test_setter_refuses_off_deck()
+	_test_loader_trusts_the_record_and_the_grid_pass_catches_it()
 	_t.finish(get_tree())
 
 
@@ -230,6 +231,152 @@ func _test_setter_refuses_off_deck() -> void:
 			not bow.set_brick(small, half, "block_45", small.partial_bow_yaw_degrees(half) + 90),
 			"a diagonal aimed the wrong way is refused on the same cell",
 		)
+
+	## THE SAME QUESTION ASKED OF THE OTHER SETTER ON THIS CLASS. `add_container_pad`
+	## read `if grid != null and not grid.has_deck_cell(c)`, so a null grid skipped
+	## its deck check outright and wrote the pad anyway. Nothing in the gate called
+	## it at all — the three tests that mention container pads all assign
+	## `layout.container_pads` directly — so the hole was invisible from both ends.
+	var pads := BrickLayout.new()
+	var span := ContainerUnit.DEFAULT_FOOTPRINT
+	_check(
+		pads.add_container_pad(
+			Vector3i(2, 0, 12), Vector3i(2 + span.x - 1, 0, 12 + span.y - 1), small
+		),
+		"add_container_pad accepts a span on the deck",
+	)
+	_check(
+		not pads.add_container_pad(
+			Vector3i(2, 0, 40), Vector3i(2 + span.x - 1, 0, 40 + span.y - 1), small
+		),
+		"add_container_pad refuses a span off the deck",
+	)
+	_check(
+		not pads.add_container_pad(
+			Vector3i(2, 0, 40), Vector3i(2 + span.x - 1, 0, 40 + span.y - 1), null
+		),
+		"add_container_pad refuses when no deck is named at all",
+	)
+	_check(
+		pads.container_pads.size() == 1,
+		"only the on-deck pad was stored (%d pads)" % pads.container_pads.size(),
+	)
+
+
+## PINS A DELIBERATE HOLE RATHER THAN CLOSING IT, and says which hole.
+##
+## `BrickLayout.set_brick` refuses an off-deck cell; `BrickLayout.from_dict` does
+## not, takes no grid, and is documented as trusting the record on purpose —
+## dropping a player's bricks on load destroys their vessel to repair a file, and
+## the loader runs before anyone has said which hull the layout is going onto.
+## That reasoning is sound and this sub-test does not argue with it.
+##
+## What it does is stop the hole being REDISCOVERED as a surprise. Three sentences,
+## in the order a maintainer meets them:
+##
+##   1. the loader keeps every cell, including the ones the setter refuses;
+##   2. a `from_dict` -> `to_dict` round trip with nothing in between re-saves them
+##      unchanged — so a tool that loads, edits and saves never learns the record
+##      is wrong, and the fault first surfaces at fit-out, on a different day;
+##   3. the check that REPLACES the loader's is `VesselCompliance.validate` against
+##      the grid the layout is actually being put on, plus
+##      `DeckFitout.placement_faults` for the engine-log half.
+##
+## Sentence 2 is the defect. It is pinned, not fixed, so that anyone who decides
+## the loader should refuse after all has to come here and rewrite this paragraph
+## instead of quietly turning a green check red — and anyone who assumed the round
+## trip was already validated finds out here rather than from a player.
+##
+## MUTATION-VERIFIED, AND THE FIRST ATTEMPT WAS A NO-OP — which is a finding
+## about the subject, not about the check (REALITY.md §8). Making `from_dict`
+## filter its cells through `HullRegistry.make_grid(layout.hull_id)` — the obvious
+## "let the loader judge" fix — left this file at PASS (93), because the record's
+## own `hull_id` resolves to a 20 x 56 deck on which all eight of these cells are
+## in bounds. A loader that consults the layout's own claim about which hull it is
+## for would not have caught the headline vessel either; that is the same argument
+## `BrickLayout.set_brick`'s header makes for taking the grid as a parameter, and
+## it is asserted below rather than left as prose.
+##
+## The two that do redden, both on the shape the pin is about — a layer silently
+## judging a cell between load and save:
+##
+##   `from_dict` sanitises against a 10 x 30 grid   11 of 87 red
+##   `to_dict` drops everything above y=0 on save    1 of 93 red
+##
+## The first takes the file's check COUNT down as well as its verdict: four
+## sub-tests run off shipped fixtures that would stop loading, and this file
+## records an absent fixture as a failure rather than a silent skip.
+func _test_loader_trusts_the_record_and_the_grid_pass_catches_it() -> void:
+	var small := DeckGrid.from_hull(15.0, 5.0, 0.0, 2.0)
+	var cells := {}
+	for row in HEADLINE_CELLS:
+		cells[BrickLayout.cell_key(row[0] as Vector3i)] = {
+			"brick_id": str(row[1]), "yaw": 0,
+		}
+	var record := {"hull_id": "fishing_trawler_small", "cells": cells}
+
+	var authored := BrickLayout.new()
+	var accepted := 0
+	for row in HEADLINE_CELLS:
+		if authored.set_brick(small, row[0] as Vector3i, str(row[1]), 0):
+			accepted += 1
+	_check(
+		accepted == 0,
+		"the setter refuses every cell in this record (%d of %d accepted)"
+		% [accepted, HEADLINE_CELLS.size()],
+	)
+
+	var loaded := BrickLayout.from_dict(record)
+	_check(
+		loaded.count() == HEADLINE_CELLS.size(),
+		"the LOADER keeps all %d of them — it takes no grid and judges nothing (%d kept)"
+		% [HEADLINE_CELLS.size(), loaded.count()],
+	)
+	## The round trip, stated cell by cell rather than by comparing two
+	## dictionaries: a save that survives a load unchanged is what makes the hole
+	## reachable, and "the sizes matched" would not have said that.
+	var round_tripped := (BrickLayout.from_dict(loaded.to_dict())).to_dict()
+	var re_saved: Dictionary = round_tripped.get("cells", {})
+	var identical := re_saved.size() == cells.size()
+	for key in cells.keys():
+		var was: Dictionary = cells[key]
+		var now: Dictionary = re_saved.get(key, {})
+		if str(now.get("brick_id", "")) != str(was.get("brick_id", "")):
+			identical = false
+		if int(now.get("yaw", -1)) != int(was.get("yaw", 0)):
+			identical = false
+	_check(
+		identical,
+		"and a from_dict -> to_dict round trip re-saves all %d unchanged: NOTHING between load and save judges a cell (%d cells came back)"
+		% [cells.size(), re_saved.size()],
+	)
+
+	## What does judge, and it needs the grid the caller names, not the one the
+	## record claims: `record.hull_id` resolves to a 20 x 56 deck on which every
+	## one of these cells IS in bounds.
+	var claimed := HullRegistry.make_grid(str(record["hull_id"]))
+	var on_claimed := 0
+	for row in HEADLINE_CELLS:
+		if claimed.in_bounds(row[0] as Vector3i):
+			on_claimed += 1
+	_check(
+		on_claimed == HEADLINE_CELLS.size(),
+		"the record's OWN hull_id would have cleared every cell (%d of %d) — which is why the caller states the deck"
+		% [on_claimed, HEADLINE_CELLS.size()],
+	)
+	var report := VesselCompliance.validate(
+		loaded, "fishing_trawler_small", "general_vessel", small
+	)
+	_check(
+		int(report.get("off_grid_bricks", 0)) == HEADLINE_CELLS.size(),
+		"the compliance pass against the REAL deck catches all %d (%d)"
+		% [HEADLINE_CELLS.size(), int(report.get("off_grid_bricks", -1))],
+	)
+	_check(
+		DeckFitout.placement_faults(small, loaded).size() == HEADLINE_CELLS.size(),
+		"and the fit-out names all %d in the engine log (%d)"
+		% [HEADLINE_CELLS.size(), DeckFitout.placement_faults(small, loaded).size()],
+	)
 
 
 ## The fixture four sub-tests are built on. Returning it silently when it is

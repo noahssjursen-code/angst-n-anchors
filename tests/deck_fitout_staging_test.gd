@@ -42,6 +42,7 @@ func _ready() -> void:
 	await _test_staged_collision_is_delivered_and_never_absent()
 	await _test_abandoned_staging_window_is_flushed()
 	_test_off_deck_bricks_reach_no_geometry()
+	_test_off_deck_bricks_reach_no_shell()
 	_t.finish(get_tree())
 
 
@@ -120,6 +121,237 @@ func _test_off_deck_bricks_reach_no_geometry() -> void:
 		DeckFitout.placement_faults(grid, clean).is_empty(),
 		"and names none on a layout that is entirely on the deck",
 	)
+
+
+## THE SAME STRIP TEST, ONE LAYER UP — and the layer the one above could not see.
+##
+## `_test_off_deck_bricks_reach_no_geometry` runs through `apply_sync`, which
+## filters its item list before anything draws, so it goes green whatever
+## `BrickShellClassifier` believes. The classifier is on the OTHER entry point:
+## `apply_staged` -> `DeckFitoutJob.configure` -> `classify`, and it built its
+## occupancy field by walking `layout.cells` verbatim while its grid argument sat
+## unused behind an underscore.
+##
+## WHAT EVERY FIXTURE IN THIS FILE DOES NOT CONTAIN, which is why nothing here
+## reddened for it: an off-deck cell. `_assert_fixture_on_deck` exists to keep
+## them out — correctly, it was added after a fixture that was entirely off the
+## hull passed a check vacuously — and `_cabin_layout` builds through `set_brick`,
+## which refuses one. So the classifier had never once been shown a layout of the
+## shape it mishandled. The two checks it did have ("cabin wall is exterior",
+## "sealed cabin block is interior") are true of a clean layout and stay true of a
+## dirty one; they are pointed at the split, and the split is not where it broke.
+##
+## Measured at c531076 on hull_90x24 (`tests/_shell_cost.gd`): one smuggled cell
+## at (-40, 0, -40) took this cabin's `exterior_air_count` from 121 to 28600 and
+## `classify` from 1.16 ms to 131.56 ms; four cells carrying hull_150x32 indices
+## took a 3000-brick vessel from 67.23 ms to 311.11 ms, synchronously, inside
+## `apply_staged`. `exterior_air_count` is what is asserted here — it is a count,
+## so it says the same thing on a fast box and on llvmpipe.
+func _test_off_deck_bricks_reach_no_shell() -> void:
+	var grid := HullRegistry.make_grid(HULL_ID)
+	var clean := _cabin_layout(true)
+	var smuggled := _cabin_layout(true)
+	## The far cell is the cost case. The deck-edge cell is the correctness case
+	## and needs a fixture nobody had built: a brick standing at the outboard edge,
+	## walled in on its other four in-plane sides and roofed, so its ONLY opening
+	## faces the water. The one cell that could seal it is a cell this deck cannot
+	## carry. Both layouts get the pocket; only the dirty one gets the plug.
+	var edge := _edge_cell_with_surround(grid)
+	_check(edge.x >= 0, "the fixture found an on-deck cell whose +X neighbour is off the deck")
+	for layout in [clean, smuggled]:
+		for offset in [Vector3i.ZERO, Vector3i(-1, 0, 0), Vector3i(0, 0, 1),
+				Vector3i(0, 0, -1), Vector3i(0, 1, 0)]:
+			_check(
+				(layout as BrickLayout).set_brick(grid, edge + (offset as Vector3i), "block", 0),
+				"the edge pocket cell %s is on the deck" % str(edge + (offset as Vector3i)),
+			)
+	_check(
+		_shell_of(grid, clean).has(BrickLayout.cell_key(edge)),
+		"with nothing beside it, the edge brick faces open water and is EXTERIOR",
+	)
+	for cell_raw in [Vector3i(-40, 0, -40), edge + Vector3i(1, 0, 0)]:
+		var cell: Vector3i = cell_raw
+		_check(
+			not smuggled.set_brick(grid, cell, "block", 0),
+			"the setter refuses (%d, %d, %d) for the shell fixture" % [cell.x, cell.y, cell.z],
+		)
+		## A doctored or stale save reaches a live layout exactly like this:
+		## `BrickLayout.from_dict` trusts a record's cells verbatim, deliberately.
+		smuggled._store_cell(cell, "block", 0)
+	_check(
+		smuggled.count() == clean.count() + 2,
+		"the shell fixture carries two cells this deck cannot hold",
+	)
+
+	var kept_clean: Array = DeckFitout.on_deck_items(grid, clean.iter_primary_cells())["kept"]
+	var kept_dirty: Array = DeckFitout.on_deck_items(grid, smuggled.iter_primary_cells())["kept"]
+	_check(
+		kept_dirty.size() == kept_clean.size(),
+		"the fit-out's own filter drops both (%d kept vs %d)" % [kept_dirty.size(), kept_clean.size()],
+	)
+	var shell_clean: Dictionary = BRICK_SHELL_CLASSIFIER.classify(clean, grid, kept_clean)
+	var shell_dirty: Dictionary = BRICK_SHELL_CLASSIFIER.classify(smuggled, grid, kept_dirty)
+	_check(
+		int(shell_clean.get("exterior_air_count", -1)) > 0,
+		"the control shell floods some air at all (%d cells)"
+		% int(shell_clean.get("exterior_air_count", -1)),
+	)
+	## THE COST PROPERTY. A brick the deck cannot carry does not enlarge the
+	## volume the flood fill has to cross, because it is not there.
+	_check(
+		int(shell_dirty.get("exterior_air_count", -1))
+			== int(shell_clean.get("exterior_air_count", -1)),
+		"a cell off the deck does not stretch the flood fill (%d air cells vs %d)"
+		% [
+			int(shell_dirty.get("exterior_air_count", -1)),
+			int(shell_clean.get("exterior_air_count", -1)),
+		],
+	)
+	## THE CORRECTNESS PROPERTY, and it is the half the 2026-08-15 measurement
+	## missed by putting its smuggled cell 40 cells from anything. A brick that
+	## will never be built must not seal the brick beside it: an INTERIOR brick is
+	## drawn in INTERIOR_VISUALS, and a remote replica stops after EXTERIOR_VISUALS.
+	_check(
+		(shell_dirty.get("interior", []) as Array).size()
+			== (shell_clean.get("interior", []) as Array).size(),
+		"a cell off the deck seals nothing into the interior (%d interior vs %d)"
+		% [
+			(shell_dirty.get("interior", []) as Array).size(),
+			(shell_clean.get("interior", []) as Array).size(),
+		],
+	)
+	var keys_clean: Dictionary = shell_clean.get("exterior_keys", {})
+	var keys_dirty: Dictionary = shell_dirty.get("exterior_keys", {})
+	_check(
+		keys_dirty.size() == keys_clean.size(),
+		"the exterior set is the same size with the off-deck cells in (%d vs %d)"
+		% [keys_dirty.size(), keys_clean.size()],
+	)
+	var moved := 0
+	for key in keys_clean.keys():
+		if not keys_dirty.has(key):
+			moved += 1
+	_check(moved == 0, "no on-deck brick left the exterior set (%d did)" % moved)
+	_check(
+		keys_dirty.has(BrickLayout.cell_key(edge)),
+		"the edge brick is STILL exterior with a never-built cell smuggled beside it",
+	)
+	_check(
+		not keys_dirty.has(BrickLayout.cell_key(edge + Vector3i(1, 0, 0))),
+		"and the off-deck cell itself is in neither list",
+	)
+
+	## THE OTHER CALL SHAPE. `deck_fitout_load_bench` and `_test_shell_classifier`
+	## hand over a layout and no item list, so nothing has filtered for them; that
+	## is the shape the grid argument exists for.
+	var shell_raw: Dictionary = BRICK_SHELL_CLASSIFIER.classify(smuggled, grid)
+	_check(
+		int(shell_raw.get("exterior_air_count", -1))
+			== int(shell_clean.get("exterior_air_count", -1)),
+		"classify(layout, grid) with no item list refuses the same cells (%d air vs %d)"
+		% [
+			int(shell_raw.get("exterior_air_count", -1)),
+			int(shell_clean.get("exterior_air_count", -1)),
+		],
+	)
+	var off_deck_out := 0
+	for list_name in ["exterior", "interior"]:
+		for item_raw in shell_raw.get(list_name, []) as Array:
+			var item := item_raw as Dictionary
+			if not BrickLayout.cell_on_grid(
+				grid,
+				item.get("cell", Vector3i.ZERO) as Vector3i,
+				str(item.get("brick_id", "")),
+				int(item.get("yaw", 0)),
+			):
+				off_deck_out += 1
+	_check(
+		off_deck_out == 0,
+		"and returns no off-deck brick for either stage to draw (%d)" % off_deck_out,
+	)
+
+	_check_footprint_fillers_stay_solid(grid)
+
+
+## The exterior key set of a layout, taken through the fit-out's own filter so
+## the helper cannot disagree with the production path about what is built.
+func _shell_of(grid: DeckGrid, layout: BrickLayout) -> Dictionary:
+	var kept: Array = DeckFitout.on_deck_items(grid, layout.iter_primary_cells())["kept"]
+	return BRICK_SHELL_CLASSIFIER.classify(layout, grid, kept).get("exterior_keys", {})
+
+
+## A MULTI-CELL BRICK IS ACCEPTED ONCE AND OCCUPIES SIX CELLS, and the fix above
+## turns on that distinction: a cell is solid iff its PRIMARY was accepted, and a
+## footprint's five filler cells carry `occupied_by` and no verdict of their own.
+## Nothing in this file had ever placed one — every fixture here is `set_brick`,
+## which is 1x1x1 — so a fix that dropped fillers from the occupancy field would
+## have opened a hole in every door and shown up first as a player seeing daylight
+## through a deckhouse.
+##
+## Stated as a substitution: the same six cells built as one `block_door_fixed`
+## and as six blocks must flood the same air and seal the same cabin.
+func _check_footprint_fillers_stay_solid(grid: DeckGrid) -> void:
+	var blocks := _cabin_layout(true)
+	var blocks_kept: Array = DeckFitout.on_deck_items(grid, blocks.iter_primary_cells())["kept"]
+	var blocks_shell: Dictionary = BRICK_SHELL_CLASSIFIER.classify(blocks, grid, blocks_kept)
+	var door_origin := Vector3i(CABIN_ORIGIN.x + 1, CABIN_ORIGIN.y, CABIN_ORIGIN.z)
+	var want := {}
+	for dx in range(2):
+		for dy in range(3):
+			want[BrickLayout.cell_key(door_origin + Vector3i(dx, dy, 0))] = true
+	var doored := _cabin_layout(true)
+	for key in want.keys():
+		doored.erase_cell(BrickLayout.parse_key(str(key)))
+	_check(
+		doored.place_footprint(door_origin, "block_door_fixed", 0, grid),
+		"a 2x3x1 door lands in the cabin's forward wall",
+	)
+	var got := 0
+	for key in want.keys():
+		if doored.cells.has(key):
+			got += 1
+	_check(
+		got == want.size() and doored.count() == _cabin_layout(true).count(),
+		"the door occupies exactly the six cells the six blocks did (%d of %d, %d cells total)"
+		% [got, want.size(), doored.count()],
+	)
+	_check(
+		doored.iter_primary_cells().size() == _cabin_layout(true).iter_primary_cells().size() - 5,
+		"and it is ONE primary item where the blocks were six",
+	)
+	var kept: Array = DeckFitout.on_deck_items(grid, doored.iter_primary_cells())["kept"]
+	var shell: Dictionary = BRICK_SHELL_CLASSIFIER.classify(doored, grid, kept)
+	_check(
+		int(shell.get("exterior_air_count", -1))
+			== int(blocks_shell.get("exterior_air_count", -1)),
+		"a footprint brick's filler cells are as solid as the blocks they replace (%d air vs %d)"
+		% [
+			int(shell.get("exterior_air_count", -1)),
+			int(blocks_shell.get("exterior_air_count", -1)),
+		],
+	)
+	_check(
+		not (shell.get("exterior_keys", {}) as Dictionary).has(
+			BrickLayout.cell_key(CABIN_INNER_CELL)
+		),
+		"and the cabin behind the door is still sealed",
+	)
+
+
+## First on-deck cell whose +X neighbour is off the deck and whose other four
+## in-plane neighbours are on it, so a single smuggled cell is the only thing
+## standing between the target and open air.
+func _edge_cell_with_surround(grid: DeckGrid) -> Vector3i:
+	for z in range(2, grid.length - 2):
+		for x in range(grid.width - 1, 0, -1):
+			var cell := Vector3i(x, 0, z)
+			if not grid.in_bounds(cell) or grid.in_bounds(cell + Vector3i(1, 0, 0)):
+				continue
+			if (grid.in_bounds(cell + Vector3i(-1, 0, 0))
+					and grid.in_bounds(cell + Vector3i(0, 0, 1))
+					and grid.in_bounds(cell + Vector3i(0, 0, -1))):
+				return cell
+	return Vector3i(-1, -1, -1)
 
 
 func _fitout_stats(boat: BoatBody) -> Dictionary:

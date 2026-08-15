@@ -488,6 +488,24 @@ func iter_container_pads() -> Array:
 	return container_pads.duplicate(true)
 
 
+## `grid` is required and `null` refuses everything, exactly as on `set_brick`.
+##
+## It used to read `if grid != null and not grid.has_deck_cell(c)`, so a `null`
+## grid skipped the deck check entirely and the pad was written wherever it was
+## asked for. Latent, not live: the one production caller
+## (`shipyard_brick_editor`) and the fixture generator (`tests/_prebuilt_gen`)
+## both pass a real grid — which is exactly the argument that was made for
+## `set_brick`'s old signature before a legally registered vessel turned up with
+## all eight of its bricks in the sea.
+##
+## NOT CLOSED HERE, and named so it is not mistaken for settled: this uses
+## `has_deck_cell` while its sibling `add_bulk_hold` uses `in_bounds` for the same
+## kind of deck rectangle. `has_deck_cell` accepts a bow HALF cell, so a pad may
+## legally reach one cell further forward than a bulk hold on the same hull and
+## put a corner of a container over the water. Measured 2026-08-15 across the four
+## shipped prebuilt vessels (`tests/_shell_cost.gd`, section 4): 128 pad cells,
+## **0** on a bow half cell and 0 off the deck, so nothing that ships moves either
+## way — which is why this is a naming and not a change made blind.
 func add_container_pad(a: Vector3i, b: Vector3i, grid: DeckGrid) -> bool:
 	var zone := normalize_cargo_rect(a, b)
 	var mn := zone_min(zone)
@@ -501,7 +519,7 @@ func add_container_pad(a: Vector3i, b: Vector3i, grid: DeckGrid) -> bool:
 	for ix in range(mn.x, mx.x + 1):
 		for iz in range(mn.z, mx.z + 1):
 			var c := Vector3i(ix, 0, iz)
-			if grid != null and not grid.has_deck_cell(c):
+			if grid == null or not grid.has_deck_cell(c):
 				return false
 			if has_cell(c):
 				return false
@@ -616,7 +634,15 @@ func to_dict() -> Dictionary:
 ## future caller uses `from_dict` → `to_dict` without a compliance pass in
 ## between. The symptom would be a saved vessel whose bricks are stored off its
 ## own hull and which only reports the fault at the moment it is fitted out —
-## not at the moment it was saved. Nothing in the gate holds that today.
+## not at the moment it was saved.
+##
+## It is now PINNED rather than merely written down:
+## `vessel_registration_test._test_loader_trusts_the_record_and_the_grid_pass_catches_it`
+## asserts all three sentences — the loader keeps what the setter refuses, the
+## round trip re-saves them unchanged, and the grid pass is what catches them —
+## so deciding the loader should refuse after all means editing that paragraph,
+## not silently reddening a check. The behaviour is unchanged; what changed is
+## that the hole has a name in the gate.
 static func from_dict(d: Dictionary) -> BrickLayout:
 	var layout := BrickLayout.new()
 	layout.hull_id = str(d.get("hull_id", "fishing_trawler_small"))

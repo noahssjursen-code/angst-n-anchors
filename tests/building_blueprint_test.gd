@@ -64,6 +64,7 @@ func _run(t: TestReport) -> void:
 	_check_grid_math(t)
 	_check_layout_bookkeeping(t)
 	_check_volume_growth(t)
+	_check_grid_size_warning_is_a_loader_check(t)
 	_check_serialisation(t)
 	_check_fitout(t)
 
@@ -432,6 +433,92 @@ func _check_volume_growth(t: TestReport) -> void:
 	tall.grid_size = Vector3i(8, 6, 8)
 	t.check("growing up needs no shift", tall.ensure_fit_cells([Vector3i(0, 9, 0)]) == Vector3i.ZERO)
 	t.check("height grows upward only", tall.grid_size == Vector3i(8, 10, 8))
+
+
+## PINS WHAT `BuildingRules`' BOUNDS WARNING CAN AND CANNOT CATCH, because the
+## answer is not the one its own comment implies.
+##
+## The check walks each brick's footprint against `layout.grid()` — a grid built
+## from the layout's own `grid_size` — and warns when a cell falls outside. Every
+## route into a layout grows or refuses first, so on three of the four it cannot
+## fire. Measured (`tests/_building_bounds_probe.gd`), from a declared 8x6x8:
+##
+##   place_footprint(40,0,40, null)   placed, grid_size -> (74,6,74), NO warning
+##   set_brick(40,0,40)               refused outright, nothing stored
+##   from_dict cell "40,0,40"         `refit_volume_to_content` grows AND remaps
+##                                    it to "73,0,73"; NO warning
+##   from_dict cell "1,-2,1"          stays at y=-2, grid_size unchanged, WARNS
+##
+## The fourth is the whole live surface, and it is one specific shape: a brick
+## BELOW the ground plane in a saved record. `ensure_fit_cells` grows +X/-X, +Z/-Z
+## and +Y, and its shift vector is `Vector3i(dx, 0, dz)` — there is no −Y branch,
+## deliberately or otherwise, so a basement cell is the one thing neither growth
+## route can repair. This warning is the only thing in the project that notices it.
+## Asserting the three silences alongside it is the point: they say the check is
+## not a general bounds guard and must not be read as one.
+##
+## LEFT AS A WARNING, DELIBERATELY, and this is the half worth arguing. Escalating
+## it to an error refuses a saved blueprint at load, which is the move
+## `BrickLayout.from_dict`'s header rejects for the same reason on the vessel side:
+## a stale file is repaired, not refused. `ok` staying true is asserted so that
+## changing it is a decision somebody makes here, in the open.
+##
+## Shipped data affected: none. `warehouse.json` carries 780 cells, 0 negative-y,
+## 0 out of bounds against its own (44,16,44) volume.
+func _check_grid_size_warning_is_a_loader_check(t: TestReport) -> void:
+	const NEEDLE := "outside the stored grid_size"
+	var grown := BuildingLayout.new()
+	grown.grid_size = Vector3i(8, 6, 8)
+	t.check(
+		"a brick lands well past the declared volume when authoring freeform",
+		grown.place_footprint(Vector3i(40, 0, 40), "block", 0, null),
+	)
+	t.check(
+		"and the volume grew to contain it (%s)" % str(grown.grid_size),
+		grown.grid_size.x > 8 and grown.grid_size.z > 8,
+	)
+	t.check(
+		"so the bounds warning CANNOT fire for anything built through place_footprint",
+		not _contains(BuildingRules.validate(grown).get("warnings", PackedStringArray()), NEEDLE),
+	)
+
+	var loaded := BuildingLayout.from_dict({
+		"grid_size": [8, 6, 8],
+		"cells": {"40,0,40": {"brick_id": "block", "yaw": 0}},
+	})
+	t.check(
+		"a loaded record's out-of-volume cell is REFITTED, not kept where it was (%s at %s)"
+		% [str(loaded.grid_size), str(loaded.cells.keys())],
+		loaded.grid_size.x > 8 and not loaded.has_cell(Vector3i(40, 0, 40)),
+	)
+	t.check(
+		"so it cannot fire on a positive index from a save either",
+		not _contains(BuildingRules.validate(loaded).get("warnings", PackedStringArray()), NEEDLE),
+	)
+
+	## The one shape left: below the ground plane. `ensure_fit_cells` shifts by
+	## `Vector3i(dx, 0, dz)` and grows Y upward only, so nothing repairs this.
+	var basement := BuildingLayout.from_dict({
+		"grid_size": [8, 6, 8],
+		"cells": {"1,0,1": {"brick_id": "block", "yaw": 0}, "1,-2,1": {"brick_id": "block", "yaw": 0}},
+	})
+	t.check(
+		"a loaded record's cell BELOW the ground plane survives every refit",
+		basement.has_cell(Vector3i(1, -2, 1)) and basement.grid_size == Vector3i(8, 6, 8),
+	)
+	var basement_report := BuildingRules.validate(basement)
+	t.check(
+		"and THAT is the one thing the bounds warning catches",
+		_contains(basement_report.get("warnings", PackedStringArray()), NEEDLE),
+	)
+	t.check(
+		"the warning names the cell it means",
+		_contains(basement_report.get("warnings", PackedStringArray()), "1,-2,1"),
+	)
+	t.check(
+		"it stays a WARNING — a stale record is repaired, not refused",
+		bool(basement_report.get("ok", false)),
+	)
 
 
 func _check_serialisation(t: TestReport) -> void:
