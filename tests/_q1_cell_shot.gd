@@ -48,6 +48,8 @@ func _ready() -> void:
 		printerr("[q1] warehouse blueprint did not load")
 		get_tree().quit(1)
 		return
+	if OS.get_environment("Q1_REAUTHOR") == "1":
+		layout = _reauthor_doubled(layout)
 	var building := BuildingCache.instance(layout, false)
 	add_child(building)
 
@@ -94,6 +96,140 @@ func _ready() -> void:
 	get_tree().quit(0)
 
 
+## ── RE-AUTHORING THE BLUEPRINT FOR (b) ─────────────────────────────────────
+##
+## (b)'s stated cost is that every blueprint has to be re-authored. Rendering
+## (b) against the un-migrated `warehouse.json` therefore photographs
+## (b)-minus-the-work, and "the door is shorter than the player" is then a fact
+## about an un-migrated file, not an argument about the option. This builds the
+## migrated blueprint IN MEMORY — nothing is written to the tree — so (b) can be
+## judged on the building it is actually proposing.
+##
+## THE RULE, and it is the only one that preserves metres. A brick with
+## footprint F covers F cells. On the 1 m lattice that is F metres; on a 0.5 m
+## lattice it is F/2 metres. So each primary placement becomes EIGHT placements,
+## two per axis, stepped by F cells at doubled coordinates: 2F cells = F metres,
+## the authored size, restored.
+##
+## Floor underlays take the bottom layer only (four placements, 2x2 in plan):
+## the underlay is one thin plate at the foot of a one-metre course, and two
+## stacked copies would be two floors half a metre apart. This is a judgement
+## the doubling rule does not make for you, which is itself part of the answer
+## to "what does migration cost".
+##
+## Content is placed before surfaces because `_place_content` refuses a cell
+## that already holds content while `_place_surface` attaches to one — the same
+## order the editor would produce.
+func _reauthor_doubled(src: BuildingLayout) -> BuildingLayout:
+	var out := BuildingLayout.new()
+	out.blueprint_id = src.blueprint_id
+	out.display_name = src.display_name
+	out.role = src.role
+	out.pad_template_id = src.pad_template_id
+	out.grid_size = src.grid_size * 2
+
+	var content: Array[Dictionary] = []
+	var surfaces: Array[Dictionary] = []
+	for entry in src.iter_primary_cells():
+		var cell := entry["cell"] as Vector3i
+		if BuildingLayout.entry_is_surface_only(entry):
+			surfaces.append({"cell": cell, "entry": entry})
+			continue
+		content.append({"cell": cell, "entry": entry})
+		if entry.has("surface"):
+			surfaces.append({"cell": cell, "entry": entry["surface"] as Dictionary})
+
+	var placed := 0
+	var refused := 0
+	var footprints: Dictionary = {}
+	for job in content:
+		var cell := job["cell"] as Vector3i
+		var entry := job["entry"] as Dictionary
+		var brick_id := str(entry.get("brick_id", ""))
+		var yaw := int(entry.get("yaw", 0))
+		var step := _footprint_steps(brick_id, yaw)
+		footprints[brick_id] = step
+		var color: Variant = entry.get("color", null)
+		var props: Dictionary = {}
+		if entry.has("text"):
+			props["text"] = str(entry["text"])
+		for i in 2:
+			for j in 2:
+				for k in 2:
+					var origin := Vector3i(
+						cell.x * 2 + i * step.x,
+						cell.y * 2 + j * step.y,
+						cell.z * 2 + k * step.z)
+					if out.place_footprint(origin, brick_id, yaw, null, color, props):
+						placed += 1
+					else:
+						refused += 1
+
+	var surfaced := 0
+	var surface_refused := 0
+	for job in surfaces:
+		var cell := job["cell"] as Vector3i
+		var entry := job["entry"] as Dictionary
+		var brick_id := str(entry.get("brick_id", "floor"))
+		var yaw := int(entry.get("yaw", 0))
+		var step := _footprint_steps(brick_id, yaw)
+		footprints[brick_id] = step
+		var color: Variant = entry.get("color", null)
+		for i in 2:
+			for k in 2:
+				var origin := Vector3i(
+					cell.x * 2 + i * step.x, cell.y * 2, cell.z * 2 + k * step.z)
+				if out.place_footprint(origin, brick_id, yaw, null, color):
+					surfaced += 1
+				else:
+					surface_refused += 1
+
+	print("[q1] REAUTHOR: %d content primaries -> %d placements (%d refused); "
+		% [content.size(), placed, refused]
+		+ "%d surfaces -> %d placements (%d refused)"
+			% [surfaces.size(), surfaced, surface_refused])
+	print("[q1] REAUTHOR: grid %s -> %s, cells %d -> %d"
+		% [str(src.grid_size), str(out.grid_size), src.cells.size(), out.cells.size()])
+	## A brick wider than one cell is drawn ONCE per placement, so eight copies of
+	## it are eight of the thing, not one of it at twice the size. That tiles for
+	## a plain slab and does not for anything with internal structure.
+	var ids := footprints.keys()
+	ids.sort()
+	for id_variant in ids:
+		var id := str(id_variant)
+		var fp := footprints[id] as Vector3i
+		var multi := fp.x > 1 or fp.y > 1 or fp.z > 1
+		print("[q1] REAUTHOR: %-18s footprint %s  %s"
+			% [id, str(fp), "MULTI-CELL — 8 copies, not one" if multi else "tiles"])
+	return out
+
+
+func _count_non_mesh(node: Node) -> Dictionary:
+	var count := 0
+	var kinds: Dictionary = {}
+	for child in node.get_children():
+		if child is MeshInstance3D:
+			continue
+		if child is VisualInstance3D or child is Light3D:
+			count += 1
+			var kind := child.get_class()
+			kinds[kind] = int(kinds.get(kind, 0)) + 1
+			continue
+		var sub := _count_non_mesh(child)
+		count += int(sub["count"])
+		for key in (sub["kinds"] as Dictionary):
+			kinds[key] = int(kinds.get(key, 0)) + int((sub["kinds"] as Dictionary)[key])
+	return {"count": count, "kinds": kinds}
+
+
+func _footprint_steps(brick_id: String, yaw: int) -> Vector3i:
+	var fp := BrickCatalog.footprint_of(brick_id)
+	var steps := int(round(float(yaw) / 90.0)) % 4
+	if steps % 2 != 0:
+		return Vector3i(fp.z, fp.y, fp.x)
+	return fp
+
+
 ## Per-brick-id drawn extents, so the roof/wall daylight in the frames is a
 ## measured number and not something I eyeballed off a picture. Built from
 ## `BuildingFitout.build` rather than `BuildingCache.instance` because the cache
@@ -130,6 +266,14 @@ func _report_courses(layout: BuildingLayout) -> void:
 		else:
 			lo[brick_id] = minf(float(lo[brick_id]), aabb.position.y)
 			hi[brick_id] = maxf(float(hi[brick_id]), aabb.position.y + aabb.size.y)
+	## `BuildingCache._flatten_visuals` rebuilds MeshInstance3D and ONLY
+	## MeshInstance3D; anything else is recursed into and, having no mesh
+	## children, dropped. Count what the fitout draws that is not a mesh, so the
+	## claim is a measurement and not a code read.
+	var non_mesh := _count_non_mesh(fitout)
+	print("[q1] %s: BuildingFitout draws %d non-MeshInstance3D visuals (%s)"
+		% [_variant, int(non_mesh["count"]), str(non_mesh["kinds"])])
+
 	var ids := lo.keys()
 	ids.sort()
 	for id_variant in ids:

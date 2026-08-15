@@ -1236,15 +1236,61 @@ file is not red by construction. It belongs beside decision #1 below.
    deep; the "10 x 6 x 3.25 m" predicted here before it was rendered was wrong on
    two axes) and every existing blueprint needs re-authoring.
 
-   **What the renders settle, and what they do not.** They settle *today*
-   decisively: it is a pegboard, not a building, and no taste is involved. They do
-   **not** settle (a) against (b), and the frames must not be read as though they
-   do — **(b) was rendered with today's blueprint, and re-authoring the blueprint
-   is precisely (b)'s stated cost.** So the shed is (b)-minus-the-work, not (b).
-   A fair (b) frame needs `warehouse.json` re-authored at double the cell counts;
-   until that exists, "the door is shorter than the player" is a fact about an
-   un-migrated blueprint and not an argument against the option. The wave has
-   been sent back for that frame.
+   **The first three frames settle *today* and nothing else.** Today is a
+   pegboard, no taste involved. They did **not** settle (a) against (b): (b) was
+   rendered against today's blueprint, and re-authoring the blueprint is precisely
+   (b)'s stated cost, so the shed with the 1.5 m door was (b)-minus-the-work. That
+   frame was re-shot.
+
+   **(b) rendered fairly — `q1_brick_cell__b-grid-0.5m-reauthored__*`.** The
+   blueprint was migrated in memory only (`git diff --quiet
+   resources/data/buildings/warehouse.json` passes), by the one rule that
+   preserves metres: a brick of footprint F covers F cells, so each primary
+   becomes eight placements, two per axis at doubled coordinates; floor underlays
+   take the bottom layer only. 336 content primaries → **2688**, 234 surfaces →
+   **936**, 0 refused; cells 780 → 5520.
+
+   **On the envelope, (b) is indistinguishable from (a)** — 20.04 × 7.00 ×
+   12.02 m against 20.07 × 7.00 × 12.03, both on the ground, every course on the
+   identical metre. The wall is the same wall.
+
+   **What differs is one defect wearing four hats: a brick wider than one cell is
+   drawn once per placement, so eight copies are eight of the thing, not one of it
+   at twice the size.** Visible in the frame: the 3 m cargo door becomes a **2×2
+   grid of four small doors**; the windows become 2×2 mullioned; `roof_flat_4x4`
+   lands as **two roofs half a metre apart**; and `wall_text_lg` becomes **eight
+   "WAREHOUSE" signs** — measured, `BuildingFitout` emits 1 `Label3D` today and 8
+   migrated. There is no blueprint edit that fixes those: `size_m` caps the sign
+   at footprint × 0.5, so it needs a catalogue footprint of (12,6,1).
+
+   **So (b) requires a second migration — of the vocabulary, not the data.**
+   Every multi-cell brick in `BrickCatalog` must be re-cut at double footprint.
+   Nothing in this file's statement of (b) mentioned that, because nobody had
+   rendered it. (b) also costs **6.5× the mesh count for the identical
+   building** — 645 → 4176 `MeshInstance3D` per warehouse, each copied per
+   instance by `BuildingCache._stamp_node`.
+
+   Caveats the wave stated rather than let me find: the 0.03 m width/depth
+   difference is unexplained and unchased; the migrated roof's 0.320 m daylight is
+   **not** an improvement over (a)'s 0.820 m, it is an extra slab underneath; the
+   "every blueprint" population is **one**, and the three multi-cell bricks tested
+   are 3 of 64 in the catalogue, with more expected to fail the same way; and no
+   frame in this whole pass had collision enabled.
+1b. **`BuildingCache` silently drops every non-mesh visual — the warehouse sign is
+   drawn on no building the game stamps.** Found 2026-08-15 while rendering the
+   brick-cell variants, verified independently: `_flatten_visuals`
+   (`building_cache.gd:76`) and `_stamp_node` (`:93`) both reconstruct
+   `MeshInstance3D` **and only that**. A `Label3D` is a `Node3D`, so it is
+   recursed into, contributes no mesh children, and vanishes without a word.
+   `BuildingFitout.build` emits 1 `Label3D` per warehouse (8 after a (b)
+   migration); the AABB report over the cached tree lists no `wall_text_lg` under
+   any variant, and no lettering appears in any of the eight Q1 frames. The
+   production path is `PortLayoutGraphVisualizer:1130` →
+   `BuildingCache.instance(captured, true)`, so this is the shipping path.
+   `BuildingLighting` is skipped by name one line above, which is deliberate — but
+   any brick whose visual is a light is presumably lost the same way, and that was
+   **not** checked. Nothing in the gate covers a non-mesh visual surviving the
+   cache, which is why this sat invisible.
 2. **`BuildingLayout.place_footprint` ignores its `_building_grid`** — 4/117 in
    `building_blueprint_test`. `BrickLayout`'s equivalent argument IS load-bearing
    and does reject out-of-bounds. Two sibling classes, contradictory, one wrong.
