@@ -440,6 +440,41 @@ no visible scale figure has no absolute scale — check the figure is *visible*,
 
     Two agents in one working tree means the index is shared mutable state. Either read it
     back before committing, or name the paths on the commit itself (`git commit -- <paths>`).
+3j. **A wave can die at any moment, and its corpse looks exactly like a defect.
+    Pause only in states where the tree compiles and the units you touched are green.**
+
+    Three waves were killed mid-edit on 2026-08-15 — one by a container restart, two
+    by a session API limit — and every one left residue indistinguishable from a real
+    failure:
+
+    - a `_result()` signature changed without its callers → `vessel_registration_test`
+      and `deck_fitout_staging_test` **NOTRUN on parse errors**, 20–26 script errors
+      across the family;
+    - a deckhouse widened to an 8.00 m front with its glazing not scaled →
+      `deckhouse_shape_test` RED on *"that one pane spans 16.8% of the 8.00 m front"*,
+      which is a **plausible geometric number**, the hardest kind of phantom to
+      dismiss;
+    - a plan-side change whose own test passed while its author's last words were
+      *"now fix the three test-side defects"*.
+
+    **The orchestrator's rule: never commit a killed wave's work to satisfy a
+    dirty-tree hook.** Preserve the diff and its probes to the scratchpad — one
+    directory per wave, kept separate — reset to the last verified commit, re-verify
+    the units the work touched, and re-spawn with the patch handed over *explicitly
+    labelled as unfinished, with what was measured about how it broke*. That is not a
+    loss: on the first occurrence the successor mined the patch, kept its predicate
+    and its grid-as-parameter argument, and correctly discarded the signature change
+    that had killed it — which *was never needed* — and the post-filter that sat at
+    the wrong layer.
+
+    **A passing test from an author still repairing it is not evidence.** Re-derive it.
+
+3k. **Check `ListAgents` before concluding a repeated notification is harness noise.**
+    An agent re-reported "state unchanged" a dozen times while genuinely running,
+    spinning on stale gate waiters and spending tokens on every wake. A first
+    `TaskStop` returned "not running" for a *different, completed* agent, and that
+    answer was generalised to the live one. Brief waves to **stop when done** rather
+    than poll a gate that has already finished.
 4. **Could a player do this with a mouse?** If not, it is a format, not a feature.
 5. **Say what you did not verify.**
 6. **Red with a diagnosis beats green with a lie**, every time.
