@@ -29,7 +29,7 @@ extends SceneTree
 const PO := preload("res://scripts/ship/plan_outfit.gd")
 const Parts := preload("res://scripts/construction/part_catalog.gd")
 const HULL := "hull_28x10"
-const EXPECTED_CHECKS := 127
+const EXPECTED_CHECKS := 137
 
 var _failures := 0
 var _checks := 0
@@ -55,6 +55,7 @@ func _initialize() -> void:
 	_test_budgets_are_enforced()
 	_test_cargo_is_a_union_of_deck_cells()
 	_test_removing_one_item_reddens_one_rule()
+	_test_the_report_publishes_its_fence()
 	print("---")
 	if _checks != EXPECTED_CHECKS:
 		print(
@@ -695,3 +696,69 @@ func _test_removing_one_item_reddens_one_rule() -> void:
 		_errors_mention(short, "At least four mooring points: at least 4 (current: 3)")
 	)
 	_check("the helm is untouched", bool(_rule(short, "helm")["ok"]))
+
+
+## THE FENCE THE REPORT NOW PUBLISHES.
+##
+## `compliance` has always taken a hull fence — it is how a bollard 900 m off the
+## bow stops counting toward "at least four mooring points". Until now it threw
+## the rows away and only the summarising error survived, so any caller that
+## needed BOTH the verdict and the refused entities took the same partition a
+## second time. Measured on `probe_container_feeder` (617 entities,
+## `tests/_compliance_cost.gd`): the fence is 99.88 ms of the 120.11 ms
+## `compliance` spends, so the second pass nearly doubled the cost of showing a
+## builder a checklist beside the off-hull line.
+##
+## `structure_studio` is the caller that needs both, on every rebake. The rows
+## come out of the report now, which makes the panel's "N OFF THE HULL" and the
+## verdict beside it ONE measurement of one question (REALITY.md §3b).
+func _test_the_report_publishes_its_fence() -> void:
+	var grid := _grid()
+	var clean := _lit_plan(false)
+	var report := PO.compliance(clean, HULL, "general_vessel", grid)
+	_check("the report carries an off_hull list", report.has("off_hull"))
+	_check(
+		"a plan built on its own hull has nothing off it",
+		(report.get("off_hull", []) as Array).is_empty()
+	)
+	_check("and that plan certifies", bool(report["registration_ok"]))
+
+	## A wall authored 900 m off the bow — the shape STATE.md 2c's 910 m collider
+	## slab came in as.
+	var strays := _lit_plan(false)
+	strays.add_wall(Vector3(900.0, 0.0, 900.0), "x", 6.0, 2.6)
+	var refused := PO.compliance(strays, HULL, "general_vessel", grid)
+	var rows := refused.get("off_hull", []) as Array
+	_check("the stray wall is in the published list", rows.size() == 1)
+	if rows.size() == 1:
+		var row := rows[0] as Dictionary
+		_check("the row names the kind", str(row.get("kind", "")) == "wall")
+		_check(
+			"and the row carries the sentence a builder is shown",
+			str(row.get("message", "")).to_lower().contains("hull")
+		)
+	## Same answer as the standalone predicate, on the same plan: the published
+	## rows are not a second, looser reading taken for the report's convenience.
+	_check(
+		"the published rows are exactly what off_hull_entities returns",
+		rows.size() == PO.off_hull_entities(StructureBaker.resolved(strays), grid).size()
+	)
+	## And the refusal reaches `errors` as it always did — publishing the rows
+	## replaced nothing.
+	_check(
+		"the summarising error is still raised",
+		_errors_mention_substring(refused, "off the hull")
+	)
+
+	## The early return — no registration chosen — carries the fence too, because
+	## that is the state a studio starts in and the panel still has to draw it.
+	var unlicensed := PO.compliance(strays, HULL, "", grid)
+	_check("an unregistered plan still reports its fence", (unlicensed.get("off_hull", []) as Array).size() == 1)
+	_check("and is refused", not bool(unlicensed["registration_ok"]))
+
+
+func _errors_mention_substring(report: Dictionary, needle: String) -> bool:
+	for message in report.get("errors", PackedStringArray()) as PackedStringArray:
+		if str(message).to_lower().contains(needle.to_lower()):
+			return true
+	return false

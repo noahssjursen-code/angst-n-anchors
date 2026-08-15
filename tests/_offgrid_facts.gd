@@ -17,12 +17,25 @@ extends Node
 ##   E. the two dormant `vessel_skin_showcase` demos: 122 refused cells between
 ##      them, every one an UNCATALOGUED BRICK ID, not one off-deck cell.
 ##   F. `staged_vessel_visual_demo`'s big layout: 3760 cells, 0 off the deck.
-##   G. THE SEAM THIS WAVE DID NOT CLOSE. `BrickShellClassifier.classify` splits
-##      the filtered item list correctly (57 exterior / 1 interior either way),
-##      but builds its occupancy field and bounding box from `layout.cells`
-##      directly and ignores its own `_grid` argument. One smuggled cell at
-##      (-40, 0, -40) takes `exterior_air_count` from **121 to 28600** — a 236x
-##      flood fill, on the staged fit-out's critical path.
+##   G. THE SEAM THIS WAVE DID NOT CLOSE — **CLOSED 2026-08-15, and G's own
+##      conclusion was half wrong.** `BrickShellClassifier.classify` built its
+##      occupancy field and bounding box from `layout.cells` directly and ignored
+##      its own `_grid` argument; one smuggled cell at (-40, 0, -40) took
+##      `exterior_air_count` from **121 to 28600** — reproduced exactly, and
+##      priced at **1.16 ms -> 131.56 ms**.
+##
+##      "The split itself is unaffected (57 exterior / 1 interior either way)"
+##      was true OF THIS FIXTURE ONLY, and only because it puts the smuggled cell
+##      40 cells from anything. Put one BESIDE an on-deck brick and the split does
+##      change: measured on hull_90x24, an on-deck block at the deck edge went
+##      `exterior` -> `interior` when a never-to-be-built cell was smuggled in on
+##      its open side — which on a remote replica (stops after EXTERIOR_VISUALS)
+##      is a brick that is never drawn at all.
+##
+##      Now `tests/_shell_cost.gd` for the measurement and
+##      `deck_fitout_staging_test._test_off_deck_bricks_reach_no_shell` for the
+##      checks. Section G below still runs and still prints; on today's code both
+##      of its rows read 121.
 ##
 ## Run: xvfb-run -a --server-args="-screen 0 1280x720x24" godot \
 ##        --rendering-driver opengl3 --audio-driver Dummy \
@@ -141,12 +154,14 @@ func _ready() -> void:
 	])
 	demo.free()
 
-	print("=== G. BrickShellClassifier — the one seam still fed unfiltered ===")
-	## `classify(layout, _grid, known_primary_items)`: the ITEM list it splits is
-	## filtered by `apply_staged`, but its occupancy field and bounding box are
-	## built by walking `layout.cells` directly, and its `_grid` parameter is
-	## unused (it is named with a leading underscore). One off-deck cell therefore
-	## still stretches the flood-fill volume.
+	print("=== G. BrickShellClassifier — the seam, now CLOSED (both rows read 121) ===")
+	## Kept as the before/after witness rather than deleted. It USED to read
+	## `classify(layout, _grid, known_primary_items)` with the grid unused behind a
+	## leading underscore: the ITEM list was filtered by `apply_staged`, but the
+	## occupancy field and bounding box were built by walking `layout.cells`
+	## directly, so one off-deck cell stretched the flood-fill volume 236x. The
+	## solid field is now the accepted primaries', so both rows below print the
+	## same `exterior_air`. See `tests/_shell_cost.gd` for the milliseconds.
 	var hull := "hull_90x24"
 	var hg := HullRegistry.make_grid(hull)
 	var origin := Vector3i(20, 0, 60)

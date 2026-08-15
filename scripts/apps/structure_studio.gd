@@ -232,6 +232,8 @@ func _ready() -> void:
 			_shoot_piece_tool()
 		elif str(arg) == "--studio-fitting-shot":
 			_shoot_fitting_tool()
+		elif str(arg) == "--studio-registration-shot":
+			_shoot_registration_checklist()
 
 
 ## A photograph of the piece tool in use, because a UI surface is not reviewable
@@ -319,6 +321,65 @@ func _shoot_fitting_tool() -> void:
 	var error := get_viewport().get_texture().get_image().save_png(out)
 	print("[structure-studio] fitting tool shot -> %s (%d)" % [out, error])
 	get_tree().quit(0 if error == OK else 1)
+
+
+## TWO PHOTOGRAPHS OF THE SAME BOAT: one that does not certify and one that does.
+##
+## The claim this wave has to survive is REALITY.md §5 — can a player who has
+## never read the source tell, from the screen, what is missing and where to get
+## it — and that is a taste answer, so it is judged by LOOKING at these two, not
+## by the check count beside them (REALITY.md §1, §2).
+##
+##   xvfb-run -a --server-args="-screen 0 1600x900x24" godot \
+##     --rendering-driver opengl3 --audio-driver Dummy \
+##     res://scenes/apps/structure_studio.tscn -- --studio-registration-shot
+func _shoot_registration_checklist() -> void:
+	_set_context("vessel")
+	_place_deck(Vector3(1, 0, 8), Vector3(9, 0, 24))
+	_set_tool(Tool.FITTING)
+	_set_build_level(0.0)
+	## A boat somebody has started: helm aboard, two of the four mooring points
+	## down, not one navigation light. Six of the eight requirements outstanding.
+	_probe_click_fitting("helm_console", Vector3i(10, 0, 40))
+	for i in 2:
+		_probe_click_fitting("bollard_pair", Vector3i(4 + i * 8, 0, 20))
+	_cam_focus = _plan_offset + Vector3(5.0, 1.2, 14.0)
+	_cam_yaw = 3.9
+	_cam_pitch = 0.34
+	_cam_distance = 17.0
+	_set_status("two mooring points and no lights", false)
+	_refresh_panel()
+	await _write_shot("structure_studio__registration_incomplete.png")
+	## The same boat, finished with the tool: two more bollards, the sidelights on
+	## their own sides, the masthead light six PgUp presses above them.
+	for i in 2:
+		_probe_click_fitting("bollard_pair", Vector3i(8 + i * 8, 0, 20))
+	_probe_click_fitting("lantern_sidelight_port", Vector3i(3, 0, 30))
+	_probe_click_fitting("lantern_sidelight_starboard", Vector3i(17, 0, 30))
+	for _press in 6:
+		_set_build_level(_active_base + NODE_SNAP)
+	_probe_click_fitting("lantern_all_round", Vector3i(10, 6, 38))
+	_set_build_level(0.0)
+	_cam_focus = _plan_offset + Vector3(5.0, 1.2, 14.0)
+	_cam_yaw = 3.9
+	_cam_pitch = 0.34
+	_cam_distance = 17.0
+	_set_status("registration complete")
+	_refresh_panel()
+	await _write_shot("structure_studio__registration_certified.png")
+	get_tree().quit(0)
+
+
+func _write_shot(file_name: String) -> void:
+	for _i in 12:
+		await get_tree().process_frame
+	await RenderingServer.frame_post_draw
+	var out := "res://screenshots/studio/%s" % file_name
+	DirAccess.make_dir_recursive_absolute(
+		ProjectSettings.globalize_path("res://screenshots/studio")
+	)
+	var error := get_viewport().get_texture().get_image().save_png(out)
+	print("[structure-studio] shot -> %s (%d)" % [out, error])
 
 
 ## Headless CI workout: drives every tool through its real placement path,
@@ -432,6 +493,12 @@ func _run_studio_probe() -> void:
 	_probe_fitting_palette(expect)
 	_probe_fitting_mouse(expect)
 	_probe_a_mouse_built_vessel_certifies(expect)
+	## ── The registration checklist ──────────────────────────────────────────
+	_probe_panels_are_on_screen(expect)
+	_probe_panel_and_spawn_agree(expect)
+	_probe_the_checklist_says_where_to_go(expect)
+	_probe_the_advice_matches_the_state(expect)
+	_probe_every_fixture_lands_on_its_own_hull(expect)
 	for arg in OS.get_cmdline_user_args():
 		if str(arg) == "--studio-write-fixtures":
 			_write_tug_fixture()
@@ -684,6 +751,373 @@ func _probe_a_mouse_built_vessel_certifies(expect: Callable) -> void:
 		not bool(dark.get("registration_ok", true))
 	)
 	_set_context("vessel")
+
+
+## ── The registration checklist probe ────────────────────────────────────────
+##
+## Three questions, in the order they have to be true in:
+##   1. is the panel on the screen at all
+##   2. does it say the same thing the spawn will say
+##   3. can a person who has never read the source act on it
+
+
+## REALITY.md §8, applied to a UI: check the instrument. Every panel this studio
+## draws must be INSIDE the viewport, and two of them were not — the properties
+## drawer stood at x = 1920 on a 1920-wide viewport and the context strip at
+## y = 1080 on a 1080-tall one, so the inspector, the surface library, SAVE JSON,
+## LOAD SELECTED, the tool hint, the metrics line and every `_set_status` toast
+## have been rendering perfectly into nobody's eyes.
+##
+## This asserts RECTS, not text. The off-hull probe below it checks a `_status`
+## STRING and passed the whole time the label carrying that string was off the
+## bottom of the screen — which is exactly the gap between "computed" and "shown"
+## this wave exists to close.
+func _probe_panels_are_on_screen(expect: Callable) -> void:
+	var view := Rect2(Vector2.ZERO, Vector2(get_viewport().get_visible_rect().size))
+	var offscreen := PackedStringArray()
+	for name in ["TopBar", "ToolPalette", "PropertiesDrawer", "ContextStrip"]:
+		var panel := _ui_root.get_node_or_null(NodePath(name)) as Control
+		if panel == null:
+			offscreen.append("%s: not in the tree" % name)
+			continue
+		if not panel.is_visible_in_tree():
+			offscreen.append("%s: hidden" % name)
+			continue
+		## `grow(1)` absorbs the one-pixel rounding a panel's own border adds;
+		## the failures this catches were 320 and 40 pixels out, not one.
+		if not view.grow(1.0).encloses(panel.get_global_rect()):
+			offscreen.append("%s: %s outside %s" % [name, panel.get_global_rect(), view])
+	expect.call(
+		"every studio panel is inside the viewport (%s)"
+		% ("all four on screen" if offscreen.is_empty() else ", ".join(offscreen)),
+		offscreen.is_empty()
+	)
+	## The checklist specifically, since it is the thing this wave delivers: it
+	## is no use being inside a panel that is off the screen.
+	_refresh_panel()
+	expect.call(
+		"the REGISTRATION checklist is visible in the tree",
+		_registration_verdict != null and _registration_verdict.is_visible_in_tree()
+	)
+
+
+## THE ONE THAT MATTERS: what the panel says and what the boat is judged to be
+## cannot disagree.
+##
+## A checklist that reads CERTIFIED over a vessel the spawn refuses is worse than
+## no checklist — it is a lie with a UI, and it would be believed. So this does
+## not compare two dictionaries: it authors the plan through the tool's own click
+## path, reads the TEXT OFF THE LABELS, then puts the same plan through
+## `VesselSpawn.instantiate` -> `DeckFitout.apply_plan` and compares the panel's
+## words against the boat's own `vessel_outfit` meta and against the checklist
+## `DeckFitout.compliance_for_layout` computes from the layout THE BOAT STORED.
+##
+## Both states are checked, because agreement on "no" is cheap: an INCOMPLETE
+## vessel (helm and mooring only) and then the same vessel with its three lights.
+func _probe_panel_and_spawn_agree(expect: Callable) -> void:
+	_set_context("vessel")
+	_set_tool(Tool.FITTING)
+	_set_build_level(0.0)
+	_probe_click_fitting("helm_console", Vector3i(10, 0, 46))
+	for i in 4:
+		_probe_click_fitting("bollard_pair", Vector3i(4 + i * 4, 0, 8))
+	_refresh_panel()
+	_probe_agreement_at(expect, "an unlit boat", false)
+
+	_probe_click_fitting("lantern_sidelight_port", Vector3i(2, 0, 30))
+	_probe_click_fitting("lantern_sidelight_starboard", Vector3i(18, 0, 30))
+	for _press in 6:
+		_set_build_level(_active_base + NODE_SNAP)
+	_probe_click_fitting("lantern_all_round", Vector3i(10, 6, 44))
+	_set_build_level(0.0)
+	_refresh_panel()
+	_probe_agreement_at(expect, "the same boat, lit", true)
+	## No reset: `_set_context` rebuilds the host vessel, which is the single most
+	## expensive call in this probe file, and the next probe opens with its own.
+
+
+## One comparison of the screen against a spawned vessel. `expect_certified` is
+## the wave's own claim about which state this is, so a mutation that makes the
+## panel agree with the spawn by making BOTH of them say "no" still reddens.
+func _probe_agreement_at(expect: Callable, what: String, expect_certified: bool) -> void:
+	var panel_certified := _registration_verdict.text.begins_with("CERTIFIED")
+	var panel_failed := _panel_failed_labels()
+	expect.call(
+		"%s: the panel's own verdict is the one this probe is testing (panel says %s)"
+		% [what, _registration_verdict.text],
+		panel_certified == expect_certified
+	)
+
+	var boat := VesselSpawn.instantiate(_hull_id, _plan.to_dict(), _registration_id)
+	expect.call("%s: it spawns" % what, boat != null)
+	if boat == null:
+		return
+	var outfit: Dictionary = boat.get_meta("vessel_outfit", {}) as Dictionary
+	var spawned_certified := bool(outfit.get("registration_ok", false))
+	expect.call(
+		"%s: THE PANEL AND THE SPAWNED VESSEL AGREE (panel %s, boat %s)"
+		% [what, panel_certified, spawned_certified],
+		panel_certified == spawned_certified
+	)
+	## And rule by rule, off the layout the BOAT is carrying — the same call
+	## persistence and deployment make on a saved record.
+	var spawned := DeckFitout.compliance_for_layout(
+		boat.get_meta("brick_layout", {}) as Dictionary,
+		_hull_id,
+		_registration_id,
+		_deck_grid,
+	)
+	var spawn_failed := PackedStringArray()
+	for raw in spawned.get("checklist", []) as Array:
+		if not bool((raw as Dictionary).get("ok", false)):
+			spawn_failed.append(str((raw as Dictionary).get("label", "")).to_upper())
+	panel_failed.sort()
+	spawn_failed.sort()
+	expect.call(
+		"%s: and they name the SAME failed requirements (panel [%s] vs spawn [%s])"
+		% [what, ", ".join(panel_failed), ", ".join(spawn_failed)],
+		panel_failed == spawn_failed
+	)
+	boat.free()
+
+
+## The requirements the panel is telling a player it has failed, read back OUT OF
+## THE LABELS — not out of `_compliance`. Reading the dictionary would prove the
+## dictionary agrees with itself (REALITY.md §3).
+func _panel_failed_labels() -> PackedStringArray:
+	var out := PackedStringArray()
+	for child in _registration_rows.get_children():
+		var label := child as Label
+		if label == null or not label.text.begins_with("✗"):
+			continue
+		out.append(label.text.substr(1).strip_edges())
+	return out
+
+
+## REALITY.md §5: could a player who has never read the source act on this?
+##
+## "FAILS 3" is not that. Neither is `white_light_height`. So for a boat that is
+## short of exactly one thing, the screen has to carry the NAME OF THE FITTING
+## that closes it and the TOOL it is on — and the name this probe looks for is
+## fetched from `PartCatalog` by the rule's own tag, so the check is not a copy
+## of the panel's string.
+func _probe_the_checklist_says_where_to_go(expect: Callable) -> void:
+	_set_context("vessel")
+	_set_tool(Tool.FITTING)
+	_set_build_level(0.0)
+	_probe_click_fitting("helm_console", Vector3i(10, 0, 46))
+	_refresh_panel()
+
+	var failed := _panel_failed_labels()
+	expect.call(
+		"a boat with a helm and nothing else fails several requirements (%d)" % failed.size(),
+		failed.size() >= 4
+	)
+	## Every failed requirement is followed by a sentence. A row with no advice
+	## under it is the "FAILS 3" panel this wave replaced.
+	var rows := _registration_rows.get_children()
+	var unadvised := PackedStringArray()
+	for index in rows.size():
+		var label := rows[index] as Label
+		if label == null or not label.text.begins_with("✗"):
+			continue
+		var advice := (rows[index + 1] as Label) if index + 1 < rows.size() else null
+		if advice == null or advice.text.strip_edges().length() < 20:
+			unadvised.append(label.text)
+	expect.call(
+		"every failed requirement carries a sentence saying what to do (%s)"
+		% ("all advised" if unadvised.is_empty() else ", ".join(unadvised)),
+		unadvised.is_empty()
+	)
+
+	var screen := _registration_panel_text()
+	## The port sidelight is missing, and the catalogue says which fitting is a
+	## port sidelight. The panel has to name it, and name a tool.
+	var wanted := PackedStringArray()
+	for id_variant in PartCatalog.ids():
+		var id := str(id_variant)
+		if PartCatalog.has_tag(id, "nav_port"):
+			wanted.append(PartCatalog.display_name(id).to_upper())
+	expect.call(
+		"the catalogue has something tagged nav_port to name (%s)" % ", ".join(wanted),
+		not wanted.is_empty()
+	)
+	var named := false
+	for name in wanted:
+		if screen.contains(name):
+			named = true
+	expect.call(
+		"THE SCREEN NAMES THE FITTING THAT WOULD FIX THE MISSING PORT LIGHT (%s)"
+		% ", ".join(wanted),
+		named
+	)
+	expect.call(
+		"and names the tool it is on, so a player knows where to click",
+		screen.contains(FITTING_TOOL)
+	)
+	## The one requirement no plan can meet says so instead of sending anybody
+	## looking for a tool that does not exist — an honest "you cannot" beats a
+	## confident wrong instruction.
+	_registration_id = "passenger_vessel"
+	_recompute_compliance()
+	_refresh_panel()
+	var passenger_screen := _registration_panel_text()
+	expect.call(
+		"the cabin rule no plan can satisfy admits it rather than inventing a tool",
+		passenger_screen.contains("CANNOT SATISFY THIS REQUIREMENT")
+	)
+	## And with no licence chosen at all, the panel says what that costs.
+	_registration_id = ""
+	_recompute_compliance()
+	_refresh_panel()
+	expect.call(
+		"an unregistered plan is told it cannot be spawned",
+		_registration_verdict.text.contains("NOT REGISTERED")
+			and _registration_panel_text().contains("PICK A LICENCE")
+	)
+	_registration_id = "general_vessel"
+	_recompute_compliance()
+	_refresh_panel()
+	## The helm-only boat is left standing on purpose —
+	## `_probe_the_advice_matches_the_state` runs next and needs exactly it.
+
+
+## THE GRID FOLLOWS THE DOCUMENT — run over EVERY shipped fixture, not the one
+## this wave was working on (REALITY.md §3c).
+##
+## `PlanOutfit`'s header states the fence refuses **zero of 2342 shipped
+## entities**. That fact was true of the function and false of this studio: it
+## adopted a loaded plan's `hull_id` and left `_deck_grid` on whatever hull the
+## app had booted with, so `probe_container_feeder` — 617 entities, every one on
+## its own hull — came back with **596 OFF THE HULL — NOT BUILT**. The panel in
+## the corner said so, and nobody had asked it to be right.
+##
+## This asserts the studio agrees with that fact through its OWN load path, on
+## every vessel document in the fixtures directory, so the next hull-shaped
+## fixture is covered the day it is added rather than the day somebody edits a
+## list here.
+func _probe_every_fixture_lands_on_its_own_hull(expect: Callable) -> void:
+	var wrong_grid := PackedStringArray()
+	var refused := PackedStringArray()
+	var loaded := 0
+	for path_variant in _saved_plan_paths():
+		var path := str(path_variant)
+		## Deliberately NOT reset between fixtures: loading a 150 m feeder over a
+		## 28 m trawler is exactly the sequence that produced 596 phantom
+		## refusals, and it is also half the work of resetting each time.
+		_load_plan(path)
+		if _context != "vessel" or _plan.hull_id.is_empty():
+			continue
+		loaded += 1
+		var want := HullRegistry.make_grid(_plan.hull_id)
+		if _deck_grid.width != want.width or _deck_grid.length != want.length:
+			wrong_grid.append("%s: %dx%d, its hull %s is %dx%d" % [
+				path.get_file(), _deck_grid.width, _deck_grid.length,
+				_plan.hull_id, want.width, want.length
+			])
+		if not _off_hull.is_empty():
+			refused.append("%s: %d of %d" % [
+				path.get_file(), _off_hull.size(), _plan.entity_count()
+			])
+	expect.call("there are shipped vessel fixtures to load (%d)" % loaded, loaded >= 10)
+	expect.call(
+		"loading a plan puts the studio on THAT plan's hull grid (%s)"
+		% ("all %d" % loaded if wrong_grid.is_empty() else ", ".join(wrong_grid)),
+		wrong_grid.is_empty()
+	)
+	expect.call(
+		"and no shipped fixture reports a single entity off its own hull (%s)"
+		% ("0 refused" if refused.is_empty() else ", ".join(refused)),
+		refused.is_empty()
+	)
+	## The hull dropdown is part of the answer: a control reading `hull_28x10`
+	## over a 150 m feeder is the same lie one panel across.
+	expect.call(
+		"and the hull dropdown names the hull actually being built on (%s)"
+		% _hull_option.get_item_text(_hull_option.selected),
+		_hull_option.get_item_text(_hull_option.selected) == _hull_id
+	)
+
+
+## THE CHECK THIS WAVE'S OWN FIRST CAPTURE EARNED.
+##
+## `_probe_the_checklist_says_where_to_go` asserts that a failed requirement
+## carries a sentence naming a fitting and a tool. The first cut of this panel
+## satisfied all of that and was still WRONG: `tag_side` fails both when the
+## light is on the wrong side and when there is no light, its `current` is 0 in
+## both, and the sentence said "FITTED, BUT NOT ALL ON THE PORT SIDE" under a
+## boat carrying no lights whatsoever. Nothing here caught it — I saw it in the
+## capture (REALITY.md §2: look, do not score).
+##
+## So the property is not "there is a sentence". It is that the sentence
+## DISTINGUISHES THE TWO STATES, and it is asserted from both directions on the
+## same rule, which is the only shape that cannot be satisfied by one fixed
+## string.
+func _probe_the_advice_matches_the_state(expect: Callable) -> void:
+	## Runs on the helm-only boat `_probe_the_checklist_says_where_to_go` left
+	## standing — rebuilding the vessel costs a host spawn, and this probe needs
+	## exactly the state that probe ends in.
+	_set_tool(Tool.FITTING)
+	_set_build_level(0.0)
+	_refresh_panel()
+	var dark := _advice_under("PORT LIGHT MOUNTED ON PORT SIDE")
+	expect.call(
+		"a boat with NO port light is not told its port light is misplaced (%s)" % dark,
+		not dark.contains("WRONG SIDE")
+	)
+	expect.call(
+		"it is told there is nothing fitted yet (%s)" % dark,
+		dark.contains("NONE FITTED")
+	)
+
+	## Now fit one — on the STARBOARD half. Port is −x, and this hull is 20 cells
+	## in the beam, so node x = 18 is the wrong side for a port light.
+	_probe_click_fitting("lantern_sidelight_port", Vector3i(18, 0, 30))
+	_refresh_panel()
+	var misplaced := _advice_under("PORT LIGHT MOUNTED ON PORT SIDE")
+	expect.call(
+		"control: fitting it made the count rule pass",
+		not _panel_failed_labels().has("PORT NAVIGATION LIGHT")
+	)
+	expect.call(
+		"and the side rule still fails, because it is on the wrong side",
+		_panel_failed_labels().has("PORT LIGHT MOUNTED ON PORT SIDE")
+	)
+	expect.call(
+		"NOW the sentence says the light is on the wrong side (%s)" % misplaced,
+		misplaced.contains("WRONG SIDE")
+	)
+	expect.call(
+		"and no longer claims nothing is fitted (%s)" % misplaced,
+		not misplaced.contains("NONE FITTED")
+	)
+	## No reset — the fixture sweep that runs next replaces the plan on its first
+	## `_load_plan`, and that is a hull change, which is the case it exists for.
+
+
+## The advice sentence drawn under a named requirement, read off the labels.
+func _advice_under(label: String) -> String:
+	var rows := _registration_rows.get_children()
+	for index in rows.size():
+		var row := rows[index] as Label
+		if row == null or not row.text.contains(label):
+			continue
+		if index + 1 >= rows.size():
+			return ""
+		var advice := rows[index + 1] as Label
+		return advice.text if advice != null else ""
+	return ""
+
+
+## Everything the REGISTRATION panel is currently putting on screen, as one
+## string — the verdict line plus every row and every sentence under it.
+func _registration_panel_text() -> String:
+	var parts := PackedStringArray([_registration_verdict.text])
+	for child in _registration_rows.get_children():
+		var label := child as Label
+		if label != null:
+			parts.append(label.text)
+	return "\n".join(parts)
 
 
 ## One palette click plus one viewport click, at a named node. The camera is
@@ -1812,9 +2246,17 @@ func _probe_bounds_hold(wall: Dictionary) -> bool:
 const PlanOutfitScript := preload("res://scripts/ship/plan_outfit.gd")
 
 var _deck_grid: DeckGrid
-## Entities of `_plan` that `PlanOutfit` will refuse to build. Recomputed by
-## `_recompute_off_hull` on every rebake; read by the panel and by the probe.
+## Entities of `_plan` that `PlanOutfit` will refuse to build — read STRAIGHT OFF
+## the compliance report, never computed here. See `_recompute_compliance`.
 var _off_hull: Array = []
+## The whole registration verdict for the working plan, exactly as
+## `DeckFitout.apply_plan` will compute it at spawn. `{}` in the building
+## context, where there is no vessel to register.
+var _compliance: Dictionary = {}
+## The licence the plan is being built to. `""` is a legal state and the panel
+## says so — an unregistered plan is refused at spawn with "Choose a vessel
+## registration before building", and the builder should read that here first.
+var _registration_id := "general_vessel"
 
 
 func _set_context(context: String) -> void:
@@ -1830,11 +2272,8 @@ func _set_context(context: String) -> void:
 	_hide_piece_ghost()
 	_hide_fitting_ghost()
 	if context == "vessel":
-		_deck_grid = HullRegistry.make_grid(_hull_id)
-		_grid_width = _deck_grid.width
-		_grid_length = _deck_grid.length
+		_apply_hull_grid()
 		_plan.hull_id = _hull_id
-		_plan_offset = Vector3(-_deck_grid.half_beam, 0.0, -_deck_grid.half_loa)
 	else:
 		_deck_grid = null
 		## CELLS, not metres — a 24 x 24 m plot on the same 0.5 m grid the vessel
@@ -1852,6 +2291,29 @@ func _set_context(context: String) -> void:
 	_rebuild_host_visual()
 	_rebake()
 	_refresh_panel()
+
+
+## THE GRID THE STUDIO IS BUILDING ON, DERIVED FROM `_hull_id` AND NOTHING ELSE.
+##
+## Extracted because `_set_context` was the ONLY place it happened, and
+## `_load_plan` — which adopts the loaded document's `hull_id` — never rebuilt
+## it. Measured before this existed (`tests/_studio_rebake_cost.gd`): loading
+## `probe_container_feeder` (hull_150x32, 617 entities) into a studio that had
+## booted on hull_28x10 left `_deck_grid` at the trawler's **20 x 56 cells**
+## while `_hull_id` read `hull_150x32`, and **596 of 617 entities came back
+## "OFF THE HULL — NOT BUILT"** on a fixture that is entirely on its own hull.
+##
+## That was survivable while the only consumer was one count in a corner of the
+## palette. It is not survivable with a registration checklist beside it: every
+## rule that locates a fitting (`tag_side`, `white_above_sidelights`) and every
+## rule that counts one reads the partition this grid decides, so the panel would
+## have been confidently, precisely wrong about somebody else's boat — a lie with
+## a UI, which is the one thing this surface must never be.
+func _apply_hull_grid() -> void:
+	_deck_grid = HullRegistry.make_grid(_hull_id)
+	_grid_width = _deck_grid.width
+	_grid_length = _deck_grid.length
+	_plan_offset = Vector3(-_deck_grid.half_beam, 0.0, -_deck_grid.half_loa)
 
 
 func _rebuild_host_visual() -> void:
@@ -2120,11 +2582,14 @@ func _rebake() -> void:
 		add_child(_ghost_root)
 	_recompute_bounds()
 	_update_selection_visual()
-	_recompute_off_hull()
+	_recompute_compliance()
 
 
-## Which entities of the working plan stand nowhere on the hull, recomputed with
-## the bake because that is when the answer can change.
+## THE WHOLE VERDICT, ONCE PER REBAKE — what will not be built, and whether what
+## is left is a legal vessel. Both answers come out of ONE call to the function
+## `DeckFitout.apply_plan` calls at spawn, so the checklist on screen and the
+## checklist the boat is judged by cannot be two different measurements
+## (REALITY.md §3b; `_probe_panel_and_spawn_agree` holds it to that).
 ##
 ## THIS IS THE HALF THAT REACHES A PERSON. `PlanOutfit` has computed an off-deck
 ## warning for slot fittings since it was written and **nothing anywhere read it**
@@ -2132,18 +2597,48 @@ func _rebake() -> void:
 ## `DeckFitout.apply_plan`, which reads `errors` only and pushes them to the
 ## engine console. The brick side had the identical defect one layer up:
 ## `shipyard_brick_editor` computed a whole error chain and discarded it one line
-## before the Label (STATE.md 2c). A refusal a builder cannot see is not a
-## refusal; it is a vessel that silently loses geometry the next time it spawns.
+## before the Label (STATE.md 2c). The registration verdict was the same shape
+## one level up again: computed correctly at spawn, and the builder who has to
+## act on it never saw it until the boat was in the water.
 ##
-## Cost, measured: the fence is about what `collect_colliders` costs — 26 ms on
-## `demo_workboat`, 98 ms on the 617-entity `probe_container_feeder` — against a
-## rebake that already bakes the whole plan twice (solid + ghost). It is taken
-## here, once per rebake, and never in `_refresh_ui`, which runs on every button.
-func _recompute_off_hull() -> void:
-	_off_hull.clear()
+## ── THE COST, AND WHY IT IS NOT A CACHE ─────────────────────────────────────
+##
+## `compliance` re-resolves the plan and takes its own hull fence, so adding it
+## BESIDE the `off_hull_entities` call this function used to make would have paid
+## for that fence twice. Measured on the 617-entity `probe_container_feeder`
+## (`tests/_compliance_cost.gd`, quiet tree, 5 reps):
+##
+##     fence alone, which is what this function used to cost      99.88 ms
+##     compliance(), which contains that same fence              120.11 ms
+##     the two of them separately — the naive panel              219.98 ms
+##
+## The verdict half is **~20 ms**: a fifth of the fence, and the fence is a
+## fifth of nothing next to the two full bakes `_rebake` already does above.
+## So the answer is not to cache it, debounce it, or hide it behind a CHECK
+## button — it is to stop taking the fence twice. `compliance` now publishes the
+## partition it already holds and this function reads it. Measured at the level
+## that matters, a whole rebake of that plan (`tests/_studio_rebake_cost.gd`,
+## one process, 9 reps, two runs):
+##
+##     BEFORE  fence only, no verdict         321.7 / 342.2 ms
+##     AFTER   this shared pass               342.4 / 365.4 ms   +6.4 % / +6.8 %
+##     NAIVE   fence AND its own compliance   427.4 / 460.0 ms  +32.9 % / +34.4 %
+##
+## A cache would also have been the worse answer on correctness, not only on
+## speed: a stale checklist is a panel that says CERTIFIED about a plan that is
+## not, which is the one thing this surface must never do.
+##
+## Taken here, once per rebake, and never in `_refresh_panel`, which runs on
+## every button press and only READS `_compliance`.
+func _recompute_compliance() -> void:
+	_off_hull = []
+	_compliance = {}
 	if _context != "vessel" or _deck_grid == null:
 		return
-	_off_hull = PlanOutfitScript.off_hull_entities(_plan, _deck_grid)
+	_compliance = PlanOutfitScript.compliance(
+		_plan, _hull_id, _registration_id, _deck_grid
+	)
+	_off_hull = (_compliance.get("off_hull", []) as Array)
 	if _off_hull.is_empty():
 		return
 	_set_status(str((_off_hull[0] as Dictionary)["message"]).to_upper(), false)
@@ -3678,12 +4173,28 @@ func _load_plan(path: String) -> void:
 	_context = _plan.context
 	if _context == "vessel" and not _plan.hull_id.is_empty():
 		_hull_id = _plan.hull_id
+		## The grid has to follow the hull the document declares. See
+		## `_apply_hull_grid` for the 596-of-617 measurement this line closes, and
+		## for why a checklist makes it load-bearing rather than cosmetic.
+		_apply_hull_grid()
+		_hull_option.selected = _hull_option_index_for(_hull_id)
 	_selected_id = -1
 	_hide_piece_ghost() ## same reason as `_set_context`: the offset may have moved
 	_set_status("LOADED / %s" % path.get_file())
 	_rebuild_host_visual()
 	_rebake()
 	_refresh_panel()
+
+
+## Which entry of the hull dropdown names `hull_id`, or the current selection if
+## the registry has no such hull. Keeps the control agreeing with the state the
+## rest of this file builds against — a dropdown reading `hull_28x10` over a
+## 150 m feeder is the same class of lie as a wrong checklist, one control over.
+func _hull_option_index_for(hull_id: String) -> int:
+	for index in _hull_option.item_count:
+		if str(_hull_option.get_item_text(index)) == hull_id:
+			return index
+	return _hull_option.selected
 
 
 func _saved_plan_paths() -> PackedStringArray:
@@ -3939,6 +4450,14 @@ var _hull_option: OptionButton
 var _hull_row: VBoxContainer
 var _entities_label: Label
 var _toast_timer: Timer
+## The registration checklist — see `_build_registration_section`.
+var _registration_section: VBoxContainer
+var _registration_option: OptionButton
+var _registration_verdict: Label
+var _registration_rows: VBoxContainer
+## The lines currently ON SCREEN, so a refresh that would draw the same thing
+## draws nothing. See `_render_registration_rows` for the 184x measurement.
+var _registration_rendered: PackedStringArray = PackedStringArray()
 
 const TOOL_HINTS := {
 	Tool.PIECE: "Piece: pick one off the kit palette, R turns it, click a grid node to stand it there. Every setting is a stepper over the piece's own list — nothing is typed.",
@@ -4034,7 +4553,7 @@ func _build_tool_palette() -> void:
 	palette.name = "ToolPalette"
 	palette.set_anchors_preset(Control.PRESET_LEFT_WIDE)
 	palette.offset_top = 60.0
-	palette.offset_bottom = -36.0
+	palette.offset_bottom = -STRIP_HEIGHT
 	_ui_root.add_child(palette)
 	## SCROLLED. The kit's parameter sets grew from four names to seven while this
 	## panel was being built, and the capture showed the result immediately: RAKE
@@ -4395,11 +4914,15 @@ func _piece_value_text(spec: Dictionary, value: Variant) -> String:
 
 
 func _build_drawer() -> void:
-	_drawer = BrandComponents.panel(Vector2(320, 0), BrandPanel.Variant.PAPER)
+	_drawer = BrandComponents.panel(Vector2(DRAWER_WIDTH, 0), BrandPanel.Variant.PAPER)
 	_drawer.name = "PropertiesDrawer"
 	_drawer.set_anchors_preset(Control.PRESET_RIGHT_WIDE)
 	_drawer.offset_top = 60.0
-	_drawer.offset_bottom = -36.0
+	_drawer.offset_bottom = -STRIP_HEIGHT
+	## See `_build_context_strip`: without this the whole drawer stands off the
+	## right edge of the viewport.
+	_drawer.offset_left = -DRAWER_WIDTH
+	_drawer.offset_right = 0.0
 	_ui_root.add_child(_drawer)
 
 	var root_box := VBoxContainer.new()
@@ -4416,6 +4939,8 @@ func _build_drawer() -> void:
 	box.add_theme_constant_override(&"separation", BrandTokens.SPACE_MD)
 	scroll.add_child(box)
 
+	_build_registration_section(box)
+	box.add_child(BrandComponents.separator())
 	box.add_child(BrandComponents.section_header("SURFACE LIBRARY"))
 	_build_library_section(box)
 	box.add_child(BrandComponents.separator())
@@ -4427,20 +4952,25 @@ func _build_drawer() -> void:
 	_inspector_box.add_theme_constant_override(&"separation", BrandTokens.SPACE_SM)
 	box.add_child(_inspector_box)
 
-	root_box.add_child(BrandComponents.separator())
-	root_box.add_child(BrandComponents.section_header("STRUCTURE FILE"))
+	## INSIDE the scroll, not pinned under it. Pinned, this block reserved ~200 px
+	## of a 984 px drawer and the registration checklist's last two requirements
+	## fell behind it — on the very boat whose mooring shortfall was one of them.
+	## The file controls are the least urgent thing in this drawer; they scroll
+	## like everything else.
+	box.add_child(BrandComponents.separator())
+	box.add_child(BrandComponents.section_header("STRUCTURE FILE"))
 	_name_edit = LineEdit.new()
 	_name_edit.placeholder_text = "Structure name"
 	_name_edit.max_length = 32
-	root_box.add_child(_name_edit)
+	box.add_child(_name_edit)
 	var save_btn := BrandComponents.primary_button("SAVE JSON", Vector2(0, BrandTokens.MIN_HIT_TARGET))
 	save_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	save_btn.pressed.connect(func() -> void: _save_plan(_name_edit.text))
-	root_box.add_child(save_btn)
+	box.add_child(save_btn)
 	_load_option = OptionButton.new()
 	_load_option.focus_mode = Control.FOCUS_ALL
 	_load_option.custom_minimum_size = Vector2(0, BrandTokens.MIN_HIT_TARGET)
-	root_box.add_child(_load_option)
+	box.add_child(_load_option)
 	var load_btn := BrandComponents.compact_button("LOAD SELECTED", 0.0)
 	load_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	load_btn.pressed.connect(func() -> void:
@@ -4448,14 +4978,511 @@ func _build_drawer() -> void:
 		if index >= 0:
 			_load_plan(str(_load_option.get_item_metadata(index)))
 	)
-	root_box.add_child(load_btn)
+	box.add_child(load_btn)
+
+
+## ── THE REGISTRATION CHECKLIST ─────────────────────────────────────────────
+##
+## The last open step of the loop STATE.md 2e/2f closed. A plan-built vessel can
+## be certified and the fittings can be placed with a mouse — and until this
+## panel existed the studio never TOLD the builder whether the plan certifies.
+## The verdict was computed correctly, at spawn, by `DeckFitout.apply_plan`, and
+## the one person who has to act on it found out when the boat hit the water.
+## REALITY.md §3d, one level up from the off-hull line right beside it.
+##
+## THREE RULES THIS SURFACE IS BUILT TO:
+##
+##  1. **It cannot say something the spawn will contradict.** Every row below is
+##     rendered out of `_compliance`, which is one call to `PlanOutfit.compliance`
+##     — the same function, with the same arguments, that `apply_plan` makes.
+##     There is no second evaluator here, no re-count of items, no "looks
+##     complete" shortcut. `_probe_panel_and_spawn_agree` authors a plan through
+##     the tool's own click path, reads the TEXT off these labels, spawns the
+##     same plan through `VesselSpawn` -> `apply_plan`, and fails if the two
+##     disagree about the verdict or about which requirements failed.
+##
+##  2. **A rule id is not an instruction.** "FAILS 3" and `white_light_height`
+##     are things a person who wrote the rules can read. So each failing row
+##     carries a sentence naming WHAT is missing and WHERE the tool for it is —
+##     and the part names in it come out of `PartCatalog`, by the same address
+##     the rule uses (tag, outfit slot, compliance numeric), never out of a list
+##     kept here. A part that declares `nav_port` tomorrow is named by this panel
+##     tomorrow, with no edit in this file.
+##
+##  3. **Where it does not know, it says so.** A requirement of a kind this
+##     studio has no tool for — `has_cabin`, which no plan primitive declares
+##     since the room was deleted — reads as exactly that, rather than as a
+##     hint that would waste an afternoon. An unrecognised rule kind says it is
+##     unrecognised. A cheerful guess here is the same defect as a green test.
+##
+## `_registration_id` is the studio's own state and is NOT saved into the plan:
+## `structure_plan_v1` has no registration field, and inventing one here would be
+## this file changing a format four other units parse. The consequence is named
+## rather than hidden — the licence is a studio setting, and the spawn path takes
+## it from the caller or from the boat's `registration_id` meta.
+const RegistrationCatalog := preload("res://scripts/ship/vessel_registration_catalog.gd")
+
+## Which tool a builder reaches for, per rule kind. This is the ONE table in this
+## file that is not read out of data, because it maps somebody else's vocabulary
+## onto THIS studio's tools, and only this file knows those.
+const FITTING_TOOL := "FITTING TOOL"
+
+
+func _build_registration_section(box: VBoxContainer) -> void:
+	_registration_section = VBoxContainer.new()
+	_registration_section.add_theme_constant_override(&"separation", BrandTokens.SPACE_XS)
+	_registration_section.add_child(BrandComponents.section_header("REGISTRATION"))
+
+	_registration_option = OptionButton.new()
+	_registration_option.focus_mode = Control.FOCUS_ALL
+	_registration_option.custom_minimum_size = Vector2(0, BrandTokens.MIN_HIT_TARGET)
+	var ids := RegistrationCatalog.ids()
+	## "NONE" is a real choice and it is first, because it is the state a plan is
+	## in before anybody picks — and the panel has to be able to say what that
+	## costs rather than defaulting quietly to a licence the builder never chose.
+	_registration_option.add_item("NONE — NOT REGISTERED", 0)
+	_registration_option.set_item_metadata(0, "")
+	for index in ids.size():
+		var id := str(ids[index])
+		_registration_option.add_item(RegistrationCatalog.display_name(id).to_upper(), index + 1)
+		_registration_option.set_item_metadata(index + 1, id)
+		if id == _registration_id:
+			_registration_option.select(index + 1)
+	_registration_option.item_selected.connect(func(index: int) -> void:
+		_registration_id = str(_registration_option.get_item_metadata(index))
+		## The verdict depends on the licence, so it has to be retaken — this is
+		## the only control in the studio that recomputes without a rebake.
+		_recompute_compliance()
+		_refresh_panel()
+	)
+	_registration_section.add_child(_registration_option)
+
+	_registration_verdict = BrandLabel.new("", BrandLabel.Role.DATA)
+	_registration_verdict.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_registration_section.add_child(_registration_verdict)
+
+	_registration_rows = VBoxContainer.new()
+	_registration_rows.add_theme_constant_override(&"separation", BrandTokens.SPACE_SM)
+	_registration_section.add_child(_registration_rows)
+	box.add_child(_registration_section)
+
+
+## COMPUTE THE WORDS, THEN REBUILD ONLY IF THEY CHANGED.
+##
+## The first cut of this function tore down and rebuilt every row on every call,
+## and `_refresh_panel` runs on every button press, every placement and twice per
+## frame during a drag. Measured on the default boat with `_studio_refresh_cost2`:
+##
+##     _refresh_panel, before this panel existed     0.179 ms
+##     _refresh_panel, rebuilding rows every time   32.904 ms
+##
+## **184x**, on the function that runs when you click anything. A `BrandLabel`
+## sets `theme` in its constructor, so sixteen of them is sixteen theme
+## propagations through a live tree, and none of that work was ever needed: the
+## checklist changes when the PLAN or the LICENCE changes, not when a tool button
+## is pressed. So the text is derived first — pure string work — and the nodes are
+## rebuilt only when it differs from what is already on screen.
+##
+## This is the cheap half of the same argument `_recompute_compliance` makes
+## about the fence: do the work once, for the thing that actually changed.
+func _refresh_registration_section() -> void:
+	if _registration_section == null:
+		return
+	_registration_section.visible = _context == "vessel"
+	if _context != "vessel":
+		_render_registration_rows(PackedStringArray())
+		return
+	var checklist: Array = _compliance.get("checklist", []) as Array
+	if _registration_id.strip_edges().is_empty():
+		_set_verdict("NOT REGISTERED — THIS PLAN CANNOT BE SPAWNED", BrandTokens.ALERT)
+		_render_registration_rows(PackedStringArray([
+			"!PICK A LICENCE ABOVE. A PLAN WITH NO REGISTRATION IS REFUSED AT SPAWN,"
+			+ " WHATEVER IS FITTED TO IT."
+		]))
+		return
+	var met := 0
+	for raw in checklist:
+		if bool((raw as Dictionary).get("ok", false)):
+			met += 1
+	var certified := bool(_compliance.get("registration_ok", false))
+	## The word a builder is looking for, and the count behind it. Not the count
+	## alone: "5 OF 8" is a score, and a score is what this panel exists to stop
+	## being the whole answer (REALITY.md §1).
+	_set_verdict(
+		"%s — %d OF %d REQUIREMENTS MET" % [
+			"CERTIFIED" if certified else "NOT CERTIFIED", met, checklist.size()
+		],
+		BrandTokens.OK_LIGHT if certified else BrandTokens.ALERT
+	)
+	_render_registration_rows(_registration_row_texts(checklist))
+
+
+## Every line the checklist wants on screen, in order, each tagged by its first
+## character: `+` met, `-` failed, `!` an advice sentence. One string array so
+## "has anything changed" is one comparison.
+func _registration_row_texts(checklist: Array) -> PackedStringArray:
+	var rules: Array = (
+		RegistrationCatalog.resolved_registration(_registration_id).get("rules", []) as Array
+	)
+	## WHAT IS STILL WRONG COMES FIRST. The met requirements need no action, and
+	## the first cut of this panel put them in rule order, which pushed "at least
+	## four mooring points" — the thing the builder in the capture was two short
+	## of — below the fold behind two requirements they had already satisfied.
+	## The failures also carry a sentence each, so they are the tall rows; ordering
+	## by verdict is what keeps the actionable half above the fold on a 320 px
+	## drawer, and it costs nothing on a plan that certifies (nothing is failing).
+	var ordered: Array = []
+	for index in checklist.size():
+		var item := checklist[index] as Dictionary
+		## Zipped by index AND checked by id: `compliance` walks the resolved
+		## rules in order to build the checklist, so index is the correspondence
+		## — but an id mismatch would mean this panel is describing a different
+		## requirement from the one it just marked failed, so it refuses to guess.
+		var rule: Dictionary = {}
+		if index < rules.size() and (rules[index] is Dictionary):
+			var candidate := rules[index] as Dictionary
+			if str(candidate.get("id", "")) == str(item.get("id", "")):
+				rule = candidate
+		ordered.append({"item": item, "rule": rule})
+	ordered.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+		return (
+			not bool((a["item"] as Dictionary).get("ok", false))
+			and bool((b["item"] as Dictionary).get("ok", false))
+		)
+	)
+	var out := PackedStringArray()
+	for pair_variant in ordered:
+		var pair := pair_variant as Dictionary
+		var item := pair["item"] as Dictionary
+		var ok := bool(item.get("ok", false))
+		out.append("%s%s  %s" % [
+			"+" if ok else "-", "✓" if ok else "✗", str(item.get("label", "")).to_upper()
+		])
+		if ok:
+			continue
+		out.append(
+			"!" + _registration_advice(pair["rule"] as Dictionary, item, checklist, rules)
+		)
+	return out
+
+
+## Puts `lines` on screen, and does nothing at all when they are already there.
+func _render_registration_rows(lines: PackedStringArray) -> void:
+	if lines == _registration_rendered and _registration_rows.get_child_count() > 0:
+		return
+	if lines.is_empty() and _registration_rows.get_child_count() == 0:
+		_registration_rendered = lines
+		return
+	## Removed AND freed, for the reason `_refresh_inspector` gives: `queue_free`
+	## alone leaves the old rows in the tree, counted and drawn, until the end of
+	## the frame — and this can run twice in one frame on a placement.
+	for child in _registration_rows.get_children():
+		_registration_rows.remove_child(child)
+		child.queue_free()
+	for line in lines:
+		var body := line.substr(1)
+		if line.begins_with("!"):
+			_registration_rows.add_child(_advice_label(body))
+			continue
+		var row := BrandLabel.new(body, BrandLabel.Role.DATA)
+		row.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		row.add_theme_color_override(
+			&"font_color",
+			BrandTokens.OK_LIGHT if line.begins_with("+") else BrandTokens.ALERT
+		)
+		_registration_rows.add_child(row)
+	_registration_rendered = lines
+
+
+func _set_verdict(text: String, color: Color) -> void:
+	_registration_verdict.text = text
+	_registration_verdict.add_theme_color_override(&"font_color", color)
+
+
+func _advice_label(text: String) -> Label:
+	var label := BrandLabel.new(text, BrandLabel.Role.MICRO_DATA)
+	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	label.add_theme_color_override(&"font_color", BrandTokens.WARN)
+	return label
+
+
+## WHAT IS MISSING AND WHERE TO GET IT, for one failed requirement.
+##
+## Every part name in the returned sentence is looked up in `PartCatalog` by the
+## address the RULE uses — its tag, its outfit slot, its compliance numeric — so
+## the catalogue is the source of the answer and this function only decides which
+## question to ask it. That is what makes a new lantern show up in this text the
+## day it is added and not the day somebody remembers this file exists.
+## `rules` is the resolved rule array the caller already holds. Passed in rather
+## than re-resolved: `VesselRegistrationCatalog.resolved_registration` deep-copies
+## the whole catalogue on every call, and this runs inside a loop that runs on
+## every button press.
+func _registration_advice(
+	rule: Dictionary, item: Dictionary, checklist: Array = [], rules: Array = []
+) -> String:
+	if rule.is_empty():
+		return (
+			"THIS REQUIREMENT FAILED AND THIS PANEL COULD NOT MATCH IT TO A RULE"
+			+ " — REPORT IT. THE VESSEL WILL BE REFUSED AT SPAWN."
+		)
+	var kind := str(rule.get("kind", ""))
+	var have := int(item.get("current", 0)) if not (item.get("current") is String) else 0
+	match kind:
+		"slot_count":
+			return _fit_advice(
+				_parts_for_slot(str(rule.get("slot", ""))), rule, have, "FITTED"
+			)
+		"tag_count":
+			return _fit_advice(
+				_parts_with_tag(str(rule.get("tag", ""))), rule, have, "FITTED"
+			)
+		"capacity":
+			return _fit_advice(
+				_parts_with_numeric(str(rule.get("field", ""))), rule, have, "PROVIDED"
+			)
+		"cargo_cells":
+			return _fit_advice(
+				_parts_with_any_tag(PlanOutfitScript.CARGO_TAGS), rule, have, "DECK CELLS OF HOLD"
+			)
+		"tag_side":
+			## THE SENTENCE THAT WAS WRONG IN THE FIRST CAPTURE. `tag_side` fails
+			## two ways — the light is on the wrong side, or there is no light —
+			## and the rule's `current` is 0 in both, so "FITTED, BUT NOT ALL ON
+			## THE PORT SIDE" was printed under a boat carrying no lights at all.
+			## A confident wrong instruction is the failure mode this panel exists
+			## to avoid, so which sentence to print is settled by asking the SAME
+			## report how many of that tag it counted, not by a second census of
+			## the plan that could disagree with the fence.
+			var tag := str(rule.get("tag", ""))
+			var side := str(rule.get("side", "")).to_upper()
+			var names := _parts_with_tag(tag)
+			var named := "/".join(names) if not names.is_empty() else "IT"
+			var counted := _counted_for_tag(checklist, rules, tag)
+			if counted < 0:
+				## No rule in this registration counts that tag, so the panel does
+				## not know which of the two it is. Say the law, not a guess.
+				return "EVERY %s MUST STAND %s OF THE CENTRELINE." % [named, side]
+			if counted == 0:
+				return "NONE FITTED — FIT ONE FIRST, THEN STAND IT %s OF THE CENTRELINE." % side
+			return (
+				"ON THE WRONG SIDE — SELECT TOOL, DRAG THE %s ACROSS TO %s (THE HALF"
+				% [named, side]
+				+ " MARKED %s ON THE GRID)." % side
+			)
+		"white_above_sidelights":
+			var whites := _parts_with_tag("nav_white")
+			return (
+				"MUST STAND HIGHER THAN THE SIDE LIGHTS — PGUP RAISES THE BUILD LEVEL,"
+				+ " THEN %s ▸ %s." % [
+					FITTING_TOOL,
+					"/".join(whites) if not whites.is_empty() else "A WHITE LANTERN"
+				]
+			)
+		"metric_range":
+			return _metric_advice(str(rule.get("metric", "")), rule, have)
+		"capability":
+			return _capability_advice(str(rule.get("capability", "")))
+		"equipment_rating_max":
+			var rated := _parts_with_tag(str(rule.get("tag", "")))
+			return (
+				"SOMETHING FITTED IS RATED %d AND THIS LICENCE ALLOWS %d. SELECT TOOL ▸"
+				% [have, int(rule.get("max_rating", 0))]
+				+ " CLICK THE %s ▸ DEL, OR CHOOSE A LICENCE THAT CARRIES IT."
+				% ["/".join(rated) if not rated.is_empty() else "FITTING"]
+			)
+	return (
+		"THIS STUDIO HAS NO GUIDANCE FOR A \"%s\" REQUIREMENT YET — IT DOES NOT KNOW"
+		% kind
+		+ " WHICH TOOL TO SEND YOU TO."
+	)
+
+
+## The shape every countable requirement shares: how short you are, and which
+## catalogue fittings carry the thing you are short of.
+func _fit_advice(
+	names: PackedStringArray, rule: Dictionary, have: int, noun: String
+) -> String:
+	if rule.has("max") and have > int(rule["max"]):
+		return (
+			"%d %s AND THIS LICENCE ALLOWS %d. SELECT TOOL ▸ CLICK ONE ▸ DEL."
+			% [have, noun, int(rule["max"])]
+		)
+	var want := int(rule.get("min", 0))
+	var short := "NONE %s" % noun if have <= 0 else "%d OF %d %s" % [have, want, noun]
+	if names.is_empty():
+		return (
+			"%s, AND NOTHING IN THE FITTINGS CATALOGUE CARRIES IT YET — THIS LICENCE"
+			% short
+			+ " CANNOT BE MET IN THIS STUDIO."
+		)
+	return "%s — %s ▸ %s." % [short, FITTING_TOOL, " OR ".join(names)]
+
+
+## How many fittings the report counted for a tag, taken out of the report's own
+## checklist rather than re-counted here. Returns -1 when this registration has
+## no rule that counts that tag, so a caller can say something true in both cases
+## instead of guessing.
+func _counted_for_tag(checklist: Array, rules: Array, tag: String) -> int:
+	for index in checklist.size():
+		if index >= rules.size() or not (rules[index] is Dictionary):
+			continue
+		var rule := rules[index] as Dictionary
+		if str(rule.get("kind", "")) != "tag_count" or str(rule.get("tag", "")) != tag:
+			continue
+		var current: Variant = (checklist[index] as Dictionary).get("current", 0)
+		return int(current) if not (current is String) else -1
+	return -1
+
+
+## Metrics are not fittings, so each one gets sent to the control that actually
+## moves it — and `exposed_deck_cells` is a HULL property, not something the DECK
+## tool can change, which is why it points at the hull dropdown. Sending a
+## builder to drag a bigger deck for it would be a confident wrong answer.
+func _metric_advice(metric: String, rule: Dictionary, have: int) -> String:
+	match metric:
+		"doors":
+			return (
+				"NO DOOR CUT YET. OPENING TOOL ▸ DOOR, THEN CLICK THE WALL YOU WANT"
+				+ " IT IN — OR FIT A CATALOGUE DOOR WITH THE %s." % FITTING_TOOL
+			)
+		"exposed_deck_cells":
+			return (
+				"THIS HULL HAS %d EXPOSED DECK CELLS AND THE LICENCE WANTS %d. THAT IS A"
+				% [have, int(rule.get("min", 0))]
+				+ " PROPERTY OF THE HULL, NOT OF WHAT YOU HAVE DRAWN — PICK A LARGER ONE"
+				+ " IN THE HULL DROPDOWN, TOP LEFT."
+			)
+	return (
+		"MEASURED \"%s\" IS %d AND THE LICENCE WANTS %s. THIS STUDIO DOES NOT KNOW"
+		% [metric, have, str(rule.get("min", "?"))]
+		+ " WHICH CONTROL MOVES THAT YET."
+	)
+
+
+func _capability_advice(capability: String) -> String:
+	if capability == "has_cabin":
+		return (
+			"NO PLAN PRIMITIVE DECLARES ENCLOSURE SINCE THE ROOM TOOL WAS REMOVED, SO"
+			+ " THIS STUDIO CANNOT SATISFY THIS REQUIREMENT AT ALL. IT IS NOT SOMETHING"
+			+ " YOU HAVE BUILT WRONG — PICK ANOTHER LICENCE."
+		)
+	return (
+		"THE VESSEL MUST REPORT \"%s\" AND DOES NOT. THIS STUDIO DOES NOT KNOW WHICH"
+		% capability
+		+ " TOOL PROVIDES IT."
+	)
+
+
+## ── Catalogue lookups: the answers come from the data, not from a list here ──
+##
+## MEMOISED, and the distinction matters. This does NOT cache a verdict — a stale
+## verdict is the lie this whole panel exists to prevent, and `_compliance` is
+## recomputed on every rebake. It caches which CATALOGUE FITTINGS carry a tag,
+## which is a property of `resources/data/parts/catalog.json` and cannot change
+## while the app is running.
+##
+## Why it needs caching at all: `PartCatalog.get_entry` returns
+## `_entries[id].duplicate(true)`, so `display_name`, `has_tag` and
+## `compliance_of` each deep-copy a part — `build` array and all — per call. The
+## advice for one failed requirement walks all 17 parts, and a checklist with
+## seven failures walks them seven times, on a function that runs on every button
+## press. Measured contribution to `_refresh_panel`: ~2.9 ms of 3.1 ms.
+var _part_name_cache: Dictionary = {}
+
+
+func _parts_for_slot(slot: String) -> PackedStringArray:
+	var key := "slot:%s" % slot
+	if _part_name_cache.has(key):
+		return _part_name_cache[key] as PackedStringArray
+	var out := PackedStringArray()
+	for id_variant in PartCatalog.ids():
+		var id := str(id_variant)
+		if PartCatalog.outfit_slot_of(id) == slot:
+			out.append(PartCatalog.display_name(id).to_upper())
+	_part_name_cache[key] = out
+	return out
+
+
+func _parts_with_tag(tag: String) -> PackedStringArray:
+	var out := PackedStringArray()
+	if tag.is_empty():
+		return out
+	var key := "tag:%s" % tag
+	if _part_name_cache.has(key):
+		return _part_name_cache[key] as PackedStringArray
+	for id_variant in PartCatalog.ids():
+		var id := str(id_variant)
+		if PartCatalog.has_tag(id, tag):
+			out.append(PartCatalog.display_name(id).to_upper())
+	_part_name_cache[key] = out
+	return out
+
+
+func _parts_with_any_tag(tags: Array) -> PackedStringArray:
+	var key := "tags:%s" % ",".join(PackedStringArray(tags))
+	if _part_name_cache.has(key):
+		return _part_name_cache[key] as PackedStringArray
+	var out := PackedStringArray()
+	for id_variant in PartCatalog.ids():
+		var id := str(id_variant)
+		for tag in tags:
+			if PartCatalog.has_tag(id, str(tag)):
+				out.append(PartCatalog.display_name(id).to_upper())
+				break
+	_part_name_cache[key] = out
+	return out
+
+
+## Fittings that contribute a compliance NUMERIC (seats, and whatever joins it),
+## with what each one contributes — because "fit more seats" without "three each"
+## leaves a builder counting benches.
+func _parts_with_numeric(field: String) -> PackedStringArray:
+	var out := PackedStringArray()
+	if field.is_empty():
+		return out
+	var key := "num:%s" % field
+	if _part_name_cache.has(key):
+		return _part_name_cache[key] as PackedStringArray
+	for id_variant in PartCatalog.ids():
+		var id := str(id_variant)
+		var value := int(PartCatalog.compliance_of(id).get(field, 0))
+		if value > 0:
+			out.append("%s (%d EACH)" % [PartCatalog.display_name(id).to_upper(), value])
+	_part_name_cache[key] = out
+	return out
+
+
+## ── THE TWO PANELS THAT WERE NEVER ON SCREEN ───────────────────────────────
+##
+## `PRESET_BOTTOM_WIDE` anchors top AND bottom to 1.0 and leaves both offsets at
+## zero, so the strip's ORIGIN is the bottom edge and its minimum height grows it
+## DOWNWARD, off the viewport. Same shape on the right drawer
+## (`PRESET_RIGHT_WIDE`, origin at the right edge, width grown rightward).
+## Measured with `tests/_studio_ui_rects.gd` against the project's 1920 x 1080
+## logical viewport, before the two offsets below existed:
+##
+##     TopBar            (0, 0)      1920 x 67    on screen
+##     ToolPalette       (0, 60)      286 x 984   on screen
+##     PropertiesDrawer  (1920, 60)   320 x 984   ENTIRELY OFF THE RIGHT EDGE
+##     ContextStrip      (0, 1080)   1920 x 40    ENTIRELY OFF THE BOTTOM EDGE
+##
+## So the inspector, the surface library, SAVE JSON, LOAD SELECTED, the tool
+## hint, the metrics line and `_set_status`'s toast have never been visible to
+## anybody — including the off-hull refusal STATE.md 2f reports as delivered,
+## whose probe asserted the `_status` STRING and not the pixel. A panel a player
+## cannot see is REALITY.md §3d at the last layer, and it is why
+## `_probe_panels_are_on_screen` now asserts the rects rather than the text.
+const STRIP_HEIGHT := 36.0
+const DRAWER_WIDTH := 320.0
 
 
 func _build_context_strip() -> void:
 	var strip := BrandComponents.panel(Vector2.ZERO, BrandPanel.Variant.BAND)
 	strip.name = "ContextStrip"
 	strip.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
-	strip.custom_minimum_size = Vector2(0, 36)
+	strip.custom_minimum_size = Vector2(0, STRIP_HEIGHT)
+	strip.offset_top = -STRIP_HEIGHT
+	strip.offset_bottom = 0.0
 	_ui_root.add_child(strip)
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override(&"separation", BrandTokens.SPACE_LG)
@@ -4481,6 +5508,12 @@ func _build_context_strip() -> void:
 	_status_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	_status_label.add_theme_color_override(&"font_color", BrandTokens.OK_LIGHT)
 	row.add_child(_status_label)
+
+	## The strip's own minimum height, not a second copy of it: the BAND variant
+	## adds its own padding, so the constant above under-states the band by 4 px
+	## and the bottom row of text falls off the screen by exactly that much.
+	## One derivation (REALITY.md §3b) — ask the panel how tall it is.
+	strip.offset_top = -maxf(STRIP_HEIGHT, strip.get_combined_minimum_size().y)
 
 
 func _set_status(text: String, ok := true) -> void:
@@ -4540,6 +5573,7 @@ func _refresh_panel() -> void:
 	)
 	_metrics_label.text = _studio_metrics_text()
 	_hint_label.text = str(TOOL_HINTS.get(_tool, "")).to_upper()
+	_refresh_registration_section()
 	_refresh_load_list()
 	_refresh_inspector()
 

@@ -743,7 +743,35 @@ static func measure(plan: StructurePlan, grid: DeckGrid, outfit: Dictionary) -> 
 
 
 ## Plan-side twin of `VesselCompliance.validate`, evaluating the SAME rules
-## through the SAME evaluator. Returns the same report dictionary.
+## through the SAME evaluator. Returns the same report dictionary, plus one
+## plan-only key: `off_hull`, the fence rows this function has already taken.
+##
+## ── Why the report carries the fence ────────────────────────────────────────
+##
+## `structure_studio` needs BOTH answers on every rebake — which entities will
+## not be built, and whether the plan certifies — and computing them separately
+## means taking the SAME partition twice. Measured on `probe_container_feeder`
+## (617 entities, 3084 boxes), `tests/_compliance_cost.gd`, quiet tree:
+##
+##     fence alone (off_hull_entities)      99.88 ms
+##     compliance() (its own fence)        120.11 ms
+##     both, separately                    219.98 ms
+##
+## So the VERDICT half — `measure` plus eight rule evaluations — is ~20 ms, and
+## the fence is the other 100. Against a whole studio rebake of that plan
+## (`tests/_studio_rebake_cost.gd`, one process, 9 reps, two runs):
+##
+##     rebake, fence only (the studio at c531076)   321.7 / 342.2 ms
+##     rebake, this shared pass                     342.4 / 365.4 ms   +6.4 % / +6.8 %
+##     rebake, fence AND its own compliance         427.4 / 460.0 ms  +32.9 % / +34.4 %
+##
+## Publishing the rows this function already holds is the difference between
+## those last two lines, and it is the same fix this function's own body records
+## making one level down ("running it twice cost 190 ms of the 277 ms").
+##
+## It is also the REALITY.md §3b half: a panel that says "1 OFF THE HULL" and a
+## verdict that judges a different partition are two measurements of one
+## question, and this repo has fixed that shape three times.
 static func compliance(
 	plan: StructurePlan,
 	hull_id: String,
@@ -773,7 +801,12 @@ static func compliance(
 	var warnings: PackedStringArray = (outfit.get("warnings", PackedStringArray()) as PackedStringArray).duplicate()
 	if registration.is_empty():
 		errors.append("Choose a vessel registration before building.")
-		return VesselCompliance._result(outfit, registration_id, false, checklist, errors, warnings)
+		return _with_fence(
+			VesselCompliance._result(
+				outfit, registration_id, false, checklist, errors, warnings
+			),
+			off_hull,
+		)
 	## MEASURED ON THE HULL, not on the document. `measure` is what feeds
 	## `brick_counts`, `tag_counts` and `positions` to the rule evaluator, so a
 	## bollard 900 m off the bow counted toward "at least four mooring points" and
@@ -792,9 +825,21 @@ static func compliance(
 			errors.append(
 				str(item.get("message", item.get("label", "Registration requirement failed")))
 			)
-	return VesselCompliance._result(
-		outfit, registration_id, registration_ok, checklist, errors, warnings
+	return _with_fence(
+		VesselCompliance._result(
+			outfit, registration_id, registration_ok, checklist, errors, warnings
+		),
+		off_hull,
 	)
+
+
+## Attaches the fence rows to a finished report. Separate so `_result`'s
+## signature stays exactly what `vessel_compliance.gd` declares it to be — the
+## header on that function records a wave that died changing it and took two
+## test units NOTRUN with it.
+static func _with_fence(report: Dictionary, off_hull: Array) -> Dictionary:
+	report["off_hull"] = off_hull
+	return report
 
 
 # ── Enclosure, read off geometry ────────────────────────────────────────────
