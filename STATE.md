@@ -3354,6 +3354,66 @@ Owner's, undecided: `_hull_iter_shot`'s `v0…v12` is 91 frames of thirteen hull
 **whose code no longer exists**, so the series can never be re-shot. The current hull is
 added as `v13`. Either delete down to the newest frame or make the variants data.
 
+### CLOSED 2026-08-16 — the rigs could not repeat because the boat was still moving
+
+**One cause for all three, and it was neither of the two on record.**
+`BoatBody.automatic_physics_lod` defaults to `true`; one second after a hull enters the
+tree the LOD update runs `freeze = physics_quality == SLEEP` — **`freeze = false`** —
+revoking the rig's own freeze. `shipyard_brick_editor.gd:2579` has described this the whole
+time.
+
+**Every recorded diagnosis was wrong, including the orchestrator's.** The "1–3 px wireframe
+plus a blob at the figure" was called a grab/draw race in a brief; it is **what a subject
+that moved 0.2 px looks like**. The `_small_hull_shot` header's measurement was real and its
+inference was not — transforms *are* bit-identical **across processes at the same frame
+index**, and nobody asked whether they were constant **over frames within one process**. The
+`_fittings_shot` weather diagnosis was named and never measured: the vessel carries **zero
+`Light3D`s** and the only writer into `WeatherLighting` is not in the tree in a rig.
+
+**Contention hides this defect rather than causing it** — the opposite of the assumption in
+the brief. Both negative verdicts got *worse* on the quiet box. Load lets the transient damp
+before the first grab, so a loaded box produces two runs that agree **at the wrong pose**.
+
+**The split is 1:1 with no exceptions:** every rig recorded as closed carries the LOD line;
+the ones without it are exactly the three known-bad plus `hull_visual_capture`. So REALITY
+§8a's *"'it settles under physics.' False"* was measured on a rig that already had the line —
+right about that rig, wrong as a general claim (§4d again).
+
+**Frame evidence cannot discriminate this defect, in either direction.** A "before" run has
+come back green with the defect fully present **three times**, once across **eight runs and
+28 pairs**. Only a property probe can, and the probes are committed beside the rigs they
+justify.
+
+`hull_visual_capture` was latent-but-safe: its LOD timer reaches **0.93 s against a 1.0 s
+threshold** under load — one settle short — and because that rig has no ocean, a crossing run
+would **free-fall 951 mm at −4.88 m/s**, not drift. **This morning's sheer verdict is
+therefore unharmed and now verified: 18/18 byte-identical across committed, unfixed, fixed
+and a 780 s pair, with `hull_150x32` reproducing 4 px over 748.**
+
+**Open and deliberately unexplained:** the **2.5118% at 241/255** recorded for
+`hull_15x5__three_quarter` in gate `20260816-083201-29255` **could not be reproduced** — 16
+runs, two 780 s pairs, nothing moved, and that gate's log prints per-frame numbers identical
+to those runs. The root cause found here does **not** account for it. Retro-fitting it to the
+convenient new explanation is exactly how the three wrong diagnoses got written.
+
+### CLOSED 2026-08-16 — a scale figure could pass the pixel check while standing inside a wall
+
+The check answered *"is there a scale reference in this picture"* and never *"is it standing
+on the deck"*. Closed by a collider query at capture time — **~0.04 ms per box, 134 ms on the
+heaviest fixture in the fleet**, inside a capture taking tens of seconds. The demonstration is
+one output: the embedded spot **fails the collider check naming the breakwater box while the
+pixel check passes at 63 px in the same run.**
+
+The two-view rule survived a mechanical attack (roofed, sight-line-visible candidates all die
+in the crop — the quarter view was seeing orange **through an open doorway**), and the obvious
+relaxation *"visible in at least one view"* **would have passed a figure inside a deckhouse at
+148 px**. A threshold raise was tried and reverted: **a pixel floor cannot be a fleet
+constant**, because each view is framed to its vessel, so raising it fails the 150 m ship for
+being 150 m long.
+
+**Named limit, now an open wave:** the figure may still be **off the ship** — `y = 0` *is* the
+deck plane, so open water passes both claims and the pixel check likes it *more*.
+
 ### Standing, not a task
 
 Every model edit returns a render and the orchestrator looks at it. No metric for appearance —
