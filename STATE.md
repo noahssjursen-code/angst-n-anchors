@@ -3024,6 +3024,14 @@ fails and exposes it.
 
 ### Then, in order
 
+> **STALE — DO NOT PLAN FROM THIS LIST. Audited 2026-08-16.** It describes a tree with
+> nineteen reds, an empty `BrickCatalog.BRICKS`, and a `resources/data/vessels/prebuilt/`
+> holding only `.gitkeep`. The gate is now **119 units / 112 PASS with five reds**, the
+> catalogue is populated, and items 4, 5 and 6 are closed. It is kept because items 1, 2
+> and the *shape* of 7 are still live, and because deleting a superseded plan hides that
+> it was ever believed — the same reason the "what is missing" list above carries its
+> corrections rather than a rewrite. **Every unmarked number below is from 2026-08-10.**
+
 1. **Judge the studio tool against the mouse test.** Not "does it compile" — can a player place a
    piece, turn it, edit its parameters and delete it without typing a number? If the palette or the
    parameter controls are hardcoded rather than read from `structure_pieces.json`, that is a
@@ -3045,6 +3053,42 @@ fails and exposes it.
    crane fails compliance; no lifesaving requirement of any kind exists; `fishing_vessel` requires
    gear but not fishing lights; no hull is under 28 m though two of the three reference vessels are
    ~22 m and the third ~15 m.
+
+### OPEN 2026-08-16 — the sheer is computed, the check is green, and I cannot see it
+
+Opened after the orchestrator looked at `screenshots/hulls/hull_15x5__side.png` and
+`hull_130x28__side.png` and read both as **flat-topped slabs with a straight red band** —
+the "reads as a barge" failure `hull_stations.gd:53` says sheer exists to prevent. The
+130 m reads as a pontoon with a stripe.
+
+**This is not a proposal to curve the deck edge.** That argument is settled and stands:
+`deck_y` is the floor of four other systems and the loft's headroom above it is zero
+millimetres — an earlier wave lifted it and produced 0.666 m of walk-through plating at
+the stem. The 2026-08-15 correction's move, putting the curve on the **rubbing strake**
+one level down inside the freeboard, is sound and `sheer_rise_at` really is wired into
+`from_form` at `strake_level = 3`.
+
+The claim under attack is the correction's last clause: **"the hull has a curve in it
+that a person can see."** The derivation lands on the Load Line Convention (0.896 m
+against a standard 0.966 m for a 28 m hull) and `hull_sheer_test` is green. If the render
+is still flat, then a number is standing in for a feel and the number is winning —
+**REALITY §2, exactly the trap that killed the appearance metric.**
+
+Three candidate causes, to be distinguished by measurement rather than argued:
+1. **Not drawn at all on these hulls.** `strake_level` is `-1` on `from_box`,
+   `from_pointed`, `from_design` and `from_hull_json` — four of five constructors have no
+   band for the curve to live on. If a kit hull takes one of those, its sheer is computed
+   and thrown away.
+2. **Drawn, correct, and invisible.** 0.9 m of rise on an 8 m freeboard rendered at
+   ~5 px/m is Convention-compliant and beneath notice. Amplitude must be measured in
+   PIXELS; metres are what the check holds and metres are not what an eye receives.
+3. **The instrument (REALITY §7).** `screenshots/hulls/*` is shot on near-black at
+   960×540 while `screenshots/vessels/*` uses sky-and-sea at 1600×900. A dark navy
+   topside on a near-black field has almost no edge contrast. **If the rig is at fault,
+   every visual judgement ever made from that family is unreliable — a bigger finding
+   than the sheer.** Related and possibly the real bug: `hull_livery.gd:11` records that a
+   sheer-strake surface is read by nothing (§3d), so a band that curves may be the same
+   colour as what it sits on.
 
 ### Standing, not a task
 
