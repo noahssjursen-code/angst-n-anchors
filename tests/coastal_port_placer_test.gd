@@ -1,14 +1,59 @@
 extends SceneTree
 
+## **EVERY PORT THIS PLACER PUTS ON THE COAST IS A PORT A PLAYER CAN SAIL INTO.**
+##
+## ── WHY THIS FILE COUNTS ITS OWN CHECKS ────────────────────────────────────
+##
+## Until 2026-08-16 this unit printed `all checks passed` and **no number**. It
+## kept its own `_failures` array and had no notion of how many questions it had
+## asked, so a run that asked NONE of them read exactly like a run that asked
+## all of them. That is not hypothetical here: the quay-carve block below used
+## to select its station out of `layout_graph.modules`, the trade quays moved
+## into `initial_attributes["berth_plan"]`, and the check **ran zero times on
+## all 35 ports for weeks** while this file printed green (REALITY.md §4, §4f).
+##
+## Almost every check in this file lives inside `for port in ports` or inside
+## the station loop nested in it, so the number of checks executed is a function
+## of what the placer happened to produce. Three things hold that down:
+##
+##   1. `TestReport`, so the verdict line carries a count at all and a run that
+##      executes zero checks exits 1 by construction.
+##   2. Population floors on the collections the loops walk — ports, quay
+##      stations, station ends — asserted *before* the loops are trusted.
+##   3. `EXPECTED_CHECKS`, frozen. The seed is fixed and the placer is
+##      deterministic, so the check count is a constant, and any drift in it —
+##      up OR down — is a fact about this suite that a human should look at.
+##      Re-freeze it deliberately, in the same commit as the checks you added.
+##
+## Floors and the budget are not redundant. A floor catches a collection that
+## went empty; the budget catches a check that stopped being reached for any
+## other reason, including one whose collection is still full.
+
+const TestReport := preload("res://tests/support/test_report.gd")
 const GENERATOR := preload("res://scripts/world/world_layout_generator.gd")
 const PLACER := preload("res://scripts/world/coastal_port_placer.gd")
 const FIXED_SEED := 90210
 const PORT_COUNT := 35
 
-var _failures := PackedStringArray()
+## Measured 2026-08-16 at FIXED_SEED 90210 / PORT_COUNT 35: 35 ports, 66 quay
+## stations, 132 station ends, **1612 checks**. The budget below counts ITSELF,
+## and the two floors. Before this file counted anything it printed one line of
+## prose for all 1612 of them.
+const EXPECTED_CHECKS := 1612
+## `_port_placer_quay_branch_probe.gd` found 66 stations over the 35 ports of
+## this seed, every one of them carrying both an `origin` and a `tip`. These are
+## floors, not the measured totals: a coast that re-shuffles is allowed, a coast
+## that stops producing piers to test is not.
+const MIN_QUAY_STATIONS := 35
+const MIN_STATION_ENDS := 70
+
+var _t: TestReport = null
+var _stations_seen := 0
+var _station_ends_seen := 0
 
 
 func _initialize() -> void:
+	_t = TestReport.new("coastal_port_placer_test", false)
 	var layout: WorldLayout = GENERATOR.generate(FIXED_SEED)
 	var same_layout: WorldLayout = GENERATOR.generate(FIXED_SEED)
 	var other_layout: WorldLayout = GENERATOR.generate(FIXED_SEED + 1)
@@ -153,12 +198,22 @@ func _test_geography(layout: WorldLayout, ports: Array[PortDefinition]) -> void:
 		)
 		for raw_station in stations:
 			var station := raw_station as Dictionary
+			_stations_seen += 1
 			## Root AND tip: the pier runs from the dock face out into the
 			## basin, and it is the tip that a terrain pad can silently bury.
 			for end_key in ["origin", "tip"]:
 				var local := station.get(end_key, []) as Array
-				if local.size() < 2:
+				## NOT a bare `continue`. A station that stops publishing an
+				## end is exactly how the carve check went to zero runs last
+				## time: the geometry it names simply stopped being where this
+				## file looked, and the check evaporated instead of failing.
+				if not _check(
+					local.size() >= 2,
+					"%s station %s publishes a 2-D %s to carve-test"
+						% [port.port_id, str(station.get("id", "?")), end_key],
+				):
 					continue
+				_station_ends_seen += 1
 				var end_world := port.world_position \
 						+ port_basis * Vector3(float(local[0]), 0.0, float(local[1]))
 				_check(
@@ -232,19 +287,37 @@ func _test_routes(layout: WorldLayout, ports: Array[PortDefinition]) -> void:
 		_check(absf(route_ab - route_ba) < 0.5, "waterway route is symmetric")
 
 
-func _check(condition: bool, label: String) -> void:
-	if not condition and not _failures.has(label):
-		_failures.append(label)
+## Argument order is `(condition, label)` — the inverse of `TestReport.check`,
+## and kept that way so the ~40 call sites above read as they always did.
+func _check(condition: bool, label: String) -> bool:
+	return _t.check(label, condition)
 
 
 func _finish(layout: WorldLayout, ports: Array[PortDefinition]) -> void:
-	if _failures.is_empty():
-		print(
-			"CoastalPortPlacer tests: all checks passed; ports=%d seed=%d checksum=%s"
-			% [ports.size(), layout.seed, layout.layout_checksum]
-		)
-		quit()
-		return
-	for failure in _failures:
-		push_error("CoastalPortPlacer test: " + failure)
-	quit(1)
+	print(
+		"CoastalPortPlacer: ports=%d stations=%d station_ends=%d seed=%d checksum=%s"
+		% [ports.size(), _stations_seen, _station_ends_seen, layout.seed, layout.layout_checksum]
+	)
+	## The populations every loop above walked, asserted after the fact. A coast
+	## that produced no piers cannot report a green carve check by not having
+	## run one.
+	_check(
+		_stations_seen >= MIN_QUAY_STATIONS,
+		"the coast produced quay stations to carve-test (%d, floor %d)"
+			% [_stations_seen, MIN_QUAY_STATIONS],
+	)
+	_check(
+		_station_ends_seen >= MIN_STATION_ENDS,
+		"the stations published pier ends to sample (%d, floor %d)"
+			% [_station_ends_seen, MIN_STATION_ENDS],
+	)
+	## The budget, counting itself. `check_count()` is the number recorded
+	## BEFORE this line, so the run total is one more.
+	var ran := _t.check_count() + 1
+	_check(
+		ran == EXPECTED_CHECKS,
+		"the run executed its whole check budget (%d of %d — re-freeze"
+			% [ran, EXPECTED_CHECKS]
+			+ " EXPECTED_CHECKS in the commit that changes it, never after the fact)",
+	)
+	_t.finish(self)
