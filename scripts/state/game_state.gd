@@ -19,10 +19,37 @@ var ship:     ShipState     = ShipState.new()
 var world:    WorldState    = WorldState.new()
 
 var _wired_controllers: Array = []
+## Boats whose `fuel_depleted` is already wired. A bound `Callable` does not
+## compare equal to a freshly-bound one, so `is_connected` cannot be the guard
+## here the way it is for the mooring wire.
+var _fuel_wired_boats: Array = []
 var _active_controller: BoatController
 var _active_boat: BoatBody
 var _instrument_elapsed := 0.0
 const INSTRUMENT_REFRESH_S := 0.05
+
+## Running dry is a thing that happens to a player at sea, and until 2026-08-16
+## it happened in silence. `BoatBody.fuel_depleted` had ZERO subscribers in the
+## whole repository (REALITY §3d) and `PropulsionComponent` simply `return`s at
+## `fuel_pct <= 0.0`, so the boat stopped answering the throttle with no event of
+## any kind. The FUEL cell does redden under 10% and read 0% — but that is a
+## poll, and it only says the tank IS empty, never that it just ran dry.
+##
+## THIS IS THE EXISTING NOTICE SURFACE, NOT A NEW ONE. `MooringComponent`'s
+## refusal already travels this exact path — `ShipState.push_notice` →
+## `LocalPlayerView.ship_notice_requested` → `ShipHud.show_toast` → `BrandToast`
+## — so it needs no HUD geometry and no new cell. It is wired in `_wire_boat`
+## beside the mooring wire, for the same reason and at the same moment.
+##
+## THE WORDING IS THE OWNER'S, NOT MINE. This string is a placeholder that says
+## the two things a stalled helmsman needs — the engine has stopped, and fuel is
+## sold at a harbour fuel point — in the house style the other helm notices use
+## (`MOORED — untie both quay lines before departure`). Change it freely; the
+## test asserts that A notice arrives and that it names fuel, not this sentence.
+const FUEL_EMPTY_NOTICE := "ENGINE STOPPED — fuel tank empty. Bunker fuel at a harbour fuel point."
+## Longer than the 3 s default: this one costs the player a tow, and the mooring
+## refusal it sits beside already runs 5 s for a smaller problem.
+const FUEL_EMPTY_NOTICE_S := 6.0
 
 
 func _ready() -> void:
@@ -106,7 +133,7 @@ func _wire_boat_controller(bc: BoatController) -> void:
 	_wired_controllers.append(bc)
 	bc.helm_activated.connect(func() -> void: _on_helm_on(bc))
 	bc.helm_deactivated.connect(_on_helm_off)
-	_wire_mooring.call_deferred(bc)
+	_wire_boat.call_deferred(bc)
 
 
 func _on_helm_on(bc: BoatController) -> void:
@@ -128,7 +155,10 @@ func _on_helm_off() -> void:
 	_active_boat = null
 
 
-func _wire_mooring(controller: BoatController) -> void:
+## Was `_wire_mooring`; renamed when the fuel wire landed beside it, because a
+## function named after one of the two things it does is how the next reader
+## fails to find the other.
+func _wire_boat(controller: BoatController) -> void:
 	if controller == null or not is_instance_valid(controller):
 		return
 	var boat := controller.get_parent() as BoatBody
@@ -137,10 +167,35 @@ func _wire_mooring(controller: BoatController) -> void:
 	var mooring := boat.get_node_or_null("ShipGameplay/MooringComponent") as MooringComponent
 	if mooring != null and not mooring.mooring_rejected.is_connected(_on_ship_notice):
 		mooring.mooring_rejected.connect(_on_ship_notice)
+	## EVERY vessel in the world gets a `BoatController`, NPC traffic included
+	## (`CatalogHullVessel._build_systems` adds one unconditionally), and they all
+	## burn fuel through the same `PropulsionComponent`. So the boat is bound and
+	## the handler asks whose it is — without that, a coaster running dry three
+	## miles away toasts the player's helm.
+	if not _fuel_wired_boats.has(boat):
+		_fuel_wired_boats.append(boat)
+		boat.fuel_depleted.connect(_on_fuel_depleted.bind(boat))
 
 
 func _on_ship_notice(message: String) -> void:
 	ship.push_notice(message)
+
+
+## `fuel_depleted` carries no argument on purpose: the crossing is the event, and
+## the level behind it is already on the HUD. Not latched — the notice fires at
+## the crossing and the FUEL cell holds `0%` in ALERT afterwards. Whether a
+## helmsman who was away from the wheel when it fired should be told again on
+## sitting down is a design question, and it is named in the report rather than
+## answered here.
+##
+## `PlayerVessel.GROUP` is the same discriminator `VesselAutopilot` and
+## `BridgeWatchAlarm` use to tell the captain's hull from the traffic.
+func _on_fuel_depleted(boat: BoatBody) -> void:
+	if boat == null or not is_instance_valid(boat):
+		return
+	if not boat.is_in_group(PlayerVessel.GROUP):
+		return
+	ship.push_notice(FUEL_EMPTY_NOTICE, FUEL_EMPTY_NOTICE_S)
 
 
 func _capture_instruments() -> Dictionary:

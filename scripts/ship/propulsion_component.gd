@@ -45,8 +45,15 @@ func _physics_process(delta: float) -> void:
 	# Burn fuel proportional to throttle magnitude. If the tank is dry,
 	# clamp magnitude to zero — engine stalls. Rudder still works because
 	# this component only owns propulsion.
+	#
+	# `delivered_thrust_n` is zeroed on the way out because this branch used to
+	# leave it at the LAST value it computed: measured 2026-08-16, a dry tank at
+	# full ahead reported 12345.0 N forever, which is a stalled engine claiming
+	# full power. Nothing reads the field today (REALITY §3d), so this changes no
+	# behaviour — it stops the first reader inheriting the lie.
 	var fuel_pct := _body.get_fuel_fraction()
 	if fuel_pct <= 0.0:
+		delivered_thrust_n = 0.0
 		return
 
 	var burn := absf(throttle) * fuel_burn_l_per_sec_full * delta

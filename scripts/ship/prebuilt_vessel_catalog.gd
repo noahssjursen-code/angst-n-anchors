@@ -95,7 +95,16 @@ static func _load_entry(path: String) -> Dictionary:
 	entry["prebuilt_path"] = path
 	entry["compliance_ok"] = compliance_ok
 	entry["is_draft"] = is_draft
-	entry["compliance_errors"] = outfit.get("errors", PackedStringArray())
+	## `entry["compliance_errors"] = outfit.get("errors", …)` stood here and was
+	## DELETED 2026-08-16. Nothing in `scripts/` or `scenes/` ever read it — the
+	## only two readers were in `starter_vessel_grant_test`, and REALITY §3d is
+	## explicit that a reader in `tests/` is not a reader. The array itself is not
+	## lost: the `push_warning` twenty lines above joins the same `errors` on the
+	## same load, which is the one derivation that reaches a human, and the two
+	## verdict fields a player-facing path DOES read — `compliance_ok` (gates
+	## `CompanyService`) and `is_draft` (filters `for_sale_entries`, badges the
+	## row in `ShipyardBrickEditor`) — are untouched. This was a third copy of a
+	## value already stated twice (REALITY §3b).
 	## Catalog hulls have no .tscn — keep empty scene_path and spawn by hull_id.
 	var scene_path := str(preset.get("scene_path", entry.get("scene_path", ""))).strip_edges()
 	if scene_path.is_empty() or not ResourceLoader.exists(scene_path):

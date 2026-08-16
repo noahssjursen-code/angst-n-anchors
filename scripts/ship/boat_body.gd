@@ -153,13 +153,22 @@ func apply_hull_livery(livery: Dictionary = {}) -> void:
 		var was_dry := fuel_l <= 0.0001
 		fuel_l = clamped
 		_refresh_mass()
-		fuel_changed.emit(get_fuel_fraction())
 		if not was_dry and fuel_l <= 0.0001:
 			fuel_depleted.emit()
 
-## Emitted when fuel level changes. Argument is current fraction (0..1).
-signal fuel_changed(fraction: float)
-## Emitted once when the tank crosses from non-empty to empty.
+## `fuel_changed(fraction)` was declared here and emitted on EVERY write to
+## `fuel_l` — sixty times a second under throttle — with zero subscribers in the
+## whole repository. Deleted 2026-08-16. The level does reach the player, by the
+## other derivation: `GameState._capture_instruments()` reads
+## `get_fuel_fraction()` into the 0.05 s snapshot, the HUD's FUEL cell draws it
+## and reddens under 10%, and `ChartNavSnapshot` carries the same fraction to
+## the chart. This was the second copy of a delivered value, and REALITY §3b
+## says the fix for two derivations is to delete one, not to keep both in step.
+##
+## Emitted once when the tank crosses from non-empty to empty. UNLIKE the level,
+## this is an EVENT and the snapshot cannot carry it: a poll can only say the
+## tank is empty now, never that it just ran dry. `GameState._wire_boat` is its
+## subscriber and turns it into a helm notice.
 signal fuel_depleted
 
 

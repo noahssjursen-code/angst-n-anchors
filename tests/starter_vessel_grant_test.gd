@@ -186,19 +186,32 @@ func _check_the_preset_is_certified_not_a_draft() -> void:
 	if not _t.check("the starter preset '%s' is in the catalogue" % prebuilt_id, not entry.is_empty()):
 		return
 
+	## Re-run the verdict against the LAYOUT, so a failure names the rule instead
+	## of saying "not ok". This USED TO READ `entry["compliance_errors"]`, a key
+	## the catalogue published and nothing outside this file ever read; the key is
+	## deleted (REALITY §3d) and the errors are taken from the producer instead.
+	## That is strictly the better source anyway — reading the key back was a
+	## test asserting the catalogue's own copy of its own answer, and once the key
+	## was gone `entry.get(…, PackedStringArray()).size() == 0` would have passed
+	## on an empty default forever (REALITY §4, the vacuous pass).
+	var hull_id := str(entry.get("hull_id", ""))
+	var report := VesselCompliance.validate(
+		BrickLayout.from_dict(entry.get("prebuilt_layout", {}) as Dictionary),
+		hull_id,
+		str(entry.get("registration_id", "")),
+		HullRegistry.make_grid(hull_id),
+	)
+	var errors := report.get("errors", PackedStringArray()) as PackedStringArray
+
 	## A draft preset is not refused — it is loaded, flagged, and `push_warning`ed
 	## once per catalog load, and `build_starter_vessel_record` then returns {}.
 	## The verdict is asserted here rather than eyeballed in the JSON.
 	_t.check(
-		"the preset is not a draft (errors: %s)"
-		% " · ".join(entry.get("compliance_errors", PackedStringArray())),
+		"the preset is not a draft (errors: %s)" % " · ".join(errors),
 		not bool(entry.get("is_draft", true)),
 	)
 	_t.check("the preset's compliance verdict is ok", bool(entry.get("compliance_ok", false)))
-	_t.equal(
-		"the preset carries no compliance errors",
-		(entry.get("compliance_errors", PackedStringArray()) as PackedStringArray).size(), 0,
-	)
+	_t.equal("the preset carries no compliance errors", errors.size(), 0)
 	## Certified stock is what the Shipwright is allowed to sell; a draft is
 	## filtered out of `for_sale_entries` and the boat becomes unbuyable too.
 	var for_sale := false
@@ -208,15 +221,6 @@ func _check_the_preset_is_certified_not_a_draft() -> void:
 			break
 	_t.check("the starter preset is also certified yard stock", for_sale)
 
-	## Re-run the verdict against the LAYOUT, item by item, so a failure names the
-	## rule instead of saying "not ok".
-	var hull_id := str(entry.get("hull_id", ""))
-	var report := VesselCompliance.validate(
-		BrickLayout.from_dict(entry.get("prebuilt_layout", {}) as Dictionary),
-		hull_id,
-		str(entry.get("registration_id", "")),
-		HullRegistry.make_grid(hull_id),
-	)
 	var seen_rule_ids := {}
 	for raw in report.get("checklist", []) as Array:
 		var item := raw as Dictionary
