@@ -75,7 +75,6 @@ static func validate(
 	var crane_cells: Array[Vector3i] = []
 	var tow_cells: Array[Vector3i] = []
 	var door_n := 0
-	var wall_n := 0
 	var window_n := 0
 	var brick_n := layout.count()
 	var max_y := 0
@@ -91,6 +90,19 @@ static func validate(
 	## helm filled the helm slot, so `has_helm` was true and the helm requirement
 	## was met by a helm in the sea.
 	var off_grid: Array = []
+	## The bricks this walk ACCEPTED, handed to `BrickShellClassifier.enclosure`
+	## below so it floods exactly what the fit-out will build without re-running
+	## `cell_on_grid` over the whole layout to find out. The classifier's own
+	## header prices that re-derivation at 25%.
+	##
+	## THIS IS A COST CHOICE, NOT A CORRECTNESS ONE, and that is measured rather
+	## than assumed: dropping the argument and letting `enclosure` re-filter left
+	## `brick_enclosure_test` at PASS (59 checks), including the case that builds
+	## a sealed cabin on a bigger hull and judges it against this one. The
+	## classifier applies the SAME `BrickLayout.cell_on_grid` predicate when it is
+	## handed no list, so a cabin in the sea is refused either way. Said plainly
+	## so the next reader does not believe this line is what keeps that honest.
+	var on_deck_items: Array = []
 	for item in layout.iter_primary_cells():
 		var cell: Vector3i = item["cell"]
 		var brick_id := str(item.get("brick_id", ""))
@@ -101,6 +113,7 @@ static func validate(
 		if not BrickLayout.cell_on_grid(g, cell, brick_id, int(item.get("yaw", 0))):
 			off_grid.append({"cell": cell, "brick_id": brick_id})
 			continue
+		on_deck_items.append(item)
 		max_y = maxi(max_y, cell.y + BrickCatalog.footprint_of(brick_id).y - 1)
 		if BrickCatalog.has_tag(brick_id, "fishing") or BrickCatalog.has_tag(brick_id, "trommel"):
 			fishing_cells.append(cell)
@@ -112,8 +125,9 @@ static func validate(
 			tow_cells.append(cell)
 		if BrickCatalog.has_tag(brick_id, "door"):
 			door_n += 1
-		if BrickCatalog.has_tag(brick_id, "wall") or BrickCatalog.has_tag(brick_id, "solid"):
-			wall_n += 1
+		## The `wall` / `solid` tally that stood here fed nothing but the old
+		## `wall_n >= 8` cabin rule, and it is gone with it rather than left as a
+		## counter the next reader assumes something reads (REALITY.md §3d).
 		if BrickCatalog.has_tag(brick_id, "window"):
 			window_n += 1
 
@@ -233,60 +247,104 @@ static func validate(
 		"cargo_zone_indices": [],
 		"bulk_hold_indices": accepted_bulk_indices,
 	}
+	## ── THE CABIN IS MEASURED OFF THE BUILD, and it used to be counted ────────
+	##
+	## This was `door_n >= 1 or wall_n >= 8` — a count of brick IDS that asked
+	## nothing about shape. Measured through this function before the change
+	## (`tests/_brick_cabin_probe.gd`, hull_28x10):
+	##
+	##     8 `block` bricks in a STRAIGHT LINE on the deck   has_cabin true
+	##     ONE `block_door` standing alone on the deck       has_cabin true
+	##
+	## and the second of those put `passenger_vessel/cabin` on the registration
+	## checklist as *"Enclosed passenger accommodation: required (current: true)"*
+	## — a licence to carry people, granted for one door brick lying on a bare
+	## deck. Nothing pinned it: `plan_outfit.gd`'s header claimed
+	## `plan_compliance_test` did, and that test pins the PLAN side of the same
+	## question (REALITY.md §4d — a citation is not a verification).
+	##
+	## `BrickShellClassifier.enclosure` answers it off the geometry instead: a
+	## pocket of air the exterior flood never reaches, with a door brick against
+	## it. (The plan path's third clause, a floor under it, is not a clause on the
+	## voxel grid — it FOLLOWS from enclosure, proved and mutation-measured in
+	## `_read_pocket`'s header.) Two recorded blockers stood in front of this and
+	## NEITHER SURVIVED BEING CHECKED (both re-measured 2026-08-16):
+	##
+	##  1. *"The classifier publishes bricks, not air."* True of what it RETURNED
+	##     and false of what it KNEW. `_flood_exterior_air` already visits every
+	##     air cell the sky reaches; the enclosed air is the complement inside the
+	##     same bounds, and on the hollow 5x5x3 cabin that complement is exactly
+	##     the 27 cells the old note said "appear nowhere". No new flood, no
+	##     second derivation — `_solid_field` builds the field once and both
+	##     readings run on it (REALITY.md §3d: a value computed and discarded).
+	##
+	##  2. *"A brick cell has no agreed metre size."* Real, and NOT ON THIS PATH.
+	##     The factor of two is between `BuildingGrid.CELL_M` (1.0) and
+	##     `BrickCatalog.size_m` (0.5) — and `BuildingGrid` is the LAND blueprint
+	##     lattice in `scripts/port/`, with zero references from `scripts/ship/`.
+	##     A vessel brick is positioned by `DeckGrid.cell_center_local`, which
+	##     steps `DeckGrid.CELL_M` = 0.5, and drawn at `BrickCatalog.size_m`,
+	##     which is that same 0.5: on a boat the lattice and the brick AGREE.
+	##     The open decision is whether 0.5 m is the right brick, not which of two
+	##     numbers this path is using.
+	##
+	## SO WHY IS THE READING STILL SCALE-FREE HERE. Because the answer that does
+	## not move when that product decision is settled is worth more than the
+	## stricter one that does. `enclosure` is asked for the TOPOLOGY — enclosed,
+	## with a way in — and NOT for the 1.8 m / 1.2 m² bars, which are the only
+	## clauses that need a metre size. Both defects above are false under every
+	## reading, so closing them never needed the decision, and
+	## `brick_enclosure_test` asserts BOTH halves of that: the published verdict
+	## is identical at 0.5 m and at 1.0 m on five fixtures, and the three-course
+	## cabin — the one fixture whose answer the metre size really does decide —
+	## is named with the figures either way.
+	##
+	## ── WHO READS THIS, AND HOW FAR THE OLD WRONG YES COULD TRAVEL ────────────
+	##
+	## Grepped and traced 2026-08-16, because the severity of a wrong capability
+	## is decided by its consumers and not by how wrong it is (REALITY.md §3d).
+	##
+	##   `passenger_vessel/cabin` in `resources/data/vessels/registrations/catalog.json`
+	##     is THE ONLY RULE IN THE CATALOGUE THAT NAMES `has_cabin`. Through
+	##     `VesselCompliance` it sets `registration_ok`, hence `report.ok`, which
+	##     gates real player paths: `VesselSpawn.resolve_deployable_record` (the
+	##     harbour master's "deploy fleet vessel"), `PlayerSession.persist_vessel_configuration`
+	##     (saving a vessel), `ShipwrightNPC._on_commission_requested`, and
+	##     `PrebuiltVesselCatalog`'s `compliance_ok` / `is_draft`.
+	##   BUT NOTHING THE SHIPPED GAME PRODUCES IS A BRICK-BUILT PASSENGER VESSEL.
+	##     All four presets in `resources/data/vessels/prebuilt/` are
+	##     cargo/bulk/fishing, the starter grant hands out those same presets, and
+	##     the only code that selects `passenger_vessel` is `structure_studio.gd`,
+	##     which authors `structure_plan_v1` and is judged by `PlanOutfit`, not by
+	##     this function.
+	##   `ShipyardBrickEditor` (`:3066`, "Cabin: yes") has the registration picker
+	##     that CAN choose `passenger_vessel`, and `open_for_hull` /
+	##     `open_for_authoring` have no callers outside that file and its scene is
+	##     instantiated nowhere — it is a standalone engine tool. That is not
+	##     harmless: in authoring mode `report.ok` is what decides whether
+	##     `_on_dev_save_prebuilt` writes an OFFICIAL preset or a draft, and an
+	##     official preset is exactly what the shipwright sells and the starter
+	##     grant gives away. The wrong yes could not reach a player by itself; it
+	##     could get a fake cabin stamped official by someone using the tool.
+	##   `HullRegistry.record_has_capability("cabin")` reads it and HAS NO CALLERS
+	##     at all (its own header says so; re-grepped, still true).
+	##
+	## So: a live gate on a player path, reachable only through a registration
+	## nothing in the game currently assigns to a brick layout. Named as measured
+	## rather than as "harmless" or "critical".
+	##
+	## WHAT THE SCALE-FREE VERDICT COSTS, stated because it is a real gap: a
+	## pocket ONE CELL tall and one cell square, with a door beside it, still
+	## reads as a cabin. That is 0.5 m or 1.0 m of headroom, and neither is
+	## accommodation. It is a strictly smaller class of wrong answer than the rule
+	## it replaces — which needed no pocket at all — and the cell counts are
+	## published below so a licence can put a bar on them the day there is one.
+	var enclosed := BrickShellClassifier.enclosure(layout, g, 0.0, on_deck_items)
 	var caps := {
 		"cargo_cells": cargo_used,
 		"cargo_budget": cargo_max,
 		"exposed_deck_cells": int(budget.get("exposed_deck_cells", 0)),
-		## ── A KNOWN WRONG YES, AND WHAT IT WOULD TAKE TO CLOSE IT ──────────
-		##
-		## `door_n >= 1 or wall_n >= 8` counts BRICK IDS and asks nothing about
-		## shape, so it certifies things nobody would live in. Measured today
-		## through this function (`tests/_brick_cabin_probe.gd`, hull_28x10):
-		##
-		##     8 `block` bricks in a STRAIGHT LINE on the deck   has_cabin true
-		##     ONE `block_door` standing alone on the deck       has_cabin true
-		##
-		## and the second of those puts `passenger_vessel/cabin` on the checklist
-		## as *"Enclosed passenger accommodation: required (current: true)"*. That
-		## is a licence for carrying people, granted for one door brick.
-		##
-		## `plan_outfit.gd`'s header used to say this rule was pinned by
-		## `plan_compliance_test`. IT IS NOT, AND NOTHING ELSE PINS IT EITHER —
-		## `plan_compliance_test` pins the PLAN side of the same question (a fence
-		## is not a cabin) and no test in this repo asserts anything about the
-		## brick reading. A citation is not a verification (REALITY.md §4d).
-		##
-		## THE PLAN PATH NOW MEASURES THIS OFF GEOMETRY (`PlanOutfit.enclosure`):
-		## a pocket of air the sky cannot reach, 1.8 m of headroom, 1.2 m² of
-		## floor, with a door into it. Two things stop that reading
-		## being handed to a brick layout, and only the second is an opinion:
-		##
-		##  1. THE MECHANISM EXISTS BUT PUBLISHES THE WRONG HALF.
-		##     `BrickShellClassifier` already floods air in from the sides and the
-		##     sky with the hull below y = 0 closed — the same flood, on the voxel
-		##     grid this path is built on. What it returns is which BRICKS are
-		##     buried, not which AIR is enclosed. Measured on a hollow 5 x 5 x 3
-		##     brick cabin with a lid: 73 exterior bricks, **0 interior**, 145
-		##     exterior air cells — and the 27 cells of air inside the cabin appear
-		##     in none of those numbers. Publishing `enclosed_air` from the flood
-		##     it already runs is a small change to that file and is the whole of
-		##     the geometry work.
-		##
-		##  2. A BRICK CELL HAS NO AGREED SIZE, so no headroom or floor-area bar
-		##     can be stated. Measured: `BuildingGrid.CELL_M` is **1.0** and
-		##     `BrickCatalog.size_m("block")` is **(0.5, 0.5, 0.5)** — the factor
-		##     of two CONVENTIONS §3a calls an open product decision. The classic
-		##     5 x 5 x 3 brick cabin is 1.5 m of interior headroom on one reading
-		##     and 3.0 m on the other, so the SAME layout is accommodation or a
-		##     crawl space depending on which is right. Picking one here to get a
-		##     number would be this file deciding a question about the whole brick
-		##     system, in a capability flag.
-		##
-		## So this stays, named rather than quietly wrong, until the brick cell's
-		## metre size is settled. It is deliberately NOT pinned by a test: a
-		## regression test on a known-wrong answer holds it in place (REALITY.md
-		## §4a), and the next person to fix this should find a red nowhere.
-		"has_cabin": door_n >= 1 or wall_n >= 8,
+		"has_cabin": bool(enclosed.get("cabin", false)),
 		"has_helm": accepted_helm.size() >= 1,
 		"has_crane": accepted_crane.size() >= 1,
 		"has_fishing": accepted_fishing.size() >= 1,
@@ -296,6 +354,18 @@ static func validate(
 		"helms": accepted_helm.size(),
 		"brick_count": brick_n,
 		"max_stack_y": max_y,
+		## The enclosure numbers, in CELLS, so nothing here states a metre size.
+		## `cabins` is the count of pockets that pass; `cabin_floor_cells` and
+		## `cabin_headroom_cells` are the largest one's plan footprint and tallest
+		## vertical run. A `metric_range` rule can name any of them, and the day
+		## the brick cell is settled they are what a 1.8 m / 1.2 m² bar is applied
+		## to. `PlanOutfit` publishes `cabins` / `cabin_area_m2` / `cabin_why` on
+		## its side; `cabin_area_m2` has no honest brick value yet and is
+		## deliberately absent rather than present and zero.
+		"cabins": int(enclosed.get("cabins", 0)),
+		"cabin_floor_cells": int(enclosed.get("floor_cells", 0)),
+		"cabin_headroom_cells": int(enclosed.get("headroom_cells", 0)),
+		"cabin_why": str(enclosed.get("why", "")),
 	}
 	var report := _result(errors.is_empty(), errors, warnings, budget, usage, accepted_slots, caps)
 	## The cells this walk refused, so `VesselCompliance._measure` skips exactly

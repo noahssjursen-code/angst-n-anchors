@@ -3,6 +3,14 @@ extends SceneTree
 ## SCRATCH PROBE (leading underscore -> skipped by tools/gate.sh discovery).
 ## What `VesselOutfit`'s `has_cabin` actually says today, and what the brick
 ## cell is worth in metres. Prints numbers; asserts nothing.
+##
+## THIS IS THE BEFORE INSTRUMENT. Run on 2026-08-16 against
+## `door_n >= 1 or wall_n >= 8` it printed `has_cabin -> true` for the fence, for
+## the lone door brick and for the hollow cabin alike, and the passenger
+## checklist line as *"required (current: true)"*. Run it now and the first two
+## are `false`. The reading that replaced the count is measured per fixture, at
+## both candidate cell sizes, by `tests/_brick_enclosure_probe.gd`, and asserted
+## by `tests/brick_enclosure_test.gd`.
 
 const HULL := "hull_28x10"
 
