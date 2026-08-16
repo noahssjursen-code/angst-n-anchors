@@ -8,7 +8,20 @@ extends Node
 ##
 ## The scene is loaded AS SHIPPED — its own camera, its own lighting, its own
 ## opening state. Nothing here poses it; if the pose is wrong the frames say so.
+##
+## ── REPRODUCIBILITY, 2026-08-16 ────────────────────────────────────────────
+##
+## This rig used to produce different pixels on every run. The cause is written
+## up in full at the top of `tests/_starter_shot.gd`, and in one line it is:
+## `WorldClock` runs a 24-REAL-MINUTE day off the Unix clock and
+## `ShipLighting` rescales every light on the vessel from it, so two runs a few
+## real minutes apart are a few GAME HOURS apart. The subject does not move —
+## the boat's transform, meshes and materials are bit-identical across
+## processes — the light does. Two fixes, both mechanical: the clock is pinned
+## at noon, and each frame is grabbed after `frame_post_draw` rather than after
+## a bare `process_frame` count.
 
+const CaptureClock := preload("res://tests/support/capture_clock.gd")
 const OUT_DIR := "res://screenshots/vessels/hold"
 const STAGES := [0.0, 0.10, 0.25, 0.50, 1.0]
 
@@ -21,6 +34,8 @@ func _ready() -> void:
 
 
 func _run() -> void:
+	print("CLOCK PINNED time_of_day=%.3f (noon) — the HOUR is fixed; see this file's header for what that closes"
+		% CaptureClock.pin(get_tree()))
 	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(OUT_DIR))
 	_viewport = SubViewport.new()
 	_viewport.size = Vector2i(1280, 900)
@@ -67,8 +82,7 @@ func _run() -> void:
 
 
 func _save(case: String) -> void:
-	for _frame in range(5):
-		await get_tree().process_frame
+	await CaptureClock.settle(get_tree(), 5)
 	var image := _viewport.get_texture().get_image()
 	image.save_png(ProjectSettings.globalize_path("%s/%s.png" % [OUT_DIR, case]))
 	print("SHOT %s" % case)

@@ -1,0 +1,6 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://tests/_repro_starter_bisect.gd" id="1"]
+
+[node name="ReproStarterBisect" type="Node"]
+script = ExtResource("1")
