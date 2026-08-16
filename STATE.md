@@ -3261,6 +3261,44 @@ recorded status as a claim:** `hull_visual_capture` is recorded byte-identical a
 pairs and produced **2.5118% at 241/255** in an ordinary gate run today, with a mask showing a
 1–3 px wireframe — a grab/draw race, in a rig that *does* call `settle`.
 
+### BASELINE 2026-08-16 — `20260816-083201-29255`, the orchestrator's own full gate
+
+**122 units.** Five reds and one SKIP, and **every one of the five is the same red it was
+this morning, unmoved by six waves of work**: `port_trade_profile_test` (apron props
+nothing draws), `remote_realtime_join_smoke` (needs a live server), `structure_plate_test`
+(open slop decision), `building_interior_test` (the open brick-cell decision — a mutation
+takes it to PASS), `plan_interior_test` (the mast); `ocean_wake_gpu_smoke` SKIP.
+
+**It caught a regression the orchestrator had committed.** `piece_kit_capture` and
+`structure_plate_capture` were red in this run, PASS → FAIL on `f9aac33` — the
+figure-visibility check applied to fixtures whose spot was never authored. The wave that
+wrote that check said plainly it had not run the gate and that the rest of the tree was
+unverified; it was, and the commit went in anyway. **Verifying what a wave CHANGED is not
+verifying what a wave REACHES.** Fixed in `63a6d0a`; both green.
+
+### Three instrument failures in one day, all of them the checker's own tools
+
+Recorded together because the pattern is the lesson, not any one instance:
+
+1. **A `pgrep` that matched itself.** The orchestrator's gate waiter grepped for
+   `bash tools/gate.sh`; its own command line contained that string, so it reported the
+   gate as running for an hour after it had finished, and a partially-written
+   `results.tsv` was read as a 2-unit run.
+2. **A `git status` used as a content check.** A wave reported frames "byte-identical" on
+   the strength of `git status`, which reports `M` on a stat-cache mismatch when a file is
+   rewritten with identical bytes and clean once the index refreshes — the same command
+   answers differently depending on when it runs. Re-verified by content hash; the
+   conclusion held, the instrument did not.
+3. **A `pgrep -f` misread as proof of a clean machine.** A wave reported no live
+   `_wave_walk_probe` process; **one had been running 2h55m at 184% CPU** and was still
+   running hours after that wave finished. It burned two cores under a full gate run and
+   under an in-flight capture-reproducibility investigation — **CPU contention being the
+   one candidate cause that investigation had never tested.** Killed by the orchestrator;
+   the wave was told which of its verdicts the window makes suspect.
+
+Standing consequence: **use `ps -C <name>` rather than `pgrep -f <pattern>`** for process
+checks, and never let a process check's own pattern appear in its own command line.
+
 ### Standing, not a task
 
 Every model edit returns a render and the orchestrator looks at it. No metric for appearance —
