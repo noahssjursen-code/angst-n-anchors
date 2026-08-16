@@ -3414,6 +3414,57 @@ being 150 m long.
 **Named limit, now an open wave:** the figure may still be **off the ship** — `y = 0` *is* the
 deck plane, so open water passes both claims and the pixel check likes it *more*.
 
+### CLOSED 2026-08-16 — the physics-LOD class is closed across all eleven rigs
+
+The last shipped rig, `vessel_render_capture`, is the **drift** case and violently so: with
+its process mode alive the LOD timer crosses on its own between the third and fourth grab
+and the hull **rises 1.742 m at +2.17 m/s**, because that stage is in the main world with
+buoyancy live and the rig submerges the hull to bring its deck to y=0. It has **no timer
+margin at all**, unlike `hull_visual_capture`'s 0.93 s.
+
+**Its frames were never wrong, and the reason had never been written down.** One line three
+below `add_child` — `process_mode = PROCESS_MODE_DISABLED` — and `disable_mode` defaults to
+`DISABLE_MODE_REMOVE`, so a disabled `BoatBody` is **taken out of the physics space**: origin
+holding all nine digits across 139 physics frames. **The freeze was decorative; the process
+mode was the entire defence.** A tidy-up that "simplified" that line would have corrupted
+every frame this project judges vessels by. 82/82 frames byte-identical by `cmp` on content.
+
+### CLOSED 2026-08-16 — a scale figure could stand in open water and pass every check
+
+`y = 0` **is** the deck plane, so an off-ship spot satisfied both the not-inside-geometry and
+not-floating claims, and the pixel check *preferred* it — a figure against open sky is highly
+visible. Closed with the outline taken from **the built hull's own loft**, per level between
+bracketing stations, with a longitudinal term as well as a transverse one because the loft
+collapses to zero width at the stem. Reproduced by the orchestrator: the open-water spot
+fails at **+6.500 m outboard** while both older figure checks stay green in the same run.
+
+**Mutation C passed and is the argument for the design:** swap the loft for `beam_m * 0.5` —
+the rectangle — and the open-water spot goes **green**, reading 16.000 m where the hull is
+7.000. The rectangle is blind by construction. Mutation B is why there are two terms: a spot
+3 m ahead of the stem fails only on the longitudinal one.
+
+The bound is argued, not tuned: the rubbing strake stands **0.150 m outboard of the sheer
+line** (5.150 vs a 5.000 m deck edge), so a figure 0.1 m out is on the strake; 0.05 m is under
+two pixels at the tightest framing.
+
+### OPEN 2026-08-16 — the builder is offered cells over open water
+
+`make_grid` and `make_stations` are **two producers of one outline** and they disagree.
+Cell-centre overhang of grid past loft: hull_28x10 **−0.000 m**, hull_150x32 **+0.000 m**,
+**`hull_45x16_cat` +6.639 m at the stem** — the grid says the bridge deck is rectangular, the
+loft tapers it.
+
+`make_grid` produces the cells **a player is offered to build on**; `make_stations` produces
+**the hull that exists**. Where the grid runs past the loft, the builder is being handed cells
+**over water**, and a wall placed there stands on nothing — the same class as the trim bands
+that hung 4 m off the barge's bow, except **a player can do this one**, and building your own
+ship is the entire premise. Whether anything downstream refuses the placement is the
+load-bearing unknown and decides whether this is live or latent.
+
+Note it may not be a grid bug: a catamaran's bridge deck spans two hulls, so a stem taper that
+is right for a monohull may be simply wrong for it. The design intent must be read from the
+hull's own data before either producer is called the wrong one.
+
 ### Standing, not a task
 
 Every model edit returns a render and the orchestrator looks at it. No metric for appearance —
