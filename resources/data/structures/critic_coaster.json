@@ -1,0 +1,751 @@
+{
+	"format": "structure_plan_v1",
+	"context": "vessel",
+	"hull_id": "hull_28x10",
+	"_note": "DEMONSTRATION FIXTURE, and the only one in this directory that is not adversarial. The three critic_* studies beside it exist to break the kit; this one exists to answer the opposite question - CAN the kit make a deckhouse a person would accept? Same 28 x 10 m hull as critic_ferry, and every difference from it is data: the house is pulled in to x 2.0..8.0 so there are 2.0 m SIDE DECKS a 1.8 m figure walks down (the ferry roofs 90% of the beam); the height is STEPPED 2.0 -> 3.0 -> 5.5 m across three tiers instead of one constant 2.5 m slab; the window band CHANGES along the length - a 1.5 m saloon ribbon of four lights forward, a higher-silled 1.0 m galley band of two aft on starboard, punched scuttles in the low casing, and a solid panel where the door goes on port; and there are TWO DOORS, one into the house off the port side deck and one into the wheelhouse off the boat deck. Nothing here is a new piece and nothing is a new parameter - 39 placements of the same six pieces, at four wall heights and three tier levels.",
+	"palette": {
+		"wall": [
+			0.91,
+			0.9,
+			0.86
+		],
+		"deck": [
+			0.29,
+			0.31,
+			0.33
+		]
+	},
+	"hull": {
+		"loa_m": 28.0,
+		"beam_m": 10.0,
+		"depth_m": 5.6,
+		"draft_m": 2.8,
+		"displacement_t": 256.0,
+		"form": "fine_entry",
+		"bow_taper_fraction": 0.17857142857142858,
+		"station_count": 8
+	},
+	"walls": [],
+	"decks": [],
+	"stairs": [],
+	"items": [],
+	"edges": [],
+	"pieces": [
+		{
+			"id": 1,
+			"piece": "wall_glazed",
+			"cell": [
+				7,
+				0,
+				18
+			],
+			"facing": 0,
+			"params": {
+				"span": 6,
+				"height": 6,
+				"rake": 4,
+				"sill": 2,
+				"band": 2,
+				"lights": 3
+			},
+			"color": "#e8e5dc",
+			"_is": "house front - raked forward, three lights"
+		},
+		{
+			"id": 2,
+			"piece": "corner_45",
+			"cell": [
+				5,
+				0,
+				18
+			],
+			"facing": 0,
+			"params": {
+				"span": 2,
+				"height": 6,
+				"rake_a": 4,
+				"rake_b": 0
+			},
+			"color": "#e8e5dc",
+			"_is": "house port knuckle 1/2 - takes the front's rake"
+		},
+		{
+			"id": 3,
+			"piece": "corner_45",
+			"cell": [
+				4,
+				0,
+				20
+			],
+			"facing": 0,
+			"params": {
+				"span": 1,
+				"height": 6,
+				"rake_a": 0,
+				"rake_b": 0
+			},
+			"color": "#e8e5dc",
+			"_is": "house port knuckle 2/2 - lands on the plumb side"
+		},
+		{
+			"id": 4,
+			"piece": "corner_45",
+			"cell": [
+				15,
+				0,
+				18
+			],
+			"facing": 270,
+			"params": {
+				"span": 2,
+				"height": 6,
+				"rake_a": 0,
+				"rake_b": 4
+			},
+			"color": "#e8e5dc",
+			"_is": "house stbd knuckle 1/2 - takes the front's rake"
+		},
+		{
+			"id": 5,
+			"piece": "corner_45",
+			"cell": [
+				16,
+				0,
+				20
+			],
+			"facing": 270,
+			"params": {
+				"span": 1,
+				"height": 6,
+				"rake_a": 0,
+				"rake_b": 0
+			},
+			"color": "#e8e5dc",
+			"_is": "house stbd knuckle 2/2 - lands on the plumb side"
+		},
+		{
+			"id": 6,
+			"piece": "wall_glazed",
+			"cell": [
+				4,
+				0,
+				29
+			],
+			"facing": 90,
+			"params": {
+				"span": 8,
+				"height": 6,
+				"rake": 0,
+				"sill": 2,
+				"band": 3,
+				"lights": 4
+			},
+			"color": "#e8e5dc",
+			"_is": "house port side - the long saloon light, 1.5 m of glass"
+		},
+		{
+			"id": 7,
+			"piece": "wall_panel",
+			"cell": [
+				4,
+				0,
+				33
+			],
+			"facing": 90,
+			"params": {
+				"span": 4,
+				"height": 6,
+				"rake": 0,
+				"opening": "door"
+			},
+			"color": "#e8e5dc",
+			"_is": "house port side - THE DOOR, onto the port side deck"
+		},
+		{
+			"id": 8,
+			"piece": "wall_panel",
+			"cell": [
+				4,
+				0,
+				34
+			],
+			"facing": 90,
+			"params": {
+				"span": 1,
+				"height": 6,
+				"rake": 0
+			},
+			"color": "#e8e5dc",
+			"_is": "house port side - corner post to the step"
+		},
+		{
+			"id": 9,
+			"piece": "wall_glazed",
+			"cell": [
+				16,
+				0,
+				21
+			],
+			"facing": 270,
+			"params": {
+				"span": 8,
+				"height": 6,
+				"rake": 0,
+				"sill": 2,
+				"band": 3,
+				"lights": 4
+			},
+			"color": "#e8e5dc",
+			"_is": "house stbd side - the long saloon light, 1.5 m of glass"
+		},
+		{
+			"id": 10,
+			"piece": "wall_glazed",
+			"cell": [
+				16,
+				0,
+				29
+			],
+			"facing": 270,
+			"params": {
+				"span": 4,
+				"height": 6,
+				"rake": 0,
+				"sill": 3,
+				"band": 2,
+				"lights": 2
+			},
+			"color": "#e8e5dc",
+			"_is": "house stbd side - galley light: higher sill, shallower band, two lights"
+		},
+		{
+			"id": 11,
+			"piece": "wall_panel",
+			"cell": [
+				16,
+				0,
+				33
+			],
+			"facing": 270,
+			"params": {
+				"span": 1,
+				"height": 6,
+				"rake": 0
+			},
+			"color": "#e8e5dc",
+			"_is": "house stbd side - corner post to the step"
+		},
+		{
+			"id": 12,
+			"piece": "deck_tile",
+			"cell": [
+				6,
+				6,
+				17
+			],
+			"facing": 0,
+			"params": {
+				"span": 8,
+				"depth": 1,
+				"gauge": "deck"
+			},
+			"color": "#4a4f54",
+			"_is": "house roof - the front strip, laid at the RAKED TOP z=8.5, not at the foot"
+		},
+		{
+			"id": 13,
+			"piece": "deck_tile",
+			"cell": [
+				5,
+				6,
+				18
+			],
+			"facing": 0,
+			"params": {
+				"span": 8,
+				"depth": 1,
+				"gauge": "deck"
+			},
+			"color": "#4a4f54",
+			"_is": "house roof, knuckle step 1 port+centre"
+		},
+		{
+			"id": 14,
+			"piece": "deck_tile",
+			"cell": [
+				13,
+				6,
+				18
+			],
+			"facing": 0,
+			"params": {
+				"span": 2,
+				"depth": 1,
+				"gauge": "deck"
+			},
+			"color": "#4a4f54",
+			"_is": "house roof, knuckle step 1 stbd"
+		},
+		{
+			"id": 15,
+			"piece": "deck_tile",
+			"cell": [
+				5,
+				6,
+				19
+			],
+			"facing": 0,
+			"params": {
+				"span": 8,
+				"depth": 1,
+				"gauge": "deck"
+			},
+			"color": "#4a4f54",
+			"_is": "house roof, knuckle step 2 port+centre"
+		},
+		{
+			"id": 16,
+			"piece": "deck_tile",
+			"cell": [
+				13,
+				6,
+				19
+			],
+			"facing": 0,
+			"params": {
+				"span": 2,
+				"depth": 1,
+				"gauge": "deck"
+			},
+			"color": "#4a4f54",
+			"_is": "house roof, knuckle step 2 stbd"
+		},
+		{
+			"id": 17,
+			"piece": "deck_tile",
+			"cell": [
+				4,
+				6,
+				20
+			],
+			"facing": 0,
+			"params": {
+				"span": 12,
+				"depth": 2,
+				"gauge": "deck"
+			},
+			"color": "#4a4f54",
+			"_is": "house roof, full width from the knuckle"
+		},
+		{
+			"id": 18,
+			"piece": "deck_tile",
+			"cell": [
+				4,
+				6,
+				22
+			],
+			"facing": 0,
+			"params": {
+				"span": 12,
+				"depth": 12,
+				"gauge": "deck"
+			},
+			"color": "#4a4f54",
+			"_is": "house roof, the boat deck"
+		},
+		{
+			"id": 19,
+			"piece": "wall_panel",
+			"cell": [
+				16,
+				4,
+				34
+			],
+			"facing": 180,
+			"params": {
+				"span": 8,
+				"height": 2,
+				"rake": 0
+			},
+			"color": "#e8e5dc",
+			"_is": "the STEP face, stbd half"
+		},
+		{
+			"id": 20,
+			"piece": "wall_panel",
+			"cell": [
+				8,
+				4,
+				34
+			],
+			"facing": 180,
+			"params": {
+				"span": 4,
+				"height": 2,
+				"rake": 0
+			},
+			"color": "#e8e5dc",
+			"_is": "the STEP face, port half"
+		},
+		{
+			"id": 21,
+			"piece": "wall_glazed",
+			"cell": [
+				4,
+				0,
+				42
+			],
+			"facing": 90,
+			"params": {
+				"span": 8,
+				"height": 4,
+				"rake": 0,
+				"sill": 2,
+				"band": 1,
+				"lights": 4
+			},
+			"color": "#e8e5dc",
+			"_is": "casing port - the low slot band, 0.5 m of glass on a 1.0 m coaming"
+		},
+		{
+			"id": 22,
+			"piece": "wall_glazed",
+			"cell": [
+				16,
+				0,
+				34
+			],
+			"facing": 270,
+			"params": {
+				"span": 8,
+				"height": 4,
+				"rake": 0,
+				"sill": 2,
+				"band": 1,
+				"lights": 4
+			},
+			"color": "#e8e5dc",
+			"_is": "casing stbd - the low slot band"
+		},
+		{
+			"id": 23,
+			"piece": "wall_panel",
+			"cell": [
+				16,
+				0,
+				42
+			],
+			"facing": 180,
+			"params": {
+				"span": 6,
+				"height": 4,
+				"rake": 0,
+				"opening": "window"
+			},
+			"color": "#e8e5dc",
+			"_is": "casing aft face, stbd half - a PUNCHED light, not a ribbon: the other thing the kit does"
+		},
+		{
+			"id": 24,
+			"piece": "wall_panel",
+			"cell": [
+				10,
+				0,
+				42
+			],
+			"facing": 180,
+			"params": {
+				"span": 6,
+				"height": 4,
+				"rake": 0
+			},
+			"color": "#e8e5dc",
+			"_is": "casing aft face, port half"
+		},
+		{
+			"id": 25,
+			"piece": "deck_tile",
+			"cell": [
+				4,
+				4,
+				34
+			],
+			"facing": 0,
+			"params": {
+				"span": 12,
+				"depth": 8,
+				"gauge": "deck"
+			},
+			"color": "#4a4f54",
+			"_is": "casing roof"
+		},
+		{
+			"id": 26,
+			"piece": "wall_glazed",
+			"cell": [
+				7,
+				6,
+				22
+			],
+			"facing": 0,
+			"params": {
+				"span": 6,
+				"height": 5,
+				"rake": 4,
+				"sill": 2,
+				"band": 2,
+				"lights": 3
+			},
+			"color": "#e8e5dc",
+			"_is": "wheelhouse front - raked one whole cell forward, three lights"
+		},
+		{
+			"id": 27,
+			"piece": "corner_45",
+			"cell": [
+				6,
+				6,
+				22
+			],
+			"facing": 0,
+			"params": {
+				"span": 1,
+				"height": 5,
+				"rake_a": 4,
+				"rake_b": 0
+			},
+			"color": "#e8e5dc",
+			"_is": "wheelhouse port knuckle"
+		},
+		{
+			"id": 28,
+			"piece": "corner_45",
+			"cell": [
+				14,
+				6,
+				22
+			],
+			"facing": 270,
+			"params": {
+				"span": 1,
+				"height": 5,
+				"rake_a": 0,
+				"rake_b": 4
+			},
+			"color": "#e8e5dc",
+			"_is": "wheelhouse stbd knuckle"
+		},
+		{
+			"id": 29,
+			"piece": "wall_glazed",
+			"cell": [
+				6,
+				6,
+				30
+			],
+			"facing": 90,
+			"params": {
+				"span": 6,
+				"height": 5,
+				"rake": 0,
+				"sill": 2,
+				"band": 2,
+				"lights": 3
+			},
+			"color": "#e8e5dc",
+			"_is": "wheelhouse port light"
+		},
+		{
+			"id": 30,
+			"piece": "wall_panel",
+			"cell": [
+				6,
+				6,
+				24
+			],
+			"facing": 90,
+			"params": {
+				"span": 1,
+				"height": 5,
+				"rake": 0
+			},
+			"color": "#e8e5dc",
+			"_is": "wheelhouse port corner post"
+		},
+		{
+			"id": 31,
+			"piece": "wall_glazed",
+			"cell": [
+				14,
+				6,
+				23
+			],
+			"facing": 270,
+			"params": {
+				"span": 6,
+				"height": 5,
+				"rake": 0,
+				"sill": 2,
+				"band": 2,
+				"lights": 3
+			},
+			"color": "#e8e5dc",
+			"_is": "wheelhouse stbd light"
+		},
+		{
+			"id": 32,
+			"piece": "wall_panel",
+			"cell": [
+				14,
+				6,
+				29
+			],
+			"facing": 270,
+			"params": {
+				"span": 1,
+				"height": 5,
+				"rake": 0
+			},
+			"color": "#e8e5dc",
+			"_is": "wheelhouse stbd corner post"
+		},
+		{
+			"id": 33,
+			"piece": "wall_panel",
+			"cell": [
+				14,
+				6,
+				30
+			],
+			"facing": 180,
+			"params": {
+				"span": 8,
+				"height": 5,
+				"rake": 0,
+				"opening": "door"
+			},
+			"color": "#e8e5dc",
+			"_is": "wheelhouse aft - THE SECOND DOOR, onto the boat deck"
+		},
+		{
+			"id": 34,
+			"piece": "deck_tile",
+			"cell": [
+				6,
+				11,
+				21
+			],
+			"facing": 0,
+			"params": {
+				"span": 8,
+				"depth": 1,
+				"gauge": "light"
+			},
+			"color": "#7d8288",
+			"_is": "wheelhouse cap - front strip at the raked top z=10.5"
+		},
+		{
+			"id": 35,
+			"piece": "deck_tile",
+			"cell": [
+				6,
+				11,
+				22
+			],
+			"facing": 0,
+			"params": {
+				"span": 8,
+				"depth": 8,
+				"gauge": "light"
+			},
+			"color": "#7d8288",
+			"_is": "wheelhouse cap"
+		},
+		{
+			"id": 36,
+			"piece": "trim_band",
+			"cell": [
+				4,
+				6,
+				34
+			],
+			"facing": 90,
+			"params": {
+				"span": 12,
+				"profile": "eave",
+				"lift": -1
+			},
+			"color": "#3b4046",
+			"_is": "house roof eave, port"
+		},
+		{
+			"id": 37,
+			"piece": "trim_band",
+			"cell": [
+				16,
+				6,
+				22
+			],
+			"facing": 270,
+			"params": {
+				"span": 12,
+				"profile": "eave",
+				"lift": -1
+			},
+			"color": "#3b4046",
+			"_is": "house roof eave, stbd"
+		},
+		{
+			"id": 38,
+			"piece": "trim_band",
+			"cell": [
+				4,
+				4,
+				42
+			],
+			"facing": 90,
+			"params": {
+				"span": 8,
+				"profile": "eave",
+				"lift": -1
+			},
+			"color": "#3b4046",
+			"_is": "casing roof eave, port"
+		},
+		{
+			"id": 39,
+			"piece": "trim_band",
+			"cell": [
+				16,
+				4,
+				34
+			],
+			"facing": 270,
+			"params": {
+				"span": 8,
+				"profile": "eave",
+				"lift": -1
+			},
+			"color": "#3b4046",
+			"_is": "casing roof eave, stbd"
+		},
+		{
+			"id": 40,
+			"piece": "trim_band",
+			"cell": [
+				16,
+				4,
+				42
+			],
+			"facing": 180,
+			"params": {
+				"span": 12,
+				"profile": "eave",
+				"lift": -1
+			},
+			"color": "#3b4046",
+			"_is": "casing roof eave, aft"
+		}
+	]
+}

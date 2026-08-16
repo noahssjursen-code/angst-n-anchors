@@ -19,9 +19,27 @@ const CRITIC_OUT := "res://screenshots/critic"
 
 const FIXTURES_HERE: Array[String] = [
 	"res://resources/data/structures/critic_barge.json",
+	"res://resources/data/structures/critic_coaster.json",
 	"res://resources/data/structures/critic_ferry.json",
 	"res://resources/data/structures/critic_yacht.json",
 ]
+
+## The parent's `FIGURE_SPOT` is a `const` and GDScript will not let a subclass
+## extend one, so a fixture this file photographs and the parent has never heard
+## of gets its spot here — the same arrangement `piece_kit_capture` uses, and the
+## reason `_figure_spot` is a METHOD in the parent rather than a dictionary
+## lookup at the call site.
+##
+## critic_coaster: the whole claim of that fixture is that the house is pulled in
+## far enough to leave a SIDE DECK, so the figure stands on one. The house's port
+## plating is at x = 2.00 and the deck edge at x = 0.00, so x = 1.00 is the
+## middle of a 2.0 m side deck, 0.78 m clear of the plating at the figure's own
+## 0.22 m radius; the eave over it stands out to x = 1.70 at y = 2.875, well over
+## a 1.8 m head. z = 13.0 is amidships, beside the long saloon light, which is
+## the picture that has to be true for the fixture to have made its point.
+const CRITIC_FIGURE_SPOT := {
+	"critic_coaster": Vector3(1.0, 0.0, 13.0),
+}
 
 
 func _run() -> void:
@@ -72,6 +90,12 @@ func _shoot(bounds: AABB, name: String, view: Dictionary) -> void:
 		if img != null:
 			img.save_png(ProjectSettings.globalize_path("%s/%s.png" % [CRITIC_OUT, name]))
 		DirAccess.remove_absolute(ProjectSettings.globalize_path(src))
+
+
+func _figure_spot(stem: String) -> Variant:
+	if CRITIC_FIGURE_SPOT.has(stem):
+		return CRITIC_FIGURE_SPOT[stem]
+	return super._figure_spot(stem)
 
 
 ## The parent's plate accounting; these fixtures are all plates.

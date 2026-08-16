@@ -53,7 +53,7 @@ extends SceneTree
 const TestReport := preload("res://tests/support/test_report.gd")
 const PO := preload("res://scripts/ship/plan_outfit.gd")
 const HULL := "hull_28x10"
-const EXPECTED_CHECKS := 66
+const EXPECTED_CHECKS := 76
 
 ## Fixtures a capsule has been walked through, on the real physics body, by
 ## `plan_interior_test` / `piece_interior_test`. If enclosure disagrees with
@@ -77,6 +77,7 @@ func _initialize() -> void:
 	_test_the_four_named_cases()
 	_test_every_clause_has_a_plan_that_breaks_it()
 	_test_the_shipped_fleet()
+	_test_a_room_with_no_way_in()
 	_test_the_seam()
 	if _t.check_count() != EXPECTED_CHECKS:
 		_t.check(
@@ -279,6 +280,76 @@ func _test_the_shipped_fleet() -> void:
 		_t.check(
 			"%s draws no roof over anything and is not a cabin" % name,
 			not PO.has_cabin(plans[name] as StructurePlan),
+		)
+
+
+# ── 4a. A room nobody can get into, and a room somebody can ─────────────────
+#
+# THE FINDING THIS SECTION EXISTS TO HOLD, measured 2026-08-16 and true of the
+# tree as it stands: **nothing in the pipeline refuses a sealed room.**
+# `critic_barge` draws 25.8 m² of enclosed, standable floor with NO door
+# anywhere in the plan, and `PlanOutfit.validate` returns `ok = true` with zero
+# errors and zero warnings. The single place the case is visible at all is the
+# capability dictionary — `has_cabin = false` beside `cabin_area_m2 = 25.8` —
+# and the single consumer of that pair is the `passenger_vessel` licence, which
+# is the only rule in `registrations/catalog.json` that names `has_cabin`. Any
+# other registration certifies the vessel. So a room a player can see into and
+# never enter is a shipping-legal vessel, and these checks pin the ONE thing
+# that would otherwise be free to quietly stop being true: that the reading
+# still reports the sealed floor as a measurement instead of rounding it off to
+# "not a cabin" and dropping the number. If `cabin_area_m2` goes to 0.0 here,
+# `structure_studio._capability_advice` silently swaps to the wrong sentence —
+# it decides between "draw walls and roof them" and "cut a door" on that number.
+#
+# `critic_coaster` is the other side of the same coin and is in this file
+# because it is the fixture built to prove the kit CAN make a room: the same
+# 28 × 10 m hull, a door in the house side onto the port side deck and a second
+# into the wheelhouse off the boat deck.
+func _test_a_room_with_no_way_in() -> void:
+	print("\n-- enclosed air with no way in, and the fixture that fixes it --")
+	var plans := _fixtures()
+
+	if _t.check("critic_barge is in the fleet", plans.has("critic_barge")):
+		var barge := plans["critic_barge"] as StructurePlan
+		var sealed := PO.enclosure(barge)
+		_t.equal("critic_barge draws no door at all", PO.door_count(barge), 0)
+		_t.check(
+			"and it is therefore not a cabin, whatever it encloses",
+			not bool(sealed["cabin"]),
+		)
+		_t.check(
+			"but the enclosed floor is MEASURED and published, not dropped (%.1f m2)"
+				% float(sealed["area_m2"]),
+			float(sealed["area_m2"]) > 20.0,
+		)
+		_t.check(
+			"and the reason says which clause refused it: %s" % str(sealed["why"]),
+			str(sealed["why"]).contains("no door opens onto it"),
+		)
+		## THE SEAM, because the studio's advice is chosen on this number and not
+		## on the sentence above it.
+		var caps: Dictionary = PO.validate(barge, barge.hull_id)["capabilities"]
+		_t.check(
+			"validate publishes the sealed area beside has_cabin=false (%.1f m2)"
+				% float(caps.get("cabin_area_m2", 0.0)),
+			not bool(caps.get("has_cabin", true))
+				and float(caps.get("cabin_area_m2", 0.0)) > 20.0,
+		)
+
+	if _t.check("critic_coaster is in the fleet", plans.has("critic_coaster")):
+		var coaster := plans["critic_coaster"] as StructurePlan
+		var report := PO.enclosure(coaster)
+		_t.check(
+			"critic_coaster IS a cabin — the kit built a room with a way in (%s)"
+				% str(report["why"]),
+			bool(report["cabin"]),
+		)
+		_t.equal("house-and-casing plus wheelhouse, two compartments",
+			int(report["cabins"]), 2)
+		_t.check(
+			"and the house is a room, not a locker (%.1f m2)"
+				% float(report["area_m2"]),
+			float(report["area_m2"]) > 60.0,
 		)
 
 

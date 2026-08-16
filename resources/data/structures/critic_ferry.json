@@ -249,10 +249,11 @@
       "params": {
         "span": 6,
         "height": 5,
-        "rake": 2
+        "rake": 2,
+        "opening": "door"
       },
       "color": "#e8e6df",
-      "_is": "saloon side 3"
+      "_is": "saloon side 3 - THE WAY IN. This fixture shipped with no door in any of its 22 wall placements: a saloon a player could see through ten glazed panels and never enter. That is a defect in the fixture, not part of its adversarial job, and it is fixed here rather than restyled. The panel runs x 4.5..1.5 on the aft face, so the 1.20 m door lands on the quarterdeck at x = 3.0."
     },
     {
       "id": 13,
