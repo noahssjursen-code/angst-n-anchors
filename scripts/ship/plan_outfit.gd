@@ -655,6 +655,29 @@ static func _validate_built(
 				cargo_items.append(item)
 				break
 
+	## THE ROOF THAT DOES NOT MEET ITS WALL. A warning and not an error, because
+	## the drawing is buildable and a player may well want an open-sided tier —
+	## but never silent, which is what it was. See `roof_gaps`: the gap is a thin
+	## wedge at a roof/wall junction seen edge-on, invisible in every render this
+	## project has ever taken, and it un-rooms the compartment underneath it.
+	##
+	## Read off the AUTHORED plan and not off `judged`, unlike `doors` below: a
+	## resolved plan has no `pieces[]` left to ask about, and a placement is the
+	## only thing that carries a rake.
+	for gap_variant in roof_gaps(plan):
+		var gap := gap_variant as Dictionary
+		warnings.append(
+			"Piece %s (%s, rake %+d): the roof stops %.2f m short of this wall's"
+			% [
+				str(gap["id"]), str(gap["piece"]), int(gap["rake"]),
+				float(gap["short_m"]),
+			]
+			+ " head — open sky along %d of its %d stations."
+			% [int(gap["stations"]), ROOF_STATIONS]
+			+ " Take the deck over it %d cell(s) further out (that overhang is the eave)."
+			% int(ceil(float(gap["short_m"]) / (WorldUnits.DECK_CELL_M) - 0.001))
+		)
+
 	var accepted_slots := _empty_slots()
 	for slot in ["fishing", "helm", "crane", "tow"]:
 		_take_slots(
@@ -1413,6 +1436,293 @@ static func _has_closure(
 	return false
 
 
+# ── Does the roof meet the wall it sits on? ─────────────────────────────────
+
+## The pieces whose top edge is a WALL HEAD — the joint a roof lands on. A
+## `deck_tile` and a `roof_slope` are roofs, not walls; a `trim_band` has no
+## height and cannot rake.
+const ROOF_WALL_PIECES: Array[String] = ["wall_panel", "wall_glazed", "corner_45"]
+## Stations along a wall head, taken between 0.15 and 0.85 of its run. The ends
+## belong to whatever is butted against them, and a neighbour's collider standing
+## at the corner would answer for a roof that is not there.
+const ROOF_STATIONS := 9
+const ROOF_FIRST_STATION := 0.15
+const ROOF_LAST_STATION := 0.85
+## Two floats computed by different expressions meeting at a joint. Flush within
+## this is flush; a boundary sample is otherwise a coin toss.
+const ROOF_FLUSH_M := 0.02
+## How far PAST the wall's own lean the "is this wall roofed at all" reference
+## stands. Quarter of a cell inboard of the foot line: inside the compartment at
+## any rake, and far enough in that a roof edge landing exactly on the foot line
+## still answers yes.
+##
+## Measured from the head and from the wall's DECLARED rake, not from the head
+## plate's own bottom corners — a `wall_glazed`'s highest plate is its HEADER,
+## whose bottom edge is the top of the glass band and not the wall's foot at all.
+## Taking the reference from there put it 0.35 m inboard of a head that needed
+## 0.75, and the reading went silent on `critic_coaster`'s wheelhouse front with
+## its roof strip deleted — a mutation that PASSED, which is a finding and not a
+## relief (REALITY standing order 8).
+const ROOF_REF_INBOARD_M := 0.25
+## A `corner_45` head moves along its facet's diagonal, so a rake of r eighth-
+## cells displaces it by r * 0.125 * sqrt(2) rather than r * 0.125.
+const ROOF_DIAGONAL := 1.4142135623730951
+const ROOF_BISECT_STEPS := 8
+
+## Every raked wall piece whose roof stops short of its own head, as
+## `[{piece, id, rake, short_m, at, stations}, …]`, worst first. Empty for a plan
+## with no placements — nothing else in the format can express this.
+##
+## ── The defect, and what the constraint actually is ─────────────────────────
+##
+## A raked wall's TOP EDGE stands `rake * 0.125 m` outboard of its foot, because
+## `rake` is counted in EIGHTH-cells. A `deck_tile`'s edges land only on the
+## 0.5 m node lattice: `span` and `depth` are whole cells and `lift` moves the
+## tile in Y, never in Z. So a roof edge is FLUSH with a raked wall head at
+## `rake` multiples of 4 and at no other value.
+##
+## THAT IS NOT THE CONSTRAINT, and reading it as one costs the kit twelve of its
+## seventeen rake values for nothing. Flush is not required — a roof that
+## OVERHANGS the head seals just as well, and the kit's own `deck_tile` text
+## calls that overhang the EAVE. Swept over the whole rake set against eaves of
+## 0, 1 and 2 cells, four wall heights, three `head` trims and two ring sizes
+## (`tests/plan_roof_seal_test.gd`), the answer is one inequality and nothing
+## else moves it:
+##
+##     gap = max(0, rake * 0.125 - eave_cells * 0.5)
+##
+## So one cell of eave carries rake 1..4, two cells carry 5..8, and a NEGATIVE
+## rake — the head tumbling home — needs no eave at all. `height`, `head` and
+## `span` change nothing: the lean is in plan, and Y is reachable at every
+## eighth-cell because `deck_tile.lift` counts the same unit the wall's `head`
+## does.
+##
+## Measured on a shipped fixture rather than only on a synthetic ring:
+## `critic_coaster` seals at rake 1, 2, 3 AND 4 with its roof untouched, and
+## first opens at rake 5 by 0.126 m (`tests/_roof_gap_inventory.gd`). Its
+## wheelhouse front is authored at +4 on the record that "+2 was blocked"; +2 is
+## not blocked and never was.
+##
+## Named limit, because it decides which houses can take a one-cell eave from a
+## SINGLE tile: `deck_tile.span` is a declared set {1,2,3,4,6,8,12,16} and holds
+## no 10, so a ring 3, 6, 8 or 12 cells wide cannot be roofed one cell larger all
+## round by one tile. It can be by two — a `depth 1` strip laid over the head,
+## which is exactly what `critic_coaster` does — so this is a convenience limit
+## and not a blocker.
+##
+## What that leaves is a COMPOSITION fault between two placements, which no
+## per-piece constraint can see — a piece's constraints are expressions over its
+## OWN parameters, and the roof is a different placement. It cannot be refused at
+## the piece, and it must not be prevented by deleting rake values that work.
+## So it is measured, on the boxes the plan actually draws, and the builder is
+## told which wall and by how much.
+##
+## ── The reading ─────────────────────────────────────────────────────────────
+##
+## For each station on the head: is the column at the head open to the sky? If
+## the column one lean plus a quarter-cell further inboard is NOT open, the wall
+## is roofed and its head should be too — the distance between the two is the
+## wedge, bisected. If that reference is open as well, nothing roofs this wall
+## (a bulwark, a coaming, an open tier) and that is not this defect.
+##
+## The wall's OWN boxes are excluded, by the ids its placement resolved into, so
+## a wall cannot answer for its own head.
+static func roof_gaps(plan: StructurePlan) -> Array:
+	if plan == null or plan.pieces.is_empty():
+		return []
+	var resolved := StructureBaker.resolved(plan)
+	## One flat list, each box tagged with the item that drew it, so a wall can be
+	## excluded from the reading of its own head by INDEX rather than by rebuilding
+	## the list per wall — which on `probe_piece_trawler` was 32 copies of two
+	## thousand boxes and most of this function's cost.
+	var all_boxes: Array = []
+	var owners := PackedInt32Array()
+	for row_variant in StructureBaker.entity_colliders(_sealed_plan(resolved)):
+		var row := row_variant as Dictionary
+		var owner := int(row["id"]) if str(row["kind"]) == "item" else -1
+		for box_variant in row["boxes"] as Array:
+			all_boxes.append(box_variant)
+			owners.append(owner)
+
+	## The ids each placement resolved into, replaying `resolve_document`'s own
+	## counter — an id is an address the plan does not guarantee unique
+	## (REALITY §4b), so this walks the placements in order rather than matching.
+	var next_id := 1
+	for item_variant in plan.items:
+		if item_variant is Dictionary:
+			next_id = maxi(next_id, int((item_variant as Dictionary).get("id", 0)) + 1)
+	var out: Array = []
+	for placement_variant in plan.pieces:
+		var placement := placement_variant as Dictionary
+		var result := PieceKit.resolve_placement(placement, next_id)
+		var own := {}
+		for item_variant in result["items"] as Array:
+			own[int((item_variant as Dictionary)["id"])] = true
+		next_id = int(result["next_id"])
+		if not ROOF_WALL_PIECES.has(str(placement.get("piece", ""))):
+			continue
+		var head := _piece_head(result["items"] as Array)
+		if head.size() != 4:
+			continue
+		## Only what can possibly answer: standing at or above the head, and within
+		## reach of it in plan. One pass over the boxes per wall instead of a copy.
+		var mid := (head[0] + head[1] + head[2] + head[3]) * 0.25
+		## The pad has to clear the furthest the reading can sample: the widest
+		## legal lean (rake 8 on a diagonal facet, 1.414 m) plus the reference
+		## inset, with a cell of slack.
+		var span := maxf(
+			(head[3] - head[2]).length(), (head[2] - head[1]).length()
+		) * 0.5 + 8.0 * 0.125 * ROOF_DIAGONAL + ROOF_REF_INBOARD_M + 0.5
+		var head_y := maxf(head[2].y, head[3].y)
+		var boxes: Array = []
+		for index in all_boxes.size():
+			if own.has(owners[index]):
+				continue
+			var box := all_boxes[index] as Dictionary
+			var centre: Vector3 = box["center"]
+			var size: Vector3 = box["size"]
+			if centre.y + size.y * 0.5 < head_y - ROOF_FLUSH_M:
+				continue
+			var reach := _box_reach(box)
+			if absf(centre.x - mid.x) > span + reach.x:
+				continue
+			if absf(centre.z - mid.z) > span + reach.y:
+				continue
+			boxes.append(box)
+		var rake := _piece_rake(placement)
+		var lean := absf(float(rake)) * 0.125 * (
+			ROOF_DIAGONAL if str(placement.get("piece", "")) == "corner_45" else 1.0
+		)
+		var gap := _head_gap(
+			boxes, head, float(placement.get("facing", 0)),
+			lean + ROOF_REF_INBOARD_M,
+		)
+		if float(gap["short_m"]) <= 0.0:
+			continue
+		gap["piece"] = str(placement.get("piece", ""))
+		gap["id"] = placement.get("id", -1)
+		gap["rake"] = rake
+		out.append(gap)
+	out.sort_custom(func(a, b): return float(a["short_m"]) > float(b["short_m"]))
+	return out
+
+
+## The four corners, in plan metres, of the placement's HIGHEST plate — indices
+## 2 and 3 are its top edge. Taken off the items the placement ALREADY resolved
+## into, so this costs no second resolve; `PieceKit.placed_corners` re-resolves
+## the whole placement per step, which on a seven-plate `wall_glazed` is seven.
+##
+## The highest plate and not the first: `wall_glazed`'s first plate is its
+## COAMING, and measuring a ribbon window's sill against the roof would report a
+## whole wheelhouse of gaps that are not there.
+static func _piece_head(items: Array) -> PackedVector3Array:
+	var best := PackedVector3Array()
+	var best_y := -INF
+	for item_variant in items:
+		var item := item_variant as Dictionary
+		var props := item["props"] as Dictionary
+		var raw: Variant = props.get("corners", null)
+		if not (raw is Array) or (raw as Array).size() != 4:
+			continue
+		var xform := Transform3D(
+			Basis.from_euler(
+				Vector3(0.0, deg_to_rad(float(item["yaw"])), 0.0), EULER_ORDER_YXZ
+			),
+			StructurePlan.vec3_of(item["at"]),
+		)
+		var corners := PackedVector3Array()
+		for triple_variant in raw as Array:
+			var triple := triple_variant as Array
+			corners.append(xform * Vector3(
+				float(triple[0]), float(triple[1]), float(triple[2])
+			))
+		var y := maxf(corners[2].y, corners[3].y)
+		if y > best_y:
+			best_y = y
+			best = corners
+	return best
+
+
+static func _piece_rake(placement: Dictionary) -> int:
+	var params: Dictionary = (
+		placement.get("params", {}) as Dictionary
+		if placement.get("params") is Dictionary else {}
+	)
+	var worst := 0
+	for key in ["rake", "rake_a", "rake_b"]:
+		if not params.has(key):
+			continue
+		var value := roundi(float(params[key]))
+		if absi(value) > absi(worst):
+			worst = value
+	return worst
+
+
+## {short_m, at, stations} for one wall head. `short_m` is 0.0 when every station
+## is either sealed or standing under open sky with nothing roofing the wall.
+static func _head_gap(
+	boxes: Array, head: PackedVector3Array, facing: float, reach: float
+) -> Dictionary:
+	var inboard := Basis.from_euler(
+		Vector3(0.0, deg_to_rad(facing), 0.0), EULER_ORDER_YXZ
+	) * Vector3(0.0, 0.0, 1.0)
+	var worst := 0.0
+	var worst_at := Vector3.ZERO
+	var open := 0
+	for index in ROOF_STATIONS:
+		var t := ROOF_FIRST_STATION + (ROOF_LAST_STATION - ROOF_FIRST_STATION) * (
+			(float(index) + 0.5) / float(ROOF_STATIONS)
+		)
+		var top := head[2].lerp(head[3], t)
+		if _covered(boxes, top):
+			continue
+		## Past the wall's own lean and a quarter-cell further: air that belongs to
+		## the compartment this wall encloses, whichever way the head leans.
+		var reference := top + inboard * reach
+		if not _covered(boxes, reference):
+			continue
+		open += 1
+		var near := top
+		var far := reference
+		for _step in ROOF_BISECT_STEPS:
+			var mid := (near + far) * 0.5
+			if _covered(boxes, mid):
+				far = mid
+			else:
+				near = mid
+		var short := Vector2(far.x - top.x, far.z - top.z).length()
+		if short > worst:
+			worst = short
+			worst_at = top
+	if worst <= ROOF_FLUSH_M:
+		return {"short_m": 0.0, "at": Vector3.ZERO, "stations": 0}
+	return {"short_m": worst, "at": worst_at, "stations": open}
+
+
+## Is anything at or above this point in its own column? The question is "is this
+## open to the sky", so a box that CONTAINS the point counts exactly as much as
+## one standing over it — which also makes the answer independent of how thick a
+## roof plate is and of whether its slab is centred on the surface it draws.
+static func _covered(boxes: Array, p: Vector3) -> bool:
+	for box_variant in boxes:
+		var box := box_variant as Dictionary
+		var centre: Vector3 = box["center"]
+		var size: Vector3 = box["size"]
+		if centre.y + size.y * 0.5 < p.y:
+			continue
+		var yaw := deg_to_rad(float(box.get("yaw_deg", 0.0)))
+		var dx := p.x - centre.x
+		var dz := p.z - centre.z
+		var cs := cos(yaw)
+		var sn := sin(yaw)
+		if absf(dx * cs - dz * sn) > size.x * 0.5:
+			continue
+		if absf(dx * sn + dz * cs) > size.z * 0.5:
+			continue
+		return true
+	return false
+
+
 ## The plan with every door and window filled back in, so the enclosure reading
 ## sees the shell rather than the holes cut through it. See the header on
 ## `enclosure`. Nothing is duplicated that does not change: an entity with no
@@ -1573,23 +1883,70 @@ static func _closure_v(opening: Dictionary) -> float:
 	return sill + height * 0.5
 
 
-## Every opening of `type` on a wall or a deck.
+## Every opening of `type` the plan cuts — on a wall, on a deck, or in a PLATE
+## item.
+##
+## ── The third collection, and why it was missing ────────────────────────────
+##
+## This walked `walls` and `decks` only. `_closure_points` — the other reading of
+## the same drawing, forty lines up — walks walls AND item plates, because that
+## is where the openings ARE on anything built out of the piece kit: a
+## `wall_panel` with `opening: "door"` resolves into an `items[]` plate carrying
+## `props.openings`, and no `walls[]` entry is ever written. So the two readings
+## of one drawing disagreed, which is REALITY §4a: `enclosure` counted the door
+## and said "cabin", `opening_count` did not and said "doors: 0".
+##
+## Measured over the shipped fleet: `probe_piece_house`, `probe_piece_trawler`,
+## `probe_piece_tug`, `probe_container_feeder` and `critic_coaster` all reported
+## `has_cabin = true` with `doors = 0`. The `passenger_vessel` licence carries
+## BOTH — `cabin` (capability) and `egress` (`doors >= 1`) — so a piece-built
+## passenger vessel passed the cabin rule and failed the egress rule with two
+## real doors drawn in it, and the studio's advice sent the builder to cut a door
+## they had already cut.
+##
+## An item is counted only when it DRAWS AS A PLATE, which is the same test
+## `_closure_points` uses: a fitting from the parts catalogue is a part, and door
+## FITTINGS are counted separately in `_validate_built` off the catalogue's
+## `door` tag. Nothing is counted twice — a plate is not in the catalogue and a
+## catalogue part draws no `props.openings`.
+##
+## RESOLVED FIRST, for the same reason `entity_colliders` is: a piece placement
+## measured as the node it stands on is measured as nothing. `resolved()` returns
+## its argument untouched when there are no placements, so the path
+## `_validate_built` takes — which hands in an already-resolved plan — pays for a
+## null check. Without it `door_count` on an AUTHORED piece plan answers 0 for
+## the same reason this whole function was wrong, one level further out.
 static func opening_count(plan: StructurePlan, type: String) -> int:
 	if plan == null:
 		return 0
+	plan = StructureBaker.resolved(plan)
 	var n := 0
 	for collection in [plan.walls, plan.decks]:
 		for raw in collection as Array:
 			if not (raw is Dictionary):
 				continue
-			var openings: Variant = (raw as Dictionary).get("openings", [])
-			if not (openings is Array):
-				continue
-			for opening_raw in openings as Array:
-				if not (opening_raw is Dictionary):
-					continue
-				if str((opening_raw as Dictionary).get("type", "")) == type:
-					n += 1
+			n += _openings_of_type((raw as Dictionary).get("openings", []), type)
+	for raw in plan.items:
+		if not (raw is Dictionary):
+			continue
+		var item := raw as Dictionary
+		if StructureBaker.item_primitive(item) != "plate":
+			continue
+		n += _openings_of_type(
+			StructurePlan.item_props(item).get("openings", []), type
+		)
+	return n
+
+
+static func _openings_of_type(openings: Variant, type: String) -> int:
+	if not (openings is Array):
+		return 0
+	var n := 0
+	for raw in openings as Array:
+		if not (raw is Dictionary):
+			continue
+		if str((raw as Dictionary).get("type", "")) == type:
+			n += 1
 	return n
 
 

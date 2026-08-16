@@ -29,7 +29,7 @@ extends SceneTree
 const PO := preload("res://scripts/ship/plan_outfit.gd")
 const Parts := preload("res://scripts/construction/part_catalog.gd")
 const HULL := "hull_28x10"
-const EXPECTED_CHECKS := 137
+const EXPECTED_CHECKS := 145
 
 var _failures := 0
 var _checks := 0
@@ -47,6 +47,7 @@ func _initialize() -> void:
 	_test_empty_plan_measures_nothing()
 	_test_a_fence_is_not_a_cabin()
 	_test_doors_come_from_openings()
+	_test_a_piece_kit_door_is_a_door()
 	_test_rule_kinds_are_satisfiable()
 	_test_sidelight_rules_are_tag_addressed()
 	_test_general_vessel_scoreboard()
@@ -264,6 +265,98 @@ func _test_doors_come_from_openings() -> void:
 	_check("doors count on every wall that carries one", int(caps["doors"]) == 2)
 	_check("windows are counted separately", int(caps["windows"]) == 2)
 	_check("a stairwell is not a door", int(caps["doors"]) != 3)
+
+
+## ── The door the count could not see ────────────────────────────────────────
+##
+## `opening_count` walked `walls[]` and `decks[]`. A PIECE-KIT door is neither:
+## a `wall_panel` with `opening: "door"` resolves into an `items[]` plate whose
+## props carry the opening, and no `walls[]` entry is ever written. So the two
+## readings of one drawing disagreed — `enclosure` walked the item plates and
+## said "cabin", `opening_count` did not and said "doors: 0" — and
+## `passenger_vessel` carries BOTH rules. Five shipped fixtures reported
+## `has_cabin = true` with `doors = 0`: a piece-built passenger vessel passed the
+## cabin rule and failed egress with two real doors drawn in it.
+##
+## The invariant is the one that was broken, not a count: `enclosure` will not
+## call a pocket a cabin unless a DOOR opens onto it (`_is_way_in`), so a plan
+## that reports a cabin must report at least one door. It is asserted over every
+## shipped fixture, because the five that were wrong were not the one being
+## worked on (REALITY §4b).
+func _test_a_piece_kit_door_is_a_door() -> void:
+	var caps: Dictionary = PO.validate(_piece_ring("door"), HULL)["capabilities"]
+	_check("a piece-kit door is a door", int(caps.get("doors", -1)) == 1)
+	_check("and the ring it stands in is a cabin", bool(caps.get("has_cabin", false)))
+	_check("metric_range: egress is satisfiable by a piece-built plan", bool(_evaluate(
+		{"kind": "metric_range", "metric": "doors", "min": 1},
+		PO.measure(_piece_ring("door"), _grid(), PO.validate(_piece_ring("door"), HULL)),
+		PO.validate(_piece_ring("door"), HULL),
+	)["ok"]))
+	var glazed: Dictionary = PO.validate(_piece_ring("window"), HULL)["capabilities"]
+	_check("a piece-kit window is a window", int(glazed.get("windows", -1)) == 1)
+	_check("and it is not a door", int(glazed.get("doors", -1)) == 0)
+	_check(
+		"so the same ring with only glazing in it is not a cabin",
+		not bool(glazed.get("has_cabin", true))
+	)
+
+	## Every fixture on disk, both readings, one property.
+	var dir := DirAccess.open("res://resources/data/structures")
+	var names := dir.get_files() if dir != null else PackedStringArray()
+	names.sort()
+	var cabins := 0
+	var doorless := PackedStringArray()
+	for name in names:
+		if not name.ends_with(".json"):
+			continue
+		var parsed: Variant = JSON.parse_string(FileAccess.get_file_as_string(
+			"res://resources/data/structures/%s" % name
+		))
+		if not (parsed is Dictionary) or not StructurePlan.is_plan(parsed as Dictionary):
+			continue
+		var plan := StructurePlan.from_dict(parsed as Dictionary)
+		if not PO.has_cabin(plan):
+			continue
+		cabins += 1
+		if PO.door_count(plan) < 1:
+			doorless.append(name.get_basename())
+	_check("the fleet has cabins to ask about (%d)" % cabins, cabins >= 10)
+	_check(
+		"every fixture that reports a cabin reports the door it was let in through%s"
+		% ("" if doorless.is_empty() else " — %s do not" % ", ".join(doorless)),
+		doorless.is_empty()
+	)
+
+
+## A four-wall piece-kit ring with one roof tile and one opening cut in it —
+## everything about it placed, nothing typed, which is the authoring layer the
+## door count was blind to.
+static func _piece_ring(opening: String) -> StructurePlan:
+	var pieces: Array = []
+	var walls := [
+		[Vector3i(0, 0, 0), 0], [Vector3i(4, 0, 0), 270],
+		[Vector3i(4, 0, 4), 180], [Vector3i(0, 0, 4), 90],
+	]
+	var id := 1
+	for row in walls:
+		var cell: Vector3i = row[0]
+		pieces.append({
+			"id": id, "piece": "wall_panel",
+			"cell": [cell.x, cell.y, cell.z], "facing": row[1],
+			"params": {
+				"span": 4, "height": 5, "opening": opening if id == 1 else "none",
+			},
+		})
+		id += 1
+	pieces.append({
+		"id": id, "piece": "deck_tile", "cell": [-1, 5, -1], "facing": 0,
+		"params": {"span": 6, "depth": 6},
+	})
+	return StructurePlan.from_dict({
+		"version": 1, "hull_id": HULL, "name": "ring",
+		"walls": [], "decks": [], "stairs": [], "edges": [], "items": [],
+		"pieces": pieces,
+	})
 
 
 # ── 3. Every rule kind, satisfied by a plan ─────────────────────────────────

@@ -6543,6 +6543,21 @@ func _capability_advice(capability: String) -> String:
 		## it was not, and the two failures need opposite instructions.
 		var enclosed := float(caps.get("cabin_area_m2", 0.0))
 		var why := str(caps.get("cabin_why", "")).to_upper()
+		## `cabin_area_m2` is the largest enclosed pocket, and `enclosure` publishes
+		## it whether or not a door opens onto it — so it is ALSO non-zero on a
+		## plan that HAS a cabin, and the branch below then told a builder with a
+		## certified 30.7 m² cabin that they had drawn a space with no way into it.
+		## Latent, because the only caller asks for advice on requirements that
+		## FAILED and this one cannot fail while `has_cabin` is true; kept out
+		## anyway, because the next caller does not inherit that guarantee and this
+		## panel's whole job is not to say a confident wrong thing (see `tag_side`
+		## above, which learned it the same way).
+		if bool(caps.get("has_cabin", false)):
+			return (
+				"THIS PLAN ALREADY REPORTS %.1f M2 OF CABIN. IF THIS REQUIREMENT IS"
+				% enclosed
+				+ " SHOWN AS FAILED, THE PANEL AND THE VERDICT DISAGREE — REPORT IT."
+			)
 		if enclosed > 0.0:
 			return (
 				"YOU HAVE DRAWN %.1f M2 OF ENCLOSED SPACE WITH NO WAY INTO IT." % enclosed
