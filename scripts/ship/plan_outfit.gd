@@ -91,9 +91,20 @@ extends RefCounted
 ##
 ## The bar the old paragraph set is the right bar and `plan_compliance_test`
 ## still holds this to it: the brick-era rule `door_n >= 1 or wall_n >= 8`
-## passes on eight roofless walls, a fence sold as accommodation. `enclosure`
+## passed on eight roofless walls, a fence sold as accommodation. `enclosure`
 ## refuses that case for the reason a person would give — a fence has no deck
 ## over it and the sky is not a ceiling — rather than by not asking.
+##
+## PAST TENSE SINCE 2026-08-16, AND THE OLD PARAGRAPH WAS WRONG ABOUT ITS OWN
+## CITATION. That rule is no longer live anywhere: `VesselOutfit` reads
+## `BrickShellClassifier.enclosure` now (commit `ed72b86`), and it was measured
+## to be worse than this paragraph claimed — one `block_door` standing alone on
+## an open deck reported a cabin, not merely eight roofless walls. The claim
+## that `plan_compliance_test` "holds this to it" was FALSE of the brick side:
+## that test pins the PLAN side, and no test in this repo asserted anything
+## about the brick reading at all until `brick_enclosure_test` existed. A
+## header that cites a test as covering a rule it does not cover is worse than
+## a header that says nothing — it is what let the wrong answer ship for days.
 ##
 ## ── Scale (CONVENTIONS §3a) ─────────────────────────────────────────────────
 ##
