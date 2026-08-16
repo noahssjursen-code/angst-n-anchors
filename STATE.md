@@ -3299,6 +3299,61 @@ Recorded together because the pattern is the lesson, not any one instance:
 Standing consequence: **use `ps -C <name>` rather than `pgrep -f <pattern>`** for process
 checks, and never let a process check's own pattern appear in its own command line.
 
+### CLOSED 2026-08-16 — three rigs could not repeat because the boat was still moving
+
+**One cause for all three, and it was neither of the two on record.**
+`BoatBody.automatic_physics_lod` defaults `true`; one second after a hull enters the tree
+the LOD update finds nothing in the `PlayerVessel` group and executes
+`freeze = physics_quality == SLEEP` — **`freeze = false`**. The rig's own `freeze = true`
+is silently revoked and the hull rises to buoyancy equilibrium **while the rig photographs
+it**. `shipyard_brick_editor.gd:2579` has carried a comment describing this all along.
+
+**The wireframe mask is not a race signature** — it is what a subject that moved **0.2 px**
+looks like (1.15 mm at 9 m across 1600 px). The orchestrator passed that wrong reading into
+the brief and it was corrected by measurement. The old `_small_hull_shot` note was right
+that transforms are bit-identical *across processes at the same frame index* and wrong to
+conclude "it is not the hull": nobody had asked whether they were constant **over frames
+within one process**. `_fittings_shot`'s weather diagnosis was named and never measured —
+and is false: the four weather values each hold one float-bit value per run, the vessel
+carries **zero `Light3D`s**, and `WeatherLighting`'s only writer is not an autoload.
+
+**Contention HIDES this defect rather than causing it** — the opposite of the standing
+assumption. Re-taken on a quiet box, both negative verdicts got slightly *worse*. Load lets
+the transient damp before the first grab, so a loaded machine produces two runs that agree
+**at the wrong pose**. A mutation that passed under saturating load was chased, not banked:
+its frames differ from the fixed ones on 7 of 7.
+
+**`_hull_iter_shot`'s "before" came back green with the defect still in it**, and four
+back-to-back runs of that same unfixed rig moved 2–5 of 7 frames. **One clean pair closes
+nothing** — which is exactly how `hull_visual_capture` got recorded as closed.
+
+Refreshes were **decomposed, not blind**: committed → unfixed isolates drift predating the
+change (2.73% small hull, 17.07% fittings); unfixed → fixed isolates the pose correction
+(0.31%). At most 0.31% of the small-hull drift is this fix, and `profile_ortho` is
+byte-identical, so the hull form did not move.
+
+**Corrects REALITY §8a.** Its "'it settles under physics.' False" was measured on
+`_starter_shot`, **which already carried the LOD line** — right about that rig, wrong as a
+general claim (§4d, again).
+
+### OPEN 2026-08-16 — the two SHIPPED rigs still carry it, and the split is 1:1
+
+Eleven rigs stand a `BoatBody` and set `freeze = true`. **Every rig this file records as
+closed carries `automatic_physics_lod = false`. The rigs without it are exactly
+`hull_visual_capture` — recorded closed at "0 of 18, four runs, six pairs" and drifted
+2.5118% today — plus the three just fixed.** No exceptions either way.
+
+Still carrying the defect: **`hull_visual_capture:172` and `vessel_render_capture:306`**
+(the two shipped ones, and therefore the milestone), plus `_boatbody_curve_probe`,
+`_critic_window`, `_ensure_breakdown_probe`, `_repro_hull_yaw_probe`, `_sheer_look`,
+`_strake_cost_probe`. **Every visual judgement taken from those two rigs was taken from a
+possibly-moving subject** — which includes today's sheer verdict and the critic frames.
+Not started yet only because a live wave owns `vessel_render_capture`.
+
+Owner's, undecided: `_hull_iter_shot`'s `v0…v12` is 91 frames of thirteen hull variants
+**whose code no longer exists**, so the series can never be re-shot. The current hull is
+added as `v13`. Either delete down to the newest frame or make the variants data.
+
 ### Standing, not a task
 
 Every model edit returns a render and the orchestrator looks at it. No metric for appearance —
