@@ -82,19 +82,17 @@ extends Node
 ##     corner number this file prints is 0.354 m on all eight pointed hulls —
 ##     exactly half a cell diagonal, i.e. the chamfer's own quantisation and not
 ##     a defect. It is printed rather than asserted so it stays visible.
-##   • It says nothing about the WALK SLAB, and the walk slab is looser than
-##     both the plate and the grid on every pointed hull. Measured through the
-##     PHYSICS SERVER, not read off the source
-##     (`tests/_walk_slab_over_water_probe.gd`): a downward ray on the
-##     `boat_walk` mask hits `WalkDeck` at y = 5.810 on hull_28x10 at
-##     (x 4.750, z -13.860) and at y = 15.150 on hull_150x32 at
-##     (x 15.200, z -74.250) — both well outside the drawn plate, which has
-##     tapered to the stem point at those stations. `WalkDeckCollider` is
-##     `10.000 x 0.140 x 28.000` and `32.000 x 0.140 x 150.000`, i.e. the full
-##     rectangle, `disabled=false`. So a builder is offered LESS than a walker
-##     is given, on all eight pointed hulls. That is a different system's
-##     outline, no player character has actually been driven out there, and
-##     nothing in this file changes it.
+##   • It says nothing about the WALK SLAB. That used to end "and the walk slab
+##     is looser than both the plate and the grid on every pointed hull ... no
+##     player character has actually been driven out there", and one HAS been
+##     since: `tests/_walk_bow_body_drive.gd` drove `scenes/shared/player.tscn`'s
+##     capsule 3.323 m outboard of the drawn deck on hull_28x10 and 10.695 m on
+##     hull_150x32, standing on `WalkDeckCollider` over open sea. Both walk
+##     shapes are now cut from the same `plate_args.ring` this file reads, and
+##     `walk_deck_outline_test` holds them there through the physics server.
+##     So the two files ask the same question of two different consumers — the
+##     grid a builder is offered, and the floor a walker is given — and both
+##     answer it against the polygon the hull draws.
 
 const TestReport := preload("res://tests/support/test_report.gd")
 

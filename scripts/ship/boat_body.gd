@@ -1091,6 +1091,7 @@ func _ensure_walk_deck() -> void:
 	## the unbatched path would have left.
 	if _walk_collider_batch_depth > 0:
 		return
+	_refresh_walk_deck_shape()
 	_ensure_walk_hull_collider()
 	_sync_walk_deck_transform()
 	## Deduplicated for the same reason: `ensure_walk_deck` runs once per
@@ -1124,8 +1125,50 @@ func _attach_walk_deck_deferred(target_parent: Node) -> void:
 		_walk_deck.reparent(target_parent, true)
 
 
+## ── THE WALKING SURFACE IS THE PLANFORM THE HULL DRAWS ─────────────────────
+##
+## Both shapes below used to be `hull_size.x` by `hull_size.z` RECTANGLES on a
+## fleet where eight hulls of nine draw a POINTED deck, and `_walk_hull_box_size`
+## carried the comment *"matches the gray hull shell"* while the shell is lofted.
+## Measured through the physics server, not read off the source:
+##
+##   * `tests/_walk_bow_body_drive.gd` drove `scenes/shared/player.tscn`'s own
+##     capsule (r 0.35, h 1.8, mask 1|boat_walk) from amidships to the stem on a
+##     BARE hull — which is what `VesselSpawn.default_brick_layout` gives a
+##     player who has just bought one. It walked to ship-local
+##     (4.750, −13.950) on `hull_28x10`, **3.323 m outboard of the drawn deck**,
+##     and to (15.200, −74.925) on `hull_150x32`, **10.695 m outboard**,
+##     standing on `WalkDeckCollider` the whole way, and then fell off the
+##     rectangle's forward face into the sea.
+##   * `tests/_walk_slab_shape_cost_probe.gd` then disabled the slab and dropped
+##     the same capsule 1.945 m outboard: it came to rest 1.05 m lower on
+##     `WalkHullCollider`, which is the SAME rectangle. Trimming one without the
+##     other only lowers the invisible floor.
+##
+## 25.0 m² of the trawler's 280 m² walk rectangle and 256.0 m² of the
+## freighter's 4800 m² is deck the vessel does not draw.
+##
+## So both shapes are now built from the ring the plate is EXTRUDED from —
+## `plate_args.ring` on `HullVisual/Deck`, the same meta `grid_deck_outline_test`
+## reads — and not from a second derivation that can drift from it (REALITY §3b).
+## The fleet's rings are convex (a rectangle and a five-point pointed planform),
+## so one `ConvexPolygonShape3D` is EXACT at one shape. Measured cost against
+## the box it replaces (`_walk_slab_shape_cost_probe`, llvmpipe / 4 cores —
+## ratios port, milliseconds do not):
+##
+##   candidate   shapes            build      walk 600 steps   ray x5000
+##   rect (was)       1        0.026 ms         12.1 ms          9.1 ms
+##   convex           1        0.058 ms         14.3 ms          9.1 ms
+##   staircase   11 / 33   0.187/0.755 ms       12.8 ms          9.1 ms
+##   wedge            2        0.054 ms         12.7 ms          9.2 ms
+##
+## i.e. +3.6 µs per `move_and_slide` step per player, nothing on the ray, and
+## 32 µs once per vessel. The staircase was rejected on CORRECTNESS, not cost:
+## its inscribed boxes leave up to half a cell of drawn deck with no floor.
+## A hull that publishes no ring keeps the rectangle, so nothing regresses to
+## "no walking surface at all".
 func _walk_deck_box_size() -> Vector3:
-	## Full hull footprint — no inset rim (avoids gray hull ledge you can fall through).
+	## Full hull footprint — the fallback bound when a hull draws no plan ring.
 	return Vector3(hull_size.x, 0.14, hull_size.z)
 
 
@@ -1138,7 +1181,10 @@ func _walk_deck_local_origin() -> Vector3:
 
 
 func _walk_hull_box_size() -> Vector3:
-	## Matches the gray hull shell (full beam/loa, 85% depth).
+	## The player-facing hull VOLUME's bounding size: full beam/loa, 85% depth.
+	## Its PLAN is the drawn ring where the hull publishes one — see above. The
+	## comment this replaced claimed the box "matches the gray hull shell"; the
+	## shell is lofted and the box never was.
 	return Vector3(hull_size.x, maxf(hull_size.y * 0.85, 0.5), hull_size.z)
 
 
@@ -1148,6 +1194,61 @@ func _walk_hull_boat_local_center() -> Vector3:
 
 
 var _walk_enable_pending := false
+## The ring each walk shape was last built from, so `_ensure_walk_deck` — which
+## runs once per collider added — does not rebuild a convex hull per brick.
+var _walk_slab_ring := PackedVector2Array()
+var _walk_hull_ring := PackedVector2Array()
+
+
+## The plan polygon the weather deck is DRAWN from, in boat-local metres.
+## `plate_args.ring` is in the plate node's own frame, so the node's X/Z is added
+## back rather than assumed zero (the catamaran positions its bridge deck by Y).
+func _walk_plan_ring() -> PackedVector2Array:
+	var mi := get_node_or_null("HullVisual/Deck") as MeshInstance3D
+	if mi == null or not mi.has_meta("plate_args"):
+		return PackedVector2Array()
+	var args: Dictionary = mi.get_meta("plate_args")
+	var raw: PackedVector2Array = args.get("ring", PackedVector2Array())
+	if raw.size() < 3:
+		return PackedVector2Array()
+	var shift := Vector2(mi.position.x, mi.position.z)
+	var out := PackedVector2Array()
+	for point in raw:
+		out.append(point + shift)
+	return out
+
+
+## A prism of `ring`, `half_height` either side of the shape's own origin.
+static func _ring_prism(ring: PackedVector2Array, half_height: float) -> ConvexPolygonShape3D:
+	var convex := ConvexPolygonShape3D.new()
+	var points := PackedVector3Array()
+	for p in ring:
+		points.append(Vector3(p.x, -half_height, p.y))
+		points.append(Vector3(p.x, half_height, p.y))
+	convex.points = points
+	return convex
+
+
+func _refresh_walk_deck_shape() -> void:
+	if _walk_deck == null or not is_instance_valid(_walk_deck):
+		return
+	var cs := _walk_deck.get_node_or_null(WALK_DECK_COLLIDER_NAME) as CollisionShape3D
+	if cs == null:
+		return
+	var ring := _walk_plan_ring()
+	var size := _walk_deck_box_size()
+	if ring.is_empty():
+		var box := cs.shape as BoxShape3D
+		if box == null:
+			box = BoxShape3D.new()
+			cs.shape = box
+		box.size = size
+		_walk_slab_ring = PackedVector2Array()
+		return
+	if cs.shape is ConvexPolygonShape3D and ring == _walk_slab_ring:
+		return
+	cs.shape = _ring_prism(ring, size.y * 0.5)
+	_walk_slab_ring = ring
 
 
 func _ensure_walk_hull_collider() -> void:
@@ -1159,11 +1260,18 @@ func _ensure_walk_hull_collider() -> void:
 		cs = CollisionShape3D.new()
 		cs.name = WALK_HULL_COLLIDER_NAME
 		_walk_deck.add_child(cs)
-	var box := cs.shape as BoxShape3D
-	if box == null:
-		box = BoxShape3D.new()
-		cs.shape = box
-	box.size = _walk_hull_box_size()
+	var size := _walk_hull_box_size()
+	var ring := _walk_plan_ring()
+	if ring.is_empty():
+		var box := cs.shape as BoxShape3D
+		if box == null:
+			box = BoxShape3D.new()
+			cs.shape = box
+		box.size = size
+		_walk_hull_ring = PackedVector2Array()
+	elif not (cs.shape is ConvexPolygonShape3D and ring == _walk_hull_ring):
+		cs.shape = _ring_prism(ring, size.y * 0.5)
+		_walk_hull_ring = ring
 	cs.position = boat_to_walk_deck_local(_walk_hull_boat_local_center())
 	cs.rotation = Vector3.ZERO
 	cs.disabled = false
@@ -1504,6 +1612,11 @@ func _enable_walk_deck_collision() -> void:
 	if not is_inside_tree() or not _walk_deck.is_inside_tree():
 		return
 	_sync_walk_deck_transform()
+	## The slab is created on the deferred call BEFORE this one, and on some
+	## spawn paths `HullVisual/Deck` does not exist yet at that moment. Refresh
+	## here as well, or a vessel keeps the rectangular fallback for its whole
+	## life and the shape is silently the old defect.
+	_refresh_walk_deck_shape()
 	_ensure_walk_hull_collider()
 	var cs := _walk_deck.get_node_or_null(WALK_DECK_COLLIDER_NAME) as CollisionShape3D
 	if cs != null:
@@ -1513,9 +1626,12 @@ func _enable_walk_deck_collision() -> void:
 func _resize_walk_deck_shape() -> void:
 	if _walk_deck == null or not is_instance_valid(_walk_deck):
 		return
-	var cs := _walk_deck.get_node_or_null(WALK_DECK_COLLIDER_NAME) as CollisionShape3D
-	if cs != null and cs.shape is BoxShape3D:
-		(cs.shape as BoxShape3D).size = _walk_deck_box_size()
+	## `hull_size` has just changed, so whichever shape this slab carries has to
+	## be rebuilt — the ring cache is invalidated so a convex slab is re-cut and
+	## does not keep the previous hull's planform.
+	_walk_slab_ring = PackedVector2Array()
+	_walk_hull_ring = PackedVector2Array()
+	_refresh_walk_deck_shape()
 	_ensure_walk_hull_collider()
 	_sync_walk_deck_transform()
 
