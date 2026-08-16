@@ -3210,6 +3210,57 @@ is hidden under the saloon roof, so those frames have **no absolute scale** — 
 §3a's exact failure, in the rig every other rig was copied from. Any proportion judgement
 made on them, including the orchestrator's, is unanchored until that is fixed.
 
+### CLOSED 2026-08-16 — the port's bounds excluded every pier, and the severity was the other consumer
+
+Third stale reader from one migration (quays left `modules` for `berth_plan`). Re-measured
+independently off the **drawn** `QuayPier/Deck` nodes, never the plan dictionary: **226.75 m**
+worst overhang, the recorded figure held, and the recorded corner counts **omitted sizes 1–2**,
+which lose 4 corners each.
+
+**The orchestrator's severity premise was false.** `plot_depth` is short by up to 226.8 m —
+and **nothing reads its magnitude**: `IslandMeshBuilder.build_polygon` has zero callers, the
+`PortPlot` fields reach only a callerless helper, and the explicit-lane builders that consume
+the island box are reached only from `_build_lane`, which has no caller. Measured through the
+production path: **zero lane segments cross a pier at any size, with the broken value and the
+fixed one identically.** `island_width` is short by 0.00 m everywhere — the `PortSizing` floor
+always wins.
+
+**The live defect was the label.** `port_plot.gd:129` centres the port's floating name on this
+box, so it sat 25–113 m landward — 13–25% of the port's own span, **95–164 px on screen,
+13–23% of frame height.** It floated over the town instead of the harbour.
+
+The check takes pier corners **from the drawn nodes** and the helper is deliberately private so
+nothing can measure tips through it. Mutation M2 is the independence proof: inflate the drawn
+deck 1.5× in the visualizer only, leave `bounds()` correct, and it still fires 36/73.
+
+**The sweep found two more stale readers and one hid the other.**
+`coastal_port_placer_test` selected a quay from `modules` — **zero quay modules on all 35
+ports**, so its "berth water stays open" check ran **zero times**. Repointing it exposed the
+fourth: the same file dropped the `WorldLayout` that `world.gd:355` always passes. With it,
+66/66 station origins in water; without it, **0/66, worst −130.52 m**. The test had been
+measuring a port generated against no coast.
+
+Named, not fixed: `flatten_zone_records()`'s site envelope is a third `bounds()` consumer,
+dead on every live port (0 records / 18) and correct only by accident of an `elif`; the
+asphalt branch of the new corner helper is **unexercised** (no fixture makes one);
+`coastal_port_placer_test._finish()` prints "all checks passed" **with no check count**.
+
+### OPEN 2026-08-16 — the instruments are the defect class
+
+One day's findings, all instruments: a hull rig shooting silhouettes at **1.18:1** against its
+own ground; a port rig **photographing an abandoned data model** as an 8×10-pixel square; a
+render rig placing a scale figure and **never counting its pixels**, so seven fixtures
+including a shipped one had no scale; a walk probe whose filter matched nothing and reported a
+capsule walking through a sealed saloon as fully clear. **Four instruments, four silent
+falsehoods, in one day.**
+
+Three known-bad remain and are now a wave: `_fittings_shot` (3.79%), `_small_hull_shot`
+(240 px), `_hull_iter_shot` (150 px) — none can reproduce its own output, so their sets are
+stale by an unknown amount and nothing downstream of them is evidence. **Treat every rig's
+recorded status as a claim:** `hull_visual_capture` is recorded byte-identical across six
+pairs and produced **2.5118% at 241/255** in an ordinary gate run today, with a mask showing a
+1–3 px wireframe — a grab/draw race, in a rig that *does* call `settle`.
+
 ### Standing, not a task
 
 Every model edit returns a render and the orchestrator looks at it. No metric for appearance —
