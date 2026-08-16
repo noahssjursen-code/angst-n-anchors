@@ -43,7 +43,7 @@ scripts/
                 #   VesselRegistrationAudit, the character/wardrobe authors). There is NO
                 #   PortSlotEditor — this line named one until 2026-08-15 and no such file exists.
   ui/           # HUDs, menus, overlays, GameMenu + DebugHud autoloads
-  state/        # GameState autoload (cross-system read model), sub-states: PlayerState, ShipState, ContractState, WorldState
+  state/        # GameState autoload (cross-system read model), sub-states: PlayerState, ShipState, WorldState
 
 resources/data/
   buildings/    # Voxel building blueprints (filename stem = id); BuildingBrickEditor
@@ -99,7 +99,7 @@ Each autoload lives in its system folder and is registered in `project.godot`.
 | `FreightService` | `cargo/` | Authoritative accepted container movements and deterministic port offers |
 | `PlayerSession` | `player/` | Persistent player data (marks, name, ship ledger, world clock). Autosaves every 60 s + on focus loss |
 | `GameMenu` | `ui/` | Pause / map / settings / hint overlay |
-| `GameState` | `state/` | Read model: player/ship/contract/world sub-states |
+| `GameState` | `state/` | Read model: player/ship/world sub-states |
 | `DebugHud` | `ui/` | F3 debug overlay |
 | `Telemetry` | `state/` | Central debug/performance service: hardware samples, published metrics, peaks, context flags, events, and copyable reports |
 | `LocalPlayerView` | `state/` | **The MP seam.** Per-client view of the local player's world. UI reads through here, not direct autoloads |
@@ -411,8 +411,18 @@ UI subscribes to `GameState`. Systems write state. No UI polls the scene tree.
 var speed = $Ship/BoatBody.velocity.length()
 
 # GOOD — read model
-var speed = GameState.ship.speed_knots
+var speed = float(LocalPlayerView.get_helm_instruments().get("speed_knots", 0.0))
 ```
+
+`ContractState` was a fourth sub-state and is DELETED (2026-08-16): `FreightService`
+wrote the manifest into it on every change and nothing read it. A projection with
+no reader is not a read model, it is bookkeeping — `tests/state_projection_reach_test.gd`
+fails the gate if a fifth field lands with nobody reading it.
+
+The example above used to read `GameState.ship.speed_knots`, WHICH HAS NEVER
+EXISTED. `ShipState` carries `data` (identity) and `instruments` (the 0.05 s helm
+snapshot); speed is a key inside the latter. A doc example naming a field that is
+not there is the same defect one layer up from the code.
 
 ### Interactable pattern
 

@@ -48,17 +48,23 @@ func _ready() -> void:
 	if t != null and not t.sampled.is_connected(_on_telemetry):
 		t.sampled.connect(_on_telemetry)
 
-	# Refresh on gameplay state changes (player, ship, contracts, weather).
+	# Refresh on gameplay state changes (player, ship, weather).
 	# Each sub-state has its own named signals — no generic "changed".
+	#
+	# THREE OF THESE WERE WIRES TO NOWHERE and are gone (2026-08-16).
+	# `"active_changed"` named a signal `ContractState` never declared, so
+	# `_connect_if`'s `has_signal` guard dropped it in silence — a connect that
+	# reads as coverage and subscribes to nothing. `"hull_changed"` and
+	# `"fuel_changed"` did exist and were never emitted, because nothing ever
+	# assigned the fields behind them; the Hull and Fuel rows below have always
+	# been stubs. All five declarations are deleted at the source now, and
+	# `state_projection_reach_test` fails the run if a name here stops resolving.
 	var gs := get_node_or_null("/root/GameState")
 	if gs != null:
 		_connect_if(gs.player,   "marks_changed",         _on_state_changed)
 		_connect_if(gs.player,   "display_name_changed",  _on_state_changed)
 		_connect_if(gs.ship,     "boarded",               _on_state_changed)
 		_connect_if(gs.ship,     "exited",                _on_state_changed)
-		_connect_if(gs.ship,     "hull_changed",          _on_state_changed)
-		_connect_if(gs.ship,     "fuel_changed",          _on_state_changed)
-		_connect_if(gs.contract, "active_changed",        _on_state_changed)
 		_connect_if(gs.world,    "weather_changed",       _on_state_changed)
 		_connect_if(gs.world,    "nearest_port_changed",  _on_state_changed)
 

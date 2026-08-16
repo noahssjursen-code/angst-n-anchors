@@ -266,7 +266,8 @@ Trade commodity metadata and physical container units. Contract trade is deferre
 The cross-system read model. `GameState` aggregates sub-states so UI can subscribe without knowing which system produced a change.
 
 - `GameState` autoload — aggregates sub-states
-- `PlayerState`, `ShipState`, `ContractState`, `WorldState` — sub-state classes
+- `PlayerState`, `ShipState`, `WorldState` — sub-state classes
+  (`ContractState` was deleted 2026-08-16: written by `FreightService`, read by nobody)
 
 ---
 
@@ -330,14 +331,19 @@ UI and other read-only consumers subscribe to `GameState`. Systems write their o
 
 ```
 [Ship system] writes → GameState.ship (ShipState)
-[Weather system] writes → GameState.world.weather (inside WorldState)
-[Contract system] writes → GameState.contract (ContractState)
+[Weather system] writes → GameState.world.weather_label (inside WorldState)
 [Player system] writes → GameState.player (PlayerState)
 
 [UI, HUD, map] reads ← GameState.*
 ```
 
 No UI node should reach into a system node to read values. No system should reach into the UI.
+
+The contract manifest does NOT come through here. `FreightService.contracts_changed`
+→ `LocalPlayerView.contracts_changed` → `WalkingHud` is the live path, and the
+`GameState.contract` projection that duplicated it was deleted on 2026-08-16 after
+a survey found nothing had ever read it. Every remaining member of every sub-state
+is held to having a reader in `scripts/` by `tests/state_projection_reach_test.gd`.
 
 ---
 

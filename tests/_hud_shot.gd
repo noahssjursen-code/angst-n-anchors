@@ -73,7 +73,6 @@ func _snapshot(case_name: String) -> Dictionary:
 		"target_bearing_deg": NAN,
 		"destination_name": "",
 		"remaining_distance_m": 0.0,
-		"bridge_watch": {},
 		"fishing": {},
 		"wind_direction": Vector3(1.0, 0.0, 0.4),
 		"wind_speed_ms": 8.3,

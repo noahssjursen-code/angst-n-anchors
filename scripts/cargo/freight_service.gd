@@ -381,11 +381,13 @@ func restore_contracts(saved: Array) -> void:
 	call_deferred("_stage_all_contracts")
 
 
+## One announcement, one copy. This used to build `active_contracts()` a second
+## time and push it into `GameState.contract.active`, which no line of the game
+## ever read — both that field and its class are gone (2026-08-16, see
+## `game_state.gd`). Everything that shows a manifest subscribes to the signal
+## below, through `LocalPlayerView.contracts_changed`.
 func _publish() -> void:
 	contracts_changed.emit(active_contracts())
-	var state := get_node_or_null("/root/GameState")
-	if state != null:
-		state.contract.active = active_contracts()
 
 
 func _complete(index: int) -> void:

@@ -56,12 +56,15 @@ const CHART_SNAPSHOT_PATH := "res://scripts/ui/chart/chart_nav_snapshot.gd"
 ## reason it is not simply a defect to fix here. The list POLICES ITSELF: a key
 ## named here that acquires a consumer fails the run too, so it cannot quietly
 ## become a stale caveat (REALITY §4b — a caveat is a claim, and it rots).
-const KNOWN_UNCONSUMED := {
-	"bridge_watch":
-	"published since the alarm landed and drawn by nobody: walking_hud.gd reads the "
-	+ "alarm from LocalPlayerView.get_autopilot_snapshot(), which builds its own copy "
-	+ "from the same node. This key is a second producer with no reader.",
-}
+##
+## EMPTY SINCE 2026-08-16, and that is the point of the self-policing: the one
+## entry it ever held, `bridge_watch`, was struck off by DELETING THE KEY from
+## `GameState._capture_instruments` rather than by finding it a reader. The
+## alarm still reaches the player, on the surface that suits it — `WalkingHud`,
+## off `LocalPlayerView.get_autopilot_snapshot()`, which is the copy with a
+## reader. Both halves below then went red until the excuse was struck, which is
+## the behaviour this dictionary exists to have.
+const KNOWN_UNCONSUMED := {}
 
 ## Alpha above this counts as painted. The viewport is rendered with a
 ## transparent background so "ink" is not a guess about a clear colour.
@@ -606,7 +609,6 @@ func _snapshot(case_name: String) -> Dictionary:
 		"target_bearing_deg": NAN,
 		"destination_name": "",
 		"remaining_distance_m": 0.0,
-		"bridge_watch": {},
 		"fishing": {},
 		"wind_direction": Vector3(1.0, 0.0, 0.4),
 		"wind_speed_ms": 8.3,

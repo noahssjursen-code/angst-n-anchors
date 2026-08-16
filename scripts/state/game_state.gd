@@ -3,9 +3,19 @@ extends Node
 ## Central read model. Systems write here on change; UI and tools read from here.
 ## Never poll this every frame — connect to the signals on each sub-state instead.
 
+## `contract: ContractState` stood here and was DELETED 2026-08-16, along with
+## the class. `FreightService._publish` wrote `contract.active` on every change
+## and NOTHING READ IT — not one line, in `scripts/` or `scenes/`. The live
+## contract path never came through here: `FreightService.contracts_changed` →
+## `LocalPlayerView.contracts_changed` → `WalkingHud._refresh_manifest`, and
+## `LocalPlayerView.get_active_contracts()` asks the service directly. This was
+## a third copy of the manifest kept up to date for no reader (REALITY §3d).
+## `debug_draw` did connect to it — to `"active_changed"`, a signal
+## `ContractState` never declared, silently dropped by `_connect_if`'s
+## `has_signal` guard, and its CONTRACTS section draws "— trade rewrite pending"
+## either way. `state_projection_reach_test` now holds both halves.
 var player:   PlayerState   = PlayerState.new()
 var ship:     ShipState     = ShipState.new()
-var contract: ContractState = ContractState.new()
 var world:    WorldState    = WorldState.new()
 
 var _wired_controllers: Array = []
@@ -51,7 +61,6 @@ func _wire_player_session() -> void:
 		player.marks        = d.marks
 		player.display_name = d.display_name
 	)
-	contract.active = []
 
 
 # ── WeatherLighting ───────────────────────────────────────────────────────────
@@ -104,8 +113,6 @@ func _on_helm_on(bc: BoatController) -> void:
 	var sd          := ShipData.new()
 	sd.ship_id      = bc.get_parent().name
 	sd.display_name = bc.ship_name
-	sd.hull_health  = 1.0
-	sd.fuel         = 1.0
 	ship.data       = sd
 	_active_controller = bc
 	_active_boat = bc.get_parent() as BoatBody
@@ -183,10 +190,15 @@ func _capture_instruments() -> Dictionary:
 		if lighting != null and lighting.has_method("get_preset_name")
 		else "OFF"
 	)
-	var watch_snapshot: Dictionary = {}
-	var watch := boat.get_node_or_null("BridgeWatchAlarm") as BridgeWatchAlarm
-	if watch != null:
-		watch_snapshot = watch.snapshot()
+	## `"bridge_watch": watch.snapshot()` was published here twenty times a
+	## second and read by NOBODY — deleted 2026-08-16, and it was already named
+	## in `ship_hud_readout_test.KNOWN_UNCONSUMED` as the one key the survey
+	## excused. `WalkingHud` does draw the alarm, from
+	## `LocalPlayerView.get_autopilot_snapshot()`, which builds its own copy off
+	## the same `BridgeWatchAlarm` node. That is the right surface for it: the
+	## alarm exists to say "you are not on the bridge", and the HUD that carried
+	## this key is the one you only see WHILE at the helm. Two producers, one
+	## reader, and this was the other one (REALITY §3b, §3d).
 	var fishing_snapshot: Dictionary = {}
 	var fishing_systems := boat.get_fishing_systems()
 	if not fishing_systems.is_empty():
@@ -223,7 +235,6 @@ func _capture_instruments() -> Dictionary:
 		"target_bearing_deg": target_bearing,
 		"destination_name": destination_name,
 		"remaining_distance_m": remaining_distance_m,
-		"bridge_watch": watch_snapshot,
 		"fishing": fishing_snapshot,
 		"wind_direction": wind_direction,
 		"wind_speed_ms": wind_speed_ms,
