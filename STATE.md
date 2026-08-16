@@ -3161,6 +3161,40 @@ cabin**, and the licence panel reads "required (current: true)". The header clai
 `plan_compliance_test` pinned that rule — it does not, and **no test in this repo asserts
 anything about the brick reading.** Now an open wave.
 
+### CLOSED 2026-08-16 — one door brick certified a passenger vessel
+
+`VesselOutfit` answered the licence with `door_n >= 1 or wall_n >= 8`: eight `block` bricks
+in a straight line reported a cabin, and **one `block_door` standing alone on the deck**
+reported a cabin. It reads enclosure off the geometry now. **Neither recorded reason for
+leaving it there survived contact.**
+
+- *"The classifier publishes buried bricks, not enclosed air"* — **false of what it already
+  knew.** `_flood_exterior_air` visits every air cell the sky reaches; enclosed air is the
+  complement inside the same bounds. Computed independently — own flood, own bounds — on
+  the hollow 5×5×3: **27 cells, exactly the 27 the old note said "appear nowhere"**, and it
+  agrees cell-for-cell. Tenth value-computed-and-discarded of the session (§3d).
+- *"A brick cell has no agreed metre size"* — real for LAND, **and never true of this
+  path.** `BuildingGrid` is the land blueprint lattice with **zero references from
+  `scripts/ship/`**; a vessel brick is positioned by `DeckGrid.CELL_M` and drawn at
+  `BrickCatalog.size_m`, **the same 0.5 m constant**. Verified independently by the
+  orchestrator. **THIS FILE ALREADY SAID SO** — the "TWO questions, not one" entry in Owner
+  decisions has been right the whole time. The wave's blocker claim contradicted the record,
+  and the orchestrator repeated the wave rather than checking the record first.
+
+Third finding: **"a floor under it" is not a clause** on a voxel grid — the cell under an
+enclosed run's base is always solid, so the branch could not fail. Deleted, with the proof,
+rather than kept.
+
+Both rows of the shipped defect are false under **every** candidate cell size, which is why
+closing this never needed the owner's decision at all. All four shipped presets keep their
+cabins and their full checklists — nothing a player owns is decertified.
+
+Reach, measured not assumed: the wrong yes could **not** reach a player unaided (every
+preset is cargo/bulk/fishing, and the only code choosing `passenger_vessel` authors plans).
+But in authoring mode `report.ok` decides whether a preset is written **official** or draft,
+and official presets are what the shipwright sells and the starter grant gives away — so it
+could have got a fake cabin stamped official by an author.
+
 ### OPEN 2026-08-16 — the hulls improved and the superstructures did not
 
 The critic frames now show boats carrying sheds. The ferry saloon is a constant-height
