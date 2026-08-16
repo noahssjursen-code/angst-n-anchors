@@ -27,8 +27,60 @@ extends Node
 ## It runs over every prebuilt vessel AND over a synthetic fishing layout on
 ## every hull in `HullRegistry.catalog()`, because the two that were broken were
 ## not the one being worked on (REALITY §3c).
+##
+## ## Why both of those populations are DECLARED (REALITY.md §4f)
+##
+## Running over "every prebuilt vessel" is the vanishing-check shape: the
+## prebuilt catalogue is a DIRECTORY LISTING, so a preset that stops being
+## listed does not fail its checks, it deletes them. Measured 2026-08-16 by
+## moving `resources/data/vessels/prebuilt/sjark_15m.json` out of that
+## directory: this unit went from **PASS (515) to PASS (475)** and said nothing.
+## Forty checks — every deck-edge, hatch, coaming and headroom check on that
+## vessel — ceased to exist, and the run stayed green.
+##
+## The two floors below (`surveyed >= 2`, and `seen >= 1` per synthetic hull)
+## did not fire and could not have. A floor sees a collection go EMPTY; this one
+## merely got SMALLER, and `fishing_trawler` alone still cleared it. That is
+## §4f's central finding and this unit is a clean instance of it.
+##
+## The fix here is §4f's FIRST shape, not its last. A frozen `EXPECTED_CHECKS`
+## would be the wrong tool: the per-vessel count is geometry-dependent (46 for
+## `fishing_trawler`, 40 for `sjark_15m`, and it moves whenever a hull's deck
+## plan changes), so a budget would have to be re-frozen for edits that are not
+## about coverage at all, and a budget re-frozen that often stops being read.
+## What is stable is not the COUNT, it is the POPULATION. Both are declared as
+## literals below, and each is compared against what was actually discovered.
+##
+## Re-freeze these lists in the same commit that adds or removes a preset or a
+## hull, never after the fact.
 
 const TestReport := preload("res://tests/support/test_report.gd")
+
+## Every preset `PrebuiltVesselCatalog.catalog_entries()` must list. Measured
+## against the shipped directory 2026-08-16. `28_10_m` and `bulk_small` mount no
+## catch hold and so contribute no geometry checks — they are declared anyway,
+## because a population is only a guard if it is the whole population.
+const EXPECTED_PREBUILT_IDS := [
+	"28_10_m",
+	"bulk_small",
+	"fishing_trawler",
+	"sjark_15m",
+]
+
+## Every hull `HullRegistry.catalog()` must offer — the registry's own two plus
+## the seven of `resources/data/vessels/hulls/catalog.json`. The synthetic-deck
+## arm walks this, and it is 369 of the 515 checks.
+const EXPECTED_HULL_IDS := [
+	"hull_15x5",
+	"hull_28x10",
+	"hull_45x16_cat",
+	"hull_70x18",
+	"hull_90x24",
+	"hull_100x24",
+	"hull_120x28",
+	"hull_130x28",
+	"hull_150x32",
+]
 
 var _t := TestReport.new("catch_hold_test")
 
@@ -451,7 +503,15 @@ const OVERHANG_EPSILON_M := 0.005
 
 func _test_the_hold_fits_the_boat() -> void:
 	var surveyed := 0
-	for entry_raw in PrebuiltVesselCatalog.catalog_entries():
+	var presets := PrebuiltVesselCatalog.catalog_entries()
+	var fleet := HullRegistry.catalog()
+	## Declared before either loop runs. Everything below this point is a check
+	## inside one of them, so if a population shrinks those checks do not fail —
+	## they stop existing, and nothing else in this file can see it (§4f).
+	_check_population("prebuilt preset", presets, "prebuilt_id", EXPECTED_PREBUILT_IDS)
+	_check_population("registry hull", fleet, "id", EXPECTED_HULL_IDS)
+
+	for entry_raw in presets:
 		var entry := entry_raw as Dictionary
 		var layout := (entry.get("prebuilt_layout", {}) as Dictionary).duplicate(true)
 		surveyed += await _hold_geometry_on(
@@ -465,7 +525,7 @@ func _test_the_hold_fits_the_boat() -> void:
 	## the painted starter deck plus a winch — the shape a player produces on a
 	## hull the fleet does not ship — because the two vessels that were broken
 	## were not the one being worked on (REALITY §3c).
-	for hull_raw in HullRegistry.catalog():
+	for hull_raw in fleet:
 		var hull_id := str((hull_raw as Dictionary).get("id", ""))
 		var grid := HullRegistry.make_grid(hull_id)
 		if grid == null:
@@ -487,6 +547,45 @@ func _test_the_hold_fits_the_boat() -> void:
 	## loop over nothing reporting success (REALITY §4).
 	_t.check(
 		"the fit survey actually measured catch holds (%d)" % surveyed, surveyed >= 2
+	)
+
+
+## Asserts that a DISCOVERED collection is exactly the DECLARED one.
+##
+## Not a floor. A floor (`size() > 0`, `>= 2`) catches a collection that went
+## empty; every measured instance of the vanishing-check trap merely made one
+## smaller, and no floor in this repo has ever fired on it (§4f). This names the
+## member that went missing, which a frozen check-count cannot do.
+func _check_population(
+	what: String, discovered: Array, id_key: String, declared_ids: Array
+) -> void:
+	var found: Array = []
+	for entry in discovered:
+		found.append(str((entry as Dictionary).get(id_key, "")))
+	found.sort()
+	var declared: Array = declared_ids.duplicate()
+	declared.sort()
+	var label := "every declared %s is present (%d)" % [what, declared.size()]
+	if found == declared:
+		_t.check(label, true)
+		return
+	var missing: Array = []
+	for id in declared:
+		if not found.has(id):
+			missing.append(id)
+	var unexpected: Array = []
+	for id in found:
+		if not declared.has(id):
+			unexpected.append(id)
+	_t.check(
+		label
+			+ " — missing %s, unexpected %s. Every check this file makes about a"
+			% [missing, unexpected]
+			+ " %s runs inside a loop over this collection, so a member that" % what
+			+ " vanishes takes its checks with it silently. Re-freeze the"
+			+ " declared list in the commit that changes the population, never"
+			+ " after the fact.",
+		false,
 	)
 
 

@@ -73,6 +73,43 @@ const FOOTPRINT_SLOP_M := 1.0
 ## entry from `UNDRAWN` is the fix; adding one needs a reason in STATE.md.
 const UNDRAWN := ["apron_decor"]
 
+## ## Why this run counts itself (REALITY.md §4f)
+##
+## The pad sweep is a `t.check()` inside a `for` over `land_plan.apron_pads`,
+## which the port GENERATES. Most of this file's checks are in there, and a run
+## that lays fewer pads does not fail them — it deletes them.
+##
+## It is worth being precise about where that population comes from, because it
+## is not where §4f's other instances got theirs. No shipped data file feeds it:
+## the ports are synthesised in `_expand()` from a fixed `SEED`, and dropping
+## `yard_grain` from `resources/data/ports/modules/catalog.json` moved nothing
+## (150 → 150, measured 2026-08-16). The pads trace back to
+## `PortTradeProfile.THEMES`, a `const` table in production SOURCE. Dropping
+## `grain` from `farm_harbour`'s exports — one commodity, one line — took this
+## unit from **PASS (150) to PASS (144)** and it stayed green. Six checks did
+## not fail; they stopped existing.
+##
+## Neither floor could see it, and this is §4f's point exactly. `pads_seen >=
+## MAX_SIZE + 1` and the per-size "lays at least one apron pad" both watch for a
+## collection that went EMPTY. This one merely got SMALLER — every size still
+## laid a pad, the sweep still saw more pads than sizes, and both floors passed.
+##
+## So this is §4f's FOURTH shape rather than its first, and deliberately. The
+## population cannot be declared as a literal because it is not an enumerable
+## shipped set — it is a generator's output, and the per-pad check count varies
+## with what each pad happens to draw. What IS constant is the total, because
+## `SEED` is fixed and every check below is deterministic. Drift in it — up OR
+## down — is a fact a human should look at.
+##
+## Re-freeze this in the same commit that changes the checks or the seed, never
+## after the fact: a budget re-frozen to match a number you did not intend is
+## the guard writing the answer down for you.
+
+## Measured against the shipped `THEMES` table and `SEED` 2026-08-16: the nine
+## sizes of the pad sweep, the sweep's own floor, the strip test, and the
+## published/drawn register — plus this budget counting itself. **151 checks.**
+const EXPECTED_CHECKS := 151
+
 
 func _initialize() -> void:
 	call_deferred("_run")
@@ -197,6 +234,14 @@ func _run() -> void:
 			t.equal("land_plan.%s draws one node per published entry" % key, drawn, planned)
 	vis_reg.queue_free()
 
+	## The budget, counting itself. `check_count()` is read BEFORE this check is
+	## recorded, so the run total is one more.
+	var ran: int = t.check_count() + 1
+	t.check(
+		"the run executed its whole check budget (%d of %d — re-freeze "
+			% [ran, EXPECTED_CHECKS]
+			+ "EXPECTED_CHECKS in the commit that changes it, never after the fact)",
+		ran == EXPECTED_CHECKS)
 	t.finish(self)
 
 

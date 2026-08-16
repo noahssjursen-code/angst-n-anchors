@@ -66,6 +66,74 @@ const CHART_SNAPSHOT_PATH := "res://scripts/ui/chart/chart_nav_snapshot.gd"
 ## the behaviour this dictionary exists to have.
 const KNOWN_UNCONSUMED := {}
 
+## ## The consumer sets are DECLARED, because a regex scan is a discovered
+## ## collection and this survey is built out of them (REALITY.md §4f)
+##
+## `_read_keys()` finds consumers by regex over production source. That makes
+## `hud_keys` and `chart_keys` collections this file DISCOVERS, and every
+## "reads 'x' and GameState publishes it" check lives inside a `for` over one of
+## them. Shrink the scan's yield and those checks do not fail — they stop
+## existing.
+##
+## Measured 2026-08-16. `ship_hud.gd` reads `wind_speed_ms` directly; the read
+## was rewritten to go through a local (`var _wind_key := "wind_speed_ms"`,
+## then `_instruments.get(_wind_key, ...)`) — identical behaviour, invisible to
+## the regex. **PASS (262) → PASS (261)**, and the printed line moved from
+## "read by ShipHud: 18" to 17. One check vanished and the run stayed green.
+##
+## The undrawn-key survey above could not catch it and was never going to:
+## `wind_speed_ms` is ALSO read by `ChartNavSnapshot`, so the key still had a
+## consumer and the published-key arm was satisfied. That guard watches the
+## PUBLISHER's set. Nothing watched the CONSUMERS' sets, and a regex that
+## silently stops matching is exactly how a consumer set shrinks.
+##
+## So both are declared, §4f's first shape. A frozen check-count would report
+## only that a number moved; these name the key. Strike a key off in the same
+## commit that stops reading it, never after the fact — and if you are striking
+## one off because a refactor hid it from the regex rather than because the HUD
+## stopped needing it, fix the regex instead.
+
+## Every `_instruments.get("…")` in `scripts/ui/ship_hud.gd`. Measured 2026-08-16.
+const EXPECTED_HUD_KEYS := [
+	"autopilot_active",
+	"bow",
+	"destination_name",
+	"fishing",
+	"fuel_fraction",
+	"heading_deg",
+	"lights",
+	"remaining_distance_m",
+	"speed_knots",
+	"target_bearing_deg",
+	"throttle_index",
+	"throttle_value",
+	"throttle_values",
+	"thruster_mode",
+	"time_hours",
+	"velocity",
+	"wind_direction",
+	"wind_speed_ms",
+]
+
+## Every `projection.get("…")` in `scripts/ui/chart/chart_nav_snapshot.gd`.
+## Four of these (`contracts`, `waypoint`, `moored_port_id`, `moored_berth_id`)
+## are added by `get_navigation_snapshot()` rather than `_capture_instruments`,
+## and are skipped by the publishes-it arm below — they are declared here all
+## the same, because a population is only a guard if it is the whole population.
+const EXPECTED_CHART_KEYS := [
+	"bow",
+	"contracts",
+	"fuel_fraction",
+	"moored_berth_id",
+	"moored_port_id",
+	"position",
+	"time_hours",
+	"velocity",
+	"waypoint",
+	"wind_direction",
+	"wind_speed_ms",
+]
+
 ## Alpha above this counts as painted. The viewport is rendered with a
 ## transparent background so "ink" is not a guess about a clear colour.
 const INK_ALPHA := 8
@@ -107,6 +175,12 @@ func _survey_snapshot_keys() -> void:
 
 	print("  published by GameState._capture_instruments: %d keys" % published.size())
 	print("  read by ShipHud: %d · by ChartNavSnapshot: %d" % [hud_keys.size(), chart_keys.size()])
+
+	## Declared before the survey uses either set. Everything below is a check
+	## inside a loop over one of them, so a scan that quietly stops matching
+	## deletes checks rather than failing them (§4f).
+	_check_scanned_population("ShipHud", hud_keys, EXPECTED_HUD_KEYS)
+	_check_scanned_population("ChartNavSnapshot", chart_keys, EXPECTED_CHART_KEYS)
 
 	var undrawn := PackedStringArray()
 	for key in published:
@@ -155,6 +229,46 @@ func _survey_snapshot_keys() -> void:
 ## The keys of the dictionary `_capture_instruments()` returns, read from the
 ## source: the function needs a live boat and a live controller to call, and a
 ## test that stubs those measures the stub.
+## Asserts a regex scan found exactly the keys declared for it.
+##
+## Not a floor and not a count. A floor catches a scan that matched NOTHING —
+## which would be a broken regex and is the easy case. What actually happened
+## here was a scan that matched one fewer, and the only guard that can see that
+## is one that knows which keys it expected by name (§4f).
+func _check_scanned_population(
+	consumer: String, found_raw: PackedStringArray, declared_ids: Array
+) -> void:
+	var found: Array = []
+	for key in found_raw:
+		if not found.has(key):
+			found.append(key)
+	found.sort()
+	var declared: Array = declared_ids.duplicate()
+	declared.sort()
+	var label := "%s still reads all %d declared instrument keys" % [consumer, declared.size()]
+	if found == declared:
+		_t.check(label, true)
+		return
+	var missing: Array = []
+	for key in declared:
+		if not found.has(key):
+			missing.append(key)
+	var unexpected: Array = []
+	for key in found:
+		if not declared.has(key):
+			unexpected.append(key)
+	_t.check(
+		label
+			+ " — missing %s, unexpected %s. Every per-key check below runs"
+			% [missing, unexpected]
+			+ " inside a loop over this scan, so a key the regex stops matching"
+			+ " takes its check with it silently. If the key is still read and"
+			+ " only the regex lost it, fix the regex; otherwise strike it off"
+			+ " in the commit that stops reading it, never after the fact.",
+		false,
+	)
+
+
 func _published_keys() -> PackedStringArray:
 	var text := FileAccess.get_file_as_string(GAME_STATE_PATH)
 	var out := PackedStringArray()

@@ -408,10 +408,54 @@ Not read. Each fixture was actually removed and each unit actually re-run.
 | `wall_brick_fill_test` | PASS (22) | **PASS (21)** | **SILENT — and note this is a WORSE result than the known one.** Blanking `is_wall_text` takes the same file to 3/19 FAILED, which at least reds. Dropping one tag is entirely silent. |
 |---|---|---|---|
 
+### M4 — the high-blast-radius units, 2026-08-16. And the population is not always a file.
+
+The five largest data-dependent units had never been fixture-mutated. Four of the five were
+measured; three of those four are **silent instances**, which makes seven found in total.
+
+| Unit | HEAD | Mutated | What was broken | |
+|---|---|---|---|---|
+| `catch_hold_test` | PASS (515) | **PASS (475)** | `prebuilt/sjark_15m.json` moved out of the directory | **SILENT — 40 vanished** |
+| `ship_hud_readout_test` | PASS (262) | **PASS (261)** | `ship_hud.gd`'s `wind_speed_ms` read routed through a local | **SILENT — 1 vanished** |
+| `port_apron_draw_test` | PASS (150) | **PASS (144)** | `grain` dropped from `PortTradeProfile.THEMES`' `farm_harbour` exports | **SILENT — 6 vanished** |
+| `vessel_render_capture` | PASS (298) | 1/265 FAILED | `probe_trawler_bulwark.json` moved out of the directory | reds, but **33 vanished** |
+| `vessel_render_capture` | PASS (298) | PASS (298) | one `items[]` entry deleted from that same fixture | insensitive — its per-item checks aggregate |
+
+`catch_hold_test` is the plainest confirmation of the floor finding yet: it had **two** floors
+(`surveyed >= 2` over the fit survey, `seen >= 1` per synthetic hull) and neither fired, because
+`fishing_trawler` alone still cleared both.
+
+**The new fact, and it is the reason this section needed a fourth mutation round: a discovered
+population does not have to be a shipped data FILE.** §4f named directory listings, catalogue
+`ids()` and generator output. Two of the three silent instances above shed from neither:
+
+- `ship_hud_readout_test` discovers its consumers by **regex over production `.gd` source**. The
+  mutation changed no behaviour at all — the HUD still reads `wind_speed_ms`, via
+  `var _wind_key := "wind_speed_ms"` — it only made the read invisible to the scan. An ordinary
+  refactor deletes a check. Worse, the unit's existing published-key survey **could not** have
+  caught it and was never going to: `wind_speed_ms` is also read by `ChartNavSnapshot`, so the key
+  still had a consumer. That guard watches the PUBLISHER's set; nothing watched the CONSUMERS'.
+- `port_apron_draw_test`'s pads trace back to `PortTradeProfile.THEMES`, a **`const` table in
+  source**. Its shipped data file is a red herring — dropping `yard_grain` from
+  `resources/data/ports/modules/catalog.json` moved the count not at all (150 → 150), and it
+  would have been easy to write the unit off as insensitive on that one result.
+
+So "break the fixture" is too narrow an instruction. **Break whatever the collection is actually
+derived from**, and when a data-file mutation moves nothing, find out what really feeds the loop
+before recording the unit as insensitive.
+
+**One more distinction worth keeping, from `vessel_render_capture`.** It is the twelve-unit
+`const FIXTURES := [...]` defence working: moving a fixture out reds it honestly. But it reds
+**while shedding 33 checks**, the `piece_kit_test` shape. That is not the same defect — with a
+declared population the shed always arrives WITH a red, so nobody is misled — but it does mean a
+declared literal bounds the damage rather than eliminating it, and "it reds" is not the same claim
+as "its coverage is intact".
+
 ### So how rare is it? Real, reproducible, and **not** universal
 
-**Four silent instances in seventeen units measured.** Ten were insensitive to the fixture broken
-at them. That is not luck and it is worth knowing why, because it is the other fix:
+**Seven silent instances in twenty-one units measured** — four in M1–M3, three more in M4, where
+the hit rate was far higher because the units were picked for blast radius rather than swept. Ten
+were insensitive to the fixture broken at them. That is not luck and it is worth knowing why, because it is the other fix:
 `structure_edge_test`, `plan_collision_test` and the rest **name their fixtures in a `const
 FIXTURES := [...]` literal** instead of discovering them, so removing a file from the directory
 cannot shrink what they walk — it makes their `FileAccess` open fail and they go red honestly.
@@ -431,14 +475,27 @@ stopped being reached for any reason at all, including one whose collection is s
 ### The four shapes this repo now has, in order of preference
 
 1. **Declare the population** — `const FIXTURES := [...]`. If it can be a literal, make it one.
+   Applied 2026-08-16 to three of M4's units, and the argument for preferring it held up in
+   practice: **the stable thing is the POPULATION, not the COUNT.** `catch_hold_test` runs 46
+   checks on one preset and 40 on another because their geometry differs, and that number moves
+   whenever a deck plan changes — a budget there would need re-freezing for edits that are not
+   about coverage at all, and a budget re-frozen that often stops being read. Its *membership* is
+   four presets and nine hulls and changes almost never. Compare the discovered list against the
+   declared one and **name the member that went missing**; a budget can only report that a number
+   moved. Compare, do not iterate the literal instead of the real collection:
+   `HullRegistry.get_by_id()` substitutes the starter trawler for an id it does not know, so a
+   test walking its own literal would have measured that hull twice and stayed green (§4c).
 2. **A per-group assertion that cannot early-return** (`roof_seat_test`). *"A model that draws
    flat roofs and seats none of them on a wall has failed the property, not escaped it"* — the
    missing-fixture branch is a `t.fail()`, not a `return`.
 3. **A population floor with a named minimum** (`port_berth_plan_test`: "every size in both passes
    contributed a station to measure"; `signal_reach_test`'s self-policing frozen register).
 4. **A frozen `EXPECTED_CHECKS`, counting itself** (`coastal_port_placer_test`, and now
-   `wall_brick_fill_test`, `plan_entity_id_test`, `hull_sheer_test`). The catch-all, for a unit
-   whose population genuinely must be discovered. Re-freeze it **in the same commit as the checks
+   `wall_brick_fill_test`, `plan_entity_id_test`, `hull_sheer_test`, `port_apron_draw_test`). The
+   catch-all, for a unit whose population genuinely must be discovered — `port_apron_draw_test` is
+   the clean case for choosing it over shape 1: its pads are a seeded GENERATOR's output, so there
+   is no enumerable set to declare, and the per-pad check count varies with what each pad draws.
+   What is constant is the total, because the seed is fixed. Re-freeze it **in the same commit as the checks
    you add**, never after the fact — a budget re-frozen to match a number you did not intend is
    the guard writing the answer down for you.
 
@@ -562,7 +619,13 @@ difference. It passes, honestly, on exactly the class of noise it was written to
     collection shrinks — measured 2026-08-16: `hull_sheer_test` **258 → 231 checks, PASS both
     times**, on one hull deleted from the catalogue; `plan_entity_id_test` **100 → 95, PASS**, on
     one fixture moved out of a directory; `wall_brick_fill_test` **22 → 21, PASS**, on one tag
-    dropped from one brick. Three found by accident before that (§4f). Population floors do not
+    dropped from one brick; `catch_hold_test` **515 → 475, PASS**, on one preset moved out of a
+    directory. Three found by accident before that (§4f). **And the collection is not always a
+    data file:** `ship_hud_readout_test` went **262 → 261, PASS** on a behaviour-preserving
+    refactor that hid a key from its regex scan of production source, and `port_apron_draw_test`
+    went **150 → 144, PASS** on one commodity dropped from a `const` table — while its shipped
+    data file moved the count not at all. Break what the loop is DERIVED from, not just the
+    fixture directory. Population floors do not
     catch it — every one of those units had a floor and it caught nothing, because a floor sees a
     collection go empty and these only got smaller. Declare the population as a literal where you
     can; freeze `EXPECTED_CHECKS` where you cannot. **When you shrink a shipped population, diff

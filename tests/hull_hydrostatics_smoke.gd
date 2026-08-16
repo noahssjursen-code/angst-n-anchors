@@ -1,7 +1,51 @@
 extends Node
 
+## Hydrostatics smoke test: every hull the game offers must displace what its
+## record says it displaces.
+##
+## ## Why the fleet is DECLARED and not just walked (REALITY.md §4f)
+##
+## The per-hull arm is a `t.check()` inside a `for` over `HullRegistry.catalog()`
+## — a collection this file DISCOVERS, half of it read out of a shipped JSON
+## file. That is the vanishing-check shape exactly. Measured 2026-08-16 by
+## deleting `hull_100x24` from `resources/data/vessels/hulls/catalog.json`: this
+## unit went from **PASS (24) to PASS (22)** and said nothing. Two checks did not
+## fail. They stopped existing, and the verdict line cannot tell the difference.
+##
+## `EXPECTED_HULL_IDS` is what closes that, and it is the first of §4f's four
+## shapes rather than the last: the fleet is a small, stable, shipped set, so it
+## can be a literal, and a literal names the hull that went missing instead of
+## reporting a number that moved.
+##
+## It is compared against the discovered catalogue rather than walked in its
+## place, deliberately. `HullRegistry.get_by_id()` falls back to
+## `FISHING_TRAWLER_SMALL` for an id it does not know, so a test that iterated
+## this literal directly would quietly measure the trawler twice for a deleted
+## hull and stay green — §4c, a check that passes BECAUSE something is broken.
+## Comparing the two lists catches both a hull that vanished and a hull that was
+## substituted.
+##
+## Re-freeze this list in the same commit that adds or removes a hull, never
+## after the fact.
+
 const TestReport := preload("res://tests/support/test_report.gd")
 const PROFILE := preload("res://scripts/ship/hull_physics_profile.gd")
+
+## The fleet `HullRegistry.catalog()` returns, in its own `loa_m`-ascending
+## order: `FISHING_TRAWLER_SMALL` and `PASSENGER_CATAMARAN` from the registry
+## itself, plus the seven hulls of `resources/data/vessels/hulls/catalog.json`.
+## Measured against the shipped catalogue 2026-08-16.
+const EXPECTED_HULL_IDS := [
+	"hull_15x5",
+	"hull_28x10",
+	"hull_45x16_cat",
+	"hull_70x18",
+	"hull_90x24",
+	"hull_100x24",
+	"hull_120x28",
+	"hull_130x28",
+	"hull_150x32",
+]
 
 
 func _ready() -> void:
@@ -11,7 +55,11 @@ func _ready() -> void:
 		_make_profile(28.0, 10.0, 5.6, 2.8, 256.0, 0.3, 8),
 	]:
 		_verify_profile(t, profile)
-	for entry in HullRegistry.catalog():
+
+	var fleet := HullRegistry.catalog()
+	_check_fleet_population(t, fleet)
+
+	for entry in fleet:
 		var hull_id := str(entry.get("id", ""))
 		var boat := HullRegistry.build_hull(hull_id)
 		if not t.check("Registered hull must build: %s" % hull_id, boat != null):
@@ -24,6 +72,36 @@ func _ready() -> void:
 		)
 		boat.free()
 	t.finish(get_tree())
+
+
+## The declared population. Every check below this one is inside a loop over the
+## fleet, so if the fleet shrinks they do not fail — they cease to exist. This is
+## the only check in the file that can see that happen.
+func _check_fleet_population(t: TestReport, fleet: Array) -> void:
+	var found: Array = []
+	for entry in fleet:
+		found.append(str(entry.get("id", "")))
+	found.sort()
+	var declared: Array = EXPECTED_HULL_IDS.duplicate()
+	declared.sort()
+	if found == declared:
+		t.check("the catalogue offers exactly the %d declared hulls" % declared.size(), true)
+		return
+	var missing: Array = []
+	for id in declared:
+		if not found.has(id):
+			missing.append(id)
+	var unexpected: Array = []
+	for id in found:
+		if not declared.has(id):
+			unexpected.append(id)
+	t.check(
+		"the catalogue offers exactly the %d declared hulls" % declared.size()
+			+ " (missing %s, unexpected %s — re-freeze EXPECTED_HULL_IDS in the"
+			% [missing, unexpected]
+			+ " commit that changes the fleet, never after the fact)",
+		false,
+	)
 
 
 func _make_profile(
