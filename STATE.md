@@ -3512,6 +3512,64 @@ drawn deck: it is walking on **invisible floor over open sea**, on all eight poi
 prior measurement is a ray query and proves only that the collider exists — whether a
 `CharacterBody3D` can get there is the load-bearing unknown.
 
+### CLOSED 2026-08-16 — a player could walk off the bow and stand on open sea
+
+**Driven, not rayed.** The prior evidence was a ray query, which proves only that a collider
+exists. The real `CharacterBody3D` — right capsule, mask, gravity, snap, step-up — held a
+supported stance **3.323 m outboard on hull_28x10 and 10.695 m on hull_150x32**, standing on
+`WalkDeckCollider` and then walking off its forward face into the sea. **Live on the bare hull
+a player owns before they build anything.** The render settles it: the drawn deck ends in its
+chamfer and the figure stands **4.7 m clear of it on open blue water with its own shadow on the
+sea**, the figure parented to the collision capsule so the picture cannot disagree with physics.
+
+**There was a second invisible floor.** Disable the slab and the capsule rests **1.05 m lower on
+`WalkHullCollider`** — the same rectangle. Trimming only the slab would have lowered the
+invisible floor by a metre and left it.
+
+**Not a physics-budget decision.** Four candidates measured; **convex is exact at one shape**
+because the fleet's rings are convex pentagons, so no shape-count growth and nothing enters the
+`body_add_shape` quadratic — **+3.6 µs per movement step per player**. The staircase was
+rejected on **correctness**: its inscribed boxes leave up to half a cell of *drawn* deck with no
+floor.
+
+**Mutation C passed first time and was a finding:** written as "finds anything on the mask", the
+floor claim was answered by `WalkHullCollider` a metre below — the check would have stayed green
+while a player fell **through** the weather deck. It now requires floor within 0.25 m of the deck
+plane.
+
+### CLOSED 2026-08-16 — the parts kit can build a deckhouse that reads
+
+`critic_coaster`: 40 placements of the same generic pieces a player gets — three tiers stepping
+in silhouette, both fronts raked so the bow is legible from the superstructure alone, three
+window bands dropping aft, 2 m side decks, two doors. **The 1.8 m figure is exactly door-height
+beside the door**, the check the ferry could never pass. **The kit was never the problem; the
+fixtures were.**
+
+**The orchestrator's premise was wrong about which fixture.** `critic_ferry` is not sealed — it
+reports **zero** enclosed volume, because its saloon roof has a **0.5 m slot across its full
+width**, so the room floods and does not read as a room. `critic_barge` is the sealed one. The
+"1713 cells" figure came from a different lattice and should not have been restated (§4a).
+
+**A sealed room is a shipping-legal vessel.** `validate` returns ok, 0 errors, 0 warnings; the
+case surfaces in exactly one place and its only consumer is the **sole licence in the catalogue
+naming `has_cabin`**.
+
+### OPEN 2026-08-16 — a raked front silently opens the roof, and no render can show it
+
+`rake` steps **0.125 m**; `deck_tile` nodes step **0.5 m**. A roof lies flush on a raked wall
+only when `rake` is a multiple of 4 — at other values a wedge of open sky opens along the whole
+front, **invisible in every render**, and it **silently un-rooms the compartment**. Moving one
+tile 0.5 m took `critic_coaster` from **74.0 m² / 2 cabins to 0.0 / 1**. `critic_ferry` is in
+that state now.
+
+A player who rakes a front at an unlucky value gets a house that looks right, cannot certify as a
+cabin, and lets weather in, **with nothing telling them why**.
+
+Beside it: `opening_count` never walks `plan.items`, so **every piece-kit door is invisible** —
+a piece-built passenger vessel **passes the cabin rule and fails egress with two real doors in
+it**. And there is **no stair or ladder piece**, so nothing in the kit gets a player up to the
+boat deck a wheelhouse door opens onto.
+
 ### Standing, not a task
 
 Every model edit returns a render and the orchestrator looks at it. No metric for appearance —
