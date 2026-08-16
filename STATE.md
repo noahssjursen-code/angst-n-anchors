@@ -3656,15 +3656,50 @@ The rig **refuses to shoot** rather than emit identical frames under different n
 constants are `const`. Restoration proved by SHA-256, and the shipped-constant re-run reproduces
 the baseline exactly.
 
-### OPEN 2026-08-16 — the roof hovers, in every arm, for a reason the decision cannot fix
+### CLOSED 2026-08-16 — the roof hovered because a flat plate hung from its own cell's ceiling
 
-In the arm that reads as a real building the worst remaining defect is a roof **0.820 m above the
-walls with daylight round the eaves** — **and the gap is identical in the shipped build**, so it
-is not caused by the cell factor and **no choice the owner makes will fix it**. Recorded cause:
-`roof_flat*` draws as a 0.18 m plate pinned to the top of its cell while `warehouse.json` puts the
-roof course a metre above the wall head — possibly two faults, one data and one code, and the fix
-differs. **Worth doing now precisely because it is independent of the pending decision: it
-improves every arm.**
+**The 0.820 m survived. The decomposition did not, and the wrong half was the orchestrator's.**
+Measured off drawn AABBs: brick-cell shortfall at the wall head **0.2500**, blueprint course
+offset **0.0000**, plate lift inside its own course **0.5700**. `warehouse.json` puts the roof at
+y=6 and the walls end at y=5, and the lattice floor of cell 6 **is** the lattice top of cell 5 —
+the roof course is exactly where it belongs. *"`warehouse.json` puts the roof course a metre above
+the wall head"*, written here and in `30bfad8`'s message by the orchestrator, **is false**.
+
+The whole gap is `pitch − plate_thickness` and **the brick size algebraically cancels** — which is
+why the arms measured an identical 0.820 in the shipped and brick-1.0 arms and 0.320 in grid-0.5.
+A cancellation, not a coincidence.
+
+**Code, on three independent proofs:** the blueprint term is 0.0000; every `roof_flat*` draws its
+plate at lift +0.3200 inside its box while every `roof_slope`/`roof_corner`/`_inv` draws at
+0.0000; and the counterfactual data fix **embeds the roof inside the wall** at brick 1.0.
+
+**The vessel side had it too, and not where the brief pointed.** Pieces are clean — `node_plan`
+puts them on grid *nodes* and `_plate_span` hangs downward, so there is no cell ceiling to pin to.
+**The bricks were the defect: every player-buyable coaster and trawler had a floating deckhouse
+roof**, 0.3200 m on 26 of 70 roof-on-wall column pairs.
+
+One declaration, three consumers that disagreed (§3b). The land collider thinned the box **without
+moving it**; the vessel collider had **no case for flat roofs at all**. Warehouse 0.820 → 0.500
+shipped, → **0.000** at brick 1.0; all four vessels → **0.000**. The 0.500 residue *is* the open
+brick-cell decision, the same gap that separates every pair of bricks in that arm.
+
+**The blind mutation caught the check's own early return.** Pairing a roof only with the cell
+below it meant moving the blueprint course left **no adjacent pairs**: the check printed "no joint
+in this model", ran two fewer checks, and reported **PASS (24)** — §4 exactly, and adjacency
+filtering was the same error as reading the answer out of the blueprint. Now grouped per roof
+course by drawn height; 26 checks in all four states.
+
+**Not fixed, named:** the warehouse has a **6 × 3 m hole in its front elevation behind the sign** —
+`wall_text_lg` draws painted letters and **no plate**, so six columns carry no wall for three
+courses. The test prints it as a diagnostic and deliberately does not assert on it, because
+attributing a missing wall to the roof would send the next wave to fix the roof.
+
+### The decision page needs re-shooting before it is read
+
+`screenshots/decisions/q1_cell_arms__*` remains valid for everything the cell choice turns on —
+walls, doors, ground gap, mesh and collider counts are untouched by a roof-seat change. But the
+brick-1.0 arm's **stated worst defect no longer exists**, so that one observation is stale. Re-shoot
+with `tests/_q1_arms_shot.gd` (it refuses to run unless the temporary constants are applied).
 
 ### Standing, not a task
 
