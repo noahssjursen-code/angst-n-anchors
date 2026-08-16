@@ -3570,6 +3570,60 @@ a piece-built passenger vessel **passes the cabin rule and fails egress with two
 it**. And there is **no stair or ladder piece**, so nothing in the kit gets a player up to the
 boat deck a wheelhouse door opens onto.
 
+### CLOSED 2026-08-16 — "multiples of 4" was wrong; the roof is sealed by the eave
+
+The orchestrator's premise was refuted and replaced by a measured law, swept over real bakes:
+
+    gap = max(0, rake * 0.125 - eave_cells * 0.5)
+
+One cell of eave carries rake 1–4, two carry 5–8, a negative rake needs none. Multiples of 4 is
+true of **flushness** and nothing else — **and flush is not what seals it**; the kit already calls
+the overhang the EAVE. **Rake 2 was never blocked:** with `critic_coaster`'s roof untouched it
+seals at rake 1, 2, 3 and 4, first opening at 5 by 0.126 m.
+
+**And the rule would not have prevented the fleet's worst wedge** — `critic_ferry`'s saloon front
+is **rake +4**, a "legal" value, with **0.501 m of open sky** across its 4.0 m run. Constraining
+rake would have deleted 12 of 17 values and broken **27 authored placements that are sealed
+today**, to prevent a fault it does not prevent. Refused with the count.
+
+Fix is **detect and report**: a warning naming the piece, the rake, the shortfall and how many
+cells of eave to add. Honest visibility answer: invisible from every angle the fleet is
+photographed from; unmistakable only from inside the saloon looking up.
+
+`opening_count` now walks `plan.items`, so piece-kit doors are visible: **12 of 20 fixtures move
+and no verdict changes** — `doors` feeds one rule, `windows` none.
+
+### CLOSED 2026-08-16 — the empty apron was a literal zero
+
+`structure_count` was written once as the literal `0` and read by a debug layer looping a literal
+`[]` and one `print` in a rig. **It could never have been non-zero.** That printed line, not a
+measurement, was the whole basis of "places pads and builds nothing on them" — a claim the
+orchestrator restated and sharpened. Measured against the real node tree: **725 meshes under
+`ApronPads`**, isolated by a strip test. Even "five pads each time" was wrong (1, 5, 2, 5, 5, 5,
+5, 5, 5).
+
+**The oldest red is a different key and is a SPECIFICATION, not a bug.** `_stamp_apron_decor()` —
+eight prop kinds, ~230 lines — **has zero callers**, with `_rebuild()` carrying the comment
+"Apron props deferred". `port_trade_profile_test` stays **red at 1/130 on purpose**, now carrying a
+comment saying so. Every cheap green is a trap: relaxing the bound is §7; deleting the quay
+keep-out scores better while standing nine props on berth loading faces (§4c).
+
+Blind mutation **stated rather than patched**: shrink the pad geometry to 1 cm cubes and the check
+still passes. It says *something stands on this pad* — not that it reads as a building.
+
+### The brick-cell decision now has a picture, and it is the reason to decide
+
+Yesterday's port frames show the `general_warehouse` — a real 780-cell, 7-level blueprint with
+blocks, roof, doors, windows and wall text — drawing as **a flat black-and-white speckled
+rectangle lying on the ground. No walls, no roof, no silhouette.** That is CONVENTIONS §3a's
+factor of exactly **2.000** rendered on real content for the first time.
+
+A wave is now shooting **all three arms in one run** — (a) today, (b) brick 1.0 m, (c) grid 0.5 m
+— same subject, same camera, 1.8 m figure in frame, with the cost of each option measured beside
+it. **It is authorised to set the constants for rendering only and forbidden to change the
+default.** Refreshing one arm of a three-way comparison is worse than refreshing none, which is
+why the previous attempt could not deliver this.
+
 ### Standing, not a task
 
 Every model edit returns a render and the orchestrator looks at it. No metric for appearance —
