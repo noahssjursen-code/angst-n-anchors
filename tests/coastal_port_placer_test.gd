@@ -106,7 +106,19 @@ func _test_geography(layout: WorldLayout, ports: Array[PortDefinition]) -> void:
 		var point := Vector2(port.world_position.x, port.world_position.z)
 		var seaward := PLACER.seaward_from_yaw(port.rotation_y)
 		_check(layout.is_land(point), "%s origin is on land" % port.port_id)
-		var expanded := PortExpander.expand(port, layout.seed)
+		## ⚠ THE LAYOUT ARGUMENT IS LOAD-BEARING AND WAS MISSING. `world.gd:355`
+		## expands every port as `PortExpander.expand(def, world_seed,
+		## _world_layout)`; this line dropped the third argument, so the whole
+		## geography block below was measuring a port generated against no coast
+		## — the basin probe never runs, arms are never shortened, and the piers
+		## are laid out for a shoreline the expander could not see. Measured over
+		## all 35 ports / 66 quay stations (`tests/_port_placer_quay_branch_probe.gd`,
+		## 2026-08-16), effective signed distance at the station origin:
+		## WITH the layout 66/66 water, worst +14.82 m; WITHOUT it 0/66 water,
+		## worst **−130.52 m** — a third of the pier roots buried more than
+		## 100 m inland of the effective waterline. REALITY.md §3: assert against
+		## the code path that can actually break, not the convenient one.
+		var expanded := PortExpander.expand(port, layout.seed, layout)
 		var root := expanded.layout_graph.modules.get("root") as PortPlacedModule
 		var root_world := port.world_position \
 				+ Basis(Vector3.UP, port.rotation_y) * root.position_m
@@ -120,26 +132,44 @@ func _test_geography(layout: WorldLayout, ports: Array[PortDefinition]) -> void:
 			"%s graph root is not far inland of the site datum" % port.port_id,
 		)
 		var terrain_zones := expanded.flatten_zone_records()
-		var quay := expanded.layout_graph.modules.get("arm_general") as PortPlacedModule
-		if quay == null:
-			for instance_id in expanded.layout_graph.module_ids():
-				var placed := expanded.layout_graph.modules[instance_id] as PortPlacedModule
-				var module := expanded.layout_graph.module_definition(placed.module_id)
-				if module != null and module.kind == "quay":
-					quay = placed
-					break
-		if quay != null:
-			var quay_world := port.world_position \
-					+ Basis(Vector3.UP, port.rotation_y) * quay.position_m
-			var quay_xz := Vector2(quay_world.x, quay_world.z)
-			_check(
-				WorldTerrainStreamer.sample_effective_signed_distance(
-					layout,
-					quay_xz,
-					terrain_zones,
-				) >= 0.0,
-				"%s quay carve keeps berth water open" % port.port_id,
-			)
+		## ⚠ THIS BLOCK USED TO SELECT THE QUAY OUT OF `layout_graph.modules` —
+		## `modules.get("arm_general")`, then a scan for a `kind == "quay"`
+		## module — and guard the check with `if quay != null:`. Trade quays
+		## moved into `initial_attributes["berth_plan"]` and `modules` now holds
+		## one coast root, so BOTH lookups returned null on all 35 ports and the
+		## check below ran ZERO times (REALITY.md §4, a negative against an empty
+		## universe; §3d, a consumer reading a dead model). Measured 2026-08-16
+		## in `tests/_port_placer_quay_branch_probe.gd`: 0 quay modules found,
+		## 66 berth-plan stations available, and the property holds on every one
+		## of them (worst effective signed distance: origin 14.82 m, tip 71.66 m
+		## — both water) — so restoring it moves no red.
+		var port_basis := Basis(Vector3.UP, port.rotation_y)
+		var stations: Array = (
+			expanded.layout_graph.initial_attributes.get("berth_plan", {}) as Dictionary
+		).get("quay_stations", []) as Array
+		_check(
+			not stations.is_empty(),
+			"%s berth plan has a quay station to carve-test" % port.port_id,
+		)
+		for raw_station in stations:
+			var station := raw_station as Dictionary
+			## Root AND tip: the pier runs from the dock face out into the
+			## basin, and it is the tip that a terrain pad can silently bury.
+			for end_key in ["origin", "tip"]:
+				var local := station.get(end_key, []) as Array
+				if local.size() < 2:
+					continue
+				var end_world := port.world_position \
+						+ port_basis * Vector3(float(local[0]), 0.0, float(local[1]))
+				_check(
+					WorldTerrainStreamer.sample_effective_signed_distance(
+						layout,
+						Vector2(end_world.x, end_world.z),
+						terrain_zones,
+					) >= 0.0,
+					"%s quay carve keeps berth water open at %s of %s"
+						% [port.port_id, end_key, str(station.get("id", "?"))],
+				)
 		_check(
 			PLACER.is_land_footprint_valid(layout, point, seaward),
 			"%s facilities footprint is land" % port.port_id

@@ -149,9 +149,20 @@ func module_ids() -> Array[String]:
 	return out
 
 
+## Port-local XZ envelope of everything this graph puts on the ground.
+##
+## ⚠ THE BUG THIS COMMENT EXISTS FOR. Until 2026-08-16 the walk was
+## `module_ids()` plus the foundation spine and nothing else — the same stale
+## read of the abandoned data model that photographed a size-4 port as one
+## 8×10-pixel square in the capture rig (REALITY.md §3d). Trade quays moved out
+## of `modules` into `initial_attributes["berth_plan"]`, `modules` now holds one
+## coast root, and so **every pier tip lay outside the box this function
+## returned**: 2 deck corners at size 0, 4 at sizes 1–2, 6 at sizes 3–8, by up
+## to 226.75 m of seaward overhang, measured against the meshes
+## `PortLayoutGraphVisualizer` actually stamps. `tests/port_layout_bounds_test`
+## states the property and derives the pier corners from those drawn nodes, not
+## from the dictionary read here.
 func bounds() -> AABB:
-	if modules.is_empty():
-		return AABB(Vector3.ZERO, Vector3.ZERO)
 	var min_point := Vector3(INF, 0.0, INF)
 	var max_point := Vector3(-INF, 0.0, -INF)
 	var max_height := 0.0
@@ -166,6 +177,13 @@ func bounds() -> AABB:
 			max_point.x = maxf(max_point.x, corner.x)
 			max_point.z = maxf(max_point.z, corner.y)
 		max_height = maxf(max_height, definition.footprint_m.y)
+	## The berth plan — where every trade quay and apron pad actually lives.
+	for corner in _berth_plan_corners():
+		min_point.x = minf(min_point.x, corner.x)
+		min_point.z = minf(min_point.z, corner.y)
+		max_point.x = maxf(max_point.x, corner.x)
+		max_point.z = maxf(max_point.z, corner.y)
+		max_height = maxf(max_height, 0.9)
 	var foundation := initial_attributes.get("foundation", {}) as Dictionary
 	var spine := foundation.get("spine", []) as Array
 	var inland_m := float(foundation.get("town_inland_m", PortCoastTracer.FOUNDATION_TOWN_INLAND_M))
@@ -197,6 +215,71 @@ func bounds() -> AABB:
 		Vector3(min_point.x, 0.0, min_point.z),
 		Vector3(max_point.x - min_point.x, max_height, max_point.z - min_point.z),
 	)
+
+
+## Every corner of every berth-plan deck, in port-local XZ, laid out the way
+## `PortLayoutGraphVisualizer` stamps them:
+##
+##   * a quay pier runs `origin` → `tip` (`length_m` long) and is `width_m`
+##     across — `_stamp_quay_pier_model` boxes exactly that;
+##   * an asphalt pad hangs `depth_m` INLAND of `origin` (the origin is the
+##     waterfront edge) and is `length_m` along the face tangent —
+##     `_stamp_berth_asphalt` centres its box at `origin - seaward * depth/2`.
+##
+## Deliberately private: a check that measured pier tips through this function
+## would be one derivation testing itself (REALITY.md §3b).
+func _berth_plan_corners() -> Array[Vector2]:
+	var out: Array[Vector2] = []
+	var plan := initial_attributes.get("berth_plan", {}) as Dictionary
+	if plan.is_empty():
+		return out
+	for raw in plan.get("quay_stations", []) as Array:
+		var station := raw as Dictionary
+		var origin := _plan_xz(station.get("origin", []), Vector2.INF)
+		if not origin.is_finite():
+			continue
+		var length_m := float(station.get("length_m", 0.0))
+		var seaward := _plan_xz(station.get("direction", []), Vector2.ZERO)
+		var tip := _plan_xz(station.get("tip", []), Vector2.INF)
+		if not tip.is_finite():
+			if seaward.length_squared() < 0.0001:
+				seaward = PortCoastTracer.PORT_LOCAL_SEAWARD_DIR
+			tip = origin + seaward.normalized() * length_m
+		var axis := tip - origin
+		if axis.length_squared() < 0.0001:
+			axis = PortCoastTracer.PORT_LOCAL_SEAWARD_DIR
+		axis = axis.normalized()
+		var across := Vector2(-axis.y, axis.x) * (float(station.get("width_m", 0.0)) * 0.5)
+		out.append(origin - across)
+		out.append(origin + across)
+		out.append(tip + across)
+		out.append(tip - across)
+	for raw_pad in plan.get("asphalt_stations", []) as Array:
+		var station_pad := raw_pad as Dictionary
+		var pad_origin := _plan_xz(station_pad.get("origin", []), Vector2.INF)
+		if not pad_origin.is_finite():
+			continue
+		var pad_seaward := _plan_xz(station_pad.get("direction", []), Vector2.ZERO)
+		if pad_seaward.length_squared() < 0.0001:
+			pad_seaward = PortCoastTracer.PORT_LOCAL_SEAWARD_DIR
+		pad_seaward = pad_seaward.normalized()
+		var pad_tangent := Vector2(-pad_seaward.y, pad_seaward.x) \
+				* (float(station_pad.get("length_m", 0.0)) * 0.5)
+		var pad_inland := pad_origin - pad_seaward * float(station_pad.get("depth_m", 0.0))
+		out.append(pad_origin - pad_tangent)
+		out.append(pad_origin + pad_tangent)
+		out.append(pad_inland + pad_tangent)
+		out.append(pad_inland - pad_tangent)
+	return out
+
+
+static func _plan_xz(raw: Variant, fallback: Vector2) -> Vector2:
+	if typeof(raw) != TYPE_ARRAY:
+		return fallback
+	var arr := raw as Array
+	if arr.size() < 2:
+		return fallback
+	return Vector2(float(arr[0]), float(arr[1]))
 
 
 func spawn_local_position() -> Vector3:
