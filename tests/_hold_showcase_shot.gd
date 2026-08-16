@@ -48,8 +48,19 @@ func _run() -> void:
 			}))
 		await _save("hold__showcase__fill%03d" % int(float(ratio) * 100.0))
 	## And the lid, for the comparison the report has to make.
-	hold.set_hatch_open(false)
+	## EMPTY, LOAD, THEN CLOSE — and two separate defects sit behind that order.
+	##
+	## LOAD BEFORE CLOSE, because since 2026-08-16 a shut hold refuses catch, so
+	## closing first would photograph a lid over an EMPTY hold and label it 50%.
+	##
+	## EMPTY BEFORE LOADING, because this frame has NEVER been 50% — that one is
+	## older than the hatch. The stage loop above ends at ratio 1.0 and leaves the
+	## hold at 4000 of 4000 kg, so the 2000 kg offered here has always overflowed
+	## whole and the frame named `closed_50` has always photographed a hold at
+	## 100%, with its own on-screen label saying so.
+	hold.withdraw_oldest(hold.get_state().total_mass_kg())
 	hold.accept_lot(CatchLot.create({"lot_id": "closed", "mass_kg": 2000.0}))
+	hold.set_hatch_open(false)
 	await _save("hold__showcase__closed_50")
 	print("SHOWCASE SHOT DONE")
 	get_tree().quit(0)

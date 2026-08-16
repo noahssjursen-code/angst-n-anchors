@@ -111,10 +111,18 @@ func _refresh_label(_state: CatchHoldState) -> void:
 	if _label == null or _hold == null:
 		return
 	var quote := FishingLandingService.quote([_hold.state])
+	## The shut-hatch line is not decoration. Since 2026-08-16 a shut hold refuses
+	## catch in both directions, so with the boards down SPACE and BACKSPACE do
+	## nothing — and an unexplained dead key is the silent refusal this whole
+	## change exists to stop being.
 	_label.text = (
 		"INSULATED CATCH HOLD\n"
 		+ "%.1f / %.1f t  |  %d%% full  |  market value %d marks  |  hatch %s\n"
 		+ "SPACE add 500 kg  |  BACKSPACE unload 500 kg  |  R empty  |  H work the hatch"
+		+ (
+			"" if _hold.is_hatch_open()
+			else "\nBOARDS DOWN — nothing goes in or out until you press H"
+		)
 	) % [
 		_hold.state.total_mass_kg() / 1000.0,
 		_hold.state.capacity_kg / 1000.0,

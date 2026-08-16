@@ -15,6 +15,20 @@ func bind_plant(pump: FishLandingPump, bank: ShoreRswTankBank) -> void:
 		_pump.transfer_completed.connect(_on_transfer_completed)
 
 
+## The message a player can act on when the boards are down. One constant, read
+## by BOTH `serve_hint` branches, because `CraneOperatorNpc` asks LOAD first when
+## neither mode can serve — a hint published under UNLOAD alone is a hint nobody
+## reads (REALITY §3d).
+const HATCH_SHUT_HINT := "Open the fish hold hatch (F at the hatch) before landing"
+
+
+## THE HOSE GOES IN THROUGH THE BOARDS — 2026-08-16.
+##
+## `FishLandingPump._ship_connection_world` hangs the hose over the hold's
+## `HoseDrop`, a point 0.38 m INSIDE the pit. Until today this job would start a
+## landing with the boards down and the pump would move four tonnes through solid
+## steel. A shut hatch is now a reason this job cannot serve, and `serve_hint`
+## says which lever to pull rather than the plant simply going quiet.
 func can_serve(ship: BoatBody, mode: String) -> bool:
 	if mode.strip_edges().to_lower() != MODE_UNLOAD:
 		return false
@@ -25,9 +39,25 @@ func can_serve(ship: BoatBody, mode: String) -> bool:
 	if not can_reach_ship(ship):
 		return false
 	for hold in ship.get_catch_holds():
-		if not hold.get_state().is_empty():
+		if not hold.get_state().is_empty() and hold.is_hatch_open():
 			return true
 	return false
+
+
+## True when this vessel has catch aboard and NO hold holding any of it is open.
+## Stated that way rather than "any hold is shut", so a boat with one full open
+## hold and one empty shut one is not reported as blocked.
+func _shut_hatch_over_catch(ship: BoatBody) -> bool:
+	if ship == null or not is_instance_valid(ship):
+		return false
+	var any_catch := false
+	for hold in ship.get_catch_holds():
+		if hold.get_state().is_empty():
+			continue
+		any_catch = true
+		if hold.is_hatch_open():
+			return false
+	return any_catch
 
 
 func can_reach_ship(ship: BoatBody) -> bool:
@@ -38,6 +68,8 @@ func can_reach_ship(ship: BoatBody) -> bool:
 
 func serve_hint(ship: BoatBody, mode: String) -> String:
 	if mode.strip_edges().to_lower() == MODE_LOAD:
+		if _shut_hatch_over_catch(ship):
+			return HATCH_SHUT_HINT
 		return "This plant only lands catch ashore"
 	if ship == null:
 		return "No ship at berth"
@@ -47,6 +79,8 @@ func serve_hint(ship: BoatBody, mode: String) -> String:
 		return "Landing hose cannot reach this vessel"
 	if _bank == null or _bank.available_kg() <= CatchLot.MASS_EPS_KG:
 		return "Shore RSW tanks are full"
+	if _shut_hatch_over_catch(ship):
+		return HATCH_SHUT_HINT
 	return "No fresh catch aboard"
 
 

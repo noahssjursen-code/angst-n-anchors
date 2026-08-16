@@ -111,6 +111,11 @@ func _test_component_mass_and_discovery() -> void:
 	hold.configure("primary", 1000.0)
 	boat.add_child(hold)
 	var before := boat.get_total_mass_kg()
+	## A HOLD IS BORN SHUT. Every check below used to run against the default
+	## state and pass, which is what "the hatch is wired to the player and to
+	## nothing else" looked like from inside this file (REALITY §3e: ask what a
+	## check was passing on).
+	hold.set_hatch_open(true)
 	hold.accept_lot(CatchLot.create({"lot_id": "mass", "mass_kg": 600.0}))
 	_t.check("boat discovers its catch hold", boat.get_catch_holds().size() == 1)
 	_t.check("catch contributes to vessel payload mass", boat.get_total_mass_kg() >= before + 599.0)
@@ -123,6 +128,44 @@ func _test_component_mass_and_discovery() -> void:
 	_t.check(
 		"trawl adds weighed catch rather than containers",
 		is_equal_approx(hold.state.total_mass_kg(), 850.0),
+	)
+	## …and the same call against shut boards moves nothing and says so. BOTH
+	## halves, because "the haul refuses" alone would pass on a hold that refuses
+	## every haul, and "the haul lands" alone is what shipped.
+	hold.set_hatch_open(false)
+	var shut_mass := hold.state.total_mass_kg()
+	var shut_completed := bool(fishing.call("_complete_one_haul_crate"))
+	_t.check("a trawl haul into a SHUT hold does not complete", not shut_completed)
+	_t.check(
+		"a refused haul adds no mass (%.1f kg moved)"
+		% (hold.state.total_mass_kg() - shut_mass),
+		is_equal_approx(hold.state.total_mass_kg(), shut_mass),
+	)
+	## The component refuses on its own, so a caller that forgets to ask cannot
+	## get fish through the boards either. The lot comes back WHOLE — an overflow
+	## of less than the offered mass would mean some of it went in.
+	var bounced := hold.accept_lot(CatchLot.create({"lot_id": "bounce", "mass_kg": 120.0}))
+	_t.check(
+		"a shut hold returns the whole lot as overflow (%.1f of 120.0 kg)" % bounced.mass_kg,
+		is_equal_approx(bounced.mass_kg, 120.0),
+	)
+	_t.check(
+		"a shut hold takes none of a directly offered lot",
+		is_equal_approx(hold.state.total_mass_kg(), shut_mass),
+	)
+	_t.check(
+		"a shut hold discharges nothing",
+		hold.withdraw_oldest(500.0).is_empty()
+		and is_equal_approx(hold.state.total_mass_kg(), shut_mass),
+	)
+	## Non-vacuity, both directions: a hold that refused EVERYTHING would satisfy
+	## all four checks above.
+	hold.set_hatch_open(true)
+	var reopened := hold.withdraw_oldest(500.0)
+	_t.check(
+		"opening the boards restores discharge (%d lots, %.1f kg left)"
+		% [reopened.size(), hold.state.total_mass_kg()],
+		not reopened.is_empty() and hold.state.total_mass_kg() < shut_mass,
 	)
 	boat.remove_child(fishing)
 	fishing.free()
@@ -141,6 +184,7 @@ func _test_shore_rsw_transfer_and_capacity() -> void:
 	hold.name = "CatchHold"
 	hold.configure("landing-hold", 1000.0)
 	boat.add_child(hold)
+	hold.set_hatch_open(true)
 	hold.accept_lot(CatchLot.create({
 		"lot_id": "landing-lot",
 		"species_id": "herring",
@@ -160,6 +204,18 @@ func _test_shore_rsw_transfer_and_capacity() -> void:
 	add_child(pump)
 	pump.bind_receiver(bank)
 	await get_tree().process_frame
+	## THE HOSE GOES IN THROUGH THE BOARDS. `_ship_connection_world` hangs it over
+	## the hold's `HoseDrop`, a point inside the pit, so a landing started against
+	## a shut hatch pumped 800 kg through solid steel and reported success.
+	hold.set_hatch_open(false)
+	_t.check("landing pump refuses a vessel whose boards are down", not pump.start_unload(boat))
+	_t.check(
+		"a refused landing leaves every kilogram aboard (%.1f kg)"
+		% hold.state.total_mass_kg(),
+		is_equal_approx(hold.state.total_mass_kg(), 800.0)
+		and is_equal_approx(bank.total_mass_kg(), 0.0),
+	)
+	hold.set_hatch_open(true)
 	_t.check("landing pump accepts a trawler with catch", pump.start_unload(boat))
 	var hose := pump.get_node_or_null("FlexibleSuctionHose") as Node3D
 	_t.check("landing hose deploys when unloading starts", hose != null and hose.visible)
@@ -232,16 +288,154 @@ func _test_official_trawler_runtime() -> void:
 	_t.check("official trawler mounts one insulated catch hold", holds.size() == 1)
 	if systems.size() == 1 and holds.size() == 1:
 		var system: FishingSystem = systems[0]
+		var hold: CatchHoldComponent = holds[0]
 		boat.freeze = true
 		system.catch_interval_seconds = 0.01
+		## ── THE PLAYER-FACING CLAIM, THROUGH THE PRODUCTION PATH ─────────────
+		##
+		## Not `hold.accept_lot(...)` and not `_complete_one_haul_crate()`: the
+		## driver below is `FishingSystem._physics_process` on a vessel that came
+		## out of `VesselSpawn.instantiate_from_record` → `DeckFitout.apply` →
+		## `_mount_fishing`, which is the chain a deployed boat runs. The hold,
+		## its boards, its colliders and its `HoldHatch` are the ones the game
+		## builds, and the hatch is worked through `HoldHatch.toggle()` — the call
+		## the F key makes — rather than by reaching past it into the component
+		## (REALITY §3: assert against the path that can break).
+		##
+		## `29e5e2a` left this exact path landing fish through shut boards and
+		## said so in its own commit message. The pairs below are the same driver
+		## either side of one keypress.
+		_t.check(
+			"a fitted-out vessel's hold starts SHUT, as a hold at sea would",
+			not hold.is_hatch_open(),
+		)
+		var hatch := hold.get_node_or_null("HoldHatch") as HoldHatch
+		_t.check("the fitted hold carries the hatch the F key works", hatch != null)
+		system.apply_trawl_desired(true)
+		system.call("_physics_process", 0.02)
+		## ONE STEP, and the frame matters. `_try_start_haul` fires on this step.
+		## By six steps' time the outcome is the same either way, because the
+		## component's own backstop bounces the lot and `_process_haul` retracts on
+		## the refusal regardless — so a six-step version of this check passes even
+		## with FishingSystem's own gates deleted. What the gates buy is that the
+		## gear never streams for a haul that cannot be stowed, and that is visible
+		## only here (REALITY §8: a mutation that passes is a blind check).
+		_t.check(
+			"the gear is not streamed for a haul a shut hold cannot take (%d crates)"
+			% int(system.get("_haul_crates_remaining")),
+			not system.trawling and int(system.get("_haul_crates_remaining")) == 0,
+		)
+		## The standing answer to "why is nothing happening", on the surface a
+		## player actually reads. `GameState` puts this string in the instrument
+		## snapshot and `ShipHud`'s FISH HOLD cell draws it; before today that cell
+		## rendered tonnage and dropped the status on the floor (REALITY §3d), so
+		## the only way to learn the boards were down was to lose a haul.
+		_t.check(
+			"the vessel reports the shut hatch as a standing blocker (%s)"
+			% system.get_activity_status(),
+			system.get_activity_status() == FishingSystem.STATUS_HATCH_SHUT,
+		)
+		for _i in range(6):
+			system.call("_physics_process", 0.02)
+		_t.check(
+			"trawling into a SHUT hold lands nothing (%.1f kg)" % hold.state.total_mass_kg(),
+			is_equal_approx(hold.state.total_mass_kg(), 0.0),
+		)
+		if hatch != null:
+			hatch.toggle()
+		_t.check("working the hatch opens the boards", hold.is_hatch_open())
 		system.apply_trawl_desired(true)
 		system.call("_physics_process", 0.02)
 		system.call("_physics_process", 0.01)
 		_t.check("official trawler reports active fishing", system.get_activity_status() == "ACTIVE")
 		_t.check(
 			"official trawler receives catch data",
-			is_equal_approx(holds[0].state.total_mass_kg(), 250.0),
+			is_equal_approx(hold.state.total_mass_kg(), 250.0),
 		)
+		## ── AND OUT AGAIN, through the plant that lands it ────────────────────
+		##
+		## `FishLandingEquipmentJob` is what a berth operator asks; it calls
+		## `FishLandingPump.start_unload`. Same catch, same vessel, one keypress
+		## apart.
+		var bank := ShoreRswTankBank.new()
+		bank.name = "RuntimeShoreBank"
+		bank.capacity_kg = 4000.0
+		add_child(bank)
+		var pump := FishLandingPump.new()
+		pump.name = "RuntimeLandingPump"
+		pump.connect_seconds = 0.01
+		pump.flush_seconds = 0.01
+		pump.pump_rate_kg_s = 1000.0
+		add_child(pump)
+		pump.bind_receiver(bank)
+		var job := FishLandingEquipmentJob.new()
+		job.name = "RuntimeLandingJob"
+		add_child(job)
+		job.bind_plant(pump, bank)
+		await get_tree().process_frame
+		if hatch != null:
+			hatch.toggle()
+		_t.check("working the hatch again closes the boards", not hold.is_hatch_open())
+		_t.check(
+			"the landing plant will not serve a vessel with shut boards",
+			not job.can_serve(boat, QuayEquipmentJob.MODE_UNLOAD),
+		)
+		_t.check(
+			"the landing pump refuses to start against shut boards",
+			not pump.start_unload(boat),
+		)
+		## THE REFUSAL NAMES THE LEVER, and it is read off the branch
+		## `CraneOperatorNpc` asks FIRST (LOAD, when neither mode can serve) as
+		## well as the one that owns the blocker.
+		_t.check(
+			"the berth panel names the hatch on the unload hint",
+			job.serve_hint(boat, QuayEquipmentJob.MODE_UNLOAD)
+			== FishLandingEquipmentJob.HATCH_SHUT_HINT,
+		)
+		_t.check(
+			"the berth panel names the hatch on the hint the operator asks for first",
+			job.serve_hint(boat, QuayEquipmentJob.MODE_LOAD)
+			== FishLandingEquipmentJob.HATCH_SHUT_HINT,
+		)
+		_t.check(
+			"a refused landing leaves every kilogram aboard (%.1f kg aboard, %.1f ashore)"
+			% [hold.state.total_mass_kg(), bank.total_mass_kg()],
+			is_equal_approx(hold.state.total_mass_kg(), 250.0)
+			and is_equal_approx(bank.total_mass_kg(), 0.0),
+		)
+		if hatch != null:
+			hatch.toggle()
+		_t.check(
+			"the landing plant serves the same vessel once the boards are up",
+			job.can_serve(boat, QuayEquipmentJob.MODE_UNLOAD),
+		)
+		_t.check("the landing pump starts against an open hatch", pump.start_unload(boat))
+		pump.set_process(false)
+		for _i in range(20):
+			pump.call("_process", 0.1)
+			if pump.state_label() == FishLandingPump.STATE_COMPLETE:
+				break
+		## READ OFF THE PUMP AND THE HOLD, NOT OFF THE BANK. The bank is a
+		## receiving buffer: `FishLandingEquipmentJob._on_transfer_completed`
+		## withdraws the whole batch into port processing the moment the pump
+		## finishes, so a completed landing leaves the bank at zero — the same
+		## reading a landing that never happened gives. Both ends of the move are
+		## stated instead: the plant weighed it and the hold emptied.
+		_t.check(
+			"catch crosses to the plant through an open hatch (%.1f kg, pump %s)"
+			% [pump.landed_mass_kg(), pump.state_label()],
+			pump.landed_mass_kg() > 240.0,
+		)
+		_t.check(
+			"the landing empties the hold (%.1f kg left)" % hold.state.total_mass_kg(),
+			hold.state.total_mass_kg() <= CatchLot.MASS_EPS_KG,
+		)
+		remove_child(job)
+		job.free()
+		remove_child(pump)
+		pump.free()
+		remove_child(bank)
+		bank.free()
 	remove_child(boat)
 	boat.free()
 
@@ -357,7 +551,25 @@ func _check_one_hold(
 	## when there is catch aboard — an empty hold hides a third of its own
 	## geometry from any measurement, and a scatter sized for a 28 m trawler
 	## hanging through a 15 m boat's liner is the same bug one scale down.
+	##
+	## WORK THE BOARDS ROUND THE FILL, and assert the fill landed. Since
+	## 2026-08-16 a shut hold refuses catch, and a hold on a fitted-out vessel
+	## spawns shut — so a bare `accept_lot` here would bounce, the water and the
+	## scatter would never be drawn, and every geometry check below would silently
+	## measure 88 corners instead of 160 and pass. That is a vacuous pass by
+	## construction (REALITY §4); the mass check is here so it cannot become one
+	## again. The hatch is put back the way it was found, because
+	## `_check_the_hatch_opens` below asserts a mounted hold STARTS closed and the
+	## geometry checks between here and there are the closed-state ones.
+	var hatch_was := hold.is_hatch_open()
+	hold.set_hatch_open(true)
 	hold.accept_lot(CatchLot.create({"lot_id": "fit-check", "mass_kg": 3900.0}))
+	hold.set_hatch_open(hatch_was)
+	_t.check(
+		"%s: the hold under measurement actually took its 3900 kg (%.1f kg)"
+		% [label, hold.state.total_mass_kg()],
+		is_equal_approx(hold.state.total_mass_kg(), 3900.0),
+	)
 
 	## THE property. Every corner of every mesh the hold COMMITTED, in boat-local
 	## metres, has to stand over a cell this hull calls FULL deck. Read off the
@@ -826,6 +1038,17 @@ func _check_the_hatch_opens(
 		open_area >= 0.25,
 	)
 	_check_no_player_sized_hole(label + " open", hold, boat)
+	## THE FENCE, IN THE OPEN STATE. The one at the end of `_check_one_hold` reads
+	## capacity after the hatch has been cycled back SHUT, so until today "4000 kg
+	## in both hatch states" was inferred from the shut reading rather than
+	## measured in the open one. Working the boards is now a precondition on
+	## landing, which puts a great deal more code between a hold and its declared
+	## capacity than there was when that fence was written.
+	_t.check(
+		"%s OPEN: the hold still declares 4000 kg (%.0f)"
+		% [label, hold.get_state().capacity_kg],
+		is_equal_approx(hold.get_state().capacity_kg, 4000.0),
+	)
 	## The full stand / shape-for-shape / drop battery again, in the open state.
 	## Same function, same sentences — a state the checks were not written for is
 	## exactly where they stop holding.

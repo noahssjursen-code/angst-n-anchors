@@ -956,6 +956,14 @@ func _refill_demo_catch(ship_override: BoatBody = null) -> void:
 	if _fish_pump != null:
 		_fish_pump.stop()
 	for catch_hold in holds:
+		## A HOLD SPAWNS SHUT, AND SHUT NOW MEANS SHUT — 2026-08-16. The boards
+		## are a precondition on every path that moves catch, so this demo has to
+		## work them like a deckhand would before it can empty or fill anything.
+		## Without this the refill moved zero and the hint below said "refilled
+		## with 3.60 t" over an empty hold. Left OPEN afterwards on purpose: the
+		## next thing this bay demonstrates is `O` — connect hose and unload —
+		## which is also gated on the boards being up.
+		catch_hold.set_hatch_open(true)
 		catch_hold.withdraw_oldest(catch_hold.get_state().total_mass_kg())
 	var hold: CatchHoldComponent = holds[0]
 	var demo_mass := minf(hold.get_state().capacity_kg * 0.82, 3600.0)
@@ -967,7 +975,10 @@ func _refill_demo_catch(ship_override: BoatBody = null) -> void:
 			"caught_game_hours": 12.0 + float(i) * 0.1,
 			"vessel_id": "showcase_fishing_trawler",
 		}))
-	_last_action_hint = "Demo hold refilled with %.2f t mixed groundfish" % (demo_mass / 1000.0)
+	_last_action_hint = (
+		"Demo hold refilled with %.2f t mixed groundfish (hatch opened)"
+		% (demo_mass / 1000.0)
+	)
 
 
 func _ensure_environment() -> void:

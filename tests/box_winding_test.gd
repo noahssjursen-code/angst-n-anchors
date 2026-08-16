@@ -67,7 +67,112 @@ func _initialize() -> void:
 		Basis.from_euler(Vector3(deg_to_rad(20.0), deg_to_rad(-50.0), deg_to_rad(15.0))),
 	)
 	t.equal("all three boxes were measured end to end", _measured, 3)
+	_check_plan_ring_fans(t, "pointed hull ring", MeshBuilder.pointed_plan_ring(28.0, 10.0, 0.28))
+	_check_plan_ring_fans(t, "rectangular ring", MeshBuilder.rect_plan_ring(12.0, 30.0))
+	t.equal("both plan rings were measured end to end", _rings_measured, 2)
 	t.finish(self)
+
+
+## THE OTHER EMITTER, which this file had never been pointed at — 2026-08-16.
+##
+## `MeshBuilder._extrude_plan_ring` draws every lofted vessel's deck plate
+## (`pointed_deck_plate`), `pointed_hull_shell`, the shipyard editor's deck wash,
+## and the plate `BoatBody` re-meshes when a fish hold cuts a hatch in it. Its two
+## end fans were emitted INSIDE OUT and had been since the function was written:
+## measured on a 28 x 10 plate, the fan at the span BOTTOM stored +Y and the fan
+## at the span TOP stored -Y, so the face a player saw looking down at the deck
+## was the plate's UNDERSIDE, 0.1 m below its real top, and the top face was
+## invisible. The function's own inline comments said "Bottom (downward)" and
+## "Top (upward)" over the two orders that produced the opposite.
+##
+## NOTHING CAUGHT IT BECAUSE NOTHING ASKED (REALITY §4b). This file held the
+## winding convention to `StructureBaker._append_box` alone; `hull_sheer_test`
+## measures the plate's EXTENT, which a winding flip does not move; and the plate
+## hid under 0.11 m of WalkDeck slab, so a deckhand stood 0.2104 m above the
+## surface being drawn for them and nothing measured that either.
+##
+## Stated against the RING rather than against one plate: whatever convex plan a
+## caller hands this, the fan at y1 is the face you see from ABOVE and the fan at
+## y0 the face you see from BELOW. Both rings the project ships are run, because
+## a property checked on one fixture is a property checked on one fixture (§3c).
+var _rings_measured := 0
+
+
+func _check_plan_ring_fans(t: TestReport, label: String, ring: PackedVector2Array) -> void:
+	var y0 := 2.60
+	var y1 := 2.70
+	var mesh := MeshBuilder.plan_plate_mesh(ring, y0, y1)
+	if not t.check(
+		"%s: plan ring commits a mesh" % label,
+		mesh != null and mesh.get_surface_count() == 1,
+	):
+		return
+	var arrays := mesh.surface_get_arrays(0)
+	var vertices: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
+	var normals: PackedVector3Array = arrays[Mesh.ARRAY_NORMAL]
+	## Same `commit()` shape trap `_check_appended_box` documents: the index array
+	## can come back as `null`, and assigning that to a typed variable aborts the
+	## whole function silently.
+	var raw_indices: Variant = arrays[Mesh.ARRAY_INDEX]
+	var order := PackedInt32Array()
+	if raw_indices is PackedInt32Array and (raw_indices as PackedInt32Array).size() >= 3:
+		order = raw_indices as PackedInt32Array
+	else:
+		order.resize(vertices.size())
+		for i in range(vertices.size()):
+			order[i] = i
+	if not t.check(
+		"%s: normals match vertices (%d vs %d)" % [label, normals.size(), vertices.size()],
+		normals.size() == vertices.size() and order.size() >= 9,
+	):
+		return
+	var centre := Vector3.ZERO
+	for p in ring:
+		centre += Vector3(p.x, (y0 + y1) * 0.5, p.y)
+	centre /= float(ring.size())
+	var top_up := 0
+	var top_total := 0
+	var bottom_down := 0
+	var bottom_total := 0
+	var side_total := 0
+	var side_outward := 0
+	for tri in range(order.size() / 3):
+		var a := vertices[order[tri * 3]]
+		var b := vertices[order[tri * 3 + 1]]
+		var c := vertices[order[tri * 3 + 2]]
+		var stored: Vector3 = normals[order[tri * 3]]
+		if is_equal_approx(a.y, y1) and is_equal_approx(b.y, y1) and is_equal_approx(c.y, y1):
+			top_total += 1
+			if stored.y > 0.99:
+				top_up += 1
+		elif is_equal_approx(a.y, y0) and is_equal_approx(b.y, y0) and is_equal_approx(c.y, y0):
+			bottom_total += 1
+			if stored.y < -0.99:
+				bottom_down += 1
+		else:
+			side_total += 1
+			var outward := (a + b + c) / 3.0 - centre
+			outward.y = 0.0
+			if stored.dot(outward.normalized()) > 0.0:
+				side_outward += 1
+	## Each fan must have been FOUND, or the three equalities below are 0 == 0 —
+	## which is exactly how a check that cannot fail gets written (REALITY §4).
+	if not t.check(
+		"%s: the extrusion emitted both end fans and a side wall (%d top, %d bottom, %d side)"
+		% [label, top_total, bottom_total, side_total],
+		top_total == ring.size() and bottom_total == ring.size()
+		and side_total == ring.size() * 2,
+	):
+		return
+	t.equal(
+		"%s: the fan at the span TOP faces UP — it is what you see looking down at the deck"
+		% label,
+		top_up,
+		top_total,
+	)
+	t.equal("%s: the fan at the span BOTTOM faces DOWN" % label, bottom_down, bottom_total)
+	t.equal("%s: every side triangle faces out of the ring" % label, side_outward, side_total)
+	_rings_measured += 1
 
 
 ## The engine's own convention, which is the INPUT to ours: this is the fact

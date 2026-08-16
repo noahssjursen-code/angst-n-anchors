@@ -109,18 +109,30 @@ func _run() -> void:
 
 		## EMPTY first — that is the state a working boat is in most of the time,
 		## and the fill visual hides what the aperture itself looks like.
+		##
+		## WORK THE HATCH ROUND EVERY MASS CHANGE. Since 2026-08-16 a shut hold
+		## refuses catch in BOTH directions, so on the `closed` pass these three
+		## calls would move nothing and the frames named `quarter_full` and
+		## `quarter` would photograph an EMPTY hold under a lid. The hatch is put
+		## back to the state being photographed before any frame is taken.
+		hold.set_hatch_open(true)
 		hold.withdraw_oldest(hold.get_state().total_mass_kg())
+		hold.set_hatch_open(open)
 		await get_tree().process_frame
 		await _persp("hold__%s__empty_quarter" % _tag,
 			world_centre + Vector3(4.6, 3.4, 4.6), world_centre + Vector3(0.0, 0.4, 0.0))
 		await _ortho_plan("hold__%s__empty_plan_ortho" % _tag, world_centre, 6.0)
 		## Then a QUARTER full — the fill stage the old deck plate hid entirely,
 		## and the one the showcase exists to display.
+		hold.set_hatch_open(true)
 		hold.accept_lot(CatchLot.create({"lot_id": "shot-q", "mass_kg": 1000.0}))
+		hold.set_hatch_open(open)
 		await _persp("hold__%s__quarter_full" % _tag,
 			world_centre + Vector3(4.6, 3.4, 4.6), world_centre + Vector3(0.0, 0.4, 0.0))
 		## Then brimful.
+		hold.set_hatch_open(true)
 		hold.accept_lot(CatchLot.create({"lot_id": "shot", "mass_kg": 2900.0}))
+		hold.set_hatch_open(open)
 		await _persp("hold__%s__quarter" % _tag,
 			world_centre + Vector3(4.6, 3.4, 4.6), world_centre + Vector3(0.0, 0.4, 0.0))
 		await _persp("hold__%s__eye_level" % _tag,

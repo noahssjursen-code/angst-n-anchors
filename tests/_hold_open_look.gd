@@ -53,6 +53,10 @@ func _run() -> void:
 		print("ABORT: no hold")
 		get_tree().quit(1)
 		return
+	## THE BOARDS ARE A PRECONDITION ON EVERY PATH THAT MOVES CATCH — 2026-08-16.
+	## Without this the fills below are refused and every frame photographs an
+	## empty hold while the print-out still claims a mass.
+	hold.set_hatch_open(true)
 	hold.accept_lot(CatchLot.create({"lot_id": "look", "mass_kg": 3900.0}))
 	var hl := boat.to_local(hold.global_position)
 

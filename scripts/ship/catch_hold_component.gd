@@ -184,6 +184,24 @@ func get_hose_drop_world() -> Vector3:
 	return global_position
 
 
+## PERSISTENCE DOES NOT EXIST YET, AND THAT IS WHY `_hatch_open` IS NOT SAVED
+## — surveyed 2026-08-16, when the hatch became a precondition on landing.
+##
+## The question asked was "if landing depends on the hatch, does the hatch have
+## to survive a reload?" The answer is that NOTHING about this hold survives a
+## reload. Grepped: this function and `BoatBody.get_catch_hold_states()` — the
+## two halves of a save/restore pair — have **zero callers outside this file and
+## `boat_body.gd`**, in `scripts/` and in `tests/` alike; `SAVE_FORMAT.md` does
+## not mention a hold or a catch; and nothing in `scripts/state/` or
+## `scripts/network/` reads either. So a reloaded vessel comes back with an empty
+## hold, and persisting the lid of a box whose contents evaporate would be
+## cosmetic in the exact sense the question was asking about (REALITY §3d — a
+## value with no consumer is not delivered; here it is a whole seam).
+##
+## When catch persistence is built, `_hatch_open` belongs in the same dictionary
+## as the lots, for a reason worth writing down now: a hold that reloads SHUT
+## with catch in it is a boat that silently refuses to land, and the refusal
+## points at a hatch the player never closed.
 func apply_state(data: Dictionary) -> void:
 	state = CatchHoldState.from_dict(data)
 	state.hold_id = hold_id
@@ -193,7 +211,43 @@ func apply_state(data: Dictionary) -> void:
 	_on_state_changed(state)
 
 
+## THE BOARDS ARE A PRECONDITION, NOT A DECORATION — 2026-08-16.
+##
+## `29e5e2a` made the hatch openable and wired it to the player and to nothing
+## else, and said so in its own commit message. Surveyed: SEVEN decision points
+## in four production systems move catch or decide whether catch can be moved,
+## and NOT ONE of them asked whether the boards were up —
+## `FishingSystem._try_start_haul` and `_complete_one_haul_crate`,
+## `FishLandingPump.start_unload`, `_transfer_mass` and `_ship_connection_world`,
+## and `FishLandingEquipmentJob.can_serve` and `serve_hint`. The pump's is the
+## sharpest: it hangs its hose on `get_hose_drop_world()`, a point 0.38 m INSIDE
+## the pit, and pumped four tonnes through solid steel while reporting success.
+##
+## THE GATE LIVES HERE, at the one seam every mover goes through, and the callers
+## ASK FIRST with `is_hatch_open()` so they can say something a player can act
+## on. That is not two derivations: `is_hatch_open()` is this node's own answer in
+## both places (REALITY §3b). What is here is the BACKSTOP — it makes a caller
+## that forgets to ask loud instead of silent, which is the whole complaint
+## against the behaviour it replaces.
+##
+## IT REFUSES. It does not auto-open and it does not queue.
+##   • Auto-opening moves the deck. A lifted board is drawn one pitch aft and one
+##     thickness up and IT KEEPS ITS COLLIDER (`_sync_colliders`), so opening the
+##     hatch moves a surface a deckhand may be standing on. Nothing but the
+##     player may do that to the deck under the player.
+##   • Queueing leaves the trawl streaming into a hold that is not taking fish,
+##     which is the silent success this replaces wearing the other face.
+## A silent refusal would be no better, so every caller pairs its refusal with a
+## line naming the lever: `FishingSystem` toasts it, `FishLandingEquipmentJob`
+## publishes it as a serve hint, and `ShipHud`'s FISH HOLD cell stands it up as a
+## standing blocker.
 func accept_lot(lot: CatchLot) -> CatchLot:
+	if not _hatch_open:
+		push_warning(
+			"CatchHoldComponent '%s': refusing catch through a SHUT hatch. " % hold_id
+			+ "Ask is_hatch_open() before offering a lot; the lot is returned whole."
+		)
+		return lot if lot != null else CatchLot.new()
 	var before := state.total_mass_kg()
 	var overflow := state.accept_lot(lot)
 	if not is_equal_approx(before, state.total_mass_kg()):
@@ -201,7 +255,15 @@ func accept_lot(lot: CatchLot) -> CatchLot:
 	return overflow
 
 
+## Same gate, same aperture. The landing hose comes down through the boards; a
+## shut hatch stops fish leaving exactly as it stops fish arriving.
 func withdraw_oldest(max_mass_kg: float) -> Array[CatchLot]:
+	if not _hatch_open:
+		push_warning(
+			"CatchHoldComponent '%s': refusing to discharge through a SHUT hatch. " % hold_id
+			+ "Ask is_hatch_open() before withdrawing; nothing was removed."
+		)
+		return [] as Array[CatchLot]
 	var before := state.total_mass_kg()
 	var lots := state.withdraw_oldest(max_mass_kg)
 	if not is_equal_approx(before, state.total_mass_kg()):

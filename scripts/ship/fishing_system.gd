@@ -78,6 +78,16 @@ func toggle_trawling() -> void:
 	if not trawling and hold.state.available_kg() <= CatchLot.MASS_EPS_KG:
 		_notify_trawl("Catch hold full - land your fish first")
 		return
+	## THE PLAYER'S OWN KEYPRESS, refused here rather than one physics step later.
+	## `_try_start_haul` carries the same gate and fires on the very next step, so
+	## without this the player gets "Net Cast - Trawling Active" and then an
+	## immediate retraction toast — two messages for one refusal, with the
+	## encouraging one first. Same predicate, `is_hatch_open()`, asked of the same
+	## hold: not a second derivation, the same answer read at the surface the
+	## player actually touched.
+	if not trawling and not hold.is_hatch_open():
+		_notify_trawl(HINT_HATCH_SHUT)
+		return
 	## Catch no longer lands as deck cargo this pass — always allow cast.
 	trawling = not trawling
 	if not trawling:
@@ -382,6 +392,12 @@ func _try_start_haul() -> void:
 	if hold.state.available_kg() <= CatchLot.MASS_EPS_KG:
 		_retract_trawl("Catch hold full - return to a fish landing")
 		return
+	## Read here as well as in `_complete_one_haul_crate`, so the gear never
+	## streams for a haul that cannot be stowed. It sits beside the two refusals
+	## this function already makes for exactly that reason.
+	if not hold.is_hatch_open():
+		_retract_trawl(HINT_HATCH_SHUT)
+		return
 
 	var sample_pos := _body.global_position
 	var zone := FishingField.sample(sample_pos) if FishingField.is_initialized() else {}
@@ -418,6 +434,13 @@ func _complete_one_haul_crate() -> bool:
 	var hold := _catch_hold()
 	if hold == null:
 		_notify_trawl("Haul lost - no insulated catch hold")
+		return false
+	## A HAUL CANNOT BE STOWED THROUGH SHUT BOARDS — 2026-08-16. Checked BEFORE
+	## the lot is built, so no lot id is spent on a crate that is not going
+	## anywhere. Same shape as the two refusals either side of it: `false` here is
+	## what `_process_haul` turns into a retraction.
+	if not hold.is_hatch_open():
+		_notify_trawl(HINT_HATCH_SHUT)
 		return false
 	var zone := _haul_zone
 	var caught_hours := 0.0
@@ -456,10 +479,27 @@ func get_catch_hold() -> CatchHoldComponent:
 	return _catch_hold()
 
 
+## The one-shot toast every hatch refusal in this file sends. One constant, so a
+## player meets the same sentence whichever refusal they hit, and so a test can
+## state "the toast names the lever" without restating the sentence.
+const HINT_HATCH_SHUT := "Hold hatch shut - open it (F at the hatch) before fishing"
+
+## The two blockers this system reports as a STANDING condition rather than as a
+## one-shot toast. `GameState` publishes them and `ShipHud`'s FISH HOLD cell
+## draws them — named because two files now compare against these exact strings.
+const STATUS_HATCH_SHUT := "HATCH SHUT"
+const STATUS_HOLD_FULL := "HOLD FULL"
+
+
 func get_activity_status() -> String:
 	var hold := _catch_hold()
+	## Ahead of HOLD FULL: shut boards block landing as well as stowing, so a full
+	## hold with the boards down needs the hatch worked first either way, and the
+	## hatch is the one the player can do something about from where they stand.
+	if hold != null and not hold.is_hatch_open():
+		return STATUS_HATCH_SHUT
 	if hold != null and hold.state.available_kg() <= CatchLot.MASS_EPS_KG:
-		return "HOLD FULL"
+		return STATUS_HOLD_FULL
 	return _activity_status
 
 

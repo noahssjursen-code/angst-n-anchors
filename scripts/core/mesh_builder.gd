@@ -313,7 +313,16 @@ static func pointed_hull_shell(
 	return mi
 
 
-## Thin deck plate matching pointed_hull_shell planform (top face at y = deck_y).
+## Thin deck plate matching pointed_hull_shell planform.
+##
+## The plate spans [deck_y − thickness, deck_y] and its TOP FACE — the surface a
+## deckhand sees and that everything on deck sits on — is at y = deck_y. That
+## sentence stood here before 2026-08-16 and was false of what rendered: the fans
+## were inside out, so the surface a camera above the deck saw was the one at
+## deck_y − thickness. The fix is in `_extrude_plan_ring`; the sentence is now
+## true. Callers pass `stations.deck_y + thickness` deliberately — see that
+## function's header — so the plate runs from the hull's structural deck up to
+## the plane the vessel is built on.
 static func pointed_deck_plate(
 	loa: float,
 	beam: float,
@@ -707,6 +716,49 @@ static func _pointed_plan_ring(loa: float, beam: float, bow_frac: float) -> Pack
 	])
 
 
+## THE TWO END FANS WERE INSIDE OUT, AND HAD BEEN SINCE THIS WAS WRITTEN
+## — fixed 2026-08-16.
+##
+## The inline comments over the two fans said "Bottom (downward)" and "Top
+## (upward)" and the vertex orders under them produced the opposite. Measured by
+## reading `ARRAY_NORMAL` back off the committed mesh (`tests/_ring_face_probe`),
+## on a 28 x 10 plate spanning [2.700, 2.800]:
+##
+##   5 tris  fan at y0 (span BOTTOM)  stored normal +Y  -> visible from ABOVE
+##   5 tris  fan at y1 (span TOP)     stored normal -Y  -> visible from BELOW
+##
+## Godot's front face is CLOCKWISE as seen by the viewer, so a stored normal
+## points AT whoever can see that face — the convention `box_winding_test` holds
+## `StructureBaker._append_box` to. Both fans therefore faced the wrong way:
+## looking down at a deck you saw the plate's UNDERSIDE, drawn one thickness
+## below its real top, and the top face was invisible. Photographed rather than
+## argued: a marker slab laid at 2.750, BURIED inside the plate's own 0.1 m band,
+## rendered on top of the deck.
+##
+## The side quads were and are correct — measured on the same mesh, every side
+## triangle's stored normal points out of the ring — which is why only the two
+## fan orders move here.
+##
+## THE CALLERS ARE NOT COMPENSATING FOR THIS AND NOTHING COMES OUT WITH IT.
+## `catalog_hull_vessel` and `fishing_trawler_small` pass `stations.deck_y + 0.1`
+## with thickness 0.1, which makes the span `[deck_y, deck_y + 0.1]` — exactly
+## what `hull_stations.gd`'s own header declares the plate fills, and exactly what
+## each of them stores in its `plate_args` meta as `y0`/`y1` for
+## `BoatBody._rebuild_deck_plate`. Taking the `+0.1` out would sink the plate to
+## `[deck_y - 0.1, deck_y]`, below the loft's top (measured: 5.6000 on the
+## trawler, equal to `deck_y`). The third caller — the shipyard editor's deck
+## wash — passes `y - 0.015` with thickness 0.01 and has no `+0.1` at all.
+##
+## What the bug cost, measured through `PhysicsServer3D` on the built trawler: a
+## 1.8 m capsule's feet over bare deck rest at boat-local **5.8104** (mean of 12
+## stations) and the surface the plate was DRAWING for them was **5.6000** —
+## **0.2104 m of air**, the same class of defect STATE.md 5j closed for the fish
+## hold at 1.09 m and which nobody had measured for the deck itself. Turning the
+## fans over moves the drawn surface to 5.7000 and halves that to 0.1104 m; the
+## remainder is the WalkDeck slab's own lift and half-thickness, which is a
+## separate decision and is NOT touched here.
+##
+## Held by `box_winding_test._check_plan_ring_fans` over two rings.
 static func _extrude_plan_ring(st: SurfaceTool, ring: PackedVector2Array, y0: float, y1: float) -> void:
 	var n := ring.size()
 	if n < 3:
@@ -726,14 +778,14 @@ static func _extrude_plan_ring(st: SurfaceTool, ring: PackedVector2Array, y0: fl
 		var b0 := Vector3(b.x, y0, b.y)
 		var a1 := Vector3(a.x, y1, a.y)
 		var b1 := Vector3(b.x, y1, b.y)
-		## Bottom (downward) — reverse winding.
+		## Bottom fan at y0, facing DOWN — the face you see from underneath.
 		st.add_vertex(c0)
-		st.add_vertex(b0)
 		st.add_vertex(a0)
-		## Top (upward).
+		st.add_vertex(b0)
+		## Top fan at y1, facing UP — the walking surface.
 		st.add_vertex(c1)
-		st.add_vertex(a1)
 		st.add_vertex(b1)
+		st.add_vertex(a1)
 		## Side quad → two tris (outward normals for CCW plan ring).
 		st.add_vertex(a0)
 		st.add_vertex(b1)

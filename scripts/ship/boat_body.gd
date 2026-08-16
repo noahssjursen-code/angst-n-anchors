@@ -1538,6 +1538,14 @@ func boat_to_walk_deck_local(boat_local: Vector3) -> Vector3:
 ## wave that closed the hatch recorded "the catch read as a pool at deck level":
 ## it photographed 3900 of 4000 kg.
 ##
+## THAT PARAGRAPH IS HISTORY AND ONE CLAUSE IN IT IS NOW WRONG — 2026-08-16.
+## "Past the plate's LOWER face" was true only because `_extrude_plan_ring`
+## emitted its two end fans INSIDE OUT, so the face a camera above the deck saw
+## was the one at 2.600 and not the one at 2.700. That is fixed in `MeshBuilder`,
+## so the surface you now see is the plate's real top at 2.700 and brimful water
+## at 2.658 does NOT clear it. The conclusion is unchanged and firmer: the plate
+## has to be cut, at every fill including brimful.
+##
 ## So a hold that opens needs the plate cut, and this is where that happens.
 ## Apertures are vessel-local XZ rectangles and the plate is re-meshed IN PLACE:
 ## the same `MeshInstance3D`, so `HullLivery.apply_to_boat`'s `material_override`

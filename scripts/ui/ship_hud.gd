@@ -287,12 +287,28 @@ func _draw_status_band(viewport: Vector2) -> void:
 		})
 	var fishing := _instruments.get("fishing", {}) as Dictionary
 	if not fishing.is_empty():
+		## `status` HAD NO CONSUMER UNTIL 2026-08-16. `GameState` has published
+		## `FishingSystem.get_activity_status()` under this key all along and this
+		## cell rendered tonnage only, so the one string that says WHY nothing is
+		## being caught went into a dictionary nobody drew (REALITY §3d). It
+		## matters now that the hatch gates every path that moves catch: a player
+		## whose boards are down would otherwise learn it by losing a haul.
+		## Blockers take the cell; with nothing blocking, the tonnage reads
+		## exactly as it did before.
+		var fishing_status := str(fishing.get("status", ""))
+		var blocked := fishing_status in [
+			FishingSystem.STATUS_HATCH_SHUT, FishingSystem.STATUS_HOLD_FULL
+		]
 		cells.append({
 			"label": tr("FISH HOLD"),
-			"value": "%.1f / %.1f T" % [
-				float(fishing.get("mass_t", 0.0)),
-				float(fishing.get("capacity_t", 0.0)),
-			],
+			"value": (
+				tr(fishing_status) if blocked
+				else "%.1f / %.1f T" % [
+					float(fishing.get("mass_t", 0.0)),
+					float(fishing.get("capacity_t", 0.0)),
+				]
+			),
+			"status": BrandTokens.WARN if blocked else BrandTokens.BRASS,
 		})
 	var start_x := maxf(224.0, (viewport.x - float(cells.size()) * 142.0) * 0.5)
 	var available := maxf(viewport.x - start_x - BrandTokens.SPACE_LG, 1.0)

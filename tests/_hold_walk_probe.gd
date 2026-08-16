@@ -82,6 +82,9 @@ func _describe_hold(hold: CatchHoldComponent, boat: BoatBody, grid: DeckGrid) ->
 	print("   drawn bounds (boat-local) x %.3f..%.3f  y %.3f..%.3f  z %.3f..%.3f" % [
 		box.position.x, box.end.x, box.position.y, box.end.y, box.position.z, box.end.z])
 	## Filled, because the water and the fish are drawn only when there is catch.
+	## Hatch first: a shut hold refuses catch since 2026-08-16, and an unfilled
+	## hold draws neither water nor fish, which is what this probe measures.
+	hold.set_hatch_open(true)
 	hold.accept_lot(CatchLot.create({"lot_id": "probe", "mass_kg": 3900.0}))
 	for node in hold.find_children("*", "MeshInstance3D", true, false):
 		var mi := node as MeshInstance3D

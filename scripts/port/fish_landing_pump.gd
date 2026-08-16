@@ -39,7 +39,12 @@ func _ready() -> void:
 func start_unload(ship: BoatBody) -> bool:
 	if ship == null or not is_instance_valid(ship):
 		return false
-	var total := _ship_catch_mass(ship)
+	## LANDABLE, not aboard. The suction hose drops through the hatch — see
+	## `_ship_connection_world` — so catch under shut boards is not catch this
+	## plant can reach. Refused here rather than entering STATE_PUMPING and moving
+	## nothing: a plant that runs and transfers zero is the silent success this
+	## replaces with the sign flipped.
+	var total := _ship_landable_mass(ship)
 	if total <= CatchLot.MASS_EPS_KG:
 		return false
 	if _receiver != null and _receiver.available_kg() <= CatchLot.MASS_EPS_KG:
@@ -122,7 +127,10 @@ func _process(delta: float) -> void:
 			_update_hose(1.0)
 			_transfer_mass(pump_rate_kg_s * delta)
 			_update_receiver_fill()
-			if _ship_catch_mass(_ship) <= CatchLot.MASS_EPS_KG or (
+			## LANDABLE again, so a player who works the boards shut mid-transfer
+			## ends the run instead of leaving the plant reading "pumping catch
+			## ashore" forever with nothing moving.
+			if _ship_landable_mass(_ship) <= CatchLot.MASS_EPS_KG or (
 				_receiver != null and _receiver.available_kg() <= CatchLot.MASS_EPS_KG
 			):
 				_elapsed = 0.0
@@ -149,6 +157,12 @@ func _transfer_mass(max_mass_kg: float) -> void:
 	for hold in _ship.get_catch_holds():
 		if remaining <= CatchLot.MASS_EPS_KG:
 			break
+		## Skipped, not aborted: a vessel with one open hold and one shut one
+		## lands what it can reach. The component refuses a shut withdrawal
+		## anyway; asking first keeps this loop from tripping its warning on every
+		## frame of a transfer.
+		if not hold.is_hatch_open():
+			continue
 		var lots := hold.withdraw_oldest(remaining)
 		for lot in lots:
 			var accepted_kg := lot.mass_kg
@@ -196,13 +210,33 @@ func _ship_catch_mass(ship: BoatBody) -> float:
 	return total
 
 
+## Catch this plant can actually reach: aboard AND under boards that are up.
+## `_ship_catch_mass` stays exactly as it was — it answers "how much fish is on
+## that boat", which is what the completion report means by `complete`.
+func _ship_landable_mass(ship: BoatBody) -> float:
+	if ship == null or not is_instance_valid(ship):
+		return 0.0
+	var total := 0.0
+	for hold in ship.get_catch_holds():
+		if hold.is_hatch_open():
+			total += hold.get_state().total_mass_kg()
+	return total
+
+
 func _ship_connection_world() -> Vector3:
 	if _ship == null or not is_instance_valid(_ship):
 		return _connection_marker.global_position
 	var holds := _ship.get_catch_holds()
-	if not holds.is_empty():
-		return holds[0].get_hose_drop_world()
-	return _ship.global_position
+	if holds.is_empty():
+		return _ship.global_position
+	## Aim the hose at a hold it can actually get into. `HoseDrop` is a point
+	## inside the pit, so hanging it over a shut hold draws a hose disappearing
+	## into the boards. Falls back to the first hold so a stopped plant still has
+	## somewhere to point.
+	for hold in holds:
+		if hold.is_hatch_open():
+			return hold.get_hose_drop_world()
+	return holds[0].get_hose_drop_world()
 
 
 func _build_visual() -> void:
