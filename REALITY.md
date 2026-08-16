@@ -516,6 +516,26 @@ difference. It passes, honestly, on exactly the class of noise it was written to
     `TaskStop` returned "not running" for a *different, completed* agent, and that
     answer was generalised to the live one. Brief waves to **stop when done** rather
     than poll a gate that has already finished.
+
+3l. **A completed agent's orphaned waiters keep firing, and `TaskStop` cannot
+    silence them.** Measured 2026-08-16: one finished wave emitted five stale
+    "completed" notifications over an hour, each from a wait-wrapper it had spawned
+    to poll a run whose results it had already read directly. `TaskStop` on it
+    returns *"not running (status: completed)"* — there is nothing left to stop.
+    **Do not generalise that answer to a live agent** (§3k is the same trap from the
+    other side; both halves have now cost real tokens). The only fix is upstream:
+    brief waves not to spawn a poller for a result they will read from a file, and
+    to say in their report if they leave one running.
+
+    This is not merely noise. The `_wave_walk_probe` waiter's underlying process was
+    **a live Godot at 184% CPU for 2h55m**, still burning two cores hours after the
+    wave that started it had reported — on the strength of a `pgrep -f` it misread —
+    that no such process was alive. It ran underneath a full gate and underneath a
+    capture-reproducibility investigation whose one untested candidate cause was CPU
+    contention. **Use `ps -C <name>`, never `pgrep -f <pattern>`**, and never let a
+    process check's own pattern appear in its own command line — a gate waiter
+    grepping for `bash tools/gate.sh` matched *itself* and reported a finished gate as
+    running for an hour.
 4. **Could a player do this with a mouse?** If not, it is a format, not a feature.
 5. **Say what you did not verify.**
 6. **Red with a diagnosis beats green with a lie**, every time.
