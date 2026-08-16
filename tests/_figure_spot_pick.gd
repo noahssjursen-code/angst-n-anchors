@@ -26,6 +26,9 @@ const CANDIDATES := {
 		Vector3(1.35, 0.0, 12.5),  ## port side deck — stern_quarter measured 0 px
 		Vector3(5.0, 0.77, 12.5),  ## hatch cover, at origin.y + thickness — FLOATS
 		Vector3(5.0, 0.65, 12.5),  ## CHOSEN: on the fish hatch cover, centreline
+		Vector3(5.0, 0.0, 7.0),    ## centreline working deck, abaft the breakwater apex
+		Vector3(5.0, 0.0, 8.0),    ## the same, a metre further aft
+		Vector3(8.65, 0.0, 12.5),  ## starboard side deck — the quarters shoot from +X
 	],
 	"probe_piece_house": [
 		Vector3(4.5, 5.0, 20.5),  ## the wheelhouse roof, as authored today
@@ -42,11 +45,57 @@ const CANDIDATES := {
 		Vector3(2.5, 0.0, 7.0),   ## the DEFAULT it was being shot at
 		Vector3(5.0, 0.0, 10.0),  ## CHOSEN: mid-foredeck, centreline
 	],
-	## NOT this wave's four. Both carry the same breakwater as
-	## `probe_piece_trawler` and both are AUTHORED in the parent's FIGURE_SPOT at
-	## the default, so if the default is inside that wall it is inside it here too.
-	"probe_trawler_bulwark": [Vector3(2.5, 0.0, 7.0)],
-	"probe_trawler_bow_bulwark": [Vector3(2.5, 0.0, 7.0)],
+	## The two shipped fixtures that are AUTHORED inside the breakwater. Same hull,
+	## same walls[] and same decks[] as `probe_piece_trawler` — only the deckhouse
+	## differs (hand-authored plates rather than pieces), and the deckhouse starts
+	## at z = 17, well aft of every spot below.
+	"probe_trawler_bulwark": [
+		Vector3(2.5, 0.0, 7.0),    ## AUTHORED TODAY — inside the breakwater
+		Vector3(5.0, 0.0, 7.0),    ## centreline working deck, abaft the breakwater apex
+		Vector3(5.0, 0.0, 8.0),    ## the same, a metre further aft
+		Vector3(1.35, 0.0, 12.5),  ## port side deck, between bulwark and hatch
+		Vector3(8.65, 0.0, 12.5),  ## starboard side deck — the quarters shoot from +X
+		Vector3(5.0, 0.65, 12.5),  ## on the fish hatch cover, as the piece trawler is
+	],
+	"probe_trawler_bow_bulwark": [
+		Vector3(2.5, 0.0, 7.0),
+		Vector3(5.0, 0.0, 7.0),
+		Vector3(5.0, 0.0, 8.0),
+		Vector3(1.35, 0.0, 12.5),
+		Vector3(8.65, 0.0, 12.5),
+		Vector3(5.0, 0.65, 12.5),
+	],
+	## EVERY REMAINING SHIPPED FIXTURE, AT THE SPOT IT IS AUTHORED AT. A capture-time
+	## collider assertion is only affordable if it is also SATISFIED by the fleet it
+	## is about to be turned on over, and "we fixed the three we looked at" is not
+	## that claim (REALITY §3c — run it over every fixture, not the one you are
+	## working on).
+	"probe_ferry_catamaran": [Vector3(12.0, 0.0, 39.0)],
+	"probe_ferry_catamaran_trim": [Vector3(12.0, 0.0, 39.0)],
+	"probe_spar_kit": [Vector3(2.5, 0.0, 7.0)],
+	"probe_sheer_bulwark": [Vector3(2.5, 0.0, 7.0)],
+	"probe_sheer_bulwark_flat": [Vector3(2.5, 0.0, 7.0)],
+	"demo_workboat": [Vector3(2.5, 0.0, 7.0)],
+	## The forecastle spot, and the one entry in the table with a non-zero y that is
+	## not standing on a `decks[]` plate — the fo'c'sle deck is an `items[]` plate.
+	## ⚠ AUTHORED AT (11.0, 3.46, 10.0), AND THAT SPOT IS BOTH BLOCKED AND FLOATING.
+	## It is 0.064 m above the fo'c'sle deck's own collider top (3.396) and its
+	## shoulder is inside `items[]` 682, the WARPING DRUM — a 0.92 m tube standing
+	## 1.55 m at (11.4, 10.6). Candidates for a replacement, all at the deck's
+	## measured height rather than at the authored 3.46.
+	"probe_container_feeder": [
+		Vector3(11.0, 3.46, 10.0),    ## AUTHORED TODAY
+		Vector3(11.0, 3.396, 10.0),   ## the same, sat down on the deck
+		Vector3(9.5, 3.396, 10.0),    ## outboard of the windlass, port side
+		Vector3(16.0, 3.396, 9.0),    ## centreline, forward of the winch group
+		Vector3(16.0, 3.396, 13.0),   ## centreline, further aft on the fo'c'sle
+		Vector3(13.0, 3.396, 14.0),   ## between the centreline and the port rail
+		Vector3(19.0, 3.396, 14.0),   ## starboard of the centreline
+		Vector3(22.0, 3.396, 10.0),   ## starboard side of the fo'c'sle
+	],
+	"critic_ferry": [Vector3(5.0, 0.0, 3.0)],
+	"critic_yacht": [Vector3(5.0, 0.0, 3.0)],
+	"critic_barge": [Vector3(5.0, 0.0, 2.0)],
 }
 
 const FIXTURES := [
@@ -56,6 +105,16 @@ const FIXTURES := [
 	"res://resources/data/structures/probe_plate_deckhouse.json",
 	"res://resources/data/structures/probe_trawler_bulwark.json",
 	"res://resources/data/structures/probe_trawler_bow_bulwark.json",
+	"res://resources/data/structures/demo_workboat.json",
+	"res://resources/data/structures/probe_ferry_catamaran.json",
+	"res://resources/data/structures/probe_ferry_catamaran_trim.json",
+	"res://resources/data/structures/probe_spar_kit.json",
+	"res://resources/data/structures/probe_sheer_bulwark.json",
+	"res://resources/data/structures/probe_sheer_bulwark_flat.json",
+	"res://resources/data/structures/probe_container_feeder.json",
+	"res://resources/data/structures/critic_ferry.json",
+	"res://resources/data/structures/critic_yacht.json",
+	"res://resources/data/structures/critic_barge.json",
 ]
 
 
@@ -90,7 +149,7 @@ func _look(path: String) -> void:
 					b.position.y, b.position.y + b.size.y,
 					b.position.z, b.position.z + b.size.z,
 					str(placement.get("_is", ""))])
-	if not plan.items.is_empty() and placements.is_empty():
+	if not plan.items.is_empty() and placements.is_empty() and plan.items.size() <= 200:
 		print("  -- authored items --")
 		for item_variant in plan.items:
 			var item := item_variant as Dictionary
@@ -108,17 +167,23 @@ func _look(path: String) -> void:
 
 	var boxes: Array[AABB] = []
 	var kinds := PackedStringArray()
+	var raw: Array[Dictionary] = []
 	for row_variant in StructureBaker.entity_colliders(plan, Vector3.ZERO):
 		var row := row_variant as Dictionary
 		for box_variant in row["boxes"] as Array:
 			boxes.append(_bounds_of(box_variant as Dictionary))
-			kinds.append(str(row["kind"]))
+			raw.append(box_variant as Dictionary)
+			kinds.append("%s[%d] id=%d" % [str(row["kind"]), int(row["index"]), int(row["id"])])
 
 	print("  -- candidate spots --")
 	for spot_variant in CANDIDATES.get(stem, []) as Array:
 		var spot := spot_variant as Vector3
-		var blocker := _blocker(boxes, kinds, spot)
-		print("   (%.2f, %.2f, %.2f)  %s  nearest=%.2f m  sky=%s  underfoot=%s"
+		var blocker := _blocker(raw, boxes, kinds, spot)
+		## `nearest` is measured against axis-aligned BOUNDS and is therefore a
+		## lower bound, not a distance: a 45-degree wall's bounds reach 2 m past its
+		## plating, so a spot 2.55 m clear of the breakwater still prints 0.00.
+		## CLEAR/BLOCKED above is the exact answer; this column is a hint.
+		print("   (%.2f, %.2f, %.2f)  %s  nearest(bounds)=%.2f m  sky=%s  underfoot=%s"
 			% [spot.x, spot.y, spot.z,
 				"CLEAR " if blocker.is_empty() else "BLOCKED by " + blocker,
 				_clearance(boxes, spot), _open_sky(boxes, spot), _supported(boxes, spot)])
@@ -177,19 +242,50 @@ func _bounds_of(box: Dictionary) -> AABB:
 	return out
 
 
-func _blocker(boxes: Array[AABB], kinds: PackedStringArray, at: Vector3) -> String:
-	var fig := AABB(
-		Vector3(at.x - FIG_RADIUS, at.y + FIG_LOW, at.z - FIG_RADIUS),
-		Vector3(FIG_RADIUS * 2.0, FIG_HIGH - FIG_LOW, FIG_RADIUS * 2.0)
-	)
-	for i in boxes.size():
-		if boxes[i].intersects(fig):
-			var b := boxes[i]
-			return "%s box x %.2f..%.2f y %.2f..%.2f z %.2f..%.2f" % [
-				kinds[i], b.position.x, b.position.x + b.size.x,
-				b.position.y, b.position.y + b.size.y,
-				b.position.z, b.position.z + b.size.z]
+## ⚠ THIS TEST USED TO BE `AABB.intersects` AGAINST `_bounds_of`, AND ON A YAWED
+## WALL THAT IS NOT THE WALL — MEASURED 2026-08-16.
+##
+## `_bounds_of` rotates a collider's eight corners and takes their bounds, so the
+## trawlers' 45-degree breakwater — 5.66 m long and 0.18 m thick — scores as a
+## 4.12 x 4.12 m SQUARE. Every point in that square read BLOCKED. The centreline
+## working deck at (5.0, 0, 7.0) is 1.84 m clear of the plating and this probe
+## called it blocked; only (2.5, 0, 7.0) was genuinely inside, at 0.071 m off a
+## centre line with a 0.09 m half-thickness. A spot search run through an
+## instrument that fails a legal spot is a search that will land somewhere odd,
+## which is REALITY §8: suspect the instrument before the subject.
+##
+## The body is sampled against each collider in ITS OWN yawed frame instead —
+## the same maths `vessel_render_capture._guarded` already uses.
+func _blocker(raw: Array[Dictionary], boxes: Array[AABB], kinds: PackedStringArray,
+		at: Vector3) -> String:
+	var y := FIG_LOW
+	while y <= FIG_HIGH:
+		for offset in [Vector3.ZERO, Vector3(FIG_RADIUS, 0, 0), Vector3(-FIG_RADIUS, 0, 0),
+				Vector3(0, 0, FIG_RADIUS), Vector3(0, 0, -FIG_RADIUS)]:
+			var p := at + Vector3(0.0, y, 0.0) + (offset as Vector3)
+			for i in raw.size():
+				if not _inside(raw[i], p):
+					continue
+				var b := boxes[i]
+				return "%s box x %.2f..%.2f y %.2f..%.2f z %.2f..%.2f (bounds; yaw %.1f)" % [
+					kinds[i], b.position.x, b.position.x + b.size.x,
+					b.position.y, b.position.y + b.size.y,
+					b.position.z, b.position.z + b.size.z,
+					float(raw[i].get("yaw_deg", 0.0))]
+		y += 0.10
 	return ""
+
+
+func _inside(box: Dictionary, p: Vector3) -> bool:
+	var centre := box["center"] as Vector3
+	var size := box["size"] as Vector3
+	if p.y < centre.y - size.y * 0.5 or p.y > centre.y + size.y * 0.5:
+		return false
+	var flat := Vector3(p.x - centre.x, 0.0, p.z - centre.z)
+	var yaw := float(box.get("yaw_deg", 0.0))
+	if not is_zero_approx(yaw):
+		flat = flat.rotated(Vector3.UP, -deg_to_rad(yaw))
+	return absf(flat.x) <= size.x * 0.5 and absf(flat.z) <= size.z * 0.5
 
 
 func _clearance(boxes: Array[AABB], at: Vector3) -> float:

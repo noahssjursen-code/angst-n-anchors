@@ -119,27 +119,41 @@ const FIGURE_SPOT := {
 	## ⚠ AND "MEASURED AT THAT VALUE" MEANT MEASURED FOR VISIBILITY ONLY, WHICH
 	## IS NOT THE SAME PROPERTY — 2026-08-16.
 	##
-	## Two of the six are standing INSIDE a wall at the value written above.
+	## Two of the six were standing INSIDE a wall at the value written above.
 	## `probe_trawler_bulwark` and `probe_trawler_bow_bulwark` both carry a
 	## V-shaped breakwater across the fore end of the working deck — `walls[]` 1
 	## and 2, from (1, 8.4) and (9, 8.4) on the diagonal axes, 0.18 m thick, 1.0 m
-	## high, meeting on the centreline at z = 4.4. Resolved through
-	## `StructureBaker.entity_colliders` (`tests/_figure_spot_pick.gd`), the spot
-	## (2.5, 0, 7.0) sits 0.07 m off that plating's centre line, inside a 0.18 m
-	## wall. Both report `BLOCKED ... nearest = 0.00 m`.
+	## high, meeting on the centreline at z = 4.4. The spot (2.5, 0, 7.0) sits
+	## 0.071 m off that plating's centre line, which has a 0.09 m half-thickness:
+	## inside it, by geometry that can be done on paper.
 	##
-	## Both measured 63 px in profile and passed, because 63 px is what the top
-	## 0.8 m of a figure looks like over a 1.0 m breakwater cap, and a pixel
-	## counter cannot tell that from a figure standing beside it. The check is not
-	## wrong — it answers "is there a scale reference in this picture", and there
-	## is. It simply does not answer "is the scale reference standing on the deck",
-	## and nothing here does. `probe_piece_trawler`, which is the same vessel built
-	## from pieces, was moved off this spot for exactly this reason; these two are
-	## left where they are and written down, because moving them rewrites shipped
-	## reference frames and that is an owner's call, not a wave's.
+	## Both measured 63 / 139 / 218 / 228 px and passed every check, because 63 px
+	## is what the top 0.8 m of a figure looks like over a 1.0 m breakwater cap,
+	## and a pixel counter cannot tell that from a figure standing beside it. No
+	## frame closes that gap; `_check_figure_stands` does, and it is why this table
+	## can now be wrong in a way that reddens rather than in a way that ships.
+	##
+	## MOVED 2026-08-16 to the spot their piece-built sister already stands on.
+	## Same hull, same breakwater, same fish hatch, same bulwark: three fixtures
+	## that exist to be laid beside each other, and a scale figure standing
+	## somewhere different on each is a difference that is not a difference. Shot
+	## at four candidates each, profile / bow_quarter / stern_quarter / plan:
+	##
+	##     (2.50, 0.00,  7.0)  AUTHORED, in the breakwater   63 / 139 / 218 / 228
+	##     (5.00, 0.00,  7.0)  centreline working deck      122 / 125 /  72 / 201
+	##     (1.35, 0.00, 12.5)  port side deck               178 / 285 /   0 / 297
+	##     (8.65, 0.00, 12.5)  starboard side deck          333 / 174 / 152 / 298
+	##     (5.00, 0.65, 12.5)  the fish hatch cover — KEPT  594 / 420 / 254 / 394
+	##
+	## `(5.0, 0, 7.0)` is not a legal alternative either — it is standing in the
+	## SAMSON POST (`items[]` id 149, a 0.30 m tube 1.90 m tall at z = 6.6) with the
+	## TRAWL WINCH DRUM (id 135, 0.84 m across and 3.0 m wide at y 0.62) through its
+	## shins. It measured 122 px in profile and would have passed the pixel check
+	## exactly as the breakwater spot did, which is the same defect a second time on
+	## the same vessel and the reason the geometry is now asked as well.
 	"demo_workboat": Vector3(2.5, 0.0, 7.0),
-	"probe_trawler_bulwark": Vector3(2.5, 0.0, 7.0),
-	"probe_trawler_bow_bulwark": Vector3(2.5, 0.0, 7.0),
+	"probe_trawler_bulwark": Vector3(5.0, 0.65, 12.5),
+	"probe_trawler_bow_bulwark": Vector3(5.0, 0.65, 12.5),
 	"probe_spar_kit": Vector3(2.5, 0.0, 7.0),
 	"probe_sheer_bulwark": Vector3(2.5, 0.0, 7.0),
 	"probe_sheer_bulwark_flat": Vector3(2.5, 0.0, 7.0),
@@ -182,7 +196,25 @@ const FIGURE_SPOT := {
 	## open air off the port bow. It goes on the FORECASTLE, sky behind it and
 	## the whole 150 m of ship running away aft — which is the one place a 1.8 m
 	## figure still resolves against a vessel this size.
-	"probe_container_feeder": Vector3(11.0, 3.46, 10.0),
+	##
+	## ⚠ AND IT WAS AT (11.0, 3.46, 10.0), WHICH IS THE THIRD INSTANCE OF THE SAME
+	## DEFECT — FOUND BY `_check_figure_stands`, NOT BY LOOKING, 2026-08-16.
+	##
+	## Two things wrong with that value, and neither is visible in any frame:
+	##
+	##   • FLOATING by 0.064 m. The fo'c'sle deck is SHEERED — it is `items[]`
+	##     plates, not a `decks[]` slab, and its collider top falls from 3.444 at
+	##     z = 9 to 3.396 at z = 10 to 3.325 at z = 14. 3.46 is not the height of
+	##     the deck anywhere under the figure.
+	##   • BLOCKED by `items[]` 682, the WARPING DRUM — a 0.92 m tube standing
+	##     1.55 m at (11.4, 10.6). True clearance to the drum's own cylinder is
+	##     0.04 m; the collider is the tube's box, so the check reads it as
+	##     contact. Either way the figure is standing with its shoulder against a
+	##     windlass drum, which is not where a person stands.
+	##
+	## Moved 1.5 m outboard and sat on the deck's measured top: CLEAR, nearest
+	## structure 1.23 m, gap -0.000 m.
+	"probe_container_feeder": Vector3(9.5, 3.396, 10.0),
 	## `probe_plate_deckhouse` is photographed by `structure_plate_capture`, which
 	## is a subclass of this file and whose fixture is destined to become another
 	## entry in FIXTURES once the plate primitive lands here. Its spot lives in
@@ -212,7 +244,112 @@ const FIGURE_SPOT_DEFAULT := Vector3(2.5, 0.0, 7.0)
 
 ## The one that must be VISIBLE, not merely present. Held so `_shoot` can take a
 ## reference frame without it.
+##
+## ONE FLOOR FOR BOTH RIGS. `piece_kit_capture` measured the same property a
+## second time with its own sampler (every other pixel, 0.03 delta) and its own
+## floor of 12, so the fleet was judged by two numbers that could not be
+## compared: 12-of-230k samples against 1-of-921k pixels. The measurement is the
+## parent's now — stride 1, `FIGURE_PIXEL_DELTA` — and there is one floor.
+##
+## ⚠ AND THE FLOOR IS 1, BECAUSE A PIXEL FLOOR CANNOT BE A FLEET CONSTANT.
+##
+## It was raised to 12 on this argument: across every 28 m fixture and every
+## candidate spot measured on 2026-08-16, an asserted view either counted 0 (the
+## figure is inside something, or off the ship) or counted 63 and up, so the band
+## between was empty and anything in it would be a finding.
+##
+## Then it was run over the fleet, and `probe_container_feeder__plan` went RED at
+## 2 px — REALITY §4d, a claim verified on one class of hull and extrapolated to
+## a hull five times longer. `_shoot` frames every view to the VESSEL, so the
+## metres-per-pixel scale is a property of the subject: on `hull_28x10` the frame
+## is about 0.031 m/px and a 1.8 m figure in plan is a 30-px disc, while on
+## `hull_150x32` it is about 0.13 m/px and the same figure is under ten. Diffing
+## the old spot against the new one on that fixture's plan frame moves FIVE
+## pixels in total, so its plan view has never carried more than about three, at
+## any spot anyone has authored.
+##
+## Raising the floor would therefore have failed the 150 m ship for being 150 m
+## long, and the fix would have been to move the figure until the number went up
+## — which is the metric choosing the subject all over again, and is what this
+## whole change is about. The floor states the property honestly instead: the
+## failure mode this check exists for is ZERO, and every instance it has ever
+## caught was zero in all four views. THAT `probe_container_feeder__plan` CARRIES
+## A TWO-PIXEL SCALE FIGURE IS A REAL DEFECT — it satisfies "is there a scale
+## reference in this picture" and no person can use it — but it is a defect in
+## how a 150 m vessel is framed, not in where its figure stands, and it wants a
+## fourth view or a crop rather than a threshold.
 const MIN_FIGURE_PIXELS := 1
+
+## Any channel differing by more than this counts as changed — one step above the
+## renderer's own dither. `_check_render_noise` measures what that dither actually
+## is rather than assuming it.
+const FIGURE_PIXEL_DELTA := 0.02
+
+## ── THE FIGURE IS STANDING ON THE DECK, NOT IN IT ───────────────────────────
+##
+## Everything above measures a FRAME, and a frame cannot answer this. The pixel
+## check asks "is there a scale reference in this picture"; it does not ask "is
+## the scale reference standing on the deck", and the difference has shipped three
+## times in this repo — a figure 0.071 m inside a 0.18 m breakwater on two
+## fixtures, and a figure floating 0.064 m over a sheered fo'c'sle with its
+## shoulder in a warping drum on a third. All three measured well over the floor
+## in every view, because the top of a figure over a bulwark cap looks exactly
+## like a whole figure beside one to a pixel counter.
+##
+## So the geometry is asked instead. `StructureBaker.collect_colliders` is the
+## same call `_check_fall_protection` already makes on this plan, and
+## `entity_colliders` `resolved()`s it first — so a piece placement is measured as
+## the plates it becomes and not as the node it was authored as. Containment is
+## `_guarded`'s test, each box in ITS OWN yawed frame: the trawlers' 45-degree
+## breakwater has axis-aligned bounds 4.12 m square, and a check that used those
+## bounds would call the whole forward working deck blocked.
+##
+## Two claims, because there are two ways a spot goes wrong:
+##
+##   • EMBEDDED — the body intersects a collider. Sampled up the capsule's axis
+##     and at four points on its radius, because a figure whose ankle is in a
+##     coaming and a figure whose chest is in a bulkhead are both defects.
+##   • FLOATING — whatever is under the feet is more than `FIGURE_FLOAT_MAX`
+##     below them. `StructureBaker._plate_span` reads a deck's `origin.y` as the
+##     plate's TOP and hangs the thickness BELOW it, so a spot computed as
+##     `origin.y + thickness` floats by exactly the thickness — 0.12 m on the
+##     trawler's fish hatch — and a bulwark hides the feet from every asserted
+##     view, so no frame would ever show it. This is the only thing that can.
+##
+## The tolerance is 0.05 m and it is a RESOLUTION argument, not a taste one: at
+## the tightest framing this rig uses, a 28 m vessel spans about 900 px, so one
+## pixel is 0.031 m and 0.05 m is under two. `probe_piece_house` stands 0.035 m
+## over a sloped roof tile — recorded, looked at, one pixel — and passes; the
+## fo'c'sle's 0.064 m does not.
+##
+## ── WHAT THIS STILL DOES NOT ANSWER, STATED SO NOBODY READS IT AS CLOSED ────
+##
+## THE FIGURE MAY STILL BE OFF THE SHIP. Nothing under the feet is read as "the
+## hull deck", because y = 0 IS the hull deck in this rig's stage space and most
+## fixtures' figures stand straight on it with no plan entity underneath. A spot
+## in open water at y = 0 therefore passes both claims above — and that is not a
+## hypothetical: the parent default (2.5, 0, 7.0) on `probe_container_feeder`
+## stands off the port bow, because at z = 7 that hull's deck edge runs
+## x 8.34 .. 23.66. The pixel check does not catch it either; a figure against
+## the sky is highly visible. Closing it needs the HULL's own half-breadth at
+## that station (`plan.hull_stations()`), not a deck rectangle — the bow taper is
+## exactly what makes the rectangle wrong — and it is the next check, not this
+## one.
+##
+## The colliders are also conservative in two known ways, and both make this
+## STRICTER than the geometry: a round tube's collider is its box (the container
+## feeder's warping drum reads as contact at 0.04 m of true clearance), and a
+## sloped run is stepped into boxes that over-cover by about half a step. A
+## refusal within a few centimetres of a fitting is therefore a refusal to stand
+## against that fitting, which is the right answer for a scale figure anyway.
+const FIGURE_FLOAT_MAX := 0.05
+## The capsule's own radius. The body is sampled here rather than at the 0.30 m
+## the deck-sweep probes use: a probe looking for somewhere to stand wants a
+## margin, a check judging where the figure IS must not invent one.
+const FIGURE_BODY_RADIUS := 0.22
+const FIGURE_BODY_LO := 0.10
+const FIGURE_BODY_HI := 1.70
+const FIGURE_BODY_STEP := 0.20
 
 ## ── WHICH VIEWS THE FIGURE IS REQUIRED IN, AND WHY NOT ALL FOUR ─────────────
 ##
@@ -242,12 +379,63 @@ const MIN_FIGURE_PIXELS := 1
 ## both 0 px — and six of the nine shipped fixtures with no authored spot. The
 ## quarters are printed rather than asserted; those two zeroes are real and are
 ## in every log line this rig writes.
+##
+## ── THE ARGUMENT ABOVE WAS ATTACKED ON 2026-08-16, AND IT HELD ──────────────
+##
+## `piece_kit_capture` asserted all FOUR views for a while, and that rule had a
+## consequence: it was the reason `probe_piece_trawler`'s figure went onto the
+## fish hatch rather than the port side deck, because the port side deck measures
+## `stern_quarter = 0`. A check that changes the subject to satisfy itself is
+## REALITY §2, so before making the two rigs agree the two-view claim was put to
+## the test: FIND A SPOT HIDDEN FROM BOTH `profile_port` AND `plan` THAT A PERSON
+## CAN STILL SEE. If one exists, "hidden from both means inside something" is
+## false and the strict rule is the right one.
+##
+## `tests/_figure_roof_sweep.gd` searched for it mechanically rather than by
+## guessing: sweep a fixture's resolved colliders for standing surfaces, keep the
+## points that are clear of geometry and ROOFED (which is the only way to hide
+## from an 88-degree plan view), then cast exact slab-intersection sight lines at
+## knee, chest and head height along all four camera directions. Swept over
+## `demo_workboat`, both trawler fixtures, both catamarans and `probe_spar_kit`;
+## it offered 25 candidates on `demo_workboat` and 227 on the catamaran, and six
+## of them were SHOT — profile / bow_quarter / stern_quarter / plan:
+##
+##     demo_workboat  (2.25, 0.0, 12.25)    0 / 0 /  96 / 0
+##     demo_workboat  (3.25, 0.0, 13.25)    0 / 0 / 148 / 0
+##     demo_workboat  (6.25, 0.0, 10.75)    0 / 0 /  46 / 0
+##     demo_workboat  (7.25, 0.0, 12.25)    0 / 0 / 131 / 0
+##     catamaran      (4.25, 3.0, 26.75)    0 / 0 /  33 / 0
+##     catamaran      (2.75, 0.0, 31.75)    0 / 0 /  23 / 0
+##
+## Every one hidden from both asserted views and counted in the stern quarter —
+## and every one of them a crop away from being nothing. `demo_workboat`'s
+## `decks[]` 5 is the DECKHOUSE ROOF and not a canopy: the figure is standing in
+## the saloon and the stern quarter is seeing a slice of an orange capsule
+## THROUGH THE OPEN DOORWAY, 148 samples of it. The catamaran's promenade spots
+## are 7 x 6 and 6 x 5 px of scalp through a door of their own. THE SWEEP FINDS
+## DOORS, because a doorway is a hole in the collider set and a sight line goes
+## through it; a person looking at the frame sees no scale reference at all.
+##
+## So the attack failed, twice, on two unrelated vessels, and it failed usefully.
+## Hidden from `profile_port` AND `plan` still means inside something — and the
+## obvious relaxation, "visible in at least ONE view", would have PASSED a figure
+## standing inside a deckhouse at 148 px. NOT TESTED: `probe_container_feeder`
+## and the three `critic_*` plans, whose sweeps did not finish (the feeder is
+## 3084 boxes over a 32 x 150 m deck). The subclass now inherits this list
+## instead of restating a stricter one.
 const FIGURE_REQUIRED_VIEWS := ["profile_port", "plan"]
 
 var _t: RefCounted
 var _camera: Camera3D
 var _stage: Node3D
 var _figure: Node3D
+
+## Where the figure ACTUALLY stands, in plan metres — authored or defaulted. Held
+## so `_check_figure_stands` judges the position the figure is at rather than the
+## table it was supposed to come from. That distinction is not pedantry: the
+## "authored, not defaulted" check spent a commit reading a table that could not
+## contain the answer while the figure stood somewhere else entirely.
+var _figure_at := Vector3.ZERO
 
 ## Renderer counters for the fixture currently on the stage. A MeshInstance3D is
 ## NOT a draw call — these come off RenderingServer's own per-frame counters,
@@ -374,6 +562,7 @@ func _capture_plan(path: String, stem: String) -> void:
 	_check_fittings(plan, stem)
 	_check_edges(plan, stem)
 	_check_rigging_attaches(plan, stem)
+	_check_figure_stands(plan, stem)
 	_check_fall_protection(plan, stem)
 
 	_draw_calls = 0
@@ -888,6 +1077,104 @@ func _xz(value: Variant) -> Vector2:
 	return Vector2(float(list[0]), float(list[1]))
 
 
+## Not inside anything, and not hanging over anything. See the note above
+## `FIGURE_FLOAT_MAX` for why a frame cannot answer either question.
+##
+## The cost is printed on every run because "assert the geometry too" is only a
+## good trade while it is cheap, and a number in the log is the only thing that
+## keeps that honest as the fixtures grow. Measured 2026-08-16 on the heaviest
+## fixture in the fleet — `probe_container_feeder`, 603 items, 3084 collider
+## boxes — this is single-digit milliseconds against a four-view capture that
+## takes tens of seconds, and `_check_fall_protection` was already paying the same
+## `collect_colliders` call four lines further down.
+func _check_figure_stands(plan: StructurePlan, stem: String) -> void:
+	var started := Time.get_ticks_usec()
+	var colliders := StructureBaker.collect_colliders(plan)
+
+	var inside := ""
+	var y := FIGURE_BODY_LO
+	while y <= FIGURE_BODY_HI and inside.is_empty():
+		for offset in [
+			Vector3.ZERO,
+			Vector3(FIGURE_BODY_RADIUS, 0.0, 0.0), Vector3(-FIGURE_BODY_RADIUS, 0.0, 0.0),
+			Vector3(0.0, 0.0, FIGURE_BODY_RADIUS), Vector3(0.0, 0.0, -FIGURE_BODY_RADIUS),
+		]:
+			var point: Vector3 = _figure_at + Vector3(0.0, y, 0.0) + (offset as Vector3)
+			var hit: Variant = _collider_containing(colliders, point)
+			if hit != null:
+				var box := hit as Dictionary
+				var centre := box["center"] as Vector3
+				var size := box["size"] as Vector3
+				inside = "a box %.2f x %.2f x %.2f centred %v, at body height %.2f m" % [
+					size.x, size.y, size.z, centre, y,
+				]
+				break
+		y += FIGURE_BODY_STEP
+
+	_t.check(
+		"%s: the 1.8 m figure at %v is clear of the plan's own geometry%s"
+			% [stem, _figure_at, "" if inside.is_empty() else " — INSIDE " + inside],
+		inside.is_empty(),
+	)
+
+	var surface := _surface_under(colliders, _figure_at)
+	var gap := _figure_at.y - surface
+	_t.check(
+		"%s: the figure stands on something (surface y=%.3f, gap %+.3f m, allowed %.2f)"
+			% [stem, surface, gap, FIGURE_FLOAT_MAX],
+		gap <= FIGURE_FLOAT_MAX,
+	)
+	print("  [stands] %s  spot %v  %d collider boxes  %.1f ms" % [
+		stem, _figure_at, colliders.size(), float(Time.get_ticks_usec() - started) / 1000.0,
+	])
+
+
+## The collider a point is inside, or null. Yaw-correct, for `_guarded`'s reason.
+func _collider_containing(colliders: Array, point: Vector3) -> Variant:
+	for collider_variant in colliders:
+		var collider := collider_variant as Dictionary
+		var centre := collider["center"] as Vector3
+		var size := collider["size"] as Vector3
+		if point.y < centre.y - size.y * 0.5 or point.y > centre.y + size.y * 0.5:
+			continue
+		var flat := Vector3(point.x - centre.x, 0.0, point.z - centre.z)
+		var yaw := deg_to_rad(float(collider.get("yaw_deg", 0.0)))
+		if not is_zero_approx(yaw):
+			flat = flat.rotated(Vector3.UP, -yaw)
+		if absf(flat.x) <= size.x * 0.5 and absf(flat.z) <= size.z * 0.5:
+			return collider
+	return null
+
+
+## The highest thing in the PLAN under the figure's feet, or the hull deck.
+##
+## y = 0 is the hull deck in this rig's stage space — `_capture_plan` bakes the
+## plan at the origin and lowers the HULL by `deck_y` to meet it — so a spot with
+## nothing of the plan's under it is standing on the ship, not in the air, and
+## reports 0.0. That is why this returns a height rather than a boolean: on the
+## container feeder the answer is a swept `items[]` plate at 3.396 and on the
+## ferry it is the hull.
+func _surface_under(colliders: Array, at: Vector3) -> float:
+	var best := 0.0
+	for collider_variant in colliders:
+		var collider := collider_variant as Dictionary
+		var centre := collider["center"] as Vector3
+		var size := collider["size"] as Vector3
+		var top := centre.y + size.y * 0.5
+		if top > at.y + FIGURE_FLOAT_MAX or top <= best:
+			continue
+		var flat := Vector3(at.x - centre.x, 0.0, at.z - centre.z)
+		var yaw := deg_to_rad(float(collider.get("yaw_deg", 0.0)))
+		if not is_zero_approx(yaw):
+			flat = flat.rotated(Vector3.UP, -yaw)
+		if absf(flat.x) > size.x * 0.5 + FIGURE_BODY_RADIUS:
+			continue
+		if absf(flat.z) > size.z * 0.5 + FIGURE_BODY_RADIUS:
+			continue
+		best = top
+	return best
+
+
 func _guarded(colliders: Array, at: Vector2, inward: Vector2, deck_y: float) -> bool:
 	var y_lo := deck_y + GUARD_LO
 	var y_hi := deck_y + GUARD_HI
@@ -960,7 +1247,8 @@ func _add_scale_figure(offset: Vector3, stem: String) -> void:
 	# plan the way `DeckFitout.apply_plan` does. Adding deck_y here left the
 	# figure hanging in the air above the mast.
 	var spot: Variant = _figure_spot(stem)
-	figure.position = offset + ((spot if spot != null else FIGURE_SPOT_DEFAULT) as Vector3)
+	_figure_at = (spot if spot != null else FIGURE_SPOT_DEFAULT) as Vector3
+	figure.position = offset + _figure_at
 	_stage.add_child(figure)
 	_figure = figure
 	_t.check(
@@ -1104,16 +1392,12 @@ func _shoot(bounds: AABB, name: String, view: Dictionary) -> void:
 	## different hidden corner keeps the placement legal and still turns this red.
 	if _figure != null:
 		_figure.visible = false
-		for i in SETTLE_FRAMES:
-			await get_tree().process_frame
-		await RenderingServer.frame_post_draw
+		await _settle()
 	var without := get_viewport().get_texture().get_image()
 	if _figure != null:
 		_figure.visible = true
 
-	for i in SETTLE_FRAMES:
-		await get_tree().process_frame
-	await RenderingServer.frame_post_draw
+	await _settle()
 
 	_draw_calls = maxi(_draw_calls, int(RenderingServer.get_rendering_info(
 		RenderingServer.RENDERING_INFO_TOTAL_DRAW_CALLS_IN_FRAME
@@ -1123,6 +1407,7 @@ func _shoot(bounds: AABB, name: String, view: Dictionary) -> void:
 	)))
 
 	var image := get_viewport().get_texture().get_image()
+	await _check_render_noise(image)
 	var out := "%s/%s.png" % [OUT_DIR, name]
 	var err := image.save_png(out)
 	_t.check("%s: capture written" % name, err == OK)
@@ -1154,6 +1439,39 @@ func _shoot(bounds: AABB, name: String, view: Dictionary) -> void:
 	])
 
 
+## Settle, then wait on the DRAW. Every byte-stable rig in this repo awaits
+## `frame_post_draw`; every unstable one awaited `process_frame` and grabbed a
+## draw out (CONVENTIONS §3). Factored out of `_shoot` so a subclass cannot copy
+## half of it.
+func _settle() -> void:
+	for _i in SETTLE_FRAMES:
+		await get_tree().process_frame
+	await RenderingServer.frame_post_draw
+
+
+## ONCE PER RUN, AND IT IS THE CONTROL FOR EVERY FIGURE COUNT THIS RIG PRINTS.
+##
+## The whole scale check is a difference between two renders. If two renders of
+## the SAME scene already differed, that difference would be measuring the
+## renderer and every frame would pass on noise. This says whether llvmpipe is
+## deterministic here rather than assuming it. Inherited from
+## `piece_kit_capture`, which is where it was written and which had it for its own
+## fixtures only — the property is the parent's, so the check is now too.
+var _noise_measured := false
+
+
+func _check_render_noise(reference: Image) -> void:
+	if _noise_measured:
+		return
+	_noise_measured = true
+	await _settle()
+	var again := get_viewport().get_texture().get_image()
+	var noise := _changed_pixels(reference, again)
+	_t.check(
+		"two renders of one unchanged frame are identical (%d px differ)" % noise, noise == 0
+	)
+
+
 func _distinct_colours(image: Image) -> int:
 	var seen := {}
 	var step := maxi(1, image.get_width() / 96)
@@ -1176,7 +1494,9 @@ func _changed_pixels(before: Image, after: Image) -> int:
 		for x in range(before.get_width()):
 			var a := before.get_pixel(x, y)
 			var b := after.get_pixel(x, y)
-			if absf(a.r - b.r) > 0.02 or absf(a.g - b.g) > 0.02 or absf(a.b - b.b) > 0.02:
+			if absf(a.r - b.r) > FIGURE_PIXEL_DELTA \
+					or absf(a.g - b.g) > FIGURE_PIXEL_DELTA \
+					or absf(a.b - b.b) > FIGURE_PIXEL_DELTA:
 				n += 1
 	return n
 

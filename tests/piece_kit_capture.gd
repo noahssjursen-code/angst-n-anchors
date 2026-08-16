@@ -35,10 +35,11 @@ extends "res://tests/vessel_render_capture.gd"
 ##    number is the assertion that matters, and the claim being made is that
 ##    BUILDING FROM PIECES COSTS NOTHING AT THE DRAW CALL: every placement, every
 ##    piece type and every tint buckets on MATERIAL alone.
-##  - `_add_scale_figure` and `_shoot` are overridden so the 1.8 m figure is
-##    placed where it can be SEEN and then checked that it was — see the block
-##    above `FIGURE_CHANGED_MIN`. That check found a shipped capture with no
-##    visible figure in it.
+##  - `_figure_spot` is overridden so the 1.8 m figure stands somewhere it can be
+##    SEEN on these three vessels; the CHECK that it was seen is the parent's and
+##    is no longer restated here. That check found a shipped capture with no
+##    visible figure in it, and the restatement that used to sit beside it is
+##    gone for the reasons written above `PIECE_BUDGET`.
 
 const PieceKitScript := preload("res://scripts/construction/piece_kit.gd")
 
@@ -140,19 +141,48 @@ const PIECE_FIGURE_SPOT := {
 	##     (2.5, 0.00,  7.0)  BLOCKED, in the breakwater   63 / 139 / 218 / 228
 	##     (5.0, 0.00,  2.5)  forecastle head               0 /  13 / 214 / 434
 	##     (1.35, 0.00, 12.5) port side deck              178 / 285 /   0 / 297
-	##     (5.0, 0.65, 12.5)  ON THE FISH HATCH COVER     see the log — chosen
+	##     (5.0, 0.65, 12.5)  ON THE FISH HATCH COVER     594 / 420 / 250 / 394
 	##
 	## The forecastle is illegal: the sheer rises 0.896 m forward and the bulwark
 	## with it, and at 3 degrees of elevation it buries the figure whole — a hard
-	## FAIL on `profile_port`. The port side deck is legal but thin, 178 px of
-	## scalp above the cap rail, and it is 0 px from the stern quarter, which this
-	## rig ASSERTS on all four views rather than two.
+	## FAIL on `profile_port`.
 	##
-	## The hatch cover is the answer, and it is not a dodge: the fish hatch
-	## (`decks[]` 5-7, x 2.10..7.90, z 9.10..15.90) is where a hand stands with
-	## the gear on deck, it is 4.5 m clear of the deckhouse front and 2.83 m from
-	## anything else, it has open sky over it, and the extra 0.65 m lifts the
-	## figure clear of the bulwark cap in profile.
+	## ⚠ AND THE REASON GIVEN FOR REJECTING THE PORT SIDE DECK WAS THIS RIG'S OWN
+	## RULE, WHICH IS THE TRAP — RE-RUN 2026-08-16.
+	##
+	## It read "the port side deck is legal but thin, and it is 0 px from the stern
+	## quarter, which this rig ASSERTS on all four views rather than two". That is a
+	## metric choosing the subject (REALITY §2): the parent had already argued the
+	## quarters cannot be asserted, and its argument was never answered here.
+	##
+	## Two things came out of re-running the search with the four-view rule gone.
+	## First, the search had been INCOMPLETE: both quarters shoot from STARBOARD
+	## (azimuth 145 and 35 both resolve to +X), and only the PORT side deck was
+	## ever tried. The starboard one measures 333 / 174 / 152 / 298 — non-zero in
+	## all four views, so a deck-level spot satisfying even the strict rule existed
+	## the whole time and was never found. Second, the hatch still wins on its own
+	## merits, which is why it is still here:
+	##
+	##     (1.35, 0.00, 12.5) port side deck              178 / 285 /   0 / 297
+	##     (8.65, 0.00, 12.5) starboard side deck         333 / 174 / 152 / 298
+	##     (5.00, 0.00,  7.0) centreline working deck     122 / 125 /  72 / 201
+	##     (5.00, 0.65, 12.5) the fish hatch cover        594 / 420 / 250 / 394
+	##
+	## LOOKED AT, not just counted. In `profile_port` the deck-level centreline
+	## spot is a HEAD — 18 x 14 px of scalp and hat above the cap rail, and the
+	## body is gone; the starboard side deck is head, shoulders and chest across
+	## the deck at 13 x 32 px; the hatch is 15 x 48 px, a whole person from
+	## mid-thigh up, standing where a hand stands with the gear on deck. In
+	## `bow_quarter` the hatch spot is the only one of the four that is not partly
+	## behind a bulwark. The centreline deck spot is not even legal — the figure
+	## is standing in the samson post with the trawl winch drum through its shins.
+	##
+	## So the metric did shape this placement, and re-deriving it without the
+	## metric lands in the same place for better reasons. The fish hatch
+	## (`decks[]` 5-7, x 2.10..7.90, z 9.10..15.90) is 4.5 m clear of the
+	## deckhouse front and 2.83 m from anything else, it has open sky over it, and
+	## the extra 0.65 m is what lifts the figure clear of a 1.0 m bulwark cap at 3
+	## degrees of elevation. Its two hand-authored sisters now stand on it too.
 	##
 	## y = 0.65 AND NOT 0.77, and the difference is the whole reason this was
 	## measured rather than computed from the fixture. `StructureBaker._plate_span`
@@ -164,7 +194,7 @@ const PIECE_FIGURE_SPOT := {
 	"probe_piece_trawler": Vector3(5.0, 0.65, 12.5),
 }
 
-## ── The figure is VISIBLE, not merely placed ────────────────────────────────
+## ── The figure is VISIBLE, not merely placed — AND THE RULE IS THE PARENT'S ──
 ##
 ## REALITY.md §8 and CONVENTIONS §3a: a capture with no visible scale figure has
 ## no absolute scale, and this repo has shipped that bug three times — a figure
@@ -185,25 +215,32 @@ const PIECE_FIGURE_SPOT := {
 ##     answers with the head excluded (skin is not orange) and with whatever the
 ##     projection maths got wrong, and the projection maths was wrong.
 ##
-## What is used instead needs no colour and no projection. THE FRAME IS RENDERED
-## AGAIN WITH THE FIGURE HIDDEN, and the two images are compared. Pixels that
-## change are pixels the figure is responsible for. A figure standing inside a
-## deckhouse changes nothing. A figure off the side of the ship changes nothing.
-## A figure behind a bulwark changes exactly the head and shoulders you can see,
-## which is the honest answer — and it is the same answer in a plan view, where
-## the figure is a nine-pixel disc, and in a profile, where it is a sliver over
-## the bulwark cap.
+## What is used instead needs no colour and no projection: the frame is rendered
+## again with the figure hidden and the two images compared. That is the parent's
+## `_shoot`, and this file no longer restates it.
 ##
-## Measured on these twelve frames: the honest views change 21 to 335 samples.
-## A hidden figure changes 0. The floor is 12.
-const FIGURE_CHANGED_MIN := 12
-## Sampled every other pixel on both axes: 1280x720 becomes 230k comparisons per
-## frame rather than 921k, and the floor is stated in those samples.
-const FIGURE_SAMPLE_STEP := 2
-## Any channel differing by more than this counts as changed. One step above the
-## renderer's own dither, and the noise control below measures what that is
-## rather than assuming it.
-const FIGURE_PIXEL_DELTA := 0.03
+## ⚠ IT DID RESTATE IT, AND THE RESTATEMENT WAS NOT A COPY — REMOVED 2026-08-16.
+##
+## This rig measured the same property a SECOND time, with its own sampler (every
+## other pixel, 0.03 delta) and its own floor of 12, and it asserted the result on
+## ALL FOUR VIEWS where the parent asserts two. Two consequences, both real:
+##
+##  1. The fleet was judged by two numbers that cannot be compared — 12 of 230k
+##     samples here against 1 of 921k pixels upstream — so "the floor is 12" meant
+##     something different depending on which rig photographed the vessel. There is
+##     one measurement now, the parent's, and one floor (REALITY §3b).
+##  2. The four-view rule CHOSE A PLACEMENT. `probe_piece_trawler`'s figure went
+##     onto the fish hatch rather than the port side deck because the port side
+##     deck measures `stern_quarter = 0`, and this file's own note says so in as
+##     many words. A check that moves the subject to satisfy itself is REALITY §2.
+##     The parent's two-view argument was attacked before this was removed — see
+##     `FIGURE_REQUIRED_VIEWS` for the sweep, the four spots it offered and the
+##     crop that killed them — and it held.
+##
+## The hatch was then re-scored WITHOUT the rule that had forced it, against the
+## port side deck, the starboard side deck and the centreline working deck. It
+## still wins, on the pixels and in the frame, and the note on
+## `PIECE_FIGURE_SPOT` carries the numbers.
 
 ## Measured on the first clean run, then given ~8% headroom on triangles. Draw
 ## calls are exact and are the load-bearing half.
@@ -352,66 +389,13 @@ func _figure_spot(stem: String) -> Variant:
 	return super._figure_spot(stem)
 
 
-## Every frame is photographed by the parent, then SHOT AGAIN WITH THE FIGURE
-## HIDDEN and the two compared. See the note above the constants for why this
-## rather than a colour count.
+## The figure must be ON THE STAGE, which is the one thing the parent's pixel
+## difference cannot distinguish from a figure that is merely invisible: both
+## report zero. Cheap, and it is the only override of the scale check left here.
 func _shoot(bounds: AABB, name: String, view: Dictionary) -> void:
-	await super._shoot(bounds, name, view)
-	var figure := _stage.get_node_or_null("ScaleFigure") as Node3D
-	if figure == null:
+	if _stage.get_node_or_null("ScaleFigure") == null:
 		_t.fail("%s: no 1.8 m figure on the stage at all" % name)
-		return
-	var with_figure := get_viewport().get_texture().get_image()
-
-	## NOISE CONTROL, once per run. If two renders of the SAME scene already
-	## differed, the difference below would measure the renderer and every frame
-	## would pass. Measured rather than assumed — llvmpipe is deterministic here,
-	## and this is what says so.
-	if not _noise_measured:
-		_noise_measured = true
-		await _settle()
-		var again := get_viewport().get_texture().get_image()
-		var noise := _changed_samples(with_figure, again)
-		_t.check(
-			"two renders of one frame are identical (%d samples differ)" % noise, noise == 0
-		)
-
-	figure.visible = false
-	await _settle()
-	var without := get_viewport().get_texture().get_image()
-	figure.visible = true
-	var changed := _changed_samples(with_figure, without)
-	_t.check(
-		"%s: the 1.8 m figure is VISIBLE in the frame (%d samples change when it is hidden, floor %d)"
-		% [name, changed, FIGURE_CHANGED_MIN],
-		changed >= FIGURE_CHANGED_MIN
-	)
-
-
-var _noise_measured := false
-
-
-func _settle() -> void:
-	for _i in SETTLE_FRAMES:
-		await get_tree().process_frame
-	await RenderingServer.frame_post_draw
-
-
-## Samples where two frames of the same size differ. Both are sampled on the same
-## grid, so the number is comparable between views and between fixtures.
-func _changed_samples(a: Image, b: Image) -> int:
-	if a == null or b == null or a.get_size() != b.get_size():
-		return 0
-	var count := 0
-	for y in range(0, a.get_height(), FIGURE_SAMPLE_STEP):
-		for x in range(0, a.get_width(), FIGURE_SAMPLE_STEP):
-			var pa := a.get_pixel(x, y)
-			var pb := b.get_pixel(x, y)
-			if absf(pa.r - pb.r) > FIGURE_PIXEL_DELTA \
-					or absf(pa.g - pb.g) > FIGURE_PIXEL_DELTA \
-					or absf(pa.b - pb.b) > FIGURE_PIXEL_DELTA:
-				count += 1
-	return count
+	await super._shoot(bounds, name, view)
 
 
 func _check_cost(stem: String, meshes: int) -> void:
