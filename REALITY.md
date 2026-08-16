@@ -404,6 +404,42 @@ Several "the art looks flat" conclusions were partly the rig:
 **Rule.** When output looks wrong, suspect the instrument before the subject. And a capture with
 no visible scale figure has no absolute scale — check the figure is *visible*, not merely placed.
 
+### 8a. The clock in the frame — 2026-08-16, and both prior diagnoses were wrong
+
+Ten of thirty capture rigs turned out not to write the same bytes twice. The interesting part is
+not the count; it is that **two named causes were on record and neither survived being checked.**
+
+*"`_starter_shot` floats a hull and settles it under physics."* False. Across two processes the
+spawned vessel's body transform is bit-identical in all twelve float words at frames 1, 4, 8, 20
+and 40, and the SHA-256 of its 138 mesh surfaces, its 141 materials and all 143 visual-instance
+AABBs match. Nothing settles. *"`probe_piece_*` and `probe_plate_deckhouse` are nondeterministic."*
+Does not reproduce — 28 frames across three rigs, zero moved.
+
+What was actually happening: **`WorldClock` runs a 24-REAL-MINUTE game day off the Unix clock**,
+and `ShipLighting` rescales every light on a spawned vessel from it. Two runs twelve minutes apart
+are twelve game hours apart — night against midday, 94.96% of one frame, deltas to 166/255. The
+subject never moved; the rig was photographing a clock. That is §8 exactly, one level further out:
+the instrument included the time of day.
+
+Three things generalise.
+
+**A percentage of moved pixels is not a measurement until you also state the delta.** "5.386% of
+pixels moved" was read as instability and looks identical to "the boat moved". Measured properly it
+was 21.7% of a frame moving by **1 to 3 parts in 255** — a real lighting change, invisible, and
+enough to break every md5. A different rig moved **0.86% of pixels by 241/255**, which is a
+one-pixel outline around every silhouette edge and a completely different defect. Report both
+numbers or you have reported neither.
+
+**A back-to-back pair cannot show a rig reproducible.** `_starter_28m_shot` measured 0.0000% over
+15 frames and was time-dependent all along. A negative result from a fast pair is not evidence;
+`tools/repro.sh` waits 780 s for this reason.
+
+**And the noise control that would have caught it was blind by construction.**
+`piece_kit_capture` renders each frame twice and asserts the two are identical — good instinct,
+and its threshold is `FIGURE_PIXEL_DELTA = 0.03`, i.e. **7.6/255**. It cannot see a 3/255
+difference. It passes, honestly, on exactly the class of noise it was written to detect
+(§4, §8: when a mutation passes you have found a blind check).
+
 ---
 
 ## The standing orders

@@ -112,6 +112,35 @@ region, or a baked structure ships with a capture.
   accumulating. A capture whose name changes every run cannot be diffed.
 - The capture harness is a `SceneTree` script driven by a **data object**, not by
   clicking. Same input JSON in, same PNG out.
+
+> ### ⚠ "SAME INPUT JSON IN, SAME PNG OUT" WAS FALSE FOR TEN OF THIRTY RIGS — SURVEYED 2026-08-16
+>
+> Every capture rig under `tests/` was run twice with no code change and the frames
+> byte-compared. **Ten moved.** `STATE.md` carries the table, the three causes and the
+> claims that were argued from a diff of one of them. Two things belong here, because
+> they are rules about how work moves and not facts about one rig:
+>
+> **1. A pair of back-to-back runs cannot show a rig reproducible.** `WorldClock` runs a
+> **24-REAL-MINUTE** game day off `Time.get_unix_time_from_system()` and `ShipLighting`
+> rescales every light on a spawned vessel from it, so two runs twelve real minutes
+> apart are twelve GAME HOURS apart. `_starter_28m_shot` measured **0.0000% over 15
+> frames** back to back and its frames still differ from the committed ones by up to
+> 10% once the clock is pinned. **Use `tools/repro.sh`, which waits 780 s between the
+> two runs by default, and do not quote a `REPRO_GAP=0` result as reproducibility.**
+>
+> **2. A capture rig must pin the clock and settle on the draw.** `tests/support/capture_clock.gd`:
+> `pin()` stops the clock and fixes `time_of_day`; `settle()` awaits N frames **then**
+> `RenderingServer.frame_post_draw`. Every byte-stable rig in this repo already awaited
+> `frame_post_draw`; every unstable one awaited `process_frame` and grabbed a draw out,
+> which shows up as a one-pixel outline around every silhouette edge. A new rig copied
+> from an existing one must copy both, and copying `vessel_render_capture` without them
+> is exactly how the nine scratch rigs lost it.
+>
+> **3. A rig that cannot be made reproducible says so in its own header AND in what it
+> prints.** `ocean_wake_visual_capture` photographs a sea whose phase comes from
+> `Time.get_ticks_msec()`; it now prints `THIS FRAME IS NOT REPRODUCIBLE AND MUST NOT BE
+> DIFFED` on every run. A capture that cannot be compared is still worth looking at; it
+> is worth nothing in a diff, and the two must not be confused.
 - A capture is evidence, not an assertion. Pair every capture with at least one
   machine-checkable claim in a gate test (node counts, AABB extents, token usage,
   no-overlap, hit-target sizes). "It looks right" is not a test result.

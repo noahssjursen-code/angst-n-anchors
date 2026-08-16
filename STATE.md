@@ -71,7 +71,273 @@ poles rather than structure.
 **The loop works.** A `structure_plan_v1` JSON goes in; `tools/capture.sh` bakes it onto its
 hull and returns four canonical-angle PNGs plus assertions. No display, no clicking. Five
 fixtures live in `resources/data/structures/`; captures under `screenshots/studio/` with stable
-names, so `git diff` on an image shows what a change did to the silhouette.
+names, so `git diff` on an image shows what a change did to the silhouette — **for the rigs that
+write the same bytes twice, which was not all of them. Read the next section before you diff a
+frame.**
+
+---
+
+## ⚠ WHICH CAPTURES CAN BE DIFFED — surveyed 2026-08-16, and the answer used to be "unknown"
+
+**Every capture rig under `tests/` was run twice with no code change and the frames byte-compared.
+30 rigs, 261 frames in the survey pass, plus `_starter_shot` measured separately (8 more).**
+
+**Eight rigs moved inside a survey pair. `_starter_shot` makes nine. Three more were dependent on
+the wall clock and measured 0.0000% only because their two runs were minutes apart —
+`_starter_28m_shot` and `_hold_overhang_probe` (both carry a `BrickLayout`, therefore
+`ShipLight`s) and `_fittings_shot` (which moves 3.79% across a six-minute gap even with the hour
+pinned). **Twelve rigs in total whose frames must not be md5-compared**, and the count was "more
+than two" as suspected.
+
+The count is the finding, and so is the shape of it: the
+`vessel_render_capture` family was byte-perfect and the SCRATCH RIGS COPIED FROM IT WERE NOT,
+because each copy dropped the two lines that made the parent reproducible.
+
+**Both diagnoses previously on record were wrong, and were disproved rather than replaced.**
+
+- *"`_starter_shot` floats a hull and settles it under physics."* **False.** Across two processes
+  the granted vessel's body transform is bit-identical in all twelve float words at frames 1, 4,
+  8, 20 and 40; the SHA-256 of its 138 mesh surface arrays, of its 141 materials and of all 143
+  visual-instance AABBs are identical. `freeze = true` holds. Nothing settles.
+- *"`probe_piece_*` and `probe_plate_deckhouse` are nondeterministic (up to 1.237%)."* **Does not
+  reproduce, and the number was measured against the wrong thing.** `piece_kit_capture` 12
+  frames, `structure_plate_capture` 4 frames, `piece_kit_critic_capture` 12 frames — **0 moved,
+  all three.** What those fifteen frames *are* is **STALE**: a fresh run differs from the PNG
+  committed at `12f609f` by **0.0284% to 1.4450%** (worst channel deltas 97–169/255, so real
+  geometry, not dither) — the same band as the "1.237% between identical runs" on record.
+  A run compared against a committed frame measures how old the frame is, not whether the rig
+  is reproducible, and the two answers look identical in a percentage.
+  `screenshots/critic/` is worse: **up to 14.91%** off a rig that is byte-perfect.
+  `vessel_render_capture`'s own 36 frames are the exception — they still match `12f609f` exactly.
+- *"`hull_visual_capture` measured 0.000% across two runs, which made a real change
+  attributable."* **The 0.000% was a lucky pair.** Measured over four runs: one pair moved 2 of 18
+  frames (0.8628% and 0.8104%), one moved 1 (0.5579%), one moved 0. It is intermittent, and it
+  lands only on the two views that yaw the hull.
+
+### The three causes, because the fix differs
+
+**1. A TIME-OF-DAY LIGHT — the big one, and it is not a light in the rig.** `WorldClock` runs a
+**24-REAL-MINUTE game day** off `Time.get_unix_time_from_system()`, and `ShipLighting._process`
+rescales every `ShipLight` on a spawned vessel from it twice a second via
+`WeatherLighting.artificial_light_scale()` = `lerpf(1.0, 0.05, daylight)`. **Two runs twelve real
+minutes apart are twelve GAME HOURS apart.** Measured on `_starter_shot`:
+
+| grabbed | game hour | `artificial_light_scale` | vs the other run |
+|---|---|---|---|
+| 01:36:40 UTC | 0.67 (night) | 1.00 | — |
+| 01:48:30 UTC | 12.50 (midday) | 0.05 | **94.96% of `plan_ortho`, deltas to 166/255** |
+
+and two runs *four* minutes apart (hours 0.67 and 5.00, both night) moved **21.7% of the same
+frame by 1 to 3 parts in 255** — a real lighting change, invisible to the eye, enough to move
+every md5. **That second number is the dangerous one.** It is why "5.386% of pixels moved" was
+reported as instability and read as if the boat had moved.
+
+*The corollary that matters more than the fix:* **two back-to-back runs cannot see this.**
+`_starter_28m_shot` measured **0.0000% over 15 frames** and is time-dependent all the same.
+Any reproducibility claim from a fast pair is worth nothing.
+
+**2. A GRAB/DRAW RACE.** A rig that awaits N `process_frame`s and then reads
+`viewport.get_texture()` — without `await RenderingServer.frame_post_draw` — intermittently
+returns a frame a draw out. With no anti-aliasing this shows up as a **one-pixel outline along
+every silhouette edge** (the diff mask is a wireframe of the boat), worst on yawed views:
+`hull_visual_capture` 0.86%, `_small_hull_shot` 0.14%, `_hull_iter_shot` 0.013%. Every
+byte-stable rig here already awaited `frame_post_draw`; every unstable one did not.
+
+**3. A WALL-CLOCK SHADER TIME — unfixable, and now labelled.** `WorldRenderer` sets the ocean
+materials' `wave_time` from `WaveSurface.get_sim_time()`, which is `Time.get_ticks_msec()*0.001`.
+`ocean_wake_visual_capture` moved **15.9% back-to-back and 88.3% minutes apart, delta 244/255**.
+Its subject is a moving sea; freezing it would delete the thing the frame exists to show, so the
+rig now **says so in its header and prints `WAVE PHASE … THIS FRAME IS NOT REPRODUCIBLE AND MUST
+NOT BE DIFFED` on every run.**
+
+**What was cleared before the rigs were blamed (REALITY §7).** The renderer itself is
+bit-deterministic on this box: a synthetic scene of four yawed boxes gives identical md5s across
+processes and across settle depths of 4/8/16/32 frames, in the main viewport and in a
+`SubViewport`, with shadows on and off, with and without a translucent slab. The instrument is
+fine; the rigs were reading it at the wrong moment and photographing a clock.
+
+### The survey — two runs, no code change, % of pixels that differ
+
+| rig | frames | moved | worst frame | cause |
+|---|---|---|---|---|
+| `vessel_render_capture` | 36 | 0 | 0.0000% | — |
+| `trawler_render_capture` | 8 | 0 | 0.0000% | — |
+| `piece_kit_capture` | 12 | 0 | 0.0000% | — |
+| `structure_plate_capture` | 4 | 0 | 0.0000% | — |
+| `structure_ao_capture` | 6 | 0 | 0.0000% | — |
+| `_piece_kit_critic_capture` | 12 | 0 | 0.0000% | — |
+| `weather_visual_capture` | 31 | 0 | 0.0000% | already calls `snap_time_of_day` per frame |
+| `world_layout_debug_capture` | 3 | 0 | 0.0000% | CPU raster, seeded |
+| `port_layout_visual_capture` | 9 | 0 | 0.0000% | CPU raster, seeded (still NOTRUN — no verdict) |
+| `_q1_cell_shot` / `_q1b` / `_q1c` / `_q2` / `_q3` | 12 | 0 | 0.0000% | buildings, already `frame_post_draw` |
+| `_warehouse_shot` | 3 | 0 | 0.0000% | — |
+| `_probe_open_water_render` | 5 | 0 | 0.0000% | — |
+| `_cache_render_probe` / `_ring_face_probe` | 3 | 0 | 0.0000% | — |
+| `_fittings_shot` | 7 | 0 back-to-back | **3.79% across a six-minute gap, WITH the clock pinned** | see below — the hour is not the only wall clock |
+| `_hold_showcase_shot` | 6 | 0 | 0.0000% | spawns no vessel at all |
+| `_starter_28m_shot` | 15 | 0 | 0.0000% | **fast pair, and it carries a `BrickLayout` — so it has `ShipLight`s and the dependency. All 15 frames moved once the clock was pinned.** |
+| `hull_visual_capture` | 18 | **2** | 0.8628% | grab/draw race, yawed views |
+| `_small_hull_shot` | 7 | **4** | 0.1356% | grab/draw race |
+| `_hull_iter_shot` | 7 | **4** | 0.0129% | grab/draw race |
+| `_starter_shot` | 8 | **8** | 94.96% (12 min apart) | time-of-day light |
+| `_hold_shot` | 16 | **11** | 75.94% | time-of-day light |
+| `_hold_open_look` | 10 | **10** | 99.20% | time-of-day light |
+| `_house_iter` | 6 | **6** | 33.04% | time-of-day light |
+| `_house28_iter` | 24 | **24** | 20.22% | time-of-day light |
+| `_hold_overhang_probe` | 1 | 0 back-to-back | **22.49% vs the committed frame** | time-of-day light, invisible to a fast pair |
+| `ocean_wake_visual_capture` | 1 | **1** | 88.30% | **wall-clock wave phase — CANNOT be fixed** |
+
+### What was done
+
+`tests/support/capture_clock.gd` — `pin()` stops `WorldClock`'s per-frame push and writes
+`WeatherLighting.time_of_day = 0.5` (noon), `settle()` is N frames **then** `frame_post_draw`.
+Eleven rigs now call both and print the pinned hour on every run. Nothing was removed from any
+frame: the lights are still on the boats, they are now photographed at a stated hour.
+
+`tools/repro.sh` + `tools/png_repro_diff.py` — run any rig twice and byte-compare, reporting both
+*what fraction of pixels moved* and *the worst channel delta*, because 95% of pixels at 1/255 and
+0.9% of pixels at 241/255 are different diagnoses. **`REPRO_GAP` defaults to 780 s** for the
+reason above; `REPRO_GAP=0` is the fast, weaker check and says so in its own output.
+
+**After, with both numbers.**
+
+| rig | before | after |
+|---|---|---|
+| `hull_visual_capture` | 2 of 18 moved, worst 0.8628% | **0 of 18, four runs, six pairs** — and the frames it writes are **byte-identical to `12f609f`**, so the fix changed nothing it shows |
+| `_starter_shot` | 8 of 8, worst 94.96% | **0 of 8, `tools/repro.sh` with a 780 s gap, exit 0** |
+| `_hold_shot` | 11 of 16, worst 75.94% | **0 of 16**, two runs ~5 game hours apart |
+| `_hold_open_look` | 10 of 10, worst 99.20% | **0 of 10**, same gap |
+| `_house_iter` | 6 of 6, worst 33.04% | **0 of 6**, same gap |
+| `_small_hull_shot` | 4 of 7, worst 0.1356% | 4–6 of 7, **worst 0.0165%** — 8× better and NOT closed |
+| `_hull_iter_shot` | 4 of 7, worst 0.0129% | 3–4 of 7, **worst 0.0102%** — NOT closed |
+| `_hold_overhang_probe` | 22.49% vs committed | **0 of 1** across a gap |
+| `_starter_28m_shot` | 0 back-to-back (blind) | **0 of 15** across a gap |
+| `_house28_iter` | 24 of 24, worst 20.22% | **0 of 24** across a gap |
+| `_fittings_shot` | 0 back-to-back (blind) | **2 of 7, worst 3.79%** across a gap — NOT closed |
+| `ocean_wake_visual_capture` | 1 of 1, 88.30% | unchanged by design; now says so on every run |
+
+**Mutation-verified, both numbers, on the rig the whole finding started from.**
+`tools/repro.sh _starter_shot` with the default 780 s gap:
+
+```
+CONTROL  fixed rig        _starter_shot: REPRODUCIBLE — 8 frames byte-identical      exit 0
+MUTANT   `git show HEAD:tests/_starter_shot.gd` restored over it, same 780 s gap
+         _starter_shot: NOT REPRODUCIBLE — 4 of 8 frames moved, worst 20.2046%
+         (starter__on_deck), largest channel delta 50/255                            exit 1
+```
+
+The comparator itself was mutated the same way: `tools/png_repro_diff.py` on the post-fix
+`hull_visual_capture` pair prints `REPRODUCIBLE — 18 frames byte-identical` and exits 0; on the
+pre-fix pair it prints `NOT REPRODUCIBLE — 2 of 18 frames moved, worst 0.8628%, largest channel
+delta 241/255` and exits 1.
+
+**`pin()` pins the HOUR and not the WEATHER, and that gap is measured rather than assumed.**
+`WeatherField.current_game_time()` calls `WorldClock.get_game_hours_elapsed()`, which is computed
+live from `Time.get_unix_time_from_system()` **whether or not `WorldClock` is processing** — so
+anything sampling `WorldWeather` per frame still drifts, and `ShipLighting._update_auto_nav` reads
+`fog_density` as well as daylight. Nine rigs closed completely with the hour pinned, so for those
+the hour was the whole story. `_fittings_shot` did not. The remaining path is named and NOT
+closed.
+
+**Three rigs are still not reproducible and now declare their own floor**, in the header and on
+stdout, rather than pretending: `_fittings_shot` **3.8% of the frame**, `_small_hull_shot`
+**240 px (0.017%)** and `_hull_iter_shot` **150 px (0.011%)**. Looked at rather than counted — the difference mask is a dotted line down
+the port and starboard sheer, 160 pixels off by 1/255 and 58 flipping the full contrast of the
+edge. It is not the light (the clock is pinned) and it is not the hull (the frozen body's
+transform is bit-identical in float bits across processes). **The residue was not traced
+further.** A difference below the stated floor in those two rigs is noise; above it is real.
+
+### The shipped frames that were re-shot, and what moved
+
+Four sets are re-shot at pinned noon by a rig that is now reproducible across a gap. Every one of
+them was previously shot at whatever game hour that wave happened to run at, so the difference is
+the hour, not the boat:
+
+| set | frames | worst vs `12f609f` |
+|---|---|---|
+| `screenshots/vessels/starter/` | 8 | **23.07%** (`starter__on_deck`, delta 236/255) |
+| `screenshots/vessels/hold/` | 26 | **99.77%** (`hold__probe__boards_plan`, delta 134/255) |
+| `screenshots/vessels/starter_28m/` | 15 | **82.50%** (`fishing_trawler__on_deck`, delta 248/255) |
+| `screenshots/vessels/fishing_trawler_28m__stern_quarter.png` | 1 | **22.49%** (delta 254/255) |
+
+Looked at rather than counted (`starter__on_deck`, before and after): the old frame has the deck
+lights up — the wheelhouse windows are flat pale slabs and the deckhouse is a uniform white with
+almost no shading. At noon the windows read as glazing with a frame, the deckhouse carries the
+shadow gradient, and the deckhouse's own shadow lies across the deck. **The noon frame is the
+better reference and that is a side effect, not the reason** — the reason is that it is the same
+frame every time.
+
+*This is worth holding against one of the reads below:* item 5g's complaint that *"three window
+slots [read] the same value as the sky behind them… as holes punched to daylight rather than
+glass"* is a judgement about glazing made from a frame whose lighting was set by the wall clock.
+
+**Not re-shot, deliberately.** `screenshots/vessels/fittings/`, `screenshots/vessels/hull_15x5*`
+and the `iter*` series are left at `12f609f`, because their rigs are still not reproducible (see
+the floors above) and a fresh frame from a rig that cannot repeat itself is not an improvement on
+a stale one. Their rigs now say so out loud.
+
+### A SECOND WAY A FRAME LIES, and it hits the rigs that ARE reproducible
+
+A committed PNG is only evidence if it is what the rig produces TODAY. Re-running the
+byte-perfect rigs over a quiet tree and diffing against `12f609f`:
+
+| shipped set | rig | worst frame vs `12f609f` |
+|---|---|---|
+| `screenshots/studio/probe_piece_*`, `probe_plate_deckhouse__*` | `piece_kit_capture`, `structure_plate_capture` | **1.4450%**, deltas to 169/255 |
+| `screenshots/critic/*` | `_piece_kit_critic_capture` | **14.9112%**, deltas to 252/255 |
+| `screenshots/buildings/*` | `_warehouse_shot` | **1.9322%** |
+| `screenshots/decisions/q1_brick_cell__today__*` | `_q1_cell_shot` | **1.4752%** |
+| `screenshots/studio/` (the other 36) | `vessel_render_capture` | **0.0000% — still current** |
+
+Every one of those rigs is byte-reproducible. The frames are simply older than the code, and a
+percentage cannot tell "the rig is unstable" from "the frame is stale" — which is almost
+certainly what produced the *"up to 1.237% between identical runs"* on record. **Refreshing them
+is a separate job and was not done here**; until it is, `git diff` on one of those images shows
+the accumulated drift since the frame was committed, not what the commit under review did.
+
+Note what this does to `q1`'s own guarantee: *"the 'today' pass was re-run last and came back
+md5-identical, so the frames are comparable by construction"* was true when written and the
+committed frame has since drifted **1.4752%** from what the rig now draws. A reproducible rig does
+not make a committed frame current.
+
+### The claims in this file that were argued from a diff of an unreproducible rig
+
+Named, not re-opened. None of them is *withdrawn* — the point is which ones were argued by a
+METHOD that could not support them.
+
+1. **The catch-hold render paragraph (item 5, "Renders, re-shot from `tests/_starter_shot`").**
+   *"The two frames named in the original report both changed… that band was the hold coaming,
+   6.34 m across a 5.00 m boat… **It is gone**."* This is a before/after comparison of
+   `_starter_shot` frames, and that rig was moving every one of its eight frames between runs.
+   **The conclusion still stands and the method did not support it:** the rig's whole
+   nondeterminism is lighting — the geometry is bit-identical across processes — so it cannot
+   add or remove a 6.34 m coaming. Sound conclusion, unsound argument. Re-shot at pinned noon;
+   the new frames differ from `12f609f`'s by 0.91% to 23.07%, all of it the hour.
+2. **`fishing_trawler_28m__stern_quarter.png`, "figure_px 3521"** (same item). Re-run today the
+   same rig prints **figure_px 3947** with no code change between them. A recorded count off an
+   unpinned rig rots exactly like a quoted constant (REALITY §4d.5).
+3. **The hull-form series, "Two renders apart, indistinguishable — v1 and v2 in the series"**
+   (`screenshots/vessels/iter/`, `_hull_iter_shot`). A negative claim from a comparison, on a rig
+   whose own run-to-run noise is 0.013%. The claim is probably right and it was not established.
+4. **The deckhouse iteration reads (items 5g / 5i, `screenshots/vessels/iter_house*`).** Every
+   frame in both series moved between runs — 33.04% and 20.22% worst — and **the series were shot
+   over many runs at many game hours, so the frames are not comparable with each other.** One
+   read is directly affected: *"three window slots the same value as the sky behind them so they
+   read as holes punched to daylight rather than glass."* Re-shot at pinned noon the same glazing
+   reads as glass with a visible frame. **That taste judgement was partly a judgement about what
+   time of night the rig happened to run at.**
+5. **`hull_visual_capture`'s 0.000% is what made this morning's bow-shoulder frames
+   "attributable".** It is not 0.000%; it moves up to 0.86% on exactly `hull_15x5` and
+   `hull_28x10` — the two hulls that fix was measured on. The *geometric* half of that entry
+   (0.2181 → 0.0000 m and 0.4788 → 0.0000 m over 800 samples, held by
+   `hull_sheer_test._check_deck_edge_matches_plate`, mutated red at −0.2266 m) is untouched and
+   is what actually carries the claim.
+
+**Argued from a single frame, so still fine:** item 5's aspect cap ("photographs as a low ledge
+lying across the deck"), 5f (the bow rail is a staircase), 5i's proportion reads (60%/27% against
+30%/14%), 5g's `ledge_45`-is-a-ramp and `roof_slope`-z-fights findings, and every `q1`/`q2`/`q3`
+decision frame — those rigs measured **0.0000%** and the `q1` entry's own *"the 'today' pass was
+re-run last and came back md5-identical"* is confirmed.
 
 **What is built and verified**
 
