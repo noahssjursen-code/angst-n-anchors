@@ -3624,6 +3624,48 @@ it. **It is authorised to set the constants for rendering only and forbidden to 
 default.** Refreshing one arm of a three-way comparison is worse than refreshing none, which is
 why the previous attempt could not deliver this.
 
+### 2026-08-16 — THE BRICK-CELL DECISION IS SHOT AND WAITING ON THE OWNER
+
+Four arms, one process, one camera, same 1.8 m figures, in
+`screenshots/decisions/q1_cell_arms__*`. **The default is unchanged and no recommendation is
+taken as decided.**
+
+- **(a) today** — not a building, a **pegboard**: separate cubes with daylight between every
+  pair, hanging 0.250 m off the ground, roof in fifteen detached slabs, and the cargo door a
+  letterbox mounted 0.75 m up the wall whose sill crosses the figure **at the waist**. No taste
+  is involved in rejecting it.
+- **(b) brick 1.0 m** — a warehouse. Wall closes, sits on the ground, doors reach it and pass a
+  figure with 1.2 m of headroom, sign legible.
+- **(c) grid 0.5 m as-is** — wall closes, but the building is half of itself and the fixed ruler
+  towers beside a shed.
+- **(c′) grid 0.5 m migrated** — right envelope, breaks up close: **every multi-cell brick draws
+  eight times** instead of once at twice the size, so a cargo door becomes four cupboard doors
+  and the sign renders eight times into illegibility. **Not fixable in data.**
+
+The ledger agrees with the picture: (b) takes `building_interior_test` **5/41 → PASS(41)** in one
+move at **zero** extra meshes, zero collision shapes, zero blueprint edits and zero catalogue
+work; (c) migrated is **still 3/41 red** at 6.6× the meshes, 7.0× the blueprint bytes and **30 of
+64 bricks re-cut**. **Neither moves a vessel; neither touches a save.**
+
+**The trap in (b), measured:** the new cell parameter is **silent when wrong** — leak the 1.0 m
+brick onto the vessel path and all three vessel brick units stay **green**, because one derives
+its expectation from `size_m` itself. If (b) is taken, a test pinning the vessel brick to an
+absolute metre figure must land in the same commit.
+
+The rig **refuses to shoot** rather than emit identical frames under different names when the
+constants are `const`. Restoration proved by SHA-256, and the shipped-constant re-run reproduces
+the baseline exactly.
+
+### OPEN 2026-08-16 — the roof hovers, in every arm, for a reason the decision cannot fix
+
+In the arm that reads as a real building the worst remaining defect is a roof **0.820 m above the
+walls with daylight round the eaves** — **and the gap is identical in the shipped build**, so it
+is not caused by the cell factor and **no choice the owner makes will fix it**. Recorded cause:
+`roof_flat*` draws as a 0.18 m plate pinned to the top of its cell while `warehouse.json` puts the
+roof course a metre above the wall head — possibly two faults, one data and one code, and the fix
+differs. **Worth doing now precisely because it is independent of the pending decision: it
+improves every arm.**
+
 ### Standing, not a task
 
 Every model edit returns a render and the orchestrator looks at it. No metric for appearance —
