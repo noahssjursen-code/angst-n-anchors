@@ -603,9 +603,94 @@ working, not coverage lost.
 accepting a note about intent as evidence — its own defect one level up. Comment
 stripping added.
 
-**Still live and outside its reach:** `BoatBody.fuel_depleted` and `fuel_changed` have
-zero subscribers, so **running dry is silent — the engine stalls with no notice of any
-kind**. A wave is on it, and on whether the check can be widened to hold every signal.
+### The three that were outside its reach — closed 2026-08-16, and the class is 59 wide
+
+All three claims were re-verified independently before anything was touched, and one
+was **narrowed**: running dry was not silent in the strictest sense. `ShipHud._fuel_status`
+already reddens the FUEL cell below 10% and it reads `0%` in ALERT — but that is a POLL,
+it is only visible at the helm, and it can only say the tank *is* empty, never that it
+just ran dry. There was no event of any kind.
+
+- **`BoatBody.fuel_depleted` — WIRED.** `GameState._wire_boat` (was `_wire_mooring`)
+  now subscribes it to `ShipState.push_notice`, the surface the mooring refusal and the
+  shore-block toast already use — `LocalPlayerView.ship_notice_requested` →
+  `ShipHud.show_toast` → `BrandToast`, no HUD geometry, no new cell. **The wording is a
+  placeholder and is the owner's**: `ENGINE STOPPED — fuel tank empty. Bunker fuel at a
+  harbour fuel point.` `tests/fuel_stall_notice_test` (25 checks, lane A) drives it
+  through the live tree — `node_added` → `_wire_boat` → the notice — and asserts one
+  notice per crossing, none while dry, and one again after refuelling.
+- **`BoatBody.fuel_changed` — DELETED.** Emitted on every write to `fuel_l`, sixty times
+  a second under throttle, to nobody. The level does reach the player, by the other
+  derivation: `_capture_instruments` → `fuel_fraction` → the HUD's FUEL cell and
+  `ChartNavSnapshot`. Second copy of a delivered value (REALITY §3b).
+- **`PrebuiltVesselCatalog`'s `compliance_errors` — DELETED.** Only readers were two
+  lines of `starter_vessel_grant_test`, and a reader in `tests/` is not a reader. The
+  same array is `push_warning`ed at the same site; the two verdict fields that DO have
+  production readers, `compliance_ok` and `is_draft`, are untouched. The test now takes
+  its errors from `VesselCompliance.validate` — reading the key back would have passed
+  on an empty default the moment the key went (REALITY §4).
+
+**`tests/signal_reach_test` (66 checks) answers the widening question: yes, and the
+answer is 59.** Every `signal` declared in `scripts/` is scanned for a subscriber in
+`scripts/` — an emission is not a subscription, a subscriber in `tests/` is not a
+subscriber, and every accepted one is printed with its `file:line` and shape.
+**178 declared, 119 subscribed, 59 not** — a third of the project's signals are emitted
+to nobody. They are a FROZEN register policed in both directions, not an approval: it
+can only shrink. Four of the 59 were invisible until the scan learned to attribute a
+shared name by the receiver's declared type — `BulkHoldComponent.fill_changed`,
+`ShipyardBrickEditor.closed` and `CaptainService.captain_created`/`captain_deleted` were
+each answered for by a subscriber on the *other* class of the same name.
+
+**Where it cannot go, counted rather than implied:** two connect sites name their signal
+through a variable (both halves of `DebugDraw._connect_if`, whose own callers pass
+literals the scan does read) — there is no `callable_mp` through a variable and no name
+built at runtime anywhere in `scripts/`; 22 subscriptions to a shared name have a
+receiver that cannot be typed and are accepted and printed; and **zero** `.tscn` files
+carry an editor connection, which is asserted rather than assumed because the day one
+appears the scan starts producing false reds.
+
+**Still live, same class, outside both checks (they hold fields and signals, not
+functions):** `BoatBody.fill_tank()` and `BoatBody.get_estimated_range_m()` have zero
+callers repo-wide while their own headers name callers that do not exist ("used by the
+shipwright on commission", "the map's fuel-range ring" — the chart draws a percentage
+and no ring), and `CRUISE_SPEED_MS` exists only for the second.
+`PropulsionComponent.delivered_thrust_n` is computed every physics tick and read by
+nothing.
+
+**Verified by the orchestrator, not accepted:** both units re-run at control (28 and 67,
+matching), and two mutations reproduced independently — dropping the `PlayerVessel.GROUP`
+guard gives **2/28 FAILED** naming the right defect ("a vessel that is not the player's
+runs dry in silence"), and adding an unsubscribed `signal` to `rudder_component.gd` gives
+**2/68 FAILED** at 179/119/60. The register polices growth; it does not merely count.
+
+### What running dry actually costs, surveyed and NOT fixed
+
+The notice is the event. Everything downstream of it is still wrong, and this is the
+next milestone rather than a footnote:
+
+- **`VesselAutopilot` has no fuel awareness at all** — zero occurrences of "fuel" in the
+  file. It disengages on arrival or a 650 m route error and nothing else, so a dry boat
+  stays `active`, keeps writing `_propulsion.throttle`, and the AUTOPILOT cell shows a
+  destination and a distance-to-run **that never falls**. Read, not run.
+- **`AutonomousVesselCaptain`** burns the same fuel through the same autopilot and its
+  `_fail()` is reachable only from `_on_autopilot_disengaged` — an NPC that runs dry sits
+  in `PASSAGE` forever **holding its traffic-lane lease**.
+- **There is no tow, no reserve, no recovery.** `add_fuel` has exactly one caller and it
+  needs the player physically at a harbour master. Running dry at sea is escapable only
+  by abandoning the vessel.
+- **Fuel is not persisted** — `_snapshot_into_player_data` sets `ship_runtime_state = {}`
+  unconditionally and "fuel" appears nowhere in the save path. A dry tank is undone by a
+  save/load, which is also why nobody noticed.
+- **The stall is not silent, it is LOUD.** `BoatAudioSystem` blends the engine loop from
+  `prop.throttle` — the *command*, not delivered thrust — so a stalled boat keeps playing
+  `engine_load` at full. Code path read; not heard (`--audio-driver Dummy`).
+- **Endurance, which explains the whole class:** trawler 840 L / 0.07 L·s⁻¹ = **3 h 20**
+  at full ahead, catalog hulls ≈ 4 h. Nothing in `tests/` had **ever crossed the tank to
+  zero** — every fixture stopped short (1000→500 L; 0.42/0.61 hard-coded) — which is why
+  both the dead wire and the stale `delivered_thrust_n` survived this long.
+- **`mooring_rejected` is wired with the same un-gated shape the first fuel version had**,
+  so an NPC captain's mooring refusal would toast the player. Not changed, not verified
+  reachable.
 
 **Left as the owner's, not fixed:** a player sails a gale with only a KT number
 (`weather_label`'s six authored strings reach the F3 panel alone), and a trawl streamed
