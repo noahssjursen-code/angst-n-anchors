@@ -25,19 +25,27 @@ extends Node
 ## at noon, and each frame is grabbed after `frame_post_draw` rather than after
 ## a bare `process_frame` count.
 ##
-## ══ THIS RIG IS NOT FULLY REPRODUCIBLE. THERE IS A FLOOR, AND IT IS 150 px. ═
+## ══ THE RESIDUE IS CLOSED, AND IT WAS NOT A RACE. 2026-08-16, second pass ═══
 ##
-## Both fixes applied, three runs, pairwise: **3 to 4 of 7 frames still move,
-## by 0.0004% to 0.0102% of their pixels** — measured 23 and 147 pixels out of
-## 1 440 000 on the two worst. The shape is the silhouette-edge race described
-## above and NOT the light: almost every differing pixel is off by 1/255, with a
-## handful of edge pixels flipping by 110 to 146 where an outline lands on the
-## other side of a pixel centre. The residue was not traced further and is
-## reported rather than papered over (REALITY §6).
+## This header used to declare a 150 px floor and call its shape "the
+## silhouette-edge race described above". It is neither a race nor unexplained.
+## `boat.freeze = true` is **revoked by `BoatBody`'s own physics LOD** one second
+## after the hull enters the tree — `_update_automatic_physics_quality()` finds
+## no `PlayerVessel`, takes the `nearest_distance == INF` branch to
+## `PhysicsQuality.FULL`, and `set_physics_quality` executes `freeze = false` and
+## re-enables `StripBuoyancyComponent`. The hull then sinks to its buoyancy
+## equilibrium: **1.15 mm on `hull_15x5`**, which is 0.2 px at `bow_on`'s 9 m
+## across 1600 px. Full mechanism and measurements in
+## `tests/support/capture_subject.gd`; the guarantee is scored by
+## `tests/capture_subject_still_test.gd`.
 ##
-## **So: a difference under about 150 pixels (0.011%) in a frame from this rig
-## is NOISE, and anything above it is real.** That floor is printed on every run
-## so nobody has to open this file to find it. Do not md5-compare these frames.
+## **How close this rig came to being declared closed by luck.** On 2026-08-16
+## `tools/repro.sh _hull_iter_shot` with the full 780 s gap returned
+## `REPRODUCIBLE — 7 frames byte-identical`, exit 0 — with the defect still in
+## place. Four back-to-back runs of that same unfixed rig, compared pairwise,
+## moved **2 to 5 of 7 frames, worst 32 px at 146/255**. The transient is
+## sampled at whatever phase the run lands on, so a single clean pair means
+## nothing. A green `repro.sh` is necessary and it is not sufficient.
 ##
 ## The shipped `v0…v12` series predates all of this and was shot at whatever
 ## game hour each run happened at, so **the series is not comparable
@@ -46,8 +54,7 @@ extends Node
 ## job for whoever owns the hull loft, not for the rig.
 
 const CaptureClock := preload("res://tests/support/capture_clock.gd")
-## Measured 2026-08-16 over three runs of the fixed rig, worst pair.
-const REPRO_NOISE_FLOOR_PX := 150
+const CaptureSubject := preload("res://tests/support/capture_subject.gd")
 const OUT_DIR := "res://screenshots/vessels/iter"
 const SKY := Color(0.80, 0.85, 0.90)
 const WATER := Color(0.13, 0.32, 0.40, 0.62)
@@ -97,12 +104,14 @@ func _run() -> void:
 	## they put two of these frames side by side. Measured 2026-08-16 over three
 	## runs of this rig with the clock pinned and `frame_post_draw` awaited.
 	print(
-		"REPRO FLOOR %d px — two runs of THIS rig still differ by up to that many "
-		% REPRO_NOISE_FLOOR_PX
-		+ "pixels (0.011%) at silhouette edges. A smaller difference between two of "
-		+ "these frames is noise, not a change in the hull. Never md5-compare them. "
-		+ "The shipped v0..v12 series predates the clock pin and is not "
-		+ "frame-to-frame comparable at all."
+		"REPRO: byte-identical across tools/repro.sh's 780 s gap (2026-08-16). The "
+		+ "old 150 px 'noise floor' was the hull sinking 1.15 mm to its buoyancy "
+		+ "equilibrium after BoatBody's physics LOD revoked freeze; it is held still "
+		+ "by CaptureSubject.hold_still now and these frames MAY be md5-compared. "
+		+ "The shipped v0..v12 series predates all of this, was shot at whatever "
+		+ "game hour and whatever phase of the sink each run landed on, and is NOT "
+		+ "frame-to-frame comparable — re-shooting it needs the historical hull "
+		+ "variants, which no longer exist in the tree."
 	)
 	get_tree().quit(0)
 
@@ -164,6 +173,10 @@ func _place(hull_id: String, at: Vector3) -> BoatBody:
 	var boat := HullRegistry.build_hull(hull_id)
 	boat.freeze = true
 	_world.add_child(boat)
+	## `freeze = true` above is revoked by BoatBody's physics LOD one second after
+	## enter-tree — see this file's header. Without this line the hull sinks
+	## 1.15 mm mid-shoot and the frames stop being comparable.
+	CaptureSubject.hold_still(boat)
 	boat.position = Vector3(at.x, WL - boat.draft_m - boat.hull_stations.keel_y, at.z)
 	var figure := _make_figure()
 	figure.position = Vector3(

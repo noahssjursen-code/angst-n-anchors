@@ -37,27 +37,44 @@ extends Node
 ## a bare `process_frame` count.
 
 ##
-## ══ AND IT IS STILL NOT REPRODUCIBLE. THE CLOCK PIN IS NOT ENOUGH HERE. ════
+## ══ CLOSED — AND IT WAS NEVER THE WEATHER. 2026-08-16, second pass ═════════
 ##
-## Two back-to-back runs of this rig agree exactly (7 frames, 0.0000%) — which
-## is why the drift was invisible. Two runs **six real minutes apart**, with the
-## clock pinned and `frame_post_draw` awaited, still move **2 of 7 frames, by
-## 3.4908% (`vessel__bow_quarter`) and 3.7904% (`vessel__deck_close`)**.
+## This header used to blame the residue on the weather: *"`CaptureClock.pin`
+## pins the HOUR and not the WEATHER … `WeatherField.current_game_time()` calls
+## `WorldClock.get_game_hours_elapsed()`"*. That path was **named but never
+## measured**, and it is not what was happening.
 ##
-## `CaptureClock.pin` pins the HOUR and not the WEATHER, and the weather is on
-## the same wall clock by another route: `WeatherField.current_game_time()`
-## calls `WorldClock.get_game_hours_elapsed()`, which is computed live from
-## `Time.get_unix_time_from_system()` whether or not `WorldClock` is processing.
-## `ShipLighting._update_auto_nav` reads `fog_density` as well as daylight. Nine
-## other rigs closed completely with the hour pinned; this one did not, and the
-## remaining path was identified but NOT closed (REALITY §6).
+## `tests/_fittings_diag_probe.gd` stands this exact vessel up through this exact
+## production path and prints, every frame, both what the weather hypothesis
+## predicts and what its rival predicts. Over a whole run:
 ##
-## **So: two frames from this rig are comparable only above about 3.8% of
-## pixels. Never md5-compare them.** Stated on stdout on every run.
+##   * `time_of_day`, `fog_density`, `daylight_factor()` and
+##     `artificial_light_scale()` are **constant in their exact float bits** —
+##     one distinct value each. Nothing pushes weather into `WeatherLighting` in
+##     a capture rig: the only writer is `AtmosphericEffects`, which is a scene
+##     node and not an autoload, so it is not in the tree here.
+##   * the vessel carries **zero `Light3D`s**, so `ShipLighting` has nothing to
+##     rescale even in principle.
+##   * the HULL moves. `global_position.y` drops and settles — 1.45 mm inside the
+##     first 45 rendered frames, **53 mm and a non-identity basis over 150
+##     physics frames** — because `boat.freeze = true` is revoked by
+##     `BoatBody`'s own physics LOD one second after enter-tree
+##     (`_update_automatic_physics_quality()` → `PhysicsQuality.FULL` →
+##     `freeze = false`, buoyancy re-enabled).
+##
+## That is why exactly the two LAST vessel frames moved and `vessel__profile`,
+## shot first, did not: the subject is sinking while the rig photographs it, so
+## each successive frame is further from the pose the rig asked for. It is also
+## why `vessel__deck_close` (12 m across, 7.5 mm/px) moves ~4.8% of its pixels —
+## the difference mask is full-width bands at the deck line and both boot-top
+## stripes, i.e. the whole boat translated a few pixels down the frame, not a
+## light change and not an edge race.
+##
+## Mechanism, measurements and the scored guarantee:
+## `tests/support/capture_subject.gd` and `tests/capture_subject_still_test.gd`.
 
 const CaptureClock := preload("res://tests/support/capture_clock.gd")
-## Measured 2026-08-16, two runs six real minutes apart with the clock pinned.
-const REPRO_FLOOR_PCT := 3.8
+const CaptureSubject := preload("res://tests/support/capture_subject.gd")
 const OUT_DIR := "res://screenshots/vessels/fittings"
 const SKY := Color(0.80, 0.85, 0.90)
 const WATER := Color(0.13, 0.32, 0.40, 0.62)
@@ -84,11 +101,12 @@ func _run() -> void:
 	await _on_the_vessel()
 	print("SHOT DONE")
 	print(
-		"REPRO FLOOR %.1f%% — two runs of THIS rig minutes apart still differ by up to "
-		% REPRO_FLOOR_PCT
-		+ "that fraction of the frame. The clock pin fixes the HOUR, not the WEATHER "
-		+ "(WeatherField reads the Unix clock directly). A smaller difference between "
-		+ "two of these frames is noise. Never md5-compare them."
+		"REPRO: byte-identical across tools/repro.sh's 780 s gap (2026-08-16). The old "
+		+ "3.8% 'floor' was never the weather — time_of_day, fog_density and "
+		+ "artificial_light_scale are constant in their float bits here and this vessel "
+		+ "carries no Light3D at all. It was the hull sinking after BoatBody's physics "
+		+ "LOD revoked freeze; CaptureSubject.hold_still holds it, and these frames MAY "
+		+ "be md5-compared."
 	)
 	get_tree().quit(0)
 
@@ -157,6 +175,10 @@ func _on_the_vessel() -> void:
 		return
 	boat.freeze = true
 	_world.add_child(boat)
+	## `freeze = true` above is revoked by BoatBody's physics LOD one second after
+	## enter-tree — see this file's header. Without this line the vessel sinks
+	## while the rig photographs it and the later frames move by ~4.8%.
+	CaptureSubject.hold_still(boat)
 	boat.position = Vector3(0.0, WL - boat.draft_m - boat.hull_stations.keel_y, 0.0)
 	await get_tree().physics_frame
 
