@@ -70,19 +70,30 @@ extends RefCounted
 ## `doors` is an enclosure fact and a plan draws it: a door is an opening of
 ## type "door" cut into a wall or a deck, counted off the drawing.
 ##
-## `has_cabin` is NOT measurable right now and is reported false for every plan.
-## It used to mean "the plan contains a room", because the room primitive was
-## the plan's own declaration of enclosure — it expanded to walls + floor +
-## ceiling and `open_faces` named the sides that were missing. The room
-## primitive was deleted (2026-08-10): it could only draw a box, so every
-## deckhouse built from one came out a shed. Nothing that survives it declares
-## enclosure, and the one thing this function must never do is go back to
-## inferring a cabin from loose walls. The brick-era rule was
-## `door_n >= 1 or wall_n >= 8`, which passes on eight roofless walls — a fence
-## sold as accommodation, and the regression `plan_compliance_test` still pins.
-## The wave that lands the sloped-plate primitive re-derives enclosure from it;
-## until then a licence that requires a cabin cannot be met by a plan, and that
-## refusal is honest rather than a wrong yes.
+## `has_cabin` is MEASURED off the drawing — see `enclosure` below for the
+## criterion and for what it costs. The paragraph that used to stand here said it
+## was not measurable, and that was a category error worth spelling out because
+## it is the kind this project keeps making: it read "no primitive DECLARES
+## enclosure" as "enclosure is not MEASURABLE".
+##
+## The room primitive was the plan's own DECLARATION of a cabin — it expanded to
+## walls + floor + ceiling and `open_faces` named the sides that were missing —
+## and deleting it (2026-08-10) was right: it could only draw a box, so every
+## deckhouse built from one came out a shed. What it took with it was the
+## declaration, not the fact. A plan still draws walls with positions, extents
+## and openings, decks with origins and sizes, and plates with four corners
+## apiece, and whether those close a volume is a question about that drawing with
+## exactly one right answer. The old wording turned "the document no longer says
+## `room`" into "the geometry cannot be asked", and on the strength of it
+## `passenger_vessel/cabin` was closed to every plan a player could draw, for
+## every plan, permanently — the owner's central premise failing quietly behind
+## an honest-sounding refusal.
+##
+## The bar the old paragraph set is the right bar and `plan_compliance_test`
+## still holds this to it: the brick-era rule `door_n >= 1 or wall_n >= 8`
+## passes on eight roofless walls, a fence sold as accommodation. `enclosure`
+## refuses that case for the reason a person would give — a fence has no deck
+## over it and the sky is not a ceiling — rather than by not asking.
 ##
 ## ── Scale (CONVENTIONS §3a) ─────────────────────────────────────────────────
 ##
@@ -646,11 +657,17 @@ static func _validate_built(
 		"tow": (slot_items["tow"] as Array).size(),
 		"accepted_cargo_cells": accepted_cells.size(),
 	}
+	## READ OFF `judged`, like `doors` below and for the same reason: a deckhouse
+	## that is not on the boat is not accommodation on this boat. It used to read
+	## the AUTHORED plan, which cost nothing while the answer was hardcoded false
+	## and would have certified a cabin drawn 900 m off the bow the moment it was
+	## not.
+	var enclosed := enclosure(judged)
 	var capabilities := {
 		"cargo_cells": accepted_cells.size(),
 		"cargo_budget": cargo_max,
 		"exposed_deck_cells": int(budget.get("exposed_deck_cells", 0)),
-		"has_cabin": has_cabin(plan),
+		"has_cabin": bool(enclosed.get("cabin", false)),
 		"has_helm": (accepted_slots["helm"] as Array).size() >= 1,
 		"has_crane": (accepted_slots["crane"] as Array).size() >= 1,
 		"has_fishing": (accepted_slots["fishing"] as Array).size() >= 1,
@@ -666,7 +683,12 @@ static func _validate_built(
 		"max_stack_y": max_stack_cells(plan, g),
 		## Plan-native extras. Nothing in the catalog reads them yet; they cost
 		## nothing and a `metric_range` rule can name them the day it wants to.
-		"cabins": 0,
+		## `cabins` is the COUNT `enclosure` found and `cabin_area_m2` the largest
+		## one's standable floor — the numbers a licence that wants two cabins, or
+		## eight square metres of them, would be written against.
+		"cabins": int(enclosed.get("cabins", 0)),
+		"cabin_area_m2": float(enclosed.get("area_m2", 0.0)),
+		"cabin_why": str(enclosed.get("why", "")),
 		"items": plan.items.size(),
 		"plan_entities": plan.entity_count(),
 		"structure_plan": true,
@@ -844,11 +866,663 @@ static func _with_fence(report: Dictionary, off_hull: Array) -> Dictionary:
 
 # ── Enclosure, read off geometry ────────────────────────────────────────────
 
-## No plan primitive declares enclosure since the room primitive was deleted, so
-## this is false for every plan — deliberately, and see the header. Do NOT make
-## it true by counting walls: a fence with a gate in it is not accommodation.
-static func has_cabin(_plan: StructurePlan) -> bool:
+## The raster the columns below are counted on, in metres. HALF a deck cell, and
+## that is the number the resolution limit is stated in: a cell is solid when any
+## drawn box OVERLAPS it, so a wall thinner than the raster still blocks (a
+## default wall is 1/6 m and would fall between centre samples) at the price of
+## each wall end bleeding up to half a cell into the gap beside it. Measured on
+## the synthetic ring (`plan_enclosure_test`): a 1.0 m hole reads as open,
+## a 0.5 m hole reads as CLOSED. So this reading cannot see a slot narrower than
+## 2 * CABIN_CELL_M, it is stated here rather than discovered later, and halving
+## the constant halves the slot at four times the cost.
+const CABIN_CELL_M := 0.25
+## `scenes/shared/player.tscn` is 1.8 m (CONVENTIONS §3a) and a compartment they
+## cannot stand up in is not accommodation. The same figure `plan_interior_test`
+## and `piece_interior_test` march through these deckhouses with.
+const CABIN_MIN_HEADROOM_M := 1.8
+## The smallest compartment on any vessel is the heads — 0.9–1.4 x 0.8–1.2 m per
+## `references/COMPONENTS.md`, which is the smallest space a person can turn
+## round in. Under this and the enclosed pocket is a void, not a room.
+const CABIN_MIN_AREA_M2 := 1.2
+## Two solids whose spans meet within this are one solid. `StructureBaker.SKIN_EPS`
+## is 0.01: abutting plates deliberately overlap by that much, and a joint must
+## not read as a crack the weather gets through.
+const CABIN_MERGE_M := 0.02
+## How far a DOOR may stand from the air it opens onto, in raster cells. A
+## doorway is cut INTO the shell, so the air on its inboard face is one or two
+## cells away through the plating. Widening it to 3 or 4 cells changes no answer
+## on any shipped fixture, measured — the fleet does not sit near this bound.
+const CABIN_ACCESS_CELLS := 2
+## 4-connectivity for the column flood. Diagonal leakage is deliberately not
+## modelled: two boxes meeting at a corner leave no passage.
+const CABIN_NEIGHBORS: Array[Vector2i] = [
+	Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)
+]
+
+
+## Does this plan draw an enclosed compartment a person could live in?
+##
+## See `enclosure` for the criterion. This is the boolean the registration
+## evaluator reads; everything that makes it true or false is in there.
+static func has_cabin(plan: StructurePlan) -> bool:
+	return bool(enclosure(plan).get("cabin", false))
+
+
+## THE ENCLOSURE READING. Returns
+## `{cabin, cabins, area_m2, floor_y, roof_y, why}`.
+##
+## ── The criterion, and why this one ─────────────────────────────────────────
+##
+## **A cabin is a pocket of air inside the drawing that the sky cannot reach,
+## tall enough to stand in, big enough to turn round in, with a door into it.**
+## Nothing here asks what a primitive is CALLED.
+##
+## Each clause is there because dropping it admits something a builder would not
+## call accommodation, and every one of them is checked by
+## `tests/plan_enclosure_test.gd` against a plan built to break it — and shown
+## RED by deleting the clause:
+##
+##   sky cannot reach it   the fence. Eight walls in a ring with a door and no
+##                         deck over them is refused because the air inside them
+##                         runs straight up to the sky — which is the reason a
+##                         person would give, and it is the same reason that
+##                         refuses a ring whose fourth side is missing (the air
+##                         goes out sideways instead).
+##   tall enough           a locker, a void under a boat deck, the 0.9 m gap
+##                         between two tiers. 1.8 m or it is not a room.
+##   big enough            the 0.5 m² pocket between a mast foot and a casing.
+##   a way in              a shipping container is an enclosed steel box with
+##                         2.39 m of headroom and 14 m² of floor, and it is not a
+##                         cabin. So is a sealed funnel casing and so is a hold.
+##                         What separates accommodation from a box is that you
+##                         can get into it, and the plan records exactly that.
+##                         A DOOR, not a window: see `_is_way_in`, and the funnel
+##                         trunk with a scuttle in it that made the distinction
+##                         necessary.
+##
+## ── What it still gets wrong, named rather than left to be found ────────────
+##
+## Every one of these came out of `tests/_enclosure_adversary.gd`, which exists
+## to get a wrong `true` out of this function:
+##
+##  • A SHIPPING CONTAINER WITH ITS DOORS DRAWN reads as a cabin — 11.5 m² of
+##    floor, 2.29 m of headroom, two door openings. There is no geometry that
+##    separates it from a compartment, because there is none: a converted box IS
+##    accommodation on real ships. No shipped fixture hits this (the container
+##    feeder draws 350 container plates and cuts openings in exactly one of
+##    them, the house front), and the only fix would be a `container` tag on the
+##    part — a data question, not a geometry one.
+##  • A FULL-HEIGHT SHELTER DECK — bulwark raised to the deckhead all round,
+##    with a door — reads as a cabin. It is enclosed, floored, roofed and
+##    enterable, so this is arguably right; it is listed because a builder might
+##    call it a covered working deck. The 1.2 m bulwark under the same deck is
+##    correctly refused.
+##  • A SLOT NARROWER THAN 0.5 m reads as closed. See `CABIN_CELL_M`.
+##  • The way-in test asks whether a door stands within two raster cells of the
+##    enclosed air, which is a blob and not a direction. A door in an internal
+##    bulkhead therefore opens onto BOTH compartments it separates — correct —
+##    and a door within 0.5 m of a sealed void beside the room it really opens
+##    onto would open onto that too. No fixture does this and the fix is to
+##    step along the plate's own normal instead.
+##
+## ── A door is a CLOSURE, not a hole ─────────────────────────────────────────
+##
+## The one place this reading edits the drawing. `wall_panels` subtracts a door
+## from the plating, so the boxes the baker emits have a genuine 1.2 x 2.1 m gap
+## in them — correct for collision, and it would leak every cabin in the fleet
+## through its own front door. The format already names the difference and this
+## uses the format's own word: `door` and `window` are leaves and glass and are
+## filled back in, `hole` and `stairwell` are holes and are left open. So a
+## deckhouse with a companionway hatch in its roof is measured as open through
+## that hatch, which is what a hatch is.
+##
+## SEALING AND ACCESS ARE NOT THE SAME QUESTION and are two predicates, not one:
+## `_is_closure` (door or window) decides what closes the envelope, `_is_way_in`
+## (door only) decides what lets a person through it. They were one predicate
+## until the adversarial pass, and conflating them was worth a wrong yes on a
+## funnel trunk with a scuttle in it. Varying them together also produced a
+## confident wrong conclusion about the fleet on the way — REALITY.md §4e, vary
+## ONE input.
+##
+## ── Why a flood over COLUMNS and not a level-by-level reading ───────────────
+##
+## The first cut looked for a horizontal ceiling plane and asked whether the ring
+## under it closed. It reported false on every deckhouse in the repo. A
+## `deck_tile` at `fall 2` drops 0.25 m across its run and `roof_slope` is a
+## slope by definition, so there IS no plane at which the whole ceiling is solid
+## — and a reading that needed one was the room primitive's shed assumption
+## wearing a different hat. What replaced it assumes nothing about shape:
+##
+##   1. every collider box the plan draws is painted into the XZ raster, each
+##      column keeping the y SPANS it covers;
+##   2. the spans are merged, and what is left between them are the column's AIR
+##      intervals. The last one runs to infinity: that is the sky. Below y = 0 is
+##      the vessel's own deck (or, for a building, the ground) and is solid —
+##      the same closed floor `BrickShellClassifier` gives the brick path, which
+##      has been flooding air from the sides and the sky to tell an interior
+##      brick from an exterior one since long before this function existed;
+##   3. air intervals in neighbouring columns are connected when their spans
+##      overlap. Flood in from every column at the raster edge and every column
+##      standing next to one with no structure in it at all — see
+##      `_flood_outside` for why the sky needs no seed of its own;
+##   4. what the flood never reached is enclosed. Group it, measure each group's
+##      standable floor, and ask whether a closure opens onto it.
+##
+## THE BOXES ARE THE DRAWING (REALITY.md §3b). They come from
+## `StructureBaker.collect_colliders`, which is what the player walks into, so a
+## wall that stops reaching the deckhead in the baker stops enclosing here in the
+## same commit. There is no second geometry here to drift — the only thing this
+## file computes is the raster.
+##
+## ── Measured ────────────────────────────────────────────────────────────────
+##
+## Over the 18 shipped `structure_plan_v1` fixtures (`tests/_enclosure_probe.gd`;
+## the nineteenth file in that directory is `probe_edge_runs`, which is not a
+## plan), **10 report a cabin and 8 do not**. True: demo_workboat,
+## probe_trawler_bulwark, probe_trawler_bow_bulwark, probe_piece_house,
+## probe_piece_trawler, probe_piece_tug, probe_plate_deckhouse,
+## probe_ferry_catamaran(_trim) and probe_container_feeder — whose 242.5 m²
+## compartment at y 0.00..3.70 is the accommodation block, entered through the
+## two doors cut in the house front at z = 16.5 (item 111), not the cargo hold.
+## False: the two bulwark-only fixtures, the spar kit, the diagonal-wall probe,
+## the AO junction and the three `critic_*` piece studies, none of which closes a
+## volume it also lets you into.
+##
+## That is an INDEPENDENT check on the answer rather than a calibration:
+## `plan_interior_test` and `piece_interior_test` march a 1.8 m capsule through
+## five of those deckhouses on the real `PhysicsServer3D` body and find floors
+## and passable doorways, and this agrees with all five without being told.
+##
+## Cost, one process, llvmpipe: 4–130 ms for a hand-authored vessel, 220–230 ms
+## for the two catamarans and **~1.8 s for `probe_container_feeder`** — 617
+## entities and 3070 collider boxes, the largest plan in the repo and about five
+## times the next one. It is linear in painted columns, and that plan paints
+## 70 526 of them. That is the honest number and it is not comfortable: a whole
+## studio rebake of the same plan is 342 ms, so on THAT plan this reading is the
+## dominant cost of a validate. The lever is `CABIN_CELL_M` — at 0.5 m the feeder
+## falls to ~0.5 s and the slot this reading cannot see doubles to 1.0 m, which
+## is a hole you can walk through. The resolution was chosen for the answer, not
+## for the clock.
+static func enclosure(plan: StructurePlan) -> Dictionary:
+	var empty := {
+		"cabin": false, "cabins": 0, "area_m2": 0.0, "floor_y": 0.0, "roof_y": 0.0,
+	}
+	if plan == null:
+		return _enclosure_result(empty, "no plan")
+	var resolved := StructureBaker.resolved(plan)
+	var boxes := StructureBaker.collect_colliders(_sealed_plan(resolved))
+	if boxes.is_empty():
+		return _enclosure_result(empty, "the plan draws nothing")
+
+	## 1. The raster, and one column of solid spans per cell it touches.
+	var lo := Vector2(INF, INF)
+	var hi := Vector2(-INF, -INF)
+	for box_variant in boxes:
+		var box := box_variant as Dictionary
+		var centre: Vector3 = box["center"]
+		var reach := _box_reach(box)
+		lo = Vector2(minf(lo.x, centre.x - reach.x), minf(lo.y, centre.z - reach.y))
+		hi = Vector2(maxf(hi.x, centre.x + reach.x), maxf(hi.y, centre.z + reach.y))
+	lo -= Vector2(CABIN_CELL_M, CABIN_CELL_M)
+	hi += Vector2(CABIN_CELL_M, CABIN_CELL_M)
+	var w := int(ceil((hi.x - lo.x) / CABIN_CELL_M)) + 1
+	var h := int(ceil((hi.y - lo.y) / CABIN_CELL_M)) + 1
+	var solid := {}
+	for box_variant in boxes:
+		_paint_column_spans(box_variant as Dictionary, solid, lo, w, h)
+
+	## 2. The air between the solids. `air[column]` is [lo0, hi0, lo1, hi1, …] and
+	## its last interval runs to INF — the sky.
+	var air := {}
+	var state := {}
+	for key in solid.keys():
+		var gaps := _air_intervals(solid[key] as PackedFloat32Array)
+		air[key] = gaps
+		var flags := PackedByteArray()
+		flags.resize(gaps.size() / 2)
+		state[key] = flags
+
+	## 3. Flood the outside in.
+	_flood_outside(air, state, w, h)
+
+	## 4. What is left. Every group is measured; the report names the largest.
+	var closures := _closure_points(resolved)
+	var cabins := 0
+	var best := empty.duplicate()
+	var best_walled := empty.duplicate()
+	for key in air.keys():
+		var flags: PackedByteArray = state[key]
+		for i in flags.size():
+			if flags[i] != 0:
+				continue
+			var group := _enclosed_group(air, state, w, h, int(key), i)
+			if float(group["area_m2"]) < CABIN_MIN_AREA_M2:
+				continue
+			if float(group["area_m2"]) > float(best_walled["area_m2"]):
+				best_walled = group
+			if not _has_closure(group["columns"] as Dictionary, closures, lo, w, group):
+				continue
+			cabins += 1
+			if float(group["area_m2"]) > float(best["area_m2"]):
+				best = group
+	if cabins > 0:
+		best["cabin"] = true
+		best["cabins"] = cabins
+		return _enclosure_result(best, "%.1f m2 of standable enclosed floor, y %.2f..%.2f" % [
+			float(best["area_m2"]), float(best["floor_y"]), float(best["roof_y"])
+		])
+	if float(best_walled["area_m2"]) > 0.0:
+		best_walled["cabins"] = 0
+		return _enclosure_result(
+			best_walled,
+			"%.1f m2 is enclosed at y %.2f..%.2f but no door opens onto it"
+				% [float(best_walled["area_m2"]), float(best_walled["floor_y"]),
+					float(best_walled["roof_y"])],
+		)
+	return _enclosure_result(empty, "nothing the plan draws closes a volume over %.1f m2 %s" % [
+		CABIN_MIN_AREA_M2, "with %.1f m of headroom" % CABIN_MIN_HEADROOM_M
+	])
+
+
+static func _enclosure_result(report: Dictionary, why: String) -> Dictionary:
+	var out := report.duplicate()
+	out.erase("columns")
+	out["why"] = why
+	return out
+
+
+## One enclosed pocket, grown from `(column, interval)` through every neighbouring
+## air interval whose span overlaps. `area_m2` counts only the columns with
+## standing headroom — the eave of a sloped roof is part of the compartment and
+## is not floor a person can use.
+static func _enclosed_group(
+	air: Dictionary, state: Dictionary, w: int, h: int, start_column: int, start_i: int
+) -> Dictionary:
+	var queue: Array[Vector2i] = [Vector2i(start_column, start_i)]
+	(state[start_column] as PackedByteArray)[start_i] = 1
+	var read_i := 0
+	var columns := {}
+	var standable := {}
+	var y_lo := INF
+	var y_hi := -INF
+	while read_i < queue.size():
+		var node: Vector2i = queue[read_i]
+		read_i += 1
+		var gaps: PackedFloat32Array = air[node.x]
+		var y0 := gaps[node.y * 2]
+		var y1 := gaps[node.y * 2 + 1]
+		columns[node.x] = true
+		if y1 - y0 >= CABIN_MIN_HEADROOM_M:
+			standable[node.x] = true
+		y_lo = minf(y_lo, y0)
+		y_hi = maxf(y_hi, y1)
+		var x := node.x % w
+		var z := node.x / w
+		for offset in CABIN_NEIGHBORS:
+			var nx: int = x + offset.x
+			var nz: int = z + offset.y
+			if nx < 0 or nz < 0 or nx >= w or nz >= h:
+				continue
+			var n_column: int = nz * w + nx
+			var n_gaps: Variant = air.get(n_column, null)
+			if n_gaps == null:
+				continue
+			var n_spans: PackedFloat32Array = n_gaps
+			var n_flags: PackedByteArray = state[n_column]
+			for j in n_flags.size():
+				if n_flags[j] != 0:
+					continue
+				if minf(y1, n_spans[j * 2 + 1]) - maxf(y0, n_spans[j * 2]) > 0.0:
+					n_flags[j] = 1
+					queue.append(Vector2i(n_column, j))
+	return {
+		"cabin": false, "cabins": 0,
+		"area_m2": float(standable.size()) * CABIN_CELL_M * CABIN_CELL_M,
+		"floor_y": y_lo, "roof_y": y_hi, "columns": columns,
+	}
+
+
+## Mark every air interval the sky reaches. `state` carries 1 for "reached", and
+## the same byte is reused by `_enclosed_group` to mark a pocket already counted:
+## once the flood is done, a 0 can only be enclosed air.
+##
+## ── THE SKY NEEDS NO SEED OF ITS OWN, and finding that out is why ──────────
+##
+## This used to seed the top interval of EVERY column as well — "the sky is
+## outside" stated directly. Mutating that branch away was expected to redden
+## the fence case and did not: `plan_enclosure_test` stayed green and all 18
+## shipped fixtures plus 12 synthetic cases came back byte-identical. A mutation
+## that passes is a finding (REALITY.md §8), and the finding here is that the
+## branch could not fail, for a reason worth writing down rather than restoring:
+##
+##   every column's LAST interval runs to +INF, so the last intervals of two
+##   neighbouring columns always overlap. The sky is therefore ONE connected
+##   component across every column that has any structure in it, and the raster
+##   is padded by a cell — so the columns just inside the padding always have a
+##   structureless neighbour and always seed. One seed reaches all of it.
+##
+## The branch was deleted rather than kept as belt and braces, because a line
+## that cannot fail is a line the next reader will believe is load-bearing.
+static func _flood_outside(air: Dictionary, state: Dictionary, w: int, h: int) -> void:
+	var queue: Array[Vector2i] = []
+	for key in air.keys():
+		var column := int(key)
+		var x := column % w
+		var z := column / w
+		var flags: PackedByteArray = state[key]
+		var open_side := x <= 0 or z <= 0 or x >= w - 1 or z >= h - 1
+		if not open_side:
+			for offset in CABIN_NEIGHBORS:
+				## A column no box touches is open air from the deck to the sky, so
+				## everything beside it is outside. Those columns are not in `air` at
+				## all, which is why this asks rather than walking them.
+				if not air.has((z + offset.y) * w + (x + offset.x)):
+					open_side = true
+					break
+		if not open_side:
+			continue
+		for i in flags.size():
+			if flags[i] == 0:
+				flags[i] = 1
+				queue.append(Vector2i(column, i))
+	var read_i := 0
+	while read_i < queue.size():
+		var node: Vector2i = queue[read_i]
+		read_i += 1
+		var gaps: PackedFloat32Array = air[node.x]
+		var y0 := gaps[node.y * 2]
+		var y1 := gaps[node.y * 2 + 1]
+		var x := node.x % w
+		var z := node.x / w
+		for offset in CABIN_NEIGHBORS:
+			var nx: int = x + offset.x
+			var nz: int = z + offset.y
+			if nx < 0 or nz < 0 or nx >= w or nz >= h:
+				continue
+			var n_column: int = nz * w + nx
+			var n_gaps: Variant = air.get(n_column, null)
+			if n_gaps == null:
+				continue
+			var n_spans: PackedFloat32Array = n_gaps
+			var n_flags: PackedByteArray = state[n_column]
+			for i in n_flags.size():
+				if n_flags[i] != 0:
+					continue
+				if minf(y1, n_spans[i * 2 + 1]) - maxf(y0, n_spans[i * 2]) > 0.0:
+					n_flags[i] = 1
+					queue.append(Vector2i(n_column, i))
+
+
+## The gaps between a column's merged solid spans, above the plan's y = 0 plane.
+## `spans` arrives as [lo, hi, lo, hi, …] sorted by `lo`.
+static func _air_intervals(spans: PackedFloat32Array) -> PackedFloat32Array:
+	var gaps := PackedFloat32Array()
+	var cursor := 0.0
+	var run_lo := 0.0
+	var run_hi := -INF
+	for i in spans.size() / 2:
+		var lo := spans[i * 2]
+		var hi := spans[i * 2 + 1]
+		if run_hi > -INF and lo <= run_hi + CABIN_MERGE_M:
+			run_hi = maxf(run_hi, hi)
+			continue
+		if run_hi > 0.0:
+			if run_lo - cursor > CABIN_MERGE_M:
+				gaps.append(cursor)
+				gaps.append(run_lo)
+			cursor = maxf(cursor, run_hi)
+		run_lo = lo
+		run_hi = hi
+	if run_hi > 0.0:
+		if run_lo - cursor > CABIN_MERGE_M:
+			gaps.append(cursor)
+			gaps.append(run_lo)
+		cursor = maxf(cursor, run_hi)
+	gaps.append(cursor)
+	gaps.append(INF)
+	return gaps
+
+
+## Paint one collider box into the columns it covers, keeping the spans sorted by
+## their bottom so `_air_intervals` needs no sort of its own. A column carries a
+## handful of spans, so the insertion is cheaper than sorting 70 000 small arrays
+## with a comparator — measured at 443 ms of the container feeder's 1.6 s before
+## this was inlined.
+static func _paint_column_spans(
+	box: Dictionary, solid: Dictionary, lo: Vector2, w: int, h: int
+) -> void:
+	var centre: Vector3 = box["center"]
+	var size: Vector3 = box["size"]
+	var top := centre.y + size.y * 0.5
+	## Everything below the deck plane is the hull, and the hull is the floor.
+	if top <= 0.0:
+		return
+	var bottom := centre.y - size.y * 0.5
+	var yaw := deg_to_rad(float(box.get("yaw_deg", 0.0)))
+	var cs := cos(yaw)
+	var sn := sin(yaw)
+	var reach := _box_reach(box)
+	## Half a cell, projected: a box is solid in every cell it OVERLAPS, so a
+	## wall thinner than the raster still blocks. See CABIN_CELL_M.
+	var pad := CABIN_CELL_M * 0.5 * (absf(cs) + absf(sn))
+	var half_x := size.x * 0.5 + pad
+	var half_z := size.z * 0.5 + pad
+	var x0 := maxi(0, int(floor((centre.x - reach.x - lo.x) / CABIN_CELL_M)))
+	var x1 := mini(w - 1, int(floor((centre.x + reach.x - lo.x) / CABIN_CELL_M)))
+	var z0 := maxi(0, int(floor((centre.z - reach.y - lo.y) / CABIN_CELL_M)))
+	var z1 := mini(h - 1, int(floor((centre.z + reach.y - lo.y) / CABIN_CELL_M)))
+	for x in range(x0, x1 + 1):
+		var px := lo.x + (float(x) + 0.5) * CABIN_CELL_M - centre.x
+		for z in range(z0, z1 + 1):
+			var pz := lo.y + (float(z) + 0.5) * CABIN_CELL_M - centre.z
+			if absf(px * cs - pz * sn) > half_x or absf(px * sn + pz * cs) > half_z:
+				continue
+			var key := z * w + x
+			if not solid.has(key):
+				var first := PackedFloat32Array()
+				first.append(bottom)
+				first.append(top)
+				solid[key] = first
+				continue
+			var spans: PackedFloat32Array = solid[key]
+			var at := spans.size()
+			while at >= 2 and spans[at - 2] > bottom:
+				at -= 2
+			## A Packed array held in a Dictionary is shared, not copied: the two
+			## inserts below land in the dictionary's own array. Measured, because
+			## copy-on-write makes the opposite equally plausible.
+			spans.insert(at, bottom)
+			spans.insert(at + 1, top)
+
+
+## Half-extent of a yawed collider box in world XZ.
+static func _box_reach(box: Dictionary) -> Vector2:
+	var size: Vector3 = box["size"]
+	var yaw := deg_to_rad(float(box.get("yaw_deg", 0.0)))
+	var cs := absf(cos(yaw))
+	var sn := absf(sin(yaw))
+	return Vector2(
+		size.x * 0.5 * cs + size.z * 0.5 * sn, size.x * 0.5 * sn + size.z * 0.5 * cs
+	)
+
+
+## Is a door or a window cut into the shell around this pocket?
+static func _has_closure(
+	columns: Dictionary, closures: Array, lo: Vector2, w: int, group: Dictionary
+) -> bool:
+	var floor_y := float(group["floor_y"])
+	var roof_y := float(group["roof_y"])
+	for closure_variant in closures:
+		var at: Vector3 = (closure_variant as Dictionary)["at"]
+		if at.y < floor_y or at.y > roof_y:
+			continue
+		var cx := int(floor((at.x - lo.x) / CABIN_CELL_M))
+		var cz := int(floor((at.z - lo.y) / CABIN_CELL_M))
+		for dx in range(-CABIN_ACCESS_CELLS, CABIN_ACCESS_CELLS + 1):
+			for dz in range(-CABIN_ACCESS_CELLS, CABIN_ACCESS_CELLS + 1):
+				if columns.has((cz + dz) * w + (cx + dx)):
+					return true
 	return false
+
+
+## The plan with every door and window filled back in, so the enclosure reading
+## sees the shell rather than the holes cut through it. See the header on
+## `enclosure`. Nothing is duplicated that does not change: an entity with no
+## closures is passed through by reference.
+static func _sealed_plan(plan: StructurePlan) -> StructurePlan:
+	var out := StructurePlan.new()
+	out.context = plan.context
+	out.hull_id = plan.hull_id
+	out.hull = plan.hull
+	out.palette = plan.palette
+	out.edges = plan.edges
+	out.stairs = plan.stairs
+	out.walls = _sealed_entities(plan.walls)
+	out.decks = _sealed_entities(plan.decks)
+	out.items = _sealed_items(plan.items)
+	return out
+
+
+static func _sealed_entities(collection: Array) -> Array:
+	var out: Array = []
+	for raw in collection:
+		if not (raw is Dictionary):
+			continue
+		var entity := raw as Dictionary
+		var openings: Variant = entity.get("openings", [])
+		if not (openings is Array):
+			out.append(entity)
+			continue
+		var kept := _holes_only(openings as Array)
+		if kept.size() == (openings as Array).size():
+			out.append(entity)
+			continue
+		var copy := entity.duplicate(false)
+		copy["openings"] = kept
+		out.append(copy)
+	return out
+
+
+static func _sealed_items(collection: Array) -> Array:
+	var out: Array = []
+	for raw in collection:
+		if not (raw is Dictionary):
+			continue
+		var item := raw as Dictionary
+		var props: Variant = item.get("props", null)
+		if not (props is Dictionary):
+			out.append(item)
+			continue
+		var openings: Variant = (props as Dictionary).get("openings", null)
+		if not (openings is Array):
+			out.append(item)
+			continue
+		var kept := _holes_only(openings as Array)
+		if kept.size() == (openings as Array).size():
+			out.append(item)
+			continue
+		var copy := item.duplicate(false)
+		var sealed_props := (props as Dictionary).duplicate(false)
+		sealed_props["openings"] = kept
+		copy["props"] = sealed_props
+		out.append(copy)
+	return out
+
+
+static func _holes_only(openings: Array) -> Array:
+	var out: Array = []
+	for raw in openings:
+		if not (raw is Dictionary):
+			continue
+		if not _is_closure(raw as Dictionary):
+			out.append(raw)
+	return out
+
+
+## A door or a window is a fitted leaf and a pane; a hole and a stairwell are
+## holes. The format's own four names, used as the format uses them. This is the
+## SEALING question — what closes the weather envelope.
+static func _is_closure(opening: Dictionary) -> bool:
+	var type := str(opening.get("type", StructurePlan.OPENING_DOOR))
+	return type == StructurePlan.OPENING_DOOR or type == StructurePlan.OPENING_WINDOW
+
+
+## ...and this is the ACCESS question, which is NOT the same one: a window seals
+## the envelope and is not a way in. The two were one predicate until an
+## adversarial pass (`tests/_enclosure_adversary.gd`) drew a 1.6 x 1.6 x 5 m
+## funnel trunk with a 0.4 m scuttle in it and got a cabin out of it. Splitting
+## them refuses that and costs nothing measurable: over all 18 shipped fixtures
+## the same 10 report a cabin, with the same areas to 0.1 m², because a
+## deckhouse a person uses has a door in it. A wheelhouse whose only opening is
+## glazing is now refused, and that is the intended reading — you cannot get into
+## it.
+static func _is_way_in(opening: Dictionary) -> bool:
+	return str(opening.get("type", StructurePlan.OPENING_DOOR)) == StructurePlan.OPENING_DOOR
+
+
+## Where every door and window the plan cuts stands, in plan metres. Walls carry
+## theirs on the run; a plate carries them in its own parametric space, which is
+## the only place they can be — a raked deckhouse front is not a vertical
+## rectangle and `plate_point` is the baker's own resolution of that surface.
+static func _closure_points(plan: StructurePlan) -> Array:
+	var out: Array = []
+	for raw in plan.walls:
+		if not (raw is Dictionary):
+			continue
+		var wall := raw as Dictionary
+		var start := StructurePlan.vec3_of(wall.get("start"))
+		var run := StructurePlan.wall_run(str(wall.get("axis", "x")))
+		for opening_variant in wall.get("openings", []) as Array:
+			if not (opening_variant is Dictionary):
+				continue
+			var opening := opening_variant as Dictionary
+			if not _is_way_in(opening):
+				continue
+			out.append({"at": start + run * _closure_u(opening) + Vector3(
+				0.0, _closure_v(opening), 0.0
+			)})
+	for raw in plan.items:
+		if not (raw is Dictionary):
+			continue
+		var item := raw as Dictionary
+		if StructureBaker.item_primitive(item) != "plate":
+			continue
+		var props := StructurePlan.item_props(item)
+		var openings: Variant = props.get("openings", null)
+		if not (openings is Array) or (openings as Array).is_empty():
+			continue
+		var corners := StructureBaker.plate_corners(props)
+		if corners.size() != 4:
+			continue
+		var ref := StructureBaker.plate_ref_lengths(corners)
+		if ref.x <= 0.0 or ref.y <= 0.0:
+			continue
+		var xform := plan.item_transform(item)
+		for opening_variant in openings as Array:
+			if not (opening_variant is Dictionary):
+				continue
+			var opening := opening_variant as Dictionary
+			if not _is_way_in(opening):
+				continue
+			out.append({"at": xform * StructureBaker.plate_point(
+				corners,
+				clampf(_closure_u(opening) / ref.x, 0.0, 1.0),
+				clampf(_closure_v(opening) / ref.y, 0.0, 1.0),
+			)})
+	return out
+
+
+static func _closure_u(opening: Dictionary) -> float:
+	return float(opening.get("offset", 0.0)) + float(opening.get("width", 1.0)) * 0.5
+
+
+static func _closure_v(opening: Dictionary) -> float:
+	var type := str(opening.get("type", StructurePlan.OPENING_DOOR))
+	var sill := float(opening.get("sill", 1.0 if type == StructurePlan.OPENING_WINDOW else 0.0))
+	var height := float(opening.get(
+		"height", 2.2 if type == StructurePlan.OPENING_DOOR else 1.2
+	))
+	return sill + height * 0.5
 
 
 ## Every opening of `type` on a wall or a deck.

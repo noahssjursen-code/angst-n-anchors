@@ -149,11 +149,12 @@ func _verdict(
 				why = "no catalogue part declares this capacity"
 		"capability":
 			addresses = "capability %s" % str(rule.get("capability", ""))
-			var cap := str(rule.get("capability", ""))
-			plan = not (cap == "has_cabin")
+			plan = true
 			brick = true
-			if cap == "has_cabin":
-				why = "PlanOutfit.has_cabin() is hardcoded false (room primitive deleted)"
+			## `has_cabin` was hardcoded false here until 2026-08-16 and was the
+			## one capability a plan could not answer. `PlanOutfit.enclosure`
+			## measures it off the drawing now, so every capability is answerable
+			## by both vocabularies.
 		_:
 			addresses = "UNKNOWN KIND"
 	var cls := "neither"

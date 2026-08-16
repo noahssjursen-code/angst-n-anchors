@@ -1079,16 +1079,26 @@ func _probe_the_checklist_says_where_to_go(expect: Callable) -> void:
 		"and names the tool it is on, so a player knows where to click",
 		screen.contains(FITTING_TOOL)
 	)
-	## The one requirement no plan can meet says so instead of sending anybody
-	## looking for a tool that does not exist — an honest "you cannot" beats a
-	## confident wrong instruction.
+	## THE CABIN RULE, AND WHAT THIS CHECK USED TO SAY. It read *"the cabin rule
+	## no plan can satisfy admits it rather than inventing a tool"* and matched
+	## the panel for "CANNOT SATISFY THIS REQUIREMENT", because
+	## `PlanOutfit.has_cabin` returned false for every plan and the honest thing
+	## was to say so. It is measured off geometry now, so the panel's job changed
+	## from admitting a dead end to naming the three tools that draw a cabin —
+	## and this check has to change with it or it pins the dead end in place.
 	_registration_id = "passenger_vessel"
 	_recompute_compliance()
 	_refresh_panel()
 	var passenger_screen := _registration_panel_text()
 	expect.call(
-		"the cabin rule no plan can satisfy admits it rather than inventing a tool",
-		passenger_screen.contains("CANNOT SATISFY THIS REQUIREMENT")
+		"the cabin rule names the tools that draw one instead of a dead end",
+		passenger_screen.contains("WALL TOOL")
+			and passenger_screen.contains("DECK TOOL")
+			and passenger_screen.contains("OPENING TOOL")
+	)
+	expect.call(
+		"...and it does NOT still tell the builder to pick another licence",
+		not passenger_screen.contains("CANNOT SATISFY THIS REQUIREMENT")
 	)
 	## And with no licence chosen at all, the panel says what that costs.
 	_registration_id = ""
@@ -6145,11 +6155,23 @@ func _build_drawer() -> void:
 ##     kept here. A part that declares `nav_port` tomorrow is named by this panel
 ##     tomorrow, with no edit in this file.
 ##
-##  3. **Where it does not know, it says so.** A requirement of a kind this
-##     studio has no tool for — `has_cabin`, which no plan primitive declares
-##     since the room was deleted — reads as exactly that, rather than as a
-##     hint that would waste an afternoon. An unrecognised rule kind says it is
-##     unrecognised. A cheerful guess here is the same defect as a green test.
+##  3. **Where it does not know, it says so.** An unrecognised rule kind reads as
+##     unrecognised rather than as a hint that would waste an afternoon. A
+##     cheerful guess here is the same defect as a green test.
+##
+##     This clause used to name `has_cabin` as its example — "a requirement of a
+##     kind this studio has no tool for, which no plan primitive declares since
+##     the room was deleted". That was true of the code and WRONG about the
+##     studio: `PlanOutfit.has_cabin` returned false for every plan, so the panel
+##     told the builder to pick another licence for something the WALL, DECK and
+##     OPENING tools between them could already draw. It is measured off geometry
+##     now (`PlanOutfit.enclosure`) and `_capability_advice` says which of the
+##     two ways the drawing falls short — nothing closed, or closed with no way
+##     in — off `cabin_area_m2`, which is the measurement rather than a sentence
+##     about it. **A panel that says "you cannot" is a
+##     claim like any other, and it goes stale the moment the thing it is about
+##     gets built** — which is what happened here, in the one place a player
+##     reads.
 ##
 ## `_registration_id` is the studio's own state and is NOT saved into the plan:
 ## `structure_plan_v1` has no registration field, and inventing one here would be
@@ -6495,12 +6517,44 @@ func _metric_advice(metric: String, rule: Dictionary, have: int) -> String:
 	)
 
 
+## `has_cabin` is the one capability with a tool behind it, and until 2026-08-16
+## this said the opposite: *"NO PLAN PRIMITIVE DECLARES ENCLOSURE SINCE THE ROOM
+## TOOL WAS REMOVED, SO THIS STUDIO CANNOT SATISFY THIS REQUIREMENT AT ALL …
+## PICK ANOTHER LICENCE."* `PlanOutfit.has_cabin` returned false for every plan,
+## so the sentence was true of the code and it sent the builder away from a
+## licence they could have earned with one deck plate.
+##
+## It is measured now, and so is the reason a plan FAILS: `cabin_area_m2` and
+## `cabin_why` come off the same report and the same partition this panel shows
+## the rest of, so the advice cannot disagree with the verdict beside it. The two
+## failures want opposite instructions — nothing is closed (draw walls, roof
+## them) against something IS closed and has no way in (cut a door) — and which
+## one is printed is decided on the AREA, not on the wording of the reason. It
+## was decided on the wording for about an hour, and that branch was already dead
+## when it was read back, because the reason string had changed underneath it.
 func _capability_advice(capability: String) -> String:
 	if capability == "has_cabin":
+		var caps: Dictionary = _compliance.get("capabilities", {})
+		## WHICH SENTENCE, DECIDED ON A NUMBER AND NOT ON A SENTENCE. The first cut
+		## matched `cabin_why` for the words "no door or window", and by the time
+		## it was read back that string said "no door opens onto it" — the branch
+		## was dead the moment the reading stopped counting a window as a way in.
+		## `cabin_area_m2` is the measurement itself: enclosed floor was found, or
+		## it was not, and the two failures need opposite instructions.
+		var enclosed := float(caps.get("cabin_area_m2", 0.0))
+		var why := str(caps.get("cabin_why", "")).to_upper()
+		if enclosed > 0.0:
+			return (
+				"YOU HAVE DRAWN %.1f M2 OF ENCLOSED SPACE WITH NO WAY INTO IT." % enclosed
+				+ " OPENING TOOL ▸ DOOR, THEN CLICK THE WALL YOU WANT IT IN."
+				+ " A WINDOW WILL NOT DO IT — A CABIN IS SOMEWHERE YOU CAN GET."
+			)
 		return (
-			"NO PLAN PRIMITIVE DECLARES ENCLOSURE SINCE THE ROOM TOOL WAS REMOVED, SO"
-			+ " THIS STUDIO CANNOT SATISFY THIS REQUIREMENT AT ALL. IT IS NOT SOMETHING"
-			+ " YOU HAVE BUILT WRONG — PICK ANOTHER LICENCE."
+			"A CABIN IS A SPACE THE WEATHER CANNOT GET INTO: WALLS ALL ROUND, A DECK"
+			+ " PLATE OVER THEM, %.1f M OF HEADROOM AND A DOOR." % PlanOutfitScript.CABIN_MIN_HEADROOM_M
+			+ " CLOSE THE RING WITH THE WALL TOOL, ROOF IT WITH THE DECK TOOL, THEN"
+			+ " CUT A DOOR WITH THE OPENING TOOL."
+			+ ("  MEASURED: %s." % why if not why.is_empty() else "")
 		)
 	return (
 		"THE VESSEL MUST REPORT \"%s\" AND DOES NOT. THIS STUDIO DOES NOT KNOW WHICH"

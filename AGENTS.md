@@ -251,13 +251,30 @@ from one was a shed — a rectangle sitting on a rectangle — and its existence
 why the sloped-plate primitive that real superstructure needs (raked, tapered,
 stepped, set back) was specified and never delivered. The fixtures are
 deliberately bare hulls plus their item rigs until that primitive lands; do not
-re-author superstructure out of wall runs in the meantime. One consequence
-lives in `PlanOutfit`: nothing declares enclosure any more, so `has_cabin` is
-false for every plan and a licence demanding a cabin cannot be met by one.
-(Confirmed 2026-08-15 over all 18 shipped plan fixtures: 0 report a cabin. Note
-the mechanism is stronger than the wording — `PlanOutfit.has_cabin` takes the
-plan as `_plan` and `return false` unconditionally, so this is true of any plan
-that could ever be written, not just of the ones we ship.)
+re-author superstructure out of wall runs in the meantime.
+
+**What the deletion did NOT take with it is enclosure.** This paragraph used to
+end: *"one consequence lives in `PlanOutfit`: nothing declares enclosure any
+more, so `has_cabin` is false for every plan and a licence demanding a cabin
+cannot be met by one"*, with the mechanism quoted approvingly — `has_cabin` took
+its plan as `_plan` and returned false unconditionally. **That conflated "no
+primitive DECLARES enclosure" with "enclosure is not MEASURABLE", and it closed
+`passenger_vessel/cabin` to every ship a player could draw.** A plan carries
+walls with positions and extents, decks with origins and sizes and plates with
+four corners, and whether those close a volume is a question about the drawing.
+`PlanOutfit.enclosure` (2026-08-16) asks it: a pocket of air the sky cannot
+reach, 1.8 m of headroom, 1.2 m² of floor, with a door into it (a window seals
+the shell and is not a way in — that split cost one wrong yes on a funnel trunk
+with a scuttle before it was drawn).
+Measured over the 18 shipped plan fixtures, 10 report a cabin and 8 do not, and
+it agrees with `plan_interior_test` / `piece_interior_test` — which march a
+1.8 m capsule through five of those deckhouses on the real `PhysicsServer3D`
+body — on all five. The fence the deleted room reading existed to refuse is
+still refused, for the reason a person would give: a fence has no deck over it.
+The BRICK path's `has_cabin` is still `door_n >= 1 or wall_n >= 8` and is a
+known wrong yes (one door brick certifies passenger accommodation); see the note
+on it in `vessel_outfit.gd` for the two things that would have to change.
+
 `DeckFitout.apply_any`
 routes vessel records: `structure_plan_v1` dicts take the parametric path,
 legacy `cells` dicts still take the voxel path. Author plans in

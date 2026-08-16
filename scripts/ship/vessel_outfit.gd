@@ -237,6 +237,55 @@ static func validate(
 		"cargo_cells": cargo_used,
 		"cargo_budget": cargo_max,
 		"exposed_deck_cells": int(budget.get("exposed_deck_cells", 0)),
+		## ── A KNOWN WRONG YES, AND WHAT IT WOULD TAKE TO CLOSE IT ──────────
+		##
+		## `door_n >= 1 or wall_n >= 8` counts BRICK IDS and asks nothing about
+		## shape, so it certifies things nobody would live in. Measured today
+		## through this function (`tests/_brick_cabin_probe.gd`, hull_28x10):
+		##
+		##     8 `block` bricks in a STRAIGHT LINE on the deck   has_cabin true
+		##     ONE `block_door` standing alone on the deck       has_cabin true
+		##
+		## and the second of those puts `passenger_vessel/cabin` on the checklist
+		## as *"Enclosed passenger accommodation: required (current: true)"*. That
+		## is a licence for carrying people, granted for one door brick.
+		##
+		## `plan_outfit.gd`'s header used to say this rule was pinned by
+		## `plan_compliance_test`. IT IS NOT, AND NOTHING ELSE PINS IT EITHER —
+		## `plan_compliance_test` pins the PLAN side of the same question (a fence
+		## is not a cabin) and no test in this repo asserts anything about the
+		## brick reading. A citation is not a verification (REALITY.md §4d).
+		##
+		## THE PLAN PATH NOW MEASURES THIS OFF GEOMETRY (`PlanOutfit.enclosure`):
+		## a pocket of air the sky cannot reach, 1.8 m of headroom, 1.2 m² of
+		## floor, with a door into it. Two things stop that reading
+		## being handed to a brick layout, and only the second is an opinion:
+		##
+		##  1. THE MECHANISM EXISTS BUT PUBLISHES THE WRONG HALF.
+		##     `BrickShellClassifier` already floods air in from the sides and the
+		##     sky with the hull below y = 0 closed — the same flood, on the voxel
+		##     grid this path is built on. What it returns is which BRICKS are
+		##     buried, not which AIR is enclosed. Measured on a hollow 5 x 5 x 3
+		##     brick cabin with a lid: 73 exterior bricks, **0 interior**, 145
+		##     exterior air cells — and the 27 cells of air inside the cabin appear
+		##     in none of those numbers. Publishing `enclosed_air` from the flood
+		##     it already runs is a small change to that file and is the whole of
+		##     the geometry work.
+		##
+		##  2. A BRICK CELL HAS NO AGREED SIZE, so no headroom or floor-area bar
+		##     can be stated. Measured: `BuildingGrid.CELL_M` is **1.0** and
+		##     `BrickCatalog.size_m("block")` is **(0.5, 0.5, 0.5)** — the factor
+		##     of two CONVENTIONS §3a calls an open product decision. The classic
+		##     5 x 5 x 3 brick cabin is 1.5 m of interior headroom on one reading
+		##     and 3.0 m on the other, so the SAME layout is accommodation or a
+		##     crawl space depending on which is right. Picking one here to get a
+		##     number would be this file deciding a question about the whole brick
+		##     system, in a capability flag.
+		##
+		## So this stays, named rather than quietly wrong, until the brick cell's
+		## metre size is settled. It is deliberately NOT pinned by a test: a
+		## regression test on a known-wrong answer holds it in place (REALITY.md
+		## §4a), and the next person to fix this should find a red nowhere.
 		"has_cabin": door_n >= 1 or wall_n >= 8,
 		"has_helm": accepted_helm.size() >= 1,
 		"has_crane": accepted_crane.size() >= 1,

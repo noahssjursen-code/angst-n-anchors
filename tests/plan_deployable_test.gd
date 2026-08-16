@@ -274,10 +274,12 @@ func _test_apply_plan_reports_a_real_verdict() -> void:
 		return
 	var built_caps := DeckFitout.apply_plan(built, _outfitted_plan(), _grid(), "general_vessel")
 	_t.check("an outfitted plan reports its helm", bool(built_caps.get("has_helm", false)))
-	## No plan can report a cabin since the room primitive was deleted: nothing
-	## that survives it declares enclosure, and inferring one from loose walls is
-	## the "fence sold as accommodation" bug plan_compliance_test still pins.
-	_t.check("no plan reports a cabin any more", not bool(built_caps.get("has_cabin", true)))
+	## `has_cabin` is measured off geometry now (`PlanOutfit.enclosure`). This
+	## plan draws ONE wall with a door in it and nothing over it, so it is still
+	## no cabin — and the reason has changed from "no plan can" to "this drawing
+	## does not close a volume", which is the whole difference. The plan that DOES
+	## is in `plan_enclosure_test`.
+	_t.check("one wall and a door is not a cabin", not bool(built_caps.get("has_cabin", true)))
 	_t.equal("an outfitted plan reports its door", int(built_caps.get("doors", -1)), 1)
 	_t.check(
 		"seven entities: a wall, a helm, four bollards and a lantern",

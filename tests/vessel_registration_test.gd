@@ -444,25 +444,41 @@ func _test_every_rule_is_answerable_by_both_vocabularies() -> void:
 				why[name] = str(answer["why"])
 	one_sided.sort()
 	_check(rules >= 51, "every resolved rule was surveyed (%d)" % rules)
-	## ONE rule is one-sided today and it is NAMED, not excused. `has_cabin` is
-	## false for every plan because the room primitive was deleted and nothing
-	## replaced its declaration of enclosure (`PlanOutfit.has_cabin`). Listing it
-	## explicitly is what makes this check able to catch the NEXT one: an equality
-	## against a known set reddens when a rule joins the list, where
-	## "at most one" would absorb it.
+	## NO SHIPPED RULE IS ONE-SIDED. It was `passenger_vessel/cabin` until
+	## 2026-08-16: `PlanOutfit.has_cabin` was `return false` for every plan, so a
+	## licence the owner's premise depends on — players build their own ships —
+	## was closed to every ship a player could draw. It is measured off the
+	## geometry now (`PlanOutfit.enclosure`), and the equality below is what makes
+	## this check able to catch the NEXT one: an empty set reddens the moment a
+	## rule joins it, where "at most one" would absorb it.
 	_check(
-		one_sided == PackedStringArray(["passenger_vessel/cabin"]),
-		"exactly one shipped rule is one-sided, and it is the known cabin gap: %s" % (
+		one_sided.is_empty(),
+		"no shipped rule is answerable by only one build path: %s" % (
 			"none" if one_sided.is_empty() else " · ".join(one_sided)
 		)
 	)
-	_check(
-		str(why.get("passenger_vessel/cabin", "")).contains("has_cabin"),
-		"and it is one-sided for the recorded reason, not a new one",
-	)
+	## The pin that outlived the gap. A null plan is not a drawing, so it draws no
+	## cabin — the one thing about `has_cabin` that was true before the reading
+	## existed and is still true after it.
 	_check(
 		not PlanOutfit.has_cabin(null),
-		"the reason is live in the code, not just in this comment",
+		"and has_cabin(null) is still false — nothing draws a cabin out of nothing",
+	)
+	## The half that has teeth: a plan that DOES draw one says so, so the line
+	## above is not passing because the answer is hardcoded again.
+	var cabin_plan := StructurePlan.new()
+	cabin_plan.hull_id = "hull_28x10"
+	var cabin_front := cabin_plan.add_wall(Vector3(1.0, 0.0, 6.0), "x", 6.0, 2.6)
+	cabin_plan.add_wall(Vector3(1.0, 0.0, 12.0), "x", 6.0, 2.6)
+	cabin_plan.add_wall(Vector3(1.0, 0.0, 6.0), "z", 6.0, 2.6)
+	cabin_plan.add_wall(Vector3(7.0, 0.0, 6.0), "z", 6.0, 2.6)
+	cabin_plan.add_deck(Vector3(1.0, 2.6, 6.0), Vector2(6.0, 6.0))
+	(cabin_front["openings"] as Array).append({
+		"type": "door", "offset": 2.4, "width": 1.2, "height": 2.1, "sill": 0.0,
+	})
+	_check(
+		PlanOutfit.has_cabin(cabin_plan),
+		"...and a drawn deckhouse with a door in it does report one",
 	)
 	## THE CONTROL. Three rules that really are one-sided or unanswerable, so the
 	## loop above is known to be capable of saying no.
@@ -529,13 +545,14 @@ func _answerable(rule: Dictionary) -> Dictionary:
 			return {"brick": brick_ok, "plan": plan_ok, "why": "nav_white/nav_port/nav_stbd"}
 		"capability":
 			var cap := str(rule.get("capability", ""))
-			## `has_cabin` is false for every plan by construction — the room
-			## primitive was deleted and nothing declares enclosure yet. It is a
-			## KNOWN one-sided rule and it is named here rather than excused: see
-			## `PlanOutfit.has_cabin`.
+			## Every capability the evaluator reads is measured off geometry both
+			## paths produce. `has_cabin` was the exception until 2026-08-16 —
+			## hardcoded false on the plan side — and was excluded here by name;
+			## `PlanOutfit.enclosure` measures it now, so the exception is gone
+			## rather than moved.
 			return {
-				"brick": true, "plan": cap != "has_cabin",
-				"why": "capability \"%s\" (PlanOutfit.has_cabin is hardcoded false)" % cap,
+				"brick": true, "plan": true,
+				"why": "capability \"%s\" (measured off geometry on both paths)" % cap,
 			}
 	return {"brick": true, "plan": true, "why": "measured off geometry"}
 

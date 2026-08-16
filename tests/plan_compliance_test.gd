@@ -218,15 +218,17 @@ func _test_empty_plan_measures_nothing() -> void:
 # ── 2. Enclosure from geometry, no items at all ─────────────────────────────
 
 ## Enclosure used to be read off the room primitive: a room WAS the plan's
-## declaration of a cabin. The room primitive was deleted, nothing that survives
-## it declares enclosure, and `has_cabin` is false for every plan until the
-## sloped-plate primitive lands (see PlanOutfit's header). The room legs of this
-## test went with it.
+## declaration of a cabin. The room primitive was deleted and the reading went
+## with it — `has_cabin` returned false for every plan until 2026-08-16, when
+## `PlanOutfit.enclosure` started measuring enclosure off the geometry instead
+## of waiting for a primitive to declare it.
 ##
-## What must NOT go with it is the regression below. It is the reason the room
-## reading existed at all, and it is the exact shape a future wave will be
-## tempted to reintroduce when a licence needs a cabin and no primitive declares
-## one. It stays, and it stays as an assertion about walls.
+## THE REGRESSION BELOW OUTLIVES BOTH. It is the reason the room reading existed
+## at all and the shape any replacement will be tempted to accept, so it stays
+## here, unchanged, as an assertion about walls — and it is the case the new
+## reading was built against. `plan_enclosure_test` carries the rest: the same
+## eight walls with a deck plate over four of them, which IS a cabin, and one
+## adversarial plan per clause.
 func _test_a_fence_is_not_a_cabin() -> void:
 	## THE REGRESSION: the brick-era rule was
 	## `door_n >= 1 or wall_n >= 8`, so eight roofless walls — and a fence with a
@@ -323,14 +325,16 @@ func _test_rule_kinds_are_satisfiable() -> void:
 	)
 	_check("capacity: two benches seat six", bool(seats["ok"]) and int(seats["current"]) == 6)
 
-	## capability — a boolean. The satisfiable case used to be has_cabin; that
-	## capability died with the room primitive and is now false for every plan,
-	## so the rule KIND is proved on one a plan can still meet, and the licence
-	## that demands a cabin is pinned as unmeetable rather than quietly dropped.
+	## capability — a boolean. Two of them, and the pair is the point: this plan
+	## carries a helm and does NOT carry a cabin (it draws one wall with a door in
+	## it and no deck over anything), so the kind is shown answering both ways on
+	## one measurement. `has_cabin` used to be the second of those because it was
+	## false for EVERY plan; it is measured off geometry now, and the plan that
+	## does draw a cabin is in `plan_enclosure_test`.
 	_check("capability: a required capability the plan has", bool(_evaluate(
 		{"kind": "capability", "capability": "has_helm", "required": true}, metrics, outfit
 	)["ok"]))
-	_check("capability: no plan can meet a required cabin", not bool(_evaluate(
+	_check("capability: a required capability this plan lacks", not bool(_evaluate(
 		{"kind": "capability", "capability": "has_cabin", "required": true}, metrics, outfit
 	)["ok"]))
 	_check("capability: a forbidden capability is absent", bool(_evaluate(

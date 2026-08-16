@@ -178,12 +178,43 @@ static func has_capability(_hull_id: String, _capability: String) -> bool:
 	return false
 
 
-## Prefer this for owned vessels — capabilities come from the brick fit-out.
+## Prefer this for owned vessels — capabilities come from the fit-out.
+##
+## ── IT READS BOTH CONSTRUCTION PATHS, and it used to read one ───────────────
+##
+## A vessel record's `brick_layout` field holds whichever document drew it, and
+## for a Structure Studio ship that is a `structure_plan_v1`. This used to run
+## `BrickLayout.from_dict` on it unconditionally, and that yields an EMPTY
+## layout — the exact failure `VesselSpawn.resolve_deployable_record` carries a
+## paragraph about, which is why the routing lives in
+## `DeckFitout.compliance_for_layout` rather than being re-decided per caller.
+## So every capability of every plan-built vessel answered false here, and
+## "cabin" would have gone on answering false after `PlanOutfit.has_cabin`
+## started measuring enclosure.
+##
+## **This function has no callers outside this file** (grepped 2026-08-16), so
+## nothing was observably broken by that and nothing is observably fixed by this
+## — REALITY.md §3d. It is repaired rather than deleted because the two halves of
+## the split are `has_capability` above (hulls carry no capabilities) and this
+## one, and a wrong answer sitting in the pair is a trap for whoever wires the
+## first caller.
+## `DeckFitout.compliance_for_layout` is the one place that decides which of the
+## two documents a `brick_layout` field holds, and re-deciding it here would be
+## the second derivation this project keeps fixing (REALITY.md §3b) — so it is
+## called rather than copied. Naming `DeckFitout` here costs nothing measurable:
+## `plan_compliance_test` runs green in the `--script` lane on **33 script
+## errors** with this line and **33** without it, exit 0 both ways. (It first
+## looked like it cost a compile: `vessel_registration_test` died on
+## *"Identifier not found: WorldGateway"*. That test is LANE B and had been run
+## in lane A — CONVENTIONS §1's "check the lane before diagnosing the failure",
+## and REALITY.md §8's instrument, one more time.)
 static func record_has_capability(record: Dictionary, capability: String) -> bool:
 	var cap := capability.strip_edges()
 	var hull_id := str(record.get("hull_id", "fishing_trawler_small"))
-	var layout := BrickLayout.from_dict(VesselSpawn.brick_layout_of(record))
-	var report := BrickRules.validate(layout, make_grid(hull_id))
+	var report: Dictionary = DeckFitout.compliance_for_layout(
+		VesselSpawn.brick_layout_of(record), hull_id, str(record.get("registration_id", "")),
+		make_grid(hull_id)
+	)
 	var caps: Dictionary = report.get("capabilities", {})
 	match cap:
 		"cargo":

@@ -45,7 +45,12 @@ func _c9_display_scale() -> void:
 
 # ── C10 ──────────────────────────────────────────────────────────────────────
 func _c10_has_cabin() -> void:
-	print("\n=== C10  AGENTS.md: 'has_cabin is false for every plan' ===")
+	## RETIRED CLAIM, KEPT AS A COUNT. AGENTS.md said "has_cabin is false for
+	## every plan" and `PlanOutfit.has_cabin` was `return false`; both went on
+	## 2026-08-16 when `PlanOutfit.enclosure` started measuring enclosure off the
+	## drawing. What this prints now is the fleet's cabin census, which is a
+	## number worth watching rather than a claim to audit.
+	print("\n=== C10  the fleet's cabin census (was: 'has_cabin is false for every plan') ===")
 	var dir := DirAccess.open(FIXTURES)
 	if dir == null:
 		return
@@ -62,7 +67,7 @@ func _c10_has_cabin() -> void:
 		if PlanOutfit.has_cabin(plan):
 			any_true += 1
 			print("   %-30s has_cabin = TRUE" % name)
-	print("   %d plans examined, %d with has_cabin true" % [total, any_true])
+	print("   %d plans examined, %d with has_cabin true, %d without" % [total, any_true, total - any_true])
 
 
 # ── C11 ──────────────────────────────────────────────────────────────────────
