@@ -694,6 +694,38 @@ static func roof_plate_offset_y(brick_id: String) -> float:
 	return -size_m(brick_id).y * 0.5 + ROOF_PLATE_M * 0.5
 
 
+## ⚠ A WALL-MOUNTED TEXT BRICK IS A PIECE OF WALL. IT USED TO BE A HOLE.
+## `wall_text_sm` / `wall_text` / `wall_text_lg` are tagged `wall` and reserve
+## 2, 6 and 18 cells of a wall course, and `create_visual` drew a `Label3D` and
+## **not one mesh**, so the cells they claimed held nothing at all. On the only
+## building there is that was a **6 x 3 m hole in the warehouse's front
+## elevation, hidden behind the word WAREHOUSE**: six columns whose topmost
+## drawn wall was y=2.750 where their neighbours reach 5.750.
+##
+## The reservation is the argument. A cell holds ONE brick — `_place_content`
+## refuses a cell that already carries content — so a player who places a sign
+## on a wall course cannot then put wall behind it, and the editor's own
+## `_try_place_text` says which case is which: dropped on an EXISTING brick the
+## sign is attached to that host (`attach_sign` -> `sign_id`, no cells taken,
+## letters only); dropped on EMPTY cells it is placed as a brick and takes them.
+## The mounted case was already right. The placed case is this constant.
+##
+## So `mounted` is the switch, passed by the four mount call sites, and a
+## PLACED wall text draws the wall it stands in.
+const WALL_TEXT_BACKER_SCALE := 0.62
+
+
+## True for the text bricks that stand in a wall course — the ones whose
+## `text_mount` is the wall rather than the floor. Asked of the declaration,
+## not of a hardcoded list at each call site: three consumers need it (the
+## visual, the land collider and the vessel collider) and they must not drift
+## (REALITY.md §3b). `deck_text` is floor-mounted, keeps its thin deck plate,
+## and is deliberately NOT one of these — a draft mark is not a bulkhead.
+static func is_wall_text(brick_id: String) -> bool:
+	return has_tag(brick_id, "text") \
+		and str(get_entry(brick_id).get("text_mount", "floor")) == "wall"
+
+
 static func yaw_step_of(brick_id: String) -> int:
 	return maxi(int(get_entry(brick_id).get("yaw_step", 90)), 1)
 
@@ -920,10 +952,14 @@ static func create_visual(brick_id: String, opts: Dictionary = {}) -> Node3D:
 				"floor",
 			)
 		"wall_text_sm", "wall_text", "wall_text_lg":
+			## `mounted` — the sign hangs on somebody else's brick (`sign_id`),
+			## so it draws letters only. Absent, this brick IS the wall: it
+			## reserved these cells and nothing else can fill them.
 			_add_deck_text_visual(
 				root, sz, color,
 				str(opts.get("text", entry.get("default_text", "NAME"))),
 				"wall",
+				not bool(opts.get("mounted", false)),
 			)
 		"bench":
 			_add_bench_visual(root, sz, color)
@@ -1045,9 +1081,30 @@ static func _add_deck_text_visual(
 	color: Color,
 	text: String,
 	mount: String = "floor",
+	backer: bool = false,
 ) -> void:
 	var label_text := text if not text.strip_edges().is_empty() else "NAME"
 	if mount == "wall":
+		## The wall this brick stands in, when it is PLACED rather than mounted
+		## on somebody else's brick. Same call `block` makes, at the same size,
+		## so it seams with the courses either side of it and moves with the
+		## open brick-cell decision exactly as they do. Darkened off the one
+		## authored colour — the `_add_door_frame` pattern — so the letters have
+		## something to read against; a sign board the colour of its own letters
+		## is a hole with extra steps.
+		if backer:
+			var wall := MeshBuilder.box(
+				sz,
+				Color(
+					color.r * WALL_TEXT_BACKER_SCALE,
+					color.g * WALL_TEXT_BACKER_SCALE,
+					color.b * WALL_TEXT_BACKER_SCALE,
+				),
+				0.85,
+				0.0,
+			)
+			wall.name = "WallTextBacker"
+			root.add_child(wall)
 		## Letters only — no plaque. Slight stick-out so they clear the wall mesh.
 		## Bebas Neue (display) reads like painted harbour / warehouse signage.
 		var stick_out := 0.06

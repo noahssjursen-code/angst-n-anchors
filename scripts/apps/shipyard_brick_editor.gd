@@ -2669,6 +2669,9 @@ func _sync_brick_visuals() -> void:
 		var opts: Dictionary = {"color": color}
 		if BrickCatalog.has_tag(brick_id, "text"):
 			opts["text"] = str(item.get("text", ""))
+			## A mounted plaque draws letters only; a placed text brick owns
+			## its cells and draws the wall it stands in.
+			opts["mounted"] = bool(item.get("is_sign", false))
 		if BrickCatalog.has_tag(brick_id, "light"):
 			opts["show_aim_gizmo"] = true
 		var visual := BrickCatalog.create_visual(brick_id, opts)

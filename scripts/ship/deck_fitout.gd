@@ -379,7 +379,10 @@ static func create_cell_mounts(root: Node3D, grid: DeckGrid, item: Dictionary) -
 	var sign_id := str(item.get("sign_id", ""))
 	if BrickCatalog.has(sign_id) and BrickCatalog.has_tag(sign_id, "text"):
 		var sign_yaw := int(item.get("sign_yaw", yaw))
-		var sign := BrickCatalog.create_visual(sign_id, {"text": str(item.get("text", ""))})
+		## `mounted` — letters only. The host brick draws and collides; a plaque
+		## that also drew a wall would stand a slab over its neighbours' cells.
+		var sign := BrickCatalog.create_visual(
+			sign_id, {"text": str(item.get("text", "")), "mounted": true})
 		sign.name = "Sign_%d_%d_%d" % [cell.x, cell.y, cell.z]
 		sign.position = grid.cell_center_local(cell)
 		sign.rotation_degrees = Vector3(0.0, float(sign_yaw), 0.0)
@@ -419,8 +422,14 @@ static func mount_item_gameplay(
 		"brick"
 	)
 	var brick_i := int(state.get("brick_i", 0))
+	## THE THIRD GATE ON THE SAME DECLARATION, and it is why the vessel arm of
+	## `wall_brick_fill_test` went red with `_collider_spec` and
+	## `_add_brick_collider` both already fixed: a wall text brick DRAWS its
+	## bulkhead and still put nothing in physics, because this predicate stopped
+	## it two layers earlier. All three now ask `BrickCatalog.is_wall_text`
+	## (REALITY.md §3b — one declaration, however many gates).
 	if (
-		not BrickCatalog.has_tag(brick_id, "text")
+		(not BrickCatalog.has_tag(brick_id, "text") or BrickCatalog.is_wall_text(brick_id))
 		and not BrickCatalog.has_tag(brick_id, "door")
 		and not BrickCatalog.has_tag(brick_id, "stairs")
 		and not BrickCatalog.has_tag(brick_id, "helm")
@@ -1224,7 +1233,11 @@ static func _collider_spec(brick_id: String) -> Dictionary:
 				"size": Vector3(sz.x * 0.9, sz.y * 0.92, sz.z * 0.9),
 				"offset": Vector3(0.0, -sz.y * 0.04, 0.0),
 			}
-		"deck_text", "wall_text_sm", "wall_text", "wall_text_lg":
+		"deck_text":
+			## A painted deck mark is not a thing you walk into. The three
+			## WALL-mounted text bricks used to be here too, and they draw the
+			## bulkhead they stand in — they take the default full-footprint box
+			## below, the same one `block` takes (REALITY.md §3b).
 			return {"size": Vector3.ZERO, "offset": Vector3.ZERO}
 		"block_half", "block_45_half":
 			return {
@@ -1282,7 +1295,9 @@ static func _add_brick_collider(
 ) -> void:
 	if boat == null or not BrickCatalog.has(brick_id):
 		return
-	if BrickCatalog.has_tag(brick_id, "text"):
+	if BrickCatalog.has_tag(brick_id, "text") and not BrickCatalog.is_wall_text(brick_id):
+		## A wall text brick draws a bulkhead, so it collides like one; a floor
+		## mark is paint and does not (REALITY.md §3b — one declaration).
 		return
 	var spec := _collider_spec(brick_id)
 	var size: Vector3 = spec["size"]

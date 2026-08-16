@@ -119,7 +119,11 @@ static func _add_mounted_sign(
 	if not BrickCatalog.has(sign_id) or not BrickCatalog.has_tag(sign_id, "text"):
 		return
 	var sign_yaw := int(entry.get("sign_yaw", host_yaw))
-	var sign := BrickCatalog.create_visual(sign_id, {"text": str(entry.get("text", ""))})
+	## `mounted` — this sign hangs on the host brick, which is still drawn and
+	## still collides. A mounted sign must NOT draw the wall backer a placed one
+	## does, or it would stand a slab over cells its host never reserved.
+	var sign := BrickCatalog.create_visual(
+		sign_id, {"text": str(entry.get("text", "")), "mounted": true})
 	sign.name = "Sign_%s" % BuildingLayout.cell_key(cell)
 	sign.position = grid.cell_center_local(cell)
 	sign.rotation_degrees = Vector3(0.0, float(sign_yaw), 0.0)
@@ -247,7 +251,11 @@ static func _needs_collider(brick_id: String) -> bool:
 	if BrickCatalog.has_tag(brick_id, "light"):
 		return false
 	if BrickCatalog.has_tag(brick_id, "text"):
-		return false
+		## ONE DERIVATION (REALITY.md §3b). A wall-mounted text brick now DRAWS
+		## the wall it stands in, so it must stand in physics too — otherwise
+		## the warehouse's name board is a 6 x 3 m doorway you can walk through
+		## and the collider disagrees with the picture. Floor marks stay free.
+		return BrickCatalog.is_wall_text(brick_id)
 	if BrickCatalog.has_tag(brick_id, "surface") or BrickCatalog.has_tag(brick_id, "floor"):
 		return true
 	return BrickCatalog.has_tag(brick_id, "solid") \

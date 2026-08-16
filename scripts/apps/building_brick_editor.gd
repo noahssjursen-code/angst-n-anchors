@@ -1803,6 +1803,9 @@ func _sync_one_visual(
 	var opts: Dictionary = {"color": color}
 	if BrickCatalog.has_tag(brick_id, "text"):
 		opts["text"] = sign_text
+		## A `#sign` key is a plaque on a host brick: letters only, no wall
+		## backer. Placed text bricks own their cells and draw the wall.
+		opts["mounted"] = mounted_sign
 	var visual := BrickCatalog.create_visual(brick_id, opts)
 	visual.name = "%s_%s" % [brick_id, key]
 	visual.position = pos

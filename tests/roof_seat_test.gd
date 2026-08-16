@@ -307,6 +307,19 @@ func _vessel_one(stem: String) -> void:
 ## property. Attributing a missing wall to the roof would redden for the wrong
 ## reason, and the next wave would go and "fix" the roof.
 ##
+## **CLOSED 2026-08-16 by `wall_brick_fill_test`** — the fault was the brick,
+## which is tagged `wall` and drew no mesh at all; a placed wall text brick now
+## draws and collides as the whole brick it declares. **The per-plate diagnostic
+## below still prints 3.5000 m over column (20,16) and that reading is now about
+## `_is_wall`, not about the building.** `_is_wall` counts bricks tagged
+## `solid`, and `wall_text_lg` is tagged `text, sign, wall` — deliberately left
+## alone, because counting it would raise THIS model's reference course joint
+## from 0.500 m to 1.000 m (a 3-course brick drawn at the shipped half scale is
+## centred in its claim, so its underside sits 0.75 m above the course floor)
+## and weaken the roof claim above. The sign's own coverage is held where it
+## belongs, in `wall_brick_fill_test`, and that 1.000 m is the open brick-cell
+## decision again, not a roof.
+##
 ## A roof course is ONE PLANE, so it is judged as one: all plates drawn at the
 ## same height are a course, and a course lands on the highest wall anywhere
 ## beneath it. Grouping by DRAWN height rather than by cell level is deliberate
