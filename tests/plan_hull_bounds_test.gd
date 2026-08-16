@@ -58,6 +58,7 @@ func _ready() -> void:
 	_test_the_fence_is_the_whole_entity()
 	_test_the_item_gradient_is_unchanged()
 	_test_shipped_fixtures_survive()
+	_test_trim_is_trim_on_something()
 	_t.finish(get_tree())
 
 
@@ -369,6 +370,171 @@ func _test_shipped_fixtures_survive() -> void:
 		"and not one shipped fixture loses a collider or a vertex: %s" % " | ".join(changed),
 		changed.size(), 0
 	)
+
+
+# ── 6. Trim is trim ON something ─────────────────────────────────────────────
+
+## ⚠ THE FENCE ABOVE WAS CALIBRATED AGAINST A BUG IT HAD MISLABELLED — 2026-08-16
+##
+## `plan_outfit.gd`'s header lists the five worst off-deck excursions in the
+## shipped fixtures and argues each is a real ship feature. Two of the five are
+## not:
+##
+##     +4.000 m  critic_barge   deck plate outboard of the side
+##     +2.000 m  critic_yacht   deck plate outboard of the side
+##
+## Measured through `PieceKit.resolve_placement` (`tests/_wave_trim_audit.gd`),
+## neither excursion is outboard of the side. Both are in **-Z, off the BOW**,
+## and the port/starboard components are 0.000 m. `critic_yacht` placement 9 is a
+## `trim_band` with `profile: "strake"` drawing a plate at z **-2.00 .. 6.00** on
+## a deck that starts at z = 0; `critic_barge` placement 1 is a `trim_band` with
+## `profile: "coaming"` at z **-4.00 .. 4.00**. In the frames they are a thin
+## unsupported spar running out over the water forward of the stem, which is what
+## sent this wave.
+##
+## The cause is that `facing` sets the outward normal and the RUN DIRECTION
+## together — facing 90 yaws the piece-local +X run axis onto -Z, so a run
+## anchored forward marches further forward. The port bulwarks these two trim
+## the other side of are `facing: 270` and march +Z. Both were re-anchored at the
+## aft end of the run they cover; no facing changed, so `critic_yacht` still asks
+## the offset-versus-tumblehome question it was written to ask.
+##
+## And the fence stayed green through all of it, because it grows the deck
+## rectangle by `half_beam` — 5.00 m on a 10 m hull — on ALL FOUR sides. That is
+## the right size for something hanging off a SIDE and it is four times the
+## largest thing that legitimately hangs off a bow. Widening or narrowing that
+## margin to make these two red would be tuning a threshold until it agreed with
+## a known answer (REALITY §2), so it is untouched. This asks the different
+## question the two placements actually fail:
+##
+##   TRIM IS THE THIN PROUD STUFF. It caps a bulwark, eaves a deck edge, coams a
+##   deck, strakes a wall. There is no such thing as trim on nothing, so every
+##   CORNER of every plate a `trim_band` draws has to be able to reach something
+##   solid — a plate of some other piece, or the deck slab itself.
+##
+## Measured across all 36 trim runs in the five piece-carrying fixtures on disk
+## (`tests/_wave_trim_reach.gd`): the worst legitimate reach is **0.300 m**, an
+## eave hanging under a deck edge, which is what an eave is. The two defects
+## reached **2.000 m** and **4.000 m**. The bound below sits between a 0.300 m
+## worst case and a 2.000 m best defect — it is not a value fitted to the answer,
+## it is the only round number in a gap that wide.
+const TRIM_REACH := 0.5
+## The deck a coaming stands on is the hull's, not the plan's, so it has to be
+## stated here. Thickness only has to be enough that a plate lying ON the deck
+## reaches it; the fore/aft and athwartships extent is the deck rectangle and
+## that is where the whole margin lives.
+const DECK_SLAB := 0.15
+
+
+func _test_trim_is_trim_on_something() -> void:
+	var dir := DirAccess.open(STRUCTURES)
+	if not _t.check("the structure fixtures are readable, again", dir != null):
+		return
+	var names := PackedStringArray()
+	for f in dir.get_files():
+		if f.ends_with(".json"):
+			names.append(f)
+	names.sort()
+
+	var runs := 0
+	var floating := PackedStringArray()
+	var worst := 0.0
+	var worst_where := ""
+	for f in names:
+		var parsed: Variant = JSON.parse_string(FileAccess.get_file_as_string(STRUCTURES + f))
+		if not (parsed is Dictionary):
+			continue
+		var doc := parsed as Dictionary
+		var placements: Array = doc.get("pieces", []) as Array
+		if placements.is_empty():
+			continue
+		var plan := StructurePlan.from_dict(doc)
+		if plan.context != "vessel" or plan.hull_id.is_empty():
+			continue
+		var grid := HullRegistry.make_grid(plan.hull_id)
+		if grid == null:
+			continue
+		var deck := AABB(
+			Vector3(0.0, -DECK_SLAB, 0.0),
+			Vector3(grid.half_beam * 2.0, DECK_SLAB, grid.half_loa * 2.0)
+		)
+
+		var solid: Array[AABB] = []
+		var trim: Array = []
+		for placement_variant in placements:
+			var placement := placement_variant as Dictionary
+			var corners := _placement_corners(placement)
+			if corners.is_empty():
+				continue
+			if str(placement.get("piece", "")) == "trim_band":
+				trim.append({"placement": placement, "corners": corners})
+			else:
+				solid.append(_bound(corners))
+		for entry_variant in trim:
+			var entry := entry_variant as Dictionary
+			runs += 1
+			var reach := 0.0
+			for corner_variant in entry["corners"] as Array:
+				var corner := corner_variant as Vector3
+				var near := _point_to_box(corner, deck)
+				for box in solid:
+					near = minf(near, _point_to_box(corner, box))
+				reach = maxf(reach, near)
+			if reach > worst:
+				worst = reach
+				worst_where = "%s id %s" % [
+					f, str((entry["placement"] as Dictionary).get("id", "?"))
+				]
+			if reach > TRIM_REACH:
+				floating.append("%s id %s: %.3f m from anything" % [
+					f, str((entry["placement"] as Dictionary).get("id", "?")), reach
+				])
+
+	_t.check("there are trim runs on disk to ask about (%d)" % runs, runs >= 30)
+	_t.equal(
+		"every trim run reaches something solid (worst %.3f m, %s)%s" % [
+			worst, worst_where,
+			"" if floating.is_empty() else " — " + " | ".join(floating),
+		],
+		floating.size(), 0
+	)
+
+
+## Every world-space plate corner one placement draws, through the real resolver.
+func _placement_corners(placement: Dictionary) -> Array:
+	var out: Array = []
+	var result := PieceKit.resolve_placement(placement, 1)
+	for item_variant in result["items"] as Array:
+		var item := item_variant as Dictionary
+		var at_list: Array = item["at"] as Array
+		var at := Vector3(float(at_list[0]), float(at_list[1]), float(at_list[2]))
+		var basis := Basis(Vector3.UP, deg_to_rad(float(item.get("yaw", 0.0))))
+		for corner_variant in (item["props"] as Dictionary)["corners"] as Array:
+			var corner_list: Array = corner_variant as Array
+			out.append(at + basis * Vector3(
+				float(corner_list[0]), float(corner_list[1]), float(corner_list[2])
+			))
+	return out
+
+
+func _bound(corners: Array) -> AABB:
+	var box := AABB(corners[0] as Vector3, Vector3.ZERO)
+	for i in range(1, corners.size()):
+		box = box.expand(corners[i] as Vector3)
+	return box
+
+
+func _point_to_box(point: Vector3, box: AABB) -> float:
+	var away := Vector3.ZERO
+	for axis in 3:
+		away[axis] = maxf(
+			maxf(
+				box.position[axis] - point[axis],
+				point[axis] - (box.position[axis] + box.size[axis]),
+			),
+			0.0,
+		)
+	return away.length()
 
 
 # ── Fixtures ─────────────────────────────────────────────────────────────────

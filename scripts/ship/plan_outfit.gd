@@ -112,11 +112,48 @@ extends RefCounted
 ## `tests/_plan_fence_facts.gd` — **61 entities have a corner outside the deck
 ## rectangle and 10 lie entirely outside it**, and they are not mistakes:
 ##
-##     +4.000 m  critic_barge            deck plate outboard of the side
-##     +2.000 m  critic_yacht            deck plate outboard of the side
+##     +4.000 m  critic_barge            deck plate outboard of the side   ⚠ WRONG, SEE BELOW
+##     +2.000 m  critic_yacht            deck plate outboard of the side   ⚠ WRONG, SEE BELOW
 ##     +0.683 m  probe_trawler_bulwark   bow cap rail / stem head cap
 ##     +0.580 m  demo_workboat           davit block
 ##     +0.220 m  probe_ferry_catamaran_trim  rubbing strake, forward
+##
+## ⚠ THE TOP TWO ROWS WERE NOT OUTBOARD OF ANYTHING — MEASURED 2026-08-16
+##
+## Both were re-measured through `PieceKit.resolve_placement`
+## (`tests/_wave_trim_audit.gd`) and their port/starboard excursion is **0.000 m**.
+## The whole 4.000 m and 2.000 m is in **-Z, forward of the stem**:
+## `critic_barge` placement 1 is a `trim_band` coaming drawing a plate at
+## z -4.00 .. 4.00, and `critic_yacht` placement 9 a `trim_band` strake at
+## z -2.00 .. 6.00, on decks that begin at z = 0. In `screenshots/critic/` they
+## are a thin unsupported spar standing out over the water ahead of the bow, in
+## both the profile and the plan view of each vessel.
+##
+## The cause is in the fixtures and it has been fixed there: `facing` yaws the
+## piece-local +X RUN AXIS as well as the outward normal, so facing 90 marches a
+## run forward, and both placements were anchored at the forward end of the run
+## they were meant to cover. They are re-anchored aft; nothing in this file
+## changed and nothing needed to.
+##
+## What this paragraph should be read for is the SHAPE of the mistake, because it
+## is the one REALITY §2 warns about and it happened here. The fence's justifying
+## example — "a rubbing strake stands proud by definition" — is an argument about
+## the ATHWARTSHIPS axis, and it was used to wave through two excursions that were
+## entirely in the fore-and-aft one. A margin of `half_beam` is the right size for
+## something bolted to a hull's side and four times too big for anything hanging
+## off a bow, and because the two worst rows in its own evidence table were the
+## bug rather than the feature, "zero of 2342 shipped entities are refused" was
+## measuring a fence calibrated against a defect. The margin is UNTOUCHED — moving
+## it to make these two red would be the tuning the same section forbids — and the
+## property they actually violate is asked separately, by
+## `plan_hull_bounds_test._test_trim_is_trim_on_something`: trim is trim ON
+## something, and every corner of every trim run has to reach it.
+##
+## NOT CHECKED, and left standing rather than quietly assumed: the three
+## surviving rows have NOT been re-measured per axis, and the counts above — 2342
+## entities, 61 with a corner outside, 10 wholly outside — were taken before the
+## two placements moved and are stale by at least those two. Re-run
+## `tests/_plan_fence_facts.gd` before quoting any of them.
 ##
 ## A stem rakes forward of the forward perpendicular, a cap rail overhangs the
 ## plating it caps, a rubbing strake stands proud by definition, and a davit

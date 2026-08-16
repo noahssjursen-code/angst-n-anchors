@@ -77,9 +77,84 @@ const VIEWS: Array[Dictionary] = [
 ## exactly the failure mode CONVENTIONS §3a says a scale reference must not
 ## have. Both ferry fixtures shipped that way. A capture with no visible figure
 ## has no absolute scale, so the spot is data now, one entry per fixture.
+##
+## ⚠ AND "ONE ENTRY PER FIXTURE" WAS NOT TRUE, AND NOTHING SAID SO — 2026-08-16
+##
+## The dictionary carried two stems. Every OTHER fixture — including the three
+## `critic_*` plans photographed into `screenshots/critic/` by the subclass in
+## `tests/support/` — fell through to the default, and the default is not a
+## per-fixture decision, it is the absence of one. On `critic_ferry` the default
+## spot (2.5, 0, 7.0) lands at plan z = 7.0 m inside a saloon that resolves to
+## x 1.00..9.00, z 5.50..23.50, under a roof at y = 2.50: the figure rendered
+## perfectly and appeared in NONE of the four frames. All four `critic_ferry`
+## frames therefore had no absolute scale, which is the exact failure this
+## comment block already described and which the rig still could not detect,
+## because NOTHING COUNTED THE FIGURE'S PIXELS. The note was true and the check
+## was missing — REALITY §4b, a whole property with no check pointed at it.
+##
+## `_shoot` now photographs every view TWICE, once with the figure hidden, and
+## fails the frame if hiding it changes nothing. `_fittings_shot` and
+## `_hold_shot` have counted figure pixels for months; this is that, in the rig
+## every other rig was copied from.
 const FIGURE_SPOT := {
 	"probe_ferry_catamaran": Vector3(12.0, 0.0, 39.0),
 	"probe_ferry_catamaran_trim": Vector3(12.0, 0.0, 39.0),
+	## The six that had no entry and fell through to the default. They are written
+	## down at the value they were already being shot at, which is NOT a no-op:
+	## the default is the absence of a decision and could move under any of them,
+	## and each of these was then MEASURED at that value rather than assumed.
+	## Figure pixels over profile / bow_quarter / stern_quarter / plan, 2026-08-16:
+	##
+	##   demo_workboat            (unlisted)  79 /  ? /   0 / 79   ← see below
+	##   probe_trawler_bulwark        63 / 139 / 218 / 228
+	##   probe_trawler_bow_bulwark    63 / 132 / 218 / 228
+	##   probe_spar_kit              421 / 332 / 219 / 412
+	##   probe_sheer_bulwark         151 / 714 / 426 / 557
+	##   probe_sheer_bulwark_flat    272 / 895 / 424 / 561
+	##
+	## `demo_workboat__stern_quarter` is 0 px and has been since this rig existed:
+	## the deckhouse stands between an after quarter and the working deck the
+	## figure is on. It is the same geometry the ferry has, at a smaller scale.
+	"demo_workboat": Vector3(2.5, 0.0, 7.0),
+	"probe_trawler_bulwark": Vector3(2.5, 0.0, 7.0),
+	"probe_trawler_bow_bulwark": Vector3(2.5, 0.0, 7.0),
+	"probe_spar_kit": Vector3(2.5, 0.0, 7.0),
+	"probe_sheer_bulwark": Vector3(2.5, 0.0, 7.0),
+	"probe_sheer_bulwark_flat": Vector3(2.5, 0.0, 7.0),
+	## The three critic fixtures, read off their own resolved geometry
+	## (`tests/_wave_trim_audit.gd`) rather than guessed. All three are 28 x 10 m
+	## hulls, so the deck rectangle is x 0..10, z 0..28 and z = 0 is the BOW.
+	##
+	## critic_ferry: the saloon fills x 1.00..9.00 over z 5.50..23.50 and the
+	## default spot is inside it. The clear deck is the foredeck forward of the
+	## saloon front (z < 5.50) and the quarterdeck aft of it (z > 23.50).
+	##
+	## AND THE SPOT HAD TO BE MEASURED VIEW BY VIEW, WHICH IS ITSELF THE FINDING.
+	## Both quarters shoot from STARBOARD (azimuth 145 and 35 both resolve to +X)
+	## and the profile from port, and the saloon is 2.5 m tall over 8.0 m of a
+	## 10.0 m beam and 18.0 m of a 28.0 m deck — so it stands between an aft
+	## quarter and anything forward of it. Measured, 2026-08-16, figure pixels over
+	## profile / bow_quarter / stern_quarter / plan:
+	##
+	##     (5.0, 0, 25.5)  quarterdeck   895 /   0 / 732 / 538
+	##     (5.0, 0,  3.0)  foredeck      895 / 941 /   0 / 538
+	##     (5.0, 0,  1.6)  hard forward  892 / 829 /  21 / 341
+	##
+	## Every point of open deck on this vessel is on one of those two regions, so
+	## there is no spot the two quarters share. 1.6 m — jammed against the stem —
+	## is the first place the figure's HEAD clears the saloon roof on the stern
+	## quarter's sight line, and it buys 21 px, 2% of what the same figure is worth
+	## in profile. The natural foredeck spot is kept instead, and the stern quarter
+	## prints its zero. That zero is the shed this wave was sent to look at, said
+	## as a measurement rather than as an adjective: from an after quarter, this
+	## ferry hides a person standing on its own deck completely.
+	"critic_ferry": Vector3(5.0, 0.0, 3.0),
+	## critic_yacht: the coachroof runs z 7.50..17.50 and the port/stbd bulwarks
+	## z 6.00..22.00. z = 3.0 is forward of both, on the open foredeck.
+	"critic_yacht": Vector3(5.0, 0.0, 3.0),
+	## critic_barge: the hopper occupies the middle of the deck and the casing
+	## z 19.50..26.50. The foredeck forward of the coamings is clear.
+	"critic_barge": Vector3(5.0, 0.0, 2.0),
 	## The default spot (2.5, 0, 7.0) is not on this ship at all: at z = 7 the
 	## 150 m hull's deck edge runs x 8.34 .. 23.66, so the figure would stand in
 	## open air off the port bow. It goes on the FORECASTLE, sky behind it and
@@ -89,9 +164,44 @@ const FIGURE_SPOT := {
 }
 const FIGURE_SPOT_DEFAULT := Vector3(2.5, 0.0, 7.0)
 
+## The one that must be VISIBLE, not merely present. Held so `_shoot` can take a
+## reference frame without it.
+const MIN_FIGURE_PIXELS := 1
+
+## ── WHICH VIEWS THE FIGURE IS REQUIRED IN, AND WHY NOT ALL FOUR ─────────────
+##
+## Every view MEASURES the figure and prints the count. Only these two are held
+## to it, and the split is not a convenience:
+##
+##   • `profile_port` and `plan` see the whole deck BY CONSTRUCTION. One looks
+##     along the port side, the other straight down. The only way to hide a
+##     figure from either is to put it inside something — under a roof, in a
+##     wheelhouse — which is exactly the defect CONVENTIONS §3a records twice and
+##     exactly the defect this check exists to catch. Both historical instances
+##     (the wheelhouse spot, and the ferry catamaran's saloon) were invisible in
+##     all four views, these two included.
+##
+##   • `bow_quarter` and `stern_quarter` both shoot from starboard at 16°
+##     elevation, so a deckhouse standing between the camera and the figure
+##     eclipses it. That is a fact about the VESSEL, not about the placement, and
+##     it has no legal fix: measured on `critic_ferry`, whose saloon covers 8.0 m
+##     of a 10.0 m beam and 18.0 m of a 28.0 m deck, a figure on the foredeck is
+##     0 px from the stern quarter and one on the quarterdeck is 0 px from the
+##     bow quarter, and every point of open deck on that vessel is in one of
+##     those two regions. Failing the frame would be failing the rig for the
+##     ship's proportions, which is REALITY §2 from the other direction.
+##
+## THE FIRST RUN OF THIS CHECK FOUND TWO SHIPPED FRAMES WITH NO FIGURE AT ALL —
+## `demo_workboat__stern_quarter` and `probe_container_feeder__stern_quarter`,
+## both 0 px — and six of the nine shipped fixtures with no authored spot. The
+## quarters are printed rather than asserted; those two zeroes are real and are
+## in every log line this rig writes.
+const FIGURE_REQUIRED_VIEWS := ["profile_port", "plan"]
+
 var _t: RefCounted
 var _camera: Camera3D
 var _stage: Node3D
+var _figure: Node3D
 
 ## Renderer counters for the fixture currently on the stage. A MeshInstance3D is
 ## NOT a draw call — these come off RenderingServer's own per-frame counters,
@@ -172,6 +282,7 @@ func _capture_plan(path: String, stem: String) -> void:
 	var plan := StructurePlan.from_dict(data)
 	_t.check("%s: plan has entities" % stem, plan.entity_count() > 0)
 
+	_figure = null
 	_stage = Node3D.new()
 	add_child(_stage)
 	_light_the_stage()
@@ -230,6 +341,7 @@ func _capture_plan(path: String, stem: String) -> void:
 
 	_stage.queue_free()
 	_stage = null
+	_figure = null
 	await get_tree().process_frame
 
 
@@ -803,6 +915,11 @@ func _add_scale_figure(offset: Vector3, stem: String) -> void:
 	# figure hanging in the air above the mast.
 	figure.position = offset + (FIGURE_SPOT.get(stem, FIGURE_SPOT_DEFAULT) as Vector3)
 	_stage.add_child(figure)
+	_figure = figure
+	_t.check(
+		"%s: the figure's spot is authored, not defaulted" % stem,
+		FIGURE_SPOT.has(stem),
+	)
 
 
 func _light_the_stage() -> void:
@@ -905,6 +1022,28 @@ func _shoot(bounds: AABB, name: String, view: Dictionary) -> void:
 	_camera.position = centre + dir * distance
 	_camera.look_at(centre, up_hint)
 
+	## THE REFERENCE FRAME, AND WHY IT IS TAKEN EVERY TIME.
+	##
+	## CONVENTIONS §3a says every vessel capture carries a 1.8 m figure and that
+	## the figure must be CHECKED VISIBLE, because the first placement put it
+	## inside a wheelhouse where it rendered perfectly and appeared in no frame.
+	## This rig placed the figure and then hoped. It shot four `critic_ferry`
+	## frames with the figure under the saloon roof and passed all four.
+	##
+	## So the frame is shot twice: once with the figure hidden, once with it, and
+	## the difference is the figure. That is a MEASUREMENT of the property the
+	## convention states — "is there a scale reference in this picture" — and not
+	## a restatement of the placement (REALITY §4a). Moving the spot to a
+	## different hidden corner keeps the placement legal and still turns this red.
+	if _figure != null:
+		_figure.visible = false
+		for i in SETTLE_FRAMES:
+			await get_tree().process_frame
+		await RenderingServer.frame_post_draw
+	var without := get_viewport().get_texture().get_image()
+	if _figure != null:
+		_figure.visible = true
+
 	for i in SETTLE_FRAMES:
 		await get_tree().process_frame
 	await RenderingServer.frame_post_draw
@@ -924,7 +1063,28 @@ func _shoot(bounds: AABB, name: String, view: Dictionary) -> void:
 	# A capture that is a flat field of one colour is a failed render that looks
 	# exactly like a successful one in a file listing. Refuse it.
 	_t.check("%s: capture is not blank" % name, _distinct_colours(image) >= 8)
-	print("  %s  %dx%d" % [out, image.get_width(), image.get_height()])
+
+	var figure_px := 0
+	if _figure != null:
+		figure_px = _changed_pixels(without, image)
+		if FIGURE_REQUIRED_VIEWS.has(str(view["name"])):
+			_t.check(
+				"%s: the 1.8 m scale figure is visible (%d px change when it is hidden)"
+					% [name, figure_px],
+				figure_px >= MIN_FIGURE_PIXELS,
+			)
+		elif figure_px < MIN_FIGURE_PIXELS:
+			print("  [scale] %s: NO FIGURE IN THIS FRAME — the vessel's own structure"
+				% name + " stands between it and the camera; see FIGURE_REQUIRED_VIEWS")
+
+	## MEASURED, NOT ASSERTED, AND THAT IS DELIBERATE — see the note below
+	## `_silhouette_contrast`. The number is on the record for every frame so a
+	## dark-on-dark regression is visible in a log; it is not a gate condition,
+	## because on this rig's white deckhouses it is not one.
+	print("  %s  %dx%d  figure_px=%d  top_edge_contrast=%.2f:1" % [
+		out, image.get_width(), image.get_height(), figure_px,
+		_silhouette_contrast(image),
+	])
 
 
 func _distinct_colours(image: Image) -> int:
@@ -936,6 +1096,87 @@ func _distinct_colours(image: Image) -> int:
 			if seen.size() >= 64:
 				return seen.size()
 	return seen.size()
+
+
+## How many pixels changed between two frames of the same view. Stride 1, for
+## `hull_visual_capture`'s reason: a 1.8 m figure on a 150 m hull is a handful of
+## pixels and subsampling can miss it entirely.
+func _changed_pixels(before: Image, after: Image) -> int:
+	if before.get_width() != after.get_width() or before.get_height() != after.get_height():
+		return 0
+	var n := 0
+	for y in range(before.get_height()):
+		for x in range(before.get_width()):
+			var a := before.get_pixel(x, y)
+			var b := after.get_pixel(x, y)
+			if absf(a.r - b.r) > 0.02 or absf(a.g - b.g) > 0.02 or absf(a.b - b.b) > 0.02:
+				n += 1
+	return n
+
+
+## ── WHY THIS IS PRINTED AND NOT ASSERTED ────────────────────────────────────
+##
+## `hull_visual_capture` holds its frames to `MIN_SILHOUETTE_CONTRAST = 3.0` on
+## exactly this number, and it is right to: it photographs BARE HULLS, whose
+## skyline is dark topsides, and it found real frames at 1.18:1 where the deck
+## edge was not a line. This rig was measured against the same formula on
+## 2026-08-16, on the twelve committed `screenshots/critic/` frames:
+##
+##     critic_ferry__profile_port  3.47:1     critic_yacht__profile_port  1.60:1
+##     critic_ferry__plan          3.14:1     critic_yacht__plan          2.31:1
+##     critic_ferry__bow_quarter   1.71:1     critic_yacht__bow_quarter   1.15:1
+##     critic_ferry__stern_quarter 1.25:1     critic_yacht__stern_quarter 1.01:1
+##     critic_barge__profile_port  3.14:1     critic_barge__bow_quarter   2.22:1
+##     critic_barge__plan          2.29:1     critic_barge__stern_quarter 1.79:1
+##
+## Eight of twelve under the floor — and all twelve were then OPENED AND LOOKED
+## AT, and every one of them reads: the vessel separates cleanly from the ground
+## in all four views, the deck edge is a line, the deckhouse massing is legible.
+## The divergence has a mechanical cause and it is not a defect in the frames.
+## `_silhouette_contrast` samples the TOPMOST subject pixel of each column, and
+## these fixtures put a NEAR-WHITE deckhouse roof on the skyline (`#e8e6df`,
+## `#f2f0ea`) where a bare hull puts dark topsides. White on a pale overcast has
+## a low WCAG ratio and a perfectly readable edge, because what separates it is
+## shading and the dark hull under it, not luminance against the sky.
+##
+## Enforcing 3:1 here would therefore demand that deckhouses be painted darker to
+## satisfy a number — an appearance decision taken by a scorer, which is
+## precisely REALITY §2. The measurement stays, in every log line, because a
+## re-darkened ground WOULD show up in it. The verdict does not.
+func _silhouette_contrast(image: Image) -> float:
+	var background := image.get_pixel(2, 2)
+	var sum := Color(0.0, 0.0, 0.0)
+	var n := 0
+	for x in range(image.get_width()):
+		for y in range(image.get_height()):
+			var c := image.get_pixel(x, y)
+			if (
+				absf(c.r - background.r) > 0.02
+				or absf(c.g - background.g) > 0.02
+				or absf(c.b - background.b) > 0.02
+			):
+				sum += c
+				n += 1
+				break
+	if n == 0:
+		return 0.0
+	var a := _relative_luminance(sum / float(n))
+	var b := _relative_luminance(background)
+	return (maxf(a, b) + 0.05) / (minf(a, b) + 0.05)
+
+
+func _relative_luminance(c: Color) -> float:
+	return (
+		0.2126 * _linearize(c.r) + 0.7152 * _linearize(c.g) + 0.0722 * _linearize(c.b)
+	)
+
+
+func _linearize(channel: float) -> float:
+	return (
+		channel / 12.92
+		if channel <= 0.04045
+		else pow((channel + 0.055) / 1.055, 2.4)
+	)
 
 
 func _count_meshes(node: Node) -> int:
