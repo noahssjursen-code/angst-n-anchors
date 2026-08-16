@@ -21,7 +21,40 @@ extends Node
 ## hull_28x10 is shot through the SAME rig at the SAME metres-per-pixel, because
 ## "does the small hull read as a shrunken trawler" is a comparison and cannot be
 ## answered from one picture.
+##
+## ── REPRODUCIBILITY, 2026-08-16 ────────────────────────────────────────────
+##
+## This rig used to produce different pixels on every run. The cause is written
+## up in full at the top of `tests/_starter_shot.gd`, and in one line it is:
+## `WorldClock` runs a 24-REAL-MINUTE day off the Unix clock and
+## `ShipLighting` rescales every light on the vessel from it, so two runs a few
+## real minutes apart are a few GAME HOURS apart. The subject does not move —
+## the boat's transform, meshes and materials are bit-identical across
+## processes — the light does. Two fixes, both mechanical: the clock is pinned
+## at noon, and each frame is grabbed after `frame_post_draw` rather than after
+## a bare `process_frame` count.
 
+##
+## ══ AND IT IS STILL NOT FULLY REPRODUCIBLE. THE FLOOR IS 240 px. ═══════════
+##
+## Both fixes applied, three runs, pairwise: **4 to 6 of 7 frames still move,
+## by 0.0001% to 0.0165%** — 237 pixels out of 1 440 000 on the worst
+## (`hull_15x5__bow_on_ortho`). Looked at rather than counted: the difference
+## mask is two dotted lines running down the port and starboard sheer, i.e. a
+## sub-pixel edge race with no anti-aliasing to absorb it — 160 pixels off by
+## 1/255 and 58 flipping the full contrast of the sheer edge (191 and 201/255).
+## It is not the light (the clock is pinned) and it is not the hull (the frozen
+## body's transform is bit-identical across processes, measured in float bits).
+## The residue was not traced further and is reported rather than hidden
+## (REALITY §6).
+##
+## **A difference under about 240 pixels (0.017%) between two frames from this
+## rig is NOISE. Above it is real. Never md5-compare them.** The floor is
+## printed on every run.
+
+const CaptureClock := preload("res://tests/support/capture_clock.gd")
+## Measured 2026-08-16 over three runs of the fixed rig, worst pair.
+const REPRO_NOISE_FLOOR_PX := 240
 const OUT_DIR := "res://screenshots/vessels"
 const SKY := Color(0.80, 0.85, 0.90)
 const WATER := Color(0.13, 0.32, 0.40, 0.62)
@@ -37,6 +70,8 @@ func _ready() -> void:
 
 
 func _run() -> void:
+	print("CLOCK PINNED time_of_day=%.3f (noon) — the HOUR is fixed; see this file's header for what that closes"
+		% CaptureClock.pin(get_tree()))
 	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(OUT_DIR))
 	_build_stage()
 
@@ -70,6 +105,14 @@ func _run() -> void:
 	b.free()
 
 	print("SHOT DONE")
+	## Stated on every run — the header is not where anyone stands when they put
+	## two of these frames side by side.
+	print(
+		"REPRO FLOOR %d px — two runs of THIS rig still differ by up to that many "
+		% REPRO_NOISE_FLOOR_PX
+		+ "pixels (0.017%) along the sheer edge. A smaller difference between two of "
+		+ "these frames is noise, not a change in the hull. Never md5-compare them."
+	)
 	get_tree().quit(0)
 
 
@@ -178,13 +221,11 @@ func _save(case: String, lens: String) -> void:
 	var figures := _figures()
 	for f in figures:
 		f.visible = false
-	for _frame in range(4):
-		await get_tree().process_frame
+	await CaptureClock.settle(get_tree(), 4)
 	var without := _viewport.get_texture().get_image()
 	for f in figures:
 		f.visible = true
-	for _frame in range(4):
-		await get_tree().process_frame
+	await CaptureClock.settle(get_tree(), 4)
 	var image := _viewport.get_texture().get_image()
 	image.save_png(ProjectSettings.globalize_path("%s/%s.png" % [OUT_DIR, case]))
 	var moved := 0

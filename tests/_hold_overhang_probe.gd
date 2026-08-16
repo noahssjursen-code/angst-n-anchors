@@ -7,6 +7,7 @@ extends Node
 ## ends. Reads the meshes the fitout actually committed, not the constants that
 ## produced them.
 
+const CaptureClock := preload("res://tests/support/capture_clock.gd")
 const PLAYER_HEIGHT := 1.8
 
 
@@ -15,6 +16,8 @@ func _ready() -> void:
 
 
 func _run() -> void:
+	print("CLOCK PINNED time_of_day=%.3f (noon) — the HOUR is fixed; see this file's header for what that closes"
+		% CaptureClock.pin(get_tree()))
 	## Is `half_beam` invariant under the open CELL_M decision? It is
 	## `floor(beam/CELL_M) * CELL_M * 0.5`, so the constant cancels whenever the
 	## beam is a whole number of cells. Printed against beam/2 for every hull.
@@ -38,6 +41,17 @@ func _run() -> void:
 ## touches, and no capture rig photographs it — `trawler_render_capture` shoots a
 ## structure-plan fixture, not this brick preset. Same rig rules as
 ## `_starter_shot`: pale sky, shadows on, a 1.8 m figure on deck, counted.
+##
+## ── REPRODUCIBILITY, 2026-08-16 ────────────────────────────────────────────
+##
+## The frame this writes was recorded in STATE.md as `figure_px 3521`. Re-run
+## today with no code change it prints **3947**, and the PNG differs from the
+## committed one by **22.49% of its pixels**. Cause and cure are written up at
+## the top of `tests/_starter_shot.gd`: `WorldClock` runs a 24-REAL-MINUTE day
+## off the Unix clock and `ShipLighting` rescales every light on the vessel from
+## it. Two BACK-TO-BACK runs of this rig agree exactly (0.0000%), which is why
+## the drift was never seen — a fast pair cannot detect a time-of-day
+## dependency. The clock is pinned at noon now and the hour is printed.
 func _shoot_trawler() -> void:
 	var out_dir := "res://screenshots/vessels"
 	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(out_dir))
@@ -104,12 +118,10 @@ func _shoot_trawler() -> void:
 		Vector3(22.0, 11.0, 30.0), Vector3(0.0, -1.5 + 3.0, 2.0), Vector3.UP
 	)
 	figure.visible = false
-	for _f in range(4):
-		await get_tree().process_frame
+	await CaptureClock.settle(get_tree(), 4)
 	var without := viewport.get_texture().get_image()
 	figure.visible = true
-	for _f in range(4):
-		await get_tree().process_frame
+	await CaptureClock.settle(get_tree(), 4)
 	var image := viewport.get_texture().get_image()
 	image.save_png(ProjectSettings.globalize_path(
 		"%s/fishing_trawler_28m__stern_quarter.png" % out_dir

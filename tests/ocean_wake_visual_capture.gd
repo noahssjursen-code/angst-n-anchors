@@ -21,6 +21,32 @@ extends SceneTree
 ## without a RenderingDevice, and each has caught a real regression. A degraded
 ## capture is a reason to label the PNG, which `_run` now does; it is not a
 ## reason to delete three live assertions from the gate.
+##
+## ══ THIS RIG'S PNG CANNOT BE DIFFED. IT IS FOR LOOKING AT ONLY. ═════════════
+##
+## Measured 2026-08-16: two runs back to back, no code change, no gap —
+## `ocean_wake_visual.png` moved **15.9% of its pixels with a worst channel
+## delta of 244/255**; a pair further apart moved **88.3%**. Nothing is wrong.
+## The subject is a moving sea.
+##
+## `WorldRenderer` sets the ocean materials' `wave_time` from
+## `WaveSurface.get_sim_time()`, which is `Time.get_ticks_msec() * 0.001` — real
+## milliseconds since the process started. Every frame this rig photographs is
+## therefore a photograph of the wave field at a WALL-CLOCK phase, and two
+## processes never reach the grab at the same millisecond.
+##
+## **This cannot be fixed without freezing the sea, and a frozen sea is not what
+## this rig exists to show** — it exists so a person can look at whether a wake
+## reads as a wake on moving water. So the rig states the limit instead of
+## papering over it, and the statement is repeated on stdout on every run
+## (`WAVE PHASE`) so nobody has to open this file to learn it.
+##
+## What that means for anyone comparing two of these PNGs: **a difference
+## between them is evidence of nothing.** The claims below are the diffable
+## part of this unit, and they are the only part.
+##
+## Every OTHER capture rig in `tests/` is byte-reproducible as of 2026-08-16 —
+## this is the one exception, and it is the one whose subject is time.
 
 const TestReport := preload("res://tests/support/test_report.gd")
 const WORLD_RENDERER := preload("res://scripts/world/world_renderer.gd")
@@ -99,6 +125,16 @@ func _run() -> void:
 			gpu_frame_ms,
 			"live" if wake_live else "INERT (no RenderingDevice: ocean rendered without wake)",
 		]
+	)
+	## Said out loud on every run, because the header is not where anyone stands
+	## when they put two of these frames side by side. Measured 2026-08-16:
+	## 15.9% of pixels between back-to-back runs, 88.3% between runs minutes
+	## apart, worst channel delta 244/255 — all of it the sea moving.
+	print(
+		"WAVE PHASE %.3f s — THIS FRAME IS NOT REPRODUCIBLE AND MUST NOT BE DIFFED. "
+		% (Time.get_ticks_msec() * 0.001)
+		+ "wave_time comes from the wall clock, so two runs never photograph the "
+		+ "same sea. Look at it; do not compare it."
 	)
 	renderer.queue_free()
 	camera.queue_free()

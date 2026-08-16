@@ -23,7 +23,41 @@ extends Node
 ## beside the figure, which is the frame that answers "is a bollard bollard-sized".
 ## The VESSEL puts them on `hull_28x10` through `VesselSpawn` -> `apply_plan`,
 ## which is the frame that answers "does this read as a working boat".
+##
+## ── REPRODUCIBILITY, 2026-08-16 ────────────────────────────────────────────
+##
+## This rig used to produce different pixels on every run. The cause is written
+## up in full at the top of `tests/_starter_shot.gd`, and in one line it is:
+## `WorldClock` runs a 24-REAL-MINUTE day off the Unix clock and
+## `ShipLighting` rescales every light on the vessel from it, so two runs a few
+## real minutes apart are a few GAME HOURS apart. The subject does not move —
+## the boat's transform, meshes and materials are bit-identical across
+## processes — the light does. Two fixes, both mechanical: the clock is pinned
+## at noon, and each frame is grabbed after `frame_post_draw` rather than after
+## a bare `process_frame` count.
 
+##
+## ══ AND IT IS STILL NOT REPRODUCIBLE. THE CLOCK PIN IS NOT ENOUGH HERE. ════
+##
+## Two back-to-back runs of this rig agree exactly (7 frames, 0.0000%) — which
+## is why the drift was invisible. Two runs **six real minutes apart**, with the
+## clock pinned and `frame_post_draw` awaited, still move **2 of 7 frames, by
+## 3.4908% (`vessel__bow_quarter`) and 3.7904% (`vessel__deck_close`)**.
+##
+## `CaptureClock.pin` pins the HOUR and not the WEATHER, and the weather is on
+## the same wall clock by another route: `WeatherField.current_game_time()`
+## calls `WorldClock.get_game_hours_elapsed()`, which is computed live from
+## `Time.get_unix_time_from_system()` whether or not `WorldClock` is processing.
+## `ShipLighting._update_auto_nav` reads `fog_density` as well as daylight. Nine
+## other rigs closed completely with the hour pinned; this one did not, and the
+## remaining path was identified but NOT closed (REALITY §6).
+##
+## **So: two frames from this rig are comparable only above about 3.8% of
+## pixels. Never md5-compare them.** Stated on stdout on every run.
+
+const CaptureClock := preload("res://tests/support/capture_clock.gd")
+## Measured 2026-08-16, two runs six real minutes apart with the clock pinned.
+const REPRO_FLOOR_PCT := 3.8
 const OUT_DIR := "res://screenshots/vessels/fittings"
 const SKY := Color(0.80, 0.85, 0.90)
 const WATER := Color(0.13, 0.32, 0.40, 0.62)
@@ -42,11 +76,20 @@ func _ready() -> void:
 
 
 func _run() -> void:
+	print("CLOCK PINNED time_of_day=%.3f (noon) — the HOUR is fixed; see this file's header for what that closes"
+		% CaptureClock.pin(get_tree()))
 	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(OUT_DIR))
 	_build_stage()
 	await _kit_sheet()
 	await _on_the_vessel()
 	print("SHOT DONE")
+	print(
+		"REPRO FLOOR %.1f%% — two runs of THIS rig minutes apart still differ by up to "
+		% REPRO_FLOOR_PCT
+		+ "that fraction of the frame. The clock pin fixes the HOUR, not the WEATHER "
+		+ "(WeatherField reads the Unix clock directly). A smaller difference between "
+		+ "two of these frames is noise. Never md5-compare them."
+	)
 	get_tree().quit(0)
 
 
@@ -268,13 +311,11 @@ func _persp(case: String, from: Vector3, look_at: Vector3) -> void:
 func _save(case: String, lens: String) -> void:
 	for f in _figures:
 		(f as Node3D).visible = false
-	for _frame in range(4):
-		await get_tree().process_frame
+	await CaptureClock.settle(get_tree(), 4)
 	var without := _viewport.get_texture().get_image()
 	for f in _figures:
 		(f as Node3D).visible = true
-	for _frame in range(4):
-		await get_tree().process_frame
+	await CaptureClock.settle(get_tree(), 4)
 	var image := _viewport.get_texture().get_image()
 	image.save_png(ProjectSettings.globalize_path("%s/%s.png" % [OUT_DIR, case]))
 	var moved := 0

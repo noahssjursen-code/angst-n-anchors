@@ -28,8 +28,43 @@ extends Node
 ##
 ## The 28 m cargo starter is shot through the SAME rig at the SAME metres per
 ## pixel, because "is this the right boat for a beginner" is a comparison.
+##
+## ── THIS RIG WAS NOT REPRODUCIBLE, AND THE NAMED CAUSE WAS WRONG ────────────
+##
+## Measured 2026-08-16. Two runs four minutes apart moved all eight frames;
+## two runs twelve minutes apart moved all eight by up to 94.96% of pixels.
+##
+## The previous diagnosis on record — *"it floats a hull and settles it under
+## physics"* — is FALSE, and was checked before it was replaced (REALITY §7).
+## Across two processes the granted vessel is bit-identical: its body transform
+## in all twelve float words (`0`, `-3.04999995231628418`, `0`, identity basis,
+## unchanged at frames 1, 4, 8, 20 and 40), the SHA-256 of its 138 mesh surface
+## arrays, the SHA-256 of its 141 materials, and the AABBs of all 143 visual
+## instances. `freeze = true` holds. Nothing settles.
+##
+## What moves is the LIGHT. `WorldClock` runs a 24-REAL-MINUTE day off
+## `Time.get_unix_time_from_system()`, and `ShipLighting._process` rescales
+## every `ShipLight` on the boat from it twice a second:
+##
+##     grabbed 01:36:40 UTC -> game hour  0.67 -> artificial_light_scale 1.00
+##     grabbed 01:48:30 UTC -> game hour 12.50 -> artificial_light_scale 0.05
+##
+## — night against midday, in two runs twelve minutes apart. In the first, the
+## deck light over the wheelhouse blows out a 2 m patch of roof; in the second
+## it is a disc. Between two runs four minutes apart (game hours 0.67 and 5.00,
+## both night) the same mechanism moved 21.7% of `starter__plan_ortho` by 1 to
+## 3 parts in 255 — a real lighting change, invisible, and enough to move every
+## md5. **That is the number a reader must not treat as noise and must not
+## treat as a change in the boat.**
+##
+## Fixed by pinning the clock at noon (`CaptureClock.pin`) and by settling
+## through `frame_post_draw` rather than a bare `process_frame` count. The
+## frames it writes are re-shot; the diff is characterised in STATE.md. Nothing
+## was removed from the picture: the lights are still on the boat, they are now
+## photographed at a stated hour, and the hour is printed on every run.
 
 const OUT_DIR := "res://screenshots/vessels/starter"
+const CaptureClock := preload("res://tests/support/capture_clock.gd")
 const SKY := Color(0.80, 0.85, 0.90)
 const WATER := Color(0.13, 0.32, 0.40, 0.62)
 const WL := -1.5 ## WaveSurface.WATER_LEVEL, named here so the rig is standalone
@@ -44,6 +79,7 @@ func _ready() -> void:
 
 
 func _run() -> void:
+	print("CLOCK PINNED time_of_day=%.3f (noon) — see the header" % CaptureClock.pin(get_tree()))
 	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(OUT_DIR))
 	_build_stage()
 
@@ -212,13 +248,11 @@ func _save(case: String, lens: String) -> void:
 	var figures := _figures()
 	for f in figures:
 		f.visible = false
-	for _frame in range(4):
-		await get_tree().process_frame
+	await CaptureClock.settle(get_tree(), 4)
 	var without := _viewport.get_texture().get_image()
 	for f in figures:
 		f.visible = true
-	for _frame in range(4):
-		await get_tree().process_frame
+	await CaptureClock.settle(get_tree(), 4)
 	var image := _viewport.get_texture().get_image()
 	image.save_png(ProjectSettings.globalize_path("%s/%s.png" % [OUT_DIR, case]))
 	var moved := 0

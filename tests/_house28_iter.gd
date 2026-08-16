@@ -14,7 +14,20 @@ extends Node
 ## Run:
 ##   xvfb-run -a --server-args="-screen 0 1280x720x24" godot \
 ##     --rendering-driver opengl3 --audio-driver Dummy res://tests/_house28_iter.tscn -- v1
+##
+## ── REPRODUCIBILITY, 2026-08-16 ────────────────────────────────────────────
+##
+## This rig used to produce different pixels on every run. The cause is written
+## up in full at the top of `tests/_starter_shot.gd`, and in one line it is:
+## `WorldClock` runs a 24-REAL-MINUTE day off the Unix clock and
+## `ShipLighting` rescales every light on the vessel from it, so two runs a few
+## real minutes apart are a few GAME HOURS apart. The subject does not move —
+## the boat's transform, meshes and materials are bit-identical across
+## processes — the light does. Two fixes, both mechanical: the clock is pinned
+## at noon, and each frame is grabbed after `frame_post_draw` rather than after
+## a bare `process_frame` count.
 
+const CaptureClock := preload("res://tests/support/capture_clock.gd")
 const OUT_DIR := "res://screenshots/vessels/iter_house28"
 const SKY := Color(0.80, 0.85, 0.90)
 const WATER := Color(0.13, 0.32, 0.40, 0.62)
@@ -36,6 +49,8 @@ func _ready() -> void:
 
 
 func _run() -> void:
+	print("CLOCK PINNED time_of_day=%.3f (noon) — the HOUR is fixed; see this file's header for what that closes"
+		% CaptureClock.pin(get_tree()))
 	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(OUT_DIR))
 	_build_stage()
 	for prebuilt_id in SUBJECTS:
@@ -258,13 +273,11 @@ func _save(case: String, lens: String) -> void:
 	var figures := _figures()
 	for f in figures:
 		f.visible = false
-	for _frame in range(4):
-		await get_tree().process_frame
+	await CaptureClock.settle(get_tree(), 4)
 	var without := _viewport.get_texture().get_image()
 	for f in figures:
 		f.visible = true
-	for _frame in range(4):
-		await get_tree().process_frame
+	await CaptureClock.settle(get_tree(), 4)
 	var image := _viewport.get_texture().get_image()
 	image.save_png(ProjectSettings.globalize_path("%s/%s.png" % [OUT_DIR, case]))
 	var moved := 0

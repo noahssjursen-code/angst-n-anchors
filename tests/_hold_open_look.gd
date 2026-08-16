@@ -17,7 +17,20 @@ extends Node
 ##   open_naive        every hatch-board MESH hidden, nothing else touched
 ##   open_no_plate     the same, plus HullVisual/Deck hidden — the control that
 ##                     separates "the plate hides it" from "nothing is drawn"
+##
+## ── REPRODUCIBILITY, 2026-08-16 ────────────────────────────────────────────
+##
+## This rig used to produce different pixels on every run. The cause is written
+## up in full at the top of `tests/_starter_shot.gd`, and in one line it is:
+## `WorldClock` runs a 24-REAL-MINUTE day off the Unix clock and
+## `ShipLighting` rescales every light on the vessel from it, so two runs a few
+## real minutes apart are a few GAME HOURS apart. The subject does not move —
+## the boat's transform, meshes and materials are bit-identical across
+## processes — the light does. Two fixes, both mechanical: the clock is pinned
+## at noon, and each frame is grabbed after `frame_post_draw` rather than after
+## a bare `process_frame` count.
 
+const CaptureClock := preload("res://tests/support/capture_clock.gd")
 const OUT_DIR := "res://screenshots/vessels/hold"
 const SKY := Color(0.80, 0.85, 0.90)
 const WATER := Color(0.13, 0.32, 0.40, 0.62)
@@ -33,6 +46,8 @@ func _ready() -> void:
 
 
 func _run() -> void:
+	print("CLOCK PINNED time_of_day=%.3f (noon) — the HOUR is fixed; see this file's header for what that closes"
+		% CaptureClock.pin(get_tree()))
 	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(OUT_DIR))
 	_build_stage()
 	var granted := CompanyService.build_starter_vessel_record(CompanyContracts.DEFAULT_STARTER)
@@ -196,8 +211,7 @@ func _ortho_plan(case: String, centre: Vector3, width_m: float) -> void:
 
 
 func _save(case: String) -> void:
-	for _frame in range(4):
-		await get_tree().process_frame
+	await CaptureClock.settle(get_tree(), 4)
 	var image := _viewport.get_texture().get_image()
 	image.save_png(ProjectSettings.globalize_path("%s/%s.png" % [OUT_DIR, case]))
 	print("SHOT %s" % case)

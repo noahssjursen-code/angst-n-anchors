@@ -24,9 +24,42 @@ extends Node
 ##    it rendered perfectly and appeared in no frame — each view is rendered
 ##    twice, with and without the figure, and the check is that the two images
 ##    DIFFER. That measures visibility, not placement.
+##
+## ── The word "deterministic" above was a claim, and it was WRONG. 2026-08-16 ─
+##
+## Run twice with no code change, this rig moved 2 of its 18 frames —
+## `hull_15x5__three_quarter` 0.8628% and `hull_28x10__three_quarter` 0.8104%,
+## with per-channel deltas up to 241/255. Another pair moved 1 frame at 0.5579%,
+## another moved 0. It is INTERMITTENT, and it lands on exactly the two views
+## that yaw the hull (`rotation_degrees.y = -18.0`); `front` and `side` are
+## byte-identical every time.
+##
+## The subject was cleared before the rig was blamed (REALITY §7). Across two
+## processes the yawed body's global transform is bit-identical — all twelve
+## float words, hex-compared, at every frame from 1 to 8 after the yaw — and its
+## visual-instance AABBs hash identical. A synthetic scene of four yawed boxes
+## under this renderer is byte-identical across processes, with and without
+## shadows, in a SubViewport and in the main viewport. The geometry does not
+## move and the rasteriser is not noisy.
+##
+## What was left is the GRAB. This rig awaited three `process_frame`s and then
+## read `viewport.get_texture()`, never `RenderingServer.frame_post_draw`. Every
+## byte-stable capture rig in this repo awaits `frame_post_draw`
+## (`vessel_render_capture` and its three subclasses: 60 frames, 0 moved);
+## every unstable one did not. The difference shows up as a one-pixel outline
+## along silhouette edges — visible in the diff mask as a wireframe of the boat
+## — which is what a frame grabbed a draw early or late looks like when there is
+## no anti-aliasing to soften an edge that moved by a fraction of a pixel.
+##
+## So the grab now goes through `CaptureClock.settle`, and the clock is pinned
+## with it. Pinning changes nothing HERE — `HullRegistry.build_hull` carries no
+## `ShipLight`, so there is nothing on a bare hull for the time of day to scale
+## — and it is done anyway so this rig cannot acquire the dependency by someone
+## later photographing a fitted-out vessel through it.
 
 const OUTPUT_DIR := "res://screenshots/hulls"
 const TestReport := preload("res://tests/support/test_report.gd")
+const CaptureClock := preload("res://tests/support/capture_clock.gd")
 ## A frame that is entirely background, or entirely subject, is a broken camera
 ## rather than a hull. Coverage is the fraction of pixels away from the clear
 ## colour.
@@ -54,6 +87,8 @@ func _ready() -> void:
 
 
 func _capture_all() -> void:
+	var hour := CaptureClock.pin(get_tree())
+	print("Hull visual capture: game clock pinned at time_of_day %.3f" % hour)
 	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(OUTPUT_DIR))
 	var viewport := SubViewport.new()
 	viewport.size = Vector2i(960, 540)
@@ -136,13 +171,13 @@ func _capture_all() -> void:
 				Vector3.UP
 			)
 			## Reference frame with no figure, then the real one with it.
+			## `CaptureClock.settle` rather than a bare `process_frame` loop —
+			## see the note at the top of this file about the yawed views.
 			figure.visible = false
-			for _frame in range(3):
-				await get_tree().process_frame
+			await CaptureClock.settle(get_tree(), 3)
 			var without := viewport.get_texture().get_image()
 			figure.visible = true
-			for _frame in range(3):
-				await get_tree().process_frame
+			await CaptureClock.settle(get_tree(), 3)
 			var image := viewport.get_texture().get_image()
 
 			var case := "%s__%s" % [hull_id, view]
