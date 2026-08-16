@@ -71,17 +71,97 @@ const FIXTURES_HERE: Array[String] = [
 const PIECE_FIGURE_SPOT := {
 	## Centreline, 5 m from the stem: clear of the casing (which starts at z = 9 m)
 	## and clear of the 5 m bow taper, with open sky behind it from every angle.
+	##
+	## Re-measured 2026-08-16 rather than taken on trust, because this entry was
+	## being reported as DEFAULTED by a check reading the wrong table and nobody
+	## had put a number against it. Resolved: CLEAR, 2.94 m from the nearest
+	## structure, open sky. Shot: 180 / 332 / 47 / 492 px over profile /
+	## bow_quarter / stern_quarter / plan. The 47 is thin — the casing stands
+	## between an after quarter and the foredeck — and the after towing deck at
+	## (5.0, 0, 22.0) measures 309 / 342 / 579 / 511, better in every view. The
+	## foredeck is kept anyway: 47 px clears the floor honestly, and a tug's
+	## towing deck is the one part of it that is meant to be empty.
 	"probe_piece_tug": Vector3(5.0, 0.0, 5.0),
 	## FOUND BY THE CHECK BELOW, not by inspection. `probe_piece_house__profile_port`
 	## shipped with NO VISIBLE FIGURE — 4 samples, and looking at the PNG confirms
 	## it: the bulwark hides the figure completely. That is not this fixture's
 	## fault. At 3 degrees of elevation a 1.1 m bulwark on a sheered hull hides a
-	## 1.8 m figure standing anywhere on the main deck, so a fourth spot on the
-	## main deck would have moved the problem rather than fixed it. It stands on
-	## the wheelhouse roof instead (plan y = 5.0 m, the `deck_tile` at cell y = 10),
-	## which is clear of everything on this vessel and has sky behind it from all
-	## four angles.
+	## 1.8 m figure standing on the main deck, so a fourth spot down there would
+	## have moved the problem rather than fixed it. It stands on the wheelhouse
+	## roof instead (plan y = 5.0 m, the `deck_tile` at cell y = 10), which is
+	## clear of everything on this vessel and has sky behind it from all four
+	## angles.
+	##
+	## ⚠ THAT SENTENCE USED TO SAY "ANYWHERE ON THE MAIN DECK", AND ANYWHERE IS
+	## MEASURABLY TOO STRONG — 2026-08-16. The bulwark run on this fixture spans
+	## z 5.29..27.98, so the deck FORWARD of it is unprotected. Figure pixels over
+	## profile / bow_quarter / stern_quarter / plan, one spot per line:
+	##
+	##     (4.5, 5.00, 20.5)  wheelhouse roof   813 / 366 / 531 / 626   ← kept
+	##     (5.0, 0.00,  3.0)  foredeck, no bulwark forward of it
+	##                                          908 / 840 / 317 / 520
+	##     (5.0, 0.00,  8.0)  main deck, inside the bulwark
+	##                                           48 / 667 / 305 / 507
+	##
+	## So the claim holds where the bulwark is (48 px is a scalp), and does not
+	## hold forward of z = 5.29. The roof is kept because it reads best of the
+	## three in the frame and not because the deck is impossible; the numbers for
+	## the alternative are here so the next reader does not have to re-measure.
+	##
+	## Standing surface, measured through `StructureBaker.entity_colliders`: the
+	## sloped `deck_tile` under this spot has its collider top at y = 4.965, so
+	## the figure hovers 0.035 m. That is one pixel at this framing — the crop
+	## shows its sole against the roof's own eave with no sky between — and it is
+	## inside the dicing step of a tile that falls 0.25 m over 4.0 m. Recorded
+	## rather than nudged, because moving it would change a committed frame to
+	## chase something no view can resolve.
 	"probe_piece_house": Vector3(4.5, 5.0, 20.5),
+	## ⚠ THE THIRD FIXTURE HAD NO ENTRY AT ALL, AND ITS DEFAULT WAS INSIDE A WALL.
+	##
+	## `probe_piece_trawler` fell through to the parent's `FIGURE_SPOT_DEFAULT`,
+	## (2.5, 0, 7.0), for as long as this rig has existed. That is not merely
+	## undecided — it is WRONG. The fixture carries a V-shaped breakwater across
+	## the fore end of the working deck (`walls[]` 1 and 2, from (1, 8.4) and
+	## (9, 8.4) on the diagonal axes, 0.18 m thick and 1.0 m high, meeting on the
+	## centreline at z = 4.4). Resolved through `StructureBaker.entity_colliders`
+	## the default lands 0.07 m off that plating's centre line, inside a 0.18 m
+	## wall: the figure was standing IN the breakwater, with the top 0.8 m of it
+	## showing over the cap.
+	##
+	## It passed every check. `_shoot` measured 63 / 139 / 218 / 228 px, all four
+	## comfortably over the floor, because a scale figure sunk to the waist in a
+	## bulwark is still a scale figure to a pixel counter. REALITY §4: the check
+	## measures VISIBILITY and cannot see EMBEDDING, and the two are not the same
+	## property.
+	##
+	## Four spots were resolved against the colliders and then shot, profile /
+	## bow_quarter / stern_quarter / plan:
+	##
+	##     (2.5, 0.00,  7.0)  BLOCKED, in the breakwater   63 / 139 / 218 / 228
+	##     (5.0, 0.00,  2.5)  forecastle head               0 /  13 / 214 / 434
+	##     (1.35, 0.00, 12.5) port side deck              178 / 285 /   0 / 297
+	##     (5.0, 0.65, 12.5)  ON THE FISH HATCH COVER     see the log — chosen
+	##
+	## The forecastle is illegal: the sheer rises 0.896 m forward and the bulwark
+	## with it, and at 3 degrees of elevation it buries the figure whole — a hard
+	## FAIL on `profile_port`. The port side deck is legal but thin, 178 px of
+	## scalp above the cap rail, and it is 0 px from the stern quarter, which this
+	## rig ASSERTS on all four views rather than two.
+	##
+	## The hatch cover is the answer, and it is not a dodge: the fish hatch
+	## (`decks[]` 5-7, x 2.10..7.90, z 9.10..15.90) is where a hand stands with
+	## the gear on deck, it is 4.5 m clear of the deckhouse front and 2.83 m from
+	## anything else, it has open sky over it, and the extra 0.65 m lifts the
+	## figure clear of the bulwark cap in profile.
+	##
+	## y = 0.65 AND NOT 0.77, and the difference is the whole reason this was
+	## measured rather than computed from the fixture. `StructureBaker._plate_span`
+	## reads a deck's `origin.y` as the plate's TOP and hangs `thickness` BELOW it,
+	## so the hatch authored at `origin.y = 0.65, thickness = 0.12` has its walking
+	## surface at 0.65. Standing the figure on 0.65 + 0.12 floats it 0.120 m, and
+	## the bulwark hides the feet from every asserted view, so no frame could ever
+	## have shown it.
+	"probe_piece_trawler": Vector3(5.0, 0.65, 12.5),
 }
 
 ## ── The figure is VISIBLE, not merely placed ────────────────────────────────
@@ -259,14 +339,17 @@ func _check_fittings(plan: StructurePlan, stem: String) -> void:
 ## Stands the figure somewhere it can be SEEN on this fixture. Same geometry as
 ## the parent's — same capsule, same head, same colours — only the spot differs,
 ## so a tug photographs at the same scale as everything else in the folder.
-func _add_scale_figure(offset: Vector3, stem: String) -> void:
-	if not PIECE_FIGURE_SPOT.has(stem):
-		super._add_scale_figure(offset, stem)
-		return
-	super._add_scale_figure(offset, stem)
-	var figure := _stage.get_node_or_null("ScaleFigure")
-	if figure != null:
-		(figure as Node3D).position = offset + (PIECE_FIGURE_SPOT[stem] as Vector3)
+##
+## This used to reposition the figure AFTER `super._add_scale_figure` had already
+## placed it and already run the "authored, not defaulted" check — so the check
+## judged the parent's table while the figure stood at this one's, and reported
+## `probe_piece_house` and `probe_piece_tug` as defaulted when they were not.
+## Answering the parent's question instead means the position and the claim come
+## from one call, and no override of the placement itself is needed.
+func _figure_spot(stem: String) -> Variant:
+	if PIECE_FIGURE_SPOT.has(stem):
+		return PIECE_FIGURE_SPOT[stem]
+	return super._figure_spot(stem)
 
 
 ## Every frame is photographed by the parent, then SHOT AGAIN WITH THE FIGURE

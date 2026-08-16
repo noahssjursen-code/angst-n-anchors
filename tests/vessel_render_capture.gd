@@ -115,6 +115,28 @@ const FIGURE_SPOT := {
 	## `demo_workboat__stern_quarter` is 0 px and has been since this rig existed:
 	## the deckhouse stands between an after quarter and the working deck the
 	## figure is on. It is the same geometry the ferry has, at a smaller scale.
+	##
+	## ⚠ AND "MEASURED AT THAT VALUE" MEANT MEASURED FOR VISIBILITY ONLY, WHICH
+	## IS NOT THE SAME PROPERTY — 2026-08-16.
+	##
+	## Two of the six are standing INSIDE a wall at the value written above.
+	## `probe_trawler_bulwark` and `probe_trawler_bow_bulwark` both carry a
+	## V-shaped breakwater across the fore end of the working deck — `walls[]` 1
+	## and 2, from (1, 8.4) and (9, 8.4) on the diagonal axes, 0.18 m thick, 1.0 m
+	## high, meeting on the centreline at z = 4.4. Resolved through
+	## `StructureBaker.entity_colliders` (`tests/_figure_spot_pick.gd`), the spot
+	## (2.5, 0, 7.0) sits 0.07 m off that plating's centre line, inside a 0.18 m
+	## wall. Both report `BLOCKED ... nearest = 0.00 m`.
+	##
+	## Both measured 63 px in profile and passed, because 63 px is what the top
+	## 0.8 m of a figure looks like over a 1.0 m breakwater cap, and a pixel
+	## counter cannot tell that from a figure standing beside it. The check is not
+	## wrong — it answers "is there a scale reference in this picture", and there
+	## is. It simply does not answer "is the scale reference standing on the deck",
+	## and nothing here does. `probe_piece_trawler`, which is the same vessel built
+	## from pieces, was moved off this spot for exactly this reason; these two are
+	## left where they are and written down, because moving them rewrites shipped
+	## reference frames and that is an owner's call, not a wave's.
 	"demo_workboat": Vector3(2.5, 0.0, 7.0),
 	"probe_trawler_bulwark": Vector3(2.5, 0.0, 7.0),
 	"probe_trawler_bow_bulwark": Vector3(2.5, 0.0, 7.0),
@@ -161,6 +183,30 @@ const FIGURE_SPOT := {
 	## the whole 150 m of ship running away aft — which is the one place a 1.8 m
 	## figure still resolves against a vessel this size.
 	"probe_container_feeder": Vector3(11.0, 3.46, 10.0),
+	## `probe_plate_deckhouse` is photographed by `structure_plate_capture`, which
+	## is a subclass of this file and whose fixture is destined to become another
+	## entry in FIXTURES once the plate primitive lands here. Its spot lives in
+	## this table for that reason: one table, and no third copy to drift.
+	##
+	## Derived from the resolved geometry, not guessed. The deckhouse's lower tier
+	## is a raked front whose top overhangs 0.45 m FORWARD of its foot, so the
+	## structure reaches z = 14.55 even though it stands on z = 15.00; the port
+	## and starboard bulwarks are `walls[]` at x 0.30 and 9.70, 0.95 m high, and
+	## the bulwark knuckle plates flare to x 0.05 and 9.95. Mid-foredeck on the
+	## centreline is 4.52 m from the nearest structure of any height, with open
+	## sky over it and nothing overhanging.
+	##
+	## Measured against the default it had been falling through to, profile /
+	## bow_quarter / stern_quarter / plan:
+	##
+	##     (2.5, 0, 7.0)   the default    149 / 703 / 240 / 510
+	##     (5.0, 0, 10.0)  chosen         128 / 667 / 404 / 514
+	##
+	## The default is not blocked on this fixture — it is simply nobody's
+	## decision, and it sits 2.02 m from the port bulwark where the centreline
+	## spot sits 4.52 m from everything. The trade is 21 px of profile for 164 px
+	## of stern quarter and a figure that is not tucked against a rail.
+	"probe_plate_deckhouse": Vector3(5.0, 0.0, 10.0),
 }
 const FIGURE_SPOT_DEFAULT := Vector3(2.5, 0.0, 7.0)
 
@@ -913,13 +959,34 @@ func _add_scale_figure(offset: Vector3, stem: String) -> void:
 	# origin and lowers the HULL by deck_y to meet it, rather than raising the
 	# plan the way `DeckFitout.apply_plan` does. Adding deck_y here left the
 	# figure hanging in the air above the mast.
-	figure.position = offset + (FIGURE_SPOT.get(stem, FIGURE_SPOT_DEFAULT) as Vector3)
+	var spot: Variant = _figure_spot(stem)
+	figure.position = offset + ((spot if spot != null else FIGURE_SPOT_DEFAULT) as Vector3)
 	_stage.add_child(figure)
 	_figure = figure
 	_t.check(
 		"%s: the figure's spot is authored, not defaulted" % stem,
-		FIGURE_SPOT.has(stem),
+		spot != null,
 	)
+
+
+## The authored spot for a fixture, in plan metres, or `null` when nobody has
+## decided one and the default is about to be used.
+##
+## ⚠ THIS IS A METHOD AND NOT `FIGURE_SPOT.get(stem)` FOR A MEASURED REASON.
+##
+## `FIGURE_SPOT` is a `const`, and GDScript will not let a subclass extend one.
+## Both subclasses of this rig photograph fixtures this file has never heard of
+## and both therefore carry their OWN table — `piece_kit_capture`'s
+## `PIECE_FIGURE_SPOT`. When the "authored, not defaulted" check went in it asked
+## `FIGURE_SPOT.has(stem)` directly, so it read a table that could not contain
+## the answer and reported `probe_piece_house` and `probe_piece_tug` as
+## defaulted while both were standing exactly where their own rig had authored
+## them. That is REALITY §3 from close range: the check was asserting against the
+## artefact it could reach rather than the value the figure was actually placed
+## from. It is one resolution now, and the position and the claim are read from
+## the same call.
+func _figure_spot(stem: String) -> Variant:
+	return FIGURE_SPOT.get(stem)
 
 
 func _light_the_stage() -> void:
