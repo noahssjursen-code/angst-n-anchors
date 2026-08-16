@@ -3751,6 +3751,46 @@ figure with 1.2 m of headroom. Its worst feature is now **cosmetic**: the name b
 darker than a signwriter would paint, its bottom edge landing on the door heads — a one-line tweak
 in one brick. **(a)'s and (c′)'s worst features remain structural.** The default is untouched.
 
+### CLOSED 2026-08-16 — four checks were silently disappearing, and a floor is not a budget
+
+Survey over 129 units: **34 report no check count at all** (their runs cannot be diffed — arguably
+worse than the population below); of the 95 that do, **67 are data-dependent** and 59 of those
+have no frozen budget; only 26 are structurally fixed.
+
+Four fixture mutations, nineteen units measured, **four silent instances**. Deleting one hull from
+the catalogue takes `hull_sheer_test` from PASS (258) to **PASS (231)** — twenty-seven checks gone,
+verdict green — and `hull_hydrostatics_smoke` 24 → 22. Moving one plan out of the fixture dir takes
+`plan_entity_id_test` 100 → 95. **Dropping the `wall` tag from `wall_text_lg` takes
+`wall_brick_fill_test` to a silent PASS (21) — worse than its known defect**, since blanking the
+seam at least reds at 3/19.
+
+Two units reded *while shedding checks* — `piece_kit_test` 218 → 5/200 with 18 gone. **Red is not
+the same as intact.**
+
+**THE FINDING: A FLOOR IS NOT A BUDGET.** Every silent unit already had a population floor and
+**not one fired**, because a floor sees a collection go *empty* and these only got *smaller* —
+`hull_sheer_test`'s fleet still cleared its `>= 8` with a hull deleted.
+
+**The counterweight, and the cheaper defence:** the class is not universal. Twelve units were
+insensitive because they **name their fixtures in a `const FIXTURES := [...]` literal**, so removing
+a file reds them honestly. Declaring the population beats counting checks where it fits.
+
+Hardened and finished: `wall_brick_fill_test` 22→23, `plan_entity_id_test` 100→102, `hull_sheer_test`
+258→259 (reproduced by the orchestrator: the hull deletion now gives **1/232 FAILED**). Recorded as
+`REALITY.md` §4f with the four shapes ranked, plus standing order 1a — *when you shrink a shipped
+population, diff the counts, not the verdicts.*
+
+Two screens that do **not** work, recorded so nobody retries them: grep cannot answer this, and
+runtime-checks ÷ static-call-sites over-counts badly (two `range()` loops scored highest). Judge on
+what the loop **iterates**.
+
+### OPEN — the vanishing-check backlog, measured and ranked
+
+`hull_hydrostatics_smoke` is a **confirmed silent instance, unhardened**. Nine high-blast-radius
+units have **never been fixture-mutated**, led by `catch_hold_test` (515 checks over 32 discovered
+loops), `vessel_render_capture` (298/24) and `ship_hud_readout_test` (262/16). The 34 no-count units
+are classified but unprobed and are a separate wave's work.
+
 ### Standing, not a task
 
 Every model edit returns a render and the orchestrator looks at it. No metric for appearance —
