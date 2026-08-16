@@ -3090,6 +3090,50 @@ Three candidate causes, to be distinguished by measurement rather than argued:
    sheer-strake surface is read by nothing (§3d), so a band that curves may be the same
    colour as what it sits on.
 
+### CLOSED 2026-08-16 — the claim was half true, and the instrument was worse than the geometry
+
+Verdict: **"a curve a person can see" is true of three hulls of six and false of the other
+three.** It was written from `hull_15x5`; nobody looked at a freighter. Confirmed by eye on
+the refreshed frames — `hull_28x10__side` dips amidships and lifts at both ends;
+`hull_150x32__side` is straight for its whole length.
+
+**Both of the orchestrator's hypotheses were partly wrong.** Nothing is discarded: all six
+kit hulls and both shipped vessels reach `from_form` with `strake_level = 3` (measured
+through `HullRegistry.build_hull`, not re-derived — `hull_sheer_test` calls `from_form`
+itself with its own station count, the artefact beside the path). The clearance clamp never
+bites. **The rig was the bigger fault**: the deck edge measured **1.18:1** against its own
+background on `hull_130x28__side`, against WCAG 1.4.11's 3:1 floor. At 1.18:1 it is not a
+line, so **every visual judgement ever made from `screenshots/hulls/*__side.png` and
+`*__front.png` was made against nothing.** The rig now shoots overcast and **asserts** the
+contrast — mutation: dark ground → 12/78 FAILED, reproduced by the orchestrator.
+
+**Two numbers in `hull_stations.gd` were wrong and are corrected.** `sheer_forward_m` is
+the value at `z = -L/2`, where the band has zero width; the forwardmost drawing station is
+at `u ≈ 0.86–0.95` and `u²` takes 7–27% of the rise. The headline **0.896 m is never drawn
+anywhere** — the drawn figure on hull_28x10 is **0.671 m**.
+
+**Why the big hulls are flat, and it is not a bug:** `rise = freeboard × bow_keel_rise`,
+and freeboard tracks *depth*, which grows far slower than *length*. Sheer-as-slope falls
+from 6.40% (28×10) to 1.68% (150×32). **`hull_150x32` curves by four pixels over seven
+hundred and forty.**
+
+**And the line carrying the curve is painted in the anti-fouling colour — 1.07:1** against
+the plating above it, separating by hue alone at the bottom of the luminance range.
+`MeshBuilder.lofted_hull_shell:536` routes the band into `keel_faces`;
+`HullLivery.DEFAULT_ACCENT` is read by nothing (§3d), exactly as `hull_livery.gd:11` says.
+
+**OPEN, AND THE OWNER'S:** how much sheer this game wants. Four levers with costs are in
+`hull_stations.gd` — scale rise by LOA; raise `bow_keel_rise` on the three full-bodied
+presets (re-rakes every forefoot and stem, must be re-rendered); lower
+`shoulder_freeboard_fraction` (buys nothing alone, the clamp is not biting); or give the
+strake its own paint (+2 draw calls, already reddened four budget tests — though vertex
+colour, or simply re-picking the two default colours, costs zero). **Moving nine pixels to
+fifteen on a 1.07:1 edge changes nothing**, so the paint is the highest ratio of visible
+change to risk.
+
+Named, not fixed: `hull_sheer_test._check_strake_is_painted:330` has a bare
+`if s.strake_level < 0: return` that contributes zero checks and reports success (§4).
+
 ### Standing, not a task
 
 Every model edit returns a render and the orchestrator looks at it. No metric for appearance —
