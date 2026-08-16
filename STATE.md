@@ -3701,6 +3701,56 @@ walls, doors, ground gap, mesh and collider counts are untouched by a roof-seat 
 brick-1.0 arm's **stated worst defect no longer exists**, so that one observation is stale. Re-shoot
 with `tests/_q1_arms_shot.gd` (it refuses to run unless the temporary constants are applied).
 
+### CLOSED 2026-08-16 — a sign brick tagged `wall` drew nothing at all
+
+Not "no plate" — **zero meshes**. All three `wall_text_*` bricks declare `text_mount: "wall"` and
+emitted no geometry, so the warehouse's name board sat over a **6 × 3 m hole** in its own front
+elevation, which is why a roof plate had nothing under it.
+
+**The fix belongs in the brick, and the argument is structural: a cell holds one brick.**
+`_place_content` refuses a cell that already carries content, so a player who places a sign on a
+bare wall course **cannot put wall behind it afterwards** — the blueprint cannot express it. An
+exclusion you do not fill is a hole nobody else can fill. The mounted-sign path was never broken
+(it attaches to a host that stays drawn and solid), and the generator authored the sign beside the
+doors and windows, both of which fill their footprint — **the sign was the only member of that
+list producing nothing.** `warehouse.json` needed no edit and got none.
+
+**Fixing the drawing was not enough:** the same declaration had **three gates on the vessel side**,
+and the arm stayed red at zero collision shapes until `mount_item_gameplay`, which refused anything
+tagged `text` two layers earlier, was found. §3b — one declaration, three consumers.
+
+### A LIMITATION FOUND IN THE NEW CHECK, RECORDED NOT PAPERED OVER
+
+Blanking the `is_wall_text` seam reds `wall_brick_fill_test` at **3/19** — but the count drops from
+22, so **three checks vanish rather than fail**. That is the vacuity pattern `roof_seat_test` was
+hardened against one commit earlier, and this unit is **not yet hardened**.
+
+### OPEN 2026-08-16 — checks that vanish instead of failing
+
+**A unit reporting PASS with fewer checks than yesterday has not passed; it has stopped looking**,
+and the gate's verdict line cannot tell the difference. Three confirmed, each found by accident
+while doing something else:
+
+- `roof_seat_test` — first draft reported **PASS (24)** on two fewer checks when the fixture moved
+  out from under it. Hardened; now 26 in all four mutation states.
+- `wall_brick_fill_test` — **22 → 19** checks under a seam mutation. Reds, so not blind, but three
+  checks evaporated. Not hardened.
+- `coastal_port_placer_test` — prints "all checks passed" with **no count at all**, and separately
+  had a check that had been **running zero times** for weeks because it read a collection that has
+  held nothing since the berth migration.
+
+The class is one thing: **a check whose existence depends on finding its own fixture.** When the
+fixture moves, the check evaporates and the verdict stays green. Now a wave, with the standing
+order to be written into `REALITY.md` so the next one recognises it without rediscovering it.
+
+### The decision page is current as of 2026-08-16
+
+Re-shot after the roof and sign fixes. **(b)'s recorded worst feature is gone from the frames** —
+roof daylight 0.000, ground gap 0.000, both cargo doors reaching the ground and passing a 1.8 m
+figure with 1.2 m of headroom. Its worst feature is now **cosmetic**: the name board is larger and
+darker than a signwriter would paint, its bottom edge landing on the door heads — a one-line tweak
+in one brick. **(a)'s and (c′)'s worst features remain structural.** The default is untouched.
+
 ### Standing, not a task
 
 Every model edit returns a render and the orchestrator looks at it. No metric for appearance —
