@@ -18,9 +18,39 @@ extends SceneTree
 ## Note what this does NOT do: it never re-states an id. It asserts the PROPERTY
 ## — that every id resolves to the entity that owns it — which is the form that
 ## survives a fixture being regenerated (REALITY.md §4a).
+##
+## ── WHY THIS FILE COUNTS ITS OWN CHECKS ────────────────────────────────────
+##
+## Every check about a plan lives inside `for path in fixtures`, and `fixtures`
+## is DISCOVERED — a directory listing, further filtered to files whose `format`
+## field reads `structure_plan_v1`. So the number of checks is a function of
+## what is on disk, and the `fixtures.size() > 0` floor below only sees the
+## directory going EMPTY (REALITY.md §4f).
+##
+## Measured 2026-08-16: moving `probe_piece_trawler.json` out of the fixture
+## directory takes this run from **100 checks to 95 and it reports PASS both
+## times.** Five checks did not fail; they stopped existing — and the fixture
+## they stopped asking about is the one this file's own header names as having
+## carried 51 duplicate ids. A fixture that merely stops saying
+## `structure_plan_v1` disappears the same way with the file still sitting there.
+##
+## `MIN_FIXTURES` catches the population shrinking; `EXPECTED_CHECKS` catches a
+## check that stopped being reached for any other reason, including one whose
+## population is still full. Re-freeze the budget in the commit that changes the
+## checks, never after the fact.
 
 const TestReport := preload("res://tests/support/test_report.gd")
 const FIXTURE_DIR := "res://resources/data/structures"
+
+## 19 plans are on disk and shipped (REALITY.md §4b, re-measured 2026-08-15).
+## A floor, not the total: a fixture set that grows is fine, one that shrinks
+## silently is the defect this guards.
+const MIN_FIXTURES := 19
+
+## Measured 2026-08-16: exactly 19 fixtures on disk at 5 checks each = 95, plus
+## the two floors, the four-check mutation arm and this budget counting itself.
+## **102 checks.**
+const EXPECTED_CHECKS := 102
 
 var _t: TestReport
 
@@ -35,9 +65,22 @@ func _initialize() -> void:
 		_t.finish(self)
 		return
 
+	## The population the loop below walks, named rather than merely non-empty.
+	_t.check("the fixture directory still holds the shipped plan set (%d, floor %d)"
+		% [fixtures.size(), MIN_FIXTURES], fixtures.size() >= MIN_FIXTURES)
+
 	for path in fixtures:
 		_check_fixture(path)
 	_check_mutation()
+
+	## The budget, counting itself. `check_count()` is the number recorded
+	## BEFORE this line, so the run total is one more.
+	var ran: int = _t.check_count() + 1
+	_t.check(
+		"the run executed its whole check budget (%d of %d — re-freeze "
+			% [ran, EXPECTED_CHECKS]
+			+ "EXPECTED_CHECKS in the commit that changes it, never after the fact)",
+		ran == EXPECTED_CHECKS)
 
 	_t.finish(self)
 

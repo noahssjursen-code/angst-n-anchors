@@ -73,11 +73,44 @@ extends Node
 ## dropped on empty cells it is placed and takes them — and only the placed case
 ## is a wall.
 
+## ── WHY THIS FILE COUNTS ITS OWN CHECKS ────────────────────────────────────
+##
+## Almost every check below lives inside a loop over a collection this file
+## DISCOVERS: the bricks tagged `wall`, the bricks `is_wall_text` answers for,
+## the shipped blueprints, the wall bricks a fit-out placed. So the number of
+## checks executed is a function of what the catalogue happened to contain, and
+## a run that asked none of them printed exactly like a run that asked all of
+## them (REALITY.md §4f).
+##
+## Measured, not argued. Dropping `wall` from `wall_text_lg`'s tags — the tag on
+## the very brick this file was written to catch, the warehouse's name board —
+## takes the run from **22 checks to 21 and it reports PASS both times**. The
+## whole-brick draw check for that brick does not fail; it stops existing. The
+## population floors below (`walls.size() > 0`, `mounts > 0`, `ids.size() > 0`,
+## `placed.size() > 0`) do not see it either: each catches a collection that
+## went EMPTY, and this one merely got smaller.
+##
+## `EXPECTED_CHECKS` is what closes that. The catalogue is a literal, the
+## blueprint set is on disk and the vessel arm is one synthetic layout, so the
+## count is a constant and any drift in it — up OR down — is a fact about this
+## suite that a human should look at. Re-freeze it deliberately, in the same
+## commit as the checks you add, never after the fact.
+##
+## Floors and the budget are not redundant. A floor catches a collection that
+## went empty; the budget catches a check that stopped being reached for any
+## other reason, including one whose collection is still full.
+
 const TestReport := preload("res://tests/support/test_report.gd")
 
 ## Floating point only. Every number compared here is a sum of exact
 ## binary-representable cell arithmetic; the observed residual is ~1e-7.
 const EPS := 0.0005
+
+## Measured 2026-08-16 against the shipped catalogue and blueprint set: 5 bricks
+## tagged `wall`, 3 wall-mounted text bricks, 1 blueprint (`warehouse`) placing
+## 255 wall bricks, one synthetic `hull_90x24` vessel. **23 checks**, the budget
+## counting itself.
+const EXPECTED_CHECKS := 23
 
 ## A hull with room on deck for a 6 x 3 x 1 brick and its control.
 const HULL_ID := "hull_90x24"
@@ -94,6 +127,18 @@ func _ready() -> void:
 	_catalogue()
 	_land()
 	await _vessel()
+
+	## The budget, counting itself, and OUTSIDE `_vessel()` on purpose: that arm
+	## early-returns after a failed check, and the count is worth having on a run
+	## that bailed as much as on one that finished.
+	## `check_count()` is the number recorded BEFORE this line, so the run total
+	## is one more.
+	var ran: int = _t.check_count() + 1
+	_t.check(
+		"the run executed its whole check budget (%d of %d — re-freeze "
+			% [ran, EXPECTED_CHECKS]
+			+ "EXPECTED_CHECKS in the commit that changes it, never after the fact)",
+		ran == EXPECTED_CHECKS)
 
 	_host.free()
 	_t.finish(get_tree())

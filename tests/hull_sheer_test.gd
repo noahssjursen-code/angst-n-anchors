@@ -40,7 +40,36 @@ extends SceneTree
 ## intrusion this guards against is a sliver a few centimetres wide along the deck edge,
 ## and a sampler dense enough to be sure of catching it is dense enough to be slow.
 
+## ── WHY THIS FILE COUNTS ITS OWN CHECKS ────────────────────────────────────
+##
+## Eight of the ten checks above run PER HULL, over `HullCatalog.catalog_entries()`
+## — a collection this file discovers rather than declares. So the number of
+## checks is a function of how many hulls the catalogue happens to return, and
+## the `hulls.size() >= 8` floor only sees the fleet fall below eight
+## (REALITY.md §4f).
+##
+## Measured 2026-08-16: deleting `hull_100x24` from
+## `resources/data/vessels/hulls/catalog.json` takes this run from **258 checks
+## to 231 and it reports PASS both times.** Twenty-seven checks — a whole hull's
+## ceiling, displacement, lever, sheer curve, strake, stem rake and deck-edge
+## agreement — did not fail. They stopped existing, and the fleet still cleared
+## the floor because the registry hulls made up the count.
+##
+## `EXPECTED_CHECKS` is what closes that. The catalogue is a shipped file and
+## every check here is deterministic geometry, so the count is a constant, and
+## drift in it — up OR down — is a fact a human should look at. Re-freeze it in
+## the commit that changes the checks, never after the fact.
+##
+## The floor and the budget are not redundant. The floor catches a fleet that
+## went empty or tiny; the budget catches a check that stopped being reached for
+## any other reason, including one whose fleet is still full.
+
 const TestReport := preload("res://tests/support/test_report.gd")
+
+## Measured 2026-08-16 against the shipped catalogue: 8 per-hull checks over the
+## fleet `catalog_entries()` returns, plus the floor, the baked-shell arm, the
+## plan-clearance arm and this budget counting itself. **259 checks.**
+const EXPECTED_CHECKS := 259
 
 const FIXTURES := [
 	"res://resources/data/structures/demo_workboat.json",
@@ -70,6 +99,15 @@ func _initialize() -> void:
 
 	_check_baked_shell(t)
 	_check_plan_clearance(t)
+
+	## The budget, counting itself. `check_count()` is the number recorded BEFORE
+	## this line, so the run total is one more.
+	var ran: int = t.check_count() + 1
+	t.check(
+		"the run executed its whole check budget (%d of %d — re-freeze "
+			% [ran, EXPECTED_CHECKS]
+			+ "EXPECTED_CHECKS in the commit that changes it, never after the fact)",
+		ran == EXPECTED_CHECKS)
 	t.finish(self)
 
 

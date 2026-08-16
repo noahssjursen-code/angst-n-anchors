@@ -337,6 +337,117 @@ reverted the code rather than keeping a plausible-looking non-fix.
 input and confirm the cost moves with the thing you think is causing it. And when an optimisation
 measures flat, delete it.
 
+## 4f. The vanishing-check trap — a unit that stops looking and still says PASS
+
+A unit reporting **PASS with fewer checks than it ran yesterday has not passed. It has stopped
+looking**, and the verdict line cannot tell the difference. This is §4's vacuous pass one level
+up: not a check that cannot fail, but a check that **ceases to exist** when the fixture it hunts
+for moves — and the run stays green because nothing counts the absence.
+
+The class has exactly one shape: **a check whose existence depends on finding its own fixture.**
+Every instance is a `t.check()` inside a `for` over a collection the file DISCOVERS — a directory
+listing, a catalogue's `ids()`, a generator's output — rather than one it declares. Shrink the
+collection and the check evaporates.
+
+**It was found by accident three times running before anybody went looking.** `roof_seat_test`
+(blind mutation moved the roof course, printed *"no flat-roof-on-wall joint in this model"*, ran
+two fewer checks, PASS 24). `wall_brick_fill_test`. `coastal_port_placer_test`, which printed
+`all checks passed` and **no number at all** while its quay-carve check ran zero times on all 35
+ports for weeks.
+
+### The survey, 2026-08-16 — two populations
+
+Over the 129 units of run `.gate/wave-vanish-base`:
+
+| Population | Count | What it means |
+|---|---|---|
+| Report **no check count at all** | **34** | The verdict is a sentence. A run that asked nothing is unreadable from it — `coastal_port_placer_test` sat here. |
+| Report a count | 95 | Of which: |
+| — count is **data-dependent** | **67** | ≥1 loop over a discovered collection. **This is the hunting ground.** |
+| — of those, no frozen budget | **59** | |
+| — count is structurally fixed | 26 | Every check site runs once; loops are over `range()` literals or nothing. Cannot vanish without a source edit. |
+
+Two screens that do NOT work, recorded so nobody rebuilds them. **Grep cannot answer this** — the
+decisive test is breaking the fixture. And **runtime-checks ÷ static-call-sites over-counts
+badly**: `solar_cycle_test` scores 32.8 and `weather_composer_contract_test` 17.2, and both are
+loops over `range(...)` literals whose counts are constants. Discriminate on what the loop
+ITERATES, not on how many checks come out.
+
+### Measured, by fixture mutation — 17 units, three mutations
+
+Not read. Each fixture was actually removed and each unit actually re-run.
+
+**M1 — `probe_piece_trawler.json` moved out of `resources/data/structures` (19 plans → 18):**
+
+| Unit | HEAD | Mutated | |
+|---|---|---|---|
+| `plan_entity_id_test` | PASS (100) | **PASS (95)** | **SILENT — 5 checks vanished, green** |
+| `plan_roof_seal_test` | PASS (116) | 1/113 FAILED | its frozen budget fired — the shape working |
+| `piece_kit_test` | PASS (218) | 5/200 FAILED | reds, but **18 checks vanished** beside the 5 that failed |
+| `piece_plan_roundtrip_test` | PASS (39) | 3/29 FAILED | reds, **10 vanished** |
+| `structure_edge_test` | PASS (87) | PASS (87) | insensitive |
+| `structure_sheer_test` | PASS (52) | PASS (52) | insensitive |
+| `structure_spar_test` | PASS (66) | PASS (66) | insensitive |
+| `plan_collision_test` | PASS (65) | PASS (65) | insensitive |
+| `structure_plan_edges_test` | PASS (57) | PASS (57) | insensitive |
+| `visual_stamp_cache_test` | PASS (104) | PASS (104) | insensitive |
+| `structure_edge_trim_cost_test` | PASS (5) | PASS (5) | insensitive |
+| `plan_compliance_test` | 145, ALL PASS | 145, ALL PASS | insensitive |
+| `structure_item_schema_test` | 102, ALL PASS | 102, ALL PASS | insensitive |
+
+**M2 — `hull_100x24` deleted from `resources/data/vessels/hulls/catalog.json` (7 hulls → 6):**
+
+| `hull_sheer_test` | PASS (258) | **PASS (231)** | **SILENT — 27 checks vanished** |
+|---|---|---|---|
+| `hull_hydrostatics_smoke` | PASS (24) | **PASS (22)** | **SILENT — 2 vanished** |
+| `starter_vessel_grant_test` | PASS (49) | PASS (49) | insensitive |
+
+**M3 — the `wall` tag dropped from `wall_text_lg`** (the warehouse's name board — the exact brick
+`wall_brick_fill_test` was written to catch):
+
+| `wall_brick_fill_test` | PASS (22) | **PASS (21)** | **SILENT — and note this is a WORSE result than the known one.** Blanking `is_wall_text` takes the same file to 3/19 FAILED, which at least reds. Dropping one tag is entirely silent. |
+|---|---|---|---|
+
+### So how rare is it? Real, reproducible, and **not** universal
+
+**Four silent instances in seventeen units measured.** Ten were insensitive to the fixture broken
+at them. That is not luck and it is worth knowing why, because it is the other fix:
+`structure_edge_test`, `plan_collision_test` and the rest **name their fixtures in a `const
+FIXTURES := [...]` literal** instead of discovering them, so removing a file from the directory
+cannot shrink what they walk — it makes their `FileAccess` open fail and they go red honestly.
+**Declaring the population is as good a defence as counting the checks**, and it is cheaper.
+
+Say plainly what this does not cover: an insensitive result means insensitive **to the one
+fixture I broke**, not proven safe. Nine of those ten walk some other discovered collection I did
+not touch, and 42 more data-dependent unbudgeted units were never mutated at all.
+
+**And a floor is not a budget.** Every unit above already had a population floor
+(`fixtures.size() > 0`, `hulls.size() >= 8`, `walls.size() > 0`). Not one of them fired, because a
+floor catches a collection that went **empty** and every mutation here merely made one **smaller**
+— `hull_sheer_test`'s fleet still cleared 8 because the registry hulls made up the count. The two
+guards are complementary: the floor catches an empty collection, the budget catches a check that
+stopped being reached for any reason at all, including one whose collection is still full.
+
+### The four shapes this repo now has, in order of preference
+
+1. **Declare the population** — `const FIXTURES := [...]`. If it can be a literal, make it one.
+2. **A per-group assertion that cannot early-return** (`roof_seat_test`). *"A model that draws
+   flat roofs and seats none of them on a wall has failed the property, not escaped it"* — the
+   missing-fixture branch is a `t.fail()`, not a `return`.
+3. **A population floor with a named minimum** (`port_berth_plan_test`: "every size in both passes
+   contributed a station to measure"; `signal_reach_test`'s self-policing frozen register).
+4. **A frozen `EXPECTED_CHECKS`, counting itself** (`coastal_port_placer_test`, and now
+   `wall_brick_fill_test`, `plan_entity_id_test`, `hull_sheer_test`). The catch-all, for a unit
+   whose population genuinely must be discovered. Re-freeze it **in the same commit as the checks
+   you add**, never after the fact — a budget re-frozen to match a number you did not intend is
+   the guard writing the answer down for you.
+
+**Rule.** Before you believe a green unit, ask **how many checks it ran** and **whether that
+number can fall**. If it can, one of the four shapes above is missing. And when you shrink any
+shipped population — a fixture, a hull, a catalogue entry, a tag — **re-run the suite and diff
+the COUNTS, not the verdicts.** Every instance in this section is invisible in a `results.tsv`
+column that reads `PASS`.
+
 ## 5. The self-shaped-tool trap — building for the agent, not the player
 
 The newest and possibly worst. The `plate` primitive is four free 3D corners. Agents authored
@@ -445,6 +556,17 @@ difference. It passes, honestly, on exactly the class of noise it was written to
 ## The standing orders
 
 1. **Mutation-verify every check.** Show it red. Report both numbers.
+1a. **A check that DISAPPEARS is worse than one that fails, and a green verdict cannot tell you
+    which happened. Report the check COUNT, and make it a number that cannot silently fall.**
+    A check written inside a loop over a collection the file discovers stops existing when that
+    collection shrinks — measured 2026-08-16: `hull_sheer_test` **258 → 231 checks, PASS both
+    times**, on one hull deleted from the catalogue; `plan_entity_id_test` **100 → 95, PASS**, on
+    one fixture moved out of a directory; `wall_brick_fill_test` **22 → 21, PASS**, on one tag
+    dropped from one brick. Three found by accident before that (§4f). Population floors do not
+    catch it — every one of those units had a floor and it caught nothing, because a floor sees a
+    collection go empty and these only got smaller. Declare the population as a literal where you
+    can; freeze `EXPECTED_CHECKS` where you cannot. **When you shrink a shipped population, diff
+    the counts, not the verdicts.**
 2. **Never build a metric for appearance.** Look, or ask someone to look.
 3. **Assert against the path that breaks**, not the artefact you can reach.
 3a. **Assert the property, not the number.** Two green tests that disagree are a finding.
