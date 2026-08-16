@@ -49,9 +49,13 @@ extends Node
 ## ── THE FORMULATION THAT WAS TRIED AND IS BLIND (REALITY.md §8) ─────────────
 ##
 ## "The roof's top surface has more than one height" sounds like the property and
-## is worthless. `roof_flat` draws a 0.18 m slab at the top of its cell, so a
-## dead-flat lid already presents TWO distinct vertex heights (+0.32 and +0.50)
-## and the check goes green on the shoebox. §1 measures the FALL instead — how
+## is worthless. `roof_flat` draws a 0.18 m slab occupying part of its cell, so a
+## dead-flat lid already presents TWO distinct vertex heights and the check goes
+## green on the shoebox. (The two were +0.32 and +0.50 until 2026-08-16, when the
+## slab was re-seated on the cell FLOOR — see `roof_seat_test` — and they are now
+## −0.25 and −0.07. The count is what mattered and the count did not change; the
+## numbers are corrected here because a stale one reads as a measurement.)
+## §1 measures the FALL instead — how
 ## high the surface stands at the house's outer perimeter against how high it
 ## stands inboard — which is 0.5000 m on the hipped cap and 0.0000 m on a flat
 ## slab, because a slab is as tall at its edge as in its middle.

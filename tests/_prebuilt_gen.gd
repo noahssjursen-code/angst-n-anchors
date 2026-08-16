@@ -337,7 +337,15 @@ func _house_plan(grid: DeckGrid) -> Dictionary:
 ##           `screenshots/vessels/iter_house/v9__house_profile_ortho.png` (a
 ##           jagged white sawtooth the full length of the house) with
 ##           `v6__house_profile_ortho.png` (none). `roof_flat` never had that
-##           problem because it draws a 0.18 m slab at the TOP of its cell.
+##           problem because it drew a 0.18 m slab at the TOP of its cell —
+##           which was the 0.320 m eave gap `roof_seat_test` now holds shut, so
+##           since 2026-08-16 the slab seats on the cell FLOOR and its underside
+##           IS on the wall top plane. Re-shot on the 28 m coaster after the
+##           change (`screenshots/decisions/q1d_roof_eave__vessel-after__*`):
+##           the junction reads as one clean band in profile and in quarter,
+##           with no sawtooth. The v9 fight was a SLOPED face sharing a plane
+##           with the wall top; two horizontal faces one of which is only ever
+##           seen from inside is not the same case.
 ##   GLASS   `block_windshield` — three cells of ONE 1.34 m pane behind a
 ##           perimeter frame — instead of `block_window`, which is a 0.34 m pane
 ##           in a frame of its own. Six of those in a row is the grid of punched

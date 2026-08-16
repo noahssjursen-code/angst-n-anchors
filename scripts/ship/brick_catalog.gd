@@ -656,6 +656,44 @@ static func size_m(brick_id: String) -> Vector3:
 	return Vector3(float(fp.x) * s, float(fp.y) * s, float(fp.z) * s)
 
 
+## ── THE FLAT-ROOF PLATE, DECLARED ONCE ─────────────────────────────────────
+##
+## A `roof_flat*` is not a solid cell: it is a thin plate occupying part of its
+## cell. WHERE in the cell was, until 2026-08-16, written three times — the
+## visual in `create_visual` below, the land collider in
+## `BuildingFitout._add_collider`, the vessel collider in
+## `DeckFitout._collider_spec` — and the three disagreed. Measured on the
+## shipped warehouse: the plate DREW at y 6.570..6.750 and its collider stood
+## at 6.250..6.750. One derivation now (REALITY.md §3b); everything that needs
+## the plate asks here.
+##
+## ⚠ THE SEAT USED TO BE THE CEILING OF THE CELL, AND THAT WAS THE BUG.
+## `roof.position.y = sz.y * 0.5 - 0.09` put the plate's TOP on the top of its
+## own box, so a roof course laid on the course above the wall head hung
+## `cell_pitch - 0.18` m clear of the wall it covers: **0.820 m** on the 1.0 m
+## building lattice (identical in every brick-cell arm, because the term is
+## `pitch - thickness` and the brick size cancels), **0.320 m** on the 0.5 m
+## vessel lattice — measured on `28_10_m`, `fishing_trawler`, `bulk_small` and
+## `sjark_15m`, which all carry `roof_flat*` over their deckhouses. The plate
+## now seats on the FLOOR of its box, which is the head of the course below it.
+const ROOF_PLATE_M := 0.18
+
+
+## True for the flat-roof family — the bricks drawn as a thin plate rather than
+## as a solid or a wedge filling the cell. Asked of the id, not of a hardcoded
+## list at each call site.
+static func is_flat_roof(brick_id: String) -> bool:
+	return brick_id == "roof_flat" \
+		or brick_id == "roof_flat_2x2" \
+		or brick_id == "roof_flat_4x4"
+
+
+## Centre of the plate, in the brick's own local frame — the frame `size_m` is
+## centred in, which is what both fitouts place at the footprint centre.
+static func roof_plate_offset_y(brick_id: String) -> float:
+	return -size_m(brick_id).y * 0.5 + ROOF_PLATE_M * 0.5
+
+
 static func yaw_step_of(brick_id: String) -> int:
 	return maxi(int(get_entry(brick_id).get("yaw_step", 90)), 1)
 
@@ -750,9 +788,9 @@ static func create_visual(brick_id: String, opts: Dictionary = {}) -> Node3D:
 			floor_plate.position = Vector3(0.0, -sz.y * 0.5 + 0.06, 0.0)
 			root.add_child(floor_plate)
 		"roof_flat", "roof_flat_2x2", "roof_flat_4x4":
-			var roof := MeshBuilder.box(Vector3(sz.x, 0.18, sz.z), color, 0.8, 0.1)
+			var roof := MeshBuilder.box(Vector3(sz.x, ROOF_PLATE_M, sz.z), color, 0.8, 0.1)
 			roof.material_override = _painted_palette_material(Palette.CLADDING, color, true)
-			roof.position = Vector3(0.0, sz.y * 0.5 - 0.09, 0.0)
+			roof.position = Vector3(0.0, roof_plate_offset_y(brick_id), 0.0)
 			root.add_child(roof)
 		"roof_slope", "roof_slope_1x2x4", "roof_slope_2x2x4":
 			var roof := MeshBuilder.wedge_45(sz, color, 0.82, 0.08)

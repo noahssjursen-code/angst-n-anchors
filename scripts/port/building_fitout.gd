@@ -275,8 +275,13 @@ static func _add_collider(
 	if brick_id == "floor" or BrickCatalog.has_tag(brick_id, "surface"):
 		size.y = 0.12
 		center.y = grid.cell_center_local(cell).y - BuildingGrid.CELL_M * 0.5 + 0.06
-	elif brick_id == "roof_flat":
-		size.y = 0.18
+	elif BrickCatalog.is_flat_roof(brick_id):
+		## The plate, where `BrickCatalog` draws it. This case used to read
+		## `brick_id == "roof_flat"` and thin the box without moving it, so the
+		## two multi-cell roofs got a full-cell collider and the 1x1 got a
+		## 0.18 m one centred half a cell under its own plate.
+		center.y += BrickCatalog.roof_plate_offset_y(brick_id)
+		size.y = BrickCatalog.ROOF_PLATE_M
 	elif brick_id == "roof_slope":
 		## Lower half under the slope — walkable / blocks attic space.
 		size.y = size.y * 0.5

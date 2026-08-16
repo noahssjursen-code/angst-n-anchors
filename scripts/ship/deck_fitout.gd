@@ -1088,6 +1088,15 @@ static func _mount_mooring(visual: Node3D, brick_id: String = "bollard") -> void
 static func _collider_spec(brick_id: String) -> Dictionary:
 	## Returns { size: Vector3, offset: Vector3 } in brick-local space (visual origin).
 	var sz := BrickCatalog.size_m(brick_id)
+	if BrickCatalog.is_flat_roof(brick_id):
+		## A flat roof is a plate, not a solid cell, and the plate now seats on
+		## the floor of its cell. There was no case here at all before, so a
+		## deckhouse roof presented a FULL-CELL collider whose walkable top
+		## stood 0.320 m above the drawn plate's top on every 0.5 m lattice.
+		return {
+			"size": Vector3(sz.x, BrickCatalog.ROOF_PLATE_M, sz.z),
+			"offset": Vector3(0.0, BrickCatalog.roof_plate_offset_y(brick_id), 0.0),
+		}
 	match brick_id:
 		"bollard":
 			return {
