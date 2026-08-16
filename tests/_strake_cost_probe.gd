@@ -9,6 +9,7 @@ extends Node
 ## and the frame's total draw calls with the hull in view.
 
 const CaptureClock := preload("res://tests/support/capture_clock.gd")
+const CaptureSubject := preload("res://tests/support/capture_subject.gd")
 const HULL_IDS := [
 	"hull_15x5", "hull_28x10", "hull_45x16_cat",
 	"hull_100x24", "hull_130x28", "hull_150x32",
@@ -56,6 +57,10 @@ func _run() -> void:
 		var boat := HullRegistry.build_hull(hull_id)
 		boat.freeze = true
 		world.add_child(boat)
+		## `freeze` alone is revoked by BoatBody's automatic physics LOD — see
+		## `tests/support/capture_subject.gd`. A drifting hull changes which surfaces
+		## the camera can see, and this probe counts exactly that.
+		CaptureSubject.hold_still(boat)
 		var height := maxf(boat.depth_m, 3.0)
 		var length := maxf(boat.length_m, 10.0)
 		var beam := maxf(boat.beam_m, 5.0)

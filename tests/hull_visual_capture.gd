@@ -56,6 +56,38 @@ extends Node
 ## `ShipLight`, so there is nothing on a bare hull for the time of day to scale
 ## — and it is done anyway so this rig cannot acquire the dependency by someone
 ## later photographing a fitted-out vessel through it.
+##
+## ── THE PARAGRAPH ABOVE NAMED THE WRONG CAUSE. 2026-08-16, later ───────────
+##
+## "What was left is the GRAB" was an elimination argument, and it eliminated the
+## subject on a measurement that did not cover the case. `1bec073` established
+## the real mechanism for three other rigs: `BoatBody.automatic_physics_lod`
+## defaults `true`, and one second after the hull enters the tree the LOD update
+## executes `freeze = physics_quality == SLEEP` — i.e. **`freeze = false`** —
+## silently revoking the `boat.freeze = true` five lines into the loop below.
+## The wireframe diff mask this rig showed is not a race signature; it is what a
+## subject that moved a fraction of a pixel looks like.
+##
+## **On this rig the defect is LATENT, and that is a margin rather than a
+## defence.** Measured with `tests/_hvc_still_probe.gd`, which reproduces the
+## loop below exactly and logs the body at every point an image is grabbed: each
+## hull is in the tree for only ~19 physics frames, so `_physics_lod_timer`
+## reaches **0.27–0.53 s** on a quiet box and **0.72–0.93 s** under saturating
+## load, against a threshold of 1.0. The LOD does not fire, `freeze` holds, and
+## the origin is exactly (0, 0, 0) with `linear_velocity.y` exactly 0 at all
+## eighteen grabs. 0.93 is one settle short.
+##
+## **And the consequence here is not the 1.15 mm buoyancy transient the other
+## rigs suffered — it is a free fall.** This rig's SubViewport carries
+## `own_world_3d`, so there is no ocean and no `StripBuoyancyComponent` support
+## in it: the same probe with the LOD update called by hand drops the hull
+## **951 mm on hull_15x5** across its three views, at `linear_velocity.y` −4.88
+## m/s and still accelerating, and 215–371 mm on the other five. So a run that
+## crosses the threshold does not produce subtly wrong frames, it produces a
+## hull sliding out of the bottom of the frame.
+##
+## `CaptureSubject.hold_still` closes it below, and `capture_subject_still_test`
+## is the scored unit for the guarantee.
 
 ## ── THE GROUND WAS NEAR-BLACK, AND THAT MADE EVERY FRAME UNJUDGEABLE ────────
 ##
@@ -94,6 +126,7 @@ const OUTPUT_DIR := "res://screenshots/hulls"
 const OUTPUT_DIR_ENV := "HULL_CAPTURE_OUT"
 const TestReport := preload("res://tests/support/test_report.gd")
 const CaptureClock := preload("res://tests/support/capture_clock.gd")
+const CaptureSubject := preload("res://tests/support/capture_subject.gd")
 ## A frame that is entirely background, or entirely subject, is a broken camera
 ## rather than a hull. Coverage is the fraction of pixels away from the clear
 ## colour.
@@ -171,6 +204,10 @@ func _capture_all() -> void:
 			continue
 		boat.freeze = true
 		world.add_child(boat)
+		## `freeze = true` above does NOT hold this hull still on its own — see the
+		## header. `CaptureSubject.hold_still` is the shared recipe and
+		## `capture_subject_still_test` is the unit that holds it; do not inline it.
+		CaptureSubject.hold_still(boat)
 		var length := maxf(boat.length_m, 10.0)
 		var beam := maxf(boat.beam_m, 5.0)
 		var height := maxf(boat.depth_m, 3.0)

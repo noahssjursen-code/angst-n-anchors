@@ -20,6 +20,7 @@ extends Node
 
 const OUT_DIR := "res://screenshots/sheer_probe"
 const CaptureClock := preload("res://tests/support/capture_clock.gd")
+const CaptureSubject := preload("res://tests/support/capture_subject.gd")
 const DARK := Color(0.055, 0.075, 0.095)
 const SKY := Color(0.62, 0.72, 0.82)
 const SHEER_GAIN := 3.0
@@ -88,6 +89,13 @@ func _shoot(
 	if gain != 1.0:
 		_regain_sheer(boat, gain)
 	_world.add_child(boat)
+	## `boat.freeze = true` above is revoked by `BoatBody`'s automatic physics LOD
+	## one second after enter-tree (see `tests/support/capture_subject.gd`). The
+	## A/B/C/D frames under `screenshots/sheer_probe/` are committed as the evidence
+	## that separates the rig from the geometry, so it matters whether they were shot
+	## off a moving hull — measured, not assumed: re-shot with this line in place,
+	## all twelve are byte-identical to the committed ones.
+	CaptureSubject.hold_still(boat)
 	_env.background_color = bg
 	_viewport.size = size
 	var height := maxf(boat.depth_m, 3.0)

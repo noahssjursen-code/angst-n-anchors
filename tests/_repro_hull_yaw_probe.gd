@@ -12,6 +12,9 @@ extends Node
 ## following that yaw, so "has the visual caught up" has an answer rather than
 ## an assumption.
 
+const CaptureSubject := preload("res://tests/support/capture_subject.gd")
+
+
 func _ready() -> void:
 	call_deferred("_run")
 
@@ -23,6 +26,10 @@ func _run() -> void:
 		var boat = HullRegistry.build_hull(hull_id)
 		boat.freeze = true
 		world.add_child(boat)
+		## This probe exists to ask whether the yawed hull holds still over frames,
+		## so it must not be the one rig that answers with `freeze` alone — BoatBody's
+		## automatic physics LOD revokes that (`tests/support/capture_subject.gd`).
+		CaptureSubject.hold_still(boat)
 		print("%s: frame0 %s" % [hull_id, _snapshot(boat)])
 		boat.rotation_degrees.y = -18.0
 		for i in 8:

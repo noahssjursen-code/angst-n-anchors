@@ -20,6 +20,8 @@ extends Node
 ## bodies are read back: shape count off PhysicsServer3D, and a capsule marched
 ## at a wall must be stopped at the same distance by both.
 
+const CaptureSubject := preload("res://tests/support/capture_subject.gd")
+
 const COUNTS := [500, 2000, 4000, 8000]
 const BOX := Vector3(0.4, 0.3, 0.1)
 
@@ -55,9 +57,15 @@ func _make_boat(at: Vector3 = Vector3.ZERO) -> BoatBody:
 	## y = -0.366, and the capsule march then read two different stopping
 	## distances against IDENTICAL shape sets. The subject was fine; the
 	## instrument was dropping one boat further than the other.
+	## The two lines BELOW treated the symptom. The cause is `automatic_physics_lod`
+	## revoking `freeze` a second after enter-tree — `tests/support/capture_subject.gd`
+	## has the mechanism and `capture_subject_still_test` holds it. They stay because
+	## zero gravity is a second, independent belt on a probe whose whole output is a
+	## capsule march against a body's resting height.
 	boat.gravity_scale = 0.0
 	boat.freeze_mode = RigidBody3D.FREEZE_MODE_STATIC
 	add_child(boat)
+	CaptureSubject.hold_still(boat)
 	boat.global_position = at
 	boat.ensure_walk_deck()
 	## The WalkDeck re-parent is deferred; without an idle frame it is still a

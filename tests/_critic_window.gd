@@ -12,6 +12,8 @@ extends Node
 ##       window.
 ##   E4. the staged path (>1000 bricks): does it batch at all?
 
+const CaptureSubject := preload("res://tests/support/capture_subject.gd")
+
 const FEEDER := "res://resources/data/structures/probe_container_feeder.json"
 const BULWARK := "res://resources/data/structures/probe_trawler_bulwark.json"
 const WORKBOAT := "res://resources/data/structures/demo_workboat.json"
@@ -181,6 +183,16 @@ func _e4() -> void:
 	boat.gravity_scale = 0.0
 	boat.freeze_mode = RigidBody3D.FREEZE_MODE_STATIC
 	add_child(boat)
+	## E4's boat is meant to be inert scaffolding for a fit-out timing, so it gets
+	## the shared hold. `automatic_physics_lod` would otherwise revoke the `freeze`
+	## above — see `tests/support/capture_subject.gd`.
+	##
+	## The E1/E3 vessels at the top of this file deliberately do NOT get it: they
+	## are `VesselSpawn.instantiate` boats carrying a player across a real refit,
+	## with no `freeze` of their own, and `hold_still` would put them in SLEEP —
+	## which stops `StripBuoyancyComponent`, `HydrodynamicsComponent` and three
+	## more from processing and so changes the very cost E1/E3 measure.
+	CaptureSubject.hold_still(boat)
 	boat.ensure_walk_deck()
 	for _i in 3:
 		await get_tree().physics_frame
