@@ -6,6 +6,29 @@ extends RefCounted
 ##   - house stakes (primitive cottages) on dry land past the beach band
 ##   - larger trade-decoration stakes sprinkled among houses, coloured by
 ##     import/export terminal family (mills, markets, yards — later)
+##
+## ── WHAT THIS PUBLISHES, AND WHO DRAWS IT ──────────────────────────────────
+##
+## | key | drawn by | state |
+## |---|---|---|
+## | `terrain_grid.points` | `PortLayoutGraphVisualizer._stamp_land_structures` | drawn |
+## | `apron_pads.pads` | `PortLayoutGraphVisualizer._stamp_apron_pads` | drawn — a blueprint from `BuildingBlueprintCatalog.find_for_pad`, else a placeholder slab + mass |
+## | `apron_decor.points` | `_stamp_apron_decor` **exists and has no callers** | NOT DRAWN — reaches no frame |
+## | `buildable_zone` | `PortDebugGizmos._stamp_land_zone` | gizmo only |
+##
+## `tests/port_apron_draw_test.gd` holds that table against the node tree the
+## visualiser actually builds, and carries `apron_decor` as a named register
+## entry so the gap cannot go quiet again.
+##
+## **`structures` / `structure_count` were deleted 2026-08-16.** They were a
+## literal `[]` and a literal `0` at both return sites — never assigned, never
+## grown. Their only readers were a `PortDebugGizmos` layer looping an array
+## that is always empty (REALITY.md §4, "negatives against an empty universe")
+## and one `print` in the capture rig, whose `structures=0` line was read as
+## *"every port places apron pads and builds nothing on them"*. Measured before
+## deleting: at size 2 the visualiser draws 4 meshes under `ApronPads` on 2 pads
+## and 630 without them; at sizes 1 and 3-8 it draws 725 on 5. The pads are
+## built on. The number that said otherwise was a constant.
 
 const CoastTracer := preload("res://scripts/port/port_coast_tracer.gd")
 const TerrainStreamer := preload("res://scripts/world/world_terrain_streamer.gd")
@@ -83,7 +106,6 @@ static func build(
 			"terrain_grid": {},
 			"apron_decor": {"points": [], "point_count": 0},
 			"apron_pads": {"pads": [], "pad_count": 0},
-			"structures": [],
 			"notes": PackedStringArray(["no dock face for land zone"]),
 		}
 
@@ -184,8 +206,6 @@ static func build(
 		"terrain_grid": terrain_grid,
 		"apron_decor": apron_decor,
 		"apron_pads": apron_pads,
-		"structures": [],
-		"structure_count": 0,
 		"notes": notes,
 	}
 

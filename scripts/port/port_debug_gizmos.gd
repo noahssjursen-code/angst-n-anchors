@@ -18,7 +18,6 @@ const LAYER_ASPHALT_BERTHS := "asphalt_berths"
 const LAYER_QUAY_ROOTS := "quay_roots"
 const LAYER_QUAY_ARMS := "quay_arms"
 const LAYER_LAND_ZONE := "land_zone"
-const LAYER_LAND_STRUCTURES := "land_structures"
 const LAYER_HARBOUR_BERTHS := "harbour_berths"
 
 const LAYER_IDS: PackedStringArray = [
@@ -35,7 +34,6 @@ const LAYER_IDS: PackedStringArray = [
 	LAYER_QUAY_ROOTS,
 	LAYER_QUAY_ARMS,
 	LAYER_LAND_ZONE,
-	LAYER_LAND_STRUCTURES,
 	LAYER_HARBOUR_BERTHS,
 ]
 
@@ -243,7 +241,6 @@ func _rebuild() -> void:
 
 	_stamp_berth_plan(_graph.initial_attributes.get("berth_plan", {}) as Dictionary)
 	_stamp_land_zone(_graph.initial_attributes.get("land_plan", {}) as Dictionary)
-	_stamp_land_plan(_graph.initial_attributes.get("land_plan", {}) as Dictionary)
 	_stamp_harbour_berths()
 	_apply_layer_visibility()
 
@@ -648,44 +645,6 @@ func _make_rising_land_wireframe(
 		root.add_child(line)
 		_align_segment(line, a, b)
 	return root
-
-
-func _stamp_land_plan(plan: Dictionary) -> void:
-	var layer := _ensure_layer(LAYER_LAND_STRUCTURES)
-	if plan.is_empty():
-		return
-	for raw in plan.get("structures", []) as Array:
-		var entry: Dictionary = raw
-		var origin := _xz(entry.get("origin", [0.0, 0.0]))
-		var size_arr: Array = entry.get("size_m", [10.0, 5.0, 8.0]) as Array
-		var size := Vector3(
-			float(size_arr[0]) if size_arr.size() > 0 else 10.0,
-			float(size_arr[1]) if size_arr.size() > 1 else 5.0,
-			float(size_arr[2]) if size_arr.size() > 2 else 8.0,
-		)
-		var color_arr: Array = entry.get("color", [0.5, 0.5, 0.45]) as Array
-		var color := Color(
-			float(color_arr[0]) if color_arr.size() > 0 else 0.5,
-			float(color_arr[1]) if color_arr.size() > 1 else 0.5,
-			float(color_arr[2]) if color_arr.size() > 2 else 0.45,
-		)
-		color.a = 0.55
-		var box := MeshBuilder.box(size, color, 0.9, 0.0)
-		box.name = str(entry.get("id", "land"))
-		layer.add_child(box)
-		box.position = Vector3(origin.x, 2.0 + size.y * 0.5, origin.y)
-		box.rotation.y = deg_to_rad(float(entry.get("yaw_degrees", 0.0)))
-		_stamp_dot(layer, Vector3(origin.x, 8.0, origin.y), color.lightened(0.2), 2.4, str(entry.get("id", "land")))
-		_label(
-			layer,
-			"%s_lbl" % str(entry.get("id", "land")),
-			"%s\n%s" % [
-				str(entry.get("label", entry.get("kind", "land"))),
-				str(entry.get("band", "")).to_upper(),
-			],
-			Vector3(origin.x, 14.0 + size.y, origin.y),
-			color.lightened(0.25),
-		)
 
 
 func _xz(raw: Variant) -> Vector2:

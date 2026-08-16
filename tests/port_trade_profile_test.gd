@@ -164,6 +164,34 @@ func _run() -> void:
 	if not a.trade_profile.all_slots().is_empty():
 		t.check("trade profile should sprinkle trade decorations", trade_n >= 1)
 	var apron: Dictionary = land.get("apron_decor", {}) as Dictionary
+	## ⚠ THE STANDING RED. Measured 2026-08-16, so the next reader does not have
+	## to re-derive it, and so it is not confused with the apron PADS.
+	##
+	## This asserts a density on `apron_decor`, which **reaches no frame on any
+	## port**: `PortLayoutGraphVisualizer._stamp_apron_decor()` is a real builder
+	## with eight prop kinds and zero callers, and `_rebuild()` says *"Apron props
+	## deferred"*. `tests/port_apron_draw_test.gd` holds that as a named register
+	## entry. So this red is honest about the number and invisible to a player.
+	##
+	## **It is NOT the "apron pads with nothing built on them" defect.** That was
+	## `land_plan.structure_count`, a literal `0` now deleted; the pads are drawn
+	## on, and `port_apron_draw_test` asserts it against the node tree.
+	##
+	## Why THIS port produces 2: its dock face is 301.5 m with 3 quay stations at
+	## keep-out radii 38 / 52 / 38 m, and `_near_quay_station` rejects 11 of the
+	## ~14 arc samples. The blocked-arc bug is gone — `asphalt_stations` is empty
+	## here, so 0.0 m of the face is blocked by arc. Over a 108-port sweep
+	## (`tests/_apron_decor_why_probe.gd`) **0 ports produce zero props and 23
+	## produce fewer than 3**, so the sprinkler works and this bound does not hold
+	## for every site.
+	##
+	## Every cheap fix is a known trap: relaxing the bound is REALITY.md §7,
+	## deleting the quay keep-out scores better while standing 9 props on berth
+	## loading faces (§4c), and `APRON_DECOR_STEP_M` was measured not to be the
+	## governing constant (4× moves the count 2→4→4→7). The real question —
+	## *should aprons carry props at all?* — is the owner's, and until it is
+	## answered this check is a specification for a feature nobody has wired.
+	## Left RED on purpose: a red with a diagnosis is the honest state.
 	t.check("apron should sprinkle service props", int(apron.get("point_count", 0)) >= 3)
 	for raw in apron.get("points", []) as Array:
 		var entry: Dictionary = raw

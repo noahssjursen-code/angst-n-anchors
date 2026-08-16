@@ -1,10 +1,11 @@
 seed=424242 generation=46
 
-size=0 quays=1 pads=1 structures=0 primary=67m total_quay=67m modules=1
+size=0 quays=1 pads=1 apron_props_planned=3 primary=67m total_quay=67m modules=1
   exports=provisions imports=provisions
   quay quay_pad_provisions                   66.8m x  36.0m  provisions
   pad  harbour_office                        44m x    66m  townside
-size=1 quays=2 pads=5 structures=0 primary=107m total_quay=212m modules=1
+  drawn: pad_sites=1 pad_meshes=2 village=42 apron_props=-1
+size=1 quays=2 pads=5 apron_props_planned=1 primary=107m total_quay=212m modules=1
   exports=provisions imports=fresh_groundfish,provisions
   quay quay_pad_fresh_groundfish_import     107.0m x  72.0m  fresh_groundfish
   quay quay_pad_provisions                  105.0m x  40.0m  provisions
@@ -13,13 +14,15 @@ size=1 quays=2 pads=5 structures=0 primary=107m total_quay=212m modules=1
   pad  provisions_cold                       22m x    44m  waterside
   pad  general_warehouse                     44m x    22m  mid
   pad  fuel_bunker                           22m x    22m  mid
-size=2 quays=2 pads=2 structures=0 primary=163m total_quay=321m modules=1
+  drawn: pad_sites=5 pad_meshes=725 village=70 apron_props=-1
+size=2 quays=2 pads=2 apron_props_planned=2 primary=163m total_quay=321m modules=1
   exports=provisions imports=fresh_groundfish,provisions
   quay quay_pad_fresh_groundfish_import     158.6m x  72.0m  fresh_groundfish
   quay quay_pad_provisions                  162.5m x  44.0m  provisions
   pad  harbour_office                        44m x    66m  townside
   pad  provisions_depot                      44m x    44m  waterside
-size=3 quays=3 pads=5 structures=0 primary=216m total_quay=634m modules=1
+  drawn: pad_sites=2 pad_meshes=4 village=70 apron_props=-1
+size=3 quays=3 pads=5 apron_props_planned=6 primary=216m total_quay=634m modules=1
   exports=provisions,lng imports=fresh_groundfish,provisions
   quay quay_pad_lng_export                  215.5m x  48.0m  lng
   quay quay_pad_fresh_groundfish_import     208.6m x  72.0m  fresh_groundfish
@@ -29,7 +32,8 @@ size=3 quays=3 pads=5 structures=0 primary=216m total_quay=634m modules=1
   pad  provisions_cold                       22m x    44m  waterside
   pad  general_warehouse                     22m x    44m  mid
   pad  fuel_bunker                           22m x    22m  mid
-size=4 quays=3 pads=5 structures=0 primary=212m total_quay=631m modules=1
+  drawn: pad_sites=5 pad_meshes=725 village=112 apron_props=-1
+size=4 quays=3 pads=5 apron_props_planned=5 primary=212m total_quay=631m modules=1
   exports=provisions,containers imports=fresh_groundfish,provisions,containers
   quay quay_pad_containers                  209.8m x  48.0m  containers
   quay quay_pad_fresh_groundfish_import     212.1m x  72.0m  fresh_groundfish
@@ -39,7 +43,8 @@ size=4 quays=3 pads=5 structures=0 primary=212m total_quay=631m modules=1
   pad  provisions_cold                       22m x    44m  waterside
   pad  container_yard                        44m x    22m  waterside
   pad  container_stack                       22m x    22m  waterside
-size=5 quays=3 pads=5 structures=0 primary=237m total_quay=704m modules=1
+  drawn: pad_sites=5 pad_meshes=10 village=91 apron_props=-1
+size=5 quays=3 pads=5 apron_props_planned=12 primary=237m total_quay=704m modules=1
   exports=provisions,grain imports=fresh_groundfish,provisions
   quay quay_pad_grain_export                235.4m x  52.0m  grain
   quay quay_pad_fresh_groundfish_import     232.5m x  72.0m  fresh_groundfish
@@ -49,7 +54,8 @@ size=5 quays=3 pads=5 structures=0 primary=237m total_quay=704m modules=1
   pad  provisions_cold                       22m x    44m  waterside
   pad  general_warehouse                     44m x    44m  mid
   pad  fuel_bunker                           22m x    22m  mid
-size=6 quays=3 pads=5 structures=0 primary=236m total_quay=706m modules=1
+  drawn: pad_sites=5 pad_meshes=725 village=147 apron_props=-1
+size=6 quays=3 pads=5 apron_props_planned=11 primary=236m total_quay=706m modules=1
   exports=provisions,grain imports=fresh_groundfish,provisions
   quay quay_pad_grain_export                235.2m x  52.0m  grain
   quay quay_pad_fresh_groundfish_import     234.5m x  72.0m  fresh_groundfish
@@ -59,7 +65,8 @@ size=6 quays=3 pads=5 structures=0 primary=236m total_quay=706m modules=1
   pad  provisions_cold                       22m x    44m  waterside
   pad  general_warehouse                     44m x    44m  mid
   pad  fuel_bunker                           22m x    22m  mid
-size=7 quays=3 pads=5 structures=0 primary=240m total_quay=706m modules=1
+  drawn: pad_sites=5 pad_meshes=725 village=147 apron_props=-1
+size=7 quays=3 pads=5 apron_props_planned=10 primary=240m total_quay=706m modules=1
   exports=provisions,coal imports=fresh_groundfish,provisions
   quay quay_pad_coal_export                 234.9m x  52.0m  coal
   quay quay_pad_fresh_groundfish_import     231.3m x  72.0m  fresh_groundfish
@@ -69,7 +76,8 @@ size=7 quays=3 pads=5 structures=0 primary=240m total_quay=706m modules=1
   pad  provisions_cold                       22m x    44m  waterside
   pad  general_warehouse                     44m x    44m  mid
   pad  fuel_bunker                           22m x    22m  mid
-size=8 quays=3 pads=5 structures=0 primary=239m total_quay=705m modules=1
+  drawn: pad_sites=5 pad_meshes=725 village=140 apron_props=-1
+size=8 quays=3 pads=5 apron_props_planned=12 primary=239m total_quay=705m modules=1
   exports=provisions,grain imports=fresh_groundfish,provisions
   quay quay_pad_grain_export                239.2m x  52.0m  grain
   quay quay_pad_fresh_groundfish_import     234.1m x  72.0m  fresh_groundfish
@@ -79,3 +87,4 @@ size=8 quays=3 pads=5 structures=0 primary=239m total_quay=705m modules=1
   pad  provisions_cold                       22m x    44m  waterside
   pad  general_warehouse                     44m x    44m  mid
   pad  fuel_bunker                           22m x    22m  mid
+  drawn: pad_sites=5 pad_meshes=725 village=140 apron_props=-1

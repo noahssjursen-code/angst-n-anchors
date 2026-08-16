@@ -174,13 +174,20 @@ func _run() -> void:
 		var stations: Array = berth.get("quay_stations", []) as Array
 		var pads: Array = ((land.get("apron_pads", {}) as Dictionary).get("pads", []) as Array)
 
+		## `structures=%d` used to stand here, reading `land_plan.structure_count`
+		## — a LITERAL 0 written at the only producer and read by nothing else in
+		## the project. It printed `structures=0` beside `pads=5` on every size and
+		## was taken as evidence that the port lays pads and builds nothing on
+		## them. The field is deleted; what stands here now is counted off the
+		## node tree the visualiser builds, below, after it is in the scene.
+		var decor_planned := int((land.get("apron_decor", {}) as Dictionary).get("point_count", 0))
 		report.append(
-			"size=%d quays=%d pads=%d structures=%d primary=%.0fm total_quay=%.0fm modules=%d"
+			"size=%d quays=%d pads=%d apron_props_planned=%d primary=%.0fm total_quay=%.0fm modules=%d"
 			% [
 				size,
 				stations.size(),
 				pads.size(),
-				int(land.get("structure_count", 0)),
+				decor_planned,
 				float(graph.primary_quay_pose().get("length_m", 0.0)),
 				graph.total_quay_length_m(),
 				graph.modules.size(),
@@ -233,6 +240,19 @@ func _run() -> void:
 		var shot := viewport.get_texture().get_image()
 		if shot != null:
 			_save(shot, out_abs.path_join("port_layout__size_%d__quarter.png" % size))
+		## Counted off the tree the visualiser BUILT, which is the only thing in
+		## this report that can say whether a pad carries anything. `-1` means the
+		## root node is absent — the shape `ApronDecor` has on every size, because
+		## `_stamp_apron_decor` has no callers.
+		report.append(
+			"  drawn: pad_sites=%d pad_meshes=%d village=%d apron_props=%d"
+			% [
+				_child_count(visualizer.get_node_or_null("ApronPads")),
+				_mesh_count(visualizer.get_node_or_null("ApronPads")),
+				_child_count(visualizer.get_node_or_null("LandDecor")),
+				_child_count(visualizer.get_node_or_null("ApronDecor")),
+			]
+		)
 		visualizer.queue_free()
 		await _settle()
 
@@ -495,6 +515,19 @@ func _stroke_polyline(
 					var y := int(p.y) + dy
 					if x >= 0 and y >= 0 and x < MAP_PX and y < MAP_PX:
 						image.set_pixel(x, y, colour)
+
+
+func _child_count(node: Node) -> int:
+	return node.get_child_count() if node != null else -1
+
+
+func _mesh_count(node: Node) -> int:
+	if node == null:
+		return -1
+	var n := 1 if node is MeshInstance3D else 0
+	for child in node.get_children():
+		n += maxi(_mesh_count(child), 0)
+	return n
 
 
 func _add_reference_planes(world: Node3D) -> void:
