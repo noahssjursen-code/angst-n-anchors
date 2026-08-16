@@ -107,9 +107,56 @@ const BODY_FRAME_Y_ROT := deg_to_rad(-90.0)
 ## `strake_base + band + sheer_rise_at(z)`, clamped to stay `STRAKE_MIN_CLEAR_FRACTION`
 ## of the freeboard under the deck edge. Nothing enters the deck plate, the plan's
 ## colliders or the space above the walking plane — the ceiling checks are unchanged and
-## still zero — and the hull has a curve in it that a person can see. What a bare hull
-## still cannot do is curve its TOP LINE; that is the bulwark cap's job and this note's
-## original argument for it stands.
+## still zero. What a bare hull still cannot do is curve its TOP LINE; that is the
+## bulwark cap's job and this note's original argument for it stands.
+##
+## ── "…AND A CURVE A PERSON CAN SEE" WAS TRUE OF THREE HULLS OF SIX — 2026-08-16 ──
+## That is how this paragraph used to end, and it was written from hull_15x5. Measured
+## on every hull the kit photographs, through `HullRegistry.build_hull` and not by
+## re-deriving `from_form`: the strake IS drawn on all six (`strake_level` = 3, no hull
+## reaches the loft through a constructor that has no band), the clearance clamp never
+## bites on any of them, and `hull_sheer_test` is right that the band carries exactly
+## `sheer_rise_at`. The curve is real. What was never measured is how much of it
+## reaches an eye, and sheer is read as a SLOPE — rise over run — not as a rise:
+##
+##   hull        derived  drawn   rise/(L/2)  px of rise / px of band   visible?
+##   hull_15x5    0.420   0.306     5.60%        14 / 547  = 2.56%      yes
+##   hull_28x10   0.896   0.671     6.40%        15 / 544  = 2.76%      yes
+##   hull_45x16   0.990   0.843     4.40%        15 / 760  = 1.97%      just
+##   hull_130x28  1.680   1.506     2.58%         9 / 739  = 1.22%      a hook at the stem
+##   hull_100x24  1.320   1.184     2.64%         7 / 732  = 0.96%      no
+##   hull_150x32  1.260   1.160     1.68%         4 / 740  = 0.54%      no
+##
+## (Pixels from the committed `screenshots/hulls/*__side.png`, top edge of the strake
+## band per column, at 960×540. "Visible?" is a person looking at the re-shot frames in
+## `screenshots/sheer_probe/rig_overcast/`, not a scorer — REALITY §2.)
+##
+## Two mechanisms, and neither is a bug in this rule:
+##
+##  • `freeboard` grows with DEPTH, and depth grows far slower than length. So a rise
+##    scaled by freeboard has a run that outgrows it, and the slope collapses on the
+##    big hulls. hull_150x32 curves by FOUR PIXELS over seven hundred and forty.
+##  • `drawn` is not `derived`. `sheer_forward_m` is the value at z = −L/2, and at that
+##    station every level has collapsed onto the stem line and the band has no width.
+##    The forwardmost station that draws anything sits at u ≈ 0.86–0.95, and u² takes
+##    73–92% of the rise with it. Quote the drawn number, not the derived one.
+##
+## And the band's own contrast is the third term, measured on the committed frames:
+## amidships the strake renders rgb(63, 6, 4) between plating at rgb(30, 35, 41) above
+## and rgb(11, 17, 24) below — **1.07:1 and 1.12:1** WCAG. The line that carries the
+## whole curve has essentially no luminance step against what it sits on; it separates
+## by hue alone, at the bottom of the range where hue discrimination is worst. See
+## `hull_livery.gd`'s `DEFAULT_ACCENT`, which is still read by nothing, and
+## `MeshBuilder.lofted_hull_shell`'s note on what a third surface costs.
+##
+## **How much sheer this game wants is an owner decision and is NOT settled here.**
+## Raising it is not a magic number — the lines below forbid that and they are right —
+## but every honest lever changes the fleet: scaling the rise by LOA instead of
+## freeboard, raising `bow_keel_rise` (which also re-rakes every forefoot, on purpose),
+## lowering `shoulder_freeboard_fraction` to buy the band more room to travel, or
+## giving the strake its own paint so the curve it already has can be seen. Until
+## someone decides, do not write that a bare hull shows a curve without naming which
+## hulls: it does on the workboats and it does not on the freighters.
 ##
 ## The rule, derived per hull from fields the catalog already carries — never a magic
 ## number per hull:
@@ -126,9 +173,28 @@ const BODY_FRAME_Y_ROT := deg_to_rad(-90.0)
 ## curve; a full-bodied box freighter (0.18 / 0.05) stays nearly flat, which is what those
 ## ships actually look like. Retuning a keel rise therefore also retunes sheer, on purpose.
 ## The parabola with its vertex amidships and a bow-dominant fore:aft ratio is the Load
-## Line Convention's standard sheer profile — and it lands on it: the Convention's
-## standard forward sheer for a 28 m hull is 50 × (L/3 + 10) mm = 0.966 m; this rule gives
-## 0.896 m on hull_28x10.
+## Line Convention's standard sheer profile.
+##
+## ── THE CONVENTION COMPARISON WAS QUOTED FROM ITS BEST HULL — re-run 2026-08-16 ──
+## This used to end *"and it lands on it: the Convention's standard forward sheer for a
+## 28 m hull is 50 × (L/3 + 10) mm = 0.966 m; this rule gives 0.896 m on hull_28x10"*.
+## Both numbers are correct and hull_28x10 is the closest fit in the fleet. Run over
+## every hull — Convention ordinate at the FP, against what this rule DERIVES and
+## against what the loft actually DRAWS (REALITY §4f': quote the number you measured,
+## for the thing you measured it on):
+##
+##   hull        L      Convention   derived  (of ICLL)   drawn  (of ICLL)
+##   hull_15x5    15 m     0.750 m    0.420      56%      0.306     41%
+##   hull_28x10   28 m     0.967 m    0.896      93%      0.671     69%
+##   hull_45x16   45 m     1.250 m    0.990      79%      0.843     67%
+##   hull_100x24 100 m     2.167 m    1.320      61%      1.184     55%
+##   hull_130x28 130 m     2.667 m    1.680      63%      1.506     56%
+##   hull_150x32 150 m     3.000 m    1.260      42%      1.160     39%
+##
+## So the rule is the Convention's SHAPE at 39–69% of its amplitude, and the gap widens
+## with length because the Convention's ordinate is linear in L and this rule's is not
+## (it scales with freeboard). "It lands on it" holds for one hull and for none of the
+## others. Anyone changing the rule re-runs this table rather than editing one row.
 const SHEER_BOW_KEY := "bow_keel_rise"
 const SHEER_STERN_KEY := "stern_keel_rise"
 

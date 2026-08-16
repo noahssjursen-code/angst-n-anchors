@@ -57,7 +57,41 @@ extends Node
 ## — and it is done anyway so this rig cannot acquire the dependency by someone
 ## later photographing a fitted-out vessel through it.
 
+## ── THE GROUND WAS NEAR-BLACK, AND THAT MADE EVERY FRAME UNJUDGEABLE ────────
+##
+## `BACKGROUND` was `Color(0.055, 0.075, 0.095)` and every frame in
+## `screenshots/hulls/` was shot against it. REALITY §8 already records the defect
+## — *"Captures were shot dark-on-dark, so a silhouette had no boundary against its
+## ground. A pale sky changed the read more than any geometry change that day"* —
+## and this rig was still doing it. Measured on the committed
+## `hull_130x28__side.png`: the mean colour of the hull's top silhouette edge is
+## rgb(31, 35, 41) against a ground of rgb(14, 19, 24), a WCAG relative-luminance
+## contrast of **1.18:1**. Three-to-one is the floor for a large graphical object.
+## At 1.18:1 the deck edge is not a line, and a sheer curve, a stem rake or a
+## deckhouse massing judged from that frame was judged from nothing. Re-shot on the
+## ground below, the same edge measures **10.65:1** and the hull has an outline.
+## Mutation-verified by putting the old colour back: 12 of 78 checks red, every
+## `front` and `side` frame between 1.19:1 and 2.23:1.
+##
+## So the ground is pale, and `_silhouette_contrast` holds it there. That check is
+## an INSTRUMENT check, not an appearance metric (REALITY §2 forbids the second): it
+## says nothing about whether the hull looks like a boat, only whether this camera
+## can show its subject at all. A rig that cannot is not evidence of anything.
+##
+## The ground is BRIGHT overcast rather than a mid sky, and that was measured, not
+## picked. A hull's silhouette spans two very different luminances: the topsides at
+## L≈0.017 and the tan deck plate at L≈0.158, and the `three_quarter` view puts the
+## DECK on the skyline. Against a mid sky (0.62, 0.72, 0.82, L=0.462) the topsides
+## clear the floor at 4.1–7.6:1 and the deck does not — 2.20:1 on hull_15x5 and
+## 2.46:1 on the three biggest hulls, **6 of 18 frames red**. Nothing between the two
+## works: to clear 3:1 above a deck at L=0.158 the ground has to sit at L>=0.574.
+## The value below is L=0.669, which clears the deck at 3.4:1 and the topsides at
+## 10.7:1 — the only band that shows both ends of the subject at once.
 const OUTPUT_DIR := "res://screenshots/hulls"
+## Scratch runs point this at their own directory rather than overwriting the
+## committed frames — a capture rig that can only be exercised by clobbering its own
+## output cannot be tested at all, which is how the contrast defect above survived.
+const OUTPUT_DIR_ENV := "HULL_CAPTURE_OUT"
 const TestReport := preload("res://tests/support/test_report.gd")
 const CaptureClock := preload("res://tests/support/capture_clock.gd")
 ## A frame that is entirely background, or entirely subject, is a broken camera
@@ -65,7 +99,12 @@ const CaptureClock := preload("res://tests/support/capture_clock.gd")
 ## colour.
 const MIN_COVERAGE := 0.02
 const MAX_COVERAGE := 0.92
-const BACKGROUND := Color(0.055, 0.075, 0.095)
+## WCAG 1.4.11's floor for a graphical object that has to be distinguishable. Taken
+## from the standard rather than tuned until the frames passed, and the three grounds
+## measured below separate cleanly on either side of it — near-black 12 of 18 red at
+## 1.19–2.23:1, mid sky 6 of 18 red at 2.20–2.46:1, overcast 0 of 18 at 3.07–10.65:1.
+const MIN_SILHOUETTE_CONTRAST := 3.0
+const BACKGROUND := Color(0.80, 0.84, 0.88)
 const HULL_IDS := [
 	## The smallest hull in the game, and the one a beginner starts from. It is
 	## FIRST because the figure-visibility check is hardest to satisfy on the
@@ -80,6 +119,7 @@ const HULL_IDS := [
 
 
 var _t := TestReport.new("hull_visual_capture", false)
+var _out_dir := OUTPUT_DIR
 
 
 func _ready() -> void:
@@ -87,9 +127,13 @@ func _ready() -> void:
 
 
 func _capture_all() -> void:
+	var override := OS.get_environment(OUTPUT_DIR_ENV).strip_edges()
+	if not override.is_empty():
+		_out_dir = override
+		print("Hull visual capture: writing to %s (%s override)" % [_out_dir, OUTPUT_DIR_ENV])
 	var hour := CaptureClock.pin(get_tree())
 	print("Hull visual capture: game clock pinned at time_of_day %.3f" % hour)
-	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(OUTPUT_DIR))
+	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(_out_dir))
 	var viewport := SubViewport.new()
 	viewport.size = Vector2i(960, 540)
 	viewport.own_world_3d = true
@@ -181,10 +225,16 @@ func _capture_all() -> void:
 			var image := viewport.get_texture().get_image()
 
 			var case := "%s__%s" % [hull_id, view]
-			var path := "%s/%s.png" % [OUTPUT_DIR, case]
+			var path := "%s/%s.png" % [_out_dir, case]
 			_t.check(
 				"capture writes %s" % case,
 				image.save_png(ProjectSettings.globalize_path(path)) == OK,
+			)
+			var contrast := _silhouette_contrast(image)
+			_t.check(
+				"%s: the silhouette stands off its ground (%.2f:1, want >= %.1f:1)"
+					% [case, contrast, MIN_SILHOUETTE_CONTRAST],
+				contrast >= MIN_SILHOUETTE_CONTRAST,
 			)
 			var coverage := _coverage(image)
 			_t.check(
@@ -198,7 +248,10 @@ func _capture_all() -> void:
 				% [case, moved],
 				moved > 0,
 			)
-			print("Hull visual capture: %s coverage=%.3f figure_px=%d" % [path, coverage, moved])
+			print(
+				"Hull visual capture: %s coverage=%.3f figure_px=%d contrast=%.2f:1"
+				% [path, coverage, moved, contrast]
+			)
 		world.remove_child(boat)
 		boat.free()
 
@@ -223,6 +276,52 @@ func _coverage(image: Image) -> float:
 			):
 				hit += 1
 	return float(hit) / float(maxi(total, 1))
+
+
+## WCAG relative-luminance contrast between the ground and the subject's TOP
+## silhouette edge — the topmost non-background pixel of every column the subject
+## occupies, averaged.
+##
+## The top edge and not the whole subject on purpose: the deck edge is the line a
+## reader takes a hull's sheer, trim and massing from, it is the line that sits
+## against the sky, and it is the darkest part of the silhouette against a dark
+## ground. If it clears the floor the rest of the outline does.
+func _silhouette_contrast(image: Image) -> float:
+	var w := image.get_width()
+	var h := image.get_height()
+	var sum := Color(0.0, 0.0, 0.0)
+	var n := 0
+	for x in range(w):
+		for y in range(h):
+			var c := image.get_pixel(x, y)
+			if (
+				absf(c.r - BACKGROUND.r) > 0.02
+				or absf(c.g - BACKGROUND.g) > 0.02
+				or absf(c.b - BACKGROUND.b) > 0.02
+			):
+				sum += c
+				n += 1
+				break
+	if n == 0:
+		return 0.0
+	var edge := sum / float(n)
+	var a := _relative_luminance(edge)
+	var b := _relative_luminance(BACKGROUND)
+	return (maxf(a, b) + 0.05) / (minf(a, b) + 0.05)
+
+
+func _relative_luminance(c: Color) -> float:
+	return (
+		0.2126 * _linearize(c.r) + 0.7152 * _linearize(c.g) + 0.0722 * _linearize(c.b)
+	)
+
+
+func _linearize(channel: float) -> float:
+	return (
+		channel / 12.92
+		if channel <= 0.04045
+		else pow((channel + 0.055) / 1.055, 2.4)
+	)
 
 
 ## How many sampled pixels changed between two frames of the same view. Used to
