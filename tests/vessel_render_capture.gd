@@ -17,6 +17,52 @@ extends Node
 ## starboard +X.
 
 const TestReport := preload("res://tests/support/test_report.gd")
+const CaptureSubject := preload("res://tests/support/capture_subject.gd")
+
+## ── THE SUBJECT WAS NEVER HELD STILL BY ITS `freeze`, AND ON THIS RIG THAT DID
+##    NOT MATTER — MEASURED 2026-08-16 ──────────────────────────────────────────
+##
+## `1bec073` established the mechanism for three rigs: `BoatBody`'s
+## `automatic_physics_lod` defaults `true`, and one second after a hull enters the
+## tree `_update_automatic_physics_quality()` runs `freeze = physics_quality ==
+## SLEEP` — i.e. **`freeze = false`** — silently revoking a capture rig's own
+## freeze. This file was the last shipped rig that had never disabled it, and
+## `STATE.md` opened it as a milestone on the strength of that grep.
+##
+## **The frames were never compromised, and NOT for the reason the other rigs
+## were safe.** `hull_visual_capture` was latent-but-safe on a timer margin —
+## 0.93 s against a 1.0 s threshold, one settle short. This rig has no margin at
+## all: it holds each hull in the tree for eight settles, and measured with
+## `tests/_vrc_still_probe.gd` (a subclass, so it photographs THIS `_capture_plan`
+## rather than a copy of it) the LOD timer crosses 1.0 s **between the third and
+## fourth grab of the first fixture** once `_physics_process` is allowed to run.
+##
+## What actually held the hull is the line three below `add_child`:
+##
+##     boat.process_mode = Node.PROCESS_MODE_DISABLED
+##
+## `CollisionObject3D.disable_mode` defaults to `DISABLE_MODE_REMOVE`, so a
+## disabled `BoatBody` is **taken out of the physics space entirely**. Measured,
+## same probe, calling the LOD update by hand on the rig as it stands:
+## `freeze=false quality=FULL in_space=false`, and the origin holds
+## −5.719999790 in all nine float digits across 139 physics frames. The freeze was
+## decorative; the process mode was the whole defence, and nothing in this file
+## said so.
+##
+## **And this rig is the DRIFT case, violently.** With `process_mode` left alone
+## so the body stays in its space, the same probe measures the LOD firing on its
+## own and the hull rising **1.742 m across its eight grabs at +2.17 m/s** — up,
+## not down, because `StripBuoyancyComponent` is live here (this stage is in the
+## main world, unlike `hull_visual_capture`'s `own_world_3d` viewport, which
+## free-falls 951 mm instead). It is not the 1.15 mm the three fixed rigs drifted:
+## this rig deliberately sinks the hull by `deck_y` — 5.72 m on the workboat — to
+## bring the deck to y = 0, so the whole hull is submerged and the transient is
+## the full ascent to equilibrium. A run that lost the process mode would produce
+## frames with the hull climbing out of the plan.
+##
+## So `CaptureSubject.hold_still` goes in, and it is not a formality: it removes
+## the single line of defence's status as the only one. `capture_subject_still_test`
+## is the scored unit for what it guarantees; do not inline the recipe.
 
 const OUT_DIR := "res://screenshots/studio"
 const SETTLE_FRAMES := 6
@@ -197,6 +243,16 @@ const FIGURE_SPOT := {
 	## the whole 150 m of ship running away aft — which is the one place a 1.8 m
 	## figure still resolves against a vessel this size.
 	##
+	## ⚠ AND THIS IS THE CASE `_check_figure_on_the_ship` WAS BUILT FOR — the
+	## sentence above was written from a look at the deck grid and nothing held
+	## the fixture to it. Measured through the built hull's own stations,
+	## 2026-08-16: the default puts the figure at ship-local x −13.500 against a
+	## half-breadth of 7.000 m at that station — **6.500 m of open water** — and
+	## it is the only spot in the whole fleet the check refuses. Note the two
+	## numbers do not agree: the deck grid's 8.34 makes it 5.84 m out and the loft
+	## makes it 6.50 m, because the grid's chamfer and the loft's taper are
+	## separate producers (see `FIGURE_OFF_SHIP_MAX`). Either way it is water.
+	##
 	## ⚠ AND IT WAS AT (11.0, 3.46, 10.0), WHICH IS THE THIRD INSTANCE OF THE SAME
 	## DEFECT — FOUND BY `_check_figure_stands`, NOT BY LOOKING, 2026-08-16.
 	##
@@ -322,19 +378,16 @@ const FIGURE_PIXEL_DELTA := 0.02
 ## over a sloped roof tile — recorded, looked at, one pixel — and passes; the
 ## fo'c'sle's 0.064 m does not.
 ##
-## ── WHAT THIS STILL DOES NOT ANSWER, STATED SO NOBODY READS IT AS CLOSED ────
+## ── AND IT DID NOT ANSWER WHETHER THE FIGURE IS ON THE SHIP AT ALL — CLOSED
+##    BELOW, 2026-08-16 ─────────────────────────────────────────────────────────
 ##
-## THE FIGURE MAY STILL BE OFF THE SHIP. Nothing under the feet is read as "the
-## hull deck", because y = 0 IS the hull deck in this rig's stage space and most
-## fixtures' figures stand straight on it with no plan entity underneath. A spot
-## in open water at y = 0 therefore passes both claims above — and that is not a
-## hypothetical: the parent default (2.5, 0, 7.0) on `probe_container_feeder`
-## stands off the port bow, because at z = 7 that hull's deck edge runs
-## x 8.34 .. 23.66. The pixel check does not catch it either; a figure against
-## the sky is highly visible. Closing it needs the HULL's own half-breadth at
-## that station (`plan.hull_stations()`), not a deck rectangle — the bow taper is
-## exactly what makes the rectangle wrong — and it is the next check, not this
-## one.
+## THE FIGURE MAY STILL BE OFF THE SHIP, is how this section read, and it was
+## right: nothing under the feet is read as "the hull deck", because y = 0 IS the
+## hull deck in this rig's stage space and most fixtures' figures stand straight
+## on it with no plan entity underneath. A spot in open water at y = 0 passes both
+## claims above, and the pixel check likes it MORE — a figure against open sky is
+## the most visible thing this rig can photograph. `_check_figure_on_the_ship` is
+## the answer and `FIGURE_OFF_SHIP_MAX` is its bound; both are argued below.
 ##
 ## The colliders are also conservative in two known ways, and both make this
 ## STRICTER than the geometry: a round tube's collider is its box (the container
@@ -350,6 +403,148 @@ const FIGURE_BODY_RADIUS := 0.22
 const FIGURE_BODY_LO := 0.10
 const FIGURE_BODY_HI := 1.70
 const FIGURE_BODY_STEP := 0.20
+
+## ── THE FIGURE IS ON THE SHIP, NOT IN THE WATER BESIDE IT ───────────────────
+##
+## The two checks above are both satisfied by a spot in open water. `y = 0` is
+## the deck plane in this rig's stage space, so "there is nothing under the feet"
+## and "the feet are on the deck" are the same reading, and a figure that is
+## simply beside the hull has clear air around it and open sky behind it — it
+## passes the embedded check by definition and scores its BEST pixel count in
+## every view. Three separate mechanisms all say yes to the one case none of them
+## can see.
+##
+## ── WHERE THE HALF-BREADTH COMES FROM, AND WHY NOT FROM THE DECK RECTANGLE ──
+##
+## The rig positions the figure at `offset + spot`, and `offset` is
+## `(-grid.half_beam, 0, -grid.half_loa)` off `HullRegistry.make_grid`. Testing
+## that spot against a rectangle built from the same `grid.half_beam` would be one
+## derivation checking itself — it can only ever say "the number I placed you with
+## is the number I placed you with" — and it is wrong on its face anyway, because
+## **the bow tapers**. Measured on the three hulls this fleet uses, deck-level
+## half-breadth against the grid's constant half_beam:
+##
+##     critic_barge   spot 2.0 m from the stem   hull 2.000 m   grid 5.000 m
+##     critic_ferry   spot 3.0 m from the stem   hull 3.000 m   grid 5.000 m
+##     feeder         spot 10.0 m from the stem  hull 10.000 m  grid 16.000 m
+##
+## A rectangle would call a point 4.9 m off the centreline at `critic_barge`'s
+## station "on the deck" when the hull there is 2.0 m wide — nearly three metres
+## of open water, at the one place on a vessel where the outline moves fastest.
+##
+## So the outline comes from the HULL, and specifically from the station table the
+## BUILT vessel carries — `boat.hull_stations` off the `VesselSpawn` path this
+## rig already stands up — rather than from `plan.hull_stations()`. Both were
+## available and they are not the same artefact: the plan's is a RE-DERIVATION
+## from catalog numbers for the `--script` lane, and `_check_hull_restatement`
+## twenty lines up exists precisely to hold it against the built one. Asserting
+## against the re-derivation would put the same numbers on both sides of two
+## different checks; asserting against the built hull asks the loft.
+##
+## The value is the widest half-breadth over the section's levels, interpolated
+## between the two bracketing stations exactly as the shell's quad strip
+## interpolates between them — so it is the hull's own plan silhouette and not a
+## sample of one height of it.
+##
+## **The catamaran is the one place that table is not the drawn loft, and it is
+## still the right table.** `PassengerCatamaran` assigns `hull_stations =
+## profile.make_stations()` — the full-beam AGGREGATE — and lofts the visible
+## shell twice from a separate demihull table at ±hull_offset. The demihull table
+## would call the entire bridge deck open water, and the bridge deck is where
+## people stand. The aggregate tapers at the ends where the bridge deck (built by
+## `make_grid` with a 0.0 bow taper) is rectangular, so on that vessel this check
+## is STRICTER than the deck near the stem. Both ferry figures stand at z_ship
+## +16.5 m, 4.16 m inside the bound; if a future spot goes forward on a catamaran
+## this is the first thing to re-read.
+##
+## ── HOW STRICT, AGAINST THE DECK A BUILDER IS ACTUALLY OFFERED ──────────────
+##
+## Two producers describe one outline — `DeckGrid.cell_shape` (what a player may
+## build on) and the station table (what this check reads) — so the honest
+## question is whether this refuses a cell the grid offers. Swept over every cell
+## row of every hull in the fleet by `tests/_figure_offship_survey.gd`, worst
+## overhang of the grid past the loft, at the outer cell EDGE and at the cell
+## CENTRE the figure would actually stand on:
+##
+##     hull_28x10      bow_taper_cells 10   edge +0.250 m   centre −0.000 m
+##     hull_150x32     bow_taper_cells 32   edge +0.250 m   centre +0.000 m
+##     hull_45x16_cat  bow_taper_cells  0   edge +6.889 m   centre +6.639 m
+##
+## On the two monohulls the check refuses **nothing** a builder can stand on: the
+## grid's square cell overhangs the loft's chamfer by half a cell at the bow
+## shoulder, and the centre of that cell lands on the loft to within a rounding
+## error. The 0.05 m tolerance is margin on top of an exact fit, which is the
+## strongest thing that can be said for a bound.
+##
+## The catamaran is the exception and the number is large: `make_grid` and
+## `HullPhysicsProfile.make_stations` disagree about that vessel's plan outline by
+## **6.639 m at the stem**, one saying the bridge deck is rectangular and the
+## other tapering it. Two producers of one outline that disagree by nearly seven
+## metres is REALITY §4a, and it is not this wave's to settle — recorded here with
+## the measurement so the next reader does not have to find it twice.
+##
+## ── THE BOUND, AND WHAT IT EXCLUDES ─────────────────────────────────────────
+##
+## 0.05 m, outboard of the hull's own widest plating at that station, and it is
+## the same RESOLUTION argument that sets `FIGURE_FLOAT_MAX`: at the tightest
+## framing this rig uses a 28 m vessel spans about 900 px, so one pixel is
+## 0.031 m and 0.05 m is under two. A figure less than two pixels outboard of the
+## ship's plating cannot be told from one standing on it in any frame this rig
+## shoots, so failing it would be failing something no view can resolve. (On the
+## 150 m ship one pixel is about 0.13 m, so there the bound is well under a single
+## pixel — this is strictest, in pixels, on the smallest vessel.)
+##
+## **"Widest plating", not "deck edge", is the geometry half of the bound and it
+## is worth more than the tolerance is.** `base_widths` in
+## `HullStations._assign_form_sections` gives the two rubbing-strake levels
+## `shoulder_width`, which stands PROUD of the deck edge: measured through the
+## built hulls, 5.150 m against a 5.000 m deck edge on `hull_28x10` and 8.160
+## against 8.000 on `hull_45x16_cat` — **0.150 m and 0.160 m of hull outboard of
+## the sheer line**, and 0.000 on `hull_150x32`, which has none. A figure 0.1 m
+## outboard of the sheer line on a trawler is standing over the strake, on the
+## ship's own plating, and a deck-edge bound would have called it open water.
+## Taking the widest level rather than a fixed pad also means this term is
+## re-measured per hull instead of being a constant somebody has to maintain.
+##
+## WHAT THE BOUND EXCLUDES, said plainly: a figure standing on anything that
+## cantilevers more than 0.05 m outboard of the hull's widest plating — a bridge
+## wing, a boarding platform, a gangway, an accommodation ladder. No fixture in
+## this fleet has one, and every authored spot clears the bound by at least
+## 2.000 m (`critic_barge`, on the centreline 2.0 m from the stem, is the
+## tightest). If such a structure is ever built, the answer is to ask the PLAN for
+## it — the `edges[]` / `items[]` colliders are already collected two functions up
+## — and not to widen this number, because a wider number buys back the open
+## water this check exists to refuse.
+##
+## WHAT IT DOES NOT ANSWER, so nobody reads it as more than it is:
+##
+##   • it says the figure is over the HULL, not over walkable deck. A spot inside
+##     the hull outline but over an open hold or a moon pool passes here; that is
+##     the floating check's question and it is asked separately.
+##   • a plan with no hull (`context != "vessel"`, or a hull that will not
+##     instantiate) is SKIPPED with a printed line rather than passed silently.
+##     Every fixture the five rigs photograph carries a hull today, so the skip
+##     path is currently dead — which is exactly why it prints.
+##
+## ── MUTATION-VERIFIED, THREE WAYS, 2026-08-16 ───────────────────────────────
+##
+##   A. `probe_container_feeder` moved to the parent default (2.5, 0, 7.0) —
+##      the case this was built for. **35 checks, 1 FAILED**, against 35 / 0 on
+##      the authored spot: *x=−13.500, half-breadth 7.000, +6.500 m outboard*.
+##      Both older figure checks stayed GREEN in the same run — "clear of the
+##      plan's own geometry" and "stands on something (gap +0.000)" — which is
+##      this section's whole argument, measured rather than asserted.
+##   B. `demo_workboat` moved to (5.0, 0, −3.0), three metres ahead of the stem
+##      on the centreline. **36 checks, 1 FAILED**, and the failure is entirely
+##      the LONGITUDINAL term: *+0.000 m outboard, +3.000 m past the ends*. A
+##      transverse-only check would have passed a figure standing in open water
+##      ahead of the bow, because the loft's forward section has no width.
+##   C. `_hull_half_breadth_at` replaced by `beam_m * 0.5` — the deck rectangle
+##      this section refuses — with mutation A's spot still in place. **35
+##      checks, 0 FAILED: it goes GREEN on the defect**, reading a half-breadth
+##      of 16.000 where the hull is 7.000. That is the rectangle being blind by
+##      construction (REALITY §8), and it is why the outline is the loft's.
+const FIGURE_OFF_SHIP_MAX := 0.05
 
 ## ── WHICH VIEWS THE FIGURE IS REQUIRED IN, AND WHY NOT ALL FOUR ─────────────
 ##
@@ -437,6 +632,16 @@ var _figure: Node3D
 ## contain the answer while the figure stood somewhere else entirely.
 var _figure_at := Vector3.ZERO
 
+## The same placement in SHIP-LOCAL metres — `offset + _figure_at`, which is where
+## the figure node actually sits, because the hull stands at x = z = 0 on this
+## stage. Read from the position rather than recomputed from the table, for the
+## reason `_figure_at` exists at all.
+var _figure_ship_xz := Vector2.ZERO
+
+## The station table of the hull this rig BUILT, or null when the plan has no
+## hull. The authority for the vessel's plan outline — see `FIGURE_OFF_SHIP_MAX`.
+var _hull_stations: HullStations = null
+
 ## Renderer counters for the fixture currently on the stage. A MeshInstance3D is
 ## NOT a draw call — these come off RenderingServer's own per-frame counters,
 ## sampled after frame_post_draw so the frame they describe is the frame that was
@@ -517,6 +722,7 @@ func _capture_plan(path: String, stem: String) -> void:
 	_t.check("%s: plan has entities" % stem, plan.entity_count() > 0)
 
 	_figure = null
+	_hull_stations = null
 	_stage = Node3D.new()
 	add_child(_stage)
 	_light_the_stage()
@@ -535,10 +741,15 @@ func _capture_plan(path: String, stem: String) -> void:
 			var boat: Node3D = VesselSpawn.instantiate(plan.hull_id, {}, "")
 			if _t.check("%s: hull %s instantiates" % [stem, plan.hull_id], boat != null):
 				_stage.add_child(boat)
+				## HOLD THE SUBJECT STILL — see "THE SUBJECT WAS NEVER HELD STILL
+				## BY ITS `freeze`" at the top of this file. `freeze = true` is not
+				## what was holding this hull, and `process_mode` below is not
+				## interchangeable with this call: one takes the body out of the
+				## space, the other stops the LOD from ever running.
+				CaptureSubject.hold_still(boat)
 				boat.position = Vector3(0.0, -deck_y, 0.0)
-				if boat is PhysicsBody3D:
-					(boat as PhysicsBody3D).freeze = true
 				boat.process_mode = Node.PROCESS_MODE_DISABLED
+				_hull_stations = boat.get("hull_stations") as HullStations
 				_check_hull_restatement(plan, stem, boat)
 
 	_add_scale_figure(offset, stem)
@@ -1127,6 +1338,71 @@ func _check_figure_stands(plan: StructurePlan, stem: String) -> void:
 	print("  [stands] %s  spot %v  %d collider boxes  %.1f ms" % [
 		stem, _figure_at, colliders.size(), float(Time.get_ticks_usec() - started) / 1000.0,
 	])
+	_check_figure_on_the_ship(stem)
+
+
+## The figure is over the hull — see `FIGURE_OFF_SHIP_MAX` for where the outline
+## comes from and what the bound excludes.
+##
+## Two overhangs, because a spot leaves the ship in two directions and only one of
+## them is about beam. TRANSVERSE is |x| against the hull's half-breadth at this
+## station. LONGITUDINAL is how far the spot is forward of the stem or aft of the
+## transom, and without it the transverse test has a hole big enough to walk
+## through: the loft's forward section collapses to zero half-beam AT the stem, so
+## a figure standing on the centreline in open water fifty metres ahead of the bow
+## would be compared against a half-breadth of ~0 with |x| = 0 and pass.
+func _check_figure_on_the_ship(stem: String) -> void:
+	if _hull_stations == null or _hull_stations.stations.is_empty():
+		print("  [onship] %s: SKIPPED — this plan builds no hull, so there is no"
+			% stem + " outline to be inside")
+		return
+	var x := _figure_ship_xz.x
+	var z := _figure_ship_xz.y
+	var first := float(_hull_stations.stations[0]["z"])
+	var last := float(_hull_stations.stations[_hull_stations.stations.size() - 1]["z"])
+	var long_over := maxf(first - z, z - last)
+	var half_breadth := _hull_half_breadth_at(z)
+	var beam_over := absf(x) - half_breadth
+	var worst := maxf(beam_over, long_over)
+	_t.check(
+		(
+			"%s: the figure stands ON the ship (ship-local x=%+.3f z=%+.3f, hull"
+			+ " half-breadth %.3f m at that station, %+.3f m outboard, %+.3f m past"
+			+ " the ends, allowed %.2f)"
+		) % [stem, x, z, half_breadth, beam_over, long_over, FIGURE_OFF_SHIP_MAX],
+		worst <= FIGURE_OFF_SHIP_MAX,
+	)
+	print("  [onship] %s  ship-local (%+.3f, %+.3f)  half-breadth %.3f  outboard %+.3f  ends %+.3f"
+		% [stem, x, z, half_breadth, beam_over, long_over])
+
+
+## The hull's widest plan half-breadth at ship-local Z.
+##
+## Interpolated PER LEVEL between the two bracketing stations and then maximised,
+## which is the loft's own surface: `MeshBuilder.lofted_hull_shell` joins level j
+## of station i to level j of station i+1, so the silhouette between two stations
+## is the linear blend of their sections and not either one of them. Sampling a
+## single height instead would read the deck edge and miss the rubbing strake,
+## which is the 0.150 m that makes the bound argue.
+func _hull_half_breadth_at(z: float) -> float:
+	var list: Array = _hull_stations.stations
+	var count := list.size()
+	if count == 1:
+		return _widest_level(list[0]["section"] as Array, list[0]["section"] as Array, 0.0)
+	var i := 0
+	while i < count - 2 and float(list[i + 1]["z"]) < z:
+		i += 1
+	var z0 := float(list[i]["z"])
+	var z1 := float(list[i + 1]["z"])
+	var t := clampf((z - z0) / maxf(z1 - z0, 1e-6), 0.0, 1.0)
+	return _widest_level(list[i]["section"] as Array, list[i + 1]["section"] as Array, t)
+
+
+func _widest_level(a: Array, b: Array, t: float) -> float:
+	var best := 0.0
+	for j in range(mini(a.size(), b.size())):
+		best = maxf(best, lerpf((a[j] as Vector2).y, (b[j] as Vector2).y, t))
+	return best
 
 
 ## The collider a point is inside, or null. Yaw-correct, for `_guarded`'s reason.
@@ -1249,6 +1525,7 @@ func _add_scale_figure(offset: Vector3, stem: String) -> void:
 	var spot: Variant = _figure_spot(stem)
 	_figure_at = (spot if spot != null else FIGURE_SPOT_DEFAULT) as Vector3
 	figure.position = offset + _figure_at
+	_figure_ship_xz = Vector2(figure.position.x, figure.position.z)
 	_stage.add_child(figure)
 	_figure = figure
 	_t.check(
