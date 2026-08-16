@@ -3134,6 +3134,48 @@ change to risk.
 Named, not fixed: `hull_sheer_test._check_strake_is_painted:330` has a bare
 `if s.strake_level < 0: return` that contributes zero checks and reports success (§4).
 
+### CLOSED 2026-08-16 — a licence no player-built ship could ever hold
+
+`PlanOutfit.has_cabin` was `return false` for every plan, so `passenger_vessel/cabin` was
+unreachable by anything a player could draw. The header defended the refusal as "honest
+rather than a wrong yes"; **the argument does not survive** — it conflates *no primitive
+DECLARES enclosure* with *enclosure is not MEASURABLE*. It is measured now: a pocket of
+air the sky cannot reach, ≥1.8 m tall, ≥1.2 m² of floor, **with a door into it**.
+
+The instructive failure is in how it was built. The first implementation looked for a
+horizontal ceiling plane and **reported false on every deckhouse in the repo** — a
+`deck_tile` at fall 2 drops 0.25 m across its run, so no plane is wholly solid. Requiring
+one was the deleted room primitive's shed assumption wearing a new hat. The column flood
+assumes nothing about shape. Cross-check rather than calibration: 10 of 18 fixtures report
+a cabin, and it agrees with all five deckhouses that `plan_interior_test` marches a real
+capsule through **without being told**.
+
+Pins were **strengthened, not weakened**: `has_cabin(null)` stays pinned false and a new
+positive pin sits beside it, so the null pin cannot pass by being hardcoded again. The
+one-sided rule set went from one member to **empty**. Verified independently before commit
+— 66 / 93 / 137 / 65 / 225, and the `return false` mutation reddens the new positive pin.
+
+**The brick path is worse than the old header said, and its citation was false.** Eight
+`block` bricks in a line report a cabin; **one `block_door` alone on a bare deck reports a
+cabin**, and the licence panel reads "required (current: true)". The header claimed
+`plan_compliance_test` pinned that rule — it does not, and **no test in this repo asserts
+anything about the brick reading.** Now an open wave.
+
+### OPEN 2026-08-16 — the hulls improved and the superstructures did not
+
+The critic frames now show boats carrying sheds. The ferry saloon is a constant-height
+slab the full length of the deck, roofing ~85% of it — **there is nowhere to walk**, which
+is a measurable property (`plan_interior_test`'s capsule) rather than a matter of taste. A
+**thin spar runs forward past the yacht's stem into open air**, present in two views so it
+is geometry, found by opening a frame a previous wave admitted it had not opened. A barge
+deck plate cantilevers past the bow — pre-existing, not a regression.
+
+**Instrument warning attached to that milestone:** `vessel_render_capture` places a 1.8 m
+scale figure and **never counts its pixels**; on all four `critic_ferry` frames the figure
+is hidden under the saloon roof, so those frames have **no absolute scale** — CONVENTIONS
+§3a's exact failure, in the rig every other rig was copied from. Any proportion judgement
+made on them, including the orchestrator's, is unanchored until that is fixed.
+
 ### Standing, not a task
 
 Every model edit returns a render and the orchestrator looks at it. No metric for appearance —
