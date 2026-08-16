@@ -3465,6 +3465,53 @@ Note it may not be a grid bug: a catamaran's bridge deck spans two hulls, so a s
 is right for a monohull may be simply wrong for it. The design intent must be read from the
 hull's own data before either producer is called the wrong one.
 
+### CLOSED 2026-08-16 — the catamaran's grid is right, its loft is wrong, and one field carried two properties
+
+**The orchestrator's framing was wrong and a render refuted it.** Opened as "the builder is
+offered cells over open water" where a wall "stands on nothing". A player *can* place a piece
+there — driven through the real app with a real mouse event, three pieces placed,
+`off_hull_entities` refuses **0 of 3**, the baker emits 3 collider boxes — but it **does not
+stand in the sea**: the catamaran draws its bridge deck as a full rectangle matching the grid
+exactly, so every offered cell has drawn deck under it. What the frame shows is a
+**cantilever**, 3.3 m of air under the plate's forward corners.
+
+The existing fence, `PlanOutfit.on_hull_point`, is derived from `DeckGrid` — the grid checking
+itself, structurally unable to see this.
+
+**Measured independently: the catamaran is the only offender**, not merely the worst — 0.000 m
+on every cell of every row of the other eight hulls, against **+6.639 m** at its stem.
+
+**The loft is the wrong producer, and it is wrong in both directions:** at the stem the
+aggregate `hull_stations` claims hull where there is an 11.9 m tunnel of open air, and claims
+water where a demihull bow is. **It describes no surface the vessel draws or collides** — the
+visual, the collision, both buoyancy components and the hydrodynamics all read
+`make_demihull_stations()`.
+
+**Why it cannot simply be reshaped is the finding:** `HullStations` is a single-body strip
+model — one `half_beam` per level, symmetric about x=0 — and **cannot express two demihulls
+and a bridge deck**. One field carries the hydrostatic model *and* the geometric outline, and
+eight monohulls hid it because there the two coincide. Draft calibration (1.5%) and hull
+pricing both run through that lattice. **Owner's decision, stated with costs, not taken.**
+
+The blind mutation is the argument for the check's design: with a real defect present, reading
+the outline from the grid's own rectangle instead of the drawn ring goes **green on all nine
+hulls**.
+
+### OPEN 2026-08-16 — a builder is offered less than a walker is given
+
+Measured through the **physics server**, not read from source: `WalkDeckCollider` is
+**10.000 × 0.140 × 28.000** on hull_28x10 and **32.000 × 0.140 × 150.000** on hull_150x32 — a
+**rectangle on every hull**, while the deck the hull draws is lofted and pointed. A downward
+ray on the `boat_walk` mask finds floor at (4.750, −13.860) and (15.200, −74.250), both well
+outside the drawn plate. `_walk_hull_box_size`'s comment claims it *"matches the gray hull
+shell"*; the shell is lofted and the box is not — the fourth stale load-bearing comment found
+in two days.
+
+If a player can reach it, this is **worse than the catamaran cantilever**, which at least had a
+drawn deck: it is walking on **invisible floor over open sea**, on all eight pointed hulls. The
+prior measurement is a ray query and proves only that the collider exists — whether a
+`CharacterBody3D` can get there is the load-bearing unknown.
+
 ### Standing, not a task
 
 Every model edit returns a render and the orchestrator looks at it. No metric for appearance —
