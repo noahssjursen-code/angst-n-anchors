@@ -563,6 +563,56 @@ missing and it wasn't" is the reusable part.
    line without putting plating above `deck_y`, and that is still the bulwark cap's
    job (`StructurePlan`), for the reasons the sheer note gives.
 
+## COMPUTED AND NEVER SHOWN — the class, and the check that now holds it (2026-08-16)
+
+**Nine values the game computed for a player and never showed**, surveyed by the HUD
+wave and re-verified one by one by the next. This is the same defect as the piece kit
+that was never wired, the apron props nothing draws, the fifteen catalogue fittings
+that drew nothing and `PlanOutfit`'s warnings — **and every instance until now was
+found by a human grepping.**
+
+Re-verification changed three of the nine, which is why it was demanded:
+- **`capabilities.max_stack_y` was DISPROVED, and the class inverted.** `capabilities`
+  is a metric namespace addressed **by data** from `registrations/catalog.json`, so a
+  key no rule names is inventory, not rot (14 of 17 are unaddressed). What had no check
+  is the **other direction** — a rule naming a key nothing publishes reads `0` forever.
+- `TOO CLOSE TO SHORE` **is** announced, by a different string, latched — but only in
+  the moving branch.
+- `errors[]` **does** reach players, in both brick editors; only `shipwright_npc`
+  collapses the array into one sentence.
+
+**Four were dead wires and were deleted**, because the honest fix for a wire nothing
+reads is to remove it: `player.current_port_id` (one hit repo-wide — its own
+declaration); `ShipState.hull_health`/`fuel` and their signals plus the same two dead
+fields on `ShipData` (`GameState` assigned the *record*, not this state, and
+`debug_draw` drew both as "not implemented" regardless); `instruments.bridge_watch`,
+published 20×/s to nobody; and **`ContractState` entirely** — `FreightService` rebuilt
+`active_contracts()` into it on every change while `debug_draw` connected to a signal
+the class never declared, **dropped in silence by `_connect_if`'s `has_signal` guard**.
+
+**`tests/state_projection_reach_test.gd` now holds the class.** It derives the
+projection list from `GameState`'s own declarations, so a new sub-state is surveyed
+without editing the test; **an assignment is not a read** (all three worst offenders
+were being written constantly); it resolves every `_connect_if` signal name against the
+class; and it prints the `file:line` it accepted for each member so the claim is
+auditable by eye. Its excuse list is empty and policed both ways —
+`ship_hud_readout_test` fell 264 → 262 when it emptied, which is the self-policing
+working, not coverage lost.
+
+**It found its own blind spot**: with the only "reader" a trailing comment it PASSED,
+accepting a note about intent as evidence — its own defect one level up. Comment
+stripping added.
+
+**Still live and outside its reach:** `BoatBody.fuel_depleted` and `fuel_changed` have
+zero subscribers, so **running dry is silent — the engine stalls with no notice of any
+kind**. A wave is on it, and on whether the check can be widened to hold every signal.
+
+**Left as the owner's, not fixed:** a player sails a gale with only a KT number
+(`weather_label`'s six authored strings reach the F3 panel alone), and a trawl streamed
+below one knot catches nothing and says nothing.
+
+---
+
 ## BASELINE — gate `20260815-081032-23858`, **111 units: 102 PASS, 7 FAIL, 1 NOTRUN, 1 SKIP**
 
 **Measured over a QUIET tree — no wave editing — which is the only kind of full run
