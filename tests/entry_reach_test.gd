@@ -224,13 +224,32 @@ const KNOWN_UNREACHABLE := {
 		"arg": "",
 	},
 	"res://scenes/systems/lighthouse_building.tscn": {
-		"reason": "a lighthouse scene. The port placer builds its own lighthouse"
-			+ " geometry; nothing loads this file.",
+		## CORRECTED 2026-08-17. This read "The port placer builds its own
+		## lighthouse geometry", and that is FALSE — measured, by going to the
+		## line. `coastal_port_placer.gd:598` assigns a BOOLEAN,
+		## `port.has_lighthouse`, onto the PortDefinition. It builds nothing.
+		## `port_feature_promise_test` now holds the checked version of this
+		## sentence, over 142 ports at nine sizes and four region kinds.
+		"reason": "a lighthouse scene, and a finished one — a 26 m tapered tower"
+			+ " with gallery ring, lantern drum and a rotating volumetric beam."
+			+ " NO LIGHTHOUSE GEOMETRY IS BUILT ANYWHERE IN THE WORLD:"
+			+ " `coastal_port_placer.gd:598` sets the boolean"
+			+ " `port.has_lighthouse` and the port stamp draws nothing for it,"
+			+ " while `LighthouseBuilding` is constructed in exactly one file"
+			+ " in the project, `scripts/world/world_lighting_showcase.gd`.",
 		"claim": "no_code_referrer",
 		"arg": "",
 	},
 	"res://scenes/systems/fog_horn_building.tscn": {
-		"reason": "a fog horn scene. Same shape as the lighthouse.",
+		## Same correction as the lighthouse above, and worse by one degree:
+		## `FogHornBuilding` is constructed in NO file at all, not even a
+		## showcase, and `fog_horn_1.wav` is 2.3 MB shipped with no code path
+		## that plays it.
+		"reason": "a fog horn scene — a modelled station with a flared trumpet"
+			+ " and a `FogHorn` that samples fog at five points. Same shape as"
+			+ " the lighthouse: `coastal_port_placer.gd:599` sets the boolean"
+			+ " `port.has_fog_horn`, the port stamp draws nothing for it, and"
+			+ " `FogHornBuilding` is constructed nowhere in the project.",
 		"claim": "no_code_referrer",
 		"arg": "",
 	},
@@ -241,13 +260,33 @@ const KNOWN_UNREACHABLE := {
 		"arg": "",
 	},
 	"res://scenes/shared/trommel.tscn": {
-		"reason": "a trommel (screening drum) scene from an earlier direction.",
+		## CORRECTED 2026-08-17. This read "a trommel (screening drum) scene
+		## from an earlier direction", which sends the next reader looking for
+		## a retired subsystem. There is none: the file's only node is named
+		## `FishingSystem` and carries `res://scripts/ship/fishing_system.gd`,
+		## a class the game builds on every fishing vessel. What is stale is
+		## the SCENE, not the direction.
+		"reason": "a one-node scene whose node is `FishingSystem`, scripted by"
+			+ " `scripts/ship/fishing_system.gd` — the LIVE trawl winch. The"
+			+ " class is current: `DeckFitout._mount_fishing` and"
+			+ " `TrawlSystem` both construct one in code, by class name, for"
+			+ " every fishing vessel. The scene is the redundant half.",
 		"claim": "no_code_referrer",
 		"arg": "",
 	},
 	"res://scenes/ui/loading_screen.tscn": {
-		"reason": "A LOADING SCREEN NOTHING SHOWS. The world loads with no cover"
-			+ " because no code names this file.",
+		## CORRECTED 2026-08-17. This read "The world loads with no cover",
+		## which is FALSE and is the opposite of the truth: the world loads
+		## behind a branded full-screen overlay on every entry AND every exit.
+		## The scene is redundant, not missing — its own script says so on its
+		## line 3, and the earlier reason would have sent a reader to build a
+		## loading screen that already exists.
+		"reason": "A LOADING SCREEN NOTHING SHOWS, and the cover it would have"
+			+ " provided IS ALREADY THERE. The `LoadingGate` autoload"
+			+ " (`scripts/ui/loading_gate.gd`) builds a full-screen branded"
+			+ " overlay at layer 80, and `WorldBootstrap._go_via_loading_gate`"
+			+ " raises it for both `scenes/world.tscn` and the return to"
+			+ " `scenes/ui/main_menu.tscn`. This file is the redundant half.",
 		"claim": "no_code_referrer",
 		"arg": "",
 	},
