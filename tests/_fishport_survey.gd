@@ -9,9 +9,29 @@ extends SceneTree
 ## as "works" — so this counts, over real generated worlds, how many ports a
 ## fishing captain may actually choose.
 ##
-## `PortFishingService.is_eligible` is the same predicate `PortExpander` uses to
-## set `has_fish_landing`, so this measures the production answer without
-## expanding 35 ports per seed.
+## ⚠ THE PARAGRAPH THAT USED TO BE HERE WAS FALSE, AND ITS NUMBER WENT INTO
+## `CompanyContracts.DEFAULT_STARTER`'S HEADER — corrected 2026-08-17.
+##
+## It said: *"`PortFishingService.is_eligible` is the same predicate `PortExpander`
+## uses to set `has_fish_landing`, so this measures the production answer without
+## expanding 35 ports per seed."* It is the predicate `PortExpander` uses to
+## **start**, and `expand_uncached` then OVERWRITES the flag with
+## `_has_realized_fish_landing(layout_graph)` because the size ladder can trim the
+## fish berth out of a small harbour. This file counts ports that are ALLOWED a fish
+## landing. It has never counted ports that HAVE one, and the gap is 137 against 85
+## over six seeds.
+##
+## Two further reasons its numbers are not the production answer, both measured:
+## `is_eligible` samples `FishingField`, whose `open_water` term reads the GLOBAL
+## `LandField` — which this file never bakes, so it asks the most permissive form of
+## the question; and it is 35 ports of one snapshot per seed with no port ever
+## expanded, so nothing here can see a berth plan at all.
+##
+## KEPT, NOT DELETED, because the shape of the question (how many home ports may a
+## fishing captain choose) is still the right one and this is the record of how it
+## was first answered wrongly. **Use `tests/_fish_landing_realization_probe.gd`,
+## which measures both producers side by side, and `tests/_home_port_confirm_probe.gd`,
+## which drives the actual CONFIRM button.**
 
 const GENERATOR := preload("res://scripts/world/world_layout_generator.gd")
 const PLACER := preload("res://scripts/world/coastal_port_placer.gd")

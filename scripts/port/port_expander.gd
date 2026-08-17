@@ -48,10 +48,94 @@ static func _restamp_generation(definition: PortDefinition, site: String) -> boo
 	return true
 
 
+## ONE DERIVATION OF "THIS PORT LANDS FISH" (REALITY §3b) — 2026-08-17.
+##
+## `expand_uncached` below deliberately overwrites `has_fish_landing` with
+## `_has_realized_fish_landing(layout_graph)`, commented *"prevents the chart/NPC
+## from advertising a fish landing that the berth plan failed to create"*. This
+## function used to print raw `PortFishingService.is_eligible` instead — and it is
+## the ONLY producer the home-port pick panel ever sees, so the correction sat on
+## the path no player reads. Measured over six world seeds, 210 ports, with the
+## land field baked as the live world bakes it: 137 ports advertised a fish
+## landing and 85 built one. All 52 divergences were size 0, and all 52 for the
+## same reason (see `PortFishingService.apply_to_profile`).
+##
+## It was not cosmetic: `map_overlay.gd:469` gates the home-port CONFIRM button on
+## this flag plus its feature string, and `CompanyContracts.DEFAULT_STARTER` is
+## "fishing", so a fishing captain was allowed to choose a harbour with no fish
+## landing in it.
+##
+## The fix asks the producer that KNOWS instead of re-deriving. A cheap local
+## predicate was available and was rejected on purpose: every divergence today is
+## the size-0 import ladder, so `import_slot_count_for_size(size) >= 1` would have
+## agreed with the berth plan on all 210 ports measured — and it would be a THIRD
+## copy of the fact, tuned to agree on the population it was tuned on, silently
+## wrong the first time a berth plan drops a fishing quay for any other reason
+## (`_place_quays` returns nothing on a degenerate dock face; the basin clamps arm
+## length; `_cap_quay_families` can drop a family). That is REALITY §1's proxy
+## trap. The only honest derivation of realized infrastructure is the realized
+## layout graph.
+##
+## COST, MEASURED, because "too expensive for the picker" is the reason the second
+## derivation existed and had never been checked: `chart_summary` was 0.24 ms per
+## port and a full `expand` is 16.8 ms, so a 35-port preview pays ~590 ms once —
+## against the 6–10 s the same call already spends generating the world layout.
+## `PortDataCache` keys on the port + seed + layout checksum, so within the menu
+## these are the same expansions `ChartHarbourPlan.for_port` already pays for on
+## this very screen when it draws a harbour silhouette. They are NOT reused by the
+## world afterwards — `world.gd:76` clears the cache at the top of `_rebuild`, so
+## do not repeat that half of the argument; the picker pays this once and the world
+## pays again.
+##
+## PASS THE LAYOUT — and here is the honest strength of that instruction, because
+## dropping it was mutation M2 of this change and IT PASSED FIRST TIME. Without a
+## layout the expansion traces a synthetic coast, and `tests/_layout_argument_probe.gd`
+## expanded 70 ports of two worlds both ways: `basin.max_arm_m` differs at 70 of 70
+## (443.9 m against `inf` at `port-home`) and `basin.seaward_clear_m` at 1 of 70, so
+## the layout demonstrably reaches this code — but `has_fish_landing`, the quay
+## families, the quay lengths, the traced coast and the trade slots came out
+## IDENTICAL at all 70. The soft arm cap shortens piers; on this population it never
+## starves one out of existence.
+##
+## So passing it is correct by construction and NOT verified to change a verdict:
+## it makes this derivation take the same inputs the world's `expand` takes, and it
+## keeps the two on one `PortDataCache` entry instead of two. Do not read the
+## measurement as licence to drop it — read it as "no check in this repo would
+## catch you dropping it", which is a different and worse thing.
+static func realized_fish_landing(
+		definition: PortDefinition,
+		world_seed: int,
+		world_layout: WorldLayout = null,
+) -> bool:
+	if definition == null:
+		return false
+	## `expand_uncached` RESOLVES the definition in place — it clamps `size` and
+	## writes back `site_max_size`. `chart_summary` promises its caller an
+	## untouched definition (`port_fishing_service_test` asserts the recorded
+	## `port_definition` is byte-identical to the placed one), so both fields are
+	## restored. The cache key is taken from the definition AS PASSED, so the
+	## world's own later `expand` of the same port still hits this entry.
+	var size := definition.size
+	var site_max_size := definition.site_max_size
+	var data := expand(definition, world_seed, world_layout)
+	definition.size = size
+	definition.site_max_size = site_max_size
+	return data != null and data.has_fish_landing
+
+
 ## Chart / menu summary without coast tracing or PortLayoutGraph generation.
-## Same trade + size rules as `expand`, cheap enough for dozens of ports.
-static func chart_summary(definition: PortDefinition, world_seed: int) -> Dictionary:
+## Same trade + size rules as `expand`, cheap enough for dozens of ports —
+## EXCEPT for `has_fish_landing`, which is realized infrastructure and cannot be
+## derived from anything cheaper than the berth plan. See above.
+static func chart_summary(
+		definition: PortDefinition,
+		world_seed: int,
+		world_layout: WorldLayout = null,
+) -> Dictionary:
 	_restamp_generation(definition, "chart_summary")
+	## Taken from the untouched definition, before the size clamping below, so the
+	## expansion sees exactly what the world's `expand` will see.
+	var has_fish_landing := realized_fish_landing(definition, world_seed, world_layout)
 	var site_max := clampi(
 		definition.site_max_size if definition.site_max_size > 0 else PortSizing.MAX_SIZE,
 		PortSizing.MIN_SIZE,
@@ -72,7 +156,12 @@ static func chart_summary(definition: PortDefinition, world_seed: int) -> Dictio
 		size = site_max
 		definition.size = size
 		PortTradeProfile.resync_for_size(trade, size)
-	var has_fish_landing := PortFishingService.is_eligible(definition, world_seed)
+	## Gated on the REALIZED flag, not on eligibility: a port whose berth plan has
+	## no fish landing does not land fish, and the world's own trade profile
+	## agrees — the size ladder trimmed `fresh_groundfish` back out of it. Keeping
+	## eligibility here would have left the panel printing
+	## `IMPORTS  Fresh groundfish` one line above a FACILITIES line that no longer
+	## claims a fish landing.
 	if has_fish_landing:
 		PortFishingService.apply_to_profile(trade)
 	definition.size = def_size
@@ -203,7 +292,11 @@ static func expand_uncached(
 	)
 	## Public facility flags describe realized infrastructure, never eligibility.
 	## This prevents the chart/NPC from advertising a fish landing that the berth
-	## plan failed to create.
+	## plan failed to create — and since 2026-08-17 it is the ONLY derivation of
+	## that fact: `chart_summary` reads this value back through
+	## `realized_fish_landing` rather than re-deriving it from eligibility, which
+	## is what let the pick panel promise 52 fish landings the world never built.
+	## Do not add a second corrected copy anywhere; ask this one.
 	data.has_fish_landing = _has_realized_fish_landing(data.layout_graph)
 	data.layout_graph.initial_attributes["has_fish_landing"] = data.has_fish_landing
 	## Basin may record a water hint; live size stays whatever Expander clamped.

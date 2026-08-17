@@ -9,7 +9,7 @@ extends Node
 ##
 ## ── WHY THIS FILE EXISTS ────────────────────────────────────────────────────
 ##
-## `port_expander.gd:84,86` appends **"Lighthouse"** and **"Fog Horn"** to a
+## `port_expander.gd:170,172` appends **"Lighthouse"** and **"Fog Horn"** to a
 ## port's `features`, and `map_overlay.gd:441` prints them to the player in the
 ## home-port pick panel: `FACILITIES  Lighthouse, Fog Horn, Fish Landing`.
 ## **Nothing in the world builds either one.** A player picks a harbour because
@@ -48,8 +48,11 @@ extends Node
 ## a port when that port's stamped tree holds a `Node3D` whose name matches the
 ## facility's and which draws at least one `MeshInstance3D`. It reads no flag, no
 ## `features` array and no layout-graph attribute. The two sides can and do
-## disagree — see the Fish Landing register entry, where the eligibility the
-## panel prints and the berth plan the world builds are not the same question.
+## disagree: **Fish Landing** was in the register below until 2026-08-17, because
+## the panel printed ELIGIBILITY while the world built from the BERTH PLAN, and
+## those are not the same question. That entry is struck off — the two producers
+## now share one derivation (`PortExpander.realized_fish_landing`) — and this file
+## is what would catch the divergence coming back.
 ##
 ## Name matching is deliberately LOOSE (lowercase, alphanumerics only,
 ## substring): `"Fish Landing"` is delivered by `FishLandingPlant`. Loose is the
@@ -82,7 +85,7 @@ extends Node
 ##    DECLARED, deterministic set of witnesses — per facility AND per population,
 ##    the smallest and largest size that advertises it, plus the divergence
 ##    witness where one exists — so `BROKEN` below is a LOWER BOUND. A facility
-##    broken only at ports outside the witness set is not seen. Nine ports are
+##    broken only at ports outside the witness set is not seen. TEN ports are
 ##    stamped today and they are printed by id on every run.
 ## 2. **Geometry outside the port plot is not walked.** A lighthouse placed on a
 ##    headland by `world.gd` rather than inside `PortPlot` would read as
@@ -205,6 +208,11 @@ const PICK_MODE_CALLERS := [
 ## A claim kind with no verifier is a claim nobody checks. The set is closed and
 ## an entry naming something outside it is a hard FAIL, not a silent skip — the
 ## rule `entry_reach_test` uses, for the same reason.
+## `advertised_before_realized` HAS NO ENTRY TODAY — the fish landing was struck
+## off on 2026-08-17 — and it is kept rather than deleted because this file's rule
+## is that an entry naming a kind outside this set is a hard FAIL. Deleting the
+## kind and its verifier would leave the next facility of that shape with nowhere
+## to be registered and no worked example of the four checks it owes.
 const CLAIM_KINDS := [
 	"builder_exists_unplaced",
 	"advertised_before_realized",
@@ -245,7 +253,7 @@ const DELIVERY_ASSERTING_PHRASES := [
 ## destroy the only record of the gap.
 const UNBUILT_PROMISES := {
 	"Lighthouse": {
-		"reason": "`port_expander.gd:84` appends this whenever the port's"
+		"reason": "`port_expander.gd:170` appends this whenever the port's"
 			+ " `has_lighthouse` is set, which `coastal_port_placer.gd:598`"
 			+ " sets for the home port and every fifth site. The scene"
 			+ " `scenes/systems/lighthouse_building.tscn` and the class"
@@ -258,7 +266,7 @@ const UNBUILT_PROMISES := {
 		"arg": "LighthouseBuilding",
 	},
 	"Fog Horn": {
-		"reason": "`port_expander.gd:86` appends this whenever `has_fog_horn`"
+		"reason": "`port_expander.gd:172` appends this whenever `has_fog_horn`"
 			+ " is set, which `coastal_port_placer.gd:599` sets for the home"
 			+ " port and every seventh site — the commonest promise in the"
 			+ " panel. `FogHornBuilding` is a modelled station with a flared"
@@ -269,22 +277,24 @@ const UNBUILT_PROMISES := {
 		"claim": "builder_exists_unplaced",
 		"arg": "FogHornBuilding",
 	},
-	"Fish Landing": {
-		"reason": "THIS ONE EXISTS — AT SOME PORTS, AND IS PROMISED AT MORE."
-			+ " `expand_uncached` deliberately overwrites `has_fish_landing`"
-			+ " with `_has_realized_fish_landing(layout_graph)`, commented"
-			+ " *\"prevents the chart/NPC from advertising a fish landing that"
-			+ " the berth plan failed to create\"*. `chart_summary` — the ONLY"
-			+ " producer the pick panel ever sees — never does that: it prints"
-			+ " raw `PortFishingService.is_eligible`. So the correction sits on"
-			+ " the path no player reads, and the panel promises a fish landing"
-			+ " at ports whose berth plan has none. Worse,"
-			+ " `map_overlay.gd:469` gates the home-port CONFIRM button on the"
-			+ " same unrealized pair, so a fishing captain is ALLOWED to choose"
-			+ " one of them.",
-		"claim": "advertised_before_realized",
-		"arg": "has_fish_landing",
-	},
+	## ── STRUCK OFF 2026-08-17: "Fish Landing" ──────────────────────────────────
+	##
+	## The promise is kept. `chart_summary` no longer prints raw
+	## `PortFishingService.is_eligible`; it reads the flag back from the realized
+	## berth plan through `PortExpander.realized_fish_landing`, so the panel and the
+	## world now have ONE derivation of the fact (REALITY §3b) and the set equality
+	## below no longer names it. Deleting the entry rather than editing it is the
+	## rule this register is written on: it can only shrink.
+	##
+	## WHAT WAS NOT DONE, AND IS THE OWNER'S: the 52 ports that lost the promise
+	## lost it because they are size 0, where `PortTradeProfile._import_count(0)` is
+	## 0 and the size ladder trims `fresh_groundfish` out of the trade slots before
+	## the berth plan reads them. Whether a hamlet should get a fish landing anyway
+	## is a world-building decision, and building 52 of them to make a panel honest
+	## is the wrong direction. Measured consequence of the honest fix, six seeds and
+	## 210 ports: 85 ports still land fish, never fewer than 11 in a world, so a
+	## fishing captain still has a home port — but `port-home` itself is one of them
+	## in only 3 of the 6 seeds measured.
 }
 
 ## §4f shape 4, under the set equality. Most of this file's checks sit in a loop
@@ -296,10 +306,26 @@ const UNBUILT_PROMISES := {
 ## budget). Re-freeze it in the SAME commit as the checks you add.
 ##
 ## Measured 2026-08-17 against `WORLD_SEEDS`, `SWEEP_SEED` and port generation
-## version 46: 9 advertised-side, coverage and derivation checks, 9 witness-stamp
-## floors, 3 register well-formedness checks, 3 × 4 claim verifications, the set
-## equality, and this budget counting itself.
-const EXPECTED_CHECKS := 35
+## version 46, and enumerated rather than copied off a run — a budget re-frozen to
+## match a number nobody predicted is the guard writing the answer down for you:
+##
+##   9  advertised-side, coverage and derivation checks
+##  10  witness-stamp floors — one per DISTINCT witness port stamped. Twelve
+##      witnesses are chosen (three facilities × two populations × smallest and
+##      largest), of which `sweep-4-0-on` answers for all three facilities and
+##      `sweep-0-0-nat` for two, leaving ten stamps.
+##   3  register well-formedness checks
+##   8  claim verifications — 2 entries × 4
+##   1  the set equality
+##   1  this budget, counting itself
+##  ── 32
+##
+## It was 35 with three register entries and nine stamps. Striking **Fish Landing**
+## on 2026-08-17 removed its four claim checks; its witness set also lost the
+## divergence witness it no longer has, and the two extremes it now contributes
+## (`port-4`, `sweep-1-0-nat`) are ports no other facility nominates, so the stamp
+## count rose by one. 35 − 4 + 1 = 32.
+const EXPECTED_CHECKS := 32
 
 var _t := TestReport.new("port_feature_promise_test")
 var _world: Node3D
@@ -363,6 +389,10 @@ func _collect_advertised() -> void:
 	var sweep := ChartDataSnapshot.new()
 	sweep.world_seed = SWEEP_SEED
 	sweep.preview = true
+	## Population B has no WorldLayout, so its field state must be DECLARED rather
+	## than inherited from whichever seed of population A ran last — see
+	## `_bake_fields`.
+	_bake_fields(null, SWEEP_SEED)
 	for size in range(PortSizing.MAX_SIZE + 1):
 		for region in REGION_KINDS:
 			for forced in [false, true]:
@@ -651,6 +681,7 @@ func _collect_delivered() -> void:
 ## what `world.gd` adds for the home port and what `ProximityLoader` streams in
 ## for every other one.
 func _stamp_and_census(row: Dictionary) -> Dictionary:
+	_bake_fields(row["layout"] as WorldLayout, int(row["seed"]))
 	PortDataCache.clear()
 	var data := PortExpander.expand(
 		row["definition"] as PortDefinition,
@@ -718,6 +749,7 @@ func _world_features(row: Dictionary) -> Array:
 	var key := "%s/%s" % [row["seed"], row["id"]]
 	if _world_feature_cache.has(key):
 		return _world_feature_cache[key] as Array
+	_bake_fields(row["layout"] as WorldLayout, int(row["seed"]))
 	PortDataCache.clear()
 	var built: Array = PortExpander.expand_uncached(
 		row["definition"] as PortDefinition,
@@ -933,6 +965,37 @@ func _check_set_equality() -> void:
 
 
 # ── helpers ───────────────────────────────────────────────────────────────────
+
+## PORT EXPANSION HAS A HIDDEN GLOBAL INPUT, AND UNTIL 2026-08-17 THIS FILE'S TWO
+## SIDES WERE COMPUTED UNDER DIFFERENT VALUES OF IT.
+##
+## `PortFishingService.is_eligible` samples `FishingField`, whose `open_water` term
+## calls `LandField.distance_to_land` — and `LandField` is a static baked from ONE
+## WorldLayout. This unit surveys two seeds plus a layout-free matrix in a single
+## process: `ChartDataSnapshot.for_preview` baked the field for each seed as it
+## went, and then every `expand_uncached` in `_world_features` ran afterwards
+## against whichever seed happened to be last. So the ADVERTISED column came from
+## one world's land and the DELIVERED column from another's.
+##
+## It was not a small effect and it is why this was worth chasing: measured over
+## six seeds and 210 ports (`tests/_fish_landing_realization_probe.gd`), the same
+## ports advertise a fish landing 137 times with their own land field baked, 139
+## with an empty one and **80** with another world's. Before this call existed,
+## this file reported 424242 / `port-home` as a divergence witness — a port that
+## advertises AND builds a fish landing when its own world's land is baked.
+##
+## Both columns now bake the row's own fields first, so a disagreement between them
+## is a disagreement between the two PRODUCERS and not between two worlds.
+func _bake_fields(layout: WorldLayout, world_seed: int) -> void:
+	FishingField.initialize(world_seed)
+	if layout != null:
+		LandField.initialize(layout)
+	else:
+		## Population B has no layout. An EMPTY field is the declared state for it —
+		## `distance_to_land` reads `inf`, so `allows_trawling` permits everything —
+		## rather than leaving it holding population A's last world.
+		LandField.initialize([])
+
 
 func _load_stripped_sources() -> void:
 	for path in _all_scripts("res://scripts"):

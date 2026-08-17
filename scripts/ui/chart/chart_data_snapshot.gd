@@ -93,16 +93,46 @@ static func for_preview(
 		maxi(port_count, 1),
 		PackedStringArray(WorldPortNames.NAMES),
 	)
-	for definition in definitions:
-		## Lightweight trade/size summary — full PortLayoutGenerator is too
-		## expensive for the captain home-port picker (dozens of ports).
-		out.ports.append(PortExpander.chart_summary(definition, seed))
-	out._index_ports()
+	## BAKED BEFORE THE PORT SUMMARIES, AND THAT ORDER IS LOAD-BEARING — 2026-08-17.
+	##
+	## These four lines used to sit after the loop below. `PortFishingService
+	## .is_eligible` samples `FishingField`, whose `open_water` term calls
+	## `LandField.distance_to_land`, and `LandField` is a GLOBAL baked from a
+	## WorldLayout — so summarising ports before baking it asked the fishing
+	## question of whatever world was baked last. Measured over six seeds, 210
+	## ports (`tests/_fish_landing_realization_probe.gd`): baked from this world's
+	## layout, 137 ports advertise a fish landing; with an empty field, 139; with
+	## ANOTHER world's field, **80**. The second regime is a first preview in a
+	## fresh process and the third is every preview after it — a re-rolled seed, or
+	## the menu re-entered after playing — so the FACILITIES line a player read
+	## depended on how many times they had pressed re-roll.
+	##
+	## `world.gd:157` bakes the land field before it expands any port. This now
+	## matches, which is what makes the preview's answer the live world's answer.
 	# These are deterministic field APIs, not world scene construction.
 	LandField.initialize(out.layout)
 	FishingField.initialize(seed)
 	WeatherField.world_seed = seed
 	WeatherFrontField.initialize(seed)
+	for definition in definitions:
+		## Lightweight trade/size summary — full PortLayoutGenerator is too
+		## expensive for the captain home-port picker (dozens of ports) and this
+		## call avoids it for everything EXCEPT `has_fish_landing`, which is
+		## realized infrastructure and has exactly one honest derivation: the berth
+		## plan in the port's layout graph. The layout is handed over so that
+		## expansion takes the same inputs the world's own `expand` takes — measured
+		## as reaching the generator (the basin's arm cap moves at 70 of 70 ports)
+		## but NOT as changing the fish-landing verdict on any of them, so nothing in
+		## the gate would catch this argument going missing. See
+		## `PortExpander.realized_fish_landing`.
+		##
+		## NOT MEASURED: this leaves 35 `PortData` per preview in the static
+		## `PortDataCache`, which nothing clears until `world.gd._rebuild`. A player
+		## who re-rolls the seed twenty times in the menu accumulates twenty worlds'
+		## worth. `ChartHarbourPlan.for_port` already cached the same way, one port at
+		## a time; this makes it every port, every preview.
+		out.ports.append(PortExpander.chart_summary(definition, seed, out.layout))
+	out._index_ports()
 	return out
 
 

@@ -44,6 +44,10 @@ func _check_all(t: TestReport) -> void:
 		20,
 		PackedStringArray(WorldPortNames.NAMES),
 	)
+	## Agreement between two all-false columns is agreement about nothing (REALITY
+	## §4). Counted so the per-port checks above cannot pass vacuously.
+	var world_fish_landings := 0
+	var preview_fish_landings := 0
 	for index in range(live_definitions.size()):
 		var preview_record := (snapshot.ports[index] as Dictionary).get(
 			"port_definition", {},
@@ -54,11 +58,41 @@ func _check_all(t: TestReport) -> void:
 			"preview port %d matches the live placement" % index,
 			preview_record == (live_definitions[index] as PortDefinition).to_dict(),
 		)
-		t.check("preview port %d agrees on fish landing" % index, PortFishingService.is_eligible(
-			PortDefinition.from_dict(preview_record), 90210,
-		) == bool(
-			(snapshot.ports[index] as Dictionary).get("has_fish_landing", false)
-		))
+		## ⚠ THIS CHECK USED TO COMPARE THE PREVIEW AGAINST
+		## `PortFishingService.is_eligible`, AND THAT IS THE DEFECT IT WENT RED ON
+		## (REALITY §3e — when a check reddens as you fix something, ask what it was
+		## passing on). Eligibility is a PRECURSOR: `expand_uncached` overwrites
+		## `has_fish_landing` with `_has_realized_fish_landing(layout_graph)`
+		## because the size ladder can trim the fish berth back out of a small
+		## harbour. Asserting the panel matched eligibility was asserting that the
+		## panel matched the uncorrected producer — 5 of these 20 ports advertised a
+		## fish landing the world does not build, and this unit called that agreement.
+		##
+		## The property is that the picker and the WORLD agree, so the right-hand
+		## side is the world's own expansion of the same placed definition — the
+		## producer `PortPlot` and the harbour master read — and not a re-derivation
+		## of either side.
+		var world_flag := PortExpander.expand(
+			live_definitions[index] as PortDefinition, 90210, snapshot.layout,
+		).has_fish_landing
+		var preview_flag := bool((snapshot.ports[index] as Dictionary).get("has_fish_landing", false))
+		if world_flag:
+			world_fish_landings += 1
+		if preview_flag:
+			preview_fish_landings += 1
+		t.check(
+			"preview port %d agrees with the WORLD on fish landing (preview %s, world %s)"
+			% [index, str(preview_flag), str(world_flag)],
+			preview_flag == world_flag,
+		)
+	t.check(
+		"the 20 previewed ports really split on fish landing (%d of 20 in the world,"
+		% world_fish_landings
+		+ " %d in the preview) — twenty agreeing falses would make every check"
+			% preview_fish_landings
+		+ " above pass while asking nothing",
+		world_fish_landings > 0 and world_fish_landings < live_definitions.size()
+	)
 
 	var base = BaseClass.new()
 	base.prepare(snapshot.layout)

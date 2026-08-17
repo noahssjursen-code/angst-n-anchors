@@ -18,11 +18,29 @@ const STARTER_WAREHOUSE_CAPACITY_UNITS := 24
 ## Changing this changes which BOAT a click-through new player is given AND
 ## which home ports the picker will accept: `MainMenu._starter_terminal_family`
 ## maps the career to a required berth family, and `fishing` requires a fish
-## landing. Measured over five generated worlds (`tests/_fishport_survey.gd`):
-## 115 of 175 ports (65.7%, never fewer than 21 of 35 in a world) offer one, so
-## a fishing captain always has a wide choice — but `port-home` itself was
-## ineligible in 2 of those 5 worlds, so the named home port is sometimes not
-## one of them.
+## landing.
+##
+## ⚠ THE NUMBER THAT USED TO BE WRITTEN HERE WAS MEASURED ON THE WRONG PRODUCER
+## — corrected 2026-08-17. It read *"115 of 175 ports (65.7%, never fewer than 21
+## of 35 in a world) offer one"*, from `tests/_fishport_survey.gd`, whose own
+## header claimed `PortFishingService.is_eligible` "measures the production
+## answer". It does not: eligibility is a PRECURSOR, and `PortExpander
+## .expand_uncached` overwrites `has_fish_landing` with what the berth plan
+## actually realized. 65.7% was the count of ports that were ALLOWED a fish
+## landing, not the count that have one.
+##
+## Re-measured through the realized producer (`tests/_fish_landing_realization_probe.gd`,
+## six world seeds, 210 ports, land field baked as the live world bakes it):
+## **85 of 210 ports (40.5%) have a fish landing, never fewer than 11 of 35 in a
+## world.** Driven end to end through the real pick panel
+## (`tests/_home_port_confirm_probe.gd`), a fishing captain finds CONFIRM enabled
+## at 16 of 35 harbours in seed 424242 and 11 of 35 in seed 20260817 — so the
+## default career is still playable, on a third of the map rather than two thirds.
+##
+## `port-home` is one of them in 3 of the 6 seeds measured: it is not eligible at
+## all in 2, and in seed 20260817 it is eligible and builds nothing. Every port
+## above size 0 that is eligible does realize one; every size-0 port that is
+## eligible does not (`PortFishingService.apply_to_profile` records why).
 const DEFAULT_STARTER := "fishing"
 
 const STARTER_VESSELS := {

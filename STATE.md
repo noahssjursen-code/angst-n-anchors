@@ -4074,6 +4074,52 @@ the trommel reason calls it a screening drum from an earlier direction (it wraps
 **A check nobody has:** nothing asserts that a `features` string the map overlay prints corresponds to
 anything in the world. That is this whole wave's class, and it is not lighthouse-specific.
 
+### CLOSED 2026-08-17 — the pick panel promised a fish landing 40 ports did not have
+
+**The correction already existed and was on the path no player reads.** `expand_uncached` overwrote
+the flag with "did the berth plan actually build one"; `chart_summary`, **the only producer the pick
+panel sees**, printed raw eligibility. §3b with the corrected derivation on the dead path.
+
+**Consequence measured through the real CONFIRM button before the fix was believed:** advertised
+137 (65.2%) → realized 85 (40.5%) over six seeds × 35 ports, **never fewer than 11 per world.** A
+fishing company can still be founded, on about a third of the map instead of two thirds. **The gate
+was not loosened.** `DEFAULT_STARTER`'s own header justified "fishing" with 65.7% measured from the
+**uncorrected** producer — corrected too.
+
+**The deeper defect, found by an instrument contradiction:** `is_eligible` samples a field that reads
+the **global `LandField`**, so it is not a pure function of (definition, seed), and `for_preview`
+summarised ports *before* baking it. The same 35 ports advertised **137 / 139 / 80** depending on
+whose land was baked — **the FACILITIES line depended on how many times you pressed re-roll.** That
+contamination is also why HEAD's own unit named `port-home` a divergence witness; with its own land
+baked, that port advertises *and* builds one.
+
+**A cheap predicate was rejected on principle:** a size-based test would have agreed on all 210 ports
+today and been a **third** copy tuned to the population that tuned it. Cost measured rather than
+assumed — 0.24 ms → 16.8 ms per port, ~590 ms per preview, on a call already spending 6–10 s.
+
+**The owner's alternative, measured and not built:** all 52 divergences are size 0, and
+`PortFishingService`'s comment claiming the advertised berth cannot be trimmed **is false at size 0** —
+the size resync takes `_import_count(0) == 0` head slots and drops the fish family before the berth
+plan reads it. A blind mutation raising that to 1 lifts realized **91 → 120 of 142** with the panel
+agreeing automatically. It hands *every* size-0 port an import slot, so the blast radius is unmeasured.
+
+**A test was rewritten rather than silenced:** `chart_rewrite_integration_test` went red because it
+was **asserting the defect** — that the preview matched the uncorrected producer.
+
+Register struck: the unit goes **PASS (35) → PASS (32)**, Fish Landing 91/91, and un-striking it reds
+4/36. NPC path measured and already correct — the harbour master reads the same `PortData` as the
+plot; only the pick panel was wrong.
+
+**M2 passed first time and is recorded as a finding:** dropping the layout argument changes
+`basin.max_arm_m` at 70/70 ports and changes **no verdict** — no check in this repo would catch it
+going missing.
+
+### OPEN — two promises still unkept, and the size-0 import ladder
+
+`Lighthouse` (63/142) and `Fog Horn` (83/142) remain **advertised and built nowhere**, held as
+registered promises. Placement is the owner's. And the size-0 import ladder above is the owner's
+choice between *advertise fewer* (shipped) and *build more* (measured, one line, wider blast radius).
+
 ### Standing, not a task
 
 Every model edit returns a render and the orchestrator looks at it. No metric for appearance —
