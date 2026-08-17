@@ -4035,6 +4035,45 @@ which makes "unreferenced" the wrong question).
 **Placement is the owner's** — nothing gets wired into the world, and nothing gets deleted, on a
 wave's authority.
 
+### 2026-08-17 — TWO FEATURES THE GAME ALREADY ADVERTISES TO THE PLAYER ARE BUILT AND NEVER PLACED
+
+`port_expander.gd:84,86` appends **"Lighthouse"** and **"Fog Horn"** to the `features` list, and
+`map_overlay.gd:441` prints them to the player in the home-port pick panel:
+`FACILITIES  Lighthouse, Fog Horn, Fish Landing`. Measured through the production expander at sizes
+0/4/8 — **every size returns them.** **Nothing in the world builds either.** The only lighthouse a
+player ever sees is a hand-built silhouette in the *main-menu backdrop*.
+
+**Both scenes are finished, not stubs.** The lighthouse is a 26 m tapered tower with a gallery ring,
+lantern drum and red roof, behind a rotating rotor, two 4 km volumetric spots and a day/fog gate that
+lights it only at night. The fog horn is a modelled station with a flared trumpet, and its
+`FogHorn` samples fog at five points with hysteresis — **`fog_horn_1.wav` is 2.3 MB shipped and no
+code path plays it.**
+
+**And the fuel station is better than what ships in its slot.** The harbour's `fuel_bunker` apron pad
+asks for a blueprint, only `warehouse` exists, so the fallback draws **a blue slab and a blue box** —
+while a modelled red diesel tank with saddle cradles, readable DIESEL decals and a pump sits orphaned.
+(`_stamp_fuel_tank` exists for a `service` module that is never created: `graph.modules` is
+`{coast: 1}` at every size. Dead code.)
+
+**Verdicts:** `loading_screen`, `trommel`, `npc_base` are **superseded or vestigial with the live
+equivalent named** — deletable. The three harbour features are **unfinished-and-unplugged**, and the
+plumbing already exists: `initial_attributes` carries `has_lighthouse`/`has_fog_horn` at every size,
+so no data work is needed — only a stamp site and a position. **~2–2.5 days after one owner decision
+about placement**, the lighthouse estimate dominated by a perf pass on its 4 km volumetric beams
+(one port in five gets one).
+
+**Three register reasons in `entry_reach_test` are FALSE and are the next wave's first task** — they
+will send the next reader the wrong way: the lighthouse reason claims *"the port placer builds its own
+lighthouse geometry"* (it sets a boolean and builds nothing); the loading-screen reason claims the
+world loads *"with no cover"* (the `LoadingGate` autoload raises a branded overlay on every entry);
+the trommel reason calls it a screening drum from an earlier direction (it wraps the live
+`FishingSystem`, the trawl winch on every fishing vessel).
+
+**Nothing was wired and nothing deleted** — placement and deletion are the owner's.
+
+**A check nobody has:** nothing asserts that a `features` string the map overlay prints corresponds to
+anything in the world. That is this whole wave's class, and it is not lighthouse-specific.
+
 ### Standing, not a task
 
 Every model edit returns a render and the orchestrator looks at it. No metric for appearance —
