@@ -1,5 +1,28 @@
 extends Node
 
+## ── WHAT THIS UNIT COVERS, AND THE ONE SEAM IT DOES NOT ────────────────────
+##
+## This is the only unit that crosses a real PROCESS boundary: a `PlayerSession`
+## writes to disk through `persist_vessel_configuration`, is freed, and a fresh
+## session is constructed and `_load_from_disk()`ed. Nothing else in the gate
+## does that, and it is why this file is worth its runtime.
+##
+## It does NOT cover the authoring seam. Measured 2026-08-17: `layout_v1` is a
+## `duplicate(true)` of a shipped prebuilt's raw JSON and `layout_v2` is that
+## copy plus two cells typed below, so every `json_equivalent(..., layout_v2)`
+## compares a dictionary this file assembled against the same dictionary after a
+## disk round trip. `BrickLayout.to_dict()` and `from_dict()` are never called on
+## this path — `PrebuiltVesselCatalog` hands out `prebuilt_layout` raw. Mutating
+## `to_dict()` to `erase("light_yaw")` on every cell, and separately mutating
+## `from_dict()` to drop every `color`, both leave this file green.
+##
+## That seam is `tests/brick_layout_save_roundtrip_test`, which reds 16/191 on
+## either mutation. Do not widen this file to chase it: what is scarce here is
+## the process boundary, not another layout comparison.
+##
+## It also reports NO CHECK COUNT (REALITY.md §4f) — the verdict is a sentence,
+## and a run that asked nothing would read the same as this one.
+
 const SESSION_SCRIPT := preload("res://scripts/player/player_session.gd")
 const TEST_ROOT := "user://automated_tests/captain_vessel_hard"
 

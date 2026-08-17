@@ -94,8 +94,22 @@ func _ready() -> void:
 	# every cell it saves — a work light's rotation silently lost on every save a
 	# player makes — and this file reports PASS (48), unchanged. `json_equivalent`
 	# is strict (it compares dictionary SIZE and every key), so it would have
-	# caught it; it never sees it. The editor-side half of the save format has no
-	# round-trip check anywhere in the gate.
+	# caught it; it never sees it.
+	#
+	# THE AUTHORING HALF NOW HAS A CHECK, and it is not this one:
+	# `tests/brick_layout_save_roundtrip_test` refits a certified shipped prebuilt
+	# through the editor's own mutators, saves it with `to_dict()`, and compares
+	# the reload against the LIVE `BrickLayout` object rather than a dictionary it
+	# typed. The same `light_yaw` mutation takes it to 16/191 FAILED while this
+	# file stays at PASS (48). This one is still worth keeping and still worth
+	# reading as what it is: the ledger/JSON half, with a hand-built fixture. Do
+	# not widen it into a layout round trip — the comparison would go back to
+	# being a dictionary against itself.
+	#
+	# Also measured the same day, and NOT a defect this file should hide: the
+	# `brick_layout` a vessel is stored with is LOSSLESS today. All four shipped
+	# prebuilts and a full-vocabulary refit survive `to_dict` → ledger → JSON →
+	# `from_dict` with zero differing fields.
 	var json := JSON.stringify({"version": PlayerSaveStore.SAVE_VERSION, "player": source.to_dict()})
 	var parsed: Variant = JSON.parse_string(json)
 	_check(typeof(parsed) == TYPE_DICTIONARY, "player envelope parses after JSON write")

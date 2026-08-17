@@ -1,0 +1,6 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource path="res://tests/brick_layout_save_roundtrip_test.gd" type="Script" id="1"]
+
+[node name="BrickLayoutSaveRoundtripTest" type="Node"]
+script = ExtResource("1")
