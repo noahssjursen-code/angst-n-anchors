@@ -120,11 +120,21 @@ static func for_preview(
 		## call avoids it for everything EXCEPT `has_fish_landing`, which is
 		## realized infrastructure and has exactly one honest derivation: the berth
 		## plan in the port's layout graph. The layout is handed over so that
-		## expansion takes the same inputs the world's own `expand` takes — measured
-		## as reaching the generator (the basin's arm cap moves at 70 of 70 ports)
-		## but NOT as changing the fish-landing verdict on any of them, so nothing in
-		## the gate would catch this argument going missing. See
-		## `PortExpander.realized_fish_landing`.
+		## expansion takes the same inputs the world's own `expand` takes.
+		##
+		## ⚠ THE SENTENCE THAT USED TO END THIS PARAGRAPH — *"measured as reaching
+		## the generator (the basin's arm cap moves at 70 of 70 ports) but NOT as
+		## changing the fish-landing verdict on any of them, so NOTHING IN THE GATE
+		## WOULD CATCH THIS ARGUMENT GOING MISSING"* — was true when written and both
+		## halves are now wrong. Re-measured 2026-08-17 against the whole serialized
+		## expansion instead of a vertex count and a length sum
+		## (`tests/_layout_argument_deep_probe.gd`): the layout does not move an arm
+		## cap, it selects A DIFFERENT HARBOUR — 81 paths at 70 of 70 ports, every
+		## coast vertex, every module position, and which apron pad templates get
+		## laid at 10 of 70. And `chart_rewrite_integration_test` now catches the
+		## argument going missing: dropping it doubles the port expansions this
+		## screen pays for, so the panel's verdict and the harbour silhouette beside
+		## it stop being the same PortData. See `PortExpander.realized_fish_landing`.
 		##
 		## NOT MEASURED: this leaves 35 `PortData` per preview in the static
 		## `PortDataCache`, which nothing clears until `world.gd._rebuild`. A player

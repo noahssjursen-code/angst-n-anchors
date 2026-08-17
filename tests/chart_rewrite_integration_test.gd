@@ -19,10 +19,57 @@ func _run() -> void:
 	t.finish(self)
 
 
+## ═══ THE PICK PANEL AGAINST THE WORLD ════════════════════════════════════════
+##
+## `PortExpander.chart_summary` and `PortExpander.expand` both publish a
+## description of the same port, and the panel reads the first while the game
+## builds the second. Every field they both publish is listed below. Surveyed
+## 2026-08-17 over 210 ports (six seeds × 35, `tests/_fish_window_probe.gd`) and
+## re-measured here at this unit's own seed.
+##
+## `MUST_AGREE` is the property. `KNOWN_DIVERGENT` is a register of DEFECTS held
+## open, not a tolerance: each entry is a line the panel prints that the world
+## contradicts, and each must still diverge or be struck off. A field appearing in
+## neither list fails the unit, which is how a new divergence announces itself
+## instead of shipping.
+const MUST_AGREE: Array[String] = [
+	"id", "display_name", "position", "size", "region", "commodity_export",
+	"max_ship_class", "max_ship_class_name", "has_lighthouse", "has_fog_horn",
+	"has_fish_landing",
+	## STRUCK OFF THE REGISTER AND PROMOTED TO A PROPERTY, 2026-08-17. This was the
+	## fourth registered divergence: the summary published one import beyond
+	## `_import_count(size)` at 24 of 210 ports, because it applied the fishing
+	## profile AFTER the size resync and never resynced again, and at 3 of those it
+	## enabled the CONFIRM button for a bulk starter at a harbour with no bulk
+	## berth. `chart_summary` now resyncs the way `PortLayoutGenerator` does. Cost
+	## measured: bulk-foundable ports 5→4 and 11→9 in two of six worlds, no world
+	## below four, fishing and general untouched.
+	"commodity_imports",
+]
+
+const KNOWN_DIVERGENT: Dictionary = {
+	## 210/210 ports. `_population(rng, size)` is drawn from an RNG the two
+	## producers advance differently, so the POPULATION line on the pick panel is a
+	## different number from the one the world's PortData carries for the same
+	## port. Nobody has decided which is that port's population.
+	"population": "the two producers draw it from differently-advanced RNGs",
+	## 210/210, and cosmetic: the world prepends "Terrain-traced Port Layout",
+	## which `map_overlay` does not filter the way it filters "Export:".
+	"features": "the world prepends a layout note the panel would print verbatim",
+	## 72/210. The summary publishes `PortSizing.berth_count(size)` — the LADDER —
+	## and the world publishes `_count_berths(layout_graph)` — what got BUILT. The
+	## panel's own meta line reads "size N · M berths".
+	"berth_count": "the summary prints the size ladder, the world counts quays",
+}
+
+
 func _check_all(t: TestReport) -> void:
 	var registry := root.get_node_or_null("PortCatalog")
 	var registry_ids: Array = registry.call("get_port_ids") if registry != null else []
+	## Cleared so the count below describes THIS preview and nothing left over.
+	PortDataCache.clear()
 	var snapshot = SnapshotClass.for_preview(90210, 20)
+	var cache_after_preview: int = PortDataCache._cache.size()
 	if not t.check("the preview snapshot is valid", snapshot.is_valid()):
 		return
 	if not t.check("the preview snapshot holds 20 ports", snapshot.ports.size() == 20):
@@ -48,6 +95,8 @@ func _check_all(t: TestReport) -> void:
 	## §4). Counted so the per-port checks above cannot pass vacuously.
 	var world_fish_landings := 0
 	var preview_fish_landings := 0
+	var field_diverged: Dictionary = {}
+	var unclassified: Dictionary = {}
 	for index in range(live_definitions.size()):
 		var preview_record := (snapshot.ports[index] as Dictionary).get(
 			"port_definition", {},
@@ -72,10 +121,21 @@ func _check_all(t: TestReport) -> void:
 		## side is the world's own expansion of the same placed definition — the
 		## producer `PortPlot` and the harbour master read — and not a re-derivation
 		## of either side.
-		var world_flag := PortExpander.expand(
+		var world_data := PortExpander.expand(
 			live_definitions[index] as PortDefinition, 90210, snapshot.layout,
-		).has_fish_landing
+		)
+		var world_flag := world_data.has_fish_landing
 		var preview_flag := bool((snapshot.ports[index] as Dictionary).get("has_fish_landing", false))
+		## Classify every field the two producers both publish (see the register above).
+		var world_chart := world_data.to_chart_dict()
+		var summary_dict := snapshot.ports[index] as Dictionary
+		for key in world_chart:
+			if not summary_dict.has(key):
+				continue
+			if not MUST_AGREE.has(str(key)) and not KNOWN_DIVERGENT.has(str(key)):
+				unclassified[str(key)] = true
+			if str(summary_dict[key]) != str(world_chart[key]):
+				field_diverged[str(key)] = int(field_diverged.get(str(key), 0)) + 1
 		if world_flag:
 			world_fish_landings += 1
 		if preview_flag:
@@ -92,6 +152,87 @@ func _check_all(t: TestReport) -> void:
 			% preview_fish_landings
 		+ " above pass while asking nothing",
 		world_fish_landings > 0 and world_fish_landings < live_definitions.size()
+	)
+
+	## ── the register, evaluated ───────────────────────────────────────────────
+	t.check(
+		"every field the panel and the world both publish is classified (%s"
+			% str(unclassified.keys())
+		+ " is not) — a new shared field must be declared MUST_AGREE or registered",
+		unclassified.is_empty(),
+	)
+	for key in MUST_AGREE:
+		if not t.check(
+			"the panel and the world agree on `%s` at all %d ports (%d differ)"
+				% [str(key), live_definitions.size(), int(field_diverged.get(str(key), 0))],
+			int(field_diverged.get(str(key), 0)) == 0,
+		):
+			continue
+	for key in KNOWN_DIVERGENT:
+		t.check(
+			"registered divergence `%s` is STILL live (%d of %d ports) — %s."
+				% [str(key), int(field_diverged.get(str(key), 0)), live_definitions.size(),
+					str(KNOWN_DIVERGENT[key])]
+			+ " Strike the entry when it is fixed; a stale entry sends the next"
+			+ " reader looking for a defect that is gone",
+			int(field_diverged.get(str(key), 0)) > 0,
+		)
+
+	## ── the layout argument `for_preview` hands to `chart_summary` ────────────
+	##
+	## `PortExpander.realized_fish_landing` runs a FULL expansion to answer the
+	## fish question, and `ChartHarbourPlan.resolve_port_data` runs one again to
+	## draw the harbour beside the panel. If the picker's expansion took different
+	## inputs from the chart's, the screen holds two different harbours for one port
+	## — the verdict from one, the silhouette from the other — and pays for both.
+	## The cache keys on the layout checksum, so this is the property that the
+	## `world_layout` argument was added (`c9abeda`) to buy, and it is the only
+	## measured consequence of that argument: every field `chart_summary` publishes
+	## is IDENTICAL with and without a layout at 70 of 70 ports surveyed.
+	t.check(
+		"the preview really cached its expansions (%d entries) — a delta of zero"
+			% cache_after_preview
+		+ " against an empty cache would assert nothing",
+		cache_after_preview > 0,
+	)
+	var cache_after_world: int = PortDataCache._cache.size()
+	t.equal(
+		"expanding all %d ports the way the chart draws them costs ZERO new"
+			% live_definitions.size()
+		+ " expansions — the panel's verdict and the harbour beside it are one"
+		+ " PortData, not two",
+		cache_after_world,
+		cache_after_preview,
+	)
+	## And the reason that matters: without the layout it is not the same harbour.
+	## Measured 2026-08-17 by diffing the whole serialized expansion — 81 paths move
+	## at 70 of 70 ports, including every coast vertex, every module position and
+	## which apron pad templates get laid. So a fish verdict taken from a
+	## layout-less expansion is an answer about a harbour that does not exist; it
+	## agrees today by coincidence, not by construction (REALITY §1).
+	var coast_differs := 0
+	var pads_differ := 0
+	for index in range(live_definitions.size()):
+		var source := (live_definitions[index] as PortDefinition).to_dict()
+		var traced := PortExpander.expand_uncached(
+			PortDefinition.from_dict(source), 90210, snapshot.layout)
+		var synthetic := PortExpander.expand_uncached(
+			PortDefinition.from_dict(source), 90210, null)
+		if str(_coast_of(traced)) != str(_coast_of(synthetic)):
+			coast_differs += 1
+		if _pad_count_of(traced) != _pad_count_of(synthetic):
+			pads_differ += 1
+	t.equal(
+		"an expansion without the world layout traces a DIFFERENT coast at every"
+		+ " port — the layout is not decoration on this call",
+		coast_differs,
+		live_definitions.size(),
+	)
+	t.check(
+		"and lays out a different number of apron pads at %d of %d ports — the"
+			% [pads_differ, live_definitions.size()]
+		+ " layout-less harbour is a different harbour, not a rescaled one",
+		pads_differ > 0,
 	)
 
 	var base = BaseClass.new()
@@ -146,3 +287,13 @@ func _check_all(t: TestReport) -> void:
 		"Marine chart rewrite integration/performance timings (base=%d us weather=%d us)"
 		% [base.build_usec, int(weather.debug_stats()["build_usec"])]
 	)
+
+
+func _coast_of(data: PortData) -> Array:
+	var area := data.layout_graph.initial_attributes.get("port_area", {}) as Dictionary
+	return area.get("coast_polyline", []) as Array
+
+
+func _pad_count_of(data: PortData) -> int:
+	var land := data.layout_graph.initial_attributes.get("land_plan", {}) as Dictionary
+	return int((land.get("apron_pads", {}) as Dictionary).get("pad_count", -1))

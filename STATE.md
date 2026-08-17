@@ -4120,6 +4120,55 @@ going missing.
 registered promises. Placement is the owner's. And the size-0 import ladder above is the owner's
 choice between *advertise fewer* (shipped) and *build more* (measured, one line, wider blast radius).
 
+### CLOSED 2026-08-17 — the 28-line window was a trap, and hunting its residue found a live one beside it
+
+**Job 1's answer: latent, not live.** Nothing outside `expand_uncached` can observe the flag in that
+window — `data` is a fresh local, and the generator is handed the definition, profile, seed and an
+attribute dict, never the `PortData`. Measured rather than assumed: the attribute copy and
+`commodity_imports` each disagree with the final flag at **0 of 210** ports.
+
+**But comparing every field the two producers both publish found a live instance of the same class,
+and it gates a button.** `commodity_imports` diverges at **24/210** — `chart_summary` applied the
+fishing profile *after* the size resync and never resynced again, publishing one import past the
+size's allowance. At three grain ports the home-port check therefore answered **true for a bulk
+starter at a harbour with no bulk berth.** Yesterday's bug exactly, on the imports line, and the shape
+predates yesterday's fix.
+
+**Consequence measured before the fix was believed**, foundable ports per 35-port world: fishing
+unchanged in all six seeds, general unchanged in all six, bulk lost **three ports across 210** and no
+world fell below four.
+
+**The property now held is structural and honest about why:** *no public `PortData` field is assigned
+a value `expand_uncached` later overwrites*, read from the source — because the window is provably
+unobservable, so there is no behaviour to assert. Defended twice: the 25-field population is a
+**declared literal compared both ways**, so a broken scan reds by name; and the one legitimate
+repeat is registered and must **still** repeat or be struck off. Reproduced by the orchestrator:
+injecting a duplicate public write reds it by name.
+
+**Job 2: the argument matters, and the earlier measurement under-measured it.** The old probe compared
+a polyline by `.size()` and quays by a **sum**. Diffing the whole serialized expansion: **70 of 70
+ports differ across 81 paths** — every coast vertex, `terrain_coast_polyline` 101 points vs 4, every
+module position, the buildable zone, `plot_depth` 365 m vs 410 m, and **pad template ids at 10/70**.
+Not an arm cap: a different harbour with different buildings. What is identical is exactly what
+`chart_summary` publishes — *everything the layout reaches is discarded except the fish verdict, which
+agrees by coincidence.* The parameter is **one day old**, added by yesterday's fix so the picker shares
+one `PortData` with the world; that reason now has a check — **drawing all 20 summarised harbours must
+cost zero new expansions** — paired with a check that the layout-less harbour really is a different
+harbour, so it is not a perf nicety.
+
+**Nine mutations, none passed first time**, including four blind ones and a behaviour-preserving
+refactor that hid a write from the scan (`missing ["plot_depth"]`).
+
+### OPEN — the parallel derivation underneath all four divergences
+
+`chart_summary` **re-derives the entire trade profile, size ladder and RNG draws in parallel with
+`expand_uncached`**, while holding the world's own `PortData` in hand and throwing it away. That single
+§3b instance produced every divergence found: `population` (210/210), `features` (cosmetic),
+`berth_count` (72/210 — the panel prints the size **ladder**, the world counts **built** quays), and
+the imports bug now fixed. Two are **registered and are owner decisions, not slips**: which number is a
+port's population, and whether the panel should print the ladder or the built count. Collapsing the
+parallel derivation is a wave of its own.
+
 ### Standing, not a task
 
 Every model edit returns a render and the orchestrator looks at it. No metric for appearance —

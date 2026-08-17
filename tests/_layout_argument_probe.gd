@@ -11,6 +11,15 @@ extends SceneTree
 ## a layout "answers a different question", and that sentence is a claim.
 ##
 ## So: expand every port of two worlds BOTH ways and diff the fields.
+##
+## ⚠ SUPERSEDED 2026-08-17 BY `_layout_argument_deep_probe.gd`, AND ITS CONCLUSION
+## WAS WRONG. Two comparators below are lossy: `coast_polyline_points` compares the
+## polyline's `.size()` and `quay_length_m` compares a SUM. A synthetic coast with
+## the same vertex count in entirely different places is invisible to the first.
+## This probe therefore reported "the traced coast came out identical at all 70"
+## when in fact every vertex of it moves at 70 of 70 ports, along with 80 other
+## paths. Do not quote this file's output; run the deep probe. Kept because the
+## instrument's own failure is the lesson — REALITY §8, check the camera.
 
 const GENERATOR := preload("res://scripts/world/world_layout_generator.gd")
 const PLACER := preload("res://scripts/world/coastal_port_placer.gd")

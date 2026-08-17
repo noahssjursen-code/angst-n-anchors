@@ -87,21 +87,45 @@ static func _restamp_generation(definition: PortDefinition, site: String) -> boo
 ## do not repeat that half of the argument; the picker pays this once and the world
 ## pays again.
 ##
-## PASS THE LAYOUT — and here is the honest strength of that instruction, because
-## dropping it was mutation M2 of this change and IT PASSED FIRST TIME. Without a
-## layout the expansion traces a synthetic coast, and `tests/_layout_argument_probe.gd`
-## expanded 70 ports of two worlds both ways: `basin.max_arm_m` differs at 70 of 70
-## (443.9 m against `inf` at `port-home`) and `basin.seaward_clear_m` at 1 of 70, so
-## the layout demonstrably reaches this code — but `has_fish_landing`, the quay
-## families, the quay lengths, the traced coast and the trade slots came out
-## IDENTICAL at all 70. The soft arm cap shortens piers; on this population it never
-## starves one out of existence.
+## PASS THE LAYOUT. Dropping it was mutation M2 of the 2026-08-17 fix and IT
+## PASSED FIRST TIME, which was recorded as a finding. The finding was real; the
+## paragraph that used to sit here was not.
 ##
-## So passing it is correct by construction and NOT verified to change a verdict:
-## it makes this derivation take the same inputs the world's `expand` takes, and it
-## keeps the two on one `PortDataCache` entry instead of two. Do not read the
-## measurement as licence to drop it — read it as "no check in this repo would
-## catch you dropping it", which is a different and worse thing.
+## ⚠ IT SAID *"`basin.max_arm_m` differs at 70 of 70 … but `has_fish_landing`, the
+## quay families, the quay lengths, THE TRACED COAST and the trade slots came out
+## IDENTICAL at all 70"*, and the traced-coast half was an artefact of the
+## instrument. `tests/_layout_argument_probe.gd` compared
+## `port_area.coast_polyline` by its `.size()` and the quays by a SUM of lengths —
+## a synthetic coast with the same vertex count in entirely different places is
+## invisible to both. Re-measured 2026-08-17 by diffing the WHOLE serialized
+## result path by path (`tests/_layout_argument_deep_probe.gd`, `PortData
+## .to_chart_dict()` + `PortLayoutGraph.to_dict()`, same 70 ports of the same two
+## worlds):
+##
+##   70 of 70 ports differ, across 81 distinct paths.
+##
+## Not a cap on an arm: A DIFFERENT HARBOUR. Every vertex of `port_area
+## .coast_polyline`, `foundation.dock_face_polyline` and the foundation segments;
+## `port_area.terrain_coast_polyline` at 101 points against 4; every module's
+## `position_m`; the whole `land_plan.buildable_zone`; `plot_depth` (365 m against
+## 410 m); `apron_pads.pad_count` at 41 of 70 and even `pads[].pad_template_id` at
+## 10 of 70 — the layout-less expansion lays out DIFFERENT BUILDINGS.
+##
+## What survives unchanged is precisely the fields `chart_summary` publishes:
+## `has_fish_landing`, `size`, `berth_count`, `commodity_imports`, `features`,
+## `population`, `max_ship_class` are identical at all 70. So the correct reading
+## is not "the layout barely reaches this code" but "everything it reaches is
+## discarded by the summary, except the fish verdict, which happens to come out the
+## same on every port measured." That coincidence is REALITY §1's proxy trap seen
+## from the inside: the answer is right for a reason that is not the reason it is
+## asked for. `_has_realized_fish_landing` walks the berth plan of whichever
+## harbour it is given, and without a layout that harbour does not exist.
+##
+## Held by a check since 2026-08-17 (`chart_rewrite_integration_test`): drawing
+## every harbour the picker just summarised must cost ZERO new expansions, so the
+## panel's verdict and the silhouette beside it come from one PortData and not two
+## — and the same unit asserts the layout-less harbour really is a different
+## harbour, so that check is not a perf nicety.
 static func realized_fish_landing(
 		definition: PortDefinition,
 		world_seed: int,
@@ -162,8 +186,29 @@ static func chart_summary(
 	## eligibility here would have left the panel printing
 	## `IMPORTS  Fresh groundfish` one line above a FACILITIES line that no longer
 	## claims a fish landing.
+	##
+	## AND RESYNCED AFTER, BECAUSE THE WORLD DOES — 2026-08-17. Without the second
+	## line this panel published ONE IMPORT MORE THAN THE WORLD BUILDS, at 24 of 210
+	## ports over six seeds, and at 3 of them it ENABLED THE CONFIRM BUTTON for a
+	## bulk starter at a harbour with no bulk berth. `apply_to_profile` pushes
+	## `fresh_groundfish` onto the FRONT of `import_slots` and `destiny_import_slots`
+	## without trimming, so the visible list ran one slot past `_import_count(size)`.
+	## `expand_uncached` never had the defect: it applies the profile BEFORE
+	## `PortLayoutGenerator`, whose own `resync_for_size` re-takes the head of the
+	## destiny list and drops the commodity that no longer fits. This is the same
+	## sequence, not a new predicate — the measured extras were diesel ×13,
+	## containers ×5, crude_oil ×4 and grain ×3, and the three grain ports are the
+	## three false CONFIRMs.
+	##
+	## Consequence measured before it was believed, the same way the fish landing
+	## was: foundable home ports per 35-port world, panel → world truth, by starter
+	## career. Fishing 16/11/12/13/14/20, unchanged in all six. General 35 in all
+	## six, unchanged. Bulk 9, 8, 8, 8, **5→4**, **11→9** — three ports lost across
+	## 210, and no world drops below four. The shape predates the 2026-08-17 fish
+	## fix; it is in `c9abeda~1` unchanged.
 	if has_fish_landing:
 		PortFishingService.apply_to_profile(trade)
+		PortTradeProfile.resync_for_size(trade, size)
 	definition.size = def_size
 
 	var has_lighthouse := definition.has_lighthouse or (size >= 1 and rng.randf() < 0.3)
@@ -269,8 +314,25 @@ static func expand_uncached(
 		data.size = definition.site_max_size
 		definition.size = data.size
 		PortTradeProfile.resync_for_size(data.trade_profile, data.size)
-	data.has_fish_landing = PortFishingService.is_eligible(definition, world_seed)
-	if data.has_fish_landing:
+	## ONE ASSIGNMENT OF THE PUBLIC FLAG (REALITY §3b) — 2026-08-17.
+	##
+	## This line used to read `data.has_fish_landing = PortFishingService
+	## .is_eligible(...)`, and the realized answer overwrote it 28 lines down. For
+	## those 28 lines the PUBLIC field held ELIGIBILITY, which is the precise value
+	## whose escape to the pick panel promised 52 fish landings the world never
+	## built. Nothing outside this function could read it there — `data` is a local
+	## that is not published until `return`, and the generator is handed the trade
+	## profile and an attribute dictionary, never the PortData — so the trap was
+	## latent rather than live. It is still the shape that produced the bug, and
+	## the two values are not the same fact: eligibility is an INPUT the berth plan
+	## needs in order to try, and `has_fish_landing` is what it managed to build.
+	##
+	## They now live in different places. `fish_eligible` is a local, the public
+	## field is assigned exactly once (after generation, from the realized layout),
+	## and `port_fishing_service_test` fails if a second assignment reappears in
+	## this function.
+	var fish_eligible := PortFishingService.is_eligible(definition, world_seed)
+	if fish_eligible:
 		PortFishingService.apply_to_profile(data.trade_profile)
 	data.has_fuel_point = true
 	data.has_lighthouse = definition.has_lighthouse or (data.size >= 1 and rng.randf() < 0.3)
@@ -279,7 +341,13 @@ static func expand_uncached(
 		"has_fuel_point": data.has_fuel_point,
 		"has_lighthouse": data.has_lighthouse,
 		"has_fog_horn": data.has_fog_horn,
-		"has_fish_landing": data.has_fish_landing,
+		## The PRECURSOR, deliberately: the berth plan cannot be told what it
+		## realized before it runs. Measured 2026-08-17 over 210 ports — no
+		## production script reads this key out of `initial_attributes` during
+		## generation, and the line below `generate` replaces it with the realized
+		## answer before the graph is published, so the graph's own copy of the fact is
+		## single-valued to every reader outside this call.
+		"has_fish_landing": fish_eligible,
 		"world_layout": world_layout,
 		"trade_max_size": trade_max,
 	}
@@ -297,6 +365,12 @@ static func expand_uncached(
 	## `realized_fish_landing` rather than re-deriving it from eligibility, which
 	## is what let the pick panel promise 52 fish landings the world never built.
 	## Do not add a second corrected copy anywhere; ask this one.
+	##
+	## THE ONLY ASSIGNMENT of this field in this function, and it must stay that
+	## way. `port_fishing_service_test` reads this source back and fails if any
+	## public `PortData` field is written twice here, because writing eligibility
+	## into it first and correcting it later is the exact shape that shipped the
+	## bug above.
 	data.has_fish_landing = _has_realized_fish_landing(data.layout_graph)
 	data.layout_graph.initial_attributes["has_fish_landing"] = data.has_fish_landing
 	## Basin may record a water hint; live size stays whatever Expander clamped.
