@@ -34,11 +34,38 @@ extends Node
 
 const TestReport := preload("res://tests/support/test_report.gd")
 
+## ── THE PREBUILT CATALOGUE IS A DIRECTORY LISTING (REALITY.md §4f) ──────────
+##
+## `PrebuiltVesselCatalog.catalog_entries()` is `DirAccess` over
+## `resources/data/vessels/prebuilt`, and three loops in this file walk what it
+## returns. A preset that leaves that directory therefore fails nothing — it
+## DELETES the checks that were pointed at it, and the verdict line does not
+## change shape by one character.
+##
+## MEASURED 2026-08-17, not inferred: `bulk_small.json` moved out of that
+## directory took this unit from **93 checks to 91, PASS both times**. The
+## `for_sale` loop below already had a population floor (`not
+## for_sale.is_empty()`) and it did not fire, because a floor sees a collection
+## go EMPTY and this one merely got SMALLER — the eighth confirmation of that in
+## this repo.
+##
+## Shape 1 of §4f is the fix here rather than a frozen budget, because the
+## per-preset check count moves with any deck edit while the MEMBERSHIP is four
+## authored presets and changes almost never: the population is DECLARED below
+## and COMPARED against the discovered one, so a failure NAMES the preset that
+## went missing instead of reporting that a number moved.
+##
+## Compared, never iterated in place of the real list. Walking this literal
+## instead of the catalogue would be §4c — a lookup that substitutes a default
+## for an unknown id would measure one preset twice and stay green.
+const PREBUILT_PRESETS := ["28_10_m", "bulk_small", "fishing_trawler", "sjark_15m"]
+
 var _t: TestReport
 
 
 func _ready() -> void:
 	_t = TestReport.new("vessel_registration_test")
+	_test_prebuilt_catalogue_population()
 	_test_catalog_and_inheritance()
 	_test_every_rule_is_answerable_by_both_vocabularies()
 	_test_official_fishing_registration()
@@ -656,6 +683,50 @@ func _test_fishing_berth_deployment_filter() -> void:
 	cargo.free()
 	fishing.free()
 	harbour.free()
+
+## The declared population, compared against the discovered one. See
+## `PREBUILT_PRESETS` for why this is a comparison and not a budget.
+##
+## BOTH DIRECTIONS, because either one silences checks: a preset that leaves the
+## directory takes its `for_sale` pair and any per-entry checks with it, and a
+## preset that arrives brings checks nobody declared. The sale list is asserted
+## separately from the catalogue because `for_sale_entries()` is
+## `catalog_entries(false)` — flipping `draft` to true in an authored JSON drops
+## a preset out of the sale loop while leaving it in the directory, which the
+## catalogue comparison alone would not see.
+func _test_prebuilt_catalogue_population() -> void:
+	var catalogued := PackedStringArray()
+	for entry in PrebuiltVesselCatalog.catalog_entries():
+		catalogued.append(str(entry.get("prebuilt_id", "")))
+	var for_sale := PackedStringArray()
+	for entry in PrebuiltVesselCatalog.for_sale_entries():
+		for_sale.append(str(entry.get("prebuilt_id", "")))
+	for declared_raw in PREBUILT_PRESETS:
+		var declared := str(declared_raw)
+		_check(
+			catalogued.has(declared),
+			"prebuilt preset '%s' is still in the catalogue — the loops in this" % declared
+			+ " file walk a directory listing, so its absence DELETES checks"
+			+ " rather than failing them (%d found: %s)"
+			% [catalogued.size(), ", ".join(catalogued)],
+		)
+		_check(
+			for_sale.has(declared),
+			"prebuilt preset '%s' is still on the Shipwright's sale list, so the" % declared
+			+ " two checks this file runs over each sale entry still run"
+			+ " (%d for sale: %s)" % [for_sale.size(), ", ".join(for_sale)],
+		)
+	var undeclared := PackedStringArray()
+	for found in catalogued:
+		if not PREBUILT_PRESETS.has(str(found)):
+			undeclared.append(str(found))
+	_check(
+		undeclared.is_empty(),
+		"every preset on disk is named in PREBUILT_PRESETS, so a new one arrives"
+		+ " with its coverage declared instead of silently unwalked (%d undeclared: %s)"
+		% [undeclared.size(), ", ".join(undeclared)],
+	)
+
 
 func _test_official_starter_catalog() -> void:
 	var found_starter := false

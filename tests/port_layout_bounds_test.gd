@@ -71,6 +71,31 @@ const SEED := 424242
 ## worst residual after the fix is 0.01 m.
 const CONTAINMENT_EPSILON_M := 0.05
 
+## ── THE SIZE LADDER IS A DISCOVERED POPULATION (REALITY.md §4f) ─────────────
+##
+## Every check in `_sweep` lives inside `for size in range(PortSizing.MAX_SIZE +
+## 1)`, so this file's coverage is a function of a CONSTANT IN PRODUCTION
+## SOURCE. Shrink the ladder and the checks do not fail — they stop existing.
+##
+## MEASURED 2026-08-17, not inferred: `PortSizing.MAX_SIZE` 8 → 7 took this unit
+## from **73 checks to 65, PASS both times**. §4f's "a discovered population is
+## not always a data file", third instance after `ship_hud_readout_test`'s regex
+## scan and `port_apron_draw_test`'s `const` table.
+##
+## AND THE FLOOR THIS FILE ALREADY HAD COULD NOT HAVE CAUGHT IT — worse, it was
+## never able to. `total_decks >= (PortSizing.MAX_SIZE + 1) * 2` is computed
+## FROM THE CONSTANT THAT DEFINES THE POPULATION, so shrinking the ladder
+## shrinks the floor by exactly as much and the comparison is unmoved. That is
+## not the ordinary "a floor catches empty, not smaller" finding: a floor
+## derived from its own population is a TAUTOLOGY and asserts nothing at any
+## size. Both halves are fixed below — the ladder is declared and compared
+## member by member, and the floor is anchored to the DECLARED count.
+##
+## Compared, not iterated in place of the real range. The sweep still walks
+## `PortSizing.MAX_SIZE` so that a ladder which GROWS is exercised at its new
+## top; this literal only says which rungs must be there.
+const EXPECTED_SIZES := [0, 1, 2, 3, 4, 5, 6, 7, 8]
+
 
 func _initialize() -> void:
 	call_deferred("_run")
@@ -81,6 +106,8 @@ func _run() -> void:
 	PortModuleCatalog.clear_cache()
 	var world := Node3D.new()
 	root.add_child(world)
+
+	_check_the_size_ladder_is_intact(t)
 
 	var total_decks := 0
 	## Pass 1 open water; pass 2 the terrain-traced site, where the basin probe
@@ -93,11 +120,45 @@ func _run() -> void:
 		var context := pass_variant as Dictionary
 		total_decks += await _sweep(t, world, str(context["label"]), context["layout"])
 
+	## Anchored to EXPECTED_SIZES, not to `PortSizing.MAX_SIZE`. Against the
+	## constant it was measuring, this floor moved with the population and could
+	## not fire at any value — see EXPECTED_SIZES' header.
 	t.check(
-		"every size in both passes contributed a drawn pier deck to measure (%d)" % total_decks,
-		total_decks >= (PortSizing.MAX_SIZE + 1) * 2,
+		"every one of the %d declared sizes in both passes contributed a drawn"
+			% EXPECTED_SIZES.size()
+			+ " pier deck to measure (%d decks)" % total_decks,
+		total_decks >= EXPECTED_SIZES.size() * 2,
 	)
 	t.finish(self)
+
+
+## The declared ladder against the one the sweep will actually walk. A rung that
+## disappears from `PortSizing` is NAMED here; without this it only subtracts
+## eight checks from a still-green verdict (REALITY.md §4f, shape 1).
+func _check_the_size_ladder_is_intact(t) -> void:
+	var swept := PackedInt32Array()
+	for size in range(PortSizing.MAX_SIZE + 1):
+		swept.append(size)
+	for declared_raw in EXPECTED_SIZES:
+		var declared := int(declared_raw)
+		t.check(
+			"port size class %d is still on PortSizing's ladder, so the four"
+				% declared
+				+ " checks this file runs at that size still run (MAX_SIZE=%d,"
+				% PortSizing.MAX_SIZE
+				+ " sweeping %d sizes)" % swept.size(),
+			swept.has(declared),
+		)
+	var undeclared := PackedInt32Array()
+	for size in swept:
+		if not EXPECTED_SIZES.has(int(size)):
+			undeclared.append(int(size))
+	t.check(
+		"no size class is swept that EXPECTED_SIZES does not name, so a new rung"
+		+ " arrives with its coverage declared rather than silently unwalked"
+		+ " (%d undeclared)" % undeclared.size(),
+		undeclared.is_empty(),
+	)
 
 
 func _sweep(t, world: Node3D, label: String, layout: Variant) -> int:
