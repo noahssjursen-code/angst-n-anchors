@@ -3990,6 +3990,51 @@ prebuilt.
 gate coverage ½ day. Plus **½ day** for a lane-A reachability unit; the closure walker is already
 written and mutation-verified.
 
+### CLOSED 2026-08-17 — the reachability check exists, and promoting it found ten more orphans
+
+`entry_reach_test` (lane A, 48 checks) is discovered and scored by the gate. The property is a **set
+equality** — the unreachable set equals the register's keys — with four directional checks and a
+frozen budget as the §4f catch-all. The closure reproduces 311 files / 5 scenes exactly.
+
+**The probe's hand-written list had four apps; the honest population has seventeen.** Ten were in no
+prior note, including **six scenes with zero referrers anywhere in the repository** —
+`loading_screen.tscn` (**a loading screen nothing ever shows**), `fuel_station`,
+`lighthouse_building`, `fog_horn_building`, `npc_base`, `trommel`. And a correction: the brick editor
+is reachable **only through comments**, so a comment-blind walker calls a dead editor live.
+
+**The register polices its own reasons.** Every entry declares a claim from a **closed set of four
+kinds, each with a verifier**; an unrecognised kind is a hard fail, not a silent skip. `hosts_script`
+chains the excuse to another *checked* claim rather than to nothing; `no_code_referrer` runs §3's
+rule as a check and is **not** implied by the closure — a referrer that is itself unreachable passes
+the closure test and fails this one. A reason containing a caller-asserting phrase fails outright.
+
+**The 59-entry signal register, audited by taking each reason to the code it names:** 23 assert only
+a negative; 36 assert something checkable; **eleven of those do not hold, ten of them new.** Five
+assert a consumer or driver **that does not exist** — two claim a poll of a method the class does not
+have, two claim drivers under `tests/` that do not name it. All corrected and marked.
+
+**Named, not fixed:** nothing *checks* those 36 sentences, so a corrected reason rots as fast as the
+one it replaced. Typing and verifying them is ~36 claims across a dozen subsystems — real work.
+
+Seven mutations, **none passed first time**, including planting the exact false sentence (1/48) and
+disabling the walker's `class_name` edge (5/48, closure 311→93 — a dead walker cannot make the
+register trivially true).
+
+**Gate defect found in passing:** a lane-A test that merely *mentions* the lane-C marker token is
+collected as a malformed lane-C app and fails, while passing lane A.
+
+### OPEN — six scenes nothing references, three of them harbour features
+
+A lighthouse, a fog horn and a fuel station are things a player would expect to see and use. **Same
+class as the studio, one level down, and player-facing.** Each is one of three and the answer will
+differ: **superseded** (the harbour master's refuel dialogue may already be the fuel station; the
+port visualiser may draw the lighthouse), **unfinished** (built, coherent, never wired — the
+interesting outcome), or **vestigial** (`npc_base.tscn` may be a base scene meant to be inherited,
+which makes "unreferenced" the wrong question).
+
+**Placement is the owner's** — nothing gets wired into the world, and nothing gets deleted, on a
+wave's authority.
+
 ### Standing, not a task
 
 Every model edit returns a render and the orchestrator looks at it. No metric for appearance —
