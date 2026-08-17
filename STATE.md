@@ -3854,6 +3854,50 @@ that had been **running zero times for weeks**.
 Alongside it, a static hole: **`deckhouse_shape_test` names 3 of the 4 presets on disk**, so
 `sjark_15m` has never had a deckhouse check run against it at all.
 
+### CLOSED 2026-08-17 — a count is not conserved under SUBSTITUTION
+
+**The orchestrator's premise was wrong and the correction is the better finding.** `sjark_15m` had
+not been skipped — it was checked under a name that hid it: the starter-boat section reads its
+subject from `CompanyContracts.DEFAULT_STARTER`, and that starter **is** the sjark.
+
+**But that coverage hung on a production constant with nothing to do with the test.** Flip it from
+`"fishing"` to `"general_cargo"` and every measurement of the 15 m sjark — the only small hull, the
+only single-tier wheelhouse, **the boat every new player is handed** — disappears, while the slot
+refills with a hull three other presets already cover. **PASS (91) before, PASS (91) after.**
+
+Every earlier instance *sheds* and the count *falls*, which is what makes a frozen budget a workable
+catch-all. **This is the case where it is not.** A budget sees nothing, a floor sees nothing, the
+verdict sees nothing. Only naming the member catches a swap — verified: under the same flip, the 19
+sjark checks survive. **§4f: a check site whose SUBJECT is read from a production constant is not
+guarded by counting.** The population is sometimes not even a collection — it is a single id.
+
+**Three conversions, and every one surfaced a defect above the conversion:**
+
+- `shipping_lane_network_test` runs **25 653 checks** — "no count" is not a proxy for "small". Its
+  hand-rolled reporter **deduplicated failures by label**, so **891 broken blocks were reportable as
+  `FAIL(1)`.**
+- `hull_form_geometry_test` has **two checks that cannot fail**, both computed from what they guard:
+  the bow-taper check is an identity (the JSON field is ignored and overwritten), and the
+  displacement check compares the solver's **output against its own input** — a 23% change to every
+  hull's block coefficient moves nothing. Marked in-file; neither property rewritten, because the
+  honest check belongs to the hull model, not to a patch.
+- `vessel_persistence_test` — see below.
+
+3 of 34 converted; **31 enumerated and ranked**, next seven named.
+
+### OPEN — half the save path has no check anywhere in the gate
+
+**`BrickLayout.to_dict()` authors the record a player's vessel is stored with, and nothing in the
+gate runs it.** `vessel_persistence_test` builds its expected dictionary itself and compares it
+against itself after a JSON round trip. Demonstrated: make `to_dict()` erase `light_yaw` on every
+cell — **a work light's rotation silently lost on every save a player makes** — and the unit reports
+**PASS (48), unchanged**.
+
+REALITY §3 exactly: the check guards the seam next to the one that breaks. The consequence is
+**player data loss**, the worst category this project has. Its sibling
+`captain_vessel_hard_persistence_test` is one of the 31 still reporting no count, so whether the
+hole is one function or the whole authoring path is unmeasured.
+
 ### Standing, not a task
 
 Every model edit returns a render and the orchestrator looks at it. No metric for appearance —
