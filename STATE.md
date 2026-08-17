@@ -3791,6 +3791,28 @@ units have **never been fixture-mutated**, led by `catch_hold_test` (515 checks 
 loops), `vessel_render_capture` (298/24) and `ship_hud_readout_test` (262/16). The 34 no-count units
 are classified but unprobed and are a separate wave's work.
 
+### BASELINE 2026-08-17 — `20260817-003348-2798`, 129 units, 122 PASS
+
+Five known reds plus one SKIP, all on record: `port_trade_profile_test` (a specification for an
+unwired feature, red on purpose), `remote_realtime_join_smoke` (needs a live server),
+`structure_plate_test`, `building_interior_test` (the open brick-cell decision),
+`plan_interior_test` (the mast); `ocean_wake_gpu_smoke` SKIP.
+
+**A sixth red was a transient the orchestrator caused, and the finding is worth more than the
+run.** `catch_hold_test` reported `1/517 — missing ["bulk_small"]`. The fixture is present and the
+unit re-runs `PASS (517)`. **The gate was started concurrently with a wave whose entire method is
+moving fixtures out and back.** I told that wave "the gate only reads" — true, and the wrong way
+round: the *wave* writes, so the gate's reads were poisoned. That is the moving-target trap this
+file has refused three times, walked into by the orchestrator holding both ends at once.
+
+**Standing consequence: never run a full gate while a fixture-mutating wave is live.** Not "it
+only reads" — ask what the *other* side writes.
+
+**And the hardening is what caught it.** Before yesterday, `catch_hold_test` would have quietly run
+**forty fewer checks** and reported PASS; the gate would have said 123 PASS and nobody would have
+known the run was polluted. **A vanishing-check guard detected a polluted gate run** — a use nobody
+designed it for, and the clearest argument yet for the class.
+
 ### Standing, not a task
 
 Every model edit returns a render and the orchestrator looks at it. No metric for appearance —
