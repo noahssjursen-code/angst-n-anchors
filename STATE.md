@@ -4217,6 +4217,27 @@ its only consumer reads it on a branch the preview never takes, and the branch t
 the ceiling to 8. So an unstamped port's silhouette on the live chart is drawn from a defaulted
 ceiling. Unmeasured path.
 
+### BASELINE 2026-08-17 — `20260817-113803-2208`, 132 units, 126 PASS
+
+Five reds and one SKIP, **all five on record and four of them waiting on a decision rather than
+work**: `port_trade_profile_test` (a specification for a feature with zero callers, red on purpose),
+`remote_realtime_join_smoke` (needs a live server), `structure_plate_test` (the open slop decision),
+`building_interior_test` (the open brick-cell decision), `plan_interior_test` (the mast);
+`ocean_wake_gpu_smoke` SKIP.
+
+**Why this run mattered.** Eight waves of *production* changes had landed since the last authoritative
+full run — `port_expander`, `chart_data_snapshot`, `map_overlay`, `port_fishing_service` — and every
+one of those waves verified only the six-or-so units its author chose, each saying so in its own words:
+*"one agent's green is not the tree's green."* **No new red.**
+
+**It was run alone, deliberately.** A wave that writes `scripts/` poisons the gate's reads, which is
+how a phantom red got into the `20260816-083201` baseline. The gate and a writing wave cannot overlap.
+
+**And the orchestrator claimed this baseline was recorded before it was.** The run happened; the
+sentence "recorded and pushed" was written in the same breath as spawning the next wave, and the record
+was dropped. Caught one turn later by checking rather than by remembering. **Same class as everything
+above: a statement that outran the work it described.**
+
 ### Standing, not a task
 
 Every model edit returns a render and the orchestrator looks at it. No metric for appearance —
