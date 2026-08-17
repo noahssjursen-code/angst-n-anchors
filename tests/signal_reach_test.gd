@@ -65,6 +65,35 @@ extends SceneTree
 ## What it cannot see at all, stated with the others: whether a subscriber does
 ## anything useful with what it receives, and whether the signal is ever
 ## EMITTED. A declared-and-connected-and-never-emitted wire reads as green here.
+##
+## ── THE REGISTER'S REASONS ARE PROSE, AND TEN OF THEM WERE FALSE ────────────
+## AUDITED 2026-08-17, entry by entry, by going and looking at the code each one
+## names. Of the 59 entries, **23 assert nothing but a negative** ("nothing draws
+## a crane gauge") — those restate the register's own membership and cannot be
+## wrong on their own. **36 assert something CHECKABLE**: a named alternative
+## consumer, a named function, a count, or an attribution to another class.
+## **Eleven of those 36 did not hold.** `layout_confirmed`'s — *"the caller reads
+## the layout back instead"* — was found first and there is no caller at all; ten
+## more were found by checking the rest the same way, and every reason above now
+## carries what is actually there. The corrections are marked in-line.
+##
+## Five of the eleven asserted a consumer or a driver THAT DOES NOT EXIST
+## (`layout_confirmed`, the two `network_manager` realtime signals, the two
+## mp-harness signals). Six misstated a mechanism or a count while the
+## conclusion survived (the four `telemetry` entries, `traffic_changed`'s "five
+## sites" which is six, `quay_equipment_job`'s reference to a `job_finished`
+## this class does not declare).
+##
+## **WHAT IS NOT FIXED, AND IT IS THE STRUCTURAL HALF.** Nothing above CHECKS any
+## of these sentences. A corrected reason rots exactly as fast as the one it
+## replaced: `is_ready()` could be added to `NetworkManager` tomorrow and this
+## file would neither notice nor care. `tests/entry_reach_test.gd` shows the
+## shape that closes it — every register entry declares a typed `claim` from a
+## closed set, each kind has a verifier that runs a real check, and an
+## unrecognised kind is a hard FAIL rather than a silent skip. Retrofitting that
+## here is 36 claims to type and verify across a dozen subsystems; it is real
+## work and it is not a comment edit, which is why this paragraph names it
+## instead of pretending it was done.
 
 const TestReport := preload("res://tests/support/test_report.gd")
 
@@ -101,12 +130,12 @@ const KNOWN_UNSUBSCRIBED := {
 	"provision_crane_auto_operator.gd:job_started": "auto-operator progress — no operator panel reads it",
 	"provision_crane_auto_operator.gd:cycle_completed": "auto-operator progress — no operator panel reads it",
 	"provision_crane_auto_operator.gd:phase_changed": "auto-operator progress — no operator panel reads it",
-	"quay_equipment_job.gd:job_started": "quay job lifecycle — job_stopped/job_finished are read, this one is not",
+	"quay_equipment_job.gd:job_started": "quay job lifecycle — CORRECTED 2026-08-17: this class declares job_started/job_completed/job_stopped and has no job_finished at all (that name is bulk_crane_auto_operator's). harbour_authority_bridge subscribes job_completed and job_stopped; this one is not",
 	# ── port / world state nobody watches ─────────────────────────────────────
 	"bulk_material_drop.gd:landed": "cargo drop outcome — the drop is resolved inline by its caller",
 	"bulk_material_drop.gd:spilled": "cargo drop outcome — the drop is resolved inline by its caller",
 	"shore_rsw_tank_bank.gd:inventory_changed": "shore tank level — the landing pump polls the bank instead",
-	"harbour_controller.gd:traffic_changed": "emitted from five sites; the chart harbour board rebuilds on open",
+	"harbour_controller.gd:traffic_changed": "emitted from SIX sites (counted 2026-08-17; the reason here said five); the chart harbour board reads HarbourController through PortPlot when it opens",
 	"world_traffic_service.gd:fleet_changed": "traffic fleet churn — the map overlay polls the service",
 	"world_traffic_service.gd:presentation_changed": "traffic presentation churn — same, polled",
 	# ── ship systems ──────────────────────────────────────────────────────────
@@ -128,7 +157,7 @@ const KNOWN_UNSUBSCRIBED := {
 	# ── UI panels whose owner wires the button, not the signal ────────────────
 	"map_overlay.gd:port_selected": "chart selection — the overlay acts on the click itself",
 	"harbour_board_panel.gd:berth_chosen": "harbour board selection — the panel acts on the click itself",
-	"shipyard_brick_editor.gd:layout_confirmed": "editor result — the caller reads the layout back instead",
+	"shipyard_brick_editor.gd:layout_confirmed": "editor result — AUDITED 2026-08-17, THE OLD REASON HERE WAS FALSE: it said \"the caller reads the layout back instead\" and there is no caller. The editor is unreachable from the shipped game (entry_reach_test)",
 	"shipyard_brick_editor.gd:closed": "editor lifecycle — FOUND BY ATTRIBUTION: the one `closed` subscriber is on a ShipwrightCatalogPanel",
 	"player_camera.gd:mode_changed": "camera mode — no HUD element shows it",
 	# ── services and platform ─────────────────────────────────────────────────
@@ -138,16 +167,16 @@ const KNOWN_UNSUBSCRIBED := {
 	"player_session.gd:save_completed": "save outcome — every caller awaits save_now() instead",
 	"captain_service.gd:captain_created": "roster churn — FOUND BY ATTRIBUTION: the subscribers are on RemoteCaptainClient's identically-named pair",
 	"captain_service.gd:captain_deleted": "roster churn — FOUND BY ATTRIBUTION: the subscribers are on RemoteCaptainClient's identically-named pair",
-	"telemetry.gd:metric_published": "the F3 panel repaints on its own timer, not on these",
-	"telemetry.gd:event_recorded": "the F3 panel repaints on its own timer, not on these",
-	"telemetry.gd:flags_changed": "the F3 panel repaints on its own timer, not on these",
-	"telemetry.gd:peaks_reset": "the F3 panel repaints on its own timer, not on these",
+	"telemetry.gd:metric_published": "CORRECTED 2026-08-17: the F3 panel has no timer — debug_draw.gd:48 connects Telemetry.sampled, a DIFFERENT signal on this same class, and repaints on that",
+	"telemetry.gd:event_recorded": "CORRECTED 2026-08-17: the F3 panel repaints on Telemetry.sampled (debug_draw.gd:48), not on a timer",
+	"telemetry.gd:flags_changed": "CORRECTED 2026-08-17: the F3 panel repaints on Telemetry.sampled (debug_draw.gd:48), not on a timer",
+	"telemetry.gd:peaks_reset": "CORRECTED 2026-08-17: the F3 panel repaints on Telemetry.sampled (debug_draw.gd:48), not on a timer",
 	"network_client.gd:connection_status_changed": "connection state — NetworkManager polls the client",
-	"network_manager.gd:realtime_session_started": "realtime session outcome — main_menu polls is_ready()",
-	"network_manager.gd:realtime_session_failed": "realtime session outcome — main_menu polls is_ready()",
+	"network_manager.gd:realtime_session_started": "realtime session outcome — CORRECTED 2026-08-17: NetworkManager has no is_ready(); main_menu learns the outcome from WorldGateway.session_ready/authority_error, which it CONNECTS to",
+	"network_manager.gd:realtime_session_failed": "realtime session outcome — CORRECTED 2026-08-17: NetworkManager has no is_ready(); main_menu learns the outcome from WorldGateway.session_ready/authority_error, which it CONNECTS to",
 	# ── the multiplayer test harness, which is production code by location ────
-	"virtual_client.gd:event_recorded": "mp_test harness plumbing under scripts/, driven by tests/",
-	"mp_test_runner.gd:scenario_started": "mp_test harness plumbing under scripts/, driven by tests/",
+	"virtual_client.gd:event_recorded": "mp_test harness plumbing — CORRECTED 2026-08-17: NOTHING under tests/ names it. Its only drivers are mp_test_suite.gd and mp_stress_viewer.gd, siblings under scripts/network/testing/, reachable only from a showcase scene the game never loads",
+	"mp_test_runner.gd:scenario_started": "mp_test harness plumbing — CORRECTED 2026-08-17: NOTHING under tests/ names it; see virtual_client.gd:event_recorded above",
 }
 
 var _t := TestReport.new("signal_reach_test")
