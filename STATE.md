@@ -4272,6 +4272,51 @@ ids was **wrong in six of eight**, caught by its own check, and wrote that into 
 **Also §3d, unfixed:** `basin_max_size` is written and read by nothing; `suggested_span_m()` and
 `centre_world()` have no production callers.
 
+### CLOSED 2026-08-17 — the chart drew 210 harbours in a region this world cannot generate
+
+**CORRECTION TO THE NUMBER, and it is a lesson about the sentence rather than the measurement.** The
+divergence a player can see is **73 of 210**, not 133. Both probes were right: the 133 walked the
+*union* of two digests' keys and so counted `data_features` and four showcase-only attributes; the same
+run with the four RNG-stream fields added gives 139. **The sentence quoting one of them named no key
+set.** Path table unchanged.
+
+**The sharpest framing of the defect:** `CoastalPortPlacer._port_region` can return only FJORD,
+ARCHIPELAGO or MAINLAND. **`"coastal"` was never a region any port had** — a null wearing a value's
+clothes — and the chart drew every harbour in it.
+
+**Fixed with one argument**, the region word, derived through `to_chart_dict()` so both producers spell
+it in one place. The whole `port_definition` was weighed and refused: `region` alone closes **every path
+a player can see, 0 of 210**; the definition's only extra win is 87 fields of a `PortData` its single
+production caller **discards**; an 18th parameter adds a field to forget and would leave the card
+reading COASTAL beside a correct fjord silhouette; and it would re-arm the `site_max_size` read deleted
+hours earlier.
+
+**The frame, and it is not subtle.** Two ~210 m quay fingers labelled *General Cargo* and *Fresh
+Groundfish* become **one** — and not one of the two: a narrower pad *between* them. The traced coast is
+pixel-identical; only berth structures move. Cause: **`PortFishingService.is_eligible` returns true for
+`LEGACY_ISLAND` without sampling water at all**, so the chart granted fish landings to fjord harbours
+that had not earned one. Reproducible — 10 frames byte-identical across a 780 s gap, twice. One card row
+moves, `REGION COASTAL → FJORD`, deliberately in the frame so no change ships unshown.
+
+**M1 passed the gate unit and that is the layer gap, measured not excused:** the unit *replicates*
+`world.gd`'s argument list rather than calling it, so **nothing in the gate sees that line.** Closed by
+hand with a probe that boots the **real `World`** and reads `PortCatalog` back against an independent
+placer run — 20/20 correct, 0 `"coastal"`. *That probe's own first run was wrong* (the boot overwrites
+the seed from settings), an instrument error shaped exactly like the defect.
+
+**M2 passed two other units — REALITY §4b:** a whole branch of `is_eligible` with no check pointed at
+it. Counts unchanged, so an unasked question rather than a vanished one.
+
+### OPEN — two more silent defaults, registered by name and NOT fixed
+
+| parameter | wrong at | who reads it |
+|---|---|---|
+| `max_ship_class_name` | **210 of 210** | draws `MAX CLASS VESSEL` on the very screen this wave photographed |
+| `commodity_exports` | **74 of 210** | `FreightOfferGenerator` — **every secondary export offers no freight** |
+
+Neither moves a silhouette; one changes a readout, one changes **the jobs a player is given**. A third,
+`spawn_pos`, is §3d dead — its getter has no caller.
+
 ### Standing, not a task
 
 Every model edit returns a render and the orchestrator looks at it. No metric for appearance —

@@ -354,6 +354,47 @@ func _setup_ports(defs: Array[PortDefinition]) -> void:
 		var data := PortExpander.expand(def, world_seed, _world_layout)
 
 		if registry != null:
+			## THE REGION WORD IS NOT OPTIONAL — 2026-08-17.
+			##
+			## This call used to stop at `data.size`, leaving `register_port`'s
+			## `region` parameter defaulted to `""` → `"coastal"`. **The placer never
+			## assigns "coastal"**: over six seeds x 35 ports it assigns fjord 170,
+			## archipelago 34, mainland 6 (`tests/_region_default_probe.gd`), so the
+			## catalog's region was wrong at 210 of 210 ports. It is not a cosmetic
+			## field. Two consumers read it:
+			##
+			##   * `ChartHarbourPlan.resolve_port_data` — the branch the marine chart
+			##     takes for every port with no `PortPlot` in the tree, i.e. 34 of 35
+			##     at boot and any port the player has not sailed within 4.8 km of.
+			##     `"coastal"` falls through that function's `match` to
+			##     `LEGACY_ISLAND`, which changes the trade theme
+			##     (`PortTradeProfile._pick_theme`), makes the port unconditionally
+			##     fish-eligible (`PortFishingService.is_eligible` returns true for
+			##     LEGACY_ISLAND without sampling water at all) and skips the fjord
+			##     arm compression in `PortBerthPlan` — so the chart drew a DIFFERENT
+			##     HARBOUR from the one the world builds at **73 of 210** ports:
+			##     `quay_polys` 70, `quay_meta` 73, `bounds` 57, `centre_world` 57,
+			##     `suggested_span_m` 46, `quay_poly_count`/`berth_count` 34, and the
+			##     whole traced coast at 2. Passing this word alone takes that to
+			##     **0 of 210**, every polygon point, every station meta dictionary,
+			##     the bounds rect and both camera helpers. Registered in
+			##     `chart_live_harbour_test` and struck in the same edit.
+			##   * `ChartLayerRenderer._draw_port_card` — the port card's `REGION` row,
+			##     which read `REGION COASTAL` for every port in the game. It is the
+			##     only port-card row this change moves; every other row on that card
+			##     already came from the world's own expansion.
+			##
+			## Derived through `to_chart_dict()` rather than by matching on
+			## `region_kind` here, so this producer and `port_plot.gd`'s spell the
+			## word in exactly one place.
+			##
+			## STILL DEFAULTED HERE, DELIBERATELY, and registered rather than fixed:
+			## `max_ship_class_name` and `commodity_exports`. Both are wrong on this
+			## record too (210 of 210 and 74 of 210), NEITHER is read by
+			## `resolve_port_data`, and correcting them changes a readout and the
+			## freight offers a player is given rather than the silhouette this wave
+			## owes a frame for. See `chart_live_harbour_test`'s second register.
+			var chart := data.to_chart_dict()
 			registry.register_port(
 				data.port_id, data.display_name, data.world_position,
 				Vector3(INF, INF, INF),
@@ -363,6 +404,7 @@ func _setup_ports(defs: Array[PortDefinition]) -> void:
 				data.layout_seed,
 				data.population, data.features, data.rotation_y,
 				data.berth_count, data.size,
+				str(chart.get("region", "")),
 			)
 
 		var is_home := data.port_id == home_port_id or (i == 0 and home_port_id == "port-home")
