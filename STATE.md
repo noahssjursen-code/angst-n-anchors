@@ -3813,6 +3813,47 @@ only reads" — ask what the *other* side writes.
 known the run was polluted. **A vanishing-check guard detected a polluted gate run** — a use nobody
 designed it for, and the clearest argument yet for the class.
 
+### CLOSED 2026-08-17 — the vanishing-check class, for every unit that reports a count
+
+**Nine silent instances in twenty-six units measured; eight hardened and verified**, each by
+breaking the population and watching the verdict stay green, then re-breaking it after the fix.
+
+**The strongest shape turned out to be one already in the tree.** `signal_reach_test`'s loops host
+**no check on the success path** — they add checks only when a new defect appears — so deleting a
+register entry does not shed a check: the entry's per-key check is replaced 1:1 by the live failure
+the now-unregistered defect raises. **The count is conserved, not floored.** Better than a frozen
+budget, which only says a number moved; this says which member moved and in which direction, and
+never needs re-freezing.
+
+**The sharpest finding: a floor computed from the population it guards asserts nothing at any
+value.** `port_layout_bounds_test` floored `total_decks >= (MAX_SIZE + 1) * 2` — derived from the
+constant the loop walks, so it shrinks by exactly as much as the thing it is meant to catch. Not a
+weak floor; **not a floor at all.** Anchor a floor to a declared literal, never to its own
+population.
+
+**Third form of "a discovered population is not always a data file", and the plainest:** after a
+regex scan over `.gd` and a `const` table, this one is **a bare `const int`** — one integer setting
+a test's coverage.
+
+**And the screen was wrong:** §4f said judge on what the loop *iterates*. A unit with 20 discovered
+loops proved structurally fixed because every one **aggregates into a scalar**. The decisive
+question is **whether a check site sits inside the loop.**
+
+**A use nobody designed:** the hardening caught a **polluted gate run** — a full gate started beside
+a fixture-mutating wave reported `missing ["bulk_small"]` at the moment it was absent. Before, that
+run would have shed forty checks and reported PASS, and the baseline would have been recorded as
+clean. **Never run a full gate while a fixture-mutating wave is live.**
+
+### OPEN — the 34 units that report no check count at all
+
+Classified, never probed, and **arguably worse than the population just closed**: a unit that prints
+no number cannot be diffed between runs, so every failure mode in §4f is invisible in it by
+construction. `coastal_port_placer_test` was one — it printed "all checks passed" and had a check
+that had been **running zero times for weeks**.
+
+Alongside it, a static hole: **`deckhouse_shape_test` names 3 of the 4 presets on disk**, so
+`sjark_15m` has never had a deckhouse check run against it at all.
+
 ### Standing, not a task
 
 Every model edit returns a render and the orchestrator looks at it. No metric for appearance —
