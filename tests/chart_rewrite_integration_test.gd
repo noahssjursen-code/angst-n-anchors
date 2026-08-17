@@ -45,20 +45,47 @@ const MUST_AGREE: Array[String] = [
 	## measured: bulk-foundable ports 5→4 and 11→9 in two of six worlds, no world
 	## below four, fishing and general untouched.
 	"commodity_imports",
+	## STRUCK OFF THE REGISTER, 2026-08-17, and not by patching a field: the
+	## PARALLEL DERIVATION UNDERNEATH the whole register was collapsed.
+	## `chart_summary` used to recompute the trade profile, the size ladder and the
+	## RNG draws beside `expand_uncached` while already holding the world's PortData
+	## — it ran a full `expand` for the fish flag and kept one boolean. It now reads
+	## that expansion. Measured: the re-derivation was 0.13 ms of a 19.88 ms call
+	## (99.3% of which was the expansion it already paid for), and 18 of the 20
+	## published keys already held the world's exact value at 210/210 ports.
+	##
+	## The register's own reason for THIS entry was its fix: *"the world prepends
+	## `Terrain-traced Port Layout`, which map_overlay does not filter the way it
+	## filters `Export:`"*. The panel now publishes the world's list verbatim and
+	## `map_overlay` filters that note beside `Export:`, matching
+	## `PortExpander.LAYOUT_FEATURE_NOTE` so producer and presenter cannot drift.
+	## The FACILITIES line a player reads is unchanged — asserted through the real
+	## presenter in `port_feature_promise_test`, which also fails if the note ever
+	## reaches a player.
+	"features",
 ]
 
+## ONLY TWO ENTRIES REMAIN, AND BOTH ARE OWNER DECISIONS — 2026-08-17.
+##
+## Every other entry this register ever held came from ONE §3b instance, the
+## parallel derivation in `chart_summary`, and was struck by collapsing it. These
+## two were deliberately NOT collapsed: doing so would silently change a number a
+## player reads, which is worse than the divergence. `chart_summary` keeps the
+## panel's own value for both, verified byte-identical to the pre-collapse output
+## at 210 of 210 ports, and the block that does it names what to delete once the
+## owner decides.
 const KNOWN_DIVERGENT: Dictionary = {
 	## 210/210 ports. `_population(rng, size)` is drawn from an RNG the two
-	## producers advance differently, so the POPULATION line on the pick panel is a
-	## different number from the one the world's PortData carries for the same
-	## port. Nobody has decided which is that port's population.
+	## producers advance differently — the world spends one extra `randf()` on its
+	## legacy rotation before drawing — so the POPULATION line on the pick panel is
+	## a different number from the one the world's PortData carries for the same
+	## port. Both are draws from the same band. Nobody has decided which is that
+	## port's population, so the panel still prints its own.
 	"population": "the two producers draw it from differently-advanced RNGs",
-	## 210/210, and cosmetic: the world prepends "Terrain-traced Port Layout",
-	## which `map_overlay` does not filter the way it filters "Export:".
-	"features": "the world prepends a layout note the panel would print verbatim",
 	## 72/210. The summary publishes `PortSizing.berth_count(size)` — the LADDER —
 	## and the world publishes `_count_berths(layout_graph)` — what got BUILT. The
-	## panel's own meta line reads "size N · M berths".
+	## panel's own meta line reads "size N · M berths". Which of the two a player
+	## should read is a product question, not a slip.
 	"berth_count": "the summary prints the size ladder, the world counts quays",
 }
 
@@ -180,15 +207,24 @@ func _check_all(t: TestReport) -> void:
 
 	## ── the layout argument `for_preview` hands to `chart_summary` ────────────
 	##
-	## `PortExpander.realized_fish_landing` runs a FULL expansion to answer the
-	## fish question, and `ChartHarbourPlan.resolve_port_data` runs one again to
+	## `PortExpander.summary_expansion` runs a FULL expansion — since the
+	## parallel-derivation collapse it answers the panel's WHOLE dossier, not just
+	## the fish question — and `ChartHarbourPlan.resolve_port_data` runs one again to
 	## draw the harbour beside the panel. If the picker's expansion took different
 	## inputs from the chart's, the screen holds two different harbours for one port
 	## — the verdict from one, the silhouette from the other — and pays for both.
 	## The cache keys on the layout checksum, so this is the property that the
-	## `world_layout` argument was added (`c9abeda`) to buy, and it is the only
-	## measured consequence of that argument: every field `chart_summary` publishes
-	## is IDENTICAL with and without a layout at 70 of 70 ports surveyed.
+	## `world_layout` argument was added (`c9abeda`) to buy, and it is still the only
+	## measured consequence of that argument.
+	##
+	## RE-MEASURED ON THE NEW PUBLISHED SET, 2026-08-17, because the old measurement
+	## was taken over the fields the summary published BEFORE the collapse and four
+	## more now come off the world's PortData (`rotation_y`, `layout_seed`,
+	## `site_max_size`, `export_slots`). Over the full base — six seeds x 35 ports,
+	## `tests/_layout_arg_publish_probe.gd` — **not one published key moves** when the
+	## layout is dropped, so the claim survives the change rather than being carried
+	## forward on trust. What DOES move is the harbour underneath: 81 paths at 70 of
+	## 70 ports, asserted below.
 	t.check(
 		"the preview really cached its expansions (%d entries) — a delta of zero"
 			% cache_after_preview
@@ -233,6 +269,81 @@ func _check_all(t: TestReport) -> void:
 			% [pads_differ, live_definitions.size()]
 		+ " layout-less harbour is a different harbour, not a rescaled one",
 		pads_differ > 0,
+	)
+
+	## ── the definition `chart_summary` promises not to touch ───────────────────
+	##
+	## ⚠ THIS CHECK EXISTS BECAUSE A BLIND MUTATION PASSED — 2026-08-17. Dropping
+	## the `definition.size` restore in `PortExpander.summary_expansion` passed this
+	## unit AND `port_fishing_service_test` first time, so it is recorded as a
+	## finding and closed here.
+	##
+	## It was not a check that vanished; it was a question nobody asked (REALITY
+	## §4b), and the collapse is what exposed it. `chart_summary` used to record
+	## `port_definition` at the END of the call, AFTER the restore, so a broken
+	## restore corrupted the recorded dict and the per-port placement check above
+	## caught it by accident. It now records the definition at ENTRY, which is
+	## strictly more correct — the recorded dict is the placed one whatever the
+	## restore does — and that accidental coverage went with it. So the property
+	## gets its own check: `expand_uncached` RESOLVES a definition in place (clamps
+	## `size`, writes back `site_max_size`) and a caller who summarises a port must
+	## get its definition back as it handed it over, because the world expands the
+	## same object afterwards.
+	##
+	## THE CACHE IS THE TRAP HERE, AND IT TOOK A SECOND MUTATION TO SEE IT. The
+	## first version of this check ran on the warm cache left by everything above,
+	## so every `chart_summary` call was a `PortDataCache` HIT, `expand_uncached`
+	## was never entered, and NOTHING RESOLVED THE DEFINITION AT ALL — the mutation
+	## passed again, against a check written specifically for it. A cache hit cannot
+	## corrupt a definition, so the property is only ever at risk on a MISS, and a
+	## check for it has to force one. The cache is cleared below and the misses are
+	## COUNTED, so a future change that makes these calls hit again reds this rather
+	## than quietly emptying it.
+	##
+	## Floored twice over, because either floor alone is passable: every port must
+	## really have expanded here, and an unrestored expansion must really have moved
+	## something at some of them — at this seed and port count it resolves
+	## `site_max_size` at 15 of 20 and `size` at 1 (`tests/_restore_witness_probe.gd`),
+	## re-measured below rather than trusted from this sentence.
+	PortDataCache.clear()
+	var definition_touched: Array[String] = []
+	var unrestored_would_move := 0
+	var summary_expansions := 0
+	for index in range(live_definitions.size()):
+		var source := (live_definitions[index] as PortDefinition).to_dict()
+		var handed_over := PortDefinition.from_dict(source)
+		var cache_before: int = PortDataCache._cache.size()
+		PortExpander.chart_summary(handed_over, 90210, snapshot.layout)
+		if PortDataCache._cache.size() > cache_before:
+			summary_expansions += 1
+		if handed_over.to_dict() != source:
+			definition_touched.append(str(source.get("port_id", index)))
+		var unrestored := PortDefinition.from_dict(source)
+		PortExpander.expand_uncached(unrestored, 90210, snapshot.layout)
+		if unrestored.to_dict() != source:
+			unrestored_would_move += 1
+	t.check(
+		"`chart_summary` hands every definition back exactly as it received it (%d"
+			% definition_touched.size()
+		+ " resolved in place: %s) — the expansion inside it clamps `size` and"
+			% str(definition_touched)
+		+ " writes back `site_max_size`, and the world expands the same object next",
+		definition_touched.is_empty(),
+	)
+	t.equal(
+		"and every one of those summaries really expanded rather than hitting the"
+		+ " cache — a hit never touches the definition, so a warm cache makes the"
+		+ " check above ask nothing at all, which is how this exact mutation passed"
+		+ " twice",
+		summary_expansions,
+		live_definitions.size(),
+	)
+	t.check(
+		"and the expansion really would have resolved %d of %d of them without the"
+			% [unrestored_would_move, live_definitions.size()]
+		+ " restore — otherwise the check above is agreeing about a definition"
+		+ " nothing was going to touch",
+		unrestored_would_move > 0,
 	)
 
 	var base = BaseClass.new()

@@ -4169,6 +4169,54 @@ the imports bug now fixed. Two are **registered and are owner decisions, not sli
 port's population, and whether the panel should print the ladder or the built count. Collapsing the
 parallel derivation is a wave of its own.
 
+### CLOSED 2026-08-17 — the parallel derivation collapses, and it made the picker faster
+
+**The trade the brief assumed was no longer the choice anyone was making.** Measured over 210 ports
+cold: `chart_summary` cost **19.88 ms**, of which the `expand()` already inside it was **19.75 ms
+(99.3%)** and the parallel trade/size/RNG derivation **0.13 ms (0.7%)**. Yesterday's fish fix had
+already put a full expansion in there and left the re-derivation running beside it. **Collapsing it
+removed work.** Cache: **0 new expansions over 210 ports** when the chart then draws the harbour it
+just summarised. And **18 of the 20 published keys already held the world's exact value at 210/210** —
+including `site_max_size`, which is *not* readable off the definition.
+
+**Whole-structure diff of every published key, 210 ports, before vs after: exactly one key changed.**
+`features` gained the world's generation note; both owner-decision fields byte-identical. `features`
+struck from the divergence register into `MUST_AGREE` — the panel now publishes the world's list
+verbatim and the presenter filters the note beside its `Export:` filter. **The FACILITIES line a
+player reads is unchanged, asserted through the real presenter** (reproduced by the orchestrator:
+dropping that filter reds 3/34 and names the note as a facility advertised everywhere and built
+nowhere).
+
+`realized_fish_landing` **deleted** — after the collapse its own declaration was its only hit, while
+five comments called it "the shared derivation".
+
+**Consequence identical in all 18 cells** (6 seeds × 3 starter families), cross-checked on the real
+CONFIRM button end to end.
+
+**Three findings, and the sharpest is about a check the wave itself wrote.** A definition-restore had
+**no check at all** — an unasked question, not a vanished one — and the collapse exposed it by moving
+the recording earlier, which had been catching a broken restore *by accident*. Its first replacement
+check **passed the mutation too**, because it ran on a warm cache where `expand_uncached` never runs.
+Closed with three checks: the property, a forced-miss count, and a witness floor proving an
+unrestored expansion really would move 15 of 20.
+
+**Also found: the register asserts *disagreement*, so a different wrong number still passes it.** That
+is why the two undecided values are frozen in a second unit, **predicted from the pre-collapse
+producer and then confirmed** rather than read off the new run.
+
+### OPEN — three decisions and one unmeasured defect
+
+**Yours, and the wave correctly refused all three:** whether a port's population is the panel's number
+or the world's (210/210 divergent); whether the panel prints the size **ladder** or the **built** quay
+count (72/210); and whether the generation note should leave the world's `features` altogether rather
+than being filtered at the presenter. Preserving the panel's population needs two RNG stream-advance
+draws, kept and labelled with the exact lines to delete once decided.
+
+**Reported and not fixed:** `site_max_size` as published by `chart_summary` **is read by nothing** —
+its only consumer reads it on a branch the preview never takes, and the branch that *is* live defaults
+the ceiling to 8. So an unstamped port's silhouette on the live chart is drawn from a defaulted
+ceiling. Unmeasured path.
+
 ### Standing, not a task
 
 Every model edit returns a render and the orchestrator looks at it. No metric for appearance —

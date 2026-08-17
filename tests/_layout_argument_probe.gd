@@ -7,7 +7,9 @@ extends SceneTree
 ## `PortExpander.chart_summary` call changed NOTHING: `port_feature_promise_test`
 ## stayed PASS (32) with identical witness ports and identical counts. Either the
 ## layout does not reach the fish-landing answer, or nothing measured looks where
-## it does. `PortExpander.realized_fish_landing`'s header says an expansion without
+## it does. `PortExpander.summary_expansion`'s header (written on
+## `realized_fish_landing`, which was deleted the same day when the collapse left it
+## with no callers) says an expansion without
 ## a layout "answers a different question", and that sentence is a claim.
 ##
 ## So: expand every port of two worlds BOTH ways and diff the fields.

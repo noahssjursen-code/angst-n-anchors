@@ -36,6 +36,67 @@ func _run() -> void:
 		PortDefinition.from_dict(advertised_definition).site_quay_half_m,
 		island.site_quay_half_m,
 	))
+
+	## ═══ THE TWO NUMBERS NOBODY HAS DECIDED, FROZEN SO THEY CANNOT MOVE BY
+	## ═══ ACCIDENT — 2026-08-17
+	##
+	## `chart_summary` stopped re-deriving the trade profile, the size ladder and
+	## the RNG draws beside `expand_uncached` and now reads that expansion — except
+	## for `population` and `berth_count`, which stay the PANEL's own numbers
+	## because which value a player should read is an owner decision, not a slip.
+	## Both are registered divergences in `chart_rewrite_integration_test`.
+	##
+	## THAT REGISTER CANNOT GUARD THEM. It asserts the panel disagrees with the
+	## world; a panel number that quietly becomes a DIFFERENT number still
+	## disagrees, so the register still passes. And the panel's population is
+	## reproduced by advancing an RNG past two draws the panel no longer uses for
+	## anything else — two lines that read exactly like dead code. Deleting them
+	## changes the POPULATION line at every port in the game and reds nothing.
+	##
+	## So the values are frozen here. They are not restatements of a spec (REALITY
+	## §4a): there is no spec, and that is the whole point — they are the numbers a
+	## player reads today, and they may change when somebody DECIDES, never as a
+	## side effect of a refactor. Both were PREDICTED from the pre-collapse producer
+	## (`tests/_panel_number_predict.gd` run against `1940c70`'s `port_expander.gd`)
+	## and then confirmed unchanged, rather than read off the new one — a number
+	## copied off the run it is meant to police is the guard writing the answer down
+	## for you (REALITY §4f).
+	##
+	## The world's two values are frozen beside them because freezing the panel's
+	## alone is vacuous the moment the two agree: if a future change makes the panel
+	## print the world's number, the pair below is what says so instead of one check
+	## silently becoming a check about nothing.
+	t.equal(
+		"the pick panel's POPULATION line for this port is the number it has always"
+		+ " been — an owner decision, so it moves when someone decides and not when"
+		+ " someone refactors the RNG stream it is drawn from",
+		int(summary.get("population", -1)),
+		3827,
+	)
+	t.equal(
+		"the pick panel's berth count for this port is the SIZE LADDER's number,"
+		+ " unchanged — the panel's meta line reads \"size N · M berths\"",
+		int(summary.get("berth_count", -1)),
+		2,
+	)
+	var world_island := PortExpander.expand(
+		PortDefinition.from_dict(island.to_dict()), 77127)
+	t.equal(
+		"and the WORLD still says something different about the population (%d vs"
+			% world_island.population
+		+ " the panel's %d) — the registered divergence, named here so the freeze"
+			% int(summary.get("population", -1))
+		+ " above cannot quietly become a check about two equal numbers",
+		world_island.population,
+		3550,
+	)
+	t.equal(
+		"and about the berths, because it counts the quays it BUILT rather than the"
+		+ " ladder (%d vs the panel's %d)"
+			% [world_island.berth_count, int(summary.get("berth_count", -1))],
+		world_island.berth_count,
+		3,
+	)
 	var profile := PortTradeProfile.derive(island, 77127)
 	PortFishingService.apply_to_profile(profile)
 	t.check(

@@ -52,7 +52,8 @@ static func apply_to_profile(profile: PortTradeProfile) -> void:
 	## to patch here — `_import_count(0) == 0` is a deliberate trade ladder and
 	## exempting one commodity from it is a world-building decision. Until it is
 	## made, the panel no longer advertises what the ladder trims (see
-	## `PortExpander.realized_fish_landing`).
+	## `PortExpander.summary_expansion`, which the pick panel's whole dossier now
+	## comes from).
 	_ensure_first(profile.destiny_import_slots, COMMODITY_ID)
 	_ensure_first(profile.import_slots, COMMODITY_ID)
 

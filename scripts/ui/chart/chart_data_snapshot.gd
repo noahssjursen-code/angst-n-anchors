@@ -115,12 +115,16 @@ static func for_preview(
 	WeatherField.world_seed = seed
 	WeatherFrontField.initialize(seed)
 	for definition in definitions:
-		## Lightweight trade/size summary — full PortLayoutGenerator is too
-		## expensive for the captain home-port picker (dozens of ports) and this
-		## call avoids it for everything EXCEPT `has_fish_landing`, which is
-		## realized infrastructure and has exactly one honest derivation: the berth
-		## plan in the port's layout graph. The layout is handed over so that
-		## expansion takes the same inputs the world's own `expand` takes.
+		## ONE PRODUCER FOR THE WHOLE DOSSIER — 2026-08-17. This used to be
+		## described as a "lightweight trade/size summary … too expensive to run
+		## the full PortLayoutGenerator for, EXCEPT `has_fish_landing`". Both halves
+		## stopped being true: the fish fix put a full expansion inside this call,
+		## and the re-derivation that was meant to avoid it went on running beside
+		## it at 0.7% of the cost while contradicting it on four fields. This call
+		## now runs one expansion and READS it. Every field but `population` and
+		## `berth_count` — the two registered owner decisions — is the world's own.
+		## The layout is handed over so that expansion takes the same inputs the
+		## world's own `expand` takes, and hits the same cache entry.
 		##
 		## ⚠ THE SENTENCE THAT USED TO END THIS PARAGRAPH — *"measured as reaching
 		## the generator (the basin's arm cap moves at 70 of 70 ports) but NOT as
@@ -134,7 +138,7 @@ static func for_preview(
 		## laid at 10 of 70. And `chart_rewrite_integration_test` now catches the
 		## argument going missing: dropping it doubles the port expansions this
 		## screen pays for, so the panel's verdict and the harbour silhouette beside
-		## it stop being the same PortData. See `PortExpander.realized_fish_landing`.
+		## it stop being the same PortData. See `PortExpander.summary_expansion`.
 		##
 		## NOT MEASURED: this leaves 35 `PortData` per preview in the static
 		## `PortDataCache`, which nothing clears until `world.gd._rebuild`. A player

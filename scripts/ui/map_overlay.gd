@@ -442,6 +442,17 @@ func _refresh_pick_panel() -> void:
 		var feature := str(raw)
 		if feature.begins_with("Export:"):
 			continue
+		## `PortExpander.LAYOUT_FEATURE_NOTE` is a note about how the harbour was
+		## generated, not a facility — no port stamp builds anything for it. It has
+		## always been in the WORLD's feature list (`PortCatalog`, so the live-tree
+		## snapshot) and reached no player only because pick mode is menu-only.
+		## Since the pick panel's dossier stopped re-deriving its own feature list
+		## and started publishing the world's (2026-08-17), it arrives here on the
+		## preview path too, so the filter is where it belongs: in the presenter,
+		## beside the `Export:` filter, matching the producer's own constant so the
+		## two cannot drift.
+		if feature == PortExpander.LAYOUT_FEATURE_NOTE:
+			continue
 		feature_bits.append(feature)
 	var features_line := ", ".join(feature_bits) if not feature_bits.is_empty() else "Standard apron"
 	var compatible := _home_port_supports_required_family(info)

@@ -51,8 +51,9 @@ extends Node
 ## disagree: **Fish Landing** was in the register below until 2026-08-17, because
 ## the panel printed ELIGIBILITY while the world built from the BERTH PLAN, and
 ## those are not the same question. That entry is struck off — the two producers
-## now share one derivation (`PortExpander.realized_fish_landing`) — and this file
-## is what would catch the divergence coming back.
+## now share one derivation (`PortExpander.summary_expansion`, which since the
+## parallel-derivation collapse supplies the panel's WHOLE dossier and not just
+## this flag) — and this file is what would catch the divergence coming back.
 ##
 ## Name matching is deliberately LOOSE (lowercase, alphanumerics only,
 ## substring): `"Fish Landing"` is delivered by `FishLandingPlant`. Loose is the
@@ -281,7 +282,7 @@ const UNBUILT_PROMISES := {
 	##
 	## The promise is kept. `chart_summary` no longer prints raw
 	## `PortFishingService.is_eligible`; it reads the flag back from the realized
-	## berth plan through `PortExpander.realized_fish_landing`, so the panel and the
+	## berth plan through `PortExpander.summary_expansion`, so the panel and the
 	## world now have ONE derivation of the fact (REALITY §3b) and the set equality
 	## below no longer names it. Deleting the entry rather than editing it is the
 	## rule this register is written on: it can only shrink.
@@ -309,7 +310,7 @@ const UNBUILT_PROMISES := {
 ## version 46, and enumerated rather than copied off a run — a budget re-frozen to
 ## match a number nobody predicted is the guard writing the answer down for you:
 ##
-##   9  advertised-side, coverage and derivation checks
+##  11  advertised-side, coverage and derivation checks
 ##  10  witness-stamp floors — one per DISTINCT witness port stamped. Twelve
 ##      witnesses are chosen (three facilities × two populations × smallest and
 ##      largest), of which `sweep-4-0-on` answers for all three facilities and
@@ -318,14 +319,23 @@ const UNBUILT_PROMISES := {
 ##   8  claim verifications — 2 entries × 4
 ##   1  the set equality
 ##   1  this budget, counting itself
-##  ── 32
+##  ── 34
 ##
 ## It was 35 with three register entries and nine stamps. Striking **Fish Landing**
 ## on 2026-08-17 removed its four claim checks; its witness set also lost the
 ## divergence witness it no longer has, and the two extremes it now contributes
 ## (`port-4`, `sweep-1-0-nat`) are ports no other facility nominates, so the stamp
 ## count rose by one. 35 − 4 + 1 = 32.
-const EXPECTED_CHECKS := 32
+##
+## 32 → 34 later the same day, and PREDICTED before the run rather than read off
+## it: collapsing `chart_summary`'s parallel derivation made the panel publish the
+## world's `features` verbatim, so `PortExpander.LAYOUT_FEATURE_NOTE` now arrives
+## on the preview path and `map_overlay` filters it. That added exactly the two
+## advertised-side checks that hold it from both ends — every surveyed port really
+## carries the note, and the panel prints it to nobody. This budget caught the
+## addition on the first run, which is the guard working in the direction nobody
+## usually tests.
+const EXPECTED_CHECKS := 34
 
 var _t := TestReport.new("port_feature_promise_test")
 var _world: Node3D
@@ -542,6 +552,40 @@ func _check_advertised_side() -> void:
 		+ " — the filter is OBSERVED here, not re-listed, so a change to it"
 		+ " moves this population instead of going unnoticed",
 		_dropped_by_panel.size() >= 1
+	)
+	## ── the generation note, both ways — 2026-08-17 ───────────────────────────
+	##
+	## `PortExpander.LAYOUT_FEATURE_NOTE` is a note about how the harbour was
+	## generated and no port stamp builds anything for it. Until today it was in the
+	## WORLD's list only, and reached no player because pick mode is menu-only and
+	## the menu used the other producer. `chart_summary` stopped re-deriving its own
+	## feature list and now publishes the world's verbatim, so the note arrives on
+	## the preview path too and `map_overlay` filters it beside `Export:`.
+	##
+	## Asserted from BOTH sides, because either one alone is vacuous: that every
+	## surveyed port really carries the note (otherwise the filter check below has
+	## nothing to filter and would pass on an empty population — REALITY §4), and
+	## that no port's panel printed it.
+	var carrying := 0
+	var printing: Array[String] = []
+	for row in _survey:
+		if (row["features"] as Array).has(PortExpander.LAYOUT_FEATURE_NOTE):
+			carrying += 1
+		if (row["advertised"] as Array).has(PortExpander.LAYOUT_FEATURE_NOTE):
+			printing.append(str(row["id"]))
+	_t.equal(
+		"every surveyed port's `features` carries the generation note — the panel"
+		+ " publishes the world's list verbatim, so a port without it means the"
+		+ " producer changed and the filter check below is asking nothing",
+		carrying,
+		_survey.size(),
+	)
+	_t.check(
+		"and the panel prints it to nobody (%d ports would: %s) — it is a note"
+			% [printing.size(), str(printing)]
+		+ " about generation, not a facility, and it is advertised at every port"
+		+ " while being built at none",
+		printing.is_empty(),
 	)
 	var sizes: Dictionary = {}
 	var regions: Dictionary = {}

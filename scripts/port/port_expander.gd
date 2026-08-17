@@ -4,6 +4,13 @@ extends RefCounted
 ## Deterministic converter: PortDefinition + world_seed → initial PortData.
 ## Pipeline: trade profile → coast-traced foundation + berth_plan → PortData.
 
+## The world's own `features` list opens with this string. It is a note about how
+## the harbour was generated, not a facility — no port stamp builds anything for
+## it — and the pick panel filters it the way it filters `Export:`. Named here
+## rather than spelled twice so the producer and the panel's filter cannot drift
+## (`map_overlay.gd` matches on this constant).
+const LAYOUT_FEATURE_NOTE := "Terrain-traced Port Layout"
+
 const POPULATION_RANGE: Dictionary = {
 	0: [50, 300],
 	1: [300, 1500],
@@ -87,6 +94,16 @@ static func _restamp_generation(definition: PortDefinition, site: String) -> boo
 ## do not repeat that half of the argument; the picker pays this once and the world
 ## pays again.
 ##
+## ⚠ THAT COST PAIR IS NO LONGER A CHOICE ANYONE IS MAKING — 2026-08-17. It reads
+## as though a summary that asks the expander costs 70× a summary that re-derives.
+## It does not, because THIS function put the full expansion inside `chart_summary`
+## and the re-derivation went on running beside it. Re-measured over the same six
+## seeds x 35 ports (`tests/_collapse_feasibility_probe.gd`): `chart_summary` cost
+## **19.88 ms** per port, of which **19.75 ms** was this expansion — the parallel
+## trade/size/RNG derivation was **0.13 ms**, 0.7% of the call. So collapsing it
+## made the picker faster. Quote the 0.24 ms number only about the producer that
+## existed before `84b8afa`.
+##
 ## PASS THE LAYOUT. Dropping it was mutation M2 of the 2026-08-17 fix and IT
 ## PASSED FIRST TIME, which was recorded as a finding. The finding was real; the
 ## paragraph that used to sit here was not.
@@ -126,141 +143,173 @@ static func _restamp_generation(definition: PortDefinition, site: String) -> boo
 ## panel's verdict and the silhouette beside it come from one PortData and not two
 ## — and the same unit asserts the layout-less harbour really is a different
 ## harbour, so that check is not a perf nicety.
-static func realized_fish_landing(
+## ⚠ THE FUNCTION THIS HEADER USED TO SIT ON IS GONE — 2026-08-17, same day it was
+## written. It was `realized_fish_landing(definition, seed, layout) -> bool`: it ran
+## a full `expand` and returned one field of it. Collapsing `chart_summary`'s
+## parallel derivation left it with **zero callers anywhere** — its own declaration
+## was the only hit in `scripts/` and `tests/` — while five comments still pointed at
+## it as "the shared derivation", which would have told every future reader that the
+## pick panel goes through a function nothing calls (REALITY §3d; the house rule is
+## that proved supersession is DELETED, not archived). Its record is kept here,
+## because the fish-landing fix is the reason this seam exists at all, and the
+## function that now does the asking is below.
+##
+## `expand_uncached` RESOLVES the definition in place — it clamps `size` and
+## writes back `site_max_size`. `chart_summary` promises its caller an untouched
+## definition (`port_fishing_service_test` asserts the recorded `port_definition`
+## is byte-identical to the placed one), so both fields are restored here. The
+## cache key is taken from the definition AS PASSED, so the world's own later
+## `expand` of the same port still hits this entry.
+##
+## Do NOT read the resolved `site_max_size` back off the definition after this
+## call: on a cache HIT `PortDataCache.expand` never enters `expand_uncached` and
+## the definition is not resolved at all, so the value would be whatever the
+## caller passed in. The resolved ceiling is published by the world at
+## `layout_graph.initial_attributes["site_max_size"]` (`port_layout_generator.gd:92`)
+## and that is where `chart_summary` takes it from — verified equal to the value
+## the old parallel derivation computed at 210 of 210 ports, six seeds x 35.
+static func summary_expansion(
 		definition: PortDefinition,
 		world_seed: int,
 		world_layout: WorldLayout = null,
-) -> bool:
+) -> PortData:
 	if definition == null:
-		return false
-	## `expand_uncached` RESOLVES the definition in place — it clamps `size` and
-	## writes back `site_max_size`. `chart_summary` promises its caller an
-	## untouched definition (`port_fishing_service_test` asserts the recorded
-	## `port_definition` is byte-identical to the placed one), so both fields are
-	## restored. The cache key is taken from the definition AS PASSED, so the
-	## world's own later `expand` of the same port still hits this entry.
+		return null
 	var size := definition.size
 	var site_max_size := definition.site_max_size
-	var data := expand(definition, world_seed, world_layout)
+	var world_data := expand(definition, world_seed, world_layout)
 	definition.size = size
 	definition.site_max_size = site_max_size
-	return data != null and data.has_fish_landing
+	return world_data
 
 
-## Chart / menu summary without coast tracing or PortLayoutGraph generation.
-## Same trade + size rules as `expand`, cheap enough for dozens of ports —
-## EXCEPT for `has_fish_landing`, which is realized infrastructure and cannot be
-## derived from anything cheaper than the berth plan. See above.
+## THE PICK PANEL'S DOSSIER, ASKED OF THE WORLD RATHER THAN RE-DERIVED — 2026-08-17.
+##
+## This function used to recompute the trade profile, the size ladder and the RNG
+## draws in parallel with `expand_uncached`, **while holding the world's own
+## `PortData` in hand and throwing it away**: it already called
+## `realized_fish_landing`, which runs a full `expand`, and kept one boolean out
+## of it. That single §3b instance produced every divergence the register ever
+## held — `has_fish_landing` (52/210, fixed by asking), `commodity_imports`
+## (24/210, fixed by resyncing the copy), `population` (210/210), `features`
+## (210/210) and `berth_count` (72/210). Fixing a parallel derivation field by
+## field is a losing game; this asks the producer instead.
+##
+## COST, MEASURED, because "too expensive for the picker" was the reason the second
+## derivation existed and had never been re-checked after the fish fix put a full
+## expansion inside this call anyway. Six seeds x 35 ports, sizes 0–4
+## (`tests/_collapse_feasibility_probe.gd`), cold cache, per port:
+##
+##   chart_summary as it stood      19.88 ms
+##   the expand() already inside it 19.75 ms   <- 99.3% of it
+##   chart_summary on a warm cache   0.26 ms
+##
+## So the parallel derivation was **0.13 ms of a 19.88 ms call** and deleting it
+## makes the picker faster, not slower. There is no cost argument left, and the
+## 0.24 ms → 16.8 ms figure quoted before the fish fix is no longer the choice
+## anyone is making: the expansion is already paid for.
+##
+## And it is the SAME expansion the chart beside the panel draws from: measured
+## **0 new cache entries over 210 ports** when `ChartHarbourPlan.resolve_port_data`
+## re-expands the port this summary just described. `chart_rewrite_integration_test`
+## holds that as a check.
+##
+## PRODUCIBILITY, measured field by field before any of this was written: of the 20
+## keys published below, **18 already hold exactly the value the world's PortData
+## carries, at 210 of 210 ports** — including the resolved `site_max_size`, the
+## traced `rotation_y`, `export_slots`, `region` and the whole `features` list once
+## the generation note is accounted for. Nothing here is a field the expander
+## cannot produce at preview time.
+##
+## TWO FIELDS ARE DELIBERATELY NOT COLLAPSED, AND THEY ARE OWNER DECISIONS —
+## see the block below. Collapsing them would silently change a number a player
+## reads, which is worse than the divergence (`chart_rewrite_integration_test`
+## keeps both registered, and each must still diverge or be struck off).
 static func chart_summary(
 		definition: PortDefinition,
 		world_seed: int,
 		world_layout: WorldLayout = null,
 ) -> Dictionary:
 	_restamp_generation(definition, "chart_summary")
-	## Taken from the untouched definition, before the size clamping below, so the
-	## expansion sees exactly what the world's `expand` will see.
-	var has_fish_landing := realized_fish_landing(definition, world_seed, world_layout)
-	var site_max := clampi(
-		definition.site_max_size if definition.site_max_size > 0 else PortSizing.MAX_SIZE,
-		PortSizing.MIN_SIZE,
-		PortSizing.MAX_SIZE,
-	)
-	var size := mini(PortSizing.normalized_size(definition.size), site_max)
-	var site_seed := definition.site_seed if definition.site_seed != 0 \
-			else world_seed ^ _hash_id(definition.port_id)
+	## Recorded BEFORE the expansion, which resolves the definition in place, so
+	## the panel carries the placed site's exact geometry inputs. Reconstructing
+	## from a summary loses measured quay clearance.
+	var placed_definition := definition.to_dict()
+	var world_data := summary_expansion(definition, world_seed, world_layout)
+	if world_data == null:
+		return {}
+	var chart := world_data.to_chart_dict()
+	var graph_attrs: Dictionary = {}
+	if world_data.layout_graph != null:
+		graph_attrs = world_data.layout_graph.initial_attributes
+	var size := int(world_data.size)
+
+	## ── THE TWO FIELDS THIS WAVE WAS TOLD NOT TO DECIDE ──────────────────────
+	##
+	## `population` and `berth_count` are the panel's OWN numbers, and they stay
+	## the panel's own numbers on purpose. Both are registered divergences in
+	## `chart_rewrite_integration_test` and both are product questions, not slips:
+	##
+	##   population  — 210/210. Two draws from the same POPULATION_RANGE band off
+	##                 the same site seed; the world advances the stream one extra
+	##                 `randf()` (its legacy rotation draw) before drawing. Which
+	##                 number is that port's population has never been decided.
+	##   berth_count — 72/210. The panel prints `PortSizing.berth_count(size)`,
+	##                 the size LADDER; the world publishes `_count_berths`, the
+	##                 quays actually BUILT. The panel's meta line reads
+	##                 "size N · M berths". Which one a player should read has
+	##                 never been decided.
+	##
+	## Reproducing the panel's population needs the RNG stream the old parallel
+	## derivation advanced, so the two throwaway draws below are kept — and they
+	## are stream advancement ONLY, mirroring `expand_uncached`'s short-circuits
+	## (`or` does not evaluate its right side, and `size >= 0` is always true), not
+	## a second derivation of the flags, which are read off the world above.
+	## Verified against the pre-collapse output: both fields byte-identical at 210
+	## of 210 ports.
+	##
+	## WHEN THE OWNER DECIDES, this whole block is deleted and the two keys read
+	## `world_data.population` / `maxi(world_data.berth_count, 1)`; then strike the
+	## two register entries. Do not decide it here.
 	var rng := RandomNumberGenerator.new()
-	rng.seed = site_seed
-	## Clone definition fields the trade profile may read without mutating caller size forever.
-	var def_size := definition.size
-	definition.size = size
-	var trade := PortTradeProfile.derive(definition, world_seed)
-	var trade_max := PortTradeProfile.max_size_for_profile(trade)
-	site_max = mini(site_max, trade_max)
-	if size > site_max:
-		size = site_max
-		definition.size = size
-		PortTradeProfile.resync_for_size(trade, size)
-	## Gated on the REALIZED flag, not on eligibility: a port whose berth plan has
-	## no fish landing does not land fish, and the world's own trade profile
-	## agrees — the size ladder trimmed `fresh_groundfish` back out of it. Keeping
-	## eligibility here would have left the panel printing
-	## `IMPORTS  Fresh groundfish` one line above a FACILITIES line that no longer
-	## claims a fish landing.
-	##
-	## AND RESYNCED AFTER, BECAUSE THE WORLD DOES — 2026-08-17. Without the second
-	## line this panel published ONE IMPORT MORE THAN THE WORLD BUILDS, at 24 of 210
-	## ports over six seeds, and at 3 of them it ENABLED THE CONFIRM BUTTON for a
-	## bulk starter at a harbour with no bulk berth. `apply_to_profile` pushes
-	## `fresh_groundfish` onto the FRONT of `import_slots` and `destiny_import_slots`
-	## without trimming, so the visible list ran one slot past `_import_count(size)`.
-	## `expand_uncached` never had the defect: it applies the profile BEFORE
-	## `PortLayoutGenerator`, whose own `resync_for_size` re-takes the head of the
-	## destiny list and drops the commodity that no longer fits. This is the same
-	## sequence, not a new predicate — the measured extras were diesel ×13,
-	## containers ×5, crude_oil ×4 and grain ×3, and the three grain ports are the
-	## three false CONFIRMs.
-	##
-	## Consequence measured before it was believed, the same way the fish landing
-	## was: foundable home ports per 35-port world, panel → world truth, by starter
-	## career. Fishing 16/11/12/13/14/20, unchanged in all six. General 35 in all
-	## six, unchanged. Bulk 9, 8, 8, 8, **5→4**, **11→9** — three ports lost across
-	## 210, and no world drops below four. The shape predates the 2026-08-17 fish
-	## fix; it is in `c9abeda~1` unchanged.
-	if has_fish_landing:
-		PortFishingService.apply_to_profile(trade)
-		PortTradeProfile.resync_for_size(trade, size)
-	definition.size = def_size
-
-	var has_lighthouse := definition.has_lighthouse or (size >= 1 and rng.randf() < 0.3)
-	var has_fog_horn := definition.has_fog_horn or (size >= 0 and rng.randf() < 0.4)
-	var features: Array[String] = []
-	if has_lighthouse:
-		features.append("Lighthouse")
-	if has_fog_horn:
-		features.append("Fog Horn")
-	if has_fish_landing:
-		features.append("Fish Landing")
-	for commodity in trade.export_slots:
-		features.append("Export:%s" % commodity)
-
-	var region := "coastal"
-	match definition.region_kind:
-		PortDefinition.RegionKind.MAINLAND:
-			region = "mainland"
-		PortDefinition.RegionKind.FJORD:
-			region = "fjord"
-		PortDefinition.RegionKind.ARCHIPELAGO:
-			region = "archipelago"
-		_:
-			region = "coastal"
-
-	var berths := maxi(PortSizing.berth_count(size), 1)
+	rng.seed = int(world_data.layout_seed)
+	if not definition.has_lighthouse and size >= 1:
+		rng.randf()
+	if not definition.has_fog_horn:
+		rng.randf()
+	var panel_population := _population(rng, size)
+	var panel_berth_count := maxi(PortSizing.berth_count(size), 1)
+	## ── end of the undecided block ───────────────────────────────────────────
 
 	return {
-		"id": definition.port_id,
-		"display_name": definition.display_name,
-		"position": definition.world_position,
-		## Preserve the placed site's exact geometry inputs for the home-port
-		## preview. Reconstructing from a summary loses measured quay clearance.
-		"port_definition": definition.to_dict(),
+		"id": world_data.port_id,
+		"display_name": world_data.display_name,
+		"position": world_data.world_position,
+		"port_definition": placed_definition,
 		## Chart harbour silhouettes expand from this summary — yaw + site seed
-		## must match the placer or every quay faces world −Z (north-up).
-		"rotation_y": definition.rotation_y,
-		"layout_seed": site_seed,
-		"site_max_size": site_max,
+		## must match the placer or every quay faces world −Z (north-up). Both are
+		## now the world's, which is what the placer handed it.
+		"rotation_y": world_data.rotation_y,
+		"layout_seed": world_data.layout_seed,
+		"site_max_size": int(graph_attrs.get("site_max_size", size)),
 		"size": size,
-		"region": region,
-		"commodity_export": trade.primary_export(),
-		"commodity_imports": trade.import_slots.duplicate(),
-		"export_slots": trade.export_slots.duplicate(),
-		"population": _population(rng, size),
-		"berth_count": berths,
-		"features": features,
-		"max_ship_class": int(_ship_class_for_size(size)),
-		"max_ship_class_name": str(ShipClass.DISPLAY_NAME.get(_ship_class_for_size(size), "Vessel")),
-		"has_lighthouse": has_lighthouse,
-		"has_fog_horn": has_fog_horn,
-		"has_fish_landing": has_fish_landing,
+		"region": str(chart.get("region", "coastal")),
+		"commodity_export": world_data.commodity_export,
+		"commodity_imports": world_data.commodity_imports.duplicate(),
+		"export_slots": world_data.trade_profile.export_slots.duplicate() \
+				if world_data.trade_profile != null else [],
+		"population": panel_population,
+		"berth_count": panel_berth_count,
+		## The world's list VERBATIM, including `LAYOUT_FEATURE_NOTE`. The panel
+		## filters that note the way it filters `Export:` — presentation belongs to
+		## the presenter, and stripping it here would have been a second list.
+		"features": world_data.features.duplicate(),
+		"max_ship_class": int(world_data.max_ship_class),
+		"max_ship_class_name": str(
+			ShipClass.DISPLAY_NAME.get(world_data.max_ship_class, "Vessel")),
+		"has_lighthouse": world_data.has_lighthouse,
+		"has_fog_horn": world_data.has_fog_horn,
+		"has_fish_landing": world_data.has_fish_landing,
 	}
 
 
@@ -394,7 +443,7 @@ static func expand_uncached(
 	data.region_kind = definition.region_kind
 	data.ground_mode = definition.ground_mode
 	data.population = _population(rng, data.size)
-	data.features = ["Terrain-traced Port Layout"]
+	data.features = [LAYOUT_FEATURE_NOTE]
 	if data.has_lighthouse:
 		data.features.append("Lighthouse")
 	if data.has_fog_horn:
