@@ -3898,6 +3898,48 @@ REALITY §3 exactly: the check guards the seam next to the one that breaks. The 
 `captain_vessel_hard_persistence_test` is one of the 31 still reporting no count, so whether the
 hole is one function or the whole authoring path is unmeasured.
 
+### CLOSED 2026-08-17 — the save format nobody was checking is intact, and the refit path reaches nothing
+
+**Nothing is lost on save today, and that is the result rather than a disappointment.** All four
+shipped prebuilts round-trip with **zero differing fields**; a full-vocabulary refit — paint, sign,
+work light, multi-cell bench, wall text, authored hold and pad — survives both save lanes intact
+over three cycles. `light_yaw` was a plausible mutation, not a live defect. **The hole was real, the
+loss was not, and nobody could have known before the run.**
+
+**The bigger finding is a layer, not a field.** `shipyard_brick_editor`'s `layout_confirmed` has no
+listener, its entry points have no caller outside its own script, and no scene instantiates it — so
+the only live authoring is the prebuilt JSON the shipwright later sells. **REALITY §3 again, found
+in the subsystem the wave was sent to *use* rather than the one it was sent to test.**
+
+**The sibling shares the blind spot**, so the hole was the full width of both:
+`captain_vessel_hard_persistence_test` is the gate's only real process-boundary test — genuinely
+valuable — but it duplicates raw JSON and hand-types cells, so the authoring functions are never on
+its path either. All three mutations left it green.
+
+`brick_layout_save_roundtrip_test` (191) refits a **certified shipped prebuilt** through the
+editor's own mutators and compares the reload against **the live object and the literal player
+inputs** — never a dictionary the file typed, which is the trap that made the old check vacuous. All
+three mutations passed the existing gate first time; the new unit reds on each.
+
+Named, not closed, neither live: a legacy load path that drops every cell prop, and a pad normaliser
+that would silently kill any future per-pad field.
+
+### OPEN — can a player reach a builder at all?
+
+**Nobody has established that they can, and it is the owner's central premise.** The claim above —
+"a player cannot refit a boat in-game" — is specific and checkable for the **brick** editor, and
+**may be too broad**: `shipyard_brick_editor` is described in earlier notes as a *retired tool*,
+while `structure_studio` is the current one, has a lane-C probe at 225 checks, and is fed by every
+pipeline recent waves have improved.
+
+So the question is which is true: *the brick editor is dead and the studio is the live path*, or
+**neither is reachable** — in which case everything built on top of them (piece kit, enclosure
+reading, roof seal law, licence rules, save round trip) sits behind a door nobody can open.
+
+**And a gate finding rides on it:** if a subsystem can be entirely unreachable while its own probe
+runs 225 green checks, that is REALITY §3's worst instance repeating — the piece kit that was never
+wired in, caught only by a strip test. **Do the probes assert reachability at all?**
+
 ### Standing, not a task
 
 Every model edit returns a render and the orchestrator looks at it. No metric for appearance —
