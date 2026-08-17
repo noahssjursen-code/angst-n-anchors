@@ -1,6 +1,24 @@
 extends Node
 
-var _failures := PackedStringArray()
+const TestReport := preload("res://tests/support/test_report.gd")
+
+## ── WHY THIS FILE COUNTS ITS CHECKS (REALITY.md §4f, standing order 1a) ─────
+##
+## It used to print `Vessel persistence tests: all checks passed` and no number.
+## This is the unit that stands between a player and losing a boat they built,
+## and it discovers its own subject twice over: the round-trip fixture is one
+## vessel per entry of `HullRegistry.catalog()`, and the three checks that a
+## configured deck survives a JSON write live INSIDE `for uid in expected`,
+## which is that catalogue keyed by uid. A hull that leaves the registry takes
+## its whole round-trip with it and the sentence above does not change.
+##
+## `restored.owned_vessels.size() == HullRegistry.catalog().size()` is NOT a
+## guard against that: both sides are the same catalogue, so it is true at every
+## size — the `port_layout_bounds_test` shape (a bound computed from the
+## population it guards). Measured 2026-08-17: `hull_100x24` deleted from the
+## catalogue takes this file from PASS (48) to PASS (45) — three checks gone,
+## green both times, with that equality green throughout.
+var _t := TestReport.new("vessel_persistence_test", false)
 
 
 func _ready() -> void:
@@ -62,6 +80,22 @@ func _ready() -> void:
 
 	# This is the actual inter-instance boundary: Variant data -> JSON text ->
 	# fresh PlayerData. Every current hull goes through the exact same path.
+	#
+	# ⚠ AND IT IS ONLY THE SECOND HALF OF THE SAVE PATH — measured 2026-08-17,
+	# REALITY.md §3 (assert against the path that breaks). `BrickLayout.to_dict()`
+	# is what AUTHORS the `brick_layout` a player's vessel is stored with —
+	# `shipyard_brick_editor.gd:3109` and `:3134` write the record through it —
+	# and nothing below runs it. `VesselSpawn.brick_layout_of()` is a raw
+	# `duplicate(true)` passthrough and `expected[uid]` is the literal dict this
+	# file authored, so the comparison walks a dictionary this test wrote against
+	# the same dictionary after a JSON round trip.
+	#
+	# Demonstrated: `BrickLayout.to_dict()` mutated to `erase("light_yaw")` on
+	# every cell it saves — a work light's rotation silently lost on every save a
+	# player makes — and this file reports PASS (48), unchanged. `json_equivalent`
+	# is strict (it compares dictionary SIZE and every key), so it would have
+	# caught it; it never sees it. The editor-side half of the save format has no
+	# round-trip check anywhere in the gate.
 	var json := JSON.stringify({"version": PlayerSaveStore.SAVE_VERSION, "player": source.to_dict()})
 	var parsed: Variant = JSON.parse_string(json)
 	_check(typeof(parsed) == TYPE_DICTIONARY, "player envelope parses after JSON write")
@@ -205,16 +239,11 @@ func _ready() -> void:
 	_finish()
 
 
+## Argument order is (condition, label) here and (label, ok) in `TestReport`;
+## the local signature is kept so the call sites above are untouched.
 func _check(condition: bool, label: String) -> void:
-	if not condition:
-		_failures.append(label)
+	_t.check(label, condition)
 
 
 func _finish() -> void:
-	if _failures.is_empty():
-		print("Vessel persistence tests: all checks passed")
-		get_tree().quit()
-		return
-	for failure in _failures:
-		push_error("Vessel persistence test: " + failure)
-	get_tree().quit(1)
+	_t.finish(get_tree())

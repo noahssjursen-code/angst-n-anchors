@@ -1,6 +1,25 @@
 extends Node
 
-var _failures := PackedStringArray()
+const TestReport := preload("res://tests/support/test_report.gd")
+
+## ── WHY THIS FILE COUNTS ITS CHECKS (REALITY.md §4f, standing order 1a) ─────
+##
+## It used to print `Hull form geometry: all loft, collision, physics, and yard
+## checks passed` and no number, so two runs of it could not be diffed and every
+## §4f failure mode was invisible in it by construction.
+##
+## The exposure is not hypothetical. `_test_registered_hulls` walks
+## `HullRegistry.catalog()` — a DISCOVERED collection — and every loft, station,
+## mesh, collision and physics check for a hull lives INSIDE that loop, which is
+## the decisive §4f screen. Its only guard is `entries.size() >= 8`, and §4f is
+## explicit that a floor is not a budget: `hull_sheer_test` shed 27 checks over
+## the same registry with the same kind of floor and stayed green, because a
+## floor sees a collection go EMPTY and a deleted hull only makes it SMALLER.
+## Measured 2026-08-17: `hull_100x24` deleted from
+## `resources/data/vessels/hulls/catalog.json` takes this file from PASS (114)
+## to PASS (104) — ten checks gone, green both times, and before the conversion
+## it printed the identical success sentence in both runs.
+var _t := TestReport.new("hull_form_geometry_test", false)
 
 
 func _ready() -> void:
@@ -9,13 +28,7 @@ func _ready() -> void:
 	_test_livery_material_slots()
 	_test_prebuilt_catalog_workflow()
 	_test_shared_hull_power_variants()
-	if _failures.is_empty():
-		print("Hull form geometry: all loft, collision, physics, and yard checks passed")
-		get_tree().quit()
-	else:
-		for failure in _failures:
-			push_error("Hull form geometry: " + failure)
-		get_tree().quit(1)
+	_t.finish(get_tree())
 
 
 func _test_registered_hulls() -> void:
@@ -34,6 +47,22 @@ func _test_registered_hulls() -> void:
 			var target := boat.displacement_t * 1000.0 / 1025.0
 			var actual := stations.volume_below(boat.draft_m)
 			var error := absf(actual - target) / maxf(target, 0.001)
+			## ⚠ THIS CHECK CANNOT FAIL — REALITY.md §4, surfaced 2026-08-17 by
+			## the conversion above. `HullStations` SOLVES the loft against the
+			## declared displacement: its own header says it builds "a flared
+			## displacement hull whose integrated submerged volume at the declared
+			## draft EXACTLY MATCHES the declared displacement", and it push_errors
+			## itself when it fails to converge. So `actual` is the solver's output
+			## and `target` is the solver's input, and this measures solver
+			## convergence, not hull correctness — standing order 3b's fault
+			## inverted, one derivation compared against itself.
+			##
+			## Measured: `hull_catalog.gd`'s block coefficient moved 0.52 -> 0.40,
+			## a 23% change to every catalogue hull's displacement, and this file
+			## reported PASS (114) unchanged — the mutation passed first time.
+			## Left as it stands: what the honest property is (compare against an
+			## independently computed hydrostatic, or drop the check) is a decision
+			## about the hull model, not a slip to patch.
 			_check(error < 0.015, "%s displacement-at-draft error %.3f" % [hull_id, error])
 			var mid := stations.stations.size() / 2
 			var bottom := stations.half_beam_at(mid, stations.keel_y)
@@ -45,6 +74,24 @@ func _test_registered_hulls() -> void:
 		if hull_id == "hull_45x16_cat":
 			_check(grid.bow_taper_cells == 0, "catamaran bridge deck is rectangular")
 		else:
+			## ⚠ THIS CHECK CANNOT FAIL EITHER, and its label is wrong about why —
+			## surfaced 2026-08-17, same conversion. There is no "declared" taper
+			## to check: `hull_catalog.gd:91` says in as many words *"Pointed =
+			## always 45° in plan (run = half beam). JSON bow_taper_m is IGNORED"*
+			## and then overwrites `entry["bow_taper_m"] = beam_m * 0.5`. So
+			## `bow_taper_cells` is `round(beam_m * 0.5 / CELL_M)` and `grid.width`
+			## is `beam_m / CELL_M`: both sides reduce to `beam_m` and the equality
+			## is an identity at every value, for every hull — the
+			## `port_layout_bounds_test` shape, a bound computed from the very
+			## population it guards.
+			##
+			## Measured: `hull_100x24.bow_taper_m` 12.0 -> 8.0 in the shipped
+			## catalogue moved this file not at all, PASS (114) both runs.
+			## The live consequence is in the DATA, not here: all seven catalogue
+			## records still carry a `bow_taper_m` that nothing reads. Every one of
+			## them happens to equal `beam_m * 0.5` today, so the field looks
+			## authoritative and is not — editing it changes no geometry and reds
+			## no test.
 			_check(
 				grid.bow_taper_cells == int(grid.width / 2),
 				"%s deck bow uses its declared 45-degree taper" % hull_id
@@ -223,6 +270,7 @@ func _collision_shape_count(boat: BoatBody) -> int:
 	return count
 
 
+## Argument order is (condition, message) here and (label, ok) in `TestReport`;
+## the local signature is kept so the call sites below are untouched.
 func _check(condition: bool, message: String) -> void:
-	if not condition:
-		_failures.append(message)
+	_t.check(message, condition)

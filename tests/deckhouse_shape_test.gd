@@ -146,7 +146,30 @@ const CELL := 0.5
 ## Every preset that carries a wheelhouse. Run over ALL of them, not the one
 ## being worked on (REALITY.md §3c) — the same generator draws all four, and the
 ## 28 m boats are the ones nobody looks at.
-const PRESETS := ["fishing_trawler", "28_10_m", "bulk_small"]
+##
+## ── WHY `sjark_15m` IS NAMED HERE EVEN THOUGH §1 ALREADY DRAWS IT ───────────
+##
+## It used to hold three ids and the sjark's nineteen checks arrived through §1
+## instead, because `CompanyContracts.DEFAULT_STARTER` is `"fishing"` and that
+## starter's `prebuilt_id` IS `sjark_15m` — every number in the mutation table
+## above labelled "sjark" was measured under the label "the boat a new captain
+## is given". So the coverage was real, and it was CONTINGENT ON A PRODUCTION
+## CONSTANT that has nothing to do with this unit.
+##
+## Measured 2026-08-17, and it is a §4f shape this repo had not seen: with the
+## three-id list, flipping `DEFAULT_STARTER` to `"general_cargo"` moves the
+## starter slot onto `hull_28x10` and deletes every sjark measurement from the
+## run — and the unit reports **PASS (91 checks)**, the SAME NUMBER it reports at
+## HEAD, because the vacated slot refills with a 28 m house the other three ids
+## already cover. The count is not merely allowed to fall; here it does not move
+## at all, so a frozen `EXPECTED_CHECKS` budget could not have caught it either.
+## Only naming the population catches a SUBSTITUTION.
+##
+## Naming it costs one extra spawn and nineteen checks that duplicate §1's
+## geometry through a different entry point (`VesselSpawn.instantiate` from the
+## catalogue entry, against §1's `instantiate_from_record` off the onboarding
+## record). Both paths are shipping paths and neither is asserted anywhere else.
+const PRESETS := ["fishing_trawler", "28_10_m", "bulk_small", "sjark_15m"]
 
 ## ── The thresholds, and the argument for each ───────────────────────────────
 ##

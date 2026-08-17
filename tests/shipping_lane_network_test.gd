@@ -4,8 +4,33 @@ const FIXED_SEED := 77127
 const PORT_COUNT := 6
 const GENERATOR := preload("res://scripts/world/world_layout_generator.gd")
 const PLACER := preload("res://scripts/world/coastal_port_placer.gd")
+const TestReport := preload("res://tests/support/test_report.gd")
 
-var _failures := PackedStringArray()
+## ── WHY THIS FILE COUNTS ITS CHECKS (REALITY.md §4f, standing order 1a) ─────
+##
+## It used to print `Shipping lane network tests: all checks passed - {…}` and
+## no check count at all, which makes every failure mode in §4f invisible in it
+## by construction: two runs of this unit cannot be diffed. That matters more
+## here than almost anywhere, because 23 of its check sites sit INSIDE loops
+## over collections it DISCOVERS from the generated world — `network.blocks`
+## (5282), `network.nodes` (3911), `sorted_edge_ids()`, `passing_zones`,
+## `port_ramps`, `portals`, `ports` — so a generator that quietly stops emitting
+## a class of edge deletes hundreds of checks and this file said `all checks
+## passed` either way.
+##
+## `TestReport` fails a run that executed zero checks by construction, and it
+## prints the number, so a shrink is diffable.
+##
+## Verbose is OFF on purpose: at HEAD this unit runs tens of thousands of
+## checks and one line each would bury the log it shares with the failures.
+## Failures always print.
+##
+## The old `_check` also DEDUPLICATED by label — `if not _failures.has(label)` —
+## so the 5282-block coverage check could only ever report ONE failure however
+## many blocks were broken, and `results.tsv` would read `FAIL(1)` for a network
+## in which every block had lost its passing zone. That is gone: every failure
+## is now recorded, so the reported magnitude is the real magnitude.
+var _t := TestReport.new("shipping_lane_network_test", false)
 
 
 func _initialize() -> void:
@@ -525,9 +550,10 @@ func _test_passing_authority(network: ShippingLaneNetwork) -> void:
 	_check(not bool(blocked.get("ok", false)), "passing authority excludes conflicting same-direction traffic")
 
 
+## Argument order is (condition, label) here and (label, ok) in `TestReport`;
+## the local signature is kept so the 108 call sites below are untouched.
 func _check(condition: bool, label: String) -> void:
-	if not condition and not _failures.has(label):
-		_failures.append(label)
+	_t.check(label, condition)
 
 
 func _finish(network: ShippingLaneNetwork) -> void:
@@ -537,11 +563,7 @@ func _finish(network: ShippingLaneNetwork) -> void:
 		if String(issue.get("severity", "warning")) == "error":
 			errors += 1
 	_check(errors == 0, "network validator reports no structural errors")
-	if _failures.is_empty():
-		print("Shipping lane network tests: all checks passed - %s" % network.summary())
-		quit()
-		return
-	for failure in _failures:
-		push_error("Shipping lane network test: " + failure)
-	print("Shipping lane validation issues: %s" % [network.validation_issues])
-	quit(1)
+	print("Shipping lane network: %s" % network.summary())
+	if not _t.ok():
+		print("Shipping lane validation issues: %s" % [network.validation_issues])
+	_t.finish(self)
