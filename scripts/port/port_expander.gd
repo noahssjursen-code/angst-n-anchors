@@ -165,9 +165,14 @@ static func _restamp_generation(definition: PortDefinition, site: String) -> boo
 ## call: on a cache HIT `PortDataCache.expand` never enters `expand_uncached` and
 ## the definition is not resolved at all, so the value would be whatever the
 ## caller passed in. The resolved ceiling is published by the world at
-## `layout_graph.initial_attributes["site_max_size"]` (`port_layout_generator.gd:92`)
-## and that is where `chart_summary` takes it from — verified equal to the value
-## the old parallel derivation computed at 210 of 210 ports, six seeds x 35.
+## `layout_graph.initial_attributes["site_max_size"]` (`port_layout_generator.gd:92`),
+## which is where `port_showcase.gd`'s ceiling readout takes it from.
+##
+## ⚠ `chart_summary` USED TO REPUBLISH IT AND NO LONGER DOES — 2026-08-17, REALITY
+## §3d. The sentence that stood here said "and that is where `chart_summary` takes
+## it from", which was true and pointless: the key had one reader in the project
+## and that reader could never see it. See the deletion note in the returned
+## dictionary below, and `chart_live_harbour_test` for what a player sees.
 static func summary_expansion(
 		definition: PortDefinition,
 		world_seed: int,
@@ -215,11 +220,13 @@ static func summary_expansion(
 ## holds that as a check.
 ##
 ## PRODUCIBILITY, measured field by field before any of this was written: of the 20
-## keys published below, **18 already hold exactly the value the world's PortData
+## keys published then, **18 already held exactly the value the world's PortData
 ## carries, at 210 of 210 ports** — including the resolved `site_max_size`, the
 ## traced `rotation_y`, `export_slots`, `region` and the whole `features` list once
 ## the generation note is accounted for. Nothing here is a field the expander
-## cannot produce at preview time.
+## cannot produce at preview time. **`site_max_size` is now 19 keys, not 20:
+## producible and read by nothing, so it is deleted rather than published** —
+## 2026-08-17, see the note where it used to sit.
 ##
 ## TWO FIELDS ARE DELIBERATELY NOT COLLAPSED, AND THEY ARE OWNER DECISIONS —
 ## see the block below. Collapsing them would silently change a number a player
@@ -239,9 +246,6 @@ static func chart_summary(
 	if world_data == null:
 		return {}
 	var chart := world_data.to_chart_dict()
-	var graph_attrs: Dictionary = {}
-	if world_data.layout_graph != null:
-		graph_attrs = world_data.layout_graph.initial_attributes
 	var size := int(world_data.size)
 
 	## ── THE TWO FIELDS THIS WAVE WAS TOLD NOT TO DECIDE ──────────────────────
@@ -291,7 +295,18 @@ static func chart_summary(
 		## now the world's, which is what the placer handed it.
 		"rotation_y": world_data.rotation_y,
 		"layout_seed": world_data.layout_seed,
-		"site_max_size": int(graph_attrs.get("site_max_size", size)),
+		## `site_max_size` USED TO BE PUBLISHED HERE AND IS DELETED — 2026-08-17,
+		## REALITY §3d. It had exactly one reader in the project,
+		## `ChartHarbourPlan.resolve_port_data`, on the branch it takes when the
+		## port record carries no `port_definition` — and this dictionary always
+		## carries one, three lines up, so that branch is never taken on a record
+		## this function produced. The other producer of that record,
+		## `PortCatalog.get_port_info`, carries neither key, so the read there
+		## resolves to `PortDefinition`'s own default. No producer in the project
+		## could make that line do anything, which is why the read went with it.
+		## Held by `chart_live_harbour_test`, which asserts the DRAWN harbour on the
+		## live-tree path is unchanged by the ceiling (0 of 210 ports over six seeds)
+		## and that this key stays gone.
 		"size": size,
 		"region": str(chart.get("region", "coastal")),
 		"commodity_export": world_data.commodity_export,

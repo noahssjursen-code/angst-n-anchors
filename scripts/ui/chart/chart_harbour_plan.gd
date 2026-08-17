@@ -93,11 +93,32 @@ static func resolve_port_data(port_id: String, tree: SceneTree, chart_snapshot) 
 	if definition_record.is_empty():
 		def.size = int(info.get("size", 1))
 		def.site_seed = int(info.get("layout_seed", 0))
-		def.site_max_size = clampi(
-			int(info.get("site_max_size", PortSizing.MAX_SIZE)),
-			PortSizing.MIN_SIZE,
-			PortSizing.MAX_SIZE,
-		)
+		## A `site_max_size` READ USED TO SIT HERE AND IS DELETED — 2026-08-17,
+		## REALITY §3d. Neither producer of `info` can feed it: `PortCatalog`
+		## entries have no such key (`register_port` has no such parameter) and a
+		## `chart_summary` record always carries `port_definition`, so this branch
+		## is not taken on one. With the key absent the line assigned
+		## `clampi(PortSizing.MAX_SIZE, …)`, which is the value `PortDefinition.new()`
+		## already holds — a no-op in the only case any producer produces.
+		##
+		## MEASURED BEFORE DELETING, six seeds x 35 ports, `tests/_chart_live_ceiling_probe.gd`:
+		## injecting the world's own resolved ceiling into the live `PortCatalog`
+		## entry and re-running THIS function moved **no drawn path at 210 of 210
+		## ports** — not a polygon point, not the bounds, not the quay count, not
+		## the resolved size, not `suggested_span_m`. What it moved, at 50 of 210,
+		## is `layout_graph.initial_attributes["site_max_size"]` / `basin_max_size`
+		## and one `berth_plan.notes` string, whose only reader in the project is
+		## `port_showcase.gd` — an F6 gallery with no route from the shipped game.
+		##
+		## ⚠ THE LIVE CHART DOES DRAW THE WRONG HARBOUR HERE, AND THE CEILING IS
+		## NOT WHY. `register_port` also drops the `region` word, so every unstamped
+		## port below resolves to `LEGACY_ISLAND` and gets a different trade theme:
+		## injecting the region word ALONE reproduced the stamped harbour's every
+		## drawn path at 210 of 210, and without it the silhouette differs from the
+		## stamped one at 133 of 210 ports — 70 on the quay polygons, 57 on the
+		## bounds, 34 on the berth count. Injecting the whole `port_definition`
+		## reproduces the stamp exactly (0 of 210), which names the fix: the catalog
+		## should carry the placed definition. Registered in `chart_live_harbour_test`.
 		var region := str(info.get("region", "coastal"))
 		match region:
 			"mainland":

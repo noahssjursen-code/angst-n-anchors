@@ -220,7 +220,9 @@ func _check_all(t: TestReport) -> void:
 	## RE-MEASURED ON THE NEW PUBLISHED SET, 2026-08-17, because the old measurement
 	## was taken over the fields the summary published BEFORE the collapse and four
 	## more now come off the world's PortData (`rotation_y`, `layout_seed`,
-	## `site_max_size`, `export_slots`). Over the full base — six seeds x 35 ports,
+	## `export_slots`, and `site_max_size` — which was DELETED later the same day
+	## as a §3d value no reader in the project could see; `chart_live_harbour_test`
+	## holds the deletion and the drawn consequence). Over the full base — six seeds x 35 ports,
 	## `tests/_layout_arg_publish_probe.gd` — **not one published key moves** when the
 	## layout is dropped, so the claim survives the change rather than being carried
 	## forward on trust. What DOES move is the harbour underneath: 81 paths at 70 of

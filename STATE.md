@@ -4212,10 +4212,11 @@ count (72/210); and whether the generation note should leave the world's `featur
 than being filtered at the presenter. Preserving the panel's population needs two RNG stream-advance
 draws, kept and labelled with the exact lines to delete once decided.
 
-**Reported and not fixed:** `site_max_size` as published by `chart_summary` **is read by nothing** —
-its only consumer reads it on a branch the preview never takes, and the branch that *is* live defaults
-the ceiling to 8. So an unstamped port's silhouette on the live chart is drawn from a defaulted
-ceiling. Unmeasured path.
+**RESOLVED 2026-08-17 — measured, and the consequence was nil.** Varying the ceiling through the
+production function moves **0 of 210 ports' drawn paths**: `expand_uncached` clamps `data.size` to the
+ceiling *before* the generator runs, and size is what drives geometry, so the ceiling is already spent.
+Both halves deleted — the published key and the dead read. **But the same probe found the live chart
+drawing the wrong harbour at 133 of 210 ports**, see below.
 
 ### BASELINE 2026-08-17 — `20260817-113803-2208`, 132 units, 126 PASS
 
@@ -4237,6 +4238,39 @@ how a phantom red got into the `20260816-083201` baseline. The gate and a writin
 sentence "recorded and pushed" was written in the same breath as spawning the next wave, and the record
 was dropped. Caught one turn later by checking rather than by remembering. **Same class as everything
 above: a statement that outran the work it described.**
+
+### 2026-08-17 — THE LIVE CHART DRAWS THE WRONG HARBOUR AT 133 OF 210 PORTS, AND A PLAYER OPENS IT WITH `M`
+
+Found while measuring something else that turned out to be nil. `game_menu.gd:133` binds `open_map` to
+physical **M**; `:164` calls the `from_live_tree` factory. Against the stamped harbour, the silhouette
+that draws differs at **133 of 210 ports** — `quay_polys` 70, `quay_meta` 73, `bounds` 57,
+`centre_world` 57, `suggested_span_m` 46, berth counts 34, and the entire foundation/shore/dock-face at
+2.
+
+**Cause isolated by injection: the `region` word alone reproduces the stamped harbour's every drawn
+path at 210 of 210.** `world.gd` supplies 14 of `register_port`'s 17 parameters and leaves `region`
+defaulted to `"coastal"` → `LEGACY_ISLAND` → a different trade theme → different quay families. **The
+placer never assigns `"coastal"`** — over 210 ports it is fjord 170, archipelago 34, mainland 6.
+Injecting the whole placed `port_definition` closes it exactly (0 of 210), which names the fix.
+
+**Registered by name, not fixed** — it changes the drawn output on a screen a player opens, so the wave
+that lands it owes a frame. And **`MAINLAND` must not be adopted as the fallback**: it agrees more often
+only because most sites at this seed are fjord, which is §1's proxy trap.
+
+**The ceiling itself was a non-event and both halves are deleted** (§3d): the published key had no
+consumer, and the read was dead in *both* directions — `info`'s only two producers are a catalog getter
+carrying neither key and `chart_summary`, which always carries `port_definition` and so skips the
+branch. Behaviour-neutrality proven rather than asserted: the live-vs-stamped path table is
+**byte-identical before and after**, same 133, same 18 paths, same counts.
+
+**The sharpest finding is about the wave's own check.** Its register asserted `divergent > 0`. Flipping
+the region fallback took divergence from **8 of 20 ports to 2** and the unit stayed **green** — the exact
+hole recorded for the other register the day before. Fixed by registering the divergence as a **named
+set**; the re-run reds and names the two survivors. And it reported that its first guess at the eight
+ids was **wrong in six of eight**, caught by its own check, and wrote that into the file.
+
+**Also §3d, unfixed:** `basin_max_size` is written and read by nothing; `suggested_span_m()` and
+`centre_world()` have no production callers.
 
 ### Standing, not a task
 
