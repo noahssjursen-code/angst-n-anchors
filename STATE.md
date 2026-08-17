@@ -3940,6 +3940,56 @@ reading, roof seal law, licence rules, save round trip) sits behind a door nobod
 runs 225 green checks, that is REALITY §3's worst instance repeating — the piece kit that was never
 wired in, caught only by a strip test. **Do the probes assert reachability at all?**
 
+### 2026-08-17 — NO AUTHORING SURFACE IN THIS PROJECT IS REACHABLE FROM THE SHIPPED GAME
+
+**The claim was correct and too NARROW.** It is not that one retired editor is dead. **Structure
+Studio, the shipyard brick editor, the building brick editor and the registration audit are all
+unreachable from the running game.** Measured as a static forward closure from what the engine
+itself starts — `main_scene` plus all 19 autoloads, following every `res://` literal *and* every
+`class_name` global (316 indexed, which matters because `world.gd` reaches the shipwright through
+`PortPlot.new()` with no path anywhere): **311 files reachable, containing the whole game** — world,
+NPCs, `deck_fitout`, `structure_baker`, `piece_kit` — **and not one `scenes/apps/` file.** Reachable
+files containing the string `scenes/apps/`: **0**. Reproduced independently by the orchestrator.
+
+**Driven, not only traced.** The real entry scene was instantiated and its buttons pressed:
+Singleplayer / Multiplayer / Quit, then Sail voyage / New captain / Back, then the three NPCs'
+dialogue trees. **Builder-ish labels: 0.** Every `add_option(` in `scripts/` is 25 lines across 3
+NPCs and none mentions building, refitting or customising.
+
+**What a player can do today:** buy one of four finished vessels from the shipwright, take a berth,
+refuel, scrap, and book freight. **They cannot build or change a boat.** The studio exists, works,
+and passes 225 self-checks — and can only be started by typing its file path on a command line.
+
+**THE GATE CANNOT SEE THIS, AND THAT IS THE SECOND FINDING.** `structure_studio` lane C is
+**green while unreachable** — all 225 checks are about what it does once running. **No gate unit
+anywhere asserts scene or UI reachability.** `shipyard_editor_ui_test` constructs the editor
+directly and asserts its palette — textbook §3. And `signal_reach_test`'s frozen register
+**accepted a rationalisation** for `layout_confirmed` — *"the caller reads the layout back"* — when
+there is no caller. Worst of all, **lane C discovery is structural**: the gate finds lane-C units by
+scanning for a `## gate-selfcheck:` marker, and the only such marker in the repo sits in a script
+the closure proves the game never loads. **The gate's only lane-C unit is, by construction, a unit
+for unreachable code.**
+
+REALITY §3's worst instance repeating, with a bigger blast radius than the piece kit: that was one
+subsystem the game did not call; this is the entire premise.
+
+**One thing is healthy and must not be rebuilt:** the *consumption* half is live and
+player-reachable — harbour master → deploy → `VesselSpawn.instantiate_from_record` → `DeckFitout` →
+`StructurePlan.from_dict`, all inside the closure. **If a `structure_plan_v1` document reached a
+player's vessel record, the game would render and collide it.** Only authoring is missing.
+
+**FOUR GAPS, ALL DESIGN DECISIONS, NONE BUILT.** (1) No entry point — smallest fix measured at
+**3 lines**, but *where the door goes* is the owner's call. (2) No way out: every `quit()` in the
+studio is a CLI path, so a player who entered would be stuck. (3) The studio never reads
+`PlayerSession` — it does not know about your boat. (4) Its output goes to `user://structures`,
+which only it reads; the one production writer of a vessel layout is called only when you buy a
+prebuilt.
+
+**Estimate: ~3 days of wave work after one owner decision about where the door goes** — entry+exit
+½ day, targeting the active vessel 1 day, certification through the existing compliance gate 1 day,
+gate coverage ½ day. Plus **½ day** for a lane-A reachability unit; the closure walker is already
+written and mutation-verified.
+
 ### Standing, not a task
 
 Every model edit returns a render and the orchestrator looks at it. No metric for appearance —
