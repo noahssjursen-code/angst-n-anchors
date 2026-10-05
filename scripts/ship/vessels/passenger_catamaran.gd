@@ -225,30 +225,11 @@ func _clear_generated() -> void:
 		remove_meta("loadout_applied")
 
 
-func _build_hull_visual(stations: HullStations) -> void:
+func _build_hull_visual(_stations: HullStations) -> void:
+	# Empty anchor retained for assembly lifecycle; old mesh generation is deleted.
 	var root := Node3D.new()
 	root.name = "HullVisual"
 	add_child(root)
-
-	var hull_offset := (BEAM_M - DEMIHULL_BEAM_M) * 0.5
-	for side in [-1.0, 1.0]:
-		var hull := MeshBuilder.lofted_hull_shell(
-			stations, Color(0.14, 0.16, 0.18), 0.9, 0.05, true
-		)
-		hull.name = "HullPort" if side < 0.0 else "HullStarboard"
-		hull.position.x = hull_offset * side
-		root.add_child(hull)
-
-	## Flat rectangular bridge deck; the demihulls remain pointed below it.
-	var deck := MeshBuilder.box(
-		Vector3(BEAM_M, 0.1, LOA_M),
-		Color(0.38, 0.34, 0.28),
-		0.95,
-		0.0,
-	)
-	deck.name = "Deck"
-	deck.position.y = stations.deck_y + 0.05
-	root.add_child(deck)
 
 
 func _build_hull_collision(stations: HullStations) -> void:

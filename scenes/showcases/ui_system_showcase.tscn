@@ -1,0 +1,12 @@
+[gd_scene format=3 uid="uid://un7ebfsjwwt"]
+
+[ext_resource type="Script" path="res://scripts/ui/ui_system_showcase.gd" id="1"]
+
+[node name="UiSystemShowcase" type="Control" unique_id=1592816227]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1")

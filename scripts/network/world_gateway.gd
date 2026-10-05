@@ -55,6 +55,8 @@ func begin_session_with_identity(
 		display_name: String = "",
 		world_checksum: String = "",
 ) -> void:
+	if ShipyardPlaytestMode.active():
+		return
 	stop_session()
 	var normalized_actor := actor.strip_edges()
 	if normalized_actor.is_empty():

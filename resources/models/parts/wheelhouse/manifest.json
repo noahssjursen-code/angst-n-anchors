@@ -1,0 +1,318 @@
+{
+  "units": "metres",
+  "wall_height_m": 2.2,
+  "thickness_m": 0.1,
+  "end_shear_key_amplitude": 4,
+  "joint_style": "matching_miter",
+  "door_clear_width_m": 0.82,
+  "door_clear_height_m": 2,
+  "window_sill_m": 0.95,
+  "assets": [
+    {
+      "id": "cabin_wall_straight",
+      "style": "wall",
+      "kind": "structure",
+      "model": "res://resources/models/parts/wheelhouse/cabin_wall_straight.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        0,
+        -1
+      ],
+      "height_start_m": 2.2,
+      "height_end_m": 2.2,
+      "angle_deg": 0.0,
+      "paintable": true
+    },
+    {
+      "id": "cabin_wall_26_port",
+      "style": "wall",
+      "kind": "structure",
+      "model": "res://resources/models/parts/wheelhouse/cabin_wall_26_port.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        0.5,
+        -1
+      ],
+      "height_start_m": 2.2,
+      "height_end_m": 2.2,
+      "angle_deg": 26.56505117707799,
+      "paintable": true
+    },
+    {
+      "id": "cabin_wall_26_starboard",
+      "style": "wall",
+      "kind": "structure",
+      "model": "res://resources/models/parts/wheelhouse/cabin_wall_26_starboard.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        -0.5,
+        -1
+      ],
+      "height_start_m": 2.2,
+      "height_end_m": 2.2,
+      "angle_deg": 26.56505117707799,
+      "paintable": true
+    },
+    {
+      "id": "cabin_wall_short",
+      "style": "wall",
+      "kind": "structure",
+      "model": "res://resources/models/parts/wheelhouse/cabin_wall_short.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        0,
+        -0.5
+      ],
+      "height_start_m": 2.2,
+      "height_end_m": 2.2,
+      "angle_deg": 0.0,
+      "paintable": true
+    },
+    {
+      "id": "cabin_wall_45_port",
+      "style": "wall",
+      "kind": "structure",
+      "model": "res://resources/models/parts/wheelhouse/cabin_wall_45_port.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        0.5,
+        -0.5
+      ],
+      "height_start_m": 2.2,
+      "height_end_m": 2.2,
+      "angle_deg": 45.0,
+      "paintable": true
+    },
+    {
+      "id": "cabin_wall_45_starboard",
+      "style": "wall",
+      "kind": "structure",
+      "model": "res://resources/models/parts/wheelhouse/cabin_wall_45_starboard.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        -0.5,
+        -0.5
+      ],
+      "height_start_m": 2.2,
+      "height_end_m": 2.2,
+      "angle_deg": 45.0,
+      "paintable": true
+    },
+    {
+      "id": "cabin_window_straight",
+      "style": "window",
+      "kind": "structure",
+      "model": "res://resources/models/parts/wheelhouse/cabin_window_straight.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        0,
+        -1
+      ],
+      "height_start_m": 2.2,
+      "height_end_m": 2.2,
+      "angle_deg": 0.0,
+      "paintable": true
+    },
+    {
+      "id": "cabin_window_26_port",
+      "style": "window",
+      "kind": "structure",
+      "model": "res://resources/models/parts/wheelhouse/cabin_window_26_port.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        0.5,
+        -1
+      ],
+      "height_start_m": 2.2,
+      "height_end_m": 2.2,
+      "angle_deg": 26.56505117707799,
+      "paintable": true
+    },
+    {
+      "id": "cabin_window_26_starboard",
+      "style": "window",
+      "kind": "structure",
+      "model": "res://resources/models/parts/wheelhouse/cabin_window_26_starboard.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        -0.5,
+        -1
+      ],
+      "height_start_m": 2.2,
+      "height_end_m": 2.2,
+      "angle_deg": 26.56505117707799,
+      "paintable": true
+    },
+    {
+      "id": "cabin_window_short",
+      "style": "window",
+      "kind": "structure",
+      "model": "res://resources/models/parts/wheelhouse/cabin_window_short.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        0,
+        -0.5
+      ],
+      "height_start_m": 2.2,
+      "height_end_m": 2.2,
+      "angle_deg": 0.0,
+      "paintable": true
+    },
+    {
+      "id": "cabin_window_45_port",
+      "style": "window",
+      "kind": "structure",
+      "model": "res://resources/models/parts/wheelhouse/cabin_window_45_port.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        0.5,
+        -0.5
+      ],
+      "height_start_m": 2.2,
+      "height_end_m": 2.2,
+      "angle_deg": 45.0,
+      "paintable": true
+    },
+    {
+      "id": "cabin_window_45_starboard",
+      "style": "window",
+      "kind": "structure",
+      "model": "res://resources/models/parts/wheelhouse/cabin_window_45_starboard.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        -0.5,
+        -0.5
+      ],
+      "height_start_m": 2.2,
+      "height_end_m": 2.2,
+      "angle_deg": 45.0,
+      "paintable": true
+    },
+    {
+      "id": "cabin_door_straight",
+      "style": "door",
+      "kind": "structure",
+      "model": "res://resources/models/parts/wheelhouse/cabin_door_straight.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        0,
+        -1
+      ],
+      "height_start_m": 2.2,
+      "height_end_m": 2.2,
+      "angle_deg": 0.0,
+      "paintable": true
+    },
+    {
+      "id": "cabin_door_26_port",
+      "style": "door",
+      "kind": "structure",
+      "model": "res://resources/models/parts/wheelhouse/cabin_door_26_port.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        0.5,
+        -1
+      ],
+      "height_start_m": 2.2,
+      "height_end_m": 2.2,
+      "angle_deg": 26.56505117707799,
+      "paintable": true
+    },
+    {
+      "id": "cabin_door_26_starboard",
+      "style": "door",
+      "kind": "structure",
+      "model": "res://resources/models/parts/wheelhouse/cabin_door_26_starboard.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        -0.5,
+        -1
+      ],
+      "height_start_m": 2.2,
+      "height_end_m": 2.2,
+      "angle_deg": 26.56505117707799,
+      "paintable": true
+    },
+    {
+      "id": "cabin_door_45_port",
+      "style": "door",
+      "kind": "structure",
+      "model": "res://resources/models/parts/wheelhouse/cabin_door_45_port.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        1,
+        -1
+      ],
+      "height_start_m": 2.2,
+      "height_end_m": 2.2,
+      "angle_deg": 45.0,
+      "paintable": true
+    },
+    {
+      "id": "cabin_door_45_starboard",
+      "style": "door",
+      "kind": "structure",
+      "model": "res://resources/models/parts/wheelhouse/cabin_door_45_starboard.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        -1,
+        -1
+      ],
+      "height_start_m": 2.2,
+      "height_end_m": 2.2,
+      "angle_deg": 45.0,
+      "paintable": true
+    }
+  ]
+}

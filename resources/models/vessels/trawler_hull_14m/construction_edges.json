@@ -1,0 +1,100 @@
+{
+  "modules": [
+    {
+      "run_m": 1,
+      "inset_m": 0.5,
+      "angle_deg": 26.56505117707799
+    },
+    {
+      "run_m": 0.5,
+      "inset_m": 0.5,
+      "angle_deg": 45
+    }
+  ],
+  "edges": [
+    {
+      "start_xz": [
+        -2.5,
+        7
+      ],
+      "end_xz": [
+        -2.5,
+        -3.5
+      ],
+      "angle_from_longitudinal_deg": 0.0,
+      "length_m": 10.5
+    },
+    {
+      "start_xz": [
+        -2.5,
+        -3.5
+      ],
+      "end_xz": [
+        -1.5,
+        -5.5
+      ],
+      "angle_from_longitudinal_deg": 26.56505117707799,
+      "length_m": 2.23606797749979
+    },
+    {
+      "start_xz": [
+        -1.5,
+        -5.5
+      ],
+      "end_xz": [
+        0,
+        -7
+      ],
+      "angle_from_longitudinal_deg": 45.0,
+      "length_m": 2.1213203435596424
+    },
+    {
+      "start_xz": [
+        0,
+        -7
+      ],
+      "end_xz": [
+        1.5,
+        -5.5
+      ],
+      "angle_from_longitudinal_deg": 45.0,
+      "length_m": 2.1213203435596424
+    },
+    {
+      "start_xz": [
+        1.5,
+        -5.5
+      ],
+      "end_xz": [
+        2.5,
+        -3.5
+      ],
+      "angle_from_longitudinal_deg": 26.56505117707799,
+      "length_m": 2.23606797749979
+    },
+    {
+      "start_xz": [
+        2.5,
+        -3.5
+      ],
+      "end_xz": [
+        2.5,
+        7
+      ],
+      "angle_from_longitudinal_deg": 0.0,
+      "length_m": 10.5
+    },
+    {
+      "start_xz": [
+        2.5,
+        7
+      ],
+      "end_xz": [
+        -2.5,
+        7
+      ],
+      "angle_from_longitudinal_deg": 90.0,
+      "length_m": 5.0
+    }
+  ]
+}

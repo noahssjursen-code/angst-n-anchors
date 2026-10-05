@@ -17,3 +17,5 @@ scripts/ui/main_menu.gd.uid
 *.pck
 *.zip
 *.cfg
+# Blender automatic backup files
+*.blend[0-9]

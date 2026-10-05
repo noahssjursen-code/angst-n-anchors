@@ -248,15 +248,37 @@ exclusive manoeuvre-lane leases. Player passage autopilot carries a three-minute
 
 ---
 
-## Visual Rules — No Imported Assets
+## Visual Rules — Procedural and Imported Assets
 
-**No `.gltf` / `.glb` / `.fbx` / `.obj`. No imported texture files for in-world objects.**
+### Mandatory rules for new ship models
 
-Everything comes from:
+- Author individual reusable assets in Blender. Do not revive deleted procedural brick meshes or substitute a complete boat for construction parts. The current model contract and acceptance checks are documented in `resources/models/README.md` under "Ship model authoring contract".
+- Metres, applied scale, Blender +Y bow/+Z up; exported Godot -Z bow/+Y up. Placement origins and named end sockets are part of the asset contract.
+- The current trawler has a 14 × 5 m deck, 3.5 m bow, straight sides, and exact 2:1 and 1:1 bow slopes. Deck corners use 0.5 m increments. Preserve these coordinates; do not replace straight construction edges with interpolated curves.
+- Half-walls must join seamlessly as separate models: matching mitered end profiles, no bevel on mating faces, no visible joint posts, and continuous top caps. Open railing uses shared posts instead.
+- Structural wheelhouse models use the dimensions and junction contract in `resources/models/README.md`. Expose Wall, Door and Window families with two-click, 0.5 m lattice placement and automatic authored angles. Preserve the movable 1.80 m player reference; no decorative work in this structural kit.
+- Present construction families, not manufacturing variants: Railing / Solid half-wall plus Rising bow. Choose exact edge lengths, angles, side, heights and miter assets automatically from the hovered hull segment; posts are automatic. Verify all segments in both profiles.
+- Floor/Roof use individual Blender assets from `surface_tiles` and closed-outline placement via `ShipSurfaceKit`. Preserve the lattice, slab datum, miter and paint rules in `resources/models/README.md`; do not expose the 109 manufacturing variants as palette items. Verify the runnable surface_tiles showcase.
+- Interior controls remain separate fixed/moving Blender components with named pivots. Use `ShipPartState` requests and revisioned snapshots for presentation; authority validates interaction separately. See the interior contract in `resources/models/README.md`. Never wire keyboard polling into model assets.
+- Expose named paint regions. Half-wall panels can change colour independently of fixed caps; hull upper, lower and deck are independent. Duplicate material overrides per instance; never mutate a shared imported material.
+- Verify imported geometry, sockets, joint heights, colour isolation and draft round-trips in Godot. Show actual renders. A generated file or a passing source-level check alone does not prove the editor integration works.
+- Imported-model shipyard drafts are an authoring format, not commissioned gameplay vessels. Do not claim gameplay/save/network migration is complete until those paths are explicitly integrated and tested.
+
+Imported 3D models are approved for experimentation alongside the existing procedural pipeline.
+Store game-ready models (prefer `.glb`) under `resources/models/`, with associated
+textures beside each asset. Keep Blender source files in `resources/models/_source/`
+(excluded from Godot import via `.gdignore`). See `resources/models/README.md`.
+The trawler hull and railing kit have shipyard palette, placement, paint and draft
+integration. Commissioning into gameplay vessels remains pending.
+
+Existing procedural assets come from:
 1. **Godot primitives** (`BoxMesh`, `CylinderMesh`, etc.) composed in GDScript.
 2. **JSON meshes** under `resources/data/meshes/`, loaded by `MeshTransformer`.
 
-Materials are always `StandardMaterial3D` built at runtime. Shaders live in `resources/shaders/`.
+Procedural materials are `StandardMaterial3D` built at runtime. Imported assets may
+use imported materials and textures. Shaders live in `resources/shaders/`.
+Keep imported visuals separate from BoatBody physics, collision, equipment,
+registration, and saved vessel identity; a model alone does not define those systems.
 
 ### MeshTransformer (single part)
 

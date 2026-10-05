@@ -237,6 +237,8 @@ func _push_to_components() -> void:
 
 
 func _ensure_autopilot() -> void:
+	if ShipyardPlaytestMode.active():
+		return
 	if _boat_body == null:
 		return
 	_autopilot = _boat_body.get_node_or_null("VesselAutopilot") as VesselAutopilot
@@ -411,3 +413,8 @@ func get_thruster_mode() -> int:
 
 func get_autopilot() -> VesselAutopilot:
 	return _autopilot
+
+
+func get_helm_visual_state() -> Dictionary:
+	## Read-only presentation state; propulsion uses negative throttle for ahead.
+	return {"steering":_rudder,"throttle":-_throttle}

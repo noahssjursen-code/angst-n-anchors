@@ -19,6 +19,7 @@ const LAYER_WORLD := 1
 @export var look_distance: float = 4.0
 @export var interact_range: float = 2.8
 @export var prompt_text: String = "Press F to helm"
+@export var exit_height_offset: float = 0.15
 @export var exit_deck_offset: Vector2 = Vector2(0.0, 1.2)
 @export var interaction_volume_size: Vector3 = Vector3(1.0, 1.4, 1.0)
 
@@ -59,7 +60,7 @@ func _boarding_player() -> CharacterBody3D:
 		return null
 	for node: Node in get_tree().get_nodes_in_group("player"):
 		var body := node as CharacterBody3D
-		if body == null:
+		if body == null or bool(body.get_meta("vehicle_occupied", false)):
 			continue
 		if HullLadderBoard.blocks_helm_for(body):
 			continue
@@ -144,7 +145,7 @@ func _exit() -> void:
 
 func _place_player_on_deck(body: CharacterBody3D) -> void:
 	## Step back from the wheel in station-local +Z (behind the helm).
-	var local_exit := Vector3(exit_deck_offset.x, 0.15, exit_deck_offset.y)
+	var local_exit := Vector3(exit_deck_offset.x, exit_height_offset, exit_deck_offset.y)
 	body.global_position = to_global(local_exit)
 	body.velocity = Vector3.ZERO
 

@@ -8,6 +8,7 @@ extends RefCounted
 
 const CELL_M := WorldUnits.DECK_CELL_M
 
+var cell_m: float = CELL_M
 var width: int = 1
 var length: int = 1
 var deck_y: float = 0.0
@@ -15,6 +16,8 @@ var half_beam: float = 0.5
 var half_loa: float = 0.5
 ## Length of a 45-degree pointed bow in whole cells. Zero keeps a rectangular deck.
 var bow_taper_cells: int = 0
+## Imported hulls provide the actual deck boundary in local X/Z metres.
+var deck_polygon := PackedVector2Array()
 
 enum CellShape {
 	NONE,
@@ -29,15 +32,17 @@ static func from_hull(
 	beam_m: float,
 	deck_y_m: float,
 	bow_taper_m: float = 0.0,
+	snap_m: float = CELL_M,
 ) -> DeckGrid:
 	var g := DeckGrid.new()
-	g.width = maxi(1, int(floor(beam_m / CELL_M)))
-	g.length = maxi(1, int(floor(loa_m / CELL_M)))
+	g.cell_m = maxf(snap_m, 0.01)
+	g.width = maxi(1, int(floor(beam_m / g.cell_m)))
+	g.length = maxi(1, int(floor(loa_m / g.cell_m)))
 	g.deck_y = deck_y_m
-	g.half_beam = float(g.width) * CELL_M * 0.5
-	g.half_loa = float(g.length) * CELL_M * 0.5
+	g.half_beam = float(g.width) * g.cell_m * 0.5
+	g.half_loa = float(g.length) * g.cell_m * 0.5
 	g.bow_taper_cells = clampi(
-		int(round(bow_taper_m / CELL_M)),
+		int(round(bow_taper_m / g.cell_m)),
 		0,
 		mini(g.length, int(g.width / 2)),
 	)
@@ -46,6 +51,24 @@ static func from_hull(
 
 func cell_count_xz() -> int:
 	return width * length
+
+
+func part_footprint(brick_id: String) -> Vector3i:
+	var size := BrickCatalog.size_m(brick_id)
+	return Vector3i(ceili(size.x / cell_m), ceili(size.y / cell_m), ceili(size.z / cell_m))
+
+
+func fits_size(origin: Vector3i, size: Vector3, yaw: int = 0) -> bool:
+	if origin.y < 0:
+		return false
+	if deck_polygon.is_empty():
+		return true # Legacy grids retain cell-shape validation.
+	var span := Vector2(size.x, size.z)
+	if posmod(roundi(float(yaw) / 90.0), 2) == 1:
+		span = Vector2(span.y, span.x)
+	var corner := Vector2(-half_beam + origin.x * cell_m, -half_loa + origin.z * cell_m)
+	var footprint := PackedVector2Array([corner, corner + Vector2(span.x, 0), corner + span, corner + Vector2(0, span.y)])
+	return Geometry2D.clip_polygons(footprint, deck_polygon).is_empty()
 
 
 func in_bounds(cell: Vector3i) -> bool:
@@ -64,6 +87,9 @@ func is_partial_bow_cell(cell: Vector3i) -> bool:
 func cell_shape(ix: int, iz: int) -> CellShape:
 	if ix < 0 or ix >= width or iz < 0 or iz >= length:
 		return CellShape.NONE
+	if not deck_polygon.is_empty():
+		var center := Vector2(-half_beam + (ix + 0.5) * cell_m, -half_loa + (iz + 0.5) * cell_m)
+		return CellShape.FULL if Geometry2D.is_point_in_polygon(center, deck_polygon) else CellShape.NONE
 	if bow_taper_cells <= 0 or iz >= bow_taper_cells:
 		return CellShape.FULL
 	var inset := bow_taper_cells - iz
@@ -91,25 +117,25 @@ func partial_bow_yaw_degrees(cell: Vector3i) -> int:
 
 func cell_center_local(cell: Vector3i) -> Vector3:
 	return Vector3(
-		-half_beam + (float(cell.x) + 0.5) * CELL_M,
-		deck_y + (float(cell.y) + 0.5) * CELL_M,
-		-half_loa + (float(cell.z) + 0.5) * CELL_M,
+		-half_beam + (float(cell.x) + 0.5) * cell_m,
+		deck_y + (float(cell.y) + 0.5) * cell_m,
+		-half_loa + (float(cell.z) + 0.5) * cell_m,
 	)
 
 
 func cell_base_local(cell: Vector3i) -> Vector3:
 	## Bottom-centre of the cell (deck contact for iy=0).
 	return Vector3(
-		-half_beam + (float(cell.x) + 0.5) * CELL_M,
-		deck_y + float(cell.y) * CELL_M,
-		-half_loa + (float(cell.z) + 0.5) * CELL_M,
+		-half_beam + (float(cell.x) + 0.5) * cell_m,
+		deck_y + float(cell.y) * cell_m,
+		-half_loa + (float(cell.z) + 0.5) * cell_m,
 	)
 
 
 func local_to_cell(local: Vector3) -> Vector3i:
-	var ix := int(floor((local.x + half_beam) / CELL_M))
-	var iz := int(floor((local.z + half_loa) / CELL_M))
-	var iy := int(floor((local.y - deck_y) / CELL_M))
+	var ix := int(floor((local.x + half_beam) / cell_m))
+	var iz := int(floor((local.z + half_loa) / cell_m))
+	var iy := int(floor((local.y - deck_y) / cell_m))
 	return Vector3i(ix, maxi(iy, 0), iz)
 
 
@@ -183,6 +209,6 @@ func to_dict() -> Dictionary:
 		"width": width,
 		"length": length,
 		"deck_y": deck_y,
-		"cell_m": CELL_M,
+		"cell_m": cell_m,
 		"bow_taper_cells": bow_taper_cells,
 	}

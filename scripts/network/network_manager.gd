@@ -57,6 +57,9 @@ var _gateway: Node = null
 
 
 func _ready() -> void:
+	if ShipyardPlaytestMode.active():
+		process_mode = Node.PROCESS_MODE_DISABLED
+		return
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	_local_view = get_node_or_null("/root/LocalPlayerView")
 	_gateway = get_node_or_null("/root/WorldGateway")
@@ -734,7 +737,8 @@ func _exit_tree() -> void:
 
 
 func close_connection() -> void:
-	client.call("close_connection")
+	if client != null:
+		client.call("close_connection")
 	_local_senders.clear()
 	_local_ships_board_states.clear()
 	_local_ship_entity_ids.clear()

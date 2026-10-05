@@ -1,0 +1,1893 @@
+{
+  "cell_m": 0.5,
+  "thickness_m": 0.1,
+  "points_xz": [
+    [
+      0,
+      0
+    ],
+    [
+      0.25,
+      0
+    ],
+    [
+      0.5,
+      0
+    ],
+    [
+      0.5,
+      0.25
+    ],
+    [
+      0.5,
+      0.5
+    ],
+    [
+      0.25,
+      0.5
+    ],
+    [
+      0,
+      0.5
+    ],
+    [
+      0,
+      0.25
+    ]
+  ],
+  "assets": [
+    {
+      "id": "floor_tile",
+      "style": "floor",
+      "kind": "surface",
+      "model": "res://resources/models/parts/surface_tiles/floor_tile.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        0.5,
+        0.5
+      ],
+      "height_start_m": 0.1,
+      "height_end_m": 0.1,
+      "paintable": true
+    },
+    {
+      "id": "floor_tri_0_1_3",
+      "style": "floor",
+      "kind": "surface",
+      "model": "res://resources/models/parts/surface_tiles/floor_tri_0_1_3.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        0.5,
+        0.5
+      ],
+      "height_start_m": 0.1,
+      "height_end_m": 0.1,
+      "paintable": true
+    },
+    {
+      "id": "floor_tri_0_1_4",
+      "style": "floor",
+      "kind": "surface",
+      "model": "res://resources/models/parts/surface_tiles/floor_tri_0_1_4.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        0.5,
+        0.5
+      ],
+      "height_start_m": 0.1,
+      "height_end_m": 0.1,
+      "paintable": true
+    },
+    {
+      "id": "floor_tri_0_1_5",
+      "style": "floor",
+      "kind": "surface",
+      "model": "res://resources/models/parts/surface_tiles/floor_tri_0_1_5.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        0.5,
+        0.5
+      ],
+      "height_start_m": 0.1,
+      "height_end_m": 0.1,
+      "paintable": true
+    },
+    {
+      "id": "floor_tri_0_1_6",
+      "style": "floor",
+      "kind": "surface",
+      "model": "res://resources/models/parts/surface_tiles/floor_tri_0_1_6.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        0.5,
+        0.5
+      ],
+      "height_start_m": 0.1,
+      "height_end_m": 0.1,
+      "paintable": true
+    },
+    {
+      "id": "floor_tri_0_1_7",
+      "style": "floor",
+      "kind": "surface",
+      "model": "res://resources/models/parts/surface_tiles/floor_tri_0_1_7.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        0.5,
+        0.5
+      ],
+      "height_start_m": 0.1,
+      "height_end_m": 0.1,
+      "paintable": true
+    },
+    {
+      "id": "floor_tri_0_2_3",
+      "style": "floor",
+      "kind": "surface",
+      "model": "res://resources/models/parts/surface_tiles/floor_tri_0_2_3.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        0.5,
+        0.5
+      ],
+      "height_start_m": 0.1,
+      "height_end_m": 0.1,
+      "paintable": true
+    },
+    {
+      "id": "floor_tri_0_2_4",
+      "style": "floor",
+      "kind": "surface",
+      "model": "res://resources/models/parts/surface_tiles/floor_tri_0_2_4.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        0.5,
+        0.5
+      ],
+      "height_start_m": 0.1,
+      "height_end_m": 0.1,
+      "paintable": true
+    },
+    {
+      "id": "floor_tri_0_2_5",
+      "style": "floor",
+      "kind": "surface",
+      "model": "res://resources/models/parts/surface_tiles/floor_tri_0_2_5.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        0.5,
+        0.5
+      ],
+      "height_start_m": 0.1,
+      "height_end_m": 0.1,
+      "paintable": true
+    },
+    {
+      "id": "floor_tri_0_2_6",
+      "style": "floor",
+      "kind": "surface",
+      "model": "res://resources/models/parts/surface_tiles/floor_tri_0_2_6.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        0.5,
+        0.5
+      ],
+      "height_start_m": 0.1,
+      "height_end_m": 0.1,
+      "paintable": true
+    },
+    {
+      "id": "floor_tri_0_2_7",
+      "style": "floor",
+      "kind": "surface",
+      "model": "res://resources/models/parts/surface_tiles/floor_tri_0_2_7.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        0.5,
+        0.5
+      ],
+      "height_start_m": 0.1,
+      "height_end_m": 0.1,
+      "paintable": true
+    },
+    {
+      "id": "floor_tri_0_3_4",
+      "style": "floor",
+      "kind": "surface",
+      "model": "res://resources/models/parts/surface_tiles/floor_tri_0_3_4.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        0.5,
+        0.5
+      ],
+      "height_start_m": 0.1,
+      "height_end_m": 0.1,
+      "paintable": true
+    },
+    {
+      "id": "floor_tri_0_3_5",
+      "style": "floor",
+      "kind": "surface",
+      "model": "res://resources/models/parts/surface_tiles/floor_tri_0_3_5.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        0.5,
+        0.5
+      ],
+      "height_start_m": 0.1,
+      "height_end_m": 0.1,
+      "paintable": true
+    },
+    {
+      "id": "floor_tri_0_3_6",
+      "style": "floor",
+      "kind": "surface",
+      "model": "res://resources/models/parts/surface_tiles/floor_tri_0_3_6.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        0.5,
+        0.5
+      ],
+      "height_start_m": 0.1,
+      "height_end_m": 0.1,
+      "paintable": true
+    },
+    {
+      "id": "floor_tri_0_3_7",
+      "style": "floor",
+      "kind": "surface",
+      "model": "res://resources/models/parts/surface_tiles/floor_tri_0_3_7.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        0.5,
+        0.5
+      ],
+      "height_start_m": 0.1,
+      "height_end_m": 0.1,
+      "paintable": true
+    },
+    {
+      "id": "floor_tri_0_4_5",
+      "style": "floor",
+      "kind": "surface",
+      "model": "res://resources/models/parts/surface_tiles/floor_tri_0_4_5.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        0.5,
+        0.5
+      ],
+      "height_start_m": 0.1,
+      "height_end_m": 0.1,
+      "paintable": true
+    },
+    {
+      "id": "floor_tri_0_4_6",
+      "style": "floor",
+      "kind": "surface",
+      "model": "res://resources/models/parts/surface_tiles/floor_tri_0_4_6.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        0.5,
+        0.5
+      ],
+      "height_start_m": 0.1,
+      "height_end_m": 0.1,
+      "paintable": true
+    },
+    {
+      "id": "floor_tri_0_4_7",
+      "style": "floor",
+      "kind": "surface",
+      "model": "res://resources/models/parts/surface_tiles/floor_tri_0_4_7.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        0.5,
+        0.5
+      ],
+      "height_start_m": 0.1,
+      "height_end_m": 0.1,
+      "paintable": true
+    },
+    {
+      "id": "floor_tri_0_5_6",
+      "style": "floor",
+      "kind": "surface",
+      "model": "res://resources/models/parts/surface_tiles/floor_tri_0_5_6.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        0.5,
+        0.5
+      ],
+      "height_start_m": 0.1,
+      "height_end_m": 0.1,
+      "paintable": true
+    },
+    {
+      "id": "floor_tri_0_5_7",
+      "style": "floor",
+      "kind": "surface",
+      "model": "res://resources/models/parts/surface_tiles/floor_tri_0_5_7.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        0.5,
+        0.5
+      ],
+      "height_start_m": 0.1,
+      "height_end_m": 0.1,
+      "paintable": true
+    },
+    {
+      "id": "floor_tri_1_2_3",
+      "style": "floor",
+      "kind": "surface",
+      "model": "res://resources/models/parts/surface_tiles/floor_tri_1_2_3.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        0.5,
+        0.5
+      ],
+      "height_start_m": 0.1,
+      "height_end_m": 0.1,
+      "paintable": true
+    },
+    {
+      "id": "floor_tri_1_2_4",
+      "style": "floor",
+      "kind": "surface",
+      "model": "res://resources/models/parts/surface_tiles/floor_tri_1_2_4.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        0.5,
+        0.5
+      ],
+      "height_start_m": 0.1,
+      "height_end_m": 0.1,
+      "paintable": true
+    },
+    {
+      "id": "floor_tri_1_2_5",
+      "style": "floor",
+      "kind": "surface",
+      "model": "res://resources/models/parts/surface_tiles/floor_tri_1_2_5.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        0.5,
+        0.5
+      ],
+      "height_start_m": 0.1,
+      "height_end_m": 0.1,
+      "paintable": true
+    },
+    {
+      "id": "floor_tri_1_2_6",
+      "style": "floor",
+      "kind": "surface",
+      "model": "res://resources/models/parts/surface_tiles/floor_tri_1_2_6.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        0.5,
+        0.5
+      ],
+      "height_start_m": 0.1,
+      "height_end_m": 0.1,
+      "paintable": true
+    },
+    {
+      "id": "floor_tri_1_2_7",
+      "style": "floor",
+      "kind": "surface",
+      "model": "res://resources/models/parts/surface_tiles/floor_tri_1_2_7.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        0.5,
+        0.5
+      ],
+      "height_start_m": 0.1,
+      "height_end_m": 0.1,
+      "paintable": true
+    },
+    {
+      "id": "floor_tri_1_3_4",
+      "style": "floor",
+      "kind": "surface",
+      "model": "res://resources/models/parts/surface_tiles/floor_tri_1_3_4.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        0.5,
+        0.5
+      ],
+      "height_start_m": 0.1,
+      "height_end_m": 0.1,
+      "paintable": true
+    },
+    {
+      "id": "floor_tri_1_3_5",
+      "style": "floor",
+      "kind": "surface",
+      "model": "res://resources/models/parts/surface_tiles/floor_tri_1_3_5.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        0.5,
+        0.5
+      ],
+      "height_start_m": 0.1,
+      "height_end_m": 0.1,
+      "paintable": true
+    },
+    {
+      "id": "floor_tri_1_3_6",
+      "style": "floor",
+      "kind": "surface",
+      "model": "res://resources/models/parts/surface_tiles/floor_tri_1_3_6.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        0.5,
+        0.5
+      ],
+      "height_start_m": 0.1,
+      "height_end_m": 0.1,
+      "paintable": true
+    },
+    {
+      "id": "floor_tri_1_3_7",
+      "style": "floor",
+      "kind": "surface",
+      "model": "res://resources/models/parts/surface_tiles/floor_tri_1_3_7.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        0.5,
+        0.5
+      ],
+      "height_start_m": 0.1,
+      "height_end_m": 0.1,
+      "paintable": true
+    },
+    {
+      "id": "floor_tri_1_4_5",
+      "style": "floor",
+      "kind": "surface",
+      "model": "res://resources/models/parts/surface_tiles/floor_tri_1_4_5.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        0.5,
+        0.5
+      ],
+      "height_start_m": 0.1,
+      "height_end_m": 0.1,
+      "paintable": true
+    },
+    {
+      "id": "floor_tri_1_4_6",
+      "style": "floor",
+      "kind": "surface",
+      "model": "res://resources/models/parts/surface_tiles/floor_tri_1_4_6.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        0.5,
+        0.5
+      ],
+      "height_start_m": 0.1,
+      "height_end_m": 0.1,
+      "paintable": true
+    },
+    {
+      "id": "floor_tri_1_4_7",
+      "style": "floor",
+      "kind": "surface",
+      "model": "res://resources/models/parts/surface_tiles/floor_tri_1_4_7.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        0.5,
+        0.5
+      ],
+      "height_start_m": 0.1,
+      "height_end_m": 0.1,
+      "paintable": true
+    },
+    {
+      "id": "floor_tri_1_5_6",
+      "style": "floor",
+      "kind": "surface",
+      "model": "res://resources/models/parts/surface_tiles/floor_tri_1_5_6.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        0.5,
+        0.5
+      ],
+      "height_start_m": 0.1,
+      "height_end_m": 0.1,
+      "paintable": true
+    },
+    {
+      "id": "floor_tri_1_5_7",
+      "style": "floor",
+      "kind": "surface",
+      "model": "res://resources/models/parts/surface_tiles/floor_tri_1_5_7.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        0.5,
+        0.5
+      ],
+      "height_start_m": 0.1,
+      "height_end_m": 0.1,
+      "paintable": true
+    },
+    {
+      "id": "floor_tri_1_6_7",
+      "style": "floor",
+      "kind": "surface",
+      "model": "res://resources/models/parts/surface_tiles/floor_tri_1_6_7.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        0.5,
+        0.5
+      ],
+      "height_start_m": 0.1,
+      "height_end_m": 0.1,
+      "paintable": true
+    },
+    {
+      "id": "floor_tri_2_3_5",
+      "style": "floor",
+      "kind": "surface",
+      "model": "res://resources/models/parts/surface_tiles/floor_tri_2_3_5.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        0.5,
+        0.5
+      ],
+      "height_start_m": 0.1,
+      "height_end_m": 0.1,
+      "paintable": true
+    },
+    {
+      "id": "floor_tri_2_3_6",
+      "style": "floor",
+      "kind": "surface",
+      "model": "res://resources/models/parts/surface_tiles/floor_tri_2_3_6.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        0.5,
+        0.5
+      ],
+      "height_start_m": 0.1,
+      "height_end_m": 0.1,
+      "paintable": true
+    },
+    {
+      "id": "floor_tri_2_3_7",
+      "style": "floor",
+      "kind": "surface",
+      "model": "res://resources/models/parts/surface_tiles/floor_tri_2_3_7.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        0.5,
+        0.5
+      ],
+      "height_start_m": 0.1,
+      "height_end_m": 0.1,
+      "paintable": true
+    },
+    {
+      "id": "floor_tri_2_4_5",
+      "style": "floor",
+      "kind": "surface",
+      "model": "res://resources/models/parts/surface_tiles/floor_tri_2_4_5.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        0.5,
+        0.5
+      ],
+      "height_start_m": 0.1,
+      "height_end_m": 0.1,
+      "paintable": true
+    },
+    {
+      "id": "floor_tri_2_4_6",
+      "style": "floor",
+      "kind": "surface",
+      "model": "res://resources/models/parts/surface_tiles/floor_tri_2_4_6.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        0.5,
+        0.5
+      ],
+      "height_start_m": 0.1,
+      "height_end_m": 0.1,
+      "paintable": true
+    },
+    {
+      "id": "floor_tri_2_4_7",
+      "style": "floor",
+      "kind": "surface",
+      "model": "res://resources/models/parts/surface_tiles/floor_tri_2_4_7.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        0.5,
+        0.5
+      ],
+      "height_start_m": 0.1,
+      "height_end_m": 0.1,
+      "paintable": true
+    },
+    {
+      "id": "floor_tri_2_5_6",
+      "style": "floor",
+      "kind": "surface",
+      "model": "res://resources/models/parts/surface_tiles/floor_tri_2_5_6.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        0.5,
+        0.5
+      ],
+      "height_start_m": 0.1,
+      "height_end_m": 0.1,
+      "paintable": true
+    },
+    {
+      "id": "floor_tri_2_5_7",
+      "style": "floor",
+      "kind": "surface",
+      "model": "res://resources/models/parts/surface_tiles/floor_tri_2_5_7.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        0.5,
+        0.5
+      ],
+      "height_start_m": 0.1,
+      "height_end_m": 0.1,
+      "paintable": true
+    },
+    {
+      "id": "floor_tri_2_6_7",
+      "style": "floor",
+      "kind": "surface",
+      "model": "res://resources/models/parts/surface_tiles/floor_tri_2_6_7.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        0.5,
+        0.5
+      ],
+      "height_start_m": 0.1,
+      "height_end_m": 0.1,
+      "paintable": true
+    },
+    {
+      "id": "floor_tri_3_4_5",
+      "style": "floor",
+      "kind": "surface",
+      "model": "res://resources/models/parts/surface_tiles/floor_tri_3_4_5.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        0.5,
+        0.5
+      ],
+      "height_start_m": 0.1,
+      "height_end_m": 0.1,
+      "paintable": true
+    },
+    {
+      "id": "floor_tri_3_4_6",
+      "style": "floor",
+      "kind": "surface",
+      "model": "res://resources/models/parts/surface_tiles/floor_tri_3_4_6.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        0.5,
+        0.5
+      ],
+      "height_start_m": 0.1,
+      "height_end_m": 0.1,
+      "paintable": true
+    },
+    {
+      "id": "floor_tri_3_4_7",
+      "style": "floor",
+      "kind": "surface",
+      "model": "res://resources/models/parts/surface_tiles/floor_tri_3_4_7.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        0.5,
+        0.5
+      ],
+      "height_start_m": 0.1,
+      "height_end_m": 0.1,
+      "paintable": true
+    },
+    {
+      "id": "floor_tri_3_5_6",
+      "style": "floor",
+      "kind": "surface",
+      "model": "res://resources/models/parts/surface_tiles/floor_tri_3_5_6.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        0.5,
+        0.5
+      ],
+      "height_start_m": 0.1,
+      "height_end_m": 0.1,
+      "paintable": true
+    },
+    {
+      "id": "floor_tri_3_5_7",
+      "style": "floor",
+      "kind": "surface",
+      "model": "res://resources/models/parts/surface_tiles/floor_tri_3_5_7.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        0.5,
+        0.5
+      ],
+      "height_start_m": 0.1,
+      "height_end_m": 0.1,
+      "paintable": true
+    },
+    {
+      "id": "floor_tri_3_6_7",
+      "style": "floor",
+      "kind": "surface",
+      "model": "res://resources/models/parts/surface_tiles/floor_tri_3_6_7.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        0.5,
+        0.5
+      ],
+      "height_start_m": 0.1,
+      "height_end_m": 0.1,
+      "paintable": true
+    },
+    {
+      "id": "floor_tri_4_5_7",
+      "style": "floor",
+      "kind": "surface",
+      "model": "res://resources/models/parts/surface_tiles/floor_tri_4_5_7.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        0.5,
+        0.5
+      ],
+      "height_start_m": 0.1,
+      "height_end_m": 0.1,
+      "paintable": true
+    },
+    {
+      "id": "floor_tri_4_6_7",
+      "style": "floor",
+      "kind": "surface",
+      "model": "res://resources/models/parts/surface_tiles/floor_tri_4_6_7.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        0.5,
+        0.5
+      ],
+      "height_start_m": 0.1,
+      "height_end_m": 0.1,
+      "paintable": true
+    },
+    {
+      "id": "floor_tri_5_6_7",
+      "style": "floor",
+      "kind": "surface",
+      "model": "res://resources/models/parts/surface_tiles/floor_tri_5_6_7.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        0.5,
+        0.5
+      ],
+      "height_start_m": 0.1,
+      "height_end_m": 0.1,
+      "paintable": true
+    },
+    {
+      "id": "roof_tile",
+      "style": "roof",
+      "kind": "surface",
+      "model": "res://resources/models/parts/surface_tiles/roof_tile.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        0.5,
+        0.5
+      ],
+      "height_start_m": 0.1,
+      "height_end_m": 0.1,
+      "paintable": true
+    },
+    {
+      "id": "roof_tri_0_1_3",
+      "style": "roof",
+      "kind": "surface",
+      "model": "res://resources/models/parts/surface_tiles/roof_tri_0_1_3.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        0.5,
+        0.5
+      ],
+      "height_start_m": 0.1,
+      "height_end_m": 0.1,
+      "paintable": true
+    },
+    {
+      "id": "roof_tri_0_1_4",
+      "style": "roof",
+      "kind": "surface",
+      "model": "res://resources/models/parts/surface_tiles/roof_tri_0_1_4.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        0.5,
+        0.5
+      ],
+      "height_start_m": 0.1,
+      "height_end_m": 0.1,
+      "paintable": true
+    },
+    {
+      "id": "roof_tri_0_1_5",
+      "style": "roof",
+      "kind": "surface",
+      "model": "res://resources/models/parts/surface_tiles/roof_tri_0_1_5.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        0.5,
+        0.5
+      ],
+      "height_start_m": 0.1,
+      "height_end_m": 0.1,
+      "paintable": true
+    },
+    {
+      "id": "roof_tri_0_1_6",
+      "style": "roof",
+      "kind": "surface",
+      "model": "res://resources/models/parts/surface_tiles/roof_tri_0_1_6.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        0.5,
+        0.5
+      ],
+      "height_start_m": 0.1,
+      "height_end_m": 0.1,
+      "paintable": true
+    },
+    {
+      "id": "roof_tri_0_1_7",
+      "style": "roof",
+      "kind": "surface",
+      "model": "res://resources/models/parts/surface_tiles/roof_tri_0_1_7.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        0.5,
+        0.5
+      ],
+      "height_start_m": 0.1,
+      "height_end_m": 0.1,
+      "paintable": true
+    },
+    {
+      "id": "roof_tri_0_2_3",
+      "style": "roof",
+      "kind": "surface",
+      "model": "res://resources/models/parts/surface_tiles/roof_tri_0_2_3.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        0.5,
+        0.5
+      ],
+      "height_start_m": 0.1,
+      "height_end_m": 0.1,
+      "paintable": true
+    },
+    {
+      "id": "roof_tri_0_2_4",
+      "style": "roof",
+      "kind": "surface",
+      "model": "res://resources/models/parts/surface_tiles/roof_tri_0_2_4.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        0.5,
+        0.5
+      ],
+      "height_start_m": 0.1,
+      "height_end_m": 0.1,
+      "paintable": true
+    },
+    {
+      "id": "roof_tri_0_2_5",
+      "style": "roof",
+      "kind": "surface",
+      "model": "res://resources/models/parts/surface_tiles/roof_tri_0_2_5.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        0.5,
+        0.5
+      ],
+      "height_start_m": 0.1,
+      "height_end_m": 0.1,
+      "paintable": true
+    },
+    {
+      "id": "roof_tri_0_2_6",
+      "style": "roof",
+      "kind": "surface",
+      "model": "res://resources/models/parts/surface_tiles/roof_tri_0_2_6.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        0.5,
+        0.5
+      ],
+      "height_start_m": 0.1,
+      "height_end_m": 0.1,
+      "paintable": true
+    },
+    {
+      "id": "roof_tri_0_2_7",
+      "style": "roof",
+      "kind": "surface",
+      "model": "res://resources/models/parts/surface_tiles/roof_tri_0_2_7.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        0.5,
+        0.5
+      ],
+      "height_start_m": 0.1,
+      "height_end_m": 0.1,
+      "paintable": true
+    },
+    {
+      "id": "roof_tri_0_3_4",
+      "style": "roof",
+      "kind": "surface",
+      "model": "res://resources/models/parts/surface_tiles/roof_tri_0_3_4.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        0.5,
+        0.5
+      ],
+      "height_start_m": 0.1,
+      "height_end_m": 0.1,
+      "paintable": true
+    },
+    {
+      "id": "roof_tri_0_3_5",
+      "style": "roof",
+      "kind": "surface",
+      "model": "res://resources/models/parts/surface_tiles/roof_tri_0_3_5.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        0.5,
+        0.5
+      ],
+      "height_start_m": 0.1,
+      "height_end_m": 0.1,
+      "paintable": true
+    },
+    {
+      "id": "roof_tri_0_3_6",
+      "style": "roof",
+      "kind": "surface",
+      "model": "res://resources/models/parts/surface_tiles/roof_tri_0_3_6.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        0.5,
+        0.5
+      ],
+      "height_start_m": 0.1,
+      "height_end_m": 0.1,
+      "paintable": true
+    },
+    {
+      "id": "roof_tri_0_3_7",
+      "style": "roof",
+      "kind": "surface",
+      "model": "res://resources/models/parts/surface_tiles/roof_tri_0_3_7.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        0.5,
+        0.5
+      ],
+      "height_start_m": 0.1,
+      "height_end_m": 0.1,
+      "paintable": true
+    },
+    {
+      "id": "roof_tri_0_4_5",
+      "style": "roof",
+      "kind": "surface",
+      "model": "res://resources/models/parts/surface_tiles/roof_tri_0_4_5.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        0.5,
+        0.5
+      ],
+      "height_start_m": 0.1,
+      "height_end_m": 0.1,
+      "paintable": true
+    },
+    {
+      "id": "roof_tri_0_4_6",
+      "style": "roof",
+      "kind": "surface",
+      "model": "res://resources/models/parts/surface_tiles/roof_tri_0_4_6.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        0.5,
+        0.5
+      ],
+      "height_start_m": 0.1,
+      "height_end_m": 0.1,
+      "paintable": true
+    },
+    {
+      "id": "roof_tri_0_4_7",
+      "style": "roof",
+      "kind": "surface",
+      "model": "res://resources/models/parts/surface_tiles/roof_tri_0_4_7.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        0.5,
+        0.5
+      ],
+      "height_start_m": 0.1,
+      "height_end_m": 0.1,
+      "paintable": true
+    },
+    {
+      "id": "roof_tri_0_5_6",
+      "style": "roof",
+      "kind": "surface",
+      "model": "res://resources/models/parts/surface_tiles/roof_tri_0_5_6.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        0.5,
+        0.5
+      ],
+      "height_start_m": 0.1,
+      "height_end_m": 0.1,
+      "paintable": true
+    },
+    {
+      "id": "roof_tri_0_5_7",
+      "style": "roof",
+      "kind": "surface",
+      "model": "res://resources/models/parts/surface_tiles/roof_tri_0_5_7.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        0.5,
+        0.5
+      ],
+      "height_start_m": 0.1,
+      "height_end_m": 0.1,
+      "paintable": true
+    },
+    {
+      "id": "roof_tri_1_2_3",
+      "style": "roof",
+      "kind": "surface",
+      "model": "res://resources/models/parts/surface_tiles/roof_tri_1_2_3.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        0.5,
+        0.5
+      ],
+      "height_start_m": 0.1,
+      "height_end_m": 0.1,
+      "paintable": true
+    },
+    {
+      "id": "roof_tri_1_2_4",
+      "style": "roof",
+      "kind": "surface",
+      "model": "res://resources/models/parts/surface_tiles/roof_tri_1_2_4.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        0.5,
+        0.5
+      ],
+      "height_start_m": 0.1,
+      "height_end_m": 0.1,
+      "paintable": true
+    },
+    {
+      "id": "roof_tri_1_2_5",
+      "style": "roof",
+      "kind": "surface",
+      "model": "res://resources/models/parts/surface_tiles/roof_tri_1_2_5.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        0.5,
+        0.5
+      ],
+      "height_start_m": 0.1,
+      "height_end_m": 0.1,
+      "paintable": true
+    },
+    {
+      "id": "roof_tri_1_2_6",
+      "style": "roof",
+      "kind": "surface",
+      "model": "res://resources/models/parts/surface_tiles/roof_tri_1_2_6.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        0.5,
+        0.5
+      ],
+      "height_start_m": 0.1,
+      "height_end_m": 0.1,
+      "paintable": true
+    },
+    {
+      "id": "roof_tri_1_2_7",
+      "style": "roof",
+      "kind": "surface",
+      "model": "res://resources/models/parts/surface_tiles/roof_tri_1_2_7.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        0.5,
+        0.5
+      ],
+      "height_start_m": 0.1,
+      "height_end_m": 0.1,
+      "paintable": true
+    },
+    {
+      "id": "roof_tri_1_3_4",
+      "style": "roof",
+      "kind": "surface",
+      "model": "res://resources/models/parts/surface_tiles/roof_tri_1_3_4.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        0.5,
+        0.5
+      ],
+      "height_start_m": 0.1,
+      "height_end_m": 0.1,
+      "paintable": true
+    },
+    {
+      "id": "roof_tri_1_3_5",
+      "style": "roof",
+      "kind": "surface",
+      "model": "res://resources/models/parts/surface_tiles/roof_tri_1_3_5.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        0.5,
+        0.5
+      ],
+      "height_start_m": 0.1,
+      "height_end_m": 0.1,
+      "paintable": true
+    },
+    {
+      "id": "roof_tri_1_3_6",
+      "style": "roof",
+      "kind": "surface",
+      "model": "res://resources/models/parts/surface_tiles/roof_tri_1_3_6.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        0.5,
+        0.5
+      ],
+      "height_start_m": 0.1,
+      "height_end_m": 0.1,
+      "paintable": true
+    },
+    {
+      "id": "roof_tri_1_3_7",
+      "style": "roof",
+      "kind": "surface",
+      "model": "res://resources/models/parts/surface_tiles/roof_tri_1_3_7.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        0.5,
+        0.5
+      ],
+      "height_start_m": 0.1,
+      "height_end_m": 0.1,
+      "paintable": true
+    },
+    {
+      "id": "roof_tri_1_4_5",
+      "style": "roof",
+      "kind": "surface",
+      "model": "res://resources/models/parts/surface_tiles/roof_tri_1_4_5.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        0.5,
+        0.5
+      ],
+      "height_start_m": 0.1,
+      "height_end_m": 0.1,
+      "paintable": true
+    },
+    {
+      "id": "roof_tri_1_4_6",
+      "style": "roof",
+      "kind": "surface",
+      "model": "res://resources/models/parts/surface_tiles/roof_tri_1_4_6.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        0.5,
+        0.5
+      ],
+      "height_start_m": 0.1,
+      "height_end_m": 0.1,
+      "paintable": true
+    },
+    {
+      "id": "roof_tri_1_4_7",
+      "style": "roof",
+      "kind": "surface",
+      "model": "res://resources/models/parts/surface_tiles/roof_tri_1_4_7.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        0.5,
+        0.5
+      ],
+      "height_start_m": 0.1,
+      "height_end_m": 0.1,
+      "paintable": true
+    },
+    {
+      "id": "roof_tri_1_5_6",
+      "style": "roof",
+      "kind": "surface",
+      "model": "res://resources/models/parts/surface_tiles/roof_tri_1_5_6.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        0.5,
+        0.5
+      ],
+      "height_start_m": 0.1,
+      "height_end_m": 0.1,
+      "paintable": true
+    },
+    {
+      "id": "roof_tri_1_5_7",
+      "style": "roof",
+      "kind": "surface",
+      "model": "res://resources/models/parts/surface_tiles/roof_tri_1_5_7.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        0.5,
+        0.5
+      ],
+      "height_start_m": 0.1,
+      "height_end_m": 0.1,
+      "paintable": true
+    },
+    {
+      "id": "roof_tri_1_6_7",
+      "style": "roof",
+      "kind": "surface",
+      "model": "res://resources/models/parts/surface_tiles/roof_tri_1_6_7.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        0.5,
+        0.5
+      ],
+      "height_start_m": 0.1,
+      "height_end_m": 0.1,
+      "paintable": true
+    },
+    {
+      "id": "roof_tri_2_3_5",
+      "style": "roof",
+      "kind": "surface",
+      "model": "res://resources/models/parts/surface_tiles/roof_tri_2_3_5.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        0.5,
+        0.5
+      ],
+      "height_start_m": 0.1,
+      "height_end_m": 0.1,
+      "paintable": true
+    },
+    {
+      "id": "roof_tri_2_3_6",
+      "style": "roof",
+      "kind": "surface",
+      "model": "res://resources/models/parts/surface_tiles/roof_tri_2_3_6.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        0.5,
+        0.5
+      ],
+      "height_start_m": 0.1,
+      "height_end_m": 0.1,
+      "paintable": true
+    },
+    {
+      "id": "roof_tri_2_3_7",
+      "style": "roof",
+      "kind": "surface",
+      "model": "res://resources/models/parts/surface_tiles/roof_tri_2_3_7.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        0.5,
+        0.5
+      ],
+      "height_start_m": 0.1,
+      "height_end_m": 0.1,
+      "paintable": true
+    },
+    {
+      "id": "roof_tri_2_4_5",
+      "style": "roof",
+      "kind": "surface",
+      "model": "res://resources/models/parts/surface_tiles/roof_tri_2_4_5.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        0.5,
+        0.5
+      ],
+      "height_start_m": 0.1,
+      "height_end_m": 0.1,
+      "paintable": true
+    },
+    {
+      "id": "roof_tri_2_4_6",
+      "style": "roof",
+      "kind": "surface",
+      "model": "res://resources/models/parts/surface_tiles/roof_tri_2_4_6.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        0.5,
+        0.5
+      ],
+      "height_start_m": 0.1,
+      "height_end_m": 0.1,
+      "paintable": true
+    },
+    {
+      "id": "roof_tri_2_4_7",
+      "style": "roof",
+      "kind": "surface",
+      "model": "res://resources/models/parts/surface_tiles/roof_tri_2_4_7.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        0.5,
+        0.5
+      ],
+      "height_start_m": 0.1,
+      "height_end_m": 0.1,
+      "paintable": true
+    },
+    {
+      "id": "roof_tri_2_5_6",
+      "style": "roof",
+      "kind": "surface",
+      "model": "res://resources/models/parts/surface_tiles/roof_tri_2_5_6.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        0.5,
+        0.5
+      ],
+      "height_start_m": 0.1,
+      "height_end_m": 0.1,
+      "paintable": true
+    },
+    {
+      "id": "roof_tri_2_5_7",
+      "style": "roof",
+      "kind": "surface",
+      "model": "res://resources/models/parts/surface_tiles/roof_tri_2_5_7.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        0.5,
+        0.5
+      ],
+      "height_start_m": 0.1,
+      "height_end_m": 0.1,
+      "paintable": true
+    },
+    {
+      "id": "roof_tri_2_6_7",
+      "style": "roof",
+      "kind": "surface",
+      "model": "res://resources/models/parts/surface_tiles/roof_tri_2_6_7.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        0.5,
+        0.5
+      ],
+      "height_start_m": 0.1,
+      "height_end_m": 0.1,
+      "paintable": true
+    },
+    {
+      "id": "roof_tri_3_4_5",
+      "style": "roof",
+      "kind": "surface",
+      "model": "res://resources/models/parts/surface_tiles/roof_tri_3_4_5.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        0.5,
+        0.5
+      ],
+      "height_start_m": 0.1,
+      "height_end_m": 0.1,
+      "paintable": true
+    },
+    {
+      "id": "roof_tri_3_4_6",
+      "style": "roof",
+      "kind": "surface",
+      "model": "res://resources/models/parts/surface_tiles/roof_tri_3_4_6.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        0.5,
+        0.5
+      ],
+      "height_start_m": 0.1,
+      "height_end_m": 0.1,
+      "paintable": true
+    },
+    {
+      "id": "roof_tri_3_4_7",
+      "style": "roof",
+      "kind": "surface",
+      "model": "res://resources/models/parts/surface_tiles/roof_tri_3_4_7.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        0.5,
+        0.5
+      ],
+      "height_start_m": 0.1,
+      "height_end_m": 0.1,
+      "paintable": true
+    },
+    {
+      "id": "roof_tri_3_5_6",
+      "style": "roof",
+      "kind": "surface",
+      "model": "res://resources/models/parts/surface_tiles/roof_tri_3_5_6.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        0.5,
+        0.5
+      ],
+      "height_start_m": 0.1,
+      "height_end_m": 0.1,
+      "paintable": true
+    },
+    {
+      "id": "roof_tri_3_5_7",
+      "style": "roof",
+      "kind": "surface",
+      "model": "res://resources/models/parts/surface_tiles/roof_tri_3_5_7.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        0.5,
+        0.5
+      ],
+      "height_start_m": 0.1,
+      "height_end_m": 0.1,
+      "paintable": true
+    },
+    {
+      "id": "roof_tri_3_6_7",
+      "style": "roof",
+      "kind": "surface",
+      "model": "res://resources/models/parts/surface_tiles/roof_tri_3_6_7.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        0.5,
+        0.5
+      ],
+      "height_start_m": 0.1,
+      "height_end_m": 0.1,
+      "paintable": true
+    },
+    {
+      "id": "roof_tri_4_5_7",
+      "style": "roof",
+      "kind": "surface",
+      "model": "res://resources/models/parts/surface_tiles/roof_tri_4_5_7.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        0.5,
+        0.5
+      ],
+      "height_start_m": 0.1,
+      "height_end_m": 0.1,
+      "paintable": true
+    },
+    {
+      "id": "roof_tri_4_6_7",
+      "style": "roof",
+      "kind": "surface",
+      "model": "res://resources/models/parts/surface_tiles/roof_tri_4_6_7.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        0.5,
+        0.5
+      ],
+      "height_start_m": 0.1,
+      "height_end_m": 0.1,
+      "paintable": true
+    },
+    {
+      "id": "roof_tri_5_6_7",
+      "style": "roof",
+      "kind": "surface",
+      "model": "res://resources/models/parts/surface_tiles/roof_tri_5_6_7.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        0.5,
+        0.5
+      ],
+      "height_start_m": 0.1,
+      "height_end_m": 0.1,
+      "paintable": true
+    },
+    {
+      "id": "roof_edge_straight",
+      "style": "roof",
+      "kind": "surface_edge",
+      "model": "res://resources/models/parts/surface_tiles/roof_edge_straight.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        0,
+        0.5
+      ],
+      "height_start_m": 0.1,
+      "height_end_m": 0.1,
+      "paintable": true
+    },
+    {
+      "id": "roof_edge_45",
+      "style": "roof",
+      "kind": "surface_edge",
+      "model": "res://resources/models/parts/surface_tiles/roof_edge_45.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        0,
+        0.7071067811865476
+      ],
+      "height_start_m": 0.1,
+      "height_end_m": 0.1,
+      "paintable": true
+    },
+    {
+      "id": "roof_edge_26",
+      "style": "roof",
+      "kind": "surface_edge",
+      "model": "res://resources/models/parts/surface_tiles/roof_edge_26.glb",
+      "start_xz": [
+        0,
+        0
+      ],
+      "end_xz": [
+        0,
+        1.118033988749895
+      ],
+      "height_start_m": 0.1,
+      "height_end_m": 0.1,
+      "paintable": true
+    }
+  ]
+}

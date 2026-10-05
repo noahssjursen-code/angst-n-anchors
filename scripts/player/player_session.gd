@@ -54,7 +54,7 @@ func _ready() -> void:
 	_remote_save_client.save_conflict.connect(_on_remote_document_conflict)
 	_remote_save_client.request_failed.connect(_on_remote_document_failed)
 	_remote_save_client.authentication_required.connect(_on_remote_authentication_required)
-	_persistent_io_enabled = allow_test_persistent_io or not _is_test_script_process()
+	_persistent_io_enabled = not ShipyardPlaytestMode.active() and (allow_test_persistent_io or not _is_test_script_process())
 	if not _persistent_io_enabled:
 		# Unit-test scripts must never read or overwrite the developer's live
 		# player profile, even if a failed test process remains alive.

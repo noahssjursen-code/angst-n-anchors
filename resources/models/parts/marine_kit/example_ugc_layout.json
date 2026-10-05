@@ -1,0 +1,736 @@
+{
+  "version": 1,
+  "units": "metres",
+  "geometry": "Separate Blender-authored GLB assets",
+  "placements": [
+    {
+      "asset_id": "coastal_hull_14m",
+      "position_m": [
+        0,
+        0,
+        0
+      ],
+      "yaw_degrees": 0
+    },
+    {
+      "asset_id": "coastal_deck_14m",
+      "position_m": [
+        0,
+        0,
+        0
+      ],
+      "yaw_degrees": 0
+    },
+    {
+      "asset_id": "window_wall_1m",
+      "position_m": [
+        -1,
+        1.5,
+        -3
+      ],
+      "yaw_degrees": 180
+    },
+    {
+      "asset_id": "wall_panel_1m",
+      "position_m": [
+        -1,
+        1.5,
+        1
+      ],
+      "yaw_degrees": 0
+    },
+    {
+      "asset_id": "window_wall_1m",
+      "position_m": [
+        0,
+        1.5,
+        -3
+      ],
+      "yaw_degrees": 180
+    },
+    {
+      "asset_id": "door_wall_1m",
+      "position_m": [
+        0,
+        1.5,
+        1
+      ],
+      "yaw_degrees": 0
+    },
+    {
+      "asset_id": "window_wall_1m",
+      "position_m": [
+        1,
+        1.5,
+        -3
+      ],
+      "yaw_degrees": 180
+    },
+    {
+      "asset_id": "wall_panel_1m",
+      "position_m": [
+        1,
+        1.5,
+        1
+      ],
+      "yaw_degrees": 0
+    },
+    {
+      "asset_id": "window_wall_1m",
+      "position_m": [
+        -1.5,
+        1.5,
+        0.5
+      ],
+      "yaw_degrees": -90
+    },
+    {
+      "asset_id": "window_wall_1m",
+      "position_m": [
+        1.5,
+        1.5,
+        0.5
+      ],
+      "yaw_degrees": 90
+    },
+    {
+      "asset_id": "window_wall_1m",
+      "position_m": [
+        -1.5,
+        1.5,
+        -0.5
+      ],
+      "yaw_degrees": -90
+    },
+    {
+      "asset_id": "window_wall_1m",
+      "position_m": [
+        1.5,
+        1.5,
+        -0.5
+      ],
+      "yaw_degrees": 90
+    },
+    {
+      "asset_id": "window_wall_1m",
+      "position_m": [
+        -1.5,
+        1.5,
+        -1.5
+      ],
+      "yaw_degrees": -90
+    },
+    {
+      "asset_id": "window_wall_1m",
+      "position_m": [
+        1.5,
+        1.5,
+        -1.5
+      ],
+      "yaw_degrees": 90
+    },
+    {
+      "asset_id": "window_wall_1m",
+      "position_m": [
+        -1.5,
+        1.5,
+        -2.5
+      ],
+      "yaw_degrees": -90
+    },
+    {
+      "asset_id": "window_wall_1m",
+      "position_m": [
+        1.5,
+        1.5,
+        -2.5
+      ],
+      "yaw_degrees": 90
+    },
+    {
+      "asset_id": "deck_plate_1m",
+      "position_m": [
+        -1,
+        1.5,
+        0.5
+      ],
+      "yaw_degrees": 0
+    },
+    {
+      "asset_id": "roof_panel_1m",
+      "position_m": [
+        -1,
+        3.7,
+        0.5
+      ],
+      "yaw_degrees": 0
+    },
+    {
+      "asset_id": "deck_plate_1m",
+      "position_m": [
+        -1,
+        1.5,
+        -0.5
+      ],
+      "yaw_degrees": 0
+    },
+    {
+      "asset_id": "roof_panel_1m",
+      "position_m": [
+        -1,
+        3.7,
+        -0.5
+      ],
+      "yaw_degrees": 0
+    },
+    {
+      "asset_id": "deck_plate_1m",
+      "position_m": [
+        -1,
+        1.5,
+        -1.5
+      ],
+      "yaw_degrees": 0
+    },
+    {
+      "asset_id": "roof_panel_1m",
+      "position_m": [
+        -1,
+        3.7,
+        -1.5
+      ],
+      "yaw_degrees": 0
+    },
+    {
+      "asset_id": "deck_plate_1m",
+      "position_m": [
+        -1,
+        1.5,
+        -2.5
+      ],
+      "yaw_degrees": 0
+    },
+    {
+      "asset_id": "roof_panel_1m",
+      "position_m": [
+        -1,
+        3.7,
+        -2.5
+      ],
+      "yaw_degrees": 0
+    },
+    {
+      "asset_id": "deck_plate_1m",
+      "position_m": [
+        0,
+        1.5,
+        0.5
+      ],
+      "yaw_degrees": 0
+    },
+    {
+      "asset_id": "roof_panel_1m",
+      "position_m": [
+        0,
+        3.7,
+        0.5
+      ],
+      "yaw_degrees": 0
+    },
+    {
+      "asset_id": "deck_plate_1m",
+      "position_m": [
+        0,
+        1.5,
+        -0.5
+      ],
+      "yaw_degrees": 0
+    },
+    {
+      "asset_id": "roof_panel_1m",
+      "position_m": [
+        0,
+        3.7,
+        -0.5
+      ],
+      "yaw_degrees": 0
+    },
+    {
+      "asset_id": "deck_plate_1m",
+      "position_m": [
+        0,
+        1.5,
+        -1.5
+      ],
+      "yaw_degrees": 0
+    },
+    {
+      "asset_id": "roof_panel_1m",
+      "position_m": [
+        0,
+        3.7,
+        -1.5
+      ],
+      "yaw_degrees": 0
+    },
+    {
+      "asset_id": "deck_plate_1m",
+      "position_m": [
+        0,
+        1.5,
+        -2.5
+      ],
+      "yaw_degrees": 0
+    },
+    {
+      "asset_id": "roof_panel_1m",
+      "position_m": [
+        0,
+        3.7,
+        -2.5
+      ],
+      "yaw_degrees": 0
+    },
+    {
+      "asset_id": "deck_plate_1m",
+      "position_m": [
+        1,
+        1.5,
+        0.5
+      ],
+      "yaw_degrees": 0
+    },
+    {
+      "asset_id": "roof_panel_1m",
+      "position_m": [
+        1,
+        3.7,
+        0.5
+      ],
+      "yaw_degrees": 0
+    },
+    {
+      "asset_id": "deck_plate_1m",
+      "position_m": [
+        1,
+        1.5,
+        -0.5
+      ],
+      "yaw_degrees": 0
+    },
+    {
+      "asset_id": "roof_panel_1m",
+      "position_m": [
+        1,
+        3.7,
+        -0.5
+      ],
+      "yaw_degrees": 0
+    },
+    {
+      "asset_id": "deck_plate_1m",
+      "position_m": [
+        1,
+        1.5,
+        -1.5
+      ],
+      "yaw_degrees": 0
+    },
+    {
+      "asset_id": "roof_panel_1m",
+      "position_m": [
+        1,
+        3.7,
+        -1.5
+      ],
+      "yaw_degrees": 0
+    },
+    {
+      "asset_id": "deck_plate_1m",
+      "position_m": [
+        1,
+        1.5,
+        -2.5
+      ],
+      "yaw_degrees": 0
+    },
+    {
+      "asset_id": "roof_panel_1m",
+      "position_m": [
+        1,
+        3.7,
+        -2.5
+      ],
+      "yaw_degrees": 0
+    },
+    {
+      "asset_id": "helm_console",
+      "position_m": [
+        0,
+        1.5,
+        -2.2
+      ],
+      "yaw_degrees": 0
+    },
+    {
+      "asset_id": "captain_chair",
+      "position_m": [
+        -0.32,
+        1.5,
+        -1.1
+      ],
+      "yaw_degrees": 0
+    },
+    {
+      "asset_id": "crew_bench",
+      "position_m": [
+        -1,
+        1.5,
+        -0.1
+      ],
+      "yaw_degrees": 0
+    },
+    {
+      "asset_id": "storage_locker",
+      "position_m": [
+        1,
+        1.5,
+        -0.1
+      ],
+      "yaw_degrees": 0
+    },
+    {
+      "asset_id": "signal_mast",
+      "position_m": [
+        0,
+        3.8,
+        -0.2
+      ],
+      "yaw_degrees": 0
+    },
+    {
+      "asset_id": "radar_radome",
+      "position_m": [
+        0,
+        5.06,
+        -0.02
+      ],
+      "yaw_degrees": 0
+    },
+    {
+      "asset_id": "vhf_aerial",
+      "position_m": [
+        0.42,
+        5.08,
+        -0.02
+      ],
+      "yaw_degrees": 0
+    },
+    {
+      "asset_id": "navigation_light_port",
+      "position_m": [
+        -1.38,
+        3.8,
+        -2.5
+      ],
+      "yaw_degrees": 0
+    },
+    {
+      "asset_id": "navigation_light_starboard",
+      "position_m": [
+        1.38,
+        3.8,
+        -2.5
+      ],
+      "yaw_degrees": 0
+    },
+    {
+      "asset_id": "led_worklight",
+      "position_m": [
+        -1,
+        3.8,
+        0.85
+      ],
+      "yaw_degrees": 0
+    },
+    {
+      "asset_id": "led_worklight",
+      "position_m": [
+        1,
+        3.8,
+        0.85
+      ],
+      "yaw_degrees": 0
+    },
+    {
+      "asset_id": "liferaft_canister",
+      "position_m": [
+        -0.65,
+        3.8,
+        -0.25
+      ],
+      "yaw_degrees": 0
+    },
+    {
+      "asset_id": "exhaust_stack",
+      "position_m": [
+        1.15,
+        1.5,
+        0.75
+      ],
+      "yaw_degrees": 0
+    },
+    {
+      "asset_id": "deck_hatch",
+      "position_m": [
+        0,
+        1.36,
+        3.7
+      ],
+      "yaw_degrees": 0
+    },
+    {
+      "asset_id": "hydraulic_winch",
+      "position_m": [
+        0,
+        1.4,
+        5.6
+      ],
+      "yaw_degrees": 0
+    },
+    {
+      "asset_id": "rail_section_1200",
+      "position_m": [
+        -1.9321083774525067,
+        1.3224765829001268,
+        5.6
+      ],
+      "yaw_degrees": 90
+    },
+    {
+      "asset_id": "rail_section_1200",
+      "position_m": [
+        -2.078830888421053,
+        1.3040362442105264,
+        4.4
+      ],
+      "yaw_degrees": 90
+    },
+    {
+      "asset_id": "rail_section_1200",
+      "position_m": [
+        -2.151120486889952,
+        1.299745843444976,
+        3.2
+      ],
+      "yaw_degrees": 90
+    },
+    {
+      "asset_id": "rail_section_1200",
+      "position_m": [
+        -2.196464646464646,
+        1.3025252525252524,
+        2.0
+      ],
+      "yaw_degrees": 90
+    },
+    {
+      "asset_id": "rail_section_1200",
+      "position_m": [
+        -2.2095555555555557,
+        1.313288888888889,
+        0.8
+      ],
+      "yaw_degrees": 90
+    },
+    {
+      "asset_id": "rail_section_1200",
+      "position_m": [
+        -2.1702748896969695,
+        1.3419880145454546,
+        -0.4
+      ],
+      "yaw_degrees": 90
+    },
+    {
+      "asset_id": "double_bollard",
+      "position_m": [
+        -1.6752257863593898,
+        1.329390316939367,
+        5.8
+      ],
+      "yaw_degrees": 0
+    },
+    {
+      "asset_id": "double_bollard",
+      "position_m": [
+        -1.0280990476190475,
+        1.7072888888888889,
+        -4.8
+      ],
+      "yaw_degrees": 0
+    },
+    {
+      "asset_id": "tyre_fender",
+      "position_m": [
+        -2.171561642870813,
+        0.5570624214354067,
+        4.7
+      ],
+      "yaw_degrees": 90
+    },
+    {
+      "asset_id": "tyre_fender",
+      "position_m": [
+        -2.3214545454545448,
+        0.553490909090909,
+        1.8
+      ],
+      "yaw_degrees": 90
+    },
+    {
+      "asset_id": "tyre_fender",
+      "position_m": [
+        -2.247692121212121,
+        0.6144581818181818,
+        -1
+      ],
+      "yaw_degrees": 90
+    },
+    {
+      "asset_id": "rail_section_1200",
+      "position_m": [
+        1.9321083774525067,
+        1.3224765829001268,
+        5.6
+      ],
+      "yaw_degrees": 90
+    },
+    {
+      "asset_id": "rail_section_1200",
+      "position_m": [
+        2.078830888421053,
+        1.3040362442105264,
+        4.4
+      ],
+      "yaw_degrees": 90
+    },
+    {
+      "asset_id": "rail_section_1200",
+      "position_m": [
+        2.151120486889952,
+        1.299745843444976,
+        3.2
+      ],
+      "yaw_degrees": 90
+    },
+    {
+      "asset_id": "rail_section_1200",
+      "position_m": [
+        2.196464646464646,
+        1.3025252525252524,
+        2.0
+      ],
+      "yaw_degrees": 90
+    },
+    {
+      "asset_id": "rail_section_1200",
+      "position_m": [
+        2.2095555555555557,
+        1.313288888888889,
+        0.8
+      ],
+      "yaw_degrees": 90
+    },
+    {
+      "asset_id": "rail_section_1200",
+      "position_m": [
+        2.1702748896969695,
+        1.3419880145454546,
+        -0.4
+      ],
+      "yaw_degrees": 90
+    },
+    {
+      "asset_id": "double_bollard",
+      "position_m": [
+        1.6752257863593898,
+        1.329390316939367,
+        5.8
+      ],
+      "yaw_degrees": 0
+    },
+    {
+      "asset_id": "double_bollard",
+      "position_m": [
+        1.0280990476190475,
+        1.7072888888888889,
+        -4.8
+      ],
+      "yaw_degrees": 0
+    },
+    {
+      "asset_id": "tyre_fender",
+      "position_m": [
+        2.171561642870813,
+        0.5570624214354067,
+        4.7
+      ],
+      "yaw_degrees": 90
+    },
+    {
+      "asset_id": "tyre_fender",
+      "position_m": [
+        2.3214545454545448,
+        0.553490909090909,
+        1.8
+      ],
+      "yaw_degrees": 90
+    },
+    {
+      "asset_id": "tyre_fender",
+      "position_m": [
+        2.247692121212121,
+        0.6144581818181818,
+        -1
+      ],
+      "yaw_degrees": 90
+    },
+    {
+      "asset_id": "boarding_ladder",
+      "position_m": [
+        -2.34,
+        -0.25,
+        2.0
+      ],
+      "yaw_degrees": 90
+    },
+    {
+      "asset_id": "lifebuoy",
+      "position_m": [
+        1.55,
+        1.6,
+        -0.0
+      ],
+      "yaw_degrees": 90
+    },
+    {
+      "asset_id": "bronze_propeller",
+      "position_m": [
+        0,
+        -0.79,
+        6.56
+      ],
+      "yaw_degrees": 0
+    },
+    {
+      "asset_id": "rudder",
+      "position_m": [
+        0,
+        -1.1,
+        6.83
+      ],
+      "yaw_degrees": 0
+    }
+  ]
+}

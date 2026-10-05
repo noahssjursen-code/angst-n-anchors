@@ -1,0 +1,6 @@
+[gd_scene format=3 uid="uid://del331d2o6ce5"]
+
+[ext_resource type="Script" path="res://scripts/ship/vessel_skin_showcase.gd" id="1_skinshow"]
+
+[node name="VesselSkinShowcase" type="Node3D" unique_id=335856434]
+script = ExtResource("1_skinshow")

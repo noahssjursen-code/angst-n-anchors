@@ -239,31 +239,11 @@ func _clear_generated() -> void:
 		remove_meta("loadout_applied")
 
 
-func _build_lofted_hull_visual(
-	stations: HullStations,
-	loa_m: float,
-	beam_m: float,
-	bow_frac: float,
-) -> void:
+func _build_lofted_hull_visual(_stations: HullStations, _loa_m: float, _beam_m: float, _bow_frac: float) -> void:
+	# Empty anchor retained for assembly lifecycle; old mesh generation is deleted.
 	var root := Node3D.new()
 	root.name = "HullVisual"
 	add_child(root)
-	var hull := MeshBuilder.lofted_hull_shell(
-		stations, Color(0.14, 0.16, 0.18), 0.9, 0.05
-	)
-	hull.name = "HullShell"
-	root.add_child(hull)
-	var deck := MeshBuilder.pointed_deck_plate(
-		loa_m,
-		beam_m,
-		stations.deck_y + 0.1,
-		0.1,
-		bow_frac,
-		Color(0.38, 0.34, 0.28),
-		0.95
-	)
-	deck.name = "Deck"
-	root.add_child(deck)
 
 
 func _build_lofted_hull_collision(stations: HullStations, loa_m: float) -> void:

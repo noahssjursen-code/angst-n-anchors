@@ -104,6 +104,7 @@ func _unhandled_input(event: InputEvent) -> void:
 
 
 func _physics_process(delta: float) -> void:
+	_sync_deck_capsule()
 	if _free_cam != null and _free_cam.is_active():
 		velocity = Vector3.ZERO
 		return
@@ -354,3 +355,28 @@ func _movement_basis() -> Basis:
 	if _player_camera != null:
 		return _player_camera.get_flat_basis()
 	return global_transform.basis
+
+
+## Keep the collision capsule in the deck frame inside tight imported doorways.
+## Character movement/camera remain world-upright; only the collision shape leans.
+func _sync_deck_capsule() -> void:
+	var collision := get_node_or_null("CollisionShape3D") as CollisionShape3D
+	if collision == null or not collision.shape is CapsuleShape3D:
+		return
+	var deck_up := Vector3.UP
+	var query := PhysicsRayQueryParameters3D.create(
+		global_position + Vector3.UP * .25,
+		global_position - Vector3.UP * (floor_snap_distance + .15),
+		LAYER_BOAT_WALK
+	)
+	var hit := get_world_3d().direct_space_state.intersect_ray(query)
+	if not hit.is_empty() and bool(hit.collider.get_meta("align_player_capsule", false)) and hit.normal.dot(Vector3.UP) > cos(floor_max_angle):
+		var boat: Node3D = hit.collider.get_meta("_boat_owner")
+		if is_instance_valid(boat):
+			deck_up = boat.global_basis.y.normalized()
+	var forward := -global_basis.z
+	forward = (forward - deck_up * forward.dot(deck_up)).normalized()
+	collision.global_transform = Transform3D(
+		Basis.looking_at(forward, deck_up),
+		global_position + deck_up * (collision.shape.height * .5)
+	)

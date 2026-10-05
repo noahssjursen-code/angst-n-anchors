@@ -235,7 +235,7 @@ func _build_pause() -> Control:
 	quit.pressed.connect(_quit_to_desktop)
 	vbox.add_child(quit)
 
-	var title_btn := UiBuilder.button("RETURN TO TITLE")
+	var title_btn := UiBuilder.button("RETURN TO BUILDER" if ShipyardPlaytestMode.active() else "RETURN TO TITLE")
 	title_btn.pressed.connect(_return_to_title)
 	vbox.add_child(title_btn)
 
@@ -296,6 +296,9 @@ func _quit_to_desktop() -> void:
 
 
 func _return_to_title() -> void:
+	if ShipyardPlaytestMode.active():
+		get_tree().quit()
+		return
 	_set_screen(Screen.NONE)
 	get_tree().paused = false
 	WorldBootstrapScript.return_to_title(get_tree())
