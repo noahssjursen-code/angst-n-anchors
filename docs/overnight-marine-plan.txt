@@ -85,3 +85,20 @@ Progress
 Planning pass completed. Marine implementation not yet started.
 Character/rig and captain onboarding tests passed before this checkpoint.
 Next: package 1 audit/research, then package 2 default propulsion presentation.
+
+6 October, first scheduled batch: package 0 is pushed as 8ce7a08. Package 1
+audit is complete; see docs/marine-integration-audit.txt for exact paths,
+primary references, visual research and acceptance gates. Added a runnable,
+isolated marine_asset_audit_showcase. Actual Godot renders show the earlier
+propeller/rudder experiments disappear inside the solid stern at the current
+physics force points. They cannot simply be mounted there. Also identified
+stale delivered thrust on dry fuel, old 2x hull dimensions versus metre-based
+kit, legacy fleet commissioning boundary and all-round masthead-light issue.
+No new fleet models or propulsion integration claimed in this research batch.
+Verification: Godot 4.6.1 Forward+ audit capture exit 0, imported bounds logged,
+spin and rudder-limit assertions pass; scene-path isolation assertion passes
+without requiring the explicit sandbox flag. git diff --check passed.
+Captures: chat outputs/marine/stern-audit.png and stern-audit-hardware.png.
+NEXT RUN: package 2. Author properly mounted shaft/propeller/rudder hardware
+with documented pivots and swept clearance, then read-only state integration
+and dry-fuel/reverse/neutral tests. Do not repeat package 1 instead of building.

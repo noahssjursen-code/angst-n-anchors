@@ -1,0 +1,167 @@
+MARINE INTEGRATION AUDIT — 6 October 2026, first overnight batch
+
+Scope: inspection and implementation decisions, not completed vessel models.
+Primary references were accessed 6 October 2026 (Europe/Oslo). Sources describe
+real equipment; proposed game dimensions remain design choices, not engineering
+certification. No third-party meshes or textures are imported into the game.
+
+1. The first propulsion integration needs actual hull-specific mounts
+
+Actual Godot inspection scene:
+  scenes/showcases/marine_asset_audit_showcase.tscn
+Keys 1/2 show the stern exterior or hide the hull to inspect the old hardware.
+The propeller rotates about Godot Z and rudder about Y. This is an explicitly
+labelled inspection animation, NOT connected gameplay integration. The scene is
+recognized by ShipyardPlaytestMode before autoload startup, including F6.
+
+ImportedDraftVessel.configure() uses CatalogHullVessel.make_physics_profile():
+propeller force point (0, .584, 6.3), rudder force point (0, .7008, 6.44).
+Those are force application coordinates, not vetted visual sockets. At these
+coordinates the existing bronze_propeller and rudder GLBs are hidden inside
+the stern in the actual render. Do not simply instantiate them there and call
+propellers implemented.
+
+Measured neutral imported bounds at these mounts:
+- Propeller: x +/- .377632; y .206368..961633; z 6.17..6.43.
+- Rudder: x +/- .04; y .7008..2.0508; z 6.23..6.65.
+The propeller's longitudinal span overlaps the rudder's. The old rudder model
+origin is its bottom, not a stock mounting datum. Their surrounding hull is
+solid: the hull generator closes the transom at z=7, with centre-bottom y=.28.
+Thus these earlier marine-kit experiments are not approved direct replacements.
+
+Next package decision: author separate shaft/stern-tube support, propeller and
+rudder source/export assets with named shaft and stock pivots and a documented
+mount manifest. Fit their swept envelopes outside the actual underwater shell,
+with rudder aft of propeller and no full-lock intersections. Preserve the exact
+deck lattice and outline. If an underwater aperture is needed, author it in
+Blender, verify resulting collision and do not silently move physics force points
+to solve visual placement. Do not rescale a whole boat to make hardware fit.
+
+PropulsionComponent throttle is negative ahead, positive astern. Its dry-fuel
+early return currently leaves delivered_thrust_n stale from the preceding tick.
+Fix and test that before using the value to drive presentation. RudderComponent
+uses the requested throttle to estimate prop-wash even when fuel is empty;
+record this as a separate existing physical issue, rather than changing handling
+inside an art adapter. Local presentation can read component state; remote
+presentation needs confirmed snapshots (do not invent a second control loop).
+Choose a documented visual RPM curve: there is no measured shaft RPM state yet.
+
+2. Hull and construction pipeline boundaries
+
+The accepted hull is TrawlerHullAsset: 14 x 5 m, deck 2.92 m, half-metre
+construction corners, 2:1 and 1:1 bow edges. ImportedShipPartsEditor assembles
+the authored kit; ImportedDraftVessel reuses it with normal BoatBody components.
+Imported runtime currently hardcodes the 14 m profile and 58 t / 300 kW.
+
+The old hull catalog contains 70x18 through 150x32 entries and explicitly says
+its dimensions are twice real scale. HullCatalog._normalize does not simply
+halve these dimensions. ContainerUnit.DEFAULT_SIZE_M is 4.0. This conflicts with
+the accepted metre-based Blender/player kit. Do not copy old catalog sizes or
+power blindly into new ships. Measure cargo footprints in the actual game,
+choose new hull dimensions explicitly, and preserve old IDs/save data.
+
+VesselSpawn.instantiate_from_record still follows registered legacy brick
+records and DeckFitout. Builder drafts have NOT become production fleet records.
+New cargo/bulk examples need a hull descriptor shared by grid/editor/runtime;
+they cannot be made by giving the 14 m trawler a different label. Keep examples
+as isolated drafts/showcases until commissioning has its own tested migration.
+
+3. Equipment integration map (paths relative to repository)
+
+Fishing: scripts/ship/fishing_system.gd owns trawling, catch timing, drag, ropes
+and the currently primitive rotating trommel. Replace _setup_visuals with a
+Blender fixed frame + separate drum; preserve anchored_to_brick and catch-hold
+checks. This system requires CatchHoldComponent, not decorative crates.
+
+Fish unloading: scripts/port/fish_landing_pump.gd owns connection, pumping,
+flushing and completion. _ship_connection_world uses the first catch hold's
+get_hose_drop_world. Replace static _build_visual hardware; keep the dynamically
+curved hose and actual CatchLot/ShoreRswTankBank transfer. Related layout/job:
+scripts/port/fish_landing_layout.gd and fish_landing_equipment_job.gd. The current
+RSW pump presentation should not imply every kind of trawler lands fish by pump.
+
+Bulk: scripts/ship/bulk_hold_component.gd has configurable width/length/depth
+and a separate BulkHoldState. Give a new hold actual open geometry and keep fill
+presentation derived from that state. Existing defaults are 6 x 12 x 2.5 m;
+these are game defaults, not proof they fit a proposed hull. Coaming, cover panel
+and moving hinges/lifting points should be independent assets.
+
+Cranes: scripts/port/bulk_crane.gd uses named ModelAssembler parts and shell
+jaws; _apply_slew, _apply_boom, _apply_hoist and _apply_bucket drive transforms.
+Keep the bucket detached from cable scaling, and retain grab_from_hold,
+force_release_at and lot transfer. Its operator still has old pose helpers:
+use the current character rig when touching this area. provision_crane.gd has
+slew/trolley/hoist and ContainerNode attachment. Preserve cargo/job APIs and
+working envelopes when adapting Blender parts; do not replace either controller.
+
+Mooring: scripts/port/mooring_component.gd (NOT scripts/ship) uses grouped
+ship_mooring_cleat and dock_mooring_bollard nodes, dynamic sag and tension solve.
+Static assets belong on MooringPoint/MooringPost with the same rope anchor.
+Blender cleats, bollards and fairleads must not move the semantic endpoint
+without a deliberate adapter. Keep ropes dynamic and authoritative tied state.
+
+Lighting: scripts/ship/ship_lighting.gd gathers ShipLight descendants and owns
+OFF/NAV/WORK/ALL plus weather/daylight scaling. ShipLight has build_housing=false
+for imported fixtures. Current NAV_MASTHEAD is explicitly all-round: this is
+not a correct substitute for the forward masthead sector. Add proper sector
+visibility and separate operating signals before claiming navigation lighting
+finished. Keep deck floods independent from navigation signals.
+
+4. Primary reference notebook and modeling implications
+
+Damen portfolio, printed pages 31 and 35 (PDF indexes 30 and 34), visually
+inspected as rendered pages:
+https://medialibrary.damen.com/m/716b9459b2fa3e81/original/Portfolio-booklet.pdf
+The cargo silhouette has aft accommodation and a long unobstructed central
+cargo region. Fishing silhouettes differ in gantry, mast and boom arrangement.
+Inference for our kit: reusable wheelhouse/roof modules, distinct working deck
+arrangements and separate equipment; don't decorate three identical hulls.
+
+Damen CF3850 current product page:
+https://www.damen.com/vessels/cargo/multi-purpose-cargo-vessels/combi-freighter-3850
+Reference: 89.75 x 12.50 m with 62.5 x 10.1 m hold; fixed-pitch propeller listed.
+Use the relationship between cargo space, side passages and accommodation,
+not these full-size dimensions as an automatic game hull specification.
+
+MacGregor hatch families:
+https://www.macgregor.com/products/merchant/hatch-covers/
+https://www.macgregor.com/products/merchant/hatch-covers/lift-away-hatch-covers/
+Lift-away panels and folding/rolling alternatives support distinct reusable
+cover families. First implementation choice: separate coaming + lift-away panels
+with lifting sockets; reserve a real stowage footprint. A closed lid alone is
+not a functional hold. Operating covers need authority/state work separately.
+
+MacGregor Triplex equipment brochure (text inspected, PDF image unavailable
+through direct download: HTTP 403):
+https://www.macgregor.com/globalassets/picturepark/imported-assets/83834.pdf
+Pages 6-10 distinguish net handling machinery from telescopic deck cranes.
+Three-roller purse-seine handling is not automatically a trawl drum. Research
+the chosen fishing method further before selecting a working gear set. Model
+pedestal, slew body, boom, cylinder, sheave and hook independently.
+
+Wartsila rudder reference:
+https://www.wartsila.com/encyclopedia/term/rudder
+Conventional rudders pivot vertically behind the propeller. Supports the shaft-Z,
+stock-Y arrangement, not the old models' placement inside our closed transom.
+
+USCG published International COLREG text (use International columns):
+https://www.navcen.uscg.gov/navigation-rules-amalgamated
+Rules 21/23/26 and Annex I are the lighting reference. Distinguish masthead
+225 degrees, each sidelight 112.5 degrees and sternlight 135 degrees. Active
+trawling uses green over white; making way adds sidelights/sternlight. Keep
+fishing state separate from ordinary underway state and from work lights.
+Recheck placement/height requirements for each finished vessel length.
+
+5. Verification and next action
+
+Godot 4.6.1 Forward+ rendered the real imported hull and both old hardware GLBs.
+Neutral bounds logged, rotating shaft exercised, rudder limited to +/-28 degrees.
+No new gameplay boat or hardware integration is claimed. Source model quality
+and stern fit must be corrected before package 2 can pass.
+Review outputs (chat workspace outputs/marine):
+  stern-audit.png — hardware occluded by solid stern
+  stern-audit-hardware.png — same mounts with hull hidden
+Research page renders are scratch references in work/, not distributable assets.
+
+Next: package 2, with the stern-clearance and dry-fuel issues above as acceptance
+gates. Then package 3 trawler assembly and method-specific fishing machinery.
